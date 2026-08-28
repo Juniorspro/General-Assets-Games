@@ -32,7 +32,10 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
              pts:new Float32Array(63), hayPts:false, usa:'',
              /* el destino crudo de la ultima medicion: 63 coordenadas mas el punto del aro, y su
                 velocidad, que es con lo que se predice entre medicion y medicion */
-             obj:new Float32Array(65), vel:new Float32Array(65), hayObj:false };
+             obj:new Float32Array(65), vel:new Float32Array(65), hayObj:false,
+             /* el periodo de medicion que se esta usando de verdad, en ms: no es una constante desde
+                que se ajusta solo al costo medido */
+             periodo:1000/24 };
 /* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
 let CAM_PREF='environment';
 try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
@@ -49,8 +52,32 @@ const MANO_CDN=[{ js:MANO_URL, wasm:MANO_WASM },
                 { js:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
                   wasm:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm' }];
 const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-/* 256x192 y no 480x360: son 2,8 veces menos pixeles para la misma mano, y la mano ocupa medio cuadro */
+/* ===================== LA ENTRADA SE QUEDA EN 256x192, Y ESO SE MIDIO =====================
+   Lo obvio para acelerar MediaPipe es bajarle la entrada, y es lo que NO sirve. Barrido en el banco,
+   cronometrando `detectForVideo()` sobre 24 detecciones en cada tamano:
+
+     320x240 -> 295,8 ms   ·   256x192 -> 292,2   ·   192x144 -> 285,5   ·   160x120 -> 285,4
+
+   Cuatro veces menos pixeles compran el 3,5%. La razon es que MediaPipe REDIMENSIONA adentro al
+   tamano fijo de sus modelos —192x192 el detector de palma, 224x224 el de puntos— asi que lo unico
+   que cambia con la camara es la subida y el reescalado, que al lado de la inferencia no es nada.
+   O sea: el costo esta en el MODELO, y contra eso hay una sola palanca, que es CUANTAS VECES se lo
+   corre. Se deja en 256x192 porque no cuesta mas que 160x120 y a esa resolucion la mano se sigue
+   detectando desde mas lejos. */
 const MANO_ENT_W=256, MANO_ENT_H=192;
+/* ===================== Y EL RITMO SE AJUSTA SOLO AL COSTO MEDIDO =====================
+   Reporte: *"entra la mano y se super laguea"*. Y es exactamente lo que tiene que pasar con un ritmo
+   fijo: sin mano, MediaPipe corre solo el detector de palma; CON mano corre ADEMAS el modelo de
+   puntos, asi que la deteccion se encarece justo en el momento en que aparece la mano. Con el periodo
+   clavado en 42 ms ese costo extra sale del presupuesto del cuadro y el juego se cae.
+
+   La regla es un PRESUPUESTO y no un numero: la deteccion no puede llevarse mas de DET_CARGA del
+   tiempo de reloj. Si medir cuesta 10 ms se mide a 24 Hz; si cuesta 25, a 14; si cuesta 60 se baja al
+   piso de 8. El juego sigue dibujando a 60 porque lo que falta lo pone la prediccion.
+   Sube rapido y baja despacio a proposito: un pico aislado no tiene que bajar el ritmo para siempre,
+   pero un aparato que de verdad no llega tiene que aliviarse en el acto. */
+const DET_CARGA=0.35;
+const DET_MIN_HZ=8;
 /* ===================== EL DETECTOR MIDE MENOS Y LA MANO SE DIBUJA IGUAL =====================
    Pedido: *"aplicale una optimizacion igual a la de baldi"*. La de RECREO son DOS cosas y solo una
    estaba puesta aca.
@@ -71,10 +98,9 @@ const MANO_ENT_W=256, MANO_ENT_H=192;
    quedaba sin medir. Con la interpolacion puesta, 24 medidas por segundo dibujan igual de suave que
    45 en cualquier aparato, asi que la rama no compraba nada y costaba una rama sin probar. */
 const MANO_HZ=24;
-/* HASTA DONDE SE PREDICE ENTRE MEDICION Y MEDICION. A 24 Hz hay 42 ms entre medidas; con el tope en
-   45 ms la prediccion cubre el hueco entero y ni un milisegundo mas. Extrapolar mas lejos que el
-   proximo dato no es interpolar: es inventar. */
-const PRED_MAX=0.045;
+/* HASTA DONDE SE PREDICE ENTRE MEDICION Y MEDICION: hasta el proximo dato y ni un milisegundo mas —
+   extrapolar mas lejos que el proximo dato no es interpolar, es inventar. Y por eso el tope NO es una
+   constante: sale del periodo de medicion, que se mueve solo con el costo. Ver `manosFiltrar`. */
 /* LA PREDICCION ESTA ATADA A LA VELOCIDAD, Y ESTO ES LA LECCION DE RECREO. Extrapolando siempre, con
    la mano QUIETA la diferencia entre dos medidas no es movimiento: es el ruido del detector. O sea
    que el codigo tomaria el ruido y lo multiplicaria antes de dibujarlo. Por debajo de PRED_V0 no se
@@ -86,7 +112,14 @@ const PRED_V0=0.15, PRED_V1=0.55;   // fracciones de pantalla por segundo
    2,39 de pantalla, o sea a metro y medio fuera del cuadro. Con el tope, un salto raro cuesta unos
    pixeles de mas y nada mas. Y se escala LA MANO ENTERA con el mismo factor, no cada punto por su
    cuenta: escalando por punto, la mano se deformaria justo cuando se mueve rapido. */
-const PRED_MAXD=0.05;               // lo mas que puede adelantarse el punto que apunta
+/* Y EL TOPE NO ES UNA DISTANCIA FIJA SINO UNA VELOCIDAD, que es lo unico que tiene sentido: lo que
+   se esta afirmando es "una mano no se mueve mas rapido que esto", y eso no depende de cada cuanto se
+   la mida. Con la distancia fija en 0,05 el tope estaba calibrado para los 42 ms de 24 Hz, asi que en
+   un aparato lento —125 ms entre medidas— tapaba el ultimo tercio de cada hueco y la mano volvia a ir
+   a los saltos justo donde mas hacia falta que no: medido, el desparejo a 8 Hz se quedaba en 2,51.
+   A 24 Hz esta velocidad da exactamente los mismos 0,050 de antes, o sea que donde ya andaba bien no
+   cambia nada. */
+const PRED_VMAX=1.2;                // pantallas por segundo: lo mas rapido que se admite predecir
 /* se apaga desde los ganchos para poder medir el ANTES y el DESPUES en la misma corrida: una mejora
    contada contra el recuerdo de como andaba no es una medicion */
 let PRED_ON=true;
@@ -285,11 +318,16 @@ function caraMedir(t){
 }
 function manosMedir(t){
   if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
-  if(t-_ultMed < 1000/MANO_HZ) return;
+  if(t-_ultMed < MANO.periodo) return;
   const a=performance.now();
   let r=null;
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
-  MANO.msDet = MANO.msDet*0.85 + (performance.now()-a)*0.15;
+  const ms=performance.now()-a;
+  /* SUBE RAPIDO Y BAJA DESPACIO. Un pico aislado tiene que aliviar en el acto; para volver a medir
+     seguido hay que haber estado barato un rato. Con una sola constante, un pico se olvida enseguida
+     y el ritmo vuelve a subir justo cuando el aparato todavia no da. */
+  MANO.msDet = ms>MANO.msDet? ms : MANO.msDet*0.94 + ms*0.06;
+  MANO.periodo = Math.max(1000/MANO_HZ, Math.min(1000/DET_MIN_HZ, MANO.msDet/DET_CARGA));
   _ultMed=t; MANO.medidas++;
   const lms=(r && r.landmarks) || [];
   if(!lms.length) return;
@@ -361,15 +399,22 @@ function manosFiltrar(t){
   if(!MANO.hayObj) return;
   const ahora = t==null? performance.now() : t;
   /* CUANTO HACE QUE NO HAY DATO, y hasta ahi se predice */
-  const ad=Math.max(0, Math.min(PRED_MAX, (ahora-_tMed)/1000));
+  /* EL TOPE DE PREDICCION SIGUE AL PERIODO DE MEDICION, no es una constante. Con el periodo en 42 ms
+     y el tope en 45 la prediccion cubre el hueco entero; si el aparato baja a 12 Hz el hueco pasa a
+     83 ms y un tope de 45 dejaria la ultima mitad de cada hueco sin nada — o sea que justo el aparato
+     que mas necesita la interpolacion seria el que menos la tendria. Un 8% de margen sobre el periodo
+     y un techo de 140 ms, que es lo que hace falta para cubrir el piso de 8 Hz. */
+  const tope=Math.min(0.140, MANO.periodo*0.00108);
+  const ad=Math.max(0, Math.min(tope, (ahora-_tMed)/1000));
   /* LA GANANCIA SALE DE LA VELOCIDAD DEL PUNTO QUE APUNTA, UNA SOLA PARA TODA LA MANO. Calculandola
      por coordenada, un dedo quieto dentro de una mano que se mueve dejaria de predecir y la mano se
      desarmaria en el aire. La mano se mueve o no se mueve; es una sola cosa. */
   const vel=Math.hypot(MANO.vel[63], MANO.vel[64]);
   const g=Math.max(0, Math.min(1, (vel-PRED_V0)/(PRED_V1-PRED_V0)));
   let k=PRED_ON? ad*g : 0;
+  const maxD=Math.min(0.15, PRED_VMAX*MANO.periodo/1000);
   const d=vel*k;
-  if(d>PRED_MAXD) k*=PRED_MAXD/d;
+  if(d>maxD) k*=maxD/d;
   const dt=Math.min(0.2, (ahora-_ultVista)/1000);
   /* UN RELOJ QUE VA PARA ATRAS SE VUELVE A ANCLAR, NO SE IGNORA. Con `if(dt<=0) return` a secas, un
      instante anterior al ultimo deja el filtro CONGELADO hasta que el reloj lo alcance — y eso paso
@@ -392,10 +437,10 @@ function manosLazo(){
                                        MANO.hayPts=false; MANO.hayObj=false; }
     if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
-    else setTimeout(paso, 1000/MANO_HZ);
+    else setTimeout(paso, MANO.periodo);
   };
   if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
-  else setTimeout(paso, 1000/MANO_HZ);
+  else setTimeout(paso, MANO.periodo);
 }
 /* lo consume el juego una vez y se apaga: asi un pellizco no puede contarse dos veces */
 function tomarPinza(){ const p=MANO.pinzaNueva; MANO.pinzaNueva=false; return p; }

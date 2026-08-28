@@ -19,6 +19,8 @@ function pintarIdioma(){
   document.getElementById('bJugar').textContent=TX('jugar');
   document.getElementById('bIdioma').textContent=TX('idioma');
   document.getElementById('bCam').textContent=TX(CAM_PREF==='environment'? 'camTrasera':'camFrontal');
+  document.getElementById('calN').textContent=TX('graficos');
+  pintarCalidad();
   document.getElementById('bOtra').textContent=TX('otra');
   document.getElementById('bMenu').textContent=TX('menu');
   pintarMenu(); pintarCam();
@@ -36,6 +38,18 @@ function pintarMenu(){
     ? (TX('menuPie')+' '+TX(CAM_PREF==='environment'? 'camPieT':'camPieF'))
     : TX('menuBloq');
 }
+/* LA CALIDAD SE PINTA Y SE APLICA EN EL MISMO SITIO, para que el boton marcado y lo que se dibuja no
+   puedan discrepar: el rotulo sale de CAL, que es lo que el renderer esta usando de verdad. */
+const CAL_NOM={ baja:'calBaja', media:'calMedia', alta:'calAlta' };
+function pintarCalidad(){
+  for(const b of document.querySelectorAll('.calB')){
+    b.textContent=TX(CAL_NOM[b.dataset.cal]);
+    b.classList.toggle('on', b.dataset.cal===CAL);
+  }
+}
+for(const b of document.querySelectorAll('.calB'))
+  b.onclick=()=>{ aplicarCalidad(b.dataset.cal); pintarCalidad(); };
+
 const camAviso=document.getElementById('camAviso');
 const CAM_MOTIVO={ permiso:'camErrPermiso', camara:'camErrCamara', cdn:'camErrCdn',
                    modelo:'camErrCdn', insegura:'camErrInsegura' };

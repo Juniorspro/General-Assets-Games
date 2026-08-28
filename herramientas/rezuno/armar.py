@@ -22,9 +22,25 @@ PARTES = ['a.html',  # el marco, el CSS y las pantallas
           'h.js',    # las pantallas, la entrada y el bucle
           'i.js']    # los ganchos de prueba
 
+# LAS DOS IMAGENES DEL MENU VIVEN EN assets/rezuno/ Y SE PEGAN AL ARMAR.
+# Guardarlas ya en base64 dentro de a.html haria que la parte —que es donde uno lee el CSS y la
+# estructura— empiece con veinte mil caracteres de basura. Se dejan como archivos y el armado las
+# mete: la fuente sigue siendo legible y la salida sigue siendo un archivo solo.
+ARTE = { '@@ARTE_TITULO@@': 'titulo.webp', '@@ARTE_MANO@@': 'mano.webp' }
+
+def pegar_arte(s):
+    import base64
+    for marca, nombre in ARTE.items():
+        ruta = os.path.join(RAIZ, 'assets', 'rezuno', nombre)
+        b64 = base64.b64encode(io.open(ruta, 'rb').read()).decode('ascii')
+        assert marca in s, 'falta la marca ' + marca
+        s = s.replace(marca, 'data:image/webp;base64,' + b64)
+    return s
+
 def main():
     partes = os.path.join(RAIZ, 'herramientas', 'rezuno', 'partes')
     s = ''.join(io.open(os.path.join(partes, p), encoding='utf8').read() for p in PARTES)
+    s = pegar_arte(s)
     # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO: io.open(p,'w') trunca el archivo ANTES de
     # evaluar lo que se le pasa, y una vez un NameError en el argumento dejo un juego en cero bytes.
     salida = os.path.join(RAIZ, 'juegos-pc', 'RezUno.html')

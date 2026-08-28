@@ -76,37 +76,19 @@ function poseMano(cierre, mano, tam, pos, yaw, pitch, roll){
   return _rp;
 }
 
-/* ---------- la cabeza, el cuello, el torso y los ojos ----------
-   CUATRO MALLAS INSTANCIADAS PARA LOS DOS RIVALES, no cuatro por rival. Y los ojos usan LA MISMA
-   matriz que el craneo con un desplazamiento local, asi que siguen la cabeza gratis: no hay dos
-   animaciones que puedan desincronizarse. */
-const matOjo=new THREE.MeshBasicMaterial({color:0x22252b});
-const cabMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,9), matPiel, 2);
-const cueMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,8,1), matPiel, 2);
-/* EL TORSO VA ANCHO ARRIBA Y ANGOSTO ABAJO, y estaba al reves. Con (0,60 arriba, 1 abajo) la parte
-   que asoma por encima del abanico era la MAS ANGOSTA —1,32 de medio ancho contra las 2,12 que mide
-   el abanico— asi que quedaba tapada entera y la cabeza salia flotando sola como un globo. Los
-   hombros son lo mas ancho de un torso visto de frente; el que se afina es el de abajo. */
-const torMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,0.70,1,12,1), matPiel, 2);
-const ojoMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,7,5), matOjo, 4);
-for(const m of [cabMalla, cueMalla, torMalla, ojoMalla]){
-  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  m.frustumCulled=false; m.castShadow=true; m.receiveShadow=false;
-  m.count=0; escena.add(m);
-}
-/* LAS MEDIDAS DE UN RIVAL, Y NO SALEN DE UNA PERSONA DE VERDAD.
-   A escala humana la carta de este juego mediria 5,6 cm, o sea que una cabeza de 22 cm seria 2,6
-   VECES el alto de una carta y taparia media mesa. La escena no esta a escala humana y forzarla lo
-   unico que consigue es que no entre en el cuadro. Lo que si se respeta son las PROPORCIONES entre
-   las partes —craneo, cuello, hombros— que es lo que hace que se lea a persona. */
-const RIV_CAB_R=1.15;                     // radio del craneo
+/* ---------- LA CABEZA SE FUE ----------
+   Pedido: *"elimina lo de la cabeza"*. Estaban el craneo, los ojos, el cuello y el torso, con la
+   cabeza girando hacia lo que el rival estaba haciendo. Se van los cuatro: con la cabeza fuera, el
+   cuello y el torso no sostienen nada y un torso sin cabeza es peor que ninguno de los dos.
+   Quedan las manos y los antebrazos, que son lo que el jugador mira — y son cuatro llamadas de
+   dibujo menos y 2.190 triangulos menos por cuadro. */
 /* cuanto cuelga la carta por debajo y por detras de la pinza que la sostiene: media carta por el
    coseno de su inclinacion, o sea su borde de arriba */
 const RIV_CUELGA_Y=CARTA_H*0.5*Math.cos(MESA.rivalTilt)-0.08, RIV_CUELGA_Z=0.40;
 const RIV={};                             // estado visible de cada rival, por jugador
 function rivalNuevo(lado, fase){
-  return { lado, desf:fase, gy:0, gx:0, gyObj:0, gxObj:0, alc:0, cierre:0,
-           garra:new THREE.Vector3(), hayGarra:false, parp:0, mirarte:0 };
+  return { lado, desf:fase, alc:0, cierre:0,
+           garra:new THREE.Vector3(), hayGarra:false };
 }
 const _rv=new THREE.Vector3(), _rv2=new THREE.Vector3(), _rq=new THREE.Quaternion(),
       _rs=new THREE.Vector3(), _rm=new THREE.Matrix4();
@@ -118,20 +100,18 @@ function rivalSitio(lado){
 /* ---------- el bucle de los rivales ---------- */
 let _rivT=0;
 function rivalesPintar(dt){
-  cabMalla.count=0; cueMalla.count=0; torMalla.count=0; ojoMalla.count=0;
   /* EN EL TUTORIAL NO HAY RIVALES, igual que sus cartas: el cartel del tutorial ocupa esa franja de
      la pantalla y ninguno de los seis pasos habla de ellos. */
   if(TUT.on || G.fase!=='juego') return;
   _rivT+=dt;
-  let iCab=0, iOjo=0;
   for(const [j, lado] of [[J_IZQ,-1],[J_DER,1]]){
     if(!RIV[j]) RIV[j]=rivalNuevo(lado, j*1.7);
     const R=RIV[j];
     const q=G.manos[j].length;
     R.hayGarra=false;
     if(!q) continue;
-    /* `desf` es el desfase de las animaciones de ESTE rival. Sin el, los dos respiran, se balancean y
-       parpadean exactamente al mismo tiempo, y dos personas sincronizadas se leen a una animacion
+    /* `desf` es el desfase de las animaciones de ESTE rival. Sin el, las dos parejas de manos se
+       balancean exactamente al mismo tiempo, y dos personas sincronizadas se leen a una animacion
        repetida —que es justo lo que son— en vez de a dos personas. */
     const S=rivalSitio(lado), f=R.desf, t=_rivT;
 
@@ -196,69 +176,7 @@ function rivalesPintar(dt){
       ponerHueso(P[0], _rv2, escM*0.34);
     }
 
-    /* ===== la cabeza ===== */
-    /* LA CABEZA TIENE QUE QUEDAR ENTERA POR ENCIMA DEL ABANICO. Con el centro a 1,62 sobre el
-       abanico, medio craneo quedaba detras de las cartas y en pantalla se veia media pelota asomando.
-       El borde de arriba del abanico esta a 1,10 sobre su centro —media carta por el coseno de la
-       inclinacion— asi que el centro de la cabeza va a esa altura mas su propio radio y un respiro. */
-    const cabY=fanY+CARTA_H*0.5*Math.cos(MESA.rivalTilt)+RIV_CAB_R*1.06+0.30, cabZ=S.z-1.95;
-    /* a donde mira: su abanico si esta pensando, la pila si esta jugando, y si no la mesa —con un
-       vistazo hacia vos cada tanto, que es lo que hace que no parezca un maniqui */
-    R.mirarte += dt;
-    let mira;
-    if(suyo && B.fase==='piensa') mira=_rv2.set(S.x, fanY, S.z+0.4);
-    else if(agarrando) mira=_rv2.set(MESA.pilaX, 0.5, MESA.centroZ);
-    else if((R.mirarte%9.5) < 2.1) mira=_rv2.set(0, 1.4, MESA.manoZ);      // te mira a vos
-    else mira=_rv2.set(0, 0.3, MESA.centroZ);
-    _rv.set(mira.x-S.x, mira.y-cabY, mira.z-cabZ);
-    R.gyObj=Math.atan2(_rv.x, _rv.z);
-    R.gxObj=-Math.atan2(_rv.y, Math.hypot(_rv.x,_rv.z));
-    /* EL BALANCEO NO SE SUMA AL OBJETIVO SINO AL RESULTADO. Sumado al objetivo pasaria por el
-       suavizado y quedaria casi borrado; sumado despues se ve, y ademas no compite con el giro. */
-    const k=Math.min(1, dt*3.4);
-    R.gy += (R.gyObj-R.gy)*k; R.gx += (R.gxObj-R.gx)*k;
-    const balY=Math.sin(t*0.53+f)*0.085 + Math.sin(t*0.31+f*2)*0.05;
-    const balX=Math.sin(t*0.44+f)*0.045;
-    const resp=Math.sin(t*1.35+f)*0.055;                   // respira
-    const gy=R.gy+balY, gx=R.gx+balX;
-
-    _reu.set(gx, gy, Math.sin(t*0.37+f)*0.05, 'YXZ');
-    _rq.setFromEuler(_reu);
-    _rv.set(S.x, cabY+resp, cabZ);
-    _rm.compose(_rv, _rq, _rs.set(RIV_CAB_R*0.97, RIV_CAB_R*1.06, RIV_CAB_R*0.94));
-    cabMalla.setMatrixAt(iCab, _rm);
-    /* el cuello y el torso NO giran con la cabeza: si giraran, girar para mirar seria girar el
-       cuerpo entero y se leeria a torreta */
-    _rv.set(S.x, cabY-RIV_CAB_R*0.92+resp*0.5, cabZ);
-    _rm.compose(_rv, _rq.identity(), _rs.set(0.30, 0.52, 0.30));
-    cueMalla.setMatrixAt(iCab, _rm);
-    /* LOS HOMBROS TIENEN QUE SER MAS ANCHOS QUE EL ABANICO, o no se ven. El torso vive DETRAS de las
-       cartas —a casi dos unidades— asi que con medio ancho de 1,30 contra las 2,12 que mide el
-       abanico quedaba tapado entero, y en pantalla la cabeza salia flotando sola como un globo. Con
-       2,20 los hombros asoman ocho decimas por cada lado del abanico y la cabeza se apoya en algo.
-       No mas: los dos rivales estan a 3,25 del centro y con 2,9 se tocarian en el medio de la mesa. */
-    _rv.set(S.x, cabY-RIV_CAB_R*1.62-0.70+resp*0.3, cabZ+0.10);
-    _rm.compose(_rv, _rq.identity(), _rs.set(2.45, 1.45, 0.95));
-    torMalla.setMatrixAt(iCab, _rm);
-    /* LOS OJOS SALEN DE LA MATRIZ DEL CRANEO. Componiendolos aparte con su propio giro habria dos
-       animaciones que mantener sincronizadas; multiplicando por la del craneo, los ojos estan en la
-       cara por construccion y no hay nada que sincronizar. */
-    cabMalla.getMatrixAt(iCab, _rm);
-    /* PARPADEA. Es lo mas barato que existe —un seno y un umbral— y es lo unico que separa "una
-       cabeza que rota" de "alguien mirandote". */
-    const parp=Math.max(0, 1-Math.abs(Math.sin(t*0.41+f*3))*22);
-    for(const ex of [-0.38, 0.38]){
-      _rv.set(ex, 0.16, 0.90).applyMatrix4(_rm);
-      _rm.decompose(_rv2, _rq, _rs);
-      const eh=0.145*(1-parp*0.92);
-      _rm.compose(_rv, _rq, _rs.set(0.155, eh, 0.10));
-      ojoMalla.setMatrixAt(iOjo++, _rm);
-      cabMalla.getMatrixAt(iCab, _rm);
-    }
-    iCab++;
   }
-  cabMalla.count=iCab; cueMalla.count=iCab; torMalla.count=iCab; ojoMalla.count=iOjo;
-  for(const m of [cabMalla, cueMalla, torMalla, ojoMalla]) m.instanceMatrix.needsUpdate=true;
 }
 /* a donde va la mano que agarra: primero a la carta elegida dentro de su abanico, despues a la pila */
 const _rdest={x:0,y:0,z:0};

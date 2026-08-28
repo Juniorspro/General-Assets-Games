@@ -30,18 +30,36 @@ html,body{ height:100%; background:#e9eaec; overflow:hidden;
    traducir, seleccionar con el lector de pantalla y que se vea nitido en cualquier densidad. El
    juego es lienzo porque son cartas moviendose. */
 .pan{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center;
-      justify-content:center; gap:clamp(14px,3.4vh,30px); padding:6vh 8%; background:#f7f8f9;
+/* EL HUECO BAJO DE 3,4vh A 2,6 Y EL PADDING DE 6 A 4. Medido en 412x732: con los valores viejos, el
+   boton de IDIOMA terminaba en 732 clavado, o sea pegado al borde de abajo sin un pixel de aire — y
+   eso con el marco justo de un telefono comun. Cada elemento que se agrega al menu se lo come todo
+   por abajo, asi que el aire tiene que salir de los huecos y no de sacar cosas. */
+      justify-content:center; gap:clamp(10px,2.6vh,24px); padding:4vh 8%; background:#f7f8f9;
       z-index:20; text-align:center; }
 .pan.ver{ display:flex; }
 
-/* EL TITULO SE DIBUJA CON TIPOGRAFIA Y NO CON UNA IMAGEN. Se pidio un menu "muy minimalista": una
-   palabra bien espaciada ES el diseño minimalista, y encima queda nitida en cualquier pantalla, pesa
-   cero bytes y se puede recolorear. Una imagen generada seria mas pesada y menos nitida. */
-#logo{ font-size:clamp(38px,11vw,74px); font-weight:200; letter-spacing:.16em;
-       line-height:1; margin-left:.16em; }
-#logo b{ font-weight:700; letter-spacing:.10em; }
+/* ===== EL TITULO ES UNA IMAGEN GENERADA, Y ES UN CAMBIO DE CRITERIO =====
+   Antes estaba dibujado con tipografia, y el argumento era que pesa cero y queda nitido. Lo que ese
+   argumento pasaba por alto es que `font-family:inherit` sobre `system-ui` NO ES LA MISMA LETRA en
+   cada aparato: en Android sale Roboto, en iPhone San Francisco y en Windows Segoe. O sea que el
+   titulo del juego —lo unico que uno reconoce de lejos— cambiaba de forma segun el telefono.
+   Una imagen es la misma letra en todos lados, y ademas se pidio con todas las letras.
+   Va con ALFA y no sobre un rectangulo blanco: el panel del menu es #f7f8f9 y un blanco puro pegado
+   encima se ve como un recuadro. Y va en negro liso con todo el detalle en el canal alfa, que en un
+   texto negro sobre blanco es exacto y comprime muchisimo mejor. */
+#logo, .logoImg{ width:min(78%, 320px); height:auto; display:block; }
 #logoSub{ font-size:clamp(10px,2.7vw,14px); letter-spacing:.42em; color:#8d929b;
           margin-left:.42em; margin-top:-2px; }
+/* ===== LA MANO ENTRA POR EL BORDE Y NO VA CENTRADA =====
+   Centrada y entera se lee a calcomania pegada encima del menu; entrando desde afuera del cuadro se
+   lee a que hay algo mas alla del menu — es la misma leccion que en el menu de Maicol, donde los dos
+   hermanos entran cortados por el costado. Y ademas asi no gasta alto, que en un marco 9:16 con
+   cuatro botones, el aviso de camara y la fila de graficos es justo lo que no sobra.
+   Va DETRAS del contenido y sin capturar toques: es fondo, no un boton. */
+#pMenu{ overflow:hidden; }
+#mArte{ position:absolute; top:-4%; right:-26%; width:96%; max-width:520px;
+        opacity:.55; pointer-events:none; z-index:0; }
+#pMenu > *:not(#mArte){ position:relative; z-index:1; }
 
 .bot{ display:block; width:min(320px,82%); padding:clamp(13px,2.4vh,18px) 10px;
       border:1px solid #c9ccd2; background:transparent; color:#1b1d22; cursor:pointer;
@@ -54,6 +72,14 @@ html,body{ height:100%; background:#e9eaec; overflow:hidden;
    linea de abajo dice "primero el tutorial" y entonces se lee a orden. */
 .bot[disabled]{ opacity:.32; cursor:default; pointer-events:none; }
 .pie{ font-size:clamp(11px,2.9vw,13px); color:#6b7079; line-height:1.55; max-width:30em; }
+#calFila{ display:flex; flex-direction:column; align-items:center; gap:7px; }
+#calN{ font-size:10px; letter-spacing:.24em; color:#8d929b; }
+#calBs{ display:flex; border:1px solid #c9ccd2; }
+.calB{ padding:8px 16px; border:0; border-left:1px solid #c9ccd2; background:transparent;
+       color:#6b7079; font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.14em;
+       cursor:pointer; }
+.calB:first-child{ border-left:0; }
+.calB.on{ background:#1b1d22; color:#f7f8f9; }
 .pie b{ color:#1b1d22; font-weight:600; }
 
 #idBotones{ display:flex; flex-direction:column; gap:12px; align-items:center; width:100%; }
@@ -141,18 +167,30 @@ body.guia #guia{ display:block; }
   <div id="guia"><span class="n" id="guiaN"></span><span id="guiaT"></span></div>
 
   <div class="pan ver" id="pIdioma">
-    <div id="logo">Rez<b>Uno</b></div>
+    <img id="logo" src="@@ARTE_TITULO@@" alt="RezUno">
     <div id="logoSub">BETA</div>
     <div id="idBotones"></div>
   </div>
 
   <div class="pan" id="pMenu">
-    <div id="logo2" style="font-size:clamp(38px,11vw,74px);font-weight:200;letter-spacing:.16em;line-height:1;margin-left:.16em">Rez<b style="font-weight:700;letter-spacing:.10em">Uno</b></div>
+    <img id="mArte" src="@@ARTE_MANO@@" alt="">
+    <img id="logo2" class="logoImg" src="@@ARTE_TITULO@@" alt="RezUno">
     <div id="logoSub2" style="font-size:clamp(10px,2.7vw,14px);letter-spacing:.42em;color:#8d929b;margin-left:.42em;margin-top:-2px">BETA</div>
     <button class="bot lleno" id="bTut"></button>
     <button class="bot" id="bJugar"></button>
     <div class="pie" id="mPie"></div>
     <div id="camAviso"></div>
+    <!-- LA CALIDAD VA EN UNA FILA DE TRES Y NO EN UN BOTON QUE CICLA. Con un boton que cicla hay que
+         tocarlo dos veces para ver la tercera opcion y nunca se sabe cuantas hay; con tres, el que
+         esta puesto se ve de una ojeada y elegir es un toque. -->
+    <div id="calFila">
+      <span id="calN"></span>
+      <div id="calBs">
+        <button class="calB" data-cal="baja"></button>
+        <button class="calB" data-cal="media"></button>
+        <button class="calB" data-cal="alta"></button>
+      </div>
+    </div>
     <button class="bot" id="bCam" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
     <button class="bot" id="bIdioma" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
   </div>

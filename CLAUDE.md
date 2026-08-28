@@ -43,13 +43,15 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~177 KB, **sin un solo asset**: todo dibujado por código). El quinto
-  juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara
-  trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la frontal se
-  puede además mirar a los lados girando la cabeza—: todo, absolutamente todo, se hace con un
-  **pellizco** (pulgar e índice). Enfrente hay **dos rivales con cabeza, brazos y manos** que agarran
-  su carta del abanico y la llevan a la pila a la vista; las cartas **flotan**. Pellizcás una carta y
-  aparecen dos opciones, **TIRAR** y **DEJAR**;
+- **`RezUno.html` es "RezUno"** (~238 KB, de los cuales 40 son las dos imágenes del menú generadas con
+  Higgsfield y recortadas; **el juego en sí no tiene un solo asset**: todo dibujado por código). El
+  quinto juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la
+  cámara trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la
+  frontal se puede además mirar a los lados girando la cabeza—: todo, absolutamente todo, se hace con
+  un **pellizco** (pulgar e índice). Enfrente hay **dos rivales con brazos y manos** que agarran su
+  carta del abanico y la llevan a la pila a la vista; las cartas **flotan**. Tiene **selección gráfica
+  de tres escalones** y el ritmo del detector de manos **se ajusta solo** al costo medido. Pellizcás
+  una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
   UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
   te pide idioma primero y después se abre un menú todo god minimalista con el nombre y donde en el
@@ -62,6 +64,159 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima quinta vuelta (2026-08-28): **RezUno** — fuera las cabezas, selección gráfica, menú generado, y el lag de MediaPipe atacado donde estaba
+
+Pedido: *"elimina lo de la cabeza y agrega selección gráfica y un buen menú god al principio, genera el
+título y todo con highsfield fotos recortadas y eso, también las manos con la cámara trasera hermano,
+también optimiza en un 300% lo de mediapipe porque entra la mano y se súper laguea igual que baldi"*.
+
+#### LAS CABEZAS SE VAN
+
+Estaban el cráneo, los ojos, el cuello y el torso. Se van los cuatro: sin la cabeza, el cuello y el
+torso no sostienen nada, y un torso sin cabeza es peor que ninguno de los dos. Quedan las manos y los
+antebrazos, que son lo que el jugador mira. Medido igual que antes: **81 → 75 llamadas de dibujo y
+7.894 → 5.690 triángulos**.
+
+#### EL LAG DE MEDIAPIPE: LO PRIMERO FUE DESCARTAR LA PALANCA OBVIA
+
+Lo obvio para acelerar MediaPipe es bajarle la resolución de entrada. **Es lo que no sirve, y se
+midió**, cronometrando `detectForVideo()` sobre 24 detecciones en cada tamaño:
+
+| entrada | costo |
+|---|---|
+| 320×240 | 295,8 ms |
+| 256×192 | 292,2 ms |
+| 192×144 | 285,5 ms |
+| **160×120** | **285,4 ms** |
+
+**Cuatro veces menos píxeles compran el 3,5 %.** La razón es que MediaPipe redimensiona adentro al
+tamaño fijo de sus modelos —192×192 el detector de palma, 224×224 el de puntos— así que lo único que
+cambia con la cámara es la subida y el reescalado, que al lado de la inferencia no es nada. La entrada
+se queda en 256×192 justamente porque no cuesta más que 160×120 y a esa resolución la mano se detecta
+desde más lejos.
+
+O sea: **el costo está en el modelo, y contra eso hay una sola palanca: cuántas veces se lo corre.**
+
+#### EL RITMO SE AJUSTA SOLO AL COSTO MEDIDO
+
+Y ahí está la explicación del reclamo. Sin mano, MediaPipe corre **sólo** el detector de palma; con
+mano corre **además** el modelo de puntos. O sea que la detección se encarece **justo en el momento en
+que aparece la mano** — que es exactamente lo que el jugador reportó. Con el período clavado en 42 ms,
+ese costo extra sale del presupuesto del cuadro y el juego se cae.
+
+La regla nueva es un **presupuesto** y no un número: la detección no puede llevarse más de **35 % del
+tiempo de reloj**. Medido, forzando el costo de medición:
+
+| medir cuesta | ritmo elegido |
+|---|---|
+| 4 ms | 24 Hz (el techo) |
+| 10 ms | 24 Hz |
+| 20 ms | **17,5 Hz** |
+| 30 ms | **11,7 Hz** |
+| 45 ms y más | **8 Hz** (el piso) |
+
+Sube rápido y baja despacio a propósito: un pico aislado tiene que aliviar en el acto, pero para
+volver a medir seguido hay que haber estado barato un rato. Y en el propio banco —donde cada detección
+cuesta 1.491 ms con render por software— el juego se baja solo al piso de 8 Hz sin que nadie le diga
+nada.
+
+**ESTO SÓLO SE PUEDE HACER PORQUE LA MANO SE SIGUE DIBUJANDO A 60.** Medido en régimen, con el antes y
+el después en la misma corrida, mirando el paso más grande dividido por el paso medio (1 es
+perfectamente parejo):
+
+| ritmo de medición | sin predicción | con |
+|---|---|---|
+| 24 Hz | 2,37 | **1,00** |
+| 17 Hz | 3,36 | **1,01** |
+| 12 Hz | 4,54 | **1,01** |
+| 8 Hz | 7,51 | **1,01** |
+
+Ése es el 300 %: se puede medir **tres veces menos seguido** —24 Hz a 8— y la mano dibujada sale igual
+de pareja. Retardo de seguimiento 6,4 ms y atenuación de temblor 2,69, sin cambio.
+
+**Y PARA QUE ESO FUERA CIERTO A 8 Hz HUBO QUE CORREGIR UN TOPE MAL PLANTEADO.** El tope de predicción
+era una DISTANCIA fija (0,05 de pantalla), y estaba calibrado para los 42 ms de 24 Hz: en un aparato
+lento —125 ms entre medidas— tapaba el último tercio de cada hueco y la mano volvía a ir a los saltos
+justo donde más hacía falta que no. Medido: el desparejo a 8 Hz se quedaba en **2,51**. Lo que se está
+afirmando con ese tope es *"una mano no se mueve más rápido que esto"*, y eso **no depende de cada
+cuánto se la mida**: pasó a ser una velocidad (1,2 pantallas por segundo). A 24 Hz da exactamente los
+mismos 0,050 de antes —o sea que donde ya andaba bien no cambia nada— y a 8 Hz da 0,150, que es lo que
+hacía falta. Con eso el desparejo a 8 Hz baja de 2,51 a **1,01**.
+
+#### LA SELECCIÓN GRÁFICA, Y NO ES UN ADORNO DE MENÚ
+
+En este juego la cámara y el detector comparten el hilo con el dibujo, así que **cada píxel que no se
+rellena es presupuesto que le queda a MediaPipe**. Tres opciones que cambian lo que cuesta, no lo que
+el juego es — las cartas, los colores y la regla son las mismas en las tres:
+
+| | píxeles | llamadas de dibujo | triángulos | mapa de sombra |
+|---|---|---|---|---|
+| alta | 301.584 | 149 | 14.150 | 1024 |
+| media | 217.700 | 149 | 14.150 | 512 |
+| **baja** | **108.433** | **77** | **7.126** | — |
+
+**LAS SOMBRAS SON UNA PASADA ENTERA DE LA ESCENA**, no un matiz: con sombras, todo lo que proyecta se
+dibuja dos veces. Apagarlas es literalmente la mitad de las llamadas.
+
+**Y ESO CASI NO SE VE, PORQUE LA MEDICIÓN ESTABA MAL.** `render.info` se pone a cero al empezar cada
+`render()`, y la pasada de sombra es *otra* pasada dentro de la misma llamada: leyendo sin apagar el
+reset automático, las llamadas de la sombra no aparecen y apagar las sombras **parece no cambiar
+nada** — el primer barrido daba 75 llamadas en las tres calidades. Es la misma trampa que ya había
+costado una medición en Campo\_de\_Tiro. Con `info.autoReset=false` aparecen las dos pasadas.
+
+Dos detalles de implementación que no son obvios:
+
+- **La escala va en el `pixelRatio`, no en `setSize`.** Bajando el tamaño con `setSize(w*esc, h*esc,
+  false)` el lienzo CSS también encoge y el juego queda dibujado en una esquina. Con el pixel ratio el
+  lienzo mide lo mismo en pantalla y lo que baja es cuántos píxeles se rellenan de verdad.
+- **El mapa de sombra viejo hay que soltarlo a mano.** three.js no recrea la textura porque cambie
+  `mapSize`: se queda con la de antes y el cambio no hace nada.
+
+Se aplica **en caliente** y se guarda: un ajuste que pide recargar la página no se prueba — el jugador
+lo toca una vez, no ve nada y no vuelve.
+
+#### EL MENÚ: EL TÍTULO PASA A SER UNA IMAGEN, Y ES UN CAMBIO DE CRITERIO
+
+Estaba dibujado con tipografía, y el argumento era que pesa cero y queda nítido. Lo que ese argumento
+pasaba por alto es que `font-family:inherit` sobre `system-ui` **no es la misma letra en cada
+aparato**: en Android sale Roboto, en iPhone San Francisco y en Windows Segoe. O sea que el título del
+juego —lo único que uno reconoce de lejos— cambiaba de forma según el teléfono.
+
+Dos imágenes generadas con Higgsfield (`nano_banana_pro`), las dos **recortadas**:
+
+- **El título** "RezUno", con `Rez` fino y `Uno` grueso. Va en **negro liso con todo el detalle en el
+  canal alfa**, que en un texto negro sobre blanco es exacto y comprime muchísimo mejor: **14,4 KB**.
+- **Una mano mate blanca haciendo una pinza y sosteniendo una carta**, recortada con el quitafondos:
+  **15,7 KB**. Entra **por el borde de arriba a la derecha**, cortada, detrás del contenido. Centrada
+  y entera se lee a calcomanía pegada encima del menú; entrando desde afuera del cuadro se lee a que
+  hay algo más allá — es la misma lección del menú de Maicol. Y así no gasta alto, que en un marco 9:16
+  con cuatro botones, el aviso de cámara y la fila de gráficos es justo lo que no sobra.
+
+**EL FONDO DE LA IMAGEN GENERADA NO ERA BLANCO PURO, y eso rompía el recorte del título.** Medido:
+1,49 millones de píxeles caen entre 253 y 255 —ruido de compresión— así que invirtiendo la luminancia
+a secas ese ruido queda con alfa 2 y **la caja útil pasa a ser la imagen entera**: el recorte no
+recortaba nada. Con el corte en 250 el ruido va a cero y el antialiasing de las letras, que va de 0 a
+250, se conserva entero.
+
+**Y LAS IMÁGENES NO VIVEN EN EL CÓDIGO FUENTE.** Están en `assets/rezuno/` y las pega `armar.py` sobre
+dos marcas. Guardarlas ya en base64 dentro de `a.html` haría que la parte donde uno lee el CSS y la
+estructura empiece con veinte mil caracteres de basura. La fuente sigue siendo legible y la salida
+sigue siendo un archivo solo.
+
+**EL AIRE DEL MENÚ SALIÓ DE LOS HUECOS.** Medido en 412×732: con los huecos viejos el botón de IDIOMA
+terminaba en 732 clavado, o sea pegado al borde de abajo sin un píxel de aire. Bajando el hueco de
+3,4vh a 2,6 y el margen de 6vh a 4: **cero solapamientos en 412×732, 360×640 y 430×764**, y el último
+botón termina en 705, 630 y 746.
+
+#### MEDIDO AL CERRAR
+
+**120 partidas** por el camino interno: 120 terminadas, **0 cartas ilegales**. **30 partidas apuntando
+con el rayo**: 30 terminadas, 0 ilegales, **0 fallos de puntería**. Tutorial completo en los tres
+idiomas. Separación entre la mano dibujada y el punto que apunta **0**, con y sin espejo. Giro de
+cabeza 17,8 grados. Los dos abanicos enteros dentro del cuadro. Las tres calidades se aplican y se
+revierten en caliente. `window.__errs` vacío. El HTML pasó de 177 a **238 KB**, de los cuales 40 son
+las dos imágenes en base64.
 
 ### Cuadragésima cuarta vuelta (2026-08-28): **RezUno** — manos humanas, la interpolación que no interpolaba, y dos rivales con cabeza
 

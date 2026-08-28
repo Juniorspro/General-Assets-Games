@@ -31,15 +31,33 @@ render.setClearColor(0xf4f5f6, 1);
 render.outputColorSpace=THREE.SRGBColorSpace;
 render.shadowMap.enabled=true;
 render.shadowMap.type=THREE.PCFSoftShadowMap;
-/* EL DPR TIENE TECHO. Dibujar al doble de la resolucion de diseño duplica los pixeles a rellenar y
-   lo unico que se gana es remuestrear hacia arriba cartas que no tienen mas detalle que dar — y con
-   la camara encendida ese presupuesto hace falta para el detector de manos. */
-const DPR_TOPE=2;
+/* ===================== LA SELECCION GRAFICA =====================
+   Pedido: *"agrega seleccion grafica"*. Y no es un adorno de menu: en este juego la camara y el
+   detector de manos comparten el hilo con el dibujo, asi que cada pixel que no se rellena es
+   presupuesto que le queda a MediaPipe. Las tres opciones cambian LO QUE CUESTA, no lo que el juego
+   es — las cartas, los colores y la regla son las mismas en las tres.
+
+   Los dos numeros que mueven la aguja son estos y no otros:
+
+   1. LA RESOLUCION, que es lineal en pixeles a rellenar. Es la unica perilla que siempre paga.
+   2. LAS SOMBRAS, que son una PASADA ENTERA de la escena: con sombras, todo lo que proyecta se
+      dibuja dos veces. Apagarlas es la mitad de las llamadas de dibujo, no un matiz.
+
+   El mapa de sombra tambien baja de 1024 a 512 en media: son cuatro veces menos texeles y sobre una
+   mesa blanca con sombras de contacto la diferencia no se ve. */
+const CALS={
+  baja:  { esc:0.60, dpr:1,   sombras:false, mapa:512,  niebla:false },
+  media: { esc:0.85, dpr:1.5, sombras:true,  mapa:512,  niebla:true  },
+  alta:  { esc:1.00, dpr:2,   sombras:true,  mapa:1024, niebla:true  }
+};
+let CAL='media';
+try{ const g=localStorage.getItem('rezuno_cal'); if(CALS[g]) CAL=g; }catch(e){}
 
 const escena=new THREE.Scene();
 escena.background=new THREE.Color(0xf4f5f6);
 /* la niebla es MUY suave y clara: separa la pared del piso sin que se note que hay niebla */
-escena.fog=new THREE.Fog(0xf4f5f6, 26, 54);
+const _niebla=new THREE.Fog(0xf4f5f6, 26, 54);
+escena.fog=_niebla;
 
 /* FOV 30 Y NO 60. Medido a ojo sobre la propia captura: con 60 la carta de la punta del abanico se
    ve de canto y su numero se pierde. Con 30 desde 20 unidades la perspectiva se nota en el grosor y
@@ -122,12 +140,38 @@ escena.add(luz); escena.add(luz.target);
 
 function ajustar(){
   const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
-  render.setPixelRatio(Math.min(devicePixelRatio||1, DPR_TOPE));
+  const c=CALS[CAL];
+  /* LA ESCALA VA EN EL PIXEL RATIO Y NO EN setSize, y esa es la unica forma correcta. Bajando el
+     tamaño del lienzo con setSize(w*esc, h*esc, false) el lienzo CSS tambien encoge y el juego queda
+     dibujado en una esquina; con el pixel ratio, el lienzo mide lo mismo en pantalla y lo que baja es
+     cuantos pixeles de verdad se rellenan, que es justamente lo que se quiere. */
+  render.setPixelRatio(Math.min(devicePixelRatio||1, c.dpr)*c.esc);
   render.setSize(w,h,false);
   camara.aspect=w/h; camara.updateProjectionMatrix();
 }
+/* SE APLICA EN CALIENTE. Un ajuste que pide recargar la pagina no se prueba: el jugador lo toca una
+   vez, no ve nada y no vuelve. */
+function aplicarCalidad(k){
+  if(CALS[k]) CAL=k;
+  try{ localStorage.setItem('rezuno_cal', CAL); }catch(e){}
+  const c=CALS[CAL];
+  render.shadowMap.enabled=c.sombras;
+  luz.castShadow=c.sombras;
+  if(luz.shadow.mapSize.x!==c.mapa){
+    luz.shadow.mapSize.set(c.mapa, c.mapa);
+    /* EL MAPA VIEJO HAY QUE SOLTARLO A MANO. three.js no recrea la textura de sombra porque cambie
+       mapSize: se queda con la de antes y el cambio no hace nada. */
+    if(luz.shadow.map){ luz.shadow.map.dispose(); luz.shadow.map=null; }
+  }
+  escena.fog = c.niebla? _niebla : null;
+  /* todos los materiales tienen que recompilar cuando entra o sale la niebla o las sombras */
+  escena.traverse(o=>{ if(o.material){ const M=Array.isArray(o.material)? o.material : [o.material];
+                                       for(const m of M) m.needsUpdate=true; } });
+  ajustar();
+  return CAL;
+}
 addEventListener('resize', ajustar);
-ajustar();
+aplicarCalidad(CAL);
 
 /* =========================================================================================
    LA CARA DE UNA CARTA, PINTADA EN UN LIENZO Y CACHEADA

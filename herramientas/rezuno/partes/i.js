@@ -215,12 +215,15 @@ window.__rez={
      Sin interpolacion solo pueden moverse los cuadros que caen justo despues de una medicion, o sea
      24 de cada 60: el 40%, y a saltos de dos cuadros y medio. Con interpolacion se mueven todos y el
      paso es parejo. `pasoMax/pasoMedio` es el numero que lo dice: 1 es perfectamente parejo. */
-  manoInterp:(vel, pred)=>{
-    const antes=PRED_ON;
+  manoInterp:(vel, pred, hz)=>{
+    const antes=PRED_ON, perAntes=MANO.periodo;
     if(pred!=null) PRED_ON=!!pred;
     fpReset();
     const v=vel==null? 0.6 : vel;
-    const PM=1000/24, PD=1000/60;
+    /* SE MIDE AL RITMO QUE SE LE PASA, y el filtro tiene que enterarse: el tope de prediccion sale de
+       MANO.periodo, asi que probar 12 Hz con el periodo en 42 mediria un caso que no existe. */
+    MANO.periodo=1000/(hz||24);
+    const PM=MANO.periodo, PD=1000/60;
     let t=performance.now(), x=0.2, tMed=t;
     let ant=null, mueven=0, n=0, sum=0, mx=0;
     for(let k=0;k<180;k++){
@@ -232,9 +235,9 @@ window.__rez={
         ant=MANO.x;
       }
     }
-    PRED_ON=antes;
+    PRED_ON=antes; MANO.periodo=perAntes;
     const medio=sum/Math.max(1,n);
-    return { vel:v, prediccion:(pred==null? antes : !!pred), cuadros:n, mueven,
+    return { vel:v, hz:hz||24, prediccion:(pred==null? antes : !!pred), cuadros:n, mueven,
              pctMueven:+(mueven/Math.max(1,n)).toFixed(3),
              pasoMedio:+medio.toFixed(5), pasoMax:+mx.toFixed(5),
              desparejo:+(mx/Math.max(1e-9,medio)).toFixed(2) };
@@ -292,7 +295,6 @@ window.__rez={
   manos3D:()=>(manosPintar(1/60), { articulaciones:artMalla.count, huesos:hueMalla.count,
                  palmas:palMalla.count, tope:[M_ART, M_HUE, M_PAL],
                  tuya:!!(MANO.on&&MANO.hay&&MANO.hayPts),
-                 cabezas:cabMalla.count, ojos:ojoMalla.count,
                  alcance:[J_IZQ,J_DER].map(j=>RIV[j]? +RIV[j].alc.toFixed(2) : 0),
                  cierre:[J_IZQ,J_DER].map(j=>RIV[j]? +RIV[j].cierre.toFixed(2) : 0) }),
   /* proyecta la punta del indice dibujada y la compara con el punto que APUNTA: si se separan, el
@@ -312,8 +314,8 @@ window.__rez={
              separacion:+Math.hypot(px-MANO.x, py-MANO.y).toFixed(5) };
   },
   /* ===== LOS RIVALES, EN COORDENADAS DE PANTALLA =====
-     Un rival "se ve bien" no es una opinion: es que la cabeza este ENTERA dentro del cuadro, que no
-     quede tapada por su propio abanico, y que las dos manos entren. Las tres cosas son numeros. */
+     Un rival "se ve bien" no es una opinion: es que su abanico entre entero en el cuadro y que la
+     mano que agarra llegue a la carta que el bot eligio. Las dos cosas son numeros. */
   rivales:()=>{
     manosPintar(1/60); armarMesa();
     escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
@@ -323,8 +325,6 @@ window.__rez={
     const out=[];
     for(const [j,lado] of [[J_IZQ,-1],[J_DER,1]]){
       const R=RIV[j]; if(!R) continue;
-      const m=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(), e=new THREE.Vector3();
-      cabMalla.getMatrixAt(0+(lado>0?1:0), m); m.decompose(p,q,e);
       const q2=G.manos[j].length;
       /* la caja del abanico: la primera y la ultima carta, arriba y abajo */
       const caj={x:[9,-9], y:[9,-9]};
@@ -336,17 +336,11 @@ window.__rez={
           caj.y[0]=Math.min(caj.y[0],w[1]); caj.y[1]=Math.max(caj.y[1],w[1]);
         }
       }
-      const arriba=pr(p.x, p.y+e.y, p.z), abajo=pr(p.x, p.y-e.y, p.z);
-      const izq=pr(p.x-e.x, p.y, p.z), der=pr(p.x+e.x, p.y, p.z);
-      /* las manos: la muñeca y la punta del indice de cada una, sacadas de los puntos dibujados */
-      out.push({ j, cabeza:{ centro:pr(p.x,p.y,p.z), arriba, abajo, izq, der,
-                             entra: arriba[1]>0.02 && abajo[1]<0.98 && izq[0]>0.02 && der[0]<0.98,
-                             sobreAbanico: abajo[1] < caj.y[0] },
-                 abanico:{ x:[+caj.x[0].toFixed(3), +caj.x[1].toFixed(3)],
-                           y:[+caj.y[0].toFixed(3), +caj.y[1].toFixed(3)],
-                           entra: caj.x[0]>0.01 && caj.x[1]<0.99 },
+      out.push({ j, abanico:{ x:[+caj.x[0].toFixed(3), +caj.x[1].toFixed(3)],
+                              y:[+caj.y[0].toFixed(3), +caj.y[1].toFixed(3)],
+                              entra: caj.x[0]>0.01 && caj.x[1]<0.99 },
                  garra:pr(R.garra.x,R.garra.y,R.garra.z), alc:+R.alc.toFixed(3),
-                 gy:+R.gy.toFixed(3), gx:+R.gx.toFixed(3) });
+                 cierre:+R.cierre.toFixed(3) });
     }
     return out;
   },
@@ -486,6 +480,60 @@ window.__rez={
   audio:()=>({ hay:!!AUD.ctx, on:AUD.on, estado:AUD.ctx? AUD.ctx.state : 'no' }),
   son:(k)=>{ son(k); return true; },
   /* ---- costo ---- */
+  /* ===== EL DESGLOSE DEL CUADRO =====
+     `costo()` dice cuanto tarda un cuadro entero; esto dice EN QUE. Sin el desglose, "va lento con la
+     mano" se arregla adivinando. Se corre cada parte por separado el mismo numero de veces y se toma
+     la mediana, que no se deja arrastrar por el primer cuadro —que siempre paga compilaciones. */
+  perfil:(n)=>{
+    const v=n||200;
+    const med=(f)=>{ const t=[]; for(let k=0;k<v;k++){ const a=performance.now(); f(); t.push(performance.now()-a); }
+                     t.sort((x,y)=>x-y); return +t[Math.floor(v*0.5)].toFixed(4); };
+    const r={ mesa:med(()=>armarMesa()),
+              manos:med(()=>manosPintar(1/60)),
+              aro:med(()=>pintarAro()),
+              rayo:med(()=>pickEn(0.5,0.5)),
+              dibujo:med(()=>render.render(escena,camara)),
+              filtro:med(()=>manosFiltrar()) };
+    r.hay=!!(MANO.on&&MANO.hay&&MANO.hayPts);
+    r.total=+Object.keys(r).filter(k=>k!=='hay'&&k!=='rayo').reduce((a,k)=>a+r[k],0).toFixed(4);
+    return r;
+  },
+  /* ===== EL COSTO DE MEDIR, QUE ES LO QUE SE PUEDE MEDIR DE VERDAD =====
+     El tiempo de cuadro en este banco no sirve —render por software y `performance.now()` recortado—
+     pero `detectForVideo()` SI se puede cronometrar, y es exactamente lo que el jugador reporta como
+     "entra la mano y se laguea". Este gancho cambia el tamaño de entrada de la camara, tira n
+     detecciones y devuelve el promedio medido. */
+  entrada:(w,h)=>{
+    const tr=MANO.vid && MANO.vid.srcObject && MANO.vid.srcObject.getVideoTracks()[0];
+    if(!tr) return 'sin camara';
+    MANO.msDet=0; MANO.medidas=0;
+    return tr.applyConstraints({ width:{ideal:w}, height:{ideal:h} })
+             .then(()=>({ pedido:[w,h], real:[tr.getSettings().width, tr.getSettings().height] }))
+             .catch(e=>'no: '+e.name);
+  },
+  /* fuerza un costo de medicion para poder ver la regla del presupuesto sin un telefono lento a mano */
+  msFalso:(ms)=>{ MANO.msDet=ms;
+                  MANO.periodo=Math.max(1000/MANO_HZ, Math.min(1000/DET_MIN_HZ, MANO.msDet/DET_CARGA));
+                  return +MANO.periodo.toFixed(1); },
+  /* la calidad: se cambia y se mide, que es la unica forma de saber si el ajuste ajusta algo */
+  calidad:(k)=>{ if(k) aplicarCalidad(k);
+    const b=render.getDrawingBufferSize(new THREE.Vector2());
+    armarMesa(); manosPintar(1/60);
+    /* EL CUADRO ENTERO Y NO LA ULTIMA PASADA. three.js pone `info` a cero al empezar cada render(), y
+       la pasada de sombra es OTRA pasada: leyendo sin apagar el reset automatico, las llamadas de la
+       sombra no aparecen y apagar las sombras parece no cambiar nada. Es la misma trampa que ya habia
+       costado una medicion en Campo_de_Tiro. */
+    const inf=render.info; inf.autoReset=false; inf.reset();
+    render.render(escena,camara);
+    const r={ cal:CAL, lienzo:[lienzo.width, lienzo.height], buffer:[b.x,b.y],
+              pixeles:b.x*b.y, sombras:render.shadowMap.enabled,
+              mapa:luz.shadow.mapSize.x, niebla:!!escena.fog,
+              llamadas:inf.render.calls, tris:inf.render.triangles };
+    inf.autoReset=true;
+    return r; },
+  det:()=>({ ms:+MANO.msDet.toFixed(2), medidas:MANO.medidas, hz:MANO_HZ,
+             hzUsa:+(1000/MANO.periodo).toFixed(1), periodo:+MANO.periodo.toFixed(1),
+             ent:[MANO.vid&&MANO.vid.videoWidth, MANO.vid&&MANO.vid.videoHeight] }),
   costo:(n)=>{
     const v=n||300, t=[];
     for(let k=0;k<v;k++){ const a=performance.now();
