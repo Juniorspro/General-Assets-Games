@@ -1,3 +1,7 @@
+/* VA ARRIBA DE TODO Y NO "donde corresponde tematicamente". Un let leido antes de su linea no rompe
+   una funcion: rompe el modulo entero, y en este proyecto eso ya tiro el juego abajo cuatro veces.
+   La regla es declarar antes del primer uso, y el primer uso de esto esta en el bucle. */
+let CONGELADO=false;
 /* ===================== LAS PANTALLAS ===================== */
 const PANTALLAS=['pIdioma','pMenu','pFin'];
 let pant='idioma';
@@ -147,14 +151,27 @@ function bucle(){
        se moviera despues, el pellizco de este cuadro se resolveria con la camara del anterior. */
     /* la ganancia 1,2 hace que unos diecisiete grados de cabeza lleguen al tope de veinte de vista:
        girar la cabeza mas que eso para mirar una pantalla que esta al frente no lo hace nadie */
+    /* EL FILTRO DE LA MANO CORRE ACA, EN CADA CUADRO. La camara mide 24 veces por segundo en un
+       telefono y el juego dibuja 60: entre medicion y medicion los 21 puntos se siguen acercando al
+       ultimo destino, asi que la mano se mueve a 60 aunque se la mida a 24. Y va ANTES de consumir el
+       pellizco, porque el punto al que se apunta tiene que ser el de este cuadro y no el anterior. */
+    manosFiltrar();
     camaraGiro(CARA.hay? CARA.giro*1.2 : 0, dt);
     if(tomarPinza()) activar(MANO.x, MANO.y);
-    partidaTick(dt);
-    tutTick(dt);
+    /* CONGELADO detiene la PARTIDA pero no el dibujo. Es para las pruebas: para fotografiar el
+       instante exacto en que una mano esta agarrando una carta hay que poder parar el reloj de la
+       partida y dejar que las animaciones —que son lerps hacia un destino— terminen de asentarse.
+       Sin esto la foto sale del cuadro siguiente al que se pidio, o sea de otro momento. */
+    if(!CONGELADO){ partidaTick(dt); tutTick(dt); }
+    /* LAS MANOS SE CALCULAN ANTES DE ARMAR LA MESA, y el orden importa. La carta que un rival esta
+       agarrando se coloca en el punto de la pinza de su mano; si la mesa se armara primero, esa carta
+       usaria la pinza del cuadro ANTERIOR y quedaria un cuadro atras de la mano que la sostiene.
+       Un cuadro de desfase a 60 son 17 ms, pero la mano viaja medio metro en medio segundo: la carta
+       se veria despegada del pulgar justo en el momento en que hay que mirarla. */
+    manosPintar(dt);
     armarMesa();
     pintarTut();
     pintarAro();
-    manosPintar(dt);
     render.render(escena, camara);
   }
   /* LA PANTALLA DE FINAL SE MIRA AFUERA DEL `if`, Y ESE ERA UN DEFECTO DE VERDAD. Estaba adentro, o

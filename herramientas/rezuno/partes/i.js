@@ -129,24 +129,40 @@ window.__rez={
     const S=esc==null? 1 : esc;
     const lm=new Array(21);
     const P=(x,y,z)=>({x:cx+x*S, y:cy+y*S, z:(z||0)*S});
-    lm[0]=P(0, 0.115, 0);                                   // muñeca
-    /* los cuatro nudillos, abiertos en abanico */
-    const nud=[[ -0.052,0.010],[-0.018,-0.005],[0.016,-0.002],[0.048,0.014]];
-    const largo=[0.052,0.058,0.054,0.042];
+    /* ===== LAS FALANGES MIDEN LO QUE MIDEN EN UNA MANO =====
+       La primera version daba a los tres tramos de cada dedo el MISMO largo, y corto: 0,30 del largo
+       de la palma cada uno. Con los radios nuevos —que salen de una mano adulta— eso deja cada tramo
+       midiendo dos veces su propio grosor, y un cilindro de relacion 2 entre dos esferas se ve como
+       una CUENTA, no como una falange. O sea que la mano de mentira se veia a collar aunque la de
+       verdad no, y una prueba que no representa lo que se mira no sirve para mirarlo.
+       Ahora los tres tramos van 0,45 · 0,27 · 0,18 de la palma, que es la proporcion de un dedo de
+       verdad: el de la base es el largo y la punta es la corta. */
+    const PL=0.115;                                         // el largo de la palma, en el marco
+    lm[0]=P(0, PL, 0);                                      // muñeca
+    /* los cuatro nudillos con su arco: el del medio es el mas alto, el menique el mas bajo */
+    const nud=[[-0.052,0.012],[-0.018,-0.005],[0.016,-0.001],[0.048,0.018]];
+    /* el largo de cada dedo en unidades de palma; el menique es notablemente mas corto */
+    const largo=[[0.44,0.26,0.17],[0.48,0.29,0.18],[0.45,0.27,0.17],[0.34,0.21,0.15]];
     for(let d=0; d<4; d++){
-      const b=5+d*4, nx=nud[d][0], ny=nud[d][1];
-      const ang=(-0.30+d*0.20);
-      lm[b]=P(nx, ny, -0.01);
-      for(let k=1;k<=3;k++){
-        const t=largo[d]*k*0.62;
-        lm[b+k]=P(nx+Math.sin(ang)*t, ny-Math.cos(ang)*t, -0.012*k);
+      const b=5+d*4, ang=(-0.16+d*0.11);
+      let x=nud[d][0], y=nud[d][1];
+      lm[b]=P(x, y, -0.01);
+      for(let k=0;k<3;k++){
+        const t=largo[d][k]*PL;
+        x+=Math.sin(ang)*t; y-=Math.cos(ang)*t;
+        lm[b+k+1]=P(x, y, -0.012*(k+1));
       }
     }
     /* el pulgar sale hacia el costado y hacia adelante, que es lo que lo distingue de los otros */
-    lm[1]=P(-0.055, 0.078, 0.004);
-    lm[2]=P(-0.086, 0.048, 0.010);
-    lm[3]=P(-0.100, 0.020, 0.016);
-    lm[4]=P(-0.106,-0.004, 0.020);
+    {
+      let x=-0.048, y=0.082;
+      lm[1]=P(x, y, 0.004);
+      const dx=-0.66, dy=-0.75, lg=[0.42,0.28,0.22];
+      for(let k=0;k<3;k++){
+        x+=dx*lg[k]*PL; y+=dy*lg[k]*PL;
+        lm[2+k]=P(x, y, 0.006*(k+1));
+      }
+    }
     if(pinza){
       /* pellizcar es llevar la punta del pulgar a la punta del indice: se mueven LAS DOS puntas al
          punto medio, que es lo que hace una mano */
@@ -186,6 +202,45 @@ window.__rez={
              desvio:+off.toFixed(4),
              retardoFrac:+err.toFixed(4), retardoMs:+(err/v*1000).toFixed(1) };
   },
+  /* ===== LA INTERPOLACION: LA MANO SE MUEVE ENTRE MEDICION Y MEDICION =====
+     Es LA prueba de la optimizacion. Se inyecta UNA sola medicion nueva —o sea, se simula que la
+     camara entrego un cuadro y despues se calla— y se corren n cuadros de dibujo sin ninguna
+     medicion mas. Si el punto se queda quieto, bajar el detector a 24 Hz dejaria la mano moviendose
+     a tirones; si sigue acercandose al destino, la mano va a 60 aunque se la mida a 24. */
+  /* ===== LA INTERPOLACION: LA MANO SE MUEVE ENTRE MEDICION Y MEDICION =====
+     Es LA prueba de la optimizacion, y se hace en REGIMEN y no con un salto: se mueve la mano de
+     mentira a velocidad constante, se la MIDE cada 42 ms —los 24 Hz del detector— y se DIBUJA cada
+     16,7 —los 60 del juego—. Despues se mira, cuadro de dibujo por cuadro de dibujo, cuantos movieron
+     el punto y cuanto lo movieron.
+     Sin interpolacion solo pueden moverse los cuadros que caen justo despues de una medicion, o sea
+     24 de cada 60: el 40%, y a saltos de dos cuadros y medio. Con interpolacion se mueven todos y el
+     paso es parejo. `pasoMax/pasoMedio` es el numero que lo dice: 1 es perfectamente parejo. */
+  manoInterp:(vel, pred)=>{
+    const antes=PRED_ON;
+    if(pred!=null) PRED_ON=!!pred;
+    fpReset();
+    const v=vel==null? 0.6 : vel;
+    const PM=1000/24, PD=1000/60;
+    let t=performance.now(), x=0.2, tMed=t;
+    let ant=null, mueven=0, n=0, sum=0, mx=0;
+    for(let k=0;k<180;k++){
+      t+=PD;
+      while(tMed+PM<=t){ tMed+=PM; x+=v*PM/1000; window.__rez.manoInyectar(x,0.5,false,tMed); }
+      manosFiltrar(t);
+      if(k>90){
+        if(ant!==null){ const d=Math.abs(MANO.x-ant); if(d>1e-6) mueven++; sum+=d; mx=Math.max(mx,d); n++; }
+        ant=MANO.x;
+      }
+    }
+    PRED_ON=antes;
+    const medio=sum/Math.max(1,n);
+    return { vel:v, prediccion:(pred==null? antes : !!pred), cuadros:n, mueven,
+             pctMueven:+(mueven/Math.max(1,n)).toFixed(3),
+             pasoMedio:+medio.toFixed(5), pasoMax:+mx.toFixed(5),
+             desparejo:+(mx/Math.max(1e-9,medio)).toFixed(2) };
+  },
+  hz:()=>({ mano:MANO_HZ, cara:CARA_HZ, grueso:(()=>{ try{
+              return window.matchMedia('(pointer:coarse)').matches; }catch(e){ return null; } })() }),
   /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
      pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
   manoTemblor:(ruido, cuadros)=>{
@@ -235,8 +290,11 @@ window.__rez={
                    for(let k=0;k<160;k++) camaraGiro(0,1/60); return window.__rez.caraVer(); },
   /* ---- LAS MANOS DIBUJADAS ---- */
   manos3D:()=>(manosPintar(1/60), { articulaciones:artMalla.count, huesos:hueMalla.count,
-                 tope:[M_ART, M_HUE], tuya:!!(MANO.on&&MANO.hay&&MANO.hayPts),
-                 alcance:RIV_ALC.map(v=>+v.toFixed(2)) }),
+                 palmas:palMalla.count, tope:[M_ART, M_HUE, M_PAL],
+                 tuya:!!(MANO.on&&MANO.hay&&MANO.hayPts),
+                 cabezas:cabMalla.count, ojos:ojoMalla.count,
+                 alcance:[J_IZQ,J_DER].map(j=>RIV[j]? +RIV[j].alc.toFixed(2) : 0),
+                 cierre:[J_IZQ,J_DER].map(j=>RIV[j]? +RIV[j].cierre.toFixed(2) : 0) }),
   /* proyecta la punta del indice dibujada y la compara con el punto que APUNTA: si se separan, el
      jugador ve su pinza en un lugar y agarra en otro */
   manoCoincide:()=>{
@@ -253,6 +311,65 @@ window.__rez={
     return { dibujo:[+px.toFixed(4), +py.toFixed(4)], apunta:[+MANO.x.toFixed(4), +MANO.y.toFixed(4)],
              separacion:+Math.hypot(px-MANO.x, py-MANO.y).toFixed(5) };
   },
+  /* ===== LOS RIVALES, EN COORDENADAS DE PANTALLA =====
+     Un rival "se ve bien" no es una opinion: es que la cabeza este ENTERA dentro del cuadro, que no
+     quede tapada por su propio abanico, y que las dos manos entren. Las tres cosas son numeros. */
+  rivales:()=>{
+    manosPintar(1/60); armarMesa();
+    escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
+    const v=new THREE.Vector3();
+    const pr=(x,y,z)=>{ v.set(x,y,z).project(camara);
+                        return [ +(v.x*0.5+0.5).toFixed(3), +(-v.y*0.5+0.5).toFixed(3) ]; };
+    const out=[];
+    for(const [j,lado] of [[J_IZQ,-1],[J_DER,1]]){
+      const R=RIV[j]; if(!R) continue;
+      const m=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(), e=new THREE.Vector3();
+      cabMalla.getMatrixAt(0+(lado>0?1:0), m); m.decompose(p,q,e);
+      const q2=G.manos[j].length;
+      /* la caja del abanico: la primera y la ultima carta, arriba y abajo */
+      const caj={x:[9,-9], y:[9,-9]};
+      for(const i of [0, q2-1]){
+        const st=sitioRival(i,q2,lado,G.t);
+        for(const dy of [-CARTA_H/2, CARTA_H/2]) for(const dx of [-CARTA_W/2, CARTA_W/2]){
+          const w=pr(st.x+dx, st.y+dy*Math.cos(st.rx), st.z-dy*Math.sin(st.rx));
+          caj.x[0]=Math.min(caj.x[0],w[0]); caj.x[1]=Math.max(caj.x[1],w[0]);
+          caj.y[0]=Math.min(caj.y[0],w[1]); caj.y[1]=Math.max(caj.y[1],w[1]);
+        }
+      }
+      const arriba=pr(p.x, p.y+e.y, p.z), abajo=pr(p.x, p.y-e.y, p.z);
+      const izq=pr(p.x-e.x, p.y, p.z), der=pr(p.x+e.x, p.y, p.z);
+      /* las manos: la muñeca y la punta del indice de cada una, sacadas de los puntos dibujados */
+      out.push({ j, cabeza:{ centro:pr(p.x,p.y,p.z), arriba, abajo, izq, der,
+                             entra: arriba[1]>0.02 && abajo[1]<0.98 && izq[0]>0.02 && der[0]<0.98,
+                             sobreAbanico: abajo[1] < caj.y[0] },
+                 abanico:{ x:[+caj.x[0].toFixed(3), +caj.x[1].toFixed(3)],
+                           y:[+caj.y[0].toFixed(3), +caj.y[1].toFixed(3)],
+                           entra: caj.x[0]>0.01 && caj.x[1]<0.99 },
+                 garra:pr(R.garra.x,R.garra.y,R.garra.z), alc:+R.alc.toFixed(3),
+                 gy:+R.gy.toFixed(3), gx:+R.gx.toFixed(3) });
+    }
+    return out;
+  },
+  /* juega hasta que un rival este en la fase que se pide, y devuelve cuantas vueltas tardo: asi se
+     puede fotografiar el instante exacto en que una mano esta agarrando una carta */
+  hastaBot:(fase, tope)=>{
+    let n=0;
+    while(n++<(tope||3000)){
+      if(G.turno!==J_VOS && G.bot.fase===fase && G.bot.j>=0) return { vueltas:n, bot:{...G.bot} };
+      if(G.turno===J_VOS){
+        if(G.colorPide){ elegirColor(botColor(J_VOS)); continue; }
+        const i=botElegir(J_VOS);
+        if(i<0){ if(!G.robo) robarJugador(); else { G.turno=siguiente(J_VOS); G.robo=false; } continue; }
+        seleccionar(i); tirarSel(); if(G.colorPide) elegirColor(botColor(J_VOS));
+        if(G.sel>=0) soltar();
+        continue;
+      }
+      partidaTick(1/60);
+    }
+    return { vueltas:n, bot:{...G.bot}, fallo:true };
+  },
+  botVer:()=>({...G.bot}),
+  pausa:(b)=>{ CONGELADO=!!b; return CONGELADO; },
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
                  crudo:+MANO.crudo.toFixed(3), medidas:MANO.medidas, delegado:MANO.delegado,

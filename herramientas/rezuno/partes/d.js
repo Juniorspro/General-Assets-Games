@@ -29,7 +29,10 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
                 guardan en un arreglo plano de 63 numeros y no en 21 objetos: los objetos habria que
                 crearlos de nuevo en cada medicion —2.520 objetos por segundo a la basura— y el
                 arreglo se escribe encima. */
-             pts:new Float32Array(63), hayPts:false, usa:'' };
+             pts:new Float32Array(63), hayPts:false, usa:'',
+             /* el destino crudo de la ultima medicion: 63 coordenadas mas el punto del aro, y su
+                velocidad, que es con lo que se predice entre medicion y medicion */
+             obj:new Float32Array(65), vel:new Float32Array(65), hayObj:false };
 /* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
 let CAM_PREF='environment';
 try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
@@ -48,7 +51,45 @@ const MANO_CDN=[{ js:MANO_URL, wasm:MANO_WASM },
 const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 /* 256x192 y no 480x360: son 2,8 veces menos pixeles para la misma mano, y la mano ocupa medio cuadro */
 const MANO_ENT_W=256, MANO_ENT_H=192;
-const MANO_HZ=45;             // techo de mediciones por segundo
+/* ===================== EL DETECTOR MIDE MENOS Y LA MANO SE DIBUJA IGUAL =====================
+   Pedido: *"aplicale una optimizacion igual a la de baldi"*. La de RECREO son DOS cosas y solo una
+   estaba puesta aca.
+
+   La que ya estaba: la medicion cuelga de `requestVideoFrameCallback` del propio <video>, o sea que
+   dispara una vez por cuadro de CAMARA y no por cuadro de RENDER. Sin eso, `detectForVideo()` —que
+   tarda entre 8 y 20 ms en un telefono— se paga dentro de los 16,6 ms de presupuesto de cada cuadro.
+
+   La que faltaba, y es la que importa: EL TECHO DE MEDICIONES Y LA INTERPOLACION. Con el techo en 45
+   se medía en cada cuadro que entregara la camara, y en un telefono eso es todo el trabajo que hay.
+   Baja a 24 en aparatos de puntero grueso —o sea telefonos y tabletas— y entre medicion y medicion
+   los 21 puntos SE INTERPOLAN en cada cuadro de dibujo. La verdad se calcula pocas veces y el dibujo
+   rellena: es el mismo criterio con el que RECREO simula a 60 pasos fijos y dibuja a 120.
+
+   VEINTICUATRO EN TODOS LADOS Y NO SOLO EN TELEFONO. La primera version partia el techo con
+   `pointer:coarse` —24 en telefono, 45 en PC— y esa rama no se puede comprobar: el navegador del
+   banco dice `coarse` tambien cuando se lo corre como escritorio, asi que la mitad del codigo
+   quedaba sin medir. Con la interpolacion puesta, 24 medidas por segundo dibujan igual de suave que
+   45 en cualquier aparato, asi que la rama no compraba nada y costaba una rama sin probar. */
+const MANO_HZ=24;
+/* HASTA DONDE SE PREDICE ENTRE MEDICION Y MEDICION. A 24 Hz hay 42 ms entre medidas; con el tope en
+   45 ms la prediccion cubre el hueco entero y ni un milisegundo mas. Extrapolar mas lejos que el
+   proximo dato no es interpolar: es inventar. */
+const PRED_MAX=0.045;
+/* LA PREDICCION ESTA ATADA A LA VELOCIDAD, Y ESTO ES LA LECCION DE RECREO. Extrapolando siempre, con
+   la mano QUIETA la diferencia entre dos medidas no es movimiento: es el ruido del detector. O sea
+   que el codigo tomaria el ruido y lo multiplicaria antes de dibujarlo. Por debajo de PRED_V0 no se
+   predice nada y por encima de PRED_V1 se predice entero. */
+const PRED_V0=0.15, PRED_V1=0.55;   // fracciones de pantalla por segundo
+/* Y ADEMAS SE TOPA CUANTO PUEDE CORRERSE, no solo cuanto tiempo. Sin el tope, una sola medicion
+   rara —el detector salta la mano de un lado al otro en un cuadro— da una velocidad enorme y la
+   prediccion la multiplica: medido con un salto sintetico de 0,58 en un cuadro, el punto se iba a
+   2,39 de pantalla, o sea a metro y medio fuera del cuadro. Con el tope, un salto raro cuesta unos
+   pixeles de mas y nada mas. Y se escala LA MANO ENTERA con el mismo factor, no cada punto por su
+   cuenta: escalando por punto, la mano se deformaria justo cuando se mueve rapido. */
+const PRED_MAXD=0.05;               // lo mas que puede adelantarse el punto que apunta
+/* se apaga desde los ganchos para poder medir el ANTES y el DESPUES en la misma corrida: una mejora
+   contada contra el recuerdo de como andaba no es una medicion */
+let PRED_ON=true;
 const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
 /* ===================== LA CARA VA A 12 Hz Y NO A 45 =====================
    Son DOS modelos corriendo sobre el mismo video, asi que el costo se suma: medir las dos cosas al
@@ -218,7 +259,7 @@ async function caraIniciar(vision, fs){
   CARA.on=!!CARA.det;
 }
 
-let _ultMed=0, _ultVista=0, _pinzaCruda=false, _ultCara=0;
+let _ultMed=0, _ultVista=0, _pinzaCruda=false, _ultCara=0, _tMed=0;
 /* EL GIRO DE LA CABEZA SALE DE LA MATRIZ Y NO DE LOS PUNTOS. Deducirlo de "donde cae la nariz entre
    los dos ojos" funciona hasta que la persona se inclina o se acerca; la matriz que devuelve el
    modelo ya trae la rotacion resuelta. El elemento [8] de una matriz columna-mayor es el seno del
@@ -262,22 +303,39 @@ function manosInyectar(lm, t){
   /* EL PUNTO DEL ARO ES EL MEDIO ENTRE EL PULGAR Y EL INDICE, y no la punta del indice: es donde el
      jugador VE que se cierra la pinza, asi que es donde tiene que estar el aro. Con la punta del
      indice, al cerrar la pinza el aro se corre un centimetro justo en el momento de elegir. */
-  const px=(lm[4].x+lm[8].x)/2, py=(lm[4].y+lm[8].y)/2;
-  const dt=Math.max(0.001, Math.min(0.2, (t-_ultVista)/1000)) || 0.02;
-  _ultVista=t;
-  MANO.x=oePaso(F.x, ex(px), dt);
-  MANO.y=oePaso(F.y, py, dt);
-  /* LOS 21 PUNTOS, POR EL MISMO FILTRO Y CON EL MISMO ESPEJO QUE EL ARO. Que compartan filtro y
-     espejo no es ahorro de lineas: es lo que garantiza que la mano DIBUJADA y el punto que APUNTA no
-     puedan separarse. Si fueran dos caminos, el jugador veria su pinza en un lugar y agarraria una
-     carta en otro — que es exactamente el defecto que se reporto en RECREO con el rompecabezas. */
+  /* ESTO SOLO GUARDA EL DESTINO; el filtro corre aparte, en cada cuadro de dibujo. Antes las dos
+     cosas pasaban aca, o sea que la mano dibujada se movia SOLO cuando habia medicion: bajando el
+     detector a 24 Hz la mano se habria movido a 24 pasos por segundo y se veria a tirones. */
+  /* LA VELOCIDAD SALE DE DOS MEDICIONES, no de dos cuadros de dibujo: entre cuadros no hay dato
+     nuevo, asi que dividir por el tiempo de cuadro daria una velocidad inventada. */
+  const dtM=(t-_tMed)/1000;
+  const nueva=MANO.hayObj && dtM>0.004 && dtM<0.25;
+  const px=ex((lm[4].x+lm[8].x)/2), py=(lm[4].y+lm[8].y)/2;
+  /* LA VELOCIDAD TAMBIEN SE SUAVIZA. Una velocidad sacada de dos medidas seguidas trae el ruido de
+     las dos, y ese ruido entra multiplicado por el tiempo de prediccion. */
+  if(nueva){ MANO.vel[63]+=((px-MANO.obj[63])/dtM-MANO.vel[63])*0.55;
+             MANO.vel[64]+=((py-MANO.obj[64])/dtM-MANO.vel[64])*0.55; }
+  else { MANO.vel[63]=0; MANO.vel[64]=0; }
+  MANO.obj[63]=px; MANO.obj[64]=py;
+  /* LOS 21 PUNTOS, CON EL MISMO ESPEJO QUE EL ARO. Que compartan destino y filtro no es ahorro de
+     lineas: es lo que garantiza que la mano DIBUJADA y el punto que APUNTA no puedan separarse. Si
+     fueran dos caminos, el jugador veria su pinza en un lugar y agarraria una carta en otro — que es
+     exactamente el defecto que se reporto en RECREO con el rompecabezas. */
   for(let k=0;k<21;k++){
-    const q=lm[k];
-    MANO.pts[k*3]   = oePaso(FP[k*3],   ex(q.x), dt);
-    MANO.pts[k*3+1] = oePaso(FP[k*3+1], q.y,     dt);
-    MANO.pts[k*3+2] = oePaso(FP[k*3+2], q.z||0,  dt);
+    const q=lm[k], b=k*3;
+    const ax=ex(q.x), ay=q.y, az=q.z||0;
+    if(nueva){ MANO.vel[b]+=((ax-MANO.obj[b])/dtM-MANO.vel[b])*0.55;
+               MANO.vel[b+1]+=((ay-MANO.obj[b+1])/dtM-MANO.vel[b+1])*0.55;
+               MANO.vel[b+2]+=((az-MANO.obj[b+2])/dtM-MANO.vel[b+2])*0.55; }
+    else { MANO.vel[b]=MANO.vel[b+1]=MANO.vel[b+2]=0; }
+    MANO.obj[b]=ax; MANO.obj[b+1]=ay; MANO.obj[b+2]=az;
   }
+  MANO.hayObj=true; _tMed=t;
+  manosFiltrar(t);
   MANO.hayPts=true;
+  /* EL PELLIZCO SE LEE DE LOS PUNTOS CRUDOS Y AL RITMO DE LA MEDICION, no del filtro ni del dibujo.
+     Un flanco es un instante: interpolarlo lo correria unos milisegundos y, peor, podria producir dos
+     cruces del umbral donde la camara vio uno solo. */
   MANO.crudo=leerPinza(lm);
   /* HISTERESIS Y NO UN UMBRAL SOLO. Con un umbral unico, una pinza que queda justo en el borde
      parpadea entre abierta y cerrada varias veces por segundo, y cada parpadeo es un "click": el
@@ -292,6 +350,38 @@ function manosInyectar(lm, t){
   if(_pinzaCruda && !antes) MANO.pinzaNueva=true;
   MANO.hay=true; MANO.visto=t;
 }
+/* ===================== EL FILTRO CORRE EN CADA CUADRO DE DIBUJO =====================
+   Se lo llama desde el bucle, no desde la medicion. Entre dos mediciones no hay dato nuevo, asi que
+   lo que hace es ACERCARSE al ultimo destino: a 24 mediciones y 60 cuadros, cada punto da dos pasos y
+   medio de mas hacia donde la camara lo vio por ultima vez. Eso es la interpolacion.
+   El reloj es UNO SOLO (`_ultVista`) y lo comparten la medicion y el dibujo: cuando la medicion ya
+   filtro en este instante, el paso del dibujo recibe dt cero y no hace nada — no hay forma de que el
+   filtro avance dos veces por el mismo tiempo. */
+function manosFiltrar(t){
+  if(!MANO.hayObj) return;
+  const ahora = t==null? performance.now() : t;
+  /* CUANTO HACE QUE NO HAY DATO, y hasta ahi se predice */
+  const ad=Math.max(0, Math.min(PRED_MAX, (ahora-_tMed)/1000));
+  /* LA GANANCIA SALE DE LA VELOCIDAD DEL PUNTO QUE APUNTA, UNA SOLA PARA TODA LA MANO. Calculandola
+     por coordenada, un dedo quieto dentro de una mano que se mueve dejaria de predecir y la mano se
+     desarmaria en el aire. La mano se mueve o no se mueve; es una sola cosa. */
+  const vel=Math.hypot(MANO.vel[63], MANO.vel[64]);
+  const g=Math.max(0, Math.min(1, (vel-PRED_V0)/(PRED_V1-PRED_V0)));
+  let k=PRED_ON? ad*g : 0;
+  const d=vel*k;
+  if(d>PRED_MAXD) k*=PRED_MAXD/d;
+  const dt=Math.min(0.2, (ahora-_ultVista)/1000);
+  /* UN RELOJ QUE VA PARA ATRAS SE VUELVE A ANCLAR, NO SE IGNORA. Con `if(dt<=0) return` a secas, un
+     instante anterior al ultimo deja el filtro CONGELADO hasta que el reloj lo alcance — y eso paso
+     de verdad: los ganchos de prueba inyectan con marcas de tiempo sinteticas, asi que despues de una
+     prueba que dejo el reloj adelantado, la siguiente pasaba setenta cuadros sin filtrar nada y
+     reportaba 792 ms de retardo donde hay 6. Reanclando se pierde UNA muestra y listo. */
+  if(dt<=0){ _ultVista=ahora; return; }
+  _ultVista=ahora;
+  MANO.x=oePaso(F.x, MANO.obj[63]+MANO.vel[63]*k, dt);
+  MANO.y=oePaso(F.y, MANO.obj[64]+MANO.vel[64]*k, dt);
+  for(let i=0;i<63;i++) MANO.pts[i]=oePaso(FP[i], MANO.obj[i]+MANO.vel[i]*k, dt);
+}
 function manosLazo(){
   const v=MANO.vid; if(!v) return;
   const paso=()=>{
@@ -299,7 +389,7 @@ function manosLazo(){
     manosMedir(t);
     caraMedir(t);
     if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
-                                       MANO.hayPts=false; }
+                                       MANO.hayPts=false; MANO.hayObj=false; }
     if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, 1000/MANO_HZ);

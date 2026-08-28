@@ -1,50 +1,62 @@
 /* =========================================================================================
-   LAS MANOS EN 3D
+   LAS MANOS EN 3D — EL CONSTRUCTOR
 
-   Pedido: *"no aparecen las manos ... que el otro cpu tambien se le vean las manos, que las manos
-   sean blancas y minimalistas"*. Antes lo unico que se veia de la mano era un aro: funcionaba para
-   apuntar pero el jugador no se veia a si mismo en la mesa.
+   Pedido de esta vuelta: *"mejora la mano a una mas humanoide y aplicale una optimizacion igual a la
+   de baldi"*. La anterior tenia la forma correcta pero un solo grosor para todo, y una mano con
+   veintiun bolitas del mismo tamano no se lee a mano: se lee a COLLAR DE CUENTAS. Lo que hace que se
+   lea a mano son tres cosas, y ninguna es agregar poligonos.
 
-   =========================================================================================
-   1. LA TUYA SE RECONSTRUYE SOBRE SU PROPIO RAYO DE PANTALLA, Y ESA ES LA DECISION IMPORTANTE
+   1. CADA ARTICULACION TIENE SU RADIO. La muneca es lo mas gordo, los nudillos siguen, y cada dedo
+      AFINA hacia la punta. Eso solo ya cambia la lectura, y es una tabla de veintiun numeros.
+   2. EL HUESO TOMA EL PROMEDIO DE SUS DOS PUNTAS, no el minimo. Con el minimo el cilindro queda mas
+      fino que las dos esferas que une y cada juntura se marca — que es exactamente el collar.
+   3. LA PALMA VA EN UNA BASE ORTONORMAL. La version anterior componia la matriz con el ancho y el
+      largo de la palma tal cual, y esos dos vectores NO son perpendiculares en una mano de verdad:
+      componer con ellos no rota el elipsoide, lo CIZALLA. Se ortonormaliza —normal por producto
+      cruzado, y el ancho recalculado contra ella— y recien ahi es un elipsoide apoyado en la palma.
 
-   MediaPipe da tambien `worldLandmarks` en metros, y parece lo obvio: anclar la mano en la muñeca y
-   escalar. Pero el juego APUNTA con el punto de pantalla —el rayo sale de ahi— y una mano colocada
-   por su geometria metrica NO cae donde estan esos puntos: verias la pinza en un lugar y agarrarias
-   una carta en otro. Es el mismo defecto que en RECREO costo una vuelta entera.
-
-   Aca cada punto se pone SOBRE SU RAYO, a una profundidad que sale de su z relativa. El dibujo y el
-   apuntado son la misma cosa *por construccion*, no por haberlos ajustado hasta que coincidieran.
-
-   2. BLANCAS Y MINIMALISTAS, PERO SOBRE UNA MESA BLANCA
-
-   Una mano blanca mate sobre una mesa blanca es una mancha. Lo que la separa no es el color sino la
-   LUZ: va con material lambert, recibe la direccional y —sobre todo— PROYECTA SOMBRA sobre la mesa.
-   La sombra es lo que dice "esta cosa esta flotando encima", y es lo unico que hace que una mano
-   blanca sobre blanco se lea. Sin sombra habria que oscurecerla, y entonces ya no seria blanca.
-
-   3. HUESOS Y ARTICULACIONES INSTANCIADOS: DOS LLAMADAS DE DIBUJO
-
-   Veintiun articulaciones y veinte huesos sueltos serian 41 mallas. Instanciados son 2, haya una
-   mano o haya cinco — y hay cinco, porque los dos rivales tienen dos manos cada uno.
+   Y LA OPTIMIZACION, QUE ES LA MISMA DE RECREO: las esferas bajan a 6x5 segmentos y los cilindros a
+   6 lados. Un nudillo ocupa unos pocos pixeles en un telefono; la diferencia entre 8x6 y 6x5 no
+   existe en pantalla y son miles de triangulos por cuadro. Todo sigue en TRES llamadas de dibujo
+   —articulaciones, huesos y palmas— haya una mano o haya cinco.
    ========================================================================================= */
 const MANO_HUESOS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
                    [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+/* EL RADIO DE CADA ARTICULACION, EN FRACCION DEL LARGO DE LA PALMA (muneca -> nudillo del medio).
+   Va relativo y no en unidades del mundo a proposito: asi la MISMA tabla sirve para tu mano —que
+   cambia de tamano segun cuanto la acerques a la camara— y para las de los rivales, que son fijas.
+   Los numeros salen de una mano adulta: la palma mide 9,5 cm y la muneca 1,75 cm de radio. */
+const MANO_RADIO=(()=>{
+  const r=new Float32Array(21), P=0.095;
+  r[0]=0.0175/P;                                                   // muneca
+  const pul=[0.0150,0.0125,0.0110,0.0098];                         // pulgar
+  for(let k=0;k<4;k++) r[1+k]=pul[k]/P;
+  const base=[0.0135,0.0135,0.0128,0.0118];                        // indice, medio, anular, menique
+  for(let d=0;d<4;d++){ const i0=5+d*4;
+    r[i0]=base[d]/P; r[i0+1]=base[d]*0.86/P; r[i0+2]=base[d]*0.74/P; r[i0+3]=base[d]*0.66/P; }
+  return r;
+})();
 const MANOS_MAX=5;                       // la tuya mas dos por cada rival
-const M_ART=22*MANOS_MAX, M_HUE=MANO_HUESOS.length*MANOS_MAX;   // 21 puntos + la palma
+/* CUATRO HUESOS DE MAS, Y SON LOS ANTEBRAZOS DE LOS RIVALES. Entran por la misma malla instanciada
+   que los huesos de los dedos —mismo cilindro, mismo material— asi que agregar un antebrazo a cada
+   mano no cuesta NI UNA llamada de dibujo mas. Sin ellos las manos de los rivales flotan sueltas
+   sobre la mesa y se leen a guantes, no a las manos de alguien. */
+const M_ART=21*MANOS_MAX, M_HUE=MANO_HUESOS.length*MANOS_MAX+4, M_PAL=MANOS_MAX;
 const matPiel=new THREE.MeshLambertMaterial({color:0xffffff});
-const artMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,7,5), matPiel, M_ART);
-const hueMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,7,1,true), matPiel, M_HUE);
-for(const m of [artMalla, hueMalla]){
+const artMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,6,5), matPiel, M_ART);
+const hueMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,6,1,true), matPiel, M_HUE);
+const palMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,6), matPiel, M_PAL);
+for(const m of [artMalla, hueMalla, palMalla]){
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   m.frustumCulled=false; m.castShadow=true; m.receiveShadow=false;
   m.count=0; escena.add(m);
 }
 const _hm=new THREE.Matrix4(), _hq=new THREE.Quaternion(), _hv=new THREE.Vector3(),
       _hd=new THREE.Vector3(), _hs=new THREE.Vector3(), _hup=new THREE.Vector3(0,1,0),
-      _ha=new THREE.Vector3(), _hb=new THREE.Vector3();
-let _nArt=0, _nHue=0;
-function manosLimpiar(){ _nArt=0; _nHue=0; }
+      _hx=new THREE.Vector3(), _hy=new THREE.Vector3(), _hn=new THREE.Vector3(),
+      _hmat=new THREE.Matrix4();
+let _nArt=0, _nHue=0, _nPal=0;
+function manosLimpiar(){ _nArt=0; _nHue=0; _nPal=0; }
 function ponerArt(p, r){
   if(_nArt>=M_ART) return;
   _hm.makeScale(r,r,r); _hm.setPosition(p.x,p.y,p.z);
@@ -62,116 +74,87 @@ function ponerHueso(a, b, r){
 }
 /* LA PALMA, Y NO ES UN ADORNO. Con huesos y articulaciones sueltos la mano se lee a ESQUELETO —se
    vio en la primera captura: cinco varillas con pelotitas en las junturas—. Lo que la vuelve una mano
-   es el volumen que las une. Es la misma esfera instanciada, achatada y orientada segun la propia
-   palma, asi que no cuesta ni una llamada de dibujo mas. */
-function ponerPalma(muneca, nud1, nud4, nudM){
-  if(_nArt>=M_ART) return;
-  _ha.subVectors(nud4, nud1);                       // el ancho de la palma
-  _hb.subVectors(nudM, muneca);                     // el largo
-  const ancho=_ha.length(), largo=_hb.length();
-  if(ancho<1e-5 || largo<1e-5) return;
-  _hv.crossVectors(_ha, _hb).normalize();           // la normal
-  _ha.normalize(); _hb.normalize();
-  const m=new THREE.Matrix4().makeBasis(_ha, _hb, _hv);
-  _hq.setFromRotationMatrix(m);
-  _hs.set(ancho*0.56, largo*0.60, Math.min(ancho,largo)*0.20);
-  _hd.addVectors(muneca, nudM).multiplyScalar(0.5);
-  _hd.addScaledVector(_hb, largo*0.04);
-  _hm.compose(_hd, _hq, _hs);
-  artMalla.setMatrixAt(_nArt++, _hm);
+   es el volumen que las une: un elipsoide apoyado en el plano de la palma. */
+function ponerPalma(P, esc){
+  if(_nPal>=M_PAL) return;
+  const p0=P[0], p5=P[5], p17=P[17];
+  _hv.copy(p5).add(p17).multiplyScalar(0.5);
+  _hy.subVectors(_hv, p0);
+  const largo=_hy.length(); if(largo<1e-5) return;
+  _hy.multiplyScalar(1/largo);
+  /* LA BASE SE ORTONORMALIZA. El ancho de la palma y su largo no son perpendiculares; componer la
+     matriz con los dos tal cual no rota el elipsoide, lo cizalla — y una palma cizallada se ve como
+     un error de render, no como una mano. La normal sale del producto cruzado y el ancho se recalcula
+     contra ella, asi los tres ejes son perpendiculares por construccion. */
+  _hn.crossVectors(_hd.subVectors(p5,p0), _hx.subVectors(p17,p0)).normalize();
+  _hx.crossVectors(_hy, _hn).normalize();
+  const ancho=p5.distanceTo(p17);
+  _hmat.makeBasis(_hx, _hy, _hn);
+  _hq.setFromRotationMatrix(_hmat);
+  _hv.copy(p0).addScaledVector(_hy, largo*0.52);
+  _hm.compose(_hv, _hq, _hs.set(ancho*0.60, largo*0.62, MANO_RADIO[0]*esc*1.05));
+  palMalla.setMatrixAt(_nPal++, _hm);
+}
+/* EL DIBUJANTE, UNO SOLO PARA TODAS LAS MANOS DEL JUEGO. Que la tuya y las de los rivales pasen por
+   aca no es ahorro de lineas: es lo que garantiza que se vean de la misma familia. Si fueran dos
+   dibujantes, mejorar una dejaria la otra atras — que es justo lo que se reporto esta vuelta. */
+function dibujarMano(P, esc){
+  for(let i=0;i<21;i++) ponerArt(P[i], MANO_RADIO[i]*esc);
+  for(const [a,b] of MANO_HUESOS)
+    ponerHueso(P[a], P[b], (MANO_RADIO[a]+MANO_RADIO[b])*0.5*1.02*esc);
+  ponerPalma(P, esc);
 }
 function manosSubir(){
-  artMalla.count=_nArt; hueMalla.count=_nHue;
+  artMalla.count=_nArt; hueMalla.count=_nHue; palMalla.count=_nPal;
   artMalla.instanceMatrix.needsUpdate=true;
   hueMalla.instanceMatrix.needsUpdate=true;
+  palMalla.instanceMatrix.needsUpdate=true;
 }
 
-/* ---------- la tuya ---------- */
-/* A QUE DISTANCIA DEL OJO SE PLANTA. Mas cerca tapa las cartas; mas lejos se ve del tamaño de un
-   dedo. A 3,6 unidades la mano abierta ocupa alrededor de un tercio del ancho del cuadro, que es lo
-   que ocupa una mano de verdad puesta delante de la cara. */
+/* =========================================================================================
+   LA TUYA: RECONSTRUIDA SOBRE SU PROPIO RAYO DE PANTALLA
+
+   MediaPipe da tambien `worldLandmarks` en metros y parece lo obvio: anclar la mano en la muneca y
+   escalar. Pero el juego APUNTA con el punto de pantalla —el rayo sale de ahi— y una mano colocada
+   por su geometria metrica NO cae donde estan esos puntos: verias la pinza en un lugar y agarrarias
+   una carta en otro. Aca cada punto se pone SOBRE SU RAYO, a una profundidad que sale de su z
+   relativa, y el dibujo y el apuntado son la misma cosa *por construccion*.
+   ========================================================================================= */
 const MANO_Z=-3.6, MANO_PROF=1.5;
 const _pmundo=[]; for(let k=0;k<21;k++) _pmundo.push(new THREE.Vector3());
+let _escMano=0;
 function manoTuya(){
   if(!MANO.on || !MANO.hay || !MANO.hayPts) return false;
-  const h=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(MANO_Z);
-  const w=h*camara.aspect;
-  /* la z de MediaPipe es relativa a la muñeca y en unidades de ancho de mano: sirve para dar
-     profundidad RELATIVA, no absoluta, asi que se centra en la muñeca y se escala */
+  /* LA MATRIZ DE LA CAMARA SE PONE AL DIA ACA. three.js la recalcula al DIBUJAR, asi que colocar la
+     mano antes de dibujar la deja en la posicion del cuadro anterior — y desde que la camara orbita
+     con la cabeza, eso es un desfase visible. Es la misma leccion que costo una prueba en pickEn:
+     nunca dar por sentado que alguien actualizo el arbol. */
+  camara.updateMatrixWorld(true);
   const z0=MANO.pts[2];
+  const tanV=Math.tan(camara.fov*Math.PI/360);
   for(let k=0;k<21;k++){
     const fx=MANO.pts[k*3], fy=MANO.pts[k*3+1], fz=MANO.pts[k*3+2]-z0;
     const prof=MANO_Z - fz*MANO_PROF;
     /* CADA PUNTO SOBRE SU RAYO: se toma la fraccion de pantalla y se la lleva al plano de SU
        profundidad, no a un plano comun. Con un plano comun la mano quedaria plana como una calcomania
        y ademas la punta del dedo no caeria donde apunta el rayo. */
-    const hz=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(prof), wz=hz*camara.aspect;
+    const hz=2*tanV*Math.abs(prof), wz=hz*camara.aspect;
     _pmundo[k].set((fx-0.5)*wz, -(fy-0.5)*hz, prof).applyMatrix4(camara.matrixWorld);
   }
-  /* el grosor sale del ANCHO DE LA PALMA en el mundo y no de una constante en metros: con una
-     constante, la mano de alguien que se acerca a la camara sale con dedos de chorizo */
-  const palma=_pmundo[0].distanceTo(_pmundo[9]) || 0.3;
-  /* LAS ARTICULACIONES CASI DEL MISMO GRUESO QUE LOS HUESOS. Con las pelotitas mas gordas que los
-     tubos, cada juntura se marca y el dedo se lee a hueso articulado; con los dos casi iguales el
-     dedo se lee a dedo, que es lo que se pidio: blancas y minimalistas. */
-  const rHue=palma*0.105, rArt=palma*0.118;
-  for(let k=0;k<21;k++) ponerArt(_pmundo[k], k===0? rArt*1.2 : rArt);
-  for(const [a,b] of MANO_HUESOS) ponerHueso(_pmundo[a], _pmundo[b], rHue);
-  ponerPalma(_pmundo[0], _pmundo[5], _pmundo[17], _pmundo[9]);
+  /* LA ESCALA SALE DE LA PROPIA MANO Y SE SUAVIZA EN EL TIEMPO. Sale de la palma reconstruida, y esa
+     reconstruccion usa la z — la coordenada mas ruidosa que da MediaPipe — asi que hereda todo su
+     ruido. Sin suavizar, la mano quieta LATIA de grosor varias veces por segundo, y eso a ojo se lee
+     como "tiembla" aunque la posicion en pantalla este perfectamente quieta. Con 0,14 por cuadro la
+     mano puede acercarse a la camara todo lo rapido que quiera, pero su tamano no cambia en dos. */
+  const cruda=Math.max(0.05, _pmundo[0].distanceTo(_pmundo[9]));
+  _escMano = _escMano>0? _escMano + (cruda-_escMano)*0.14 : cruda;
+  dibujarMano(_pmundo, _escMano);
   return true;
-}
-
-/* ---------- las de los rivales ---------- */
-/* NO SE MIDEN DE NINGUNA CAMARA: SE ARMAN. Un rival no tiene manos que leer, asi que la suya es una
-   pose fija —la mano apoyada, los dedos apenas abiertos— construida con los mismos veintiun puntos.
-   Reusar la misma estructura no es elegancia: es lo que hace que se vean de la misma familia que la
-   tuya sin escribir un segundo dibujante de manos. */
-const POSE_DEDOS=[[1,0.32,-0.62],[5,0.14,-0.20],[9,0.02,0],[13,-0.10,0.16],[17,-0.22,0.34]];
-function manoRival(cx, cz, ancho, alza, giro, alcance){
-  const P=[];
-  const co=Math.cos(giro), si=Math.sin(giro);
-  const pon=(lx,lz,ly)=>{ P.push(new THREE.Vector3(cx+(lx*co-lz*si)*ancho, alza+ly*ancho,
-                                                   cz+(lx*si+lz*co)*ancho)); };
-  pon(0,0.55,0.02);                                    // 0 muñeca
-  for(const [base, dx, dz] of POSE_DEDOS){
-    /* cada dedo son cuatro puntos que se alejan de la muñeca; el pulgar sale mas al costado */
-    const es=(base===1)? 0.30 : 0.26;
-    for(let k=1;k<=4;k++){
-      const t=k*es;
-      /* ALCANCE: cuando ese rival esta tirando una carta, los dedos se estiran hacia la mesa. Es la
-         unica animacion que tienen y alcanza para que se lea que fueron ELLOS los que jugaron. */
-      const est=1+alcance*0.35;
-      pon(dx*(0.35+t*0.5), 0.55-t*est, 0.02+Math.sin(t*2.2)*0.10*(1-alcance));
-    }
-  }
-  const rHue=ancho*0.105, rArt=ancho*0.118;
-  for(let k=0;k<P.length;k++) ponerArt(P[k], k===0? rArt*1.2 : rArt);
-  for(const [a,b] of MANO_HUESOS){ if(P[a]&&P[b]) ponerHueso(P[a],P[b],rHue); }
-  if(P[0]&&P[5]&&P[17]&&P[9]) ponerPalma(P[0],P[5],P[17],P[9]);
-}
-/* cuanto alcanza cada rival hacia la mesa: sube a 1 cuando le toca y baja sola */
-const RIV_ALC=[0,0,0];
-function manosRivales(dt){
-  for(const j of [J_IZQ,J_DER]){
-    const obj=(G.fase==='juego' && G.turno===j)? 1 : 0;
-    RIV_ALC[j] += (obj-RIV_ALC[j])*Math.min(1, dt*4.2);
-  }
-  for(const [j, lado] of [[J_IZQ,-1],[J_DER,1]]){
-    const q=G.manos[j].length;
-    if(!q) continue;
-    const base=lado*MESA.rivalX;
-    /* dos manos por rival, a los dos lados de su abanico */
-    /* EL TAMAÑO SALE DE LA CARTA Y NO DE UN NUMERO SUELTO: una mano apoyada al lado de un abanico
-       tiene que medir mas o menos lo que mide una carta, o se lee a juguete. Con 1,05 en la primera
-       captura eran cuatro astillas blancas al costado del abanico. */
-    for(const s of [-1,1])
-      manoRival(base + s*1.95, MESA.rivalZ+1.3, CARTA_W*1.35, 0.07, s*0.24, RIV_ALC[j]);
-  }
 }
 
 function manosPintar(dt){
   manosLimpiar();
   manoTuya();
-  manosRivales(dt);
+  rivalesPintar(dt);
   manosSubir();
 }

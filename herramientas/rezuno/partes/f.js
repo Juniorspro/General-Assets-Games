@@ -67,9 +67,31 @@ function manoGrupoAlDia(){ manoGrupo.rotation.y = camGiro; }
 const MESA={
   manoZ:8.4, manoY:1.02, manoArco:0.16, manoAncho:7.2, manoTilt:-0.78,
   mazoX:-2.9, pilaX:2.9, centroZ:-0.6,
-  rivalZ:-9.6, rivalX:4.9,
+  rivalZ:-9.6, rivalX:2.95, rivalFanY:1.55, rivalTilt:-0.55,
   selY:2.4, selZ:3.4, botY:3.4, botZ:1.4
 };
+
+/* ===================== LAS CARTAS FLOTAN =====================
+   Pedido: *"las cartas flotando tambien"*. Y no es solo estetica: los abanicos de los rivales estaban
+   APOYADOS en la mesa y casi acostados (rx -1,30, o sea 74 grados), asi que desde una camara que mira
+   desde arriba se veian como una franja de cantos. Levantados y parados a 31 grados, el dorso queda
+   de frente a la camara y ademas el abanico crece hacia arriba, que es justo donde hay pantalla libre
+   y donde ahora esta la cabeza del rival.
+   El vaiven es lento y chico —siete centesimas— y va DESFASADO carta por carta: con todas en fase el
+   abanico entero sube y baja como un bloque, que se lee a error de camara y no a cartas flotando. */
+function flota(t, i, k){ return Math.sin((t||0)*1.25 + i*0.42)*(k==null? 0.07 : k); }
+/* el sitio de una carta del abanico de un rival. ES UNA FUNCION Y NO ESTA ADENTRO DE armarMesa a
+   proposito: la mano del rival tiene que poder preguntar donde esta la carta que va a agarrar, y si
+   la cuenta viviera adentro del bucle que dibuja, la mano y la carta serian dos cuentas distintas
+   —o sea que la mano agarraria al lado de la carta. */
+function sitioRival(i, q, lado, t){
+  const paso=Math.min(0.42, 3.2/Math.max(1,q));
+  const f=q<=1? 0 : (i/(q-1))*2-1;
+  return { x: lado*MESA.rivalX + (i-(q-1)/2)*paso,
+           y: MESA.rivalFanY + flota(t, i+lado*3) + i*0.012,
+           z: MESA.rivalZ + i*0.03,
+           rx: MESA.rivalTilt, ry:0, rz:-f*0.13 };
+}
 
 /* el abanico: un arco, no una fila. Con las cartas en linea el jugador ve una pared de cantos; con el
    arco cada una gira un poco y se ve su cara. El paso se aprieta cuando hay muchas para que el
@@ -264,6 +286,10 @@ function armarMesa(){
       ma.userData.activo=false;
     } else {
       const p=sitioMano(i,n);
+      /* TU ABANICO FLOTA MENOS QUE EL DE ELLOS, y no por gusto: sobre tus cartas se APUNTA. Cuatro
+         centesimas sobre una carta de 2,58 de alto es un vaiven que se ve y que no mueve el blanco
+         —medido, las 30 partidas apuntando con el rayo siguen sin un solo fallo de punteria—. */
+      p.y += flota(G.t, i, 0.04);
       if(_primera) poner(ma,p); else irA(ma,p, tuTurno?0.24:0.18);
     }
   }
@@ -275,16 +301,38 @@ function armarMesa(){
        exactamente esa franja de la pantalla, y ninguno de los seis pasos habla de los rivales. */
     if(TUT.on){ sobra(lista, 0); continue; }
     const q=G.manos[j].length;
-    const paso=Math.min(0.42, 3.2/Math.max(1,q));
+    const B=G.bot, R=RIV[j];
+    /* cuanto lleva de la fase de llevar la carta a la pila: 0 mientras la agarra, 1 al soltarla */
+    const llev=(B.j===j && B.fase==='lleva')? Math.min(1, B.t/BOT_LLEVA) : 0;
     for(let i=0;i<q;i++){
-      const ma=malla(lista,i); ma.visible=true; ponerCara(ma,null);
+      const ma=malla(lista,i); ma.visible=true;
       ponerApagado(ma,false);
       ma.userData.tipo=null;
-      const f=q<=1?0:(i/(q-1))*2-1;
-      const p={ x:lado*MESA.rivalX + (lado<0? 1:-1)*0,
-                y:0.10+(1-f*f)*0.12, z:MESA.rivalZ + f*paso*q*0.5*0,
-                rx:-1.30, ry:0, rz:-f*0.13 };
-      p.x = lado*MESA.rivalX + (i-(q-1)/2)*paso;
+      /* LA QUE EL RIVAL ESTA AGARRANDO CUELGA DE SU MANO, y su sitio ES el punto de la pinza de esa
+         mano —el medio entre pulgar e indice— calculado de los mismos veintiun puntos que se dibujan.
+         Con un sitio propio, la mano y la carta serian dos animaciones que hay que mantener juntas, y
+         se separarian en el primer cuadro que una de las dos se atrase. */
+      if(R && R.hayGarra && B.j===j && B.idx===i){
+        /* Y SE DA VUELTA AL LLEVARLA. Mientras la elige se ve el dorso —el rival no te muestra su
+           mano— y al ir hacia la pila se acuesta y muestra la cara, que es cuando ya la jugo. */
+        ponerCara(ma, llev>0.35? G.manos[j][i] : null);
+        /* LA CARTA CUELGA POR DEBAJO DE LA PINZA, no centrada en ella. Centrada, la mano queda
+           dibujada encima de la mitad de la carta y se lee a mano TAPANDO una carta, no a mano
+           sosteniendola; y colgando media carta justo, los dedos quedan en el borde de arriba, que es
+           de donde se agarra una carta de un abanico. La misma distancia la usa la mano para elegir a
+           donde ir, asi que al engancharse la carta no se mueve ni un milimetro. */
+        /* Y SE ACUESTA RECIEN AL FINAL. Acostandola desde el principio del viaje, una carta plana
+           vista desde una camara que mira de arriba queda debajo de la mano y no se ve: se pidio VER
+           como la seleccionan, asi que la cara mira a la camara casi todo el trayecto y solo se
+           acuesta en el ultimo tercio, cuando ya esta llegando a la pila. */
+        const ac=Math.max(0, (llev-0.62)/0.38);
+        const p={ x:R.garra.x, y:R.garra.y-RIV_CUELGA_Y, z:R.garra.z+RIV_CUELGA_Z,
+                  rx:MESA.rivalTilt + (-Math.PI/2-MESA.rivalTilt)*ac, ry:0, rz:0 };
+        irA(ma, p, 0.55);
+        continue;
+      }
+      ponerCara(ma,null);
+      const p=sitioRival(i, q, lado, G.t);
       if(_primera) poner(ma,p); else irA(ma,p,0.18);
     }
     sobra(lista,q);
@@ -295,7 +343,7 @@ function armarMesa(){
   if(!mazoMalla){ mazoMalla=nuevaCarta(); grupo.add(mazoMalla);
                   mazoMalla.rotation.x=-Math.PI/2; mazoMalla.rotation.z=Math.PI; }
   mazoMalla.visible=true; ponerCara(mazoMalla,null); ponerApagado(mazoMalla,false);
-  mazoMalla.position.set(MESA.mazoX, 0.16, MESA.centroZ);
+  mazoMalla.position.set(MESA.mazoX, 0.30+flota(G.t, 7, 0.05), MESA.centroZ);
   mazoMalla.rotation.set(-Math.PI/2, 0, 0);
   mazoMalla.userData.tipo='mazo'; mazoMalla.userData.i=0; mazoMalla.userData.activo=puedeRobar;
   PICK.push(mazoMalla);
@@ -308,7 +356,7 @@ function armarMesa(){
     if(!c){ ma.visible=false; continue; }
     ma.visible=true; ponerCara(ma,c); ponerApagado(ma,false);
     ma.userData.tipo=null;
-    const p={ x:MESA.pilaX, y:0.03+k*0.05, z:MESA.centroZ,
+    const p={ x:MESA.pilaX, y:0.24+k*0.05+flota(G.t, 11, 0.05), z:MESA.centroZ,
               rx:-Math.PI/2, ry:0, rz:((k*53)%23-11)*Math.PI/180 };
     if(_primera) poner(ma,p); else irA(ma,p,0.3);
   }

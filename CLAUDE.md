@@ -43,11 +43,13 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~138 KB, **sin un solo asset**: todo dibujado por código). El quinto
+- **`RezUno.html` es "RezUno"** (~177 KB, **sin un solo asset**: todo dibujado por código). El quinto
   juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara
   trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la frontal se
   puede además mirar a los lados girando la cabeza—: todo, absolutamente todo, se hace con un
-  **pellizco** (pulgar e índice). Pellizcás una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
+  **pellizco** (pulgar e índice). Enfrente hay **dos rivales con cabeza, brazos y manos** que agarran
+  su carta del abanico y la llevan a la pila a la vista; las cartas **flotan**. Pellizcás una carta y
+  aparecen dos opciones, **TIRAR** y **DEJAR**;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
   UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
   te pide idioma primero y después se abre un menú todo god minimalista con el nombre y donde en el
@@ -60,6 +62,187 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima cuarta vuelta (2026-08-28): **RezUno** — manos humanas, la interpolación que no interpolaba, y dos rivales con cabeza
+
+Pedido: *"mejora la mano a una más humanoide y aplícale una optimización igual a la de baldi, y que los
+bots estén enfrentados sus manos también, agrégales una cabeza que se mueven animado, las cartas
+flotando también y ver cómo con sus manos seleccionan las cartas"*.
+
+#### LA MANO: TRES COSAS, Y NINGUNA ES AGREGAR POLÍGONOS
+
+La anterior tenía la forma correcta y **un solo grosor para todo**. Veintiún esferas del mismo tamaño
+unidas por cilindros más finos no se leen a mano: se leen a **collar de cuentas**.
+
+1. **Cada articulación tiene su radio.** La muñeca es lo más gordo y cada dedo **afina** hacia la
+   punta. Es una tabla de veintiún números, sacada de una mano adulta —palma de 9,5 cm, muñeca de
+   1,75 de radio— y guardada **en fracción de la palma**, no en unidades del mundo: así la misma tabla
+   sirve para tu mano, que cambia de tamaño según cuánto la acerques a la cámara, y para las de los
+   rivales, que son fijas.
+2. **El hueso toma el promedio de sus dos puntas y un pelo más**, no el mínimo. Con el mínimo el
+   cilindro queda más fino que las dos esferas que une y **cada juntura se marca**: eso es el collar.
+3. **La palma va en una base ortonormal.** La versión anterior componía la matriz con el ancho y el
+   largo de la palma tal cual, y esos dos vectores **no son perpendiculares** en una mano de verdad:
+   componer con ellos no rota el elipsoide, lo **cizalla**. Ahora la normal sale del producto cruzado y
+   el ancho se recalcula contra ella.
+
+Y la optimización de la forma es la de RECREO: las esferas bajan a 6×5 segmentos y los cilindros a 6
+lados. Un nudillo ocupa unos pocos píxeles en un teléfono. Resultado medido: **cinco manos completas
+—105 articulaciones, 109 huesos, 5 palmas— en TRES llamadas de dibujo**, y el archivo entero pasó de
+**8.008 a 7.894 triángulos** *agregando* dos rivales con cabeza, torso y brazos.
+
+**Y HUBO QUE ARREGLAR LA PRUEBA ANTES QUE EL DIBUJO.** La mano de mentira daba a los tres tramos de
+cada dedo el **mismo largo**, y corto: 0,30 de la palma cada uno. Con los radios nuevos eso deja cada
+tramo midiendo **dos veces su propio grosor**, y un cilindro de relación 2 entre dos esferas se ve
+como una cuenta. O sea que la mano de mentira se veía a collar **aunque la de verdad no**, y una
+prueba que no representa lo que se mira no sirve para mirarlo. Los tramos pasaron a 0,45 · 0,27 · 0,18
+de la palma, que es la proporción de un dedo.
+
+#### LA OPTIMIZACIÓN DE BALDI: LA INTERPOLACIÓN NO INTERPOLABA, Y LO DIJO LA MEDICIÓN
+
+De RECREO faltaba la mitad. La que ya estaba: la medición cuelga de `requestVideoFrameCallback` del
+propio `<video>`, o sea que dispara por cuadro de **cámara** y no de **render**. La que faltaba: **el
+techo de mediciones y la interpolación**. Estaba en 45, o sea midiendo en cada cuadro que la cámara
+entregara — que en un teléfono es todo el trabajo que hay.
+
+Bajarlo a 24 **a secas habría sido peor**, y por eso el primer intento no sirvió: el filtro corría
+dentro de la medición, así que la mano dibujada se movía **sólo cuando había medición**. Se separó el
+filtro y se lo llamó en cada cuadro de dibujo… y el gancho nuevo dijo que **seguía sin interpolar**:
+el 1-euro acercándose a un destino quieto converge en dos cuadros y después se queda.
+
+Así que entró la predicción de verdad, con las tres protecciones que RECREO ya había pagado:
+
+- **Acotada en tiempo a 45 ms.** A 24 Hz hay 42 ms entre medidas: la predicción cubre el hueco entero
+  y ni un milisegundo más. Extrapolar más lejos que el próximo dato no es interpolar, es inventar.
+- **Atada a la velocidad.** Con la mano quieta, la diferencia entre dos medidas **no es movimiento: es
+  el ruido del detector**. Por debajo de 0,15 de pantalla por segundo no se predice nada.
+- **Y acotada en distancia**, que fue un defecto propio encontrado midiendo: con un salto sintético de
+  0,58 en un cuadro la velocidad sale enorme y la predicción la multiplica — **el punto se iba a 2,39
+  de pantalla**, o sea bien fuera del cuadro. Ahora el adelanto se topa en 0,05 y se escala **la mano
+  entera con el mismo factor**, porque escalando por punto la mano se deformaría justo al moverse.
+
+**Medido en régimen** —midiendo cada 42 ms y dibujando cada 16,7, que es lo que pasa de verdad— y con
+el antes y el después **en la misma corrida**, porque una mejora contada contra el recuerdo no es una
+medición:
+
+| mano a | desparejo sin predicción | con predicción |
+|---|---|---|
+| 0,6 pantallas/s | **2,19** | **1,00** |
+| 1,2 pantallas/s | **2,33** | **1,00** |
+| casi quieta (0,02) | 1,21 | **1,21** |
+
+`desparejo` es el paso más grande dividido por el paso medio: 1 es perfectamente parejo. El cuadro que
+cae justo después de una medición saltaba 2,2 veces lo que saltaban los otros — eso es el escalonado.
+Y la última fila es la que prueba que la puerta de velocidad funciona: con la mano quieta la
+predicción **no cambia absolutamente nada**, así que no puede amplificar el ruido.
+
+Lo demás quedó igual, que también hay que comprobarlo: retardo **6,4 ms**, atenuación de temblor
+**2,69**, histéresis 0,411/0,591, flanco 1 de 15.
+
+**Y VEINTICUATRO EN TODOS LADOS.** La primera versión partía el techo con `pointer:coarse` —24 en
+teléfono, 45 en PC— y esa rama **no se puede comprobar**: el navegador del banco dice `coarse` también
+corriéndolo como escritorio, así que la mitad del código quedaba sin medir. Con la interpolación
+puesta, 24 dibujan igual de parejo que 45.
+
+**Lo que NO se pudo medir:** en el banco cada detección cuesta 440 ms (SwiftShader) y la cámara falsa
+entrega 20 cuadros por segundo, así que el techo de 24 **nunca llega a morder** — medido, 2,83
+mediciones por segundo. El ahorro del techo es aritmética conocida (una cámara de 30 fps pasa de 30 a
+24 detecciones por segundo, y cada una cuesta entre 8 y 20 ms en un teléfono); lo que sí está medido
+de verdad es la otra mitad, que es que bajar el ritmo ya **no** cuesta suavidad.
+
+#### LOS RIVALES DEJAN DE SER UN ABANICO
+
+Antes un rival era un abanico de dorsos apoyado en la mesa y dos manos de pose fija al costado, y
+jugaba **teletransportando** la carta: en un cuadro estaba en su mano y en el siguiente arriba del
+montón. Se veía que algo había pasado, no **quién** lo había hecho.
+
+**LA MANO SE CONSTRUYE EN SU PROPIO MARCO Y DESPUÉS SE COLOCA.** La versión anterior calculaba cada
+punto directo en coordenadas de mundo con senos y cosenos metidos en el bucle: girar la mano un poco
+era reescribir la fórmula. Ahora hay una **pose local** —muñeca en el origen, dedos hacia +Z, palma
+hacia abajo— con un parámetro de cierre, y una matriz que la lleva a donde va. Girar, inclinar o
+cerrar la mano son tres números.
+
+**El turno de un rival pasa a ser una secuencia de tres tiempos**: piensa 0,45 s mirando su abanico,
+agarra 0,34 s con la mano viajando hasta la carta, y lleva 0,42 s con la carta colgada de la pinza
+hasta la pila. La carta se baja de verdad recién al final. **Y la elección se hace al empezar a
+agarrar, no al bajar**: eligiendo al final, la mano habría estado viajando hacia una carta todavía sin
+decidir.
+
+**EL SITIO DE LA CARTA AGARRADA *ES* EL PUNTO DE LA PINZA**, calculado de los mismos veintiún puntos
+que se dibujan. No es una animación pegada al lado: si la mano se mueve, la carta se mueve, y no
+pueden separarse. Cuatro números salieron de mirar el resultado:
+
+- **La carta cuelga media carta por debajo de la pinza**, no centrada en ella. Centrada, la mano queda
+  dibujada encima de la mitad de la carta y se lee a mano **tapando** una carta. Y la mano apunta a
+  esa misma distancia por encima del sitio de la carta, así que al engancharse la carta no se mueve
+  ni un milímetro.
+- **La carta no se engancha hasta que la mano llegó** (alcance 0,55 y no 0,02). Enganchándola apenas
+  la mano arranca, la carta salía volando del abanico **hacia** la mano, al revés de lo que pasa.
+- **Se acuesta recién en el último tercio del viaje.** Acostada desde el principio, una carta plana
+  vista desde una cámara que mira de arriba queda debajo de la mano y no se ve — y lo que se pidió es
+  justamente verla.
+- **El antebrazo termina justo antes del abanico.** Llevándolo hasta el hombro, que está dos unidades
+  detrás de las cartas, el cilindro **atraviesa el abanico por el medio**: a la altura de las cartas
+  pasaría por y 1,93 con el abanico ocupando de 0,45 a 2,65. Y entra por la **misma malla instanciada**
+  que los huesos de los dedos, así que los cuatro antebrazos cuestan **cero llamadas de dibujo**.
+
+#### LA CABEZA MIRA LO QUE EL RIVAL ESTÁ HACIENDO
+
+Piensa → mira su abanico. Agarra y lleva → mira la pila. Si no es su turno → mira la mesa, y cada
+tanto **te mira a vos**. Una cabeza que se mueve al azar se lee a adorno; una que mira lo que pasa se
+lee a alguien jugando. Encima respira, se balancea con dos senos de frecuencias que no son múltiplos
+—para que el ciclo no se repita nunca igual— y **parpadea** cada 7,7 segundos durante 0,22: es lo más
+barato que existe, un seno y un umbral, y es lo único que separa "una cabeza que rota" de "alguien
+mirándote". Cada rival lleva su propio desfase: dos personas sincronizadas se leen a una animación
+repetida, que es lo que son.
+
+Cuatro mallas instanciadas **para los dos rivales**, no cuatro por rival, y **los ojos salen de la
+matriz del cráneo** con un desplazamiento local: siguen la cabeza por construcción y no hay dos
+animaciones que puedan desincronizarse. El cuello y el torso **no** giran con la cabeza — si giraran,
+mirar de reojo giraría el cuerpo entero y se leería a torreta.
+
+**Y EL TORSO ESTABA AL REVÉS.** Con el radio de arriba en 0,60 y el de abajo en 1, la parte que asoma
+por encima del abanico era **la más angosta**: 1,32 de medio ancho contra las 2,12 que mide el
+abanico, o sea tapada entera, y en pantalla **la cabeza salía flotando sola como un globo**. Los
+hombros son lo más ancho de un torso visto de frente. Dado vuelta y con 2,45 asoman ocho décimas por
+cada lado; más no, porque a 2,9 los dos rivales se tocarían en el medio de la mesa.
+
+#### LAS CARTAS FLOTAN, Y NO ES SÓLO ESTÉTICA
+
+Los abanicos de los rivales estaban **apoyados en la mesa y casi acostados** (74 grados), así que desde
+una cámara que mira de arriba se veían como una franja de cantos. Levantados y parados a 31 grados el
+dorso queda de frente y el abanico crece **hacia arriba**, que es justo donde hay pantalla libre y
+donde ahora está la cabeza. El vaivén va **desfasado carta por carta**: con todas en fase el abanico
+entero sube y baja como un bloque, que se lee a error de cámara y no a cartas flotando. **Tu** abanico
+flota la mitad —cuatro centésimas— porque sobre tus cartas se apunta.
+
+#### DOS DEFECTOS PROPIOS QUE SÓLO APARECIERON MIDIENDO
+
+- **El reloj del filtro se congelaba yendo para atrás.** Al separar el filtro de la medición puse
+  `if(dt<=0) return`, y los ganchos de prueba inyectan con marcas de tiempo sintéticas: después de una
+  prueba que dejó el reloj adelantado, la siguiente pasaba **setenta cuadros sin filtrar nada** y
+  reportaba **792 ms de retardo donde hay 6,4**. Reanclando el reloj se pierde una muestra y listo.
+- **La cabeza le caía encima al rótulo.** Desde que cada rival tiene cara, el cráneo proyecta entre el
+  21% y el 36% del ancho, y el nombre arrancaba en el 7% midiendo el 19%. Los rótulos se pegaron al
+  2,5% y adelgazaron, y los rivales se corrieron de 4,9 a 2,95: **cero solapamientos** medidos contra
+  las cajas del DOM.
+
+#### EL ORDEN DEL BUCLE CAMBIÓ, Y ES POR UNA RAZÓN
+
+`manosPintar` va **antes** de `armarMesa`. La carta que un rival está agarrando se coloca en el punto
+de la pinza de su mano; armando la mesa primero, esa carta usaría la pinza del cuadro **anterior**. Un
+cuadro a 60 son 17 ms, pero la mano viaja medio metro en medio segundo: la carta se vería despegada
+del pulgar justo en el momento en que hay que mirarla.
+
+#### MEDIDO AL CERRAR
+
+**120 partidas** por el camino interno: 120 terminadas, **0 cartas ilegales**. **30 partidas apuntando
+con el rayo**: 30 terminadas, 0 ilegales, **0 fallos de puntería** — o sea que las cartas flotando no
+movieron un solo blanco. Tutorial completo en los tres idiomas, y sin rivales dibujados durante el
+tutorial (0 cabezas, 0 manos). Separación entre la mano dibujada y el punto que apunta **0**, con y sin
+espejo. Giro de cabeza 17,8 grados con el abanico entero en cuadro. Cabezas y abanicos de los dos
+rivales **enteros dentro del cuadro y por encima de su propio abanico**. **81 llamadas de dibujo y
+7.894 triángulos**. `window.__errs` vacío. El HTML pasó de 138 a **177 KB**.
 
 ### Cuadragésima tercera vuelta (2026-08-28): **RezUno** — la cámara trasera, y el espejo que se deducía mal
 

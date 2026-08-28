@@ -16,7 +16,8 @@ PARTES = ['a.html',  # el marco, el CSS y las pantallas
           'd.js',    # la mano: MediaPipe, el pellizco y el filtro
           'e.js',    # la partida: reglas, efectos y los dos rivales
           'f.js',    # la mesa, las zonas pellizcables y el sonido
-          'j.js',    # las manos en 3D: la tuya y las de los dos rivales
+          'j.js',    # el constructor de manos en 3D, y la tuya
+          'k.js',    # los dos rivales: cabeza, manos enfrentadas y agarrar la carta
           'g.js',    # el tutorial de seis pasos
           'h.js',    # las pantallas, la entrada y el bucle
           'i.js']    # los ganchos de prueba

@@ -12,7 +12,10 @@
 const J_VOS=0, J_IZQ=1, J_DER=2;
 const G={ manos:[[],[],[]], mazo:[], pila:[], color:0, valor:0, turno:0, giro:1,
           fase:'menu', gana:-1, robo:false, sel:-1, colorPide:false, aviso:'', avisoT:0,
-          mov:[], t:0, semilla:1, tutorial:false, botT:0, uno:[false,false,false] };
+          mov:[], t:0, semilla:1, tutorial:false, botT:0, uno:[false,false,false],
+          /* el turno de un rival deja de ser un instante y pasa a ser una secuencia visible:
+             piensa -> agarra la carta de su abanico -> la lleva a la pila. Ver mas abajo. */
+          bot:{ j:-1, fase:'', t:0, idx:-1 } };
 
 /* las animaciones son una lista de cosas que viajan de un punto a otro y despues se olvidan. No hace
    falta nada mas elaborado: una carta que se tira es un rectangulo yendo de A a B en medio segundo */
@@ -123,16 +126,54 @@ function botColor(j){
   let k=0; for(let i=1;i<4;i++) if(c[i]>c[k]) k=i;
   return k;
 }
-function turnoBot(j){
-  let i=botElegir(j);
-  if(i<0){
-    const d=robarDelMazo();
-    if(d){ G.manos[j].push(d); son('roba'); }
-    i=botElegir(j);
-    if(i<0){ G.turno=siguiente(j); G.robo=false; return; }
+/* ===================== EL TURNO DE UN RIVAL, EN TRES TIEMPOS =====================
+   Pedido: *"ver como con sus manos seleccionan las cartas"*. Antes esto era UNA linea: elegir el
+   indice y llamar a jugarCarta(). O sea que la carta se TELETRANSPORTABA de su abanico a la pila en
+   el mismo cuadro. Se veia que algo habia pasado, no quien lo habia hecho.
+
+   Ahora el turno pasa por tres fases y la mano del rival las sigue: mientras PIENSA mira su abanico;
+   al AGARRAR la mano viaja hasta la carta elegida y se cierra; al LLEVAR la carta va colgada de la
+   pinza hasta la pila. La carta se baja de verdad —jugarCarta— recien al final de la tercera.
+
+   Y LA ELECCION SE HACE AL EMPEZAR A AGARRAR, NO AL BAJAR. Si se eligiera al final, la mano habria
+   estado viajando hacia una carta que todavia no estaba decidida: iria a cualquier lado y despues se
+   bajaria otra. El indice se fija cuando la mano arranca, y es el mismo que se juega. */
+const BOT_PIENSA=0.45, BOT_AGARRA=0.34, BOT_LLEVA=0.42;
+function botReset(){ G.bot.j=-1; G.bot.fase=''; G.bot.t=0; G.bot.idx=-1; }
+function botTick(dt){
+  const B=G.bot;
+  if(B.j!==G.turno){ B.j=G.turno; B.fase='piensa'; B.t=0; B.idx=-1; }
+  B.t+=dt;
+  const j=B.j;
+  if(B.fase==='piensa'){
+    if(B.t<BOT_PIENSA) return;
+    let i=botElegir(j);
+    if(i<0){
+      const d=robarDelMazo();
+      if(d){ G.manos[j].push(d); son('roba'); }
+      i=botElegir(j);
+      /* NO PUEDE JUGAR: pasa, y la mano nunca sale de su reposo. Esto tiene que quedar aca y no
+         dentro de la fase de agarrar, o el rival estiraria la mano hacia una carta que no existe. */
+      if(i<0){ G.turno=siguiente(j); G.robo=false; botReset(); return; }
+    }
+    B.idx=i; B.fase='agarra'; B.t=0;
+    return;
   }
-  const c=G.manos[j][i];
-  jugarCarta(j, i, c.color===4? botColor(j) : null);
+  if(B.fase==='agarra'){
+    if(B.t<BOT_AGARRA) return;
+    B.fase='lleva'; B.t=0; son('agarra');
+    return;
+  }
+  if(B.fase==='lleva'){
+    if(B.t<BOT_LLEVA) return;
+    /* el indice puede haber quedado fuera de rango si algo cambio la mano en el medio; no puede
+       pasar hoy, pero un indice viejo aplicado a una mano nueva baja OTRA carta y eso no se ve */
+    const i=Math.min(B.idx, G.manos[j].length-1);
+    if(i<0){ botReset(); return; }
+    const c=G.manos[j][i];
+    botReset();
+    jugarCarta(j, i, c.color===4? botColor(j) : null);
+  }
 }
 
 /* ===================== EL TURNO DEL JUGADOR =====================
@@ -175,14 +216,12 @@ function avisar(t){ G.aviso=t; G.avisoT=1.6; }
 
 /* el reloj de la partida: los rivales piensan medio segundo, que es lo que tarda alguien en mirar su
    mano — sin esa pausa las tres jugadas pasan en el mismo cuadro y no se ve nada */
-const BOT_PIENSA=0.75;
 function partidaTick(dt){
   G.t+=dt;
   if(G.avisoT>0) G.avisoT-=dt;
   movTick(dt);
-  if(G.fase!=='juego') return;
-  if(G.turno===J_VOS) return;
+  if(G.fase!=='juego'){ botReset(); return; }
+  if(G.turno===J_VOS){ botReset(); return; }
   if(movHay()) return;
-  G.botT+=dt;
-  if(G.botT>=BOT_PIENSA){ G.botT=0; turnoBot(G.turno); }
+  botTick(dt);
 }
