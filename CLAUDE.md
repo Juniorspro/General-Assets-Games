@@ -46,8 +46,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`RezUno.html` es "RezUno"** (~250 KB, de los cuales 40 son las dos imágenes del menú generadas con
   Higgsfield y recortadas; **el juego en sí no tiene un solo asset**: todo dibujado por código). El
   quinto juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la
-  cámara trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la
-  frontal se puede además mirar a los lados girando la cabeza—: todo, absolutamente todo, se hace con
+  cámara trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; la frontal
+  se abre sólo en un aparato que no tenga trasera—: todo, absolutamente todo, se hace con
   un **pellizco** (pulgar e índice). Enfrente hay **dos rivales con brazos y manos** que agarran su
   carta del abanico y la llevan a la pila a la vista; las cartas **flotan**. Tiene **selección gráfica
   de tres escalones** y el ritmo del detector de manos **se ajusta solo** al costo medido. Pellizcás
@@ -64,6 +64,107 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima séptima vuelta (2026-08-28): **RezUno** — la entrada del detector estaba tirando detección a la basura, y dos "arreglos" míos que la medición desmintió
+
+Reporte: *"la mano va súper mal y no detecta a full, la mano va lenta lagueada y súper mal... y elimina
+el uso de la cámara frontal"*.
+
+#### LO QUE ARREGLA LA DETECCIÓN: LA ENTRADA ESTABA EN 256×192 POR UNA OPTIMIZACIÓN QUE NO SIRVE
+
+La entrada del detector estaba en 256×192, y estaba ahí por una suposición que **nunca se comprobó**.
+Medida —cronometrando `detectForVideo()` sobre una veintena de detecciones en cada tamaño— dice lo
+contrario:
+
+| entrada | 192×144 | 320×240 | 480×360 | **640×480** |
+|---|---|---|---|---|
+| costo | 557 ms | 547 | 523 | **494** |
+
+**Diez veces más píxeles no sólo no cuestan más: la medición da un poco menos**, o sea que la
+diferencia es ruido y el costo **no depende de la entrada**. MediaPipe redimensiona adentro al tamaño
+fijo de sus modelos —192×192 el detector de palma, 224×224 el de puntos—, así que mandarle menos
+píxeles no le ahorra nada **y le saca detalle**: un dedo que a 256×192 son cuatro píxeles, a 640×480
+son diez. Bajar la entrada era **regalar detección a cambio de nada**, y eso es exactamente lo que se
+reportó. Sube a 640×480.
+
+Y bajan los tres umbrales de confianza (0,4 · 0,4 · **0,3** en seguimiento). El que importa es el de
+seguimiento: es el que decide cuánto se sostiene una mano ya encontrada, y soltarla no cuesta un
+cuadro — al perder el seguimiento la medición siguiente tiene que volver a correr **el buscador de
+palma**, que es la parte cara. Dudar sale más caro que seguir.
+
+#### LO QUE ARREGLA LA LENTITUD: EL DETECTOR SE LLEVA EL 45 % DEL HILO Y NO EL 30 %
+
+El 0,30 estaba copiado de RECREO, donde la mano es **uno** de los sistemas: allá también hay un
+profesor caminando, siete actividades y una escuela que dibujar. En RezUno **la mano es la entrada** —
+no hay teclado, ni joystick, ni nada más que apuntar y pellizcar— así que darle menos de la mitad del
+hilo al único sensor del juego es una prioridad mal puesta. Y hay con qué pagarlo: el control de
+resolución de la vuelta anterior existe justamente para recomprar tiempo de dibujo.
+
+| medir cuesta | 4 ms | 8 | 12 | 16 | 20 | 25 | 30 | 40 | sin mano |
+|---|---|---|---|---|---|---|---|---|---|
+| ritmo con 0,30 | 60 | 37,5 | 25 | 18,8 | 15 | 12 | 12 | 12 | 10 |
+| **ritmo con 0,45** | **60** | **56,3** | **37,5** | **28,1** | **22,5** | **18** | **15** | **12** | 10 |
+
+Con una detección de 12 ms —un teléfono común— el ritmo pasa de 25 a **37,5 mediciones por segundo**
+sin tocar una línea del filtro.
+
+#### Y DOS "ARREGLOS" MÍOS QUE LA MEDICIÓN DESMINTIÓ, PORQUE LA MEDICIÓN ESTABA MAL
+
+Para medir lo que el jugador llama "va lenta" hice falta una prueba nueva, porque **la que había
+engañaba**: la rampa mide con velocidad **constante**, y a velocidad constante la predicción compensa
+el muestreo entero — medido, el retardo da 6,4 ms lo mismo a 62 Hz que a 12. Ese número es cierto y no
+describe nada: una mano de verdad acelera, para y cambia de dirección, y **en esos instantes** se paga
+el muestreo. La prueba nueva mueve la mano, **la frena en seco** y cuenta hasta que el punto dibujado
+se queda quieto.
+
+Y la primera versión de esa prueba también estaba mal: **calibraba el desvío de la mano con la mano en
+movimiento**, así que se llevaba puesto el adelanto de la predicción y devolvía **117 y 167 ms** de
+asentamiento en ritmos donde el juego asienta en uno solo. Contra ese número falso, dos cambios
+*parecían* mejoras y los hice: achicar la predicción cuando el hueco es grande, y hacer que la
+velocidad estimada bajara más rápido de lo que sube.
+
+Calibrando con la mano **quieta** —donde la predicción vale cero por construcción— y midiendo de
+nuevo:
+
+- El asentamiento es **16,7 ms** —un cuadro, el mínimo que la prueba puede ver— a 60, 37,5, 25, 18, 15
+  **y 12 Hz**.
+- Las cuatro combinaciones de suavizado de velocidad (0,55/0,55 · 0,85/0,45 · 1/0,35 · 1/0,55) dan
+  **exactamente los mismos números** en sobrepico, desparejo, retardo y atenuación.
+- Achicar la predicción no mejora el asentamiento —ya está en el piso— y **sí empeora** el desparejo a
+  12 Hz, de 1,01 a 1,44.
+
+Así que los dos se sacaron. **Lo que sí crece al bajar el ritmo es el SOBREPICO** —cuánto se pasa de
+largo el punto al frenar—: 0 % a 60 Hz, 1,0 a 37,5, **2,1 a 25, 4,2 a 15 y 5,7 a 12**. Y contra eso la
+palanca no es el filtro: es no bajar tanto el ritmo, que es justamente lo que hace el 45 %.
+
+#### LA CÁMARA FRONTAL SE VA ENTERA
+
+Se va la opción, el botón del menú y **el reconocimiento de cara** —que existía sólo para mover la
+vista girando la cabeza y sólo tenía sentido con la frontal, porque con la trasera tu cara está del
+otro lado del teléfono—. Con eso se van también un segundo modelo de 3,7 MB que había que bajar y un
+detector corriendo a 12 Hz sobre el mismo video: **dos cosas menos peleándose el hilo con la mano**.
+Si el aparato no tiene trasera —una notebook— se abre la que haya y se espeja, porque si no no habría
+juego; pero ya no es algo que el jugador elija. La órbita de la cámara queda en cero y el menú pierde
+un botón: medido, cero solapamientos y el último termina en 676 de 732.
+
+#### UNA LECCIÓN DE MÉTODO, QUE ES LA DE LA VUELTA
+
+Los dos ajustes que saqué no eran errores de código: eran errores de **medición**. Una prueba que
+calibra su cero en el momento equivocado no falla ruidosamente — devuelve un número plausible y
+mueve el diseño en la dirección equivocada. Las dos veces que esta vuelta cambié algo por una
+medición, la medición estaba mal, y las dos veces se vio porque el número era **absurdo** (117 ms de
+asentamiento donde el muestreo solo explica 83) o porque **no cambiaba con lo que tenía que cambiar**
+(cuatro constantes de suavizado dando resultados idénticos hasta el último decimal).
+
+#### MEDIDO AL CERRAR
+
+**120 partidas** internas: 120 terminadas, **0 cartas ilegales**. **30 apuntando con el rayo**: 30
+terminadas, 0 ilegales, **0 fallos de puntería**. Tutorial completo en los tres idiomas. Separación
+entre la mano dibujada y el punto que apunta **0**, con y sin espejo. Retardo de seguimiento 6,5 a
+7,6 ms de 60 a 12 Hz; desparejo 1,00–1,01 en todo el rango; atenuación de temblor 2,69; histéresis
+0,411/0,591; flanco 1 de 15. El control de 60 cuadros sigue llegando con hasta 60 ms de relleno y
+**cero cambios una vez asentado**. 87 llamadas de dibujo en alta y 45 en baja. `window.__errs` vacío.
+El HTML quedó en **255 KB**.
 
 ### Cuadragésima sexta vuelta (2026-08-28): **RezUno** — la cámara con `exact`, el ritmo de mano de RECREO, y los 60 cuadros forzados
 

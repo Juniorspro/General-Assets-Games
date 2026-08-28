@@ -18,7 +18,6 @@ function pintarIdioma(){
   document.getElementById('bTut').textContent=TX('tutorial');
   document.getElementById('bJugar').textContent=TX('jugar');
   document.getElementById('bIdioma').textContent=TX('idioma');
-  document.getElementById('bCam').textContent=TX(CAM_PREF==='environment'? 'camTrasera':'camFrontal');
   document.getElementById('calN').textContent=TX('graficos');
   pintarCalidad();
   document.getElementById('bOtra').textContent=TX('otra');
@@ -35,7 +34,7 @@ function pintarMenu(){
   document.getElementById('bTut').classList.toggle('lleno', !TUT.hecho);
   /* el pie dice como se sostiene el telefono con la camara elegida; si falta el tutorial, eso manda */
   document.getElementById('mPie').innerHTML = TUT.hecho
-    ? (TX('menuPie')+' '+TX(CAM_PREF==='environment'? 'camPieT':'camPieF'))
+    ? (TX('menuPie')+' '+TX(MANO.usa==='user'? 'camPieF':'camPieT'))
     : TX('menuBloq');
 }
 /* LA CALIDAD SE PINTA Y SE APLICA EN EL MISMO SITIO, para que el boton marcado y lo que se dibuja no
@@ -56,14 +55,11 @@ const CAM_MOTIVO={ permiso:'camErrPermiso', camara:'camErrCamara', cdn:'camErrCd
 /* EL MOTIVO SE ESCRIBE Y SE QUEDA. Un juego que se maneja con la camara y no la pide se ve roto, y
    sin decir por que no hay nada que el jugador pueda hacer al respecto. */
 function pintarCam(){
-  const bc=document.getElementById('bCam');
-  if(bc) bc.textContent=TX(CAM_PREF==='environment'? 'camTrasera':'camFrontal');
   if(!camAviso) return;
   camAviso.classList.remove('bien','mal');
-  /* EL AVISO DICE QUE HACER CON LA MANO, Y ESO CAMBIA CON LA CAMARA. Con la trasera la mano va DETRAS
-     del telefono y con la frontal delante: es la unica instruccion que el jugador necesita y depende
-     de cual camara toco, no de cual se pidio. */
-  const tras = (MANO.usa||CAM_PREF)==='environment';
+  /* EL AVISO DICE QUE HACER CON LA MANO, y depende de que camara toco de verdad y no de cual se
+     pidio: en una notebook, que no tiene trasera, la mano va adelante. */
+  const tras = MANO.usa==='environment';
   if(MANO.estado==='carga'){ camAviso.textContent=TX('camPide'); return; }
   if(MANO.estado==='lista'){ camAviso.textContent=TX(tras?'camOkT':'camOkF');
                              camAviso.classList.add('bien'); return; }
@@ -73,26 +69,6 @@ function pintarCam(){
 /* CAMBIAR DE CAMARA REARRANCA EL DETECTOR ENTERO, y no es pereza: el flujo de video, el espejo y el
    detector de caras dependen de cual es, asi que media docena de cosas tendrian que reconciliarse en
    caliente. Se sueltan las pistas, se pone el estado en cero y se vuelve a pedir. */
-/* Y NO SE PUEDE TOCAR DOS VECES MIENTRAS ARRANCA. Medido: tocandolo de nuevo con el detector a
-   medio abrir quedan DOS manosIniciar() en vuelo, y la que termina segunda pisa el espejo y el
-   cartel de la primera — o sea que el juego queda diciendo una camara y espejando la otra. */
-let _camOcupado=false;
-document.getElementById('bCam').onclick=async()=>{
-  if(_camOcupado) return;
-  _camOcupado=true;
-  CAM_PREF = (CAM_PREF==='environment')? 'user' : 'environment';
-  try{ localStorage.setItem('rezuno_cam', CAM_PREF); }catch(e){}
-  if(MANO.vid && MANO.vid.srcObject){
-    for(const t of MANO.vid.srcObject.getTracks()) try{ t.stop(); }catch(e){}
-    MANO.vid.srcObject=null;
-  }
-  if(MANO.det){ try{ MANO.det.close(); }catch(e){} MANO.det=null; }
-  if(CARA.det){ try{ CARA.det.close(); }catch(e){} CARA.det=null; CARA.on=false; CARA.hay=false; }
-  MANO.on=false; MANO.hay=false; MANO.hayPts=false; MANO.estado='no'; MANO.error=''; MANO.usa='';
-  pintarIdioma();
-  try{ await manosIniciar(); } finally{ _camOcupado=false; }
-  pintarCam(); pintarMenu();
-};
 (function(){
   const c=document.getElementById('idBotones');
   for(const [cod,nom] of IDIOMAS){
@@ -173,7 +149,6 @@ function bucle(){
        el jugador siente, no el que tarda el dibujo. */
     resTick(dt);
     manosFiltrar();
-    camaraGiro(CARA.hay? CARA.giro*1.2 : 0, dt);
     if(tomarPinza()) activar(MANO.x, MANO.y);
     /* CONGELADO detiene la PARTIDA pero no el dibujo. Es para las pruebas: para fotografiar el
        instante exacto en que una mano esta agarrando una carta hay que poder parar el reloj de la

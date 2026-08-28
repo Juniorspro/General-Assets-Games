@@ -52,7 +52,15 @@
       mirar diez veces por segundo alcanza de sobra para notar que aparecio, porque la MISMA medicion
       que la encuentra ya sube el ritmo al maximo. */
 const MANO_HZ_TOPE=60;
-const MANO_CARGA=0.30;
+/* ===== EL DETECTOR SE LLEVA EL 45 % DEL HILO, Y EN ESTE JUEGO ESO ES LO CORRECTO =====
+   El 0,30 esta copiado de RECREO, donde la mano es UNO de los sistemas: alla tambien hay un profesor
+   caminando, siete actividades y una escuela que dibujar. En RezUno la mano ES la entrada —no hay
+   teclado, ni joystick, ni nada mas que apuntar y pellizcar— asi que darle menos de la mitad del hilo
+   al unico sensor del juego es una prioridad mal puesta. Y hay con que pagarlo: el control de
+   resolucion existe justamente para recomprar tiempo de dibujo.
+   Medido sobre la misma regla: con una deteccion de 12 ms, 0,30 da 25 mediciones por segundo y 0,45
+   da 37,5 — o sea el retardo de la mano baja de 43 ms a 27 sin tocar una linea del filtro. */
+const MANO_CARGA=0.45;
 const MANO_HZ_MIN=12;
 const MANO_HZ_REPOSO=10;
 /* Y VA ARRIBA DE `MANO` PORQUE `MANO` LO USA. Es la quinta vez en este proyecto que una
@@ -73,12 +81,15 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
                 que se ajusta solo al costo medido */
              hz:MANO_HZ_TOPE, periodo:1000/MANO_HZ_TOPE, hueco:0 };
 /* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
-let CAM_PREF='environment';
-try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
-/* LA CARA, Y SOLO PARA MOVER LA VISTA. Pedido: "agrega reconocimiento facial o sea solamente para el
-   movimiento y pon que el jugador pueda mirar a los lados con solo girar su cabeza". No se lee ningun
-   gesto de la cara: se lee UN numero, el giro horizontal, y se usa para mover la camara. */
-const CARA={ on:false, det:null, hay:false, giro:0, crudo:0, medidas:0, msDet:0, error:'' };
+/* ===================== SOLO LA TRASERA =====================
+   Pedido: *"elimina el uso de la camara frontal"*. Se va la opcion, se va el boton del menu y se va el
+   reconocimiento de cara —que existia SOLO para mover la vista girando la cabeza, y que solo tiene
+   sentido con la frontal porque con la trasera tu cara esta del otro lado del telefono—. Con eso se va
+   tambien un segundo modelo de 3,7 MB y un detector corriendo a 12 Hz sobre el mismo video: dos cosas
+   menos peleandose el hilo con la mano, que es lo unico que importa aca.
+   Si el aparato no tiene trasera —una notebook— se abre la que haya y se espeja, porque si no no
+   habria juego; pero ya no es algo que el jugador elija. */
+const CAM_PREF='environment';
 
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -88,19 +99,20 @@ const MANO_CDN=[{ js:MANO_URL, wasm:MANO_WASM },
                 { js:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
                   wasm:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm' }];
 const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-/* ===================== LA ENTRADA SE QUEDA EN 256x192, Y ESO SE MIDIO =====================
-   Lo obvio para acelerar MediaPipe es bajarle la entrada, y es lo que NO sirve. Barrido en el banco,
-   cronometrando `detectForVideo()` sobre 24 detecciones en cada tamano:
+/* ===================== LA ENTRADA SUBE A 640x480, Y ESO SE MIDIO DOS VECES =====================
+   Reporte: *"no detecta a full la mano"*. Y la entrada estaba en 256x192 por una optimizacion que
+   nunca se comprobo que sirviera — y que, medida, no sirve. Cronometrando `detectForVideo()` sobre
+   una veintena de detecciones en cada tamano:
 
-     320x240 -> 295,8 ms   ·   256x192 -> 292,2   ·   192x144 -> 285,5   ·   160x120 -> 285,4
+     192x144 -> 557 ms  ·  320x240 -> 547  ·  480x360 -> 523  ·  640x480 -> 494
 
-   Cuatro veces menos pixeles compran el 3,5%. La razon es que MediaPipe REDIMENSIONA adentro al
-   tamano fijo de sus modelos —192x192 el detector de palma, 224x224 el de puntos— asi que lo unico
-   que cambia con la camara es la subida y el reescalado, que al lado de la inferencia no es nada.
-   O sea: el costo esta en el MODELO, y contra eso hay una sola palanca, que es CUANTAS VECES se lo
-   corre. Se deja en 256x192 porque no cuesta mas que 160x120 y a esa resolucion la mano se sigue
-   detectando desde mas lejos. */
-const MANO_ENT_W=256, MANO_ENT_H=192;
+   Diez veces mas pixeles no solo no cuestan mas: la medicion da un poco MENOS, o sea que la
+   diferencia es ruido y el costo NO DEPENDE de la entrada. La razon es que MediaPipe redimensiona
+   adentro al tamano fijo de sus modelos —192x192 el detector de palma, 224x224 el de puntos— asi que
+   mandarle menos pixeles no le ahorra nada Y le saca detalle: un dedo que a 256x192 son cuatro
+   pixeles, a 640x480 son diez. Bajar la entrada era regalar deteccion a cambio de nada, y eso es
+   exactamente lo que se reporto. El costo esta en el MODELO; la unica palanca es cuantas veces corre. */
+const MANO_ENT_W=640, MANO_ENT_H=480;
 /* ===================== EL DETECTOR MIDE MENOS Y LA MANO SE DIBUJA IGUAL =====================
    Pedido: *"aplicale una optimizacion igual a la de baldi"*. La de RECREO son DOS cosas y solo una
    estaba puesta aca.
@@ -135,18 +147,23 @@ const PRED_V0=0.15, PRED_V1=0.55;   // fracciones de pantalla por segundo
    A 24 Hz esta velocidad da exactamente los mismos 0,050 de antes, o sea que donde ya andaba bien no
    cambia nada. */
 const PRED_VMAX=1.2;                // pantallas por segundo: lo mas rapido que se admite predecir
+/* ===== DOS AJUSTES QUE SE PROBARON Y SE SACARON, PORQUE LA MEDICION DIJO QUE NO HACIAN NADA =====
+   Los dos salieron de una prueba de frenazo que estaba MAL: calibraba el desvio de la mano con la
+   mano EN MOVIMIENTO, asi que se llevaba puesto el adelanto de la prediccion y devolvia 117 y 167 ms
+   de asentamiento en ritmos donde el juego asienta en uno solo. Contra ese numero falso, achicar la
+   prediccion y hacer que la velocidad bajara mas rapido que subir parecian mejoras.
+   Con la calibracion hecha con la mano quieta, medido de nuevo: el asentamiento es 16,7 ms —un cuadro,
+   el minimo que la prueba puede ver— a 60, 37,5, 25, 18, 15 y 12 Hz, y las cuatro combinaciones de
+   suavizado de velocidad (0,55/0,55 · 0,85/0,45 · 1/0,35 · 1/0,55) dan EXACTAMENTE los mismos
+   numeros en sobrepico, desparejo, retardo y atenuacion. Y achicar la prediccion no mejoraba el
+   asentamiento —ya estaba en el piso— y SI empeoraba el desparejo a 12 Hz de 1,01 a 1,44.
+   Asi que se predice el hueco entero y la velocidad se suaviza con una sola constante. Lo que si
+   crece al bajar el ritmo es el SOBREPICO: 0 % a 60 Hz, 2,7 a 25, 4,2 a 15 y 5,7 a 12 — y contra eso
+   la palanca no es el filtro, es no bajar tanto el ritmo. */
 /* se apaga desde los ganchos para poder medir el ANTES y el DESPUES en la misma corrida: una mejora
    contada contra el recuerdo de como andaba no es una medicion */
 let PRED_ON=true;
 const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
-/* ===================== LA CARA VA A 12 Hz Y NO A 45 =====================
-   Son DOS modelos corriendo sobre el mismo video, asi que el costo se suma: medir las dos cosas al
-   mismo ritmo seria mas del doble de trabajo por cuadro de camara. Y no hace falta — una cabeza que
-   gira tarda medio segundo en ir de un lado al otro, o sea que a 12 Hz se la mide seis veces en el
-   camino, y encima el giro entra por un suavizado. La mano SI necesita ritmo: es lo que apunta. */
-const CARA_HZ=12;
-const CARA_MODELO='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const CARA_CADUCA=900;
 
 function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
 
@@ -177,7 +194,14 @@ const F={ x:{v:0,d:0,ini:false}, y:{v:0,d:0,ini:false} };
    hace al punto del aro: sin filtrar, los veintiun puntos vibran cada uno por su cuenta y la mano
    dibujada hierve. Se crean UNA vez y se escriben encima. */
 const FP=[]; for(let k=0;k<63;k++) FP.push({v:0,d:0,ini:false});
-function fpReset(){ for(const q of FP) q.ini=false; F.x.ini=false; F.y.ini=false; }
+/* LO REINICIA TODO, Y ESO NO ES OPCIONAL. Lo usan solo los ganchos de prueba, y una prueba que
+   arranca con la velocidad y el hueco que dejo la anterior no mide lo que dice medir: corriendo el
+   frenazo despues de la rampa, el frenazo devolvia "no paro nunca" en un ritmo donde solo tarda 33 ms.
+   Un orden de pruebas no puede cambiar el resultado de una prueba. */
+function fpReset(){
+  for(const q of FP) q.ini=false; F.x.ini=false; F.y.ini=false;
+  MANO.vel.fill(0); MANO.hueco=0; _tMed=0;
+}
 function oePaso(S, x, dt){
   if(!S.ini){ S.v=x; S.d=0; S.ini=true; return x; }
   let d=(x-S.v)/dt;
@@ -298,7 +322,16 @@ async function manosIniciar(){
         MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
           baseOptions:{ modelAssetPath:MANO_MODELO, delegate:del },
           runningMode:'VIDEO', numHands:1,
-          minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5, minTrackingConfidence:0.5 });
+          /* ===== LOS UMBRALES BAJAN, Y ESO ATACA EL "no detecta a full" =====
+             Con 0,5 en los tres, una mano a contraluz, de costado o a medio salir del cuadro no llega
+             al umbral y el detector la SUELTA. Y soltarla no es solo perderla un cuadro: al perder el
+             seguimiento, la medicion siguiente tiene que volver a correr el BUSCADOR DE PALMA, que es
+             la parte cara — o sea que dudar sale mas caro que seguir.
+             `minTrackingConfidence` es el que mas importa de los tres: es el que decide cuanto se
+             sostiene una mano que ya se encontro. A 0,3 se sostiene mucho mas, y lo peor que puede
+             pasar es que siga a una mano un par de cuadros de mas, que es infinitamente mejor que
+             perderla en medio de un pellizco. */
+          minHandDetectionConfidence:0.4, minHandPresenceConfidence:0.4, minTrackingConfidence:0.3 });
         MANO.delegado=del; break;
       }catch(e){}
     }
@@ -307,59 +340,9 @@ async function manosIniciar(){
   MANO.estado='lista'; MANO.on=true; MANO.listaEn=performance.now();
   if(typeof pintarCam==='function') pintarCam();
   manosLazo();
-  /* LA CARA SE PIDE DESPUES Y SIN BLOQUEAR. Es otro modelo de varios megas: esperarlo antes de dejar
-     jugar seria hacer esperar por algo que solo mueve la vista. Si no llega, el juego se juega igual
-     con la camara quieta — que es exactamente lo que pasaba antes de que existiera. */
-  /* ===================== LA CARA SOLO SIRVE CON LA FRONTAL =====================
-     Y esto no es un detalle de implementacion: con la camara trasera tu cara esta del OTRO lado del
-     telefono. Girar la cabeza no puede mover la vista porque no hay nada que mirar. En vez de dejar
-     un detector corriendo que no va a encontrar nada nunca —gastando la mitad del presupuesto de la
-     camara para eso— ni siquiera se pide el modelo, y la linea de estado lo dice.
-     El jugador elige: TRASERA para meter la mano por detras como en RECREO, o FRONTAL para que
-     ademas se pueda mirar a los lados girando la cabeza. Las dos cosas no caben en una camara. */
-  if(MANO.usa!=='environment') caraIniciar(vision, _fs);
   return true;
 }
-async function caraIniciar(vision, fs){
-  if(!vision || !fs || CARA.det) return;
-  for(const del of ['GPU','CPU']){
-    try{
-      CARA.det=await vision.FaceLandmarker.createFromOptions(fs,{
-        baseOptions:{ modelAssetPath:CARA_MODELO, delegate:del },
-        runningMode:'VIDEO', numFaces:1,
-        /* la matriz de transformacion es lo unico que se pide: de ahi sale el giro de la cabeza sin
-           tener que deducirlo de la geometria de la cara */
-        outputFacialTransformationMatrixes:true, outputFaceBlendshapes:false });
-      break;
-    }catch(e){ CARA.error=String(e && e.message || e).slice(0,60); }
-  }
-  CARA.on=!!CARA.det;
-}
-
-let _ultMed=0, _ultVista=0, _pinzaCruda=false, _ultCara=0, _tMed=0;
-/* EL GIRO DE LA CABEZA SALE DE LA MATRIZ Y NO DE LOS PUNTOS. Deducirlo de "donde cae la nariz entre
-   los dos ojos" funciona hasta que la persona se inclina o se acerca; la matriz que devuelve el
-   modelo ya trae la rotacion resuelta. El elemento [8] de una matriz columna-mayor es el seno del
-   giro alrededor del eje vertical. */
-function caraMedir(t){
-  if(!CARA.det || !MANO.vid || MANO.vid.readyState<2) return;
-  if(t-_ultCara < 1000/CARA_HZ) return;
-  const a=performance.now();
-  let r=null;
-  try{ r=CARA.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
-  CARA.msDet=CARA.msDet*0.85+(performance.now()-a)*0.15;
-  _ultCara=t; CARA.medidas++;
-  const m=r && r.facialTransformationMatrixes && r.facialTransformationMatrixes[0];
-  if(!m || !m.data){ return; }
-  const d=m.data;
-  let g=Math.asin(Math.max(-1, Math.min(1, d[8])));
-  if(MANO.espejo) g=-g;
-  CARA.crudo=g;
-  /* suavizado exponencial: la cabeza se mueve despacio y el ruido del modelo no, asi que aca alcanza
-     con una constante fija — no hace falta el 1-euro que si necesita la mano */
-  CARA.giro += (g-CARA.giro)*0.25;
-  CARA.hay=true; CARA.visto=t;
-}
+let _ultMed=0, _ultVista=0, _pinzaCruda=false, _tMed=0;
 /* EL RITMO SE MUEVE DE A POCO. Saltando entre 40 y 14 segun el ultimo cuadro, la mano cambia de
    suavidad todo el tiempo y eso se nota mas que ir siempre a 20. */
 function manoRitmo(){
@@ -410,10 +393,12 @@ function manosInyectar(lm, t){
      el desparejo a 24 Hz reales pasaba de 1,00 a 1,47 en cuanto el pedido y el hueco discrepaban. */
   if(nueva) MANO.hueco = MANO.hueco>0? MANO.hueco*0.7 + dtM*0.3 : dtM;
   const px=ex((lm[4].x+lm[8].x)/2), py=(lm[4].y+lm[8].y)/2;
-  /* LA VELOCIDAD TAMBIEN SE SUAVIZA. Una velocidad sacada de dos medidas seguidas trae el ruido de
-     las dos, y ese ruido entra multiplicado por el tiempo de prediccion. */
-  if(nueva){ MANO.vel[63]+=((px-MANO.obj[63])/dtM-MANO.vel[63])*0.55;
-             MANO.vel[64]+=((py-MANO.obj[64])/dtM-MANO.vel[64])*0.55; }
+  /* LA VELOCIDAD SE SUAVIZA: sacada de dos medidas seguidas trae el ruido de las dos, y ese ruido
+     entra multiplicado por el tiempo de prediccion. Una sola constante: ver arriba por que no hay
+     dos. */
+  const velPaso=(v, cruda)=>v + (cruda-v)*0.55;
+  if(nueva){ MANO.vel[63]=velPaso(MANO.vel[63], (px-MANO.obj[63])/dtM);
+             MANO.vel[64]=velPaso(MANO.vel[64], (py-MANO.obj[64])/dtM); }
   else { MANO.vel[63]=0; MANO.vel[64]=0; }
   MANO.obj[63]=px; MANO.obj[64]=py;
   /* LOS 21 PUNTOS, CON EL MISMO ESPEJO QUE EL ARO. Que compartan destino y filtro no es ahorro de
@@ -423,9 +408,9 @@ function manosInyectar(lm, t){
   for(let k=0;k<21;k++){
     const q=lm[k], b=k*3;
     const ax=ex(q.x), ay=q.y, az=q.z||0;
-    if(nueva){ MANO.vel[b]+=((ax-MANO.obj[b])/dtM-MANO.vel[b])*0.55;
-               MANO.vel[b+1]+=((ay-MANO.obj[b+1])/dtM-MANO.vel[b+1])*0.55;
-               MANO.vel[b+2]+=((az-MANO.obj[b+2])/dtM-MANO.vel[b+2])*0.55; }
+    if(nueva){ MANO.vel[b]=velPaso(MANO.vel[b], (ax-MANO.obj[b])/dtM);
+               MANO.vel[b+1]=velPaso(MANO.vel[b+1], (ay-MANO.obj[b+1])/dtM);
+               MANO.vel[b+2]=velPaso(MANO.vel[b+2], (az-MANO.obj[b+2])/dtM); }
     else { MANO.vel[b]=MANO.vel[b+1]=MANO.vel[b+2]=0; }
     MANO.obj[b]=ax; MANO.obj[b+1]=ay; MANO.obj[b+2]=az;
   }
@@ -498,10 +483,8 @@ function manosLazo(){
   const paso=()=>{
     const t=performance.now();
     manosMedir(t);
-    caraMedir(t);
     if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
                                        MANO.hayPts=false; MANO.hayObj=false; manoRitmo(); }
-    if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, MANO.periodo);
   };

@@ -80,18 +80,15 @@ camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
    apuntarles. Orbitando, la mesa se queda donde esta y lo que cambia es el ANGULO desde el que se la
    ve: se asoma uno a los costados, se ve el canto de las cartas, se ven los rivales de otro perfil.
    Es lo que hace alguien sentado a una mesa que se mueve para ver mejor, y no rompe el juego.
-   EL LIMITE SON 20 GRADOS, y llego a ser 14 por un defecto de MEDICION y no del juego: el barrido
-   decia que el abanico se salia del cuadro a partir de los tres grados, y lo que se salia era una
-   caja imaginaria — se estaba midiendo la caja alineada a los ejes de una carta inclinada, que crece
-   al rotar la vista, y ademas sin poner al dia la matriz del grupo. Con las dos cosas arregladas, el
-   abanico cae EXACTAMENTE en la misma fraccion de pantalla de 2 a 16 grados de giro. El limite lo
-   pone ahora lo que se quiere ver, no lo que se rompe. */
+   ===== Y LA ORBITA SE QUEDA EN CERO =====
+   La movia el giro de la cabeza, y el reconocimiento de cara se fue con la camara frontal. La camara
+   se planta una vez y no se mueve mas. La funcion se queda porque es la que COLOCA la camara —el
+   encuadre entero sale de ella— y porque `camGiro` lo sigue leyendo el grupo del abanico; lo que se
+   fue es quien la llamaba con un angulo distinto de cero. */
 const CAM_ORBITA=0.349;                  // 20 grados en radianes
 let camGiro=0;
 function camaraGiro(objetivo, dt){
   const lim=Math.max(-CAM_ORBITA, Math.min(CAM_ORBITA, objetivo||0));
-  /* el suavizado va aparte del de la cara: aquel limpia el ruido del modelo, este le da inercia al
-     movimiento de la vista para que no se sienta pegada a la cabeza */
   camGiro += (lim-camGiro)*Math.min(1, (dt||0.016)*3.2);
   const co=Math.cos(camGiro), si=Math.sin(camGiro);
   const x=CAM_POS.x, z=CAM_POS.z - CAM_MIRA[1];
@@ -239,6 +236,8 @@ function aplicarCalidad(k){
 }
 addEventListener('resize', ajustar);
 aplicarCalidad(CAL);
+/* la camara se coloca una vez: sin nadie que la orbite, este es su unico llamado */
+camaraGiro(0, 1);
 
 /* =========================================================================================
    LA CARA DE UNA CARTA, PINTADA EN UN LIENZO Y CACHEADA

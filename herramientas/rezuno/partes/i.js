@@ -6,6 +6,17 @@
    son la misma cuenta, que un pellizco de mentira cae en la zona que se ve, y que el tutorial se
    puede completar de punta a punta sin camara.
    ========================================================================================= */
+/* el desvio de la forma de la mano, medido con la mano QUIETA: ver manoFrenar */
+function _frenarDesvio(PM){
+  fpReset();
+  let t=performance.now(), tMed=t;
+  for(let k=0;k<200;k++){
+    t+=1000/60;
+    while(tMed+PM<=t){ tMed+=PM; window.__rez.manoInyectar(0.5,0.5,false,tMed); }
+    manosFiltrar(t);
+  }
+  return MANO.x-0.5;
+}
 window.__rez={
   estado:()=>({ pant, fase:G.fase, turno:G.turno, gana:G.gana, color:G.color, valor:G.valor,
                 manos:G.manos.map(m=>m.length), mazo:G.mazo.length, pila:G.pila.length,
@@ -185,10 +196,16 @@ window.__rez={
   /* EL RETARDO EN REGIMEN: se mueve la mano de mentira a velocidad constante y se mide cuanto atras
      va el aro cuando ya se estabilizo. Es el numero que decide si apuntar a una carta se siente
      pegado o pastoso. Se devuelve en fraccion de pantalla y en milisegundos. */
-  manoRampa:(vel, cuadros)=>{
+  /* ===== Y SE MIDE AL RITMO DE VERDAD, QUE ES LA CORRECCION IMPORTANTE =====
+     Esta prueba inyectaba una medicion cada 16 ms, o sea a 62 Hz — un ritmo que el juego no alcanza
+     nunca en un telefono. Asi medido, el retardo daba 6,4 ms y ese numero no describia nada de lo que
+     el jugador siente: a 62 Hz el retardo es casi todo filtro, y en el juego de verdad es casi todo
+     ESPERA DEL PROXIMO DATO. Ahora se le pasa el ritmo y se mide lo que pasa a ese ritmo. */
+  manoRampa:(vel, cuadros, hz)=>{
     fpReset();
+    MANO.hueco=0;
     const v=vel==null? 0.5 : vel;          // fracciones de pantalla por segundo
-    const dt=16, n=cuadros||90;
+    const dt=1000/(hz||62.5), n=cuadros||90;
     let t=performance.now(), x=0.2;
     /* SE CALIBRA EL DESVIO ANTES DE MEDIR EL RETARDO. El punto que apunta es el medio entre el pulgar
        y el indice, y en una mano abierta ese medio NO cae en el centro de la mano: esta corrido unos
@@ -198,8 +215,8 @@ window.__rez={
     const off=MANO.x-x;
     for(let k=0;k<n;k++){ t+=dt; x+=v*dt/1000; window.__rez.manoInyectar(x,0.5,false,t); }
     const err=Math.abs((x+off)-MANO.x);
-    return { vel:v, cuadros:n, real:+(x+off).toFixed(4), aro:+MANO.x.toFixed(4),
-             desvio:+off.toFixed(4),
+    return { vel:v, hz:+(1000/dt).toFixed(1), cuadros:n,
+             real:+(x+off).toFixed(4), aro:+MANO.x.toFixed(4), desvio:+off.toFixed(4),
              retardoFrac:+err.toFixed(4), retardoMs:+(err/v*1000).toFixed(1) };
   },
   /* ===== LA INTERPOLACION: LA MANO SE MUEVE ENTRE MEDICION Y MEDICION =====
@@ -244,7 +261,49 @@ window.__rez={
              desparejo:+(mx/Math.max(1e-9,medio)).toFixed(2) };
   },
   hz:()=>({ tope:MANO_HZ_TOPE, min:MANO_HZ_MIN, reposo:MANO_HZ_REPOSO, carga:MANO_CARGA,
-            usa:+MANO.hz.toFixed(1), cara:CARA_HZ }),
+            usa:+MANO.hz.toFixed(1) }),
+  /* ===== EL FRENAZO, QUE ES LO QUE SE SIENTE COMO "LA MANO VA ATRAS" =====
+     La rampa mide con velocidad CONSTANTE, y a velocidad constante la prediccion compensa el muestreo
+     entero: medido, el retardo da 6,4 ms lo mismo a 62 Hz que a 12. Ese numero es cierto y no
+     describe nada, porque una mano de verdad no se mueve a velocidad constante: acelera, para y
+     cambia de direccion. En esos instantes la prediccion apunta a donde la mano YA NO VA, y ahi si se
+     paga el muestreo entero.
+     Esta prueba mueve la mano, la FRENA en seco, y cuenta cuanto tarda el punto dibujado en quedar a
+     menos de un umbral del sitio real. Es el numero que el jugador siente cuando llega a una carta y
+     el aro se pasa de largo. */
+  manoFrenar:(hz, vel, tol)=>{
+    fpReset();
+    const H=hz||24, v=vel==null? 0.9 : vel, T=tol==null? 0.012 : tol;
+    const PM=1000/H, PD=1000/60;
+    const off=_frenarDesvio(PM);
+    fpReset();
+    let t=performance.now(), x=0.25, tMed=t;
+    /* primero se mueve un rato para que el filtro y la prediccion esten en regimen */
+    for(let k=0;k<120;k++){
+      t+=PD;
+      while(tMed+PM<=t){ tMed+=PM; x+=v*PM/1000; window.__rez.manoInyectar(x,0.5,false,tMed); }
+      manosFiltrar(t);
+    }
+    /* EL DESVIO SE CALIBRA CON LA MANO QUIETA Y NO EN MOVIMIENTO, y esto costo una medicion entera.
+       Midiendolo al final del tramo en movimiento, `off` se lleva puesto EL ADELANTO DE LA PREDICCION
+       ademas del desvio de la forma de la mano; despues, con la mano parada, ese adelanto ya no esta
+       y el error se queda clavado en menos el adelanto — hasta 0,09 de pantalla, o sea que nunca
+       entra en la tolerancia. El gancho devolvia "no paro nunca" en ritmos donde para en 33 ms.
+       Con la mano quieta la prediccion vale cero por construccion, asi que lo que queda es solo la
+       forma. */
+    const xFin=x;
+    let msPara=-1, sobre=0;
+    for(let k=0;k<180;k++){                      // tres segundos de sobra
+      t+=PD;
+      while(tMed+PM<=t){ tMed+=PM; window.__rez.manoInyectar(xFin,0.5,false,tMed); }
+      manosFiltrar(t);
+      const e=MANO.x-(xFin+off);
+      sobre=Math.max(sobre, e);                  // cuanto se paso de largo
+      if(msPara<0 && Math.abs(e)<T) msPara=(k+1)*PD;
+    }
+    return { hz:H, vel:v, tolerancia:T, msHastaParar:+((msPara<0? 3000 : msPara)).toFixed(1),
+             sobrepicoFrac:+sobre.toFixed(4) };
+  },
   /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
      pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
   manoTemblor:(ruido, cuadros)=>{
@@ -269,29 +328,11 @@ window.__rez={
     return { ruido:r, cuadros:n, entra:+de.toFixed(5), sale:+ds.toFixed(5),
              atenua:+(de/Math.max(1e-9,ds)).toFixed(2) };
   },
-  /* ---- LA CARA: SOLO MUEVE LA VISTA ---- */
-  caraVer:()=>({ on:CARA.on, hay:CARA.hay, giro:+CARA.giro.toFixed(4), crudo:+CARA.crudo.toFixed(4),
-                 medidas:CARA.medidas, ms:+CARA.msDet.toFixed(2), error:CARA.error,
-                 camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
-                 cam:[+camara.position.x.toFixed(2), +camara.position.z.toFixed(2)] }),
-  /* se inyecta un giro de cabeza y se deja que la vista lo siga, para poder medir hasta donde llega
-     y comprobar que la mesa no se sale del cuadro en los extremos */
-  caraInyectar:(giro, cuadros)=>{
-    CARA.on=true; CARA.hay=true; CARA.crudo=giro; CARA.giro=giro;
-    for(let k=0;k<(cuadros||120);k++) camaraGiro(giro*1.6, 1/60);
-    armarMesa();
-    return { pedido:giro, camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
-             encuadre:window.__rez.extremos(true) };
-  },
-  /* donde cae en pantalla cada blanco, uno por uno: para poder ver CUAL se sale del cuadro al girar
-     en vez de deducirlo del rectangulo que los envuelve a todos */
   puntos:()=>{ armarMesa(); escena.updateMatrixWorld(true);
     const v=new THREE.Vector3();
     return PICK.map(o=>{ o.updateMatrixWorld(true);
       v.setFromMatrixPosition(o.matrixWorld).project(camara);
       return [o.userData.tipo+':'+o.userData.i, +(v.x*0.5+0.5).toFixed(3)]; }); },
-  caraSoltar:()=>{ CARA.hay=false; CARA.giro=0;
-                   for(let k=0;k<160;k++) camaraGiro(0,1/60); return window.__rez.caraVer(); },
   /* ---- LAS MANOS DIBUJADAS ---- */
   manos3D:()=>(manosPintar(1/60), { articulaciones:artMalla.count, huesos:hueMalla.count,
                  palmas:palMalla.count, tope:[M_ART, M_HUE, M_PAL],
@@ -368,7 +409,7 @@ window.__rez={
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
                  crudo:+MANO.crudo.toFixed(3), medidas:MANO.medidas, delegado:MANO.delegado,
-                 espejo:MANO.espejo, usa:MANO.usa, pref:CAM_PREF, ms:+MANO.msDet.toFixed(2) }),
+                 espejo:MANO.espejo, usa:MANO.usa, ms:+MANO.msDet.toFixed(2) }),
   /* EL FLANCO: una pinza sostenida tiene que valer UNA vez. Se empujan n cuadros seguidos con la
      pinza cerrada y se cuentan los flancos. */
   flancoProbar:(n)=>{
