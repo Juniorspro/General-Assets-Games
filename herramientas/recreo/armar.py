@@ -9,7 +9,7 @@ la fuente; el HTML es la salida.
 
     python3 herramientas/recreo/armar.py
 """
-import base64, io, os, sys
+import base64, io, json, os, sys
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PARTES = ['a2.html',   # el marco, el CSS y el HUD
@@ -52,6 +52,19 @@ def main():
             print('falta', ruta, file=sys.stderr); return 1
         dat = open(ruta, 'rb').read()
         s = s.replace(clave, 'data:image/webp;base64,' + base64.b64encode(dat).decode('ascii'))
+    # LAS TEXTURAS DE FOTO, horneadas por hornear_texturas.py. Van como un objeto de data URIs y no
+    # como nueve claves distintas: son nueve y podrian ser quince, y una lista se agrega sola.
+    tex = {}
+    td = os.path.join(RAIZ, 'assets', 'recreo', 'tex')
+    for arch in sorted(os.listdir(td)) if os.path.isdir(td) else []:
+        if not arch.endswith('.webp'):
+            continue
+        dat = open(os.path.join(td, arch), 'rb').read()
+        tex[arch[:-5]] = 'data:image/webp;base64,' + base64.b64encode(dat).decode('ascii')
+    if '__TEX_JSON__' not in s:
+        print('no aparece __TEX_JSON__ en las partes', file=sys.stderr); return 1
+    s = s.replace('__TEX_JSON__', json.dumps(tex), 1)
+
     # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO. io.open(p,'w') trunca el archivo ANTES de
     # evaluar lo que se le pasa: una vez un NameError en el argumento me dejo Recreo.html en cero.
     salida = os.path.join(RAIZ, 'juegos-pc', 'Recreo.html')

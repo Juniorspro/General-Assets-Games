@@ -50,6 +50,149 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Trigésima octava vuelta (2026-08-28): **RECREO** — un pasillo, cero puertas, sombras y nueve texturas generadas
+
+Pedido: *"haz que los salones estén seguiditos y que no hayan puertas así el juego es más rápido y
+bueno etc mejores los gráficos en altos agrega sombras y mejores colores también genera en highsfield
+texturas para todo"*.
+
+#### EL COLEGIO SE ACHICA A LA MITAD, Y LAS DOS MITADES DEL PEDIDO ERAN LA MISMA COSA
+
+Era una reja de **23×19 —96,6 × 79,8 m—** con tres pasillos horizontales, tres verticales y las ocho
+aulas repartidas por las cuatro esquinas, cada una con su puerta en un anillo de pared. El recorrido
+tenía tramos de **catorce celdas**: 58,8 m que a 2,9 m/s son veinte segundos de pasillo vacío entre
+una cuenta y la siguiente. Y cada aula costaba además acercarse a una puerta y esperar a que girara.
+
+Ahora es **un solo pasillo** —la fila 4— con cuatro salones de un lado y cuatro del otro, pegados
+entre sí y separados por una única celda de pared. El salón **no tiene puerta**: su lado del pasillo
+está abierto de punta a punta, así que desde el pasillo se ven las ocho bocas y se entra caminando.
+La reja baja a **17×9 = 71,4 × 37,8 m**, el 44 % de la superficie.
+
+**El tramo más largo pasa de 14 celdas a 4**, medido con el propio BFS del juego. La partida entera
+pasa de **15.039 pasos a 9.828**: un 35 % más corta con las mismas 24 cuentas y las mismas 7
+actividades.
+
+Un tramo mide **cero**, y es el del 4 al 8: el 8 está justo enfrente del 4, se cruza el pasillo y ya.
+No rompe nada y se comprobó por qué: la ruta de una escena de viaje lleva además los cuatro puntos de
+salir del aula anterior y los cuatro de entrar a la siguiente, así que nunca queda vacía, y la
+actividad de ese tramo cae en el pasillo entre las dos bocas.
+
+#### LO QUE ESTO OBLIGÓ A GENERALIZAR, Y ES EL TRABAJO DE VERDAD
+
+Hasta ahora **todas las aulas se entraban por el norte**, y esa suposición estaba metida *adentro de
+las fórmulas*: «la pared del fondo es la fila j1+1», «él va en la última fila del aula». Con salones a
+los dos lados de un mismo pasillo, los del norte se entran **por el sur** y las cinco cuentas se dan
+vuelta. Cada aula lleva ahora su **`dir`** —+1 entrando por el norte, −1 por el sur— y las fórmulas lo
+multiplican: fondo, profesor, escritorio, cámara y pizarrón. De ahí salen también hacia dónde mira
+cada uno (`giroCam`, `giroProfe`), que antes eran las constantes 0 y π escritas a mano.
+
+Y **las coordenadas del patio dejaron de estar clavadas en metros**. `[-46,2 · 0]`, `[-48,5 · -0,4]`,
+`[-52 · -1,6]`… estaban escritas para una reja de 23×19 con la salida en \[0,9\]. Con el mapa nuevo
+los cinco quedaban dentro del colegio o a cuarenta metros de donde tenían que estar. Ahora salen de la
+cara oeste del edificio y de la fila de la salida, y **las distancias relativas —las que se midieron—
+se quedan**: la cámara para 3,7 m pasada la fachada y el autobús está a 17,7. La prueba de que
+funcionó es que la cinemática del final no se tocó y el autobús sigue midiendo **64,5 % del ancho,
+entero, centrado en el 50,1 %, con 0,7 grados de error de rumbo** — los mismos números que antes de
+mover el colegio entero.
+
+#### LAS SOMBRAS: UNA SOLA, CHICA, Y QUE SIGUE AL JUGADOR
+
+Lo que faltaba no era iluminación —la escuela ya estaba bien iluminada— sino **apoyo**: sin sombra el
+profesor, los pupitres y los lockers flotan un centímetro sobre el piso, y eso es lo que hace que una
+escena 3D se lea a maqueta. Tres decisiones, las tres por la misma razón: **un mapa de sombra cubre un
+área fija**.
+
+1. **La cámara de sombra sigue al jugador**, con un cuadro de 11 metros de lado. Cubriendo el colegio
+   entero serían 14 texels por metro y la sombra de una pierna cuatro píxeles temblando; siguiendo a
+   la cámara son **93,1 texels por metro**.
+2. **La escuela no proyecta, sólo recibe.** Paredes, pisos y techos son tres mallas fundidas con
+   `frustumCulled=false`: ponerlas a proyectar obliga a redibujar el colegio entero en la pasada de
+   sombra todos los cuadros para conseguir la sombra de una pared bajo una luz que viene de arriba, o
+   sea nada. Proyectan las cosas que se apoyan.
+3. **Sólo en calidad alta**, que es una pasada de render más y la elige el jugador.
+
+**Y el ángulo de la luz se corrigió mirando la captura.** A 63 grados de elevación la sombra de una
+persona mide medio cuerpo tirada por el piso y se leía a mancha. Una escuela está iluminada por tubos
+en el techo: la sombra útil es la de **contacto**, la que dice «está parado ahí». A 77 grados mide
+0,23 veces la altura, o sea 40 cm para un cuerpo de 1,80.
+
+**Y va a 30 Hz y no a 60.** Medido contando llamadas de dibujo cuadro por cuadro: con la sombra a 60
+cada cuadro cuesta 20 llamadas y 18.082 triángulos; alternando, la secuencia real es
+`12 · 20 · 12 · 20` — **la pasada de sombra cuesta 8 llamadas y 7.648 triángulos, y ahora se paga la
+mitad de las veces**. Una sombra de contacto de una figura que camina a 3,4 m/s se mueve dos
+centímetros por actualización a 30 Hz.
+
+#### NUEVE TEXTURAS GENERADAS, Y LA COSTURA SE RESUELVE SIN TOCAR UN PÍXEL
+
+Piso de vinílico a cuadros, pared, placas de techo, lockers, pizarrón, asfalto, pasto, ladrillo de la
+fachada y madera, generadas con `z_image` y horneadas a WebP. **Las nueve suman 47 KB**, que en base64
+son 63.
+
+Primero las horneé a 256 y las nueve dieron **17,4 KB**: o sea que el presupuesto nunca fue el
+problema —son fotos suaves, sin detalle fino, y WebP con eso pesa nada—. A 512 suman 47 y el mapa
+aguanta que la cámara se pegue a una pared, que es lo que pasa en cada aula. La única que se quedó
+chica es **el pasto**: es el único que es ruido de verdad y a 384 pesaba **41,6 KB, más que las otras
+ocho juntas**, para algo que sólo se ve al fondo del patio en la cinemática final.
+
+**LA COSTURA.** Al modelo se le pidieron texturas «sin costura» y no lo son —ninguna lo es de verdad—;
+coserlas a mano desplazando media imagen y difuminando el cruce ensucia justo el centro, que es lo que
+más se mira. Se resuelve del otro lado con **`MirroredRepeatWrapping`**: la copia de al lado va dada
+vuelta, así que los dos bordes que se tocan son **el mismo borde** y la costura no puede existir. Lo
+que se paga es que el patrón queda simétrico cada dos repeticiones, y en manchas —revoque, asfalto,
+pasto, baldosa— eso no se ve.
+
+**NO REEMPLAZAN A LAS DIBUJADAS: LAS PISAN CUANDO LLEGAN.** Un data URI se decodifica de forma
+asincrónica, así que un material que naciera esperando la foto daría un cuadro —o veinte— en negro.
+Nace con el lienzo pintado por código, que ya funciona, y la foto entra encima cuando está lista. Si
+una no decodifica, ese material se queda con su dibujo: no hay estado roto posible.
+
+**Y LA REPETICIÓN CORRIGE LA ESCALA FÍSICA**, que es lo que más trabajo dio. Las UV ya venían
+escaladas en la geometría y estaban calculadas para dibujos de 64 px que no representan nada de un
+tamaño concreto. Una foto sí: con repetición 1 cada hilada de ladrillo medía **22 cm** y la pared se
+leía a casa de muñecas; a 2×2 quedan 5,5 cm. Los lockers fueron el más difícil, porque la foto son
+**cuatro** lockers de frente: un banco de 3,28 m tiene once lockers de 30 cm, así que la UV final
+tiene que dar 11/4 = 2,75 de ancho y 1 de alto, y horneada viene 2,98 × 1,4 — de ahí 0,92 y 0,71.
+
+**TRES TINTES BAJARON DESPUÉS DE MIRAR UNA FOTO, no antes:**
+- **El techo**, de `0xd6d4c8` a `0xa9a79c`: con el dibujo por código el tinte alto estaba bien; con
+  una foto que ya trae su propio gris, el producto dejaba el tercio de arriba del cuadro casi blanco
+  y el techo brillaba más que el piso.
+- **La madera**, dos veces: primero se le sacó el marrón (multiplicaba a la foto y la dejaba color
+  barro) y después se le bajó lo cálido, porque el escritorio en primer plano salía naranja fuerte y
+  en un aula beige el mueble no puede ser lo más saturado del cuadro.
+- **El asfalto** lleva un tinte **frío** aunque la foto ya es gris neutro, y no es corregir la foto:
+  la hemisférica de este juego tiene el cielo en `0xfff6e2` porque adentro imita tubos cálidos, y
+  encima el filtro sube la saturación. Un gris neutro bajo esa luz sale arena — en la captura el
+  patio parecía una playa.
+
+#### UN COLOR POR SALÓN, Y NO ES SÓLO ESTÉTICA
+
+El colegio entero era beige: pared beige, piso beige, techo beige y madera marrón. Con las fotos ganó
+textura pero seguía siendo una escala de arena, y en un pasillo con ocho bocas iguales eso tiene un
+costo que no es decorativo: **no hay forma de saber en cuál estás parado**.
+
+Cada salón estrena un **dintel de su color** cruzando la boca, a la altura del techo. Es una viga y no
+un cartel a propósito: se ve desde el otro extremo del pasillo, se ve de reojo al pasar, y no hay que
+leer nada. Los ocho colores van **mezclados un 30 % con el beige de la pared**, porque el filtro del
+juego *suma* saturación y a plena pureza el pasillo se leía a parque de diversiones. Y van en **una
+sola malla con color por vértice**: ocho materiales serían ocho llamadas de dibujo para ocho cajas.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24**, 0 muertes, **9.828 pasos** (eran 15.039), terminando en la pantalla de
+final después del autobús. Auditoría de rumbo **0 pasos dentro de paredes en 9.844**. Contestando mal:
+muerte, y **desde el reintento la partida se termina igual** (24/24 con 1 muerte). El final jugado
+solo: las cinco fases en orden, 1.419 pasos. Autobús 64,5 % del ancho, entero, 0,7 grados de error.
+Tramo más largo del recorrido **4 celdas**. Las **10 fotos decodificadas** y puestas en sus materiales
+con su repetición. Sombra: 93,1 texels por metro, 56 mallas proyectando de 62. Costo por cuadro
+alternando **12 · 20 llamadas** (10.434 y 18.082 triángulos). La tableta puntúa **9 de 9** en la
+matriz. Espejo y lectura de mano en verde. `window.__errs` vacío en las once corridas. El HTML pasa de
+1,93 a **2,01 MB**.
+
+**Lo que no pude verificar:** los fps reales en el teléfono. El contenedor renderiza por software, así
+que el costo de la sombra está medido en llamadas y triángulos —que son exactos— y no en cuadros por
+segundo. Si en el teléfono pesa, la calidad media la apaga entera.
+
 ### Trigésima séptima vuelta (2026-08-28): **RECREO** — la salida al patio, el autobús, y el control de resolución que rebotaba
 
 Pedido: *"agrega que al terminar la clase estás saliendo afuera con un autobús que te espera y en la

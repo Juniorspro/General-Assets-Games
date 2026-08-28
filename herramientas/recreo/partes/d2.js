@@ -49,40 +49,102 @@ function armarEscuela(){
 }
 const escuela=armarEscuela();
 
-/* ---------- LAS PUERTAS, SUELTAS PORQUE SE ABREN ----------
-   Cada una gira sobre su marco. Van sueltas y con su propio material: es lo unico del edificio que
-   se mueve, y fundirlas con la pared las dejaria clavadas para siempre. */
-const puertaGeo=new THREE.BoxGeometry(CEL*0.92, ALTO_M*0.86, 0.14);
-{ const a=puertaGeo.attributes.uv.array; for(let k=0;k<a.length;k+=2){ a[k]*=1; a[k+1]*=1; } }
-puertaGeo.translate(CEL*0.46, 0, 0);            // la bisagra en el borde
-for(const p of PUERTAS){
-  const g=new THREE.Group();
-  const m=new THREE.Mesh(puertaGeo, p.salida? new THREE.MeshLambertMaterial({map:T_PUERTA, color:0x9fd08f}) : M_PUERTA);
-  g.add(m);
-  /* la puerta se orienta segun por donde se pasa: si los vecinos pisables estan en Z, la hoja va en X */
-  const vertical = (pisable(p.i,p.j-1)||pisable(p.i,p.j+1)) &&
-                   !(pisable(p.i-1,p.j)||pisable(p.i+1,p.j));
-  g.position.set(XC(p.i) - CEL*0.46*(vertical?1:0), ALTO_M*0.43, ZC(p.j) - CEL*0.46*(vertical?0:1));
-  if(!vertical){ g.rotation.y=Math.PI/2; g.position.set(XC(p.i), ALTO_M*0.43, ZC(p.j) - CEL*0.46); }
-  else { g.position.set(XC(p.i) - CEL*0.46, ALTO_M*0.43, ZC(p.j)); }
-  p.g=g; p.vertical=vertical; escena.add(g);
+/* ===================== QUIEN PROYECTA Y QUIEN RECIBE =====================
+   La regla es una sola y esta escrita al reves de lo que uno esperaria: PROYECTA TODO MENOS la
+   escuela y las manos.
+
+   - LA ESCUELA NO PROYECTA. Paredes, pisos y techos son tres mallas fundidas con frustumCulled=false,
+     asi que ponerlas a proyectar significa redibujar las 16 mil caras del colegio entero en la pasada
+     de sombra en CADA cuadro, y con la luz cayendo casi de arriba la sombra que se ganaria es la de
+     una pared sobre si misma. Reciben, que es lo que importa: la sombra del profesor cae en el piso.
+   - EL TECHO NO RECIBE y no se puede: es MeshBasicMaterial, sin luz, justamente para que no le
+     quede el color de suelo de la hemisferica.
+   - LAS MANOS NO PROYECTAN. Estan reconstruidas sobre el rayo de pantalla, o sea a medio metro del
+     ojo: su sombra seria una mancha de tres metros tapando el pasillo.
+   Se vuelve a llamar cuando entra Baldi, porque su modelo llega despues por la red. */
+const SIN_SOMBRA=new Set();
+function marcarSinSombra(o){ if(o) SIN_SOMBRA.add(o); }
+function aplicarSombras(tam){
+  const on=!!tam;
+  render.shadowMap.enabled=on;
+  /* EL MAPA DE SOMBRA SE REDIBUJA UNA VEZ CADA DOS CUADROS, y esto salio de medir la basura por
+     cuadro: el dibujo sin sombra aloja 548 bytes y con sombra 1.165, o sea que la pasada de sombra
+     —que arma su propia lista de render— cuesta 616 bytes por cuadro, 37 KB por segundo tirados a
+     la basura. Y no hace falta a 60: es una sombra de CONTACTO de una figura que camina a 3,4 m/s,
+     asi que a 30 se mueve dos centimetros por actualizacion. Con autoUpdate en false, three.js solo
+     la redibuja cuando se le pide. */
+  render.shadowMap.autoUpdate=false;
+  luzS.castShadow=on;
+  luzS.intensity=on? 0.55 : 0;
+  if(on && luzS.shadow.mapSize.width!==tam){
+    luzS.shadow.mapSize.set(tam,tam);
+    if(luzS.shadow.map){ luzS.shadow.map.dispose(); luzS.shadow.map=null; }
+  }
+  const recibe=new Set([escuela.paredes, escuela.pisos, escuela.lockers]);
+  escena.traverse(o=>{
+    if(!o.isMesh && !o.isInstancedMesh) return;
+    if(SIN_SOMBRA.has(o)){ o.castShadow=false; o.receiveShadow=false; return; }
+    if(o===escuela.techos){ o.castShadow=false; o.receiveShadow=false; return; }
+    o.receiveShadow=on;
+    o.castShadow=on && !recibe.has(o) ? true : (on && o===escuela.lockers);
+  });
 }
-/* TAPA POR FUERA DE CADA SALIDA. La celda de una salida es puerta, asi que el constructor de
-   paredes no levanta pared ahi, y del otro lado de la reja del mapa NO HAY NADA. Mirando el pasillo
-   del medio de punta a punta se veia un agujero negro al fondo: medido en una captura de 790x1400,
-   unos 90 px de lado a 42 m de distancia, o sea los 4,2 m enteros de la celda. Eso era el vacio de
-   afuera de la escuela, visible por arriba y por los costados de la hoja —que mide 0,92 de celda de
-   ancho y 0,86 de alto—. Dos paneles pegados por fuera y el pasillo vuelve a terminar en algo. */
-/* SE DECLARA ANTES DEL BUCLE QUE LO USA. Un `let` leido antes de su linea no rompe una funcion: rompe
-   el modulo entero antes de la primera instruccion. Es la quinta vez en este proyecto. */
+
+/* ---------- YA NO HAY PUERTAS ----------
+   Estaban aca: una hoja por aula, cada una girando sobre su marco, con su material y su sonido. Se
+   fueron enteras con el pedido —"que no hayan puertas asi el juego es mas rapido"— y con ellas se
+   fue la unica malla del edificio que se movia. Lo que queda es la boca abierta del salon.
+
+   TAPA POR FUERA DE CADA SALIDA. La celda de una salida es pasillo, asi que el constructor de
+   paredes no levanta pared ahi, y del otro lado de la reja del mapa NO HAY NADA: mirando el pasillo
+   de punta a punta se veia un agujero negro al fondo —medido en una captura de 790x1400, unos 90 px
+   de lado a 42 m, o sea los 4,2 m enteros de la celda—. Dos paneles pegados por fuera y el pasillo
+   vuelve a terminar en algo.
+   SE DECLARA ANTES DEL BUCLE QUE LO USA. Un `let` leido antes de su linea no rompe una funcion:
+   rompe el modulo entero antes de la primera instruccion. Es la quinta vez en este proyecto. */
 let _tapaOeste=null;
-for(const p of PUERTAS){
-  if(!p.salida) continue;
+for(const p of SALIDAS){
   const fuera=(p.i===0)? -1 : 1;
   const tapa=new THREE.Mesh(new THREE.BoxGeometry(CEL*0.5, ALTO_M, CEL), M_PARED);
   tapa.position.set(XC(p.i)+fuera*CEL*0.62, ALTO_M/2, ZC(p.j));
   if(p.i===0) _tapaOeste=tapa;      // la del oeste se saca al salir: por ahi se va al autobus
   escena.add(tapa);
+}
+
+/* ===================== UN COLOR POR SALON =====================
+   Pedido: "mejores colores". El colegio entero era beige: pared beige, piso beige, techo beige y
+   madera marron. Con las fotos gano textura pero seguia siendo una escala de arena, y en un pasillo
+   con ocho bocas iguales eso tiene un costo que no es solo estetico — no hay forma de saber en cual
+   estas parado.
+
+   Cada salon estrena un dintel de su color cruzando la boca, a la altura del techo. Es una viga y
+   no un cartel a proposito: se ve desde el otro extremo del pasillo, se ve de reojo al pasar, y no
+   hay que leer nada. Los ocho colores estan bajados de saturacion (se mezclan con el beige de la
+   pared) porque el filtro del juego SUMA saturacion: puestos a plena pureza el pasillo se leia a
+   parque de diversiones y no a escuela.
+
+   VAN EN UNA SOLA MALLA CON COLOR POR VERTICE. Ocho materiales serian ocho llamadas de dibujo para
+   ocho cajas; con el color metido en la geometria son una. */
+const AULA_COLOR=[0xc25a4e, 0xd08a3c, 0xc7b03e, 0x6ea355,
+                  0x4f9c98, 0x4a7bb5, 0x8a6aad, 0xc06a90];
+{
+  const gs=[], base=new THREE.Color();
+  AULAS.forEach((a,k)=>{
+    const c=new THREE.Color(AULA_COLOR[k % AULA_COLOR.length]);
+    /* mezclado con el beige de la pared: el filtro de saturacion del juego los subiria a puro */
+    base.setHex(0xd8cbb0); c.lerp(base, 0.30);
+    const anc=(a.i1-a.i0+1)*CEL;
+    const zB=ZC(a.boca[1]) + a.dir*CEL/2;      // el borde entre el pasillo y el salon
+    const g=new THREE.BoxGeometry(anc, 0.52, 0.34);
+    g.translate(XC(Math.round((a.i0+a.i1)/2)), ALTO_M-0.26, zB);
+    const n=g.attributes.position.count, col=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3));
+    gs.push(g);
+  });
+  const g=mergeGeometries(gs,false); for(const q of gs) q.dispose();
+  const m=new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors:true}));
+  m.frustumCulled=false; escena.add(m);
 }
 
 /* ---------- LOS PUPITRES DE ADORNO ----------
@@ -139,6 +201,10 @@ const T_PIZA=tex(256,128,(g,w,h)=>{
    material son tres: las pizarras, la madera clara y la madera oscura.
    ========================================================================================= */
 const M_MAD1=new THREE.MeshLambertMaterial({color:0x8f6a3c});
+const M_PIZA=new THREE.MeshLambertMaterial({map:T_PIZA, side:THREE.DoubleSide});
+const M_ASFALTO=new THREE.MeshLambertMaterial({color:0x53535a});
+const M_PASTO=new THREE.MeshLambertMaterial({color:0x6b8a3f});
+const M_FACHADA=new THREE.MeshLambertMaterial({color:0xe2d5b6});
 const M_MAD2=new THREE.MeshLambertMaterial({color:0x7d5c34});
 const AULA_SITIO={};
 {
@@ -159,18 +225,29 @@ const AULA_SITIO={};
        Ahora la cara interior de la pared es F y todo se cuelga hacia adelante de ella: el marco
        apoyado (F-0,10 a F), la pizarra 1,5 cm delante del marco y la bandeja de la tiza sobresaliendo,
        que es lo que hace una bandeja. */
-    const F=ZC(a.j1+1)-CEL/2;
-    const zPiza=F-0.115;
-    const zProfe=ZC(a.j1);
-    const zEsc=zProfe-1.60;
-    const zCam=zProfe-2.35;
-    AULA_SITIO[a.n]={ n:a.n, x:xC, i:Math.round((a.i0+a.i1)/2), zPiza, zProfe, zEsc, zCam,
-                      jCam:zCam/CEL+(GH-1)/2, jm:Math.round((a.j0+a.j1)/2), j0:a.j0, j1:a.j1 };
+    /* TODO MULTIPLICADO POR dir. Antes estas cinco lineas tenian metida la suposicion de que a un
+       aula se entra siempre por el norte: el fondo era j1+1 y el profesor la fila j1, y punto. Con
+       cuatro salones a cada lado de un mismo pasillo, los del norte se entran POR EL SUR y las cinco
+       cuentas se dan vuelta. dir es +1 entrando por el norte y -1 entrando por el sur, y con eso la
+       misma formula sirve para los ocho. */
+    const D=a.dir;
+    const jFondo=(D>0)? a.j1+1 : a.j0-1;
+    const jProfe=(D>0)? a.j1 : a.j0;
+    const F=ZC(jFondo)-D*CEL/2;
+    const zPiza=F-D*0.115;
+    const zProfe=ZC(jProfe);
+    const zEsc=zProfe-D*1.60;
+    const zCam=zProfe-D*2.35;
+    AULA_SITIO[a.n]={ n:a.n, x:xC, i:Math.round((a.i0+a.i1)/2), zPiza, zProfe, zEsc, zCam, dir:D,
+                      /* de que lado mira cada uno: el profesor al jugador y la camara al profesor */
+                      giroProfe:(D>0)? Math.PI : 0, giroCam:(D>0)? 0 : Math.PI,
+                      jCam:zCam/CEL+(GH-1)/2, jm:Math.round((a.j0+a.j1)/2), j0:a.j0, j1:a.j1,
+                      jPrim:(D>0)? a.j0 : a.j1, boca:a.boca };
     /* EL MARCO VA DETRAS DE LA PIZARRA Y NO DELANTE, y esto se vio en una foto: el marco estaba a
        zP-0,03 y la pizarra a zP+0,03, o sea que desde la camara —que esta a menor Z— el marco tapaba
        la pizarra entera y el aula tenia un rectangulo de madera en la pared. Tres centimetros. */
-    caja(mad1, CEL*2.5+0.34, 2.02, 0.10, xC, 1.90, F-0.05);
-    caja(mad1, CEL*2.5, 0.07, 0.16, xC, 0.94, F-0.14);           // la bandeja de la tiza
+    caja(mad1, CEL*2.5+0.34, 2.02, 0.10, xC, 1.90, F-D*0.05);
+    caja(mad1, CEL*2.5, 0.07, 0.16, xC, 0.94, F-D*0.14);         // la bandeja de la tiza
     /* la pizarra: un plano, y el material va a DOS CARAS — un PlaneGeometry mira a su +Z y girarlo
        con FrontSide lo deja invisible desde este lado. Con DoubleSide no hay lado equivocado. */
     const pl=new THREE.PlaneGeometry(CEL*2.5, 1.86);
@@ -179,7 +256,7 @@ const AULA_SITIO={};
        un maestro y ademas pone una mesa entre el jugador y el, que es lo que hace que la escena se
        lea a clase y no a persecucion. */
     caja(mad1, 2.60, 0.11, 1.10, xC, 0.86, zEsc);
-    caja(mad2, 2.60, 0.74, 0.09, xC, 0.45, zEsc-0.50);
+    caja(mad2, 2.60, 0.74, 0.09, xC, 0.45, zEsc-D*0.50);
     for(const sx of [-1,1]) caja(mad2, 0.09, 0.74, 1.10, xC+sx*1.25, 0.45, zEsc);
   }
   const juntar=(lista, mat)=>{
@@ -188,9 +265,52 @@ const AULA_SITIO={};
     for(const q of lista) q.dispose();
     const m=new THREE.Mesh(g, mat); m.frustumCulled=false; escena.add(m); return m;
   };
-  juntar(pizas, new THREE.MeshLambertMaterial({map:T_PIZA, side:THREE.DoubleSide}));
+  juntar(pizas, M_PIZA);
   juntar(mad1, M_MAD1);
   juntar(mad2, M_MAD2);
+}
+/* ===================== LAS NUEVE FOTOS ENTRAN ACA =====================
+   Se pisan los materiales una vez que TODOS existen, y no cada uno en su linea: los del patio nacen
+   dentro de un IIFE cien lineas mas abajo, asi que repartir las llamadas garantizaba olvidarse de
+   una. Los multiplicadores de repeticion corrigen la escala fisica y estan explicados uno por uno,
+   porque un numero suelto aca es un ladrillo de veinte centimetros dentro de seis meses. */
+{
+  /* PISO: la UV horneada da 2 baldosas por celda, o sea una foto cada 2,1 m. La foto trae 8x8
+     cuadros → 26 cm cada uno, que es lo que mide una baldosa de vinilico. Va con NEAREST porque las
+     baldosas del original se ven a bloques y suavizarlas le saca justamente eso. */
+  fotoEn(M_PISO, 'piso', 1, 1, true);
+  /* PARED: 1,9 x 1,5 horneado sobre 4,2 x 3,6 m. Con repeticion 1 cada hilada de ladrillo media
+     22 cm; a 2 x 2 quedan 5,5 cm, que es un ladrillo. */
+  fotoEn(M_PARED, 'pared', 2, 2, false);
+  /* TECHO: la placa acustica de verdad mide 60 cm. La foto trae 6 filas por tile y el tile horneado
+     mide 2,1 m → 35 cm. A 0,6 quedan 58. */
+  fotoEn(M_TECHO, 'techo', 0.6, 0.6, false);
+  /* LOCKER: la foto son CUATRO lockers de frente, o sea un tile = 4 de ancho y 1 de alto. Un banco
+     de 3,28 m tiene once lockers de 30 cm, asi que la UV final tiene que dar 11/4 = 2,75 de ancho y
+     1 de alto; horneada viene 2,98 x 1,4. De ahi 0,92 y 0,71. */
+  fotoEn(M_LOCKER, 'locker', 0.92, 0.71, false);
+  /* PIZARRON: un PlaneGeometry con UV 0..1, y la foto es una pizarra entera. Uno a uno. */
+  fotoEn(M_PIZA, 'piza', 1, 1, false);
+  /* MADERA: los escritorios son cajas con UV 0..1 por cara, o sea que una tabla de 2,6 m mostraria
+     la foto entera estirada. A 2 x 2 la veta queda a escala. Y se les saca el tinte marron: el
+     color multiplicaba a la foto y la dejaba color barro. Y despues BAJO otra vez: con 0xd8c39f el
+     escritorio en primer plano salia naranja fuerte —la foto ya es calida y el filtro de saturacion
+     le suma— y en un aula beige el mueble no puede ser lo mas saturado del cuadro. */
+  M_MAD1.color.setHex(0xbdb49f); M_MAD2.color.setHex(0x9d9583);
+  fotoEn(M_MAD1, 'madera', 2, 2, false);
+  fotoEn(M_MAD2, 'madera', 2, 2, false);
+  /* ASFALTO Y PASTO: planos de 60 x 100 y 60 x 70 con UV 0..1. A 30 y 20 repeticiones cada tile
+     mide 2 y 3 metros. Y sin tinte, que la foto ya trae el color. */
+  /* EL ASFALTO LLEVA UN TINTE FRIO Y LA FOTO ES GRIS NEUTRO. No es corregir la foto: la hemisferica
+     de este juego tiene el cielo en 0xfff6e2 —crema— porque adentro imita tubos fluorescentes
+     calidos, y encima el filtro del juego sube la saturacion. Un gris neutro bajo esa luz sale
+     arena: en la captura el patio parecia una playa. */
+  M_ASFALTO.color.setHex(0x9aa2ad); fotoEn(M_ASFALTO, 'asfalto', 30, 30, false);
+  M_PASTO.color.setHex(0xffffff);   fotoEn(M_PASTO, 'pasto', 20, 20, false);
+  /* FACHADA: el paño largo mide 37,8 x 4,15 m con UV 0..1, asi que la repeticion no puede ser la
+     misma en los dos ejes; 12 x 2 deja el ladrillo cuadrado en la cara grande, que es la unica que
+     se ve desde la vereda. */
+  M_FACHADA.color.setHex(0xffffff); fotoEn(M_FACHADA, 'fachada', 12, 2, false);
 }
 const AULA_CLASE=AULAS[0];
 const CLASE_I=AULA_SITIO[1].i, CLASE_J=AULA_SITIO[1].jm;
@@ -439,20 +559,19 @@ let busMalla=null;   // se expone para poder MEDIR el encuadre en pixeles, no es
    su costado de nueve metros proyectaba el 101,6% del ancho del cuadro: o sea cortado por los dos
    lados, que en una captura se lee como "esta demasiado cerca". Corrido a x = -66 quedan 12,5 m
    hasta la parada de la camara y el autobus entra entero con margen. */
-const BUS_X=-66, BUS_Z=-2.0;
+const _salO=SALIDAS.find(q=>q.i===0)||SALIDAS[0];
+const BUS_X=XC(0)-CEL/2-17.7, BUS_Z=ZC(_salO.j)-2.0;
 (()=>{
   /* el suelo: asfalto con un pasto al fondo. Dos planos y no una textura, porque a esta distancia y
      con el filtro de baja calidad puesto un degrade no se distinguiria de un color plano */
   /* EL SUELO EMPIEZA DONDE TERMINA EL COLEGIO Y NO ANTES. Centrado en el medio del mapa, el asfalto
      quedaba a 2 cm POR ENCIMA del piso de la escuela y lo tapaba entero. La pared oeste esta en
      x = -46, asi que el patio va de -105 a -45. */
-  const asf=new THREE.Mesh(new THREE.PlaneGeometry(60, 100),
-    new THREE.MeshLambertMaterial({color:0x53535a}));
-  asf.rotation.x=-Math.PI/2; asf.position.set(-75, 0.02, 0);
+  const asf=new THREE.Mesh(new THREE.PlaneGeometry(60, 100), M_ASFALTO);
+  asf.rotation.x=-Math.PI/2; asf.position.set(XC(0)-CEL/2-26.7, 0.02, ZC(_salO.j));
   afueraGrupo.add(asf);
-  const pasto=new THREE.Mesh(new THREE.PlaneGeometry(60, 70),
-    new THREE.MeshLambertMaterial({color:0x6b8a3f}));
-  pasto.rotation.x=-Math.PI/2; pasto.position.set(-75, 0.01, -78);
+  const pasto=new THREE.Mesh(new THREE.PlaneGeometry(60, 70), M_PASTO);
+  pasto.rotation.x=-Math.PI/2; pasto.position.set(XC(0)-CEL/2-26.7, 0.01, ZC(_salO.j)-78);
   afueraGrupo.add(pasto);
   /* EL AUTOBUS, EN DOS MALLAS FUNDIDAS Y NO EN UNA, Y ESA ES LA DIFERENCIA ENTRE UN AUTOBUS Y UN
      CAJON AMARILLO. Con todo en una sola malla el material es uno solo, asi que LAS RUEDAS SALIAN
@@ -508,16 +627,15 @@ const BUS_X=-66, BUS_Z=-2.0;
   const facha=[];
   const XO=-(GW-1)/2*CEL - CEL/2;          // la cara exterior del oeste: -48,3
   const ZN=-(GH-1)/2*CEL - CEL/2, ZS=-ZN;  // los extremos norte y sur: -39,9 y 39,9
-  const ZP0=ZC(9)-CEL/2, ZP1=ZC(9)+CEL/2;  // el hueco de la puerta de salida
+  const ZP0=ZC(_salO.j)-CEL/2, ZP1=ZC(_salO.j)+CEL/2;   // el hueco de la puerta de salida
   /* MAS BAJA DE LO QUE PARECIA QUE TENIA QUE SER. Con 4,7 m, y con el profesor a menos de cuatro
      metros de la camara, la pared subia cuarenta y cuatro grados por encima del ojo y se comia el
      tercio de arriba del cuadro: en la captura el saludo pasaba delante de un muro marron. */
   const ALTO_F=ALTO_M+0.55;
   cj(facha, 0.30, ALTO_F, ZP0-ZN, XO-0.15, ALTO_F/2, (ZN+ZP0)/2);
   cj(facha, 0.30, ALTO_F, ZS-ZP1, XO-0.15, ALTO_F/2, (ZP1+ZS)/2);
-  cj(facha, 0.30, ALTO_F-2.35, CEL, XO-0.15, ALTO_F-(ALTO_F-2.35)/2, ZC(9));   // el dintel
-  const fach=new THREE.Mesh(mergeGeometries(facha.map(g=>g.index?g.toNonIndexed():g), false),
-    new THREE.MeshLambertMaterial({color:0xe2d5b6}));
+  cj(facha, 0.30, ALTO_F-2.35, CEL, XO-0.15, ALTO_F-(ALTO_F-2.35)/2, ZC(_salO.j));  // el dintel
+  const fach=new THREE.Mesh(mergeGeometries(facha.map(g=>g.index?g.toNonIndexed():g), false), M_FACHADA);
   for(const q of facha) q.dispose();
   fach.frustumCulled=false; afueraGrupo.add(fach);
   /* NI LOSA DE TECHO NI ALERO, Y ESO SE DECIDIO APAGANDOLOS DE A UNO. Los dos son planos

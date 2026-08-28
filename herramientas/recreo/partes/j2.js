@@ -333,9 +333,17 @@ window.__recreo={
   matar:()=>{ morir(); return { grito:gritoT, muertes }; },
   reintentar:()=>{ reintentar(); return window.__recreo.estado(); },
   /* ---- EL MAPA Y LAS RUTAS ---- */
-  aulas:()=>Object.keys(AULA_SITIO).map(k=>{ const S=AULA_SITIO[k], p=puertaDe(S.n);
-    return { n:S.n, x:+S.x.toFixed(2), zPiza:+S.zPiza.toFixed(2), zProfe:+S.zProfe.toFixed(2),
-             zCam:+S.zCam.toFixed(2), puerta:p? [p.i,p.j] : null, frente:frenteDe(S.n) }; }),
+  aulas:()=>Object.keys(AULA_SITIO).map(k=>{ const S=AULA_SITIO[k];
+    return { n:S.n, dir:S.dir, x:+S.x.toFixed(2), zPiza:+S.zPiza.toFixed(2),
+             zProfe:+S.zProfe.toFixed(2), zCam:+S.zCam.toFixed(2), boca:S.boca,
+             frente:frenteDe(S.n) }; }),
+  /* el mapa entero en una cadena, para poder MIRARLO en vez de deducirlo de ocho rectangulos */
+  mapa:()=>({ GW, GH, filas:MAPA.map(f=>f.map(c=>'.#'[0]===0?'':'').join('')||f.join('')),
+              dibujo:MAPA.map(f=>f.map(c=>c===0?'#':(c===1?'.':'A')).join('')),
+              salidas:SALIDAS.map(s=>[s.i,s.j]),
+              tramoMax:(()=>{ let m=0; for(let k=0;k<TOUR.length-1;k++){
+                  const r=rutaCeldas(frenteDe(TOUR[k]), frenteDe(TOUR[k+1]));
+                  m=Math.max(m, r? r.length-1 : -1); } return m; })() }),
   ruta:(a,b)=>{ const r=rutaCeldas(a,b); return { largo:r?r.length:0, esquinas:esquinas(r) }; },
   /* ---- LOS DEDOS ---- */
   leer:(lm)=>manoLeer(lm),
@@ -694,6 +702,20 @@ window.__recreo={
              far:escena.fog.far, capas:busMalla.layers.mask, camCapas:camara.layers.mask,
              render:busMalla.renderOrder, mv:busMalla.matrixWorldNeedsUpdate }; },
   afueraPiezas:(o)=>{ const r={}; afueraGrupo.children.forEach((c,i)=>{ if(o&&o[i]!=null) c.visible=!!o[i]; r[i]=[c.geometry&&c.geometry.type, c.visible, +c.position.x.toFixed(1), +c.position.y.toFixed(1)]; }); return r; },
+  fotos:()=>({ listas:fotosListas, pedidas:fotosPedidas, hay:Object.keys(TEX_FOTO||{}),
+               mapas:[['piso',M_PISO],['pared',M_PARED],['techo',M_TECHO],['locker',M_LOCKER],
+                      ['piza',M_PIZA],['mad1',M_MAD1],['asfalto',M_ASFALTO],['pasto',M_PASTO],
+                      ['fachada',M_FACHADA]]
+                 .map(([n,m])=>[n, !!(m&&m.map&&m.map.image&&m.map.image.width),
+                                m&&m.map? [m.map.repeat.x, m.map.repeat.y] : null]) }),
+  sombraVer:()=>{ let proy=0, rec=0, tot=0;
+    escena.traverse(o=>{ if(o.isMesh||o.isInstancedMesh){ tot++; if(o.castShadow)proy++; if(o.receiveShadow)rec++; } });
+    const c=luzS.shadow.camera;
+    return { on:render.shadowMap.enabled, luz:luzS.castShadow, mapa:luzS.shadow.mapSize.width,
+             proyectan:proy, reciben:rec, mallas:tot, lado:[c.left,c.right],
+             luzPos:[+luzS.position.x.toFixed(1),+luzS.position.y.toFixed(1),+luzS.position.z.toFixed(1)],
+             blanco:[+luzS.target.position.x.toFixed(1),+luzS.target.position.z.toFixed(1)],
+             texelPorMetro:+(luzS.shadow.mapSize.width/(c.right-c.left)).toFixed(1) }; },
   congelar:(si)=>{ CONGELADO=!!si; return CONGELADO; },
   cajaBus:()=>{
     if(!busMalla) return null;
@@ -914,6 +936,18 @@ window.__recreo={
      escena se dibuja en dos pasadas —al destino y despues el blit a pantalla—, asi que leerlo despues
      de un cuadro devolvia SOLO el blit: "1 llamada, 2 triangulos". Con autoReset apagado se suman
      las dos y el numero pasa a significar algo. */
+  /* EL COSTO DE N CUADROS SEGUIDOS, y no de uno. Con la sombra a 30 Hz un cuadro lleva la pasada de
+     sombra y el siguiente no: mirando UN cuadro se ve el doble o la mitad segun cual toque. */
+  costoCuadros:(n)=>{
+    render.info.autoReset=false;
+    const R=[];
+    for(let k=0;k<(n||6);k++){ render.info.reset(); dibujar(1);
+      R.push([render.info.render.calls, render.info.render.triangles]); }
+    render.info.autoReset=true;
+    const c=R.map(r=>r[0]);
+    return { cuadros:R, llamadasMedia:+(c.reduce((a,b)=>a+b,0)/c.length).toFixed(1),
+             min:Math.min(...c), max:Math.max(...c) };
+  },
   perfil:()=>{
     render.info.autoReset=false; render.info.reset();
     dibujar(1);

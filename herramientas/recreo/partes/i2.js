@@ -11,11 +11,11 @@
    pasillo entre dos puntos sale de un BFS sobre el mapa, que es la misma estructura que ya decide
    donde va la puerta de cada aula: se declara la geometria y el resto se deduce.
    ========================================================================================= */
-function puertaDe(n){ return PUERTAS.find(p=>p.aula===n && p.j===AULA_SITIO[n].j0-1)
-                          || PUERTAS.find(p=>p.aula===n); }
-/* la celda de PASILLO delante de la puerta principal: la puerta va siempre en j0-1 y el pasillo
-   inmediatamente antes, o sea j0-2 */
-function frenteDe(n){ const p=puertaDe(n); return [p.i, p.j-1]; }
+const ARR_I=1;                   // la celda de pasillo donde arranca todo, pegada a la salida oeste
+/* LA BOCA DEL AULA, QUE YA NO ES UNA PUERTA. Antes habia que buscar la hoja en PUERTAS y despues
+   pedir la celda de pasillo de delante; ahora la boca ES la celda de pasillo, porque el salon abre
+   directo sobre el. Un nombre menos y un paso menos. */
+function frenteDe(n){ return AULA_SITIO[n].boca; }
 
 function rutaCeldas(a, b){
   const K=(i,j)=>j*GW+i;
@@ -73,15 +73,16 @@ function rutaDesde(pts, x, z){
   }
   return R;
 }
-/* entrar al aula: la puerta, la primera fila del aula, el medio, y el sitio de la camara */
+/* entrar al aula: la boca, la primera fila del aula, el medio, y el sitio de la camara.
+   jPrim es la fila del aula que da al pasillo, que depende de por que lado se entra. */
 function rutaEntrar(n){
-  const S=AULA_SITIO[n], p=puertaDe(n);
-  return [[p.i,p.j],[S.i,S.j0],[S.i,S.jm],[S.i,S.jCam]];
+  const S=AULA_SITIO[n];
+  return [S.boca,[S.i,S.jPrim],[S.i,S.jm],[S.i,S.jCam]];
 }
 /* salir del aula: al reves, hasta el pasillo */
 function rutaSalir(n){
-  const S=AULA_SITIO[n], p=puertaDe(n);
-  return [[S.i,S.jm],[S.i,S.j0],[p.i,p.j],[p.i,p.j-1]];
+  const S=AULA_SITIO[n];
+  return [[S.i,S.jm],[S.i,S.jPrim],S.boca];
 }
 
 function cel2(p){ return [XC(p[0]), ZC(p[1])]; }
@@ -112,20 +113,17 @@ function empezar(){
   bichosApagar();
   CUENTAS=armarCuentas();
   for(const l of LIBROS){ l.hecho=false; l.g.visible=false; }
-  for(const p of PUERTAS){ p.abierta=false; p.t=0; p.ang=0; }
-  /* ARRANCA MIRANDO HACIA DONDE VA A CAMINAR, y no de costado. Estaba con la camara mirando a -X y
-     el profesor 2,73 m en esa direccion; pero el primer viaje baja por la columna 11, o sea -Z. Con
-     lo cual lo primero que hacia el profesor era caminar HACIA ATRAS hasta la celda de la camara
-     para poder doblar, cruzandose con el jugador — y si en vez de eso se le saltea ese punto, corta
-     la esquina y camina en diagonal por dentro de la pared (medido: 113 pasos en la celda [10,8]).
-     El problema nunca fue la ruta: era que el saludo pasaba en una esquina. Poniendo a los dos sobre
-     la columna 11 y la camara mirando a -Z, la ruta sale derecho y no hay esquina que cortar. */
-  cam.x=XC(11); cam.z=ZC(9); cam.giro=Math.PI; cam.pitch=0.02; cam.ojo=OJO;
+  /* ARRANCA EN LA PUNTA OESTE DEL PASILLO, MIRANDO HACIA DONDE VA A CAMINAR. Es la misma puerta por
+     la que se sale al final: se entra al colegio por ahi y se sale por ahi. Y es un tramo recto —el
+     pasillo unico no tiene esquinas—, que es lo que importa: el saludo no puede pasar en una esquina
+     o el profesor corta camino en diagonal y atraviesa la pared (medido en su momento: 113 pasos
+     dentro de la celda [10,8]). */
+  cam.x=XC(ARR_I); cam.z=ZC(PAS_F[0]); cam.giro=Math.PI/2; cam.pitch=0.02; cam.ojo=OJO;
   cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro; cam.apitch=cam.pitch; cam.aojo=cam.ojo;
   /* A DOS METROS SETENTA Y NO A SEIS. El primer plano del juego es el saludando, y a 5,88 m en un
      pasillo de 3,6 de techo el personaje ocupaba 90 px de los 732 del marco: un muneco al fondo.
      A 2,73 ocupa el 40% de la altura, que es la distancia a la que alguien te saluda. */
-  PROFE.x=XC(11); PROFE.z=ZC(8.35); PROFE.giro=0;
+  PROFE.x=XC(ARR_I)+2.73; PROFE.z=ZC(PAS_F[0]); PROFE.giro=-Math.PI/2;
   PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
   PROFE.anim='saludar'; PROFE.animOtro=null; PROFE.mezcla=0; PROFE.at=0;
   riel=null; profeRiel=null;
@@ -163,10 +161,8 @@ function siguienteEscena(){
       let pre=[];
       let desde;
       if(aulaPrev && aulaPrev!==n){
-        const pa=puertaDe(aulaPrev);
-        pa.abierta=true;
         pre=rutaSalir(aulaPrev);
-        desde=[pa.i, pa.j-1];
+        desde=AULA_SITIO[aulaPrev].boca;
       } else {
         desde=celda(cam.x, cam.z);
       }
@@ -203,10 +199,6 @@ function siguienteEscena(){
     const rumbo = fin? Math.atan2(fin[0]-cam.x, fin[1]-cam.z) : cam.giro;
     actSoltar(E.tipo, E.act, rumbo, E);
   }
-  if(E.puerta!=null){
-    const p=puertaDe(E.puerta);
-    if(p){ p.abierta=true; p.t=0; son('puerta'); }
-  }
   if(E.clase!=null){
     const n=E.clase, S=AULA_SITIO[n];
     aulaN=n; aulaIdx=TOUR.indexOf(n); aulaK=0; aulaPrev=n;
@@ -223,13 +215,12 @@ function siguienteEscena(){
        escena tiene que componerse igual: un aula perfectamente armada vista desde otro pasillo no es
        una escena. */
     if(Math.hypot(cam.x-S.x, cam.z-S.zCam)>1.2){
-      cam.x=S.x; cam.z=S.zCam; cam.giro=0;
+      cam.x=S.x; cam.z=S.zCam; cam.giro=S.giroCam;
       cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro;
-      const p=puertaDe(n); if(p) p.abierta=true;
       riel=null;
     }
     /* el se pone DEL OTRO LADO del escritorio, entre la mesa y el pizarron */
-    PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=Math.PI;
+    PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=S.giroProfe;
     PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
     profeRiel=null;
     pintarLibros();
@@ -350,8 +341,8 @@ function reintentar(){
   const k=GUION.findIndex(e=>e.clase===aulaN);
   escena_i=(k>=0? k : 0)-1;
   const S=AULA_SITIO[aulaN];
-  cam.x=S.x; cam.z=S.zCam; cam.giro=0; cam.pitch=0.02; cam.ojo=OJO;
-  PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=Math.PI;
+  cam.x=S.x; cam.z=S.zCam; cam.giro=S.giroCam; cam.pitch=0.02; cam.ojo=OJO;
+  PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=S.giroProfe;
   guardarAnterior();
   riel=null; profeRiel=null; restoRuta=null; aulaPrev=0;
   verPantalla('juego');
@@ -382,27 +373,33 @@ function terminarClase(){
    enseño en el tutorial y el unico que significa "hola" sin explicarlo.
    ========================================================================================= */
 const FIN={ on:false, fase:0, t:0, brillo:0, saludado:false };
-const FIN_PUERTA=[-46.2, 0];        // la celda de la salida oeste, en metros
-/* LOS DOS TRAMOS DE AFUERA VAN SIEMPRE HACIA EL MISMO LADO. El primero llegaba a x=-52 y el segundo
-   VOLVIA a -51: o sea que el ultimo tramo apuntaba hacia atras, y como el riel gira la camara hacia
-   donde camina —con un resorte mas fuerte que el de mirarA—, la camara terminaba mirando 40 grados
-   fuera del autobus. Medido: error de rumbo 39,6 grados con medio campo de 29, o sea el autobus
-   literalmente fuera del cuadro. */
-const FIN_AFUERA=[-48.5, -0.4];
-/* EL AUTOBUS MIDE NUEVE METROS DE LARGO, asi que su costado llega a x = -57,5: parando en -53,5 la
-   camara quedaba a un metro de la chapa y el autobus llenaba media pantalla cortado. A -51 se ve
-   entero y todavia se lee grande. */
-const FIN_BUS=[-52.0, -1.6];
-const FIN_PROFE=[-48.0, 0.9];   // en la vereda, al lado de la puerta
+/* TODO EL PATIO SALE DE LA SALIDA, Y NO DE NUMEROS ESCRITOS A MANO. Estos cinco puntos estaban
+   clavados en metros —[-46,2 · 0], [-48,5 · -0,4], [-52 · -1,6]…— porque la reja media 23x19 y la
+   salida caia en [0,9]. Con el mapa nuevo, de 17x9 y con la salida en [0,4], los cinco quedaban
+   dentro del colegio o a cuarenta metros de donde tenian que estar. Ahora salen de la cara oeste del
+   edificio (XO) y de la fila de la salida, asi que el mapa puede volver a cambiar sin que esto se
+   rompa. Las distancias RELATIVAS son las que se midieron y se quedan: la camara para 3,7 m pasada
+   la fachada y el autobus esta a 17,7, que es lo que da 64,6% del ancho del cuadro. */
+const SAL_O=SALIDAS.find(q=>q.i===0) || SALIDAS[0];
+const XO_FACH=XC(0)-CEL/2;                  // la cara exterior de la pared oeste
+const Z_SAL=ZC(SAL_O.j);
+const FIN_PUERTA=[XC(SAL_O.i), Z_SAL];      // la celda de la salida oeste, en metros
+/* LOS DOS TRAMOS DE AFUERA VAN SIEMPRE HACIA EL MISMO LADO. El primero llegaba a un punto y el
+   segundo VOLVIA hacia atras: como el riel gira la camara hacia donde camina —con un resorte mas
+   fuerte que el de mirarA—, la camara terminaba mirando 39,6 grados fuera del autobus, con medio
+   campo de 29. O sea el autobus literalmente fuera del cuadro. */
+const FIN_AFUERA=[XO_FACH-0.2, Z_SAL-0.4];
+/* MEDIDO PROYECTANDO SU CAJA A PIXELES: a 8,6 m el autobus ocupaba el 101,6% del ancho, o sea
+   cortado por los dos lados. A 12,5 ocupa 64,6% y entra entero. */
+const FIN_BUS=[XO_FACH-3.7, Z_SAL-1.6];
+const FIN_PROFE=[XO_FACH+0.3, Z_SAL+0.9];   // en la vereda, al lado de la puerta
 const FIN_MIRA_BUS=1.4;         // lo que se queda mirando el autobus antes de darse vuelta
 function finEmpezar(){
   FIN.on=true; FIN.fase=0; FIN.t=0; FIN.brillo=0; FIN.saludado=false;
   terminado=0; jugando=true;
   bichosApagar();
-  /* la puerta de la salida se abre y la tapa de afuera se saca: hasta ahora estaba puesta justamente
-     para que no se viera el vacio, y recien ahora hay algo que ver */
-  const p=PUERTAS.find(q=>q.salida && q.i===0);
-  if(p){ p.abierta=true; p.t=0; }
+  /* la tapa de afuera se saca: hasta ahora estaba puesta justamente para que no se viera el vacio, y
+     recien ahora hay algo que ver */
   afueraVer(true);
   dice('dSalir');
   /* la camara sale del aula hacia la puerta: se usa la misma ruta que usa todo el juego */
@@ -1650,10 +1647,6 @@ function avanzar(dt){
   if(n>=8) acum=0;
   dialogoTick(dt);
   if(avisoT>0){ avisoT-=dt; if(avisoT<=0) marcaEl.classList.remove('ver'); }
-  for(const p of PUERTAS){
-    const obj=p.abierta? 1.42 : 0;
-    p.ang += (obj-p.ang)*Math.min(1, dt*5);
-  }
   return n;
 }
 function angLerp(a,b,f){ let d=b-a; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
@@ -1668,6 +1661,9 @@ function ponerCamara(alfa){
 function dibujar(alfa){
   cuadrosTotal++;
   ponerCamara(alfa);
+  /* la caja de sombra viaja con la camara: cubre once metros y no el colegio entero */
+  sombraSeguir(camara.position.x, camara.position.z, cam.giro);
+  if(render.shadowMap.enabled) render.shadowMap.needsUpdate=((cuadrosTotal&1)===0);
   const R = baldiGLB? baldi : profe;
   if(R && R.raiz){
     R.raiz.position.x=PROFE.ax+(PROFE.x-PROFE.ax)*alfa;
@@ -1683,7 +1679,6 @@ function dibujar(alfa){
   for(const l of LIBROS){ if(!l.g.visible) continue;
     l.giro+=0.012; l.g.rotation.y=Math.PI+Math.sin(l.giro)*0.34;
     l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
-  for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
   actDibujar();
   if(!PRUEBA.sinManos3D) manos3DDibujar();
   if(!PRUEBA.sinMiras) pintarMiras();
@@ -1787,5 +1782,5 @@ addEventListener('resize', ajustar);
    molesta a nadie: no hay nada moviendose todavia. Y de nuevo al terminar de cargar a Baldi, porque
    su material entra despues y trae el suyo propio. */
 calentarShaders();
-cargarBaldi(()=>{ calentarShaders(); });
+cargarBaldi(()=>{ aplicarSombras(CAL[calidad].sombras); calentarShaders(); });
 bucle();

@@ -78,6 +78,9 @@ manoArt.instanceColor.setUsage(THREE.DynamicDrawUsage);
 const manoPal=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,6), MANO_M_PIEL, MANOS_MAX);
 manoPal.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 manoPal.frustumCulled=false; manoPal.visible=false; manoPal.renderOrder=5; escena.add(manoPal);
+/* las tres mallas de la mano quedan fuera de la sombra: viven a medio metro del ojo, asi que su
+   sombra seria una mancha de tres metros tapando el pasillo */
+for(const m of [manoArt, manoHue, manoPal]) marcarSinSombra(m);
 const _hx=new THREE.Vector3(), _hy=new THREE.Vector3(), _hn=new THREE.Vector3();
 const _hmat=new THREE.Matrix4();
 

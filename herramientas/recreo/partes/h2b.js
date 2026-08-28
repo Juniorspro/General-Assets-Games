@@ -174,6 +174,7 @@ function aplicarCal(c){
   calidad=c; try{ localStorage.setItem('recreo_cal',c); }catch(e){}
   escena.fog.far=CAL[c].niebla;
   if(escuela.lockers) escuela.lockers.visible=CAL[c].lockers;
+  aplicarSombras(CAL[c].sombras);
   ajustar(); pintarCal();
 }
 for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);

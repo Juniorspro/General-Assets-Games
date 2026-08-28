@@ -183,9 +183,9 @@ try{ plataf=(matchMedia('(pointer:coarse)').matches &&
 /* TRES CALIDADES Y LAS TRES LAS ELIGE EL JUGADOR. Hubo un cuarto escalon 'minima' al que llegaba
    solo un vigia automatico; se fue junto con el vigia, porque un escalon que nadie puede elegir y que
    solo aparece cuando el juego decide bajarte los graficos es exactamente lo que se pidio sacar. */
-const CAL={ baja:{ px:0.60, lockers:false, niebla:30 },
-            media:{ px:0.90, lockers:true,  niebla:40 },
-            alta:{ px:2.00, lockers:true,  niebla:52 } };
+const CAL={ baja:{ px:0.60, lockers:false, niebla:30, sombras:0 },
+            media:{ px:0.90, lockers:true,  niebla:40, sombras:0 },
+            alta:{ px:2.00, lockers:true,  niebla:52, sombras:1024 } };
 /* ARRANCA EN ALTA, Y ESO RECIEN AHORA ES SENSATO. Antes 'alta' significaba a la vez mas pixeles y
    mas cosas que ver, asi que ponerla por defecto habria hundido a medio mundo. Con la resolucion
    dinamica delante, lo que cuesta —el relleno— se ajusta solo cuadro a cuadro, y lo que se ve —los
@@ -227,61 +227,65 @@ const ZANCADA=1.15;                                       // metros por paso
 const CAMINA_W=2*Math.PI*VEL_PROFE/(2*ZANCADA);           // rad/s del ciclo (dos pasos por ciclo)
 
 const CEL=4.2, ALTO_M=3.6, GRUESO=0.30;
-const GW=23, GH=19;                      // celdas
-const PAS_F=[1,9,17], PAS_C=[1,11,21];   // pasillos: filas y columnas
-/* LAS AULAS DEJAN UN ANILLO DE PARED, y esto lo encontro la propia prueba del mapa. La primera
-   version las pegaba directo a los pasillos —filas 2..8 contra el pasillo de la fila 1— y entonces
-   NO HABIA DONDE PONER LA PUERTA, porque no quedaba ni una celda de pared entre el aula y el
-   pasillo. El gancho lo canto en dos numeros: `puertasPorAula:[0,0,0,0,0,0,0,0]` y las ocho aulas
-   alcanzables SIN abrir nada. Un aula sin puerta no es un aula, es un ensanchamiento del pasillo, y
-   eso no se ve en una foto del pasillo.
-   Con los pasillos en las filas 1, 9 y 17 y en las columnas 1, 11 y 21, el interior de cada aula va
-   de la fila 3 a la 7 (o de la 11 a la 15) y mide tres columnas: las filas 2, 8, 10 y 16 y las
-   columnas 2, 6, 10, 12, 16 y 20 quedan de pared, que es donde se abren las puertas. */
+const GW=17, GH=9;                       // celdas
+/* ================= UN SOLO PASILLO, LOS OCHO SALONES PEGADOS, Y NI UNA PUERTA =================
+
+   Pedido textual: *"haz que los salones esten seguiditos y que no hayan puertas asi el juego es mas
+   rapido"*. Las dos mitades del pedido son la misma cosa y arreglan el mismo defecto.
+
+   COMO ERA. Una reja de 23x19 —96,6 por 79,8 metros— con tres pasillos horizontales y tres
+   verticales, las ocho aulas repartidas por las cuatro esquinas, y cada aula con su puerta en un
+   anillo de pared. El recorrido 1,2,3,4,8,7,6,5 tenia tramos de CATORCE celdas: 58,8 m que a 2,9 m/s
+   son veinte segundos de pasillo vacio entre una cuenta y la siguiente. Y encima cada aula costaba
+   una puerta: acercarse, abrirla, esperar a que gire.
+
+   COMO ES. Un solo pasillo —la fila 4— con cuatro salones de un lado y cuatro del otro, pegados
+   entre si y separados por una unica celda de pared. El salon no tiene puerta: su lado del pasillo
+   esta ABIERTO de punta a punta, o sea que desde el pasillo se ven las ocho bocas y se entra
+   caminando. La reja baja a 17x9 = 71,4 x 37,8 m, o sea el 44% de la superficie.
+
+   EL TRAMO MAS LARGO PASA DE 14 CELDAS A 4. El recorrido 1,2,3,4,8,7,6,5 va por el pasillo de oeste
+   a este visitando los cuatro del norte y vuelve al oeste visitando los cuatro del sur: siete tramos
+   y seis de ellos miden cuatro celdas (16,8 m, unos seis segundos). El septimo —del 4 al 8— mide
+   CERO, porque el 8 esta justo enfrente del 4: se cruza el pasillo y ya. Eso no rompe nada y se
+   comprobo: la ruta de una escena de viaje lleva ademas los cuatro puntos de salir del aula y los
+   cuatro de entrar a la siguiente, asi que nunca queda vacia, y la actividad de ese tramo cae en el
+   pasillo, entre las dos bocas.
+
+   LO QUE ESTO OBLIGO A GENERALIZAR: hasta ahora TODAS las aulas se entraban por el norte, y el sitio
+   del pizarron, del escritorio, del profesor y de la camara estaba escrito con esa suposicion
+   metida adentro de la formula (`la pared del fondo es la fila j1+1`). Con salones a los dos lados
+   de un mismo pasillo, los del norte se entran por el SUR. Cada aula lleva ahora su `dir`: +1 si se
+   entra por el norte y -1 si se entra por el sur, y las cinco formulas lo multiplican. */
+const PAS_F=[4], PAS_C=[];               // un solo pasillo, horizontal, en el medio
+const PAS_I0=1, PAS_I1=GW-2;
+/* dir: +1 se entra por el norte (fondo al sur), -1 se entra por el sur (fondo al norte) */
 const AULAS=[
-  {i0:3, i1:5,  j0:3,  j1:7,  n:1}, {i0:7, i1:9,  j0:3,  j1:7,  n:2},
-  {i0:13,i1:15, j0:3,  j1:7,  n:3}, {i0:17,i1:19, j0:3,  j1:7,  n:4},
-  {i0:3, i1:5,  j0:11, j1:15, n:5}, {i0:7, i1:9,  j0:11, j1:15, n:6},
-  {i0:13,i1:15, j0:11, j1:15, n:7}, {i0:17,i1:19, j0:11, j1:15, n:8}
+  {i0:1, i1:3,  j0:1, j1:3, n:1, dir:-1}, {i0:5, i1:7,  j0:1, j1:3, n:2, dir:-1},
+  {i0:9, i1:11, j0:1, j1:3, n:3, dir:-1}, {i0:13,i1:15, j0:1, j1:3, n:4, dir:-1},
+  {i0:1, i1:3,  j0:5, j1:7, n:5, dir:1},  {i0:5, i1:7,  j0:5, j1:7, n:6, dir:1},
+  {i0:9, i1:11, j0:5, j1:7, n:7, dir:1},  {i0:13,i1:15, j0:5, j1:7, n:8, dir:1}
 ];
 const LIBRETAS_N=AULAS.length;
-/* 0 = pared, 1 = pasillo, 2 = aula, 3 = puerta */
+/* 0 = pared, 1 = pasillo, 2 = aula. EL 3 —puerta— YA NO EXISTE. */
 const MAPA=[];
 for(let j=0;j<GH;j++){ MAPA.push([]); for(let i=0;i<GW;i++) MAPA[j].push(0); }
-for(const f of PAS_F) for(let i=1;i<=21;i++) MAPA[f][i]=1;
-for(const c of PAS_C) for(let j=1;j<=17;j++) MAPA[j][c]=1;
+for(const f of PAS_F) for(let i=PAS_I0;i<=PAS_I1;i++) MAPA[f][i]=1;
+for(const c of PAS_C) for(let j=1;j<=GH-2;j++) MAPA[j][c]=1;
 for(const a of AULAS) for(let j=a.j0;j<=a.j1;j++) for(let i=a.i0;i<=a.i1;i++) MAPA[j][i]=2;
-/* LA PUERTA DE CADA AULA SE CALCULA: la celda del borde del aula que toca un pasillo. Dibujarlas a
-   mano en un mapa de 23x19 es la forma mas rapida de que una quede tapiada y el nivel sea
-   imposible sin que nadie se entere hasta jugarlo. */
-const PUERTAS=[];
+/* LA BOCA DE CADA AULA: la celda de PASILLO que tiene el aula al lado. No es una puerta y no hay
+   nada que abrir — es el nombre del punto por donde se entra, y sale de la geometria igual que
+   antes salia la puerta, asi que sigue siendo imposible que quede tapiada. */
+const PUERTAS=[];                        // se deja vacio: ya no hay hojas que girar
 for(const a of AULAS){
-  const im=Math.round((a.i0+a.i1)/2), jm=Math.round((a.j0+a.j1)/2);
-  /* LA PARED DEL FONDO NO ES CANDIDATA A PUERTA, y esto aparecio al amueblar las ocho aulas:
-     el pizarron va en la pared de enfrente de la puerta principal —la del fondo— y mide 2,5 celdas
-     de ancho sobre un aula de 3, o sea que la tapa entera. Las aulas 3 y 6, que llevan dos puertas,
-     tenian la segunda justo ahi: un pizarron con una puerta atras. Sacando (im, j1+1) de la lista,
-     la segunda puerta cae en una pared LATERAL —la 3 en (12,5) y la 6 en (10,13), las dos contra el
-     pasillo de la columna 11— y el fondo queda libre por construccion. */
-  const cand=[[im,a.j0-1],[a.i0-1,jm],[a.i1+1,jm]];
-  let puesta=0;
-  for(const [i,j] of cand){
-    if(i<0||j<0||i>=GW||j>=GH) continue;
-    const vecinos=[[i,j-1],[i,j+1],[i-1,j],[i+1,j]];
-    const tocaPas=vecinos.some(([x,y])=>x>=0&&y>=0&&x<GW&&y<GH&&MAPA[y][x]===1);
-    const tocaAula=vecinos.some(([x,y])=>x>=0&&y>=0&&x<GW&&y<GH&&MAPA[y][x]===2);
-    if(MAPA[j][i]===0 && tocaPas && tocaAula){
-      MAPA[j][i]=3;
-      PUERTAS.push({ i, j, aula:a.n, abierta:false, ang:0 });
-      if(++puesta>=(a.n%3===0?2:1)) break;   // un tercio de las aulas tiene dos puertas
-    }
-  }
-  a.puertas=puesta;
+  const im=Math.round((a.i0+a.i1)/2);
+  a.boca=[im, (a.dir>0)? a.j0-1 : a.j1+1];
+  a.puertas=0;
 }
-/* las dos salidas, al este y al oeste del pasillo del medio */
-const SALIDAS=[{i:0,j:9},{i:22,j:9}];
-for(const s of SALIDAS) MAPA[s.j][s.i]=3;
-for(const s of SALIDAS) PUERTAS.push({ i:s.i, j:s.j, aula:0, abierta:false, ang:0, salida:true });
+/* LAS DOS SALIDAS, a las dos puntas del pasillo. Tambien son aberturas y no puertas: la del oeste es
+   por donde se sale al patio al terminar la clase. */
+const SALIDAS=[{i:0,j:PAS_F[0]},{i:GW-1,j:PAS_F[0]}];
+for(const s of SALIDAS) MAPA[s.j][s.i]=1;
 
 function XC(i){ return (i-(GW-1)/2)*CEL; }
 function ZC(j){ return (j-(GH-1)/2)*CEL; }
@@ -289,9 +293,7 @@ function celda(x,z){ return [Math.round(x/CEL+(GW-1)/2), Math.round(z/CEL+(GH-1)
 function pisable(i,j){
   if(i<0||j<0||i>=GW||j>=GH) return false;
   const c=MAPA[j][i];
-  if(c===1||c===2) return true;
-  if(c===3){ const p=PUERTAS.find(q=>q.i===i&&q.j===j); return !!(p&&p.abierta); }
-  return false;
+  return c===1||c===2;
 }
 /* EL PROFESOR ABRE LAS PUERTAS, ASI QUE PARA EL TODAS ESTAN ABIERTAS.
    Con una sola funcion de "se pisa" para los dos pasaba esto, y lo encontro la prueba: el profesor
@@ -299,8 +301,4 @@ function pisable(i,j){
    hasta el, `rumbo` devolvia null, y el pobre caminaba en linea recta contra la pared de su propia
    aula. La distancia al jugador bajaba 6,9 m en tres segundos y despues 2,2 m en cuatro: estaba
    raspando una pared. Un perseguidor encerrado no es una amenaza, es un adorno. */
-function pisableProf(i,j){
-  if(i<0||j<0||i>=GW||j>=GH) return false;
-  const c=MAPA[j][i];
-  return c===1||c===2||c===3;
-}
+function pisableProf(i,j){ return pisable(i,j); }
