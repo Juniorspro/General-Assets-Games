@@ -24,7 +24,16 @@
    ========================================================================================= */
 const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', delegado:'',
              x:0.5, y:0.5, pinza:false, pinzaNueva:false, crudo:0, hz:0, medidas:0,
-             espejo:true, msDet:0, cdn:null, listaEn:0 };
+             espejo:true, msDet:0, cdn:null, listaEn:0,
+             /* LOS 21 PUNTOS FILTRADOS, para poder DIBUJAR la mano y no solo apuntar con ella. Se
+                guardan en un arreglo plano de 63 numeros y no en 21 objetos: los objetos habria que
+                crearlos de nuevo en cada medicion —2.520 objetos por segundo a la basura— y el
+                arreglo se escribe encima. */
+             pts:new Float32Array(63), hayPts:false };
+/* LA CARA, Y SOLO PARA MOVER LA VISTA. Pedido: "agrega reconocimiento facial o sea solamente para el
+   movimiento y pon que el jugador pueda mirar a los lados con solo girar su cabeza". No se lee ningun
+   gesto de la cara: se lee UN numero, el giro horizontal, y se usa para mover la camara. */
+const CARA={ on:false, det:null, hay:false, giro:0, crudo:0, medidas:0, msDet:0, error:'' };
 
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -38,6 +47,14 @@ const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmark
 const MANO_ENT_W=256, MANO_ENT_H=192;
 const MANO_HZ=45;             // techo de mediciones por segundo
 const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
+/* ===================== LA CARA VA A 12 Hz Y NO A 45 =====================
+   Son DOS modelos corriendo sobre el mismo video, asi que el costo se suma: medir las dos cosas al
+   mismo ritmo seria mas del doble de trabajo por cuadro de camara. Y no hace falta — una cabeza que
+   gira tarda medio segundo en ir de un lado al otro, o sea que a 12 Hz se la mide seis veces en el
+   camino, y encima el giro entra por un suavizado. La mano SI necesita ritmo: es lo que apunta. */
+const CARA_HZ=12;
+const CARA_MODELO='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const CARA_CADUCA=900;
 
 function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
 
@@ -64,6 +81,11 @@ function leerPinza(lm){
 const OE={ fcMin:0.9, beta:38.0, fcD:2.4, dz:0.0012 };
 function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 const F={ x:{v:0,d:0,ini:false}, y:{v:0,d:0,ini:false} };
+/* UN FILTRO POR COORDENADA DE CADA PUNTO. Son 63 estados y parece mucho, pero es lo mismo que se le
+   hace al punto del aro: sin filtrar, los veintiun puntos vibran cada uno por su cuenta y la mano
+   dibujada hierve. Se crean UNA vez y se escriben encima. */
+const FP=[]; for(let k=0;k<63;k++) FP.push({v:0,d:0,ini:false});
+function fpReset(){ for(const q of FP) q.ini=false; F.x.ini=false; F.y.ini=false; }
 function oePaso(S, x, dt){
   if(!S.ini){ S.v=x; S.d=0; S.ini=true; return x; }
   let d=(x-S.v)/dt;
@@ -112,8 +134,9 @@ async function manosIniciar(){
     try{ vision=await import(/* @vite-ignore */ cdn.js); MANO.cdn=cdn; break; }catch(e){}
   }
   if(!vision){ manoFallo('cdn'); return false; }
+  let _fs=null;
   try{
-    const fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm);
+    const fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm); _fs=fs;
     /* GPU primero y CPU de respaldo: en telefonos viejos el delegado de GPU tira al crear la tarea, y
        un detector a 15 fps en CPU sigue siendo jugable. */
     for(const del of ['GPU','CPU']){
@@ -130,10 +153,52 @@ async function manosIniciar(){
   MANO.estado='lista'; MANO.on=true; MANO.listaEn=performance.now();
   if(typeof pintarCam==='function') pintarCam();
   manosLazo();
+  /* LA CARA SE PIDE DESPUES Y SIN BLOQUEAR. Es otro modelo de varios megas: esperarlo antes de dejar
+     jugar seria hacer esperar por algo que solo mueve la vista. Si no llega, el juego se juega igual
+     con la camara quieta — que es exactamente lo que pasaba antes de que existiera. */
+  caraIniciar(vision, _fs);
   return true;
 }
+async function caraIniciar(vision, fs){
+  if(!vision || !fs || CARA.det) return;
+  for(const del of ['GPU','CPU']){
+    try{
+      CARA.det=await vision.FaceLandmarker.createFromOptions(fs,{
+        baseOptions:{ modelAssetPath:CARA_MODELO, delegate:del },
+        runningMode:'VIDEO', numFaces:1,
+        /* la matriz de transformacion es lo unico que se pide: de ahi sale el giro de la cabeza sin
+           tener que deducirlo de la geometria de la cara */
+        outputFacialTransformationMatrixes:true, outputFaceBlendshapes:false });
+      break;
+    }catch(e){ CARA.error=String(e && e.message || e).slice(0,60); }
+  }
+  CARA.on=!!CARA.det;
+}
 
-let _ultMed=0, _ultVista=0, _pinzaCruda=false;
+let _ultMed=0, _ultVista=0, _pinzaCruda=false, _ultCara=0;
+/* EL GIRO DE LA CABEZA SALE DE LA MATRIZ Y NO DE LOS PUNTOS. Deducirlo de "donde cae la nariz entre
+   los dos ojos" funciona hasta que la persona se inclina o se acerca; la matriz que devuelve el
+   modelo ya trae la rotacion resuelta. El elemento [8] de una matriz columna-mayor es el seno del
+   giro alrededor del eje vertical. */
+function caraMedir(t){
+  if(!CARA.det || !MANO.vid || MANO.vid.readyState<2) return;
+  if(t-_ultCara < 1000/CARA_HZ) return;
+  const a=performance.now();
+  let r=null;
+  try{ r=CARA.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
+  CARA.msDet=CARA.msDet*0.85+(performance.now()-a)*0.15;
+  _ultCara=t; CARA.medidas++;
+  const m=r && r.facialTransformationMatrixes && r.facialTransformationMatrixes[0];
+  if(!m || !m.data){ return; }
+  const d=m.data;
+  let g=Math.asin(Math.max(-1, Math.min(1, d[8])));
+  if(MANO.espejo) g=-g;
+  CARA.crudo=g;
+  /* suavizado exponencial: la cabeza se mueve despacio y el ruido del modelo no, asi que aca alcanza
+     con una constante fija — no hace falta el 1-euro que si necesita la mano */
+  CARA.giro += (g-CARA.giro)*0.25;
+  CARA.hay=true; CARA.visto=t;
+}
 function manosMedir(t){
   if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
   if(t-_ultMed < 1000/MANO_HZ) return;
@@ -159,6 +224,17 @@ function manosInyectar(lm, t){
   _ultVista=t;
   MANO.x=oePaso(F.x, ex(px), dt);
   MANO.y=oePaso(F.y, py, dt);
+  /* LOS 21 PUNTOS, POR EL MISMO FILTRO Y CON EL MISMO ESPEJO QUE EL ARO. Que compartan filtro y
+     espejo no es ahorro de lineas: es lo que garantiza que la mano DIBUJADA y el punto que APUNTA no
+     puedan separarse. Si fueran dos caminos, el jugador veria su pinza en un lugar y agarraria una
+     carta en otro — que es exactamente el defecto que se reporto en RECREO con el rompecabezas. */
+  for(let k=0;k<21;k++){
+    const q=lm[k];
+    MANO.pts[k*3]   = oePaso(FP[k*3],   ex(q.x), dt);
+    MANO.pts[k*3+1] = oePaso(FP[k*3+1], q.y,     dt);
+    MANO.pts[k*3+2] = oePaso(FP[k*3+2], q.z||0,  dt);
+  }
+  MANO.hayPts=true;
   MANO.crudo=leerPinza(lm);
   /* HISTERESIS Y NO UN UMBRAL SOLO. Con un umbral unico, una pinza que queda justo en el borde
      parpadea entre abierta y cerrada varias veces por segundo, y cada parpadeo es un "click": el
@@ -178,7 +254,10 @@ function manosLazo(){
   const paso=()=>{
     const t=performance.now();
     manosMedir(t);
-    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false; }
+    caraMedir(t);
+    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
+                                       MANO.hayPts=false; }
+    if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, 1000/MANO_HZ);
   };

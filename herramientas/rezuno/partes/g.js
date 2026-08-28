@@ -107,20 +107,27 @@ function tutDejo(){ if(TUT.on && TUT.paso===4) tutEsperaDeja=false; }
 const tutAro=new THREE.Mesh(new THREE.RingGeometry(1.25,1.55,44),
   new THREE.MeshBasicMaterial({color:0xc47b00, transparent:true, depthWrite:false}));
 tutAro.rotation.x=-Math.PI/2; tutAro.visible=false; tutAro.renderOrder=3;
-escena.add(tutAro);
+/* VA DENTRO DEL GRUPO QUE GIRA CON EL JUGADOR, porque casi siempre marca una carta de SU mano: en el
+   mundo se quedaria donde estaba la carta y no donde esta. Para el paso del mazo —que si es de la
+   mesa— se le deshace el giro. */
+manoGrupo.add(tutAro);
+const _tv=new THREE.Vector3();
 function pintarTut(){
   if(!TUT.on){ tutAro.visible=false; return; }
   const obj=tutObjetivo();
   let dest=null;
   if(obj>=0 && G.sel<0 && obj<G.manos[J_VOS].length){
     const g=manoGeo(G.manos[J_VOS].length);
-    dest=[g.x0+obj*g.paso, MESA.manoZ-0.35];
+    dest=1; tutAro.position.set(g.x0+obj*g.paso, 0.012, MESA.manoZ - CAM_MIRA[1] - 0.35);
   } else if(TUT.paso===5){
-    dest=[MESA.mazoX, MESA.centroZ];
+    dest=1;
+    _tv.set(MESA.mazoX, 0.012, MESA.centroZ);
+    manoGrupo.updateMatrixWorld(true);
+    manoGrupo.worldToLocal(_tv);
+    tutAro.position.copy(_tv);
   }
   if(!dest){ tutAro.visible=false; return; }
   tutAro.visible=true;
-  tutAro.position.set(dest[0], 0.012, dest[1]);
   const p=0.5+0.5*Math.sin(G.t*5.2);
   tutAro.material.opacity=0.35+0.45*p;
   tutAro.scale.setScalar(0.92+0.10*p);

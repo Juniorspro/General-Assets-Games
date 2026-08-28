@@ -109,12 +109,18 @@ function bucle(){
   const ahora=performance.now();
   const dt=Math.min(0.25, (ahora-ultimo)/1000); ultimo=ahora;
   if(G.fase==='juego'){
+    /* LA CAMARA SE MUEVE ANTES DE TODO LO DEMAS. El rayo del pellizco sale de la camara, asi que si
+       se moviera despues, el pellizco de este cuadro se resolveria con la camara del anterior. */
+    /* la ganancia 1,2 hace que unos diecisiete grados de cabeza lleguen al tope de veinte de vista:
+       girar la cabeza mas que eso para mirar una pantalla que esta al frente no lo hace nadie */
+    camaraGiro(CARA.hay? CARA.giro*1.2 : 0, dt);
     if(tomarPinza()) activar(MANO.x, MANO.y);
     partidaTick(dt);
     tutTick(dt);
     armarMesa();
     pintarTut();
     pintarAro();
+    manosPintar(dt);
     render.render(escena, camara);
   }
   /* LA PANTALLA DE FINAL SE MIRA AFUERA DEL `if`, Y ESE ERA UN DEFECTO DE VERDAD. Estaba adentro, o

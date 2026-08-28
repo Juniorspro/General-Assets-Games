@@ -75,7 +75,12 @@ window.__rez={
      centro de cada objeto a la pantalla y despues tiran el rayo por ahi, o sea que recorren el
      camino entero —mundo, camara, proyeccion, rayo— y no un atajo. Si la camara mirara a otro lado,
      esta prueba fallaria, que es exactamente lo que tiene que hacer. */
-  zonas:()=>{ armarMesa(); camara.updateMatrixWorld(true);
+  zonas:()=>{ armarMesa();
+    /* EL ARBOL ENTERO, NO SOLO EL OBJETO. updateMatrixWorld() sobre un hijo NO actualiza a su padre,
+       y desde que el abanico vive en un grupo que gira con el jugador, actualizar solo la carta la
+       proyecta con la matriz VIEJA del grupo. Es el mismo defecto que ya habia costado una prueba en
+       el rayo, con otro disfraz: medir sin poner el arbol al dia. */
+    escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
     const v=new THREE.Vector3();
     return PICK.map(o=>{ o.updateMatrixWorld(true);
       v.setFromMatrixPosition(o.matrixWorld).project(camara);
@@ -115,14 +120,41 @@ window.__rez={
              pantalla:[+p.x.toFixed(3),+p.y.toFixed(3)], activo:p.activo };
   },
   /* ---- la mano de mentira: entra por el mismo camino que la de verdad ---- */
-  manoFalsa:(cx, cy, pinza)=>{
-    const lm=[];
-    for(let k=0;k<21;k++) lm.push({x:cx, y:cy, z:0});
-    lm[0]={x:cx, y:cy+0.11, z:0};                    // muñeca
-    lm[9]={x:cx, y:cy-0.02, z:0};                    // nudillo del medio: palma = 0,13
-    const d=pinza? 0.010 : 0.085;                    // pulgar-indice
-    lm[4]={x:cx-d/2, y:cy, z:0};
-    lm[8]={x:cx+d/2, y:cy, z:0};
+  /* UNA MANO DE MENTIRA CON LOS VEINTIUN PUNTOS EN SU SITIO. La primera version ponia todos los
+     puntos encima del mismo lugar salvo cuatro, y servia para probar el pellizco —que solo mira
+     esos cuatro— pero al dibujarla en 3D salia un palito: no se podia juzgar nada de la mano. Esta
+     tiene la muñeca, la palma y los cinco dedos con sus falanges, con las proporciones de una mano
+     abierta de verdad. */
+  manoFalsa:(cx, cy, pinza, esc)=>{
+    const S=esc==null? 1 : esc;
+    const lm=new Array(21);
+    const P=(x,y,z)=>({x:cx+x*S, y:cy+y*S, z:(z||0)*S});
+    lm[0]=P(0, 0.115, 0);                                   // muñeca
+    /* los cuatro nudillos, abiertos en abanico */
+    const nud=[[ -0.052,0.010],[-0.018,-0.005],[0.016,-0.002],[0.048,0.014]];
+    const largo=[0.052,0.058,0.054,0.042];
+    for(let d=0; d<4; d++){
+      const b=5+d*4, nx=nud[d][0], ny=nud[d][1];
+      const ang=(-0.30+d*0.20);
+      lm[b]=P(nx, ny, -0.01);
+      for(let k=1;k<=3;k++){
+        const t=largo[d]*k*0.62;
+        lm[b+k]=P(nx+Math.sin(ang)*t, ny-Math.cos(ang)*t, -0.012*k);
+      }
+    }
+    /* el pulgar sale hacia el costado y hacia adelante, que es lo que lo distingue de los otros */
+    lm[1]=P(-0.055, 0.078, 0.004);
+    lm[2]=P(-0.086, 0.048, 0.010);
+    lm[3]=P(-0.100, 0.020, 0.016);
+    lm[4]=P(-0.106,-0.004, 0.020);
+    if(pinza){
+      /* pellizcar es llevar la punta del pulgar a la punta del indice: se mueven LAS DOS puntas al
+         punto medio, que es lo que hace una mano */
+      const mx=(lm[4].x+lm[8].x)/2, my=(lm[4].y+lm[8].y)/2, mz=(lm[4].z+lm[8].z)/2;
+      lm[4]={x:mx-0.004*S, y:my, z:mz}; lm[8]={x:mx+0.004*S, y:my, z:mz};
+      lm[3]={x:(lm[2].x+lm[4].x)/2, y:(lm[2].y+lm[4].y)/2, z:(lm[2].z+lm[4].z)/2};
+      lm[7]={x:(lm[6].x+lm[8].x)/2, y:(lm[6].y+lm[8].y)/2, z:(lm[6].z+lm[8].z)/2};
+    }
     return lm;
   },
   manoInyectar:(cx, cy, pinza, t)=>{
@@ -135,32 +167,88 @@ window.__rez={
      va el aro cuando ya se estabilizo. Es el numero que decide si apuntar a una carta se siente
      pegado o pastoso. Se devuelve en fraccion de pantalla y en milisegundos. */
   manoRampa:(vel, cuadros)=>{
-    F.x.ini=false; F.y.ini=false;
+    fpReset();
     const v=vel==null? 0.5 : vel;          // fracciones de pantalla por segundo
     const dt=16, n=cuadros||90;
     let t=performance.now(), x=0.2;
+    /* SE CALIBRA EL DESVIO ANTES DE MEDIR EL RETARDO. El punto que apunta es el medio entre el pulgar
+       y el indice, y en una mano abierta ese medio NO cae en el centro de la mano: esta corrido unos
+       centesimos. Sin calibrar, ese corrimiento constante se sumaba al retardo y el gancho reportaba
+       193 ms de atraso donde hay 6 — o sea que la prueba media la forma de la mano y no el filtro. */
+    for(let k=0;k<70;k++){ t+=dt; window.__rez.manoInyectar(x,0.5,false,t); }
+    const off=MANO.x-x;
     for(let k=0;k<n;k++){ t+=dt; x+=v*dt/1000; window.__rez.manoInyectar(x,0.5,false,t); }
-    const err=Math.abs(x-MANO.x);
-    return { vel:v, cuadros:n, real:+x.toFixed(4), aro:+MANO.x.toFixed(4),
+    const err=Math.abs((x+off)-MANO.x);
+    return { vel:v, cuadros:n, real:+(x+off).toFixed(4), aro:+MANO.x.toFixed(4),
+             desvio:+off.toFixed(4),
              retardoFrac:+err.toFixed(4), retardoMs:+(err/v*1000).toFixed(1) };
   },
   /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
      pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
   manoTemblor:(ruido, cuadros)=>{
-    F.x.ini=false; F.y.ini=false;
+    fpReset();
     const r=ruido==null? 0.006 : ruido, n=cuadros||240;
     let t=performance.now(), S=12345;
     const az=()=>{ S=(S*1103515245+12345)&0x7fffffff; return S/0x7fffffff*2-1; };
-    let sEnt=0, sSal=0, m1=0, m2=0;
+    /* EL RUIDO SE MIDE ALREDEDOR DE LA MEDIA MEDIDA Y NO ALREDEDOR DE 0,5. El punto que apunta esta
+       corrido respecto del centro de la mano —el medio entre pulgar e indice no es el centro— asi que
+       restarle 0,5 mete ese corrimiento constante adentro de la desviacion: el gancho reportaba que
+       el filtro AMPLIFICABA el temblor veinticinco veces cuando lo atenua tres. Se recogen las dos
+       series y se calcula su desviacion sobre su propia media. */
+    const ent=[], sal=[];
     for(let k=0;k<n;k++){
       t+=16; const x=0.5+az()*r;
       window.__rez.manoInyectar(x,0.5,false,t);
-      if(k>40){ sEnt+=(x-0.5)*(x-0.5); sSal+=(MANO.x-0.5)*(MANO.x-0.5); m1++; }
-      m2++;
+      if(k>60){ ent.push(x); sal.push(MANO.x); }
     }
-    const de=Math.sqrt(sEnt/m1), ds=Math.sqrt(sSal/m1);
+    const desv=(A)=>{ const m=A.reduce((a,b)=>a+b,0)/A.length;
+                      return Math.sqrt(A.reduce((a,b)=>a+(b-m)*(b-m),0)/A.length); };
+    const de=desv(ent), ds=desv(sal);
     return { ruido:r, cuadros:n, entra:+de.toFixed(5), sale:+ds.toFixed(5),
              atenua:+(de/Math.max(1e-9,ds)).toFixed(2) };
+  },
+  /* ---- LA CARA: SOLO MUEVE LA VISTA ---- */
+  caraVer:()=>({ on:CARA.on, hay:CARA.hay, giro:+CARA.giro.toFixed(4), crudo:+CARA.crudo.toFixed(4),
+                 medidas:CARA.medidas, ms:+CARA.msDet.toFixed(2), error:CARA.error,
+                 camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
+                 cam:[+camara.position.x.toFixed(2), +camara.position.z.toFixed(2)] }),
+  /* se inyecta un giro de cabeza y se deja que la vista lo siga, para poder medir hasta donde llega
+     y comprobar que la mesa no se sale del cuadro en los extremos */
+  caraInyectar:(giro, cuadros)=>{
+    CARA.on=true; CARA.hay=true; CARA.crudo=giro; CARA.giro=giro;
+    for(let k=0;k<(cuadros||120);k++) camaraGiro(giro*1.6, 1/60);
+    armarMesa();
+    return { pedido:giro, camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
+             encuadre:window.__rez.extremos(true) };
+  },
+  /* donde cae en pantalla cada blanco, uno por uno: para poder ver CUAL se sale del cuadro al girar
+     en vez de deducirlo del rectangulo que los envuelve a todos */
+  puntos:()=>{ armarMesa(); escena.updateMatrixWorld(true);
+    const v=new THREE.Vector3();
+    return PICK.map(o=>{ o.updateMatrixWorld(true);
+      v.setFromMatrixPosition(o.matrixWorld).project(camara);
+      return [o.userData.tipo+':'+o.userData.i, +(v.x*0.5+0.5).toFixed(3)]; }); },
+  caraSoltar:()=>{ CARA.hay=false; CARA.giro=0;
+                   for(let k=0;k<160;k++) camaraGiro(0,1/60); return window.__rez.caraVer(); },
+  /* ---- LAS MANOS DIBUJADAS ---- */
+  manos3D:()=>(manosPintar(1/60), { articulaciones:artMalla.count, huesos:hueMalla.count,
+                 tope:[M_ART, M_HUE], tuya:!!(MANO.on&&MANO.hay&&MANO.hayPts),
+                 alcance:RIV_ALC.map(v=>+v.toFixed(2)) }),
+  /* proyecta la punta del indice dibujada y la compara con el punto que APUNTA: si se separan, el
+     jugador ve su pinza en un lugar y agarra en otro */
+  manoCoincide:()=>{
+    if(!MANO.hayPts) return null;
+    manosPintar(1/60); camara.updateMatrixWorld(true);
+    const h=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(MANO_Z), w=h*camara.aspect;
+    const z0=MANO.pts[2];
+    const pun=(k)=>{ const fz=MANO.pts[k*3+2]-z0, prof=MANO_Z-fz*MANO_PROF;
+      const hz=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(prof), wz=hz*camara.aspect;
+      return new THREE.Vector3((MANO.pts[k*3]-0.5)*wz, -(MANO.pts[k*3+1]-0.5)*hz, prof)
+        .applyMatrix4(camara.matrixWorld).project(camara); };
+    const a=pun(4), b=pun(8);
+    const px=((a.x+b.x)/2)*0.5+0.5, py=-((a.y+b.y)/2)*0.5+0.5;
+    return { dibujo:[+px.toFixed(4), +py.toFixed(4)], apunta:[+MANO.x.toFixed(4), +MANO.y.toFixed(4)],
+             separacion:+Math.hypot(px-MANO.x, py-MANO.y).toFixed(5) };
   },
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
@@ -294,16 +382,36 @@ window.__rez={
   /* EL ENCUADRE SE MIDE, NO SE ESTIMA. Devuelve el rectangulo que ocupan TODAS las piezas de la mesa
      proyectadas a la pantalla, en fraccion de 0 a 1. Si algo se sale, aca da menos que 0 o mas que 1
      — y eso en una captura chica no se ve, porque lo que se sale simplemente no esta. */
-  extremos:()=>{
-    armarMesa(); camara.updateMatrixWorld(true);
+  /* CON `mios` SOLO SE MIDE LO QUE EL JUGADOR TIENE QUE PODER ALCANZAR: su abanico, el mazo y los
+     botones. Los abanicos de los rivales quedan afuera de la cuenta a proposito — al asomarse a un
+     lado es NATURAL que el rival del otro lado se salga del cuadro, y exigir que entre todo con la
+     vista girada obliga a alejar la camara casi un 50%, o sea a dejar las cartas del tamaño de un
+     sello para poder ver dos abanicos que ni se tocan. */
+  extremos:(mios)=>{
+    armarMesa();
+    /* EL ARBOL ENTERO, NO SOLO EL OBJETO. updateMatrixWorld() sobre un hijo NO actualiza a su padre,
+       y desde que el abanico vive en un grupo que gira con el jugador, actualizar solo la carta la
+       proyecta con la matriz VIEJA del grupo. Es el mismo defecto que ya habia costado una prueba en
+       el rayo, con otro disfraz: medir sin poner el arbol al dia. */
+    escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
     const v=new THREE.Vector3();
     let x0=9,y0=9,x1=-9,y1=-9;
-    const caja=new THREE.Box3();
-    for(const o of PICK.concat([mazoMalla]).filter(Boolean)){
+    const lista = mios? PICK.filter(o=>o.userData.tipo).concat([mazoMalla]).filter(Boolean)
+                      : PICK.concat([mazoMalla]).filter(Boolean);
+    for(const o of lista){
       o.updateMatrixWorld(true);
-      caja.setFromObject(o);
+      /* SE PROYECTAN LAS OCHO ESQUINAS DEL OBJETO EN SU PROPIO ESPACIO, NO SU CAJA DE MUNDO.
+         Box3.setFromObject devuelve la caja ALINEADA A LOS EJES: para una carta inclinada y girada
+         esa caja es bastante mas grande que la carta, y crece cuando la vista rota — asi que el
+         barrido decia que el abanico se salia del cuadro cuando lo que se salia era una caja
+         imaginaria. Medido despues: con doce grados de giro las siete cartas caen EXACTAMENTE en la
+         misma fraccion de pantalla que sin girar. */
+      const g=o.geometry; if(!g) continue;
+      if(!g.boundingBox) g.computeBoundingBox();
+      const caja=g.boundingBox;
       for(let i=0;i<8;i++){
-        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z).project(camara);
+        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z)
+         .applyMatrix4(o.matrixWorld).project(camara);
         const px=v.x*0.5+0.5, py=-v.y*0.5+0.5;
         if(px<x0)x0=px; if(px>x1)x1=px; if(py<y0)y0=py; if(py>y1)y1=py;
       }

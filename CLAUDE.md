@@ -43,7 +43,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~103 KB, **sin un solo asset**: todo dibujado por código). El quinto
+- **`RezUno.html` es "RezUno"** (~128 KB, **sin un solo asset**: todo dibujado por código). El quinto
   juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara**: todo, absolutamente todo, se hace con un
   **pellizco** (pulgar e índice). Pellizcás una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
@@ -58,6 +58,123 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima segunda vuelta (2026-08-28): **RezUno** — las manos se ven, y la cabeza mueve la vista
+
+Pedido: *"no aparecen las manos y deben ser 7 cartas por jugador, también agrega reconocimiento facial
+o sea solamente para el movimiento y pon que el jugador pueda mirar a los lados con solo girar su
+cabeza, y que al otro cpu también se le vean las manos, que las manos sean blancas y minimalistas"*.
+
+**LAS 7 CARTAS YA ESTABAN**, y lo mejor es que se puede decir con un número en vez de discutirlo: el
+reparto da `[7,7,7]` con 86 en el mazo y 1 en la pila, o sea **108** — el mazo entero, sin una carta
+de más ni de menos. Queda medido en la batería para que no haya que volver a preguntarlo.
+
+#### LA MANO SE RECONSTRUYE SOBRE SU PROPIO RAYO DE PANTALLA
+
+MediaPipe da también `worldLandmarks` en metros y parece lo obvio: anclar la mano en la muñeca y
+escalar la forma. Pero el juego **apunta con el punto de pantalla** —el rayo sale de ahí— y una mano
+colocada por su geometría métrica **no cae donde están esos puntos**: verías la pinza en un lugar y
+agarrarías una carta en otro. Es el mismo defecto que en RECREO costó una vuelta entera.
+
+Acá cada punto se pone **sobre su propio rayo**, a una profundidad que sale de su z relativa. El
+dibujo y el apuntado son la misma cosa *por construcción*. Medido: la punta de la pinza dibujada y el
+punto que apunta caen en la misma fracción de pantalla con **separación 0,00000**.
+
+Y los 21 puntos pasan por **el mismo filtro y el mismo espejo** que el punto del aro. Que compartan
+las dos cosas no es ahorro de líneas: es lo que garantiza que la mano dibujada y el punto que apunta
+no puedan separarse nunca.
+
+#### BLANCAS Y MINIMALISTAS, PERO SOBRE UNA MESA BLANCA
+
+Una mano blanca mate sobre una mesa blanca es una mancha. Lo que la separa no es el color sino **la
+luz**: material lambert, la direccional, y sobre todo **proyecta sombra**. La sombra es lo que dice
+"esto está flotando encima", y es lo único que permite que una mano blanca sobre blanco se lea. Sin
+sombra habría que oscurecerla, y entonces ya no sería blanca.
+
+**Y LE FALTABA LA PALMA.** La primera captura mostraba cinco varillas con pelotitas en las junturas:
+un esqueleto. Lo que vuelve una mano a un montón de huesos es el volumen que los une. Es la misma
+esfera instanciada, achatada y orientada según la propia palma, así que **no cuesta ni una llamada de
+dibujo más**. Y las articulaciones bajaron a casi el grosor de los huesos: con las pelotitas más
+gordas cada juntura se marca y el dedo se lee a hueso articulado.
+
+Los rivales tienen manos por el mismo camino: **no se miden de ninguna cámara, se arman** con los
+mismos veintiún puntos en una pose fija. Reusar la estructura no es elegancia — es lo que hace que se
+vean de la misma familia que la tuya sin escribir un segundo dibujante de manos. Su única animación es
+estirarse hacia la mesa cuando les toca, y alcanza para que se lea que fueron ellos los que jugaron.
+Todo instanciado: **dos llamadas de dibujo para las cinco manos**.
+
+#### LA CARA: UN SOLO NÚMERO, Y A 12 Hz
+
+Se pidió *"solamente para el movimiento"* y se tomó literal: no se lee ningún gesto, se lee **el giro
+horizontal de la cabeza** y nada más. Sale de la matriz de transformación que devuelve el modelo y no
+de deducirlo de dónde cae la nariz entre los ojos — eso funciona hasta que la persona se inclina o se
+acerca.
+
+**Y VA A 12 Hz CONTRA LOS 45 DE LA MANO.** Son dos modelos sobre el mismo video, así que el costo se
+suma; y no hace falta más: una cabeza tarda medio segundo en girar de un lado al otro, o sea que a 12
+Hz se la mide seis veces en el camino. La mano **sí** necesita ritmo, porque es la que apunta. El
+modelo de la cara además se pide **después y sin bloquear**: si no llega, se juega igual con la vista
+quieta.
+
+#### MIRAR A LOS LADOS: SE ORBITA, Y TUS CARTAS GIRAN CON VOS
+
+Girar la cámara en el sitio es lo que suena a "mirar a los lados", pero acá no se puede: el campo
+**horizontal** de este encuadre son 26 grados, así que con 13 de giro las cartas se van del cuadro — y
+el juego entero consiste en apuntarles. Orbitando alrededor del centro de la mesa, la mesa se queda
+donde está y lo que cambia es **el ángulo desde el que se la ve**.
+
+**Pero orbitar movía tu propio abanico**, que está a nueve unidades del pivote: medido, con dos grados
+ya asomaba fuera de pantalla. Y la solución no es girar menos, es que **tus cartas son tuyas**: cuando
+alguien sentado a una mesa gira la cabeza para mirar de reojo, sus propias cartas no se quedan atrás.
+El abanico y los dos botones viven en un grupo que gira lo mismo que la cámara alrededor del mismo
+pivote, así que su sitio **en la pantalla** no cambia mientras la mesa sí rota.
+
+#### Y EL LÍMITE ERAN 14 GRADOS POR DOS DEFECTOS DE **MEDICIÓN**, NO DEL JUEGO
+
+El barrido decía que el abanico se salía del cuadro a partir de los 3 grados. Dos cosas estaban mal en
+el gancho que mide, y las dos son la misma familia de error:
+
+1. **Medía la caja alineada a los ejes.** `Box3.setFromObject` devuelve la caja envolvente en el
+   mundo, y para una carta inclinada y girada esa caja es bastante más grande que la carta — y crece
+   cuando la vista rota. Se estaba midiendo una caja imaginaria. Ahora se proyectan las ocho esquinas
+   del objeto **en su propio espacio**.
+2. **Ponía al día la matriz del hijo pero no la del padre.** `updateMatrixWorld()` sobre una carta no
+   actualiza el grupo que la contiene, así que desde que el abanico vive en un grupo que gira, la
+   carta se proyectaba con la matriz **vieja** del grupo. Es exactamente el mismo defecto que ya había
+   costado una prueba en el rayo, con otro disfraz.
+
+Con las dos cosas arregladas, el abanico cae **exactamente en la misma fracción de pantalla de 2 a 16
+grados de giro**: `x:[0,065 · 0,940]` en todos. El límite lo pone ahora lo que se quiere ver y no lo
+que se rompe, y quedó en **20 grados**.
+
+#### DOS GANCHOS DE PRUEBA QUE SE ROMPIERON AL CAMBIAR LA MANO SINTÉTICA, Y POR QUÉ IMPORTA
+
+La mano de mentira pasó de cuatro puntos útiles a los veintiuno con sus falanges —hacía falta, porque
+con la anterior la mano dibujada en 3D salía un palito y no se podía juzgar nada—. Y al hacerla real
+apareció que **el punto que apunta no está en el centro de la mano**: el medio entre pulgar e índice
+está corrido 0,093 de pantalla. Eso rompió dos mediciones de una forma que hay que saber leer:
+
+- el gancho del **retardo** reportó **193 ms** donde hay 6, porque sumaba ese corrimiento constante al
+  atraso del filtro. Ahora se calibra el desvío antes de medir.
+- el del **temblor** reportó que el filtro *amplificaba* el ruido 25 veces, porque medía la desviación
+  alrededor de 0,5 en vez de alrededor de la media real. Ahora usa la media medida: atenúa **2,69**.
+
+Los dos números anteriores eran falsos y los dos parecían resultados. Es el recordatorio de siempre:
+una prueba que cambia de respuesta cuando cambia el *generador de datos* estaba midiendo el generador.
+
+#### MEDIDO AL CERRAR
+
+Reparto **[7,7,7] + 86 + 1 = 108**. **30 partidas jugadas apuntando con el rayo: las 30 terminan, 0
+cartas ilegales, 0 fallos de apuntado.** 120 por el camino interno: 120 terminadas, 0 ilegales,
+ganador 43/41/36. Tutorial completo. Manos 3D: **110 articulaciones y 105 huesos en dos llamadas de
+dibujo**, y la pinza dibujada coincide con la que apunta con **separación 0**. Giro de cabeza: 20
+grados de tope y el abanico invariante entre 0 y 20. Retardo del aro 11,2 / 6,4 / 3,0 ms según la
+velocidad; temblor atenuado 2,69. Flanco 1 de 15. Histéresis 0,411 / 0,591. 76 llamadas de dibujo,
+8.008 triángulos. `window.__errs` vacío. El HTML pasa de 103 a **128 KB**.
+
+**Lo que no pude verificar:** cómo responde el detector de caras con una cabeza de verdad, y los fps
+reales con los dos modelos corriendo a la vez. El banco inyecta caras y manos sintéticas y renderiza
+por software.
 
 ### Cuadragésima primera vuelta (2026-08-28): **RezUno pasa a 3D** — mesa blanca, y cuatro defectos que sólo aparecen apuntando con un rayo
 

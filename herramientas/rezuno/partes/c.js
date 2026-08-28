@@ -48,9 +48,38 @@ escena.fog=new THREE.Fog(0xf4f5f6, 26, 54);
    de 200 combinaciones midiendo el rectangulo que ocupan TODAS las piezas proyectadas: este es el que
    mete la mesa entera adentro del cuadro usando el 97% del ancho. */
 const CAM_MIRA=[0.0, -0.5];              // a que altura y profundidad apunta
+const CAM_POS=new THREE.Vector3(0, 16, 21);
 const camara=new THREE.PerspectiveCamera(44, 9/16, 0.5, 90);
-camara.position.set(0, 16, 21);
+camara.position.copy(CAM_POS);
 camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+
+/* ===================== MIRAR A LOS LADOS GIRANDO LA CABEZA =====================
+   Pedido: *"pon que el jugador pueda mirar a los lados con solo girar su cabeza"*.
+
+   Y SE ORBITA ALREDEDOR DE LA MESA, NO SE GIRA LA CAMARA EN EL SITIO. Girar en el sitio es lo que
+   suena a "mirar a los lados", pero acá no se puede: el campo HORIZONTAL de este encuadre son 26
+   grados, asi que con 13 de giro las cartas se van del cuadro — y el juego entero consiste en
+   apuntarles. Orbitando, la mesa se queda donde esta y lo que cambia es el ANGULO desde el que se la
+   ve: se asoma uno a los costados, se ve el canto de las cartas, se ven los rivales de otro perfil.
+   Es lo que hace alguien sentado a una mesa que se mueve para ver mejor, y no rompe el juego.
+   EL LIMITE SON 20 GRADOS, y llego a ser 14 por un defecto de MEDICION y no del juego: el barrido
+   decia que el abanico se salia del cuadro a partir de los tres grados, y lo que se salia era una
+   caja imaginaria — se estaba midiendo la caja alineada a los ejes de una carta inclinada, que crece
+   al rotar la vista, y ademas sin poner al dia la matriz del grupo. Con las dos cosas arregladas, el
+   abanico cae EXACTAMENTE en la misma fraccion de pantalla de 2 a 16 grados de giro. El limite lo
+   pone ahora lo que se quiere ver, no lo que se rompe. */
+const CAM_ORBITA=0.349;                  // 20 grados en radianes
+let camGiro=0;
+function camaraGiro(objetivo, dt){
+  const lim=Math.max(-CAM_ORBITA, Math.min(CAM_ORBITA, objetivo||0));
+  /* el suavizado va aparte del de la cara: aquel limpia el ruido del modelo, este le da inercia al
+     movimiento de la vista para que no se sienta pegada a la cabeza */
+  camGiro += (lim-camGiro)*Math.min(1, (dt||0.016)*3.2);
+  const co=Math.cos(camGiro), si=Math.sin(camGiro);
+  const x=CAM_POS.x, z=CAM_POS.z - CAM_MIRA[1];
+  camara.position.set(x*co + z*si, CAM_POS.y, -x*si + z*co + CAM_MIRA[1]);
+  camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+}
 
 /* ---------- luces ---------- */
 /* la hemisferica hace el trabajo del ambiente de una habitacion clara; sin ella los costados de las

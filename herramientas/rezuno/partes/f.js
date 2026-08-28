@@ -41,6 +41,20 @@ const pilaMallas=[];                 // las tres ultimas de la pila
 let mazoMalla=null, selMalla=null;
 const botones={};                    // tirar / dejar / los cuatro colores
 const grupo=new THREE.Group(); escena.add(grupo);
+/* ===================== TUS CARTAS GIRAN CON VOS =====================
+   Al asomarse a un lado, la camara ORBITA alrededor del centro de la mesa. Tu abanico esta a nueve
+   unidades de ese centro, asi que orbitando doce grados se corre casi dos unidades de costado y se
+   sale del cuadro: medido, con dos grados de giro ya asomaba fuera de pantalla.
+
+   Y la solucion no es girar menos: es que tus cartas son TUYAS. Cuando alguien sentado a una mesa
+   gira la cabeza para mirar de reojo, sus propias cartas no se quedan atras — se mueven con el.
+   El abanico y los dos botones viven en un grupo que gira lo mismo que la camara alrededor del mismo
+   pivote, asi que su sitio EN LA PANTALLA no cambia mientras la mesa si rota. Lo que se mueve es el
+   punto de vista sobre la mesa, que es lo que se pidio. */
+const manoGrupo=new THREE.Group();
+manoGrupo.position.set(0, 0, CAM_MIRA[1]);
+escena.add(manoGrupo);
+function manoGrupoAlDia(){ manoGrupo.rotation.y = camGiro; }
 
 /* EL SITIO DE CADA COSA, EN UNIDADES DEL MUNDO. Estan juntos a proposito: son las quince medidas que
    definen la mesa y tenerlas desparramadas es como se termina con un abanico que se sale del cuadro. */
@@ -90,7 +104,7 @@ function sitioMano(i, n){
      franja visible seguia devolviendo la 4 en las dos semillas probadas. Sin arco de altura la
      profundidad la decide UNICAMENTE el indice, y el escalon sube a 0,05 para que sea inconfundible.
      El abanico se sigue viendo abanico porque el giro de cada carta no se toca. */
-  return { x, y:MESA.manoY, z:MESA.manoZ + i*0.05,
+  return { x, y:MESA.manoY, z:MESA.manoZ - CAM_MIRA[1] + i*0.05,
            rz:-f*MESA.manoArco, rx:MESA.manoTilt };
 }
 
@@ -108,8 +122,8 @@ function puntoMano(malla, i, n){
   malla.updateMatrixWorld(true);
   return malla.localToWorld(_pv.set(-tapado/2, 0, 0));
 }
-function malla(lista, k){
-  while(lista.length<=k){ const m=nuevaCarta(); m.visible=false; grupo.add(m); lista.push(m); }
+function malla(lista, k, padre){
+  while(lista.length<=k){ const m=nuevaCarta(); m.visible=false; (padre||grupo).add(m); lista.push(m); }
   return lista[k];
 }
 function sobra(lista, n){ for(let k=n;k<lista.length;k++) lista[k].visible=false; }
@@ -161,7 +175,7 @@ function nuevoBoton(tipo, i, w, h){
      cambian de numero y de sitio— asi que un objeto anotado una sola vez al crearse desaparece de la
      lista en el primer cuadro. Costo una prueba: pellizcar TIRAR devolvia "no hay tirar". Los
      botones se anotan cuando se los hace visibles, junto con todo lo demas. */
-  grupo.add(m);
+  manoGrupo.add(m);
   return m;
 }
 botones.tirar=nuevoBoton('tirar',0, 2.55, 0.93);
@@ -170,7 +184,7 @@ botones.color=[0,1,2,3].map(k=>{
   const m=new THREE.Mesh(_geoBot, new THREE.MeshBasicMaterial({color:COLORES[k], depthTest:false}));
   m.scale.set(2.15,1.25,1); m.renderOrder=5; m.visible=false;
   m.userData={tipo:'color', i:k, activo:true};
-  grupo.add(m); return m;
+  manoGrupo.add(m); return m;
 });
 let _texBot={};
 function ponerTexBoton(m, clave, s, activo, fuerte){
@@ -187,19 +201,22 @@ function ponerTexBoton(m, clave, s, activo, fuerte){
    no donde el rayo choca — si se pusiera en el punto de impacto, saltaria de una carta a otra y por
    el aire desapareceria. Colgado de la camara a distancia fija, se mueve como un cursor. */
 const aroG=new THREE.Group(); camara.add(aroG); escena.add(camara);
-const aroMalla=new THREE.Mesh(new THREE.RingGeometry(0.9,1,40),
-  new THREE.MeshBasicMaterial({color:0x1b1d22, transparent:true, depthTest:false}));
+/* EL ARO SE ACHICA A LA MITAD AHORA QUE SE VE LA MANO. Antes era el UNICO indicio de donde estabas
+   apuntando, asi que tenia que ser grande; con los cinco dedos dibujados, lo que hace falta es una
+   marca fina en el punto exacto de la pinza — un aro gordo encima de la mano la tapa. */
+const aroMalla=new THREE.Mesh(new THREE.RingGeometry(0.86,1,40),
+  new THREE.MeshBasicMaterial({color:0x2a2d34, transparent:true, opacity:0.9, depthTest:false}));
 aroMalla.renderOrder=20; aroG.add(aroMalla);
 const aroPunto=new THREE.Mesh(new THREE.CircleGeometry(0.16,16),
   new THREE.MeshBasicMaterial({color:0x1b1d22, transparent:true, depthTest:false}));
 aroPunto.renderOrder=21; aroG.add(aroPunto);
 let ARO_R=0;
-const ARO_Z=-4.0;                 // a cuatro unidades del ojo, en el eje de la camara
+const ARO_Z=-3.55;                // apenas delante de la mano, para que no quede tapado
 function pintarAro(){
   const ver = MANO.on && ARO_R>0.02;
   aroMalla.visible=aroPunto.visible=ver;
   if(!MANO.on) { ARO_R+=(0-ARO_R)*0.2; return; }
-  const obj = MANO.hay? (MANO.pinza? 0.16 : 0.34) : 0;
+  const obj = MANO.hay? (MANO.pinza? 0.075 : 0.135) : 0;
   ARO_R += (obj-ARO_R)*0.28;
   if(!ver) return;
   /* del punto de pantalla al plano a ARO_Z: la altura visible a esa distancia sale del fov */
@@ -223,12 +240,13 @@ function pintarAro(){
 let _primera=true;
 function armarMesa(){
   PICK.length=0;
+  manoGrupoAlDia();
   const m=G.manos[J_VOS], n=m.length;
   const tuTurno=(G.fase==='juego' && G.turno===J_VOS);
 
   /* tu mano */
   for(let i=0;i<n;i++){
-    const c=m[i], ma=malla(cartasMallas,i);
+    const c=m[i], ma=malla(cartasMallas,i,manoGrupo);
     ma.visible=true; ponerCara(ma,c);
     const ok=pega(c,G.color,G.valor);
     ponerApagado(ma, tuTurno && !ok);
@@ -237,7 +255,7 @@ function armarMesa(){
     if(i===G.sel){
       /* la agarrada se levanta HACIA la camara y se endereza: es la unica que hay que poder leer
          entera mientras se decide */
-      const p={ x:0, y:MESA.selY, z:MESA.selZ, rx:-0.62, ry:0, rz:0 };
+      const p={ x:0, y:MESA.selY, z:MESA.selZ - CAM_MIRA[1], rx:-0.62, ry:0, rz:0 };
       irA(ma, p, 0.26);
       /* Y NO ENTRA AL RAYO. Ponerla con activo:false no alcanzaba y costo una prueba: la carta
          levantada queda MAS CERCA de la camara que los botones, asi que el rayo la tocaba primero,
@@ -305,15 +323,15 @@ function armarMesa(){
     ponerTexBoton(botones.tirar,'t',TX('tirar'), ok, true);
     ponerTexBoton(botones.dejar,'d',TX('dejar'), true, false);
     botones.tirar.userData.activo=ok;
-    botones.tirar.position.set(-1.42, MESA.botY, MESA.botZ);
-    botones.dejar.position.set( 1.42, MESA.botY, MESA.botZ);
+    botones.tirar.position.set(-1.42, MESA.botY, MESA.botZ - CAM_MIRA[1]);
+    botones.dejar.position.set( 1.42, MESA.botY, MESA.botZ - CAM_MIRA[1]);
     for(const b of [botones.tirar,botones.dejar]) b.rotation.set(-0.62,0,0);
   }
   const hayCol = G.colorPide && G.fase==='juego';
   for(let k=0;k<4;k++){
     const b=botones.color[k]; b.visible=hayCol;
     if(hayCol){ PICK.push(b);
-                b.position.set((k%2? 1.20:-1.20), MESA.botY+0.75-Math.floor(k/2)*1.42, MESA.botZ);
+                b.position.set((k%2? 1.20:-1.20), MESA.botY+0.75-Math.floor(k/2)*1.42, MESA.botZ - CAM_MIRA[1]);
                 b.rotation.set(-0.62,0,0); }
   }
   _primera=false;

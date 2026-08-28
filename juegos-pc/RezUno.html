@@ -367,9 +367,38 @@ escena.fog=new THREE.Fog(0xf4f5f6, 26, 54);
    de 200 combinaciones midiendo el rectangulo que ocupan TODAS las piezas proyectadas: este es el que
    mete la mesa entera adentro del cuadro usando el 97% del ancho. */
 const CAM_MIRA=[0.0, -0.5];              // a que altura y profundidad apunta
+const CAM_POS=new THREE.Vector3(0, 16, 21);
 const camara=new THREE.PerspectiveCamera(44, 9/16, 0.5, 90);
-camara.position.set(0, 16, 21);
+camara.position.copy(CAM_POS);
 camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+
+/* ===================== MIRAR A LOS LADOS GIRANDO LA CABEZA =====================
+   Pedido: *"pon que el jugador pueda mirar a los lados con solo girar su cabeza"*.
+
+   Y SE ORBITA ALREDEDOR DE LA MESA, NO SE GIRA LA CAMARA EN EL SITIO. Girar en el sitio es lo que
+   suena a "mirar a los lados", pero acá no se puede: el campo HORIZONTAL de este encuadre son 26
+   grados, asi que con 13 de giro las cartas se van del cuadro — y el juego entero consiste en
+   apuntarles. Orbitando, la mesa se queda donde esta y lo que cambia es el ANGULO desde el que se la
+   ve: se asoma uno a los costados, se ve el canto de las cartas, se ven los rivales de otro perfil.
+   Es lo que hace alguien sentado a una mesa que se mueve para ver mejor, y no rompe el juego.
+   EL LIMITE SON 20 GRADOS, y llego a ser 14 por un defecto de MEDICION y no del juego: el barrido
+   decia que el abanico se salia del cuadro a partir de los tres grados, y lo que se salia era una
+   caja imaginaria — se estaba midiendo la caja alineada a los ejes de una carta inclinada, que crece
+   al rotar la vista, y ademas sin poner al dia la matriz del grupo. Con las dos cosas arregladas, el
+   abanico cae EXACTAMENTE en la misma fraccion de pantalla de 2 a 16 grados de giro. El limite lo
+   pone ahora lo que se quiere ver, no lo que se rompe. */
+const CAM_ORBITA=0.349;                  // 20 grados en radianes
+let camGiro=0;
+function camaraGiro(objetivo, dt){
+  const lim=Math.max(-CAM_ORBITA, Math.min(CAM_ORBITA, objetivo||0));
+  /* el suavizado va aparte del de la cara: aquel limpia el ruido del modelo, este le da inercia al
+     movimiento de la vista para que no se sienta pegada a la cabeza */
+  camGiro += (lim-camGiro)*Math.min(1, (dt||0.016)*3.2);
+  const co=Math.cos(camGiro), si=Math.sin(camGiro);
+  const x=CAM_POS.x, z=CAM_POS.z - CAM_MIRA[1];
+  camara.position.set(x*co + z*si, CAM_POS.y, -x*si + z*co + CAM_MIRA[1]);
+  camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+}
 
 /* ---------- luces ---------- */
 /* la hemisferica hace el trabajo del ambiente de una habitacion clara; sin ella los costados de las
@@ -588,7 +617,16 @@ function ponerApagado(malla, apagado){
    ========================================================================================= */
 const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', delegado:'',
              x:0.5, y:0.5, pinza:false, pinzaNueva:false, crudo:0, hz:0, medidas:0,
-             espejo:true, msDet:0, cdn:null, listaEn:0 };
+             espejo:true, msDet:0, cdn:null, listaEn:0,
+             /* LOS 21 PUNTOS FILTRADOS, para poder DIBUJAR la mano y no solo apuntar con ella. Se
+                guardan en un arreglo plano de 63 numeros y no en 21 objetos: los objetos habria que
+                crearlos de nuevo en cada medicion —2.520 objetos por segundo a la basura— y el
+                arreglo se escribe encima. */
+             pts:new Float32Array(63), hayPts:false };
+/* LA CARA, Y SOLO PARA MOVER LA VISTA. Pedido: "agrega reconocimiento facial o sea solamente para el
+   movimiento y pon que el jugador pueda mirar a los lados con solo girar su cabeza". No se lee ningun
+   gesto de la cara: se lee UN numero, el giro horizontal, y se usa para mover la camara. */
+const CARA={ on:false, det:null, hay:false, giro:0, crudo:0, medidas:0, msDet:0, error:'' };
 
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -602,6 +640,14 @@ const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmark
 const MANO_ENT_W=256, MANO_ENT_H=192;
 const MANO_HZ=45;             // techo de mediciones por segundo
 const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
+/* ===================== LA CARA VA A 12 Hz Y NO A 45 =====================
+   Son DOS modelos corriendo sobre el mismo video, asi que el costo se suma: medir las dos cosas al
+   mismo ritmo seria mas del doble de trabajo por cuadro de camara. Y no hace falta — una cabeza que
+   gira tarda medio segundo en ir de un lado al otro, o sea que a 12 Hz se la mide seis veces en el
+   camino, y encima el giro entra por un suavizado. La mano SI necesita ritmo: es lo que apunta. */
+const CARA_HZ=12;
+const CARA_MODELO='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const CARA_CADUCA=900;
 
 function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
 
@@ -628,6 +674,11 @@ function leerPinza(lm){
 const OE={ fcMin:0.9, beta:38.0, fcD:2.4, dz:0.0012 };
 function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 const F={ x:{v:0,d:0,ini:false}, y:{v:0,d:0,ini:false} };
+/* UN FILTRO POR COORDENADA DE CADA PUNTO. Son 63 estados y parece mucho, pero es lo mismo que se le
+   hace al punto del aro: sin filtrar, los veintiun puntos vibran cada uno por su cuenta y la mano
+   dibujada hierve. Se crean UNA vez y se escriben encima. */
+const FP=[]; for(let k=0;k<63;k++) FP.push({v:0,d:0,ini:false});
+function fpReset(){ for(const q of FP) q.ini=false; F.x.ini=false; F.y.ini=false; }
 function oePaso(S, x, dt){
   if(!S.ini){ S.v=x; S.d=0; S.ini=true; return x; }
   let d=(x-S.v)/dt;
@@ -676,8 +727,9 @@ async function manosIniciar(){
     try{ vision=await import(/* @vite-ignore */ cdn.js); MANO.cdn=cdn; break; }catch(e){}
   }
   if(!vision){ manoFallo('cdn'); return false; }
+  let _fs=null;
   try{
-    const fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm);
+    const fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm); _fs=fs;
     /* GPU primero y CPU de respaldo: en telefonos viejos el delegado de GPU tira al crear la tarea, y
        un detector a 15 fps en CPU sigue siendo jugable. */
     for(const del of ['GPU','CPU']){
@@ -694,10 +746,52 @@ async function manosIniciar(){
   MANO.estado='lista'; MANO.on=true; MANO.listaEn=performance.now();
   if(typeof pintarCam==='function') pintarCam();
   manosLazo();
+  /* LA CARA SE PIDE DESPUES Y SIN BLOQUEAR. Es otro modelo de varios megas: esperarlo antes de dejar
+     jugar seria hacer esperar por algo que solo mueve la vista. Si no llega, el juego se juega igual
+     con la camara quieta — que es exactamente lo que pasaba antes de que existiera. */
+  caraIniciar(vision, _fs);
   return true;
 }
+async function caraIniciar(vision, fs){
+  if(!vision || !fs || CARA.det) return;
+  for(const del of ['GPU','CPU']){
+    try{
+      CARA.det=await vision.FaceLandmarker.createFromOptions(fs,{
+        baseOptions:{ modelAssetPath:CARA_MODELO, delegate:del },
+        runningMode:'VIDEO', numFaces:1,
+        /* la matriz de transformacion es lo unico que se pide: de ahi sale el giro de la cabeza sin
+           tener que deducirlo de la geometria de la cara */
+        outputFacialTransformationMatrixes:true, outputFaceBlendshapes:false });
+      break;
+    }catch(e){ CARA.error=String(e && e.message || e).slice(0,60); }
+  }
+  CARA.on=!!CARA.det;
+}
 
-let _ultMed=0, _ultVista=0, _pinzaCruda=false;
+let _ultMed=0, _ultVista=0, _pinzaCruda=false, _ultCara=0;
+/* EL GIRO DE LA CABEZA SALE DE LA MATRIZ Y NO DE LOS PUNTOS. Deducirlo de "donde cae la nariz entre
+   los dos ojos" funciona hasta que la persona se inclina o se acerca; la matriz que devuelve el
+   modelo ya trae la rotacion resuelta. El elemento [8] de una matriz columna-mayor es el seno del
+   giro alrededor del eje vertical. */
+function caraMedir(t){
+  if(!CARA.det || !MANO.vid || MANO.vid.readyState<2) return;
+  if(t-_ultCara < 1000/CARA_HZ) return;
+  const a=performance.now();
+  let r=null;
+  try{ r=CARA.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
+  CARA.msDet=CARA.msDet*0.85+(performance.now()-a)*0.15;
+  _ultCara=t; CARA.medidas++;
+  const m=r && r.facialTransformationMatrixes && r.facialTransformationMatrixes[0];
+  if(!m || !m.data){ return; }
+  const d=m.data;
+  let g=Math.asin(Math.max(-1, Math.min(1, d[8])));
+  if(MANO.espejo) g=-g;
+  CARA.crudo=g;
+  /* suavizado exponencial: la cabeza se mueve despacio y el ruido del modelo no, asi que aca alcanza
+     con una constante fija — no hace falta el 1-euro que si necesita la mano */
+  CARA.giro += (g-CARA.giro)*0.25;
+  CARA.hay=true; CARA.visto=t;
+}
 function manosMedir(t){
   if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
   if(t-_ultMed < 1000/MANO_HZ) return;
@@ -723,6 +817,17 @@ function manosInyectar(lm, t){
   _ultVista=t;
   MANO.x=oePaso(F.x, ex(px), dt);
   MANO.y=oePaso(F.y, py, dt);
+  /* LOS 21 PUNTOS, POR EL MISMO FILTRO Y CON EL MISMO ESPEJO QUE EL ARO. Que compartan filtro y
+     espejo no es ahorro de lineas: es lo que garantiza que la mano DIBUJADA y el punto que APUNTA no
+     puedan separarse. Si fueran dos caminos, el jugador veria su pinza en un lugar y agarraria una
+     carta en otro — que es exactamente el defecto que se reporto en RECREO con el rompecabezas. */
+  for(let k=0;k<21;k++){
+    const q=lm[k];
+    MANO.pts[k*3]   = oePaso(FP[k*3],   ex(q.x), dt);
+    MANO.pts[k*3+1] = oePaso(FP[k*3+1], q.y,     dt);
+    MANO.pts[k*3+2] = oePaso(FP[k*3+2], q.z||0,  dt);
+  }
+  MANO.hayPts=true;
   MANO.crudo=leerPinza(lm);
   /* HISTERESIS Y NO UN UMBRAL SOLO. Con un umbral unico, una pinza que queda justo en el borde
      parpadea entre abierta y cerrada varias veces por segundo, y cada parpadeo es un "click": el
@@ -742,7 +847,10 @@ function manosLazo(){
   const paso=()=>{
     const t=performance.now();
     manosMedir(t);
-    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false; }
+    caraMedir(t);
+    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
+                                       MANO.hayPts=false; }
+    if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, 1000/MANO_HZ);
   };
@@ -982,6 +1090,20 @@ const pilaMallas=[];                 // las tres ultimas de la pila
 let mazoMalla=null, selMalla=null;
 const botones={};                    // tirar / dejar / los cuatro colores
 const grupo=new THREE.Group(); escena.add(grupo);
+/* ===================== TUS CARTAS GIRAN CON VOS =====================
+   Al asomarse a un lado, la camara ORBITA alrededor del centro de la mesa. Tu abanico esta a nueve
+   unidades de ese centro, asi que orbitando doce grados se corre casi dos unidades de costado y se
+   sale del cuadro: medido, con dos grados de giro ya asomaba fuera de pantalla.
+
+   Y la solucion no es girar menos: es que tus cartas son TUYAS. Cuando alguien sentado a una mesa
+   gira la cabeza para mirar de reojo, sus propias cartas no se quedan atras — se mueven con el.
+   El abanico y los dos botones viven en un grupo que gira lo mismo que la camara alrededor del mismo
+   pivote, asi que su sitio EN LA PANTALLA no cambia mientras la mesa si rota. Lo que se mueve es el
+   punto de vista sobre la mesa, que es lo que se pidio. */
+const manoGrupo=new THREE.Group();
+manoGrupo.position.set(0, 0, CAM_MIRA[1]);
+escena.add(manoGrupo);
+function manoGrupoAlDia(){ manoGrupo.rotation.y = camGiro; }
 
 /* EL SITIO DE CADA COSA, EN UNIDADES DEL MUNDO. Estan juntos a proposito: son las quince medidas que
    definen la mesa y tenerlas desparramadas es como se termina con un abanico que se sale del cuadro. */
@@ -1031,7 +1153,7 @@ function sitioMano(i, n){
      franja visible seguia devolviendo la 4 en las dos semillas probadas. Sin arco de altura la
      profundidad la decide UNICAMENTE el indice, y el escalon sube a 0,05 para que sea inconfundible.
      El abanico se sigue viendo abanico porque el giro de cada carta no se toca. */
-  return { x, y:MESA.manoY, z:MESA.manoZ + i*0.05,
+  return { x, y:MESA.manoY, z:MESA.manoZ - CAM_MIRA[1] + i*0.05,
            rz:-f*MESA.manoArco, rx:MESA.manoTilt };
 }
 
@@ -1049,8 +1171,8 @@ function puntoMano(malla, i, n){
   malla.updateMatrixWorld(true);
   return malla.localToWorld(_pv.set(-tapado/2, 0, 0));
 }
-function malla(lista, k){
-  while(lista.length<=k){ const m=nuevaCarta(); m.visible=false; grupo.add(m); lista.push(m); }
+function malla(lista, k, padre){
+  while(lista.length<=k){ const m=nuevaCarta(); m.visible=false; (padre||grupo).add(m); lista.push(m); }
   return lista[k];
 }
 function sobra(lista, n){ for(let k=n;k<lista.length;k++) lista[k].visible=false; }
@@ -1102,7 +1224,7 @@ function nuevoBoton(tipo, i, w, h){
      cambian de numero y de sitio— asi que un objeto anotado una sola vez al crearse desaparece de la
      lista en el primer cuadro. Costo una prueba: pellizcar TIRAR devolvia "no hay tirar". Los
      botones se anotan cuando se los hace visibles, junto con todo lo demas. */
-  grupo.add(m);
+  manoGrupo.add(m);
   return m;
 }
 botones.tirar=nuevoBoton('tirar',0, 2.55, 0.93);
@@ -1111,7 +1233,7 @@ botones.color=[0,1,2,3].map(k=>{
   const m=new THREE.Mesh(_geoBot, new THREE.MeshBasicMaterial({color:COLORES[k], depthTest:false}));
   m.scale.set(2.15,1.25,1); m.renderOrder=5; m.visible=false;
   m.userData={tipo:'color', i:k, activo:true};
-  grupo.add(m); return m;
+  manoGrupo.add(m); return m;
 });
 let _texBot={};
 function ponerTexBoton(m, clave, s, activo, fuerte){
@@ -1128,19 +1250,22 @@ function ponerTexBoton(m, clave, s, activo, fuerte){
    no donde el rayo choca — si se pusiera en el punto de impacto, saltaria de una carta a otra y por
    el aire desapareceria. Colgado de la camara a distancia fija, se mueve como un cursor. */
 const aroG=new THREE.Group(); camara.add(aroG); escena.add(camara);
-const aroMalla=new THREE.Mesh(new THREE.RingGeometry(0.9,1,40),
-  new THREE.MeshBasicMaterial({color:0x1b1d22, transparent:true, depthTest:false}));
+/* EL ARO SE ACHICA A LA MITAD AHORA QUE SE VE LA MANO. Antes era el UNICO indicio de donde estabas
+   apuntando, asi que tenia que ser grande; con los cinco dedos dibujados, lo que hace falta es una
+   marca fina en el punto exacto de la pinza — un aro gordo encima de la mano la tapa. */
+const aroMalla=new THREE.Mesh(new THREE.RingGeometry(0.86,1,40),
+  new THREE.MeshBasicMaterial({color:0x2a2d34, transparent:true, opacity:0.9, depthTest:false}));
 aroMalla.renderOrder=20; aroG.add(aroMalla);
 const aroPunto=new THREE.Mesh(new THREE.CircleGeometry(0.16,16),
   new THREE.MeshBasicMaterial({color:0x1b1d22, transparent:true, depthTest:false}));
 aroPunto.renderOrder=21; aroG.add(aroPunto);
 let ARO_R=0;
-const ARO_Z=-4.0;                 // a cuatro unidades del ojo, en el eje de la camara
+const ARO_Z=-3.55;                // apenas delante de la mano, para que no quede tapado
 function pintarAro(){
   const ver = MANO.on && ARO_R>0.02;
   aroMalla.visible=aroPunto.visible=ver;
   if(!MANO.on) { ARO_R+=(0-ARO_R)*0.2; return; }
-  const obj = MANO.hay? (MANO.pinza? 0.16 : 0.34) : 0;
+  const obj = MANO.hay? (MANO.pinza? 0.075 : 0.135) : 0;
   ARO_R += (obj-ARO_R)*0.28;
   if(!ver) return;
   /* del punto de pantalla al plano a ARO_Z: la altura visible a esa distancia sale del fov */
@@ -1164,12 +1289,13 @@ function pintarAro(){
 let _primera=true;
 function armarMesa(){
   PICK.length=0;
+  manoGrupoAlDia();
   const m=G.manos[J_VOS], n=m.length;
   const tuTurno=(G.fase==='juego' && G.turno===J_VOS);
 
   /* tu mano */
   for(let i=0;i<n;i++){
-    const c=m[i], ma=malla(cartasMallas,i);
+    const c=m[i], ma=malla(cartasMallas,i,manoGrupo);
     ma.visible=true; ponerCara(ma,c);
     const ok=pega(c,G.color,G.valor);
     ponerApagado(ma, tuTurno && !ok);
@@ -1178,7 +1304,7 @@ function armarMesa(){
     if(i===G.sel){
       /* la agarrada se levanta HACIA la camara y se endereza: es la unica que hay que poder leer
          entera mientras se decide */
-      const p={ x:0, y:MESA.selY, z:MESA.selZ, rx:-0.62, ry:0, rz:0 };
+      const p={ x:0, y:MESA.selY, z:MESA.selZ - CAM_MIRA[1], rx:-0.62, ry:0, rz:0 };
       irA(ma, p, 0.26);
       /* Y NO ENTRA AL RAYO. Ponerla con activo:false no alcanzaba y costo una prueba: la carta
          levantada queda MAS CERCA de la camara que los botones, asi que el rayo la tocaba primero,
@@ -1246,15 +1372,15 @@ function armarMesa(){
     ponerTexBoton(botones.tirar,'t',TX('tirar'), ok, true);
     ponerTexBoton(botones.dejar,'d',TX('dejar'), true, false);
     botones.tirar.userData.activo=ok;
-    botones.tirar.position.set(-1.42, MESA.botY, MESA.botZ);
-    botones.dejar.position.set( 1.42, MESA.botY, MESA.botZ);
+    botones.tirar.position.set(-1.42, MESA.botY, MESA.botZ - CAM_MIRA[1]);
+    botones.dejar.position.set( 1.42, MESA.botY, MESA.botZ - CAM_MIRA[1]);
     for(const b of [botones.tirar,botones.dejar]) b.rotation.set(-0.62,0,0);
   }
   const hayCol = G.colorPide && G.fase==='juego';
   for(let k=0;k<4;k++){
     const b=botones.color[k]; b.visible=hayCol;
     if(hayCol){ PICK.push(b);
-                b.position.set((k%2? 1.20:-1.20), MESA.botY+0.75-Math.floor(k/2)*1.42, MESA.botZ);
+                b.position.set((k%2? 1.20:-1.20), MESA.botY+0.75-Math.floor(k/2)*1.42, MESA.botZ - CAM_MIRA[1]);
                 b.rotation.set(-0.62,0,0); }
   }
   _primera=false;
@@ -1312,6 +1438,183 @@ function son(k){
     else if(k==='gana'){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.22,0.12,'square'),i*95)); }
     else if(k==='pierde'){ [392,330,262].forEach((f,i)=>setTimeout(()=>tono(f,0.26,0.11,'triangle'),i*130)); }
   }catch(e){}
+}
+/* =========================================================================================
+   LAS MANOS EN 3D
+
+   Pedido: *"no aparecen las manos ... que el otro cpu tambien se le vean las manos, que las manos
+   sean blancas y minimalistas"*. Antes lo unico que se veia de la mano era un aro: funcionaba para
+   apuntar pero el jugador no se veia a si mismo en la mesa.
+
+   =========================================================================================
+   1. LA TUYA SE RECONSTRUYE SOBRE SU PROPIO RAYO DE PANTALLA, Y ESA ES LA DECISION IMPORTANTE
+
+   MediaPipe da tambien `worldLandmarks` en metros, y parece lo obvio: anclar la mano en la muñeca y
+   escalar. Pero el juego APUNTA con el punto de pantalla —el rayo sale de ahi— y una mano colocada
+   por su geometria metrica NO cae donde estan esos puntos: verias la pinza en un lugar y agarrarias
+   una carta en otro. Es el mismo defecto que en RECREO costo una vuelta entera.
+
+   Aca cada punto se pone SOBRE SU RAYO, a una profundidad que sale de su z relativa. El dibujo y el
+   apuntado son la misma cosa *por construccion*, no por haberlos ajustado hasta que coincidieran.
+
+   2. BLANCAS Y MINIMALISTAS, PERO SOBRE UNA MESA BLANCA
+
+   Una mano blanca mate sobre una mesa blanca es una mancha. Lo que la separa no es el color sino la
+   LUZ: va con material lambert, recibe la direccional y —sobre todo— PROYECTA SOMBRA sobre la mesa.
+   La sombra es lo que dice "esta cosa esta flotando encima", y es lo unico que hace que una mano
+   blanca sobre blanco se lea. Sin sombra habria que oscurecerla, y entonces ya no seria blanca.
+
+   3. HUESOS Y ARTICULACIONES INSTANCIADOS: DOS LLAMADAS DE DIBUJO
+
+   Veintiun articulaciones y veinte huesos sueltos serian 41 mallas. Instanciados son 2, haya una
+   mano o haya cinco — y hay cinco, porque los dos rivales tienen dos manos cada uno.
+   ========================================================================================= */
+const MANO_HUESOS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                   [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const MANOS_MAX=5;                       // la tuya mas dos por cada rival
+const M_ART=22*MANOS_MAX, M_HUE=MANO_HUESOS.length*MANOS_MAX;   // 21 puntos + la palma
+const matPiel=new THREE.MeshLambertMaterial({color:0xffffff});
+const artMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,7,5), matPiel, M_ART);
+const hueMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,7,1,true), matPiel, M_HUE);
+for(const m of [artMalla, hueMalla]){
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled=false; m.castShadow=true; m.receiveShadow=false;
+  m.count=0; escena.add(m);
+}
+const _hm=new THREE.Matrix4(), _hq=new THREE.Quaternion(), _hv=new THREE.Vector3(),
+      _hd=new THREE.Vector3(), _hs=new THREE.Vector3(), _hup=new THREE.Vector3(0,1,0),
+      _ha=new THREE.Vector3(), _hb=new THREE.Vector3();
+let _nArt=0, _nHue=0;
+function manosLimpiar(){ _nArt=0; _nHue=0; }
+function ponerArt(p, r){
+  if(_nArt>=M_ART) return;
+  _hm.makeScale(r,r,r); _hm.setPosition(p.x,p.y,p.z);
+  artMalla.setMatrixAt(_nArt++, _hm);
+}
+function ponerHueso(a, b, r){
+  if(_nHue>=M_HUE) return;
+  _hd.subVectors(b,a);
+  const L=_hd.length(); if(L<1e-5) return;
+  _hq.setFromUnitVectors(_hup, _hd.normalize());
+  _hs.set(r, L, r);
+  _hv.addVectors(a,b).multiplyScalar(0.5);
+  _hm.compose(_hv, _hq, _hs);
+  hueMalla.setMatrixAt(_nHue++, _hm);
+}
+/* LA PALMA, Y NO ES UN ADORNO. Con huesos y articulaciones sueltos la mano se lee a ESQUELETO —se
+   vio en la primera captura: cinco varillas con pelotitas en las junturas—. Lo que la vuelve una mano
+   es el volumen que las une. Es la misma esfera instanciada, achatada y orientada segun la propia
+   palma, asi que no cuesta ni una llamada de dibujo mas. */
+function ponerPalma(muneca, nud1, nud4, nudM){
+  if(_nArt>=M_ART) return;
+  _ha.subVectors(nud4, nud1);                       // el ancho de la palma
+  _hb.subVectors(nudM, muneca);                     // el largo
+  const ancho=_ha.length(), largo=_hb.length();
+  if(ancho<1e-5 || largo<1e-5) return;
+  _hv.crossVectors(_ha, _hb).normalize();           // la normal
+  _ha.normalize(); _hb.normalize();
+  const m=new THREE.Matrix4().makeBasis(_ha, _hb, _hv);
+  _hq.setFromRotationMatrix(m);
+  _hs.set(ancho*0.56, largo*0.60, Math.min(ancho,largo)*0.20);
+  _hd.addVectors(muneca, nudM).multiplyScalar(0.5);
+  _hd.addScaledVector(_hb, largo*0.04);
+  _hm.compose(_hd, _hq, _hs);
+  artMalla.setMatrixAt(_nArt++, _hm);
+}
+function manosSubir(){
+  artMalla.count=_nArt; hueMalla.count=_nHue;
+  artMalla.instanceMatrix.needsUpdate=true;
+  hueMalla.instanceMatrix.needsUpdate=true;
+}
+
+/* ---------- la tuya ---------- */
+/* A QUE DISTANCIA DEL OJO SE PLANTA. Mas cerca tapa las cartas; mas lejos se ve del tamaño de un
+   dedo. A 3,6 unidades la mano abierta ocupa alrededor de un tercio del ancho del cuadro, que es lo
+   que ocupa una mano de verdad puesta delante de la cara. */
+const MANO_Z=-3.6, MANO_PROF=1.5;
+const _pmundo=[]; for(let k=0;k<21;k++) _pmundo.push(new THREE.Vector3());
+function manoTuya(){
+  if(!MANO.on || !MANO.hay || !MANO.hayPts) return false;
+  const h=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(MANO_Z);
+  const w=h*camara.aspect;
+  /* la z de MediaPipe es relativa a la muñeca y en unidades de ancho de mano: sirve para dar
+     profundidad RELATIVA, no absoluta, asi que se centra en la muñeca y se escala */
+  const z0=MANO.pts[2];
+  for(let k=0;k<21;k++){
+    const fx=MANO.pts[k*3], fy=MANO.pts[k*3+1], fz=MANO.pts[k*3+2]-z0;
+    const prof=MANO_Z - fz*MANO_PROF;
+    /* CADA PUNTO SOBRE SU RAYO: se toma la fraccion de pantalla y se la lleva al plano de SU
+       profundidad, no a un plano comun. Con un plano comun la mano quedaria plana como una calcomania
+       y ademas la punta del dedo no caeria donde apunta el rayo. */
+    const hz=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(prof), wz=hz*camara.aspect;
+    _pmundo[k].set((fx-0.5)*wz, -(fy-0.5)*hz, prof).applyMatrix4(camara.matrixWorld);
+  }
+  /* el grosor sale del ANCHO DE LA PALMA en el mundo y no de una constante en metros: con una
+     constante, la mano de alguien que se acerca a la camara sale con dedos de chorizo */
+  const palma=_pmundo[0].distanceTo(_pmundo[9]) || 0.3;
+  /* LAS ARTICULACIONES CASI DEL MISMO GRUESO QUE LOS HUESOS. Con las pelotitas mas gordas que los
+     tubos, cada juntura se marca y el dedo se lee a hueso articulado; con los dos casi iguales el
+     dedo se lee a dedo, que es lo que se pidio: blancas y minimalistas. */
+  const rHue=palma*0.105, rArt=palma*0.118;
+  for(let k=0;k<21;k++) ponerArt(_pmundo[k], k===0? rArt*1.2 : rArt);
+  for(const [a,b] of MANO_HUESOS) ponerHueso(_pmundo[a], _pmundo[b], rHue);
+  ponerPalma(_pmundo[0], _pmundo[5], _pmundo[17], _pmundo[9]);
+  return true;
+}
+
+/* ---------- las de los rivales ---------- */
+/* NO SE MIDEN DE NINGUNA CAMARA: SE ARMAN. Un rival no tiene manos que leer, asi que la suya es una
+   pose fija —la mano apoyada, los dedos apenas abiertos— construida con los mismos veintiun puntos.
+   Reusar la misma estructura no es elegancia: es lo que hace que se vean de la misma familia que la
+   tuya sin escribir un segundo dibujante de manos. */
+const POSE_DEDOS=[[1,0.32,-0.62],[5,0.14,-0.20],[9,0.02,0],[13,-0.10,0.16],[17,-0.22,0.34]];
+function manoRival(cx, cz, ancho, alza, giro, alcance){
+  const P=[];
+  const co=Math.cos(giro), si=Math.sin(giro);
+  const pon=(lx,lz,ly)=>{ P.push(new THREE.Vector3(cx+(lx*co-lz*si)*ancho, alza+ly*ancho,
+                                                   cz+(lx*si+lz*co)*ancho)); };
+  pon(0,0.55,0.02);                                    // 0 muñeca
+  for(const [base, dx, dz] of POSE_DEDOS){
+    /* cada dedo son cuatro puntos que se alejan de la muñeca; el pulgar sale mas al costado */
+    const es=(base===1)? 0.30 : 0.26;
+    for(let k=1;k<=4;k++){
+      const t=k*es;
+      /* ALCANCE: cuando ese rival esta tirando una carta, los dedos se estiran hacia la mesa. Es la
+         unica animacion que tienen y alcanza para que se lea que fueron ELLOS los que jugaron. */
+      const est=1+alcance*0.35;
+      pon(dx*(0.35+t*0.5), 0.55-t*est, 0.02+Math.sin(t*2.2)*0.10*(1-alcance));
+    }
+  }
+  const rHue=ancho*0.105, rArt=ancho*0.118;
+  for(let k=0;k<P.length;k++) ponerArt(P[k], k===0? rArt*1.2 : rArt);
+  for(const [a,b] of MANO_HUESOS){ if(P[a]&&P[b]) ponerHueso(P[a],P[b],rHue); }
+  if(P[0]&&P[5]&&P[17]&&P[9]) ponerPalma(P[0],P[5],P[17],P[9]);
+}
+/* cuanto alcanza cada rival hacia la mesa: sube a 1 cuando le toca y baja sola */
+const RIV_ALC=[0,0,0];
+function manosRivales(dt){
+  for(const j of [J_IZQ,J_DER]){
+    const obj=(G.fase==='juego' && G.turno===j)? 1 : 0;
+    RIV_ALC[j] += (obj-RIV_ALC[j])*Math.min(1, dt*4.2);
+  }
+  for(const [j, lado] of [[J_IZQ,-1],[J_DER,1]]){
+    const q=G.manos[j].length;
+    if(!q) continue;
+    const base=lado*MESA.rivalX;
+    /* dos manos por rival, a los dos lados de su abanico */
+    /* EL TAMAÑO SALE DE LA CARTA Y NO DE UN NUMERO SUELTO: una mano apoyada al lado de un abanico
+       tiene que medir mas o menos lo que mide una carta, o se lee a juguete. Con 1,05 en la primera
+       captura eran cuatro astillas blancas al costado del abanico. */
+    for(const s of [-1,1])
+      manoRival(base + s*1.95, MESA.rivalZ+1.3, CARTA_W*1.35, 0.07, s*0.24, RIV_ALC[j]);
+  }
+}
+
+function manosPintar(dt){
+  manosLimpiar();
+  manoTuya();
+  manosRivales(dt);
+  manosSubir();
 }
 /* =========================================================================================
    EL TUTORIAL
@@ -1422,20 +1725,27 @@ function tutDejo(){ if(TUT.on && TUT.paso===4) tutEsperaDeja=false; }
 const tutAro=new THREE.Mesh(new THREE.RingGeometry(1.25,1.55,44),
   new THREE.MeshBasicMaterial({color:0xc47b00, transparent:true, depthWrite:false}));
 tutAro.rotation.x=-Math.PI/2; tutAro.visible=false; tutAro.renderOrder=3;
-escena.add(tutAro);
+/* VA DENTRO DEL GRUPO QUE GIRA CON EL JUGADOR, porque casi siempre marca una carta de SU mano: en el
+   mundo se quedaria donde estaba la carta y no donde esta. Para el paso del mazo —que si es de la
+   mesa— se le deshace el giro. */
+manoGrupo.add(tutAro);
+const _tv=new THREE.Vector3();
 function pintarTut(){
   if(!TUT.on){ tutAro.visible=false; return; }
   const obj=tutObjetivo();
   let dest=null;
   if(obj>=0 && G.sel<0 && obj<G.manos[J_VOS].length){
     const g=manoGeo(G.manos[J_VOS].length);
-    dest=[g.x0+obj*g.paso, MESA.manoZ-0.35];
+    dest=1; tutAro.position.set(g.x0+obj*g.paso, 0.012, MESA.manoZ - CAM_MIRA[1] - 0.35);
   } else if(TUT.paso===5){
-    dest=[MESA.mazoX, MESA.centroZ];
+    dest=1;
+    _tv.set(MESA.mazoX, 0.012, MESA.centroZ);
+    manoGrupo.updateMatrixWorld(true);
+    manoGrupo.worldToLocal(_tv);
+    tutAro.position.copy(_tv);
   }
   if(!dest){ tutAro.visible=false; return; }
   tutAro.visible=true;
-  tutAro.position.set(dest[0], 0.012, dest[1]);
   const p=0.5+0.5*Math.sin(G.t*5.2);
   tutAro.material.opacity=0.35+0.45*p;
   tutAro.scale.setScalar(0.92+0.10*p);
@@ -1551,12 +1861,18 @@ function bucle(){
   const ahora=performance.now();
   const dt=Math.min(0.25, (ahora-ultimo)/1000); ultimo=ahora;
   if(G.fase==='juego'){
+    /* LA CAMARA SE MUEVE ANTES DE TODO LO DEMAS. El rayo del pellizco sale de la camara, asi que si
+       se moviera despues, el pellizco de este cuadro se resolveria con la camara del anterior. */
+    /* la ganancia 1,2 hace que unos diecisiete grados de cabeza lleguen al tope de veinte de vista:
+       girar la cabeza mas que eso para mirar una pantalla que esta al frente no lo hace nadie */
+    camaraGiro(CARA.hay? CARA.giro*1.2 : 0, dt);
     if(tomarPinza()) activar(MANO.x, MANO.y);
     partidaTick(dt);
     tutTick(dt);
     armarMesa();
     pintarTut();
     pintarAro();
+    manosPintar(dt);
     render.render(escena, camara);
   }
   /* LA PANTALLA DE FINAL SE MIRA AFUERA DEL `if`, Y ESE ERA UN DEFECTO DE VERDAD. Estaba adentro, o
@@ -1691,7 +2007,12 @@ window.__rez={
      centro de cada objeto a la pantalla y despues tiran el rayo por ahi, o sea que recorren el
      camino entero —mundo, camara, proyeccion, rayo— y no un atajo. Si la camara mirara a otro lado,
      esta prueba fallaria, que es exactamente lo que tiene que hacer. */
-  zonas:()=>{ armarMesa(); camara.updateMatrixWorld(true);
+  zonas:()=>{ armarMesa();
+    /* EL ARBOL ENTERO, NO SOLO EL OBJETO. updateMatrixWorld() sobre un hijo NO actualiza a su padre,
+       y desde que el abanico vive en un grupo que gira con el jugador, actualizar solo la carta la
+       proyecta con la matriz VIEJA del grupo. Es el mismo defecto que ya habia costado una prueba en
+       el rayo, con otro disfraz: medir sin poner el arbol al dia. */
+    escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
     const v=new THREE.Vector3();
     return PICK.map(o=>{ o.updateMatrixWorld(true);
       v.setFromMatrixPosition(o.matrixWorld).project(camara);
@@ -1731,14 +2052,41 @@ window.__rez={
              pantalla:[+p.x.toFixed(3),+p.y.toFixed(3)], activo:p.activo };
   },
   /* ---- la mano de mentira: entra por el mismo camino que la de verdad ---- */
-  manoFalsa:(cx, cy, pinza)=>{
-    const lm=[];
-    for(let k=0;k<21;k++) lm.push({x:cx, y:cy, z:0});
-    lm[0]={x:cx, y:cy+0.11, z:0};                    // muñeca
-    lm[9]={x:cx, y:cy-0.02, z:0};                    // nudillo del medio: palma = 0,13
-    const d=pinza? 0.010 : 0.085;                    // pulgar-indice
-    lm[4]={x:cx-d/2, y:cy, z:0};
-    lm[8]={x:cx+d/2, y:cy, z:0};
+  /* UNA MANO DE MENTIRA CON LOS VEINTIUN PUNTOS EN SU SITIO. La primera version ponia todos los
+     puntos encima del mismo lugar salvo cuatro, y servia para probar el pellizco —que solo mira
+     esos cuatro— pero al dibujarla en 3D salia un palito: no se podia juzgar nada de la mano. Esta
+     tiene la muñeca, la palma y los cinco dedos con sus falanges, con las proporciones de una mano
+     abierta de verdad. */
+  manoFalsa:(cx, cy, pinza, esc)=>{
+    const S=esc==null? 1 : esc;
+    const lm=new Array(21);
+    const P=(x,y,z)=>({x:cx+x*S, y:cy+y*S, z:(z||0)*S});
+    lm[0]=P(0, 0.115, 0);                                   // muñeca
+    /* los cuatro nudillos, abiertos en abanico */
+    const nud=[[ -0.052,0.010],[-0.018,-0.005],[0.016,-0.002],[0.048,0.014]];
+    const largo=[0.052,0.058,0.054,0.042];
+    for(let d=0; d<4; d++){
+      const b=5+d*4, nx=nud[d][0], ny=nud[d][1];
+      const ang=(-0.30+d*0.20);
+      lm[b]=P(nx, ny, -0.01);
+      for(let k=1;k<=3;k++){
+        const t=largo[d]*k*0.62;
+        lm[b+k]=P(nx+Math.sin(ang)*t, ny-Math.cos(ang)*t, -0.012*k);
+      }
+    }
+    /* el pulgar sale hacia el costado y hacia adelante, que es lo que lo distingue de los otros */
+    lm[1]=P(-0.055, 0.078, 0.004);
+    lm[2]=P(-0.086, 0.048, 0.010);
+    lm[3]=P(-0.100, 0.020, 0.016);
+    lm[4]=P(-0.106,-0.004, 0.020);
+    if(pinza){
+      /* pellizcar es llevar la punta del pulgar a la punta del indice: se mueven LAS DOS puntas al
+         punto medio, que es lo que hace una mano */
+      const mx=(lm[4].x+lm[8].x)/2, my=(lm[4].y+lm[8].y)/2, mz=(lm[4].z+lm[8].z)/2;
+      lm[4]={x:mx-0.004*S, y:my, z:mz}; lm[8]={x:mx+0.004*S, y:my, z:mz};
+      lm[3]={x:(lm[2].x+lm[4].x)/2, y:(lm[2].y+lm[4].y)/2, z:(lm[2].z+lm[4].z)/2};
+      lm[7]={x:(lm[6].x+lm[8].x)/2, y:(lm[6].y+lm[8].y)/2, z:(lm[6].z+lm[8].z)/2};
+    }
     return lm;
   },
   manoInyectar:(cx, cy, pinza, t)=>{
@@ -1751,32 +2099,88 @@ window.__rez={
      va el aro cuando ya se estabilizo. Es el numero que decide si apuntar a una carta se siente
      pegado o pastoso. Se devuelve en fraccion de pantalla y en milisegundos. */
   manoRampa:(vel, cuadros)=>{
-    F.x.ini=false; F.y.ini=false;
+    fpReset();
     const v=vel==null? 0.5 : vel;          // fracciones de pantalla por segundo
     const dt=16, n=cuadros||90;
     let t=performance.now(), x=0.2;
+    /* SE CALIBRA EL DESVIO ANTES DE MEDIR EL RETARDO. El punto que apunta es el medio entre el pulgar
+       y el indice, y en una mano abierta ese medio NO cae en el centro de la mano: esta corrido unos
+       centesimos. Sin calibrar, ese corrimiento constante se sumaba al retardo y el gancho reportaba
+       193 ms de atraso donde hay 6 — o sea que la prueba media la forma de la mano y no el filtro. */
+    for(let k=0;k<70;k++){ t+=dt; window.__rez.manoInyectar(x,0.5,false,t); }
+    const off=MANO.x-x;
     for(let k=0;k<n;k++){ t+=dt; x+=v*dt/1000; window.__rez.manoInyectar(x,0.5,false,t); }
-    const err=Math.abs(x-MANO.x);
-    return { vel:v, cuadros:n, real:+x.toFixed(4), aro:+MANO.x.toFixed(4),
+    const err=Math.abs((x+off)-MANO.x);
+    return { vel:v, cuadros:n, real:+(x+off).toFixed(4), aro:+MANO.x.toFixed(4),
+             desvio:+off.toFixed(4),
              retardoFrac:+err.toFixed(4), retardoMs:+(err/v*1000).toFixed(1) };
   },
   /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
      pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
   manoTemblor:(ruido, cuadros)=>{
-    F.x.ini=false; F.y.ini=false;
+    fpReset();
     const r=ruido==null? 0.006 : ruido, n=cuadros||240;
     let t=performance.now(), S=12345;
     const az=()=>{ S=(S*1103515245+12345)&0x7fffffff; return S/0x7fffffff*2-1; };
-    let sEnt=0, sSal=0, m1=0, m2=0;
+    /* EL RUIDO SE MIDE ALREDEDOR DE LA MEDIA MEDIDA Y NO ALREDEDOR DE 0,5. El punto que apunta esta
+       corrido respecto del centro de la mano —el medio entre pulgar e indice no es el centro— asi que
+       restarle 0,5 mete ese corrimiento constante adentro de la desviacion: el gancho reportaba que
+       el filtro AMPLIFICABA el temblor veinticinco veces cuando lo atenua tres. Se recogen las dos
+       series y se calcula su desviacion sobre su propia media. */
+    const ent=[], sal=[];
     for(let k=0;k<n;k++){
       t+=16; const x=0.5+az()*r;
       window.__rez.manoInyectar(x,0.5,false,t);
-      if(k>40){ sEnt+=(x-0.5)*(x-0.5); sSal+=(MANO.x-0.5)*(MANO.x-0.5); m1++; }
-      m2++;
+      if(k>60){ ent.push(x); sal.push(MANO.x); }
     }
-    const de=Math.sqrt(sEnt/m1), ds=Math.sqrt(sSal/m1);
+    const desv=(A)=>{ const m=A.reduce((a,b)=>a+b,0)/A.length;
+                      return Math.sqrt(A.reduce((a,b)=>a+(b-m)*(b-m),0)/A.length); };
+    const de=desv(ent), ds=desv(sal);
     return { ruido:r, cuadros:n, entra:+de.toFixed(5), sale:+ds.toFixed(5),
              atenua:+(de/Math.max(1e-9,ds)).toFixed(2) };
+  },
+  /* ---- LA CARA: SOLO MUEVE LA VISTA ---- */
+  caraVer:()=>({ on:CARA.on, hay:CARA.hay, giro:+CARA.giro.toFixed(4), crudo:+CARA.crudo.toFixed(4),
+                 medidas:CARA.medidas, ms:+CARA.msDet.toFixed(2), error:CARA.error,
+                 camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
+                 cam:[+camara.position.x.toFixed(2), +camara.position.z.toFixed(2)] }),
+  /* se inyecta un giro de cabeza y se deja que la vista lo siga, para poder medir hasta donde llega
+     y comprobar que la mesa no se sale del cuadro en los extremos */
+  caraInyectar:(giro, cuadros)=>{
+    CARA.on=true; CARA.hay=true; CARA.crudo=giro; CARA.giro=giro;
+    for(let k=0;k<(cuadros||120);k++) camaraGiro(giro*1.6, 1/60);
+    armarMesa();
+    return { pedido:giro, camGiro:+camGiro.toFixed(4), grados:+(camGiro*180/Math.PI).toFixed(1),
+             encuadre:window.__rez.extremos(true) };
+  },
+  /* donde cae en pantalla cada blanco, uno por uno: para poder ver CUAL se sale del cuadro al girar
+     en vez de deducirlo del rectangulo que los envuelve a todos */
+  puntos:()=>{ armarMesa(); escena.updateMatrixWorld(true);
+    const v=new THREE.Vector3();
+    return PICK.map(o=>{ o.updateMatrixWorld(true);
+      v.setFromMatrixPosition(o.matrixWorld).project(camara);
+      return [o.userData.tipo+':'+o.userData.i, +(v.x*0.5+0.5).toFixed(3)]; }); },
+  caraSoltar:()=>{ CARA.hay=false; CARA.giro=0;
+                   for(let k=0;k<160;k++) camaraGiro(0,1/60); return window.__rez.caraVer(); },
+  /* ---- LAS MANOS DIBUJADAS ---- */
+  manos3D:()=>(manosPintar(1/60), { articulaciones:artMalla.count, huesos:hueMalla.count,
+                 tope:[M_ART, M_HUE], tuya:!!(MANO.on&&MANO.hay&&MANO.hayPts),
+                 alcance:RIV_ALC.map(v=>+v.toFixed(2)) }),
+  /* proyecta la punta del indice dibujada y la compara con el punto que APUNTA: si se separan, el
+     jugador ve su pinza en un lugar y agarra en otro */
+  manoCoincide:()=>{
+    if(!MANO.hayPts) return null;
+    manosPintar(1/60); camara.updateMatrixWorld(true);
+    const h=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(MANO_Z), w=h*camara.aspect;
+    const z0=MANO.pts[2];
+    const pun=(k)=>{ const fz=MANO.pts[k*3+2]-z0, prof=MANO_Z-fz*MANO_PROF;
+      const hz=2*Math.tan(camara.fov*Math.PI/360)*Math.abs(prof), wz=hz*camara.aspect;
+      return new THREE.Vector3((MANO.pts[k*3]-0.5)*wz, -(MANO.pts[k*3+1]-0.5)*hz, prof)
+        .applyMatrix4(camara.matrixWorld).project(camara); };
+    const a=pun(4), b=pun(8);
+    const px=((a.x+b.x)/2)*0.5+0.5, py=-((a.y+b.y)/2)*0.5+0.5;
+    return { dibujo:[+px.toFixed(4), +py.toFixed(4)], apunta:[+MANO.x.toFixed(4), +MANO.y.toFixed(4)],
+             separacion:+Math.hypot(px-MANO.x, py-MANO.y).toFixed(5) };
   },
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
@@ -1910,16 +2314,36 @@ window.__rez={
   /* EL ENCUADRE SE MIDE, NO SE ESTIMA. Devuelve el rectangulo que ocupan TODAS las piezas de la mesa
      proyectadas a la pantalla, en fraccion de 0 a 1. Si algo se sale, aca da menos que 0 o mas que 1
      — y eso en una captura chica no se ve, porque lo que se sale simplemente no esta. */
-  extremos:()=>{
-    armarMesa(); camara.updateMatrixWorld(true);
+  /* CON `mios` SOLO SE MIDE LO QUE EL JUGADOR TIENE QUE PODER ALCANZAR: su abanico, el mazo y los
+     botones. Los abanicos de los rivales quedan afuera de la cuenta a proposito — al asomarse a un
+     lado es NATURAL que el rival del otro lado se salga del cuadro, y exigir que entre todo con la
+     vista girada obliga a alejar la camara casi un 50%, o sea a dejar las cartas del tamaño de un
+     sello para poder ver dos abanicos que ni se tocan. */
+  extremos:(mios)=>{
+    armarMesa();
+    /* EL ARBOL ENTERO, NO SOLO EL OBJETO. updateMatrixWorld() sobre un hijo NO actualiza a su padre,
+       y desde que el abanico vive en un grupo que gira con el jugador, actualizar solo la carta la
+       proyecta con la matriz VIEJA del grupo. Es el mismo defecto que ya habia costado una prueba en
+       el rayo, con otro disfraz: medir sin poner el arbol al dia. */
+    escena.updateMatrixWorld(true); camara.updateMatrixWorld(true);
     const v=new THREE.Vector3();
     let x0=9,y0=9,x1=-9,y1=-9;
-    const caja=new THREE.Box3();
-    for(const o of PICK.concat([mazoMalla]).filter(Boolean)){
+    const lista = mios? PICK.filter(o=>o.userData.tipo).concat([mazoMalla]).filter(Boolean)
+                      : PICK.concat([mazoMalla]).filter(Boolean);
+    for(const o of lista){
       o.updateMatrixWorld(true);
-      caja.setFromObject(o);
+      /* SE PROYECTAN LAS OCHO ESQUINAS DEL OBJETO EN SU PROPIO ESPACIO, NO SU CAJA DE MUNDO.
+         Box3.setFromObject devuelve la caja ALINEADA A LOS EJES: para una carta inclinada y girada
+         esa caja es bastante mas grande que la carta, y crece cuando la vista rota — asi que el
+         barrido decia que el abanico se salia del cuadro cuando lo que se salia era una caja
+         imaginaria. Medido despues: con doce grados de giro las siete cartas caen EXACTAMENTE en la
+         misma fraccion de pantalla que sin girar. */
+      const g=o.geometry; if(!g) continue;
+      if(!g.boundingBox) g.computeBoundingBox();
+      const caja=g.boundingBox;
       for(let i=0;i<8;i++){
-        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z).project(camara);
+        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z)
+         .applyMatrix4(o.matrixWorld).project(camara);
         const px=v.x*0.5+0.5, py=-v.y*0.5+0.5;
         if(px<x0)x0=px; if(px>x1)x1=px; if(py<y0)y0=py; if(py>y1)y1=py;
       }
