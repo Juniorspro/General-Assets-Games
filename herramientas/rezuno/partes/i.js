@@ -590,8 +590,34 @@ window.__rez={
   tutVer:()=>({ on:TUT.on, paso:TUT.paso, hecho:TUT.hecho, objetivo:tutObjetivo(),
                 guia:(document.getElementById('guiaT')||{}).textContent||'' }),
   /* ---- el audio: lo unico que prueba que sono es medirlo ---- */
-  audio:()=>({ hay:!!AUD.ctx, on:AUD.on, estado:AUD.ctx? AUD.ctx.state : 'no' }),
+  audio:()=>({ hay:!!AUD.ctx, on:AUD.on, estado:AUD.ctx? AUD.ctx.state : 'no',
+               clips:Object.keys(AUDIO_B64).length,
+               decodificados:Object.keys(BUF).length,
+               falta:Object.keys(AUDIO_B64).filter(k=>!BUF[k]),
+               duraciones:Object.keys(BUF).sort().map(k=>[k, +BUF[k].duration.toFixed(2)]),
+               musica:MUS.nombre, sonando:!!MUS.fuente,
+               ganMus:MUS.gan? +MUS.gan.gain.value.toFixed(4) : null }),
   son:(k)=>{ son(k); return true; },
+  /* ===== LO UNICO QUE PRUEBA QUE SONO =====
+     Se lee el buffer del analizador colgado del maestro durante una ventana y se devuelve el pico y
+     el rms. Sin esto, "el sonido anda" significa "la llamada no tiro excepcion" — y eso ya dejo pasar
+     una musica muda una vuelta entera en Campo_de_Tiro. */
+  medirSon:(k, ms)=>new Promise(res=>{
+    if(!AUD.an) return res(null);
+    const N=AUD.an.fftSize, buf=new Float32Array(N);
+    let pico=0, sum=0, n=0;
+    const t0=performance.now();
+    if(k) son(k);
+    const paso=()=>{
+      AUD.an.getFloatTimeDomainData(buf);
+      for(let i=0;i<N;i++){ const v=Math.abs(buf[i]); if(v>pico) pico=v; sum+=buf[i]*buf[i]; }
+      n+=N;
+      if(performance.now()-t0 < (ms||700)) requestAnimationFrame(paso);
+      else res({ k:k||'(fondo)', pico:+pico.toFixed(4), rms:+Math.sqrt(sum/n).toFixed(4) });
+    };
+    requestAnimationFrame(paso);
+  }),
+  musica:(k)=>{ musica(k); return MUS.nombre; },
   /* ---- costo ---- */
   /* ===== EL DESGLOSE DEL CUADRO =====
      `costo()` dice cuanto tarda un cuadro entero; esto dice EN QUE. Sin el desglose, "va lento con la

@@ -215,6 +215,7 @@ function tirarSel(){
 function elegirColor(k){
   if(!G.colorPide || G.sel<0) return false;
   const c=G.manos[J_VOS][G.sel];
+  son('color');
   jugarCarta(J_VOS, G.sel, k);
   G.sel=-1; G.colorPide=false;
   if(c) mpTiro(c, k);

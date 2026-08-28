@@ -12,6 +12,12 @@ function verPantalla(p){
   if(m[p]) document.getElementById(m[p]).classList.add('ver');
   document.body.classList.toggle('jugando', p==='juego');
   if(p!=='juego') guia('','');
+  /* LA MUSICA SIGUE A LA PANTALLA, y en un solo sitio. Repartiendo llamadas por cada boton que
+     cambia de pantalla, el dia que se agregue una sexta pantalla va a quedar sin musica y nadie se
+     va a enterar hasta jugarla. Aca es imposible por construccion: si cambio de pantalla, cambio de
+     tema. La de fin se queda con la del juego a proposito — el resultado se canta con la fanfarria y
+     un corte de musica justo ahi se la come. */
+  musica(p==='juego'||p==='fin' ? 'mJuego' : 'mMenu');
 }
 function pintarIdioma(){
   document.documentElement.lang=IDIOMA;
@@ -100,8 +106,15 @@ async function arrancar(esTutorial){
   orIniciar();
   if(esTutorial){ verPantalla('juego'); tutorialEmpezar(); }
   else { TUT.on=false; guia('',''); repartir((Date.now()&0x7fffffff)||1);
-         G.fase='juego'; verPantalla('juego'); }
+         G.fase='juego'; verPantalla('juego'); son('reparte'); }
 }
+/* EL TOQUE DE UN BOTON SUENA, Y VA DELEGADO. Poniendolo en cada onclick habria que acordarse en los
+   dieciocho botones y en el proximo que se agregue; en captura, sobre el documento, un boton nuevo
+   suena sin tocar una linea. */
+document.addEventListener('click', e=>{
+  const b=e.target.closest && e.target.closest('button');
+  if(b && AUD.on) son('boton');
+}, true);
 document.getElementById('bTut').onclick=()=>arrancar(true);
 /* JUGAR YA NO REPARTE: abre la eleccion de modo. Un juego que ademas tiene multijugador no puede
    decidir por el jugador cual de los dos queria. */
@@ -205,6 +218,14 @@ lienzo.addEventListener('pointerdown', e=>{
    se pinta significaria que el orden en que se dibujan las zonas decide cual gana, y ese es el tipo
    de defecto que aparece recien cuando se agrega un boton nuevo seis meses despues. */
 let ultimo=performance.now();
+/* EL AVISO DE TU TURNO SALE DE UN CAMBIO, no de un estado. Mirando "es mi turno" cada cuadro sonaria
+   sesenta veces por segundo; lo que hay que oir es el INSTANTE en que pasa a serlo. */
+let _turnoAnt=-1;
+function turnoSonar(){
+  const mio = (G.fase==='juego' && G.turno===J_VOS && !TUT.on);
+  if(mio && _turnoAnt!==J_VOS) son('turno');
+  _turnoAnt = (G.fase==='juego')? G.turno : -1;
+}
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
@@ -230,7 +251,7 @@ function bucle(){
        instante exacto en que una mano esta agarrando una carta hay que poder parar el reloj de la
        partida y dejar que las animaciones —que son lerps hacia un destino— terminen de asentarse.
        Sin esto la foto sale del cuadro siguiente al que se pidio, o sea de otro momento. */
-    if(!CONGELADO){ partidaTick(dt); tutTick(dt); }
+    if(!CONGELADO){ partidaTick(dt); tutTick(dt); turnoSonar(); }
     /* LAS MANOS SE CALCULAN ANTES DE ARMAR LA MESA, y el orden importa. La carta que un rival esta
        agarrando se coloca en el punto de la pinza de su mano; si la mesa se armara primero, esa carta
        usaria la pinza del cuadro ANTERIOR y quedaria un cuadro atras de la mano que la sostiene.

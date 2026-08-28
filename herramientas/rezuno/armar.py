@@ -12,6 +12,7 @@ import io, os, sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PARTES = ['a.html',  # el marco, el CSS y las pantallas
           'b.js',    # los idiomas, el mazo y la regla
+          'p.js',    # el audio grabado: dos temas y quince efectos
           'c.js',    # el lienzo y el dibujo de una carta
           'd.js',    # la mano: MediaPipe, el pellizco y el filtro
           'e.js',    # la partida: reglas, efectos y los dos rivales
@@ -39,10 +40,21 @@ def pegar_arte(s):
         s = s.replace(marca, 'data:image/webp;base64,' + b64)
     return s
 
+# EL AUDIO SE HORNEA APARTE Y SE PEGA ACA, por el mismo motivo que las imagenes: 386 KB de base64
+# dentro de una parte la vuelven imposible de leer y de parchear. Lo produce
+# `python3 herramientas/rezuno/hornear_audio.py` a partir de herramientas/rezuno/audio/crudo/.
+def pegar_audio(s):
+    ruta = os.path.join(RAIZ, 'herramientas', 'rezuno', 'audio', 'audio_b64.js')
+    txt = io.open(ruta, encoding='utf8').read()
+    i, j = txt.index('{'), txt.rindex('}')
+    assert '@@AUDIO_B64@@' in s, 'falta la marca @@AUDIO_B64@@'
+    return s.replace('@@AUDIO_B64@@', txt[i:j+1])
+
 def main():
     partes = os.path.join(RAIZ, 'herramientas', 'rezuno', 'partes')
     s = ''.join(io.open(os.path.join(partes, p), encoding='utf8').read() for p in PARTES)
     s = pegar_arte(s)
+    s = pegar_audio(s)
     # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO: io.open(p,'w') trunca el archivo ANTES de
     # evaluar lo que se le pasa, y una vez un NameError en el argumento dejo un juego en cero bytes.
     salida = os.path.join(RAIZ, 'juegos-pc', 'RezUno.html')

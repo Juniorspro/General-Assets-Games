@@ -67,6 +67,87 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Quincuagésima vuelta (2026-08-28): **RezUno** — el logo acomodado, dos temas y quince efectos generados, y un índice para los cinco
+
+Pedido: *"acomoda el logo está mal acomodado, también genera música y sonidos para todo, y no digas
+que no se puede porque si ya lo hiciste y dame un link de Github raw para jugar los 5 juegos"*.
+
+#### EL LOGO ESTABA DETRÁS DEL TÍTULO, Y ESTAR DETRÁS NO ARREGLA NADA
+
+La mano estaba en absoluto contra la esquina de arriba, con `z-index:0`, o sea de fondo. El problema
+es que el contenido de un menú centrado en vertical **arranca justo ahí**: medido, la imagen ocupaba
+de 0,081 a 0,288 del alto y el título de 0,24 a 0,33. Lo que se encima es el **dibujo con las
+letras**, y el orden de pintado no cambia eso — sólo decide cuál de los dos se ve peor.
+
+Ahora la mano es **un elemento más de la columna, arriba del título**: mano y palabra forman una sola
+marca y el solapamiento pasa a ser imposible por construcción, que es la misma lección que ya había
+costado una vuelta con el HUD de Eco. Y va **medida en alto y no en ancho**: el menú tiene nueve cosas
+apiladas y en un teléfono corto se come todo el aire por abajo; con `height` en vh la marca se achica
+justo cuando el alto escasea. Verificado en 412×892, 412×732 y 360×640: **cero solapamientos** entre
+los nueve elementos, y todo entre 0,12 y 0,88 del alto en el caso más apretado.
+
+#### LA MÚSICA SE PUEDE GENERAR, Y TENÍA RAZÓN EL USUARIO
+
+En RECREO escribí que no había con qué generar música. Ya no es cierto: `sonilo_music` y
+`mirelo_text_to_audio` están disponibles. **Dos temas** —uno de menú y uno de partida, 24 s cada uno—
+y **quince efectos**.
+
+**LOS PROMPTS QUE PIDEN UN SONIDO CHIQUITO DEVUELVEN SILENCIO.** Es el hallazgo de la vuelta y costó
+tres tandas. Pedí *"very short soft pick-up click, tiny paper tick, muted"* y volvió con **pico
+0,005**; *"tirar una carta"* con 0,032; *"+2"* con 0,002. O sea: pedí que sonara bajito y me lo dieron
+—tan bajito que no existe—. Los que salieron bien fueron los que describían un sonido **fuerte y
+concreto**: `roba` 0,787, `salta` 0,762. Reescritos como *"loud clear close-up recording of a playing
+card slapped hard onto a wooden table, full volume"*, `tira` pasó de 0,032 a **0,729**. **El nivel se
+pone en el código, no en el prompt.**
+
+Dos no salieron ni al tercer intento, y **se derivan de los que sí**: agarrar una carta de un abanico
+*es* deslizar una carta —`roba` recortado a 0,10 s y subido un tono y medio— y el castigo de +2/+4 *es*
+varias cartas repartidas, que es lo que grabó `reparte`. No se inventa un sonido: se usa el de la misma
+cosa física.
+
+**Y EL NIVEL SE MIDE DESPUÉS DE CODIFICAR, NO ANTES.** Normalizar el float a 0,46 y dar el número por
+bueno es creerle a una cuenta que no se hizo: el remuestreo a 16 kHz suaviza los picos angostos y el
+codificador tampoco los conserva. Medido, el campanazo de `turno` se caía de **0,46 a 0,146** — la
+tercera parte, y lo habría enviado así. El horneado ahora **abre el MP3 terminado**, mide el pico real
+y corrige; los quince quedan dentro del **6 %** de su nivel de diseño.
+
+La mezcla es la de siempre en este proyecto: la victoria es lo más fuerte y lo que se dispara cien
+veces por partida va abajo. Medido con el analizador colgado del maestro, en partida: música de fondo
+rms **0,0095** · agarrar 0,242 de pico · tirar 0,402 · UNO 0,420 · **ganar 0,494 de pico y 0,0532 de
+rms, o sea 5,6 veces la música**. Y la música **se agacha** mientras suena la fanfarria: gain 0,13 →
+0,058 y vuelve sola a 0,13.
+
+Tres decisiones más:
+- **Un tema por pantalla y no uno solo con el volumen bajado.** El menú y la partida son dos estados y
+  el jugador tiene que oír que algo cambió al empezar. Se cruzan en 0,9 s, porque un corte en seco se
+  lee a error.
+- **La música cuelga de `verPantalla()` y de ningún otro sitio.** Repartiendo llamadas por cada botón,
+  la próxima pantalla que se agregue va a quedar muda y nadie se va a enterar hasta jugarla.
+- **El sintetizado no se borra.** Si un clip no decodifica —un navegador viejo, un MP3 que no le
+  gusta— suena el de osciladores de siempre. Un juego mudo por un decodificador es peor que un juego
+  con bips.
+
+Y el clic de botón va **delegado en captura sobre el documento**: en cada `onclick` habría que
+acordarse en los dieciocho botones y en el próximo.
+
+Costo: 386 KB en base64 (298 de los dos temas a 44 kbps mono 22 kHz, 88 de los quince efectos a
+40 kbps mono 16 kHz). El HTML pasa de 340 KB a **744 KB**.
+
+#### UN ÍNDICE PARA LOS CINCO
+
+`juegos-pc/index.html`: una página con los cinco y **enlaces relativos**, así el mismo archivo sirve
+desde cualquier rama o commit sin tocar una URL.
+
+#### MEDIDO AL CERRAR
+
+17 de 17 clips decodificados con su duración real, música sonando en las dos pantallas y volviendo de
+la agachada. **120/120 partidas con bots y 120/120 a dos, 0 jugadas ilegales**; **30/30 por rayo, 0
+fallos de apuntado**; tutorial completo en los tres idiomas; separación dibujo-apuntado **0**; frenada
+16,7 ms; atenuación de temblor 2,69; reja con desvío de hueco 0; escalera de ritmo 4 ms→60 Hz …
+40→12; interpolación despareja 1,00-1,01; control de 60 cuadros con **0 cambios ya asentado**; 97
+llamadas de dibujo en alta y 50 en baja; partida entre dos páginas con la misma huella (`6|91`) y **0
+errores de protocolo**. `window.__errs` vacío en todas las corridas.
+
 ### Cuadragésima novena vuelta (2026-08-28): **RezUno** — el logo naranja con su 10, monitores por cabeza, la mano del otro y la cámara que sigue tu cabeza
 
 Pedido: *"puedes hacer que la mano del logo al inicio sea naranja y la carta 10 naranja también, puedes

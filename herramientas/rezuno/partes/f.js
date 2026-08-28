@@ -411,13 +411,18 @@ function armarMesa(){
 /* ===================== EL SONIDO =====================
    Procedural y sin un solo archivo: seis ruidos cortos que son todos la misma familia —un tono que
    sube o baja con un sobre rapido—. Grabarlos serian seis descargas para seis sonidos de diez lineas. */
-const AUD={ ctx:null, m:null, on:false };
+const AUD={ ctx:null, m:null, on:false, an:null };
 function audioIniciar(){
-  if(AUD.ctx){ if(AUD.ctx.state==='suspended') AUD.ctx.resume(); return; }
+  if(AUD.ctx){ if(AUD.ctx.state==='suspended') AUD.ctx.resume(); audioDecodificar(); return; }
   try{
     AUD.ctx=new (window.AudioContext||window.webkitAudioContext)();
-    AUD.m=AUD.ctx.createGain(); AUD.m.gain.value=0.5; AUD.m.connect(AUD.ctx.destination);
+    AUD.m=AUD.ctx.createGain(); AUD.m.gain.value=0.5;
+    /* EL ANALIZADOR CUELGA DEL MAESTRO, y no es un adorno de depuracion: es lo unico que prueba que
+       algo SONO. Sin el, "el audio anda" quiere decir "la llamada no tiro excepcion". */
+    AUD.an=AUD.ctx.createAnalyser(); AUD.an.fftSize=2048;
+    AUD.m.connect(AUD.an); AUD.m.connect(AUD.ctx.destination);
     AUD.on=true;
+    audioDecodificar();
   }catch(e){ AUD.on=false; }
 }
 function tono(f, dur, vol, tipo, f2){
@@ -445,8 +450,17 @@ function roce(dur, vol, f0, f1){
   g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
   s.connect(bp); bp.connect(g); g.connect(AUD.m); s.start(t); s.stop(t+dur+0.02);
 }
+/* LOS TRES QUE SE AGACHAN LA MUSICA. Son los unicos momentos en que el juego tiene algo que decir
+   mas fuerte que el fondo; agachar en cada carta tirada seria un fondo que late toda la partida. */
+const SON_GRANDE={ gana:[0.30,2.4], pierde:[0.30,2.0], uno:[0.45,1.1] };
 function son(k){
   if(!AUD.on) return;
+  /* PRIMERO LA MUESTRA GRABADA, Y SI NO ESTA EL SINTETIZADO. El orden importa: si el clip no
+     decodifico —navegador viejo, MP3 que no le gusta— el juego tiene que seguir sonando. */
+  if(sonMuestra(k)){
+    const g=SON_GRANDE[k]; if(g) musicaAgachar(g[0], g[1]);
+    return;
+  }
   try{
     if(k==='agarra') tono(760,0.07,0.10,'sine',900);
     else if(k==='deja') tono(520,0.08,0.08,'sine',400);
