@@ -15,11 +15,19 @@ escena.fog=new THREE.Fog(0x0e0e12, 8, CAL[calidad].niebla);
    daria 132 verticales y todo saldria estirado por los bordes. */
 const FOV=90;
 const camara=new THREE.PerspectiveCamera(FOV, 9/16, 0.08, 220);
+/* EL TAMAÑO DEL MARCO SE GUARDA Y NO SE PREGUNTA CADA CUADRO. Leer clientWidth obliga al navegador
+   a recalcular el layout ANTES de contestar, y postTam() lo leia dos veces por cuadro — o sea 120
+   vaciados de layout por segundo mezclados con las escrituras al DOM del contador de dedos y de las
+   miras. Eso es el "layout thrashing" de manual y no aparece en ningun perfil de WebGL: se ve como
+   tirones que van y vienen. El marco solo cambia de tamaño cuando cambia la ventana. */
+let marcoW=2, marcoH=2;
+function marcoMedir(){ marcoW=Math.max(2, marco.clientWidth); marcoH=Math.max(2, marco.clientHeight); }
 function ajustar(){
+  marcoMedir();
   /* SE MIDE EL MARCO Y NO LA VENTANA. El marco es 9:16 recortado dentro de la ventana; usar
      innerWidth/innerHeight dibujaria a la resolucion de la ventana entera y despues lo estiraria al
      marco, o sea trabajo de mas y una imagen deformada. */
-  const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
+  const w=marcoW, h=marcoH;
   render.setPixelRatio(Math.min(devicePixelRatio||1, CAL[calidad].px));
   render.setSize(w,h,false);
   camara.aspect=w/h; camara.fov=FOV;

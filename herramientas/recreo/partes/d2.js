@@ -73,11 +73,15 @@ for(const p of PUERTAS){
    unos 90 px de lado a 42 m de distancia, o sea los 4,2 m enteros de la celda. Eso era el vacio de
    afuera de la escuela, visible por arriba y por los costados de la hoja —que mide 0,92 de celda de
    ancho y 0,86 de alto—. Dos paneles pegados por fuera y el pasillo vuelve a terminar en algo. */
+/* SE DECLARA ANTES DEL BUCLE QUE LO USA. Un `let` leido antes de su linea no rompe una funcion: rompe
+   el modulo entero antes de la primera instruccion. Es la quinta vez en este proyecto. */
+let _tapaOeste=null;
 for(const p of PUERTAS){
   if(!p.salida) continue;
   const fuera=(p.i===0)? -1 : 1;
   const tapa=new THREE.Mesh(new THREE.BoxGeometry(CEL*0.5, ALTO_M, CEL), M_PARED);
   tapa.position.set(XC(p.i)+fuera*CEL*0.62, ALTO_M/2, ZC(p.j));
+  if(p.i===0) _tapaOeste=tapa;      // la del oeste se saca al salir: por ahi se va al autobus
   escena.add(tapa);
 }
 
@@ -418,3 +422,135 @@ discoMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 discoMalla.frustumCulled=false; discoMalla.visible=false; escena.add(discoMalla);
 discoMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(DISCO_MAX*3), 3);
 discoMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+/* =========================================================================================
+   EL AFUERA: EL PATIO Y EL AUTOBUS DEL FINAL
+
+   Todo el juego pasa adentro de un edificio sin ventanas, asi que salir es el unico cambio de lugar
+   que tiene — y por eso vale la pena que se vea distinto de verdad y no solo "otro pasillo".
+
+   Va colgado de UN grupo que arranca apagado y se enciende al terminar la ultima clase: mientras no se
+   usa no cuesta ni una llamada de dibujo. Y se planta en la salida oeste del pasillo del medio, que es
+   una de las dos puertas que el mapa ya tenia marcadas como salida.
+   ========================================================================================= */
+const afueraGrupo=new THREE.Group(); afueraGrupo.visible=false; escena.add(afueraGrupo);
+let busMalla=null;   // se expone para poder MEDIR el encuadre en pixeles, no estimarlo
+/* DONDE PARA EL AUTOBUS, y el numero sale de una medicion y no del ojo. A nueve metros de la camara
+   su costado de nueve metros proyectaba el 101,6% del ancho del cuadro: o sea cortado por los dos
+   lados, que en una captura se lee como "esta demasiado cerca". Corrido a x = -66 quedan 12,5 m
+   hasta la parada de la camara y el autobus entra entero con margen. */
+const BUS_X=-66, BUS_Z=-2.0;
+(()=>{
+  /* el suelo: asfalto con un pasto al fondo. Dos planos y no una textura, porque a esta distancia y
+     con el filtro de baja calidad puesto un degrade no se distinguiria de un color plano */
+  /* EL SUELO EMPIEZA DONDE TERMINA EL COLEGIO Y NO ANTES. Centrado en el medio del mapa, el asfalto
+     quedaba a 2 cm POR ENCIMA del piso de la escuela y lo tapaba entero. La pared oeste esta en
+     x = -46, asi que el patio va de -105 a -45. */
+  const asf=new THREE.Mesh(new THREE.PlaneGeometry(60, 100),
+    new THREE.MeshLambertMaterial({color:0x53535a}));
+  asf.rotation.x=-Math.PI/2; asf.position.set(-75, 0.02, 0);
+  afueraGrupo.add(asf);
+  const pasto=new THREE.Mesh(new THREE.PlaneGeometry(60, 70),
+    new THREE.MeshLambertMaterial({color:0x6b8a3f}));
+  pasto.rotation.x=-Math.PI/2; pasto.position.set(-75, 0.01, -78);
+  afueraGrupo.add(pasto);
+  /* EL AUTOBUS, EN DOS MALLAS FUNDIDAS Y NO EN UNA, Y ESA ES LA DIFERENCIA ENTRE UN AUTOBUS Y UN
+     CAJON AMARILLO. Con todo en una sola malla el material es uno solo, asi que LAS RUEDAS SALIAN
+     AMARILLAS — y eso es exactamente lo que se veia en la captura: un ladrillo amarillo con cuatro
+     tacos amarillos abajo. Las dos mallas son "lo amarillo" y "lo oscuro" (ruedas, parachoques,
+     franja de abajo y vidrios), o sea dos llamadas de dibujo para las mismas veinte piezas. */
+  const ama=[], osc=[];
+  const cj=(l,w,h,d,x,y,z)=>{ const g=new THREE.BoxGeometry(w,h,d); g.translate(x,y,z); l.push(g); };
+  /* medidas de un autobus escolar tipo C: 9 m de largo, 2,5 de ancho, 3,1 de alto al techo */
+  cj(ama, 7.7, 2.05, 2.50,  -0.5, 1.62, 0);      // la caja de pasajeros
+  cj(ama, 7.9, 0.30, 2.56,  -0.5, 2.78, 0);      // el techo, apenas mas ancho: da alero y canto
+  cj(ama, 1.9, 1.35, 2.42,   3.6, 1.18, 0);      // el capot, mas bajo que la caja
+  cj(ama, 0.5, 0.85, 2.30,   4.6, 1.72, 0);      // el parabrisas inclinado, resuelto con un bloque
+  /* la franja negra DEBAJO de las ventanas: es la marca visual del autobus escolar. Va abajo y no
+     arriba — arriba compite con el techo y el costado entero se lee oscuro. */
+  cj(osc, 7.75, 0.22, 2.53, -0.5, 1.55, 0);
+  cj(osc, 7.75, 0.26, 2.53, -0.5, 0.72, 0);      // el zocalo
+  cj(osc, 9.2,  0.34, 2.20,  0.0, 0.62, 0);      // los parachoques, de punta a punta
+  /* las ventanas: siete paños en vez de una franja corrida. Una tira sola se lee a visera; los cortes
+     entre paño y paño son lo que da la escala de "acá adentro van chicos sentados". */
+  for(let k=0;k<7;k++) cj(osc, 0.92, 0.70, 2.545, -3.85+k*1.12, 2.06, 0);
+  /* el parabrisas va DENTRO del bloque del frente, no envolviendolo: con 2,545 de fondo sobresalia
+     por los dos costados y con el centro a 1,92 se pasaba por arriba, o sea una mancha oscura
+     flotando delante del capot */
+  cj(osc, 0.60, 0.62, 2.33,  4.60, 1.80, 0);
+  /* la puerta, del lado que mira la camara, al lado del capot */
+  cj(osc, 0.95, 1.66, 0.06,   2.35, 1.40, 1.27);
+  for(const x of [-2.9, 2.9]) for(const z of [-1.10, 1.10]){
+    const r=new THREE.CylinderGeometry(0.62,0.62,0.36,10);
+    r.rotateZ(Math.PI/2); r.translate(x, 0.62, z); osc.push(r);
+  }
+  const fundir=(l, mat)=>{
+    const pl=l.map(g=>g.index? g.toNonIndexed() : g);
+    const m=new THREE.Mesh(mergeGeometries(pl,false), mat);
+    for(const q of l) q.dispose();
+    m.frustumCulled=false;
+    /* DE COSTADO Y NO DE CULATA. Con el eje largo en X y la camara llegando desde el este, lo que se
+       veia era la trasera: un cuadrado amarillo de tres por dos y medio, que no se lee a autobus.
+       Girado noventa grados, los nueve metros y la fila de ventanas quedan de frente. */
+    m.rotation.y=Math.PI/2;
+    m.position.set(BUS_X, 0, BUS_Z);
+    afueraGrupo.add(m);
+    return m;
+  };
+  /* ================= LA FACHADA =================
+     EL COLEGIO ESTA CONSTRUIDO DE ADENTRO HACIA AFUERA: son cubos de pared de celda entera y una
+     losa de techo por celda, o sea que NO TIENE CASCARA. Mirandolo desde la vereda —que es algo que
+     hasta ahora no pasaba nunca— lo que se ve es un monton de bloques beige con el techo colgando
+     y el interior asomando por arriba. Medido en la captura del saludo: el fondo detras del
+     profesor era una pila de cajas con un plano flotando encima.
+     La cascara son tres piezas: los dos paños de pared del oeste con el hueco de la puerta en el
+     medio, y una losa de techo que pasa por encima de todo y tapa los cantos. */
+  const facha=[];
+  const XO=-(GW-1)/2*CEL - CEL/2;          // la cara exterior del oeste: -48,3
+  const ZN=-(GH-1)/2*CEL - CEL/2, ZS=-ZN;  // los extremos norte y sur: -39,9 y 39,9
+  const ZP0=ZC(9)-CEL/2, ZP1=ZC(9)+CEL/2;  // el hueco de la puerta de salida
+  /* MAS BAJA DE LO QUE PARECIA QUE TENIA QUE SER. Con 4,7 m, y con el profesor a menos de cuatro
+     metros de la camara, la pared subia cuarenta y cuatro grados por encima del ojo y se comia el
+     tercio de arriba del cuadro: en la captura el saludo pasaba delante de un muro marron. */
+  const ALTO_F=ALTO_M+0.55;
+  cj(facha, 0.30, ALTO_F, ZP0-ZN, XO-0.15, ALTO_F/2, (ZN+ZP0)/2);
+  cj(facha, 0.30, ALTO_F, ZS-ZP1, XO-0.15, ALTO_F/2, (ZP1+ZS)/2);
+  cj(facha, 0.30, ALTO_F-2.35, CEL, XO-0.15, ALTO_F-(ALTO_F-2.35)/2, ZC(9));   // el dintel
+  const fach=new THREE.Mesh(mergeGeometries(facha.map(g=>g.index?g.toNonIndexed():g), false),
+    new THREE.MeshLambertMaterial({color:0xe2d5b6}));
+  for(const q of facha) q.dispose();
+  fach.frustumCulled=false; afueraGrupo.add(fach);
+  /* NI LOSA DE TECHO NI ALERO, Y ESO SE DECIDIO APAGANDOLOS DE A UNO. Los dos son planos
+     HORIZONTALES vistos DESDE ABAJO —la camara queda a metro y medio de altura y a tres metros de
+     la pared—, y una cara que mira al piso recibe de la hemisferica el color del suelo: salian casi
+     negros y se comian el tercio de arriba del cuadro, justo donde el profesor levanta el brazo.
+     Con la fachada sola, el saludo pasa contra pared clara y cielo. La fachada ya tapa el interior:
+     mide 4,15 m y las paredes de adentro 3,6. */
+  const bus=fundir(ama, new THREE.MeshLambertMaterial({color:0xf0c418}));
+  /* lo oscuro va SIN LUZ a proposito: son vidrios y goma, o sea las dos cosas de un autobus que no
+     tienen difuso. Con Lambert el sol de la hemisferica las aclara y los vidrios salen gris ceniza. */
+  fundir(osc, new THREE.MeshBasicMaterial({color:0x23262b}));
+  busMalla=bus;
+})();
+/* la tapa de la salida oeste se saca cuando se sale: esta puesta justamente para que no se vea el
+   vacio de afuera, y ahora afuera hay algo que mostrar */
+/* EL CIELO Y LA NIEBLA TAMBIEN CAMBIAN, y sin eso no hay afuera. La escena entera esta armada para un
+   interior: fondo casi negro y niebla cerrada a treinta o cincuenta metros. Saliendo por la puerta con
+   eso puesto, lo que se ve no es un patio sino un vacio gris — que es exactamente como salio en la
+   primera captura. Afuera el fondo pasa a cielo y la niebla se abre a doscientos metros. */
+let _cieloAnt=null;
+function afueraVer(si){
+  afueraGrupo.visible=!!si;
+  if(_tapaOeste) _tapaOeste.visible=!si;
+  if(si && !_cieloAnt){
+    _cieloAnt={ fondo:escena.background.getHex(), col:escena.fog.color.getHex(),
+                near:escena.fog.near, far:escena.fog.far };
+    escena.background.setHex(0x9fc7e8);
+    escena.fog.color.setHex(0xbcd8ee); escena.fog.near=30; escena.fog.far=210;
+  } else if(!si && _cieloAnt){
+    escena.background.setHex(_cieloAnt.fondo);
+    escena.fog.color.setHex(_cieloAnt.col);
+    escena.fog.near=_cieloAnt.near; escena.fog.far=_cieloAnt.far;
+    _cieloAnt=null;
+  }
+}

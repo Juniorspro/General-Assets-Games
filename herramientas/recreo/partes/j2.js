@@ -660,8 +660,119 @@ window.__recreo={
     MANO.msDet=gMs; MANO.hz=gHz; MANO.hzTope=gTope;
     return r;
   },
+  /* =========================================================================================
+     LOS TIRONES: NO ALCANZA CON EL PROMEDIO
+
+     "el juego a veces se puede poner lag de la nada" no es un problema de cuadros por segundo medios
+     —esos pueden estar perfectos— sino de UNOS POCOS CUADROS MUY LARGOS: el recolector de basura
+     entrando, un shader que se compila la primera vez que se usa, un audio que se decodifica. Un
+     promedio los esconde por definicion. Lo que hay que mirar es la COLA: el peor 1% y el maximo.
+     ========================================================================================= */
+  calentar:()=>calentarShaders(),
+  /* el final: en que tramo va, cuanto deslumbra y donde esta la camara */
+  finVer:()=>({ on:FIN.on, fase:FIN.fase, t:+FIN.t.toFixed(2), brillo:+FIN.brillo.toFixed(3),
+                giro:+cam.giro.toFixed(3),
+                rumboBus:+Math.atan2(BUS_X-cam.x, BUS_Z-cam.z).toFixed(3),
+                errorGrados:+((()=>{ let g=Math.atan2(BUS_X-cam.x,BUS_Z-cam.z)-cam.giro;
+                   while(g>Math.PI)g-=2*Math.PI; while(g<-Math.PI)g+=2*Math.PI;
+                   return g*180/Math.PI; })()).toFixed(1),
+                saludado:FIN.saludado, cam:[+cam.x.toFixed(1), +cam.z.toFixed(1)],
+                afuera:afueraGrupo.visible, tapa:_tapaOeste? _tapaOeste.visible : null }),
+  finEmpezar:()=>{ finEmpezar(); return window.__recreo.finVer(); },
+  /* EL ENCUADRE DEL AUTOBUS SE MIDE, NO SE ESTIMA. Proyecta las ocho esquinas de su caja a pixeles y
+     dice cuanto del ancho ocupa y cuanto se sale por cada borde. Un autobus cortado por la izquierda
+     no se distingue de uno bien encuadrado en una captura chica. */
+  busVer:()=>({ hay:!!busMalla, vis:busMalla&&busMalla.visible, grupo:afueraGrupo.visible,
+                tri:busMalla&&busMalla.geometry? busMalla.geometry.attributes.position.count/3 : 0,
+                pos:busMalla? [+busMalla.position.x.toFixed(1),+busMalla.position.z.toFixed(1)]:null,
+                mat:busMalla? busMalla.material.type : null }),
+  busProbar:(o)=>{ if(!busMalla) return null;
+    if(o&&o.basico){ busMalla.material=new THREE.MeshBasicMaterial({color:0xff00ff}); }
+    if(o&&o.x!=null) busMalla.position.x=o.x;
+    if(o&&o.niebla!=null) escena.fog.far=o.niebla;
+    return { pos:[busMalla.position.x, busMalla.position.z], mat:busMalla.material.type,
+             far:escena.fog.far, capas:busMalla.layers.mask, camCapas:camara.layers.mask,
+             render:busMalla.renderOrder, mv:busMalla.matrixWorldNeedsUpdate }; },
+  afueraPiezas:(o)=>{ const r={}; afueraGrupo.children.forEach((c,i)=>{ if(o&&o[i]!=null) c.visible=!!o[i]; r[i]=[c.geometry&&c.geometry.type, c.visible, +c.position.x.toFixed(1), +c.position.y.toFixed(1)]; }); return r; },
+  congelar:(si)=>{ CONGELADO=!!si; return CONGELADO; },
+  cajaBus:()=>{
+    if(!busMalla) return null;
+    /* LA CAMARA SOLO SE ACOMODA AL DIBUJAR, asi que corriendo con avanzar() —que simula sin dibujar
+       un solo cuadro— todavia tiene la posicion del menu y la proyeccion da numeros absurdos: medido,
+       el autobus salia ocupando el 3.094% del ancho. Se sincroniza antes de proyectar. */
+    ponerCamara(1);
+    const W=lienzo.clientWidth, H=lienzo.clientHeight;
+    const v=new THREE.Vector3();
+    const c=new THREE.Box3().setFromObject(busMalla);
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9, delante=true;
+    /* UN PUNTO DETRAS DE LA CAMARA PROYECTA IGUAL, dado vuelta, y cae adentro del cuadro: sin esta
+       comprobacion el autobus daba "entero" con la camara mirando justo para el otro lado. */
+    for(let i=0;i<8;i++){
+      v.set(i&1?c.max.x:c.min.x, i&2?c.max.y:c.min.y, i&4?c.max.z:c.min.z);
+      camara.worldToLocal(v); if(v.z>=0) delante=false;
+      v.project? 0 : 0;
+      const w=new THREE.Vector3(i&1?c.max.x:c.min.x, i&2?c.max.y:c.min.y, i&4?c.max.z:c.min.z).project(camara);
+      const px=(w.x*0.5+0.5)*W, py=(-w.y*0.5+0.5)*H;
+      if(px<x0)x0=px; if(px>x1)x1=px; if(py<y0)y0=py; if(py>y1)y1=py;
+    }
+    return { marco:[W,H], caja:[x0,y0,x1,y1].map(q=>+q.toFixed(0)),
+             anchoPct:+((x1-x0)/W*100).toFixed(1), altoPct:+((y1-y0)/H*100).toFixed(1),
+             centroPct:[+((x0+x1)/2/W*100).toFixed(1), +((y0+y1)/2/H*100).toFixed(1)],
+             delante, entero:(delante && x0>=0 && x1<=W && y0>=0 && y1<=H) };
+  },
+  /* juega el final entero solo, saludando cuando se lo piden */
+  finJugar:(tope)=>{
+    finEmpezar();
+    const log=[]; let n=0, ult=-1;
+    while(FIN.on && n++<(tope||8000)){
+      if(FIN.fase!==ult){ ult=FIN.fase;
+        log.push('fase'+FIN.fase+' cam['+cam.x.toFixed(1)+','+cam.z.toFixed(1)+'] brillo'+FIN.brillo.toFixed(2)); }
+      if(FIN.fase===3 && !FIN.saludado) padPedido=5;
+      avanzar(1/60);
+    }
+    return { pasos:n, termino:!FIN.on, pantalla:pant, log };
+  },
+  /* para bisecar de donde sale el tiron: se apagan partes del cuadro de a una y se vuelve a medir */
+  cuadroPartes:(o)=>{ if(o){ if(o.manos3D!=null) PRUEBA.sinManos3D=!o.manos3D;
+                             if(o.miras!=null) PRUEBA.sinMiras=!o.miras;
+                             if(o.escena!=null) PRUEBA.sinEscena=!o.escena; }
+                      return { manos3D:!PRUEBA.sinManos3D, miras:!PRUEBA.sinMiras,
+                               escena:!PRUEBA.sinEscena }; },
+  /* =========================================================================================
+     LA BASURA POR CUADRO, QUE ES LO QUE SI SE PUEDE MEDIR ACA
+
+     Los tirones no se pueden medir en este banco: el render es por software y el contenedor comparte
+     procesador, asi que el maximo de una tanda da 79 ms, 118 o 627 en corridas identicas — es ruido
+     de la maquina, no del juego. Lo que SI se mide es cuanta memoria se pide por cuadro, y esa es la
+     causa clasica de "se pone lag de la nada": todo lo que se aloja cuadro a cuadro se acumula hasta
+     que el recolector entra, y cuando entra se lleva un cuadro entero por delante.
+     Un juego que no aloja nada en su bucle no puede tener esa clase de tiron.
+     ========================================================================================= */
+  perfilBasura:(n)=>{
+    if(!performance.memory) return 'sin performance.memory';
+    const v=n||600;
+    for(let k=0;k<20;k++){ avanzar(1/60); dibujar(1); }      // asentar
+    const a=performance.memory.usedJSHeapSize;
+    for(let k=0;k<v;k++){ avanzar(1/60); dibujar(1); }
+    const b=performance.memory.usedJSHeapSize;
+    return { cuadros:v, bytes:b-a, porCuadro:+((b-a)/v).toFixed(1) };
+  },
+  perfilTirones:(n)=>{
+    const v=n||400, t=[];
+    for(let k=0;k<v;k++){
+      const a=performance.now();
+      avanzar(1/60); dibujar(1);
+      t.push(performance.now()-a);
+    }
+    t.sort((x,y)=>x-y);
+    const q=(p)=>+t[Math.min(t.length-1, Math.floor(t.length*p))].toFixed(3);
+    const media=+(t.reduce((s,x)=>s+x,0)/t.length).toFixed(3);
+    return { cuadros:v, media, p50:q(0.50), p90:q(0.90), p99:q(0.99),
+             max:+t[t.length-1].toFixed(3), razonMaxMedia:+(t[t.length-1]/media).toFixed(1) };
+  },
   /* la resolucion dinamica: donde esta y a cuantos pixeles equivale */
-  resVer:()=>({ resDin:+resDin.toFixed(3), min:RES_MIN, max:RES_MAX,
+  resVer:()=>({ resDin:+resDin.toFixed(3), escalon:resI, escalera:RES_ESC, cambios:_resCambios,
+                min:RES_MIN, max:RES_MAX,
                 objetivoMs:+RES_OBJ.toFixed(2), destino:postTam(),
                 pixeles:postTam()[0]*postTam()[1], calidad, px:CAL[calidad].px, filtro }),
   /* la POLITICA de la resolucion, probada sin un telefono lento: se le inyectan tiempos de cuadro y
@@ -675,6 +786,30 @@ window.__recreo={
     }
     const fin=+resDin.toFixed(3); resDin=g;
     return { pasos:R, fin };
+  },
+  /* EL LAZO CERRADO, QUE ES LO UNICO QUE PRUEBA SI OSCILA. Alimentarle tiempos fijos no sirve: el
+     control oscila justamente porque bajar la resolucion ACELERA el cuadro y eso lo hace subir otra
+     vez. Aca el tiempo simulado sale de los pixeles: ms = msPleno * resDin^2, que es como se comporta
+     algo limitado por relleno. Lo que se cuenta es cuantas veces cambio de escalon, o sea cuantas
+     veces se reasigno el destino de render. */
+  resLazo:(msPleno, segundos, ruido)=>{
+    const gD=resDin, gI=resI, gN=_resN, gS=_resSuma, gB=_resBuenas, gF=_resFrio, gC=_resCambios, gU=_resSubidas;
+    resI=0; resDin=RES_ESC[0]; _resN=0; _resSuma=0; _resBuenas=0; _resFrio=0; _resCambios=0; _resSubidas=0;
+    const vistos={};
+    let t=0; const tope=(segundos||60);
+    while(t<tope){
+      /* CON RUIDO, QUE ES EL CASO DE VERDAD. Un telefono no entrega 21,4 ms clavados: entrega 18 y
+         despues 25. Sin ruido casi cualquier regla se queda quieta; el ruido es lo que hace que una
+         regla sin racha y sin enfriamiento cambie de tamaño en cada ventana. */
+      const ms=Math.max(1, msPleno*resDin*resDin + (ruido? (Math.random()*2-1)*ruido : 0));
+      resTick(ms/1000); t+=ms/1000;
+      vistos[resDin.toFixed(2)]=(vistos[resDin.toFixed(2)]||0)+1;
+    }
+    const r={ msPleno, segundos:tope, cambios:_resCambios, resFinal:+resDin.toFixed(2),
+              msFinal:+(msPleno*resDin*resDin).toFixed(1), escalonesVisitados:Object.keys(vistos).length,
+              reparto:vistos };
+    resDin=gD; resI=gI; _resN=gN; _resSuma=gS; _resBuenas=gB; _resFrio=gF; _resCambios=gC; _resSubidas=gU;
+    return r;
   },
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
@@ -724,6 +859,9 @@ window.__recreo={
         if(TABLETA.on) tabAuto();
         else if(!(vueltas%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); }
       }
+      /* EL FINAL TAMBIEN SE JUEGA SOLO: en la vereda hay que saludar con la mano abierta, y sin esto
+         la partida automatica se queda parada delante del profesor hasta que se acaba el tope. */
+      if(FIN.on && FIN.fase===3 && !FIN.saludado) padPedido=5;
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
       if(escena_i!==antes) log.push('escena:'+((GUION[escena_i]||{}).id||'fin'));
@@ -750,7 +888,13 @@ window.__recreo={
         if(TABLETA.on) tabAuto();
         else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); }
       }
+      if(FIN.on && FIN.fase===3 && !FIN.saludado) padPedido=5;
       avanzar(1/60);
+      /* DURANTE EL FINAL NO SE AUDITA, y no es hacer la vista gorda: el profesor sale a la vereda,
+         o sea FUERA de la grilla, donde "celda pisable" no quiere decir nada — toda celda de afuera
+         es pared por definicion. La auditoria mide que no atraviese paredes CAMINANDO por el
+         colegio, y en el final no camina: se queda parado saludando. */
+      if(FIN.on) continue;
       const c=celda(PROFE.x, PROFE.z);
       if(!pisableProf(c[0], c[1])){
         fuera++;

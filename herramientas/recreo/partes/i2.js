@@ -365,7 +365,114 @@ function terminarClase(){
   dice(ultima? 'dFin' : 'dSale'); son('listo');
   luegoDe(ultima? 1.9 : 0.85, ()=>{ if(ultima) ganar(); else siguienteEscena(); });
 }
+/* =========================================================================================
+   EL FINAL: SALIR DEL COLEGIO, EL AUTOBUS, Y SALUDAR A BALDI
+
+   Todo el juego pasa adentro de un edificio sin ventanas. Salir es el unico cambio de lugar que tiene,
+   asi que el final no es una pantalla que dice "ganaste": es la primera vez que se ve el cielo.
+
+   EL DESLUMBRE ES LO QUE HACE QUE SE SIENTA UN AFUERA. Saliendo de un interior a plena luz, el ojo
+   tarda un momento en acomodarse: primero se blanquea todo y despues vuelve. Sin eso, cruzar la puerta
+   es cambiar de decorado; con eso, es SALIR. Va en tres tramos —crece acercandose a la puerta, se
+   satura al cruzarla, y baja despacio— y el que baja dura mas que el que sube, porque asi es el ojo:
+   se ciega rapido y se acomoda lento.
+
+   Y EL SALUDO ES LO UNICO QUE EL JUGADOR TIENE QUE HACER. Lo pidio asi: "en la puerta de salida te
+   esta saludando Baldi y debes saludarlo". Se pide la mano abierta, que es el gesto que el juego ya
+   enseño en el tutorial y el unico que significa "hola" sin explicarlo.
+   ========================================================================================= */
+const FIN={ on:false, fase:0, t:0, brillo:0, saludado:false };
+const FIN_PUERTA=[-46.2, 0];        // la celda de la salida oeste, en metros
+/* LOS DOS TRAMOS DE AFUERA VAN SIEMPRE HACIA EL MISMO LADO. El primero llegaba a x=-52 y el segundo
+   VOLVIA a -51: o sea que el ultimo tramo apuntaba hacia atras, y como el riel gira la camara hacia
+   donde camina —con un resorte mas fuerte que el de mirarA—, la camara terminaba mirando 40 grados
+   fuera del autobus. Medido: error de rumbo 39,6 grados con medio campo de 29, o sea el autobus
+   literalmente fuera del cuadro. */
+const FIN_AFUERA=[-48.5, -0.4];
+/* EL AUTOBUS MIDE NUEVE METROS DE LARGO, asi que su costado llega a x = -57,5: parando en -53,5 la
+   camara quedaba a un metro de la chapa y el autobus llenaba media pantalla cortado. A -51 se ve
+   entero y todavia se lee grande. */
+const FIN_BUS=[-52.0, -1.6];
+const FIN_PROFE=[-48.0, 0.9];   // en la vereda, al lado de la puerta
+const FIN_MIRA_BUS=1.4;         // lo que se queda mirando el autobus antes de darse vuelta
+function finEmpezar(){
+  FIN.on=true; FIN.fase=0; FIN.t=0; FIN.brillo=0; FIN.saludado=false;
+  terminado=0; jugando=true;
+  bichosApagar();
+  /* la puerta de la salida se abre y la tapa de afuera se saca: hasta ahora estaba puesta justamente
+     para que no se viera el vacio, y recien ahora hay algo que ver */
+  const p=PUERTAS.find(q=>q.salida && q.i===0);
+  if(p){ p.abierta=true; p.t=0; }
+  afueraVer(true);
+  dice('dSalir');
+  /* la camara sale del aula hacia la puerta: se usa la misma ruta que usa todo el juego */
+  const desde=celda(cam.x, cam.z);
+  const r=rutaCeldas(desde, [1,9]) || [[1,9]];
+  rielIr(esquinas(r).map(cel2).concat([FIN_PUERTA]), VEL_CAM, ()=>{ FIN.fase=1; FIN.t=0; });
+  /* EL PROFESOR SALE A LA VEREDA, NO SE QUEDA ADENTRO. En la celda [1,9] queda a nueve metros y
+     metido en el pasillo: medido en la captura, un muñeco de veinte pixeles al fondo de un tunel
+     beige, que no se lee a nadie despidiendote. Un metro y medio afuera de la puerta queda a 4,7 m
+     de donde para la camara —el 26% del alto del cuadro— y con el cielo detras. */
+  PROFE.x=FIN_PROFE[0]; PROFE.z=FIN_PROFE[1];
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z;
+  PROFE.giro=Math.atan2(FIN_BUS[0]-PROFE.x, FIN_BUS[1]-PROFE.z);
+  profeIr([], 0);          // ruta vacia = se queda donde esta; con null, profeTick indexa null y tira
+  PROFE.anim='saludar';
+}
+function finTick(dt){
+  FIN.t+=dt;
+  const d=Math.hypot(cam.x-FIN_PUERTA[0], cam.z-FIN_PUERTA[1]);
+  if(FIN.fase===0){
+    /* crece acercandose: a seis metros todavia no deslumbra, pegado a la puerta si */
+    FIN.brillo=Math.max(FIN.brillo, Math.max(0, 1-d/9)*0.85);
+  } else if(FIN.fase===1){
+    /* cruzo la puerta: se satura y arranca la caminata hacia afuera */
+    FIN.brillo=Math.min(1, FIN.brillo+dt*2.6);
+    if(FIN.t>0.55){ FIN.fase=2; FIN.t=0;
+      rielIr([FIN_AFUERA, FIN_BUS], VEL_CAM*0.62, ()=>{ FIN.fase=3; FIN.t=0; }); }
+  } else if(FIN.fase===2){
+    /* el ojo se acomoda: baja MAS LENTO de lo que subio */
+    FIN.brillo=Math.max(0, FIN.brillo-dt*0.42);
+    /* y se mira el autobus mientras se camina hacia el: sin esto la camara conserva el rumbo del
+       pasillo y el autobus queda de costado justo en el cuadro en que se lo nombra */
+    /* y con resorte MAS FUERTE que el del riel (3,0), porque los dos escriben cam.giro en el mismo
+       cuadro y gana el que tira mas: con 1,8 contra 3,0 el rumbo se quedaba a mitad de camino */
+    mirarA(BUS_X, BUS_Z, dt, 6.0);
+    if(FIN.t>1.2 && FIN.t-dt<=1.2) dice('dBus');
+  } else if(FIN.fase===3){
+    FIN.brillo=Math.max(0, FIN.brillo-dt*0.42);
+    /* PRIMERO SE QUEDA MIRANDO EL AUTOBUS. Sin esta espera, el cuadro en que la camara termina de
+       caminar es el mismo en que empieza a darse vuelta: el autobus entra encuadrado y se va por el
+       borde derecho antes de que nadie lo vea. Segundo y pico de nada, y recien despues el giro. */
+    if(FIN.t<FIN_MIRA_BUS){ mirarA(BUS_X, BUS_Z, dt, 3.0); }
+    else {
+      /* girarse a mirar al profesor, que es donde quedo el */
+      mirarA(FIN_PROFE[0], FIN_PROFE[1], dt, 2.4);
+      profeMirarCam(dt, 2.0);
+      if(FIN.t-dt<=FIN_MIRA_BUS) dice('dChau');
+    }
+    /* y el saludo: la mano abierta. Sin camara, el teclado de numeros sirve igual. */
+    if(!FIN.saludado && FIN.t>FIN_MIRA_BUS && (MANO.dedos>=5 || padPedido>=5)){
+      FIN.saludado=true; padPedido=-1;
+      dice('dChau2'); son('listo');
+      luegoDe(2.0, ()=>{ FIN.fase=4; FIN.t=0; });
+    }
+  } else if(FIN.fase===4){
+    /* se desvanece a negro y al menu */
+    FIN.brillo=Math.min(1, FIN.brillo+dt*0.9);
+    if(FIN.t>1.5){ FIN.on=false; afueraVer(false); ganarPantalla(); }
+  }
+  const el=document.getElementById('brillo');
+  if(el){ const v=FIN.brillo.toFixed(3); if(el._o!==v){ el.style.opacity=v; el._o=v; } }
+}
 function ganar(){
+  /* el final ya no es una pantalla: es salir. La pantalla viene despues del autobus. */
+  if(!FIN.on){ finEmpezar(); return; }
+  ganarPantalla();
+}
+function ganarPantalla(){
+  const el=document.getElementById('brillo');
+  if(el){ el.style.opacity=0; el._o='0'; }
   terminado=1; jugando=false;
   musicaParar(1.4);
   document.getElementById('finT').textContent=TX('finT');
@@ -409,10 +516,28 @@ const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1), _bc=new THREE.Color()
    un cuadro, la tenia con la posicion del MENU: los bichos se proyectaban a cualquier lado y no se
    podia acertar ninguno (medido: 56.400 pasos en un pasillo con dos bichos que no morian nunca).
    Con la camara puesta, apuntar en el paso fijo mide lo mismo que apuntar mirando la pantalla. */
+/* =========================================================================================
+   NI aPantalla NI deSPantalla ALOJAN NADA, Y ESO ES LO QUE SACA LOS TIRONES
+
+   Las dos devolvian un objeto o un arreglo NUEVO en cada llamada, y se llaman muchas veces por cuadro:
+   golpeEnLista las llama una vez por blanco, miraBlanco otra vez por blanco, y la tableta unas ciento
+   veinte veces por cuadro para poner sus discos. Medido con el crecimiento del monton:
+   1.647 bytes por cuadro, o sea unos 99 KB por segundo de basura — y eso no se paga cuando se aloja,
+   se paga TODO JUNTO cuando el recolector entra, que es exactamente lo que se siente como "de la nada
+   se puso lento".
+
+   Van con un anillo de buffers y no con uno solo a proposito: hay sitios que piden dos posiciones y
+   usan la segunda mientras todavia tienen la primera en la mano. Con un solo buffer eso seria un
+   defecto silencioso —la primera cambiaria bajo los pies del que la tiene—; con un anillo de ocho, un
+   cuadro tendria que pedir nueve seguidas antes de pisarse, y ninguno pide mas de tres. */
+const _apA=[]; for(let i=0;i<8;i++) _apA.push({x:0,y:0,delante:false});
+let _apI=0;
 function aPantalla(x,y,z){
   ponerCamara(1);
   _bv.set(x,y,z).project(camara);
-  return { x:_bv.x*0.5+0.5, y:-_bv.y*0.5+0.5, delante:_bv.z<1 };
+  const r=_apA[_apI=(_apI+1)&7];
+  r.x=_bv.x*0.5+0.5; r.y=-_bv.y*0.5+0.5; r.delante=_bv.z<1;
+  return r;
 }
 /* HACIA DONDE MIRA EL JUGADOR CUANDO SUELTAN LOS BICHOS.
    No es "hacia donde miraba": al salir de un aula el ultimo tramo de la ruta va de la puerta al
@@ -593,11 +718,14 @@ function bichosDibujar(){
 const TIZAS=[], CASILL=[];
 let casillBueno=-1, casillT=0;
 /* los golpes de este cuadro, en fraccion del marco: pinzas nuevas de cualquier mano, y toques */
+/* el mismo arreglo siempre: se vacia y se vuelve a llenar. Devolver uno nuevo por cuadro es un
+   arreglo por cuadro tirado a la basura para, casi siempre, no contener nada. */
+const _golpes=[];
 function golpesJuntar(){
-  const g=[];
-  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) g.push(p); }
-  while(TOQUES.length) g.push(TOQUES.shift());
-  return g;
+  _golpes.length=0;
+  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) _golpes.push(p); }
+  while(TOQUES.length) _golpes.push(TOQUES.shift());
+  return _golpes;
 }
 /* el blanco mas cercano al dedo, dentro del radio. Devuelve el indice o -1. */
 function golpeEnLista(g, lista, vivo, pos){
@@ -758,12 +886,16 @@ function casillDibujar(){
    como los casilleros terminaron siendo una pared roja de lado a lado.
    ========================================================================================= */
 const _ev=new THREE.Vector3(), _ef=new THREE.Vector3();
+const _dsA=[]; for(let i=0;i<8;i++) _dsA.push([0,0,0]);
+let _dsI=0;
 function deSPantalla(sx, sy, dist){
   ponerCamara(1);
   _ev.set(sx*2-1, 1-sy*2, 0.5).unproject(camara).sub(camara.position).normalize();
   _ef.set(0,0,-1).applyQuaternion(camara.quaternion);
   const t=dist/Math.max(0.05, _ev.dot(_ef));
-  return [camara.position.x+_ev.x*t, camara.position.y+_ev.y*t, camara.position.z+_ev.z*t];
+  const r=_dsA[_dsI=(_dsI+1)&7];
+  r[0]=camara.position.x+_ev.x*t; r[1]=camara.position.y+_ev.y*t; r[2]=camara.position.z+_ev.z*t;
+  return r;
 }
 /* la distancia de un punto a un SEGMENTO, en pixeles. Es lo que hace que cortar sea cortar: con la
    mano a 21 ms de retardo y a 60 cuadros, una mano rapida se mueve 30 o 40 pixeles ENTRE UN CUADRO Y
@@ -1325,18 +1457,27 @@ function pintarMiras(){
     const m=ps.find(p=>p.k===q);
     /* SOLO MIENTRAS HAY ACTIVIDAD. En el aula lo que se hace es contar con los dedos, y ahi un aro
        de punteria no indica nada: es ruido encima del unico momento en que hay que mirar el libro. */
-    if(!hayAct || !m){ el.classList.remove('ver'); continue; }
+    if(!hayAct || !m){ if(el._ver){ el.classList.remove('ver'); el._ver=false; } continue; }
     const x=m.x, y=m.y;
     const hay=miraBlanco({x, y});
     /* sobre la hoja de la tableta el aro NO se abre al radio de un blanco: ahi no hay blanco, hay
        hoja, y un aro gigante taparia justamente el dibujo que se esta haciendo */
     const rad=(hay? (TABLETA.on? MIRA_R*1.15 : BICHO_R) : MIRA_R)*W;
-    el.style.width=(rad*2)+'px'; el.style.height=(rad*2)+'px';
-    el.style.left=(x*100)+'%';
-    el.style.top=(y*100)+'%';
-    el.classList.toggle('hit', hay);
-    el.classList.toggle('cerrada', !!m.pinza);
-    el.classList.add('ver');
+    /* SOLO SE ESCRIBE LO QUE CAMBIO, Y ESTO ERA UN TIRON DE VERDAD.
+       Escribir el.style.left/top/width/height invalida el diseño de la pagina, y hacerlo en CADA
+       cuadro por cada mano obliga al navegador a recalcular la disposicion sesenta veces por segundo
+       para mover un aro. Medido con el perfil de cola: con una mano en pantalla el reparto era
+       bimodal —mediana 0,3 ms pero p90 de 38 ms—, que es la firma de un recalculo de diseño que cae
+       cada tantos cuadros. Guardando lo ultimo escrito y salteando lo igual, la mayoria de los cuadros
+       no toca el DOM: el aro se mueve pocos pixeles y el tamaño casi nunca cambia. */
+    const izq=(x*100).toFixed(2)+'%', arr=(y*100).toFixed(2)+'%', anc=(rad*2).toFixed(1)+'px';
+    if(el._izq!==izq){ el.style.left=izq; el._izq=izq; }
+    if(el._arr!==arr){ el.style.top=arr; el._arr=arr; }
+    if(el._anc!==anc){ el.style.width=anc; el.style.height=anc; el._anc=anc; }
+    if(el._hit!==hay){ el.classList.toggle('hit', hay); el._hit=hay; }
+    const cer=!!m.pinza;
+    if(el._cer!==cer){ el.classList.toggle('cerrada', cer); el._cer=cer; }
+    if(!el._ver){ el.classList.add('ver'); el._ver=true; }
   }
 }
 
@@ -1405,6 +1546,12 @@ function pasoFijo(dt){
      manda: no avanza la escena, no camina nadie y el jugador no puede contestar nada. */
   if(gritoT>0){ gritoTick(dt); return; }
   if(!jugando || terminado) return;
+  /* EL FINAL TAMBIEN MANDA SOBRE EL GUION: cuando arranca ya no hay escenas que avanzar, hay una
+     salida que caminar. Corre el riel, el profesor y las esperas, y nada mas. */
+  if(FIN.on){
+    esperasTick(dt); rielTick(dt); profeTick(dt); finTick(dt);
+    return;
+  }
   const E=GUION[escena_i];
   if(!E) return;
   escenaT+=dt;
@@ -1538,9 +1685,9 @@ function dibujar(alfa){
     l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
   for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
   actDibujar();
-  manos3DDibujar();
-  pintarMiras();
-  pintarEscena();
+  if(!PRUEBA.sinManos3D) manos3DDibujar();
+  if(!PRUEBA.sinMiras) pintarMiras();
+  if(!PRUEBA.sinEscena) pintarEscena();
 }
 /* EL VIGIA SE FUE ENTERO, Y LO PIDIO EL JUGADOR: "que no se baje automaticamente los graficos".
    Tenia razon y ademas se habia vuelto redundante. Bajaba la calidad por escalones —apagaba los
@@ -1580,6 +1727,43 @@ function manoAjustarPedido(){
   if(MANO.escenaPide && MANO.hz<(MANO.hzMax||24)) MANO.hz=MANO.hzMax||24;
 }
 
+/* =========================================================================================
+   CALENTAR LOS SHADERS ANTES DE JUGAR
+
+   Esto es lo que el jugador reporta como "se laguea de la nada" y como "la segunda mano aparece y se
+   laguea un monton". MEDIDO con el perfil de cola: sin manos el cuadro tipico son 0,2 ms; la PRIMERA
+   tanda con una mano da p90 de 32,5 ms y un maximo de 145 ms — y la segunda tanda, con DOS manos,
+   vuelve a 0,4 ms de mediana y 1,8 de maximo. Dos manos no cuestan mas que una: lo que costaba era
+   LA PRIMERA VEZ.
+
+   La causa es que WebGL compila el programa de un material la primera vez que ese material se dibuja.
+   Las mallas de las manos, de los bichos, de las tizas, de los casilleros, del rompecabezas, de los
+   globos y de la tableta arrancan invisibles y se encienden en medio de la partida — o sea que cada
+   una paga su compilacion EN EL PEOR MOMENTO POSIBLE: el cuadro en el que aparece.
+
+   Se compilan todas de una, con el menu en pantalla, donde un tiron no molesta a nadie porque no hay
+   nada moviendose. Hay que hacerlas visibles para compilarlas: render.compile() recorre lo VISIBLE, y
+   justamente el problema son las que no lo estan. */
+/* interruptores de prueba: dejan apagar partes del cuadro para saber cual cuesta */
+const PRUEBA={ sinManos3D:false, sinMiras:false, sinEscena:false };
+function calentarShaders(){
+  if(!render || !escena || !camara) return 0;
+  const lista=[manoArt, manoHue, manoPal, bichoMalla, bichoOjos, esqMalla, tizaMalla, casillMalla,
+               rompeMalla, huecoMalla, globoMalla, tabMalla, discoMalla];
+  const antes=lista.map(m=>m && m.visible);
+  for(const m of lista) if(m) m.visible=true;
+  /* PREDIJE QUE EL PATIO IBA A COSTAR UNA COMPILACION Y LA MEDICION DIJO QUE NO. El razonamiento
+     parecia solido: el autobus y la fachada viven en un grupo apagado toda la partida, asi que su
+     primer cuadro dibujado es el primero de la cinematica final. Se midio calentando con el patio y
+     sin el patio, en dos cargas distintas: 19 programas en los dos casos, y 19 tambien despues de
+     que el patio aparece. La razon es que sus materiales son Lambert y Basic PELADOS —sin textura—
+     y esos dos programas ya estaban compilados por otras piezas del juego. La cache de programas de
+     three.js es por combinacion de caracteristicas, no por material. */
+  lista.forEach((m,i)=>{ if(m) m.visible=antes[i]; });
+  return render.info.programs? render.info.programs.length : 0;
+}
+
+let CONGELADO=false;
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
@@ -1589,11 +1773,19 @@ function bucle(){
      fps se iba en mirar la mano. Ahora la medicion la maneja el propio <video> por su cuenta y lo
      unico que corre a 60 es la interpolacion, que son 126 numeros. */
   if(MANO.on) manosAvanzar(dt);
-  avanzar(dt);
+  /* CONGELADO: PARA PODER FOTOGRAFIAR UN INSTANTE. Con avanzar() se simula sin dibujar, pero entre
+     ese paso y la captura el navegador sigue corriendo su propio bucle y la escena se va: las tres
+     primeras fotos del autobus salieron con la camara ya dada vuelta mirando a Baldi, y parecia que
+     el autobus no se dibujaba. Congelado, la simulacion no avanza y el dibujo sigue. */
+  if(!CONGELADO) avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
   resTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
 addEventListener('resize', ajustar);
-cargarBaldi(()=>{});
+/* SE CALIENTAN CON EL MENU EN PANTALLA, que es el unico momento del juego en que un tiron no le
+   molesta a nadie: no hay nada moviendose todavia. Y de nuevo al terminar de cargar a Baldi, porque
+   su material entra despues y trae el suyo propio. */
+calentarShaders();
+cargarBaldi(()=>{ calentarShaders(); });
 bucle();

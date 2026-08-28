@@ -50,6 +50,149 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Trigésima séptima vuelta (2026-08-28): **RECREO** — la salida al patio, el autobús, y el control de resolución que rebotaba
+
+Pedido: *"agrega que al terminar la clase estás saliendo afuera con un autobús que te espera y en la
+puerta de salida te está saludando baldi y debes saludarlo … primero la Cinemática de saliendo de la
+escuela con un buen brillo disminuyendo así realista al salir afuera de un entorno cerrado y el
+autobús ahí pipi y después caminas automáticamente hasta ahí y se gira para saludar a baldi y después
+se desvanece y te lleva al menú, también el juego a veces se puede poner lag de la nada debes
+optimizar aún más eso"*.
+
+#### CINCO FASES, Y EL DESLUMBRE ES EL PEGAMENTO
+
+`ganar()` ya no muestra la pantalla de final: **arranca la salida**. Fase 0, la cámara sale del aula
+hasta la puerta oeste y el brillo crece a medida que se acerca; fase 1, cruza y **satura**; fase 2,
+camina a la vereda mientras el ojo se acomoda; fase 3, se queda mirando el autobús, se da vuelta y
+pide el saludo; fase 4, funde y recién ahí aparece la pantalla.
+
+**El brillo sube rápido y baja LENTO** (2,6 contra 0,42 por segundo), y no es un adorno: así se
+comporta un ojo de verdad saliendo de un interior — deslumbrarse es instantáneo y acomodarse tarda.
+Bajando igual de rápido se lee a transición de video y no a salir a la calle.
+
+#### CUATRO ERRORES DE PUESTA EN ESCENA, Y NINGUNO SE VEÍA EN UNA CAPTURA CHICA
+
+1. **El autobús estaba adentro del colegio y a espaldas del jugador** (x = −38). Va donde la cámara
+   camina, no donde quedaba cómodo escribirlo.
+2. **Se veía de culata**: con el eje largo en X y la cámara llegando desde el este, lo que aparecía
+   era la trasera, un cuadrado amarillo de tres metros por dos y medio. Girado noventa grados se ven
+   los nueve metros y la fila de ventanas.
+3. **El último tramo del camino iba PARA ATRÁS** —llegaba a −52 y volvía a −51—, y como el riel gira
+   la cámara hacia donde camina con un resorte más fuerte que el de `mirarA`, la cámara terminaba
+   mirando 39,6 grados fuera del autobús, con medio campo de 29: o sea el autobús literalmente fuera
+   del cuadro. Con los dos tramos hacia el mismo lado y el resorte de `mirarA` subido a 6,0 el error
+   quedó en **1,6 grados**.
+4. **Y estaba demasiado cerca**: medido proyectando su caja a píxeles, ocupaba el **101,6 % del ancho
+   del cuadro**, o sea cortado por los dos lados. Corrido a x = −66 quedan 12,5 m y ocupa **64,6 %,
+   entero y centrado en el 50,1 %**.
+
+#### EL DEFECTO DE MÉTODO DE ESTA VUELTA: LA FOTO NO ERA DEL INSTANTE QUE YO CREÍA
+
+Tres capturas seguidas del autobús salieron **sin autobús**, y llegué a comprobar que la malla
+existía, era visible, tenía sus 208 triángulos y su caja proyectaba dentro del cuadro. Todo eso era
+cierto **y la foto seguía sin mostrarlo**.
+
+La causa: `avanzar()` simula sin dibujar, pero **entre ese paso y la captura el navegador sigue
+corriendo su propio bucle**, así que para cuando se sacaba la foto la cámara ya se había dado vuelta
+a mirar al profesor. La foto era de tres segundos después. Se arregla con un `CONGELADO` que frena la
+simulación y deja el dibujo: la escena se queda en el instante que se quiere fotografiar.
+
+Y hay un segundo error de medición del mismo tipo, ya conocido en este proyecto: **`camara` solo se
+acomoda al dibujar**, así que proyectar después de `avanzar()` usa la posición del menú. Sin
+sincronizar, el autobús daba **3.094 % del ancho**. Con `ponerCamara(1)` antes de proyectar, 64,6 %.
+Y un tercero: **un punto detrás de la cámara proyecta igual, dado vuelta, y cae dentro del cuadro** —
+el autobús daba "entero" con la cámara mirando justo para el otro lado. Ahora se comprueba que las
+ocho esquinas estén delante.
+
+#### LAS RUEDAS SALÍAN AMARILLAS, Y ESA ERA LA RAZÓN DE QUE NO SE LEYERA A AUTOBÚS
+
+Todo fundido en una sola malla es una sola malla **y un solo material**. En la captura eso era un
+ladrillo amarillo con cuatro tacos amarillos abajo. Van **dos** mallas fundidas —lo amarillo y lo
+oscuro (ruedas, parachoques, la franja de abajo de las ventanas, los siete paños y la puerta)—, o sea
+dos llamadas de dibujo para las veinte piezas. Y lo oscuro va **sin luz** a propósito: son vidrio y
+goma, las dos cosas de un autobús que no tienen difuso.
+
+Dos cosas más que salieron de mirar la captura: la franja negra va **debajo** de las ventanas y no
+encima —arriba compite con el techo y el costado entero se lee oscuro—, y las ventanas son **siete
+paños y no una tira corrida**, porque los cortes son lo que da la escala de "acá adentro van chicos
+sentados".
+
+#### EL COLEGIO NO TENÍA CÁSCARA, PORQUE NADIE LO HABÍA MIRADO DESDE AFUERA
+
+Está construido de adentro hacia afuera: cubos de pared de celda entera y una losa de techo por
+celda. Desde la vereda eso es **un montón de bloques con el techo colgando y el interior asomando por
+arriba**. Entró una fachada de tres piezas con el hueco de la puerta y su dintel.
+
+**Y ACÁ APAGUÉ PIEZAS DE A UNA EN VEZ DE ADIVINAR.** Había puesto además una losa de techo y un alero
+sobre la puerta, y el tercio de arriba del cuadro salía casi negro justo donde el profesor levanta el
+brazo. Apagándolos por separado quedó claro: los dos son planos **horizontales vistos DESDE ABAJO**
+—la cámara está a metro y medio y a tres metros de la pared— y una cara que mira al piso recibe de la
+hemisférica el color del suelo. Los dos se fueron. La fachada sola alcanza para tapar el interior:
+mide 4,15 m y las paredes de adentro 3,6.
+
+#### EL PROFESOR SALE A LA VEREDA
+
+En la celda \[1,9\] quedaba a nueve metros y metido en el pasillo: medido en la captura, **un muñeco de
+veinte píxeles al fondo de un túnel beige**, que no se lee a nadie despidiéndote. Metro y medio afuera
+de la puerta queda a 4,7 m de donde para la cámara —el 26 % del alto del cuadro— y con cielo detrás.
+
+Y **la cámara se queda 1,4 s mirando el autobús antes de darse vuelta**. Sin esa espera, el cuadro en
+que termina de caminar es el mismo en que empieza a girar: el autobús entra encuadrado y se va por el
+borde derecho antes de que nadie lo vea.
+
+#### "SE PONE LAG DE LA NADA": DOS CAUSAS MEDIDAS Y UNA PREDICCIÓN MÍA QUE SALIÓ MAL
+
+**1. El control de resolución rebotaba, y la razón es aritmética.** Cada cambio llama a
+`postRT.setSize()`, que tira la textura y el buffer de profundidad y se los vuelve a pedir a la GPU:
+un tirón. Así que lo que hay que minimizar no es el error de la resolución, es **la cantidad de
+cambios**.
+
+La banda muerta va de 15,86 a 21,55 ms, o sea un factor 1,359. El tiempo de cuadro va con los píxeles,
+o sea con el **cuadrado** de la escala. Si dos escalones vecinos están en razón *k*, saltar de uno al
+otro multiplica el tiempo por *k²*: **con *k²* > 1,359 el escalón de arriba queda por encima de la
+banda y el de abajo por debajo, y entonces el control NO PUEDE quedarse quieto**. Mi primera escalera
+tenía 0,58 y 0,45 pegados (*k* = 1,289, *k²* = 1,66) y medido daba dieciséis cambios por minuto **ya
+asentado**. La escalera nueva es geométrica de razón 1,12: *k²* = 1,25, con margen.
+Más: subir necesita rachas de ventanas buenas y **la racha se duplica en cada subida** (3, 6, 12, 24,
+48), así que recuperar sigue siendo posible al salir de un aula cargada pero dejar de rebotar está
+garantizado. Y hay enfriamiento de segundo y medio después de cada cambio.
+
+Medido en **336 corridas de un minuto** (tiempos de 14 a 68 ms, ruido de 0 a ±12 ms, y el lazo
+**cerrado** —el tiempo simulado sale de los píxeles—, que es la única forma de que un control oscile
+de verdad; con tiempos fijos casi cualquier regla se queda quieta):
+
+| | cambios totales | el peor caso | ya asentado (>20 s) | peor asentado |
+|---|---|---|---|---|
+| regla anterior | 2.752 | 31 | 701 | **16** |
+| ésta | **1.460** | **10** | **213** | **5** |
+
+**2. `postTam()` preguntaba el tamaño del marco DOS VECES POR CUADRO.** Leer `clientWidth` obliga al
+navegador a recalcular el layout antes de contestar: son 120 vaciados de layout por segundo mezclados
+con las escrituras al DOM del contador de dedos y de las miras. Es el *layout thrashing* de manual y
+**no aparece en ningún perfil de WebGL**: se ve como tirones que van y vienen. El marco solo cambia de
+tamaño cuando cambia la ventana, así que se guarda en `ajustar()`.
+
+**3. Y ACÁ ME EQUIVOQUÉ Y LA MEDICIÓN ME CORRIGIÓ.** Predije que el patio iba a costar una compilación
+de shaders en medio de la cinemática: el autobús y la fachada viven en un grupo apagado toda la
+partida, así que su primer cuadro dibujado es el primero del final. El razonamiento parecía sólido y
+es el mismo que ya había valido para las manos y los bichos. Se midió calentando **con** el patio y
+**sin** el patio, en dos cargas distintas: **19 programas en los dos casos**, y 19 también después de
+que el patio aparece. La razón es que sus materiales son Lambert y Basic **pelados**, sin textura, y
+esos dos programas ya estaban compilados por otras piezas del juego — la caché de three.js es por
+combinación de características, no por material. El cambio se sacó en vez de dejarlo con un
+comentario que dijera algo que no pasa.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24**, 0 muertes, 15.039 pasos, terminando en la pantalla de final **después
+del autobús**. Auditoría de rumbo **0 pasos dentro de paredes en 15.055**. Contestando mal: muerte y
+pantalla de agarrón. El final jugado solo: las cinco fases en orden, 1.239 pasos, termina en `fin`.
+La tableta puntúa **9 de 9** en la matriz (diagonal perfecta: cada figura acepta la suya y rechaza las
+otras dos). Reparto de manos y espejo en verde; `manoLeerVer` da 5 dedos sin pinza para la mano
+abierta y 1 dedo con pinza para la pinza. Manos 3D a **0,111 ms por cuadro**. **0 bytes por cuadro**
+de basura en 900 cuadros. 17 llamadas de dibujo y 16.386 triángulos con el patio en pantalla.
+`window.__errs` vacío en las nueve corridas.
+
 ### Vigesimoséptima vuelta (2026-08-27): **RECREO** — las manos 3 veces más rápidas y siete pasillos distintos
 
 Pedido: *"hace que sea 3 veces más rápido el movimiento de las manos, también que por ejemplo en el

@@ -100,7 +100,8 @@ function manos3DDibujar(){
        —o caducaba a los 260 ms sin medicion— las mallas se ocultaban pero los dos numeros quedaban
        clavados en pantalla, en el ultimo lugar donde hubo una mano. */
     for(let q=0;q<MANOS_MAX;q++){
-      const el=document.getElementById('manoN'+q); if(el) el.classList.remove('ver');
+      const el=document.getElementById('manoN'+q);
+      if(el && el._ver){ el.classList.remove('ver'); el._ver=false; }
     }
     return;
   }
@@ -196,13 +197,17 @@ function manos3DNumeros(vivas, n, tanV){
   const W=lienzo.clientWidth, H=lienzo.clientHeight;
   for(let q=0;q<MANOS_MAX;q++){
     const el=document.getElementById('manoN'+q); if(!el) continue;
-    if(q>=n){ el.classList.remove('ver'); continue; }
+    if(q>=n){ if(el._ver){ el.classList.remove('ver'); el._ver=false; } continue; }
     const R=vivas[q], L=R.sal;
     const x=MANO.espejo? 1-L[0] : L[0];
-    el.style.left=(x*100)+'%';
-    el.style.top=((L[1]*H+34)/H*100)+'%';
-    el.textContent=String(R.dedos);
-    el.classList.add('ver');
+    /* mismo criterio que el aro: escribir estilos invalida el diseño, y el numero de dedos cambia una
+       vez cada tantos segundos mientras la posicion cambia de a fracciones de pixel */
+    const izq=(x*100).toFixed(2)+'%', arr=((L[1]*H+34)/H*100).toFixed(2)+'%';
+    if(el._izq!==izq){ el.style.left=izq; el._izq=izq; }
+    if(el._arr!==arr){ el.style.top=arr; el._arr=arr; }
+    const txt=String(R.dedos);      // `n` es el parametro de esta funcion: pisarlo tira ReferenceError
+    if(el._n!==txt){ el.textContent=txt; el._n=txt; }
+    if(!el._ver){ el.classList.add('ver'); el._ver=true; }
   }
 }
 

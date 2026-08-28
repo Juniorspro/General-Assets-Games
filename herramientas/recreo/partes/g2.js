@@ -73,8 +73,21 @@ const MANO_ENT_W=256, MANO_ENT_H=192;
    aparecio, porque en cuanto aparece la MISMA medicion que la encontro ya sube el ritmo al maximo.
    Si hay una mano, el jugador la esta usando: va a fondo, camine el profesor o no. */
 const MANO_HZ_REPOSO=10;
+/* CON DOS MANOS SE MIDE MENOS SEGUIDO, Y NO ES UN RECORTE A CIEGAS.
+   El jugador lo reporto asi: "la segunda mano aparece en pantalla y se laguea un monton". Y es cierto
+   que cuesta el doble — el modelo de puntos corre UNA VEZ POR MANO —, pero lo importante es PARA QUE
+   se piden dos manos: solo para CONTAR DEDOS, cuando la respuesta pasa de cinco. Y contar no necesita
+   velocidad. Al contrario: el numero se vota entre tres lecturas y despues hay que sostenerlo 1,1
+   segundos con un aro que se llena, o sea que lo que importa ahi es que el numero sea ESTABLE, no que
+   la mano llegue rapido. Apuntar necesita velocidad; contar necesita quietud.
+   Asi que con dos manos el ritmo baja a 20: el doble de trabajo por medicion, un tercio menos de
+   mediciones, y el jugador no puede notar la diferencia porque en ese momento no esta apuntando a
+   nada. */
+const MANO_HZ_DOS=20;
 function manoTope(){
-  return (MANO.hay || MANO.escenaPide)? (MANO.hzMax || MANO_HZ_MOVIL) : MANO_HZ_REPOSO;
+  if(!(MANO.hay || MANO.escenaPide)) return MANO_HZ_REPOSO;
+  const max=MANO.hzMax || MANO_HZ_MOVIL;
+  return (MANO.pedidas>=2)? Math.min(max, MANO_HZ_DOS) : max;
 }
 
 /* =========================================================================================
@@ -165,12 +178,21 @@ function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.h
 /* PURA A PROPOSITO: entran 21 puntos y sale {dedos, pinza}. Sin camara, sin estado y sin navegador,
    asi que se puede comprobar inyectando manos de mentira y midiendo — que es la unica forma de
    probar esto en un banco sin camara ni mano. */
+/* LA TABLA DE DEDOS Y EL RESULTADO SON FIJOS Y SE REUSAN. manoLeer() se llama por cada mano en cada
+   cuadro y ademas en cada medicion; con el .map() de antes alojaba dos arreglos y un objeto por
+   llamada, o sea unos trescientos objetos por segundo tirados para devolver dos numeros. */
+const _mlPares=[[8,5],[12,9],[16,13],[20,17]];
+const _mlLargos=[false,false,false,false];
+const _mlRes={ dedos:0, pinza:false, estirados:[false,false,false,false,false] };
 function manoLeer(lm){
   if(!lm || lm.length<21) return null;
   const mu=lm[0], nu=lm[9];
   const palma=Math.max(1e-6, d3(mu,nu));
-  const largos=[[8,5],[12,9],[16,13],[20,17]].map(([pt,n])=>
-    (d3(lm[pt],mu) / Math.max(1e-6,d3(lm[n],mu))) > 1.28 );
+  const largos=_mlLargos;
+  for(let i=0;i<4;i++){
+    const pt=_mlPares[i][0], n=_mlPares[i][1];
+    largos[i] = (d3(lm[pt],mu) / Math.max(1e-6,d3(lm[n],mu))) > 1.28;
+  }
   /* el pulgar, contra el nudillo del menique */
   const pulgar = (d3(lm[4], lm[17]) / palma) > 1.05;
   /* LA PINZA ES EL PULGAR Y EL INDICE, Y NADA MAS. Lo reporto el jugador con esas palabras: "el
@@ -188,10 +210,13 @@ function manoLeer(lm){
   /* SE DEVUELVE TAMBIEN CUALES. El dibujo de la mano marca en verde los dedos que el juego CONTO,
      y eso es la mitad de la enseñanza: cuando el numero no es el que el jugador cree, se ve cual
      dedo no cerro o no estiro del todo. Un numero solo no explica nada. */
-  return { dedos: largos.filter(Boolean).length + (pulgar?1:0),
-           pulgar, pinza, palma,
-           estirados: [pulgar, largos[0], largos[1], largos[2], largos[3]],
-           abierta: largos.every(Boolean) && pulgar };
+  let n=0; for(let i=0;i<4;i++) if(largos[i]) n++;
+  const r=_mlRes, e=r.estirados;
+  r.dedos = n + (pulgar?1:0);
+  r.pulgar=pulgar; r.pinza=pinza; r.palma=palma;
+  e[0]=pulgar; e[1]=largos[0]; e[2]=largos[1]; e[3]=largos[2]; e[4]=largos[3];
+  r.abierta = (n===4) && pulgar;
+  return r;
 }
 function manoTotal(lms){
   if(!lms || !lms.length) return { hay:false, dedos:0, pinza:false, manos:0 };
@@ -210,9 +235,14 @@ function manoTotal(lms){
    2. LO QUE VALE ES EL FLANCO, no el estado. Una pinza sostenida medio segundo son treinta cuadros:
       si cada cuadro matara, una sola pinza limpiaria el pasillo entero. Solo cuenta el cuadro en que
       la pinza APARECE, y para eso hay que recordar la de cada mano en el cuadro anterior. */
+/* las mismas dos entradas siempre: manoPinzas corre en cada cuadro y alojaba un arreglo mas un
+   objeto por mano, o sea unos 180 objetos por segundo para devolver cuatro numeros */
+const _pzA=[{x:0,y:0,px:0,py:0,k:0,pinza:false,nueva:false},
+            {x:0,y:0,px:0,py:0,k:0,pinza:false,nueva:false}];
+const _pzR=[];
 function manoPinzas(lms){
-  const r=[];
-  if(!lms || !lms.length){ MANO.pzPrev=[]; return r; }
+  const r=_pzR; r.length=0;
+  if(!lms || !lms.length){ MANO.pzPrev.length=0; return r; }
   lms.forEach((lm,k)=>{
     const q=manoLeer(lm); if(!q) return;
     const p4=lm[4], p8=lm[8], p9=lm[9];
@@ -231,10 +261,15 @@ function manoPinzas(lms){
        1-x, o sea los dos reflejados uno del otro. No es un defecto del rompecabezas: lo tenian las
        siete actividades —bichos incluidos— y el rompecabezas solo lo hace obvio, porque ahi se mira
        la pieza mientras se arrastra en vez de un bicho que desaparece. */
-    const ex = MANO.espejo? (v)=>1-v : (v)=>v;
-    r.push({ x: ex((p4.x+p8.x)/2), y: (p4.y+p8.y)/2,
-             px: ex(p9.x), py: p9.y, k,
-             pinza:q.pinza, nueva: q.pinza && !MANO.pzPrev[k] });
+    const esp=MANO.espejo;
+    const o=_pzA[k] || (_pzA[k]={x:0,y:0,px:0,py:0,k:0,pinza:false,nueva:false});
+    const mx=(p4.x+p8.x)/2;
+    o.x = esp? 1-mx : mx;
+    o.y = (p4.y+p8.y)/2;
+    o.px = esp? 1-p9.x : p9.x;
+    o.py = p9.y; o.k = k;
+    o.pinza = q.pinza; o.nueva = q.pinza && !MANO.pzPrev[k];
+    r.push(o);
     MANO.pzPrev[k]=q.pinza;
   });
   return r;
@@ -669,11 +704,12 @@ function manosMedir(t){
   pintarCam();
 }
 
+const _salida=[], _lmsTmp=[];
 /* SE LLAMA UNA VEZ POR CUADRO DE RENDER, y es lo unico de las manos que corre a 60. */
 function manosAvanzar(dt){
   const ahora=performance.now();
   let vivas=0, total=0, pinza=false;
-  const salida=[];
+  const salida=_salida; salida.length=0;
   for(let q=0;q<2;q++){
     const R=MANO.ranuras[q];
     if(!R.hay) continue;
@@ -722,7 +758,11 @@ function manosAvanzar(dt){
   /* las pinzas salen de los puntos SUAVIZADOS, no de la ultima medicion: si salieran de la medicion,
      apuntar a un bicho seria apuntar con una mano que se mueve a saltos de 24 Hz mientras se ve una
      que se mueve a 60 */
-  MANO.pinzas=manoPinzas(salida.map(R=>arregloALms(R.sal, R.lmsSal)));
+  /* el .map() alojaba un arreglo NUEVO en cada cuadro solo para pasar dos elementos: 60 arreglos por
+     segundo a la basura. Se llena uno fijo. */
+  _lmsTmp.length=0;
+  for(let i=0;i<salida.length;i++) _lmsTmp.push(arregloALms(salida[i].sal, salida[i].lmsSal));
+  MANO.pinzas=manoPinzas(_lmsTmp);
   MANO.vivas=salida;
 }
 

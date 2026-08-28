@@ -140,6 +140,14 @@ const L={
  dGrito:{en:'W R O N G', es:'M A L', pt:'E R R A D O'},
  dBien:{en:'That is it!', es:'¡Eso es!', pt:'É isso!'},
  dMal:{en:'No. Look again.', es:'No. Mirá otra vez.', pt:'Não. Olhe de novo.'},
+ dSalir:{en:'Class is over. <b>Come on, out you go.</b>',
+          es:'Terminó la clase. <b>Vamos, para afuera.</b>',
+          pt:'Acabou a aula. <b>Vamos, para fora.</b>'},
+ dBus:{en:'Your bus is here.', es:'Ahí está tu autobús.', pt:'Ali está seu ônibus.'},
+ dChau:{en:'<b>Wave goodbye</b> — show me your hand.',
+        es:'<b>Saludalo</b> — mostrame la mano.',
+        pt:'<b>Acene</b> — me mostre a mão.'},
+ dChau2:{en:'See you tomorrow.', es:'Hasta mañana.', pt:'Até amanhã.'},
  dFin:{en:'Class over. Nicely done.', es:'Terminó la clase. Muy bien.', pt:'Acabou a aula. Muito bem.'},
  comoT:{en:
   'Baldi asks, you answer with your <b>fingers</b>. Four plus four is eight fingers — both hands.<br><br>'+

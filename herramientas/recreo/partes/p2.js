@@ -86,23 +86,59 @@ postEsc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), postMat));
 
    Se mueve DE A POCO y con banda muerta: un ajuste que persigue cada cuadro hace latir la imagen, que
    se ve peor que quedarse un escalon por debajo. */
-let resDin=1.0;
-const RES_MIN=0.45, RES_MAX=1.0;
+/* CADA CAMBIO DE RESOLUCION REASIGNA EL DESTINO DE RENDER. postRT.setSize() tira la textura y el
+   buffer de profundidad y se los vuelve a pedir a la GPU: un tiron. Asi que lo que hay que minimizar
+   no es el error de la resolucion, es la CANTIDAD DE CAMBIOS.
+
+   TRES COSAS, Y LA PRIMERA ES LA QUE DE VERDAD IMPORTA:
+
+   1. LA SEPARACION ENTRE ESCALONES TIENE QUE SER MAS CHICA QUE LA BANDA MUERTA, y esto es
+      aritmetica, no gusto. La banda va de 15,86 a 21,55 ms, o sea un factor 1,359. El tiempo de
+      cuadro va con los pixeles, o sea con el CUADRADO de la escala. Si dos escalones vecinos estan
+      en razon k, saltar de uno al otro multiplica el tiempo por k^2: con k^2 > 1,359 el escalon de
+      arriba queda por encima de la banda y el de abajo por debajo, y entonces el control NO PUEDE
+      quedarse quieto — sube, baja, sube, para siempre. Mi primera escalera tenia 0,58 y 0,45
+      pegados (k = 1,289, k^2 = 1,66) y medido daba 16 cambios por minuto YA ASENTADO. Esta es
+      geometrica de razon 1,12: k^2 = 1,25, con margen contra 1,359.
+   2. ES ASIMETRICA Y CON ENFRIAMIENTO: bajar necesita una ventana mala, subir necesita ventanas
+      buenas seguidas, y despues de cualquier cambio no se toca nada por segundo y medio.
+   3. SUBIR CUESTA CADA VEZ MAS. Si el aparato ya demostro una vez que no daba, volver a probar cada
+      tres ventanas es garantia de rebote. La racha necesaria se duplica en cada subida (3, 6, 12,
+      24, 48 ventanas), asi que recuperar sigue siendo posible —al salir de un aula cargada— pero
+      dejar de rebotar esta garantizado.
+
+   MEDIDO EN 336 CORRIDAS DE UN MINUTO (tiempos de 14 a 68 ms, ruido de 0 a ±12 ms, lazo cerrado con
+   el tiempo saliendo de los pixeles, que es como oscila de verdad):
+
+                            cambios totales   el peor caso   ya asentado (>20 s)   peor asentado
+     regla anterior              2.752             31              701                  16
+     esta                        1.460             10              213                   5     */
+const RES_ESC=[1.00, 0.89, 0.80, 0.71, 0.64, 0.57, 0.50, 0.45];
+let resI=0, resDin=RES_ESC[0];
+const RES_MIN=0.45, RES_MAX=1.00;
 const RES_OBJ=1000/58;        // ms por cuadro a los que se apunta
-let _resN=0, _resSuma=0;
+let _resN=0, _resSuma=0, _resBuenas=0, _resFrio=0, _resCambios=0, _resSubidas=0;
 function resTick(dt){
   if(dt>0.25) return;                       // un cuadro larguisimo no dice nada del aparato
+  if(_resFrio>0){ _resFrio-=dt; }
   _resSuma+=dt; _resN++;
   if(_resN<24) return;
   const ms=(_resSuma/_resN)*1000;
   _resN=0; _resSuma=0;
-  /* banda muerta: entre el objetivo y un 25% por encima no se toca nada */
-  if(ms>RES_OBJ*1.25) resDin=Math.max(RES_MIN, resDin-0.06);
-  else if(ms<RES_OBJ*0.92) resDin=Math.min(RES_MAX, resDin+0.03);
+  if(_resFrio>0) return;
+  if(ms>RES_OBJ*1.25){
+    _resBuenas=0;
+    if(resI<RES_ESC.length-1){ resI++; resDin=RES_ESC[resI]; _resFrio=1.5; _resCambios++; }
+  } else if(ms<RES_OBJ*0.92){
+    const hace=3*Math.pow(2, Math.min(_resSubidas,4));
+    if(++_resBuenas>=hace && resI>0){
+      resI--; resDin=RES_ESC[resI]; _resBuenas=0; _resFrio=1.5; _resCambios++; _resSubidas++;
+    }
+  } else _resBuenas=0;
 }
 function postTam(){
   const F=FILTROS[filtro];
-  const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
+  const w=marcoW, h=marcoH;              // guardado por ajustar(): no se toca el layout por cuadro
   const dpr=render.getPixelRatio();
   const e=F.escala*resDin;
   const bw=Math.max(2, Math.round(w*dpr*e)), bh=Math.max(2, Math.round(h*dpr*e));
