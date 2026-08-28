@@ -43,7 +43,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~238 KB, de los cuales 40 son las dos imágenes del menú generadas con
+- **`RezUno.html` es "RezUno"** (~250 KB, de los cuales 40 son las dos imágenes del menú generadas con
   Higgsfield y recortadas; **el juego en sí no tiene un solo asset**: todo dibujado por código). El
   quinto juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la
   cámara trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la
@@ -64,6 +64,146 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima sexta vuelta (2026-08-28): **RezUno** — la cámara con `exact`, el ritmo de mano de RECREO, y los 60 cuadros forzados
+
+Reporte: *"la mano va lentísima y lagueadísima y aún sigue usando la cámara frontal, te pedí la
+trasera... usa el juego de baldi para ver cómo lograr un buen handtracking y fluido, obliga a 60fps si
+o si incluso en gamas bajas"*. Los dos reclamos eran ciertos y los dos eran míos.
+
+#### LA CÁMARA: PEDIR `environment` A SECAS ES UN DESEO, NO UNA ORDEN
+
+`facingMode:'environment'` sin `exact` es una **preferencia**: el navegador puede abrir la que quiera,
+y muchos Android abren la frontal igual. Y peor: con la petición blanda **no hay forma de saber cuál
+abrió**, porque `getSettings()` no siempre trae `facingMode` — medido en el banco, la cámara del
+contenedor no la trae. Ahí la versión anterior tenía que adivinar, y adivinaba "frontal": con la
+trasera abierta el juego espejaba la mano al revés y escribía *"la mano adelante"*. Desde afuera eso es
+indistinguible de estar usando la frontal, que es exactamente lo que se reportó.
+
+Con `exact` no hay nada que adivinar: si la petición vuelve, **es** esa cámara. Se pide
+`{exact:'environment'}`; si tira `OverconstrainedError` —una notebook no tiene trasera— se prueba
+`{exact:'user'}`; y sólo si las dos fallan se pide cualquier cámara y ahí sí se lee el track.
+
+Verificado en los dos caminos:
+
+| aparato | qué pasa | `usa` | espejo | cartel |
+|---|---|---|---|---|
+| webcam (rechaza `exact`) | cae al tercer intento | user | sí | *la mano adelante* |
+| teléfono (acepta `exact`) | primer intento | **environment** | **no** | *la mano por detrás del teléfono* |
+| teléfono, tocando el botón | primer intento | user | sí | *la mano adelante* |
+
+Y de paso se le piden **60 cuadros a la cámara**: la medición cuelga de `requestVideoFrameCallback`,
+o sea que corre al mínimo entre el ritmo que pide el juego y el de la cámara. Con una cámara a 30 no
+hay forma de medir más de 30 por mucho que sobre procesador.
+
+#### EL RITMO DE LA MANO: RECREO YA TENÍA ESCRITO MI PROPIO ERROR
+
+La vuelta pasada bajé el piso de medición a 8 Hz y lo presenté como la optimización. En `CLAUDE.md`,
+una vuelta de RECREO **anterior a esa**, está el mismo error cometido y corregido, con el reporte
+textual del jugador —*"ahora la mano va lento y súper lagueada"*— y la tabla que lo explica:
+
+| ritmo | 24 Hz | 15 | 12 | 10 | 8 | 6 |
+|---|---|---|---|---|---|---|
+| retardo de seguimiento | 21 ms | 34 | 43 | 52 | **64** | 88 |
+
+O sea que mi piso de 8 Hz dejaba la mano **64 ms atrasada**. La interpolación tapa el **escalonado**
+—eso se midió y es cierto— pero no puede tapar el **retardo**, porque el dato no existe todavía. Medir
+menos seguido no hace la mano más suave: la hace **más vieja**. Se copian las cuatro reglas de RECREO:
+
+1. **El techo es 60 y no 24.** El 24 no era una decisión sino un resto de cuando no había forma de
+   saber cuánto costaba medir en *este* aparato. Un teléfono rápido con una detección de 5 ms puede
+   permitirse 60 mediciones por segundo y el techo se las cortaba a la mitad.
+2. **Lo que se fija es cuánto hilo se le presta** (30 %), no cuántas veces se mide: `hz = carga / lo
+   que tarda`. El rápido sube solo y el lento baja solo.
+3. **El piso es 12 y no 8.** Por debajo de 12 el retardo pasa de 43 ms.
+4. **El ritmo de reposo (10 Hz) es para cuando NO HAY MANO EN CUADRO**, no para cuando el juego no
+   pregunta. Sin mano no hay nada que seguir y encima es el caso barato; y la misma medición que la
+   encuentra ya sube el ritmo al máximo.
+
+Medido, forzando el costo de medición:
+
+| medir cuesta | 3 ms | 5 | 8 | 12 | 16 | 20 | 25 y más | sin mano |
+|---|---|---|---|---|---|---|---|---|
+| ritmo | 60 | 60 | 37,5 | 25 | 18,8 | 15 | 12 | **10** |
+
+**Y UN DEFECTO DE ORDEN EN ESA MISMA CUENTA.** Estaba escrita `max(piso, min(techo, calc))`, así que
+un aparato lento en reposo daba `max(12, min(10, 0,23)) = 12`: **el piso pisaba al techo** y el ritmo
+de reposo no se aplicaba nunca. El piso va por dentro del techo.
+
+#### LA VENTANA DE PREDICCIÓN SALE DEL HUECO MEDIDO, NO DEL PERÍODO PEDIDO
+
+La predicción tiene que cubrir el hueco **de verdad**, y ése no es el período que el juego pidió: la
+medición cuelga del cuadro de cámara, así que con una cámara a 30 el juego puede pedir 60 y recibir
+30. Derivándola del pedido, la predicción cubriría la mitad de cada hueco. Medido: en cuanto el pedido
+y el hueco discrepaban, el desparejo a 24 Hz pasaba de 1,00 a **1,47**. Ahora el hueco se mide.
+
+Con eso, la interpolación aguanta todo el rango de ritmos (paso más grande ÷ paso medio; 1 es
+perfecto):
+
+| ritmo | 60 Hz | 40 | 24 | 17 | 12 |
+|---|---|---|---|---|---|
+| sin predicción | 1,00 | 1,65 | 2,37 | 3,36 | 4,54 |
+| **con** | **1,00** | **1,00** | **1,01** | **1,01** | **1,01** |
+
+Retardo 6,4 ms, atenuación de temblor 2,69, histéresis 0,411/0,591 y flanco 1 de 15: sin cambio.
+
+#### LOS 60 CUADROS SE FUERZAN, Y ESO ES UN LAZO CERRADO
+
+*"Obliga a 60fps sí o sí"* no lo puede dar una lista de tres calidades: la elige una persona que no
+sabe cuánto le cuesta a **su** teléfono, y encima el costo cambia dentro de la partida —una mano en
+cuadro cuesta más que ninguna—. Lo único que sostiene un número de cuadros es un control cerrado sobre
+el tiempo **medido**. Se porta la regla de RECREO, con sus tres propiedades: escalones geométricos de
+razón 1,12 (k² = 1,25, por debajo de la banda muerta de 1,359, que es lo que impide que oscile),
+asimétrica y con enfriamiento, y con la racha necesaria para subir **duplicándose** en cada subida.
+Lo que el jugador eligió en el menú manda como **techo**: el control sólo baja desde ahí.
+
+**Y EL ÚLTIMO ESCALÓN NO ES LA RESOLUCIÓN: SON LAS SOMBRAS**, que valen la mitad de las llamadas de
+dibujo. Se sacan últimas porque se notan más.
+
+Medido **con el lazo cerrado** —el tiempo saliendo de lo que el control hizo, que es como oscila de
+verdad— sobre 120 ventanas:
+
+| relleno a plena resolución | dónde se queda | ms finales | ¿60? | cambios ya asentado |
+|---|---|---|---|---|
+| 10 ms | esc 0,89 · sombras | 18,3 | sí | **0** |
+| 18 ms | esc 0,64 · sombras | 17,4 | sí | **0** |
+| 26 ms | esc 0,57 · sombras | 19,1 | sí | **0** |
+| 40 ms | esc 0,45 · sombras | 18,6 | sí | **0** |
+| 60 ms | esc 0,45 · **sin sombras** | 18,2 | sí | **0** |
+
+**Cero cambios una vez asentado en los cinco casos**: no parpadea. Y recupera — bajado al piso, con
+9 ms de tiempo de cuadro vuelve a subir hasta el escalón 2 con las sombras puestas.
+
+**EL LÍMITE HONESTO, MEDIDO:** el control no puede tocar el costo **fijo** —la detección de manos y el
+JS del juego—. Con 4 ms de fijo llega a 60 aun con 60 ms de relleno; con 10 ms de fijo ya no llega por
+mucho que baje la resolución. Por eso el presupuesto del 30 % para el detector no es un lujo sino la
+otra mitad del mismo problema.
+
+#### Y SE CORTARON LAS LLAMADAS DE DIBUJO A LA MITAD
+
+Las llamadas de dibujo de este juego **son las cartas**: cada una lleva tres grupos de geometría
+—cantos, cara y dorso— o sea tres llamadas cada una. Pero las de los rivales y el mazo **no muestran
+la cara nunca**: para ellas los tres grupos son un gasto sin contrapartida. Con una geometría sin
+grupos y un solo material pasan a **una** llamada. Lo único que cambia en pantalla es el canto, que
+deja de ser `#f2f3f4` y pasa a ser el gris del dorso: cuatro centímetros de espesor a esa distancia son
+uno o dos píxeles.
+
+| | antes | ahora |
+|---|---|---|
+| alta (con sombras) | 149 | **87** |
+| baja (sin sombras) | 77 | **45** |
+
+#### MEDIDO AL CERRAR
+
+**120 partidas** internas: 120 terminadas, **0 cartas ilegales**. **30 apuntando con el rayo**: 30
+terminadas, 0 ilegales, **0 fallos de puntería**. Tutorial completo en los tres idiomas. Separación
+entre la mano dibujada y el punto que apunta **0**, con y sin espejo. Los dos abanicos enteros dentro
+del cuadro. Las tres calidades se aplican y se revierten. Los dos caminos de cámara verificados.
+`window.__errs` vacío. El HTML quedó en **240 KB**.
+
+**Quinta vez que un `const` puesto "donde corresponde temáticamente" tira el módulo entero:**
+`MANO` se declara con `hz:MANO_HZ_TOPE` y las constantes del ritmo estaban cien líneas más abajo.
+`Cannot access 'MANO_HZ_TOPE' before initialization` y la página en blanco. Antes del primer uso.
 
 ### Cuadragésima quinta vuelta (2026-08-28): **RezUno** — fuera las cabezas, selección gráfica, menú generado, y el lag de MediaPipe atacado donde estaba
 

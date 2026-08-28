@@ -169,6 +169,9 @@ function bucle(){
        telefono y el juego dibuja 60: entre medicion y medicion los 21 puntos se siguen acercando al
        ultimo destino, asi que la mano se mueve a 60 aunque se la mida a 24. Y va ANTES de consumir el
        pellizco, porque el punto al que se apunta tiene que ser el de este cuadro y no el anterior. */
+    /* EL CONTROL DE CUADROS MIDE EL CUADRO ENTERO, incluida la deteccion de manos: es el tiempo que
+       el jugador siente, no el que tarda el dibujo. */
+    resTick(dt);
     manosFiltrar();
     camaraGiro(CARA.hay? CARA.giro*1.2 : 0, dt);
     if(tomarPinza()) activar(MANO.x, MANO.y);

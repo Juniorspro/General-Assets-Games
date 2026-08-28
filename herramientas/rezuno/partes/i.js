@@ -220,10 +220,11 @@ window.__rez={
     if(pred!=null) PRED_ON=!!pred;
     fpReset();
     const v=vel==null? 0.6 : vel;
-    /* SE MIDE AL RITMO QUE SE LE PASA, y el filtro tiene que enterarse: el tope de prediccion sale de
-       MANO.periodo, asi que probar 12 Hz con el periodo en 42 mediria un caso que no existe. */
-    MANO.periodo=1000/(hz||24);
-    const PM=MANO.periodo, PD=1000/60;
+    /* SE MIDE AL RITMO QUE SE LE PASA. El filtro no hay que avisarle: el tope de prediccion sale del
+       hueco MEDIDO entre inyecciones, asi que se entera solo — que es justamente lo que se quiere
+       comprobar. Se arranca con el hueco en cero para que lo aprenda de esta corrida. */
+    MANO.hueco=0;
+    const PM=1000/(hz||24), PD=1000/60;
     let t=performance.now(), x=0.2, tMed=t;
     let ant=null, mueven=0, n=0, sum=0, mx=0;
     for(let k=0;k<180;k++){
@@ -242,8 +243,8 @@ window.__rez={
              pasoMedio:+medio.toFixed(5), pasoMax:+mx.toFixed(5),
              desparejo:+(mx/Math.max(1e-9,medio)).toFixed(2) };
   },
-  hz:()=>({ mano:MANO_HZ, cara:CARA_HZ, grueso:(()=>{ try{
-              return window.matchMedia('(pointer:coarse)').matches; }catch(e){ return null; } })() }),
+  hz:()=>({ tope:MANO_HZ_TOPE, min:MANO_HZ_MIN, reposo:MANO_HZ_REPOSO, carga:MANO_CARGA,
+            usa:+MANO.hz.toFixed(1), cara:CARA_HZ }),
   /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
      pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
   manoTemblor:(ruido, cuadros)=>{
@@ -512,9 +513,11 @@ window.__rez={
              .catch(e=>'no: '+e.name);
   },
   /* fuerza un costo de medicion para poder ver la regla del presupuesto sin un telefono lento a mano */
-  msFalso:(ms)=>{ MANO.msDet=ms;
-                  MANO.periodo=Math.max(1000/MANO_HZ, Math.min(1000/DET_MIN_HZ, MANO.msDet/DET_CARGA));
-                  return +MANO.periodo.toFixed(1); },
+  msFalso:(ms, hay)=>{ MANO.msDet=ms; if(hay!=null) MANO.hay=!!hay;
+                       /* se deja asentar el suavizado: el ritmo se mueve de a poco a proposito, asi
+                          que una sola pasada no dice a donde va a parar */
+                       for(let k=0;k<80;k++) manoRitmo();
+                       return +MANO.hz.toFixed(1); },
   /* la calidad: se cambia y se mide, que es la unica forma de saber si el ajuste ajusta algo */
   calidad:(k)=>{ if(k) aplicarCalidad(k);
     const b=render.getDrawingBufferSize(new THREE.Vector2());
@@ -531,8 +534,44 @@ window.__rez={
               llamadas:inf.render.calls, tris:inf.render.triangles };
     inf.autoReset=true;
     return r; },
-  det:()=>({ ms:+MANO.msDet.toFixed(2), medidas:MANO.medidas, hz:MANO_HZ,
-             hzUsa:+(1000/MANO.periodo).toFixed(1), periodo:+MANO.periodo.toFixed(1),
+  /* EL CONTROL DE 60 CUADROS: se le inyecta un tiempo de cuadro y se mira a donde converge.
+     Es la unica forma de probarlo en un banco donde el tiempo real no sirve. */
+  res:()=>({ i:resI, esc:resDin, sombra:resSombra, cambios:_resCambios, subidas:_resSubidas,
+             objMs:+RES_OBJ.toFixed(2) }),
+  resProbar:(ms, ventanas)=>{
+    /* se alimenta el lazo con ventanas de 24 cuadros del tiempo pedido. El enfriamiento es de 1,5 s
+       de reloj de juego, asi que hay que pasarle dt de verdad. */
+    const dt=ms/1000;
+    for(let v=0; v<(ventanas||60); v++) for(let k=0;k<24;k++) resTick(dt);
+    return { pedidoMs:ms, i:resI, esc:+resDin.toFixed(2), sombra:resSombra, cambios:_resCambios };
+  },
+  resCero:()=>{ aplicarCalidad(CAL); return { i:resI, esc:resDin, sombra:resSombra }; },
+  /* ===== EL LAZO CERRADO, QUE ES LA UNICA PRUEBA QUE VALE =====
+     Alimentar el control con un tiempo FIJO solo demuestra que se mueve para el lado correcto. Lo
+     que hay que demostrar es que SE QUEDA QUIETO, y para eso el tiempo tiene que salir de lo que el
+     control hizo: el relleno de pixeles va con el cuadrado de la escala, la sombra suma su pasada, y
+     encima hay un costo fijo que el control no puede tocar (la deteccion de manos, el JS del juego).
+     Se cuenta cuantas veces cambia YA ASENTADO, que es lo que el jugador veria como parpadeo. */
+  resLazo:(pico, fijo, ruido, ventanas)=>{
+    const P=pico==null? 26 : pico, F=fijo==null? 6 : fijo, R=ruido==null? 2 : ruido;
+    const N=ventanas||120;
+    let S=98765; const az=()=>{ S=(S*1103515245+12345)&0x7fffffff; return (S/0x7fffffff*2-1)*R; };
+    const c0=_resCambios; let cAsent=0, iAsent=[];
+    for(let v=0; v<N; v++){
+      const e=resDin, som=resSombra && CALS[CAL].sombras;
+      const ms=F + P*e*e*(som? 1.55 : 1) + az();
+      const antes=_resCambios;
+      for(let k=0;k<24;k++) resTick(ms/1000);
+      if(v>N*0.5){ cAsent += (_resCambios-antes); iAsent.push(resI+(resSombra?0:0.5)); }
+    }
+    const fin=F + P*resDin*resDin*((resSombra&&CALS[CAL].sombras)? 1.55:1);
+    return { pico:P, fijo:F, ventanas:N, cambios:_resCambios-c0, cambiosAsentado:cAsent,
+             i:resI, esc:+resDin.toFixed(2), sombra:resSombra,
+             msFinal:+fin.toFixed(2), objMs:+RES_OBJ.toFixed(2),
+             llega60: fin<=RES_OBJ*1.25 };
+  },
+  det:()=>({ ms:+MANO.msDet.toFixed(2), medidas:MANO.medidas, hay:MANO.hay,
+             hzUsa:+MANO.hz.toFixed(1), periodo:+MANO.periodo.toFixed(1),
              ent:[MANO.vid&&MANO.vid.videoWidth, MANO.vid&&MANO.vid.videoHeight] }),
   costo:(n)=>{
     const v=n||300, t=[];

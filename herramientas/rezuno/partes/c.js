@@ -145,18 +145,85 @@ function ajustar(){
      tamaño del lienzo con setSize(w*esc, h*esc, false) el lienzo CSS tambien encoge y el juego queda
      dibujado en una esquina; con el pixel ratio, el lienzo mide lo mismo en pantalla y lo que baja es
      cuantos pixeles de verdad se rellenan, que es justamente lo que se quiere. */
-  render.setPixelRatio(Math.min(devicePixelRatio||1, c.dpr)*c.esc);
+  render.setPixelRatio(Math.min(devicePixelRatio||1, c.dpr)*c.esc*resDin);
   render.setSize(w,h,false);
   camara.aspect=w/h; camara.updateProjectionMatrix();
+}
+/* =========================================================================================
+   LOS 60 CUADROS SE FUERZAN, NO SE ESPERAN
+
+   Pedido: *"obliga a 60fps si o si incluso en gamas bajas"*. Y eso no lo puede dar una lista de tres
+   calidades, por buena que sea: la lista la elige una persona que no sabe cuanto le cuesta a SU
+   telefono, y ademas el costo cambia dentro de la misma partida —una mano en cuadro cuesta mas que
+   ninguna—. Lo unico que puede sostener un numero de cuadros es un lazo cerrado sobre el tiempo de
+   cuadro MEDIDO.
+
+   Lo que se ajusta es la resolucion y, en el ultimo escalon, las sombras. Es la misma decision que
+   toman las consolas y es la correcta: la resolucion se nota mucho menos que perder la sombra, y las
+   dos se notan muchisimo menos que ir a 30. Lo que el jugador eligio en el menu sigue mandando como
+   TECHO — el control solo baja desde ahi, nunca sube por encima.
+
+   TRES REGLAS, Y LA PRIMERA ES ARITMETICA Y NO GUSTO (es la de RECREO, medida alla en 336 corridas):
+
+   1. LA SEPARACION ENTRE ESCALONES TIENE QUE SER MENOR QUE LA BANDA MUERTA. El tiempo de cuadro va
+      con los pixeles, o sea con el CUADRADO de la escala: si dos escalones vecinos estan en razon k,
+      saltar de uno al otro multiplica el tiempo por k². Con k² mayor que la banda, el escalon de
+      arriba queda por encima y el de abajo por debajo, y el control NO PUEDE quedarse quieto: sube,
+      baja, sube, para siempre. La banda va de 0,92 a 1,25 del objetivo, o sea un factor 1,359; la
+      escalera es geometrica de razon 1,12, o sea k²=1,25, con margen.
+   2. ES ASIMETRICA Y CON ENFRIAMIENTO: bajar necesita UNA ventana mala, subir necesita varias buenas
+      seguidas, y despues de cualquier cambio no se toca nada por segundo y medio.
+   3. SUBIR CUESTA CADA VEZ MAS. Si el aparato ya demostro una vez que no daba, volver a probar cada
+      tres ventanas es garantia de rebote. La racha necesaria se duplica en cada subida.
+   ========================================================================================= */
+const RES_ESC=[1.00, 0.89, 0.80, 0.71, 0.64, 0.57, 0.50, 0.45];
+const RES_OBJ=1000/58;                    // ms por cuadro a los que se apunta
+let resI=0, resDin=1, resSombra=true;
+let _resN=0, _resSuma=0, _resBuenas=0, _resFrio=0, _resCambios=0, _resSubidas=0;
+function resTick(dt){
+  if(dt>0.25) return;                     // un cuadro larguisimo no dice nada del aparato
+  if(_resFrio>0) _resFrio-=dt;
+  _resSuma+=dt; _resN++;
+  if(_resN<24) return;
+  const ms=(_resSuma/_resN)*1000;
+  _resN=0; _resSuma=0;
+  if(_resFrio>0) return;
+  if(ms>RES_OBJ*1.25){
+    _resBuenas=0;
+    if(resI<RES_ESC.length-1){ resI++; _resFrio=1.5; _resCambios++; aplicarRes(); }
+    /* EL ULTIMO ESCALON NO ES LA RESOLUCION: SON LAS SOMBRAS. Con la escalera en el piso ya se
+       dibujan cinco veces menos pixeles; lo que queda por sacar es la pasada entera de sombra, que
+       vale la MITAD de las llamadas de dibujo. Se saca ultima porque se nota mas que la resolucion. */
+    else if(resSombra && CALS[CAL].sombras){ resSombra=false; _resFrio=1.5; _resCambios++; aplicarRes(); }
+  } else if(ms<RES_OBJ*0.92){
+    const hace=3*Math.pow(2, Math.min(_resSubidas,4));
+    if(++_resBuenas>=hace){
+      _resBuenas=0; _resFrio=1.5; _resCambios++; _resSubidas++;
+      if(!resSombra && CALS[CAL].sombras) resSombra=true;
+      else if(resI>0) resI--;
+      aplicarRes();
+    }
+  } else _resBuenas=0;
+}
+function aplicarRes(){
+  resDin=RES_ESC[resI];
+  render.shadowMap.enabled = CALS[CAL].sombras && resSombra;
+  luz.castShadow = render.shadowMap.enabled;
+  ajustar();
 }
 /* SE APLICA EN CALIENTE. Un ajuste que pide recargar la pagina no se prueba: el jugador lo toca una
    vez, no ve nada y no vuelve. */
 function aplicarCalidad(k){
   if(CALS[k]) CAL=k;
+  /* AL CAMBIAR DE CALIDAD A MANO, EL CONTROL VUELVE A CERO. Si no, el jugador sube a 'alta' y sigue
+     viendo la resolucion que el control habia bajado en 'media': tocaria el boton y no pasaria nada
+     visible, que es la peor respuesta posible para un ajuste. */
+  resI=0; resDin=RES_ESC[0]; resSombra=true;
+  _resBuenas=0; _resSubidas=0; _resFrio=1.5; _resN=0; _resSuma=0;
   try{ localStorage.setItem('rezuno_cal', CAL); }catch(e){}
   const c=CALS[CAL];
-  render.shadowMap.enabled=c.sombras;
-  luz.castShadow=c.sombras;
+  render.shadowMap.enabled=c.sombras && resSombra;
+  luz.castShadow=render.shadowMap.enabled;
   if(luz.shadow.mapSize.x!==c.mapa){
     luz.shadow.mapSize.set(c.mapa, c.mapa);
     /* EL MAPA VIEJO HAY QUE SOLTARLO A MANO. three.js no recrea la textura de sombra porque cambie
@@ -293,6 +360,21 @@ _geoCarta.addGroup(0, 24, 0);      // +X, -X, +Y, -Y: los cuatro cantos
 _geoCarta.addGroup(24, 6, 1);      // +Z: la cara
 _geoCarta.addGroup(30, 6, 0);      // -Z: el dorso, con el material del canto
 const _matCanto=new THREE.MeshLambertMaterial({color:0xf2f3f4});
+/* ===== UNA CARTA QUE SOLO MUESTRA EL DORSO SE DIBUJA DE UNA SOLA VEZ =====
+   Las llamadas de dibujo de este juego SON las cartas: cada una lleva tres grupos de geometria
+   —cantos, cara y dorso— o sea TRES llamadas, y con veinticinco cartas en pantalla eso son 75. Pero
+   las de los rivales y el mazo no muestran la cara NUNCA: para ellas los tres grupos son un gasto sin
+   contrapartida. Con una geometria sin grupos y un solo material, cada una pasa a UNA llamada.
+   Lo unico que cambia en pantalla es el canto, que deja de ser #f2f3f4 y pasa a ser el gris del
+   dorso: 4 centimetros de espesor a esa distancia son uno o dos pixeles. */
+const _geoDorso=_geoCarta.clone();
+_geoDorso.clearGroups();
+function nuevaCartaDorso(){
+  const m=new THREE.Mesh(_geoDorso, new THREE.MeshLambertMaterial({color:0xffffff, map:texDorso()}));
+  m.castShadow=true; m.receiveShadow=false;
+  m.userData={};
+  return m;
+}
 function nuevaCarta(){
   const mats=[_matCanto, new THREE.MeshLambertMaterial({color:0xffffff})];
   const m=new THREE.Mesh(_geoCarta, mats);

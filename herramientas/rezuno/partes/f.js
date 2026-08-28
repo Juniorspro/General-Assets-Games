@@ -36,7 +36,8 @@ function pickEn(fx, fy){
 
 /* ---------- las piezas de la mesa ---------- */
 const cartasMallas=[];               // las de tu mano
-const dorsoIzq=[], dorsoDer=[];      // las de los rivales
+const dorsoIzq=[], dorsoDer=[];      // la que un rival tiene agarrada, que si muestra su cara
+const dorsoIzqD=[], dorsoDerD=[];    // el resto de su abanico: solo dorso, una llamada cada una
 const pilaMallas=[];                 // las tres ultimas de la pila
 let mazoMalla=null, selMalla=null;
 const botones={};                    // tirar / dejar / los cuatro colores
@@ -146,6 +147,11 @@ function puntoMano(malla, i, n){
 }
 function malla(lista, k, padre){
   while(lista.length<=k){ const m=nuevaCarta(); m.visible=false; (padre||grupo).add(m); lista.push(m); }
+  return lista[k];
+}
+/* la misma reserva, pero de cartas que solo muestran el dorso: una llamada de dibujo cada una */
+function mallaDorso(lista, k, padre){
+  while(lista.length<=k){ const m=nuevaCartaDorso(); m.visible=false; (padre||grupo).add(m); lista.push(m); }
   return lista[k];
 }
 function sobra(lista, n){ for(let k=n;k<lista.length;k++) lista[k].visible=false; }
@@ -299,20 +305,22 @@ function armarMesa(){
   for(const [lista, j, lado] of [[dorsoIzq,J_IZQ,-1],[dorsoDer,J_DER,1]]){
     /* DURANTE EL TUTORIAL NO SE DIBUJAN. No es por despejar porque si: el cartel del tutorial ocupa
        exactamente esa franja de la pantalla, y ninguno de los seis pasos habla de los rivales. */
-    if(TUT.on){ sobra(lista, 0); continue; }
+    if(TUT.on){ sobra(lista, 0); sobra(lado<0? dorsoIzqD : dorsoDerD, 0); continue; }
     const q=G.manos[j].length;
     const B=G.bot, R=RIV[j];
+    const dlista=(lado<0? dorsoIzqD : dorsoDerD);
+    const dsobra={};
+    const hayGarraAqui = !!(R && R.hayGarra && B.j===j);
     /* cuanto lleva de la fase de llevar la carta a la pila: 0 mientras la agarra, 1 al soltarla */
     const llev=(B.j===j && B.fase==='lleva')? Math.min(1, B.t/BOT_LLEVA) : 0;
     for(let i=0;i<q;i++){
-      const ma=malla(lista,i); ma.visible=true;
-      ponerApagado(ma,false);
-      ma.userData.tipo=null;
       /* LA QUE EL RIVAL ESTA AGARRANDO CUELGA DE SU MANO, y su sitio ES el punto de la pinza de esa
          mano —el medio entre pulgar e indice— calculado de los mismos veintiun puntos que se dibujan.
          Con un sitio propio, la mano y la carta serian dos animaciones que hay que mantener juntas, y
          se separarian en el primer cuadro que una de las dos se atrase. */
-      if(R && R.hayGarra && B.j===j && B.idx===i){
+      const esGarra = !!(R && R.hayGarra && B.j===j && B.idx===i);
+      if(esGarra){
+        const ma=malla(lista,i); ma.visible=true; ponerApagado(ma,false); ma.userData.tipo=null;
         /* Y SE DA VUELTA AL LLEVARLA. Mientras la elige se ve el dorso —el rival no te muestra su
            mano— y al ir hacia la pila se acuesta y muestra la cara, que es cuando ya la jugo. */
         ponerCara(ma, llev>0.35? G.manos[j][i] : null);
@@ -329,20 +337,25 @@ function armarMesa(){
         const p={ x:R.garra.x, y:R.garra.y-RIV_CUELGA_Y, z:R.garra.z+RIV_CUELGA_Z,
                   rx:MESA.rivalTilt + (-Math.PI/2-MESA.rivalTilt)*ac, ry:0, rz:0 };
         irA(ma, p, 0.55);
+        for(let k=0;k<lista.length;k++) if(k!==i) lista[k].visible=false;
+        dsobra[i]=true;
         continue;
       }
-      ponerCara(ma,null);
+      const ma=mallaDorso(dlista,i);
+      ma.visible=true;
       const p=sitioRival(i, q, lado, G.t);
       if(_primera) poner(ma,p); else irA(ma,p,0.18);
     }
-    sobra(lista,q);
+    /* la carta agarrada sale de la lista de dorsos y entra en la de caras: se apagan las dos sobras */
+    for(let k=0;k<dlista.length;k++) if(k>=q || dsobra[k]) dlista[k].visible=false;
+    if(!hayGarraAqui) sobra(lista,0);
   }
 
   /* el mazo: una pila de dorsos, y la de arriba es la que se pellizca */
   const puedeRobar = tuTurno && !G.robo && G.sel<0 && !G.colorPide;
-  if(!mazoMalla){ mazoMalla=nuevaCarta(); grupo.add(mazoMalla);
+  if(!mazoMalla){ mazoMalla=nuevaCartaDorso(); grupo.add(mazoMalla);
                   mazoMalla.rotation.x=-Math.PI/2; mazoMalla.rotation.z=Math.PI; }
-  mazoMalla.visible=true; ponerCara(mazoMalla,null); ponerApagado(mazoMalla,false);
+  mazoMalla.visible=true;
   mazoMalla.position.set(MESA.mazoX, 0.30+flota(G.t, 7, 0.05), MESA.centroZ);
   mazoMalla.rotation.set(-Math.PI/2, 0, 0);
   mazoMalla.userData.tipo='mazo'; mazoMalla.userData.i=0; mazoMalla.userData.activo=puedeRobar;

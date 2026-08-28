@@ -22,6 +22,42 @@
       hay forma de apuntar a una carta. Aca se usa la FRONTAL, que es la que mira a alguien sentado
       jugando a las cartas, pero igual se lee del track.
    ========================================================================================= */
+/* ===================== EL RITMO SE AJUSTA SOLO, Y EL PISO ESTABA MAL PUESTO =====================
+   Reporte: *"la mano va lentisima y lagueadisima ... usa el juego de baldi para ver como lograr un
+   buen handtracking"*. Y en RECREO esta escrito el mismo error, cometido y corregido una vuelta
+   antes: bajar el ritmo cuando el aparato sufre parece optimizar, y lo que produce es EXACTAMENTE lo
+   que se reporta. El retardo de seguimiento medido alla contra el ritmo:
+
+     24 Hz -> 21 ms  ·  15 -> 34  ·  12 -> 43  ·  10 -> 52  ·  8 -> 64  ·  6 -> 88
+
+   O sea que mi piso de 8 Hz dejaba la mano en 64 ms de atraso: PEOR que el punto de partida. La
+   interpolacion tapa el ESCALONADO —eso se midio y es cierto, el paso queda parejo a 8 Hz— pero no
+   puede tapar el RETARDO, porque el dato simplemente no existe todavia. Medir menos seguido no hace
+   la mano mas suave: la hace mas VIEJA.
+
+   Las cuatro reglas, tal como estan en RECREO:
+
+   1. EL TECHO ES 60 Y NO 24. El 24 no era una decision, era un resto de cuando no habia forma de
+      saber cuanto costaba medir en ESTE aparato. Con la regla de abajo, un telefono rapido con una
+      deteccion de 6 ms puede permitirse 50 mediciones por segundo y el tope de 24 se las cortaba a
+      la mitad. Por encima del ritmo de dibujo no tiene a donde ir, asi que 60.
+   2. LO QUE SE FIJA ES CUANTO HILO SE LE PRESTA, no cuantas veces se mide. `detectForVideo()` corre
+      en el hilo principal —tasks-vision usa `document.createElement` adentro, asi que no arranca en
+      un worker— y de ahi sale todo: hz = carga / lo_que_tarda. El rapido sube solo y el lento baja
+      solo, sin una constante que este mal en los dos extremos.
+   3. EL PISO ES 12 Y NO 8. Por debajo de 12 el retardo pasa de 43 ms y ya no hay interpolacion que
+      lo tape.
+   4. EL RITMO DE REPOSO ES PARA CUANDO NO HAY MANO EN CUADRO, no para cuando el juego no pregunta.
+      Sin mano no hay nada que seguir y ademas es el caso barato —solo corre el buscador de palma—;
+      mirar diez veces por segundo alcanza de sobra para notar que aparecio, porque la MISMA medicion
+      que la encuentra ya sube el ritmo al maximo. */
+const MANO_HZ_TOPE=60;
+const MANO_CARGA=0.30;
+const MANO_HZ_MIN=12;
+const MANO_HZ_REPOSO=10;
+/* Y VA ARRIBA DE `MANO` PORQUE `MANO` LO USA. Es la quinta vez en este proyecto que una
+   declaracion puesta "donde corresponde tematicamente" en vez de "antes del primer uso" tira el
+   modulo entero: un `const` leido antes de su linea no rompe una funcion, rompe la pagina. */
 const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', delegado:'',
              x:0.5, y:0.5, pinza:false, pinzaNueva:false, crudo:0, hz:0, medidas:0,
              espejo:true, msDet:0, cdn:null, listaEn:0,
@@ -35,7 +71,7 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
              obj:new Float32Array(65), vel:new Float32Array(65), hayObj:false,
              /* el periodo de medicion que se esta usando de verdad, en ms: no es una constante desde
                 que se ajusta solo al costo medido */
-             periodo:1000/24 };
+             hz:MANO_HZ_TOPE, periodo:1000/MANO_HZ_TOPE, hueco:0 };
 /* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
 let CAM_PREF='environment';
 try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
@@ -65,19 +101,6 @@ const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmark
    corre. Se deja en 256x192 porque no cuesta mas que 160x120 y a esa resolucion la mano se sigue
    detectando desde mas lejos. */
 const MANO_ENT_W=256, MANO_ENT_H=192;
-/* ===================== Y EL RITMO SE AJUSTA SOLO AL COSTO MEDIDO =====================
-   Reporte: *"entra la mano y se super laguea"*. Y es exactamente lo que tiene que pasar con un ritmo
-   fijo: sin mano, MediaPipe corre solo el detector de palma; CON mano corre ADEMAS el modelo de
-   puntos, asi que la deteccion se encarece justo en el momento en que aparece la mano. Con el periodo
-   clavado en 42 ms ese costo extra sale del presupuesto del cuadro y el juego se cae.
-
-   La regla es un PRESUPUESTO y no un numero: la deteccion no puede llevarse mas de DET_CARGA del
-   tiempo de reloj. Si medir cuesta 10 ms se mide a 24 Hz; si cuesta 25, a 14; si cuesta 60 se baja al
-   piso de 8. El juego sigue dibujando a 60 porque lo que falta lo pone la prediccion.
-   Sube rapido y baja despacio a proposito: un pico aislado no tiene que bajar el ritmo para siempre,
-   pero un aparato que de verdad no llega tiene que aliviarse en el acto. */
-const DET_CARGA=0.35;
-const DET_MIN_HZ=8;
 /* ===================== EL DETECTOR MIDE MENOS Y LA MANO SE DIBUJA IGUAL =====================
    Pedido: *"aplicale una optimizacion igual a la de baldi"*. La de RECREO son DOS cosas y solo una
    estaba puesta aca.
@@ -86,18 +109,10 @@ const DET_MIN_HZ=8;
    dispara una vez por cuadro de CAMARA y no por cuadro de RENDER. Sin eso, `detectForVideo()` —que
    tarda entre 8 y 20 ms en un telefono— se paga dentro de los 16,6 ms de presupuesto de cada cuadro.
 
-   La que faltaba, y es la que importa: EL TECHO DE MEDICIONES Y LA INTERPOLACION. Con el techo en 45
-   se medía en cada cuadro que entregara la camara, y en un telefono eso es todo el trabajo que hay.
-   Baja a 24 en aparatos de puntero grueso —o sea telefonos y tabletas— y entre medicion y medicion
-   los 21 puntos SE INTERPOLAN en cada cuadro de dibujo. La verdad se calcula pocas veces y el dibujo
-   rellena: es el mismo criterio con el que RECREO simula a 60 pasos fijos y dibuja a 120.
-
-   VEINTICUATRO EN TODOS LADOS Y NO SOLO EN TELEFONO. La primera version partia el techo con
-   `pointer:coarse` —24 en telefono, 45 en PC— y esa rama no se puede comprobar: el navegador del
-   banco dice `coarse` tambien cuando se lo corre como escritorio, asi que la mitad del codigo
-   quedaba sin medir. Con la interpolacion puesta, 24 medidas por segundo dibujan igual de suave que
-   45 en cualquier aparato, asi que la rama no compraba nada y costaba una rama sin probar. */
-const MANO_HZ=24;
+   La que faltaba, y es la que importa: LA INTERPOLACION. Entre medicion y medicion los 21 puntos se
+   interpolan en cada cuadro de dibujo: la verdad se calcula pocas veces y el dibujo rellena. Es el
+   mismo criterio con el que RECREO simula a 60 pasos fijos y dibuja a 120, y es lo que hace posible
+   la regla de ritmo de mas abajo — sin ella, medir menos veces seria una mano a saltos. */
 /* HASTA DONDE SE PREDICE ENTRE MEDICION Y MEDICION: hasta el proximo dato y ni un milisegundo mas —
    extrapolar mas lejos que el proximo dato no es interpolar, es inventar. Y por eso el tope NO es una
    constante: sale del periodo de medicion, que se mueve solo con el costo. Ver `manosFiltrar`. */
@@ -197,17 +212,40 @@ async function manosIniciar(){
      SE PIDE LA TRASERA Y SE ACEPTA LA QUE HAYA. `exact` fallaria en cualquier notebook —no tienen
      camara trasera— y dejaria el juego sin manos por pedir algo que no existe. Se pide como
      PREFERENCIA, y si el aparato solo tiene una, esa se usa. Despues se lee del track cual toco. */
+  /* ===================== SE PIDE CON `exact`, Y ESO NO ES UN DETALLE =====================
+   Reporte: *"aun sigue usando la camara frontal, te pedi la trasera"*. Y la causa es que pedir
+   `facingMode:'environment'` a secas es un DESEO: el navegador puede abrir la que quiera, y muchos
+   Android abren la frontal igual. Peor todavia — con la peticion blanda no hay forma de SABER cual
+   abrio, porque `getSettings()` no siempre trae `facingMode`, y ahi la version anterior tenia que
+   adivinar. Adivinaba "frontal", asi que con la trasera abierta el juego espejaba la mano al reves y
+   escribia "la mano adelante": desde afuera, indistinguible de estar usando la frontal.
+
+   Con `exact` no hay nada que adivinar: si la peticion vuelve, ES esa camara; si no hay, tira
+   OverconstrainedError y se prueba la otra. La notebook —que no tiene trasera— cae en el segundo
+   intento y queda con la frontal y su espejo, que es lo correcto para ella.
+   El tercer intento, sin pedir camara ninguna, es para el aparato raro que rechaza las dos por
+   `exact`: ahi si hay que leer el track y, si se calla, suponer frontal. */
   let flujo=null;
-  const pedirCam=async (modo)=>navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:modo, width:{ideal:640}, height:{ideal:480} }, audio:false });
+  const otra = CAM_PREF==='environment'? 'user' : 'environment';
+  /* Y SE PIDEN 60 CUADROS DE CAMARA. La medicion cuelga de requestVideoFrameCallback, o sea que corre
+     al MINIMO entre el ritmo que pide el juego y el de la camara: con una camara a 30 no hay forma de
+     medir mas de 30 por mucho que sobre procesador — y este juego ahora sube hasta 60. */
+  const pedirCam=async (v)=>navigator.mediaDevices.getUserMedia({
+      video:Object.assign({ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H},
+                            frameRate:{ideal:60} }, v), audio:false });
+  let usaCierto='';
   try{
-    flujo=await pedirCam(CAM_PREF);
+    flujo=await pedirCam({ facingMode:{exact:CAM_PREF} }); usaCierto=CAM_PREF;
   }catch(e){
-    /* si la preferida no esta, se prueba la otra antes de darse por vencido */
-    try{ flujo=await pedirCam(CAM_PREF==='environment'? 'user':'environment'); }
+    if(e && (e.name==='NotAllowedError'||e.name==='SecurityError')){ manoFallo('permiso'); return false; }
+    try{ flujo=await pedirCam({ facingMode:{exact:otra} }); usaCierto=otra; }
     catch(e2){
-      manoFallo((e2 && (e2.name==='NotFoundError'||e2.name==='OverconstrainedError'))? 'camara' : 'permiso');
-      return false;
+      if(e2 && (e2.name==='NotAllowedError'||e2.name==='SecurityError')){ manoFallo('permiso'); return false; }
+      try{ flujo=await pedirCam({}); }
+      catch(e3){
+        manoFallo((e3 && (e3.name==='NotFoundError'||e3.name==='OverconstrainedError'))? 'camara' : 'permiso');
+        return false;
+      }
     }
   }
   const v=document.getElementById('camVid');
@@ -233,11 +271,17 @@ async function manosIniciar(){
           Asi que solo un track que diga 'environment' apaga el espejo, y el silencio se lee frontal
           —que es tambien lo que dice la linea de estado, para que el cartel y el espejo no puedan
           contradecirse. */
-       let fm = s.facingMode || '';
+       /* SI SE ABRIO CON `exact`, ESO ES LA VERDAD Y NO HAY QUE PREGUNTARLE AL TRACK. El track puede
+          callarse —medido en el banco: `getSettings()` de una camara de notebook NO TRAE la clave
+          `facingMode`— y ahi la version anterior suponia "frontal" y espejaba al reves una camara
+          trasera. Con `exact`, el navegador ya garantizo cual es. Solo el tercer intento, el que pide
+          cualquier camara, tiene que leer el track; y si tambien se calla, frontal es lo probable
+          porque un aparato que rechaza las dos peticiones `exact` es una webcam sin facingMode. */
+       let fm = usaCierto || s.facingMode || '';
        if(!fm && Array.isArray(cp.facingMode) && cp.facingMode.length===1) fm=cp.facingMode[0];
        MANO.usa = fm || 'user';
        MANO.espejo = (MANO.usa!=='environment');
-  }catch(e){ MANO.usa='user'; MANO.espejo=true; }
+  }catch(e){ MANO.usa=usaCierto||'user'; MANO.espejo=(MANO.usa!=='environment'); }
 
   let vision=null;
   for(const cdn of MANO_CDN){
@@ -316,6 +360,18 @@ function caraMedir(t){
   CARA.giro += (g-CARA.giro)*0.25;
   CARA.hay=true; CARA.visto=t;
 }
+/* EL RITMO SE MUEVE DE A POCO. Saltando entre 40 y 14 segun el ultimo cuadro, la mano cambia de
+   suavidad todo el tiempo y eso se nota mas que ir siempre a 20. */
+function manoRitmo(){
+  const tope = MANO.hay? MANO_HZ_TOPE : MANO_HZ_REPOSO;
+  /* EL PISO VA POR DENTRO DEL TECHO Y NO AL REVES. Con `max(piso, min(techo, calc))`, un aparato
+     lento en reposo daba `max(12, min(10, 0,23)) = 12`: el piso pisaba al techo y el ritmo de reposo
+     no se aplicaba nunca. Medido en el banco, donde medir cuesta 1,3 s. */
+  let hz = tope;
+  if(MANO.msDet>0.5) hz = Math.min(tope, Math.max(MANO_HZ_MIN, (1000*MANO_CARGA)/MANO.msDet));
+  MANO.hz += (hz-MANO.hz)*0.25;
+  MANO.periodo = 1000/Math.max(1, MANO.hz);
+}
 function manosMedir(t){
   if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
   if(t-_ultMed < MANO.periodo) return;
@@ -324,10 +380,9 @@ function manosMedir(t){
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
   const ms=performance.now()-a;
   /* SUBE RAPIDO Y BAJA DESPACIO. Un pico aislado tiene que aliviar en el acto; para volver a medir
-     seguido hay que haber estado barato un rato. Con una sola constante, un pico se olvida enseguida
-     y el ritmo vuelve a subir justo cuando el aparato todavia no da. */
+     seguido hay que haber estado barato un rato. */
   MANO.msDet = ms>MANO.msDet? ms : MANO.msDet*0.94 + ms*0.06;
-  MANO.periodo = Math.max(1000/MANO_HZ, Math.min(1000/DET_MIN_HZ, MANO.msDet/DET_CARGA));
+  manoRitmo();
   _ultMed=t; MANO.medidas++;
   const lms=(r && r.landmarks) || [];
   if(!lms.length) return;
@@ -348,6 +403,12 @@ function manosInyectar(lm, t){
      nuevo, asi que dividir por el tiempo de cuadro daria una velocidad inventada. */
   const dtM=(t-_tMed)/1000;
   const nueva=MANO.hayObj && dtM>0.004 && dtM<0.25;
+  /* EL HUECO ENTRE MEDICIONES SE MIDE, NO SE SUPONE. La prediccion tiene que cubrir el hueco de
+     VERDAD, y ese no es el periodo que el juego pidio: la medicion cuelga del cuadro de camara, asi
+     que con una camara a 30 el juego puede pedir 60 y recibir 30. Derivando el tope del periodo
+     pedido, la prediccion cubriria la mitad de cada hueco y la mano volveria a escalonarse — medido:
+     el desparejo a 24 Hz reales pasaba de 1,00 a 1,47 en cuanto el pedido y el hueco discrepaban. */
+  if(nueva) MANO.hueco = MANO.hueco>0? MANO.hueco*0.7 + dtM*0.3 : dtM;
   const px=ex((lm[4].x+lm[8].x)/2), py=(lm[4].y+lm[8].y)/2;
   /* LA VELOCIDAD TAMBIEN SE SUAVIZA. Una velocidad sacada de dos medidas seguidas trae el ruido de
      las dos, y ese ruido entra multiplicado por el tiempo de prediccion. */
@@ -387,6 +448,10 @@ function manosInyectar(lm, t){
      aparece. */
   if(_pinzaCruda && !antes) MANO.pinzaNueva=true;
   MANO.hay=true; MANO.visto=t;
+  /* la medicion que la encuentra ya sube el ritmo: si esperara a la siguiente, el primer medio
+     segundo de cada mano que entra al cuadro seria a diez por segundo, que es justo el momento en
+     que el jugador esta mirando si el juego lo ve */
+  manoRitmo();
 }
 /* ===================== EL FILTRO CORRE EN CADA CUADRO DE DIBUJO =====================
    Se lo llama desde el bucle, no desde la medicion. Entre dos mediciones no hay dato nuevo, asi que
@@ -403,8 +468,9 @@ function manosFiltrar(t){
      y el tope en 45 la prediccion cubre el hueco entero; si el aparato baja a 12 Hz el hueco pasa a
      83 ms y un tope de 45 dejaria la ultima mitad de cada hueco sin nada — o sea que justo el aparato
      que mas necesita la interpolacion seria el que menos la tendria. Un 8% de margen sobre el periodo
-     y un techo de 140 ms, que es lo que hace falta para cubrir el piso de 8 Hz. */
-  const tope=Math.min(0.140, MANO.periodo*0.00108);
+     y un techo de 140 ms, que es donde extrapolar deja de ser honesto. */
+  const hueco=MANO.hueco>0? MANO.hueco : MANO.periodo/1000;
+  const tope=Math.min(0.140, hueco*1.08);
   const ad=Math.max(0, Math.min(tope, (ahora-_tMed)/1000));
   /* LA GANANCIA SALE DE LA VELOCIDAD DEL PUNTO QUE APUNTA, UNA SOLA PARA TODA LA MANO. Calculandola
      por coordenada, un dedo quieto dentro de una mano que se mueve dejaria de predecir y la mano se
@@ -412,7 +478,7 @@ function manosFiltrar(t){
   const vel=Math.hypot(MANO.vel[63], MANO.vel[64]);
   const g=Math.max(0, Math.min(1, (vel-PRED_V0)/(PRED_V1-PRED_V0)));
   let k=PRED_ON? ad*g : 0;
-  const maxD=Math.min(0.15, PRED_VMAX*MANO.periodo/1000);
+  const maxD=Math.min(0.15, PRED_VMAX*hueco);
   const d=vel*k;
   if(d>maxD) k*=maxD/d;
   const dt=Math.min(0.2, (ahora-_ultVista)/1000);
@@ -434,7 +500,7 @@ function manosLazo(){
     manosMedir(t);
     caraMedir(t);
     if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
-                                       MANO.hayPts=false; MANO.hayObj=false; }
+                                       MANO.hayPts=false; MANO.hayObj=false; manoRitmo(); }
     if(t-(CARA.visto||0)>CARA_CADUCA){ CARA.hay=false; CARA.giro+=(0-CARA.giro)*0.06; }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, MANO.periodo);
