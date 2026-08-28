@@ -43,8 +43,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~71 KB, **sin un solo asset**: todo dibujado por código). El quinto
-  juego. Un UNO que se juega **con la mano por la cámara**: todo, absolutamente todo, se hace con un
+- **`RezUno.html` es "RezUno"** (~103 KB, **sin un solo asset**: todo dibujado por código). El quinto
+  juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara**: todo, absolutamente todo, se hace con un
   **pellizco** (pulgar e índice). Pellizcás una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
   UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
@@ -58,6 +58,118 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima primera vuelta (2026-08-28): **RezUno pasa a 3D** — mesa blanca, y cuatro defectos que sólo aparecen apuntando con un rayo
+
+Pedido: *"pero 3D hermano 3D en un ambiente 3D blanco no negro"*. La primera versión dibujaba las
+cartas con un contexto 2D sobre fondo casi negro. Ahora es una escena de three.js: cartas con grosor,
+sombra de contacto y perspectiva, sobre una mesa blanca.
+
+#### POR QUÉ BLANCO, Y NO SÓLO "PORQUE NO NEGRO"
+
+Este juego tiene **una** regla y es *"del mismo color"*. Sobre fondo oscuro los cuatro colores se
+acercan entre sí —todos leen como "claro contra oscuro"— y sobre blanco se leen por lo que son.
+Además una mesa de cartas es blanca. El fondo no es decoración: es lo que hace legible la única
+decisión del juego. El dorso también pasó a claro por lo mismo: con dorsos negros, los dos abanicos
+de los rivales y el mazo eran los tres bloques más pesados del cuadro, y son lo que menos importa.
+
+#### APUNTAR EN 3D ES UN RAYO, Y ESO CAMBIÓ CUATRO COSAS
+
+La mano vive en la cámara web —dos dimensiones, normalizadas— y las cartas viven en el mundo. El
+puente es tirar un rayo desde el punto de pantalla donde está el aro. Comparar en el mundo obligaría
+al jugador a acertar una profundidad, que es lo que se pidió evitar con todas las letras.
+
+Pasar de rectángulos a un rayo destapó **cuatro defectos**, y ninguno se ve en una captura:
+
+**1. La carta agarrada tapaba el botón.** Al levantarla queda MÁS CERCA de la cámara que TIRAR y
+DEJAR, así que el rayo la tocaba primero, veía que tiene tipo, y devolvía una carta desactivada — o
+sea que pellizcar TIRAR no hacía nada. Marcarla como inactiva no alcanzaba: una carta que ya está
+agarrada no es un blanco, así que directamente no entra en la lista.
+
+**2. Los botones desaparecían de la lista en el primer cuadro.** La lista de blancos se vacía en cada
+cuadro —las cartas cambian de número y de sitio— y los botones estaban anotados una sola vez al
+crearse. Medido: `pellizcarZona('tirar')` devolvía *"no hay tirar"*.
+
+**3. EL RAYO USABA MATRICES DEL CUADRO ANTERIOR.** three.js recalcula las matrices de mundo **cuando
+dibuja**, así que un rayo tirado antes de dibujar apunta a donde estaban las cosas antes. En el juego
+eso queda tapado porque se dibuja todos los cuadros, pero es una dependencia de **orden** invisible, y
+la prueba —que apunta sin dibujar— la destapó: apuntar a la carta 2 devolvía la 3, porque la 3 seguía
+donde estaba en la mano anterior. Ahora el rayo pone las matrices al día él mismo.
+
+**4. Y EL ABANICO SE SUPERPONÍA EN EL ORDEN EQUIVOCADO.** La profundidad venía del arco: las cartas
+del medio quedaban más lejos que las de las puntas, así que las de afuera tapaban a las de adentro y
+el centro de una carta del medio podía estar debajo de su vecina. Medido: de 25 partidas jugadas
+apuntando al centro de cada carta, **9 se trababan**. Ahora la profundidad la decide únicamente el
+índice —cada carta tapa a la anterior y a ninguna otra, como un abanico de verdad— y con eso todas
+tienen una franja visible del mismo lado.
+
+**Y el arco en altura tuvo que irse, que es la segunda mitad del mismo defecto:** con las cartas
+inclinadas 45 grados, subir una carta 0,04 la acerca a la cámara 0,028, o sea que el arco metía una
+profundidad propia **del mismo tamaño** que el escalón del solape. Con el escalón en 0,05 y sin arco
+de altura, el orden es inconfundible. El abanico se sigue viendo abanico porque el giro de cada carta
+no se tocó.
+
+#### LO QUE SE APUNTA ES LA FRANJA VISIBLE, NO EL CENTRO
+
+Con solape, el centro de una carta puede estar debajo de la siguiente. Lo que el jugador ve —y por lo
+tanto dónde apunta— es la tira que asoma, y su ancho sale de la geometría: el ancho de la carta menos
+el paso del abanico. El punto se calcula **pasando por la matriz de la propia carta** y no
+reconstruyéndolo a mano: la carta está girada en dos ejes, y escribir *"x más dx por el coseno del
+giro"* es adivinar en qué orden three.js compone los ángulos — adivinarlo mal manda el punto a otra
+carta, y fallaba en una de cada siete.
+
+#### EL ENCUADRE SE MIDIÓ, Y LA PRIMERA RESPUESTA FUE CAMBIAR LA MESA, NO LA CÁMARA
+
+Entró un gancho que proyecta las ocho esquinas de **todas** las piezas y devuelve el rectángulo que
+ocupan en pantalla. Con la primera mesa —casi cuadrada, 9,2 de ancho por 13,8 de fondo— barrí **200
+combinaciones** de campo, altura y distancia, y la mejor usaba el **34 % del alto**: en un marco 9:16
+eso deja el tercio de arriba y el sexto de abajo vacíos. **No hay cámara que lo arregle, porque el
+problema es la forma de lo que se mira.** Estirada a 21 de fondo por 9 de ancho —una proporción de
+2,3 contra el 1,78 de la pantalla— el mismo barrido encuentra encuadres que llenan el alto. Quedó en
+campo 44, a 16 de alto y 21 de fondo: **97 % del ancho, todo adentro del cuadro**.
+
+Dos medidas más salieron del mismo gancho: **la carta mide 1,72 y no 2,00** —el abanico entero tiene
+que entrar en 7,2 unidades, que es lo que entra, así que el paso lo fija la pantalla y no la carta;
+con cartas de 2,00 el solape era del 55 % y de siete cartas se leían cuatro— y **las cartas de la mano
+se paran a 45 grados en vez de acostarse a 58**, porque tumbadas la cara se escorza tanto que el
+número pierde la mitad de su alto.
+
+#### TRES GRUPOS Y NO SEIS: LA MITAD DE LAS LLAMADAS DE DIBUJO
+
+Una `BoxGeometry` trae un grupo por cara, o sea **seis llamadas por carta**. Los cuatro cantos y el
+dorso comparten material —el dorso **no se ve nunca**, porque "boca abajo" en este juego es ponerle el
+dorso a la cara de arriba, no dar vuelta la carta— así que quedan tres grupos. Medido: **de 142
+llamadas a 73**.
+
+#### UN DEFECTO DE DIBUJO QUE SE VIO EN LA PRIMERA CAPTURA EN 3D
+
+Las cartas de los rivales y el mazo salían como **rectángulos blancos**. `ponerCara(null)` dejaba el
+material sin mapa, y un material blanco sobre una mesa blanca es un rectángulo invisible.
+
+#### LOS ROTULOS VUELVEN A DOM
+
+Los nombres de los rivales, sus cuentas de cartas y la línea de turno son DOM y no textura: son texto
+que hay que traducir y que tiene que verse nítido en cualquier densidad. Y ocupan la franja de arriba,
+que con una mesa larga y angosta queda libre **por geometría**. Se escriben **sólo cuando cambian** —
+escribir en el DOM cada cuadro obliga al navegador a recalcular el layout sesenta veces por segundo
+para poner el mismo texto.
+
+Dos posiciones salieron de mirar la captura: el rótulo de turno caía encima de la carta levantada
+—que proyecta entre el 47 % y el 62 % del alto— así que **con una carta en la mano el rótulo se va
+entero**, porque los dos botones que acaban de aparecer *son* la instrucción; y el *"ELEGÍ COLOR"*
+caía encima de los cuatro cuadros de color, que empiezan en el 34 %.
+
+#### MEDIDO AL CERRAR
+
+**30 partidas jugadas de punta a punta apuntando con el rayo: las 30 terminan, 0 cartas ilegales y 0
+fallos de apuntado.** 120 partidas por el camino interno: 120 terminadas, 0 ilegales, ganador
+43/41/36. Tutorial completo en los tres idiomas y JUGAR sigue bloqueado hasta hacerlo. Encuadre: todo
+adentro, 95 % del ancho. **73 llamadas de dibujo, 370 triángulos, 52 mallas.** Flanco: 15 cuadros de
+pinza sostenida = 1 click. Histéresis 0,415 / 0,585. Retardo del aro 6,4 ms a media velocidad.
+`window.__errs` vacío. El HTML pasa de 71 a **103 KB**.
+
+**Lo que no pude verificar:** los fps reales. El contenedor renderiza por software, así que el costo
+está medido en llamadas de dibujo y triángulos —que son exactos— y no en cuadros por segundo.
 
 ### Cuadragésima vuelta (2026-08-28): **RezUno**, el quinto juego — un UNO que se juega con un solo gesto
 

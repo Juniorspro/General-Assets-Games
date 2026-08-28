@@ -113,7 +113,9 @@ function TX(k, p){
    EL COLOR 4 ES "SIN COLOR". Guardar los comodines con un color inventado obligaria a preguntar por
    el valor en todos lados; con un color propio, "es comodin" es `c.color===4` y punto. */
 const COLORES=['#e0483c','#f0b429','#3fa356','#3f7fd0'];   // rojo, amarillo, verde, azul
-const COL_OSC=['#a32c23','#b07c12','#2b7038','#2b5896'];
+/* los oscuros son para el numero DENTRO del ovalo blanco: el color pleno sobre blanco no
+   tiene contraste suficiente para un numero que hay que leer de reojo */
+const COL_OSC=['#a32c23','#8a5f0b','#256b30','#2b5896'];
 const NOMBRE_COL=['R','Y','G','B'];
 const SALTA=10, GIRA=11, MAS2=12, COMODIN=13, MAS4=14;
 function mazoNuevo(){

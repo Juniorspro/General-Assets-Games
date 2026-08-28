@@ -70,16 +70,49 @@ window.__rez={
     return { vueltas:n, fase:G.fase, gana:G.gana, ilegales,
              manos:G.manos.map(m=>m.length), log };
   },
-  /* ---- las zonas: lo que se ve y lo que se pellizca son lo mismo ---- */
-  zonas:()=>{ pintarMesa(); return ZONAS.map(z=>({t:z.tipo,i:z.i,activo:z.activo,
-                x:+z.x.toFixed(0),y:+z.y.toFixed(0),w:+z.w.toFixed(0),h:+z.h.toFixed(0)})); },
-  zonaEn:(x,y)=>{ pintarMesa(); const z=zonaEn(x,y); return z? {t:z.tipo,i:z.i,activo:z.activo} : null; },
-  /* pellizca en el centro de una zona, por el mismo camino que la camara */
+  /* ---- LO QUE SE VE Y LO QUE SE PELLIZCA SON EL MISMO OBJETO ----
+     En 3D no hay rectangulos: hay objetos, y el rayo devuelve el objeto. Estos ganchos PROYECTAN el
+     centro de cada objeto a la pantalla y despues tiran el rayo por ahi, o sea que recorren el
+     camino entero —mundo, camara, proyeccion, rayo— y no un atajo. Si la camara mirara a otro lado,
+     esta prueba fallaria, que es exactamente lo que tiene que hacer. */
+  zonas:()=>{ armarMesa(); camara.updateMatrixWorld(true);
+    const v=new THREE.Vector3();
+    return PICK.map(o=>{ o.updateMatrixWorld(true);
+      v.setFromMatrixPosition(o.matrixWorld).project(camara);
+      return { t:o.userData.tipo, i:o.userData.i, activo:!!o.userData.activo,
+               px:+((v.x*0.5+0.5)).toFixed(3), py:+((-v.y*0.5+0.5)).toFixed(3) }; }); },
+  pantallaDe:(tipo,i)=>{
+    /* SE DEJA ASENTAR LA ANIMACION ANTES DE PROYECTAR. Las cartas se acercan a su sitio con un lerp,
+       asi que en el cuadro siguiente a repartir todavia estan a mitad de camino: apuntar ahi es
+       apuntar a donde la carta ESTUVO. Una persona espera a que se acomoden; la prueba tambien. */
+    /* SESENTA Y NO DIECISEIS. Con 16 pasadas el lerp queda al 1,5% del camino, y cuando la mano
+       cambia de tamaño una carta se mueve tres unidades: ese 1,5% son 0,046, o sea DEL MISMO TAMAÑO
+       que el escalon de 0,05 que decide cual carta esta delante. Medido: apuntar a la carta 3 daba
+       la 4 en la primera jugada de algunas partidas y no en otras — la diferencia era de donde venia
+       la carta. Con 60 pasadas el residuo es 4 diezmillonesimas. */
+    for(let k=0;k<60;k++) armarMesa();
+    camara.updateMatrixWorld(true);
+    const o=PICK.filter(q=>q.userData.tipo===tipo && (i==null||q.userData.i===i)).pop();
+    if(!o) return null;
+    o.updateMatrixWorld(true);
+    /* PARA UNA CARTA SE APUNTA A SU FRANJA VISIBLE Y NO A SU CENTRO, que es donde apunta una persona:
+       con el abanico superpuesto el centro de una carta esta debajo de la siguiente. El punto sale de
+       la misma geometria que dibuja el abanico, no de un numero puesto a mano. */
+    const v=new THREE.Vector3();
+    if(tipo==='carta') v.copy(puntoMano(o, o.userData.i, G.manos[J_VOS].length));
+    else v.setFromMatrixPosition(o.matrixWorld);
+    v.project(camara);
+    return { x:v.x*0.5+0.5, y:-v.y*0.5+0.5, activo:!!o.userData.activo };
+  },
+  zonaEn:(fx,fy)=>{ armarMesa(); const o=pickEn(fx,fy);
+                    return o? {t:o.userData.tipo,i:o.userData.i,activo:!!o.userData.activo} : null; },
+  /* pellizca EN LA PANTALLA, sobre el centro proyectado del objeto: el mismo camino que la camara */
   pellizcarZona:(tipo, i)=>{
-    pintarMesa();
-    const z=ZONAS.filter(q=>q.tipo===tipo && (i==null||q.i===i)).pop();
-    if(!z) return 'no hay '+tipo;
-    return { hizo:activar(z.x+z.w/2, z.y+z.h/2), zona:{t:z.tipo,i:z.i,activo:z.activo} };
+    const p=window.__rez.pantallaDe(tipo,i);
+    if(!p) return 'no hay '+tipo;
+    const o=pickEn(p.x,p.y);
+    return { hizo:activar(p.x,p.y), apunta:o? o.userData.tipo+':'+o.userData.i : null,
+             pantalla:[+p.x.toFixed(3),+p.y.toFixed(3)], activo:p.activo };
   },
   /* ---- la mano de mentira: entra por el mismo camino que la de verdad ---- */
   manoFalsa:(cx, cy, pinza)=>{
@@ -189,7 +222,7 @@ window.__rez={
      cubre lo unico que no cubre jugarSolo(): que el boton apagado y la regla sean la misma cuenta. */
   porZonas:(sem, tope)=>{
     repartir(sem||1); G.fase='juego';
-    let n=0, colores=0, ilegales=0;
+    let n=0, colores=0, ilegales=0; const fallos=[];
     while(G.fase==='juego' && n++<(tope||9000)){
       if(G.turno!==J_VOS){ partidaTick(1/60); continue; }
       if(G.colorPide){ window.__rez.pellizcarZona('color',1); colores++; continue; }
@@ -207,9 +240,23 @@ window.__rez={
         if(!q || !q.hizo){ G.turno=siguiente(J_VOS); G.robo=false; }
         continue;
       }
-      window.__rez.pellizcarZona('carta',i);
+      const r=window.__rez.pellizcarZona('carta',i);
+      /* SI EL RAYO NO AGARRA LA CARTA QUE SE APUNTO, SE ANOTA. Es el unico modo de fallo que importa
+         aca: significa que lo que se ve y lo que se pellizca no coinciden. */
+      if(!r || !r.hizo || G.sel!==i){
+        const det={n, i, mano:m.length, apunta:r&&r.apunta, sel:G.sel, p:r&&r.pantalla, ptos:[]};
+        const selG=G.sel; G.sel=-1;
+        for(let k=0;k<m.length;k++){ const q=window.__rez.pantallaDe('carta',k);
+          det.ptos.push(q? [k, +q.x.toFixed(3), +q.y.toFixed(3),
+                            (o=>o?o.userData.tipo+':'+o.userData.i:'x')(pickEn(q.x,q.y))] : [k,'null']); }
+        G.sel=selG;
+        det.z=PICK.filter(o=>o.userData.tipo==='carta')
+                  .map(o=>[o.userData.i, +o.position.x.toFixed(3), +o.position.z.toFixed(3)]);
+        fallos.push(det);
+        if(fallos.length>60) break; }
     }
-    return { vueltas:n, fase:G.fase, gana:G.gana, colores, ilegales, manos:G.manos.map(x=>x.length) };
+    return { vueltas:n, fase:G.fase, gana:G.gana, colores, ilegales, manos:G.manos.map(x=>x.length),
+             fallos:fallos.length, ejemplos:fallos.slice(0,4) };
   },
   tutIr:(paso)=>{
     tutorialEmpezar();
@@ -233,14 +280,60 @@ window.__rez={
   /* ---- costo ---- */
   costo:(n)=>{
     const v=n||300, t=[];
-    for(let k=0;k<v;k++){ const a=performance.now(); pintarMesa(); t.push(performance.now()-a); }
+    for(let k=0;k<v;k++){ const a=performance.now();
+      armarMesa(); pintarTut(); pintarAro(); render.render(escena,camara);
+      t.push(performance.now()-a); }
     t.sort((x,y)=>x-y);
+    const inf=render.info;
     return { cuadros:v, media:+(t.reduce((s,x)=>s+x,0)/v).toFixed(3),
              p50:+t[Math.floor(v*0.5)].toFixed(3), p90:+t[Math.floor(v*0.9)].toFixed(3),
-             max:+t[v-1].toFixed(3), zonas:ZONAS.length };
+             max:+t[v-1].toFixed(3), pick:PICK.length,
+             llamadas:inf.render.calls, tris:inf.render.triangles,
+             texturas:inf.memory.textures, geometrias:inf.memory.geometries };
   },
-  medidas:()=>({ dis:[DIS_W,DIS_H], lienzo:[lienzo.width,lienzo.height], esc:+ESC.toFixed(3),
-                 LH:+LH.toFixed(0), marco:[marco.clientWidth, marco.clientHeight] })
+  /* EL ENCUADRE SE MIDE, NO SE ESTIMA. Devuelve el rectangulo que ocupan TODAS las piezas de la mesa
+     proyectadas a la pantalla, en fraccion de 0 a 1. Si algo se sale, aca da menos que 0 o mas que 1
+     — y eso en una captura chica no se ve, porque lo que se sale simplemente no esta. */
+  extremos:()=>{
+    armarMesa(); camara.updateMatrixWorld(true);
+    const v=new THREE.Vector3();
+    let x0=9,y0=9,x1=-9,y1=-9;
+    const caja=new THREE.Box3();
+    for(const o of PICK.concat([mazoMalla]).filter(Boolean)){
+      o.updateMatrixWorld(true);
+      caja.setFromObject(o);
+      for(let i=0;i<8;i++){
+        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z).project(camara);
+        const px=v.x*0.5+0.5, py=-v.y*0.5+0.5;
+        if(px<x0)x0=px; if(px>x1)x1=px; if(py<y0)y0=py; if(py>y1)y1=py;
+      }
+    }
+    return { x:[+x0.toFixed(3),+x1.toFixed(3)], y:[+y0.toFixed(3),+y1.toFixed(3)],
+             entra:(x0>=0.01&&x1<=0.99&&y0>=0.01&&y1<=0.99),
+             ancho:+(x1-x0).toFixed(3), alto:+(y1-y0).toFixed(3) };
+  },
+  /* mueve la camara en vivo para poder buscar el encuadre midiendo en vez de recompilando */
+  encuadre:(o)=>{
+    if(o){
+      if(o.fov!=null){ camara.fov=o.fov; camara.updateProjectionMatrix(); }
+      if(o.y!=null) camara.position.y=o.y;
+      if(o.z!=null) camara.position.z=o.z;
+      if(o.miraY!=null || o.miraZ!=null){ CAM_MIRA[0]=o.miraY!=null?o.miraY:CAM_MIRA[0];
+                                          CAM_MIRA[1]=o.miraZ!=null?o.miraZ:CAM_MIRA[1]; }
+      camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+    }
+    return { pos:[+camara.position.y.toFixed(2), +camara.position.z.toFixed(2)],
+             fov:camara.fov, mira:CAM_MIRA.slice() };
+  },
+  escenaVer:()=>{ armarMesa(); render.render(escena,camara);
+    let mallas=0; escena.traverse(o=>{ if(o.isMesh) mallas++; });
+    return { mallas, pick:PICK.length, llamadas:render.info.render.calls,
+             tris:render.info.render.triangles,
+             camara:[+camara.position.x.toFixed(1),+camara.position.y.toFixed(1),+camara.position.z.toFixed(1)],
+             fov:camara.fov, sombra:render.shadowMap.enabled,
+             fondo:'#'+escena.background.getHexString() }; },
+  medidas:()=>({ lienzo:[lienzo.width,lienzo.height], marco:[marco.clientWidth, marco.clientHeight],
+                 dpr:render.getPixelRatio(), aspecto:+camara.aspect.toFixed(3) })
 };
 </script>
 </body>

@@ -1,72 +1,116 @@
-/* ===================== EL LIENZO =====================
-   Contexto 2D y no WebGL, y no es pereza: todo lo que se dibuja son rectangulos redondeados, texto y
-   circulos, que es exactamente lo que un contexto 2D hace por hardware. WebGL aca no compra nada y
-   cuesta mil lineas de shaders para dibujar cartas.
+/* =========================================================================================
+   EL MUNDO 3D
 
-   EL MUNDO SE MIDE EN UNIDADES DE DISEÑO, NO EN PIXELES. Todo se calcula sobre un marco imaginario
-   de 720 x 1280 y se escala al final. Sin esto, cada medida del juego —el ancho de una carta, la
-   separacion del abanico, el radio del aro— habria que escribirla en funcion del tamaño de pantalla,
-   y la primera que se olvide deja el abanico saliendose del marco en un telefono angosto. */
+   Pedido: *"pero 3D hermano 3D en un ambiente 3D blanco no negro"*. La version anterior dibujaba las
+   cartas con un contexto 2D. Ahora la mesa es una escena de three.js y cada carta es un objeto con
+   grosor, sombra y perspectiva.
+
+   POR QUE BLANCO Y NO SOLO "NO NEGRO": este juego tiene UNA regla y es "del mismo color". Sobre un
+   fondo oscuro los cuatro colores se acercan entre si —todos leen como "claro contra oscuro"— y sobre
+   blanco se leen por lo que son. Ademas una mesa de cartas es blanca. El fondo no es decoracion:
+   es lo que hace legible la unica decision del juego.
+
+   TRES DECISIONES DE ESCENA, LAS TRES CON UN MOTIVO CONCRETO:
+
+   1. LA CAMARA ES ORTOGRAFICA-ISH: perspectiva angosta (fov 30) y lejos. Con un fov ancho la carta
+      del borde del abanico se deforma tanto que su numero deja de leerse, y en un juego donde hay que
+      comparar numeros y colores eso es un impuesto en cada turno. Un fov angosto desde lejos da
+      volumen y sombra sin deformar.
+   2. LA SOMBRA ES DE CONTACTO Y CHICA. Sin sombra las cartas flotan sobre la mesa y la escena se lee
+      a calcomanias; con una sombra larga y dura se lee a escenario de teatro. Una direccional casi
+      cenital con mapa chico da el apoyo y nada mas.
+   3. EL FONDO NO ES UN COLOR PLANO SINO UNA SALA. Un color plano detras de una mesa blanca hace que
+      la mesa no se distinga del vacio: no hay horizonte y todo flota. Dos planos —piso y pared— con
+      dos blancos apenas distintos alcanzan para que haya un "adentro".
+   ========================================================================================= */
 const lienzo=document.getElementById('lienzo');
-const ctx=lienzo.getContext('2d');
 const marco=document.getElementById('marco');
-const DIS_W=720, DIS_H=1280;
-let ESC=1, LW=DIS_W, LH=DIS_H, DPR=1;
-/* EL DPR TIENE TECHO, y el numero salio de una medicion en otro juego de este repo: dibujar al doble
-   de la resolucion de diseño duplica los pixeles a rellenar por cuadro y lo unico que se gana es
-   remuestrear hacia arriba dibujos que no tienen mas detalle que dar. Con la camara encendida ese
-   presupuesto hace falta para otra cosa. */
+
+const render=new THREE.WebGLRenderer({canvas:lienzo, antialias:true});
+render.setClearColor(0xf4f5f6, 1);
+render.outputColorSpace=THREE.SRGBColorSpace;
+render.shadowMap.enabled=true;
+render.shadowMap.type=THREE.PCFSoftShadowMap;
+/* EL DPR TIENE TECHO. Dibujar al doble de la resolucion de diseño duplica los pixeles a rellenar y
+   lo unico que se gana es remuestrear hacia arriba cartas que no tienen mas detalle que dar — y con
+   la camara encendida ese presupuesto hace falta para el detector de manos. */
 const DPR_TOPE=2;
+
+const escena=new THREE.Scene();
+escena.background=new THREE.Color(0xf4f5f6);
+/* la niebla es MUY suave y clara: separa la pared del piso sin que se note que hay niebla */
+escena.fog=new THREE.Fog(0xf4f5f6, 26, 54);
+
+/* FOV 30 Y NO 60. Medido a ojo sobre la propia captura: con 60 la carta de la punta del abanico se
+   ve de canto y su numero se pierde. Con 30 desde 20 unidades la perspectiva se nota en el grosor y
+   en la sombra, que es donde tiene que notarse. */
+/* CAMPO 44, A 16 DE ALTO Y 21 DE FONDO, MIRANDO A z=-0,5. Los cuatro numeros salieron de un barrido
+   de 200 combinaciones midiendo el rectangulo que ocupan TODAS las piezas proyectadas: este es el que
+   mete la mesa entera adentro del cuadro usando el 97% del ancho. */
+const CAM_MIRA=[0.0, -0.5];              // a que altura y profundidad apunta
+const camara=new THREE.PerspectiveCamera(44, 9/16, 0.5, 90);
+camara.position.set(0, 16, 21);
+camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+
+/* ---------- luces ---------- */
+/* la hemisferica hace el trabajo del ambiente de una habitacion clara; sin ella los costados de las
+   cartas quedan negros y el blanco de la mesa se ve sucio */
+escena.add(new THREE.HemisphereLight(0xffffff, 0xdfe2e6, 2.05));
+const luz=new THREE.DirectionalLight(0xffffff, 1.15);
+luz.position.set(4.5, 16, 7.5);
+luz.castShadow=true;
+luz.shadow.mapSize.set(1024,1024);
+luz.shadow.camera.near=4; luz.shadow.camera.far=42;
+/* LA CAMARA DE SOMBRA COTA LA MESA Y NADA MAS. Cubriendo la sala entera, un mapa de 1024 daria pocos
+   texeles por unidad y la sombra de una carta serian cuatro pixeles temblando. */
+luz.shadow.camera.left=-13; luz.shadow.camera.right=13;
+luz.shadow.camera.top=13; luz.shadow.camera.bottom=-13;
+luz.shadow.bias=-0.0009; luz.shadow.normalBias=0.02;
+escena.add(luz); escena.add(luz.target);
+
+/* ---------- la sala ---------- */
+{
+  const mesa=new THREE.Mesh(new THREE.PlaneGeometry(70,70),
+    new THREE.MeshLambertMaterial({color:0xfbfbfc}));
+  mesa.rotation.x=-Math.PI/2; mesa.position.y=0; mesa.receiveShadow=true; escena.add(mesa);
+  /* la pared del fondo, apenas mas gris que el piso: es lo que da horizonte */
+  const pared=new THREE.Mesh(new THREE.PlaneGeometry(70,34),
+    new THREE.MeshLambertMaterial({color:0xeceef1}));
+  pared.position.set(0,17,-19); escena.add(pared);
+  /* UNA MANCHA SUAVE DEBAJO DE LA ZONA DE JUEGO. La sombra de mapa da el contacto de cada carta, pero
+     la mesa entera queda de un blanco parejo que se lee a papel: una vinieta clarisima le devuelve el
+     centro. Es un plano con una textura de degrade, o sea cero costo de sombreado. */
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const g=c.getContext('2d');
+  const gr=g.createRadialGradient(64,64,4,64,64,64);
+  gr.addColorStop(0,'rgba(120,128,140,0.13)'); gr.addColorStop(1,'rgba(120,128,140,0)');
+  g.fillStyle=gr; g.fillRect(0,0,128,128);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  const vin=new THREE.Mesh(new THREE.PlaneGeometry(30,30),
+    new THREE.MeshBasicMaterial({map:t, transparent:true, depthWrite:false}));
+  vin.rotation.x=-Math.PI/2; vin.position.set(0,0.006,-1.0); escena.add(vin);
+}
+
 function ajustar(){
   const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
-  DPR=Math.min(devicePixelRatio||1, DPR_TOPE);
-  lienzo.width=Math.round(w*DPR); lienzo.height=Math.round(h*DPR);
-  /* el marco ya es 9:16, asi que la escala es la misma en los dos ejes y no hay que recortar nada */
-  ESC=(w*DPR)/DIS_W;
-  LW=DIS_W; LH=(h*DPR)/ESC;
+  render.setPixelRatio(Math.min(devicePixelRatio||1, DPR_TOPE));
+  render.setSize(w,h,false);
+  camara.aspect=w/h; camara.updateProjectionMatrix();
 }
 addEventListener('resize', ajustar);
 ajustar();
 
-/* de coordenadas de diseño a pixeles del lienzo, y al reves. La inversa hace falta para el toque:
-   un dedo llega en pixeles de pagina y hay que saber sobre que carta cayo. */
-function aPx(x,y){ return [x*ESC, y*ESC]; }
-function dePagina(px,py){
-  const r=marco.getBoundingClientRect();
-  return [ (px-r.left)*DPR/ESC, (py-r.top)*DPR/ESC ];
-}
+/* =========================================================================================
+   LA CARA DE UNA CARTA, PINTADA EN UN LIENZO Y CACHEADA
 
-/* ---------- helpers de dibujo ---------- */
-function rr(g,x,y,w,h,r){
-  const k=Math.min(r, w/2, h/2);
-  g.beginPath();
-  g.moveTo(x+k,y); g.lineTo(x+w-k,y); g.quadraticCurveTo(x+w,y,x+w,y+k);
-  g.lineTo(x+w,y+h-k); g.quadraticCurveTo(x+w,y+h,x+w-k,y+h);
-  g.lineTo(x+k,y+h); g.quadraticCurveTo(x,y+h,x,y+h-k);
-  g.lineTo(x,y+k); g.quadraticCurveTo(x,y,x+k,y); g.closePath();
-}
-function txt(g,s,x,y,px,col,peso,esp,alin){
-  g.save();
-  g.font=(peso||400)+' '+px+'px "Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif';
-  g.fillStyle=col; g.textAlign=alin||'center'; g.textBaseline='middle';
-  if(esp){
-    /* el espaciado de letras no existe en canvas 2D en todos los navegadores, asi que se dibuja
-       letra por letra: es la unica forma de que el titulo y los rotulos se vean como en el CSS */
-    let tot=0; for(const ch of s) tot+=g.measureText(ch).width+esp;
-    tot-=esp;
-    let cx = alin==='left'? x : (alin==='right'? x-tot : x-tot/2);
-    g.textAlign='left';
-    for(const ch of s){ g.fillText(ch,cx,y); cx+=g.measureText(ch).width+esp; }
-  } else g.fillText(s,x,y);
-  g.restore();
-}
-
-/* ===================== LA CARTA =====================
-   MEDIDAS: 96 x 144 de diseño, o sea la proporcion 2:3 de una carta de verdad. El ovalo blanco
-   inclinado es lo que la hace leer a carta de este juego y no a ficha de color, y el numero va
-   DOS VECES —grande en el ovalo y chico en las esquinas— porque en el abanico las cartas se tapan
-   entre si y lo unico que asoma es la esquina. */
-const CW=96, CH=144;
+   Las caras se dibujan por codigo —no hay un solo archivo de imagen en el juego— y se guardan por
+   clave. SE CACHEAN Y NO SE GENERAN TODAS: hay 54 caras distintas y en pantalla nunca hay mas de
+   veinte, asi que generarlas todas al arrancar seria subir a la GPU el triple de textura que se usa.
+   ========================================================================================= */
+/* los cuatro colores y los cinco valores de accion viven en b.js: son DATOS DEL JUEGO y no del
+   dibujo. Repetirlos aca costo un SyntaxError que tira la pagina entera antes de la primera linea. */
+const TEX_W=192, TEX_H=288;
+const _texCache={};
 function simbolo(v){
   if(v===SALTA) return '⊘';
   if(v===GIRA)  return '⇄';
@@ -75,57 +119,127 @@ function simbolo(v){
   if(v===COMODIN) return '★';
   return String(v);
 }
-function dibujarCarta(g, c, x, y, w, h, o){
-  o=o||{};
-  const s=w/CW;
-  g.save();
-  if(o.sombra){ g.shadowColor='rgba(0,0,0,.55)'; g.shadowBlur=18*s; g.shadowOffsetY=7*s; }
-  rr(g,x,y,w,h,11*s);
-  g.fillStyle = c.color<4? COLORES[c.color] : '#23252c';
-  g.fill();
-  g.shadowColor='transparent';
-  /* el borde blanco: una carta sin borde sobre un fondo oscuro se lee a mancha de color */
-  rr(g,x+3.5*s,y+3.5*s,w-7*s,h-7*s,8*s);
-  g.strokeStyle='#f6f7f8'; g.lineWidth=3.2*s; g.stroke();
-
-  if(c.color===4){
-    /* EL COMODIN LLEVA LOS CUATRO COLORES, y no un dibujo abstracto: es lo unico que dice "esta
-       carta se convierte en cualquiera de estos" sin una linea de texto. */
-    const cx=x+w/2, cy=y+h/2, r=w*0.30;
-    for(let k=0;k<4;k++){
-      g.beginPath(); g.moveTo(cx,cy);
-      g.arc(cx,cy,r, (k*90-135)*Math.PI/180, ((k+1)*90-135)*Math.PI/180);
-      g.closePath(); g.fillStyle=COLORES[k]; g.fill();
-    }
-    if(c.valor===MAS4) txt(g,'+4',cx,cy+h*0.30, w*0.26, '#f6f7f8', 800);
-  } else {
-    g.save();
-    g.translate(x+w/2, y+h/2); g.rotate(-Math.PI/8);
-    g.beginPath(); g.ellipse(0,0, w*0.40, h*0.30, 0, 0, Math.PI*2);
-    g.fillStyle='#f6f7f8'; g.fill();
-    g.restore();
-    const sim=simbolo(c.valor);
-    txt(g, sim, x+w/2, y+h/2, sim.length>1? w*0.42 : w*0.56, COL_OSC[c.color], 800);
-  }
-  const sim=simbolo(c.valor);
-  const cEsq = c.color===4? '#f6f7f8' : '#f6f7f8';
-  txt(g, sim, x+w*0.15, y+h*0.11, w*0.19, cEsq, 700, 0, 'center');
-  txt(g, sim, x+w*0.85, y+h*0.89, w*0.19, cEsq, 700, 0, 'center');
-  g.restore();
+function rr(g,x,y,w,h,r){
+  const k=Math.min(r,w/2,h/2);
+  g.beginPath();
+  g.moveTo(x+k,y); g.lineTo(x+w-k,y); g.quadraticCurveTo(x+w,y,x+w,y+k);
+  g.lineTo(x+w,y+h-k); g.quadraticCurveTo(x+w,y+h,x+w-k,y+h);
+  g.lineTo(x+k,y+h); g.quadraticCurveTo(x,y+h,x,y+h-k);
+  g.lineTo(x,y+k); g.quadraticCurveTo(x,y,x+k,y); g.closePath();
 }
-/* el dorso: la misma silueta con el ovalo, para que una carta dada vuelta se lea como la misma carta */
-function dibujarDorso(g, x, y, w, h, o){
-  const s=w/CW;
-  g.save();
-  if(o&&o.sombra){ g.shadowColor='rgba(0,0,0,.5)'; g.shadowBlur=14*s; g.shadowOffsetY=5*s; }
-  rr(g,x,y,w,h,11*s); g.fillStyle='#1b1d24'; g.fill();
-  g.shadowColor='transparent';
-  rr(g,x+3.5*s,y+3.5*s,w-7*s,h-7*s,8*s); g.strokeStyle='#3a3e4a'; g.lineWidth=3.2*s; g.stroke();
-  g.save();
-  g.translate(x+w/2,y+h/2); g.rotate(-Math.PI/8);
-  g.beginPath(); g.ellipse(0,0,w*0.36,h*0.27,0,0,Math.PI*2);
-  g.fillStyle='#2a2d36'; g.fill();
-  g.restore();
-  txt(g,'R', x+w/2, y+h/2, w*0.30, '#4b5060', 800);
-  g.restore();
+function texCara(c){
+  const k=(c.color===4? 'W':c.color)+':'+c.valor;
+  if(_texCache[k]) return _texCache[k];
+  const cv=document.createElement('canvas'); cv.width=TEX_W; cv.height=TEX_H;
+  const g=cv.getContext('2d');
+  const W=TEX_W, H=TEX_H;
+  g.fillStyle='#f7f8f9'; g.fillRect(0,0,W,H);
+  const m=W*0.055;
+  rr(g, m, m, W-2*m, H-2*m, W*0.075);
+  g.fillStyle = c.color<4? COLORES[c.color] : '#26282e'; g.fill();
+  if(c.color===4){
+    const cx=W/2, cy=H/2, r=W*0.30;
+    for(let q=0;q<4;q++){
+      g.beginPath(); g.moveTo(cx,cy);
+      g.arc(cx,cy,r,(q*90-135)*Math.PI/180,((q+1)*90-135)*Math.PI/180);
+      g.closePath(); g.fillStyle=COLORES[q]; g.fill();
+    }
+    if(c.valor===MAS4){
+      g.font='800 '+(W*0.24)+'px "Segoe UI",system-ui,sans-serif';
+      g.fillStyle='#f7f8f9'; g.textAlign='center'; g.textBaseline='middle';
+      g.fillText('+4', cx, cy+H*0.29);
+    }
+  } else {
+    /* el ovalo blanco inclinado es lo que hace que se lea a carta de este juego y no a ficha */
+    g.save(); g.translate(W/2,H/2); g.rotate(-Math.PI/8);
+    g.beginPath(); g.ellipse(0,0,W*0.38,H*0.29,0,0,Math.PI*2);
+    g.fillStyle='#f7f8f9'; g.fill(); g.restore();
+    const sim=simbolo(c.valor);
+    g.font='800 '+(W*(sim.length>1?0.40:0.56))+'px "Segoe UI",system-ui,sans-serif';
+    g.fillStyle=COL_OSC[c.color]; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText(sim, W/2, H/2);
+  }
+  /* EL SIMBOLO VA TAMBIEN EN DOS ESQUINAS. En el abanico las cartas se tapan entre si y lo unico que
+     asoma es la esquina de arriba: sin ese numero chico, media mano es ilegible. */
+  const sim=simbolo(c.valor);
+  g.font='700 '+(W*0.155)+'px "Segoe UI",system-ui,sans-serif';
+  g.fillStyle='#f7f8f9'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(sim, W*0.17, H*0.115);
+  g.save(); g.translate(W*0.83, H*0.885); g.rotate(Math.PI);
+  g.fillText(sim, 0, 0); g.restore();
+  const t=new THREE.CanvasTexture(cv);
+  t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4;
+  _texCache[k]=t;
+  return t;
+}
+let _texDorso=null;
+function texDorso(){
+  if(_texDorso) return _texDorso;
+  const cv=document.createElement('canvas'); cv.width=TEX_W; cv.height=TEX_H;
+  const g=cv.getContext('2d'); const W=TEX_W,H=TEX_H;
+  g.fillStyle='#f7f8f9'; g.fillRect(0,0,W,H);
+  const m=W*0.055;
+  /* EL DORSO ES CLARO Y NO NEGRO. En la primera captura en 3D los dos abanicos de los rivales y el
+     mazo eran tres bloques oscuros sobre una mesa blanca: lo mas pesado del cuadro pasaba a ser lo
+     que menos importa. Un gris apenas mas oscuro que la mesa, con el borde marcado, dice "hay cartas
+     ahi" sin robarle el ojo a los colores, que son la unica informacion del juego. */
+  rr(g,m,m,W-2*m,H-2*m,W*0.075); g.fillStyle='#dcdfe4'; g.fill();
+  g.lineWidth=W*0.022; g.strokeStyle='#b7bcc4'; g.stroke();
+  g.save(); g.translate(W/2,H/2); g.rotate(-Math.PI/8);
+  g.beginPath(); g.ellipse(0,0,W*0.34,H*0.26,0,0,Math.PI*2);
+  g.fillStyle='#cbcfd6'; g.fill(); g.restore();
+  g.font='200 '+(W*0.28)+'px "Segoe UI",system-ui,sans-serif';
+  g.fillStyle='#7b818b'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText('Rez', W/2, H/2);
+  const t=new THREE.CanvasTexture(cv);
+  t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4;
+  _texDorso=t; return t;
+}
+
+/* =========================================================================================
+   UNA CARTA ES UNA CAJA FINA CON SEIS MATERIALES
+
+   El canto tiene que existir: una carta sin grosor vista de costado desaparece, y en un abanico
+   inclinado eso pasa todo el tiempo. Cuatro decimas de milimetro a escala de la carta alcanza.
+   Los seis indices de una BoxGeometry son +X, -X, +Y, -Y, +Z (frente) y -Z (dorso).
+   ========================================================================================= */
+/* LA CARTA MIDE 1,72 Y NO 2,00, Y NO ES UN GUSTO. El abanico entero tiene que entrar en el ancho del
+   cuadro —medido, 7,4 unidades es el maximo que entra con este encuadre— asi que el paso entre carta
+   y carta esta fijado por la pantalla y no por la carta. Con cartas de 2,00 el solape era del 55% y
+   de siete cartas se leian cuatro; con 1,72 el solape baja al 44% y asoman las siete. La proporcion
+   sigue siendo 2:3, que es la de una carta de verdad. */
+const CARTA_W=1.72, CARTA_H=2.58, CARTA_D=0.042;
+const _geoCarta=new THREE.BoxGeometry(CARTA_W, CARTA_H, CARTA_D);
+/* TRES GRUPOS Y NO SEIS, Y ESO ES LA MITAD DE LAS LLAMADAS DE DIBUJO. Una BoxGeometry trae un grupo
+   por cara, o sea seis llamadas por carta: con veinticinco cartas en pantalla son 150 llamadas para
+   dibujar veinticinco rectangulos. Los cuatro cantos y el dorso comparten material —el dorso no se ve
+   NUNCA, porque "boca abajo" en este juego es ponerle el dorso a la cara de arriba, no dar vuelta la
+   carta— asi que quedan tres grupos: cantos, cara y dorso. Medido: de 142 llamadas a 82. */
+_geoCarta.clearGroups();
+_geoCarta.addGroup(0, 24, 0);      // +X, -X, +Y, -Y: los cuatro cantos
+_geoCarta.addGroup(24, 6, 1);      // +Z: la cara
+_geoCarta.addGroup(30, 6, 0);      // -Z: el dorso, con el material del canto
+const _matCanto=new THREE.MeshLambertMaterial({color:0xf2f3f4});
+function nuevaCarta(){
+  const mats=[_matCanto, new THREE.MeshLambertMaterial({color:0xffffff})];
+  const m=new THREE.Mesh(_geoCarta, mats);
+  m.castShadow=true; m.receiveShadow=false;
+  m.userData={};
+  return m;
+}
+/* CON carta EN null LA CARA DE ADELANTE LLEVA EL DORSO, NO NADA. Esto era un defecto y se vio en la
+   primera captura en 3D: las cartas de los rivales y el mazo salian como rectangulos BLANCOS. La
+   razon es que "boca abajo" en esta escena no significa girar la carta —estan apoyadas en la mesa y
+   lo que se ve es su cara de arriba— sino PONERLE EL DORSO A LA CARA QUE SE VE. Dejar el mapa en
+   null deja el material blanco, que sobre una mesa blanca es un rectangulo invisible. */
+function ponerCara(malla, carta){
+  const m=malla.material[1];
+  const t=carta? texCara(carta) : texDorso();
+  if(m.map!==t){ m.map=t; m.needsUpdate=true; }
+}
+/* apagar una carta que no se puede jugar: se BAJA el color, no se pone transparente. Transparente
+   obliga a ordenar por profundidad y en un abanico que se superpone eso se ve peor que el problema */
+function ponerApagado(malla, apagado){
+  const c=apagado? 0x9aa0aa : 0xffffff;
+  if(malla.material[1].color.getHex()!==c) malla.material[1].color.setHex(c);
 }

@@ -77,22 +77,26 @@ document.getElementById('bMenu').onclick=()=>{ verPantalla('menu'); pintarMenu()
    aca, con las mismas coordenadas de diseño. Si fueran dos funciones, el respaldo tactil se
    desincronizaria del juego de verdad en cuanto se agregue una zona nueva — y el respaldo es
    justamente lo que nadie prueba. */
-function activar(x,y){
+function activar(fx, fy){
   if(G.fase!=='juego') return false;
-  const z=zonaEn(x,y);
-  if(!z || !z.activo) return false;
-  if(z.tipo==='carta') return seleccionar(z.i);
-  if(z.tipo==='tirar') return tirarSel();
-  if(z.tipo==='dejar'){ const r=soltar(); tutDejo(); return r; }
-  if(z.tipo==='color') return elegirColor(z.i);
-  if(z.tipo==='mazo')  return robarJugador();
+  const o=pickEn(fx, fy);
+  if(!o) return false;
+  const u=o.userData;
+  if(!u.activo) return false;
+  if(u.tipo==='carta') return seleccionar(u.i);
+  if(u.tipo==='tirar') return tirarSel();
+  if(u.tipo==='dejar'){ const r=soltar(); tutDejo(); return r; }
+  if(u.tipo==='color') return elegirColor(u.i);
+  if(u.tipo==='mazo')  return robarJugador();
   return false;
 }
 /* EL RESPALDO TACTIL NO ES UN EXTRA: sin camara —permiso negado, sin camara, http— el juego seria
    imposible de jugar, y eso no es degradar, es romperse. */
 lienzo.addEventListener('pointerdown', e=>{
-  const [x,y]=dePagina(e.clientX, e.clientY);
-  activar(x,y);
+  /* a fraccion de pantalla, que es la MISMA unidad en la que llega la mano: asi el toque y el
+     pellizco entran por la misma funcion y no pueden desincronizarse */
+  const r=marco.getBoundingClientRect();
+  activar((e.clientX-r.left)/Math.max(1,r.width), (e.clientY-r.top)/Math.max(1,r.height));
 }, {passive:true});
 
 /* ===================== EL BUCLE =====================
@@ -105,10 +109,13 @@ function bucle(){
   const ahora=performance.now();
   const dt=Math.min(0.25, (ahora-ultimo)/1000); ultimo=ahora;
   if(G.fase==='juego'){
-    if(tomarPinza()) activar(MANO.x*DIS_W, MANO.y*LH);
+    if(tomarPinza()) activar(MANO.x, MANO.y);
     partidaTick(dt);
     tutTick(dt);
-    pintarMesa();
+    armarMesa();
+    pintarTut();
+    pintarAro();
+    render.render(escena, camara);
   }
   /* LA PANTALLA DE FINAL SE MIRA AFUERA DEL `if`, Y ESE ERA UN DEFECTO DE VERDAD. Estaba adentro, o
      sea que solo se enteraba en el mismo cuadro en que la partida terminaba. Con el pellizco eso
@@ -123,8 +130,45 @@ function bucle(){
     document.getElementById('finS').textContent = gano? TX('ganasteS') : TX('perdisteS');
     verPantalla('fin');
   }
+  pintarHud();
+}
+
+/* ===================== LOS ROTULOS =====================
+   SE ESCRIBEN SOLO CUANDO CAMBIAN. Escribir en el DOM cada cuadro obliga al navegador a recalcular el
+   layout sesenta veces por segundo para poner el mismo texto: es trabajo tirado y ademas se mezcla con
+   las lecturas de tamaño del render. Se guarda lo ultimo escrito y se compara. */
+const _hud={};
+function ponerTexto(el, t){ if(!el) return; if(_hud[el.id]===t) return; _hud[el.id]=t; el.textContent=t; }
+function ponerClase(el, c, si){ if(!el) return; const k=el.id+'|'+c;
+  if(_hud[k]===si) return; _hud[k]=si; el.classList.toggle(c, si); }
+function pintarHud(){
   const mk=document.getElementById('marcador');
-  if(mk && G.fase==='juego') mk.textContent = TUT.on? 'TUTORIAL' : '';
+  ponerTexto(mk, (G.fase==='juego' && TUT.on)? 'TUTORIAL' : '');
+  if(G.fase!=='juego') return;
+  const rivs=[[J_IZQ,'bot1',1],[J_DER,'bot2',2]];
+  for(const [j,clave,k] of rivs){
+    const n=G.manos[j].length;
+    ponerTexto(document.getElementById('rivN'+k), TX(clave));
+    ponerTexto(document.getElementById('rivC'+k), n===1? TX('unaCarta') : TX('cartas',{n}));
+    ponerClase(document.getElementById('rivC'+k), 'uno', n===1);
+    const cont=document.getElementById('rivN'+k).parentNode;
+    cont.classList.toggle('juega', G.turno===j);
+  }
+  document.body.classList.toggle('eligiendo', G.sel>=0 || G.colorPide);
+  document.body.classList.toggle('pidecolor', G.colorPide);
+  const t=document.getElementById('turnoT'), a=document.getElementById('turnoA');
+  const mio=G.turno===J_VOS;
+  ponerTexto(t, G.colorPide? TX('color')
+                : (mio? TX('tuTurno') : TX('turnoDe',{n:TX(G.turno===J_IZQ?'bot1':'bot2')})));
+  ponerClase(t, 'rival', !mio);
+  /* LA LINEA DE AYUDA DICE QUE HACER AHORA Y NO COMO SE JUEGA. Cambia con el estado: agarrar, elegir
+     entre los dos botones, o elegir color. Un texto fijo se deja de leer al segundo turno. */
+  let ay='';
+  if(G.avisoT>0) ay=G.aviso;
+  else if(mio && G.colorPide) ay=TX('ayudaColor');
+  else if(mio && G.sel>=0) ay=TX('ayudaTirar');
+  else if(mio) ay=TX('ayudaMano');
+  ponerTexto(a, ay);
 }
 pintarIdioma(); verPantalla('idioma');
 bucle();

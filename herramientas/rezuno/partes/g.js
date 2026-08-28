@@ -99,26 +99,29 @@ function tutorialFin(){
    el paso avanzaria tirando la carta que se supone que no se puede tirar. */
 function tutDejo(){ if(TUT.on && TUT.paso===4) tutEsperaDeja=false; }
 
-/* el brillo de la carta que hay que agarrar, y la flecha al mazo en el paso del robo */
-function pintarTut(g){
-  if(!TUT.on) return;
+/* ===================== EL BRILLO DEL TUTORIAL, EN 3D =====================
+   Antes era un rectangulo dibujado alrededor de la carta. En 3D la carta esta girada y en
+   perspectiva, asi que un rectangulo de pantalla ya no la sigue. Es un ARO que se pone DEBAJO de la
+   carta, sobre la mesa: se ve desde cualquier angulo, no tapa la cara —que es lo que hay que leer— y
+   con el pulso late sin competir con la carta. */
+const tutAro=new THREE.Mesh(new THREE.RingGeometry(1.25,1.55,44),
+  new THREE.MeshBasicMaterial({color:0xc47b00, transparent:true, depthWrite:false}));
+tutAro.rotation.x=-Math.PI/2; tutAro.visible=false; tutAro.renderOrder=3;
+escena.add(tutAro);
+function pintarTut(){
+  if(!TUT.on){ tutAro.visible=false; return; }
   const obj=tutObjetivo();
-  if(obj>=0 && G.sel<0){
-    const n=G.manos[J_VOS].length, geo=manoGeo(n);
-    if(obj<n){
-      const x=geo.x0+obj*geo.paso, y=MANO_Y-(pega(G.manos[J_VOS][obj],G.color,G.valor)?14:0);
-      const p=0.5+0.5*Math.sin(G.t*5.2);
-      g.save();
-      rr(g, x-7, y-7, CW+14, CH+14, 15);
-      g.strokeStyle='#ffd84a'; g.lineWidth=3+2*p; g.globalAlpha=0.55+0.45*p; g.stroke();
-      g.restore();
-    }
+  let dest=null;
+  if(obj>=0 && G.sel<0 && obj<G.manos[J_VOS].length){
+    const g=manoGeo(G.manos[J_VOS].length);
+    dest=[g.x0+obj*g.paso, MESA.manoZ-0.35];
+  } else if(TUT.paso===5){
+    dest=[MESA.mazoX, MESA.centroZ];
   }
-  if(TUT.paso===5){
-    const p=0.5+0.5*Math.sin(G.t*5.2);
-    g.save();
-    rr(g, MAZO_X-11, MAZO_Y-11, CW+22, CH+22, 17);
-    g.strokeStyle='#ffd84a'; g.lineWidth=3+2*p; g.globalAlpha=0.55+0.45*p; g.stroke();
-    g.restore();
-  }
+  if(!dest){ tutAro.visible=false; return; }
+  tutAro.visible=true;
+  tutAro.position.set(dest[0], 0.012, dest[1]);
+  const p=0.5+0.5*Math.sin(G.t*5.2);
+  tutAro.material.opacity=0.35+0.45*p;
+  tutAro.scale.setScalar(0.92+0.10*p);
 }
