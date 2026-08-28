@@ -45,6 +45,7 @@ const RIV_DEDOS=[
    Con los tres iguales el dedo se enrosca como una manguera. */
 const RIV_CURVA=[0.50, 1.00, 0.85];
 const _rp=[]; for(let k=0;k<21;k++) _rp.push(new THREE.Vector3());
+const _pr2=[]; for(let k=0;k<21;k++) _pr2.push(new THREE.Vector3());
 const _rd=new THREE.Vector3(), _rmat=new THREE.Matrix4(), _reu=new THREE.Euler(),
       _rsc=new THREE.Vector3();
 function _rotX(v,a){ const c=Math.cos(a), s=Math.sin(a);
@@ -76,12 +77,36 @@ function poseMano(cierre, mano, tam, pos, yaw, pitch, roll){
   return _rp;
 }
 
-/* ---------- LA CABEZA SE FUE ----------
-   Pedido: *"elimina lo de la cabeza"*. Estaban el craneo, los ojos, el cuello y el torso, con la
-   cabeza girando hacia lo que el rival estaba haciendo. Se van los cuatro: con la cabeza fuera, el
-   cuello y el torso no sostienen nada y un torso sin cabeza es peor que ninguno de los dos.
-   Quedan las manos y los antebrazos, que son lo que el jugador mira — y son cuatro llamadas de
-   dibujo menos y 2.190 triangulos menos por cuadro. */
+/* =========================================================================================
+   LAS CABEZAS VUELVEN, Y LOS BOTS SON MONITORES
+
+   Pedido: *"puedes agregar otra vez las cabezas, al menos para el jugador; los bots son computadoras
+   asi que les pondras monitores como cabeza"*. Asi que hay dos clases de rival y se ven distintas de
+   una ojeada, que es lo que hace que la mesa se lea sola: si enfrente hay un monitor sabes que es la
+   maquina, y si hay una cabeza sabes que del otro lado hay alguien.
+
+   SEIS MALLAS INSTANCIADAS PARA LOS DOS RIVALES, no seis por rival. Y los ojos van en UNA sola malla
+   con color por instancia: en la cabeza humana son dos puntos oscuros y en el monitor son dos pixeles
+   encendidos sobre la pantalla apagada. Dos materiales habrian sido dos llamadas de dibujo para pintar
+   cuatro puntitos.
+   ========================================================================================= */
+const matOjo=new THREE.MeshBasicMaterial({color:0xffffff});
+const matPanel=new THREE.MeshLambertMaterial({color:0x24262b});
+const cabMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,9), matPiel, 2);
+const monMalla=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), matPiel, 2);
+const panMalla=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), matPanel, 2);
+const cueMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1,1,8,1), matPiel, 2);
+const torMalla=new THREE.InstancedMesh(new THREE.CylinderGeometry(1,0.70,1,12,1), matPiel, 2);
+const ojoMalla=new THREE.InstancedMesh(new THREE.SphereGeometry(1,7,5), matOjo, 4);
+for(const m of [cabMalla, monMalla, panMalla, cueMalla, torMalla, ojoMalla]){
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled=false; m.castShadow=true; m.receiveShadow=false;
+  m.count=0; escena.add(m);
+}
+ojoMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(4*3), 3);
+ojoMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+const COL_OJO=new THREE.Color(0x22252b), COL_PIXEL=new THREE.Color(0x8fe3b0);
+const RIV_CAB_R=1.15;                     // radio del craneo humano
 /* cuanto cuelga la carta por debajo y por detras de la pinza que la sostiene: media carta por el
    coseno de su inclinacion, o sea su borde de arriba */
 const RIV_CUELGA_Y=CARTA_H*0.5*Math.cos(MESA.rivalTilt)-0.08, RIV_CUELGA_Z=0.40;
@@ -91,6 +116,7 @@ function rivalNuevo(lado, fase){
            garra:new THREE.Vector3(), hayGarra:false };
 }
 const _rv=new THREE.Vector3(), _rv2=new THREE.Vector3(), _rq=new THREE.Quaternion(),
+      _rq2=new THREE.Quaternion(),
       _rs=new THREE.Vector3(), _rm=new THREE.Matrix4();
 
 /* donde se sienta cada rival: el abanico flota adelante y la persona esta detras */
@@ -100,10 +126,13 @@ function rivalSitio(lado){
 /* ---------- el bucle de los rivales ---------- */
 let _rivT=0;
 function rivalesPintar(dt){
+  cabMalla.count=0; monMalla.count=0; panMalla.count=0;
+  cueMalla.count=0; torMalla.count=0; ojoMalla.count=0;
   /* EN EL TUTORIAL NO HAY RIVALES, igual que sus cartas: el cartel del tutorial ocupa esa franja de
      la pantalla y ninguno de los seis pasos habla de ellos. */
   if(TUT.on || G.fase!=='juego') return;
   _rivT+=dt;
+  let iCab=0, iOjo=0, iCabH=0, iCabM=0;
   for(const [,, j, lado] of RIVALES()){
     if(!RIV[j]) RIV[j]=rivalNuevo(lado, j*1.7);
     const R=RIV[j];
@@ -136,7 +165,14 @@ function rivalesPintar(dt){
        del abanico a cada lado— la mano de afuera del rival de la derecha caia en x 1,02 de pantalla:
        fuera del cuadro. Y ademas es como NO se sostiene un abanico: se lo agarra por la parte de
        abajo, con las dos manos juntas, que es lo que ademas las deja bien adentro del encuadre. */
-    for(const s of [-1,1]){
+    /* SE DECLARA ACA Y NO DONDE SE USA: la lectura de abajo elige si se dibujan las manos posadas, y
+       un `const` leido antes de su linea tira ReferenceError y se lleva puesto el modulo entero. Es
+       la sexta vez en este proyecto. */
+    const _real = MP.jugando && MP.manoRival && (performance.now()-MP.manoRivalT)<600;
+    /* CON LA MANO DE VERDAD EN PANTALLA, LAS DOS POSADAS NO SE DIBUJAN. Dibujando las tres, el rival
+       tiene TRES manos: dos sosteniendo el abanico y una moviendose. Y no es que sobre una — es que
+       las posadas existen justamente para ocupar el lugar de las de verdad mientras no las hay. */
+    for(const s of (_real? [] : [-1,1])){
       /* la mano de adentro —la que da al centro de la mesa— es la que agarra */
       /* la mano que agarra es la que da al centro de la mesa; con el rival centrado no hay centro al
          que dar, asi que agarra la derecha, que es la que queda del lado de la pila */
@@ -178,7 +214,115 @@ function rivalesPintar(dt){
       ponerHueso(P[0], _rv2, escM*0.34);
     }
 
+    /* ===== Y SI DEL OTRO LADO HAY UNA PERSONA, SU MANO DE VERDAD =====
+       No es una pose ni una animacion: son los veintiun puntos que MediaPipe midio en SU telefono,
+       puestos en un plano sobre su lado de la mesa. Va ESPEJADA en x porque estan enfrentados: su
+       derecha es tu izquierda, y sin el espejo la mano se moveria al reves de como el la mueve. */
+    /* DONDE VA LA MUNECA Y CUANTO MIDE LA MANO SON DOS NUMEROS DISTINTOS, y mezclarlos fue el primer
+       intento: un solo factor mapeaba el cuadro entero de SU camara a unidades de mesa, y de ahi
+       salia tambien el tamano de la mano. Medido, la mano ocupaba el 7,3% del ancho de la pantalla
+       contra el 29,2% del abanico —o sea la cuarta parte de sus propias cartas— y encima caia
+       justo sobre el abanico: invisible. El recorrido de la muneca tiene que ser CHICO (mover la mano
+       de punta a punta de su camara no puede barrer media mesa) y la mano tiene que ser GRANDE.
+       Con dos factores separados, cada cosa se ajusta por su cuenta. */
+    if(_real){
+      const R2=MP.manoRival;
+      const ANCHO=4.6, ALTO=3.3, PROF=2.2, FORMA=13.6, BASE=1.05;
+      const nx0=R2[0], ny0=R2[1], z0=R2[2];
+      /* 0,58 y no 0,5: una mano que entra en cuadro se apoya en la mitad de abajo, asi que con el
+         centro en 0,5 la mano en reposo queda flotando por encima de la mesa. */
+      const cx=S.x + (0.5-nx0)*ANCHO, cy=BASE + (0.58-ny0)*ALTO, cz=S.z + 2.30;
+      for(let k=0;k<21;k++){
+        _pr2[k].set(cx + (nx0-R2[k*3])*FORMA,
+                    cy + (ny0-R2[k*3+1])*FORMA,
+                    cz - (R2[k*3+2]-z0)*PROF);
+      }
+      dibujarMano(_pr2, _pr2[0].distanceTo(_pr2[9]));
+      /* Y LA CARTA LA LLEVA SU MANO DE VERDAD, no la de mentira. Es la misma regla que la tuya: el
+         medio entre la punta del pulgar y la del indice. Si la carta siguiera a la mano posada, el
+         rival estaria pellizcando en un sitio y la carta saldria de otro. */
+      R.garra.copy(_pr2[4]).add(_pr2[8]).multiplyScalar(0.5);
+      R.hayGarra = R.alc>0.55;
+    }
+
+    /* ===== LA CABEZA: MONITOR SI ES UN BOT, CRANEO SI DEL OTRO LADO HAY ALGUIEN ===== */
+    /* el borde de arriba del abanico esta a media carta por el coseno de su inclinacion; la cabeza va
+       a esa altura mas su propio radio y un respiro, o queda medio craneo detras de las cartas */
+    const cabY=fanY+CARTA_H*0.5*Math.cos(MESA.rivalTilt)+RIV_CAB_R*1.06+0.30, cabZ=S.z-1.95;
+    const resp=Math.sin(t*1.35+f)*0.055;
+    const humano=MP.jugando;
+    /* a donde mira: su abanico si esta pensando, la pila si esta jugando, y si no la mesa, con un
+       vistazo hacia vos cada tanto. Una cabeza que se mueve al azar se lee a adorno; una que mira lo
+       que esta pasando se lee a alguien jugando — y un monitor que se orienta se lee a que te sigue. */
+    R.mirarte=(R.mirarte||0)+dt;
+    let mira;
+    if(suyo && B.fase==='piensa') mira=_rv2.set(S.x, fanY, S.z+0.4);
+    else if(agarrando) mira=_rv2.set(MESA.pilaX, 0.5, MESA.centroZ);
+    else if((R.mirarte%9.5)<2.1) mira=_rv2.set(0, 1.4, MESA.manoZ);
+    else mira=_rv2.set(0, 0.3, MESA.centroZ);
+    _rv.set(mira.x-S.x, mira.y-cabY, mira.z-cabZ);
+    const gyO=Math.atan2(_rv.x, _rv.z), gxO=-Math.atan2(_rv.y, Math.hypot(_rv.x,_rv.z));
+    const kk=Math.min(1, dt*3.4);
+    R.gy=(R.gy||0)+(gyO-(R.gy||0))*kk; R.gx=(R.gx||0)+(gxO-(R.gx||0))*kk;
+    /* EL BALANCEO SE SUMA AL RESULTADO Y NO AL OBJETIVO: sumado al objetivo pasaria por el suavizado
+       y quedaria casi borrado. Y el monitor se balancea LA MITAD: un aparato apoyado no respira. */
+    const bal=humano? 1 : 0.4;
+    const gy=R.gy+(Math.sin(t*0.53+f)*0.085+Math.sin(t*0.31+f*2)*0.05)*bal;
+    const gx=R.gx+Math.sin(t*0.44+f)*0.045*bal;
+    _reu.set(gx, gy, Math.sin(t*0.37+f)*0.05*bal, 'YXZ');
+    _rq.setFromEuler(_reu);
+    const yCab=cabY+resp*bal;
+
+    if(humano){
+      _rv.set(S.x, yCab, cabZ);
+      _rm.compose(_rv, _rq, _rs.set(RIV_CAB_R*0.97, RIV_CAB_R*1.06, RIV_CAB_R*0.94));
+      cabMalla.setMatrixAt(iCab, _rm);
+    } else {
+      /* EL MONITOR ES CAJA Y PANTALLA, DOS PIEZAS. Con una sola caja oscura se lee a ladrillo; lo que
+         lo vuelve un monitor es el marco claro alrededor de un panel apagado, que es exactamente lo
+         que uno ve de un monitor de frente. El panel va un pelo adelante para que no pelee en z. */
+      _rv.set(S.x, yCab, cabZ);
+      _rm.compose(_rv, _rq, _rs.set(2.05, 1.52, 0.34));
+      monMalla.setMatrixAt(iCab, _rm);
+      _rv.set(0, 0.03, 0.55).applyMatrix4(_rm);
+      _rm.compose(_rv, _rq, _rs.set(1.74, 1.16, 0.10));
+      panMalla.setMatrixAt(iCab, _rm);
+    }
+    /* el cuello (o el pie del monitor) y el torso NO giran con la cabeza: si giraran, mirar de reojo
+       giraria el cuerpo entero y se leeria a torreta */
+    _rv.set(S.x, yCab-(humano? RIV_CAB_R*0.92 : 0.95)+resp*0.5, cabZ);
+    _rm.compose(_rv, _rq.identity(), _rs.set(humano?0.30:0.22, humano?0.52:0.46, humano?0.30:0.22));
+    cueMalla.setMatrixAt(iCab, _rm);
+    /* LOS HOMBROS TIENEN QUE SER MAS ANCHOS QUE EL ABANICO O NO SE VEN: el torso vive dos unidades
+       detras de las cartas, y el abanico mide 2,12 de medio ancho. Con 2,45 asoman ocho decimas por
+       cada lado; con 2,9 los dos rivales se tocarian en el medio de la mesa. */
+    _rv.set(S.x, cabY-RIV_CAB_R*1.62-0.70+resp*0.3, cabZ+0.10);
+    _rm.compose(_rv, _rq.identity(), _rs.set(2.45, 1.45, 0.95));
+    torMalla.setMatrixAt(iCab, _rm);
+
+    /* LOS OJOS SALEN DE LA MATRIZ DE LA CABEZA. Componiendolos aparte con su propio giro habria dos
+       animaciones que mantener sincronizadas; multiplicando por la de la cabeza estan en la cara por
+       construccion. Y parpadea: es un seno y un umbral, y es lo unico que separa "una cabeza que
+       rota" de "alguien mirandote" — en el monitor el mismo gesto se lee a la pantalla refrescando. */
+    (humano? cabMalla : monMalla).getMatrixAt(iCab, _rm);
+    const parp=Math.max(0, 1-Math.abs(Math.sin(t*0.41+f*3))*22);
+    for(const ex of (humano? [-0.38, 0.38] : [-0.30, 0.30])){
+      _rv.set(ex, humano? 0.16 : 0.10, humano? 0.90 : 0.62).applyMatrix4(_rm);
+      _rm.decompose(_rv2, _rq2, _rs);
+      const eh=(humano? 0.145 : 0.10)*(1-parp*0.92);
+      _rm.compose(_rv, _rq2, _rs.set(humano?0.155:0.16, eh, humano?0.10:0.05));
+      ojoMalla.setMatrixAt(iOjo, _rm);
+      ojoMalla.setColorAt(iOjo, humano? COL_OJO : COL_PIXEL);
+      iOjo++;
+      (humano? cabMalla : monMalla).getMatrixAt(iCab, _rm);
+    }
+    if(humano) iCabH++; else iCabM++;
+    iCab++;
   }
+  cabMalla.count=iCabH? iCab : 0; monMalla.count=iCabM? iCab : 0;
+  panMalla.count=monMalla.count; cueMalla.count=iCab; torMalla.count=iCab; ojoMalla.count=iOjo;
+  for(const m of [cabMalla, monMalla, panMalla, cueMalla, torMalla, ojoMalla]) m.instanceMatrix.needsUpdate=true;
+  if(ojoMalla.instanceColor) ojoMalla.instanceColor.needsUpdate=true;
 }
 /* a donde va la mano que agarra: primero a la carta elegida dentro de su abanico, despues a la pila */
 const _rdest={x:0,y:0,z:0};

@@ -85,15 +85,26 @@ camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
    se planta una vez y no se mueve mas. La funcion se queda porque es la que COLOCA la camara —el
    encuadre entero sale de ella— y porque `camGiro` lo sigue leyendo el grupo del abanico; lo que se
    fue es quien la llamaba con un angulo distinto de cero. */
-const CAM_ORBITA=0.349;                  // 20 grados en radianes
-let camGiro=0;
-function camaraGiro(objetivo, dt){
-  const lim=Math.max(-CAM_ORBITA, Math.min(CAM_ORBITA, objetivo||0));
-  camGiro += (lim-camGiro)*Math.min(1, (dt||0.016)*3.2);
+const CAM_ORBITA=0.349;                  // 20 grados en radianes: cuanto se puede asomar a los lados
+/* ===== Y CUANTO SE PUEDE LEVANTAR LA VISTA =====
+   Pedido: *"al tener seguimiento de cabeza podras mirar arriba y verla"*. Levantar la vista NO es
+   mover la camara de sitio: es correr a donde MIRA. Moviendola de sitio cambiaria el encuadre de la
+   mesa entera —las cartas se alejarian o se irian de lado— y lo unico que se quiere es apuntar el
+   ojo mas arriba, que es lo que hace una persona sentada a una mesa cuando levanta la cabeza.
+   El rango es asimetrico a proposito: hacia arriba llega hasta ver la cabeza del rival entera, y
+   hacia abajo apenas se mueve, porque abajo ya esta todo lo que hay que ver. */
+const CAM_ALZA_MAX=9.0, CAM_ALZA_MIN=-1.2;
+let camGiro=0, camAlza=0;
+function camaraGiro(giro, alza, dt){
+  const k=Math.min(1, (dt||0.016)*3.2);
+  const lim=Math.max(-CAM_ORBITA, Math.min(CAM_ORBITA, giro||0));
+  const lia=Math.max(CAM_ALZA_MIN, Math.min(CAM_ALZA_MAX, alza||0));
+  camGiro += (lim-camGiro)*k;
+  camAlza += (lia-camAlza)*k;
   const co=Math.cos(camGiro), si=Math.sin(camGiro);
   const x=CAM_POS.x, z=CAM_POS.z - CAM_MIRA[1];
   camara.position.set(x*co + z*si, CAM_POS.y, -x*si + z*co + CAM_MIRA[1]);
-  camara.lookAt(0, CAM_MIRA[0], CAM_MIRA[1]);
+  camara.lookAt(0, CAM_MIRA[0]+camAlza, CAM_MIRA[1]);
 }
 
 /* ---------- luces ---------- */
@@ -237,7 +248,7 @@ function aplicarCalidad(k){
 addEventListener('resize', ajustar);
 aplicarCalidad(CAL);
 /* la camara se coloca una vez: sin nadie que la orbite, este es su unico llamado */
-camaraGiro(0, 1);
+camaraGiro(0, 0, 1);
 
 /* =========================================================================================
    LA CARA DE UNA CARTA, PINTADA EN UN LIENZO Y CACHEADA

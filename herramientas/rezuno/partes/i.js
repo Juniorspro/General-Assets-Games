@@ -378,11 +378,39 @@ window.__rez={
           caj.y[0]=Math.min(caj.y[0],w[1]); caj.y[1]=Math.max(caj.y[1],w[1]);
         }
       }
-      out.push({ j, abanico:{ x:[+caj.x[0].toFixed(3), +caj.x[1].toFixed(3)],
+      /* la caja de la cabeza en pantalla: de ahi sale si choca con los rotulos y si hay que mirar
+         arriba para verla entera */
+      const M=(MP.jugando? cabMalla : monMalla), im=new THREE.Matrix4(),
+            mp=new THREE.Vector3(), mq=new THREE.Quaternion(), me=new THREE.Vector3();
+      let cab=null;
+      if(M.count>0){
+        M.getMatrixAt(RIVALES().findIndex(r=>r[2]===j), im); im.decompose(mp,mq,me);
+        /* LA ESFERA TIENE RADIO 1 Y LA CAJA MEDIO LADO 0,5: la escala de una no significa lo mismo
+           que la de la otra. Midiendo las dos igual, el monitor salia el DOBLE de ancho de lo que es y
+           la prueba de solapamiento denunciaba un choque que no existe. */
+        const semi=(M===cabMalla)? 1 : 0.5;
+        const ar=pr(mp.x, mp.y+me.y*semi, mp.z), ab=pr(mp.x, mp.y-me.y*semi, mp.z);
+        const iz=pr(mp.x-me.x*semi, mp.y, mp.z), de=pr(mp.x+me.x*semi, mp.y, mp.z);
+        cab={ x:[+iz[0].toFixed(3), +de[0].toFixed(3)], y:[+ar[1].toFixed(3), +ab[1].toFixed(3)],
+              entera: ar[1]>0.005 && ab[1]<0.995 };
+      }
+      out.push({ j, cabeza:cab, cabezaTipo:(MP.jugando?'humana':'monitor'),
+                 abanico:{ x:[+caj.x[0].toFixed(3), +caj.x[1].toFixed(3)],
                               y:[+caj.y[0].toFixed(3), +caj.y[1].toFixed(3)],
                               entra: caj.x[0]>0.01 && caj.x[1]<0.99 },
                  garra:pr(R.garra.x,R.garra.y,R.garra.z), alc:+R.alc.toFixed(3),
-                 cierre:+R.cierre.toFixed(3) });
+                 cierre:+R.cierre.toFixed(3),
+                 /* LA MANO DEL OTRO, PROYECTADA. Que lleguen 63 numeros no prueba que se vean: hay
+                    que saber DONDE caen en la pantalla. _pr2 son los puntos que acaba de dibujar
+                    rivalesPintar(), o sea exactamente los que se estan viendo. */
+                 manoReal: (MP.jugando && MP.manoRival && (performance.now()-MP.manoRivalT)<600)?
+                   (()=>{ const c={x:[9,-9],y:[9,-9]};
+                     for(let k=0;k<21;k++){ const w=pr(_pr2[k].x,_pr2[k].y,_pr2[k].z);
+                       c.x[0]=Math.min(c.x[0],w[0]); c.x[1]=Math.max(c.x[1],w[0]);
+                       c.y[0]=Math.min(c.y[0],w[1]); c.y[1]=Math.max(c.y[1],w[1]); }
+                     return { x:[+c.x[0].toFixed(3),+c.x[1].toFixed(3)],
+                              y:[+c.y[0].toFixed(3),+c.y[1].toFixed(3)],
+                              entra: c.x[0]>0 && c.x[1]<1 && c.y[0]>0 && c.y[1]<1 }; })() : null });
     }
     return out;
   },
@@ -414,6 +442,20 @@ window.__rez={
   mpDecir:(t)=>{ mpDecir(t); return MP.chat.length; },
   mpCortar:()=>{ mpCortar(); return MP.estado; },
   mpNueva:()=>mpRepartirYo(),
+  /* la mano del rival: cuantos puntos llegaron y hace cuanto. Es la unica forma de comprobar que lo
+     que se dibuja del otro lado es lo que el otro midio y no una pose inventada. */
+  /* mete una mano de rival SIN red, para poder fotografiar lo que el otro ve. Entra por el mismo
+     sitio que el mensaje de MQTT, o sea que dibuja exactamente lo mismo. */
+  manoRivalPoner:(cx,cy,pinza)=>{
+    const lm=window.__rez.manoFalsa(cx==null?0.5:cx, cy==null?0.5:cy, pinza==null?0.9:pinza);
+    const p=new Array(63); for(let k=0;k<21;k++){ p[k*3]=+lm[k].x.toFixed(3);
+      p[k*3+1]=+lm[k].y.toFixed(3); p[k*3+2]=+lm[k].z.toFixed(3); }
+    MP.jugando=true; MP.manoRival=p; MP.manoRivalT=performance.now();
+    return p.length;
+  },
+  manoRivalVer:()=>({ hay:!!MP.manoRival, n:MP.manoRival? MP.manoRival.length : 0,
+                      edadMs:MP.manoRival? +(performance.now()-MP.manoRivalT).toFixed(0) : -1,
+                      p0:MP.manoRival? MP.manoRival.slice(0,6) : null }),
   dosJug:(n)=>{ ponerJugadores(n); return N_JUG; },
   /* juega SOLO las jugadas propias: en multijugador un cliente no puede mover al rival */
   mpJugarMio:(tope)=>{
@@ -616,6 +658,21 @@ window.__rez={
     return { pedidoMs:ms, i:resI, esc:+resDin.toFixed(2), sombra:resSombra, cambios:_resCambios };
   },
   resCero:()=>{ aplicarCalidad(CAL); return { i:resI, esc:resDin, sombra:resSombra }; },
+  /* la vista: se le pide un giro y una alzada y se la deja asentar, como si el aparato se hubiera
+     movido. Es el mismo camino que usa el sensor. */
+  vista:(giro, alza)=>{ for(let k=0;k<400;k++) camaraGiro(giro||0, alza||0, 1/60);
+                        return { giro:+camGiro.toFixed(3), alza:+camAlza.toFixed(3) }; },
+  orVer:()=>({ on:OR.on, hay:OR.hay, permiso:OR.permiso, ev:OR.ev,
+               giro:+OR.giro.toFixed(3), alza:+OR.alza.toFixed(3) }),
+  /* se inyecta un evento de orientacion crudo, que es lo que manda el aparato */
+  orInyectar:(alpha, beta, n)=>{
+    OR.on=true;
+    for(let k=0;k<(n||30);k++){ orLeer({alpha, beta}); orTick(1/60); }
+    return { giro:+OR.giro.toFixed(3), alza:+OR.alza.toFixed(3),
+             camGiro:+orGiro().toFixed(3), camAlza:+orAlza().toFixed(3) };
+  },
+  orCero:()=>{ OR.a0=null; OR.b0=null; OR.hay=false; OR.giro=0; OR.alza=0;
+               OR.giroObj=0; OR.alzaObj=0; return true; },
   /* ===== EL LAZO CERRADO, QUE ES LA UNICA PRUEBA QUE VALE =====
      Alimentar el control con un tiempo FIJO solo demuestra que se mueve para el lado correcto. Lo
      que hay que demostrar es que SE QUEDA QUIETO, y para eso el tiempo tiene que salir de lo que el

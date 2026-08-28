@@ -19,6 +19,7 @@ PARTES = ['a.html',  # el marco, el CSS y las pantallas
           'j.js',    # el constructor de manos en 3D, y la tuya
           'k.js',    # los dos rivales: manos enfrentadas y agarrar la carta a la vista
           'm.js',    # el multijugador 1v1 por MQTT, sin servidor
+          'n.js',    # el seguimiento de cabeza por la orientacion del aparato
           'g.js',    # el tutorial de seis pasos
           'h.js',    # las pantallas, la entrada y el bucle
           'i.js']    # los ganchos de prueba

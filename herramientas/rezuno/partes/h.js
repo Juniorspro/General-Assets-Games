@@ -95,6 +95,9 @@ document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
 async function arrancar(esTutorial){
   audioIniciar();
   if(!MANO.on && MANO.estado!=='carga'){ await manosIniciar(); pintarCam(); }
+  /* el sensor de orientacion tambien se pide con el gesto de jugar: en iOS hay que pedirlo desde un
+     toque o el navegador lo rechaza sin decir nada */
+  orIniciar();
   if(esTutorial){ verPantalla('juego'); tutorialEmpezar(); }
   else { TUT.on=false; guia('',''); repartir((Date.now()&0x7fffffff)||1);
          G.fase='juego'; verPantalla('juego'); }
@@ -116,6 +119,7 @@ document.getElementById('bConectar').onclick=async()=>{
   /* LA CAMARA SE PIDE ACA TAMBIEN. Entrando por multijugador, `arrancar()` no corre nunca — y sin el
      no hay permiso de camara, o sea que el jugador entra a una partida en la que no puede apuntar. */
   if(!MANO.on && MANO.estado!=='carga'){ await manosIniciar(); pintarCam(); }
+  orIniciar();
   mpConectar(document.getElementById('salaCod').value, '');
 };
 
@@ -217,6 +221,8 @@ function bucle(){
     /* EL CONTROL DE CUADROS MIDE EL CUADRO ENTERO, incluida la deteccion de manos: es el tiempo que
        el jugador siente, no el que tarda el dibujo. */
     resTick(dt);
+    orTick(dt);
+    camaraGiro(orGiro(), orAlza(), dt);
     mpTick(performance.now());
     manosFiltrar();
     if(tomarPinza()) activar(MANO.x, MANO.y);
@@ -267,6 +273,7 @@ function pintarHud(){
   /* con dos jugadores hay un solo rotulo */
   const rivs = (N_JUG===2)? [[J_IZQ,'bot1',1]] : [[J_IZQ,'bot1',1],[J_DER,'bot2',2]];
   document.getElementById('rivN2').parentNode.style.display = (N_JUG===2)? 'none' : '';
+  ponerClase(document.getElementById('rivales'), 'solo', N_JUG===2);
   for(const [j,clave,k] of rivs){
     const n=G.manos[j].length;
     ponerTexto(document.getElementById('rivN'+k), (N_JUG===2 && MP.on)? MP.rivalNom : TX(clave));

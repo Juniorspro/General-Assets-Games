@@ -67,6 +67,118 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Cuadragésima novena vuelta (2026-08-28): **RezUno** — el logo naranja con su 10, monitores por cabeza, la mano del otro y la cámara que sigue tu cabeza
+
+Pedido: *"puedes hacer que la mano del logo al inicio sea naranja y la carta 10 naranja también, puedes
+agregar otra vez las cabezas almenos para el jugador los bots son computadoras así que los pondrás
+monitores como cabeza, cuando juegues 1vs1 con otra persona vos podrás ver exactamente como mueve sus
+manos las que haga aparecer en la pantalla, al tener seguimiento de cabeza podrás mirar arriba y verla,
+la idea es que con el seguimiento sirva para mover la cámara real del juego"*.
+
+#### EL SEGUIMIENTO DE CABEZA NO PUEDE SER LA CARA, Y LA RAZÓN ES LA CÁMARA TRASERA
+
+Lo obvio sería detectar la cara con MediaPipe. **No se puede**: hace tres vueltas que este juego usa la
+**cámara trasera**, porque es la que apunta a la mano. Con la trasera la cara no está en cuadro nunca, y
+encender las dos cámaras a la vez es duplicar el trabajo del detector en el aparato más lento, que es
+justo lo que las últimas tres vueltas estuvieron sacando.
+
+Pero el dato ya existe y no cuesta nada: **el teléfono sabe cómo está orientado**. `deviceorientation`
+da alpha y beta a 60 Hz, sin cámara, sin modelo y sin un milisegundo de detección — y la orientación del
+teléfono **es** para dónde estás mirando, porque el teléfono lo tenés en la mano delante de la cara.
+Inclinarlo hacia arriba es levantar la vista.
+
+Cómo está hecho: el primer evento **fija el cero** —nadie juega con el teléfono perfectamente vertical,
+así que la referencia tiene que ser la postura en la que empezaste, no una constante—, hay **zona muerta
+de 1,6 grados** (una mano nunca está quieta, y sin zona muerta la cámara del juego tiembla despacio todo
+el tiempo) y **recentrado lento** para que dejarlo un poco inclinado no te deje mirando al techo. El
+alpha se normaliza a la vuelta corta: sin eso, cruzar de 359 a 1 grado hace que la cámara pegue media
+vuelta.
+
+Medido, y en las dos direcciones: partiendo de beta 60, inclinarlo a **44** —o sea levantar la vista 16
+grados— da `alza 0,588` y **mueve la cámara 5,29 unidades**; las cabezas de los rivales pasan de la franja
+`y 0,072-0,129` (pegadas al borde de arriba) a `y 0,298-0,350`, o sea al medio de la pantalla. Al revés,
+inclinarlo a **76** las deja arriba de todo. Y girando el aparato 24 grados, `giro 0,609` mueve las dos
+cabezas de x 0,245 y 0,623 a **0,392 y 0,777**: la cámara orbita.
+
+Los topes no son simétricos a propósito: **arriba 9,0 unidades y abajo 1,2**. Mirar arriba es lo que el
+pedido quiere que sirva —ver a quien tenés enfrente—; mirar abajo no muestra nada que no estés viendo ya,
+porque tu propio abanico ocupa el borde de abajo de la pantalla.
+
+#### LAS CABEZAS VUELVEN, Y UN BOT NO TIENE CARA
+
+En la vuelta 45 se sacaron porque el pedido fue sacarlas. Vuelven, pero **con dos clases distintas, y no
+es un adorno**: un bot es una computadora, así que su cabeza es un **monitor** —carcasa, panel oscuro y
+dos píxeles verdes por ojos—, y del otro lado de un 1v1 hay una persona, así que ahí va un **cráneo**. En
+una partida se sabe contra qué estás jugando **sin leer un cartel**, que es la única razón por la que la
+distinción vale la pena.
+
+Las seis mallas nuevas van **instanciadas** —cráneo, carcasa, panel, cuello, torso y ojos— así que dos
+rivales con cabeza cuestan lo mismo que uno. Los ojos llevan `instanceColor` porque el mismo par de
+esferas hace de pupila oscura en una cara y de píxel verde en un monitor.
+
+**Y HUBO QUE MEDIR EL MONITOR DISTINTO QUE EL CRÁNEO.** El gancho `rivales()` proyectaba la caja de la
+cabeza suponiendo radio 1, que es lo que mide la esfera; una caja tiene **medio lado 0,5**. Midiendo las
+dos igual, el monitor salía **el doble de ancho** y la prueba de solapamiento denunciaba un choque con el
+rótulo que no existía. Una prueba que miente en contra es tan mala como una que miente a favor.
+
+#### LA MANO DEL OTRO ES SU MANO, NO UNA ANIMACIÓN
+
+En 1v1 se publican los **21 puntos** que MediaPipe midió en el teléfono del otro, redondeados a tres
+decimales, a 8 Hz, por el mismo MQTT que ya lleva las jugadas. Del otro lado se dibujan **espejados en x**
+porque están enfrentados: su derecha es tu izquierda, y sin el espejo la mano se movería al revés de como
+él la mueve. Si dejan de llegar puntos por más de 600 ms la mano desaparece, que es el comportamiento
+correcto cuando alguien saca la mano del cuadro.
+
+**DOS DEFECTOS, LOS DOS ENCONTRADOS PROYECTANDO Y NO MIRANDO:**
+
+1. **Que lleguen 63 números no prueba que se vean.** El primer intento usaba **un solo factor** para
+   mapear el cuadro entero de su cámara a unidades de mesa, y de ahí salía también el tamaño de la mano.
+   Medido: la mano ocupaba el **7,3% del ancho de la pantalla** contra el **29,2% del abanico** —o sea la
+   cuarta parte de sus propias cartas— y encima caía justo encima del abanico. En la captura no se veía
+   nada, y sin embargo todos los números de red estaban bien. **Dónde viaja la muñeca y cuánto mide la
+   mano son dos cosas distintas**: el recorrido tiene que ser chico (mover la mano de punta a punta de su
+   cámara no puede barrer media mesa) y la mano tiene que ser grande. Con los dos factores separados
+   —4,6 de recorrido y 13,6 de forma— la mano pasa a **15,6% del ancho**, la mitad del abanico, delante
+   de las cartas. Ahí sí se ve.
+2. **Con la mano de verdad, el rival tenía TRES manos.** Las dos posadas que sostienen el abanico están
+   justamente para ocupar el lugar de las de verdad mientras no las hay; con la real en pantalla dejan de
+   dibujarse. Y **la carta la lleva su mano de verdad**: `R.garra` sale del medio entre la punta de su
+   pulgar y la de su índice, que es exactamente la misma regla que usa tu propia mano — si la carta
+   siguiera a la mano de mentira, él estaría pellizcando en un sitio y la carta saldría de otro.
+
+Y **el `const` que decide si se dibujan las posadas se declara ANTES del bucle**, no donde temáticamente
+correspondería. Es la sexta vez en este proyecto que un `let`/`const` leído antes de su línea no rompe una
+función sino el módulo entero.
+
+#### EL PUNTO DE CONEXIÓN Y EL RÓTULO DEL RIVAL ESTABAN ENCIMADOS
+
+`#rivales` reparte con `justify-content:space-between`, y **con un solo hijo eso lo pega a la izquierda**
+— que es exactamente donde vive el punto de conexión del multijugador. Y el 1v1 es el único modo con un
+solo rival, o sea que los dos elementos que sólo existen en multijugador se pisaban entre ellos. Medido en
+la captura: "7 cartas" debajo de "MANOS · P-W8Y". Con un rival el rótulo se va **a la derecha**, donde no
+hay nada, y la cabeza en 1v1 se proyecta en el medio (x 0,426-0,574), así que tampoco le cae encima a la
+cara. Verificado: `choques:[]` entre los seis elementos de la franja de arriba.
+
+#### EL LOGO
+
+Generado de nuevo con Higgsfield: mano naranja sosteniendo una carta naranja **con el 10 grande y el 10
+chico de la esquina**. Recortado a su caja y a 560×313 en WebP, **21 KB**. El encuadre se corrigió midiendo:
+con el anterior el borde derecho caía en **1,07** del ancho, o sea que la carta —que es donde ahora está
+el número— quedaba cortada por fuera de la pantalla. Queda en 1,01.
+
+#### MEDIDO AL CERRAR
+
+**120 partidas con bots terminadas de 120, 0 jugadas ilegales**; **120 partidas a dos terminadas de 120,
+0 ilegales**; **30 partidas jugadas por rayo, 30 terminadas, 0 fallos de apuntado**; tutorial completo en
+los tres idiomas (7 pasos). Mano: separación entre lo que se dibuja y lo que apunta **0**, frenada
+**16,7 ms**, atenuación de temblor **2,69**, un flanco de pinza en diez cuadros, histéresis 0,411/0,591.
+Reja: pedir 22 o 28 Hz da 24 —el ritmo de la cámara— con **desvío de hueco 0**. Escalera de ritmo
+4 ms→60 Hz · 10→45 · 20→22,5 · 30→15 · 40→12. Interpolación despareja 1,00-1,01 de 60 a 12 Hz. Control de
+60 cuadros: llega al objetivo y **0 cambios ya asentado**. 98 llamadas de dibujo en alta, 51 en baja.
+Partida de multijugador entre dos páginas: misma huella de estado en las dos (`8|86`), manos espejadas,
+**0 errores de protocolo**, chat en los dos sentidos, y la mano del rival entrando en pantalla. HTML:
+**340 KB**. `window.__errs` vacío en todas las corridas.
+
 ### Cuadragésima octava vuelta (2026-08-28): **RezUno** — el aliasing que hacía la detección entrecortada, y multijugador 1v1 por MQTT sin servidor
 
 Pedido: *"no con lag sino que como que detecta entrecortado la mano... obliga a 60fps si o si"* y

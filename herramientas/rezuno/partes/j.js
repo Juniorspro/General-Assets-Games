@@ -36,7 +36,7 @@ const MANO_RADIO=(()=>{
     r[i0]=base[d]/P; r[i0+1]=base[d]*0.86/P; r[i0+2]=base[d]*0.74/P; r[i0+3]=base[d]*0.66/P; }
   return r;
 })();
-const MANOS_MAX=5;                       // la tuya mas dos por cada rival
+const MANOS_MAX=6;                       // la tuya, dos por rival, y la de VERDAD del rival humano
 /* CUATRO HUESOS DE MAS, Y SON LOS ANTEBRAZOS DE LOS RIVALES. Entran por la misma malla instanciada
    que los huesos de los dedos —mismo cilindro, mismo material— asi que agregar un antebrazo a cada
    mano no cuesta NI UNA llamada de dibujo mas. Sin ellos las manos de los rivales flotan sueltas

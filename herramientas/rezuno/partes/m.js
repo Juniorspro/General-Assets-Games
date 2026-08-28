@@ -55,7 +55,15 @@ const MP={ on:false, cli:null, estado:'no', sala:'', reparte:false, jugando:fals
               la pila y del mazo: si discrepan un segundo entero, algo se perdio en el medio y la unica
               reparacion honesta es repartir de nuevo — mucho mejor que seguir jugando dos partidas
               distintas sin que nadie se entere. */
-           ronda:0, semilla:0, rondaRival:-1, huellaRival:'', desdeMal:0 };
+           ronda:0, semilla:0, rondaRival:-1, huellaRival:'', desdeMal:0,
+           /* ===== LA MANO DEL OTRO, TAL CUAL LA MUEVE =====
+              Pedido: *"cuando juegues 1vs1 con otra persona vos podras ver exactamente como mueve sus
+              manos"*. Y "exactamente" quiere decir los VEINTIUN PUNTOS, no una pose que se parezca:
+              lo que viaja es lo mismo que MediaPipe midio del otro lado, redondeado a tres decimales.
+              63 numeros a 8 por segundo son unos tres kilobytes por segundo, que en un relevo publico
+              es despreciable y es lo unico que hace que se le vean los dedos moverse de verdad. */
+           manoRival:null, manoRivalT:0 };
+const MP_MANO_HZ=8;
 
 /* un identificador estable y al azar por pestana. No hace falta que sea unico en el universo: solo
    que dos jugadores de la misma sala no lo compartan. */
@@ -180,8 +188,25 @@ function mpTick(t){
                             ronda:MP.ronda, huella:MP.jugando? mpHuella() : '' });
     }
   }
+  /* la mano propia al aire, a su propio ritmo y solo si hay algo que mandar */
+  if(t-(MP._manoT||0) >= 1000/MP_MANO_HZ){
+    MP._manoT=t;
+    if(MANO.hayPts && MANO.hay){
+      const a=new Array(63);
+      for(let k=0;k<63;k++) a[k]=Math.round(MANO.pts[k]*1000)/1000;
+      mpPublicar('action', { tipo:'mano', id:MP.id, p:a });
+      MP._manoIba=true;
+    } else if(MP._manoIba){
+      /* UN AVISO DE QUE SE FUE, Y UNO SOLO. Sin el, la ultima mano medida se quedaria colgada en la
+         mesa del otro para siempre; mandandolo en cada vuelta seria un mensaje por nada diez veces
+         por segundo mientras nadie levanta la mano. */
+      MP._manoIba=false;
+      mpPublicar('action', { tipo:'mano', id:MP.id, p:null });
+    }
+  }
   if(MP.rivalId && t-MP.visto>MP_CADUCA){
     MP.rivalId=''; MP.rivalNom='';
+    MP.manoRival=null;
     if(MP.jugando){ MP.jugando=false; G.fase='menu'; if(typeof mpSeFue==='function') mpSeFue(); }
     else if(typeof mpListos==='function') mpListos();
   }
@@ -196,6 +221,13 @@ function mpDeAccion(d){
     if(d.ronda!=null && d.ronda===MP.ronda && MP.jugando) return;
     MP.ronda=(d.ronda!=null)? d.ronda : MP.ronda+1;
     mpEmpezar(d.semilla, false);
+    return;
+  }
+  if(d.tipo==='mano'){
+    /* SIN PARTIDA TAMBIEN SE ACEPTA: en la sala, ver moverse la mano del otro es la forma mas rapida
+       de saber que del otro lado hay alguien de verdad y que su camara anda. */
+    MP.manoRival = (d.p && d.p.length===63)? d.p : null;
+    MP.manoRivalT = performance.now();
     return;
   }
   if(!MP.jugando) return;
