@@ -708,6 +708,68 @@ window.__recreo={
                       ['fachada',M_FACHADA]]
                  .map(([n,m])=>[n, !!(m&&m.map&&m.map.image&&m.map.image.width),
                                 m&&m.map? [m.map.repeat.x, m.map.repeat.y] : null]) }),
+  /* =========================================================================================
+     EL PROFESOR NO PUEDE RETROCEDER NI ATRAVESARTE, Y ESO SE MIDE
+
+     Se juega la partida entera y en CADA paso se anotan dos cosas: cuanto retrocedio respecto del
+     rumbo en el que venia caminando, y a que distancia paso de la camara. Un "se viene devuelta y
+     te atraviesa" dura dos segundos y en una captura no se ve; en numeros es un retroceso de varios
+     metros y un cruce a menos de medio metro.
+     ========================================================================================= */
+  auditarProfe:(tope)=>{
+    empezar();
+    let px=PROFE.x, pz=PROFE.z;
+    /* EL METRO QUE IMPORTA ES CUANTO CAMINA EN TOTAL. Contar los pasos en los que se DA VUELTA es
+       una medida floja: un ida y vuelta de tres metros son dos pasos de 7 cm en los que el rumbo se
+       invierte, o sea 0,14 m en la cuenta, y eso no distingue un rebote de un redondeo. El camino
+       total si: caminar de mas se paga metro a metro. */
+    let retroMax=0, retroTotal=0, cercaMin=1e9, cruces=0, pasos=0, caminado=0;
+    const casos=[], porEscena={};
+    let dirX=0, dirZ=0;
+    while(!terminado && pasos++<(tope||80000)){
+      const E=GUION[escena_i];
+      if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
+      else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
+      if(bichosVivos>0){ if(TABLETA.on) tabAuto();
+                         else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); } }
+      if(FIN.on && FIN.fase===3 && !FIN.saludado) padPedido=5;
+      avanzar(1/60);
+      if(FIN.on) continue;
+      const dx=PROFE.x-px, dz=PROFE.z-pz, d=Math.hypot(dx,dz);
+      /* UN SALTO GRANDE NO ES CAMINAR: es el juego poniendolo en su sitio al empezar una escena.
+         A 4,2 m/s y 60 pasos por segundo, caminando avanza 7 cm por paso; medido, el "retroceso"
+         mas grande daba 15,5 m EN UN PASO, que es un teleport y no un defecto de ruta. */
+      if(d<0.5) caminado+=d;
+      if(d>1e-4 && d<0.5){
+        if(dirX||dirZ){
+          /* producto escalar con el rumbo anterior: negativo = camina para atras */
+          const p=(dx*dirX+dz*dirZ)/d;
+          if(p<-0.5){ retroTotal+=d; if(d>retroMax) retroMax=d; }
+        }
+        dirX=dx/d; dirZ=dz/d;
+      } else if(d>=0.5){ dirX=0; dirZ=0; }
+      px=PROFE.x; pz=PROFE.z;
+      const dc=Math.hypot(PROFE.x-cam.x, PROFE.z-cam.z);
+      if(dc<cercaMin) cercaMin=dc;
+      const id=(GUION[escena_i]||{}).id||'?';
+      if(!porEscena[id] || dc<porEscena[id]) porEscena[id]=+dc.toFixed(2);
+      if(dc<0.55){ cruces++; if(casos.length<5)
+        casos.push({ escena:id, d:+dc.toFixed(2), profe:[+PROFE.x.toFixed(1),+PROFE.z.toFixed(1)],
+                     cam:[+cam.x.toFixed(1),+cam.z.toFixed(1)] }); }
+    }
+    return { pasos, caminado:+caminado.toFixed(1),
+             retroMax:+retroMax.toFixed(3), retroTotal:+retroTotal.toFixed(2),
+             masCerca:+cercaMin.toFixed(2), crucesEncima:cruces, casos, porEscena };
+  },
+  /* donde esta el profesor y donde la camara, ahora mismo */
+  profeVer:()=>({ profe:[+PROFE.x.toFixed(2), +PROFE.z.toFixed(2)], anim:PROFE.anim,
+                  cam:[+cam.x.toFixed(2), +cam.z.toFixed(2)],
+                  distancia:+Math.hypot(PROFE.x-cam.x, PROFE.z-cam.z).toFixed(2),
+                  riel:profeRiel? profeRiel.pts.length-profeRiel.k : 0,
+                  escena:(GUION[escena_i]||{}).id||'?' }),
+  /* la voz: cuantas fuentes hay sonando a la vez. Con una sola boca tiene que ser 0 o 1. */
+  vozVer:()=>({ sonando:!!vozFuente, clave:vozClave, bipsEncendidos:dBip,
+                clips:Object.keys(VOZ||{}).length }),
   sombraVer:()=>{ let proy=0, rec=0, tot=0;
     escena.traverse(o=>{ if(o.isMesh||o.isInstancedMesh){ tot++; if(o.castShadow)proy++; if(o.receiveShadow)rec++; } });
     const c=luzS.shadow.camera;

@@ -41,20 +41,36 @@ function vozCargar(){
 /* SE LLAMA hablar() Y NO voz(): `voz` ya existe y es el bip por letra del subtitulo, en h2b.js. Dos
    `function voz` en un modulo no son un aviso, son un SyntaxError que tira la pagina antes de la
    primera linea — la segunda vez en este archivo que un nombre repetido cuesta una vuelta entera.
-   PARA QUE NO SE PISE CONSIGO MISMA: dos "bien" encimados suenan a coro de una persona, que es lo
-   mas raro que puede sonar una voz. Si el mismo ladrido ya esta sonando, el nuevo lo reemplaza. */
-const vozSonando={};
+
+   =========================================================================================
+   HAY UNA SOLA VOZ, Y ES UN CANAL, NO UNA LISTA
+
+   Antes se guardaba la fuente POR CLAVE: dos "bien" encimados se cortaban entre si, pero
+   'dBien' y 'dSale' —dos claves distintas— sonaban AL MISMO TIEMPO, y eso pasa todo el rato
+   porque las lineas del juego se disparan una detras de otra sin esperar a la anterior:
+     · acertas la ultima cuenta → dice('dBien'), y 0,7 s despues terminarClase() dice('dSale');
+     · terminas la tanda de bichos → dice('dBichosFin') y enseguida la escena nueva dice lo suyo;
+     · en la tableta, dibujas rapido y el "otra mas" se monta sobre el "muy bien";
+     · y el grito de la muerte entra encima de la linea que estuviera hablando.
+   El resultado es dos Baldis hablando a la vez. Y no es un problema de mezcla: es que hay UN
+   personaje, o sea UNA boca. Ahora la fuente que suena es una sola y la nueva corta a la que
+   estaba, sea cual sea su clave.
+   ========================================================================================= */
+let vozFuente=null, vozClave=null;
+function vozCortar(){
+  if(vozFuente){ try{ vozFuente.onended=null; vozFuente.stop(); }catch(e){} }
+  vozFuente=null; vozClave=null;
+}
 function hablar(k, vol){
   if(!AUD.ctx || !AUD.on) return 0;
   const buf=VOZ[k]; if(!buf) return 0;
   try{
-    const s=vozSonando[k];
-    if(s){ try{ s.stop(); }catch(e){} }
+    vozCortar();
     const src=AUD.ctx.createBufferSource(); src.buffer=buf;
     const g=AUD.ctx.createGain(); g.gain.value=(vol==null?1:vol);
     src.connect(g); g.connect(AUD.m);
-    src.start(); vozSonando[k]=src;
-    src.onended=()=>{ if(vozSonando[k]===src) vozSonando[k]=null; };
+    src.start(); vozFuente=src; vozClave=k;
+    src.onended=()=>{ if(vozFuente===src){ vozFuente=null; vozClave=null; } };
   }catch(e){ return 0; }
   return buf.duration;
 }
@@ -70,8 +86,17 @@ function hablar(k, vol){
    comportamiento correcto y no un error.
    ========================================================================================= */
 function dice(clave, params, vol){
-  decir(TX(clave, params));
+  /* SE HABLA PRIMERO Y SE ESCRIBE DESPUES, y no es un capricho de orden: decir() necesita saber si
+     esta linea tiene clip para decidir si ademas biplea letra por letra, y eso solo se sabe despues
+     de intentar reproducirlo. */
   const dur=hablar(IDIOMA+':'+clave, vol==null? 0.78 : vol);
+  /* SIN CLIP TAMBIEN CALLA AL ANTERIOR, y esto lo destapo la prueba. hablar() corta la voz que
+     estuviera sonando, pero solo si la linea nueva TIENE clip: una linea sin grabar —la tableta, por
+     ejemplo— dejaba la anterior sonando y encima le ponia los bips por letra. Medido: despues de
+     dice('dTabPide') la fuente que seguia sonando era 'es:dBien'. Una linea nueva es una boca nueva
+     aunque no tenga audio propio. */
+  if(dur<=0) vozCortar();
+  decir(TX(clave, params), dur<=0);
   /* LA MUSICA SE AGACHA MIENTRAS HABLA, y vuelve sola cuando termina la linea. Sin esto la cama y la
      voz comparten el mismo rango y la voz —que es la que lleva la instruccion del juego— queda
      peleandole a un acorde. Se agacha a 0,35 y no a cero: cortar la musica del todo cada vez que

@@ -84,9 +84,16 @@ function voz(ch){
 
 /* ===================== EL DIALOGO, ESCRITO A MAQUINA ===================== */
 const dEl=document.getElementById('dialogo'), dTxt=document.getElementById('dTxt');
-let dCola='', dPos=0, dT=0, dVer=false;
+let dCola='', dPos=0, dT=0, dVer=false, dBip=true;
 const D_VEL=0.030;                    // segundos por letra
-function decir(txt){
+/* EL BIP POR LETRA Y LA VOZ GRABADA SON DOS BALDIS HABLANDO A LA VEZ.
+   El bip nacio cuando el juego no tenia voz: era lo que hacia que el subtitulo se leyera COMO SI
+   alguien lo estuviera diciendo. Desde que hay 59 clips grabados —19 lineas por tres idiomas— quedo
+   sonando ENCIMA de ellos: una voz de hombre y una onda cuadrada bipeando cada dos letras, las dos
+   diciendo lo mismo al mismo tiempo. Ahora los bips salen SOLO cuando esa linea no tiene clip, que
+   es el caso para el que se escribieron: falta el idioma, o el audio todavia no decodifico. */
+function decir(txt, conBip){
+  dBip = conBip!==false;
   dCola=txt||''; dPos=0; dT=0;
   dTxt.innerHTML='';
   dVer=!!dCola;
@@ -104,7 +111,7 @@ function dialogoTick(dt){
       dPos = fin<0? dCola.length : fin+1;
     } else {
       const ch=dCola[dPos]; dPos++;
-      if(ch!==' ' && (dPos%2===0)) voz(ch);
+      if(dBip && ch!==' ' && (dPos%2===0)) voz(ch);
     }
     dTxt.innerHTML=dCola.slice(0,dPos);
   }

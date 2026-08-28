@@ -66,7 +66,17 @@ function rutaDesde(pts, x, z){
      Y ni el primero se descarta si el segundo no queda MAS ADELANTE: se compara la distancia al
      punto 1 desde el profesor contra la distancia desde el punto 0, y si desde el profesor no esta
      mas cerca, el punto 0 todavia tiene algo que decirle. */
-  if(R.length>2 && Math.hypot(R[0][0]-x, R[0][1]-z) < CEL*0.75){
+  /* R.length>1 Y NO >2. Con el mapa viejo toda ruta tenia tres puntos o mas y la guarda nunca se
+     notaba; con un pasillo unico y los salones pegados las rutas de pasillo son de DOS puntos, y
+     entonces el descarte no corria nunca — al profesor se le daba como primer punto la celda de la
+     CAMARA, que le queda detras, asi que arrancaba caminando para atras. Medido cuando se encontro:
+     en el saludo pasaba a 3 cm de la camara.
+     HONESTAMENTE: hoy esto ya no cambia ningun numero, y se comprobo volviendolo a >2 — sale igual.
+     La razon es que al profesor SIEMPRE se le agrega el punto de adelanto, asi que su ruta nunca
+     tiene menos de tres puntos. Se queda porque la guarda seguia estando mal escrita y la proxima
+     ruta corta que alguien arme sin adelanto se lleva el defecto puesto. Lo que protege las esquinas
+     no es este numero sino la comparacion de abajo, y esa sigue igual. */
+  if(R.length>1 && Math.hypot(R[0][0]-x, R[0][1]-z) < CEL*0.75){
     const dProf=Math.hypot(R[1][0]-x, R[1][1]-z);
     const dCero=Math.hypot(R[1][0]-R[0][0], R[1][1]-R[0][1]);
     if(dProf<=dCero) R.shift();
@@ -85,8 +95,57 @@ function rutaSalir(n){
   return [[S.i,S.jm],[S.i,S.jPrim],S.boca];
 }
 
+/* SIN PUNTOS REPETIDOS. Una ruta se arma pegando la salida del aula con el camino de pasillo, y la
+   ultima celda de la primera y la primera de la segunda son LA MISMA: la boca. Ese punto duplicado
+   parecia inofensivo y no lo era, por dos motivos.
+     · Para la camara, cada punto es una parada de 10 cm donde el resorte del giro vuelve a arrancar
+       — que es exactamente lo que esquinas() existe para evitar.
+     · Y rompia el adelanto del profesor: la direccion en la que tiene que seguir se calcula restando
+       dos puntos consecutivos, y restar un punto de si mismo da cero. Medido: se quedaba parado en
+       la boca, en el mismo sitio que la camara, a 8 cm de ella durante toda la actividad.
+   Se descartan las repeticiones al armarla, que es donde nacen. */
+function sinRepes(pts){
+  const R=[];
+  for(const p of pts){ const u=R[R.length-1];
+    if(!u || u[0]!==p[0] || u[1]!==p[1]) R.push(p); }
+  return R;
+}
+/* ================= EL PROFESOR CAMINA POR EL COSTADO =================
+   Queda un cruce que NO se arregla con rutas y es pura geometria: dentro del aula el se para 2,35 m
+   MAS LEJOS de la salida que la camara, y en el pasillo tiene que terminar 2,8 m MAS CERCA de donde
+   siguen. O sea que en algun momento tiene que pasar por donde esta el jugador, si o si — y con las
+   dos rutas sobre la misma linea, "pasar por donde esta" es atravesarlo. Medido: 8 cm.
+
+   La solucion no es cambiarle el camino sino CORRERLO de costado, que es lo que hacen dos personas
+   en un pasillo. Cada punto se desplaza 1,15 m perpendicular a la direccion en la que va: el pasillo
+   mide 4,2 m y el aula 12,6 de ancho, asi que sigue caminando bien adentro. La perpendicular sale de
+   la direccion ENTRE el punto anterior y el siguiente y no de un solo segmento, para que en una
+   esquina el desvio gire con el camino en vez de dar un salto. */
+/* 0,85 Y NO 1,15, Y EL NUMERO SALE DEL ENCUADRE. Parado 2,8 m adelante, 1,15 m de costado lo dejan a
+   22,3 grados del centro contra 29,4 de medio campo horizontal: o sea al 76% del borde, cortado por
+   el canto del cuadro en la captura. A 0,85 son 16,9 grados —el 57%— y sigue habiendo 85 cm de aire
+   entre el y la camara, que con un cuerpo de 45 cm de ancho es de sobra. */
+const PROFE_COSTADO=0.85;
+function costado(pts, d){
+  const R=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)];
+    let dx=b[0]-a[0], dz=b[1]-a[1];
+    const L=Math.hypot(dx,dz);
+    if(L<1e-6){ R.push([pts[i][0], pts[i][1]]); continue; }
+    dx/=L; dz/=L;
+    R.push([pts[i][0]+dz*d, pts[i][1]-dx*d]);
+  }
+  return R;
+}
 function cel2(p){ return [XC(p[0]), ZC(p[1])]; }
 let restoRuta=null;          // la segunda mitad del viaje, la que se camina despues de los bichos
+/* 2,8 Y NO 3,2, Y EL NUMERO NO ES DE GUSTO: TIENE QUE SER MENOR QUE EL UMBRAL DE rutaDesde().
+   Al retomar el camino, el primer punto de la ruta nueva es justamente el punto del que ya se corrio
+   estos metros. rutaDesde() lo descarta si le queda a menos de 0,75 celdas —3,15 m—; con 3,2 quedaba
+   fuera por cinco centimetros y el profesor volvia a caminar hacia atras. Con 2,8 lo descarta la
+   misma regla que ya protege las esquinas, y no hace falta una segunda bandera que se acuerde. */
+const PROFE_ADELANTE=2.8;    // cuanto se adelanta a la camara, en metros
 let bichosCerrado=false;     // la tanda de bichos de la escena actual ya se cerro
 let aulaPrev=0;              // de que aula venimos, para saber si hay que salir de ella
 
@@ -126,7 +185,7 @@ function empezar(){
   PROFE.x=XC(ARR_I)+2.73; PROFE.z=ZC(PAS_F[0]); PROFE.giro=-Math.PI/2;
   PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
   PROFE.anim='saludar'; PROFE.animOtro=null; PROFE.mezcla=0; PROFE.at=0;
-  riel=null; profeRiel=null;
+  riel=null; profeRiel=null; 
   escena_i=-1; escenaT=0; esperaT=0; espDespues.length=0;
   MANO.cand=-1; MANO.votos=0; MANO.dedos=0; padPedido=-1;
   document.body.classList.remove('clase');
@@ -167,7 +226,7 @@ function siguienteEscena(){
         desde=celda(cam.x, cam.z);
       }
       const medio=rutaCeldas(desde, frenteDe(n));
-      ruta=[...pre, ...esquinas(medio||[frenteDe(n)])];
+      ruta=sinRepes([...pre, ...esquinas(medio||[frenteDe(n)])]);
       /* SE CORTA AL MEDIO SI DESPUES VIENEN BICHOS. El tramo mas largo son catorce celdas y los
          bichos al final de la caminata dejarian veinte segundos seguidos de pasillo antes. Cortado
          a la mitad, la actividad cae EN el camino, que es lo que se pidio. */
@@ -178,10 +237,48 @@ function siguienteEscena(){
       }
     }
     rielIr(ruta.map(cel2), VEL_CAM, ()=>{});
-    /* el camina la ruta ENTERA y espera al final: mientras el jugador revienta bichos, el esta
-       esperandolo al fondo del pasillo, que es exactamente lo que hace un maestro apurado */
-    let suya = restoRuta? [...ruta, ...restoRuta] : ruta;
-    profeIr(rutaDesde(suya.map(cel2), PROFE.x, PROFE.z), VEL_PROFE);
+    /* =====================================================================================
+       EL PROFESOR CAMINA SU MITAD Y SE QUEDA CON VOS, NO SE VA AL FONDO A ESPERAR
+
+       Antes su ruta era `[...ruta, ...restoRuta]`, o sea el viaje ENTERO de una: se iba al fondo del
+       pasillo mientras el jugador hacia la actividad. Eso tenia dos problemas y el segundo era feo
+       de verdad.
+
+       1. El jugador lo pidio con todas las letras: no tiene que dejarte solo.
+       2. Y ATRAVESABA AL JUGADOR AL VOLVER. Al terminar la actividad arranca la escena 'sigue', que
+          hace `ruta = restoRuta` — y ahi se le volvia a dar ESA ruta a alguien que ya estaba parado
+          en su ultimo punto. rutaDesde() solo descarta el primer punto si le queda encima, asi que
+          el resto de los puntos quedaban TODOS detras de el: caminaba para atras hasta el principio
+          del tramo —cruzandose con la camara— y recien despues volvia a avanzar. Es exactamente lo
+          que se reporto: "se viene devuelta para ti y te atraviesa y despues tarda en volver".
+
+       Ahora camina lo mismo que la camara. Y NO SE PARA EN EL MISMO PUNTO: si su destino fuera el
+       de la camara quedaria adentro del ojo los diez segundos que dura la actividad. Se le agrega un
+       punto PROFE_ADELANTE metros mas alla, en la direccion en la que va a seguir el camino, asi
+       queda unos pasos adelante y de espaldas — que es donde uno espera ver a alguien que te esta
+       llevando a algun lado. */
+    let suya = ruta.map(cel2);
+    /* SE PARA UNOS PASOS MAS ADELANTE QUE LA CAMARA, SIEMPRE. Si su destino fuera el mismo punto que
+       el de ella, la camara le termina adentro — y eso ya pasaba desde antes en cada viaje sin
+       actividad: los dos apuntaban a la boca del aula, el llegaba primero, se paraba ahi, y la
+       camara le entraba en el cuerpo por el segundo y medio que tarda la escena de entrar. Medido
+       con la auditoria nueva: 0,00 m de distancia entre los dos.
+       Adonde se adelanta sale de por donde va a SEGUIR el camino, que no es lo mismo que por donde
+       venia: si despues hay actividad, hacia el resto del pasillo; si no, hacia adentro del aula. */
+    if(suya.length){
+      const u=suya[suya.length-1];
+      /* el primer punto de lo que sigue que NO sea el punto donde para la camara: aunque las rutas
+         ya vienen sin repetidos, el que sigue puede caer encima por redondeo de celda */
+      const cola = (restoRuta && restoRuta.length)? restoRuta : (E.viaje!=null? rutaEntrar(E.viaje) : []);
+      let sig=null;
+      for(const q of cola){ const w=cel2(q);
+        if(Math.hypot(w[0]-u[0], w[1]-u[1])>0.05){ sig=w; break; } }
+      if(sig){
+        const dx=sig[0]-u[0], dz=sig[1]-u[1], d=Math.hypot(dx,dz);
+        suya=[...suya, [u[0]+dx/d*PROFE_ADELANTE, u[1]+dz/d*PROFE_ADELANTE]];
+      }
+    }
+    profeIr(rutaDesde(costado(suya, PROFE_COSTADO), PROFE.x, PROFE.z), VEL_PROFE);
     aulaPrev=0;
   }
   bichosCerrado=false;
@@ -1572,6 +1669,10 @@ function pasoFijo(dt){
   if(E.viaje!=null && !riel){ profeAnim('quieto'); siguienteEscena(); return; }
   /* --- los bichos: se sale cuando no queda ninguno --- */
   if(E.act && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
+  /* MIENTRAS HACES LA ACTIVIDAD, EL TE MIRA. Quedandose de espaldas parece que se olvido de vos; se
+     da vuelta apenas termina de caminar y espera mirandote, que es lo que hace que "se queda con
+     vos" se note sin decirlo. */
+  if(E.act && !profeRiel) profeMirarCam(dt, 2.2);
   if(E.act && !bichosCerrado){
     if(bichosVivos<=0 && escenaT>0.5){
       /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,act:0}: eso
@@ -1592,7 +1693,11 @@ function pasoFijo(dt){
          estirado empujando aire. Ahora camina, y camina hasta donde se tiene que quedar. */
       const n=E.puerta, S=AULA_SITIO[n], dentro=rutaEntrar(n);
       profeAnim('caminar');
-      profeIr([...dentro.slice(0,-1).map(cel2), [S.x, S.zProfe]], VEL_PROFE);
+      /* POR rutaDesde() TAMBIEN: cuando llego al aula ya venia adelantado PROFE_ADELANTE metros
+         hacia adentro, asi que el primer punto de esta ruta —la boca— le queda detras. */
+      /* el ultimo punto NO se corre de costado: ahi tiene que quedar centrado detras del escritorio */
+      profeIr(rutaDesde([...costado(dentro.slice(0,-1).map(cel2), PROFE_COSTADO), [S.x, S.zProfe]],
+                        PROFE.x, PROFE.z), VEL_PROFE);
       rielIr([...dentro.slice(0,-1).map(cel2), [S.x, S.zCam]], VEL_CAM, ()=>siguienteEscena());
     }
   }

@@ -50,6 +50,119 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Trigésima novena vuelta (2026-08-28): **RECREO** — una sola boca, y el profesor deja de atravesarte
+
+Pedido: *"evita que los audios se sobrepongan y también elimina que baldi se quede mientras completas
+el minijuegos y te espere y lo haces y el se viene devuelta para ti y te atraviesa y después tarda en
+volver eso no debería pasar"*.
+
+#### EL AUDIO: HAY UN PERSONAJE, O SEA UNA BOCA — Y HABÍA TRES FORMAS DE QUE SONARAN DOS
+
+**1. El bip por letra sonaba ENCIMA de la voz grabada.** El bip nació cuando el juego no tenía voz:
+era lo que hacía que el subtítulo se leyera *como si* alguien lo estuviera diciendo. Desde la vuelta
+26 hay **59 clips grabados** y el bip se quedó ahí, así que en cada línea sonaban una voz de hombre y
+una onda cuadrada bipeando cada dos letras, las dos diciendo lo mismo al mismo tiempo. Es el más
+audible de los tres y el más fácil de no ver en el código, porque las dos mitades viven en archivos
+distintos. Ahora los bips salen **sólo cuando esa línea no tiene clip**, que es el caso para el que se
+escribieron.
+
+**2. La voz se guardaba POR CLAVE y no por canal.** Dos `dBien` encimados se cortaban entre sí, pero
+`dBien` y `dSale` —dos claves distintas— sonaban a la vez. Y eso pasa todo el rato, porque las líneas
+se disparan una detrás de otra sin esperar a la anterior: acertás la última cuenta y 0,7 s después
+`terminarClase()` habla; terminás la tanda de bichos y enseguida habla la escena nueva; en la tableta
+dibujás rápido y el *"otra más"* se monta sobre el *"muy bien"*; y el grito de la muerte entra encima
+de lo que estuviera sonando. Ahora la fuente es **una sola** y la nueva corta a la que estaba, sea
+cual sea su clave.
+
+**3. Y UNA LÍNEA SIN CLIP NO CALLABA A LA ANTERIOR, que lo destapó la prueba.** `hablar()` corta lo
+que suena, pero sólo se lo llama con éxito si la línea nueva **tiene** clip. Una línea sin grabar —las
+de la tableta, por ejemplo— dejaba la anterior sonando *y encima* le ponía los bips. Medido: después
+de `dice('dTabPide')` la fuente que seguía sonando era `es:dBien`. Una línea nueva es una boca nueva
+aunque no tenga audio propio.
+
+Verificado con el audio decodificado de verdad: `d1` → una fuente, `es:d1`, bips apagados; `dBien`
+inmediatamente después → una fuente, `es:dBien`; `dTabPide` (sin clip) → **ninguna fuente** y bips
+encendidos.
+
+#### EL PROFESOR: TRES DEFECTOS ENCADENADOS, Y UNA AUDITORÍA NUEVA QUE LOS ENCONTRÓ
+
+Un *"se viene de vuelta y te atraviesa"* dura dos segundos y en una captura no se ve. Entró
+`auditarProfe()`: juega la partida entera y en cada paso anota **cuánto camina en total** y **a qué
+distancia pasa de la cámara**. Los tres defectos salieron de mirar esos dos números.
+
+**1. Caminaba el viaje ENTERO y te dejaba solo.** Su ruta era `[...ruta, ...restoRuta]`: se iba al
+fondo del pasillo mientras el jugador hacía la actividad. Ahora camina lo mismo que la cámara y
+**espera al lado tuyo, mirándote** — quedándose de espaldas parece que se olvidó de vos.
+
+**2. Y AL RETOMAR TE ATRAVESABA.** Al terminar la actividad arranca la escena `sigue`, que hace
+`ruta = restoRuta` — y ahí se le volvía a dar esa ruta a alguien que ya estaba parado en su último
+punto. `rutaDesde()` sólo descarta el primer punto si le queda encima, así que el resto quedaban
+**todos detrás de él**: caminaba para atrás hasta el principio del tramo, se cruzaba con la cámara, y
+recién después volvía a avanzar. Es exactamente lo reportado, palabra por palabra.
+
+**3. UN PUNTO REPETIDO EN LA JUNTURA ANULABA EL ARREGLO.** Una ruta se arma pegando la salida del aula
+con el camino de pasillo, y la última celda de la primera y la primera de la segunda **son la misma**:
+la boca. Ese duplicado parecía inofensivo. No lo era: la dirección en la que él tiene que seguir se
+calcula restando dos puntos consecutivos, y restar un punto de sí mismo da cero — o sea que el
+adelanto no se aplicaba y se quedaba parado en la boca, en el mismo sitio que la cámara, **a 8 cm de
+ella** durante toda la actividad. (De paso, cada punto repetido es una parada de 10 cm donde el
+resorte del giro de la cámara vuelve a arrancar, que es justo lo que `esquinas()` existe para evitar.)
+
+#### Y QUEDA UN CRUCE QUE NO SE ARREGLA CON RUTAS, PORQUE ES GEOMETRÍA
+
+Dentro del aula él se para **2,35 m más lejos de la salida** que la cámara, y en el pasillo tiene que
+terminar **2,8 m más cerca** de donde sigue el camino. O sea que en algún momento tiene que pasar por
+donde está el jugador, sí o sí — y con las dos rutas sobre la misma línea, *"pasar por donde está"* es
+atravesarlo.
+
+La solución no es cambiarle el camino sino **correrlo de costado**, que es lo que hacen dos personas
+en un pasillo. Cada punto de su ruta se desplaza perpendicular a la dirección en la que va, y la
+perpendicular sale de la dirección **entre el punto anterior y el siguiente** —no de un solo
+segmento— para que en una esquina el desvío gire con el camino en vez de dar un salto.
+
+**El desvío mide 0,85 m y el número salió del encuadre, no del gusto.** Empezó en 1,15: parado 2,8 m
+adelante, eso lo deja a 22,3 grados del centro contra 29,4 de medio campo horizontal, o sea al 76 %
+del borde — y en la captura salía cortado por el canto del cuadro. A 0,85 son 16,9 grados, el 57 %, y
+sigue habiendo 85 cm de aire entre él y la cámara, que con un cuerpo de 45 cm de ancho es de sobra.
+
+**Y `PROFE_ADELANTE` vale 2,8 y no 3,2 por una razón aritmética**: tiene que ser **menor** que el
+umbral de `rutaDesde()`, que son 0,75 celdas = 3,15 m. Al retomar, el primer punto de la ruta nueva es
+justamente el punto del que ya se corrió esos metros; con 3,2 quedaba fuera del umbral por cinco
+centímetros y el profesor volvía a caminar hacia atrás. Con 2,8 lo descarta la misma regla que ya
+protege las esquinas, y no hace falta una segunda bandera que se acuerde de nada.
+
+#### LA MEDICIÓN, Y LA PRUEBA DE QUE LA MEDICIÓN SIRVE
+
+Primero medí *"pasos en los que se da vuelta"* y **no servía**: un ida y vuelta de tres metros son dos
+pasos de 7 cm en los que el rumbo se invierte, o sea 0,14 m en la cuenta, y eso no distingue un rebote
+de un redondeo. El **camino total** sí: caminar de más se paga metro a metro.
+
+| | camino total | cuadros encima de la cámara | lo más cerca |
+|---|---|---|---|
+| como estaba | **351,4 m** | **1.252** | **0,00 m** |
+| sin el desvío de costado | 289,9 m | 107 | 0,02 m |
+| ahora | **278,2 m** | **0** | **0,85 m** |
+
+O sea: **73 metros de caminata de más**, que es literalmente el *"después tarda en volver"*. Y las
+tres filas están medidas sobre el mismo binario con una constante cambiada, así que la prueba detecta
+el defecto además de aprobar el arreglo.
+
+**UNA CORRECCIÓN HONESTA:** también relajé la guarda de `rutaDesde()` de `R.length>2` a `>1`, porque
+con un pasillo único las rutas de pasillo son de dos puntos y con `>2` el descarte no corría nunca.
+Cuando lo hice, arregló un cruce a 3 cm en el saludo. Pero **hoy ya no cambia ningún número** —lo
+comprobé volviéndolo a `>2` y sale idéntico—, y la razón es que al profesor siempre se le agrega el
+punto de adelanto, así que su ruta nunca tiene menos de tres puntos. Se queda porque la guarda seguía
+estando mal escrita, no porque esté haciendo algo hoy.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24**, 0 muertes, 9.818 pasos. **0 pasos dentro de paredes en 9.834.**
+Profesor: **0 cuadros encima de la cámara**, mínimo 0,85 m, 278,2 m caminados. Contestando mal:
+muerte, y desde el reintento la partida se termina igual (24/24 con 1 muerte). El final: cinco fases,
+1.233 pasos. Voz: una sola fuente en los tres casos, y bips sólo cuando no hay clip. Tableta **9 de 9**
+en la matriz. Espejo y lectura de mano en verde, 10 fotos puestas. Costo alternando **15 · 23**
+llamadas. `window.__errs` vacío.
+
 ### Trigésima octava vuelta (2026-08-28): **RECREO** — un pasillo, cero puertas, sombras y nueve texturas generadas
 
 Pedido: *"haz que los salones estén seguiditos y que no hayan puertas así el juego es más rápido y
