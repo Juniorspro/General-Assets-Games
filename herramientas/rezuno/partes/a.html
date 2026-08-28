@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>RezUno</title>
+<style>
+/* ===================== EL MARCO =====================
+   Todo el juego vive dentro de un rectangulo 9:16 centrado. Es la misma decision que en RECREO y por
+   el mismo motivo: el reparto de cartas, el abanico de la mano y los dos botones estan pensados para
+   una pantalla alta, y estirarlos a un monitor apaisado deja las cartas del tamaño de un sello con
+   dos metros de vacio a los costados. En una pantalla ancha se ve el marco con bandas negras, que es
+   lo que hace cualquier juego vertical. */
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; background:#0b0c0f; overflow:hidden;
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  color:#f2f3f5; user-select:none; -webkit-user-select:none; }
+#todo{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+#marco{ position:relative; width:min(100vw, calc(100vh * 9 / 16));
+        height:min(100vh, calc(100vw * 16 / 9)); overflow:hidden; background:#14151a; }
+#lienzo{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ===================== LAS PANTALLAS =====================
+   Idioma, menu y final son DOM y no lienzo, y eso es a proposito: son texto que hay que poder
+   traducir, seleccionar con el lector de pantalla y que se vea nitido en cualquier densidad. El
+   juego es lienzo porque son cartas moviendose. */
+.pan{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center;
+      justify-content:center; gap:clamp(14px,3.4vh,30px); padding:6vh 8%; background:#14151a;
+      z-index:20; text-align:center; }
+.pan.ver{ display:flex; }
+
+/* EL TITULO SE DIBUJA CON TIPOGRAFIA Y NO CON UNA IMAGEN. Se pidio un menu "muy minimalista": una
+   palabra bien espaciada ES el diseño minimalista, y encima queda nitida en cualquier pantalla, pesa
+   cero bytes y se puede recolorear. Una imagen generada seria mas pesada y menos nitida. */
+#logo{ font-size:clamp(38px,11vw,74px); font-weight:200; letter-spacing:.16em;
+       line-height:1; margin-left:.16em; }
+#logo b{ font-weight:700; letter-spacing:.10em; }
+#logoSub{ font-size:clamp(10px,2.7vw,14px); letter-spacing:.42em; color:#6f737d;
+          margin-left:.42em; margin-top:-2px; }
+
+.bot{ display:block; width:min(320px,82%); padding:clamp(13px,2.4vh,18px) 10px;
+      border:1px solid #2e313a; background:transparent; color:#f2f3f5; cursor:pointer;
+      font-size:clamp(14px,3.6vw,18px); font-weight:600; letter-spacing:.13em;
+      font-family:inherit; transition:background .15s,border-color .15s; }
+.bot:active{ background:#20222a; }
+.bot.lleno{ background:#f2f3f5; color:#14151a; border-color:#f2f3f5; }
+.bot.lleno:active{ background:#c9ccd3; }
+/* UN BOTON APAGADO TIENE QUE DECIR POR QUE. Un boton gris sin explicacion se lee a juego roto; la
+   linea de abajo dice "primero el tutorial" y entonces se lee a orden. */
+.bot[disabled]{ opacity:.32; cursor:default; pointer-events:none; }
+.pie{ font-size:clamp(11px,2.9vw,13px); color:#767b85; line-height:1.55; max-width:30em; }
+.pie b{ color:#c9ccd3; font-weight:600; }
+
+#idBotones{ display:flex; flex-direction:column; gap:12px; align-items:center; width:100%; }
+
+/* la linea de estado de la camara: permanente y con el motivo, no un cartel de dos segundos */
+#camAviso{ font-size:clamp(10px,2.7vw,12px); letter-spacing:.10em; color:#767b85; min-height:1.2em; }
+#camAviso.bien{ color:#6ecb8a; }
+#camAviso.mal{ color:#e0705f; }
+
+/* EL VIDEO NO VA CON display:none. Un video que el compositor considera que no se dibuja puede dejar
+   de entregar cuadros, y sin cuadros no hay deteccion. Queda de 2 px y transparente. */
+#camVid{ position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+/* el HUD del juego: solo dos cosas, y las dos son texto */
+#hud{ position:absolute; left:0; right:0; top:0; padding:calc(env(safe-area-inset-top) + 10px) 14px 0;
+      display:none; justify-content:space-between; align-items:flex-start; z-index:10;
+      pointer-events:none; font-size:clamp(10px,2.7vw,12px); letter-spacing:.14em; color:#8b909b; }
+body.jugando #hud{ display:flex; }
+#salir{ pointer-events:auto; cursor:pointer; border:1px solid #2e313a; background:#181a20;
+        color:#8b909b; padding:6px 11px; font:inherit; letter-spacing:.14em; }
+
+/* el cartel del tutorial: abajo, ancho, con fondo propio para que se lea sobre las cartas */
+/* EL CARTEL VA ARRIBA Y NO ABAJO, y esto salio de una captura: abajo tapaba justo el abanico de la
+   mano, o sea la parte de la pantalla que el propio cartel te esta pidiendo que mires. Arriba cae en
+   la franja de los dos rivales, que durante el tutorial no se dibujan porque ningun paso habla de
+   ellos — el hueco existe precisamente porque se lo hace existir. */
+#guia{ position:absolute; left:12px; right:12px; top:13%;
+       background:#0f1013f2; border:1px solid #262932; padding:13px 15px; z-index:12;
+       display:none; font-size:clamp(12px,3.3vw,15px); line-height:1.5; }
+body.guia #guia{ display:block; }
+#guia .n{ font-size:10px; letter-spacing:.22em; color:#6f737d; display:block; margin-bottom:5px; }
+#guia b{ color:#ffd84a; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="todo"><div id="marco">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud"><div id="marcador"></div><button id="salir">×</button></div>
+  <div id="guia"><span class="n" id="guiaN"></span><span id="guiaT"></span></div>
+
+  <div class="pan ver" id="pIdioma">
+    <div id="logo">Rez<b>Uno</b></div>
+    <div id="logoSub">BETA</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <div id="logo2" style="font-size:clamp(38px,11vw,74px);font-weight:200;letter-spacing:.16em;line-height:1;margin-left:.16em">Rez<b style="font-weight:700;letter-spacing:.10em">Uno</b></div>
+    <div id="logoSub2" style="font-size:clamp(10px,2.7vw,14px);letter-spacing:.42em;color:#6f737d;margin-left:.42em;margin-top:-2px">BETA</div>
+    <button class="bot lleno" id="bTut"></button>
+    <button class="bot" id="bJugar"></button>
+    <div class="pie" id="mPie"></div>
+    <div id="camAviso"></div>
+    <button class="bot" id="bIdioma" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <div id="finT" style="font-size:clamp(26px,8vw,44px);font-weight:200;letter-spacing:.10em"></div>
+    <div class="pie" id="finS"></div>
+    <button class="bot lleno" id="bOtra"></button>
+    <button class="bot" id="bMenu"></button>
+  </div>
+</div></div>
+<video id="camVid" playsinline muted autoplay></video>
+
+<script type="module">

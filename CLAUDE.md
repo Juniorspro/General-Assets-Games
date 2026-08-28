@@ -43,12 +43,140 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
+- **`RezUno.html` es "RezUno"** (~71 KB, **sin un solo asset**: todo dibujado por código). El quinto
+  juego. Un UNO que se juega **con la mano por la cámara**: todo, absolutamente todo, se hace con un
+  **pellizco** (pulgar e índice). Pellizcás una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
+  si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
+  UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
+  te pide idioma primero y después se abre un menú todo god minimalista con el nombre y donde en el
+  menú debes tocar play tutorial si o si al inicio ... y te da un tutorial súper bien explicado"*.
+  El botón JUGAR **está bloqueado hasta que el tutorial esté hecho**. Vive partido en
+  `herramientas/rezuno/partes/` y se arma con `python3 herramientas/rezuno/armar.py`.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima vuelta (2026-08-28): **RezUno**, el quinto juego — un UNO que se juega con un solo gesto
+
+#### LA DECISIÓN DE FONDO: UN SOLO GESTO, Y TODO LO DEMÁS SALE DE AHÍ
+
+Se pidió *"todo se maneja mediante pinchs"*, y tomárselo literalmente es lo que hace que el juego
+funcione. No hay arrastrar, no hay mantener, no hay apuntar y esperar: **hay un pellizco**. Eso obliga
+a que cada decisión sea una lista de blancos grandes y separados, que es exactamente lo que una webcam
+puede resolver bien — y es lo contrario de lo que pasó en RECREO cuando una actividad pedía precisión
+de profundidad.
+
+De ahí sale la mecánica de dos tiempos que se pidió: **pellizcás una carta y aparecen dos opciones**,
+TIRAR y DEJAR. Un solo tiempo —pellizcar la carta y que se tire— haría que cualquier temblor tirara
+una carta que no querías, y en un juego de cartas eso no se puede deshacer.
+
+#### EL BOTÓN APAGADO **ES** LA REGLA, Y ESO NO ES UNA FRASE
+
+Se pidió que *"si el color no es el mismo directamente la de tirar aparece medio apagada"*. La
+tentación es escribir la condición del botón por un lado y la del juego por otro. Acá hay **una sola
+función**, `pega(carta, colorMesa, valorMesa)`, y la usan las cinco cosas que la necesitan: el botón,
+el jugador, los dos rivales, el sombreado de las cartas que no sirven y el tutorial. Si fueran dos
+cuentas, el botón diría una cosa y el juego haría otra — que es el defecto más difícil de encontrar
+que puede tener un juego de cartas, porque solo aparece en el caso raro.
+
+Y se comprueba: **25 partidas jugadas de punta a punta pellizcando las zonas** —o sea el camino
+literal del jugador, buscando la zona donde se dibuja y activando su centro— con **0 cartas ilegales
+bajadas**. Más 60 partidas por el camino interno: 60 terminadas, 0 ilegales.
+
+#### LAS ZONAS SE CALCULAN MIENTRAS SE DIBUJA, EN LA MISMA LÍNEA
+
+`pintarMesa()` dibuja una carta y **acto seguido** registra su zona, con los mismos números. No hay
+una tabla de rectángulos en otro lado. Es la lección que en RECREO costó una vuelta entera: el
+rompecabezas agarraba las piezas de la izquierda con la mano a la derecha porque el dibujo y el área
+sensible eran dos cuentas distintas.
+
+#### EL TUTORIAL: SEIS PASOS QUE SON SEIS COSAS QUE HACER, NO SEIS PANTALLAS DE TEXTO
+
+Obligatorio, como se pidió: **JUGAR está bloqueado** hasta que esté hecho, y el pie dice por qué —un
+botón apagado sin explicación se lee a juego roto, con la línea de abajo se lee a orden.
+
+Cada paso **espera a que hagas la cosa**, así que no se puede saltear ni pasar sin entender:
+levantar la mano · pellizcar · pellizcar una carta · pellizcar TIRAR · **una carta que no pega** ·
+pellizcar el mazo. El quinto es el que importa y es el único que no se puede explicar con palabras:
+la regla se aprende **viendo** que TIRAR está apagado con esa carta y encendido con la otra.
+
+**Y LA MANO DEL TUTORIAL ESTÁ ARMADA CARTA POR CARTA, no repartida al azar.** El paso 5 *necesita* una
+carta que no pegue con nada, y con un reparto aleatorio ese paso a veces no existe. Un tutorial que a
+veces no puede enseñar lo que tiene que enseñar no es un tutorial. Verificado: los siete pasos en
+orden, sin cámara, y en los tres idiomas.
+
+#### DOS COSAS DE LA MANO QUE NO SON OBVIAS
+
+**EL ARO VA EN EL MEDIO DEL PULGAR Y EL ÍNDICE, no en la punta del índice.** Es donde el jugador *ve*
+que se cierra la pinza, así que es donde tiene que estar el cursor. Con la punta del índice, al cerrar
+la pinza el aro se corre un centímetro justo en el momento de elegir.
+
+**Y EL UMBRAL DEL PELLIZCO TIENE HISTÉRESIS Y NO UN NÚMERO SOLO.** Con un umbral único, una pinza que
+queda justo en el borde parpadea varias veces por segundo, y **cada parpadeo es un click**: tirás una
+carta que no quisiste. Cierra en 0,42 y abre recién en 0,58, medido: `cierra 0,415 · abre 0,585`.
+Además vale el **flanco** y no el estado — una pinza sostenida quince cuadros da **un** click, medido.
+
+Medido el filtro (1-euro con zona muerta sobre la derivada, normalizado por el tamaño de la palma):
+retardo **11,2 ms** con la mano lenta, **6,4** a media y **3,0** rápido — o sea que cuanto más rápido
+movés, menos atrasa, que es justo lo que hace falta para apuntar. Temblor atenuado 2,7 veces.
+
+#### EL ARO TIENE TRES ESTADOS Y NO DOS
+
+Apagado (no hay mano), abierto (hay mano) y cerrado (estás pellizcando). Sin el estado del medio, el
+jugador no puede distinguir *"el juego no me ve"* de *"el pellizco no me sale"*, y esas dos cosas se
+arreglan de maneras opuestas.
+
+#### TRES RIVALES Y NO DOS, POR UNA CARTA
+
+Con dos jugadores el "gira" es idéntico al "salta" —le devuelve el turno al que la tiró—, así que una
+de las cuatro cartas de acción dejaría de significar algo. Con tres, girar cambia a quién le toca.
+Medido en **200 partidas**: gana 70 / 74 / 56, o sea que ninguno de los tres asientos está roto.
+
+#### UN DEFECTO PROPIO, ENCONTRADO FOTOGRAFIANDO Y NO LEYENDO
+
+La pantalla de final se miraba **adentro** del `if(fase==='juego')` del bucle, o sea que solo se
+enteraba en el mismo cuadro en que la partida terminaba. Con el pellizco eso siempre pasa —se consume
+dentro del bucle—, pero **el respaldo táctil entra por `pointerdown`, que corre afuera**: ganando de
+un toque, `fase` quedaba en `'fin'`, en el cuadro siguiente el `if` ya era falso y nadie mostraba
+nada. El juego se quedaba congelado en la última imagen. Se vio sacando la foto del final.
+
+**Y EL RESPALDO TÁCTIL NO ES UN EXTRA**: sin cámara —permiso negado, sin cámara, http— el juego sería
+imposible de jugar, y eso no es degradar, es romperse. El toque y el pellizco terminan los dos en la
+misma función con las mismas coordenadas: si fueran dos, el respaldo se desincronizaría en cuanto se
+agregue una zona, y el respaldo es justo lo que nadie prueba.
+
+#### DOS AJUSTES QUE SALIERON DE MIRAR UNA CAPTURA
+
+- **El cartel del tutorial estaba abajo y tapaba el abanico de la mano** — o sea la parte de la
+  pantalla que el propio cartel te pide que mires. Se mudó arriba, a la franja de los dos rivales, y
+  los rivales no se dibujan durante el tutorial: ningún paso habla de ellos, así que el hueco existe
+  porque se lo hace existir.
+- **La carta agarrada se superponía con la mano.** Mide 190 de alto y subía 160, así que su borde
+  caía en 1.120 y el abanico empieza en 1.090. Entre la pila y el abanico hay 386 px y botón + hueco
+  + carta suman 304: sube 210 y entran con aire.
+
+#### SIN UN SOLO ASSET, Y EL TÍTULO TAMPOCO
+
+71 KB, todo dibujado por código: las cartas, el dorso, los cuatro cuadrantes del comodín, los seis
+sonidos. **El título del menú es tipografía y no una imagen generada** — se pidió "muy minimalista", y
+una palabra bien espaciada *es* el diseño minimalista: queda nítida en cualquier pantalla, pesa cero
+y se puede recolorear.
+
+#### MEDIDO AL CERRAR
+
+Mazo **108 cartas** exactas (4 ceros, 8 comodines de los cuales 4 son +4, 25 por color). **60 partidas
+por el camino interno y 25 por las zonas: las 85 terminan, 0 cartas ilegales.** 200 partidas para el
+equilibrio: 70/74/56. Tutorial completo en los tres idiomas. Flanco: 15 cuadros de pinza sostenida =
+1 click. Histéresis 0,415 / 0,585. Retardo del aro 3–11 ms según la velocidad. **0,17 ms por cuadro**
+de dibujo. Cámara probada de verdad en el banco: `estado lista · delegado GPU · espejo true`.
+`window.__errs` vacío en las once corridas.
+
+**Lo que no pude verificar:** cómo se siente pellizcar con una mano de verdad y con la luz de una
+habitación cualquiera. El banco inyecta manos sintéticas y la cámara del contenedor es un patrón de
+prueba: los umbrales están medidos contra el modelo, no contra una persona.
 
 ### Trigésima novena vuelta (2026-08-28): **RECREO** — una sola boca, y el profesor deja de atravesarte
 

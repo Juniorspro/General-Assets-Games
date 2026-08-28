@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>RezUno</title>
+<style>
+/* ===================== EL MARCO =====================
+   Todo el juego vive dentro de un rectangulo 9:16 centrado. Es la misma decision que en RECREO y por
+   el mismo motivo: el reparto de cartas, el abanico de la mano y los dos botones estan pensados para
+   una pantalla alta, y estirarlos a un monitor apaisado deja las cartas del tamaño de un sello con
+   dos metros de vacio a los costados. En una pantalla ancha se ve el marco con bandas negras, que es
+   lo que hace cualquier juego vertical. */
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; background:#0b0c0f; overflow:hidden;
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  color:#f2f3f5; user-select:none; -webkit-user-select:none; }
+#todo{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+#marco{ position:relative; width:min(100vw, calc(100vh * 9 / 16));
+        height:min(100vh, calc(100vw * 16 / 9)); overflow:hidden; background:#14151a; }
+#lienzo{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ===================== LAS PANTALLAS =====================
+   Idioma, menu y final son DOM y no lienzo, y eso es a proposito: son texto que hay que poder
+   traducir, seleccionar con el lector de pantalla y que se vea nitido en cualquier densidad. El
+   juego es lienzo porque son cartas moviendose. */
+.pan{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center;
+      justify-content:center; gap:clamp(14px,3.4vh,30px); padding:6vh 8%; background:#14151a;
+      z-index:20; text-align:center; }
+.pan.ver{ display:flex; }
+
+/* EL TITULO SE DIBUJA CON TIPOGRAFIA Y NO CON UNA IMAGEN. Se pidio un menu "muy minimalista": una
+   palabra bien espaciada ES el diseño minimalista, y encima queda nitida en cualquier pantalla, pesa
+   cero bytes y se puede recolorear. Una imagen generada seria mas pesada y menos nitida. */
+#logo{ font-size:clamp(38px,11vw,74px); font-weight:200; letter-spacing:.16em;
+       line-height:1; margin-left:.16em; }
+#logo b{ font-weight:700; letter-spacing:.10em; }
+#logoSub{ font-size:clamp(10px,2.7vw,14px); letter-spacing:.42em; color:#6f737d;
+          margin-left:.42em; margin-top:-2px; }
+
+.bot{ display:block; width:min(320px,82%); padding:clamp(13px,2.4vh,18px) 10px;
+      border:1px solid #2e313a; background:transparent; color:#f2f3f5; cursor:pointer;
+      font-size:clamp(14px,3.6vw,18px); font-weight:600; letter-spacing:.13em;
+      font-family:inherit; transition:background .15s,border-color .15s; }
+.bot:active{ background:#20222a; }
+.bot.lleno{ background:#f2f3f5; color:#14151a; border-color:#f2f3f5; }
+.bot.lleno:active{ background:#c9ccd3; }
+/* UN BOTON APAGADO TIENE QUE DECIR POR QUE. Un boton gris sin explicacion se lee a juego roto; la
+   linea de abajo dice "primero el tutorial" y entonces se lee a orden. */
+.bot[disabled]{ opacity:.32; cursor:default; pointer-events:none; }
+.pie{ font-size:clamp(11px,2.9vw,13px); color:#767b85; line-height:1.55; max-width:30em; }
+.pie b{ color:#c9ccd3; font-weight:600; }
+
+#idBotones{ display:flex; flex-direction:column; gap:12px; align-items:center; width:100%; }
+
+/* la linea de estado de la camara: permanente y con el motivo, no un cartel de dos segundos */
+#camAviso{ font-size:clamp(10px,2.7vw,12px); letter-spacing:.10em; color:#767b85; min-height:1.2em; }
+#camAviso.bien{ color:#6ecb8a; }
+#camAviso.mal{ color:#e0705f; }
+
+/* EL VIDEO NO VA CON display:none. Un video que el compositor considera que no se dibuja puede dejar
+   de entregar cuadros, y sin cuadros no hay deteccion. Queda de 2 px y transparente. */
+#camVid{ position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+/* el HUD del juego: solo dos cosas, y las dos son texto */
+#hud{ position:absolute; left:0; right:0; top:0; padding:calc(env(safe-area-inset-top) + 10px) 14px 0;
+      display:none; justify-content:space-between; align-items:flex-start; z-index:10;
+      pointer-events:none; font-size:clamp(10px,2.7vw,12px); letter-spacing:.14em; color:#8b909b; }
+body.jugando #hud{ display:flex; }
+#salir{ pointer-events:auto; cursor:pointer; border:1px solid #2e313a; background:#181a20;
+        color:#8b909b; padding:6px 11px; font:inherit; letter-spacing:.14em; }
+
+/* el cartel del tutorial: abajo, ancho, con fondo propio para que se lea sobre las cartas */
+/* EL CARTEL VA ARRIBA Y NO ABAJO, y esto salio de una captura: abajo tapaba justo el abanico de la
+   mano, o sea la parte de la pantalla que el propio cartel te esta pidiendo que mires. Arriba cae en
+   la franja de los dos rivales, que durante el tutorial no se dibujan porque ningun paso habla de
+   ellos — el hueco existe precisamente porque se lo hace existir. */
+#guia{ position:absolute; left:12px; right:12px; top:13%;
+       background:#0f1013f2; border:1px solid #262932; padding:13px 15px; z-index:12;
+       display:none; font-size:clamp(12px,3.3vw,15px); line-height:1.5; }
+body.guia #guia{ display:block; }
+#guia .n{ font-size:10px; letter-spacing:.22em; color:#6f737d; display:block; margin-bottom:5px; }
+#guia b{ color:#ffd84a; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="todo"><div id="marco">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud"><div id="marcador"></div><button id="salir">×</button></div>
+  <div id="guia"><span class="n" id="guiaN"></span><span id="guiaT"></span></div>
+
+  <div class="pan ver" id="pIdioma">
+    <div id="logo">Rez<b>Uno</b></div>
+    <div id="logoSub">BETA</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <div id="logo2" style="font-size:clamp(38px,11vw,74px);font-weight:200;letter-spacing:.16em;line-height:1;margin-left:.16em">Rez<b style="font-weight:700;letter-spacing:.10em">Uno</b></div>
+    <div id="logoSub2" style="font-size:clamp(10px,2.7vw,14px);letter-spacing:.42em;color:#6f737d;margin-left:.42em;margin-top:-2px">BETA</div>
+    <button class="bot lleno" id="bTut"></button>
+    <button class="bot" id="bJugar"></button>
+    <div class="pie" id="mPie"></div>
+    <div id="camAviso"></div>
+    <button class="bot" id="bIdioma" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <div id="finT" style="font-size:clamp(26px,8vw,44px);font-weight:200;letter-spacing:.10em"></div>
+    <div class="pie" id="finS"></div>
+    <button class="bot lleno" id="bOtra"></button>
+    <button class="bot" id="bMenu"></button>
+  </div>
+</div></div>
+<video id="camVid" playsinline muted autoplay></video>
+
+<script type="module">
+/* =========================================================================================
+   REZUNO — un UNO que se juega con las manos
+
+   Pedido textual: *"tiene que ser asi con handtracking pero es un UNO de handtracking simple, la
+   idea es que el menu sea muy minimalista y el juego se llame RezUno, te pide idioma primero y
+   despues se abre un menu todo god minimalista con el nombre y donde en el menu debes tocar play
+   tutorial si o si al inicio dependiendo del idioma y te da un tutorial super bien explicado de como
+   jugar, para elegir las cartas que vas a tirar debes hacer pinch y te da dos opciones, una es tirar
+   y otra es dejar, si el color no es el mismo directamente la de tirar aparece medio apagada, todo
+   se maneja mediante pinchs, haz una beta"*.
+
+   ES UN JUEGO DE FAMILIA HECHO DE CERO Y NO USA NADA DE LA MARCA. Las reglas de un juego de cartas no
+   se pueden registrar; el nombre, el logo y el arte si. Por eso se llama RezUno, no dice la palabra
+   de la marca en ningun lado, y las cartas estan dibujadas por codigo con una tipografia propia.
+   ========================================================================================= */
+
+/* ===================== LOS IDIOMAS =====================
+   Ni un texto suelto en el codigo: todo sale de esta tabla. Arranca en ingles y se guarda, igual que
+   los otros cuatro juegos del repo. La funcion se llama TX y no t: una funcion global de una letra
+   la pisa cualquier cosa que comparta la pagina, y cuando se pisa no falla el idioma — falla TODO,
+   porque no queda un solo texto que no pase por ahi. Ya paso una vez en este repositorio. */
+const IDIOMAS=[['en','English'],['es','Español'],['pt','Português']];
+let IDIOMA='en';
+try{ const g=localStorage.getItem('rezuno_idioma'); if(g) IDIOMA=g; }catch(e){}
+
+const LANG={
+ en:{
+  jugar:'PLAY', tutorial:'TUTORIAL', idioma:'LANGUAGE', otra:'PLAY AGAIN', menu:'MENU',
+  menuPie:'Play with your hand. <b>Pinch</b> to pick a card, pinch again to choose.',
+  menuBloq:'Do the <b>tutorial</b> first — it takes a minute.',
+  camPide:'asking for the camera…', camOk:'CAMERA READY · pinch to play',
+  camNo:'no camera · you can tap instead',
+  camErrPermiso:'camera denied · tap the cards instead',
+  camErrCamara:'no camera found · tap the cards instead',
+  camErrCdn:'could not download the hand model · tap the cards instead',
+  camErrInsegura:'needs https · tap the cards instead',
+  tuTurno:'YOUR TURN', turnoDe:'{n} IS PLAYING', robaste:'YOU DREW',
+  tirar:'PLAY', dejar:'KEEP', robar:'DRAW', color:'PICK A COLOUR',
+  noVale:'DOESN’T MATCH', bot1:'LEFT', bot2:'RIGHT',
+  ganaste:'YOU WIN', perdiste:'{n} WON',
+  ganasteS:'You got rid of every card.', perdisteS:'They emptied their hand first.',
+  cartas:'{n} cards', unaCarta:'1 card', uno:'UNO!',
+  /* el tutorial: cada paso espera a que lo hagas */
+  t0n:'STEP 1 OF 6', t0:'Hold your <b>open hand</b> up in front of the camera. You will see a ring follow it.',
+  t1n:'STEP 2 OF 6', t1:'Now touch your <b>thumb and index finger</b> together. That is a <b>pinch</b>, and it is the only thing you do in this game.',
+  t2n:'STEP 3 OF 6', t2:'These are your cards. Move the ring over the <b>glowing one</b> and pinch it.',
+  t3n:'STEP 4 OF 6', t3:'Two options came up. <b>PLAY</b> puts the card down, <b>KEEP</b> puts it back. Pinch <b>PLAY</b>.',
+  t4n:'STEP 5 OF 6', t4:'A card only goes down if it matches the pile in <b>colour</b> or in <b>number</b>. This one matches neither, so PLAY is <b>dimmed</b>. Pinch <b>KEEP</b>.',
+  t5n:'STEP 6 OF 6', t5:'When nothing of yours fits, take one from the pile. Pinch the <b>deck</b> on the left.',
+  t6n:'READY', t6:'That is the whole game. Empty your hand before the other two do.',
+  ayudaTirar:'pinch PLAY or KEEP', ayudaColor:'pinch a colour', ayudaMano:'pinch a card, or the deck'
+ },
+ es:{
+  jugar:'JUGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'OTRA VEZ', menu:'MENÚ',
+  menuPie:'Se juega con la mano. <b>Pellizcá</b> para agarrar una carta y pellizcá otra vez para elegir.',
+  menuBloq:'Primero hacé el <b>tutorial</b> — es un minuto.',
+  camPide:'pidiendo la cámara…', camOk:'CÁMARA LISTA · pellizcá para jugar',
+  camNo:'sin cámara · podés tocar la pantalla',
+  camErrPermiso:'cámara denegada · tocá las cartas',
+  camErrCamara:'no hay cámara · tocá las cartas',
+  camErrCdn:'no se pudo bajar el modelo de manos · tocá las cartas',
+  camErrInsegura:'hace falta https · tocá las cartas',
+  tuTurno:'TU TURNO', turnoDe:'JUEGA {n}', robaste:'ROBASTE',
+  tirar:'TIRAR', dejar:'DEJAR', robar:'ROBAR', color:'ELEGÍ COLOR',
+  noVale:'NO PEGA', bot1:'IZQUIERDA', bot2:'DERECHA',
+  ganaste:'GANASTE', perdiste:'GANÓ {n}',
+  ganasteS:'Te quedaste sin cartas.', perdisteS:'Se quedó sin cartas antes que vos.',
+  cartas:'{n} cartas', unaCarta:'1 carta', uno:'¡UNO!',
+  t0n:'PASO 1 DE 6', t0:'Levantá la <b>mano abierta</b> delante de la cámara. Vas a ver un aro que la sigue.',
+  t1n:'PASO 2 DE 6', t1:'Ahora juntá el <b>pulgar y el índice</b>. Eso es un <b>pellizco</b>, y es lo único que se hace en todo el juego.',
+  t2n:'PASO 3 DE 6', t2:'Estas son tus cartas. Llevá el aro encima de la que <b>brilla</b> y pellizcala.',
+  t3n:'PASO 4 DE 6', t3:'Aparecieron dos opciones. <b>TIRAR</b> la baja a la mesa, <b>DEJAR</b> la devuelve. Pellizcá <b>TIRAR</b>.',
+  t4n:'PASO 5 DE 6', t4:'Una carta solo baja si coincide con la pila en el <b>color</b> o en el <b>número</b>. Esta no coincide en nada, así que TIRAR está <b>apagado</b>. Pellizcá <b>DEJAR</b>.',
+  t5n:'PASO 6 DE 6', t5:'Cuando no te sirve ninguna, agarrás una del mazo. Pellizcá el <b>mazo</b> de la izquierda.',
+  t6n:'LISTO', t6:'Eso es todo el juego. Quedate sin cartas antes que los otros dos.',
+  ayudaTirar:'pellizcá TIRAR o DEJAR', ayudaColor:'pellizcá un color', ayudaMano:'pellizcá una carta, o el mazo'
+ },
+ pt:{
+  jugar:'JOGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'DE NOVO', menu:'MENU',
+  menuPie:'Joga-se com a mão. <b>Belisque</b> para pegar uma carta e belisque de novo para escolher.',
+  menuBloq:'Faça o <b>tutorial</b> primeiro — leva um minuto.',
+  camPide:'pedindo a câmera…', camOk:'CÂMERA PRONTA · belisque para jogar',
+  camNo:'sem câmera · você pode tocar na tela',
+  camErrPermiso:'câmera negada · toque nas cartas',
+  camErrCamara:'não há câmera · toque nas cartas',
+  camErrCdn:'não deu para baixar o modelo de mãos · toque nas cartas',
+  camErrInsegura:'precisa de https · toque nas cartas',
+  tuTurno:'SUA VEZ', turnoDe:'JOGA {n}', robaste:'VOCÊ COMPROU',
+  tirar:'JOGAR', dejar:'DEIXAR', robar:'COMPRAR', color:'ESCOLHA A COR',
+  noVale:'NÃO SERVE', bot1:'ESQUERDA', bot2:'DIREITA',
+  ganaste:'VOCÊ GANHOU', perdiste:'{n} GANHOU',
+  ganasteS:'Você ficou sem cartas.', perdisteS:'Ficou sem cartas antes de você.',
+  cartas:'{n} cartas', unaCarta:'1 carta', uno:'UNO!',
+  t0n:'PASSO 1 DE 6', t0:'Levante a <b>mão aberta</b> na frente da câmera. Você verá um anel seguindo ela.',
+  t1n:'PASSO 2 DE 6', t1:'Agora junte o <b>polegar e o indicador</b>. Isso é um <b>beliscão</b>, e é a única coisa que se faz no jogo.',
+  t2n:'PASSO 3 DE 6', t2:'Estas são suas cartas. Leve o anel sobre a que <b>brilha</b> e belisque.',
+  t3n:'PASSO 4 DE 6', t3:'Apareceram duas opções. <b>JOGAR</b> baixa a carta, <b>DEIXAR</b> devolve. Belisque <b>JOGAR</b>.',
+  t4n:'PASSO 5 DE 6', t4:'Uma carta só desce se combinar com a pilha na <b>cor</b> ou no <b>número</b>. Esta não combina em nada, então JOGAR está <b>apagado</b>. Belisque <b>DEIXAR</b>.',
+  t5n:'PASSO 6 DE 6', t5:'Quando nenhuma serve, você compra do monte. Belisque o <b>monte</b> da esquerda.',
+  t6n:'PRONTO', t6:'É todo o jogo. Fique sem cartas antes dos outros dois.',
+  ayudaTirar:'belisque JOGAR ou DEIXAR', ayudaColor:'belisque uma cor', ayudaMano:'belisque uma carta, ou o monte'
+ }
+};
+function TX(k, p){
+  let s=(LANG[IDIOMA] && LANG[IDIOMA][k]) || (LANG.en[k]!=null? LANG.en[k] : k);
+  if(p) for(const q in p) s=s.split('{'+q+'}').join(p[q]);
+  return s;
+}
+
+/* ===================== EL MAZO =====================
+   108 cartas, el reparto clasico: por cada uno de los cuatro colores un 0, dos de cada 1..9 y dos de
+   cada carta de accion (salta, gira, +2); mas cuatro comodines y cuatro comodines de +4.
+   EL COLOR 4 ES "SIN COLOR". Guardar los comodines con un color inventado obligaria a preguntar por
+   el valor en todos lados; con un color propio, "es comodin" es `c.color===4` y punto. */
+const COLORES=['#e0483c','#f0b429','#3fa356','#3f7fd0'];   // rojo, amarillo, verde, azul
+const COL_OSC=['#a32c23','#b07c12','#2b7038','#2b5896'];
+const NOMBRE_COL=['R','Y','G','B'];
+const SALTA=10, GIRA=11, MAS2=12, COMODIN=13, MAS4=14;
+function mazoNuevo(){
+  const m=[];
+  for(let c=0;c<4;c++){
+    m.push({color:c, valor:0});
+    for(let v=1;v<=9;v++){ m.push({color:c,valor:v}); m.push({color:c,valor:v}); }
+    for(const a of [SALTA,GIRA,MAS2]){ m.push({color:c,valor:a}); m.push({color:c,valor:a}); }
+  }
+  for(let k=0;k<4;k++){ m.push({color:4,valor:COMODIN}); m.push({color:4,valor:MAS4}); }
+  return m;
+}
+/* LA MEZCLA ES FISHER-YATES Y CON SEMILLA PROPIA. Con Math.random no se puede reproducir una partida,
+   y una partida que no se puede reproducir no se puede depurar: cuando el jugador diga "me paso algo
+   raro" no hay forma de volver a ese reparto. La semilla se guarda con la partida. */
+let SEM=1;
+function azar(){ SEM=(SEM*1664525+1013904223)&0x7fffffff; return SEM/0x7fffffff; }
+function mezclar(m){
+  for(let i=m.length-1;i>0;i--){ const j=Math.floor(azar()*(i+1)); const t=m[i]; m[i]=m[j]; m[j]=t; }
+  return m;
+}
+/* LA REGLA, EN UNA SOLA FUNCION. La usan el jugador, los dos rivales, el boton apagado y el tutorial:
+   si fueran dos cuentas distintas, el boton diria una cosa y el juego haria otra — que es el defecto
+   mas dificil de encontrar que puede tener un juego de cartas. */
+function pega(carta, colorMesa, valorMesa){
+  if(!carta) return false;
+  if(carta.color===4) return true;                 // los comodines siempre
+  if(carta.color===colorMesa) return true;
+  return carta.valor===valorMesa;
+}
+/* ===================== EL LIENZO =====================
+   Contexto 2D y no WebGL, y no es pereza: todo lo que se dibuja son rectangulos redondeados, texto y
+   circulos, que es exactamente lo que un contexto 2D hace por hardware. WebGL aca no compra nada y
+   cuesta mil lineas de shaders para dibujar cartas.
+
+   EL MUNDO SE MIDE EN UNIDADES DE DISEÑO, NO EN PIXELES. Todo se calcula sobre un marco imaginario
+   de 720 x 1280 y se escala al final. Sin esto, cada medida del juego —el ancho de una carta, la
+   separacion del abanico, el radio del aro— habria que escribirla en funcion del tamaño de pantalla,
+   y la primera que se olvide deja el abanico saliendose del marco en un telefono angosto. */
+const lienzo=document.getElementById('lienzo');
+const ctx=lienzo.getContext('2d');
+const marco=document.getElementById('marco');
+const DIS_W=720, DIS_H=1280;
+let ESC=1, LW=DIS_W, LH=DIS_H, DPR=1;
+/* EL DPR TIENE TECHO, y el numero salio de una medicion en otro juego de este repo: dibujar al doble
+   de la resolucion de diseño duplica los pixeles a rellenar por cuadro y lo unico que se gana es
+   remuestrear hacia arriba dibujos que no tienen mas detalle que dar. Con la camara encendida ese
+   presupuesto hace falta para otra cosa. */
+const DPR_TOPE=2;
+function ajustar(){
+  const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
+  DPR=Math.min(devicePixelRatio||1, DPR_TOPE);
+  lienzo.width=Math.round(w*DPR); lienzo.height=Math.round(h*DPR);
+  /* el marco ya es 9:16, asi que la escala es la misma en los dos ejes y no hay que recortar nada */
+  ESC=(w*DPR)/DIS_W;
+  LW=DIS_W; LH=(h*DPR)/ESC;
+}
+addEventListener('resize', ajustar);
+ajustar();
+
+/* de coordenadas de diseño a pixeles del lienzo, y al reves. La inversa hace falta para el toque:
+   un dedo llega en pixeles de pagina y hay que saber sobre que carta cayo. */
+function aPx(x,y){ return [x*ESC, y*ESC]; }
+function dePagina(px,py){
+  const r=marco.getBoundingClientRect();
+  return [ (px-r.left)*DPR/ESC, (py-r.top)*DPR/ESC ];
+}
+
+/* ---------- helpers de dibujo ---------- */
+function rr(g,x,y,w,h,r){
+  const k=Math.min(r, w/2, h/2);
+  g.beginPath();
+  g.moveTo(x+k,y); g.lineTo(x+w-k,y); g.quadraticCurveTo(x+w,y,x+w,y+k);
+  g.lineTo(x+w,y+h-k); g.quadraticCurveTo(x+w,y+h,x+w-k,y+h);
+  g.lineTo(x+k,y+h); g.quadraticCurveTo(x,y+h,x,y+h-k);
+  g.lineTo(x,y+k); g.quadraticCurveTo(x,y,x+k,y); g.closePath();
+}
+function txt(g,s,x,y,px,col,peso,esp,alin){
+  g.save();
+  g.font=(peso||400)+' '+px+'px "Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif';
+  g.fillStyle=col; g.textAlign=alin||'center'; g.textBaseline='middle';
+  if(esp){
+    /* el espaciado de letras no existe en canvas 2D en todos los navegadores, asi que se dibuja
+       letra por letra: es la unica forma de que el titulo y los rotulos se vean como en el CSS */
+    let tot=0; for(const ch of s) tot+=g.measureText(ch).width+esp;
+    tot-=esp;
+    let cx = alin==='left'? x : (alin==='right'? x-tot : x-tot/2);
+    g.textAlign='left';
+    for(const ch of s){ g.fillText(ch,cx,y); cx+=g.measureText(ch).width+esp; }
+  } else g.fillText(s,x,y);
+  g.restore();
+}
+
+/* ===================== LA CARTA =====================
+   MEDIDAS: 96 x 144 de diseño, o sea la proporcion 2:3 de una carta de verdad. El ovalo blanco
+   inclinado es lo que la hace leer a carta de este juego y no a ficha de color, y el numero va
+   DOS VECES —grande en el ovalo y chico en las esquinas— porque en el abanico las cartas se tapan
+   entre si y lo unico que asoma es la esquina. */
+const CW=96, CH=144;
+function simbolo(v){
+  if(v===SALTA) return '⊘';
+  if(v===GIRA)  return '⇄';
+  if(v===MAS2)  return '+2';
+  if(v===MAS4)  return '+4';
+  if(v===COMODIN) return '★';
+  return String(v);
+}
+function dibujarCarta(g, c, x, y, w, h, o){
+  o=o||{};
+  const s=w/CW;
+  g.save();
+  if(o.sombra){ g.shadowColor='rgba(0,0,0,.55)'; g.shadowBlur=18*s; g.shadowOffsetY=7*s; }
+  rr(g,x,y,w,h,11*s);
+  g.fillStyle = c.color<4? COLORES[c.color] : '#23252c';
+  g.fill();
+  g.shadowColor='transparent';
+  /* el borde blanco: una carta sin borde sobre un fondo oscuro se lee a mancha de color */
+  rr(g,x+3.5*s,y+3.5*s,w-7*s,h-7*s,8*s);
+  g.strokeStyle='#f6f7f8'; g.lineWidth=3.2*s; g.stroke();
+
+  if(c.color===4){
+    /* EL COMODIN LLEVA LOS CUATRO COLORES, y no un dibujo abstracto: es lo unico que dice "esta
+       carta se convierte en cualquiera de estos" sin una linea de texto. */
+    const cx=x+w/2, cy=y+h/2, r=w*0.30;
+    for(let k=0;k<4;k++){
+      g.beginPath(); g.moveTo(cx,cy);
+      g.arc(cx,cy,r, (k*90-135)*Math.PI/180, ((k+1)*90-135)*Math.PI/180);
+      g.closePath(); g.fillStyle=COLORES[k]; g.fill();
+    }
+    if(c.valor===MAS4) txt(g,'+4',cx,cy+h*0.30, w*0.26, '#f6f7f8', 800);
+  } else {
+    g.save();
+    g.translate(x+w/2, y+h/2); g.rotate(-Math.PI/8);
+    g.beginPath(); g.ellipse(0,0, w*0.40, h*0.30, 0, 0, Math.PI*2);
+    g.fillStyle='#f6f7f8'; g.fill();
+    g.restore();
+    const sim=simbolo(c.valor);
+    txt(g, sim, x+w/2, y+h/2, sim.length>1? w*0.42 : w*0.56, COL_OSC[c.color], 800);
+  }
+  const sim=simbolo(c.valor);
+  const cEsq = c.color===4? '#f6f7f8' : '#f6f7f8';
+  txt(g, sim, x+w*0.15, y+h*0.11, w*0.19, cEsq, 700, 0, 'center');
+  txt(g, sim, x+w*0.85, y+h*0.89, w*0.19, cEsq, 700, 0, 'center');
+  g.restore();
+}
+/* el dorso: la misma silueta con el ovalo, para que una carta dada vuelta se lea como la misma carta */
+function dibujarDorso(g, x, y, w, h, o){
+  const s=w/CW;
+  g.save();
+  if(o&&o.sombra){ g.shadowColor='rgba(0,0,0,.5)'; g.shadowBlur=14*s; g.shadowOffsetY=5*s; }
+  rr(g,x,y,w,h,11*s); g.fillStyle='#1b1d24'; g.fill();
+  g.shadowColor='transparent';
+  rr(g,x+3.5*s,y+3.5*s,w-7*s,h-7*s,8*s); g.strokeStyle='#3a3e4a'; g.lineWidth=3.2*s; g.stroke();
+  g.save();
+  g.translate(x+w/2,y+h/2); g.rotate(-Math.PI/8);
+  g.beginPath(); g.ellipse(0,0,w*0.36,h*0.27,0,0,Math.PI*2);
+  g.fillStyle='#2a2d36'; g.fill();
+  g.restore();
+  txt(g,'R', x+w/2, y+h/2, w*0.30, '#4b5060', 800);
+  g.restore();
+}
+/* =========================================================================================
+   LA MANO
+
+   Este juego necesita DOS cosas de la camara y nada mas: donde esta la mano en la pantalla, y si el
+   pulgar y el indice se estan tocando. Todo lo demas —cuantos dedos, que gesto, la mano en 3D— es
+   trabajo que no se usa, asi que no se hace: se pide UNA mano y se leen cuatro puntos.
+
+   TRES COSAS QUE HAY QUE HACER BIEN Y NO SON OBVIAS, las tres aprendidas en RECREO:
+
+   1. LA MEDICION NO VA EN EL BUCLE DE DIBUJO. detectForVideo() tarda entre 8 y 20 ms en un telefono,
+      y con 16,6 ms de presupuesto para 60 fps cada cuadro pagaria la medicion entera. La maneja
+      requestVideoFrameCallback del propio <video>, que dispara una vez por cuadro de CAMARA y no de
+      render. Entre medicion y medicion la posicion se interpola.
+
+   2. LA CAMARA SE PIDE ANTES QUE EL MODELO. El detector son dos descargas de un CDN mas un modelo de
+      7,8 MB, o sea varios segundos: pidiendolos primero, cuando por fin se llama a getUserMedia el
+      gesto del jugador ya expiro y Safari lo rechaza SIN mostrar el cartelito. La camara va en la
+      primera linea y la descarga despues.
+
+   3. EL ESPEJO SE LEE DEL TRACK Y NO SE SUPONE. Con la camara frontal la imagen va espejada y con la
+      trasera no; si se espeja al reves, mover la mano a la derecha mueve el aro a la izquierda y no
+      hay forma de apuntar a una carta. Aca se usa la FRONTAL, que es la que mira a alguien sentado
+      jugando a las cartas, pero igual se lee del track.
+   ========================================================================================= */
+const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', delegado:'',
+             x:0.5, y:0.5, pinza:false, pinzaNueva:false, crudo:0, hz:0, medidas:0,
+             espejo:true, msDet:0, cdn:null, listaEn:0 };
+
+const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+/* DOS CDN. El detector es una descarga de un tercero: si ese tercero no contesta, el juego se queda
+   sin manos y no hay nada que el jugador pueda hacer. */
+const MANO_CDN=[{ js:MANO_URL, wasm:MANO_WASM },
+                { js:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+                  wasm:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm' }];
+const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+/* 256x192 y no 480x360: son 2,8 veces menos pixeles para la misma mano, y la mano ocupa medio cuadro */
+const MANO_ENT_W=256, MANO_ENT_H=192;
+const MANO_HZ=45;             // techo de mediciones por segundo
+const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
+
+function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
+
+/* ===================== EL PELLIZCO =====================
+   Distancia pulgar-indice DIVIDIDA POR EL TAMAÑO DE LA PALMA, y esa division es todo el asunto: la
+   mano puede estar a 20 cm de la camara o a un metro, asi que ninguna distancia en fracciones de
+   cuadro sirve por si sola. La palma (muñeca -> nudillo del medio) es invariante a la distancia y al
+   tamaño de la mano de quien juega.
+   Medido en RECREO con manos sinteticas: un pellizco da 0,06 y un puño 0,88 — catorce veces de
+   margen, asi que el umbral en 0,45 no esta apretado ni de casualidad. */
+const PINZA_CIERRA=0.42, PINZA_ABRE=0.58;
+function leerPinza(lm){
+  const palma=d3(lm[0], lm[9]) || 1e-6;
+  return d3(lm[4], lm[8]) / palma;
+}
+
+/* ===================== EL FILTRO =====================
+   Un filtro de constante fija no puede ganar: si suaviza poco pasa el temblor del detector, y si
+   suaviza mucho el aro llega tarde. Las dos cosas no pasan al mismo tiempo, asi que la constante
+   tiene que depender de la velocidad. Esto es un 1-euro: con la mano quieta baja el corte —donde lo
+   unico que se mueve es ruido— y lo abre cuando la mano se mueve.
+   LA ZONA MUERTA SOBRE LA DERIVADA es lo que evita que el propio ruido abra el filtro: sin ella, la
+   mano quieta "se mueve" unos puntos por cuadro y el filtro lo interpreta como movimiento real. */
+const OE={ fcMin:0.9, beta:38.0, fcD:2.4, dz:0.0012 };
+function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
+const F={ x:{v:0,d:0,ini:false}, y:{v:0,d:0,ini:false} };
+function oePaso(S, x, dt){
+  if(!S.ini){ S.v=x; S.d=0; S.ini=true; return x; }
+  let d=(x-S.v)/dt;
+  const a=Math.abs(d);
+  d = a<OE.dz/dt? 0 : d*(1 - (OE.dz/dt)/a);
+  const ad=oeAlfa(OE.fcD, dt);
+  S.d = S.d + ad*(d-S.d);
+  const fc=OE.fcMin + OE.beta*Math.abs(S.d);
+  const al=oeAlfa(fc, dt);
+  S.v = S.v + al*(x-S.v);
+  return S.v;
+}
+
+function manoFallo(cual){
+  MANO.estado='no'; MANO.error=cual; MANO.on=false;
+  if(typeof pintarCam==='function') pintarCam();
+}
+
+async function manosIniciar(){
+  if(MANO.estado==='lista'||MANO.estado==='carga') return MANO.on;
+  MANO.estado='carga'; MANO.error='';
+  if(typeof pintarCam==='function') pintarCam();
+  /* SIN HTTPS navigator.mediaDevices NO EXISTE, asi que no hay permiso que negar: el navegador ni
+     pregunta. Es la causa mas facil de confundir con un error del juego. */
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ manoFallo('insegura'); return false; }
+  let flujo=null;
+  try{
+    flujo=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false });
+  }catch(e){
+    manoFallo((e && (e.name==='NotFoundError'||e.name==='OverconstrainedError'))? 'camara' : 'permiso');
+    return false;
+  }
+  const v=document.getElementById('camVid');
+  v.srcObject=flujo; MANO.vid=v;
+  try{ await v.play(); }catch(e){}
+  /* la entrada se achica en el propio track: menos pixeles que subir a la GPU en cada medicion */
+  try{ const tr=flujo.getVideoTracks()[0];
+       await tr.applyConstraints({ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H} });
+       const s=tr.getSettings? tr.getSettings() : {};
+       MANO.espejo = (s.facingMode!=='environment');
+  }catch(e){}
+
+  let vision=null;
+  for(const cdn of MANO_CDN){
+    try{ vision=await import(/* @vite-ignore */ cdn.js); MANO.cdn=cdn; break; }catch(e){}
+  }
+  if(!vision){ manoFallo('cdn'); return false; }
+  try{
+    const fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm);
+    /* GPU primero y CPU de respaldo: en telefonos viejos el delegado de GPU tira al crear la tarea, y
+       un detector a 15 fps en CPU sigue siendo jugable. */
+    for(const del of ['GPU','CPU']){
+      try{
+        MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
+          baseOptions:{ modelAssetPath:MANO_MODELO, delegate:del },
+          runningMode:'VIDEO', numHands:1,
+          minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5, minTrackingConfidence:0.5 });
+        MANO.delegado=del; break;
+      }catch(e){}
+    }
+  }catch(e){}
+  if(!MANO.det){ manoFallo('modelo'); return false; }
+  MANO.estado='lista'; MANO.on=true; MANO.listaEn=performance.now();
+  if(typeof pintarCam==='function') pintarCam();
+  manosLazo();
+  return true;
+}
+
+let _ultMed=0, _ultVista=0, _pinzaCruda=false;
+function manosMedir(t){
+  if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
+  if(t-_ultMed < 1000/MANO_HZ) return;
+  const a=performance.now();
+  let r=null;
+  try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
+  MANO.msDet = MANO.msDet*0.85 + (performance.now()-a)*0.15;
+  _ultMed=t; MANO.medidas++;
+  const lms=(r && r.landmarks) || [];
+  if(!lms.length) return;
+  manosInyectar(lms[0], t);
+}
+/* SE SEPARA DE LA MEDICION PARA PODER PROBARLA. Con manosInyectar() suelta, una mano de mentira entra
+   por el mismo camino que la de verdad: el filtro, el umbral del pellizco y el flanco se prueban sin
+   camara y sin persona. */
+function manosInyectar(lm, t){
+  const ex = MANO.espejo? (v)=>1-v : (v)=>v;
+  /* EL PUNTO DEL ARO ES EL MEDIO ENTRE EL PULGAR Y EL INDICE, y no la punta del indice: es donde el
+     jugador VE que se cierra la pinza, asi que es donde tiene que estar el aro. Con la punta del
+     indice, al cerrar la pinza el aro se corre un centimetro justo en el momento de elegir. */
+  const px=(lm[4].x+lm[8].x)/2, py=(lm[4].y+lm[8].y)/2;
+  const dt=Math.max(0.001, Math.min(0.2, (t-_ultVista)/1000)) || 0.02;
+  _ultVista=t;
+  MANO.x=oePaso(F.x, ex(px), dt);
+  MANO.y=oePaso(F.y, py, dt);
+  MANO.crudo=leerPinza(lm);
+  /* HISTERESIS Y NO UN UMBRAL SOLO. Con un umbral unico, una pinza que queda justo en el borde
+     parpadea entre abierta y cerrada varias veces por segundo, y cada parpadeo es un "click": el
+     jugador tira una carta que no quiso. Cierra en 0,42 y abre recien en 0,58. */
+  const antes=_pinzaCruda;
+  if(_pinzaCruda){ if(MANO.crudo>PINZA_ABRE) _pinzaCruda=false; }
+  else { if(MANO.crudo<PINZA_CIERRA) _pinzaCruda=true; }
+  MANO.pinza=_pinzaCruda;
+  /* VALE EL FLANCO, NO EL ESTADO. Una pinza sostenida medio segundo son treinta cuadros: si cada
+     cuadro contara, una sola pinza recorreria todos los botones. Solo cuenta el cuadro en el que
+     aparece. */
+  if(_pinzaCruda && !antes) MANO.pinzaNueva=true;
+  MANO.hay=true; MANO.visto=t;
+}
+function manosLazo(){
+  const v=MANO.vid; if(!v) return;
+  const paso=()=>{
+    const t=performance.now();
+    manosMedir(t);
+    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false; }
+    if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
+    else setTimeout(paso, 1000/MANO_HZ);
+  };
+  if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
+  else setTimeout(paso, 1000/MANO_HZ);
+}
+/* lo consume el juego una vez y se apaga: asi un pellizco no puede contarse dos veces */
+function tomarPinza(){ const p=MANO.pinzaNueva; MANO.pinzaNueva=false; return p; }
+/* =========================================================================================
+   LA PARTIDA
+
+   Tres jugadores: vos (0) y dos rivales (1 y 2). TRES Y NO DOS, y el motivo es una carta: con dos
+   jugadores el "gira" es identico al "salta" —le devuelve el turno al que la tiro— asi que una de
+   las cuatro cartas de accion dejaria de significar algo. Con tres, girar cambia a quien le toca.
+
+   TODO EL ESTADO EN UN OBJETO. Sin esto, "reiniciar" es acordarse de poner a mano quince variables y
+   la que se olvide se arrastra a la partida siguiente — que es como se ven los defectos que solo
+   aparecen en la segunda partida.
+   ========================================================================================= */
+const J_VOS=0, J_IZQ=1, J_DER=2;
+const G={ manos:[[],[],[]], mazo:[], pila:[], color:0, valor:0, turno:0, giro:1,
+          fase:'menu', gana:-1, robo:false, sel:-1, colorPide:false, aviso:'', avisoT:0,
+          mov:[], t:0, semilla:1, tutorial:false, botT:0, uno:[false,false,false] };
+
+/* las animaciones son una lista de cosas que viajan de un punto a otro y despues se olvidan. No hace
+   falta nada mas elaborado: una carta que se tira es un rectangulo yendo de A a B en medio segundo */
+function volar(carta, x0,y0,x1,y1, seg, boca){
+  G.mov.push({ c:carta, x0,y0,x1,y1, t:0, dur:seg||0.42, boca:!!boca });
+}
+function movTick(dt){
+  for(let i=G.mov.length-1;i>=0;i--){
+    const m=G.mov[i]; m.t+=dt;
+    if(m.t>=m.dur) G.mov.splice(i,1);
+  }
+}
+function movHay(){ return G.mov.length>0; }
+
+function robarDelMazo(){
+  if(!G.mazo.length){
+    /* SE REBARAJA LA PILA MENOS LA DE ARRIBA. Sin esto, en una partida larga el mazo se vacia y el
+       juego se queda esperando una carta que no existe — y eso no se ve probando dos minutos. */
+    if(G.pila.length<2) return null;
+    const arriba=G.pila.pop();
+    G.mazo=mezclar(G.pila.splice(0, G.pila.length));
+    G.pila=[arriba];
+  }
+  return G.mazo.pop() || null;
+}
+
+function repartir(semilla){
+  SEM=semilla|0 || 1; G.semilla=SEM;
+  G.mazo=mezclar(mazoNuevo());
+  G.manos=[[],[],[]];
+  for(let k=0;k<7;k++) for(let j=0;j<3;j++) G.manos[j].push(G.mazo.pop());
+  /* LA PRIMERA DE LA PILA NO PUEDE SER UNA CARTA DE ACCION. Si sale un +4 antes de que nadie jugara,
+     el juego arranca preguntandole un color a alguien que todavia no entendio que esta pasando. */
+  let p=null;
+  while(G.mazo.length){ const c=G.mazo.pop(); if(c.valor<=9){ p=c; break; } G.mazo.unshift(c); }
+  G.pila=[p]; G.color=p.color; G.valor=p.valor;
+  G.turno=J_VOS; G.giro=1; G.gana=-1; G.robo=false; G.sel=-1; G.colorPide=false;
+  G.mov.length=0; G.uno=[false,false,false]; G.botT=0;
+  ordenarMano(J_VOS);
+}
+/* LA MANO SE ORDENA POR COLOR Y DESPUES POR VALOR. No es cosmetica: el juego entero es buscar una
+   carta del color de la pila, y en un abanico desordenado eso es leer nueve cartas de a una. */
+function ordenarMano(j){ G.manos[j].sort((a,b)=> (a.color-b.color) || (a.valor-b.valor)); }
+
+function puedeJugar(j){ return G.manos[j].some(c=>pega(c,G.color,G.valor)); }
+function siguiente(desde){ return (desde + G.giro + 3) % 3; }
+
+/* aplica el efecto de la carta y devuelve a quien le toca despues */
+function efecto(c, quien){
+  let sig=siguiente(quien);
+  if(c.valor===SALTA){ sig=siguiente(sig); son('salta'); }
+  else if(c.valor===GIRA){ G.giro=-G.giro; sig=siguiente(quien); son('gira'); }
+  else if(c.valor===MAS2){
+    for(let k=0;k<2;k++){ const d=robarDelMazo(); if(d) G.manos[sig].push(d); }
+    if(sig===J_VOS) ordenarMano(J_VOS);
+    sig=siguiente(sig); son('mas');
+  } else if(c.valor===MAS4){
+    for(let k=0;k<4;k++){ const d=robarDelMazo(); if(d) G.manos[sig].push(d); }
+    if(sig===J_VOS) ordenarMano(J_VOS);
+    sig=siguiente(sig); son('mas');
+  }
+  return sig;
+}
+
+function jugarCarta(j, idx, colorElegido){
+  const c=G.manos[j][idx];
+  if(!c) return false;
+  G.manos[j].splice(idx,1);
+  G.pila.push(c);
+  G.color = (c.color===4)? (colorElegido==null? 0 : colorElegido) : c.color;
+  G.valor = c.valor;
+  son('tira');
+  if(G.manos[j].length===1){ G.uno[j]=true; son('uno'); }
+  if(!G.manos[j].length){ G.gana=j; G.fase='fin'; son(j===J_VOS?'gana':'pierde'); return true; }
+  G.turno=efecto(c, j);
+  G.robo=false;
+  return true;
+}
+
+/* ===================== LOS DOS RIVALES =====================
+   No es una inteligencia y no tiene que serlo: es un jugador de mesa razonable. Prefiere sacarse de
+   encima las cartas de accion —que es lo que hace cualquiera— y guarda los comodines para cuando no
+   le queda nada del color, que es el unico momento en que valen. Sin esa segunda regla tiraria el +4
+   en el primer turno y despues se quedaria trabado con seis cartas de un color que no sale mas. */
+function botElegir(j){
+  const m=G.manos[j];
+  const vale=[];
+  for(let i=0;i<m.length;i++) if(pega(m[i],G.color,G.valor)) vale.push(i);
+  if(!vale.length) return -1;
+  const sinCom=vale.filter(i=>m[i].color!==4);
+  const lista=sinCom.length? sinCom : vale;
+  let mejor=lista[0], punt=-1;
+  for(const i of lista){
+    const c=m[i];
+    let p=0;
+    if(c.valor===MAS2) p=6; else if(c.valor===SALTA) p=5; else if(c.valor===GIRA) p=4;
+    else if(c.valor===MAS4) p=3; else if(c.valor===COMODIN) p=2; else p=1;
+    /* con dos cartas iguales de utilidad, la del color del que MAS tiene: asi se queda con una mano
+       de un solo color, que es lo que hace que despues pueda encadenar */
+    if(c.color<4) p += 0.1*m.filter(q=>q.color===c.color).length;
+    if(p>punt){ punt=p; mejor=i; }
+  }
+  return mejor;
+}
+function botColor(j){
+  const c=[0,0,0,0];
+  for(const q of G.manos[j]) if(q.color<4) c[q.color]++;
+  let k=0; for(let i=1;i<4;i++) if(c[i]>c[k]) k=i;
+  return k;
+}
+function turnoBot(j){
+  let i=botElegir(j);
+  if(i<0){
+    const d=robarDelMazo();
+    if(d){ G.manos[j].push(d); son('roba'); }
+    i=botElegir(j);
+    if(i<0){ G.turno=siguiente(j); G.robo=false; return; }
+  }
+  const c=G.manos[j][i];
+  jugarCarta(j, i, c.color===4? botColor(j) : null);
+}
+
+/* ===================== EL TURNO DEL JUGADOR =====================
+   Dos pellizcos: uno agarra la carta y otro elige. Y el de TIRAR no hace nada si la carta no pega —
+   pero el boton ya se veia apagado antes de intentarlo, asi que no hay forma de que el jugador
+   descubra la regla equivocandose a ciegas. */
+function seleccionar(i){
+  if(G.fase!=='juego' || G.turno!==J_VOS || G.colorPide) return false;
+  if(i<0 || i>=G.manos[J_VOS].length) return false;
+  G.sel=i; son('agarra'); return true;
+}
+function soltar(){ if(G.sel<0) return false; G.sel=-1; son('deja'); return true; }
+function tirarSel(){
+  if(G.sel<0) return false;
+  const c=G.manos[J_VOS][G.sel];
+  if(!pega(c,G.color,G.valor)){ son('mal'); return false; }
+  if(c.color===4){ G.colorPide=true; return true; }   // primero el color, despues baja
+  jugarCarta(J_VOS, G.sel, null); G.sel=-1;
+  return true;
+}
+function elegirColor(k){
+  if(!G.colorPide || G.sel<0) return false;
+  jugarCarta(J_VOS, G.sel, k);
+  G.sel=-1; G.colorPide=false;
+  return true;
+}
+function robarJugador(){
+  if(G.fase!=='juego' || G.turno!==J_VOS || G.sel>=0 || G.colorPide) return false;
+  if(G.robo) return false;                       // una sola por turno
+  const d=robarDelMazo(); if(!d) return false;
+  G.manos[J_VOS].push(d); ordenarMano(J_VOS);
+  son('roba'); G.robo=true;
+  avisar(TX('robaste'));
+  /* SI LA QUE ROBASTE TAMPOCO PEGA, EL TURNO PASA SOLO. Dejarlo trabado con un boton de "pasar" que
+     no hace nada mas es un boton de mas para aprender. */
+  if(!puedeJugar(J_VOS)){ G.turno=siguiente(J_VOS); G.robo=false; }
+  return true;
+}
+function avisar(t){ G.aviso=t; G.avisoT=1.6; }
+
+/* el reloj de la partida: los rivales piensan medio segundo, que es lo que tarda alguien en mirar su
+   mano — sin esa pausa las tres jugadas pasan en el mismo cuadro y no se ve nada */
+const BOT_PIENSA=0.75;
+function partidaTick(dt){
+  G.t+=dt;
+  if(G.avisoT>0) G.avisoT-=dt;
+  movTick(dt);
+  if(G.fase!=='juego') return;
+  if(G.turno===J_VOS) return;
+  if(movHay()) return;
+  G.botT+=dt;
+  if(G.botT>=BOT_PIENSA){ G.botT=0; turnoBot(G.turno); }
+}
+/* =========================================================================================
+   LA MESA: DONDE VA CADA COSA, Y LAS ZONAS QUE SE PUEDEN PELLIZCAR
+
+   ESTO ES UNA SOLA LISTA Y NO DOS. Las zonas se calculan mientras se dibuja, en el mismo lugar y con
+   los mismos numeros: si el dibujo y el area sensible fueran dos cuentas distintas, el jugador
+   pellizcaria una carta y el juego agarraria la de al lado — que es exactamente el defecto que se
+   reporto en RECREO con el rompecabezas y costo una vuelta entera encontrarlo.
+   ========================================================================================= */
+let ZONAS=[];        // {tipo, i, x, y, w, h, activo}
+function zona(tipo, i, x, y, w, h, activo){ ZONAS.push({tipo,i,x,y,w,h,activo:activo!==false}); }
+function zonaEn(x,y){
+  /* de atras para adelante: lo ultimo que se dibuja es lo que esta arriba, asi que gana */
+  for(let k=ZONAS.length-1;k>=0;k--){
+    const z=ZONAS[k];
+    if(x>=z.x && x<=z.x+z.w && y>=z.y && y<=z.y+z.h) return z;
+  }
+  return null;
+}
+
+/* ---------- el abanico de la mano ---------- */
+/* EL ABANICO SE APRIETA CUANDO HAY MUCHAS CARTAS, y el ancho total esta topado. Con separacion fija,
+   una mano de catorce cartas se sale del marco por los dos lados y las de las puntas no se pueden
+   ni ver ni tocar. Se calcula el paso para que el abanico entero entre en el ancho util. */
+const MANO_Y=1090, MANO_ANCHO=640;
+function manoGeo(n){
+  const paso=n<=1? 0 : Math.min(CW*0.78, (MANO_ANCHO-CW)/(n-1));
+  const tot=CW + paso*(n-1);
+  return { paso, x0:(DIS_W-tot)/2 };
+}
+
+const MAZO_X=170, MAZO_Y=560, PILA_X=DIS_W-170-CW, PILA_Y=560;
+
+function pintarMesa(){
+  const g=ctx;
+  ZONAS.length=0;
+  g.save();
+  g.setTransform(ESC,0,0,ESC,0,0);
+  g.clearRect(0,0,LW,LH);
+  g.fillStyle='#14151a'; g.fillRect(0,0,LW,LH);
+
+  /* EL COLOR EN JUEGO SE VE EN EL FONDO, y es la unica pista permanente que hay. En un juego cuya
+     regla entera es "del mismo color", tener que mirar la esquina de una carta para saber cual es el
+     color activo es un impuesto en cada turno. Un halo detras de la pila lo dice sin texto. */
+  const cc=COLORES[G.color]||'#666';
+  const gr=g.createRadialGradient(DIS_W/2, PILA_Y+CH/2, 20, DIS_W/2, PILA_Y+CH/2, 470);
+  gr.addColorStop(0, cc+'44'); gr.addColorStop(1, '#14151a00');
+  g.fillStyle=gr; g.fillRect(0,180,DIS_W,760);
+
+  /* ---------- los dos rivales ----------
+     DURANTE EL TUTORIAL NO SE DIBUJAN. No es por despejar la pantalla porque si: el cartel del
+     tutorial ocupa esa franja, y ningun paso de los seis habla de los rivales. Sus cartas vuelven
+     apenas termina. */
+  if(!TUT.on) for(const [j, lado] of [[J_IZQ,-1],[J_DER,1]]){
+    const n=G.manos[j].length;
+    const cx = lado<0? 150 : DIS_W-150;
+    const y=200;
+    const w=CW*0.52, h=CH*0.52;
+    const paso=Math.min(w*0.44, 190/Math.max(1,n));
+    const tot=w+paso*Math.max(0,n-1);
+    for(let i=0;i<n;i++) dibujarDorso(g, cx-tot/2+i*paso, y, w, h);
+    /* EL TURNO SE MARCA CON UN SUBRAYADO Y NO CON UN BRILLO. Un brillo sobre cartas oscuras casi no
+       se ve; una linea del ancho del grupo se ve de reojo. */
+    if(G.fase==='juego' && G.turno===j){
+      g.fillStyle='#f2f3f5'; g.fillRect(cx-tot/2, y+h+10, tot, 3);
+    }
+    txt(g, TX(j===J_IZQ?'bot1':'bot2'), cx, y-26, 17, '#8b909b', 700, 2.2);
+    txt(g, n===1? TX('unaCarta') : TX('cartas',{n}), cx, y+h+34, 19, n===1?'#ffd84a':'#c9ccd3', 600);
+  }
+
+  /* ---------- mazo y pila ---------- */
+  const puedeRobar = G.fase==='juego' && G.turno===J_VOS && !G.robo && G.sel<0 && !G.colorPide;
+  dibujarDorso(g, MAZO_X, MAZO_Y, CW, CH, {sombra:true});
+  if(puedeRobar){
+    rr(g, MAZO_X-6, MAZO_Y-6, CW+12, CH+12, 15);
+    g.strokeStyle='#f2f3f5'; g.lineWidth=2.5; g.setLineDash([9,7]); g.stroke(); g.setLineDash([]);
+    txt(g, TX('robar'), MAZO_X+CW/2, MAZO_Y+CH+26, 17, '#c9ccd3', 700, 2.2);
+  }
+  zona('mazo', 0, MAZO_X-14, MAZO_Y-14, CW+28, CH+28, puedeRobar);
+
+  /* la pila: se ven las tres ultimas, apenas giradas, para que se lea a monton y no a una sola carta */
+  const ult=G.pila.slice(-3);
+  ult.forEach((c,k)=>{
+    g.save();
+    g.translate(PILA_X+CW/2, PILA_Y+CH/2);
+    g.rotate(((k*37)%17-8)*Math.PI/180);
+    dibujarCarta(g, c, -CW/2, -CH/2, CW, CH, {sombra:k===ult.length-1});
+    g.restore();
+  });
+
+  /* ---------- tu mano ---------- */
+  const m=G.manos[J_VOS], n=m.length;
+  const geo=manoGeo(n);
+  const tuTurno = G.fase==='juego' && G.turno===J_VOS;
+  for(let i=0;i<n;i++){
+    if(i===G.sel) continue;                         // la agarrada se dibuja aparte, arriba de todo
+    const x=geo.x0+i*geo.paso;
+    const ok=pega(m[i],G.color,G.valor);
+    const y=MANO_Y - (tuTurno&&ok? 14 : 0);
+    dibujarCarta(g, m[i], x, y, CW, CH, {sombra:true});
+    /* LAS QUE NO PEGAN SE OSCURECEN, no se esconden. Esconderlas cambiaria la mano de tamaño en cada
+       turno y el jugador perderia la referencia de donde estaba cada carta. */
+    if(tuTurno && !ok){ rr(g,x,y,CW,CH,11); g.fillStyle='#14151aaa'; g.fill(); }
+    zona('carta', i, x, y, geo.paso>0&&i<n-1? geo.paso : CW, CH, tuTurno);
+  }
+  /* ---------- la carta agarrada y sus dos opciones ---------- */
+  if(G.sel>=0 && m[G.sel]){
+    const c=m[G.sel];
+    const ok=pega(c,G.color,G.valor);
+    /* LA CARTA AGARRADA SUBE 210 Y NO 160, y el numero sale de una cuenta de estorbo: mide 190 de
+       alto, asi que a MANO_Y-160 su borde de abajo caia en 1.120 y el abanico empieza en 1.090 — se
+       superponia justo con la mano que hay que seguir mirando para decidir. Entre la pila (termina en
+       704) y el abanico hay 386 px, y boton + hueco + carta suman 304: entran con aire. */
+    const w=CW*1.32, h=CH*1.32, x=(DIS_W-w)/2, y=MANO_Y-210;
+    if(G.colorPide){
+      pintarColores(g);
+    } else {
+      dibujarCarta(g, c, x, y, w, h, {sombra:true});
+      const bw=248, bh=88, by=y-bh-26;
+      /* TIRAR A LA IZQUIERDA Y DEJAR A LA DERECHA, SIEMPRE EN EL MISMO SITIO. Un boton que se mueve
+         obliga a leerlo cada vez, y aca se pellizca cien veces por partida. */
+      pintarBoton(g, TX('tirar'), DIS_W/2-bw-12, by, bw, bh, ok, ok? '#f2f3f5':'#3a3e4a');
+      zona('tirar', 0, DIS_W/2-bw-12, by, bw, bh, ok);
+      pintarBoton(g, TX('dejar'), DIS_W/2+12, by, bw, bh, true, '#8b909b');
+      zona('dejar', 0, DIS_W/2+12, by, bw, bh, true);
+      if(!ok) txt(g, TX('noVale'), DIS_W/2-bw/2-12, by+bh+24, 17, '#e0705f', 700, 2.4);
+    }
+  }
+
+  /* ---------- el rotulo de turno ---------- */
+  if(G.fase==='juego' && !TUT.on){
+    const t = G.turno===J_VOS? TX('tuTurno') : TX('turnoDe',{n:TX(G.turno===J_IZQ?'bot1':'bot2')});
+    txt(g, t, DIS_W/2, 470, 22, G.turno===J_VOS? '#f2f3f5':'#8b909b', 700, 3.4);
+    if(G.turno===J_VOS && G.sel<0 && !G.colorPide)
+      txt(g, TX('ayudaMano'), DIS_W/2, 505, 15, '#6f737d', 500, 1.6);
+  }
+  if(G.avisoT>0) txt(g, G.aviso, DIS_W/2, 640, 26, '#ffd84a', 700, 3.0);
+
+  /* el brillo del tutorial va DEBAJO del aro: si se dibujara encima, el aro —que es el cursor— le
+     quedaria tapado justo cuando hay que llevarlo a la carta que brilla */
+  if(typeof pintarTut==='function') pintarTut(g);
+  pintarAro(g);
+  g.restore();
+}
+
+function pintarBoton(g, s, x, y, w, h, activo, col){
+  rr(g,x,y,w,h,10);
+  g.fillStyle = activo? '#1b1d24' : '#16171c'; g.fill();
+  g.strokeStyle = activo? col : '#2a2d36'; g.lineWidth=2; g.stroke();
+  txt(g, s, x+w/2, y+h/2, 27, activo? col : '#4b5060', 700, 3.2);
+}
+/* los cuatro colores del comodin: cuatro cuadrantes grandes, que es lo mas facil de acertar con una
+   mano que tiembla */
+function pintarColores(g){
+  const w=196, h=110, gx=DIS_W/2-w-8, gy=MANO_Y-232;
+  txt(g, TX('color'), DIS_W/2, gy-30, 21, '#f2f3f5', 700, 3.2);
+  for(let k=0;k<4;k++){
+    const x=gx+(k%2)*(w+16), y=gy+Math.floor(k/2)*(h+16);
+    rr(g,x,y,w,h,10); g.fillStyle=COLORES[k]; g.fill();
+    g.strokeStyle='#f6f7f8'; g.lineWidth=2; g.stroke();
+    zona('color', k, x, y, w, h, true);
+  }
+}
+
+/* ===================== EL ARO =====================
+   Es el cursor y ademas es el unico aviso de que la camara te esta viendo. Por eso tiene tres
+   estados y no dos: apagado (no hay mano), abierto (hay mano) y cerrado (estas pellizcando). Sin el
+   estado "abierto" el jugador no sabe si el juego no lo ve o si el pellizco no le sale. */
+let ARO_R=0;
+function pintarAro(g){
+  if(!MANO.on) return;
+  const x=MANO.x*DIS_W, y=MANO.y*LH;
+  const obj = MANO.hay? (MANO.pinza? 13 : 30) : 0;
+  ARO_R += (obj-ARO_R)*0.28;
+  if(ARO_R<1) return;
+  const z=zonaEn(x,y);
+  const col = (z&&z.activo)? '#ffd84a' : '#f2f3f5';
+  g.save();
+  g.globalAlpha=MANO.hay? 1 : 0.35;
+  g.beginPath(); g.arc(x,y,ARO_R,0,Math.PI*2);
+  g.strokeStyle=col; g.lineWidth=MANO.pinza? 6 : 3.5; g.stroke();
+  g.beginPath(); g.arc(x,y,2.5,0,Math.PI*2); g.fillStyle=col; g.fill();
+  g.restore();
+}
+
+/* ===================== EL SONIDO =====================
+   Procedural y sin un solo archivo. Un juego de cartas necesita seis ruidos cortos y todos son la
+   misma familia: un tono que sube o baja con un sobre rapido. Grabarlos serian seis descargas para
+   seis sonidos de diez lineas. */
+const AUD={ ctx:null, m:null, on:false };
+function audioIniciar(){
+  if(AUD.ctx) { if(AUD.ctx.state==='suspended') AUD.ctx.resume(); return; }
+  try{
+    AUD.ctx=new (window.AudioContext||window.webkitAudioContext)();
+    AUD.m=AUD.ctx.createGain(); AUD.m.gain.value=0.5; AUD.m.connect(AUD.ctx.destination);
+    AUD.on=true;
+  }catch(e){ AUD.on=false; }
+}
+function tono(f, dur, vol, tipo, f2){
+  if(!AUD.ctx||!AUD.on) return;
+  const c=AUD.ctx, t=c.currentTime;
+  const o=c.createOscillator(); o.type=tipo||'sine';
+  o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(40,f2), t+dur);
+  const g=c.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(vol, t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g); g.connect(AUD.m); o.start(t); o.stop(t+dur+0.02);
+}
+/* el roce de una carta es ruido corto y filtrado, no un tono: con un oscilador suena a timbre */
+function roce(dur, vol, f0, f1){
+  if(!AUD.ctx||!AUD.on) return;
+  const c=AUD.ctx, t=c.currentTime, n=Math.max(1,Math.floor(c.sampleRate*dur));
+  const b=c.createBuffer(1,n,c.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  const s=c.createBufferSource(); s.buffer=b;
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.8;
+  bp.frequency.setValueAtTime(f0,t);
+  bp.frequency.exponentialRampToValueAtTime(Math.max(60,f1||f0), t+dur);
+  const g=c.createGain(); g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  s.connect(bp); bp.connect(g); g.connect(AUD.m); s.start(t); s.stop(t+dur+0.02);
+}
+function son(k){
+  if(!AUD.on) return;
+  try{
+    if(k==='agarra') tono(760,0.07,0.10,'sine',900);
+    else if(k==='deja') tono(520,0.08,0.08,'sine',400);
+    else if(k==='tira'){ roce(0.16,0.35,900,300); tono(300,0.09,0.09,'triangle',210); }
+    else if(k==='roba') roce(0.14,0.28,700,1500);
+    else if(k==='mal') tono(180,0.20,0.11,'sawtooth',110);
+    else if(k==='salta') tono(880,0.13,0.10,'square',520);
+    else if(k==='gira'){ tono(520,0.10,0.08,'square',880); setTimeout(()=>tono(880,0.10,0.08,'square',520),95); }
+    else if(k==='mas'){ tono(240,0.16,0.12,'sawtooth',150); roce(0.18,0.25,500,180); }
+    else if(k==='uno'){ [740,988].forEach((f,i)=>setTimeout(()=>tono(f,0.14,0.11,'square'),i*90)); }
+    else if(k==='gana'){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.22,0.12,'square'),i*95)); }
+    else if(k==='pierde'){ [392,330,262].forEach((f,i)=>setTimeout(()=>tono(f,0.26,0.11,'triangle'),i*130)); }
+  }catch(e){}
+}
+/* =========================================================================================
+   EL TUTORIAL
+
+   Se pidio obligatorio ("debes tocar play tutorial si o si al inicio") y "super bien explicado". Las
+   dos cosas se resuelven igual: CADA PASO ESPERA A QUE HAGAS LA COSA. No se puede saltear, no se
+   puede pasar sin haber entendido, y no hay un boton de "siguiente" que se pueda apretar sin leer.
+   Es la misma forma que funciono en ECO, y por el mismo motivo: un tutorial que avanza solo se lee
+   como un cartel, y un cartel se saltea.
+
+   Y LOS SEIS PASOS NO SON SEIS PANTALLAS DE TEXTO: son seis cosas distintas que hacer.
+     1  levantar la mano       → aprende que la camara lo ve
+     2  pellizcar              → aprende el unico gesto del juego
+     3  pellizcar una carta    → aprende a elegir
+     4  pellizcar TIRAR        → aprende que hace la primera opcion
+     5  una carta que NO pega  → aprende la regla, VIENDO el boton apagado
+     6  pellizcar el mazo      → aprende que hacer cuando no le sirve ninguna
+   El paso 5 es el que importa y es el unico que no se puede explicar con palabras: la regla del juego
+   se aprende viendo que TIRAR esta apagado con esa carta y encendido con la otra.
+   ========================================================================================= */
+const TUT={ on:false, paso:0, t:0, hecho:false };
+try{ TUT.hecho = localStorage.getItem('rezuno_tut')==='1'; }catch(e){}
+
+const guiaEl=document.getElementById('guia'),
+      guiaN=document.getElementById('guiaN'), guiaT=document.getElementById('guiaT');
+function guia(n, t){
+  guiaN.textContent=n||''; guiaT.innerHTML=t||'';
+  document.body.classList.toggle('guia', !!t);
+}
+
+/* LA MANO DEL TUTORIAL ESTA ARMADA A MANO, carta por carta, y no repartida al azar: el paso 5 NECESITA
+   una carta que no pegue con nada, y con un reparto aleatorio ese paso a veces no existe. Un tutorial
+   que a veces no puede enseñar lo que tiene que enseñar no es un tutorial. */
+function tutorialEmpezar(){
+  repartir(7);
+  G.fase='juego'; G.turno=J_VOS;
+  /* pila: un 5 rojo. mano: un 5 azul (pega por numero), un 9 verde (no pega en nada) y relleno */
+  G.pila=[{color:0,valor:5}]; G.color=0; G.valor=5;
+  G.manos[J_VOS]=[{color:3,valor:5},{color:2,valor:9},{color:1,valor:2},{color:3,valor:7}];
+  G.manos[J_IZQ]=G.mazo.splice(0,5);
+  G.manos[J_DER]=G.mazo.splice(0,5);
+  G.sel=-1; G.colorPide=false; G.robo=false; G.mov.length=0;
+  TUT.on=true; TUT.paso=0; TUT.t=0;
+  tutPintar();
+}
+function tutPintar(){
+  const k=TUT.paso;
+  if(k>6){ guia('',''); return; }
+  guia(TX('t'+k+'n'), TX('t'+k));
+}
+/* CUAL CARTA BRILLA EN CADA PASO. Devuelve el indice de la mano que el tutorial quiere que agarres, o
+   -1. El brillo lo dibuja pintarTut() y el paso lo comprueba tutTick(): los dos leen de aca, asi que
+   no puede brillar una y esperarse otra. */
+function tutObjetivo(){
+  if(!TUT.on) return -1;
+  if(TUT.paso===2 || TUT.paso===3) return 0;      // el 5 azul, que pega por numero
+  if(TUT.paso===4) return 1;                      // el 9 verde, que no pega en nada
+  return -1;
+}
+function tutTick(dt){
+  if(!TUT.on) return;
+  TUT.t+=dt;
+  const k=TUT.paso;
+  if(k===0){ if(MANO.hay || !MANO.on) pasoSig(); }
+  else if(k===1){ if(MANO.pinza || !MANO.on) pasoSig(); }
+  else if(k===2){ if(G.sel===0) pasoSig(); }
+  else if(k===3){ if(G.sel<0 && G.pila.length>1) pasoSig(); }      // la tiro de verdad
+  else if(k===4){ if(G.sel<0 && TUT.t>0.2 && !tutEsperaDeja) pasoSig(); }
+  else if(k===5){ if(G.robo) pasoSig(); }
+  else if(k===6){ if(TUT.t>2.6) tutorialFin(); }
+}
+let tutEsperaDeja=false;
+function pasoSig(){
+  TUT.paso++; TUT.t=0;
+  /* el paso 4 arranca poniendole la carta que no pega en la mano, por si la tiro en el 3 */
+  if(TUT.paso===4){
+    tutEsperaDeja=true;
+    if(!G.manos[J_VOS].some(c=>!pega(c,G.color,G.valor)))
+      G.manos[J_VOS].unshift({color:(G.color+2)%4, valor:9});
+  }
+  if(TUT.paso===5){
+    tutEsperaDeja=false;
+    /* para el paso del mazo hace falta que NINGUNA carta pegue: si le queda una jugable, "pellizca el
+       mazo" es una instruccion que contradice al propio juego */
+    G.manos[J_VOS]=G.manos[J_VOS].filter(c=>!pega(c,G.color,G.valor));
+    if(!G.manos[J_VOS].length) G.manos[J_VOS].push({color:(G.color+2)%4, valor:9});
+    G.robo=false;
+  }
+  tutPintar();
+}
+function tutorialFin(){
+  TUT.on=false; TUT.hecho=true;
+  try{ localStorage.setItem('rezuno_tut','1'); }catch(e){}
+  guia('','');
+  G.fase='menu';
+  verPantalla('menu'); pintarMenu();
+}
+/* EL SEGUIMIENTO DEL PASO 4 ES UNA BANDERA Y NO UN CONTADOR DE TIEMPO. Al pellizcar DEJAR, soltar()
+   pone G.sel en -1, que es lo mismo que pasa al TIRAR: sin la bandera los dos casos se ven iguales y
+   el paso avanzaria tirando la carta que se supone que no se puede tirar. */
+function tutDejo(){ if(TUT.on && TUT.paso===4) tutEsperaDeja=false; }
+
+/* el brillo de la carta que hay que agarrar, y la flecha al mazo en el paso del robo */
+function pintarTut(g){
+  if(!TUT.on) return;
+  const obj=tutObjetivo();
+  if(obj>=0 && G.sel<0){
+    const n=G.manos[J_VOS].length, geo=manoGeo(n);
+    if(obj<n){
+      const x=geo.x0+obj*geo.paso, y=MANO_Y-(pega(G.manos[J_VOS][obj],G.color,G.valor)?14:0);
+      const p=0.5+0.5*Math.sin(G.t*5.2);
+      g.save();
+      rr(g, x-7, y-7, CW+14, CH+14, 15);
+      g.strokeStyle='#ffd84a'; g.lineWidth=3+2*p; g.globalAlpha=0.55+0.45*p; g.stroke();
+      g.restore();
+    }
+  }
+  if(TUT.paso===5){
+    const p=0.5+0.5*Math.sin(G.t*5.2);
+    g.save();
+    rr(g, MAZO_X-11, MAZO_Y-11, CW+22, CH+22, 17);
+    g.strokeStyle='#ffd84a'; g.lineWidth=3+2*p; g.globalAlpha=0.55+0.45*p; g.stroke();
+    g.restore();
+  }
+}
+/* ===================== LAS PANTALLAS ===================== */
+const PANTALLAS=['pIdioma','pMenu','pFin'];
+let pant='idioma';
+function verPantalla(p){
+  pant=p;
+  for(const id of PANTALLAS) document.getElementById(id).classList.remove('ver');
+  const m={ idioma:'pIdioma', menu:'pMenu', fin:'pFin' };
+  if(m[p]) document.getElementById(m[p]).classList.add('ver');
+  document.body.classList.toggle('jugando', p==='juego');
+  if(p!=='juego') guia('','');
+}
+function pintarIdioma(){
+  document.documentElement.lang=IDIOMA;
+  document.getElementById('bTut').textContent=TX('tutorial');
+  document.getElementById('bJugar').textContent=TX('jugar');
+  document.getElementById('bIdioma').textContent=TX('idioma');
+  document.getElementById('bOtra').textContent=TX('otra');
+  document.getElementById('bMenu').textContent=TX('menu');
+  pintarMenu(); pintarCam();
+}
+/* EL BOTON DE JUGAR ESTA BLOQUEADO HASTA QUE EL TUTORIAL ESTE HECHO, y el pie dice por que. Se pidio
+   asi con todas las letras. Un boton apagado sin explicacion se lee a juego roto; con la linea de
+   abajo se lee a orden. */
+function pintarMenu(){
+  const bj=document.getElementById('bJugar');
+  bj.disabled=!TUT.hecho;
+  bj.classList.toggle('lleno', TUT.hecho);
+  document.getElementById('bTut').classList.toggle('lleno', !TUT.hecho);
+  document.getElementById('mPie').innerHTML = TUT.hecho? TX('menuPie') : TX('menuBloq');
+}
+const camAviso=document.getElementById('camAviso');
+const CAM_MOTIVO={ permiso:'camErrPermiso', camara:'camErrCamara', cdn:'camErrCdn',
+                   modelo:'camErrCdn', insegura:'camErrInsegura' };
+/* EL MOTIVO SE ESCRIBE Y SE QUEDA. Un juego que se maneja con la camara y no la pide se ve roto, y
+   sin decir por que no hay nada que el jugador pueda hacer al respecto. */
+function pintarCam(){
+  if(!camAviso) return;
+  camAviso.classList.remove('bien','mal');
+  if(MANO.estado==='carga'){ camAviso.textContent=TX('camPide'); return; }
+  if(MANO.estado==='lista'){ camAviso.textContent=TX('camOk'); camAviso.classList.add('bien'); return; }
+  if(MANO.error){ camAviso.textContent=TX(CAM_MOTIVO[MANO.error]||'camNo'); camAviso.classList.add('mal'); return; }
+  camAviso.textContent=TX('camNo');
+}
+(function(){
+  const c=document.getElementById('idBotones');
+  for(const [cod,nom] of IDIOMAS){
+    const b=document.createElement('button'); b.className='bot'; b.textContent=nom;
+    /* el idioma es el primer toque de la sesion, asi que es donde se enciende el audio: ningun
+       navegador deja sonar nada sin un gesto */
+    b.onclick=()=>{ audioIniciar(); IDIOMA=cod;
+      try{ localStorage.setItem('rezuno_idioma',cod); }catch(e){}
+      pintarIdioma(); verPantalla('menu'); };
+    c.appendChild(b);
+  }
+})();
+document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
+
+/* LA CAMARA SE PIDE AL EMPEZAR, no en un ajuste. En RECREO el permiso colgaba de un boton chico que
+   ya aparecia elegido, asi que nadie lo tocaba y el juego parecia no usar la camara. Aca cuelga de
+   los dos botones que todos tocan, y si falla se juega tocando la pantalla. */
+async function arrancar(esTutorial){
+  audioIniciar();
+  if(!MANO.on && MANO.estado!=='carga'){ await manosIniciar(); pintarCam(); }
+  if(esTutorial){ verPantalla('juego'); tutorialEmpezar(); }
+  else { TUT.on=false; guia('',''); repartir((Date.now()&0x7fffffff)||1);
+         G.fase='juego'; verPantalla('juego'); }
+}
+document.getElementById('bTut').onclick=()=>arrancar(true);
+document.getElementById('bJugar').onclick=()=>arrancar(false);
+document.getElementById('salir').onclick=()=>{ G.fase='menu'; TUT.on=false; guia('','');
+                                              verPantalla('menu'); pintarMenu(); };
+document.getElementById('bOtra').onclick=()=>arrancar(false);
+document.getElementById('bMenu').onclick=()=>{ verPantalla('menu'); pintarMenu(); };
+
+/* ===================== LO QUE HACE UN PELLIZCO =====================
+   UN SOLO SITIO PARA LOS DOS CAMINOS. El pellizco de la camara y el toque del dedo terminan los dos
+   aca, con las mismas coordenadas de diseño. Si fueran dos funciones, el respaldo tactil se
+   desincronizaria del juego de verdad en cuanto se agregue una zona nueva — y el respaldo es
+   justamente lo que nadie prueba. */
+function activar(x,y){
+  if(G.fase!=='juego') return false;
+  const z=zonaEn(x,y);
+  if(!z || !z.activo) return false;
+  if(z.tipo==='carta') return seleccionar(z.i);
+  if(z.tipo==='tirar') return tirarSel();
+  if(z.tipo==='dejar'){ const r=soltar(); tutDejo(); return r; }
+  if(z.tipo==='color') return elegirColor(z.i);
+  if(z.tipo==='mazo')  return robarJugador();
+  return false;
+}
+/* EL RESPALDO TACTIL NO ES UN EXTRA: sin camara —permiso negado, sin camara, http— el juego seria
+   imposible de jugar, y eso no es degradar, es romperse. */
+lienzo.addEventListener('pointerdown', e=>{
+  const [x,y]=dePagina(e.clientX, e.clientY);
+  activar(x,y);
+}, {passive:true});
+
+/* ===================== EL BUCLE =====================
+   Un solo reloj y un solo dibujo. El pellizco se consume ACA y no dentro del dibujo: leerlo mientras
+   se pinta significaria que el orden en que se dibujan las zonas decide cual gana, y ese es el tipo
+   de defecto que aparece recien cuando se agrega un boton nuevo seis meses despues. */
+let ultimo=performance.now();
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora=performance.now();
+  const dt=Math.min(0.25, (ahora-ultimo)/1000); ultimo=ahora;
+  if(G.fase==='juego'){
+    if(tomarPinza()) activar(MANO.x*DIS_W, MANO.y*LH);
+    partidaTick(dt);
+    tutTick(dt);
+    pintarMesa();
+  }
+  /* LA PANTALLA DE FINAL SE MIRA AFUERA DEL `if`, Y ESE ERA UN DEFECTO DE VERDAD. Estaba adentro, o
+     sea que solo se enteraba en el mismo cuadro en que la partida terminaba. Con el pellizco eso
+     siempre pasa —el pellizco se consume dentro del bucle—, pero el RESPALDO TACTIL entra por
+     pointerdown, que corre fuera: ganando de un toque, `fase` quedaba en 'fin' y en el cuadro
+     siguiente el `if` de arriba ya era falso, asi que nadie mostraba nada. El juego se quedaba
+     congelado en la ultima imagen. Encontrado fotografiando el final, no leyendo. */
+  if(G.fase==='fin' && pant!=='fin'){
+    const gano=G.gana===J_VOS;
+    document.getElementById('finT').textContent = gano? TX('ganaste')
+      : TX('perdiste',{n:TX(G.gana===J_IZQ?'bot1':'bot2')});
+    document.getElementById('finS').textContent = gano? TX('ganasteS') : TX('perdisteS');
+    verPantalla('fin');
+  }
+  const mk=document.getElementById('marcador');
+  if(mk && G.fase==='juego') mk.textContent = TUT.on? 'TUTORIAL' : '';
+}
+pintarIdioma(); verPantalla('idioma');
+bucle();
+/* =========================================================================================
+   LOS GANCHOS DE PRUEBA
+
+   Nada de esto lo usa el juego. Estan para poder AFIRMAR cosas con numeros en vez de mirar una
+   captura: que las 108 cartas estan, que una partida entera termina, que el boton apagado y la regla
+   son la misma cuenta, que un pellizco de mentira cae en la zona que se ve, y que el tutorial se
+   puede completar de punta a punta sin camara.
+   ========================================================================================= */
+window.__rez={
+  estado:()=>({ pant, fase:G.fase, turno:G.turno, gana:G.gana, color:G.color, valor:G.valor,
+                manos:G.manos.map(m=>m.length), mazo:G.mazo.length, pila:G.pila.length,
+                sel:G.sel, colorPide:G.colorPide, robo:G.robo, giro:G.giro,
+                tut:{ on:TUT.on, paso:TUT.paso, hecho:TUT.hecho } }),
+  idioma:(c)=>{ IDIOMA=c; pintarIdioma(); return IDIOMA; },
+  pantalla:(p)=>{ verPantalla(p); return pant; },
+  /* ---- el mazo ---- */
+  mazoVer:()=>{
+    const m=mazoNuevo();
+    const cuenta={};
+    for(const c of m){ const k=(c.color===4?'W':NOMBRE_COL[c.color])+':'+c.valor;
+                       cuenta[k]=(cuenta[k]||0)+1; }
+    return { total:m.length, ceros:m.filter(c=>c.valor===0).length,
+             comodines:m.filter(c=>c.color===4).length,
+             mas4:m.filter(c=>c.valor===MAS4).length,
+             porColor:[0,1,2,3].map(k=>m.filter(c=>c.color===k).length), cuenta };
+  },
+  /* ---- la regla, aislada ---- */
+  pega:(c, col, val)=>pega(c, col, val),
+  /* ---- una partida ---- */
+  repartir:(s)=>{ repartir(s||1); G.fase='juego'; verPantalla('juego'); return window.__rez.estado(); },
+  /* pone una mano y una pila a mano, para poder fotografiar y probar un caso concreto —el comodin,
+     la ultima carta— sin tener que buscar una semilla que lo produzca */
+  poner:(mano, colorMesa, valorMesa)=>{
+    if(mano) G.manos[J_VOS]=mano.map(c=>({color:c.color, valor:c.valor}));
+    if(colorMesa!=null) G.color=colorMesa;
+    if(valorMesa!=null) G.valor=valorMesa;
+    /* la pila TAMBIEN, o el gancho mentiria: en el juego de verdad el color activo y la carta de
+       arriba salen los dos de jugarCarta() y no pueden discrepar */
+    if(colorMesa!=null && valorMesa!=null && colorMesa<4) G.pila.push({color:colorMesa, valor:valorMesa});
+    G.sel=-1; G.colorPide=false; G.turno=J_VOS; G.fase='juego';
+    return window.__rez.estado();
+  },
+  mano:(j)=>G.manos[j||0].map(c=>({color:c.color, valor:c.valor,
+                                   pega:pega(c,G.color,G.valor)})),
+  /* JUEGA LA PARTIDA ENTERA SOLA, y el jugador automatico usa EL MISMO CAMINO que una persona:
+     seleccionar() y tirarSel(), no jugarCarta() directo. Llamando a la funcion de adentro no se
+     probaria nada de lo que puede estar mal, que es justamente si el boton apagado deja pasar. */
+  jugarSolo:(tope)=>{
+    const log=[]; let n=0, ilegales=0;
+    while(G.fase==='juego' && n++<(tope||6000)){
+      if(G.turno!==J_VOS){ partidaTick(1/60); continue; }
+      if(G.colorPide){ elegirColor(botColor(J_VOS)); continue; }
+      const i=botElegir(J_VOS);
+      if(i<0){
+        if(!G.robo){ robarJugador(); }
+        else { G.turno=siguiente(J_VOS); G.robo=false; }
+        continue;
+      }
+      seleccionar(i);
+      const antes=G.pila.length;
+      const c=G.manos[J_VOS][i];
+      const deberia=pega(c,G.color,G.valor);
+      tirarSel();
+      if(G.colorPide){ elegirColor(botColor(J_VOS)); }
+      const bajo=G.pila.length>antes;
+      /* LA COMPROBACION QUE IMPORTA: nunca puede bajar una carta que la regla dice que no pega */
+      if(bajo && !deberia) ilegales++;
+      if(!bajo && G.sel>=0) soltar();
+    }
+    return { vueltas:n, fase:G.fase, gana:G.gana, ilegales,
+             manos:G.manos.map(m=>m.length), log };
+  },
+  /* ---- las zonas: lo que se ve y lo que se pellizca son lo mismo ---- */
+  zonas:()=>{ pintarMesa(); return ZONAS.map(z=>({t:z.tipo,i:z.i,activo:z.activo,
+                x:+z.x.toFixed(0),y:+z.y.toFixed(0),w:+z.w.toFixed(0),h:+z.h.toFixed(0)})); },
+  zonaEn:(x,y)=>{ pintarMesa(); const z=zonaEn(x,y); return z? {t:z.tipo,i:z.i,activo:z.activo} : null; },
+  /* pellizca en el centro de una zona, por el mismo camino que la camara */
+  pellizcarZona:(tipo, i)=>{
+    pintarMesa();
+    const z=ZONAS.filter(q=>q.tipo===tipo && (i==null||q.i===i)).pop();
+    if(!z) return 'no hay '+tipo;
+    return { hizo:activar(z.x+z.w/2, z.y+z.h/2), zona:{t:z.tipo,i:z.i,activo:z.activo} };
+  },
+  /* ---- la mano de mentira: entra por el mismo camino que la de verdad ---- */
+  manoFalsa:(cx, cy, pinza)=>{
+    const lm=[];
+    for(let k=0;k<21;k++) lm.push({x:cx, y:cy, z:0});
+    lm[0]={x:cx, y:cy+0.11, z:0};                    // muñeca
+    lm[9]={x:cx, y:cy-0.02, z:0};                    // nudillo del medio: palma = 0,13
+    const d=pinza? 0.010 : 0.085;                    // pulgar-indice
+    lm[4]={x:cx-d/2, y:cy, z:0};
+    lm[8]={x:cx+d/2, y:cy, z:0};
+    return lm;
+  },
+  manoInyectar:(cx, cy, pinza, t)=>{
+    MANO.on=true; MANO.espejo=false;
+    manosInyectar(window.__rez.manoFalsa(cx,cy,pinza), t==null? performance.now() : t);
+    return { x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), crudo:+MANO.crudo.toFixed(3),
+             pinza:MANO.pinza, nueva:MANO.pinzaNueva };
+  },
+  /* EL RETARDO EN REGIMEN: se mueve la mano de mentira a velocidad constante y se mide cuanto atras
+     va el aro cuando ya se estabilizo. Es el numero que decide si apuntar a una carta se siente
+     pegado o pastoso. Se devuelve en fraccion de pantalla y en milisegundos. */
+  manoRampa:(vel, cuadros)=>{
+    F.x.ini=false; F.y.ini=false;
+    const v=vel==null? 0.5 : vel;          // fracciones de pantalla por segundo
+    const dt=16, n=cuadros||90;
+    let t=performance.now(), x=0.2;
+    for(let k=0;k<n;k++){ t+=dt; x+=v*dt/1000; window.__rez.manoInyectar(x,0.5,false,t); }
+    const err=Math.abs(x-MANO.x);
+    return { vel:v, cuadros:n, real:+x.toFixed(4), aro:+MANO.x.toFixed(4),
+             retardoFrac:+err.toFixed(4), retardoMs:+(err/v*1000).toFixed(1) };
+  },
+  /* EL TEMBLOR: mano quieta con ruido, y cuanto de ese ruido llega al aro. Es la otra mitad de la
+     pelea: un filtro que no atenua deja el aro vibrando encima de las cartas. */
+  manoTemblor:(ruido, cuadros)=>{
+    F.x.ini=false; F.y.ini=false;
+    const r=ruido==null? 0.006 : ruido, n=cuadros||240;
+    let t=performance.now(), S=12345;
+    const az=()=>{ S=(S*1103515245+12345)&0x7fffffff; return S/0x7fffffff*2-1; };
+    let sEnt=0, sSal=0, m1=0, m2=0;
+    for(let k=0;k<n;k++){
+      t+=16; const x=0.5+az()*r;
+      window.__rez.manoInyectar(x,0.5,false,t);
+      if(k>40){ sEnt+=(x-0.5)*(x-0.5); sSal+=(MANO.x-0.5)*(MANO.x-0.5); m1++; }
+      m2++;
+    }
+    const de=Math.sqrt(sEnt/m1), ds=Math.sqrt(sSal/m1);
+    return { ruido:r, cuadros:n, entra:+de.toFixed(5), sale:+ds.toFixed(5),
+             atenua:+(de/Math.max(1e-9,ds)).toFixed(2) };
+  },
+  manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
+                 x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
+                 crudo:+MANO.crudo.toFixed(3), medidas:MANO.medidas, delegado:MANO.delegado,
+                 espejo:MANO.espejo, ms:+MANO.msDet.toFixed(2) }),
+  /* EL FLANCO: una pinza sostenida tiene que valer UNA vez. Se empujan n cuadros seguidos con la
+     pinza cerrada y se cuentan los flancos. */
+  flancoProbar:(n)=>{
+    let t=performance.now(), f=0;
+    window.__rez.manoInyectar(0.5,0.5,false,t);
+    for(let k=0;k<(n||10);k++){ t+=16; window.__rez.manoInyectar(0.5,0.5,true,t); if(tomarPinza()) f++; }
+    return { cuadros:n||10, flancos:f };
+  },
+  /* la histeresis: se barre la distancia cruda de abierta a cerrada y al reves, y se anota donde
+     cambia. Con un umbral solo, los dos cambios caerian en el mismo valor y no habria histeresis. */
+  histProbar:()=>{
+    const r={cierra:null, abre:null};
+    let t=performance.now();
+    window.__rez.manoInyectar(0.5,0.5,false,t);
+    for(let d=0.09; d>0.0; d-=0.002){
+      t+=16; const lm=window.__rez.manoFalsa(0.5,0.5,false);
+      lm[4]={x:0.5-d/2,y:0.5,z:0}; lm[8]={x:0.5+d/2,y:0.5,z:0};
+      manosInyectar(lm,t);
+      if(MANO.pinza && r.cierra==null) r.cierra=+MANO.crudo.toFixed(3);
+    }
+    for(let d=0.0; d<0.12; d+=0.002){
+      t+=16; const lm=window.__rez.manoFalsa(0.5,0.5,false);
+      lm[4]={x:0.5-d/2,y:0.5,z:0}; lm[8]={x:0.5+d/2,y:0.5,z:0};
+      manosInyectar(lm,t);
+      if(!MANO.pinza && r.abre==null && r.cierra!=null) r.abre=+MANO.crudo.toFixed(3);
+    }
+    return r;
+  },
+  /* ---- el tutorial jugado solo ---- */
+  tutJugar:(tope)=>{
+    tutorialEmpezar();
+    const log=[]; let n=0, ult=-1;
+    MANO.on=false;                      // sin camara: los pasos 0 y 1 se dan por vistos
+    while(TUT.on && n++<(tope||4000)){
+      if(TUT.paso!==ult){ ult=TUT.paso; log.push('paso'+TUT.paso); }
+      if(TUT.paso===2) window.__rez.pellizcarZona('carta',0);
+      else if(TUT.paso===3) window.__rez.pellizcarZona('tirar');
+      else if(TUT.paso===4){
+        const o=tutObjetivo();
+        if(G.sel<0 && o>=0) window.__rez.pellizcarZona('carta',o);
+        else if(G.sel>=0) window.__rez.pellizcarZona('dejar');
+      }
+      else if(TUT.paso===5) window.__rez.pellizcarZona('mazo');
+      partidaTick(1/60); tutTick(1/60);
+    }
+    return { vueltas:n, paso:TUT.paso, on:TUT.on, hecho:TUT.hecho, pant, log };
+  },
+  /* arranca el tutorial y lo deja en el paso que se pida, para poder fotografiar cada uno */
+  /* deja correr el reloj de la partida sin dibujar: los rivales piensan y las cartas vuelan */
+  correr:(seg)=>{ const n=Math.round((seg||1)*60); for(let k=0;k<n;k++) partidaTick(1/60);
+                  return window.__rez.estado(); },
+  /* JUEGA UNA PARTIDA ENTERA SOLO POR ZONAS, que es literalmente el camino del jugador: buscar la
+     zona en el mismo sitio donde se dibuja, pellizcar el centro y ver que pasa. Es la prueba que
+     cubre lo unico que no cubre jugarSolo(): que el boton apagado y la regla sean la misma cuenta. */
+  porZonas:(sem, tope)=>{
+    repartir(sem||1); G.fase='juego';
+    let n=0, colores=0, ilegales=0;
+    while(G.fase==='juego' && n++<(tope||9000)){
+      if(G.turno!==J_VOS){ partidaTick(1/60); continue; }
+      if(G.colorPide){ window.__rez.pellizcarZona('color',1); colores++; continue; }
+      if(G.sel>=0){
+        const c=G.manos[J_VOS][G.sel], deberia=pega(c,G.color,G.valor), antes=G.pila.length;
+        const r=window.__rez.pellizcarZona('tirar');
+        if(G.pila.length>antes && !deberia) ilegales++;
+        if(G.sel>=0 && !G.colorPide) window.__rez.pellizcarZona('dejar');
+        continue;
+      }
+      const m=G.manos[J_VOS];
+      let i=-1; for(let k=0;k<m.length;k++) if(pega(m[k],G.color,G.valor)){ i=k; break; }
+      if(i<0){
+        const q=window.__rez.pellizcarZona('mazo');
+        if(!q || !q.hizo){ G.turno=siguiente(J_VOS); G.robo=false; }
+        continue;
+      }
+      window.__rez.pellizcarZona('carta',i);
+    }
+    return { vueltas:n, fase:G.fase, gana:G.gana, colores, ilegales, manos:G.manos.map(x=>x.length) };
+  },
+  tutIr:(paso)=>{
+    tutorialEmpezar();
+    let n=0;
+    while(TUT.paso<(paso||0) && n++<3000){
+      if(TUT.paso===0||TUT.paso===1){ MANO.on=false; }
+      else if(TUT.paso===2) window.__rez.pellizcarZona('carta',0);
+      else if(TUT.paso===3) window.__rez.pellizcarZona('tirar');
+      else if(TUT.paso===4){ const o=tutObjetivo();
+        if(G.sel<0 && o>=0) window.__rez.pellizcarZona('carta',o); else window.__rez.pellizcarZona('dejar'); }
+      else if(TUT.paso===5) window.__rez.pellizcarZona('mazo');
+      partidaTick(1/60); tutTick(1/60);
+    }
+    return window.__rez.tutVer();
+  },
+  tutVer:()=>({ on:TUT.on, paso:TUT.paso, hecho:TUT.hecho, objetivo:tutObjetivo(),
+                guia:(document.getElementById('guiaT')||{}).textContent||'' }),
+  /* ---- el audio: lo unico que prueba que sono es medirlo ---- */
+  audio:()=>({ hay:!!AUD.ctx, on:AUD.on, estado:AUD.ctx? AUD.ctx.state : 'no' }),
+  son:(k)=>{ son(k); return true; },
+  /* ---- costo ---- */
+  costo:(n)=>{
+    const v=n||300, t=[];
+    for(let k=0;k<v;k++){ const a=performance.now(); pintarMesa(); t.push(performance.now()-a); }
+    t.sort((x,y)=>x-y);
+    return { cuadros:v, media:+(t.reduce((s,x)=>s+x,0)/v).toFixed(3),
+             p50:+t[Math.floor(v*0.5)].toFixed(3), p90:+t[Math.floor(v*0.9)].toFixed(3),
+             max:+t[v-1].toFixed(3), zonas:ZONAS.length };
+  },
+  medidas:()=>({ dis:[DIS_W,DIS_H], lienzo:[lienzo.width,lienzo.height], esc:+ESC.toFixed(3),
+                 LH:+LH.toFixed(0), marco:[marco.clientWidth, marco.clientHeight] })
+};
+</script>
+</body>
+</html>
