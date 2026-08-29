@@ -491,6 +491,7 @@ const FIN_AFUERA=[XO_FACH-0.2, Z_SAL-0.4];
 const FIN_BUS=[XO_FACH-3.7, Z_SAL-1.6];
 const FIN_PROFE=[XO_FACH+0.3, Z_SAL+0.9];   // en la vereda, al lado de la puerta
 const FIN_MIRA_BUS=1.4;         // lo que se queda mirando el autobus antes de darse vuelta
+const FIN_ESPERA_CHAU=9.0;      // y si nadie saluda, el autobus se va igual
 function finEmpezar(){
   FIN.on=true; FIN.fase=0; FIN.t=0; FIN.brillo=0; FIN.saludado=false;
   terminado=0; jugando=true;
@@ -546,10 +547,19 @@ function finTick(dt){
       if(FIN.t-dt<=FIN_MIRA_BUS) dice('dChau');
     }
     /* y el saludo: la mano abierta. Sin camara, el teclado de numeros sirve igual. */
+    /* EL SALUDO NO PUEDE SER OBLIGATORIO, y esto era un final que no terminaba. La fase 3 esperaba
+       cinco dedos para seguir: quien juega sin camara —o quien simplemente no adivina que hay que
+       saludar— se quedaba parado en la vereda mirando el autobus PARA SIEMPRE, con el juego ya
+       ganado y sin forma de llegar al menu. Saludar sigue estando y sigue estando bien; a los nueve
+       segundos el autobus se va igual, que es lo que hace un autobus. */
     if(!FIN.saludado && FIN.t>FIN_MIRA_BUS && (MANO.dedos>=5 || padPedido>=5)){
       FIN.saludado=true; padPedido=-1;
       dice('dChau2'); son('listo');
       luegoDe(2.0, ()=>{ FIN.fase=4; FIN.t=0; });
+    }
+    if(!FIN.saludado && FIN.t>FIN_ESPERA_CHAU){
+      FIN.saludado=true;
+      luegoDe(1.2, ()=>{ FIN.fase=4; FIN.t=0; });
     }
   } else if(FIN.fase===4){
     /* se desvanece a negro y al menu */
@@ -572,6 +582,12 @@ function ganarPantalla(){
   document.getElementById('finT').textContent=TX('finT');
   document.getElementById('finS').textContent=TX('finS',{n:aciertos,t:TOTAL_CUENTAS});
   verPantalla('fin');
+  /* Y AL MENU SOLO. El pedido es que ganar te lleve al menu despues del autobus; el cartel con el
+     resultado se queda ocho segundos —lo que se tarda en leer "24 de 24"— y despues vuelve. El boton
+     sigue estando para el que no quiera esperar, y si el jugador toca cualquier otra cosa antes, el
+     temporizador se descarta: solo vuelve si al vencer se sigue en la pantalla de final. */
+  if(FIN._alMenu) clearTimeout(FIN._alMenu);
+  FIN._alMenu=setTimeout(()=>{ if(pant==='fin') verPantalla('menu'); }, 8000);
 }
 
 /* ---------- QUE NUMERO ESTA PIDIENDO EL JUGADOR ----------

@@ -60,12 +60,148 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   menú debes tocar play tutorial si o si al inicio ... y te da un tutorial súper bien explicado"*.
   El botón JUGAR **está bloqueado hasta que el tutorial esté hecho**. Vive partido en
   `herramientas/rezuno/partes/` y se arma con `python3 herramientas/rezuno/armar.py`.
-- **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
-  negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
+- **`Eco.html` es "Eco"** (~2,97 MB: la foto de la hoja, los cinco modelos 3D, la voz de la historia en
+  tres idiomas, la música y el video del final). Laberinto a ciegas: el mundo está
+  negro y solo se ve por ecolocación, en blanco y negro. Cuatro llaves abren **una puerta de cuatro
+  cerraduras**, cerca de la puerta suena una trompeta que llama a la cosa, y al salir hay una cinemática
+  y un prado donde despertás. Se parchea con los scripts de `herramientas/eco/`. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Quincuagesimoprimera vuelta (2026-08-29): **Eco** — la puerta de las cuatro llaves, nadie te guía, la trompeta, y salir a un prado
+
+Pedido: *"en Eco hace que haya una puerta que se abre con las llaves que recolectas, nada se te guía,
+vos encontras la notas y las llaves por tu cuenta una vez pasas el tutorial, también haz que al estar
+cerca de esa puerta suena una trompeta que alerta al monstruo pero no va más rápido, solamente esa zona
+no tan grande cerca de la puerta, también al salir debe hacer un difuminado en blanco y genera un mini
+vídeo de Cinemática del tipo saliendo de la caberna cayendo del cielo y se apaga para prenderse como en
+primera persona despertando en un mundo lleno de pasto etc hermoso cielos hermosos y realista"*, más
+*"al ganar el de baldi debe llevarte al menú después de irte en el bus"* y *"música de fondo y de UI en
+todos los juegos"*.
+
+#### LA PUERTA EXISTÍA EN LA FICCIÓN Y NO EN EL JUEGO
+
+La salida era **un faro**: un punto del mapa que latía con el eco y, al llegar con los cuatro sellos, se
+ganaba. Y la hoja que está en esa misma celda dice, desde hace vueltas, *"la puerta tiene **cuatro
+cerraduras** y no se abre con tres"*. O sea que el texto describía una puerta que no estaba: las cuatro
+llaves no abrían nada, sólo contaban.
+
+Ahora hay puerta, y las cuatro llaves son sus cuatro cerraduras. Va contra la pared **enfrente de la
+abertura** de la celda de salida —al meterse en el fondo del laberinto, lo que hay adelante es la
+puerta— y si la celda tuviera más de una abertura se elige la pared más opuesta al promedio, así que el
+criterio no depende de que sea un sin salida.
+
+**El marco va con el material del sonido y las cerraduras no**, y ese reparto es el mismo que ya usan
+las hojas y las llaves: la piedra aparece y desaparece con las ondas, y las cerraduras —que son el
+marcador de cuántas llaves llevás— tienen luz propia. Medido: apagadas 0,012 de piso, encendidas 0,075,
+y con eco 0,23 contra 0,92.
+
+**Y SE ABRE ANTES DE GANAR.** Ganar en el mismo cuadro en que se toca la puerta tira a la basura lo
+único que las cuatro llaves construyeron: hay que verla abrirse. Son 2,6 s de piedra moviéndose, con el
+fogonazo de la propia puerta.
+
+**UN DEFECTO QUE SÓLO SE VIO MIRANDO:** el grupo de la puerta se orientaba con `atan2(dx,dz)`, o sea con
+su +Z apuntando **al muro**. Las cuatro cerraduras —puestas a z=+0,14— y los dos escalones —a +0,72—
+quedaban enterrados en la pared. En la captura la puerta se veía entera y lisa: no faltaban las
+cerraduras, estaban del otro lado.
+
+#### NADIE TE GUÍA, Y ERAN DOS COSAS
+
+La **flecha** decía dónde estaba lo que faltaba y los **rastros rojos** del suelo llevaban de una hoja a
+la siguiente. Las dos se van al terminar el tutorial. En la sala de práctica la flecha se queda, y no es
+una excepción caprichosa: el tutorial enseña a despertar una llave a los gritos y para eso hay que poder
+llegar a la de práctica.
+
+#### LA TROMPETA: ALERTA, NO VELOCIDAD
+
+Zona de 8,5 m alrededor de la puerta, una trompeta cada 7 s, y **sale de la puerta y no de vos**: la cosa
+va hacia la puerta, que es peor, porque ahí tenés que llegar igual. Y **enciende**, como cualquier otro
+ruido: ésa es la única regla que este juego tiene y no puede tener una excepción — de paso es lo único
+que te muestra la puerta entera de una.
+
+Que sea alerta y no velocidad es lo que la hace justa, y está medido: con la cosa a 26 m, la trompeta la
+pasa de `ronda`/1,35 m/s a **`caza`/`caminar`/2,30 m/s**, que es la velocidad de persecución de siempre.
+Corriendo se le sigue ganando (5,50 contra 3,55). A 50 m no la oye —el alcance es 46— así que la zona
+tampoco es un despertador global.
+
+#### EL FINAL: BLANCO, CINEMÁTICA Y UN PRADO
+
+Cuatro tiempos: **blanco** 1,15 s —blanco y no negro, porque se sale de un lugar sin luz y lo que ciega
+es la luz—, la **cinemática generada** (la boca de la cueva, el fogonazo, la caída sobre un mundo verde),
+un **negro** corto, y **despertar tirado en el pasto**. Los ojos se abren de verdad: dos franjas negras
+que se separan, porque un fundido desde negro se lee a transición de video y esto tiene que leerse a
+abrir los ojos.
+
+**EL VIDEO VA EN DOS FORMATOS, Y ES LA LECCIÓN DEL AUDIO DE MAICOL OTRA VEZ.** Chromium no trae los
+códecs propietarios: medido, `canPlayType('video/mp4; codecs="avc1.42E01E"')` devuelve **cadena vacía** y
+el video no arranca nunca, mientras que VP9 da "probably". Pero al revés pasa en un iPhone viejo, donde
+WebM no existe y H.264 sí. Van los dos, WebM primero porque pesa 156 KB contra 236.
+
+**Y EL PRADO ES OTRA ESCENA, no el laberinto con luces puestas.** El juego entero se dibuja con el shader
+del sonido, donde todo lo que no tocó una onda es negro: un prado con ese material sería un prado negro.
+
+Cinco cosas del prado que salieron de medir y no de mirar:
+
+- **La niebla empezaba a 55 m y se comía el prado entero.** Con la cámara a 1,62 m mirando al horizonte,
+  casi todo el suelo que entra en el cuadro está más lejos de 55 m: salía blanco azulado de punta a
+  punta. Pasó a 300-1800.
+- **El suelo era un `CircleGeometry` de 56 cuñas.** Con Lambert la luz se interpola por vértice y el
+  prado salía con rayas verticales en abanico, que son literalmente los triángulos. Un plano de 80×80
+  reparte los vértices parejo.
+- **El color por vértice competía con la textura.** Los dos verdes se multiplican: 0,33 × 0,35 deja el
+  prado en 0,12 y el suelo salía casi negro al lado del pasto. El color base vive en la textura y el
+  vértice sólo lo mancha.
+- **LAS CUARENTA Y SEIS NUBES NO SE VEÍAN, y estaban.** `Matrix4.lookAt` orienta el objeto mirando por su
+  **−Z** —la convención de three.js— y un `PlaneGeometry` tiene la cara en +Z: con `FrontSide` las
+  cuarenta y seis miraban para el otro lado. Van a dos caras. (Y sin `renderOrder`: con −1 se dibujaban
+  antes que el domo del cielo, que no escribe profundidad pero sí color, y las tapaba.)
+- **EL PASTO NO SE VEÍA Y NO ERA POR NO DIBUJARSE.** Apagando y prendiendo las briznas sobre la misma
+  imagen, la diferencia eran **32 píxeles de 455.400**. Con el pasto pintado de rojo y la cámara puesta
+  arriba se vio el disco entero, sólido: estaba todo bien. Lo que fallaba era la **vista de pie** — a
+  1,62 m de altura, unas briznas de 20 a 55 cm se miran casi desde arriba, se tapan entre ellas y no
+  aportan un píxel, que es exactamente lo que hace un césped cortado. Con pasto de 55 a 125 cm y la vista
+  en reposo inclinada 0,22 rad hacia abajo, las briznas pasan del **0,005 % al 3,4 %** de la pantalla y
+  el prado se llena.
+
+Cuesta 8 llamadas de dibujo y 300 mil triángulos, y es una escena estática sin juego encima.
+
+#### RECREO: EL FINAL NO TERMINABA
+
+La fase 3 del autobús **esperaba cinco dedos para seguir**. Quien juega sin cámara —o quien simplemente
+no adivina que hay que saludar— se quedaba parado en la vereda mirando el autobús **para siempre**, con
+el juego ya ganado y sin forma de llegar al menú. Saludar sigue estando; a los nueve segundos el autobús
+se va igual, que es lo que hace un autobús. Y la pantalla de resultado vuelve sola al menú a los ocho
+segundos. Verificado sin saludar: fase 0 → 2 → 3 → 4 → `fin` → **`menu`**.
+
+#### MÚSICA Y TOQUE DE BOTÓN EN LOS TRES JUEGOS
+
+Cinco temas y un toque de interfaz generados, horneados a 16 s con la cola fundida sobre la cabeza —un
+tema cortado en seco y puesto en loop da un golpe cada vuelta que se escucha más que la música—, mono a
+40 kbps. La capa es la misma en Eco, POMPOM y RECREO y cuelga del maestro que cada juego ya tiene, así
+que el analizador con el que cada uno se mide la sigue midiendo. **La muestra primero y el sintetizado
+después**: si un clip no decodifica, suena el de osciladores de siempre.
+
+**Y LOS PROMPTS QUE PIDEN UN SONIDO CHIQUITO SIGUEN DEVOLVIENDO SILENCIO.** El toque de interfaz se pidió
+cuatro veces —*"soft UI click"*, *"warm rounded tap"*— y volvió con pico 0,006, 0,009 y 0,020. El que
+sirve es el golpe de madera que RezUno ya tenía grabado. La regla quedó clara: **el nivel se pone en el
+código, nunca en el prompt.**
+
+Los volúmenes son distintos a propósito: Eco 0,075 —ahí el sonido *es* la vista y una cama que compita
+con el eco rompe la única regla del juego—, POMPOM 0,115 y RECREO 0,055, que además conserva su música
+procedural en partida porque ésa se agacha sola cuando Baldi habla y cambia según el aula.
+
+Medido en Eco, en partida: fondo rms 0,0143 · **trompeta 0,166 (11,6× el fondo)** · grito 0,223 —el grito
+sigue siendo lo más fuerte, que es lo que este juego necesita.
+
+#### MEDIDO AL CERRAR
+
+Eco: laberinto **121 de 121 celdas alcanzables**, salida a 22 pasos, 4 llaves en 4 salas, la puerta en la
+celda de salida, `window.__errs` vacío en todas las corridas. RECREO: partida completa **24 libros de 24,
+24 aciertos, 0 muertes** en 9.818 vueltas, y el final llega al menú solo. POMPOM: **160 de 160 niveles
+jugados solos con 0 choques**, y los ocho mundos por encima de su ventana mínima. Audio: 5 de 5 clips
+decodificados en Eco, 3 de 3 en POMPOM, 2 de 2 en RECREO. Tamaños: Eco 2,97 MB, RECREO 2,04, POMPOM 0,35.
 
 ### Quincuagésima vuelta (2026-08-28): **RezUno** — el logo acomodado, dos temas y quince efectos generados, y un índice para los cinco
 
