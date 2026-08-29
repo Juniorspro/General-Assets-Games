@@ -70,6 +70,55 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Quincuagesimosegunda vuelta (2026-08-29): **VECINDARIO** — el sexto juego: una cinemática de noche en primera persona
+
+Pedido: *"genera un mundo 3D de noche genera en highsfield el cielo y también texturas de calle y
+vereda, pasto, y también de las casas ... una animación en HTML de una persona en primera persona ...
+un vecindario bueno de noche god iluminación gráficos god, y el movimiento de cámara debe ser dinámico
+y de la nada llega a una casa super fea y abandonada, mira un cartel que dice no entrar y después se
+gira atrás y hay una abuela genera una imagen de una abuela con un bate 3D y como lo golpea y la cámara
+cae al suelo y se apaga y después se prende despertando de la cama y el se debe poder ver el cuerpo y
+se mira las manos y ahí termina, haz que dure entre 20-40s"*.
+
+`juegos-pc/Vecindario.html` (~3,4 MB), partido en `herramientas/vecindario/partes/` y armado con
+`python3 herramientas/vecindario/armar.py`. **38 segundos, sin controles**: caminata por la vereda con
+miradas a las casas y a los propios pies, llegada a la casa abandonada, el cartel NO ENTRAR, el giro,
+la abuela con el bate (imagen generada → `image_to_3d` con rig de 24 huesos, 10,3 MB → 2,0 MB con el
+horno de Baldi), el golpe con fogonazo y caída, negro, y despertar en una cama mirándose las manos.
+
+**LA CINEMATICA ES UNA FUNCION DE t, no una máquina de estados**: `poner(t)` recibe el segundo y deja
+la cámara, el cuerpo y la abuela. Por eso el banco puede fotografiar el segundo 26,4 directo con
+`__vec.ir(t)` sin esperar 26 segundos — así se encontró todo lo de abajo.
+
+Lo que las capturas y las cuentas corrigieron:
+- **Las casas de la derecha estaban construidas ENCIMA de la vereda**: giradas −90°, su frente es su
+  medio fondo (D/2≈3,9 m) hacia −x; en 11,5 el frente caía en 7,6 y la vereda termina en 6,3.
+- **El poste del cartel atravesaba la palabra**: tabla y poste centrados en el mismo plano z=0.
+- **El farol roto quedaba EXACTO entre la cámara parada y la casa fea**: un palo cruzando el plano
+  más importante. A z=−30.
+- **El cuerpo acostado estaba ESPEJADO**: el pecho armado hacia la almohada dejaba las manos "en
+  reposo" flotando delante de la cara antes de que el guion las pidiera.
+- **El marco vertical no perdona**: a 0,63 m el semiancho visible es 0,18 m — las manos con hombros
+  reales (±0,24) subían por los bordes como garras ajenas. Y el eje que las acerca es `rotation.y`,
+  NO `rotation.z`: con el brazo casi horizontal, z es el eje del brazo y girarlo es torsión (medido
+  con `manosNDC()`: clavadas en 0,08/0,93 de pantalla hasta cambiar de eje — la misma trampa de ejes
+  de los hombros de Baldi). Quedaron en 0,35/0,65.
+- **El cuerpo propio se mira siempre en sombra** (la luna viene de atrás): las zapatillas eran dos
+  manchas negras. Un pelín de emisivo en los cuatro materiales del cuerpo.
+- **La pose de la abuela es un DELTA sobre el reposo del rig** (la lección de RECREO): carga en dos
+  tiempos —espalda y brazo atrás 0,7 s, latigazo 0,2 s— sobre Spine/RightArm/RightForeArm, con
+  respaldo de cuerpo entero si el rig no carga.
+- Los pasos suenan desde la MISMA fase que mueve las piernas: son el mismo número, no pueden
+  desincronizarse. La fase sale de la DISTANCIA, no del tiempo: frenar no patina.
+
+Audio generado (grillos, tensión, paso, golpe, susto, latido — 218 KB) con el horno de RezUno; el
+recorte por energía se quedó solo con el impacto del golpe (0,25 s) porque el vuelo del bate vino casi
+mudo: se aflojó el mínimo de ventana. Cielo y 7 texturas generadas, cosidas por bordes en el horno
+(WebP 512, 421 KB los ocho).
+
+Medido al cerrar: corrida entera en vivo sin un error de página, 46 llamadas de dibujo, grillos rms
+0,077 · tensión 0,056 · latido 0,112, y los diez planos del guion fotografiados uno a uno.
+
 ### Quincuagesimoprimera vuelta (2026-08-29): **Eco** — la puerta de las cuatro llaves, nadie te guía, la trompeta, y salir a un prado
 
 Pedido: *"en Eco hace que haya una puerta que se abre con las llaves que recolectas, nada se te guía,
