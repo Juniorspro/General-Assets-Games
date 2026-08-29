@@ -69,6 +69,64 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+- **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
+  y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
+  de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Quincuagesimotercera vuelta (2026-08-29): **VISOR 3D** — un modelo con 10 animaciones, todo de Rezona Lab
+
+Pedido: *"puedes generar un modelo 3D y animarlo con 10 animaciones? todo de Rezona lab y haz un
+HTML viewer del modelo 3D"*. Salió `juegos-pc/Visor3D.html` (3,8 MB): Maicol en 3D sobre una tarima
+de estudio, órbita con el dedo, pinza para acercar, y un botón por animación con fundido de 0,25 s.
+Fuente en `herramientas/visor3d/` (plantilla + fusionar + hornear + armar).
+
+#### LAS 10 ANIMACIONES COSTARON DESCUBRIR UN VOCABULARIO QUE NINGÚN ERROR TE DICE
+
+La cadena de Rezona Lab (proveedor Tripo) para esto es `submit_model3d_generation` →
+`submit_rig3d_generation` con `animations`. Tres cosas que hubo que averiguar a los golpes:
+
+- **Como mucho 5 animaciones por tarea.** El MCP devuelve un VALIDATION_ERROR genérico; el detalle
+  (`max_length: 5`) solo aparece pegándole al endpoint crudo con el Bearer. 10 animaciones = 2 tareas.
+- **Los nombres tienen un vocabulario cerrado y los desconocidos se IGNORAN en silencio.** Pedí
+  `idle, walk, run…` y las tareas salieron `ready` con `ignored_animations` lleno: rigs facturados
+  sin un solo clip pedido. El endpoint que lista los nombres válidos (`rig3d/precheck`) contesta
+  `PAT_ROUTE_FORBIDDEN` con API key. **La respuesta estaba adentro del GLB**: el rig vino con 3 clips
+  de regalo llamados `preset:walk`, `preset:idle`, `preset:jump` — el vocabulario es el de Tripo con
+  prefijo `preset:`, confirmado después en su documentación (idle, walk, run, dive, climb, jump,
+  slash, shoot, hurt, fall, turn…). Con `preset:run, preset:slash, preset:shoot, preset:hurt,
+  preset:fall` + `preset:climb, preset:turn` las dos tareas volvieron con `ignored_animations: null`
+  y los 7 clips adentro. 3 + 5 + 2 = **10 exactos**.
+- **`fusionar.py` junta los clips de los tres GLB en uno.** Acá NO hace falta el retarget por espacio
+  de mundo que costó una vuelta entera en Eco: las tres tareas parten del MISMO modelo con el MISMO
+  esqueleto, así que basta copiar `animations` a nivel glTF remapeando los nodos POR NOMBRE (los
+  índices crudos no, que el orden del JSON no está garantizado). Con filtro de repetidos, porque dos
+  botones QUIETO son un defecto visible.
+
+#### TRIPO DEVUELVE 741.010 TRIÁNGULOS Y ESO NO SE ARREGLA CUANTIZANDO
+
+El GLB fusionado pesaba **32,6 MB — 8,9 MB solo de índices** (383.018 vértices). La poda de Eco
+(cuantizar normales, pesos, rotaciones) hubiera dejado ~21 MB: cuando el problema son los triángulos
+hay que TIRAR triángulos conservando el rig, y eso lo hace meshoptimizer:
+`npx gltfpack -si 0.12 -kn -noq` → **3,2 MB con 88.920 triángulos**, los 10 clips con sus nombres
+(`-kn`; sin eso los botones pierden el rótulo) y **sin extensiones** (`-noq` apaga la cuantización a
+propósito: KHR_mesh_quantization iría en `extensionsRequired` y un cargador sin ella muestra NADA;
+3,2 MB sin extensiones le gana a 1,8 con una). Después `hornear.py` baja las tres texturas de 2048 a
+JPEG 512 (441 KB → 67 KB) y reempaqueta. HTML final: **3,8 MB**.
+
+#### MEDIDO AL CERRAR
+
+Los 10 clips cargados y MEDIDOS con `__visor.medirClip()` (el recorrido de una mano y un pie por el
+mundo, la única prueba de que una animación anima): camina 0,25/0,47 m · quieto 0,20/0,12 · salta
+0,19/0,15 · corre 0,52/0,57 · espadazo 0,71/0,16 · dispara 0,45/0,58 · dolor 0,12/0,02 · cae
+1,64/0,65 · trepa 0,66/0,50 · gira 0,86/0,49 — los diez distintos y ninguno quieto. 4 llamadas de
+dibujo, cero errores de página. Y el encuadre se midió, no se estimó: con dist 4,2 y el objetivo en
+y=1,0 el personaje ocupaba el 27% del alto hundido abajo; con el objetivo al medio del cuerpo (0,78)
+y dist 2,7 ocupa ~50% centrado, verificado en 412×892. Los botones traducen el prefijo del proveedor
+(`preset:hurt` → DOLOR): un botón que dice PRESET:HURT no le dice nada a nadie.
+
+Los GLB crudos de las tareas (90 MB) no se versionan: se regeneran con `fetch_generated_asset`
+(proyecto `PwVerjQL`, tareas `gtask-0d284df5…` modelo, `gtask-34e913…/0d7787…/7435a4…` rigs).
+Se versionan `maicol3d_sim.glb` (la fuente podada) y `maicol3d_p.glb` (lo que pega `armar.py`).
 
 ### Quincuagesimosegunda vuelta (2026-08-29): **VECINDARIO** — el sexto juego: una cinemática de noche en primera persona
 

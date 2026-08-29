@@ -73,8 +73,14 @@ def main():
         return len(ja['accessors']) - 1
 
     ja.setdefault('animations', [])
-    copiadas, sinNodo = 0, []
+    # Si el B trae un clip que el A ya tiene (los rigs de Rezona/Tripo pegan sus clips por
+    # defecto en TODAS las tareas), se saltea: dos botones QUIETO son un defecto visible.
+    yaEstan = {a.get('name', '') for a in ja['animations']}
+    copiadas, sinNodo, repetidas = 0, [], 0
     for anim in jb.get('animations', []):
+        if anim.get('name', 'clip') in yaEstan:
+            repetidas += 1
+            continue
         nueva = {'name': anim.get('name', 'clip'), 'samplers': [], 'channels': []}
         ok = True
         for ch in anim['channels']:
@@ -104,7 +110,7 @@ def main():
     ja['buffers'] = [{'byteLength': len(ba)}]
     escribir(sal, ja, ba)
     print('clips del A:', len(ja['animations']) - copiadas, '+ copiados del B:', copiadas,
-          '=', len(ja['animations']))
+          '=', len(ja['animations']), '| repetidas salteadas:', repetidas)
     if sinNodo:
         print('OJO, clips salteados por nodos que no estan en A:', sorted(set(sinNodo))[:8])
     print(sal, os.path.getsize(sal), 'bytes')

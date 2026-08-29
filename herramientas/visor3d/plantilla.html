@@ -18,7 +18,7 @@
         text-align:center; color:#e8ecf2; font-size:clamp(15px,4vw,20px); font-weight:700;
         letter-spacing:.30em; text-indent:.30em; pointer-events:none; z-index:5;
         text-shadow:0 2px 10px rgba(0,0,0,.6); }
-  #sub{ position:absolute; top:calc(env(safe-area-inset-top) + 40px); left:0; right:0;
+  #sub{ position:absolute; top:calc(env(safe-area-inset-top) + 40px); left:18px; right:18px;
         text-align:center; color:#6b7484; font-size:clamp(10px,2.6vw,12px);
         letter-spacing:.22em; pointer-events:none; z-index:5; }
 
@@ -95,7 +95,10 @@ contra.position.set(-4, 3, -4); escena.add(contra);
 escena.add(new THREE.HemisphereLight(0x3a4250, 0x14171c, 1.5));
 
 /* ---------- la camara orbita con el dedo ---------- */
-const ORB={ yaw:0.5, pitch:0.28, dist:4.2, alto:1.0, girando:false, vyaw:0.25 };
+/* El encuadre se MIDE, no se estima: con dist 4.2 y el objetivo en y=1.0 el personaje de 1.55
+   ocupaba el 27% del alto y quedaba hundido en el tercio de abajo (medido en 412x892). El
+   objetivo va al MEDIO del cuerpo (0.78) y la distancia a 2.7: 55% del alto, centrado. */
+const ORB={ yaw:0.5, pitch:0.17, dist:2.7, alto:0.78, girando:false, vyaw:0.25 };
 let _arr=null;
 addEventListener('pointerdown', e=>{ if(e.target.tagName!=='BUTTON') _arr=[e.clientX,e.clientY]; });
 addEventListener('pointermove', e=>{ if(!_arr) return;
@@ -105,14 +108,14 @@ addEventListener('pointermove', e=>{ if(!_arr) return;
   _arr=[e.clientX,e.clientY];
 });
 addEventListener('pointerup', ()=>{ _arr=null; });
-addEventListener('wheel', e=>{ ORB.dist=Math.max(2, Math.min(9, ORB.dist+e.deltaY*0.003)); }, { passive:true });
+addEventListener('wheel', e=>{ ORB.dist=Math.max(1.4, Math.min(8, ORB.dist+e.deltaY*0.003)); }, { passive:true });
 /* la pinza para acercar, que es lo que hace un pulgar en un telefono */
 let _pinza=null;
 addEventListener('touchmove', e=>{
   if(e.touches.length!==2) { _pinza=null; return; }
   const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
                      e.touches[0].clientY-e.touches[1].clientY);
-  if(_pinza) ORB.dist=Math.max(2, Math.min(9, ORB.dist*(_pinza/d)));
+  if(_pinza) ORB.dist=Math.max(1.4, Math.min(8, ORB.dist*(_pinza/d)));
   _pinza=d;
 }, { passive:true });
 addEventListener('touchend', ()=>{ _pinza=null; });
@@ -140,11 +143,16 @@ addEventListener('error', e=>window.__errs.push(String(e.message)));
     g.position.z=-(caja.min.z+caja.max.z)/2;
     g.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
     escena.add(g);
-    /* los clips: un boton por animacion. El nombre visible se limpia del sufijo del proveedor. */
+    /* los clips: un boton por animacion. El nombre visible se limpia del prefijo del proveedor
+       (Tripo llama a todo "preset:algo") y se traduce: un boton que dice PRESET:HURT no le dice
+       nada a nadie; DOLOR si. */
+    const NOMBRES={ idle:'QUIETO', walk:'CAMINA', run:'CORRE', jump:'SALTA', climb:'TREPA',
+                    slash:'ESPADAZO', shoot:'DISPARA', hurt:'DOLOR', fall:'CAE', turn:'GIRA' };
     mixer=new THREE.AnimationMixer(g);
     const cont=document.getElementById('botones');
     for(const clip of gltf.animations){
-      const nombre=clip.name.replace(/[_-]?(inplace|anim(ation)?)$/i,'').replace(/[_]/g,' ');
+      const crudo=clip.name.replace(/^preset:/i,'').replace(/[_-]?(inplace|anim(ation)?)$/i,'');
+      const nombre=NOMBRES[crudo.toLowerCase()] || crudo.replace(/[_:]/g,' ');
       CLIPS[clip.name]=mixer.clipAction(clip);
       VISOR.clips.push({ nombre:clip.name, seg:+clip.duration.toFixed(2) });
       const b=document.createElement('button');

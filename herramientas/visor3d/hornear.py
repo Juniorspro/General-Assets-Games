@@ -1,28 +1,29 @@
 # -*- coding: utf-8 -*-
 """
-Hornea el GLB del visor: textura a JPEG 512 y reempaquetado, pero CONSERVANDO las
-animaciones — que aca son el producto, no un clip de regalo de Meshy generado con Higgsfield (Meshy image_to_3d, riggeado y texturizado) para que
-entre en un HTML de un solo archivo.
+Hornea el GLB del visor: textura a JPEG 512 y reempaquetado, CONSERVANDO las 10
+animaciones — que aca son el producto.
 
-VIENE DE 8,2 MB Y CASI TODO ES LA TEXTURA: un PNG grande sin comprimir. El modelo son 12.180
-triangulos; el resto es la imagen.
-
-TRES COSAS, EN ESTE ORDEN:
-1. LA TEXTURA A JPEG DE 512. A JPEG y no a WebP a proposito: WebP dentro de un GLB necesita la
-   extension EXT_texture_webp declarada, y si el cargador no la soporta el modelo aparece SIN
-   textura. JPEG es parte del nucleo de glTF y lo lee cualquier cargador. En un personaje de dos
-   metros visto a tres, 512 es mas de lo que se llega a ver.
-2. SE TIRA LA ANIMACION QUE VIENE. Meshy mete un clip por defecto; las cuatro animaciones de este
-   juego estan escritas a mano sobre el esqueleto, asi que ese clip son bytes que nadie lee.
-3. SE REEMPAQUETA EL BINARIO DEJANDO SOLO LO QUE SE USA. Al sacar la animacion quedan accesores y
-   bufferViews huerfanos: si se dejan, el archivo pesa igual que antes y el ahorro es imaginario.
+LA CADENA ENTERA (el modelo viene de Rezona Lab, proveedor Tripo):
+1. fusionar.py junta los clips de las tres tareas de rig en maicol3d_rig.glb (Tripo acepta
+   como mucho 5 animaciones por tarea, y la primera trajo 3 por defecto).
+2. LA MALLA SE SIMPLIFICA CON gltfpack ANTES DE ESTE PASO. Tripo devuelve 741.010 triangulos
+   y 383.018 vertices: 8,9 MB solo de indices, 32,6 MB en total. Cuantizar no alcanza — hay
+   que tirar triangulos conservando el rig, y eso lo hace meshoptimizer:
+       npx gltfpack -i maicol3d_rig.glb -o maicol3d_sim.glb -si 0.12 -kn -noq
+   -si 0.12 deja 88.920 triangulos (de sobra para un personaje de cuerpo entero en telefono),
+   -kn conserva los NOMBRES de los clips (los botones del visor salen de ahi) y -noq apaga la
+   cuantizacion a proposito: KHR_mesh_quantization iria en extensionsRequired y un cargador
+   que no la tenga muestra NADA. 3,2 MB sin una sola extension es mejor que 1,8 con una.
+3. ESTE PASO: la textura a JPEG de 512 (a JPEG y no a WebP: WebP dentro de un GLB necesita
+   EXT_texture_webp y si el cargador no la soporta el modelo sale SIN textura; JPEG es nucleo
+   de glTF) y reempaquetado del binario sin bufferViews huerfanos.
 """
 import io, os, json, struct
 from PIL import Image
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = '/home/user/General-Assets-Games'
-ENT  = os.path.join(RAIZ, 'herramientas', 'visor3d', 'maicol3d_rig.glb')
+ENT  = os.path.join(RAIZ, 'herramientas', 'visor3d', 'maicol3d_sim.glb')
 SAL  = os.path.join(RAIZ, 'herramientas', 'visor3d', 'maicol3d_p.glb')
 TEX_LADO = 512
 TEX_Q = 82
