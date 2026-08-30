@@ -40,8 +40,27 @@ const estrellas = (() => {
 })();
 
 const _dir = new T.Vector3(), _foco = new T.Vector3();
+/* LA NOCHE SE CLAVA Y NO VUELVE A AMANECER.
+   Después de la escena de la llave el juego deja de ser «un día en la isla» y
+   pasa a ser una huida: si el reloj siguiera corriendo, a los pocos minutos
+   saldría el sol y la persecución quedaría a plena luz con el camello trotando
+   por el pasto verde, que es exactamente lo contrario de lo que la escena
+   acaba de plantar. Así que a partir de ahí la hora se PROGRAMA: se lleva a
+   medianoche cerrada y se queda. No se congela de golpe —eso se ve como un
+   corte— sino que baja hasta el valor fijo en unos segundos. */
+let NOCHE_FIJA = false;
+const NOCHE_HORA = 0.965;        /* casi medianoche: la luna alta y nada de sol */
+function clavaNoche(){ NOCHE_FIJA = true; }
 function ponSol(dt){
-  if (dt && !PAUSA) CFG.sol = (CFG.sol + dt / CICLO) % 1;
+  if (NOCHE_FIJA){
+    /* el camino más corto hasta el valor fijo, para no cruzar el mediodía */
+    let d = NOCHE_HORA - CFG.sol;
+    if (d >  0.5) d -= 1;
+    if (d < -0.5) d += 1;
+    if (Math.abs(d) > 0.0008) CFG.sol = (CFG.sol + d * Math.min(1, (dt||0) * 0.55) + 1) % 1;
+    else CFG.sol = NOCHE_HORA;
+  }
+  else if (dt && !PAUSA) CFG.sol = (CFG.sol + dt / CICLO) % 1;
   const f = CFG.sol;
   const ang = (f - 0.25) * 6.283185;
   const alt = Math.sin(ang), az = Math.cos(ang);

@@ -702,6 +702,8 @@ const LLAVE = {
     BICHO.modo = 'embiste';
     BICHO.golpe = 0.9;
     BICHO.caza = true;
+    /* y de acá en adelante no amanece más: el día terminó */
+    clavaNoche();
     MIS.avanza();
     aviso(TX('aCorre'));
   }

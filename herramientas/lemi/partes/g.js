@@ -521,6 +521,9 @@ const INTRO = {
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
+    /* una partida nueva vuelve a tener día: si no, reiniciar después de haber
+       llegado a la llave dejaba el amanecer clavado en medianoche para siempre */
+    NOCHE_FIJA = false;
     $('menu').classList.remove('on');
     $('hud').classList.remove('on');
     $('cine').classList.add('on');

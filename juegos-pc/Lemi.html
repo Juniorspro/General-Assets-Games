@@ -608,11 +608,20 @@ const lerp = (a,b,t) => a + (b-a)*t;
 
 /* ───────────────────────── ajustes vivos ───────────────────────── */
 const CFG = {
-  /* AJUSTE FIJO, el que se pidió: brillo y saturación al tope, píxel en 2,
-     contraste 1.10 y nueve niveles de color. Con nueve escalones por canal el
-     degradado del cielo se corta en bandas anchas y todo el cuadro se empasta
-     como un póster: es lo que da el aire de consola vieja. */
-  pix: 2, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
+  /* AJUSTE FIJO: brillo y saturación al tope, contraste 1.10 y nueve niveles de
+     color. Con nueve escalones por canal el degradado del cielo se corta en
+     bandas anchas y todo el cuadro se empasta como un póster: es lo que da el
+     aire de consola vieja.
+
+     EL PÍXEL PASA DE 2 A 3, que es lo que se pidió. En un marco de 892×412 eso
+     lleva el destino de render de 446×206 a 298×138 —la mitad de los píxeles—,
+     y a ojo la diferencia es que los troncos y las copas dejan de tener bordes
+     casi limpios y pasan a escalonarse de verdad. Comparados los tres al lado:
+     en 2 todavía se lee a «3D con poco filtro», en 4 el bosque del fondo se
+     empieza a empastar y las copas dejan de contarse. En 3 se ve el escalón y
+     todavía se distingue qué es cada cosa, que es lo que tiene que pasar en un
+     juego donde hay que encontrar ramas entre los árboles. */
+  pix: 3, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
   nubes: true, sombras: true, viento: true,
   /* fase del día: 0 medianoche · .25 amanecer · .5 mediodía · .75 atardecer */
   sol: 0.42, girar: true
@@ -2555,8 +2564,27 @@ const estrellas = (() => {
 })();
 
 const _dir = new T.Vector3(), _foco = new T.Vector3();
+/* LA NOCHE SE CLAVA Y NO VUELVE A AMANECER.
+   Después de la escena de la llave el juego deja de ser «un día en la isla» y
+   pasa a ser una huida: si el reloj siguiera corriendo, a los pocos minutos
+   saldría el sol y la persecución quedaría a plena luz con el camello trotando
+   por el pasto verde, que es exactamente lo contrario de lo que la escena
+   acaba de plantar. Así que a partir de ahí la hora se PROGRAMA: se lleva a
+   medianoche cerrada y se queda. No se congela de golpe —eso se ve como un
+   corte— sino que baja hasta el valor fijo en unos segundos. */
+let NOCHE_FIJA = false;
+const NOCHE_HORA = 0.965;        /* casi medianoche: la luna alta y nada de sol */
+function clavaNoche(){ NOCHE_FIJA = true; }
 function ponSol(dt){
-  if (dt && !PAUSA) CFG.sol = (CFG.sol + dt / CICLO) % 1;
+  if (NOCHE_FIJA){
+    /* el camino más corto hasta el valor fijo, para no cruzar el mediodía */
+    let d = NOCHE_HORA - CFG.sol;
+    if (d >  0.5) d -= 1;
+    if (d < -0.5) d += 1;
+    if (Math.abs(d) > 0.0008) CFG.sol = (CFG.sol + d * Math.min(1, (dt||0) * 0.55) + 1) % 1;
+    else CFG.sol = NOCHE_HORA;
+  }
+  else if (dt && !PAUSA) CFG.sol = (CFG.sol + dt / CICLO) % 1;
   const f = CFG.sol;
   const ang = (f - 0.25) * 6.283185;
   const alt = Math.sin(ang), az = Math.cos(ang);
@@ -3344,6 +3372,9 @@ const INTRO = {
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
+    /* una partida nueva vuelve a tener día: si no, reiniciar después de haber
+       llegado a la llave dejaba el amanecer clavado en medianoche para siempre */
+    NOCHE_FIJA = false;
     $('menu').classList.remove('on');
     $('hud').classList.remove('on');
     $('cine').classList.add('on');
@@ -4289,6 +4320,8 @@ const LLAVE = {
     BICHO.modo = 'embiste';
     BICHO.golpe = 0.9;
     BICHO.caza = true;
+    /* y de acá en adelante no amanece más: el día terminó */
+    clavaNoche();
     MIS.avanza();
     aviso(TX('aCorre'));
   }
@@ -4552,6 +4585,10 @@ function bucle(){
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
     /* el idioma, para poder comprobar los tres desde el banco sin recargar */
     idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
+    /* cambiar el pixelado en vivo. `CFG.pix` sola no hace nada: el destino de
+       render se dimensiona en `medir()`, así que sin volver a medir el ajuste
+       queda escrito y el cuadro sigue igual. */
+    pix: (n) => { if (n) { CFG.pix = n; medir(); } return { pix: CFG.pix, rt: rt ? [rt.width, rt.height] : null }; },
     TX, TXF,
     nan: () => { const malas = [];
       escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;

@@ -20,11 +20,20 @@ const lerp = (a,b,t) => a + (b-a)*t;
 
 /* ───────────────────────── ajustes vivos ───────────────────────── */
 const CFG = {
-  /* AJUSTE FIJO, el que se pidió: brillo y saturación al tope, píxel en 2,
-     contraste 1.10 y nueve niveles de color. Con nueve escalones por canal el
-     degradado del cielo se corta en bandas anchas y todo el cuadro se empasta
-     como un póster: es lo que da el aire de consola vieja. */
-  pix: 2, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
+  /* AJUSTE FIJO: brillo y saturación al tope, contraste 1.10 y nueve niveles de
+     color. Con nueve escalones por canal el degradado del cielo se corta en
+     bandas anchas y todo el cuadro se empasta como un póster: es lo que da el
+     aire de consola vieja.
+
+     EL PÍXEL PASA DE 2 A 3, que es lo que se pidió. En un marco de 892×412 eso
+     lleva el destino de render de 446×206 a 298×138 —la mitad de los píxeles—,
+     y a ojo la diferencia es que los troncos y las copas dejan de tener bordes
+     casi limpios y pasan a escalonarse de verdad. Comparados los tres al lado:
+     en 2 todavía se lee a «3D con poco filtro», en 4 el bosque del fondo se
+     empieza a empastar y las copas dejan de contarse. En 3 se ve el escalón y
+     todavía se distingue qué es cada cosa, que es lo que tiene que pasar en un
+     juego donde hay que encontrar ramas entre los árboles. */
+  pix: 3, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
   nubes: true, sombras: true, viento: true,
   /* fase del día: 0 medianoche · .25 amanecer · .5 mediodía · .75 atardecer */
   sol: 0.42, girar: true

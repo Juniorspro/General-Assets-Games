@@ -184,6 +184,10 @@ function bucle(){
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
     /* el idioma, para poder comprobar los tres desde el banco sin recargar */
     idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
+    /* cambiar el pixelado en vivo. `CFG.pix` sola no hace nada: el destino de
+       render se dimensiona en `medir()`, así que sin volver a medir el ajuste
+       queda escrito y el cuadro sigue igual. */
+    pix: (n) => { if (n) { CFG.pix = n; medir(); } return { pix: CFG.pix, rt: rt ? [rt.width, rt.height] : null }; },
     TX, TXF,
     nan: () => { const malas = [];
       escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;
