@@ -1499,6 +1499,9 @@ const ASIENTOS = [];
    está a siete metros. Va como variable y no como valor puesto a mano en el
    bucle, para que el latido y el parpadeo sigan siendo los mismos. */
 let FUEGO_K = 1;
+/* y si hay fuego o no. Nace prendido —en partida siempre lo está— y sólo la
+   cinemática del armado lo apaga, mientras todavía están poniendo la leña. */
+let FUEGO_ON = true;
 
 /* busca el mejor punto según lo que se le pida, evitando los ya elegidos */
 function buscaSitio(test, puntaje, lejosDe, minDist){
@@ -1909,7 +1912,12 @@ function armaCampamento(c){
     k.position.set(px, H(c.x+px, c.z+pz) - y, pz);
     k.rotation.y = a + Math.PI + (Math.random()-0.5)*0.22;
     g.add(k);
-    CARPAS.push({ x: c.x + px, z: c.z + pz });
+    /* LA MALLA VIAJA CON LA POSICIÓN. La cinemática del armado necesita poder
+       apagar y prender cada carpa, y con sólo las coordenadas no hay a qué
+       agarrarse: habría que buscarla por posición entre los hijos del grupo,
+       que es exactamente el tipo de búsqueda que se rompe el día que se agrega
+       otra cosa en el mismo lugar. */
+    CARPAS.push({ x: c.x + px, z: c.z + pz, malla: k });
   }
 
   g.position.set(c.x, y, c.z);
@@ -3410,11 +3418,20 @@ function pasoCamello(dt){
    el texto ya resuelto adentro, cambiar de idioma no cambia el subtítulo que
    está en pantalla, y peor, la tabla se arma una sola vez al cargar el módulo. */
 const GUION = [
-  [ 6.0,  'g0' ], [ 11.0, 'g1' ], [ 17.0, 'g3' ],
-  [ 21.0, 'g4' ], [ 27.5, 'g5' ], [ 31.0, 'g6' ]
+  [  6.0, 'g0' ],   /* llegan */
+  [ 13.0, 'g1' ],   /* arman todo */
+  [ 19.0, 'g2' ],   /* el campamento quedó armado */
+  [ 24.0, 'g3' ],   /* el ruido */
+  [ 29.5, 'g4' ],   /* se van a dormir */
+  [ 34.5, 'g5' ],   /* se despertó solo */
+  [ 38.0, 'g6' ]    /* el rastro */
 ];
 const INTRO = {
-  activa: false, t: 0, dur: 31.0, gente: [],
+  /* LOS TIEMPOS DE LA HISTORIA. Cada nombre es el segundo en que EMPIEZA su
+     escena, así que leer la tabla es leer el guion. */
+  T: { llega: 0, arma: 6.0, prende: 11.6, sienta: 13.0,
+       ruido: 19.0, duerme: 24.0, corte: 29.5 },
+  activa: false, t: 0, dur: 38.0, gente: [],
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
@@ -3470,6 +3487,9 @@ const INTRO = {
        las cinco misiones son «del día»: soltarlo de noche contradiría lo que se
        acaba de ver y encima dejaría sin sentido «juntá ramas PARA LA NOCHE». */
     CFG.sol = 0.28;
+    FUEGO_ON = true;
+    if (fuegoMalla) fuegoMalla.visible = true;
+    for (const k of CARPAS) if (k.malla){ k.malla.visible = true; k.malla.scale.set(1,1,1); }
     entraJuego();
     /* las misiones ya están armadas desde `arranca()`: acá sólo se destapa el
        panel. Rearmarlas tiraría el rastro que se acaba de ver y lo volvería a
@@ -3495,17 +3515,43 @@ const INTRO = {
     /* la tarde cae, la noche pasa, y de la noche se corta a la mañana. El corte
        cae DENTRO del negro, que es lo que hace que se lea como que pasó la
        noche y no como que el sol pegó un salto. */
-    CFG.sol = t < 12   ? 0.680 + t*0.00583
-            : t < 21   ? 0.750 + (t-12)*0.01344
-            : t < 22.5 ? 0.871
-            :            0.245 + cl((t-22.5)/5, 0, 1)*0.055;
+    /* LOS TIEMPOS DE LA HISTORIA, EN UN SOLO LUGAR. Estaban escritos como
+       números sueltos repartidos por toda la función —el sol miraba 12, el
+       fuego miraba 9 y 22,5, la noche miraba 12 y 22,5— y agregar una escena al
+       principio obligaba a encontrarlos todos y correrlos uno por uno. Con la
+       tabla, correr una escena es cambiar un número. */
+    const T0 = INTRO.T;
+    /* la tarde cae, la noche pasa, y de la noche se corta a la mañana. El corte
+       cae DENTRO del negro, que es lo que hace que se lea como que pasó la
+       noche y no como que el sol pegó un salto. */
+    CFG.sol = t < T0.sienta ? 0.680 + t*0.0032
+            : t < T0.duerme + 3.5 ? 0.742 + (t-T0.sienta)*0.0106
+            : t < T0.corte ? 0.871
+            :               0.245 + cl((t-T0.corte)/5, 0, 1)*0.055;
     ponSol(0);
-    if (this.foco && !(t >= 12 && t < 17)) this.foco.intensity = 0;
-    if (fuegoLuz) fuegoLuz.distance = (t > 9 && t < 22.5) ? 40 : 26;
-    FUEGO_K = (t > 9 && t < 22.5) ? 3.0 : 1;
+    if (this.foco && !(t >= T0.ruido && t < T0.duerme)) this.foco.intensity = 0;
+    const deNoche = t > T0.prende && t < T0.corte;
+    if (fuegoLuz) fuegoLuz.distance = deNoche ? 40 : 26;
+    FUEGO_K = deNoche ? 3.0 : 1;
+    /* LA FOGATA NO ESTÁ PRENDIDA DESDE EL PRIMER CUADRO: la prenden ellos, y
+       hasta entonces son piedras y leña apagada. Es la mitad de la escena nueva
+       —«armaron todo»— y sin esto el fuego ya estaba ahí antes de que llegaran. */
+    FUEGO_ON = t >= T0.prende;
+    if (fuegoMalla) fuegoMalla.visible = FUEGO_ON;
+    /* y las carpas se levantan una por una mientras las arman */
+    for (let i = 0; i < CARPAS.length; i++){
+      const k = CARPAS[i];
+      if (!k.malla) continue;
+      const cuando = T0.arma + 1.2 + i*1.5;
+      const sale = cl((t - cuando)/1.1, 0, 1);
+      k.malla.visible = sale > 0.02;
+      /* se levanta creciendo desde el piso, que es lo que hace una carpa de
+         varillas al tensarse: sube en Y y casi no cambia de planta */
+      k.malla.scale.set(0.55 + sale*0.45, sale*sale, 0.55 + sale*0.45);
+    }
     /* la noche se levanta sólo mientras se la mira de cerca, igual que antes */
-    if (t > 12 && t < 22.5){
-      const lift = cl((t - 12)/2.5, 0, 1);
+    if (t > T0.ruido && t < T0.corte){
+      const lift = cl((t - T0.ruido)/2.5, 0, 1);
       ambiente.intensity = 0.20 + 0.62*lift;
       luna.intensity = 0.42 + 0.95*lift;
     }
@@ -3526,11 +3572,91 @@ const INTRO = {
     /* la carpa de cada uno, para el tramo de irse a dormir */
     const carpaDe = (k) => CARPAS.length ? CARPAS[(k+2) % CARPAS.length] : sitio(k);
 
-    if (t < 12){
-      /* ── 1 · LOS CUATRO EN LA FOGATA, CAYENDO EL SOL ──
+    if (t < T0.arma){
+      /* ── 1 · LLEGAN AL CLARO ──
+         Entran caminando desde donde está la camioneta. El auto ya está
+         estacionado —eso no cambió— y lo que se ve es a los cuatro cruzando el
+         claro con el sitio todavía vacío: sin carpas, sin fuego. Que el lugar
+         esté PELADO es la escena: es lo que hace que la siguiente, en la que
+         aparece todo, se lea como que lo armaron ellos. */
+      const k = cl(t/T0.arma, 0, 1);
+      /* de dónde vienen: del auto si existe, y si no de un costado */
+      const dx = a ? a.x - c.x : 12, dz = a ? a.z - c.z : 12;
+      const dl = Math.hypot(dx, dz) || 1;
+      const ex = dx/dl, ez = dz/dl;
+      g.forEach((p, i) => {
+        p.visible = true;
+        p.userData.leno.visible = false;
+        /* en fila despareja, que cuatro personas caminando alineadas se leen a
+           desfile: cada uno con su distancia y su corrimiento de costado */
+        const atras = 1.0 + i*1.15, lado = ((i%2) ? 1 : -1) * (0.8 + (i>>1)*0.7);
+        const d0 = 13.5 - k*10.0 + atras;
+        const sx = c.x + ex*d0 - ez*lado, sz = c.z + ez*d0 + ex*lado;
+        p.position.set(sx, H(sx, sz), sz);
+        p.rotation.y = Math.atan2(sx - c.x, sz - c.z);
+        poseCamina(p, RELOJ.value + i*0.7, 0.55);
+      });
+      /* la cámara los espera en el claro, a la altura de la vista, y se corre
+         despacio: un plano fijo con gente que se acerca es lo más legible que
+         hay para decir «llegaron» */
+      /* LA CÁMARA VA AL COSTADO DEL CAMINO POR EL QUE VIENEN, no encima. Puesta
+         sobre esa línea, a nueve metros del centro en la dirección del auto,
+         cayó DENTRO de la camioneta —que está justo ahí— y el plano entero
+         salió rojo. Corrida sobre la perpendicular, los ve cruzar de lado, que
+         además es como se lee mejor un grupo caminando. */
+      /* Y MIRA DONDE ESTÁN, no un punto fijo. La primera versión apuntaba a
+         cinco metros del centro y el grupo entraba por un costado del cuadro:
+         el plano decía «un claro vacío» y los cuatro pasaban de refilón. El
+         punto de mira sale de la MISMA cuenta que los coloca —`d0` con el
+         atraso del medio— así que los sigue por construcción. */
+      const px2 = -ez, pz2 = ex;
+      const dGrupo = 13.5 - k*10.0 + 2.7;
+      const mx = c.x + ex*dGrupo, mz = c.z + ez*dGrupo;
+      const cx = mx + px2*9.5 + ex*1.5;
+      const cz = mz + pz2*9.5 + ez*1.5;
+      cam.position.set(cx, c.h + 2.3, cz);
+      cam.lookAt(mx, H(mx, mz) + 1.05, mz);
+      cam.fov = 54;
+    } else if (t < T0.sienta){
+      /* ── 2 · ARMAN TODO ──
+         Dos levantan las carpas —que van saliendo del piso una por una, con el
+         reloj de arriba— y dos ponen los troncos en la fogata hasta prenderla.
+         Cada uno hace UNA cosa y se queda en su sitio: cuatro personas yendo y
+         viniendo por el claro se leen a caos, no a trabajo. */
+      const u = t - T0.arma, k = cl(u/(T0.sienta - T0.arma), 0, 1);
+      g.forEach((p, i) => {
+        p.visible = true;
+        if (i < 2){
+          /* los dos de la fogata: agachados poniendo leña, con el tronco en la
+             mano hasta que el fuego prende */
+          const s2 = sitio(i);
+          const fx = lerp(s2.x, c.x, 0.62), fz = lerp(s2.z, c.z, 0.62);
+          p.position.set(fx, H(fx, fz), fz);
+          p.rotation.y = Math.atan2(c.x - fx, c.z - fz);
+          p.userData.leno.visible = t < T0.prende;
+          poseLena(p, RELOJ.value + i*0.8, t < T0.prende);
+        } else {
+          /* los dos de las carpas: parados al lado de la suya, trabajando */
+          const ca = CARPAS.length ? CARPAS[(i-2) % CARPAS.length] : sitio(i);
+          const hx = lerp(c.x, ca.x, 0.82), hz = lerp(c.z, ca.z, 0.82);
+          p.position.set(hx, H(hx, hz), hz);
+          p.rotation.y = Math.atan2(ca.x - hx, ca.z - hz);
+          p.userData.leno.visible = false;
+          poseLena(p, RELOJ.value + i*1.1, true);
+        }
+      });
+      /* la cámara rodea el claro entero: hay que ver las carpas Y el fuego, y
+         están en lados distintos */
+      const ang = 1.15 + k*1.05, rr = 12.4 - k*2.6;
+      const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
+      cam.position.set(cx, c.h + 3.6 - k*0.9, cz);
+      cam.lookAt(c.x, c.h + 1.25, c.z);
+      cam.fov = 55 - k*4;
+    } else if (t < T0.ruido){
+      /* ── 3 · LOS CUATRO EN LA FOGATA, CAYENDO EL SOL ──
          Sentados y charlando. La cámara los rodea despacio y baja: es el plano
          que establece que son cuatro y que están bien. */
-      const k = cl(t/12, 0, 1);
+      const k = cl((t - T0.sienta)/(T0.ruido - T0.sienta), 0, 1);
       g.forEach((p, i) => {
         p.visible = true;
         p.userData.leno.visible = false;
@@ -3549,15 +3675,15 @@ const INTRO = {
       cam.position.set(cx, c.h + 3.0 - k*0.55, cz);
       cam.lookAt(c.x, c.h + 1.15, c.z);
       cam.fov = 47;
-    } else if (t < 17){
-      /* ── 2 · EL RUIDO ──
+    } else if (t < T0.duerme){
+      /* ── 4 · EL RUIDO ──
          Lemi se para y se da vuelta hacia el monte. LOS OTROS TRES NO SE
          MUEVEN, y eso es la escena entera: si se pararan los cuatro, lo que
          pasa es que todos oyeron algo; quedándose sentados, lo que pasa es que
          Lemi es el único que lo oyó, que es lo que dice el texto.
          La cámara se pone DETRÁS de él y mira hacia donde él mira: así el
          espectador busca en la oscuridad lo mismo que está buscando él. */
-      const u = t - 12, k = cl(u/5, 0, 1);
+      const u = t - T0.ruido, k = cl(u/(T0.duerme - T0.ruido), 0, 1);
       const para = cl((u - 0.7)/1.1, 0, 1);      /* se levanta */
       const gira = cl((u - 1.6)/1.4, 0, 1);      /* se da vuelta */
       /* EL MONTE OSCURO ES EL QUE TIENE ATRÁS, no un rumbo escrito a mano.
@@ -3615,11 +3741,11 @@ const INTRO = {
         this.foco.position.set(cx, y0 + alt + 0.25, cz);
         this.foco.intensity = 2.6 * cl((u - 0.4)/1.2, 0, 1);
       }
-    } else if (t < 22.5){
-      /* ── 3 · SE VAN A DORMIR ──
+    } else if (t < T0.corte){
+      /* ── 5 · SE VAN A DORMIR ──
          Caminan a las carpas y desaparecen adentro. La cámara se queda quieta
          del otro lado del fuego: es el último plano en el que se los ve. */
-      const u = t - 17, k = cl(u/4.2, 0, 1);
+      const u = t - T0.duerme, k = cl(u/4.2, 0, 1);
       g.forEach((p, i) => {
         const s2 = sitio(i), ca = carpaDe(i);
         const sx = lerp(s2.x, ca.x, k), sz = lerp(s2.z, ca.z, k);
@@ -3636,10 +3762,10 @@ const INTRO = {
       cam.lookAt(c.x, c.h + 1.0, c.z);
       cam.fov = 48;
     } else {
-      /* ── 4 · LA MAÑANA, Y NO HAY NADIE ──
+      /* ── 6 · LA MAÑANA, Y NO HAY NADIE ──
          Mismo encuadre del campamento, de día, vacío. Que sea el MISMO sitio es
          lo que hace la escena: no hace falta decir que faltan, se ve. */
-      const u = t - 22.5, k = cl(u/8.5, 0, 1);
+      const u = t - T0.corte, k = cl(u/8.5, 0, 1);
       for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
       /* Y EL ÚLTIMO PLANO MIRA EL RASTRO. El pie dice «sólo un rastro que salía
          del campamento» y la cámara apuntaba a un rumbo fijo escrito a mano, o
@@ -3681,7 +3807,7 @@ const INTRO = {
     /* EL NEGRO DEL MEDIO ES LA NOCHE QUE PASA, y es el que permite el corte de
        hora sin que se lea a error. El del final es por donde entra el juego. */
     $('cVelo').classList.toggle('ver',
-      (t > 21.4 && t < 23.4) || t > this.dur - 1.1);
+      (t > T0.corte - 1.1 && t < T0.corte + 0.9) || t > this.dur - 1.1);
   },
   paso(dt){
     this.t += dt;
@@ -4808,7 +4934,12 @@ function bucle(){
   if (fuegoLuz){
     const t = RELOJ.value;
     const p1 = Math.sin(t*11.3) * 0.5 + Math.sin(t*7.1) * 0.3 + Math.sin(t*23.7) * 0.2;
-    fuegoLuz.intensity = (7.5 + p1 * 2.6) * FUEGO_K;
+    /* EL PARPADEO NO PUEDE PRENDER UN FUEGO APAGADO. Esta línea corre TODOS los
+       cuadros y escribe la intensidad entera, así que apagar la fogata desde la
+       cinemática —mientras todavía la están armando— no servía de nada: el
+       parpadeo se la volvía a prender en el cuadro siguiente. `FUEGO_ON` es lo
+       que decide si hay fuego; esto sólo lo hace latir. */
+    fuegoLuz.intensity = FUEGO_ON ? (7.5 + p1 * 2.6) * FUEGO_K : 0;
     if (fuegoMalla){
       const e = 0.9 + p1 * 0.12;
       fuegoMalla.scale.set(e, 1 + p1*0.16, e);
@@ -4964,7 +5095,14 @@ function bucle(){
                gente: INTRO.gente.length,
                camello: donde(INTRO.camelloCine),
                fuego: donde(fuegoMalla),
-               lemi: donde(INTRO.gente[0]) };
+               lemi: donde(INTRO.gente[0]),
+               /* los cuatro, para saber cuántos entran en el cuadro: en las
+                  escenas de grupo lo que hay que comprobar no es dónde cae uno
+                  sino que estén TODOS */
+               gentePx: INTRO.gente.map(p => { const q = donde(p);
+                 return q && q.delante && q.x[1] > 0.02 && q.x[0] < 0.98 &&
+                        q.y[1] > 0.02 && q.y[0] < 0.98 ? 1 : 0; })
+                 .reduce((a,b) => a+b, 0) };
     },
     saltar: () => { INTRO.termina(); return MODO; },
     /* ── las misiones, desde afuera ── */

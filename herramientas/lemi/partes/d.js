@@ -15,6 +15,9 @@ const ASIENTOS = [];
    está a siete metros. Va como variable y no como valor puesto a mano en el
    bucle, para que el latido y el parpadeo sigan siendo los mismos. */
 let FUEGO_K = 1;
+/* y si hay fuego o no. Nace prendido —en partida siempre lo está— y sólo la
+   cinemática del armado lo apaga, mientras todavía están poniendo la leña. */
+let FUEGO_ON = true;
 
 /* busca el mejor punto según lo que se le pida, evitando los ya elegidos */
 function buscaSitio(test, puntaje, lejosDe, minDist){
@@ -425,7 +428,12 @@ function armaCampamento(c){
     k.position.set(px, H(c.x+px, c.z+pz) - y, pz);
     k.rotation.y = a + Math.PI + (Math.random()-0.5)*0.22;
     g.add(k);
-    CARPAS.push({ x: c.x + px, z: c.z + pz });
+    /* LA MALLA VIAJA CON LA POSICIÓN. La cinemática del armado necesita poder
+       apagar y prender cada carpa, y con sólo las coordenadas no hay a qué
+       agarrarse: habría que buscarla por posición entre los hijos del grupo,
+       que es exactamente el tipo de búsqueda que se rompe el día que se agrega
+       otra cosa en el mismo lugar. */
+    CARPAS.push({ x: c.x + px, z: c.z + pz, malla: k });
   }
 
   g.position.set(c.x, y, c.z);

@@ -88,7 +88,12 @@ function bucle(){
   if (fuegoLuz){
     const t = RELOJ.value;
     const p1 = Math.sin(t*11.3) * 0.5 + Math.sin(t*7.1) * 0.3 + Math.sin(t*23.7) * 0.2;
-    fuegoLuz.intensity = (7.5 + p1 * 2.6) * FUEGO_K;
+    /* EL PARPADEO NO PUEDE PRENDER UN FUEGO APAGADO. Esta línea corre TODOS los
+       cuadros y escribe la intensidad entera, así que apagar la fogata desde la
+       cinemática —mientras todavía la están armando— no servía de nada: el
+       parpadeo se la volvía a prender en el cuadro siguiente. `FUEGO_ON` es lo
+       que decide si hay fuego; esto sólo lo hace latir. */
+    fuegoLuz.intensity = FUEGO_ON ? (7.5 + p1 * 2.6) * FUEGO_K : 0;
     if (fuegoMalla){
       const e = 0.9 + p1 * 0.12;
       fuegoMalla.scale.set(e, 1 + p1*0.16, e);
@@ -244,7 +249,14 @@ function bucle(){
                gente: INTRO.gente.length,
                camello: donde(INTRO.camelloCine),
                fuego: donde(fuegoMalla),
-               lemi: donde(INTRO.gente[0]) };
+               lemi: donde(INTRO.gente[0]),
+               /* los cuatro, para saber cuántos entran en el cuadro: en las
+                  escenas de grupo lo que hay que comprobar no es dónde cae uno
+                  sino que estén TODOS */
+               gentePx: INTRO.gente.map(p => { const q = donde(p);
+                 return q && q.delante && q.x[1] > 0.02 && q.x[0] < 0.98 &&
+                        q.y[1] > 0.02 && q.y[0] < 0.98 ? 1 : 0; })
+                 .reduce((a,b) => a+b, 0) };
     },
     saltar: () => { INTRO.termina(); return MODO; },
     /* ── las misiones, desde afuera ── */
