@@ -217,10 +217,20 @@ todo lo de abajo.
   oscura** se recorta, y los ojos —sin luz, y grandes a propósito— son lo único suyo que no depende
   de la hora: a veinte metros, con el juego dibujando a media resolución, unos ojos de tamaño real no
   llegan a un píxel.
-- **Lemi tapaba justo lo que hay que mirar.** Sentado en el eje de la cámara, su espalda se comía el
-  centro: medido, el fuego caía en y 0,64-0,97 y él en 0,66-1,47, o sea encima. Corrido medio radián,
-  la cámara mira por el hueco. Composición final medida: camello en y 0,26-0,56 y 30 % del alto,
-  fuego en 0,61-0,83, Lemi a la derecha en x 0,60-0,82.
+- **LEMI TAPABA LA FOGATA, Y DOS VECES.** De noche, sentado en el eje de la cámara, su espalda se
+  comía el centro: medido, el fuego caía en y 0,64-0,97 y él en 0,66-1,47. Y en la escena de la
+  fogata pasaba lo mismo de día: la cámara rodea de 0,90 a 2,05 rad y él se paraba en 1,60, o sea
+  exactamente en el medio —fuego en x 0,468-0,538, él en 0,445-0,553—. Los cuatro se reparten ahora
+  **fuera del arco que barre el lente** (5,60 · 3,60 · 4,55 · 0,25) y de noche **contra la boca por
+  donde entra el camello**. Composición final medida: camello en y 0,28-0,58 y 30 % del alto, fuego
+  en 0,61-0,83, Lemi a la derecha en x 0,58-0,83, y en la escena de día fuego 0,477-0,530 contra
+  Lemi 0,579-0,655, sin tocarse.
+  Había una lista única de tres ángulos que servía para las dos escenas, y justamente por servir para
+  las dos no servía para ninguna: cada escena decide contra SU cámara.
+- **Y CADA UNO LLEVA SU TRONCO**, que es lo que se pidió. El leño cuelga del ANTEBRAZO y no de la
+  escena: así lo lleva la mano por construcción y no hay dos animaciones que puedan
+  desincronizarse. Sentados de noche ya no lo llevan —lo pusieron en el fuego—, que si no serían
+  cuatro personas cenando con un tronco en la mano.
 - **La noche del juego es demasiado oscura para un plano fijo.** Está bien cuando uno la camina con
   una fogata cerca, pero en ocho segundos quietos el cuadro salía negro entero. Se sube la luna y el
   rebote **sólo** durante la escena 3, y la fogata se multiplica por 3,4 — que es lo que hace que la

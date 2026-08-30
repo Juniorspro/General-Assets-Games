@@ -2440,7 +2440,21 @@ function armaPersona(d){
     pi[k] = { musl, rod };
   }
 
-  g.userData = { d, e, cadera, torso, cuello, br, pi, fase: Math.random()*6.28 };
+  /* EL TRONCO QUE LLEVA EN LA MANO.
+     Cuelga del ANTEBRAZO DERECHO y no de la escena: así lo lleva la mano por
+     construcción y no hay dos animaciones que puedan desincronizarse —si la
+     posición del leño se calculara aparte, en el cuadro en que el brazo se
+     mueve el leño iría un cuadro atrasado y se vería despegado de la mano—.
+     Es la misma regla que la carta pegada a la pinza en RezUno.
+     Nace apagado: sólo se enciende en la escena de la fogata. */
+  const leno = new T.Mesh(new T.CylinderGeometry(0.075*e, 0.09*e, 0.86*e, 6), matCorteza);
+  leno.position.set(0, -0.30*e, 0.10*e);
+  leno.rotation.set(Math.PI/2, 0, 0.22);
+  leno.castShadow = true;
+  leno.visible = false;
+  br.d.codo.add(leno);
+
+  g.userData = { d, e, cadera, torso, cuello, br, pi, leno, fase: Math.random()*6.28 };
   return g;
 }
 
@@ -2861,9 +2875,11 @@ const INTRO = {
     }
 
     const g = this.gente;
-    /* dónde se sienta cada uno: alrededor del fuego, mirándolo */
-    const sillas = [0.5, 2.59, 4.69].map(ang => ({
-      x: c.x + Math.cos(ang)*3.5, z: c.z + Math.sin(ang)*3.5, a: ang }));
+    /* dónde se para cada uno lo decide CADA ESCENA, contra su propia cámara:
+       la de la fogata reparte a los cuatro fuera del arco que barre el lente y
+       la de la noche los reparte contra la boca por donde entra el camello.
+       Acá había una lista única de tres ángulos que servía para las dos, y
+       justamente por servir para las dos no servía para ninguna. */
 
     if (t < 11.5){
       /* ── 1 · EL AUTO LLEGA A LA ISLA ──
@@ -2882,7 +2898,7 @@ const INTRO = {
       a.g.rotation.y = a.ry;
       for (const f of a.g.userData.faros) f.intensity = 0;
       /* la gente todavía está adentro: no se dibuja */
-      for (const p of g) p.visible = false;
+      for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
 
       const lado = 7.5 + (1-s)*5;
       const cx = px - Math.cos(a.ry)*lado, cz = pz + Math.sin(a.ry)*lado;
@@ -2898,21 +2914,32 @@ const INTRO = {
       a.g.position.set(a.x, a.y, a.z); a.g.rotation.y = a.ry;
       for (const f of a.g.userData.faros) f.intensity = 0;
 
+      /* LOS CUATRO VAN DEL OTRO LADO DEL FUEGO, fuera del arco que barre la
+         cámara. La cámara rodea de 0,90 a 2,05 rad; con Lemi parado en 1,60
+         quedaba EXACTAMENTE entre el lente y la fogata y la tapaba entera
+         —medido: el fuego en x 0,468-0,538 y él en 0,445-0,553, o sea encima—.
+         Puestos en 5,60 · 3,60 · 4,55 · 0,25, los cuatro caen del lado opuesto,
+         se los ve DE FRENTE porque miran al fuego, y entre ellos y el lente no
+         queda más que la fogata, que es lo que hay que ver. */
+      const trab = [5.60, 3.60, 4.55, 0.25];
       g.forEach((p, i) => {
         p.visible = true;
+        p.userData.leno.visible = true;
+        const ag = trab[i], rr2 = 3.2;
+        const dx2 = c.x + Math.cos(ag)*rr2, dz2 = c.z + Math.sin(ag)*rr2;
         if (i === 0){
-          /* Lemi entra caminando desde el auto y se agacha al llegar */
+          /* Lemi entra caminando desde el auto y se agacha al llegar. El camino
+             pasa a 3,15 m del fuego, o sea por fuera del círculo de piedras: no
+             lo cruza. */
           const ll = cl(u/4.2, 0, 1);
-          const sx = lerp(a.x, c.x + Math.cos(1.6)*3.0, ll);
-          const sz = lerp(a.z, c.z + Math.sin(1.6)*3.0, ll);
+          const sx = lerp(a.x, dx2, ll), sz = lerp(a.z, dz2, ll);
           p.position.set(sx, H(sx, sz), sz);
           p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
           if (ll < 1) poseCamina(p, RELOJ.value, 1);
           else poseLena(p, RELOJ.value, true);
         } else {
-          const s2 = sillas[i-1];
-          p.position.set(s2.x*0.82 + c.x*0.18, H(s2.x, s2.z), s2.z*0.82 + c.z*0.18);
-          p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+          p.position.set(dx2, H(dx2, dz2), dz2);
+          p.rotation.y = Math.atan2(c.x - dx2, c.z - dz2);
           poseLena(p, RELOJ.value + i*0.7, true);
         }
       });
@@ -2946,6 +2973,9 @@ const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
       const susto = cl((u - 6.4)/0.55, 0, 1);
       g.forEach((p, i) => {
         p.visible = true;
+        /* SENTADOS YA NO LLEVAN LEÑA: la pusieron en el fuego. Dejarla puesta
+           sería cuatro personas cenando con un tronco en la mano. */
+        p.userData.leno.visible = false;
         const ag = asien[i];
         const sx = c.x + Math.cos(ag)*3.5, sz = c.z + Math.sin(ag)*3.5;
         p.position.set(sx, H(sx, sz) + 0.42, sz);
