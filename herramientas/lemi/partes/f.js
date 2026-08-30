@@ -315,17 +315,68 @@ function pausa(v){
       TXF('pSub', Math.floor(t/60), String(t%60).padStart(2,'0'));
   }
 }
+/* ── APLICAR UNA CALIDAD, EN CALIENTE ──
+   Sin recargar la página: un ajuste que pide reiniciar el juego no se prueba —el
+   jugador lo toca una vez, no ve nada y no vuelve—. Es la misma lección que en
+   RezUno con la selección gráfica.
+   Y EL MAPA DE SOMBRA HAY QUE SOLTARLO A MANO: three.js no recrea la textura
+   porque cambie `mapSize`, se queda con la de antes y el cambio no hace nada. */
+function ponCalidad(q){
+  const c = CALIDADES[q]; if (!c) return CALIDAD;
+  CALIDAD = q;
+  CFG.pix = c.pix; CFG.sombras = c.sombras; CFG.nubes = c.nubes; CFG.viento = c.viento;
+  VIENTO.value = c.viento ? 1 : 0;
+  ren.shadowMap.enabled = c.sombras;
+  if (sol.shadow.mapSize.x !== c.mapa){
+    sol.shadow.mapSize.set(c.mapa, c.mapa);
+    if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
+  }
+  sol.castShadow = c.sombras;
+  if (nubes) nubes.visible = c.nubes;
+  medir();
+  try { localStorage.setItem('lemi_cal', q); } catch(e){}
+  pintaAjustes();
+  return CALIDAD;
+}
+/* marca cuál está elegida en las dos filas de fichas del menú */
+function pintaAjustes(){
+  for (const b of document.querySelectorAll('#mCal .chip'))
+    b.classList.toggle('sel', b.dataset.cal === CALIDAD);
+  for (const b of document.querySelectorAll('#mIdi .chip'))
+    b.classList.toggle('sel', b.dataset.lang === IDIOMA);
+}
+
 function armaPanel(){
   $('bPanel').onclick = () => pausa(!PAUSA);
   $('pSeguir').onclick = () => pausa(false);
-  $('pReinicia').onclick = () => { pausa(false); resembrar(); };
+  /* REINICIAR ES VOLVER A EMPEZAR LA PARTIDA, NO CAMBIAR DE ISLA. Llamaba a
+     `resembrar()`, o sea que sembraba una isla nueva —era el botón «otra isla»
+     con otro nombre, y ése se acaba de sacar del menú porque no se pidió— y
+     encima dejaba puesto todo lo de la partida vieja: las misiones ya hechas,
+     los objetos plantados en coordenadas que ya no existen, y desde la vuelta
+     pasada también la pierna rota y la viñeta roja. Reiniciar en medio de la
+     huida te dejaba cojeando en una isla recién sembrada.
+     Los tres pasos son los mismos que usa el arranque normal, en el mismo
+     orden: apagar lo de la partida anterior, replantar las misiones y volver a
+     poner al jugador en el campamento. */
+  $('pReinicia').onclick = () => {
+    pausa(false); limpiaPartida(); MIS.arranca(); entraJuego();
+  };
   $('pMenu').onclick = () => vuelveMenu();
   /* JUGAR abre la CINEMÁTICA, no el juego: el juego arranca cuando ella
      termina, que es lo que se pidió. Y se puede saltear en cualquier momento
      —una apertura obligatoria vista por segunda vez es un peaje—. */
   $('mJugar').onclick = async () => { await pantallaCompleta(); INTRO.arranca(); };
   $('cSaltar').onclick = () => INTRO.termina();
-  $('mOtra').onclick = async () => { await resembrar(); vuelveMenu(); };
+  /* las dos filas de ajustes del menú: idioma y gráficos. Van ACÁ y no sólo en
+     la pantalla previa porque cambiar de idioma o de calidad después de haber
+     empezado obligaba a recargar la página entera. */
+  for (const b of document.querySelectorAll('#mCal .chip'))
+    b.onclick = () => ponCalidad(b.dataset.cal);
+  for (const b of document.querySelectorAll('#mIdi .chip'))
+    b.onclick = () => { ponIdioma(b.dataset.lang); pintaAjustes(); };
+  try { const g = localStorage.getItem('lemi_cal'); if (g && CALIDADES[g]) CALIDAD = g; } catch(e){}
+  ponCalidad(CALIDAD);
   $('bFull').onclick = () => {
     if (enPantallaCompleta()) salirPantallaCompleta(); else pantallaCompleta();
   };

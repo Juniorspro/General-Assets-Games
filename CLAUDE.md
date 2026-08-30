@@ -162,6 +162,160 @@ elementos apilados sin un solo solapamiento. Final: `final` → `fin` → **`men
 de vuelta en `ronda` a 193,7 m y la camioneta otra vez en (8,7 · 9,1). `window.__errs` vacío en todas
 las corridas.
 
+### Sexagésima vuelta (2026-08-30): **LEMI** — la carga con la piel del juego, calidad e idioma en el menú, y la huida que se puede ganar
+
+Pedido textual: *"agrega una pantalla de carga igual a la del menú inicial porque la pantalla azul es
+fea, también elimina el otra isla, y disminuye la pixelacion está muy pixelados hacelo un poco menos,
+también lemo cuando te persigue vos corres rápido con la pierna mal pero te caes a veces y agrega
+selección gráfica e idioma en el menú de inicio y genera un nuevo logo de LEMI para el menú"*.
+
+#### LA HUIDA NO SE PODÍA GANAR, Y ERA ARITMÉTICA
+
+Es el defecto de fondo de la vuelta y lo encontró el jugador antes que el banco. Con la pierna rota,
+correr daba **6,4 m/s** y el camello embiste a **7,4**: o sea que la persecución estaba **decidida
+antes de empezar**, hicieras lo que hicieras. Eso no es una huida, es una cuenta regresiva — y encima
+el juego te acababa de sacar el control con la escena del susto para meterte en algo que no se puede
+jugar.
+
+La vuelta pasada eso lo escribí como una virtud (*«o sea que ahora te alcanza, y llegar al auto deja
+de ser un trámite»*), y el error de razonamiento es de los que conviene anotar: **estaba mirando el
+problema de a un número por vez**. Bajar la velocidad hace que la huida cueste, sí, pero cuando el
+número queda por debajo de la embestida deja de costar y pasa a ser imposible, y las dos cosas se ven
+igual desde el código — lo único que las separa es una comparación con OTRO número, que estaba
+escrito trescientas líneas más allá.
+
+Ahora correr roto da **10,2**, o sea que se le saca ventaja, y **lo que te pone en peligro son los
+tropiezos**: cada cinco a nueve segundos la pierna no responde, te caés, y el camello recupera de una
+todo lo que habías ganado. La diferencia no es de dificultad sino de **de qué depende escapar**: antes
+de nada, ahora de cuántas veces te trabás y de cuánto tardás en levantarte.
+
+#### LA PANTALLA AZUL SE FUE, Y NO ERA SÓLO FEA
+
+La carga y la elección de idioma eran dos degradados azules con letras finas: la portada de una
+aplicación. Y son **lo primero que se ve**, o sea que la primera impresión de este juego era la de
+otro juego — con el menú de madera de la vuelta pasada esperando dos pantallas más adelante. Las dos
+pasan a la misma piel: fondo de selva, el cartel de madera con el logo, y los tres idiomas como las
+mismas tablas que ya son los botones del menú. Una sola familia de controles desde el primer cuadro.
+
+**EL VERDE NO PUEDE DEPENDER DE NINGUNA IMAGEN, y ésa es la parte que hay que hacer bien.** La
+pantalla de carga se pinta **antes de que el módulo se haya evaluado siquiera** —para eso existe—, así
+que si el fondo fuera el follaje horneado habría un cuadro azul de todos modos justo en el instante
+que se quería arreglar. El verde es un degradado de CSS y el follaje entra encima cuando puede.
+
+**Y EL FOLLAJE VA HORNEADO DOS VECES, sin girar y girado.** El menú vive adentro de `#escenario`, que
+lleva un `rotate(90deg)` para que un juego apaisado entre en un teléfono vertical; la carga y el
+idioma viven **afuera**, porque se leen con el teléfono como uno lo agarra. Poniendo la versión girada
+en las dos, las hojas salían aplastadas. Son 16 KB de más por no estirar una imagen a la fuerza.
+
+#### TRES CALIDADES Y TRES IDIOMAS EN EL MENÚ
+
+Las dos filas cambian **lo que cuesta** y no lo que el juego es: la isla, la cueva y el camello son los
+mismos en las tres. Lo que se mueve es cuántos píxeles hay que rellenar —que es lo único que siempre
+paga, porque todo pasa por el destino de render reducido—, las sombras —que son una pasada entera de
+la escena—, las nubes y el viento del pasto.
+
+| | píxel | destino de render | sombras | llamadas | triángulos |
+|---|---|---|---|---|---|
+| baja | 2,8 | 319×148 | no | 65 | 721k |
+| media | 2,0 | **446×206** | sí | 66 | 775k |
+| alta | 1,5 | 595×275 | sí | 66 | 775k |
+
+**SE APLICA EN CALIENTE**, que es la lección de RezUno: un ajuste que pide recargar la página no se
+prueba — el jugador lo toca una vez, no ve nada y no vuelve. Y **el mapa de sombra hay que soltarlo a
+mano**: three.js no recrea la textura porque cambie `mapSize`, se queda con la de antes y el cambio no
+hace nada.
+
+**Y EL IDIOMA TAMBIÉN VA EN EL MENÚ Y NO SÓLO EN LA PANTALLA PREVIA.** Elegir mal el idioma en la
+primera pantalla obligaba a recargar el juego entero, o sea a volver a sembrar la isla.
+
+**UN DEFECTO PROPIO, Y DE ORDEN:** la ficha del idioma se marcaba desde `window.repintaJuego`, que se
+asigna al **final** del arranque —después de sembrar la isla, que son diez segundos— mientras que la
+pantalla de idioma se toca en el primer segundo. Medido: con el castellano elegido, la fila del menú
+seguía mostrando **EN** resaltada. La llamada pasó adentro de `ponIdioma()`, que es quien sabe que el
+idioma cambió.
+
+#### EL PIXELADO BAJA A 2,0 — Y EL RECORRIDO DICE ALGO
+
+Fue 2 → 3 → 2,4 → **2,0**. El 3 empastaba: en un marco de 892×412 deja el destino de render en 298×138
+y a esa resolución la cueva, los cuerpos y las ramas sueltas dejan de distinguirse de las manchas del
+piso, que en un juego donde hay que **encontrar** cosas no es un estilo sino dificultad de más. En 2,0
+el destino queda en 446×206, el escalón se sigue viendo y las copas se vuelven a contar. Y ahora es
+además el eje de la selección gráfica, así que el que quiera más grano lo tiene en BAJA.
+
+#### «OTRA ISLA» SE FUE, Y ARRASTRÓ UN REINICIO QUE HACÍA LO MISMO
+
+El botón se sacó del menú. Pero **REINICIAR, en el panel de pausa, llamaba a la misma función**: era
+«otra isla» con otro nombre, y encima dejaba puesto todo lo de la partida vieja —las misiones ya
+hechas, los objetos plantados en coordenadas que ya no existen, y desde la vuelta pasada también la
+pierna rota y la viñeta roja—. Reiniciar en medio de la huida te dejaba **cojeando en una isla recién
+sembrada**. Ahora hace los mismos tres pasos que el arranque normal y en el mismo orden: apagar lo de
+la partida anterior, replantar las misiones y volver a poner al jugador en el campamento.
+
+Y `resembrar()` se borró entera. Una función viva que ya no llama nadie es una que el día que se toque
+va a estar rota sin que nada lo diga; la limpieza que hacía sigue existiendo adentro de `sembrar()`,
+así que lo que se fue es el camino y no la maquinaria.
+
+#### EL LOGO DICE «LEMI», Y ESO SACA UN ELEMENTO EN VEZ DE AGREGARLO
+
+El anterior era un **sello circular** —un dibujo, no la palabra—, y por eso el cartel de madera tenía
+que llevar además el nombre escrito al lado: dos cosas peleándose el mismo cartel, y la palabra
+dibujada con la tipografía del sistema, que es Roboto en Android, San Francisco en iPhone y Segoe en
+Windows. O sea que el nombre del juego cambiaba de forma según el aparato.
+
+El nuevo son **cuatro letras de tablones atados con soga y el camello encima de la I**: trae el nombre
+dibujado, con la forma que le corresponde a este juego, y pega con la madera del menú y con el
+antagonista. Con eso el texto se va y queda **una** imagen adentro del cartel.
+
+De paso pesa **15 KB contra 309**. El anterior era un PNG a todo color de 1024; éste va recortado a su
+caja, con el blanco pasado a alfa con la misma rampa que el resto de la interfaz, achicado a 384 de
+ancho y **cuantizado a 64 colores** —que es pixel art, o sea que la paleta corta es la forma correcta
+y no una degradación—. En base64 son 20 KB contra 412: el HTML baja casi 400 KB.
+
+(Y `Image.MEDIANCUT` no sirve sobre RGBA: PIL sólo acepta `FASTOCTREE` o libimagequant, y lo dice con
+un error que nombra los métodos por número.)
+
+#### DOS DEFECTOS DE LA PRUEBA QUE MIDE LA HUIDA, Y SON PEORES QUE UNO DEL JUEGO
+
+Para poder afirmar lo de arriba hay que medir cuánto se avanza corriendo. Las dos primeras corridas
+devolvieron números plausibles y los dos estaban mal:
+
+1. **`anda(n, correr)` NO PODÍA CORRER.** Ponía `teclas.ShiftLeft = true`, y correr no es una tecla
+   del mapa: es la variable `corre`, que encienden `keydown`/`keyup`. Medido con el defecto puesto,
+   «corriendo» daba **5,78 m/s** — que es la velocidad de caminar clavada. Una prueba que no puede
+   activar lo que dice medir no falla: contesta.
+2. **Y MEDÍA EL TIEMPO CON EL RELOJ DE PARED.** El `dt` del juego está topado en 0,08 s, así que en el
+   banco —que dibuja por software y con el píxel en 2,0 baja a **1,7 cuadros por segundo**— un segundo
+   de reloj de pared son ocho centésimas de juego. Dividiendo por el reloj de pared, cualquier
+   velocidad sale diez veces menor. Va con `RELOJ.value`, que es el reloj que la física usa.
+
+Y de paso: **para medir la huida el banco corre con el píxel en 3,2**. Lo que se mide es la física, no
+el dibujo, y a 1,7 cuadros por segundo una corrida de cuatrocientos cuadros son tres minutos.
+
+#### MEDIDO AL CERRAR
+
+La huida, caminada de verdad —con la física, los tropiezos y el recorte del terreno—:
+
+| | metros | segundos de juego | cuadros en el piso | m/s |
+|---|---|---|---|---|
+| sano, corriendo | 86,8 | 6,9 | 0 | **12,6** |
+| roto, caminando | 27,2 | 6,4 | 18 de 90 | **5,5** |
+| roto, corriendo | 243,6 | 28,1 | **57 de 400** | **10,4 en movimiento** |
+
+Contando las caídas, la huida rota promedia **8,7 m/s contra los 7,4 de la embestida**: se le gana,
+pero por poco y sólo si se corre. El 14 % del tiempo se pasa en el piso.
+
+Reiniciar desde la pausa: vuelve a la **misión 0**, con la pierna sana, la viñeta apagada y el camello
+en `ronda`. **0 NaN**.
+
+Menú: las fichas quedan marcadas en el idioma y la calidad elegidos (`es:SEL`, `media:SEL`), el botón
+`mOtra` ya no existe, y **cero solapamientos** entre los siete bloques apilados en 412×892. El pie del
+menú sigue el idioma en vivo en los tres (`2259 árboles…` · `2259 árvores…` · `2259 trees…`) — y ése era
+**un tercer gancho llamado antes de existir**: `window.repintaJuego` se colgaba DESPUÉS del `await` que
+espera la elección de idioma, o sea que en el instante en que se elige todavía no estaba, y el pie se
+quedaba en inglés bajo un menú en castellano. Las tres calidades se aplican en caliente.
+Carga e idioma con la piel de madera y el follaje puesto. `window.__errs` vacío en todas las corridas.
+El HTML pasó de **1,61 MB a 1,25 MB**, y esos 360 KB son el logo viejo.
+
 ### Quincuagesimoctava vuelta (2026-08-30): **LEMI** — voces, controles de pixel art, y cinco defectos de una lista de siete
 
 Pedido: *"al empezar la Cinemática inicial aparecen caminando para atrás · el auto al final va volando

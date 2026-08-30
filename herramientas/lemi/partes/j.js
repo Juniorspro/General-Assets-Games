@@ -606,9 +606,12 @@ function hondoCueva(){
    bajar un número no se lee como estar herido, se lee como que el juego se
    puso pesado—. Son tres cosas a la vez, y las tres tienen que estar:
 
-   1. LA VELOCIDAD BAJA Y EL CORRER CASI NO SUMA. Sano, correr da 12,8 contra
-      5,8 de caminar; roto, 6,4 contra 4,6. El camello embiste a 7,4: o sea que
-      ahora te alcanza, y llegar al auto deja de ser un trámite.
+   1. LA VELOCIDAD BAJA, PERO CORRIENDO SE LE SIGUE GANANDO. Sano, correr da
+      12,8 contra 5,8 de caminar; roto, 10,2 contra 5,4, y el camello embiste a
+      7,4. Empezó en 6,4 —o sea POR DEBAJO de la embestida— y eso convertía la
+      huida en una persecución que no se puede ganar: no importaba lo que uno
+      hiciera, el camello llegaba. Lo que tiene que costar son los TROPIEZOS,
+      no la velocidad: corriendo se saca ventaja y cada caída se la devuelve.
    2. LA CÁMARA COJEA. Un paso apoya y el otro se hunde: el balanceo va a la
       MITAD de la frecuencia del paso, que es lo que distingue una renguera de
       un temblor. Sin esto, «lento» es lo único que se percibe.
@@ -633,7 +636,7 @@ function rompePierna(){
   ROTO.on = true; ROTO.t = 0; ROTO.cae = 0;
   /* el primer tropiezo no cae de una: dar tres pasos y desplomarse antes de
      entender que estás herido se lee a bug */
-  ROTO.prox = 6.5 + Math.random()*4;
+  ROTO.prox = 5.0 + Math.random()*3;
 }
 function pasoRoto(dt){
   if (!ROTO.on) return;
@@ -650,7 +653,10 @@ function pasoRoto(dt){
   }
   if (ROTO.cae > 0){
     ROTO.cae -= dt;
-    if (ROTO.cae <= 0) ROTO.prox = 7 + Math.random()*6;
+    /* MÁS SEGUIDO QUE ANTES (era 7 a 13 s). Con la velocidad de correr por
+       encima de la embestida del camello, los tropiezos pasaron a ser LO ÚNICO
+       que lo deja alcanzarte: si son raros, la huida se gana caminando. */
+    if (ROTO.cae <= 0) ROTO.prox = 5 + Math.random()*4;
     return;
   }
   /* sólo se traba si se está moviendo: caerse parado es una broma pesada */

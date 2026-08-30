@@ -22,20 +22,54 @@ canvas{display:block}
 body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
-/* ── CARGA ── */
+/* EL LOGO SE DECLARA UNA SOLA VEZ. Aparece en tres pantallas —carga, idioma y
+   menú— y `armar.py` reemplaza TODAS las marcas que encuentre: con un
+   `<img src>` por pantalla, el mismo base64 quedaba pegado tres veces adentro
+   del HTML. Como variable se declara una vez y se usa como fondo. */
+:root{--logo:url(@@LOGO@@)}
+.lg{background:var(--logo) center/contain no-repeat;image-rendering:pixelated;
+  flex:0 0 auto;display:block}
+
+/* ── CARGA E IDIOMA: LA MISMA PIEL QUE EL MENÚ ──
+   Eran dos pantallas azules con degradado y letras finas: la portada de una
+   aplicación, no la de este juego. Y son lo PRIMERO que se ve, o sea que la
+   primera impresión del juego era de otro juego.
+   EL FONDO DE BASE YA ES SELVA, SIN DEPENDER DE NINGUNA IMAGEN. La pantalla de
+   carga se pinta antes de que el módulo se haya evaluado siquiera, así que si el
+   verde dependiera del follaje horneado habría un cuadro azul igual. El follaje
+   entra cuando puede, encima. */
+.selva{background:
+    radial-gradient(130% 95% at 50% 12%, #12301f 0%, #0a1c14 52%, #04100b 100%)}
+.follaje{position:absolute;inset:0;pointer-events:none;
+  background:var(--marcoV) center/100% 100% no-repeat;
+  image-rendering:pixelated;opacity:.85;filter:brightness(.48) saturate(.7);
+  -webkit-mask-image:radial-gradient(ellipse 60% 68% at 50% 50%, transparent 38%, #000 100%);
+  mask-image:radial-gradient(ellipse 60% 68% at 50% 50%, transparent 38%, #000 100%)}
+/* el cartel de madera con el nombre, igual que en el menú */
+.marca{display:flex;align-items:center;justify-content:center;
+  padding:20px 11% 24px;margin:0 auto 14px;width:min(300px,82%);
+  background:var(--cartel) center/100% 100% no-repeat;image-rendering:pixelated;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.7))}
+/* el logo LLEVA LA PALABRA DIBUJADA, así que ocupa el cartel entero y no hay
+   texto al lado: es una sola imagen y la proporción la fija el propio PNG */
+.marca .lg{width:100%;aspect-ratio:384/185;
+  filter:drop-shadow(0 3px 6px rgba(0,0,0,.8))}
+
 #carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
-  background:radial-gradient(120% 90% at 50% 15%,#1d4a72 0%,#0d2338 55%,#081420 100%);
   transition:opacity .6s ease}
 #carga.ido{opacity:0;pointer-events:none}
-#carga .caja{text-align:center;width:min(360px,84vw)}
-#carga h1{font-size:clamp(26px,7vw,40px);font-weight:200;letter-spacing:-.02em;
-  background:linear-gradient(160deg,#fff 30%,#8fe3a0);-webkit-background-clip:text;
-  background-clip:text;color:transparent}
-#carga p{margin-top:8px;font-size:12.5px;color:rgba(234,244,255,.55);min-height:1.4em}
-#carga .barra{margin-top:18px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
-#carga .barra i{display:block;height:100%;width:0;border-radius:99px;
-  background:linear-gradient(90deg,#7ee3a0,#57b6ef);transition:width .25s}
-#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.42);line-height:1.5}
+#carga .caja{text-align:center;width:min(360px,84vw);position:relative;z-index:2}
+#carga p{margin-top:8px;font-size:12.5px;color:rgba(232,216,180,.72);min-height:1.4em;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
+/* LA BARRA ES UNA TABLA QUE SE LLENA, no una línea celeste. El degradado verde a
+   celeste era el mismo que tenían los botones del menú antes de las chapas, y
+   por la misma razón no va: no hay nada de ese color en la isla. */
+#carga .barra{margin:16px auto 0;width:78%;height:9px;
+  background:rgba(20,12,6,.72);border:2px solid rgba(58,38,20,.9);overflow:hidden}
+#carga .barra i{display:block;height:100%;width:0;
+  background:linear-gradient(180deg,#f0bd6a,#c07f2c);transition:width .25s}
+#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.50);
+  line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.95)}
 
 /* ── IDIOMA ──
    VA ANTES DEL MENU Y NO ADENTRO. Elegir idioma dentro de un menu ya escrito en
@@ -49,21 +83,24 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    está afuera — la pantalla de idioma quedaba tapada por la barra de carga. Y
    de paso queda coherente: las dos pantallas previas se leen con el teléfono
    como uno lo agarra, y recién el menú pide darlo vuelta. */
-#idioma{position:fixed;inset:0;z-index:95;display:none;place-items:center;
-  background:radial-gradient(120% 90% at 50% 15%,#1d4a72 0%,#0d2338 55%,#081420 100%)}
+#idioma{position:fixed;inset:0;z-index:95;display:none;place-items:center}
 #idioma.on{display:grid}
-#idioma .caja{text-align:center;width:min(320px,80vw)}
-#idioma h1{font-size:clamp(24px,6.5vw,36px);font-weight:200;letter-spacing:-.02em;
-  background:linear-gradient(160deg,#fff 30%,#8fe3a0);-webkit-background-clip:text;
-  background-clip:text;color:transparent;margin-bottom:4px}
+#idioma .caja{text-align:center;width:min(320px,80vw);position:relative;z-index:2}
 #idioma .sub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.22em;
-  color:rgba(234,244,255,.42);text-transform:uppercase;margin-bottom:22px}
-#idioma button{display:block;width:100%;margin-top:10px;padding:14px 18px;
-  border-radius:99px;border:1px solid rgba(255,255,255,.16);
-  background:rgba(255,255,255,.06);color:#eaf4ff;font:600 15px/1 system-ui,sans-serif;
-  cursor:pointer;transition:transform .12s ease,background .2s ease}
-#idioma button:active{transform:scale(.97)}
-#idioma button.sel{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+  color:rgba(232,216,180,.66);text-transform:uppercase;margin-bottom:20px;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
+/* los tres botones son las mismas tablas del menú: una sola familia de controles
+   en todo el juego, desde la primera pantalla */
+#idioma button{display:block;width:100%;margin-top:9px;padding:16px 18px;
+  border:none;background:var(--tabla) center/100% 100% no-repeat;
+  image-rendering:pixelated;color:#f2e6cf;
+  font:800 15px/1 system-ui,sans-serif;letter-spacing:.05em;cursor:pointer;
+  text-shadow:0 2px 0 rgba(0,0,0,.65), 0 0 12px rgba(0,0,0,.5);
+  filter:drop-shadow(0 5px 12px rgba(0,0,0,.5));
+  transition:transform .12s ease,filter .2s ease}
+#idioma button:active{transform:scale(.97) translateY(2px);filter:brightness(1.25)}
+#idioma button.sel{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.55)}
 
 /* ── LA VIÑETA ROJA ──
    Se pinta con `box-shadow` hacia adentro y no con un degradado radial de
@@ -175,8 +212,7 @@ body.pc #acciones{display:none}
    tabla colgada con el logo clavado encima. Y el logo puede crecer, porque ya no
    compite con nada. */
 #menu .mEmb{position:relative;display:flex;align-items:center;justify-content:center;
-  gap:min(14px, calc(var(--eh,100vh) * 0.018));
-  padding:calc(var(--eh,100vh) * 0.042) 9% calc(var(--eh,100vh) * 0.050);
+  padding:calc(var(--eh,100vh) * 0.040) 11% calc(var(--eh,100vh) * 0.048);
   margin-bottom:min(6px, calc(var(--eh,100vh) * 0.008));
   background:var(--cartel) center/100% 100% no-repeat;
   image-rendering:pixelated;
@@ -192,20 +228,21 @@ body.pc #acciones{display:none}
    Y VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO (`max-height` en vh): el menú tiene
    siete cosas apiladas y en un teléfono corto el título se come el aire de
    todas las demás. */
-/* EL LOGO GENERADO ES UN EMBLEMA CIRCULAR, NO LA PALABRA. Sacando el texto se
-   perdió el nombre del juego entero: el cartel quedó con un sello dorado en el
-   medio y nada que dijera LEMI. Van los dos, en fila y adentro de la misma
-   tabla — el sello a la izquierda y la palabra a la derecha, que es como está
-   armada cualquier chapa de un local. Una sola marca, y el nombre se lee. */
-#menu .mEmb img{width:auto;height:calc(var(--eh,100vh) * 0.115);
-  max-width:26%;object-fit:contain;flex:0 0 auto;
-  filter:saturate(1.1) drop-shadow(0 2px 5px rgba(0,0,0,.85))}
-#menu .mEmb .mTit{font-weight:900;letter-spacing:.16em;text-indent:.16em;
-  font-size:clamp(24px, calc(var(--eh,100vh) * 0.088), 44px);line-height:1;
-  color:#f0e2c6;
-  /* grabada en la madera: la sombra va HACIA ABAJO y dura un píxel, que es lo
-     que hace que la letra se lea hundida en la tabla en vez de impresa encima */
-  text-shadow:0 2px 0 rgba(0,0,0,.8), 0 0 14px rgba(0,0,0,.55)}
+/* EL LOGO NUEVO DICE «LEMI», ASÍ QUE NO HAY TEXTO AL LADO. El anterior era un
+   sello circular —un dibujo, no la palabra—, y por eso hacía falta escribir el
+   nombre en la tabla: dos elementos peleándose el mismo cartel, y encima la
+   palabra escrita con la tipografía del sistema, que es distinta en cada
+   aparato. El logo nuevo son cuatro letras de tablones atados con soga y el
+   camello encima de la I: trae el nombre dibujado y con la forma que le
+   corresponde a ESTE juego. Una sola imagen, que además pesa 15 KB contra los
+   309 del anterior.
+   VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO: el menú tiene siete cosas apiladas y en
+   un teléfono corto un título medido sólo en ancho se come el aire de todas las
+   demás. La proporción sale del propio PNG (`aspect-ratio`), así que cambiar el
+   logo no obliga a tocar el CSS. */
+#menu .mEmb .lg{width:100%;aspect-ratio:384/185;
+  max-height:calc(var(--eh,100vh) * 0.155);
+  filter:saturate(1.06) drop-shadow(0 3px 6px rgba(0,0,0,.85))}
 /* EL NOMBRE VA DEBAJO DEL EMBLEMA Y NO ENCIMA. Antes iba superpuesto en
    absoluto sobre la imagen, y ahí las dos cosas se pelean el mismo espacio: la
    palabra le cae encima al dibujo y el dibujo le ensucia la palabra. Apilados,
@@ -219,7 +256,7 @@ body.pc #acciones{display:none}
      marco, cualquier cosa por debajo de eso se pierde. */
   text-transform:uppercase;color:rgba(232,216,180,.80);
   text-shadow:0 1px 6px rgba(0,0,0,.95);
-  margin-top:calc(var(--eh,100vh) * 0.024);
+  margin-top:calc(var(--eh,100vh) * 0.040);
   margin-bottom:min(18px, calc(var(--eh,100vh) * 0.022))}
 /* ── LOS BOTONES SON CHAPAS DE MADERA ──
    Eran dos píldoras: una de vidrio esmerilado y otra con un degradado verde a
@@ -248,6 +285,25 @@ body.pc #acciones{display:none}
    de 412 píxeles de ALTO, y con las medidas fijas los siete elementos sumaban
    450 — el texto de la historia y el pie quedaban cortados por el borde de
    abajo. Con los topes, lo que se achica primero es el aire y no el texto. */
+/* ── LAS DOS FILAS DE AJUSTES ──
+   Idioma y gráficos, en el menú y no sólo en la pantalla previa: hasta ahora, el
+   idioma se elegía una vez antes de todo y cambiarlo obligaba a recargar la
+   página, y la calidad no se podía elegir en ningún lado. Van como FICHAS
+   CHICAS y no como botones grandes porque son ajustes, no acciones — el ojo
+   tiene que ir primero a JUGAR. */
+#menu .mFila{display:flex;align-items:center;justify-content:center;gap:5px;
+  margin-top:min(9px, calc(var(--eh,100vh) * 0.012))}
+#menu .mRot{font:700 8.5px/1 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(232,216,180,.5);text-shadow:0 1px 5px rgba(0,0,0,.95);
+  margin-right:4px;min-width:62px;text-align:right}
+#menu .chip{border:none;padding:7px 11px;
+  background:var(--tabla) center/100% 100% no-repeat;image-rendering:pixelated;
+  color:rgba(242,230,207,.72);font:800 10.5px/1 ui-monospace,monospace;
+  letter-spacing:.08em;cursor:pointer;
+  text-shadow:0 1px 0 rgba(0,0,0,.7);transition:transform .12s,filter .2s}
+#menu .chip:active{transform:scale(.94)}
+#menu .chip.sel{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.5)}
 #menu .mHist{margin-top:min(18px, calc(var(--eh,100vh) * 0.022));
   font-size:clamp(10.5px, calc(var(--eh,100vh) * 0.029), 12.5px);
   line-height:1.5;color:rgba(234,244,255,.66);text-wrap:balance;
@@ -376,15 +432,15 @@ body:not(.pc) #joy{display:block}
 </head>
 <body>
 
-<div id="carga"><div class="caja">
-  <h1>LEMI</h1>
+<div id="carga" class="selva"><div class="follaje"></div><div class="caja">
+  <div class="marca"><i class="lg"></i></div>
   <p id="cTxt" data-i18n="cargando">Seeding the island…</p>
   <div class="barra"><i id="cBar"></i></div>
   <div class="pista" id="cPista"></div>
 </div></div>
 
-<div id="idioma"><div class="caja">
-  <h1>LEMI</h1>
+<div id="idioma" class="selva"><div class="follaje"></div><div class="caja">
+  <div class="marca"><i class="lg"></i></div>
   <div class="sub">language · idioma · idioma</div>
   <button data-lang="en">English</button>
   <button data-lang="es">Español</button>
@@ -417,10 +473,21 @@ body:not(.pc) #joy{display:block}
 <div id="menu">
   <div class="mMarco"></div>
   <div class="mCaja">
-    <div class="mEmb"><img src="@@LOGO@@" alt=""><div class="mTit">LEMI</div></div>
+    <div class="mEmb"><i class="lg"></i></div>
     <div class="mSub" data-i18n="mSub">the camel island</div>
     <button class="mBtn pri" id="mJugar" data-i18n="mJugar">▶ Play</button>
-    <button class="mBtn" id="mOtra" data-i18n="mOtra">Another island</button>
+    <div class="mFila" id="mIdi">
+      <span class="mRot" data-i18n="mIdioma">LANGUAGE</span>
+      <button class="chip" data-lang="en">EN</button>
+      <button class="chip" data-lang="es">ES</button>
+      <button class="chip" data-lang="pt">PT</button>
+    </div>
+    <div class="mFila" id="mCal">
+      <span class="mRot" data-i18n="mGraf">GRAPHICS</span>
+      <button class="chip" data-cal="baja" data-i18n="gBaja">LOW</button>
+      <button class="chip" data-cal="media" data-i18n="gMedia">MED</button>
+      <button class="chip" data-cal="alta" data-i18n="gAlta">HIGH</button>
+    </div>
     <div class="mHist" id="mHist"></div>
     <div class="mPie" id="mPie"></div>
   </div>

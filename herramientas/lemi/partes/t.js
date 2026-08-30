@@ -27,7 +27,8 @@ const TXT = {
     cBosque:'Planting the forest…', cSitiosArm:'Setting up the camp…',
     cNubes:'Hanging the clouds…', cListo:'Ready',
     /* menú */
-    mSub:'the camel island', mJugar:'▶ Play', mOtra:'Another island',
+    mSub:'the camel island', mJugar:'▶ Play', mIdioma:'LANGUAGE', mGraf:'GRAPHICS',
+    gBaja:'LOW', gMedia:'MED', gAlta:'HIGH',
     mHist:'You came camping with three friends to an island that is on no map. '+
           'There were footprints in the sand. They were nobody in the group’s.',
     mPie:(a,s,m) => a+' trees · '+s+' places · '+m+' m across',
@@ -88,7 +89,8 @@ const TXT = {
     cCueva:'Cavando…', cTerreno:'Levantando el terreno…', cAgua:'Sirviendo el mar…',
     cBosque:'Plantando el bosque…', cSitiosArm:'Armando el campamento…',
     cNubes:'Colgando las nubes…', cListo:'Listo',
-    mSub:'la isla del camello', mJugar:'▶ Jugar', mOtra:'Otra isla',
+    mSub:'la isla del camello', mJugar:'▶ Jugar', mIdioma:'IDIOMA', mGraf:'GRÁFICOS',
+    gBaja:'BAJA', gMedia:'MEDIA', gAlta:'ALTA',
     mHist:'Viniste a acampar con tres amigos a una isla que no figura en ningún mapa. '+
           'En la arena había huellas. No eran de nadie del grupo.',
     mPie:(a,s,m) => a+' árboles · '+s+' sitios · '+m+' m de lado',
@@ -142,7 +144,8 @@ const TXT = {
     cCueva:'Cavando…', cTerreno:'Levantando o terreno…', cAgua:'Servindo o mar…',
     cBosque:'Plantando a floresta…', cSitiosArm:'Montando o acampamento…',
     cNubes:'Pendurando as nuvens…', cListo:'Pronto',
-    mSub:'a ilha do camelo', mJugar:'▶ Jogar', mOtra:'Outra ilha',
+    mSub:'a ilha do camelo', mJugar:'▶ Jogar', mIdioma:'IDIOMA', mGraf:'GRÁFICOS',
+    gBaja:'BAIXA', gMedia:'MÉDIA', gAlta:'ALTA',
     mHist:'Você veio acampar com três amigos numa ilha que não está em nenhum mapa. '+
           'Havia pegadas na areia. Não eram de ninguém do grupo.',
     mPie:(a,s,m) => a+' árvores · '+s+' lugares · '+m+' m de lado',
@@ -245,6 +248,14 @@ function ponIdioma(v){
   for (const b of document.querySelectorAll('#idioma button'))
     b.classList.toggle('sel', b.getAttribute('data-lang') === v);
   pintaIdioma();
+  /* Y LAS FICHAS DEL MENÚ SE MARCAN ACÁ Y NO EN `repintaJuego`. Puesto allá no
+     corría nunca en el momento que importa: `window.repintaJuego` se asigna al
+     FINAL del arranque —después de sembrar la isla, que son diez segundos— y la
+     pantalla de idioma se elige en el primero. Medido: con el castellano puesto,
+     la fila del menú seguía mostrando EN resaltada. `pintaAjustes` es una
+     declaración de función, o sea que está izada en todo el módulo: llamarla
+     desde acá funciona aunque `f.js` todavía no se haya evaluado del todo. */
+  if (typeof pintaAjustes === 'function') pintaAjustes();
 }
 
 /* los números de la isla se guardan para poder rehacer el pie del menú al

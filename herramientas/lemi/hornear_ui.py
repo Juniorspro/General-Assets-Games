@@ -118,11 +118,16 @@ def main():
     #    imagen 9:16 puesta ahi se estira a un rectangulo apaisado y las hojas
     #    salen aplastadas. Girada al reves ANTES de guardarla, la rotacion del
     #    escenario la endereza y llega a la pantalla con su proporcion.
+    #    Y VA HORNEADO DOS VECES. Las pantallas de carga y de idioma viven AFUERA
+    #    del escenario y no giran —se leen con el telefono como uno lo agarra—,
+    #    asi que ahi hace falta la version vertical. Es la misma imagen, no un
+    #    generado mas: 16 KB de mas por no tener que estirar una a la fuerza.
     f = os.path.join(ENTRADA, 'marco.png')
     if os.path.exists(f):
         im7, b7 = piezas(f, minimo=20000)
         base = Image.open(f).convert('RGB')
         rec = saca_fondo(base)
+        salida['marcoV'] = rec.resize((144, 256), Image.LANCZOS)
         rec = rec.rotate(-90, expand=True)
         salida['marco'] = rec.resize((256, 144), Image.LANCZOS)
 

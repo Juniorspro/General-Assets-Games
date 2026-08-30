@@ -25,22 +25,36 @@ const CFG = {
      bandas anchas y todo el cuadro se empasta como un póster: es lo que da el
      aire de consola vieja.
 
-     EL PÍXEL VUELVE A 2,4 y no a 3, que es lo que se pidió: «sacale un poco lo
-     pixelado». Empezó en 2, subió a 3 y ahí se pasó — en un marco de 892×412,
-     el 3 lleva el destino de render a 298×138 y a esa resolución la cueva, los
-     cuerpos y las ramas sueltas dejan de distinguirse de las manchas del piso,
-     que en un juego donde hay que ENCONTRAR cosas no es un estilo sino una
-     dificultad de más. En 2,4 el destino queda en 372×172, o sea un 55 % más de
-     píxeles que en 3 y un 30 % menos que en 2: el escalón se sigue viendo y las
-     copas se vuelven a contar.
+     EL PÍXEL BAJA A 2,0 Y AHORA LO ELIGE EL JUGADOR. Fue 2 → 3 → 2,4 → 2, y el
+     recorrido dice algo: el 3 empastaba —en un marco de 892×412 el destino de
+     render queda en 298×138 y ahí la cueva, los cuerpos y las ramas sueltas
+     dejan de distinguirse de las manchas del piso, que en un juego donde hay
+     que ENCONTRAR cosas no es un estilo sino dificultad de más— y el 2,4 seguía
+     pasado. En 2,0 el destino queda en 446×206: el escalón se ve, las copas se
+     cuentan y las ramas del suelo se leen.
      Y ES DECIMAL A PROPÓSITO. `medir()` divide y redondea, así que el ajuste no
      tiene por qué ser entero: con 2 y 3 como únicas opciones no hay nada entre
      «casi limpio» y «empastado». */
-  pix: 2.4, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
+  pix: 2.0, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
   nubes: true, sombras: true, viento: true,
   /* fase del día: 0 medianoche · .25 amanecer · .5 mediodía · .75 atardecer */
   sol: 0.42, girar: true
 };
+/* ── LAS TRES CALIDADES ──
+   Cambian lo que CUESTA y no lo que el juego es: la isla, la cueva y el camello
+   son los mismos en las tres. Lo que se mueve es cuántos píxeles hay que
+   rellenar —que es lo único que siempre paga, porque todo pasa por el destino de
+   render reducido—, las sombras —que son una pasada entera de la escena, o sea
+   la mitad de las llamadas de dibujo—, las nubes y el viento del pasto.
+   El pixelado va al revés de lo que uno esperaría: ALTA es el número MÁS CHICO,
+   porque es cuántas veces se divide la resolución. */
+const CALIDADES = {
+  baja:  { pix: 2.8, sombras: false, nubes: false, viento: false, mapa: 1024 },
+  media: { pix: 2.0, sombras: true,  nubes: true,  viento: true,  mapa: 2048 },
+  alta:  { pix: 1.5, sombras: true,  nubes: true,  viento: true,  mapa: 2048 }
+};
+let CALIDAD = 'media';
+
 /* el ciclo completo, día y noche, en tres minutos */
 const CICLO = 180;
 

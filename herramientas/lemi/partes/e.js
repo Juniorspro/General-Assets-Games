@@ -239,7 +239,7 @@ function cargaUI(){
 function ponHoja(){
   /* las que van por CSS entran como variables: así una sola línea las alcanza a
      todas y no hay que ir a buscar el elemento de cada una */
-  for (const k of ['hoja', 'tabla', 'tablaPri', 'cartel', 'marco'])
+  for (const k of ['hoja', 'tabla', 'tablaPri', 'cartel', 'marco', 'marcoV'])
     if (IMG[k]) document.documentElement.style.setProperty(
       '--' + k, 'url(' + IMG[k].src + ')');
   for (const [id, k] of [['acCorre','bCorre'], ['acAgacha','bAgacha'],
@@ -309,13 +309,17 @@ function fisica(dt){
   if (m > 1){ mx /= m; my /= m; }
   /* agachado se anda a la mitad y no se puede correr, que es lo que hace que
      agacharse sea una decisión y no un botón de adorno */
-  /* CON LA PIERNA ROTA CAMBIAN LAS DOS VELOCIDADES, no una. Bajando sólo la de
-     correr, caminar seguiría siendo normal y lo único que se notaría es que el
-     botón de correr dejó de hacer algo. Y el tope de correr queda POR DEBAJO de
-     la embestida del camello (7,4), que es lo que hace que la huida sea una
-     huida y no un trámite. */
+  /* CON LA PIERNA ROTA SE CORRE RÁPIDO, Y LO QUE MATA SON LAS CAÍDAS.
+     Estaba en 6,4 corriendo contra los 7,4 de la embestida del camello: o sea
+     que el bicho te ganaba SIEMPRE, por aritmética, hicieras lo que hicieras.
+     Eso no es una huida, es una cuenta regresiva. Ahora son 10,2 —por encima de
+     la embestida, así que corriendo se le saca ventaja— y lo que te pone en
+     peligro son los tropiezos: cada cinco a nueve segundos la pierna no
+     responde, te caés, y ahí el camello recupera todo lo que habías ganado.
+     La diferencia es de qué depende escapar: antes de nada, ahora de cuántas
+     veces te trabás y de cuánto tardás en levantarte. */
   const spBase = JUG.agacha ? VEL*0.42
-               : ROTO.on ? (corre ? 6.4 : 4.6)
+               : ROTO.on ? (corre ? 10.2 : 5.4)
                : (corre ? CORRE : VEL);
   const sp = spBase * (JUG.vuela ? 2.6 : 1) * factorRoto();
   AND.v = Math.hypot(vxAnt, vzAnt);

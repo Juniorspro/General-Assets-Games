@@ -40,16 +40,12 @@ async function construir(primera){
   await paso(1, r.arboles + ' árboles · ' + SITIOS.length + ' sitios');
   return r;
 }
-async function resembrar(){
-  SEM = (Math.random()*1e9)|0;
-  $('carga').classList.remove('ido');
-  $('carga').style.display = '';
-  await paso(0.02, 'Otra isla…');
-  const r = await construir(false);
-  aviso(r.arboles + ' árboles nuevos');
-  setTimeout(() => { $('carga').classList.add('ido');
-    setTimeout(() => $('carga').style.display = 'none', 700); }, 260);
-}
+/* `resembrar()` se fue con el botón «otra isla». Era la única forma de sembrar
+   una isla nueva sin recargar, y con el botón sacado no la llamaba nadie: una
+   función viva que nadie usa es una que el día que se toque va a estar rota sin
+   que nada lo diga. La limpieza que hacía sigue existiendo —está adentro de
+   `sembrar()`, que borra lo anterior antes de plantar— así que no se perdió
+   nada: lo que se fue es el camino, no la maquinaria. */
 
 let ultimo = performance.now(), fps = 0, cuadros = 0, acum = 0, DIB = 0, TRI = 0;
 /* CONGELADO: frena la SIMULACIÓN y deja el dibujo.
@@ -180,16 +176,15 @@ function bucle(){
   /* de la barra de carga al menú de inicio, con la isla ya viva detrás */
   ISLA_DATOS = { arboles: r.arboles, sitios: SITIOS.length, lado: Math.round(MITAD*2) };
   $('mPie').textContent = TXF('mPie', r.arboles, SITIOS.length, Math.round(MITAD*2));
-  CINE.arranca();
-  /* y si todavía está eligiendo idioma, el menú espera: dos paneles encimados
-     son dos paneles que se tocan sin querer */
-  await new Promise(res => {
-    const ver = () => { if (window.__idiomaElegido) res(); else setTimeout(ver, 120); };
-    ver();
-  });
-  $('menu').classList.add('on');
-  $('carga').classList.add('ido');
-  setTimeout(() => $('carga').style.display = 'none', 700);
+  /* Y EL GANCHO SE CUELGA ACÁ, ANTES DE ESPERAR AL IDIOMA. Estaba después del
+     `await` que espera a que se elija idioma, o sea que en el momento en que se
+     elige —que es lo que resuelve esa espera— `pintaIdioma()` corría y
+     `window.repintaJuego` todavía no existía: el pie del menú se quedaba en
+     inglés para siempre por más que todo lo demás cambiara. Medido en la
+     captura: «1772 trees · 4 places · 660 m across» debajo de un menú en
+     castellano. Es el mismo defecto de orden que las fichas de ajustes de esta
+     misma vuelta, y por eso vale escribirlo dos veces: un gancho tiene que
+     existir antes de que pueda dispararse, no donde queda prolijo. */
   /* el gancho que usa `pintaIdioma()` para poner al día lo que ya se está
      viendo. Va colgado de `window` a propósito: esto es un módulo ES, así que
      una `function` declarada arriba NO aparece en `window`, y la tabla de textos
@@ -203,6 +198,16 @@ function bucle(){
     if (p.classList.contains('on') && MIS.cerca)
       p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + TX(MIS.cerca.rot);
   };
+  CINE.arranca();
+  /* y si todavía está eligiendo idioma, el menú espera: dos paneles encimados
+     son dos paneles que se tocan sin querer */
+  await new Promise(res => {
+    const ver = () => { if (window.__idiomaElegido) res(); else setTimeout(ver, 120); };
+    ver();
+  });
+  $('menu').classList.add('on');
+  $('carga').classList.add('ido');
+  setTimeout(() => $('carga').style.display = 'none', 700);
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
     /* el idioma, para poder comprobar los tres desde el banco sin recargar */
     idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
@@ -297,13 +302,26 @@ function bucle(){
        la huida: teletransportarse no puede tropezar. */
     anda: (n, correr) => new Promise(res => {
       let i = 0, caidas = 0, pasos = 0;
+      /* EL TIEMPO SE MIDE CON EL RELOJ DEL JUEGO Y NO CON EL DE PARED. El `dt`
+         está topado en 0,08 s, así que en el banco —que dibuja por software y
+         puede caer a dos cuadros por segundo— un segundo de reloj de pared son
+         ocho centésimas de juego: dividiendo por el reloj de pared, cualquier
+         velocidad da diez veces menos de lo que es. */
+      const x0 = JUG.x, z0 = JUG.z, t0 = RELOJ.value;
       const un = () => {
-        teclas.KeyW = true; teclas.ShiftLeft = !!correr;
+        /* CORRER NO ES UNA TECLA DEL MAPA: es la variable `corre`, que la
+           encienden `keydown`/`keyup`. Poniendo `teclas.ShiftLeft` la prueba
+           creía estar corriendo y el juego caminaba — medido, 110,9 m en 19,2 s
+           de juego, o sea 5,78 m/s, que es CAMINAR clavado. Una prueba que no
+           puede activar lo que dice medir devuelve un número plausible. */
+        teclas.KeyW = true; corre = !!correr;
         if (ROTO.cae > 0) caidas++;
         pasos++;
         if (++i < n) requestAnimationFrame(un);
-        else { teclas.KeyW = false; teclas.ShiftLeft = false;
+        else { teclas.KeyW = false; corre = false;
                res(JSON.stringify({ cuadros: pasos, caidas,
+                 metros: +Math.hypot(JUG.x-x0, JUG.z-z0).toFixed(1),
+                 seg: +(RELOJ.value-t0).toFixed(1),
                  dentro: ENCUEVA, avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x,JUG.z).avance.toFixed(1) : null,
                  x:+JUG.x.toFixed(1), z:+JUG.z.toFixed(1),
                  cerca: MIS.cerca ? MIS.cerca.tipo : null, modo: MODO })); }
@@ -692,6 +710,10 @@ function bucle(){
                      avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x, JUG.z).avance.toFixed(1) : null,
                      hondo: +hondoCueva().toFixed(2) }),
     /* el estado de la pierna rota */
+    /* rompe la pierna sin tener que jugar la cinemática de la llave: es lo que
+       permite medir la huida sola, que es lo que se toca */
+    rompe: () => { rompePierna(); ROJO.on = true;
+      return { on: ROTO.on, prox: +ROTO.prox.toFixed(1) }; },
     roto: () => ({ on: ROTO.on, cae: +ROTO.cae.toFixed(2), prox: +ROTO.prox.toFixed(1),
                    rojoOn: ROJO.on, rojo: +postMat.uniforms.rojo.value.toFixed(2) }),
     /* mete al jugador N metros adentro del pasillo, para poder fotografiarlo */
