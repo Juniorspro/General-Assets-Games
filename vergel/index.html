@@ -11,6 +11,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a1420;touch-action
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#eaf4ff;
   -webkit-user-select:none;user-select:none;overscroll-behavior:none}
 canvas{display:block}
+
+/* ── EL ESCENARIO ──
+   Todo el juego vive acá adentro. Con el teléfono en vertical se gira 90° y se
+   le intercambian el ancho y el alto, así se juega apaisado sin pedirle a nadie
+   que dé vuelta el aparato. La pantalla de carga queda AFUERA a propósito: se
+   muestra antes de girar nada y hay que poder leerla como venga el teléfono. */
+#escenario{position:fixed;left:0;top:0;width:100%;height:100%;
+  transform-origin:top left;overflow:hidden}
+body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 /* ── CARGA ── */
@@ -26,9 +35,17 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 #carga .barra{margin-top:18px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
 #carga .barra i{display:block;height:100%;width:0;border-radius:99px;
   background:linear-gradient(90deg,#7ee3a0,#57b6ef);transition:width .25s}
+/* el botón de entrada: hace falta que sea un GESTO del usuario, porque tanto
+   pantalla completa como el bloqueo de orientación sólo se conceden ahí */
+#bEntrar{margin-top:22px;padding:15px 30px;border-radius:99px;font-size:15px;font-weight:700;
+  background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;
+  box-shadow:0 10px 30px rgba(87,182,239,.28);transition:transform .18s}
+#bEntrar:active{transform:scale(.96)}
+#bEntrar[hidden]{display:none}
+#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.42);line-height:1.5}
 
 /* ── HUD ── */
-#hud{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s}
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s}
 #hud.on{opacity:1}
 #fps{position:absolute;left:12px;top:calc(10px + env(safe-area-inset-top,0px));
   font:600 10.5px/1.6 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.5);
@@ -52,7 +69,7 @@ body:not(.pc) #joy{display:block}
 #joy canvas{width:100%;height:100%;display:block}
 
 /* ── PANEL ── */
-#panel{position:fixed;right:0;top:0;bottom:0;width:min(300px,86vw);z-index:40;
+#panel{position:absolute;right:0;top:0;bottom:0;width:min(300px,86vw);z-index:40;
   background:rgba(8,16,26,.9);border-left:1px solid rgba(255,255,255,.09);
   backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
   transform:translateX(100%);transition:transform .4s cubic-bezier(.22,1,.36,1);
@@ -95,12 +112,16 @@ body:not(.pc) #joy{display:block}
   <h1>Vergel</h1>
   <p id="cTxt">Sembrando la isla…</p>
   <div class="barra"><i id="cBar"></i></div>
+  <button id="bEntrar" hidden>▶ Entrar en pantalla completa</button>
+  <div class="pista" id="cPista"></div>
 </div></div>
 
+<div id="escenario">
 <div id="hud">
   <div id="fps"></div>
   <div id="botones">
     <button class="bt" id="bCorre">CORRER</button>
+    <button class="bt" id="bFull">⛶</button>
     <button class="bt" id="bPanel">☰</button>
   </div>
   <div id="teclas">
@@ -135,12 +156,14 @@ body:not(.pc) #joy{display:block}
   <div class="sw"><span>Nubes<em>Cúmulos gordos de poca cara</em></span><div class="tog on" id="tNub"></div></div>
   <div class="sw"><span>Sombras<em>Lo que más cuesta en un teléfono</em></span><div class="tog on" id="tSom"></div></div>
   <div class="sw"><span>Viento<em>Mueve pasto y hojas</em></span><div class="tog on" id="tVie"></div></div>
+  <div class="sw"><span>Forzar horizontal<em>Gira el juego 90° si el teléfono está vertical</em></span><div class="tog on" id="tGir"></div></div>
   <div class="sl" style="margin-top:14px"><label>Hora del día<b id="vSol">10:00</b></label>
     <input type="range" id="sSol" min="0" max="1" step="0.005" value="0.34"></div>
 
   <button class="pbtn" id="bOtra">Otra isla</button>
   <button class="pbtn pri" id="bCerrar">Listo</button>
   <div class="nota">Todo lo que ves está hecho por código al abrir: no se baja ni una textura ni un modelo.</div>
+</div>
 </div>
 
 <script type="importmap">
@@ -258,7 +281,7 @@ const PAL = {
 
 /* ══════════════════════════ ESCENA ══════════════════════════ */
 const lienzo = document.createElement('canvas');
-document.body.insertBefore(lienzo, document.getElementById('carga'));
+document.getElementById('escenario').appendChild(lienzo);
 const ren = new T.WebGLRenderer({ canvas: lienzo, antialias: false, powerPreference: 'high-performance' });
 ren.setPixelRatio(1);                       /* el pixelado manda: nada de DPR */
 ren.outputColorSpace = T.SRGBColorSpace;
@@ -827,9 +850,39 @@ const postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   postEsc.add(new T.Mesh(g, postMat));
 }
 
-let W = 1, H2 = 1;
+let W = 1, H2 = 1, GIRADO = false;
+CFG.girar = true;
+
+/* ══════ COORDENADAS DEL ESCENARIO ══════
+   Con el escenario girado, un dedo que cruza la pantalla de izquierda a derecha
+   se mueve en VERTICAL en coordenadas de ventana. Si los controles leen
+   `clientX/clientY` a secas, mirar y caminar quedan cruzados y espejados.
+   Todo lo que toca el dedo pasa por acá.
+
+   El escenario se coloca con `rotate(90deg) translateY(-100%)` y origen arriba
+   a la izquierda, así que un punto local (x,y) cae en la ventana en
+   (altoEscenario - y, x). Invirtiéndolo: x = clientY, y = anchoVentana - clientX. */
+function pt(e){
+  if (!GIRADO) return { x: e.clientX, y: e.clientY };
+  return { x: e.clientY, y: window.innerWidth - e.clientX };
+}
+/* el rectángulo de un elemento, también en coordenadas del escenario. Un giro
+   de 90° deja el rectángulo alineado a los ejes, así que la conversión es exacta */
+function rectEsc(el){
+  const r = el.getBoundingClientRect();
+  if (!GIRADO) return { x: r.left, y: r.top, w: r.width, h: r.height };
+  return { x: r.top, y: window.innerWidth - r.right, w: r.height, h: r.width };
+}
+
 function medir(){
-  W = Math.max(1, window.innerWidth); H2 = Math.max(1, window.innerHeight);
+  const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight);
+  /* se gira sólo si hace falta: aparato en vertical y la opción encendida */
+  GIRADO = !!CFG.girar && vh > vw;
+  document.body.classList.toggle('girado', GIRADO);
+  W = GIRADO ? vh : vw;
+  H2 = GIRADO ? vw : vh;
+  const esc = document.getElementById('escenario');
+  esc.style.width = W + 'px'; esc.style.height = H2 + 'px';
   ren.setSize(W, H2, false);
   cam.aspect = W / H2; cam.updateProjectionMatrix();
   const w = Math.max(1, Math.ceil(W / CFG.pix)), h = Math.max(1, Math.ceil(H2 / CFG.pix));
@@ -907,13 +960,15 @@ const DED = { mira: null, mov: null };
 lienzo.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') return;
   modoPC(false);
-  if (e.clientX > W*0.42 && !DED.mira) DED.mira = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  const q = pt(e);
+  if (q.x > W*0.42 && !DED.mira) DED.mira = { id: e.pointerId, x: q.x, y: q.y };
 }, { passive: true });
 lienzo.addEventListener('pointermove', e => {
   if (DED.mira && DED.mira.id === e.pointerId){
-    JUG.yaw -= (e.clientX - DED.mira.x) * 0.0052;
-    JUG.pitch = cl(JUG.pitch - (e.clientY - DED.mira.y) * 0.0052, -1.35, 1.35);
-    DED.mira.x = e.clientX; DED.mira.y = e.clientY;
+    const q = pt(e);
+    JUG.yaw -= (q.x - DED.mira.x) * 0.0052;
+    JUG.pitch = cl(JUG.pitch - (q.y - DED.mira.y) * 0.0052, -1.35, 1.35);
+    DED.mira.x = q.x; DED.mira.y = q.y;
   }
 }, { passive: true });
 const sueltaDedo = e => { if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null; };
@@ -942,9 +997,9 @@ const joySuelta = e => { if (jd === e.pointerId){ jd = null; movV.x = movV.y = 0
 $('joy').addEventListener('pointerup', joySuelta);
 $('joy').addEventListener('pointercancel', joySuelta);
 function joyMueve(e){
-  const r = $('joy').getBoundingClientRect();
-  let dx = (e.clientX - (r.left + r.width/2)) / (r.width/2);
-  let dy = (e.clientY - (r.top + r.height/2)) / (r.height/2);
+  const r = rectEsc($('joy')), q = pt(e);
+  let dx = (q.x - (r.x + r.w/2)) / (r.w/2);
+  let dy = (q.y - (r.y + r.h/2)) / (r.h/2);
   const d = Math.hypot(dx, dy);
   if (d > 1){ dx /= d; dy /= d; }
   movV.x = dx; movV.y = dy;
@@ -1041,14 +1096,51 @@ function aviso(m){
   let e = $('avisoCaja');
   if (!e){
     e = document.createElement('div'); e.id = 'avisoCaja';
-    e.style.cssText = 'position:fixed;left:50%;bottom:14%;transform:translateX(-50%);z-index:30;'+
+    e.style.cssText = 'position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:30;'+
       'padding:10px 18px;border-radius:99px;background:rgba(8,18,28,.72);border:1px solid rgba(255,255,255,.14);'+
       'font:600 12px ui-monospace,monospace;letter-spacing:.04em;opacity:0;transition:opacity .3s;pointer-events:none';
-    document.body.appendChild(e);
+    document.getElementById('escenario').appendChild(e);
   }
   e.textContent = m; e.style.opacity = 1;
   clearTimeout(tAviso); tAviso = setTimeout(() => e.style.opacity = 0, 1900);
 }
+
+/* ══════════════════════════ PANTALLA COMPLETA Y ORIENTACIÓN ══════════════
+   Las dos cosas sólo se conceden DENTRO DE UN GESTO del usuario: por eso hay un
+   botón al terminar de cargar y no se intenta solo al abrir, que es la forma
+   segura de que el navegador lo rechace en silencio.
+
+   El bloqueo de orientación no existe en iOS y en escritorio suele fallar. No
+   importa: el giro por CSS del escenario cubre igual el caso, y por eso se
+   intenta bloquear pero nunca se depende de que salga bien. */
+function enPantallaCompleta(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+async function pantallaCompleta(){
+  const el = document.documentElement;
+  try {
+    if (!enPantallaCompleta()){
+      if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+  } catch(e){ /* puede negarse; no es motivo para no jugar */ }
+  try {
+    if (screen.orientation && screen.orientation.lock)
+      await screen.orientation.lock('landscape');
+  } catch(e){ /* iOS no lo tiene: queda el giro por CSS */ }
+  setTimeout(medir, 280);
+}
+async function salirPantallaCompleta(){
+  try {
+    if (document.exitFullscreen) await document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch(e){}
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+  setTimeout(medir, 280);
+}
+/* al salir con la tecla de escape hay que volver a medir: cambia la ventana */
+for (const ev of ['fullscreenchange','webkitfullscreenchange','orientationchange'])
+  addEventListener(ev, () => setTimeout(medir, 300));
 
 /* ══════════════════════════ PANEL ══════════════════════════ */
 function armaPanel(){
@@ -1077,6 +1169,8 @@ function armaPanel(){
   tog('tNub','nubes', () => { if (nubes) nubes.visible = CFG.nubes; });
   tog('tSom','sombras', () => { ren.shadowMap.enabled = CFG.sombras; escena.traverse(o => { if (o.material) o.material.needsUpdate = true; }); });
   tog('tVie','viento', () => VIENTO.value = CFG.viento ? 1 : 0);
+  tog('tGir','girar', () => { medir();
+    aviso(CFG.girar ? 'Horizontal forzado' : 'Se respeta la orientación del aparato'); });
 
   $('bPanel').onclick = () => {
     const p = $('panel'); p.classList.toggle('on');
@@ -1085,6 +1179,10 @@ function armaPanel(){
   };
   $('bCerrar').onclick = () => { $('panel').classList.remove('on'); $('bPanel').classList.remove('on'); };
   $('bCorre').onclick = () => { corre = !corre; $('bCorre').classList.toggle('on', corre); };
+  $('bFull').onclick = () => {
+    if (enPantallaCompleta()) salirPantallaCompleta(); else pantallaCompleta();
+    $('bFull').classList.toggle('on', !enPantallaCompleta());
+  };
   $('bOtra').onclick = () => { $('panel').classList.remove('on'); $('bPanel').classList.remove('on'); resembrar(); };
 }
 
@@ -1114,6 +1212,7 @@ async function resembrar(){
   SEM = (Math.random()*1e9)|0;
   $('carga').classList.remove('ido');
   $('carga').style.display = '';
+  $('bEntrar').hidden = true; $('cPista').textContent = '';
   await paso(0.02, 'Otra isla…');
   const r = await construir(false);
   aviso(r.arboles + ' árboles nuevos');
@@ -1178,13 +1277,22 @@ function bucle(){
   const r = await construir(true);
   $('hud').classList.add('on');
   bucle();
-  setTimeout(() => {
+  /* el mundo ya está vivo detrás; la portada se queda esperando el gesto */
+  $('cTxt').textContent = r.arboles + ' árboles · ' + r.matas + ' matas';
+  $('cPista').textContent = (window.innerHeight > window.innerWidth)
+    ? 'Se gira 90° para que juegues apaisado sin dar vuelta el teléfono.'
+    : 'También podés entrar y salir con el botón ⛶.';
+  const be = $('bEntrar');
+  be.hidden = false;
+  be.onclick = async () => {
+    be.disabled = true;
+    await pantallaCompleta();
     $('carga').classList.add('ido');
-    setTimeout(() => $('carga').style.display = 'none', 700);
+    setTimeout(() => { $('carga').style.display = 'none'; be.disabled = false; }, 700);
     aviso(document.body.classList.contains('pc')
       ? 'Clic para mirar con el ratón · C para volar'
       : 'Arrastrá para mirar · palanca para caminar');
-  }, 420);
+  };
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
     nan: () => { const malas = [];
       escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;
@@ -1192,7 +1300,9 @@ function bucle(){
         for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])){
           malas.push({ tipo: g.type, nombre: ob.name || ob.type, idx: i, de: a.length }); break; } });
       return malas; },
-    est: () => ({ fps, pix: CFG.pix, rt: rt ? [rt.width, rt.height] : null,
+    entrar: () => { const b = document.getElementById('bEntrar'); if (b && !b.hidden) b.click(); },
+    est: () => ({ fps, pix: CFG.pix, girado: GIRADO, escenario: [W, H2],
+                  rt: rt ? [rt.width, rt.height] : null,
                   dib: DIB, tri: TRI,
                   x: +JUG.x.toFixed(1), z: +JUG.z.toFixed(1), y: +JUG.y.toFixed(1) }) };
 })();
