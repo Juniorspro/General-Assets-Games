@@ -309,8 +309,21 @@ function ponCam(dt){
   const enSuelo = !JUG.aire && !JUG.vuela;
 
   /* la fase avanza con la velocidad: los pasos se aceleran solos al correr */
+  const faseAnt = AND.fase;
   if (enSuelo) AND.fase += dt * (2.7 + AND.v * 0.62);
   else AND.fase += dt * 1.2;
+
+  /* LA PISADA VA ATADA A LA FASE DEL PASO Y NO A UN TEMPORIZADOR. Un reloj
+     aparte se desincroniza del cabeceo en cuanto cambia la velocidad, y ahí el
+     sonido deja de caer donde cae el pie. Hay DOS apoyos por vuelta —uno por
+     pierna— así que suena cada vez que la fase cruza un múltiplo de π. Es la
+     misma corrección que en Maicol convirtió veinticuatro pisadas por segundo
+     superpuestas —o sea ruido blanco— en un trote.
+     Y sólo si se está moviendo de verdad: parado, la fase igual avanza. */
+  if (enSuelo && AND.v > 0.6 && MODO === 'juego' && !PAUSA){
+    if (Math.floor(AND.fase / Math.PI) !== Math.floor(faseAnt / Math.PI))
+      son2('paso', 0.55 + cl(AND.v / CORRE, 0, 1) * 0.45);
+  }
 
   /* EL BALANCEO EMPIEZA AL CAMINAR, no al correr. La amplitud arranca en un
      valor propio en cuanto te movés y el correr sólo la agranda; antes crecía

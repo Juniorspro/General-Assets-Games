@@ -22,7 +22,7 @@ LOGO = os.path.join(RAIZ, 'assets', 'lemi', 'logo.png')
 # `t.js` VA PRIMERO Y NO DONDE QUEDE MAS PROLIJO: es la tabla de textos y
 # la lee todo lo demas. Un `const` leido antes de su linea no rompe una
 # funcion, rompe el modulo entero — ya paso cuatro veces en este repo.
-ORDEN = ['a.html', 't.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'i.js', 'h.js', 'z.html']
+ORDEN = ['a.html', 't.js', 's.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'i.js', 'h.js', 'z.html']
 
 
 def main():

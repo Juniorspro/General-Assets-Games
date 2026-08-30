@@ -171,29 +171,106 @@ const MINI = {
     /* FALLAR NO REINICIA. Perder los seis golpes anteriores por uno malo
        convierte un minijuego de treinta segundos en uno de cinco minutos, y
        nada en el pedido dice que esto tenga que castigar. Sólo no suma. */
+    son2('mal');
     $('miAviso').textContent = TX('miMal');
     return 'mal';
   }
 };
 
-/* un chasquido para las acciones. El juego no tenía audio; esto es lo mínimo
-   que hace que apretar un botón se sienta como haber hecho algo. */
-let AUD = null;
-function son2(tipo){
+/* ══════════════════════════ EL SONIDO ══════════════════════════
+   Diez clips generados con Higgsfield y horneados a MP3 mono de 22 kHz, que
+   viven en base64 dentro del archivo (ver `herramientas/lemi/hornear_son.py`).
+
+   TODO PASA POR UN MAESTRO. Es la misma decisión que ya se tomó en Maicol y en
+   Eco, y no es prolijidad: con elementos `<audio>` sueltos un efecto no puede
+   sonar encima de sí mismo sin una copia por voz, los teléfonos limitan cuántos
+   se pueden tener vivos —y al pasarse NO tiran error, simplemente no suenan— y,
+   sobre todo, no hay forma de MEDIR si sonó. Colgado del maestro, el pico del
+   analizador es la prueba.
+
+   SE DECODIFICA UNA VEZ. Cada disparo es un `BufferSource` nuevo, que es
+   gratis; decodificar 220 KB de base64 en cada golpe no lo es.
+
+   Y NADA ARRANCA SIN UN GESTO. Ningún navegador deja sonar nada antes del
+   primer toque, así que el contexto se crea dormido y se despierta en el
+   primer `son2()` que llegue después de que el jugador tocó algo. */
+let AUD = null, AUD_MAESTRO = null, AUD_ANAL = null;
+const AUD_BUF = {};
+let AUD_LISTO = false;
+
+function audioArranca(){
+  if (AUD) return AUD;
   try {
-    if (!AUD) AUD = new (window.AudioContext || window.webkitAudioContext)();
+    AUD = new (window.AudioContext || window.webkitAudioContext)();
+    AUD_MAESTRO = AUD.createGain();
+    AUD_MAESTRO.gain.value = 0.9;
+    /* el analizador cuelga del maestro: es lo único que permite comprobar que
+       un sonido sonó de verdad, en vez de comprobar que la llamada no falló */
+    AUD_ANAL = AUD.createAnalyser();
+    AUD_ANAL.fftSize = 2048;
+    AUD_MAESTRO.connect(AUD_ANAL);
+    AUD_MAESTRO.connect(AUD.destination);
+    /* la decodificación es asíncrona y no bloquea nada: hasta que termina, el
+       juego se juega igual y en silencio */
+    for (const k in SON_B64) decodificaUno(k, SON_B64[k]);
+  } catch(e){ AUD = null; }
+  return AUD;
+}
+function decodificaUno(k, b64){
+  try {
+    const bin = atob(b64), n = bin.length, arr = new Uint8Array(n);
+    for (let i = 0; i < n; i++) arr[i] = bin.charCodeAt(i);
+    AUD.decodeAudioData(arr.buffer, (b) => { AUD_BUF[k] = b; AUD_LISTO = true; },
+                        () => {});
+  } catch(e){}
+}
+/* un disparo. `vol` multiplica el nivel ya horneado, que es el que fija la
+   relación entre los diez: acá sólo se lo baja por distancia o por contexto. */
+function son2(tipo, vol){
+  try {
+    if (!audioArranca()) return;
     if (AUD.state === 'suspended') AUD.resume();
-    const t = AUD.currentTime, o = AUD.createOscillator(), g = AUD.createGain();
-    const f = tipo === 'bomba' ? 320 : tipo === 'mal' ? 150 : 520;
-    o.type = tipo === 'mal' ? 'sawtooth' : 'triangle';
-    o.frequency.setValueAtTime(f, t);
-    o.frequency.exponentialRampToValueAtTime(f * (tipo === 'mal' ? 0.6 : 1.7), t + 0.09);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.13, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    o.connect(g); g.connect(AUD.destination);
-    o.start(t); o.stop(t + 0.18);
+    const b = AUD_BUF[tipo];
+    if (!b) return;                       /* todavía decodificando: silencio */
+    const f = AUD.createBufferSource(), g = AUD.createGain();
+    f.buffer = b;
+    g.gain.value = vol == null ? 1 : vol;
+    f.connect(g); g.connect(AUD_MAESTRO);
+    f.start(0);
   } catch(e){ /* sin audio se juega igual */ }
+}
+
+/* ── LAS DOS CAMAS ──
+   Una para el día y otra para la noche, las dos en bucle y sonando SIEMPRE las
+   dos: lo que cambia es cuál se oye. Con un solo tema que se corta y arranca
+   otro, el cambio de hora se escucharía como un corte; con las dos corriendo y
+   una ganancia cruzada, la noche entra por debajo del día y no hay costura.
+   Y es barato: dos fuentes en bucle no cuestan nada al lado de la escena. */
+const CAMA = { dia: null, noche: null, g: {}, on: false };
+function camasArrancan(){
+  if (CAMA.on || !AUD || !AUD_BUF.dia || !AUD_BUF.noche) return;
+  for (const k of ['dia', 'noche']){
+    const f = AUD.createBufferSource(), g = AUD.createGain();
+    f.buffer = AUD_BUF[k]; f.loop = true;
+    g.gain.value = 0;
+    f.connect(g); g.connect(AUD_MAESTRO);
+    f.start(0);
+    CAMA[k] = f; CAMA.g[k] = g;
+  }
+  CAMA.on = true;
+}
+/* qué tan de noche es, de 0 a 1, con los mismos cortes que usa el camello para
+   decidir si sale a cazar: una sola definición de «es de noche» */
+function camasPaso(dt){
+  if (!AUD || !AUD_LISTO) return;
+  camasArrancan();
+  if (!CAMA.on) return;
+  const s = CFG.sol;
+  const noche = s > 0.80 ? cl((s - 0.78)/0.10, 0, 1)
+              : s < 0.24 ? cl((0.26 - s)/0.10, 0, 1) : 0;
+  const k = Math.min(1, dt*0.9);
+  CAMA.g.noche.gain.value += (noche - CAMA.g.noche.gain.value) * k;
+  CAMA.g.dia.gain.value   += ((1 - noche) - CAMA.g.dia.gain.value) * k;
 }
 
 /* ══════════════════════════ EL INFLADOR ══════════════════════════
@@ -481,7 +558,7 @@ const MIS = {
     if (o.tipo === 'rama'){
       this.ramas++;
       o.activo = false; o.malla.visible = false;
-      son2('ok'); this.pintaSub(); this.balizas();
+      son2('junta'); this.pintaSub(); this.balizas();
       if (this.ramas >= 5){ aviso(TX('aRamas')); this.avanza(); }
       return 'rama';
     }
@@ -500,7 +577,7 @@ const MIS = {
       if (this.i === 3 && !this.antorcha.fuego){
         this.antorcha.fuego = true;
         aviso(TX('aEncendedor'));
-        son2('ok'); this.pintaSub(); this.chequeaAntorcha();
+        son2('fuego'); this.pintaSub(); this.chequeaAntorcha();
         return 'encendedor';
       }
       return null;
@@ -524,7 +601,7 @@ const MIS = {
       this.antorcha.tela = true;
       if (this.ramas > 0 && !this.antorcha.rama){ this.antorcha.rama = true; this.ramas--; }
       aviso(TX('aLona'));
-      son2('ok'); this.pintaSub(); this.chequeaAntorcha();
+      son2('tela'); this.pintaSub(); this.chequeaAntorcha();
       return 'lona';
     }
     if (o.tipo === 'llaves'){
@@ -829,6 +906,7 @@ const LLAVE = {
     AND.ojo = OJO;
     /* y sale a correrte: modo caza permanente, sin importar la hora. El cuello
        vuelve a su eje, que si no corre con la cabeza torcida para siempre. */
+    son2('grito');
     if (CAM3){ CAM3.userData.cuello.rotation.y = 0;
                CAM3.userData.miraCuello = null; CAM3.userData.miraCabeza = null; }
     /* SE LO CORRE UN POCO Y SE LE DA UN INSTANTE. Terminando la cinemática con

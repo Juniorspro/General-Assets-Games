@@ -75,6 +75,7 @@ function bucle(){
      necesita que `ponCam` corra igual aunque la física no */
   if (MODO === 'llave') ponCam(dt);
   MIS.paso(dt);
+  camasPaso(dt);
   /* la cinemática pone la hora ella misma cuadro a cuadro: si además corriera
      el reloj del día, el atardecer se le adelantaría al guion */
   ponSol(MODO === 'cine' ? 0 : dt);
@@ -508,6 +509,53 @@ function bucle(){
                  z:+(c.z[1]-c.z[0]).toFixed(3) }; }
       return r;
     },
+    /* EL PICO DEL ANALIZADOR ES LA PRUEBA DE QUE SONO. Comprobar que `son2()`
+       no tiro excepcion no prueba nada: un `<audio>` que el telefono no pudo
+       abrir tampoco tira. Esto dispara el clip, espera, y devuelve el pico
+       medido en el maestro. */
+    oir: (tipo, ms) => new Promise(res => {
+      if (!audioArranca()) return res({ no: 'sin audio' });
+      if (AUD.state === 'suspended') AUD.resume();
+      if (!AUD_BUF[tipo]) return res({ no: 'sin buffer', listo: Object.keys(AUD_BUF) });
+      const n = AUD_ANAL.fftSize, d = new Uint8Array(n);
+      let pico = 0, suma = 0, cuenta = 0;
+      son2(tipo);
+      const t0 = performance.now();
+      const mira = () => {
+        AUD_ANAL.getByteTimeDomainData(d);
+        let mx = 0, ac = 0;
+        for (let i = 0; i < n; i++){ const v = Math.abs(d[i] - 128) / 128; if (v > mx) mx = v; ac += v*v; }
+        if (mx > pico) pico = mx;
+        suma += ac / n; cuenta++;
+        if (performance.now() - t0 < (ms || 900)) requestAnimationFrame(mira);
+        else res({ tipo, pico: +pico.toFixed(4), rms: +Math.sqrt(suma/cuenta).toFixed(4) });
+      };
+      requestAnimationFrame(mira);
+    }),
+    /* el piso: lo que suena SIN disparar nada. Es contra esto que hay que
+       comparar los efectos — decir que un clip da 0,03 no significa nada si no
+       se sabe cuánto da el silencio. */
+    fondo: (ms) => new Promise(res => {
+      if (!AUD_ANAL) return res({ no: 'sin audio' });
+      const n = AUD_ANAL.fftSize, d = new Uint8Array(n);
+      let pico = 0, suma = 0, cuenta = 0;
+      const t0 = performance.now();
+      const mira = () => {
+        AUD_ANAL.getByteTimeDomainData(d);
+        let mx = 0, ac = 0;
+        for (let i = 0; i < n; i++){ const v = Math.abs(d[i] - 128) / 128; if (v > mx) mx = v; ac += v*v; }
+        if (mx > pico) pico = mx;
+        suma += ac / n; cuenta++;
+        if (performance.now() - t0 < (ms || 900)) requestAnimationFrame(mira);
+        else res({ pico: +pico.toFixed(4), rms: +Math.sqrt(suma/cuenta).toFixed(4) });
+      };
+      requestAnimationFrame(mira);
+    }),
+    /* cuántos clips llegaron a decodificar, y el fondo sin disparar nada */
+    audio: () => ({ ctx: AUD ? AUD.state : null, listo: Object.keys(AUD_BUF).length,
+                    cuales: Object.keys(AUD_BUF),
+                    camas: CAMA.on ? { dia:+CAMA.g.dia.gain.value.toFixed(3),
+                                       noche:+CAMA.g.noche.gain.value.toFixed(3) } : null }),
     auto: () => AUTO ? { x:+AUTO.x.toFixed(1), z:+AUTO.z.toFixed(1),
                          y:+AUTO.y.toFixed(1), ry:+AUTO.ry.toFixed(3) } : null,
     inflador: () => ({ enAuto: MIS.infladorMalla ? MIS.infladorMalla.visible : null,
