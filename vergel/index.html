@@ -35,13 +35,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 #carga .barra{margin-top:18px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
 #carga .barra i{display:block;height:100%;width:0;border-radius:99px;
   background:linear-gradient(90deg,#7ee3a0,#57b6ef);transition:width .25s}
-/* el botón de entrada: hace falta que sea un GESTO del usuario, porque tanto
-   pantalla completa como el bloqueo de orientación sólo se conceden ahí */
-#bEntrar{margin-top:22px;padding:15px 30px;border-radius:99px;font-size:15px;font-weight:700;
-  background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;
-  box-shadow:0 10px 30px rgba(87,182,239,.28);transition:transform .18s}
-#bEntrar:active{transform:scale(.96)}
-#bEntrar[hidden]{display:none}
 #carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.42);line-height:1.5}
 
 /* ── HUD ── */
@@ -86,6 +79,36 @@ body.pc #teclas{display:block}
 #acAgacha{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:2}
 body.pc #acciones{display:none}
 
+/* ── MENÚ DE INICIO ──
+   El fondo NO es una imagen: es la isla de verdad, filmada con un campo de
+   visión de treinta grados. Con el teleobjetivo se aplasta la perspectiva, las
+   copas se apilan unas sobre otras y el movimiento lento de la cámara se lee
+   como una grúa de cine en vez de como un paseo. */
+#menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(4,10,16,.30) 0%,rgba(4,10,16,.06) 38%,rgba(4,10,16,.72) 100%)}
+#menu.on{display:grid}
+#menu .mCaja{text-align:center;width:min(360px,84%)}
+#menu .mEmb{position:relative;display:grid;place-items:center;margin-bottom:6px}
+/* el emblema va en PNG con alfa: en JPG el fondo negro se veía como un cuadrado
+   más claro flotando sobre el bosque por más que se mezclara en «screen» */
+#menu .mEmb img{width:min(260px,64vw);opacity:.78;
+  filter:saturate(1.35) contrast(1.1) drop-shadow(0 6px 26px rgba(0,0,0,.6))}
+#menu .mTit{position:absolute;font-weight:800;letter-spacing:.20em;
+  font-size:min(62px,15vw);line-height:1;padding-left:.20em;
+  background:linear-gradient(168deg,#f4fff6 18%,#8fe3a0 52%,#f0c869);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 22px rgba(0,0,0,.75))}
+#menu .mSub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  text-transform:uppercase;color:rgba(234,244,255,.5);margin-bottom:24px}
+#menu .mBtn{display:block;width:100%;padding:15px;border-radius:99px;margin-top:10px;
+  font-size:15px;font-weight:700;border:1px solid rgba(255,255,255,.17);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.06);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .16s}
+#menu .mBtn:active{transform:scale(.97)}
+#menu .mBtn.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none;
+  box-shadow:0 10px 30px rgba(87,182,239,.26)}
+#menu .mPie{margin-top:16px;font-size:11px;color:rgba(234,244,255,.34);line-height:1.5}
+
 /* ── MENÚ DE PAUSA ── */
 #pausa{position:absolute;inset:0;z-index:45;display:none;place-items:center;
   background:rgba(6,12,20,.72);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
@@ -112,7 +135,6 @@ body:not(.pc) #joy{display:block}
   <h1>Vergel</h1>
   <p id="cTxt">Sembrando la isla…</p>
   <div class="barra"><i id="cBar"></i></div>
-  <button id="bEntrar" hidden>▶ Entrar en pantalla completa</button>
   <div class="pista" id="cPista"></div>
 </div></div>
 
@@ -134,6 +156,16 @@ body:not(.pc) #joy{display:block}
     <b>Espacio</b> saltar · <b>F</b> volar · <b>Esc</b> pausa
   </div>
   <div id="joy"><canvas width="300" height="300"></canvas></div>
+</div>
+
+<div id="menu">
+  <div class="mCaja">
+    <div class="mEmb"><img src="./lemi-emblema.png" alt=""><span class="mTit">LEMI</span></div>
+    <div class="mSub">una isla que se dibuja sola</div>
+    <button class="mBtn pri" id="mJugar">▶ Jugar</button>
+    <button class="mBtn" id="mOtra">Otra isla</button>
+    <div class="mPie" id="mPie"></div>
+  </div>
 </div>
 
 <div id="pausa">
@@ -332,6 +364,12 @@ escena.add(sol); escena.add(sol.target);
    y que todo se vea bañado en luz de mediodía. */
 const ambiente = new T.HemisphereLight(0xa8dcff, 0x76b84a, 1.30);
 escena.add(ambiente);
+/* RELLENO. Una segunda direccional, fría, floja y sin sombra, apuntando desde
+   el lado contrario al sol. En la realidad eso lo hace el cielo rebotando en el
+   suelo; sin ella la cara en sombra de cada árbol y de cada carpa es un plano
+   liso del mismo color, y el bosque se ve recortado en cartulina. */
+const relleno = new T.DirectionalLight(0xbcd8ff, 0);
+escena.add(relleno); escena.add(relleno.target);
 
 /* ══════════════════════════ TEXTURAS PROCEDURALES ══════════════════════════
    Chiquitas y con filtro NEAREST: a esta resolución de render, una textura
@@ -834,29 +872,61 @@ function armaCampamento(c){
     g.add(t);
   }
 
-  /* LAS CARPAS. Un prisma triangular ES una carpa, pero hay que pararlo bien:
-     el cilindro de tres lados nace con un vertice hacia +Z, y al acostarlo con
-     rotateX ese vertice queda ABAJO, o sea la carpa apoyada en el filo y con el
-     piso al aire. Girando media vuelta la seccion ANTES de acostarla, el
-     vertice sube y la cara plana queda de piso, que es como se para una carpa. */
-  const R_CARPA = 1.1;
-  const geoCarpa = new T.CylinderGeometry(R_CARPA, R_CARPA, 2.7, 3);
-  geoCarpa.rotateY(Math.PI);
-  geoCarpa.rotateX(Math.PI/2);
-  geoCarpa.translate(0, R_CARPA*0.5, 0);
-  const carpa = () => {
+  /* LAS CARPAS, HUECAS DE VERDAD.
+     Antes era un prisma cerrado: por fuera pasaba, pero no era una carpa sino un
+     bulto. Ahora se arma con las tres piezas que tiene una carpa —EL PISO y LAS
+     DOS AGUAS del techo— y se deja abierta en las dos puntas, así se entra, se
+     ve el interior y la luz de la fogata se mete adentro. Las tres van a
+     DoubleSide porque desde adentro se miran por el reverso. */
+  const C_ANCHO = 2.0, C_LARGO = 3.0, C_ALTO = 1.5;
+  function carpa(){
     const gr = new T.Group();
-    const lona = new T.Mesh(geoCarpa, matLona);
-    lona.castShadow = lona.receiveShadow = true;
-    gr.add(lona);
+    const mitad = C_ANCHO/2;
+    const caida = Math.hypot(mitad, C_ALTO);        /* largo real de cada agua */
+    const incl = Math.atan2(mitad, C_ALTO);         /* cuánto se abre del vertical */
+
+    const piso = new T.Mesh(new T.PlaneGeometry(C_ANCHO, C_LARGO), matLona);
+    piso.rotation.x = -Math.PI/2;
+    piso.position.y = 0.02;
+    piso.receiveShadow = true;
+    gr.add(piso);
+
     for (const sg of [-1, 1]){
-      const palo = new T.Mesh(new T.CylinderGeometry(0.04, 0.04, 1.5, 4), matCorteza);
-      palo.position.set(0, 0.55, sg*1.9);
-      palo.rotation.x = sg*0.75;
-      gr.add(palo);
+      const agua = new T.Mesh(new T.PlaneGeometry(caida, C_LARGO), matLona);
+      /* cada agua nace vertical y se abre hacia su lado desde la cumbrera */
+      agua.rotation.set(-Math.PI/2, 0, 0);
+      agua.rotation.y = sg * incl;
+      agua.position.set(sg * mitad/2, C_ALTO/2, 0);
+      agua.rotation.set(0, 0, sg * (Math.PI/2 - incl));
+      agua.castShadow = true; agua.receiveShadow = true;
+      gr.add(agua);
+    }
+    /* LA CUMBRERA y las estacas. Los palitos de antes flotaban sueltos al lado
+       de la carpa sin tocar nada: ahora el palo va de punta a punta por arriba,
+       y de cada punta bajan dos vientos hasta una estaca clavada en el suelo,
+       que es lo que sostiene una carpa de verdad. */
+    const cumb = new T.Mesh(new T.CylinderGeometry(0.045, 0.045, C_LARGO + 0.5, 4), matCorteza);
+    cumb.rotation.x = Math.PI/2;
+    cumb.position.y = C_ALTO;
+    gr.add(cumb);
+    for (const sz of [-1, 1]){
+      const zp = sz * (C_LARGO/2 + 0.25);
+      for (const sx of [-1, 1]){
+        const ex = sx * 1.15, ez = sz * (C_LARGO/2 + 1.15);
+        const a = new T.Vector3(0, C_ALTO, zp), b = new T.Vector3(ex, 0.05, ez);
+        const largo = a.distanceTo(b);
+        const v = new T.Mesh(new T.CylinderGeometry(0.022, 0.022, largo, 3), matCorteza);
+        v.position.copy(a).add(b).multiplyScalar(0.5);
+        v.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),
+          b.clone().sub(a).normalize());
+        gr.add(v);
+        const est = new T.Mesh(new T.CylinderGeometry(0.035, 0.02, 0.34, 4), matCorteza);
+        est.position.set(ex, 0.1, ez);
+        gr.add(est);
+      }
     }
     return gr;
-  };
+  }
   for (let i = 0; i < 3; i++){
     const a = i/3*6.283 + 1.9, r = 8.2 + (i%2)*1.4;
     const px = Math.cos(a)*r, pz = Math.sin(a)*r;
@@ -921,14 +991,26 @@ function armaArco(c){
 }
 
 function eligeSitios(){
-  /* el campamento: llano, arriba de la playa y no muy alto */
-  CAMPO = buscaSitio(
-    (h, pe) => h > PLAYA + 1.2 && h < 20 && pe < 0.16,
-    (h, pe, x, z) => (1 - pe*4)*3 + (1 - Math.abs(h - 10)/18)*2 - Math.hypot(x, z)/MITAD*1.4);
+  /* EL CAMPAMENTO VA EN EL CENTRO DE LA ISLA. No se busca por toda la isla: se
+     busca el punto más llano DENTRO de un radio corto del origen, así queda
+     siempre en el medio —que es donde uno lo espera— pero sin que la fogata
+     termine colgada de una ladera. */
+  CAMPO = null;
+  { let mejorP = -1e9;
+    for (let r = 0; r <= 34; r += 2){
+      for (let a = 0; a < 6.283; a += (r < 1 ? 7 : 0.24)){
+        const x = Math.cos(a)*r, z = Math.sin(a)*r;
+        const h = H(x, z), pe = pendiente(x, z);
+        if (h < PLAYA + 1.0) continue;
+        const pun = (1 - pe*5)*4 - r*0.035;
+        if (pun > mejorP){ mejorP = pun; CAMPO = { x, z, h }; }
+      }
+    }
+  }
   if (!CAMPO) CAMPO = { x: 0, z: 0, h: Math.max(H(0,0), PLAYA + 1.4) };
   const usados = [CAMPO];
 
-  const cima = buscaSitio((h, pe) => pe < 0.5, h => h, usados, 110);
+  const cima = buscaSitio((h, pe) => pe < 0.5, h => h, usados, 130);
   const circ = buscaSitio((h, pe) => h > PLAYA + 3 && h < 30 && pe < 0.18,
                           (h, pe) => (1 - pe*4)*2 + h*0.05, usados, 120);
   const arco = buscaSitio((h, pe) => h > PLAYA - 0.5 && h < PLAYA + 2.2 && pe < 0.3,
@@ -1019,7 +1101,7 @@ const postMat = new T.ShaderMaterial({
     bri:  { value: CFG.bri },
     con:  { value: CFG.con },
     pos:  { value: CFG.pos },
-    vig:  { value: 0.22 }
+    vig:  { value: 0.46 }
   },
   vertexShader: `varying vec2 vUv;
     void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -1031,10 +1113,14 @@ const postMat = new T.ShaderMaterial({
       c = (c - 0.5) * con + 0.5;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, sat);
-      if (pos > 1.5){ c = floor(c * pos + 0.5) / pos; }   /* bandas de color */
-      /* viñeta muy suave: junta la mirada al centro sin que se note */
+      /* LA VIÑETA VA ANTES DE LAS BANDAS. Puesta después quedaba como un
+         degradado suave encima de una imagen escalonada, y se notaba que era un
+         filtro pegado. Cortada en los mismos niveles de color, el oscurecimiento
+         de las esquinas avanza a saltos igual que el resto del cuadro. */
       vec2 d = vUv - 0.5;
-      c *= 1.0 - dot(d, d) * vig;
+      float r2 = dot(d, d);
+      c *= 1.0 - r2 * vig - r2 * r2 * vig * 1.35;
+      if (pos > 1.5){ c = floor(c * pos + 0.5) / pos; }   /* bandas de color */
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
   depthTest: false, depthWrite: false
@@ -1299,19 +1385,30 @@ function ponCam(dt){
   if (enSuelo) AND.fase += dt * (2.7 + AND.v * 0.62);
   else AND.fase += dt * 1.2;
 
-  const objAmp = enSuelo ? andando : 0;
-  const amp = lerp(0, objAmp, 1);
-  const arriba = Math.abs(Math.sin(AND.fase)) * (0.055 + rapido*0.055) * amp;
-  const costado = Math.cos(AND.fase) * (0.035 + rapido*0.045) * amp;
+  /* EL BALANCEO EMPIEZA AL CAMINAR, no al correr. La amplitud arranca en un
+     valor propio en cuanto te movés y el correr sólo la agranda; antes crecía
+     desde cero con la velocidad y a paso normal casi no se veía. */
+  const amp = enSuelo ? cl(andando * 1.35, 0, 1) : 0;
+  const base = amp > 0.02 ? 0.052 : 0;
+  const arriba = Math.abs(Math.sin(AND.fase)) * (base + rapido*0.052) * amp;
+  const costado = Math.cos(AND.fase) * (0.042 + rapido*0.042) * amp;
+
+  /* BALANCEO QUIETO: la respiración. Con la cámara clavada del todo el mundo
+     parece una foto; con esto respira sin marear. */
+  const quieto = cl(1 - andando*1.6, 0, 1) * (enSuelo ? 1 : 0);
+  const resp = Math.sin(RELOJ.value * 1.05) * 0.020 * quieto;
+  const respLado = Math.sin(RELOJ.value * 0.58 + 1.2) * 0.014 * quieto;
+  const respRoll = Math.sin(RELOJ.value * 0.47 + 2.1) * 0.0075 * quieto;
 
   /* el ojo: altura de pie o agachado, persiguiendo para que no salte */
-  const objOjo = OJO * (JUG.agacha ? 0.56 : 1);
+  const objOjo = OJO * (JUG.agacha ? 0.74 : 1);   /* menos hondo que antes */
   AND.ojo = lerp(AND.ojo, objOjo, Math.min(1, dt*9));
   AND.golpe = lerp(AND.golpe, 0, Math.min(1, dt*6));
   AND.lado = lerp(AND.lado, ladoAnt, Math.min(1, dt*7));
 
   /* roll: el vaivén del paso más la inclinación al andar de costado */
-  const objRoll = Math.cos(AND.fase) * (0.012 + rapido*0.020) * amp - AND.lado * 0.055;
+  const objRoll = Math.cos(AND.fase) * (0.020 + rapido*0.022) * amp
+                - AND.lado * 0.062 + respRoll;
   AND.roll = lerp(AND.roll, objRoll, Math.min(1, dt*10));
 
   /* el campo de visión se abre al correr: la sensación de velocidad sale de acá */
@@ -1321,9 +1418,9 @@ function ponCam(dt){
 
   const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
   cam.position.set(
-    JUG.x + cy * costado,
-    JUG.y + AND.ojo + arriba - AND.golpe,
-    JUG.z - sy * costado
+    JUG.x + cy * (costado + respLado),
+    JUG.y + AND.ojo + arriba + resp - AND.golpe,
+    JUG.z - sy * (costado + respLado)
   );
   cam.rotation.order = 'YXZ';
   cam.rotation.y = JUG.yaw;
@@ -1402,8 +1499,14 @@ function ponSol(dt){
   luna.visible = alt < 0.02;
   luna.intensity = 0.42 * cl(-alt / 0.25, 0, 1);
 
+  /* el relleno viaja opuesto al sol y sube con el día */
+  relleno.position.set(-az*0.7, 0.55, 0.34).normalize().multiplyScalar(200).add(_foco);
+  relleno.target.position.copy(_foco); relleno.target.updateMatrixWorld();
+  relleno.intensity = 0.12 + dia*0.62;
+  relleno.color.setHSL(0.58, 0.42, 0.62);
+
   /* el rebote: de noche baja mucho pero no a cero, o no se vería nada */
-  ambiente.intensity = 0.16 + dia*1.18;
+  ambiente.intensity = 0.20 + dia*1.32;
   ambiente.color.setHSL(0.60 - dia*0.04, 0.50, 0.22 + dia*0.36);
   ambiente.groundColor.setHSL(0.28, 0.35, 0.07 + dia*0.24);
 
@@ -1483,6 +1586,65 @@ async function salirPantallaCompleta(){
 for (const ev of ['fullscreenchange','webkitfullscreenchange','orientationchange'])
   addEventListener(ev, () => setTimeout(medir, 300));
 
+/* ══════════════════════════ LA CÁMARA DE CINE DEL MENÚ ══════════════════
+   Mientras el menú está abierto la isla sigue viva detrás, filmada con un campo
+   de visión de 30° en vez de los 66 de juego. El teleobjetivo aplasta la
+   perspectiva —las copas se apilan unas sobre otras y el fondo se acerca—, y
+   junto con un movimiento MUY lento eso es lo que da el aire de grúa de cine.
+   Va rotando entre los sitios de la isla, unos segundos en cada uno. */
+let MODO = 'menu';
+const CINE = {
+  i: 0, t: 0, ang: 0, alto: 0,
+  arranca(){
+    this.i = 0; this.t = 0; this.ang = Math.random()*6.283; this.pon();
+  },
+  pon(){
+    const s2 = (SITIOS && SITIOS.length) ? SITIOS[this.i % SITIOS.length]
+             : { c: { x: 0, z: 0, h: 10 } };
+    this.obj = s2.c;
+    this.rad = 34 + Math.random()*22;
+    this.alto = 11 + Math.random()*13;
+    this.vel = (Math.random() < 0.5 ? -1 : 1) * (0.035 + Math.random()*0.030);
+  },
+  paso(dt){
+    /* el bucle arranca antes de que nadie haya elegido sitio: si `obj` no está,
+       se elige acá y no se tira todo abajo cuadro a cuadro */
+    if (!this.obj) this.pon();
+    this.t += dt;
+    if (this.t > 11){ this.t = 0; this.i++; this.pon(); }
+    this.ang += this.vel * dt;
+    const o = this.obj;
+    const x = o.x + Math.cos(this.ang)*this.rad;
+    const z = o.z + Math.sin(this.ang)*this.rad;
+    /* nunca por debajo del terreno ni dentro del mar */
+    const y = Math.max(H(x, z) + 3.5, MAR + 4) + this.alto;
+    cam.position.set(x, y, z);
+    cam.lookAt(o.x, o.h + 4.5, o.z);
+    cam.rotation.z = Math.sin(this.t*0.19) * 0.012;   /* deriva mínima */
+    if (cam.fov !== 30){ cam.fov = 30; cam.updateProjectionMatrix(); }
+    AND.fov = 30;
+  }
+};
+function entraJuego(){
+  MODO = 'juego';
+  $('menu').classList.remove('on');
+  $('hud').classList.add('on');
+  JUG.x = CAMPO.x + 12; JUG.z = CAMPO.z + 12; JUG.y = H(JUG.x, JUG.z);
+  JUG.vy = 0; JUG.aire = false; JUG.vuela = false; JUG.agacha = false;
+  JUG.yaw = Math.atan2(JUG.x - CAMPO.x, JUG.z - CAMPO.z);
+  JUG.pitch = -0.05;
+  AND.ojo = OJO; AND.fase = 0; AND.golpe = 0; AND.fov = 66;
+  cam.fov = 66; cam.updateProjectionMatrix();
+  cam.rotation.z = 0;
+}
+function vuelveMenu(){
+  MODO = 'menu';
+  pausa(false);
+  $('hud').classList.remove('on');
+  $('menu').classList.add('on');
+  CINE.arranca();
+}
+
 /* ══════════════════════════ MENÚ DE PAUSA ══════════════════════════
    Tres botones y nada más: reanudar, reiniciar y volver a la portada. Los
    deslizadores de imagen se fueron porque los valores quedaron fijos. */
@@ -1501,13 +1663,9 @@ function armaPanel(){
   $('bPanel').onclick = () => pausa(!PAUSA);
   $('pSeguir').onclick = () => pausa(false);
   $('pReinicia').onclick = () => { pausa(false); resembrar(); };
-  $('pMenu').onclick = () => {
-    pausa(false);
-    $('carga').classList.remove('ido'); $('carga').style.display = '';
-    $('cTxt').textContent = 'Isla lista';
-    $('bEntrar').hidden = false; $('bEntrar').disabled = false;
-    $('bEntrar').textContent = '▶ Volver a la isla';
-  };
+  $('pMenu').onclick = () => vuelveMenu();
+  $('mJugar').onclick = async () => { await pantallaCompleta(); entraJuego(); };
+  $('mOtra').onclick = async () => { await resembrar(); vuelveMenu(); };
   $('bFull').onclick = () => {
     if (enPantallaCompleta()) salirPantallaCompleta(); else pantallaCompleta();
   };
@@ -1547,15 +1705,6 @@ async function construir(primera){
   await paso(0.88, 'Formando nubes…');
   armaNubes();
   if (nubes) nubes.visible = CFG.nubes;
-  /* se aparece EN el campamento, mirando a la fogata desde afuera del círculo */
-  JUG.x = CAMPO.x + 12; JUG.z = CAMPO.z + 12; JUG.y = H(JUG.x, JUG.z);
-  JUG.vy = 0; JUG.aire = false; JUG.vuela = false; JUG.agacha = false;
-  /* OJO CON EL SIGNO. En este motor el frente es (-sin yaw, -cos yaw), así que
-     para MIRAR hacia el campamento el ángulo se arma con la resta al revés: con
-     `CAMPO - JUG` se aparecía de espaldas a la fogata. */
-  JUG.yaw = Math.atan2(JUG.x - CAMPO.x, JUG.z - CAMPO.z);
-  JUG.pitch = -0.05;
-  AND.ojo = OJO; AND.fase = 0; AND.golpe = 0;
   CFG.sol = 0.42;                      /* se empieza de mañana */
   ponSol(0);
   await paso(1, r.arboles + ' árboles · ' + SITIOS.length + ' sitios');
@@ -1565,7 +1714,6 @@ async function resembrar(){
   SEM = (Math.random()*1e9)|0;
   $('carga').classList.remove('ido');
   $('carga').style.display = '';
-  $('bEntrar').hidden = true; $('cPista').textContent = '';
   await paso(0.02, 'Otra isla…');
   const r = await construir(false);
   aviso(r.arboles + ' árboles nuevos');
@@ -1581,7 +1729,8 @@ function bucle(){
   ultimo = ahora;
   RELOJ.value += dt;
 
-  if (!PAUSA) fisica(dt);
+  if (MODO === 'menu') CINE.paso(dt);
+  else if (!PAUSA) fisica(dt);
   ponSol(dt);
 
   /* el cielo viaja con la cámara: si no, se ve el borde de la esfera */
@@ -1643,24 +1792,16 @@ function bucle(){
     window.__rz = setTimeout(medir, 240); });
   armaPanel();
   const r = await construir(true);
-  $('hud').classList.add('on');
+  /* el HUD no va en el menú: se prende al entrar al juego */
+  CINE.arranca();
   bucle();
-  /* el mundo ya está vivo detrás; la portada se queda esperando el gesto */
-  $('cTxt').textContent = r.arboles + ' árboles · ' + r.matas + ' matas';
-  $('cPista').textContent = (window.innerHeight > window.innerWidth)
-    ? 'Se gira 90° para que juegues apaisado sin dar vuelta el teléfono.'
-    : 'También podés entrar y salir con el botón ⛶.';
-  const be = $('bEntrar');
-  be.hidden = false;
-  be.onclick = async () => {
-    be.disabled = true;
-    await pantallaCompleta();
-    $('carga').classList.add('ido');
-    setTimeout(() => { $('carga').style.display = 'none'; be.disabled = false; }, 700);
-    aviso(document.body.classList.contains('pc')
-      ? 'Clic para mirar con el ratón · C para volar'
-      : 'Arrastrá para mirar · palanca para caminar');
-  };
+  /* de la barra de carga al menú de inicio, con la isla ya viva detrás */
+  $('mPie').textContent = r.arboles + ' árboles · ' + SITIOS.length + ' sitios · ' +
+    Math.round(MITAD*2) + ' m de lado';
+  CINE.arranca();
+  $('menu').classList.add('on');
+  $('carga').classList.add('ido');
+  setTimeout(() => $('carga').style.display = 'none', 700);
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
     nan: () => { const malas = [];
       escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;
@@ -1668,7 +1809,8 @@ function bucle(){
         for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])){
           malas.push({ tipo: g.type, nombre: ob.name || ob.type, idx: i, de: a.length }); break; } });
       return malas; },
-    entrar: () => { const b = document.getElementById('bEntrar'); if (b && !b.hidden) b.click(); },
+    entrar: () => { const b = document.getElementById('mJugar'); if (b) b.click(); },
+    modo: () => MODO,
     est: () => ({ fps, pix: CFG.pix, girado: GIRADO, escenario: [W, H2],
                   rt: rt ? [rt.width, rt.height] : null,
                   dib: DIB, tri: TRI,
