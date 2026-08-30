@@ -453,6 +453,61 @@ function bucle(){
       return { x: +JUG.x.toFixed(1), y: +JUG.y.toFixed(1), z: +JUG.z.toFixed(1) };
     },
     /* el inflador: si está en la caja del auto, si está en la mano */
+    /* CUÁNTO SE MUEVE DE VERDAD CADA PARTE EN UN CICLO. Es la única prueba de
+       que una animación anima: un recorrido de dos centímetros es un muñeco
+       temblando, no alguien caminando. Devuelve metros. */
+    anim: (cual, vel) => {
+      const p = INTRO.gente[0];
+      if (!p) return null;
+      const u = p.userData;
+      /* la cabeza va en la lista: en la pose de alerta lo único que se mueve es
+         el barrido del cuello, y midiendo sólo codos y rodillas la medición
+         decía «no se mueve» sobre la parte que sí lo hace */
+      /* Y SE MIDE LA MALLA DE LA CABEZA, NO EL PIVOTE DEL CUELLO. Girar un
+         pivote no mueve su propio origen, así que midiendo el pivote el barrido
+         de la cabeza en la pose de alerta daba cero — la medición no veía
+         justamente lo único que se mueve ahí. Todos los demás ya son pivotes
+         DEL EXTREMO (la rodilla, el codo), que sí se trasladan. */
+      const partes = { pieI: u.pi.i.rod, pieD: u.pi.d.rod,
+                       manoI: u.br.i.codo, manoD: u.br.d.codo,
+                       cabeza: u.cuello.children[0] || u.cuello, cadera: u.cadera };
+      const caja = {}, v = new T.Vector3();
+      /* LOS CENTINELAS VAN EN INFINITO Y NO EN NUEVE. Estaban en ±9 y la isla
+         llega a 22 m de altura, así que `Math.min(9, 22.4)` devuelve 9 para
+         siempre y el «recorrido» que salía era la altura del terreno: un pie
+         que se mueve tres centímetros medía 13,44 m. Un centinela que puede
+         estar dentro del rango de los datos no es un centinela. */
+      const INF = Infinity;
+      for (const k in partes) caja[k] = { x:[INF,-INF], y:[INF,-INF], z:[INF,-INF] };
+      /* DIECISÉIS SEGUNDOS Y NO DOS. La ventana era de 2 s y las cosas lentas
+         no entraban: el cambio de peso de la pose quieta dura quince segundos y
+         el barrido de cabeza de la alerta ocho, así que la medición decía «no
+         se mueve» sobre movimientos que sí están, sólo que más largos que la
+         ventana. Con 0,1 s de paso el ciclo de caminata —0,87 s— todavía cae
+         nueve veces por vuelta, que alcanza de sobra para un recorrido. */
+      const N = 160;
+      for (let i = 0; i < N; i++){
+        const t = i * 0.1;
+        if (cual === 'camina') poseCamina(p, t, vel || 1.4);
+        else if (cual === 'quieto') poseQuieto(p, t);
+        else if (cual === 'lena') poseLena(p, t, true);
+        else if (cual === 'sentado') poseSentado(p, t);
+        else if (cual === 'alerta') poseAlerta(p, t, 1);
+        p.updateMatrixWorld(true);
+        for (const k in partes){
+          v.setFromMatrixPosition(partes[k].matrixWorld);
+          const c = caja[k];
+          c.x[0]=Math.min(c.x[0],v.x); c.x[1]=Math.max(c.x[1],v.x);
+          c.y[0]=Math.min(c.y[0],v.y); c.y[1]=Math.max(c.y[1],v.y);
+          c.z[0]=Math.min(c.z[0],v.z); c.z[1]=Math.max(c.z[1],v.z);
+        }
+      }
+      const r = {};
+      for (const k in caja){ const c = caja[k];
+        r[k] = { x:+(c.x[1]-c.x[0]).toFixed(3), y:+(c.y[1]-c.y[0]).toFixed(3),
+                 z:+(c.z[1]-c.z[0]).toFixed(3) }; }
+      return r;
+    },
     auto: () => AUTO ? { x:+AUTO.x.toFixed(1), z:+AUTO.z.toFixed(1),
                          y:+AUTO.y.toFixed(1), ry:+AUTO.ry.toFixed(3) } : null,
     inflador: () => ({ enAuto: MIS.infladorMalla ? MIS.infladorMalla.visible : null,

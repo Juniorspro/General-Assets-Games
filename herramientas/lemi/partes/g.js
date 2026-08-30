@@ -135,31 +135,63 @@ function armaPersona(d){
    de Meshy—. */
 function poseQuieto(p, t){
   const u = p.userData, f = t*1.5 + u.fase;
-  u.cadera.position.y = 0.92*u.e + Math.sin(f)*0.012;
-  u.torso.rotation.set(Math.sin(f)*0.02, 0, 0);
-  u.cuello.rotation.set(Math.sin(f*0.7)*0.05, Math.sin(f*0.31)*0.22, 0);
+  /* EL CAMBIO DE PESO, que es lo que hace que estar parado no sea estar
+     congelado. Nadie se queda con el peso repartido en las dos piernas: se
+     apoya en una, se cansa y cambia. Va a 0,21 Hz —una vuelta cada cinco
+     segundos— porque más rápido se lee a que se está meciendo. Medido, sin esto
+     la pose entera movía 1,5 cm y con esto llega a los seis. */
+  const w = Math.sin(t*0.42 + u.fase);
+  u.cadera.position.y = 0.92*u.e + Math.sin(f)*0.012 - Math.abs(w)*0.014*u.e;
+  u.cadera.rotation.z = w*0.045;
+  u.torso.rotation.set(Math.sin(f)*0.02, -w*0.05, -w*0.03);
+  u.cuello.rotation.set(Math.sin(f*0.7)*0.05, Math.sin(f*0.31)*0.22 + w*0.04, 0);
   for (const [k, sx] of [['i',-1],['d',1]]){
-    u.br[k].hombro.rotation.set(Math.sin(f + (sx>0?0:1))*0.05, 0, sx*0.09);
-    u.br[k].codo.rotation.set(-0.22, 0, 0);
-    u.pi[k].musl.rotation.set(0, 0, 0);
-    u.pi[k].rod.rotation.set(0.04, 0, 0);
+    /* el brazo del lado cargado cuelga más pegado al cuerpo */
+    const carga = (sx > 0 ? w : -w);
+    u.br[k].hombro.rotation.set(Math.sin(f + (sx>0?0:1))*0.05, 0, sx*(0.09 + carga*0.045));
+    u.br[k].codo.rotation.set(-0.22 - Math.max(0, carga)*0.10, 0, 0);
+    /* la pierna descargada se dobla y se abre un poco */
+    u.pi[k].musl.rotation.set(Math.max(0, -carga)*0.10, 0, sx*(0.02 + Math.max(0, -carga)*0.07));
+    u.pi[k].rod.rotation.set(0.04 + Math.max(0, -carga)*0.16, 0, 0);
   }
 }
-function poseCamina(p, t, v){
-  const u = p.userData, f = t*(2.4 + v*1.2)*2 + u.fase;
-  const a = 0.55*Math.min(1, 0.4 + v);
-  u.cadera.position.y = 0.92*u.e + Math.abs(Math.sin(f))*0.035;
-  u.torso.rotation.set(0.10, Math.sin(f)*0.07, 0);
-  u.cuello.rotation.set(-0.05, 0, 0);
+/* EL RITMO SALE DE LA VELOCIDAD Y DE LA ZANCADA, no de una constante.
+   Estaba en `t*(2,4 + v*1,2)*2` con `v` valiendo 0,55 o 0,7 —un número que no
+   era la velocidad de nada— así que el ciclo iba a un ritmo y el cuerpo a otro,
+   y los pies patinaban. Es el mismo defecto que en RECREO tenía a Baldi
+   arrastrando los pies a 2,7 metros por paso. Un ciclo son DOS pasos, así que
+   `ω = π·v/zancada`: si mañana caminan más rápido, las piernas lo siguen solas.
+   `vel` está en metros por segundo. */
+const ZANCADA = 0.72;                 /* largo de UN paso, en metros, a escala 1 */
+function poseCamina(p, t, vel){
+  const u = p.userData;
+  const v = Math.max(0.15, vel || 1.4);
+  const f = t * Math.PI * v / (ZANCADA * u.e) + u.fase;
+  const a = cl(0.26 + v*0.20, 0.20, 0.62);
+  const sf = Math.sin(f), cf = Math.cos(f);
+  /* el rebote va al DOBLE del ciclo: hay dos apoyos por vuelta, no uno */
+  u.cadera.position.y = 0.92*u.e + Math.abs(sf)*0.030*u.e;
+  /* BASCULACIÓN DE LA PELVIS: la cadera cae del lado de la pierna que está en
+     el aire. Es lo que separa a alguien que camina de un muñeco que abre y
+     cierra las piernas — y no cuesta un hueso más, es una rotación de la raíz. */
+  u.cadera.rotation.z = sf * 0.055;
+  /* el tronco gira al REVÉS que la pelvis, que es lo que hace que los brazos y
+     las piernas se crucen en vez de ir en bloque */
+  u.torso.rotation.set(0.09 + v*0.03, -sf*0.085, 0);
+  /* la cabeza compensa el rebote: la vista de alguien que camina no sube y baja
+     tanto como su cadera */
+  u.cuello.rotation.set(-0.05 - Math.abs(sf)*0.035, sf*0.05, -sf*0.05);
   for (const [k, sg] of [['i',1],['d',-1]]){
-    const s = Math.sin(f) * sg;
+    const s = sf * sg, c2 = cf * sg;
     u.br[k].hombro.rotation.set(-s*a*0.85, 0, (k==='i'?-1:1)*0.08);
     u.br[k].codo.rotation.set(-0.35 - Math.max(0, s)*0.4, 0, 0);
     u.pi[k].musl.rotation.set(s*a, 0, 0);
     /* la rodilla SÓLO se dobla hacia atrás y sólo en la pierna que va atrás:
        una rodilla que se dobla para adelante es lo que hace que un muñeco
-       camine como un títere */
-    u.pi[k].rod.rotation.set(Math.max(0, -s)*a*1.25, 0, 0);
+       camine como un títere. Y se dobla MÁS a mitad del vuelo —que es cuando
+       hay que levantar el pie del piso— y no en el apoyo. */
+    const vuelo = Math.max(0, -s);
+    u.pi[k].rod.rotation.set(vuelo*a*1.25 + Math.max(0, -c2)*a*0.55, 0, 0);
   }
 }
 /* agachado poniendo leña: la cadera baja, las rodillas se abren y los brazos
@@ -169,7 +201,12 @@ function poseLena(p, t, trabaja){
   const w = trabaja ? 1 : 0;
   u.cadera.position.y = 0.92*u.e - 0.34*u.e;
   u.torso.rotation.set(0.52, 0, 0);
-  u.cuello.rotation.set(0.28, Math.sin(f*0.5)*0.1, 0);
+  /* EL CABECEO, y hay una razón por la que el giro que ya estaba no servía: la
+     cabeza cuelga del cuello SOBRE SU PROPIO EJE, así que girar el cuello en Y
+     no la mueve ni un milímetro —medido, recorrido cero—. Lo que mueve una
+     cabeza es asentir, que es la X. Y encima es lo que hace alguien que está
+     acomodando leña: mira lo que tiene entre las manos. */
+  u.cuello.rotation.set(0.28 + Math.sin(f*0.9)*0.07*w, Math.sin(f*0.5)*0.1, 0);
   for (const [k, sx] of [['i',-1],['d',1]]){
     const s = Math.sin(f + (k==='d'?0:0.9)) * w;
     u.br[k].hombro.rotation.set(-1.15 - s*0.30, 0, sx*0.26);
@@ -215,12 +252,23 @@ function poseSentado(p, t){
    y los hombros subidos: nadie escucha algo raro con los hombros sueltos. */
 function poseAlerta(p, t, k){
   const u = p.userData, f = t*1.2 + u.fase;
-  u.cadera.position.y = 0.92*u.e + Math.sin(f)*0.008;
-  u.torso.rotation.set(0.10 + k*0.06, 0, 0);
-  u.cuello.rotation.set(-0.16 - k*0.10, Math.sin(f*0.6)*0.10*(1-k), 0);
+  /* LA RESPIRACIÓN SE ACELERA Y SE ACORTA. Medido, con `k` en 1 esta pose no
+     movía NADA: todos los términos vivos estaban multiplicados por `(1-k)`, así
+     que al terminar de darse vuelta el personaje quedaba de estatua. Alguien
+     que acaba de oír algo no se queda quieto: respira más rápido y más corto, y
+     sigue barriendo con la cabeza. Es lo contrario de la calma, y la quietud
+     absoluta se lee a calma —o a que el juego se colgó—. */
+  const fr = t*(1.2 + k*1.5) + u.fase;
+  u.cadera.position.y = 0.92*u.e + Math.sin(fr)*(0.008 - k*0.003);
+  u.torso.rotation.set(0.10 + k*0.06 + Math.sin(fr)*0.012, 0, Math.sin(fr*0.31)*0.010);
+  /* la cabeza no deja de buscar: lento y corto cuando ya está tenso */
+  u.cuello.rotation.set(-0.16 - k*0.10 + Math.sin(fr*1.7)*0.02*k,
+                        Math.sin(f*0.6)*0.10*(1-k) + Math.sin(t*0.75)*0.30*k, 0);
   for (const [kk, sx] of [['i',-1],['d',1]]){
-    u.br[kk].hombro.rotation.set(-0.12 - k*0.10, 0, sx*(0.16 + k*0.10));
-    u.br[kk].codo.rotation.set(-0.42 - k*0.22, 0, 0);
+    /* los hombros suben con la tensión y tiemblan un pelo */
+    u.br[kk].hombro.rotation.set(-0.12 - k*0.10 + Math.sin(fr + (sx>0?0:0.8))*0.022,
+                                 0, sx*(0.16 + k*0.10));
+    u.br[kk].codo.rotation.set(-0.42 - k*0.22 - Math.max(0, Math.sin(fr*0.9))*0.05*k, 0, 0);
     u.pi[kk].musl.rotation.set(-0.05, 0, sx*0.05);
     u.pi[kk].rod.rotation.set(0.10, 0, 0);
   }
@@ -706,7 +754,8 @@ const INTRO = {
         const sx = c.x + ex*d0 - ez*lado, sz = c.z + ez*d0 + ex*lado;
         p.position.set(sx, H(sx, sz), sz);
         p.rotation.y = Math.atan2(sx - c.x, sz - c.z);
-        poseCamina(p, RELOJ.value + i*0.7, 0.55);
+        /* recorren 10 m en los seis segundos del tramo */
+        poseCamina(p, RELOJ.value + i*0.7, 1.65);
       });
       /* la cámara los espera en el claro, a la altura de la vista, y se corre
          despacio: un plano fijo con gente que se acerca es lo más legible que
@@ -867,7 +916,8 @@ const INTRO = {
         /* se meten en la carpa: se apagan al llegar, que es más honesto que
            hundirlos en el piso */
         p.visible = k < 0.94;
-        if (k < 1) poseCamina(p, RELOJ.value, 0.7);
+        /* del tronco a la carpa, unos cinco metros en 4,2 s */
+        if (k < 1) poseCamina(p, RELOJ.value, 1.20);
       });
       const cx = c.x + Math.cos(0.55)*10.5, cz = c.z + Math.sin(0.55)*10.5;
       cam.position.set(cx, c.h + 3.2, cz);
