@@ -6,6 +6,10 @@
    camine hacia algún lado en vez de dar vueltas. */
 let CAMPO = null, SITIOS = [], fuegoLuz = null, fuegoMalla = null;
 let CARPAS = [], AUTO = null;   /* dónde quedaron, para la cinemática y el auto */
+/* dónde se sienta cada uno: lo llena `armaCampamento()` con la tapa de los
+   troncos que construye, y lo lee la cinemática. Una sola lista para las dos
+   cosas, que es lo que impide que la gente quede sentada al lado del tronco. */
+const ASIENTOS = [];
 /* cuánto se multiplica la fogata. En partida vale 1; la cinemática la sube,
    porque en la escena de noche es la ÚNICA luz y tiene que alcanzar a algo que
    está a siete metros. Va como variable y no como valor puesto a mano en el
@@ -284,15 +288,40 @@ function armaCampamento(c){
   fuegoLuz.position.set(0, 1.1, 0);
   g.add(fuegoLuz);
 
-  /* LOS TRES TRONCOS para sentarse, uno por lado y con un hueco para entrar */
+  /* LOS TRES TRONCOS para sentarse, uno por lado y con un hueco para entrar.
+
+     Y DE ACÁ SALEN LOS ASIENTOS, que antes eran otra lista. Los troncos estaban
+     a radio 3,5 en los ángulos 0,50 · 2,59 · 4,69, y la gente se sentaba a radio
+     3,4 en 5,55 · 3,62 · 4,58 · 0,28: cuatro personas en cuatro ángulos que no
+     coinciden con ninguno de los tres troncos, o sea CUATRO PERSONAS SENTADAS EN
+     EL AIRE al lado de los troncos. Dos listas que describen la misma cosa y que
+     nadie mantiene juntas terminan así siempre. Ahora hay una sola: el tronco se
+     construye y en el mismo paso deja anotado dónde se sienta uno encima, con la
+     altura de SU tapa —no una constante— y mirando al fuego.
+
+     SON CUATRO ASIENTOS EN TRES TRONCOS. El primero lleva dos, corridos sobre su
+     propio eje: un tronco de 3,10 m tiene lugar de sobra para dos, y con un
+     cuarto tronco no quedaría el hueco por donde se entra al círculo. */
+  ASIENTOS.length = 0;
+  const RT = 3.5, ALTO_T = 0.36 + 0.38;      /* eje del tronco + su radio: la tapa */
   for (let i = 0; i < 3; i++){
-    const a = i/3*6.283 + 0.5, r = 3.5;
+    const a = i/3*6.283 + 0.5;
     const t = new T.Mesh(new T.CylinderGeometry(0.36, 0.4, 3.1, 7), matCorteza);
-    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
-    t.position.set(px, H(c.x+px, c.z+pz) - y + 0.36, pz);
+    const px = Math.cos(a)*RT, pz = Math.sin(a)*RT;
+    const suelo = H(c.x+px, c.z+pz);
+    t.position.set(px, suelo - y + 0.36, pz);
     t.rotation.set(Math.PI/2, 0, -a);   /* acostado y de cara al fuego */
     t.castShadow = t.receiveShadow = true;
     g.add(t);
+    /* el eje del tronco es perpendicular al radio: por ahí se corre el asiento */
+    const ex = -Math.sin(a), ez = Math.cos(a);
+    const corr = (i === 0) ? [-0.72, 0.72] : [0];
+    for (const d of corr){
+      const sx = c.x + px + ex*d, sz = c.z + pz + ez*d;
+      ASIENTOS.push({ x: sx, z: sz, y: suelo + ALTO_T,
+                      /* de cara al fuego, que está en el centro del campamento */
+                      mira: Math.atan2(c.x - sx, c.z - sz) });
+    }
   }
 
   /* LAS CARPAS, HUECAS DE VERDAD.

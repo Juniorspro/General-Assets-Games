@@ -249,7 +249,8 @@ function bucle(){
     saltar: () => { INTRO.termina(); return MODO; },
     /* ── las misiones, desde afuera ── */
     mis: () => ({ i: MIS.i, on: MIS.on, ramas: MIS.ramas,
-                  tit: MIS.i >= 0 && MIS.i < 5 ? MIS.lista[MIS.i].n : 'fin',
+                  tit: MIS.i >= 0 && MIS.i < 5 ? TX(MIS.lista[MIS.i].k + 'n') : 'fin',
+                  rastroVis: MIS.marcaRastro ? MIS.marcaRastro.visible : null,
                   cerca: MIS.cerca ? MIS.cerca.tipo : null,
                   antorcha: MIS.antorcha, mini: MINI.on,
                   cosas: COSAS.filter(o => o.activo).map(o => o.tipo) }),

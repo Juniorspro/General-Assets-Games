@@ -179,17 +179,34 @@ function poseLena(p, t, trabaja){
   }
 }
 /* sentado en un tronco, mirando el fuego */
+/* SENTADO, Y LAS PIERNAS SALEN DE LA GEOMETRÍA Y NO DEL TANTEO.
+   Estaba con el muslo a −1,42 y la rodilla a +1,05: la suma da −0,37, o sea la
+   pantorrilla inclinada 21° HACIA ADELANTE, que es alguien resbalándose del
+   tronco. Sentarse es una sola cosa: el muslo horizontal y la pantorrilla a
+   plomo. El muslo cuelga hacia −Y en reposo, así que horizontal es −π/2; y la
+   rodilla tiene que devolver exactamente lo mismo para que la pantorrilla
+   vuelva a la vertical. De ahí los dos números, y por eso están escritos como
+   la cuenta y no como el resultado: si mañana cambia la pose de reposo del rig,
+   esto sigue siendo cierto.
+
+   Y LA CADERA VA A LA ALTURA DE LA TAPA DEL TRONCO. La pone quien lo sienta,
+   con `y` del asiento; acá sólo se la baja lo que mide el muslo, que es lo que
+   se hunde al doblar la pierna. */
+const SENT_MUSLO = -Math.PI/2, SENT_RODILLA = Math.PI/2;
 function poseSentado(p, t){
   const u = p.userData, f = t*1.15 + u.fase;
-  u.cadera.position.y = 0.92*u.e - 0.30*u.e;
+  /* apoyado: la cadera queda donde la dejó quien lo sentó, sólo respira */
+  u.cadera.position.y = 0.42*u.e + Math.sin(f)*0.008;
   u.torso.rotation.set(0.14 + Math.sin(f)*0.03, Math.sin(f*0.4)*0.06, 0);
   u.cuello.rotation.set(-0.06, Math.sin(f*0.33)*0.16, 0);
   for (const [k, sx] of [['i',-1],['d',1]]){
-    u.br[k].hombro.rotation.set(-0.42 + Math.sin(f + (k==='d'?0:1.4))*0.05, 0, sx*0.30);
-    u.br[k].codo.rotation.set(-0.95, 0, 0);
-    /* las piernas colgando del tronco y apenas abiertas */
-    u.pi[k].musl.rotation.set(-1.42, 0, sx*0.10);
-    u.pi[k].rod.rotation.set(1.05, 0, 0);
+    /* los brazos apoyados en las rodillas, que es como se sienta alguien
+       alrededor de un fuego: el hombro adelante y el codo bien cerrado */
+    u.br[k].hombro.rotation.set(-0.55 + Math.sin(f + (k==='d'?0:1.4))*0.045, 0, sx*0.22);
+    u.br[k].codo.rotation.set(-1.15, 0, 0);
+    /* muslo horizontal, pantorrilla a plomo, y las rodillas apenas abiertas */
+    u.pi[k].musl.rotation.set(SENT_MUSLO + Math.sin(f*0.5 + sx)*0.02, 0, sx*0.13);
+    u.pi[k].rod.rotation.set(SENT_RODILLA, 0, 0);
   }
 }
 /* PARADO Y EN GUARDIA: es la pose del que oyó algo. Los brazos caen pero
@@ -540,6 +557,15 @@ const INTRO = {
        que hacer todavía. */
     MIS.arranca();
     $('obj').classList.remove('on');
+    /* EL RASTRO SE TAPA HASTA QUE PASA. Armar las misiones acá deja el mundo
+       listo para el último plano, pero también pone las manchas de sangre en el
+       suelo DESDE EL PRIMER CUADRO: en la captura del atardecer, con los cuatro
+       todavía sentados y vivos, ya se veían dos manchas al lado del tronco. Se
+       apagan y las prende el propio guion cuando toca. Lo mismo las balizas de
+       las ramas, que son amarillas y brillan: durante la historia no hay nada
+       que buscar. */
+    if (MIS.marcaRastro) MIS.marcaRastro.visible = false;
+    for (const o of COSAS) if (o.bal) o.bal.visible = false;
     /* UN FAROLITO PARA LA ESCENA DEL RUIDO. Lemi termina de espaldas al fuego,
        o sea a contraluz: medido en la captura salía como una silueta negra sin
        un rasgo, y lo que la escena tiene que mostrar es que está asustado. Va
@@ -571,6 +597,8 @@ const INTRO = {
        última imagen de la historia. */
     if (!MIS.on) MIS.arranca();
     $('obj').classList.add('on');
+    if (MIS.marcaRastro) MIS.marcaRastro.visible = true;
+    MIS.balizas();
   },
   /* deja TODO en el instante `t`. Sin estado escondido: llamarla dos veces con
      el mismo número tiene que dar la misma imagen. */
@@ -606,9 +634,15 @@ const INTRO = {
     /* dónde se sienta cada uno. Se reparten FUERA del arco que barre la cámara
        (0,80 a 2,10 rad): con alguien en el medio, su espalda tapa la fogata,
        que es lo único que hay que ver en esta escena. */
-    const asien = [5.55, 3.62, 4.58, 0.28];
-    const sitio = (k) => ({ x: c.x + Math.cos(asien[k])*3.4,
-                            z: c.z + Math.sin(asien[k])*3.4 });
+    /* LOS ASIENTOS LOS DA EL CAMPAMENTO, que es quien construyó los troncos.
+       Acá había otra lista de cuatro ángulos, y ninguno caía sobre un tronco:
+       los cuatro se sentaban en el aire. Si por lo que sea no hay asientos —una
+       isla sin campamento no debería pasar, pero el código no puede suponerlo—
+       se cae al círculo de antes y al menos no se rompe. */
+    const sitio = (k) => ASIENTOS.length
+      ? ASIENTOS[k % ASIENTOS.length]
+      : { x: c.x + Math.cos(k*1.6)*3.4, z: c.z + Math.sin(k*1.6)*3.4,
+          y: c.h + 0.74, mira: 0 };
     /* la carpa de cada uno, para el tramo de irse a dormir */
     const carpaDe = (k) => CARPAS.length ? CARPAS[(k+2) % CARPAS.length] : sitio(k);
 
@@ -621,8 +655,13 @@ const INTRO = {
         p.visible = true;
         p.userData.leno.visible = false;
         const s2 = sitio(i);
-        p.position.set(s2.x, H(s2.x, s2.z) + 0.42, s2.z);
-        p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+        /* SE APOYA EN LA TAPA DEL TRONCO, no a 42 cm del suelo. La cadera de la
+           pose queda a 0,42·e sobre el origen del grupo, así que poniendo el
+           origen en la tapa menos eso, la cadera cae EXACTAMENTE sobre el
+           tronco: la altura sale de la geometría del asiento y del rig, no de
+           una constante que después nadie vuelve a mirar. */
+        p.position.set(s2.x, s2.y - 0.42*p.userData.e, s2.z);
+        p.rotation.y = s2.mira;
         poseSentado(p, RELOJ.value + i*1.3);
       });
       const ang = 0.80 + k*1.30, rr = 9.6 - k*1.9;
@@ -655,14 +694,16 @@ const INTRO = {
         p.visible = true;
         p.userData.leno.visible = false;
         const s2 = sitio(i);
-        p.position.set(s2.x, H(s2.x, s2.z) + (i === 0 ? 0.42*(1-para) : 0.42), s2.z);
+        /* sentado apoya en el tronco; parado apoya en el suelo, y entre las dos
+           cosas se interpola: eso ES levantarse */
+        const ySent = s2.y - 0.42*p.userData.e, yPara = H(s2.x, s2.z);
+        p.position.set(s2.x, i === 0 ? lerp(ySent, yPara, para) : ySent, s2.z);
         if (i === 0){
-          const mira = Math.atan2(c.x - s2.x, c.z - s2.z);
-          p.rotation.y = lerp(mira, mira + Math.PI, gira);
+          p.rotation.y = lerp(s2.mira, s2.mira + Math.PI, gira);
           if (para < 1) poseSentado(p, RELOJ.value);
           else poseAlerta(p, RELOJ.value, gira);
         } else {
-          p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+          p.rotation.y = s2.mira;
           poseSentado(p, RELOJ.value + i*1.3);
         }
       });
@@ -726,6 +767,9 @@ const INTRO = {
          rastro va del campamento a la cueva, así que ése es el rumbo, y la
          cámara se pone del lado de acá para que salga hacia el fondo. La vista
          además baja: se está despertando en el piso. */
+      /* y acá sí: el rastro aparece con la mañana, que es cuando la historia lo
+         nombra. Es lo primero que hay del otro lado de la noche. */
+      if (MIS.marcaRastro) MIS.marcaRastro.visible = true;
       const r0 = (MIS && MIS.rastroDesde) ? MIS.rastroDesde : { x: c.x + 9, z: c.z - 7 };
       let vx = r0.x - c.x, vz = r0.z - c.z;
       const vl = Math.hypot(vx, vz) || 1; vx /= vl; vz /= vl;
