@@ -13,7 +13,13 @@ let CONGELADO = false;
    están adelante y lejos: eso lo tiene que decidir el juego, porque el motor no
    sabe que a ciento sesenta metros no queda un solo píxel visible. Es una
    distancia y una comparación por cuadra y por cuadro — veinticinco cuentas. */
-const VISTA = 168;
+/* CIENTO VEINTIOCHO METROS Y NO CIENTO SESENTA Y OCHO, y el número sale de la
+   niebla y no del gusto. Con `FogExp2` en 0,0165, a 120 m el factor de niebla ya
+   es 0,98: lo que hay más allá aporta el dos por ciento de su color. Con la
+   vuelta de cuadras de borde el barrio pasó de veinticinco manzanas a cuarenta
+   y nueve, y con el corte viejo se dibujaban veintiséis a la vez —336 llamadas—
+   para mostrar gris. */
+const VISTA = 116;
 function pasoCuadras(){
   for (const g of GRUPOS){
     const dx = g.userData.cx - JUG.x, dz = g.userData.cz - JUG.z;
@@ -99,10 +105,28 @@ async function construir(){
      se mueve, el navegador no repinta y en un teléfono aparece el aviso de
      página que no responde. */
   for (let i = 0; i < CUADRAS; i++){
-    for (let j = 0; j < CUADRAS; j++) TOTALES.casas += armaCuadra(i, j).casas;
-    await paso(0.14 + 0.55*(i+1)/CUADRAS,
+    for (let j = 0; j < CUADRAS; j++) TOTALES.casas += armaCuadra(i, j, [0, 1]).casas;
+    await paso(0.14 + 0.44*(i+1)/CUADRAS,
                TX(i < 3 ? 'cCasas' : 'cCercas'));
   }
+  /* ── LA VUELTA DE AFUERA ──
+     Cada cuadra de borde lleva casas SÓLO en el lado que mira a la calle
+     exterior: las otras tres caras dan al campo, y una casa mirando al campo es
+     una casa que nadie va a ver nunca por su frente. */
+  for (let i = 0; i < CUADRAS; i++){
+    TOTALES.casas += armaCuadra(i, -1, [1]).casas;         /* arriba, miran al sur */
+    TOTALES.casas += armaCuadra(i, CUADRAS, [0]).casas;    /* abajo, miran al norte */
+    TOTALES.casas += armaCuadra(-1, i, [3]).casas;         /* izquierda, miran al este */
+    TOTALES.casas += armaCuadra(CUADRAS, i, [2]).casas;    /* derecha, miran al oeste */
+  }
+  await paso(0.62, TX('cCercas'));
+  /* las cuatro esquinas, con dos frentes cada una */
+  TOTALES.casas += armaCuadra(-1, -1, [1, 3]).casas;
+  TOTALES.casas += armaCuadra(CUADRAS, -1, [1, 2]).casas;
+  TOTALES.casas += armaCuadra(-1, CUADRAS, [0, 3]).casas;
+  TOTALES.casas += armaCuadra(CUADRAS, CUADRAS, [0, 2]).casas;
+  armaArboleda();
+  await paso(0.70, TX('cCercas'));
   await paso(0.74, TX('cLuces'));
   armaFaroles(); armaCharcos(); armaAutos();
   TOTALES.faroles = FAROLES.length;
@@ -135,6 +159,11 @@ async function arranca(){
   $('cPista').textContent = TX('pistas')[Math.floor(Math.random()*TX('pistas').length)];
 
   armaPanel();
+  /* las siete texturas generadas se decodifican acá y no al lado de los
+     materiales: `TEX_B64` es un `const` de otra parte y un `const` leído
+     mientras se evalúa el módulo está en su zona muerta — ni `typeof` lo salva.
+     Acá el módulo ya terminó de evaluarse. */
+  cargaTexturas();
   await construir();
 
   /* el gancho de repintado se cuelga ANTES de esperar al idioma. Puesto
@@ -196,6 +225,10 @@ async function arranca(){
       requestAnimationFrame(un);
     }),
     /* cuánto le está costando el cuadro y con qué */
+    tex: () => ({ pedidas: TEXGEN.pedidas, puestas: TEXGEN.puestas,
+                  mapas: TEX_DESTINO.map(([n, d]) => [n, !!d().map,
+                    d().map ? [+d().map.repeat.x.toFixed(2), +d().map.repeat.y.toFixed(2)] : null,
+                    d().map && d().map.image ? (d().map.image.width || 0) : 0]) }),
     est: () => ({ fps, pix: CFG.pix, calidad: CALIDAD,
                   rt: rt ? [rt.width, rt.height] : null, escenario: [W, H2], girado: GIRADO,
                   dib: DIB, tri: TRI,

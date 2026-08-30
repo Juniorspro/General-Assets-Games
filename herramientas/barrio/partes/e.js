@@ -10,11 +10,16 @@
    ese ritmo es lo que da velocidad al caminar. */
 let sueloMesh = null, lineasMesh = null;
 function armaCalles(){
-  const g = new T.PlaneGeometry(LADO, LADO);
+  /* EL PLANO SE PASA DEL BARRIO POR DOS CUADRAS. Las cuadras de borde viven
+     afuera de la reja de calles, así que con el plano justo al tamaño del
+     damero quedarían apoyadas en el vacío — y el borde del plano se ve como una
+     línea recta contra la niebla, que es peor que no tener borde. */
+  const EXT = LADO + PASO*2.4;
+  const g = new T.PlaneGeometry(EXT, EXT);
   sueloMesh = new T.Mesh(g, matAsfalto);
   sueloMesh.rotation.x = -Math.PI/2;
   sueloMesh.receiveShadow = true;
-  matAsfalto.map.repeat.set(LADO/2.4, LADO/2.4);
+  matAsfalto.map.repeat.set(EXT/2.4, EXT/2.4);
   escena.add(sueloMesh);
 
   const piezas = [];

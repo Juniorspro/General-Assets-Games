@@ -20,7 +20,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PARTES = os.path.join(AQUI, 'partes')
 
-ORDEN = ['a.html', 't.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js',
+ORDEN = ['a.html', 't.js', 'x.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js',
          'g.js', 'h.js', 'i.js', 'z.html']
 
 

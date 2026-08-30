@@ -91,8 +91,10 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   sonidos y las ciento cincuenta casas se dibujan por código). El octavo juego. Un damero de
   **5 × 5 cuadras** —274 m de lado— a las tres de la mañana y bajo la lluvia, en primera persona y
   sin más objetivo que caminarlo. Calles con línea cortada, veredas con cordón de quince
-  centímetros, césped, **150 casas** con su cerca, su entrada de auto y alguna ventana encendida,
-  **96 faroles** con su cable colgando en catenaria, autos estacionados y árboles. Pixelación suave
+  centímetros, césped, **234 casas** con su cerca de piquetes, su entrada de auto y alguna ventana encendida,
+  **96 faroles** con su cable colgando en catenaria, autos estacionados y árboles. El damero lleva
+  además una **vuelta de cuadras de borde** y una arboleda detrás, así que para donde uno mire hay
+  vecindario. Las siete texturas del suelo y de las casas están generadas con Higgsfield. Pixelación suave
   —el destino de render va a 1/1,7— y de noche: lo único que ilumina de verdad son los faroles.
   Hay relámpagos con su trueno a destiempo, linterna, y las tres calidades y los tres idiomas en el
   menú. Vive partido en `herramientas/barrio/partes/` y se arma con
@@ -101,6 +103,143 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Sexagésima tercera vuelta (2026-08-30): **BARRIO** — la vuelta de afuera, las casas de verdad y las cercas de piquetes
+
+Pedido textual: *"podés mejorar las calles o sea hace que los bordes también sean vecindario así no queda
+como un vecindario vacío ... también necesito que las casas las mejores en un 100% también agrega que
+las cercas sean de madera mejor hechas genera texturas con Rezona ... también genera imágenes y todo
+para texturas del suelo nomás y esas cosas ... conecta bien las cercas y casas"*.
+
+**REZONA NO CONECTÓ EN ESTA SESIÓN.** Está en `.mcp.json` —`npx rezona@latest mcp`— pero el servidor no
+levantó: las herramientas cargadas son Higgsfield, GitHub y las de three.js, y no hay ninguna
+`mcp__rezona__*`. Las siete texturas se generaron con Higgsfield, que es lo que ya había funcionado
+para las nueve de RECREO. No lo intenté con la URL: en la vuelta 56 quedó medido que
+`https://lab.rezona.ai/mcp` devuelve HTML en un GET y 405 en el POST.
+
+#### LOS BORDES: EL BARRIO SE CIERRA CON UNA VUELTA MÁS
+
+Parado en la calle exterior y mirando hacia afuera no había NADA: el damero terminaba en un plano de
+asfalto perdiéndose en niebla, y un plano que se pierde en gris se lee a maqueta recortada. Ahora hay
+**veinticuatro cuadras de borde** —una vuelta completa— y detrás de ellas una franja de **900 árboles**.
+
+**Y LAS DE BORDE LLEVAN CASAS EN UN SOLO LADO.** Sus otras tres caras dan al campo, y una casa mirando
+al campo es una casa que nadie va a ver nunca por su frente: seis por cuadra serían ciento cuarenta
+casas puestas de espaldas. Las cuatro esquinas llevan dos frentes. De 150 casas a **234**.
+
+**LA VEREDA VA SÓLO DONDE HAY CALLE**, y por lo mismo: en una cuadra de borde, una vereda en la cara que
+da al campo es una vereda que no lleva a ningún lado y que encima delata que la cuadra está cortada.
+
+Y el plano de asfalto se pasa del damero por dos cuadras: con el plano justo al tamaño del barrio, las
+cuadras nuevas quedaban apoyadas en el vacío.
+
+#### LAS CASAS: LO QUE SE MIRA A TRES METROS SON LOS BORDES
+
+La versión anterior era una caja, un techo a dos aguas y dos ventanas. De lejos pasaba; de cerca —que
+es donde uno camina— era una caja. **Lo que hace que una casa se lea a casa no es el volumen grande
+sino los bordes**, y son todos piezas de diez centímetros:
+
+- **El alero**, que sobresale cincuenta y cinco centímetros y tira su sombra horizontal bajo el techo.
+  Un techo al ras se lee a maqueta.
+- **La fascia**, la tabla clara que cierra el canto del alero: es lo que separa el techo de la pared
+  cuando los dos están en penumbra.
+- **El zócalo de ladrillo.** Sin él la casa nace del pasto, y una casa que nace del pasto se lee a caja
+  apoyada encima.
+- **El alféizar de cada ventana**, que es lo único que sobresale de la pared y por eso lo único que
+  atrapa la luz de un farol de costado.
+- **La canaleta y su bajada.** Una casa con lluvia y sin canaleta es una casa a la que no le llueve.
+- **Y LOS ESCALONES DEL PORCHE**, que no son un detalle: el piso está a cincuenta y cinco centímetros
+  del pasto por el zócalo, así que sin escalones la puerta queda flotando y el porche es una repisa.
+
+Más: tres formas de techo —dos aguas al frente, dos aguas a lo largo y cuatro aguas—, frontón del color
+de la casa y no del techo, porche con columnas y baranda, garaje en una de cada tres, postigos, chimenea
+con capucha, número de casa, aire acondicionado al costado, y ventanas con marco, crucero y postigos.
+
+**LA CARPINTERÍA BLANCA VA APARTE Y CLARA A PROPÓSITO.** De noche, una casa entera del mismo tono es una
+silueta; lo único que le devuelve la forma son los bordes claros. Es la pieza más chica de todas y la
+que más se ve.
+
+#### LAS CERCAS: UNA TEXTURA CON ALFA, Y LA CUENTA ES LA QUE DECIDE
+
+Un cerco de frente mide doce metros y lleva unos setenta y cinco piquetes; por doscientas treinta y
+cuatro casas son **diecisiete mil cajas** —doscientos mil triángulos— para algo que de noche y a quince
+metros es una silueta con rayas.
+
+Y lo que hace que una cerca se lea a piquetes **no es el volumen de cada tabla: son los HUECOS entre
+ellas**. Un plano recortado con alfa los da exactos —con la punta en pico, porque una tabla cortada a
+escuadra se lee a tapia— y los postes y los dos travesaños, que sí son cajas, ponen el volumen donde se
+ve, que es al lado de uno. Va con `alphaTest` y no con transparencia: un material transparente no
+escribe profundidad y dos cercas cruzadas se dibujan en el orden equivocado.
+
+#### CONECTADAS, QUE ERA LA MITAD DEL PEDIDO
+
+- **La puerta del cerco cae exactamente sobre la vereda de acceso**, y la vereda va del portón a los
+  escalones del porche. Sin ella el cerco tiene una puerta que da al pasto y el porche unos escalones
+  que bajan a la nada.
+- **La entrada de auto termina en el garaje** cuando lo hay. Una entrada que muere contra una pared lisa
+  no lleva a ningún lado.
+- **La medianera la pone UNO SOLO de los dos vecinos.** Con las dos, cada límite entre lotes queda con
+  dos cercas superpuestas — y eso no se ve como una cerca más gruesa, se ve como un parpadeo entre dos
+  planos que pelean el mismo píxel.
+- Y los postes del portón van más altos, con su tapa: es lo que hace que se lea a entrada y no a un
+  pedazo de cerca que falta.
+
+#### EL LOTE SE ESCRIBE UNA VEZ Y SE USA CUATRO
+
+La versión anterior tenía casas en dos lados de la cuadra y el código escrito para esos dos. Con los
+bordes hacen falta los cuatro. Todo el lote —casa, jardín, entrada, veredas y cercas— se escribe en un
+marco LOCAL donde `u` corre a lo largo de la calle y `v` entra en la cuadra, y una tabla de cuatro
+entradas lo lleva al mundo. Escribirlo cuatro veces es la forma más rápida de que tres de los cuatro
+lados terminen con la puerta contra el patio.
+
+#### LAS SIETE TEXTURAS GENERADAS, Y LA ESCALA SE CUENTA SOBRE LA IMAGEN
+
+Asfalto, vereda, pasto, madera, ladrillo, revestimiento y teja. **106 KB las siete.**
+
+**LAS UV PASAN A ESCRIBIRSE EN METROS.** Antes cada pieza dividía por un número propio —1,6 acá, 2,2
+allá, 0,9 en el zócalo— así que cambiar una textura obligaba a encontrar los once sitios donde se la
+usaba. Ahora hay una sola tabla, `METROS`, que dice cuántos metros cubre cada imagen, y el factor de
+cada pieza divide por eso. **Los números están contados sobre la imagen generada**: trece hiladas de
+ladrillo son un metro, diez tablas de revestimiento son dos metros cinco. Sin esa cuenta una pared sale
+con hiladas de veintidós centímetros y la casa se lee a casa de muñecas — el mismo defecto que en RECREO
+costó una vuelta con los lockers.
+
+**NO SE COSEN LOS BORDES.** Al modelo se le pidieron texturas «sin costura» y ninguna imagen generada lo
+es de verdad; coserlas a mano ensucia justo el centro, que es lo que más se mira. Va
+`MirroredRepeatWrapping`: la copia de al lado va dada vuelta, los dos bordes que se tocan son **el mismo
+borde** y la costura no puede existir.
+
+**Y LA REPETICIÓN SE COPIA DE LA QUE HABÍA.** El asfalto no toma su escala de las UV sino de `repeat`
+—es un plano de doscientos metros con UV de 0 a 1— así que reemplazar el mapa sin copiarla deja la calle
+con UN texel estirado sobre el barrio entero.
+
+#### TRES MALLAS MENOS POR CUADRA
+
+La carpintería oscura y la blanca son el mismo material con otro color, y lo mismo pasa con las ventanas
+encendidas, los televisores y la chapita del número, y con los troncos y las copas. Separados eran seis
+mallas por cuadra —o sea seis llamadas de dibujo por cuadra visible, y hay quince a la vez— para pintar
+cosas que sólo se distinguen por el tono. Con color por vértice son tres.
+
+**Y LA DISTANCIA DE VISTA BAJA DE 168 A 116 METROS**, que sale de la niebla y no del gusto: con `FogExp2`
+en 0,0165, a 120 m el factor ya es 0,98. Con la vuelta de borde el barrio pasó de veinticinco manzanas a
+cuarenta y nueve, y con el corte viejo se dibujaban veintiséis a la vez —336 llamadas— para mostrar gris.
+
+#### MEDIDO AL CERRAR
+
+**234 casas · 96 faroles · 49 cuadras.** Las 7 texturas decodificadas y puestas en sus materiales, con la
+repetición del asfalto conservada (167,17). Mil quinientos cuadros caminados de verdad por tres calles
+—una de adentro en cada sentido y **la del borde**—: **686 metros y 0 cuadros dentro de una casa**. HUD sin
+un solo solapamiento. **218-246 llamadas de dibujo** con 11-14 cuadras a la vista, contando las dos pasadas
+y la de sombra. **0 NaN** y `window.__errs` vacío en las siete corridas. El HTML pasó de 119 KB a **287 KB**,
+y esos 167 son las siete texturas.
+
+**Y LA PRIMERA MEDICIÓN DE LA CAMINATA ESTABA MAL, que es lo que vale anotar.** La solté en (0,−2) y en
+(−2, 0) dando por sentado que el origen es un cruce. No lo es: las calles caen en −132,5 · −79,5 · −26,5 ·
+26,5 · 79,5 · 132,5, o sea que **el (0,0) es el medio de una manzana**. Una de las dos corridas se clavó a
+3,4 m contra la pared del fondo de una casa —correcto— y la otra recorrió 133 m por el callejón de un metro
+que queda entre las dos cercas de fondo. Los dos números eran ciertos y ninguno de los dos medía lo que yo
+decía que medía: una prueba que camina por donde el jugador no camina no prueba que el barrio se pueda
+recorrer.
 
 ### Sexagésima segunda vuelta (2026-08-30): **BARRIO**, el octavo juego — cinco por cinco cuadras, de noche y lloviendo
 

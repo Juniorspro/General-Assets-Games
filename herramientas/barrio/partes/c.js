@@ -9,6 +9,21 @@
    Y VAN OSCURAS. Es de noche: una textura pensada para el día, iluminada por un
    farol naranja, sale marrón. El color base de cada superficie está elegido con
    la luz que le va a tocar, no en abstracto. */
+/* ── CUÁNTOS METROS CUBRE CADA TEXTURA ──
+   Es la única constante que hace falta para que el barrio tenga escala. Sin
+   ella una pared de ladrillo sale con hiladas de veintidós centímetros y la
+   casa se lee a casa de muñecas — ya pasó en RECREO con los lockers.
+   LOS NÚMEROS ESTÁN CONTADOS SOBRE LA IMAGEN GENERADA: trece hiladas de
+   ladrillo son un metro, diez tablas de revestimiento son dos metros cinco. Y
+   valen también para las dibujadas por código, que se pintan para llenar el
+   mismo cuadrado.
+   DE ACÁ EN MÁS, LAS UV DE LA GEOMETRÍA SE ESCRIBEN EN METROS y el factor `u`
+   de cada pieza las convierte a repeticiones dividiendo por esto. Con un
+   divisor distinto por pieza —que es como estaba— cambiar una textura obliga a
+   encontrar los once sitios donde se la usa. */
+const METROS = { asfalto: 2.40, vereda: 1.30, pasto: 1.60, madera: 1.30,
+                 ladrillo: 1.00, tabla: 2.05, teja: 1.30, piquete: 1.24 };
+
 function lienzoTex(n, f, repx, repy){
   const c = document.createElement('canvas');
   c.width = c.height = n;
@@ -140,6 +155,51 @@ const texMadera = lienzoTex(32, (g, n) => {
   }
 });
 
+/* ── LA CERCA DE PIQUETES ──
+   VA COMO UNA TEXTURA CON ALFA Y NO COMO SETENTA Y CINCO CAJAS, y la cuenta es
+   la que decide: un cerco de frente mide doce metros y lleva unos setenta y
+   cinco piquetes; por doscientas treinta y cuatro casas son diecisiete mil
+   cajas —doscientos mil triángulos— para algo que de noche y a quince metros es
+   una silueta con rayas.
+   Lo que hace que una cerca se lea a piquetes NO es el volumen de cada tabla:
+   son los HUECOS entre ellas. Un plano recortado con alfa los da exactos, y los
+   postes y los dos travesaños —que sí son cajas— ponen el volumen donde se ve,
+   que es al lado de uno.
+   Y VA CON `alphaTest` Y NO CON TRANSPARENCIA: un material transparente no
+   escribe profundidad, así que dos cercas cruzadas se dibujan en el orden
+   equivocado y una tapa a la otra. `alphaTest` descarta el píxel ANTES de la
+   mezcla y entonces sí escribe profundidad. */
+const texPiquete = (() => {
+  const w = 64, h = 64;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  /* ocho piquetes con su hueco: el ancho de la tabla y el del hueco salen de
+     una cerca de verdad —once centímetros de tabla y cuatro y medio de aire— */
+  const paso = 8, tabla = 6;
+  for (let x = 0; x < w; x += paso){
+    const v = 0.80 + Math.random()*0.35;
+    g.fillStyle = 'rgb(' + (150*v|0) + ',' + (132*v|0) + ',' + (108*v|0) + ')';
+    /* la punta va en pico: una tabla cortada a escuadra se lee a tapia */
+    g.beginPath();
+    g.moveTo(x, h); g.lineTo(x, 9); g.lineTo(x + tabla/2, 2);
+    g.lineTo(x + tabla, 9); g.lineTo(x + tabla, h); g.closePath(); g.fill();
+    /* la veta y el canto oscuro de un lado: es lo que le da espesor sin
+       gastar un solo triángulo */
+    g.fillStyle = 'rgba(60,46,32,0.42)'; g.fillRect(x + tabla - 1, 2, 1, h - 2);
+    for (let k = 0; k < 5; k++){
+      g.fillStyle = 'rgba(70,56,38,' + (0.10 + Math.random()*0.20).toFixed(3) + ')';
+      g.fillRect(x + (Math.random()*tabla|0), Math.random()*h|0, 1, 3 + Math.random()*10|0);
+    }
+  }
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.magFilter = T.NearestFilter; t.minFilter = T.LinearMipmapLinearFilter;
+  t.anisotropy = 4;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+
 /* LA REJA DE ALAMBRE, y va CON CANAL ALFA. Es la única textura del juego que
    no es opaca, y por eso es la única que da problemas: un material transparente
    no escribe profundidad, así que dos rejas cruzadas se dibujan en el orden
@@ -192,9 +252,33 @@ const matPared    = new T.MeshLambertMaterial({ map: texTabla, vertexColors: tru
 const matLadrilloV= new T.MeshLambertMaterial({ map: texLadrillo, vertexColors: true, color: 0x9a8c86 });
 const matTechoV   = new T.MeshLambertMaterial({ map: texTeja, vertexColors: true, color: 0xacb3bd });
 const matMaderaV  = new T.MeshLambertMaterial({ map: texMadera, vertexColors: true, color: 0x8e8474 });
+const matPiquete = new T.MeshLambertMaterial({ map: texPiquete, vertexColors: true,
+                                               color: 0xb8b8b8,
+                                               transparent: true, alphaTest: 0.5,
+                                               side: T.DoubleSide });
 const matPoste   = new T.MeshLambertMaterial({ color: 0x30353d });
 const matCable   = new T.MeshLambertMaterial({ color: 0x14171c });
-const matMarco   = new T.MeshLambertMaterial({ color: 0x2a2e35 });
+/* ── LA CARPINTERÍA BLANCA ──
+   La fascia, los marcos, los alféizares, las columnas y la baranda del porche.
+   Va aparte y CLARA a propósito: de noche, una casa entera del mismo tono es
+   una silueta, y lo único que le devuelve la forma son los bordes claros. Es la
+   pieza más chica de todas y la que más se ve. */
+/* ── TRES MALLAS MENOS POR CUADRA ──
+   La carpintería oscura y la blanca son el mismo material con otro color, y lo
+   mismo pasa con las ventanas encendidas, los televisores y la chapita del
+   número, y con los troncos y las copas. Separados eran seis mallas por cuadra
+   —o sea seis llamadas de dibujo por cuadra visible, y hay quince a la vez—
+   para pintar cosas que sólo se distinguen por el tono. Con color por vértice
+   son tres. Es exactamente el mismo argumento que hizo que las seis casas de
+   una cuadra compartan un material. */
+const matCarp    = new T.MeshLambertMaterial({ vertexColors: true, color: 0xffffff });
+const matEmisivo = new T.MeshBasicMaterial({ vertexColors: true, color: 0xffffff });
+const matVerde   = new T.MeshLambertMaterial({ vertexColors: true, color: 0xffffff, flatShading: true });
+const C_MARCO = 0x2a2e35, C_BLANCO = 0xd6d2c8;
+const C_VENT = 0xffcf8a, C_TV = 0x9fd8ff, C_NUM = 0x6b6250;
+const C_TRONCO = 0x4a4038, C_COPA = 0x2c3f2a;
+/* la chapita del número, con luz propia y muy floja: no ilumina nada, sólo se
+   ve — que es lo que hace un número de casa a las tres de la mañana */
 /* EL VIDRIO APAGADO NO PUEDE SER NEGRO PURO. Un negro absoluto no tiene
    sombreado que mostrar, así que la ventana deja de leerse como un hueco con
    vidrio y se lee como un agujero recortado en la pared. Va gris muy oscuro con
@@ -202,9 +286,9 @@ const matMarco   = new T.MeshLambertMaterial({ color: 0x2a2e35 });
 const matVidrio  = new T.MeshPhongMaterial({ color: 0x0d1218, specular: 0x334455, shininess: 90 });
 /* la ventana encendida: emisiva, o sea que se ve aunque no le llegue una sola
    luz — que es lo que hace una ventana encendida */
-const matLuzVent = new T.MeshBasicMaterial({ color: 0xffcf8a });
-const matLuzVentF= new T.MeshBasicMaterial({ color: 0x9fd8ff });   /* el televisor */
-const matPuerta  = new T.MeshLambertMaterial({ color: 0x4a3b30 });
+/* la puerta lleva color por vértice: cada casa tiene la suya y todas se funden
+   en la misma malla */
+const matPuertaV = new T.MeshLambertMaterial({ vertexColors: true, color: 0xffffff });
 const matFarol   = new T.MeshBasicMaterial({ color: 0xffe6b4 });
 /* ── EL REFLEJO EN EL ASFALTO MOJADO ──
    LLEVA UN DEGRADADO Y NO UN COLOR PLANO, y es el mismo defecto que tenía el
@@ -242,5 +326,56 @@ const matSalpica = new T.MeshBasicMaterial({ color: 0x9fc0e0, transparent: true,
 const matCielo   = new T.MeshBasicMaterial({ color: 0x0c141f, side: T.BackSide, fog: false });
 const matAutoV   = new T.MeshPhongMaterial({ color: 0x0f151c, specular: 0x445566, shininess: 80 });
 const matAutoL   = new T.MeshBasicMaterial({ color: 0x60181a });
-const matTronco  = new T.MeshLambertMaterial({ color: 0x4a4038, flatShading: true });
-const matCopa    = new T.MeshLambertMaterial({ color: 0x2c3f2a, flatShading: true });
+
+/* ══════════════════════ LAS TEXTURAS GENERADAS ══════════════════════
+   Entran DESPUÉS y encima de las dibujadas por código. El orden importa: un
+   data URI se decodifica de forma asincrónica, así que un material que naciera
+   esperando la foto daría veinte cuadros con un mapa nulo —o sea gris plano— y
+   si una imagen no decodifica ese material se queda sin nada. Naciendo con el
+   lienzo, que ya funciona, no hay estado roto posible.
+
+   Y VAN EN `MirroredRepeatWrapping`. Al modelo se le pidieron texturas «sin
+   costura» y ninguna imagen generada lo es de verdad; coserlas a mano ensucia
+   justo el centro, que es lo que más se mira. Con el espejo, la copia de al
+   lado va dada vuelta: los dos bordes que se tocan son EL MISMO BORDE y la
+   costura no puede existir. Lo que se paga es que el patrón queda simétrico
+   cada dos repeticiones, y en manchas eso no se ve. */
+const TEX_DESTINO = [
+  ['asfalto',  () => matAsfalto],
+  ['vereda',   () => matVereda],
+  ['pasto',    () => matPasto],
+  ['madera',   () => matMaderaV],
+  ['ladrillo', () => matLadrilloV],
+  ['tabla',    () => matPared],
+  ['teja',     () => matTechoV]
+];
+const TEXGEN = { puestas: 0, pedidas: 0 };
+function cargaTexturas(){
+  if (typeof TEX_B64 === 'undefined') return;
+  for (const [nom, dst] of TEX_DESTINO){
+    const b64 = TEX_B64[nom];
+    if (!b64) continue;
+    TEXGEN.pedidas++;
+    const im = new Image();
+    im.onload = () => {
+      const t = new T.Texture(im);
+      t.wrapS = t.wrapT = T.MirroredRepeatWrapping;
+      t.magFilter = T.LinearFilter;
+      t.minFilter = T.LinearMipmapLinearFilter;
+      t.anisotropy = 4;
+      t.colorSpace = T.SRGBColorSpace;
+      const m = dst();
+      /* LA REPETICIÓN SE COPIA DE LA QUE HABÍA. El asfalto no toma su escala de
+         las UV sino de `repeat` —es un plano de doscientos metros con UV de 0 a
+         1— así que reemplazar el mapa sin copiarla deja la calle con UN texel
+         estirado sobre el barrio entero. */
+      if (m.map) t.repeat.copy(m.map.repeat);
+      t.needsUpdate = true;
+      m.map = t;
+      m.needsUpdate = true;
+      TEXGEN.puestas++;
+    };
+    im.onerror = () => {};
+    im.src = 'data:image/webp;base64,' + b64;
+  }
+}
