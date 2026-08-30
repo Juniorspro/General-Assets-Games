@@ -3727,7 +3727,7 @@ const matFuego2 = new T.MeshBasicMaterial({ color: 0xffb347 });
    parecía un pedazo de vidrio. Con un emisivo cálido no depende de qué luz haya
    en ese segundo, que es justo lo que hace falta en el objeto que la cinemática
    está pidiendo que se mire. */
-const matLlave  = new T.MeshLambertMaterial({ color: 0xd8b45a, emissive: 0x4a3712,
+const matLlave  = new T.MeshLambertMaterial({ color: 0xecd07a, emissive: 0x6e5522,
                                               flatShading: true });
 
 /* ── una cosa usable ──
@@ -4225,7 +4225,7 @@ const MIS = {
    que lo veas VOS: mirándolo desde una cámara externa, lo que se ve es a un
    muñeco asustándose, que no es lo mismo. */
 const LLAVE = {
-  on: false, t: 0, dur: 6.4, manos: null, yaw0: 0, pitch0: 0, pitchFin: 0.10, luz: null,
+  on: false, t: 0, dur: 7.4, manos: null, yaw0: 0, pitch0: 0, pitchFin: 0.10, luz: null,
   arranca(){
     if (this.on) return;
     this.on = true; this.t = 0;
@@ -4239,6 +4239,14 @@ const LLAVE = {
        sea el juego pidiéndote que hagas lo que estás viendo que ya hiciste. */
     $('hud').classList.remove('on');
     $('pista').classList.remove('on');
+    /* Y LA ANTORCHA SE GUARDA. Cuelga de la cámara con una llama sin luz —o sea
+       amarillo puro— y en el plano del agarre quedaba justo delante de la mano:
+       medido en la captura, el cono de fuego tapaba media pantalla y la mano
+       salía como una silueta negra contra él. Aparte tiene sentido: para juntar
+       algo del piso con las DOS manos hay que soltar lo que llevabas. Vuelve
+       cuando termina la escena. */
+    if (this.antorchaGuardada === undefined) this.antorchaGuardada = null;
+    if (MIS.antorchaMalla){ MIS.antorchaMalla.visible = false; this.antorchaGuardada = MIS.antorchaMalla; }
     this.yaw0 = JUG.yaw;
     /* mira al suelo: la llave está a los pies */
     this.manos = armaManos();
@@ -4309,8 +4317,14 @@ const LLAVE = {
        exactamente el flash de una foto de noche: aplasta el volumen y deja la
        cara plana y visible, que para un susto es lo que se quiere. Se apaga al
        terminar, así que el resto del juego sigue iluminado como siempre. */
+    /* LA LUZ VA DOS METROS DELANTE DEL OJO Y NO EN EL OJO. Pegada a la cámara,
+       las manos —que están a cuarenta centímetros— reciben dieciséis veces más
+       que el camello, que está a seis y medio: medido en la captura, los dos
+       brazos salían blancos puros mientras el bicho seguía apenas iluminado.
+       Corrida hacia adelante, la distancia a las manos pasa a 2,6 m y al
+       camello a 4,3: la relación cae de 16 a 2,7 y las dos cosas se ven. */
     this.luz = new T.PointLight(0xfff2e0, 0.0, 26, 1.0);
-    this.luz.position.set(0, 0.15, 0.10);
+    this.luz.position.set(0, 0.20, -2.2);
     cam.add(this.luz);
   },
 
@@ -4326,15 +4340,26 @@ const LLAVE = {
     const lista = escena.children.filter(o => o.visible && !fuera.has(o));
     const rc = new T.Raycaster();
     rc.far = 6.2;
-    const o = new T.Vector3(JUG.x, JUG.y + OJO, JUG.z), d = new T.Vector3();
+    const o = new T.Vector3(), d = new T.Vector3();
     let mejor = 0, mejorLibre = -1;
+    /* TRES RAYOS Y NO UNO, separados el ancho del animal. Con un solo rayo por
+       el centro, un tronco parado al costado del camello no lo descarta y el
+       plano vuelve a salir partido al medio — que es justo lo que volvió a
+       pasar en la captura después del primer arreglo. El camello presenta unos
+       2,1 m de frente, así que se prueban el eje y los dos bordes. */
     for (const off of [0, 0.55, -0.55, 1.1, -1.1, 1.9, -1.9, 3.14]){
       const a = this.yaw0 + off;
-      d.set(-Math.sin(a), 0.10, -Math.cos(a)).normalize();
-      rc.set(o, d);
+      const ux = -Math.sin(a), uz = -Math.cos(a);
       let libre = 99;
-      try { const h = rc.intersectObjects(lista, true); if (h.length) libre = h[0].distance; }
-      catch(e){ libre = 99; }
+      for (const lat of [0, -1.0, 1.0]){
+        /* el costado es perpendicular al rumbo */
+        o.set(JUG.x - uz*lat, JUG.y + OJO, JUG.z + ux*lat);
+        d.set(ux, 0.10, uz).normalize();
+        rc.set(o, d);
+        try { const h = rc.intersectObjects(lista, true);
+              if (h.length) libre = Math.min(libre, h[0].distance); }
+        catch(e){}
+      }
       if (libre > mejorLibre){ mejorLibre = libre; mejor = off; }
       if (libre > 6.1) break;
     }
@@ -4346,10 +4371,17 @@ const LLAVE = {
     /* tres tiempos: se agacha y mira el suelo · agarra · levanta la vista */
     const baja = cl(t/1.5, 0, 1);
     const agarra = cl((t - 1.7)/1.1, 0, 1);
-    const sube = cl((t - 3.4)/1.9, 0, 1);
+    /* el tramo nuevo: con la llave ya en el puño, la mano sube hasta el ojo y se
+       queda un segundo. Recién después empieza a levantarse la vista. */
+    const muestra = cl((t - 2.9)/0.9, 0, 1) * (1 - cl((t - 5.1)/0.8, 0, 1));
+    const sube = cl((t - 4.3)/1.9, 0, 1);
     /* la vista baja a la llave y después sube hasta el ángulo que `arranca()`
        calculó contra la altura real del terreno donde quedó el camello */
-    JUG.pitch = lerp(lerp(-0.05, -0.92, baja), this.pitchFin, sube);
+    /* LA VISTA BAJA HASTA −0,78 Y NO HASTA −0,92. A 53° la cámara mira casi a
+       plomo y de las manos sólo se ve el DORSO: una loza plana con los dedos
+       escondidos detrás. A 45° la mano se ve de tres cuartos y los dedos se
+       recortan contra el pasto, que es lo que hace que se lea el agarre. */
+    JUG.pitch = lerp(lerp(-0.05, -0.78, baja), this.pitchFin, sube);
     JUG.yaw = this.yaw0;
     AND.ojo = OJO - baja*0.42 + sube*0.30;
     /* LA LUZ ENTRA CON EL LEVANTAR LA VISTA Y NO ANTES. Encendida desde el
@@ -4358,8 +4390,8 @@ const LLAVE = {
        puros y el pasto en primer plano un verde plano sin un pliegue. Es para
        el camello, que está a seis metros y medio, así que sube con `sube`. */
     if (this.luz) this.luz.intensity = 9.0 * sube;
-    if (this.manos) ponManos(this.manos, baja, agarra, sube);
-    if (t > 4.6){
+    if (this.manos) ponManos(this.manos, baja, agarra, sube, muestra);
+    if (t > 5.6){
       $('cTexto').textContent = '…';
       $('cTexto').classList.add('ver');
     }
@@ -4373,6 +4405,7 @@ const LLAVE = {
     $('cSaltar').style.display = '';
     setTimeout(() => $('cine').classList.remove('on'), 520);
     if (this.manos){ cam.remove(this.manos); soltar(this.manos); this.manos = null; }
+    if (this.antorchaGuardada){ this.antorchaGuardada.visible = true; this.antorchaGuardada = null; }
     if (this.luz){ cam.remove(this.luz); this.luz.dispose && this.luz.dispose(); this.luz = null; }
     $('hud').classList.add('on');
     JUG.pitch = -0.05;
@@ -4405,6 +4438,25 @@ const LLAVE = {
    marco vertical el semiancho visible a medio metro son dieciocho centímetros,
    así que unos hombros a la distancia real dejan las manos por fuera del
    cuadro. Van juntas, cerca del eje. */
+/* ══════════════════════════ LAS DOS MANOS DE PRIMERA PERSONA ═══════════════
+   DOS ANTEBRAZOS NO SON DOS MANOS, y ése era todo el problema del plano de la
+   llave: en la captura se veían dos postes marrones que subían y bajaban
+   juntos, con la llave apareciendo de golpe encima de uno. Un gesto de agarrar
+   necesita tres cosas que ahí no estaban:
+
+   1. DEDOS QUE SE CIERRAN. Sin dedos no hay agarre posible: la mano llega, la
+      llave aparece, y el jugador entiende que se la teletransportaron.
+   2. LAS DOS MANOS HACIENDO COSAS DISTINTAS. Dos copias espejadas moviéndose en
+      el mismo cuadro se leen a máquina. La derecha agarra; la izquierda entra
+      después, más abajo y menos, apoyándose — que es lo que hace cualquiera al
+      juntar algo del piso.
+   3. LA MUÑECA. El antebrazo baja recto y es la muñeca la que gira para que la
+      palma mire el suelo. Sin ese giro la mano llega de canto.
+
+   La jerarquía es la de un brazo: pivote del codo → antebrazo, y colgando de su
+   punta el pivote de la MUÑECA → palma y cinco dedos. Así girar la muñeca no
+   despega la palma del antebrazo, que es el mismo motivo por el que los cuatro
+   personajes tienen pivotes y no cajas sueltas. */
 function armaManos(){
   const g = new T.Group();
   const mat = matPiel;
@@ -4419,23 +4471,56 @@ function armaManos(){
      son 12 cm por debajo del eje. */
   for (const sx of [-1, 1]){
     const b = new T.Object3D();
-    b.position.set(sx*0.115, -0.12, -0.52);
+    b.position.set(sx*0.150, -0.12, -0.50);
     const ante = new T.Mesh(geoCaja, mat);
-    ante.scale.set(0.075, 0.26, 0.08);
-    ante.position.y = -0.13;
+    ante.scale.set(0.074, 0.215, 0.080);
+    ante.position.y = -0.108;
     b.add(ante);
-    const mano = new T.Mesh(geoCaja, mat);
-    mano.scale.set(0.092, 0.10, 0.042);
-    mano.position.y = 0.02;
-    b.add(mano);
+
+    /* la muñeca, en la PUNTA del antebrazo */
+    const mun = new T.Object3D();
+    mun.position.y = 0.005;
+    b.add(mun);
+    const palma = new T.Mesh(geoCaja, mat);
+    palma.scale.set(0.112, 0.038, 0.112);
+    palma.position.set(0, 0.058, -0.040);
+    mun.add(palma);
+
+    /* CUATRO DEDOS Y UN PULGAR, cada uno con su pivote en el nudillo: doblar el
+       dedo es girar el pivote, y así la punta describe un arco en vez de
+       hundirse dentro de la palma. El pulgar va del otro lado y cierra CONTRA
+       los otros cuatro, que es lo único que hace que un puño se lea a agarre y
+       no a mano cerrada. */
+    const dedos = [];
+    for (let d = 0; d < 4; d++){
+      const piv = new T.Object3D();
+      piv.position.set((-1.5 + d)*0.030, 0.058, -0.094);
+      mun.add(piv);
+      const m = new T.Mesh(geoCaja, mat);
+      m.scale.set(0.023, 0.030, 0.098);
+      m.position.z = -0.049;
+      piv.add(m);
+      dedos.push(piv);
+    }
+    const pul = new T.Object3D();
+    pul.position.set(sx*0.052, 0.052, -0.048);
+    mun.add(pul);
+    const mp = new T.Mesh(geoCaja, mat);
+    mp.scale.set(0.028, 0.030, 0.074);
+    mp.position.z = -0.037;
+    pul.add(mp);
+
+    b.userData = { mun, dedos, pul };
     g.add(b);
     g.userData.br.push(b);
   }
+
   /* LA LLAVE CUELGA DE LA MANO DERECHA Y NO DEL GRUPO. Puesta suelta en el
      grupo se quedaba quieta mientras el brazo subía y bajaba: en el cuadro se
      veía una chapita flotando al lado de una mano, que es lo contrario de
-     «agarrás la llave». Colgada del brazo, se mueve con él por construcción.
-     Y va con anillo: dos chapitas sueltas no se leen a llavero. */
+     «agarrás la llave». Ahora cuelga de la MUÑECA derecha, así que además la
+     acompaña cuando la muñeca gira. Y va con anillo: dos chapitas sueltas no se
+     leen a llavero. */
   const k = new T.Group();
   const paleta = new T.Mesh(new T.BoxGeometry(0.055, 0.014, 0.21), matLlave);
   paleta.position.z = -0.10;
@@ -4453,24 +4538,77 @@ function armaManos(){
      −Z el jugador la ve DE PUNTA: medido en la captura, dos píxeles de canto
      asomando por encima del puño. Girada un cuarto de vuelta se ve de costado y
      ahí sí se lee a llave. */
-  k.position.set(0.01, 0.075, -0.02);
+  k.position.set(0.014, 0.070, -0.072);
   k.rotation.set(0.25, 1.40, 0);
   k.visible = false;
-  g.userData.br[1].add(k);
+  g.userData.br[1].userData.mun.add(k);
   g.userData.llave = k;
   return g;
 }
-function ponManos(g, baja, agarra, sube){
+
+/* EL GESTO, EN CUATRO TIEMPOS Y NO EN UNO.
+   `baja` es agacharse, `agarra` es el brazo llegando, `sube` es enderezarse. De
+   `agarra` salen DOS curvas distintas y ahí está casi todo: la mano llega
+   primero (`alcanza`) y recién cuando llegó se cierran los dedos (`cierra`).
+   Con una sola curva la mano se cierra mientras todavía está bajando, o sea que
+   agarra el aire y llega con el puño hecho. */
+function ponManos(g, baja, agarra, sube, muestra){
   const br = g.userData.br;
+  const alcanza = cl(agarra / 0.55, 0, 1);
+  const cierra  = cl((agarra - 0.50) / 0.35, 0, 1);
+  const mu = muestra || 0;
   for (let i = 0; i < 2; i++){
-    const b = br[i];
-    /* entran al cuadro al agacharse, se estiran al agarrar y se retiran al
-       levantar la vista, que es lo que hace alguien que acaba de guardar algo */
-    b.position.y = -0.26 + baja*0.14 + agarra*0.03 - sube*0.16;
-    b.position.z = -0.46 - baja*0.10 - agarra*0.05 + sube*0.06;
-    b.rotation.x = -0.35 + baja*0.55 - agarra*0.18 - sube*0.40;
+    const b = br[i], u = b.userData;
+    const der = (i === 1);
+    /* LA IZQUIERDA VA MENOS Y LLEGA DESPUÉS. Las dos haciendo lo mismo se leen
+       a máquina; con la derecha adelante y la izquierda apoyándose, se lee a
+       persona. */
+    const k = der ? 1 : 0.55;
+    const ret = der ? 0 : 0.10;                  /* la izquierda se atrasa */
+    const al = cl((alcanza - ret) / (1 - ret), 0, 1);
+    /* Y DESPUÉS LA SUBE A LA CÁMARA, que es el plano que de verdad muestra la
+       llave. Mirada desde arriba, una mano hecha de cajas a cuarenta píxeles es
+       una caja: probé cuatro encuadres del agarre a ras del suelo y ninguno se
+       leía. Lo que sí se lee es lo que hacen todos los juegos en primera
+       persona: agarrar abajo —donde no importa que se vea poco— y LEVANTAR el
+       objeto hasta el ojo, donde ocupa un tercio del cuadro. La derecha sube
+       con la llave; la izquierda se queda abajo y sale de cuadro. */
+    const sube2 = der ? mu : 0;
+    b.position.y = -0.26 + baja*0.14 + al*0.03*k - sube*0.16 + sube2*0.11;
+    b.position.z = -0.46 - baja*0.10 - al*0.07*k + sube*0.06 + sube2*0.07;
+    if (!der) b.position.y -= mu*0.22;
+    b.rotation.x = -0.35 + baja*0.55 - al*0.18*k - sube*0.40 + sube2*0.34;
+    b.rotation.z = (der ? -1 : 1) * (0.16 + al*0.30*k);
+    /* PROBÉ GIRAR LOS DOS BRAZOS HACIA ADENTRO para que convergieran sobre la
+       llave, y midiendo la captura salió PEOR: con medio radián de guiñada la
+       palma se separa visualmente del antebrazo y las dos piezas se leen como
+       dos bloques flotando, no como un brazo. A esta resolución —el destino de
+       render mide 298×138, o sea que una mano son unos cuarenta píxeles— lo
+       único que se lee es el CONTORNO, y un contorno partido en dos no se lee.
+       Los brazos entran rectos desde abajo y lo que converge es la inclinación
+       lateral, que no rompe la continuidad. */
+    b.rotation.y = (der ? -1 : 1) * al * 0.10 * k;
+    /* la muñeca gira para poner la palma mirando el suelo mientras baja, y
+       vuelve al enderezarse */
+    u.mun.rotation.x = -0.08 - baja*0.16 - al*0.20*k + sube*0.30;
+    u.mun.rotation.z = (der ? 1 : -1) * al * 0.22 * k;
+    u.mun.rotation.y = (der ? -1 : 1) * al * 0.12 * k;
+    /* los dedos: abiertos mientras llega, cerrados sobre la llave al final.
+       Se abren un poco de más en el camino —la mano se prepara— que es lo que
+       hace que el cierre se note. */
+    const abre = -0.30 * al * k;
+    const cerr = (der ? 1.05 : 0.70) * cierra;
+    for (let d = 0; d < 4; d++){
+      /* el meñique cierra un pelo más que el índice: una mano en la que los
+         cuatro dedos hacen exactamente lo mismo se ve de plástico */
+      u.dedos[d].rotation.x = abre + cerr * (0.88 + d*0.09);
+    }
+    u.pul.rotation.x = abre*0.6 + cerr*0.75;
+    u.pul.rotation.y = (der ? -1 : 1) * (0.35 + cerr*0.45);
   }
-  g.userData.llave.visible = agarra > 0.55;
+  /* LA LLAVE APARECE CUANDO LOS DEDOS YA SE ESTÁN CERRANDO, no antes: si
+     aparece con la mano abierta se la ve materializarse en el aire. */
+  g.userData.llave.visible = cierra > 0.35;
 }
 /* ══════════════════════════ ARRANQUE Y BUCLE ══════════════════════════ */
 function paso(p, txt){
@@ -4792,6 +4930,10 @@ function bucle(){
                camello: CAM3 ? donde(CAM3) : null,
                camVis: CAM3 ? CAM3.visible : null, modoB: BICHO.modo,
                dist: dc === null ? null : +dc.toFixed(1),
+               /* Y LA LLAVE MEDIDA EN PANTALLA, que es lo único que dice si el
+                  plano la muestra: «está en la mano» no quiere decir que se vea. */
+               llave: LLAVE.manos && LLAVE.manos.userData.llave.visible
+                        ? donde(LLAVE.manos.userData.llave) : null,
                llaveVis: LLAVE.manos ? LLAVE.manos.userData.llave.visible : null };
     },
     enMano: () => {

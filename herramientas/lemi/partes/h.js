@@ -318,6 +318,10 @@ function bucle(){
                camello: CAM3 ? donde(CAM3) : null,
                camVis: CAM3 ? CAM3.visible : null, modoB: BICHO.modo,
                dist: dc === null ? null : +dc.toFixed(1),
+               /* Y LA LLAVE MEDIDA EN PANTALLA, que es lo único que dice si el
+                  plano la muestra: «está en la mano» no quiere decir que se vea. */
+               llave: LLAVE.manos && LLAVE.manos.userData.llave.visible
+                        ? donde(LLAVE.manos.userData.llave) : null,
                llaveVis: LLAVE.manos ? LLAVE.manos.userData.llave.visible : null };
     },
     enMano: () => {
