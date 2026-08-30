@@ -196,11 +196,69 @@ function son2(tipo){
   } catch(e){ /* sin audio se juega igual */ }
 }
 
+/* ══════════════════════════ EL INFLADOR ══════════════════════════
+   Una bomba de pie, de las de auto: base con dos pedales, cilindro, émbolo con
+   manija en T, manómetro y la manguera enroscada. Se arma dos veces —una que
+   vive en la caja de la camioneta y otra colgada de la cámara— y las dos salen
+   de la MISMA función, con un parámetro de escala: si fueran dos modelos, el
+   que se ve en la mano no sería el que se levantó del auto, y eso se nota.
+
+   NO SE FUNDE EN UNA SOLA MALLA como el auto o la cueva, y es a propósito: son
+   nueve piezas, o sea nueve llamadas de dibujo contra las 60-90 que ya tiene la
+   escena. Fundirlo obligaría a repetir el trabajo de transformar cada pieza
+   para ganar ocho llamadas que no se notan. */
+const matBomba  = new T.MeshLambertMaterial({ color: 0x2f3a46, flatShading: true });
+const matBombaR = new T.MeshLambertMaterial({ color: 0xc23528, flatShading: true });
+const matMangue = new T.MeshLambertMaterial({ color: 0x22252b, flatShading: true });
+const matDial   = new T.MeshLambertMaterial({ color: 0xe8e2d0, emissive: 0x2a2822,
+                                              flatShading: true });
+function armaInflador(e){
+  e = e || 1;
+  const g = new T.Group();
+  const pon = (m, x, y, z, rx, ry, rz) => {
+    m.position.set(x*e, y*e, z*e);
+    if (rx || ry || rz) m.rotation.set(rx||0, ry||0, rz||0);
+    m.scale.multiplyScalar(e);
+    g.add(m); return m;
+  };
+  /* LA BASE: dos pedales, que es lo que distingue una bomba de pie de un tubo */
+  for (const sx of [-1, 1])
+    pon(new T.Mesh(new T.BoxGeometry(0.075, 0.020, 0.115), matBomba), sx*0.062, 0.010, 0);
+  pon(new T.Mesh(new T.BoxGeometry(0.055, 0.018, 0.070), matBomba), 0, 0.010, 0);
+  /* el cilindro y el émbolo que sale por arriba */
+  pon(new T.Mesh(new T.CylinderGeometry(0.030, 0.034, 0.30, 7), matBomba), 0, 0.17, 0);
+  pon(new T.Mesh(new T.CylinderGeometry(0.012, 0.012, 0.16, 5), matCromo), 0, 0.38, 0);
+  /* la manija en T, roja: es la pieza por la que se agarra y por eso lleva el
+     único color vivo del objeto */
+  pon(new T.Mesh(new T.BoxGeometry(0.165, 0.028, 0.032), matBombaR), 0, 0.455, 0);
+  for (const sx of [-1, 1])
+    pon(new T.Mesh(new T.CylinderGeometry(0.014, 0.014, 0.030, 5), matBombaR),
+        sx*0.070, 0.437, 0, Math.PI/2, 0, 0);
+  /* el manómetro, de costado sobre el cilindro */
+  pon(new T.Mesh(new T.CylinderGeometry(0.042, 0.042, 0.014, 8), matDial),
+      0.042, 0.24, 0.010, 0, 0, Math.PI/2);
+  /* LA MANGUERA, enroscada. Una curva de tubo dice «esto se conecta a algo»;
+     un cilindro recto se lee a palo. Va con `TubeGeometry` sobre una hélice
+     achatada, que son ocho líneas y no una malla dibujada a mano. */
+  const pts = [];
+  for (let i = 0; i <= 22; i++){
+    const u = i/22, a = u*Math.PI*3.2;
+    pts.push(new T.Vector3(Math.cos(a)*0.075*e,
+                           (0.055 + u*0.085)*e,
+                           Math.sin(a)*0.055*e));
+  }
+  const cur = new T.CatmullRomCurve3(pts);
+  const man = new T.Mesh(new T.TubeGeometry(cur, 22, 0.011*e, 4, false), matMangue);
+  g.add(man);
+  return g;
+}
+
 /* ══════════════════════════ EL SISTEMA ══════════════════════════ */
 const MIS = {
   i: -1, on: false, ramas: 0, tieneInflador: false,
   antorcha: { rama: false, tela: false, fuego: false },
   cerca: null, marcaRastro: null, llaves: null, antorchaMalla: null,
+  infladorMalla: null, infladorMano: null,
 
   lista: [
     /* LAS MISIONES GUARDAN LA CLAVE Y NO EL TEXTO. Si guardaran el texto, la
@@ -217,6 +275,7 @@ const MIS = {
     this.i = -1; this.on = true; this.ramas = 0; this.tieneInflador = false;
     this.antorcha = { rama: false, tela: false, fuego: false };
     this.llaves = null; this.antorchaMalla = null;
+    this.guardaInflador(); this.infladorMalla = null;
     $('obj').classList.add('on');
     this.arma();
     this.avanza();
@@ -268,6 +327,25 @@ const MIS = {
     if (AUTO){
       cosa({ tipo:'auto', x: AUTO.x, z: AUTO.z, r: 4.2,
              rot:'rAuto', mision:1, activo:false });
+      /* EL INFLADOR SE VE EN LA CAJA DE LA CAMIONETA. Antes «buscar el inflador
+         en el auto» era tocar un botón y que un cartel dijera que ya lo tenías:
+         el objeto de la segunda misión no existía en ninguna parte. Puesto en
+         la caja, se lo ve antes de llegar y se ve que desapareció al agarrarlo,
+         que es la mitad de lo que hace que juntar algo se sienta. */
+      /* LA CAJA ESTÁ DETRÁS DE LA CABINA, y eso hay que transformarlo bien: la
+         camioneta mide 4,30 con 2,05 de cabina y el morro sobre su +Z, así que
+         el piso de la caja cae en z local −1,3. Con la cuenta anterior el
+         inflador quedaba a 1,10 del centro, o sea DENTRO de la cabina, y desde
+         afuera no se veía. Una rotación en Y lleva (lx,lz) a
+         (lx·cos + lz·sen, −lx·sen + lz·cos): escribirlo mal es meter el objeto
+         en cualquier lado, y no se nota hasta que se lo busca. */
+      const LX = 0.28, LZ = -1.30;
+      const ix = AUTO.x + LX*Math.cos(AUTO.ry) + LZ*Math.sin(AUTO.ry);
+      const iz = AUTO.z - LX*Math.sin(AUTO.ry) + LZ*Math.cos(AUTO.ry);
+      this.infladorMalla = armaInflador(1);
+      this.infladorMalla.position.set(ix, AUTO.y + 0.86, iz);
+      this.infladorMalla.rotation.set(0.16, AUTO.ry + 0.5, 0.10);
+      G.add(this.infladorMalla);
       /* LA RUEDA PINCHADA es la delantera del lado de afuera. Se marca con la
          baliza propia para que no haya que adivinar de qué lado del auto es. */
       const rx = AUTO.x + Math.cos(AUTO.ry)*1.55 + Math.sin(AUTO.ry)*1.05;
@@ -331,6 +409,10 @@ const MIS = {
 
   /* ── pasar a la siguiente ── */
   avanza(){
+    /* al pasar de la rueda al rastro se guarda el inflador: seguir caminando
+       por la isla con la bomba colgada del ojo la deja tapando el cuadro toda
+       la partida, y su trabajo ya está hecho */
+    if (this.i === 1) this.guardaInflador();
     this.i++;
     if (this.i >= this.lista.length){ this.fin(); return; }
     const m = this.lista[this.i];
@@ -406,6 +488,8 @@ const MIS = {
     if (o.tipo === 'auto'){
       if (this.i === 1 && !this.tieneInflador){
         this.tieneInflador = true;
+        if (this.infladorMalla) this.infladorMalla.visible = false;
+        this.ponInfladorEnMano();
         aviso(TX('aInflador'));
         $('obj').querySelector('.s').textContent = TX('sInflar');
         for (const c2 of COSAS) if (c2.tipo === 'rueda') c2.activo = true;
@@ -450,6 +534,30 @@ const MIS = {
       return 'llaves';
     }
     return null;
+  },
+  /* EL INFLADOR EN LA MANO. Cuelga de la cámara, igual que la antorcha, así que
+     va con la vista por construcción y no hay dos cosas que puedan
+     desincronizarse. Y sub-escalado por la misma razón que ya costó tres
+     intentos con la antorcha: a tamaño real, medio metro delante del ojo, una
+     bomba de pie tapa el cuadro entero. */
+  ponInfladorEnMano(){
+    if (this.infladorMano) return;
+    const g = armaInflador(0.34);
+    /* MEDIDO Y CORREGIDO: puesta en (−0,34 · −0,46 · −0,66) la bomba caía en
+       y 0,83–1,13 del alto, o sea con el 83 % por DEBAJO del borde: en pantalla
+       asomaba la manija y nada más. Subida y acercada queda en poco más de un
+       cuarto del cuadro, como la antorcha. */
+    g.position.set(-0.30, -0.30, -0.58);
+    g.rotation.set(0.12, 0.5, 0.32);
+    cam.add(g);
+    escena.add(cam);
+    this.infladorMano = g;
+  },
+  guardaInflador(){
+    if (!this.infladorMano) return;
+    cam.remove(this.infladorMano);
+    soltar(this.infladorMano);
+    this.infladorMano = null;
   },
   chequeaAntorcha(){
     const a = this.antorcha;

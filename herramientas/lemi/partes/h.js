@@ -324,8 +324,10 @@ function bucle(){
                         ? donde(LLAVE.manos.userData.llave) : null,
                llaveVis: LLAVE.manos ? LLAVE.manos.userData.llave.visible : null };
     },
-    enMano: () => {
-      const o = MIS.antorchaMalla; if (!o) return null;
+    /* lo que se lleva en la mano, medido en pantalla. `que` elige cuál. */
+    enMano: (que) => {
+      const o = que === 'inflador' ? MIS.infladorMano : MIS.antorchaMalla;
+      if (!o || !o.visible) return null;
       /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
          `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
          proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
@@ -438,6 +440,12 @@ function bucle(){
       JUG.vy = 0; JUG.aire = false;
       return { x: +JUG.x.toFixed(1), y: +JUG.y.toFixed(1), z: +JUG.z.toFixed(1) };
     },
+    /* el inflador: si está en la caja del auto, si está en la mano */
+    auto: () => AUTO ? { x:+AUTO.x.toFixed(1), z:+AUTO.z.toFixed(1),
+                         y:+AUTO.y.toFixed(1), ry:+AUTO.ry.toFixed(3) } : null,
+    inflador: () => ({ enAuto: MIS.infladorMalla ? MIS.infladorMalla.visible : null,
+                       enMano: !!MIS.infladorMano,
+                       tiene: MIS.tieneInflador }),
     est: () => ({ fps, pix: CFG.pix, girado: GIRADO, escenario: [W, H2],
                   rt: rt ? [rt.width, rt.height] : null,
                   dib: DIB, tri: TRI,
