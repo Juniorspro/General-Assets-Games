@@ -69,7 +69,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
-- **`Lemi.html` es "LEMI"** (~690 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
+- **`Lemi.html` es "LEMI"** (~919 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
   mundo entero es procedural y no tiene un solo asset). El séptimo juego. Isla pixelada de 660 m de
   lado que se dibuja sola con ruido: terreno, mar, bosque, nubes, cuatro sitios —campamento, mojón,
   círculo de piedras y arco de costa— y una **cueva excavada en la propia función de altura**, con su
@@ -242,11 +242,43 @@ a 1,10 del centro, o sea adentro de la cabina.
 
 Los tres idiomas cambiando el panel de misión y el cartel de lo que hay cerca en vivo. Partida completa
 por el mismo camino que usa el jugador. `window.__errs` vacío y **0 NaN** en todas las corridas. El HTML
-quedó en **690 KB**.
+quedó en **919 KB**.
 
-**Lo que no se pudo hacer:** los sonidos generados. La cola de la cuenta está parada —ver arriba— y no
-hay forma de cancelar desde el código. Quedaron **cuatro enviados** (juntar, bomba, ok, tela) y seis en
-una cola de reintento que manda de a uno apenas se libere un lugar.
+#### LOS DIEZ SONIDOS, Y SALIERON POR HIGGSFIELD
+
+La cola de Rezona no se destrabó nunca —**y borrar el proyecto tampoco las libera**: comprobado,
+las doce tareas siguen contestando `pending` con el proyecto ya inexistente, y siguen contando contra
+el tope de la cuenta—. Así que se generaron con Higgsfield: `mirelo_text_to_audio` para los ocho
+efectos y `sonilo_music` para las dos camas.
+
+**TRES SALIERON MUDOS, y se vio midiendo y no escuchando.** `ok` daba pico **0,002**, `tela` 0,011 y
+`bomba` 0,019 — archivos de tamaño normal, con contenido, y en silencio. Se rehicieron con prompts que
+dicen *fuerte, cerca y seco* y que describen el **objeto físico**: «una campanita golpeada dos veces»
+en vez de «un chime de confirmación». La tela costó tres intentos.
+
+Dos cosas del horneado:
+- **Se nivela por RMS y no por pico.** El pico no sabe cuánto dura: nivelando por pico, un chasquido
+  de dos centésimas queda tan «fuerte» como un grito sostenido.
+- **Y hace falta una `tanh` antes de nivelar.** Un clip con pico 0,92 y rms 0,020 —el fogonazo del
+  encendedor— **no se puede subir**: el tope de pico lo baja todo de nuevo. Aplastando la punta con
+  una curva suave, el mismo clip llega a 0,040.
+
+**Las dos camas suenan siempre las dos** y lo que cambia es la ganancia cruzada. Con un tema que se
+corta y arranca otro, el cambio de hora se escucharía como un corte.
+
+**La pisada va atada a la fase del paso y no a un temporizador**, que es la corrección que en Maicol
+convirtió veinticuatro pisadas por segundo superpuestas —o sea ruido blanco— en un trote.
+
+Medido con el analizador colgado del maestro, que es lo único que prueba que sonó:
+
+| | rms | contra el fondo |
+|---|---|---|
+| fondo (sólo la cama) | 0,0054 | — |
+| pisada | 0,0141 | 2,6× |
+| **grito del camello** | **0,0887** | **16×** |
+
+Los diez decodifican. El cruce día/noche: poniendo el sol en 0,92, las camas pasan de 0,63/0 a
+0,27/0,54 en cinco segundos. 219 KB en base64; el HTML queda en **919 KB**.
 
 ### Quincuagesimoquinta vuelta (2026-08-30): **LEMI** — el día tiene cinco misiones, hay una cueva y el camello te encuentra
 
