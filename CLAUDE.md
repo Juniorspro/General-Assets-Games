@@ -69,9 +69,184 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+- **`Lemi.html` es "LEMI"** (~500 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
+  mundo entero es procedural y no tiene un solo asset). El séptimo juego. Isla pixelada de 660 m de
+  lado que se dibuja sola con ruido: terreno, mar, bosque, nubes y cuatro sitios —campamento, mojón,
+  círculo de piedras y arco de costa—. **Sos Lemi**: viniste a acampar con tres amigos a una isla que
+  no está en ningún mapa, y hay un **camello asesino** dando vueltas que de noche viene a buscarte
+  (correr le gana). Se abre con una **cinemática de 33 s en tres escenas** —el auto llegando, los
+  cuatro armando la fogata al atardecer, y los cuatro sentados de noche cuando aparece el bicho— y de
+  ahí arranca la partida. El pixelado no es un filtro: la escena se dibuja a media resolución en un
+  render target con NEAREST y recién eso se estira. Vive partido en `herramientas/lemi/partes/` y se
+  arma con `python3 herramientas/lemi/armar.py`.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Quincuagesimocuarta vuelta (2026-08-30): **LEMI** — el séptimo juego: carpas, el auto, el camello y una apertura de tres escenas
+
+Pedido: *"mejora las carpas, también agrega mejores pastos y árboles, también que la Cinemática de
+fondo del menú no esté invertida y que el logo generes con Rezona un mejor logo goty, y agrega una
+historia como de un camello asesino, nosotros somos Lemi, y veníamos a acampar con nuestros amigos a
+esta isla, agrega autos en el mapa cerca uno, uno nomás, y bien detallado y texturas piexl art,
+también agrega una cinematica al empezar el juego del auto llegando a la isla, después cambia de
+escena de los 3 amigos con Lemi 4 haciendo la fogata y poniendo los troncos todo god y animado
+cartoon, y después una dónde están sentados todos de noche, y después haz que de esa Cinemática
+empiece el juego"*.
+
+El juego venía de afuera como `lemi.html` (se llamaba «Vergel»). Ahora es `juegos-pc/Lemi.html`,
+partido en `herramientas/lemi/partes/` y armado con `python3 herramientas/lemi/armar.py` — el
+armado se comprobó reproduciendo el original BYTE POR BYTE antes de tocar una línea.
+
+#### «LA CINEMÁTICA DEL MENÚ ESTÁ INVERTIDA»: ERA EL ORDEN DEL EULER
+
+El horizonte del menú salía torcido, y torcido **de a poco distinto en cada instante**, que es lo que
+se lee como que la imagen está dada vuelta. Aislado en un solo cuadro: `cam.lookAt()` deja la cámara
+con **0,00°** de inclinación y la línea siguiente, `cam.rotation.z = deriva`, la deja con **29,81°**.
+
+La causa es el orden del Euler. Escribir `rotation.z` recompone la rotación ENTERA desde el Euler, y
+el orden de fábrica es `XYZ`, o sea R = Rx·Ry·Rz: el cabeceo se aplica alrededor del eje X **del
+mundo** después del giro, y eso ladea el horizonte tanto más cuanto más grande sea el giro. Como la
+cámara del menú ORBITA, el giro barre la vuelta entera y la inclinación va y viene: medido 17,3° en
+un instante y 29,8° en otro. El juego no lo sufría porque `ponCam` pone `rotation.order='YXZ'`, que
+es el orden correcto para una cámara de girar-y-cabecear; pero el menú corre **antes de que `ponCam`
+haya existido siquiera una vez**. La deriva pasó a aplicarse como cuaternión local
+(`cam.quaternion.multiply`), que gira sobre el eje óptico y no depende de ningún orden. Medido
+después: **0,10°**.
+
+**Y EL ENCUADRE NO ENTRABA CIELO.** Con la cámara 11 a 24 m por encima de un radio de 34 a 56, el
+cabeceo daba 20 a 30° hacia abajo y el teleobjetivo abre 15° para arriba del eje: el borde superior
+del cuadro caía **por debajo del horizonte** y el menú era una alfombra verde. Si el horizonte va a
+la fracción f del alto, el cabeceo vale `mediaAbertura·(1−2f)`; con f = 0,26 son 6,6°, o sea
+alto = radio × 0,116 **por encima del punto al que mira**, que no es lo mismo que por encima del
+suelo. Medido después: cabeceo 7,28° y horizonte en **0,257** del alto.
+
+#### DOS DEFECTOS QUE VENÍAN DE ANTES Y NO SE VEÍAN
+
+- **«Otra isla» devolvía una isla SIN UN SOLO ÁRBOL.** El barrido de limpieza hacía
+  `g.geometry.dispose()` sobre todo lo de `GRUPOS`, y ahí no hay sólo mallas: el campamento y los
+  otros tres sitios se guardan como `Group`, y un Group **no tiene `geometry`**. La primera vuelta
+  del `forEach` tiraba un TypeError que se llevaba puesto el sembrado entero — y no aparecía en
+  `window.__errs` porque una promesa rechazada no dispara el evento `error` de la ventana. Medido:
+  **96 llamadas de dibujo y 747k triángulos antes de tocar el botón, 23 y 282k después**. Con el
+  barrido recursivo, 97 y 762k.
+- **Al SALTEAR la apertura, el auto se quedaba a setenta metros.** La escena 1 lo hace entrar desde
+  78 m; salteando en el segundo 1, la partida empezaba sin camioneta. Se veía como que el auto no
+  existía, y la proyección lo confirmó: la caja ocupaba el **2,3 %** del alto del cuadro donde le
+  tocaba el 26 % — que es justo lo que da un objeto de dos metros a setenta. `termina()` ahora lo
+  devuelve a su lugar. Medido después: **57,9 %** a seis metros y medio.
+
+#### LAS CARPAS: UNA CARPA NO ES UN TECHO A DOS AGUAS
+
+Eran tres rectángulos de lona. Ahora son iglús de verdad: la tela es media cápsula
+(`SphereGeometry` cortada por phi, que ya trae la curvatura), dos **arcos** cruzados, una **puerta**
+con el faldón enrollado al lado, un **sobretecho** un 10 % más afuera que **no llega al suelo** —la
+franja de sombra entre las dos telas es lo único que hace que se lean como dos y no como una—,
+cuatro vientos con estaca y una mochila tirada al lado. Tres colores, porque tres carpas idénticas se
+leen a copia y pega. **Y las tres miran al fuego**: antes se orientaban con un `+Math.random()` y
+alguna quedaba de espaldas.
+
+**FUNDIDAS EN TRES MALLAS Y NO EN QUINCE.** Sueltas, cada pieza es una llamada de dibujo, y con las
+sombras encendidas se paga dos veces: la carpa nueva sola había subido el cuadro de 70 a 96 llamadas.
+`fundir()` transforma cada pieza y hornea las posiciones en los vértices — con índice en Uint32 y no
+Uint16, que un auto entero no entra en 65.535 vértices y el desborde no avisa: dibuja triángulos que
+apuntan a cualquier lado.
+
+#### EL AUTO: UNO, DETALLADO, CON TEXTURAS DE PÍXEL
+
+Camioneta de 4,30 m en cinco mallas fundidas —chapa, vidrio, goma, cromo, luces—. Cuerpo en dos
+bloques (el bajo y la cabina más angosta) porque un solo prisma se lee a ladrillo; capó más bajo que
+el techo; guardabarros; estribo; parabrisas inclinado; parrilla; equipaje atado arriba; auxilio
+atrás; espejos. Las texturas son lienzos de 32 píxeles dibujados con `fillRect` y filtro NEAREST,
+igual que la corteza y el pasto: **una foto acá se vería pegada encima**.
+
+Cuatro cosas salieron de mirar capturas:
+- **Las ruedas eran dos manchas negras planas.** El negro absoluto no tiene sombreado que mostrar,
+  así que la pieza pierde el volumen y se lee a agujero en la carrocería. Goma a gris oscuro y, sobre
+  todo, **llanta**: el centro claro es lo que convierte un disco en rueda.
+- **El cromo salía CIAN.** Este juego satura al tope en el post-proceso, así que cualquier gris con
+  un pelo de azul se va a celeste. Gris cálido.
+- **La parrilla era un bloque oscuro entre los dos faros.** Tenía su textura de listones escrita y
+  sin usar.
+- **Los faros eran dos rectángulos amarillos flotando de noche.** Estaban en `MeshBasic`, que ignora
+  la luz. Un auto **estacionado** tiene las luces apagadas: lo que se ve de su óptica es el reflejo.
+  Pasaron a Lambert con un emisivo bajo; los haces de verdad son dos `SpotLight` que enciende la
+  cinemática.
+- Y **el claro del campamento creció de 13 a 17 m**: la camioneta está a 12,6 del centro y mide 4,3,
+  así que con el claro viejo había un tronco justo delante del capó.
+
+#### PASTO Y ÁRBOLES
+
+- **La brizna pasó de 32 a 48 píxeles**, de 7 a 11 hojas, con curva en vez de inclinación recta, una
+  de cada cinco seca y una de cada seis con espiga. Y **la base arranca en 0,74 de luminancia y no en
+  0,52**: con la base oscura, contra un suelo verde clarísimo, las briznas se leían como palitos
+  secos clavados en el pasto.
+- **EL COLOR POR MATA, que era lo que faltaba y es lo que más se nota.** El pasto no tenía
+  `setColorAt`, así que todas las matas salían del mismo verde y el prado era UNA mancha lisa por más
+  briznas que tuviera la silueta. Ahora el tono y la claridad se mueven por mata y una de cada nueve
+  tira a amarillo.
+- **Flores**: una malla instanciada, cuatro colores, sólo donde hay pasto y pocas. Comparten el mismo
+  material y el mismo viento que el pasto — con shader propio se quedarían quietas mientras el pasto
+  se mueve.
+- **Árboles**: especie nueva de **acacia** con la copa en sombrilla (la copa chata **cortada por
+  abajo**: achatada a secas sigue siendo una lenteja y desde el suelo se le ve la panza), coníferas
+  de **cinco** pisos en vez de tres —con tres se leen a pila de sombreros—, rango de tamaños abierto
+  con ejemplares gigantes, y troncos caídos, que es lo más barato que hay para que un bosque deje de
+  ser un campo de postes verticales.
+
+#### LOS CUATRO, EL CAMELLO Y LA APERTURA
+
+Personajes con **rig propio de pivotes**: cada articulación es un Object3D puesto donde está la
+articulación y la caja del hueso cuelga de él corrida media longitud, así girar el pivote gira el
+hueso alrededor de su punta de arriba, que es lo que hace un codo. Cinco poses escritas como
+funciones del tiempo: quieto, camina, leña, sentado y susto. Existen SÓLO durante la cinemática — los
+tres amigos se quedan en las carpas, que por eso son tres, y la partida no paga un triángulo.
+
+**LA CINEMÁTICA ES UNA FUNCIÓN DEL TIEMPO**, `INTRO.pon(t)`, no una máquina de estados: por eso el
+banco fotografía el segundo 30,5 con `__V.cine(30.5)` sin esperar treinta segundos. Así se encontró
+todo lo de abajo.
+
+- **La curva del sol restaba y saltaba.** Con la primera, en el segundo 16 la fase iba en 0,772 —o
+  sea de noche— mientras el subtítulo decía «antes de que cayera el sol», y en el segundo 24 saltaba
+  de 0,456 a 0,756 en un cuadro. Ahora los tres tramos empalman, no baja nunca, y **los cortes caen
+  donde corta el guion**: el tramo de la fogata termina en 0,745, o sea con el sol rozando el
+  horizonte, que es literalmente lo que dice el texto.
+- **El camello era negro sobre negro.** Estaba en pardo casi negro con el argumento de que una
+  silueta da más miedo; el gancho de proyección decía que estaba en cuadro ocupando el 22 % del alto
+  y en la captura no había nada que ver, porque de noche el fondo también es negro. En **arena
+  oscura** se recorta, y los ojos —sin luz, y grandes a propósito— son lo único suyo que no depende
+  de la hora: a veinte metros, con el juego dibujando a media resolución, unos ojos de tamaño real no
+  llegan a un píxel.
+- **Lemi tapaba justo lo que hay que mirar.** Sentado en el eje de la cámara, su espalda se comía el
+  centro: medido, el fuego caía en y 0,64-0,97 y él en 0,66-1,47, o sea encima. Corrido medio radián,
+  la cámara mira por el hueco. Composición final medida: camello en y 0,26-0,56 y 30 % del alto,
+  fuego en 0,61-0,83, Lemi a la derecha en x 0,60-0,82.
+- **La noche del juego es demasiado oscura para un plano fijo.** Está bien cuando uno la camina con
+  una fogata cerca, pero en ocho segundos quietos el cuadro salía negro entero. Se sube la luna y el
+  rebote **sólo** durante la escena 3, y la fogata se multiplica por 3,4 — que es lo que hace que la
+  luz llegue al bicho a siete metros.
+- **El juego empieza en la fase 0,185 y no en 0,865.** Salir a un mediodía radiante contradiría lo
+  que se acaba de ver, pero soltar al jugador en 0,865 son **setenta segundos de oscuridad** antes
+  del primer amanecer. En 0,185 todavía es de noche —el camello está activo— y el sol sale a los
+  once segundos: se empieza con miedo y se ve amanecer.
+
+**EL CAMELLO EN LA ISLA.** Después de la apertura ronda a 2,2 m/s; de noche, a menos de 95 m,
+acecha a 3,6 y embiste a 7,4. Correr son 12,8: **se le gana**, que es la regla de Eco. No hay
+pantalla de derrota —este juego no tiene una—: te alcanza, te sacude y aparecés en el campamento.
+Y **se va a noventa metros** al soltarte: dejándolo donde estaba, si el encuentro fue cerca del
+campamento, al pasársele el aturdimiento lo tenés otra vez encima sin haber podido hacer nada.
+De noche **la mitad de sus destinos apuntan al jugador**, porque con destinos al azar en una isla de
+660 m de lado quedarse en un rincón era una partida ganada.
+
+#### MEDIDO AL CERRAR
+
+Roll del menú **0,10°** (era 17 a 30) y horizonte en 0,257 del alto. Menú: **cero solapamientos**
+entre los seis elementos, todo entre 40 y 420 de 460. Los seis planos de la apertura fotografiados
+uno a uno, con el camello, el fuego y Lemi **proyectados a coordenadas de pantalla** y los tres
+delante de la cámara. Camello: ronda 2,2 · a 70 m de noche acecha 3,6 · a 18 m embiste 7,4 · te
+agarra y pasa a 91,8 m de distancia; de día no acecha. «Otra isla» replanta (97 llamadas, 762k
+triángulos). Auto al 57,9 % del alto a 6,5 m. `window.__errs` vacío y **0 NaN** en todas las
+corridas.
 
 ### Quincuagesimotercera vuelta (2026-08-29): **VISOR 3D** — un modelo con 10 animaciones, todo de Rezona Lab
 

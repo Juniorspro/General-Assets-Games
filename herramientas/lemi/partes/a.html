@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#57b6ef">
+<title>LEMI · la isla del camello</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a1420;touch-action:none;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#eaf4ff;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+canvas{display:block}
+
+/* ── EL ESCENARIO ──
+   Todo el juego vive acá adentro. Con el teléfono en vertical se gira 90° y se
+   le intercambian el ancho y el alto, así se juega apaisado sin pedirle a nadie
+   que dé vuelta el aparato. La pantalla de carga queda AFUERA a propósito: se
+   muestra antes de girar nada y hay que poder leerla como venga el teléfono. */
+#escenario{position:fixed;left:0;top:0;width:100%;height:100%;
+  transform-origin:top left;overflow:hidden}
+body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* ── CARGA ── */
+#carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  background:radial-gradient(120% 90% at 50% 15%,#1d4a72 0%,#0d2338 55%,#081420 100%);
+  transition:opacity .6s ease}
+#carga.ido{opacity:0;pointer-events:none}
+#carga .caja{text-align:center;width:min(360px,84vw)}
+#carga h1{font-size:clamp(26px,7vw,40px);font-weight:200;letter-spacing:-.02em;
+  background:linear-gradient(160deg,#fff 30%,#8fe3a0);-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+#carga p{margin-top:8px;font-size:12.5px;color:rgba(234,244,255,.55);min-height:1.4em}
+#carga .barra{margin-top:18px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
+#carga .barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#7ee3a0,#57b6ef);transition:width .25s}
+#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.42);line-height:1.5}
+
+/* ── HUD ── */
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s}
+#hud.on{opacity:1}
+#fps{position:absolute;left:12px;top:calc(10px + env(safe-area-inset-top,0px));
+  font:600 10.5px/1.6 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.5);
+  text-shadow:0 1px 4px rgba(0,0,0,.8);letter-spacing:.04em}
+#teclas{position:absolute;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:10px 13px;border-radius:12px;background:rgba(8,18,28,.5);border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font:600 11px/1.85 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.62);display:none}
+body.pc #teclas{display:block}
+#teclas b{color:#eaf4ff}
+/* ── arriba a la derecha, sólo lo que NO se usa jugando ── */
+#botones{position:absolute;right:max(10px,2.5vw);top:calc(10px + env(safe-area-inset-top,0px));
+  display:flex;gap:7px;pointer-events:auto}
+.bt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(8,18,28,.42);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);font:800 15px/1 system-ui,sans-serif;opacity:.8}
+.bt:active{transform:translateY(1px);filter:brightness(1.3)}
+
+/* ── ACCIONES, abajo a la derecha y debajo del pulgar ──
+   El botón de correr estaba arriba, del lado opuesto a la mano que juega: para
+   apretarlo había que soltar la palanca. Todo lo que se usa en movimiento baja
+   acá, en racimo, con el salto grande porque es el que más se aprieta. */
+#acciones{position:absolute;right:max(16px,4vw);bottom:max(18px,5vh);
+  display:grid;grid-template-columns:auto auto;gap:11px;align-items:end;
+  justify-items:center;pointer-events:auto}
+.ac{border-radius:50%;display:grid;place-items:center;color:#eaf4ff;
+  background:rgba(10,20,30,.42);border:1.6px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);transition:transform .12s,background .2s,border-color .2s}
+.ac:active{transform:scale(.9);filter:brightness(1.35)}
+.ac.on{background:rgba(126,227,160,.3);border-color:rgba(126,227,160,.75);color:#eafff2}
+.ac .ico{font-size:20px;line-height:1;margin-bottom:1px}
+#acSalta{width:min(88px,19vw);aspect-ratio:1;grid-column:2;grid-row:1/3;
+  background:rgba(126,227,160,.20);border-color:rgba(126,227,160,.5)}
+#acSalta .ico{font-size:27px}
+#acCorre{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:1}
+#acAgacha{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:2}
+body.pc #acciones{display:none}
+
+/* ── MENÚ DE INICIO ──
+   El fondo NO es una imagen: es la isla de verdad, filmada con un campo de
+   visión de treinta grados. Con el teleobjetivo se aplasta la perspectiva, las
+   copas se apilan unas sobre otras y el movimiento lento de la cámara se lee
+   como una grúa de cine en vez de como un paseo. */
+#menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(4,10,16,.30) 0%,rgba(4,10,16,.06) 38%,rgba(4,10,16,.72) 100%)}
+#menu.on{display:grid}
+#menu .mCaja{text-align:center;width:min(360px,84%)}
+#menu .mEmb{position:relative;display:grid;place-items:center;margin-bottom:6px}
+/* EL LOGO ES EL TÍTULO, no un emblema detrás de un título. Antes había una
+   imagen al 78 % de opacidad y encima, superpuesta, la palabra escrita con la
+   tipografía del sistema; eso significaba que el nombre del juego cambiaba de
+   forma según el aparato —Roboto en Android, San Francisco en iPhone, Segoe en
+   Windows— y que las dos cosas competían por el mismo espacio. Ahora el logo
+   viene con la palabra adentro, va OPACO y ocupa el ancho que le corresponde a
+   un título. Va en PNG con alfa: en JPG el fondo se ve como un cuadrado más
+   claro flotando sobre el bosque por más que se lo mezcle.
+   Y VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO (`max-height` en vh): el menú tiene
+   siete cosas apiladas y en un teléfono corto el título se come el aire de
+   todas las demás. */
+#menu .mEmb img{width:min(300px,72vw);max-height:26vh;object-fit:contain;
+  filter:saturate(1.15) drop-shadow(0 6px 26px rgba(0,0,0,.6))}
+#menu .mSub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  text-transform:uppercase;color:rgba(234,244,255,.5);margin-bottom:24px}
+#menu .mBtn{display:block;width:100%;padding:15px;border-radius:99px;margin-top:10px;
+  font-size:15px;font-weight:700;border:1px solid rgba(255,255,255,.17);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.06);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .16s}
+#menu .mBtn:active{transform:scale(.97)}
+#menu .mBtn.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none;
+  box-shadow:0 10px 30px rgba(87,182,239,.26)}
+#menu .mHist{margin-top:18px;font-size:12.5px;line-height:1.62;
+  color:rgba(234,244,255,.60);text-wrap:balance}
+#menu .mPie{margin-top:10px;font-size:11px;color:rgba(234,244,255,.34);line-height:1.5}
+
+/* ── MENÚ DE PAUSA ── */
+#pausa{position:absolute;inset:0;z-index:45;display:none;place-items:center;
+  background:rgba(6,12,20,.72);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+#pausa.on{display:grid}
+#pausa .caja{width:min(300px,80%);text-align:center}
+#pausa h2{font-size:23px;font-weight:200;letter-spacing:.02em;margin-bottom:4px}
+#pausa .sub{font:600 9.5px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  text-transform:uppercase;color:rgba(234,244,255,.34);margin-bottom:20px}
+#pausa button{display:block;width:100%;padding:14px;border-radius:14px;margin-top:9px;
+  font-size:14.5px;font-weight:600;border:1px solid rgba(255,255,255,.15);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.05)}
+#pausa button:active{transform:scale(.98)}
+#pausa button.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+/* ── LA CINEMÁTICA DE APERTURA ──
+   Dos barras negras, un renglón de texto abajo y un botón de saltear. Las
+   barras no son un adorno: son lo que le dice al jugador «esto no se juega, se
+   mira», y sin ellas los primeros segundos se leen como que el juego se trabó.
+   Y CRECEN desde cero en medio segundo, porque apareciendo de golpe se leen a
+   error de dibujo. */
+#cine{position:absolute;inset:0;z-index:46;display:none;pointer-events:none}
+#cine.on{display:block}
+#cine .barra{position:absolute;left:0;right:0;height:0;background:#05080c;
+  transition:height .5s ease}
+#cine.abre .barra{height:11%}
+#cine .barra.ar{top:0} #cine .barra.ab{bottom:0}
+/* EL TEXTO VIVE DENTRO DE LA BARRA DE ABAJO y no encima de la imagen: sobre el
+   pasto saturado de este juego un renglón blanco se pierde, y ponerle una caja
+   propia sería una tercera franja. Adentro de la barra ya hay negro. */
+#cine .txt{position:absolute;left:6%;right:6%;bottom:0;height:11%;
+  display:grid;place-items:center;text-align:center;
+  font-size:clamp(13px,2.6vw,19px);line-height:1.45;font-weight:500;
+  color:#eaf4ff;text-shadow:0 2px 10px rgba(0,0,0,.9);
+  opacity:0;transition:opacity .45s}
+#cine .txt.ver{opacity:1}
+#cine .saltar{position:absolute;right:max(12px,3vw);
+  bottom:calc(11% + 12px);pointer-events:auto;
+  padding:9px 16px;border-radius:99px;font:600 12px/1 system-ui,sans-serif;
+  letter-spacing:.12em;color:rgba(234,244,255,.72);
+  background:rgba(8,18,28,.55);border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#cine .saltar:active{transform:scale(.95)}
+/* el fundido a negro entre escena y escena, y el de entrada al juego */
+#cine .velo{position:absolute;inset:0;background:#05080c;opacity:0;
+  transition:opacity .55s}
+#cine .velo.ver{opacity:1}
+
+#joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);width:min(148px,32vw);
+  aspect-ratio:1;pointer-events:auto;opacity:.9;display:none}
+body:not(.pc) #joy{display:block}
+#joy canvas{width:100%;height:100%;display:block}
+
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja">
+  <h1>LEMI</h1>
+  <p id="cTxt">Sembrando la isla…</p>
+  <div class="barra"><i id="cBar"></i></div>
+  <div class="pista" id="cPista"></div>
+</div></div>
+
+<div id="escenario">
+<div id="hud">
+  <div id="fps"></div>
+  <div id="botones">
+    <button class="bt" id="bFull" title="Pantalla completa">⛶</button>
+    <button class="bt" id="bPanel" title="Pausa">☰</button>
+  </div>
+  <div id="acciones">
+    <button class="ac" id="acCorre"><span class="ico">»</span>CORRER</button>
+    <button class="ac" id="acAgacha"><span class="ico">⌄</span>AGACHAR</button>
+    <button class="ac" id="acSalta"><span class="ico">⌃</span>SALTAR</button>
+  </div>
+  <div id="teclas">
+    <b>W A S D</b> moverse · <b>ratón</b> mirar<br>
+    <b>Shift</b> correr · <b>Ctrl</b> agacharse<br>
+    <b>Espacio</b> saltar · <b>F</b> volar · <b>Esc</b> pausa
+  </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+</div>
+
+<div id="menu">
+  <div class="mCaja">
+    <div class="mEmb"><img src="@@LOGO@@" alt="LEMI"></div>
+    <div class="mSub">la isla del camello</div>
+    <button class="mBtn pri" id="mJugar">▶ Jugar</button>
+    <button class="mBtn" id="mOtra">Otra isla</button>
+    <div class="mHist">Viniste a acampar con tres amigos a una isla que no figura
+      en ningún mapa. En la arena había huellas. No eran de nadie del grupo.</div>
+    <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="cine">
+  <div class="velo" id="cVelo"></div>
+  <div class="barra ar"></div>
+  <div class="barra ab"></div>
+  <div class="txt" id="cTexto"></div>
+  <button class="saltar" id="cSaltar">SALTEAR ▸</button>
+</div>
+
+<div id="pausa">
+  <div class="caja">
+    <h2>En pausa</h2>
+    <div class="sub" id="pSub"></div>
+    <button class="pri" id="pSeguir">Reanudar</button>
+    <button id="pReinicia">Reiniciar</button>
+    <button id="pMenu">Menú</button>
+  </div>
+</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as T from 'three';
