@@ -91,6 +91,145 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima primera vuelta (2026-08-30): **LEMI** — te mata y volvés a la cueva, el camello más lento, y dos props 3D
+
+Pedido textual: *"está bien pero el boto. saltar tiene textura bugueada, el camello debe ir despacio al
+morir moris y se repite desde la cueva adentro escapando, también debes hacer que al caerte aún puedas
+caminar un poco, también que el camello no vaya tan rápido y que al atraparte tenga screamer, genera
+modelos 3D low Poly de antorcha e inflador con highsfield"*.
+
+#### EL BOTÓN DE SALTAR SALÍA EMBALDOSADO, Y ERA UN ATAJO DE CSS
+
+`.ac` ponía la chapa con el atajo `background: … center/contain no-repeat`, y `#acSalta` —que
+necesita su propio color de fondo— lo volvía a escribir entero. **Un atajo repone a su valor inicial
+todo lo que no nombra**, así que le devolvía `background-size: auto` y `background-repeat: repeat`
+justo al único botón que mide 88 px con una chapa de 56: la flecha salía a tamaño natural y repetida,
+o sea una flecha y media cortada. Los otros tres miden 58 contra 56 y disimulaban el defecto — que es
+lo que lo hizo durar una vuelta entera. Medido ahora: los cuatro en `contain` · `no-repeat`, el de
+saltar de 78×78 con una sola flecha.
+
+**Y `#acUsar` TENÍA EL MISMO ATAJO Y NO SE HABÍA VISTO.** Apareció recién cuando la sonda midió los
+cuatro botones en vez de mirar el de saltar: seguía en `auto`/`repeat` con su fondo amarillo puesto
+por encima de la chapa. Una sonda que mide UNO de cuatro elementos iguales encuentra un defecto de
+cuatro.
+
+De paso el estado «tiene imagen» dejó de ser `[style*="background-image"]`. Ese selector busca una
+subcadena dentro del atributo `style` —o sea que depende de cómo el navegador serialice la línea— y
+encima pierde contra un ID, que es exactamente lo que dejaba el tinte verde por debajo de la chapa.
+Ahora la chapa entra por una variable (`--spr`) y el estado es una clase.
+
+#### TE ALCANZA Y TE MATA, PERO SÓLO DURANTE LA HUIDA
+
+Que el camello te toque pasa a ser el final de esa vida —con screamer— **desde que la escena de la
+llave enciende `BICHO.caza`, y no antes**. Antes de eso el bicho ronda de noche por una isla en la que
+uno está juntando ramas: morir ahí obligaría a rehacer cinco misiones por un encuentro que ni siquiera
+es el nudo del juego. `caza` ya es la marca exacta de que la huida empezó, así que es la condición
+correcta y no una bandera nueva. Verificado: con el camello traído a dos metros antes de la llave, te
+empuja al campamento y `MODO` sigue en `juego`.
+
+**Y SE VUELVE AL FONDO DE LA CUEVA, no al campamento.** El campamento es la isla de la mañana, o sea
+otro juego; lo que quedaba por jugar es la huida. `reviveEnCueva()` reconstruye el mismo estado que
+deja la escena de la llave: adentro, a doce metros del fondo, mirando a la boca, con la pierna rota,
+la viñeta puesta, la antorcha en la mano y el camello detrás.
+
+**OJO CON EL ORDEN AHÍ ADENTRO:** `esconde(true)` apaga el mundo de afuera y en esa lista está el
+camello, así que encenderlo tiene que ir DESPUÉS — al revés, la cosa que te persigue queda invisible y
+`pasoCamello` ni siquiera corre, porque arranca con `if (!CAM3.visible) return`.
+
+**DOCE METROS Y NO OCHO, y el número salió de una medición.** Con ocho, el camello —que se planta a
+metro y medio de la pared del fondo— quedaba a seis y medio: medido en el banco, un jugador quieto se
+comía la segunda muerte antes de terminar de levantarse. Son los mismos diez metros y pico de gracia
+que la escena de la llave ya había tenido que dar por exactamente la misma razón.
+
+#### EL SCREAMER: TRES COSAS QUE SÓLO APARECIERON MIRANDO
+
+Son 2,3 segundos en los que el juego saca el control, gira la cabeza hacia el bicho, se lo trae encima
+y grita. Y las tres correcciones son de puesta en escena, no de código:
+
+1. **LA CÁMARA TERMINABA ENTRE LAS PATAS.** La primera versión ponía el CENTRO del camello a la
+   distancia que quería. El animal mide cuatro metros de largo: con el centro a 1,15 m, la cabeza
+   queda **medio metro detrás del ojo**. Medido en la captura, lo que llenaba el cuadro eran dos patas
+   delanteras y la panza. Ahora `arranca()` lo coloca una vez, **lee dónde cayó la cabeza** y de ahí
+   sale el corrimiento; de ese punto en más todo se mide contra la cabeza, que es lo que el plano
+   tiene que mostrar.
+2. **ESCONDER LA ANTORCHA APAGABA LA ÚNICA LUZ.** Se esconde porque cuelga de la cámara y quedaría una
+   llama flotando delante de la cara del bicho —y porque es una luz naranja a medio metro que lo pinta
+   de rojo—. Pero apagando el grupo entero se apaga también su `PointLight`, y adentro de la cueva ésa
+   es toda la luz que hay: medido en la captura, el screamer era **un bulto negro sobre fondo negro**.
+   Ahora se esconden las mallas y se deja la luz, más una luz casi blanca colgada de la cámara que
+   sube con la escena — que es literalmente el flash de una foto de noche.
+3. **Y LA SATURACIÓN BAJA A 1,20 MIENTRAS DURA.** El post multiplica por 2,2, y con una sola luz de
+   color eso no separa nada: tiñe. Es la misma corrección que ya había hecho falta adentro de la cueva.
+
+#### UN NaN QUE NO SE VE COMO UN ERROR
+
+Al reescribir el arranque borré `d0` del objeto y dejé una línea que seguía leyendo `this.d0`:
+`undefined` entra en una multiplicación y sale NaN, NaN va a `BICHO.x`, de ahí a la posición de la
+cabeza, de ahí a `JUG.pitch` y de ahí a **la matriz de la cámara**. El resultado no es un mensaje en
+la consola: es que deja de dibujarse todo, en silencio. `window.__errs` estaba vacío. Lo delató la
+sonda, que devolvió `d: null` —porque `JSON.stringify(NaN)` es `null`— y no la pantalla.
+Quedó además una guarda: si la posición de la cabeza no es finita, no se toca el rumbo.
+
+#### Y UNA SONDA QUE SE PISABA A SÍ MISMA
+
+`__V.muere()` arrancaba la secuencia si no estaba corriendo. Cada foto que se quería sacar DURANTE la
+muerte empezaba una muerte nueva, así que las cuatro muestras daban `t: 0` y parecía que el reloj no
+avanzaba — cuando lo que pasaba era que la sonda lo reiniciaba. Con `'ver'` la sonda sólo mira. Es la
+tercera vez en este proyecto que la medición está mal antes que el juego.
+
+#### EL CAMELLO VA MÁS DESPACIO Y EN EL PISO TE ARRASTRÁS
+
+Embestía a **7,4** y acecha a 3,6; ahora **6,2** y 3,1. Con la pierna rota corriendo a 10,2 —y a 8,7
+de promedio contando las caídas— la ventaja pasa de un 17 % a un 40 %.
+
+Y `factorRoto()` devolvía **cero** mientras se está en el piso: cada tropiezo era un segundo y medio
+de pantalla que no responde, que no se lee como estar caído sino como que el juego se colgó, y encima
+con un camello viniendo. Ahora devuelve 0,30 y en el piso no se puede correr. Medido: **0,5 m en 0,4 s
+de juego, o sea 1,25 m/s** — era 0.
+
+#### LOS DOS PROPS 3D, Y EL PASO QUE HACE POSIBLE TODO LO DEMÁS
+
+La antorcha y el inflador: una imagen generada con `z_image` y pasada por `image_to_3d`. Tripo
+devuelve **30.000 triángulos y un JPEG de 2,5 MB por pieza**, o sea cuatro megas por un palo con un
+trapo.
+
+**LA TEXTURA SE HORNEA EN LOS VÉRTICES, Y ÉSE ES EL PASO QUE IMPORTA.** Decimando con la textura
+puesta, el simplificador tiene que respetar las costuras de UV y se planta: medido, 30.673 → **11.184
+triángulos con `-si` a cualquier valor entre 0,04 y 0,20**, o sea que el parámetro no hacía nada. Sin
+UV no hay costuras y baja hasta donde uno quiera. Quedaron en **2.889 y 2.781 triángulos y 50 KB cada
+uno**, que es lo que se pidió («low poly») y lo que corresponde a un objeto que se mira a cuarenta
+centímetros del ojo en un juego que dibuja a 446×206.
+
+**Y SE CONVIERTE DE sRGB A LINEAL AL MUESTREAR.** glTF trata `COLOR_0` como lineal y una textura de
+color como sRGB: copiando el píxel tal cual, todo sale lavado. Más una **desaturación del 42 % al
+hornear**, que no es corregir la foto — el post de este juego multiplica la saturación por 2,2, y sin
+eso el palo de la antorcha sale rojo fuego. Es la misma corrección que ya costó el cromo del auto.
+
+**NO SE USA `GLTFLoader`.** Lo que sale del horneado es un nodo, una malla, una primitiva y cuatro
+accesores con las vistas compactas: para eso alcanza un lector de cuarenta líneas. Bajar el cargador
+de three.js de un CDN sería una dependencia más que puede no llegar —este juego depende de que llegue
+`three` y de nada más— aparte de una entrada nueva en el importmap.
+
+**Y NO REEMPLAZAN NADA HASTA QUE LLEGAN.** El objeto dibujado por código se arma igual y sus piezas
+quedan marcadas con `userData.proc`; cuando la malla está decodificada se apagan y entra la de verdad.
+La llama de la antorcha y su luz **siguen siendo de código**, porque una llama no es geometría.
+
+**UN `const` LEÍDO EN SU ZONA MUERTA, POR SEXTA VEZ.** `PROPS.carga()` iba al lado de `cargaUI()`, que
+es el sitio temáticamente correcto — y que corre mientras se evalúa `e.js`, o sea antes de que exista
+`PROPS`, que es un `const` de `i.js`. Ni siquiera `typeof` lo salva: sobre una declaración en zona
+muerta, `typeof` **tira**. Pasó al arranque, después de `armaPanel()`.
+
+#### MEDIDO AL CERRAR
+
+Los cuatro botones del HUD en `contain` · `no-repeat` · fondo transparente, el de saltar de 78×78 con
+una sola flecha. Los dos props cargados —**2.889 y 2.781 triángulos**— con 2 y 10 piezas dibujadas por
+código apagadas. Arrastrarse en el piso: **1,25 m/s** (era 0). La muerte, jugada de punta a punta
+adentro de la cueva: el camello a 4,6 m al empezar, la cabeza llenando el cuadro a 1,1 s, los tres
+destellos, el negro, y la vida nueva en `avance 64,3 de 76,3` mirando a la boca, con la pierna rota,
+la viñeta encendida, la antorcha de vuelta en la mano y el camello en `embiste` a 10,5 m. Antes de la
+llave, alcanzarte deja `MODO` en `juego` y te manda al campamento. **0 NaN** y `window.__errs` vacío en
+las siete corridas. El HTML pasó de 1,25 a **1,41 MB**, y esos 160 KB son los dos props.
+
 ### Quincuagesimonovena vuelta (2026-08-30): **LEMI** — el menú de madera, el final que vuelve, y menos pixelado
 
 Pedido: *"el menú también cámbialo agrégale imágenes y botones UI, y esas cosas, también termina y

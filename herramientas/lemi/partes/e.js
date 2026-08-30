@@ -242,9 +242,17 @@ function ponHoja(){
   for (const k of ['hoja', 'tabla', 'tablaPri', 'cartel', 'marco', 'marcoV'])
     if (IMG[k]) document.documentElement.style.setProperty(
       '--' + k, 'url(' + IMG[k].src + ')');
+  /* LOS BOTONES VAN POR VARIABLE Y CLASE, no escribiendo `backgroundImage`.
+     Escribiéndolo directo, la propiedad entra en el atributo `style` y ahí
+     compite con la regla del CSS que le da el tamaño y la repetición; con la
+     variable, el CSS sigue mandando y lo único que la línea aporta es CUÁL es
+     la chapa. La clase avisa que ya la tiene puesta, que es lo que apaga el
+     círculo, el vidrio y el glifo del sistema. */
   for (const [id, k] of [['acCorre','bCorre'], ['acAgacha','bAgacha'],
                          ['acSalta','bSalta'], ['acUsar','bUsar']]){
-    if (IMG[k]) $(id).style.backgroundImage = 'url(' + IMG[k].src + ')';
+    if (!IMG[k]) continue;
+    $(id).style.setProperty('--spr', 'url(' + IMG[k].src + ')');
+    $(id).classList.add('conImg');
   }
 }
 function joyDibuja(){
@@ -318,8 +326,12 @@ function fisica(dt){
      responde, te caés, y ahí el camello recupera todo lo que habías ganado.
      La diferencia es de qué depende escapar: antes de nada, ahora de cuántas
      veces te trabás y de cuánto tardás en levantarte. */
+  /* Y EN EL PISO NO SE CORRE: `factorRoto()` ya baja la velocidad, pero si
+     además se tomara el valor de correr, arrastrarse iría al doble que
+     arrastrarse sin apretar nada. Lo que se arrastra es el cuerpo, no las
+     piernas. */
   const spBase = JUG.agacha ? VEL*0.42
-               : ROTO.on ? (corre ? 10.2 : 5.4)
+               : ROTO.on ? ((corre && ROTO.cae <= 0) ? 10.2 : 5.4)
                : (corre ? CORRE : VEL);
   const sp = spBase * (JUG.vuela ? 2.6 : 1) * factorRoto();
   AND.v = Math.hypot(vxAnt, vzAnt);

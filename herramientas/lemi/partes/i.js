@@ -332,6 +332,118 @@ function camasPaso(dt){
   CAMA.g.dia.gain.value   += ((1 - noche)*d - CAMA.g.dia.gain.value) * k;
 }
 
+/* ══════════════════════ LOS DOS PROPS 3D ══════════════════════
+   La antorcha y el inflador vienen de Higgsfield: una imagen generada y pasada
+   por `image_to_3d`, con la textura horneada en los vértices y decimada a unos
+   2.900 triángulos (`herramientas/lemi/hornear_props.py`).
+
+   NO SE USA `GLTFLoader`, Y NO ES POR AHORRAR. Lo que sale del horneado es un
+   nodo, una malla, una primitiva y cuatro accesores con las vistas compactas:
+   para eso alcanza un lector de cuarenta líneas. Bajar el cargador de three.js
+   de un CDN sería una dependencia más que puede no llegar —y este juego ya
+   depende de que llegue `three` y nada más—, aparte de una entrada nueva en el
+   importmap que el banco tendría que reescribir.
+
+   Y NO REEMPLAZAN NADA HASTA QUE LLEGAN. El objeto dibujado por código se arma
+   igual y sus piezas quedan marcadas con `userData.proc`; cuando la malla está
+   decodificada se apagan y entra la de verdad. Si el base64 estuviera roto se
+   juega con las de siempre, que es la misma regla que las nueve texturas de
+   RECREO y las once imágenes de la interfaz. */
+const _GLB_TIPO = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array,
+                    5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array };
+const _GLB_N = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+function leeGLB(b64){
+  const bin = atob(b64), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x46546C67) return null;   /* 'glTF' */
+  const total = dv.getUint32(8, true);
+  let off = 12, js = null, base = -1;
+  while (off < total){
+    const n = dv.getUint32(off, true), tipo = dv.getUint32(off + 4, true);
+    if (tipo === 0x4E4F534A)
+      js = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, off + 8, n)));
+    else if (tipo === 0x004E4942) base = off + 8;
+    off += 8 + n + ((4 - n % 4) % 4);
+  }
+  if (!js || base < 0 || !js.meshes || !js.meshes.length) return null;
+  const acc = (i) => {
+    const a = js.accessors[i], TA = _GLB_TIPO[a.componentType], n = _GLB_N[a.type];
+    const bv = js.bufferViews[a.bufferView];
+    const o = base + (bv.byteOffset || 0) + (a.byteOffset || 0);
+    /* UNA VISTA TIPADA EXIGE QUE EL DESPLAZAMIENTO SEA MÚLTIPLO DEL TAMAÑO del
+       elemento; si no, el constructor tira. El horneado alinea a cuatro, pero
+       un GLB ajeno puede no hacerlo, así que en ese caso se copia. */
+    const largo = a.count * n;
+    if (o % TA.BYTES_PER_ELEMENT)
+      return { d: new TA(buf.slice(o, o + largo * TA.BYTES_PER_ELEMENT)), n, norm: !!a.normalized };
+    return { d: new TA(buf, o, largo), n, norm: !!a.normalized };
+  };
+  const pr = js.meshes[0].primitives[0];
+  const g = new T.BufferGeometry();
+  const pos = acc(pr.attributes.POSITION);
+  g.setAttribute('position', new T.BufferAttribute(pos.d, 3));
+  if (pr.attributes.NORMAL != null){
+    const nr = acc(pr.attributes.NORMAL);
+    g.setAttribute('normal', new T.BufferAttribute(nr.d, 3, nr.norm));
+  }
+  if (pr.attributes.COLOR_0 != null){
+    const c = acc(pr.attributes.COLOR_0);
+    g.setAttribute('color', new T.BufferAttribute(c.d, c.n, c.norm));
+  }
+  if (pr.indices != null){
+    const ix = acc(pr.indices);
+    g.setIndex(new T.BufferAttribute(ix.d, 1));
+  }
+  if (!g.getAttribute('normal')) g.computeVertexNormals();
+  g.computeBoundingBox();
+  return g;
+}
+
+const PROPS = {
+  geo: {}, pend: [],
+  /* UN MATERIAL PARA LOS DOS, y plano: el color vive en los vértices, así que
+     lo único que el material aporta es cómo recibe la luz. `flatShading` es lo
+     que hace que dos mil novecientos triángulos se lean como low poly y no como
+     una malla suave mal decimada. */
+  mat: new T.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+  carga(){
+    if (typeof PROP_B64 === 'undefined') return;
+    for (const k of Object.keys(PROP_B64)){
+      try { const g = leeGLB(PROP_B64[k]); if (g) this.geo[k] = g; }
+      catch (e){ /* sin malla se juega con la dibujada por código */ }
+    }
+    for (const p of this.pend) this.aplica(p);
+    this.pend.length = 0;
+  },
+  /* `cen` es dónde va el CENTRO de la pieza en el espacio del grupo y `rot` la
+     gira alrededor de ese centro. Por eso la malla va dentro de un contenedor:
+     girándola directamente giraría alrededor de su propio origen, que después
+     del corrimiento no es el centro de nada. */
+  pon(g, cual, alto, cen, rot){
+    const p = { g, cual, alto, cen, rot };
+    if (this.geo[cual]) this.aplica(p); else this.pend.push(p);
+  },
+  aplica(p){
+    const geo = this.geo[p.cual];
+    if (!geo || !p.g) return;
+    const b = geo.boundingBox;
+    const k = p.alto / ((b.max.y - b.min.y) || 1);
+    const cont = new T.Group();
+    cont.position.set(p.cen[0], p.cen[1], p.cen[2]);
+    if (p.rot) cont.rotation.set(p.rot[0], p.rot[1], p.rot[2]);
+    const m = new T.Mesh(geo, this.mat);
+    m.scale.setScalar(k);
+    m.position.set(-(b.min.x + b.max.x) / 2 * k,
+                   -(b.min.y + b.max.y) / 2 * k,
+                   -(b.min.z + b.max.z) / 2 * k);
+    m.castShadow = true;
+    cont.add(m);
+    p.g.add(cont);
+    p.g.traverse(o => { if (o.userData && o.userData.proc) o.visible = false; });
+  }
+};
+
 /* ══════════════════════════ EL INFLADOR ══════════════════════════
    Una bomba de pie, de las de auto: base con dos pedales, cilindro, émbolo con
    manija en T, manómetro y la manguera enroscada. Se arma dos veces —una que
@@ -355,6 +467,7 @@ function armaInflador(e){
     m.position.set(x*e, y*e, z*e);
     if (rx || ry || rz) m.rotation.set(rx||0, ry||0, rz||0);
     m.scale.multiplyScalar(e);
+    m.userData.proc = true;      /* la malla generada la tapa cuando llega */
     g.add(m); return m;
   };
   /* LA BASE: dos pedales, que es lo que distingue una bomba de pie de un tubo */
@@ -385,7 +498,14 @@ function armaInflador(e){
   }
   const cur = new T.CatmullRomCurve3(pts);
   const man = new T.Mesh(new T.TubeGeometry(cur, 22, 0.011*e, 4, false), matMangue);
+  man.userData.proc = true;
   g.add(man);
+  /* LA MALLA GENERADA MIDE LO MISMO QUE LA DIBUJADA. El alto de la bomba de
+     código va de la base (0) a la manija (0,485), así que el prop se escala a
+     0,50 y se centra a media altura: si se pusiera «tamaño natural» sería otro
+     objeto y el que se levanta de la caja del auto no sería el que aparece en
+     la mano. */
+  PROPS.pon(g, 'inflador', 0.50*e, [0, 0.25*e, 0], null);
   return g;
 }
 
@@ -739,11 +859,19 @@ const MIS = {
     const palo = new T.Mesh(new T.CylinderGeometry(0.035, 0.05, 0.72, 5), matRamaM);
     palo.position.set(0, -0.06, 0);
     palo.rotation.set(0.30, 0, 0.22);
+    palo.userData.proc = true;
     g.add(palo);
     const tela = new T.Mesh(new T.CylinderGeometry(0.075, 0.062, 0.20, 6), matLona);
     tela.position.set(0.05, 0.26, -0.10);
     tela.rotation.set(0.30, 0, 0.22);
+    tela.userData.proc = true;
     g.add(tela);
+    /* LA MALLA GENERADA VA CON LA MISMA INCLINACIÓN Y EL MISMO EJE que el palo
+       dibujado, así que la llama —que sigue siendo de código, porque una llama
+       no es geometría sino un cono sin luz que late— cae donde tiene que caer.
+       Se centra un poco por debajo del trapo: la de Higgsfield trae el trapo
+       arriba y el mango abajo, igual que la de código. */
+    PROPS.pon(g, 'antorcha', 0.94, [0.02, 0.13, -0.05], [0.30, 0, 0.22]);
     for (let k = 0; k < 2; k++){
       const f = new T.Mesh(new T.ConeGeometry(0.09 - k*0.03, 0.30 - k*0.09, 5), matFuego2);
       f.position.set(0.06, 0.44 - k*0.03, -0.12);

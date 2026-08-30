@@ -70,6 +70,7 @@ const TXT = {
     aLona:'A piece of canvas, and one of the branches',
     aAntorcha:'Torch ready. Now the keys.',
     aCorre:'RUN!', aAlcanzo:'IT CAUGHT YOU! · back to camp',
+    aMuerte:'IT KILLED YOU · again, from the back of the cave',
     aVuelo:'Free flight', aSuelo:'Back on the ground',
     /* la historia */
     g0:'Four friends. An island on no map.',
@@ -126,6 +127,7 @@ const TXT = {
     aLona:'Un pedazo de lona, y una de las ramas',
     aAntorcha:'Antorcha lista. Ahora las llaves.',
     aCorre:'¡CORRÉ!', aAlcanzo:'¡TE ALCANZÓ! · volvés al campamento',
+    aMuerte:'TE MATÓ · otra vez, desde el fondo de la cueva',
     aVuelo:'Vuelo libre', aSuelo:'De vuelta al suelo',
     g0:'Cuatro amigos. Una isla que no figura en ningún mapa.',
     g1:'Levantaron las carpas y prendieron el fuego antes de que cayera el sol.',
@@ -181,6 +183,7 @@ const TXT = {
     aLona:'Um pedaço de lona, e um dos galhos',
     aAntorcha:'Tocha pronta. Agora as chaves.',
     aCorre:'CORRA!', aAlcanzo:'ELE TE PEGOU! · de volta ao acampamento',
+    aMuerte:'ELE TE MATOU · de novo, do fundo da caverna',
     aVuelo:'Voo livre', aSuelo:'De volta ao chão',
     g0:'Quatro amigos. Uma ilha que não está em nenhum mapa.',
     g1:'Montaram as barracas e acenderam o fogo antes do sol se pôr.',

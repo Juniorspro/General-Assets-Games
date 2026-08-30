@@ -673,11 +673,231 @@ function pasoRoto(dt){
     }
   }
 }
-/* cuánto se puede mover ahora: 0 mientras se está en el piso */
+/* CUÁNTO SE PUEDE MOVER AHORA. Estaba en CERO mientras se está en el piso, y
+   eso convertía cada tropiezo en un segundo y medio de pantalla que no responde
+   —que no se lee como estar caído, se lee como que el juego se colgó, y encima
+   con un camello viniendo—. Arrastrarse es lento pero es algo que uno hace:
+   0,30 de la velocidad de caminar son 1,6 m/s, o sea que en el segundo y medio
+   que dura la caída se ganan dos metros y medio en vez de ninguno. Y no se
+   puede correr en el piso: eso lo decide `fisica`, que mira `ROTO.cae`. */
 function factorRoto(){
   if (!ROTO.on) return 1;
-  if (ROTO.cae > 0) return 0;
+  if (ROTO.cae > 0) return 0.30;
   return 1;
+}
+
+/* ══════════════════════════ TE ALCANZA Y TE MATA ══════════════════════════
+   Durante la huida —o sea con `BICHO.caza` puesto— que el camello te toque deja
+   de ser un empujón y pasa a ser el final de esa vida. Y eso obliga a dos cosas
+   que van juntas:
+
+   1. HAY QUE VERLO. Antes te teletransportaba en el mismo cuadro: el único
+      momento del juego en que el antagonista está a dos metros no se llegaba a
+      mirar. Son 2,3 segundos en los que el juego te saca el control, te gira la
+      cabeza hacia él, se te viene encima y grita. Es lo mismo que hace el
+      screamer de RECREO y por la misma razón: un susto que dura un cuadro no es
+      un susto, es un parpadeo.
+   2. Y HAY QUE VOLVER A UN SITIO QUE TENGA SENTIDO. No al campamento —eso es la
+      isla de la mañana, o sea otro juego— sino al fondo de la cueva, con la
+      pierna rota, la viñeta puesta y el bicho detrás: exactamente el estado en
+      el que la escena de la llave te deja. Se vuelve a intentar la huida, que
+      es lo único que quedaba por jugar.
+
+   EL CAMELLO SE CONGELA CON `modo: 'quieto'`, que ya existía para la cinemática
+   de la llave: `pasoCamello` lo planta donde diga `BICHO.x/z` y no lo mueve.
+   Poniéndole una velocidad cero desde afuera habría que además impedir que la
+   lógica de persecución le reescriba el destino todos los cuadros. */
+const MUERTE = {
+  on: false, t: 0, dur: 2.30, yaw0: 0, off: 1.9, sat0: 0, antorcha: null, luz: null,
+  arranca(){
+    if (this.on) return;
+    this.on = true; this.t = 0;
+    MODO = 'muere';
+    $('hud').classList.remove('on');
+    $('pista').classList.remove('on');
+    $('muerte').classList.add('on');
+    this.yaw0 = JUG.yaw;
+    /* LA ANTORCHA SE GUARDA, como en la escena de la llave y por dos razones a
+       la vez: cuelga de la cámara, así que en un plano donde la cara del bicho
+       llena el cuadro queda una llama flotando delante de él; y es una luz
+       naranja a medio metro, o sea que a dos metros pinta al camello de naranja
+       y el post lo multiplica por 2,2 de saturación — medido en la captura, el
+       cuerpo salía como un rectángulo ROJO PURO. */
+    /* SE ESCONDEN LAS MALLAS Y SE DEJA LA LUZ. Apagando el grupo entero se
+       apaga también el `PointLight`, que cuelga de él — y adentro de la cueva
+       ésa es la ÚNICA luz que hay: medido en la captura, el screamer quedaba
+       siendo un bulto negro sobre fondo negro. Es el mismo error que en la
+       vuelta de Eco dejó al camello «en cuadro» y sin un solo píxel dibujado. */
+    this.antorcha = [];
+    if (MIS.antorchaMalla)
+      MIS.antorchaMalla.traverse(o => {
+        if (o.isMesh && o.visible){ o.visible = false; this.antorcha.push(o); }
+      });
+    /* Y UNA LUZ EN LA CARA, que es lo que hace un screamer. Va colgada de la
+       cámara y sube con la escena: encendida desde el primer cuadro quemaría el
+       pasillo entero antes de que el bicho llegue. */
+    /* CASI BLANCA Y NO CÁLIDA: la antorcha ya aporta un naranja fuerte, y dos
+       luces cálidas sobre un animal marrón lo dejan rojo — medido en la
+       captura, el camello salía anaranjado entero. */
+    this.luz = new T.PointLight(0xfff0e4, 0, 8.5, 1.7);
+    this.luz.position.set(0, 0.1, -0.5);
+    cam.add(this.luz);
+    escena.add(cam);
+    /* y la saturación baja: es la misma corrección que la cueva, por el mismo
+       motivo — con una sola luz de color, el x2,2 no separa nada, tiñe */
+    this.sat0 = postMat.uniforms.sat.value;
+    postMat.uniforms.sat.value = 1.20;
+    /* SE LO PLANTA DELANTE DE LA CARA Y NO DONDE ESTABA. Te alcanzó, o sea que
+       está a menos de 2,6 m, pero puede estar a un costado o a la espalda: el
+       plano tiene que empezar con el bicho EN EL CUADRO. El adelante de esta
+       cámara es (-sin yaw, -cos yaw). */
+    BICHO.modo = 'quieto';
+    BICHO.golpe = 0;
+    const fx = -Math.sin(JUG.yaw), fz = -Math.cos(JUG.yaw);
+    /* la colocación inicial es provisoria: mide el corrimiento de la cabeza y
+       de ahí en más `paso()` coloca contra ella */
+    BICHO.x = JUG.x + fx*4.6; BICHO.z = JUG.z + fz*4.6;
+    BICHO.ry = Math.atan2(-fx, -fz);      /* mirándote */
+    if (CAM3) CAM3.visible = true;
+    /* baja la cabeza hasta la altura de una persona: el cuello del camello está
+       a tres metros y medio, así que sin esto lo que llena el cuadro es el
+       pecho y la cara —que es lo que da miedo— queda fuera por arriba */
+    if (CAM3){ CAM3.userData.miraCuello = 0.86; CAM3.userData.miraCabeza = 0.30; }
+    /* CUÁNTO ADELANTA LA CABEZA AL CENTRO DEL BICHO, MEDIDO Y NO SUPUESTO. La
+       primera versión ponía el CENTRO a la distancia que quería y el resultado
+       era que la cámara terminaba entre las patas: el camello mide cuatro
+       metros de largo, así que con el centro a 1,15 m la cabeza queda MEDIO
+       METRO DETRÁS del ojo. Medido en la captura, lo que llenaba el cuadro eran
+       dos patas delanteras y la panza. Se coloca a mano una vez, se lee dónde
+       cayó la cabeza y de ahí sale el corrimiento; después todo se mide contra
+       la CABEZA, que es lo que el plano tiene que mostrar. */
+    if (CAM3 && CAM3.userData.cabeza){
+      CAM3.position.set(BICHO.x, pisoDe(BICHO.x, BICHO.z), BICHO.z);
+      CAM3.rotation.y = BICHO.ry;
+      animaCamello(CAM3, RELOJ.value, 0);
+      CAM3.updateMatrixWorld(true);
+      const w = new T.Vector3();
+      CAM3.userData.cabeza.getWorldPosition(w);
+      this.off = Math.max(0.6, Math.hypot(w.x - BICHO.x, w.z - BICHO.z));
+    }
+    son2('grito', 1.0);
+    JUG.vy = 0; JUG.aire = false; JUG.agacha = false;
+  },
+  paso(dt){
+    if (!this.on) return;
+    this.t += dt;
+    const t = this.t, k = cl(t / 1.35, 0, 1);
+    /* SE VIENE ENCIMA: LA CABEZA de 3,0 m a 1,25. Un screamer que se queda
+       quieto se lee a pantalla de derrota; lo que asusta es que crezca. Y la
+       distancia es a la cabeza, no al centro: por eso se le suma `off`. */
+    const d = lerp(3.0, 1.05, k*k);
+    const fx = -Math.sin(this.yaw0), fz = -Math.cos(this.yaw0);
+    BICHO.x = JUG.x + fx*(d + this.off); BICHO.z = JUG.z + fz*(d + this.off);
+    BICHO.ry = Math.atan2(-fx, -fz);
+    /* LA VISTA SE VA SOLA A LA CABEZA, y el ángulo se CALCULA: la cabeza está a
+       unos 3,2 m de alto y el ojo a 1,6, así que a metro y pico el cabeceo pasa
+       de medio radián. Clavado a ojo, el plano sale mirándole el pecho. */
+    if (CAM3 && CAM3.userData.cabeza){
+      CAM3.updateMatrixWorld(true);
+      const w = new T.Vector3();
+      CAM3.userData.cabeza.getWorldPosition(w);
+      /* UN NaN ACÁ NO SE VE COMO UN ERROR: se ve como una pantalla en blanco.
+         `JUG.pitch` alimenta la matriz de la cámara, así que un solo NaN deja de
+         dibujarse TODO y sin un mensaje en la consola. Ya pasó una vez en esta
+         misma vuelta, con `this.d0` leído después de haberlo borrado. */
+      if (Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z)){
+        const dh = Math.hypot(w.x - JUG.x, w.z - JUG.z) || 0.001;
+        const obj = Math.atan2(w.y - (JUG.y + OJO), dh);
+        JUG.pitch += (obj - JUG.pitch) * Math.min(1, dt*5.5);
+        JUG.yaw   += (Math.atan2(-(w.x-JUG.x), -(w.z-JUG.z)) - JUG.yaw) * Math.min(1, dt*5.5);
+      }
+    }
+    /* EL TEMBLOR VA POR `AND.golpe` Y POR EL RUMBO, que es lo que ya lee
+       `ponCam`: escribiendo `cam.position` acá se lo pisaría el cuadro
+       siguiente, porque `ponCam` corre después. */
+    const sac = 0.05 + k*0.10;
+    AND.golpe = Math.max(AND.golpe, (Math.random()*0.5+0.5) * sac);
+    JUG.yaw += (Math.random()-0.5) * sac * 0.22;
+    if (this.luz) this.luz.intensity = 0.8 + k*3.4;
+    /* la viñeta al máximo y el cuadro que se va a negro */
+    ROJO.on = true;
+    postMat.uniforms.rojo.value = Math.min(1, 0.55 + k*0.45);
+    /* TRES DESTELLOS Y RECIÉN AHÍ EL NEGRO. Un fundido suave se lee a
+       transición de video; los cortes se leen a golpe. */
+    let op = 0;
+    if (t > 1.25 && t < 1.62) op = (Math.floor((t-1.25)*17) % 2) ? 0.92 : 0.10;
+    else if (t >= 1.62) op = Math.min(1, (t - 1.62) / 0.30);
+    $('muerte').style.opacity = op.toFixed(3);
+    if (t >= this.dur) this.termina();
+  },
+  termina(){
+    this.on = false;
+    if (CAM3){ CAM3.userData.miraCuello = null; CAM3.userData.miraCabeza = null; }
+    postMat.uniforms.sat.value = this.sat0 || CFG.sat;
+    if (this.antorcha){ for (const o of this.antorcha) o.visible = true; this.antorcha = null; }
+    if (this.luz){ cam.remove(this.luz); this.luz.dispose && this.luz.dispose(); this.luz = null; }
+    reviveEnCueva();
+    MODO = 'juego';
+    $('hud').classList.add('on');
+    aviso(TX('aMuerte'));
+    /* el negro se suelta con una transición de CSS: acá sí, porque lo que se
+       está mostrando ya es el juego y lo que se quiere es abrir los ojos */
+    $('muerte').classList.add('sale');
+    $('muerte').style.opacity = '0';
+    setTimeout(() => { $('muerte').classList.remove('on');
+                       $('muerte').classList.remove('sale'); }, 900);
+  }
+};
+
+/* ── VOLVER A EMPEZAR LA HUIDA, DESDE EL FONDO DE LA CUEVA ──
+   Reconstruye el mismo estado que deja la escena de la llave. No reusa
+   `entraCueva()` porque ésa hace un fundido y planta al jugador en la BOCA, que
+   es el otro extremo del pasillo; y no reusa `LLAVE.termina()` porque ésa
+   además cierra una cinemática que acá no corrió.
+   OJO CON EL ORDEN: `esconde(true)` apaga el mundo de afuera y en esa lista
+   está el camello, así que encenderlo tiene que ir DESPUÉS — al revés, la cosa
+   que te persigue queda invisible y `pasoCamello` ni siquiera corre. */
+function reviveEnCueva(){
+  construyeCueva();
+  if (CUEVA_EJE){
+    if (!ENCUEVA){ ENCUEVA = true; esconde(true); }
+    /* DOCE METROS DEL FONDO, NO OCHO. Con ocho, el camello —que se planta a un
+       metro y medio de la pared— queda a seis metros y medio, y con la gracia
+       de 1,1 s eso son dos segundos hasta el primer golpe: medido en el banco,
+       un jugador quieto se comía la segunda muerte antes de terminar de
+       levantarse. Son los mismos diez metros y pico que la escena de la llave
+       tuvo que dar por exactamente la misma razón. */
+    const d = Math.max(4, CUEVA_LARGO - 12);
+    const p = puntoEje(d);
+    JUG.x = p.x; JUG.z = p.z; JUG.y = p.y;
+    /* mirando A LA BOCA: hacia donde el avance baja. El frente de esta cámara
+       es (-sin yaw, -cos yaw), así que para mirar en (-ex,-ez) el rumbo es
+       atan2(ex, ez). */
+    JUG.yaw = Math.atan2(p.ex, p.ez);
+  } else {
+    JUG.x = CAMPO.x + 3.4; JUG.z = CAMPO.z + 3.4; JUG.y = H(JUG.x, JUG.z);
+  }
+  JUG.pitch = -0.05; JUG.vy = 0; JUG.aire = false; JUG.agacha = false;
+  AND.golpe = 0; AND.ojo = OJO; AND.fov = 66;
+  /* la pierna sigue rota y la viñeta sigue puesta: es la misma huida */
+  rompePierna();
+  ROJO.on = true;
+  /* la antorcha vuelve a la mano: adentro es la única luz que hay */
+  if (MIS.antorchaMalla) MIS.antorchaMalla.visible = true;
+  /* Y EL CAMELLO SE REPLANTA DETRÁS, NO DONDE TE MATÓ. Dejándolo encima, el
+     primer cuadro de la vida nueva ya viene con el golpe puesto: es el mismo
+     defecto que la escena de la llave tuvo que corregir con diez metros y nueve
+     décimas de gracia. */
+  if (CUEVA_EJE){
+    const q = puntoEje(Math.max(4, CUEVA_LARGO - 1.5));
+    BICHO.x = q.x; BICHO.z = q.z;
+  } else {
+    BICHO.x = JUG.x + Math.sin(JUG.yaw)*11; BICHO.z = JUG.z + Math.cos(JUG.yaw)*11;
+  }
+  BICHO.modo = 'embiste'; BICHO.golpe = 1.1; BICHO.caza = true;
+  BICHO.tx = JUG.x; BICHO.tz = JUG.z;
+  if (CAM3) CAM3.visible = true;
+  postMat.uniforms.rojo.value = 0.55;
 }
 
 /* ══════════════════════════ SUBIRSE Y ESCAPAR ══════════════════════════

@@ -466,7 +466,12 @@ const BICHO = { x: 0, z: 0, ry: 0, v: 0, modo: 'ronda', tx: 0, tz: 0, t: 0, golp
                    ya no importa si es de día, te sigue igual. Hasta entonces
                    sólo sale de noche. */
                 caza: false };
-const RONDA = 2.2, ACECHA = 3.6, EMBISTE = 7.4;   /* correr son 12,8: se le gana */
+/* SE LE BAJÓ LA VELOCIDAD, y era un pedido directo: «que el camello no vaya tan
+   rápido». Embestía a 7,4 y acechaba a 3,6. Bajado a 6,2 y 3,1, con la pierna
+   rota corriendo a 10,2 —y a 8,7 de promedio contando las caídas— la ventaja
+   pasa de un 17 % a un 40 %: la huida se gana si se corre y se pierde si uno se
+   queda en el piso, que es lo que tiene que decidirla. */
+const RONDA = 2.0, ACECHA = 3.1, EMBISTE = 6.2;   /* correr son 12,8: se le gana */
 /* CUÁNTO MIDE DE ALTO, sumado de la propia jerarquía y no estimado: cuerpo
    2,05 + cuello 0,34 + cabeza 1,24 + media cabeza 0,18 + oreja 0,09. Lo usa la
    cinemática de la llave para saber cuánto tiene que levantar la vista. */
@@ -549,6 +554,13 @@ function pasoCamello(dt){
 
   /* te alcanzó */
   if (MODO === 'juego' && !PAUSA && BICHO.golpe <= 0 && dj < 2.6){
+    /* DESPUÉS DE LA LLAVE, ALCANZARTE TE MATA. Antes de eso no: el camello
+       ronda de noche por una isla en la que uno está juntando ramas, y morir
+       ahí obligaría a rehacer las cinco misiones por un encuentro que ni
+       siquiera es el nudo del juego. `BICHO.caza` es exactamente la marca de
+       que la huida ya empezó —la enciende la escena de la llave— así que es la
+       condición correcta y no una bandera nueva. */
+    if (BICHO.caza){ MUERTE.arranca(); return; }
     BICHO.golpe = 7.5;
     JUG.x = CAMPO.x + 3.4; JUG.z = CAMPO.z + 3.4; JUG.y = H(JUG.x, JUG.z);
     JUG.vy = 0; AND.golpe = 1.0;

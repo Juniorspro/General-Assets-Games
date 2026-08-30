@@ -67,10 +67,11 @@ function bucle(){
   else if (MODO === 'cine') INTRO.paso(dt);
   else if (MODO === 'llave') LLAVE.paso(dt);
   else if (MODO === 'final') FINAL.paso(dt);
+  else if (MODO === 'muere') MUERTE.paso(dt);
   else if (!PAUSA) fisica(dt);
-  /* la cinemática de la llave mueve la cámara ella misma con `JUG`, así que
-     necesita que `ponCam` corra igual aunque la física no */
-  if (MODO === 'llave') ponCam(dt);
+  /* la cinemática de la llave y la muerte mueven la cámara ellas mismas con
+     `JUG`, así que necesitan que `ponCam` corra igual aunque la física no */
+  if (MODO === 'llave' || MODO === 'muere') ponCam(dt);
   MIS.paso(dt);
   camasPaso(dt);
   pasoRoto(dt);
@@ -169,6 +170,14 @@ function bucle(){
   addEventListener('resize', () => { clearTimeout(window.__rz);
     window.__rz = setTimeout(medir, 240); });
   armaPanel();
+  /* LOS DOS PROPS 3D SE DECODIFICAN ACÁ Y NO AL LADO DE `cargaUI()`, que sería
+     el sitio temáticamente correcto. `cargaUI()` corre mientras se evalúa
+     `e.js`, o sea ANTES de que exista `PROPS` —que es un `const` de `i.js`— y
+     un `const` leído en su zona muerta no devuelve `undefined`: TIRA. Ni
+     siquiera `typeof` lo salva, que es la excepción que casi nadie recuerda.
+     Es la sexta vez en este proyecto que una declaración puesta donde queda
+     prolijo en vez de antes de su primer uso tira el módulo entero. */
+  PROPS.carga();
   const r = await construir(true);
   /* el HUD no va en el menú: se prende al entrar al juego */
   CINE.arranca();
@@ -710,14 +719,102 @@ function bucle(){
                      avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x, JUG.z).avance.toFixed(1) : null,
                      hondo: +hondoCueva().toFixed(2) }),
     /* el estado de la pierna rota */
+    /* fuerza un tropiezo: es la única forma de medir cuánto se avanza EN EL
+       PISO sin esperar a que la pierna falle sola */
+    tropieza: () => { ROTO.on = true; ROTO.cae = 1.35; return ROTO.cae; },
     /* rompe la pierna sin tener que jugar la cinemática de la llave: es lo que
        permite medir la huida sola, que es lo que se toca */
     rompe: () => { rompePierna(); ROJO.on = true;
       return { on: ROTO.on, prox: +ROTO.prox.toFixed(1) }; },
+    /* la muerte, fotografiable en cualquier instante: `MUERTE.paso` es una
+       función del tiempo igual que las cinemáticas, así que se puede saltar al
+       segundo que se quiera sin esperarlo. Devuelve dónde cae el camello en la
+       pantalla, que es lo único que prueba que el screamer se ve. */
+    /* CON 'ver' NO ARRANCA NADA, Y ESO HACE FALTA. La primera versión disparaba
+       la muerte en cuanto se la llamaba, así que cada foto que se quería sacar
+       DURANTE la secuencia empezaba una secuencia nueva: las cuatro muestras
+       daban `t: 0` y parecía que el reloj no corría, cuando lo que pasaba era
+       que la sonda lo reiniciaba. */
+    muere: (t) => {
+      if (t !== 'ver' && !MUERTE.on) MUERTE.arranca();
+      if (t != null && t !== 'ver'){ MUERTE.t = t; MUERTE.paso(0); }
+      ponCam(0); pasoCamello(0);
+      cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+      const caja = new T.Box3(), v = new T.Vector3();
+      let x0=9,x1=-9,y0=9,y1=-9, delante = true;
+      if (CAM3){
+        CAM3.updateMatrixWorld(true); caja.setFromObject(CAM3);
+        for (let i = 0; i < 8; i++){
+          v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+          v.applyMatrix4(cam.matrixWorldInverse);
+          if (v.z > -0.05) delante = false;
+          v.applyMatrix4(cam.projectionMatrix);
+          const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+      }
+      return { t: +MUERTE.t.toFixed(2), modo: MODO, on: MUERTE.on, reloj: +RELOJ.value.toFixed(1),
+               d: CAM3 ? +Math.hypot(CAM3.position.x-JUG.x, CAM3.position.z-JUG.z).toFixed(2) : null,
+               visible: CAM3 ? CAM3.visible : null, delante,
+               x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)],
+               rojo: +postMat.uniforms.rojo.value.toFixed(2),
+               velo: +($('muerte').style.opacity || 0) };
+    },
+    /* el estado de la vida nueva: dónde te deja, cómo está la pierna y dónde
+       quedó el camello */
+    revivio: () => ({ dentro: ENCUEVA, modo: MODO,
+      avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x, JUG.z).avance.toFixed(1) : null,
+      largo: +CUEVA_LARGO.toFixed(1),
+      roto: ROTO.on, rojoOn: ROJO.on,
+      antorcha: MIS.antorchaMalla ? MIS.antorchaMalla.visible : null,
+      bicho: BICHO.modo, caza: BICHO.caza,
+      dBicho: +Math.hypot(BICHO.x-JUG.x, BICHO.z-JUG.z).toFixed(1),
+      camVis: CAM3 ? CAM3.visible : null,
+      /* mirando a la boca: el avance tiene que BAJAR al caminar de frente */
+      haciaBoca: (ENCUEVA && CUEVA_EJE)
+        ? cercaEje(JUG.x - Math.sin(JUG.yaw), JUG.z - Math.cos(JUG.yaw)).avance
+          < cercaEje(JUG.x, JUG.z).avance : null }),
+    /* los dos props 3D: si decodificaron, cuántos triángulos tienen y cuánto
+       ocupa la antorcha en la pantalla —que es lo único que dice si «se ve
+       bien», porque cuelga de la cámara y a cuarenta centímetros del ojo
+       cualquier cosa con proporciones de verdad es gigante */
+    props: () => {
+      const r = { cargados: Object.keys(PROPS.geo), pend: PROPS.pend.length, tri: {} };
+      for (const k of Object.keys(PROPS.geo)){
+        const g = PROPS.geo[k];
+        r.tri[k] = g.index ? g.index.count/3 : g.getAttribute('position').count/3;
+      }
+      const a = MIS.antorchaMalla;
+      if (a){
+        cam.updateMatrixWorld(true);
+        cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+        a.updateMatrixWorld(true);
+        const caja = new T.Box3().setFromObject(a), v = new T.Vector3();
+        let x0=9,x1=-9,y0=9,y1=-9;
+        for (let i = 0; i < 8; i++){
+          v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+          v.applyMatrix4(cam.matrixWorldInverse).applyMatrix4(cam.projectionMatrix);
+          const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+        r.antorcha = { x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)] };
+        r.procApagadas = 0; r.mallas = 0;
+        a.traverse(o => { if (o.userData && o.userData.proc && !o.visible) r.procApagadas++;
+                          if (o.isMesh && o.material === PROPS.mat) r.mallas++; });
+      }
+      const inf = MIS.infladorMalla;
+      if (inf){ r.inflProc = 0; r.inflMallas = 0;
+        inf.traverse(o => { if (o.userData && o.userData.proc && !o.visible) r.inflProc++;
+                            if (o.isMesh && o.material === PROPS.mat) r.inflMallas++; }); }
+      return r;
+    },
     roto: () => ({ on: ROTO.on, cae: +ROTO.cae.toFixed(2), prox: +ROTO.prox.toFixed(1),
                    rojoOn: ROJO.on, rojo: +postMat.uniforms.rojo.value.toFixed(2) }),
     /* mete al jugador N metros adentro del pasillo, para poder fotografiarlo */
-    enCueva: (d, atras) => { if (!CUEVA_EJE) return 'sin cueva';
+    enCueva: (d, atras) => { construyeCueva();
+      if (!CUEVA_EJE) return 'sin cueva';
+      if (!ENCUEVA){ ENCUEVA = true; esconde(true); if (CAM3) CAM3.visible = true; }
       const p = puntoEje(cl(d, 0, CUEVA_LARGO));
       JUG.x = p.x; JUG.z = p.z; JUG.y = p.y;
       if (atras){ JUG.yaw = Math.atan2(p.ex, p.ez); JUG.pitch = -0.05;
