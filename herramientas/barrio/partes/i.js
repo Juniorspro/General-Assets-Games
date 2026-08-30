@@ -35,7 +35,8 @@ function bucle(){
   if (CONGELADO) dt = 0;
   RELOJ.value += dt;
 
-  if (MODO === 'menu') CINE.paso(dt);
+  if (MODO === 'cine') CINEMA.paso(dt);
+  else if (MODO === 'menu') CINE.paso(dt);
   else if (!PAUSA){ fisica(dt); ponCam(dt); }
 
   pasoCuadras();
@@ -65,6 +66,21 @@ function bucle(){
   ren.info.reset();
   ren.setRenderTarget(rt);
   ren.render(escena, cam);
+  /* ── LA SEGUNDA PASADA, SÓLO EN EL PLANO DE LA CARA ──
+     La MISMA cámara con las capas cambiadas: el mundo vive en la capa 0 y la
+     cabeza con sus tres luces en la 1, así que las dos pasadas comparten
+     encuadre por construcción y no hay dos cámaras que puedan desincronizarse.
+     Y se limpia con alfa CERO: lo que no es cabeza tiene que quedar
+     transparente, porque el shader compone por el alfa. */
+  if (postMat.uniforms.cara.value > 0.5){
+    const al = ren.getClearAlpha();
+    cam.layers.set(1);
+    ren.setClearAlpha(0);
+    ren.setRenderTarget(rtH);
+    ren.render(escena, cam);
+    ren.setClearAlpha(al);
+    cam.layers.set(0);
+  }
   ren.setRenderTarget(null);
   ren.render(postEsc, postCam);
 
@@ -268,6 +284,51 @@ async function arranca(){
                pctEncendido: +(enc/(w*h)*100).toFixed(1),
                franjas: fr.map((v,k) => +(v/cnt[k]).toFixed(1)), tam: [w, h] };
     },
+    /* ── LA CINEMÁTICA ──
+       `pon(t)` es puro, así que el banco puede fotografiar cualquier segundo sin
+       esperarlo. Y NO REARRANCA LA SECUENCIA si ya está corriendo: en LEMI una
+       sonda que llamaba a `muere()` en vez de mirarla devolvió `t: 0` en las
+       cuatro muestras y parecía que el reloj no avanzaba. */
+    cine: (t) => {
+      if (!CINEMA.on) CINEMA.arranca();
+      CINEMA.t = t; CINEMA.pon(t);
+      cam.updateMatrixWorld(true);
+      return JSON.stringify({ t, modo: MODO, plano: t < CINE_CORTE ? 'A' : 'B',
+        cara: postMat.uniforms.cara.value, dof: +postMat.uniforms.dof.value.toFixed(3),
+        fov: +cam.fov.toFixed(1),
+        cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+        neg: +($('cineNeg').style.opacity || 0) });
+    },
+    saltarCine: () => { CINEMA.saltar(); return MODO; },
+    /* dónde cae la cabeza en la pantalla, EN FRACCIÓN DEL CUADRO, y si está
+       delante de la cámara. Lo segundo no es un detalle: un punto que está
+       DETRÁS proyecta igual, dado vuelta, y cae dentro del rectángulo — ya dio
+       un «entero y centrado» falso en RECREO y otro en LEMI. */
+    caraEnCuadro: () => {
+      if (!CARA || !CARA.visible) return JSON.stringify({ visible: false });
+      CARA.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      const caj = new T.Box3().setFromObject(CARA);
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, delante = true;
+      for (let i = 0; i < 8; i++){
+        const v = new T.Vector3(i&1 ? caj.max.x : caj.min.x,
+                                i&2 ? caj.max.y : caj.min.y,
+                                i&4 ? caj.max.z : caj.min.z);
+        const l = v.clone().applyMatrix4(cam.matrixWorldInverse);
+        if (l.z > -0.02) delante = false;
+        v.project(cam);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x);
+        y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      const f = (a) => +((a + 1) / 2).toFixed(3);
+      return JSON.stringify({ visible: true, delante,
+        x: [f(x0), f(x1)], y: [f(y0), f(y1)],
+        altoPct: +(((y1 - y0) / 2) * 100).toFixed(1) });
+    },
+    /* los párpados, que es lo único que el plano B tiene que contar */
+    ojos: () => JSON.stringify({
+      sup: +OJO_I.sup.rotation.x.toFixed(3), inf: +OJO_I.inf.rotation.x.toFixed(3),
+      simetrico: Math.abs(OJO_I.sup.rotation.x - OJO_D.sup.rotation.x) < 1e-6,
+      mira: [+OJO_I.mir.rotation.x.toFixed(3), +OJO_I.mir.rotation.y.toFixed(3)] }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },
     verRayo: () => ({ t: +RAYO.t.toFixed(2), luz: +rayoLuz.intensity.toFixed(2),
                       velo: +($('rayo').style.opacity || 0) }),
@@ -346,7 +407,19 @@ function armaPanel(){
     audioIniciar();
     if (AUD && AUD.state === 'suspended') AUD.resume();
     await pantallaCompleta();
-    entraJuego();
+    /* LA CINEMÁTICA SE VE UNA VEZ SOLA POR SU CUENTA. La primera partida entra
+       por la escena; de ahí en más JUGAR es JUGAR, y quien la quiera ver de
+       nuevo la tiene en su propio botón. Una escena obligatoria repetida deja
+       de ser una escena y pasa a ser un peaje. */
+    let vista = false;
+    try { vista = localStorage.getItem('barrio_cine') === '1'; } catch(e){}
+    if (vista) entraJuego(); else CINEMA.arranca();
+  };
+  $('mCine').onclick = async () => {
+    audioIniciar();
+    if (AUD && AUD.state === 'suspended') AUD.resume();
+    await pantallaCompleta();
+    CINEMA.arranca();
   };
   $('bFull').onclick = () => {
     if (document.fullscreenElement) document.exitFullscreen(); else pantallaCompleta();
@@ -364,7 +437,12 @@ function armaPanel(){
   addEventListener('pointerdown', () => {
     audioIniciar();
     if (AUD && AUD.state === 'suspended') AUD.resume();
+    if (MODO === 'cine') CINEMA.saltar();
   }, { once: false });
+  addEventListener('keydown', (e) => {
+    if (MODO === 'cine' && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter'))
+      CINEMA.saltar();
+  });
 }
 
 window.__errs = [];

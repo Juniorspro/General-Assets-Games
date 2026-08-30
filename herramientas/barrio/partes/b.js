@@ -69,6 +69,13 @@ cam.rotation.order = 'YXZ';
    LINEAL — y sin convertirla, la noche sale casi negra con un tinte verdoso.
    Es la misma trampa que ya costó una medición en RECREO. */
 let rt = null;
+/* EL SEGUNDO DESTINO ES SÓLO PARA LA CABEZA DE LA CINEMÁTICA, y existe por una
+   razón concreta: el plano de la cara pide el fondo DESENFOCADO y la cara
+   NÍTIDA. Dibujando todo junto no hay forma de separarlos sin un mapa de
+   profundidad; con dos pasadas —el mundo en `rt` y la cabeza sola en `rtH`— la
+   composición es una línea de shader. Y la cabeza va al MISMO tamaño reducido,
+   porque a resolución completa sería lo único sin pixelar de la pantalla. */
+let rtH = null;
 const postMat = new T.ShaderMaterial({
   uniforms: {
     tex:  { value: null },
@@ -77,13 +84,42 @@ const postMat = new T.ShaderMaterial({
     t:    { value: 0 },
     /* el agua en el lente: no es una gota dibujada sino una ondulación muy
        suave del muestreo, que es lo que hace un vidrio mojado */
-    agua: { value: 0.55 }
+    agua: { value: 0.55 },
+    /* ── LO QUE SÓLO EXISTE EN LA CINEMÁTICA ──
+       `dof` es el desenfoque del fondo, `cara` dice si hay que componer encima
+       la pasada de la cabeza, `abe` es la aberración cromática del lente y
+       `asp` es la proporción del cuadro — sin ella el bokeh sale ovalado,
+       porque un desplazamiento en UV mide distinto en X que en Y.
+       LOS TRES ARRANCAN EN CERO Y EL JUEGO NO PAGA NADA: el `if` de abajo deja
+       una sola muestra por píxel mientras no haya cinemática. */
+    texH: { value: null },
+    dof:  { value: 0 }, cara: { value: 0 }, abe: { value: 0 }, asp: { value: 2 }
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: `
-    uniform sampler2D tex; uniform float sat, bri, con, pos, vig, grano, t, agua;
+    uniform sampler2D tex, texH;
+    uniform float sat, bri, con, pos, vig, grano, t, agua, dof, cara, abe, asp;
     varying vec2 vUv;
     float ruido(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    /* ── EL DESENFOQUE DEL FONDO ──
+       Trece muestras en espiral de ángulo áureo. La espiral no es coquetería:
+       con un anillo regular de doce puntos el desenfoque de un farol sale como
+       doce copias del farol en círculo, que es exactamente lo que se ve cuando
+       un desenfoque está mal muestreado. Repartidas por raíz del índice, la
+       densidad queda pareja en el disco.
+       Y VA CON EL MUESTREO NEAREST DEL DESTINO, que es lo correcto acá: este
+       juego se dibuja a 1/1,7 y se estira con NEAREST, así que un desenfoque
+       suave por interpolación sería lo ÚNICO liso del cuadro y se leería como
+       un elemento pegado encima. */
+    vec3 borrosa(vec2 uv, float r){
+      vec3 s = texture2D(tex, uv).rgb;
+      for (int i = 0; i < 12; i++){
+        float a = float(i) * 2.39996323;
+        float d = sqrt((float(i) + 0.5) / 12.0) * r;
+        s += texture2D(tex, uv + vec2(cos(a) / asp, sin(a)) * d).rgb;
+      }
+      return s / 13.0;
+    }
     void main(){
       vec2 uv = vUv;
       /* EL AGUA EN EL LENTE VA ANTES DE MUESTREAR, o sea que deforma la imagen
@@ -93,7 +129,29 @@ const postMat = new T.ShaderMaterial({
          render — más que eso ya no es un vidrio mojado, es estar borracho. */
       float on = sin(uv.y*38.0 + t*1.7) * sin(uv.x*23.0 - t*1.1);
       uv += vec2(on, on*0.6) * 0.0016 * agua;
-      vec3 c = texture2D(tex, uv).rgb;
+      vec2 dd = uv - 0.5;
+      float ka = abe * dot(dd, dd);
+      vec3 c;
+      if (dof > 0.002) c = borrosa(uv, dof * 0.017);
+      else if (ka > 0.0) {
+        /* LA ABERRACIÓN VA SÓLO DONDE HAY ALGO NÍTIDO. Un fondo ya desenfocado
+           no puede mostrar franjas de color en un borde que no tiene: hacerlo
+           igual cuesta veintiséis muestras más para no cambiar un píxel. */
+        c = texture2D(tex, uv).rgb;
+        c.r = texture2D(tex, uv + dd * ka).r;
+        c.b = texture2D(tex, uv - dd * ka).b;
+      } else c = texture2D(tex, uv).rgb;
+      /* LA CABEZA SE COMPONE ANTES DE LA GAMMA. Los dos destinos guardan color
+         LINEAL, así que mezclarlos después de convertir a sRGB daría un borde
+         más claro de lo que corresponde alrededor de la silueta. */
+      if (cara > 0.5){
+        vec4 h = texture2D(texH, uv);
+        if (h.a > 0.0){
+          float hr = texture2D(texH, uv + dd * ka).r;
+          float hb = texture2D(texH, uv - dd * ka).b;
+          c = mix(c, vec3(hr, h.g, hb), h.a);
+        }
+      }
       c = pow(max(c, 0.0), vec3(1.0/2.2));          /* lineal -> sRGB */
       c *= bri;
       c = (c - 0.5) * con + 0.5;
@@ -144,9 +202,16 @@ function medir(){
     depthBuffer: true, colorSpace: T.LinearSRGBColorSpace
   });
   postMat.uniforms.tex.value = rt.texture;
+  if (rtH) rtH.dispose();
+  rtH = new T.WebGLRenderTarget(rw, rh, {
+    minFilter: T.NearestFilter, magFilter: T.NearestFilter,
+    depthBuffer: true, colorSpace: T.LinearSRGBColorSpace
+  });
+  postMat.uniforms.texH.value = rtH.texture;
+  postMat.uniforms.asp.value = W / H2;
 }
 window.addEventListener('resize', () => { clearTimeout(window.__rz); window.__rz = setTimeout(medir, 220); });
 
 const RELOJ = { value: 0 };
-let MODO = 'menu';         /* menu · juego */
+let MODO = 'menu';         /* menu · cine · juego */
 let PAUSA = false;

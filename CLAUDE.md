@@ -97,12 +97,176 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   vecindario. Las siete texturas del suelo y de las casas están generadas con Higgsfield. Pixelación suave
   —el destino de render va a 1/1,7— y de noche: lo único que ilumina de verdad son los faroles.
   Hay relámpagos con su trueno a destiempo, linterna, y las tres calidades y los tres idiomas en el
-  menú. Vive partido en `herramientas/barrio/partes/` y se arma con
-  `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
+  menú. Se abre con una **cinemática de 27 segundos en dos planos**: primera persona bajando por la
+  calle, corte, y un primer plano de la cara con lente largo y el fondo desenfocado en el que abre los
+  ojos y los vuelve a cerrar mientras el cuerpo sigue caminando — **sin bandas negras**, y la cabeza
+  está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
+  con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Sexagésima cuarta vuelta (2026-08-30): **BARRIO** — la cinemática de dos planos, y la cara
+
+Pedido textual: *"agrega una cinematica sin los bordes negros de arriba y abajo ... haz que sea en
+primera persona y obviamente con movimientos de cámara súper realistas, también agrega filtros y
+efectos ... la Cinemática sea caminando después otra cámara enfrente del personaje con fov bajo bien en
+la cabeza y con el fondo difuminado de como abre los ojos y después lo cierra mientras tiene el
+balanceo de caminar"*.
+
+Veintisiete segundos, dos planos y un corte seco en el medio. Vive en
+`herramientas/barrio/partes/j.js`, que es archivo nuevo.
+
+#### SIN BANDAS NEGRAS, Y NO ES SÓLO OBEDECER
+
+Es lo primero que se pidió y encima es lo correcto acá: el juego ya se dibuja apaisado y girado dentro
+de un teléfono vertical, así que recortarlo más deja el barrio en una ranura. **Lo que hace que algo se
+lea a cinemática no es el recorte sino lo que sí está**: el desenfoque, la aberración del lente, el
+grano más alto, la viñeta cerrada y, sobre todo, que nadie tenga el control.
+
+Y el pedido cierra solo: los ojos que se abren y se cierran son **los del personaje, vistos de frente**,
+no un antifaz de pantalla. Un fundido con forma de párpado ES una banda negra.
+
+#### ES UNA FUNCIÓN DEL TIEMPO, Y POR ESO SE PUDO ARREGLAR
+
+`CINEMA.pon(t)` no es una máquina de estados: recibe el segundo y deja la cámara, la cabeza y los
+párpados. Por eso el banco fotografía el segundo 17,4 con `__V.cine(17.4)` sin esperarlo. Los siete
+defectos de abajo salieron todos de fotografiar un instante, no de leer el código.
+
+Que sea puro obliga a una cosa: **los giros de cabeza no pueden ser un resorte integrado**. Van con
+`smoothstep` entre una tabla de miradas —al frente, una casa a la izquierda, los cables, el charco, al
+frente— y eso ya tiene derivada cero en las dos puntas, o sea que arranca y termina frenando, que es
+justo lo que se ve de un resorte. Encima, **tres senos de frecuencias que no son múltiplos entre sí**
+sobre el rumbo y el cabeceo: sin eso, los tramos en los que mira al frente se leen a trípode que camina.
+El cabeceo es el ocho de siempre —vertical al doble de frecuencia que el lateral, porque hay dos pisadas
+por ciclo— y **la pisada va atada a la fase del paso**, la misma regla que el juego, así que el sonido y
+el balanceo no se pueden desincronizar.
+
+#### EL PLANO DE LA CARA: DOS DESTINOS Y UNA CÁMARA
+
+El fondo desenfocado y la cara nítida no se pueden separar en una sola pasada sin un mapa de
+profundidad. Van dos: el mundo a `rt` y **la cabeza sola a `rtH`**, y el shader compone por el alfa.
+Lo que hace que las dos pasadas no se puedan desalinear es que son **la misma cámara con las capas
+cambiadas** —el barrio en la 0 y la cabeza en la 1— en vez de dos cámaras que habría que mantener
+sincronizadas.
+
+**Y LAS TRES LUCES DE LA CARA TAMBIÉN VAN EN LA CAPA 1.** three.js junta las luces comparando sus capas
+contra las de la CÁMARA, así que una luz en la capa 1 no existe para el mundo: la cara se ilumina sola,
+sin que el farol de mentira le pinte las casas de atrás.
+
+El desenfoque son **trece muestras en espiral de ángulo áureo**. La espiral no es coquetería: con un
+anillo regular de doce puntos, un farol desenfocado sale como doce copias del farol en círculo. Y va con
+el muestreo NEAREST del destino, que acá es lo correcto — este juego se estira con NEAREST, así que un
+desenfoque suave por interpolación sería lo único liso del cuadro.
+
+**LA ABERRACIÓN CROMÁTICA VA SÓLO DONDE HAY ALGO NÍTIDO.** Un fondo ya desenfocado no puede mostrar
+franjas de color en un borde que no tiene: hacerlo igual cuesta veintiséis muestras más para no cambiar
+un píxel. Van dos taps sobre la cabeza, que es lo único con filo.
+
+#### LA CARA: SIETE DEFECTOS, Y SEIS SÓLO SE VEN MIRANDO
+
+1. **EL PLANO MOSTRABA LA NUCA.** La cara del modelo está sobre su +Z local y la cámara se planta en
+   `cabeza − adelante·dist`, así que el ángulo correcto es `yaw0` y no `yaw0 + π` — que es lo que
+   parecía «darlo vuelta». La sonda decía *cabeza en cuadro · delante de la cámara · 68 % del alto*, y
+   los tres eran ciertos.
+2. **LOS OJOS ESTABAN VEINTIDÓS MILÍMETROS ADENTRO DE LA CABEZA.** Y ésta es la regla que ordena todo lo
+   demás: **una cara hecha de bultos convexos no se compone poniendo cada pieza donde va, se compone
+   contra la SUPERFICIE DEL CRÁNEO**, porque lo que quede por detrás no se ve — acá no hay cuenca
+   excavada. Lo que se veía en la captura eran los pómulos, que sí sobresalían dos centímetros. El
+   cráneo se acható de frente y cada pieza lleva su cuenta: el ojo asoma 2,7 mm, el pómulo 2,7, la ceja
+   4,5 y la nariz veinte.
+3. **EL PELO TAPABA MEDIA CARA.** Un casquete de esfera cortado en 0,60π baja **dieciocho grados por
+   debajo del ecuador**: la línea del pelo caía por debajo de los ojos. En 0,40π el nacimiento queda en
+   y 0,051, justo encima de la ceja, y atrás va otra pieza porque si no la nuca queda pelada.
+4. **LAS CEJAS ERAN UNA SOLA BARRA.** Cuatro coma ocho centímetros de ancho puestas a ±3,1 se pisan en
+   el medio: con el flequillo justo encima, la frente quedaba entre dos travesaños negros paralelos.
+5. **EL SIGNO DE LOS PÁRPADOS ESTABA AL REVÉS.** El casquete de arriba cubre el hemisferio de su polo, y
+   girándolo un ángulo `a` sobre X el borde queda `a` radianes POR DEBAJO del eje de la pupila — o sea
+   que cualquier `a` positivo la tapa. Con el «abierto» escrito en +0,30, los dos párpados estaban
+   cerrados siempre.
+6. **Y AUN CERRADOS, EL IRIS LOS ATRAVESABA.** Éste es el que hacía que cerrar los ojos no se viera. El
+   iris estaba en z 0,0097 con medio grosor 0,0049, o sea que llegaba a 0,0146: **por fuera del párpado,
+   que mide 0,0142, y hasta por fuera del propio globo, que mide 0,0125.** Ampliadas al lado, la foto
+   del ojo cerrado y la del abierto eran idénticas. Los dos discos van aplastados y por dentro del globo.
+7. **ABIERTO ES UNA ALMENDRA, NO UN CÍRCULO.** El casquete que asoma del cráneo es un disco de dieciséis
+   milímetros; con los párpados apenas tocándolo el ojo salía redondo, o sea saltón. En ±0,23 los bordes
+   quedan a trece grados del eje y queda una franja de dieciséis por cinco y medio.
+
+#### LA LUZ: EL FAROL ELIGE EL LADO, EL PLANO ELIGE EL ÁNGULO
+
+Primero puse la clave **sobre la recta al poste de verdad**, con el argumento de que la sombra tiene que
+caer del lado del farol que se ve en el fondo. El argumento sigue siendo bueno y el resultado era malo:
+el farol más cercano está adelante y arriba, o sea **detrás de la cámara**, así que la luz terminaba casi
+en el eje del lente — y una luz frontal NO MODELA. Medido en la ampliación: cara plana, sin sombra de
+nariz, sin ceja y sin pómulo.
+
+Ahora el farol decide **lo único que el ojo puede comprobar contra el fondo** —de qué lado viene la luz—
+y el ángulo lo pone el plano: cuarenta grados de costado y treinta y cinco de alto, que es la clave de
+siempre. Más un contra frío del lado contrario, que es lo que separa la silueta del fondo desenfocado
+—la lección que en LEMI costó una vuelta con el screamer adentro de la cueva— y un relleno hemisférico
+que **no puede ser negro abajo**, porque si no el mentón y el cuello reciben cero.
+
+#### LA GOTA DE CERCA ERA UNA TABLA BLANCA CRUZANDO LA CARA
+
+La lluvia del juego se apaga por debajo de los setenta centímetros, que es lo correcto para primera
+persona; pero en este plano la cabeza está justo a setenta, o sea en la franja apagada, y una cara bajo
+la lluvia sin una gota pasándole por delante no está bajo la lluvia. Va otra nube, chica y en la capa 1.
+Y **la primera versión copió los tamaños de la del juego**: a sesenta centímetros del lente y con 26
+grados de campo, el cuadro mide veintiocho centímetros de alto, así que una tira de dieciséis
+centímetros por dos de ancho sale de **doscientos treinta píxeles por treinta** — medido en la captura,
+tapaba media frente. Con 4,5 cm de largo y 3 mm de ancho quedan sesenta píxeles por cuatro, que es una
+gota.
+
+#### LA CÁMARA VA MEDIO ENGANCHADA, Y ESO ES EL PEDIDO
+
+Enganchada del todo a la cabeza, la cara queda clavada en el cuadro y el balanceo no se ve en ninguna
+parte: se ve el fondo moviéndose y la cabeza quieta, que es el error clásico de un plano así. Siguiendo
+**el 66 % del cabeceo**, en la cara queda un tercio de residuo —que es lo que se mira— y el fondo se
+mueve entero.
+
+Y **se apunta un poco por debajo de los ojos**: apuntando justo a ellos quedan clavados en el medio del
+cuadro, que es donde no van, y medido la coronilla tocaba el borde de arriba.
+
+#### DÓNDE ARRANCA LA CAMINATA, QUE TAMBIÉN ES DEL PLANO DE LA CARA
+
+En el plano B la cámara mira **hacia atrás**, así que el fondo desenfocado es la cuadra que acaba de
+pasar. Arrancando a dieciséis metros del cruce, la cara caía con la **esquina a seis metros por detrás
+de la cabeza** — y el flanco de una casa de esquina, a fov 26, ocupa casi cincuenta grados: en la
+captura, una tapia negra detrás del personaje y ni un punto de luz. Arrancando **tres metros antes del
+cruce** se lo cruza en el segundo dos y para cuando empieza el plano B la esquina quedó a dieciséis
+metros: el fondo es la calle entera con sus faroles, que desenfocados son las manchas que un lente largo
+tiene que dar.
+
+#### LO QUE SE FUNDE Y LO QUE NO
+
+La cabeza son treinta y cinco piezas y **sólo se mueven doce**: los dos globos, los cuatro párpados y los
+cuatro discos del iris. Todo lo demás está clavado, así que va por `fundir()` —la misma función que junta
+las doscientas piezas de una cuadra— y quedan cinco mallas en vez de veintitrés. Medido: el plano B pasó
+de **236 a 217 llamadas de dibujo**.
+
+#### Y SE PUEDE SALTEAR, CON MEDIO SEGUNDO DE GRACIA
+
+Una cinemática obligatoria que se ve una vez es una escena; vista cinco veces es un peaje — la lección de
+POMPOM. Se ve sola la primera vez que se toca JUGAR y después queda en su propio botón. El toque que la
+abre es un `click` y el que la saltea un `pointerdown`: sin la guarda de 0,55 s, un doble toque sobre
+JUGAR —que en un teléfono pasa todo el tiempo— la arranca y la saltea en el mismo gesto.
+
+**Y SE ENTRA AL JUEGO DONDE TERMINÓ LA ESCENA**, mirando para el mismo lado. Devolviendo al jugador a la
+esquina de siempre, el último cuadro de la cinemática y el primero del juego son dos sitios distintos y
+el corte se lee a error.
+
+#### MEDIDO AL CERRAR
+
+Los dos planos fotografiados instante por instante: entrada desde negro con el desenfoque que se acomoda,
+la casa, los cables, el charco, el corte, y la cara **en cuadro y delante de la cámara** en los cuatro
+tiempos. Ojos: cerrados en el segundo 15,4 (0,24 / −0,08), abiertos en el 20,5 (−0,23 / +0,23), **los dos
+iguales hasta el último decimal** — no pueden bizquear. Costo: **225 llamadas de dibujo en el plano A y
+217 en el B**, contando las dos pasadas. La escena termina sola en `juego` en x 47,9, que es exactamente
+donde terminó la caminata; el HUD vuelve **sin un solo solapamiento** y desde ahí se corren 67,3 m con
+**0 cuadros dentro de una casa**. Saltear también deja `juego`. Los dos textos nuevos en los tres
+idiomas. **0 NaN** y `window.__errs` vacío en las nueve corridas. El HTML pasó de 287 KB a **333 KB**, y
+no entró un solo asset: la cabeza son cajas y esferas.
 
 ### Sexagésima tercera vuelta (2026-08-30): **BARRIO** — la vuelta de afuera, las casas de verdad y las cercas de piquetes
 

@@ -153,7 +153,11 @@ function pausa(v){
   }
 }
 let T0JUEGO = 0;
-function entraJuego(){
+/* `desde` lo manda la cinemática: el juego arranca EXACTAMENTE donde terminó la
+   escena y mirando para el mismo lado. Devolviendo al jugador a la esquina de
+   siempre, el último cuadro de la escena y el primero del juego son dos sitios
+   distintos y el corte se lee a error y no a corte. */
+function entraJuego(desde){
   MODO = 'juego';
   $('menu').classList.remove('on');
   $('hud').classList.add('on');
@@ -162,10 +166,11 @@ function entraJuego(){
      de una cuadra, el primer cuadro es una cerca a dos metros; desde la esquina
      lo que se ve son doscientos metros de faroles perdiéndose en la niebla, que
      es la imagen que este barrio tiene para dar. */
-  JUG.x = EJES[0]; JUG.z = EJES[0];
+  JUG.x = desde ? desde.x : EJES[0];
+  JUG.z = desde ? desde.z : EJES[0];
   JUG.y = alturaSuelo(JUG.x, JUG.z);
   JUG.vx = JUG.vz = 0;
-  JUG.yaw = Math.PI;              /* mirando hacia +Z, o sea calle adentro */
+  JUG.yaw = desde ? desde.yaw : Math.PI;   /* sin `desde`, hacia +Z: calle adentro */
   JUG.pitch = -0.02;
   AND.ojo = OJO; AND.fase = 0; AND.fov = 70;
   cam.fov = 70; cam.updateProjectionMatrix();
@@ -175,6 +180,8 @@ function entraJuego(){
 function vuelveMenu(){
   MODO = 'menu';
   pausa(false);
+  CINEMA.limpia();
+  $('cineNeg').classList.remove('on');
   $('hud').classList.remove('on');
   $('menu').classList.add('on');
   ponLinterna(false);

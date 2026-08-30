@@ -15,6 +15,7 @@ const TXT = {
     cLuces:'Wiring the streetlights…', cLluvia:'Bringing the rain…',
     cListo:'Ready',
     mSub:'five by five blocks · 3 am', mJugar:'▶ Walk',
+    mCine:'Watch the opening', cSalta:'tap to skip',
     mIdioma:'LANGUAGE', mGraf:'GRAPHICS', gBaja:'LOW', gMedia:'MED', gAlta:'HIGH',
     mHist:'Three in the morning and it will not stop raining. '+
           'Twenty-five blocks, every window dark, and the streetlights buzzing. '+
@@ -46,6 +47,7 @@ const TXT = {
     cLuces:'Cableando los faroles…', cLluvia:'Trayendo la lluvia…',
     cListo:'Listo',
     mSub:'cinco por cinco cuadras · 3 de la mañana', mJugar:'▶ Caminar',
+    mCine:'Ver la cinemática', cSalta:'tocá para saltear',
     mIdioma:'IDIOMA', mGraf:'GRÁFICOS', gBaja:'BAJA', gMedia:'MEDIA', gAlta:'ALTA',
     mHist:'Las tres de la mañana y no para de llover. '+
           'Veinticinco cuadras, todas las ventanas apagadas y los faroles zumbando. '+
@@ -74,6 +76,7 @@ const TXT = {
     cLuces:'Ligando os postes…', cLluvia:'Trazendo a chuva…',
     cListo:'Pronto',
     mSub:'cinco por cinco quarteirões · 3 da manhã', mJugar:'▶ Caminhar',
+    mCine:'Ver a abertura', cSalta:'toque para pular',
     mIdioma:'IDIOMA', mGraf:'GRÁFICOS', gBaja:'BAIXA', gMedia:'MÉDIA', gAlta:'ALTA',
     mHist:'Três da manhã e não para de chover. '+
           'Vinte e cinco quarteirões, todas as janelas apagadas e os postes zumbindo. '+
