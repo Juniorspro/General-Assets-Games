@@ -69,14 +69,15 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
-- **`Lemi.html` es "LEMI"** (~630 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
+- **`Lemi.html` es "LEMI"** (~690 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
   mundo entero es procedural y no tiene un solo asset). El séptimo juego. Isla pixelada de 660 m de
   lado que se dibuja sola con ruido: terreno, mar, bosque, nubes, cuatro sitios —campamento, mojón,
   círculo de piedras y arco de costa— y una **cueva excavada en la propia función de altura**, con su
   ladera detrás. **Sos Lemi**: viniste a acampar con tres amigos a una isla que no está en ningún
-  mapa. Se abre con una **cinemática de 31 s en cuatro tiempos** —los cuatro en la fogata al
-  atardecer, Lemi que oye un ruido y se para, se van a dormir, y Lemi que se despierta solo con un
-  rastro de sangre saliendo del campamento— y de ahí arranca el día. **Cinco misiones en orden**:
+  mapa. Está en **inglés, castellano y portugués**, y el idioma se elige antes que nada. Se abre con una
+  **cinemática de 38 s en seis tiempos** —llegan al claro, arman las carpas y prenden la fogata, los
+  cuatro sentados al atardecer, Lemi que oye un ruido y se para, se van a dormir, y Lemi que se
+  despierta solo con un rastro de sangre saliendo del campamento— y de ahí arranca el día. **Cinco misiones en orden**:
   juntar 5 ramas · buscar el inflador en la camioneta y agacharse a inflar la rueda pinchada (**un
   minijuego de siete golpes** con un bloque que se angosta de 22 % a 9 %) · seguir el rastro hasta la
   cueva, que no te deja pasar · armar una antorcha (rama + lona de una carpa + el encendedor del
@@ -89,6 +90,163 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Quincuagesimosexta vuelta (2026-08-30): **LEMI** — tres idiomas, dos escenas nuevas, el inflador y la llave rehecha
+
+Pedido: *"la animación de agarrando la llave re nada que ver, también ahí nunca más se tiene que hacer
+de día debe ser programado, también debe haber un modelo 3D de inflador, también selector de idiomas
+antes de empezar a jugar, también te faltó el que llegaban al campamento y después comenzaban a armar
+todo, también están mal sentados, y falta mejores animaciones y pixelacion en 3-4 mejor, también todos
+los sonidos generados por IA de Rezona lab, fíjate que puedo hacer y por qué no anda"*.
+
+#### POR QUÉ NO ANDABA REZONA: DOS COSAS, Y NINGUNA ERA DEL JUEGO
+
+1. **La entrada del MCP apuntaba a una URL que no es un MCP.** En `.mcp.json` estaba
+   `rezona-lab → https://lab.rezona.ai/mcp`. Medido: un `GET` ahí devuelve **200 con
+   `content-type: text/html`** —la página web— y el `POST` que hace el cliente devuelve **405 de
+   nginx**. Probadas también `/api/mcp`, `/mcp/`, `/sse` y `/mcp/sse`: las cuatro, 405. El transporte
+   que sí existe es el paquete de npm en modo stdio.
+2. **La cola de generación está parada, y no por falta de lugares.** El tope son **12 en vuelo**, y las
+   8 de la vuelta anterior siguen ahí. Pero lo que importa es lo otro: **cuatro sonidos enviados con la
+   sesión nueva y sana quedaron igual de trabados**, en `pending` con `progress: null` cuarenta minutos
+   después. O sea que liberar lugares no arreglaría nada. Y el tope es **por cuenta y no por proyecto**:
+   comprobado creando un proyecto nuevo, que da el mismo error. **No hay forma de cancelar**: el cliente
+   tiene exactamente cuatro rutas —`/api/projects/{id}`, `/versions`, `/generations`,
+   `/rezona/publish`— más `/api/generations/status`, todas POST, y ninguna cancela.
+
+#### LOS TRES IDIOMAS, Y LA PANTALLA VA ANTES DEL MENÚ
+
+Elegir idioma dentro de un menú ya escrito en un idioma que no entendés no sirve: para cuando lo
+encontrás ya leíste todo lo demás sin entenderlo. La isla se siembra mientras tanto, que son segundos
+que no dependen de qué idioma se elija.
+
+**Las misiones y el guion guardan la CLAVE y no el texto.** Con el texto ya resuelto adentro, la lista
+se arma una sola vez al empezar y cambiar de idioma en medio de la partida deja el panel en el idioma
+viejo hasta la misión siguiente. Es la misma corrección que en Z Force costó 107 claves.
+
+**Y probé meter la pantalla adentro de `#escenario` para que girara con el menú: no se ve.**
+`#escenario` lleva un `transform`, y un `transform` crea contexto de apilado, así que el z-index 95 de
+adentro **no le gana** al 90 de `#carga`, que está afuera. Queda afuera y sin girar, que además es
+coherente con la pantalla de carga que viene justo antes.
+
+#### LA CINEMÁTICA DE LA LLAVE: EL PROBLEMA ERA EL ENCUADRE, NO LA MANO
+
+Eran dos antebrazos cuadrados subiendo y bajando juntos. Se rehizo entero —muñeca con pivote, palma,
+cuatro dedos y pulgar, cada uno con su nudillo; los dedos se abren mientras la mano llega y se cierran
+**recién cuando llegó**, que con una sola curva se cerraban en el aire— y aun así seguía sin leerse.
+
+**La proporción estaba mal:** antebrazo 0,26 y mano entera 0,10, cuando una mano es **dos tercios** del
+antebrazo. Por eso se leían a postes.
+
+**Y aun corregida no alcanzaba.** Mirada desde arriba, una mano de cajas a cuarenta píxeles **es** una
+caja. Probé cuatro encuadres del agarre a ras del suelo y ninguno se leía; uno de ellos —girar los dos
+brazos hacia adentro para que convergieran— midió **peor**: con medio radián de guiñada la palma se
+despega del antebrazo y las dos piezas se leen como bloques sueltos. A esta resolución lo único que se
+lee es el **contorno**, y un contorno partido no se lee.
+
+Lo que funciona es lo que hacen todos los juegos en primera persona: **agarrar abajo, donde no importa
+que se vea poco, y LEVANTAR el objeto hasta el ojo**. Medido, la llave queda en x 0,48–0,67 e
+y 0,24–0,56.
+
+Tres cosas más que salieron de mirar la captura:
+- **La antorcha tapaba el plano.** Su llama es amarillo puro sin luz y quedaba delante de la mano, que
+  salía en silueta. Se guarda durante la escena — y encima tiene sentido: para juntar algo con las dos
+  manos hay que soltar lo que llevabas.
+- **La luz de relleno quemaba las manos.** Pegada a la cámara, lo que está a cuarenta centímetros
+  recibe **dieciséis veces** más que lo que está a seis metros y medio: los dos brazos salían blancos
+  puros. Corrida dos metros adelante, la relación cae a 2,7.
+- **Y el camello volvió a salir con un tronco cruzándolo.** El rayo que elige el rumbo era **uno solo,
+  por el centro**, y un tronco al costado no descarta la dirección. Van tres, separados el ancho del
+  animal.
+
+#### ESTABAN SENTADOS EN EL AIRE, Y ERAN DOS LISTAS
+
+Los troncos a radio 3,5 en los ángulos 0,50 · 2,59 · 4,69; la gente a radio 3,4 en 5,55 · 3,62 · 4,58 ·
+0,28. **Ninguno coincidía.** Dos listas que describen la misma cosa y que nadie mantiene juntas terminan
+así siempre. Ahora el tronco se construye y en el mismo paso deja anotado dónde se sienta uno encima,
+con la altura de **su** tapa. Cuatro asientos en tres troncos: el primero lleva dos, porque un cuarto
+tronco taparía el hueco por donde se entra al círculo.
+
+Y la pose salía del tanteo: muslo −1,42 y rodilla +1,05 suman −0,37, o sea **la pantorrilla 21° hacia
+adelante**, que es alguien resbalándose. Sentarse es muslo horizontal (−π/2) y pantorrilla a plomo
+(+π/2), escrito como la cuenta y no como el número.
+
+#### LAS DOS ESCENAS QUE FALTABAN
+
+La apertura pasa de cuatro tiempos a seis y de 31 a 38 segundos: **llegan** al claro con el sitio
+todavía pelado —sin carpas y sin fuego, que es lo que hace que la siguiente se lea como que lo armaron
+ellos— y **arman todo**, dos poniendo troncos hasta prender la fogata y dos levantando las carpas, que
+van saliendo del piso una por una. Cada uno hace **una** cosa y se queda en su sitio: cuatro personas
+yendo y viniendo se leen a caos.
+
+**Los tiempos pasan a una tabla.** Estaban como números sueltos repartidos por toda la función —el sol
+miraba 12, el fuego 9 y 22,5, la noche 12 y 22,5— y agregar una escena al principio obligaba a
+encontrarlos todos.
+
+**Y el parpadeo del fuego pisaba el apagado.** Esa línea corre todos los cuadros y escribe la intensidad
+entera, así que apagar la fogata desde la cinemática no servía de nada: se volvía a prender al cuadro
+siguiente. `FUEGO_ON` decide si hay fuego; el parpadeo sólo lo hace latir.
+
+**La cámara de la llegada caía DENTRO de la camioneta** —el plano salía todo rojo— porque estaba sobre
+la misma línea por la que vienen. Va al costado, y mira el punto que sale de la misma cuenta que los
+coloca. Medido: **4 de 4 en el cuadro** en las cinco escenas en que están, y 0 de 4 en la mañana.
+
+#### LA NOCHE SE CLAVA, Y EL PIXELADO SUBE A 3
+
+Después de la llave el reloj deja de correr y la hora baja hasta medianoche cerrada y se queda: con el
+ciclo andando, a los pocos minutos amanecía y la persecución quedaba a pleno sol sobre pasto verde, o
+sea lo contrario de lo que la escena acaba de plantar. Baja en unos segundos y no de golpe.
+
+`CFG.pix` de 2 a 3: el destino de render pasa de 446×206 a **298×138**. Comparados los tres al lado, en
+2 se lee a «3D con poco filtro» y en 4 el bosque del fondo se empasta y las copas dejan de contarse.
+
+#### LAS ANIMACIONES, Y LA SONDA QUE LAS PRUEBA
+
+El ritmo de la caminata sale de la velocidad y la zancada (`ω = π·v/zancada`). Estaba en
+`t*(2,4 + v*1,2)*2` con `v` valiendo 0,55 o 0,7 —un número que no era la velocidad de nada— así que los
+pies patinaban, que es el mismo defecto que en RECREO tenía a Baldi a 2,7 metros por paso. Más:
+basculación de pelvis, tronco girando al revés que la cadera, cabeza que compensa el rebote, cambio de
+peso en la pose quieta, y respiración corta y rápida en la de alerta —que con `k` en 1 no movía
+**nada**, porque todos los términos vivos iban multiplicados por `(1−k)`—.
+
+| | pie (z) | mano | cabeza |
+|---|---|---|---|
+| camina 1,65 m/s | 0,343 | 0,19 | 0,044 |
+| camina 1,20 | 0,295 | 0,16 | 0,044 |
+| quieto | 0,038 | 0,053 | 0,040 |
+| leña | 0 | 0,103 | 0,018 |
+| sentado | 0,027 | 0,061 | 0,033 |
+| alerta | 0 | 0,014 | 0,027 |
+
+**Y la sonda tuvo tres defectos propios que valen más que los números:**
+- **Los centinelas del mínimo estaban en ±9 y la isla llega a 22 m de altura**, así que
+  `Math.min(9, 22.4)` devuelve 9 para siempre: un pie que se mueve tres centímetros medía **13,44 m**.
+  Un centinela que puede caer dentro del rango de los datos no es un centinela.
+- **La ventana era de 2 s y las cosas lentas no entraban:** el cambio de peso dura quince segundos.
+  Decía «no se mueve» sobre movimientos que sí están.
+- **Medir el PIVOTE del cuello no ve el giro de la cabeza**, porque girar un pivote no mueve su propio
+  origen. Y por lo mismo, el giro en Y que tenía la pose de la leña movía la cabeza exactamente cero:
+  está sobre el eje. Lo que mueve una cabeza es asentir.
+
+#### EL INFLADOR
+
+Buscar el inflador en el auto era tocar un botón y que un cartel dijera que ya lo tenías: el objeto de
+la segunda misión **no existía en ninguna parte**. Bomba de pie con pedales, cilindro, manija en T,
+manómetro y la manguera enroscada. **La misma función arma las dos copias** con un parámetro de escala
+—la de la caja de la camioneta y la de la mano— porque con dos modelos el de la mano no sería el que se
+levantó del auto. Medido: puesta a −0,46 caía en y 0,83–1,13, con el 83 % por debajo del borde;
+corregida queda en 31,3 % del alto. Y la caja está **detrás de la cabina**: la cuenta anterior lo dejaba
+a 1,10 del centro, o sea adentro de la cabina.
+
+#### MEDIDO AL CERRAR
+
+Los tres idiomas cambiando el panel de misión y el cartel de lo que hay cerca en vivo. Partida completa
+por el mismo camino que usa el jugador. `window.__errs` vacío y **0 NaN** en todas las corridas. El HTML
+quedó en **690 KB**.
+
+**Lo que no se pudo hacer:** los sonidos generados. La cola de la cuenta está parada —ver arriba— y no
+hay forma de cancelar desde el código. Quedaron **cuatro enviados** (juntar, bomba, ok, tela) y seis en
+una cola de reintento que manda de a uno apenas se libere un lugar.
 
 ### Quincuagesimoquinta vuelta (2026-08-30): **LEMI** — el día tiene cinco misiones, hay una cueva y el camello te encuentra
 
