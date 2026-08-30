@@ -601,17 +601,12 @@ const INTRO = {
     MODO = 'cine';
     /* una partida nueva vuelve a tener día: si no, reiniciar después de haber
        llegado a la llave dejaba el amanecer clavado en medianoche para siempre */
-    NOCHE_FIJA = false;
-    /* Y EL CAMELLO VUELVE A EMPEZAR, que era el otro estado que sobrevivía a un
-       reinicio. `BICHO.caza` lo enciende la escena de la llave y no lo apagaba
-       nadie: al empezar de nuevo, el bicho arrancaba en modo caza —que persigue
-       desde CUATROCIENTOS metros, contra los 95 del olfato normal— así que la
-       partida nueva empezaba con la cosa viniendo derecho al campamento desde el
-       primer segundo. `ponCamello()` lo manda de vuelta a 120-190 m, lo pone en
-       ronda y apaga la caza; ya lo hacía, sólo que nadie lo llamaba al arrancar. */
-    ponCamello();
-    ROTO.on = false; ROTO.cae = 0; ROJO.on = false;
-    cuevaReinicia();
+    /* Y TODO LO DEMÁS SE APAGA CON `limpiaPartida()`, que es la misma función
+       que usa el botón de menú. El estado que sobrevivía a un reinicio era
+       `BICHO.caza` —lo enciende la escena de la llave y no lo apagaba nadie—,
+       así que la partida nueva empezaba con la cosa viniendo derecho al
+       campamento desde CUATROCIENTOS metros, contra los 95 del olfato normal. */
+    limpiaPartida();
     $('menu').classList.remove('on');
     $('hud').classList.remove('on');
     $('cine').classList.add('on');

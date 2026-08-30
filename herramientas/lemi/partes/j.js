@@ -842,8 +842,27 @@ const FINAL = {
     MODO = 'fin';
     $('obj').classList.remove('on');
     ROJO.on = false;
-    /* se queda en negro con el nombre: no hay pantalla de derrota en este juego
-       y tampoco hay una de victoria con puntaje. Terminó. */
+    /* ── Y VUELVE AL MENÚ SOLO ──
+       Antes se quedaba en negro con el nombre y ahí terminaba TODO: el juego
+       quedaba en un estado del que no se sale sin recargar la página. No hay
+       pantalla de victoria con puntaje —este juego tampoco tiene una de
+       derrota— pero eso no es lo mismo que no tener salida.
+       Los 2,6 segundos de negro son a propósito: cortar del último plano al
+       menú en el mismo cuadro se lee a que el juego se cerró, no a que se
+       terminó. Y `vuelveMenu()` es la MISMA función que usa el botón de pausa,
+       así que no hay un segundo camino de vuelta que pueda quedar desincronizado
+       —que es exactamente lo que pasó en RECREO, donde el final se colgaba
+       esperando un saludo y no había forma de llegar al menú—. */
+    setTimeout(() => {
+      if (MODO !== 'fin') return;        /* si ya se salió por otro lado, nada */
+      $('cTexto').textContent = '';
+      $('cine').classList.remove('on', 'abre');
+      $('cVelo').classList.remove('ver');
+      $('cSaltar').style.display = '';
+      if (AUTO && AUTO.g.userData.faros)
+        for (const f of AUTO.g.userData.faros) f.intensity = 0;
+      vuelveMenu();
+    }, 2600);
   }
 };
 

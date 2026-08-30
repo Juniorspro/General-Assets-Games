@@ -99,6 +99,33 @@ def main():
     im4, b4 = piezas(os.path.join(ENTRADA, 'dedo.png'))
     if b4:
         salida['joyDedo'] = hornea(im4, b4[0], 40)
+    # ── el menu: dos chapas de madera y un cartel colgado ──
+    for nom, arch, w, h in [('tabla', 'tabla.png', 192, 60),
+                            ('tablaPri', 'tablaPri.png', 192, 60),
+                            ('cartel', 'cartel.png', 208, 130)]:
+        f = os.path.join(ENTRADA, arch)
+        if not os.path.exists(f):
+            print('  falta', arch); continue
+        im6, b6 = piezas(f)
+        if not b6:
+            continue
+        x0, y0, x1, y1 = b6[0]
+        salida[nom] = saca_fondo(im6.crop((x0, y0, x1 + 1, y1 + 1))).resize((w, h), Image.LANCZOS)
+
+    # ── el marco de hojas: VA GIRADO NOVENTA GRADOS AL HORNEARLO ──
+    #    El menu vive adentro de `#escenario`, que lleva un `rotate(90deg)` para
+    #    que un juego apaisado se vea en un telefono vertical. O sea que una
+    #    imagen 9:16 puesta ahi se estira a un rectangulo apaisado y las hojas
+    #    salen aplastadas. Girada al reves ANTES de guardarla, la rotacion del
+    #    escenario la endereza y llega a la pantalla con su proporcion.
+    f = os.path.join(ENTRADA, 'marco.png')
+    if os.path.exists(f):
+        im7, b7 = piezas(f, minimo=20000)
+        base = Image.open(f).convert('RGB')
+        rec = saca_fondo(base)
+        rec = rec.rotate(-90, expand=True)
+        salida['marco'] = rec.resize((256, 144), Image.LANCZOS)
+
     # ── la hoja de objetivos: no va cuadrada, va con su proporcion ──
     im5, b5 = piezas(os.path.join(ENTRADA, 'hoja.png'))
     if b5:

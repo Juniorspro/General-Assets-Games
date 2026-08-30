@@ -91,6 +91,77 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Quincuagesimonovena vuelta (2026-08-30): **LEMI** — el menú de madera, el final que vuelve, y menos pixelado
+
+Pedido: *"el menú también cámbialo agrégale imágenes y botones UI, y esas cosas, también termina y
+vuelve al menú y sácale un poco lo pixelado"*.
+
+#### EL MENÚ: TRES IMÁGENES Y UN DEFECTO QUE VOLVIÓ
+
+Los dos botones eran píldoras —una de vidrio esmerilado y otra con un degradado verde a celeste— o sea
+la biblioteca de widgets de cualquier aplicación. Y el degradado era lo único del menú que no aparece
+en ningún otro lado del juego: la isla no tiene un solo píxel celeste que no sea el cielo. Ahora son
+**dos tablas clavadas** y un **cartel colgado**, generados y horneados a 192×60 y 208×130, más un
+**marco de follaje** que cierra los bordes.
+
+**EL RADIO Y EL VIDRIO SE VAN CON LA CHAPA.** Un `border-radius` de CSS por encima de una tabla que ya
+trae su contorno dibujado deja **dos** bordes, uno nítido y uno pixelado, y el nítido gana. Lo mismo el
+`backdrop-filter`: una tabla de madera con vidrio esmerilado detrás no es una tabla.
+
+**EL MARCO SE HORNEA GIRADO NOVENTA GRADOS.** El menú vive adentro de `#escenario`, que lleva un
+`rotate(90deg)`; una imagen 9:16 puesta ahí se estira a un rectángulo apaisado y las hojas salen
+aplastadas. Girada al revés ANTES de guardarla, la rotación del escenario la endereza.
+
+**Y SE DESVANECE HACIA EL CENTRO.** A opacidad pareja el follaje de abajo le caía encima al pie y a la
+línea de la historia — medido en la captura, el pie salía partido por una hoja. Con una máscara radial
+el marco cierra los bordes y suelta el medio, que es lo único que tiene que hacer.
+
+**EL DEFECTO QUE VOLVIÓ:** con el cartel puesto quedaron el emblema generado arriba **y** la palabra
+LEMI escrita en la tabla, o sea el nombre del juego dos veces — que es exactamente lo que este menú ya
+había arreglado una vuelta atrás. Saqué el texto y quedó peor: el logo generado es **un sello circular,
+no la palabra**, así que el cartel quedó con un emblema dorado y nada que dijera cómo se llama el
+juego. Van los dos **en fila y adentro de la misma tabla**: el sello a la izquierda, la palabra a la
+derecha, como cualquier chapa de local. Una sola marca, y el nombre se lee.
+
+#### EL FINAL VUELVE AL MENÚ
+
+Se quedaba en negro con el nombre y ahí terminaba todo: el juego entraba en un estado del que no se
+sale sin recargar la página. No hay pantalla de victoria con puntaje —tampoco hay una de derrota— pero
+eso no es lo mismo que no tener salida. Los **2,6 segundos de negro** son a propósito: cortar del
+último plano al menú en el mismo cuadro se lee a que el juego se cerró, no a que se terminó.
+
+**Y LOS DOS CAMINOS DE SALIDA COMPARTEN UNA FUNCIÓN.** `limpiaPartida()` apaga la noche fija, la pierna
+rota, la viñeta, la cueva y el modo caza del camello, y devuelve la camioneta a donde estaba
+estacionada —la cinemática la mueve noventa metros y el menú orbita justo por ahí—. La llaman el botón
+de menú del panel de pausa, el arranque de una partida nueva y el final. Repartido en tres sitios, el
+próximo que se agregue va a quedar sin apagar algo: es literalmente lo que acababa de pasar con
+`BICHO.caza`.
+
+#### `visibility` ADEMÁS DE `opacity`, Y LA RAZÓN ES EL `backdrop-filter`
+
+Al volver al menú se veían dos barras claras al costado del cartel. Eran los botones de pantalla
+completa y de pausa, que viven dentro de `#hud` — y `#hud` estaba en `opacity:0`. **Un
+`backdrop-filter` se aplica contra lo que hay DETRÁS del elemento, no contra su propio píxel**, así que
+en un padre transparente el navegador lo compone igual. `visibility:hidden` no se compone, y va con
+`transition-delay` para que el fundido de salida se llegue a ver antes de desaparecer.
+
+#### EL PIXELADO BAJA A 2,4
+
+Empezó en 2, subió a 3 y ahí se pasó. Con `pix` en 3 y un marco de 892×412 el destino de render queda
+en **298×138**, y a esa resolución la cueva, los cuerpos y las ramas sueltas dejan de distinguirse de
+las manchas del piso — que en un juego donde hay que ENCONTRAR cosas no es un estilo sino dificultad de
+más. En **2,4** el destino queda en **372×172**: un 55 % más de píxeles que en 3 y un 30 % menos que en
+2. El escalón se sigue viendo y las copas se vuelven a contar.
+**Y ES DECIMAL A PROPÓSITO**: `medir()` divide y redondea, así que el ajuste no tiene por qué ser
+entero. Con 2 y 3 como únicas opciones no hay nada entre «casi limpio» y «empastado».
+
+#### MEDIDO AL CERRAR
+
+11 de 11 imágenes cargadas y puestas. Destino de render **372×172** con `pix 2,4`. Menú: los seis
+elementos apilados sin un solo solapamiento. Final: `final` → `fin` → **`menu`** solo, con el camello
+de vuelta en `ronda` a 193,7 m y la camioneta otra vez en (8,7 · 9,1). `window.__errs` vacío en todas
+las corridas.
+
 ### Quincuagesimoctava vuelta (2026-08-30): **LEMI** — voces, controles de pixel art, y cinco defectos de una lista de siete
 
 Pedido: *"al empezar la Cinemática inicial aparecen caminando para atrás · el auto al final va volando

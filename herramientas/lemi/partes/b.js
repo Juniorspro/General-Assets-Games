@@ -25,15 +25,18 @@ const CFG = {
      bandas anchas y todo el cuadro se empasta como un póster: es lo que da el
      aire de consola vieja.
 
-     EL PÍXEL PASA DE 2 A 3, que es lo que se pidió. En un marco de 892×412 eso
-     lleva el destino de render de 446×206 a 298×138 —la mitad de los píxeles—,
-     y a ojo la diferencia es que los troncos y las copas dejan de tener bordes
-     casi limpios y pasan a escalonarse de verdad. Comparados los tres al lado:
-     en 2 todavía se lee a «3D con poco filtro», en 4 el bosque del fondo se
-     empieza a empastar y las copas dejan de contarse. En 3 se ve el escalón y
-     todavía se distingue qué es cada cosa, que es lo que tiene que pasar en un
-     juego donde hay que encontrar ramas entre los árboles. */
-  pix: 3, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
+     EL PÍXEL VUELVE A 2,4 y no a 3, que es lo que se pidió: «sacale un poco lo
+     pixelado». Empezó en 2, subió a 3 y ahí se pasó — en un marco de 892×412,
+     el 3 lleva el destino de render a 298×138 y a esa resolución la cueva, los
+     cuerpos y las ramas sueltas dejan de distinguirse de las manchas del piso,
+     que en un juego donde hay que ENCONTRAR cosas no es un estilo sino una
+     dificultad de más. En 2,4 el destino queda en 372×172, o sea un 55 % más de
+     píxeles que en 3 y un 30 % menos que en 2: el escalón se sigue viendo y las
+     copas se vuelven a contar.
+     Y ES DECIMAL A PROPÓSITO. `medir()` divide y redondea, así que el ajuste no
+     tiene por qué ser entero: con 2 y 3 como únicas opciones no hay nada entre
+     «casi limpio» y «empastado». */
+  pix: 2.4, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
   nubes: true, sombras: true, viento: true,
   /* fase del día: 0 medianoche · .25 amanecer · .5 mediodía · .75 atardecer */
   sol: 0.42, girar: true

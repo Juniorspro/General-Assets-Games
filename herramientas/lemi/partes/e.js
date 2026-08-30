@@ -231,14 +231,17 @@ function cargaUI(){
   for (const k of Object.keys(UI_B64)){
     const im = new Image();
     im.onload = () => { IMG[k] = im; if (k.startsWith('joy')) joyDibuja();
-                        if (k === 'hoja') ponHoja(); };
+                        else ponHoja(); };
     im.src = 'data:image/webp;base64,' + UI_B64[k];
   }
 }
 /* la hoja y los botones van por CSS, que es donde viven esos elementos */
 function ponHoja(){
-  if (IMG.hoja) document.documentElement.style.setProperty(
-    '--hoja', 'url(' + IMG.hoja.src + ')');
+  /* las que van por CSS entran como variables: así una sola línea las alcanza a
+     todas y no hay que ir a buscar el elemento de cada una */
+  for (const k of ['hoja', 'tabla', 'tablaPri', 'cartel', 'marco'])
+    if (IMG[k]) document.documentElement.style.setProperty(
+      '--' + k, 'url(' + IMG[k].src + ')');
   for (const [id, k] of [['acCorre','bCorre'], ['acAgacha','bAgacha'],
                          ['acSalta','bSalta'], ['acUsar','bUsar']]){
     if (IMG[k]) $(id).style.backgroundImage = 'url(' + IMG[k].src + ')';

@@ -269,9 +269,32 @@ function entraJuego(){
   cam.fov = 66; cam.updateProjectionMatrix();
   cam.rotation.z = 0;
 }
+/* ── LO QUE HAY QUE APAGAR AL SALIR DE UNA PARTIDA ──
+   Una sola función, y la llaman los DOS caminos de salida: el botón de menú del
+   panel de pausa y el final de la cinemática del escape. Repartido en los dos
+   sitios, el día que se agregue un tercero va a quedar sin apagar algo — que es
+   literalmente lo que acaba de pasar con `BICHO.caza`, que sobrevivía a un
+   reinicio porque nadie lo apagaba en ninguno de los dos. */
+function limpiaPartida(){
+  NOCHE_FIJA = false;
+  ROTO.on = false; ROTO.cae = 0; ROJO.on = false;
+  cuevaReinicia();
+  ponCamello();
+  /* y la camioneta vuelve a donde estaba estacionada: la cinemática del escape
+     la mueve noventa metros y el menú orbita justo por ahí */
+  if (AUTO){
+    AUTO.g.position.set(AUTO.x, AUTO.y, AUTO.z);
+    AUTO.g.rotation.set(0, AUTO.ry, 0);
+    if (AUTO.g.userData.faros) for (const f of AUTO.g.userData.faros) f.intensity = 0;
+  }
+  if (MIS.antorchaMalla) MIS.antorchaMalla.visible = false;
+  $('obj').classList.remove('on');
+  $('pista').classList.remove('on');
+}
 function vuelveMenu(){
   MODO = 'menu';
   pausa(false);
+  limpiaPartida();
   $('hud').classList.remove('on');
   $('menu').classList.add('on');
   CINE.arranca();

@@ -77,8 +77,17 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    escalonada, o sea pegada arriba del juego. Se pidió PIXELADA. */
 
 /* ── HUD ── */
-#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s}
-#hud.on{opacity:1}
+/* EL HUD SE OCULTA CON `visibility` ADEMAS DE CON `opacity`, y no es cinturón y
+   tirantes. Los botones de arriba a la derecha llevan `backdrop-filter`, y un
+   filtro de fondo se aplica contra lo que hay DETRÁS del elemento, no contra su
+   propio píxel: en un padre con `opacity:0` el navegador igual lo compone, así
+   que los dos botones seguían viéndose recortados sobre el menú. Medido en la
+   captura de la vuelta al menú: dos barras claras al costado del cartel.
+   `visibility:hidden` no se compone, y va con `transition-delay` para que el
+   fundido de salida se llegue a ver antes de desaparecer. */
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;
+  visibility:hidden;transition:opacity .8s, visibility 0s linear .8s}
+#hud.on{opacity:1;visibility:visible;transition:opacity .8s, visibility 0s}
 #fps{position:absolute;left:12px;top:calc(10px + env(safe-area-inset-top,0px));
   font:600 10.5px/1.6 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.5);
   text-shadow:0 1px 4px rgba(0,0,0,.8);letter-spacing:.04em}
@@ -140,10 +149,38 @@ body.pc #acciones{display:none}
    copas se apilan unas sobre otras y el movimiento lento de la cámara se lee
    como una grúa de cine en vez de como un paseo. */
 #menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
-  background:linear-gradient(180deg,rgba(4,10,16,.30) 0%,rgba(4,10,16,.06) 38%,rgba(4,10,16,.72) 100%)}
+  background:linear-gradient(180deg,rgba(4,10,16,.34) 0%,rgba(4,10,16,.08) 38%,rgba(4,10,16,.78) 100%)}
 #menu.on{display:grid}
+/* ── EL MARCO DE HOJAS ──
+   Una capa encima del velo y debajo de los botones: los bordes del cuadro se
+   cierran con follaje oscuro y el centro queda limpio. No es decoración suelta —
+   el menú tiene detrás la isla girando en vivo, o sea una imagen que cambia todo
+   el tiempo, y sin algo que cierre los bordes el texto queda flotando sobre
+   cualquier cosa que la cámara esté mirando en ese momento. Va con
+   `pointer-events:none` porque tapa los botones. */
+#menu .mMarco{position:absolute;inset:0;pointer-events:none;
+  background:var(--marco) center/100% 100% no-repeat;
+  image-rendering:pixelated;opacity:.86;filter:brightness(.5) saturate(.7);
+  /* SE DESVANECE HACIA EL CENTRO. A opacidad pareja, el follaje de abajo le caía
+     encima al pie y a la línea de la historia —medido en la captura, el pie salía
+     partido por una hoja—. Con la máscara, el marco cierra los bordes y suelta
+     el medio, que es lo único que tiene que hacer. */
+  -webkit-mask-image:radial-gradient(ellipse 62% 74% at 50% 50%, transparent 42%, #000 100%);
+  mask-image:radial-gradient(ellipse 62% 74% at 50% 50%, transparent 42%, #000 100%)}
 #menu .mCaja{text-align:center;width:min(360px,84%)}
-#menu .mEmb{position:relative;display:grid;place-items:center;margin-bottom:6px}
+/* EL CARTEL ES EL TÍTULO, Y EL LOGO VA ADENTRO. Con el cartel puesto quedaron
+   las dos cosas: el emblema generado arriba, chiquito, y debajo la palabra LEMI
+   escrita en la tabla — o sea el nombre del juego dos veces, que es exactamente
+   el defecto que este menú ya había arreglado una vez. Ahora hay UNA marca: la
+   tabla colgada con el logo clavado encima. Y el logo puede crecer, porque ya no
+   compite con nada. */
+#menu .mEmb{position:relative;display:flex;align-items:center;justify-content:center;
+  gap:min(14px, calc(var(--eh,100vh) * 0.018));
+  padding:calc(var(--eh,100vh) * 0.042) 9% calc(var(--eh,100vh) * 0.050);
+  margin-bottom:min(6px, calc(var(--eh,100vh) * 0.008));
+  background:var(--cartel) center/100% 100% no-repeat;
+  image-rendering:pixelated;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.7))}
 /* EL LOGO ES EL TÍTULO, no un emblema detrás de un título. Antes había una
    imagen al 78 % de opacidad y encima, superpuesta, la palabra escrita con la
    tipografía del sistema; eso significaba que el nombre del juego cambiaba de
@@ -155,29 +192,57 @@ body.pc #acciones{display:none}
    Y VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO (`max-height` en vh): el menú tiene
    siete cosas apiladas y en un teléfono corto el título se come el aire de
    todas las demás. */
-#menu .mEmb img{width:min(230px,58%);max-height:calc(var(--eh,100vh) * 0.155);object-fit:contain;
-  filter:saturate(1.15) drop-shadow(0 6px 26px rgba(0,0,0,.6))}
+/* EL LOGO GENERADO ES UN EMBLEMA CIRCULAR, NO LA PALABRA. Sacando el texto se
+   perdió el nombre del juego entero: el cartel quedó con un sello dorado en el
+   medio y nada que dijera LEMI. Van los dos, en fila y adentro de la misma
+   tabla — el sello a la izquierda y la palabra a la derecha, que es como está
+   armada cualquier chapa de un local. Una sola marca, y el nombre se lee. */
+#menu .mEmb img{width:auto;height:calc(var(--eh,100vh) * 0.115);
+  max-width:26%;object-fit:contain;flex:0 0 auto;
+  filter:saturate(1.1) drop-shadow(0 2px 5px rgba(0,0,0,.85))}
+#menu .mEmb .mTit{font-weight:900;letter-spacing:.16em;text-indent:.16em;
+  font-size:clamp(24px, calc(var(--eh,100vh) * 0.088), 44px);line-height:1;
+  color:#f0e2c6;
+  /* grabada en la madera: la sombra va HACIA ABAJO y dura un píxel, que es lo
+     que hace que la letra se lea hundida en la tabla en vez de impresa encima */
+  text-shadow:0 2px 0 rgba(0,0,0,.8), 0 0 14px rgba(0,0,0,.55)}
 /* EL NOMBRE VA DEBAJO DEL EMBLEMA Y NO ENCIMA. Antes iba superpuesto en
    absoluto sobre la imagen, y ahí las dos cosas se pelean el mismo espacio: la
    palabra le cae encima al dibujo y el dibujo le ensucia la palabra. Apilados,
    el solapamiento es imposible por construcción. */
-#menu .mTit{font-weight:800;letter-spacing:.22em;text-indent:.22em;
-  font-size:clamp(30px, calc(var(--eh,100vh) * 0.105), 54px);line-height:1;
-  background:linear-gradient(168deg,#f4fff6 18%,#8fe3a0 52%,#f0c869);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 4px 22px rgba(0,0,0,.75))}
+/* la palabra escrita se fue con el cartel: el logo ya la trae dibujada, y dos
+   veces el mismo nombre es la mitad del alto del menú gastada en repetirse */
 #menu .mSub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
-  text-transform:uppercase;color:rgba(234,244,255,.5);
-  margin-bottom:min(24px, calc(var(--eh,100vh) * 0.028))}
-#menu .mBtn{display:block;width:100%;border-radius:99px;
-  padding:min(15px, calc(var(--eh,100vh) * 0.020)) 15px;
-  margin-top:min(10px, calc(var(--eh,100vh) * 0.013));
-  font-size:15px;font-weight:700;border:1px solid rgba(255,255,255,.17);
-  color:rgba(234,244,255,.9);background:rgba(255,255,255,.06);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .16s}
-#menu .mBtn:active{transform:scale(.97)}
-#menu .mBtn.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none;
-  box-shadow:0 10px 30px rgba(87,182,239,.26)}
+  /* SE DESPEGA DEL CARTEL. Con 7 px de margen quedaba apoyado sobre la tabla de
+     abajo —gris oscuro sobre madera oscura, o sea ilegible— y encima parecía
+     parte del cartel en vez de un pie. Y sube de .62 a .80: sobre el follaje del
+     marco, cualquier cosa por debajo de eso se pierde. */
+  text-transform:uppercase;color:rgba(232,216,180,.80);
+  text-shadow:0 1px 6px rgba(0,0,0,.95);
+  margin-top:calc(var(--eh,100vh) * 0.024);
+  margin-bottom:min(18px, calc(var(--eh,100vh) * 0.022))}
+/* ── LOS BOTONES SON CHAPAS DE MADERA ──
+   Eran dos píldoras: una de vidrio esmerilado y otra con un degradado verde a
+   celeste. Las dos son de la biblioteca de widgets de cualquier aplicación, y
+   encima el degradado es lo único del menú que no aparece en ningún otro lado
+   del juego —la isla no tiene un solo píxel celeste que no sea el cielo—. Ahora
+   son dos tablas clavadas, generadas y horneadas a 192×60, estiradas con
+   `image-rendering: pixelated`: son madera, como el campamento.
+   EL RADIO Y EL VIDRIO SE VAN CON LA CHAPA. Un borde redondeado de CSS por
+   encima de una tabla con el contorno dibujado deja DOS bordes, uno nítido y
+   uno pixelado, y el nítido gana. */
+#menu .mBtn{display:block;width:100%;border:none;background:transparent;
+  padding:min(17px, calc(var(--eh,100vh) * 0.023)) 15px;
+  margin-top:min(9px, calc(var(--eh,100vh) * 0.012));
+  font-size:15px;font-weight:800;letter-spacing:.05em;
+  color:#f2e6cf;text-shadow:0 2px 0 rgba(0,0,0,.65), 0 0 12px rgba(0,0,0,.5);
+  background:var(--tabla) center/100% 100% no-repeat;
+  image-rendering:pixelated;transition:transform .16s,filter .16s;
+  filter:drop-shadow(0 5px 12px rgba(0,0,0,.5))}
+#menu .mBtn:active{transform:scale(.97) translateY(2px);filter:brightness(1.25)}
+#menu .mBtn.pri{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.55);
+  font-size:17px;filter:drop-shadow(0 6px 18px rgba(240,175,70,.30))}
 /* LAS MEDIDAS DEL MENÚ VAN TOPADAS EN vh ADEMÁS DE EN PÍXELES, y eso salió de
    una captura: con el escenario girado, un teléfono en vertical deja un marco
    de 412 píxeles de ALTO, y con las medidas fijas los siete elementos sumaban
@@ -185,9 +250,10 @@ body.pc #acciones{display:none}
    abajo. Con los topes, lo que se achica primero es el aire y no el texto. */
 #menu .mHist{margin-top:min(18px, calc(var(--eh,100vh) * 0.022));
   font-size:clamp(10.5px, calc(var(--eh,100vh) * 0.029), 12.5px);
-  line-height:1.5;color:rgba(234,244,255,.60);text-wrap:balance}
+  line-height:1.5;color:rgba(234,244,255,.66);text-wrap:balance;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
 #menu .mPie{margin-top:min(10px, calc(var(--eh,100vh) * 0.013));font-size:10.5px;
-  color:rgba(234,244,255,.34);line-height:1.4}
+  color:rgba(234,244,255,.40);line-height:1.4;text-shadow:0 1px 5px rgba(0,0,0,.95)}
 
 /* ── MENÚ DE PAUSA ── */
 #pausa{position:absolute;inset:0;z-index:45;display:none;place-items:center;
@@ -349,9 +415,9 @@ body:not(.pc) #joy{display:block}
 </div>
 
 <div id="menu">
+  <div class="mMarco"></div>
   <div class="mCaja">
-    <div class="mEmb"><img src="@@LOGO@@" alt=""></div>
-    <div class="mTit">LEMI</div>
+    <div class="mEmb"><img src="@@LOGO@@" alt=""><div class="mTit">LEMI</div></div>
     <div class="mSub" data-i18n="mSub">the camel island</div>
     <button class="mBtn pri" id="mJugar" data-i18n="mJugar">▶ Play</button>
     <button class="mBtn" id="mOtra" data-i18n="mOtra">Another island</button>
