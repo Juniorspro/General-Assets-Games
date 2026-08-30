@@ -148,7 +148,14 @@ function ubicaInicio(){
 addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
-  if (e.code === 'Space'){ e.preventDefault(); saltar(); }
+  /* LA BARRA ESPACIADORA HACE DOS COSAS SEGÚN DÓNDE ESTÉS, y no puede hacer las
+     dos: con el minijuego abierto bombea, y si no, salta. Saltando con el
+     inflador en pantalla, el personaje pegaría brincos detrás del panel. */
+  if (e.code === 'Space'){
+    e.preventDefault();
+    if (typeof MINI !== 'undefined' && MINI.on) MINI.golpe(); else saltar();
+  }
+  if (e.code === 'KeyE'){ e.preventDefault(); if (typeof MIS !== 'undefined') MIS.usa(); }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight'){ e.preventDefault(); ponAgacha(true); }
   if (e.code === 'KeyF'){ JUG.vuela = !JUG.vuela; JUG.vy = 0; aviso(JUG.vuela ? 'Vuelo libre' : 'De vuelta al suelo'); }
   if (e.code === 'Escape') pausa(!PAUSA);

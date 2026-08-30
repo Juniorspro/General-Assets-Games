@@ -89,9 +89,47 @@ function mascaraIsla(x, z){
   const t = cl((0.86 - d + on) / 0.38, 0, 1);
   return t*t*(3-2*t);
 }
+/* ══ LA CUEVA, EXCAVADA EN LA PROPIA FUNCIÓN DE ALTURA ══
+   La boca de la cueva NO es una malla apoyada contra una loma: es un hueco de
+   verdad hundido en el terreno. Y tiene que estar ACÁ ADENTRO, en `H()`, porque
+   `H()` es la única fuente de la altura del suelo: la malla del terreno, las
+   colisiones del jugador, dónde se planta cada árbol y dónde camina el camello
+   salen todas de ella. Excavando la malla por un lado y el suelo por otro, uno
+   caminaría por el aire sobre la boca o chocaría contra un hueco visible.
+
+   El hueco es un CUENCO de coseno elevado —suave en el borde, hondo en el
+   centro— que se recuesta contra la ladera. El coseno elevado y no una campana
+   gaussiana porque tiene borde finito: fuera del radio vale exactamente cero y
+   no hay que preguntarse a partir de dónde se puede despreciar.
+   `CUEVA` se elige ANTES de armar el terreno; mientras sea null esto no cuesta
+   más que una comparación. */
+let CUEVA = null;
 function H(x, z){
   const m = mascaraIsla(x, z);
-  return alturaCruda(x, z) * m - (1 - m) * 9 - 3.2;
+  let h = alturaCruda(x, z) * m - (1 - m) * 9 - 3.2;
+  if (CUEVA){
+    /* PRIMERO EL CERRO Y DESPUÉS LA BOCA, en ese orden.
+       Una boca de cueva necesita monte ENCIMA; sin eso es un pozo en un prado,
+       que es exactamente como se veía cuando esto era sólo el cuenco: en la
+       captura, un montículo de piedra apoyado sobre el pasto.
+       El terreno de esta isla es suave y no siempre hay una ladera donde haga
+       falta, así que la ladera se LEVANTA: una loma de coseno elevado centrada
+       veinte metros DETRÁS de la boca. Al llegar caminando de frente, lo que se
+       ve es un cerro con un agujero negro en el pie.
+       Va multiplicada por la máscara de la isla: sin eso, una cueva cerca de la
+       costa levantaría una montaña saliendo del mar. */
+    const dm = Math.hypot(x - CUEVA.mx, z - CUEVA.mz);
+    if (dm < CUEVA.mr){
+      const t = 0.5 + 0.5*Math.cos(Math.PI * dm / CUEVA.mr);
+      h += CUEVA.malto * t * t * m;
+    }
+    const d = Math.hypot(x - CUEVA.x, z - CUEVA.z);
+    if (d < CUEVA.r){
+      const t = 0.5 + 0.5*Math.cos(Math.PI * d / CUEVA.r);
+      h -= CUEVA.hondo * t * t;
+    }
+  }
+  return h;
 }
 /* normal por diferencias finitas: la usan la cámara y el sembrado */
 function pendiente(x, z){

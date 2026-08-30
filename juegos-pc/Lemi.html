@@ -147,6 +147,62 @@ body.pc #acciones{display:none}
   color:rgba(234,244,255,.9);background:rgba(255,255,255,.05)}
 #pausa button:active{transform:scale(.98)}
 #pausa button.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+/* ── LAS MISIONES DEL DÍA ──
+   El panel va ARRIBA A LA IZQUIERDA y no en el medio: es un renglón que hay que
+   poder mirar de reojo mientras se camina, no un cartel que se lee y se cierra.
+   Y el borde de color a la izquierda es lo que hace que se distinga del reloj y
+   de los fps, que viven en la misma esquina. */
+#obj{position:absolute;left:12px;top:calc(30px + env(safe-area-inset-top,0px));
+  max-width:min(300px,62%);padding:8px 12px 9px 11px;border-radius:9px;
+  background:rgba(8,18,28,.55);border-left:3px solid #7ee3a0;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+  opacity:0;transition:opacity .4s;pointer-events:none}
+#obj.on{opacity:1}
+#obj .n{font:700 9px/1.5 ui-monospace,monospace;letter-spacing:.20em;
+  color:rgba(126,227,160,.85);text-transform:uppercase}
+#obj .t{font-size:13.5px;font-weight:650;line-height:1.32;margin-top:1px}
+#obj .s{font-size:11px;line-height:1.4;color:rgba(234,244,255,.55);margin-top:2px}
+#obj.hecho{border-left-color:#f0c869}
+#obj.hecho .n{color:rgba(240,200,105,.9)}
+
+/* la pista de acción: aparece sola cuando hay algo cerca */
+#pista{position:absolute;left:50%;bottom:calc(18% + 10px);transform:translateX(-50%);
+  padding:8px 15px;border-radius:99px;background:rgba(8,18,28,.66);
+  border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(9px);
+  -webkit-backdrop-filter:blur(9px);font:600 12.5px system-ui,sans-serif;
+  letter-spacing:.03em;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#pista.on{opacity:1}
+#pista b{color:#7ee3a0}
+/* el botón de usar entra en el racimo de acciones, arriba del salto */
+#acUsar{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:3;
+  background:rgba(240,200,105,.18);border-color:rgba(240,200,105,.55)}
+#acUsar.apagado{opacity:.28;pointer-events:none}
+
+/* ── EL MINIJUEGO DEL INFLADOR ──
+   Una barra, una línea que la recorre y un bloque verde. Va en DOM y no en el
+   lienzo 3D a propósito: es una interfaz, tiene que verse nítida a cualquier
+   densidad de pantalla y no le sirve de nada estar dentro del mundo. */
+#mini{position:absolute;inset:0;z-index:47;display:none;place-items:center;
+  background:rgba(6,12,20,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#mini.on{display:grid}
+#mini .caja{width:min(430px,86%);text-align:center;pointer-events:auto}
+#mini .tit{font-size:15px;font-weight:700;letter-spacing:.02em}
+#mini .cnt{font:700 11px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(126,227,160,.9);margin-top:3px}
+#mini .barra{position:relative;height:52px;margin:16px 0 6px;border-radius:10px;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.17);overflow:hidden}
+#mini .cubo{position:absolute;top:6px;bottom:6px;border-radius:5px;
+  background:linear-gradient(180deg,#8ff0a8,#4cc472);box-shadow:0 0 14px rgba(126,227,160,.5)}
+#mini .linea{position:absolute;top:-1px;bottom:-1px;width:4px;border-radius:2px;
+  background:#fff;box-shadow:0 0 12px rgba(255,255,255,.9)}
+#mini .aviso{height:1.5em;font-size:12.5px;font-weight:600;
+  color:rgba(234,244,255,.75);margin-top:4px}
+#mini .btn{display:block;width:100%;margin-top:12px;padding:16px;border-radius:99px;
+  font-size:15px;font-weight:700;border:none;color:#04121a;
+  background:linear-gradient(135deg,#7ee3a0,#57b6ef)}
+#mini .btn:active{transform:scale(.97)}
+#mini .pie{margin-top:9px;font-size:11px;color:rgba(234,244,255,.42)}
+
 /* ── LA CINEMÁTICA DE APERTURA ──
    Dos barras negras, un renglón de texto abajo y un botón de saltear. Las
    barras no son un adorno: son lo que le dice al jugador «esto no se juega, se
@@ -207,11 +263,14 @@ body:not(.pc) #joy{display:block}
     <button class="ac" id="acCorre"><span class="ico">»</span>CORRER</button>
     <button class="ac" id="acAgacha"><span class="ico">⌄</span>AGACHAR</button>
     <button class="ac" id="acSalta"><span class="ico">⌃</span>SALTAR</button>
+    <button class="ac apagado" id="acUsar"><span class="ico">✋</span>USAR</button>
   </div>
+  <div id="obj"><div class="n"></div><div class="t"></div><div class="s"></div></div>
+  <div id="pista"></div>
   <div id="teclas">
     <b>W A S D</b> moverse · <b>ratón</b> mirar<br>
     <b>Shift</b> correr · <b>Ctrl</b> agacharse<br>
-    <b>Espacio</b> saltar · <b>F</b> volar · <b>Esc</b> pausa
+    <b>Espacio</b> saltar · <b>E</b> usar · <b>Esc</b> pausa
   </div>
   <div id="joy"><canvas width="300" height="300"></canvas></div>
 </div>
@@ -226,6 +285,17 @@ body:not(.pc) #joy{display:block}
     <div class="mHist">Viniste a acampar con tres amigos a una isla que no figura
       en ningún mapa. En la arena había huellas. No eran de nadie del grupo.</div>
     <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="mini">
+  <div class="caja">
+    <div class="tit">INFLANDO LA RUEDA</div>
+    <div class="cnt" id="miCnt">0 / 7</div>
+    <div class="barra"><div class="cubo" id="miCubo"></div><div class="linea" id="miLinea"></div></div>
+    <div class="aviso" id="miAviso"></div>
+    <button class="btn" id="miBtn">BOMBEAR</button>
+    <div class="pie">Tocá cuando la línea pase por el verde · <b>Espacio</b> en PC</div>
   </div>
 </div>
 
@@ -344,9 +414,47 @@ function mascaraIsla(x, z){
   const t = cl((0.86 - d + on) / 0.38, 0, 1);
   return t*t*(3-2*t);
 }
+/* ══ LA CUEVA, EXCAVADA EN LA PROPIA FUNCIÓN DE ALTURA ══
+   La boca de la cueva NO es una malla apoyada contra una loma: es un hueco de
+   verdad hundido en el terreno. Y tiene que estar ACÁ ADENTRO, en `H()`, porque
+   `H()` es la única fuente de la altura del suelo: la malla del terreno, las
+   colisiones del jugador, dónde se planta cada árbol y dónde camina el camello
+   salen todas de ella. Excavando la malla por un lado y el suelo por otro, uno
+   caminaría por el aire sobre la boca o chocaría contra un hueco visible.
+
+   El hueco es un CUENCO de coseno elevado —suave en el borde, hondo en el
+   centro— que se recuesta contra la ladera. El coseno elevado y no una campana
+   gaussiana porque tiene borde finito: fuera del radio vale exactamente cero y
+   no hay que preguntarse a partir de dónde se puede despreciar.
+   `CUEVA` se elige ANTES de armar el terreno; mientras sea null esto no cuesta
+   más que una comparación. */
+let CUEVA = null;
 function H(x, z){
   const m = mascaraIsla(x, z);
-  return alturaCruda(x, z) * m - (1 - m) * 9 - 3.2;
+  let h = alturaCruda(x, z) * m - (1 - m) * 9 - 3.2;
+  if (CUEVA){
+    /* PRIMERO EL CERRO Y DESPUÉS LA BOCA, en ese orden.
+       Una boca de cueva necesita monte ENCIMA; sin eso es un pozo en un prado,
+       que es exactamente como se veía cuando esto era sólo el cuenco: en la
+       captura, un montículo de piedra apoyado sobre el pasto.
+       El terreno de esta isla es suave y no siempre hay una ladera donde haga
+       falta, así que la ladera se LEVANTA: una loma de coseno elevado centrada
+       veinte metros DETRÁS de la boca. Al llegar caminando de frente, lo que se
+       ve es un cerro con un agujero negro en el pie.
+       Va multiplicada por la máscara de la isla: sin eso, una cueva cerca de la
+       costa levantaría una montaña saliendo del mar. */
+    const dm = Math.hypot(x - CUEVA.mx, z - CUEVA.mz);
+    if (dm < CUEVA.mr){
+      const t = 0.5 + 0.5*Math.cos(Math.PI * dm / CUEVA.mr);
+      h += CUEVA.malto * t * t * m;
+    }
+    const d = Math.hypot(x - CUEVA.x, z - CUEVA.z);
+    if (d < CUEVA.r){
+      const t = 0.5 + 0.5*Math.cos(Math.PI * d / CUEVA.r);
+      h -= CUEVA.hondo * t * t;
+    }
+  }
+  return h;
 }
 /* normal por diferencias finitas: la usan la cámara y el sembrado */
 function pendiente(x, z){
@@ -1523,6 +1631,114 @@ function armaCampamento(c){
   AUTO = { g: auto, x: ax, z: az, y: H(ax, az), ry: auto.rotation.y };
 }
 
+/* ══════════════════════════ LA CUEVA ══════════════════════════
+   Se elige ANTES de armar el terreno, porque el cuenco que la hunde vive dentro
+   de `H()` y la malla del terreno se construye leyendo `H()`.
+
+   VA EN UNA LADERA Y NO EN LO LLANO, y ésa es toda la diferencia entre una
+   cueva y un pozo: lo que hace que se lea como una boca es que haya monte
+   ENCIMA. Se busca la pendiente más marcada dentro de un anillo alrededor del
+   campamento —lo bastante lejos para que llegar sea un viaje, lo bastante cerca
+   para que el rastro de sangre no dé la vuelta a la isla—, y se orienta mirando
+   hacia abajo de la ladera, que es por donde uno llega caminando. */
+function eligeCueva(campo){
+  let mejor = null, mejorP = -1e9;
+  for (let a = 0; a < 6.283; a += 0.09){
+    for (let r = 88; r <= 150; r += 4){
+      const x = campo.x + Math.cos(a)*r, z = campo.z + Math.sin(a)*r;
+      if (Math.hypot(x, z) > MITAD*0.80) continue;
+      const h = H(x, z), pe = pendiente(x, z);
+      if (h < PLAYA + 6) continue;                 /* ni en la playa ni en el mar */
+      const p = pe*10 + h*0.05 - Math.abs(r - 115)*0.02;
+      if (p > mejorP){ mejorP = p; mejor = { x, z, h, a }; }
+    }
+  }
+  if (!mejor) return null;
+  /* hacia dónde baja la ladera: la boca mira para allá */
+  const e = 3.0;
+  const gx = H(mejor.x + e, mejor.z) - H(mejor.x - e, mejor.z);
+  const gz = H(mejor.x, mejor.z + e) - H(mejor.x, mejor.z - e);
+  const baja = Math.atan2(-gx, -gz);              /* el sentido de bajada */
+  /* el cerro va detrás de la boca, en el sentido contrario al que uno llega.
+     Los números están elegidos para que en la boca las dos cosas casi se
+     cancelen —a veinte metros del centro de una loma de radio cuarenta, el
+     coseno elevado vale un cuarto, o sea +4,5 m contra los −5,2 del cuenco—
+     así que el piso de la entrada queda a la altura del terreno de siempre y lo
+     que crece es todo lo que hay alrededor y por encima. */
+  const c = { x: mejor.x, z: mejor.z, r: 12.5, hondo: 5.4, mira: baja,
+              mr: 40, malto: 18 };
+  c.mx = mejor.x - Math.sin(baja)*20;
+  c.mz = mejor.z - Math.cos(baja)*20;
+  c.h = 0;              /* se rellena con H() ya excavada, más abajo */
+  return c;
+}
+
+const texPiedra = lienzoTex(48, (g,n) => {
+  moteado(g, n, '#9c9282', '#b8af9c', '#736a5b', 0.55);
+  g.fillStyle = '#3f3a33';
+  for (let i = 0; i < 16; i++){ const y=(Math.random()*n)|0; g.fillRect(0,y,n,1); }
+  for (let i = 0; i < 10; i++){ const x=(Math.random()*n)|0; g.fillRect(x,0,1,n); }
+});
+const matPiedra = new T.MeshLambertMaterial({ map: texPiedra, flatShading: true });
+/* EL FONDO DE LA CUEVA VA SIN LUZ Y EN NEGRO CASI PURO. Un fondo sombreado
+   igual devuelve algo de la hemisférica y entonces se le ve el final: el agujero
+   deja de ser un agujero y pasa a ser un nicho. En negro plano no tiene fondo. */
+const matNegro = new T.MeshBasicMaterial({ color: 0x05070a });
+
+function armaCueva(c){
+  const g = new T.Group();
+  /* LA BOCA: un arco de bloques de piedra hundido en la ladera, con el túnel
+     detrás. Los bloques van en un semicírculo y con tamaños desparejos, porque
+     un arco de piezas iguales se lee a puerta construida y no a roca partida. */
+  const piezas = [];
+  const N = 17, RA = 4.4;
+  for (let i = 0; i < N; i++){
+    const t = i/(N-1), an = Math.PI*t;
+    const s = 0.85 + Math.random()*0.55;
+    piezas.push({ g: new T.BoxGeometry(1.5*s, 1.35*s, 2.2),
+                  p: [Math.cos(an)*RA, Math.sin(an)*RA*0.92, 0],
+                  r: [(Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, -an + Math.PI/2] });
+  }
+  /* piedras sueltas al pie, que es lo que hay en la boca de una cueva */
+  for (let i = 0; i < 9; i++){
+    const s = 0.5 + Math.random()*0.9;
+    piezas.push({ g: new T.IcosahedronGeometry(s, 0),
+                  p: [(Math.random()-0.5)*8, 0.1 + Math.random()*0.3, 1.2 + Math.random()*2.2],
+                  r: [Math.random()*3, Math.random()*3, Math.random()*3] });
+  }
+  const arco = new T.Mesh(fundir(piezas), matPiedra);
+  arco.castShadow = true; arco.receiveShadow = true;
+  g.add(arco);
+
+  /* EL TÚNEL: un cilindro abierto metido en el cerro, tapado al fondo. Da la
+     profundidad que el cuenco del terreno no puede dar —un mapa de alturas no
+     tiene techo— y es lo que hace que desde afuera se vea que sigue. */
+  /* EL NEGRO VA PEGADO A LA BOCA, Y ESO SALE DE UNA CUENTA DEL TERRENO.
+     Estaba dieciocho metros adentro, con un túnel largo delante. Pero el cerro
+     que se levanta detrás de la boca sube 2,8 m en los primeros tres metros y
+     6,3 m en cinco —es una ladera, para eso se la puso—, así que el túnel y su
+     fondo quedaban ENTERRADOS: en la captura no había agujero, había un montón
+     de piedras oscuras sobre el pasto. Con el negro a metro y medio, delante de
+     donde el suelo empieza a trepar, el arco se lee como lo que es. El túnel se
+     queda corto, sólo para que el canto tenga espesor. */
+  const tun = new T.Mesh(
+    new T.CylinderGeometry(RA*0.84, RA*0.84, 6, 12, 1, true), matPiedra);
+  tun.rotation.x = Math.PI/2;
+  tun.position.set(0, RA*0.48, -2.6);
+  tun.material.side = T.DoubleSide;
+  g.add(tun);
+  const fondo = new T.Mesh(new T.CircleGeometry(RA*0.84, 12), matNegro);
+  fondo.position.set(0, RA*0.48, -5.2);
+  g.add(fondo);
+
+  g.position.set(c.x, H(c.x, c.z), c.z);
+  g.rotation.y = c.mira;
+  escena.add(g); GRUPOS.push(g);
+  /* dónde se para uno cuando llega: cinco metros delante de la boca */
+  c.frenteX = c.x + Math.sin(c.mira)*7.5;
+  c.frenteZ = c.z + Math.cos(c.mira)*7.5;
+}
+
 /* mojón de piedras en la cima: se ve desde media isla */
 function armaMojon(c){
   const g = new T.Group();
@@ -1611,6 +1827,7 @@ function eligeSitios(){
 }
 function armaSitios(){
   fuegoLuz = null; fuegoMalla = null;
+  if (CUEVA) armaCueva(CUEVA);
   for (const s2 of SITIOS){
     if (s2.t === 'campamento') armaCampamento(s2.c);
     else if (s2.t === 'mojón') armaMojon(s2.c);
@@ -1825,7 +2042,14 @@ function ubicaInicio(){
 addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
-  if (e.code === 'Space'){ e.preventDefault(); saltar(); }
+  /* LA BARRA ESPACIADORA HACE DOS COSAS SEGÚN DÓNDE ESTÉS, y no puede hacer las
+     dos: con el minijuego abierto bombea, y si no, salta. Saltando con el
+     inflador en pantalla, el personaje pegaría brincos detrás del panel. */
+  if (e.code === 'Space'){
+    e.preventDefault();
+    if (typeof MINI !== 'undefined' && MINI.on) MINI.golpe(); else saltar();
+  }
+  if (e.code === 'KeyE'){ e.preventDefault(); if (typeof MIS !== 'undefined') MIS.usa(); }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight'){ e.preventDefault(); ponAgacha(true); }
   if (e.code === 'KeyF'){ JUG.vuela = !JUG.vuela; JUG.vy = 0; aviso(JUG.vuela ? 'Vuelo libre' : 'De vuelta al suelo'); }
   if (e.code === 'Escape') pausa(!PAUSA);
@@ -2327,6 +2551,11 @@ function armaPanel(){
   sostener('acAgacha', () => ponAgacha(true), () => ponAgacha(false));
   $('acCorre').addEventListener('pointerdown', ev => { ev.preventDefault(); modoPC(false);
     corre = !corre; $('acCorre').classList.toggle('on', corre); });
+  /* USAR: un solo botón para todo lo que se pueda hacer cerca. Con un botón por
+     tipo de cosa, la pantalla se llenaría de botones apagados. */
+  sostener('acUsar', () => MIS.usa());
+  /* el minijuego se juega con un botón grande o con la barra espaciadora */
+  $('miBtn').addEventListener('pointerdown', ev => { ev.preventDefault(); MINI.golpe(); });
 }
 
 
@@ -2523,6 +2752,22 @@ function poseSentado(p, t){
     u.pi[k].rod.rotation.set(1.05, 0, 0);
   }
 }
+/* PARADO Y EN GUARDIA: es la pose del que oyó algo. Los brazos caen pero
+   separados del cuerpo, el peso atrás, la cabeza adelantada. Lo que la hace
+   leer como alerta y no como estar parado es el CUELLO estirado hacia adelante
+   y los hombros subidos: nadie escucha algo raro con los hombros sueltos. */
+function poseAlerta(p, t, k){
+  const u = p.userData, f = t*1.2 + u.fase;
+  u.cadera.position.y = 0.92*u.e + Math.sin(f)*0.008;
+  u.torso.rotation.set(0.10 + k*0.06, 0, 0);
+  u.cuello.rotation.set(-0.16 - k*0.10, Math.sin(f*0.6)*0.10*(1-k), 0);
+  for (const [kk, sx] of [['i',-1],['d',1]]){
+    u.br[kk].hombro.rotation.set(-0.12 - k*0.10, 0, sx*(0.16 + k*0.10));
+    u.br[kk].codo.rotation.set(-0.42 - k*0.22, 0, 0);
+    u.pi[kk].musl.rotation.set(-0.05, 0, sx*0.05);
+    u.pi[kk].rod.rotation.set(0.10, 0, 0);
+  }
+}
 /* un salto de sorpresa: se echa para atrás y sube los brazos. Es la pose del
    final de la cinemática, cuando aparece lo que aparece. */
 function poseSusto(p, t, k){
@@ -2557,6 +2802,43 @@ function poseSusto(p, t, k){
 const matPelo   = new T.MeshLambertMaterial({ color: 0x8a6a44, flatShading: true });
 const matOjoMal = new T.MeshBasicMaterial({ color: 0xff7a2a });
 
+/* ── LA CARA ──
+   Dibujada por código a 32 píxeles, como todo lo demás de este juego. Una foto
+   de una cara real pegada sobre un animal de cajas planas se ve exactamente
+   como lo que es: una foto pegada encima. Lo que da miedo acá no es el detalle
+   sino la GEOMETRÍA de la cara, que se lee igual a cuatro píxeles: dos ojos
+   demasiado juntos y demasiado arriba, pupilas chiquitas en mucho blanco —lo
+   que hace que algo se vea desquiciado y no dormido— y una fila de dientes
+   demasiado larga para el hocico.
+   VA EN UNA SOLA CARA DEL CUBO DE LA CABEZA. Con el mismo mapa en las seis, el
+   bicho tendría cara en la nuca. */
+const texCara = lienzoTex(32, (g,n) => {
+  moteado(g, n, '#8a6a44', '#a3835c', '#5e472c', 0.5);
+  /* las cuencas: dos manchas oscuras hundidas, que es lo que hace que los ojos
+     se lean como metidos adentro de la cabeza */
+  g.fillStyle = '#2a1d12';
+  g.fillRect(4, 7, 9, 8); g.fillRect(19, 7, 9, 8);
+  /* el blanco del ojo, mucho, y la pupila chiquita y arriba */
+  g.fillStyle = '#f4ecd8';
+  g.fillRect(5, 8, 7, 6); g.fillRect(20, 8, 7, 6);
+  g.fillStyle = '#c85a10';
+  g.fillRect(7, 9, 3, 3); g.fillRect(22, 9, 3, 3);
+  g.fillStyle = '#120c08';
+  g.fillRect(8, 10, 1, 2); g.fillRect(23, 10, 1, 2);
+  /* la boca: una raja negra de oreja a oreja con los dientes encima */
+  g.fillStyle = '#1a0f0a';
+  g.fillRect(3, 21, 26, 7);
+  g.fillStyle = '#e8dcb0';
+  for (let x = 4; x < 29; x += 3) g.fillRect(x, 21, 2, 3);
+  for (let x = 5; x < 29; x += 3) g.fillRect(x, 25, 2, 3);
+  /* los dos agujeros de la nariz y unas cicatrices */
+  g.fillStyle = '#3a2616';
+  g.fillRect(12, 17, 3, 2); g.fillRect(18, 17, 3, 2);
+  g.fillStyle = '#6b4f33';
+  g.fillRect(2, 4, 12, 1); g.fillRect(24, 16, 6, 1);
+});
+const matCara = new T.MeshLambertMaterial({ map: texCara, flatShading: true });
+
 function armaCamello(){
   const g = new T.Group();
   const cuerpo = new T.Object3D();
@@ -2587,7 +2869,12 @@ function armaCamello(){
   const cabeza = new T.Object3D();
   cabeza.position.y = 1.24;
   cuello.add(cabeza);
-  const mCab = new T.Mesh(geoCaja, matPelo);
+  /* la cabeza lleva SEIS materiales, uno por cara del cubo: la cara creepy va
+     en +Z —el frente, o sea por donde mira— y el pelo en las otras cinco.
+     `BoxGeometry` ya viene con seis grupos, uno por cara, en el orden
+     +X −X +Y −Y +Z −Z: alcanza con pasarle un arreglo de materiales. */
+  const mCab = new T.Mesh(geoCaja,
+    [matPelo, matPelo, matPelo, matPelo, matCara, matPelo]);
   mCab.scale.set(0.36, 0.36, 0.52);
   mCab.position.z = 0.10;
   mCab.castShadow = true;
@@ -2646,6 +2933,15 @@ function animaCamello(c, t, v){
   u.cuerpo.position.y = 2.05 + Math.abs(Math.sin(f*2))*0.055;
   u.cuello.rotation.x = 0.30 + Math.sin(f)*0.09;
   u.cabeza.rotation.x = -0.22 + Math.sin(f*2)*0.05;
+  /* MIRAR A ALGUIEN ES UNA EXCEPCIÓN Y VA ACÁ, no en quien la pide. El ciclo
+     de caminata escribe estas dos rotaciones TODOS los cuadros, así que una
+     pose puesta desde afuera se borraba sola en el cuadro siguiente: la
+     cinemática de la llave dejaba al camello mirando al horizonte con la cara
+     —que es la textura que hay que ver— apuntando por encima del jugador.
+     Rotar la cabeza en +X inclina su +Z hacia abajo, que es lo que hace falta
+     para bajar la vista hasta alguien que está a los pies. */
+  if (u.miraCuello != null) u.cuello.rotation.x = u.miraCuello;
+  if (u.miraCabeza != null) u.cabeza.rotation.x = u.miraCabeza;
   u.pat.forEach((p, i) => {
     const s = Math.sin(f + (i%2 ? Math.PI : 0) + (p.sz > 0 ? 0 : 0.5));
     p.alto.rotation.x = s*0.52;
@@ -2660,8 +2956,16 @@ function animaCamello(c, t, v){
    la regla que ya usa Eco con su cosa: el castigo es el susto y el camino de
    vuelta, no perder la partida. */
 let CAM3 = null;
-const BICHO = { x: 0, z: 0, ry: 0, v: 0, modo: 'ronda', tx: 0, tz: 0, t: 0, golpe: 0 };
+const BICHO = { x: 0, z: 0, ry: 0, v: 0, modo: 'ronda', tx: 0, tz: 0, t: 0, golpe: 0,
+                /* `caza` lo saca del horario: después de la escena de la llave
+                   ya no importa si es de día, te sigue igual. Hasta entonces
+                   sólo sale de noche. */
+                caza: false };
 const RONDA = 2.2, ACECHA = 3.6, EMBISTE = 7.4;   /* correr son 12,8: se le gana */
+/* CUÁNTO MIDE DE ALTO, sumado de la propia jerarquía y no estimado: cuerpo
+   2,05 + cuello 0,34 + cabeza 1,24 + media cabeza 0,18 + oreja 0,09. Lo usa la
+   cinemática de la llave para saber cuánto tiene que levantar la vista. */
+const ALTO_CAMELLO = 3.90;
 
 function ponCamello(){
   if (!CAM3){ CAM3 = armaCamello(); escena.add(CAM3); }
@@ -2670,7 +2974,7 @@ function ponCamello(){
   const a = Math.random()*6.283, r = 120 + Math.random()*70;
   BICHO.x = CAMPO.x + Math.cos(a)*r;
   BICHO.z = CAMPO.z + Math.sin(a)*r;
-  BICHO.modo = 'ronda'; BICHO.t = 0; BICHO.golpe = 0;
+  BICHO.modo = 'ronda'; BICHO.t = 0; BICHO.golpe = 0; BICHO.caza = false;
   nuevoDestino();
   CAM3.visible = true;
 }
@@ -2703,10 +3007,13 @@ function pasoCamello(dt){
   /* LA NOCHE ES LO QUE LO CAMBIA. `CFG.sol` es la fase del día: 0 medianoche,
      0,5 mediodía. Entre 0,80 y 0,20 —o sea de noche— sale a buscar. */
   const noche = CFG.sol > 0.80 || CFG.sol < 0.20;
+  /* durante la cinemática de la llave se queda plantado donde lo puso ella */
+  if (BICHO.modo === 'quieto'){ CAM3.position.set(BICHO.x, H(BICHO.x, BICHO.z), BICHO.z);
+    CAM3.rotation.y = BICHO.ry; animaCamello(CAM3, RELOJ.value, 0.02); return; }
   if (BICHO.golpe > 0){
     BICHO.golpe -= dt;
     if (BICHO.golpe <= 0){ BICHO.modo = 'ronda'; nuevoDestino(); }
-  } else if (noche && dj < 95){
+  } else if ((noche || BICHO.caza) && dj < (BICHO.caza ? 400 : 95)){
     BICHO.modo = dj < 26 ? 'embiste' : 'acecha';
     BICHO.tx = JUG.x; BICHO.tz = JUG.z;
   } else {
@@ -2763,18 +3070,15 @@ function pasoCamello(dt){
    SE PUEDE SALTEAR EN CUALQUIER MOMENTO. Una cinemática obligatoria que se ve
    por segunda vez deja de ser una historia y pasa a ser un peaje. */
 const GUION = [
-  /* [ hasta el segundo, texto ] — el texto es el de la escena, no el del
-     instante: partirlo en renglones sueltos obliga a leer más rápido de lo que
-     uno mira, y lo que hay que mirar es la isla. */
-  [ 5.5,  'Cuatro amigos. Una isla que no figura en ningún mapa.' ],
-  [ 11.0, 'Lemi manejó ocho horas para llegar hasta acá.' ],
-  [ 17.5, 'Levantaron el campamento antes de que cayera el sol.' ],
-  [ 23.5, 'Nadie preguntó de quién eran las huellas en la arena.' ],
-  [ 29.0, 'Eran de un camello. Y los estaba mirando.' ],
-  [ 33.5, 'Los otros tres no salieron de las carpas.' ]
+  [ 6.0,  'Cuatro amigos. Una isla que no figura en ningún mapa.' ],
+  [ 11.0, 'El campamento ya estaba armado antes de que cayera el sol.' ],
+  [ 17.0, '—¿Escucharon eso? Nadie escuchó nada.' ],
+  [ 21.0, 'Se fueron a dormir.' ],
+  [ 27.5, 'Cuando Lemi se despertó, no había nadie.' ],
+  [ 31.0, 'Sólo un rastro que salía del campamento.' ]
 ];
 const INTRO = {
-  activa: false, t: 0, dur: 33.5, gente: [], camelloCine: null,
+  activa: false, t: 0, dur: 31.0, gente: [],
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
@@ -2782,244 +3086,219 @@ const INTRO = {
     $('hud').classList.remove('on');
     $('cine').classList.add('on');
     requestAnimationFrame(() => $('cine').classList.add('abre'));
-    /* la gente se arma acá y se destruye al terminar: durante la partida los
-       tres amigos están adentro de las carpas —por eso hay TRES carpas— y no
-       cuestan un solo triángulo */
+    /* la gente se arma acá y se destruye al terminar: durante la partida no
+       hay nadie —de eso va la historia— y no cuestan un solo triángulo */
     this.gente = AMIGOS.map(d => { const p = armaPersona(d); escena.add(p); return p; });
-    this.camelloCine = armaCamello();
-    this.camelloCine.visible = false;
-    escena.add(this.camelloCine);
     this.txtActual = -1;
+    /* EL MUNDO DE LAS MISIONES SE PLANTA ACÁ Y NO AL TERMINAR, y la razón es
+       una sola línea del guion: «sólo un rastro que salía del campamento». El
+       rastro lo construye `MIS.arma()`, que antes corría recién al entrar al
+       juego, así que el plano que lo nombra mostraba pasto limpio. Lo único que
+       se esconde es el panel de objetivos: durante la cinemática no hay nada
+       que hacer todavía. */
+    MIS.arranca();
+    $('obj').classList.remove('on');
+    /* UN FAROLITO PARA LA ESCENA DEL RUIDO. Lemi termina de espaldas al fuego,
+       o sea a contraluz: medido en la captura salía como una silueta negra sin
+       un rasgo, y lo que la escena tiene que mostrar es que está asustado. Va
+       colgado de la cámara y sólo se enciende en ese tramo, así que la noche
+       sigue siendo noche en los otros tres. */
+    this.foco = new T.PointLight(0xffd9a8, 0, 17, 1.0);
+    escena.add(this.foco);
   },
   termina(){
     if (!this.activa) return;
     this.activa = false;
-    /* EL JUEGO EMPIEZA AL FINAL DE LA NOCHE, no al mediodía y no a medianoche.
-       La historia dice que se sentaron de noche y que a partir de ahí es la
-       tuya, así que salir a un mediodía radiante contradiría lo que se acaba de
-       ver. Pero soltar al jugador en la fase 0,865 son SETENTA SEGUNDOS de
-       oscuridad antes del primer amanecer, y eso no es tensión, es esperar.
-       En 0,185 todavía es de noche —el camello está activo, que es lo que hace
-       falta— y el sol sale a los once segundos: se empieza con miedo y se ve
-       amanecer sobre la isla, que es el final que esta apertura pide. */
-    CFG.sol = 0.185;
     FUEGO_K = 1;
-    /* EL AUTO VUELVE A SU LUGAR DE ESTACIONAMIENTO.
-       La escena 1 lo hace entrar desde setenta y ocho metros, así que salteando
-       la cinemática en el segundo 1 la partida empezaba con la camioneta a
-       setenta metros de donde tiene que estar —o sea, en la práctica, sin auto—.
-       Se veía como que el auto no existía; medido con la proyección, la caja
-       ocupaba el 2,3 % del alto del cuadro en vez del 26 % que le toca a seis
-       metros, que es exactamente lo que da un objeto de dos metros a setenta.
-       Y se apagan los faros, que la escena 1 podría haber dejado encendidos. */
-    if (AUTO){
-      AUTO.g.position.set(AUTO.x, AUTO.y, AUTO.z);
-      AUTO.g.rotation.y = AUTO.ry;
-      for (const f of AUTO.g.userData.faros) f.intensity = 0;
-    }
     if (fuegoLuz) fuegoLuz.distance = 26;
     for (const p of this.gente) soltar(p);
     this.gente = [];
-    if (this.camelloCine){ soltar(this.camelloCine); this.camelloCine = null; }
+    if (this.foco){ escena.remove(this.foco); this.foco.dispose && this.foco.dispose(); this.foco = null; }
     $('cine').classList.remove('abre');
     $('cTexto').classList.remove('ver');
+    $('cVelo').classList.remove('ver');
     setTimeout(() => $('cine').classList.remove('on'), 520);
+    /* EL DÍA EMPIEZA DE MAÑANA. La apertura termina con Lemi despertándose, y
+       las cinco misiones son «del día»: soltarlo de noche contradiría lo que se
+       acaba de ver y encima dejaría sin sentido «juntá ramas PARA LA NOCHE». */
+    CFG.sol = 0.28;
     entraJuego();
-    ponCamello();
+    /* las misiones ya están armadas desde `arranca()`: acá sólo se destapa el
+       panel. Rearmarlas tiraría el rastro que se acaba de ver y lo volvería a
+       sortear, o sea que el juego empezaría con un rastro distinto del de la
+       última imagen de la historia. */
+    if (!MIS.on) MIS.arranca();
+    $('obj').classList.add('on');
   },
   /* deja TODO en el instante `t`. Sin estado escondido: llamarla dos veces con
      el mismo número tiene que dar la misma imagen. */
   pon(t){
     const c = CAMPO, a = AUTO;
-    /* el sol baja a lo largo de la cinemática: llegan de tarde (0,66), arman el
-       campamento al atardecer y terminan de noche cerrada (0,93). Es la misma
-       cuenta que usa el juego, así que el cielo, la niebla y las estrellas
-       acompañan solos. */
-    /* LA CURVA DEL SOL TIENE QUE SER CRECIENTE Y CONTINUA, y la primera versión
-       no era ninguna de las dos: restaba —o sea que el sol SUBÍA hacia el
-       mediodía en vez de ponerse— y encima saltaba de 0,456 a 0,756 en el
-       segundo 24, o sea que la noche caía de golpe en un cuadro. Medido:
-       t=21 daba 0,493, que es mediodía, con el guion hablando del atardecer.
-       Ahora los tres tramos empalman y no baja nunca: 0,66 (media tarde) →
-       0,735 (el sol tocando el horizonte, justo mientras arman la fogata) →
-       0,845 (noche) → 0,876 al terminar.
-       Y LOS CORTES DE LOS TRAMOS CAEN DONDE CORTA EL GUION, no cada doce
-       segundos redondos. El atardecer es la fase 0,75: el tramo de la fogata
-       TERMINA en 0,745, o sea que los amigos arman el campamento con el sol
-       rozando el horizonte —que es literalmente lo que dice el subtítulo— y la
-       noche cae recién en la escena tres. Con los cortes anteriores, en el
-       segundo 16 la fase ya iba en 0,772 y el cuadro estaba de noche mientras
-       el texto hablaba de que todavía había sol.
-       NO SE LLEGA A 0,93. A esa fase la luna sola deja el cuadro casi negro y
-       la escena que importa —el bicho— no se ve; a 0,865 hay noche cerrada y
-       todavía queda algo de luz del oeste para recortar siluetas. */
-    CFG.sol = t < 11.5 ? 0.600 + t*0.00565
-            : t < 23.5 ? 0.665 + (t-11.5)*0.00667
-            : 0.745 + (t-23.5)*0.0120;
+    /* EL AUTO YA ESTÁ ESTACIONADO desde el primer cuadro. Antes llegaba
+       manejando; ahora el campamento está armado cuando empieza la historia,
+       así que lo único que hay que hacer con él es dejarlo en su lugar. */
+    if (a){
+      a.g.position.set(a.x, a.y, a.z);
+      a.g.rotation.y = a.ry;
+      for (const f of a.g.userData.faros) f.intensity = 0;
+    }
+    /* la tarde cae, la noche pasa, y de la noche se corta a la mañana. El corte
+       cae DENTRO del negro, que es lo que hace que se lea como que pasó la
+       noche y no como que el sol pegó un salto. */
+    CFG.sol = t < 12   ? 0.680 + t*0.00583
+            : t < 21   ? 0.750 + (t-12)*0.01344
+            : t < 22.5 ? 0.871
+            :            0.245 + cl((t-22.5)/5, 0, 1)*0.055;
     ponSol(0);
-    /* LA FOGATA CRECE PARA LA ESCENA DE NOCHE. En partida su alcance está
-       medido para no lavar el campamento; acá es la única luz que hay y encima
-       tiene que llegar a cuatro personas sentadas a tres metros. */
-    if (fuegoLuz) fuegoLuz.distance = t > 23.5 ? 44 : 26;
-    FUEGO_K = t > 23.5 ? 3.4 : 1;
-    /* Y LA NOCHE SE LEVANTA, que es una decisión de cine y no de simulación.
-       La noche del JUEGO es oscura a propósito —ambiente 0,20 y luna 0,42— y
-       eso está bien cuando uno la camina con una fogata cerca. Pero en un plano
-       fijo de ocho segundos, con eso el cuadro salía negro entero: medido, no se
-       distinguía ni la fogata ni el bicho. Se sube la luna y el rebote sólo
-       durante la escena 3 y se los deja como estaban al terminar. */
-    if (t > 23.5){
-      const lift = cl((t - 23.5)/2.2, 0, 1);
+    if (this.foco && !(t >= 12 && t < 17)) this.foco.intensity = 0;
+    if (fuegoLuz) fuegoLuz.distance = (t > 9 && t < 22.5) ? 40 : 26;
+    FUEGO_K = (t > 9 && t < 22.5) ? 3.0 : 1;
+    /* la noche se levanta sólo mientras se la mira de cerca, igual que antes */
+    if (t > 12 && t < 22.5){
+      const lift = cl((t - 12)/2.5, 0, 1);
       ambiente.intensity = 0.20 + 0.62*lift;
       luna.intensity = 0.42 + 0.95*lift;
     }
 
     const g = this.gente;
-    /* dónde se para cada uno lo decide CADA ESCENA, contra su propia cámara:
-       la de la fogata reparte a los cuatro fuera del arco que barre el lente y
-       la de la noche los reparte contra la boca por donde entra el camello.
-       Acá había una lista única de tres ángulos que servía para las dos, y
-       justamente por servir para las dos no servía para ninguna. */
+    /* dónde se sienta cada uno. Se reparten FUERA del arco que barre la cámara
+       (0,80 a 2,10 rad): con alguien en el medio, su espalda tapa la fogata,
+       que es lo único que hay que ver en esta escena. */
+    const asien = [5.55, 3.62, 4.58, 0.28];
+    const sitio = (k) => ({ x: c.x + Math.cos(asien[k])*3.4,
+                            z: c.z + Math.sin(asien[k])*3.4 });
+    /* la carpa de cada uno, para el tramo de irse a dormir */
+    const carpaDe = (k) => CARPAS.length ? CARPAS[(k+2) % CARPAS.length] : sitio(k);
 
-    if (t < 11.5){
-      /* ── 1 · EL AUTO LLEGA A LA ISLA ──
-         Entra desde la costa y frena en su lugar de estacionamiento. La cámara
-         lo sigue desde afuera y bajita, casi al ras del pasto: un plano de
-         seguimiento a la altura de la rueda es lo que hace que un auto se lea
-         RÁPIDO, porque el suelo pasa cerca. */
-      const k = cl(t/9.5, 0, 1);
-      const s = 1 - Math.pow(1 - k, 2.6);                /* frena, no corta */
-      const dx = Math.cos(a.ry), dz = Math.sin(a.ry);
-      /* el auto viene desde 78 m detrás de su lugar, sobre su propio eje */
-      const px = a.x - Math.sin(a.ry)*78*(1-s);
-      const pz = a.z - Math.cos(a.ry)*78*(1-s);
-      const py = H(px, pz);
-      a.g.position.set(px, py, pz);
-      a.g.rotation.y = a.ry;
-      for (const f of a.g.userData.faros) f.intensity = 0;
-      /* la gente todavía está adentro: no se dibuja */
-      for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
-
-      const lado = 7.5 + (1-s)*5;
-      const cx = px - Math.cos(a.ry)*lado, cz = pz + Math.sin(a.ry)*lado;
-      cam.position.set(cx, Math.max(H(cx,cz), MAR) + 1.55 + s*0.9, cz);
-      cam.lookAt(px, py + 1.0, pz);
-      cam.fov = 52;
-    } else if (t < 23.5){
-      /* ── 2 · LA FOGATA ──
-         Los cuatro alrededor del fuego poniendo los troncos. Tres se agachan y
-         acomodan; el cuarto —Lemi— llega caminando con un tronco al hombro y
-         se agacha también. La cámara los rodea despacio. */
-      const u = t - 11.5, k = cl(u/12, 0, 1);
-      a.g.position.set(a.x, a.y, a.z); a.g.rotation.y = a.ry;
-      for (const f of a.g.userData.faros) f.intensity = 0;
-
-      /* LOS CUATRO VAN DEL OTRO LADO DEL FUEGO, fuera del arco que barre la
-         cámara. La cámara rodea de 0,90 a 2,05 rad; con Lemi parado en 1,60
-         quedaba EXACTAMENTE entre el lente y la fogata y la tapaba entera
-         —medido: el fuego en x 0,468-0,538 y él en 0,445-0,553, o sea encima—.
-         Puestos en 5,60 · 3,60 · 4,55 · 0,25, los cuatro caen del lado opuesto,
-         se los ve DE FRENTE porque miran al fuego, y entre ellos y el lente no
-         queda más que la fogata, que es lo que hay que ver. */
-      const trab = [5.60, 3.60, 4.55, 0.25];
+    if (t < 12){
+      /* ── 1 · LOS CUATRO EN LA FOGATA, CAYENDO EL SOL ──
+         Sentados y charlando. La cámara los rodea despacio y baja: es el plano
+         que establece que son cuatro y que están bien. */
+      const k = cl(t/12, 0, 1);
       g.forEach((p, i) => {
         p.visible = true;
-        p.userData.leno.visible = true;
-        const ag = trab[i], rr2 = 3.2;
-        const dx2 = c.x + Math.cos(ag)*rr2, dz2 = c.z + Math.sin(ag)*rr2;
+        p.userData.leno.visible = false;
+        const s2 = sitio(i);
+        p.position.set(s2.x, H(s2.x, s2.z) + 0.42, s2.z);
+        p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+        poseSentado(p, RELOJ.value + i*1.3);
+      });
+      const ang = 0.80 + k*1.30, rr = 9.6 - k*1.9;
+      const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
+      cam.position.set(cx, c.h + 3.0 - k*0.55, cz);
+      cam.lookAt(c.x, c.h + 1.15, c.z);
+      cam.fov = 47;
+    } else if (t < 17){
+      /* ── 2 · EL RUIDO ──
+         Lemi se para y se da vuelta hacia el monte. LOS OTROS TRES NO SE
+         MUEVEN, y eso es la escena entera: si se pararan los cuatro, lo que
+         pasa es que todos oyeron algo; quedándose sentados, lo que pasa es que
+         Lemi es el único que lo oyó, que es lo que dice el texto.
+         La cámara se pone DETRÁS de él y mira hacia donde él mira: así el
+         espectador busca en la oscuridad lo mismo que está buscando él. */
+      const u = t - 12, k = cl(u/5, 0, 1);
+      const para = cl((u - 0.7)/1.1, 0, 1);      /* se levanta */
+      const gira = cl((u - 1.6)/1.4, 0, 1);      /* se da vuelta */
+      /* EL MONTE OSCURO ES EL QUE TIENE ATRÁS, no un rumbo escrito a mano.
+         Con la constante de antes, la dirección del ruido caía del OTRO lado
+         del campamento, o sea que Lemi se daba vuelta para mirar por encima de
+         la fogata y sus tres amigos — y la cámara «delante de él» terminaba
+         adentro del fuego: medido, la fogata ocupaba el 310 % del alto del
+         cuadro y todo salía rojo. Lo que hay a espaldas de alguien sentado
+         alrededor de un fuego es el bosque, y ésa es la dirección. */
+      const s0i = sitio(0);
+      let ax = s0i.x - c.x, az = s0i.z - c.z;
+      const al0 = Math.hypot(ax, az) || 1; ax /= al0; az /= al0;
+      g.forEach((p, i) => {
+        p.visible = true;
+        p.userData.leno.visible = false;
+        const s2 = sitio(i);
+        p.position.set(s2.x, H(s2.x, s2.z) + (i === 0 ? 0.42*(1-para) : 0.42), s2.z);
         if (i === 0){
-          /* Lemi entra caminando desde el auto y se agacha al llegar. El camino
-             pasa a 3,15 m del fuego, o sea por fuera del círculo de piedras: no
-             lo cruza. */
-          const ll = cl(u/4.2, 0, 1);
-          const sx = lerp(a.x, dx2, ll), sz = lerp(a.z, dz2, ll);
-          p.position.set(sx, H(sx, sz), sz);
-          p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
-          if (ll < 1) poseCamina(p, RELOJ.value, 1);
-          else poseLena(p, RELOJ.value, true);
+          const mira = Math.atan2(c.x - s2.x, c.z - s2.z);
+          p.rotation.y = lerp(mira, mira + Math.PI, gira);
+          if (para < 1) poseSentado(p, RELOJ.value);
+          else poseAlerta(p, RELOJ.value, gira);
         } else {
-          p.position.set(dx2, H(dx2, dz2), dz2);
-          p.rotation.y = Math.atan2(c.x - dx2, c.z - dz2);
-          poseLena(p, RELOJ.value + i*0.7, true);
+          p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+          poseSentado(p, RELOJ.value + i*1.3);
         }
       });
-      const ang = 0.9 + k*1.15;
-      const rr = 10.4 - k*2.0;
-const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
-      cam.position.set(cx, c.h + 2.5 - k*0.55, cz);
-      cam.lookAt(c.x, c.h + 1.05, c.z);
-      cam.fov = 46;
-    } else {
-      /* ── 3 · DE NOCHE, SENTADOS ──
-         Los cuatro en los troncos y el fuego alto. Y atrás, en el borde de la
-         luz, aparece el camello. La cámara ESTÁ DETRÁS DE ELLOS y no enfrente:
-         mirándolos de frente, lo que aparece atrás queda fuera de cuadro; desde
-         atrás, el bicho entra por encima de sus cabezas y se ve lo mismo que
-         ven ellos, que es el punto de la escena. */
-      const u = t - 23.5, k = cl(u/10, 0, 1);
-      a.g.position.set(a.x, a.y, a.z); a.g.rotation.y = a.ry;
-      /* DÓNDE SE SIENTA CADA UNO SE DECIDE CONTRA DÓNDE ENTRA EL CAMELLO, no al
-         azar. El bicho viene por 2,05 rad; Lemi se sienta en el ángulo OPUESTO
-         (2,05 + π = 5,19) porque ahí es donde va la cámara, y los otros tres a
-         ±1,4 y +2,6 de él, que deja el sector de 2,05 despejado. Repartidos
-         parejo, uno de los cuatro tapaba justo la boca por donde aparece lo
-         único que hay que ver en la escena. */
-      const AENT = 2.05, ALEMI = AENT + Math.PI;
-      /* LEMI NO SE SIENTA EN EL EJE DE LA CÁMARA sino medio radián al costado.
-         Sentado justo delante, su espalda tapaba la fogata: medido, el fuego
-         caía en y 0,64-0,97 y Lemi en 0,66-1,47, o sea encima. Corrido, la
-         cámara mira POR EL HUECO entre él y el de al lado. */
-      const asien = [ALEMI - 0.52, ALEMI + 1.42, ALEMI - 1.78, ALEMI + 2.62];
-      const susto = cl((u - 6.4)/0.55, 0, 1);
-      g.forEach((p, i) => {
-        p.visible = true;
-        /* SENTADOS YA NO LLEVAN LEÑA: la pusieron en el fuego. Dejarla puesta
-           sería cuatro personas cenando con un tronco en la mano. */
-        p.userData.leno.visible = false;
-        const ag = asien[i];
-        const sx = c.x + Math.cos(ag)*3.5, sz = c.z + Math.sin(ag)*3.5;
-        p.position.set(sx, H(sx, sz) + 0.42, sz);
-        p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
-        if (susto > 0) poseSusto(p, RELOJ.value, susto);
-        else poseSentado(p, RELOJ.value + i*1.3);
-      });
-      /* EL CAMELLO ENTRA CAMINANDO Y NO APARECIENDO. Encendido de golpe se lee
-         a error de dibujo; viniendo desde la oscuridad se lee a que estaba ahí
-         desde antes, que es lo que dice el texto. */
-      const cc = this.camelloCine;
-      if (cc){
-        const ent = cl((u - 3.2)/5.2, 0, 1);
-        cc.visible = ent > 0;
-        /* SE ACERCA HASTA DIEZ METROS y no hasta catorce: a catorce, con el
-           campo cerrado de esta escena, medía cuatro dedos de alto al fondo del
-           cuadro y no se leía como una amenaza sino como un arbusto. */
-        /* SE ACERCA HASTA SIETE METROS DEL FUEGO, y ése es el número que lo
-           hace existir: más lejos, la luz de la fogata no le llega y de noche
-           un bicho sin luz encima es exactamente nada. Medido con una
-           diferencia de píxeles sobre su propia caja proyectada. */
-        const dd = 22 - ent*15;
-        const cxx = c.x + Math.cos(AENT)*dd, czz = c.z + Math.sin(AENT)*dd;
-        cc.position.set(cxx, H(cxx, czz), czz);
-        cc.rotation.y = Math.atan2(c.x - cxx, c.z - czz);
-        animaCamello(cc, RELOJ.value, ent < 1 ? 0.16 : 0.02);
+      /* LA CÁMARA VA SOBRE SU HOMBRO, Y SE ARMA EN EL MARCO DE LEMI.
+         Puesta en el círculo del campamento y apuntada al monte, la vista le
+         pasaba POR ENCIMA DE LA CABEZA: medido, Lemi caía a 2,3 m del lente y
+         entero por debajo del borde de abajo, así que el plano del susto —que
+         es de lo que va esta escena— era un rectángulo de árboles negros sin
+         nadie adentro. Ahora el sitio se calcula respecto de ÉL: tantos metros
+         detrás y tantos a un costado de la dirección en la que mira, y el punto
+         al que apunta está delante suyo. Así el encuadre no depende de dónde
+         cayó el campamento ni de qué asiento le tocó. */
+      const s0 = s0i, y0 = H(s0.x, s0.z);
+      const ux = ax, uz = az;                       /* hacia donde termina mirando */
+      const px = -uz, pz = ux;                      /* su costado */
+      /* Y VA POR DELANTE DE ÉL, NO DETRÁS. Sobre el hombro se ve lo que él mira
+         —oscuridad— y no se lo ve a él; medido, Lemi ocupaba el 68 % del alto y
+         aun así en la captura no se distinguía, porque estaba de espaldas y en
+         sombra contra árboles negros. Puesta enfrente, la fogata le queda
+         DETRÁS y lo recorta: se le ve la silueta pararse y darse vuelta, que es
+         lo único que esta escena tiene que contar. */
+      const dist = lerp(5.0, 3.4, k), lado = lerp(2.8, 1.7, k), alt = lerp(1.85, 1.55, k);
+      const cx = s0.x + ux*dist + px*lado;
+      const cz = s0.z + uz*dist + pz*lado;
+      cam.position.set(cx, y0 + alt, cz);
+      cam.lookAt(s0.x, y0 + 0.95 + para*0.45, s0.z);
+      cam.fov = 46 - k*7;
+      if (this.foco){
+        this.foco.position.set(cx, y0 + alt + 0.25, cz);
+        this.foco.intensity = 2.6 * cl((u - 0.4)/1.2, 0, 1);
       }
-      /* LA CÁMARA VA SOBRE EL EJE FUEGO–CAMELLO, detrás de Lemi.
-         El primer intento la ponía en un ángulo y miraba a otro punto corrido
-         diez metros, y el resultado medido fue que en el cuadro no entraban ni
-         la fogata ni el bicho: se veía a Lemi solo, en un rincón, contra un
-         fondo negro. Puesta EN LA MISMA LÍNEA, lo que hay entre la cámara y el
-         punto al que mira es, en orden, la nuca de Lemi, el fuego, y el camello
-         saliendo de la oscuridad. Los tres planos del plano. */
-      /* MÁS ALTA Y MÁS ATRÁS que el primer intento: a 2,05 m y siete metros, la
-         espalda de Lemi se comía el centro del cuadro y el fuego quedaba detrás
-         de ella. Desde 3,1 m se lo mira POR ENCIMA del hombro y el fuego, los
-         otros tres y el camello quedan los tres a la vista. */
-      const cx = c.x + Math.cos(ALEMI)*(9.4 - k*1.5);
-      const cz = c.z + Math.sin(ALEMI)*(9.4 - k*1.5);
-      cam.position.set(cx, c.h + 2.90 + k*0.22, cz);
-      cam.lookAt(c.x + Math.cos(AENT)*(2.2 + k*3.4), c.h + 1.15 + k*0.55,
-                 c.z + Math.sin(AENT)*(2.2 + k*3.4));
-      cam.fov = 46 - k*6;
+    } else if (t < 22.5){
+      /* ── 3 · SE VAN A DORMIR ──
+         Caminan a las carpas y desaparecen adentro. La cámara se queda quieta
+         del otro lado del fuego: es el último plano en el que se los ve. */
+      const u = t - 17, k = cl(u/4.2, 0, 1);
+      g.forEach((p, i) => {
+        const s2 = sitio(i), ca = carpaDe(i);
+        const sx = lerp(s2.x, ca.x, k), sz = lerp(s2.z, ca.z, k);
+        p.position.set(sx, H(sx, sz), sz);
+        p.rotation.y = Math.atan2(sx - ca.x, sz - ca.z) + Math.PI;
+        p.userData.leno.visible = false;
+        /* se meten en la carpa: se apagan al llegar, que es más honesto que
+           hundirlos en el piso */
+        p.visible = k < 0.94;
+        if (k < 1) poseCamina(p, RELOJ.value, 0.7);
+      });
+      const cx = c.x + Math.cos(0.55)*10.5, cz = c.z + Math.sin(0.55)*10.5;
+      cam.position.set(cx, c.h + 3.2, cz);
+      cam.lookAt(c.x, c.h + 1.0, c.z);
+      cam.fov = 48;
+    } else {
+      /* ── 4 · LA MAÑANA, Y NO HAY NADIE ──
+         Mismo encuadre del campamento, de día, vacío. Que sea el MISMO sitio es
+         lo que hace la escena: no hace falta decir que faltan, se ve. */
+      const u = t - 22.5, k = cl(u/8.5, 0, 1);
+      for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
+      /* Y EL ÚLTIMO PLANO MIRA EL RASTRO. El pie dice «sólo un rastro que salía
+         del campamento» y la cámara apuntaba a un rumbo fijo escrito a mano, o
+         sea a cualquier lado: en la captura no se veía una sola mancha. El
+         rastro va del campamento a la cueva, así que ése es el rumbo, y la
+         cámara se pone del lado de acá para que salga hacia el fondo. La vista
+         además baja: se está despertando en el piso. */
+      const r0 = (MIS && MIS.rastroDesde) ? MIS.rastroDesde : { x: c.x + 9, z: c.z - 7 };
+      let vx = r0.x - c.x, vz = r0.z - c.z;
+      const vl = Math.hypot(vx, vz) || 1; vx /= vl; vz /= vl;
+      /* el plano ARRANCA en el campamento vacío y TERMINA sobre el rastro. Con
+         una sola posición no entran las dos cosas: el campamento pide estar
+         lejos y las manchas piden estar cerca —miden medio metro y el cuadro
+         abre 108° en horizontal—, así que la cámara viaja de una a la otra
+         mientras baja, que además es lo que hace alguien que se levanta y
+         camina hasta lo que encontró. */
+      const cx = lerp(c.x - vx*7.0, r0.x - vx*5.5, k);
+      const cz = lerp(c.z - vz*7.0, r0.z - vz*5.5, k);
+      cam.position.set(cx, c.h + 3.0 - k*1.3, cz);
+      cam.lookAt(lerp(c.x, r0.x + vx*6, k), c.h + 1.1 - k*0.85,
+                 lerp(c.z, r0.z + vz*6, k));
+      cam.fov = 54 + k*6;
     }
     cam.updateProjectionMatrix();
     AND.fov = cam.fov;
@@ -3033,8 +3312,10 @@ const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
       el.classList.remove('ver');
       setTimeout(() => { el.textContent = GUION[idx][1]; el.classList.add('ver'); }, 180);
     }
-    /* el fundido a negro del final, que es por donde entra el juego */
-    $('cVelo').classList.toggle('ver', t > this.dur - 1.1);
+    /* EL NEGRO DEL MEDIO ES LA NOCHE QUE PASA, y es el que permite el corte de
+       hora sin que se lea a error. El del final es por donde entra el juego. */
+    $('cVelo').classList.toggle('ver',
+      (t > 21.4 && t < 23.4) || t > this.dur - 1.1);
   },
   paso(dt){
     this.t += dt;
@@ -3042,6 +3323,778 @@ const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
     if (this.t >= this.dur) this.termina();
   }
 };
+
+/* ══════════════════════════ LAS MISIONES DEL DÍA ══════════════════════════
+   Cinco objetivos, en orden. Van EN ORDEN y no sueltos a propósito: cada uno
+   deja algo que el siguiente usa —el inflador vive en el auto, el rastro sale
+   del campamento, la antorcha necesita una rama de las cinco— así que
+   ofrecerlos todos a la vez sería ofrecer cuatro cosas que todavía no se pueden
+   hacer, y eso se lee a juego roto y no a libertad.
+
+   TODO PASA POR UNA SOLA LISTA, `COSAS`. Cada cosa del mundo con la que se
+   puede hacer algo se anota ahí con su posición, su radio y qué pasa al usarla;
+   el bucle busca la más cercana y prende el cartel y el botón. Con un `if` por
+   objeto desparramado por el código, el primero que se agregue después va a
+   quedar sin cartel y nadie se va a enterar hasta jugarlo. */
+
+const COSAS = [];
+let MIS_GRUPO = null;          /* todo lo que las misiones plantan en el mundo */
+
+/* materiales y geometrías de las misiones. Las compartidas se marcan para que
+   `soltar()` no las libere: es la misma trampa que ya costó los personajes. */
+const geoRama  = new T.CylinderGeometry(0.055, 0.075, 1.15, 5);
+const geoBaliza = new T.OctahedronGeometry(0.30, 0);
+geoRama.userData.compartida = true;
+geoBaliza.userData.compartida = true;
+const matRamaM  = new T.MeshLambertMaterial({ color: 0x9a6f42, flatShading: true });
+const matBaliza = new T.MeshBasicMaterial({ color: 0xf0c869 });
+const matSangre = new T.MeshBasicMaterial({ color: 0x6e0f0c });
+/* EL METAL VA CÁLIDO. Es la tercera vez en este juego: con la saturación al
+   tope del post-proceso, cualquier gris con un pelo de azul sale CIAN, y la
+   llave salía celeste. Un gris tirando a arena queda metálico. */
+const matMetal  = new T.MeshLambertMaterial({ color: 0xa89f8e, flatShading: true });
+const matFuego2 = new T.MeshBasicMaterial({ color: 0xffb347 });
+/* LA LLAVE EN LA MANO VA DE BRONCE Y CON LUZ PROPIA, y es la cuarta vez que
+   este juego tropieza con lo mismo. En el momento en que se la agarra la única
+   luz es el cielo, que es azul; un gris iluminado sólo por cielo azul y pasado
+   por la saturación del post-proceso sale CELESTE, y en la captura la llave
+   parecía un pedazo de vidrio. Con un emisivo cálido no depende de qué luz haya
+   en ese segundo, que es justo lo que hace falta en el objeto que la cinemática
+   está pidiendo que se mire. */
+const matLlave  = new T.MeshLambertMaterial({ color: 0xd8b45a, emissive: 0x4a3712,
+                                              flatShading: true });
+
+/* ── una cosa usable ──
+   `r` es el radio en el que se ofrece, y es GENEROSO (2,8 m) por la misma razón
+   por la que el blanco de los bichos de RECREO es grande: lo que tiene que
+   costar es LLEGAR, no clavar el píxel. */
+function cosa(o){
+  o.r = o.r || 2.8;
+  o.activo = o.activo !== false;
+  COSAS.push(o);
+  return o;
+}
+function borraCosas(){
+  COSAS.length = 0;
+  if (MIS_GRUPO){ soltar(MIS_GRUPO); MIS_GRUPO = null; }
+}
+
+/* la baliza: un rombo que gira y flota sobre lo que hay que buscar. Sin esto,
+   «juntá cinco ramas» en una isla de 660 m de lado es una búsqueda a ciegas —y
+   este juego no es de buscar, es de ir hasta allá. */
+function baliza(padre, y){
+  const m = new T.Mesh(geoBaliza, matBaliza);
+  m.position.y = y || 1.5;
+  padre.add(m);
+  return m;
+}
+
+/* ══════════════════════════ EL RASTRO DE SANGRE ══════════════════════════
+   Manchas planas sobre el suelo, del campamento a la cueva. Van pegadas a la
+   forma del terreno —cada una toma su altura de `H()` y se apoya— porque un
+   rastro que flota a una altura fija se despega en cuanto hay una loma.
+   Y se APAGAN las que ya pasaste, como los rastros de Eco: siempre hay una sola
+   punta encendida, la que lleva a donde falta. */
+function armaRastro(desde, hasta, grupo){
+  const trozos = [];
+  const N = 34;
+  for (let i = 0; i < N; i++){
+    const t = i/(N-1);
+    /* el camino no va derecho: se curva con un seno, porque un rastro recto se
+       lee a línea pintada y no a algo que arrastraron */
+    const cur = Math.sin(t*Math.PI) * 16;
+    const dx = hasta.x - desde.x, dz = hasta.z - desde.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const px = desde.x + dx*t - dz/d*cur;
+    const pz = desde.z + dz*t + dx/d*cur;
+    /* dos o tres manchas por punto, desparramadas */
+    const n = 2 + ((Math.random()*2)|0);
+    for (let k = 0; k < n; k++){
+      const ox = px + (Math.random()-0.5)*2.6, oz = pz + (Math.random()-0.5)*2.6;
+      const s = 0.34 + Math.random()*0.62;
+      trozos.push({ g: new T.CircleGeometry(s, 7),
+                    p: [ox, H(ox, oz) + 0.06, oz],
+                    r: [-Math.PI/2, 0, Math.random()*3] });
+    }
+  }
+  const m = new T.Mesh(fundir(trozos), matSangre);
+  grupo.add(m);
+  return m;
+}
+
+/* ══════════════════════════ EL MINIJUEGO DEL INFLADOR ══════════════════════
+   Una línea que va y viene por una barra y un bloque verde en un sitio al azar.
+   Se toca cuando la línea lo cruza. Siete veces, y el bloque se angosta.
+
+   EL BLOQUE SE ANGOSTA PERO NO SE HACE IMPOSIBLE, que es lo que se pidió: va de
+   22 % a 9 % del ancho de la barra. A la velocidad de la línea, 9 % son unos
+   170 ms de ventana — más que el tiempo de reacción de cualquiera. Y la línea
+   NO acelera: lo que sube es la puntería, no el reflejo, y con las dos cosas a
+   la vez el último golpe sería lotería.
+
+   EL ESTADO VIVE EN JS Y NO EN EL DOM. La posición de la línea se guarda en un
+   número y se escribe al estilo del elemento; leerla de vuelta del DOM ataría el
+   juego a que el navegador haya terminado de aplicar el estilo. */
+const MINI = {
+  on: false, k: 0, meta: 7, pos: 0, dir: 1, vel: 0.86,
+  cubo: 0.5, ancho: 0.22, listo: false, tGolpe: 0,
+  abre(){
+    this.on = true; this.k = 0; this.pos = 0; this.dir = 1; this.tGolpe = 0;
+    $('mini').classList.add('on');
+    $('miAviso').textContent = '';
+    this.nuevoCubo();
+    this.pinta();
+  },
+  cierra(ok){
+    /* IDEMPOTENTE. El cierre llega por un `setTimeout` de 0,7 s, y en ese rato
+       el botón sigue vivo: dos toques rápidos al final agendaban DOS cierres y
+       cada uno avanzaba una misión. Medido: los siete golpes dejaban el juego
+       en la misión 4 en vez de la 2, salteando el rastro y la antorcha enteros. */
+    if (!this.on) return;
+    this.on = false;
+    $('mini').classList.remove('on');
+    if (ok) MIS.avanza();
+  },
+  nuevoCubo(){
+    /* el ancho baja de 0,22 a 0,09 a lo largo de los siete */
+    this.ancho = 0.22 - (this.k / (this.meta - 1)) * 0.13;
+    /* el centro nunca pegado al borde: ahí la línea rebota y la ventana se
+       duplica sola, o sea que el golpe más difícil saldría más fácil */
+    this.cubo = 0.16 + Math.random() * 0.68;
+  },
+  paso(dt){
+    if (!this.on) return;
+    this.pos += this.dir * this.vel * dt;
+    if (this.pos > 1){ this.pos = 1; this.dir = -1; }
+    if (this.pos < 0){ this.pos = 0; this.dir = 1; }
+    if (this.tGolpe > 0) this.tGolpe -= dt;
+    this.pinta();
+  },
+  pinta(){
+    $('miLinea').style.left = (this.pos*100) + '%';
+    $('miCubo').style.left = ((this.cubo - this.ancho/2)*100) + '%';
+    $('miCubo').style.width = (this.ancho*100) + '%';
+    $('miCnt').textContent = this.k + ' / ' + this.meta;
+  },
+  golpe(){
+    /* y una vez completo no acepta más: es la otra mitad del mismo defecto */
+    if (!this.on || this.tGolpe > 0 || this.k >= this.meta) return null;
+    this.tGolpe = 0.22;                 /* no se puede martillar el botón */
+    const dentro = Math.abs(this.pos - this.cubo) <= this.ancho/2;
+    if (dentro){
+      this.k++;
+      son2('bomba');
+      if (this.k >= this.meta){
+        $('miAviso').textContent = '¡La rueda está inflada!';
+        setTimeout(() => this.cierra(true), 700);
+        return 'fin';
+      }
+      $('miAviso').textContent = '¡Bien! ' + (this.meta - this.k) + ' más';
+      this.nuevoCubo();
+      return 'ok';
+    }
+    /* FALLAR NO REINICIA. Perder los seis golpes anteriores por uno malo
+       convierte un minijuego de treinta segundos en uno de cinco minutos, y
+       nada en el pedido dice que esto tenga que castigar. Sólo no suma. */
+    $('miAviso').textContent = 'Se escapó… seguí bombeando';
+    return 'mal';
+  }
+};
+
+/* un chasquido para las acciones. El juego no tenía audio; esto es lo mínimo
+   que hace que apretar un botón se sienta como haber hecho algo. */
+let AUD = null;
+function son2(tipo){
+  try {
+    if (!AUD) AUD = new (window.AudioContext || window.webkitAudioContext)();
+    if (AUD.state === 'suspended') AUD.resume();
+    const t = AUD.currentTime, o = AUD.createOscillator(), g = AUD.createGain();
+    const f = tipo === 'bomba' ? 320 : tipo === 'mal' ? 150 : 520;
+    o.type = tipo === 'mal' ? 'sawtooth' : 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * (tipo === 'mal' ? 0.6 : 1.7), t + 0.09);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g); g.connect(AUD.destination);
+    o.start(t); o.stop(t + 0.18);
+  } catch(e){ /* sin audio se juega igual */ }
+}
+
+/* ══════════════════════════ EL SISTEMA ══════════════════════════ */
+const MIS = {
+  i: -1, on: false, ramas: 0, tieneInflador: false,
+  antorcha: { rama: false, tela: false, fuego: false },
+  cerca: null, marcaRastro: null, llaves: null, antorchaMalla: null,
+
+  lista: [
+    { n:'Ramas para el fuego',   s:'Juntá 5 ramas en el bosque' },
+    { n:'La rueda pinchada',     s:'El inflador está en la camioneta' },
+    { n:'El rastro',             s:'Alguien se arrastró hasta el monte' },
+    { n:'Una antorcha',          s:'Una rama, tela de una carpa y el encendedor' },
+    { n:'Las llaves',            s:'Sin ellas la camioneta no arranca' }
+  ],
+
+  arranca(){
+    borraCosas();
+    MIS_GRUPO = new T.Group();
+    escena.add(MIS_GRUPO);
+    this.i = -1; this.on = true; this.ramas = 0; this.tieneInflador = false;
+    this.antorcha = { rama: false, tela: false, fuego: false };
+    this.llaves = null; this.antorchaMalla = null;
+    $('obj').classList.add('on');
+    this.arma();
+    this.avanza();
+  },
+  para(){
+    this.on = false;
+    $('obj').classList.remove('on');
+    $('pista').classList.remove('on');
+    borraCosas();
+  },
+
+  /* ── todo lo que las misiones ponen en el mundo, de una sola vez ──
+     Se planta TODO al empezar y se va activando: plantarlo a medida que hace
+     falta obligaría a resembrar la escena en medio de la partida, y además
+     dejaría el bosque sin las ramas hasta que el juego decida que existen. */
+  arma(){
+    const c = CAMPO, G = MIS_GRUPO;
+
+    /* LAS CINCO RAMAS, repartidas en un anillo alrededor del campamento.
+       En anillo y no al azar por toda la isla: al azar, dos podían caer a
+       trescientos metros y la primera misión duraría diez minutos. */
+    for (let k = 0; k < 5; k++){
+      const a = k/5*6.283 + Math.random()*0.9, r = 26 + Math.random()*26;
+      let x = c.x + Math.cos(a)*r, z = c.z + Math.sin(a)*r;
+      /* que no caiga en el agua ni en una ladera imposible */
+      for (let intento = 0; intento < 12 && (H(x,z) < PLAYA + 0.5 || pendiente(x,z) > 0.5); intento++){
+        const a2 = Math.random()*6.283, r2 = 22 + Math.random()*24;
+        x = c.x + Math.cos(a2)*r2; z = c.z + Math.sin(a2)*r2;
+      }
+      const g = new T.Group();
+      g.position.set(x, H(x, z), z);
+      /* tres palitos cruzados en el piso: una rama sola es un palo perdido en
+         el pasto, tres se ven de lejos */
+      for (let j = 0; j < 3; j++){
+        const m = new T.Mesh(geoRama, matRamaM);
+        m.rotation.set(Math.PI/2 + (Math.random()-0.5)*0.3, Math.random()*3, (Math.random()-0.5)*0.5);
+        m.position.set((Math.random()-0.5)*0.5, 0.09, (Math.random()-0.5)*0.5);
+        m.castShadow = true;
+        g.add(m);
+      }
+      const b = baliza(g, 1.6);
+      G.add(g);
+      cosa({ tipo:'rama', x, z, malla:g, bal:b, rotulo:'Levantar una rama',
+             mision:0, activo:false });
+    }
+
+    /* EL INFLADOR Y EL ENCENDEDOR VIVEN EN EL AUTO, o sea en la misma cosa
+       usable: el auto se usa una vez para cada mision y el rótulo cambia. */
+    if (AUTO){
+      cosa({ tipo:'auto', x: AUTO.x, z: AUTO.z, r: 4.2,
+             rotulo:'Revisar la camioneta', mision:1, activo:false });
+      /* LA RUEDA PINCHADA es la delantera del lado de afuera. Se marca con la
+         baliza propia para que no haya que adivinar de qué lado del auto es. */
+      const rx = AUTO.x + Math.cos(AUTO.ry)*1.55 + Math.sin(AUTO.ry)*1.05;
+      const rz = AUTO.z - Math.sin(AUTO.ry)*1.55 + Math.cos(AUTO.ry)*1.05;
+      const gr = new T.Group();
+      gr.position.set(rx, H(rx, rz), rz);
+      const b = baliza(gr, 1.9);
+      G.add(gr);
+      /* LA RUEDA NO EXISTE HASTA QUE TENGAS EL INFLADOR, y no es un detalle:
+         parado junto a la camioneta, la rueda queda MÁS CERCA que el centro del
+         auto —medido, 1,62 m contra 1,70— así que era ella la que ganaba el
+         cartel, y el cartel decía «agachate a inflar» para después contestar
+         que falta el inflador. Con `requiere`, hasta que no lo tengas la única
+         cosa usable ahí es la camioneta. */
+      cosa({ tipo:'rueda', x: rx, z: rz, r: 2.4, malla:gr, bal:b,
+             rotulo:'Agacharse a inflar', mision:1, requiere:true, activo:false });
+    }
+
+    /* EL RASTRO Y LA CUEVA */
+    if (CUEVA){
+      const desde = { x: c.x + 9, z: c.z - 7 };
+      /* dónde empieza el rastro queda guardado: el último plano de la
+         cinemática lo necesita para apuntar la cámara, y si lo recalculara por
+         su cuenta serían dos cuentas que un día se separan */
+      this.rastroDesde = desde;
+      this.marcaRastro = armaRastro(desde, CUEVA, G);
+      cosa({ tipo:'cueva', x: CUEVA.frenteX, z: CUEVA.frenteZ, r: 6.0,
+             rotulo:'Mirar la cueva', mision:2, activo:false });
+    }
+
+    /* LA CARPA que se rompe para la tela: la primera, que es la de Lemi */
+    if (CARPAS.length){
+      const k = CARPAS[0];
+      cosa({ tipo:'carpa', x: k.x, z: k.z, r: 3.4,
+             rotulo:'Arrancar un pedazo de lona', mision:3, activo:false });
+    }
+
+    /* LAS LLAVES, tiradas donde termina el rastro pero del lado de acá: no
+       adentro de la cueva, que a la cueva no se puede entrar. */
+    if (CUEVA){
+      const a = CUEVA.mira, d = 13;
+      const lx = CUEVA.x + Math.sin(a)*d + Math.cos(a)*6;
+      const lz = CUEVA.z + Math.cos(a)*d - Math.sin(a)*6;
+      const g = new T.Group();
+      g.position.set(lx, H(lx, lz), lz);
+      const anillo = new T.Mesh(new T.TorusGeometry(0.13, 0.028, 4, 10), matMetal);
+      anillo.rotation.x = Math.PI/2; anillo.position.y = 0.12;
+      g.add(anillo);
+      for (let j = 0; j < 2; j++){
+        const ll = new T.Mesh(new T.BoxGeometry(0.05, 0.012, 0.24), matMetal);
+        ll.position.set(0.10 + j*0.05, 0.12, 0.12);
+        ll.rotation.y = j*0.4;
+        g.add(ll);
+      }
+      const b = baliza(g, 1.4);
+      G.add(g);
+      this.llaves = cosa({ tipo:'llaves', x: lx, z: lz, malla:g, bal:b,
+                           rotulo:'Agarrar las llaves', mision:4, activo:false });
+    }
+  },
+
+  /* ── pasar a la siguiente ── */
+  avanza(){
+    this.i++;
+    if (this.i >= this.lista.length){ this.fin(); return; }
+    const m = this.lista[this.i];
+    $('obj').classList.remove('hecho');
+    $('obj').querySelector('.n').textContent = 'OBJETIVO ' + (this.i+1) + ' DE 5';
+    $('obj').querySelector('.t').textContent = m.n;
+    this.pintaSub();
+    /* se activa lo de esta misión y se apaga lo demás */
+    for (const o of COSAS) o.activo = (o.mision === this.i) && !o.requiere;
+    /* la antorcha usa el auto y una carpa a la vez */
+    if (this.i === 3) for (const o of COSAS)
+      if (o.tipo === 'auto' || o.tipo === 'carpa') o.activo = true;
+    this.balizas();
+    son2('ok');
+  },
+  pintaSub(){
+    const m = this.lista[this.i];
+    let s = m.s;
+    if (this.i === 0) s = 'Llevás ' + this.ramas + ' de 5';
+    if (this.i === 3){
+      const a = this.antorcha;
+      s = (a.rama ? '✓' : '·') + ' rama   ' +
+          (a.tela ? '✓' : '·') + ' lona   ' +
+          (a.fuego ? '✓' : '·') + ' encendedor';
+    }
+    $('obj').querySelector('.s').textContent = s;
+  },
+  balizas(){
+    for (const o of COSAS) if (o.bal) o.bal.visible = o.activo;
+  },
+  fin(){
+    $('obj').classList.add('hecho');
+    $('obj').querySelector('.n').textContent = 'EL DÍA TERMINÓ';
+    $('obj').querySelector('.t').textContent = 'Corré';
+    $('obj').querySelector('.s').textContent = 'No mires atrás';
+  },
+
+  /* qué es lo más cercano que se puede usar AHORA. Lo calculan las dos cosas
+     que lo necesitan —el cartel y la acción— llamando acá, y no se guarda en
+     una variable que una lea y la otra escriba: `usa()` apoyado en lo que dejó
+     el cuadro anterior depende del ORDEN en que corran, y ese es el tipo de
+     dependencia que funciona hasta que un día no. */
+  buscaCerca(){
+    let mejor = null, mejorD = 1e9;
+    for (const o of COSAS){
+      if (!o.activo) continue;
+      const d = Math.hypot(JUG.x - o.x, JUG.z - o.z);
+      if (d < o.r && d < mejorD){ mejorD = d; mejor = o; }
+    }
+    return mejor;
+  },
+
+  /* ── usar lo que haya cerca ── */
+  usa(){
+    const o = this.buscaCerca();
+    if (!o) return null;
+    if (o.tipo === 'rama'){
+      this.ramas++;
+      o.activo = false; o.malla.visible = false;
+      son2('ok'); this.pintaSub(); this.balizas();
+      if (this.ramas >= 5){ aviso('Cinco ramas. Ya hay fuego para la noche.'); this.avanza(); }
+      return 'rama';
+    }
+    if (o.tipo === 'auto'){
+      if (this.i === 1 && !this.tieneInflador){
+        this.tieneInflador = true;
+        aviso('Inflador en la mano');
+        $('obj').querySelector('.s').textContent = 'Ahora agachate junto a la rueda';
+        for (const c2 of COSAS) if (c2.tipo === 'rueda') c2.activo = true;
+        this.balizas();
+        son2('ok');
+        return 'inflador';
+      }
+      if (this.i === 3 && !this.antorcha.fuego){
+        this.antorcha.fuego = true;
+        aviso('Encendedor en la mano');
+        son2('ok'); this.pintaSub(); this.chequeaAntorcha();
+        return 'encendedor';
+      }
+      return null;
+    }
+    if (o.tipo === 'rueda'){
+      if (!this.tieneInflador){ aviso('Falta el inflador: está en la camioneta'); return null; }
+      ponAgacha(true);
+      MINI.abre();
+      return 'mini';
+    }
+    if (o.tipo === 'cueva'){
+      /* NO SE PUEDE PASAR, y eso hay que DECIRLO. Un pasaje invisible que no
+         deja avanzar sin explicar por qué se lee a error de colisión. */
+      aviso('Está tapado. No se puede pasar por acá.');
+      o.activo = false;
+      this.avanza();
+      return 'cueva';
+    }
+    if (o.tipo === 'carpa'){
+      if (this.i !== 3 || this.antorcha.tela) return null;
+      this.antorcha.tela = true;
+      if (this.ramas > 0 && !this.antorcha.rama){ this.antorcha.rama = true; this.ramas--; }
+      aviso('Un pedazo de lona, y una de las ramas');
+      son2('ok'); this.pintaSub(); this.chequeaAntorcha();
+      return 'lona';
+    }
+    if (o.tipo === 'llaves'){
+      o.activo = false; o.malla.visible = false;
+      this.balizas();
+      LLAVE.arranca();
+      return 'llaves';
+    }
+    return null;
+  },
+  chequeaAntorcha(){
+    const a = this.antorcha;
+    if (a.rama && a.tela && a.fuego){
+      aviso('Antorcha lista. Ahora las llaves.');
+      this.prendeAntorcha();
+      this.avanza();
+    }
+  },
+  /* la antorcha encendida se ve en la mano: una rama con una llama arriba,
+     colgada de la CÁMARA, así que va con la vista y no hay dos cosas que
+     puedan desincronizarse */
+  prendeAntorcha(){
+    if (this.antorchaMalla) return;
+    const g = new T.Group();
+    const palo = new T.Mesh(new T.CylinderGeometry(0.035, 0.05, 0.72, 5), matRamaM);
+    palo.position.set(0, -0.06, 0);
+    palo.rotation.set(0.30, 0, 0.22);
+    g.add(palo);
+    const tela = new T.Mesh(new T.CylinderGeometry(0.075, 0.062, 0.20, 6), matLona);
+    tela.position.set(0.05, 0.26, -0.10);
+    tela.rotation.set(0.30, 0, 0.22);
+    g.add(tela);
+    for (let k = 0; k < 2; k++){
+      const f = new T.Mesh(new T.ConeGeometry(0.09 - k*0.03, 0.30 - k*0.09, 5), matFuego2);
+      f.position.set(0.06, 0.44 - k*0.03, -0.12);
+      g.add(f);
+    }
+    /* LA LUZ DE LA ANTORCHA VA COLGADA DE LA CÁMARA Y NO DE LA MALLA, y el
+       alcance es corto (14 m): es una antorcha, no un reflector. De noche es lo
+       único que te deja ver el suelo por el que caminás. */
+    const luz = new T.PointLight(0xffa33c, 5.5, 14, 1.6);
+    luz.position.set(0.06, 0.34, -0.12);
+    g.add(luz);
+    /* LA ANTORCHA VA SUB-ESCALADA A PROPÓSITO Y ESO NO ES UN ERROR DE CUENTA.
+       Cualquier cosa colgada de la cámara se dibuja a medio metro del ojo, así
+       que con proporciones de verdad es gigante en el cuadro: medido, la
+       primera versión ocupaba media pantalla de alto y tapaba el lado derecho
+       entero. Es la misma trampa que ya costó tres intentos con la espada de
+       RECREO y con la hoja de Eco. A 0,46 de escala y empujada al borde queda
+       en poco más de un cuarto del alto, que es lo que ocupa algo que uno lleva
+       en la mano y mira de reojo. */
+    g.scale.setScalar(0.46);
+    g.position.set(0.40, -0.42, -0.92);
+    cam.add(g);
+    escena.add(cam);
+    this.antorchaMalla = g;
+  },
+
+  /* ── cada cuadro: qué hay cerca ── */
+  paso(dt){
+    if (!this.on || MODO !== 'juego') return;
+    if (MINI.on){ MINI.paso(dt); return; }
+    const mejor = this.buscaCerca();
+    this.cerca = mejor;
+    const p = $('pista');
+    if (mejor){
+      p.classList.add('on');
+      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + mejor.rotulo;
+      $('acUsar').classList.remove('apagado');
+    } else {
+      p.classList.remove('on');
+      $('acUsar').classList.add('apagado');
+    }
+    /* las balizas giran y flotan: quietas se leen a objeto del decorado */
+    const t = RELOJ.value;
+    for (const o of COSAS) if (o.bal && o.bal.visible){
+      o.bal.rotation.y = t*1.9;
+      o.bal.position.y = (o.tipo === 'rueda' ? 1.9 : o.tipo === 'llaves' ? 1.4 : 1.6)
+                       + Math.sin(t*2.2 + o.x)*0.16;
+    }
+    /* la antorcha late */
+    if (this.antorchaMalla)
+      this.antorchaMalla.rotation.z = Math.sin(t*2.4)*0.05;
+  }
+};
+
+/* ══════════════════════════ LA LLAVE Y EL CAMELLO ══════════════════════════
+   La última misión termina en una cinemática EN PRIMERA PERSONA: las manos
+   entran en cuadro, agarran la llave del suelo, y al levantar la vista está el
+   bicho. Va en primera persona y no en un plano de afuera porque el susto es
+   que lo veas VOS: mirándolo desde una cámara externa, lo que se ve es a un
+   muñeco asustándose, que no es lo mismo. */
+const LLAVE = {
+  on: false, t: 0, dur: 6.4, manos: null, yaw0: 0, pitch0: 0, pitchFin: 0.10, luz: null,
+  arranca(){
+    if (this.on) return;
+    this.on = true; this.t = 0;
+    MODO = 'llave';
+    $('cine').classList.add('on');
+    requestAnimationFrame(() => $('cine').classList.add('abre'));
+    $('cTexto').textContent = '';
+    $('cSaltar').style.display = 'none';
+    /* EL HUD SE VA. Durante la cinemática seguían en pantalla el panel de
+       objetivo, la leyenda de teclas y el cartel «E · Agarrar las llaves» —o
+       sea el juego pidiéndote que hagas lo que estás viendo que ya hiciste. */
+    $('hud').classList.remove('on');
+    $('pista').classList.remove('on');
+    this.yaw0 = JUG.yaw;
+    /* mira al suelo: la llave está a los pies */
+    this.manos = armaManos();
+    cam.add(this.manos);
+    escena.add(cam);
+    /* EL CAMELLO SE PLANTA DETRÁS Y ARRIBA, en la dirección en la que uno va a
+       levantar la vista, y a nueve metros: más cerca no entra entero en el
+       cuadro y más lejos deja de ser una amenaza. */
+    ponCamello();
+    /* EL ADELANTE DE ESTA CÁMARA ES `(-sin yaw, -cos yaw)` Y NO `(+sin, +cos)`.
+       Con el signo al revés el camello quedaba plantado siete metros y medio a
+       la ESPALDA del jugador, o sea fuera del cuadro, y por eso la escena del
+       susto no mostraba nada. Y la sonda no lo denunciaba: un punto detrás de
+       la cámara se proyecta igual —dado vuelta, porque w es negativo— y cae
+       dentro del rectángulo, así que decía «entra en el cuadro» mientras el
+       recorte del frustum ni siquiera lo dibujaba. Es exactamente la misma
+       trampa que en RECREO dio un autobús «entero y centrado» con la cámara
+       mirando para el otro lado. Ahora `donde()` mira también la profundidad. */
+    /* CINCO METROS Y DE TRES CUARTOS, y los dos números salen de medir.
+       De frente y a siete metros y medio un camello es una COLUMNA: medido, la
+       silueta ocupaba el 1,7 % del cuadro, porque lo que se ve de frente son
+       ochenta y seis centímetros de pecho. Lo que hace grande a un camello es
+       el largo —dos metros treinta de tronco más el cuello—, así que se lo
+       planta girado: a cuarenta grados presenta 2,1 m de ancho, o sea el 70 %
+       del cuadro a cinco metros. Y el cuello se gira lo mismo para el otro
+       lado, así que el cuerpo está de tres cuartos y la cara sigue mirándote,
+       que es lo que se pidió. */
+    /* Y LA DIRECCIÓN SE ELIGE MIRANDO SI HAY ALGO EN EL MEDIO. Plantado a ojo
+       en la dirección en la que uno venía, el camello salió con un tronco de
+       árbol cruzándolo por la mitad: el plano más importante del juego partido
+       en dos por un palo. Es el mismo defecto que en Vecindario dejó el farol
+       roto justo entre la cámara y la casa fea. Acá se prueban ocho rumbos y se
+       toma el primero que tenga la vista libre —o, si ninguno la tiene, el más
+       despejado de los ocho—. Sale una sola vez, no por cuadro. */
+    this.yaw0 += this.rumboLibre();
+    BICHO.x = JUG.x - Math.sin(this.yaw0)*6.5;
+    BICHO.z = JUG.z - Math.cos(this.yaw0)*6.5;
+    /* su hocico sale por su +Z, así que mirarte de frente sería `yaw0` */
+    BICHO.ry = this.yaw0 + 0.70;
+    if (CAM3){
+      CAM3.userData.cuello.rotation.y = -0.70;
+      /* y la cara baja hasta el jugador: la cabeza está a 3,6 m y el ojo a 1,5,
+         a 6,5 m de distancia, o sea 18° hacia abajo. Repartidos entre el cuello
+         —que además se endereza, y así la silueta crece— y la cabeza. */
+      CAM3.userData.miraCuello = 0.10;
+      CAM3.userData.miraCabeza = 0.22;
+    }
+    BICHO.modo = 'quieto'; BICHO.golpe = 0;
+    const suelo = H(BICHO.x, BICHO.z);
+    if (CAM3){ CAM3.position.set(BICHO.x, suelo, BICHO.z);
+               CAM3.rotation.y = BICHO.ry; }
+    /* CUÁNTO SE LEVANTA LA VISTA SE CALCULA, NO SE ESCRIBE A MANO.
+       Estaba clavado en +0,10 rad, sacado de suponer que el camello y el
+       jugador pisan la misma altura. No la pisan: la llave está al lado de la
+       cueva, que está en una ladera, y ahí el bicho quedaba parado dos metros
+       más arriba —medido, la cabeza terminaba diecisiete centésimas de pantalla
+       POR ENCIMA del borde de arriba y en el cuadro se veían cuatro patas—.
+       Ahora se apunta al medio del animal: el ángulo a la cabeza y el ángulo a
+       las patas, promediados. Así queda encuadrado esté donde esté. */
+    const ojo = JUG.y + OJO - 0.12;                 /* el ojo al final del subir */
+    const alto = Math.atan2(suelo + ALTO_CAMELLO - ojo, 6.5);
+    const bajo = Math.atan2(suelo - ojo, 6.5);
+    this.pitchFin = cl((alto + bajo)/2, -0.10, 0.62);
+    /* UNA LUZ EN EL OJO, SÓLO EN ESTA ESCENA. El camello se planta contra el
+       cielo, o sea a contraluz, y medido en la captura la cara —que es la
+       textura que este pedido pide que se vea— salía en un marrón casi negro:
+       una silueta con dos puntitos rojos. Una luz colgada de la cámara es
+       exactamente el flash de una foto de noche: aplasta el volumen y deja la
+       cara plana y visible, que para un susto es lo que se quiere. Se apaga al
+       terminar, así que el resto del juego sigue iluminado como siempre. */
+    this.luz = new T.PointLight(0xfff2e0, 0.0, 26, 1.0);
+    this.luz.position.set(0, 0.15, 0.10);
+    cam.add(this.luz);
+  },
+
+  /* cuánto hay que girar para que entre la cámara y el camello no haya nada.
+     El rayo sale del ojo y va casi horizontal; se descartan de la lista la
+     propia cámara —de la que cuelgan las manos y la antorcha, o sea a medio
+     metro—, el domo del cielo, el agua, el camello y lo que plantaron las
+     misiones, que no son escenario. */
+  rumboLibre(){
+    const fuera = new Set([cam, CAM3, MIS_GRUPO,
+                           typeof cielo !== 'undefined' ? cielo : null,
+                           typeof agua  !== 'undefined' ? agua  : null]);
+    const lista = escena.children.filter(o => o.visible && !fuera.has(o));
+    const rc = new T.Raycaster();
+    rc.far = 6.2;
+    const o = new T.Vector3(JUG.x, JUG.y + OJO, JUG.z), d = new T.Vector3();
+    let mejor = 0, mejorLibre = -1;
+    for (const off of [0, 0.55, -0.55, 1.1, -1.1, 1.9, -1.9, 3.14]){
+      const a = this.yaw0 + off;
+      d.set(-Math.sin(a), 0.10, -Math.cos(a)).normalize();
+      rc.set(o, d);
+      let libre = 99;
+      try { const h = rc.intersectObjects(lista, true); if (h.length) libre = h[0].distance; }
+      catch(e){ libre = 99; }
+      if (libre > mejorLibre){ mejorLibre = libre; mejor = off; }
+      if (libre > 6.1) break;
+    }
+    return mejor;
+  },
+  paso(dt){
+    this.t += dt;
+    const t = this.t;
+    /* tres tiempos: se agacha y mira el suelo · agarra · levanta la vista */
+    const baja = cl(t/1.5, 0, 1);
+    const agarra = cl((t - 1.7)/1.1, 0, 1);
+    const sube = cl((t - 3.4)/1.9, 0, 1);
+    /* la vista baja a la llave y después sube hasta el ángulo que `arranca()`
+       calculó contra la altura real del terreno donde quedó el camello */
+    JUG.pitch = lerp(lerp(-0.05, -0.92, baja), this.pitchFin, sube);
+    JUG.yaw = this.yaw0;
+    AND.ojo = OJO - baja*0.42 + sube*0.30;
+    /* LA LUZ ENTRA CON EL LEVANTAR LA VISTA Y NO ANTES. Encendida desde el
+       primer cuadro, con la cara pegada al suelo y las manos a medio metro, un
+       foco de nueve en el ojo quemaba: medido, los dos brazos salían blancos
+       puros y el pasto en primer plano un verde plano sin un pliegue. Es para
+       el camello, que está a seis metros y medio, así que sube con `sube`. */
+    if (this.luz) this.luz.intensity = 9.0 * sube;
+    if (this.manos) ponManos(this.manos, baja, agarra, sube);
+    if (t > 4.6){
+      $('cTexto').textContent = '…';
+      $('cTexto').classList.add('ver');
+    }
+    if (t >= this.dur) this.termina();
+  },
+  termina(){
+    this.on = false;
+    MODO = 'juego';
+    $('cine').classList.remove('abre');
+    $('cTexto').classList.remove('ver');
+    $('cSaltar').style.display = '';
+    setTimeout(() => $('cine').classList.remove('on'), 520);
+    if (this.manos){ cam.remove(this.manos); soltar(this.manos); this.manos = null; }
+    if (this.luz){ cam.remove(this.luz); this.luz.dispose && this.luz.dispose(); this.luz = null; }
+    $('hud').classList.add('on');
+    JUG.pitch = -0.05;
+    AND.ojo = OJO;
+    /* y sale a correrte: modo caza permanente, sin importar la hora. El cuello
+       vuelve a su eje, que si no corre con la cabeza torcida para siempre. */
+    if (CAM3){ CAM3.userData.cuello.rotation.y = 0;
+               CAM3.userData.miraCuello = null; CAM3.userData.miraCabeza = null; }
+    /* SE LO CORRE UN POCO Y SE LE DA UN INSTANTE. Terminando la cinemática con
+       el bicho a seis metros y medio y embistiendo a 7,4 m/s, te agarra ANTES de
+       que llegues a arrancar: medido en el banco, el primer cuadro de partida ya
+       venía con el golpe puesto y el camello a ciento treinta metros, o sea que
+       la escena del susto terminaba en un castigo que nadie pudo evitar. A diez
+       metros y con nueve décimas de quedarse clavado —que es lo que tarda uno en
+       ponerse a correr— la persecución empieza a la par y se le gana. */
+    BICHO.x = JUG.x - Math.sin(this.yaw0)*10.5;
+    BICHO.z = JUG.z - Math.cos(this.yaw0)*10.5;
+    BICHO.modo = 'embiste';
+    BICHO.golpe = 0.9;
+    BICHO.caza = true;
+    MIS.avanza();
+    aviso('¡CORRÉ!');
+  }
+};
+
+/* las dos manos de primera persona: dos brazos que entran desde abajo del
+   cuadro. Es el mismo recurso que Vecindario, y con la misma lección: en un
+   marco vertical el semiancho visible a medio metro son dieciocho centímetros,
+   así que unos hombros a la distancia real dejan las manos por fuera del
+   cuadro. Van juntas, cerca del eje. */
+function armaManos(){
+  const g = new T.Group();
+  const mat = matPiel;
+  g.userData.br = [];
+  /* LAS MEDIDAS SALEN DE UNA CUENTA, NO DEL TANTEO.
+     Los brazos cuelgan del ojo, y el ojo abre 66° en vertical, o sea 33° para
+     arriba y 33° para abajo del eje. Un brazo puesto a 30 cm por debajo del ojo
+     y a 30 cm de profundidad queda a atan(0,30/0,30) = 45° hacia abajo: FUERA
+     del cuadro. Medido, la primera versión no mostraba una sola mano.
+     Para que las manos caigan alrededor del 70 % del alto hace falta un ángulo
+     de unos 13°, o sea `y = z · tan(13°) = 0,23·z`. A 52 cm de profundidad eso
+     son 12 cm por debajo del eje. */
+  for (const sx of [-1, 1]){
+    const b = new T.Object3D();
+    b.position.set(sx*0.115, -0.12, -0.52);
+    const ante = new T.Mesh(geoCaja, mat);
+    ante.scale.set(0.075, 0.26, 0.08);
+    ante.position.y = -0.13;
+    b.add(ante);
+    const mano = new T.Mesh(geoCaja, mat);
+    mano.scale.set(0.092, 0.10, 0.042);
+    mano.position.y = 0.02;
+    b.add(mano);
+    g.add(b);
+    g.userData.br.push(b);
+  }
+  /* LA LLAVE CUELGA DE LA MANO DERECHA Y NO DEL GRUPO. Puesta suelta en el
+     grupo se quedaba quieta mientras el brazo subía y bajaba: en el cuadro se
+     veía una chapita flotando al lado de una mano, que es lo contrario de
+     «agarrás la llave». Colgada del brazo, se mueve con él por construcción.
+     Y va con anillo: dos chapitas sueltas no se leen a llavero. */
+  const k = new T.Group();
+  const paleta = new T.Mesh(new T.BoxGeometry(0.055, 0.014, 0.21), matLlave);
+  paleta.position.z = -0.10;
+  k.add(paleta);
+  for (let j = 0; j < 2; j++){
+    const dien = new T.Mesh(new T.BoxGeometry(0.020, 0.014, 0.030), matLlave);
+    dien.position.set(0.026, 0, -0.16 + j*0.045);
+    k.add(dien);
+  }
+  const aro = new T.Mesh(new T.TorusGeometry(0.036, 0.009, 4, 10), matLlave);
+  aro.rotation.y = Math.PI/2;
+  aro.position.z = 0.02;
+  k.add(aro);
+  /* Y ATRAVESADA, no apuntando hacia adelante. Con la paleta sobre su propio
+     −Z el jugador la ve DE PUNTA: medido en la captura, dos píxeles de canto
+     asomando por encima del puño. Girada un cuarto de vuelta se ve de costado y
+     ahí sí se lee a llave. */
+  k.position.set(0.01, 0.075, -0.02);
+  k.rotation.set(0.25, 1.40, 0);
+  k.visible = false;
+  g.userData.br[1].add(k);
+  g.userData.llave = k;
+  return g;
+}
+function ponManos(g, baja, agarra, sube){
+  const br = g.userData.br;
+  for (let i = 0; i < 2; i++){
+    const b = br[i];
+    /* entran al cuadro al agacharse, se estiran al agarrar y se retiran al
+       levantar la vista, que es lo que hace alguien que acaba de guardar algo */
+    b.position.y = -0.26 + baja*0.14 + agarra*0.03 - sube*0.16;
+    b.position.z = -0.46 - baja*0.10 - agarra*0.05 + sube*0.06;
+    b.rotation.x = -0.35 + baja*0.55 - agarra*0.18 - sube*0.40;
+  }
+  g.userData.llave.visible = agarra > 0.55;
+}
 /* ══════════════════════════ ARRANQUE Y BUCLE ══════════════════════════ */
 function paso(p, txt){
   $('cBar').style.width = (p*100) + '%';
@@ -3049,14 +4102,29 @@ function paso(p, txt){
   return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 }
 async function construir(primera){
-  await paso(0.10, 'Levantando el terreno…');
-  armaTerreno();
-  await paso(0.28, 'Llenando el mar…');
-  armaAgua();
-  /* PRIMERO los sitios: definen los claros donde no se siembra, así el
-     campamento no aparece con tres árboles adentro de la fogata */
-  await paso(0.36, 'Buscando dónde acampar…');
+  /* EL ORDEN NO ES CAPRICHOSO Y CAMBIÓ POR LA CUEVA.
+     La boca de la cueva es un hueco excavado DENTRO de `H()`, y la malla del
+     terreno se construye leyendo `H()`: si se eligiera después, el suelo
+     dibujado y el suelo que se camina dirían cosas distintas justo ahí.
+     Así que primero se elige dónde acampar —en crudo, que el campamento va en
+     el medio y la cueva lejos—, después dónde va la cueva, y recién entonces se
+     levanta el terreno. */
+  CUEVA = null;
+  await paso(0.06, 'Buscando dónde acampar…');
   eligeSitios();
+  await paso(0.12, 'Cavando…');
+  CUEVA = eligeCueva(CAMPO);
+  /* la altura del piso de la cueva se lee con la cueva YA excavada: leerla
+     antes daría la del terreno original, que es cinco metros más arriba */
+  if (CUEVA) CUEVA.h = H(CUEVA.x, CUEVA.z);
+  await paso(0.18, 'Levantando el terreno…');
+  armaTerreno();
+  await paso(0.30, 'Llenando el mar…');
+  armaAgua();
+  /* los claros se recalculan con la cueva ya elegida: sin esto crecen árboles
+     dentro de la boca */
+  CLAROS = SITIOS.map(s2 => ({ x: s2.c.x, z: s2.c.z, r: s2.t === 'campamento' ? 17 : 9 }));
+  if (CUEVA) CLAROS.push({ x: CUEVA.x, z: CUEVA.z, r: 15 });
   await paso(0.44, 'Sembrando…');
   const r = sembrar((p, t) => { $('cBar').style.width = (p*100)+'%'; $('cTxt').textContent = t; });
   await paso(0.78, 'Levantando el campamento…');
@@ -3081,16 +4149,29 @@ async function resembrar(){
 }
 
 let ultimo = performance.now(), fps = 0, cuadros = 0, acum = 0, DIB = 0, TRI = 0;
+/* CONGELADO: frena la SIMULACIÓN y deja el dibujo.
+   Sin esto no se puede fotografiar un instante: entre el paso que pone la
+   escena y la captura, el navegador sigue corriendo su propio bucle y la foto
+   sale de dos segundos después. Ya pasó tres veces en este proyecto —el
+   autobús de RECREO, la abuela de Vecindario y acá el camello de la llave, que
+   para cuando se sacaba la foto ya te había alcanzado y estaba a cien metros. */
+let CONGELADO = false;
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora = performance.now();
-  const dt = Math.min((ahora - ultimo)/1000, 0.08);
+  let dt = Math.min((ahora - ultimo)/1000, 0.08);
   ultimo = ahora;
+  if (CONGELADO) dt = 0;
   RELOJ.value += dt;
 
   if (MODO === 'menu') CINE.paso(dt);
   else if (MODO === 'cine') INTRO.paso(dt);
+  else if (MODO === 'llave') LLAVE.paso(dt);
   else if (!PAUSA) fisica(dt);
+  /* la cinemática de la llave mueve la cámara ella misma con `JUG`, así que
+     necesita que `ponCam` corra igual aunque la física no */
+  if (MODO === 'llave') ponCam(dt);
+  MIS.paso(dt);
   /* la cinemática pone la hora ella misma cuadro a cuadro: si además corriera
      el reloj del día, el atardecer se le adelantaría al guion */
   ponSol(MODO === 'cine' ? 0 : dt);
@@ -3187,7 +4268,15 @@ function bucle(){
          1 abajo/derecha— y además se comprueba que estén DELANTE, porque un
          punto detrás de la cámara proyecta igual, dado vuelta, y cae adentro
          del cuadro: es la trampa que ya costó una medición con el autobús. */
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
       cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
       const v = new T.Vector3(), caja = new T.Box3();
       const donde = (ob) => {
         if (!ob || !ob.visible) return null;
@@ -3216,10 +4305,138 @@ function bucle(){
                lemi: donde(INTRO.gente[0]) };
     },
     saltar: () => { INTRO.termina(); return MODO; },
+    /* ── las misiones, desde afuera ── */
+    mis: () => ({ i: MIS.i, on: MIS.on, ramas: MIS.ramas,
+                  tit: MIS.i >= 0 && MIS.i < 5 ? MIS.lista[MIS.i].n : 'fin',
+                  cerca: MIS.cerca ? MIS.cerca.tipo : null,
+                  antorcha: MIS.antorcha, mini: MINI.on,
+                  cosas: COSAS.filter(o => o.activo).map(o => o.tipo) }),
+    /* camina hasta la cosa activa que se le pida y la usa */
+    irA: (tipo) => {
+      const o = COSAS.find(c => c.activo && c.tipo === tipo);
+      if (!o) return { no: tipo, activas: COSAS.filter(c=>c.activo).map(c=>c.tipo) };
+      JUG.x = o.x + 1.2; JUG.z = o.z + 1.2; JUG.y = H(JUG.x, JUG.z); JUG.vy = 0;
+      JUG.yaw = Math.atan2(JUG.x - o.x, JUG.z - o.z);
+      return { tipo, x: +o.x.toFixed(1), z: +o.z.toFixed(1) };
+    },
+    usar: () => MIS.usa(),
+    helar: (v) => { CONGELADO = !!v; return CONGELADO; },
+    /* cuánto de la pantalla se come lo que cuelga de la cámara. La antorcha y
+       las manos viven pegadas al ojo, y ahí «se ve bien» no es una opinión: es
+       un porcentaje del cuadro. */
+    /* la cinemática de la llave, fotografiable en cualquier instante */
+    llave: (t) => {
+      if (!LLAVE.on) LLAVE.arranca();
+      LLAVE.t = t; LLAVE.paso(0);
+      /* Y HAY QUE CORRER `ponCam` A MANO, que es la segunda mitad de la misma
+         trampa. `LLAVE.paso` no mueve la cámara: mueve `JUG.pitch`, y quien lo
+         copia a `cam.rotation.x` es `ponCam`, que corre en el bucle. Midiendo
+         justo después de `paso(0)` se proyectaba con la cámara del instante
+         ANTERIOR, así que la sonda contestaba sobre un cuadro que no era el que
+         se estaba fotografiando —de ahí que dijera que el camello estaba a la
+         vista en el segundo en que se mira el suelo—. */
+      ponCam(0);
+      /* y el camello se planta donde lo dejó la cinemática, no donde lo dejó el
+         último cuadro del bucle */
+      pasoCamello(0);
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
+      cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+      const caja = new T.Box3(), v = new T.Vector3();
+      const donde = (ob) => {
+        if (!ob) return null;
+        ob.updateMatrixWorld(true);
+        caja.setFromObject(ob);
+        if (caja.isEmpty()) return null;
+        let x0=9,x1=-9,y0=9,y1=-9, delante = true;
+        for (let i = 0; i < 8; i++){
+          v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+          v.applyMatrix4(cam.matrixWorldInverse);
+          /* EN EL ESPACIO DE LA CÁMARA, LO QUE SE VE TIENE z NEGATIVA. Sin esta
+             comprobación un objeto que está a la espalda proyecta igual —dado
+             vuelta— y la sonda contesta «entra en el cuadro» sobre algo que el
+             recorte del frustum ni siquiera dibuja. */
+          if (v.z > -0.05) delante = false;
+          v.applyMatrix4(cam.projectionMatrix);
+          const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+        return { x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)], delante };
+      };
+      const dc = CAM3 ? Math.hypot(cam.position.x - BICHO.x, cam.position.z - BICHO.z) : null;
+      return { t, pitch:+JUG.pitch.toFixed(2), camRotX:+cam.rotation.x.toFixed(2),
+               manos: LLAVE.manos ? donde(LLAVE.manos) : null,
+               camello: CAM3 ? donde(CAM3) : null,
+               camVis: CAM3 ? CAM3.visible : null, modoB: BICHO.modo,
+               dist: dc === null ? null : +dc.toFixed(1),
+               llaveVis: LLAVE.manos ? LLAVE.manos.userData.llave.visible : null };
+    },
+    enMano: () => {
+      const o = MIS.antorchaMalla; if (!o) return null;
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
+      cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert(); o.updateMatrixWorld(true);
+      const caja = new T.Box3().setFromObject(o), v = new T.Vector3();
+      let x0=9,x1=-9,y0=9,y1=-9;
+      for (let i = 0; i < 8; i++){
+        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+        v.applyMatrix4(cam.matrixWorldInverse).applyMatrix4(cam.projectionMatrix);
+        const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+        x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+      }
+      return { x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)],
+               altoPct:+((y1-y0)*100).toFixed(1), anchoPct:+((x1-x0)*100).toFixed(1) };
+    },
+    /* juega el minijuego solo: golpea SIEMPRE dentro del cubo, así se prueba
+       que los siete cuenten y que el ancho baje, sin depender del reflejo */
+    mini: (n) => {
+      const r = [];
+      for (let k = 0; k < (n || 12) && MINI.on; k++){
+        r.push({ k: MINI.k, ancho: +MINI.ancho.toFixed(3) });
+        MINI.pos = MINI.cubo; MINI.tGolpe = 0;
+        const res = MINI.golpe();
+        r[r.length-1].res = res;
+        if (res === 'fin' || res === null) break;
+      }
+      return r;
+    },
+    /* y golpea siempre AFUERA, para comprobar que fallar no reinicia */
+    miniMal: (n) => {
+      const r = [];
+      for (let k = 0; k < (n || 3) && MINI.on; k++){
+        MINI.pos = MINI.cubo > 0.5 ? 0.02 : 0.98; MINI.tGolpe = 0;
+        r.push({ k: MINI.k, res: MINI.golpe() });
+      }
+      return r;
+    },
+    cueva: () => CUEVA && { x:+CUEVA.x.toFixed(1), z:+CUEVA.z.toFixed(1),
+      h:+CUEVA.h.toFixed(1), hondoReal: +(alturaCruda(CUEVA.x,CUEVA.z)*mascaraIsla(CUEVA.x,CUEVA.z)
+        - 9*(1-mascaraIsla(CUEVA.x,CUEVA.z)) - 3.2 - H(CUEVA.x,CUEVA.z)).toFixed(2),
+      frente: [+CUEVA.frenteX.toFixed(1), +CUEVA.frenteZ.toFixed(1)] },
     /* dónde cae el auto en la pantalla, con la misma cuenta que el camello */
     verAuto: () => {
       if (!AUTO) return null;
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
       cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
       const caja = new T.Box3().setFromObject(AUTO.g), v = new T.Vector3();
       let x0=9,x1=-9,y0=9,y1=-9,delante=true;
       for (let i = 0; i < 8; i++){
@@ -3245,6 +4462,10 @@ function bucle(){
        antes y después, la diferencia de píxeles dice si SE VE, que no es lo
        mismo que estar en cuadro */
     verCamello: (v) => { if (INTRO.camelloCine) INTRO.camelloCine.visible = v; return v; },
+    /* la malla del camello, para poder apagarla o pintarla desde el banco: un
+       bulto oscuro contra un fondo oscuro se ve igual que un bulto que no se
+       dibujó, y la única forma de distinguirlos es apagarlo y comparar */
+    malla: () => CAM3,
     /* pone el camello a la distancia que se le pida, en la dirección que
        quiera: sin esto, probar el acecho y la embestida exigía esperar a que
        llegara caminando desde ciento cuarenta metros a 2,2 m/s */

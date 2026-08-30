@@ -19,7 +19,7 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PARTES = os.path.join(AQUI, 'partes')
 LOGO = os.path.join(RAIZ, 'assets', 'lemi', 'logo.png')
 
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'h.js', 'z.html']
+ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'i.js', 'h.js', 'z.html']
 
 
 def main():

@@ -192,6 +192,22 @@ function poseSentado(p, t){
     u.pi[k].rod.rotation.set(1.05, 0, 0);
   }
 }
+/* PARADO Y EN GUARDIA: es la pose del que oyó algo. Los brazos caen pero
+   separados del cuerpo, el peso atrás, la cabeza adelantada. Lo que la hace
+   leer como alerta y no como estar parado es el CUELLO estirado hacia adelante
+   y los hombros subidos: nadie escucha algo raro con los hombros sueltos. */
+function poseAlerta(p, t, k){
+  const u = p.userData, f = t*1.2 + u.fase;
+  u.cadera.position.y = 0.92*u.e + Math.sin(f)*0.008;
+  u.torso.rotation.set(0.10 + k*0.06, 0, 0);
+  u.cuello.rotation.set(-0.16 - k*0.10, Math.sin(f*0.6)*0.10*(1-k), 0);
+  for (const [kk, sx] of [['i',-1],['d',1]]){
+    u.br[kk].hombro.rotation.set(-0.12 - k*0.10, 0, sx*(0.16 + k*0.10));
+    u.br[kk].codo.rotation.set(-0.42 - k*0.22, 0, 0);
+    u.pi[kk].musl.rotation.set(-0.05, 0, sx*0.05);
+    u.pi[kk].rod.rotation.set(0.10, 0, 0);
+  }
+}
 /* un salto de sorpresa: se echa para atrás y sube los brazos. Es la pose del
    final de la cinemática, cuando aparece lo que aparece. */
 function poseSusto(p, t, k){
@@ -226,6 +242,43 @@ function poseSusto(p, t, k){
 const matPelo   = new T.MeshLambertMaterial({ color: 0x8a6a44, flatShading: true });
 const matOjoMal = new T.MeshBasicMaterial({ color: 0xff7a2a });
 
+/* ── LA CARA ──
+   Dibujada por código a 32 píxeles, como todo lo demás de este juego. Una foto
+   de una cara real pegada sobre un animal de cajas planas se ve exactamente
+   como lo que es: una foto pegada encima. Lo que da miedo acá no es el detalle
+   sino la GEOMETRÍA de la cara, que se lee igual a cuatro píxeles: dos ojos
+   demasiado juntos y demasiado arriba, pupilas chiquitas en mucho blanco —lo
+   que hace que algo se vea desquiciado y no dormido— y una fila de dientes
+   demasiado larga para el hocico.
+   VA EN UNA SOLA CARA DEL CUBO DE LA CABEZA. Con el mismo mapa en las seis, el
+   bicho tendría cara en la nuca. */
+const texCara = lienzoTex(32, (g,n) => {
+  moteado(g, n, '#8a6a44', '#a3835c', '#5e472c', 0.5);
+  /* las cuencas: dos manchas oscuras hundidas, que es lo que hace que los ojos
+     se lean como metidos adentro de la cabeza */
+  g.fillStyle = '#2a1d12';
+  g.fillRect(4, 7, 9, 8); g.fillRect(19, 7, 9, 8);
+  /* el blanco del ojo, mucho, y la pupila chiquita y arriba */
+  g.fillStyle = '#f4ecd8';
+  g.fillRect(5, 8, 7, 6); g.fillRect(20, 8, 7, 6);
+  g.fillStyle = '#c85a10';
+  g.fillRect(7, 9, 3, 3); g.fillRect(22, 9, 3, 3);
+  g.fillStyle = '#120c08';
+  g.fillRect(8, 10, 1, 2); g.fillRect(23, 10, 1, 2);
+  /* la boca: una raja negra de oreja a oreja con los dientes encima */
+  g.fillStyle = '#1a0f0a';
+  g.fillRect(3, 21, 26, 7);
+  g.fillStyle = '#e8dcb0';
+  for (let x = 4; x < 29; x += 3) g.fillRect(x, 21, 2, 3);
+  for (let x = 5; x < 29; x += 3) g.fillRect(x, 25, 2, 3);
+  /* los dos agujeros de la nariz y unas cicatrices */
+  g.fillStyle = '#3a2616';
+  g.fillRect(12, 17, 3, 2); g.fillRect(18, 17, 3, 2);
+  g.fillStyle = '#6b4f33';
+  g.fillRect(2, 4, 12, 1); g.fillRect(24, 16, 6, 1);
+});
+const matCara = new T.MeshLambertMaterial({ map: texCara, flatShading: true });
+
 function armaCamello(){
   const g = new T.Group();
   const cuerpo = new T.Object3D();
@@ -256,7 +309,12 @@ function armaCamello(){
   const cabeza = new T.Object3D();
   cabeza.position.y = 1.24;
   cuello.add(cabeza);
-  const mCab = new T.Mesh(geoCaja, matPelo);
+  /* la cabeza lleva SEIS materiales, uno por cara del cubo: la cara creepy va
+     en +Z —el frente, o sea por donde mira— y el pelo en las otras cinco.
+     `BoxGeometry` ya viene con seis grupos, uno por cara, en el orden
+     +X −X +Y −Y +Z −Z: alcanza con pasarle un arreglo de materiales. */
+  const mCab = new T.Mesh(geoCaja,
+    [matPelo, matPelo, matPelo, matPelo, matCara, matPelo]);
   mCab.scale.set(0.36, 0.36, 0.52);
   mCab.position.z = 0.10;
   mCab.castShadow = true;
@@ -315,6 +373,15 @@ function animaCamello(c, t, v){
   u.cuerpo.position.y = 2.05 + Math.abs(Math.sin(f*2))*0.055;
   u.cuello.rotation.x = 0.30 + Math.sin(f)*0.09;
   u.cabeza.rotation.x = -0.22 + Math.sin(f*2)*0.05;
+  /* MIRAR A ALGUIEN ES UNA EXCEPCIÓN Y VA ACÁ, no en quien la pide. El ciclo
+     de caminata escribe estas dos rotaciones TODOS los cuadros, así que una
+     pose puesta desde afuera se borraba sola en el cuadro siguiente: la
+     cinemática de la llave dejaba al camello mirando al horizonte con la cara
+     —que es la textura que hay que ver— apuntando por encima del jugador.
+     Rotar la cabeza en +X inclina su +Z hacia abajo, que es lo que hace falta
+     para bajar la vista hasta alguien que está a los pies. */
+  if (u.miraCuello != null) u.cuello.rotation.x = u.miraCuello;
+  if (u.miraCabeza != null) u.cabeza.rotation.x = u.miraCabeza;
   u.pat.forEach((p, i) => {
     const s = Math.sin(f + (i%2 ? Math.PI : 0) + (p.sz > 0 ? 0 : 0.5));
     p.alto.rotation.x = s*0.52;
@@ -329,8 +396,16 @@ function animaCamello(c, t, v){
    la regla que ya usa Eco con su cosa: el castigo es el susto y el camino de
    vuelta, no perder la partida. */
 let CAM3 = null;
-const BICHO = { x: 0, z: 0, ry: 0, v: 0, modo: 'ronda', tx: 0, tz: 0, t: 0, golpe: 0 };
+const BICHO = { x: 0, z: 0, ry: 0, v: 0, modo: 'ronda', tx: 0, tz: 0, t: 0, golpe: 0,
+                /* `caza` lo saca del horario: después de la escena de la llave
+                   ya no importa si es de día, te sigue igual. Hasta entonces
+                   sólo sale de noche. */
+                caza: false };
 const RONDA = 2.2, ACECHA = 3.6, EMBISTE = 7.4;   /* correr son 12,8: se le gana */
+/* CUÁNTO MIDE DE ALTO, sumado de la propia jerarquía y no estimado: cuerpo
+   2,05 + cuello 0,34 + cabeza 1,24 + media cabeza 0,18 + oreja 0,09. Lo usa la
+   cinemática de la llave para saber cuánto tiene que levantar la vista. */
+const ALTO_CAMELLO = 3.90;
 
 function ponCamello(){
   if (!CAM3){ CAM3 = armaCamello(); escena.add(CAM3); }
@@ -339,7 +414,7 @@ function ponCamello(){
   const a = Math.random()*6.283, r = 120 + Math.random()*70;
   BICHO.x = CAMPO.x + Math.cos(a)*r;
   BICHO.z = CAMPO.z + Math.sin(a)*r;
-  BICHO.modo = 'ronda'; BICHO.t = 0; BICHO.golpe = 0;
+  BICHO.modo = 'ronda'; BICHO.t = 0; BICHO.golpe = 0; BICHO.caza = false;
   nuevoDestino();
   CAM3.visible = true;
 }
@@ -372,10 +447,13 @@ function pasoCamello(dt){
   /* LA NOCHE ES LO QUE LO CAMBIA. `CFG.sol` es la fase del día: 0 medianoche,
      0,5 mediodía. Entre 0,80 y 0,20 —o sea de noche— sale a buscar. */
   const noche = CFG.sol > 0.80 || CFG.sol < 0.20;
+  /* durante la cinemática de la llave se queda plantado donde lo puso ella */
+  if (BICHO.modo === 'quieto'){ CAM3.position.set(BICHO.x, H(BICHO.x, BICHO.z), BICHO.z);
+    CAM3.rotation.y = BICHO.ry; animaCamello(CAM3, RELOJ.value, 0.02); return; }
   if (BICHO.golpe > 0){
     BICHO.golpe -= dt;
     if (BICHO.golpe <= 0){ BICHO.modo = 'ronda'; nuevoDestino(); }
-  } else if (noche && dj < 95){
+  } else if ((noche || BICHO.caza) && dj < (BICHO.caza ? 400 : 95)){
     BICHO.modo = dj < 26 ? 'embiste' : 'acecha';
     BICHO.tx = JUG.x; BICHO.tz = JUG.z;
   } else {
@@ -432,18 +510,15 @@ function pasoCamello(dt){
    SE PUEDE SALTEAR EN CUALQUIER MOMENTO. Una cinemática obligatoria que se ve
    por segunda vez deja de ser una historia y pasa a ser un peaje. */
 const GUION = [
-  /* [ hasta el segundo, texto ] — el texto es el de la escena, no el del
-     instante: partirlo en renglones sueltos obliga a leer más rápido de lo que
-     uno mira, y lo que hay que mirar es la isla. */
-  [ 5.5,  'Cuatro amigos. Una isla que no figura en ningún mapa.' ],
-  [ 11.0, 'Lemi manejó ocho horas para llegar hasta acá.' ],
-  [ 17.5, 'Levantaron el campamento antes de que cayera el sol.' ],
-  [ 23.5, 'Nadie preguntó de quién eran las huellas en la arena.' ],
-  [ 29.0, 'Eran de un camello. Y los estaba mirando.' ],
-  [ 33.5, 'Los otros tres no salieron de las carpas.' ]
+  [ 6.0,  'Cuatro amigos. Una isla que no figura en ningún mapa.' ],
+  [ 11.0, 'El campamento ya estaba armado antes de que cayera el sol.' ],
+  [ 17.0, '—¿Escucharon eso? Nadie escuchó nada.' ],
+  [ 21.0, 'Se fueron a dormir.' ],
+  [ 27.5, 'Cuando Lemi se despertó, no había nadie.' ],
+  [ 31.0, 'Sólo un rastro que salía del campamento.' ]
 ];
 const INTRO = {
-  activa: false, t: 0, dur: 33.5, gente: [], camelloCine: null,
+  activa: false, t: 0, dur: 31.0, gente: [],
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
@@ -451,244 +526,219 @@ const INTRO = {
     $('hud').classList.remove('on');
     $('cine').classList.add('on');
     requestAnimationFrame(() => $('cine').classList.add('abre'));
-    /* la gente se arma acá y se destruye al terminar: durante la partida los
-       tres amigos están adentro de las carpas —por eso hay TRES carpas— y no
-       cuestan un solo triángulo */
+    /* la gente se arma acá y se destruye al terminar: durante la partida no
+       hay nadie —de eso va la historia— y no cuestan un solo triángulo */
     this.gente = AMIGOS.map(d => { const p = armaPersona(d); escena.add(p); return p; });
-    this.camelloCine = armaCamello();
-    this.camelloCine.visible = false;
-    escena.add(this.camelloCine);
     this.txtActual = -1;
+    /* EL MUNDO DE LAS MISIONES SE PLANTA ACÁ Y NO AL TERMINAR, y la razón es
+       una sola línea del guion: «sólo un rastro que salía del campamento». El
+       rastro lo construye `MIS.arma()`, que antes corría recién al entrar al
+       juego, así que el plano que lo nombra mostraba pasto limpio. Lo único que
+       se esconde es el panel de objetivos: durante la cinemática no hay nada
+       que hacer todavía. */
+    MIS.arranca();
+    $('obj').classList.remove('on');
+    /* UN FAROLITO PARA LA ESCENA DEL RUIDO. Lemi termina de espaldas al fuego,
+       o sea a contraluz: medido en la captura salía como una silueta negra sin
+       un rasgo, y lo que la escena tiene que mostrar es que está asustado. Va
+       colgado de la cámara y sólo se enciende en ese tramo, así que la noche
+       sigue siendo noche en los otros tres. */
+    this.foco = new T.PointLight(0xffd9a8, 0, 17, 1.0);
+    escena.add(this.foco);
   },
   termina(){
     if (!this.activa) return;
     this.activa = false;
-    /* EL JUEGO EMPIEZA AL FINAL DE LA NOCHE, no al mediodía y no a medianoche.
-       La historia dice que se sentaron de noche y que a partir de ahí es la
-       tuya, así que salir a un mediodía radiante contradiría lo que se acaba de
-       ver. Pero soltar al jugador en la fase 0,865 son SETENTA SEGUNDOS de
-       oscuridad antes del primer amanecer, y eso no es tensión, es esperar.
-       En 0,185 todavía es de noche —el camello está activo, que es lo que hace
-       falta— y el sol sale a los once segundos: se empieza con miedo y se ve
-       amanecer sobre la isla, que es el final que esta apertura pide. */
-    CFG.sol = 0.185;
     FUEGO_K = 1;
-    /* EL AUTO VUELVE A SU LUGAR DE ESTACIONAMIENTO.
-       La escena 1 lo hace entrar desde setenta y ocho metros, así que salteando
-       la cinemática en el segundo 1 la partida empezaba con la camioneta a
-       setenta metros de donde tiene que estar —o sea, en la práctica, sin auto—.
-       Se veía como que el auto no existía; medido con la proyección, la caja
-       ocupaba el 2,3 % del alto del cuadro en vez del 26 % que le toca a seis
-       metros, que es exactamente lo que da un objeto de dos metros a setenta.
-       Y se apagan los faros, que la escena 1 podría haber dejado encendidos. */
-    if (AUTO){
-      AUTO.g.position.set(AUTO.x, AUTO.y, AUTO.z);
-      AUTO.g.rotation.y = AUTO.ry;
-      for (const f of AUTO.g.userData.faros) f.intensity = 0;
-    }
     if (fuegoLuz) fuegoLuz.distance = 26;
     for (const p of this.gente) soltar(p);
     this.gente = [];
-    if (this.camelloCine){ soltar(this.camelloCine); this.camelloCine = null; }
+    if (this.foco){ escena.remove(this.foco); this.foco.dispose && this.foco.dispose(); this.foco = null; }
     $('cine').classList.remove('abre');
     $('cTexto').classList.remove('ver');
+    $('cVelo').classList.remove('ver');
     setTimeout(() => $('cine').classList.remove('on'), 520);
+    /* EL DÍA EMPIEZA DE MAÑANA. La apertura termina con Lemi despertándose, y
+       las cinco misiones son «del día»: soltarlo de noche contradiría lo que se
+       acaba de ver y encima dejaría sin sentido «juntá ramas PARA LA NOCHE». */
+    CFG.sol = 0.28;
     entraJuego();
-    ponCamello();
+    /* las misiones ya están armadas desde `arranca()`: acá sólo se destapa el
+       panel. Rearmarlas tiraría el rastro que se acaba de ver y lo volvería a
+       sortear, o sea que el juego empezaría con un rastro distinto del de la
+       última imagen de la historia. */
+    if (!MIS.on) MIS.arranca();
+    $('obj').classList.add('on');
   },
   /* deja TODO en el instante `t`. Sin estado escondido: llamarla dos veces con
      el mismo número tiene que dar la misma imagen. */
   pon(t){
     const c = CAMPO, a = AUTO;
-    /* el sol baja a lo largo de la cinemática: llegan de tarde (0,66), arman el
-       campamento al atardecer y terminan de noche cerrada (0,93). Es la misma
-       cuenta que usa el juego, así que el cielo, la niebla y las estrellas
-       acompañan solos. */
-    /* LA CURVA DEL SOL TIENE QUE SER CRECIENTE Y CONTINUA, y la primera versión
-       no era ninguna de las dos: restaba —o sea que el sol SUBÍA hacia el
-       mediodía en vez de ponerse— y encima saltaba de 0,456 a 0,756 en el
-       segundo 24, o sea que la noche caía de golpe en un cuadro. Medido:
-       t=21 daba 0,493, que es mediodía, con el guion hablando del atardecer.
-       Ahora los tres tramos empalman y no baja nunca: 0,66 (media tarde) →
-       0,735 (el sol tocando el horizonte, justo mientras arman la fogata) →
-       0,845 (noche) → 0,876 al terminar.
-       Y LOS CORTES DE LOS TRAMOS CAEN DONDE CORTA EL GUION, no cada doce
-       segundos redondos. El atardecer es la fase 0,75: el tramo de la fogata
-       TERMINA en 0,745, o sea que los amigos arman el campamento con el sol
-       rozando el horizonte —que es literalmente lo que dice el subtítulo— y la
-       noche cae recién en la escena tres. Con los cortes anteriores, en el
-       segundo 16 la fase ya iba en 0,772 y el cuadro estaba de noche mientras
-       el texto hablaba de que todavía había sol.
-       NO SE LLEGA A 0,93. A esa fase la luna sola deja el cuadro casi negro y
-       la escena que importa —el bicho— no se ve; a 0,865 hay noche cerrada y
-       todavía queda algo de luz del oeste para recortar siluetas. */
-    CFG.sol = t < 11.5 ? 0.600 + t*0.00565
-            : t < 23.5 ? 0.665 + (t-11.5)*0.00667
-            : 0.745 + (t-23.5)*0.0120;
+    /* EL AUTO YA ESTÁ ESTACIONADO desde el primer cuadro. Antes llegaba
+       manejando; ahora el campamento está armado cuando empieza la historia,
+       así que lo único que hay que hacer con él es dejarlo en su lugar. */
+    if (a){
+      a.g.position.set(a.x, a.y, a.z);
+      a.g.rotation.y = a.ry;
+      for (const f of a.g.userData.faros) f.intensity = 0;
+    }
+    /* la tarde cae, la noche pasa, y de la noche se corta a la mañana. El corte
+       cae DENTRO del negro, que es lo que hace que se lea como que pasó la
+       noche y no como que el sol pegó un salto. */
+    CFG.sol = t < 12   ? 0.680 + t*0.00583
+            : t < 21   ? 0.750 + (t-12)*0.01344
+            : t < 22.5 ? 0.871
+            :            0.245 + cl((t-22.5)/5, 0, 1)*0.055;
     ponSol(0);
-    /* LA FOGATA CRECE PARA LA ESCENA DE NOCHE. En partida su alcance está
-       medido para no lavar el campamento; acá es la única luz que hay y encima
-       tiene que llegar a cuatro personas sentadas a tres metros. */
-    if (fuegoLuz) fuegoLuz.distance = t > 23.5 ? 44 : 26;
-    FUEGO_K = t > 23.5 ? 3.4 : 1;
-    /* Y LA NOCHE SE LEVANTA, que es una decisión de cine y no de simulación.
-       La noche del JUEGO es oscura a propósito —ambiente 0,20 y luna 0,42— y
-       eso está bien cuando uno la camina con una fogata cerca. Pero en un plano
-       fijo de ocho segundos, con eso el cuadro salía negro entero: medido, no se
-       distinguía ni la fogata ni el bicho. Se sube la luna y el rebote sólo
-       durante la escena 3 y se los deja como estaban al terminar. */
-    if (t > 23.5){
-      const lift = cl((t - 23.5)/2.2, 0, 1);
+    if (this.foco && !(t >= 12 && t < 17)) this.foco.intensity = 0;
+    if (fuegoLuz) fuegoLuz.distance = (t > 9 && t < 22.5) ? 40 : 26;
+    FUEGO_K = (t > 9 && t < 22.5) ? 3.0 : 1;
+    /* la noche se levanta sólo mientras se la mira de cerca, igual que antes */
+    if (t > 12 && t < 22.5){
+      const lift = cl((t - 12)/2.5, 0, 1);
       ambiente.intensity = 0.20 + 0.62*lift;
       luna.intensity = 0.42 + 0.95*lift;
     }
 
     const g = this.gente;
-    /* dónde se para cada uno lo decide CADA ESCENA, contra su propia cámara:
-       la de la fogata reparte a los cuatro fuera del arco que barre el lente y
-       la de la noche los reparte contra la boca por donde entra el camello.
-       Acá había una lista única de tres ángulos que servía para las dos, y
-       justamente por servir para las dos no servía para ninguna. */
+    /* dónde se sienta cada uno. Se reparten FUERA del arco que barre la cámara
+       (0,80 a 2,10 rad): con alguien en el medio, su espalda tapa la fogata,
+       que es lo único que hay que ver en esta escena. */
+    const asien = [5.55, 3.62, 4.58, 0.28];
+    const sitio = (k) => ({ x: c.x + Math.cos(asien[k])*3.4,
+                            z: c.z + Math.sin(asien[k])*3.4 });
+    /* la carpa de cada uno, para el tramo de irse a dormir */
+    const carpaDe = (k) => CARPAS.length ? CARPAS[(k+2) % CARPAS.length] : sitio(k);
 
-    if (t < 11.5){
-      /* ── 1 · EL AUTO LLEGA A LA ISLA ──
-         Entra desde la costa y frena en su lugar de estacionamiento. La cámara
-         lo sigue desde afuera y bajita, casi al ras del pasto: un plano de
-         seguimiento a la altura de la rueda es lo que hace que un auto se lea
-         RÁPIDO, porque el suelo pasa cerca. */
-      const k = cl(t/9.5, 0, 1);
-      const s = 1 - Math.pow(1 - k, 2.6);                /* frena, no corta */
-      const dx = Math.cos(a.ry), dz = Math.sin(a.ry);
-      /* el auto viene desde 78 m detrás de su lugar, sobre su propio eje */
-      const px = a.x - Math.sin(a.ry)*78*(1-s);
-      const pz = a.z - Math.cos(a.ry)*78*(1-s);
-      const py = H(px, pz);
-      a.g.position.set(px, py, pz);
-      a.g.rotation.y = a.ry;
-      for (const f of a.g.userData.faros) f.intensity = 0;
-      /* la gente todavía está adentro: no se dibuja */
-      for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
-
-      const lado = 7.5 + (1-s)*5;
-      const cx = px - Math.cos(a.ry)*lado, cz = pz + Math.sin(a.ry)*lado;
-      cam.position.set(cx, Math.max(H(cx,cz), MAR) + 1.55 + s*0.9, cz);
-      cam.lookAt(px, py + 1.0, pz);
-      cam.fov = 52;
-    } else if (t < 23.5){
-      /* ── 2 · LA FOGATA ──
-         Los cuatro alrededor del fuego poniendo los troncos. Tres se agachan y
-         acomodan; el cuarto —Lemi— llega caminando con un tronco al hombro y
-         se agacha también. La cámara los rodea despacio. */
-      const u = t - 11.5, k = cl(u/12, 0, 1);
-      a.g.position.set(a.x, a.y, a.z); a.g.rotation.y = a.ry;
-      for (const f of a.g.userData.faros) f.intensity = 0;
-
-      /* LOS CUATRO VAN DEL OTRO LADO DEL FUEGO, fuera del arco que barre la
-         cámara. La cámara rodea de 0,90 a 2,05 rad; con Lemi parado en 1,60
-         quedaba EXACTAMENTE entre el lente y la fogata y la tapaba entera
-         —medido: el fuego en x 0,468-0,538 y él en 0,445-0,553, o sea encima—.
-         Puestos en 5,60 · 3,60 · 4,55 · 0,25, los cuatro caen del lado opuesto,
-         se los ve DE FRENTE porque miran al fuego, y entre ellos y el lente no
-         queda más que la fogata, que es lo que hay que ver. */
-      const trab = [5.60, 3.60, 4.55, 0.25];
+    if (t < 12){
+      /* ── 1 · LOS CUATRO EN LA FOGATA, CAYENDO EL SOL ──
+         Sentados y charlando. La cámara los rodea despacio y baja: es el plano
+         que establece que son cuatro y que están bien. */
+      const k = cl(t/12, 0, 1);
       g.forEach((p, i) => {
         p.visible = true;
-        p.userData.leno.visible = true;
-        const ag = trab[i], rr2 = 3.2;
-        const dx2 = c.x + Math.cos(ag)*rr2, dz2 = c.z + Math.sin(ag)*rr2;
+        p.userData.leno.visible = false;
+        const s2 = sitio(i);
+        p.position.set(s2.x, H(s2.x, s2.z) + 0.42, s2.z);
+        p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+        poseSentado(p, RELOJ.value + i*1.3);
+      });
+      const ang = 0.80 + k*1.30, rr = 9.6 - k*1.9;
+      const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
+      cam.position.set(cx, c.h + 3.0 - k*0.55, cz);
+      cam.lookAt(c.x, c.h + 1.15, c.z);
+      cam.fov = 47;
+    } else if (t < 17){
+      /* ── 2 · EL RUIDO ──
+         Lemi se para y se da vuelta hacia el monte. LOS OTROS TRES NO SE
+         MUEVEN, y eso es la escena entera: si se pararan los cuatro, lo que
+         pasa es que todos oyeron algo; quedándose sentados, lo que pasa es que
+         Lemi es el único que lo oyó, que es lo que dice el texto.
+         La cámara se pone DETRÁS de él y mira hacia donde él mira: así el
+         espectador busca en la oscuridad lo mismo que está buscando él. */
+      const u = t - 12, k = cl(u/5, 0, 1);
+      const para = cl((u - 0.7)/1.1, 0, 1);      /* se levanta */
+      const gira = cl((u - 1.6)/1.4, 0, 1);      /* se da vuelta */
+      /* EL MONTE OSCURO ES EL QUE TIENE ATRÁS, no un rumbo escrito a mano.
+         Con la constante de antes, la dirección del ruido caía del OTRO lado
+         del campamento, o sea que Lemi se daba vuelta para mirar por encima de
+         la fogata y sus tres amigos — y la cámara «delante de él» terminaba
+         adentro del fuego: medido, la fogata ocupaba el 310 % del alto del
+         cuadro y todo salía rojo. Lo que hay a espaldas de alguien sentado
+         alrededor de un fuego es el bosque, y ésa es la dirección. */
+      const s0i = sitio(0);
+      let ax = s0i.x - c.x, az = s0i.z - c.z;
+      const al0 = Math.hypot(ax, az) || 1; ax /= al0; az /= al0;
+      g.forEach((p, i) => {
+        p.visible = true;
+        p.userData.leno.visible = false;
+        const s2 = sitio(i);
+        p.position.set(s2.x, H(s2.x, s2.z) + (i === 0 ? 0.42*(1-para) : 0.42), s2.z);
         if (i === 0){
-          /* Lemi entra caminando desde el auto y se agacha al llegar. El camino
-             pasa a 3,15 m del fuego, o sea por fuera del círculo de piedras: no
-             lo cruza. */
-          const ll = cl(u/4.2, 0, 1);
-          const sx = lerp(a.x, dx2, ll), sz = lerp(a.z, dz2, ll);
-          p.position.set(sx, H(sx, sz), sz);
-          p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
-          if (ll < 1) poseCamina(p, RELOJ.value, 1);
-          else poseLena(p, RELOJ.value, true);
+          const mira = Math.atan2(c.x - s2.x, c.z - s2.z);
+          p.rotation.y = lerp(mira, mira + Math.PI, gira);
+          if (para < 1) poseSentado(p, RELOJ.value);
+          else poseAlerta(p, RELOJ.value, gira);
         } else {
-          p.position.set(dx2, H(dx2, dz2), dz2);
-          p.rotation.y = Math.atan2(c.x - dx2, c.z - dz2);
-          poseLena(p, RELOJ.value + i*0.7, true);
+          p.rotation.y = Math.atan2(c.x - s2.x, c.z - s2.z);
+          poseSentado(p, RELOJ.value + i*1.3);
         }
       });
-      const ang = 0.9 + k*1.15;
-      const rr = 10.4 - k*2.0;
-const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
-      cam.position.set(cx, c.h + 2.5 - k*0.55, cz);
-      cam.lookAt(c.x, c.h + 1.05, c.z);
-      cam.fov = 46;
-    } else {
-      /* ── 3 · DE NOCHE, SENTADOS ──
-         Los cuatro en los troncos y el fuego alto. Y atrás, en el borde de la
-         luz, aparece el camello. La cámara ESTÁ DETRÁS DE ELLOS y no enfrente:
-         mirándolos de frente, lo que aparece atrás queda fuera de cuadro; desde
-         atrás, el bicho entra por encima de sus cabezas y se ve lo mismo que
-         ven ellos, que es el punto de la escena. */
-      const u = t - 23.5, k = cl(u/10, 0, 1);
-      a.g.position.set(a.x, a.y, a.z); a.g.rotation.y = a.ry;
-      /* DÓNDE SE SIENTA CADA UNO SE DECIDE CONTRA DÓNDE ENTRA EL CAMELLO, no al
-         azar. El bicho viene por 2,05 rad; Lemi se sienta en el ángulo OPUESTO
-         (2,05 + π = 5,19) porque ahí es donde va la cámara, y los otros tres a
-         ±1,4 y +2,6 de él, que deja el sector de 2,05 despejado. Repartidos
-         parejo, uno de los cuatro tapaba justo la boca por donde aparece lo
-         único que hay que ver en la escena. */
-      const AENT = 2.05, ALEMI = AENT + Math.PI;
-      /* LEMI NO SE SIENTA EN EL EJE DE LA CÁMARA sino medio radián al costado.
-         Sentado justo delante, su espalda tapaba la fogata: medido, el fuego
-         caía en y 0,64-0,97 y Lemi en 0,66-1,47, o sea encima. Corrido, la
-         cámara mira POR EL HUECO entre él y el de al lado. */
-      const asien = [ALEMI - 0.52, ALEMI + 1.42, ALEMI - 1.78, ALEMI + 2.62];
-      const susto = cl((u - 6.4)/0.55, 0, 1);
-      g.forEach((p, i) => {
-        p.visible = true;
-        /* SENTADOS YA NO LLEVAN LEÑA: la pusieron en el fuego. Dejarla puesta
-           sería cuatro personas cenando con un tronco en la mano. */
-        p.userData.leno.visible = false;
-        const ag = asien[i];
-        const sx = c.x + Math.cos(ag)*3.5, sz = c.z + Math.sin(ag)*3.5;
-        p.position.set(sx, H(sx, sz) + 0.42, sz);
-        p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
-        if (susto > 0) poseSusto(p, RELOJ.value, susto);
-        else poseSentado(p, RELOJ.value + i*1.3);
-      });
-      /* EL CAMELLO ENTRA CAMINANDO Y NO APARECIENDO. Encendido de golpe se lee
-         a error de dibujo; viniendo desde la oscuridad se lee a que estaba ahí
-         desde antes, que es lo que dice el texto. */
-      const cc = this.camelloCine;
-      if (cc){
-        const ent = cl((u - 3.2)/5.2, 0, 1);
-        cc.visible = ent > 0;
-        /* SE ACERCA HASTA DIEZ METROS y no hasta catorce: a catorce, con el
-           campo cerrado de esta escena, medía cuatro dedos de alto al fondo del
-           cuadro y no se leía como una amenaza sino como un arbusto. */
-        /* SE ACERCA HASTA SIETE METROS DEL FUEGO, y ése es el número que lo
-           hace existir: más lejos, la luz de la fogata no le llega y de noche
-           un bicho sin luz encima es exactamente nada. Medido con una
-           diferencia de píxeles sobre su propia caja proyectada. */
-        const dd = 22 - ent*15;
-        const cxx = c.x + Math.cos(AENT)*dd, czz = c.z + Math.sin(AENT)*dd;
-        cc.position.set(cxx, H(cxx, czz), czz);
-        cc.rotation.y = Math.atan2(c.x - cxx, c.z - czz);
-        animaCamello(cc, RELOJ.value, ent < 1 ? 0.16 : 0.02);
+      /* LA CÁMARA VA SOBRE SU HOMBRO, Y SE ARMA EN EL MARCO DE LEMI.
+         Puesta en el círculo del campamento y apuntada al monte, la vista le
+         pasaba POR ENCIMA DE LA CABEZA: medido, Lemi caía a 2,3 m del lente y
+         entero por debajo del borde de abajo, así que el plano del susto —que
+         es de lo que va esta escena— era un rectángulo de árboles negros sin
+         nadie adentro. Ahora el sitio se calcula respecto de ÉL: tantos metros
+         detrás y tantos a un costado de la dirección en la que mira, y el punto
+         al que apunta está delante suyo. Así el encuadre no depende de dónde
+         cayó el campamento ni de qué asiento le tocó. */
+      const s0 = s0i, y0 = H(s0.x, s0.z);
+      const ux = ax, uz = az;                       /* hacia donde termina mirando */
+      const px = -uz, pz = ux;                      /* su costado */
+      /* Y VA POR DELANTE DE ÉL, NO DETRÁS. Sobre el hombro se ve lo que él mira
+         —oscuridad— y no se lo ve a él; medido, Lemi ocupaba el 68 % del alto y
+         aun así en la captura no se distinguía, porque estaba de espaldas y en
+         sombra contra árboles negros. Puesta enfrente, la fogata le queda
+         DETRÁS y lo recorta: se le ve la silueta pararse y darse vuelta, que es
+         lo único que esta escena tiene que contar. */
+      const dist = lerp(5.0, 3.4, k), lado = lerp(2.8, 1.7, k), alt = lerp(1.85, 1.55, k);
+      const cx = s0.x + ux*dist + px*lado;
+      const cz = s0.z + uz*dist + pz*lado;
+      cam.position.set(cx, y0 + alt, cz);
+      cam.lookAt(s0.x, y0 + 0.95 + para*0.45, s0.z);
+      cam.fov = 46 - k*7;
+      if (this.foco){
+        this.foco.position.set(cx, y0 + alt + 0.25, cz);
+        this.foco.intensity = 2.6 * cl((u - 0.4)/1.2, 0, 1);
       }
-      /* LA CÁMARA VA SOBRE EL EJE FUEGO–CAMELLO, detrás de Lemi.
-         El primer intento la ponía en un ángulo y miraba a otro punto corrido
-         diez metros, y el resultado medido fue que en el cuadro no entraban ni
-         la fogata ni el bicho: se veía a Lemi solo, en un rincón, contra un
-         fondo negro. Puesta EN LA MISMA LÍNEA, lo que hay entre la cámara y el
-         punto al que mira es, en orden, la nuca de Lemi, el fuego, y el camello
-         saliendo de la oscuridad. Los tres planos del plano. */
-      /* MÁS ALTA Y MÁS ATRÁS que el primer intento: a 2,05 m y siete metros, la
-         espalda de Lemi se comía el centro del cuadro y el fuego quedaba detrás
-         de ella. Desde 3,1 m se lo mira POR ENCIMA del hombro y el fuego, los
-         otros tres y el camello quedan los tres a la vista. */
-      const cx = c.x + Math.cos(ALEMI)*(9.4 - k*1.5);
-      const cz = c.z + Math.sin(ALEMI)*(9.4 - k*1.5);
-      cam.position.set(cx, c.h + 2.90 + k*0.22, cz);
-      cam.lookAt(c.x + Math.cos(AENT)*(2.2 + k*3.4), c.h + 1.15 + k*0.55,
-                 c.z + Math.sin(AENT)*(2.2 + k*3.4));
-      cam.fov = 46 - k*6;
+    } else if (t < 22.5){
+      /* ── 3 · SE VAN A DORMIR ──
+         Caminan a las carpas y desaparecen adentro. La cámara se queda quieta
+         del otro lado del fuego: es el último plano en el que se los ve. */
+      const u = t - 17, k = cl(u/4.2, 0, 1);
+      g.forEach((p, i) => {
+        const s2 = sitio(i), ca = carpaDe(i);
+        const sx = lerp(s2.x, ca.x, k), sz = lerp(s2.z, ca.z, k);
+        p.position.set(sx, H(sx, sz), sz);
+        p.rotation.y = Math.atan2(sx - ca.x, sz - ca.z) + Math.PI;
+        p.userData.leno.visible = false;
+        /* se meten en la carpa: se apagan al llegar, que es más honesto que
+           hundirlos en el piso */
+        p.visible = k < 0.94;
+        if (k < 1) poseCamina(p, RELOJ.value, 0.7);
+      });
+      const cx = c.x + Math.cos(0.55)*10.5, cz = c.z + Math.sin(0.55)*10.5;
+      cam.position.set(cx, c.h + 3.2, cz);
+      cam.lookAt(c.x, c.h + 1.0, c.z);
+      cam.fov = 48;
+    } else {
+      /* ── 4 · LA MAÑANA, Y NO HAY NADIE ──
+         Mismo encuadre del campamento, de día, vacío. Que sea el MISMO sitio es
+         lo que hace la escena: no hace falta decir que faltan, se ve. */
+      const u = t - 22.5, k = cl(u/8.5, 0, 1);
+      for (const p of g){ p.visible = false; p.userData.leno.visible = false; }
+      /* Y EL ÚLTIMO PLANO MIRA EL RASTRO. El pie dice «sólo un rastro que salía
+         del campamento» y la cámara apuntaba a un rumbo fijo escrito a mano, o
+         sea a cualquier lado: en la captura no se veía una sola mancha. El
+         rastro va del campamento a la cueva, así que ése es el rumbo, y la
+         cámara se pone del lado de acá para que salga hacia el fondo. La vista
+         además baja: se está despertando en el piso. */
+      const r0 = (MIS && MIS.rastroDesde) ? MIS.rastroDesde : { x: c.x + 9, z: c.z - 7 };
+      let vx = r0.x - c.x, vz = r0.z - c.z;
+      const vl = Math.hypot(vx, vz) || 1; vx /= vl; vz /= vl;
+      /* el plano ARRANCA en el campamento vacío y TERMINA sobre el rastro. Con
+         una sola posición no entran las dos cosas: el campamento pide estar
+         lejos y las manchas piden estar cerca —miden medio metro y el cuadro
+         abre 108° en horizontal—, así que la cámara viaja de una a la otra
+         mientras baja, que además es lo que hace alguien que se levanta y
+         camina hasta lo que encontró. */
+      const cx = lerp(c.x - vx*7.0, r0.x - vx*5.5, k);
+      const cz = lerp(c.z - vz*7.0, r0.z - vz*5.5, k);
+      cam.position.set(cx, c.h + 3.0 - k*1.3, cz);
+      cam.lookAt(lerp(c.x, r0.x + vx*6, k), c.h + 1.1 - k*0.85,
+                 lerp(c.z, r0.z + vz*6, k));
+      cam.fov = 54 + k*6;
     }
     cam.updateProjectionMatrix();
     AND.fov = cam.fov;
@@ -702,8 +752,10 @@ const cx = c.x + Math.cos(ang)*rr, cz = c.z + Math.sin(ang)*rr;
       el.classList.remove('ver');
       setTimeout(() => { el.textContent = GUION[idx][1]; el.classList.add('ver'); }, 180);
     }
-    /* el fundido a negro del final, que es por donde entra el juego */
-    $('cVelo').classList.toggle('ver', t > this.dur - 1.1);
+    /* EL NEGRO DEL MEDIO ES LA NOCHE QUE PASA, y es el que permite el corte de
+       hora sin que se lea a error. El del final es por donde entra el juego. */
+    $('cVelo').classList.toggle('ver',
+      (t > 21.4 && t < 23.4) || t > this.dur - 1.1);
   },
   paso(dt){
     this.t += dt;

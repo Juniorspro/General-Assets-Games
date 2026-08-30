@@ -147,6 +147,62 @@ body.pc #acciones{display:none}
   color:rgba(234,244,255,.9);background:rgba(255,255,255,.05)}
 #pausa button:active{transform:scale(.98)}
 #pausa button.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+/* ── LAS MISIONES DEL DÍA ──
+   El panel va ARRIBA A LA IZQUIERDA y no en el medio: es un renglón que hay que
+   poder mirar de reojo mientras se camina, no un cartel que se lee y se cierra.
+   Y el borde de color a la izquierda es lo que hace que se distinga del reloj y
+   de los fps, que viven en la misma esquina. */
+#obj{position:absolute;left:12px;top:calc(30px + env(safe-area-inset-top,0px));
+  max-width:min(300px,62%);padding:8px 12px 9px 11px;border-radius:9px;
+  background:rgba(8,18,28,.55);border-left:3px solid #7ee3a0;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+  opacity:0;transition:opacity .4s;pointer-events:none}
+#obj.on{opacity:1}
+#obj .n{font:700 9px/1.5 ui-monospace,monospace;letter-spacing:.20em;
+  color:rgba(126,227,160,.85);text-transform:uppercase}
+#obj .t{font-size:13.5px;font-weight:650;line-height:1.32;margin-top:1px}
+#obj .s{font-size:11px;line-height:1.4;color:rgba(234,244,255,.55);margin-top:2px}
+#obj.hecho{border-left-color:#f0c869}
+#obj.hecho .n{color:rgba(240,200,105,.9)}
+
+/* la pista de acción: aparece sola cuando hay algo cerca */
+#pista{position:absolute;left:50%;bottom:calc(18% + 10px);transform:translateX(-50%);
+  padding:8px 15px;border-radius:99px;background:rgba(8,18,28,.66);
+  border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(9px);
+  -webkit-backdrop-filter:blur(9px);font:600 12.5px system-ui,sans-serif;
+  letter-spacing:.03em;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#pista.on{opacity:1}
+#pista b{color:#7ee3a0}
+/* el botón de usar entra en el racimo de acciones, arriba del salto */
+#acUsar{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:3;
+  background:rgba(240,200,105,.18);border-color:rgba(240,200,105,.55)}
+#acUsar.apagado{opacity:.28;pointer-events:none}
+
+/* ── EL MINIJUEGO DEL INFLADOR ──
+   Una barra, una línea que la recorre y un bloque verde. Va en DOM y no en el
+   lienzo 3D a propósito: es una interfaz, tiene que verse nítida a cualquier
+   densidad de pantalla y no le sirve de nada estar dentro del mundo. */
+#mini{position:absolute;inset:0;z-index:47;display:none;place-items:center;
+  background:rgba(6,12,20,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#mini.on{display:grid}
+#mini .caja{width:min(430px,86%);text-align:center;pointer-events:auto}
+#mini .tit{font-size:15px;font-weight:700;letter-spacing:.02em}
+#mini .cnt{font:700 11px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(126,227,160,.9);margin-top:3px}
+#mini .barra{position:relative;height:52px;margin:16px 0 6px;border-radius:10px;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.17);overflow:hidden}
+#mini .cubo{position:absolute;top:6px;bottom:6px;border-radius:5px;
+  background:linear-gradient(180deg,#8ff0a8,#4cc472);box-shadow:0 0 14px rgba(126,227,160,.5)}
+#mini .linea{position:absolute;top:-1px;bottom:-1px;width:4px;border-radius:2px;
+  background:#fff;box-shadow:0 0 12px rgba(255,255,255,.9)}
+#mini .aviso{height:1.5em;font-size:12.5px;font-weight:600;
+  color:rgba(234,244,255,.75);margin-top:4px}
+#mini .btn{display:block;width:100%;margin-top:12px;padding:16px;border-radius:99px;
+  font-size:15px;font-weight:700;border:none;color:#04121a;
+  background:linear-gradient(135deg,#7ee3a0,#57b6ef)}
+#mini .btn:active{transform:scale(.97)}
+#mini .pie{margin-top:9px;font-size:11px;color:rgba(234,244,255,.42)}
+
 /* ── LA CINEMÁTICA DE APERTURA ──
    Dos barras negras, un renglón de texto abajo y un botón de saltear. Las
    barras no son un adorno: son lo que le dice al jugador «esto no se juega, se
@@ -207,11 +263,14 @@ body:not(.pc) #joy{display:block}
     <button class="ac" id="acCorre"><span class="ico">»</span>CORRER</button>
     <button class="ac" id="acAgacha"><span class="ico">⌄</span>AGACHAR</button>
     <button class="ac" id="acSalta"><span class="ico">⌃</span>SALTAR</button>
+    <button class="ac apagado" id="acUsar"><span class="ico">✋</span>USAR</button>
   </div>
+  <div id="obj"><div class="n"></div><div class="t"></div><div class="s"></div></div>
+  <div id="pista"></div>
   <div id="teclas">
     <b>W A S D</b> moverse · <b>ratón</b> mirar<br>
     <b>Shift</b> correr · <b>Ctrl</b> agacharse<br>
-    <b>Espacio</b> saltar · <b>F</b> volar · <b>Esc</b> pausa
+    <b>Espacio</b> saltar · <b>E</b> usar · <b>Esc</b> pausa
   </div>
   <div id="joy"><canvas width="300" height="300"></canvas></div>
 </div>
@@ -226,6 +285,17 @@ body:not(.pc) #joy{display:block}
     <div class="mHist">Viniste a acampar con tres amigos a una isla que no figura
       en ningún mapa. En la arena había huellas. No eran de nadie del grupo.</div>
     <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="mini">
+  <div class="caja">
+    <div class="tit">INFLANDO LA RUEDA</div>
+    <div class="cnt" id="miCnt">0 / 7</div>
+    <div class="barra"><div class="cubo" id="miCubo"></div><div class="linea" id="miLinea"></div></div>
+    <div class="aviso" id="miAviso"></div>
+    <button class="btn" id="miBtn">BOMBEAR</button>
+    <div class="pie">Tocá cuando la línea pase por el verde · <b>Espacio</b> en PC</div>
   </div>
 </div>
 

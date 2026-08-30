@@ -69,19 +69,175 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
-- **`Lemi.html` es "LEMI"** (~500 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
+- **`Lemi.html` es "LEMI"** (~630 KB, de los cuales el logo generado con Rezona Lab es casi todo; el
   mundo entero es procedural y no tiene un solo asset). El séptimo juego. Isla pixelada de 660 m de
-  lado que se dibuja sola con ruido: terreno, mar, bosque, nubes y cuatro sitios —campamento, mojón,
-  círculo de piedras y arco de costa—. **Sos Lemi**: viniste a acampar con tres amigos a una isla que
-  no está en ningún mapa, y hay un **camello asesino** dando vueltas que de noche viene a buscarte
-  (correr le gana). Se abre con una **cinemática de 33 s en tres escenas** —el auto llegando, los
-  cuatro armando la fogata al atardecer, y los cuatro sentados de noche cuando aparece el bicho— y de
-  ahí arranca la partida. El pixelado no es un filtro: la escena se dibuja a media resolución en un
-  render target con NEAREST y recién eso se estira. Vive partido en `herramientas/lemi/partes/` y se
-  arma con `python3 herramientas/lemi/armar.py`.
+  lado que se dibuja sola con ruido: terreno, mar, bosque, nubes, cuatro sitios —campamento, mojón,
+  círculo de piedras y arco de costa— y una **cueva excavada en la propia función de altura**, con su
+  ladera detrás. **Sos Lemi**: viniste a acampar con tres amigos a una isla que no está en ningún
+  mapa. Se abre con una **cinemática de 31 s en cuatro tiempos** —los cuatro en la fogata al
+  atardecer, Lemi que oye un ruido y se para, se van a dormir, y Lemi que se despierta solo con un
+  rastro de sangre saliendo del campamento— y de ahí arranca el día. **Cinco misiones en orden**:
+  juntar 5 ramas · buscar el inflador en la camioneta y agacharse a inflar la rueda pinchada (**un
+  minijuego de siete golpes** con un bloque que se angosta de 22 % a 9 %) · seguir el rastro hasta la
+  cueva, que no te deja pasar · armar una antorcha (rama + lona de una carpa + el encendedor del
+  auto) · y las llaves, que abren una **cinemática en primera persona**: agarrás la llave con las dos
+  manos, levantás la vista y **el camello está mirándote**, con una cara creepy dibujada por código en
+  la cara delantera de su cabeza. De ahí en más te persigue sin importar la hora (correr le gana:
+  12,8 contra 7,4). El pixelado no es un filtro: la escena se dibuja a media resolución en un render
+  target con NEAREST y recién eso se estira. Vive partido en `herramientas/lemi/partes/` y se arma con
+  `python3 herramientas/lemi/armar.py`.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Quincuagesimoquinta vuelta (2026-08-30): **LEMI** — el día tiene cinco misiones, hay una cueva y el camello te encuentra
+
+Pedido: *"el auto no debe llegar y que ya esté todo armado, tambien el camello no debe aparecer
+solamente debe aparecer una cinematica de como Lemi se preocupa al escuchar un ruido, también después
+se van a dormir y ahí Lemi despierta sin sus amigos y hay rastros de sangre ... 5 misiones objetivos
+del día ... juntar 5 ramas ... buscar el inflador en el auto y agacharte e inflar ... una pantallita
+de minijuego donde hay una barra con una línea ... 7 veces ... seguir rastros de sangre ... una cueva
+procedural en el terreno ... al llegar no te dejé pasar ... armarte una antorcha recolectando una
+rama, romper una carpa, enliarla y prenderla fuego con un encendedor en el auto ... buscar las llaves
+del auto, en eso te persigue el camello ... una cinematica en primera persona de como agarras con los
+brazos la llave, y miras arriba y está el camello viéndote ... una cara creepy para meterla como
+textura al camello"*.
+
+Las misiones viven en `herramientas/lemi/partes/i.js`, que es archivo nuevo.
+
+#### TODO PASA POR UNA SOLA LISTA
+
+`COSAS` es el registro de cada cosa del mundo con la que se puede hacer algo: su posición, su radio y
+qué pasa al usarla. El bucle busca la más cercana y de ahí salen **el cartel y el botón USAR**. Con un
+`if` por objeto desparramado, el próximo que se agregue queda sin cartel y nadie se entera hasta
+jugarlo. Y el radio es generoso —2,8 m— por la misma razón que el blanco de los bichos de RECREO: lo
+que tiene que costar es llegar, no clavar el píxel.
+
+**Y `usa()` NO SE APOYA EN LO QUE DEJÓ EL CUADRO ANTERIOR.** La primera versión leía `this.cerca`, que
+lo escribe `paso()`: dos funciones, una lee lo que la otra dejó, y eso funciona hasta el día en que
+cambia el orden del bucle. Las dos llaman a `buscaCerca()`.
+
+**LA RUEDA GANABA EL CARTEL ANTES DE TIEMPO.** Parado junto a la camioneta, la rueda queda **más
+cerca** que el centro del auto —medido, 1,62 m contra 1,70— así que el cartel decía «agachate a
+inflar» para después contestar que falta el inflador. Con la marca `requiere`, hasta tenerlo la única
+cosa usable ahí es la camioneta.
+
+#### EL MINIJUEGO: EL BLOQUE SE ANGOSTA, LA LÍNEA NO ACELERA
+
+De 22 % a 9 % del ancho de la barra a lo largo de los siete golpes, medido: 0,220 · 0,198 · 0,177 ·
+0,155 · 0,133 · 0,112 · 0,090. **La línea NO acelera** a propósito: lo que sube es la puntería, no el
+reflejo, y con las dos cosas a la vez el último golpe sería lotería. **Fallar no reinicia** —perder
+seis golpes por uno malo convierte treinta segundos en cinco minutos y nada en el pedido lo pide—, y
+el centro del bloque nunca queda pegado al borde, porque ahí la línea rebota y la ventana se duplica
+sola: el golpe más difícil saldría más fácil.
+
+**Y `cierra()` TUVO QUE HACERSE IDEMPOTENTE.** El cierre llega por un `setTimeout` de 0,7 s y en ese
+rato el botón sigue vivo: dos toques rápidos al final agendaban **dos** cierres y cada uno avanzaba
+una misión. Medido, los siete golpes dejaban el juego en la misión 4 en vez de la 2, **salteando el
+rastro y la antorcha enteros**.
+
+#### LA CUEVA SE EXCAVA EN LA FUNCIÓN DE ALTURA
+
+`H(x,z)` le resta un cuenco de 12,5 m de radio y 5,4 de hondo. Pero un cuenco en un prado se lee a
+pozo, no a cueva: hace falta ladera. Así que la misma función **le suma un cerro** de 40 m de radio y
+18 de alto **centrado veinte metros detrás de la boca**, multiplicado por la máscara de la isla. En la
+boca las dos cosas casi se cancelan (+4,5 contra −5,4) y lo que crece es todo lo que hay alrededor.
+
+**Y EL NEGRO DEL FONDO HUBO QUE TRAERLO ADELANTE.** Estaba a dieciocho metros, con un túnel largo por
+delante. Pero ese cerro sube **2,8 m en los primeros tres metros y 6,3 en cinco**, así que el túnel y
+su fondo quedaban **enterrados**: en la captura no había agujero, había un montón de piedras oscuras
+sobre el pasto. Con el negro a metro y medio de la boca —delante de donde el suelo empieza a trepar—
+el arco se lee como lo que es.
+
+#### LA CINEMÁTICA DE LA LLAVE, Y EL DEFECTO QUE LA SONDA NO VEÍA
+
+**EL CAMELLO SE PLANTABA DETRÁS DEL JUGADOR.** El adelante de esta cámara es `(-sin yaw, -cos yaw)` y
+estaba escrito `(+sin, +cos)`, así que el bicho quedaba siete metros y medio **a la espalda**. Y la
+sonda decía que estaba en cuadro: **un punto detrás de la cámara proyecta igual, dado vuelta, y cae
+dentro del rectángulo**. Es la misma trampa que en RECREO dio un autobús «entero y centrado» con la
+cámara mirando para el otro lado. Comprobado midiendo lo único que no miente: con la malla apagada y
+encendida, **cero píxeles de diferencia en 367.504** — no se estaba dibujando, el recorte del frustum
+lo descartaba. Ahora `donde()` mira también la profundidad y devuelve `delante`.
+
+**Y LA SONDA MEDÍA UN CUADRO QUE NO ERA EL QUE SE FOTOGRAFIABA.** `LLAVE.paso()` no mueve la cámara:
+mueve `JUG.pitch`, y quien lo copia a `cam.rotation.x` es `ponCam`, que corre en el bucle. Midiendo
+justo después de `paso(0)` se proyectaba con la cámara del instante anterior. El gancho llama a
+`ponCam(0)` y a `pasoCamello(0)` antes de proyectar.
+
+**DE FRENTE UN CAMELLO ES UNA COLUMNA.** Medido, la silueta ocupaba el **1,7 % del cuadro**, porque lo
+que se ve de frente son ochenta y seis centímetros de pecho. Lo que lo hace grande es el largo, así
+que se lo planta **girado cuarenta grados** y con el **cuello girado lo mismo para el otro lado**: el
+cuerpo de tres cuartos y la cara mirándote, que es lo que se pidió.
+
+**CUÁNTO SE LEVANTA LA VISTA SE CALCULA.** Estaba clavado en +0,10 rad, sacado de suponer que los dos
+pisan la misma altura. No la pisan: la llave está al lado de la cueva, que está en una ladera, y ahí
+la cabeza terminaba **diecisiete centésimas de pantalla por encima del borde** y en el cuadro se veían
+cuatro patas. Ahora se promedian el ángulo a la cabeza y el ángulo a las patas. Medido después:
+**y 0,16–0,78 del alto**.
+
+**Y LA DIRECCIÓN SE ELIGE MIRANDO SI HAY ALGO EN EL MEDIO.** Plantado en el rumbo en el que uno venía,
+el camello salió con **un tronco de árbol cruzándolo por la mitad**. Se prueban ocho rumbos con un
+rayo desde el ojo y se toma el primero con la vista libre — el mismo defecto que en Vecindario dejó el
+farol roto justo entre la cámara y la casa fea.
+
+**UNA LUZ EN EL OJO, Y SÓLO CUANDO SE LEVANTA LA VISTA.** El bicho se planta contra el cielo, o sea a
+contraluz, y la cara —que es la textura que este pedido pide que se vea— salía en un marrón casi
+negro. Una luz colgada de la cámara es el flash de una foto de noche. Encendida desde el primer cuadro
+quemaba las manos a medio metro (**dos brazos blancos puros y el pasto plano**), así que sube con el
+mismo número que levanta la vista.
+
+**Y LA LLAVE SALÍA CELESTE, POR CUARTA VEZ EN ESTE JUEGO.** En el momento en que se la agarra la única
+luz es el cielo, que es azul; un gris bajo cielo azul pasado por la saturación del post-proceso sale
+cian. Va de bronce y con emisivo. Además **cuelga de la mano derecha y no del grupo** —suelta se
+quedaba quieta mientras el brazo subía— y **atravesada y no apuntando adelante**, que de punta eran
+dos píxeles de canto asomando por encima del puño.
+
+#### LA APERTURA CAMBIA: NO LLEGA NADIE Y NO APARECE EL CAMELLO
+
+Cuatro tiempos: los cuatro en la fogata al atardecer · **el ruido** · se van a dormir · Lemi se
+despierta solo. El auto ya está estacionado desde el primer cuadro y el camello no sale.
+
+**LA ESCENA DEL RUIDO COSTÓ TRES ENCUADRES Y LOS TRES ERRORES ERAN DISTINTOS:**
+1. **Detrás de él:** se ve lo que él mira —oscuridad— y no se lo ve a él. Medido, ocupaba el 68 % del
+   alto y en la captura no se distinguía nada.
+2. **Delante de él, con el monte oscuro puesto a mano:** ese rumbo caía **del otro lado del
+   campamento**, así que Lemi se daba vuelta para mirar por encima de la fogata y **la cámara
+   terminaba adentro del fuego** —medido, la fogata ocupaba el 310 % del alto y todo salía rojo—. Lo
+   que hay a espaldas de alguien sentado alrededor de un fuego es el bosque, y ésa es la dirección.
+3. **Y aun bien encuadrado era una silueta negra**, porque termina de espaldas al fuego. Un farolito
+   que sólo se enciende en ese tramo lo resuelve sin tocar los otros tres.
+
+**EL RASTRO SE PLANTA AL EMPEZAR LA CINEMÁTICA Y NO AL TERMINARLA.** El último pie dice «sólo un
+rastro que salía del campamento» y lo construye `MIS.arma()`, que corría recién al entrar al juego: el
+plano que lo nombra mostraba pasto limpio. Ahora las misiones se arman en `INTRO.arranca()` y lo único
+que se esconde es el panel de objetivos.
+
+**Y ESE ÚLTIMO PLANO VIAJA.** Con una sola posición no entran las dos cosas: el campamento vacío pide
+estar lejos y las manchas piden estar cerca —miden medio metro y el cuadro abre 108° en horizontal—.
+La cámara va del campamento al principio del rastro mientras baja, que además es lo que hace alguien
+que se levanta y camina hasta lo que encontró.
+
+#### Y TE AGARRABA ANTES DE QUE PUDIERAS ARRANCAR
+
+Terminando la cinemática con el bicho a seis metros y medio y embistiendo a 7,4 m/s, el **primer
+cuadro de partida ya venía con el golpe puesto** y el camello a ciento treinta metros: la escena del
+susto terminaba en un castigo que nadie pudo evitar. A diez metros y con nueve décimas de quedarse
+clavado —lo que tarda uno en ponerse a correr— la persecución empieza a la par, y correr son 12,8
+contra 7,4.
+
+#### MEDIDO AL CERRAR
+
+Partida completa por el mismo camino que usa el jugador: **5 ramas → inflador → rueda → los 7 golpes
+del minijuego → la cueva → lona y encendedor → «Las llaves» → la cinemática → `modo juego` con el
+camello en `embiste` a 10,5 m**. Antorcha en la mano al 46,6 % del alto y 8,1 % del ancho. Camello en
+el plano del susto: **x 0,42–0,61 · y 0,16–0,78, delante de la cámara**. Cero solapamientos entre los
+seis elementos del HUD en 412×892. `window.__errs` vacío y **0 NaN** en todas las corridas. El HTML
+quedó en **630 KB**.
+
+**Lo que no se pudo hacer:** los ocho pedidos a Rezona —tres logos, la cara del camello y los cuatro
+modelos 3D (camello, auto, carpa, personaje)— siguen en `pending` después de horas. El juego no
+depende de ellos: la cara creepy está dibujada por código en un lienzo de 32 px y va en la cara +Z de
+la cabeza, y todo lo demás sigue siendo procedural.
 
 ### Quincuagesimocuarta vuelta (2026-08-30): **LEMI** — el séptimo juego: carpas, el auto, el camello y una apertura de tres escenas
 

@@ -299,5 +299,10 @@ function armaPanel(){
   sostener('acAgacha', () => ponAgacha(true), () => ponAgacha(false));
   $('acCorre').addEventListener('pointerdown', ev => { ev.preventDefault(); modoPC(false);
     corre = !corre; $('acCorre').classList.toggle('on', corre); });
+  /* USAR: un solo botón para todo lo que se pueda hacer cerca. Con un botón por
+     tipo de cosa, la pantalla se llenaría de botones apagados. */
+  sostener('acUsar', () => MIS.usa());
+  /* el minijuego se juega con un botón grande o con la barra espaciadora */
+  $('miBtn').addEventListener('pointerdown', ev => { ev.preventDefault(); MINI.golpe(); });
 }
 

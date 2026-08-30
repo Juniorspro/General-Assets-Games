@@ -5,14 +5,29 @@ function paso(p, txt){
   return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 }
 async function construir(primera){
-  await paso(0.10, 'Levantando el terreno…');
-  armaTerreno();
-  await paso(0.28, 'Llenando el mar…');
-  armaAgua();
-  /* PRIMERO los sitios: definen los claros donde no se siembra, así el
-     campamento no aparece con tres árboles adentro de la fogata */
-  await paso(0.36, 'Buscando dónde acampar…');
+  /* EL ORDEN NO ES CAPRICHOSO Y CAMBIÓ POR LA CUEVA.
+     La boca de la cueva es un hueco excavado DENTRO de `H()`, y la malla del
+     terreno se construye leyendo `H()`: si se eligiera después, el suelo
+     dibujado y el suelo que se camina dirían cosas distintas justo ahí.
+     Así que primero se elige dónde acampar —en crudo, que el campamento va en
+     el medio y la cueva lejos—, después dónde va la cueva, y recién entonces se
+     levanta el terreno. */
+  CUEVA = null;
+  await paso(0.06, 'Buscando dónde acampar…');
   eligeSitios();
+  await paso(0.12, 'Cavando…');
+  CUEVA = eligeCueva(CAMPO);
+  /* la altura del piso de la cueva se lee con la cueva YA excavada: leerla
+     antes daría la del terreno original, que es cinco metros más arriba */
+  if (CUEVA) CUEVA.h = H(CUEVA.x, CUEVA.z);
+  await paso(0.18, 'Levantando el terreno…');
+  armaTerreno();
+  await paso(0.30, 'Llenando el mar…');
+  armaAgua();
+  /* los claros se recalculan con la cueva ya elegida: sin esto crecen árboles
+     dentro de la boca */
+  CLAROS = SITIOS.map(s2 => ({ x: s2.c.x, z: s2.c.z, r: s2.t === 'campamento' ? 17 : 9 }));
+  if (CUEVA) CLAROS.push({ x: CUEVA.x, z: CUEVA.z, r: 15 });
   await paso(0.44, 'Sembrando…');
   const r = sembrar((p, t) => { $('cBar').style.width = (p*100)+'%'; $('cTxt').textContent = t; });
   await paso(0.78, 'Levantando el campamento…');
@@ -37,16 +52,29 @@ async function resembrar(){
 }
 
 let ultimo = performance.now(), fps = 0, cuadros = 0, acum = 0, DIB = 0, TRI = 0;
+/* CONGELADO: frena la SIMULACIÓN y deja el dibujo.
+   Sin esto no se puede fotografiar un instante: entre el paso que pone la
+   escena y la captura, el navegador sigue corriendo su propio bucle y la foto
+   sale de dos segundos después. Ya pasó tres veces en este proyecto —el
+   autobús de RECREO, la abuela de Vecindario y acá el camello de la llave, que
+   para cuando se sacaba la foto ya te había alcanzado y estaba a cien metros. */
+let CONGELADO = false;
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora = performance.now();
-  const dt = Math.min((ahora - ultimo)/1000, 0.08);
+  let dt = Math.min((ahora - ultimo)/1000, 0.08);
   ultimo = ahora;
+  if (CONGELADO) dt = 0;
   RELOJ.value += dt;
 
   if (MODO === 'menu') CINE.paso(dt);
   else if (MODO === 'cine') INTRO.paso(dt);
+  else if (MODO === 'llave') LLAVE.paso(dt);
   else if (!PAUSA) fisica(dt);
+  /* la cinemática de la llave mueve la cámara ella misma con `JUG`, así que
+     necesita que `ponCam` corra igual aunque la física no */
+  if (MODO === 'llave') ponCam(dt);
+  MIS.paso(dt);
   /* la cinemática pone la hora ella misma cuadro a cuadro: si además corriera
      el reloj del día, el atardecer se le adelantaría al guion */
   ponSol(MODO === 'cine' ? 0 : dt);
@@ -143,7 +171,15 @@ function bucle(){
          1 abajo/derecha— y además se comprueba que estén DELANTE, porque un
          punto detrás de la cámara proyecta igual, dado vuelta, y cae adentro
          del cuadro: es la trampa que ya costó una medición con el autobús. */
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
       cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
       const v = new T.Vector3(), caja = new T.Box3();
       const donde = (ob) => {
         if (!ob || !ob.visible) return null;
@@ -172,10 +208,138 @@ function bucle(){
                lemi: donde(INTRO.gente[0]) };
     },
     saltar: () => { INTRO.termina(); return MODO; },
+    /* ── las misiones, desde afuera ── */
+    mis: () => ({ i: MIS.i, on: MIS.on, ramas: MIS.ramas,
+                  tit: MIS.i >= 0 && MIS.i < 5 ? MIS.lista[MIS.i].n : 'fin',
+                  cerca: MIS.cerca ? MIS.cerca.tipo : null,
+                  antorcha: MIS.antorcha, mini: MINI.on,
+                  cosas: COSAS.filter(o => o.activo).map(o => o.tipo) }),
+    /* camina hasta la cosa activa que se le pida y la usa */
+    irA: (tipo) => {
+      const o = COSAS.find(c => c.activo && c.tipo === tipo);
+      if (!o) return { no: tipo, activas: COSAS.filter(c=>c.activo).map(c=>c.tipo) };
+      JUG.x = o.x + 1.2; JUG.z = o.z + 1.2; JUG.y = H(JUG.x, JUG.z); JUG.vy = 0;
+      JUG.yaw = Math.atan2(JUG.x - o.x, JUG.z - o.z);
+      return { tipo, x: +o.x.toFixed(1), z: +o.z.toFixed(1) };
+    },
+    usar: () => MIS.usa(),
+    helar: (v) => { CONGELADO = !!v; return CONGELADO; },
+    /* cuánto de la pantalla se come lo que cuelga de la cámara. La antorcha y
+       las manos viven pegadas al ojo, y ahí «se ve bien» no es una opinión: es
+       un porcentaje del cuadro. */
+    /* la cinemática de la llave, fotografiable en cualquier instante */
+    llave: (t) => {
+      if (!LLAVE.on) LLAVE.arranca();
+      LLAVE.t = t; LLAVE.paso(0);
+      /* Y HAY QUE CORRER `ponCam` A MANO, que es la segunda mitad de la misma
+         trampa. `LLAVE.paso` no mueve la cámara: mueve `JUG.pitch`, y quien lo
+         copia a `cam.rotation.x` es `ponCam`, que corre en el bucle. Midiendo
+         justo después de `paso(0)` se proyectaba con la cámara del instante
+         ANTERIOR, así que la sonda contestaba sobre un cuadro que no era el que
+         se estaba fotografiando —de ahí que dijera que el camello estaba a la
+         vista en el segundo en que se mira el suelo—. */
+      ponCam(0);
+      /* y el camello se planta donde lo dejó la cinemática, no donde lo dejó el
+         último cuadro del bucle */
+      pasoCamello(0);
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
+      cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+      const caja = new T.Box3(), v = new T.Vector3();
+      const donde = (ob) => {
+        if (!ob) return null;
+        ob.updateMatrixWorld(true);
+        caja.setFromObject(ob);
+        if (caja.isEmpty()) return null;
+        let x0=9,x1=-9,y0=9,y1=-9, delante = true;
+        for (let i = 0; i < 8; i++){
+          v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+          v.applyMatrix4(cam.matrixWorldInverse);
+          /* EN EL ESPACIO DE LA CÁMARA, LO QUE SE VE TIENE z NEGATIVA. Sin esta
+             comprobación un objeto que está a la espalda proyecta igual —dado
+             vuelta— y la sonda contesta «entra en el cuadro» sobre algo que el
+             recorte del frustum ni siquiera dibuja. */
+          if (v.z > -0.05) delante = false;
+          v.applyMatrix4(cam.projectionMatrix);
+          const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+        return { x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)], delante };
+      };
+      const dc = CAM3 ? Math.hypot(cam.position.x - BICHO.x, cam.position.z - BICHO.z) : null;
+      return { t, pitch:+JUG.pitch.toFixed(2), camRotX:+cam.rotation.x.toFixed(2),
+               manos: LLAVE.manos ? donde(LLAVE.manos) : null,
+               camello: CAM3 ? donde(CAM3) : null,
+               camVis: CAM3 ? CAM3.visible : null, modoB: BICHO.modo,
+               dist: dc === null ? null : +dc.toFixed(1),
+               llaveVis: LLAVE.manos ? LLAVE.manos.userData.llave.visible : null };
+    },
+    enMano: () => {
+      const o = MIS.antorchaMalla; if (!o) return null;
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
+      cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert(); o.updateMatrixWorld(true);
+      const caja = new T.Box3().setFromObject(o), v = new T.Vector3();
+      let x0=9,x1=-9,y0=9,y1=-9;
+      for (let i = 0; i < 8; i++){
+        v.set(i&1?caja.max.x:caja.min.x, i&2?caja.max.y:caja.min.y, i&4?caja.max.z:caja.min.z);
+        v.applyMatrix4(cam.matrixWorldInverse).applyMatrix4(cam.projectionMatrix);
+        const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+        x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+      }
+      return { x:[+x0.toFixed(2),+x1.toFixed(2)], y:[+y0.toFixed(2),+y1.toFixed(2)],
+               altoPct:+((y1-y0)*100).toFixed(1), anchoPct:+((x1-x0)*100).toFixed(1) };
+    },
+    /* juega el minijuego solo: golpea SIEMPRE dentro del cubo, así se prueba
+       que los siete cuenten y que el ancho baje, sin depender del reflejo */
+    mini: (n) => {
+      const r = [];
+      for (let k = 0; k < (n || 12) && MINI.on; k++){
+        r.push({ k: MINI.k, ancho: +MINI.ancho.toFixed(3) });
+        MINI.pos = MINI.cubo; MINI.tGolpe = 0;
+        const res = MINI.golpe();
+        r[r.length-1].res = res;
+        if (res === 'fin' || res === null) break;
+      }
+      return r;
+    },
+    /* y golpea siempre AFUERA, para comprobar que fallar no reinicia */
+    miniMal: (n) => {
+      const r = [];
+      for (let k = 0; k < (n || 3) && MINI.on; k++){
+        MINI.pos = MINI.cubo > 0.5 ? 0.02 : 0.98; MINI.tGolpe = 0;
+        r.push({ k: MINI.k, res: MINI.golpe() });
+      }
+      return r;
+    },
+    cueva: () => CUEVA && { x:+CUEVA.x.toFixed(1), z:+CUEVA.z.toFixed(1),
+      h:+CUEVA.h.toFixed(1), hondoReal: +(alturaCruda(CUEVA.x,CUEVA.z)*mascaraIsla(CUEVA.x,CUEVA.z)
+        - 9*(1-mascaraIsla(CUEVA.x,CUEVA.z)) - 3.2 - H(CUEVA.x,CUEVA.z)).toFixed(2),
+      frente: [+CUEVA.frenteX.toFixed(1), +CUEVA.frenteZ.toFixed(1)] },
     /* dónde cae el auto en la pantalla, con la misma cuenta que el camello */
     verAuto: () => {
       if (!AUTO) return null;
+      /* LA INVERSA HAY QUE CALCULARLA A MANO. `updateMatrixWorld()` pone al día
+         `matrixWorld`, pero `matrixWorldInverse` —que es la que usa cualquier
+         proyección— la recalcula EL RENDERER al dibujar. Midiendo justo después
+         de mover la cámara, la sonda proyectaba con la cámara del cuadro
+         anterior: decía que el camello estaba dentro del cuadro cuando estaba
+         medio metro por encima del borde, y al revés. Es la misma trampa que en
+         RECREO hizo que el autobús diera 3.094 % del ancho. */
       cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
       const caja = new T.Box3().setFromObject(AUTO.g), v = new T.Vector3();
       let x0=9,x1=-9,y0=9,y1=-9,delante=true;
       for (let i = 0; i < 8; i++){
@@ -201,6 +365,10 @@ function bucle(){
        antes y después, la diferencia de píxeles dice si SE VE, que no es lo
        mismo que estar en cuadro */
     verCamello: (v) => { if (INTRO.camelloCine) INTRO.camelloCine.visible = v; return v; },
+    /* la malla del camello, para poder apagarla o pintarla desde el banco: un
+       bulto oscuro contra un fondo oscuro se ve igual que un bulto que no se
+       dibujó, y la única forma de distinguirlos es apagarlo y comparar */
+    malla: () => CAM3,
     /* pone el camello a la distancia que se le pida, en la dirección que
        quiera: sin esto, probar el acecho y la embestida exigía esperar a que
        llegara caminando desde ciento cuarenta metros a 2,2 m/s */

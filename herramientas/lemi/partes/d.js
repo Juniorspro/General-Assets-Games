@@ -419,6 +419,114 @@ function armaCampamento(c){
   AUTO = { g: auto, x: ax, z: az, y: H(ax, az), ry: auto.rotation.y };
 }
 
+/* ══════════════════════════ LA CUEVA ══════════════════════════
+   Se elige ANTES de armar el terreno, porque el cuenco que la hunde vive dentro
+   de `H()` y la malla del terreno se construye leyendo `H()`.
+
+   VA EN UNA LADERA Y NO EN LO LLANO, y ésa es toda la diferencia entre una
+   cueva y un pozo: lo que hace que se lea como una boca es que haya monte
+   ENCIMA. Se busca la pendiente más marcada dentro de un anillo alrededor del
+   campamento —lo bastante lejos para que llegar sea un viaje, lo bastante cerca
+   para que el rastro de sangre no dé la vuelta a la isla—, y se orienta mirando
+   hacia abajo de la ladera, que es por donde uno llega caminando. */
+function eligeCueva(campo){
+  let mejor = null, mejorP = -1e9;
+  for (let a = 0; a < 6.283; a += 0.09){
+    for (let r = 88; r <= 150; r += 4){
+      const x = campo.x + Math.cos(a)*r, z = campo.z + Math.sin(a)*r;
+      if (Math.hypot(x, z) > MITAD*0.80) continue;
+      const h = H(x, z), pe = pendiente(x, z);
+      if (h < PLAYA + 6) continue;                 /* ni en la playa ni en el mar */
+      const p = pe*10 + h*0.05 - Math.abs(r - 115)*0.02;
+      if (p > mejorP){ mejorP = p; mejor = { x, z, h, a }; }
+    }
+  }
+  if (!mejor) return null;
+  /* hacia dónde baja la ladera: la boca mira para allá */
+  const e = 3.0;
+  const gx = H(mejor.x + e, mejor.z) - H(mejor.x - e, mejor.z);
+  const gz = H(mejor.x, mejor.z + e) - H(mejor.x, mejor.z - e);
+  const baja = Math.atan2(-gx, -gz);              /* el sentido de bajada */
+  /* el cerro va detrás de la boca, en el sentido contrario al que uno llega.
+     Los números están elegidos para que en la boca las dos cosas casi se
+     cancelen —a veinte metros del centro de una loma de radio cuarenta, el
+     coseno elevado vale un cuarto, o sea +4,5 m contra los −5,2 del cuenco—
+     así que el piso de la entrada queda a la altura del terreno de siempre y lo
+     que crece es todo lo que hay alrededor y por encima. */
+  const c = { x: mejor.x, z: mejor.z, r: 12.5, hondo: 5.4, mira: baja,
+              mr: 40, malto: 18 };
+  c.mx = mejor.x - Math.sin(baja)*20;
+  c.mz = mejor.z - Math.cos(baja)*20;
+  c.h = 0;              /* se rellena con H() ya excavada, más abajo */
+  return c;
+}
+
+const texPiedra = lienzoTex(48, (g,n) => {
+  moteado(g, n, '#9c9282', '#b8af9c', '#736a5b', 0.55);
+  g.fillStyle = '#3f3a33';
+  for (let i = 0; i < 16; i++){ const y=(Math.random()*n)|0; g.fillRect(0,y,n,1); }
+  for (let i = 0; i < 10; i++){ const x=(Math.random()*n)|0; g.fillRect(x,0,1,n); }
+});
+const matPiedra = new T.MeshLambertMaterial({ map: texPiedra, flatShading: true });
+/* EL FONDO DE LA CUEVA VA SIN LUZ Y EN NEGRO CASI PURO. Un fondo sombreado
+   igual devuelve algo de la hemisférica y entonces se le ve el final: el agujero
+   deja de ser un agujero y pasa a ser un nicho. En negro plano no tiene fondo. */
+const matNegro = new T.MeshBasicMaterial({ color: 0x05070a });
+
+function armaCueva(c){
+  const g = new T.Group();
+  /* LA BOCA: un arco de bloques de piedra hundido en la ladera, con el túnel
+     detrás. Los bloques van en un semicírculo y con tamaños desparejos, porque
+     un arco de piezas iguales se lee a puerta construida y no a roca partida. */
+  const piezas = [];
+  const N = 17, RA = 4.4;
+  for (let i = 0; i < N; i++){
+    const t = i/(N-1), an = Math.PI*t;
+    const s = 0.85 + Math.random()*0.55;
+    piezas.push({ g: new T.BoxGeometry(1.5*s, 1.35*s, 2.2),
+                  p: [Math.cos(an)*RA, Math.sin(an)*RA*0.92, 0],
+                  r: [(Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, -an + Math.PI/2] });
+  }
+  /* piedras sueltas al pie, que es lo que hay en la boca de una cueva */
+  for (let i = 0; i < 9; i++){
+    const s = 0.5 + Math.random()*0.9;
+    piezas.push({ g: new T.IcosahedronGeometry(s, 0),
+                  p: [(Math.random()-0.5)*8, 0.1 + Math.random()*0.3, 1.2 + Math.random()*2.2],
+                  r: [Math.random()*3, Math.random()*3, Math.random()*3] });
+  }
+  const arco = new T.Mesh(fundir(piezas), matPiedra);
+  arco.castShadow = true; arco.receiveShadow = true;
+  g.add(arco);
+
+  /* EL TÚNEL: un cilindro abierto metido en el cerro, tapado al fondo. Da la
+     profundidad que el cuenco del terreno no puede dar —un mapa de alturas no
+     tiene techo— y es lo que hace que desde afuera se vea que sigue. */
+  /* EL NEGRO VA PEGADO A LA BOCA, Y ESO SALE DE UNA CUENTA DEL TERRENO.
+     Estaba dieciocho metros adentro, con un túnel largo delante. Pero el cerro
+     que se levanta detrás de la boca sube 2,8 m en los primeros tres metros y
+     6,3 m en cinco —es una ladera, para eso se la puso—, así que el túnel y su
+     fondo quedaban ENTERRADOS: en la captura no había agujero, había un montón
+     de piedras oscuras sobre el pasto. Con el negro a metro y medio, delante de
+     donde el suelo empieza a trepar, el arco se lee como lo que es. El túnel se
+     queda corto, sólo para que el canto tenga espesor. */
+  const tun = new T.Mesh(
+    new T.CylinderGeometry(RA*0.84, RA*0.84, 6, 12, 1, true), matPiedra);
+  tun.rotation.x = Math.PI/2;
+  tun.position.set(0, RA*0.48, -2.6);
+  tun.material.side = T.DoubleSide;
+  g.add(tun);
+  const fondo = new T.Mesh(new T.CircleGeometry(RA*0.84, 12), matNegro);
+  fondo.position.set(0, RA*0.48, -5.2);
+  g.add(fondo);
+
+  g.position.set(c.x, H(c.x, c.z), c.z);
+  g.rotation.y = c.mira;
+  escena.add(g); GRUPOS.push(g);
+  /* dónde se para uno cuando llega: cinco metros delante de la boca */
+  c.frenteX = c.x + Math.sin(c.mira)*7.5;
+  c.frenteZ = c.z + Math.cos(c.mira)*7.5;
+}
+
 /* mojón de piedras en la cima: se ve desde media isla */
 function armaMojon(c){
   const g = new T.Group();
@@ -507,6 +615,7 @@ function eligeSitios(){
 }
 function armaSitios(){
   fuegoLuz = null; fuegoMalla = null;
+  if (CUEVA) armaCueva(CUEVA);
   for (const s2 of SITIOS){
     if (s2.t === 'campamento') armaCampamento(s2.c);
     else if (s2.t === 'mojón') armaMojon(s2.c);
