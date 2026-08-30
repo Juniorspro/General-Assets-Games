@@ -78,6 +78,15 @@ function medir(){
   H2 = GIRADO ? vw : vh;
   const esc = document.getElementById('escenario');
   esc.style.width = W + 'px'; esc.style.height = H2 + 'px';
+  /* EL ALTO DEL ESCENARIO, PUBLICADO COMO VARIABLE, y hace falta porque con el
+     escenario GIRADO las unidades `vh` del CSS miden el eje equivocado: `vh` es
+     el alto de la VENTANA, y con el teléfono en vertical eso son los 892 px del
+     lado largo mientras que el alto del cuadro jugable son los 412 del corto.
+     Medido: un `max-height:20vh` daba 178 px —el 20 % de 892— y el logo del menú
+     empujaba el pie fuera del marco. Todo lo que se mida en proporción al alto
+     del cuadro tiene que usar `--eh`, no `vh`. */
+  esc.style.setProperty('--eh', H2 + 'px');
+  esc.style.setProperty('--ew', W + 'px');
   ren.setSize(W, H2, false);
   cam.aspect = W / H2; cam.updateProjectionMatrix();
   const w = Math.max(1, Math.ceil(W / CFG.pix)), h = Math.max(1, Math.ceil(H2 / CFG.pix));
