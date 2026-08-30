@@ -513,7 +513,7 @@ function pasoCamello(dt){
      0,5 mediodía. Entre 0,80 y 0,20 —o sea de noche— sale a buscar. */
   const noche = CFG.sol > 0.80 || CFG.sol < 0.20;
   /* durante la cinemática de la llave se queda plantado donde lo puso ella */
-  if (BICHO.modo === 'quieto'){ CAM3.position.set(BICHO.x, H(BICHO.x, BICHO.z), BICHO.z);
+  if (BICHO.modo === 'quieto'){ CAM3.position.set(BICHO.x, pisoDe(BICHO.x, BICHO.z), BICHO.z);
     CAM3.rotation.y = BICHO.ry; animaCamello(CAM3, RELOJ.value, 0.02); return; }
   if (BICHO.golpe > 0){
     BICHO.golpe -= dt;
@@ -543,7 +543,7 @@ function pasoCamello(dt){
     BICHO.ry += da * Math.min(1, dt*2.6);
   }
   BICHO.v = vel;
-  CAM3.position.set(BICHO.x, H(BICHO.x, BICHO.z), BICHO.z);
+  CAM3.position.set(BICHO.x, pisoDe(BICHO.x, BICHO.z), BICHO.z);
   CAM3.rotation.y = BICHO.ry;
   animaCamello(CAM3, RELOJ.value, vel * dt * 26);
 

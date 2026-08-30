@@ -70,15 +70,27 @@ function bucle(){
   if (MODO === 'menu') CINE.paso(dt);
   else if (MODO === 'cine') INTRO.paso(dt);
   else if (MODO === 'llave') LLAVE.paso(dt);
+  else if (MODO === 'final') FINAL.paso(dt);
   else if (!PAUSA) fisica(dt);
   /* la cinemática de la llave mueve la cámara ella misma con `JUG`, así que
      necesita que `ponCam` corra igual aunque la física no */
   if (MODO === 'llave') ponCam(dt);
   MIS.paso(dt);
   camasPaso(dt);
+  pasoRoto(dt);
+  pasoRojo(dt);
+  if (ENCUEVA) pasoMurcielagos(RELOJ.value);
   /* la cinemática pone la hora ella misma cuadro a cuadro: si además corriera
      el reloj del día, el atardecer se le adelantaría al guion */
   ponSol(MODO === 'cine' ? 0 : dt);
+  /* LA LUZ DE LA CUEVA VA DESPUES DE `ponSol`, Y NO ES UN DETALLE DE ORDEN.
+     `ponSol` reescribe el sol, la luna y el ambiente TODOS los cuadros; puesta
+     antes, la cueva apagaba el mundo y una línea más abajo el sol volvía a
+     encenderse. Medido: adentro del pasillo, con `LUZC.amb` barrido de 0,62 a
+     2,4 el brillo del destino de render se movía 0,6 sobre 255 —o sea nada— y
+     la sonda devolvía `sol: 2,55` a setenta metros dentro del cerro. Lo que se
+     veía era el pasillo iluminado por el AMANECER, y de ahí venía el naranja. */
+  luzCueva(dt);
   if (MODO !== 'cine') pasoCamello(dt);
 
   /* el cielo viaja con la cámara: si no, se ve el borde de la esfera */
@@ -276,6 +288,31 @@ function bucle(){
       return { tipo, x: +o.x.toFixed(1), z: +o.z.toFixed(1) };
     },
     usar: () => MIS.usa(),
+    /* camina de verdad hacia adelante N cuadros, pasando por la fisica, el
+       recorte del pasillo y los tropiezos. Es la unica forma honesta de probar
+       la huida: teletransportarse no puede tropezar. */
+    anda: (n, correr) => new Promise(res => {
+      let i = 0, caidas = 0, pasos = 0;
+      const un = () => {
+        teclas.KeyW = true; teclas.ShiftLeft = !!correr;
+        if (ROTO.cae > 0) caidas++;
+        pasos++;
+        if (++i < n) requestAnimationFrame(un);
+        else { teclas.KeyW = false; teclas.ShiftLeft = false;
+               res(JSON.stringify({ cuadros: pasos, caidas,
+                 dentro: ENCUEVA, avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x,JUG.z).avance.toFixed(1) : null,
+                 x:+JUG.x.toFixed(1), z:+JUG.z.toFixed(1),
+                 cerca: MIS.cerca ? MIS.cerca.tipo : null, modo: MODO })); }
+      };
+      requestAnimationFrame(un);
+    }),
+    /* lleva las misiones hasta la que se pida, sin jugarlas. Con la antorcha
+       ya armada, porque de la cuarta en adelante es lo unico que ilumina. */
+    misA: (i) => { MIS.ramas = 5; MIS.tieneInflador = true;
+      MIS.antorcha = { rama:true, tela:true, fuego:true };
+      while (MIS.i < i && MIS.i < MIS.lista.length){ MIS.avanza(); }
+      if (i >= 4) MIS.prendeAntorcha();   /* directo: chequeaAntorcha() ademas avanza */
+      return { i: MIS.i, antorcha: !!MIS.antorchaMalla }; },
     helar: (v) => { CONGELADO = !!v; return CONGELADO; },
     /* cuánto de la pantalla se come lo que cuelga de la cámara. La antorcha y
        las manos viven pegadas al ojo, y ahí «se ve bien» no es una opinión: es
@@ -428,6 +465,16 @@ function bucle(){
        bulto oscuro contra un fondo oscuro se ve igual que un bulto que no se
        dibujó, y la única forma de distinguirlos es apagarlo y comparar */
     malla: () => CAM3,
+    camPos: () => { if (!CAM3) return null; CAM3.updateMatrixWorld(true);
+      const c = new T.Box3().setFromObject(CAM3);
+      return { pos: [+CAM3.position.x.toFixed(1), +CAM3.position.y.toFixed(2), +CAM3.position.z.toFixed(1)],
+               esc: +CAM3.scale.y.toFixed(2),
+               caja: [+c.min.y.toFixed(2), +c.max.y.toFixed(2)],
+               alto: +(c.max.y-c.min.y).toFixed(2),
+               jug: [+JUG.x.toFixed(1), +JUG.y.toFixed(2), +JUG.z.toFixed(1)],
+               d: +Math.hypot(CAM3.position.x-JUG.x, CAM3.position.z-JUG.z).toFixed(1),
+               piso: (ENCUEVA && CUEVA_EJE) ? +cercaEje(CAM3.position.x, CAM3.position.z).y.toFixed(2) : null,
+               H: +H(CAM3.position.x, CAM3.position.z).toFixed(2) }; },
     /* pone el camello a la distancia que se le pida, en la dirección que
        quiera: sin esto, probar el acecho y la embestida exigía esperar a que
        llegara caminando desde ciento cuarenta metros a 2,2 m/s */
@@ -556,6 +603,96 @@ function bucle(){
                     cuales: Object.keys(AUD_BUF),
                     camas: CAMA.on ? { dia:+CAMA.g.dia.gain.value.toFixed(3),
                                        noche:+CAMA.g.noche.gain.value.toFixed(3) } : null }),
+    /* CUÁNTA LUZ HAY DE VERDAD EN EL CUADRO. Se lee el búfer con `readPixels`
+       y no con `drawImage`: un lienzo WebGL sin `preserveDrawingBuffer` sale en
+       cero por ahí. Es la misma sonda que en Eco decidió el nivel del fogonazo,
+       y sirve para lo mismo — «se ve oscuro» es una opinión, 6,4 de 255 es un
+       dato. */
+    brillo: () => {
+      /* SE LEE EL DESTINO DE RENDER Y NO EL LIENZO. El lienzo se compone y se
+         descarta: sin `preserveDrawingBuffer`, leerlo desde fuera del cuadro
+         devuelve CEROS —medido, las cuatro capturas daban 0 de 0—. El destino
+         intermedio, en cambio, sigue ahí, y encima es el que tiene la escena
+         antes del post-proceso, que es justo lo que hay que medir cuando lo que
+         se está ajustando es la luz. */
+      if (!rt) return { no: 'sin destino' };
+      const w = rt.width, h = rt.height;
+      const px = new Uint8Array(w*h*4);
+      ren.readRenderTargetPixels(rt, 0, 0, w, h, px);
+      let suma = 0, max = 0, enc = 0;
+      for (let i = 0; i < px.length; i += 4){
+        const v = px[i]*0.30 + px[i+1]*0.59 + px[i+2]*0.11;
+        suma += v; if (v > max) max = v; if (v > 26) enc++;
+      }
+      const n = w*h;
+      return { medio: +(suma/n).toFixed(1), max: Math.round(max),
+               pctEncendido: +(enc/n*100).toFixed(1), tam: [w, h] };
+    },
+    luzc: (o) => { if (o) Object.assign(LUZC, o);
+      const g = MIS.antorchaMalla, ls = [];
+      if (g) for (const q of g.children) if (q.isPointLight) ls.push([+q.intensity.toFixed(2), +q.distance.toFixed(1)]);
+      return { ...LUZC, amb: +ambiente.intensity.toFixed(2), sat: +postMat.uniforms.sat.value.toFixed(2),
+               vig: +postMat.uniforms.vig.value.toFixed(3), luces: ls,
+               luna: +luna.intensity.toFixed(2), sol: +sol.intensity.toFixed(2),
+               rel: +relleno.intensity.toFixed(2),
+               col: '#'+ambiente.color.getHexString(), suelo: '#'+ambiente.groundColor.getHexString(),
+               hondo: +hondoCueva().toFixed(2) }; },
+    /* diagnostico: cambia el material del tunel para ver si el problema es la
+       geometria o la luz */
+    tunelMat: (que) => { const m = CUEVA_G && CUEVA_G.children[0] && CUEVA_G.children[0].children[0];
+      if (!m) return 'sin tunel';
+      if (que === 'basic') m.material = new T.MeshBasicMaterial({ map: texCueva });
+      else if (que === 'normal') m.material = new T.MeshNormalMaterial();
+      else m.material = matRocaCueva;
+      const g = m.geometry;
+      return { que, tri: g.attributes.position.count/3,
+               uv: !!g.attributes.uv, nor: !!g.attributes.normal }; },
+    /* donde caen los cuerpos en la pantalla, que es la unica forma de saber si
+       se ven: «esta oscuro» es una opinion, «ocupa el 0,4 % del cuadro» no */
+    cuerpos: () => { cam.updateMatrixWorld(true);
+      cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+      return CUERPOS.map((p, i) => { p.updateMatrixWorld(true);
+        const caja = new T.Box3().setFromObject(p), v = new T.Vector3();
+        let x0=9,x1=-9,y0=9,y1=-9, del = false;
+        for (let k = 0; k < 8; k++){
+          v.set(k&1?caja.max.x:caja.min.x, k&2?caja.max.y:caja.min.y, k&4?caja.max.z:caja.min.z);
+          v.applyMatrix4(cam.matrixWorldInverse);
+          if (v.z < -0.05) del = true;
+          v.applyMatrix4(cam.projectionMatrix);
+          const sx=v.x*0.5+0.5, sy=0.5-v.y*0.5;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+        return { i, vis: p.visible, delante: del,
+                 d: +Math.hypot(p.position.x-JUG.x, p.position.z-JUG.z).toFixed(1),
+                 x: [+x0.toFixed(2), +x1.toFixed(2)], y: [+y0.toFixed(2), +y1.toFixed(2)],
+                 alto: +(caja.max.y-caja.min.y).toFixed(2) }; }); },
+    /* el estado de adentro de la cueva */
+    cueva2: () => ({ dentro: ENCUEVA, largo: +CUEVA_LARGO.toFixed(1),
+                     construida: !!CUEVA_G, cuerpos: CUERPOS.length,
+                     murcis: MURCIS.n,
+                     avance: (ENCUEVA && CUEVA_EJE) ? +cercaEje(JUG.x, JUG.z).avance.toFixed(1) : null,
+                     hondo: +hondoCueva().toFixed(2) }),
+    /* el estado de la pierna rota */
+    roto: () => ({ on: ROTO.on, cae: +ROTO.cae.toFixed(2), prox: +ROTO.prox.toFixed(1),
+                   rojoOn: ROJO.on, rojo: +postMat.uniforms.rojo.value.toFixed(2) }),
+    /* mete al jugador N metros adentro del pasillo, para poder fotografiarlo */
+    enCueva: (d, atras) => { if (!CUEVA_EJE) return 'sin cueva';
+      const p = puntoEje(cl(d, 0, CUEVA_LARGO));
+      JUG.x = p.x; JUG.z = p.z; JUG.y = p.y;
+      if (atras){ JUG.yaw = Math.atan2(p.ex, p.ez); JUG.pitch = -0.05;
+                  JUG.vy = 0; JUG.aire = false;
+                  return { d, atras: true, x:+p.x.toFixed(1), z:+p.z.toFixed(1) }; }
+      JUG.yaw = Math.atan2(-p.ex, -p.ez);
+      JUG.pitch = -0.05; JUG.vy = 0; JUG.aire = false;
+      return { d, x:+p.x.toFixed(1), z:+p.z.toFixed(1), y:+p.y.toFixed(1) }; },
+    /* la cinemática final, fotografiable en cualquier instante */
+    fin: (t) => { if (!FINAL.on) FINAL.arranca();
+      FINAL.t = t; FINAL.paso(0);
+      return JSON.stringify({ t, modo: MODO,
+        cam: [+cam.position.x.toFixed(1), +cam.position.y.toFixed(2), +cam.position.z.toFixed(1)],
+        auto: [+AUTO.g.position.x.toFixed(1), +AUTO.g.position.z.toFixed(1)],
+        bicho: [+BICHO.x.toFixed(1), +BICHO.z.toFixed(1)],
+        texto: document.getElementById('cTexto').textContent }); },
     auto: () => AUTO ? { x:+AUTO.x.toFixed(1), z:+AUTO.z.toFixed(1),
                          y:+AUTO.y.toFixed(1), ry:+AUTO.ry.toFixed(3) } : null,
     inflador: () => ({ enAuto: MIS.infladorMalla ? MIS.infladorMalla.visible : null,

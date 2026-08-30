@@ -12,12 +12,13 @@ const postMat = new T.ShaderMaterial({
     bri:  { value: CFG.bri },
     con:  { value: CFG.con },
     pos:  { value: CFG.pos },
-    vig:  { value: 0.46 }
+    vig:  { value: 0.46 },
+    rojo: { value: 0.0 }
   },
   vertexShader: `varying vec2 vUv;
     void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: `
-    uniform sampler2D tex; uniform float sat, bri, con, pos, vig; varying vec2 vUv;
+    uniform sampler2D tex; uniform float sat, bri, con, pos, vig, rojo; varying vec2 vUv;
     void main(){
       vec3 c = texture2D(tex, vUv).rgb;
       c *= bri;
@@ -31,6 +32,19 @@ const postMat = new T.ShaderMaterial({
       vec2 d = vUv - 0.5;
       float r2 = dot(d, d);
       c *= 1.0 - r2 * vig - r2 * r2 * vig * 1.35;
+      /* LA VIÑETA ROJA DE ESTAR ROTO VA ACÁ ADENTRO Y NO EN UNA CAPA DE CSS, y
+         por eso sale pixelada. Todo esto se dibuja en el destino de render
+         chico y recién después se estira con NEAREST: cualquier cosa que entre
+         antes del posterizado sale con los mismos escalones y los mismos
+         píxeles gordos que el resto del juego. La primera versión era un
+         un box-shadow de CSS encima del lienzo, o sea un degradado suave y
+         continuo pegado sobre una imagen escalonada — se leía como el filtro de
+         daño de otro juego puesto arriba de éste. */
+      if (rojo > 0.001){
+        float m = smoothstep(0.10, 0.62, r2) * rojo;
+        c = mix(c, vec3(0.46, 0.03, 0.02), m * 0.80);
+        c *= 1.0 - m * 0.30;
+      }
       if (pos > 1.5){ c = floor(c * pos + 0.5) / pos; }   /* bandas de color */
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
@@ -256,7 +270,15 @@ function fisica(dt){
   if (m > 1){ mx /= m; my /= m; }
   /* agachado se anda a la mitad y no se puede correr, que es lo que hace que
      agacharse sea una decisión y no un botón de adorno */
-  const sp = (JUG.agacha ? VEL*0.42 : (corre ? CORRE : VEL)) * (JUG.vuela ? 2.6 : 1);
+  /* CON LA PIERNA ROTA CAMBIAN LAS DOS VELOCIDADES, no una. Bajando sólo la de
+     correr, caminar seguiría siendo normal y lo único que se notaría es que el
+     botón de correr dejó de hacer algo. Y el tope de correr queda POR DEBAJO de
+     la embestida del camello (7,4), que es lo que hace que la huida sea una
+     huida y no un trámite. */
+  const spBase = JUG.agacha ? VEL*0.42
+               : ROTO.on ? (corre ? 6.4 : 4.6)
+               : (corre ? CORRE : VEL);
+  const sp = spBase * (JUG.vuela ? 2.6 : 1) * factorRoto();
   AND.v = Math.hypot(vxAnt, vzAnt);
   const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
   const vx = (-sy * -my + cy * mx) * sp;
@@ -266,7 +288,12 @@ function fisica(dt){
   JUG.x = cl(JUG.x + vx*dt, -MITAD+3, MITAD-3);
   JUG.z = cl(JUG.z + vz*dt, -MITAD+3, MITAD-3);
 
-  const suelo = Math.max(H(JUG.x, JUG.z), MAR - 0.6);
+  /* ADENTRO DE LA CUEVA MANDA EL PASILLO Y NO EL MAPA DE ALTURAS. Se recorta
+     DESPUÉS de mover y no antes: recortando antes, el jugador se mueve y recién
+     al cuadro siguiente se lo devuelve adentro, o sea que se lo ve salir. */
+  recortaCueva();
+
+  const suelo = ENCUEVA ? JUG.y : Math.max(H(JUG.x, JUG.z), MAR - 0.6);
   if (JUG.vuela){
     if (teclas.Space) JUG.y += sp*0.6*dt;
     if (teclas.ShiftLeft) JUG.y -= sp*0.6*dt;
@@ -330,8 +357,17 @@ function ponCam(dt){
      desde cero con la velocidad y a paso normal casi no se veía. */
   const amp = enSuelo ? cl(andando * 1.35, 0, 1) : 0;
   const base = amp > 0.02 ? 0.052 : 0;
-  const arriba = Math.abs(Math.sin(AND.fase)) * (base + rapido*0.052) * amp;
-  const costado = Math.cos(AND.fase) * (0.042 + rapido*0.042) * amp;
+  let arriba = Math.abs(Math.sin(AND.fase)) * (base + rapido*0.052) * amp;
+  let costado = Math.cos(AND.fase) * (0.042 + rapido*0.042) * amp;
+  /* LA COJERA VA A LA MITAD DE LA FRECUENCIA DEL PASO, y ahí está todo: el
+     balanceo normal sube y baja una vez por PISADA, así que las dos piernas se
+     ven iguales. A la mitad, un paso apoya y el otro se hunde — que es lo que
+     hace una renguera. Con el mismo ritmo sólo se lee «tiembla más». */
+  if (ROTO.on){
+    const c = Math.sin(AND.fase*0.5);
+    arriba -= Math.max(0, c) * 0.085 * amp;
+    costado += c * 0.055 * amp;
+  }
 
   /* BALANCEO QUIETO: la respiración. Con la cámara clavada del todo el mundo
      parece una foto; con esto respira sin marear. */
@@ -367,5 +403,15 @@ function ponCam(dt){
   /* un pelo de cabeceo vertical en cada apoyo, y el hundimiento del aterrizaje */
   cam.rotation.x = JUG.pitch + Math.sin(AND.fase*2) * 0.006 * amp - AND.golpe*0.55;
   cam.rotation.z = AND.roll;
+  /* EL DESPLOME. Se cae al piso y se levanta, y la cámara lo hace ENTERA: baja
+     hasta cuarenta centímetros del suelo y se tuerce. Con sólo quitarle el
+     control al jugador no se entendería qué pasó. */
+  if (ROTO.on && ROTO.cae > 0){
+    const u = 1 - ROTO.cae/1.35;                 /* 0 recién caído, 1 de pie */
+    const hondo = Math.sin(Math.min(1, u*1.25) * Math.PI);
+    cam.position.y -= hondo * (AND.ojo - 0.42);
+    cam.rotation.z += hondo * 0.55;
+    cam.rotation.x -= hondo * 0.30;
+  }
 }
 

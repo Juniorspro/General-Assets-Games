@@ -91,6 +91,130 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Quincuagesimoséptima vuelta (2026-08-30): **LEMI** — la cueva por dentro, la pierna rota y el escape
+
+Pedido textual: *"agrega que al tener la llave hay que entrar al auto y escapar también la idea es que
+todo se encuentre dentro de la cueva ahí con la antorcha entremos y sea largo el pasillo hayan
+murciélagos sangre y después encontremos a los cuerpos grotescamente asesinados y la llave y ahí
+recién miramos arriba pero no podemos correr tanto a veces nos trabamos porque estamos rotos de la
+pierna nos caemos en la Cinemática al salir corriendo y se pone un viñeta rojo pixelado y después ahí
+jugamos hasta llegar al auto y escapar al subirnos hay una cinematica"*. Todo nuevo en
+`herramientas/lemi/partes/j.js`; las misiones pasan de cinco a **siete**.
+
+#### EL PASILLO NO TENÍA PAREDES, Y ESTUVE UNA HORA ILUMINÁNDOLO
+
+Es el defecto de la vuelta y explica todo lo demás. El túnel se arma con cuatro tiras por tramo —piso,
+dos paredes y techo— y las normales están escritas a mano, apuntando hacia adentro. **El descarte de
+caras traseras no mira la normal: mira el ORDEN de los vértices.** Con el orden que emitía, el techo y
+las dos paredes quedaban de espaldas al jugador y se tiraban antes de sombrearse.
+
+Y no se veía como "faltan paredes": se veía como "está oscuro". Así que subí el ambiente, subí la
+antorcha, cambié el color, barrí cuarenta combinaciones. Los números no cerraban nunca: **con el
+ambiente barrido de 0,62 a 2,4 el brillo del destino de render se movía 0,6 sobre 255**, o sea nada. La
+que lo dijo fue una prueba de treinta segundos: cambiarle el material al túnel por uno de **normales**.
+El pasillo entero salió de **un solo verde —(0,1,0), que es PISO—** y arriba no había nada. Estaba
+iluminando un tubo que sólo tenía suelo. `side: DoubleSide` y listo.
+
+**La lección es de método**: cuando subir la luz cuatro veces no cambia el brillo, el problema no es la
+luz. Un material de diagnóstico contesta en un cuadro lo que un barrido de parámetros no contesta nunca.
+
+#### Y LA GEOMETRÍA TAMPOCO TENÍA UV
+
+Misma familia: `armaTunel` escribía `position` y `normal` y nada más, con un material que lleva `map`.
+**Un `map` sin coordenadas no falla ni avisa**: WebGL le pasa (0,0) al atributo que falta, así que los
+setenta y seis metros de pasillo salían pintados con **un solo texel**. Paredes de color plano y liso,
+que es exactamente lo que delata a un decorado. Las UV salen de la longitud de arco y del ancho, en
+metros, así que la piedra mide lo mismo en el piso, en la pared y en el techo por construcción.
+
+#### TRES COSAS MÁS QUE ILUMINABAN MAL, Y NINGUNA ERA "LA LUZ DE LA CUEVA"
+
+1. **`luzCueva()` corría ANTES que `ponSol()`.** `ponSol` reescribe el sol, la luna y el ambiente todos
+   los cuadros: la cueva apagaba el mundo y una línea más abajo el sol volvía a encenderse. La sonda
+   devolvía **`sol: 2,55` a setenta metros adentro del cerro** — lo que se veía era el pasillo
+   iluminado por el amanecer, y de ahí venía el naranja.
+2. **El relleno quedaba prendido.** Es una direccional **celeste** que existe para que la sombra del sol
+   no sea negra. Adentro pintaba el techo de turquesa y una pared de azul marino, y yo se lo estaba
+   atribuyendo al color del ambiente —que ya estaba en gris neutro y no tenía nada que ver.
+3. **El hemisférico con los dos colores iguales no tiene forma.** Un `HemisphereLight` reparte según
+   hacia dónde mira la cara; puestos los dos en el mismo gris, **todas las caras reciben exactamente lo
+   mismo**: medido, un óvalo malva plano donde no se distinguía el piso del techo. Va claro arriba
+   (0xaeaeb0) y casi negro abajo (0x141312), que es lo que hace la luz de una cueva — lo único que
+   ilumina está a la altura de la mano.
+
+Y la **saturación baja a 1,25 adentro**. El post multiplica por 2,2, que afuera es lo que hace que el
+pasto y el mar se lean; adentro la única luz de color es la antorcha, y saturar por 2,2 una piedra gris
+iluminada de naranja devuelve una pared **roja**.
+
+#### EL PASILLO SE ANGOSTA Y AL FINAL SE ABRE
+
+Empezó en 3,4 de medio ancho —**8,6 metros de pared a pared**— y eso no se lee a pasillo, se lee a
+galpón; encima con las paredes a cuatro metros la antorcha no llegaba a ninguna. A 2,2 las dos entran
+en el cuadro. Y los **últimos catorce metros son una sala**: ahí están los cuerpos y ahí se planta el
+camello, que mide 3,90 y no entra en un techo de 3,10. Un tubo que termina en una tapa es un tubo; uno
+que termina en una sala es una cueva.
+
+#### EL MUNDO DE AFUERA SE APAGA, Y NO ES UN AHORRO
+
+El pasillo baja 4,5 cm por metro y el cerro no baja igual, así que a partir de la mitad **la superficie
+del terreno le pasa por adentro al tubo**: medido en la captura de los 52 m, una mancha de pasto verde
+que ocupaba un cuarto del cuadro. Bajarle el piso al pasillo corre el problema unos metros pero no lo
+resuelve, porque el mapa de alturas no tiene agujero. Estando adentro no hay un solo píxel de afuera
+que sea legítimo, así que se apaga entero. De paso el pasillo pasa a dibujarse con **11 llamadas**.
+
+#### AL ENTRAR SE MIRABA LA PARED DE LA ENTRADA
+
+`JUG.yaw = atan2(-ex,-ez) + PI`. El frente de este motor es `(-sin yaw, -cos yaw)`, así que el rumbo
+para mirar hacia `(ex,ez)` es `atan2(-ex,-ez)` **y nada más**: con el `+ PI` de más, entrar a la cueva
+te dejaba mirando la tapa de piedra de la boca a dos metros, con el pasillo a la espalda. Lo cantó la
+sonda de los cuerpos: los tres daban **`delante: false`** parado a siete metros de ellos.
+
+#### EL CAMELLO APARECÍA NUEVE METROS Y MEDIO EN EL AIRE
+
+`H()` es el mapa de alturas de la isla, o sea **la ladera del cerro**: adentro devuelve el techo de la
+montaña. Medido, el camello de la escena de la llave se plantaba en y=29,45 con el jugador en 19,76 —
+fuera del cuadro por arriba, o sea que el plano del susto no mostraba nada. Y no alcanzaba con
+arreglarlo al plantarlo, porque **`pasoCamello()` lo vuelve a apoyar en `H()` todos los cuadros**. Ahora
+hay una sola función, `pisoDe()`, y la usan los tres sitios.
+Adentro, además, **el rumbo no se elige**: `rumboLibre()` prueba ocho direcciones buscando una sin
+árboles y adentro las ocho están tapadas por la misma pared. Se lo pone sobre el eje del pasillo,
+**hacia la boca** — que es por donde hay que salir, o sea que la cosa queda entre uno y la salida.
+
+#### LA VIÑETA ROJA VA EN EL SHADER, Y POR ESO SALE PIXELADA
+
+Empezó como un `box-shadow` de CSS encima del lienzo: un degradado suave y continuo pegado sobre una
+imagen escalonada, que se lee como el filtro de daño de otro juego puesto arriba de éste. Ahora es un
+uniforme del post-proceso y entra **antes del posterizado**, así que sale con los mismos escalones y los
+mismos píxeles gordos que el resto del juego. Y late: más fuerte justo cuando la pierna falla, que es
+lo único que convierte el filtro en información en vez de decoración.
+
+#### LA PIERNA ROTA SON TRES COSAS Y NO UNA
+
+Bajar un número no se lee como estar herido, se lee como que el juego se puso pesado. Van las tres:
+la velocidad baja **y correr casi no suma** (12,8/5,8 sano contra 6,4/4,6 roto, con la embestida del
+camello en 7,4 — o sea que ahora te alcanza); la cámara **cojea** a la mitad de la frecuencia del paso,
+que es lo que distingue una renguera de un temblor; y cada siete a trece segundos **la pierna no
+responde**, te caés y hay que levantarse. Medido en la huida: 600 cuadros corriendo del fondo del
+pasillo hacia la boca, **63 cuadros en el piso**, avance de 70 m a 29,8.
+
+#### LA CINEMÁTICA FINAL NO ENTRA A LA CABINA
+
+La primera versión ponía el ojo "al volante" —35 cm adelante y 42 al costado del origen—. Medido en la
+captura, desde el segundo tres el cuadro entero eran **dos paneles rojos y una franja celeste**: el ojo
+estaba dentro de la chapa, y no es cuestión de correr los números porque esta camioneta **no tiene
+interior modelado**. Lo que sí tiene es un exterior que se ve bien, así que el plano es de afuera: tres
+cuartos a seis metros, la cámara se acerca despacio, el motor falla y arranca —con el sacudón en la
+cámara, que un motor que no prende además se SIENTE— y la camioneta se va mientras el bicho sale del
+monte demasiado tarde. Y la antorcha se apaga: cuelga de la cámara, así que en un plano de afuera
+quedaba una llama flotando en el medio del cuadro.
+
+#### MEDIDO AL CERRAR
+
+Partida completa desde la cueva: entrar, los **3 cuerpos** con `delante: true` a 7-11 m, los **26
+murciélagos** y la sangre, agarrar las llaves, la escena de la llave con el camello encuadrado
+(y [0,20 · 0,78] del cuadro), la pierna rota con la viñeta en 0,49, la huida con 63 cuadros de caída,
+el auto y `MODO: 'final'`. **Cero errores de página** en todas las corridas. Costo adentro: **11
+llamadas de dibujo y 2,3k triángulos**, 36-43 fps con SwiftShader.
+
 ### Quincuagesimosexta vuelta (2026-08-30): **LEMI** — tres idiomas, dos escenas nuevas, el inflador y la llave rehecha
 
 Pedido: *"la animación de agarrando la llave re nada que ver, también ahí nunca más se tiene que hacer

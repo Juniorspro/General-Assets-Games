@@ -342,7 +342,8 @@ const MIS = {
        lista se arma una sola vez al empezar y cambiar de idioma en medio de la
        partida dejaría el panel en el idioma viejo hasta la misión siguiente —el
        mismo defecto que ya costó una vuelta con las tablas de Z Force. */
-    { k:'m0' }, { k:'m1' }, { k:'m2' }, { k:'m3' }, { k:'m4' }
+    { k:'m0' }, { k:'m1' }, { k:'m2' }, { k:'m3' },
+    { k:'m4' }, { k:'m5' }, { k:'m6' }
   ],
 
   arranca(){
@@ -460,28 +461,32 @@ const MIS = {
              rot:'rCarpa', mision:3, activo:false });
     }
 
-    /* LAS LLAVES, tiradas donde termina el rastro pero del lado de acá: no
-       adentro de la cueva, que a la cueva no se puede entrar. */
+    /* LAS LLAVES YA NO ESTÁN TIRADAS EN EL PASTO.
+       Estaban a trece metros de la boca, sobre la ladera, sin ninguna razón
+       para estar ahí: es el sitio al que uno las tira cuando todavía no hay
+       adónde ponerlas. Ahora viven al fondo del pasillo, entre los cuerpos, que
+       es lo que se pidió y de paso es la única razón por la que alguien
+       entraría a la cueva. Las arma `construyeCueva()`, así que la cosa usable
+       se registra acá pero su posición se completa cuando el pasillo existe. */
     if (CUEVA){
-      const a = CUEVA.mira, d = 13;
-      const lx = CUEVA.x + Math.sin(a)*d + Math.cos(a)*6;
-      const lz = CUEVA.z + Math.cos(a)*d - Math.sin(a)*6;
-      const g = new T.Group();
-      g.position.set(lx, H(lx, lz), lz);
-      const anillo = new T.Mesh(new T.TorusGeometry(0.13, 0.028, 4, 10), matMetal);
-      anillo.rotation.x = Math.PI/2; anillo.position.y = 0.12;
-      g.add(anillo);
-      for (let j = 0; j < 2; j++){
-        const ll = new T.Mesh(new T.BoxGeometry(0.05, 0.012, 0.24), matMetal);
-        ll.position.set(0.10 + j*0.05, 0.12, 0.12);
-        ll.rotation.y = j*0.4;
-        g.add(ll);
-      }
-      const b = baliza(g, 1.4);
-      G.add(g);
-      this.llaves = cosa({ tipo:'llaves', x: lx, z: lz, malla:g, bal:b,
-                           rot:'rLlaves', mision:4, activo:false });
+      this.llaves = cosa({ tipo:'llaves', x: CUEVA.x, z: CUEVA.z, r: 2.6,
+                           rot:'rLlaves', mision:5, activo:false });
+      /* Y LA CUEVA VUELVE A SER USABLE EN LA CUARTA: la misma boca que en la
+         tercera te dice que no se puede pasar, con la antorcha te deja entrar. */
+      /* la boca vale en DOS misiones, así que lleva las dos y no una: con un
+         solo número habría que duplicar la cosa, y dos cosas en el mismo sitio
+         es la receta para que un día una tape a la otra. */
+      const cv = COSAS.find(c => c.tipo === 'cueva');
+      if (cv) cv.misiones = [2, 4];
     }
+    /* Y LA CAMIONETA, OTRA VEZ, PARA LA ÚLTIMA. Es una cosa aparte y no la
+       misma de las misiones 1 y 3: aquélla es «revisar el auto» y ésta es
+       «subirse», dos rótulos y dos acciones distintas sobre el mismo objeto.
+       Con una sola cosa habría que preguntar la misión adentro de cada rama,
+       que es justo lo que la lista existe para evitar. */
+    if (AUTO)
+      cosa({ tipo:'auto_esc', x: AUTO.x, z: AUTO.z, r: 4.6,
+             rot:'rEscapa', mision:6, activo:false });
   },
 
   /* ── pasar a la siguiente ── */
@@ -498,10 +503,14 @@ const MIS = {
     $('obj').querySelector('.t').textContent = TX(m.k + 'n');
     this.pintaSub();
     /* se activa lo de esta misión y se apaga lo demás */
-    for (const o of COSAS) o.activo = (o.mision === this.i) && !o.requiere;
+    for (const o of COSAS)
+      o.activo = (o.misiones ? o.misiones.indexOf(this.i) >= 0 : o.mision === this.i)
+                 && !o.requiere;
     /* la antorcha usa el auto y una carpa a la vez */
     if (this.i === 3) for (const o of COSAS)
       if (o.tipo === 'auto' || o.tipo === 'carpa') o.activo = true;
+    /* en la última, lo usable es la camioneta: subirse es escapar */
+    if (this.i === 6) for (const o of COSAS) if (o.tipo === 'auto_esc') o.activo = true;
     this.balizas();
     son2('ok');
   },
@@ -589,12 +598,22 @@ const MIS = {
       return 'mini';
     }
     if (o.tipo === 'cueva'){
-      /* NO SE PUEDE PASAR, y eso hay que DECIRLO. Un pasaje invisible que no
-         deja avanzar sin explicar por qué se lee a error de colisión. */
-      aviso(TX('aCueva'));
-      o.activo = false;
-      this.avanza();
-      return 'cueva';
+      /* LA MISMA BOCA HACE DOS COSAS DISTINTAS SEGÚN LA MISIÓN, y ésa es la
+         razón por la que existe la antorcha: la primera vez que llegás está
+         negro y no se puede pasar; con la antorcha en la mano, sí. Sin ese
+         «no» previo, armar la antorcha no tendría para qué. */
+      if (this.i === 2){
+        aviso(TX('aCueva'));
+        o.activo = false;
+        this.avanza();
+        return 'cueva';
+      }
+      if (this.i === 4){
+        entraCueva();
+        this.avanza();
+        return 'entra';
+      }
+      return null;
     }
     if (o.tipo === 'carpa'){
       if (this.i !== 3 || this.antorcha.tela) return null;
@@ -605,10 +624,15 @@ const MIS = {
       return 'lona';
     }
     if (o.tipo === 'llaves'){
-      o.activo = false; o.malla.visible = false;
+      o.activo = false;
+      if (o.malla) o.malla.visible = false;
       this.balizas();
       LLAVE.arranca();
       return 'llaves';
+    }
+    if (o.tipo === 'auto_esc'){
+      FINAL.arranca();
+      return 'escapa';
     }
     return null;
   },
@@ -666,7 +690,13 @@ const MIS = {
     /* LA LUZ DE LA ANTORCHA VA COLGADA DE LA CÁMARA Y NO DE LA MALLA, y el
        alcance es corto (14 m): es una antorcha, no un reflector. De noche es lo
        único que te deja ver el suelo por el que caminás. */
+    /* LA ANTORCHA SE AGRANDA ADENTRO DE LA CUEVA, y no es un capricho: afuera
+       compite con la luna y sólo tiene que iluminar el suelo por el que uno
+       camina; adentro es la ÚNICA luz de un pasillo de setenta y seis metros.
+       El alcance sube de 14 a 22 m, que es lo que hace que se vea hasta dónde
+       sigue el pasillo en vez de un metro de piso. Lo maneja `luzCueva`. */
     const luz = new T.PointLight(0xffa33c, 5.5, 14, 1.6);
+    luz.userData.base = { i: 5.5, d: 14 };
     luz.position.set(0.06, 0.34, -0.12);
     g.add(luz);
     /* LA ANTORCHA VA SUB-ESCALADA A PROPÓSITO Y ESO NO ES UN ERROR DE CUENTA.
@@ -693,7 +723,9 @@ const MIS = {
     const p = $('pista');
     if (mejor){
       p.classList.add('on');
-      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + TX(mejor.rot);
+      /* la boca dice dos cosas distintas según la misión: mirar o entrar */
+      const rot = (mejor.tipo === 'cueva' && this.i === 4) ? 'rEntra' : mejor.rot;
+      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + TX(rot);
       $('acUsar').classList.remove('apagado');
     } else {
       p.classList.remove('on');
@@ -775,9 +807,27 @@ const LLAVE = {
        roto justo entre la cámara y la casa fea. Acá se prueban ocho rumbos y se
        toma el primero que tenga la vista libre —o, si ninguno la tiene, el más
        despejado de los ocho—. Sale una sola vez, no por cuadro. */
-    this.yaw0 += this.rumboLibre();
-    BICHO.x = JUG.x - Math.sin(this.yaw0)*6.5;
-    BICHO.z = JUG.z - Math.cos(this.yaw0)*6.5;
+    /* ADENTRO DE LA CUEVA EL RUMBO NO SE ELIGE: ES EL PASILLO.
+       `rumboLibre()` prueba ocho direcciones buscando una sin arboles, y adentro
+       las ocho estan tapadas por la misma pared de piedra, asi que devolveria
+       cualquiera y el camello quedaria plantado DENTRO del cerro. Y hay una
+       eleccion mejor que no necesita buscarse: se lo pone sobre el eje del
+       pasillo, hacia la boca. Es la unica direccion que existe ahi adentro y
+       ademas es por donde hay que salir, o sea que la cosa queda entre uno y la
+       salida — que es exactamente lo que hace que la huida sea una huida. */
+    if (ENCUEVA && CUEVA_EJE){
+      const p = cercaEje(JUG.x, JUG.z);
+      const L = Math.hypot(p.nx, p.nz) || 1;
+      /* el eje apunta hacia adentro; hacia la boca es al reves */
+      const hx = -p.nx/L, hz = -p.nz/L;
+      this.yaw0 = Math.atan2(-hx, -hz);
+      const dd = Math.min(7.0, Math.max(3.5, p.avance - 1.0));
+      BICHO.x = JUG.x + hx*dd; BICHO.z = JUG.z + hz*dd;
+    } else {
+      this.yaw0 += this.rumboLibre();
+      BICHO.x = JUG.x - Math.sin(this.yaw0)*6.5;
+      BICHO.z = JUG.z - Math.cos(this.yaw0)*6.5;
+    }
     /* su hocico sale por su +Z, así que mirarte de frente sería `yaw0` */
     BICHO.ry = this.yaw0 + 0.70;
     if (CAM3){
@@ -789,7 +839,9 @@ const LLAVE = {
       CAM3.userData.miraCabeza = 0.22;
     }
     BICHO.modo = 'quieto'; BICHO.golpe = 0;
-    const suelo = H(BICHO.x, BICHO.z);
+    /* y el piso de adentro es el del pasillo: `H()` devuelve la ladera del
+       cerro, que ahi arriba esta veinte metros por encima de la cabeza */
+    const suelo = pisoDe(BICHO.x, BICHO.z);
     if (CAM3){ CAM3.position.set(BICHO.x, suelo, BICHO.z);
                CAM3.rotation.y = BICHO.ry; }
     /* CUÁNTO SE LEVANTA LA VISTA SE CALCULA, NO SE ESCRIBE A MANO.
@@ -883,7 +935,17 @@ const LLAVE = {
        foco de nueve en el ojo quemaba: medido, los dos brazos salían blancos
        puros y el pasto en primer plano un verde plano sin un pliegue. Es para
        el camello, que está a seis metros y medio, así que sube con `sube`. */
-    if (this.luz) this.luz.intensity = 9.0 * sube;
+    /* Y ADENTRO DE LA CUEVA VALE LA MITAD Y LLEGA MENOS LEJOS. El foco existe
+       porque afuera el camello se planta CONTRA EL CIELO y sin él la cara sale
+       negra; adentro no hay contraluz —lo que hay detrás es roca oscura— y en
+       cambio hay dos paredes a dos metros que devuelven todo. Medido en la
+       captura, con los nueve enteros el piso y el techo del pasillo salían
+       blancos y el camello quedaba de silueta contra ellos: exactamente el
+       defecto que este foco vino a arreglar, pero al revés. */
+    if (this.luz){
+      this.luz.intensity = (ENCUEVA ? 4.2 : 9.0) * sube;
+      this.luz.distance = ENCUEVA ? 12 : 26;
+    }
     if (this.manos) ponManos(this.manos, baja, agarra, sube, muestra);
     if (t > 5.6){
       $('cTexto').textContent = '…';
@@ -904,6 +966,12 @@ const LLAVE = {
     $('hud').classList.add('on');
     JUG.pitch = -0.05;
     AND.ojo = OJO;
+    /* SE ROMPE LA PIERNA Y ENTRA LA VIÑETA. De acá en adelante no se corre: se
+       cojea, y cada tanto la pierna no responde. La viñeta roja es lo que dice
+       que el estado cambió — sin ella, ir más lento se lee a que el juego se
+       puso pesado. */
+    rompePierna();
+    ROJO.on = true;
     /* y sale a correrte: modo caza permanente, sin importar la hora. El cuello
        vuelve a su eje, que si no corre con la cabeza torcida para siempre. */
     son2('grito');
