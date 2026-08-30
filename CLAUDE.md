@@ -107,6 +107,191 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima quinta vuelta (2026-08-30): **BARRIO** — un personaje generado, riggeado a mano en la cara, y el cuerpo en primera persona
+
+Pedido textual: *"puedes generar con highsfield un modelo 3D y animarlo ... necesito que tenga huesos en
+los ojos y párpados reales, y con ese haz las animaciones, también prueba riggear la boca ... también
+agrega animaciones generales para primera persona al mirar abajo debes ver el personaje, igualito a la
+imagen pero lo quiero joven y con mochila y ropa casual"*, con una foto de referencia de un low poly.
+
+`herramientas/barrio/hornear_pj.py` (hornear y decimar), `herramientas/barrio/riggear.py` (la cara y la
+mochila), `herramientas/barrio/glb.py` (leer y escribir GLB) y tres partes nuevas del juego: `y.js` (el
+modelo en base64), `k.js` (el lector) y `l.js` (los huesos y las animaciones).
+
+#### LO QUE NINGÚN RIGGEADOR AUTOMÁTICO DA, Y POR ESO HAY QUE PONERLO
+
+El riggeado automático devuelve **veinticuatro huesos**: caderas, columna, brazos, piernas, cuello y
+cabeza. Ni ojos, ni párpados, ni mandíbula. Y en este modelo los ojos **ni siquiera son geometría**: son
+dos manchas oscuras pintadas en la textura — **un párpado no se puede animar sobre una malla que no
+tiene párpado**.
+
+Así que se agregan las dos cosas a la vez, y ése es el trabajo de la vuelta: **los huesos Y la geometría
+que mueven**. Siete huesos nuevos —`ojoI`, `ojoD`, `parpSupI`, `parpInfI`, `parpSupD`, `parpInfD` y
+`mandibula`— colgados de `Head`, más `mochila` colgado de `Spine01`. De 24 huesos a **32**.
+
+La mandíbula es distinta de las otras: **no trae geometría propia, se lleva la que ya estaba**. Se le
+pasa peso a los vértices que están por debajo del labio y adelante de la bisagra, **con una rampa** —con
+un corte duro, abrir la boca parte la cara en dos.
+
+**Y TODO ESTO VA DESPUÉS DE DECIMAR**, porque el simplificador se comería justo lo que se acaba de poner:
+el ojo mide un centímetro.
+
+#### LA REGLA QUE ORDENA UNA CARA HECHA DE BULTOS
+
+Una cara armada con esferas y cajas no se compone «poniendo cada pieza donde va»: se compone **contra la
+superficie del cráneo**, porque cualquier cosa que quede por detrás de esa superficie **no se ve** — acá
+no hay cuenca excavada, hay una esfera opaca.
+
+Los ojos fueron exactamente eso: con el globo puesto en z 0,072 y el cráneo llegando a 0,094 a esa
+altura, los dos ojos estaban **veintidós milímetros adentro de la cabeza**. Y las mediciones no avisaban:
+la sonda decía *cabeza en cuadro · delante de la cámara · 68 % del alto*, los tres ciertos. Lo que se veía
+en la captura eran los **pómulos**, que sí sobresalían dos centímetros.
+
+**Y LA ALTURA DEL OJO SALIÓ DE CONTAR VÉRTICES OSCUROS POR FRANJA.** Promediando todos los vértices
+oscuros de la cara sale y = 1,646, y ahí lo que hay son **las cejas**. El histograma muestra dos grupos
+separados por un hueco —uno en 1,575..1,610 y otro en 1,635..1,665— y el de abajo es el de los ojos. Con
+el promedio, los dos globos quedaban cuatro centímetros por encima de las manchas pintadas.
+
+**Y EL OJO VA GRANDE PORQUE LA CABEZA ES GRANDE**: esta cabeza mide treinta y cinco centímetros —es un
+personaje estilizado, no una persona— así que un globo de radio anatómico se lee a alfiler.
+
+#### DOS DEFECTOS DEL HORNEADO DE COLOR, Y LOS DOS SE VIERON MIDIENDO
+
+1. **EL COLOR SE MUESTREA EN EL CENTRO DEL TRIÁNGULO Y NO EN EL VÉRTICE.** El atlas que devuelve el
+   generador es **una isla por triángulo** —miles de manchitas de nueve píxeles— y el UV de un vértice
+   cae en la **esquina** de su isla, que es el peor sitio posible: agarra el borde, el relleno o el color
+   de la isla de al lado. El personaje horneado así salió **entero de camuflaje**, con la piel manchada
+   de azul y el pantalón de gris.
+2. **Y LA V NO SE DA VUELTA.** glTF pone el origen de la textura arriba a la izquierda, así que la fila
+   es `v·(H−1)` y no `(1−v)·(H−1)`. **Esto no se puede ver, hay que medirlo**: con el volteo puesto, el
+   muslo —que tiene que ser denim— devolvía (0,32 0,33 0,37), un gris; sin el volteo devuelve
+   (0,30 0,43 0,56), que es azul, y la cara pasa de gris a (0,45 0,31 0,25), que es piel. La prueba no es
+   mirar el modelo: es promediar el color muestreado en una zona que uno **sabe** de qué color tiene que
+   ser.
+
+Y el color por vértice **se guarda en LINEAL y no en sRGB**: three.js toma `COLOR_0` como lineal y no le
+aplica ninguna conversión, así que escribiéndolo codificado la campera casi negra salía gris claro.
+
+**EL MATERIAL SE REEMPLAZA ENTERO Y NO SE LE SACAN LAS TEXTURAS DE A UNA.** El que viene trae
+`emissiveTexture`, `KHR_materials_ior` y un `KHR_materials_specular` con el factor en 2,0 —fuera de
+especificación—; sacando sólo `baseColorTexture` queda una referencia a una textura que ya no existe y
+gltfpack contesta «invalid GLTF» sin decir cuál.
+
+#### EL ESQUELETO SE PASA A METROS
+
+Viene en centímetros con un `Armature` que escala por 0,01, y esa mezcla ya había costado una vuelta en
+el visor 3D. Multiplicando cada traslación por 0,01 y sacándole la escala al Armature, el espacio de los
+huesos y el de los vértices pasan a ser el mismo — y **las matrices de bind hay que rehacerlas también**,
+porque traían esa escala adentro del 3×3: dejándolas como estaban, el producto hueso × bind deja de ser
+la identidad y el personaje sale cien veces más grande.
+
+#### LAS ANIMACIONES SE ESCRIBEN, NO SE TRAEN
+
+El generador ofrece una biblioteca de clips enlatados. No se usó ninguno, y no es por gusto: **con un
+clip no hay forma de mezclar la caminata con la mirada, el parpadeo y la mandíbula**, que es justo lo que
+este personaje tiene de más que un maniquí. Van como funciones del tiempo sobre el esqueleto, igual que
+los cuatro de LEMI.
+
+**Y EL GIRO SE PIDE EN EJES DE MUNDO, NO EN LOS DEL HUESO.** Los ejes locales de un hueso son los que
+dejó el bind, así que no significan nada: en este rig la cabeza viene con cuarenta grados de inclinación
+sobre X. Escribiendo `rotation.x` se le **borra** esa rotación y el personaje se dobla en dos — la
+lección que en RECREO costó una vuelta con los brazos de Baldi. El delta se lleva al espacio del hueso
+con `P⁻¹·R·P`, donde P es la rotación de mundo del **padre** en la pose de reposo.
+
+**LOS BRAZOS SE BAJAN CINCUENTA Y CINCO CENTÉSIMAS, y está medido:** el modelo se generó en pose de A
+porque es lo que el riggeador necesita, y medido sobre el bind el brazo sale a **41 grados** de la
+vertical. Sin bajarlos, mirándose el pecho lo que se ve son dos manos flotando en los costados.
+
+#### LA CADENCIA DEL PASO ESTABA MAL Y EL CUERPO LO DESTAPÓ
+
+`AND.fase += (AND.v·dt)/0,82` decía en su comentario «0,82 m por medio paso» y hacía otra cosa: la fase
+avanzaba **uno** cada 82 cm, pero la pisada dispara cuando cambia `floor(fase/π)`, o sea **cada 2,58 m**.
+El jugador daba un paso cada dos metros y medio. Sin cuerpo eso se leía a deslizarse; con piernas, los
+pies patinan — el defecto que en RECREO tenía a Baldi a 2,7 metros por paso. Va `π` por cada 0,82 m, y
+con eso el cabeceo de la cámara, la pisada y la zancada son **el mismo número**.
+
+#### EL CUERPO EN PRIMERA PERSONA: TRES INTENTOS Y UNA CUENTA
+
+Lo anatómicamente correcto es poner el **ojo** del modelo en la cámara. Y sale mal: el ojo está quince
+centímetros **por delante** del torso, así que el pecho queda quince centímetros detrás de uno. Medido,
+con la vista a sesenta y seis grados hacia abajo el esternón proyectaba en **−0,66** y lo único que
+entraba en el cuadro eran las zapatillas. Y con setenta grados de campo vertical **no hay ángulo que
+alcance**: el pecho está más allá de la vertical del ojo.
+
+Adelantar el cuerpo tampoco: con cinco centímetros la cámara queda encima del cuello y el cuadro entero
+es el forro de la campera. Bajar el cuerpo entero hunde las zapatillas en el asfalto.
+
+Lo que funciona es bajar **sólo el torso**: en primera persona el hueso `Spine02` —el primero por encima
+de la cadera— se corre quince centímetros y medio hacia abajo y tres hacia adelante. El cuello queda a
+treinta y siete centímetros por debajo del ojo, el pecho aparece a partir de los cincuenta grados, y **la
+pelvis y las piernas no se mueven**, así que los pies siguen pisando el suelo. Lo que se deforma es la
+cintura, que es justamente lo único que desde adentro no se ve.
+
+**Y HAY QUE TAPAR EL CUELLO.** La cabeza se achica a la centésima parte —el truco de siempre— y una
+cabeza que desaparece deja un **agujero**: el cuello del modelo está abierto por arriba porque ahí
+empezaba el cráneo. Medido en la captura, mirando hacia abajo el cuadro entero era el interior del
+torso. Va un casquete pegado al hueso del cuello, que desde afuera no se ve porque queda por dentro de
+la cabeza.
+
+**Y UNA LUZ MÍNIMA COLGADA DE LA CÁMARA**, con alcance 1,6 m — o sea que se apaga antes de llegar al
+asfalto y no rompe la regla del juego, que es que lo único que ilumina de verdad son los faroles. Sin
+ella, mirarse el pecho a las tres de la mañana entre farol y farol es mirar una silueta negra.
+
+#### LA MOCHILA VA POR CÓDIGO
+
+El generador **no la puso**: leyó las correas como parte de la campera. Se agrega en `riggear.py` —cuerpo,
+tapa, base, bolsillo trasero y dos correas— y eso además es lo que garantiza que **las dos correas se
+vean en primera persona**, que es la única señal de que uno lleva mochila cuando no se ve la espalda. Las
+correas siguen el pecho **escalón por escalón**, con las alturas medidas sobre el modelo: una correa
+recta atraviesa el pecho a la altura del esternón y sale por el otro lado.
+
+#### LA CINEMÁTICA PASA A USAR EL PERSONAJE, Y APARECIÓ LA NUCA
+
+La cabeza dibujada por código de la vuelta anterior se fue entera. El plano A es ahora la misma primera
+persona del juego —o sea que **también se ve el cuerpo**— y el plano B filma la cara del modelo.
+
+**Y LA CÁMARA ESTABA DEL LADO EQUIVOCADO.** Iba en `cabeza − adelante·dist`, o sea DETRÁS, y funcionaba
+sólo porque la cabeza de código se giraba media vuelta para mirarla. Con un cuerpo entero eso es alguien
+caminando en una dirección con la cabeza puesta al revés: en la captura, la nuca llenando el cuadro. La
+cámara pasa adelante y camina de espaldas, que es lo que hace una cámara que filma a alguien de frente.
+
+**Y LA DISTANCIA SE CALCULA SOBRE LA CABEZA QUE HAY**: a noventa centímetros y con 26 grados el cuadro
+medía cuarenta y dos centímetros y la coronilla salía cortada (y 1,38 de 1). A 1,18 m mide 54 y la cabeza
+ocupa el 64 %.
+
+#### UN LECTOR DE GLB DE CIENTO VEINTE LÍNEAS, Y NO `GLTFLoader`
+
+Este juego depende de que llegue `three` y de nada más. El cargador de three.js es otra descarga de un
+CDN que puede no llegar, más una entrada en el importmap, para leer un archivo que generamos **nosotros**
+y cuya forma controlamos entera. Es la misma decisión que en LEMI con los dos props.
+
+#### MEDIDO AL CERRAR
+
+**32 huesos · 10.045 triángulos · 5.467 vértices**, y lo que importa: **cada hueso nuevo mueve
+geometría**, medido girándolo y comparando dónde quedaron sus propios vértices —un hueso mal pesado gira
+igual y no desplaza nada—:
+
+| hueso | vértices | desplazamiento medio | máximo |
+|---|---|---|---|
+| mandíbula (0,34 rad) | 50 | **55,9 mm** | 66,8 |
+| párpado superior (0,90) | 55 | **12,9 mm** | 16,0 |
+| párpado inferior (−0,50) | 55 | **7,3 mm** | 9,0 |
+| ojo (0,50 en Y) | 204 | **5,7 mm** | 8,4 |
+| mochila (0,30) | 120 | 75,5 mm | 98,7 |
+| muslo (−0,60) | 45 | 100,5 mm | 198,8 |
+| antebrazo (−0,70) | 46 | 83,8 mm | 147,3 |
+
+Los párpados **simétricos hasta el tercer decimal** en los tres tiempos del plano B —no pueden bizquear—,
+cerrados en el segundo 15,4 y abiertos en el 20,5. Cabeza en cuadro y delante de la cámara. En primera
+persona la escala de la cabeza pasa de 1 a 0,01 y el esternón proyecta en **0,119** del alto —o sea que
+se ve—. Sesenta y tres metros corridos con **0 cuadros dentro de una casa**, HUD sin un solo
+solapamiento, **245 llamadas de dibujo**, **0 NaN** y `window.__errs` vacío en las once corridas. El HTML
+pasó de 333 KB a **631 KB**, y esos 286 son el personaje.
+
+**LO QUE NO SE PUDO HACER:** la mochila no salió del generador y las manos no tienen huesos de dedos —el
+riggeado automático da una sola articulación por mano—. Y la cara sigue teniendo las cejas y la boca
+pintadas en la textura: lo que se mueve de verdad son los ojos, los párpados y la mandíbula.
+
 ### Sexagésima cuarta vuelta (2026-08-30): **BARRIO** — la cinemática de dos planos, y la cara
 
 Pedido textual: *"agrega una cinematica sin los bordes negros de arriba y abajo ... haz que sea en

@@ -56,184 +56,32 @@ const CINE_MIRA = [
    comparando `luz.layers` contra las de la CÁMARA, así que una luz en la capa 1
    no existe para el mundo: la cara se ilumina sola, sin que el farol de mentira
    le pinte las casas de atrás. */
-let CARA = null, CARA_LUZ = null, CARA_REL = null, CARA_AMB = null;
-const OJO_I = {}, OJO_D = {};
+let CARA_LUZ = null, CARA_REL = null, CARA_AMB = null;
 let LLUCARA = null;
 
-function armaCabeza(){
-  if (CARA) return CARA;
-  CARA = new T.Group();
-
-  /* MOJADO, QUE ES LA MITAD DEL PERSONAJE. Todos los materiales de la cara
-     llevan especular: bajo la lluvia lo que distingue una piel de un plástico
-     mate es el brillo del farol resbalando por la frente y el pómulo. Con
-     Lambert —que es lo que usa el resto del juego— no hay especular posible y
-     la cara sale de cartón. */
-  const mPiel  = new T.MeshPhongMaterial({ color: 0x8e7566, specular: 0x6d7480, shininess: 26, flatShading: true });
-  const mPelo  = new T.MeshPhongMaterial({ color: 0x1c1715, specular: 0x59616e, shininess: 44, flatShading: true });
-  const mCejas = new T.MeshPhongMaterial({ color: 0x1d1715, shininess: 8 });
-  const mLabio = new T.MeshPhongMaterial({ color: 0x7a5551, specular: 0x60666f, shininess: 30 });
-  const mCamp  = new T.MeshPhongMaterial({ color: 0x22303c, specular: 0x4a5764, shininess: 62, flatShading: true });
-  /* LA ESCLERÓTICA LLEVA UN EMISIVO MÍNIMO. De noche y con una sola luz de
-     costado, el blanco del ojo queda en sombra y los ojos desaparecen — que es
-     justo lo único que este plano tiene que mostrar. Con 0x101216 se despegan
-     sin quedar dos focos en la cara. */
-  /* LA ESCLERÓTICA VA GRIS Y NO BLANCA, y el especular tampoco es blanco puro.
-     Con blanco y brillo 160 el globo devolvía el farol entero: medido en la
-     captura, dos bolas encendidas del tamaño de un pómulo y ninguna cara
-     alrededor. Lo que se ve de un ojo de verdad no es una esfera: es la RANURA
-     que dejan los párpados, y eso lo resuelven los casquetes de más abajo. */
-  const mOjo   = new T.MeshPhongMaterial({ color: 0xa8adb8, emissive: 0x0d0f13, specular: 0x8e96a4, shininess: 70 });
-  const mIris  = new T.MeshPhongMaterial({ color: 0x2f4550, specular: 0xc8d2e0, shininess: 150 });
-  const mPupi  = new T.MeshBasicMaterial({ color: 0x07080a });
-
-  const geoE = new T.SphereGeometry(1, 12, 9);
-  const geoC = new T.BoxGeometry(1, 1, 1);
-  const geoT = new T.CylinderGeometry(1, 1, 1, 10);
-  /* ── LAS PIEZAS QUIETAS SE FUNDEN, IGUAL QUE UNA CUADRA ──
-     Treinta y cinco mallas sueltas son treinta y cinco llamadas de dibujo en la
-     segunda pasada, y de las treinta y cinco sólo se MUEVEN doce: los dos
-     globos, los cuatro párpados y los cuatro discos del iris. Todo lo demás
-     —cráneo, mandíbula, nariz, cejas, pelo, cuello y campera— está clavado a la
-     cabeza, así que va por `fundir()`, que es la misma función que junta las
-     doscientas piezas de una cuadra. Quedan cinco mallas y no veintitrés. */
-  const CAP = new Map();
-  const pieza = (mat, geo, p, s, r) => {
-    if (!CAP.has(mat)) CAP.set(mat, []);
-    CAP.get(mat).push({ g: geo, p, s, r });
-  };
-
-  /* ── LA REGLA QUE ORDENA TODA LA CABEZA ──
-     Una cara hecha de bultos convexos no se compone «poniendo cada pieza donde
-     va»: se compone contra la SUPERFICIE DEL CRÁNEO, porque cualquier cosa que
-     quede por detrás de esa superficie NO SE VE — la esfera de adelante la tapa
-     entera y no hay hueco que valga, que acá no hay cuenca excavada.
-
-     Los ojos fueron exactamente eso. Con el globo en z 0,072 y el cráneo
-     llegando a 0,094 a esa altura, los dos ojos estaban VEINTIDÓS MILÍMETROS
-     ADENTRO de la cabeza: la sonda decía «cabeza en cuadro, delante de la
-     cámara, 68 % del alto» —los tres ciertos— y en la captura no había ojos. Lo
-     que se veía eran los pómulos, que sí sobresalían dos centímetros.
-
-     Así que el cráneo se acható de frente (z 0,088 corrido a −0,012) y cada
-     pieza lleva su cuenta: el ojo asoma 2,7 mm, el pómulo 2,7, la ceja 4,5 y la
-     nariz veinte. Los números están calculados sobre el elipsoide, no probados
-     a ojo — a esta resolución un error de cinco milímetros es un píxel y no se
-     ve hasta que se acumula. */
-  pieza(mPiel, geoE, [0, 0.010, -0.012], [0.094, 0.104, 0.088]);
-  /* la mandíbula y el mentón: sin ellos una cabeza es una pelota con ojos */
-  pieza(mPiel, geoE, [0, -0.055, 0.008], [0.070, 0.066, 0.062]);
-  pieza(mPiel, geoE, [0, -0.090, 0.036], [0.038, 0.028, 0.024]);
-  /* los pómulos, que son lo que atrapa la luz de costado */
-  for (const s of [-1, 1]) pieza(mPiel, geoE, [s*0.043, -0.030, 0.036], [0.024, 0.021, 0.015]);
-  /* la ceja: una tabla que TIRA SOMBRA SOBRE EL OJO, y es lo que hace que un
-     ojo se lea hundido en vez de pegado en la superficie */
-  pieza(mPiel, geoC, [0, 0.045, 0.052], [0.126, 0.017, 0.032]);
-  /* DOS CEJAS Y NO UNA BARRA. Con 4,8 cm de ancho puestas a ±3,1 se pisaban en
-     el medio y formaban un solo travesaño negro de once centímetros — medido en
-     la ampliación, con el flequillo justo encima quedaban dos barras paralelas y
-     la frente en el medio. Separadas, el hueco entre ellas es lo que las hace
-     leer a cejas. */
-  for (const s of [-1, 1]) pieza(mCejas, geoC, [s*0.033, 0.046, 0.068], [0.034, 0.008, 0.011], [0, 0, -0.14*s]);
-  /* la nariz, en dos piezas: el caballete y la punta */
-  pieza(mPiel, geoC, [0, 0.002, 0.072], [0.021, 0.052, 0.030], [0.16, 0, 0]);
-  pieza(mPiel, geoE, [0, -0.026, 0.078], [0.014, 0.011, 0.013]);
-  /* la boca: el labio de arriba y la línea, que es lo único que se lee */
-  pieza(mPiel, geoC, [0, -0.050, 0.062], [0.054, 0.011, 0.014]);
-  pieza(mLabio, geoC, [0, -0.059, 0.062], [0.054, 0.009, 0.014]);
-  /* las orejas */
-  for (const s of [-1, 1]) pieza(mPiel, geoE, [s*0.092, -0.004, -0.010], [0.011, 0.026, 0.017]);
-  /* ── EL PELO, EMPAPADO ──
-     El casquete se corta en 0,40π y no en 0,60π, y eso es una cuenta: con 0,60π
-     el borde del casquete baja DIECIOCHO GRADOS POR DEBAJO DEL ECUADOR, o sea
-     que la línea del pelo caía por debajo de los ojos y la mitad de arriba de la
-     cara era una banda negra. Con 0,40π el nacimiento queda en y 0,051, justo
-     encima de la ceja. Atrás va otra pieza, porque un casquete cortado ahí deja
-     la nuca pelada. */
-  const casq = new T.SphereGeometry(1, 12, 8, 0, Math.PI*2, 0, Math.PI*0.40);
-  pieza(mPelo, casq, [0, 0.010, -0.012], [0.098, 0.108, 0.094]);
-  pieza(mPelo, geoE, [0, -0.008, -0.046], [0.096, 0.098, 0.070]);
-  pieza(mPelo, geoC, [0, 0.076, 0.048], [0.136, 0.020, 0.042], [0.42, 0, 0]);
-  for (const s of [-1, 1]) pieza(mPelo, geoC, [s*0.084, 0.004, -0.004], [0.024, 0.086, 0.092], [0, 0, s*0.10]);
-
-  /* ── LOS OJOS ──
-     El globo va HUNDIDO y lo que asoma es un casquete de dos milímetros y
-     medio: eso da un disco de un centímetro y medio, que es lo que mide la
-     ranura de un ojo. Los párpados son casquetes de una esfera un pelo más
-     grande y concéntrica, así que sobresalen cuatro milímetros y hacen el
-     bulto del párpado por construcción. */
-  const casqSup = new T.SphereGeometry(1, 12, 6, 0, Math.PI*2, 0, Math.PI*0.5);
-  const casqInf = new T.SphereGeometry(1, 12, 6, 0, Math.PI*2, Math.PI*0.5, Math.PI*0.5);
-  for (const [O, s] of [[OJO_I, -1], [OJO_D, 1]]){
-    const g = new T.Group();
-    g.position.set(s*0.030, 0.018, 0.0615);
-    CARA.add(g);
-    const globo = new T.Mesh(geoE, mOjo);
-    globo.scale.set(0.0125, 0.0125, 0.0125);
-    g.add(globo);
-    /* el iris cuelga de un pivote: girando el pivote la mirada se mueve sobre
-       la esfera por construcción, y no hay forma de que se despegue del globo */
-    const mir = new T.Group(); g.add(mir);
-    /* ── EL IRIS TIENE QUE CABER DEBAJO DEL PÁRPADO ──
-       Éste es el defecto que hacía que cerrar los ojos no se viera: el iris
-       estaba puesto en z 0,0097 con medio grosor 0,0049, o sea que llegaba a
-       0,0146 — POR FUERA del casquete del párpado, que mide 0,0142, y hasta por
-       fuera del propio globo, que mide 0,0125. Así que los párpados se cerraban
-       de verdad y el iris los ATRAVESABA: en la ampliación, el ojo cerrado y el
-       abierto salían idénticos. Los dos discos van aplastados y por dentro del
-       globo, asomando tres décimas de milímetro. */
-    const iris = new T.Mesh(geoE, mIris);
-    iris.position.set(0, 0, 0.0098); iris.scale.set(0.0064, 0.0064, 0.0030);
-    mir.add(iris);
-    const pupi = new T.Mesh(geoE, mPupi);
-    pupi.position.set(0, 0, 0.0112); pupi.scale.set(0.0030, 0.0030, 0.0018);
-    mir.add(pupi);
-    const sup = new T.Mesh(casqSup, mPiel); sup.scale.set(0.0142, 0.0142, 0.0142); g.add(sup);
-    const inf = new T.Mesh(casqInf, mPiel); inf.scale.set(0.0140, 0.0140, 0.0140); g.add(inf);
-    /* LA LÍNEA DE LAS PESTAÑAS ES UN ANILLO EN EL BORDE DEL CASQUETE, o sea un
-       cilindro con el eje sobre el POLO del párpado y del radio del casquete: el
-       globo, que es más chico, deja asomar un anillo de dos milímetros. Puesto
-       girado noventa grados —que fue el primer intento— el cilindro queda de
-       cara al frente y tapa el ojo entero con un disco negro. */
-    const bor = new T.Mesh(geoT, mCejas);
-    bor.scale.set(0.0144, 0.0022, 0.0144);
-    sup.add(bor);
-    O.g = g; O.mir = mir; O.sup = sup; O.inf = inf;
-  }
-
-  /* el cuello y los hombros: sólo asoma la franja de arriba, pero sin ellos la
-     cabeza flota y el plano se lee a busto de museo */
-  pieza(mPiel, geoT, [0, -0.148, -0.010], [0.041, 0.110, 0.041]);
-  /* EL CUELLO DE LA CAMPERA SUBE, y no es un detalle de vestuario: con el
-     cuello desnudo asomando siete centímetros, la cabeza se lee apoyada sobre
-     un pedestal. Y encima alguien empapado a las tres de la mañana lo lleva
-     levantado. */
-  pieza(mCamp, geoT, [0, -0.192, -0.010], [0.070, 0.086, 0.070]);
-  pieza(mCamp, geoE, [0, -0.320, -0.010], [0.180, 0.120, 0.120]);
-  for (const s of [-1, 1]) pieza(mCamp, geoE, [s*0.175, -0.290, -0.010], [0.085, 0.075, 0.090]);
-
-  for (const [mat, lista] of CAP) CARA.add(new T.Mesh(fundir(lista), mat));
-
-  /* ── LAS TRES LUCES, Y LAS TRES TIENEN UN TRABAJO ──
-     1. LA CLAVE sale del farol de verdad que tiene delante: la posición se lee
-        de `FAROLES`, así que la sombra en la cara cae del mismo lado que el
-        poste que se ve en el fondo. Si la dirección no coincidiera con lo que
-        hay en pantalla, el ojo lo nota aunque no sepa por qué.
-     2. EL CONTRA es lo que separa la silueta del fondo. Sin él, una cara de
-        noche contra un barrio oscuro es una mancha — la lección que en LEMI
-        costó una vuelta entera con el screamer adentro de la cueva.
-     3. Y EL RELLENO NO PUEDE SER NEGRO ABAJO: con el suelo del hemisférico en
-        negro, toda cara que no mire al cielo recibe cero, o sea la mitad de
-        abajo del mentón y del cuello. */
+/* ── LAS TRES LUCES DE LA CARA, Y LAS TRES TIENEN UN TRABAJO ──
+   1. LA CLAVE sale del farol de verdad que tiene delante: la posición se lee de
+      `FAROLES`, así que la sombra en la cara cae del mismo lado que el poste que
+      se ve en el fondo. Pero el ÁNGULO lo pone el plano, no el farol: puesta
+      sobre la recta al poste —que está adelante y arriba, o sea detrás de la
+      cámara— la luz termina en el eje del lente, y una luz frontal NO MODELA:
+      medido, cara plana, sin sombra de nariz, sin ceja y sin pómulo.
+   2. EL CONTRA es lo que separa la silueta del fondo desenfocado. Sin él, una
+      cara de noche contra un barrio oscuro es una mancha — la lección que en
+      LEMI costó una vuelta con el screamer adentro de la cueva.
+   3. Y EL RELLENO NO PUEDE SER NEGRO ABAJO: con el suelo del hemisférico en
+      negro, toda cara que no mire al cielo recibe cero, o sea la mitad de abajo
+      del mentón y del cuello.
+   LAS TRES VAN EN LA CAPA 1. three.js junta las luces comparando sus capas
+   contra las de la CÁMARA, así que una luz de la capa 1 no existe para el
+   mundo: la cara se ilumina sola, sin que el farol de mentira le pinte las
+   casas de atrás. */
+function armaLucesCara(){
+  if (CARA_LUZ) return;
   CARA_LUZ = new T.PointLight(0xffd2a0, 7.5, 12, 1.2);
   CARA_REL = new T.DirectionalLight(0x9dc0ea, 0.58);
   CARA_AMB = new T.HemisphereLight(0x2b3b52, 0x14161c, 0.22);
   for (const l of [CARA_LUZ, CARA_REL, CARA_AMB]){ l.layers.set(1); escena.add(l); }
-
-  CARA.traverse(o => o.layers.set(1));
-  CARA.visible = false;
-  escena.add(CARA);
-  return CARA;
 }
 
 /* ── LA LLUVIA DE CERCA ──
@@ -307,7 +155,7 @@ const CINEMA = {
 
   prepara(){
     if (this.listo) return;
-    armaCabeza(); armaLluviaCara();
+    cargaPersonaje(); armaLucesCara(); armaLluviaCara();
     this.listo = true;
   },
 
@@ -336,7 +184,7 @@ const CINEMA = {
     camaVol(0.85);
     postMat.uniforms.abe.value = 0.018;
     postMat.uniforms.vig.value = 0.80;
-    CARA.visible = false; LLUCARA.visible = false;
+    escondePersonaje(); LLUCARA.visible = false;
     this.pon(0);
   },
 
@@ -364,8 +212,9 @@ const CINEMA = {
 
     if (t < CINE_CORTE){
       /* ═══ PLANO A: PRIMERA PERSONA ═══ */
-      CARA.visible = false; LLUCARA.visible = false;
+      LLUCARA.visible = false;
       postMat.uniforms.cara.value = 0;
+      capaPersonaje(0);
       /* el desenfoque de la entrada: la vista se acomoda en el primer segundo y
          medio. Es lo mismo que hace un ojo al abrirse, y encima anuncia el
          recurso que el plano B va a usar entero. */
@@ -394,30 +243,61 @@ const CINEMA = {
       const fov = 70 + Math.sin(t*0.37)*0.9;
       if (Math.abs(cam.fov - fov) > 0.01){ cam.fov = fov; cam.updateProjectionMatrix(); }
       JUG.x = c.x; JUG.z = c.z;              /* los faroles y la lluvia lo siguen */
+      /* Y SE VE EL CUERPO: es la misma primera persona del juego, así que
+         mirando hacia abajo están el pecho, las correas de la mochila y las
+         piernas caminando. La fase del paso es la MISMA que mueve la cámara. */
+      AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
+      GESTO.pitch = pit + c.pt; GESTO.yawRel = 0; GESTO.abre = 1; GESTO.parp = 0;
+      ponPersonaje(c.x, c.z, this.yaw0, alturaSuelo(c.x, c.z), true);
+      pasoPersonaje(0);
     } else {
       /* ═══ PLANO B: LA CARA ═══ */
       const u = t - CINE_CORTE;
-      CARA.visible = true; LLUCARA.visible = true;
+      LLUCARA.visible = true; capaPersonaje(1);
       postMat.uniforms.cara.value = 1;
       postMat.uniforms.dof.value = 0.88 + suave(0, 9.0, u)*0.12;
 
       const suelo = alturaSuelo(c.x, c.z);
-      /* la cabeza va donde estaría el ojo, un pelo más abajo: el ojo no está en
-         el centro del cráneo sino unos centímetros por delante y por encima */
       const hx = c.x + der.x*c.sx, hz = c.z + der.z*c.sx;
-      const hy = suelo + OJO - 0.020 + c.sy;
-      CARA.position.set(hx, hy, hz);
-      /* ── MIRA AL LENTE ──
-         La cara del modelo está sobre su +Z local, y un giro en Y lleva ese +Z a
-         (sin ry, cos ry). La cámara está en `cabeza − adelante·dist`, así que la
-         cara tiene que apuntar a `−adelante` — que es exactamente el mismo
-         ángulo con el que se orienta la cámara, o sea `yaw0`. Con `yaw0 + π`
-         —que es lo que parecía «darlo vuelta»— el plano entero mostraba LA NUCA:
-         medido, la cabeza en cuadro, delante de la cámara y ocupando el 68 % del
-         alto, y en la captura no había una sola cara. */
-      CARA.rotation.set(c.pt*1.4 + Math.sin(u*0.53)*0.012,
-                        this.yaw0 + Math.sin(c.f)*0.021 + Math.sin(u*0.41)*0.030,
-                        -c.rl*1.6);
+
+      /* ── LOS OJOS ──
+         Cerrados · se abren · miran · se cierran. La apertura es LENTA (0,8 s) y
+         el cierre del final más lento todavía: un párpado que baja en dos
+         décimas es un parpadeo, y un parpadeo no dice lo mismo que cerrar los
+         ojos. Los dos parpadeos del medio sí son rápidos, y ASIMÉTRICOS —bajan
+         en 0,09 s y suben en 0,17—, que es como parpadea alguien.
+         Y esto NO es un truco de dibujo: son cuatro huesos de párpado y dos de
+         ojo que se le agregaron al esqueleto, con su geometría, porque ningún
+         riggeador automático los da. */
+      let abre = suave(1.85, 2.65, u);
+      abre *= 1 - 0.97*(suave(4.10, 4.19, u) - suave(4.19, 4.36, u));
+      abre *= 1 - 0.97*(suave(6.35, 6.44, u) - suave(6.44, 6.62, u));
+      abre *= 1 - suave(7.55, 9.65, u);
+      GESTO.abre = abre; GESTO.parp = 0;
+      /* LA MIRADA SE MUEVE, y es lo que separa a alguien de un maniquí: un ojo
+         humano hace microsacadas todo el tiempo. Los dos ojos comparten el
+         ángulo, así que no pueden bizquear. */
+      GESTO.gy = Math.sin(u*0.71)*0.10 + Math.sin(u*2.3 + 0.7)*0.035;
+      GESTO.gx = Math.sin(u*0.53 + 1.9)*0.05;
+      /* y la mandíbula respira: un primer plano de una cara con la boca clavada
+         se lee a máscara. No habla —no hay nadie a quien hablarle— pero traga y
+         entreabre los labios. */
+      GESTO.boca = Math.max(0, Math.sin(u*0.63 - 0.4)) * 0.16
+                 + Math.max(0, Math.sin(u*2.9)) * 0.05;
+      GESTO.pitch = 0.10; GESTO.yawRel = Math.sin(u*0.41)*0.10;
+
+      /* el cuerpo camina y la cabeza va donde el esqueleto la ponga: la cámara
+         lo LEE en vez de suponerlo, así que el encuadre no puede despegarse de
+         la animación */
+      AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
+      ponPersonaje(hx, hz, this.yaw0, suelo, false);
+      pasoPersonaje(0);
+      PJ.grupo.updateMatrixWorld(true);
+      const _pO = new T.Vector3(), _pI = new T.Vector3();
+      if (PJ.ok){ PJ.idx['ojoI'].getWorldPosition(_pI); PJ.idx['ojoD'].getWorldPosition(_pO);
+                  _pO.add(_pI).multiplyScalar(0.5); }
+      else _pO.set(hx, suelo + OJO, hz);
+      const hy = _pO.y;
 
       /* ── LA CÁMARA VA MEDIO ENGANCHADA, Y ESO ES EL PEDIDO ──
          Enganchada del todo, la cara queda clavada en el cuadro y el balanceo
@@ -425,17 +305,29 @@ const CINEMA = {
          quieta, que es el error clásico de un plano así. Siguiendo sólo el 66 %
          del cabeceo, en la cara queda un tercio de residuo —que es lo que se
          mira— y el fondo se mueve entero. */
-      const dist = mez(0.92, 0.810, suave(0, 11.0, u));
-      const px = hx - this.adx*dist - der.x*c.sx*0.34;
+      /* LA DISTANCIA SE CALCULA SOBRE LA CABEZA QUE HAY, no sobre la que uno
+         imagina. Esta cabeza mide treinta y cinco centímetros —es un personaje
+         estilizado— así que a noventa centímetros y con 26 grados el cuadro
+         medía cuarenta y dos: medido, la coronilla salía cortada por arriba
+         (y 1,38 de 1). A 1,18 m el cuadro mide 54 cm y la cabeza ocupa el 64 %,
+         que es un primer plano con aire. */
+      const dist = mez(1.180, 1.045, suave(0, 11.0, u));
+      /* LA CÁMARA VA ADELANTE Y CAMINA DE ESPALDAS, que es lo que hace una
+         cámara que filma a alguien de frente. Estaba DETRÁS —`− adelante·dist`—
+         y funcionaba sólo porque la cabeza dibujada por código se giraba media
+         vuelta para mirarla: con un cuerpo entero eso es alguien caminando en
+         una dirección con la cabeza puesta al revés, y en la captura lo que se
+         veía era la nuca. */
+      const px = _pO.x + this.adx*dist - der.x*c.sx*0.34;
       const py = suelo + OJO + 0.012 + c.sy*0.66 + Math.sin(u*1.9)*0.0035;
-      const pz = hz - this.adz*dist - der.z*c.sx*0.34;
+      const pz = _pO.z + this.adz*dist - der.z*c.sx*0.34;
       cam.position.set(px, py, pz);
       /* SE APUNTA UN POCO POR DEBAJO DE LOS OJOS. Apuntando justo a ellos
          quedan clavados en el medio del cuadro, que es donde no van: en un
          primer plano los ojos caen alrededor de los dos tercios del alto, y lo
          que sube el encuadre es bajar el punto al que se mira. Medido, con el
          punto en los ojos la coronilla tocaba el borde de arriba. */
-      const ox = hx - px, oy = (hy - 0.018) - py, oz = hz - pz;
+      const ox = _pO.x - px, oy = (hy - 0.032) - py, oz = _pO.z - pz;
       cam.rotation.set(Math.atan2(oy, Math.hypot(ox, oz)),
                        Math.atan2(-ox, -oz),
                        Math.sin(u*0.77)*0.010 - c.rl*0.30);
@@ -445,41 +337,6 @@ const CINEMA = {
          12 cm y la nariz saldría deformada. */
       if (Math.abs(cam.fov - 26) > 0.01){ cam.fov = 26; cam.updateProjectionMatrix(); }
       JUG.x = c.x; JUG.z = c.z;
-
-      /* ── LOS OJOS ──
-         Cerrados · se abren · miran · se cierran. La apertura es LENTA (0,8 s) y
-         el cierre del final más lento todavía: un párpado que baja en dos
-         décimas es un parpadeo, y un parpadeo no dice lo mismo que cerrar los
-         ojos. Los dos parpadeos del medio sí son rápidos, y ASIMÉTRICOS —bajan
-         en 0,08 s y suben en 0,17—, que es como parpadea alguien. */
-      let abre = suave(1.85, 2.65, u);
-      abre *= 1 - 0.97*(suave(4.10, 4.19, u) - suave(4.19, 4.36, u));
-      abre *= 1 - 0.97*(suave(6.35, 6.44, u) - suave(6.44, 6.62, u));
-      abre *= 1 - suave(7.55, 9.65, u);
-      /* ── EL SIGNO DEL PÁRPADO, QUE ESTABA AL REVÉS ──
-         El casquete de arriba cubre el hemisferio de su POLO, y girándolo un
-         ángulo `a` sobre X el borde queda `a` radianes POR DEBAJO del eje de la
-         pupila. O sea que cualquier `a` positivo tapa la pupila: con el abierto
-         escrito en +0,30 los dos párpados estaban cerrados SIEMPRE, y encima el
-         de abajo con el signo cambiado hacía lo mismo desde el otro lado.
-         Abierto es el borde de arriba POR ENCIMA del eje (a negativo) y el de
-         abajo por debajo (b positivo); cerrado, los dos se cruzan. */
-      /* Y ABIERTO ES UNA ALMENDRA, NO UN CÍRCULO. El casquete que asoma del
-         cráneo es un disco de dieciséis milímetros; con los párpados en −0,55 y
-         +0,45 apenas lo tocaban y el ojo salía redondo, o sea saltón. En ±0,23
-         los bordes quedan a trece grados del eje y lo que queda es una franja de
-         dieciséis por cinco y medio — que es la proporción de un ojo. */
-      OJO_I.sup.rotation.x = mez(0.24, -0.23, abre);
-      OJO_D.sup.rotation.x = mez(0.24, -0.23, abre);
-      OJO_I.inf.rotation.x = mez(-0.08, 0.23, abre);
-      OJO_D.inf.rotation.x = mez(-0.08, 0.23, abre);
-      /* LA MIRADA SE MUEVE, y es lo que separa a alguien de un maniquí: un ojo
-         humano hace microsacadas todo el tiempo. Los dos ojos comparten el
-         ángulo, así que no pueden bizquear. */
-      const gy = Math.sin(u*0.71)*0.10 + Math.sin(u*2.3 + 0.7)*0.035;
-      const gx = Math.sin(u*0.53 + 1.9)*0.05;
-      OJO_I.mir.rotation.set(gx, gy, 0);
-      OJO_D.mir.rotation.set(gx, gy, 0);
 
       /* ── LA CLAVE SALE DEL FAROL QUE TIENE DELANTE ──
          La DIRECCIÓN es la del poste que de verdad está en el cuadro; el NIVEL
@@ -550,7 +407,7 @@ const CINEMA = {
 
   limpia(){
     this.on = false;
-    if (CARA){ CARA.visible = false; }
+    escondePersonaje(); capaPersonaje(0);
     if (LLUCARA) LLUCARA.visible = false;
     postMat.uniforms.cara.value = 0;
     postMat.uniforms.dof.value = 0;

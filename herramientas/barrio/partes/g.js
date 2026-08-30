@@ -266,7 +266,15 @@ function ponCam(dt){
   const rapido = cl(AND.v / CORRE, 0, 1);
   const andando = cl(AND.v / VEL, 0, 1);
   const faseAnt = AND.fase;
-  AND.fase += (AND.v * dt) / 0.82;          /* 0,82 m por medio paso */
+  /* PI POR CADA 0,82 m, y no 1. La linea decia «0,82 m por medio paso» y hacia
+     otra cosa: sumando `v·dt/0,82` la fase avanza UNO cada 82 cm, pero la
+     pisada dispara cuando cambia `floor(fase/PI)`, o sea cada PI unidades =
+     2,58 m. Con eso el jugador daba un paso cada dos metros y medio y el
+     cabeceo subia y bajaba una vez cada dos metros y medio: se leia a
+     deslizarse, no a caminar. Y ahora que hay un cuerpo con piernas, la
+     zancada tiene que ser la de verdad o los pies patinan — que es el defecto
+     que en RECREO tenia a Baldi a 2,7 metros por paso. */
+  AND.fase += Math.PI * (AND.v * dt) / 0.82;   /* 0,82 m por medio paso, de verdad */
   if (AND.v > 0.5 && MODO === 'juego' && !PAUSA){
     if (Math.floor(AND.fase / Math.PI) !== Math.floor(faseAnt / Math.PI))
       son('paso', 0.42 + rapido*0.4);

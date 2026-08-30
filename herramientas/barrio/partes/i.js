@@ -36,8 +36,17 @@ function bucle(){
   RELOJ.value += dt;
 
   if (MODO === 'cine') CINEMA.paso(dt);
-  else if (MODO === 'menu') CINE.paso(dt);
-  else if (!PAUSA){ fisica(dt); ponCam(dt); }
+  else if (MODO === 'menu'){ CINE.paso(dt); escondePersonaje(); }
+  else if (!PAUSA){
+    fisica(dt); ponCam(dt);
+    /* ── EL CUERPO EN PRIMERA PERSONA ──
+       Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
+       se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
+       correas de la mochila, los brazos y las piernas caminando. */
+    ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, true);
+    GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
+    pasoPersonaje(dt);
+  }
 
   pasoCuadras();
   pasoFaroles();
@@ -148,6 +157,7 @@ async function construir(){
   TOTALES.faroles = FAROLES.length;
   await paso(0.90, TX('cLluvia'));
   armaLluvia(); armaSalpicaduras(); indexaColisiones();
+  cargaPersonaje();
   await paso(1.0, TX('cListo'));
 }
 
@@ -299,36 +309,107 @@ async function arranca(){
         cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
         neg: +($('cineNeg').style.opacity || 0) });
     },
-    saltarCine: () => { CINEMA.saltar(); return MODO; },
+    /* la sonda NO pasa por `saltar()`: ésa tiene medio segundo de gracia para
+       que un doble toque no se coma la escena, y en el banco —que dibuja por
+       software— medio segundo de reloj de juego son varios segundos de reloj de
+       pared. Una prueba que a veces saltea y a veces no, no prueba nada. */
+    saltarCine: () => { if (CINEMA.on) CINEMA.termina(); return MODO; },
     /* dónde cae la cabeza en la pantalla, EN FRACCIÓN DEL CUADRO, y si está
        delante de la cámara. Lo segundo no es un detalle: un punto que está
        DETRÁS proyecta igual, dado vuelta, y cae dentro del rectángulo — ya dio
        un «entero y centrado» falso en RECREO y otro en LEMI. */
     caraEnCuadro: () => {
-      if (!CARA || !CARA.visible) return JSON.stringify({ visible: false });
-      CARA.updateMatrixWorld(true); cam.updateMatrixWorld(true);
-      const caj = new T.Box3().setFromObject(CARA);
+      if (!PJ.ok || !PJ.grupo.visible) return JSON.stringify({ visible: false });
+      PJ.grupo.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      /* la caja de la CABEZA y no la del personaje entero: lo que hay que poder
+         afirmar es cuánto del cuadro ocupa la cara */
+      const c = new T.Vector3(), a = new T.Vector3(), b = new T.Vector3();
+      PJ.idx['Head'].getWorldPosition(c);
+      PJ.idx['head_end'].getWorldPosition(a);
+      PJ.idx['ojoI'].getWorldPosition(b);
+      const r = Math.max(0.12, a.distanceTo(c)) * 0.95;
       let x0 = 9, x1 = -9, y0 = 9, y1 = -9, delante = true;
       for (let i = 0; i < 8; i++){
-        const v = new T.Vector3(i&1 ? caj.max.x : caj.min.x,
-                                i&2 ? caj.max.y : caj.min.y,
-                                i&4 ? caj.max.z : caj.min.z);
+        const v = new T.Vector3(b.x + ((i&1)?r:-r), c.y + ((i&2)?r*1.1:-r*0.6),
+                                b.z + ((i&4)?r:-r));
         const l = v.clone().applyMatrix4(cam.matrixWorldInverse);
         if (l.z > -0.02) delante = false;
         v.project(cam);
         x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x);
         y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
       }
-      const f = (a) => +((a + 1) / 2).toFixed(3);
-      return JSON.stringify({ visible: true, delante,
-        x: [f(x0), f(x1)], y: [f(y0), f(y1)],
-        altoPct: +(((y1 - y0) / 2) * 100).toFixed(1) });
+      const f = (q) => +((q + 1) / 2).toFixed(3);
+      return JSON.stringify({ visible: true, delante, x: [f(x0), f(x1)],
+        y: [f(y0), f(y1)], altoPct: +(((y1 - y0) / 2) * 100).toFixed(1) });
     },
+    /* mide los huesos de la cara con la cabeza a TAMAÑO ENTERO: en primera
+       persona está achicada a la centésima parte, así que medirla ahí devuelve
+       décimas de milímetro y parece que el hueso no mueve nada */
+    verCara: (v) => { if (!PJ.ok) return 'no';
+      /* se fuerza el estado CONTRARIO antes de llamar: `ponPersonaje` sólo
+         cambia la escala de la cabeza cuando el modo cambia, así que poniéndolo
+         ya en el estado que se quiere, la llamada no hace nada — y la medición
+         devuelve décimas de milímetro sin que nada avise */
+      PJ.primeraPersona = !!v;
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !v);
+      return JSON.stringify({ fp: PJ.primeraPersona,
+        escCabeza: +PJ.idx['Head'].scale.x.toFixed(3) }); },
     /* los párpados, que es lo único que el plano B tiene que contar */
-    ojos: () => JSON.stringify({
-      sup: +OJO_I.sup.rotation.x.toFixed(3), inf: +OJO_I.inf.rotation.x.toFixed(3),
-      simetrico: Math.abs(OJO_I.sup.rotation.x - OJO_D.sup.rotation.x) < 1e-6,
-      mira: [+OJO_I.mir.rotation.x.toFixed(3), +OJO_I.mir.rotation.y.toFixed(3)] }),
+    ojos: () => { if (!PJ.ok) return 'no';
+      const q = (n) => { const e = new T.Euler().setFromQuaternion(
+        PJ.bind[n].clone().invert().multiply(PJ.idx[n].quaternion), 'XYZ'); return +e.x.toFixed(3); };
+      return JSON.stringify({ abre: +GESTO.abre.toFixed(3), boca: +GESTO.boca.toFixed(3),
+        supI: q('parpSupI'), supD: q('parpSupD'), infI: q('parpInfI'),
+        simetrico: Math.abs(q('parpSupI') - q('parpSupD')) < 1e-3,
+        mand: q('mandibula') }); },
+    /* ── EL PERSONAJE ──
+       Lo que hay que poder afirmar: que el GLB entró, que los ocho huesos
+       nuevos están, y —sobre todo— que cada hueso MUEVE ALGO. Un hueso mal
+       pesado gira igual y no desplaza un solo vértice, y eso desde el código no
+       se ve: se mide moviendo el hueso y comparando dónde quedaron sus propios
+       vértices antes y después. */
+    pj: () => JSON.stringify({ ok: PJ.ok, tri: PJ.tri,
+      huesos: PJ.ok ? PJ.huesos.length : 0,
+      nombres: PJ.ok ? PJ.huesos.map(b => b.name) : [],
+      visible: PJ.ok ? PJ.grupo.visible : false,
+      fp: PJ.primeraPersona, esc: +PJ_ESC.toFixed(4) }),
+    hueso: (n) => { if (!PJ.ok) return 'no'; PJ.grupo.updateMatrixWorld(true);
+      const v = new T.Vector3(); PJ.idx[n].getWorldPosition(v);
+      return JSON.stringify([+v.x.toFixed(4), +v.y.toFixed(4), +v.z.toFixed(4)]); },
+    /* cuánto se mueven los vértices que pesa un hueso al girarlo un radián */
+    mide: (n, ax, ay, az) => {
+      if (!PJ.ok) return 'no';
+      const g = PJ.malla.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+      const k = PJ.huesos.findIndex(b => b.name === n);
+      const ids = [];
+      for (let i = 0; i < si.count && ids.length < 260; i++)
+        for (let q = 0; q < 4; q++)
+          if (si.getComponent(i, q) === k && sw.getComponent(i, q) > 0.6){ ids.push(i); break; }
+      const lee = () => { PJ.malla.updateMatrixWorld(true); return ids.map(i => {
+        const v = new T.Vector3().fromBufferAttribute(g.attributes.position, i);
+        PJ.malla.applyBoneTransform(i, v); return v; }); };
+      giraH(n, 0, 0, 0); const a = lee();
+      giraH(n, ax || 0, ay || 0, az || 0); const b = lee();
+      giraH(n, 0, 0, 0);
+      let mx = 0, su = 0;
+      for (let i = 0; i < a.length; i++){ const d = a[i].distanceTo(b[i]); su += d; if (d > mx) mx = d; }
+      return JSON.stringify({ hueso: n, vertices: ids.length,
+        medio: +(su / Math.max(1, a.length)).toFixed(4), max: +mx.toFixed(4) });
+    },
+    gesto: (g) => { Object.assign(GESTO, g || {}); if (PJ.ok) pasoPersonaje(0); return JSON.stringify(GESTO); },
+    /* dónde cae un hueso en la PANTALLA, y si está delante de la cámara: un
+       punto que está detrás proyecta igual, dado vuelta, y cae dentro del
+       rectángulo — ya dio tres falsos positivos en este repo */
+    enPantalla: (n) => {
+      if (!PJ.ok) return 'no'; PJ.grupo.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      const v = new T.Vector3(); PJ.idx[n].getWorldPosition(v);
+      const l = v.clone().applyMatrix4(cam.matrixWorldInverse);
+      const d = -l.z; v.project(cam);
+      return JSON.stringify({ hueso: n, delante: d > cam.near, dist: +d.toFixed(3),
+        x: +((v.x+1)/2).toFixed(3), y: +((v.y+1)/2).toFixed(3) });
+    },
+    luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,
+      near: cam.near, fp: PJ.primeraPersona }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },
     verRayo: () => ({ t: +RAYO.t.toFixed(2), luz: +rayoLuz.intensity.toFixed(2),
                       velo: +($('rayo').style.opacity || 0) }),
