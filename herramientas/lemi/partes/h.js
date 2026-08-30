@@ -135,6 +135,19 @@ function bucle(){
 
 (async function(){
   medir();
+  /* EL IDIOMA SE ELIGE ANTES DE QUE EMPIECE NADA, y la isla se siembra mientras
+     tanto: son unos segundos de cuentas que no dependen de qué idioma se elija,
+     así que hacerlos esperar sería regalar el único rato en que el jugador tiene
+     algo que hacer. Si ya eligió alguna vez, la pantalla ni aparece. */
+  for (const b of document.querySelectorAll('#idioma button'))
+    b.onclick = () => { ponIdioma(b.getAttribute('data-lang'));
+                        document.getElementById('idioma').classList.remove('on');
+                        window.__idiomaElegido = true; };
+  let yaEligio = false;
+  try { yaEligio = !!localStorage.getItem('lemi.idioma'); } catch(e){}
+  ponIdioma(IDIOMA);
+  if (!yaEligio) document.getElementById('idioma').classList.add('on');
+  else window.__idiomaElegido = true;
   addEventListener('resize', () => { clearTimeout(window.__rz);
     window.__rz = setTimeout(medir, 240); });
   armaPanel();
@@ -143,13 +156,35 @@ function bucle(){
   CINE.arranca();
   bucle();
   /* de la barra de carga al menú de inicio, con la isla ya viva detrás */
-  $('mPie').textContent = r.arboles + ' árboles · ' + SITIOS.length + ' sitios · ' +
-    Math.round(MITAD*2) + ' m de lado';
+  ISLA_DATOS = { arboles: r.arboles, sitios: SITIOS.length, lado: Math.round(MITAD*2) };
+  $('mPie').textContent = TXF('mPie', r.arboles, SITIOS.length, Math.round(MITAD*2));
   CINE.arranca();
+  /* y si todavía está eligiendo idioma, el menú espera: dos paneles encimados
+     son dos paneles que se tocan sin querer */
+  await new Promise(res => {
+    const ver = () => { if (window.__idiomaElegido) res(); else setTimeout(ver, 120); };
+    ver();
+  });
   $('menu').classList.add('on');
   $('carga').classList.add('ido');
   setTimeout(() => $('carga').style.display = 'none', 700);
+  /* el gancho que usa `pintaIdioma()` para poner al día lo que ya se está
+     viendo. Va colgado de `window` a propósito: esto es un módulo ES, así que
+     una `function` declarada arriba NO aparece en `window`, y la tabla de textos
+     —que se carga antes— no puede nombrar nada de acá. Es la misma trampa que en
+     RECREO dejó `pintarFiltro` sin correr nunca. */
+  window.repintaJuego = () => {
+    if (ISLA_DATOS) $('mPie').textContent =
+      TXF('mPie', ISLA_DATOS.arboles, ISLA_DATOS.sitios, ISLA_DATOS.lado);
+    if (typeof MIS !== 'undefined' && MIS.repinta) MIS.repinta();
+    const p = $('pista');
+    if (p.classList.contains('on') && MIS.cerca)
+      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + TX(MIS.cerca.rot);
+  };
   window.__V = { CFG, JUG, escena, ren, T, H, cam,
+    /* el idioma, para poder comprobar los tres desde el banco sin recargar */
+    idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
+    TX, TXF,
     nan: () => { const malas = [];
       escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;
         const a = g.attributes.position.array;

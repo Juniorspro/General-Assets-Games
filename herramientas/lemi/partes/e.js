@@ -157,7 +157,7 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'KeyE'){ e.preventDefault(); if (typeof MIS !== 'undefined') MIS.usa(); }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight'){ e.preventDefault(); ponAgacha(true); }
-  if (e.code === 'KeyF'){ JUG.vuela = !JUG.vuela; JUG.vy = 0; aviso(JUG.vuela ? 'Vuelo libre' : 'De vuelta al suelo'); }
+  if (e.code === 'KeyF'){ JUG.vuela = !JUG.vuela; JUG.vy = 0; aviso(TX(JUG.vuela ? 'aVuelo' : 'aSuelo')); }
   if (e.code === 'Escape') pausa(!PAUSA);
   modoPC(true);
 });

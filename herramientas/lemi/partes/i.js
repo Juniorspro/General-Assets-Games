@@ -160,18 +160,18 @@ const MINI = {
       this.k++;
       son2('bomba');
       if (this.k >= this.meta){
-        $('miAviso').textContent = '¡La rueda está inflada!';
+        $('miAviso').textContent = TX('miFin');
         setTimeout(() => this.cierra(true), 700);
         return 'fin';
       }
-      $('miAviso').textContent = '¡Bien! ' + (this.meta - this.k) + ' más';
+      $('miAviso').textContent = TXF('miBien', this.meta - this.k);
       this.nuevoCubo();
       return 'ok';
     }
     /* FALLAR NO REINICIA. Perder los seis golpes anteriores por uno malo
        convierte un minijuego de treinta segundos en uno de cinco minutos, y
        nada en el pedido dice que esto tenga que castigar. Sólo no suma. */
-    $('miAviso').textContent = 'Se escapó… seguí bombeando';
+    $('miAviso').textContent = TX('miMal');
     return 'mal';
   }
 };
@@ -203,11 +203,11 @@ const MIS = {
   cerca: null, marcaRastro: null, llaves: null, antorchaMalla: null,
 
   lista: [
-    { n:'Ramas para el fuego',   s:'Juntá 5 ramas en el bosque' },
-    { n:'La rueda pinchada',     s:'El inflador está en la camioneta' },
-    { n:'El rastro',             s:'Alguien se arrastró hasta el monte' },
-    { n:'Una antorcha',          s:'Una rama, tela de una carpa y el encendedor' },
-    { n:'Las llaves',            s:'Sin ellas la camioneta no arranca' }
+    /* LAS MISIONES GUARDAN LA CLAVE Y NO EL TEXTO. Si guardaran el texto, la
+       lista se arma una sola vez al empezar y cambiar de idioma en medio de la
+       partida dejaría el panel en el idioma viejo hasta la misión siguiente —el
+       mismo defecto que ya costó una vuelta con las tablas de Z Force. */
+    { k:'m0' }, { k:'m1' }, { k:'m2' }, { k:'m3' }, { k:'m4' }
   ],
 
   arranca(){
@@ -259,7 +259,7 @@ const MIS = {
       }
       const b = baliza(g, 1.6);
       G.add(g);
-      cosa({ tipo:'rama', x, z, malla:g, bal:b, rotulo:'Levantar una rama',
+      cosa({ tipo:'rama', x, z, malla:g, bal:b, rot:'rRama',
              mision:0, activo:false });
     }
 
@@ -267,7 +267,7 @@ const MIS = {
        usable: el auto se usa una vez para cada mision y el rótulo cambia. */
     if (AUTO){
       cosa({ tipo:'auto', x: AUTO.x, z: AUTO.z, r: 4.2,
-             rotulo:'Revisar la camioneta', mision:1, activo:false });
+             rot:'rAuto', mision:1, activo:false });
       /* LA RUEDA PINCHADA es la delantera del lado de afuera. Se marca con la
          baliza propia para que no haya que adivinar de qué lado del auto es. */
       const rx = AUTO.x + Math.cos(AUTO.ry)*1.55 + Math.sin(AUTO.ry)*1.05;
@@ -283,7 +283,7 @@ const MIS = {
          que falta el inflador. Con `requiere`, hasta que no lo tengas la única
          cosa usable ahí es la camioneta. */
       cosa({ tipo:'rueda', x: rx, z: rz, r: 2.4, malla:gr, bal:b,
-             rotulo:'Agacharse a inflar', mision:1, requiere:true, activo:false });
+             rot:'rRueda', mision:1, requiere:true, activo:false });
     }
 
     /* EL RASTRO Y LA CUEVA */
@@ -295,14 +295,14 @@ const MIS = {
       this.rastroDesde = desde;
       this.marcaRastro = armaRastro(desde, CUEVA, G);
       cosa({ tipo:'cueva', x: CUEVA.frenteX, z: CUEVA.frenteZ, r: 6.0,
-             rotulo:'Mirar la cueva', mision:2, activo:false });
+             rot:'rCueva', mision:2, activo:false });
     }
 
     /* LA CARPA que se rompe para la tela: la primera, que es la de Lemi */
     if (CARPAS.length){
       const k = CARPAS[0];
       cosa({ tipo:'carpa', x: k.x, z: k.z, r: 3.4,
-             rotulo:'Arrancar un pedazo de lona', mision:3, activo:false });
+             rot:'rCarpa', mision:3, activo:false });
     }
 
     /* LAS LLAVES, tiradas donde termina el rastro pero del lado de acá: no
@@ -325,7 +325,7 @@ const MIS = {
       const b = baliza(g, 1.4);
       G.add(g);
       this.llaves = cosa({ tipo:'llaves', x: lx, z: lz, malla:g, bal:b,
-                           rotulo:'Agarrar las llaves', mision:4, activo:false });
+                           rot:'rLlaves', mision:4, activo:false });
     }
   },
 
@@ -335,8 +335,8 @@ const MIS = {
     if (this.i >= this.lista.length){ this.fin(); return; }
     const m = this.lista[this.i];
     $('obj').classList.remove('hecho');
-    $('obj').querySelector('.n').textContent = 'OBJETIVO ' + (this.i+1) + ' DE 5';
-    $('obj').querySelector('.t').textContent = m.n;
+    $('obj').querySelector('.n').textContent = TXF('oNum', this.i+1);
+    $('obj').querySelector('.t').textContent = TX(m.k + 'n');
     this.pintaSub();
     /* se activa lo de esta misión y se apaga lo demás */
     for (const o of COSAS) o.activo = (o.mision === this.i) && !o.requiere;
@@ -348,24 +348,33 @@ const MIS = {
   },
   pintaSub(){
     const m = this.lista[this.i];
-    let s = m.s;
-    if (this.i === 0) s = 'Llevás ' + this.ramas + ' de 5';
+    let s = TX(m.k + 's');
+    if (this.i === 0) s = TXF('sRamas', this.ramas);
     if (this.i === 3){
       const a = this.antorcha;
-      s = (a.rama ? '✓' : '·') + ' rama   ' +
-          (a.tela ? '✓' : '·') + ' lona   ' +
-          (a.fuego ? '✓' : '·') + ' encendedor';
+      s = TXF('sAntorcha', a.rama ? '✓' : '·', a.tela ? '✓' : '·', a.fuego ? '✓' : '·');
     }
     $('obj').querySelector('.s').textContent = s;
+  },
+  /* REPINTA LO QUE YA ESTA EN PANTALLA. Cambiar de idioma con el juego abierto
+     tiene que cambiar el panel de objetivo y el cartel de lo que hay cerca AHORA,
+     no en la próxima misión. Es lo mismo que en Eco con las hojas ya encontradas. */
+  repinta(){
+    if (!this.on || this.i < 0) return;
+    if (this.i >= this.lista.length){ this.fin(); return; }
+    const m = this.lista[this.i];
+    $('obj').querySelector('.n').textContent = TXF('oNum', this.i+1);
+    $('obj').querySelector('.t').textContent = TX(m.k + 'n');
+    this.pintaSub();
   },
   balizas(){
     for (const o of COSAS) if (o.bal) o.bal.visible = o.activo;
   },
   fin(){
     $('obj').classList.add('hecho');
-    $('obj').querySelector('.n').textContent = 'EL DÍA TERMINÓ';
-    $('obj').querySelector('.t').textContent = 'Corré';
-    $('obj').querySelector('.s').textContent = 'No mires atrás';
+    $('obj').querySelector('.n').textContent = TX('oFinN');
+    $('obj').querySelector('.t').textContent = TX('oFinT');
+    $('obj').querySelector('.s').textContent = TX('oFinS');
   },
 
   /* qué es lo más cercano que se puede usar AHORA. Lo calculan las dos cosas
@@ -391,14 +400,14 @@ const MIS = {
       this.ramas++;
       o.activo = false; o.malla.visible = false;
       son2('ok'); this.pintaSub(); this.balizas();
-      if (this.ramas >= 5){ aviso('Cinco ramas. Ya hay fuego para la noche.'); this.avanza(); }
+      if (this.ramas >= 5){ aviso(TX('aRamas')); this.avanza(); }
       return 'rama';
     }
     if (o.tipo === 'auto'){
       if (this.i === 1 && !this.tieneInflador){
         this.tieneInflador = true;
-        aviso('Inflador en la mano');
-        $('obj').querySelector('.s').textContent = 'Ahora agachate junto a la rueda';
+        aviso(TX('aInflador'));
+        $('obj').querySelector('.s').textContent = TX('sInflar');
         for (const c2 of COSAS) if (c2.tipo === 'rueda') c2.activo = true;
         this.balizas();
         son2('ok');
@@ -406,14 +415,14 @@ const MIS = {
       }
       if (this.i === 3 && !this.antorcha.fuego){
         this.antorcha.fuego = true;
-        aviso('Encendedor en la mano');
+        aviso(TX('aEncendedor'));
         son2('ok'); this.pintaSub(); this.chequeaAntorcha();
         return 'encendedor';
       }
       return null;
     }
     if (o.tipo === 'rueda'){
-      if (!this.tieneInflador){ aviso('Falta el inflador: está en la camioneta'); return null; }
+      if (!this.tieneInflador){ aviso(TX('aFaltaInflador')); return null; }
       ponAgacha(true);
       MINI.abre();
       return 'mini';
@@ -421,7 +430,7 @@ const MIS = {
     if (o.tipo === 'cueva'){
       /* NO SE PUEDE PASAR, y eso hay que DECIRLO. Un pasaje invisible que no
          deja avanzar sin explicar por qué se lee a error de colisión. */
-      aviso('Está tapado. No se puede pasar por acá.');
+      aviso(TX('aCueva'));
       o.activo = false;
       this.avanza();
       return 'cueva';
@@ -430,7 +439,7 @@ const MIS = {
       if (this.i !== 3 || this.antorcha.tela) return null;
       this.antorcha.tela = true;
       if (this.ramas > 0 && !this.antorcha.rama){ this.antorcha.rama = true; this.ramas--; }
-      aviso('Un pedazo de lona, y una de las ramas');
+      aviso(TX('aLona'));
       son2('ok'); this.pintaSub(); this.chequeaAntorcha();
       return 'lona';
     }
@@ -445,7 +454,7 @@ const MIS = {
   chequeaAntorcha(){
     const a = this.antorcha;
     if (a.rama && a.tela && a.fuego){
-      aviso('Antorcha lista. Ahora las llaves.');
+      aviso(TX('aAntorcha'));
       this.prendeAntorcha();
       this.avanza();
     }
@@ -499,7 +508,7 @@ const MIS = {
     const p = $('pista');
     if (mejor){
       p.classList.add('on');
-      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + mejor.rotulo;
+      p.innerHTML = (document.body.classList.contains('pc') ? '<b>E</b> · ' : '') + TX(mejor.rot);
       $('acUsar').classList.remove('apagado');
     } else {
       p.classList.remove('on');
@@ -694,7 +703,7 @@ const LLAVE = {
     BICHO.golpe = 0.9;
     BICHO.caza = true;
     MIS.avanza();
-    aviso('¡CORRÉ!');
+    aviso(TX('aCorre'));
   }
 };
 

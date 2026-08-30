@@ -270,7 +270,7 @@ function pausa(v){
   if (v){
     const t = Math.floor(RELOJ.value);
     document.getElementById('pSub').textContent =
-      Math.floor(t/60) + ' min ' + String(t%60).padStart(2,'0') + ' s en la isla';
+      TXF('pSub', Math.floor(t/60), String(t%60).padStart(2,'0'));
   }
 }
 function armaPanel(){

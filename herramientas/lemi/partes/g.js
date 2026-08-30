@@ -496,7 +496,7 @@ function pasoCamello(dt){
     BICHO.x = CAMPO.x + Math.cos(aa)*rr;
     BICHO.z = CAMPO.z + Math.sin(aa)*rr;
     nuevoDestino();
-    aviso('¡TE ALCANZÓ! · volvés al campamento');
+    aviso(TX('aAlcanzo'));
   }
 }
 
@@ -509,13 +509,12 @@ function pasoCamello(dt){
 
    SE PUEDE SALTEAR EN CUALQUIER MOMENTO. Una cinemática obligatoria que se ve
    por segunda vez deja de ser una historia y pasa a ser un peaje. */
+/* EL GUION GUARDA LA CLAVE, NO LA FRASE. Es la misma regla que en RECREO: con
+   el texto ya resuelto adentro, cambiar de idioma no cambia el subtítulo que
+   está en pantalla, y peor, la tabla se arma una sola vez al cargar el módulo. */
 const GUION = [
-  [ 6.0,  'Cuatro amigos. Una isla que no figura en ningún mapa.' ],
-  [ 11.0, 'El campamento ya estaba armado antes de que cayera el sol.' ],
-  [ 17.0, '—¿Escucharon eso? Nadie escuchó nada.' ],
-  [ 21.0, 'Se fueron a dormir.' ],
-  [ 27.5, 'Cuando Lemi se despertó, no había nadie.' ],
-  [ 31.0, 'Sólo un rastro que salía del campamento.' ]
+  [ 6.0,  'g0' ], [ 11.0, 'g1' ], [ 17.0, 'g3' ],
+  [ 21.0, 'g4' ], [ 27.5, 'g5' ], [ 31.0, 'g6' ]
 ];
 const INTRO = {
   activa: false, t: 0, dur: 31.0, gente: [],
@@ -750,7 +749,7 @@ const INTRO = {
       this.txtActual = idx;
       const el = $('cTexto');
       el.classList.remove('ver');
-      setTimeout(() => { el.textContent = GUION[idx][1]; el.classList.add('ver'); }, 180);
+      setTimeout(() => { el.textContent = TX(GUION[idx][1]); el.classList.add('ver'); }, 180);
     }
     /* EL NEGRO DEL MEDIO ES LA NOCHE QUE PASA, y es el que permite el corte de
        hora sin que se lea a error. El del final es por donde entra el juego. */
