@@ -214,18 +214,54 @@ const sueltaDedo = e => { if (DED.mira && DED.mira.id === e.pointerId) DED.mira 
 lienzo.addEventListener('pointerup', sueltaDedo);
 lienzo.addEventListener('pointercancel', sueltaDedo);
 
-/* ── la palanca dibujada ── */
+/* ── LA PALANCA, DIBUJADA CON LAS IMAGENES DE PIXEL ART ──
+   Eran dos circulos verdes de `arc()`. Un circulo de canvas sale con los bordes
+   suavizados, o sea NITIDO, encima de un juego que se dibuja a un tercio de
+   resolucion y se estira con NEAREST: el control se leia como una interfaz de
+   otra aplicacion puesta arriba. Ahora son el aro y el pulgar generados, con
+   `imageSmoothingEnabled` en false para que al agrandarlos los pixeles queden
+   cuadrados en vez de borrosos.
+   Y SE SIGUEN DIBUJANDO CON LOS CIRCULOS SI LAS IMAGENES NO CARGARON: son un
+   WebP en base64 que se decodifica de forma asincronica, asi que los primeros
+   cuadros —o un navegador que no lo soporte— tienen que tener joystick igual. */
 const joyCv = document.querySelector('#joy canvas'), jg = joyCv.getContext('2d');
+const IMG = {};
+function cargaUI(){
+  if (typeof UI_B64 === 'undefined') return;
+  for (const k of Object.keys(UI_B64)){
+    const im = new Image();
+    im.onload = () => { IMG[k] = im; if (k.startsWith('joy')) joyDibuja();
+                        if (k === 'hoja') ponHoja(); };
+    im.src = 'data:image/webp;base64,' + UI_B64[k];
+  }
+}
+/* la hoja y los botones van por CSS, que es donde viven esos elementos */
+function ponHoja(){
+  if (IMG.hoja) document.documentElement.style.setProperty(
+    '--hoja', 'url(' + IMG.hoja.src + ')');
+  for (const [id, k] of [['acCorre','bCorre'], ['acAgacha','bAgacha'],
+                         ['acSalta','bSalta'], ['acUsar','bUsar']]){
+    if (IMG[k]) $(id).style.backgroundImage = 'url(' + IMG[k].src + ')';
+  }
+}
 function joyDibuja(){
   const n = 300, c = n/2, R = n/2 - 12;
   jg.clearRect(0,0,n,n);
+  jg.imageSmoothingEnabled = false;
+  const px = c + movV.x*R*0.55, py = c + movV.y*R*0.55;
+  if (IMG.joyAro && IMG.joyDedo){
+    jg.drawImage(IMG.joyAro, c-R, c-R, R*2, R*2);
+    const rd = 46;
+    jg.drawImage(IMG.joyDedo, px-rd, py-rd, rd*2, rd*2);
+    return;
+  }
   jg.strokeStyle = 'rgba(126,227,160,.55)'; jg.lineWidth = 3;
   jg.beginPath(); jg.arc(c,c,R,0,6.283); jg.stroke();
   jg.fillStyle = 'rgba(8,18,28,.35)'; jg.fill();
-  const px = c + movV.x*R*0.55, py = c + movV.y*R*0.55;
   jg.beginPath(); jg.arc(px, py, 34, 0, 6.283);
   jg.fillStyle = 'rgba(126,227,160,.85)'; jg.fill();
 }
+cargaUI();
 let jd = null;
 $('joy').addEventListener('pointerdown', e => {
   e.preventDefault(); modoPC(false);

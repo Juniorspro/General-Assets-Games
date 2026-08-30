@@ -591,13 +591,27 @@ const INTRO = {
      escena, así que leer la tabla es leer el guion. */
   T: { llega: 0, arma: 6.0, prende: 11.6, sienta: 13.0,
        ruido: 19.0, duerme: 24.0, corte: 29.5 },
-  activa: false, t: 0, dur: 38.0, gente: [],
+  /* LA APERTURA DURA 40 s Y NO 38, y el par de segundos son de la voz. El
+     último tramo iba de 34,5 a 38, o sea 3,5 s, y la frase grabada dura 4,6 en
+     castellano y 4,1 en portugués: se cortaba en seco justo en la línea que
+     nombra el rastro, que es la que le dice al jugador qué tiene que hacer. */
+  activa: false, t: 0, dur: 40.0, gente: [],
   arranca(){
     this.t = 0; this.activa = true;
     MODO = 'cine';
     /* una partida nueva vuelve a tener día: si no, reiniciar después de haber
        llegado a la llave dejaba el amanecer clavado en medianoche para siempre */
     NOCHE_FIJA = false;
+    /* Y EL CAMELLO VUELVE A EMPEZAR, que era el otro estado que sobrevivía a un
+       reinicio. `BICHO.caza` lo enciende la escena de la llave y no lo apagaba
+       nadie: al empezar de nuevo, el bicho arrancaba en modo caza —que persigue
+       desde CUATROCIENTOS metros, contra los 95 del olfato normal— así que la
+       partida nueva empezaba con la cosa viniendo derecho al campamento desde el
+       primer segundo. `ponCamello()` lo manda de vuelta a 120-190 m, lo pone en
+       ronda y apaga la caza; ya lo hacía, sólo que nadie lo llamaba al arrancar. */
+    ponCamello();
+    ROTO.on = false; ROTO.cae = 0; ROJO.on = false;
+    cuevaReinicia();
     $('menu').classList.remove('on');
     $('hud').classList.remove('on');
     $('cine').classList.add('on');
@@ -753,7 +767,14 @@ const INTRO = {
         const d0 = 13.5 - k*10.0 + atras;
         const sx = c.x + ex*d0 - ez*lado, sz = c.z + ez*d0 + ex*lado;
         p.position.set(sx, H(sx, sz), sz);
-        p.rotation.y = Math.atan2(sx - c.x, sz - c.z);
+        /* MIRAN HACIA DONDE CAMINAN, y estaba al revés. `d0` baja con `k`, o sea
+           que van del auto HACIA el claro; el rumbo estaba escrito
+           `atan2(sx - c.x, sz - c.z)`, que es la dirección contraria, así que la
+           escena de la llegada eran cuatro personas entrando al campamento
+           caminando de espaldas. La convención de este rig es la misma en todos
+           lados —`atan2(destino - propio)`, como la usan los que ponen leña
+           mirando el fuego—; acá estaba restada al revés. */
+        p.rotation.y = Math.atan2(c.x - sx, c.z - sz);
         /* recorren 10 m en los seis segundos del tramo */
         poseCamina(p, RELOJ.value + i*0.7, 1.65);
       });
@@ -964,7 +985,11 @@ const INTRO = {
       this.txtActual = idx;
       const el = $('cTexto');
       el.classList.remove('ver');
-      setTimeout(() => { el.textContent = TX(GUION[idx][1]); el.classList.add('ver'); }, 180);
+      const k = GUION[idx][1];
+      setTimeout(() => { el.textContent = TX(k); el.classList.add('ver'); }, 180);
+      /* Y LA VOZ SALE DE LA MISMA CLAVE QUE EL SUBTITULO. No hay dos listas: la
+         línea que se lee y la que se escucha son la misma entrada del guion. */
+      voz(k);
     }
     /* EL NEGRO DEL MEDIO ES LA NOCHE QUE PASA, y es el que permite el corte de
        hora sin que se lea a error. El del final es por donde entra el juego. */

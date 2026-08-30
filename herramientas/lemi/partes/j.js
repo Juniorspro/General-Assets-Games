@@ -267,6 +267,33 @@ function armaMurcielagos(){
 }
 const _mB = new T.Matrix4(), _qB = new T.Quaternion(), _eB = new T.Euler();
 const _vB = new T.Vector3(), _sB = new T.Vector3(1,1,1);
+/* EL AMBIENTE DE LA CUEVA: los murciélagos y una gota cada tanto.
+   Van SUELTOS Y AL AZAR y no en bucle: una gota que cae con métrica exacta se
+   oye a metrónomo, y lo que hace que una cueva se sienta viva es justamente que
+   no se pueda anticipar. El volumen de los murciélagos sale de cuántos hay
+   cerca, así que el pasillo suena distinto según por dónde se vaya. */
+const CUEVA_AMB = { gota: 4, bicho: 3 };
+function ambienteCueva(dt){
+  if (!ENCUEVA || !CUEVA_EJE) return;
+  CUEVA_AMB.gota -= dt;
+  if (CUEVA_AMB.gota <= 0){
+    CUEVA_AMB.gota = 5 + Math.random()*9;
+    son2('gota', 0.35 + Math.random()*0.3);
+  }
+  CUEVA_AMB.bicho -= dt;
+  if (CUEVA_AMB.bicho <= 0){
+    CUEVA_AMB.bicho = 3.5 + Math.random()*5;
+    /* cuántos murciélagos hay a menos de doce metros: si no hay ninguno, no
+       suena nada, que es lo que hace que el sonido signifique algo */
+    let cerca = 0;
+    for (let i = 0; i < MURCIS.n; i++){
+      const b = MURCIS.datos[i], p = puntoEje(b.d);
+      if (Math.hypot(p.x - JUG.x, p.z - JUG.z) < 12) cerca++;
+    }
+    if (cerca) son2('murcis', Math.min(0.85, 0.20 + cerca*0.16));
+  }
+}
+
 function pasoMurcielagos(t){
   if (!MURCIS.cuerpo) return;
   for (let i = 0; i < MURCIS.n; i++){
@@ -384,7 +411,15 @@ function poseMuerto(p, v){
 function armaCuerpos(){
   CUERPOS = [];
   /* al fondo del pasillo, amontonados pero no encimados */
-  const base = CUEVA_LARGO - 7;
+  /* LOS CUERPOS Y LA LLAVE SE CORREN HACIA ATRÁS PARA QUE QUEDE SALA DETRÁS.
+     Estaban a 7 y a 3,2 metros del fondo, o sea pegados a la tapa: cuando el
+     camello aparecía tenía que plantarse hacia la BOCA por falta de sitio, y
+     entonces quedaba entre el jugador y la única salida — «nos atrapa apenas
+     queremos salir corriendo», textual. Movidos a 13 y a 9, los últimos nueve
+     metros de la sala quedan libres y el bicho puede aparecer DELANTE, con la
+     salida a la espalda del jugador: te das vuelta y corrés, que es lo que una
+     escena de susto tiene que dejar hacer. */
+  const base = CUEVA_LARGO - 13;
   for (let i = 1; i < AMIGOS.length; i++){
     const p = armaPersona(AMIGOS[i]);
     const d = base + (i-1)*1.9;
@@ -415,7 +450,7 @@ function construyeCueva(){
   /* LA LLAVE VA AL FONDO, entre los cuerpos: es lo que se pidió —que todo esté
      adentro— y de paso resuelve solo el problema de que antes estaba tirada en
      el pasto sin ninguna razón para estar ahí. */
-  const q = puntoEje(CUEVA_LARGO - 3.2);
+  const q = puntoEje(CUEVA_LARGO - 9);
   const g = new T.Group();
   g.position.set(q.x, q.y, q.z);
   const anillo = new T.Mesh(new T.TorusGeometry(0.13, 0.028, 4, 10), matLlave);
@@ -494,6 +529,28 @@ function entraCueva(){
     setTimeout(() => $('cine').classList.remove('on'), 520);
   }, 620);
 }
+/* VOLVER A EMPEZAR DESDE ADENTRO DE LA CUEVA. Reiniciar con `ENCUEVA` en true
+   dejaba el mundo de afuera apagado y las luces guardadas sin devolver: la
+   partida nueva arrancaba en un campamento invisible. No es `saleCueva()`,
+   porque ésa además teletransporta al jugador a la boca — acá el jugador ya lo
+   está colocando la cinemática. */
+function cuevaReinicia(){
+  ENCUEVA = false;
+  esconde(false);
+  if (_luzGuardada){
+    ambiente.intensity = _luzGuardada.a;
+    ambiente.color.copy(_luzGuardada.c);
+    if (_luzGuardada.g) ambiente.groundColor.copy(_luzGuardada.g);
+    luna.intensity = _luzGuardada.l;
+    sol.intensity = _luzGuardada.s;
+    relleno.intensity = _luzGuardada.r;
+    postMat.uniforms.vig.value = _luzGuardada.v;
+    postMat.uniforms.sat.value = _luzGuardada.sa;
+    _luzGuardada = null;
+  }
+  postMat.uniforms.rojo.value = 0;
+}
+
 function saleCueva(){
   if (!ENCUEVA) return;
   ENCUEVA = false;
@@ -571,7 +628,7 @@ function pasoRojo(dt){
   postMat.uniforms.rojo.value += (v - postMat.uniforms.rojo.value) * Math.min(1, dt*4.5);
 }
 
-const ROTO = { on: false, t: 0, cae: 0, prox: 0, fase: 0 };
+const ROTO = { on: false, t: 0, cae: 0, prox: 0, fase: 0, lat: 0 };
 function rompePierna(){
   ROTO.on = true; ROTO.t = 0; ROTO.cae = 0;
   /* el primer tropiezo no cae de una: dar tres pasos y desplomarse antes de
@@ -581,6 +638,16 @@ function rompePierna(){
 function pasoRoto(dt){
   if (!ROTO.on) return;
   ROTO.t += dt;
+  /* EL LATIDO VA MAS RAPIDO CUANTO MAS CERCA ESTA EL BICHO, que es la única
+     forma de que el sonido diga algo en vez de sonar cada tanto. Y se calla
+     mientras el narrador habla o mientras uno está en el piso: ahí ya hay algo
+     que escuchar. */
+  ROTO.lat -= dt;
+  if (ROTO.lat <= 0 && ROTO.cae <= 0){
+    const d = Math.hypot(BICHO.x - JUG.x, BICHO.z - JUG.z);
+    ROTO.lat = cl(d/34, 0.62, 2.1);
+    son2('latido', cl(1.2 - d/60, 0.22, 0.8));
+  }
   if (ROTO.cae > 0){
     ROTO.cae -= dt;
     if (ROTO.cae <= 0) ROTO.prox = 7 + Math.random()*6;
@@ -592,7 +659,10 @@ function pasoRoto(dt){
     if (ROTO.prox <= 0){
       ROTO.cae = 1.35;
       AND.golpe = 0.85;
-      son2('paso', 1.0);
+      /* EL GOLPE ES EL SONIDO DE UN CUERPO CONTRA LA PIEDRA, no una pisada. Con
+         `paso` puesto, caerse sonaba igual que dar un paso más — o sea que lo
+         único que avisaba de que te habías caído era que la cámara bajaba. */
+      son2('caida', 1.0);
       aviso(TX('aTrabado'));
     }
   }
@@ -627,6 +697,15 @@ const FINAL = {
        afuera —donde el jugador ya no es el ojo sino alguien que se sube a una
        camioneta— quedaba una llama flotando en el medio del cuadro. */
     if (MIS.antorchaMalla) MIS.antorchaMalla.visible = false;
+    /* Y SE PRENDEN LOS FAROS. La escena pasa de noche cerrada —el reloj quedó
+       clavado ahí después de la llave— y sin ellos la camioneta es una silueta
+       negra sobre un monte negro: medido en la captura, los cuatro planos del
+       final eran cuatro rectángulos oscuros con un subtítulo. Los dos haces ya
+       existían, apagados desde que el auto está estacionado; ésta es la única
+       escena del juego en la que el auto anda, o sea la única en la que tienen
+       algo que hacer. De paso iluminan por dónde se va, que es lo que el plano
+       tiene que contar. */
+    if (AUTO.g.userData.faros) for (const f of AUTO.g.userData.faros) f.intensity = 3.4;
     /* el camello sale del monte por donde uno vino: llega tarde, y que llegue
        tarde es el final.
        Y SE PIDE EL MODELO ANTES DE MIRARLO. `CAM3` se arma la primera vez que el
@@ -662,12 +741,48 @@ const FINAL = {
        bicho saliendo del monte cuando ya es tarde. */
     const sube = cl(t/2.4, 0, 1);
     /* 2 · arranca al segundo intento */
-    if (t > 3.0 && t < 3.1) son2('mal', 0.8);
-    if (t > 4.3 && t < 4.4) son2('bomba', 0.9);
+    /* EL MOTOR ES EL MOTOR, y antes eran dos sonidos prestados: `mal` —que es
+       el pitido de equivocarse en el minijuego— y `bomba`, que es el inflador.
+       Ahora son los dos clips propios: uno de arranque que no prende y otro que
+       sí. El sonido de fallar es lo único que hace que el segundo intento tenga
+       algo de alivio. */
+    if (t > 3.0 && t < 3.1) son2('motorMal', 0.95);
+    if (t > 4.3 && t < 4.4) son2('motor', 1.0);
+    if (t > 2.15 && t < 2.25) son2('puerta', 0.85);
     /* 3 · se va */
     const anda = cl((t - 4.6)/6.0, 0, 1);
     const rec = anda*anda * 92;
-    a.g.position.set(a.x + Math.sin(a.ry)*rec, a.y, a.z + Math.cos(a.ry)*rec);
+    /* ── LA CAMIONETA PISA EL SUELO, Y ANTES VOLABA ──
+       Estaba escrito `a.g.position.set(x, a.y, z)`: la altura QUEDABA CLAVADA en
+       la del sitio donde estaba estacionada mientras el vehículo recorría
+       noventa y dos metros. La isla no es plana, así que a los pocos metros el
+       terreno bajaba y la camioneta seguía a la altura vieja — o sea, se iba
+       volando en línea recta. Ahora la altura sale de `H()` en cada cuadro, que
+       es el mismo mapa que pisa el jugador.
+       Y NO ALCANZA CON APOYARLA: un auto que sigue el terreno sin inclinarse se
+       lee a calcomanía que se desliza. El CABECEO sale de medir el suelo un poco
+       adelante y un poco atrás —la pendiente de verdad, en radianes— y el
+       BALANCEO de medirlo a izquierda y derecha, que es exactamente lo que hace
+       un eje. Se suavizan los dos, porque una suspensión no copia el terreno al
+       instante: eso es lo que separa un vehículo de un objeto pegado al piso. */
+    const nx = a.x + Math.sin(a.ry)*rec, nz = a.z + Math.cos(a.ry)*rec;
+    const fx = Math.sin(a.ry), fz = Math.cos(a.ry);        /* hacia adelante */
+    const lx = -fz, lz = fx;                               /* el costado */
+    const D = 1.9;                                         /* la mitad de la distancia entre ejes */
+    const hAde = H(nx + fx*D, nz + fz*D), hAtr = H(nx - fx*D, nz - fz*D);
+    const hIzq = H(nx + lx*0.9, nz + lz*0.9), hDer = H(nx - lx*0.9, nz - lz*0.9);
+    /* la altura es el promedio de las cuatro ruedas, no la del centro: con la
+       del centro, en una loma el auto se hunde y en un pozo flota */
+    const hy = (hAde + hAtr + hIzq + hDer)/4;
+    a.g.position.set(nx, hy, nz);
+    const cabeceo = Math.atan2(hAtr - hAde, D*2);
+    const balanceo = Math.atan2(hDer - hIzq, 1.8);
+    /* y un rebote de suspensión, más fuerte cuanto más rápido va */
+    const bote = Math.sin(t*17.0) * 0.018 * anda;
+    a.g.rotation.order = 'YXZ';
+    a.g.rotation.y = a.ry;
+    a.g.rotation.x = lerp(a.g.rotation.x, cabeceo + bote, 0.12);
+    a.g.rotation.z = lerp(a.g.rotation.z, balanceo, 0.12);
     /* LA CAMARA VA DE TRES CUARTOS Y NO PEGADA A LA PUERTA. Puesta a dos metros
        del costado —que suena a «al lado de la puerta»— la camioneta mide mas de
        dos de ancho, asi que quedaba a UN metro de la chapa: medido en la
@@ -695,7 +810,10 @@ const FINAL = {
     const bl = (CAM3 && t > 6.2) ? cl((t - 6.2)/2.2, 0, 1) : 0;
     const mira = new T.Vector3(
       lerp(a.g.position.x, BICHO.x, bl*0.55),
-      a.y + 1.0 - sube*0.0,
+      /* la mira sigue la altura DE LA CAMIONETA y no la del sitio donde estaba
+         estacionada: si no, en cuanto el terreno baja el auto se va del cuadro
+         por abajo mientras la cámara sigue apuntando al aire */
+      lerp(a.g.position.y + 1.0, pisoDe(BICHO.x, BICHO.z) + 1.6, bl*0.55),
       lerp(a.g.position.z, BICHO.z, bl*0.55));
     cam.lookAt(mira);
     cam.fov = 62 - sube*4; cam.updateProjectionMatrix();
@@ -714,6 +832,7 @@ const FINAL = {
       const el = $('cTexto');
       el.classList.remove('ver');
       setTimeout(() => { el.textContent = TX(idx); el.classList.add('ver'); }, 180);
+      voz(idx);
     }
     $('cVelo').classList.toggle('ver', t > this.dur - 1.6);
     if (t >= this.dur) this.termina();

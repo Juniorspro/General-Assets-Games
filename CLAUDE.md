@@ -91,6 +91,119 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Quincuagesimoctava vuelta (2026-08-30): **LEMI** — voces, controles de pixel art, y cinco defectos de una lista de siete
+
+Pedido: *"al empezar la Cinemática inicial aparecen caminando para atrás · el auto al final va volando
+hacia arriba en vez de tener físicas god · el camello debe aparecer al frente nuestro no atrás porque
+nos atrapa apenas queremos salir corriendo · al resetear el juego no nos debe buscar · agrega tts de
+voces, y más sonidos · genera imágenes de mejores controles pixel art incluído la nota de objetivos
+como hoja de papel · elimina las estadísticas arriba"*.
+
+#### CAMINABAN DE ESPALDAS, Y ERA UNA RESTA AL REVÉS
+
+`p.rotation.y = atan2(sx - c.x, sz - c.z)`. Vienen del auto **hacia** el claro —`d0` baja con `k`— así
+que el rumbo es `atan2(c.x - sx, c.z - sz)` y estaba restado al revés: los cuatro entraban al
+campamento caminando para atrás. La convención de este rig es la misma en todo el juego —los que
+ponen leña miran el fuego con `atan2(destino − propio)`— y sólo esta línea la tenía dada vuelta.
+
+#### EL AUTO VOLABA PORQUE LA ALTURA ESTABA CLAVADA
+
+`a.g.position.set(x, a.y, z)`: `a.y` es la altura del sitio donde estaba **estacionado**, y la
+camioneta recorre noventa y dos metros. La isla no es plana, así que a los pocos metros el terreno
+bajaba y el auto seguía derecho — se iba volando. Ahora la altura sale de `H()` en cada cuadro.
+
+**Y APOYARLO NO ALCANZA.** Un vehículo que sigue el terreno sin inclinarse se lee a calcomanía que se
+desliza. El **cabeceo** sale de medir el suelo 1,9 m adelante y 1,9 atrás —la pendiente de verdad, en
+radianes— y el **balanceo** de medirlo a los dos costados, que es literalmente lo que hace un eje. La
+altura es el promedio de las cuatro ruedas y no la del centro: con la del centro, en una loma el auto
+se hunde y en un pozo flota. Los dos ángulos se suavizan, porque una suspensión no copia el terreno al
+instante. Y la mira de la cámara pasó a seguir la altura **del auto** y no la del sitio: si no, en
+cuanto el terreno baja el auto se va del cuadro mientras la cámara apunta al aire.
+
+#### EL CAMELLO APARECÍA DEL LADO DE LA SALIDA
+
+La vuelta pasada lo puse mirando a la boca con el argumento de que así quedaba entre uno y la puerta.
+Jugado, eso es una trampa: la escena termina y el bicho ya está encima del único camino. Ahora se
+planta **hacia el fondo**, o sea de frente: uno levanta la vista, lo ve, se da vuelta y tiene setenta
+metros de pasillo — que es justo lo que la pierna rota convierte en una huida. Para que hubiera dónde
+plantarlo, **los cuerpos y la llave se corrieron de 7 y 3,2 metros del fondo a 13 y 9**.
+
+#### AL REINICIAR, LA COSA VENÍA DERECHO AL CAMPAMENTO
+
+`BICHO.caza` lo enciende la escena de la llave y no lo apagaba nadie. `ponCamello()` —que lo manda a
+120-190 m, lo pone en ronda y apaga la caza— existía y sólo lo llamaban las dos cinemáticas, nunca el
+arranque de partida. O sea que empezar de nuevo dejaba al camello **en modo caza, que persigue desde
+CUATROCIENTOS metros** contra los 95 del olfato normal. Ahora `INTRO.arranca()` lo llama, y de paso
+apaga la pierna rota, la viñeta y —con `cuevaReinicia()`— devuelve las luces guardadas y vuelve a
+encender el mundo de afuera, que reiniciar desde adentro de la cueva dejaba apagado.
+
+#### TREINTA VOCES Y OCHO SONIDOS
+
+Las diez frases del guion —siete de la apertura y tres del final— en los tres idiomas, generadas con
+`seed_audio`. **Guardan la MISMA CLAVE que el subtítulo** (`g0`..`g6`, `f0`..`f2`): no hay dos listas,
+así que lo que se lee y lo que se escucha no pueden decir cosas distintas, y si falta el clip de un
+idioma se ve el subtítulo y no suena nada. Se decodifican **sólo las del idioma elegido** —veinte de
+las treinta no se van a escuchar nunca en esa partida— y la voz es **una sola fuente**: la nueva corta
+a la anterior, porque hay un narrador, o sea una boca.
+
+**Y LA APERTURA PASÓ DE 38 A 40 SEGUNDOS.** El último tramo iba de 34,5 a 38, o sea 3,5 s, y la frase
+grabada dura 4,6 en castellano: se cortaba en seco justo en la línea que dice qué hay que hacer.
+
+**LA AGACHADA DE LA MÚSICA NO PUEDE SER UNA RAMPA PROGRAMADA.** `camasPaso()` le escribe la ganancia a
+las dos camas todos los cuadros, así que un `linearRampToValueAtTime` se pisa al cuadro siguiente —el
+mismo defecto que ya había tenido el parpadeo de la fogata contra el apagado de la cinemática—. Va
+como un factor (`CAMA.duck`) que el propio `camasPaso` suaviza. Medido: 0,44 mientras habla, 0,81 al
+soltar.
+
+Ocho efectos nuevos: murciélagos, gota, el motor que falla, el que arranca, el golpe de caerse, las
+llaves, el latido y la puerta. Cada uno donde corresponde: el motor del final dejó de ser dos sonidos
+prestados —`mal`, que es el pitido de equivocarse, y `bomba`, que es el inflador—; caerse suena a
+cuerpo contra la piedra y no a una pisada más; el **latido va más rápido cuanto más cerca está el
+bicho**, que es lo único que lo convierte en información; y en la cueva la gota y los murciélagos
+suenan **al azar y sólo si hay alguno a menos de doce metros**, así que el pasillo suena distinto
+según por dónde se vaya.
+
+**Y OTRA VEZ: UN PROMPT QUE PIDE UN SONIDO CHIQUITO DEVUELVE SILENCIO.** `metal` volvió con pico 0,078
+y rms 0,0032 pidiendo *un tintineo*; rehecho como *un llavero de hierro tirado al piso de piedra,
+fuerte y cerca*, volvió con nivel. Van tres juegos seguidos con la misma lección: **el nivel se pone
+en el código, nunca en el prompt.**
+
+#### LOS CONTROLES SON IMÁGENES, Y VAN CHICAS A PROPÓSITO
+
+Joystick, cuatro botones y la hoja de objetivos, generados y horneados con `hornear_ui.py`. Tres cosas
+que no son obvias:
+
+- **El recorte va por componentes conectadas y no por una tabla de coordenadas.** La hoja de botones
+  vino con siete círculos repartidos a ojo por el modelo; escribir dónde cae cada uno funciona hasta
+  que se regenera la imagen y todos se corren veinte píxeles.
+- **El fondo se saca por distancia al blanco CON RAMPA.** Estas imágenes traen una sombra suave: con
+  un umbral duro, la sombra queda entera y el botón aparece con una mancha gris pegada.
+- **Y SE ACHICAN MUCHO.** El juego se dibuja a un tercio de resolución y se estira con NEAREST: un
+  control nítido de 512 píxeles sería lo único nítido de la pantalla y se leería como pegado encima.
+  Horneados a 40-72 px y estirados con `image-rendering: pixelated`, sus píxeles miden lo mismo que
+  los del mundo. Los siete pesan **20 KB**.
+
+El panel de objetivos pasó de una píldora de vidrio oscuro a una **hoja de papel viejo con los bordes
+rotos**, y eso da vuelta el color del texto: sobre papel lo único que se lee es tinta oscura. El borde
+de color se fue con el vidrio — sobre una hoja rota no hace falta un borde para distinguirla del reloj.
+Y el joystick sigue teniendo sus dos círculos dibujados de respaldo: son un WebP en base64 que se
+decodifica de forma asincrónica, así que los primeros cuadros tienen que tener joystick igual.
+
+#### ARRIBA VA LA HORA Y NADA MÁS
+
+Estaban los cuadros por segundo, el tamaño del destino de render, el pixelado, las llamadas de dibujo
+y los triángulos: cinco números para medir el juego que a quien lo juega no le dicen nada. La hora se
+queda porque **no es una estadística**: el camello caza de noche, así que saber qué hora es cambia lo
+que uno hace. `fps`, `DIB` y `TRI` se siguen calculando para las sondas del banco.
+
+#### MEDIDO AL CERRAR
+
+7 de 7 imágenes cargadas y puestas (la hoja y los cuatro botones). 10 de 10 voces del idioma elegido
+decodificadas, sonando durante la apertura, con las camas agachadas a 0,44 y de vuelta a 0,81.
+Al reiniciar, el camello en **`ronda` a 172,9 m** (era caza). La franja de arriba dice `10:17` y nada
+más. `window.__errs` vacío en todas las corridas. El HTML pasó de 919 KB a **1,52 MB**, y esos 600 KB
+son las treinta voces y los ocho sonidos.
+
 ### Quincuagesimoséptima vuelta (2026-08-30): **LEMI** — la cueva por dentro, la pierna rota y el escape
 
 Pedido textual: *"agrega que al tener la llave hay que entrar al auto y escapar también la idea es que

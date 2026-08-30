@@ -79,7 +79,7 @@ function bucle(){
   camasPaso(dt);
   pasoRoto(dt);
   pasoRojo(dt);
-  if (ENCUEVA) pasoMurcielagos(RELOJ.value);
+  if (ENCUEVA){ pasoMurcielagos(RELOJ.value); ambienteCueva(dt); }
   /* la cinemática pone la hora ella misma cuadro a cuadro: si además corriera
      el reloj del día, el atardecer se le adelantaría al guion */
   ponSol(MODO === 'cine' ? 0 : dt);
@@ -143,11 +143,15 @@ function bucle(){
   cuadros++; acum += dt;
   if (acum > 0.5){
     fps = Math.round(cuadros/acum); cuadros = 0; acum = 0;
-    const w = rt ? rt.width : 0, h = rt ? rt.height : 0;
+    /* ARRIBA VA LA HORA Y NADA MÁS. Estaban también los cuadros por segundo, el
+       tamaño del destino de render, el pixelado, las llamadas de dibujo y los
+       triángulos: cinco números que sirven para medir el juego y que a quien lo
+       juega no le dicen absolutamente nada. La hora se queda porque NO es una
+       estadística — es información de la partida: el camello caza de noche, así
+       que saber qué hora es cambia lo que uno hace. `fps`, `DIB` y `TRI` siguen
+       calculándose para las sondas del banco, sólo que no se muestran. */
     const hh = Math.floor(HORA), mm = Math.floor((HORA % 1) * 60);
-    $('fps').textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') +
-      ' · ' + fps + ' fps · ' + w + '×' + h + ' · x' + CFG.pix +
-      ' · ' + DIB + ' dib · ' + (TRI/1000).toFixed(0) + 'k tri';
+    $('fps').textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
   }
 }
 
@@ -666,6 +670,21 @@ function bucle(){
                  d: +Math.hypot(p.position.x-JUG.x, p.position.z-JUG.z).toFixed(1),
                  x: [+x0.toFixed(2), +x1.toFixed(2)], y: [+y0.toFixed(2), +y1.toFixed(2)],
                  alto: +(caja.max.y-caja.min.y).toFixed(2) }; }); },
+    /* la voz: que idioma esta cargado, cuantos clips decodifican y si suena */
+    vozVer: () => ({ idioma: VOZ_IDIOMA, listos: Object.keys(VOZ_BUF).length,
+                     cuales: Object.keys(VOZ_BUF),
+                     seg: Object.fromEntries(Object.entries(VOZ_BUF)
+                          .map(([k,b]) => [k, +b.duration.toFixed(2)])),
+                     sonando: !!VOZ_FUENTE, duck: +CAMA.duckAct.toFixed(2) }),
+    /* forzar el modo tactil: el banco arranca en PC y los controles de pixel
+       art solo se dibujan con `body:not(.pc)` */
+    movil: () => { modoPC(false); return document.body.className; },
+    /* las imagenes de los controles */
+    ui: () => ({ listas: Object.keys(IMG),
+                 hoja: getComputedStyle($('obj')).backgroundImage.slice(0, 30),
+                 bot: ['acCorre','acAgacha','acSalta','acUsar']
+                      .map(i => ($(i).style.backgroundImage||'').slice(0,26)),
+                 stats: $('fps').textContent }),
     /* el estado de adentro de la cueva */
     cueva2: () => ({ dentro: ENCUEVA, largo: +CUEVA_LARGO.toFixed(1),
                      construida: !!CUEVA_G, cuerpos: CUERPOS.length,

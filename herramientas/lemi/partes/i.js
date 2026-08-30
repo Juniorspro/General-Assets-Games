@@ -213,6 +213,12 @@ function audioArranca(){
     /* la decodificación es asíncrona y no bloquea nada: hasta que termina, el
        juego se juega igual y en silencio */
     for (const k in SON_B64) decodificaUno(k, SON_B64[k]);
+    /* LA VOZ SE DECODIFICA SOLO EN EL IDIOMA QUE SE ELIGIO. Son treinta clips y
+       veinte no se van a escuchar nunca en esta partida: decodificarlos todos es
+       medio megabyte de PCM en memoria y un segundo largo de procesador en el
+       arranque, para nada. Si el jugador cambia de idioma, `vozCarga()` trae el
+       nuevo — que es exactamente cuando hace falta. */
+    vozCarga();
   } catch(e){ AUD = null; }
   return AUD;
 }
@@ -223,6 +229,52 @@ function decodificaUno(k, b64){
     AUD.decodeAudioData(arr.buffer, (b) => { AUD_BUF[k] = b; AUD_LISTO = true; },
                         () => {});
   } catch(e){}
+}
+/* ── LA VOZ DEL NARRADOR ──
+   Diez frases por idioma con la MISMA CLAVE que el subtítulo (`g0`..`g6`,
+   `f0`..`f2`). Que compartan la clave no es un ahorro de líneas: es lo que hace
+   imposible que se lea una cosa y se escuche otra, que es el defecto que en
+   RECREO costó una vuelta entera cuando el texto llegaba ya traducido y la
+   clave se perdía por el camino. Si falta el clip de un idioma se ve el
+   subtítulo y no suena nada, que es el comportamiento correcto y no un error. */
+const VOZ_BUF = {};
+let VOZ_IDIOMA = null, VOZ_FUENTE = null, VOZ_GAN = null;
+function vozCarga(){
+  if (!AUD || typeof VOZ_B64 === 'undefined') return;
+  const L = IDIOMA;
+  if (VOZ_IDIOMA === L || !VOZ_B64[L]) return;
+  VOZ_IDIOMA = L;
+  for (const k in VOZ_B64[L]){
+    try {
+      const bin = atob(VOZ_B64[L][k]), n = bin.length, arr = new Uint8Array(n);
+      for (let i = 0; i < n; i++) arr[i] = bin.charCodeAt(i);
+      AUD.decodeAudioData(arr.buffer, (b) => { VOZ_BUF[k] = b; }, () => {});
+    } catch(e){}
+  }
+}
+/* LA VOZ ES UNA SOLA FUENTE Y LA NUEVA CORTA A LA ANTERIOR. Guardada por clave
+   —como estaba en RECREO antes de arreglarlo— dos líneas distintas se pisan y se
+   escuchan las dos a la vez: hay UN narrador, o sea una boca. */
+function voz(clave){
+  try {
+    if (!audioArranca()) return false;
+    if (AUD.state === 'suspended') AUD.resume();
+    vozCarga();
+    if (VOZ_FUENTE){ try { VOZ_FUENTE.stop(); } catch(e){} VOZ_FUENTE = null; }
+    const b = VOZ_BUF[clave];
+    if (!b) return false;
+    const f = AUD.createBufferSource(), g = AUD.createGain();
+    f.buffer = b; g.gain.value = 1;
+    f.connect(g); g.connect(AUD_MAESTRO);
+    f.start(0);
+    VOZ_FUENTE = f; VOZ_GAN = g;
+    /* Y LAS DOS CAMAS SE AGACHAN MIENTRAS HABLA. Es la misma regla que en
+       RECREO: una cama de fondo al mismo nivel que la narración no es fondo, es
+       competencia. Vuelven solas cuando la frase termina. */
+    CAMA.duck = 0.34;
+    f.onended = () => { if (VOZ_FUENTE === f){ VOZ_FUENTE = null; CAMA.duck = 1; } };
+    return true;
+  } catch(e){ return false; }
 }
 /* un disparo. `vol` multiplica el nivel ya horneado, que es el que fija la
    relación entre los diez: acá sólo se lo baja por distancia o por contexto. */
@@ -246,7 +298,12 @@ function son2(tipo, vol){
    otro, el cambio de hora se escucharía como un corte; con las dos corriendo y
    una ganancia cruzada, la noche entra por debajo del día y no hay costura.
    Y es barato: dos fuentes en bucle no cuestan nada al lado de la escena. */
-const CAMA = { dia: null, noche: null, g: {}, on: false };
+/* `duck` es el OBJETIVO de la agachada y `duckAct` lo que vale ahora. Va como
+   factor y no como una rampa programada en el gain: `camasPaso()` le escribe la
+   ganancia a las dos camas TODOS los cuadros, así que una rampa se pisaría al
+   cuadro siguiente — es exactamente lo que pasaba con el parpadeo de la fogata
+   contra el apagado de la cinemática. */
+const CAMA = { dia: null, noche: null, g: {}, on: false, duck: 1, duckAct: 1 };
 function camasArrancan(){
   if (CAMA.on || !AUD || !AUD_BUF.dia || !AUD_BUF.noche) return;
   for (const k of ['dia', 'noche']){
@@ -269,8 +326,10 @@ function camasPaso(dt){
   const noche = s > 0.80 ? cl((s - 0.78)/0.10, 0, 1)
               : s < 0.24 ? cl((0.26 - s)/0.10, 0, 1) : 0;
   const k = Math.min(1, dt*0.9);
-  CAMA.g.noche.gain.value += (noche - CAMA.g.noche.gain.value) * k;
-  CAMA.g.dia.gain.value   += ((1 - noche) - CAMA.g.dia.gain.value) * k;
+  CAMA.duckAct += (CAMA.duck - CAMA.duckAct) * Math.min(1, dt*3.2);
+  const d = CAMA.duckAct;
+  CAMA.g.noche.gain.value += (noche*d - CAMA.g.noche.gain.value) * k;
+  CAMA.g.dia.gain.value   += ((1 - noche)*d - CAMA.g.dia.gain.value) * k;
 }
 
 /* ══════════════════════════ EL INFLADOR ══════════════════════════
@@ -627,6 +686,9 @@ const MIS = {
       o.activo = false;
       if (o.malla) o.malla.visible = false;
       this.balizas();
+      /* el tintineo del llavero: es el único objeto del juego que suena a metal,
+         y suena JUSTO cuando la escena lo levanta del piso */
+      son2('metal', 0.9);
       LLAVE.arranca();
       return 'llaves';
     }
@@ -818,10 +880,19 @@ const LLAVE = {
     if (ENCUEVA && CUEVA_EJE){
       const p = cercaEje(JUG.x, JUG.z);
       const L = Math.hypot(p.nx, p.nz) || 1;
-      /* el eje apunta hacia adentro; hacia la boca es al reves */
-      const hx = -p.nx/L, hz = -p.nz/L;
+      /* EL CAMELLO SE PLANTA HACIA EL FONDO, O SEA DELANTE, Y NO HACIA LA BOCA.
+         La primera version lo ponia sobre el eje pero mirando a la salida, con
+         el argumento de que asi quedaba entre uno y la puerta. Jugado, eso es
+         una trampa sin salida: el susto termina y el bicho ya esta encima del
+         unico camino, o sea que te agarra antes de poder arrancar. Puesto al
+         fondo, uno levanta la vista, lo ve DE FRENTE, se da vuelta y tiene
+         setenta metros de pasillo por delante — que es justo lo que la pierna
+         rota convierte en una huida. Por eso ademas los cuerpos y la llave se
+         corrieron trece y nueve metros del fondo: para que haya sala donde
+         plantarlo. */
+      const hx = p.nx/L, hz = p.nz/L;             /* hacia adentro */
       this.yaw0 = Math.atan2(-hx, -hz);
-      const dd = Math.min(7.0, Math.max(3.5, p.avance - 1.0));
+      const dd = Math.min(6.5, Math.max(3.6, CUEVA_LARGO - p.avance - 1.2));
       BICHO.x = JUG.x + hx*dd; BICHO.z = JUG.z + hz*dd;
     } else {
       this.yaw0 += this.rumboLibre();
