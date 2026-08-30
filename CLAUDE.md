@@ -87,9 +87,175 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   12,8 contra 7,4). El pixelado no es un filtro: la escena se dibuja a media resolución en un render
   target con NEAREST y recién eso se estira. Vive partido en `herramientas/lemi/partes/` y se arma con
   `python3 herramientas/lemi/armar.py`.
+- **`Barrio.html` es "BARRIO"** (~119 KB, **sin un solo asset**: las diez texturas, los ocho
+  sonidos y las ciento cincuenta casas se dibujan por código). El octavo juego. Un damero de
+  **5 × 5 cuadras** —274 m de lado— a las tres de la mañana y bajo la lluvia, en primera persona y
+  sin más objetivo que caminarlo. Calles con línea cortada, veredas con cordón de quince
+  centímetros, césped, **150 casas** con su cerca, su entrada de auto y alguna ventana encendida,
+  **96 faroles** con su cable colgando en catenaria, autos estacionados y árboles. Pixelación suave
+  —el destino de render va a 1/1,7— y de noche: lo único que ilumina de verdad son los faroles.
+  Hay relámpagos con su trueno a destiempo, linterna, y las tres calidades y los tres idiomas en el
+  menú. Vive partido en `herramientas/barrio/partes/` y se arma con
+  `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
+  cinemática de 38 segundos sin controles y sigue igual.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Sexagésima segunda vuelta (2026-08-30): **BARRIO**, el octavo juego — cinco por cinco cuadras, de noche y lloviendo
+
+Pedido textual: *"ok hagamos el mejor juego HTML del mundo ahora dejemos Lemi atrás, necesito que hagas
+una ciudad o bueno un vencidario de aproximadamente 5 cuadras por 5 cuadras, que tenga casas cercas
+texturas de calle de veredas pasto también luces postes de luz cables etc de noche con pixelacion suave
+y buenos gráficos en primera persona lloviendo"*.
+
+`juegos-pc/Barrio.html` (~119 KB, **sin un solo asset**: todo dibujado por código). Vive partido en
+`herramientas/barrio/partes/` y se arma con `python3 herramientas/barrio/armar.py`.
+**Vecindario NO se tocó**: ése es una cinemática de 38 segundos sin controles, y esto es otra cosa.
+
+#### TODO SALE DE TRES NÚMEROS
+
+Cuadra de 44 m, calle de 9 y vereda de 2,6. De ahí salen el paso de la grilla (53 m), los doscientos
+setenta y cuatro metros de lado, los seis ejes de cada sentido y la posición de cada casa, cada farol y
+cada cable. **Escritas cuadra por cuadra, mover una calle sería mover cien cosas**; así el barrio se
+agranda cambiando `CUADRAS`.
+
+Y el barrio es SIEMPRE EL MISMO: la semilla está fija. Con un azar de verdad, «la casa de la esquina»
+dejaría de querer decir algo y el jugador no podría orientarse en veinticinco cuadras iguales.
+
+#### TRES CASAS POR LADO Y SÓLO EN DOS LADOS, Y ESO ES UNA CUENTA
+
+La primera versión ponía casas en los cuatro lados de cada cuadra, y las de las esquinas se pisan: una
+casa ocupa trece metros hacia adentro contando el jardín, y el rincón de trece por trece lo reclaman
+las dos. Con tres mirando al norte y tres al sur quedan doce metros de fondo entre las dos filas —o sea
+**patios**— y los lados de este y oeste se llenan con medianeras, que es exactamente como está armado
+cualquier barrio de damero. Son **150 casas**.
+
+#### HAY 96 FAROLES Y SEIS LUCES, Y ÉSA ES LA DECISIÓN DE FONDO DEL JUEGO
+
+Una `PointLight` por farol es imposible: el renderer directo de three.js compila un shader con TODAS
+las luces adentro, y noventa y seis revientan el límite de uniformes de cualquier teléfono. Bajar la
+cantidad de faroles arruinaría el barrio. Así que **los faroles son geometría y las luces son seis
+objetos que se mudan cada cuadro a los seis faroles más cercanos**. Lo que se ve de un farol a treinta
+metros es su cabeza encendida y su halo —no la luz que tira sobre el asfalto— y a diez metros nunca hay
+más de seis. Medido: con el jugador en una esquina, las seis luces caen a 3,5 · 26,7 · 26,7 · 49,5 ·
+53,1 m y la sexta se apaga porque el sexto farol está a 180.
+
+**Y UNA SOLA PROYECTA SOMBRA**, la más cercana. Cada luz con sombra es una pasada entera de la escena
+desde su punto de vista: seis serían siete pasadas por cuadro. Con una, el poste y la cerca que uno
+tiene al lado tiran su sombra —que es lo único que se mira— y las otras cinco iluminan.
+
+#### EL HALO NO ES UN CONO, Y ESO COSTÓ DOS CAPTURAS
+
+La primera versión era un cono aditivo, que es lo que uno dibujaría pensando en «el aire iluminado
+debajo del farol». **No funciona, y el motivo se ve en la primera captura: un cono TIENE SILUETA.** Su
+borde es una recta que corta el cielo, así que sobre un fondo casi negro y con mezcla aditiva lo que
+aparece son pirámides pálidas y sólidas — dos o tres superpuestas tapaban media pantalla. Bajarle la
+opacidad no lo arregla: lo hace más tenue y sigue siendo una pirámide. Ponerle un degradado en los
+vértices tampoco, porque un cono sólo tiene rim y ápice: el borde sigue estando.
+
+Lo que no tiene silueta es un **degradado radial**, y para que funcione desde cualquier ángulo tiene
+que mirar a la cámara. Noventa y seis `Sprite` serían noventa y seis llamadas de dibujo, así que van
+como una malla instanciada con el encaramiento hecho en el vertex shader: **una llamada**, y el brillo
+se calcula por PÍXEL en vez de por vértice, que es de donde salía el borde duro.
+
+**Y EL REFLEJO EN EL ASFALTO TENÍA EL MISMO DEFECTO.** Los parches debajo de cada farol eran planos
+aditivos de color parejo: en la captura, rectángulos de cartulina naranja tirados en el piso. Van con
+una textura radial. Y a **0,20 de opacidad y no 0,42**: la mezcla es aditiva y hay tres parches por
+farol, así que lo que se ve no es un reflejo sino la suma de los tres — la calle entera quedaba naranja
+plana y el asfalto dejaba de existir.
+
+#### CUATRO MIL GOTAS Y CERO TRABAJO DE JAVASCRIPT POR CUADRO
+
+La forma obvia no sirve: con un `InstancedMesh` normal hay que componer y escribir cuatro mil matrices
+en cada cuadro, y eso solo se come el presupuesto de un teléfono. Acá **la caída la calcula el vertex
+shader** a partir de una semilla por gota y del reloj — la gota cae, llega abajo y vuelve a aparecer
+arriba con un módulo. Lo único que se manda por cuadro son dos números.
+
+**Y CADA GOTA MIRA A LA CÁMARA.** Una tira vertical es un plano, y un plano visto de canto no tiene un
+solo píxel: girando la cabeza, la mitad de la lluvia desaparecería. El eje horizontal de cada tira sale
+del producto cruzado entre la vertical y la dirección a la cámara, así que se ve de frente siempre sin
+dejar de estar inclinada con el viento.
+
+**Y LA CAJA DE LLUVIA SE CENTRA EN LA CÁMARA REDONDEADA A LA UNIDAD.** Sin redondear, la nube entera se
+desliza con el jugador y la lluvia se ve QUIETA respecto de uno, que es lo contrario de lo que pasa.
+
+Las salpicaduras del piso sí se mueven desde JavaScript, porque son doscientas veinte. Y **son mucho
+más chicas de lo que uno pondría**: la primera versión medía medio metro de radio y en la captura lo
+que había en el piso eran anillos de tiza. Una salpicadura mide un palmo; lo que la hace leer no es el
+tamaño sino que haya muchas y que duren poco.
+
+#### EL COLOR POR VÉRTICE ES LO QUE HACE QUE FUNDIR NO CUESTE VARIEDAD
+
+Una cuadra son seis casas y unas doscientas piezas. Sueltas, cada pieza es una llamada de dibujo, y con
+sombras se paga dos veces. Fundidas por material, una cuadra cuesta ocho llamadas. Pero sin color por
+vértice las seis casas tendrían que compartir el color del material —o sea que serían la misma casa
+seis veces— y la única salida sería un material por casa, que es justo lo que la fusión estaba tratando
+de evitar. three.js multiplica `map × vertexColor × material.color`, así que el tinte por casa sale
+gratis.
+
+**Y SE FUNDE POR CUADRA Y NO POR BARRIO.** Con todo en una malla no hay recorte por frustum posible y
+las veinticinco cuadras se dibujan siempre, mire uno donde mire. Por cuadra, el recorte tira las que
+están detrás y un apagado por distancia tira las que la niebla ya se comió — que el motor no puede
+saber, porque no sabe que a ciento sesenta metros no queda un píxel visible. Medido: **8 cuadras
+visibles de 25 en una esquina, 13 en el medio**, con 124-141 llamadas de dibujo y 108 mil triángulos.
+
+#### DOS COSAS QUE ESTABAN NEGRAS Y POR QUÉ
+
+- **Las casas eran siluetas.** El ambiente estaba en 0,55 y lo único que se veía del barrio eran los
+  faroles. Una noche de verdad tiene cielo nublado encima, y un cielo nublado sobre una ciudad **no es
+  negro**: rebota la luz de la propia ciudad.
+- **Y EL COLOR DE ABAJO DEL HEMISFÉRICO NO PUEDE SER NEGRO.** Un `HemisphereLight` reparte según hacia
+  dónde mira la cara: con el suelo en negro, toda cara que no mire al cielo —o sea las cuatro paredes
+  de cada casa— recibe cero. Medido: metido en un patio y de frente a una medianera, el cuadro era
+  negro en un noventa por ciento. Es el mismo defecto que en Eco dejó un óvalo malva plano donde no se
+  distinguía el piso del techo.
+
+#### EL PIXELADO VA EN 1,7, QUE ES LO QUE SE PIDIÓ
+
+«Pixelación suave». En un marco de 892×412 el 1,7 deja el destino de render en **525×242**: el escalón
+se ve —los cables, las rejas y la lluvia salen con el borde escalonado, que es lo que da el aire— pero
+un número de casa a veinte metros se sigue distinguiendo. Y el posterizado va en **26 bandas y no en 9**
+como el de LEMI: un cielo nocturno es un degradado de arriba abajo, y con nueve escalones sale a rayas
+horizontales marcadas.
+
+#### LO QUE HACE QUE LA CALLE SE VEA MOJADA SON TRES COSAS Y NINGUNA ES «MÁS OSCURA»
+
+El asfalto es **lo único de la escena con especular** —un `MeshPhongMaterial` entre veinte materiales
+Lambert— porque una calle mojada refleja los faroles en una raya larga; los parches radiales debajo de
+cada farol; y el agua en el lente, que va **antes de muestrear** en el post-proceso, o sea que deforma
+la imagen en vez de pintarse encima. La amplitud es de menos de un píxel del destino de render: más que
+eso ya no es un vidrio mojado, es estar borracho.
+
+#### EL RELÁMPAGO ES LUZ DE ESCENA Y NO UN VELO BLANCO
+
+Lo que hace un relámpago es que por un cuarto de segundo se vea **todo** el barrio con sombras duras
+desde otra dirección, y eso un velo encima no lo puede fingir. Es una direccional apagada que se
+enciende de golpe, más un velo de CSS chiquito que entra DESPUÉS del pixelado — o sea luz en el ojo y
+no luz en la escena. **Y son dos destellos y no uno**: un relámpago casi nunca es un solo golpe de luz,
+y con uno se lee a que alguien apretó un interruptor. El trueno llega después, con el retardo
+proporcional a la distancia, que es lo único que convierte dos efectos en un solo fenómeno.
+
+#### EL SONIDO ES PROCEDURAL, Y ACÁ ESO NO ES UNA LIMITACIÓN
+
+Lo que suena en este juego es **lluvia**, o sea ruido filtrado. Un clip grabado pesa cientos de
+kilobytes y encima se corta cada vez que da la vuelta, y ese corte se escucha más que la lluvia; un
+ruido generado no tiene vuelta que dar. Va en **dos capas** —una ancha y grave, que es el agua cayendo
+sobre todo el barrio, y otra aguda, que es el agua golpeando cerca— porque con una sola suena a
+estática de radio. Y una pisada en el agua **son dos cosas**: el golpe del zapato y la salpicadura que
+le sigue.
+
+Medido con el analizador colgado del maestro: fondo de lluvia **rms 0,0231**, trueno **pico 0,319 y rms
+0,0824**, o sea **3,6 veces el fondo**.
+
+#### MEDIDO AL CERRAR
+
+**150 casas · 96 faroles · 274 m de lado.** Novecientos cuadros caminados de verdad —con la física y el
+choque— por tres calles distintas: **261 metros y 0 cuadros dentro de una casa**. El escalón del cordón
+medido a los tres lados: calle 0 · vereda 0,150 · pasto 0,162. Las tres calidades se aplican en
+caliente: 372×172 con 1.100 gotas · 525×242 con 2.600 · 714×330 con 4.200. HUD sin un solo solapamiento
+en teléfono y en PC, con los controles correctos en cada uno. Los tres idiomas cambian el pie del menú
+en vivo. Relámpago y trueno verificados. **0 NaN** y `window.__errs` vacío en las ocho corridas.
 
 ### Sexagésima primera vuelta (2026-08-30): **LEMI** — te mata y volvés a la cueva, el camello más lento, y dos props 3D
 

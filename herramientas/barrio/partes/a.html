@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#05070c">
+<title>BARRIO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070c;color:#dce6f2;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+canvas{display:block}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* ── EL CUADRO ──
+   El juego se dibuja apaisado y el teléfono se agarra vertical, así que el
+   escenario ENTERO —lienzo, HUD, menú— vive dentro de un solo elemento que se
+   gira noventa grados. Es lo mismo que hacen LEMI y Eco, y por la misma razón:
+   con una sola transformación no hay forma de que el HUD quede desalineado del
+   mundo, y girar el lienzo solo dejaría los botones donde estaban. */
+#escenario{position:fixed;left:0;top:0;width:100%;height:100%;
+  transform-origin:top left;overflow:hidden}
+body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
+
+/* ── CARGA ── */
+#carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  background:radial-gradient(140% 100% at 50% 18%, #101a2a 0%, #080d16 55%, #04060a 100%);
+  transition:opacity .6s ease}
+#carga.ido{opacity:0;pointer-events:none}
+#carga .caja{text-align:center;width:min(340px,84vw)}
+#carga h1{font:200 clamp(30px,9vw,46px)/1 system-ui,sans-serif;letter-spacing:.30em;
+  text-indent:.30em;color:#cfe0f2;text-shadow:0 0 30px rgba(150,190,255,.35)}
+#carga .sub{margin-top:6px;font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.26em;
+  color:rgba(190,214,240,.45);text-transform:uppercase}
+#carga p{margin-top:16px;font-size:12.5px;color:rgba(200,220,245,.55);min-height:1.4em}
+#carga .barra{margin:14px auto 0;width:76%;height:3px;background:rgba(255,255,255,.10);
+  overflow:hidden;border-radius:99px}
+#carga .barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#4d7fb8,#9dc4ec);transition:width .25s}
+#carga .pista{margin-top:14px;font-size:11.5px;color:rgba(200,220,245,.38);line-height:1.5}
+
+/* ── IDIOMA ──
+   Antes del menú y no adentro: elegir idioma dentro de un menú ya escrito en un
+   idioma que no se entiende no sirve de nada, porque para cuando uno encuentra
+   el selector ya leyó todo lo demás sin entenderlo. */
+#idioma{position:fixed;inset:0;z-index:95;display:none;place-items:center;
+  background:radial-gradient(140% 100% at 50% 18%, #101a2a 0%, #080d16 55%, #04060a 100%)}
+#idioma.on{display:grid}
+#idioma .caja{text-align:center;width:min(320px,80vw)}
+#idioma h1{font:200 clamp(26px,7vw,38px)/1 system-ui,sans-serif;letter-spacing:.30em;
+  text-indent:.30em;color:#cfe0f2;margin-bottom:6px}
+#idioma .sub{font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  color:rgba(190,214,240,.42);text-transform:uppercase;margin-bottom:22px}
+#idioma button{display:block;width:100%;margin-top:10px;padding:14px 18px;
+  border-radius:12px;border:1px solid rgba(160,195,235,.22);
+  background:rgba(140,180,230,.07);color:#dce6f2;font:600 15px/1 system-ui,sans-serif;
+  transition:transform .12s ease,background .2s ease}
+#idioma button:active{transform:scale(.97)}
+#idioma button.sel{background:linear-gradient(135deg,#5b8ec4,#8fb9e4);color:#06111c;border-color:transparent}
+
+/* ── HUD ──
+   `visibility` ADEMÁS DE `opacity`: un `backdrop-filter` se compone contra lo
+   que hay DETRÁS del elemento y no contra su propio píxel, así que en un padre
+   con opacidad cero el navegador lo dibuja igual y quedan barras claras
+   flotando. Con `visibility:hidden` no se compone. */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;visibility:hidden;
+  transition:opacity .45s ease, visibility 0s linear .45s}
+#hud.on{opacity:1;visibility:visible;transition:opacity .45s ease, visibility 0s}
+#hud > *{pointer-events:none}
+
+#reloj{position:absolute;left:max(14px,3.4vw);top:max(12px,3vh);
+  font:700 13px/1 ui-monospace,monospace;letter-spacing:.16em;
+  color:rgba(214,232,252,.72);text-shadow:0 1px 8px rgba(0,0,0,.95)}
+#calle{position:absolute;left:max(14px,3.4vw);top:calc(max(12px,3vh) + 20px);
+  font:600 10.5px/1 ui-monospace,monospace;letter-spacing:.20em;
+  color:rgba(150,185,225,.55);text-shadow:0 1px 8px rgba(0,0,0,.95);
+  text-transform:uppercase}
+
+#botones{position:absolute;right:max(12px,3vw);top:max(10px,2.6vh);display:flex;gap:8px;
+  pointer-events:auto}
+.bt{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  font-size:15px;color:rgba(220,236,252,.80);
+  background:rgba(12,20,32,.45);border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.bt:active{transform:scale(.92)}
+
+/* el joystick, sólo en teléfono */
+#joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);width:min(146px,32vw);
+  aspect-ratio:1;pointer-events:auto;opacity:.85;display:none}
+body:not(.pc) #joy{display:block}
+#joy canvas{width:100%;height:100%;display:block}
+
+#acciones{position:absolute;right:max(16px,4vw);bottom:max(18px,5vh);
+  display:flex;flex-direction:column;gap:10px;align-items:center;pointer-events:auto}
+body.pc #acciones{display:none}
+.ac{width:min(62px,14vw);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;
+  color:#dbe8f6;font:800 9px/1.25 system-ui,sans-serif;letter-spacing:.06em;text-align:center;
+  background:rgba(12,22,36,.42);border:1.4px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  text-shadow:0 1px 4px rgba(0,0,0,.9);transition:transform .12s,filter .2s}
+.ac:active{transform:scale(.9);filter:brightness(1.4)}
+.ac.on{filter:brightness(1.4);background:rgba(120,180,240,.26);border-color:rgba(150,200,250,.6)}
+#acCorre{width:min(74px,16vw)}
+
+#teclas{position:absolute;left:max(14px,3.4vw);bottom:max(14px,4vh);
+  font:500 11px/1.75 ui-monospace,monospace;color:rgba(196,218,242,.50);
+  text-shadow:0 1px 8px rgba(0,0,0,.95);display:none}
+body.pc #teclas{display:block}
+#teclas b{color:rgba(226,240,255,.86)}
+
+/* el aviso de una línea, arriba en el medio */
+#aviso{position:absolute;left:50%;top:12%;transform:translateX(-50%);
+  padding:8px 15px;border-radius:99px;white-space:nowrap;
+  font:700 11.5px/1 system-ui,sans-serif;letter-spacing:.09em;
+  color:#e6f0fb;background:rgba(10,18,30,.62);border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  opacity:0;transition:opacity .35s}
+#aviso.on{opacity:1}
+
+/* ── MENÚ ──
+   El fondo NO es una imagen: es el barrio de verdad, filmado con la cámara
+   paseando entre las casas. Un menú con una foto detrás y un juego que se ve
+   distinto es lo que hace que la portada se lea a promesa incumplida. */
+#menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(3,6,12,.55) 0%,rgba(3,6,12,.12) 40%,rgba(3,6,12,.86) 100%)}
+#menu.on{display:grid}
+#menu .mCaja{text-align:center;width:min(370px,86%)}
+#menu .mTit{font:200 clamp(30px,calc(var(--eh,100vh)*0.115),56px)/1 system-ui,sans-serif;
+  letter-spacing:.32em;text-indent:.32em;color:#dcecff;
+  text-shadow:0 0 34px rgba(140,190,255,.45), 0 3px 0 rgba(0,0,0,.6)}
+#menu .mSub{margin-top:5px;font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.26em;
+  color:rgba(180,208,238,.55);text-transform:uppercase}
+#menu .mBtn{display:block;width:100%;margin-top:16px;padding:15px 18px;border-radius:13px;
+  border:1px solid rgba(160,200,240,.24);background:rgba(140,180,230,.09);
+  color:#e2eefc;font:700 15px/1 system-ui,sans-serif;letter-spacing:.08em;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:transform .12s ease,background .2s ease}
+#menu .mBtn.pri{background:linear-gradient(135deg,#5b8ec4,#8fb9e4);color:#06111c;border-color:transparent}
+#menu .mBtn:active{transform:scale(.975)}
+/* las dos filas de ajustes: idioma y gráficos */
+#menu .mFila{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:11px}
+#menu .mRot{font:700 9px/1 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(170,200,232,.45);margin-right:3px}
+#menu .chip{padding:7px 11px;border-radius:9px;font:700 10.5px/1 ui-monospace,monospace;
+  letter-spacing:.10em;color:rgba(214,232,252,.68);
+  border:1px solid rgba(160,200,240,.20);background:rgba(140,180,230,.06)}
+#menu .chip.sel{background:rgba(150,200,250,.28);color:#f0f7ff;border-color:rgba(170,210,250,.55)}
+#menu .mPie{margin-top:15px;font:500 10.5px/1.7 ui-monospace,monospace;
+  color:rgba(170,200,232,.38);letter-spacing:.06em}
+#menu .mHist{margin-top:13px;font-size:12px;line-height:1.65;color:rgba(206,226,248,.62)}
+
+/* ── PAUSA ── */
+#pausa{position:absolute;inset:0;z-index:46;display:none;place-items:center;
+  background:rgba(4,8,14,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+#pausa.on{display:grid}
+#pausa .pCaja{text-align:center;width:min(300px,80%)}
+#pausa h2{font:200 30px/1 system-ui,sans-serif;letter-spacing:.26em;text-indent:.26em;color:#dcecff}
+#pausa .pSub{margin-top:5px;font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.2em;
+  color:rgba(180,208,238,.5)}
+#pausa button{display:block;width:100%;margin-top:11px;padding:13px 18px;border-radius:12px;
+  border:1px solid rgba(160,200,240,.22);background:rgba(140,180,230,.08);
+  color:#e2eefc;font:700 14px/1 system-ui,sans-serif;letter-spacing:.07em}
+#pausa button:active{transform:scale(.975)}
+
+/* el fogonazo del relámpago: va en el DOM y no en el shader a propósito —
+   entra DESPUÉS del pixelado, o sea que es luz en el ojo y no luz en la
+   escena, que es exactamente lo que es un relámpago mirado de reojo */
+#rayo{position:absolute;inset:0;z-index:40;pointer-events:none;background:#cfe2ff;opacity:0}
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja">
+  <h1>BARRIO</h1>
+  <div class="sub" data-i18n="sub">five by five blocks · 3 am</div>
+  <p id="cTxt" data-i18n="cargando">Paving the streets…</p>
+  <div class="barra"><i id="cBar"></i></div>
+  <div class="pista" id="cPista"></div>
+</div></div>
+
+<div id="idioma"><div class="caja">
+  <h1>BARRIO</h1>
+  <div class="sub">language · idioma · idioma</div>
+  <button data-lang="en">English</button>
+  <button data-lang="es">Español</button>
+  <button data-lang="pt">Português</button>
+</div></div>
+
+<div id="escenario">
+<div id="hud">
+  <div id="reloj">03:00</div>
+  <div id="calle"></div>
+  <div id="botones">
+    <button class="bt" id="bFull" title="Pantalla completa">⛶</button>
+    <button class="bt" id="bPanel" title="Pausa">☰</button>
+  </div>
+  <div id="acciones">
+    <button class="ac" id="acCorre" data-i18n="bCorrer">RUN</button>
+    <button class="ac" id="acLinterna" data-i18n="bLinterna">LIGHT</button>
+  </div>
+  <div id="aviso"></div>
+  <div id="teclas">
+    <b>W A S D</b> <span data-i18n="kMover">move</span> · <b>mouse</b> <span data-i18n="kMirar">look</span><br>
+    <b>Shift</b> <span data-i18n="kCorrer">run</span> · <b>F</b> <span data-i18n="kLinterna">flashlight</span><br>
+    <b>Esc</b> <span data-i18n="kPausa">pause</span>
+  </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+</div>
+
+<div id="rayo"></div>
+
+<div id="menu">
+  <div class="mCaja">
+    <div class="mTit">BARRIO</div>
+    <div class="mSub" data-i18n="mSub">five by five blocks · 3 am</div>
+    <button class="mBtn pri" id="mJugar" data-i18n="mJugar">▶ Walk</button>
+    <div class="mFila" id="mIdi">
+      <span class="mRot" data-i18n="mIdioma">LANGUAGE</span>
+      <button class="chip" data-lang="en">EN</button>
+      <button class="chip" data-lang="es">ES</button>
+      <button class="chip" data-lang="pt">PT</button>
+    </div>
+    <div class="mFila" id="mCal">
+      <span class="mRot" data-i18n="mGraf">GRAPHICS</span>
+      <button class="chip" data-cal="baja" data-i18n="gBaja">LOW</button>
+      <button class="chip" data-cal="media" data-i18n="gMedia">MED</button>
+      <button class="chip" data-cal="alta" data-i18n="gAlta">HIGH</button>
+    </div>
+    <div class="mHist" id="mHist"></div>
+    <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="pausa">
+  <div class="pCaja">
+    <h2 data-i18n="pTit">PAUSED</h2>
+    <div class="pSub" id="pSub"></div>
+    <button id="pSeguir" data-i18n="pSeguir">Resume</button>
+    <button id="pMenu" data-i18n="pMenu">Main menu</button>
+  </div>
+</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as T from 'three';
