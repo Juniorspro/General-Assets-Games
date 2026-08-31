@@ -146,7 +146,9 @@ def color_en_vertices(ent, sal):
 
 
 def main():
-    ent = os.path.join(ENTRADA, 'pj.glb')
+    # PJ_FUENTE deja elegir el modelo de entrada sin tocar el script: la vuelta
+    # del personaje denso entra por aca (`pj2.glb`) y el viejo sigue reproducible.
+    ent = os.path.join(ENTRADA, os.environ.get('PJ_FUENTE', 'pj.glb'))
     if not os.path.exists(ent):
         print('falta', ent); return 1
     print('== entrada'); glb.resumen(ent)

@@ -340,8 +340,13 @@ function armaCaraSprites(){
      oreja a la altura de los ojos, y la tinta ocupa el 78,6 % de la celda, así
      que 0,158 deja el par de ojos en 0,124 — dos tercios de la cara, que es lo
      que mide un par de ojos. */
-  CARA.ojos = new T.Mesh(placaCara(0.158, 0.158 * 84 / 112, 0.019, 0.008), mO);
-  CARA.boca = new T.Mesh(placaCara(0.100, 0.100 * 84 / 96, 0.008, 0.004), mB);
+  /* EL ANCHO DE LAS PLACAS SE MIDE CONTRA LA CARA, no se hereda del modelo
+     anterior. En el personaje denso el frente de la cara mide 0,155 m de ancho a
+     la altura de los ojos y el par de ojos pintado del propio modelo mide 0,12:
+     con los 0,158 de antes la placa tapaba de oreja a oreja y los ojos salian
+     del tamano de la cabeza. */
+  CARA.ojos = new T.Mesh(placaCara(0.120, 0.120 * 84 / 112, 0.015, 0.006), mO);
+  CARA.boca = new T.Mesh(placaCara(0.062, 0.062 * 84 / 96, 0.005, 0.003), mB);
   CARA.ojos.frustumCulled = false; CARA.boca.frustumCulled = false;
   anO.add(CARA.ojos); anB.add(CARA.boca);
   ponOjos('neutro'); ponBoca('cerrada');

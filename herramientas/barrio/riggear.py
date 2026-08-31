@@ -49,9 +49,42 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 # de la cara pelada (`__V.punto(x,y,z)`): ahi se ve que los ojos del modelo
 # caen en 1,585-1,615, el flequillo baja hasta 1,62, la punta de la nariz esta
 # en 1,510 y la linea de la boca en 1,468.
-OJOS_Y, OJOS_Z = 1.5890, 0.1660
-BOCA_Y, BOCA_Z = 1.4800, 0.1680
-MAND_Y, MAND_Z = 1.5850, -0.0250      # la bisagra, a la altura de la oreja
+# MEDIDO SOBRE EL MODELO DENSO (`pj2.glb`, 1,70 m de alto), perfilando la cabeza
+# por franjas de altura: el frente de la cara por `z` maxima y las facciones por
+# la luminancia del color ya horneado en los vertices.
+#   cabeza    y 1,385 -> 1,700   ·   z -0,008 -> 0,289
+#   nariz     y 1,469  (la z maxima de todo el modelo, 0,2894)
+#   ojos      y 1,510  ·  frente z 0,277   (el par pintado mide 0,12 de ancho)
+#   boca      y 1,435  ·  frente z 0,268  (la boca PINTADA del modelo cae
+#             en 1,39, o sea sobre el borde de la mandibula: es un error del
+#             generador, no una boca. La placa va donde va una boca —tres
+#             centimetros y medio bajo la punta de la nariz— y la ventana de
+#             repintado se estira hasta 1,36 para tapar la pintada.)
+# Y LAS DOS SALEN DE LA REGLA PROYECTADA, NO DEL PERFIL DE LUMINANCIA. Por el
+# perfil me dieron 1,548 y 1,440, o sea 38 y 48 mm arriba: la franja oscura de
+# 1,548 no son los ojos, es el borde del flequillo, que en esta cabeza cae
+# justo encima. Con `__V.punto` dibujando una regla de alturas sobre la foto de
+# la cara pelada las dos se leen solas — es la tercera vez en el proyecto que
+# la luminancia miente y la regla acierta.
+#   pelo      arranca en 1,610, donde la luminancia cae a 0,019
+# EL MODELO NUEVO TIENE LAS FACCIONES CUATRO CENTIMETROS MAS ABAJO que el viejo
+# (ojos 1,548 contra 1,589) y la cara treinta centimetros mas adelante en z
+# (0,274 contra 0,175). Con las constantes viejas puestas, la ventana de
+# aplanado caia sobre el craneo y el pelo: medido, el vertice que mas entraba se
+# hundia 149,5 mm. Por eso esto se vuelve a medir en cada cambio de modelo.
+OJOS_Y, OJOS_Z = 1.5100, 0.2810
+BOCA_Y, BOCA_Z = 1.4350, 0.2720
+MAND_Y, MAND_Z = 1.5100, 0.0700       # la bisagra, a la altura de la oreja
+
+# LAS VENTANAS SALEN DE ESAS ALTURAS Y NO SE ESCRIBEN SUELTAS. Cada una es
+# (y0, y1, |x| max, z): las de repintado piden ademas estar en el frente de la
+# cara (z > zm) y las de aplanado son la profundidad del casquete.
+REP_OJOS = (1.468, 1.556, 0.078, 0.190)
+REP_BOCA = (1.360, 1.462, 0.060, 0.170)
+APL_OJOS = (1.464, 1.560, 0.080, 0.2700)
+APL_BOCA = (1.408, 1.462, 0.058, 0.2660)
+# la nariz se salva del aplanado: es la unica saliente que tiene que quedar.
+NARIZ_Y, NARIZ_X = 1.440, 0.022
 
 # ── LA CARA SE APLANA, Y ES LA MITAD DEL PEDIDO ──
 # «hacer la cara plana o almenos los ojos y las cejas y boca plana». No es una
@@ -258,7 +291,10 @@ def main():
     # aparecen cuatro picos limpios más el pulgar, separados un centímetro y
     # ocho. Medido sobre la malla original, que es la que tiene la resolución
     # para verlo; los cortes se aplican después sobre la que se publica.
-    ORIG = '/tmp/m4/pj.glb'
+    # La deteccion de dedos se hace sobre la malla SIN DECIMAR, que es donde los
+    # dedos todavia son islas separables. PJ_FUENTE tiene que ser el mismo modelo
+    # que se horneo, o los cortes caen en otro lado.
+    ORIG = '/tmp/m4/' + os.environ.get('PJ_FUENTE', 'pj.glb')
 
     def cortes_de(ruta, lado):
         """Dónde cae cada dedo sobre el eje de los nudillos, medido en la malla
@@ -285,13 +321,25 @@ def main():
         eje = vt[0]
         t = (XZ - cen) @ eje
         h, bordes = np.histogram(t, bins=26)
-        # los cortes son los VALLES entre los cinco picos, buscados de a uno
+        # EL UMBRAL NO PUEDE SER UN NUMERO DE VERTICES. Estaba en `h[i] >= 15`, que
+        # es una cuenta absoluta, y con una malla seis veces mas densa ese quince lo
+        # cruza cualquier grumo: en el modelo nuevo daba SEIS dedos y el sexto se
+        # comia el nombre del quinto, o sea dos huesos llamados `Pulgar`. El umbral
+        # va contra el pico mas alto de la propia mano, que escala solo.
+        # Y despues entra lo unico que de verdad sabemos del problema: UNA MANO TIENE
+        # CINCO DEDOS. Si sobran picos se dejan los cinco mas gruesos y se reordenan
+        # por posicion; medido en el modelo nuevo, los cinco que sobreviven caen en
+        # los bins 6, 11, 16, 20 y 25 — separados de a cinco bins, que es la firma de
+        # cinco dedos parejos y no de un grumo.
         pk = []
         for i in range(len(h)):
-            if h[i] >= 15 and (i == 0 or h[i] >= h[i-1]) and (i == len(h)-1 or h[i] >= h[i+1]):
+            if h[i] >= max(8, 0.08 * h.max()) and (i == 0 or h[i] >= h[i-1]) \
+               and (i == len(h)-1 or h[i] >= h[i+1]):
                 c = (bordes[i] + bordes[i+1]) / 2
-                if not pk or abs(c - pk[-1]) > 0.010: pk.append(c)
-        pk = sorted(pk)
+                if not pk or abs(c - pk[-1][0]) > 0.010: pk.append((c, int(h[i])))
+        if len(pk) > 5:
+            pk = sorted(sorted(pk, key=lambda x: -x[1])[:5], key=lambda x: x[0])
+        pk = [c for c, _ in sorted(pk, key=lambda x: x[0])]
         cortes = [(pk[i] + pk[i+1]) / 2 for i in range(len(pk) - 1)]
         return eje, cen, pk, cortes, largo
 
@@ -390,8 +438,7 @@ def main():
     # 0,30, o sea que hay un hueco enorme entre las dos cosas y el corte estaba
     # metido adentro de lo pintado. Con 0,055 quedaban dos ojeras puestas.
     manch = np.zeros(len(P), bool)
-    for y0, y1, xm, zm in ((1.545, 1.628, 0.102, 0.095),     # ojos y cejas
-                           (1.428, 1.522, 0.072, 0.090)):    # boca
+    for y0, y1, xm, zm in (REP_OJOS, REP_BOCA):
         manch |= ((P[:, 1] > y0) & (P[:, 1] < y1) & (P[:, 2] > zm)
                   & (np.abs(P[:, 0]) < xm) & (lum < 0.30))
     C[manch] = piel * np.float32(0.86)
@@ -419,12 +466,11 @@ def main():
     # Y LA COLUMNA DE LA NARIZ QUEDA AFUERA (|x| < 0,026 por encima de 1,492):
     # la punta está en 1,510 con z=0,181, y aplanarla se la come — cuarenta y
     # tres milímetros medidos la primera vez.
-    for y0, y1, xm, z0 in ((1.540, 1.665, 0.105, 0.1470),
-                           (1.415, 1.528, 0.078, 0.1400)):
+    for y0, y1, xm, z0 in (APL_OJOS, APL_BOCA):
         l = np.float32(z0) - np.float32(APL_CURVA) * P[:, 0] ** 2
         v = ((P[:, 1] > y0) & (P[:, 1] < y1) & (np.abs(P[:, 0]) < xm)
              & (P[:, 2] > 0.060) & (P[:, 2] > l) & (lum > 0.10)
-             & ~((P[:, 1] > 1.492) & (np.abs(P[:, 0]) < 0.026)))
+             & ~((P[:, 1] > NARIZ_Y) & (np.abs(P[:, 0]) < NARIZ_X)))
         lim[v] = l[v]; apl |= v
     hondo = float((P[apl, 2] - lim[apl]).max()) if apl.any() else 0.0
     P[apl, 2] = lim[apl]
