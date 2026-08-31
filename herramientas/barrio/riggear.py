@@ -152,6 +152,26 @@ def main():
         s = np.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2
         return ((R[0,2]+R[2,0])/s, (R[1,2]+R[2,1])/s, 0.25*s, (R[1,0]-R[0,1])/s)
 
+    def nuevo_hueso_rot(nombre, papa, p, R):
+        """Igual, pero con la orientación de bind que se le pida.
+
+        HACE FALTA PARA LOS DEDOS. `nuevo_hueso` deja el bind SIN rotación, o
+        sea alineado con los ejes del mundo, y ahí «doblar el dedo» no es
+        ninguno de los tres ejes. Dándole la misma orientación que la mano, el
+        eje X del propio hueso ES la bisagra del nudillo, y curvar un dedo pasa
+        a ser un número."""
+        kp = nom.index(papa)
+        T = np.eye(4); T[:3, :3] = R; T[:3, 3] = p
+        L = np.linalg.inv(WT[kp]) @ T
+        nodos.append({'name': nombre,
+                      'translation': [float(L[0,3]), float(L[1,3]), float(L[2,3])],
+                      'rotation': list(_quat(L[:3, :3]))})
+        i = len(nodos) - 1
+        nodos[joints[kp]].setdefault('children', []).append(i)
+        joints.append(i); nom.append(nombre)
+        WT.append(T)
+        return len(joints) - 1, T
+
     WT = [Wm[k] for k in range(len(Wm))]     # los binds, y crece
     Wnuevos = []
     HUESOS = {}
@@ -224,6 +244,117 @@ def main():
 
     P = np.concatenate(Pn); N = np.concatenate(Nn); C = np.concatenate(Cn)
     J = np.concatenate(Jn); Wt = np.concatenate(Wn); I = np.concatenate(In)
+
+    # ── 2b. LOS DEDOS QUE YA ESTÁN EN LA MANO, RIGGEADOS ──
+    # El riggeador automático da UN hueso por mano y ahí se termina. Pero los
+    # dedos SÍ están modelados: lo que no estaba era la forma de encontrarlos.
+    #
+    # EL DETECTOR QUE NO SIRVE Y EL QUE SÍ. Buscar huecos en la x no encuentra
+    # nada —los dedos están juntos y curvados, así que sus rangos de x se
+    # pisan— y las componentes conexas tampoco: la malla decimada los soldó y
+    # la original viene partida en ciento diecisiete islas sueltas, que es cómo
+    # la devuelve el generador. Lo que sí los separa es proyectar la banda de
+    # las PUNTAS sobre su propio eje principal en el plano de la palma: ahí
+    # aparecen cuatro picos limpios más el pulgar, separados un centímetro y
+    # ocho. Medido sobre la malla original, que es la que tiene la resolución
+    # para verlo; los cortes se aplican después sobre la que se publica.
+    ORIG = '/tmp/m4/pj.glb'
+
+    def cortes_de(ruta, lado):
+        """Dónde cae cada dedo sobre el eje de los nudillos, medido en la malla
+        original. Devuelve el eje, el centro y los cortes entre dedos."""
+        jo, bo = glb.carga(ruta)
+        po = jo['meshes'][0]['primitives'][0]
+        Po = glb.leer(jo, bo, po['attributes']['POSITION'])
+        Jo = glb.leer(jo, bo, po['attributes']['JOINTS_0'])
+        Wo = glb.leer(jo, bo, po['attributes']['WEIGHTS_0'])
+        so = jo['skins'][0]
+        no = [jo['nodes'][x].get('name', '?') for x in so['joints']]
+        io_ = glb.leer(jo, bo, so['inverseBindMatrices']).reshape(-1, 4, 4).astype(np.float64)
+        Wo2 = np.array([np.linalg.inv(m.T) for m in io_])
+        kk = no.index(lado + 'Hand')
+        Mo = Wo2[kk].copy()
+        for c in range(3): Mo[:3, c] /= np.linalg.norm(Mo[:3, c])
+        se = np.zeros(len(Po), bool)
+        for q in range(4): se |= (Jo[:, q] == kk) & (Wo[:, q] > 0.20)
+        lo = (np.linalg.inv(Mo) @ np.c_[Po, np.ones(len(Po))].T).T[:, :3]
+        largo = lo[se, 1].max()
+        B = lo[se & (lo[:, 1] > largo * 0.61)]
+        XZ = B[:, [0, 2]]; cen = XZ.mean(axis=0)
+        _, _, vt = np.linalg.svd(XZ - cen, full_matrices=False)
+        eje = vt[0]
+        t = (XZ - cen) @ eje
+        h, bordes = np.histogram(t, bins=26)
+        # los cortes son los VALLES entre los cinco picos, buscados de a uno
+        pk = []
+        for i in range(len(h)):
+            if h[i] >= 15 and (i == 0 or h[i] >= h[i-1]) and (i == len(h)-1 or h[i] >= h[i+1]):
+                c = (bordes[i] + bordes[i+1]) / 2
+                if not pk or abs(c - pk[-1]) > 0.010: pk.append(c)
+        pk = sorted(pk)
+        cortes = [(pk[i] + pk[i+1]) / 2 for i in range(len(pk) - 1)]
+        return eje, cen, pk, cortes, largo
+
+    DEDO_NOM = ['Indice', 'Medio', 'Anular', 'Menique', 'Pulgar']
+    for lado in ('Right', 'Left'):
+        kh = nom.index(lado + 'Hand')
+        Mh = WT[kh].copy()
+        for c in range(3): Mh[:3, c] /= np.linalg.norm(Mh[:3, c])
+        eje, cen, pk, cortes, largo = cortes_de(ORIG, lado)
+        print('%sHand: %d dedos detectados en %s (eje %s)'
+              % (lado, len(pk), np.round(pk, 3), np.round(eje, 2)))
+        inv = np.linalg.inv(Mh)
+        loc = (inv @ np.c_[P, np.ones(len(P))].T).T[:, :3]
+        sel = np.zeros(len(P), bool)
+        for q in range(4): sel |= (J[:, q] == kh) & (Wt[:, q] > 0.20)
+        NUD = largo * 0.50               # el nudillo, a mitad de la mano
+        band = sel & (loc[:, 1] > NUD)
+        t = (loc[:, [0, 2]] - cen) @ eje
+        etq = np.digitize(t, cortes)     # 0..len(pk)-1
+        # el pulgar es el grupo del extremo, y arranca MÁS ABAJO que los otros:
+        # con el mismo nudillo queda un pulgar de dos centímetros
+        for d in range(len(pk)):
+            esPulgar = (d == len(pk) - 1)
+            # EL PULGAR ARRANCA MÁS ABAJO Y TERMINA MÁS ABAJO: con la misma
+            # ventana que los otros cuatro se llevaba medio dorso —medido, un
+            # pulgar de trece centímetros y medio— porque su columna del eje
+            # también contiene los nudillos del índice.
+            m = sel & (etq == d)
+            m &= loc[:, 1] > (largo * 0.24 if esPulgar else NUD)
+            if esPulgar: m &= loc[:, 1] < largo * 0.72
+            if m.sum() < 6:
+                print('   dedo %d: %d vértices, se saltea' % (d, m.sum())); continue
+            y0 = loc[m, 1].min()
+            base = np.array([loc[m, 0].mean(), y0, loc[m, 2].mean()])
+            punta = loc[m][np.argmax(loc[m, 1])]
+            dirv = punta - base
+            L = np.linalg.norm(dirv)
+            if L < 0.02: continue
+            dirv /= L
+            # marco del hueso: +Y a lo largo del dedo, +X sobre el eje de los
+            # nudillos — o sea que girar sobre X ES doblar el dedo
+            ejx = np.array([eje[0], 0.0, eje[1]])
+            ejx = ejx - dirv * float(ejx @ dirv)
+            ejx /= (np.linalg.norm(ejx) or 1.0)
+            R = np.stack([ejx, dirv, np.cross(ejx, dirv)], axis=1)
+            Rm = Mh[:3, :3] @ R
+            nb1 = lado + DEDO_NOM[min(d, 4)]
+            nb2 = nb1 + 'B'
+            p1 = (Mh @ np.r_[base, 1.0])[:3]
+            p2 = (Mh @ np.r_[base + dirv * L * 0.52, 1.0])[:3]
+            k1, _ = nuevo_hueso_rot(nb1, lado + 'Hand', p1, Rm)
+            k2, _ = nuevo_hueso_rot(nb2, nb1, p2, Rm)
+            # LOS PESOS: una rampa a lo largo del dedo y otra en el nudillo. Con
+            # un corte duro en la base, doblar el dedo le abre un tajo a la mano.
+            s = (loc[m] - base) @ dirv / L
+            k = np.clip((s - 0.42) / 0.30, 0, 1); k = k*k*(3 - 2*k)      # prox -> dist
+            g = np.clip((loc[m, 1] - (y0 - 0.006)) / 0.022, 0, 1)
+            g = g*g*(3 - 2*g)                                            # mano -> dedo
+            J[m, 0] = k1; Wt[m, 0] = g * (1 - k)
+            J[m, 1] = k2; Wt[m, 1] = g * k
+            J[m, 2] = kh; Wt[m, 2] = 1 - g
+            J[m, 3] = 0;  Wt[m, 3] = 0
+            print('   %-14s n=%3d  largo %.3f m' % (nb1, m.sum(), L))
 
     # ── 3. LA MANDÍBULA SE LLEVA LA PARTE DE ABAJO DE LA CARA ──
     # No alcanza con poner el hueso: hay que darle vértices. Se le pasa peso a lo

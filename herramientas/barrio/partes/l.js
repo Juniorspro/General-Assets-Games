@@ -24,6 +24,13 @@ const _qA = new T.Quaternion(), _qB = new T.Quaternion(), _eA = new T.Euler();
    41 grados de la vertical. Mirándose el pecho en primera persona lo que se ve
    son dos manos flotando en los costados de la pantalla. */
 const BRAZO_BASE = 0.55;
+/* EL SIGNO DEL CIERRE SE COMPRUEBA, NO SE DEDUCE: el marco del hueso sale de la
+   geometría medida, así que cuál de los dos lados es «hacia la palma» depende
+   de cómo cayó el eje. Fotografiado en los dos sentidos: con +1 los dedos se
+   abren hacia atrás —una mano rota— y con −1 se cierran sobre la palma.
+   Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
+   útil es de ahí a cerrado y no de abierto a cerrado. */
+const DEDO_SIGNO = -1;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
@@ -106,7 +113,39 @@ const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
                    la altura del pecho, SIN parar la caminata: lo que hay que
                    ver es alguien que camina mirándose la mano, no alguien que
                    se paró a mirarla. */
-                mano: 0 };
+                mano: 0,
+                /* cuánto se cierran los dedos, de 0 (abierta) a 1 (puño) */
+                puno: 0, punoIzq: 0 };
+
+/* ── LOS DEDOS ──
+   No son geometría nueva: son los dedos que la malla YA tenía, detectados
+   proyectando la banda de las puntas sobre el eje de los nudillos y riggeados
+   con dos huesos cada uno (`herramientas/barrio/riggear.py`).
+   SE GIRAN SOBRE SU PROPIO EJE X y no sobre uno del mundo, y ésa es la razón de
+   que el hueso se haya creado con la orientación medida del dedo: doblar un
+   dedo pasa a ser un número en vez de tres. Y va POSMULTIPLICADO sobre el bind,
+   que es lo que aplica el giro en el espacio del hueso. */
+const DEDOS_N = ['Indice', 'Medio', 'Anular', 'Menique'];
+/* la falange de abajo dobla menos que la de arriba, y el meñique más que el
+   índice: con todos iguales la mano se cierra como una pinza de metal */
+const DEDOS_K = [[0.95, 1.15], [1.00, 1.20], [1.05, 1.25], [1.10, 1.30]];
+const _qDedo = new T.Quaternion();
+const _ejeDedo = new T.Vector3(1, 0, 0);
+function curvaDedo(n, a){
+  const b = PJ.idx[n], q = PJ.bind[n];
+  if (!b || !q) return;
+  b.quaternion.copy(q).multiply(_qDedo.setFromAxisAngle(_ejeDedo, a));
+}
+function ponPuno(lado, k){
+  const c = cl(k, 0, 1) * DEDO_SIGNO;
+  for (let i = 0; i < 4; i++){
+    curvaDedo(lado + DEDOS_N[i], c * DEDOS_K[i][0]);
+    curvaDedo(lado + DEDOS_N[i] + 'B', c * DEDOS_K[i][1]);
+  }
+  /* el pulgar cierra bastante menos y va contra los otros, no con ellos */
+  curvaDedo(lado + 'Pulgar', c * 0.55);
+  curvaDedo(lado + 'PulgarB', c * 0.70);
+}
 
 /* Lo que la pose que corrió dejó en el brazo derecho. Existe para que la mezcla
    de `GESTO.mano` parta de LO QUE HAY y no de una copia de la fórmula: dos
@@ -195,6 +234,9 @@ function pasoPersonaje(dt){
      Se mezcla y no se reemplaza: el resto del cuerpo sigue en su ciclo, así que
      lo que se ve es un brazo que se levanta mientras las piernas siguen. Los
      ángulos están medidos con `__V.manoDer()` contra el pecho, no elegidos. */
+  ponPuno('Right', GESTO.puno);
+  ponPuno('Left', GESTO.punoIzq);
+
   const m = cl(GESTO.mano, 0, 1);
   if (m > 0.001){
     giraH('RightArm', mez(POSE.bdX, MANO_A[0], m), MANO_A[1] * m,

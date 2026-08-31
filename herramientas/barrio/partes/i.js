@@ -303,7 +303,7 @@ async function arranca(){
       if (!CINEMA.on) CINEMA.arranca();
       CINEMA.t = t; CINEMA.pon(t);
       cam.updateMatrixWorld(true);
-      const pl = t < CINE_T1 ? 'A' : (t < CINE_T2 ? 'S' : (t < CINE_T3 ? 'B' : 'P'));
+      const pl = t < CINE_T1 ? 'A' : (t < CINE_T3 ? 'B' : 'P');
       return JSON.stringify({ t, modo: MODO, plano: pl,
         cara: postMat.uniforms.cara.value, dof: +postMat.uniforms.dof.value.toFixed(3),
         fov: +cam.fov.toFixed(1),
@@ -514,6 +514,32 @@ async function arranca(){
         py: [+((y0+1)/2).toFixed(3), +((y1+1)/2).toFixed(3)],
         pct: +((y1-y0)/2*100).toFixed(1) }); },
     frascoOff: (a, l, y) => { FR_OFF = [a, l, y]; return JSON.stringify(FR_OFF); },
+    /* cuánto MUEVE cada dedo al cerrarse: un hueso mal pesado gira igual y no
+       desplaza un solo vértice, y eso desde el código no se ve */
+    dedos: (k) => { if (!PJ.ok) return 'no';
+      const g = PJ.malla.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+      const nombres = ['Indice','Medio','Anular','Menique','Pulgar'];
+      const sal = {};
+      for (const n of nombres){
+        const nb = 'Right' + n;
+        const j = PJ.huesos.findIndex(b => b.name === nb);
+        const ids = [];
+        for (let i = 0; i < si.count; i++)
+          for (let q = 0; q < 4; q++)
+            if (si.getComponent(i, q) === j && sw.getComponent(i, q) > 0.5){ ids.push(i); break; }
+        const lee = () => { PJ.malla.updateMatrixWorld(true); return ids.map(i => {
+          const v = new T.Vector3().fromBufferAttribute(g.attributes.position, i);
+          PJ.malla.applyBoneTransform(i, v); return PJ.malla.localToWorld(v); }); };
+        GESTO.puno = 0; pasoPersonaje(0); const a = lee();
+        GESTO.puno = k === undefined ? 1 : k; pasoPersonaje(0); const b = lee();
+        let s = 0, mx = 0;
+        for (let i = 0; i < a.length; i++){ const d = a[i].distanceTo(b[i]); s += d; mx = Math.max(mx, d); }
+        sal[n] = { v: ids.length, medio: +(s / Math.max(1, a.length)).toFixed(4), max: +mx.toFixed(4) };
+      }
+      GESTO.puno = 0; pasoPersonaje(0);
+      return JSON.stringify(sal); },
+    puno: (k, i) => { GESTO.puno = k; if (i !== undefined) GESTO.punoIzq = i;
+      if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ puno: GESTO.puno }); },
     luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,
       near: cam.near, fp: PJ.primeraPersona }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },

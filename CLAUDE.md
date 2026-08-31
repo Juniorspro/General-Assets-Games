@@ -107,6 +107,88 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima octava vuelta (2026-08-31): **BARRIO** — se va el plano de espaldas, y los dedos que ya estaban se riggean
+
+Pedido textual: *"en la Cinemática se ve de espaldas no quiero eso me gustaría que siempre sea de la
+cabeza nomás ahí y después miré abajo y después pase a ver su mano con las pastillas riggea la mano y
+ajusta bien las pastillas ahí está mal"*.
+
+Se va el plano de seguimiento por detrás. Quedan **tres**: primera persona · la cara · las pastillas. Y
+la mano pasa de un hueso a **veintiuno**: los cinco dedos de cada mano, con dos huesos cada uno, sobre
+la geometría que ya estaba.
+
+#### EL DETECTOR DE DEDOS QUE NO SIRVE Y EL QUE SÍ
+
+Esto es lo que vale anotar de la vuelta, porque **la primera respuesta fue la equivocada y era mía**:
+medí los vértices de la mano buscando huecos en la `x` y concluí que era una manopla sin dedos, y me
+puse a agregarle dedos de cero. No hacía falta: los dedos estaban modelados desde el principio.
+
+Tres detectores probados:
+
+- **Huecos en la x: no encuentra nada.** Los dedos están juntos y curvados, así que sus rangos de `x`
+  se pisan — medido, en la banda de las puntas no hay un hueco mayor a un centímetro.
+- **Componentes conexas: tampoco.** En la malla decimada los dedos quedaron soldados, y en la
+  original la malla viene partida en **ciento diecisiete islas sueltas**, que es como la devuelve el
+  generador: cada isla es un puñado de triángulos, no un dedo.
+- **Lo que sí:** proyectar la banda de las **puntas** sobre su propio **eje principal** en el plano de
+  la palma. Ahí aparecen **cuatro picos limpios más el pulgar**, separados un centímetro y ocho:
+  `[−0,042 · −0,025 · −0,004 · +0,020 · +0,038]`. Los cortes son los valles.
+
+La medición va sobre la malla **original** —que tiene la resolución para verlo— y los cortes se
+aplican sobre la que se publica. Cada dedo se lleva dos huesos: uno en el nudillo y otro a la mitad.
+
+**LOS PESOS VAN CON DOS RAMPAS Y NO CON UN CORTE.** Una a lo largo del dedo, que reparte entre las dos
+falanges, y otra en el nudillo, que reparte entre el dedo y la mano: con un corte duro en la base,
+doblar el dedo le abre un tajo a la palma.
+
+**Y EL MARCO DEL HUESO SALE DE LA GEOMETRÍA.** El hueso se crea con su **+Y a lo largo del dedo
+medido** y su **+X sobre el eje de los nudillos**, así que doblar un dedo pasa a ser un número —girar
+sobre su propio X— en vez de tres. Para eso hizo falta un constructor nuevo, `nuevo_hueso_rot`: el que
+había deja el bind sin rotación, o sea alineado con los ejes del mundo, y ahí «doblar el dedo» no es
+ninguno de los tres ejes.
+
+**EL SIGNO SE COMPRUEBA, NO SE DEDUCE.** Fotografiado en los dos sentidos: con `+1` los dedos se abren
+hacia atrás —una mano rota— y con `−1` se cierran sobre la palma. Y la pose de reposo de esta malla
+**ya es un puño flojo**, así que el recorrido útil va de ahí a cerrado y no de abierto a cerrado.
+
+Medido, cuánto se mueve cada dedo al cerrar el puño: **índice 31 mm de promedio · meñique 36 · medio
+24 · pulgar 20**. Un hueso mal pesado gira igual y no desplaza un solo vértice, así que ese número es
+la única prueba de que el rig hace algo.
+
+#### LAS PASTILLAS CUELGAN DEL DEDO Y NO DEL FRASCO
+
+Colgadas del frasco quedaban flotando al costado del puño, sin tocar nada — y una pastilla que flota
+no se lee a pastilla que alguien tiene, se lee a error. Ahora cuelgan de la **falange de arriba del
+índice**, o sea que están apoyadas en algo y ese algo se mueve cuando el dedo se mueve. Y el punto se
+dice en el MUNDO —«hacia la cámara» y «hacia arriba»— y se lo trae al espacio del dedo, por lo mismo
+que el frasco: los ejes locales de un hueso son los que dejó el bind y no significan nada.
+
+#### EL PLANO DE ESPALDAS SE VA, Y LO QUE LO REEMPLAZA ES UN MOVIMIENTO
+
+No hay plano nuevo: la cara se queda los doce segundos y **el final del plano es que baja la vista**.
+No es un fundido: la cabeza y los ojos se van hacia abajo —con el cuadro `abajo` del atlas, que para
+esto está— y recién ahí se corta a lo que está mirando. Sin ese movimiento, el corte a la mano no
+tiene causa, y un corte sin causa se lee a que faltó un plano.
+
+**Y LA BAJADA ES DE TREINTA Y CUATRO CENTÉSIMAS Y NO DE SESENTA.** Con sesenta la cabeza se va tanto
+que lo que se ve es la coronilla, y eso no es bajar la vista: es agachar la cabeza.
+
+De paso, el relámpago vuelve al plano A —donde estaba pensado, con la cámara mirando al frente y las
+casas de los dos lados— porque con el plano de seguimiento afuera había quedado cayendo en medio del
+primer plano de la cara.
+
+#### MEDIDO AL CERRAR
+
+**48 huesos · 9.221 triángulos** — los mismos triángulos que antes: los dedos no agregaron geometría,
+sólo huesos y pesos sobre la que ya estaba. Los cinco dedos de la derecha, medidos girándolos y
+comparando dónde quedaron sus propios vértices: **índice 31,2 mm de desplazamiento medio · meñique
+36,3 · medio 23,6 · pulgar 19,9**. Los tres planos fotografiados instante por instante: la primera
+persona, la cara pasando de `cansado` a `triste` y de ahí a `abajo`, y el frasco entrando fuera de
+foco y resolviéndose con las dos pastillas apoyadas en el índice — **del 36,6 al 41,3 % del alto del
+cuadro, visible y delante de la cámara**. Al terminar, el juego arranca en `juego` con el HUD **sin un
+solo solapamiento**, y desde ahí se caminan **99,4 m con 0 cuadros dentro de una casa**. **254 llamadas
+de dibujo**. **0 NaN** y `window.__errs` vacío en las nueve corridas. El HTML pasó de 829 a **837 KB**.
+
 ### Sexagésima séptima vuelta (2026-08-31): **BARRIO** — la cinemática pasa a cuatro planos, y hay un frasco
 
 Pedido textual: *"puedes hacer más realista todo y tiene que ser un momento melancólico haz que el
