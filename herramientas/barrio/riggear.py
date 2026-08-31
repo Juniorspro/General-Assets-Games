@@ -537,7 +537,24 @@ def main():
     # 0,01 del Armature adentro del 3x3; sacandosela a los nodos y dejandolas
     # como estaban, el producto hueso x bind deja de ser la identidad en la pose
     # de reposo y el personaje sale cien veces mas grande.
-    todos = list(Wm) + Wnuevos
+    # ── Y SE ARMAN DESDE `WT`, QUE ES LA UNICA LISTA QUE TIENE TODOS ──
+    # Estaba en `list(Wm) + Wnuevos`, y `Wnuevos` solo se llena en `nuevo_hueso`:
+    # `nuevo_hueso_rot` —la que crea los VEINTE huesos de dedo— nunca hacia el
+    # append. Resultado: el GLB declaraba 48 joints y escribia 28 matrices.
+    # Y NO FALLABA RUIDOSAMENTE, QUE ES LO PEOR. `k.js` llena su lista con un
+    # bucle de `huesos.length` sobre un Float32Array de 448 flotantes, asi que
+    # de k=28 en adelante `fromArray` lee fuera de rango y deja la matriz en
+    # `undefined`; como la lista SALE con largo 48, `T.Skeleton` no dispara su
+    # aviso de «number of inverse bone matrices does not match» —ese aviso solo
+    # salta si los largos difieren— y se queda con veinte matrices basura. En el
+    # shader eso son NaN, y 0,0 * NaN sigue siendo NaN: alcanza con nombrar uno
+    # de esos huesos para envenenar el vertice. Medido: 603 vertices y 1.297
+    # triangulos de 24.567 (el 5,3 %) tocan algun hueso de dedo — o sea LAS DOS
+    # MANOS ENTERAS.
+    # `WT` crece con cada hueso que se crea, por las dos vias, asi que es la
+    # lista correcta y no puede volver a desincronizarse.
+    todos = list(WT)
+    assert len(todos) == len(joints), 'faltan binds: %d contra %d joints' % (len(todos), len(joints))
     ibm2 = np.array([np.linalg.inv(W).T.reshape(16) for W in todos])
     aB = pon(ibm2.astype(np.float32).reshape(-1, 16), 5126, 'MAT4')
 

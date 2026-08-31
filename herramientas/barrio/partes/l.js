@@ -42,12 +42,30 @@ let PALMA_A = 0.95;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
-/* [hombro X, hombro Y, hombro Z, codo X]. LA Y HACE FALTA: con X y Z solos el
-   brazo baja y se adelanta pero NO CRUZA — medido, dieciocho combinaciones y la
-   mano no bajó de cuarenta centímetros de costado. Lo que la trae al eje del
-   cuerpo es el giro alrededor de la vertical. */
-let MANO_A = [-0.55, 1.55, 0.70, -1.95];   /* medido: mano a 1,28 de alto,
-                                             36 cm adelante y 13 de costado */
+/* [hombro X, hombro Y, hombro Z, codo X].
+   EL VALOR VIEJO ERA [-0,55 · 1,55 · 0,70 · -1,95] Y METIA EL BRAZO EN EL TORSO.
+   Medido sobre el rig con cinematica directa: el codo quedaba a z = -0,005, o sea
+   EN EL EJE DEL CUERPO teniendo el hombro en -0,173 — el humero arrastrado 17 cm
+   por delante del esternon, con **160 de 249 vertices del brazo DENTRO del
+   tronco** y un swivel de -52,1 grados cuando un brazo humano sosteniendo algo
+   delante del pecho lo tiene entre +20 y +50. Eso es lo que se veia como «el
+   brazo esta roto».
+   EL CULPABLE ERA EL SEGUNDO NUMERO. Apagando uno por uno: con MANO_A[1] = 0 el
+   codo se va a z = -0,166, o sea que ese giro solo lo empujaba 16,1 cm hacia
+   adentro. Y el comentario que lo justificaba —«lo que la trae al eje del cuerpo
+   es el giro alrededor de la vertical»— era el error de razonamiento: un brazo
+   humano trae la mano al eje del cuerpo con la flexion del codo y la rotacion
+   interna del humero SOBRE SU PROPIO EJE, no rotando el brazo entero alrededor
+   de la vertical, que es lo que arrastra el codo por delante del pecho.
+   EL ANGULO DEL CODO NUNCA FUE EL PROBLEMA: 72,5 grados, dentro del rango humano
+   de 30 a 160, y ademas invariante — barridos los tres angulos del hombro sobre
+   24 valores, se queda clavado en 72,5, porque `giraH` escribe el local del
+   antebrazo con la rotacion de mundo del padre en REPOSO, que es constante.
+   EL VALOR NUEVO SALE DE BARRER LAS 2.520 TERNAS quedandose con las que dejan la
+   muneca a menos de 5,5 cm de donde estaba: deja la muneca a 1,8 cm, pone el codo
+   20,5 cm hacia AFUERA (swivel +74,0 grados) y baja los vertices dentro del torso
+   de 160 a 21. */
+let MANO_A = [0.56, -0.60, -0.82, -1.95];
 /* la misma mano pero LLEVADA A LA BOCA: mas flexion de codo y el hombro un poco
    mas arriba. El codo es el que hace casi todo el trabajo — es lo que acerca la
    mano a la cara sin sacarla del eje del cuerpo. */
