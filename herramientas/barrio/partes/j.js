@@ -250,6 +250,7 @@ const CINEMA = {
       if (!GESTO.libre){
         GESTO.pitch = pit + c.pt; GESTO.yawRel = 0; GESTO.abre = 1;
         GESTO.autoParp = true; GESTO.expr = 'neutro'; GESTO.bocaExpr = null;
+        GESTO.mira = 0; GESTO.miraY = 0;
       }
       ponPersonaje(c.x, c.z, this.yaw0, alturaSuelo(c.x, c.z), true);
       pasoPersonaje(0);
@@ -288,7 +289,17 @@ const CINEMA = {
            la cara dibujada eso es cambiar de cuadro —mira a un lado, al otro,
            al frente— y no girar un globo. */
         GESTO.mira = Math.sin(u*0.44);
-        GESTO.expr = u > 7.9 ? 'cansado' : 'neutro';
+        /* Y TAMBIÉN EN VERTICAL, que es lo que la segunda hoja habilitó: con
+           una sola fila de miradas la vista sólo va de un lado al otro y se lee
+           a metrónomo. Los dos senos tienen frecuencias que no son múltiplos
+           entre sí, así que el recorrido no se repite. */
+        GESTO.miraY = Math.sin(u*0.31 + 1.1) * 0.85;
+        /* EL CANSANCIO ENTRA ANTES QUE EL CIERRE, y el número salió de una
+           medición: la rampa de apertura manda sobre la expresión —un ojo a
+           medio cerrar es un ojo a medio cerrar— así que con el umbral en 7,9,
+           que es después de que `abre` empieza a bajar en 7,55, el cuadro
+           `cansado` no se veía NUNCA. */
+        GESTO.expr = u > 6.75 ? 'cansado' : 'neutro';
         /* y la mandíbula respira: un primer plano de una cara con la boca
            clavada se lee a máscara. No habla —no hay nadie a quien hablarle—
            pero traga y entreabre los labios. */

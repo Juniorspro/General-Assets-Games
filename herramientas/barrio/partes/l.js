@@ -88,7 +88,7 @@ function cargaPersonaje(){
    `assets/barrio/cara/cara.json`, o sea que agregar una expresión es agregar un
    sprite y nombrarlo — no tocar el modelo. */
 const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
-                expr: 'neutro', bocaExpr: null, mira: 0, autoParp: true,
+                expr: 'neutro', bocaExpr: null, mira: 0, miraY: 0, autoParp: true,
                 /* `libre` = nadie más está manejando la cara. La cinemática la
                    toma para sí, y quien quiera escribirla mientras tanto —hoy,
                    la sonda que fotografía las expresiones— la pide con esto. */
@@ -212,16 +212,18 @@ function placaCara(anchoM, altoM, flechaX, flechaY){
   return g;
 }
 
-function texAtlas(b64){
+function texAtlas(b64, g){
   const im = new Image();
   const t = new T.Texture(im);
   t.colorSpace = T.SRGBColorSpace;
-  /* SIN MIPMAPS Y CON REPETICIÓN DE UN CUARTO: un atlas con mipmaps mezcla el
-     cuadro de al lado en cuanto la cara se aleja, y en una cara eso es un ojo
-     con la ceja de otra expresión encima. */
+  /* SIN MIPMAPS: un atlas con mipmaps mezcla el cuadro de al lado en cuanto la
+     cara se aleja, y en una cara eso es un ojo con la ceja de otra expresión
+     encima. Y la repetición SALE DE LA GRILLA que escribió el horno: con el
+     cuarto clavado a mano, agregar una hoja de expresiones deja la mitad del
+     atlas fuera de alcance sin que nada avise. */
   t.generateMipmaps = false;
   t.minFilter = T.LinearFilter; t.magFilter = T.LinearFilter;
-  t.repeat.set(0.25, 0.25);
+  t.repeat.set(1 / g[0], 1 / g[1]);
   im.onload = () => { t.needsUpdate = true; };
   im.src = 'data:image/png;base64,' + b64;
   return t;
@@ -231,8 +233,8 @@ function armaCaraSprites(){
   if (CARA.ojos || !PJ.ok) return;
   const anO = PJ.idx['caraOjos'], anB = PJ.idx['caraBoca'];
   if (!anO || !anB) return;
-  CARA.texO = texAtlas(CARA_OJOS_B64);
-  CARA.texB = texAtlas(CARA_BOCA_B64);
+  CARA.texO = texAtlas(CARA_OJOS_B64, CARA_OJOS_G);
+  CARA.texB = texAtlas(CARA_BOCA_B64, CARA_BOCA_G);
   /* ALFA POR CORTE Y NO POR TRANSPARENCIA: un material transparente no escribe
      profundidad, así que la placa de la boca y la de los ojos se dibujarían en
      el orden equivocado contra la nariz. Es la misma corrección que las cercas
@@ -256,17 +258,35 @@ function armaCaraSprites(){
   ponOjos('neutro'); ponBoca('cerrada');
 }
 
+/* la fila se cuenta DESDE ARRIBA en la imagen y desde abajo en la UV, así que
+   el desplazamiento vertical va al revés: es el único lugar donde el atlas y la
+   textura no hablan el mismo idioma */
+function ponCuadro(t, g, i){
+  t.offset.set((i % g[0]) / g[0], (g[1] - 1 - Math.floor(i / g[0])) / g[1]);
+}
 function ponOjos(n){
   const i = CARA_OJOS_N.indexOf(n);
   if (i < 0 || i === CARA.frameO || !CARA.texO) return;
-  CARA.frameO = i;
-  CARA.texO.offset.set((i % 4) * 0.25, 0.75 - Math.floor(i / 4) * 0.25);
+  CARA.frameO = i; ponCuadro(CARA.texO, CARA_OJOS_G, i);
 }
 function ponBoca(n){
   const i = CARA_BOCA_N.indexOf(n);
   if (i < 0 || i === CARA.frameB || !CARA.texB) return;
-  CARA.frameB = i;
-  CARA.texB.offset.set((i % 4) * 0.25, 0.75 - Math.floor(i / 4) * 0.25);
+  CARA.frameB = i; ponCuadro(CARA.texB, CARA_BOCA_G, i);
+}
+
+/* ── HACIA DÓNDE MIRA ──
+   Con las dos hojas hay ocho direcciones y no dos, así que la mirada deja de
+   ser «izquierda o derecha» y pasa a ser un punto: `mira` es el eje horizontal
+   y `miraY` el vertical, y las diagonales existen de verdad en vez de salir de
+   promediar dos cuadros que no se pueden promediar. */
+function mirada(){
+  const x = GESTO.mira, y = GESTO.miraY;
+  const dx = x < -0.35 ? -1 : (x > 0.35 ? 1 : 0);
+  const dy = y < -0.35 ? -1 : (y > 0.35 ? 1 : 0);
+  if (dy > 0) return dx < 0 ? 'arribaIzq' : (dx > 0 ? 'arribaDer' : 'arriba');
+  if (dy < 0) return dx < 0 ? 'abajoIzq' : (dx > 0 ? 'abajoDer' : 'abajo');
+  return dx < 0 ? 'izq' : (dx > 0 ? 'der' : 'neutro');
 }
 
 /* ── EL PARPADEO ES ASIMÉTRICO Y NO PERIÓDICO ──
@@ -286,12 +306,20 @@ function pasoCaraSprites(dt){
       if (k > 0.30) CARA.parp = -1;
     }
   }
-  /* de la apertura al cuadro: entero, a medias o cerrado */
+  /* ── DE LA APERTURA AL CUADRO: CINCO ESCALONES Y NO UNO ──
+     Con un solo cuadro intermedio, un parpadeo son tres estados —abierto, a
+     medias, cerrado— y a sesenta cuadros por segundo eso se ve como un
+     interruptor: el ojo salta. La rampa `ab90 · ab70 · ab50 · ab25` es la
+     razón de ser de la segunda hoja de expresiones, y es lo único que hace que
+     bajar un párpado se lea a párpado. */
   let n;
-  if (abre < 0.22) n = 'cerrado';
-  else if (abre < 0.62) n = 'medio';
+  if (abre < 0.13) n = 'cerrado';
+  else if (abre < 0.30) n = 'ab25';
+  else if (abre < 0.48) n = 'ab50';
+  else if (abre < 0.66) n = 'ab70';
+  else if (abre < 0.84) n = 'ab90';
   else if (GESTO.expr && GESTO.expr !== 'neutro') n = GESTO.expr;
-  else n = GESTO.mira < -0.35 ? 'izq' : (GESTO.mira > 0.35 ? 'der' : 'neutro');
+  else n = mirada();
   ponOjos(n);
 
   /* y la boca: la expresión manda, y si no hay, la abertura */

@@ -371,14 +371,14 @@ async function arranca(){
        siguiente y la foto sale con la expresión de antes. Una sonda que empuja
        el estado por un camino que el juego no usa no está midiendo el juego. */
     expr: (o, b) => {
+      /* SE PIDE EL CUADRO POR NOMBRE Y NADA MÁS. La primera versión traducía
+         algunos nombres a apertura —«medio» a 0,4, «cerrado» a 0— y con la
+         rampa de cinco escalones puesta eso pasó a devolver OTRO cuadro: pedir
+         `medio` fotografiaba `ab50`. Una sonda que traduce lo que le piden no
+         está fotografiando lo que le piden. */
       GESTO.libre = true; GESTO.autoParp = false;
-      if (o){
-        if (o === 'cerrado') GESTO.abre = 0;
-        else if (o === 'medio') GESTO.abre = 0.4;
-        else { GESTO.abre = 1;
-               GESTO.expr = (o === 'izq' || o === 'der' || o === 'centro') ? 'neutro' : o;
-               GESTO.mira = o === 'izq' ? -1 : (o === 'der' ? 1 : 0); }
-      }
+      GESTO.abre = 1; GESTO.mira = 0; GESTO.miraY = 0;
+      if (o) GESTO.expr = o;
       if (b) GESTO.bocaExpr = b;
       pasoCaraSprites(0);
       return JSON.stringify({ ojos: CARA_OJOS_N[CARA.frameO], boca: CARA_BOCA_N[CARA.frameB] }); },

@@ -40,11 +40,24 @@ SALIDA = os.path.join(RAIZ, 'assets', 'barrio', 'cara')
 OJOS = ['neutro', 'medio', 'cerrado', 'sorpresa',
         'enojo', 'triste', 'feliz', 'cansado',
         'izq', 'centro', 'der', 'arriba',
-        'entrecerrado', 'duda', 'abajo', 'somnoliento']
+        'entrecerrado', 'duda', 'abajo', 'somnoliento',
+        # ── segunda hoja ──
+        # Los cuatro primeros son LA RAMPA DEL PARPADEO, y son la razón de ser
+        # de esta hoja: con un solo cuadro intermedio un parpadeo son tres
+        # escalones y se ve a interruptor; con cinco se ve a párpado.
+        'ab90', 'ab70', 'ab50', 'ab25',
+        'arribaIzq', 'arribaDer', 'abajoIzq', 'abajoDer',
+        'guinoIzq', 'guinoDer', 'cejaAlta', 'terror',
+        'llanto', 'sospecha', 'asco', 'dormido']
 BOCAS = ['cerrada', 'entreabierta', 'a', 'grande',
          'e', 'o', 'u', 'sonrisa',
          'sonrisaCerrada', 'sonrisaChica', 'triste', 'mueca',
-         'dientes', 'sorpresa', 'ladeada', 'apretada']
+         'dientes', 'sorpresa', 'ladeada', 'apretada',
+         # ── segunda hoja: los visemas que faltaban y las muecas ──
+         'i', 'f', 'sellada', 'l',
+         'sonrisaDientes', 'risa', 'mediaIzq', 'mediaDer',
+         'beso', 'oChica', 'asco', 'grunido',
+         'bostezo', 'tristeAbierta', 'duda', 'lengua']
 
 
 def recorta(hoja, n=4):
@@ -138,22 +151,31 @@ def registra(rgba, caja, esc, ancho, alto):
     return out
 
 
-def hornea(ruta, nombres, ancho, alto, soloOjos, base):
-    hoja = Image.open(ruta)
-    celdas, caja = recorta(hoja)
-    print('%s: celda de %d px' % (os.path.basename(ruta), caja))
-    rgbas = [alfa(c) for c in celdas]
-    cajas = [caja_de(r, soloOjos) for r in rgbas]
+def hornea(rutas, nombres, ancho, alto, soloOjos, base):
+    """LAS HOJAS SE HORNEAN JUNTAS Y NO UNA POR UNA, y eso no es comodidad: la
+    escala de registro es UNA SOLA para los treinta y dos cuadros. Sacándola por
+    hoja, el ojo abierto de la primera y el de la rampa de parpadeo de la
+    segunda quedan de tamaños distintos, y entonces parpadear también cambia el
+    tamaño del ojo — que es el mismo defecto de «hoja de dibujos contra atlas»
+    que ya había costado el registro por cuadro, ahora entre hojas."""
+    rgbas, cajas = [], []
+    for ruta in rutas:
+        celdas, caja = recorta(Image.open(ruta))
+        print('%s: celda de %d px' % (os.path.basename(ruta), caja))
+        for c in celdas:
+            r = alfa(c); rgbas.append(r); cajas.append(caja_de(r, soloOjos))
     anchos = sorted((c[1] - c[0]) for c in cajas if c)
     ref = anchos[len(anchos)//2]              # la mediana, no el máximo
     esc = (ancho * (0.80 if soloOjos else 0.62)) / max(1.0, ref)
-    print('  ancho de referencia %d px -> escala %.3f' % (ref, esc))
+    print('  %d cuadros · ancho de referencia %d px -> escala %.3f'
+          % (len(rgbas), ref, esc))
     marcos = []
     for i, r in enumerate(rgbas):
         m = registra(r, cajas[i], esc, ancho, alto)
         marcos.append(m)
         m.save(os.path.join(SALIDA, '%s_%02d_%s.png' % (base, i, nombres[i])))
-    atlas = Image.new('RGBA', (ancho*4, alto*4), (0, 0, 0, 0))
+    filas = (len(marcos) + 3) // 4
+    atlas = Image.new('RGBA', (ancho*4, alto*filas), (0, 0, 0, 0))
     for i, m in enumerate(marcos):
         atlas.paste(m, ((i % 4)*ancho, (i // 4)*alto), m)
     # EL ATLAS QUE VA AL JUEGO SE ACHICA Y SE CUANTIZA; los sprites sueltos de la
@@ -162,22 +184,27 @@ def hornea(ruta, nombres, ancho, alto, soloOjos, base):
     # unos noventa de ancho: un cuadro de 112 alcanza y sobra. Y el dibujo tiene
     # tres colores -marron, blanco y nada- asi que una paleta de 32 no le saca
     # un solo tono. Va con FASTOCTREE porque MEDIANCUT no acepta RGBA.
-    at = atlas.resize((112*4, 84*4) if soloOjos else (96*4, 84*4), Image.LANCZOS)
+    at = atlas.resize((112*4, 84*filas) if soloOjos else (96*4, 84*filas),
+                      Image.LANCZOS)
     at = at.quantize(colors=32, method=Image.FASTOCTREE).convert('RGBA')
     p = os.path.join(SALIDA, base + '.png')
     at.save(p, optimize=True)
     atlas.save(os.path.join(SALIDA, base + '_grande.png'))
     atlas = at
-    print('  atlas %s  %dx%d  %d bytes' % (base, atlas.width, atlas.height, os.path.getsize(p)))
-    return p
+    print('  atlas %s  %dx%d (4x%d)  %d bytes'
+          % (base, atlas.width, atlas.height, filas, os.path.getsize(p)))
+    return p, filas
 
 
 def main():
     os.makedirs(SALIDA, exist_ok=True)
-    a = hornea('/tmp/cara/ojos_ref.png', OJOS, 128, 96, True, 'ojos')
-    b = hornea('/tmp/cara/boca_ref.png', BOCAS, 112, 96, False, 'boca')
+    a, fa = hornea(['/tmp/cara/ojos_ref.png', '/tmp/cara/ojos_b_ref.png'],
+                   OJOS, 128, 96, True, 'ojos')
+    b, fb = hornea(['/tmp/cara/boca_ref.png', '/tmp/cara/boca_b_ref.png'],
+                   BOCAS, 112, 96, False, 'boca')
     io.open(os.path.join(SALIDA, 'cara.json'), 'w', encoding='utf8').write(
-        json.dumps({'ojos': OJOS, 'boca': BOCAS, 'grilla': [4, 4]},
+        json.dumps({'ojos': OJOS, 'boca': BOCAS,
+                    'grilla': {'ojos': [4, fa], 'boca': [4, fb]}},
                    ensure_ascii=False, indent=1))
     import base64
     txt = ["\n/* ═══════════════════ LOS SPRITES DE LA CARA ═══════════════════\n"
@@ -191,6 +218,10 @@ def main():
                    % (n.upper(), base64.b64encode(io.open(p, 'rb').read()).decode('ascii')))
     txt.append("const CARA_OJOS_N = %s;\n" % json.dumps(OJOS))
     txt.append("const CARA_BOCA_N = %s;\n" % json.dumps(BOCAS))
+    txt.append("/* la grilla la escribe el horno: agregar una hoja no puede\n"
+               "   obligar a acordarse de cambiar un número en otro archivo */\n")
+    txt.append("const CARA_OJOS_G = [4, %d];\n" % fa)
+    txt.append("const CARA_BOCA_G = [4, %d];\n" % fb)
     io.open(os.path.join(AQUI, 'partes', 'w.js'), 'w', encoding='utf8').write(''.join(txt))
     print('partes/w.js  %d bytes' % os.path.getsize(os.path.join(AQUI, 'partes', 'w.js')))
     return 0

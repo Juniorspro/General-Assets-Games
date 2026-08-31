@@ -254,6 +254,46 @@ del borde—: **109,3 · 136,3 · 109,3 m y 0 cuadros dentro de una casa**. HUD 
 cuadras a la vista. **0 NaN** y `window.__errs` vacío en las catorce corridas. El HTML pasó de 618 a
 **660 KB**, y esos 42 son los dos atlas en base64.
 
+#### Y DESPUÉS, EL DOBLE DE CUADROS: DE 32 A 64
+
+Pedido: *"es hermoso, puedes lograr más fotogramas?"*. Entran **dos hojas más** —una de ojos y una de
+bocas—, generadas con la hoja anterior **como referencia de estilo** para que no se noten dos dibujantes.
+Los atlas pasan de 4×4 a **4×8** y la carpeta a **64 sprites**.
+
+**LA MITAD DE LOS CUADROS NUEVOS SON UNA RAMPA DE PARPADEO, y ésa es la ganancia de verdad.** Con un
+solo cuadro intermedio un parpadeo tiene tres estados —abierto, a medias, cerrado— y a sesenta cuadros
+por segundo eso no se ve como un párpado, se ve como un interruptor. Los cuatro nuevos
+(`ab90 · ab70 · ab50 · ab25`) lo llevan a **seis escalones**. El resto son las cuatro miradas diagonales
+—que convierten la mirada de un eje en un punto, con `miraY`—, los dos guiños, la ceja levantada, el
+terror, el llanto, la sospecha, el asco y el dormido; y del lado de la boca, los visemas que faltaban
+(`i · f · l · sellada`), la risa, las dos medias sonrisas, el beso, el gruñido, el bostezo y la lengua.
+
+**LAS DOS HOJAS SE HORNEAN JUNTAS, Y NO ES COMODIDAD.** La escala de registro tiene que ser **una sola
+para los treinta y dos cuadros**: sacándola por hoja, el ojo abierto de la primera y el de la rampa de
+la segunda quedan de tamaños distintos y entonces **parpadear también cambia el tamaño del ojo**. Es el
+mismo defecto de «hoja de dibujos contra atlas» que ya había costado el registro por cuadro, ahora entre
+hojas. Medido: las dos hojas dan celdas de 458 y 457 px y una referencia común de 361.
+
+**Y LA GRILLA LA ESCRIBE EL HORNO** (`CARA_OJOS_G`, `CARA_BOCA_G`). Con el cuarto clavado a mano en el
+juego, agregar una hoja deja la mitad del atlas fuera de alcance sin que nada avise.
+
+**UN DEFECTO DE LA SONDA, otra vez del mismo tipo:** `expr()` traducía algunos nombres a apertura
+—«medio» a 0,4— y con la rampa puesta eso pasó a devolver **otro cuadro**: pedir `medio` fotografiaba
+`ab50`. Ahora pide el cuadro por nombre y nada más. Una sonda que traduce lo que le piden no está
+fotografiando lo que le piden.
+
+Y en la cinemática los cuadros nuevos se usan de verdad, que es lo que separa agregarlos de tenerlos:
+la mirada recorre las diagonales (`arribaDer` medido en el segundo 17,6) y el cierre del final pasa por
+la rampa (`ab90` en el 18,9, `ab70` en el 23,0). **Y ahí apareció un defecto propio:** la rampa manda
+sobre la expresion —un ojo a medio cerrar es un ojo a medio cerrar— asi que con el cansancio entrando
+en el segundo 7,9 y el cierre empezando en el 7,55, el cuadro `cansado` **no se veia nunca**. Entra en
+el 6,75 y ahora se mide.
+
+Medido: **64 de 64 cuadros fotografiados dentro del juego**, cada uno verificado por nombre contra el
+que se pidió. Atlas de 448×672 y 384×672, **99 KB los dos** con la misma paleta de 32 colores — el doble
+de cuadros por un 48 % más de bytes, porque lo que se agrega es dibujo plano sobre transparencia. El
+HTML pasó de 660 a **732 KB**.
+
 ### Sexagésima quinta vuelta (2026-08-30): **BARRIO** — un personaje generado, riggeado a mano en la cara, y el cuerpo en primera persona
 
 Pedido textual: *"puedes generar con highsfield un modelo 3D y animarlo ... necesito que tenga huesos en
