@@ -2878,14 +2878,17 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
-/* 0,95 RADIANES. El numero salio de medir hacia donde apunta la palma
-   (`__V.normal`) con el giro ya repartido 70/30 entre antebrazo y muneca:
-   0→(−0,88, −0,19) · 0,6→(−0,73, +0,34) · 1,4→(−0,09, +0,95). Con 1,40 la palma
-   mira casi recto ARRIBA, y eso servia cuando la camara se ponia encima de la
-   mano; ahora la camara esta adelante, asi que lo que hace falta es que la palma
-   mire adelante Y un poco arriba —(−0,7, +0,7)—, que cae cerca de 0,95. Son 38
-   grados de antebrazo mas 16 de muneca. */
-let PALMA_A = 0.95;
+/* −1,05 RADIANES, Y EL SIGNO ESTABA AL REVES — POR ESO LA MANO MIRABA PARA ABAJO.
+   Al corregir MANO_A el brazo cambio de familia (el codo paso de adentro a
+   afuera) y con el la palma se dio vuelta. Medido con el MANO_A nuevo, barriendo
+   PALMA_A de −3,5 a +1,0 con toda la torsion en el antebrazo, la componente
+   VERTICAL de la normal de la palma va: +0,95→−0,68 · 0→+0,17 · −1,00→+0,914 ·
+   −1,50→**+0,992** · −2,50→+0,467. O sea que con el 0,95 que habia la palma
+   apuntaba 43 grados PARA ABAJO, y ningun valor POSITIVO la pone hacia arriba.
+   Se elige −1,05 y no el −1,50 que maximiza: a −1,50 la palma queda horizontal
+   perfecta y no se le ve nada desde una camara puesta adelante; a −1,05 queda
+   arriba +0,92 y adelante +0,34, o sea inclinada hacia la lente. */
+let PALMA_A = -1.05;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
@@ -3173,8 +3176,17 @@ function pasoPersonaje(dt){
      torsión tiene que ser alrededor del eje del propio hueso, que es lo que
      hace la posmultiplicación. */
   if (Math.abs(GESTO.palma) > 0.001){
-    torsion('RightForeArm', GESTO.palma * PALMA_A * 0.70);
-    torsion('RightHand',    GESTO.palma * PALMA_A * 0.30);
+    /* ── TODA LA TORSION VA AL ANTEBRAZO, Y NADA A LA MUNECA ──
+       Estaba repartida 70/30. El 30 % que caia en la muneca es lo que se veia
+       como «la muneca tan tirada que parece un palo apretado»: medido, el giro
+       relativo entre la mano y el antebrazo llegaba a 34,4 grados, y la piel de
+       la muneca no tiene donde absorberlo — un solo anillo de vertices se lleva
+       todo el retorcimiento.
+       Y anatomicamente el reparto era un invento: la pronosupinacion es del
+       ANTEBRAZO entero, el radio girando sobre el cubito. La muneca no supina,
+       flexiona y desvia. Con el 100 % en el antebrazo el giro relativo mide 0,0
+       grados en todo el rango. */
+    torsion('RightForeArm', GESTO.palma * PALMA_A);
   }
   pasoCaraSprites(dt);
 }
