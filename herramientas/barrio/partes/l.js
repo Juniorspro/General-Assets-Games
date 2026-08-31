@@ -31,14 +31,15 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
-/* 2,60 Y NO 1,40, Y SALE DE MEDIR LA NORMAL DE LA PALMA, no de mirar la mano.
-   Barridos nueve angulos leyendo hacia donde apunta la palma (`__V.normal`), la
-   componente vertical va: −2,6→+0,55 · −0,8→−0,83 · 0→−0,82 · +1,4→+0,24 ·
-   +2,0→+0,70 · +2,6→**+0,93**. O sea que con 1,40 la palma miraba de costado y
-   apenas 24 % hacia arriba: apoyarle algo era ponerlo en un plano inclinado
-   sesenta grados. A 2,60 la palma queda casi horizontal y recien ahi «apoyar»
-   quiere decir algo. */
-let PALMA_A = 2.60;
+/* 1,40 RADIANES, Y EL NÚMERO CAMBIÓ AL REPARTIR EL GIRO.
+   Con toda la supinación en la muñeca hacían falta 2,60 —149 grados en un hueso
+   que llega a 90— y por eso la mano se veía quebrada. Repartida 70/30 con el
+   antebrazo, la palma llega más arriba con MENOS: barridos nueve ángulos
+   leyendo la normal de la palma (`__V.normal`), la componente vertical va
+   0→−0,19 · +0,6→+0,34 · **+1,4→+0,945** · +2,2→+0,61. O sea que 1,40 la deja
+   casi horizontal, y son 56 grados de antebrazo más 24 de muñeca: los dos
+   dentro de lo que una muñeca real hace. */
+let PALMA_A = 1.40;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
@@ -146,6 +147,13 @@ const _ejeDedo = new T.Vector3(1, 0, 0);
    sale de que los dedos van a lo largo de ese eje —medido, de 0 a 0,188 en y—
    así que girar sobre él es exactamente supinar. */
 const _ejeMuneca = new T.Vector3(0, 1, 0);
+/* una torsión alrededor del eje del propio hueso, ENCIMA de lo que ya tenga.
+   Posmultiplicar es lo que la deja en el espacio del hueso; premultiplicar la
+   pondría en el del padre y torcería el brazo entero. */
+function torsion(n, a){
+  const b = PJ.idx[n]; if (!b) return;
+  b.quaternion.multiply(_qA.setFromAxisAngle(_ejeMuneca, a));
+}
 function giraMuneca(n, a){
   const b = PJ.idx[n], q = PJ.bind[n];
   if (!b || !q) return;
@@ -256,13 +264,28 @@ function pasoPersonaje(dt){
      ángulos están medidos con `__V.manoDer()` contra el pecho, no elegidos. */
   ponPuno('Right', GESTO.puno);
   ponPuno('Left', GESTO.punoIzq);
-  if (Math.abs(GESTO.palma) > 0.001) giraMuneca('RightHand', GESTO.palma * PALMA_A);
 
   const m = cl(GESTO.mano, 0, 1);
   if (m > 0.001){
     giraH('RightArm', mez(POSE.bdX, MANO_A[0], m), MANO_A[1] * m,
           mez(POSE.bdZ, MANO_A[2], m));
     giraH('RightForeArm', mez(POSE.bdA, MANO_A[3], m), 0, 0);
+  }
+  /* ── LA SUPINACIÓN ES DEL ANTEBRAZO, NO DE LA MUÑECA ──
+     Estaba todo en la muñeca: `PALMA_A` en 2,60 son CIENTO CUARENTA Y NUEVE
+     GRADOS de giro en un hueso que en una persona llega a noventa. En pantalla
+     eso no es una palma para arriba, es una mano quebrada — la paleta pegada de
+     costado al brazo que se veía en la captura.
+     Poner la palma hacia arriba es pronosupinación, y eso pasa en el ANTEBRAZO:
+     el radio gira sobre el cúbito. Se reparte 70/30 y ninguno de los dos pasa
+     de los grados que tiene.
+     VA DESPUÉS de `giraH` y POSMULTIPLICANDO, no antes: `giraH` escribe el
+     cuaternión entero, así que un giro puesto antes lo borra — y encima la
+     torsión tiene que ser alrededor del eje del propio hueso, que es lo que
+     hace la posmultiplicación. */
+  if (Math.abs(GESTO.palma) > 0.001){
+    torsion('RightForeArm', GESTO.palma * PALMA_A * 0.70);
+    torsion('RightHand',    GESTO.palma * PALMA_A * 0.30);
   }
   pasoCaraSprites(dt);
 }
@@ -352,8 +375,8 @@ function armaCaraSprites(){
      la altura de los ojos y el par de ojos pintado del propio modelo mide 0,12:
      con los 0,158 de antes la placa tapaba de oreja a oreja y los ojos salian
      del tamano de la cabeza. */
-  CARA.ojos = new T.Mesh(placaCara(0.120, 0.120 * 84 / 112, 0.015, 0.006), mO);
-  CARA.boca = new T.Mesh(placaCara(0.062, 0.062 * 84 / 96, 0.005, 0.003), mB);
+  CARA.ojos = new T.Mesh(placaCara(0.150, 0.150 * 84 / 112, 0.017, 0.007), mO);
+  CARA.boca = new T.Mesh(placaCara(0.078, 0.078 * 84 / 96, 0.006, 0.003), mB);
   CARA.ojos.frustumCulled = false; CARA.boca.frustumCulled = false;
   anO.add(CARA.ojos); anB.add(CARA.boca);
   ponOjos('neutro'); ponBoca('cerrada');

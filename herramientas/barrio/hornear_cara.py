@@ -88,17 +88,44 @@ def alfa(im):
     g = np.asarray(im.convert('L')).astype(np.float32)
     H, W = g.shape
     claro = g > 205
+
+    # ── EL CONTORNO SE CIERRA ANTES DE INUNDAR ──
+    # Con el estilo viejo —un anillo oscuro y grueso alrededor del ojo— el
+    # relleno desde el borde no podia entrar y la esclerotica se salvaba sola.
+    # Con el dibujo nuevo el parpado de ABAJO es una linea fina y clara, asi que
+    # el contorno tiene agujeros de uno o dos pixeles: el relleno se cuela por
+    # ahi y se COME EL BLANCO DEL OJO. Medido en el primer horneado: del sprite
+    # `neutro` quedaban SEIS pixeles blancos opacos en todo el cuadro, o sea dos
+    # ojos sin esclerotica.
+    # Se dilata la tinta R pasos —que puentea cualquier hueco de hasta 2R—, se
+    # inunda contra esa barrera, y despues se dilata el FONDO los mismos R pasos
+    # para devolverle al contorno su grosor. Es un cierre morfologico y no un
+    # umbral nuevo: un umbral no distingue el blanco de adentro del de afuera,
+    # que es justo el problema.
+    R = 2
+
+    def _dil(m, n):
+        o = m.copy()
+        for _ in range(n):
+            d = o.copy()
+            d[1:, :] |= o[:-1, :]; d[:-1, :] |= o[1:, :]
+            d[:, 1:] |= o[:, :-1]; d[:, :-1] |= o[:, 1:]
+            o = d
+        return o
+
+    libre = claro & ~_dil(~claro, R)
     vis = np.zeros_like(claro)
     pila = [(0, x) for x in range(W)] + [(H-1, x) for x in range(W)] \
          + [(y, 0) for y in range(H)] + [(y, W-1) for y in range(H)]
-    pila = [p for p in pila if claro[p]]
+    pila = [p for p in pila if libre[p]]
     for p in pila: vis[p] = True
     while pila:
         y, x = pila.pop()
         for dy, dx in ((1,0),(-1,0),(0,1),(0,-1)):
             b, a = y+dy, x+dx
-            if 0 <= b < H and 0 <= a < W and claro[b, a] and not vis[b, a]:
+            if 0 <= b < H and 0 <= a < W and libre[b, a] and not vis[b, a]:
                 vis[b, a] = True; pila.append((b, a))
+    vis = _dil(vis, R) & claro
     # LO QUE NO SE ALCANZA DESDE EL BORDE ES OPACO DEL TODO, y esto es lo que
     # estaba mal: mezclando el alfa con la luminancia, el BLANCO DE ADENTRO del
     # ojo quedaba al 55 % y sobre la piel se veia beige -o sea un ojo sin

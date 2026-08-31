@@ -550,7 +550,7 @@ const CINEMA = {
          Lo vi porque las capturas que estaba mirando salian de saltar a un
          tiempo con `__V.cine(t)` y esperar — o sea del final de la rampa — y no
          de dejar correr la escena. Jugada de verdad no se parecia. */
-      const dist = mez(0.40, 0.30, suave(0, dur, u));
+      const dist = mez(0.56, 0.42, suave(0, dur, u));
       /* LA CÁMARA MIRA DESDE ARRIBA, y no es una preferencia: a la altura de la
          mano el fondo del cuadro es SU PROPIA CARA, y como el cuerpo entero va
          en la capa nítida la cara sale enfocada y se lleva la atención del
@@ -566,7 +566,17 @@ const CINEMA = {
          camara estaba del lado equivocado.
          Sobre la normal, en cambio, la palma da a la lente POR CONSTRUCCION, y
          sigue dandole aunque el brazo se mueva mientras se levanta. */
+      /* LA NORMAL SE INCLINA HACIA ADELANTE ANTES DE PONER LA CAMARA. Con la
+         palma ya casi horizontal la normal apunta CASI RECTO ARRIBA, asi que la
+         camara quedaba a treinta centimetros por encima de la mano — o sea a la
+         altura de su cara y pegada a ella: en la captura la mano salia en
+         silueta con la cara detras. Mezclada con la direccion en la que camina,
+         se la mira desde arriba y de adelante, y lo que queda de fondo es el
+         asfalto. */
       const nrm = normalPalma('Right');
+      nrm.x = nrm.x*0.66 + this.adx*0.34;
+      nrm.z = nrm.z*0.66 + this.adz*0.34;
+      nrm.normalize();
       const px = pf.x + nrm.x*dist + der.x*0.015;
       /* y la camara baja: con 0,13 sobre una palma que ya mira hacia arriba, lo
          que entra abajo del cuadro es la manga */

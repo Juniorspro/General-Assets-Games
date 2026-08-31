@@ -81,8 +81,8 @@ MAND_Y, MAND_Z = 1.5100, 0.0700       # la bisagra, a la altura de la oreja
 # cara (z > zm) y las de aplanado son la profundidad del casquete.
 REP_OJOS = (1.468, 1.556, 0.078, 0.190)
 REP_BOCA = (1.360, 1.462, 0.060, 0.170)
-APL_OJOS = (1.464, 1.560, 0.080, 0.2700)
-APL_BOCA = (1.408, 1.462, 0.058, 0.2660)
+APL_OJOS = (1.452, 1.578, 0.092, 0.2690)
+APL_BOCA = (1.392, 1.474, 0.072, 0.2570)
 # la nariz se salva del aplanado: es la unica saliente que tiene que quedar.
 NARIZ_Y, NARIZ_X = 1.440, 0.022
 
