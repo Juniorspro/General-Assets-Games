@@ -1062,6 +1062,110 @@ function cargaTexturas(){
 const _mF = new T.Matrix4(), _eF = new T.Euler(), _qF = new T.Quaternion(),
       _vF = new T.Vector3(), _sF = new T.Vector3(), _nF = new T.Matrix3(),
       _cF = new T.Color();
+const geoCono = new T.ConeGeometry(1, 1, 7);
+const geoBlob = new T.IcosahedronGeometry(1, 0);
+
+/* ══════════════════════ LAS COPAS ══════════════════════
+   Un cono liso y un icosaedro son las dos formas que delatan un arbol de
+   maqueta, y por el mismo motivo: las dos tienen la silueta PERFECTAMENTE
+   REGULAR. La silueta es lo unico que se ve de un arbol de noche —el follaje
+   esta casi negro y el detalle interior no llega—, asi que lo que hay que
+   romper es el contorno y nada mas.
+
+   AZAR PROPIO Y NO EL DEL BARRIO. Estas geometrias se arman al cargar el
+   modulo; si tirasen de `az()` correrian la secuencia compartida y el barrio
+   entero —donde cae cada casa, cada farol, cada arbol— saldria distinto. Un
+   generador de tres lineas aparte cuesta menos que ese acoplamiento. */
+let _sA = 20260831;
+const _rA = () => ((_sA = (_sA * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+/* ── UN PISO DE RAMAS, QUE NO ES UN CONO ──
+   El borde de un cono es una recta y a contraluz eso se lee a gorro de fiesta.
+   Acá el anillo de la base alterna radio largo y radio corto y sube y baja de
+   altura, así que el contorno queda DENTADO: lo que se ve son puntas de rama y
+   no una generatriz. Cuesta lo mismo —un triángulo por segmento— y cambia toda
+   la lectura. */
+function conoRamas(seg, tapa){
+  const pos = [], N = seg * 2;
+  const ap = [0, 0.5, 0];
+  const ani = [];
+  for (let i = 0; i < N; i++){
+    const a = i / N * Math.PI * 2;
+    const largo = (i % 2) === 0;
+    const r = largo ? 1.0 * (0.90 + _rA()*0.20) : 0.60 * (0.85 + _rA()*0.30);
+    const y = largo ? -0.50 : -0.34 - _rA()*0.10;
+    ani.push([Math.cos(a)*r, y, Math.sin(a)*r]);
+  }
+  const cen = [0, -0.30, 0];
+  for (let i = 0; i < N; i++){
+    const b = ani[i], c = ani[(i+1) % N];
+    pos.push(ap[0],ap[1],ap[2],  b[0],b[1],b[2],  c[0],c[1],c[2]);
+    /* LA TAPA DE ABAJO SOLO EN LOS DE CERCA. Los pisos se tapan entre si, pero
+       el de mas abajo se ve desde la vereda cuando uno pasa al lado del tronco.
+       A cuarenta metros nadie mira por debajo de un arbol, y la tapa es la
+       MITAD de los triangulos del piso: quitarla en la arboleda son veinte mil
+       triangulos menos en la vista de la calle larga, que es justo la vista mas
+       cara del barrio. */
+    if (tapa) pos.push(cen[0],cen[1],cen[2],  c[0],c[1],c[2],  b[0],b[1],b[2]);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/* ── UNA BOLA ABOLLADA ──
+   Un icosaedro tiene veinte caras iguales y se lee a dado. Movido cada vértice
+   sobre su propio radio entre 0,72 y 1,26, la silueta deja de tener simetría y
+   pasa a leerse a masa de hojas.
+   EL DESPLAZAMIENTO SALE DE LA DIRECCION Y NO DEL INDICE DEL VERTICE, porque
+   `IcosahedronGeometry` viene SIN indice: cada cara trae su propia copia de
+   los tres vertices, y moviendo cada copia por su cuenta la bola se abre en
+   veinte triangulos sueltos. Redondeando la direccion a milesimas, las copias
+   de un mismo vertice reciben el mismo numero. */
+function bolaAbollada(det, amp){
+  const g = new T.IcosahedronGeometry(1, det);
+  const P = g.attributes.position.array;
+  const cache = new Map();
+  for (let i = 0; i < P.length; i += 3){
+    const x = P[i], y = P[i+1], z = P[i+2];
+    const k = Math.round(x*1000) + ',' + Math.round(y*1000) + ',' + Math.round(z*1000);
+    let f = cache.get(k);
+    if (f === undefined){ f = 1 - amp + _rA()*amp*2; cache.set(k, f); }
+    P[i] = x*f; P[i+1] = y*f; P[i+2] = z*f;
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/* TRES VARIANTES Y NO UNA. Con una sola bola abollada, doscientas copias son la
+   misma abolladura doscientas veces — y una irregularidad repetida se lee como
+   un patrón, que es peor que la esfera regular. Con tres y el giro por árbol
+   que ya había, ninguna copa se repite a la vista. */
+const RAMAS  = [conoRamas(5, 1), conoRamas(6, 1), conoRamas(5, 1)];
+const RAMAS0 = [conoRamas(5, 0), conoRamas(6, 0), conoRamas(5, 0)];
+/* LA AMPLITUD DE LA ABOLLADURA NO ES LA MISMA EN LAS DOS. La de ochenta caras
+   tiene facetas chicas y con ±26 % los pliegues se marcan tanto que la copa se
+   lee a repollo; la de veinte necesita justo lo contrario, porque con poca
+   abolladura vuelve a ser un icosaedro. */
+const COPAS = [bolaAbollada(1, 0.19), bolaAbollada(1, 0.19), bolaAbollada(1, 0.19)];
+const MATAS = [bolaAbollada(0, 0.27), bolaAbollada(0, 0.27), bolaAbollada(0, 0.27)];
+
+/* la paleta del follaje de noche: verdes apagados tirando a oliva y a azul.
+   Un solo verde para novecientos arboles es lo que los delata como copiados. */
+const VERDES = [0x2c3f2a, 0x34472e, 0x263a28, 0x2f4232, 0x3a4a30, 0x223327];
+/* UN PISO MAS ALTO ES UN PISO MAS CLARO. Con los tres pisos del mismo verde la
+   copa vuelve a ser UNA silueta y el trabajo de partirla en tres se pierde: lo
+   que separa una masa de otra no es el contorno, es que una este mas iluminada
+   que la de abajo. Multiplicar el color por canal cuesta cero —ya viaja en los
+   vertices— y es lo que hace que la copa tenga fondo. */
+function tinta(hex, k){
+  const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+  const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+  const b = Math.min(255, Math.round((hex & 255) * k));
+  return (r << 16) | (g << 8) | b;
+}
+
 function fundir(piezas){
   if (!piezas.length) return null;
   let nv = 0, ni = 0;
@@ -1491,17 +1595,77 @@ function armaLote(P, L, ox, oz, anchoLote, fondoLote, conVecinoIzq){
   P.madera.push({ g: geoCil, p:[bx2, 0.15 + 0.55, bz2], s:[0.085, 1.1, 0.085], c: 0x6a6055 });
   P.carp.push({ c: C_MARCO,  g: geoCaja, p:[bx2, 0.15 + 1.24, bz2], r:[0, L.rot, 0], s:[0.42, 0.22, 0.26] });
 
-  /* un árbol o un arbusto en el jardín */
-  if (az() < 0.55){
+  /* ── EL ARBOL DEL JARDIN, QUE ES EL QUE SE VE DE CERCA ──
+     Los del fondo estan a treinta metros y detras de la niebla; ESTE esta a
+     cinco de la vereda, o sea que es el que decide si el barrio se ve hecho o
+     no. Era un cono de siete lados sobre un cilindro — a esa distancia eso no
+     es un arbol, es un pino de plastico de maqueta.
+     Ahora son las mismas dos especies que el bosque pero con una capa mas,
+     porque aca si se justifica: de cerca lo que falta es la MASA, y una masa se
+     hace con volumenes que se encima entre si y no con uno solo. */
+  if (az() < 0.62){
     const [tx, tz] = mundo(info.px + (az() < 0.5 ? -1 : 1) * azr(2.6, mu - 0.6), azr(1.6, JARDIN - 1.2));
-    const th = azr(4.4, 7.2);
-    P.verde.push({ c: C_TRONCO,  g: geoCil, p:[tx, 0.15 + th*0.30, tz], s:[0.34, th*0.60, 0.34] });
-    P.verde.push({ c: C_COPA,  g: new T.ConeGeometry(azr(1.8, 2.7), th*0.78, 7), p:[tx, 0.15 + th*0.74, tz] });
+    const th = azr(4.4, 7.6);
+    const inc = [azr(-0.05, 0.05), azr(0, 6.283), azr(-0.05, 0.05)];
+    const ver = VERDES[azi(0, VERDES.length - 1)];
+    P.verde.push({ c: C_TRONCO, g: geoCil, p:[tx, 0.15 + th*0.28, tz], r: inc,
+                   s:[azr(0.26, 0.38), th*0.58, azr(0.26, 0.38)] });
+    if (az() < 0.5){
+      /* CONIFERA: CUATRO PISOS DE RAMAS, cada uno girado y un poco mas claro
+         que el de abajo. El cuarto es la punta: sin el, los tres terminan en un
+         vertice unico y eso es exactamente la punta del gorro de fiesta. */
+      const r0 = azr(1.8, 2.6);
+      const pisos = [[0.54, 1.00, 0.50, 0.00, 0.84],
+                     [0.79, 0.76, 0.44, 0.45, 0.94],
+                     [0.99, 0.52, 0.36, 0.90, 1.04],
+                     [1.13, 0.30, 0.26, 1.35, 1.14]];
+      const vi = ((Math.round(tx*3 + tz*7) % 3) + 3) % 3;
+      let n = 0;
+      for (const [py, pr, ph, gi, kl] of pisos)
+        P.verde.push({ c: tinta(ver, kl), g: RAMAS[(vi + n++) % 3],
+                       p:[tx, 0.15 + th*py, tz],
+                       r:[inc[0], inc[1] + gi, inc[2]],
+                       s:[r0*pr, th*ph, r0*pr] });
+    } else {
+      /* LATIFOLIA: TRES BOLAS ABOLLADAS, la de arriba mas clara. Cada una toma
+         una de las tres variantes al azar, asi que ni dos copas del barrio
+         tienen la misma abolladura. */
+      /* CINCO MASAS CHICAS Y NO TRES GRANDES. Con tres, cada bola mide dos
+         metros y sus facetas miden medio metro: a cinco metros de la vereda eso
+         se ve como un repollo. Con cinco mas chicas la faceta baja a la mitad y
+         lo que se lee son grumos de hojas, que es de lo que esta hecha una copa.
+         Y la variante sale de la POSICION del arbol y no de `az()`: cada tirada
+         nueva del azar compartido corre TODO lo que viene despues —donde cae
+         cada casa, cada farol, cada arbol del barrio— y el barrio tiene que ser
+         el mismo de siempre. */
+      const r0 = azr(1.6, 2.3);
+      const vi = ((Math.round(tx*3 + tz*7) % 3) + 3) % 3;
+      let n = 0;
+      for (const [dx, dy, dz, e, kl] of [[0, 0.70, 0, 1.00, 0.84],
+                                         [0.72, 0.86, -0.34, 0.76, 0.96],
+                                         [-0.62, 0.80, 0.48, 0.72, 0.90],
+                                         [0.24, 0.99, 0.52, 0.64, 1.06],
+                                         [-0.40, 1.00, -0.46, 0.60, 1.02]]){
+        P.verde.push({ c: tinta(ver, kl), g: COPAS[(vi + n++) % 3],
+                       p:[tx + dx, 0.15 + th*dy, tz + dz],
+                       r:[azr(0, 1.2), azr(0, 6.283), azr(0, 1.2)],
+                       s:[r0*e, r0*e*azr(0.72, 0.94), r0*e] });
+      }
+    }
     COLIS.push({ x0: tx - 0.38, x1: tx + 0.38, z0: tz - 0.38, z1: tz + 0.38 });
   }
+  /* los arbustos: dos bolas achatadas y encimadas en vez de una esfera. Una
+     esfera de radio medio metro a la altura de la rodilla se lee a pelota. */
   for (let k = 0; k < 2; k++) if (az() < 0.6){
     const [ax, azz] = mundo(azr(-mu + 0.6, mu - 0.6), azr(0.9, JARDIN - 0.8));
-    P.verde.push({ c: C_COPA,  g: new T.SphereGeometry(azr(0.42, 0.72), 6, 4), p:[ax, 0.15 + 0.42, azz] });
+    const rb = azr(0.42, 0.74), vb = VERDES[azi(0, VERDES.length - 1)];
+    const vb2 = ((Math.round(ax*5 + azz*11) % 3) + 3) % 3;
+    P.verde.push({ c: vb, g: MATAS[vb2], p:[ax, 0.15 + rb*0.72, azz],
+                   r:[azr(0,1), azr(0,6.283), azr(0,1)], s:[rb, rb*0.78, rb] });
+    P.verde.push({ c: tinta(vb, 0.88), g: MATAS[(vb2+1) % 3],
+                   p:[ax + azr(-0.35, 0.35), 0.15 + rb*0.52, azz + azr(-0.35, 0.35)],
+                   r:[azr(0,1), azr(0,6.283), azr(0,1)],
+                   s:[rb*0.72, rb*0.60, rb*0.72] });
   }
 }
 
@@ -1588,8 +1752,13 @@ function armaCuadra(bi, bj, lados){
    hacia afuera desde la calle exterior se ve el plano de asfalto perdiéndose en
    gris — y un plano que se pierde en gris se lee a que ahí se acabó el juego.
    Con los árboles, lo que hay detrás del barrio es más barrio que no se ve. */
+/* ── DOS GEOMETRIAS UNITARIAS Y NADA MAS ──
+   Antes se creaba un `ConeGeometry` NUEVO por arbol —novecientos objetos de
+   geometria para fundirlos acto seguido en una sola malla—. Con una unidad y la
+   escala por pieza, que `fundir` ya aplica, sale lo mismo y se crean dos. */
+
 function armaArboleda(){
-  const tronco = [], copa = [];
+  const piezas = [];
   const borde = MITAD + LOTE;
   for (let k = 0; k < 900; k++){
     const lado = azi(0, 3);
@@ -1599,11 +1768,49 @@ function armaArboleda(){
     else if (lado === 1){ x = t; z = borde + p2; }
     else if (lado === 2){ x = -borde - p2; z = t; }
     else { x = borde + p2; z = t; }
-    const h = azr(5.5, 11.5);
-    tronco.push({ g: geoCil, p:[x, h*0.28, z], s:[0.36, h*0.56, 0.36], c: C_TRONCO });
-    copa.push({ g: new T.ConeGeometry(azr(2.0, 3.4), h*0.82, 6), p:[x, h*0.72, z], c: C_COPA });
+    const h = azr(5.5, 12.5);
+    /* CADA ARBOL SE INCLINA UN POCO Y GIRA SOBRE SI MISMO. La inclinacion es de
+       hasta tres grados y no se ve como inclinacion: lo que se ve es que la
+       linea de arriba del bosque deja de ser una sierra regular. Y el giro en Y
+       es gratis —no cambia la silueta de un cono, pero SI la de un cono de siete
+       lados visto de cerca— y sobre todo evita que las caras planas de todos los
+       arboles reflejen el mismo farol a la vez. */
+    const inc = [azr(-0.055, 0.055), azr(0, 6.283), azr(-0.055, 0.055)];
+    const ver = VERDES[azi(0, VERDES.length - 1)];
+    piezas.push({ g: geoCil, p:[x, h*0.26, z], r: inc,
+                  s:[azr(0.26, 0.40), h*0.54, azr(0.26, 0.40)], c: C_TRONCO });
+
+    if (k % 5 < 3){
+      /* ── CONIFERA: TRES PISOS DE RAMAS ──
+         Un cono solo es un gorro de fiesta clavado en un palo, y con novecientos
+         iguales el fondo se lee a papel pintado. Acá van las mismas piezas
+         dentadas que el árbol del jardín, y por eso el fondo y el frente se
+         leen como el mismo bosque; lo único que cambia es que son dos pisos y
+         no cuatro, y sin tapa: a cuarenta metros y detrás de la niebla lo único
+         que llega de un árbol es el contorno, y el contorno de dos pisos
+         dentados ya es el de una conífera. */
+      const r0 = azr(2.1, 3.3);
+      piezas.push({ g: RAMAS0[k % 3], p:[x, h*0.58, z], r: inc,
+                    s:[r0, h*0.56, r0], c: tinta(ver, 0.88) });
+      piezas.push({ g: RAMAS0[(k+1) % 3], p:[x, h*0.90, z],
+                    r:[inc[0], inc[1] + 0.55, inc[2]],
+                    s:[r0*0.66, h*0.50, r0*0.66], c: tinta(ver, 1.08) });
+    } else {
+      /* ── LATIFOLIA: DOS BOLAS ABOLLADAS Y DESCENTRADAS ──
+         La otra silueta. Acá van las de veinte caras y no las de ochenta: a
+         cuarenta metros la subdivisión no se ve y en cambio se pagaría por
+         setecientas copas. Lo que sí se ve —y es lo que se arregló— es que el
+         contorno no sea el de un poliedro regular. */
+      const r0 = azr(2.0, 3.2);
+      piezas.push({ g: MATAS[k % 3], p:[x, h*0.76, z], r: inc,
+                    s:[r0, r0*azr(0.62, 0.86), r0], c: tinta(ver, 0.88) });
+      piezas.push({ g: MATAS[(k+1) % 3],
+                    p:[x + azr(-0.9, 0.9), h*azr(0.90, 1.02), z + azr(-0.9, 0.9)],
+                    r:[inc[0] + 0.4, inc[1] + 1.1, inc[2]],
+                    s:[r0*0.70, r0*azr(0.50, 0.70), r0*0.70], c: tinta(ver, 1.06) });
+    }
   }
-  const m1 = new T.Mesh(fundir(tronco.concat(copa)), matVerde);
+  const m1 = new T.Mesh(fundir(piezas), matVerde);
   m1.receiveShadow = true;
   escena.add(m1);
   ARBOLEDA.push(m1);
