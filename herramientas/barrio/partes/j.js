@@ -675,29 +675,52 @@ const CINEMA = {
       /* LOS CUATRO TIEMPOS, y cada uno tarda lo que tarda de verdad:
          sube la mano (1,5 s) · cierra los ojos y traga (1,4) · el asco (1,6) ·
          se sacude la mano (2,0). El resto es caminar con la cara deshecha. */
-      const sube  = suave(0.2, 1.7, u);
-      const traga = suave(1.7, 3.1, u);
-      const asco  = suave(3.1, 4.7, u);
-      const sacu  = suave(4.6, 5.0, u) * (1 - suave(6.6, 7.2, u));
+      /* ── LA COREOGRAFIA, Y AHORA LA HACE LA MANO IZQUIERDA ──
+         La derecha NO se mueve: se queda sosteniendo el frasco con la palma
+         arriba, que es lo que el jugador ya vio en el plano anterior y lo que se
+         pidio que se mantenga. La izquierda hace todo el trabajo — va, agarra,
+         se la lleva a la boca y vuelve — que es como lo hace una persona: la
+         mano que sostiene el frasco no es la que se lleva la pastilla.
+         Seis tiempos, cada uno lo que tarda de verdad:
+           0,2-1,4  la izquierda viaja a la palma derecha
+           1,4-1,9  los dedos se cierran sobre la pastilla
+           1,9-3,2  la lleva a la boca
+           3,2-4,0  cierra los ojos y traga
+           4,0-5,4  el asco y el sacudon
+           5,4-7,2  el brazo vuelve a colgar */
+      const vaPalma = suave(0.2, 1.4, u);
+      const agarra  = suave(1.4, 1.9, u);
+      const aBoca   = suave(1.9, 3.2, u);
+      const vuelve  = suave(5.4, 7.2, u);
+      const traga = suave(3.2, 4.0, u);
+      const asco  = suave(4.0, 5.4, u);
+      const sacu  = suave(4.3, 4.8, u) * (1 - suave(6.4, 7.0, u));
       if (!GESTO.libre){
-        GESTO.mano = 1; GESTO.manoBoca = sube * (1 - suave(5.4, 7.0, u));
-        GESTO.puno = 0.14 + 0.62 * sube;      /* los dedos se cierran sobre ella */
-        GESTO.palma = 1 - 0.75 * sube;        /* y la palma se da vuelta hacia la boca */
+        /* la derecha se queda quieta con el frasco */
+        GESTO.mano = 1; GESTO.manoBoca = 0;
+        GESTO.puno = 0.14; GESTO.palma = 1;
+        /* y la izquierda recorre 0 -> 1 (la palma) -> 2 (la boca) -> 0 */
+        GESTO.izq = (vaPalma + aBoca) * (1 - vuelve);
+        /* la pinza izquierda se cierra al agarrar y se abre al volver */
+        GESTO.punoIzq = 0.85 * agarra * (1 - suave(3.4, 4.2, u));
         GESTO.tiembla = sacu;
-        /* EL MIEDO ES CERRAR LOS OJOS ANTES, no despues: se los cierra mientras
-           la mano sube, o sea que se la toma sin mirar. */
-        GESTO.abre = mez(1, 0.06, suave(0.9, 2.2, u)) + 0.55 * suave(4.9, 6.4, u);
-        GESTO.expr = u < 1.0 ? 'terror' : (asco > 0.5 ? 'asco' : 'cerrado');
-        GESTO.bocaExpr = u < 1.6 ? 'apretada'
-                       : (traga > 0.6 && asco < 0.5 ? 'sellada'
+        /* EL MIEDO ES CERRAR LOS OJOS ANTES DE QUE LLEGUE, no despues: los
+           cierra mientras la mano sube, o sea que se la toma sin mirar. */
+        GESTO.abre = mez(1, 0.06, suave(2.3, 3.4, u)) + 0.55 * suave(5.0, 6.5, u);
+        GESTO.expr = u < 1.9 ? 'terror' : (asco > 0.5 ? 'asco' : 'cerrado');
+        GESTO.bocaExpr = u < 2.9 ? 'apretada'
+                       : (traga > 0.5 && asco < 0.5 ? 'sellada'
                        : (asco > 0.5 ? 'asco' : 'entreabierta'));
-        GESTO.mira = 0; GESTO.miraY = -0.5;
-        /* la cabeza tira hacia atras al tragar y despues cae */
-        GESTO.pitch = -0.30 * traga + 0.42 * asco;
+        GESTO.mira = 0; GESTO.miraY = u < 1.9 ? -0.7 : -0.2;
+        GESTO.pitch = -0.26 * traga + 0.38 * asco;
         GESTO.yawRel = 0.10 * sacu;
       }
-      /* las pastillas se van de la mano en cuanto se la lleva a la boca */
-      ponFrasco(u < 1.35);
+      /* la pastilla suelta aparece cuando los dedos se cierran sobre ella y
+         desaparece cuando entra en la boca */
+      ponUna(agarra > 0.6 && traga < 0.5);
+      /* el frasco se queda en la derecha todo el plano: es lo que el jugador
+         viene mirando y lo que se pidio que se mantenga */
+      ponFrasco(true);
       ponPersonaje(c.x, c.z, this.yaw0, suelo, false);
       pasoPersonaje(0);
       PJ.grupo.updateMatrixWorld(true);

@@ -20,7 +20,7 @@
    que se puede desincronizar de la animacion — el mismo defecto que en LEMI
    dejo la llave quieta mientras el brazo subia. Colgado del hueso, la mano lo
    lleva por construccion. */
-const FRASCO = { ok: false, grupo: null, past: null, tri: 0 };
+const FRASCO = { ok: false, grupo: null, past: null, una: null, tri: 0 };
 
 /* medidas de un frasco de farmacia de verdad, en metros */
 const FR_R = 0.0170;        /* radio del cuerpo */
@@ -93,6 +93,18 @@ function cargaFrasco(){
   const dedo = PJ.idx['RightIndiceB'] || PJ.idx['RightHand'];
   dedo.add(gp);
   FRASCO.past = gp; gp.visible = false;
+
+  /* ── LA PASTILLA QUE VIAJA EN LA MANO IZQUIERDA ──
+     Es otra capsula, colgada de la falange de arriba del indice IZQUIERDO. No se
+     reusa una de las tres del monton: esas viven en la mano derecha y tienen que
+     seguir ahi mientras la izquierda se lleva la suya — si la sacaramos del
+     monton habria que reparentarla en pleno movimiento, y un objeto que cambia
+     de padre a mitad de camino salta un cuadro. Una capsula mas cuesta 1 malla. */
+  const gu = new T.Mesh(new T.CapsuleGeometry(0.0066, 0.0120, 3, 10), mp);
+  gu.rotation.set(Math.PI/2, 0, 0.2);
+  gu.position.set(0.004, 0.016, 0.004);
+  (PJ.idx['LeftIndiceB'] || PJ.idx['LeftHand']).add(gu);
+  FRASCO.una = gu; gu.visible = false;
   FRASCO.grupo = g; FRASCO.ok = true;
   g.visible = false;
 }
@@ -101,6 +113,8 @@ function ponFrasco(v){
   if (FRASCO.grupo) FRASCO.grupo.visible = !!v;
   if (FRASCO.past) FRASCO.past.visible = !!v;
 }
+/* la pastilla suelta de la mano izquierda se prende y se apaga aparte del monton */
+function ponUna(v){ if (FRASCO.una) FRASCO.una.visible = !!v; }
 
 /* las pastillas se colocan igual que el frasco: el punto se dice en el MUNDO
    —«hacia la cámara» y «hacia arriba»— y se lo trae al espacio del dedo */
@@ -119,6 +133,7 @@ function ponPastillasMundo(p, giro){
 function capaFrasco(n){
   if (FRASCO.grupo) FRASCO.grupo.traverse(o => { o.layers.set(n); });
   if (FRASCO.past)  FRASCO.past.traverse(o => { o.layers.set(n); });
+  if (FRASCO.una)   FRASCO.una.layers.set(n);
 }
 
 /* ── SE COLOCA EN COORDENADAS DE MUNDO Y NO EN LAS DE LA MANO ──

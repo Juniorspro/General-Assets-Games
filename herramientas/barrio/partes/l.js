@@ -83,6 +83,20 @@ let MANO_A = [0.56, -0.60, -0.82, -1.95];
    pastilla en la boca». */
 let MANO_B = [-0.55, 3.15, 1.70, -2.20];
 
+/* ── EL BRAZO IZQUIERDO, Y LOS DOS DESTINOS SALEN DE UN SOLVER ──
+   No estan elegidos: se busco sobre los cuatro angulos de `giraH` el minimo de
+   la distancia de la yema del indice izquierdo al destino, con penalizacion por
+   meter el antebrazo en el torso, primero en una rejilla de 4.900 ternas y
+   despues afinando por coordenadas.
+     · TOMA — la yema al centro de la palma derecha, que es donde estan las
+       pastillas: error medido **2,1 cm**, cero vertices en el torso.
+     · BOCA — la yema al hueso `caraBoca`: error **10,7 cm**. Es un minimo local
+       y no baja de ahi con estos cuatro ejes; como `LeftIndiceB` es la falange y
+       no la punta, la yema de verdad queda unos 7 cm de la boca, que a cuadro se
+       lee como la mano en la cara. */
+let MANO_I_TOMA = [0.40, 0.40, 1.60, -1.13];
+let MANO_I_BOCA = [0.69, 0.52, 1.52, -2.36];
+
 /* ── UN GIRO EN LOS EJES DEL MUNDO Y NO EN LOS DEL HUESO ──
    Los ejes locales de un hueso son los que dejó el bind, así que no significan
    nada: en este rig la cabeza viene con cuarenta grados de inclinación sobre X
@@ -167,7 +181,13 @@ const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
                    no sobre la muneca a proposito: sacudir la mano es un
                    movimiento del brazo entero, y puesto en la muneca se lee a
                    glitch. */
-                tiembla: 0 };
+                tiembla: 0,
+                /* EL BRAZO IZQUIERDO EN UN SOLO NUMERO, de 0 a 2: 0 es colgando
+                   como en la caminata, 1 es la yema sobre la palma derecha
+                   —agarrando la pastilla— y 2 es en la boca. Un solo escalar y
+                   no dos mezclas separadas porque el recorrido es una linea:
+                   nunca hay que estar a la vez yendo a la palma y a la boca. */
+                izq: 0 };
 
 /* ── LOS DEDOS ──
    No son geometría nueva: son los dedos que la malla YA tenía, detectados
@@ -328,6 +348,21 @@ function pasoPersonaje(dt){
      cuaternión entero, así que un giro puesto antes lo borra — y encima la
      torsión tiene que ser alrededor del eje del propio hueso, que es lo que
      hace la posmultiplicación. */
+  /* ── EL BRAZO IZQUIERDO ──
+     Mismo tratamiento que el derecho: los angulos se mezclan y despues se
+     aplican de una, para que no haya dos giros encadenados moviendose a la vez
+     (que es lo que hacia el tirabuzon en el derecho). */
+  const qi = cl(GESTO.izq, 0, 2);
+  if (qi > 0.001){
+    const t1 = Math.min(qi, 1), t2 = Math.max(0, qi - 1);
+    const i0 = mez(0, MANO_I_TOMA[0], t1) + (MANO_I_BOCA[0] - MANO_I_TOMA[0]) * t2;
+    const i1 = mez(0, MANO_I_TOMA[1], t1) + (MANO_I_BOCA[1] - MANO_I_TOMA[1]) * t2;
+    const i2 = mez(0, MANO_I_TOMA[2], t1) + (MANO_I_BOCA[2] - MANO_I_TOMA[2]) * t2;
+    const i3 = mez(0, MANO_I_TOMA[3], t1) + (MANO_I_BOCA[3] - MANO_I_TOMA[3]) * t2;
+    giraH('LeftArm', i0, i1, i2);
+    giraH('LeftForeArm', i3, 0, 0);
+  }
+
   if (Math.abs(GESTO.palma) > 0.001){
     /* ── TODA LA TORSION VA AL ANTEBRAZO, Y NADA A LA MUNECA ──
        Estaba repartida 70/30. El 30 % que caia en la muneca es lo que se veia
