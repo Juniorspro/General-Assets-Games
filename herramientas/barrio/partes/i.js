@@ -326,7 +326,7 @@ async function arranca(){
       const c = new T.Vector3(), a = new T.Vector3(), b = new T.Vector3();
       PJ.idx['Head'].getWorldPosition(c);
       PJ.idx['head_end'].getWorldPosition(a);
-      PJ.idx['ojoI'].getWorldPosition(b);
+      PJ.idx['caraOjos'].getWorldPosition(b);
       const r = Math.max(0.12, a.distanceTo(c)) * 0.95;
       let x0 = 9, x1 = -9, y0 = 9, y1 = -9, delante = true;
       for (let i = 0; i < 8; i++){
@@ -355,13 +355,67 @@ async function arranca(){
       return JSON.stringify({ fp: PJ.primeraPersona,
         escCabeza: +PJ.idx['Head'].scale.x.toFixed(3) }); },
     /* los párpados, que es lo único que el plano B tiene que contar */
+    /* qué cuadro del atlas está puesto en cada placa, y con qué nombre: es lo
+       único que hay que poder afirmar de una cara dibujada */
     ojos: () => { if (!PJ.ok) return 'no';
-      const q = (n) => { const e = new T.Euler().setFromQuaternion(
-        PJ.bind[n].clone().invert().multiply(PJ.idx[n].quaternion), 'XYZ'); return +e.x.toFixed(3); };
+      const e = new T.Euler().setFromQuaternion(
+        PJ.bind['mandibula'].clone().invert().multiply(PJ.idx['mandibula'].quaternion), 'XYZ');
       return JSON.stringify({ abre: +GESTO.abre.toFixed(3), boca: +GESTO.boca.toFixed(3),
-        supI: q('parpSupI'), supD: q('parpSupD'), infI: q('parpInfI'),
-        simetrico: Math.abs(q('parpSupI') - q('parpSupD')) < 1e-3,
-        mand: q('mandibula') }); },
+        ojos: CARA.frameO >= 0 ? CARA_OJOS_N[CARA.frameO] : null,
+        bocaN: CARA.frameB >= 0 ? CARA_BOCA_N[CARA.frameB] : null,
+        offO: CARA.texO ? [+CARA.texO.offset.x.toFixed(2), +CARA.texO.offset.y.toFixed(2)] : null,
+        mand: +e.x.toFixed(3) }); },
+    /* ── PONE UNA EXPRESIÓN A MANO, PARA PODER FOTOGRAFIAR LAS TREINTA Y DOS ──
+       Y VA POR `GESTO` Y NO POR `ponOjos`: el cuadro lo decide `pasoCaraSprites`
+       en cada vuelta del bucle, así que escribirlo directo lo pisa al cuadro
+       siguiente y la foto sale con la expresión de antes. Una sonda que empuja
+       el estado por un camino que el juego no usa no está midiendo el juego. */
+    expr: (o, b) => {
+      GESTO.libre = true; GESTO.autoParp = false;
+      if (o){
+        if (o === 'cerrado') GESTO.abre = 0;
+        else if (o === 'medio') GESTO.abre = 0.4;
+        else { GESTO.abre = 1;
+               GESTO.expr = (o === 'izq' || o === 'der' || o === 'centro') ? 'neutro' : o;
+               GESTO.mira = o === 'izq' ? -1 : (o === 'der' ? 1 : 0); }
+      }
+      if (b) GESTO.bocaExpr = b;
+      pasoCaraSprites(0);
+      return JSON.stringify({ ojos: CARA_OJOS_N[CARA.frameO], boca: CARA_BOCA_N[CARA.frameB] }); },
+    caras: () => JSON.stringify({ ojos: CARA_OJOS_N, boca: CARA_BOCA_N,
+      placas: !!CARA.ojos }),
+    /* Apagar una placa por vez es la única forma de saber qué dibuja cada una:
+       con las dos puestas, un defecto de una se lee como un defecto de la otra.
+       `dz` la corre hacia adelante y `prof` le saca la prueba de profundidad —
+       las dos juntas contestan en un cuadro si lo que falta está TAPADO o si
+       directamente no se está dibujando, que desde la foto son indistinguibles.
+       Acá contestaron que no estaba tapada, y eso descartó la mitad de las
+       hipótesis de una. */
+    placa: (c, v, dz, prof) => { const m = c === 'boca' ? CARA.boca : CARA.ojos;
+      if (!m) return 'no'; m.visible = !!v;
+      if (dz !== undefined) m.position.z = dz;
+      if (prof !== undefined){ m.material.depthTest = !!prof; m.renderOrder = prof ? 0 : 9; }
+      const w = new T.Vector3(); m.getWorldPosition(w);
+      return JSON.stringify({ que: c, visible: m.visible,
+        y: +w.y.toFixed(4), z: +w.z.toFixed(4) }); },
+    /* ── LA FICHA DE LAS DOS PLACAS ──
+       Es la sonda que encontró el defecto de la vuelta, y sirve por lo que
+       mide: no «se ve la cara» sino QUÉ CUADRO tiene puesto cada atlas. Las
+       seis fotos salían idénticas y los seis nombres pedidos eran distintos —
+       o sea que alguien estaba escribiendo el desplazamiento después que la
+       sonda, y era la cinemática. */
+    diagCara: () => {
+      if (!CARA.ojos) return 'no';
+      const d = (m, t, nom) => ({ vis: m.visible, tex: t.image ? t.image.width : 0,
+        cuadro: nom, off: [+t.offset.x.toFixed(2), +t.offset.y.toFixed(2)],
+        /* el alto EN EL MUNDO: una placa aplastada por la matriz del hueso se
+           lee igual que una placa tapada, y hay que poder separarlas */
+        alto: +(new T.Vector3(0, 0.5, 0).applyMatrix4(m.matrixWorld).y
+              - new T.Vector3(0, -0.5, 0).applyMatrix4(m.matrixWorld).y).toFixed(4) });
+      return JSON.stringify({
+        ojos: d(CARA.ojos, CARA.texO, CARA_OJOS_N[CARA.frameO]),
+        boca: d(CARA.boca, CARA.texB, CARA_BOCA_N[CARA.frameB]) });
+    },
     /* ── EL PERSONAJE ──
        Lo que hay que poder afirmar: que el GLB entró, que los ocho huesos
        nuevos están, y —sobre todo— que cada hueso MUEVE ALGO. Un hueso mal
@@ -408,6 +462,18 @@ async function arranca(){
       return JSON.stringify({ hueso: n, delante: d > cam.near, dist: +d.toFixed(3),
         x: +((v.x+1)/2).toFixed(3), y: +((v.y+1)/2).toFixed(3) });
     },
+    /* ── LA REGLA ──
+       Proyecta un punto escrito en el espacio del MODELO (el mismo en el que
+       están escritas las medidas de `riggear.py`) a fracciones de pantalla, con
+       el origen arriba a la izquierda. Es lo único que permite decir «la ceja
+       del dibujo cae donde está la ceja del modelo» en vez de mirarlo. */
+    punto: (x, y, z) => { if (!PJ.ok) return 'no';
+      PJ.grupo.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      const v = new T.Vector3(x, y, z).applyMatrix4(PJ.grupo.matrixWorld);
+      const l = v.clone().applyMatrix4(cam.matrixWorldInverse); const d = -l.z;
+      v.project(cam);
+      return JSON.stringify({ d: +d.toFixed(3), x: +((v.x+1)/2).toFixed(4),
+        y: +((1-v.y)/2).toFixed(4) }); },
     luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,
       near: cam.near, fp: PJ.primeraPersona }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },

@@ -107,6 +107,153 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima sexta vuelta (2026-08-31): **BARRIO** — la cara se dibuja, y treinta y dos sprites en una carpeta
+
+Pedido textual: *"buena pero los ojos no deben ser ahí ni redondos, detecta bien los ojos y dibuja le
+textura o incluso podés generar como ojos dibujados y hacer la cara plana o almenos los ojos y las cejas
+y boca plana y ahí metes las texturas y vas cambiando eso es más profesional y generas totalmente todos
+los Sprites de movimiento de boca ojos y expresiones etc y lo guardas en una carpeta para poder realizar
+cualquier animación de cara"*.
+
+Se van los seis huesos de ojo y de párpado de la vuelta anterior y entran **dos placas con textura**:
+una de ojos y cejas y otra de boca, cada una con un **atlas de dieciséis cuadros** generado con
+Higgsfield, recortado y registrado por `herramientas/barrio/hornear_cara.py`. Los **treinta y dos
+sprites sueltos** quedan en `assets/barrio/cara/` con su `cara.json`, que es literalmente lo que se
+pidió: con esa carpeta se arma cualquier animación de cara sin volver a generar nada.
+
+#### POR QUÉ ESTO ES MEJOR Y NO SÓLO DISTINTO
+
+En una cabeza low poly **sin cuenca excavada**, un globo ocular o queda enterrado —medido la vuelta
+pasada, veintidós milímetros adentro del cráneo— o queda saltado, y no hay punto medio. Y aunque
+quedara bien, seis huesos de párpado dan **una** forma de ojo. Un atlas da dieciséis y se le agregan
+más sin tocar el modelo ni el esqueleto. Cambiar de expresión pasa a costar **dos números**: el
+desplazamiento del atlas.
+
+#### LAS ALTURAS DE LA CARA NO SE DEDUCEN DE LA LUMINANCIA, Y ESO COSTÓ LA VUELTA
+
+Para poner una placa hay que saber dónde están los ojos del modelo. Lo hice contando **vértices
+oscuros por franja de altura**, que parece la medición obvia y es la equivocada: en esta cabeza el
+pelo, la ceja pintada y la cuenca son todos oscuros y caen en franjas pegadas. El resultado —ojos en
+1,618 y boca en 1,534— salió con los **ojos dieciocho milímetros arriba** y, sobre todo, con la
+**boca sesenta y seis milímetros arriba**: el dibujo de la boca aparecía a la altura del puente de la
+nariz, o sea pegado debajo de los ojos.
+
+Lo que no se puede confundir es **una regla proyectada sobre la foto de la cara pelada**. Entró
+`__V.punto(x,y,z)`, que lleva un punto escrito en el espacio del modelo —el mismo en el que están
+escritas las medidas de `riggear.py`— a fracciones de pantalla; se apagan las dos placas, se
+fotografía la cabeza y se dibujan las líneas encima. Ahí no hay nada que interpretar: los ojos del
+modelo caen en **1,585–1,615**, el flequillo baja hasta **1,62**, la punta de la nariz está en
+**1,510** y la línea de la boca en **1,468**. Quedaron en 1,589 y 1,480.
+
+#### LA CARA SE APLANA, Y ES LA MITAD DEL PEDIDO
+
+No es una preferencia de estilo. El **arco superciliar** de este modelo sobresale hasta z = 0,175 y
+la placa vive en 0,166: sin aplanar, la ceja de bulto **atraviesa el dibujo** y lo que se ve son dos
+barras de piel cruzando los ojos por la mitad. Se lleva a un casquete suave —plano, pero no un plano:
+una cara perfectamente plana se lee a máscara— y **sólo hacia atrás**, con un mínimo, así que nada de
+lo que ya estaba adentro se mueve.
+
+**Y LA NORMAL TAMBIÉN.** Aplanando sólo la posición, la ceja ya no sobresale pero **sigue sombreada
+como si sobresaliera**, y en una cara eso se ve igual. La normal sale de la pendiente del propio
+casquete: `(2c·x, 0, 1)`.
+
+Tres cosas del aplanado que salieron de medir y no de mirar:
+
+- **La nariz queda afuera de la ventana.** La primera versión cortaba en 1,508 y la punta está en
+  1,510: medido, **cuarenta y tres milímetros de nariz** metidos para adentro.
+- **El pelo tampoco se aplana, y por eso el orden importa.** El flequillo baja hasta 1,654 con
+  z = 0,190, o sea cuarenta y tres milímetros por delante del casquete, y aplanarlo se lo mete adentro
+  de la frente. **Después** de repintar la cara, lo único que sigue oscuro en esa franja *es* el pelo,
+  así que la luminancia alcanza para distinguirlo — antes no, porque la ceja pintada era igual de
+  oscura.
+- **La boca se aplana más hondo que los ojos** (0,140 contra 0,147). Entre el labio y la barbilla la
+  cara llega a z = 0,160 y la placa vivía en 0,160 con las esquinas arqueadas en 0,144, o sea
+  **detrás** de la cara.
+
+#### EL REPINTADO ESTABA CORTANDO EN EL SITIO EQUIVOCADO
+
+Los ojos y las cejas del modelo están **pintados en la textura**, así que dejándolos cada expresión
+sale con un segundo par de ojos debajo. El corte de luminancia estaba en 0,055 y **la cuenca pintada
+llega a 0,30**: medido franja por franja, en la banda de los ojos la piel da 0,63 y lo pintado va de
+0,004 a 0,30 — o sea que hay un hueco enorme entre las dos cosas y el corte estaba metido adentro de
+lo pintado. Con 0,055 quedaban dos ojeras puestas debajo del dibujo.
+
+#### LAS SEIS FOTOS SALÍAN IDÉNTICAS, Y NO ERA DEL DIBUJO
+
+El defecto más caro de la vuelta, y la parte que vale anotar es **cómo se encontró**. Fotografiando
+seis expresiones, las seis salían pixel por pixel iguales y la boca no aparecía nunca. Descarté
+oclusión midiendo: con `depthTest` apagado la imagen **no cambia en un solo píxel**, así que la
+barbilla no estaba tapando nada. Descarté la textura: `diagCara()` decía que los dos atlas estaban
+decodificados, que el material era el mismo objeto y que la matriz de la textura llevaba el
+desplazamiento puesto — pero **el desplazamiento que llevaba no era el que la sonda había pedido**.
+
+Ahí quedó claro: la sonda escribía la expresión y **el cuadro siguiente la cinemática la pisaba**,
+porque el plano B maneja la cara entera —apertura, mirada, cansancio y mandíbula— en cada vuelta del
+bucle. Con `CONGELADO` la simulación no avanza, pero el bucle sigue dibujando y sigue llamando a
+`pon(t)`.
+
+La solución no es un atajo de sonda: es que **la cara tenga dueño**. `GESTO.libre` dice que alguien
+más la está manejando, y mientras esté puesto la cinemática no la escribe. Es lo mismo que ya hizo
+falta con `FUEGO_ON` contra el parpadeo de la fogata en LEMI, con la agachada de la música en LEMI y
+con la mezcla de animación durante el grito de RECREO: **una línea que corre todos los cuadros gana
+siempre contra una que corre una vez.**
+
+Y de paso: la sonda pasó a empujar `GESTO` y no `ponOjos()` directo. Una sonda que escribe el estado
+por un camino que el juego no usa no está midiendo el juego.
+
+#### EL HORNEADO: TRES COSAS QUE HAY QUE HACER BIEN
+
+1. **El fondo se saca por relleno desde el borde y no por umbral de brillo.** El blanco de afuera y el
+   blanco de **adentro del ojo** son el mismo blanco: con un umbral se va la esclerótica junto con el
+   fondo y quedan dos anillos huecos. Y lo que no se alcanza desde el borde queda **opaco del todo**;
+   mezclando el alfa con la luminancia, el blanco del ojo quedaba al 55 % y sobre la piel se veía
+   beige — o sea un ojo sin esclerótica. El suavizado del contorno se hace después, difuminando la
+   máscara un píxel, que es donde hace falta y en ningún otro sitio.
+2. **Cada cuadro se registra, y es lo único que separa un atlas de una hoja de dibujos.** Los dieciséis
+   pares no están en el mismo sitio ni miden lo mismo —medido, el centro se corre treinta píxeles de
+   columna a columna— y un parpadeo con los ojos corridos tres milímetros se ve como un tic. **La
+   escala es la misma para los dieciséis**: escalando cada cuadro a su propia caja, una boca cerrada
+   —que es una raya— se agranda hasta el ancho de una boca abierta y al hablar la cara late. Lo único
+   que se corrige por cuadro es el centro. Y en los ojos la caja de registro **excluye las cejas**,
+   que suben y bajan a propósito: se busca el hueco vertical más grande de la tinta y se registra por
+   lo de abajo.
+3. **La grilla se mide, no se supone.** El generador no deja las celdas donde uno se las imagina: acá
+   el paso es de 481 píxeles y no de 512, y cortando de a 512 el último cuadro sale partido al medio.
+
+Los dos atlas van **cuantizados a 32 colores** (`FASTOCTREE`, que `MEDIANCUT` no acepta RGBA) y
+achicados a 448×336 y 384×336: en el primer plano la cabeza mide unos ciento cincuenta píxeles de alto,
+así que un cuadro de 112 alcanza y sobra, y el dibujo tiene tres colores. **67 KB los dos.** Los
+sprites sueltos de la carpeta se quedan grandes, que para eso están.
+
+#### DOS DETALLES DE LA PLACA
+
+- **Va con `alphaTest` y no con transparencia.** Un material transparente no escribe profundidad, así
+  que la placa de la boca y la de los ojos se dibujarían en el orden equivocado contra la nariz. Es la
+  misma corrección que las cercas de piquetes.
+- **Y sin mipmaps.** Un atlas con mipmaps mezcla el cuadro de al lado en cuanto la cara se aleja, y en
+  una cara eso es un ojo con la ceja de otra expresión encima.
+- **El ancho es lo único que se elige; el alto sale de la celda.** Los atlas tienen celdas de 112×84 y
+  de 96×84: una placa con otra proporción estira el dibujo, y un ojo estirado no se lee a estilo sino
+  a error. La cara mide 0,18 de oreja a oreja a la altura de los ojos y la tinta ocupa el 78,6 % de la
+  celda, así que 0,158 deja el par de ojos en 0,124 — dos tercios de la cara.
+- **La mandíbula sigue siendo un hueso.** El sprite dice qué forma tiene la boca y el hueso le da el
+  movimiento del mentón: con sólo el sprite, hablar se ve como una calcomanía que cambia; con sólo el
+  hueso, como alguien que abre la boca sin labios.
+
+#### MEDIDO AL CERRAR
+
+**28 huesos · 4.916 vértices · 9.221 triángulos** — exactamente los mismos que antes de esta vuelta:
+las dos placas son sesenta y cuatro triángulos y la geometría de los ojos y los párpados que se fueron
+los devolvió. Las **seis expresiones
+fotografiadas y distintas** (neutro · sonrisa · cerrado · sorpresa · enojo · feliz), con el cuadro del
+atlas verificado por nombre en cada una. La cinemática, corrida de punta a punta: la cara pasa de
+`cerrado` a `der` a `cansado` y de vuelta a `cerrado`, y la boca de `cerrada` a `entreabierta`, con la
+mandíbula acompañando (0 → 0,095 rad). Cara aplanada: **210 vértices, el que más entró 16,7 mm**;
+cara limpiada: **123 vértices repintados**. Caminata de verdad por tres calles —una de adentro en cada sentido y la
+del borde—: **109,3 · 136,3 · 109,3 m y 0 cuadros dentro de una casa**. HUD sin un solo solapamiento. **254 llamadas de dibujo** con 16
+cuadras a la vista. **0 NaN** y `window.__errs` vacío en las catorce corridas. El HTML pasó de 618 a
+**660 KB**, y esos 42 son los dos atlas en base64.
+
 ### Sexagésima quinta vuelta (2026-08-30): **BARRIO** — un personaje generado, riggeado a mano en la cara, y el cuerpo en primera persona
 
 Pedido textual: *"puedes generar con highsfield un modelo 3D y animarlo ... necesito que tenga huesos en

@@ -34,21 +34,34 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 # ── LAS MEDIDAS, TODAS MEDIDAS SOBRE EL MODELO Y NO ELEGIDAS ──
 # El ojo sale de promediar los vértices oscuros de la ventana de la cara; el
 # frente de la cara, del perfil de `z` máximo por altura.
-# EL OJO SE ENCONTRO CONTANDO VERTICES OSCUROS POR FRANJA DE ALTURA, y esa
-# cuenta corrigio el primer intento: promediando todos los vertices oscuros de
-# la cara salia y=1,646, y ahi lo que hay son las CEJAS. El histograma muestra
-# dos grupos separados por un hueco -uno en 1,575..1,610 y otro en 1,635..1,665-
-# y el de abajo es el de los ojos. Con el valor promediado, los dos globos
-# quedaban cuatro centimetros por encima de las manchas pintadas.
-OJO_X, OJO_Y = 0.0435, 1.6060
-# EL OJO VA GRANDE PORQUE LA CABEZA ES GRANDE. Esta cabeza mide treinta y cinco
-# centimetros -es un personaje estilizado, no una persona- asi que un globo de
-# radio anatomico (1,2 cm) se lee a alfiler: medido en la ampliacion, dos puntos
-# de tres pixeles perdidos en la cuenca. El radio va escalado con la cabeza.
-OJO_R, PARP_R = 0.0166, 0.0184
-# la cara llega a z=0,1651 en esa franja: el globo asoma 2,6 mm y nada mas
-OJO_Z = 0.1651 - OJO_R + 0.0030
+# ── LAS DOS PLACAS DE LA CARA ──
+# Los ojos, las cejas y la boca dejan de ser geometria y pasan a ser DIBUJO: dos
+# placas con textura pegadas a la cara, cada una con su atlas de dieciseis
+# cuadros. Es como se hace una cara estilizada en cualquier juego, y aca ademas
+# resuelve de raiz lo que no se podia resolver con volumen: en una cabeza low
+# poly SIN CUENCA, un globo ocular o queda enterrado -medido, veintidos
+# milimetros adentro- o queda saltado, y no hay punto medio.
+# LAS ALTURAS NO SE DEDUCEN DE LA LUMINANCIA: SE MIDEN EN LA PANTALLA. Contar
+# vertices oscuros por franja da la respuesta equivocada, y costo una vuelta —
+# devolvia los ojos en 1,618 cuando estan en 1,600, porque en esta cabeza el
+# pelo, la ceja PINTADA y la cuenca son todos oscuros y caen en franjas
+# pegadas. Lo que no se puede confundir es una regla proyectada sobre la foto
+# de la cara pelada (`__V.punto(x,y,z)`): ahi se ve que los ojos del modelo
+# caen en 1,585-1,615, el flequillo baja hasta 1,62, la punta de la nariz esta
+# en 1,510 y la linea de la boca en 1,468.
+OJOS_Y, OJOS_Z = 1.5890, 0.1660
+BOCA_Y, BOCA_Z = 1.4800, 0.1680
 MAND_Y, MAND_Z = 1.5850, -0.0250      # la bisagra, a la altura de la oreja
+
+# ── LA CARA SE APLANA, Y ES LA MITAD DEL PEDIDO ──
+# «hacer la cara plana o almenos los ojos y las cejas y boca plana». No es una
+# preferencia de estilo: el arco superciliar de este modelo sobresale hasta
+# z=0,175 y la placa vive en 0,166, asi que SIN APLANAR la ceja de bulto
+# atraviesa el dibujo y lo que se ve son dos barras de piel cruzando los ojos.
+# Se lleva a un casquete suave —plano, pero no un plano: una cara perfectamente
+# plana se lee a mascara— y solo hacia ATRAS, con un minimo, asi que nada de lo
+# que ya estaba adentro se mueve.
+APL_CURVA = 1.30
 
 
 def esfera(cx, cy, cz, rx, ry, rz, seg=10, ani=7, t0=0.0, t1=np.pi):
@@ -107,9 +120,12 @@ def main():
     padre_de = glb.arbol(js)
 
     def nuevo_hueso(nombre, papa, p):
-        """Un hueso hijo con bind sin rotación en `p` (metros, espacio de malla)."""
+        """Un hueso hijo con bind sin rotacion en `p` (metros, espacio de malla).
+        LA LISTA DE BINDS CRECE con cada hueso nuevo: `caraBoca` cuelga de
+        `mandibula`, que tambien es nueva, y buscando el padre solo entre los
+        veinticuatro originales el indice se sale del array."""
         kp = nom.index(papa)
-        Wp = Wm[kp]
+        Wp = WT[kp]
         L = np.linalg.inv(Wp) @ np.array([[1,0,0,p[0]],[0,1,0,p[1]],[0,0,1,p[2]],[0,0,0,1]])
         nodos.append({'name': nombre,
                       'translation': [float(L[0,3]), float(L[1,3]), float(L[2,3])],
@@ -118,6 +134,7 @@ def main():
         nodos[joints[kp]].setdefault('children', []).append(i)
         joints.append(i); nom.append(nombre)
         W = np.eye(4); W[:3, 3] = p
+        WT.append(W)
         return len(joints) - 1, W
 
     def _quat(R):
@@ -135,17 +152,14 @@ def main():
         s = np.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2
         return ((R[0,2]+R[2,0])/s, (R[1,2]+R[2,1])/s, 0.25*s, (R[1,0]-R[0,1])/s)
 
+    WT = [Wm[k] for k in range(len(Wm))]     # los binds, y crece
     Wnuevos = []
     HUESOS = {}
     for nb, pa, p in [
-        ('ojoI',     'Head',    ( OJO_X, OJO_Y, OJO_Z)),
-        ('ojoD',     'Head',    (-OJO_X, OJO_Y, OJO_Z)),
-        ('parpSupI', 'Head',    ( OJO_X, OJO_Y, OJO_Z)),
-        ('parpInfI', 'Head',    ( OJO_X, OJO_Y, OJO_Z)),
-        ('parpSupD', 'Head',    (-OJO_X, OJO_Y, OJO_Z)),
-        ('parpInfD', 'Head',    (-OJO_X, OJO_Y, OJO_Z)),
-        ('mandibula','Head',    (0.0, MAND_Y, MAND_Z)),
-        ('mochila',  'Spine01', (0.0, 1.2000, -0.1000))]:
+        ('mandibula','Head',      (0.0, MAND_Y, MAND_Z)),
+        ('caraOjos', 'Head',      (0.0, OJOS_Y, OJOS_Z)),
+        ('caraBoca', 'mandibula', (0.0, BOCA_Y, BOCA_Z)),
+        ('mochila',  'Spine01',   (0.0, 1.2000, -0.1000))]:
         k, W = nuevo_hueso(nb, pa, p)
         HUESOS[nb] = k; Wnuevos.append(W)
 
@@ -162,29 +176,6 @@ def main():
     def sRGB(h):
         c = np.array([(h >> 16 & 255), (h >> 8 & 255), (h & 255)], np.float64) / 255.0
         return np.where(c <= 0.04045, c/12.92, ((c+0.055)/1.055)**2.4).astype(np.float32)
-
-    for s, suf in ((1, 'I'), (-1, 'D')):
-        cx = s * OJO_X
-        # el globo, el iris y la pupila cuelgan del hueso del OJO: girando ese
-        # hueso la mirada se mueve sobre la esfera por construcción
-        piezas.append((*esfera(cx, OJO_Y, OJO_Z, OJO_R, OJO_R, OJO_R, 10, 7), sRGB(0xb9bcc4), 'ojo'+suf))
-        # EL IRIS Y LA PUPILA VAN APENAS SALIDOS DEL GLOBO, no clavados en su
-        # superficie. Con la pupila terminando por dentro del globo, lo que se ve
-        # en el centro del ojo es la ESCLEROTICA asomando por delante de ella:
-        # medido en la ampliacion, un punto claro en el medio del iris, o sea el
-        # ojo dado vuelta. Cada disco termina un dos por ciento mas afuera que el
-        # anterior y el orden queda garantizado por la geometria y no por el
-        # orden de dibujo.
-        piezas.append((*esfera(cx, OJO_Y, OJO_Z + OJO_R*0.78, OJO_R*0.60, OJO_R*0.60, OJO_R*0.24, 10, 5),
-                       sRGB(0x35505c), 'ojo'+suf))
-        piezas.append((*esfera(cx, OJO_Y, OJO_Z + OJO_R*0.86, OJO_R*0.30, OJO_R*0.30, OJO_R*0.18, 9, 4),
-                       sRGB(0x08090b), 'ojo'+suf))
-        # los párpados: casquetes de una esfera un pelo más grande y concéntrica,
-        # así sobresalen del globo y hacen el bulto del párpado por construcción
-        piezas.append((*esfera(cx, OJO_Y, OJO_Z, PARP_R, PARP_R, PARP_R, 10, 4, 0.0, np.pi*0.52),
-                       sRGB(0xc39a80), 'parpSup'+suf))
-        piezas.append((*esfera(cx, OJO_Y, OJO_Z, PARP_R*0.99, PARP_R*0.99, PARP_R*0.99, 10, 4, np.pi*0.48, np.pi),
-                       sRGB(0xbb9078), 'parpInf'+suf))
 
     # ── EL TAPON DEL CUELLO ──
     # En primera persona la cabeza se achica a la centesima parte, y una cabeza
@@ -256,12 +247,63 @@ def main():
     # Los ojos del modelo son dos manchas negras en la textura, y el globo nuevo
     # no las tapa entera: alrededor queda un borde negro que se lee a ojera. Se
     # llevan al color de la piel oscurecido, que es lo que hace una cuenca.
+    # LA CARA SE LIMPIA ENTERA. Los ojos, las cejas y la boca del modelo estan
+    # PINTADOS en la textura, y ahora los dibuja la placa: dejandolos, cada
+    # expresion sale con un segundo par de ojos debajo. Se repinta todo lo oscuro
+    # de la franja de la cara con el color de la piel, un poco mas oscuro para
+    # que siga habiendo cuenca.
     piel = np.array([0.713, 0.460, 0.326], np.float32)
-    manch = ((P[:, 1] > 1.582) & (P[:, 1] < 1.634) & (P[:, 2] > 0.08)
-             & (np.abs(P[:, 0]) < 0.10)
-             & (C @ np.array([0.299, 0.587, 0.114], np.float32) < 0.03))
-    C[manch] = piel * 0.72
-    print('mancha del ojo repintada: %d vértices' % manch.sum())
+    lum = C @ np.array([0.299, 0.587, 0.114], np.float32)
+    # EL CORTE ESTABA EN 0,055 Y LA CUENCA LLEGA A 0,30: medido franja por
+    # franja, en la banda de los ojos la piel da 0,63 y lo pintado va de 0,004 a
+    # 0,30, o sea que hay un hueco enorme entre las dos cosas y el corte estaba
+    # metido adentro de lo pintado. Con 0,055 quedaban dos ojeras puestas.
+    manch = np.zeros(len(P), bool)
+    for y0, y1, xm, zm in ((1.545, 1.628, 0.102, 0.095),     # ojos y cejas
+                           (1.428, 1.522, 0.072, 0.090)):    # boca
+        manch |= ((P[:, 1] > y0) & (P[:, 1] < y1) & (P[:, 2] > zm)
+                  & (np.abs(P[:, 0]) < xm) & (lum < 0.30))
+    C[manch] = piel * np.float32(0.86)
+    print('cara limpiada: %d vértices repintados' % manch.sum())
+
+    # ── 3c. Y LA CARA SE APLANA DONDE VAN LAS PLACAS ──
+    # Solo hacia atrás (`minimum`): así el casquete no puede inflar nada, y todo
+    # lo que ya estaba por dentro se queda donde estaba. La nariz queda AFUERA
+    # de las dos ventanas a propósito — es lo único de esta cara que tiene que
+    # seguir teniendo bulto.
+    # EL PELO NO SE APLANA, y por eso esto va DESPUÉS de repintar: el flequillo
+    # baja hasta 1,654 con z=0,190, o sea cuarenta y tres milímetros por delante
+    # del casquete, y aplanarlo se lo mete adentro de la frente. Después del
+    # repintado lo único que sigue oscuro en esta franja ES el pelo, así que la
+    # luminancia alcanza para distinguirlo — antes no, porque la ceja pintada
+    # era igual de oscura.
+    lum = C @ np.array([0.299, 0.587, 0.114], np.float32)
+    apl = np.zeros(len(P), bool)
+    lim = np.zeros(len(P), np.float32)
+    # LA BOCA SE APLANA MÁS HONDO QUE LOS OJOS, y ése fue el defecto que dejó la
+    # boca invisible: entre el labio y la barbilla la cara llega a z=0,160 y la
+    # placa vivía en 0,160 con las esquinas arqueadas en 0,144, o sea DETRÁS de
+    # la cara. Se veía como que la boca no se dibujaba; lo que pasaba es que
+    # estaba tapada por la propia barbilla.
+    # Y LA COLUMNA DE LA NARIZ QUEDA AFUERA (|x| < 0,026 por encima de 1,492):
+    # la punta está en 1,510 con z=0,181, y aplanarla se la come — cuarenta y
+    # tres milímetros medidos la primera vez.
+    for y0, y1, xm, z0 in ((1.540, 1.665, 0.105, 0.1470),
+                           (1.415, 1.528, 0.078, 0.1400)):
+        l = np.float32(z0) - np.float32(APL_CURVA) * P[:, 0] ** 2
+        v = ((P[:, 1] > y0) & (P[:, 1] < y1) & (np.abs(P[:, 0]) < xm)
+             & (P[:, 2] > 0.060) & (P[:, 2] > l) & (lum > 0.10)
+             & ~((P[:, 1] > 1.492) & (np.abs(P[:, 0]) < 0.026)))
+        lim[v] = l[v]; apl |= v
+    hondo = float((P[apl, 2] - lim[apl]).max()) if apl.any() else 0.0
+    P[apl, 2] = lim[apl]
+    # Y LA NORMAL TAMBIÉN, que si no la ceja sigue estando: la de bulto ya no
+    # sobresale pero sigue sombreada como si sobresaliera, y en una cara eso se
+    # ve igual. La del casquete sale de su propia pendiente: (2c·x, 0, 1).
+    nn = np.stack([2.0 * APL_CURVA * P[apl, 0], np.zeros(apl.sum(), np.float32),
+                   np.ones(apl.sum(), np.float32)], axis=1)
+    N[apl] = nn / np.linalg.norm(nn, axis=1, keepdims=True)
+    print('cara aplanada: %d vértices, el que más entró %.1f mm' % (apl.sum(), hondo * 1000))
 
     # ── 4. A ESCRIBIR ──
     vistas, accs, buf = [], [], bytearray()

@@ -247,7 +247,10 @@ const CINEMA = {
          mirando hacia abajo están el pecho, las correas de la mochila y las
          piernas caminando. La fase del paso es la MISMA que mueve la cámara. */
       AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
-      GESTO.pitch = pit + c.pt; GESTO.yawRel = 0; GESTO.abre = 1; GESTO.parp = 0;
+      if (!GESTO.libre){
+        GESTO.pitch = pit + c.pt; GESTO.yawRel = 0; GESTO.abre = 1;
+        GESTO.autoParp = true; GESTO.expr = 'neutro'; GESTO.bocaExpr = null;
+      }
       ponPersonaje(c.x, c.z, this.yaw0, alturaSuelo(c.x, c.z), true);
       pasoPersonaje(0);
     } else {
@@ -266,25 +269,34 @@ const CINEMA = {
          décimas es un parpadeo, y un parpadeo no dice lo mismo que cerrar los
          ojos. Los dos parpadeos del medio sí son rápidos, y ASIMÉTRICOS —bajan
          en 0,09 s y suben en 0,17—, que es como parpadea alguien.
-         Y esto NO es un truco de dibujo: son cuatro huesos de párpado y dos de
-         ojo que se le agregaron al esqueleto, con su geometría, porque ningún
-         riggeador automático los da. */
-      let abre = suave(1.85, 2.65, u);
-      abre *= 1 - 0.97*(suave(4.10, 4.19, u) - suave(4.19, 4.36, u));
-      abre *= 1 - 0.97*(suave(6.35, 6.44, u) - suave(6.44, 6.62, u));
-      abre *= 1 - suave(7.55, 9.65, u);
-      GESTO.abre = abre; GESTO.parp = 0;
-      /* LA MIRADA SE MUEVE, y es lo que separa a alguien de un maniquí: un ojo
-         humano hace microsacadas todo el tiempo. Los dos ojos comparten el
-         ángulo, así que no pueden bizquear. */
-      GESTO.gy = Math.sin(u*0.71)*0.10 + Math.sin(u*2.3 + 0.7)*0.035;
-      GESTO.gx = Math.sin(u*0.53 + 1.9)*0.05;
-      /* y la mandíbula respira: un primer plano de una cara con la boca clavada
-         se lee a máscara. No habla —no hay nadie a quien hablarle— pero traga y
-         entreabre los labios. */
-      GESTO.boca = Math.max(0, Math.sin(u*0.63 - 0.4)) * 0.16
-                 + Math.max(0, Math.sin(u*2.9)) * 0.05;
-      GESTO.pitch = 0.10; GESTO.yawRel = Math.sin(u*0.41)*0.10;
+         Y la apertura no es un párpado de bulto: es el cuadro del atlas que
+         corresponde —abierto, a medias o cerrado—, que en una cabeza sin cuenca
+         es lo único que se lee.
+         `GESTO.libre` ES LA LLAVE DE LA CARA. Mientras la cinemática corre, la
+         cara es suya y nadie más puede escribirla; la sonda que fotografía las
+         treinta y dos expresiones la toma prestada poniendo esa marca. Sin eso,
+         la sonda escribe la expresión y el cuadro siguiente la cinemática la
+         pisa — y las seis fotos salen idénticas, que fue exactamente lo que
+         pasó. */
+      if (!GESTO.libre){
+        let abre = suave(1.85, 2.65, u);
+        abre *= 1 - 0.97*(suave(4.10, 4.19, u) - suave(4.19, 4.36, u));
+        abre *= 1 - 0.97*(suave(6.35, 6.44, u) - suave(6.44, 6.62, u));
+        abre *= 1 - suave(7.55, 9.65, u);
+        GESTO.abre = abre; GESTO.autoParp = false;
+        /* LA MIRADA SE MUEVE, y es lo que separa a alguien de un maniquí. Con
+           la cara dibujada eso es cambiar de cuadro —mira a un lado, al otro,
+           al frente— y no girar un globo. */
+        GESTO.mira = Math.sin(u*0.44);
+        GESTO.expr = u > 7.9 ? 'cansado' : 'neutro';
+        /* y la mandíbula respira: un primer plano de una cara con la boca
+           clavada se lee a máscara. No habla —no hay nadie a quien hablarle—
+           pero traga y entreabre los labios. */
+        GESTO.boca = Math.max(0, Math.sin(u*0.63 - 0.4)) * 0.30
+                   + Math.max(0, Math.sin(u*2.9)) * 0.10;
+        GESTO.bocaExpr = null;
+        GESTO.pitch = 0.10; GESTO.yawRel = Math.sin(u*0.41)*0.10;
+      }
 
       /* el cuerpo camina y la cabeza va donde el esqueleto la ponga: la cámara
          lo LEE en vez de suponerlo, así que el encuadre no puede despegarse de
@@ -293,9 +305,11 @@ const CINEMA = {
       ponPersonaje(hx, hz, this.yaw0, suelo, false);
       pasoPersonaje(0);
       PJ.grupo.updateMatrixWorld(true);
-      const _pO = new T.Vector3(), _pI = new T.Vector3();
-      if (PJ.ok){ PJ.idx['ojoI'].getWorldPosition(_pI); PJ.idx['ojoD'].getWorldPosition(_pO);
-                  _pO.add(_pI).multiplyScalar(0.5); }
+      const _pO = new T.Vector3();
+      /* EL PUNTO DE LOS OJOS ES EL ANCLA DE LA PLACA, no dos huesos de globo
+         ocular: desde que la cara es un dibujo, `caraOjos` ES donde están los
+         ojos, y encima ya viene centrado. */
+      if (PJ.ok && PJ.idx['caraOjos']) PJ.idx['caraOjos'].getWorldPosition(_pO);
       else _pO.set(hx, suelo + OJO, hz);
       const hy = _pO.y;
 

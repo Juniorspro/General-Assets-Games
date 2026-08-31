@@ -76,13 +76,23 @@ function cargaPersonaje(){
     PJ.qpw[b.name] = q;
   }
   PJ.ok = true;
+  armaCaraSprites();
 }
 
 /* ══════════════════════ LAS POSES ══════════════════════
    Todo sale de dos números: la FASE del paso —la misma que mueve la cámara y
    dispara las pisadas, así que el pie y el sonido no se pueden desincronizar— y
    cuánto se está corriendo. */
-const GESTO = { abre: 1, boca: 0, gx: 0, gy: 0, pitch: 0, yawRel: 0, parp: 0 };
+/* `expr` y `bocaExpr` eligen el cuadro del atlas por NOMBRE; `abre` y `boca`
+   son las dos perillas continuas que la cinemática mueve. Los nombres viven en
+   `assets/barrio/cara/cara.json`, o sea que agregar una expresión es agregar un
+   sprite y nombrarlo — no tocar el modelo. */
+const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
+                expr: 'neutro', bocaExpr: null, mira: 0, autoParp: true,
+                /* `libre` = nadie más está manejando la cara. La cinemática la
+                   toma para sí, y quien quiera escribirla mientras tanto —hoy,
+                   la sonda que fotografía las expresiones— la pide con esto. */
+                libre: false };
 
 function poseQuieto(f, t){
   /* respirar es lo único que separa a alguien parado de un maniquí */
@@ -153,18 +163,142 @@ function pasoPersonaje(dt){
   giraH('Head', -incl * 0.45 + py * 0.65 + (and > 0.06 ? Math.sin(f*2) * 0.010 : 0),
         yr * 0.65, (and > 0.06 ? Math.cos(f) * 0.018 : 0));
 
-  /* ── LA CARA ──
-     Los seis huesos que ningún riggeador automático da. El párpado de arriba
-     cubre el hemisferio de su polo: girándolo un ángulo positivo el borde queda
-     por DEBAJO del eje de la pupila, o sea que tapa; abierto es negativo. */
-  const a = cl(GESTO.abre * (1 - GESTO.parp), 0, 1);
-  giraH('parpSupI', mez(0.62, -0.30, a), 0, 0);
-  giraH('parpSupD', mez(0.62, -0.30, a), 0, 0);
-  giraH('parpInfI', mez(-0.30, 0.26, a), 0, 0);
-  giraH('parpInfD', mez(-0.30, 0.26, a), 0, 0);
-  giraH('ojoI', GESTO.gx, GESTO.gy, 0);
-  giraH('ojoD', GESTO.gx, GESTO.gy, 0);
-  giraH('mandibula', GESTO.boca * 0.34, 0, 0);
+  /* la mandíbula acompaña a la boca dibujada: el sprite dice QUÉ forma tiene la
+     boca y el hueso le da el movimiento del mentón. Con sólo el sprite, hablar
+     se ve como una calcomanía que cambia; con sólo el hueso, como alguien que
+     abre la boca sin labios. */
+  giraH('mandibula', GESTO.boca * 0.26, 0, 0);
+  pasoCaraSprites(dt);
+}
+
+/* ══════════════════════ LA CARA DIBUJADA ══════════════════════
+   Los ojos, las cejas y la boca NO son geometría: son dos placas con textura
+   pegadas a la cara, cada una con un atlas de dieciséis cuadros generados y
+   registrados con `herramientas/barrio/hornear_cara.py`.
+
+   POR QUÉ, Y ES LA DECISIÓN DE FONDO DE ESTA VUELTA: en una cabeza low poly SIN
+   CUENCA EXCAVADA un ojo de volumen o queda enterrado —medido, veintidós
+   milímetros adentro del cráneo, con la sonda diciendo que estaba en cuadro— o
+   queda saltado, y no hay punto medio. Y aunque quedara bien, seis huesos de
+   párpado dan UNA forma de ojo; un atlas da dieciséis expresiones y se le
+   agregan más sin tocar el modelo.
+
+   Y LAS PLACAS SE CURVAN. Una cara es convexa: un rectángulo plano de dieciséis
+   centímetros pegado a una cabeza de trece de radio se hunde centímetro y medio
+   en las puntas — o sea que las cejas quedarían adentro del cráneo. La placa se
+   arquea con la misma flecha que la cabeza y por eso apoya en todo su ancho. */
+const CARA = { ojos: null, boca: null, texO: null, texB: null,
+               t: 0, prox: 2.4, parp: -1, frameO: -1, frameB: -1 };
+
+function placaCara(anchoM, altoM, flechaX, flechaY){
+  /* una rejilla de 5×5 arqueada hacia atrás en las dos direcciones */
+  const N = 4, pos = [], uv = [], idx = [];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++){
+    const u = i/N, v = j/N;
+    const x = (u - 0.5) * anchoM, y = (0.5 - v) * altoM;
+    const k = (u - 0.5) * 2, m = (0.5 - v) * 2;
+    pos.push(x, y, -(k*k*flechaX + m*m*flechaY));
+    uv.push(u, 1 - v);
+  }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++){
+    const a = j*(N+1) + i;
+    idx.push(a, a+N+1, a+1, a+1, a+N+1, a+N+2);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function texAtlas(b64){
+  const im = new Image();
+  const t = new T.Texture(im);
+  t.colorSpace = T.SRGBColorSpace;
+  /* SIN MIPMAPS Y CON REPETICIÓN DE UN CUARTO: un atlas con mipmaps mezcla el
+     cuadro de al lado en cuanto la cara se aleja, y en una cara eso es un ojo
+     con la ceja de otra expresión encima. */
+  t.generateMipmaps = false;
+  t.minFilter = T.LinearFilter; t.magFilter = T.LinearFilter;
+  t.repeat.set(0.25, 0.25);
+  im.onload = () => { t.needsUpdate = true; };
+  im.src = 'data:image/png;base64,' + b64;
+  return t;
+}
+
+function armaCaraSprites(){
+  if (CARA.ojos || !PJ.ok) return;
+  const anO = PJ.idx['caraOjos'], anB = PJ.idx['caraBoca'];
+  if (!anO || !anB) return;
+  CARA.texO = texAtlas(CARA_OJOS_B64);
+  CARA.texB = texAtlas(CARA_BOCA_B64);
+  /* ALFA POR CORTE Y NO POR TRANSPARENCIA: un material transparente no escribe
+     profundidad, así que la placa de la boca y la de los ojos se dibujarían en
+     el orden equivocado contra la nariz. Es la misma corrección que las cercas
+     de piquetes. */
+  const mO = new T.MeshPhongMaterial({ map: CARA.texO, alphaTest: 0.45,
+                                       shininess: 6, specular: 0x101216 });
+  const mB = new T.MeshPhongMaterial({ map: CARA.texB, alphaTest: 0.45,
+                                       shininess: 6, specular: 0x101216 });
+  /* ── LAS DOS MEDIDAS SALEN DE LA PROPORCIÓN DE LA CELDA, NO DEL GUSTO ──
+     El atlas de los ojos tiene celdas de 112×84 y el de la boca de 96×84: una
+     placa con otra proporción estira el dibujo, y un ojo estirado no se lee a
+     estilo sino a error. Lo que se elige es UN número —el ancho— y el alto sale
+     de la celda. Y el ancho se elige midiendo: la cara mide 0,18 de oreja a
+     oreja a la altura de los ojos, y la tinta ocupa el 78,6 % de la celda, así
+     que 0,158 deja el par de ojos en 0,124 — dos tercios de la cara, que es lo
+     que mide un par de ojos. */
+  CARA.ojos = new T.Mesh(placaCara(0.158, 0.158 * 84 / 112, 0.019, 0.008), mO);
+  CARA.boca = new T.Mesh(placaCara(0.100, 0.100 * 84 / 96, 0.008, 0.004), mB);
+  CARA.ojos.frustumCulled = false; CARA.boca.frustumCulled = false;
+  anO.add(CARA.ojos); anB.add(CARA.boca);
+  ponOjos('neutro'); ponBoca('cerrada');
+}
+
+function ponOjos(n){
+  const i = CARA_OJOS_N.indexOf(n);
+  if (i < 0 || i === CARA.frameO || !CARA.texO) return;
+  CARA.frameO = i;
+  CARA.texO.offset.set((i % 4) * 0.25, 0.75 - Math.floor(i / 4) * 0.25);
+}
+function ponBoca(n){
+  const i = CARA_BOCA_N.indexOf(n);
+  if (i < 0 || i === CARA.frameB || !CARA.texB) return;
+  CARA.frameB = i;
+  CARA.texB.offset.set((i % 4) * 0.25, 0.75 - Math.floor(i / 4) * 0.25);
+}
+
+/* ── EL PARPADEO ES ASIMÉTRICO Y NO PERIÓDICO ──
+   Un parpadeo baja en menos de una décima y sube en dos, y no cae cada tantos
+   segundos exactos: con un período fijo se lee a luz que titila. */
+function pasoCaraSprites(dt){
+  if (!CARA.ojos) return;
+  CARA.t += dt;
+  let abre = cl(GESTO.abre, 0, 1);
+  if (GESTO.autoParp){
+    CARA.prox -= dt;
+    if (CARA.prox <= 0 && CARA.parp < 0){ CARA.parp = 0; CARA.prox = azr(2.6, 6.4); }
+    if (CARA.parp >= 0){
+      CARA.parp += dt;
+      const k = CARA.parp;
+      abre = Math.min(abre, k < 0.09 ? 1 - k/0.09 : (k < 0.27 ? (k-0.09)/0.18 : 1));
+      if (k > 0.30) CARA.parp = -1;
+    }
+  }
+  /* de la apertura al cuadro: entero, a medias o cerrado */
+  let n;
+  if (abre < 0.22) n = 'cerrado';
+  else if (abre < 0.62) n = 'medio';
+  else if (GESTO.expr && GESTO.expr !== 'neutro') n = GESTO.expr;
+  else n = GESTO.mira < -0.35 ? 'izq' : (GESTO.mira > 0.35 ? 'der' : 'neutro');
+  ponOjos(n);
+
+  /* y la boca: la expresión manda, y si no hay, la abertura */
+  const b = cl(GESTO.boca, 0, 1);
+  ponBoca(GESTO.bocaExpr ? GESTO.bocaExpr
+        : (b < 0.12 ? 'cerrada' : (b < 0.38 ? 'entreabierta'
+        : (b < 0.70 ? 'a' : 'grande'))));
 }
 
 /* ── DÓNDE SE PLANTA ──
