@@ -93,12 +93,17 @@ const postMat = new T.ShaderMaterial({
        LOS TRES ARRANCAN EN CERO Y EL JUEGO NO PAGA NADA: el `if` de abajo deja
        una sola muestra por píxel mientras no haya cinemática. */
     texH: { value: null },
-    dof:  { value: 0 }, cara: { value: 0 }, abe: { value: 0 }, asp: { value: 2 }
+    dof:  { value: 0 }, cara: { value: 0 }, abe: { value: 0 }, asp: { value: 2 },
+    /* `dofS` es el desenfoque del SUJETO, y existe para el plano de las
+       pastillas: un enfoque que se hace no es el fondo que se aclara, es lo que
+       uno mira lo que se resuelve. Con un solo `dof` el fondo se desenfoca y el
+       sujeto nace nítido, que es exactamente lo que un rack focus no hace. */
+    dofS: { value: 0 }
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: `
     uniform sampler2D tex, texH;
-    uniform float sat, bri, con, pos, vig, grano, t, agua, dof, cara, abe, asp;
+    uniform float sat, bri, con, pos, vig, grano, t, agua, dof, cara, abe, asp, dofS;
     varying vec2 vUv;
     float ruido(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     /* ── EL DESENFOQUE DEL FONDO ──
@@ -145,11 +150,25 @@ const postMat = new T.ShaderMaterial({
          LINEAL, así que mezclarlos después de convertir a sRGB daría un borde
          más claro de lo que corresponde alrededor de la silueta. */
       if (cara > 0.5){
-        vec4 h = texture2D(texH, uv);
+        /* EL SUJETO DESENFOCADO SE MEZCLA POR SU ALFA DESENFOCADO, y por eso la
+           silueta se ablanda sola: un objeto fuera de foco no tiene borde. */
+        vec4 h;
+        if (dofS > 0.002){
+          h = texture2D(texH, uv); float w = 1.0;
+          for (int i = 0; i < 8; i++){
+            float ang = float(i) * 2.39996;
+            float rr = dofS * 0.017 * sqrt((float(i) + 0.5) / 8.0);
+            h += texture2D(texH, uv + vec2(cos(ang)*rr/asp, sin(ang)*rr)); w += 1.0;
+          }
+          h /= w;
+        } else h = texture2D(texH, uv);
         if (h.a > 0.0){
-          float hr = texture2D(texH, uv + dd * ka).r;
-          float hb = texture2D(texH, uv - dd * ka).b;
-          c = mix(c, vec3(hr, h.g, hb), h.a);
+          vec3 hc = h.rgb;
+          if (dofS <= 0.002){
+            hc.r = texture2D(texH, uv + dd * ka).r;
+            hc.b = texture2D(texH, uv - dd * ka).b;
+          }
+          c = mix(c, hc, clamp(h.a, 0.0, 1.0));
         }
       }
       c = pow(max(c, 0.0), vec3(1.0/2.2));          /* lineal -> sRGB */

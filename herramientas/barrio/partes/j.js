@@ -27,8 +27,16 @@
 const suave = (a, b, t) => { const k = cl((t - a) / (b - a), 0, 1); return k*k*(3 - 2*k); };
 const mez = (a, b, k) => a + (b - a) * k;
 
-const CINE_DUR = 27.0;
-const CINE_CORTE = 14.6;          /* el corte entre los dos planos */
+/* ── CUATRO PLANOS Y TRES CORTES ──
+   A · primera persona caminando · S · el plano que lo SIGUE, donde por fin se
+   lo ve caminar entero · B · la cara · P · las pastillas.
+   Los cortes son constantes con nombre y no números sueltos: mover uno movía
+   antes cinco cosas repartidas por el archivo. */
+const CINE_T1  = 7.6;             /* primera persona -> el plano que lo sigue */
+const CINE_T2  = 13.8;            /* el seguimiento -> la cara */
+const CINE_T3  = 24.0;            /* la cara -> las pastillas */
+const CINE_DUR = 32.4;
+const CINE_CORTE = CINE_T2;       /* el plano de la cara cuenta desde acá */
 const CINE_VEL = 1.28;            /* m/s: un paso de madrugada, no una marcha */
 const CINE_ZANC = 0.80;           /* metros por medio paso */
 
@@ -37,12 +45,12 @@ const CINE_ZANC = 0.80;           /* metros por medio paso */
    persona y no a cámara sobre rieles es que la cabeza NO vuelve exactamente al
    mismo sitio: cada tramo deja su propio residuo. */
 const CINE_MIRA = [
-  [0.0,  3.4,  0.00, -0.020],
-  [3.4,  5.8,  0.42,  0.045],    /* una casa a la izquierda */
-  [5.8,  7.3,  0.05, -0.010],
-  [7.3,  9.2, -0.17,  0.300],    /* los cables */
-  [9.2, 10.9, -0.04, -0.330],    /* el charco de la vereda */
-  [10.9, 99.0, 0.02, -0.030]
+  [0.0,  2.1,  0.00, -0.020],
+  [2.1,  3.7,  0.42,  0.045],    /* una casa a la izquierda */
+  [3.7,  4.6,  0.05, -0.010],
+  [4.6,  5.9, -0.17,  0.300],    /* los cables */
+  [5.9,  6.9, -0.04, -0.330],    /* el charco de la vereda */
+  [6.9, 99.0, 0.02, -0.030]
 ];
 
 /* ══════════════════════════ LA CABEZA ══════════════════════════
@@ -149,6 +157,12 @@ function armaLluviaCara(){
 }
 
 /* ══════════════════════════ EL GUION ══════════════════════════ */
+const _pB = new T.Vector3();
+/* [adelante, costado, alto] desde la muñeca. LA MANO SE ADELANTA MÁS QUE EL
+   FRASCO: el hueso está en la muñeca y los dedos llegan quince centímetros más
+   allá, así que un frasco puesto a ocho centímetros queda DETRÁS del puño — y
+   desde la foto eso se ve igual que un frasco que no se dibuja. */
+let FR_OFF = [0.150, 0.010, 0.035];
 const CINEMA = {
   on: false, t: 0, x0: 0, z0: 0, yaw0: 0, adx: 0, adz: 0,
   faseAnt: 0, rayoHecho: false, listo: false,
@@ -156,6 +170,10 @@ const CINEMA = {
   prepara(){
     if (this.listo) return;
     cargaPersonaje(); armaLucesCara(); armaLluviaCara();
+    /* el frasco cuelga del hueso de la mano, así que sólo se puede armar cuando
+       el personaje ya está: si el GLB todavía no llegó, el plano P lo intenta
+       de nuevo en su primer cuadro */
+    cargaFrasco();
     this.listo = true;
   },
 
@@ -210,7 +228,7 @@ const CINEMA = {
     const c = this.cuerpo(t);
     const der = { x: -this.adz, z: this.adx };
 
-    if (t < CINE_CORTE){
+    if (t < CINE_T1){
       /* ═══ PLANO A: PRIMERA PERSONA ═══ */
       LLUCARA.visible = false;
       postMat.uniforms.cara.value = 0;
@@ -250,13 +268,76 @@ const CINEMA = {
       if (!GESTO.libre){
         GESTO.pitch = pit + c.pt; GESTO.yawRel = 0; GESTO.abre = 1;
         GESTO.autoParp = true; GESTO.expr = 'neutro'; GESTO.bocaExpr = null;
-        GESTO.mira = 0; GESTO.miraY = 0;
+        GESTO.mira = 0; GESTO.miraY = 0; GESTO.mano = 0;
       }
       ponPersonaje(c.x, c.z, this.yaw0, alturaSuelo(c.x, c.z), true);
       pasoPersonaje(0);
-    } else {
+      ponFrasco(false);
+
+    } else if (t < CINE_T2){
+      /* ═══ PLANO S: EL PLANO QUE LO SIGUE ═══
+         «haz que el tipo literalmente esté caminando». En primera persona la
+         caminata se DEDUCE del cabeceo, y en el primer plano de la cara ni eso:
+         del cuello para abajo no se ve nada. Acá se lo ve entero —la mochila,
+         los brazos, las piernas, la sombra— y ése es el único plano de la
+         escena en el que la palabra «caminando» se puede comprobar mirando.
+
+         VA DETRÁS Y DE COSTADO Y NO DE FRENTE: de frente el paso casi no se
+         lee, porque las piernas se tapan entre ellas; de tres cuartos por
+         detrás la zancada se abre en el cuadro. */
+      const u = t - CINE_T1, dur = CINE_T2 - CINE_T1;
+      LLUCARA.visible = false;
+      postMat.uniforms.cara.value = 0;
+      postMat.uniforms.dofS.value = 0;
+      capaPersonaje(0); capaFrasco(0);
+      /* un desenfoque suave y no el del primer plano: acá lo que interesa es la
+         figura contra la calle, así que el fondo se ablanda pero se sigue
+         leyendo. Y se cierra un poco a lo largo del plano, que es lo que hace
+         una cámara que se acerca. */
+      postMat.uniforms.dof.value = mez(0.34, 0.20, suave(0, dur, u));
+
+      AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
+      if (!GESTO.libre){
+        /* MELANCÓLICO ES MIRAR AL PISO, no una cara triste: la cabeza va abajo,
+           la mirada baja y la boca cerrada. Y parpadea despacio. */
+        GESTO.pitch = 0.30 + Math.sin(u*0.53)*0.035;
+        GESTO.yawRel = Math.sin(u*0.37 + 0.6)*0.13;
+        GESTO.abre = 1; GESTO.autoParp = true;
+        GESTO.expr = 'cansado'; GESTO.mira = 0; GESTO.miraY = -0.6;
+        GESTO.boca = 0; GESTO.bocaExpr = null; GESTO.mano = 0;
+      }
+      const suelo = alturaSuelo(c.x, c.z);
+      ponPersonaje(c.x, c.z, this.yaw0, suelo, false);
+      pasoPersonaje(0);
+      PJ.grupo.updateMatrixWorld(true);
+      ponFrasco(false);
+
+      /* LA CÁMARA CAMINA CON ÉL Y NO LO PERSIGUE: va enganchada al cuerpo con
+         un desfase fijo, así que lo que se mueve en el cuadro es la calle
+         pasando y no el personaje escapándose. El acercamiento es de la
+         distancia, no del zoom. */
+      const dist = mez(4.35, 2.95, suave(0, dur, u));
+      const lat  = mez(1.35, 0.95, suave(0, dur, u));
+      const cx = c.x - this.adx*dist + der.x*lat;
+      const cz = c.z - this.adz*dist + der.z*lat;
+      /* el temblor de una cámara en mano: tres senos que no son múltiplos, más
+         un resto del propio paso — quien filma también camina */
+      const tem = Math.sin(u*1.31)*0.010 + Math.sin(u*2.17 + 1.2)*0.006;
+      cam.position.set(cx + tem, suelo + 1.42 + Math.sin(u*1.7)*0.012 + c.sy*0.35,
+                       cz + tem*0.6);
+      const ax = c.x - cx, az = c.z - cz;
+      const ay = (suelo + 1.24) - cam.position.y;
+      cam.rotation.set(Math.atan2(ay, Math.hypot(ax, az)),
+                       Math.atan2(-ax, -az),
+                       Math.sin(u*0.83)*0.008);
+      if (Math.abs(cam.fov - 38) > 0.01){ cam.fov = 38; cam.updateProjectionMatrix(); }
+      JUG.x = c.x; JUG.z = c.z;
+
+    } else if (t < CINE_T3){
       /* ═══ PLANO B: LA CARA ═══ */
       const u = t - CINE_CORTE;
+      postMat.uniforms.dofS.value = 0;
+      capaFrasco(1); ponFrasco(false);
       LLUCARA.visible = true; capaPersonaje(1);
       postMat.uniforms.cara.value = 1;
       postMat.uniforms.dof.value = 0.88 + suave(0, 9.0, u)*0.12;
@@ -299,13 +380,18 @@ const CINEMA = {
            medio cerrar es un ojo a medio cerrar— así que con el umbral en 7,9,
            que es después de que `abre` empieza a bajar en 7,55, el cuadro
            `cansado` no se veía NUNCA. */
-        GESTO.expr = u > 6.75 ? 'cansado' : 'neutro';
+        /* MELANCÓLICO NO ES UNA CARA TRISTE PUESTA TODO EL PLANO: entra
+           pesado, después mira alrededor —y ahí es donde las miradas de la
+           segunda hoja tienen algo que hacer— y recién al final se le cae la
+           cara. Con `neutro` desde el primer cuadro, los ojos grandes y
+           redondos se leen a sorpresa, que es lo contrario del plano. */
+        GESTO.expr = u < 2.6 ? 'cansado' : (u > 6.75 ? 'triste' : 'neutro');
         /* y la mandíbula respira: un primer plano de una cara con la boca
            clavada se lee a máscara. No habla —no hay nadie a quien hablarle—
            pero traga y entreabre los labios. */
         GESTO.boca = Math.max(0, Math.sin(u*0.63 - 0.4)) * 0.30
                    + Math.max(0, Math.sin(u*2.9)) * 0.10;
-        GESTO.bocaExpr = null;
+        GESTO.bocaExpr = null; GESTO.mano = 0;
         GESTO.pitch = 0.10; GESTO.yawRel = Math.sin(u*0.41)*0.10;
       }
 
@@ -400,6 +486,108 @@ const CINEMA = {
       LLUCARA.material.uniforms.cen.value.set(hx, hy + 0.25, hz);
       LLUCARA.material.uniforms.camPos.value.copy(cam.position);
       LLUCARA.material.uniforms.t.value = RELOJ.value;
+
+    } else {
+      /* ═══ PLANO P: LAS PASTILLAS ═══
+         «otra vista de cámara desenfocada que después se enfoca en algo que él
+         tiene en la mano». El plano entra CON EL SUJETO FUERA DE FOCO —no sólo
+         el fondo— y el foco se hace encima de lo que él está mirando. Ésa es la
+         diferencia entre un rack focus y un fundido: lo que cambia no es el
+         brillo, es qué cosa del cuadro está resuelta.
+
+         Y SIGUE CAMINANDO. El brazo se levanta mezclado sobre el ciclo de la
+         caminata, así que las piernas no se enteran: lo que se ve es alguien
+         que camina mirándose la mano, que es el plano que se pidió. */
+      const u = t - CINE_T3, dur = CINE_DUR - CINE_T3;
+      if (!FRASCO.ok) cargaFrasco();
+      LLUCARA.visible = true; capaPersonaje(1); capaFrasco(1); ponFrasco(true);
+      postMat.uniforms.cara.value = 1;
+      postMat.uniforms.dof.value = 1.0;
+      /* EL ENFOQUE SE HACE, NO APARECE: 2,6 segundos, y arranca recién en el
+         1,2 — un plano que ya está enfocándose desde el primer cuadro no se lee
+         a plano nuevo, se lee a error del anterior. */
+      postMat.uniforms.dofS.value = 1.0 - suave(1.2, 3.8, u);
+
+      const suelo = alturaSuelo(c.x, c.z);
+      AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
+      if (!GESTO.libre){
+        GESTO.mano = suave(0.0, 1.7, u);
+        GESTO.pitch = 0.20 + 0.30 * GESTO.mano;   /* le baja la vista a la mano */
+        GESTO.yawRel = -0.10 * GESTO.mano;
+        GESTO.abre = 1; GESTO.autoParp = true;
+        GESTO.expr = u > 5.4 ? 'triste' : 'cansado';
+        GESTO.mira = 0; GESTO.miraY = -0.8;
+        GESTO.boca = 0; GESTO.bocaExpr = 'sellada';
+      }
+      ponPersonaje(c.x, c.z, this.yaw0, suelo, false);
+      pasoPersonaje(0);
+      PJ.grupo.updateMatrixWorld(true);
+
+      /* EL FRASCO VA DELANTE DEL PUÑO. Puesto con un desplazamiento en los
+         ejes del hueso quedaba ADENTRO de la mano —medido en la captura, lo
+         único que asomaba era una astilla naranja— porque los ejes locales de
+         un hueso son los que dejó el bind y no significan nada. */
+      const mn = PJ.idx['RightHand'];
+      if (mn && FRASCO.ok){
+        mn.getWorldPosition(_pB);
+        _pB.x += this.adx*FR_OFF[0] + der.x*FR_OFF[1];
+        _pB.z += this.adz*FR_OFF[0] + der.z*FR_OFF[1];
+        _pB.y += FR_OFF[2];
+        ponFrascoMundo(_pB, this.yaw0 + 0.55);
+      }
+      /* EL PUNTO SE LEE DEL MUNDO. Si la cámara apuntara a una posición
+         calculada aparte, el frasco y el encuadre serían dos cuentas distintas
+         y en cuanto el brazo se mueva se separan. */
+      const pf = puntoFrasco() || _pB.set(c.x, suelo + 1.25, c.z);
+      /* LA DISTANCIA SALE DE LA MANO Y NO DEL FRASCO: esta mano estilizada mide
+         veinte centímetros, así que encuadrando sólo el frasco lo que llena el
+         cuadro es el puño. A 0,55 m y con 30 grados el cuadro mide 29 cm: el
+         frasco ocupa el 29 % y la mano entra entera. */
+      const dist = mez(0.56, 0.40, suave(0, dur, u));
+      /* LA CÁMARA MIRA DESDE ARRIBA, y no es una preferencia: a la altura de la
+         mano el fondo del cuadro es SU PROPIA CARA, y como el cuerpo entero va
+         en la capa nítida la cara sale enfocada y se lleva la atención del
+         plano. Bajando la vista treinta grados, detrás de la mano queda el
+         asfalto mojado —capa 0, o sea desenfocado— y lo único resuelto del
+         cuadro es lo que tiene en la mano. */
+      const px = pf.x + this.adx*dist + der.x*0.20;
+      const py = pf.y + 0.32 - 0.04*suave(0, dur, u);
+      const pz = pf.z + this.adz*dist + der.z*0.20;
+      cam.position.set(px + Math.sin(u*1.23)*0.004,
+                       py + Math.sin(u*1.61 + 0.7)*0.003, pz);
+      const ox = pf.x - px, oy = pf.y - py, oz = pf.z - pz;
+      cam.rotation.set(Math.atan2(oy, Math.hypot(ox, oz)),
+                       Math.atan2(-ox, -oz),
+                       0.06 + Math.sin(u*0.71)*0.012);
+      /* TREINTA GRADOS Y NO VEINTISÉIS: a 34 cm el cuadro mide 18 cm de alto, o
+         sea que el frasco de 8,5 ocupa el 47 % y las dos pastillas se cuentan.
+         Con el lente de la cara habría que meterse a 25 cm y ahí la mano tapa
+         el frasco. */
+      if (Math.abs(cam.fov - 30) > 0.01){ cam.fov = 30; cam.updateProjectionMatrix(); }
+      JUG.x = c.x; JUG.z = c.z;
+
+      /* la clave viene de arriba y de costado, como el farol que tiene encima,
+         y el nivel es bajo: es una mano a las tres de la mañana, no un producto
+         en un estudio */
+      /* LA LUZ VA LEJOS Y NO CERCA, y es aritmética: una luz puntual cae con el
+         cuadrado de la distancia, así que la misma intensidad que modela una
+         cara a dos metros QUEMA una mano a ochenta centímetros — medido en la
+         primera captura, el antebrazo salía blanco puro y tapaba el frasco. Se
+         la deja a la misma distancia que en el plano de la cara. */
+      CARA_LUZ.position.set(pf.x - der.x*1.25 + this.adx*0.80, pf.y + 1.45,
+                            pf.z - der.z*1.25 + this.adz*0.80);
+      /* Y MÁS BAJA QUE EN LA CARA: el frasco es plástico brillante con una
+         etiqueta casi blanca, así que con el nivel del retrato el especular lo
+         deja blanco puro y la etiqueta deja de existir. */
+      CARA_LUZ.intensity = 3.4;
+      CARA_REL.position.set(pf.x + this.adx*1.6 + der.x*1.1, pf.y + 1.2,
+                            pf.z + this.adz*1.6 + der.z*1.1);
+      CARA_REL.target.position.copy(pf);
+      CARA_REL.target.updateMatrixWorld();
+
+      LLUCARA.material.uniforms.cen.value.set(pf.x, pf.y + 0.10, pf.z);
+      LLUCARA.material.uniforms.camPos.value.copy(cam.position);
+      LLUCARA.material.uniforms.t.value = RELOJ.value;
     }
 
     /* ── EL NEGRO DE LAS PUNTAS ──
@@ -433,6 +621,9 @@ const CINEMA = {
   limpia(){
     this.on = false;
     escondePersonaje(); capaPersonaje(0);
+    ponFrasco(false); capaFrasco(0);
+    GESTO.mano = 0; GESTO.miraY = 0; GESTO.bocaExpr = null;
+    postMat.uniforms.dofS.value = 0;
     if (LLUCARA) LLUCARA.visible = false;
     postMat.uniforms.cara.value = 0;
     postMat.uniforms.dof.value = 0;

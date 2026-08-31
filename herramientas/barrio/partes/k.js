@@ -125,3 +125,24 @@ function armaPersonaje(buf, mat){
            tri: js.accessors[pr.indices].count / 3,
            vert: js.accessors[pr.attributes.POSITION].count };
 }
+
+/* ── Y UNA MALLA SUELTA, SIN ESQUELETO ──
+   El frasco no tiene huesos: cuelga de la mano. Es el mismo lector —lo único
+   que no hace es armar la `Skeleton`—, y por eso vive acá y no en un segundo
+   lector: un GLB leído por dos caminos distintos es un GLB que un día se va a
+   leer de dos maneras distintas. */
+function armaProp(buf, mat){
+  const { js, acc } = leeGLB(buf);
+  const pr = js.meshes[0].primitives[0];
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(acc(pr.attributes.POSITION), 3));
+  if (pr.attributes.NORMAL)
+    g.setAttribute('normal', new T.BufferAttribute(acc(pr.attributes.NORMAL), 3));
+  if (pr.attributes.COLOR_0)
+    g.setAttribute('color', new T.BufferAttribute(acc(pr.attributes.COLOR_0), 3));
+  g.setIndex(new T.BufferAttribute(acc(pr.indices), 1));
+  const m = new T.Mesh(g, mat);
+  m.frustumCulled = false;
+  return { malla: m, tri: js.accessors[pr.indices].count / 3,
+           vert: js.accessors[pr.attributes.POSITION].count };
+}

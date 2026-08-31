@@ -107,6 +107,105 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima séptima vuelta (2026-08-31): **BARRIO** — la cinemática pasa a cuatro planos, y hay un frasco
+
+Pedido textual: *"puedes hacer más realista todo y tiene que ser un momento melancólico haz que el
+tipo literalmente esté caminando y después agrega otra vista de cámara desenfocada que después se
+enfoca en algo que el tiene en la mano que son unas pastillas hace el frasco generalo"*.
+
+De dos planos a **cuatro**, de 27 segundos a **32,4**: A primera persona · **S el plano que lo sigue**
+· B la cara · **P las pastillas**. Y un frasco de remedios generado con Higgsfield (imagen → 3D),
+horneado a color por vértice y decimado a **1.935 triángulos**.
+
+#### «LITERALMENTE CAMINANDO» ES UN PLANO NUEVO, NO UN AJUSTE
+
+En primera persona la caminata se **deduce** del cabeceo, y en el primer plano de la cara ni eso: del
+cuello para abajo no se ve nada. Así que la palabra «caminando» no se podía comprobar mirando en
+ninguno de los dos planos que había. El plano S lo sigue desde atrás y de costado, con la cámara
+enganchada al cuerpo y acercándose de 4,35 a 2,95 metros: ahí están la mochila, los brazos, las
+piernas y la zancada.
+
+**VA DE TRES CUARTOS POR DETRÁS Y NO DE FRENTE**, y no es gusto: de frente las piernas se tapan entre
+ellas y el paso casi no se lee; de tres cuartos la zancada se abre en el cuadro.
+
+**Y LA CÁMARA CAMINA CON ÉL, no lo persigue.** Enganchada al cuerpo con un desfase fijo, lo que se
+mueve en el cuadro es la calle pasando; persiguiéndolo, lo que se ve es alguien que se escapa. El
+acercamiento es de la distancia y no del zoom, y el temblor son tres senos que no son múltiplos entre
+sí más un resto del propio paso — quien filma también camina.
+
+#### EL PLANO DE LAS PASTILLAS: EL FOCO SE HACE, NO APARECE
+
+Hacía falta un uniforme nuevo. El post ya tenía `dof` —el desenfoque del **fondo**— y con eso solo el
+sujeto nace nítido, que es exactamente lo que un rack focus NO hace. `dofS` desenfoca la capa del
+sujeto y **se mezcla por su alfa desenfocado**, así que la silueta se ablanda sola: un objeto fuera de
+foco no tiene borde. El foco se hace en 2,6 segundos y **arranca recién en el 1,2** — un plano que ya
+está enfocándose desde el primer cuadro no se lee a plano nuevo, se lee a error del anterior.
+
+**Y SIGUE CAMINANDO.** `GESTO.mano` mezcla el brazo derecho sobre el ciclo de la caminata en vez de
+reemplazarlo, así que las piernas no se enteran: lo que se ve es alguien que camina mirándose la mano.
+El brazo mezcla desde **lo que la pose dejó** (`POSE.bdX/bdZ/bdA`) y no desde una copia de la fórmula
+del vaivén: dos sitios que describen el mismo movimiento terminan siempre desincronizados.
+
+#### CUATRO DEFECTOS DE ESE PLANO, Y LOS CUATRO SE MIDIERON
+
+1. **LA Y HACÍA FALTA Y NO ESTABA.** Con giros en X y en Z el brazo baja y se adelanta pero **no
+   cruza**: barridas dieciocho combinaciones, la mano no bajó de **cuarenta centímetros de costado**.
+   Lo que la trae al eje del cuerpo es el giro alrededor de la vertical, y el signo importa — con la Y
+   negativa la mano se va **para atrás** (medido, `adelante −0,25`). Quedó en
+   `[-0,55 · 1,55 · 0,70 · -1,95]`: mano a **1,28 de alto, 36 cm adelante y 13 de costado**.
+2. **EL FRASCO ESTABA ADENTRO DEL PUÑO.** Puesto con un desplazamiento en los ejes del hueso de la
+   mano —que son los que dejó el bind, o sea nada— lo único que asomaba era una astilla naranja, y
+   desde la foto eso se ve igual que un frasco que no se dibuja. La sonda decía `vis: true`,
+   `delante: true`, **30,9 % del alto**: los tres ciertos. Lo que pasaba es que **el hueso está en la
+   muñeca y los dedos llegan quince centímetros más allá**. Ahora el punto se calcula en el MUNDO
+   —«delante» es la dirección en la que camina— y se lo trae al espacio del padre, que es exacto y se
+   corrige solo cuando la mano gira. Sigue colgado del hueso, así que no hay dos cuentas.
+3. **LA LUZ QUEMABA LA MANO.** Una luz puntual cae con el cuadrado de la distancia: la misma
+   intensidad que modela una cara a dos metros deja un antebrazo a ochenta centímetros **blanco puro**
+   —medido en la captura, tapaba el frasco entero—. Y el frasco es plástico brillante con una etiqueta
+   casi blanca, así que además hubo que bajar el especular.
+4. **Y EL FONDO DEL PLANO ERA SU PROPIA CARA.** A la altura de la mano, detrás queda su cabeza; y como
+   el cuerpo entero va en la capa nítida, la cara salía **enfocada** y se llevaba la atención del
+   plano. Bajando la vista treinta grados, detrás de la mano queda el asfalto mojado —capa 0, o sea
+   desenfocado— y lo único resuelto del cuadro es lo que tiene en la mano.
+
+Y las dos pastillas —que van por código, porque una pastilla es una cápsula de doce milímetros y
+generar un modelo para eso sería bajar cincuenta kilobytes para dibujar un poroto— estaban **del lado
+equivocado**: puestas en el +Z local del grupo quedaban detrás del frasco, porque ese eje apunta al
+revés que la cámara del plano. Y sueltas debajo del puño **flotaban**: una pastilla que flota no se lee
+a pastilla que alguien tiene, se lee a error.
+
+#### MELANCÓLICO NO ES UNA CARA TRISTE PUESTA TODO EL PLANO
+
+Con `neutro` desde el primer cuadro, los ojos grandes y redondos del atlas se leen a **sorpresa**, que
+es lo contrario del plano. El arco es: entra pesado (`cansado`), después mira alrededor —y ahí es
+donde las miradas diagonales de la segunda hoja tienen algo que hacer— y recién al final se le cae la
+cara (`triste`). En el plano S mira al piso, que es lo que hace alguien caminando solo a las tres de
+la mañana.
+
+#### EL FRASCO
+
+Generado con `image_to_3d` sobre una foto de producto también generada. **La misma cadena que el
+personaje** —hornear la textura en los vértices, decimar sin UV, base64— y por eso `hornear_frasco.py`
+importa `color_en_vertices` en vez de copiarla: dos horneados que hacen lo mismo terminan divergiendo
+justo en el sitio donde hay que corregir un defecto.
+
+Dos cosas propias: **se escala a tamaño de frasco** (el generador devuelve la malla en una caja de
+lado 2, o sea dos metros: un tacho) y **se para**, midiéndole la caja y llevando su eje más largo a
++Y con la base en el origen. 8,5 cm de alto, 1.935 triángulos, 77 KB en base64.
+
+#### MEDIDO AL CERRAR
+
+Los cuatro planos fotografiados instante por instante: la primera persona bajando por la calle, **el
+plano que lo sigue con el cuerpo entero caminando**, la cara pasando de `cansado` a las miradas y a
+`triste`, y el frasco entrando fuera de foco y resolviéndose. El frasco medido en pantalla: **visible,
+delante de la cámara y del 38 al 41 % del alto del cuadro**, con las dos pastillas al lado. La mano en
+la pose de sostener: **1,279 de alto contra un pecho a 1,200 · 36 cm adelante · 13 de costado**.
+Al terminar, el juego arranca en `juego` con el HUD **sin un solo solapamiento**, y desde ahí se
+caminan dos calles enteras: **109,3 y 109,3 m con 0 cuadros dentro de una casa**. **254 llamadas de
+dibujo** con 16 cuadras a la vista. **0 NaN** y `window.__errs` vacío en las once corridas. El HTML
+pasó de 732 a **829 KB**, y esos 77 son el frasco.
+
 ### Sexagésima sexta vuelta (2026-08-31): **BARRIO** — la cara se dibuja, y treinta y dos sprites en una carpeta
 
 Pedido textual: *"buena pero los ojos no deben ser ahí ni redondos, detecta bien los ojos y dibuja le

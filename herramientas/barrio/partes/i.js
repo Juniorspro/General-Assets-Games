@@ -303,7 +303,8 @@ async function arranca(){
       if (!CINEMA.on) CINEMA.arranca();
       CINEMA.t = t; CINEMA.pon(t);
       cam.updateMatrixWorld(true);
-      return JSON.stringify({ t, modo: MODO, plano: t < CINE_CORTE ? 'A' : 'B',
+      const pl = t < CINE_T1 ? 'A' : (t < CINE_T2 ? 'S' : (t < CINE_T3 ? 'B' : 'P'));
+      return JSON.stringify({ t, modo: MODO, plano: pl,
         cara: postMat.uniforms.cara.value, dof: +postMat.uniforms.dof.value.toFixed(3),
         fov: +cam.fov.toFixed(1),
         cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
@@ -474,6 +475,45 @@ async function arranca(){
       v.project(cam);
       return JSON.stringify({ d: +d.toFixed(3), x: +((v.x+1)/2).toFixed(4),
         y: +((1-v.y)/2).toFixed(4) }); },
+    /* dónde cae la mano derecha RESPECTO DEL PECHO, que es lo único que dice si
+       está sosteniendo algo delante o si le quedó colgando al costado */
+    manoDer: () => { if (!PJ.ok) return 'no';
+      PJ.grupo.updateMatrixWorld(true);
+      const h = new T.Vector3(), p = new T.Vector3(), a = new T.Vector3();
+      PJ.idx['RightHand'].getWorldPosition(h);
+      PJ.idx['Spine01'].getWorldPosition(p);
+      PJ.idx['caraOjos'].getWorldPosition(a);
+      const d = h.clone().sub(p);
+      return JSON.stringify({ mano: +GESTO.mano.toFixed(2),
+        alto: +h.y.toFixed(3), pecho: +p.y.toFixed(3), ojos: +a.y.toFixed(3),
+        adelante: +(d.x*CINEMA.adx + d.z*CINEMA.adz).toFixed(3),
+        costado: +(d.x*-CINEMA.adz + d.z*CINEMA.adx).toFixed(3) }); },
+    manoA: (a, b, c, d) => { MANO_A = [a, b, c, d];
+      if (PJ.ok) pasoPersonaje(0); return JSON.stringify(MANO_A); },
+    /* que el frasco EXISTA no es que se vea: lo que hay que poder afirmar es
+       dónde cae en la pantalla y cuánto ocupa */
+    frasco: () => { if (!FRASCO.ok) return JSON.stringify({ ok: false });
+      PJ.grupo.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      const b = new T.Box3().setFromObject(FRASCO.grupo);
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, del = true;
+      for (let i = 0; i < 8; i++){
+        const v = new T.Vector3(i&1 ? b.max.x : b.min.x, i&2 ? b.max.y : b.min.y,
+                                i&4 ? b.max.z : b.min.z);
+        const l = v.clone().applyMatrix4(cam.matrixWorldInverse);
+        if (-l.z <= cam.near) del = false;
+        v.project(cam);
+        x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x);
+        y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+      }
+      return JSON.stringify({ ok: true, vis: FRASCO.grupo.visible, tri: FRASCO.tri,
+        capa: FRASCO.grupo.children[0].layers.mask,
+        alto: +(b.max.y - b.min.y).toFixed(3),
+        y: +b.min.y.toFixed(3),
+        delante: del,
+        x: [+((x0+1)/2).toFixed(3), +((x1+1)/2).toFixed(3)],
+        py: [+((y0+1)/2).toFixed(3), +((y1+1)/2).toFixed(3)],
+        pct: +((y1-y0)/2*100).toFixed(1) }); },
+    frascoOff: (a, l, y) => { FR_OFF = [a, l, y]; return JSON.stringify(FR_OFF); },
     luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,
       near: cam.near, fp: PJ.primeraPersona }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },

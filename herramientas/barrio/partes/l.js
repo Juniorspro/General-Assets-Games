@@ -24,6 +24,15 @@ const _qA = new T.Quaternion(), _qB = new T.Quaternion(), _eA = new T.Euler();
    41 grados de la vertical. Mirándose el pecho en primera persona lo que se ve
    son dos manos flotando en los costados de la pantalla. */
 const BRAZO_BASE = 0.55;
+/* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
+   bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
+   la mano, no de elegirlos. */
+/* [hombro X, hombro Y, hombro Z, codo X]. LA Y HACE FALTA: con X y Z solos el
+   brazo baja y se adelanta pero NO CRUZA — medido, dieciocho combinaciones y la
+   mano no bajó de cuarenta centímetros de costado. Lo que la trae al eje del
+   cuerpo es el giro alrededor de la vertical. */
+let MANO_A = [-0.55, 1.55, 0.70, -1.95];   /* medido: mano a 1,28 de alto,
+                                             36 cm adelante y 13 de costado */
 
 /* ── UN GIRO EN LOS EJES DEL MUNDO Y NO EN LOS DEL HUESO ──
    Los ejes locales de un hueso son los que dejó el bind, así que no significan
@@ -92,7 +101,17 @@ const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
                 /* `libre` = nadie más está manejando la cara. La cinemática la
                    toma para sí, y quien quiera escribirla mientras tanto —hoy,
                    la sonda que fotografía las expresiones— la pide con esto. */
-                libre: false };
+                libre: false,
+                /* `mano` mezcla el brazo derecho a la pose de sostener algo a
+                   la altura del pecho, SIN parar la caminata: lo que hay que
+                   ver es alguien que camina mirándose la mano, no alguien que
+                   se paró a mirarla. */
+                mano: 0 };
+
+/* Lo que la pose que corrió dejó en el brazo derecho. Existe para que la mezcla
+   de `GESTO.mano` parta de LO QUE HAY y no de una copia de la fórmula: dos
+   sitios que describen el mismo vaivén terminan siempre desincronizados. */
+const POSE = { bdX: 0, bdZ: 0, bdA: 0 };
 
 function poseQuieto(f, t){
   /* respirar es lo único que separa a alguien parado de un maniquí */
@@ -100,9 +119,10 @@ function poseQuieto(f, t){
   giraH('Spine01', r * 0.016, 0, 0);
   giraH('Spine', -r * 0.012, 0, Math.sin(t * 0.37) * 0.010);
   giraH('LeftArm',  0.02, 0, -BRAZO_BASE + Math.sin(t*0.53)*0.012);
-  giraH('RightArm', 0.02, 0,  BRAZO_BASE - Math.sin(t*0.53+1.7)*0.012);
+  POSE.bdX = 0.02; POSE.bdZ = BRAZO_BASE - Math.sin(t*0.53+1.7)*0.012; POSE.bdA = -0.12;
+  giraH('RightArm', POSE.bdX, 0, POSE.bdZ);
   giraH('LeftForeArm',  -0.12, 0, 0);
-  giraH('RightForeArm', -0.12, 0, 0);
+  giraH('RightForeArm', POSE.bdA, 0, 0);
   for (const n of ['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot'])
     giraH(n, 0, 0, 0);
   mueveH('Hips', 0, r * 0.004, 0);
@@ -131,9 +151,11 @@ function poseCamina(f, k){
   /* los brazos van al revés que las piernas: es lo que mantiene el equilibrio y
      lo primero que se nota si falta */
   giraH('LeftArm',  s2 * C, 0, -BRAZO_BASE + 0.10 + k*0.06);
-  giraH('RightArm', s  * C, 0,  BRAZO_BASE - 0.10 - k*0.06);
+  POSE.bdX = s * C; POSE.bdZ = BRAZO_BASE - 0.10 - k*0.06;
+  POSE.bdA = -(0.20 + k*0.55) - Math.max(0, s) * (0.25 + k*0.5);
+  giraH('RightArm', POSE.bdX, 0, POSE.bdZ);
   giraH('LeftForeArm',  -(0.20 + k*0.55) - Math.max(0, s2) * (0.25 + k*0.5), 0, 0);
-  giraH('RightForeArm', -(0.20 + k*0.55) - Math.max(0, s)  * (0.25 + k*0.5), 0, 0);
+  giraH('RightForeArm', POSE.bdA, 0, 0);
   /* la pelvis bascula y el tronco gira AL REVÉS que ella: sin ese
      contramovimiento el personaje camina como una tabla */
   mueveH('Hips', c * 0.012, Math.abs(s) * (0.018 + k*0.014) - 0.010 - k*0.02, 0);
@@ -168,6 +190,17 @@ function pasoPersonaje(dt){
      se ve como una calcomanía que cambia; con sólo el hueso, como alguien que
      abre la boca sin labios. */
   giraH('mandibula', GESTO.boca * 0.26, 0, 0);
+
+  /* ── EL BRAZO QUE SOSTIENE, MEZCLADO SOBRE EL QUE CAMINA ──
+     Se mezcla y no se reemplaza: el resto del cuerpo sigue en su ciclo, así que
+     lo que se ve es un brazo que se levanta mientras las piernas siguen. Los
+     ángulos están medidos con `__V.manoDer()` contra el pecho, no elegidos. */
+  const m = cl(GESTO.mano, 0, 1);
+  if (m > 0.001){
+    giraH('RightArm', mez(POSE.bdX, MANO_A[0], m), MANO_A[1] * m,
+          mez(POSE.bdZ, MANO_A[2], m));
+    giraH('RightForeArm', mez(POSE.bdA, MANO_A[3], m), 0, 0);
+  }
   pasoCaraSprites(dt);
 }
 
