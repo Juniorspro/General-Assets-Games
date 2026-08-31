@@ -87,8 +87,9 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   12,8 contra 7,4). El pixelado no es un filtro: la escena se dibuja a media resolución en un render
   target con NEAREST y recién eso se estira. Vive partido en `herramientas/lemi/partes/` y se arma con
   `python3 herramientas/lemi/armar.py`.
-- **`Barrio.html` es "BARRIO"** (~119 KB, **sin un solo asset**: las diez texturas, los ocho
-  sonidos y las ciento cincuenta casas se dibujan por código). El octavo juego. Un damero de
+- **`Barrio.html` es "BARRIO"** (~1,28 MB, de los cuales el personaje generado y su cara son casi
+  todo; **el barrio en sí no tiene un solo asset**: las diez texturas, los sonidos de ambiente y las
+  doscientas treinta y cuatro casas se dibujan por código). El octavo juego. Un damero de
   **5 × 5 cuadras** —274 m de lado— a las tres de la mañana y bajo la lluvia, en primera persona y
   sin más objetivo que caminarlo. Calles con línea cortada, veredas con cordón de quince
   centímetros, césped, **234 casas** con su cerca de piquetes, su entrada de auto y alguna ventana encendida,
@@ -97,7 +98,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   vecindario. Las siete texturas del suelo y de las casas están generadas con Higgsfield. Pixelación suave
   —el destino de render va a 1/1,7— y de noche: lo único que ilumina de verdad son los faroles.
   Hay relámpagos con su trueno a destiempo, linterna, y las tres calidades y los tres idiomas en el
-  menú. Se abre con una **cinemática de 27 segundos en dos planos**: primera persona bajando por la
+  menú. Se abre con una **cinemática de 48 segundos en cinco planos**: primera persona bajando por la
   calle, corte, y un primer plano de la cara con lente largo y el fondo desenfocado en el que abre los
   ojos y los vuelve a cerrar mientras el cuerpo sigue caminando — **sin bandas negras**, y la cabeza
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
@@ -106,6 +107,144 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Septuagésima segunda vuelta (2026-08-31): **BARRIO** — los árboles dejan de ser un cono y un icosaedro
+
+Pedido: *"arregla el barrio literalmente agrega mejores árboles esos ya se pasan de low Poly"*.
+
+#### LO QUE DELATA A UN ÁRBOL DE MAQUETA NO ES LA CANTIDAD DE CARAS, ES LA REGULARIDAD
+
+Un cono y un icosaedro tienen las dos la silueta **perfectamente regular**, y de noche —con el
+follaje casi negro y sin detalle interior— la silueta es lo único que llega. Subdividir no arregla
+eso: un cono de treinta lados sigue teniendo la generatriz recta y sigue leyéndose a gorro de fiesta.
+
+- **El piso de ramas no es un cono.** El anillo de la base alterna radio largo y radio corto y sube
+  y baja de altura, así que el contorno queda **dentado** —lo que se ve son puntas de rama— en vez
+  de una recta. Cuesta un triángulo por segmento, exactamente lo mismo que el cono.
+- **La bola abollada.** Cada vértice se mueve sobre su propio radio. **El desplazamiento sale de la
+  DIRECCIÓN del vértice y no de su índice**, porque `IcosahedronGeometry` viene **sin índice**: cada
+  cara trae su copia de los tres vértices y, moviendo cada copia por su cuenta, la bola se abre en
+  veinte triángulos sueltos. Redondeando la dirección a milésimas, las copias reciben el mismo
+  número.
+- **Tres variantes de cada una y no una.** Una irregularidad repetida doscientas veces se lee como
+  un patrón, que es peor que la esfera regular.
+- **Un piso más alto es un piso más claro.** Con todos los pisos del mismo verde la copa vuelve a
+  ser **una** silueta y partirla en cuatro no sirvió de nada: lo que separa una masa de otra no es
+  el contorno, es que una esté más iluminada que la de abajo. El color ya viaja en los vértices, así
+  que cuesta cero.
+- **El árbol de hoja ancha del jardín pasa a cinco masas chicas y no tres grandes.** Con tres, cada
+  bola mide dos metros y sus facetas medio metro, y a cinco metros de la vereda eso se ve como un
+  **repollo**. Y las amplitudes de abolladura son distintas según las caras: la de ochenta necesita
+  ±19 % o los pliegues se marcan de más, la de veinte necesita ±27 % o vuelve a ser un icosaedro.
+
+#### DOS COSAS QUE NO SE VEN Y HAY QUE HACER IGUAL
+
+- **La variante de cada pieza sale de la POSICIÓN del árbol, no de `az()`.** Cada tirada nueva del
+  azar compartido corre **todo** lo que viene después —dónde cae cada casa, cada farol, cada árbol—
+  y el barrio tiene que ser el mismo de siempre. Lo mismo con las geometrías, que se arman al cargar
+  el módulo y llevan **su propio generador de tres líneas**.
+- **La arboleda del fondo lleva dos pisos y sin tapa de abajo.** A cuarenta metros y detrás de la
+  niebla nadie mira por debajo de un árbol, y la tapa es **la mitad** de los triángulos del piso.
+
+#### DÓNDE SE VE CADA COSA, MEDIDO Y NO SUPUESTO
+
+La arboleda de novecientos árboles **no se ve** desde la calle exterior mirando hacia afuera: la
+vuelta de cuadras de borde la tapa entera, y por encima de los techos no asoma nada (verificado con
+la foto aclarada 2,6 veces). Donde **sí** se ve —y ahí cierra el final del mundo, que es para lo que
+está— es por el **corredor de la calle**, a unos cincuenta metros, cerrando la perspectiva.
+
+Medido a 412×892 con SwiftShader, mismo encuadre en las dos versiones: calle larga 238.538 →
+**278.838** triángulos, cuadra 366.470 → **415.366**, y los **doce cuadros por segundo son los mismos
+en las dos** — el cuadro lo manda el relleno (lluvia, niebla, resolución) y no la geometría.
+`window.__errs` vacío y la cinemática de 48 s sigue corriendo entera.
+
+### Septuagésima primera vuelta (2026-08-31): **BARRIO** — los sonidos del hombre, el viento que respira y el pitido del desmayo
+
+Pedido: *"genera sonidos ambientales también sonidos del hombre y todo eso bien cinemático"*.
+
+**LA DIVISIÓN NO ES CAPRICHOSA: LA AMBIENTACIÓN SIGUE SIENDO PROCEDURAL Y EL HOMBRE ES ARCHIVO.** La
+lluvia es ruido filtrado — un clip grabado pesa cientos de KB y además se corta cada vez que da la
+vuelta, y ese corte se escucha más que la lluvia. Un jadeo, un trago o una arcada son lo contrario:
+no salen de filtrar ruido, y duran menos de dos segundos.
+
+**Nueve sonidos del hombre**, generados con `seed_audio` (voz Holden) y horneados a MP3 mono de
+16 kHz a 24 kbps: respiración cansada, suspiro, inhalación de miedo, trago, arcada, tos, quejido, el
+aire que se le va al golpear el piso, y jadeo. **81 KB de MP3, 109 en base64.** Todos **no verbales a
+propósito**: el juego habla en tres idiomas, una frase habría que grabarla tres veces y un suspiro se
+entiende igual en los tres — misma decisión que con los ladridos de RECREO.
+**El recorte es por extremos y no por ráfaga**, al revés que en RECREO: allá el clip era una
+interjección y quedarse con la ráfaga de más energía era correcto; acá un jadeo son varias
+respiraciones seguidas **con huecos**, y cortar por ráfagas lo partiría al medio.
+
+**LA AMBIENTACIÓN GANA UNA TERCERA CAPA: EL VIENTO.** La lluvia sola, por bien filtrada que esté, es
+**estacionaria** — suena siempre igual y a los veinte segundos el oído deja de escucharla. Lo que la
+vuelve un lugar es que respire. Un pasabajos muy grave cuya ganancia y corte se mueven con dos senos
+de períodos que no son múltiplos entre sí (17 y 23 s), así que la racha nunca cae dos veces en el
+mismo sitio y no se puede aprender.
+
+**Y EL DESMAYO SE OYE ANTES DE VERSE.** El jadeo entra con el desenfoque y el quejido cuando ceden
+las rodillas, o sea que el sonido va medio segundo **por delante** de la imagen: es lo que hace que
+la caída se sienta venir en vez de sorprender. El latido va de 62 a 110 por minuto y es lo único que
+ocupa el lugar de la música en ese plano — **dos golpes y no uno**, porque un corazón hace «tum-TUM»
+y con uno solo se lee a bombo, con el segundo a 0,26 s del primero, que es el intervalo real entre el
+cierre de las válvulas. Al final entra un pitido que se lleva todo lo demás: la lluvia se agacha 85 %
+mientras el tono sube, que es como se apaga el oído.
+
+**LOS VOLÚMENES ESTÁN MEDIDOS, NO ELEGIDOS.** Disparados a 1,0 los clips daban rms de 0,19 a 0,45
+contra 0,025 de la cama —diez a dieciocho veces el fondo, que no es una voz en una calle sino una voz
+en la cara— y `golpe` y el latido llegaban a **1,00 de pico, o sea recortando**. Bajados, la escala
+queda: lluvia 0,021 · voz 0,05-0,08 · el golpe contra el piso **0,19**, que es el sonido más fuerte de
+la escena y tiene que serlo. Misma regla que en Eco y en RECREO.
+Medido: 9 de 9 clips decodificados con su duración real, y sobre la escena corrida entera el fondo se
+queda en 0,021 de rms con los picos de voz en 0,052.
+
+**DE PASO, `herramientas/barrio/prep_banco.py`.** El `prep2.py` del banco reescribe los CDN de
+**unpkg** y BARRIO importa three desde **jsDelivr**, así que había que parchearlo a mano — y el
+contenedor se reinició **tres veces** en esta sesión, borrando el parche cada vez. El síntoma siempre
+era el mismo y desorientaba igual: `window.__V is not defined`, que parece un error del juego y es
+del banco. Ahora vive en el repo.
+
+**LO QUE NO PUEDE VERIFICARSE:** no puedo escuchar. Que los nueve suenan y a qué nivel está medido;
+si la **voz** es la correcta para un pibe de veinte años —es la misma que hacía de profesor en
+RECREO— no lo sé, y si suena mal se cambia el `voice_id` y se rehornea con un comando.
+
+### Septuagésima vuelta (2026-08-31): **BARRIO** — la izquierda agarra la pastilla y se la come, y la derecha no se mueve
+
+Pedido: *"ahora la animación de comer hazlo bien o sea ese se mantiene y con la otra mano en la misma
+escena con animaciones de brazo y mano agarra una pastilla y se la come llevando a la boca y volviendo
+al estado neutral"*.
+
+La derecha se queda sosteniendo el frasco con la palma arriba —es lo que el jugador ya vino mirando—
+y todo el trabajo lo hace la izquierda, **que es como lo hace una persona**: la mano que sostiene el
+frasco no es la que se lleva la pastilla.
+
+**LOS DOS DESTINOS DEL BRAZO IZQUIERDO NO ESTÁN ELEGIDOS, SALEN DE UN SOLVER.** Se buscó sobre los
+cuatro ángulos de `giraH` el mínimo de la distancia de la yema del índice izquierdo al destino, con
+penalización por meter el antebrazo en el torso: primero una rejilla de 4.900 ternas y después
+afinado por coordenadas.
+
+| destino | error | |
+|---|---|---|
+| **toma** — la yema al centro de la palma derecha, donde están las pastillas | **2,1 cm** | cero vértices dentro del torso |
+| **boca** — la yema al hueso `caraBoca` | **10,7 cm** | mínimo local; como `LeftIndiceB` es la falange y no la punta, la yema de verdad queda unos 7 cm |
+
+**EL BRAZO IZQUIERDO ENTRA COMO UN SOLO ESCALAR**, `GESTO.izq` de 0 a 2: 0 colgando, 1 sobre la palma
+derecha, 2 en la boca. Uno y no dos mezclas separadas porque el recorrido **es una línea** — nunca
+hay que estar yendo a la palma y a la boca a la vez. Y los ángulos se mezclan **antes** de aplicarse:
+encadenar dos giros moviéndose juntos es exactamente lo que hacía el tirabuzón del brazo derecho.
+
+**LA PASTILLA QUE VIAJA ES UNA CÁPSULA APARTE** colgada del índice izquierdo, no una de las tres del
+montón: ésas viven en la mano derecha y tienen que seguir ahí mientras la izquierda se lleva la suya.
+Sacarla del montón obligaría a reparentarla en pleno movimiento, y un objeto que cambia de padre a
+mitad de camino **salta un cuadro**.
+
+Seis tiempos, cada uno lo que tarda de verdad: viaja a la palma (1,2 s) · cierra los dedos sobre la
+pastilla (0,5) · la lleva a la boca (1,3) · cierra los ojos y traga (0,8) · el asco y el sacudón
+(1,4) · el brazo vuelve a colgar (1,8). **Los ojos se cierran mientras la mano sube**, o sea que se la
+toma sin mirar.
+
+Verificado con catorce cuadros seguidos del plano: se ve la izquierda ir, juntarse con la derecha,
+subir a la boca y volver. `window.__errs` vacío.
 
 ### Sexagésima novena vuelta (2026-08-31): **BARRIO** — el personaje denso, la cara vuelta a medir y las pastillas en la palma
 
