@@ -145,6 +145,87 @@ def color_en_vertices(ent, sal):
     glb.guarda(sal, js, bytes(nuevo))
 
 
+def soldar(ent, sal, eps=0.0002):
+    """UNE LOS VERTICES COINCIDENTES. Es el paso que faltaba y explica lo que se
+    veia: la malla que devuelve el generador viene SIN SOLDAR —cada grupo de
+    caras trae su propia copia de los vertices del borde— asi que no es una
+    superficie, son cientos de cascaras sueltas apoyadas una contra otra.
+    MEDIDO EN LA MANO DERECHA: 3.544 vertices en **391 ISLAS**. Soldando a dos
+    decimas de milimetro quedan 1.610 vertices y **UNA** isla.
+    Por que importa tanto: el esqueleto mueve cada cascara por su cuenta, asi que
+    en cuanto la mano se dobla las costuras se ABREN — los dedos se ven como
+    tablitas separadas con ranuras negras en el medio, que es exactamente lo que
+    se veia. Y el decimador, con `-sa`, trata cada borde de cascara como una
+    costura que hay que respetar, asi que ademas simplificaba mal.
+    Se promedian las normales del grupo y se conserva el color y los pesos del
+    primero: los duplicados estan en el MISMO punto, asi que sus pesos son los
+    mismos y promediarlos no cambiaria nada."""
+    js, bn = glb.carga(ent)
+    pr = js['meshes'][0]['primitives'][0]
+    at = pr['attributes']
+    P = glb.leer(js, bn, at['POSITION']).astype(np.float32)
+    N = glb.leer(js, bn, at['NORMAL']).astype(np.float32)
+    I = glb.leer(js, bn, pr['indices']).astype(np.int64)
+    extra = {}
+    for k in ('COLOR_0', 'JOINTS_0', 'WEIGHTS_0'):
+        if k in at: extra[k] = glb.leer(js, bn, at[k])
+
+    clave = np.round(P / eps).astype(np.int64)
+    _, prim, inv = np.unique(clave, axis=0, return_index=True, return_inverse=True)
+    orden = np.argsort(prim)                    # respetar el orden original
+    remap = np.empty(len(prim), np.int64); remap[orden] = np.arange(len(prim))
+    nuevo = remap[inv]
+    n = len(prim)
+
+    P2 = np.zeros((n, 3), np.float32); P2[nuevo] = P
+    N2 = np.zeros((n, 3), np.float32)
+    np.add.at(N2, nuevo, N)
+    ln = np.linalg.norm(N2, axis=1, keepdims=True); ln[ln == 0] = 1
+    N2 /= ln
+    ex2 = {}
+    for k, v in extra.items():
+        w = np.zeros((n,) + v.shape[1:], v.dtype); w[nuevo] = v; ex2[k] = w
+    I2 = nuevo[I]
+
+    print('== soldado: %d -> %d vertices (%.1f%%)' % (len(P), n, 100.0*n/len(P)))
+
+    # SE APENDEA AL BUFFER EN VEZ DE REESCRIBIRLO. Las matrices de bind del
+    # esqueleto tambien viven ahi, asi que rearmar el binario obligaria a
+    # reubicarlas; agregando al final y repuntando solo los accesores de esta
+    # primitiva, lo demas no se toca. Los bytes viejos quedan huerfanos y
+    # gltfpack los tira en el paso siguiente.
+    buf = bytearray(bn)
+    def mete(datos, comp, tipo, minmax=False):
+        while len(buf) % 4: buf.append(0)
+        off = len(buf); b = datos.tobytes(); buf.extend(b)
+        js['bufferViews'].append({'buffer': 0, 'byteOffset': off, 'byteLength': len(b)})
+        a = {'bufferView': len(js['bufferViews']) - 1, 'componentType': comp,
+             'count': int(datos.shape[0]), 'type': tipo}
+        if minmax:
+            a['min'] = [float(x) for x in datos.min(axis=0)]
+            a['max'] = [float(x) for x in datos.max(axis=0)]
+        js['accessors'].append(a)
+        return len(js['accessors']) - 1
+
+    TIPO = {1: 'SCALAR', 2: 'VEC2', 3: 'VEC3', 4: 'VEC4'}
+    COMP = {np.dtype('float32'): 5126, np.dtype('uint16'): 5123,
+            np.dtype('uint8'): 5121, np.dtype('uint32'): 5125}
+    at['POSITION'] = mete(P2, 5126, 'VEC3', True)
+    at['NORMAL']   = mete(N2, 5126, 'VEC3')
+    for k, v in ex2.items():
+        ac = mete(v, COMP[v.dtype], TIPO[v.shape[1]])
+        # JOINTS_0 SON INDICES, NO UNA FRACCION: marcarlo `normalized` divide
+        # cada indice por 65535 y todos los vertices pasan a apuntar al hueso 0.
+        # Costo una vuelta — el rig salia con cero vertices en cada dedo y en la
+        # mandibula, o sea que «no habia dedos» cuando lo que no habia eran pesos.
+        if v.dtype != np.float32 and k != 'JOINTS_0':
+            js['accessors'][ac]['normalized'] = True
+        at[k] = ac
+    pr['indices'] = mete(I2.astype(np.uint32), 5125, 'SCALAR')
+    js['buffers'] = [{'byteLength': len(buf)}]
+    glb.guarda(sal, js, bytes(buf))
+
+
 def main():
     # PJ_FUENTE deja elegir el modelo de entrada sin tocar el script: la vuelta
     # del personaje denso entra por aca (`pj2.glb`) y el viejo sigue reproducible.
@@ -157,9 +238,12 @@ def main():
     color_en_vertices(ent, vc)
     print('== color en vértices: %d bytes' % os.path.getsize(vc))
 
+    sol = os.path.join(ENTRADA, 'pj_sol.glb')
+    soldar(vc, sol)
+
     dec = os.path.join(ENTRADA, 'pj_dec.glb')
     subprocess.run(['npx', '--yes', 'gltfpack', '-si', RATIO, '-sa', '-kn', '-noq',
-                    '-i', vc, '-o', dec], check=True,
+                    '-i', sol, '-o', dec], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print('== decimado'); glb.resumen(dec)
     return 0
