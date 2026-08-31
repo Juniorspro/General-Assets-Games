@@ -111,6 +111,105 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Septuagésima cuarta vuelta (2026-08-31): **BARRIO** — los techos estaban al revés, la cámara en tercera persona, y las siete texturas fotorrealistas
+
+Pedido: *"quiero que agregues a las casas el techo también · me gusta esa cámara detrás del tipo al
+estar jugando · quiero que generes con Rezona imágenes para las texturas fotorrealistas"*.
+
+#### LOS TECHOS: EL BOBINADO ESTABA INVERTIDO Y LAS NORMALES SE PROMEDIABAN
+
+«Agregales el techo» era literal: las casas TIENEN techo desde el primer día y no se ve. Medido
+sobre la propia lista de caras, no mirando la pantalla:
+
+- **Las dos faldas del gablete daban normal de cara Y = −0,707** —o sea mirando al piso— y las dos
+  caras de abajo **Y = +1**. Con `FrontSide`, que es lo que usa todo el barrio, la cara de afuera del
+  techo es una cara **trasera** y se descarta: lo que se veía era el interior de la falda de
+  enfrente, que es una silueta negra.
+- **Y `computeVertexNormals` sobre una geometría INDEXADA promedia** las caras que comparten cada
+  vértice. Acá los seis vértices los comparten las faldas, los dos hastiales y el fondo: los dos de
+  la cumbrera terminaban con **Y = −0,905**. O sea que aun con el bobinado bien, el sombreado decía
+  que la parte de arriba del techo mira al suelo — y con un hemisférico eso es el color de abajo, que
+  es casi negro.
+- La pirámide del techo a cuatro aguas, lo mismo: cuatro faldas en −0,707 y la punta promediada en
+  **Y = −1**.
+
+Se arregla invirtiendo el bobinado y pasando las dos geometrías a **`toNonIndexed()`**, que le da a
+cada cara sus tres vértices propios y por lo tanto su normal exacta. Que además es lo que un techo
+necesita: aristas duras, no suavizadas.
+
+#### LA CÁMARA EN TERCERA PERSONA
+
+Botón VISTA, tecla **V**, y se guarda.
+
+- **LA ROTACIÓN NO SE TOCA.** La cámara se queda mirando exactamente para donde miraba en primera y
+  lo único que cambia es DÓNDE está. Componer un `lookAt` acá sería reabrir la trampa del orden del
+  Euler que ya costó una vuelta en la cinemática —cerca de los noventa grados de cabeceo, un grado de
+  guiñada se convierte en decenas de alabeo— y además garantiza que **apuntar se sienta igual en las
+  dos vistas**, porque la dirección de la mirada es la misma cuenta.
+- **De tres cuartos por detrás**, no justo atrás: de frente al eje del cuerpo las piernas se tapan
+  entre ellas y la zancada casi no se lee. Es lo mismo que se midió cuando la cinemática tenía su
+  plano de seguimiento.
+- **No atraviesa paredes.** Se marcha desde la cabeza hacia atrás en ocho pasos y se corta en el
+  último punto libre, contra **la misma rejilla de colisiones** que usa el cuerpo: una segunda lista
+  de paredes sólo para la cámara se desincroniza el día que se agregue un obstáculo.
+- **El cabeceo del paso baja a un tercio.** En primera el balanceo *es* la caminata; en tercera la
+  caminata ya se ve en las piernas, y el mismo balanceo aplicado a una cámara a tres metros se lee a
+  que tiembla el pulso de quien filma.
+- **La luz del cuerpo pasa de alcance 1,6 a 5,0 m**, y es aritmética: el cuerpo pasa de estar a
+  treinta centímetros del lente a estar a casi tres metros, y con `decay 1,1` ahí no llegaba nada.
+- **Y EL PERSONAJE PROYECTA SOMBRA.** Sin ella se ve flotando sobre el asfalto por más que los pies
+  estén exactamente en y = 0: lo que dice que algo toca el piso no es dónde está, es la sombra de
+  contacto.
+
+#### LAS SIETE TEXTURAS, FOTORREALISTAS
+
+**Rezona Lab no está conectada en esta sesión** —no hay ninguna herramienta `mcp__rezona__*` y las
+credenciales se perdieron con el reinicio del contenedor—, así que van con Higgsfield, que es lo que
+generó las siete anteriores: Recraft V4.1 en modo `utility` a 2048 px, pedidas como muestra de
+material plana, ortográfica y sin sombras.
+
+- **LA ESCALA SE VUELVE A CONTAR**, porque no es una preferencia sino una propiedad de la imagen.
+  Contadas sobre la nueva —con el perfil de bordes y después a ojo sobre el recorte— son **12 hiladas
+  de ladrillo, 9 tablas de revestimiento, 5 hiladas de teja y 24 tablas de cerca**: 0,90 · 1,62 ·
+  0,80 · 2,16 metros. Con los números viejos la pared salía con hiladas de 8,3 cm en vez de 7,5 y el
+  revestimiento con tablas de 23.
+- **Y EL TINTE SE RECALCULA.** three.js multiplica `map × vertexColor × material.color`, así que
+  cambiar la foto y dejar el tinte corre el color de toda la superficie. Medido el promedio de cada
+  textura contra la anterior: asfalto **×0,76** · vereda ×0,91 · pasto ×0,87 · ladrillo ×0,93 ·
+  revestimiento ×1,02 · madera **×1,31** · teja **×0,74**. Se compensan las tres que se salen del
+  ruido, y la teja importa especialmente porque el techo acaba de dejar de ser negro y no puede
+  volver a apagarse. Es la misma cuenta que en el battle royale de Z Force.
+- Los tres que se miran de cerca —ladrillo, revestimiento y teja— suben de 384 a **448 px**: el juego
+  estira con NEAREST y 384 alcanzaba para un dibujo plano, pero una foto con grano de árido y veta
+  pierde justo eso.
+
+#### DOS COSAS QUE SALIERON DE LAS SKILLS NUEVAS, Y LAS DOS MEDIDAS
+
+Llegaron cinco skills de creación de juegos y quedaron en `.claude/skills/`
+(`game-asset-pipeline`, `game-character-animation`, `game-physics-rapier`,
+`open-world-streaming`, `realtime-rendering-quality`). Contrastadas contra BARRIO, casi todo ya
+estaba —color de salida en sRGB, `antialias:false`, destino de render reducido, fundido por cuadra,
+`alphaTest` en vez de transparencia, tres calidades, 244 llamadas de dibujo—. Lo que **no** estaba:
+
+- **Los shaders de la habitación se compilaban en el corte de la cinemática.** Medido: el barrio
+  corre con **23 programas** y con la habitación en pantalla son **26**. Compilar un shader son
+  decenas o cientos de milisegundos en un teléfono, y ese es el peor momento posible. Ahora el cuarto
+  se arma durante la barra de carga y se calienta ahí — y `compileAsync` sólo recorre lo **visible**,
+  así que hay que encenderlo un instante: apagado, la llamada no compila nada. Tras la carga hay 44
+  programas calientes, o sea que de paso se calientan los del barrio.
+- **`shadow.normalBias = 0,02`** y el bias a la mitad. Corre el punto de muestreo a lo largo de la
+  normal, que es donde el error de profundidad está, así que saca el acné sin despegar la sombra del
+  pie del poste.
+
+#### MEDIDO AL CERRAR
+
+**225 metros caminados por tres calles** —89,2 + 92,1 en primera y **43,7 en tercera**— con **0
+cuadros dentro de una casa**. Partida completa: cinemática → habitación → se despierta → camina 4,8 m
+a la ventana → cruza la puerta → barrio con la niebla de vuelta en 0,0165. La cámara de tercera a 3 m
+y recortada contra las paredes. **7 de 7 texturas** decodificadas con su repetición. Los tres idiomas
+y las tres calidades en caliente. **0 NaN** y `window.__errs` vacío en las once corridas. El HTML pasó
+de 1,39 a **1,69 MB**, y 207 KB de esos son las texturas nuevas.
+
 ### Septuagésima tercera vuelta (2026-08-31): **BARRIO** — te despertás en una habitación, y por la ventana estás en la cima de un edificio
 
 Pedido: *"genera que una vez despiertes aparezcas en una habitación con una cama y en la ventana al ir
