@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#57b6ef">
+<title>Vergel · isla pixelada</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a1420;touch-action:none;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#eaf4ff;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+canvas{display:block}
+
+/* ── EL ESCENARIO ──
+   Todo el juego vive acá adentro. Con el teléfono en vertical se gira 90° y se
+   le intercambian el ancho y el alto, así se juega apaisado sin pedirle a nadie
+   que dé vuelta el aparato. La pantalla de carga queda AFUERA a propósito: se
+   muestra antes de girar nada y hay que poder leerla como venga el teléfono. */
+#escenario{position:fixed;left:0;top:0;width:100%;height:100%;
+  transform-origin:top left;overflow:hidden}
+body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* ── CARGA ── */
+#carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  background:radial-gradient(120% 90% at 50% 15%,#1d4a72 0%,#0d2338 55%,#081420 100%);
+  transition:opacity .6s ease}
+#carga.ido{opacity:0;pointer-events:none}
+#carga .caja{text-align:center;width:min(360px,84vw)}
+#carga h1{font-size:clamp(26px,7vw,40px);font-weight:200;letter-spacing:-.02em;
+  background:linear-gradient(160deg,#fff 30%,#8fe3a0);-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+#carga p{margin-top:8px;font-size:12.5px;color:rgba(234,244,255,.55);min-height:1.4em}
+#carga .barra{margin-top:18px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
+#carga .barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#7ee3a0,#57b6ef);transition:width .25s}
+#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.42);line-height:1.5}
+
+/* ── HUD ── */
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s}
+#hud.on{opacity:1}
+#fps{position:absolute;left:12px;top:calc(10px + env(safe-area-inset-top,0px));
+  font:600 10.5px/1.6 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.5);
+  text-shadow:0 1px 4px rgba(0,0,0,.8);letter-spacing:.04em}
+#teclas{position:absolute;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:10px 13px;border-radius:12px;background:rgba(8,18,28,.5);border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font:600 11px/1.85 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.62);display:none}
+body.pc #teclas{display:block}
+#teclas b{color:#eaf4ff}
+/* ── arriba a la derecha, sólo lo que NO se usa jugando ── */
+#botones{position:absolute;right:max(10px,2.5vw);top:calc(10px + env(safe-area-inset-top,0px));
+  display:flex;gap:7px;pointer-events:auto}
+.bt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(8,18,28,.42);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);font:800 15px/1 system-ui,sans-serif;opacity:.8}
+.bt:active{transform:translateY(1px);filter:brightness(1.3)}
+
+/* ── ACCIONES, abajo a la derecha y debajo del pulgar ──
+   El botón de correr estaba arriba, del lado opuesto a la mano que juega: para
+   apretarlo había que soltar la palanca. Todo lo que se usa en movimiento baja
+   acá, en racimo, con el salto grande porque es el que más se aprieta. */
+#acciones{position:absolute;right:max(16px,4vw);bottom:max(18px,5vh);
+  display:grid;grid-template-columns:auto auto;gap:11px;align-items:end;
+  justify-items:center;pointer-events:auto}
+.ac{border-radius:50%;display:grid;place-items:center;color:#eaf4ff;
+  background:rgba(10,20,30,.42);border:1.6px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);transition:transform .12s,background .2s,border-color .2s}
+.ac:active{transform:scale(.9);filter:brightness(1.35)}
+.ac.on{background:rgba(126,227,160,.3);border-color:rgba(126,227,160,.75);color:#eafff2}
+.ac .ico{font-size:20px;line-height:1;margin-bottom:1px}
+#acSalta{width:min(88px,19vw);aspect-ratio:1;grid-column:2;grid-row:1/3;
+  background:rgba(126,227,160,.20);border-color:rgba(126,227,160,.5)}
+#acSalta .ico{font-size:27px}
+#acCorre{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:1}
+#acAgacha{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:2}
+body.pc #acciones{display:none}
+
+/* ── MENÚ DE INICIO ──
+   El fondo NO es una imagen: es la isla de verdad, filmada con un campo de
+   visión de treinta grados. Con el teleobjetivo se aplasta la perspectiva, las
+   copas se apilan unas sobre otras y el movimiento lento de la cámara se lee
+   como una grúa de cine en vez de como un paseo. */
+#menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(4,10,16,.30) 0%,rgba(4,10,16,.06) 38%,rgba(4,10,16,.72) 100%)}
+#menu.on{display:grid}
+#menu .mCaja{text-align:center;width:min(360px,84%)}
+#menu .mEmb{position:relative;display:grid;place-items:center;margin-bottom:6px}
+/* el emblema va en PNG con alfa: en JPG el fondo negro se veía como un cuadrado
+   más claro flotando sobre el bosque por más que se mezclara en «screen» */
+#menu .mEmb img{width:min(260px,64vw);opacity:.78;
+  filter:saturate(1.35) contrast(1.1) drop-shadow(0 6px 26px rgba(0,0,0,.6))}
+#menu .mTit{position:absolute;font-weight:800;letter-spacing:.20em;
+  font-size:min(62px,15vw);line-height:1;padding-left:.20em;
+  background:linear-gradient(168deg,#f4fff6 18%,#8fe3a0 52%,#f0c869);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 22px rgba(0,0,0,.75))}
+#menu .mSub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  text-transform:uppercase;color:rgba(234,244,255,.5);margin-bottom:24px}
+#menu .mBtn{display:block;width:100%;padding:15px;border-radius:99px;margin-top:10px;
+  font-size:15px;font-weight:700;border:1px solid rgba(255,255,255,.17);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.06);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .16s}
+#menu .mBtn:active{transform:scale(.97)}
+#menu .mBtn.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none;
+  box-shadow:0 10px 30px rgba(87,182,239,.26)}
+#menu .mPie{margin-top:16px;font-size:11px;color:rgba(234,244,255,.34);line-height:1.5}
+
+/* ── MENÚ DE PAUSA ── */
+#pausa{position:absolute;inset:0;z-index:45;display:none;place-items:center;
+  background:rgba(6,12,20,.72);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+#pausa.on{display:grid}
+#pausa .caja{width:min(300px,80%);text-align:center}
+#pausa h2{font-size:23px;font-weight:200;letter-spacing:.02em;margin-bottom:4px}
+#pausa .sub{font:600 9.5px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  text-transform:uppercase;color:rgba(234,244,255,.34);margin-bottom:20px}
+#pausa button{display:block;width:100%;padding:14px;border-radius:14px;margin-top:9px;
+  font-size:14.5px;font-weight:600;border:1px solid rgba(255,255,255,.15);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.05)}
+#pausa button:active{transform:scale(.98)}
+#pausa button.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+#joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);width:min(148px,32vw);
+  aspect-ratio:1;pointer-events:auto;opacity:.9;display:none}
+body:not(.pc) #joy{display:block}
+#joy canvas{width:100%;height:100%;display:block}
+
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja">
+  <h1>Vergel</h1>
+  <p id="cTxt">Sembrando la isla…</p>
+  <div class="barra"><i id="cBar"></i></div>
+  <div class="pista" id="cPista"></div>
+</div></div>
+
+<div id="escenario">
+<div id="hud">
+  <div id="fps"></div>
+  <div id="botones">
+    <button class="bt" id="bFull" title="Pantalla completa">⛶</button>
+    <button class="bt" id="bPanel" title="Pausa">☰</button>
+  </div>
+  <div id="acciones">
+    <button class="ac" id="acCorre"><span class="ico">»</span>CORRER</button>
+    <button class="ac" id="acAgacha"><span class="ico">⌄</span>AGACHAR</button>
+    <button class="ac" id="acSalta"><span class="ico">⌃</span>SALTAR</button>
+  </div>
+  <div id="teclas">
+    <b>W A S D</b> moverse · <b>ratón</b> mirar<br>
+    <b>Shift</b> correr · <b>Ctrl</b> agacharse<br>
+    <b>Espacio</b> saltar · <b>F</b> volar · <b>Esc</b> pausa
+  </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+</div>
+
+<div id="menu">
+  <div class="mCaja">
+    <div class="mEmb"><img src="./lemi-emblema.png" alt=""><span class="mTit">LEMI</span></div>
+    <div class="mSub">una isla que se dibuja sola</div>
+    <button class="mBtn pri" id="mJugar">▶ Jugar</button>
+    <button class="mBtn" id="mOtra">Otra isla</button>
+    <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="pausa">
+  <div class="caja">
+    <h2>En pausa</h2>
+    <div class="sub" id="pSub"></div>
+    <button class="pri" id="pSeguir">Reanudar</button>
+    <button id="pReinicia">Reiniciar</button>
+    <button id="pMenu">Menú</button>
+  </div>
+</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as T from 'three';
+/* ══════════════════════════════════════════════════════════════════════════
+   VERGEL · una isla con el look pedido: pixelado, saturado, luz ambiental
+   suave, cúmulos gordos y vegetación que se sostiene de cerca.
+
+   Todo es procedural. No hay un solo archivo de textura ni de modelo: las
+   hojas, la corteza, el pasto y las nubes se arman con ruido y geometría al
+   abrir. Eso lo hace instantáneo y hace que «otra isla» sea un botón.
+
+   EL PIXELADO no es un filtro encima. La escena se dibuja de verdad a una
+   fracción de la resolución, en un render target con filtro NEAREST, y recién
+   ese cuadro chico se agranda a pantalla completa. Por eso los bordes de las
+   sombras y de las hojas quedan escalonados como corresponde, en vez de un
+   mosaico borroso pegado sobre una imagen nítida.
+   ══════════════════════════════════════════════════════════════════════════ */
+'use strict';
+
+const $ = id => document.getElementById(id);
+const cl = (v,a,b) => Math.max(a, Math.min(b, v));
+const lerp = (a,b,t) => a + (b-a)*t;
+
+/* ───────────────────────── ajustes vivos ───────────────────────── */
+const CFG = {
+  /* AJUSTE FIJO, el que se pidió: brillo y saturación al tope, píxel en 2,
+     contraste 1.10 y nueve niveles de color. Con nueve escalones por canal el
+     degradado del cielo se corta en bandas anchas y todo el cuadro se empasta
+     como un póster: es lo que da el aire de consola vieja. */
+  pix: 2, sat: 2.2, bri: 1.6, con: 1.10, pos: 9,
+  nubes: true, sombras: true, viento: true,
+  /* fase del día: 0 medianoche · .25 amanecer · .5 mediodía · .75 atardecer */
+  sol: 0.42, girar: true
+};
+/* el ciclo completo, día y noche, en tres minutos */
+const CICLO = 180;
+
+/* ══════════════════════════ RUIDO ══════════════════════════
+   Value noise con hash entero: determinista, sin dependencias, y con la
+   semilla se puede volver a sembrar la misma isla. */
+let SEM = (Math.random()*1e9)|0;
+/* OJO CON LA ARITMÉTICA. La versión obvia de este hash multiplica por
+   constantes de 64 bits, y en JavaScript eso pasa de MAX_SAFE_INTEGER: el
+   número pierde los bits bajos —justo los que dan el azar— y el hash devuelve
+   casi siempre lo mismo. El resultado era un terreno degenerado, con la isla
+   partida en pedazos flotando y el jugador apareciendo bajo el agua.
+   Con Math.imul la multiplicación es de 32 bits exactos y el ruido se porta. */
+function hash2(x, y, s){
+  let h = Math.imul(x|0, 374761393) ^ Math.imul(y|0, 668265263) ^ Math.imul(s|0, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+const suave = t => t*t*(3-2*t);
+function ruido(x, y, s){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x-xi, yf = y-yi;
+  const u = suave(xf), v = suave(yf);
+  return lerp(lerp(hash2(xi,yi,s), hash2(xi+1,yi,s), u),
+              lerp(hash2(xi,yi+1,s), hash2(xi+1,yi+1,s), u), v);
+}
+function fbm(x, y, oct, s){
+  let a = 0.5, f = 1, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++){
+    sum += a * ruido(x*f, y*f, s + i*97);
+    norm += a; a *= 0.5; f *= 2;
+  }
+  return sum / norm;
+}
+
+/* ══════════════════════════ EL TERRENO ══════════════════════════
+   Una isla: fbm por encima, y una máscara radial que la hunde en el agua
+   en los bordes. La máscara no es un círculo limpio —se le suma ruido— así
+   la costa entra y sale y aparecen bahías. */
+/* ISLA GRANDE: 660 metros de lado. Con 190 se cruzaba caminando en menos de un
+   minuto y no quedaba nada por descubrir. */
+const MITAD = 330;         /* medio lado del mundo, en metros */
+const MAR = 0;              /* nivel del agua */
+let PLAYA = 1.6;            /* hasta acá es arena */
+
+function alturaCruda(x, z){
+  const s = SEM;
+  const cont = fbm(x*0.0042, z*0.0042, 4, s) * 30;         /* colinas grandes */
+  const det  = fbm(x*0.021,  z*0.021,  4, s+311) * 5.2;    /* rugosidad */
+  const mont = Math.pow(fbm(x*0.0026, z*0.0026, 3, s+733), 2.4) * 34;
+  return cont + det + mont;
+}
+function mascaraIsla(x, z){
+  const d = Math.hypot(x, z) / MITAD;
+  /* el borde de la isla ondula: sin esto es una moneda */
+  const on = (fbm(x*0.0075, z*0.0075, 3, SEM+55) - 0.5) * 0.42;
+  const t = cl((0.86 - d + on) / 0.38, 0, 1);
+  return t*t*(3-2*t);
+}
+function H(x, z){
+  const m = mascaraIsla(x, z);
+  return alturaCruda(x, z) * m - (1 - m) * 9 - 3.2;
+}
+/* normal por diferencias finitas: la usan la cámara y el sembrado */
+function pendiente(x, z){
+  const e = 1.4;
+  const gx = H(x+e, z) - H(x-e, z), gz = H(x, z+e) - H(x, z-e);
+  return Math.hypot(gx, gz) / (2*e);
+}
+
+/* ══════════════════════════ PALETA ══════════════════════════
+   Colores saturados a propósito: el grado de color de después los levanta
+   todavía más, pero si la base ya es apagada no hay filtro que la salve. */
+const PAL = {
+  arena:   new T.Color('#efdcae'),
+  arena2:  new T.Color('#e0c78e'),
+  pasto:   new T.Color('#63c33f'),
+  pasto2:  new T.Color('#4aa32e'),
+  pastoSec:new T.Color('#8fd24a'),
+  roca:    new T.Color('#8b8478'),
+  roca2:   new T.Color('#6e685e'),
+  tierra:  new T.Color('#7a5a38'),
+  agua:    new T.Color('#2aa8d8'),
+  aguaHon: new T.Color('#116a9e')
+};
+
+/* ══════════════════════════ ESCENA ══════════════════════════ */
+const lienzo = document.createElement('canvas');
+document.getElementById('escenario').appendChild(lienzo);
+const ren = new T.WebGLRenderer({ canvas: lienzo, antialias: false, powerPreference: 'high-performance' });
+ren.setPixelRatio(1);                       /* el pixelado manda: nada de DPR */
+ren.outputColorSpace = T.SRGBColorSpace;
+ren.toneMapping = T.NoToneMapping;          /* el grado de color lo hago yo */
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = T.PCFSoftShadowMap;
+
+const escena = new T.Scene();
+const cam = new T.PerspectiveCamera(66, 1, 0.1, 2200);
+escena.fog = new T.Fog(0x9fd0ef, 230, 640);
+
+/* ── el cielo: una esfera con degradé vertical, nada de textura ── */
+const cieloMat = new T.ShaderMaterial({
+  side: T.BackSide, depthWrite: false, fog: false,
+  uniforms: {
+    arriba: { value: new T.Color('#2f7fd6') },
+    medio:  { value: new T.Color('#79c4f2') },
+    abajo:  { value: new T.Color('#cfe9f7') },
+    sol:    { value: new T.Vector3(0,1,0) },
+    calor:  { value: new T.Color('#ffe9b0') }
+  },
+  vertexShader: `varying vec3 vD;
+    void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform vec3 arriba, medio, abajo, calor; uniform vec3 sol; varying vec3 vD;
+    void main(){
+      float h = clamp(vD.y*0.5+0.5, 0.0, 1.0);
+      vec3 c = mix(abajo, medio, smoothstep(0.42, 0.60, h));
+      c = mix(c, arriba, smoothstep(0.58, 0.95, h));
+      /* halo alrededor del sol: da la sensación de aire caliente sin costar nada */
+      float d = max(0.0, dot(normalize(vD), normalize(sol)));
+      c += calor * pow(d, 8.0) * 0.55 + calor * pow(d, 2.0) * 0.10;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+const cielo = new T.Mesh(new T.SphereGeometry(1400, 24, 16), cieloMat);
+escena.add(cielo);
+
+/* ── luces ── */
+const sol = new T.DirectionalLight(0xfff2d0, 2.35);
+sol.castShadow = true;
+sol.shadow.mapSize.set(2048, 2048);
+sol.shadow.camera.near = 1; sol.shadow.camera.far = 460;
+const SOMBRA_R = 78;
+sol.shadow.camera.left = -SOMBRA_R; sol.shadow.camera.right = SOMBRA_R;
+sol.shadow.camera.top = SOMBRA_R; sol.shadow.camera.bottom = -SOMBRA_R;
+sol.shadow.bias = -0.0004;
+/* NORMAL BIAS CHICO. Con 0.42 los troncos salían NEGROS: el desplazamiento a lo
+   largo de la normal es más grueso que el propio cilindro, así que cada tronco
+   se auto-sombreaba entero. Las copas y los arbustos zafaban por ser bultos
+   grandes, y por eso parecía un problema de color y no de sombra. */
+sol.shadow.normalBias = 0.045;
+escena.add(sol); escena.add(sol.target);
+
+/* EL AMBIENTE ES LA MITAD DEL LOOK. Un hemisférico fuerte —cielo arriba,
+   rebote del pasto abajo— es lo que hace que las sombras no sean pozos negros
+   y que todo se vea bañado en luz de mediodía. */
+const ambiente = new T.HemisphereLight(0xa8dcff, 0x76b84a, 1.30);
+escena.add(ambiente);
+/* RELLENO. Una segunda direccional, fría, floja y sin sombra, apuntando desde
+   el lado contrario al sol. En la realidad eso lo hace el cielo rebotando en el
+   suelo; sin ella la cara en sombra de cada árbol y de cada carpa es un plano
+   liso del mismo color, y el bosque se ve recortado en cartulina. */
+const relleno = new T.DirectionalLight(0xbcd8ff, 0);
+escena.add(relleno); escena.add(relleno.target);
+
+/* ══════════════════════════ TEXTURAS PROCEDURALES ══════════════════════════
+   Chiquitas y con filtro NEAREST: a esta resolución de render, una textura
+   grande y suave se pierde. El grano tiene que ser del tamaño del píxel. */
+function lienzoTex(n, pinta){
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  pinta(c.getContext('2d'), n);
+  const t = new T.CanvasTexture(c);
+  t.magFilter = T.NearestFilter; t.minFilter = T.NearestMipmapNearestFilter;
+  t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace;
+  t.generateMipmaps = true;
+  return t;
+}
+/* moteado genérico: la base de casi todo */
+const moteado = (g, n, base, luz, osc, densidad) => {
+  g.fillStyle = base; g.fillRect(0,0,n,n);
+  for (let i = 0; i < n*n*densidad; i++){
+    const x = (Math.random()*n)|0, y = (Math.random()*n)|0;
+    g.fillStyle = Math.random() < 0.5 ? luz : osc;
+    g.fillRect(x, y, 1, 1);
+  }
+};
+const texPasto = lienzoTex(64, (g,n) => {
+  moteado(g, n, '#5cbb39', '#7fd94e', '#3f8f27', 0.55);
+  for (let i = 0; i < 90; i++){                      /* matas más claras */
+    const x=(Math.random()*n)|0, y=(Math.random()*n)|0;
+    g.fillStyle='#8ee158'; g.fillRect(x,y,1,2);
+  }
+});
+const texArena = lienzoTex(64, (g,n) => moteado(g,n,'#e9d3a0','#f7e9c6','#d3b57e',0.4));
+const texRoca  = lienzoTex(64, (g,n) => {
+  moteado(g,n,'#867f73','#a49c8d','#5f594f',0.5);
+  g.fillStyle='#6d675c';
+  for(let i=0;i<12;i++){ const y=(Math.random()*n)|0; g.fillRect(0,y,n,1); }
+});
+/* CORTEZA CLARA. La primera versión era #6b4a2c y los troncos se veían NEGROS:
+   medido en un caso aislado, un cilindro con esa textura daba (59,43,23) —ya de
+   por sí oscuro—, y encima el tronco vive bajo la sombra de su propia copa. La
+   cara lateral de un cilindro además recibe poco sol cuando el sol está alto,
+   porque su normal es horizontal. Con una base clara el tronco se lee incluso
+   en sombra, que es como se ve un árbol de verdad a plena luz. */
+const texCorteza = lienzoTex(32, (g,n) => {
+  g.fillStyle='#a87a4c'; g.fillRect(0,0,n,n);
+  for(let x=0;x<n;x++) for(let y=0;y<n;y++){
+    const v=Math.random();
+    if(v<0.24){ g.fillStyle='#8a6038'; g.fillRect(x,y,1,1); }
+    else if(v<0.40){ g.fillStyle='#c69a67'; g.fillRect(x,y,1,1); }
+  }
+  /* vetas verticales: es lo que hace que se lea como corteza y no como barro */
+  for(let i=0;i<10;i++){ const x=(Math.random()*n)|0;
+    g.fillStyle='#7d5730'; g.fillRect(x,0,1,n); }
+});
+/* GRANO NEUTRO, no verde. Esta textura MULTIPLICA al color de la instancia: si
+   además es verde oscuro, se multiplican dos oscuros y el bosque entero sale
+   casi negro, que es justo lo que pasaba. Centrada en blanco sólo aporta
+   textura y deja que el tono lo decida cada árbol. */
+const texHoja = lienzoTex(32, (g,n) => moteado(g,n,'#e6e6e6','#ffffff','#bdbdbd',0.6));
+
+/* la hoja suelta del pasto: silueta con alfa, para las matas cruzadas */
+function texBrizna(){
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const g = c.getContext('2d');
+  g.clearRect(0,0,32,32);
+  for (let i = 0; i < 7; i++){
+    const bx = 3 + i*4 + ((Math.random()*2)|0);
+    const alto = 16 + ((Math.random()*14)|0);
+    const incl = (Math.random()-0.5) * 5;
+    for (let y = 0; y < alto; y++){
+      const t = y/alto;
+      const w = Math.max(1, Math.round(2.2*(1-t)));
+      const x = Math.round(bx + incl*t*t);
+      const lum = 0.55 + t*0.45;
+      g.fillStyle = 'rgb('+Math.round(74*lum+18)+','+Math.round(190*lum+30)+','+Math.round(52*lum+14)+')';
+      g.fillRect(x, 31-y, w, 1);
+    }
+  }
+  const t = new T.CanvasTexture(c);
+  t.magFilter = T.NearestFilter; t.minFilter = T.NearestFilter;
+  t.colorSpace = T.SRGBColorSpace; t.generateMipmaps = false;
+  return t;
+}
+const texPastoAlfa = texBrizna();
+
+/* ══════════════════════════ MALLA DEL TERRENO ══════════════════════════
+   Plano subdividido, desplazado por H(), con color por vértice y flatShading.
+   Las caras planas son parte del look: con normales suavizadas el terreno se
+   vuelve un globo de goma y se pierde el aire de maqueta. */
+/* la malla acompaña al tamaño: 300 cuadros para 660 m son 2,2 m por cuadro,
+   parecido al detalle de antes y sin dispararse en vértices */
+const SEG = 300;
+let terreno = null, agua = null;
+function armaTerreno(){
+  if (terreno){ escena.remove(terreno); terreno.geometry.dispose(); }
+  const g = new T.PlaneGeometry(MITAD*2, MITAD*2, SEG, SEG);
+  g.rotateX(-Math.PI/2);
+  const p = g.attributes.position, n = p.count;
+  const col = new Float32Array(n*3);
+  const c = new T.Color();
+  for (let i = 0; i < n; i++){
+    const x = p.getX(i), z = p.getZ(i);
+    const h = H(x, z);
+    p.setY(i, h);
+    /* la mezcla de color por altura y pendiente: arena abajo, pasto en lo
+       llano, roca donde empina, y una variación de ruido para que no queden
+       franjas planas de un solo verde */
+    const s = pendiente(x, z);
+    const v = fbm(x*0.03, z*0.03, 2, SEM+9);
+    if (h < PLAYA){
+      c.copy(PAL.arena).lerp(PAL.arena2, v);
+    } else {
+      c.copy(PAL.pasto).lerp(PAL.pasto2, v);
+      c.lerp(PAL.pastoSec, cl((h-8)/26, 0, 1) * 0.5);
+      c.lerp(PAL.arena, cl((PLAYA + 2.2 - h)/2.2, 0, 1));   /* borde de playa */
+    }
+    c.lerp(PAL.roca, cl((s - 0.42)/0.5, 0, 1));
+    c.lerp(PAL.roca2, cl((s - 0.85)/0.5, 0, 1) * 0.7);
+    col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+  }
+  g.setAttribute('color', new T.BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const m = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: texPasto });
+  /* la textura se usa sólo como grano fino: el color lo pone el vértice */
+  m.map.repeat.set(90, 90);
+  m.onBeforeCompile = sh => {
+    /* SE REEMPLAZA EL TROZO ENTERO, no se le agrega algo detrás: el nombre de la
+       variable que declara `map_fragment` cambió entre versiones de three
+       (`texelColor` antes, `sampledDiffuseColor` ahora) y apoyarse en él rompe
+       el shader sin decir por qué. Acá se muestrea a mano y no se depende de
+       ningún nombre interno. */
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+         /* el mapa aporta MOTEADO, no color: se centra en 1.0 y se atenúa, así
+            el color sigue viniendo del vértice y la textura sólo da el grano */
+         vec4 mota = texture2D(map, vMapUv);
+         diffuseColor.rgb *= mix(vec3(1.0), mota.rgb * 1.9, 0.30);
+       #endif`);
+  };
+  terreno = new T.Mesh(g, m);
+  terreno.receiveShadow = true;
+  escena.add(terreno);
+}
+
+/* ── el agua: plano con olas por vértice, dos azules y algo de transparencia ── */
+function armaAgua(){
+  if (agua){ escena.remove(agua); agua.geometry.dispose(); }
+  const g = new T.PlaneGeometry(MITAD*2.9, MITAD*2.9, 60, 60);
+  g.rotateX(-Math.PI/2);
+  const col = new Float32Array(g.attributes.position.count*3);
+  const c = new T.Color();
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++){
+    const prof = cl((MAR - H(p.getX(i), p.getZ(i))) / 12, 0, 1);
+    c.copy(PAL.agua).lerp(PAL.aguaHon, prof);
+    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+  }
+  g.setAttribute('color', new T.BufferAttribute(col, 3));
+  const m = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true,
+    transparent: true, opacity: 0.86 });
+  agua = new T.Mesh(g, m);
+  agua.position.y = MAR;
+  agua.receiveShadow = false;
+  escena.add(agua);
+  agua.userData.base = g.attributes.position.array.slice();
+}
+
+/* ══════════════════════════ VEGETACIÓN ══════════════════════════
+   Tres especies de árbol, arbustos, rocas y matas de pasto. Todo va por
+   InstancedMesh: un solo draw call por pieza, así entran miles sin que el
+   teléfono se caiga. */
+/* NADA DE `vertexColors` ACÁ. El color va POR INSTANCIA, y para eso three usa
+   `instanceColor`, que es otra cosa: con `vertexColors:true` el shader además
+   espera un atributo `color` en la geometría, y como las copas y los conos no
+   lo tienen, leía basura y TODA la vegetación salía negra. Con `setColorAt` y
+   sin `vertexColors` three define `USE_INSTANCING_COLOR` solo y multiplica bien. */
+const matCorteza = new T.MeshLambertMaterial({ map: texCorteza, flatShading: true });
+const matHoja    = new T.MeshLambertMaterial({ map: texHoja, flatShading: true });
+const matRoca    = new T.MeshLambertMaterial({ map: texRoca, flatShading: true });
+
+/* copa: un icosaedro achatado y deformado, para que no sean bolas perfectas */
+function geoCopa(r, semilla){
+  const g = new T.IcosahedronGeometry(r, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++){
+    const x=p.getX(i), y=p.getY(i), z=p.getZ(i);
+    const k = 0.82 + hash2((x*31)|0, (z*37)|0, semilla) * 0.42;
+    p.setXYZ(i, x*k, y*k*0.78, z*k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+/* fronda de palmera: una tira que se abre y cae, hecha con un plano curvado */
+function geoFronda(largo, ancho){
+  const seg = 7;
+  const g = new T.PlaneGeometry(ancho, largo, 1, seg);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++){
+    const y = p.getY(i);
+    /* SE ACOTA A [0,1] Y NO ES POR PROLIJIDAD. `PlaneGeometry` arma la última
+       fila como `seg * (largo/seg) - largo/2`, y eso en coma flotante da un
+       pelo MENOS que -largo/2: `t` salía en -1.3e-16, y `Math.pow(negativo,
+       2.1)` es NaN. Los dos vértices de la punta de cada fronda quedaban en
+       NaN, la palmera se dibujaba rota y la consola tiraba «Computed radius is
+       NaN» sin decir de qué. */
+    const t = cl((y + largo/2) / largo, 0, 1);     /* 0 en la base, 1 en la punta */
+    p.setZ(i, -Math.pow(t, 2.1) * largo * 0.42);   /* la caída */
+    p.setX(i, p.getX(i) * (0.35 + Math.sin(t*Math.PI) * 0.95));
+  }
+  g.rotateX(-Math.PI/2);
+  g.translate(0, 0, largo/2);
+  g.computeVertexNormals();
+  return g;
+}
+
+const GRUPOS = [];   /* para poder borrar todo al resembrar */
+/* claros: alrededor del campamento y de cada sitio no crece nada, para que se
+   llegue caminando y no haya que abrirse paso entre árboles */
+let CLAROS = [];
+function enClaro(x, z){
+  for (const c of CLAROS) if (Math.hypot(x-c.x, z-c.z) < c.r) return true;
+  return false;
+}
+function instanciar(geo, mat, lista, sombra){
+  if (!lista.length) return null;
+  const im = new T.InstancedMesh(geo, mat, lista.length);
+  im.castShadow = !!sombra; im.receiveShadow = true;
+  const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler();
+  const blanco = new T.Color(1,1,1);
+  lista.forEach((o, i) => {
+    e.set(o.rx||0, o.ry||0, o.rz||0);
+    q.setFromEuler(e);
+    m.compose(new T.Vector3(o.x, o.y, o.z), q, new T.Vector3(o.sx||o.s||1, o.sy||o.s||1, o.sz||o.s||1));
+    im.setMatrixAt(i, m);
+    im.setColorAt(i, o.c || blanco);      /* crea `instanceColor` la primera vez */
+  });
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  im.computeBoundingSphere();
+  escena.add(im); GRUPOS.push(im);
+  return im;
+}
+
+/* variación de verde por instancia: sin esto el bosque es de plástico */
+function verde(t){
+  /* claridad alta a propósito: el material es Lambert y la cara en sombra ya
+     baja sola. Si la base es oscura, el lado sombreado se va a negro. */
+  return new T.Color().setHSL(0.255 + (Math.random()-0.5)*0.05,
+                              0.62 + Math.random()*0.20,
+                              0.46 + t*0.17 + Math.random()*0.08);
+}
+
+let pastoMesh = null, matPasto = null;
+const RELOJ = { value: 0 };
+
+function sembrar(prog){
+  /* limpiar lo anterior */
+  GRUPOS.forEach(g => { escena.remove(g); g.geometry.dispose(); });
+  GRUPOS.length = 0;
+  if (pastoMesh){ escena.remove(pastoMesh); pastoMesh.geometry.dispose(); pastoMesh = null; }
+
+  const troncos=[], copas=[], conos=[], frondas=[], cocos=[], arbustos=[], rocas=[], matas=[];
+  const geoTronco = new T.CylinderGeometry(0.34, 0.52, 1, 6, 1);
+  geoTronco.translate(0, 0.5, 0);
+  const geoCono = new T.ConeGeometry(1, 1, 7);
+  geoCono.translate(0, 0.5, 0);
+  const geoCopa1 = geoCopa(1, 11);
+  const geoArb = geoCopa(1, 77);
+  const geoRoca = new T.IcosahedronGeometry(1, 0);
+  const geoFr = geoFronda(3.4, 0.85);
+  const geoCoco = new T.IcosahedronGeometry(0.22, 0);
+
+  /* un candidato cada tantos metros, aceptado según altura, pendiente y ruido:
+     así los árboles se agrupan en bosques en vez de quedar sueltos y parejos */
+  const N = 62000;
+  for (let i = 0; i < N; i++){
+    const x = (Math.random()*2-1)*MITAD*0.97;
+    const z = (Math.random()*2-1)*MITAD*0.97;
+    const h = H(x, z);
+    if (h < PLAYA - 0.4 || h > 46) continue;
+    if (enClaro(x, z)) continue;
+    const s = pendiente(x, z);
+    if (s > 0.62) continue;
+
+    const bosque = fbm(x*0.011, z*0.011, 3, SEM+404);
+    const playa = h < PLAYA + 2.4;
+    const r = Math.random();
+
+    if (playa){
+      /* la costa es de palmeras, y con menos densidad */
+      if (r < 0.030){
+        const alto = 5.2 + Math.random()*4.2;
+        const incl = (Math.random()-0.5)*0.30;
+        troncos.push({ x, y:h, z, s:1, sx:0.62, sy:alto, sz:0.62,
+                       rx:incl, rz:(Math.random()-0.5)*0.30, c:new T.Color(0.95,0.9,0.85) });
+        const n = 7 + ((Math.random()*3)|0);
+        const cy = h + alto*0.97, cx = x + Math.sin(incl)*alto*0.5;
+        for (let k = 0; k < n; k++){
+          frondas.push({ x:cx, y:cy, z, ry: (k/n)*6.283 + Math.random()*0.3,
+                         rx: -0.30 - Math.random()*0.34, s: 0.85 + Math.random()*0.4,
+                         c: verde(0.55) });
+        }
+        for (let k = 0; k < 3; k++)
+          cocos.push({ x:cx + Math.cos(k*2.1)*0.42, y:cy-0.35, z: z + Math.sin(k*2.1)*0.42,
+                       s:1, c:new T.Color('#7a5a2a') });
+      } else if (r < 0.055){
+        arbustos.push({ x, y:h, z, s: 0.5 + Math.random()*0.5, ry: Math.random()*6.28, c: verde(0.4) });
+      }
+    } else {
+      const dens = 0.020 + bosque*0.085;
+      if (r < dens){
+        if (bosque > 0.58 && h > 16 && Math.random() < 0.6){
+          /* coníferas arriba: tres conos apilados */
+          const alto = 4.6 + Math.random()*5.6;
+          troncos.push({ x, y:h, z, sx:0.5, sy:alto*0.42, sz:0.5, c:new T.Color(0.9,0.85,0.8) });
+          const c = verde(0.18);
+          for (let k = 0; k < 3; k++){
+            const t = k/3;
+            conos.push({ x, y: h + alto*(0.30 + t*0.46), z,
+                         sx: (2.5-t*1.35)*(0.8+Math.random()*0.25),
+                         sy: alto*0.40, sz: (2.5-t*1.35)*(0.8+Math.random()*0.25),
+                         ry: Math.random()*6.28, c });
+          }
+        } else {
+          /* frondoso: tronco y tres o cuatro copas superpuestas */
+          const alto = 3.4 + Math.random()*4.4;
+          const anc = 1.5 + Math.random()*1.5;
+          troncos.push({ x, y:h, z, sx:0.62, sy:alto, sz:0.62,
+                         rz:(Math.random()-0.5)*0.12, c:new T.Color(1,0.96,0.92) });
+          const c = verde(0.32);
+          const nb = 3 + ((Math.random()*2)|0);
+          for (let k = 0; k < nb; k++){
+            const a = Math.random()*6.283, rr = Math.random()*anc*0.5;
+            copas.push({ x: x + Math.cos(a)*rr, y: h + alto + Math.random()*anc*0.42,
+                         z: z + Math.sin(a)*rr, s: anc*(0.62 + Math.random()*0.5),
+                         ry: Math.random()*6.28,
+                         c: c.clone().offsetHSL(0, 0, (Math.random()-0.5)*0.07) });
+          }
+        }
+      } else if (r < dens + 0.055){
+        arbustos.push({ x, y: h, z, s: 0.55 + Math.random()*0.75,
+                        ry: Math.random()*6.28, c: verde(0.26) });
+      } else if (r < dens + 0.070){
+        const g = 0.55 + Math.random()*0.35;
+        rocas.push({ x, y: h + 0.1, z, s: 0.5 + Math.random()*1.5,
+                     rx: Math.random()*3, ry: Math.random()*6.28, rz: Math.random()*3,
+                     c: new T.Color(g, g*0.98, g*0.92) });
+      }
+    }
+    if (r < 0.30 && h > PLAYA - 0.2 && s < 0.5)
+      matas.push({ x, y: h, z, ry: Math.random()*6.28, s: 0.7 + Math.random()*0.9 });
+  }
+  prog && prog(0.55, 'Plantando ' + (troncos.length) + ' árboles…');
+
+  instanciar(geoTronco, matCorteza, troncos, true);
+  instanciar(geoCopa1, matHoja, copas, true);
+  instanciar(geoCono, matHoja, conos, true);
+  instanciar(geoFr, matHoja, frondas, true);
+  instanciar(geoCoco, matCorteza, cocos, true);
+  instanciar(geoArb, matHoja, arbustos, true);
+  instanciar(geoRoca, matRoca, rocas, true);
+
+  /* ── el pasto: cruces de dos planos con alfa recortada ──
+     alphaTest y no transparencia: sin orden que resolver, se puede meter
+     mucho y encima queda el borde duro que combina con el pixelado. */
+  matPasto = new T.MeshLambertMaterial({
+    map: texPastoAlfa, alphaTest: 0.5, side: T.DoubleSide, flatShading: true
+  });
+  matPasto.onBeforeCompile = sh => {
+    sh.uniforms.reloj = RELOJ;
+    sh.uniforms.viento = VIENTO;
+    sh.vertexShader = 'uniform float reloj; uniform float viento;\n' + sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       /* el vaivén crece con la altura del vértice: la base queda clavada */
+       float alt = max(0.0, position.y);
+       vec3 wp = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+       transformed.x += sin(reloj*1.7 + wp.x*0.32 + wp.z*0.21) * alt * 0.20 * viento;
+       transformed.z += cos(reloj*1.35 + wp.z*0.28) * alt * 0.13 * viento;`);
+  };
+  const gp = new T.PlaneGeometry(0.9, 0.9);
+  gp.translate(0, 0.45, 0);
+  const gp2 = gp.clone(); gp2.rotateY(Math.PI/2);
+  const cruz = mezclar([gp, gp2]);
+  pastoMesh = new T.InstancedMesh(cruz, matPasto, matas.length);
+  pastoMesh.castShadow = false; pastoMesh.receiveShadow = true;
+  const m4 = new T.Matrix4(), qq = new T.Quaternion(), ee = new T.Euler();
+  matas.forEach((o, i) => {
+    ee.set(0, o.ry, 0); qq.setFromEuler(ee);
+    m4.compose(new T.Vector3(o.x, o.y, o.z), qq, new T.Vector3(o.s, o.s*(0.8+Math.random()*0.6), o.s));
+    pastoMesh.setMatrixAt(i, m4);
+  });
+  pastoMesh.instanceMatrix.needsUpdate = true;
+  escena.add(pastoMesh);
+
+  return { arboles: troncos.length, matas: matas.length };
+}
+
+/* mezcla de geometrías sin depender de BufferGeometryUtils: sólo necesito
+   unir dos planos idénticos en atributos, y así el HTML no importa nada más */
+function mezclar(gs){
+  let nv = 0, ni = 0;
+  gs.forEach(g => { nv += g.attributes.position.count; ni += g.index ? g.index.count : 0; });
+  const pos = new Float32Array(nv*3), nor = new Float32Array(nv*3), uv = new Float32Array(nv*2);
+  const idx = new Uint16Array(ni);
+  let vo = 0, io = 0;
+  gs.forEach(g => {
+    const p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv;
+    pos.set(p.array, vo*3); nor.set(n.array, vo*3); uv.set(u.array, vo*2);
+    const gi = g.index.array;
+    for (let i = 0; i < gi.length; i++) idx[io+i] = gi[i] + vo;
+    vo += p.count; io += gi.length;
+  });
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new T.BufferAttribute(nor, 3));
+  g.setAttribute('uv', new T.BufferAttribute(uv, 2));
+  g.setIndex(new T.BufferAttribute(idx, 1));
+  return g;
+}
+const VIENTO = { value: 1 };
+
+/* ══════════════════════════ LOS SITIOS ══════════════════════════
+   Una isla grande sin nada adentro es un campo vacío. Se buscan cuatro lugares
+   con sentido —terreno llano para el campamento, la cima para el mojón, un
+   claro alto para las piedras y la costa para el arco— y se los construye a
+   mano, uno por uno, porque un sitio que se ve de lejos es lo que hace que uno
+   camine hacia algún lado en vez de dar vueltas. */
+let CAMPO = null, SITIOS = [], fuegoLuz = null, fuegoMalla = null;
+
+/* busca el mejor punto según lo que se le pida, evitando los ya elegidos */
+function buscaSitio(test, puntaje, lejosDe, minDist){
+  let mejor = null, mejorP = -1e9;
+  for (let gx = -0.86; gx <= 0.86; gx += 0.028){
+    for (let gz = -0.86; gz <= 0.86; gz += 0.028){
+      const x = gx*MITAD, z = gz*MITAD, h = H(x, z), pe = pendiente(x, z);
+      if (!test(h, pe, x, z)) continue;
+      let ok = true;
+      for (const o of (lejosDe || []))
+        if (Math.hypot(x-o.x, z-o.z) < (minDist || 90)){ ok = false; break; }
+      if (!ok) continue;
+      const p = puntaje(h, pe, x, z);
+      if (p > mejorP){ mejorP = p; mejor = { x, z, h }; }
+    }
+  }
+  return mejor;
+}
+
+const texLona = lienzoTex(32, (g,n) => {
+  moteado(g, n, '#c9a878', '#e0c497', '#a98a5e', 0.35);
+  g.fillStyle = '#b08f62';
+  for (let i = 0; i < n; i += 4) g.fillRect(0, i, n, 1);
+});
+const matLona = new T.MeshLambertMaterial({ map: texLona, flatShading: true, side: T.DoubleSide });
+const matBrasa = new T.MeshBasicMaterial({ color: 0xff9a3c });
+
+function armaCampamento(c){
+  const g = new T.Group();
+  const y = c.h;
+
+  /* el círculo de piedras */
+  for (let i = 0; i < 11; i++){
+    const a = i/11*6.283, r = 1.65;
+    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
+    const m = new T.Mesh(new T.IcosahedronGeometry(0.26 + Math.random()*0.16, 0), matRoca);
+    m.position.set(px, H(c.x+px, c.z+pz) - y + 0.1, pz);
+    m.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  }
+  /* la leña cruzada */
+  for (let i = 0; i < 5; i++){
+    const a = i/5*6.283;
+    const l = new T.Mesh(new T.CylinderGeometry(0.09, 0.12, 1.5, 5), matCorteza);
+    l.position.set(Math.cos(a)*0.35, 0.42, Math.sin(a)*0.35);
+    l.rotation.set(Math.cos(a)*0.95, a, Math.sin(a)*0.95);
+    l.castShadow = true;
+    g.add(l);
+  }
+  /* la llama: dos conos que laten. Sin transparencia, para que el pixelado la
+     recorte con borde duro como todo lo demás. */
+  fuegoMalla = new T.Group();
+  for (let i = 0; i < 2; i++){
+    const f = new T.Mesh(new T.ConeGeometry(0.42 - i*0.14, 1.25 - i*0.35, 5), matBrasa);
+    f.position.y = 0.72 - i*0.12;
+    fuegoMalla.add(f);
+  }
+  g.add(fuegoMalla);
+  fuegoLuz = new T.PointLight(0xffa03c, 8, 26, 1.7);
+  fuegoLuz.position.set(0, 1.1, 0);
+  g.add(fuegoLuz);
+
+  /* LOS TRES TRONCOS para sentarse, uno por lado y con un hueco para entrar */
+  for (let i = 0; i < 3; i++){
+    const a = i/3*6.283 + 0.5, r = 3.5;
+    const t = new T.Mesh(new T.CylinderGeometry(0.36, 0.4, 3.1, 7), matCorteza);
+    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
+    t.position.set(px, H(c.x+px, c.z+pz) - y + 0.36, pz);
+    t.rotation.set(Math.PI/2, 0, -a);   /* acostado y de cara al fuego */
+    t.castShadow = t.receiveShadow = true;
+    g.add(t);
+  }
+
+  /* LAS CARPAS, HUECAS DE VERDAD.
+     Antes era un prisma cerrado: por fuera pasaba, pero no era una carpa sino un
+     bulto. Ahora se arma con las tres piezas que tiene una carpa —EL PISO y LAS
+     DOS AGUAS del techo— y se deja abierta en las dos puntas, así se entra, se
+     ve el interior y la luz de la fogata se mete adentro. Las tres van a
+     DoubleSide porque desde adentro se miran por el reverso. */
+  const C_ANCHO = 2.0, C_LARGO = 3.0, C_ALTO = 1.5;
+  function carpa(){
+    const gr = new T.Group();
+    const mitad = C_ANCHO/2;
+    const caida = Math.hypot(mitad, C_ALTO);        /* largo real de cada agua */
+    const incl = Math.atan2(mitad, C_ALTO);         /* cuánto se abre del vertical */
+
+    const piso = new T.Mesh(new T.PlaneGeometry(C_ANCHO, C_LARGO), matLona);
+    piso.rotation.x = -Math.PI/2;
+    piso.position.y = 0.02;
+    piso.receiveShadow = true;
+    gr.add(piso);
+
+    for (const sg of [-1, 1]){
+      const agua = new T.Mesh(new T.PlaneGeometry(caida, C_LARGO), matLona);
+      /* cada agua nace vertical y se abre hacia su lado desde la cumbrera */
+      agua.rotation.set(-Math.PI/2, 0, 0);
+      agua.rotation.y = sg * incl;
+      agua.position.set(sg * mitad/2, C_ALTO/2, 0);
+      agua.rotation.set(0, 0, sg * (Math.PI/2 - incl));
+      agua.castShadow = true; agua.receiveShadow = true;
+      gr.add(agua);
+    }
+    /* LA CUMBRERA y las estacas. Los palitos de antes flotaban sueltos al lado
+       de la carpa sin tocar nada: ahora el palo va de punta a punta por arriba,
+       y de cada punta bajan dos vientos hasta una estaca clavada en el suelo,
+       que es lo que sostiene una carpa de verdad. */
+    const cumb = new T.Mesh(new T.CylinderGeometry(0.045, 0.045, C_LARGO + 0.5, 4), matCorteza);
+    cumb.rotation.x = Math.PI/2;
+    cumb.position.y = C_ALTO;
+    gr.add(cumb);
+    for (const sz of [-1, 1]){
+      const zp = sz * (C_LARGO/2 + 0.25);
+      for (const sx of [-1, 1]){
+        const ex = sx * 1.15, ez = sz * (C_LARGO/2 + 1.15);
+        const a = new T.Vector3(0, C_ALTO, zp), b = new T.Vector3(ex, 0.05, ez);
+        const largo = a.distanceTo(b);
+        const v = new T.Mesh(new T.CylinderGeometry(0.022, 0.022, largo, 3), matCorteza);
+        v.position.copy(a).add(b).multiplyScalar(0.5);
+        v.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),
+          b.clone().sub(a).normalize());
+        gr.add(v);
+        const est = new T.Mesh(new T.CylinderGeometry(0.035, 0.02, 0.34, 4), matCorteza);
+        est.position.set(ex, 0.1, ez);
+        gr.add(est);
+      }
+    }
+    return gr;
+  }
+  for (let i = 0; i < 3; i++){
+    const a = i/3*6.283 + 1.9, r = 8.2 + (i%2)*1.4;
+    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
+    const k = carpa();
+    k.position.set(px, H(c.x+px, c.z+pz) - y, pz);
+    k.rotation.y = a + Math.PI/2 + (Math.random()-0.5)*0.4;
+    g.add(k);
+  }
+
+  g.position.set(c.x, y, c.z);
+  escena.add(g); GRUPOS.push(g);
+}
+
+/* mojón de piedras en la cima: se ve desde media isla */
+function armaMojon(c){
+  const g = new T.Group();
+  for (let i = 0; i < 9; i++){
+    const t = i/9;
+    const m = new T.Mesh(new T.IcosahedronGeometry(0.85*(1-t*0.62), 0), matRoca);
+    m.position.set((Math.random()-0.5)*0.3, t*3.4, (Math.random()-0.5)*0.3);
+    m.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  }
+  g.position.set(c.x, c.h, c.z);
+  escena.add(g); GRUPOS.push(g);
+}
+
+/* círculo de piedras paradas */
+function armaCirculo(c){
+  const g = new T.Group();
+  for (let i = 0; i < 8; i++){
+    const a = i/8*6.283, r = 6.5;
+    const alto = 2.6 + Math.random()*2.2;
+    const m = new T.Mesh(new T.BoxGeometry(1.1, alto, 0.7), matRoca);
+    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
+    m.position.set(px, H(c.x+px, c.z+pz) - c.h + alto/2 - 0.2, pz);
+    m.rotation.set((Math.random()-0.5)*0.14, a, (Math.random()-0.5)*0.12);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  }
+  g.position.set(c.x, c.h, c.z);
+  escena.add(g); GRUPOS.push(g);
+}
+
+/* arco de piedra en la costa */
+function armaArco(c){
+  const g = new T.Group();
+  const N = 11;
+  for (let i = 0; i < N; i++){
+    const t = i/(N-1), a = Math.PI*t;
+    const m = new T.Mesh(new T.BoxGeometry(2.1, 1.9, 2.6), matRoca);
+    m.position.set(Math.cos(a)*5.2, Math.sin(a)*5.6, 0);
+    m.rotation.set((Math.random()-0.5)*0.2, (Math.random()-0.5)*0.2, -a + Math.PI/2);
+    m.scale.setScalar(0.85 + Math.random()*0.35);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  }
+  g.position.set(c.x, c.h - 0.4, c.z);
+  g.rotation.y = Math.random()*3.14;
+  escena.add(g); GRUPOS.push(g);
+}
+
+function eligeSitios(){
+  /* EL CAMPAMENTO VA EN EL CENTRO DE LA ISLA. No se busca por toda la isla: se
+     busca el punto más llano DENTRO de un radio corto del origen, así queda
+     siempre en el medio —que es donde uno lo espera— pero sin que la fogata
+     termine colgada de una ladera. */
+  CAMPO = null;
+  { let mejorP = -1e9;
+    for (let r = 0; r <= 34; r += 2){
+      for (let a = 0; a < 6.283; a += (r < 1 ? 7 : 0.24)){
+        const x = Math.cos(a)*r, z = Math.sin(a)*r;
+        const h = H(x, z), pe = pendiente(x, z);
+        if (h < PLAYA + 1.0) continue;
+        const pun = (1 - pe*5)*4 - r*0.035;
+        if (pun > mejorP){ mejorP = pun; CAMPO = { x, z, h }; }
+      }
+    }
+  }
+  if (!CAMPO) CAMPO = { x: 0, z: 0, h: Math.max(H(0,0), PLAYA + 1.4) };
+  const usados = [CAMPO];
+
+  const cima = buscaSitio((h, pe) => pe < 0.5, h => h, usados, 130);
+  const circ = buscaSitio((h, pe) => h > PLAYA + 3 && h < 30 && pe < 0.18,
+                          (h, pe) => (1 - pe*4)*2 + h*0.05, usados, 120);
+  const arco = buscaSitio((h, pe) => h > PLAYA - 0.5 && h < PLAYA + 2.2 && pe < 0.3,
+                          (h, pe, x, z) => Math.hypot(x, z)/MITAD*3 - pe, usados, 120);
+  SITIOS = [{ t:'campamento', c: CAMPO }];
+  if (cima) SITIOS.push({ t:'mojón', c: cima });
+  if (circ) SITIOS.push({ t:'círculo', c: circ });
+  if (arco) SITIOS.push({ t:'arco', c: arco });
+  CLAROS = SITIOS.map(s2 => ({ x: s2.c.x, z: s2.c.z, r: s2.t === 'campamento' ? 13 : 9 }));
+}
+function armaSitios(){
+  fuegoLuz = null; fuegoMalla = null;
+  for (const s2 of SITIOS){
+    if (s2.t === 'campamento') armaCampamento(s2.c);
+    else if (s2.t === 'mojón') armaMojon(s2.c);
+    else if (s2.t === 'círculo') armaCirculo(s2.c);
+    else if (s2.t === 'arco') armaArco(s2.c);
+  }
+}
+
+/* ══════════════════════════ LAS NUBES ══════════════════════════
+   Cúmulos gordos: racimos de icosaedros de una sola subdivisión, planos, en
+   blanco casi puro. Con flatShading y el hemisférico, la panza les queda
+   azulada sola y arriba les pega el sol. Nada de billboards ni de alfa: son
+   volumen de verdad, y por eso se pixelan bien en los bordes. */
+let nubes = null, matNube = null;
+function armaNubes(){
+  if (nubes){ escena.remove(nubes); nubes.geometry.dispose(); }
+  const trozos = [];
+  const RACIMOS = 54;
+  for (let i = 0; i < RACIMOS; i++){
+    /* LEJOS Y ALTAS. Con el radio mínimo en 60 había cúmulos a la altura de las
+       copas y encima de la cabeza: se veían como globos estirados en vez de
+       nubes. Un cúmulo se lee como cúmulo cuando está lejos y arriba. */
+    const a = Math.random()*6.283, d = 190 + Math.random()*430;
+    const cx = Math.cos(a)*d, cz = Math.sin(a)*d;
+    const cy = 105 + Math.random()*95;
+    const esc = 7 + Math.random()*11;
+    const n = 9 + ((Math.random()*9)|0);
+    for (let k = 0; k < n; k++){
+      /* la panza plana y la coronilla redonda: los trozos de abajo se achatan */
+      const t = Math.random();
+      const alto = (Math.random()-0.25);
+      trozos.push({
+        x: cx + (Math.random()-0.5)*esc*2.7,
+        y: cy + alto*esc*0.62,
+        z: cz + (Math.random()-0.5)*esc*2.7,
+        sx: esc*(0.52+Math.random()*0.58),
+        sy: esc*(0.30+Math.random()*0.26)*(alto > 0 ? 1.15 : 0.72),
+        sz: esc*(0.52+Math.random()*0.58),
+        /* SOLO giro en Y: con rotación libre el icosaedro achatado se acuesta y
+           la nube pasa a ser una cápsula tumbada. El eje chato tiene que quedar
+           vertical siempre. */
+        rx: 0, ry: Math.random()*6.283, rz: 0
+      });
+    }
+  }
+  const g = new T.IcosahedronGeometry(1, 1);
+  /* con emisivo la panza de la nube no se va a gris: un cúmulo real rebota
+     tanta luz adentro que nunca se ve oscuro desde abajo */
+  const m = new T.MeshLambertMaterial({ color: 0xffffff, emissive: 0xcfe6ff,
+    emissiveIntensity: 0.55, flatShading: true, fog: false });
+  const im = new T.InstancedMesh(g, m, trozos.length);
+  const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler();
+  trozos.forEach((o, i) => {
+    e.set(o.rx, o.ry, o.rz); q.setFromEuler(e);
+    m4.compose(new T.Vector3(o.x,o.y,o.z), q, new T.Vector3(o.sx,o.sy,o.sz));
+    im.setMatrixAt(i, m4);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  im.castShadow = false; im.receiveShadow = false;
+  im.frustumCulled = false;
+  nubes = im; escena.add(im);
+  matNube = m;
+}
+
+/* ══════════════════════════ EL PIXELADO ══════════════════════════
+   La escena entera va a un render target chico con filtro NEAREST, y este
+   material lo estira a pantalla completa haciendo de paso el grado de color.
+   Trabaja sobre valores YA en sRGB —el render target los codifica al
+   escribir— así que saturación y brillo se comportan como uno espera de esas
+   dos palabras, y no como una curva rara en espacio lineal. */
+let rt = null;
+const postMat = new T.ShaderMaterial({
+  uniforms: {
+    tex:  { value: null },
+    sat:  { value: CFG.sat },
+    bri:  { value: CFG.bri },
+    con:  { value: CFG.con },
+    pos:  { value: CFG.pos },
+    vig:  { value: 0.46 }
+  },
+  vertexShader: `varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tex; uniform float sat, bri, con, pos, vig; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tex, vUv).rgb;
+      c *= bri;
+      c = (c - 0.5) * con + 0.5;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, sat);
+      /* LA VIÑETA VA ANTES DE LAS BANDAS. Puesta después quedaba como un
+         degradado suave encima de una imagen escalonada, y se notaba que era un
+         filtro pegado. Cortada en los mismos niveles de color, el oscurecimiento
+         de las esquinas avanza a saltos igual que el resto del cuadro. */
+      vec2 d = vUv - 0.5;
+      float r2 = dot(d, d);
+      c *= 1.0 - r2 * vig - r2 * r2 * vig * 1.35;
+      if (pos > 1.5){ c = floor(c * pos + 0.5) / pos; }   /* bandas de color */
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const postEsc = new T.Scene();
+const postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+{
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(new Float32Array([-1,-1,0, 3,-1,0, -1,3,0]), 3));
+  g.setAttribute('uv', new T.BufferAttribute(new Float32Array([0,0, 2,0, 0,2]), 2));
+  postEsc.add(new T.Mesh(g, postMat));
+}
+
+let W = 1, H2 = 1, GIRADO = false;
+CFG.girar = true;
+
+/* ══════ COORDENADAS DEL ESCENARIO ══════
+   Con el escenario girado, un dedo que cruza la pantalla de izquierda a derecha
+   se mueve en VERTICAL en coordenadas de ventana. Si los controles leen
+   `clientX/clientY` a secas, mirar y caminar quedan cruzados y espejados.
+   Todo lo que toca el dedo pasa por acá.
+
+   El escenario se coloca con `rotate(90deg) translateY(-100%)` y origen arriba
+   a la izquierda, así que un punto local (x,y) cae en la ventana en
+   (altoEscenario - y, x). Invirtiéndolo: x = clientY, y = anchoVentana - clientX. */
+function pt(e){
+  if (!GIRADO) return { x: e.clientX, y: e.clientY };
+  return { x: e.clientY, y: window.innerWidth - e.clientX };
+}
+/* el rectángulo de un elemento, también en coordenadas del escenario. Un giro
+   de 90° deja el rectángulo alineado a los ejes, así que la conversión es exacta */
+function rectEsc(el){
+  const r = el.getBoundingClientRect();
+  if (!GIRADO) return { x: r.left, y: r.top, w: r.width, h: r.height };
+  return { x: r.top, y: window.innerWidth - r.right, w: r.height, h: r.width };
+}
+
+function medir(){
+  const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight);
+  /* se gira sólo si hace falta: aparato en vertical y la opción encendida */
+  GIRADO = !!CFG.girar && vh > vw;
+  document.body.classList.toggle('girado', GIRADO);
+  W = GIRADO ? vh : vw;
+  H2 = GIRADO ? vw : vh;
+  const esc = document.getElementById('escenario');
+  esc.style.width = W + 'px'; esc.style.height = H2 + 'px';
+  ren.setSize(W, H2, false);
+  cam.aspect = W / H2; cam.updateProjectionMatrix();
+  const w = Math.max(1, Math.ceil(W / CFG.pix)), h = Math.max(1, Math.ceil(H2 / CFG.pix));
+  if (rt) rt.dispose();
+  rt = new T.WebGLRenderTarget(w, h, {
+    minFilter: T.NearestFilter, magFilter: T.NearestFilter,
+    depthBuffer: true, stencilBuffer: false,
+    colorSpace: T.SRGBColorSpace       /* codifica al escribir: ver comentario de arriba */
+  });
+  postMat.uniforms.tex.value = rt.texture;
+}
+
+/* ══════════════════════════ CÁMARA Y CONTROLES ══════════════════════════ */
+const JUG = { x: 0, z: 0, y: 0, vy: 0, aire: false, yaw: 0, pitch: -0.06, vuela: false, agacha: false };
+const OJO = 1.72, VEL = 6.4, CORRE = 12.8, GRAV = 22, SALTO = 8.2;
+let corre = false;
+/* estado del CABECEO: fase del paso, amplitudes suavizadas y el golpe al caer */
+const AND = { fase: 0, v: 0, ojo: OJO, roll: 0, dip: 0, lado: 0, fov: 66, golpe: 0 };
+function saltar(){
+  if (JUG.vuela || JUG.aire || PAUSA) return;
+  JUG.vy = SALTO * (JUG.agacha ? 0.72 : 1); JUG.aire = true;
+}
+function ponAgacha(v){
+  JUG.agacha = !!v;
+  const b = document.getElementById('acAgacha');
+  if (b) b.classList.toggle('on', JUG.agacha);
+}
+const teclas = {};
+const movV = { x: 0, y: 0 };
+
+/* dónde empezar: un punto de la isla que esté sobre la playa y no empinado */
+/* BARRIDO EN REJILLA, NO SORTEO. Antes tiraba 900 puntos al azar y si ninguno
+   servía te dejaba en el origen —que puede estar bajo el agua—. Ahora recorre
+   una rejilla y se queda con el MEJOR candidato, así siempre hay respuesta y
+   además es la misma para la misma isla. */
+function ubicaInicio(){
+  let mejor = null, mejorP = -1e9;
+  for (let gx = -0.72; gx <= 0.72; gx += 0.045){
+    for (let gz = -0.72; gz <= 0.72; gz += 0.045){
+      const x = gx*MITAD, z = gz*MITAD;
+      const h = H(x, z);
+      if (h < PLAYA + 0.4) continue;
+      const s = pendiente(x, z);
+      if (s > 0.36) continue;
+      /* se premia lo llano y una altura de mirador, y se castiga el borde */
+      const p = (1 - s*2) * 3 + (1 - Math.abs(h - 13)/22) * 2.4 - Math.hypot(gx, gz);
+      if (p > mejorP){ mejorP = p; mejor = { x, z, h }; }
+    }
+  }
+  if (!mejor){
+    /* isla toda sumergida (puede pasar con una semilla mala): se sube el punto */
+    mejor = { x: 0, z: 0, h: Math.max(H(0,0), PLAYA + 1.2) };
+  }
+  JUG.x = mejor.x; JUG.z = mejor.z; JUG.y = mejor.h;
+  JUG.vy = 0; JUG.aire = false; JUG.vuela = false;
+  JUG.yaw = Math.atan2(mejor.x, mejor.z);   /* mismo signo que arriba */
+}
+
+addEventListener('keydown', e => {
+  teclas[e.code] = true;
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
+  if (e.code === 'Space'){ e.preventDefault(); saltar(); }
+  if (e.code === 'ControlLeft' || e.code === 'ControlRight'){ e.preventDefault(); ponAgacha(true); }
+  if (e.code === 'KeyF'){ JUG.vuela = !JUG.vuela; JUG.vy = 0; aviso(JUG.vuela ? 'Vuelo libre' : 'De vuelta al suelo'); }
+  if (e.code === 'Escape') pausa(!PAUSA);
+  modoPC(true);
+});
+addEventListener('keyup', e => {
+  teclas[e.code] = false;
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = false;
+  if (e.code === 'ControlLeft' || e.code === 'ControlRight') ponAgacha(false);
+});
+
+/* ratón: al hacer clic se toma el puntero, que es lo natural en PC */
+lienzo.addEventListener('click', () => {
+  if (document.body.classList.contains('pc') && !document.pointerLockElement)
+    lienzo.requestPointerLock();
+});
+addEventListener('mousemove', e => {
+  if (document.pointerLockElement === lienzo){
+    JUG.yaw -= e.movementX * 0.0024;
+    JUG.pitch = cl(JUG.pitch - e.movementY * 0.0024, -1.35, 1.35);
+  }
+});
+addEventListener('mousedown', e => { if (e.pointerType !== 'touch') modoPC(true); }, true);
+
+/* dedo: mitad derecha mira, palanca abajo a la izquierda mueve */
+const DED = { mira: null, mov: null };
+lienzo.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') return;
+  modoPC(false);
+  const q = pt(e);
+  if (q.x > W*0.42 && !DED.mira) DED.mira = { id: e.pointerId, x: q.x, y: q.y };
+}, { passive: true });
+lienzo.addEventListener('pointermove', e => {
+  if (DED.mira && DED.mira.id === e.pointerId){
+    const q = pt(e);
+    JUG.yaw -= (q.x - DED.mira.x) * 0.0052;
+    JUG.pitch = cl(JUG.pitch - (q.y - DED.mira.y) * 0.0052, -1.35, 1.35);
+    DED.mira.x = q.x; DED.mira.y = q.y;
+  }
+}, { passive: true });
+const sueltaDedo = e => { if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null; };
+lienzo.addEventListener('pointerup', sueltaDedo);
+lienzo.addEventListener('pointercancel', sueltaDedo);
+
+/* ── la palanca dibujada ── */
+const joyCv = document.querySelector('#joy canvas'), jg = joyCv.getContext('2d');
+function joyDibuja(){
+  const n = 300, c = n/2, R = n/2 - 12;
+  jg.clearRect(0,0,n,n);
+  jg.strokeStyle = 'rgba(126,227,160,.55)'; jg.lineWidth = 3;
+  jg.beginPath(); jg.arc(c,c,R,0,6.283); jg.stroke();
+  jg.fillStyle = 'rgba(8,18,28,.35)'; jg.fill();
+  const px = c + movV.x*R*0.55, py = c + movV.y*R*0.55;
+  jg.beginPath(); jg.arc(px, py, 34, 0, 6.283);
+  jg.fillStyle = 'rgba(126,227,160,.85)'; jg.fill();
+}
+let jd = null;
+$('joy').addEventListener('pointerdown', e => {
+  e.preventDefault(); modoPC(false);
+  jd = e.pointerId; $('joy').setPointerCapture(e.pointerId); joyMueve(e);
+});
+$('joy').addEventListener('pointermove', e => { if (jd === e.pointerId) joyMueve(e); });
+const joySuelta = e => { if (jd === e.pointerId){ jd = null; movV.x = movV.y = 0; joyDibuja(); } };
+$('joy').addEventListener('pointerup', joySuelta);
+$('joy').addEventListener('pointercancel', joySuelta);
+function joyMueve(e){
+  const r = rectEsc($('joy')), q = pt(e);
+  let dx = (q.x - (r.x + r.w/2)) / (r.w/2);
+  let dy = (q.y - (r.y + r.h/2)) / (r.h/2);
+  const d = Math.hypot(dx, dy);
+  if (d > 1){ dx /= d; dy /= d; }
+  movV.x = dx; movV.y = dy;
+  /* la palanca a fondo ya no fuerza correr: para eso está el botón, y así se
+     puede caminar despacio sin que se dispare sola */
+  joyDibuja();
+}
+joyDibuja();
+
+function modoPC(v){
+  if (document.body.classList.contains('pc') === v) return;
+  document.body.classList.toggle('pc', v);
+}
+/* de arranque se mira lo que el aparato PUEDE hacer, no con qué se lo tocó */
+try {
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) modoPC(true);
+  else if (matchMedia('(pointer:fine)').matches && !matchMedia('(pointer:coarse)').matches) modoPC(true);
+} catch(e){ modoPC(true); }
+
+/* ══════════════════════════ FÍSICA ══════════════════════════ */
+function fisica(dt){
+  let mx = movV.x, my = movV.y;
+  if (teclas.KeyW) my -= 1; if (teclas.KeyS) my += 1;
+  if (teclas.KeyA) mx -= 1; if (teclas.KeyD) mx += 1;
+  if (teclas.ArrowLeft) JUG.yaw += 2.1*dt; if (teclas.ArrowRight) JUG.yaw -= 2.1*dt;
+  if (teclas.ArrowUp) JUG.pitch = cl(JUG.pitch + 1.6*dt, -1.35, 1.35);
+  if (teclas.ArrowDown) JUG.pitch = cl(JUG.pitch - 1.6*dt, -1.35, 1.35);
+  const m = Math.hypot(mx, my);
+  if (m > 1){ mx /= m; my /= m; }
+  /* agachado se anda a la mitad y no se puede correr, que es lo que hace que
+     agacharse sea una decisión y no un botón de adorno */
+  const sp = (JUG.agacha ? VEL*0.42 : (corre ? CORRE : VEL)) * (JUG.vuela ? 2.6 : 1);
+  AND.v = Math.hypot(vxAnt, vzAnt);
+  const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
+  const vx = (-sy * -my + cy * mx) * sp;
+  const vz = (-cy * -my - sy * mx) * sp;
+  vxAnt = vx; vzAnt = vz; ladoAnt = mx;
+
+  JUG.x = cl(JUG.x + vx*dt, -MITAD+3, MITAD-3);
+  JUG.z = cl(JUG.z + vz*dt, -MITAD+3, MITAD-3);
+
+  const suelo = Math.max(H(JUG.x, JUG.z), MAR - 0.6);
+  if (JUG.vuela){
+    if (teclas.Space) JUG.y += sp*0.6*dt;
+    if (teclas.ShiftLeft) JUG.y -= sp*0.6*dt;
+    JUG.y = Math.max(JUG.y, suelo + 0.5);
+  } else {
+    if (JUG.aire){
+      JUG.vy -= GRAV*dt; JUG.y += JUG.vy*dt;
+      if (JUG.y <= suelo){
+        /* EL GOLPE AL CAER: cuanto más fuerte, más se hunde la cámara. Es medio
+           segundo de nada y es lo que hace que un salto se sienta con peso. */
+        AND.golpe = Math.min(0.42, Math.max(0, -JUG.vy) * 0.032);
+        JUG.y = suelo; JUG.vy = 0; JUG.aire = false;
+      }
+    } else {
+      /* el ojo persigue al suelo en vez de pegarse: sin esto cada escalón del
+         terreno es un tirón vertical */
+      JUG.y = lerp(JUG.y, suelo, Math.min(1, dt*11));
+      if (Math.abs(suelo - JUG.y) > 3) JUG.y = suelo;
+    }
+  }
+  ponCam(dt);
+}
+let vxAnt = 0, vzAnt = 0, ladoAnt = 0;
+
+/* ══════════════════════════ EL CABECEO ══════════════════════════
+   Lo que separa una cámara que flota de una que camina. Cuatro cosas a la vez,
+   todas atadas a la MISMA fase del paso para que no se peleen:
+
+     · sube y baja dos veces por zancada (el apoyo de cada pie);
+     · se corre de lado una vez por zancada, en contrafase;
+     · se INCLINA sobre su eje —el roll— que es lo que de verdad se lee como
+       caminar, y además se ladea al andar de costado;
+     · abre el campo de visión al correr y lo cierra al frenar.
+
+   Las amplitudes se persiguen con lerp en vez de saltar: si el cabeceo aparece
+   de golpe al empezar a andar, se nota como un tirón. */
+function ponCam(dt){
+  const rapido = cl(AND.v / CORRE, 0, 1);
+  const andando = cl(AND.v / VEL, 0, 1);
+  const enSuelo = !JUG.aire && !JUG.vuela;
+
+  /* la fase avanza con la velocidad: los pasos se aceleran solos al correr */
+  if (enSuelo) AND.fase += dt * (2.7 + AND.v * 0.62);
+  else AND.fase += dt * 1.2;
+
+  /* EL BALANCEO EMPIEZA AL CAMINAR, no al correr. La amplitud arranca en un
+     valor propio en cuanto te movés y el correr sólo la agranda; antes crecía
+     desde cero con la velocidad y a paso normal casi no se veía. */
+  const amp = enSuelo ? cl(andando * 1.35, 0, 1) : 0;
+  const base = amp > 0.02 ? 0.052 : 0;
+  const arriba = Math.abs(Math.sin(AND.fase)) * (base + rapido*0.052) * amp;
+  const costado = Math.cos(AND.fase) * (0.042 + rapido*0.042) * amp;
+
+  /* BALANCEO QUIETO: la respiración. Con la cámara clavada del todo el mundo
+     parece una foto; con esto respira sin marear. */
+  const quieto = cl(1 - andando*1.6, 0, 1) * (enSuelo ? 1 : 0);
+  const resp = Math.sin(RELOJ.value * 1.05) * 0.020 * quieto;
+  const respLado = Math.sin(RELOJ.value * 0.58 + 1.2) * 0.014 * quieto;
+  const respRoll = Math.sin(RELOJ.value * 0.47 + 2.1) * 0.0075 * quieto;
+
+  /* el ojo: altura de pie o agachado, persiguiendo para que no salte */
+  const objOjo = OJO * (JUG.agacha ? 0.74 : 1);   /* menos hondo que antes */
+  AND.ojo = lerp(AND.ojo, objOjo, Math.min(1, dt*9));
+  AND.golpe = lerp(AND.golpe, 0, Math.min(1, dt*6));
+  AND.lado = lerp(AND.lado, ladoAnt, Math.min(1, dt*7));
+
+  /* roll: el vaivén del paso más la inclinación al andar de costado */
+  const objRoll = Math.cos(AND.fase) * (0.020 + rapido*0.022) * amp
+                - AND.lado * 0.062 + respRoll;
+  AND.roll = lerp(AND.roll, objRoll, Math.min(1, dt*10));
+
+  /* el campo de visión se abre al correr: la sensación de velocidad sale de acá */
+  const objFov = 66 + rapido*9 - (JUG.agacha ? 3 : 0);
+  AND.fov = lerp(AND.fov, objFov, Math.min(1, dt*3.4));
+  if (Math.abs(cam.fov - AND.fov) > 0.02){ cam.fov = AND.fov; cam.updateProjectionMatrix(); }
+
+  const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
+  cam.position.set(
+    JUG.x + cy * (costado + respLado),
+    JUG.y + AND.ojo + arriba + resp - AND.golpe,
+    JUG.z - sy * (costado + respLado)
+  );
+  cam.rotation.order = 'YXZ';
+  cam.rotation.y = JUG.yaw;
+  /* un pelo de cabeceo vertical en cada apoyo, y el hundimiento del aterrizaje */
+  cam.rotation.x = JUG.pitch + Math.sin(AND.fase*2) * 0.006 * amp - AND.golpe*0.55;
+  cam.rotation.z = AND.roll;
+}
+
+/* ══════════════════════════ EL DÍA Y LA NOCHE ══════════════════════════
+   Ciclo completo en tres minutos. La fase va de 0 a 1: 0 es medianoche, 0,25 el
+   amanecer, 0,5 el mediodía y 0,75 el atardecer. De ahí sale TODO —altura del
+   sol, color de la luz, cielo, niebla, estrellas y la luna—, así nunca se
+   desincroniza una cosa de la otra. */
+const luna = new T.DirectionalLight(0xbcd4ff, 0);
+escena.add(luna); escena.add(luna.target);
+
+/* las estrellas: un puñado de puntos en la esfera del cielo que sólo se ven de
+   noche. Van sin niebla y sin profundidad para que no las tape nada. */
+const estrellas = (() => {
+  const N = 900, pos = new Float32Array(N*3), tam = new Float32Array(N);
+  for (let i = 0; i < N; i++){
+    const u = Math.random()*6.283, v = Math.random()*0.85 + 0.06;
+    const r = 820, sy = Math.sin(v*Math.PI/2), rr = Math.cos(v*Math.PI/2);
+    pos[i*3] = Math.cos(u)*rr*r; pos[i*3+1] = sy*r; pos[i*3+2] = Math.sin(u)*rr*r;
+    tam[i] = 1.6 + Math.random()*3.4;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(pos, 3));
+  g.setAttribute('tam', new T.BufferAttribute(tam, 1));
+  const m = new T.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { alfa: { value: 0 } },
+    vertexShader: `attribute float tam; varying float vT;
+      void main(){ vT = tam;
+        vec4 mv = modelViewMatrix * vec4(position,1.0);
+        gl_PointSize = tam; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float alfa; varying float vT;
+      void main(){
+        vec2 d = gl_PointCoord - 0.5;
+        float f = smoothstep(0.5, 0.06, length(d));
+        gl_FragColor = vec4(vec3(1.0, 0.98, 0.92), f * alfa * (0.45 + vT*0.14));
+      }`
+  });
+  const pts = new T.Points(g, m);
+  pts.frustumCulled = false;
+  escena.add(pts);
+  return pts;
+})();
+
+const _dir = new T.Vector3(), _foco = new T.Vector3();
+function ponSol(dt){
+  if (dt && !PAUSA) CFG.sol = (CFG.sol + dt / CICLO) % 1;
+  const f = CFG.sol;
+  const ang = (f - 0.25) * 6.283185;
+  const alt = Math.sin(ang), az = Math.cos(ang);
+  const dia = cl(alt / 0.22, 0, 1);            /* 0 de noche, 1 con el sol alto */
+  const filo = 1 - Math.abs(cl(alt / 0.30, -1, 1));   /* 1 justo en el horizonte */
+
+  _foco.set(JUG.x, 0, JUG.z);
+  /* EL SOL. Bajo el horizonte se apaga, y la luna toma el relevo con su propia
+     dirección: si se dejara el mismo foco, de noche las sombras seguirían
+     saliendo del suelo hacia arriba. */
+  _dir.set(az*0.86, Math.max(0.05, alt), -0.40).normalize();
+  sol.position.copy(_dir).multiplyScalar(230).add(_foco);
+  sol.target.position.copy(_foco); sol.target.updateMatrixWorld();
+  sol.visible = alt > -0.02;
+  sol.intensity = 2.55 * dia;
+  /* dorado cuando roza el horizonte, blanco cuando está alto */
+  sol.color.setHSL(0.09 + dia*0.045, 0.62 - dia*0.5, 0.52 + dia*0.14);
+  sol.castShadow = CFG.sombras && alt > 0.06;
+
+  /* LA LUNA: fría, floja y sin sombra, para que la noche se vea y no ciegue */
+  _dir.set(-az*0.86, Math.max(0.05, -alt), 0.40).normalize();
+  luna.position.copy(_dir).multiplyScalar(230).add(_foco);
+  luna.target.position.copy(_foco); luna.target.updateMatrixWorld();
+  luna.visible = alt < 0.02;
+  luna.intensity = 0.42 * cl(-alt / 0.25, 0, 1);
+
+  /* el relleno viaja opuesto al sol y sube con el día */
+  relleno.position.set(-az*0.7, 0.55, 0.34).normalize().multiplyScalar(200).add(_foco);
+  relleno.target.position.copy(_foco); relleno.target.updateMatrixWorld();
+  relleno.intensity = 0.12 + dia*0.62;
+  relleno.color.setHSL(0.58, 0.42, 0.62);
+
+  /* el rebote: de noche baja mucho pero no a cero, o no se vería nada */
+  ambiente.intensity = 0.20 + dia*1.32;
+  ambiente.color.setHSL(0.60 - dia*0.04, 0.50, 0.22 + dia*0.36);
+  ambiente.groundColor.setHSL(0.28, 0.35, 0.07 + dia*0.24);
+
+  const c = cieloMat.uniforms;
+  c.sol.value.copy(_dir.set(az*0.86, alt, -0.40).normalize());
+  /* de azul noche a azul día, con el naranja del horizonte metido por `filo` */
+  c.arriba.value.setHSL(0.62 - dia*0.035, 0.55 + dia*0.15, 0.045 + dia*0.44);
+  c.medio.value.setHSL(0.60 - dia*0.035, 0.50 + dia*0.17, 0.09 + dia*0.53);
+  c.abajo.value.setHSL(0.60 - filo*0.53, 0.40 + filo*0.50, 0.12 + dia*0.66);
+  c.calor.value.setHSL(0.07, 0.90, 0.20 + dia*0.42);
+  escena.fog.color.copy(c.medio.value).lerp(c.abajo.value, 0.55);
+  /* de noche se ve MENOS lejos: sin esto la isla nocturna es una silueta plana */
+  escena.fog.near = 120 + dia*110; escena.fog.far = 300 + dia*340;
+
+  /* las nubes se apagan con el sol: con el emisivo fijo quedaban celestes y
+     luminosas a medianoche, flotando sobre un mundo negro */
+  if (matNube){
+    matNube.emissiveIntensity = 0.10 + dia*0.50;
+    matNube.color.setHSL(0.60, 0.16 + (1-dia)*0.20, 0.16 + dia*0.80);
+  }
+  estrellas.material.uniforms.alfa.value = cl(-alt*2.6, 0, 1);
+  estrellas.position.copy(cam.position);
+
+  HORA = f * 24;
+}
+let HORA = 10;
+
+/* ══════════════════════════ AVISOS ══════════════════════════ */
+let tAviso;
+function aviso(m){
+  let e = $('avisoCaja');
+  if (!e){
+    e = document.createElement('div'); e.id = 'avisoCaja';
+    e.style.cssText = 'position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:30;'+
+      'padding:10px 18px;border-radius:99px;background:rgba(8,18,28,.72);border:1px solid rgba(255,255,255,.14);'+
+      'font:600 12px ui-monospace,monospace;letter-spacing:.04em;opacity:0;transition:opacity .3s;pointer-events:none';
+    document.getElementById('escenario').appendChild(e);
+  }
+  e.textContent = m; e.style.opacity = 1;
+  clearTimeout(tAviso); tAviso = setTimeout(() => e.style.opacity = 0, 1900);
+}
+
+/* ══════════════════════════ PANTALLA COMPLETA Y ORIENTACIÓN ══════════════
+   Las dos cosas sólo se conceden DENTRO DE UN GESTO del usuario: por eso hay un
+   botón al terminar de cargar y no se intenta solo al abrir, que es la forma
+   segura de que el navegador lo rechace en silencio.
+
+   El bloqueo de orientación no existe en iOS y en escritorio suele fallar. No
+   importa: el giro por CSS del escenario cubre igual el caso, y por eso se
+   intenta bloquear pero nunca se depende de que salga bien. */
+function enPantallaCompleta(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+async function pantallaCompleta(){
+  const el = document.documentElement;
+  try {
+    if (!enPantallaCompleta()){
+      if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+  } catch(e){ /* puede negarse; no es motivo para no jugar */ }
+  try {
+    if (screen.orientation && screen.orientation.lock)
+      await screen.orientation.lock('landscape');
+  } catch(e){ /* iOS no lo tiene: queda el giro por CSS */ }
+  setTimeout(medir, 280);
+}
+async function salirPantallaCompleta(){
+  try {
+    if (document.exitFullscreen) await document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch(e){}
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+  setTimeout(medir, 280);
+}
+/* al salir con la tecla de escape hay que volver a medir: cambia la ventana */
+for (const ev of ['fullscreenchange','webkitfullscreenchange','orientationchange'])
+  addEventListener(ev, () => setTimeout(medir, 300));
+
+/* ══════════════════════════ LA CÁMARA DE CINE DEL MENÚ ══════════════════
+   Mientras el menú está abierto la isla sigue viva detrás, filmada con un campo
+   de visión de 30° en vez de los 66 de juego. El teleobjetivo aplasta la
+   perspectiva —las copas se apilan unas sobre otras y el fondo se acerca—, y
+   junto con un movimiento MUY lento eso es lo que da el aire de grúa de cine.
+   Va rotando entre los sitios de la isla, unos segundos en cada uno. */
+let MODO = 'menu';
+const CINE = {
+  i: 0, t: 0, ang: 0, alto: 0,
+  arranca(){
+    this.i = 0; this.t = 0; this.ang = Math.random()*6.283; this.pon();
+  },
+  pon(){
+    const s2 = (SITIOS && SITIOS.length) ? SITIOS[this.i % SITIOS.length]
+             : { c: { x: 0, z: 0, h: 10 } };
+    this.obj = s2.c;
+    this.rad = 34 + Math.random()*22;
+    this.alto = 11 + Math.random()*13;
+    this.vel = (Math.random() < 0.5 ? -1 : 1) * (0.035 + Math.random()*0.030);
+  },
+  paso(dt){
+    /* el bucle arranca antes de que nadie haya elegido sitio: si `obj` no está,
+       se elige acá y no se tira todo abajo cuadro a cuadro */
+    if (!this.obj) this.pon();
+    this.t += dt;
+    if (this.t > 11){ this.t = 0; this.i++; this.pon(); }
+    this.ang += this.vel * dt;
+    const o = this.obj;
+    const x = o.x + Math.cos(this.ang)*this.rad;
+    const z = o.z + Math.sin(this.ang)*this.rad;
+    /* nunca por debajo del terreno ni dentro del mar */
+    const y = Math.max(H(x, z) + 3.5, MAR + 4) + this.alto;
+    cam.position.set(x, y, z);
+    cam.lookAt(o.x, o.h + 4.5, o.z);
+    cam.rotation.z = Math.sin(this.t*0.19) * 0.012;   /* deriva mínima */
+    if (cam.fov !== 30){ cam.fov = 30; cam.updateProjectionMatrix(); }
+    AND.fov = 30;
+  }
+};
+function entraJuego(){
+  MODO = 'juego';
+  $('menu').classList.remove('on');
+  $('hud').classList.add('on');
+  JUG.x = CAMPO.x + 12; JUG.z = CAMPO.z + 12; JUG.y = H(JUG.x, JUG.z);
+  JUG.vy = 0; JUG.aire = false; JUG.vuela = false; JUG.agacha = false;
+  JUG.yaw = Math.atan2(JUG.x - CAMPO.x, JUG.z - CAMPO.z);
+  JUG.pitch = -0.05;
+  AND.ojo = OJO; AND.fase = 0; AND.golpe = 0; AND.fov = 66;
+  cam.fov = 66; cam.updateProjectionMatrix();
+  cam.rotation.z = 0;
+}
+function vuelveMenu(){
+  MODO = 'menu';
+  pausa(false);
+  $('hud').classList.remove('on');
+  $('menu').classList.add('on');
+  CINE.arranca();
+}
+
+/* ══════════════════════════ MENÚ DE PAUSA ══════════════════════════
+   Tres botones y nada más: reanudar, reiniciar y volver a la portada. Los
+   deslizadores de imagen se fueron porque los valores quedaron fijos. */
+let PAUSA = false;
+function pausa(v){
+  PAUSA = v;
+  document.getElementById('pausa').classList.toggle('on', v);
+  if (v && document.pointerLockElement) document.exitPointerLock();
+  if (v){
+    const t = Math.floor(RELOJ.value);
+    document.getElementById('pSub').textContent =
+      Math.floor(t/60) + ' min ' + String(t%60).padStart(2,'0') + ' s en la isla';
+  }
+}
+function armaPanel(){
+  $('bPanel').onclick = () => pausa(!PAUSA);
+  $('pSeguir').onclick = () => pausa(false);
+  $('pReinicia').onclick = () => { pausa(false); resembrar(); };
+  $('pMenu').onclick = () => vuelveMenu();
+  $('mJugar').onclick = async () => { await pantallaCompleta(); entraJuego(); };
+  $('mOtra').onclick = async () => { await resembrar(); vuelveMenu(); };
+  $('bFull').onclick = () => {
+    if (enPantallaCompleta()) salirPantallaCompleta(); else pantallaCompleta();
+  };
+  /* los tres de acción: el de correr y el de agacharse quedan fijados mientras
+     se los mantenga, que es como se espera de un botón de acción */
+  const sostener = (id, abajo, arriba) => {
+    const e = $(id);
+    e.addEventListener('pointerdown', ev => { ev.preventDefault(); modoPC(false); abajo(); });
+    for (const k of ['pointerup','pointercancel','pointerleave'])
+      e.addEventListener(k, () => arriba && arriba());
+  };
+  sostener('acSalta', () => saltar());
+  sostener('acAgacha', () => ponAgacha(true), () => ponAgacha(false));
+  $('acCorre').addEventListener('pointerdown', ev => { ev.preventDefault(); modoPC(false);
+    corre = !corre; $('acCorre').classList.toggle('on', corre); });
+}
+
+/* ══════════════════════════ ARRANQUE Y BUCLE ══════════════════════════ */
+function paso(p, txt){
+  $('cBar').style.width = (p*100) + '%';
+  if (txt) $('cTxt').textContent = txt;
+  return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+}
+async function construir(primera){
+  await paso(0.10, 'Levantando el terreno…');
+  armaTerreno();
+  await paso(0.28, 'Llenando el mar…');
+  armaAgua();
+  /* PRIMERO los sitios: definen los claros donde no se siembra, así el
+     campamento no aparece con tres árboles adentro de la fogata */
+  await paso(0.36, 'Buscando dónde acampar…');
+  eligeSitios();
+  await paso(0.44, 'Sembrando…');
+  const r = sembrar((p, t) => { $('cBar').style.width = (p*100)+'%'; $('cTxt').textContent = t; });
+  await paso(0.78, 'Levantando el campamento…');
+  armaSitios();
+  await paso(0.88, 'Formando nubes…');
+  armaNubes();
+  if (nubes) nubes.visible = CFG.nubes;
+  CFG.sol = 0.42;                      /* se empieza de mañana */
+  ponSol(0);
+  await paso(1, r.arboles + ' árboles · ' + SITIOS.length + ' sitios');
+  return r;
+}
+async function resembrar(){
+  SEM = (Math.random()*1e9)|0;
+  $('carga').classList.remove('ido');
+  $('carga').style.display = '';
+  await paso(0.02, 'Otra isla…');
+  const r = await construir(false);
+  aviso(r.arboles + ' árboles nuevos');
+  setTimeout(() => { $('carga').classList.add('ido');
+    setTimeout(() => $('carga').style.display = 'none', 700); }, 260);
+}
+
+let ultimo = performance.now(), fps = 0, cuadros = 0, acum = 0, DIB = 0, TRI = 0;
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora = performance.now();
+  const dt = Math.min((ahora - ultimo)/1000, 0.08);
+  ultimo = ahora;
+  RELOJ.value += dt;
+
+  if (MODO === 'menu') CINE.paso(dt);
+  else if (!PAUSA) fisica(dt);
+  ponSol(dt);
+
+  /* el cielo viaja con la cámara: si no, se ve el borde de la esfera */
+  cielo.position.set(cam.position.x, 0, cam.position.z);
+
+  /* la fogata: late y parpadea. Es la única luz de la noche y por eso conviene
+     que se note que está viva. */
+  if (fuegoLuz){
+    const t = RELOJ.value;
+    const p1 = Math.sin(t*11.3) * 0.5 + Math.sin(t*7.1) * 0.3 + Math.sin(t*23.7) * 0.2;
+    fuegoLuz.intensity = 7.5 + p1 * 2.6;
+    if (fuegoMalla){
+      const e = 0.9 + p1 * 0.12;
+      fuegoMalla.scale.set(e, 1 + p1*0.16, e);
+      fuegoMalla.rotation.y = t * 1.4;
+    }
+  }
+
+  /* las nubes se corren despacio y se envuelven alrededor del jugador */
+  if (nubes && CFG.nubes){
+    nubes.position.x += dt * 1.15;
+    if (nubes.position.x > 300) nubes.position.x -= 600;
+  }
+  /* olas: se mueve el plano del agua por vértice */
+  if (agua){
+    const p = agua.geometry.attributes.position, b = agua.userData.base;
+    for (let i = 0; i < p.count; i++){
+      const x = b[i*3], z = b[i*3+2];
+      p.array[i*3+1] = Math.sin(RELOJ.value*1.1 + x*0.075) * 0.16
+                     + Math.cos(RELOJ.value*0.8 + z*0.061) * 0.13;
+    }
+    p.needsUpdate = true;
+    agua.position.set(cam.position.x, MAR, cam.position.z);
+  }
+
+  /* ── el doble pase: escena al target chico, target a la pantalla ── */
+  ren.setRenderTarget(rt);
+  ren.render(escena, cam);
+  /* las cuentas se leen ACÁ: después del segundo pase `ren.info` habla del
+     triángulo del post-proceso y decía «1 dib, 1 tri», que no es del mundo */
+  DIB = ren.info.render.calls; TRI = ren.info.render.triangles;
+  ren.setRenderTarget(null);
+  ren.render(postEsc, postCam);
+
+  cuadros++; acum += dt;
+  if (acum > 0.5){
+    fps = Math.round(cuadros/acum); cuadros = 0; acum = 0;
+    const w = rt ? rt.width : 0, h = rt ? rt.height : 0;
+    const hh = Math.floor(HORA), mm = Math.floor((HORA % 1) * 60);
+    $('fps').textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') +
+      ' · ' + fps + ' fps · ' + w + '×' + h + ' · x' + CFG.pix +
+      ' · ' + DIB + ' dib · ' + (TRI/1000).toFixed(0) + 'k tri';
+  }
+}
+
+(async function(){
+  medir();
+  addEventListener('resize', () => { clearTimeout(window.__rz);
+    window.__rz = setTimeout(medir, 240); });
+  armaPanel();
+  const r = await construir(true);
+  /* el HUD no va en el menú: se prende al entrar al juego */
+  CINE.arranca();
+  bucle();
+  /* de la barra de carga al menú de inicio, con la isla ya viva detrás */
+  $('mPie').textContent = r.arboles + ' árboles · ' + SITIOS.length + ' sitios · ' +
+    Math.round(MITAD*2) + ' m de lado';
+  CINE.arranca();
+  $('menu').classList.add('on');
+  $('carga').classList.add('ido');
+  setTimeout(() => $('carga').style.display = 'none', 700);
+  window.__V = { CFG, JUG, escena, ren, T, H, cam,
+    nan: () => { const malas = [];
+      escena.traverse(ob => { const g = ob.geometry; if (!g || !g.attributes.position) return;
+        const a = g.attributes.position.array;
+        for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])){
+          malas.push({ tipo: g.type, nombre: ob.name || ob.type, idx: i, de: a.length }); break; } });
+      return malas; },
+    entrar: () => { const b = document.getElementById('mJugar'); if (b) b.click(); },
+    modo: () => MODO,
+    est: () => ({ fps, pix: CFG.pix, girado: GIRADO, escenario: [W, H2],
+                  rt: rt ? [rt.width, rt.height] : null,
+                  dib: DIB, tri: TRI,
+                  x: +JUG.x.toFixed(1), z: +JUG.z.toFixed(1), y: +JUG.y.toFixed(1) }) };
+})();
+</script>
+</body>
+</html>

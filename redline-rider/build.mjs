@@ -1,0 +1,107 @@
+/* Empaqueta src/ + three vendorizado en un unico index.html.
+   Se compila a IIFE clasico a proposito: un <script type="module"> no carga desde
+   file://, y el objetivo es que el juego se pueda abrir haciendo doble clic. */
+
+import * as esbuild from 'esbuild';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+const dev = process.argv.includes('--dev');
+const single = process.argv.includes('--single');
+const cdn = process.argv.includes('--cdn');
+/* --fresh marca la compilacion para que borre el progreso guardado la PRIMERA vez que se
+   abra, y solo esa vez. Sirve para poder verificar el juego desde el principio (idioma,
+   calidad, garaje vacio) sin que borre la partida cada vez que se abre el fichero. */
+const fresh = process.argv.includes('--fresh');
+
+const REPO = 'Juniorspro/General-Assets-Games';
+const SUBDIR = 'redline-rider';
+
+/* Version CDN: el HTML pesa kilobytes y el audio se sirve desde jsDelivr, que lo cachea
+   y lo entrega comprimido desde el borde. Se fija al commit que toco assets/ por ultima
+   vez: es inmutable, asi que jsDelivr lo cachea para siempre y la URL nunca se rompe
+   aunque la rama avance. */
+function assetsRef(){
+  const sha = execFileSync('git', ['log', '-1', '--format=%H', '--', 'assets'],
+                           { cwd: root, encoding: 'utf8' }).trim();
+  if (!/^[0-9a-f]{40}$/.test(sha))
+    throw new Error('no se pudo resolver el commit de assets/ (hay que commitearlos antes)');
+  return sha;
+}
+
+/* Version de un solo fichero: los assets viajan empotrados como data URI.
+   Se recorre assets/ en vez de mantener una lista a mano, que se desincroniza en cuanto
+   se anade o quita un modelo. */
+const MIME = { '.mp3':'audio/mpeg', '.m4a':'audio/mp4', '.ogg':'audio/ogg', '.glb':'model/gltf-binary',
+               '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp' };
+
+async function walk(dir, out = []){
+  for (const e of await readdir(dir, { withFileTypes:true })){
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) await walk(p, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+async function embedAssets(){
+  const dir = path.join(root, 'assets');
+  const files = (await walk(dir)).filter(f => MIME[path.extname(f).toLowerCase()]);
+  files.sort();
+  const map = {};
+  let bytes = 0;
+  for (const abs of files){
+    const rel = path.relative(root, abs).split(path.sep).join('/');
+    const buf = await readFile(abs);
+    bytes += buf.length;
+    map[rel] = 'data:' + MIME[path.extname(abs).toLowerCase()] + ';base64,' + buf.toString('base64');
+  }
+  console.log('empotrados', files.length, 'assets,', (bytes / 1048576).toFixed(2), 'MB en crudo');
+  return 'window.__HX_ASSETS=' + JSON.stringify(map) + ';\n';
+}
+
+const res = await esbuild.build({
+  entryPoints: [path.join(root, 'src/main.js')],
+  bundle: true,
+  format: 'iife',
+  target: ['es2020'],
+  minify: !dev,
+  sourcemap: false,
+  legalComments: 'none',
+  alias: { three: path.join(root, 'vendor/three/three.module.js') },
+  write: false
+});
+
+const bundle = res.outputFiles[0].text;
+let prelude = '';
+if (single) prelude = await embedAssets();
+else if (cdn){
+  const ref = assetsRef();
+  const base = `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/${SUBDIR}/`;
+  prelude = 'window.__HX_ASSET_BASE=' + JSON.stringify(base) + ';\n';
+  console.log('assets desde jsDelivr, commit', ref.slice(0, 10));
+}
+
+if (fresh){
+  /* El sello lleva la hora de compilacion: cada compilacion con --fresh es un sello nuevo, y
+     por tanto un reseteo nuevo, mientras que reabrir el mismo fichero respeta el progreso. */
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  prelude = 'window.__HX_RESET=' + JSON.stringify('fresh-' + stamp) + ';\n' + prelude;
+  console.log('compilacion con reseteo, sello fresh-' + stamp);
+}
+
+const js = (prelude + bundle).replace(/<\/script/gi, '<\\/script');
+const tpl = await readFile(path.join(root, 'template.html'), 'utf8');
+if (!tpl.includes('<!--BUNDLE-->')) throw new Error('template.html no tiene el marcador <!--BUNDLE-->');
+
+const out = tpl.replace('<!--BUNDLE-->', () => js);
+const name = single ? 'redline-rider.html' : cdn ? 'redline-rider-cdn.html' : 'index.html';
+await writeFile(path.join(root, name), out);
+
+const mb = n => (n / 1048576).toFixed(2) + ' MB';
+const kb = n => (n / 1024).toFixed(0) + ' KB';
+console.log(name, '->', single ? mb(Buffer.byteLength(out)) : kb(Buffer.byteLength(out)),
+            '(bundle', kb(Buffer.byteLength(bundle)) + ')');
