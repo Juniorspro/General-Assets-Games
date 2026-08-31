@@ -21,7 +21,7 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PARTES = os.path.join(AQUI, 'partes')
 
 ORDEN = ['a.html', 't.js', 'x.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js',
-         'g.js', 'h.js', 'y.js', 'w.js',  'k.js', 'l.js', 'o.js',
+         'g.js', 'h.js', 'y.js', 'w.js', 'v.js',  'k.js', 'l.js', 'o.js',
          'j.js', 'i.js', 'z.html']
 
 

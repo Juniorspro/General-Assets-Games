@@ -34,6 +34,7 @@ function bucle(){
   ultimo = ahora;
   if (CONGELADO) dt = 0;
   RELOJ.value += dt;
+  camaPaso(RELOJ.value);   /* el viento respira, tambien en el menu */
 
   if (MODO === 'cine') CINEMA.paso(dt);
   else if (MODO === 'menu'){ CINE.paso(dt); escondePersonaje(); }
@@ -561,6 +562,22 @@ async function arranca(){
       if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ palma: GESTO.palma, A: PALMA_A }); },
     puno: (k, i) => { GESTO.puno = k; if (i !== undefined) GESTO.punoIzq = i;
       if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ puno: GESTO.puno }); },
+    /* el audio no se puede escuchar desde acá, asi que se MIDE: cuantos clips
+       decodificaron y cuanto pico da el analizador cuando se dispara uno */
+    voces: () => JSON.stringify({
+      ctx: AUD ? AUD.state : 'no', clips: Object.keys(VOZ).length,
+      total: Object.keys(VOZ_B64).length,
+      dur: Object.fromEntries(Object.keys(VOZ).map(k => [k, +VOZ[k].duration.toFixed(2)])) }),
+    pico: (n) => { if (!ANAL) return 'no';
+      const a = new Uint8Array(ANAL.fftSize); let mx = 0, s2 = 0;
+      for (let i = 0; i < (n || 24); i++){
+        ANAL.getByteTimeDomainData(a);
+        for (let k = 0; k < a.length; k++){ const v = (a[k]-128)/128; mx = Math.max(mx, Math.abs(v)); s2 += v*v; }
+      }
+      return JSON.stringify({ pico: +mx.toFixed(4),
+        rms: +Math.sqrt(s2/((n||24)*a.length)).toFixed(4) }); },
+    voz: (k, v) => { voz(k, v === undefined ? 1 : v, false); return k; },
+    lat: (v) => { latido(v === undefined ? 1 : v, 1); return 'ok'; },
     luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,
       near: cam.near, fp: PJ.primeraPersona }),
     rayo: () => { RAYO.prox = 0; RAYO.t = 0; return 'ok'; },

@@ -188,6 +188,7 @@ const CINEMA = {
     MODO = 'cine';
     this.t = 0; this.faseAnt = 0; this.rayoHecho = false;
     this.golpe = false; this.nrmS = null; this.upS = null;
+    this.dicho = {};   /* los sonidos del hombre, cada uno una sola vez */
     this.on = true;
     /* ── DÓNDE ARRANCA, Y ES UNA DECISIÓN DE FONDO ──
        En el plano B la cámara mira HACIA ATRÁS, o sea que el fondo desenfocado
@@ -348,6 +349,8 @@ const CINEMA = {
            cara. Con `neutro` desde el primer cuadro, los ojos grandes y
            redondos se leen a sorpresa, que es lo contrario del plano. */
         GESTO.expr = u < 2.6 ? 'cansado' : (u > 6.75 ? 'triste' : 'neutro');
+        if (u > 1.2 && !this.dicho.resp){ this.dicho.resp = 1; voz('resp', 0.55); }
+        if (u > 9.6 && !this.dicho.susp){ this.dicho.susp = 1; voz('susp', 0.28); }
         if (baja > 0.45) GESTO.expr = 'abajo';
         /* y la mandíbula respira: un primer plano de una cara con la boca
            clavada se lee a máscara. No habla —no hay nadie a quien hablarle—
@@ -715,6 +718,23 @@ const CINEMA = {
         GESTO.pitch = -0.26 * traga + 0.38 * asco;
         GESTO.yawRel = 0.10 * sacu;
       }
+      /* ── LOS SONIDOS DEL HOMBRE, CADA UNO EN SU TIEMPO ──
+         LOS VOLUMENES ESTAN MEDIDOS, NO ELEGIDOS. Con el clip normalizado a 0,88
+         de pico, disparados a 1,0 daban rms de 0,19 a 0,45 contra 0,025 de la
+         cama de lluvia — o sea diez a dieciocho veces el fondo, que no es una
+         voz en una calle, es una voz en la cara. Bajados a estos numeros la
+         escala queda: lluvia 0,025 · voz 0,05-0,08 · el golpe contra el piso
+         0,19, que es el sonido mas fuerte de la escena y tiene que serlo. Es la
+         misma regla que en Eco y en RECREO: el fondo por debajo, y un solo
+         momento arriba.
+         Van atados a las MISMAS rampas que mueven el cuerpo, no a numeros
+         sueltos: asi el trago no puede sonar antes de que la mano llegue por
+         mucho que el aparato vaya lento. */
+      if (aBoca > 0.15 && !this.dicho.inh){ this.dicho.inh = 1; voz('inh', 0.55); }
+      if (traga > 0.45 && !this.dicho.trago){ this.dicho.trago = 1; voz('trago', 0.30); }
+      if (asco  > 0.35 && !this.dicho.asco){ this.dicho.asco = 1; voz('asco', 0.26); }
+      if (asco  > 0.85 && !this.dicho.tos){ this.dicho.tos = 1; voz('tos', 0.22); }
+
       /* la pastilla suelta aparece cuando los dedos se cierran sobre ella y
          desaparece cuando entra en la boca */
       ponUna(agarra > 0.6 && traga < 0.5);
@@ -810,7 +830,29 @@ const CINEMA = {
       if (Math.abs(cam.fov - 62) > 0.01){ cam.fov = 62; cam.updateProjectionMatrix(); }
       JUG.x = c.x; JUG.z = c.z;
 
-      if (!this.golpe && cae > 0.90){ this.golpe = true; son('paso', 1.0); }
+      if (!this.golpe && cae > 0.90){
+        this.golpe = true; son('paso', 1.0); voz('golpe', 0.42);
+      }
+      /* ── EL DESMAYO SE OYE ANTES DE VERSE ──
+         El jadeo entra con el desenfoque y el quejido cuando ceden las rodillas,
+         o sea que el sonido va medio segundo por DELANTE de la imagen: es lo que
+         hace que la caida se sienta venir en vez de sorprender. */
+      if (u > 1.6 && !this.dicho.jadeo){ this.dicho.jadeo = 1; voz('jadeo', 0.26); }
+      if (rod > 0.25 && !this.dicho.quej){ this.dicho.quej = 1; voz('quej', 0.30); }
+      /* EL LATIDO SE ACELERA Y SE HACE MAS FUERTE, y es lo unico que ocupa el
+         lugar de la musica en este plano. Va de 62 a 110 por minuto — un pulso
+         en panico— y arranca antes de que se vea nada raro. */
+      {
+        const pr = suave(0.6, 6.8, u);
+        const per = mez(0.97, 0.55, pr);
+        if (!this.tlat || this.t - this.tlat > per){
+          this.tlat = this.t; latido(0.12 + 0.28*pr, 1 + 0.10*pr);
+        }
+      }
+      /* y el pitido se lleva todo lo demas: la lluvia se agacha mientras el tono
+         sube, que es como se apaga el oido de verdad */
+      pitido(suave(5.6, 8.4, u));
+      camaVol(1 - 0.85*suave(5.2, 8.2, u));
     }
 
     /* ── EL NEGRO DE LAS PUNTAS ──
@@ -869,6 +911,7 @@ const CINEMA = {
     GESTO.mano = 0; GESTO.miraY = 0; GESTO.bocaExpr = null; GESTO.puno = 0;
     postMat.uniforms.dofS.value = 0;
     cam.up.set(0, 1, 0);
+    pitido(0); camaVol(1);
     if (LLUCARA) LLUCARA.visible = false;
     postMat.uniforms.cara.value = 0;
     postMat.uniforms.dof.value = 0;
