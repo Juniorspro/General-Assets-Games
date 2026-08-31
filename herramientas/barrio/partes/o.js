@@ -182,7 +182,17 @@ function puntoPalma(lado, haciaDedos, alto){
    los dos lados del plano es la palma depende del orden en que se detectaron
    los dedos, y eso lo decide el histograma. Fotografiado en los dos sentidos.
    `PALMA_LADO` guarda el que dio la palma de frente. */
-const PALMA_LADO = -1;
+/* +1, Y AHORA SE DECIDIO MIDIENDO EN VEZ DE FOTOGRAFIANDO.
+   Estaba en −1 y era el lado equivocado: la botella y las pastillas se estaban
+   apoyando en el DORSO de la mano. La prueba no necesita ojo — la palma es, por
+   definicion, el lado hacia el que se cierran los dedos. Se cierra el puno con
+   `ponPuno` y se mira hacia donde se movieron las cuatro yemas: el producto
+   escalar de esa direccion con la normal cruda da POSITIVO, asi que la normal
+   cruda YA apunta hacia la palma y el −1 la estaba dando vuelta.
+   (El comentario viejo decia «fotografiado en los dos sentidos». Lo estaba, pero
+   con la camara puesta SOBRE la normal, y entonces las dos fotos se ven
+   parecidas: en una mirabas la palma y en la otra el dorso, las dos de frente.) */
+const PALMA_LADO = 1;
 const _plC = new T.Vector3(), _plD = new T.Vector3(), _plE = new T.Vector3();
 function calcNormalPalma(lado){
   const mn = PJ.idx[lado + 'Hand'], md = PJ.idx[lado + 'Medio'];

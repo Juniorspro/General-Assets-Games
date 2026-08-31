@@ -31,17 +31,17 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
-/* −1,05 RADIANES, Y EL SIGNO ESTABA AL REVES — POR ESO LA MANO MIRABA PARA ABAJO.
-   Al corregir MANO_A el brazo cambio de familia (el codo paso de adentro a
-   afuera) y con el la palma se dio vuelta. Medido con el MANO_A nuevo, barriendo
-   PALMA_A de −3,5 a +1,0 con toda la torsion en el antebrazo, la componente
-   VERTICAL de la normal de la palma va: +0,95→−0,68 · 0→+0,17 · −1,00→+0,914 ·
-   −1,50→**+0,992** · −2,50→+0,467. O sea que con el 0,95 que habia la palma
-   apuntaba 43 grados PARA ABAJO, y ningun valor POSITIVO la pone hacia arriba.
-   Se elige −1,05 y no el −1,50 que maximiza: a −1,50 la palma queda horizontal
-   perfecta y no se le ve nada desde una camara puesta adelante; a −1,05 queda
-   arriba +0,92 y adelante +0,34, o sea inclinada hacia la lente. */
-let PALMA_A = -1.05;
+/* +2,20 RADIANES. El barrido anterior maximizaba el lado EQUIVOCADO de la mano
+   —estaba usando la normal invertida— asi que daba −1,05 y ponia la palma boca
+   abajo con las cosas apoyadas en el dorso. Decidido el lado por los dedos (la
+   palma es hacia donde se cierran) y rebarrido, la vertical de la palma va:
+   −1,50→−0,992 · 0→−0,167 · +1,00→+0,724 · +1,75→**+0,975** · +2,25→+0,845 ·
+   +3,25→+0,040.
+   Se elige +2,20 y no el +1,75 que maximiza, por lo mismo de siempre: a +1,75 la
+   palma queda horizontal y desde una camara puesta adelante no se le ve el
+   contenido; a +2,20 queda arriba +0,86 y adelante +0,20, inclinada hacia la
+   lente. */
+let PALMA_A = 2.20;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
