@@ -98,7 +98,10 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   vecindario. Las siete texturas del suelo y de las casas están generadas con Higgsfield. Pixelación suave
   —el destino de render va a 1/1,7— y de noche: lo único que ilumina de verdad son los faroles.
   Hay relámpagos con su trueno a destiempo, linterna, y las tres calidades y los tres idiomas en el
-  menú. Se abre con una **cinemática de 48 segundos en cinco planos**: primera persona bajando por la
+  menú. **La cinemática termina en una habitación**: uno se despierta en una cama, y al asomarse a la
+  ventana resulta que está en la cima de un edificio con la ciudad lloviendo noventa y seis metros
+  abajo; el barrio queda del otro lado de la puerta. Se abre con una **cinemática de 48 segundos en
+  cinco planos**: primera persona bajando por la
   calle, corte, y un primer plano de la cara con lente largo y el fondo desenfocado en el que abre los
   ojos y los vuelve a cerrar mientras el cuerpo sigue caminando — **sin bandas negras**, y la cabeza
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
@@ -107,6 +110,117 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Septuagésima tercera vuelta (2026-08-31): **BARRIO** — te despertás en una habitación, y por la ventana estás en la cima de un edificio
+
+Pedido: *"genera que una vez despiertes aparezcas en una habitación con una cama y en la ventana al ir
+a ver ves que estás en la cima de un edificio y ciudad lloviendo"*. Todo nuevo en
+`herramientas/barrio/partes/p.js`.
+
+#### LA CINEMÁTICA YA NO TERMINA EN LA CALLE
+
+Terminaba con el hombre desmayándose y los ojos cerrándose, y el cuadro siguiente era el barrio de
+pie: dos sitios distintos pegados, y el corte se leía a error. Ahora se despierta en el cuarto y el
+barrio queda **del otro lado de la puerta**. **Saltear la escena también lleva al cuarto**, a
+propósito: si saltear entrara derecho al barrio, el botón estaría cambiando la historia en vez de
+ahorrar tiempo.
+
+**ES UN LUGAR Y NO OTRA CINEMÁTICA**, porque el pedido dice «AL IR A VER»: la ventana tiene que
+costar caminar hasta ella. Contado con la cámara sobre rieles el jugador no descubre nada —se lo
+muestran— y el descubrimiento es todo lo que esta escena tiene: hasta que uno llega a la ventana,
+esto es un cuarto cualquiera.
+
+#### EL BARRIO NO SE BORRA, SE APAGA
+
+Las dos cosas viven en la **misma escena** y en las mismas coordenadas de x y de z; lo único que las
+separa es la altura —el cuarto está noventa y seis metros arriba— y una lista que se prende y se
+apaga. Una segunda escena obligaría a duplicar la lluvia, el cielo, las luces y el post, que son
+justamente las cuatro cosas que hacen que los dos sitios se vean del mismo juego.
+
+**Y LA LISTA SALE DE UNA FOTO** de lo que había en la escena al terminar de construir, no de anotar a
+mano cuáles son las mallas del barrio: anotarlas garantiza que la próxima que se agregue quede sin
+apagar. La foto se saca **antes** de construir el cuarto — al revés, el grupo del cuarto queda dentro
+de «lo que es barrio» y `esconde()` lo apaga y lo prende dos veces en la misma pasada, que funciona
+sólo por el orden en que están escritas las dos líneas.
+
+#### UNA CORNISA ANGOSTA Y UN PARAPETO BAJO, Y ES UNA CUENTA DE ÁNGULOS
+
+La primera versión tenía cinco metros de azotea y un parapeto de 1,05, y desde la ventana lo único
+que se veía mirando hacia abajo era la losa. Con el ojo a 1,66 el parapeto tapa **todo lo que esté
+por debajo de los veinte grados** y la losa lo que esté por debajo de los veintisiete: o sea que la
+ciudad de abajo **no se ve nunca**, que es exactamente lo que la escena tiene que mostrar. Con 1,6 m
+de cornisa y 0,55 de parapeto la vista se abre por debajo de los treinta y tres grados y ahí aparece
+el suelo, a unos ciento sesenta metros. Sigue habiendo algo cerca —el borde mojado y el parapeto—
+que es lo que da la escala; lo que se fue es lo que tapaba.
+
+#### LA CIUDAD
+
+Doscientas cajas fundidas en dos mallas, con las **UV en metros**: sin eso, un edificio de setenta
+metros y uno de veinte comparten la misma grilla estirada y las ventanas del alto miden tres pisos —
+es la misma cuenta que en el barrio dejó las hiladas de ladrillo en 5,5 cm y no en 22.
+
+**LAS VENTANAS ENCENDIDAS Y LOS FAROLES DE LA CALLE VAN POR MAPA EMISIVO Y NO POR DIFUSO.** A noventa
+y seis metros de altura no les llega una sola luz: en la primera captura el suelo entre los edificios
+era una mancha negra sin un punto. Y la fachada y su mapa emisivo salen **del mismo sorteo**,
+recorrido en el mismo orden — con dos sorteos habría ventanas que brillan sin estar dibujadas.
+
+**Y NADA ALTO AL LADO.** Un vecino más alto a treinta metros deshace de un cuadro lo único que la
+escena tiene que decir. De ciento veinte metros para afuera sí, y una de cada cuatro de las lejanas
+es una torre de sesenta a ciento diez: con todas repartidas parejo la ciudad sale como una manta
+chata y el horizonte es una línea.
+
+#### CUATRO DEFECTOS DE LUZ, LOS CUATRO MEDIDOS
+
+1. **La luz del velador estaba ADENTRO de la pantalla**, y es la única de las seis que proyecta
+   sombra: el cono le tapaba el cuarto entero. Medido, brillo medio del cuadro **3 sobre 255**.
+2. **Y estaba en 5,4 de intensidad.** Estas seis luces se crearon con `decay 1,9`, o sea que caen
+   casi con el cuadrado —a tres metros, un 5 se convierte en 0,6—. Los faroles del barrio usan 26 a
+   cinco metros; un velador a dos tiene que estar en el mismo orden.
+3. **La mesa de luz estaba detrás de la cabecera**, así que el respaldo de noventa centímetros se
+   interponía entre el velador y el cuarto: la única luz del sitio proyectaba un rectángulo negro de
+   punta a punta de la cama. Al costado, la luz sale limpia.
+4. **La luz fría de la ciudad estaba a la altura del antepecho**, a sesenta centímetros del alféizar:
+   con `decay 1,9` eso multiplica por veinte y el alféizar salía **blanco puro**, la banda más
+   brillante del cuadro y delante de la ciudad. Va en el dintel. Y el alféizar dejó de ser
+   `C_BLANCO`, que es el de la carpintería de las casas del barrio —que se mira de noche y a diez
+   metros— y acá está a medio metro del ojo.
+
+#### DOS COSAS QUE LA LLUVIA TUVO QUE APRENDER
+
+La caída se calcula en **Y absoluto** (`mod(semilla.y − t·v, alto)`), o sea que la nube vive entre 0
+y 26 metros: en el cuarto la cámara está a noventa y siete y sin `baseY` no habría una sola gota — y
+el defecto no se vería como «falta la lluvia» sino como que la escena está mal iluminada. Y **no
+puede llover adentro del cuarto**: las gotas de más allá de las paredes quedan tapadas solas por la
+prueba de profundidad, pero las que caen dentro de los cinco por siete metros caen en la cara. Seis
+comparaciones en el vertex shader y se apagan.
+
+#### Y DE PASO, UN DEFECTO VIEJO DEL BARRIO
+
+En primera persona la cabeza se achica a la centésima parte, pero **`Head` no domina la cabeza
+entera**. Medido girando cada hueso un radián y viendo cuánto se mueven sus propios vértices, `neck`
+domina **102 vértices que se desplazan 7,5 cm de promedio y 12,7 el que más** — o sea un pedazo de
+cráneo. Mirando treinta grados hacia abajo aparecía la propia nuca llenando el cuadro, **en el barrio
+también**, y salta a la vista en la habitación, donde lo primero que uno hace es asomarse a la
+ventana.
+
+**No se arregla achicando también `neck`**: el tapón que cierra el agujero que deja la cabeza está
+pesado a ese mismo hueso —vive en y = 1,483 del bind— y achicándolo se abre el agujero y lo que se ve
+es el forro de la campera desde adentro. Se arregla pasándole a `Head` los **486 vértices de `neck`
+que están por encima del tapón**, una vez al cargar y sobre el atributo de pesos: no cuesta un solo
+ciclo por cuadro.
+
+#### MEDIDO AL CERRAR
+
+Partida completa desde el menú: cinemática → cuarto → se despierta → camina **4,8 m** hasta la
+ventana (y ahí salta el aviso) → cruza la puerta → barrio, con la niebla de vuelta en 0,0165 y las
+seis luces otra vez en los faroles. Entrar y salir del cuarto **dos veces seguidas** sin residuo.
+Pausa → menú principal desde el cuarto: el barrio vuelve. Los tres idiomas cambian el rótulo en vivo
+—y ése era un defecto propio: el rótulo del cuarto lo escribe `entraCuarto` una sola vez y no
+`ponCalle`, así que sin engancharlo a `repintaJuego` se quedaba en el idioma anterior—. Las tres
+calidades se aplican en caliente. Cuarto: **45-48 llamadas de dibujo y 53,8k triángulos**. Barrio:
+241 y 354k, sin cambio. **118,4 m caminados con 0 cuadros dentro de una casa.** 0 NaN y
+`window.__errs` vacío en las diez corridas. El HTML pasó de 1,35 a **1,39 MB**, y no entró un solo
+asset: la ciudad son cajas y dos lienzos de 128 y 256 píxeles.
 
 ### Septuagésima segunda vuelta (2026-08-31): **BARRIO** — los árboles dejan de ser un cono y un icosaedro
 
