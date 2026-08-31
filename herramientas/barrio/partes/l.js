@@ -49,6 +49,10 @@ let PALMA_A = 1.40;
    cuerpo es el giro alrededor de la vertical. */
 let MANO_A = [-0.55, 1.55, 0.70, -1.95];   /* medido: mano a 1,28 de alto,
                                              36 cm adelante y 13 de costado */
+/* la misma mano pero LLEVADA A LA BOCA: mas flexion de codo y el hombro un poco
+   mas arriba. El codo es el que hace casi todo el trabajo — es lo que acerca la
+   mano a la cara sin sacarla del eje del cuerpo. */
+let MANO_B = [-0.95, 1.62, 1.05, -2.62];
 
 /* ── UN GIRO EN LOS EJES DEL MUNDO Y NO EN LOS DEL HUESO ──
    Los ejes locales de un hueso son los que dejó el bind, así que no significan
@@ -127,7 +131,14 @@ const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
                 puno: 0, punoIzq: 0,
                 /* la supinación: 0 es como cae la mano y 1 es la palma para
                    arriba, que es lo único que permite APOYAR algo en ella */
-                palma: 0 };
+                palma: 0,
+                /* 0 = la mano donde la deja `mano`; 1 = pegada a la boca */
+                manoBoca: 0,
+                /* el sacudon de la mano despues de tragar. Va sobre el hombro y
+                   no sobre la muneca a proposito: sacudir la mano es un
+                   movimiento del brazo entero, y puesto en la muneca se lee a
+                   glitch. */
+                tiembla: 0 };
 
 /* ── LOS DEDOS ──
    No son geometría nueva: son los dedos que la malla YA tenía, detectados
@@ -267,9 +278,14 @@ function pasoPersonaje(dt){
 
   const m = cl(GESTO.mano, 0, 1);
   if (m > 0.001){
-    giraH('RightArm', mez(POSE.bdX, MANO_A[0], m), MANO_A[1] * m,
-          mez(POSE.bdZ, MANO_A[2], m));
-    giraH('RightForeArm', mez(POSE.bdA, MANO_A[3], m), 0, 0);
+    const q = cl(GESTO.manoBoca, 0, 1);
+    const a0 = mez(MANO_A[0], MANO_B[0], q), a1 = mez(MANO_A[1], MANO_B[1], q),
+          a2 = mez(MANO_A[2], MANO_B[2], q), a3 = mez(MANO_A[3], MANO_B[3], q);
+    /* 34 rad/s son cinco sacudidas por segundo, que es lo que hace una mano
+       cuando algo le da asco: mas lento se lee a saludo y mas rapido a vibrador */
+    const tb = GESTO.tiembla > 0.001 ? Math.sin(PJ.t * 34.0) * 0.17 * GESTO.tiembla : 0;
+    giraH('RightArm', mez(POSE.bdX, a0, m), a1 * m, mez(POSE.bdZ, a2 + tb, m));
+    giraH('RightForeArm', mez(POSE.bdA, a3, m), 0, 0);
   }
   /* ── LA SUPINACIÓN ES DEL ANTEBRAZO, NO DE LA MUÑECA ──
      Estaba todo en la muñeca: `PALMA_A` en 2,60 son CIENTO CUARENTA Y NUEVE

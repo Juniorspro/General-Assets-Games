@@ -81,10 +81,20 @@ MAND_Y, MAND_Z = 1.5100, 0.0700       # la bisagra, a la altura de la oreja
 # cara (z > zm) y las de aplanado son la profundidad del casquete.
 REP_OJOS = (1.468, 1.556, 0.078, 0.190)
 REP_BOCA = (1.360, 1.462, 0.060, 0.170)
-APL_OJOS = (1.452, 1.578, 0.092, 0.2690)
-APL_BOCA = (1.392, 1.474, 0.072, 0.2570)
+# ── UNA SOLA VENTANA Y NO DOS: LA CARA ENTERA SE APLANA ──
+# Pedido textual: «aplana la cara deja la nariz nomas». Con dos ventanas —una
+# por los ojos y otra por la boca— entre las dos quedaba una franja de pomulo
+# sin tocar, y eso es lo que hacia que la cara siguiera leyendose de bulto: los
+# ojos y la boca planos con un relieve en el medio se ven PEOR que todo de
+# bulto, porque la placa dibujada y la geometria discuten justo al lado.
+# Ahora es una sola ventana desde el menton hasta el nacimiento del pelo.
+APL_CARA = (1.372, 1.602, 0.106, 0.2700)
 # la nariz se salva del aplanado: es la unica saliente que tiene que quedar.
-NARIZ_Y, NARIZ_X = 1.440, 0.022
+# LA NARIZ ES LO UNICO QUE QUEDA AFUERA, y se recorta por arriba en 1,526: sin
+# tope, la columna protegida sigue subiendo por la frente y deja una loma en el
+# medio. 1,526 es justo por encima de los ojos, asi que el caballete se salva y
+# la frente se aplana.
+NARIZ = (1.396, 1.526, 0.025)
 
 # ── LA CARA SE APLANA, Y ES LA MITAD DEL PEDIDO ──
 # «hacer la cara plana o almenos los ojos y las cejas y boca plana». No es una
@@ -466,11 +476,22 @@ def main():
     # Y LA COLUMNA DE LA NARIZ QUEDA AFUERA (|x| < 0,026 por encima de 1,492):
     # la punta está en 1,510 con z=0,181, y aplanarla se la come — cuarenta y
     # tres milímetros medidos la primera vez.
-    for y0, y1, xm, z0 in (APL_OJOS, APL_BOCA):
+    for y0, y1, xm, z0 in (APL_CARA,):
         l = np.float32(z0) - np.float32(APL_CURVA) * P[:, 0] ** 2
         v = ((P[:, 1] > y0) & (P[:, 1] < y1) & (np.abs(P[:, 0]) < xm)
-             & (P[:, 2] > 0.060) & (P[:, 2] > l) & (lum > 0.10)
-             & ~((P[:, 1] > NARIZ_Y) & (np.abs(P[:, 0]) < NARIZ_X)))
+             # ── SE SNAPEA AL CASQUETE EN LOS DOS SENTIDOS, NO SOLO HACIA ATRAS ──
+             # Estaba en `P[:,2] > l`, o sea que solo empujaba hacia atras lo que
+             # sobresalia. Aplanar es otra cosa: es que TODO caiga en la misma
+             # superficie, asi que lo que esta hundido tambien tiene que subir.
+             # Con la condicion vieja el casquete a 0,270 tocaba 94 vertices y el
+             # que mas entraba se movia 4,8 mm — o sea que no aplanaba nada, y por
+             # eso la cara seguia leyendose de bulto.
+             # La banda de 32 mm es lo que evita que se lleve los costados de la
+             # cabeza: sin ella, un vertice de la oreja a 0,19 se vendria hasta
+             # 0,26 y la cara saldria inflada.
+             & (P[:, 2] > 0.060) & (np.abs(P[:, 2] - l) < 0.032) & (lum > 0.10)
+             & ~((P[:, 1] > NARIZ[0]) & (P[:, 1] < NARIZ[1])
+                 & (np.abs(P[:, 0]) < NARIZ[2])))
         lim[v] = l[v]; apl |= v
     hondo = float((P[apl, 2] - lim[apl]).max()) if apl.any() else 0.0
     P[apl, 2] = lim[apl]

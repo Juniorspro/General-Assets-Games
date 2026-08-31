@@ -34,7 +34,9 @@ const mez = (a, b, k) => a + (b - a) * k;
    antes cinco cosas repartidas por el archivo. */
 const CINE_T1  = 7.6;             /* primera persona -> la cara */
 const CINE_T3  = 20.0;            /* la cara -> las pastillas */
-const CINE_DUR = 29.6;
+const CINE_T4  = 29.6;            /* las pastillas -> se la toma */
+const CINE_T5  = 38.0;            /* se la toma -> el desmayo, en primera persona */
+const CINE_DUR = 48.4;
 const CINE_CORTE = CINE_T1;       /* el plano de la cara cuenta desde acá */
 const CINE_VEL = 1.28;            /* m/s: un paso de madrugada, no una marcha */
 const CINE_ZANC = 0.80;           /* metros por medio paso */
@@ -180,6 +182,7 @@ const CINEMA = {
     this.prepara();
     MODO = 'cine';
     this.t = 0; this.faseAnt = 0; this.rayoHecho = false;
+    this.golpe = false; this.nrmS = null;
     this.on = true;
     /* ── DÓNDE ARRANCA, Y ES UNA DECISIÓN DE FONDO ──
        En el plano B la cámara mira HACIA ATRÁS, o sea que el fondo desenfocado
@@ -443,7 +446,7 @@ const CINEMA = {
       LLUCARA.material.uniforms.camPos.value.copy(cam.position);
       LLUCARA.material.uniforms.t.value = RELOJ.value;
 
-    } else {
+    } else if (t < CINE_T4) {
       /* ═══ PLANO P: LAS PASTILLAS ═══
          «otra vista de cámara desenfocada que después se enfoca en algo que él
          tiene en la mano». El plano entra CON EL SUJETO FUERA DE FOCO —no sólo
@@ -454,9 +457,19 @@ const CINEMA = {
          Y SIGUE CAMINANDO. El brazo se levanta mezclado sobre el ciclo de la
          caminata, así que las piernas no se enteran: lo que se ve es alguien
          que camina mirándose la mano, que es el plano que se pidió. */
-      const u = t - CINE_T3, dur = CINE_DUR - CINE_T3;
+      const u = t - CINE_T3, dur = CINE_T4 - CINE_T3;
       if (!FRASCO.ok) cargaFrasco();
-      LLUCARA.visible = true; capaPersonaje(1); capaFrasco(1); ponFrasco(true);
+      /* ── EL FRASCO APARECE RECIEN CUANDO LA MANO YA ESTA ARMADA ──
+         «cuando levanta la mano la botellita de pastillas atraviesa toda la
+         mano». Y es cierto: durante los dos primeros segundos del plano el brazo
+         se esta levantando y la muneca girando, asi que el punto de apoyo se
+         mueve varios centimetros por cuadro mientras los dedos se abren — el
+         frasco queda adentro de la geometria por el camino. No hay pose que lo
+         arregle: lo que hay que hacer es no mostrarlo hasta que la mano llegue.
+         La mano termina de armarse en 1,7 (`GESTO.mano`) y la supinacion en 2,4;
+         a los 2,5 ya no se mueve nada. */
+      LLUCARA.visible = true; capaPersonaje(1); capaFrasco(1);
+      ponFrasco(u > 2.5);
       postMat.uniforms.cara.value = 1;
       postMat.uniforms.dof.value = 1.0;
       /* EL ENFOQUE SE HACE, NO APARECE: 2,6 segundos, y arranca recién en el
@@ -577,6 +590,18 @@ const CINEMA = {
       nrm.x = nrm.x*0.66 + this.adx*0.34;
       nrm.z = nrm.z*0.66 + this.adz*0.34;
       nrm.normalize();
+      /* ── Y SE SUAVIZA, QUE ES POR LO QUE LA MANO PARECIA GIRAR ──
+         «la mano al final gira una banda». La camara esta atada a la normal de
+         la palma, asi que TODO lo que la muneca haga se convierte en giro de
+         camara — y la muneca no esta quieta: la lleva el ciclo de la caminata.
+         Un bamboleo de tres grados en la mano, visto desde veinte centimetros,
+         es la mano dando vueltas.
+         La normal se filtra con una constante de 0,55 s: la caminata queda
+         afuera y el giro grande —el de la supinacion, que dura dos segundos y
+         medio— pasa entero. */
+      if (!this.nrmS){ this.nrmS = nrm.clone(); }
+      else { this.nrmS.lerp(nrm, 1 - Math.exp(-(this.dtu || 0.016) / 0.55)); this.nrmS.normalize(); }
+      nrm.copy(this.nrmS);
       const px = pf.x + nrm.x*dist + der.x*0.015;
       /* y la camara baja: con 0,13 sobre una palma que ya mira hacia arriba, lo
          que entra abajo del cuadro es la manga */
@@ -617,13 +642,152 @@ const CINEMA = {
       LLUCARA.material.uniforms.cen.value.set(pf.x, pf.y + 0.10, pf.z);
       LLUCARA.material.uniforms.camPos.value.copy(cam.position);
       LLUCARA.material.uniforms.t.value = RELOJ.value;
+
+    /* ══════════ PLANO T · SE LA TOMA ══════════
+       Plano medio y no primer plano de la cara, y es por una razon concreta: hay
+       que ver la mano Y la cara en el mismo cuadro. En un primer plano la mano
+       entra por abajo del marco y lo que se ve es un brazo sin dueno; en un
+       plano entero la cara mide veinte pixeles y el asco no existe. Del pecho a
+       la cabeza es donde las dos cosas caben. */
+    } else if (t < CINE_T5) {
+      const u = t - CINE_T4, dur = CINE_T5 - CINE_T4;
+      postMat.uniforms.cara.value = 1;
+      postMat.uniforms.dof.value = 0.92;
+      postMat.uniforms.dofS.value = 0;
+      LLUCARA.visible = true; capaPersonaje(1); capaFrasco(1);
+
+      const suelo = alturaSuelo(c.x, c.z);
+      AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
+
+      /* LOS CUATRO TIEMPOS, y cada uno tarda lo que tarda de verdad:
+         sube la mano (1,5 s) · cierra los ojos y traga (1,4) · el asco (1,6) ·
+         se sacude la mano (2,0). El resto es caminar con la cara deshecha. */
+      const sube  = suave(0.2, 1.7, u);
+      const traga = suave(1.7, 3.1, u);
+      const asco  = suave(3.1, 4.7, u);
+      const sacu  = suave(4.6, 5.0, u) * (1 - suave(6.6, 7.2, u));
+      if (!GESTO.libre){
+        GESTO.mano = 1; GESTO.manoBoca = sube * (1 - suave(5.4, 7.0, u));
+        GESTO.puno = 0.14 + 0.62 * sube;      /* los dedos se cierran sobre ella */
+        GESTO.palma = 1 - 0.75 * sube;        /* y la palma se da vuelta hacia la boca */
+        GESTO.tiembla = sacu;
+        /* EL MIEDO ES CERRAR LOS OJOS ANTES, no despues: se los cierra mientras
+           la mano sube, o sea que se la toma sin mirar. */
+        GESTO.abre = mez(1, 0.06, suave(0.9, 2.2, u)) + 0.55 * suave(4.9, 6.4, u);
+        GESTO.expr = u < 1.0 ? 'terror' : (asco > 0.5 ? 'asco' : 'cerrado');
+        GESTO.bocaExpr = u < 1.6 ? 'apretada'
+                       : (traga > 0.6 && asco < 0.5 ? 'sellada'
+                       : (asco > 0.5 ? 'asco' : 'entreabierta'));
+        GESTO.mira = 0; GESTO.miraY = -0.5;
+        /* la cabeza tira hacia atras al tragar y despues cae */
+        GESTO.pitch = -0.30 * traga + 0.42 * asco;
+        GESTO.yawRel = 0.10 * sacu;
+      }
+      /* las pastillas se van de la mano en cuanto se la lleva a la boca */
+      ponFrasco(u < 1.35);
+      ponPersonaje(c.x, c.z, this.yaw0, suelo, false);
+      pasoPersonaje(0);
+      PJ.grupo.updateMatrixWorld(true);
+
+      const cab = PJ.idx['Head'];
+      if (cab) cab.getWorldPosition(_pB); else _pB.set(c.x, suelo + 1.55, c.z);
+      /* la camara delante y un poco por debajo de la cara: mirando de arriba se
+         le ve la coronilla justo cuando la cara es todo el plano */
+      const d2 = mez(0.98, 0.86, suave(0, dur, u));
+      const px2 = _pB.x + this.adx*d2 + der.x*0.16;
+      const py2 = _pB.y - 0.16;
+      const pz2 = _pB.z + this.adz*d2 + der.z*0.16;
+      cam.position.set(px2 + Math.sin(u*1.4)*0.004, py2 + Math.sin(u*1.7)*0.003, pz2);
+      const ox2 = _pB.x - px2, oy2 = (_pB.y - 0.06) - py2, oz2 = _pB.z - pz2;
+      cam.rotation.set(Math.atan2(oy2, Math.hypot(ox2, oz2)),
+                       Math.atan2(-ox2, -oz2), 0.03 + Math.sin(u*0.6)*0.010);
+      if (Math.abs(cam.fov - 34) > 0.01){ cam.fov = 34; cam.updateProjectionMatrix(); }
+      JUG.x = c.x; JUG.z = c.z;
+
+      CARA_LUZ.position.set(_pB.x - der.x*1.15 + this.adx*0.75, _pB.y + 0.95,
+                            _pB.z - der.z*1.15 + this.adz*0.75);
+      CARA_LUZ.intensity = 4.2;
+      CARA_REL.position.set(_pB.x + this.adx*1.6 + der.x*1.1, _pB.y + 1.0,
+                            _pB.z + this.adz*1.6 + der.z*1.1);
+      CARA_REL.target.position.copy(_pB);
+      CARA_REL.target.updateMatrixWorld();
+      LLUCARA.material.uniforms.cen.value.set(_pB.x, _pB.y, _pB.z);
+      LLUCARA.material.uniforms.camPos.value.copy(cam.position);
+      LLUCARA.material.uniforms.t.value = RELOJ.value;
+
+    /* ══════════ PLANO D · EL DESMAYO, EN PRIMERA PERSONA ══════════
+       Vuelve a primera persona —el mismo ojo con el que se juega— porque el
+       desmayo es lo unico de la escena que le pasa a EL y no a alguien que se
+       esta mirando. Y por eso el cuerpo se apaga: en primera persona la cabeza
+       propia tapa media pantalla. */
+    } else {
+      const u = t - CINE_T5, dur = CINE_DUR - CINE_T5;
+      postMat.uniforms.cara.value = 0;
+      postMat.uniforms.dofS.value = 0;
+      LLUCARA.visible = false; capaPersonaje(0); capaFrasco(0); ponFrasco(false);
+      escondePersonaje();
+
+      /* ── VE BORROSO DE A POCO, Y EL DESENFOQUE ES EL DE TODA LA PANTALLA ──
+         `dof` sin `cara` desenfoca el destino entero, que es justo lo que hace
+         falta: no es un sujeto fuera de foco, es el ojo que deja de enfocar.
+         Sube en seis segundos y no en uno: un desmayo que llega de golpe es un
+         corte, y lo que se pidio es «de a poco». */
+      postMat.uniforms.dof.value = 2.7 * suave(0.3, 6.4, u);
+      /* la vineta se cierra al mismo tiempo: es lo que da el tunel */
+      postMat.uniforms.vig.value = mez(0.62, 1.55, suave(1.0, 7.4, u));
+      postMat.uniforms.sat.value = CFG.sat * mez(1.0, 0.30, suave(1.4, 7.8, u));
+
+      /* ── LA CAIDA ──
+         Se le doblan las rodillas primero (el ojo baja despacio) y despues se va
+         de costado y golpea. Los dos tiempos separados: una caida de una sola
+         curva se lee a ascensor. */
+      const rod  = suave(4.6, 6.2, u);      /* las rodillas */
+      const cae  = suave(6.2, 7.0, u);      /* el golpe */
+      const suelo = alturaSuelo(c.x, c.z);
+      /* deja de caminar cuando empiezan a fallarle las piernas */
+      const anda = 1 - suave(3.6, 5.0, u);
+      AND.v = CINE_VEL * anda; AND.fase = c.f;
+
+      const oy = suelo + mez(OJO, OJO * 0.62, rod) - (mez(OJO*0.62, 0.16, cae));
+      cam.position.set(c.x + der.x*c.sx*anda,
+                       suelo + mez(OJO, 0.17, Math.max(rod*0.45, cae)),
+                       c.z + der.z*c.sx*anda);
+      /* la vista se va de costado y hacia el piso, que es como cae una cabeza */
+      cam.rotation.set(mez(-0.10, -1.18, cae) - 0.24*rod,
+                       this.yaw0 + 0.20*rod + 0.55*cae,
+                       mez(0, 1.02, cae) + 0.10*rod);
+      if (Math.abs(cam.fov - 62) > 0.01){ cam.fov = 62; cam.updateProjectionMatrix(); }
+      JUG.x = c.x; JUG.z = c.z;
+
+      if (!this.golpe && cae > 0.55){ this.golpe = true; son('paso', 1.0); }
     }
 
     /* ── EL NEGRO DE LAS PUNTAS ──
        Entra desde negro y se va a negro, y el de la salida empieza ANTES de que
        termine el plano: cortar del último cuadro al menú en el mismo instante se
        lee a que el juego se cerró, no a que la escena terminó. */
-    const neg = Math.max(1 - suave(0.15, 1.55, t), suave(CINE_DUR - 1.9, CINE_DUR - 0.15, t));
+    let neg = Math.max(1 - suave(0.15, 1.55, t), suave(CINE_DUR - 1.9, CINE_DUR - 0.15, t));
+    /* ── EL PESTANEO CON EL QUE SE APAGA ──
+       Pedido: «se desvanece con un efecto de pestanear». No es un fundido: son
+       tres cierres, cada uno mas profundo, y CADA UNO REABRE MENOS QUE EL
+       ANTERIOR — 0,10 · 0,26 · 1,00 de piso. Eso es lo que separa un pestaneo de
+       un fundido: el fundido baja monotono, el ojo pelea. Y el cierre es mas
+       rapido que la apertura (0,28 s contra 0,45), que es como se mueve un
+       parpado de verdad.
+       El tercero cierra en 1,00 y ya no abre: ahi termina la escena. */
+    if (t >= CINE_T5){
+      const up = t - CINE_T5;
+      let b = 0;
+      for (const [t0, w, prof, piso] of [[6.7, 0.28, 0.72, 0.10],
+                                         [7.7, 0.24, 0.90, 0.26],
+                                         [8.7, 0.30, 1.00, 1.00]]){
+        if (up < t0) continue;
+        const cier = Math.min(1, (up - t0) / w);
+        const abre = Math.min(1, Math.max(0, (up - t0 - w) / (w * 1.6)));
+        b = Math.max(b, mez(prof, piso, abre) * cier);
+      }
+      neg = Math.max(neg, b);
+    }
     $('cineNeg').style.opacity = neg.toFixed(3);
     /* el grano sube y la saturación baja: es la misma imagen del juego filmada
        con una cámara peor, que es exactamente lo que se quiere */
@@ -633,7 +797,7 @@ const CINEMA = {
 
   paso(dt){
     if (!this.on) return;
-    this.t += dt;
+    this.t += dt; this.dtu = dt;   /* `pon` lo necesita para filtrar en el tiempo */
     const c = this.cuerpo(this.t);
     /* LA PISADA VA ATADA A LA FASE DEL PASO y no a un temporizador: es la misma
        regla que el juego, así que el sonido y el cabeceo no se pueden

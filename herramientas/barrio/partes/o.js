@@ -1,47 +1,87 @@
 
 /* ══════════════════════ EL FRASCO Y LAS PASTILLAS ══════════════════════
-   El frasco está generado (imagen -> 3D con Higgsfield) y horneado a color por
-   vértice; las dos pastillas van por código, porque una pastilla es una cápsula
-   blanca de doce milímetros y generar un modelo para eso sería bajar cincuenta
-   kilobytes para dibujar un poroto.
+   LOS DOS VAN POR CODIGO, y el frasco dejo de ser un modelo generado. Pedido:
+   «que las pastillas y el frasquito sean modelos 3D procedurales». Es lo
+   correcto y no solo mas barato:
 
-   CUELGA DEL HUESO DE LA MANO Y NO DE LA ESCENA. Puesto en la escena habría que
-   copiarle la posición de la mano en cada cuadro, y eso es una segunda cuenta
-   que se puede desincronizar de la animación — el mismo defecto que en LEMI
-   dejó la llave quieta mientras el brazo subía. Colgado del hueso, la mano lo
-   lleva por construcción. */
+   1. UN FRASCO DE PASTILLAS ES UN CILINDRO CON TAPA. No tiene una sola forma
+      que un generador pueda inventar mejor que una cuenta: es un tubo ambar
+      levemente conico, una tapa blanca acanalada y una etiqueta de papel. El
+      GLB generado pesaba 77 KB en base64 y traia 1.935 triangulos para dibujar
+      eso.
+   2. Y SOBRE TODO: LAS MEDIDAS PASAN A SER MIAS. El defecto que el usuario vio
+      —«cuando levanta la mano la botellita atraviesa toda la mano»— sale de no
+      saber donde esta el eje ni cuanto mide el modelo que devolvio el
+      generador. Con el frasco escrito, el radio y el alto son numeros que puedo
+      comparar contra la palma: 17 mm de radio contra 52 de palma.
+
+   CUELGA DEL HUESO DE LA MANO Y NO DE LA ESCENA. Puesto en la escena habria que
+   copiarle la posicion de la mano en cada cuadro, y eso es una segunda cuenta
+   que se puede desincronizar de la animacion — el mismo defecto que en LEMI
+   dejo la llave quieta mientras el brazo subia. Colgado del hueso, la mano lo
+   lleva por construccion. */
 const FRASCO = { ok: false, grupo: null, past: null, tri: 0 };
+
+/* medidas de un frasco de farmacia de verdad, en metros */
+const FR_R = 0.0170;        /* radio del cuerpo */
+const FR_H = 0.0620;        /* alto del cuerpo */
+const FR_TAPA = 0.0150;     /* alto de la tapa */
 
 function cargaFrasco(){
   if (FRASCO.grupo || !PJ.ok) return;
   const g = new T.Group();
-  try {
-    const r = armaProp(B64(FRASCO_B64), new T.MeshPhongMaterial({
-      vertexColors: true, shininess: 20, specular: 0x141618 }));
-    /* EL FRASCO SE AGARRA POR EL MEDIO, no por la base: la mano se cierra
-       alrededor de su cintura, así que el origen —que el horno dejó en la
-       base— tiene que bajar media altura. */
-    r.malla.position.set(0, -0.040, 0);
-    g.add(r.malla); FRASCO.tri = r.tri;
-  } catch(e){ if (window.__errs) window.__errs.push('frasco: ' + e.message); }
+  let tri = 0;
+  const suma = (m) => { tri += m.geometry.index
+    ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3; };
 
-  /* LAS DOS PASTILLAS. Van APOYADAS EN LA MANO y no flotando: lo que hace que
-     se lean es que estén sobre algo. Y son dos, no una: una sola pastilla en
-     una palma se lee a moneda. */
+  /* EL CUERPO ES LEVEMENTE CONICO —el de abajo un 4 % mas angosto—, que es como
+     sale de un molde de inyeccion y es lo que evita que se lea a lata. Ambar
+     opaco y no translucido: la transparencia obligaria a ordenar el dibujo
+     contra el cuerpo y contra las pastillas, y a las tres de la manana con un
+     farol de costado un ambar oscuro brillante se lee igual de bien. */
+  const mCuerpo = new T.MeshPhongMaterial({ color: 0x9a5a1c, shininess: 46,
+                                            specular: 0x6b5a3a });
+  const cuerpo = new T.Mesh(
+    new T.CylinderGeometry(FR_R, FR_R * 0.96, FR_H, 20, 1), mCuerpo);
+  g.add(cuerpo); suma(cuerpo);
+
+  /* LA TAPA VA CON DOCE LADOS Y NO CON VEINTE, y no es para ahorrar: las
+     acanaladuras de una tapa de seguridad son exactamente eso, facetas. Con
+     veinte lados se ve un cilindro liso y con doce se leen las canaletas sin
+     dibujar una sola de mas. */
+  const mTapa = new T.MeshPhongMaterial({ color: 0xe8e6df, shininess: 18,
+                                          specular: 0x201f1c });
+  const tapa = new T.Mesh(
+    new T.CylinderGeometry(FR_R * 1.06, FR_R * 1.06, FR_TAPA, 12, 1), mTapa);
+  tapa.position.y = (FR_H + FR_TAPA) / 2;
+  g.add(tapa); suma(tapa);
+
+  /* LA ETIQUETA ES UN ANILLO UN PELO MAS GRANDE QUE EL CUERPO, no una textura:
+     medio milimetro de papel encima del vidrio es lo que hace que se vea el
+     canto del papel, y el canto es lo que dice «etiqueta». Sin fondos ni tapas,
+     asi que son veinte quads. */
+  const mEtiq = new T.MeshPhongMaterial({ color: 0xd9d4c6, shininess: 6,
+                                          specular: 0x141414 });
+  const etiq = new T.Mesh(
+    new T.CylinderGeometry(FR_R * 1.012, FR_R * 1.002, FR_H * 0.56, 20, 1, true),
+    mEtiq);
+  etiq.position.y = -FR_H * 0.06;
+  g.add(etiq); suma(etiq);
+
+  /* EL ORIGEN DEL GRUPO QUEDA EN EL MEDIO DEL CUERPO, que es por donde una mano
+     lo agarra y por donde se apoya acostado. Escrito asi no hay que adivinar
+     donde lo dejo un horno. */
+  FRASCO.tri = Math.round(tri);
+
+  /* ── LAS PASTILLAS ──
+     Capsulas de 12 mm por 13 de diametro, que es una pastilla de verdad. Tres y
+     no dos: una sola en una palma se lee a moneda, y con tres se cuentan de una.
+     Van en su propio grupo para poder aparecer y desaparecer sin el frasco. */
   const mp = new T.MeshPhongMaterial({ color: 0xf2f0ea, shininess: 24,
                                        specular: 0x1e2024 });
   PJ.idx['RightHand'].add(g);
 
-  /* ── LAS PASTILLAS CUELGAN DEL DEDO, NO DEL FRASCO ──
-     Colgadas del frasco quedaban flotando al costado, sin tocar nada, y una
-     pastilla que flota no se lee a pastilla que alguien tiene: se lee a error.
-     Colgadas de la falange de arriba del índice están APOYADAS en algo, y ese
-     algo se mueve cuando el dedo se mueve. */
   const gp = new T.Group();
-  /* TRES Y NO DOS, Y MAS GRANDES. A 46 cm con lente de 30 grados el cuadro mide
-     24,6 cm de alto: una pastilla de 2,1 cm ocupa el 8 % y a dos se las cuenta
-     con esfuerzo. Con tres y un milimetro mas de radio se leen de una — y tres
-     pastillas sueltas en la palma dicen algo que dos no dicen. */
   for (const [x, y, z, r] of [[-0.014, 0.000, -0.004, 0.30],
                               [ 0.010, -0.002, 0.007, -0.45],
                               [-0.001, 0.001, 0.016, 1.05]]){
