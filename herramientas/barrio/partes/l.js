@@ -31,6 +31,7 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
+let PALMA_A = 1.40;                 /* cuánto gira la muñeca para poner la palma arriba */
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
@@ -115,7 +116,10 @@ const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
                    se paró a mirarla. */
                 mano: 0,
                 /* cuánto se cierran los dedos, de 0 (abierta) a 1 (puño) */
-                puno: 0, punoIzq: 0 };
+                puno: 0, punoIzq: 0,
+                /* la supinación: 0 es como cae la mano y 1 es la palma para
+                   arriba, que es lo único que permite APOYAR algo en ella */
+                palma: 0 };
 
 /* ── LOS DEDOS ──
    No son geometría nueva: son los dedos que la malla YA tenía, detectados
@@ -131,6 +135,15 @@ const DEDOS_N = ['Indice', 'Medio', 'Anular', 'Menique'];
 const DEDOS_K = [[0.95, 1.15], [1.00, 1.20], [1.05, 1.25], [1.10, 1.30]];
 const _qDedo = new T.Quaternion();
 const _ejeDedo = new T.Vector3(1, 0, 0);
+/* EL EJE DE LA MUÑECA ES EL +Y DEL PROPIO HUESO DE LA MANO, y eso no se elige:
+   sale de que los dedos van a lo largo de ese eje —medido, de 0 a 0,188 en y—
+   así que girar sobre él es exactamente supinar. */
+const _ejeMuneca = new T.Vector3(0, 1, 0);
+function giraMuneca(n, a){
+  const b = PJ.idx[n], q = PJ.bind[n];
+  if (!b || !q) return;
+  b.quaternion.copy(q).multiply(_qDedo.setFromAxisAngle(_ejeMuneca, a));
+}
 function curvaDedo(n, a){
   const b = PJ.idx[n], q = PJ.bind[n];
   if (!b || !q) return;
@@ -236,6 +249,7 @@ function pasoPersonaje(dt){
      ángulos están medidos con `__V.manoDer()` contra el pecho, no elegidos. */
   ponPuno('Right', GESTO.puno);
   ponPuno('Left', GESTO.punoIzq);
+  if (Math.abs(GESTO.palma) > 0.001) giraMuneca('RightHand', GESTO.palma * PALMA_A);
 
   const m = cl(GESTO.mano, 0, 1);
   if (m > 0.001){

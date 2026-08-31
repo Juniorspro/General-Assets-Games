@@ -538,6 +538,8 @@ async function arranca(){
       }
       GESTO.puno = 0; pasoPersonaje(0);
       return JSON.stringify(sal); },
+    palma: (v, a) => { GESTO.palma = v; if (a !== undefined) PALMA_A = a;
+      if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ palma: GESTO.palma, A: PALMA_A }); },
     puno: (k, i) => { GESTO.puno = k; if (i !== undefined) GESTO.punoIzq = i;
       if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ puno: GESTO.puno }); },
     luzc: () => JSON.stringify({ hay: !!luzCuerpo, i: luzCuerpo ? luzCuerpo.intensity : 0,

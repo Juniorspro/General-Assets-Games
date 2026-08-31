@@ -189,6 +189,34 @@ cuadro, visible y delante de la cámara**. Al terminar, el juego arranca en `jue
 solo solapamiento**, y desde ahí se caminan **99,4 m con 0 cuadros dentro de una casa**. **254 llamadas
 de dibujo**. **0 NaN** y `window.__errs` vacío en las nueve corridas. El HTML pasó de 829 a **837 KB**.
 
+#### Y DESPUÉS: LA MANO NO SE PUEDE FILMAR DE CERCA, Y ESO SE MIDIÓ
+
+Pedido: *"está mal hecho se ve horrible y si mejor lo muestras como lo sostiene en su palma?"*, y
+después *"si generas un modelo 3D con highsfield ya igualito a ese pero a este si le haces cada parte
+del cuerpo para animaciones complejas"*.
+
+**LO SEGUNDO NO SE PUEDE PEDIR, Y ESTÁ MEDIDO.** Volví a generar el mismo personaje desde la misma
+imagen de referencia, con `enable_rigging`, en pose de A y a 60.000 triángulos. Volvió con **56.959
+vértices, 60.265 triángulos, una animación de 72 canales… y 24 huesos: exactamente la misma lista que
+la primera vez, sin un solo dedo.** El riggeador de Meshy arma un esqueleto humanoide fijo con una
+articulación por mano, y en sus parámetros no hay ninguno para pedir más: sólo `enable_rigging`, la
+altura y el clip. Generar otra vez no cambia eso — es una propiedad del riggeador, no de cómo se lo
+pida. (Por eso los dedos hubo que detectarlos y riggearlos a mano, que es lo que hace la vuelta.)
+
+**Y LO PRIMERO TAMPOCO ERA LA POSE.** Probé seis supinaciones de muñeca y tres cierres de puño —nueve
+combinaciones fotografiadas— y las nueve se ven rotas. La causa no es cómo está la mano: **la mano
+decimada tiene 259 vértices para diecinueve centímetros**, así que a treinta y seis centímetros del
+lente lo que hay son facetas planas, y ninguna pose arregla eso.
+
+Lo que sí lo arregla es **no filmarla de cerca**: a 62 cm el low poly vuelve a leerse a estilo y el
+héroe del plano pasa a ser el frasco, que es lo que el plano tiene que mostrar.
+
+**LO QUE QUEDA PENDIENTE, Y ES HONESTO DECIRLO:** el arreglo de fondo es cambiar el personaje por el
+de 60k que se generó en esta vuelta —con esa densidad la mano aguanta un primer plano— pero eso obliga
+a volver a medir todo lo que está calibrado sobre el modelo actual: las alturas de los ojos y de la
+boca, el aplanado de la cara, el tapón del cuello, la mochila y los ángulos del brazo. Es una vuelta
+entera, no un reemplazo de archivo.
+
 ### Sexagésima séptima vuelta (2026-08-31): **BARRIO** — la cinemática pasa a cuatro planos, y hay un frasco
 
 Pedido textual: *"puedes hacer más realista todo y tiene que ser un momento melancólico haz que el

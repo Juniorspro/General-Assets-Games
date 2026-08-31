@@ -470,7 +470,7 @@ const CINEMA = {
         GESTO.mano = suave(0.0, 1.7, u);
         /* y la mano se cierra sobre el frasco mientras se levanta: los dedos
            son los que ya tenía la malla, riggeados de a dos huesos */
-        GESTO.puno = 0.30 + 0.55 * suave(0.3, 2.2, u);
+        GESTO.puno = 0.22 + 0.40 * suave(0.3, 2.2, u);
         GESTO.pitch = 0.20 + 0.30 * GESTO.mano;   /* le baja la vista a la mano */
         GESTO.yawRel = -0.10 * GESTO.mano;
         GESTO.abre = 1; GESTO.autoParp = true;
@@ -512,7 +512,14 @@ const CINEMA = {
          veinte centímetros, así que encuadrando sólo el frasco lo que llena el
          cuadro es el puño. A 0,55 m y con 30 grados el cuadro mide 29 cm: el
          frasco ocupa el 29 % y la mano entra entera. */
-      const dist = mez(0.50, 0.36, suave(0, dur, u));
+      /* ── SE FILMA EL FRASCO, NO EL PUÑO ──
+         La mano decimada tiene 259 vértices para diecinueve centímetros: a
+         treinta y seis centímetros del lente eso son facetas planas, y no hay
+         pose que lo arregle —probadas seis supinaciones y tres cierres, las
+         nueve se ven rotas—. A sesenta y dos el low poly vuelve a leerse a
+         estilo, y lo que se mira es lo que tiene en la mano, que es el plano
+         que se pidió. */
+      const dist = mez(0.80, 0.62, suave(0, dur, u));
       /* LA CÁMARA MIRA DESDE ARRIBA, y no es una preferencia: a la altura de la
          mano el fondo del cuadro es SU PROPIA CARA, y como el cuerpo entero va
          en la capa nítida la cara sale enfocada y se lleva la atención del
