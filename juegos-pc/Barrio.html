@@ -2746,6 +2746,43 @@ function ponCam(dt){
   if (Math.abs(cam.fov - AND.fov) > 0.02){ cam.fov = AND.fov; cam.updateProjectionMatrix(); }
 
   const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
+
+  /* ── ¿HAY LUGAR PARA LA CÁMARA AL HOMBRO? ──
+     Esto se decide ANTES de todo lo demás, porque si no lo hay la vista tiene
+     que ser primera persona ENTERA: el balanceo, la altura del ojo y —sobre
+     todo— la cabeza achicada.
+
+     EL DEFECTO QUE ARREGLA, Y NO SE VE COMO UN DEFECTO DE CÁMARA: pegado a una
+     pared el recorte devolvía distancia CERO, o sea la cámara exactamente en la
+     cabeza… con la cabeza dibujada a tamaño real, porque en tercera persona no
+     se achica. Lo que se ve entonces es el INTERIOR del propio cráneo llenando
+     el cuadro, y desde afuera eso se lee a «el personaje no tiene cabeza».
+     En el cuarto pasaba SIEMPRE: mide 5,2 × 6,8 m y la cámara pide 1,55 m hacia
+     atrás, así que no hay un solo sitio donde entre.
+
+     Y EL CUARTO VA EN PRIMERA Y PUNTO. No es sólo que no entre: son cuatro
+     metros y medio de caminata hasta una ventana, y lo único que esa escena
+     tiene que mostrar es lo que se ve por ella — con la cámara detrás, lo que se
+     mira desde la ventana es la propia nuca.
+
+     LA HISTÉRESIS NO ES UN LUJO: sin ella, caminando pegado a una cerca la
+     vista salta entre primera y tercera varias veces por segundo, y eso se ve
+     peor que cualquiera de las dos. */
+  let libre = CAM3_DIST;
+  if (CFG.tercera && !CU.on){
+    const s0 = -sy, c0 = -cy;
+    const dx = -c0, dz = s0;               /* la derecha del cuerpo */
+    const cp0 = Math.cos(JUG.pitch);
+    const ox0 = JUG.x + dx*CAM3_LADO, oz0 = JUG.z + dz*CAM3_LADO;
+    for (let k = 1; k <= 8; k++){
+      const t = CAM3_DIST * k / 8;
+      if (!camLibre(ox0 - s0*cp0*t, oz0 - c0*cp0*t)){ libre = CAM3_DIST * (k-1) / 8; break; }
+    }
+  }
+  CAM3.libre = libre;
+  CAM3.apretada = CU.on || (CAM3.apretada ? libre < CAM3_VUELVE : libre < CAM3_MIN);
+  const tercera = CFG.tercera && !CAM3.apretada;
+
   /* ── LA TERCERA PERSONA ──
      LA ROTACIÓN NO SE TOCA: la cámara se queda mirando exactamente para donde
      miraba en primera y lo único que cambia es DÓNDE está. Componer un `lookAt`
@@ -2758,10 +2795,11 @@ function ponCam(dt){
      caminata; en tercera la caminata ya se ve en las piernas del personaje, y
      el mismo balanceo aplicado a una cámara que está a tres metros se lee a que
      tiembla el pulso de quien filma. */
-  const bob = CFG.tercera ? 0.35 : 1;
+  const bob = tercera ? 0.35 : 1;
   const ojoY = JUG.y + AND.ojo + arriba*bob + resp*bob;
   cam.rotation.set(JUG.pitch + Math.sin(AND.fase*2)*0.004*amp*bob, JUG.yaw, AND.roll*bob);
-  if (!CFG.tercera){
+  if (!tercera){
+    CAM3.d = 0;   /* la camara ESTA en el ojo: al volver a tercera sale de ahi */
     cam.position.set(JUG.x + cy*costado, ojoY, JUG.z - sy*costado);
     return;
   }
@@ -2774,16 +2812,9 @@ function ponCam(dt){
   const dir = { x: ade.x*cp, y: Math.sin(JUG.pitch), z: ade.z*cp };
   const ox = JUG.x + der.x*CAM3_LADO, oz = JUG.z + der.z*CAM3_LADO;
   const oy = ojoY + CAM3_ALTO;
-  /* ── Y NO ATRAVIESA PAREDES ──
-     Se marcha desde la cabeza hacia atrás y se corta en el último punto libre.
-     Sin esto, caminando pegado a una cerca la cámara queda del otro lado y el
-     jugador se ve la casa por dentro. */
-  let d = CAM3_DIST;
-  for (let k = 1; k <= 8; k++){
-    const t = CAM3_DIST * k / 8;
-    if (!camLibre(ox - dir.x*t, oz - dir.z*t)){ d = CAM3_DIST * (k-1) / 8; break; }
-  }
-  CAM3.d = lerp(CAM3.d, d, Math.min(1, dt*14));
+  /* ── Y NO ATRAVIESA PAREDES ── el recorte se marchó más arriba, porque de él
+     depende también si la vista puede ser de tercera. */
+  CAM3.d = lerp(CAM3.d, libre, Math.min(1, dt*14));
   cam.position.set(ox - dir.x*CAM3.d, oy - dir.y*CAM3.d, oz - dir.z*CAM3.d);
 }
 /* ── AL HOMBRO, Y NO EN TERCERA PERSONA ──
@@ -2801,7 +2832,13 @@ function ponCam(dt){
      centro; con 56 grados de medio campo horizontal eso lo deja cerca del 70 %
      del ancho — o sea a la derecha de verdad, y sin comerse el cuadro. */
 const CAM3_DIST = 1.55, CAM3_LADO = -0.62, CAM3_ALTO = 0.26;
-const CAM3 = { d: CAM3_DIST };
+/* Y UN PISO: POR DEBAJO DE ESTO LA CÁMARA ESTÁ ADENTRO DEL CUERPO. La cabeza
+   vive en y = 1,50 y mide unos once centímetros de radio, así que a menos de
+   medio metro del hombro el lente queda dentro del cráneo o de la mochila. Con
+   `CAM3_VUELVE` más arriba que `CAM3_MIN` hay histéresis y la vista no parpadea
+   al rozar una cerca. */
+const CAM3_MIN = 0.62, CAM3_VUELVE = 0.85;
+const CAM3 = { d: CAM3_DIST, libre: CAM3_DIST, apretada: false };
 /* ¿se puede poner la cámara acá? Reusa la MISMA rejilla de colisiones que el
    cuerpo: una segunda lista de paredes sólo para la cámara se desincroniza el
    día que se agregue un obstáculo. */
@@ -2819,12 +2856,19 @@ function camLibre(x, z){
   return true;
 }
 
+/* ¿el personaje se dibuja como en primera persona? Tres cosas dicen que sí y
+   una sola de ellas es la preferencia del jugador: la vista elegida, estar en el
+   cuarto, y que la cámara al hombro no tenga lugar. Va en una función y no
+   repetida en los tres sitios que la usan — repartida, el próximo sitio que se
+   agregue va a dibujar la cabeza donde no va. */
+function vistaFP(){ return !CFG.tercera || CU.on || CAM3.apretada; }
+
 /* ── EL CAMBIO DE VISTA ── */
 function ponVista(v){
   CFG.tercera = !!v;
   CAM3.d = CAM3_DIST;
   $('acVista').classList.toggle('on', CFG.tercera);
-  if (PJ.ok){ PJ.primeraPersona = null; ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !CFG.tercera); }
+  if (PJ.ok){ PJ.primeraPersona = null; ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, vistaFP()); }
   aviso(TX(CFG.tercera ? 'aTercera' : 'aPrimera'));
   son('clic', 0.7);
   try { localStorage.setItem('barrio_vista', CFG.tercera ? '3' : '1'); } catch(e){}
@@ -6010,7 +6054,7 @@ function bucle(){
          Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
          se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
          correas de la mochila, los brazos y las piernas caminando. */
-      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !CFG.tercera);
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, vistaFP());
       GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
       pasoPersonaje(dt);
     }

@@ -51,7 +51,7 @@ function bucle(){
          Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
          se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
          correas de la mochila, los brazos y las piernas caminando. */
-      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !CFG.tercera);
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, vistaFP());
       GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
       pasoPersonaje(dt);
     }

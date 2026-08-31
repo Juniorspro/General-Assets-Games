@@ -187,6 +187,51 @@ jardín se iba a verde manzana. El tinte nuevo sale de dividir en **lineal** el 
 nuevo — `0x8a9b7e → 0x72809e` el pasto y `0x6d6558 → 0x716b5e` la madera — y el producto queda
 idéntico hasta la quinta cifra, que es la prueba de que compensa y no de que quedó lindo.
 
+#### Y DESPUÉS: «SE VE SIN CABEZA», Y NO ERA LA CABEZA
+
+Reporte, con la captura del cuarto: *"se ve sin cabeza we xd"*. Lo que llenaba el cuadro era el
+**interior del propio cráneo**, y la causa es la cámara al hombro.
+
+El recorte contra las paredes se marcha ocho pasos hacia atrás y se corta en el último punto libre;
+con la pared pegada devolvía distancia **cero**, o sea el lente exactamente en la cabeza — **y en
+tercera persona la cabeza se dibuja a tamaño real**, porque la que se achica a la centésima parte es
+la de primera. Desde afuera eso no se lee a «la cámara está adentro»: se lee a que al personaje le
+falta la cabeza.
+
+**EN EL CUARTO PASABA SIEMPRE, y es una cuenta:** mide 5,2 × 6,8 m y la cámara pide 1,55 m hacia
+atrás, así que no hay un solo sitio del cuarto donde entre. **Y EN EL BARRIO TAMBIÉN ERA
+ALCANZABLE** — medido barriendo media manzana, en `z = −20,0` y en `z = −17,0`, o sea parado delante
+de una casa.
+
+Se arregla con dos cosas y la segunda es la que importa:
+
+- **Un piso: por debajo de 0,62 m el lente está adentro del cuerpo.** La cabeza vive en y = 1,50 y
+  mide unos once centímetros de radio.
+- **Y por debajo de ese piso la vista PASA A PRIMERA PERSONA ENTERA**, no sólo se acerca: el balanceo,
+  la altura del ojo y —sobre todo— la cabeza achicada. Una cámara «al hombro» a veinte centímetros no
+  es una cámara al hombro, es estar adentro del muñeco.
+- **Y el cuarto va en primera y punto.** No es sólo que no entre: son cuatro metros y medio de
+  caminata hasta una ventana, y lo único que esa escena tiene que mostrar es lo que se ve por ella —
+  con la cámara detrás, lo que se mira desde la ventana es la propia nuca.
+- **Con histéresis** (se apaga en 0,62 y vuelve en 0,85): sin ella, caminando pegado a una cerca la
+  vista salta entre primera y tercera varias veces por segundo, y eso se ve peor que cualquiera de las
+  dos.
+
+**Y LA DECISIÓN SE TOMA ANTES DEL BALANCEO, no después de colocar la cámara.** El recorte se marchó
+arriba de todo justo por eso: de él depende también cuánto balanceo hay y qué escala tiene la cabeza,
+así que calcularlo después obligaría a deshacer medio cuadro.
+
+**UN DEFECTO DE LA MEDICIÓN, y del tipo que ya costó vueltas acá:** para comprobarlo usé
+`__V.verCara(true)`, que **fuerza el estado contrario antes de medir** —para eso existe— así que
+devolvía `escCabeza: 1` siempre y parecía que el arreglo no hacía nada. Lo que no miente es la
+distancia entre los huesos `Head` y `head_end`: **0,269 m con la cabeza entera y 0,003 con la cabeza
+achicada**. Una sonda que escribe el estado que va a medir no está midiendo el juego.
+
+Medido: en el cuarto `d 0 · fp true · cráneo 0,003`; en la calle abierta `d 1,55 · fp false · cráneo
+0,269`; delante de una casa, `d 0 · fp true`. Partida completa de ida y vuelta —135,8 m en el barrio
+al hombro, 4,6 m en el cuarto hasta la ventana, y **la cámara al hombro vuelve sola al salir**
+(d 1,55) para otros 138,7 m— con **0 cuadros dentro de una casa** y `window.__errs` vacío.
+
 #### MEDIDO AL CERRAR
 
 7 de 7 texturas decodificadas y puestas con su escala. **271,6 m caminados de verdad por dos calles
