@@ -236,7 +236,7 @@ const matAsfalto = new T.MeshPhongMaterial({
    separa la calle de la vereda es el escalón de quince centímetros, y un
    escalón no se ve si las dos caras tienen el mismo tono. */
 const matVereda  = new T.MeshLambertMaterial({ map: texVereda, color: 0x7d838d });
-const matPasto   = new T.MeshLambertMaterial({ map: texPasto, color: 0x8a9b7e });
+const matPasto   = new T.MeshLambertMaterial({ map: texPasto, color: 0x72809e });
 const matReja    = new T.MeshLambertMaterial({ map: texReja, color: 0x99a3b2,
                                                transparent: true, alphaTest: 0.42,
                                                side: T.DoubleSide });
@@ -259,9 +259,15 @@ const matLadrilloV= new T.MeshLambertMaterial({ map: texLadrillo, vertexColors: 
    revestimiento ×1,02 · **madera ×1,31** · **teja ×0,74**. Las cinco primeras
    están dentro del ruido; las dos últimas se compensan acá, y la teja importa
    especialmente porque el techo acaba de dejar de ser negro y no puede volver a
-   apagarse. Es la misma cuenta que en el battle royale de Z Force. */
+   apagarse. Es la misma cuenta que en el battle royale de Z Force.
+   Y CUANDO EL PASTO Y LA MADERA PASARON A LA TANDA DE REZONA hubo que rehacerla
+   otra vez, canal por canal: el pasto de Rezona es mucho más verde y con la
+   mitad de azul (0,105·0,226·0,039 contra 0,070·0,150·0,064), así que dejando el
+   tinte donde estaba el jardín se iba a verde manzana. El tinte nuevo sale de
+   dividir en LINEAL el promedio viejo por el nuevo, y el producto queda idéntico
+   hasta la quinta cifra. */
 const matTechoV   = new T.MeshLambertMaterial({ map: texTeja, vertexColors: true, color: 0xe4eaf2 });
-const matMaderaV  = new T.MeshLambertMaterial({ map: texMadera, vertexColors: true, color: 0x6d6558 });
+const matMaderaV  = new T.MeshLambertMaterial({ map: texMadera, vertexColors: true, color: 0x716b5e });
 const matPiquete = new T.MeshLambertMaterial({ map: texPiquete, vertexColors: true,
                                                color: 0xb8b8b8,
                                                transparent: true, alphaTest: 0.5,
@@ -379,7 +385,17 @@ function cargaTexturas(){
          las UV sino de `repeat` —es un plano de doscientos metros con UV de 0 a
          1— así que reemplazar el mapa sin copiarla deja la calle con UN texel
          estirado sobre el barrio entero. */
-      if (m.map) t.repeat.copy(m.map.repeat);
+      /* Y LA ESCALA TAMBIÉN, QUE ES LO QUE FALTABA. `METROS` dice cuántos
+         metros cubre el LIENZO dibujado; `TEX_M` cuántos cubre la FOTO, contados
+         sobre ella. No son el mismo número —la foto de ladrillo trae doce
+         hiladas donde el dibujo trae treinta y dos— así que copiar la repetición
+         tal cual deja la pared con hiladas de 8,3 cm en vez de 7,5 y el techo
+         con tejas de 26 en vez de 16. `TEX_M` se venía calculando y NADIE LO
+         LEÍA: estaba escrito en `x.js` desde que existe y no había una sola
+         línea que lo usara. */
+      const k = (typeof TEX_M !== 'undefined' && TEX_M[nom] && METROS[nom])
+                ? METROS[nom] / TEX_M[nom] : 1;
+      if (m.map) t.repeat.copy(m.map.repeat).multiplyScalar(k);
       t.needsUpdate = true;
       m.map = t;
       m.needsUpdate = true;
