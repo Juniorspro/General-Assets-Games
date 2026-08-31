@@ -182,7 +182,7 @@ const CINEMA = {
     this.prepara();
     MODO = 'cine';
     this.t = 0; this.faseAnt = 0; this.rayoHecho = false;
-    this.golpe = false; this.nrmS = null;
+    this.golpe = false; this.nrmS = null; this.upS = null;
     this.on = true;
     /* ── DÓNDE ARRANCA, Y ES UNA DECISIÓN DE FONDO ──
        En el plano B la cámara mira HACIA ATRÁS, o sea que el fondo desenfocado
@@ -230,6 +230,10 @@ const CINEMA = {
     const c = this.cuerpo(t);
     const der = { x: -this.adz, z: this.adx };
 
+    /* EL «ARRIBA» DE LA CAMARA VUELVE A SER LA VERTICAL EN CADA CUADRO. Solo el
+       plano de la palma lo cambia, y si no se repone aca el resto de la escena
+       —y el juego cuando termina— heredan el eje de la mano y salen torcidos. */
+    cam.up.set(0, 1, 0);
     if (t < CINE_T1){
       /* ═══ PLANO A: PRIMERA PERSONA ═══ */
       LLUCARA.visible = false;
@@ -586,37 +590,33 @@ const CINEMA = {
          silueta con la cara detras. Mezclada con la direccion en la que camina,
          se la mira desde arriba y de adelante, y lo que queda de fondo es el
          asfalto. */
-      const nrm = normalPalma('Right');
-      nrm.x = nrm.x*0.66 + this.adx*0.34;
-      nrm.z = nrm.z*0.66 + this.adz*0.34;
-      nrm.normalize();
-      /* ── Y SE SUAVIZA, QUE ES POR LO QUE LA MANO PARECIA GIRAR ──
-         «la mano al final gira una banda». La camara esta atada a la normal de
-         la palma, asi que TODO lo que la muneca haga se convierte en giro de
-         camara — y la muneca no esta quieta: la lleva el ciclo de la caminata.
-         Un bamboleo de tres grados en la mano, visto desde veinte centimetros,
-         es la mano dando vueltas.
-         La normal se filtra con una constante de 0,55 s: la caminata queda
-         afuera y el giro grande —el de la supinacion, que dura dos segundos y
-         medio— pasa entero. */
-      if (!this.nrmS){ this.nrmS = nrm.clone(); }
-      else { this.nrmS.lerp(nrm, 1 - Math.exp(-(this.dtu || 0.016) / 0.55)); this.nrmS.normalize(); }
-      nrm.copy(this.nrmS);
-      const px = pf.x + nrm.x*dist + der.x*0.015;
-      /* y la camara baja: con 0,13 sobre una palma que ya mira hacia arriba, lo
-         que entra abajo del cuadro es la manga */
-      const py = pf.y + nrm.y*dist + 0.05;
-      const pz = pf.z + nrm.z*dist + der.z*0.015;
+      /* ── LA CAMARA NO SIGUE A LA MANO: SE QUEDA QUIETA Y LA MANO SE DA VUELTA ──
+         Dos intentos fallidos antes de este, y los dos por la misma idea
+         equivocada — poner la camara sobre la normal de la palma.
+         · Primero con tres angulos de Euler. `cam.rotation.set(pitch,yaw,roll)`
+           usa el orden XYZ, y para apuntar a un punto hace falta YXZ: con XYZ
+           cabeceo y rumbo se mezclan, y la mezcla se vuelve brutal cerca de los
+           noventa grados de cabeceo. Desde que la palma mira hacia arriba la
+           camara quedo casi vertical sobre la mano, o sea justo ahi: un grado de
+           rumbo se convertia en decenas de alabeo. La mano girando como loca.
+         · Despues con `lookAt` y el «arriba» sacado de la propia mano. Eso clava
+           la mano en el cuadro, si — pero le pasa el problema al mundo: el brazo
+           se mece al caminar, asi que la calle y el propio personaje daban
+           vueltas de campana. Fotografiado: la cara boca abajo en cuatro cuadros
+           de doce.
+         LA SALIDA ES AL REVES. La camara se planta en un sitio FIJO respecto del
+         personaje —adelante y arriba, como en todos los otros planos— con el
+         arriba en la vertical de siempre, y lo que se acomoda es LA MANO: la
+         supinacion se elige para que la palma mire hacia la camara. Asi no hay
+         nada que pueda girar, porque nada esta atado a la muneca.
+         `lookAt` igual, y no tres angulos: no tiene orden ni gimbal. */
+      const px = pf.x + this.adx*dist*0.88 + der.x*0.10;
+      const py = pf.y + dist*0.46;
+      const pz = pf.z + this.adz*dist*0.88 + der.z*0.10;
       cam.position.set(px + Math.sin(u*1.23)*0.004,
                        py + Math.sin(u*1.61 + 0.7)*0.003, pz);
-      const ox = pf.x - px, oy = pf.y - py, oz = pf.z - pz;
-      cam.rotation.set(Math.atan2(oy, Math.hypot(ox, oz)),
-                       Math.atan2(-ox, -oz),
-                       0.06 + Math.sin(u*0.71)*0.012);
-      /* TREINTA GRADOS Y NO VEINTISÉIS: a 34 cm el cuadro mide 18 cm de alto, o
-         sea que el frasco de 8,5 ocupa el 47 % y las dos pastillas se cuentan.
-         Con el lente de la cara habría que meterse a 25 cm y ahí la mano tapa
-         el frasco. */
+      cam.up.set(0, 1, 0);
+      cam.lookAt(pf.x, pf.y, pf.z);
       if (Math.abs(cam.fov - 30) > 0.01){ cam.fov = 30; cam.updateProjectionMatrix(); }
       JUG.x = c.x; JUG.z = c.z;
 
@@ -817,6 +817,7 @@ const CINEMA = {
     ponFrasco(false); capaFrasco(0);
     GESTO.mano = 0; GESTO.miraY = 0; GESTO.bocaExpr = null; GESTO.puno = 0;
     postMat.uniforms.dofS.value = 0;
+    cam.up.set(0, 1, 0);
     if (LLUCARA) LLUCARA.visible = false;
     postMat.uniforms.cara.value = 0;
     postMat.uniforms.dof.value = 0;

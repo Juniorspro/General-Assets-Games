@@ -196,6 +196,15 @@ function calcNormalPalma(lado){
   return _plN;
 }
 function normalPalma(lado){ return calcNormalPalma(lado || 'Right').clone(); }
+/* el eje LARGO de la mano: de la muneca a la base del dedo medio. Es el «arriba»
+   natural de la mano, y sirve para que la camara la encuadre siempre igual. */
+const _plU = new T.Vector3();
+function ejePalma(lado){
+  const mn = PJ.idx[(lado || 'Right') + 'Hand'], md = PJ.idx[(lado || 'Right') + 'Medio'];
+  if (!mn || !md) return _plU.set(0, 1, 0).clone();
+  mn.getWorldPosition(_plC); md.getWorldPosition(_plU);
+  return _plU.sub(_plC).normalize().clone();
+}
 
 /* dónde está el punto que la cámara del plano tiene que mirar, leído del mundo
    y no supuesto */

@@ -31,15 +31,14 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
-/* 1,40 RADIANES, Y EL NÚMERO CAMBIÓ AL REPARTIR EL GIRO.
-   Con toda la supinación en la muñeca hacían falta 2,60 —149 grados en un hueso
-   que llega a 90— y por eso la mano se veía quebrada. Repartida 70/30 con el
-   antebrazo, la palma llega más arriba con MENOS: barridos nueve ángulos
-   leyendo la normal de la palma (`__V.normal`), la componente vertical va
-   0→−0,19 · +0,6→+0,34 · **+1,4→+0,945** · +2,2→+0,61. O sea que 1,40 la deja
-   casi horizontal, y son 56 grados de antebrazo más 24 de muñeca: los dos
-   dentro de lo que una muñeca real hace. */
-let PALMA_A = 1.40;
+/* 0,95 RADIANES. El numero salio de medir hacia donde apunta la palma
+   (`__V.normal`) con el giro ya repartido 70/30 entre antebrazo y muneca:
+   0→(−0,88, −0,19) · 0,6→(−0,73, +0,34) · 1,4→(−0,09, +0,95). Con 1,40 la palma
+   mira casi recto ARRIBA, y eso servia cuando la camara se ponia encima de la
+   mano; ahora la camara esta adelante, asi que lo que hace falta es que la palma
+   mire adelante Y un poco arriba —(−0,7, +0,7)—, que cae cerca de 0,95. Son 38
+   grados de antebrazo mas 16 de muneca. */
+let PALMA_A = 0.95;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */
