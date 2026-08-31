@@ -468,9 +468,15 @@ const CINEMA = {
       AND.v = CINE_VEL; AND.fase = c.f; PJ.t = t;
       if (!GESTO.libre){
         GESTO.mano = suave(0.0, 1.7, u);
-        /* y la mano se cierra sobre el frasco mientras se levanta: los dedos
-           son los que ya tenía la malla, riggeados de a dos huesos */
-        GESTO.puno = 0.22 + 0.40 * suave(0.3, 2.2, u);
+        /* ── LA MANO SE ABRE, NO SE CIERRA ──
+           Estaba cerrandose sobre el frasco (`0,22 + 0,40`), y con la mano
+           densa eso se ve por lo que es: un puno con un frasco atravesado. Lo
+           que hay que ver son las pastillas, y una pastilla no se ve dentro de
+           un puno. Queda un cuenco flojo —los dedos no rectos, que se lee a
+           mano de maniqui— y la muneca SUPINA hasta poner la palma para arriba,
+           que es la unica pose en la que algo se puede apoyar. */
+        GESTO.puno = 0.30 - 0.16 * suave(0.3, 2.2, u);
+        GESTO.palma = suave(0.4, 2.4, u);
         GESTO.pitch = 0.20 + 0.30 * GESTO.mano;   /* le baja la vista a la mano */
         GESTO.yawRel = -0.10 * GESTO.mano;
         GESTO.abre = 1; GESTO.autoParp = true;
@@ -486,28 +492,44 @@ const CINEMA = {
          ejes del hueso quedaba ADENTRO de la mano —medido en la captura, lo
          único que asomaba era una astilla naranja— porque los ejes locales de
          un hueso son los que dejó el bind y no significan nada. */
-      const mn = PJ.idx['RightHand'];
-      if (mn && FRASCO.ok){
-        mn.getWorldPosition(_pB);
-        _pB.x += this.adx*FR_OFF[0] + der.x*FR_OFF[1];
-        _pB.z += this.adz*FR_OFF[0] + der.z*FR_OFF[1];
-        _pB.y += FR_OFF[2];
-        ponFrascoMundo(_pB, this.yaw0 + 0.55);
-        /* las pastillas, sobre la falange de arriba del índice y corridas hacia
-           la cámara: apoyadas en el dedo y no detrás de él */
-        const di = PJ.idx['RightIndiceB'];
-        if (di && FRASCO.past){
-          di.getWorldPosition(_pC);
-          _pC.x += this.adx*0.020 - der.x*0.024;
-          _pC.z += this.adz*0.020 - der.z*0.024;
-          _pC.y += 0.016;
-          ponPastillasMundo(_pC, this.yaw0 + 0.55);
+      /* ── TODO SE APOYA EN LA PALMA, Y LA PALMA SE LEE DE LOS HUESOS ──
+         El punto no se escribe: sale de `puntoPalma()`, que lo saca de la
+         muneca y de la base del dedo medio. Por eso sigue siendo cierto
+         mientras el brazo se levanta y la muneca supina, que es justo lo que
+         pasa durante los dos primeros segundos del plano. */
+      if (PJ.idx['RightHand'] && FRASCO.ok){
+        /* 0,72 y no 0,52: el hueso del dedo medio no esta en la BASE del dedo
+           sino a media falange, asi que interpolar a la mitad cae sobre la
+           muneca — fotografiado, el frasco quedaba apoyado en el puno de la
+           campera y no en la mano. */
+        const pal = puntoPalma('Right', 0.60, 0.042);
+        if (pal){
+          /* EL FRASCO ACOSTADO Y CRUZADO SOBRE LA PALMA. Mide 8,5 cm y la palma
+             10: parado no se apoya en ninguna parte, se clava. Acostado es lo
+             que uno hace de verdad con un frasco que acaba de vaciar. */
+          _pB.copy(pal);
+          _pB.x -= der.x * 0.030; _pB.z -= der.z * 0.030;
+          /* ACOSTADO Y CRUZADO: `giro + 1,57` lo pone perpendicular a los
+             dedos. A lo largo de ellos, y con la palma para arriba, la camara
+             lo mira por la tapa y de un frasco de 8,5 cm se ven 3. */
+          ponFrascoMundo(_pB, this.yaw0 + 0.55 + 1.57, 0.04, 1.57);
+          /* y las pastillas al lado, del lado de la camara, un poco mas arriba
+             para que no queden dentro del frasco */
+          if (FRASCO.past){
+            const pp = puntoPalma('Right', 0.80, 0.034) || pal;
+            _pC.copy(pp);
+            _pC.x += der.x * 0.030; _pC.z += der.z * 0.030;
+            ponPastillasMundo(_pC, this.yaw0 + 0.55);
+          }
         }
       }
       /* EL PUNTO SE LEE DEL MUNDO. Si la cámara apuntara a una posición
          calculada aparte, el frasco y el encuadre serían dos cuentas distintas
          y en cuanto el brazo se mueva se separan. */
-      const pf = puntoFrasco() || _pB.set(c.x, suelo + 1.25, c.z);
+      /* y lo que se mira es la PALMA, no el frasco: el frasco esta apoyado en
+         ella, asi que centrando la palma entran el frasco y las pastillas. */
+      const pf = puntoPalma('Right', 0.74, 0.02) ||
+                 puntoFrasco() || _pB.set(c.x, suelo + 1.25, c.z);
       /* LA DISTANCIA SALE DE LA MANO Y NO DEL FRASCO: esta mano estilizada mide
          veinte centímetros, así que encuadrando sólo el frasco lo que llena el
          cuadro es el puño. A 0,55 m y con 30 grados el cuadro mide 29 cm: el
@@ -519,16 +541,28 @@ const CINEMA = {
          nueve se ven rotas—. A sesenta y dos el low poly vuelve a leerse a
          estilo, y lo que se mira es lo que tiene en la mano, que es el plano
          que se pidió. */
-      const dist = mez(0.80, 0.62, suave(0, dur, u));
+      /* 0,46 al final: con la mano densa el low poly aguanta acercarse, y lo
+         que se filma son dos pastillas de un centimetro. */
+      const dist = mez(0.62, 0.38, suave(0, dur, u));
       /* LA CÁMARA MIRA DESDE ARRIBA, y no es una preferencia: a la altura de la
          mano el fondo del cuadro es SU PROPIA CARA, y como el cuerpo entero va
          en la capa nítida la cara sale enfocada y se lleva la atención del
          plano. Bajando la vista treinta grados, detrás de la mano queda el
          asfalto mojado —capa 0, o sea desenfocado— y lo único resuelto del
          cuadro es lo que tiene en la mano. */
-      const px = pf.x + this.adx*dist + der.x*0.20;
-      const py = pf.y + 0.32 - 0.04*suave(0, dur, u);
-      const pz = pf.z + this.adz*dist + der.z*0.20;
+      /* ── LA CAMARA SE PONE SOBRE LA NORMAL DE LA PALMA ──
+         Estaba puesta «adelante del personaje», y adelante del personaje no es
+         donde mira la palma: fotografiado, lo que se veia era el DORSO de la
+         mano y las pastillas quedaban del otro lado, tapadas por sus propios
+         dedos. Probe tres supinaciones buscando el angulo que diera vuelta la
+         mano y ninguna sirve, porque el problema no es la muneca — es que la
+         camara estaba del lado equivocado.
+         Sobre la normal, en cambio, la palma da a la lente POR CONSTRUCCION, y
+         sigue dandole aunque el brazo se mueva mientras se levanta. */
+      const nrm = normalPalma('Right');
+      const px = pf.x + nrm.x*dist + der.x*0.015;
+      const py = pf.y + nrm.y*dist + 0.13;
+      const pz = pf.z + nrm.z*dist + der.z*0.015;
       cam.position.set(px + Math.sin(u*1.23)*0.004,
                        py + Math.sin(u*1.61 + 0.7)*0.003, pz);
       const ox = pf.x - px, oy = pf.y - py, oz = pf.z - pz;

@@ -538,6 +538,13 @@ async function arranca(){
       }
       GESTO.puno = 0; pasoPersonaje(0);
       return JSON.stringify(sal); },
+    /* la normal de la palma y hacia donde apunta, que es lo unico que dice si
+       la camara la va a ver de frente o de canto */
+    normal: (a) => { if (a !== undefined) PALMA_A = a;
+      if (PJ.ok) pasoPersonaje(0);
+      const n = normalPalma('Right'), p = puntoPalma('Right', 0.72, 0.03);
+      return JSON.stringify({ A: PALMA_A, n: [+n.x.toFixed(3), +n.y.toFixed(3), +n.z.toFixed(3)],
+                              p: p ? [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)] : null }); },
     palma: (v, a) => { GESTO.palma = v; if (a !== undefined) PALMA_A = a;
       if (PJ.ok) pasoPersonaje(0); return JSON.stringify({ palma: GESTO.palma, A: PALMA_A }); },
     puno: (k, i) => { GESTO.puno = k; if (i !== undefined) GESTO.punoIzq = i;

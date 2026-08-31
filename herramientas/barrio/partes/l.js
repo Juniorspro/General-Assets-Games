@@ -31,7 +31,14 @@ const BRAZO_BASE = 0.55;
    Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
    útil es de ahí a cerrado y no de abierto a cerrado. */
 const DEDO_SIGNO = -1;
-let PALMA_A = 1.40;                 /* cuánto gira la muñeca para poner la palma arriba */
+/* 2,60 Y NO 1,40, Y SALE DE MEDIR LA NORMAL DE LA PALMA, no de mirar la mano.
+   Barridos nueve angulos leyendo hacia donde apunta la palma (`__V.normal`), la
+   componente vertical va: −2,6→+0,55 · −0,8→−0,83 · 0→−0,82 · +1,4→+0,24 ·
+   +2,0→+0,70 · +2,6→**+0,93**. O sea que con 1,40 la palma miraba de costado y
+   apenas 24 % hacia arriba: apoyarle algo era ponerlo en un plano inclinado
+   sesenta grados. A 2,60 la palma queda casi horizontal y recien ahi «apoyar»
+   quiere decir algo. */
+let PALMA_A = 2.60;
 /* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
    bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
    la mano, no de elegirlos. */

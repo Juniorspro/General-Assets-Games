@@ -38,9 +38,14 @@ function cargaFrasco(){
      Colgadas de la falange de arriba del índice están APOYADAS en algo, y ese
      algo se mueve cuando el dedo se mueve. */
   const gp = new T.Group();
-  for (const [x, y, z, r] of [[-0.010, 0.000, 0.000, 0.30],
-                              [ 0.011, -0.004, 0.006, -0.45]]){
-    const c = new T.Mesh(new T.CapsuleGeometry(0.0056, 0.0100, 3, 10), mp);
+  /* TRES Y NO DOS, Y MAS GRANDES. A 46 cm con lente de 30 grados el cuadro mide
+     24,6 cm de alto: una pastilla de 2,1 cm ocupa el 8 % y a dos se las cuenta
+     con esfuerzo. Con tres y un milimetro mas de radio se leen de una — y tres
+     pastillas sueltas en la palma dicen algo que dos no dicen. */
+  for (const [x, y, z, r] of [[-0.014, 0.000, -0.004, 0.30],
+                              [ 0.010, -0.002, 0.007, -0.45],
+                              [-0.001, 0.001, 0.016, 1.05]]){
+    const c = new T.Mesh(new T.CapsuleGeometry(0.0066, 0.0120, 3, 10), mp);
     c.rotation.set(Math.PI/2, 0, r);
     c.position.set(x, y, z);
     gp.add(c);
@@ -88,14 +93,69 @@ function capaFrasco(n){
    desincronizar. */
 const _fp = new T.Vector3(), _fq = new T.Quaternion(), _fe = new T.Euler();
 const _fq2 = new T.Quaternion();
-function ponFrascoMundo(p, giro){
+/* `incX` e `incZ` son opcionales y por omision valen la inclinacion floja de
+   siempre. Hacen falta porque el frasco ya no siempre va PARADO: apoyado en la
+   palma abierta va ACOSTADO, y eso es un cuarto de vuelta sobre Z. Sin poder
+   decirlo, la unica forma de acostarlo seria girar el hueso de la mano, que
+   mueve tambien los dedos. */
+function ponFrascoMundo(p, giro, incX, incZ){
   const g = FRASCO.grupo; if (!g || !g.parent) return;
   g.parent.updateMatrixWorld(true);
   g.position.copy(g.parent.worldToLocal(_fp.copy(p)));
   g.parent.getWorldQuaternion(_fq);
-  _fe.set(0.12, giro, 0.16);
+  _fe.set(incX == null ? 0.12 : incX, giro, incZ == null ? 0.16 : incZ);
   g.quaternion.copy(_fq.invert().multiply(_fq2.setFromEuler(_fe)));
 }
+
+/* ── EL CENTRO DE LA PALMA, LEIDO DE LOS HUESOS ──
+   El hueso de la mano esta en la MUNECA, no en la palma: apoyar algo ahi lo
+   deja colgando del antebrazo. La palma es el tramo entre la muneca y la base
+   del dedo medio, asi que su centro es un punto sobre esa recta — y sale de los
+   huesos, o sea que sigue siendo cierto con la mano en cualquier pose.
+   `alto` levanta el objeto por encima de la piel a lo largo de la normal de la
+   palma, que se saca del propio hueso y no se supone vertical: si se supusiera,
+   con la mano apenas inclinada las pastillas se hunden. */
+const _plA = new T.Vector3(), _plB = new T.Vector3(), _plN = new T.Vector3();
+const _plQ = new T.Quaternion();
+function puntoPalma(lado, haciaDedos, alto){
+  const mn = PJ.idx[(lado || 'Right') + 'Hand'];
+  const md = PJ.idx[(lado || 'Right') + 'Medio'];
+  if (!mn) return null;
+  mn.getWorldPosition(_plA);
+  if (md){ md.getWorldPosition(_plB); }
+  else { _plB.copy(_plA); _plB.y += 0.08; }
+  _plA.lerp(_plB, haciaDedos == null ? 0.55 : haciaDedos);
+  /* la normal de la palma es el +Z del hueso de la mano llevado al mundo: los
+     dedos corren sobre su +Y —medido, de 0 a 0,188— asi que lo que sale de la
+     palma es el eje que queda. */
+  calcNormalPalma(lado || 'Right');
+  _plA.addScaledVector(_plN, alto == null ? 0.03 : alto);
+  return _plA;
+}
+
+/* ── LA NORMAL DE LA PALMA SALE DE TRES HUESOS, NO DE UN EJE DEL BIND ──
+   La palma es un plano y tres puntos lo definen: la muneca, la base del dedo
+   medio y el ancho entre indice y menique. Su normal es el producto cruz de
+   esos dos vectores, o sea que es correcta en cualquier pose y no depende de
+   como quedaron los ejes locales del rig.
+   EL SIGNO SE COMPRUEBA, NO SE DEDUCE —lo mismo que con `DEDO_SIGNO`—: cual de
+   los dos lados del plano es la palma depende del orden en que se detectaron
+   los dedos, y eso lo decide el histograma. Fotografiado en los dos sentidos.
+   `PALMA_LADO` guarda el que dio la palma de frente. */
+const PALMA_LADO = -1;
+const _plC = new T.Vector3(), _plD = new T.Vector3(), _plE = new T.Vector3();
+function calcNormalPalma(lado){
+  const mn = PJ.idx[lado + 'Hand'], md = PJ.idx[lado + 'Medio'];
+  const ix = PJ.idx[lado + 'Indice'], mq = PJ.idx[lado + 'Menique'];
+  if (!mn || !md || !ix || !mq){ _plN.set(0, 1, 0); return _plN; }
+  mn.getWorldPosition(_plC); md.getWorldPosition(_plD);
+  _plD.sub(_plC);                                    /* muneca -> dedo medio */
+  ix.getWorldPosition(_plC); mq.getWorldPosition(_plE);
+  _plE.sub(_plC);                                    /* indice -> menique */
+  _plN.crossVectors(_plD, _plE).normalize().multiplyScalar(PALMA_LADO);
+  return _plN;
+}
+function normalPalma(lado){ return calcNormalPalma(lado || 'Right').clone(); }
 
 /* dónde está el punto que la cámara del plano tiene que mirar, leído del mundo
    y no supuesto */
