@@ -51,7 +51,16 @@ let MANO_A = [-0.55, 1.55, 0.70, -1.95];   /* medido: mano a 1,28 de alto,
 /* la misma mano pero LLEVADA A LA BOCA: mas flexion de codo y el hombro un poco
    mas arriba. El codo es el que hace casi todo el trabajo — es lo que acerca la
    mano a la cara sin sacarla del eje del cuerpo. */
-let MANO_B = [-0.95, 1.62, 1.05, -2.62];
+/* BARRIDO DE 33 COMBINACIONES midiendo la distancia de la punta del dedo medio
+   al hueso de la boca. El optimo esta aca y es plano: 3,15 de giro sobre la
+   vertical y 1,70 de meceo son los que cruzan el brazo por delante del pecho, y
+   pasarse de ahi EMPEORA (3,60 da 0,276 y 4,05 da 0,336).
+   LO QUE EL BARRIDO DICE Y HAY QUE ANOTAR: la punta del dedo no baja de unos
+   20 cm de la boca. Con la altura clavada (dy = +0,015, o sea a la altura de la
+   boca) lo que falta es horizontal, y no lo dan estos tres ejes — el codo llega
+   a su tope. Alcanza para «se lleva la mano a la cara», no para «se pone la
+   pastilla en la boca». */
+let MANO_B = [-0.55, 3.15, 1.70, -2.20];
 
 /* ── UN GIRO EN LOS EJES DEL MUNDO Y NO EN LOS DEL HUESO ──
    Los ejes locales de un hueso son los que dejó el bind, así que no significan

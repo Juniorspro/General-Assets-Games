@@ -25,6 +25,11 @@
    dos puntas, o sea que un giro de cabeza arranca y termina frenando. Un
    resorte de verdad —integrado— leería igual y rompería la pureza de `pon(t)`. */
 const suave = (a, b, t) => { const k = cl((t - a) / (b - a), 0, 1); return k*k*(3 - 2*k); };
+/* UN TRAMO QUE ACELERA Y NO FRENA. `suave` entra y sale despacio, que es lo que
+   se quiere para una camara; para algo que se CAE es exactamente lo contrario —
+   un cuerpo no desacelera antes de tocar el piso. `t0` es cuando arranca y `w`
+   cuanto dura. */
+const tiron = (t, t0, w) => { const k = cl((t - t0) / w, 0, 1); return k*k; };
 const mez = (a, b, k) => a + (b - a) * k;
 
 /* ── CUATRO PLANOS Y TRES CORTES ──
@@ -493,7 +498,15 @@ const CINEMA = {
            mano de maniqui— y la muneca SUPINA hasta poner la palma para arriba,
            que es la unica pose en la que algo se puede apoyar. */
         GESTO.puno = 0.30 - 0.16 * suave(0.3, 2.2, u);
-        GESTO.palma = suave(0.4, 2.4, u);
+        /* ── LA SUPINACION NO SE ANIMA: YA VIENE PUESTA ──
+           «cuando empieza a levantar las pastillas gira como helicoptero».
+           Estaba rampeando de 0 a 1 entre 0,4 y 2,4 AL MISMO TIEMPO que el brazo
+           subia, y dos giros simultaneos en huesos encadenados no se ven como
+           dos giros: se ven como un tirabuzon. El brazo sube y la mano gira, y
+           el ojo lee lo segundo.
+           Se la deja fija en 1 desde el primer cuadro: la mano entra al plano ya
+           con la palma para arriba y lo unico que se mueve es el brazo. */
+        GESTO.palma = 1;
         GESTO.pitch = 0.20 + 0.30 * GESTO.mano;   /* le baja la vista a la mano */
         GESTO.yawRel = -0.10 * GESTO.mano;
         GESTO.abre = 1; GESTO.autoParp = true;
@@ -741,25 +754,40 @@ const CINEMA = {
          Se le doblan las rodillas primero (el ojo baja despacio) y despues se va
          de costado y golpea. Los dos tiempos separados: una caida de una sola
          curva se lee a ascensor. */
-      const rod  = suave(4.6, 6.2, u);      /* las rodillas */
-      const cae  = suave(6.2, 7.0, u);      /* el golpe */
+      /* ── LA CAIDA NO ES UNA CURVA SUAVE: SON TRES TIRONES ──
+         `suave()` entra y SALE despacio, o sea que frena antes de llegar — y una
+         caida que frena antes de tocar el piso es un ascensor. Un cuerpo que se
+         desmaya no desacelera: acelera hasta que golpea.
+         `tiron()` es el mismo tramo pero con la salida cuadratica y sin frenado:
+         empieza lento y llega a fondo. Y son tres, con dos pausas en el medio —
+         las rodillas ceden, se sostiene medio segundo, y recien ahi se va. Esa
+         pausa es lo que lo hace leer a persona y no a muneco. */
+      const rod  = Math.max(tiron(u, 4.20, 0.22) * 0.55, tiron(u, 5.05, 0.30));
+      const cae  = tiron(u, 5.95, 0.34);
+      /* EL GOLPE SACUDE LA CAMARA. Cuatro decimas, dos senos rapidos de
+         frecuencias que no son multiplos entre si —asi no se lee a vibracion— y
+         una envolvente que cae con el cuadrado: el primer rebote es el que se
+         siente. */
+      const gs = Math.max(0, 1 - (u - 6.29) / 0.42);
+      const sac = (u > 6.29 ? gs * gs : 0);
       const suelo = alturaSuelo(c.x, c.z);
       /* deja de caminar cuando empiezan a fallarle las piernas */
       const anda = 1 - suave(3.6, 5.0, u);
       AND.v = CINE_VEL * anda; AND.fase = c.f;
 
       const oy = suelo + mez(OJO, OJO * 0.62, rod) - (mez(OJO*0.62, 0.16, cae));
-      cam.position.set(c.x + der.x*c.sx*anda,
-                       suelo + mez(OJO, 0.17, Math.max(rod*0.45, cae)),
-                       c.z + der.z*c.sx*anda);
+      cam.position.set(c.x + der.x*c.sx*anda + Math.sin(u*97.0)*0.035*sac,
+                       suelo + mez(OJO, 0.17, Math.max(rod*0.45, cae))
+                             + Math.sin(u*131.0)*0.028*sac,
+                       c.z + der.z*c.sx*anda + Math.sin(u*113.0)*0.030*sac);
       /* la vista se va de costado y hacia el piso, que es como cae una cabeza */
-      cam.rotation.set(mez(-0.10, -1.18, cae) - 0.24*rod,
-                       this.yaw0 + 0.20*rod + 0.55*cae,
-                       mez(0, 1.02, cae) + 0.10*rod);
+      cam.rotation.set(mez(-0.10, -1.18, cae) - 0.24*rod + Math.sin(u*89.0)*0.10*sac,
+                       this.yaw0 + 0.20*rod + 0.55*cae + Math.sin(u*71.0)*0.08*sac,
+                       mez(0, 1.02, cae) + 0.10*rod + Math.sin(u*103.0)*0.13*sac);
       if (Math.abs(cam.fov - 62) > 0.01){ cam.fov = 62; cam.updateProjectionMatrix(); }
       JUG.x = c.x; JUG.z = c.z;
 
-      if (!this.golpe && cae > 0.55){ this.golpe = true; son('paso', 1.0); }
+      if (!this.golpe && cae > 0.90){ this.golpe = true; son('paso', 1.0); }
     }
 
     /* ── EL NEGRO DE LAS PUNTAS ──
@@ -778,9 +806,9 @@ const CINEMA = {
     if (t >= CINE_T5){
       const up = t - CINE_T5;
       let b = 0;
-      for (const [t0, w, prof, piso] of [[6.7, 0.28, 0.72, 0.10],
-                                         [7.7, 0.24, 0.90, 0.26],
-                                         [8.7, 0.30, 1.00, 1.00]]){
+      for (const [t0, w, prof, piso] of [[6.75, 0.26, 0.72, 0.10],
+                                         [7.65, 0.22, 0.90, 0.26],
+                                         [8.55, 0.30, 1.00, 1.00]]){
         if (up < t0) continue;
         const cier = Math.min(1, (up - t0) / w);
         const abre = Math.min(1, Math.max(0, (up - t0 - w) / (w * 1.6)));

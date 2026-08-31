@@ -488,6 +488,18 @@ async function arranca(){
         alto: +h.y.toFixed(3), pecho: +p.y.toFixed(3), ojos: +a.y.toFixed(3),
         adelante: +(d.x*CINEMA.adx + d.z*CINEMA.adz).toFixed(3),
         costado: +(d.x*-CINEMA.adz + d.z*CINEMA.adx).toFixed(3) }); },
+    /* donde cae la mano derecha respecto de la BOCA: es lo unico que dice si el
+       gesto de llevarsela llega o se queda a mitad de camino */
+    poseBoca: (q, mb) => { if (!PJ.ok) return 'no';
+      if (mb) MANO_B = mb;
+      GESTO.libre = true; GESTO.mano = 1; GESTO.manoBoca = q;
+      pasoPersonaje(0); PJ.grupo.updateMatrixWorld(true);
+      const m = PJ.idx['RightMedioB'] || PJ.idx['RightHand'], b2 = PJ.idx['caraBoca'];
+      if (!m || !b2) return 'faltan huesos';
+      const pm = new T.Vector3(), pb = new T.Vector3();
+      m.getWorldPosition(pm); b2.getWorldPosition(pb);
+      return JSON.stringify({ MB: MANO_B, d: +pm.distanceTo(pb).toFixed(3),
+        dy: +(pm.y - pb.y).toFixed(3) }); },
     manoA: (a, b, c, d) => { MANO_A = [a, b, c, d];
       if (PJ.ok) pasoPersonaje(0); return JSON.stringify(MANO_A); },
     /* que el frasco EXISTA no es que se vea: lo que hay que poder afirmar es
