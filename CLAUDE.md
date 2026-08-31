@@ -107,6 +107,87 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Sexagésima novena vuelta (2026-08-31): **BARRIO** — el personaje denso, la cara vuelta a medir y las pastillas en la palma
+
+Pedido: *"fíjate como las pastillas no están bien sobre la palma de la mano"*. Y tenía razón: la mano
+era un abanico de cuñas planas con el frasco atravesado.
+
+#### LA MANO NO AGUANTABA UN PRIMER PLANO PORQUE NO HABÍA MANO
+
+**259 vértices para diecinueve centímetros.** Ninguna pose arregla eso, y ya lo había medido en la
+vuelta anterior alejando la cámara. El modelo nuevo —la misma imagen de referencia, `target_polycount`
+60.000— entra con 60.609 triángulos y se decima a **24.566** (`PJ_RATIO=0.40` contra 0,22). El número
+que importa es el de la mano: **1.920 vértices dominados por `RightHand`, 7,4 veces los 259**, en una
+caja de 11,1 × 17,0 × 14,8 cm.
+
+#### DOS PARTES DEL PIPELINE NO SOBREVIVIERON AL CAMBIO DE MODELO, Y LAS DOS CALLARON
+
+1. **El detector de dedos contaba vértices en absoluto.** El umbral era `h[i] >= 15` sobre el
+   histograma de los nudillos. Con una malla seis veces más densa ese quince lo cruza cualquier grumo:
+   daba **seis** dedos, y el sexto se comía el nombre del quinto — dos huesos llamados `Pulgar`, que
+   rompe cualquier búsqueda por nombre. El umbral pasa a ir contra el pico más alto de la propia mano,
+   que escala solo, y después entra lo único que de verdad se sabe del problema: **una mano tiene cinco
+   dedos**. Medido, los cinco que sobreviven caen en los bins 6, 11, 16, 20 y 25 —separados de a
+   cinco—, que es la firma de cinco dedos parejos y no de un grumo. Largos 8,1 a 9,1 cm, pulgar 7,2.
+2. **Las alturas de la cara eran del modelo viejo.** Éste tiene las facciones cuatro centímetros más
+   abajo y la cara treinta milímetros más adelante, así que la ventana de aplanado caía sobre el cráneo
+   y el pelo: medido, el vértice que más entraba se hundía **149,5 mm**. Ahora 4,5.
+
+#### LA LUMINANCIA VOLVIÓ A MENTIR, Y ES LA TERCERA VEZ
+
+El perfil de franjas oscuras daba ojos en 1,548 y boca en 1,440. La **regla proyectada** sobre la foto
+de la cara pelada —`__V.punto` dibujando alturas encima de la imagen— las pone en **1,510 y 1,435**. La
+franja de 1,548 no son los ojos: es el borde del flequillo, que en esta cabeza cae justo encima.
+
+Y la **boca pintada del propio modelo cae en 1,39**, o sea sobre el borde de la mandíbula: eso es un
+error del generador y no una boca. La placa va donde va una boca —tres centímetros y medio bajo la
+punta de la nariz— y la ventana de repintado se estira hasta 1,36 para tapar la pintada.
+
+Las placas también se miden contra la cara: el frente mide 0,155 m de ancho a la altura de los ojos y
+el par de ojos pintado 0,12, así que la de ojos baja de **0,158 a 0,120** y la de boca de 0,100 a
+0,062. Con los 0,158 tapaba de oreja a oreja y los ojos salían del tamaño de la cabeza.
+
+#### LAS PASTILLAS: TRES DEFECTOS Y NINGUNO ERA EL QUE PARECÍA
+
+1. **La mano se estaba cerrando** (`puno = 0,22 + 0,40`), o sea que terminaba en un puño con el frasco
+   atravesado. Una pastilla no se ve dentro de un puño.
+2. **La supinación estaba a un tercio de lo que hacía falta**, y eso se midió. `__V.normal` devuelve
+   hacia dónde apunta la palma; barridos nueve ángulos, la componente vertical va −2,6→+0,55 · 0→−0,82
+   · +1,4→**+0,24** · +2,6→**+0,93**. Con el 1,40 que había, la palma miraba de costado: apoyarle algo
+   era ponerlo en un plano inclinado sesenta grados.
+3. **Y la cámara estaba del lado del dorso.** Éste era el defecto de fondo. Estaba puesta «adelante del
+   personaje», y adelante del personaje no es donde mira la palma: se veía el dorso y las pastillas
+   quedaban tapadas por sus propios dedos. Probé tres supinaciones buscando el ángulo que diera vuelta
+   la mano y ninguna sirve, **porque el problema no era la muñeca**. Ahora la cámara se pone sobre la
+   **normal de la palma** y la palma da a la lente por construcción, aunque el brazo se mueva.
+
+**LA NORMAL SALE DE TRES HUESOS Y NO DE UN EJE DEL BIND**: muñeca, base del dedo medio y el ancho entre
+índice y meñique definen el plano de la palma, así que su normal es correcta en cualquier pose. El
+**signo se comprueba y no se deduce** —igual que `DEDO_SIGNO`—: fotografiado en los dos sentidos, con
++1 la cámara se va abajo de la mano, a oscuras.
+
+El punto de apoyo tampoco se escribe: `puntoPalma()` lo saca de la muñeca y del dedo medio. Con la
+interpolación a la mitad caía sobre el puño de la campera —**el hueso del dedo medio no está en la base
+del dedo sino a media falange**—, así que va a 0,60 para el frasco y 0,80 para las pastillas.
+
+El frasco va **acostado y cruzado** a los dedos: parado no se apoya en nada, se clava, y a lo largo de
+los dedos la cámara lo mira por la tapa y de 8,5 cm se ven 3. Las pastillas pasan de dos a tres y ganan
+un milímetro de radio: a 38 cm con lente de 30 grados el cuadro mide 20 cm de alto, y con dos de 2,1 cm
+había que contarlas con esfuerzo.
+
+#### DOS COSAS DEL BANCO
+
+`prep2.py` reescribía **unpkg** y BARRIO importa three desde **jsDelivr**, así que el módulo nunca
+cargaba y todas las sondas contestaban `__V is not defined` — parecía un error del juego y era del
+banco. Y `window.__V` se define **después** de la pantalla de idioma: el plan tiene que tocar
+`#idioma button[data-lang=es]` antes de medir nada.
+
+#### MEDIDO AL CERRAR
+
+Los tres planos corridos de punta a punta (A primera persona · B la cara y el cabeceo · P la palma),
+`window.__errs` vacío. El HTML pasa de 853 KB a **1,89 MB**, y 1,29 de esos son el personaje en base64.
+`hornear_pj.py` y `riggear.py` toman el modelo por `PJ_FUENTE`, así que el viejo sigue reproducible.
+
 ### Sexagésima octava vuelta (2026-08-31): **BARRIO** — se va el plano de espaldas, y los dedos que ya estaban se riggean
 
 Pedido textual: *"en la Cinemática se ve de espaldas no quiero eso me gustaría que siempre sea de la
