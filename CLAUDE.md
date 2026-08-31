@@ -111,6 +111,141 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Septuagésima sexta vuelta (2026-08-31): **BARRIO** — el pasto y la cerca pasan a Rezona, y los metros de la foto por fin llegan al juego
+
+Pedido: *"quiero que generes con Rezona imágenes para las texturas fotorrealistas"* — y antes de eso,
+*"por qué esta sesión sí puede"*, con la captura de otra sesión generando un modelo con Rezona.
+
+#### PRIMERO: LA DIFERENCIA ENTRE LAS DOS SESIONES ERA UN LOGIN EN DISCO, Y YO LO HABÍA DICHO MAL
+
+En vueltas anteriores escribí que Rezona estaba bloqueado. **No lo estaba.** Medido hoy: el servidor
+levanta con `npx -y rezona@latest mcp` y lista sus herramientas; lo que devolvía era
+`Not authenticated. Run npx rezona@latest login`. O sea que no faltaba permiso, faltaba **la
+credencial en disco** — que la escribe el login por código de un solo uso, y que por eso no puede
+salir del aparato: `~/.rezona/credentials.json`, con `.rezona/` en el `.gitignore`. Este repo es
+público, así que **el cliente puede vivir en el repo y la llave no**. El cliente quedó en
+`herramientas/rezona/rz.py`, treinta líneas de JSON-RPC por stdio, porque las herramientas
+`mcp__rezona__*` no están cargadas en esta sesión y esperar un reinicio no era necesario.
+
+**UN DEFECTO PROPIO DE ESE CLIENTE, Y SILENCIOSO:** las respuestas volvían **desordenadas**, así que
+la textura de asfalto llegaba con el `output_path` de la vereda. Se vio porque el nombre del archivo
+no cuadraba con lo pedido, no porque fallara nada. Las respuestas de JSON-RPC llevan `id`: hay que
+ordenar por ahí y no por el orden en que salen del proceso.
+
+#### LA ELECCIÓN ENTRE LAS DOS TANDAS NO SE HACE MIRANDO LAS IMÁGENES
+
+Es la parte que vale anotar. Generadas las siete con Rezona, las dos tandas se ven bien **en la hoja
+de contactos**, y esa hoja miente: en el juego la misma imagen se ve achicada a 384 o 448, a 1/1,7 de
+resolución, de noche, con la repetición puesta y con el tinte del material encima. Así que se
+hornearon **las dos** —para eso `hornear_tex.py` aprendió a leer de otra carpeta y escribir a otro
+archivo— y se fotografiaron **los mismos cuatro encuadres** con las dos, en primera persona y sin HUD.
+
+Gana **Rezona en dos**:
+
+- **pasto** — es la única en la que Rezona conserva más detalle al achicarla (67,9 contra 50,4 de
+  desviación local), y en el jardín eso se ve: el césped deja de ser una franja verde plana.
+- **madera** — sus tablas son más anchas, así que a 1,12 m **cada piquete de la cerca se lee por
+  separado**; con la otra, la cerca de noche es una mancha oscura.
+
+Y **Higgsfield en las otras cinco**, sobre todo en **teja**: la de Rezona es pizarra oscura y de noche
+el techo entero desaparece en una silueta negra — medido, 25,0 de detalle contra 48,3, que es
+exactamente el defecto que la vuelta anterior había arreglado dando vuelta las caras del techo.
+
+**Y EL ENCUADRE DE PRUEBA SE ELIGIÓ MIDIENDO, no a ojo.** La primera tanda de fotos salió con la
+linterna encendida y **no servía**: a dos metros, una luz de intensidad 34 quema la carpintería blanca
+a blanco puro y deja el resto en negro, o sea que la textura no se ve ni bien ni mal. Lo que sí
+ilumina una superficie sin quemarla es **un farol**, y dónde cae uno es una cuenta: los postes van
+sobre la vereda a `CALLE/2 + 0,9` del eje y el brazo lleva la cabeza 1,9 m hacia la calle, así que
+sobre la calle `z = −26,5` hay una cabeza de farol en `(0 · −23)`. Los cuatro encuadres se plantaron
+alrededor de ése.
+
+#### EL HALLAZGO: `TEX_M` SE VENÍA CALCULANDO Y NO LO LEÍA NADIE
+
+`hornear_tex.py` tiene desde que existe una sección que explica que **se cuentan los metros que cubre
+cada foto** —doce hiladas de ladrillo por 7,5 cm son 0,90 m— y escribe esos números en `x.js` como
+`TEX_M`. Buscado en las diecinueve partes del juego: **cero usos**. La repetición de cada material la
+seguía poniendo `METROS`, que es cuántos metros cubre el **lienzo dibujado por código**, y el
+reemplazo de la textura la copiaba tal cual.
+
+No son el mismo número, y no pueden serlo: el dibujo de ladrillo trae treinta y dos hiladas y la foto
+doce. Medido, lo que se estaba viendo: **hiladas de 8,3 cm en vez de 7,5, tejas de 26 en vez de 16 y
+tablas de revestimiento de 22,8 en vez de 18** — que es literalmente el defecto de «casa de muñecas»
+que esa sección del script existe para evitar, escrito en el comentario y no en el código.
+
+El arreglo es una línea: al poner la foto, la repetición se multiplica por `METROS[nom] / TEX_M[nom]`.
+Y **tiene que ser un factor y no un reemplazo**, porque el lienzo dibujado sigue existiendo de
+respaldo y él sí cubre `METROS`. Medido después: madera ×1,16 · ladrillo ×1,11 · tabla ×1,27 ·
+**teja ×1,63**, y asfalto y vereda ×1 —los suyos ya coincidían—, con la repetición de 167,17 del
+asfalto conservada.
+
+#### EL TINTE SE RECALCULA CANAL POR CANAL, Y ES LA TERCERA VEZ EN ESTE JUEGO
+
+three.js multiplica `map × vertexColor × material.color`, así que el color del material es un **tinte
+sobre la imagen**. El pasto de Rezona tiene más del doble de verde y **la mitad de azul**
+(0,105 · 0,226 · 0,039 en lineal contra 0,070 · 0,150 · 0,064): dejando el tinte donde estaba, el
+jardín se iba a verde manzana. El tinte nuevo sale de dividir en **lineal** el promedio viejo por el
+nuevo — `0x8a9b7e → 0x72809e` el pasto y `0x6d6558 → 0x716b5e` la madera — y el producto queda
+idéntico hasta la quinta cifra, que es la prueba de que compensa y no de que quedó lindo.
+
+#### MEDIDO AL CERRAR
+
+7 de 7 texturas decodificadas y puestas con su escala. **271,6 m caminados de verdad por dos calles
+—una en cada sentido— con 0 cuadros dentro de una casa**. **174 llamadas de dibujo** con 12 cuadras a
+la vista, 426 mil triángulos, y los **12 cuadros por segundo son los mismos que antes**: el cuadro lo
+manda el relleno y no la textura. `window.__errs` vacío en las seis corridas. El HTML pasó de 1,69 a
+**1,70 MB**.
+
+### Septuagésima quinta vuelta (2026-08-31): **BARRIO** — el idle de verdad, y la cámara pasa a ser al hombro
+
+Pedido: *"agrégale animaciones Idle al modelo 3D del personaje y yo quería la cámara al hombro xd no
+en tercera persona no tan al hombro que la parte derecha se vea un poco el personaje y así"*.
+
+#### QUIETO NO ES UNA POSE: SON CINCO GESTOS Y UN CAMBIO DE PESO
+
+La pose de quieto era una respiración y nada más, y una respiración sola se lee a maniquí que sube y
+baja. Entran **cinco gestos** que salen cada tres a nueve segundos y duran lo que duran de verdad
+—encoger los hombros 1,9 s · estirar el cuello 2,4 · mirar alrededor 3,6 · tiritar 1,5 · acomodarse
+la mochila 2,8— más un **cambio de peso de una pierna a la otra cada siete a trece segundos**, que es
+lo que hace de verdad alguien parado bajo la lluvia.
+
+**EL CAMBIO DE PESO ES EL QUE MÁS SE NOTA Y EL QUE MENOS SE VE VENIR.** No es una animación: es un
+escalar entre −1 y 1 que mueve la cadera, las rodillas y los hombros a la vez, interpolado lento. Sin
+él, los cinco gestos se leen a tics sobre un cuerpo clavado.
+
+#### `giraH` ESCRIBE EL CUATERNIÓN ENTERO, ASÍ QUE LOS GESTOS SE SUMAN ANTES DE ESCRIBIR
+
+Éste es el defecto que costó la vuelta y es el mismo de siempre con otro disfraz: `giraH` no compone,
+**pisa**. Un segundo `giraH` sobre el mismo hueso borra el primero, así que un gesto que toca el cuello
+y una respiración que también lo toca no se mezclan: gana el último. Los deltas se suman y se escribe
+**una sola vez por hueso**.
+
+**Y `poseCamina` TENÍA QUE APRENDER A DEVOLVER LOS HOMBROS A CERO.** No los escribía —nunca los había
+tocado— así que al arrancar a caminar en medio del gesto de encoger los hombros, **quedaban levantados
+para siempre**: no hay nada que los baje.
+
+#### LA CÁMARA AL HOMBRO NO ES TERCERA PERSONA CON MENOS DISTANCIA
+
+Se pidió explícitamente *"no tan al hombro"* y *"que la parte derecha se vea un poco el personaje"*, o
+sea que el personaje tiene que ocupar **una franja del cuadro y no el medio**. Va a 1,55 m detrás,
+0,26 arriba y **0,62 corridos de costado**, y ahí apareció el error de signo: **corriendo la cámara
+hacia la derecha, el cuerpo aparece a la IZQUIERDA del cuadro**. Es obvio dicho así y no lo es
+mirando el número.
+
+**Y LA ROTACIÓN NO SE TOCA.** Sólo se mueve la posición: girando además la cámara hacia el personaje,
+el centro del cuadro deja de ser hacia dónde se camina y apuntar la linterna se vuelve otra cosa. Más
+un recorte contra el barrio (`camLibre`, sobre la misma rejilla que usa el choque) para que la cámara
+no se meta dentro de una casa ni de una cerca.
+
+**Y HAY QUE TAPARSE LA CABEZA, otra vez.** En tercera persona el modelo se dibuja entero, así que la
+cabeza que en primera persona se achica a la centésima parte vuelve a existir — y con ella el defecto
+inverso: mirando hacia abajo, **la propia cabeza llenaba el cuadro**. `despejaCabeza()` reasigna a
+`Head` los 486 vértices que el hueso `neck` domina por encima de 1,520, que es la línea del cuello
+medida sobre este modelo. Achicar `neck` no sirve: colapsa el tapón del cuello, que vive en 1,483.
+
+**Y EL PERSONAJE FLOTABA.** No le faltaba luz: le faltaba **sombra de contacto**. `PJ.malla.castShadow`
+estaba apagado desde que el personaje sólo se veía desde adentro. Con la sombra puesta —y con
+`shadow.bias −0,002` y `normalBias 0,02`, que es lo que saca el acné sobre el asfalto— se apoya.
+
 ### Septuagésima cuarta vuelta (2026-08-31): **BARRIO** — los techos estaban al revés, la cámara en tercera persona, y las siete texturas fotorrealistas
 
 Pedido: *"quiero que agregues a las casas el techo también · me gusta esa cámara detrás del tipo al
