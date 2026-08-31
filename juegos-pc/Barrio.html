@@ -2770,7 +2770,21 @@ function ponCam(dt){
   CAM3.d = lerp(CAM3.d, d, Math.min(1, dt*14));
   cam.position.set(ox - dir.x*CAM3.d, oy - dir.y*CAM3.d, oz - dir.z*CAM3.d);
 }
-const CAM3_DIST = 2.95, CAM3_LADO = 0.55, CAM3_ALTO = 0.16;
+/* ── AL HOMBRO, Y NO EN TERCERA PERSONA ──
+   Pedido: *«yo quería la cámara al hombro, no en tercera persona; no tan al
+   hombro, que en la parte derecha se vea un poco el personaje»*. Son dos cosas
+   distintas y las dos son números:
+
+   · TRES METROS ES TERCERA PERSONA. A esa distancia el personaje entra entero y
+     el juego pasa a ser sobre él; al hombro es un metro y medio, donde lo que se
+     ve es la espalda y el mundo por encima de ella.
+   · Y EL LADO CAMBIA DE SIGNO. Con la cámara corrida a la DERECHA del cuerpo, el
+     cuerpo queda a la izquierda del cuadro. Para que se vea «en la parte
+     derecha» hay que correr la cámara a la IZQUIERDA. Con 1,45 de distancia y
+     0,62 de costado, el eje del cuerpo cae a atan(0,62/1,55) = 21,8 grados del
+     centro; con 56 grados de medio campo horizontal eso lo deja cerca del 70 %
+     del ancho — o sea a la derecha de verdad, y sin comerse el cuadro. */
+const CAM3_DIST = 1.55, CAM3_LADO = -0.62, CAM3_ALTO = 0.26;
 const CAM3 = { d: CAM3_DIST };
 /* ¿se puede poner la cámara acá? Reusa la MISMA rejilla de colisiones que el
    cuerpo: una segunda lista de paredes sólo para la cámara se desincroniza el
@@ -3613,20 +3627,130 @@ function ponPuno(lado, k){
    sitios que describen el mismo vaivén terminan siempre desincronizados. */
 const POSE = { bdX: 0, bdZ: 0, bdA: 0 };
 
-function poseQuieto(f, t){
-  /* respirar es lo único que separa a alguien parado de un maniquí */
+/* ══════════════════════ EL IDLE ══════════════════════
+   Respirar es el piso, no el idle. Alguien parado a las tres de la mañana bajo
+   la lluvia no se queda quieto respirando: cambia el peso de pierna, se acomoda
+   la mochila, tirita, mira alrededor. Con sólo la respiración, en tercera
+   persona —donde ahora el personaje se ve todo el tiempo— el muñeco se lee a
+   maniquí a los cuatro segundos, que es justo lo que tarda el ciclo en repetirse.
+
+   DOS CAPAS Y NO UNA, y la división importa:
+
+   1. EL CAMBIO DE PESO ES CONTINUO. Nadie se queda con el peso repartido en las
+      dos piernas: se apoya en una, y cada tanto cambia. No es un gesto que pasa
+      y termina — es un estado, y por eso va aparte y siempre encendido.
+   2. LOS GESTOS SON DE UNA VEZ, con su duración y su espera. Se elige uno al
+      azar, se lo mezcla con una campana —entra y sale, nunca corta— y después
+      hay entre seis y catorce segundos de nada. Un gesto cada dos segundos se
+      lee a tic nervioso.
+
+   Y NINGUNO SE APLICA CON UN `giraH` PROPIO. `giraH` escribe el cuaternión
+   ENTERO del hueso, así que un segundo giro sobre el mismo hueso borra el
+   primero: es el mismo defecto que ya costó una vuelta con la supinación del
+   antebrazo. Los gestos devuelven DELTAS y `poseQuieto` los suma antes de
+   escribir. */
+const IDLE = {
+  lado: 1, l: 1, tLado: 0,       /* el cambio de peso */
+  cual: -1, t: 0, prox: 3.2,     /* el gesto de turno */
+  nY: 0, hY: 0, hZ: 0, hX: 0     /* lo que el gesto le pide a la cabeza */
+};
+const suav = (x) => { const k = cl(x, 0, 1); return k*k*(3 - 2*k); };
+/* cada gesto recibe u de 0 a 1 y devuelve deltas; el peso lo pone la campana */
+const IDLE_GESTOS = [
+  /* ── HOMBROS ── los sube y los deja caer. Es el más corto y el más frecuente
+     porque es lo que hace cualquiera que lleva una mochila. */
+  { dur: 1.9, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      d.homZ = a * 0.20; d.espX = a * 0.05; d.braZ = -a * 0.09; } },
+  /* ── EL CUELLO ── inclina la cabeza a un lado y vuelve, con el hombro de ese
+     lado subiendo un poco: estirarse el cuello no es sólo girar la cabeza. */
+  { dur: 2.4, fn: (u, d, s) => {
+      const a = Math.sin(u * Math.PI);
+      d.hZ = a * 0.26 * s; d.nZ = a * 0.10 * s; d.homZ = a * 0.07; } },
+  /* ── MIRAR ALREDEDOR ── gira despacio, SE QUEDA, y vuelve. La pausa en el
+     medio es lo que separa mirar algo de barrer la vista: sin ella se lee a
+     torreta. */
+  { dur: 3.6, fn: (u, d, s) => {
+      const a = u < 0.30 ? suav(u / 0.30) : (u > 0.72 ? 1 - suav((u - 0.72) / 0.28) : 1);
+      d.nY = a * 0.34 * s; d.hY = a * 0.40 * s; d.hX = a * 0.06; } },
+  /* ── TIRITAR ── son las tres de la mañana y está lloviendo. Ocho sacudidas por
+     segundo con los brazos cerrándose contra el cuerpo; más lento se lee a que
+     se está riendo. */
+  { dur: 1.5, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      const v = Math.sin(u * Math.PI * 2 * 8) * a;
+      d.espX = v * 0.030; d.hX = v * 0.022;
+      d.braZ = -a * 0.16; d.antX = -a * 0.22; d.homZ = a * 0.12; } },
+  /* ── ACOMODARSE LA MOCHILA ── la mano derecha sube a la correa y baja. Va
+     último porque es el único que necesita el brazo libre. */
+  { dur: 2.8, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      d.braDX = a * 0.30; d.braDZ = -a * 1.02; d.antDX = -a * 1.35;
+      d.espX = a * 0.03; d.hZ = -a * 0.05; } }
+];
+
+function idlePaso(dt, t){
+  /* ── EL CAMBIO DE PESO ── entre siete y trece segundos, y el `lerp` tarda casi
+     dos: cambiar de pierna de un cuadro al otro es un salto lateral. */
+  IDLE.tLado -= dt;
+  if (IDLE.tLado <= 0){ IDLE.tLado = 7 + Math.random() * 6; IDLE.lado = -IDLE.lado; }
+  IDLE.l = mez(IDLE.l, IDLE.lado, Math.min(1, dt * 0.85));
+
+  const d = { homZ:0, espX:0, braZ:0, antX:0, braDX:0, braDZ:0, antDX:0,
+              nY:0, nZ:0, hY:0, hZ:0, hX:0 };
+  if (IDLE.cual < 0){
+    IDLE.prox -= dt;
+    if (IDLE.prox <= 0){
+      IDLE.cual = Math.floor(Math.random() * IDLE_GESTOS.length);
+      /* el de la mochila necesita el brazo derecho libre */
+      if (IDLE.cual === 4 && GESTO.mano > 0.01) IDLE.cual = 0;
+      IDLE.t = 0; IDLE.signo = Math.random() < 0.5 ? -1 : 1;
+    }
+  } else {
+    const g = IDLE_GESTOS[IDLE.cual];
+    IDLE.t += dt;
+    const u = IDLE.t / g.dur;
+    if (u >= 1){ IDLE.cual = -1; IDLE.prox = 6 + Math.random() * 8; }
+    else g.fn(u, d, IDLE.signo);
+  }
+  IDLE.nY = d.nY; IDLE.hY = d.hY; IDLE.hZ = d.hZ; IDLE.hX = d.hX; IDLE.nZ = d.nZ;
+  return d;
+}
+
+function poseQuieto(f, t, dt){
+  /* respirar es lo único que separa a alguien parado de un maniquí — y es el
+     piso, no el idle: lo que hace que no se lea a maniquí es lo de arriba */
   const r = Math.sin(t * 1.15);
-  giraH('Spine01', r * 0.016, 0, 0);
-  giraH('Spine', -r * 0.012, 0, Math.sin(t * 0.37) * 0.010);
-  giraH('LeftArm',  0.02, 0, -BRAZO_BASE + Math.sin(t*0.53)*0.012);
-  POSE.bdX = 0.02; POSE.bdZ = BRAZO_BASE - Math.sin(t*0.53+1.7)*0.012; POSE.bdA = -0.12;
+  const d = idlePaso(dt || 0, t);
+  const L = IDLE.l;                         /* −1 apoyado en la izquierda, +1 en la derecha */
+
+  giraH('Spine01', r * 0.016 + d.espX, 0, -L * 0.022);
+  giraH('Spine', -r * 0.012 + d.espX * 0.5, 0, Math.sin(t * 0.37) * 0.010 + L * 0.030);
+  /* los hombros: el gesto los sube a los dos, y el cambio de peso baja el del
+     lado en el que se apoya — que es lo que hace una cadera desnivelada */
+  giraH('LeftShoulder',  0, 0, -d.homZ - L * 0.030);
+  giraH('RightShoulder', 0, 0,  d.homZ - L * 0.030);
+  giraH('LeftArm',  0.02, 0, -BRAZO_BASE + Math.sin(t*0.53)*0.012 - d.braZ);
+  POSE.bdX = 0.02 + d.braDX;
+  POSE.bdZ = BRAZO_BASE - Math.sin(t*0.53+1.7)*0.012 + d.braZ + d.braDZ;
+  POSE.bdA = -0.12 + d.antX + d.antDX;
   giraH('RightArm', POSE.bdX, 0, POSE.bdZ);
-  giraH('LeftForeArm',  -0.12, 0, 0);
+  giraH('LeftForeArm',  -0.12 + d.antX, 0, 0);
   giraH('RightForeArm', POSE.bdA, 0, 0);
-  for (const n of ['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot'])
-    giraH(n, 0, 0, 0);
-  mueveH('Hips', 0, r * 0.004, 0);
-  giraH('Hips', 0, 0, 0);
+  /* ── LAS PIERNAS DEL CAMBIO DE PESO ──
+     La que aguanta se estira y la otra se dobla un poco y se abre. Sin esto la
+     cadera se mueve de costado con las dos piernas rectas, que se lee a que el
+     muñeco se desliza y no a que descansa. */
+  const li = cl(-L, 0, 1), de = cl(L, 0, 1);   /* cuánto descansa cada una */
+  giraH('LeftUpLeg',  de * 0.10, 0,  de * 0.055);
+  giraH('RightUpLeg', li * 0.10, 0, -li * 0.055);
+  giraH('LeftLeg',  -de * 0.17, 0, 0);
+  giraH('RightLeg', -li * 0.17, 0, 0);
+  giraH('LeftFoot',  de * 0.07, 0, 0);
+  giraH('RightFoot', li * 0.07, 0, 0);
+  /* la cadera se corre HACIA la pierna que aguanta y baja un pelo */
+  mueveH('Hips', L * 0.032, r * 0.004 - Math.abs(L) * 0.004, 0);
+  giraH('Hips', 0, 0, -L * 0.045);
 }
 
 function poseCamina(f, k){
@@ -3662,6 +3786,12 @@ function poseCamina(f, k){
   giraH('Hips', 0, s * (0.07 + k*0.05), c * (0.05 + k*0.03));
   giraH('Spine01', 0.06 + k * 0.16, -s * (0.06 + k*0.05), 0);
   giraH('Spine', 0.02 + k * 0.06, -s * (0.05 + k*0.04), 0);
+  /* LOS HOMBROS VUELVEN A CERO ACÁ. Los escribe el idle y NO los escribía nadie
+     más: sin esta línea, terminar un encogimiento de hombros y salir caminando
+     deja los hombros levantados para siempre. Es el defecto de siempre de una
+     pose que escribe huesos que la otra no toca. */
+  giraH('LeftShoulder', 0, 0, 0);
+  giraH('RightShoulder', 0, 0, 0);
 }
 
 function pasoPersonaje(dt){
@@ -3670,7 +3800,7 @@ function pasoPersonaje(dt){
   const f = AND.fase;
   const and = cl(AND.v / VEL, 0, 1);
   const k = cl((AND.v - VEL) / (CORRE - VEL), 0, 1);
-  if (and < 0.06) poseQuieto(f, PJ.t);
+  if (and < 0.06) poseQuieto(f, PJ.t, dt);
   else poseCamina(f, k);
 
   /* ── LA CABEZA ──
@@ -3681,9 +3811,16 @@ function pasoPersonaje(dt){
   const incl = (and < 0.06) ? 0 : (0.06 + k * 0.16) + (0.02 + k * 0.06);
   const py = cl(GESTO.pitch, -1.1, 0.9);
   const yr = cl(GESTO.yawRel, -1.15, 1.15);
-  giraH('neck', -incl * 0.55 + py * 0.35, yr * 0.35, 0);
-  giraH('Head', -incl * 0.45 + py * 0.65 + (and > 0.06 ? Math.sin(f*2) * 0.010 : 0),
-        yr * 0.65, (and > 0.06 ? Math.cos(f) * 0.018 : 0));
+  /* Y LA CABEZA SUMA LO QUE EL IDLE PIDIÓ. Va acá y no adentro de `poseQuieto`
+     porque el cuello y la cabeza los escribe este bloque: puestos allá, estas
+     dos líneas los borrarían. Caminando el idle vale cero, así que la suma no
+     hace nada. */
+  const iq = (and < 0.06) ? 1 : 0;
+  giraH('neck', -incl * 0.55 + py * 0.35 + IDLE.hX * iq * 0.4,
+        yr * 0.35 + IDLE.nY * iq, IDLE.nZ * iq);
+  giraH('Head', -incl * 0.45 + py * 0.65 + (and > 0.06 ? Math.sin(f*2) * 0.010 : 0) + IDLE.hX * iq,
+        yr * 0.65 + IDLE.hY * iq,
+        (and > 0.06 ? Math.cos(f) * 0.018 : 0) + IDLE.hZ * iq);
 
   /* la mandíbula acompaña a la boca dibujada: el sprite dice QUÉ forma tiene la
      boca y el hueso le da el movimiento del mentón. Con sólo el sprite, hablar

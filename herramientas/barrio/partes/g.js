@@ -340,7 +340,21 @@ function ponCam(dt){
   CAM3.d = lerp(CAM3.d, d, Math.min(1, dt*14));
   cam.position.set(ox - dir.x*CAM3.d, oy - dir.y*CAM3.d, oz - dir.z*CAM3.d);
 }
-const CAM3_DIST = 2.95, CAM3_LADO = 0.55, CAM3_ALTO = 0.16;
+/* ── AL HOMBRO, Y NO EN TERCERA PERSONA ──
+   Pedido: *«yo quería la cámara al hombro, no en tercera persona; no tan al
+   hombro, que en la parte derecha se vea un poco el personaje»*. Son dos cosas
+   distintas y las dos son números:
+
+   · TRES METROS ES TERCERA PERSONA. A esa distancia el personaje entra entero y
+     el juego pasa a ser sobre él; al hombro es un metro y medio, donde lo que se
+     ve es la espalda y el mundo por encima de ella.
+   · Y EL LADO CAMBIA DE SIGNO. Con la cámara corrida a la DERECHA del cuerpo, el
+     cuerpo queda a la izquierda del cuadro. Para que se vea «en la parte
+     derecha» hay que correr la cámara a la IZQUIERDA. Con 1,45 de distancia y
+     0,62 de costado, el eje del cuerpo cae a atan(0,62/1,55) = 21,8 grados del
+     centro; con 56 grados de medio campo horizontal eso lo deja cerca del 70 %
+     del ancho — o sea a la derecha de verdad, y sin comerse el cuadro. */
+const CAM3_DIST = 1.55, CAM3_LADO = -0.62, CAM3_ALTO = 0.26;
 const CAM3 = { d: CAM3_DIST };
 /* ¿se puede poner la cámara acá? Reusa la MISMA rejilla de colisiones que el
    cuerpo: una segunda lista de paredes sólo para la cámara se desincroniza el
