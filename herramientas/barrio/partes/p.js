@@ -64,7 +64,12 @@ const CU_AZ = { x0: -9.0, x1: 9.0, z0: -5.20, z1: 9.0, par: 0.55, gr: 0.26 };
 const MUNDO = { barrio: [], listo: false };
 function fotoDelBarrio(){
   if (MUNDO.listo) return;
-  const salvo = new Set([cielo, LLUVIA.malla, SALPICA.malla, PJ.grupo, cam]);
+  /* Y EL GRUPO DEL CUARTO SE EXCLUYE POR NOMBRE Y NO POR ORDEN. Antes alcanzaba
+     con sacar la foto antes de construirlo; desde que el cuarto se arma durante
+     la carga —para compilar sus shaders ahí y no en el corte de la cinemática—
+     ya está en la escena cuando se saca la foto, y quedaría dentro de «lo que es
+     barrio». Nombrarlo es exacto; depender del orden de dos líneas no lo es. */
+  const salvo = new Set([cielo, LLUVIA.malla, SALPICA.malla, PJ.grupo, cam, CU.grupo]);
   for (const o of escena.children){
     if (o.isLight || salvo.has(o)) continue;
     MUNDO.barrio.push(o);

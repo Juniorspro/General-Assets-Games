@@ -232,7 +232,13 @@ function armaFaroles(){
     LUCES[0].shadow.mapSize.set(1024, 1024);
     LUCES[0].shadow.camera.near = 0.4;
     LUCES[0].shadow.camera.far = 26;
-    LUCES[0].shadow.bias = -0.004;
+    /* `bias` SOLO NO ALCANZA, y hay que empujarlo tan lejos que despega la
+       sombra del objeto. `normalBias` corre el punto de muestreo a lo largo de
+       la NORMAL de la superficie, que es donde el error de profundidad
+       realmente está: con él puesto, el bias puede bajar a la mitad y el acné
+       desaparece igual sin que la sombra se despegue del pie del poste. */
+    LUCES[0].shadow.bias = -0.002;
+    LUCES[0].shadow.normalBias = 0.02;
   }
 }
 

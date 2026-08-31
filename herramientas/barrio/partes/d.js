@@ -215,10 +215,29 @@ function geoGablete(w, d, h){
     -x,0,-z,  x,0,-z,  x,0,z,  -x,0,z,        /* base */
     0,h,-z,   0,h,z                            /* la cumbrera */
   ];
-  const f = [ 0,1,4,  1,2,5,  1,5,4,  2,3,5,  3,0,4,  3,4,5,  0,3,2,  0,2,1 ];
-  const g = new T.BufferGeometry();
+  /* ── EL BOBINADO ESTABA AL REVÉS, Y ESO ES POR QUÉ LAS CASAS NO TENÍAN TECHO ──
+     Medido sobre esta misma lista: las dos faldas daban normal de cara con
+     **Y = −0,707** —o sea mirando al piso— y las dos caras de abajo **Y = +1**.
+     Con `FrontSide`, que es lo que usa todo el barrio, la cara de afuera del
+     techo es una cara TRASERA y se descarta: lo que se ve es el interior de la
+     falda de enfrente, y eso es una silueta negra. Está así desde que se
+     construyó el barrio, y en cada captura el techo salió como un agujero.
+
+     Y ADEMÁS LAS NORMALES SE PROMEDIABAN. `computeVertexNormals` sobre una
+     geometría INDEXADA promedia las caras que comparten cada vértice, y acá los
+     seis vértices los comparten las faldas, los dos hastiales y el fondo:
+     medido, los dos vértices de la cumbrera terminaban con **Y = −0,905**. O sea
+     que aunque el bobinado hubiera estado bien, el sombreado decía que la parte
+     de arriba del techo mira al suelo — y con un hemisférico eso es el color de
+     abajo, que es casi negro.
+     `toNonIndexed()` le da a cada cara sus tres vértices propios, así que la
+     normal que sale de `computeVertexNormals` es EXACTAMENTE la de la cara. Es
+     lo que un techo necesita: aristas duras, no suavizadas. */
+  const f = [ 0,4,1,  1,5,2,  1,4,5,  2,5,3,  3,4,0,  3,5,4,  0,2,3,  0,1,2 ];
+  let g = new T.BufferGeometry();
   g.setAttribute('position', new T.BufferAttribute(new Float32Array(v), 3));
   g.setIndex(f);
+  g = g.toNonIndexed();
   g.computeVertexNormals();
   /* SIN UV UNA TEXTURA NO FALLA NI AVISA: WebGL le pasa (0,0) al atributo que
      falta y el techo entero sale pintado con UN SOLO texel, o sea de un color
@@ -241,10 +260,13 @@ function geoGablete(w, d, h){
    acordarse cada vez que se lo use. */
 function geoPiramide(){
   const v = [-1,0,-1,  1,0,-1,  1,0,1,  -1,0,1,  0,1,0];
-  const f = [0,1,4, 1,2,4, 2,3,4, 3,0,4, 0,3,2, 0,2,1];
-  const g = new T.BufferGeometry();
+  /* mismo defecto y mismo arreglo que el gablete: las cuatro faldas daban
+     Y = −0,707 y la base Y = +1, y la punta promediada quedaba en Y = −1 */
+  const f = [0,4,1, 1,4,2, 2,4,3, 3,4,0, 0,2,3, 0,1,2];
+  let g = new T.BufferGeometry();
   g.setAttribute('position', new T.BufferAttribute(new Float32Array(v), 3));
   g.setIndex(f);
+  g = g.toNonIndexed();
   g.computeVertexNormals();
   const p = g.attributes.position, uv = new Float32Array(p.count*2);
   for (let i = 0; i < p.count; i++){

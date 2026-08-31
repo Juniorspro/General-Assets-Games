@@ -148,6 +148,13 @@ function cargaPersonaje(){
     PJ.qpw[b.name] = q;
   }
   PJ.ok = true;
+  /* ── EL PERSONAJE PROYECTA SOMBRA, Y ES LO QUE LO APOYA EN EL SUELO ──
+     Sin ella, en tercera persona el muñeco se ve FLOTANDO sobre el asfalto por
+     más que sus pies estén exactamente en y=0: lo que dice que algo toca el
+     piso no es dónde está, es la sombra de contacto. Cuesta una malla más en la
+     pasada de sombra —una sola, y con esqueleto— y sólo cuando hay sombras. */
+  PJ.malla.castShadow = true;
+  PJ.malla.receiveShadow = true;
   despejaCabeza();
   armaCaraSprites();
 }
@@ -655,7 +662,14 @@ function ponLuzCuerpo(v){
     cam.add(luzCuerpo);
     escena.add(cam);
   }
-  luzCuerpo.intensity = v ? 0.38 : 0;
+  /* EN TERCERA PERSONA LA MISMA LUZ NO ALCANZA, y es aritmética: el cuerpo pasa
+     de estar a treinta centímetros del lente a estar a casi tres metros, y con
+     `decay 1,1` y alcance 1,6 m ahí no llega nada. Y no puede quedar en cero:
+     entre farol y farol el personaje sería una silueta negra en el medio de la
+     pantalla, que es justo lo que la tercera persona viene a mostrar. */
+  const t = CFG.tercera;
+  luzCuerpo.distance = t ? 5.0 : 1.6;
+  luzCuerpo.intensity = v ? (t ? 2.6 : 0.38) : 0;
 }
 function escondePersonaje(){ if (PJ.ok) PJ.grupo.visible = false; ponLuzCuerpo(false); }
 function capaPersonaje(k){ if (PJ.ok) PJ.grupo.traverse(o => o.layers.set(k)); }

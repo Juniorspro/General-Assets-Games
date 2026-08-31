@@ -33,17 +33,34 @@ import base64, io, os, sys
 from PIL import Image
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-ENTRADA = '/tmp/tex'
+ENTRADA = '/tmp/tex2'
 
 #  nombre      archivo         lado  calidad  metros que cubre (contados en la imagen)
+#
+# LA SEGUNDA TANDA ES FOTORREALISTA (Recraft V4.1 en `utility`, 2048 px), y por
+# eso los metros CAMBIARON: la escala no es una preferencia, sale de contar los
+# elementos que tienen medida conocida. Contados sobre la imagen nueva, con el
+# perfil de bordes y después a ojo sobre el recorte:
+#   · ladrillo  12 hiladas  × 7,5 cm  = 0,90 m
+#   · tabla      9 tablas   × 18 cm   = 1,62 m
+#   · teja       5 hiladas  × 16 cm   = 0,80 m
+#   · madera    24 tablas   × 9 cm    = 2,16 m
+# Con los números viejos, la pared nueva salía con hiladas de 8,3 cm en vez de
+# 7,5 y el revestimiento con tablas de 23 — la casa se lee a casa de muñecas, que
+# es exactamente el defecto que estos números existen para evitar.
+#
+# Y LOS TRES QUE SE MIRAN DE CERCA SUBEN A 448. El juego dibuja a 1/1,7 y estira
+# con NEAREST, así que 384 alcanzaba para un dibujo plano; una foto con grano de
+# árido y veta de madera pierde justo eso, y ladrillo, revestimiento y teja son
+# las tres que el jugador tiene a tres metros de la cara caminando por la vereda.
 PLAN = [
-    ('asfalto',  'asfalto.png',  384, 76, 2.4),
-    ('vereda',   'vereda.png',   320, 78, 1.30),
+    ('asfalto',  'asfalto.png',  384, 76, 2.40),
+    ('vereda',   'vereda.png',   384, 78, 1.30),
     ('pasto',    'pasto.png',    384, 74, 1.60),
-    ('madera',   'madera.png',   320, 80, 1.30),
-    ('ladrillo', 'ladrillo.png', 384, 78, 1.00),
-    ('tabla',    'tabla.png',    320, 80, 2.05),
-    ('teja',     'teja.png',     384, 76, 1.30),
+    ('madera',   'madera.png',   384, 80, 2.16),
+    ('ladrillo', 'ladrillo.png', 448, 78, 0.90),
+    ('tabla',    'tabla.png',    448, 80, 1.62),
+    ('teja',     'teja.png',     448, 76, 0.80),
 ]
 
 

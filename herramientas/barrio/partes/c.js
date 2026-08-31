@@ -225,7 +225,7 @@ const texReja = (() => {
    Casi todo va en Lambert: no hay sol, hay faroles, y un difuso puro con luces
    puntuales es exactamente lo que hace falta. Las excepciones están anotadas. */
 const matAsfalto = new T.MeshPhongMaterial({
-  map: texAsfalto, color: 0x5c626e,
+  map: texAsfalto, color: 0x7a8090,   /* la foto nueva es 24 % más oscura */
   /* EL ASFALTO ES LO ÚNICO CON BRILLO ESPECULAR, y es la mitad de la lluvia.
      Una calle mojada no es una calle más oscura: es una calle que REFLEJA los
      faroles en una raya larga. Con Lambert eso no existe, así que acá sí va
@@ -250,8 +250,18 @@ const matReja    = new T.MeshLambertMaterial({ map: texReja, color: 0x99a3b2,
    el `color` de acá queda como el tono general de la superficie. */
 const matPared    = new T.MeshLambertMaterial({ map: texTabla, vertexColors: true, color: 0xb6b6b6 });
 const matLadrilloV= new T.MeshLambertMaterial({ map: texLadrillo, vertexColors: true, color: 0x9a8c86 });
-const matTechoV   = new T.MeshLambertMaterial({ map: texTeja, vertexColors: true, color: 0xacb3bd });
-const matMaderaV  = new T.MeshLambertMaterial({ map: texMadera, vertexColors: true, color: 0x8e8474 });
+/* ── EL TINTE SE RECALCULA CUANDO CAMBIA LA FOTO, NO SE HEREDA ──
+   three.js multiplica `map × vertexColor × material.color`, así que el `color`
+   de acá es un TINTE sobre la imagen: cambiar la textura por otra más clara o
+   más oscura y dejar el tinte donde estaba corre el color de toda la superficie.
+   Medido el promedio de cada textura, la tanda fotorrealista respecto de la
+   dibujada: asfalto ×0,76 · vereda ×0,91 · pasto ×0,87 · ladrillo ×0,93 ·
+   revestimiento ×1,02 · **madera ×1,31** · **teja ×0,74**. Las cinco primeras
+   están dentro del ruido; las dos últimas se compensan acá, y la teja importa
+   especialmente porque el techo acaba de dejar de ser negro y no puede volver a
+   apagarse. Es la misma cuenta que en el battle royale de Z Force. */
+const matTechoV   = new T.MeshLambertMaterial({ map: texTeja, vertexColors: true, color: 0xe4eaf2 });
+const matMaderaV  = new T.MeshLambertMaterial({ map: texMadera, vertexColors: true, color: 0x6d6558 });
 const matPiquete = new T.MeshLambertMaterial({ map: texPiquete, vertexColors: true,
                                                color: 0xb8b8b8,
                                                transparent: true, alphaTest: 0.5,

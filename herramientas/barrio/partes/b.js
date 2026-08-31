@@ -26,7 +26,8 @@ const CFG = {
   grano: 0.055,
   niebla: 0.0165,
   gotas: 2600, sombras: true, charcos: true,
-  linterna: false
+  linterna: false,
+  tercera: false        /* la cámara detrás del personaje */
 };
 /* ── LAS TRES CALIDADES ──
    Cambian lo que CUESTA y no lo que el barrio es: las mismas veinticinco

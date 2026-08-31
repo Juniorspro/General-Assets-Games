@@ -86,6 +86,7 @@ addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
   if (e.code === 'KeyF') ponLinterna(!CFG.linterna);
+  if (e.code === 'KeyV') ponVista(!CFG.tercera);
   if (e.code === 'Escape' && (MODO === 'juego' || MODO === 'cuarto')) pausa(!PAUSA);
   if (['KeyW','KeyA','KeyS','KeyD','Space'].includes(e.code)) e.preventDefault();
 });
@@ -299,8 +300,74 @@ function ponCam(dt){
   if (Math.abs(cam.fov - AND.fov) > 0.02){ cam.fov = AND.fov; cam.updateProjectionMatrix(); }
 
   const sy = Math.sin(JUG.yaw), cy = Math.cos(JUG.yaw);
-  cam.position.set(JUG.x + cy*costado, JUG.y + AND.ojo + arriba + resp, JUG.z - sy*costado);
-  cam.rotation.set(JUG.pitch + Math.sin(AND.fase*2)*0.004*amp, JUG.yaw, AND.roll);
+  /* ── LA TERCERA PERSONA ──
+     LA ROTACIÓN NO SE TOCA: la cámara se queda mirando exactamente para donde
+     miraba en primera y lo único que cambia es DÓNDE está. Componer un `lookAt`
+     acá sería reabrir la trampa que ya costó una vuelta en la cinemática —cerca
+     de los noventa grados de cabeceo, un grado de guiñada se convierte en
+     decenas de grados de alabeo— y además garantiza que apuntar se sienta igual
+     en las dos vistas, porque la dirección de la mirada es la misma cuenta.
+
+     Y EL CABECEO DEL PASO SE ACHICA A UN TERCIO. En primera el balanceo ES la
+     caminata; en tercera la caminata ya se ve en las piernas del personaje, y
+     el mismo balanceo aplicado a una cámara que está a tres metros se lee a que
+     tiembla el pulso de quien filma. */
+  const bob = CFG.tercera ? 0.35 : 1;
+  const ojoY = JUG.y + AND.ojo + arriba*bob + resp*bob;
+  cam.rotation.set(JUG.pitch + Math.sin(AND.fase*2)*0.004*amp*bob, JUG.yaw, AND.roll*bob);
+  if (!CFG.tercera){
+    cam.position.set(JUG.x + cy*costado, ojoY, JUG.z - sy*costado);
+    return;
+  }
+  /* de tres cuartos por detrás y no justo atrás: de frente al eje del cuerpo,
+     las piernas se tapan entre ellas y la zancada casi no se lee — es lo que se
+     midió cuando la cinemática tenía su plano de seguimiento. */
+  const ade = { x: -sy, z: -cy };
+  const der = { x: -ade.z, z: ade.x };
+  const cp = Math.cos(JUG.pitch);
+  const dir = { x: ade.x*cp, y: Math.sin(JUG.pitch), z: ade.z*cp };
+  const ox = JUG.x + der.x*CAM3_LADO, oz = JUG.z + der.z*CAM3_LADO;
+  const oy = ojoY + CAM3_ALTO;
+  /* ── Y NO ATRAVIESA PAREDES ──
+     Se marcha desde la cabeza hacia atrás y se corta en el último punto libre.
+     Sin esto, caminando pegado a una cerca la cámara queda del otro lado y el
+     jugador se ve la casa por dentro. */
+  let d = CAM3_DIST;
+  for (let k = 1; k <= 8; k++){
+    const t = CAM3_DIST * k / 8;
+    if (!camLibre(ox - dir.x*t, oz - dir.z*t)){ d = CAM3_DIST * (k-1) / 8; break; }
+  }
+  CAM3.d = lerp(CAM3.d, d, Math.min(1, dt*14));
+  cam.position.set(ox - dir.x*CAM3.d, oy - dir.y*CAM3.d, oz - dir.z*CAM3.d);
+}
+const CAM3_DIST = 2.95, CAM3_LADO = 0.55, CAM3_ALTO = 0.16;
+const CAM3 = { d: CAM3_DIST };
+/* ¿se puede poner la cámara acá? Reusa la MISMA rejilla de colisiones que el
+   cuerpo: una segunda lista de paredes sólo para la cámara se desincroniza el
+   día que se agregue un obstáculo. */
+function camLibre(x, z){
+  if (CU.on) return x > CU.X0 + 0.25 && x < CU.X1 - 0.25 &&
+                    z > CU.Z0 + 0.25 && z < CU.Z1 - 0.25;
+  if (Math.abs(x) > MITAD - 0.6 || Math.abs(z) > MITAD - 0.6) return false;
+  const i = Math.floor((x + MITAD) / PASO), j = Math.floor((z + MITAD) / PASO);
+  for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++){
+    const lista = REJILLA.get((i+di) * 97 + (j+dj));
+    if (!lista) continue;
+    for (const c of lista)
+      if (x > c.x0 - 0.28 && x < c.x1 + 0.28 && z > c.z0 - 0.28 && z < c.z1 + 0.28) return false;
+  }
+  return true;
+}
+
+/* ── EL CAMBIO DE VISTA ── */
+function ponVista(v){
+  CFG.tercera = !!v;
+  CAM3.d = CAM3_DIST;
+  $('acVista').classList.toggle('on', CFG.tercera);
+  if (PJ.ok){ PJ.primeraPersona = null; ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !CFG.tercera); }
+  aviso(TX(CFG.tercera ? 'aTercera' : 'aPrimera'));
+  son('clic', 0.7);
+  try { localStorage.setItem('barrio_vista', CFG.tercera ? '3' : '1'); } catch(e){}
 }
 
 /* ── EL AVISO DE UNA LÍNEA ── */

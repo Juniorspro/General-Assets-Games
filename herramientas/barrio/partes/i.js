@@ -51,7 +51,7 @@ function bucle(){
          Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
          se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
          correas de la mochila, los brazos y las piernas caminando. */
-      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, true);
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, !CFG.tercera);
       GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
       pasoPersonaje(dt);
     }
@@ -172,6 +172,22 @@ async function construir(){
   await paso(0.90, TX('cLluvia'));
   armaLluvia(); armaSalpicaduras(); indexaColisiones();
   cargaPersonaje();
+  /* ── LA HABITACIÓN SE ARMA ACÁ Y NO AL ENTRAR, Y ES POR LOS SHADERS ──
+     MEDIDO: el barrio corre con 23 programas compilados y con la habitación en
+     pantalla son 26. Esos tres se compilaban en el instante en que la
+     cinemática corta al cuarto, que es el peor momento posible — compilar un
+     shader son decenas o cientos de milisegundos en un teléfono y el corte se
+     ve como un tirón. Armándola durante la barra de carga, los tres ya están.
+     Y `compileAsync` sólo recorre lo VISIBLE, así que hay que encenderla un
+     instante: apagada, la llamada no compila nada y el problema queda igual.
+     De paso calienta también los del barrio, que hasta ahora se compilaban en
+     el primer cuadro de la partida. */
+  armaCuarto();
+  if (CU.grupo){
+    CU.grupo.visible = true;
+    try { await ren.compileAsync(escena, cam); } catch(e){}
+    CU.grupo.visible = false;
+  }
   await paso(1.0, TX('cListo'));
 }
 
@@ -182,6 +198,7 @@ async function arranca(){
   if (!g){ const n = (navigator.language || 'en').slice(0,2); if (TXT[n]) g = n; }
   ponIdioma(g || 'en');
   try { const c = localStorage.getItem('barrio_cal'); if (c && CALIDADES[c]) CALIDAD = c; } catch(e){}
+  try { CFG.tercera = localStorage.getItem('barrio_vista') === '3'; } catch(e){}
 
   /* la pantalla de idioma se muestra ENSEGUIDA y el barrio se construye
      mientras tanto: son segundos que no dependen de qué idioma se elija */
@@ -236,6 +253,11 @@ async function arranca(){
     idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
     calidad: (v) => { if (v) ponCalidad(v); return CALIDAD; },
     modo: () => MODO,
+    vista: (v) => { if (v !== undefined) ponVista(v); return {
+      tercera: CFG.tercera, d: +CAM3.d.toFixed(2), fp: PJ.primeraPersona,
+      cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+      jug: [+JUG.x.toFixed(2), +JUG.y.toFixed(2), +JUG.z.toFixed(2)],
+      dist: +Math.hypot(cam.position.x-JUG.x, cam.position.z-JUG.z).toFixed(2) }; },
     /* ── LA HABITACIÓN ──
        `cuarto()` entra sin pasar por la cinemática y `cuDesp()` saltea los tres
        segundos de despertarse: fotografiar el final de una rampa esperándola en
@@ -717,6 +739,7 @@ function armaPanel(){
   $('acCorre').ontouchstart = () => { corre = true; $('acCorre').classList.add('on'); };
   $('acCorre').ontouchend = () => { corre = false; $('acCorre').classList.remove('on'); };
   $('acLinterna').onclick = () => ponLinterna(!CFG.linterna);
+  $('acVista').onclick = () => ponVista(!CFG.tercera);
   for (const b of document.querySelectorAll('#mCal .chip'))
     b.onclick = () => ponCalidad(b.dataset.cal);
   for (const b of document.querySelectorAll('#mIdi .chip'))
