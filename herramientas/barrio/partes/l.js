@@ -148,7 +148,48 @@ function cargaPersonaje(){
     PJ.qpw[b.name] = q;
   }
   PJ.ok = true;
+  despejaCabeza();
   armaCaraSprites();
+}
+
+/* ══════════════════ LO QUE QUEDABA DE LA CABEZA ══════════════════
+   DEFECTO MEDIDO, Y VIEJO: en primera persona la cabeza se achica a la
+   centésima parte, pero `Head` no domina la cabeza entera. Medido girando cada
+   hueso un radián y viendo cuánto se mueven sus propios vértices, `neck` domina
+   **102 vértices que se desplazan 7,5 cm de promedio y 12,7 el que más** — o
+   sea un pedazo de cráneo, no un cuello. Ésos no se achican con `Head`, así que
+   mirando hacia abajo treinta grados aparece la propia nuca llenando el cuadro.
+   Estaba desde siempre en el barrio y salta a la vista en la habitación, donde
+   lo primero que uno hace es asomarse a la ventana y mirar para abajo.
+
+   NO SE ARREGLA ACHICANDO TAMBIÉN `neck`: el tapón que cierra el agujero que
+   deja la cabeza está pesado a ese mismo hueso —vive en y = 1,483 del bind— y
+   achicándolo se abre el agujero y lo que se ve es el forro de la campera
+   desde adentro.
+
+   Lo que sí: pasarle a `Head` los vértices de `neck` que están POR ENCIMA del
+   tapón. Se hace una vez al cargar, sobre el atributo de pesos, y no cuesta un
+   solo ciclo por cuadro. */
+const PJ_CORTE_CUELLO = 1.520;
+function despejaCabeza(){
+  if (!PJ.ok || !PJ.malla) return 0;
+  const g = PJ.malla.geometry;
+  const pos = g.attributes.position, si = g.attributes.skinIndex;
+  if (!pos || !si) return 0;
+  const iN = PJ.huesos.findIndex(b => b.name === 'neck');
+  const iH = PJ.huesos.findIndex(b => b.name === 'Head');
+  if (iN < 0 || iH < 0) return 0;
+  const ejes = ['X', 'Y', 'Z', 'W'];
+  let n = 0;
+  for (let v = 0; v < pos.count; v++){
+    if (pos.getY(v) < PJ_CORTE_CUELLO) continue;
+    let toco = false;
+    for (const e of ejes) if (si['get' + e](v) === iN){ si['set' + e](v, iH); toco = true; }
+    if (toco) n++;
+  }
+  if (n) si.needsUpdate = true;
+  PJ.cuelloArreglado = n;
+  return n;
 }
 
 /* ══════════════════════ LAS POSES ══════════════════════

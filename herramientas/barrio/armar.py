@@ -22,7 +22,7 @@ PARTES = os.path.join(AQUI, 'partes')
 
 ORDEN = ['a.html', 't.js', 'x.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js',
          'g.js', 'h.js', 'y.js', 'w.js', 'v.js',  'k.js', 'l.js', 'o.js',
-         'j.js', 'i.js', 'z.html']
+         'j.js', 'p.js', 'i.js', 'z.html']
 
 
 def main():

@@ -86,7 +86,7 @@ addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
   if (e.code === 'KeyF') ponLinterna(!CFG.linterna);
-  if (e.code === 'Escape' && MODO === 'juego') pausa(!PAUSA);
+  if (e.code === 'Escape' && (MODO === 'juego' || MODO === 'cuarto')) pausa(!PAUSA);
   if (['KeyW','KeyA','KeyS','KeyD','Space'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -251,8 +251,14 @@ function fisica(dt){
     JUG.vx -= JUG.vx*f; JUG.vz -= JUG.vz*f;
   }
   JUG.x += JUG.vx*dt; JUG.z += JUG.vz*dt;
-  corrige();
-  JUG.y = alturaSuelo(JUG.x, JUG.z);
+  /* EL CHOQUE Y EL SUELO SALEN DEL SITIO EN EL QUE SE ESTÁ. En la habitación no
+     hay damero ni rejilla de colisiones: hay cuatro paredes y dos muebles, y el
+     suelo está noventa y seis metros más arriba. Con el `corrige()` del barrio
+     puesto, el recorte de `±MITAD` no molesta —el cuarto cae dentro— pero
+     `alturaSuelo` devuelve cero y el jugador se cae al vacío en el primer
+     cuadro. */
+  if (CU.on){ corrigeCuarto(); JUG.y = CU.Y + 0.02; }
+  else { corrige(); JUG.y = alturaSuelo(JUG.x, JUG.z); }
   AND.v = Math.hypot(JUG.vx, JUG.vz);
   AND.lado = (JUG.vx*der.x + JUG.vz*der.z) / (CORRE);
 }
@@ -275,7 +281,7 @@ function ponCam(dt){
      zancada tiene que ser la de verdad o los pies patinan — que es el defecto
      que en RECREO tenia a Baldi a 2,7 metros por paso. */
   AND.fase += Math.PI * (AND.v * dt) / 0.82;   /* 0,82 m por medio paso, de verdad */
-  if (AND.v > 0.5 && MODO === 'juego' && !PAUSA){
+  if (AND.v > 0.5 && (MODO === 'juego' || MODO === 'cuarto') && !PAUSA){
     if (Math.floor(AND.fase / Math.PI) !== Math.floor(faseAnt / Math.PI))
       son('paso', 0.42 + rapido*0.4);
   }

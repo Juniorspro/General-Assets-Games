@@ -38,13 +38,29 @@ function armaLluvia(){
       t: { value: 0 }, camXZ: { value: new T.Vector2() }, camPos: { value: new T.Vector3() },
       caja: { value: LLUVIA.caja }, alto: { value: LLUVIA.alto },
       viento: { value: new T.Vector2(0.30, 0.16) },
-      col: { value: new T.Color(0xa8c6e6) }, op: { value: 0.34 }
+      col: { value: new T.Color(0xa8c6e6) }, op: { value: 0.34 },
+      /* ── LA CAJA DE LLUVIA NO ESTÁ SIEMPRE EN EL SUELO ──
+         La caída se calcula en Y ABSOLUTO —`mod(semilla.y - t·v, alto)`— así
+         que la nube vive entre 0 y 26 metros y nada más. En la habitación la
+         cámara está a noventa y siete: sin `baseY` no habría una sola gota, y
+         el defecto no se vería como «falta la lluvia» sino como que la escena
+         está mal iluminada. */
+      baseY: { value: 0 },
+      /* Y NO PUEDE LLOVER ADENTRO DEL CUARTO. La lluvia se dibuja con prueba de
+         profundidad, así que las gotas de más allá de las paredes quedan
+         tapadas solas; las que caen DENTRO de los cinco por siete metros del
+         cuarto, no — y ésas son las que se ven, porque caen en la cara. Seis
+         comparaciones en el vertex shader y se apagan. */
+      cuartoOn: { value: 0 },
+      cuartoXZ: { value: new T.Vector4(-2.9, 2.9, -3.7, 3.7) },
+      cuartoY: { value: new T.Vector2(95.9, 99.0) }
     },
     vertexShader: `
       attribute vec4 semilla;
-      uniform float t, caja, alto, op;
-      uniform vec2 camXZ, viento;
+      uniform float t, caja, alto, op, baseY, cuartoOn;
+      uniform vec2 camXZ, viento, cuartoY;
       uniform vec3 camPos;
+      uniform vec4 cuartoXZ;
       varying float vA;
       void main(){
         /* la caja de lluvia se centra en la cámara redondeando a la unidad: sin
@@ -55,7 +71,7 @@ function armaLluvia(){
         float z = c.y + semilla.z + viento.y * t * semilla.w * 6.0;
         x = c.x + mod(x - c.x + caja, caja*2.0) - caja;
         z = c.y + mod(z - c.y + caja, caja*2.0) - caja;
-        float y = mod(semilla.y - t * semilla.w * 17.0, alto);
+        float y = baseY + mod(semilla.y - t * semilla.w * 17.0, alto);
         vec3 base = vec3(x, y, z);
         vec3 hacia = camPos - base;
         float d = length(hacia);
@@ -65,6 +81,9 @@ function armaLluvia(){
         /* se apaga con la distancia en vez de con niebla: una gota gris a
            cuarenta metros no es lluvia, es ruido */
         vA = op * (1.0 - smoothstep(6.0, caja * 0.85, d)) * smoothstep(0.7, 2.2, d);
+        if (cuartoOn > 0.5 && x > cuartoXZ.x && x < cuartoXZ.y &&
+            z > cuartoXZ.z && z < cuartoXZ.w &&
+            y > cuartoY.x && y < cuartoY.y) vA = 0.0;
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: `
@@ -113,7 +132,18 @@ function pasoSalpicaduras(dt){
       s.t = 1;
       const a = az()*6.283, r = Math.sqrt(az()) * 13;
       s.x = JUG.x + Math.cos(a)*r; s.z = JUG.z + Math.sin(a)*r;
-      s.y = alturaSuelo(s.x, s.z);
+      /* EN LA AZOTEA SE REPARTEN SOBRE LA AZOTEA Y NO ALREDEDOR DEL JUGADOR.
+         El jugador está adentro del cuarto: un anillo de trece metros centrado
+         en él deja la mitad de las salpicaduras flotando en el aire, noventa y
+         seis metros arriba de la calle. Y las que caen dentro del cuarto se
+         saltean por lo mismo que la lluvia. */
+      if (CU.on){
+        s.x = cl(s.x, CU_AZ.x0 + 0.6, CU_AZ.x1 - 0.6);
+        s.z = cl(s.z, CU_AZ.z0 + 0.6, CU_AZ.z1 - 0.6);
+        if (s.x > CU.X0 - 0.4 && s.x < CU.X1 + 0.4 &&
+            s.z > CU.Z0 - 0.4 && s.z < CU.Z1 + 0.4) s.z = CU.Z0 - 1.4;
+      }
+      s.y = alturaPiso(s.x, s.z) - 0.02;
     }
     const u = 1 - s.t;
     const k = u * 1.9 + 0.25;

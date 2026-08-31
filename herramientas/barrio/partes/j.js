@@ -938,15 +938,19 @@ const CINEMA = {
   },
 
   termina(){
-    /* SE ENTRA AL JUEGO DONDE TERMINÓ LA CINEMÁTICA Y MIRANDO PARA EL MISMO
-       LADO. Devolviendo al jugador a la esquina de siempre, el último cuadro de
-       la escena y el primero del juego son dos sitios distintos y el corte se
-       lee a error. */
-    const c = this.cuerpo(Math.min(this.t, CINE_DUR));
+    /* ── DONDE TERMINA LA ESCENA EMPIEZA LA HABITACIÓN ──
+       La cinemática termina con el hombre desmayándose en la calle y los ojos
+       cerrándose. Lo que sigue no puede ser volver a la calle de pie: el
+       pestañeo del final y el primer cuadro de la partida serían dos sitios
+       distintos y el corte se leería a error. Se despierta en el cuarto, que es
+       lo que se pidió — y el barrio queda del otro lado de la puerta.
+       SALTEARLA TAMBIÉN LLEVA AL CUARTO, y a propósito: si saltear entrara
+       derecho al barrio, el botón de saltear estaría cambiando la historia y no
+       ahorrando tiempo. */
     this.limpia();
     $('cineNeg').classList.remove('on');
     $('cineNeg').style.opacity = '0';
     try { localStorage.setItem('barrio_cine', '1'); } catch(e){}
-    entraJuego({ x: c.x, z: c.z, yaw: this.yaw0 });
+    entraCuarto();
   }
 };

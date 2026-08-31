@@ -272,6 +272,11 @@ function vuelveMenu(){
   MODO = 'menu';
   pausa(false);
   CINEMA.limpia();
+  /* y la habitación, que si no el barrio se queda apagado y el menú orbita una
+     escena vacía. Una sola función que apaga todo lo de la partida anterior, en
+     vez de repartir el apagado por los sitios que la empiezan: es la lección de
+     `limpiaPartida()` en LEMI. */
+  limpiaCuarto();
   $('cineNeg').classList.remove('on');
   $('hud').classList.remove('on');
   $('menu').classList.add('on');

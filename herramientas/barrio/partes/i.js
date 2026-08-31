@@ -39,18 +39,31 @@ function bucle(){
   if (MODO === 'cine') CINEMA.paso(dt);
   else if (MODO === 'menu'){ CINE.paso(dt); escondePersonaje(); }
   else if (!PAUSA){
-    fisica(dt); ponCam(dt);
-    /* ── EL CUERPO EN PRIMERA PERSONA ──
-       Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
-       se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
-       correas de la mochila, los brazos y las piernas caminando. */
-    ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, true);
-    GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
-    pasoPersonaje(dt);
+    /* LA HABITACIÓN CORRE ANTES QUE LA FÍSICA. Durante los tres segundos en que
+       uno se despierta, `CUARTO.paso` es quien maneja la cámara y devuelve; si
+       corriera después, la física del cuadro le pisaría la pose de acostado. */
+    let dormido = false;
+    if (CU.on){ CUARTO.paso(dt); dormido = (CU.fase === 'despierta'); }
+    if (dormido) escondePersonaje();   /* acostado: el cuerpo de pie no va */
+    else {
+      fisica(dt); ponCam(dt);
+      /* ── EL CUERPO EN PRIMERA PERSONA ──
+         Se planta en el suelo debajo de la cámara y con el rumbo de la cámara, y
+         se le achica la cabeza: mirando hacia abajo se ven el pecho con las dos
+         correas de la mochila, los brazos y las piernas caminando. */
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, true);
+      GESTO.pitch = JUG.pitch; GESTO.yawRel = 0;
+      pasoPersonaje(dt);
+    }
   }
 
-  pasoCuadras();
-  pasoFaroles();
+  /* EN LA HABITACIÓN NO CORREN NI EL APAGADO DE CUADRAS NI EL MUDADO DE LOS
+     FAROLES: el primero volvería a encender las veinticinco cuadras que
+     `esconde()` acaba de apagar —decide por distancia y el cuarto está encima
+     del barrio—, y el segundo pondría las seis luces en faroles que no se ven,
+     que son justo las dos que el cuarto necesita. */
+  if (CU.on){ CUARTO.luces(); }
+  else { pasoCuadras(); pasoFaroles(); }
   pasoHalos();
   pasoRayo(dt);
   pasoLluvia();
@@ -62,7 +75,7 @@ function bucle(){
 
   /* el reloj de la pantalla: son las tres de la mañana y corre lento, que es
      lo que hace una noche que no termina */
-  if (MODO === 'juego'){
+  if (MODO === 'juego' || MODO === 'cuarto'){
     const m = Math.floor(RELOJ.value * 0.5) % 60;
     $('reloj').textContent = '03:' + String(m).padStart(2, '0');
   }
@@ -199,6 +212,12 @@ async function arranca(){
   window.repintaJuego = () => {
     $('mPie').textContent = TXF('mPie', TOTALES.casas, TOTALES.faroles, LADO);
     _calleAnt = ''; if (MODO === 'juego') ponCalle();
+    /* Y EL RÓTULO DE LA HABITACIÓN, que no lo escribe `ponCalle` sino
+       `entraCuarto` una sola vez: sin esto, cambiar de idioma con el cuarto en
+       pantalla deja el rótulo en el idioma anterior para siempre. Es el mismo
+       defecto que en LEMI dejó el pie del menú en inglés bajo un menú en
+       castellano. */
+    if (CU.on) $('calle').textContent = TX('cuCalle');
   };
   window.repintaJuego();
 
@@ -217,6 +236,26 @@ async function arranca(){
     idioma: (v) => { if (v) ponIdioma(v); return IDIOMA; },
     calidad: (v) => { if (v) ponCalidad(v); return CALIDAD; },
     modo: () => MODO,
+    /* ── LA HABITACIÓN ──
+       `cuarto()` entra sin pasar por la cinemática y `cuDesp()` saltea los tres
+       segundos de despertarse: fotografiar el final de una rampa esperándola en
+       tiempo real ya costó una tanda de capturas equivocadas en esta misma
+       escena. */
+    cuarto: () => { entraCuarto(); return MODO; },
+    cuDesp: () => { CU.t = CUARTO.DESP + 0.01; CUARTO.paso(0.016); return CU.fase; },
+    cuEst: () => ({ on: CU.on, fase: CU.fase, t: +CU.t.toFixed(2),
+                    x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
+                    ojo: +AND.ojo.toFixed(2), pitch: +JUG.pitch.toFixed(2),
+                    visto: CU.visto, salida: +CU.salida.toFixed(2),
+                    neg: $('cineNeg').style.opacity,
+                    niebla: +escena.fog.density.toFixed(4),
+                    barrio: MUNDO.barrio.filter(o => o.visible).length,
+                    piezas: MUNDO.barrio.length,
+                    luces: LUCES.map(l => +l.intensity.toFixed(1)) }),
+    cuSal: () => { salCuarto(); return MODO; },
+    cuello: () => ({ movidos: PJ.cuelloArreglado || 0,
+                     neck: JSON.parse(__V.mide('neck', 0, 0.6, 0)),
+                     head: JSON.parse(__V.mide('Head', 0, 0.6, 0)) }),
     entrar: () => { const b = $('mJugar'); if (b) b.click(); return MODO; },
     pausar: (v) => { pausa(!!v); return PAUSA; },
     helar: (v) => { CONGELADO = !!v; return CONGELADO; },
