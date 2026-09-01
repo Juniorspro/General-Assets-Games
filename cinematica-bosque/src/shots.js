@@ -406,7 +406,9 @@
                 }
                 if (moving && st - this.stepAt > .5) { this.stepAt = st; li("concrete", .4) }
                 // estira el brazo, abre la puerta y la cierra al entrar
-                let reach = HA(Math.min((st - 5.1) / .6, (7.4 - st) / .5), 0, 1);
+                let reach = Math.max(
+                    HA(Math.min((st - 5.1) / .6, (7.4 - st) / .5), 0, 1),   // la abre
+                    HA(Math.min((st - 8.5) / .5, (9.9 - st) / .4), 0, 1));  // y la cierra
                 this.boyReach(reach);
                 if (!this.knocked && st > 5.2) { this.knocked = !0; HT(.45, 0) }
                 let open = HA((st - 5.6) / 1.3, 0, 1),

@@ -190,8 +190,10 @@
                 this.shots[j] && this.shots[j].enter && this.shots[j].enter();
             }
             let sh = this.shots[this.index];
+            window.__CDLV_IDS || (window.__CDLV_IDS = this.shots.map(s => s.id));
             window.__CDLV_DBG = {
                 idx: this.index, id: sh && sh.id, t: +this.shotTime.toFixed(2), dur: sh && sh.duration,
+                fin: !!this.finished,
                 fov: +this.deps.camera.fov.toFixed(1),
                 body: !!this.car.body, glass: !!this.car.glass,
                 pov: !!(this.povRig && this.povRig.root.visible),

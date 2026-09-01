@@ -33,8 +33,12 @@ Reemplaza a la escena del chico parado en la carretera mientras pasa un auto.
    carretera y frena frente a la casa. El motor se apaga al llegar.
 5. `get-out`: se baja del auto — la cámara sale del asiento y se endereza a 1,62 m.
 6. `walk-to-door`: **tercera persona**. Camina desde el auto hasta la puerta con
-   la animación `preset:walk` del propio personaje, golpea, la puerta se abre
-   sola girando sobre su bisagra y entra.
+   la animación `preset:walk` del propio personaje. El recorrido rodea el auto
+   (sale por el costado, avanza hasta pasar el capot y recién ahí cruza) para que
+   no lo atraviese. Al llegar estira el brazo derecho, la puerta gira sobre su
+   bisagra siguiendo la mano, entra y la vuelve a cerrar detrás suyo con el mismo
+   gesto. La orientación sale de la velocidad real y no de apuntar al objetivo,
+   que se daba vuelta 180° en cuanto lo pasaba de largo.
 
 La puerta de entrada no es un asset aparte: el generador de la casa la arma como
 un grupo con pivote en la bisagra y la hoja como hijo. Se la ubica buscando en la
@@ -43,12 +47,15 @@ le anima el giro.
 
 ### Dentro de la casa — el batazo
 Reemplaza al montaje de días que caminaba al personaje en círculo hasta el día 12.
+Apenas cruza la puerta entra el batazo: la escena de los pasos por el pasillo
+(`enter-house`) también se sacó, así que después de entrar no hay animación de
+relleno.
 
-7. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
-8. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
-   la cámara se desploma girando hasta el piso y alcanza a verla parada encima
-   con el bate antes del negro.
-9. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
+7. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
+   la cámara se desploma girando hasta el piso y desde ahí se la ve parada encima
+   levantando el bate otra vez, antes del negro. El swing en sí queda fuera de
+   cuadro a propósito: la cámara recién gira hacia ella cuando el golpe ya cayó.
+8. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
    fuera.
 
 El modelo de la vieja se generó con Tripo (imagen → 3D → rig), **sin bate**: el
@@ -88,12 +95,22 @@ window.__CDLV_DBG          // en qué escena va, tiempo, qué está visible
 window.__CDLV_JUMP = 9     // salta a esa escena
 ```
 
+```js
+window.__CDLV_IDS           // la lista de escenas en orden
+```
+
 Índices: `0` auto pasando · `1` POV manejando · `2` el celular · `3` pantalla
 partida · `4` título · `5` llega a la casa · `6` se baja del auto · `7` camina a
-la puerta · `8` entra a la casa · `9` el batazo · `10` despierta encerrado.
+la puerta · `8` el batazo · `9` despierta encerrado · `10` persecución · `11` se
+esconde.
 
-También se sacaron la bajada al sótano (`descent`), la sábana (`sheet`) y la
-aparición de la vieja en el sótano (`reveal`).
+También se sacaron la bajada al sótano (`descent`), la sábana (`sheet`), la
+aparición de la vieja en el sótano (`reveal`) y los pasos por el pasillo
+(`enter-house`).
+
+El botón **Saltar intro** del HUD era sólo una etiqueta sin handler: el juego
+salteaba con `E` o con click en el canvas, pero tocar el botón no hacía nada.
+Ahora tiene su propio listener (`wireSkipButton`).
 
 ## Archivos
 
