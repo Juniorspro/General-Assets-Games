@@ -142,6 +142,8 @@ def main():
     cls = cut(cls, '{id:"arrival"', "...this.houseShots(A,P,D,i),", "...this.arriveShots(A,P,D,i,t),")
     # fuera la bajada al sotano
     cls = cut(cls, '{id:"descent"', '{id:"sheet"')
+    # fuera la sabana y la aparicion de la vieja
+    cls = cut(cls, '{id:"sheet"', '{id:"chase"')
 
     methods = open(os.path.join(HERE, "methods.js"), encoding="utf-8").read()
     shots = open(os.path.join(HERE, "shots.js"), encoding="utf-8").read()

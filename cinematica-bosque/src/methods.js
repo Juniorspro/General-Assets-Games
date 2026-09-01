@@ -427,6 +427,31 @@
     }
     /* zoom = 0 primera persona pura; 1 se corre un poco al costado del hombro
        para que el brazo levantado no tape el celular */
+    /* la puerta de entrada es un grupo con pivote en la bisagra y la hoja como
+       hijo: se lo busca por posicion, midiendo que el hijo tenga tamaño de puerta */
+    findFrontDoor() {
+        let H = this.deps.house, tx = H.exitDoor.x, tz = H.bounds.z;
+        let best = null, bd = 1e9, wp = new Y, box = new fP, size = new Y;
+        this.deps.scene.traverse(o => {
+            if (!o.children || !o.children.length || o.isMesh) return;
+            let leaf = o.children.find(c => c.isMesh && c.geometry);
+            if (!leaf) return;
+            o.getWorldPosition(wp);
+            if (Math.abs(wp.y) > 1.4) return;
+            let d = Math.hypot(wp.x - tx, wp.z - tz);
+            if (d > 1.7 || d >= bd) return;
+            leaf.geometry.computeBoundingBox();
+            leaf.geometry.boundingBox.getSize(size);
+            if (size.y < 1.8 || size.y > 2.8) return;      // alto de puerta
+            bd = d; best = o;
+        });
+        if (best) this.frontDoor = { pivot: best, rest: best.rotation.y, dist: bd };
+        return this.frontDoor;
+    }
+    swingDoor(k) {
+        let d = this.frontDoor; if (!d) return;
+        d.pivot.rotation.y = d.rest + aD(HA(k, 0, 1)) * -1.45;
+    }
     loadOldLady() {
         if (typeof CDLV_OLD_LADY !== "string" || !CDLV_OLD_LADY) return;
         new w8().load(CDLV_OLD_LADY, gltf => {

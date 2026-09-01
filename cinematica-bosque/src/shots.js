@@ -322,7 +322,7 @@
         };
         let out = {
             id: "get-out",
-            duration: 7.5,
+            duration: 3.4,
             captions: [{ from: 3.2, to: 7, text: "Tres semanas. Vaciarla, tapar los agujeros y dejarla presentable." }],
             enter: () => {
                 // autosuficiente: tambien vale si se salta directo a esta escena
@@ -350,28 +350,78 @@
                 // en cuanto la camara sale del asiento, el cuerpo sentado sobra
                 this.povRig && (this.povRig.root.visible = st < 1.1);
                 let slide = aD(HA(st / 2.2, 0, 1)),
-                    rise = aD(HA((st - 1.6) / 2, 0, 1)),
-                    walk = aD(HA((st - 3.6) / 3, 0, 1));
+                    rise = aD(HA((st - 1.6) / 1.6, 0, 1));
                 let cx = HP(carX + .45, carX - 1.5, slide),
                     cz = HP(stopZ + .02, stopZ - .35, slide);
-                cx = HP(cx, doorX - .2, walk);
-                cz = HP(cz, doorZ - 3.4, walk);
                 let cy = HP(HP(1.35, 1.02, slide), 1.62, rise);
                 A.position.set(cx, y0 + cy + Math.sin(tt * 4.6) * .015, cz);
                 // gira de mirar el volante a mirar la casa
-                let turn = aD(HA((st - 1.4) / 2.4, 0, 1));
+                let turn = aD(HA((st - 1.2) / 2, 0, 1));
                 A.lookAt(HP(carX + .45, doorX, turn), y0 + HP(1.1, 1.75, turn), HP(stopZ + 6, doorZ + .4, turn));
                 A.rotateZ(HP(.06, 0, rise) + Math.sin(tt * 1.3) * .008);
-                if (st > 3.6 && st - this.stepAt > .58) { this.stepAt = st; li("concrete", .45) }
                 this.driftFog(dt);
-                if (st > 6.9) P.set({ fade: HA((st - 6.9) / .6, 0, 1) });
+            },
+            exit: () => { this.povRig && (this.povRig.root.visible = !1) }
+        };
+        /* tercera persona: camina hasta la puerta, la abre y entra */
+        let toDoor = {
+            id: "walk-to-door",
+            duration: 9,
+            captions: [{ from: .8, to: 4.6, text: "Tres semanas. Vaciarla, tapar los agujeros y dejarla presentable." }],
+            enter: () => {
+                this.look("night-exterior");
+                i.intensity = 2.2;
+                this.povRig && (this.povRig.root.visible = !1);
+                this.driverRig && (this.driverRig.root.visible = !1);
+                this.car.group.visible = !0;
+                this.car.group.rotation.y = 0;
+                this.car.group.position.set(carX, 0, stopZ);
+                this.setActorVisible(!0);
+                this.man.group.position.set(carX - 1.5, y0, stopZ - .35);
+                this.man.group.rotation.y = 0;
+                this.rig && this.rig.play("preset:walk", { fade: .2 });
+                this.actorRate = 1;
+                this.findFrontDoor();
+                this.swingDoor(0);
+                this.stepAt = -1; this.knocked = !1; this.walkClip = !0;
+                A.fov = 52; A.updateProjectionMatrix();
+                P.set({ fade: 0, subtitle: "", cardTitle: "", cardSub: "" });
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime, g = this.man.group;
+                let k = Mi(HA(st / 4.4, 0, 1));                  // camina hasta la puerta
+                let px = HP(carX - 1.5, doorX, k), pz = HP(stopZ - .35, doorZ - 1.5, k);
+                if (st > 6.4) {                                   // y entra
+                    let e2 = aD(HA((st - 6.4) / 2.1, 0, 1));
+                    px = HP(doorX, doorX, e2); pz = HP(doorZ - 1.5, doorZ + 1.1, e2);
+                }
+                g.position.set(px, y0, pz);
+                g.rotation.y = Math.atan2(doorX - px, (doorZ - .2) - pz + .001);
+                let moving = st < 4.4 || st > 6.4;
+                if (this.rig && this.walkClip !== moving) {
+                    this.walkClip = moving;
+                    this.rig.play(moving ? "preset:walk" : "preset:idle", { fade: .22 });
+                }
+                if (moving && st - this.stepAt > .5) { this.stepAt = st; li("concrete", .4) }
+                // golpea y la puerta se abre sola
+                if (!this.knocked && st > 4.7) { this.knocked = !0; HT(.5, 0); HT(.45, 0) }
+                this.swingDoor((st - 5.2) / 1.4);
+                // camara en tercera persona, atras y a un costado
+                let ang = HP(-.9, -.35, Mi(HA(st / 6, 0, 1))),
+                    dist = HP(4.2, 2.6, Mi(HA(st / 6, 0, 1)));
+                A.position.set(px + Math.sin(ang) * dist, y0 + HP(1.75, 1.55, Mi(HA(st / 6, 0, 1))), pz - Math.cos(ang) * dist);
+                A.lookAt(px, y0 + HP(1.05, 1.35, HA((st - 4) / 3, 0, 1)), pz + .6);
+                this.handheld(.005);
+                this.driftFog(dt);
+                if (st > 8.4) P.set({ fade: HA((st - 8.4) / .6, 0, 1) });
             },
             exit: () => {
-                this.povRig && (this.povRig.root.visible = !1);
+                this.setActorVisible(!1);
                 this.car.group.visible = !1;
                 this.roadGroup.visible = !1;
+                this.walkClip = void 0;
                 P.set({ fade: 1 });
             }
         };
-        return [drive, out];
+        return [drive, out, toDoor];
     }

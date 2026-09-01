@@ -31,17 +31,24 @@ Reemplaza a la escena del chico parado en la carretera mientras pasa un auto.
 
 4. `drive-arrive`: después de aceptar el contrato sigue manejando, sale de la
    carretera y frena frente a la casa. El motor se apaga al llegar.
-5. `get-out`: se baja del auto — la cámara sale del asiento, se endereza a 1,62 m,
-   gira a mirar la casa y camina hasta la puerta.
+5. `get-out`: se baja del auto — la cámara sale del asiento y se endereza a 1,62 m.
+6. `walk-to-door`: **tercera persona**. Camina desde el auto hasta la puerta con
+   la animación `preset:walk` del propio personaje, golpea, la puerta se abre
+   sola girando sobre su bisagra y entra.
+
+La puerta de entrada no es un asset aparte: el generador de la casa la arma como
+un grupo con pivote en la bisagra y la hoja como hijo. Se la ubica buscando en la
+escena el grupo más cercano a `exitDoor` cuyo hijo tenga tamaño de puerta, y se
+le anima el giro.
 
 ### Dentro de la casa — el batazo
 Reemplaza al montaje de días que caminaba al personaje en círculo hasta el día 12.
 
-6. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
-7. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
+7. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
+8. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
    la cámara se desploma girando hasta el piso y alcanza a verla parada encima
    con el bate antes del negro.
-8. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
+9. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
    fuera.
 
 El modelo de la vieja se generó con Tripo (imagen → 3D → rig). El servicio de
@@ -76,11 +83,11 @@ window.__CDLV_JUMP = 9     // salta a esa escena
 ```
 
 Índices: `0` auto pasando · `1` POV manejando · `2` el celular · `3` pantalla
-partida · `4` título · `5` llega a la casa · `6` se baja del auto · `7` entra a
-la casa · `8` el batazo · `9` despierta encerrado · `10` la sábana.
+partida · `4` título · `5` llega a la casa · `6` se baja del auto · `7` camina a
+la puerta · `8` entra a la casa · `9` el batazo · `10` despierta encerrado.
 
-También se sacó la bajada al sótano (`descent`), que iba entre el despertar y
-la sábana.
+También se sacaron la bajada al sótano (`descent`), la sábana (`sheet`) y la
+aparición de la vieja en el sótano (`reveal`).
 
 ## Archivos
 
