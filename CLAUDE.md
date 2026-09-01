@@ -111,6 +111,115 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Septuagésima séptima vuelta (2026-09-01): **BARRIO** — el muslo giraba en el eje equivocado, y el paso pasa a venir de Tripo
+
+Pedido: *"mejora la animación de caminar está horrible xd ... se ve como tus piernas van de lado a
+lado no adelante, agrégale pue con Tripo una animación, ya tenés Rezona; también props como lámparas,
+muebles, usa Tripo 3D"*.
+
+#### EL DIAGNÓSTICO ERA LITERAL: EL MUSLO NO SE MOVÍA HACIA ADELANTE
+
+`poseCamina` giraba el muslo en **X**, con el comentario de siempre de que `giraH` pide los ejes en
+el marco del personaje. Los ejes de un rig no se deducen: se giran y se mira dónde quedó la punta.
+Entró `ejeH(hueso, destino, ax, ay, az)`, que gira un hueso un radián y devuelve el desplazamiento
+del **pie** en el marco del personaje —adelante, costado y alto—, y contestó esto:
+
+| hueso | eje | adelante | costado | alto |
+|---|---|---|---|---|
+| **muslo** | X | 7,0 cm | **8,9 cm** | 0,8 | ← lo que se venía usando |
+| | **Y** | **57,3 cm** | 9,3 | 28,2 | ← la flexión de verdad |
+| | Z | 20,3 | **54,9** | 25,6 | ← la abducción |
+| rodilla | **X** | **34,9** | 2,1 | 14,4 | ← ésa sí estaba bien |
+| pie | **X** | **10,1** | 0,2 | 4,6 | ← y ésa también |
+
+O sea que el muslo se movía **más de costado que hacia adelante**, y encima ocho veces menos de lo
+que ese hueso podía dar. Medido en el juego, el pie recorría **20,8 cm de adelante contra 18,2 de
+costado**: una relación de 1,1. Eso es exactamente «las piernas van de lado a lado».
+
+**Y NO SE ARREGLA CORRIGIENDO `giraH`.** La composición que usa —`bind · (P⁻¹RP)` en vez de
+`(P⁻¹RP) · bind`— es la que está calibrada contra TODO lo demás del personaje: los cuatro ángulos del
+solver de la mano izquierda, los del brazo derecho con el frasco, la cabeza, el idle. Cambiarla
+arregla la pierna y rompe seis cosas medidas. Lo que se cambia es **qué eje se le pide**.
+
+#### Y DE PASO EL CICLO ENTERO PASA A VENIR DE AFUERA
+
+`submit_rig3d_generation` **no puede riggear el personaje que el juego ya tiene**: sólo acepta el
+`task_id` de un modelo generado por uno mismo. Así que se genera un peatón cualquiera, se lo riggea
+con `preset:walk` y `preset:run`, y **lo que se trae al juego no es la malla sino el movimiento**.
+
+**LOS CANALES NO SE COPIAN, SE PASAN POR EL MUNDO.** Un canal de rotación es local al padre, así que
+copiado sobre un hueso que arranca mirando para otro lado deja al personaje doblado en dos — la
+lección que en Eco costó una vuelta entera. Y acá hizo falta un paso más que en Eco:
+
+**EL DELTA HAY QUE CONJUGARLO, PORQUE LOS DOS RIGS NO MIRAN PARA EL MISMO LADO.** Medido por el eje
+que va de una cadera a la otra, el peatón de Tripo y el personaje del juego están a **97,5 grados**.
+Con el retarget de libro —`Rw_src · inv(Rw_reposo_src) · Rw_reposo_dest`— el delta llega girado y la
+caminata sale **de costado**: medido, 51 cm de recorrido lateral contra 4,7 de adelante, o sea el
+mismo defecto que se estaba arreglando, ahora importado. Lo correcto es `Q · Δ · Q⁻¹` con Δ el delta
+contra el reposo y Q el giro entre los dos mundos.
+
+**Y LA CADERA BAJA POR FASE LO QUE HAGA FALTA PARA QUE EL PIE DE APOYO TOQUE.** El clip trae sólo
+rotaciones, así que sin esto el cuerpo se queda a altura fija y el pie flota: medido sobre
+`preset:run`, el tobillo más bajo del ciclo queda en 17,2 cm contra los 10,3 que mide en reposo, o
+sea siete centímetros de aire. Y de paso ese número **es** el rebote de la caminata: sin él el
+personaje se desliza a altura constante.
+
+**NO SE GUARDA UN CLIP, SE GUARDA UNA TABLA POR FASE.** El juego ya tiene `AND.fase`, de la que
+dependen el sonido de la pisada, el cabeceo de la cámara y el balanceo del cuerpo; un
+`AnimationMixer` con su propio reloj se desincronizaría de las tres. Diez huesos —las dos piernas y
+la columna— por veinticuatro fases, **16 KB**. Los brazos, la cabeza y las manos **no están en la
+tabla**, porque los maneja el juego: la mirada, el idle, la linterna y las pastillas de la
+cinemática. Y la tabla viene **girada** para que el pie izquierdo toque el suelo en la fase 0, que es
+donde suena el paso.
+
+Medido en el juego, con el mismo gancho antes y después:
+
+| | recorrido del pie adelante | de costado | relación |
+|---|---|---|---|
+| como estaba | 0,21 m | 0,18 m | **1,1** |
+| el muslo en Y | 0,51 | 0,13 | 3,8 |
+| **el ciclo de Tripo** | **0,53** | **0,10** | **5,3** |
+
+#### LOS CUATRO MUEBLES
+
+Velador, silla, mesa de luz y cómoda, generados con Tripo para el cuarto — que es el único sitio del
+juego que se mira de cerca y con luz, y estaba armado con cajas. Misma cadena que los props de LEMI:
+la textura se hornea en los vértices —sin UV no hay costuras y el simplificador baja hasta donde uno
+quiera— y se decima con `gltfpack -noq`.
+
+**EL OBJETIVO ES UN NÚMERO DE TRIÁNGULOS Y NO UN RATIO, y eso costó una pasada.** `-si 0.06`
+devolvía 59.800 triángulos y parecía que el simplificador estaba trabado, que es justo lo que le pasó
+a LEMI con las UV. No lo estaba: hacía exactamente el 6 % que se le pedía, y **la entrada tiene un
+millón de triángulos**. Un ratio no dice nada si no se sabe de cuánto se parte. Con el objetivo en
+2.000, los cuatro pesan **166 KB en base64**.
+
+**Y UN DEFECTO PROPIO DE `armaProp` QUE NO FALLA NI AVISA:** leía `COLOR_0` como **tres floats sin
+normalizar**, que es lo que necesitaba el frasco. gltfpack devuelve estos muebles con el color en
+**VEC4 de bytes normalizados** aunque se le pase `-noq`, así que los valores llegaban entre 0 y 255:
+en la captura, los cuatro muebles salieron **blanco puro con motas de colores**. El número de
+componentes sale del accesor y la marca de normalizado de que el array no sea de floats, igual que en
+el personaje.
+
+**LA LUZ DEL VELADOR HUBO QUE VOLVER A SUBIRLA, y es la tercera vez en este cuarto.** Con la lámpara
+dibujada a mano la luz iba a 14 cm de la mesa, o sea por debajo del borde del cono; la lámpara
+generada mide 42 cm y su pantalla arranca más arriba, así que esos 14 cm caen en el medio del fuste y
+la pantalla salía blanca y sin forma. Va a 34.
+
+**Y LOS TRES MUEBLES QUE REEMPLAZAN UNA CAJA VAN EN SU PROPIA MALLA.** El resto del cuarto se funde
+en cuatro mallas y una pieza fundida no se puede esconder sola. Cuestan tres llamadas de dibujo más y
+son lo que hace que un base64 roto cueste **un mueble y no un cuarto vacío**. La cómoda no tiene caja
+de respaldo porque es un mueble nuevo, no el reemplazo de uno que ya estaba — y su caja de colisión
+sale de dónde se la puso, no escrita a mano.
+
+#### MEDIDO AL CERRAR
+
+**271,6 m caminados** por dos calles —al hombro y en primera— con **0 cuadros dentro de una casa**.
+Ida y vuelta al cuarto: 4,6 m hasta la ventana con el aviso, y la vista vuelve sola al salir. La
+cinemática entera, los cuatro planos y el final en el cuarto. 7 de 7 texturas con su escala.
+**174 llamadas de dibujo en el barrio** (sin cambio) y **80 en el cuarto contra 52**, con los mismos
+14 cuadros por segundo. `window.__errs` vacío en las nueve corridas. El HTML pasó de 1,70 a
+**1,90 MB**, y esos 190 KB son los cuatro muebles y el ciclo de paso.
+
 ### Septuagésima sexta vuelta (2026-08-31): **BARRIO** — el pasto y la cerca pasan a Rezona, y los metros de la foto por fin llegan al juego
 
 Pedido: *"quiero que generes con Rezona imágenes para las texturas fotorrealistas"* — y antes de eso,
