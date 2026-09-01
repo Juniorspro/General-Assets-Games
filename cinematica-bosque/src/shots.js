@@ -125,7 +125,7 @@
                 this.povHead(A, 1 - zoom * .7, zoom);
                 if (this.phoneHolder && zoom > 0) {
                     this.phoneHolder.getWorldPosition(this._v3);
-                    this._v2.set(.45, 1.10, 14); this.car.group.localToWorld(this._v2);
+                    this._v2.set(.45, 1.46, 16); this.car.group.localToWorld(this._v2);
                     this._v2.lerp(this._v3, zoom);
                     A.lookAt(this._v2);
                 }
