@@ -104,16 +104,16 @@ export class Road {
 
         // banquina de tierra y el suelo general
         const shoulder = new THREE.Mesh(
-            new THREE.PlaneGeometry(30, this.length),
-            new THREE.MeshStandardMaterial({ color: 0x4a4234, roughness: 1 }));
+            new THREE.PlaneGeometry(11.4, this.length),
+            new THREE.MeshStandardMaterial({ color: 0x6d6248, roughness: 1 }));
         shoulder.rotation.x = -Math.PI / 2;
         shoulder.position.y = 0.005;
         shoulder.receiveShadow = true;
         G.add(shoulder);
 
         const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(700, 700),
-            new THREE.MeshStandardMaterial({ color: 0x3d4630, roughness: 1 }));
+            new THREE.PlaneGeometry(1400, 1400),
+            new THREE.MeshStandardMaterial({ color: 0x5c6b3c, roughness: 1 }));
         ground.rotation.x = -Math.PI / 2;
         ground.position.y = -0.02;
         ground.receiveShadow = true;
@@ -121,7 +121,6 @@ export class Road {
 
         this.buildForest(A);
         this.buildGrass(A);
-        this.buildSky(A);
     }
 
     /* Bosque: cada arbol = tronco + ramas + tarjetas de hoja, todo instanciado
@@ -154,7 +153,7 @@ export class Road {
         const leafMat = new THREE.MeshStandardMaterial({
             map: A.leaf ? tex(A.leaf) : null,
             color: A.leaf ? 0xffffff : 0x3c5a2a,
-            transparent: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.82,
+            alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.82,
         });
         const LC = 14;
         const leaves = new THREE.InstancedMesh(crossCard(1.85, 1.85), windify(leafMat, 0.3, 1), COUNT * LC);
@@ -210,36 +209,28 @@ export class Road {
 
     buildGrass(A) {
         const rng = new Rng(777);
-        const N = 5200;
+        const N = 14000;
         const mat = new THREE.MeshStandardMaterial({
-            map: A.grass ? tex(A.grass) : null,
+            map: A.grassField ? tex(A.grassField) : null,
             color: A.grass ? 0xffffff : 0x5c6b34,
-            transparent: true, alphaTest: 0.38, side: THREE.DoubleSide, roughness: 0.9,
+            alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9,
         });
-        const mesh = new THREE.InstancedMesh(crossCard(0.72, 0.62), windify(mat, 0.34, 2), N);
+        const mesh = new THREE.InstancedMesh(crossCard(0.46, 0.40), windify(mat, 0.26, 2), N);
         const m = new THREE.Matrix4(), p = new THREE.Vector3(), s = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler();
         for (let i = 0; i < N; i++) {
-            let x = rng.range(-40, 40);
-            if (Math.abs(x) < 4.6) x += Math.sign(x || 1) * 4.6;   // fuera del asfalto
+            // se concentra cerca del asfalto, que es lo unico que se llega a ver
+            let x = rng.range(-26, 26);
+            if (Math.abs(x) < 4.6) x += Math.sign(x || 1) * 4.6;
             e.set(0, rng.range(0, Math.PI), 0); q.setFromEuler(e);
             p.set(x, 0, rng.range(-this.length / 2, this.length / 2));
-            s.set(rng.range(0.7, 1.5), rng.range(0.6, 1.6), 1);
+            s.set(rng.range(0.8, 1.5), rng.range(0.7, 1.5), 1);
             m.compose(p, q, s); mesh.setMatrixAt(i, m);
         }
         this.group.add(mesh);
         this.grass = mesh;
     }
 
-    buildSky(A) {
-        if (!A.sky) return;
-        const geo = new THREE.SphereGeometry(460, 32, 20);
-        const mat = new THREE.MeshBasicMaterial({
-            map: tex(A.sky, { repeat: [3, 1] }), side: THREE.BackSide, fog: false, depthWrite: false,
-        });
-        const sky = new THREE.Mesh(geo, mat);
-        this.group.add(sky);
-        this.sky = sky;
-    }
+
 }
 
 /* Polvo y tierra levantada: se emiten en el derrape y en el impacto. */
@@ -278,7 +269,7 @@ export class Dust {
             p.vx = (Math.random() - 0.5) * 3.4 * power;
             p.vy = (0.6 + Math.random() * 1.9) * power;
             p.vz = (Math.random() - 0.5) * 3.4 * power;
-            p.s = (0.7 + Math.random() * 1.5) * power;
+            p.s = (0.35 + Math.random() * 0.75) * power;
             p.r = Math.random() * Math.PI;
         }
     }
@@ -290,7 +281,7 @@ export class Dust {
             p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
             p.vy -= 1.4 * dt; p.vx *= 0.965; p.vz *= 0.965;
             const k = sat(p.life / p.ttl);
-            const s = p.s * (0.5 + k * 2.1);
+            const s = p.s * (0.28 + k * 1.15);
             this._v.set(p.x, Math.max(p.y, 0.03), p.z);
             this._q.copy(camera.quaternion);
             this._s.set(s, s, s);

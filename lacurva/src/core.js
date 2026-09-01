@@ -55,6 +55,9 @@ export class Engine {
 
         this.clock = new THREE.Clock();
         this.shakeAmt = 0; this.shakeT = 0;
+        this.pmrem = new THREE.PMREMGenerator(this.renderer);
+        this.pmrem.compileEquirectangularShader();
+        this.envs = {};
         this.resize();
         addEventListener('resize', () => this.resize());
     }
@@ -65,23 +68,28 @@ export class Engine {
         this.camera.updateProjectionMatrix();
     }
     /* paletas: la ruta de tarde y el interior nocturno de la casa */
+    /* Convierte el panorama del cielo en fondo y en luz de entorno. Sin
+       environment map los materiales metalicos (la chapa del auto) salen
+       negros porque no tienen nada que reflejar. */
+    setSky(texture) {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        this.skyTex = texture;
+        this.envs.sky = this.pmrem.fromEquirectangular(texture).texture;
+    }
     look(name) {
         const s = this.scene, f = s.fog;
         if (name === 'road-day') {
-            this.sun.intensity = 2.9; this.sun.color.set(0xffdcae);
-            this.sun.position.set(-70, 42, -25);
-            this.hemi.intensity = 1.15; this.hemi.color.set(0xbcd6f2); this.hemi.groundColor.set(0x5b513c);
-            this.amb.intensity = 0.16;
-            f.color.set(0xc2ceda); f.near = 40; f.far = 260;
-            s.background = new THREE.Color(0xb9cbdd);
-            this.renderer.toneMappingExposure = 1.05;
-        } else if (name === 'road-dusk') {
-            this.sun.intensity = 1.5; this.sun.color.set(0xff9d63);
-            this.hemi.intensity = 0.7; this.hemi.color.set(0x8fa6c8); this.hemi.groundColor.set(0x3a3428);
+            this.sun.intensity = 3.4; this.sun.color.set(0xffdcae);
+            this.sun.position.set(-90, 46, -30);
+            this.hemi.intensity = 0.9; this.hemi.color.set(0xbcd6f2); this.hemi.groundColor.set(0x6a6046);
             this.amb.intensity = 0.1;
-            f.color.set(0x6f6a72); f.near = 25; f.far = 190;
-            s.background = new THREE.Color(0x6f6a72);
-            this.renderer.toneMappingExposure = 0.95;
+            // la niebla solo tapa el borde del mapa, no lava el bosque entero
+            f.color.set(0xe4c9a6); f.near = 190; f.far = 620;
+            s.background = this.skyTex || new THREE.Color(0xb9cbdd);
+            s.environment = this.envs.sky || null;
+            s.environmentIntensity = 1;
+            this.renderer.toneMappingExposure = 1.15;
         } else if (name === 'house') {
             this.sun.intensity = 0.16; this.sun.color.set(0x7d94c4);
             this.sun.position.set(18, 30, -14);
@@ -89,6 +97,8 @@ export class Engine {
             this.amb.intensity = 0.05;
             f.color.set(0x05060a); f.near = 1.2; f.far = 22;
             s.background = new THREE.Color(0x05060a);
+            s.environment = this.envs.sky || null;
+            s.environmentIntensity = 0.045;   // apenas, para que la chapa no muera
             this.renderer.toneMappingExposure = 1.15;
         }
     }

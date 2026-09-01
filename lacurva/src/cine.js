@@ -123,6 +123,7 @@ export class Director {
                 g.audio.stinger();
                 g.lady.root.visible = true;
                 g.ladyOnRoad(carAt(this.elapsed) + 62);
+                g.ladyPlaced = true;
             },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
@@ -138,7 +139,12 @@ export class Director {
         const silhouette = {
             id: 'silhouette',
             duration: 2.2,
-            enter: () => { g.phoneVisible(false); hud.set({ sub: '' }) },
+            enter: () => {
+                g.phoneVisible(false);
+                hud.set({ sub: '' });
+                g.lady.root.visible = true;
+                if (!g.ladyPlaced) g.ladyOnRoad(carAt(this.elapsed) + 34);
+            },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
                 car().group.position.set(0, 0, z);
@@ -167,7 +173,7 @@ export class Director {
                 g.dust.emit(off, 0.05, z - 2, 3, 1.5);
                 hud.set({ vignette: lerp(0.55, 0.7, k) });
             },
-            exit: () => { g.lady.root.visible = false },
+            exit: () => { g.lady.root.visible = false; g.ladyPlaced = false },
         };
 
         // ---------------------------------------------------------------- ACTO 3

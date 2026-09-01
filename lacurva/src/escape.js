@@ -82,7 +82,6 @@ export class Escape {
             hasKey: false, stamina: 1, prompt: '',
         });
         g.audio.playAmbience(0.42);
-        this.g.engine.renderer.domElement.requestPointerLock?.();
     }
 
     restart() {
@@ -274,7 +273,8 @@ export class Escape {
     updatePrompts() {
         const g = this.g;
         let p = '';
-        if (!this.hasKey && this.pos.distanceTo(this.keyPos) < 1.5) p = 'E — agarrar la llave';
+        if (document.pointerLockElement !== g.engine.renderer.domElement) p = 'Click para mirar alrededor';
+        else if (!this.hasKey && this.pos.distanceTo(this.keyPos) < 1.5) p = 'E — agarrar la llave';
         else if (this.hasKey && this.pos.distanceTo(g.house.exitPos) < 2.2) p = 'E — abrir la puerta';
         g.hud.set({ prompt: p });
     }

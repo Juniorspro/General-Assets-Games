@@ -24,7 +24,9 @@ class Game {
 
     async load(onProgress) {
         const P = onProgress || (() => { });
-        P(0.05, 'armando la carretera');
+        P(0.03, 'mirando el cielo');
+        await this.loadSky();
+        P(0.08, 'armando la carretera');
         this.road = new Road(this.engine.scene, A);
         this.dust = new Dust(this.engine.scene, 320);
 
@@ -57,6 +59,13 @@ class Game {
         this.director = new Director(this);
         this.escape = new Escape(this);
         P(1, 'listo');
+    }
+
+    loadSky() {
+        return new Promise(res => {
+            if (!A.skyDay) return res();
+            new THREE.TextureLoader().load(A.skyDay, t => { this.engine.setSky(t); res() }, undefined, () => res());
+        });
     }
 
     /* En POV la cabeza tapa la camara: se la achica a cero en vez de sacarla,
@@ -158,9 +167,9 @@ class Game {
     povEye(cam, sway, zoom) {
         const c = this.car.group, z = sat(zoom || 0);
         c.updateMatrixWorld(true);
-        const p = new THREE.Vector3(lerp(0.45, 0.52, z), lerp(1.35, 1.24, z), lerp(0.02, 0.14, z));
+        const p = new THREE.Vector3(lerp(0.45, 0.50, z), lerp(1.46, 1.40, z), lerp(0.22, 0.34, z));
         c.localToWorld(p);
-        const look = new THREE.Vector3(lerp(0.45, 0.56, z), lerp(1.10, 0.86, z), lerp(14, 0.62, z));
+        const look = new THREE.Vector3(lerp(0.45, 0.56, z), lerp(1.22, 0.95, z), lerp(14, 0.80, z));
         c.localToWorld(look);
         cam.position.copy(p);
         cam.position.y += Math.sin(this.t * 8.3) * 0.006 * sway;
