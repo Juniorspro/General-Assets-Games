@@ -37,14 +37,31 @@ La moldura va **baja** a propósito: desde 55 cm de altura, un zócalo a la
 altura real (2,5 m) se come toda la vista y no se ve el papel. Con la moldura
 a 1,05 el rojo domina, que es como se ve en las capturas.
 
-Las arañas colgando del techo son la única luz fija, y roperos y cómodas
-contra las paredes llenan las salas — de paso dan una referencia de tamaño,
-que es de lo que se trata todo esto.
+Roperos y cómodas contra las paredes llenan las salas — de paso dan una
+referencia de tamaño, que es de lo que se trata todo esto.
+
+## Los faroles del techo
+
+**38 en la planta baja**, en una rejilla floja: arañas grandes de 8 brazos en
+las salas y colgantes chicos de 5 en los pasillos. Antes sólo iban donde había
+un 3×3 libre, así que los pasillos —que son casi todo el mapa— quedaban sin
+luz fija.
+
+La luz de cada uno va **justo debajo del aro**, así el aro y los brazos
+proyectan su **sombra de rueda sobre el techo**. Es el detalle que los hace
+leer como lámparas y no como bolitas flotando.
+
+Sólo **las tres más cercanas proyectan** a la vez: una luz puntual con sombra
+cuesta seis pases de render, y son las únicas cuya rueda se llega a ver. La
+lista se reordena cada cuarto de segundo, no cada frame.
 
 ## Deslizamiento
 
-`ESPACIO` / `X`, o el botón **DESLIZAR** en táctil. Dura 0,85 s y es corto y
-violento a propósito:
+`ESPACIO` / `X`, o el botón **DESLIZAR** en táctil. **Sólo mientras corrés** —
+es un deslizamiento de carrera, no un agacharse rápido. El botón se enciende
+en azul justo cuando hay carrera que aprovechar.
+
+Dura 0,85 s y es corto y violento a propósito:
 
 - la dirección **se fija al arrancar**: no se dobla en el aire
 - la cámara cae de golpe a **19 cm** y vuelve suave
@@ -73,9 +90,14 @@ atajos para cuando estás escapando, no puertas.
 - **Táctil**: joystick abajo a la izquierda, botón **DESLIZAR** a la derecha,
   el resto de la pantalla para mirar
 
-**Carrera automática:** el joystick no tiene botón de correr. Pasado el **70%**
-del recorrido y empujando hacia arriba, arranca a correr solo; más abajo, la
-velocidad es proporcional a cuánto lo empujaste.
+**Carrera automática:** `R` (o el botón **Alternar carrera**) la deja fija: se
+corre sin mantener nada. Además, el joystick arranca a correr solo pasado el
+**70%** del recorrido hacia arriba; más abajo la velocidad es proporcional a
+cuánto lo empujaste.
+
+**Botones táctiles**, como en la referencia: **AGACHARSE**, **Alternar
+carrera** (se ilumina cuando está puesta) y **DESLIZAR** (se ilumina cuando
+estás corriendo).
 
 **Inclinación al moverse:** la cámara rola hacia el lado al que te desplazás y
 un poco más al girar, como si el cuerpo acompañara, más un balanceo suave al
