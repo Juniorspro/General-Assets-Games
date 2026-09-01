@@ -181,6 +181,7 @@
                 this.roadGroup.visible = !1;
                 this.car.group.visible = !1;
                 i.intensity = 2.4;
+                A.fov = 64; A.updateProjectionMatrix();
                 P.set({ fade: 1, subtitle: "", cardTitle: "", cardSub: "", dread: 0 });
                 this.stepAt = -1;
                 this.oldLady && (this.oldLady.root.visible = !1);
@@ -203,6 +204,7 @@
             captions: [{ from: 3.1, to: 5.2, text: "No la oí entrar." }],
             enter: () => {
                 this.hitDone = !1;
+                A.fov = 64; A.updateProjectionMatrix();
                 if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
                 placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
@@ -258,6 +260,7 @@
             enter: () => {
                 this.look("night-interior");
                 i.intensity = 1.1;
+                A.fov = 62; A.updateProjectionMatrix();
                 P.set({ fade: 1, dread: .5 });
                 ZT(1);
             },
@@ -322,9 +325,21 @@
             duration: 7.5,
             captions: [{ from: 3.2, to: 7, text: "Tres semanas. Vaciarla, tapar los agujeros y dejarla presentable." }],
             enter: () => {
+                // autosuficiente: tambien vale si se salta directo a esta escena
+                this.look("night-exterior");
+                this.roadGroup.visible = !0;
+                this.forest && (this.forest.visible = !0);
+                this.setActorVisible(!1);
+                this.driverRig && (this.driverRig.root.visible = !1);
+                this.car.group.visible = !0;
+                this.car.group.rotation.y = 0;
+                this.car.group.position.set(carX, 0, stopZ);
                 this.povRig && (this.povRig.root.visible = !0);
+                this.seatPose(this.povRig, 0, 0);
                 this.engine && (this.engine.stop(), this.engine = null);
                 for (let l of this.car.lights) l.intensity = 0;
+                i.intensity = 2.6;                           // saca la linterna al bajar
+                P.set({ fade: 0, cardTitle: "", cardSub: "" });
                 A.fov = 62; A.updateProjectionMatrix();
                 this.stepAt = -1;
                 ki(.5, .15);                                 // la puerta del auto
