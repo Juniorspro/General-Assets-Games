@@ -1,9 +1,57 @@
-# Cinemática del bosque — La casa de la vieja
+# La curva — la intro de La casa de la vieja
 
-Dos escenas nuevas al principio de la cinemática de `lacasadelavieja8.html`,
-más el bosque y la neblina que tapan los límites del mapa.
+La cinemática de apertura de `lacasadelavieja9.html`: el chico maneja de
+noche, mira el celular, y cuando levanta la vista tiene a la vieja parada en
+el medio del asfalto. Dobla, se va de la ruta y choca contra un árbol. De ahí
+engancha con el despertar encerrado que el juego ya tenía, y sigue el juego.
 
-## Qué se agregó
+Reemplaza a la intro anterior (la llamada del contrato, llegar en auto a la
+casa, el montaje de días, el sótano y la sábana). El orden de escenas quedó:
+
+```
+night-pass · pov-drive · pov-phone · look-up · silhouette · swerve · crash
+black-out · title · wake-locked · chase · hide
+```
+
+## Los planos nuevos
+
+1. **night-pass** (7,2 s) — el auto cruza de noche, los faros barren los
+   troncos, polvo detrás de las ruedas. Se lo ve al chico manejando.
+2. **pov-drive** (6 s) — primera persona en el asiento, la radio puesta, la
+   cabeza cabeceando con la música.
+3. **pov-phone** (7,4 s) — suena el teléfono, lo saca del bolsillo y baja la
+   vista. La cámara hace zoom hasta la pantalla.
+4. **look-up** (1,4 s) — levanta la vista de golpe. La música se va.
+5. **silhouette** (2,3 s) — la vieja parada en el asfalto, recortada contra
+   los faros. La cámara cierra el encuadre.
+6. **swerve** (2,4 s) — volantazo: el auto tira a la banquina, la cámara
+   rueda, las gomas levantan tierra.
+7. **crash** (2,6 s) — plano exterior: pega contra el árbol, sacudón, polvo,
+   los faros se apagan.
+8. **black-out** (3,2 s) — adentro del auto, la cabeza cae sobre el volante y
+   todo se va a negro.
+
+Después entra el título y el despertar: **"No sé cuánto estuve tirado ahí. /
+Alguien me metió adentro. Y cerró la puerta por fuera."**
+
+## Lo que se mejoró de paso
+
+- **Árboles.** Las hojas ahora cuelgan de la punta de cada rama en vez de
+  estar sorteadas alrededor de la copa, y son cartas cruzadas en vez de
+  planos sueltos: la copa tiene volumen desde cualquier ángulo y el follaje
+  se corresponde con las ramas que se ven. 8 ramas por árbol, 3 racimos por
+  rama.
+- **Sombras.** La luna proyecta (2048², frustum de 140 m) y **la sigue al
+  auto**: una luz direccional sólo sombrea una caja alrededor de su target,
+  así que sin moverla las sombras se cortaban a los pocos metros. Troncos,
+  ramas, auto y personajes proyectan; el asfalto y la banquina reciben.
+- **Iluminación de noche.** Niebla más abierta (9–118 m en vez de 5–60) para
+  que la silueta se lea a 40 m, cielo hemisférico más frío y la luna más
+  fuerte.
+- **El personaje en el auto.** Estaba anclado por los pies: la pose de
+  sentado rota las piernas pero no mueve el root, así que quedaba parado
+  adentro del auto. Ahora se lo ancla por la **pelvis** al punto del asiento,
+  medido después de aplicar la pose.
 
 ### Bosque + neblina (en toda la parte exterior)
 - ~900 pinos colocados con `InstancedMesh` (3 draw calls: tronco + dos capas de
