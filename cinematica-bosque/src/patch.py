@@ -106,6 +106,9 @@ REPLACEMENTS = [
      'P.set({fade:1,skip:!0}),this.engine=this.engine||Ug(),this.rig?.play("preset:idle")'),
     ("update:(s,o)=>{if(!this.rig){let j=Math.sin(o*7.5)*.5+.5;",
      "update:(s,o)=>{if(P.set({fade:HA(1-s*7,0,1)}),!this.rig){let j=Math.sin(o*7.5)*.5+.5;"),
+    # 6b. hook de debug/salto de escena en cada frame
+    ("update(A){if(this.finished)return;this.elapsed+=A,this.shotTime+=A,",
+     "update(A){if(this.finished)return;this.dbg(),this.elapsed+=A,this.shotTime+=A,"),
     # 7. finish/dispose limpian lo nuevo
     ("finish(){this.finished=!0,this.engine?.stop()",
      "finish(){this.finished=!0,this.splitHide(),this.stopVo(),"

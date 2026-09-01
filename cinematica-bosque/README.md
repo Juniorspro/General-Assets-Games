@@ -26,6 +26,21 @@ más el bosque y la neblina que tapan los límites del mapa.
 - El personaje va sentado adentro manejando (se ve poco porque pasa rápido,
   como se pidió).
 
+### Dentro de la casa — el batazo
+Reemplaza al montaje de días que caminaba al personaje en círculo hasta el día 12.
+
+4. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
+5. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
+   la cámara se desploma girando hasta el piso y alcanza a verla parada encima
+   con el bate antes del negro.
+6. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
+   fuera.
+
+El modelo de la vieja se generó con Tripo (imagen → 3D → rig). El servicio de
+rigging ignoró el clip de golpe que se le pidió y devolvió solo `walk/idle/jump`,
+así que **el batazo está animado a mano sobre los huesos** del brazo y la columna,
+después de que corre el mixer: así el impacto cae en el frame exacto.
+
 ### Escena 2 — POV manejando y el contrato
 1. `pov-drive` (6 s): primera persona bien puesta en el asiento del conductor.
    Se ve el pecho, las piernas, los dos brazos y las manos sobre el volante,
@@ -43,12 +58,26 @@ El diálogo está en **español, inglés y portugués**: el idioma se elige solo
 `navigator.language` y se puede forzar desde la consola con
 `window.__CDLV_LANG = "pt"` antes de arrancar.
 
+## Debug
+
+Desde la consola del navegador, mientras corre la cinemática:
+
+```js
+window.__CDLV_DBG          // en qué escena va, tiempo, qué está visible
+window.__CDLV_JUMP = 9     // salta a esa escena
+```
+
+Índices: `0` auto pasando · `1` POV manejando · `2` el celular · `3` pantalla
+partida · `4` carretera de noche · `7` llegada · `8` entra a la casa · `9` el
+batazo · `10` despierta encerrado.
+
 ## Archivos
 
 ```
 modelos/car_body.glb    carrocería SIN ruedas (12.850 tris, 1024² WebP PBR)
 modelos/car_wheel.glb   una rueda suelta       (4.012 tris, 512² WebP PBR)
 modelos/phone.glb       celular                (2.380 tris, 512² WebP PBR)
+modelos/vieja.glb       la vieja con el bate, rigueada (walk/idle/jump)
 audio/vo_office_{es,en,pt}.mp3   la oferta del contrato
 audio/vo_player_{es,en,pt}.mp3   "Acepto." / "I'll take it." / "Eu aceito."
 referencias/            las imágenes que se usaron para generar cada modelo

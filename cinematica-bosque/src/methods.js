@@ -166,18 +166,6 @@
         this.disposers.push(() => { dome.geometry.dispose(); mat.dispose(); this.deps.scene.remove(dome) });
     }
     driftFog(dt) {
-        try {
-            let sh = this.shots[this.index];
-            window.__CDLV_DBG = {
-                idx: this.index, id: sh && sh.id, t: +this.shotTime.toFixed(2), dur: sh && sh.duration,
-                carX: +this.car.group.position.x.toFixed(1), fov: +this.deps.camera.fov.toFixed(1),
-                body: !!this.car.body, glass: !!this.car.glass, wheels: this.car.wheels.length,
-                pov: !!(this.povRig && this.povRig.root.visible), phone: !!(this.phoneHolder && this.phoneHolder.visible),
-                driver: !!(this.driverRig && this.driverRig.root.visible),
-                grass: !!(this.grass && this.grass.visible), sky: !!(this.sky && this.sky.visible),
-                split: !!(this.split && this.split.on), wind: this.windU ? +this.windU.value.toFixed(1) : null
-            };
-        } catch (e) { window.__CDLV_DBG = { err: String(e) } }
         for (let f of this.fogSheets) {
             f.mesh.position.x += f.speed * dt;
             f.mesh.position.y += Math.sin(this.elapsed * .25 + f.phase) * dt * .12;
@@ -187,6 +175,32 @@
             this.sky.position.copy(this.deps.camera.position);
             this.sky.rotation.y += dt * .004;
         }
+    }
+    /* debug: window.__CDLV_DBG dice en que escena va, y window.__CDLV_JUMP = n
+       salta a la escena n (0 auto pasando, 4 carretera, 8 entra a la casa,
+       9 el batazo, 10 despierta encerrado) */
+    dbg() {
+        try {
+            if (typeof window === "undefined") return;
+            if (window.__CDLV_JUMP != null) {
+                let j = Math.max(0, Math.min(this.shots.length - 1, window.__CDLV_JUMP | 0));
+                window.__CDLV_JUMP = null;
+                this.shots[this.index] && this.shots[this.index].exit && this.shots[this.index].exit();
+                this.index = j; this.shotTime = 0;
+                this.shots[j] && this.shots[j].enter && this.shots[j].enter();
+            }
+            let sh = this.shots[this.index];
+            window.__CDLV_DBG = {
+                idx: this.index, id: sh && sh.id, t: +this.shotTime.toFixed(2), dur: sh && sh.duration,
+                fov: +this.deps.camera.fov.toFixed(1),
+                body: !!this.car.body, glass: !!this.car.glass,
+                pov: !!(this.povRig && this.povRig.root.visible),
+                phone: !!(this.phoneHolder && this.phoneHolder.visible),
+                lady: !!(this.oldLady && this.oldLady.root.visible),
+                grass: !!(this.grass && this.grass.visible), sky: !!(this.sky && this.sky.visible),
+                split: !!(this.split && this.split.on), wind: this.windU ? +this.windU.value.toFixed(1) : null
+            };
+        } catch (e) { }
     }
     buildGrass() {
         let D = this.rng, roadZ = this.deps.house.bounds.z - 26;
