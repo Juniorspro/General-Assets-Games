@@ -96,10 +96,12 @@
         });
         this.windPatch(branchMat, .055, 0);
         this.windPatch(leafMat, .30, 1);
-        let trunkGeo = new P9(.16, .44, 1, 6, 1, !1); trunkGeo.translate(0, .5, 0);
-        let branchGeo = new P9(.035, .11, 1, 5, 1, !1); branchGeo.translate(0, .5, 0);
-        let leafGeo = new k9(1, 1);
-        let N = 360, B = 6, L = 16;
+        let trunkGeo = new P9(.16, .44, 1, 7, 1, !1); trunkGeo.translate(0, .5, 0);
+        let branchGeo = new P9(.03, .12, 1, 5, 1, !1); branchGeo.translate(0, .5, 0);
+        // cartas cruzadas en vez de un plano suelto: la copa tiene volumen
+        // desde cualquier angulo y no se aplana al girar la camara
+        let leafGeo = this.crossCard(1, 1);
+        let N = 360, B = 8, L = B * 3;
         let trunks = new f8(trunkGeo, trunkMat, N),
             branches = new f8(branchGeo, branchMat, N * B),
             leaves = new f8(leafGeo, leafMat, N * L);
@@ -112,32 +114,44 @@
             let hgt = D.range(7.5, 15.5), rad = hgt * D.range(.055, .085), yaw = D.range(0, Math.PI * 2);
             d.position.set(x, 0, z); d.rotation.set(0, yaw, 0); d.scale.set(rad, hgt, rad);
             d.updateMatrix(); trunks.setMatrixAt(placed, d.matrix);
-            // ramas: salen del tronco hacia afuera y arriba
+            /* Ramas primero, y las hojas colgadas de la punta de cada rama.
+               Antes las hojas se sorteaban sueltas alrededor de la copa, asi
+               que el follaje flotaba sin relacion con las ramas que se veian. */
             for (let k = 0; k < B; k++) {
-                let a = yaw + k / B * Math.PI * 2 + D.range(-.4, .4),
-                    up = hgt * D.range(.45, .93),
-                    len = hgt * D.range(.16, .30),
-                    tilt = D.range(.55, 1.15);
-                d.position.set(x + Math.cos(a) * rad * .5, up, z + Math.sin(a) * rad * .5);
+                let a = yaw + k / B * Math.PI * 2 + D.range(-.35, .35),
+                    up = hgt * D.range(.42, .95),
+                    len = hgt * D.range(.18, .34),
+                    tilt = D.range(.5, 1.1);
+                let bx = x + Math.cos(a) * rad * .5, bz = z + Math.sin(a) * rad * .5;
+                d.position.set(bx, up, bz);
                 d.rotation.set(Math.cos(a) * tilt, -a, -Math.sin(a) * tilt);
-                d.scale.set(len * .32, len, len * .32);
+                d.scale.set(len * .30, len, len * .30);
                 d.updateMatrix(); branches.setMatrixAt(bi++, d.matrix);
-            }
-            // hojas: cartas alrededor de la copa
-            for (let k = 0; k < L; k++) {
-                let a = D.range(0, Math.PI * 2),
-                    r = hgt * D.range(.08, .34),
-                    up = hgt * D.range(.55, 1.02),
-                    s = hgt * D.range(.22, .42);
-                d.position.set(x + Math.cos(a) * r, up, z + Math.sin(a) * r);
-                d.rotation.set(D.range(-.5, .5), a + Math.PI / 2, D.range(-.5, .5));
-                d.scale.set(s, s, s);
-                d.updateMatrix(); leaves.setMatrixAt(li++, d.matrix);
+
+                // donde termina la rama, contando la inclinacion
+                let reach = len * Math.sin(tilt), rise = len * Math.cos(tilt);
+                let tx = bx + Math.cos(a) * reach, tz = bz + Math.sin(a) * reach, ty = up + rise;
+                for (let q = 0; q < 3; q++) {
+                    let f = .55 + q * .28,                       // a lo largo de la rama
+                        s = hgt * D.range(.16, .26) * (1.15 - q * .16);
+                    d.position.set(
+                        bx + (tx - bx) * f + D.range(-.4, .4),
+                        up + (ty - up) * f + D.range(-.25, .35),
+                        bz + (tz - bz) * f + D.range(-.4, .4));
+                    d.rotation.set(0, a + D.range(-.6, .6), 0);
+                    d.scale.set(s, s, s);
+                    d.updateMatrix(); leaves.setMatrixAt(li++, d.matrix);
+                }
             }
             placed++;
         }
         trunks.count = placed; branches.count = bi; leaves.count = li;
         for (let m of [trunks, branches, leaves]) { m.instanceMatrix.needsUpdate = !0; m.frustumCulled = !1; root.add(m) }
+        // los troncos proyectan; las hojas no, son miles de cartas con alpha
+        trunks.castShadow = !0; trunks.receiveShadow = !0;
+        branches.castShadow = !0;
+        // el asfalto y la banquina tienen que recibir lo que proyectan
+        this.roadGroup && this.roadGroup.traverse(o => { if (o.isMesh) o.receiveShadow = !0 });
         // neblina: planos anchos y lejos del corredor de la carretera
         let fogMat = new f9({ color: 0xa9bccd, transparent: !0, opacity: .05, depthWrite: !1 });
         for (let k = 0; k < 14; k++) {
@@ -373,6 +387,7 @@
             holder.position.set(.45, -.13, -.11);
             holder.rotation.y = -Math.PI / 2;
             holder.visible = !1;
+            root.traverse(o => { if (o.isMesh) o.castShadow = !isPov });
             let bones = {};
             root.traverse(o => {
                 if (o.isBone) bones[o.name] = o;
@@ -386,9 +401,36 @@
                 this.loadPhone();
             } else this.driverRig = rig;
             this.seatPose(rig, 0, 0);
+            this.seatRig(rig);
             this.disposers.push(() => this.car.group.remove(holder));
         }, void 0, () => { });
         load(!0); load(!1);
+    }
+    /* La luna es direccional: su sombra solo cubre una caja alrededor del
+       target. En la cinematica el auto recorre cientos de metros, asi que hay
+       que llevarle el foco encima o las sombras se cortan. */
+    moonOver(x, z) {
+        let m = this.deps.moon;
+        if (!m) return;
+        m.target.position.set(x, 0, z);
+        m.position.set(x - 46, 64, z - 32);
+        m.target.updateMatrixWorld();
+        m.updateMatrixWorld();
+    }
+    /* Ancla el rig por la cadera y no por los pies. La pose sentada rota las
+       piernas pero no mueve el root, asi que apoyarlo por los pies lo deja
+       parado adentro del auto con la cabeza afuera. El punto de asiento esta
+       en coordenadas del auto: la carroceria arranca a 0,34 m del piso. */
+    seatRig(rig) {
+        if (!rig) return;
+        let SEAT = { x: .45, y: .62, z: -.30 };
+        let h = rig.root, pelvis = rig.bones.Pelvis || rig.bones.Hip;
+        if (!pelvis) return;
+        h.position.set(0, 0, 0);
+        h.updateWorldMatrix(!0, !0);
+        let w = pelvis.getWorldPosition(new Y);
+        this.car.group.worldToLocal(w);
+        h.position.set(SEAT.x - w.x, SEAT.y - w.y, SEAT.z - w.z);
     }
     /* k = 0 manos al volante, 1 celular arriba; reach = mano yendo al bolsillo */
     seatPose(rig, k, reach) {
@@ -621,4 +663,65 @@
     }
     stopVo() {
         if (this.vo) { try { this.vo.pause() } catch (e) { } this.vo = null }
+    }
+    /* La radio del auto: arranca contenta y se apaga cuando aparece la vieja. */
+    playMusic(vol) {
+        try {
+            if (typeof CDLV_MUSIC !== "string" || !CDLV_MUSIC) return;
+            if (!this.music) { this.music = new Audio(CDLV_MUSIC); this.music.loop = !0 }
+            this.music.volume = HA(vol, 0, 1);
+            this.music.play().catch(() => { });
+        } catch (e) { }
+    }
+    setMusicVolume(v) { if (this.music) try { this.music.volume = HA(v, 0, 1) } catch (e) { } }
+    stopMusic() { if (this.music) { try { this.music.pause() } catch (e) { } this.music = null } }
+    playCrashSfx() {
+        try {
+            if (typeof CDLV_CRASH !== "string" || !CDLV_CRASH) return;
+            let a = new Audio(CDLV_CRASH);
+            a.volume = 1;
+            a.play().catch(() => { });
+            this.crashSfx = a;
+        } catch (e) { }
+    }
+    /* El arbol contra el que termina: uno solo, grande y con sombra propia,
+       porque el bosque instanciado no sirve para poner uno donde haga falta. */
+    buildCrashTree() {
+        let barkTex = this.makeTex(typeof CDLV_BARK === "string" ? CDLV_BARK : "", { repeat: [1.6, 3] });
+        let leafTex = this.makeTex(typeof CDLV_LEAF === "string" ? CDLV_LEAF : "");
+        let trunkMat = new _A({ color: 0x6d5f4c, roughness: 1, map: barkTex });
+        let leafMat = new _A({
+            color: 0x8fa77e, roughness: 1, map: leafTex, alphaTest: .42, side: 2,
+            emissive: new RA(0x0c150e), emissiveIntensity: 1
+        });
+        this.windPatch(leafMat, .22, 1);
+        let g = new eP;
+        let trunk = new fA(new P9(.42, .86, 11, 10, 1), trunkMat);
+        trunk.position.y = 5.5; trunk.castShadow = !0; trunk.receiveShadow = !0;
+        g.add(trunk);
+        let branchGeo = new P9(.05, .17, 2.6, 5, 1); branchGeo.translate(0, 1.3, 0);
+        let leafGeo = this.crossCard(1, 1);
+        for (let k = 0; k < 9; k++) {
+            let a = k / 9 * Math.PI * 2, up = 5.2 + (k % 3) * 1.5, tilt = .55 + (k % 2) * .3;
+            let br = new fA(branchGeo, trunkMat);
+            br.position.set(Math.cos(a) * .5, up, Math.sin(a) * .5);
+            br.rotation.set(Math.cos(a) * tilt, -a, -Math.sin(a) * tilt);
+            br.castShadow = !0;
+            g.add(br);
+            for (let q = 0; q < 3; q++) {
+                let f = .6 + q * .3, s = 2.6 - q * .5;
+                let lf = new fA(leafGeo, leafMat);
+                lf.position.set(
+                    Math.cos(a) * (.5 + 2.6 * Math.sin(tilt) * f),
+                    up + 2.6 * Math.cos(tilt) * f,
+                    Math.sin(a) * (.5 + 2.6 * Math.sin(tilt) * f));
+                lf.rotation.y = a;
+                lf.scale.setScalar(s);
+                g.add(lf);
+            }
+        }
+        g.visible = !1;
+        this.deps.scene.add(g);
+        this.crashTree = g;
+        this.disposers.push(() => this.deps.scene.remove(g));
     }

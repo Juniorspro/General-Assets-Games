@@ -3,7 +3,7 @@
 import base64, json, os, re, sys
 
 SRC = "/root/.claude/uploads/7184cbee-c46c-5dcd-976a-793758168571/ec4d2c6c-lacasadelavieja7.html"
-OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/user/General-Assets-Games/lacasadelavieja8.html"
+OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/user/General-Assets-Games/lacasadelavieja9.html"
 AST = "/home/user/lemi-game/assets/dist"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -55,6 +55,8 @@ def preamble():
         'var CDLV_BARK=%s;' % json.dumps(durl(f"{AST}/bark.jpg", "image/jpeg")),
         'var CDLV_SKY=%s;' % json.dumps(durl(f"{AST}/sky.jpg", "image/jpeg")),
         'var CDLV_OLD_LADY=%s;' % json.dumps(durl(f"{AST}/vieja.glb", "model/gltf-binary")),
+        'var CDLV_MUSIC=%s;' % json.dumps(durl(f"{AST}/music.mp3", "audio/mpeg")),
+        'var CDLV_CRASH=%s;' % json.dumps(durl(f"{AST}/crash.mp3", "audio/mpeg")),
         'var CDLV_VO=%s;' % json.dumps(vo),
         'var CDLV_TXT=%s;' % json.dumps(TXT, ensure_ascii=False),
         'var CDLV_VOT=%s;' % json.dumps(VOT),
@@ -78,7 +80,7 @@ REPLACEMENTS = [
      "this.driverRig=null,this.phoneHolder=null,this.vo=null,this._v1=new Y,this._v2=new Y,this._v3=new Y,"
      "this.startWind(),this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildForest(),"
      "this.buildGrass(),this.buildSky(),this.buildDust(),this.loadCarModel(),this.buildRigs(),this.loadOldLady(),"
-     "this.buildSplit(),this.wireSkipButton(),this.buildShots()"),
+     "this.buildSplit(),this.buildCrashTree(),this.wireSkipButton(),this.buildShots()"),
     # 2b. asfalto y banquina un poco mas claros para que se lean de noche
     ("t=new _A({color:1316122,roughness:.95})", "t=new _A({color:2238250,roughness:.95})"),
     ("o=new _A({color:1711126,roughness:1})", "o=new _A({color:2828834,roughness:1})"),
@@ -95,9 +97,17 @@ REPLACEMENTS = [
      "{group:A,proc:pr,wheels:j,lights:z}"),
     # 4. look(): iluminacion y niebla del bosque
     ('}=this.deps;A==="day"?',
-     '}=this.deps;this.sky&&(this.sky.visible=A!=="night-interior"),A==="forest-night"?(D.intensity=1.5,D.color.set(8230328),D.groundColor.set(2500141),'
-     'P.intensity=3,P.color.set(13292284),t.intensity=0,i.fog.color.set(3360090),i.fog.near=5,i.fog.far=60,'
-     'i.background.set(3360090)):A==="day"?'),
+     '}=this.deps;this.sky&&(this.sky.visible=A!=="night-interior"),A==="forest-night"?('
+     'D.intensity=1.15,D.color.set(2899292),D.groundColor.set(1316892),'
+     'P.intensity=3.4,P.color.set(13228287),t.intensity=0,'
+     # la luna proyecta: sin esto los arboles y el auto flotan sobre el asfalto
+     'P.castShadow=!0,P.shadow.mapSize.setScalar(2048),P.shadow.bias=-.0009,'
+     'P.shadow.camera.left=-70,P.shadow.camera.right=70,P.shadow.camera.top=70,'
+     'P.shadow.camera.bottom=-70,P.shadow.camera.near=1,P.shadow.camera.far=300,'
+     'P.shadow.camera.updateProjectionMatrix(),'
+     # niebla mas abierta: la silueta tiene que leerse a 40 m
+     'i.fog.color.set(1712432),i.fog.near=9,i.fog.far=118,'
+     'i.background.set(1712432)):A==="day"?'),
     # 5. insertar las escenas nuevas al principio
     ('this.shots=[{id:"road-talk"', 'this.shots=this.introShots(A,P,D,i,t).concat([{id:"road-talk"'),
     ('P.set({fade:(s-.7)/.3})}}]}start(){', 'P.set({fade:(s-.7)/.3})}}])}start(){'),
@@ -106,7 +116,7 @@ REPLACEMENTS = [
      "update(A){if(this.finished)return;this.dbg(),this.elapsed+=A,this.shotTime+=A,"),
     # 7. finish/dispose limpian lo nuevo
     ("finish(){this.finished=!0,this.engine?.stop()",
-     "finish(){this.finished=!0,this.splitHide(),this.stopVo(),"
+     "finish(){this.finished=!0,this.splitHide(),this.stopVo(),this.stopMusic(),"
      "this.povRig&&(this.povRig.root.visible=!1),this.driverRig&&(this.driverRig.root.visible=!1),"
      "this.phoneHolder&&(this.phoneHolder.visible=!1),this.grass&&(this.grass.visible=!1),"
      "this.dust&&(this.dust.mesh.visible=!1),this.engine?.stop()"),
@@ -134,16 +144,13 @@ def main():
         assert a < b, (frm, to)
         return text[:a] + ins + text[b:]
 
-    # fuera el montaje de dias caminando en circulo (montage + strange + wake)
-    cls = cut(cls, '{id:"montage"', '{id:"descent"', "...this.houseShots(A,P,D,i),")
-    # fuera el chico parado en la carretera con el auto que pasa
+    # El orden original era:
+    #   road-talk road-car title arrival montage strange wake descent sheet reveal chase hide
+    # Ahora la intro es el choque, asi que todo lo que iba entre el titulo y la
+    # persecucion (llegar en auto, el montaje de dias, el sotano, la sabana)
+    # sobra: el chico se despierta en la casa directamente despues del golpe.
     cls = cut(cls, '{id:"road-talk"', '{id:"title"')
-    # la llegada ahora es manejando y bajandose del auto
-    cls = cut(cls, '{id:"arrival"', "...this.houseShots(A,P,D,i),", "...this.arriveShots(A,P,D,i,t),")
-    # fuera la bajada al sotano
-    cls = cut(cls, '{id:"descent"', '{id:"sheet"')
-    # fuera la sabana y la aparicion de la vieja
-    cls = cut(cls, '{id:"sheet"', '{id:"chase"')
+    cls = cut(cls, '{id:"arrival"', '{id:"chase"', "...this.houseShots(A,P,D,i),")
 
     methods = open(os.path.join(HERE, "methods.js"), encoding="utf-8").read()
     shots = open(os.path.join(HERE, "shots.js"), encoding="utf-8").read()
