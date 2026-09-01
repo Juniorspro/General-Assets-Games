@@ -153,10 +153,10 @@
         // el asfalto y la banquina tienen que recibir lo que proyectan
         this.roadGroup && this.roadGroup.traverse(o => { if (o.isMesh) o.receiveShadow = !0 });
         // neblina: planos anchos y lejos del corredor de la carretera
-        let fogMat = new f9({ color: 0xa9bccd, transparent: !0, opacity: .05, depthWrite: !1 });
+        let fogMat = new f9({ color: 0xa9bccd, transparent: !0, opacity: .022, depthWrite: !1 });
         for (let k = 0; k < 14; k++) {
-            let m = new fA(new k9(D.range(70, 130), D.range(9, 20)), fogMat);
-            m.position.set(D.range(-150, 150), D.range(1.2, 5.4), roadZ + (D.chance(.5) ? 1 : -1) * D.range(30, 86));
+            let m = new fA(new k9(D.range(90, 160), D.range(9, 20)), fogMat);
+            m.position.set(D.range(-150, 150), D.range(1.2, 5.4), roadZ + (D.chance(.5) ? 1 : -1) * D.range(52, 104));
             m.rotation.y = D.range(-.35, .35);
             m.renderOrder = 3;
             root.add(m);
@@ -574,7 +574,9 @@
         car.updateMatrixWorld(!0);
         // el ojo va adelante y arriba del centro del auto: mas atras se come
         // el capot y la parte de abajo del parabrisas
-        this._v1.set(HP(.45, .58, z), HP(1.46, 1.50, z), HP(.34, .26, z));
+        // manejando el ojo va adelante para no comerse el capot; al mirar el
+        // telefono vuelve al cuerpo, si no el celular queda detras de la camara
+        this._v1.set(HP(.45, .55, z), HP(1.46, 1.38, z), HP(.34, -.06, z));
         car.localToWorld(this._v1);
         this._v2.set(.45, 1.40, 16); car.localToWorld(this._v2);
         camera.position.copy(this._v1);

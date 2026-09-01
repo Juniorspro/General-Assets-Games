@@ -238,7 +238,7 @@
                 showRig(this.povRig, !1);
                 showRig(this.driverRig, !0);
                 this.phoneHolder && (this.phoneHolder.visible = !1);
-                this.car.group.position.set(TREE.x - 3.4, 0, TREE.z + 2.6);
+                this.car.group.position.set(TREE.x - 2.6, 0, TREE.z + 2.1);
                 this.car.group.rotation.set(0, Math.PI / 2 + .55, 0);
                 for (let w of this.car.wheels) w.rotation.x = 0;
                 for (let l of this.car.lights) l.intensity = 110;
@@ -254,7 +254,7 @@
                 let st = this.shotTime, k = HA(st / 2.6, 0, 1), car = this.car.group;
                 // rebota contra el tronco y se queda
                 let back = aD(HA(st / .45, 0, 1)) * 1.1 - Math.exp(-st * 4) * .4;
-                car.position.set(TREE.x - 3.4 - back * .5, 0, TREE.z + 2.6 + back * .5);
+                car.position.set(TREE.x - 2.6 - back * .5, 0, TREE.z + 2.1 + back * .5);
                 car.rotation.z = Math.sin(st * 26) * .05 * Math.exp(-st * 3);
                 this.moonOver(car.position.x, car.position.z);
                 // camara exterior, del lado del asfalto
@@ -275,7 +275,7 @@
                 showRig(this.driverRig, !1);
                 showRig(this.povRig, !0);
                 this.phoneHolder && (this.phoneHolder.visible = !1);
-                this.car.group.position.set(TREE.x - 3.9, 0, TREE.z + 3.1);
+                this.car.group.position.set(TREE.x - 3.1, 0, TREE.z + 2.6);
                 this.car.group.rotation.set(0, Math.PI / 2 + .55, 0);
                 A.fov = 58; A.updateProjectionMatrix();
                 this.stopMusic();
