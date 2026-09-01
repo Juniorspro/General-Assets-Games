@@ -5233,6 +5233,8 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
                 this.findFrontDoor();
                 this.swingDoor(0);
                 this.stepAt = -1; this.knocked = !1; this.walkClip = !0;
+                this.lastPX = carX - 1.5; this.lastPZ = stopZ - .35;
+                this.faceY = Math.atan2(doorX - (carX - 1.5), (doorZ - 1.5) - (stopZ - .35));
                 A.fov = 52; A.updateProjectionMatrix();
                 P.set({ fade: 0, subtitle: "", cardTitle: "", cardSub: "" });
             },
@@ -5245,7 +5247,12 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
                     px = HP(doorX, doorX, e2); pz = HP(doorZ - 1.5, doorZ + 1.1, e2);
                 }
                 g.position.set(px, y0, pz);
-                g.rotation.y = Math.atan2(doorX - px, (doorZ - .2) - pz + .001);
+                // orientar por la velocidad real: apuntar al objetivo se da vuelta
+                // 180 grados en cuanto lo pasa de largo
+                let vx = px - this.lastPX, vz = pz - this.lastPZ;
+                if (Math.hypot(vx, vz) > 1e-4) this.faceY = Math.atan2(vx, vz);
+                this.lastPX = px; this.lastPZ = pz;
+                g.rotation.y = this.faceY;
                 let moving = st < 4.4 || st > 6.4;
                 if (this.rig && this.walkClip !== moving) {
                     this.walkClip = moving;
