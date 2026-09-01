@@ -122,8 +122,8 @@ export class Director {
                 // camara clavada al borde del asfalto: el auto le pasa al lado
                 // a los 2 s, casi rozandola
                 const anchor = carAt(5.6 + 2.0);
-                cam().position.set(3.4, 0.52, anchor);
-                cam().lookAt(0.2, 0.75, z);
+                cam().position.set(4.6, 0.86, anchor);
+                cam().lookAt(0.2, 0.80, z);
                 g.dust.emit(0.9, 0.05, z - 2.4, 1, 0.5);
             },
         };
