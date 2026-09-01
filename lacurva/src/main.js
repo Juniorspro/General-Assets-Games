@@ -139,7 +139,7 @@ class Game {
     }
 
     buildTorch() {
-        const L = new THREE.SpotLight(0xcfe0ff, 26, 16, 0.52, 0.62, 1.5);
+        const L = new THREE.SpotLight(0xcfe0ff, 22, 17, 0.60, 0.88, 1.4);
         L.castShadow = true;
         L.shadow.mapSize.set(1024, 1024);
         L.shadow.bias = -0.003;
@@ -152,15 +152,16 @@ class Game {
         const cam = this.engine.camera;
         this.engine.scene.add(cam);          // si no, los hijos de la camara no se dibujan
         if (this.phoneModel) {
+            // tamano real: el modelo ya viene normalizado a 14,8 cm de alto
             const v = this.phoneModel.clone(true);
-            v.scale.setScalar(1.9);
-            v.position.set(0.26, -0.24, -0.45);
-            v.rotation.set(-0.35, 0.22, 0.12);
+            v.scale.setScalar(1);
+            v.position.set(0.19, -0.16, -0.42);
+            v.rotation.set(-0.42, 0.26, 0.10);
             v.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = false } });
             v.visible = false;
             cam.add(v);
             this.phoneView = v;
-            const screen = new THREE.PointLight(0xa8c8ff, 0.5, 0.9, 2);
+            const screen = new THREE.PointLight(0xa8c8ff, 0.28, 0.55, 2);
             screen.position.set(0, 0.05, 0);
             v.add(screen);
         }
