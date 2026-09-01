@@ -233,6 +233,23 @@ export class Road {
 
 }
 
+/* Un degrade radial dibujado en un canvas: convierte cada particula en una
+   bocanada en vez de un cuadrado plano. */
+function puffTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+}
+
 /* Polvo y tierra levantada: se emiten en el derrape y en el impacto. */
 export class Dust {
     constructor(scene, max = 260) {
@@ -240,6 +257,7 @@ export class Dust {
         const geo = new THREE.PlaneGeometry(1, 1);
         this.mat = new THREE.MeshBasicMaterial({
             color: 0xa2957c, transparent: true, opacity: 0.42, depthWrite: false,
+            map: puffTexture(), fog: true,
         });
         this.mesh = new THREE.InstancedMesh(geo, this.mat, max);
         this.mesh.frustumCulled = false;
@@ -269,7 +287,7 @@ export class Dust {
             p.vx = (Math.random() - 0.5) * 3.4 * power;
             p.vy = (0.6 + Math.random() * 1.9) * power;
             p.vz = (Math.random() - 0.5) * 3.4 * power;
-            p.s = (0.35 + Math.random() * 0.75) * power;
+            p.s = Math.min((0.35 + Math.random() * 0.75) * power, 1.5);
             p.r = Math.random() * Math.PI;
         }
     }
@@ -281,7 +299,9 @@ export class Dust {
             p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
             p.vy -= 1.4 * dt; p.vx *= 0.965; p.vz *= 0.965;
             const k = sat(p.life / p.ttl);
-            const s = p.s * (0.28 + k * 1.15);
+            // crece al salir y se achica al morir: con la textura suave lee
+            // como una bocanada que se deshace
+            const s = p.s * (0.35 + k * 1.0) * (k > 0.75 ? 1 - (k - 0.75) * 3.6 : 1);
             this._v.set(p.x, Math.max(p.y, 0.03), p.z);
             this._q.copy(camera.quaternion);
             this._s.set(s, s, s);

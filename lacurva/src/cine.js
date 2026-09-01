@@ -233,7 +233,9 @@ export class Director {
                 roadSetup();
                 g.boySeat(true, false);
                 cam().fov = 50; cam().updateProjectionMatrix();
-                hud.set({ fade: 0, blur: 0, lids: 0, flash: 0 });
+                // el arbol contra el que va a chocar, plantado donde termina
+                this.crashZ = carAt(this.elapsed + 1.9) + 1.6;
+                g.road.heroTree.position.set(-15.6, 0, this.crashZ + 3.1);
             },
             update: () => {
                 const t = this.t, k = sat(t / 1.9);
@@ -245,8 +247,7 @@ export class Director {
                 // plano exterior: el auto derrapando hacia el arbol
                 cam().position.set(off + 11, 3.1, z - 8);
                 cam().lookAt(off, 1.0, z + 5);
-                g.dust.emit(off, 0.05, z - 2, 5, 2);
-                g.road.heroTree.position.set(-11.5, 0, carAt(this.elapsed) + 15.5);
+                g.dust.emit(off, 0.05, z - 2, 4, 1.3);
             },
         };
 
@@ -256,12 +257,13 @@ export class Director {
             enter: () => {
                 roadSetup();
                 g.boySeat(true, false);
+                this.crashZ = carAt(this.elapsed) + 1.6;
+                g.road.heroTree.position.set(-15.6, 0, this.crashZ + 3.1);
+                car().group.position.set(-14.2, 0, this.crashZ);
                 g.audio.crash();
                 g.engine.shake(0.55, 1.1);
                 hud.set({ flash: 1 });
-                const p = car().group.position;
-                g.dust.emit(p.x, 0.4, p.z + 2.4, 60, 2.6);
-                this.crashZ = p.z;
+                g.dust.emit(-14.6, 0.5, this.crashZ + 2.6, 46, 1.4);
             },
             update: () => {
                 const t = this.t, k = sat(t / 1.5);
