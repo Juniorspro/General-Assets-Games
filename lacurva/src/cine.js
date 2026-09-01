@@ -54,15 +54,35 @@ export class Director {
         /* posicion del auto en el tiempo global de la cinematica */
         const carAt = t => -170 + t * SPEED;
 
+        /* Cada plano arma su propio escenario. Depender de lo que dejo el
+           anterior hace que saltar (o entrar en frio desde la consola) muestre
+           la escena equivocada o directamente negro. */
+        const roadSetup = () => {
+            g.engine.look('road-day');
+            g.road.group.visible = true;
+            g.house.group.visible = false;
+            g.torch.visible = false;
+            car().group.visible = true;
+            car().group.rotation.set(0, 0, 0);
+            g.keyMesh.visible = false;
+        };
+        const houseSetup = () => {
+            g.engine.look('house');
+            g.house.group.visible = true;
+            g.road.group.visible = false;
+            car().group.visible = false;
+            g.boy.root.visible = false;
+            g.phoneVisible(false);
+            g.torch.visible = false;
+            g.keyMesh.visible = false;
+        };
+
         // ---------------------------------------------------------------- ACTO 1
         const drivePast = {
             id: 'drive-past',
             duration: 5.6,
             enter: () => {
-                g.engine.look('road-day');
-                g.road.group.visible = true;
-                g.house.group.visible = false;
-                car().group.visible = true;
+                roadSetup();
                 car().setHeadlights(false);
                 g.boySeat(true, false);
                 hud.set({ fade: 1, sub: '', cardOn: false, hudOn: false, skipOn: true, vignette: 0.25, blur: 0, lids: 0 });
@@ -86,7 +106,7 @@ export class Director {
         const drivePass = {
             id: 'drive-pass',
             duration: 3.9,
-            enter: () => { cam().fov = 42; cam().updateProjectionMatrix() },
+            enter: () => { roadSetup(); g.boySeat(true, false); cam().fov = 42; cam().updateProjectionMatrix() },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
                 car().group.position.set(0, 0, z);
@@ -104,9 +124,12 @@ export class Director {
             id: 'pov-happy',
             duration: 6.5,
             enter: () => {
+                roadSetup();
+                g.boySeat(true, true);
                 cam().fov = 62; cam().updateProjectionMatrix();
                 g.phoneVisible(true);
-                hud.set({ sub: '' });
+                g.audio.playMusic(0.55);
+                hud.set({ sub: '', fade: 0, blur: 0, lids: 0, cardOn: false, hudOn: false, skipOn: true });
             },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
@@ -126,6 +149,9 @@ export class Director {
             id: 'look-up',
             duration: 1.5,
             enter: () => {
+                roadSetup();
+                g.boySeat(true, true);
+                g.phoneVisible(true);
                 g.audio.duckMusic(0.16, 0.35);
                 g.audio.stinger();
                 g.lady.root.visible = true;
@@ -147,8 +173,11 @@ export class Director {
             id: 'silhouette',
             duration: 2.2,
             enter: () => {
+                roadSetup();
+                g.boySeat(true, true);
                 g.phoneVisible(false);
-                hud.set({ sub: '' });
+                cam().fov = 55; cam().updateProjectionMatrix();
+                hud.set({ sub: '', fade: 0, blur: 0, lids: 0, cardOn: false });
                 g.lady.root.visible = true;
                 if (!g.ladyPlaced) g.ladyOnRoad(carAt(this.elapsed) + 60);
             },
@@ -165,7 +194,12 @@ export class Director {
         const swerve = {
             id: 'swerve',
             duration: 2.5,
-            enter: () => { g.audio.screech(); g.engine.shake(0.06, 2.4) },
+            enter: () => {
+                roadSetup();
+                g.boySeat(true, true);
+                cam().fov = 46; cam().updateProjectionMatrix();
+                g.audio.screech(); g.engine.shake(0.06, 2.4);
+            },
             update: () => {
                 const t = this.t, k = sat(t / 2.5);
                 // el auto tira a la izquierda y se va de la ruta
@@ -188,8 +222,10 @@ export class Director {
             id: 'off-road',
             duration: 1.9,
             enter: () => {
-                cam().fov = 50; cam().updateProjectionMatrix();
+                roadSetup();
                 g.boySeat(true, false);
+                cam().fov = 50; cam().updateProjectionMatrix();
+                hud.set({ fade: 0, blur: 0, lids: 0, flash: 0 });
             },
             update: () => {
                 const t = this.t, k = sat(t / 1.9);
@@ -210,6 +246,8 @@ export class Director {
             id: 'impact',
             duration: 1.5,
             enter: () => {
+                roadSetup();
+                g.boySeat(true, false);
                 g.audio.crash();
                 g.engine.shake(0.55, 1.1);
                 hud.set({ flash: 1 });
@@ -235,8 +273,10 @@ export class Director {
             id: 'black-out',
             duration: 3.4,
             enter: () => {
+                roadSetup();
+                g.boySeat(true, true);          // la camara queda dentro de la cabeza
+                cam().fov = 58; cam().updateProjectionMatrix();
                 g.audio.heartbeat(true); g.audio.duckMusic(0, 1.2);
-                g.setHeadHidden(g.boy, true);   // la camara queda dentro de la cabeza
             },
             update: () => {
                 const t = this.t, k = sat(t / 3.4);
@@ -256,10 +296,8 @@ export class Director {
             id: 'wake-blink',
             duration: 4.2,
             enter: () => {
-                g.engine.look('house');
-                g.house.group.visible = true;
-                g.boySeat(false);
-                g.phoneVisible(false);
+                houseSetup();
+                g.lady.root.visible = false;
                 cam().fov = 68; cam().updateProjectionMatrix();
                 cam().position.set(g.wakeSpot.x, 0.22, g.wakeSpot.z);
                 g.audio.playAmbience(0.5);
@@ -288,7 +326,13 @@ export class Director {
         const sitUp = {
             id: 'sit-up',
             duration: 4.0,
-            enter: () => { hud.set({ lids: 0.08 }) },
+            enter: () => {
+                houseSetup();
+                g.lady.root.visible = false;
+                cam().fov = 68; cam().updateProjectionMatrix();
+                g.audio.playAmbience(0.5);
+                hud.set({ lids: 0.08, fade: 0, flash: 0, cardOn: false, hudOn: false, skipOn: true });
+            },
             update: () => {
                 const t = this.t, k = smooth(sat(t / 4.0));
                 const w = g.wakeSpot;
@@ -306,6 +350,10 @@ export class Director {
             id: 'reveal',
             duration: 5.6,
             enter: () => {
+                houseSetup();
+                cam().fov = 68; cam().updateProjectionMatrix();
+                g.audio.playAmbience(0.5);
+                hud.set({ fade: 0, blur: 0, lids: 0, flash: 0, vignette: 0.6 });
                 // la vieja cruza el fondo del pasillo, lejos, sin mirarlo
                 const [ax, az] = toWorld(3, 8);
                 const [bx, bz] = toWorld(20, 8);
