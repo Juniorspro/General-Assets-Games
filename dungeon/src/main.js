@@ -238,49 +238,76 @@ class Dungeon {
         this.placeFurniture(lv, base, group);
     }
 
-    /* Arañas colgando del techo, como en las fotos. Son la unica luz fija:
-       dan altura al espacio y dejan el piso en penumbra. */
+    /* Faroles colgando del techo. La luz va dentro del aro, asi que el aro y
+       los brazos proyectan su sombra de rueda sobre el techo: es el detalle
+       que hace que se lean como lamparas y no como bolitas flotando. */
     placeChandeliers(lv, base, group) {
         const rng = new Rng(0x7A0 + lv * 977);
         const armMat = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: .6, metalness: .35 });
         const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdda2 });
-        const bulbGeo = new THREE.SphereGeometry(.055, 7, 5);
-        const ringGeo = new THREE.TorusGeometry(.42, .035, 6, 14);
-        const chainGeo = new THREE.CylinderGeometry(.02, .02, 1, 4);
-        let placed = 0;
-        for (let i = 0; i < 4000 && placed < 20; i++) {
-            const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
-            if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
-            // solo donde hay lugar: en un pasillo de una celda queda pegada
-            let room = true;
-            for (let dr = -1; dr <= 1 && room; dr++)
-                for (let dc = -1; dc <= 1; dc++)
-                    if (!isOpen(lv, c + dc, r + dr)) { room = false; break }
-            if (!room) continue;
+        const bulbGeo = new THREE.SphereGeometry(.05, 7, 5);
+        const chainGeo = new THREE.CylinderGeometry(.018, .018, 1, 4);
+        const armGeo = new THREE.BoxGeometry(.44, .035, .05);
 
+        const hang = (c, r, big) => {
             const [x, z] = toWorld(c, r);
             const g = new THREE.Group();
             g.position.set(x, base, z);
+            const rad = big ? .46 : .3, drop = big ? 1.15 : .8;
+            const arms = big ? 8 : 5;
+
             const chain = new THREE.Mesh(chainGeo, armMat);
-            chain.scale.y = 1.1;
-            chain.position.y = WALL_H - 0.55;
+            chain.scale.y = drop;
+            chain.position.y = WALL_H - drop / 2;
+            chain.castShadow = true;
             g.add(chain);
-            const ring = new THREE.Mesh(ringGeo, armMat);
+
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(rad, .03, 6, 16), armMat);
             ring.rotation.x = Math.PI / 2;
-            ring.position.y = WALL_H - 1.1;
+            ring.position.y = WALL_H - drop;
+            ring.castShadow = true;
             g.add(ring);
-            for (let k = 0; k < 6; k++) {
-                const a = k / 6 * Math.PI * 2;
+
+            for (let k = 0; k < arms; k++) {
+                const a = k / arms * Math.PI * 2;
+                // el brazo que va del centro al aro: es lo que dibuja la rueda
+                const arm = new THREE.Mesh(armGeo, armMat);
+                arm.scale.x = rad / .22;
+                arm.position.set(Math.cos(a) * rad / 2, WALL_H - drop, Math.sin(a) * rad / 2);
+                arm.rotation.y = -a;
+                arm.castShadow = true;
+                g.add(arm);
+
                 const b = new THREE.Mesh(bulbGeo, bulbMat);
-                b.position.set(Math.cos(a) * .42, WALL_H - 1.0, Math.sin(a) * .42);
+                b.position.set(Math.cos(a) * rad, WALL_H - drop + .09, Math.sin(a) * rad);
                 g.add(b);
             }
-            const L = new THREE.PointLight(0xffca86, 13, 17, 1.7);
-            L.position.y = WALL_H - 1.15;
+
+            // la luz va justo debajo del aro: proyecta la rueda hacia arriba
+            const L = new THREE.PointLight(0xffca86, big ? 15 : 9, big ? 19 : 13, 1.75);
+            L.position.y = WALL_H - drop - .04;
+            L.shadow.mapSize.set(512, 512);
+            L.shadow.bias = -0.006;
+            L.shadow.camera.near = 0.08;
             g.add(L);
             group.add(g);
             (this.lamps || (this.lamps = [])).push({ L, phase: rng.range(0, 9) });
-            placed++;
+        };
+
+        /* Rejilla floja: un farol cada pocas celdas, en salas y en pasillos.
+           Antes solo iban donde habia 3x3 libre, asi que los pasillos —que son
+           casi todo el mapa— quedaban a oscuras. */
+        const STEP = 4;
+        for (let r = 1; r < H - 1; r++) {
+            for (let c = 1; c < W - 1; c++) {
+                if ((c % STEP) || (r % STEP)) continue;
+                if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) continue;
+                let open3 = true;
+                for (let dr = -1; dr <= 1 && open3; dr++)
+                    for (let dc = -1; dc <= 1; dc++)
+                        if (!isOpen(lv, c + dc, r + dr)) { open3 = false; break }
+                hang(c, r, open3);
+            }
         }
     }
 
@@ -383,6 +410,7 @@ class Dungeon {
                cada frame: un toque corto puede caer entero entre dos frames y
                perderse, justo cuando mas rapido va todo. */
             if (e.code === 'KeyX' || e.code === 'Space') this.slideRequested = true;
+            if (e.code === 'KeyR' || e.code === 'CapsLock') this.autoRun = !this.autoRun;
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
         });
         addEventListener('keyup', e => { this.keys[e.code] = false });
@@ -441,11 +469,25 @@ class Dungeon {
                 if (t.identifier === this.look.id) { this.look.active = false; this.look.id = -1 }
             }
         };
-        // boton de deslizar, como el DESLIZAR de las fotos
-        const slideBtn = document.getElementById('slide');
-        const fire = e => { e.preventDefault(); e.stopPropagation(); this.slideRequested = true };
-        slideBtn.addEventListener('touchstart', fire, { passive: false });
-        slideBtn.addEventListener('mousedown', fire);
+        /* Los tres botones de las fotos: agacharse, alternar carrera y
+           deslizar. El de deslizar solo se enciende cuando vas corriendo. */
+        const btn = (id, down, up) => {
+            const el = document.getElementById(id);
+            const a = e => { e.preventDefault(); e.stopPropagation(); down() };
+            el.addEventListener('touchstart', a, { passive: false });
+            el.addEventListener('mousedown', a);
+            if (up) {
+                const b = e => { e.preventDefault(); up() };
+                el.addEventListener('touchend', b);
+                el.addEventListener('touchcancel', b);
+                el.addEventListener('mouseup', b);
+                el.addEventListener('mouseleave', b);
+            }
+            return el;
+        };
+        this.slideBtn = btn('slide', () => { this.slideRequested = true });
+        this.runBtn = btn('runtoggle', () => { this.autoRun = !this.autoRun });
+        btn('crouch', () => { this.touchCrouch = true }, () => { this.touchCrouch = false });
 
         addEventListener('touchstart', onStart, { passive: false });
         addEventListener('touchmove', onMove, { passive: false });
@@ -466,7 +508,7 @@ class Dungeon {
         /* Correr automatico: cuanto mas arriba va el joystick, mas rapido, y
            pasado el 70% del recorrido entra en carrera sin apretar nada. */
         const stickRun = sm > 0.7 && -this.stick.y > 0.55;
-        this.crouch = !!(k.KeyC || k.ControlLeft || k.ControlRight);
+        this.crouch = !!(k.KeyC || k.ControlLeft || k.ControlRight || this.touchCrouch);
 
         /* Deslizamiento: corto, muy rapido y con la camara tirada al piso.
            Es la unica forma de cruzar los huecos sin frenar a agacharse. */
@@ -474,7 +516,7 @@ class Dungeon {
         const wantSlide = !!this.slideRequested;
         this.slideRequested = false;
         if (this.slideT > 0) this.slideT -= dt;
-        else if (wantSlide && this.slideCd <= 0 && Math.hypot(fwd, str) > 0.35) {
+        else if (wantSlide && this.slideCd <= 0 && this.running && Math.hypot(fwd, str) > 0.35) {
             this.slideT = SLIDE_TIME;
             this.slideCd = SLIDE_TIME + SLIDE_COOLDOWN;
             this.slideDir = null;
@@ -482,7 +524,8 @@ class Dungeon {
         }
         const sliding = this.slideT > 0;
 
-        const wantRun = (!!(k.ShiftLeft || k.ShiftRight) || stickRun) && !this.crouch && !sliding && this.stamina > 0.02;
+        const wantRun = (!!(k.ShiftLeft || k.ShiftRight) || stickRun || this.autoRun)
+            && !this.crouch && !sliding && this.stamina > 0.02;
 
         const moving = Math.hypot(fwd, str);
         let spd = this.crouch ? CROUCH_SPD : wantRun ? RUN : WALK;
@@ -549,9 +592,30 @@ class Dungeon {
         this.lamp.position.set(this.pos.x, this.y + this.eyeY + 0.12, this.pos.z);
         this.lamp.intensity = 19 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.8;
 
+        /* Una luz puntual con sombra cuesta seis caras de render, asi que solo
+           las proyectan las mas cercanas: son las unicas cuya rueda en el techo
+           se llega a ver. La lista se reordena cada pocos frames, no siempre. */
+        // arranca en positivo para que la primera asignacion salga ya en el
+        // primer frame y no despues de un cuarto de segundo a oscuras
+        this.shadowTick = (this.shadowTick === undefined ? 1 : this.shadowTick) + dt;
+        if (this.lamps && this.shadowTick > 0.25) {
+            this.shadowTick = 0;
+            const px = this.pos.x, py = this.y, pz = this.pos.z;
+            for (const l of this.lamps) {
+                l.L.getWorldPosition(this._lp || (this._lp = new THREE.Vector3()));
+                l.d = this._lp.distanceToSquared({ x: px, y: py + 1, z: pz });
+            }
+            const near = this.lamps.slice().sort((a, b) => a.d - b.d).slice(0, 3);
+            const set = new Set(near);
+            for (const l of this.lamps) {
+                const want = set.has(l);
+                if (l.L.castShadow !== want) l.L.castShadow = want;
+            }
+        }
         for (const l of this.lamps || []) {
-            const f = 0.9 + 0.1 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
-            l.L.intensity = 13 * f;
+            const base = l.L.distance > 15 ? 15 : 9;
+            const f = 0.92 + 0.08 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
+            l.L.intensity = base * f;
         }
 
         /* Solo se dibuja el nivel en el que esta y el de al lado. Son tres
@@ -572,9 +636,20 @@ class Dungeon {
         const fill = document.getElementById('stam-fill');
         fill.style.width = (this.stamina * 100) + '%';
         fill.style.background = this.stamina < 0.25 ? '#b4483c' : '#c9c2ae';
+        // el boton de deslizar se enciende solo cuando hay carrera que aprovechar
+        const canSlide = this.running && this.slideCd <= 0;
+        if (this._canSlide !== canSlide) {
+            this._canSlide = canSlide;
+            this.slideBtn && this.slideBtn.classList.toggle('on', canSlide);
+        }
+        if (this._auto !== this.autoRun) {
+            this._auto = this.autoRun;
+            this.runBtn && this.runBtn.classList.toggle('on', !!this.autoRun);
+        }
         const st = document.getElementById('state');
         const want = this.slideT > 0 ? 'deslizando'
-            : this.crouch ? 'agachado' : this.running ? 'corriendo' : '';
+            : this.crouch ? 'agachado'
+                : this.running ? (this.autoRun ? 'corriendo · automático' : 'corriendo') : '';
         if (this._state !== want) { this._state = want; st.textContent = want }
         const p = document.getElementById('prompt');
         const locked = document.pointerLockElement === this.renderer.domElement;
@@ -598,6 +673,8 @@ function loop(now) {
         x: +game.pos.x.toFixed(2), z: +game.pos.z.toFixed(2), y: +game.y.toFixed(2),
         level: levelAt(game.y), running: game.running, roll: +game.roll.toFixed(3),
         sliding: (game.slideT || 0) > 0, eye: +(game.eyeY || 0).toFixed(2),
+        autoRun: !!game.autoRun, lamps: (game.lamps || []).length,
+        shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,
         fov: +game.camera.fov.toFixed(1),
     };
 }
