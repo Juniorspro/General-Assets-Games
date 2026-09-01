@@ -124,7 +124,7 @@
                 if (pov && pov.phoneHolder) {
                     pov.phoneHolder.getWorldPosition(this._v3);
                     A.lookAt(this._v3);
-                    pov.phoneGlow && (pov.phoneGlow.material.opacity = .5 + Math.sin(tt * 3) * .06);
+                    pov.phoneLight && (pov.phoneLight.intensity = 1.4 + Math.sin(tt * 3) * .18);
                 }
                 let lineP = Mi(HA(st / .34, 0, 1)),
                     panelP = Mi(HA((st - .34) / .72, 0, 1));
