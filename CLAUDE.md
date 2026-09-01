@@ -111,6 +111,98 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Septuagésima novena vuelta (2026-09-01): **BARRIO** — la puerta lleva al cielo, y hay parkour entre nubes
+
+Pedido: *"que sea en primera persona una vez termina la cinemática, pero que sí demos sombra del
+personaje real; al pasar la puerta no volvamos al barrio, ya pasemos a un lugar súper raro donde es
+puro cielo y de la nada caemos en una nube y vamos viajando entre nubes saltando en parkour y tenemos
+gravedad baja; agregá buena movilidad; y generá mejores modelos 3D de props, la wea que generás está
+toda corrupta"*.
+
+El cielo vive en `herramientas/barrio/partes/u.js`, que es archivo nuevo.
+
+#### VIVE EN LA MISMA ESCENA QUE EL BARRIO Y QUE EL CUARTO
+
+Por la misma razón que el cuarto: una segunda escena obligaría a duplicar el cielo, las luces, la
+lluvia y el post, que son las cuatro cosas que hacen que los tres sitios se vean del mismo juego. Lo
+único que los separa es la altura —las nubes viven en y = 400— y una lista que se prende y se apaga.
+
+**Y LA COLISIÓN ES UN DISCO Y NO LA MALLA.** Una nube son ocho o diez esferas achatadas fundidas:
+probar contra eso sería un rayo por cuadro contra cuatrocientos triángulos para averiguar algo que un
+centro y un radio ya dicen. Además el disco es lo que el jugador **lee**: la silueta de la nube vista
+desde arriba.
+
+#### LOS TRES NÚMEROS DEL SALTO SALEN DE LO QUE SE QUIERE, NO AL REVÉS
+
+No se eligen la gravedad y el impulso por separado: se elige **cuánto se sube y cuánto se tarda**, y
+de ahí salen los dos. Con 2,6 m de alto y 1,05 s de subida, `g = 2h/t² = 4,72` y `v = 2h/t = 4,95`.
+Eso da **2,1 s de aire** —se siente flotar, que es lo que se pidió— y, con la carrera en 3,2 m/s,
+**6,7 m de alcance**. Los huecos entre nubes se dibujan por debajo de eso.
+
+La movilidad son otras tres cosas, y ninguna se ve:
+- **Control en el aire al 55 %.** En cero, un salto mal apuntado no se corrige y el parkour es
+  lotería; en cien, el salto deja de tener peso y da lo mismo desde dónde se salte.
+- **Y el roce del aire al 12 %:** lo que hace que un salto largo llegue es que la velocidad que se
+  traía no se evapore a mitad de camino.
+- **Coyote de 0,12 s y salto guardado de 0,17.** Se puede saltar un pestañeo después de haberse ido
+  del borde, y un salto apretado un pestañeo antes de tocar vale igual.
+
+#### EL CAMINO SE JUEGA SOLO, PORQUE UNO GENERADO Y NO JUGADO ES UNO ROTO QUE TODAVÍA NO SE SABE
+
+`nubJuega()` apunta a la nube siguiente, corre y salta **en el labio de la nube en la que está** —
+midiendo contra la de destino, el salto sale antes o después según el tamaño de la de enfrente, que
+no tiene nada que ver.
+
+Y encontró el defecto: con el hueco creciendo hasta 5,7 m y **la subida sorteada aparte del hueco**,
+el auto-jugador se clavaba en la **nube 37 de 42** y no pasaba de ahí en nueve mil cuadros. La causa
+es que el salto llega a 2,6 m de alto **y** a 6,7 de largo, pero **no a las dos cosas a la vez**: cada
+tanto salían las dos grandes juntas y ese salto no existía. Con el hueco topado en 4,0 y la subida en
+1,15 lo termina: **42 de 42 nubes, 41 saltos, 22 cuadros de caída**.
+
+**Y CAERSE NO ES PERDER: SE VUELVE A LA ÚLTIMA NUBE PISADA.** Un parkour en el que un error cuesta el
+nivel entero se cierra a los cinco minutos.
+
+**Y LA ÚLTIMA NUBE DEVUELVE AL BARRIO.** Si la puerta lleva al cielo y el cielo no lleva a ninguna
+parte, doscientas treinta y cuatro casas y noventa y seis faroles dejan de ser jugables y pasan a
+verse sólo en la cinemática. El camino tiene que terminar en algún lado, y terminar donde empezó la
+historia es lo único que cierra.
+
+#### TRES COSAS DE LUZ QUE SÓLO APARECEN MIRANDO
+
+1. **EL DOMO DEL CIELO SEGUÍA PUESTO, y no está en la lista del barrio.** `esconde()` lo saltea a
+   propósito —de noche el cielo es el cielo en los tres sitios— así que apagar el barrio lo dejaba
+   encendido: medido en la captura, **una banda negra cruzando el horizonte** por delante del azul.
+   Acá el fondo es un color y no un domo.
+2. **EL HEMISFÉRICO CAMBIA DE COLOR Y NO SÓLO DE INTENSIDAD.** El del barrio es azul de noche arriba
+   y casi negro abajo. Subiéndole sólo la intensidad, el personaje sigue recibiendo azul oscuro por
+   arriba y nada por abajo: contra un cielo casi blanco **los hombros salían negros**. Acá arriba hay
+   cielo claro y **abajo también**, porque lo que hay debajo son nubes blancas.
+3. **Y LA LUNA PASA A PROYECTAR SOMBRA**, que es lo único que apoya al personaje sobre la nube —el
+   pedido decía *«pero que sí demos sombra del personaje real»*—. Con una caja de sombra **chica** que
+   sigue al jugador: la resolución del mapa se reparte sobre el área que cubre, y una de trescientos
+   metros para una sombra de dos deja el contorno hecho un peine.
+
+#### Y LA PRIMERA PERSONA AL SALIR DE LA CINEMÁTICA
+
+La vista elegida se guarda, así que quien venía jugando al hombro volvía al hombro apenas terminaba la
+escena — y la escena es en primera. Se fija dónde empieza; el botón VISTA sigue estando, porque lo que
+se pidió es dónde arranca y no qué se puede elegir.
+
+#### LOS MUEBLES ESTABAN CORRUPTOS, Y LA CAUSA ERA EL DECIMADO
+
+*"La wea que generás está toda corrupta"* — tenía razón. La primera tanda venía con **un millón de
+triángulos** y bajarla a dos mil es tirar el 99,8 %: el simplificador se come los detalles finos —el
+tirador de un cajón, el aro de una pantalla— y lo que queda es una mancha con la textura estirada
+encima. La segunda se pidió con **`extra: {face_limit: 6000}`**, o sea con el generador haciendo la
+reducción él, que sabe qué es qué, y con `texture_quality: detailed`. Entran con 4.400-5.700
+triángulos y bajan a tres mil, que es tirar el 40 % y no el 99,8.
+
+#### MEDIDO AL CERRAR
+
+Cadena completa: cinemática → cuarto **en primera persona** → puerta → cielo → **42 de 42 nubes** →
+barrio, y desde ahí 72,3 m caminados con **0 cuadros dentro de una casa**. El cielo cuesta **13
+llamadas de dibujo**. `window.__errs` vacío en las once corridas. El HTML pasó de 2,09 a **2,29 MB**.
+
 ### Septuagésima octava vuelta (2026-09-01): **BARRIO** — pasos reales en vez de hormigas, y la ciudad del cuarto pasa a ser foto
 
 Pedido: *"tiembla mucho en la cinemática, agregá más suavidad; también al correr más suave y sin
