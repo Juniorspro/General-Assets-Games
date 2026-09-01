@@ -387,9 +387,21 @@ else
 fi
 python3 herramientas/rezona/estado.py --ver 2>/dev/null | sed 's/^/  /'
 echo "  probando el servidor…"
-timeout 180 python3 herramientas/rezona/rz.py call list_projects '{}' 2>/dev/null | head -3 \
-  | grep -qi "not authenticated" && no "el servidor responde pero falta el login" \
-  || ok "el servidor contesta"
+# ── SE GUARDA LA RESPUESTA Y DESPUES SE MIRA, NO SE ENCADENA CON && / || ──
+# La version anterior era `… | grep -qi "not authenticated" && no … || ok …`, y
+# con eso NO HABER CONTESTADO NADA caia en el verde: la primera corrida de una
+# sesion nueva se va en que `npx` baja el paquete, se pasa el timeout, el grep no
+# encuentra nada porque no hay nada, y el `||` anuncia "el servidor contesta".
+# Medido: dijo el verde con la credencial ausente. Un chequeo que miente en el
+# caso que existe para detectar es peor que no tenerlo.
+RESP="$(timeout 240 python3 herramientas/rezona/rz.py call list_projects '{}' 2>/dev/null | head -3)"
+if [ -z "$RESP" ]; then
+  no "el servidor no contesto en 240 s (la primera vez npx baja el paquete: volve a correrlo)"
+elif printf '%s' "$RESP" | grep -qi "not authenticated"; then
+  no "el servidor responde pero falta el login  →  npx rezona@latest login"
+else
+  ok "el servidor contesta"
+fi
 
 tit "5 · el banco de pruebas"
 if [ -f /tmp/ui/run2.sh ] && [ -d /tmp/ui/node_modules/playwright ]; then
@@ -411,7 +423,6 @@ tit "listo"
 echo "  Leé la skill 'arranque' para saber cómo se trabaja en este repo:"
 echo "      /arranque      (o mirá .claude/skills/arranque/SKILL.md)"
 echo
-
 __FIN_HERRAMIENTAS_ARRANQUE_PREPARAR_SH__
 chmod 755 herramientas/arranque/preparar.sh
 echo '  · herramientas/arranque/preparar.sh'
