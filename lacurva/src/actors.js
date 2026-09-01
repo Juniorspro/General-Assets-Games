@@ -29,23 +29,35 @@ export function fitModel(root, targetLen, axis = 'z', yaw = 0) {
     return root;
 }
 
-/* Separa el parabrisas del resto de la carroceria mirando cada triangulo en
-   coordenadas locales del auto: los que estan arriba, adelante y bastante
-   horizontales son el vidrio. Asi se puede hacer transparente sin tocar el GLB. */
+/* Separa el parabrisas del resto de la carroceria. El test va en fracciones
+   del bounding box de la propia malla, no en metros: el GLB viene cuantizado,
+   asi que los valores del atributo no son unidades de mundo y cualquier
+   umbral fijo en metros no engancha nada.
+   El parabrisas es la franja alta (y > 0.70), justo detras del capot
+   (z 0.26-0.48 desde el frente) y bastante volcada (normal con y marcada). */
 export function splitGlass(mesh) {
     const geo = mesh.geometry;
     const pos = geo.getAttribute('position');
     const idx = geo.getIndex();
     if (!idx) return null;
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    const size = new THREE.Vector3(); bb.getSize(size);
+    if (size.x < 1e-6 || size.y < 1e-6 || size.z < 1e-6) return null;
+
     const a = idx.array;
     const keep = [], glass = [];
     const p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), p2 = new THREE.Vector3();
     const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nn = new THREE.Vector3();
     for (let t = 0; t < a.length; t += 3) {
         p0.fromBufferAttribute(pos, a[t]); p1.fromBufferAttribute(pos, a[t + 1]); p2.fromBufferAttribute(pos, a[t + 2]);
-        const cy = (p0.y + p1.y + p2.y) / 3, cz = (p0.z + p1.z + p2.z) / 3;
-        e1.subVectors(p1, p0); e2.subVectors(p2, p0); nn.crossVectors(e1, e2).normalize();
-        const isGlass = cy > 1.30 && cz > 0.16 && cz < 1.06 && Math.abs(nn.y) > 0.66;
+        const hy = ((p0.y + p1.y + p2.y) / 3 - bb.min.y) / size.y;
+        const hz = ((p0.z + p1.z + p2.z) / 3 - bb.min.z) / size.z;
+        // los bordes se reescalan por el bbox para recuperar la normal real
+        e1.subVectors(p1, p0).multiply(size);
+        e2.subVectors(p2, p0).multiply(size);
+        nn.crossVectors(e1, e2).normalize();
+        const isGlass = hy > 0.70 && hz > 0.26 && hz < 0.48 && Math.abs(nn.y) > 0.45;
         (isGlass ? glass : keep).push(a[t], a[t + 1], a[t + 2]);
     }
     if (!glass.length) return null;
