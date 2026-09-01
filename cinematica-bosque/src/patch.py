@@ -54,6 +54,7 @@ def preamble():
         'var CDLV_LEAF=%s;' % json.dumps(durl(f"{AST}/leaf_card.webp", "image/webp")),
         'var CDLV_BARK=%s;' % json.dumps(durl(f"{AST}/bark.jpg", "image/jpeg")),
         'var CDLV_SKY=%s;' % json.dumps(durl(f"{AST}/sky.jpg", "image/jpeg")),
+        'var CDLV_OLD_LADY=%s;' % json.dumps(durl(f"{AST}/vieja.glb", "model/gltf-binary")),
         'var CDLV_VO=%s;' % json.dumps(vo),
         'var CDLV_TXT=%s;' % json.dumps(TXT, ensure_ascii=False),
         'var CDLV_VOT=%s;' % json.dumps(VOT),
@@ -62,13 +63,21 @@ def preamble():
     ]
     return "\n" + "\n".join(parts) + "\n"
 
+# se aplican a todo el archivo, no solo a la clase de la cinematica
+GLOBAL_REPLACEMENTS = [
+    # los rigs de Tripo miran a +X y todo el juego asume +Z (por eso la vieja
+    # caminaba de costado): se corrige de una vez en el helper del rig
+    ("t.scale.setScalar(A/Math.max(s.y,.001)),t.traverse(",
+     "t.scale.setScalar(A/Math.max(s.y,.001)),t.rotation.y=-Math.PI/2,t.traverse("),
+]
+
 REPLACEMENTS = [
     # 1. constructor: fields + new builders
     ("this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildShots()",
      "this.fogSheets=[],this.grass=null,this.dust=null,this.sky=null,this.split=null,this.povRig=null,"
      "this.driverRig=null,this.phoneHolder=null,this.vo=null,this._v1=new Y,this._v2=new Y,this._v3=new Y,"
      "this.startWind(),this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildForest(),"
-     "this.buildGrass(),this.buildSky(),this.buildDust(),this.loadCarModel(),this.buildRigs(),"
+     "this.buildGrass(),this.buildSky(),this.buildDust(),this.loadCarModel(),this.buildRigs(),this.loadOldLady(),"
      "this.buildSplit(),this.buildShots()"),
     # 2b. asfalto y banquina un poco mas claros para que se lean de noche
     ("t=new _A({color:1316122,roughness:.95})", "t=new _A({color:2238250,roughness:.95})"),
@@ -116,6 +125,11 @@ def main():
     cls = src[start:end]
     assert cls.endswith("}"), cls[-40:]
 
+    # fuera el montaje de dias caminando en circulo (montage + strange + wake)
+    a = cls.index('{id:"montage"')
+    b = cls.index('{id:"descent"')
+    cls = cls[:a] + "...this.houseShots(A,P,D,i)," + cls[b:]
+
     for i, (old, new) in enumerate(REPLACEMENTS):
         n = cls.count(old)
         if n != 1:
@@ -129,6 +143,11 @@ def main():
     ins = src.index('var lj="LA CASA DE LA VIEJA"')
     assert ins < start
     out = src[:ins] + preamble() + src[ins:start] + cls + src[end:]
+    for i, (old, new) in enumerate(GLOBAL_REPLACEMENTS):
+        n = out.count(old)
+        if n != 1:
+            raise SystemExit("global replacement %d matched %d times: %r" % (i, n, old[:70]))
+        out = out.replace(old, new)
     open(OUT, "w", encoding="utf-8").write(out)
     print("wrote", OUT, len(out), "chars (was", len(src), ")")
 

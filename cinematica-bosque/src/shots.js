@@ -161,3 +161,115 @@
         };
         return [pass, drive, call, split];
     }
+    /* ====== ENTRA A LA CASA, LA VIEJA LO NOQUEA, DESPIERTA ENCERRADO ====== */
+    houseShots(A, P, D, i) {
+        let doorX = D.exitDoor.x, doorZ = D.bounds.z, y0 = $A(0);
+        let placeLady = (x, z, yaw, clip) => {
+            let L = this.oldLady; if (!L) return;
+            L.root.visible = !0;
+            L.root.position.set(x, y0, z);
+            L.root.rotation.y = yaw;
+            clip && L.play(clip, { fade: .18 });
+        };
+        let walkIn = {
+            id: "enter-house",
+            duration: 6,
+            captions: [{ from: .8, to: 4.6, text: "La puerta estaba abierta. Nadie contestó." }],
+            enter: () => {
+                this.look("night-exterior");
+                this.setActorVisible(!1);
+                this.roadGroup.visible = !1;
+                this.car.group.visible = !1;
+                i.intensity = 2.4;
+                P.set({ fade: 1, subtitle: "", cardTitle: "", cardSub: "", dread: 0 });
+                this.stepAt = -1;
+                this.oldLady && (this.oldLady.root.visible = !1);
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime;
+                P.set({ fade: HA(1 - st / 1.3, 0, 1) });
+                let k = Mi(HA(st / 5, 0, 1)),
+                    z = HP(doorZ - 2.2, doorZ + 1.3, k);
+                A.position.set(doorX + Math.sin(tt * 1.9) * .05, y0 + 1.62 + Math.sin(tt * 5.2) * .025, z);
+                A.lookAt(doorX + Math.sin(tt * .7) * .3, y0 + 1.48, z + 3);
+                A.rotateZ(Math.sin(tt * 2.6) * .009);
+                if (st - this.stepAt > .62) { this.stepAt = st; li(z < doorZ ? "concrete" : "wood", .5) }
+                this.oldLady && this.oldLady.update(dt, 1);
+            }
+        };
+        let hit = {
+            id: "bat-hit",
+            duration: 5.4,
+            captions: [{ from: 3.1, to: 5.2, text: "No la oí entrar." }],
+            enter: () => {
+                this.hitDone = !1;
+                // entra por detras, a la izquierda, fuera de cuadro
+                placeLady(doorX + .58, doorZ + 1.02, .4, "preset:idle");
+                this.oldLady && (this.oldLady.root.visible = !1);
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime, L = this.oldLady;
+                L && L.update(dt, st < 1.15 ? 1.35 : .9);
+                if (st > .78) { L && (L.root.visible = !0); this.ladySwing((st - .78) / .55) }
+                if (st < 1.15) {
+                    // ultimo paso adentro, todavia de espaldas a ella
+                    let z = HP(doorZ + 1.3, doorZ + 1.8, Mi(HA(st / 1.15, 0, 1)));
+                    A.position.set(doorX, y0 + 1.62 + Math.sin(tt * 5.2) * .025, z);
+                    A.lookAt(doorX, y0 + 1.48, z + 3);
+                    if (st - this.stepAt > .62) { this.stepAt = st; li("wood", .5) }
+                    return;
+                }
+                if (!this.hitDone) {
+                    this.hitDone = !0;
+                    HT(1); ZT(1); ki(1, -.35);
+                    P.set({ dread: 1 });
+                    placeLady(doorX + .55, doorZ + 1.05, .35, "preset:idle");
+                }
+                // el golpe: la camara cae al piso girando
+                let f = HA((st - 1.15) / 1.5, 0, 1), e = aD(f);
+                let camY = HP(y0 + 1.62, y0 + .28, e),
+                    camZ = HP(doorZ + 1.8, doorZ + 2.15, e);
+                A.position.set(doorX + HP(0, -.35, e) + Math.sin(tt * 26) * .05 * (1 - f), camY, camZ);
+                // gira la cabeza hacia ella mientras se desploma
+                let lx = HP(doorX, doorX + .55, e),
+                    ly = HP(y0 + 1.48, y0 + 1.25, e),
+                    lz = HP(camZ + 3, doorZ + 1.05, e);
+                A.lookAt(lx, ly, lz);
+                A.rotateZ(HP(0, 1.15, e) + Math.sin(tt * 18) * .06 * (1 - f));
+                if (st > 2.9) P.set({ fade: HA((st - 2.9) / 1.5, 0, 1) });
+                if (st > 4.4 && L) L.root.visible = !1;
+            },
+            exit: () => { P.set({ dread: .35 }); this.oldLady && (this.oldLady.root.visible = !1) }
+        };
+        let wake = {
+            id: "wake-locked",
+            duration: 9,
+            captions: [
+                { from: 2.4, to: 5.4, text: "Cuando abrí los ojos ya era otro día." },
+                { from: 5.8, to: 8.6, text: "La puerta estaba cerrada por fuera." }
+            ],
+            enter: () => {
+                this.look("night-interior");
+                i.intensity = 1.1;
+                P.set({ fade: 1, dread: .5 });
+                ZT(1);
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime;
+                // parpadeos al volver en si
+                let f = st < .9 ? 1 : st < 1.2 ? .35 : st < 1.5 ? .85 : st < 1.9 ? .25 : HA(1 - (st - 1.9) * 1.5, 0, 1);
+                P.set({ fade: f, dread: HA(.5 - st * .06, .12, .5) });
+                let rise = Mi(HA((st - 1.6) / 3.4, 0, 1));
+                let b = this.bedroom;
+                A.position.set(b.x, HP(b.y - 1.32, b.y - .42, rise), b.z);
+                let turn = HA((st - 4.6) / 3, 0, 1);
+                A.lookAt(HP(b.x, b.x + 1.6, aD(turn)), HP(b.y - 1.1, b.y - .35, aD(turn)), b.z - 2.6);
+                A.rotateZ(HP(.28, .03, rise) + Math.sin(tt * 1.7) * .012);
+                if (st > 5.6 && st < 5.7) HT(.55);
+                if (st > 6.4 && st < 6.5) HT(.5);
+                this.handheld(.008);
+            },
+            exit: () => { P.set({ fade: 0, dread: .3 }); i.intensity = 3.2 }
+        };
+        return [walkIn, hit, wake];
+    }

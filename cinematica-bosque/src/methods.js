@@ -397,7 +397,7 @@
             let ph = this.fitModel(gltf.scene, .152, "length-z");
             let holder = new eP;
             holder.add(ph);
-            holder.position.set(0, -.012, .03);
+            holder.position.set(.03, .025, .05);   // dentro del puño, no apoyado en la palma
             holder.rotation.set(Math.PI, 0, 0);   // la cara con la pantalla mira a los ojos
             holder.visible = !1;
             let light = new GD(0x9fd4ff, .45, 1.4, 2);
@@ -413,6 +413,31 @@
     }
     /* zoom = 0 primera persona pura; 1 se corre un poco al costado del hombro
        para que el brazo levantado no tape el celular */
+    loadOldLady() {
+        if (typeof CDLV_OLD_LADY !== "string" || !CDLV_OLD_LADY) return;
+        new w8().load(CDLV_OLD_LADY, gltf => {
+            let rig = _T(gltf, { height: 1.62 });
+            rig.bones = {};
+            rig.model.traverse(o => { if (o.isBone) rig.bones[o.name] = o });
+            rig.root.visible = !1;
+            this.deps.scene.add(rig.root);
+            this.oldLady = rig;
+            this.disposers.push(() => { rig.dispose(); this.deps.scene.remove(rig.root) });
+        }, void 0, () => { });
+    }
+    /* el rig vino con walk/idle/jump nomas, asi que el batazo va a mano sobre los
+       huesos, despues del mixer: t=0 bate abajo, .38 arriba del todo, .7 impacto */
+    ladySwing(t) {
+        let L = this.oldLady; if (!L || !L.bones) return;
+        let b = L.bones, k = HA(t, 0, 1);
+        let up = k < .38 ? HP(-1, -.15, aD(k / .38)) : HP(-.15, -2.45, aD(HA((k - .38) / .32, 0, 1)));
+        let tw = k < .38 ? HP(.08, .4, k / .38) : HP(.4, -.34, aD(HA((k - .38) / .32, 0, 1)));
+        b.R_Upperarm && b.R_Upperarm.rotation.set(0, 0, up);
+        b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.62, -.05, HA(k / .7, 0, 1)));
+        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, -up * .5);
+        b.Spine01 && b.Spine01.rotation.set(0, tw, 0);
+        b.Spine02 && b.Spine02.rotation.set(HP(-.05, .18, HA(k, 0, 1)), tw * .5, 0);
+    }
     povHead(camera, sway, zoom) {
         let car = this.car.group, z = HA(zoom || 0, 0, 1);
         car.updateMatrixWorld(!0);
