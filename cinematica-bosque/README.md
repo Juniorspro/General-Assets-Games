@@ -134,6 +134,12 @@ El diálogo está en **español, inglés y portugués**: el idioma se elige solo
 `navigator.language` y se puede forzar desde la consola con
 `window.__CDLV_LANG = "pt"` antes de arrancar.
 
+## Verificado en navegador
+
+Los seis momentos renderizados sin errores, y el paso a la partida: tocar
+`Saltar intro` esconde el botón y aparece el HUD del juego. Los cuadros están
+en `preview/`.
+
 ## Debug
 
 Desde la consola del navegador, mientras corre la cinemática:
