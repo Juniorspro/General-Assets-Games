@@ -6,27 +6,29 @@ import {
     toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
 } from './map.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
-import { Piernas } from './piernas.js';
+import { Cuerpo } from './cuerpo.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
-/* Somos chicos: el ojo va a 55 cm y las paredes miden 7 m, asi que un pasillo
-   de 2,2 m se lee como una nave. Todo lo demas sale de esta escala. */
-const EYE = 0.55, CROUCH_EYE = 0.34, SLIDE_EYE = 0.19, RADIUS = 0.26;
-const WALK = 2.3, RUN = 4.6, CROUCH_SPD = 1.2;
+/* La escala sale de medir el juego original. El ojo va a 1 m —seguimos algo
+   bajos, pero no somos un raton— y el techo a 4,6 m: un pasillo de 2,2 m se
+   lee como un pasillo de casa. Antes el ojo iba a 55 cm contra paredes de
+   7 m y cada cuarto salia del tamano de una iglesia. */
+const EYE = 1.00, CROUCH_EYE = 0.60, SLIDE_EYE = 0.34, RADIUS = 0.30;
+const WALK = 2.9, RUN = 5.4, CROUCH_SPD = 1.5;
 const FOV = 100;
 /* El deslizamiento es corto y violento a proposito: mucha velocidad al
    principio, la camara se tira al piso y el FOV pega un tiron. */
-const SLIDE_TIME = 0.85, SLIDE_SPEED = 8.2, SLIDE_COOLDOWN = 0.45;
+const SLIDE_TIME = 0.85, SLIDE_SPEED = 9.2, SLIDE_COOLDOWN = 0.45;
 
 /* Altura de las bandas de la pared, como en las fotos: zocalo crema, moldura
    de madera, papel rojo y cornisa arriba. */
 /* La moldura va baja: desde 55 cm de altura, un zocalo de dos metros y medio
    se come toda la vista y no se ve el papel. Asi el rojo domina, que es como
    se ve en las fotos. */
-const WAINSCOT = 1.05, RAIL_H = 0.13, CORNICE = 0.45;
+const WAINSCOT = 1.12, RAIL_H = 0.12, CORNICE = 0.34;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -94,7 +96,7 @@ class Dungeon {
         /* La niebla arrancaba a 6 m y se comia el cuarto entero. Ahora empieza
            donde termina el alcance del farol y cierra mucho mas lejos: se ve
            el fondo del pasillo, que es lo que se pedia. */
-        this.scene.fog = new THREE.Fog(0x0d1018, 13, 86);
+        this.scene.fog = new THREE.Fog(0x0d1018, 8, 52);
         this.camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.02, 300);
 
         /* Luz de relleno de verdad: antes el ambiente estaba en 0,06 y todo
@@ -108,7 +110,7 @@ class Dungeon {
         /* Caida 1,2 y no 1,55: con la caida fuerte, a treinta centimetros de
            una pared el farol la quemaba en blanco. Aplanando la curva, a dos
            metros alumbra casi lo mismo y de cerca pega menos de la mitad. */
-        this.lamp = new THREE.PointLight(0xffc98a, 11, 30, 1.2);
+        this.lamp = new THREE.PointLight(0xffdcb8, 11, 30, 1.2);
         this.lamp.castShadow = true;
         this.lamp.shadow.mapSize.set(1024, 1024);
         this.lamp.shadow.bias = -0.004;
@@ -122,12 +124,11 @@ class Dungeon {
         addEventListener('resize', () => this.resize());
 
         this.t = 0; this.roll = 0; this.bob = 0; this.pitch = 0; this.yaw = 0;
-        this.stamina = 1; this.running = false; this.crouch = false;
+        this.running = false; this.crouch = false;
         this.visited = new Set();
 
-        this.piernas = new Piernas(this.camera);
-        this.scene.add(this.camera);   // la camara tiene hijos: tiene que estar en la escena
-        this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z });
+        this.cuerpo = new Cuerpo(this.scene);
+        this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         this.cajasMuebles = [];
 
         /* Los muebles llegan tarde y no pasa nada: el nivel ya esta armado y
@@ -160,18 +161,26 @@ class Dungeon {
         this.mats = {
             paper: new THREE.MeshStandardMaterial({
                 map: A.paper ? tex(A.paper, [1, 1]) : null,
-                color: A.paper ? 0xffffff : 0x6e1c22, roughness: 0.92,
+                color: A.paper ? 0xa8bda0 : 0x4c5c44, roughness: 0.92,
             }),
             wainscot: new THREE.MeshStandardMaterial({
                 map: A.wainscot ? tex(A.wainscot, [1, 1]) : null,
                 color: A.wainscot ? 0xffffff : 0xcfc4ad, roughness: 0.88,
             }),
-            wood: new THREE.MeshStandardMaterial({ color: 0x4a2e1c, roughness: 0.7 }),
+            // listel y cornisa: madera miel, como el marco de las fotos
+            wood: new THREE.MeshStandardMaterial({
+                map: A.ceil ? tex(A.ceil, [1, 1]) : null,
+                color: A.ceil ? 0x7c6f5c : 0x8a6034, roughness: 0.66,
+            }),
             floor: new THREE.MeshStandardMaterial({
                 map: A.floor ? tex(A.floor, [1, 1]) : null,
-                color: A.floor ? 0xffffff : 0x3a2417, roughness: 0.72,
+                color: A.floor ? 0xffffff : 0x4a1518, roughness: 0.94,
             }),
-            ceil: new THREE.MeshStandardMaterial({ color: 0x3b2717, roughness: 0.85 }),
+            // el techo es de tablas, no un color plano
+            ceil: new THREE.MeshStandardMaterial({
+                map: A.ceil ? tex(A.ceil, [1, 1]) : null,
+                color: A.ceil ? 0x968c78 : 0x3b2717, roughness: 0.85,
+            }),
             dark: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 }),
         };
         for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv);
@@ -228,7 +237,10 @@ class Dungeon {
         for (const kind of Object.keys(out)) {
             if (!out[kind].length) continue;
             const merged = mergeGeos(out[kind]);
-            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'wainscot' ? 1.25 : 0.7);
+            /* Metros que cubre cada foto: el damasco tiene unos dos motivos y
+               medio por lado y un motivo real mide ~0,38 m, o sea 0,95 m; el
+               listel de madera repite corto para que se le vea la veta. */
+            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'wainscot' ? 1.25 : 0.55);
             const m = new THREE.Mesh(merged, this.mats[kind]);
             m.castShadow = m.receiveShadow = true;
             group.add(m);
@@ -259,13 +271,13 @@ class Dungeon {
         }
         if (floors.length) {
             const fg = mergeGeos(floors);
-            worldUV(fg, 1.5);
+            worldUV(fg, 1.35);
             const fm = new THREE.Mesh(fg, this.mats.floor);
             fm.receiveShadow = true;
             group.add(fm);
             floors.forEach(g => g.dispose());
             const cg = mergeGeos(ceils);
-            worldUV(cg, 2.2);
+            worldUV(cg, 2.2);   // ~16 tablas por foto y la tabla mide ~14 cm
             group.add(new THREE.Mesh(cg, this.mats.ceil));
             ceils.forEach(g => g.dispose());
         }
@@ -278,7 +290,8 @@ class Dungeon {
        que hace que se lean como lamparas y no como bolitas flotando. */
     placeChandeliers(lv, base, group) {
         const rng = new Rng(0x7A0 + lv * 977);
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: .6, metalness: .35 });
+        // hierro negro forjado, no bronce: es lo que cuelga en el juego original
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x0e0e0c, roughness: .55, metalness: .3 });
         const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdda2 });
         const bulbGeo = new THREE.SphereGeometry(.05, 7, 5);
         const chainGeo = new THREE.CylinderGeometry(.018, .018, 1, 4);
@@ -319,7 +332,7 @@ class Dungeon {
             }
 
             // la luz va justo debajo del aro: proyecta la rueda hacia arriba
-            const L = new THREE.PointLight(0xffca86, big ? 20 : 12, big ? 28 : 20, 1.7);
+            const L = new THREE.PointLight(0xffdcb0, big ? 20 : 12, big ? 28 : 20, 1.7);
             L.position.y = WALL_H - drop - .04;
             L.shadow.mapSize.set(512, 512);
             L.shadow.bias = -0.006;
@@ -540,8 +553,10 @@ class Dungeon {
         }
         const sliding = this.slideT > 0;
 
+        /* Sin barra de aguante: se corre todo lo que uno quiera. El limite
+           del juego es el RUIDO —correr lo trae— y no una barra que se vacia. */
         const wantRun = (!!(k.ShiftLeft || k.ShiftRight) || stickRun || this.autoRun)
-            && !this.crouch && !sliding && this.stamina > 0.02;
+            && !this.crouch && !sliding;
 
         const moving = Math.hypot(fwd, str);
         let spd = this.crouch ? CROUCH_SPD : wantRun ? RUN : WALK;
@@ -551,8 +566,6 @@ class Dungeon {
         if (sliding) spd = lerp(WALK * 0.9, SLIDE_SPEED, slideK * slideK);
 
         this.running = wantRun && moving > 0.05;
-        if (this.running) this.stamina = Math.max(0, this.stamina - dt * 0.22);
-        else this.stamina = Math.min(1, this.stamina + dt * 0.16);
 
         const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
         let vx = (-sin * fwd + cos * str), vz = (-cos * fwd - sin * str);
@@ -608,7 +621,11 @@ class Dungeon {
             cam.updateProjectionMatrix();
         }
 
-        this.piernas.actualizar(slideK, sliding, this.t, dt);
+        this.cuerpo.actualizar({
+            x: this.pos.x, y: this.y, z: this.pos.z, yaw: this.yaw,
+            ojo: this.eyeY, vel: speed, corriendo: this.running,
+            agachado: this.crouch, deslizando: sliding, k: slideK, t: this.t, dt,
+        });
 
         /* La mision y el bicho. El ruido sale de COMO te movés, no de donde
            estás: correr y deslizarse lo hacen, agachado no. */
@@ -629,7 +646,11 @@ class Dungeon {
             if (sy !== null) this.y = sy;
         }
 
-        this.lamp.position.set(this.pos.x, this.y + 0.72, this.pos.z);
+        /* El farol va 35 cm por DELANTE, no encima de la cabeza: pegado al
+           cuerpo le quemaba los hombros en blanco y no se veia nada al mirar
+           para abajo. Adelante alumbra el pasillo, que es para lo que esta. */
+        this.lamp.position.set(this.pos.x - Math.sin(this.yaw) * 0.35, this.y + 1.15,
+                               this.pos.z - Math.cos(this.yaw) * 0.35);
         this.lamp.intensity = 11 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.0;
 
         /* Una luz puntual con sombra cuesta seis caras de render, asi que solo
@@ -673,9 +694,6 @@ class Dungeon {
             this._lv = lv;
             document.getElementById('level').textContent = LEVELS[lv].name;
         }
-        const fill = document.getElementById('stam-fill');
-        fill.style.width = (this.stamina * 100) + '%';
-        fill.style.background = this.stamina < 0.25 ? '#b4483c' : '#c9c2ae';
         // el boton de deslizar se enciende solo cuando hay carrera que aprovechar
         const canSlide = this.running && this.slideCd <= 0;
         if (this._canSlide !== canSlide) {
@@ -746,7 +764,7 @@ function loop(now) {
             estado: game.mision.bicho.estado, ruido: +game.mision.ruido.toFixed(2),
             atrapadas: game.mision.atrapadas,
         } : null,
-        piernas: game.piernas ? +(game.piernas.mezcla || 0).toFixed(2) : null,
+        cuerpo: game.cuerpo ? +game.cuerpo.raiz.scale.x.toFixed(2) : null,
         muebles: (game.cajasMuebles || []).length,
         puestos: game.mision ? game.mision.puestos : 0,
         shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,

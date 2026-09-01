@@ -7,10 +7,14 @@ GAME = os.path.dirname(HERE)
 DIST = os.path.join(GAME, "assets", "dist")
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/user/General-Assets-Games/elplano.html"
 
+# El look sale de las capturas de partida del juego original: papel damasco
+# VERDE arriba del listel, zocalo crema abajo, techo de tablas de pino y
+# alfombra bordo. El rojo de antes era de otro juego.
 ASSETS = {
-    "paper":    ("damask.webp",     "image/webp"),
-    "wainscot": ("wainscot.webp",   "image/webp"),
-    "floor":    ("wood_floor.webp", "image/webp"),
+    "paper":    ("papel_verde.webp",  "image/webp"),
+    "wainscot": ("wainscot.webp",     "image/webp"),
+    "floor":    ("alfombra.webp",     "image/webp"),
+    "ceil":     ("techo_tablas.webp", "image/webp"),
 }
 
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
@@ -44,6 +48,9 @@ def main():
         raise SystemExit("faltan assets: %s" % ", ".join(missing))
 
     data = {k: durl(f, m) for k, (f, m) in ASSETS.items()}
+    bicho = os.path.join(MUE_DIR, "langosta.glb")
+    if os.path.exists(bicho):
+        data["bicho"] = durl_abs(bicho, "model/gltf-binary")
     for nombre in MUEBLES:
         ruta = os.path.join(MUE_DIR, nombre + ".glb")
         # si falta una pieza el juego igual entra: el modulo la saltea

@@ -14,6 +14,7 @@
    ruido y el ruido lo trae. Agachado no hace ruido, y por los huecos de 62 cm
    no entra: son la salida de verdad cuando ya te vio. */
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
 } from './map.js';
@@ -31,62 +32,52 @@ const NIVEL = 0;              // todo el bucle pasa en la planta baja
    eso da miedo sin necesidad de una cara. Va articulado y no como una malla
    sola deslizandose, porque una figura que se traslada sin mover las piernas
    se lee como un cartel, no como algo que camina. */
-const ALTO_BICHO = 2.6;
+const ALTO_BICHO = 3.2;
 
 class Langosta {
-    constructor(escena, base) {
+    constructor(escena, base, assets) {
         this.base = base;
         this.raiz = new THREE.Group();
-        const piel = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: .95 });
-        const palido = new THREE.MeshStandardMaterial({
-            color: 0xd9cfc0, roughness: .78, emissive: 0x201a14, emissiveIntensity: .5,
-        });
+        /* La malla de Tripo mira a +X, como todo lo que devuelve. El resto del
+           codigo trata al bicho como si mirara a -Z, igual que la camara, asi
+           que se gira UNA vez adentro de este grupo y nadie mas se entera.
+           Girando +90°, el +X de la malla va a parar a -Z. */
+        this.giroModelo = new THREE.Group();
+        this.giroModelo.rotation.y = Math.PI / 2;
+        this.raiz.add(this.giroModelo);
 
-        const cuerpo = new THREE.Mesh(new THREE.CapsuleGeometry(.19, .78, 5, 10), piel);
-        cuerpo.position.y = 1.72;
-        this.raiz.add(cuerpo);
-
-        const cabeza = new THREE.Mesh(new THREE.SphereGeometry(.17, 14, 12), palido);
-        cabeza.scale.set(.85, 1.25, .9);
-        cabeza.position.y = 2.36;
-        this.raiz.add(cabeza);
-        this.cabeza = cabeza;
-        // dos cuencas hundidas: alcanza para que la cara mire
-        for (const s of [-1, 1]) {
-            const oj = new THREE.Mesh(new THREE.SphereGeometry(.043, 8, 6),
-                new THREE.MeshBasicMaterial({ color: 0x07070a }));
-            oj.position.set(s * .068, 2.40, -.145);
-            this.raiz.add(oj);
+        this.listo = false;
+        const url = assets && assets.bicho;
+        if (url) {
+            new GLTFLoader().loadAsync(url).then(g => {
+                const o = g.scene;
+                const b = new THREE.Box3().setFromObject(o);
+                o.scale.setScalar(ALTO_BICHO / (b.max.y - b.min.y));
+                const b2 = new THREE.Box3().setFromObject(o);
+                const c = b2.getCenter(new THREE.Vector3());
+                o.position.set(-c.x, -b2.min.y, -c.z);
+                o.traverse(n => { if (n.isMesh) n.castShadow = true });
+                this.giroModelo.add(o);
+                this.modelo = o;
+                this.listo = true;
+                /* Si el rig vino con animaciones, se usan; si no, el cuerpo se
+                   mece a mano. Un bicho de zancos que se traslada sin moverse
+                   se lee como un cartel, no como algo que camina. */
+                if (g.animations && g.animations.length) {
+                    this.mixer = new THREE.AnimationMixer(o);
+                    this.clips = {};
+                    for (const c of g.animations) this.clips[c.name.toLowerCase()] = c;
+                    const primero = g.animations[0];
+                    this.accion = this.mixer.clipAction(primero);
+                    this.accion.play();
+                }
+            }).catch(() => { });
         }
-
-        const hueso = (largo, gordo) => new THREE.CapsuleGeometry(gordo, largo, 4, 8);
-        this.piernas = []; this.brazos = [];
-        for (const s of [-1, 1]) {
-            const cad = new THREE.Group();
-            cad.position.set(s * .105, 1.30, 0);
-            const mu = new THREE.Mesh(hueso(.60, .056), piel); mu.position.y = -.30; cad.add(mu);
-            const rod = new THREE.Group(); rod.position.y = -.62;
-            const pa = new THREE.Mesh(hueso(.58, .043), piel); pa.position.y = -.29; rod.add(pa);
-            const pie = new THREE.Mesh(new THREE.BoxGeometry(.10, .05, .24), piel);
-            pie.position.set(0, -.60, -.06); rod.add(pie);
-            cad.add(rod); this.raiz.add(cad);
-            this.piernas.push({ cad, rod, lado: s });
-
-            const hom = new THREE.Group();
-            hom.position.set(s * .21, 2.12, 0);
-            const br = new THREE.Mesh(hueso(.62, .043), piel); br.position.y = -.31; hom.add(br);
-            const cod = new THREE.Group(); cod.position.y = -.64;
-            const an = new THREE.Mesh(hueso(.60, .034), piel); an.position.y = -.30; cod.add(an);
-            const mano = new THREE.Mesh(hueso(.16, .04), palido); mano.position.y = -.66; cod.add(mano);
-            hom.add(cod); this.raiz.add(hom);
-            this.brazos.push({ hom, cod, lado: s });
-        }
-        this.raiz.traverse(n => { if (n.isMesh) n.castShadow = true });
 
         /* Un halo tenue: en un pasillo negro, sin esto aparece encima tuyo sin
            aviso y eso no asusta, enoja. */
-        this.luz = new THREE.PointLight(0x9fb4c8, 2.6, 7, 2);
-        this.luz.position.y = 2.2;
+        this.luz = new THREE.PointLight(0x9fb4c8, 2.2, 8, 2);
+        this.luz.position.y = ALTO_BICHO * 0.75;
         this.raiz.add(this.luz);
         escena.add(this.raiz);
 
@@ -104,22 +95,23 @@ class Langosta {
     }
 
     animar(dt, vel) {
-        this.paso += dt * (1.4 + vel * 1.5);
-        const amp = Math.min(1, vel / 2.4);
-        for (const p of this.piernas) {
-            const f = Math.sin(this.paso * 2 + (p.lado > 0 ? Math.PI : 0));
-            p.cad.rotation.x = f * .62 * amp;
-            p.rod.rotation.x = Math.max(0, -f + .35) * .75 * amp;
+        this.paso += dt * (1.0 + vel * 0.95);
+        const amp = Math.min(1, vel / 2.6);
+
+        if (this.mixer) {
+            // el clip corre al ritmo del paso, asi que los pies no patinan
+            this.mixer.timeScale = 0.55 + vel * 0.42;
+            this.mixer.update(dt);
         }
-        for (const b of this.brazos) {
-            const f = Math.sin(this.paso * 2 + (b.lado > 0 ? 0 : Math.PI));
-            b.hom.rotation.x = f * .38 * amp - .12;
-            b.hom.rotation.z = b.lado * .16;
-            b.cod.rotation.x = .28 + Math.abs(f) * .3 * amp;
-        }
-        // el cuerpo se balancea; parado, respira
-        this.raiz.position.y = this.base + Math.abs(Math.sin(this.paso)) * .035 * amp;
-        this.cabeza.rotation.z = Math.sin(this.paso) * .07 * amp;
+
+        /* Anda en zancos: el balanceo lateral es lo que da la caminata. Cada
+           zancada lo tira para un lado y lo levanta un poco. */
+        const g = this.giroModelo;
+        g.rotation.z = Math.sin(this.paso * 2) * 0.085 * amp;
+        g.rotation.x = -0.05 - 0.09 * amp;                 // se inclina al avanzar
+        g.position.y = Math.abs(Math.sin(this.paso * 2)) * 0.075 * amp;
+        // y se contonea de adelante hacia atras, medio paso mas tarde
+        g.position.z = Math.sin(this.paso * 2 + 1.1) * 0.05 * amp;
     }
 }
 
@@ -128,7 +120,7 @@ export class Mision {
     /* `origen` es donde aparece el jugador: la puerta y el bicho arrancan lo
        mas lejos posible de ahi. Midiendo desde el centro del mapa —que es lo
        que hacia antes— la puerta podia caer al lado tuyo. */
-    constructor(escena, origen) {
+    constructor(escena, origen, assets) {
         this.escena = escena;
         this.base = LEVELS[NIVEL].base;
         this.rng = new Rng(20260902);
@@ -154,7 +146,7 @@ export class Mision {
         this.origen = origen || { x: 0, z: 0 };
         this.armarCubos();
         this.armarSalida();
-        this.bicho = new Langosta(escena, this.base);
+        this.bicho = new Langosta(escena, this.base, assets);
         const p = this.lejosDe(this.origen.x, this.origen.z);
         this.bicho.reubicar(p[0], p[1]);
     }
@@ -171,37 +163,63 @@ export class Mision {
         return mejor;
     }
 
+    /* Un cuarto con 3x3 celdas abiertas: ahi van las TRES baldosas juntas y la
+       trampilla del techo. En el juego original es una sola "colored-pad room",
+       no tres baldosas desparramadas por la casa — desparramadas, el juego es
+       caminar, y juntas es un rompecabezas. */
+    salaDePads() {
+        const cand = [];
+        for (let r = 3; r < H - 3; r++) {
+            for (let c = 3; c < W - 3; c++) {
+                let libre = true;
+                for (let dr = -1; dr <= 1 && libre; dr++)
+                    for (let dc = -1; dc <= 1; dc++)
+                        if (!isOpen(NIVEL, c + dc, r + dr) || isStairCell(c + dc, r + dr)) { libre = false; break }
+                if (libre) cand.push([c, r]);
+            }
+        }
+        return cand.length ? cand[this.rng.int(0, cand.length - 1)] : this.celdaAlAzar();
+    }
+
     armarCubos() {
         this.cubos = []; this.baldosas = [];
-        const geo = new THREE.BoxGeometry(.30, .30, .30);
-        const disco = new THREE.CylinderGeometry(.46, .46, .035, 22);
-        for (const col of COLORES) {
+        const geo = new THREE.BoxGeometry(.34, .34, .34);
+        /* Rectangulo plano pintado en el piso, como en el juego: un disco que
+           brilla parece un objeto, y esto es una marca. */
+        const marca = new THREE.PlaneGeometry(1.25, .80);
+        marca.rotateX(-Math.PI / 2);
+
+        const [sc, sr] = this.salaDePads();
+        this.salaPads = [sc, sr];
+        const fila = [[-1, 0], [0, 0], [1, 0]];
+
+        COLORES.forEach((col, i) => {
             const m = new THREE.MeshStandardMaterial({
                 color: col.hex, roughness: .55, emissive: col.hex, emissiveIntensity: .30,
             });
+            // los cubos SI van desparramados: buscarlos es medio juego
             const c = this.celdaAlAzar(), [x, z] = toWorld(c[0], c[1]);
             const cubo = new THREE.Mesh(geo, m);
-            cubo.position.set(x, this.base + .18, z);
+            cubo.position.set(x, this.base + .20, z);
             cubo.castShadow = true;
             this.grupo.add(cubo);
             this.cubos.push({ ...col, obj: cubo, mat: m, puesto: false });
 
-            const b = this.celdaAlAzar(), [bx, bz] = toWorld(b[0], b[1]);
-            const pad = new THREE.Mesh(disco, new THREE.MeshStandardMaterial({
-                color: col.hex, roughness: .7, emissive: col.hex, emissiveIntensity: .55,
+            const [dc, dr] = fila[i];
+            const [bx, bz] = toWorld(sc + dc, sr + dr);
+            const pad = new THREE.Mesh(marca, new THREE.MeshStandardMaterial({
+                color: col.hex, roughness: .8, emissive: col.hex, emissiveIntensity: .5,
             }));
-            pad.position.set(bx, this.base + .02, bz);
-            pad.receiveShadow = true;
+            pad.position.set(bx, this.base + .012, bz);
             this.grupo.add(pad);
-            // una luz del color: es lo que hace que la baldosa se vea de lejos
-            const L = new THREE.PointLight(col.hex, 3.2, 5.5, 2);
+            const L = new THREE.PointLight(col.hex, 2.4, 4.5, 2);
             L.position.set(bx, this.base + .5, bz);
             this.grupo.add(L);
             this.baldosas.push({ ...col, obj: pad, x: bx, z: bz });
-        }
+        });
 
         /* La soga baja del techo recien cuando estan los tres cubos. */
-        this.sogaCelda = this.celdaAlAzar();
+        this.sogaCelda = [sc, sr - 1];
         const [sx, sz] = toWorld(this.sogaCelda[0], this.sogaCelda[1]);
         this.soga = new THREE.Group();
         const cuerda = new THREE.Mesh(

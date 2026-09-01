@@ -5,9 +5,14 @@
    pasillos angostos, y un backtracker da exactamente eso sin riesgo de dejar
    un cuarto sin salida. Encima se recortan las salas y se abren atajos. */
 
+/* La escala sale de MEDIR el juego original en las capturas de partida: el
+   personaje de Roblox mide ~1,7 m, el pasillo entra como dos anchos de
+   personaje y el techo queda como a tres alturas. Antes las paredes iban a
+   7 m con el ojo a 55 cm —trece veces nuestra altura— y eso convertia cada
+   cuarto en una nave de catedral. */
 export const CELL = 2.2;          // ancho de pasillo, en metros
-export const WALL_H = 7.0;        // paredes altas a proposito
-export const LEVEL_H = 8.2;       // separacion entre pisos
+export const WALL_H = 4.6;        // techo de casa, no de catedral
+export const LEVEL_H = 5.9;       // separacion entre pisos
 export const W = 31, H = 31;      // impar: el laberinto se carva en celdas impares
 
 export class Rng {
@@ -91,17 +96,22 @@ export const LEVELS = [
     {   // planta baja: el patio grande y dos salas laterales
         base: 0,
         name: 'Planta baja',
-        grid: buildLevel(0xC0FFEE, [[3, 3, 8, 8], [19, 5, 7, 7], [11, 19, 9, 9]], 34),
+        /* Cuartos de casa, no patios: la mas grande es de 5x5 celdas, o sea
+           11 m de lado. Antes habia una de 9x9 (20 m) y una de 13x13 (29 m). */
+        grid: buildLevel(0xC0FFEE, [[4, 4, 5, 5], [20, 6, 4, 4], [13, 20, 5, 5],
+                                    [8, 13, 4, 4], [22, 20, 4, 4]], 34),
     },
     {   // arriba: una sola nave enorme y galerias
         base: LEVEL_H,
         name: 'Nivel alto',
-        grid: buildLevel(0x51EED0, [[9, 9, 13, 13], [3, 21, 6, 6], [23, 3, 5, 5]], 28),
+        grid: buildLevel(0x51EED0, [[12, 12, 5, 5], [4, 21, 4, 4], [23, 4, 4, 4],
+                                    [5, 5, 4, 4], [19, 21, 4, 4]], 28),
     },
     {   // abajo: cisternas cuadradas
         base: -LEVEL_H,
         name: 'Cisternas',
-        grid: buildLevel(0xBEEF11, [[5, 5, 7, 7], [17, 17, 9, 9], [5, 19, 6, 6], [19, 5, 5, 5]], 30),
+        grid: buildLevel(0xBEEF11, [[6, 6, 4, 4], [18, 18, 5, 5], [6, 20, 4, 4],
+                                    [20, 6, 4, 4], [12, 12, 4, 4]], 30),
     },
 ];
 
@@ -149,7 +159,7 @@ export const isOpen = (lv, c, r) =>
 /* Agujeros: pared con un hueco rectangular abajo que comunica los dos lados.
    Solo se pasa agachado o deslizando, asi que son atajos para escapar.
    Se eligen paredes que separen dos espacios abiertos de verdad. */
-export const HOLE_H = 0.62;              // alto del hueco, en metros
+export const HOLE_H = 1.02;              // alto del hueco, en metros
 export const HOLES = LEVELS.map(() => new Uint8Array(W * H));
 
 (function carveHoles() {

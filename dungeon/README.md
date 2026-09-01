@@ -34,6 +34,38 @@ Un detalle que cuesta encontrar: el centro del joystick sale de
 elemento girado es su caja alineada a los ejes de la pantalla, no la del
 elemento.
 
+## Todo salió de mirar el juego original
+
+No de memoria: se bajaron las miniaturas del propio Roblox por su API y las
+portadas de los videos de partidas, y de ahí salió el aspecto.
+
+| | el original | acá |
+|---|---|---|
+| Papel | damasco **verde** en rombos | ídem, generado con Rezona |
+| Zócalo | panel crema | ídem |
+| Listel y cornisa | madera miel | ídem |
+| Techo | tablas de pino | ídem |
+| Piso | alfombra **bordó** | ídem |
+| Arañas | hierro negro | ídem |
+| Baldosas | tres rectángulos planos **en fila, en un mismo cuarto** | ídem |
+
+El rojo damasco de la versión anterior era de otro juego. En *House of The
+Locust* los pasillos son verdes.
+
+## Las habitaciones son cuartos, no naves
+
+La escala también salió de medir las capturas: el personaje de Roblox mide
+~1,7 m, el pasillo entra como dos anchos de personaje y el techo queda como a
+tres alturas.
+
+| | antes | ahora |
+|---|---|---|
+| Ojo | 0,55 m | **1,00 m** |
+| Pared | 7,0 m | **4,6 m** |
+| Sala más grande | 13×13 celdas (29 m) | **5×5 (11 m)** |
+
+Con el ojo a 55 cm contra paredes de 7 m, cada cuarto era una nave de catedral.
+
 ## El bucle: cuatro pasos
 
 1. **Los tres cubos** —rojo, amarillo, azul— a la baldosa de su color. **De a
@@ -68,12 +100,25 @@ progreso, se pierde el viaje.
 
 ### El bicho
 
-Mide **2,60 m**. Con el ojo a 55 cm eso es casi cinco veces nuestra altura:
-por eso da miedo sin necesidad de una cara. Va **articulado** —caderas,
-rodillas, hombros, codos— y no es una malla sola deslizándose: una figura que
-se traslada sin mover las piernas se lee como un cartel, no como algo que
-camina. Lleva un halo tenue encima: en un pasillo negro, sin eso aparece
-arriba tuyo sin aviso, y eso no asusta, enoja.
+Mide **3,20 m** y es una **malla generada con Rezona a partir del turnaround
+del modelo real**: zancos terminados en púas negras en vez de pies, brazos
+igual de largos con púas en vez de manos, torso de hueso, trapo oscuro en la
+cadera y una columna vendada por cabeza con una carita de marfil y una maraña
+de sogas. 2.597 triángulos, 163 KB.
+
+**El rig no se usó.** Se pidió a Rezona el rig con `preset:walk` y
+`preset:run` y volvió con los dos clips, pero **la malla sale aplastada** —
+también la copia sin animar, así que no es el clip sino el esqueleto: un
+preset humanoide no le entra a un bicho de zancos sin pies. Se comprobó
+renderizándolo aparte antes de meterlo.
+
+Así que camina **procedural**: el balanceo lateral de la zancada, el rebote
+vertical, la inclinación al avanzar y un contoneo medio paso más tarde. En
+zancos eso es exactamente la caminata. Una figura que se traslada sin
+moverse se lee como un cartel, no como algo que camina.
+
+Lleva un halo tenue encima: en un pasillo negro, sin eso aparece arriba tuyo
+sin aviso, y eso no asusta, enoja.
 
 Camina por la grilla con una búsqueda en anchura sobre 31×31, que cuesta nada
 y se rehace cada medio segundo cazando y cada 1,2 s rondando.
@@ -104,25 +149,34 @@ arrancaba con la cara adentro de un ropero.
 Los muebles llegan tarde y no pasa nada: el nivel ya está armado y entran
 encima. Un base64 roto cuesta una cómoda, no la pantalla.
 
-## Las piernas al deslizarse
+## El cuerpo en primera persona
 
-Son un **modelo de vista**, no geometría del mundo: se dibujan siempre encima,
-sin consultar la profundidad, con material plano. Tres cosas que costaron una
-vuelta cada una:
+Ya no son dos piernas al deslizarse: es un **cuerpo entero** —torso, brazos,
+piernas y botas— puesto en la escena a escala real, con los pies en el piso.
+Al mirar para abajo se ve el pecho y las piernas donde tienen que estar.
 
-- **El signo del giro.** Girando en X, la pierna —que cuelga en −Y— va a parar
-  a `(0,-cos,-sin)`: hace falta ángulo **positivo** para que salga hacia
-  adelante. Con el signo al revés quedaban atrás de la cabeza.
-- **El piso las tapaba.** Deslizando el ojo va a 19 cm del suelo; con la
-  cadera colgando, el pie terminaba en `y = -0,14` con el piso en 0. De ahí
-  el `depthTest: false`.
-- **Se veían de punta.** Estiradas al frente apuntan al mismo lado que la
-  cámara y quedan dos puntitos. La rodilla se dobla **fuerte** para que la
-  pantorrilla **caiga** y se le vea el largo.
+Dos cosas lo hacen funcionar:
 
-Y el muslo no se dibuja: naciendo a cuatro centímetros del lente salía una
-cuña gris que tapaba media pantalla. Se ve de la rodilla para abajo, que es lo
-que uno se ve de sí mismo.
+- **Sigue el giro pero NO el cabeceo.** La cabeza mira para abajo; el cuerpo
+  se queda derecho. Si acompañara el cabeceo, mirar al piso te acostaría el
+  torso y verías la nuca de tu propio personaje.
+- **Va 2 cm detrás del ojo.** Con 20 cm quedaba entero detrás del plano de la
+  cámara y mirar para abajo no mostraba nada. Se midió.
+
+**Material plano**, como las piernas viejas: el cuerpo pasa a medio metro de
+las arañas del techo y del propio farol, así que con un material que responde
+a la luz los hombros salían **blancos** —medido— y el cuerpo se leía como una
+mancha. Por lo mismo el farol se corrió **35 cm hacia adelante**: encima de la
+cabeza alumbraba los hombros y no el pasillo.
+
+Las poses son cuatro: caminar, correr (brazos más flexionados), agachado y
+deslizándose (piernas al frente, brazos atrás).
+
+## Sin barra de aguante
+
+Se corre todo lo que uno quiera. El límite del juego es el **ruido** —correr
+lo trae— y no una barra que se vacía. El botón **DESLIZAR** se enciende
+siempre que estés corriendo, que ahora es siempre que quieras.
 
 ## La luz
 
