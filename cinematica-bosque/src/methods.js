@@ -448,6 +448,16 @@
         if (best) this.frontDoor = { pivot: best, rest: best.rotation.y, dist: bd };
         return this.frontDoor;
     }
+    /* estira el brazo derecho del chico hacia el picaporte (el mixer corre antes
+       que el update de la escena, asi que estas rotaciones ganan ese frame) */
+    boyReach(k) {
+        let r = this.rig; if (!r) return;
+        if (!r.bones) { r.bones = {}; r.model.traverse(o => { if (o.isBone) r.bones[o.name] = o }) }
+        let b = r.bones, t = HA(k, 0, 1);
+        if (!b.R_Upperarm) return;
+        b.R_Upperarm.rotation.set(0, HP(b.R_Upperarm.rotation.y, -1.25, t), HP(b.R_Upperarm.rotation.z, -1.95, t));
+        b.R_Forearm && b.R_Forearm.rotation.set(HP(b.R_Forearm.rotation.x, -.35, t), 0, 0);
+    }
     swingDoor(k) {
         let d = this.frontDoor; if (!d) return;
         d.pivot.rotation.y = d.rest + aD(HA(k, 0, 1)) * -1.45;
@@ -459,6 +469,17 @@
             rig.bones = {};
             rig.model.traverse(o => { if (o.isBone) rig.bones[o.name] = o });
             rig.root.visible = !1;
+            let hand = rig.bones.R_Hand;
+            if (hand) {
+                let bat = this.buildBat();
+                hand.add(bat);
+                hand.updateWorldMatrix(!0, !1);
+                let ws = bat.getWorldScale(new Y);
+                bat.scale.setScalar(1 / Math.max(ws.x, 1e-4));
+                bat.position.set(0, -.02, .03);
+                bat.rotation.set(0, 0, Math.PI);        // el mango en la mano, el barril hacia afuera
+                rig.bat = bat;
+            }
             this.deps.scene.add(rig.root);
             this.oldLady = rig;
             // luz propia del golpe: la linterna apunta a donde mira la camara y en
@@ -496,6 +517,35 @@
         camera.rotateZ(Math.sin(this.elapsed * 1.4) * .012 * sway);
     }
     /* ============ PANTALLA PARTIDA CON LA OFICINA ============ */
+    /* el boton del HUD era solo una etiqueta: no tenia handler, asi que tocarlo
+       no hacia nada (el juego saltea con E o click en el canvas) */
+    wireSkipButton() {
+        let el = document.getElementById("skip");
+        if (!el || el.dataset.cdlvWired) return;
+        el.dataset.cdlvWired = "1";
+        el.style.pointerEvents = "auto";
+        el.style.cursor = "pointer";
+        let go = ev => { ev.preventDefault(); ev.stopPropagation(); this.finished || this.skip() };
+        el.addEventListener("pointerdown", go);
+        el.addEventListener("click", go);
+        this.disposers.push(() => { el.removeEventListener("pointerdown", go); el.removeEventListener("click", go) });
+    }
+    /* bate recto por geometria: el modelo generado lo traia curvado */
+    buildBat() {
+        let mat = new _A({ color: 0x8a6a45, roughness: .85 });
+        let g = new eP;
+        let grip = new P9(.026, .032, .26, 8); grip.translate(0, .13, 0);
+        let barrel = new P9(.045, .031, .48, 10); barrel.translate(0, .5, 0);
+        let knob = new P9(.036, .03, .035, 8); knob.translate(0, .01, 0);
+        let tip = new R9(.045, 10, 6); tip.translate(0, .74, 0);
+        for (let geo of [grip, barrel, knob, tip]) {
+            let mesh = new fA(geo, mat);
+            mesh.castShadow = !0;
+            g.add(mesh);
+        }
+        this.disposers.push(() => { [grip, barrel, knob, tip].forEach(x => x.dispose()); mat.dispose() });
+        return g;
+    }
     buildSplit() {
         let host = document.getElementById("app") || document.body;
         let wrap = document.createElement("div");

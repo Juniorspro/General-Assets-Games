@@ -78,7 +78,7 @@ REPLACEMENTS = [
      "this.driverRig=null,this.phoneHolder=null,this.vo=null,this._v1=new Y,this._v2=new Y,this._v3=new Y,"
      "this.startWind(),this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildForest(),"
      "this.buildGrass(),this.buildSky(),this.buildDust(),this.loadCarModel(),this.buildRigs(),this.loadOldLady(),"
-     "this.buildSplit(),this.buildShots()"),
+     "this.buildSplit(),this.wireSkipButton(),this.buildShots()"),
     # 2b. asfalto y banquina un poco mas claros para que se lean de noche
     ("t=new _A({color:1316122,roughness:.95})", "t=new _A({color:2238250,roughness:.95})"),
     ("o=new _A({color:1711126,roughness:1})", "o=new _A({color:2828834,roughness:1})"),

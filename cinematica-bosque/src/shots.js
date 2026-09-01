@@ -171,39 +171,17 @@
             L.root.rotation.y = yaw;
             clip && L.play(clip, { fade: .18 });
         };
-        let walkIn = {
-            id: "enter-house",
-            duration: 6,
-            captions: [{ from: .8, to: 4.6, text: "La puerta estaba abierta. Nadie contestó." }],
-            enter: () => {
-                this.look("night-exterior");
-                this.setActorVisible(!1);
-                this.roadGroup.visible = !1;
-                this.car.group.visible = !1;
-                i.intensity = 2.4;
-                A.fov = 64; A.updateProjectionMatrix();
-                P.set({ fade: 1, subtitle: "", cardTitle: "", cardSub: "", dread: 0 });
-                this.stepAt = -1;
-                this.oldLady && (this.oldLady.root.visible = !1);
-            },
-            update: (p, tt, dt) => {
-                let st = this.shotTime;
-                P.set({ fade: HA(1 - st / 1.3, 0, 1) });
-                let k = Mi(HA(st / 5, 0, 1)),
-                    z = HP(doorZ - 2.2, doorZ + 1.3, k);
-                A.position.set(doorX + Math.sin(tt * 1.9) * .05, y0 + 1.62 + Math.sin(tt * 5.2) * .025, z);
-                A.lookAt(doorX + Math.sin(tt * .7) * .3, y0 + 1.48, z + 3);
-                A.rotateZ(Math.sin(tt * 2.6) * .009);
-                if (st - this.stepAt > .62) { this.stepAt = st; li(z < doorZ ? "concrete" : "wood", .5) }
-                this.oldLady && this.oldLady.update(dt, 1);
-            }
-        };
         let hit = {
             id: "bat-hit",
             duration: 5.4,
             captions: [{ from: 3.1, to: 5.2, text: "No la oí entrar." }],
             enter: () => {
                 this.hitDone = !1;
+                this.look("night-exterior");
+                i.intensity = 2.4;
+                this.setActorVisible(!1);
+                this.stepAt = -1;
+                P.set({ fade: 1, dread: 0, cardTitle: "", cardSub: "" });
                 A.fov = 64; A.updateProjectionMatrix();
                 if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
@@ -212,6 +190,7 @@
             },
             update: (p, tt, dt) => {
                 let st = this.shotTime, L = this.oldLady;
+                if (st < 1.15) P.set({ fade: HA(1 - st / .8, 0, 1) });
                 L && L.update(dt, st < 1.15 ? 1.35 : .9);
                 if (st > .78) { L && (L.root.visible = !0); this.ladySwing((st - .78) / .55) }
                 if (st < 1.15) {
@@ -281,7 +260,7 @@
             },
             exit: () => { P.set({ fade: 0, dread: .3 }); i.intensity = 3.2 }
         };
-        return [walkIn, hit, wake];
+        return [hit, wake];
     }
     /* ====== SIGUE MANEJANDO, LLEGA A LA CASA Y SE BAJA DEL AUTO ====== */
     arriveShots(A, P, D, i, t) {
@@ -366,7 +345,7 @@
         /* tercera persona: camina hasta la puerta, la abre y entra */
         let toDoor = {
             id: "walk-to-door",
-            duration: 9,
+            duration: 10.4,
             captions: [{ from: .8, to: 4.6, text: "Tres semanas. Vaciarla, tapar los agujeros y dejarla presentable." }],
             enter: () => {
                 this.look("night-exterior");
@@ -383,7 +362,7 @@
                 this.actorRate = 1;
                 this.findFrontDoor();
                 this.swingDoor(0);
-                this.stepAt = -1; this.knocked = !1; this.walkClip = !0;
+                this.stepAt = -1; this.knocked = !1; this.shut = !1; this.walkClip = !0;
                 this.lastPX = carX - 1.5; this.lastPZ = stopZ - .35;
                 this.faceY = Math.atan2(doorX - (carX - 1.5), (doorZ - 1.5) - (stopZ - .35));
                 A.fov = 52; A.updateProjectionMatrix();
@@ -391,11 +370,19 @@
             },
             update: (p, tt, dt) => {
                 let st = this.shotTime, g = this.man.group;
-                let k = Mi(HA(st / 4.4, 0, 1));                  // camina hasta la puerta
-                let px = HP(carX - 1.5, doorX, k), pz = HP(stopZ - .35, doorZ - 1.5, k);
-                if (st > 6.4) {                                   // y entra
-                    let e2 = aD(HA((st - 6.4) / 2.1, 0, 1));
-                    px = HP(doorX, doorX, e2); pz = HP(doorZ - 1.5, doorZ + 1.1, e2);
+                // el recorrido rodea el auto: primero sale de al lado y avanza
+                // hasta pasar el capot, recien despues cruza hacia la puerta
+                let px, pz;
+                if (st < 2) {
+                    let k = Mi(HA(st / 2, 0, 1));
+                    px = HP(carX - 1.55, carX - 1.45, k); pz = HP(stopZ - .35, stopZ + 3.7, k);
+                } else if (st < 5) {
+                    let k = Mi(HA((st - 2) / 3, 0, 1));
+                    px = HP(carX - 1.45, doorX, k); pz = HP(stopZ + 3.7, doorZ - 1.5, k);
+                } else if (st < 7) { px = doorX; pz = doorZ - 1.5 }
+                else {                                            // y entra
+                    let e2 = aD(HA((st - 7) / 2.2, 0, 1));
+                    px = doorX; pz = HP(doorZ - 1.5, doorZ + 1.2, e2);
                 }
                 g.position.set(px, y0, pz);
                 // orientar por la velocidad real: apuntar al objetivo se da vuelta
@@ -404,23 +391,28 @@
                 if (Math.hypot(vx, vz) > 1e-4) this.faceY = Math.atan2(vx, vz);
                 this.lastPX = px; this.lastPZ = pz;
                 g.rotation.y = this.faceY;
-                let moving = st < 4.4 || st > 6.4;
+                let moving = st < 5 || st > 7;
                 if (this.rig && this.walkClip !== moving) {
                     this.walkClip = moving;
                     this.rig.play(moving ? "preset:walk" : "preset:idle", { fade: .22 });
                 }
                 if (moving && st - this.stepAt > .5) { this.stepAt = st; li("concrete", .4) }
-                // golpea y la puerta se abre sola
-                if (!this.knocked && st > 4.7) { this.knocked = !0; HT(.5, 0); HT(.45, 0) }
-                this.swingDoor((st - 5.2) / 1.4);
+                // estira el brazo, abre la puerta y la cierra al entrar
+                let reach = HA(Math.min((st - 5.1) / .6, (7.4 - st) / .5), 0, 1);
+                this.boyReach(reach);
+                if (!this.knocked && st > 5.2) { this.knocked = !0; HT(.45, 0) }
+                let open = HA((st - 5.6) / 1.3, 0, 1),
+                    shut = HA((st - 8.7) / 1, 0, 1);
+                this.swingDoor(open * (1 - shut));
+                if (!this.shut && st > 9.5) { this.shut = !0; HT(.6, 0); li("wood", .6) }
                 // camara en tercera persona, atras y a un costado
-                let ang = HP(-.9, -.35, Mi(HA(st / 6, 0, 1))),
-                    dist = HP(4.2, 2.6, Mi(HA(st / 6, 0, 1)));
-                A.position.set(px + Math.sin(ang) * dist, y0 + HP(1.75, 1.55, Mi(HA(st / 6, 0, 1))), pz - Math.cos(ang) * dist);
+                let cam = Mi(HA(st / 6.5, 0, 1));
+                let ang = HP(-1.05, -.3, cam), dist = HP(4.6, 2.7, cam);
+                A.position.set(px + Math.sin(ang) * dist, y0 + HP(1.8, 1.55, cam), pz - Math.cos(ang) * dist);
                 A.lookAt(px, y0 + HP(1.05, 1.35, HA((st - 4) / 3, 0, 1)), pz + .6);
                 this.handheld(.005);
                 this.driftFog(dt);
-                if (st > 8.4) P.set({ fade: HA((st - 8.4) / .6, 0, 1) });
+                if (st > 9.7) P.set({ fade: HA((st - 9.7) / .6, 0, 1) });
             },
             exit: () => {
                 this.setActorVisible(!1);
