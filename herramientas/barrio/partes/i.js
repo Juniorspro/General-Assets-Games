@@ -371,7 +371,12 @@ async function arranca(){
       return JSON.stringify({ t, modo: MODO, plano: pl,
         cara: postMat.uniforms.cara.value, dof: +postMat.uniforms.dof.value.toFixed(3),
         fov: +cam.fov.toFixed(1),
-        cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+        /* CINCO DECIMALES Y NO DOS: con dos, el paso de cuantización es un
+           centímetro y la segunda diferencia de la trayectoria —que es con lo
+           que se mide el temblor— sale dominada por el redondeo. Medido, daba
+           exactamente 10, 14,14 y 17,32 mm, o sea 10·√1, √2 y √3: el ruido del
+           toFixed y no la cámara. */
+        cam: [+cam.position.x.toFixed(5), +cam.position.y.toFixed(5), +cam.position.z.toFixed(5)],
         neg: +($('cineNeg').style.opacity || 0) });
     },
     /* la sonda NO pasa por `saltar()`: ésa tiene medio segundo de gracia para

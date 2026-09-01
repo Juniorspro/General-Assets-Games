@@ -225,14 +225,20 @@ const CINEMA = {
       x: this.x0 + this.adx*av, z: this.z0 + this.adz*av, f,
       /* el ocho: el vertical va al DOBLE de frecuencia que el lateral, porque
          hay dos pisadas por ciclo y una sola oscilación de cadera */
-      /* Y LAS CUATRO AMPLITUDES BAJAN A LA MITAD, por el mismo reporte que el
-         cabeceo del juego: 3,6 cm de subida y 3,0 de vaivén dos veces por
-         segundo no se leen a caminata sino a temblor. Un cabeceo real caminando
-         son dos centímetros. */
-      sy: Math.abs(Math.sin(f)) * 0.018,
-      sx: Math.cos(f) * 0.014,
-      rl: Math.cos(f) * 0.008,
-      pt: Math.sin(f*2) * 0.003
+      /* ── LA CÁMARA SE QUEDA FIJA, Y EL PASO YA NO LA MUEVE ──
+         Pedido, después de bajar las amplitudes a la mitad y de que siguiera
+         temblando: *«que sea fijo pero con movimiento suave»*. Y es la lectura
+         correcta: lo que temblaba no era la amplitud sino LA FRECUENCIA. Estos
+         cuatro términos salen de `f`, que es la fase del paso —dos por segundo—
+         y a esa velocidad cualquier amplitud se lee a temblor, aunque midiera
+         un milímetro. Un plano de cine no cabecea con cada pisada.
+         Queda una sola deriva, y sale del RELOJ y no del paso: un seno de 0,42
+         Hz —una vuelta cada quince segundos— y un centímetro de amplitud. Eso
+         es respirar, no caminar, y es lo que separa «fijo» de «congelado». */
+      sy: Math.sin(t*0.42) * 0.010,
+      sx: Math.sin(t*0.29 + 1.7) * 0.008,
+      rl: 0,
+      pt: 0
     };
   },
 
@@ -268,14 +274,15 @@ const CINEMA = {
          múltiplos entre sí: así el ciclo no se repite y no se lee a animación.
          Sin esto, los tramos en los que mira al frente parecen una cámara
          montada en un trípode que camina. */
-      /* ── EL TEMBLOR DE LA CINEMÁTICA BAJA A LA MITAD ──
-         Reporte: *«tiembla mucho en la cinemática, agregá más suavidad»*. Los
-         senos rápidos —1,97 y 1,43 Hz— son los que se leen a temblor y no a
-         cámara en mano; los lentos son los que dan el aire de que alguien la
-         está llevando. Así que los rápidos se cortan a un tercio y los lentos
-         casi no se tocan: lo que se va es el temblor, no el movimiento. */
-      yaw += Math.sin(t*0.83)*0.010 + Math.sin(t*1.97 + 1.3)*0.0025;
-      pit += Math.sin(t*0.61 + 2.1)*0.008 + Math.sin(t*1.43)*0.0016;
+      /* ── Y LOS DOS SENOS RÁPIDOS SE VAN DEL TODO ──
+         Bajarlos a un tercio no alcanzó, y por lo mismo que el cabeceo del paso:
+         a 1,97 y 1,43 Hz lo que se ve es temblor, no una cámara en mano. Quedan
+         los dos lentos —0,83 y 0,61 Hz, o sea una vuelta cada siete y cada diez
+         segundos— que son los que hacen que la cabeza no esté clavada a un
+         trípode. Uno solo tampoco serviría: un seno solo se repite igual y el
+         ojo lo aprende; dos de frecuencias que no son múltiplos entre sí, no. */
+      yaw += Math.sin(t*0.83)*0.007;
+      pit += Math.sin(t*0.61 + 2.1)*0.006;
 
       cam.position.set(c.x + der.x*c.sx, alturaSuelo(c.x, c.z) + OJO + c.sy,
                        c.z + der.z*c.sx);
@@ -409,7 +416,9 @@ const CINEMA = {
          una dirección con la cabeza puesta al revés, y en la captura lo que se
          veía era la nuca. */
       const px = _pO.x + this.adx*dist - der.x*c.sx*0.34;
-      const py = suelo + OJO + 0.012 + c.sy*0.66 + Math.sin(u*1.9)*0.0035;
+      /* el seno de 1,9 Hz que había acá era la misma clase de temblor que el
+         del plano A: se va, y lo que queda es la deriva lenta que ya trae `c` */
+      const py = suelo + OJO + 0.012 + c.sy*0.66;
       const pz = _pO.z + this.adz*dist - der.z*c.sx*0.34;
       cam.position.set(px, py, pz);
       /* SE APUNTA UN POCO POR DEBAJO DE LOS OJOS. Apuntando justo a ellos
@@ -639,8 +648,11 @@ const CINEMA = {
       const px = pf.x + this.adx*dist*0.88 + der.x*0.10;
       const py = pf.y + dist*0.46;
       const pz = pf.z + this.adz*dist*0.88 + der.z*0.10;
-      cam.position.set(px + Math.sin(u*1.23)*0.004,
-                       py + Math.sin(u*1.61 + 0.7)*0.003, pz);
+      /* mismo criterio en el plano de las pastillas: 1,23 y 1,61 Hz son temblor.
+         Van a 0,29 y 0,23 —una vuelta cada veinte y cada veintisiete segundos—
+         y con eso el plano se mueve sin vibrar. */
+      cam.position.set(px + Math.sin(u*0.29)*0.006,
+                       py + Math.sin(u*0.23 + 0.7)*0.005, pz);
       cam.up.set(0, 1, 0);
       cam.lookAt(pf.x, pf.y, pf.z);
       if (Math.abs(cam.fov - 30) > 0.01){ cam.fov = 30; cam.updateProjectionMatrix(); }
