@@ -436,7 +436,13 @@
             rig.root.visible = !1;
             this.deps.scene.add(rig.root);
             this.oldLady = rig;
-            this.disposers.push(() => { rig.dispose(); this.deps.scene.remove(rig.root) });
+            // luz propia del golpe: la linterna apunta a donde mira la camara y en
+            // el momento del batazo la camara ya no la esta mirando
+            let hl = new GD(0xc3d4ea, 0, 5.5, 2);
+            hl.visible = !1;
+            this.deps.scene.add(hl);
+            this.hitLight = hl;
+            this.disposers.push(() => { rig.dispose(); this.deps.scene.remove(rig.root); this.deps.scene.remove(hl) });
         }, void 0, () => { });
     }
     /* el rig vino con walk/idle/jump nomas, asi que el batazo va a mano sobre los

@@ -203,8 +203,9 @@
             captions: [{ from: 3.1, to: 5.2, text: "No la oí entrar." }],
             enter: () => {
                 this.hitDone = !1;
+                if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
-                placeLady(doorX + .58, doorZ + 1.02, .4, "preset:idle");
+                placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
                 this.oldLady && (this.oldLady.root.visible = !1);
             },
             update: (p, tt, dt) => {
@@ -223,23 +224,29 @@
                     this.hitDone = !0;
                     HT(1); ZT(1); ki(1, -.35);
                     P.set({ dread: 1 });
-                    placeLady(doorX + .55, doorZ + 1.05, .35, "preset:idle");
+                    placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
                 }
                 // el golpe: la camara cae al piso girando
-                let f = HA((st - 1.15) / 1.5, 0, 1), e = aD(f);
-                let camY = HP(y0 + 1.62, y0 + .28, e),
-                    camZ = HP(doorZ + 1.8, doorZ + 2.15, e);
-                A.position.set(doorX + HP(0, -.35, e) + Math.sin(tt * 26) * .05 * (1 - f), camY, camZ);
-                // gira la cabeza hacia ella mientras se desploma
-                let lx = HP(doorX, doorX + .55, e),
-                    ly = HP(y0 + 1.48, y0 + 1.25, e),
-                    lz = HP(camZ + 3, doorZ + 1.05, e);
+                let f = HA((st - 1.15) / 1.5, 0, 1), e = aD(f),
+                    turn = aD(HA((st - 1.2) / .6, 0, 1));   // la cabeza gira antes de terminar de caer
+                let camY = HP(y0 + 1.62, y0 + .3, e),
+                    camZ = HP(doorZ + 1.8, doorZ + 2.3, e);
+                A.position.set(doorX + HP(0, -.15, e) + Math.sin(tt * 26) * .05 * (1 - f), camY, camZ);
+                // mira hacia ella parada encima con el bate
+                let lx = HP(doorX, doorX + .35, turn),
+                    ly = HP(y0 + 1.48, y0 + 1.05, turn),
+                    lz = HP(camZ + 3, doorZ + .78, turn);
                 A.lookAt(lx, ly, lz);
-                A.rotateZ(HP(0, 1.15, e) + Math.sin(tt * 18) * .06 * (1 - f));
+                A.rotateZ(HP(0, .7, e) + Math.sin(tt * 18) * .06 * (1 - f));
+                if (this.hitLight) this.hitLight.intensity = HP(0, 11, HA((st - 1.1) / .35, 0, 1)) * HA(1 - (st - 3) / 1.4, 0, 1);
                 if (st > 2.9) P.set({ fade: HA((st - 2.9) / 1.5, 0, 1) });
                 if (st > 4.4 && L) L.root.visible = !1;
             },
-            exit: () => { P.set({ dread: .35 }); this.oldLady && (this.oldLady.root.visible = !1) }
+            exit: () => {
+                P.set({ dread: .35 });
+                this.oldLady && (this.oldLady.root.visible = !1);
+                this.hitLight && (this.hitLight.visible = !1, this.hitLight.intensity = 0);
+            }
         };
         let wake = {
             id: "wake-locked",
