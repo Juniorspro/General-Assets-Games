@@ -187,10 +187,47 @@ export class House {
             put(room, new THREE.BoxGeometry(1.1, 1.9, 0.35), wood, 0.95);
     }
 
+    /* Ventana tapiada: tablones sobre un hueco y luz fria entrando entre ellos.
+       Es la unica luz de las piezas y motiva que se vea algo antes de tener
+       el celular en la mano. */
+    buildWindow(c, r, facing) {
+        const [x, z] = toWorld(c, r);
+        const g = new THREE.Group();
+        const inward = facing;                       // +1 mira a +Z, -1 a -Z
+        const glow = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.15, 1.35),
+            new THREE.MeshBasicMaterial({ color: 0x8fb0e6, fog: false }));
+        glow.position.set(0, 1.55, 0.02 * inward);
+        glow.rotation.y = inward > 0 ? 0 : Math.PI;
+        g.add(glow);
+        const bm = new THREE.MeshStandardMaterial({ color: 0x3a2b1d, roughness: 0.95 });
+        for (const [y, a] of [[1.15, 0.12], [1.55, -0.09], [1.95, 0.05]]) {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.19, 0.05), bm);
+            b.position.set(0, y, 0.05 * inward);
+            b.rotation.z = a;
+            b.castShadow = true;
+            g.add(b);
+        }
+        const L = new THREE.PointLight(0x93b4e8, 3.4, 8.5, 2);
+        L.position.set(0, 1.6, 0.75 * inward);
+        g.add(L);
+        g.position.set(x, 0, z + (CELL / 2 - 0.03) * inward);
+        this.group.add(g);
+        return g;
+    }
+
     buildLights() {
+        // luz de luna en las piezas grandes, para que nada quede en negro puro
+        this.buildWindow(3, 1, 1);        // dormitorio
+        this.buildWindow(12, 1, 1);       // cuarto del fondo
+        this.buildWindow(20, 1, 1);       // deposito
+        this.buildWindow(3, 16, -1);      // sala: es donde despierta
+        this.buildWindow(13, 16, -1);     // cocina
+        this.buildWindow(21, 16, -1);     // despensa
+
         // una bombita colgando en el pasillo, apenas viva
         const [hx, hz] = toWorld(11, 8);
-        const bulb = new THREE.PointLight(0xffd9a0, 6, 11, 1.8);
+        const bulb = new THREE.PointLight(0xffd9a0, 9, 16, 1.7);
         bulb.position.set(hx, WALL_H - 0.5, hz);
         bulb.castShadow = true;
         bulb.shadow.mapSize.set(512, 512);
@@ -215,7 +252,7 @@ export class House {
     flicker(t) {
         if (!this.bulb) return;
         const f = 0.72 + 0.28 * Math.sin(t * 11.3) * Math.sin(t * 3.1) + (Math.random() < 0.012 ? -0.5 : 0);
-        this.bulb.intensity = Math.max(0.6, 6 * f);
+        this.bulb.intensity = Math.max(1.2, 9 * f);
         this.bulbGlass.material.color.setScalar(Math.min(1, 0.5 + f * 0.6));
     }
 

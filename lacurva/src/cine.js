@@ -261,7 +261,7 @@ export class Director {
                 g.boySeat(false);
                 g.phoneVisible(false);
                 cam().fov = 68; cam().updateProjectionMatrix();
-                cam().position.set(wx, 0.22, wz);
+                cam().position.set(g.wakeSpot.x, 0.22, g.wakeSpot.z);
                 g.audio.playAmbience(0.5);
                 hud.set({ fade: 1, blur: 1, lids: 1, vignette: 0.9 });
             },

@@ -14,6 +14,8 @@ const A = window.CRASH_ASSETS || {};
 /* Punto de la cadera del conductor, en coordenadas del auto. El Bentley del
    que salio el modelo es ingles, asi que el volante cae a la derecha. */
 const SEAT = { x: 0.45, y: 0.55, z: -0.35 };
+/* Altura del ojo del conductor sobre el asfalto. */
+const EYE_Y = 1.26;
 
 class Game {
     constructor() {
@@ -181,24 +183,18 @@ class Game {
     boyPhone(k) { this.seatPose(sat(k)); if (this.phoneGlow) this.phoneGlow.intensity = 0.45 * sat(k) }
     phoneVisible(v) { if (this.phoneHolder) this.phoneHolder.visible = v }
 
-    /* Ojo del conductor. Sale del hueso de la cabeza del propio rig, no de
-       numeros adivinados: asi la vista y el cuerpo siempre coinciden. */
+    /* Ojo del conductor, en coordenadas del auto. Coincide con el cuerpo
+       porque el rig se ancla por la cadera al mismo punto de asiento. */
     povEye(cam, sway, zoom) {
         const c = this.car.group, z = sat(zoom || 0);
         this.setHeadHidden(this.boy, true);
         c.updateMatrixWorld(true);
-        this.boy.root.updateMatrixWorld(true);
 
-        const head = this.boy.bones.Head || this.boy.bones.Neck;
-        const p = new THREE.Vector3();
-        if (head) {
-            head.getWorldPosition(p);
-            // los ojos caen un poco adelante y arriba de la base del craneo
-            p.add(new THREE.Vector3(0, 0.06, 0.10).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.rotation.y));
-        } else {
-            p.set(0.45, 1.22, -0.15);
-            c.localToWorld(p);
-        }
+        // Punto fijo en coordenadas del auto. Va bastante adelante de la base
+        // del craneo a proposito: el buzo tiene capucha y desde el hueso de la
+        // cabeza la camara queda mirando el forro de adentro.
+        const p = new THREE.Vector3(SEAT.x, EYE_Y, SEAT.z + 0.24);
+        c.localToWorld(p);
         cam.position.copy(p);
         cam.position.y += Math.sin(this.t * 8.3) * 0.006 * sway;
         cam.position.x += Math.sin(this.t * 5.1) * 0.008 * sway;

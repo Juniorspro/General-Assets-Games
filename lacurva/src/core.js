@@ -93,8 +93,8 @@ export class Engine {
         } else if (name === 'house') {
             this.sun.intensity = 0.16; this.sun.color.set(0x7d94c4);
             this.sun.position.set(18, 30, -14);
-            this.hemi.intensity = 0.16; this.hemi.color.set(0x36435c); this.hemi.groundColor.set(0x14100c);
-            this.amb.intensity = 0.05;
+            this.hemi.intensity = 0.34; this.hemi.color.set(0x36435c); this.hemi.groundColor.set(0x14100c);
+            this.amb.intensity = 0.11;
             f.color.set(0x05060a); f.near = 1.2; f.far = 22;
             s.background = new THREE.Color(0x05060a);
             s.environment = this.envs.sky || null;
