@@ -5,6 +5,10 @@ import {
     CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
     toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
 } from './map.js';
+import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
+import { Piernas } from './piernas.js';
+import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
+import { Mision } from './langosta.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -82,25 +86,35 @@ class Dungeon {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.1;
+        this.renderer.toneMappingExposure = 1.06;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x05060a);
-        this.scene.fog = new THREE.Fog(0x05060a, 6, 46);
+        this.scene.background = new THREE.Color(0x0d1018);
+        /* La niebla arrancaba a 6 m y se comia el cuarto entero. Ahora empieza
+           donde termina el alcance del farol y cierra mucho mas lejos: se ve
+           el fondo del pasillo, que es lo que se pedia. */
+        this.scene.fog = new THREE.Fog(0x0d1018, 13, 86);
         this.camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.02, 300);
 
-        this.scene.add(new THREE.HemisphereLight(0x3a4a6b, 0x100c08, 0.5));
-        this.scene.add(new THREE.AmbientLight(0xffffff, 0.06));
+        /* Luz de relleno de verdad: antes el ambiente estaba en 0,06 y todo
+           lo que el farol no tocaba era negro liso. Sube el piso de luz sin
+           aplanar, porque el hemisferico sigue teniendo cielo y suelo. */
+        this.scene.add(new THREE.HemisphereLight(0x7d90b8, 0x2a1e14, 0.85));
+        this.scene.add(new THREE.AmbientLight(0xffeedd, 0.16));
 
         /* El farol del jugador. Como somos chicos, alcanza poco y las paredes
            se pierden hacia arriba en la oscuridad: eso es lo que las agranda. */
-        this.lamp = new THREE.PointLight(0xffc98a, 19, 30, 1.55);
+        /* Caida 1,2 y no 1,55: con la caida fuerte, a treinta centimetros de
+           una pared el farol la quemaba en blanco. Aplanando la curva, a dos
+           metros alumbra casi lo mismo y de cerca pega menos de la mitad. */
+        this.lamp = new THREE.PointLight(0xffc98a, 11, 30, 1.2);
         this.lamp.castShadow = true;
         this.lamp.shadow.mapSize.set(1024, 1024);
         this.lamp.shadow.bias = -0.004;
         this.scene.add(this.lamp);
 
+        iniciarPantalla();
         this.build();
         this.initPlayer();
         this.bindInput();
@@ -110,11 +124,33 @@ class Dungeon {
         this.t = 0; this.roll = 0; this.bob = 0; this.pitch = 0; this.yaw = 0;
         this.stamina = 1; this.running = false; this.crouch = false;
         this.visited = new Set();
+
+        this.piernas = new Piernas(this.camera);
+        this.scene.add(this.camera);   // la camara tiene hijos: tiene que estar en la escena
+        this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z });
+        this.cajasMuebles = [];
+
+        /* Los muebles llegan tarde y no pasa nada: el nivel ya esta armado y
+           entran encima. Un base64 roto cuesta una comoda, no la pantalla. */
+        cargarMuebles(A).then(modelos => {
+            this.modelosMuebles = modelos;
+            const revisables = [];
+            for (let lv = 0; lv < LEVELS.length; lv++) {
+                const r = poblar(modelos, lv, LEVELS[lv].base, this.levelGroups[lv],
+                    0xF0E + lv * 313, lv === 0 ? this.celdasVedadas : null);
+                this.cajasMuebles.push(...r.cajas);
+                revisables.push(...r.revisables);
+            }
+            this.mision.esconderLlave(revisables);
+        });
     }
 
+    /* El tamano sale del MARCO girado, no de la ventana: en vertical el marco
+       mide innerHeight de ancho. Si se usara innerWidth, el juego saldria
+       apaisado pero con el aspecto de un telefono parado. */
     resize() {
-        this.renderer.setSize(innerWidth, innerHeight, false);
-        this.camera.aspect = innerWidth / innerHeight;
+        this.renderer.setSize(vistaAncho(), vistaAlto(), false);
+        this.camera.aspect = vistaAncho() / vistaAlto();
         this.camera.updateProjectionMatrix();
     }
 
@@ -235,7 +271,6 @@ class Dungeon {
         }
 
         this.placeChandeliers(lv, base, group);
-        this.placeFurniture(lv, base, group);
     }
 
     /* Faroles colgando del techo. La luz va dentro del aro, asi que el aro y
@@ -284,14 +319,14 @@ class Dungeon {
             }
 
             // la luz va justo debajo del aro: proyecta la rueda hacia arriba
-            const L = new THREE.PointLight(0xffca86, big ? 15 : 9, big ? 19 : 13, 1.75);
+            const L = new THREE.PointLight(0xffca86, big ? 20 : 12, big ? 28 : 20, 1.7);
             L.position.y = WALL_H - drop - .04;
             L.shadow.mapSize.set(512, 512);
             L.shadow.bias = -0.006;
             L.shadow.camera.near = 0.08;
             g.add(L);
             group.add(g);
-            (this.lamps || (this.lamps = [])).push({ L, phase: rng.range(0, 9) });
+            (this.lamps || (this.lamps = [])).push({ L, base: big ? 20 : 12, phase: rng.range(0, 9) });
         };
 
         /* Rejilla floja: un farol cada pocas celdas, en salas y en pasillos.
@@ -308,48 +343,6 @@ class Dungeon {
                         if (!isOpen(lv, c + dc, r + dr)) { open3 = false; break }
                 hang(c, r, open3);
             }
-        }
-    }
-
-    /* Roperos y comodas contra las paredes: llenan las salas grandes y de paso
-       dan referencia de tamano, que es de lo que se trata todo esto. */
-    placeFurniture(lv, base, group) {
-        const rng = new Rng(0xF0E + lv * 313);
-        const wood = new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: .62 });
-        const dark = new THREE.MeshStandardMaterial({ color: 0x3a2415, roughness: .7 });
-        const pieces = [];
-        let placed = 0;
-        for (let i = 0; i < 6000 && placed < 34; i++) {
-            const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
-            if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
-            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
-            if (!dirs.length) continue;
-            const [dc, dr] = dirs[Math.floor(rng.next() * dirs.length)];
-            const [x, z] = toWorld(c, r);
-            const tall = rng.next() < .45;
-            const w = tall ? 1.15 : 1.25, hgt = tall ? 2.05 : 0.95, d = tall ? .62 : .55;
-            const along = dc ? d : w, across = dc ? w : d;
-            const px = x + dc * (CELL / 2 - (dc ? d : 0) / 2 - .06);
-            const pz = z + dr * (CELL / 2 - (dr ? d : 0) / 2 - .06);
-            const body = new THREE.BoxGeometry(along, hgt, across);
-            body.translate(px, base + hgt / 2, pz);
-            pieces.push({ g: body, m: wood });
-            // dos puertas o cajones marcados con una caja fina mas oscura
-            const inset = new THREE.BoxGeometry(along * .82, hgt * (tall ? .58 : .34), across * .82);
-            inset.translate(px + dc * .02, base + hgt * (tall ? .62 : .55), pz + dr * .02);
-            pieces.push({ g: inset, m: dark });
-            placed++;
-        }
-        for (const mat of [wood, dark]) {
-            const list = pieces.filter(p => p.m === mat).map(p => p.g);
-            if (!list.length) continue;
-            const merged = mergeGeos(list);
-            worldUV(merged, .8);
-            const m = new THREE.Mesh(merged, mat);
-            m.castShadow = m.receiveShadow = true;
-            group.add(m);
-            list.forEach(g => g.dispose());
         }
     }
 
@@ -400,6 +393,10 @@ class Dungeon {
         for (const [dc, dr, yaw] of dirs) {
             if (isOpen(0, s.c + dc, s.r + dr)) { this.yaw = yaw; break }
         }
+        this.celdasVedadas = [];
+        for (let dr = -2; dr <= 2; dr++)
+            for (let dc = -2; dc <= 2; dc++)
+                this.celdasVedadas.push((s.c + dc) + ',' + (s.r + dr));
     }
 
     bindInput() {
@@ -411,6 +408,7 @@ class Dungeon {
                perderse, justo cuando mas rapido va todo. */
             if (e.code === 'KeyX' || e.code === 'Space') this.slideRequested = true;
             if (e.code === 'KeyR' || e.code === 'CapsLock') this.autoRun = !this.autoRun;
+            if (e.code === 'KeyE' || e.code === 'Enter') this.usarPedido = true;
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
         });
         addEventListener('keyup', e => { this.keys[e.code] = false });
@@ -433,16 +431,26 @@ class Dungeon {
 
         const setKnob = (dx, dy) => { knob.style.transform = `translate(${dx}px, ${dy}px)` };
 
+        /* Los dedos vienen en coordenadas de PANTALLA y el juego vive en un
+           marco girado 90°, asi que hay que traducirlos. Los botones no lo
+           necesitan —estan adentro del marco y el navegador ya les acierta—
+           pero el joystick y el arrastre para mirar se leen crudos.
+
+           El centro del joystick sale de offsetLeft/offsetTop y no de
+           getBoundingClientRect: el rect de un elemento girado es su caja
+           alineada a los ejes de la pantalla, no la del elemento. */
         const onStart = e => {
             for (const t of e.changedTouches) {
-                const r = base.getBoundingClientRect();
-                const inStick = t.clientX < innerWidth * 0.5;
+                const [mx, my] = aMarco(t.clientX, t.clientY);
+                const inStick = mx < vistaAncho() * 0.5;
                 if (inStick && !this.stick.active) {
                     this.stick.active = true; this.stick.id = t.identifier;
-                    this.stick.cx = r.left + r.width / 2; this.stick.cy = r.top + r.height / 2;
+                    this.stick.cx = base.offsetLeft + base.offsetWidth / 2;
+                    this.stick.cy = base.offsetTop + base.offsetHeight / 2;
                 } else if (!this.look.active) {
                     this.look.active = true; this.look.id = t.identifier;
                     this.look.lx = t.clientX; this.look.ly = t.clientY;
+                    this.look.movio = 0;
                 }
             }
             e.preventDefault();
@@ -450,15 +458,18 @@ class Dungeon {
         const onMove = e => {
             for (const t of e.changedTouches) {
                 if (this.stick.active && t.identifier === this.stick.id) {
-                    let dx = t.clientX - this.stick.cx, dy = t.clientY - this.stick.cy;
+                    const [mx, my] = aMarco(t.clientX, t.clientY);
+                    let dx = mx - this.stick.cx, dy = my - this.stick.cy;
                     const d = Math.hypot(dx, dy);
                     if (d > R) { dx = dx / d * R; dy = dy / d * R }
                     this.stick.x = dx / R; this.stick.y = dy / R;
                     setKnob(dx, dy);
                 } else if (this.look.active && t.identifier === this.look.id) {
-                    this.yaw -= (t.clientX - this.look.lx) * 0.005;
-                    this.pitch = clamp(this.pitch - (t.clientY - this.look.ly) * 0.005, -1.2, 1.2);
+                    const [dx, dy] = deltaMarco(t.clientX - this.look.lx, t.clientY - this.look.ly);
+                    this.yaw -= dx * 0.005;
+                    this.pitch = clamp(this.pitch - dy * 0.005, -1.2, 1.2);
                     this.look.lx = t.clientX; this.look.ly = t.clientY;
+                    this.look.movio += Math.abs(dx) + Math.abs(dy);
                 }
             }
             e.preventDefault();
@@ -466,7 +477,11 @@ class Dungeon {
         const onEnd = e => {
             for (const t of e.changedTouches) {
                 if (t.identifier === this.stick.id) { this.stick.active = false; this.stick.id = -1; this.stick.x = this.stick.y = 0; setKnob(0, 0) }
-                if (t.identifier === this.look.id) { this.look.active = false; this.look.id = -1 }
+                if (t.identifier === this.look.id) {
+                    // un toque sin arrastre es "usar": en tactil nadie busca un boton chico
+                    if (this.look.movio < 12) this.usarPedido = true;
+                    this.look.active = false; this.look.id = -1;
+                }
             }
         };
         /* Los tres botones de las fotos: agacharse, alternar carrera y
@@ -488,6 +503,7 @@ class Dungeon {
         this.slideBtn = btn('slide', () => { this.slideRequested = true });
         this.runBtn = btn('runtoggle', () => { this.autoRun = !this.autoRun });
         btn('crouch', () => { this.touchCrouch = true }, () => { this.touchCrouch = false });
+        this.usarBtn = btn('usar', () => { this.usarPedido = true });
 
         addEventListener('touchstart', onStart, { passive: false });
         addEventListener('touchmove', onMove, { passive: false });
@@ -554,6 +570,7 @@ class Dungeon {
         const low = sliding || this.crouch;
         let nx = this.pos.x + vx * dt, nz = this.pos.z + vz * dt;
         [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
+        [nx, nz] = chocarMuebles(this.cajasMuebles, nx, nz, this.y, RADIUS * 0.8);
         this.pos.set(nx, 0, nz);
 
         // la altura sigue la superficie: escaleras arriba y abajo sin fisica
@@ -581,7 +598,9 @@ class Dungeon {
         cam.position.set(this.pos.x, this.y + this.eyeY + bobY, this.pos.z);
         cam.rotation.order = 'YXZ';
         // deslizando la cabeza tambien se va para atras
-        cam.rotation.set(this.pitch + (sliding ? -0.16 * slideK : 0), this.yaw, this.roll);
+        /* Al tirarse la cabeza cae y se mira las propias piernas: sin esto quedan
+           abajo del borde de la pantalla y el deslizamiento no se ve. */
+        cam.rotation.set(this.pitch + (sliding ? -0.24 * slideK : 0), this.yaw, this.roll);
         // el FOV se abre al correr y pega un tiron al deslizar
         const wantFov = FOV + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
         if (Math.abs(cam.fov - wantFov) > 0.05) {
@@ -589,8 +608,29 @@ class Dungeon {
             cam.updateProjectionMatrix();
         }
 
-        this.lamp.position.set(this.pos.x, this.y + this.eyeY + 0.12, this.pos.z);
-        this.lamp.intensity = 19 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.8;
+        this.piernas.actualizar(slideK, sliding, this.t, dt);
+
+        /* La mision y el bicho. El ruido sale de COMO te movés, no de donde
+           estás: correr y deslizarse lo hacen, agachado no. */
+        if (this.usarPedido) {
+            this.usarPedido = false;
+            this.mision.usar(this.pos.x, this.y, this.pos.z);
+        }
+        this.mision.actualizar(dt, {
+            x: this.pos.x, y: this.y, z: this.pos.z,
+            corriendo: this.running, agachado: this.crouch, deslizando: sliding,
+        });
+        if (this.mision.reaparecer) {
+            const [rx, rz] = this.mision.reaparecer;
+            this.mision.reaparecer = null;
+            this.pos.set(rx, 0, rz);
+            this.slideT = 0;
+            const sy = surfaceAt(rx, rz, this.y);
+            if (sy !== null) this.y = sy;
+        }
+
+        this.lamp.position.set(this.pos.x, this.y + 0.72, this.pos.z);
+        this.lamp.intensity = 11 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.0;
 
         /* Una luz puntual con sombra cuesta seis caras de render, asi que solo
            las proyectan las mas cercanas: son las unicas cuya rueda en el techo
@@ -613,7 +653,7 @@ class Dungeon {
             }
         }
         for (const l of this.lamps || []) {
-            const base = l.L.distance > 15 ? 15 : 9;
+            const base = l.base;
             const f = 0.92 + 0.08 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
             l.L.intensity = base * f;
         }
@@ -655,6 +695,33 @@ class Dungeon {
         const locked = document.pointerLockElement === this.renderer.domElement;
         const show = !locked && !('ontouchstart' in window);
         if (this._prompt !== show) { this._prompt = show; p.style.display = show ? 'block' : 'none' }
+
+        // la mision: el pendiente, lo que tengo delante y el ultimo aviso
+        const M = this.mision;
+        const tarea = M.tareas()[0];
+        if (this._tarea !== tarea) {
+            this._tarea = tarea;
+            document.getElementById('tarea').textContent = tarea;
+        }
+        const foco = M.mirando(this.pos.x, this.y, this.pos.z);
+        const txt = foco ? foco.texto : '';
+        if (this._foco !== txt) {
+            this._foco = txt;
+            const el = document.getElementById('accion');
+            el.textContent = txt;
+            el.style.opacity = txt ? '1' : '0';
+            this.usarBtn && this.usarBtn.classList.toggle('on', !!txt && foco.tipo !== 'nada');
+        }
+        const av = M.avisoT > 0 ? M.aviso : '';
+        if (this._aviso !== av) {
+            this._aviso = av;
+            document.getElementById('aviso').textContent = av;
+            document.getElementById('aviso').style.opacity = av ? '1' : '0';
+        }
+        if (M.terminado === 'escapo' && !this._fin) {
+            this._fin = true;
+            document.getElementById('fin').classList.add('ver');
+        }
     }
 }
 
@@ -674,6 +741,14 @@ function loop(now) {
         level: levelAt(game.y), running: game.running, roll: +game.roll.toFixed(3),
         sliding: (game.slideT || 0) > 0, eye: +(game.eyeY || 0).toFixed(2),
         autoRun: !!game.autoRun, lamps: (game.lamps || []).length,
+        bicho: game.mision ? {
+            x: +game.mision.bicho.pos.x.toFixed(2), z: +game.mision.bicho.pos.y.toFixed(2),
+            estado: game.mision.bicho.estado, ruido: +game.mision.ruido.toFixed(2),
+            atrapadas: game.mision.atrapadas,
+        } : null,
+        piernas: game.piernas ? +(game.piernas.mezcla || 0).toFixed(2) : null,
+        muebles: (game.cajasMuebles || []).length,
+        puestos: game.mision ? game.mision.puestos : 0,
         shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,
         fov: +game.camera.fov.toFixed(1),
     };

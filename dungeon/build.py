@@ -13,9 +13,19 @@ ASSETS = {
     "floor":    ("wood_floor.webp", "image/webp"),
 }
 
+# Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
+# Van como data URL igual que las texturas: el juego es UN archivo.
+MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa"]
+MUE_DIR = os.path.join(HERE, "muebles")
+
 
 def durl(name, mime):
     with open(os.path.join(DIST, name), "rb") as f:
+        return "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode())
+
+
+def durl_abs(path, mime):
+    with open(path, "rb") as f:
         return "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode())
 
 
@@ -34,6 +44,13 @@ def main():
         raise SystemExit("faltan assets: %s" % ", ".join(missing))
 
     data = {k: durl(f, m) for k, (f, m) in ASSETS.items()}
+    for nombre in MUEBLES:
+        ruta = os.path.join(MUE_DIR, nombre + ".glb")
+        # si falta una pieza el juego igual entra: el modulo la saltea
+        if os.path.exists(ruta):
+            data["mueble_" + nombre] = durl_abs(ruta, "model/gltf-binary")
+        else:
+            print("  (sin %s)" % nombre)
     shell = open(os.path.join(HERE, "shell.html"), encoding="utf-8").read()
     html = shell.replace("/*__ASSETS__*/{}", json.dumps(data)).replace("/*__BUNDLE__*/", bundle)
     open(OUT, "w", encoding="utf-8").write(html)
