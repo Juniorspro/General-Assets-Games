@@ -283,11 +283,11 @@
             holder.position.set(0, -.055, .015);
             holder.rotation.set(-1.05, 0, .12);
             holder.visible = !1;
-            let glowMat = new f9({ color: 0xcfe9ff, transparent: !0, opacity: .5 });
+            let glowMat = new f9({ color: 0xcfe9ff, transparent: !0, opacity: .42 });
             let glows = [];
             for (let s of [1, -1]) {
-                let g = new fA(new k9(.066, .134), glowMat);
-                g.position.set(0, s * .0065, 0);
+                let g = new fA(new k9(.058, .118), glowMat);
+                g.position.set(0, s * .011, 0);
                 g.rotation.x = -s * Math.PI / 2;
                 holder.add(g); glows.push(g);
             }
