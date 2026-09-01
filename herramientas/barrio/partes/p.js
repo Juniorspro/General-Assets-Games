@@ -97,7 +97,13 @@ function alturaPiso(x, z){
    con recortar contra el rectángulo y empujar fuera de dos cajas. Recortar es
    exacto — no hay esquina que raspar— y es la misma decisión que en Eco con la
    sala de práctica. */
-const CU_CAJAS = [CU_CAMA, CU_MESA];
+/* ── Y LA CÓMODA TAMBIÉN FRENA ──
+   Es el único mueble que no estaba antes, así que era el único con el que se
+   podía caminar por adentro. Su caja sale de dónde se la puso y de cuánto mide,
+   no escrita a mano: dos números que digan lo mismo terminan diciendo cosas
+   distintas el día que se la mueve. */
+const CU_COMODA = { x0: -2.38, x1: -1.85, z0: 0.85, z1: 1.85, alto: 0.82 };
+const CU_CAJAS = [CU_CAMA, CU_MESA, CU_COMODA];
 function corrigeCuarto(){
   const R = RADIO;
   JUG.x = cl(JUG.x, CU.X0 + R, CU.X1 - R);
@@ -255,6 +261,63 @@ function armaCiudad(g){
 }
 
 /* ══════════════════════ EL CUARTO ══════════════════════ */
+/* ══════════════════════ LOS MUEBLES GENERADOS ══════════════════════
+   Velador, silla, mesa de luz y cómoda, generados con Rezona Lab (Tripo) y
+   horneados por `herramientas/barrio/hornear_muebles.py`.
+
+   NO REEMPLAZAN NADA HASTA QUE LLEGAN, y acá «llegar» es que el GLB se lea sin
+   tirar. El cuarto se arma con las cajas de siempre —que ya funcionan— y recién
+   después se intenta leer cada malla; la que se lee apaga su caja, y la que
+   tire la deja encendida. O sea que un base64 roto cuesta un mueble y no un
+   cuarto vacío. Es la misma regla que las siete texturas.
+
+   EL TAMAÑO NO SE ELIGE MIRANDO: el generador devuelve todo dentro de un cubo
+   de lado dos, o sea muebles de dos metros. `MUE_CAJA` trae la caja de cada
+   malla tal como vino, y acá se dice cuánto mide el mueble DE VERDAD; la escala
+   sale de dividir. Sin eso la silla mide lo mismo que la cómoda. */
+const MUE_SITIO = {
+  /* nombre: [x, z, alto en metros, giro] */
+  silla:   [-1.55, -1.35, 0.92, 0.35],
+  mesita:  [0.64, 2.50, 0.55, 0],
+  velador: [0.64, 2.50, 0.42, 0],
+  comoda:  [(CU_COMODA.x0 + CU_COMODA.x1)/2, (CU_COMODA.z0 + CU_COMODA.z1)/2, CU_COMODA.alto, Math.PI/2],
+};
+/* el velador va ARRIBA de la mesa de luz, no en el piso */
+const MUE_SOBRE = { velador: 'mesita' };
+const matMueble = new T.MeshLambertMaterial({ vertexColors: true });
+const MUEBLES = {
+  listas: 0, pedidas: 0, mallas: {},
+  pon(g){
+    if (typeof MUE_B64 === 'undefined') return;
+    for (const nom of Object.keys(MUE_SITIO)){
+      const b64 = MUE_B64[nom]; if (!b64) continue;
+      this.pedidas++;
+      let r;
+      try { r = armaProp(B64(b64), matMueble); } catch(e){ continue; }
+      const c = MUE_CAJA[nom];
+      const alto = c[4] - c[1];
+      const [x, z, h, giro] = MUE_SITIO[nom];
+      const e = alto > 1e-4 ? h / alto : 1;
+      const base = MUE_SOBRE[nom]
+                   ? CU.Y + MUE_SITIO[MUE_SOBRE[nom]][2] : CU.Y + 0.03;
+      const o = new T.Object3D();
+      o.add(r.malla);
+      /* el pivote: la malla se centra en x/z y se apoya por su base, y ESO se
+         hace en un objeto de adentro para que el giro de afuera gire el mueble
+         alrededor de su propio eje y no del origen del generador */
+      r.malla.position.set(-(c[0] + c[3])/2, -c[1], -(c[2] + c[5])/2);
+      o.scale.setScalar(e);
+      const w = new T.Object3D();
+      w.add(o); w.position.set(x, base, z); w.rotation.y = giro;
+      w.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true; } });
+      g.add(w);
+      this.mallas[nom] = w;
+      this.listas++;
+      if (CU.proc && CU.proc[nom]) CU.proc[nom].visible = false;
+    }
+  }
+};
+
 function armaCuarto(){
   if (CU.ok) return;
   texturasCiudad();
@@ -262,6 +325,7 @@ function armaCuarto(){
   g.visible = false;
 
   const P = { pared:[], madera:[], carp:[], vidrio:[], emisivo:[], hormigon:[], tela:[] };
+  const MU = { mesita:[], velador:[], silla:[] };
   const M = CU.MURO, A = CU.ALTO, Y = CU.Y;
   const cx = (CU.X0 + CU.X1)/2, cz = (CU.Z0 + CU.Z1)/2;
   const an = CU.X1 - CU.X0, fo = CU.Z1 - CU.Z0;
@@ -349,19 +413,32 @@ function armaCuarto(){
      por nada se lee a maqueta, y uno iluminado desde un solo punto bajo tiene
      sombras largas, que es lo que hace que se lea a las tres de la mañana. */
   const mx = (CU_MESA.x0 + CU_MESA.x1)/2, mz = (CU_MESA.z0 + CU_MESA.z1)/2;
-  P.madera.push({ g: geoCaja, p:[mx, Y + CU_MESA.alto/2, mz],
+  /* ── LAS TRES CAJAS QUE UN MUEBLE DE VERDAD VA A TAPAR VAN APARTE ──
+     El resto del cuarto se funde en cuatro mallas, y una pieza fundida no se
+     puede esconder sola. Éstas tres se guardan en su propia lista: cuando el
+     GLB del mueble termina de decodificar se apaga la caja y se enciende la
+     malla. Cuestan tres llamadas de dibujo más en un cuarto que hace 45. */
+  MU.mesita.push({ g: geoCaja, p:[mx, Y + CU_MESA.alto/2, mz],
                   s:[CU_MESA.x1 - CU_MESA.x0, CU_MESA.alto, CU_MESA.z1 - CU_MESA.z0],
                   u:[0.7/METROS.madera, CU_MESA.alto/METROS.madera], c: 0x6b5a48 });
-  P.carp.push({ g: geoCil, p:[mx, Y + CU_MESA.alto + 0.10, mz], s:[0.05, 0.20, 0.05],
-                c: 0x3a3a3e });
+  MU.velador.push({ g: geoCil, p:[mx, Y + CU_MESA.alto + 0.10, mz], s:[0.05, 0.20, 0.05],
+                   c: 0x3a3a3e });
   /* LA PANTALLA VA CON LA BOCA PARA ABAJO —el cono sin girar, o sea ancho abajo
      y en punta arriba— y LA LUZ VA POR DEBAJO DEL BORDE. Con la luz adentro de
      la pantalla, y como ésta es la única de las seis que proyecta sombra, el
      cono le tapaba el cuarto entero: medido, el brillo medio del cuadro daba
      3 sobre 255 con el velador encendido. */
-  P.emisivo.push({ g: geoCono, p:[mx, Y + CU_MESA.alto + 0.30, mz],
-                   s:[0.17, 0.22, 0.17], c: 0xffd9a0 });
-  CU.lampara = [mx, Y + CU_MESA.alto + 0.14, mz];
+  MU.velador.push({ g: geoCono, p:[mx, Y + CU_MESA.alto + 0.30, mz],
+                   s:[0.17, 0.22, 0.17], c: 0xffd9a0, emisivo: true });
+  /* ── DÓNDE VA LA LUZ CUANDO LA LÁMPARA DEJA DE SER UN CONO ──
+     Con el velador dibujado a mano la luz iba a 14 cm de la mesa, o sea POR
+     DEBAJO del borde de la pantalla: con la luz adentro del cono —y como es la
+     única de las seis que proyecta sombra— el cono le tapaba el cuarto entero.
+     La lámpara generada mide 42 cm y su pantalla arranca más arriba, así que
+     esos 14 cm caen ahora en el medio del fuste: medido, la pantalla salía
+     blanco puro y sin forma. Va a 34, que es justo por debajo del borde de la
+     pantalla nueva. */
+  CU.lampara = [mx, Y + MUE_SITIO.mesita[2] + 0.34, mz];
 
   /* ── LO QUE HACE QUE UN CUARTO SE LEA A CUARTO Y NO A CAJA ──
      Una alfombra, una silla y el frasco sobre la mesa de luz. Los tres son
@@ -371,15 +448,18 @@ function armaCuarto(){
   P.tela.push({ g: geoCaja, p:[-0.55, Y + 0.035, 0.20], r:[0, 0.10, 0],
                 s:[2.30, 0.03, 1.70], c: 0x4a4740 });
   {
-    const sx = -1.55, sz = -1.35, sh = 0.46;
+    const sx = MUE_SITIO.silla[0], sz = MUE_SITIO.silla[1], sh = 0.46;
     for (const [dx, dz] of [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.19], [0.19, 0.19]])
-      P.madera.push({ g: geoCaja, p:[sx + dx, Y + sh/2, sz + dz], s:[0.05, sh, 0.05],
-                      u:[0.05, sh], c: 0x5c4b3c });
-    P.madera.push({ g: geoCaja, p:[sx, Y + sh + 0.02, sz], s:[0.46, 0.05, 0.46],
-                    u:[0.46/METROS.madera, 0.46/METROS.madera], c: 0x6b5a48 });
-    P.madera.push({ g: geoCaja, p:[sx, Y + sh + 0.28, sz - 0.20], s:[0.44, 0.46, 0.05],
-                    u:[0.44/METROS.madera, 0.46/METROS.madera], c: 0x6b5a48 });
+      MU.silla.push({ g: geoCaja, p:[sx + dx, Y + sh/2, sz + dz], s:[0.05, sh, 0.05],
+                     u:[0.05, sh], c: 0x5c4b3c });
+    MU.silla.push({ g: geoCaja, p:[sx, Y + sh + 0.02, sz], s:[0.46, 0.05, 0.46],
+                   u:[0.46/METROS.madera, 0.46/METROS.madera], c: 0x6b5a48 });
+    MU.silla.push({ g: geoCaja, p:[sx, Y + sh + 0.28, sz - 0.20], s:[0.44, 0.46, 0.05],
+                  u:[0.44/METROS.madera, 0.46/METROS.madera], c: 0x6b5a48 });
   }
+  /* la cómoda no tiene caja de respaldo: es un mueble NUEVO, no el reemplazo de
+     uno que ya estaba. Si su GLB no decodifica, el cuarto se queda sin cómoda y
+     nada más. */
   /* el frasco: un cilindro ámbar, la tapa blanca y dos cápsulas al lado. Las
      medidas son las mismas que las del que se lleva en la mano (17 mm de radio
      y 62 de alto), así que es el mismo objeto y no uno parecido. */
@@ -429,6 +509,16 @@ function armaCuarto(){
   pon(P.tela, matPared, true);
   pon(P.vidrio, matVent, false);
   pon(P.emisivo, matEmisivo, false);
+  /* las tres cajas que un mueble de verdad va a tapar, cada una en su malla */
+  CU.proc = {};
+  for (const n of ['mesita', 'velador', 'silla']){
+    const geo = fundir(MU[n]);
+    if (!geo) continue;
+    const m = new T.Mesh(geo, n === 'velador' ? matEmisivo : matMaderaV);
+    m.castShadow = n !== 'velador'; m.receiveShadow = true;
+    g.add(m); CU.proc[n] = m;
+  }
+  MUEBLES.pon(g);
 
   armaCiudad(g);
   escena.add(g);

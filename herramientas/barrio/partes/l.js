@@ -17,6 +17,12 @@ const PJ_OJO = 1.6060;
 const PJ_ESC = OJO / PJ_OJO;
 
 const _qA = new T.Quaternion(), _qB = new T.Quaternion(), _eA = new T.Euler();
+/* CUATRO PROPIOS PARA LA TABLA DEL PASO, y no los de `giraH`: el bucle del
+   ciclo y el giro por ejes de mundo corren en la misma pose, y compartir el
+   temporal es la clase de defecto que no falla hoy y falla al agregar una
+   línea en el medio. */
+const _zA = new T.Quaternion(), _zB = new T.Quaternion(),
+      _zC = new T.Quaternion(), _zD = new T.Quaternion();
 
 /* ── LOS BRAZOS SE BAJAN, Y CUÁNTO ESTÁ MEDIDO ──
    El modelo se generó en pose de A porque es lo que un riggeador automático
@@ -418,21 +424,45 @@ function poseCamina(f, k){
   /* k va de 0 (caminando) a 1 (corriendo): lo que cambia es la amplitud y la
      inclinación del tronco, no el ciclo — correr no es caminar más rápido, es
      caminar más grande y echado adelante */
-  const A = 0.46 + k * 0.34;          /* muslo */
-  const B = 0.62 + k * 0.55;          /* rodilla */
+  /* ── LAS PIERNAS Y LA COLUMNA SALEN DE UN CICLO DE VERDAD ──
+     `PASO_CAMINA` y `PASO_CORRE` son un ciclo de caminata y uno de carrera
+     generados con Rezona Lab (Tripo) y retargeteados al esqueleto de este juego
+     por `herramientas/barrio/hornear_paso.py`. Diez huesos por veinticuatro
+     fases; los brazos, la cabeza y las manos NO están en la tabla porque los
+     maneja el juego —la mirada, el idle, la linterna, las pastillas—.
+
+     POR QUÉ HIZO FALTA, Y NO ES CAPRICHO: reporte del jugador, *«las piernas
+     van de lado a lado, no adelante»*. Medido con la sonda `ejeH` —que gira un
+     hueso un radián y devuelve adónde se fue el PIE, en el marco del
+     personaje— el muslo en X daba **7,0 cm adelante y 8,9 de costado**: o sea
+     que la pierna se movía más de costado que hacia adelante, y encima ocho
+     veces menos de lo que podía. Los ejes de un rig no se adivinan.
+
+     Y NO SE GUARDA UN CLIP, SE GUARDA UNA TABLA POR FASE. El juego ya tiene
+     `AND.fase`, de la que dependen el sonido de la pisada, el cabeceo de la
+     cámara y el balanceo del cuerpo; un `AnimationMixer` con su propio reloj se
+     desincronizaría de las tres. La tabla viene GIRADA para que el pie
+     izquierdo toque el suelo en la fase 0, que es donde suena el paso. */
+  const _u = (f / (Math.PI*2)) * PASO_N;
+  const _i = ((Math.floor(_u) % PASO_N) + PASO_N) % PASO_N;
+  const _j = (_i + 1) % PASO_N;
+  const _t = _u - Math.floor(_u);
+  for (let b = 0; b < PASO_H.length; b++){
+    const h = PJ.idx[PASO_H[b]]; if (!h) continue;
+    /* caminar y correr se mezclan por `k`, que es el mismo número que ya
+       mezclaba las amplitudes: correr no es caminar más rápido, es otro ciclo */
+    _zA.fromArray(PASO_CAMINA[b][_i]); _zB.fromArray(PASO_CAMINA[b][_j]);
+    _zA.slerp(_zB, _t);
+    if (k > 0.001){
+      _zC.fromArray(PASO_CORRE[b][_i]); _zD.fromArray(PASO_CORRE[b][_j]);
+      _zC.slerp(_zD, _t);
+      _zA.slerp(_zC, k);
+    }
+    h.quaternion.copy(_zA);
+  }
   const C = 0.38 + k * 0.32;          /* brazo */
   const s = Math.sin(f), c = Math.cos(f);
   const s2 = Math.sin(f + Math.PI);
-  /* LA RODILLA SÓLO DOBLA PARA UN LADO. Con un seno pelado la pierna se dobla
-     hacia adelante media vuelta de cada ciclo, que es exactamente lo que se ve
-     como una marioneta rota. */
-  const rod = (x) => Math.max(0, Math.sin(x + 1.15)) * B;
-  giraH('LeftUpLeg',  -s * A, 0, 0);
-  giraH('RightUpLeg', -s2 * A, 0, 0);
-  giraH('LeftLeg',  rod(f), 0, 0);
-  giraH('RightLeg', rod(f + Math.PI), 0, 0);
-  giraH('LeftFoot',  Math.sin(f + 2.3) * (0.20 + k*0.14), 0, 0);
-  giraH('RightFoot', Math.sin(f + 2.3 + Math.PI) * (0.20 + k*0.14), 0, 0);
   /* los brazos van al revés que las piernas: es lo que mantiene el equilibrio y
      lo primero que se nota si falta */
   giraH('LeftArm',  s2 * C, 0, -BRAZO_BASE + 0.10 + k*0.06);
@@ -443,10 +473,16 @@ function poseCamina(f, k){
   giraH('RightForeArm', POSE.bdA, 0, 0);
   /* la pelvis bascula y el tronco gira AL REVÉS que ella: sin ese
      contramovimiento el personaje camina como una tabla */
-  mueveH('Hips', c * 0.012, Math.abs(s) * (0.018 + k*0.014) - 0.010 - k*0.02, 0);
-  giraH('Hips', 0, s * (0.07 + k*0.05), c * (0.05 + k*0.03));
-  giraH('Spine01', 0.06 + k * 0.16, -s * (0.06 + k*0.05), 0);
-  giraH('Spine', 0.02 + k * 0.06, -s * (0.05 + k*0.04), 0);
+  /* ── LA ALTURA DE LA CADERA TAMBIÉN SALE DE LA TABLA ──
+     El ciclo trae sólo rotaciones, así que sin esto el cuerpo se queda a altura
+     fija y el pie de apoyo FLOTA: medido sobre el clip de carrera, el tobillo
+     más bajo queda en 17,2 cm contra los 10,3 que mide en reposo, o sea siete
+     centímetros de aire. `PASO_Y` es cuánto hay que bajar la cadera en cada
+     fase para que el pie de apoyo toque, y de paso es de donde sale el rebote:
+     sin él el personaje se desliza a altura constante. */
+  const _y0 = PASO_Y.camina[_i] + (PASO_Y.camina[_j] - PASO_Y.camina[_i]) * _t;
+  const _y1 = PASO_Y.corre[_i]  + (PASO_Y.corre[_j]  - PASO_Y.corre[_i])  * _t;
+  mueveH('Hips', 0, _y0 + (_y1 - _y0) * k, 0);
   /* LOS HOMBROS VUELVEN A CERO ACÁ. Los escribe el idle y NO los escribía nadie
      más: sin esta línea, terminar un encogimiento de hombros y salir caminando
      deja los hombros levantados para siempre. Es el defecto de siempre de una

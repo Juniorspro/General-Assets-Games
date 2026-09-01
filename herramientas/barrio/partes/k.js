@@ -136,10 +136,23 @@ function armaProp(buf, mat){
   const pr = js.meshes[0].primitives[0];
   const g = new T.BufferGeometry();
   g.setAttribute('position', new T.BufferAttribute(acc(pr.attributes.POSITION), 3));
-  if (pr.attributes.NORMAL)
-    g.setAttribute('normal', new T.BufferAttribute(acc(pr.attributes.NORMAL), 3));
-  if (pr.attributes.COLOR_0)
-    g.setAttribute('color', new T.BufferAttribute(acc(pr.attributes.COLOR_0), 3));
+  if (pr.attributes.NORMAL){
+    const n = acc(pr.attributes.NORMAL);
+    g.setAttribute('normal', new T.BufferAttribute(n, 3, !(n instanceof Float32Array)));
+  }
+  /* ── EL COLOR SE LEE COMO VENGA, NO COMO UNO SUPONE ──
+     Estaba escrito `(…, 3)` y sin la marca de normalizado, que es lo que el
+     frasco necesitaba —float, tres componentes—. gltfpack devuelve los muebles
+     con COLOR_0 en **VEC4 de bytes normalizados** aunque se le pase `-noq`, y
+     leídos como tres floats sin normalizar los valores llegan entre 0 y 255: en
+     la captura, los cuatro muebles salieron BLANCO PURO con motas de colores.
+     Ni falla ni avisa. El número de componentes sale del accesor y la marca de
+     normalizado de que el array no sea de floats, igual que en el personaje. */
+  if (pr.attributes.COLOR_0){
+    const c = acc(pr.attributes.COLOR_0);
+    const nc = GLB_COMP[js.accessors[pr.attributes.COLOR_0].type];
+    g.setAttribute('color', new T.BufferAttribute(c, nc, !(c instanceof Float32Array)));
+  }
   g.setIndex(new T.BufferAttribute(acc(pr.indices), 1));
   const m = new T.Mesh(g, mat);
   m.frustumCulled = false;

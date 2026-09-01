@@ -513,6 +513,27 @@ async function arranca(){
       return JSON.stringify({ hueso: n, vertices: ids.length,
         medio: +(su / Math.max(1, a.length)).toFixed(4), max: +mx.toFixed(4) });
     },
+    /* ── HACIA DÓNDE MUEVE UN HUESO A OTRO, Y NO CUÁNTO ──
+       `mide` dice si un hueso mueve algo; esto dice PARA DÓNDE. Es la única
+       forma de saber qué eje de `giraH` es la flexión de una pierna: los ejes de
+       un rig no se adivinan, se giran y se mira dónde quedó la punta. Es la
+       misma sonda que en RECREO costó una vuelta con los brazos de Baldi. */
+    ejeH: (n, dest, ax, ay, az) => {
+      if (!PJ.ok) return 'no';
+      const v = new T.Vector3(), w = new T.Vector3();
+      const d = PJ.idx[dest]; if (!d) return 'no';
+      giraH(n, 0, 0, 0); PJ.grupo.updateMatrixWorld(true); d.getWorldPosition(v);
+      giraH(n, ax || 0, ay || 0, az || 0); PJ.grupo.updateMatrixWorld(true); d.getWorldPosition(w);
+      giraH(n, 0, 0, 0); PJ.grupo.updateMatrixWorld(true);
+      /* en el marco DEL PERSONAJE: adelante es hacia donde camina */
+      const yaw = PJ.grupo.rotation.y - Math.PI;
+      const ad = new T.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const de = new T.Vector3(-ad.z, 0, ad.x);
+      const dd = w.sub(v);
+      return JSON.stringify({ adelante: +dd.dot(ad).toFixed(4),
+                              costado: +dd.dot(de).toFixed(4),
+                              alto: +dd.y.toFixed(4) });
+    },
     gesto: (g) => { Object.assign(GESTO, g || {}); if (PJ.ok) pasoPersonaje(0); return JSON.stringify(GESTO); },
     /* dónde cae un hueso en la PANTALLA, y si está delante de la cámara: un
        punto que está detrás proyecta igual, dado vuelta, y cae dentro del
