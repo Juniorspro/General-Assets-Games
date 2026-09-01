@@ -96,7 +96,7 @@
                 if (!call.saidHello && st >= call.tHello) { call.saidHello = !0; this.playVo("hello") }
                 if (!call.saidCaller && st >= call.tCaller) { call.saidCaller = !0; this.playVo("caller") }
                 let zoom = aD(HA((st - 5) / 2.6, 0, 1));
-                A.fov = HP(68, 46, zoom); A.updateProjectionMatrix();
+                A.fov = HP(68, 52, zoom); A.updateProjectionMatrix();
                 this.povHead(A, 1 - zoom * .7);
                 if (this.phoneHolder && zoom > 0) {
                     this.phoneHolder.getWorldPosition(this._v3);
@@ -123,7 +123,7 @@
                 ];
                 split.playedOffice = !1; split.playedAccept = !1;
                 this.car.group.position.x = -40;
-                A.fov = 46; A.updateProjectionMatrix();
+                A.fov = 52; A.updateProjectionMatrix();
             },
             update: (p, tt, dt) => {
                 let st = this.shotTime;
@@ -133,7 +133,7 @@
                 if (this.phoneHolder) {
                     this.phoneHolder.getWorldPosition(this._v3);
                     A.lookAt(this._v3);
-                    this.phoneLight && (this.phoneLight.intensity = 1.4 + Math.sin(tt * 3) * .18);
+                    this.phoneLight && (this.phoneLight.intensity = .45 + Math.sin(tt * 3) * .08);
                 }
                 let lineP = Mi(HA(st / .34, 0, 1)),
                     panelP = Mi(HA((st - .34) / .72, 0, 1));
