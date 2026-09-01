@@ -4777,16 +4777,24 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
     }
     /* el rig vino con walk/idle/jump nomas, asi que el batazo va a mano sobre los
        huesos, despues del mixer: t=0 bate abajo, .38 arriba del todo, .7 impacto */
+    /* el rig no trae clip de golpe, asi que el batazo va a mano sobre los huesos,
+       despues del mixer. Tres poses verificadas: brazo a media altura, bate sobre
+       la cabeza (k=.4) y remate bajando hacia adelante (k=.75) */
     ladySwing(t) {
         let L = this.oldLady; if (!L || !L.bones) return;
-        let b = L.bones, k = HA(t, 0, 1);
-        let up = k < .38 ? HP(-1, -.15, aD(k / .38)) : HP(-.15, -2.45, aD(HA((k - .38) / .32, 0, 1)));
-        let tw = k < .38 ? HP(.08, .4, k / .38) : HP(.4, -.34, aD(HA((k - .38) / .32, 0, 1)));
-        b.R_Upperarm && b.R_Upperarm.rotation.set(0, 0, up);
-        b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.62, -.05, HA(k / .7, 0, 1)));
-        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, HP(-.18, -.55, k));
+        let b = L.bones, k = HA(t, 0, 1), ax, ay, az, tw;
+        if (k < .4) {
+            let u = aD(k / .4);
+            ax = 0; ay = HP(.02, .12, u); az = HP(-.9, -2.05, u); tw = HP(.05, .28, u);
+        } else {
+            let u = aD(HA((k - .4) / .35, 0, 1));
+            ax = HP(0, -.9, u); ay = HP(.12, 0, u); az = HP(-2.05, -.6, u); tw = HP(.28, -.22, u);
+        }
+        b.R_Upperarm && b.R_Upperarm.rotation.set(ax, ay, az);
+        b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.45, -.12, HA(k / .6, 0, 1)));
+        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, HP(-.18, -.45, k));
         b.Spine01 && b.Spine01.rotation.set(0, tw, 0);
-        b.Spine02 && b.Spine02.rotation.set(HP(-.05, .18, HA(k, 0, 1)), tw * .5, 0);
+        b.Spine02 && b.Spine02.rotation.set(HP(-.04, .16, k), tw * .4, 0);
     }
     povHead(camera, sway, zoom) {
         let car = this.car.group, z = HA(zoom || 0, 0, 1);
@@ -5082,9 +5090,9 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
                 this.stepAt = -1;
                 P.set({ fade: 1, dread: 0, cardTitle: "", cardSub: "" });
                 A.fov = 46; A.updateProjectionMatrix();
-                if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
+                if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + .9); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
-                placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
+                placeLady(doorX + .3, doorZ + .15, .1, "preset:idle");
                 this.oldLady && (this.oldLady.root.visible = !1);
             },
             update: (p, tt, dt) => {
@@ -5104,7 +5112,7 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
                     this.hitDone = !0;
                     HT(1); ZT(1); ki(1, -.35);
                     P.set({ dread: .7 });
-                    placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
+                    placeLady(doorX + .3, doorZ + .15, .1, "preset:idle");
                 }
                 // el golpe: la camara cae al piso girando
                 let f = HA((st - 1.15) / 1.5, 0, 1), e = aD(f),
@@ -5113,9 +5121,9 @@ var lj="LA CASA DE LA VIEJA",kj="una remodelaci\xF3n que nadie pidi\xF3",As=clas
                     camZ = HP(doorZ + 1.8, doorZ + 2.3, e);
                 A.position.set(doorX + HP(0, -.15, e) + Math.sin(tt * 26) * .05 * (1 - f), camY, camZ);
                 // mira hacia ella parada encima con el bate
-                let lx = HP(doorX, doorX + .35, turn),
+                let lx = HP(doorX, doorX + .3, turn),
                     ly = HP(y0 + 1.48, y0 + 1.05, turn),
-                    lz = HP(camZ + 3, doorZ + .78, turn);
+                    lz = HP(camZ + 3, doorZ + .15, turn);
                 A.lookAt(lx, ly, lz);
                 A.rotateZ(HP(0, .7, e) + Math.sin(tt * 18) * .06 * (1 - f));
                 if (this.hitLight) this.hitLight.intensity = HP(0, 18, HA((st - 1.1) / .35, 0, 1)) * HA(1 - (st - 3) / 1.4, 0, 1);

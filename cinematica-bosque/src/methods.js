@@ -493,16 +493,24 @@
     }
     /* el rig vino con walk/idle/jump nomas, asi que el batazo va a mano sobre los
        huesos, despues del mixer: t=0 bate abajo, .38 arriba del todo, .7 impacto */
+    /* el rig no trae clip de golpe, asi que el batazo va a mano sobre los huesos,
+       despues del mixer. Tres poses verificadas: brazo a media altura, bate sobre
+       la cabeza (k=.4) y remate bajando hacia adelante (k=.75) */
     ladySwing(t) {
         let L = this.oldLady; if (!L || !L.bones) return;
-        let b = L.bones, k = HA(t, 0, 1);
-        let up = k < .38 ? HP(-1, -.15, aD(k / .38)) : HP(-.15, -2.45, aD(HA((k - .38) / .32, 0, 1)));
-        let tw = k < .38 ? HP(.08, .4, k / .38) : HP(.4, -.34, aD(HA((k - .38) / .32, 0, 1)));
-        b.R_Upperarm && b.R_Upperarm.rotation.set(0, 0, up);
-        b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.62, -.05, HA(k / .7, 0, 1)));
-        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, HP(-.18, -.55, k));
+        let b = L.bones, k = HA(t, 0, 1), ax, ay, az, tw;
+        if (k < .4) {
+            let u = aD(k / .4);
+            ax = 0; ay = HP(.02, .12, u); az = HP(-.9, -2.05, u); tw = HP(.05, .28, u);
+        } else {
+            let u = aD(HA((k - .4) / .35, 0, 1));
+            ax = HP(0, -.9, u); ay = HP(.12, 0, u); az = HP(-2.05, -.6, u); tw = HP(.28, -.22, u);
+        }
+        b.R_Upperarm && b.R_Upperarm.rotation.set(ax, ay, az);
+        b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.45, -.12, HA(k / .6, 0, 1)));
+        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, HP(-.18, -.45, k));
         b.Spine01 && b.Spine01.rotation.set(0, tw, 0);
-        b.Spine02 && b.Spine02.rotation.set(HP(-.05, .18, HA(k, 0, 1)), tw * .5, 0);
+        b.Spine02 && b.Spine02.rotation.set(HP(-.04, .16, k), tw * .4, 0);
     }
     povHead(camera, sway, zoom) {
         let car = this.car.group, z = HA(zoom || 0, 0, 1);

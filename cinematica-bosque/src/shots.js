@@ -183,9 +183,9 @@
                 this.stepAt = -1;
                 P.set({ fade: 1, dread: 0, cardTitle: "", cardSub: "" });
                 A.fov = 46; A.updateProjectionMatrix();
-                if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
+                if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + .9); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
-                placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
+                placeLady(doorX + .3, doorZ + .15, .1, "preset:idle");
                 this.oldLady && (this.oldLady.root.visible = !1);
             },
             update: (p, tt, dt) => {
@@ -205,7 +205,7 @@
                     this.hitDone = !0;
                     HT(1); ZT(1); ki(1, -.35);
                     P.set({ dread: .7 });
-                    placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
+                    placeLady(doorX + .3, doorZ + .15, .1, "preset:idle");
                 }
                 // el golpe: la camara cae al piso girando
                 let f = HA((st - 1.15) / 1.5, 0, 1), e = aD(f),
@@ -214,9 +214,9 @@
                     camZ = HP(doorZ + 1.8, doorZ + 2.3, e);
                 A.position.set(doorX + HP(0, -.15, e) + Math.sin(tt * 26) * .05 * (1 - f), camY, camZ);
                 // mira hacia ella parada encima con el bate
-                let lx = HP(doorX, doorX + .35, turn),
+                let lx = HP(doorX, doorX + .3, turn),
                     ly = HP(y0 + 1.48, y0 + 1.05, turn),
-                    lz = HP(camZ + 3, doorZ + .78, turn);
+                    lz = HP(camZ + 3, doorZ + .15, turn);
                 A.lookAt(lx, ly, lz);
                 A.rotateZ(HP(0, .7, e) + Math.sin(tt * 18) * .06 * (1 - f));
                 if (this.hitLight) this.hitLight.intensity = HP(0, 18, HA((st - 1.1) / .35, 0, 1)) * HA(1 - (st - 3) / 1.4, 0, 1);
