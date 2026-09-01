@@ -42,11 +42,21 @@ DESAT = 0.20
 # simplificador estaba trabado —que es lo que le pasó a LEMI con las UV—. No lo
 # estaba: hacía exactamente el 6 % que se le pedía, y la entrada tiene UN MILLÓN
 # de triángulos. Un ratio no dice nada si no se sabe de cuánto se parte.
+# ── Y LA SEGUNDA TANDA SE PIDIÓ CON `face_limit` ──
+# Reporte: *«la wea que generas está toda corrupta, los muebles y eso»*. Tenía
+# razón y la causa era el decimado: la primera tanda venía con UN MILLÓN de
+# triángulos y bajarla a dos mil es tirar el 99,8 %, así que el simplificador se
+# come los detalles finos —el tirador de un cajón, el aro de una pantalla— y lo
+# que queda es una mancha con la textura estirada encima.
+# La segunda se pidió con `extra: {face_limit: 6000}`, o sea con el generador
+# haciendo la reducción él, que sabe qué es qué; y con `texture_quality:
+# detailed`. Entran con 4.400-5.700 triángulos y bajan a tres mil, que es tirar
+# el 40 % y no el 99,8.
 PLAN = [
-    ('velador', 'velador-g1.glb', 2200),
-    ('silla',   'silla-g1.glb',   2200),
-    ('mesita',  'mesita-g1.glb',  1800),
-    ('comoda',  'comoda-g1.glb',  1800),
+    ('velador', 'velador-g1.glb', 3000),
+    ('silla',   'silla-g1.glb',   3000),
+    ('mesita',  'mesita-g1.glb',  2600),
+    ('comoda',  'comoda-g1.glb',  2600),
 ]
 
 import glb

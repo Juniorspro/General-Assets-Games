@@ -62,8 +62,10 @@ function bucle(){
      `esconde()` acaba de apagar —decide por distancia y el cuarto está encima
      del barrio—, y el segundo pondría las seis luces en faroles que no se ven,
      que son justo las dos que el cuarto necesita. */
+  const _bs = $('acSalta');
+  if (_bs) _bs.style.display = (NUB.on && !esPC) ? '' : 'none';
   if (CU.on){ CUARTO.luces(); }
-  else { pasoCuadras(); pasoFaroles(); }
+  else if (!NUB.on){ pasoCuadras(); pasoFaroles(); }
   pasoHalos();
   pasoRayo(dt);
   pasoLluvia();
@@ -519,6 +521,39 @@ async function arranca(){
        un rig no se adivinan, se giran y se mira dónde quedó la punta. Es la
        misma sonda que en RECREO costó una vuelta con los brazos de Baldi. */
     ciudad: () => ({ pedidas: CIUGEN.pedidas, puestas: CIUGEN.puestas }),
+    nubes: () => { entraNubes(); return MODO; },
+    nubEst: () => ({ on: NUB.on, fase: NUB.fase, nubes: NUB.discos.length,
+                     ultima: NUB.ultima, tocadas: NUB.tocadas, meta: NUB.meta,
+                     x: +JUG.x.toFixed(2), y: +JUG.y.toFixed(2), z: +JUG.z.toFixed(2),
+                     vy: +JUG.vy.toFixed(2), aire: JUG.aire,
+                     v: +AND.v.toFixed(2) }),
+    saltar: () => { saltoNubes(); return JUG.guarda; },
+    /* juega el camino solo: apunta a la nube siguiente, corre y salta cuando el
+       borde queda cerca. Es la única prueba de que el parkour SE PUEDE hacer —
+       un camino generado y no jugado es un camino roto que todavía no se sabe. */
+    nubJuega: (n) => new Promise(res => {
+      let i = 0, caidas = 0, saltos = 0;
+      const paso = () => {
+        if (i++ > n || NUB.fase === 'fin'){
+          res(JSON.stringify({ vueltas: i, ultima: NUB.ultima, tocadas: NUB.tocadas,
+                               meta: NUB.meta, caidas, saltos, fase: NUB.fase }));
+          return;
+        }
+        const sig = NUB.discos[Math.min(NUB.ultima + 1, NUB.meta)];
+        const aqui = NUB.discos[NUB.ultima];
+        const dx = sig.x - JUG.x, dz = sig.z - JUG.z;
+        JUG.yaw = Math.atan2(-dx, -dz);
+        teclas.KeyW = true; corre = true;
+        /* SALTA EN EL LABIO DE LA NUBE EN LA QUE ESTÁ, que es donde salta una
+           persona: midiendo contra la nube de destino, el salto sale antes o
+           después según el tamaño de la de enfrente, que no tiene nada que ver. */
+        const dq = Math.hypot(aqui.x - JUG.x, aqui.z - JUG.z);
+        if (!JUG.aire && aqui.r - dq < 0.7){ saltoNubes(); saltos++; }
+        if (JUG.y < NUB.Y - 60) caidas++;
+        requestAnimationFrame(paso);
+      };
+      paso();
+    }),
     cabezaFP: (v) => { PJ_CABEZA_FP = v; PJ.primeraPersona = null;
       ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, vistaFP()); return PJ_CABEZA_FP; },
     ejeH: (n, dest, ax, ay, az) => {
@@ -764,6 +799,12 @@ function armaPanel(){
   $('acCorre').ontouchend = () => { corre = false; $('acCorre').classList.remove('on'); };
   $('acLinterna').onclick = () => ponLinterna(!CFG.linterna);
   $('acVista').onclick = () => ponVista(!CFG.tercera);
+  /* EL BOTÓN DE SALTAR SÓLO EXISTE DONDE SE SALTA. En el barrio y en el cuarto
+     no hay eje vertical, así que un botón de saltar ahí es un botón que no hace
+     nada — y un control que a veces no hace nada enseña a no usarlo. */
+  const bs = $('acSalta');
+  bs.addEventListener('pointerdown', (e) => { e.preventDefault(); saltoNubes(); });
+  bs.style.display = 'none';
   for (const b of document.querySelectorAll('#mCal .chip'))
     b.onclick = () => ponCalidad(b.dataset.cal);
   for (const b of document.querySelectorAll('#mIdi .chip'))

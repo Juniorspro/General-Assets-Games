@@ -33,6 +33,8 @@ const TXT = {
     cuPuerta:'THE DOOR',
     bVista:'VIEW', kVista:'camera',
     aTercera:'THIRD PERSON', aPrimera:'FIRST PERSON',
+    aNubes:'…and there is no floor', aNubes2:'JUMP from cloud to cloud',
+    aNubes3:'THE LAST CLOUD', cNubes:'ABOVE EVERYTHING', bSalta:'JUMP',
     calle:(a,b) => a+' & '+b,
     /* los nombres de las calles: las que van al norte son avenidas numeradas y
        las que van al este llevan nombre de árbol, que es como está armado
@@ -71,6 +73,8 @@ const TXT = {
     cuPuerta:'LA PUERTA',
     bVista:'VISTA', kVista:'cámara',
     aTercera:'TERCERA PERSONA', aPrimera:'PRIMERA PERSONA',
+    aNubes:'…y no hay piso', aNubes2:'SALTÁ de nube en nube',
+    aNubes3:'LA ÚLTIMA NUBE', cNubes:'ENCIMA DE TODO', bSalta:'SALTAR',
     calle:(a,b) => a+' y '+b,
     ns:['1ª','2ª','3ª','4ª','5ª','6ª'],
     ew:['Roble','Arce','Cedro','Abedul','Sauce','Fresno'],
@@ -106,6 +110,8 @@ const TXT = {
     cuPuerta:'A PORTA',
     bVista:'VISTA', kVista:'câmera',
     aTercera:'TERCEIRA PESSOA', aPrimera:'PRIMEIRA PESSOA',
+    aNubes:'…e não há chão', aNubes2:'PULE de nuvem em nuvem',
+    aNubes3:'A ÚLTIMA NUVEM', cNubes:'ACIMA DE TUDO', bSalta:'PULAR',
     calle:(a,b) => a+' e '+b,
     ns:['1ª','2ª','3ª','4ª','5ª','6ª'],
     ew:['Carvalho','Bordo','Cedro','Bétula','Salgueiro','Freixo'],

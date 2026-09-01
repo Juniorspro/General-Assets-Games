@@ -642,9 +642,13 @@ function limpiaCuarto(){
 }
 
 /* al cruzar la puerta se vuelve al barrio: la escena termina donde empezó */
+/* ── LA PUERTA YA NO DEVUELVE AL BARRIO ──
+   Pedido: *«al pasar la puerta no volvamos al barrio, ya pasemos a un lugar
+   súper raro donde es puro cielo»*. El barrio queda del lado de la cinemática;
+   lo que hay del otro lado de la puerta es el cielo. */
 function salCuarto(){
   limpiaCuarto();
-  entraJuego();
+  entraNubes();
 }
 
 /* ══════════════════════ EL PASO ══════════════════════ */

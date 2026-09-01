@@ -958,6 +958,13 @@ const CINEMA = {
        derecho al barrio, el botón de saltear estaría cambiando la historia y no
        ahorrando tiempo. */
     this.limpia();
+    /* ── Y SE SALE EN PRIMERA PERSONA ──
+       Pedido: *«que sea en primera persona una vez termina la cinemática»*. La
+       vista elegida se guarda, así que quien venía de jugar al hombro volvía al
+       hombro apenas termina la escena; la escena es en primera y el corte tiene
+       que caer en primera. El botón VISTA sigue estando: lo que se fija es
+       dónde empieza, no lo que se puede elegir. */
+    ponVista(false);
     $('cineNeg').classList.remove('on');
     $('cineNeg').style.opacity = '0';
     try { localStorage.setItem('barrio_cine', '1'); } catch(e){}

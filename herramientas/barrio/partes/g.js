@@ -14,7 +14,10 @@ const OJO = 1.66;
    Se paga que el barrio se cruza más despacio, y es el precio de que los pies
    pisen donde parece que pisan. */
 const VEL = 1.90, CORRE = 3.20;
-const JUG = { x: 0, z: -MITAD + CALLE*0.5, y: 0, yaw: 0, pitch: -0.03, vx: 0, vz: 0 };
+const JUG = { x: 0, z: -MITAD + CALLE*0.5, y: 0, yaw: 0, pitch: -0.03, vx: 0, vz: 0,
+              /* sólo el cielo los usa: en el barrio y en el cuarto la altura se
+                 pega al suelo y no hay nada que integrar */
+              vy: 0, aire: false, coyote: 0, guarda: 0 };
 const AND = { fase: 0, v: 0, ojo: OJO, roll: 0, fov: 70, lado: 0, arriba: 0, costado: 0 };
 
 /* ── LA ALTURA DEL SUELO ──
@@ -97,6 +100,7 @@ let linterna = null;
 addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') corre = true;
+  if (e.code === 'Space'){ saltoNubes(); e.preventDefault(); }
   if (e.code === 'KeyF') ponLinterna(!CFG.linterna);
   if (e.code === 'KeyV') ponVista(!CFG.tercera);
   if (e.code === 'Escape' && (MODO === 'juego' || MODO === 'cuarto')) pausa(!PAUSA);
@@ -247,20 +251,29 @@ function fisica(dt){
   const dx = ade.x*mz2 + der.x*mx2, dz = ade.z*mz2 + der.z*mx2;
   const dl = Math.hypot(dx, dz) || 1;
   const ux = dx/dl, uz = dz/dl;
+  /* ── EN EL AIRE SE MANDA MENOS, PERO SE MANDA ──
+     Con control cero un salto mal apuntado no se corrige y el parkour se vuelve
+     lotería; con control entero el salto deja de tener peso y da lo mismo desde
+     dónde se salte. Y el roce del aire es CASI CERO: lo que hace que una salto
+     largo llegue es que la velocidad que se traía no se evapore a mitad de
+     camino. */
+  const enAire = JUG.aire && NUB.on;
+  const kA = enAire ? NUB_AIRE : 1;
+  const kR = enAire ? 0.12 : 1;
   if (pide){
     const proy = JUG.vx*ux + JUG.vz*uz;
     const falta = tope - proy;
     if (falta > 0){
-      const a = Math.min(ACEL*dt, falta);
+      const a = Math.min(ACEL*kA*dt, falta);
       JUG.vx += ux*a; JUG.vz += uz*a;
     }
     /* el roce, sólo de costado: es lo que deja que doblar no frene */
     const lx = -uz, lz = ux;
     const lat = JUG.vx*lx + JUG.vz*lz;
-    const f = lat * Math.min(1, ROCE*dt);
+    const f = lat * Math.min(1, ROCE*kR*dt);
     JUG.vx -= lx*f; JUG.vz -= lz*f;
   } else {
-    const f = Math.min(1, ROCE*dt);
+    const f = Math.min(1, ROCE*kR*dt);
     JUG.vx -= JUG.vx*f; JUG.vz -= JUG.vz*f;
   }
   JUG.x += JUG.vx*dt; JUG.z += JUG.vz*dt;
@@ -270,7 +283,8 @@ function fisica(dt){
      puesto, el recorte de `±MITAD` no molesta —el cuarto cae dentro— pero
      `alturaSuelo` devuelve cero y el jugador se cae al vacío en el primer
      cuadro. */
-  if (CU.on){ corrigeCuarto(); JUG.y = CU.Y + 0.02; }
+  if (NUB.on) pasoNubes(dt);        /* el único sitio con eje vertical */
+  else if (CU.on){ corrigeCuarto(); JUG.y = CU.Y + 0.02; }
   else { corrige(); JUG.y = alturaSuelo(JUG.x, JUG.z); }
   AND.v = Math.hypot(JUG.vx, JUG.vz);
   AND.lado = (JUG.vx*der.x + JUG.vz*der.z) / (CORRE);
