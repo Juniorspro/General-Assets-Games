@@ -101,11 +101,6 @@ REPLACEMENTS = [
     # 5. insertar las escenas nuevas al principio
     ('this.shots=[{id:"road-talk"', 'this.shots=this.introShots(A,P,D,i,t).concat([{id:"road-talk"'),
     ('P.set({fade:(s-.7)/.3})}}]}start(){', 'P.set({fade:(s-.7)/.3})}}])}start(){'),
-    # 6. road-talk entra desde negro y no reinicia el motor
-    ('P.set({fade:0,skip:!0}),this.engine=Ug(),this.rig?.play("preset:idle")',
-     'P.set({fade:1,skip:!0}),this.engine=this.engine||Ug(),this.rig?.play("preset:idle")'),
-    ("update:(s,o)=>{if(!this.rig){let j=Math.sin(o*7.5)*.5+.5;",
-     "update:(s,o)=>{if(P.set({fade:HA(1-s*7,0,1)}),!this.rig){let j=Math.sin(o*7.5)*.5+.5;"),
     # 6b. hook de debug/salto de escena en cada frame
     ("update(A){if(this.finished)return;this.elapsed+=A,this.shotTime+=A,",
      "update(A){if(this.finished)return;this.dbg(),this.elapsed+=A,this.shotTime+=A,"),
@@ -128,16 +123,25 @@ def main():
     cls = src[start:end]
     assert cls.endswith("}"), cls[-40:]
 
-    # fuera el montaje de dias caminando en circulo (montage + strange + wake)
-    a = cls.index('{id:"montage"')
-    b = cls.index('{id:"descent"')
-    cls = cls[:a] + "...this.houseShots(A,P,D,i)," + cls[b:]
-
     for i, (old, new) in enumerate(REPLACEMENTS):
         n = cls.count(old)
         if n != 1:
             raise SystemExit("replacement %d matched %d times: %r" % (i, n, old[:70]))
         cls = cls.replace(old, new)
+
+    def cut(text, frm, to, ins=""):
+        a = text.index(frm); b = text.index(to)
+        assert a < b, (frm, to)
+        return text[:a] + ins + text[b:]
+
+    # fuera el montaje de dias caminando en circulo (montage + strange + wake)
+    cls = cut(cls, '{id:"montage"', '{id:"descent"', "...this.houseShots(A,P,D,i),")
+    # fuera el chico parado en la carretera con el auto que pasa
+    cls = cut(cls, '{id:"road-talk"', '{id:"title"')
+    # la llegada ahora es manejando y bajandose del auto
+    cls = cut(cls, '{id:"arrival"', "...this.houseShots(A,P,D,i),", "...this.arriveShots(A,P,D,i,t),")
+    # fuera la bajada al sotano
+    cls = cut(cls, '{id:"descent"', '{id:"sheet"')
 
     methods = open(os.path.join(HERE, "methods.js"), encoding="utf-8").read()
     shots = open(os.path.join(HERE, "shots.js"), encoding="utf-8").read()

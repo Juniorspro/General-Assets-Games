@@ -154,8 +154,8 @@
                 showRig(this.driverRig, !1);
                 this.phoneHolder && (this.phoneHolder.visible = !1);
                 this.dust && (this.dust.mesh.visible = !1);
-                this.setActorVisible(!0);
-                A.fov = 44; A.updateProjectionMatrix();
+                this.setActorVisible(!1);
+                A.fov = 68; A.updateProjectionMatrix();
                 P.set({ subtitle: "" });
             }
         };
@@ -279,4 +279,82 @@
             exit: () => { P.set({ fade: 0, dread: .3 }); i.intensity = 3.2 }
         };
         return [walkIn, hit, wake];
+    }
+    /* ====== SIGUE MANEJANDO, LLEGA A LA CASA Y SE BAJA DEL AUTO ====== */
+    arriveShots(A, P, D, i, t) {
+        let doorX = D.exitDoor.x, doorZ = D.bounds.z, y0 = $A(0);
+        let carX = doorX - 1.7, stopZ = doorZ - 8.4;
+        let drive = {
+            id: "drive-arrive",
+            duration: 8.5,
+            captions: [{ from: .7, to: 4.4, text: "La última casa antes del cruce." }],
+            enter: () => {
+                this.look("forest-night");
+                this.roadGroup.visible = !0;
+                this.forest && (this.forest.visible = !0);
+                this.setActorVisible(!1);
+                this.driverRig && (this.driverRig.root.visible = !1);
+                this.povRig && (this.povRig.root.visible = !0);
+                this.seatPose(this.povRig, 0, 0);
+                this.phoneHolder && (this.phoneHolder.visible = !1);
+                this.car.group.visible = !0;
+                this.car.group.rotation.y = 0;              // enfilado hacia la casa
+                this.car.group.position.set(carX, 0, doorZ - 34);
+                A.fov = 68; A.updateProjectionMatrix();
+                P.set({ fade: 0, subtitle: "", cardTitle: "", cardSub: "" });
+                this.engine || (this.engine = Ug());
+                this.stopped = !1;
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime;
+                let k = Mi(HA(st / 6.8, 0, 1));             // va frenando al llegar
+                this.car.group.position.z = HP(doorZ - 34, stopZ, k);
+                let spd = 1 - Mi(HA(st / 6.8, 0, 1));
+                for (let w of this.car.wheels) w.rotation.x += dt * 11 * spd;
+                for (let l of this.car.lights) l.intensity = 34 + 34 * spd;
+                this.povHead(A, .25 + spd * .75);
+                this.driftFog(dt);
+                if (!this.stopped && st > 7) { this.stopped = !0; this.engine && (this.engine.stop(), this.engine = null); HT(.4) }
+            }
+        };
+        let out = {
+            id: "get-out",
+            duration: 7.5,
+            captions: [{ from: 3.2, to: 7, text: "Tres semanas. Vaciarla, tapar los agujeros y dejarla presentable." }],
+            enter: () => {
+                this.povRig && (this.povRig.root.visible = !0);
+                this.engine && (this.engine.stop(), this.engine = null);
+                for (let l of this.car.lights) l.intensity = 0;
+                A.fov = 62; A.updateProjectionMatrix();
+                this.stepAt = -1;
+                ki(.5, .15);                                 // la puerta del auto
+            },
+            update: (p, tt, dt) => {
+                let st = this.shotTime;
+                // del asiento a parado al lado del auto: primero sale, despues se endereza
+                let slide = aD(HA(st / 2.2, 0, 1)),
+                    rise = aD(HA((st - 1.6) / 2, 0, 1)),
+                    walk = aD(HA((st - 3.6) / 3, 0, 1));
+                let cx = HP(carX + .45, carX - 1.5, slide),
+                    cz = HP(stopZ + .02, stopZ - .35, slide);
+                cx = HP(cx, doorX - .2, walk);
+                cz = HP(cz, doorZ - 3.4, walk);
+                let cy = HP(HP(1.35, 1.02, slide), 1.62, rise);
+                A.position.set(cx, y0 + cy + Math.sin(tt * 4.6) * .015, cz);
+                // gira de mirar el volante a mirar la casa
+                let turn = aD(HA((st - 1.4) / 2.4, 0, 1));
+                A.lookAt(HP(carX + .45, doorX, turn), y0 + HP(1.1, 1.75, turn), HP(stopZ + 6, doorZ + .4, turn));
+                A.rotateZ(HP(.06, 0, rise) + Math.sin(tt * 1.3) * .008);
+                if (st > 3.6 && st - this.stepAt > .58) { this.stepAt = st; li("concrete", .45) }
+                this.driftFog(dt);
+                if (st > 6.9) P.set({ fade: HA((st - 6.9) / .6, 0, 1) });
+            },
+            exit: () => {
+                this.povRig && (this.povRig.root.visible = !1);
+                this.car.group.visible = !1;
+                this.roadGroup.visible = !1;
+                P.set({ fade: 1 });
+            }
+        };
+        return [drive, out];
     }

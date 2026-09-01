@@ -26,14 +26,22 @@ más el bosque y la neblina que tapan los límites del mapa.
 - El personaje va sentado adentro manejando (se ve poco porque pasa rápido,
   como se pidió).
 
+### Llegada — sigue manejando y se baja del auto
+Reemplaza a la escena del chico parado en la carretera mientras pasa un auto.
+
+4. `drive-arrive`: después de aceptar el contrato sigue manejando, sale de la
+   carretera y frena frente a la casa. El motor se apaga al llegar.
+5. `get-out`: se baja del auto — la cámara sale del asiento, se endereza a 1,62 m,
+   gira a mirar la casa y camina hasta la puerta.
+
 ### Dentro de la casa — el batazo
 Reemplaza al montaje de días que caminaba al personaje en círculo hasta el día 12.
 
-4. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
-5. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
+6. `enter-house`: POV entrando a la casa, un par de pasos sobre madera.
+7. `bat-hit`: la vieja entra por detrás y le pega con el bate. Golpe, flash rojo,
    la cámara se desploma girando hasta el piso y alcanza a verla parada encima
    con el bate antes del negro.
-6. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
+8. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
    fuera.
 
 El modelo de la vieja se generó con Tripo (imagen → 3D → rig). El servicio de
@@ -68,8 +76,11 @@ window.__CDLV_JUMP = 9     // salta a esa escena
 ```
 
 Índices: `0` auto pasando · `1` POV manejando · `2` el celular · `3` pantalla
-partida · `4` carretera de noche · `7` llegada · `8` entra a la casa · `9` el
-batazo · `10` despierta encerrado.
+partida · `4` título · `5` llega a la casa · `6` se baja del auto · `7` entra a
+la casa · `8` el batazo · `9` despierta encerrado · `10` la sábana.
+
+También se sacó la bajada al sótano (`descent`), que iba entre el despertar y
+la sábana.
 
 ## Archivos
 
