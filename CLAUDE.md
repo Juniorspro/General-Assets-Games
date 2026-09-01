@@ -176,6 +176,18 @@ reemplazo, y lo que evitó escribir un HTML a medias fue justamente que el asser
    (159,192,208)**, con el azul ya por encima del verde y del rojo. El degradado de respaldo tenía el
    mismo defecto y se corrigió igual.
 
+4. **Y ESTABA DADA VUELTA EN VERTICAL, que es lo que el usuario vio: «el cielo está mal ubicado».**
+   three sube la textura invertida por omisión (`flipY`), así que la fila 0 de la imagen —que en una
+   equirectangular **es el cenit**— termina en `v = 1`, y este shader la busca en `v = 0`. O sea que le
+   estaba mostrando el horizonte pálido al cenit y el cenit al ras del suelo. Se veía como dos bandas
+   claras, una arriba de todo y otra en el horizonte, con el azul en una franja en el medio. Medido
+   barriendo el cabeceo, el azul-rojo **bajaba** al mirar hacia arriba —de 41 cerca del horizonte a 19
+   en lo alto— cuando en la propia imagen va de 65,6 a 188,6. Con `flipY = false` pasa a **93 → 123**,
+   subiendo con la altura hasta que el borde del cuadro cruza el cenit y empieza a bajar por el otro
+   lado, que es lo que tiene que pasar.
+   La lección: **medir la imagen no alcanza, hay que medir lo que sale en pantalla.** El horneado estaba
+   perfecto —gradiente monótono, costura 0,00— y el cielo igual estaba al revés.
+
 **Y LA FOTO SE MUESTREA POR DIRECCIÓN Y NO POR LA UV DE LA ESFERA.** Así el mapeo no depende de cómo
 esté partida la geometría del domo y —lo que importa— se la puede **girar con un uniform** para que su
 parte más brillante caiga donde está el sol que tira las sombras: medido, el sol de la foto está en
