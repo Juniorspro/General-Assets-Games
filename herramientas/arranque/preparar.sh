@@ -64,7 +64,9 @@ if [ -f "$HOME/.rezona/credentials.json" ]; then
 else
   no "sin credencial"
   eh "corré:  npx rezona@latest login    (código de un solo uso; la llave NUNCA va al repo)"
+  eh "el estado NO secreto —proyectos, assets, parámetros— está en herramientas/rezona/estado.json"
 fi
+python3 herramientas/rezona/estado.py --ver 2>/dev/null | sed 's/^/  /'
 echo "  probando el servidor…"
 timeout 180 python3 herramientas/rezona/rz.py call list_projects '{}' 2>/dev/null | head -3 \
   | grep -qi "not authenticated" && no "el servidor responde pero falta el login" \

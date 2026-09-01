@@ -101,6 +101,10 @@ python3 herramientas/rezona/rz.py call submit_model3d_generation '{"project_id":
 - `submit_image_generation` · `submit_model3d_generation` · `submit_rig3d_generation` (rig +
   animaciones sobre **un modelo propio**, no sobre uno que ya esté en el juego) · `submit_audio_generation`
   · `check_generation_tasks` · `fetch_generated_asset`.
+- **El estado que NO es secreto está en `herramientas/rezona/estado.json`**: en qué proyecto va
+  cada cosa (`PwVerjWD` para BARRIO), qué assets ya existen con su `output_path`, y **con qué
+  parámetros salieron bien**. Leerlo antes de generar nada. Se refresca con
+  `python3 herramientas/rezona/estado.py`.
 - **La credencial vive en `~/.rezona/credentials.json`**, la escribe `npx rezona@latest login` con
   un código de un solo uso. `.rezona/` está en `.gitignore`: **el cliente puede vivir en el repo, la
   llave no.** Este repo es público.
