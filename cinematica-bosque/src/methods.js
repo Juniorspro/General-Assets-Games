@@ -500,7 +500,7 @@
         let tw = k < .38 ? HP(.08, .4, k / .38) : HP(.4, -.34, aD(HA((k - .38) / .32, 0, 1)));
         b.R_Upperarm && b.R_Upperarm.rotation.set(0, 0, up);
         b.R_Forearm && b.R_Forearm.rotation.set(0, 0, HP(-.62, -.05, HA(k / .7, 0, 1)));
-        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, -up * .5);
+        b.L_Upperarm && b.L_Upperarm.rotation.set(0, 0, HP(-.18, -.55, k));
         b.Spine01 && b.Spine01.rotation.set(0, tw, 0);
         b.Spine02 && b.Spine02.rotation.set(HP(-.05, .18, HA(k, 0, 1)), tw * .5, 0);
     }

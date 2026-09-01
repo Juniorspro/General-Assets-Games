@@ -182,7 +182,7 @@
                 this.setActorVisible(!1);
                 this.stepAt = -1;
                 P.set({ fade: 1, dread: 0, cardTitle: "", cardSub: "" });
-                A.fov = 64; A.updateProjectionMatrix();
+                A.fov = 46; A.updateProjectionMatrix();
                 if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + 1.5); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
                 placeLady(doorX + .35, doorZ + .78, .12, "preset:idle");
