@@ -30,6 +30,10 @@ import numpy, PIL
 PY
 
 tit "2 · el repo"
+if ! git rev-parse HEAD >/dev/null 2>&1; then
+  no "no hay commits acá — ¿estás en el repo equivocado, o en un clon vacío?"
+  eh "el trabajo vive en: git fetch origin claude/billeteras-sin-registro-3z7uvz"
+else
 echo "  rama   $(git rev-parse --abbrev-ref HEAD)"
 echo "  HEAD   $(git rev-parse --short HEAD)  $(git log -1 --format=%s | cut -c1-60)"
 git fetch origin "$(git rev-parse --abbrev-ref HEAD)" -q 2>/dev/null
@@ -42,6 +46,16 @@ else
 fi
 SUCIO=$(git status --porcelain | wc -l)
 [ "$SUCIO" -eq 0 ] && ok "árbol limpio" || eh "$SUCIO archivos sin commitear — MIRALOS antes de commitear, pueden ser de un snapshot viejo"
+JUEGOS=$(ls -1 juegos-pc/*.html 2>/dev/null | wc -l)
+if [ "$JUEGOS" -eq 0 ]; then
+  no "no hay juegos-pc/ — estás en una rama que salió de main"
+  eh "main tiene 28 commits y sólo el volcado de assets; el trabajo (563 commits)"
+  eh "está en claude/billeteras-sin-registro-3z7uvz. Traelo con:"
+  eh "    git fetch origin claude/billeteras-sin-registro-3z7uvz && git checkout FETCH_HEAD"
+else
+  ok "$JUEGOS juegos en juegos-pc/"
+fi
+fi
 
 tit "3 · los MCP declarados en .mcp.json"
 if [ -f .mcp.json ]; then
