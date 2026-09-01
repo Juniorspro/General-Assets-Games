@@ -116,6 +116,7 @@ class Game {
         holder.add(glow);
         this.phoneHolder = holder;
         this.phoneGlow = glow;
+        this.phoneModel = m;
         holder.visible = false;
     }
 
@@ -145,6 +146,24 @@ class Game {
         L.visible = false;
         this.engine.scene.add(L, L.target);
         this.torch = L;
+
+        /* El mismo celular que venia mirando en la ruta le queda en la mano
+           como linterna. Va colgado de la camara, abajo a la derecha. */
+        const cam = this.engine.camera;
+        this.engine.scene.add(cam);          // si no, los hijos de la camara no se dibujan
+        if (this.phoneModel) {
+            const v = this.phoneModel.clone(true);
+            v.scale.setScalar(1.9);
+            v.position.set(0.26, -0.24, -0.45);
+            v.rotation.set(-0.35, 0.22, 0.12);
+            v.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = false } });
+            v.visible = false;
+            cam.add(v);
+            this.phoneView = v;
+            const screen = new THREE.PointLight(0xa8c8ff, 0.5, 0.9, 2);
+            screen.position.set(0, 0.05, 0);
+            v.add(screen);
+        }
     }
 
     /* ---------- poses del chico dentro del auto ---------- */
@@ -227,6 +246,7 @@ class Game {
         this.boy.root.visible = false;
         this.phoneVisible(false);
         this.torch.visible = true;
+        if (this.phoneView) this.phoneView.visible = true;
         this.house.group.visible = true;
         this.engine.look('house');
         this.engine.camera.fov = 72;

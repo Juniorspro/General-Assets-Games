@@ -62,6 +62,7 @@ export class Director {
             g.road.group.visible = true;
             g.house.group.visible = false;
             g.torch.visible = false;
+            if (g.phoneView) g.phoneView.visible = false;
             car().group.visible = true;
             car().group.rotation.set(0, 0, 0);
             g.keyMesh.visible = false;
@@ -74,6 +75,7 @@ export class Director {
             g.boy.root.visible = false;
             g.phoneVisible(false);
             g.torch.visible = false;
+            if (g.phoneView) g.phoneView.visible = false;
             g.keyMesh.visible = false;
         };
 

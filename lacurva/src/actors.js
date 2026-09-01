@@ -186,8 +186,11 @@ export class Rig {
         const k = Object.keys(this.clips).find(n => n === 'preset:' + name || n.endsWith(':' + name) || n.toLowerCase().includes(name));
         return k ? this.clips[k] : null;
     }
-    play(name, { fade = 0.25, loop = true, rate = 1 } = {}) {
-        const clip = this.find(name);
+    /* `fallback` cubre el caso de un rig al que le falta el clip pedido: la
+       vieja solo vino con walk e idle, asi que su persecucion es el mismo
+       walk acelerado en vez de quedarse sin animacion y patinar. */
+    play(name, { fade = 0.25, loop = true, rate = 1, fallback = null } = {}) {
+        const clip = this.find(name) || (fallback ? this.find(fallback) : null);
         if (!clip) return null;
         const next = this.mixer.clipAction(clip);
         if (this.current && this.current.getClip() === clip) { this.current.timeScale = rate; return this.current }

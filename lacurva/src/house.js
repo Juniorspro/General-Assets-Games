@@ -258,6 +258,7 @@ export class House {
 
     openExit(k) { if (this.exitPivot) this.exitPivot.rotation.y = -1.5 * Math.min(1, Math.max(0, k)) }
     unboard() { if (this.boards) this.boards.visible = false }
+    reboard() { if (this.boards) this.boards.visible = true }
 
     /* Punto libre aleatorio dentro de una pieza, en coordenadas de mundo. */
     randomSpotIn(room, rng) {

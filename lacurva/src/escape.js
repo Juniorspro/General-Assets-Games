@@ -76,6 +76,7 @@ export class Escape {
         g.lady.play('walk', { fade: 0.2 });
 
         g.house.openExit(0);
+        g.house.reboard();          // al reintentar, la puerta vuelve a estar clavada
         g.hud.set({
             hudOn: true, skipOn: false, cardOn: false, fade: 0, blur: 0, lids: 0, vignette: 0.5,
             obj: 'Encontrá la llave — la puerta está clavada',
@@ -189,8 +190,9 @@ export class Escape {
         const L = this.g.torch;
         if (L) {
             L.position.set(cam.position.x, cam.position.y - 0.12, cam.position.z);
-            const d = new THREE.Vector3(0, 0, -1).applyEuler(cam.rotation);
-            L.target.position.copy(cam.position).add(d.multiplyScalar(9));
+            const d = (this._fwd || (this._fwd = new THREE.Vector3()))
+                .set(0, 0, -1).applyEuler(cam.rotation);
+            L.target.position.copy(cam.position).addScaledVector(d, 9);
             L.target.updateMatrixWorld();
         }
     }
@@ -229,7 +231,7 @@ export class Escape {
         }
 
         const speed = L.state === 'chase' ? LADY_CHASE : L.state === 'hunt' ? LADY_HUNT : LADY_PATROL;
-        if (L.path && L.node < L.path.length) {
+        if (L.path && L.node < L.path.length) {   // avanzar por el camino
             const [c, r] = L.path[L.node];
             const [wx, wz] = toWorld(c, r);
             const dx = wx - L.pos.x, dz = wz - L.pos.z;
@@ -246,7 +248,9 @@ export class Escape {
 
         g.lady.root.position.set(L.pos.x, 0, L.pos.z);
         g.lady.root.rotation.y = L.yaw;
-        g.lady.play(L.state === 'chase' ? 'run' : 'walk', { fade: 0.25, rate: L.state === 'chase' ? 1.25 : 0.9 });
+        // la cadencia sale de la velocidad real, si no los pies patinan
+        g.lady.play(L.state === 'chase' ? 'run' : 'walk',
+            { fallback: 'walk', fade: 0.25, rate: speed / 1.25 });
         g.lady.update(dt);
 
         // pista sonora y visual de que viene: mas cerca, mas roja la vineta
