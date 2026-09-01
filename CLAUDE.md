@@ -7,6 +7,38 @@ Cuando el usuario escriba **"Pope"** (solo, o dentro de un mensaje), significa
 Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pushearlo.
 
 
+## Encargo permanente: los HTML que llegan se mejoran graficamente sin que lo pidan
+
+Autorizado por el usuario (2026-09-01), y vale para **todo HTML que entre a la sesion**, no
+para uno solo:
+
+> mejoralo graficamente por mas que no te lo pida — menos movimiento, camara, animaciones,
+> texturas las generas, cielo 360 adecuado, texturas de suelo y pisos
+
+O sea que llegar un HTML **ya es el pedido**: no hay que preguntar si se puede pulir. Lo que si
+hay que hacer antes de tocar nada:
+
+1. **Mirar si es 2D o 3D, y decirlo.** Casi todo el encargo es de three.js: el cielo 360, las
+   texturas PBR de piso, la camara. En un juego 2D —Maicol, Pompom, que dibujan todo por codigo
+   en canvas— nada de eso existe y la mejora es otra: paleta, parallax, particulas, tipografia,
+   transiciones. No suponerlo: abrirlo y ver.
+2. **Comprobar si el HTML es la SALIDA de un juego partido.** Los grandes viven en
+   `herramientas/<juego>/partes/` y se arman con `armar.py`. Editar el HTML de uno de esos es
+   trabajo que el proximo armado pisa. Si esta partido: se tocan las partes y se rearma.
+3. **`Campo_de_Tiro.html` no se toca ni se borra**, llegue como llegue.
+4. **Medir antes de decir que quedo mejor.** Las sondas de `window.__X` y el banco de
+   `/tmp/ui` estan para eso; una captura antes y otra despues valen mas que un parrafo.
+5. **Lo generado no reemplaza nada hasta que llega.** Se arranca con lo dibujado por codigo y
+   la foto o la malla lo pisa cuando decodifica, asi que un asset que falla cuesta una pieza y
+   no la pantalla entera.
+
+Las texturas y el cielo se generan con Rezona (`herramientas/rezona/rz.py`, un proyecto por
+juego) o con Higgsfield, y conviene sacar las dos y comparar **dentro del juego**. Las diez
+reglas de horneado —`face_limit`, los metros que cubre cada foto, el tinte, las costuras— estan
+en la skill `arranque`, y saltearse la de los metros es lo que convierte una casa en casa de
+munecas.
+
+
 ## Los juegos de `juegos-pc/`
 
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
