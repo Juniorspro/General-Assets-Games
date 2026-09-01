@@ -111,6 +111,107 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Septuagésima octava vuelta (2026-09-01): **BARRIO** — pasos reales en vez de hormigas, y la ciudad del cuarto pasa a ser foto
+
+Pedido: *"tiembla mucho en la cinemática, agregá más suavidad; también al correr más suave y sin
+temblar mucho, y que sean pasos reales no hormigas; también que la cabeza se vea por más que me tape
+visión, porque así lo veo yo; también los edificios de la ciudad en el departamento y la carretera
+deben ser reales"*.
+
+#### «PASOS DE HORMIGA» ERA UNA CADENCIA, Y SE CUENTA
+
+La fase avanzaba π cada **0,82 m** con la velocidad en **3,15 y 6,0 m/s**. O sea **3,8 pasos por
+segundo caminando y 7,3 corriendo**: nadie da siete pasos por segundo. Y encima el ciclo sólo barre
+0,70 m con el pie, así que los otros doce centímetros de cada paso los hacía **patinando**.
+
+**EL PASO NO SE ESCRIBE EN EL JUEGO: LO TRAE EL CICLO.** Durante el apoyo el pie está clavado en el
+piso, así que el cuerpo avanza exactamente lo que el pie barre hacia atrás — ese número se mide al
+hornear la tabla y se guarda como `PASO_M`. El juego divide por él, y con eso **el patinaje es cero
+por construcción**; con un número a mano al lado de otro medido, los dos se separan el día que se
+cambia el ciclo.
+
+De ahí sale la velocidad, y no al revés: `pasos por segundo = velocidad ÷ paso`, y un humano camina a
+1,9-2,4 y corre a 3-4.
+
+| | antes | ahora |
+|---|---|---|
+| caminar | 3,15 m/s ÷ 0,82 = **3,8 pasos/s** | 1,90 ÷ 0,70 = **2,7** |
+| correr | 6,00 ÷ 0,82 = **7,3** | 3,20 ÷ 0,77 = **4,1** |
+
+**Y EL CICLO SE ESTIRA HASTA QUE EL PASO MIDA ESO** —amplificando el delta contra el reposo, que para
+factor 1 devuelve exactamente lo que entró—. **Pero no se puede estirar mucho:** probado, para llevar
+la carrera a 1,15 m hay que amplificar **2,70** y ahí el ciclo deja de ser el mismo movimiento — el
+pie sube 71 cm y la cadera baja 75. Con 1,36 y 1,28 el paso llega a 0,70 y 0,77 y la pose aguanta.
+
+**Y EL REBOTE SE TOPA, PORQUE UNA CARRERA TIENE VUELO.** La cadera baja por fase lo que haga falta
+para que el pie de apoyo toque; pero en los cuadros en que los **dos** pies están en el aire el cuerpo
+se va a buscarlos, y medido eso hundía la cadera **26 cm** — corriendo en cuclillas. El cuerpo nunca
+baja más de un palmo por debajo de su punto más alto; en esos cuadros los pies no tocan, que es
+justamente lo que hace un vuelo.
+
+#### EL TEMBLOR: LO QUE SE VA ES EL PICO, NO EL RITMO
+
+Corriendo, el ojo subía y bajaba **7 cm** y se corría 5,6 de costado **cuatro veces por segundo**. Un
+cabeceo real caminando son dos o tres centímetros. Las cuatro amplitudes bajan a la mitad **y además
+pasan por un filtro de primer orden** —el mismo `lerp` con el que ya se suavizaban el alabeo y el
+campo—: el seno cambia de golpe en cada apoyo, y lo que se lee a temblor es ese golpe, no la
+oscilación.
+
+En la cinemática, lo mismo con un criterio: de los cuatro senos que mueven la cabeza, **los rápidos
+—1,97 y 1,43 Hz— son los que se leen a temblor y los lentos son los que dan el aire de que alguien la
+está llevando**. Los rápidos se cortan a un tercio y los lentos casi no se tocan.
+
+#### LA CABEZA EN PRIMERA PERSONA: SE IMPLEMENTÓ ENTERA Y NO SE PUEDE
+
+Es la parte que vale anotar, porque el resultado fue **descartarla**. Se hizo la primera persona de
+verdad: la cámara en el **globo del ojo** —no en la placa de la cara, que es la superficie: puesto el
+lente ahí, la nariz queda encima y no se dibuja nada—, el corrimiento del cuerpo **medido cuadro a
+cuadro** sobre el hueso `caraOjos` en vez de una constante, el tronco enderezado con un `sumaH` que
+compone sobre lo que la pose dejó, y el plano de recorte a 3,5 cm.
+
+**Y la razón por la que no funciona es una medida del modelo:** lleva **los ojos 21,7 cm por delante
+del esternón** (z 0,281 contra 0,064), cuando en una persona son ocho o diez. Con el lente en los
+ojos, el pecho queda casi a la espalda del lente: mirando hacia abajo todo lo que entra es **el
+agujero del cuello por dentro** y el forro del torso. Fotografiadas las cuatro combinaciones de cabeza
+achicada o entera por enderezado sí o no, **las cuatro se ven rotas**.
+
+La conclusión es la de siempre y conviene dejarla escrita: **una cámara metida en la cabeza no puede
+ver la cabeza, sólo su interior.** En primera persona la cabeza sigue achicándose a la centésima
+parte, y se ve con VISTA, que para eso está.
+
+#### LA CIUDAD Y LA CALLE, DE FOTO
+
+Cuatro imágenes generadas con Rezona Lab —dos fachadas de noche (una torre de oficinas y un bloque de
+departamentos), la trama de calles vista desde arriba y una azotea con sus equipos— que pisan a los
+lienzos de 128 píxeles con los que la ciudad se venía dibujando.
+
+**EL MAPA EMISIVO NO SE PIDE APARTE: SE DERIVA DE LA MISMA FOTO.** Las ventanas encendidas y los
+faroles no se ven tan claros como la luz que les llegue, porque a noventa y seis metros no les llega
+ninguna. Tienen que emitir. Y pidiendo una segunda imagen habría ventanas que brillan sin estar
+dibujadas: el mapa sale de quedarse con lo que pasa un percentil de luminancia de la propia foto, con
+rampa —un corte duro deja las ventanas con el borde dentado—, así que **lo que brilla es exactamente
+lo que se ve encendido, por construcción**.
+
+**Y LA ESCALA SE CUENTA, igual que las siete del barrio:** un piso mide unos tres metros y pico, así
+que la cantidad de filas de ventanas de la foto dice cuántos metros cubre una copia (29,7 × 40,3 la
+de oficinas, 49,4 × 63,8 la de departamentos). Sin eso un edificio de cien metros sale con pisos de
+diez.
+
+Más dos cosas de geometría:
+- **Retranqueos.** Una torre que es un prisma parejo de cien metros se lee a caja; lo que distingue
+  una silueta de ciudad de un gráfico de barras es que el edificio suba, se corte y siga más angosto.
+- **Dos familias de fachada y no una.** Con una sola foto repetida en doscientos edificios la ciudad
+  se lee a un edificio copiado doscientas veces. Cuesta **una** llamada de dibujo más.
+
+#### MEDIDO AL CERRAR
+
+La zancada, medida en el juego: **de 0,21 m de recorrido de pie a 0,70-0,74**, con la relación
+adelante/costado **de 1,1 a 5,8-7,2**. 224 m caminados por dos calles con **0 cuadros dentro de una
+casa**; ida y vuelta al cuarto con 4,6 m hasta la ventana y la vista que vuelve sola al salir.
+**7 de 7 texturas del barrio y 7 de 7 de la ciudad** decodificadas y puestas con su escala. 174
+llamadas de dibujo en el barrio y **81 en el cuarto**. `window.__errs` vacío en las once corridas. El
+HTML pasó de 1,90 a **2,09 MB**, y esos 190 KB son las cuatro fotos de la ciudad con sus emisivos.
+
 ### Septuagésima séptima vuelta (2026-09-01): **BARRIO** — el muslo giraba en el eje equivocado, y el paso pasa a venir de Tripo
 
 Pedido: *"mejora la animación de caminar está horrible xd ... se ve como tus piernas van de lado a
