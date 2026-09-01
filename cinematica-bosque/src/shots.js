@@ -332,6 +332,8 @@
             update: (p, tt, dt) => {
                 let st = this.shotTime;
                 // del asiento a parado al lado del auto: primero sale, despues se endereza
+                // en cuanto la camara sale del asiento, el cuerpo sentado sobra
+                this.povRig && (this.povRig.root.visible = st < 1.1);
                 let slide = aD(HA(st / 2.2, 0, 1)),
                     rise = aD(HA((st - 1.6) / 2, 0, 1)),
                     walk = aD(HA((st - 3.6) / 3, 0, 1));
