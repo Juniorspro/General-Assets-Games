@@ -143,6 +143,120 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima primera vuelta (2026-09-01): **PUERTA BLANCA**, el noveno juego — el cielo 360 y las flores gigantes del nivel 1
+
+Llegó un HTML de afuera —`bosque3d31verdugo.html`, 422 KB, three.js r128 desde cdnjs y **sin un solo
+asset**: sus 31 texturas son lienzos 2D dibujados por código—. Es "PUERTA BLANCA", cinco pisos más un
+prólogo, y el pedido fue sobre el **nivel 1, el campo**: *"genera un cielo 360 como textura … también
+genera modelos 3D gigantes de flores reales y decora mejor todo ese nivel … cielo celeste con nubes
+bien god"*.
+
+Vive en `juegos-pc/Puerta_Blanca.html`, y **es la salida**: la fuente es `herramientas/puerta/base.html`
+más `armar.py`, que inyecta los assets y aplica once parches, **cada uno con su ancla y su `assert`**.
+Eso no es ceremonia: a mitad de la vuelta un reemplazo mío pisó la línea de un ancla en vez de la del
+reemplazo, y lo que evitó escribir un HTML a medias fue justamente que el assert falló en voz alta.
+
+#### EL CIELO: TRES DEFECTOS, Y EL TERCERO ERA DE FÁBRICA
+
+1. **La panorámica volvió 1376×768, o sea 1,792:1.** Una equirectangular mapea 360 grados de ancho
+   contra 180 de alto: la relación **tiene** que ser 2:1 o las nubes salen aplastadas. Se reescala en
+   el horneado.
+2. **Y SU CENIT ERA GRIS** (`0x9aabc3`). Lo que devuelve el generador no es una equirect rigurosa: su
+   parte más azul cae a media altura y el borde de arriba es pálido, así que mapeada tal cual, mirar
+   hacia arriba devuelve el mismo gris del que uno se quería ir. El horneado le empuja **el azul de la
+   propia foto** (`0x00549c`, sacado del percentil 97 de saturación) hacia el cenit, con dos cuidados:
+   sube con la elevación —abajo el cielo palidece de verdad— y **no toca las nubes**, detectadas por lo
+   que son, claras y poco saturadas. Sin esa máscara los cúmulos se pintan de azul y se pierde lo único
+   que hace que el cielo se lea a foto. Cenit medido después: **`0x2fb3ed`**.
+3. **EL DOBLE ENCODE DE sRGB, que el juego ya tenía.** En un `ShaderMaterial` propio, `texture2D`
+   devuelve el texel **crudo** —three inyecta la conversión sólo en sus materiales— y más abajo el
+   `#include <encodings_fragment>` lo codifica a sRGB **otra vez**. Codificado dos veces, todo se va al
+   blanco. Medido mirando 43 grados hacia arriba: las bandas daban **(220,223,225)**, gris parejo, con
+   un cenit que es celeste. Con `pow(tx, 2.2)` al muestrear pasan a **(199,210,217) · (184,203,216) ·
+   (159,192,208)**, con el azul ya por encima del verde y del rojo. El degradado de respaldo tenía el
+   mismo defecto y se corrigió igual.
+
+**Y LA FOTO SE MUESTREA POR DIRECCIÓN Y NO POR LA UV DE LA ESFERA.** Así el mapeo no depende de cómo
+esté partida la geometría del domo y —lo que importa— se la puede **girar con un uniform** para que su
+parte más brillante caiga donde está el sol que tira las sombras: medido, el sol de la foto está en
+azimut −0,818 rad y el de la escena en +0,494, o sea 1,312 de giro. Con un sol de cada lado la luz se
+contradice y eso se ve. El brillo del sol dibujado se suma **sólo sobre el degradado**: la foto ya trae
+el suyo, y dos soles en el mismo cielo se leen a dos soles.
+
+**LAS 16 NUBES-SPRITE SE APAGAN EN EL CAMPO.** Son manchas de un lienzo de 128 px puestas por delante
+de una panorámica fotográfica. Y acá hay que anotar un error mío: **las acusé de lavar el cielo y no
+eran** — apagándolas con la sonda, el cuadro se movía **una unidad sobre 220**. Se van igual, pero por
+lo que cuestan y no por lo que yo creía: **de 134 a 126 llamadas de dibujo**, que es más de lo que
+suman las cuatro mallas de flores nuevas.
+
+#### LAS FLORES: `face_limit` ES LA DIFERENCIA ENTRE UNA FLOR Y UNA MANCHA
+
+Cuatro especies reales —girasol, amapola, margarita, tulipán— con `extra:{face_limit:6000}`. Entran
+con **5.502 a 5.768 triángulos** en vez del millón que Tripo devuelve por defecto, y eso es lo que
+permite que los pétalos finos sobrevivan al decimado.
+
+**EL PUNTO DE DECIMADO SE BUSCÓ MIDIENDO, Y LAS DOS PUNTAS SE DESCARTARON:**
+
+| objetivo | bytes en base64 | qué pasa |
+|---|---|---|
+| 2.000 tri | 182 KB | **se rompe**: la amapola pierde las hojas de abajo y quedan dos formas rojas flotando |
+| **3.200** | **372 KB** | el punto |
+| 5.400 tri | 868 KB | **no cambia nada** |
+
+Lo de 5.400 vale anotarlo porque mi hipótesis estaba mal: yo atribuía el grumo del color a la densidad
+de vértices, y duplicando el presupuesto **la imagen sale idéntica**. El grumo es de la textura de
+origen, que trae manchas verdes en los pétalos del tulipán. 496 KB que no compraban nada.
+
+**Y `COLOR_0` VOLVIÓ EN VEC4 DE BYTES NORMALIZADOS** aunque se escribió como tres floats y se pasó
+`-noq`. Es la regla 5 del horneado y esta vez se sabía de antemano: el lector saca el número de
+componentes del accesor y la normalización de que el array no sea de floats. Leído como floats sin
+normalizar, las cuatro salen blanco puro con motas.
+
+Van **cuatro `InstancedMesh`, una por especie**: veinte flores de cinco a once metros cuestan cuatro
+llamadas de dibujo. Con `frustumCulled` apagado, porque el centro de la instancia no es el de la flor.
+Y sus obstáculos se vuelven a poner dentro de `applyFlowerDensity`, que **vacía la lista** y la
+rellena con las del campo: sin eso, cambiar la calidad en caliente hace que un tallo de once metros
+deje de existir para el choque.
+
+#### EL SUELO, Y LA ESCALA QUE SE CUENTA
+
+La foto de pasto se midió con la **autocorrelación horizontal**: el primer mínimo cae en 9 px, o sea
+que "brizna + hueco" mide unos 18, y con una brizna real de 8-10 mm los 1024 px cubren **0,46 a 0,57
+m**. A escala real serían ~720 repeticiones sobre los 360 m del terreno, y pasados quince metros eso
+es ruido sub-texel; quedó en **300 (1,2 m por baldosa) contra las 90 (4 m) del lienzo**, y lo que
+sostiene el detalle cerca son las briznas 3D, que son geometría. El tinte se recalculó **en lineal**
+(`0xa8bf88 → 0x98aba5`), porque three multiplica `map × vertexColor × material.color` y una foto que ya
+trae su verde con el tinte del lienzo encima sale color musgo. Costura: **0,9 veces el salto normal**,
+o sea que no hace falta coser — la resuelve `MirroredRepeatWrapping`.
+
+Y la niebla pasa a `0x97bcd9`, que es **el color del horizonte de la propia panorámica**: con la niebla
+de otro color aparece una banda a la altura del horizonte.
+
+#### TRES VECES QUE LA MEDICIÓN ME CORRIGIÓ
+
+Vale anotarlas juntas porque son la misma lección: acusé a las nubes-sprite de lavar el cielo (movían
+una unidad sobre 220), atribuí el grumo de las flores a la densidad de vértices (duplicarla no cambia
+un píxel), y di por gris un cielo que **es azul en las ocho direcciones** —medido, azul-rojo de 93 a
+155— cuando lo que veía era **cobertura de nubes**: 24-29 % en los sectores pálidos contra 1-3 % en los
+azules. Las tres se veían ciertas mirando la pantalla.
+
+#### MEDIDO AL CERRAR
+
+Los **seis niveles** cargan y se recorren, y volviendo al 1 el cielo sigue puesto. Cielo 1536×768 en
+uso con la niebla en `#97bcd9`; suelo 512 con repetición 300; **4 especies y 20 flores gigantes, 63.700
+triángulos, cero errores de carga**. Costo contra un control que es `base.html` **con las sondas y nada
+más** —hubo que construirlo, porque el juego no exponía ninguna—: **134 → 126 llamadas** en alta y
+270.992 → 396.830 triángulos, y ese delta de 125.838 cuadra con las gigantes contadas por su propia
+sonda (63.700 × 2 pasadas con la de sombra), que es la comprobación de que los dos números miden lo
+mismo. En baja, 50 llamadas en los dos casos. `window.__errs` vacío en las nueve corridas. El HTML pasó
+de 422 KB a **1,09 MB**, y esos 670 KB son el cielo (123 en base64), las cuatro flores (372) y el pasto
+(152).
+
+**LO QUE QUEDA PENDIENTE, Y ES HONESTO DECIRLO:** las gigantes se plantan con giro al azar, así que
+algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se arregla midiendo una vez
+hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
+
+
 ### Octogésima vuelta (2026-09-01): **BARRIO** — la cámara de la cinemática se queda fija
 
 Pedido, después de que la vuelta anterior bajara las amplitudes a la mitad y siguiera temblando:
