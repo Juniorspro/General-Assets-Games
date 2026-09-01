@@ -423,6 +423,7 @@ tit "listo"
 echo "  Leé la skill 'arranque' para saber cómo se trabaja en este repo:"
 echo "      /arranque      (o mirá .claude/skills/arranque/SKILL.md)"
 echo
+
 __FIN_HERRAMIENTAS_ARRANQUE_PREPARAR_SH__
 chmod 755 herramientas/arranque/preparar.sh
 echo '  . herramientas/arranque/preparar.sh'
