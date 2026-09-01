@@ -138,10 +138,10 @@ class Game {
     }
 
     /* ---------- poses del chico dentro del auto ---------- */
-    boySeat(on) {
+    boySeat(on, hideHead) {
         this.boy.root.visible = on;
         if (!on) return;
-        this.setHeadHidden(this.boy, true);
+        this.setHeadHidden(this.boy, !!hideHead);
         const c = this.car.group;
         this.boy.root.position.copy(c.position);
         this.boy.root.rotation.y = c.rotation.y;
@@ -163,17 +163,37 @@ class Game {
     boyPhone(k) { this.seatPose(sat(k)); if (this.phoneGlow) this.phoneGlow.intensity = 0.45 * sat(k) }
     phoneVisible(v) { if (this.phoneHolder) this.phoneHolder.visible = v }
 
-    /* Ojo del conductor, en coordenadas del auto. */
+    /* Ojo del conductor. Sale del hueso de la cabeza del propio rig, no de
+       numeros adivinados: asi la vista y el cuerpo siempre coinciden. */
     povEye(cam, sway, zoom) {
         const c = this.car.group, z = sat(zoom || 0);
+        this.setHeadHidden(this.boy, true);
         c.updateMatrixWorld(true);
-        const p = new THREE.Vector3(lerp(0.45, 0.50, z), lerp(1.46, 1.40, z), lerp(0.22, 0.34, z));
-        c.localToWorld(p);
-        const look = new THREE.Vector3(lerp(0.45, 0.56, z), lerp(1.22, 0.95, z), lerp(14, 0.80, z));
-        c.localToWorld(look);
+        this.boy.root.updateMatrixWorld(true);
+
+        const head = this.boy.bones.Head || this.boy.bones.Neck;
+        const p = new THREE.Vector3();
+        if (head) {
+            head.getWorldPosition(p);
+            // los ojos caen un poco adelante y arriba de la base del craneo
+            p.add(new THREE.Vector3(0, 0.06, 0.10).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.rotation.y));
+        } else {
+            p.set(0.45, 1.22, -0.15);
+            c.localToWorld(p);
+        }
         cam.position.copy(p);
         cam.position.y += Math.sin(this.t * 8.3) * 0.006 * sway;
         cam.position.x += Math.sin(this.t * 5.1) * 0.008 * sway;
+
+        // al mirar el celular la vista va al teléfono; si no, a la ruta
+        const look = new THREE.Vector3();
+        if (z > 0.01 && this.phoneHolder) {
+            this.phoneHolder.getWorldPosition(look);
+            const far = new THREE.Vector3(0.45, 1.15, 22); c.localToWorld(far);
+            look.lerp(far, 1 - z);
+        } else {
+            look.set(0.45, 1.15, 22); c.localToWorld(look);
+        }
         cam.rotation.set(0, 0, 0);
         cam.lookAt(look);
         cam.rotateZ(Math.sin(this.t * 1.4) * 0.012 * sway);

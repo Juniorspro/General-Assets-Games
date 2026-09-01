@@ -58,7 +58,7 @@ export class Director {
                 g.house.group.visible = false;
                 car().group.visible = true;
                 car().setHeadlights(false);
-                g.boySeat(true);
+                g.boySeat(true, false);
                 hud.set({ fade: 1, sub: '', cardOn: false, hudOn: false, skipOn: true, vignette: 0.25, blur: 0, lids: 0 });
                 g.audio.playMusic(0.55);
                 cam().fov = 46; cam().updateProjectionMatrix();
@@ -80,15 +80,16 @@ export class Director {
         const drivePass = {
             id: 'drive-pass',
             duration: 3.9,
-            enter: () => { cam().fov = 38; cam().updateProjectionMatrix() },
+            enter: () => { cam().fov = 42; cam().updateProjectionMatrix() },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
                 car().group.position.set(0, 0, z);
                 car().update(1 / 60, SPEED, 0);
-                // camara clavada en la banquina: el auto viene de frente y pasa
-                const anchor = carAt(3.4 + 5.6);
-                cam().position.set(4.3, 0.62, anchor);
-                cam().lookAt(0, 0.8, z);
+                // camara clavada al borde del asfalto: el auto le pasa al lado
+                // a los 2 s, casi rozandola
+                const anchor = carAt(5.6 + 2.0);
+                cam().position.set(3.4, 0.52, anchor);
+                cam().lookAt(0.2, 0.75, z);
                 g.dust.emit(0.9, 0.05, z - 2.4, 1, 0.5);
             },
         };
@@ -122,7 +123,7 @@ export class Director {
                 g.audio.duckMusic(0.16, 0.35);
                 g.audio.stinger();
                 g.lady.root.visible = true;
-                g.ladyOnRoad(carAt(this.elapsed) + 62);
+                g.ladyOnRoad(carAt(this.elapsed) + 96);
                 g.ladyPlaced = true;
             },
             update: () => {
@@ -143,7 +144,7 @@ export class Director {
                 g.phoneVisible(false);
                 hud.set({ sub: '' });
                 g.lady.root.visible = true;
-                if (!g.ladyPlaced) g.ladyOnRoad(carAt(this.elapsed) + 34);
+                if (!g.ladyPlaced) g.ladyOnRoad(carAt(this.elapsed) + 60);
             },
             update: () => {
                 const t = this.t, z = carAt(this.elapsed);
@@ -182,7 +183,7 @@ export class Director {
             duration: 1.9,
             enter: () => {
                 cam().fov = 50; cam().updateProjectionMatrix();
-                g.boySeat(true);
+                g.boySeat(true, false);
             },
             update: () => {
                 const t = this.t, k = sat(t / 1.9);
@@ -227,7 +228,10 @@ export class Director {
         const blackOut = {
             id: 'black-out',
             duration: 3.4,
-            enter: () => { g.audio.heartbeat(true); g.audio.duckMusic(0, 1.2) },
+            enter: () => {
+                g.audio.heartbeat(true); g.audio.duckMusic(0, 1.2);
+                g.setHeadHidden(g.boy, true);   // la camara queda dentro de la cabeza
+            },
             update: () => {
                 const t = this.t, k = sat(t / 3.4);
                 // adentro del auto, la cabeza caida sobre el volante

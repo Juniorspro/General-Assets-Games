@@ -105,7 +105,7 @@ export class Road {
         // banquina de tierra y el suelo general
         const shoulder = new THREE.Mesh(
             new THREE.PlaneGeometry(11.4, this.length),
-            new THREE.MeshStandardMaterial({ color: 0x6d6248, roughness: 1 }));
+            new THREE.MeshStandardMaterial({ color: 0x64643f, roughness: 1 }));
         shoulder.rotation.x = -Math.PI / 2;
         shoulder.position.y = 0.005;
         shoulder.receiveShadow = true;
@@ -168,16 +168,16 @@ export class Road {
 
             for (let b = 0; b < BR; b++) {
                 const ang = s.r + b * (Math.PI * 2 / BR) + rng.range(-0.3, 0.3);
-                const hy = (4.2 + b * 0.52) * s.s;
+                const hy = (3.1 + b * 0.62) * s.s;
                 eu.set(rng.range(0.5, 1.05), ang, 0); qt.setFromEuler(eu);
                 pos.set(s.x, hy, s.z); sc.setScalar(s.s * rng.range(0.8, 1.2));
                 m.compose(pos, qt, sc); branches.setMatrixAt(bi++, m);
             }
             for (let l = 0; l < LC; l++) {
-                const ang = rng.range(0, Math.PI * 2), rad = rng.range(0.7, 2.9) * s.s;
-                eu.set(0, ang, rng.range(-0.4, 0.4)); qt.setFromEuler(eu);
-                pos.set(s.x + Math.cos(ang) * rad, (5.0 + rng.range(0, 3.1)) * s.s, s.z + Math.sin(ang) * rad);
-                sc.setScalar(s.s * rng.range(0.75, 1.35));
+                const ang = rng.range(0, Math.PI * 2), rad = rng.range(0.9, 3.6) * s.s;
+                eu.set(0, ang, rng.range(-0.5, 0.5)); qt.setFromEuler(eu);
+                pos.set(s.x + Math.cos(ang) * rad, (3.4 + rng.range(0, 4.2)) * s.s, s.z + Math.sin(ang) * rad);
+                sc.setScalar(s.s * rng.range(0.9, 1.7));
                 m.compose(pos, qt, sc); leaves.setMatrixAt(li++, m);
             }
         });
