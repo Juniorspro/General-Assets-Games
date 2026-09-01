@@ -398,7 +398,7 @@
             let holder = new eP;
             holder.add(ph);
             holder.position.set(0, -.04, .02);
-            holder.rotation.set(-1.78, 0, .12);
+            holder.rotation.set(Math.PI, 0, 0);   // la cara con la pantalla mira a los ojos
             holder.visible = !1;
             let light = new GD(0x9fd4ff, 1.4, 1.8, 2);
             light.position.set(0, .05, 0); holder.add(light);
