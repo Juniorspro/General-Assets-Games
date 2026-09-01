@@ -146,11 +146,7 @@
                 P.set({ fade: 0, subtitle: "" });
                 for (let l of this.car.lights) l.intensity = 110;
                 // la vieja aparece parada en el asfalto, de espaldas a los faros
-                if (this.oldLady) {
-                    this.oldLady.root.visible = !0;
-                    this.oldLady.root.position.set(CRASH_X - 6, 0, roadZ + .5);
-                    this.oldLady.root.rotation.y = -Math.PI / 2;
-                }
+                this.placeLady(CRASH_X - 6, roadZ + .5, -Math.PI / 2);
                 this.setMusicVolume(.2);
                 ki(.3, .06);
             },
@@ -182,11 +178,7 @@
                 A.fov = 50; A.updateProjectionMatrix();
                 P.set({ fade: 0, subtitle: "" });
                 for (let l of this.car.lights) l.intensity = 130;
-                if (this.oldLady) {
-                    this.oldLady.root.visible = !0;
-                    this.oldLady.root.position.set(CRASH_X - 6, 0, roadZ + .5);
-                    this.oldLady.root.rotation.y = -Math.PI / 2;
-                }
+                this.placeLady(CRASH_X - 6, roadZ + .5, -Math.PI / 2);
                 this.setMusicVolume(.06);
             },
             update: (p, tt, dt) => {
@@ -212,11 +204,7 @@
                 this.car.group.position.set(CRASH_X - 12, 0, roadZ);
                 A.fov = 46; A.updateProjectionMatrix();
                 for (let l of this.car.lights) l.intensity = 130;
-                if (this.oldLady) {
-                    this.oldLady.root.visible = !0;
-                    this.oldLady.root.position.set(CRASH_X - 6, 0, roadZ + .5);
-                    this.oldLady.root.rotation.y = -Math.PI / 2;
-                }
+                this.placeLady(CRASH_X - 6, roadZ + .5, -Math.PI / 2);
                 this.setMusicVolume(0);
                 HT(.9, 0);
                 this.skidAt = -1;

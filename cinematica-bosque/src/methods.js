@@ -406,6 +406,19 @@
         }, void 0, () => { });
         load(!0); load(!1);
     }
+    /* El helper de rigs del juego escala el modelo pero no lo apoya: el origen
+       queda donde lo dejo el generador, que en estos es el centro del cuerpo.
+       Se mide la caja despues de ubicarla y se corrige la altura. */
+    placeLady(x, z, yaw) {
+        let L = this.oldLady;
+        if (!L) return;
+        L.root.visible = !0;
+        L.root.position.set(x, 0, z);
+        L.root.rotation.y = yaw;
+        L.root.updateWorldMatrix(!0, !0);
+        let box = new fP().setFromObject(L.root);
+        if (isFinite(box.min.y)) L.root.position.y = -box.min.y;
+    }
     /* La luna es direccional: su sombra solo cubre una caja alrededor del
        target. En la cinematica el auto recorre cientos de metros, asi que hay
        que llevarle el foco encima o las sombras se cortan. */
