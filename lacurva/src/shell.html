@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>La curva — La casa de la vieja</title>
+<style>
+  :root { --ink: #d7d0bf; --dim: #8d8676; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: "Times New Roman", Georgia, serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased; user-select: none; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #ui { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+
+  /* --- capas de imagen --- */
+  #vignette { position: absolute; inset: 0; opacity: .5; transition: opacity .5s linear;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 32%, rgba(0,0,0,.92) 100%); }
+  #blur { position: absolute; inset: 0; opacity: 0; transition: opacity .25s linear;
+    backdrop-filter: blur(7px) saturate(.6); -webkit-backdrop-filter: blur(7px) saturate(.6); }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity .12s linear; }
+  #lids { position: absolute; inset: 0; }
+  #lid-top, #lid-bot { position: absolute; left: 0; right: 0; height: 0; background: #000; }
+  #lid-top { top: 0; border-bottom: 1px solid rgba(0,0,0,.9); }
+  #lid-bot { bottom: 0; }
+
+  /* --- textos --- */
+  #sub { position: absolute; left: 0; right: 0; bottom: max(14%, 76px); display: none;
+    padding: 0 8vw; text-align: center; font-size: clamp(15px, 2.1vw, 22px);
+    letter-spacing: .02em; text-shadow: 0 2px 10px #000; }
+  #card { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; opacity: 0;
+    transition: opacity .7s ease; text-align: center; }
+  #card-t { font-size: clamp(30px, 6.6vw, 74px); letter-spacing: .30em; margin: 0 0 0 .30em;
+    text-shadow: 0 4px 26px #000; }
+  #card-s { font-size: clamp(13px, 1.8vw, 19px); letter-spacing: .22em; color: var(--dim);
+    margin: 0 0 0 .22em; text-transform: uppercase; }
+
+  /* --- hud de la mision --- */
+  #hud { display: none; }
+  #obj { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%); font-size: 15px; letter-spacing: .1em; color: var(--dim);
+    text-shadow: 0 2px 10px #000; white-space: nowrap; }
+  #stam { position: absolute; left: 22px; bottom: 24px; width: 148px; height: 5px;
+    background: rgba(255,255,255,.10); border-radius: 3px; overflow: hidden; }
+  #stam-fill { height: 100%; width: 100%; background: #c9c2ae; transition: background .3s; }
+  #key-pip { position: absolute; left: 22px; bottom: 40px; font-size: 12px;
+    letter-spacing: .18em; color: #d9b76a; opacity: .2; }
+  #prompt { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%);
+    display: none; font-size: 15px; letter-spacing: .12em; color: var(--ink);
+    background: rgba(8,8,10,.55); border: 1px solid rgba(200,190,170,.22);
+    padding: 7px 14px; border-radius: 2px; text-shadow: 0 2px 8px #000; }
+  #hint { position: absolute; right: 20px; bottom: 22px; font-size: 11.5px;
+    letter-spacing: .12em; color: rgba(215,208,191,.42); text-align: right; line-height: 1.7; }
+
+  #skip { position: absolute; right: 18px; bottom: 18px; display: none; pointer-events: auto;
+    padding: 9px 16px; font: inherit; font-size: 13px; letter-spacing: .14em; color: var(--dim);
+    background: rgba(10,10,12,.55); border: 1px solid rgba(200,190,170,.22);
+    border-radius: 2px; cursor: pointer; }
+  #skip:hover { color: var(--ink); border-color: rgba(200,190,170,.45); }
+
+  /* --- pantalla de carga --- */
+  #boot { position: fixed; inset: 0; background: #050507; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+    transition: opacity .6s ease; z-index: 50; }
+  #boot h1 { font-size: clamp(26px, 5.4vw, 58px); letter-spacing: .30em; margin: 0 0 0 .30em;
+    font-weight: normal; }
+  #boot h2 { font-size: clamp(11px, 1.6vw, 15px); letter-spacing: .34em; margin: 0 0 0 .34em;
+    color: var(--dim); font-weight: normal; text-transform: uppercase; }
+  #boot-track { width: min(340px, 62vw); height: 3px; background: rgba(255,255,255,.09); }
+  #boot-bar { height: 100%; width: 0; background: #b9ae90; transition: width .3s ease; }
+  #boot-tip { font-size: 12.5px; letter-spacing: .16em; color: rgba(215,208,191,.45); height: 1.2em; }
+  #start { display: none; pointer-events: auto; margin-top: 6px; padding: 12px 34px;
+    font: inherit; font-size: 14px; letter-spacing: .24em; color: var(--ink);
+    background: transparent; border: 1px solid rgba(200,190,170,.35); cursor: pointer; }
+  #start:hover { background: rgba(200,190,170,.09); }
+  #boot.ready #boot-track, #boot.ready #boot-tip { opacity: .25; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="ui">
+  <div id="vignette"></div>
+  <div id="blur"></div>
+  <div id="lids"><div id="lid-top"></div><div id="lid-bot"></div></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+
+  <div id="sub"></div>
+  <div id="card"><h1 id="card-t"></h1><p id="card-s"></p></div>
+
+  <div id="hud">
+    <div id="obj"></div>
+    <div id="key-pip">LLAVE</div>
+    <div id="stam"><div id="stam-fill"></div></div>
+    <div id="hint">WASD moverse · SHIFT correr<br>C agacharse · E interactuar · M silenciar</div>
+  </div>
+  <div id="prompt"></div>
+  <button id="skip" type="button">Saltar intro</button>
+</div>
+
+<div id="boot">
+  <h1>LA CURVA</h1>
+  <h2>La casa de la vieja</h2>
+  <div id="boot-track"><div id="boot-bar"></div></div>
+  <div id="boot-tip">cargando</div>
+  <button id="start" type="button">EMPEZAR</button>
+</div>
+
+<script>window.CRASH_ASSETS = /*__ASSETS__*/{};</script>
+<script>/*__BUNDLE__*/</script>
+</body>
+</html>
