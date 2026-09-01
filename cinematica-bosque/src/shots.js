@@ -97,7 +97,7 @@
                 if (!call.saidCaller && st >= call.tCaller) { call.saidCaller = !0; this.playVo("caller") }
                 let zoom = aD(HA((st - 5) / 2.6, 0, 1));
                 A.fov = HP(68, 52, zoom); A.updateProjectionMatrix();
-                this.povHead(A, 1 - zoom * .7);
+                this.povHead(A, 1 - zoom * .7, zoom);
                 if (this.phoneHolder && zoom > 0) {
                     this.phoneHolder.getWorldPosition(this._v3);
                     this._v2.set(.45, 1.10, 14); this.car.group.localToWorld(this._v2);
@@ -129,7 +129,7 @@
                 let st = this.shotTime;
                 this.car.group.position.x += 4.5 * dt;
                 for (let w of this.car.wheels) w.rotation.x += dt * 3.6;
-                this.povHead(A, .3);
+                this.povHead(A, .3, 1);
                 if (this.phoneHolder) {
                     this.phoneHolder.getWorldPosition(this._v3);
                     A.lookAt(this._v3);

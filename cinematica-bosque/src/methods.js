@@ -383,9 +383,9 @@
         set("Spine01", -.12, 0, 0);
         set("L_Upperarm", 0, 1.6, 1.6); set("L_Forearm", 0, 0, 0);
         // brazo derecho: volante -> bolsillo -> celular a la altura de los ojos
-        let uy = HP(-1.6, HP(-2.2, -1.0, k), reach),
+        let uy = HP(-1.6, HP(-2.2, -1.1, k), reach),
             uz = HP(-1.6, -1.8, reach),
-            fx = HP(0, .8, reach);
+            fx = HP(0, HP(.8, .2, k), reach);
         set("R_Upperarm", 0, uy, uz);
         set("R_Forearm", fx, 0, 0);
     }
@@ -397,7 +397,7 @@
             let ph = this.fitModel(gltf.scene, .152, "length-z");
             let holder = new eP;
             holder.add(ph);
-            holder.position.set(0, -.04, .02);
+            holder.position.set(0, -.012, .03);
             holder.rotation.set(Math.PI, 0, 0);   // la cara con la pantalla mira a los ojos
             holder.visible = !1;
             let light = new GD(0x9fd4ff, .45, 1.4, 2);
@@ -411,10 +411,13 @@
             this.disposers.push(() => hand.remove(holder));
         }, void 0, () => { });
     }
-    povHead(camera, sway) {
-        let car = this.car.group;
+    /* zoom = 0 primera persona pura; 1 se corre un poco al costado del hombro
+       para que el brazo levantado no tape el celular */
+    povHead(camera, sway, zoom) {
+        let car = this.car.group, z = HA(zoom || 0, 0, 1);
         car.updateMatrixWorld(!0);
-        this._v1.set(.45, 1.35, .02); car.localToWorld(this._v1);
+        this._v1.set(HP(.45, .60, z), HP(1.35, 1.42, z), HP(.02, -.06, z));
+        car.localToWorld(this._v1);
         this._v2.set(.45, 1.10, 14); car.localToWorld(this._v2);
         camera.position.copy(this._v1);
         camera.position.y += Math.sin(this.elapsed * 8.3) * .006 * sway;
