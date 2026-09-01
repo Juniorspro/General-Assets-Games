@@ -46,6 +46,25 @@ export const ROOMS = {
 };
 export const EXIT = { c: 9, r: 17 };
 
+/* Degrade radial en un canvas: el vano se lee como luz que entra y no como
+   un rectangulo azul pintado en la pared. */
+let _glare = null;
+function glareTexture() {
+    if (_glare) return _glare;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    _glare = new THREE.CanvasTexture(c);
+    _glare.colorSpace = THREE.SRGBColorSpace;
+    return _glare;
+}
+
 export class House {
     constructor(scene, assets, rng) {
         this.group = new THREE.Group();
@@ -196,8 +215,11 @@ export class House {
         const g = new THREE.Group();
         const inward = facing;                       // +1 mira a +Z, -1 a -Z
         const glow = new THREE.Mesh(
-            new THREE.PlaneGeometry(1.15, 1.35),
-            new THREE.MeshBasicMaterial({ color: 0x5c78ad, fog: false }));
+            new THREE.PlaneGeometry(1.7, 1.95),
+            new THREE.MeshBasicMaterial({
+                color: 0x9fbde8, fog: false, transparent: true,
+                map: glareTexture(), blending: THREE.AdditiveBlending, depthWrite: false,
+            }));
         glow.position.set(0, 1.55, 0.02 * inward);
         glow.rotation.y = inward > 0 ? 0 : Math.PI;
         g.add(glow);
