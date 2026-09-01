@@ -60,9 +60,26 @@ def main():
             nuevos += 1
         else:
             d['proyectos'][pid]['nombre'] = p.get('name', d['proyectos'][pid]['nombre'])
+
+    # ── LO QUE VUELVE ES UNA PAGINA, NO LA LISTA ──
+    # `list_projects` contesta {items, total, page, page_size} con page_size=20, y
+    # la herramienta MCP NO expone parametro de pagina: probados `page`, `page_size`
+    # y `offset`, los tres se IGNORAN en silencio y siempre vuelve la pagina 1.
+    # Medido: total=316, items=20. La version anterior imprimia «20 proyectos en el
+    # servidor» y dejaba creer que el inventario estaba completo. Se anota el total
+    # para que se note el faltante.
+    total = lista.get('total', len(items))
+    d['_alcance_de_la_lista'] = (
+        'list_projects devuelve solo la pagina 1 (page_size=%s) y no acepta parametro '
+        'de pagina: aca estan los %d mas recientes de %s. Los viejos existen pero no '
+        'se alcanzan por MCP; se ven en el workbench.'
+        % (lista.get('page_size'), len(items), total))
     io.open(EST, 'w', encoding='utf8').write(
         json.dumps(d, ensure_ascii=False, indent=2) + '\n')
-    print('\n%d proyectos en el servidor · %d nuevos anotados' % (len(items), nuevos))
+    print('\n%s proyectos en el servidor · %d alcanzables por MCP (pagina 1) · %d nuevos anotados'
+          % (total, len(items), nuevos))
+    if total > len(items):
+        print('los otros %d no se pueden listar desde acá — no hay parámetro de página' % (total - len(items)))
     return 0
 
 

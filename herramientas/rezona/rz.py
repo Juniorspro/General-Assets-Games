@@ -14,23 +14,76 @@ que la pone `npx rezona@latest login` con un código de un solo uso. Este repo e
 público: la llave adentro sería la llave publicada. Por eso `.rezona/` está en el
 `.gitignore` y este script no la lee ni la imprime nunca.
 """
-import json, subprocess, sys
+import json, queue, subprocess, sys, threading, time
 
 CMD = ['npx', '-y', 'rezona@latest', 'mcp']
 
 
 def rpc(mensajes, espera=300):
-    ent = '\n'.join(json.dumps(m) for m in mensajes) + '\n'
-    p = subprocess.run(CMD, input=ent, capture_output=True, text=True, timeout=espera)
-    salida = []
-    for linea in p.stdout.splitlines():
+    """Manda los mensajes por stdin y devuelve las respuestas JSON.
+
+    ── SE CORTA CUANDO LLEGARON LAS RESPUESTAS PEDIDAS, NO CUANDO MUERE EL PROCESO ──
+    La version anterior era un `subprocess.run(...)`, que espera a que el proceso
+    termine. Con `list_projects` andaba porque el servidor cierra solo; con
+    `fetch_generated_asset` NO: escribe el archivo y se queda vivo. Medido: la
+    descarga tardo dos segundos, el archivo quedo en disco, y el cliente se comio
+    los 230 s de timeout y despues tiro `TimeoutExpired` — un asset bajado
+    reportado como fallado, que es la peor forma de contestar mal.
+
+    Ahora se lee la salida a medida que llega y se corta apenas estan las
+    respuestas de todos los `id` que se mandaron; despues se mata el proceso.
+    """
+    esperados = set(m['id'] for m in mensajes if 'id' in m)
+    p = subprocess.Popen(CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL, text=True)
+    cola = queue.Queue()
+
+    def leer():
+        try:
+            for linea in p.stdout:
+                cola.put(linea)
+        except Exception:
+            pass
+        cola.put(None)
+
+    threading.Thread(target=leer, daemon=True).start()
+    try:
+        p.stdin.write('\n'.join(json.dumps(m) for m in mensajes) + '\n')
+        p.stdin.flush()
+    except Exception:
+        pass
+
+    salida, vistos, limite = [], set(), time.time() + espera
+    while not (esperados and esperados <= vistos):
+        resto = limite - time.time()
+        if resto <= 0:
+            break
+        try:
+            linea = cola.get(timeout=min(resto, 1.0))
+        except queue.Empty:
+            continue
+        if linea is None:
+            break
         linea = linea.strip()
         if not linea.startswith('{'):
             continue
         try:
-            salida.append(json.loads(linea))
+            m = json.loads(linea)
         except Exception:
-            pass
+            continue
+        salida.append(m)
+        if 'id' in m:
+            vistos.add(m['id'])
+
+    try:
+        p.stdin.close()
+    except Exception:
+        pass
+    p.terminate()
+    try:
+        p.wait(timeout=10)
+    except Exception:
+        p.kill()
     return salida
 
 
