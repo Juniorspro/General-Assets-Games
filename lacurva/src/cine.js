@@ -366,8 +366,8 @@ export class Director {
                 hud.set({ fade: 0, blur: 0, lids: 0, flash: 0, vignette: 0.6 });
                 // cruza el pasillo justo por delante del vano de la sala:
                 // es lo unico que se ve desde donde despierta
-                const [ax, az] = toWorld(0, 8);
-                const [bx, bz] = toWorld(9, 8);
+                const [ax, az] = toWorld(1, 8);
+                const [bx, bz] = toWorld(8, 8);
                 g.lady.root.visible = true;
                 g.lady.root.position.set(ax, 0, az);
                 g.ladyCross = { ax, az, bx, bz };
@@ -376,7 +376,7 @@ export class Director {
             },
             update: () => {
                 const t = this.t, w = g.wakeSpot;
-                const k = smooth(sat((t - 1.1) / 3.0));
+                const k = smooth(sat((t - 2.0) / 3.2));
                 const c = g.ladyCross;
                 g.lady.root.position.set(lerp(c.ax, c.bx, k), 0, c.az);
                 g.lady.root.rotation.y = Math.PI / 2;
@@ -392,7 +392,7 @@ export class Director {
                 cam().lookAt(tx, 1.45, tz);
                 g.house.flicker(this.elapsed);
 
-                if (t > 3.9) hud.set({ cardOn: true, cardTitle: 'MISIÓN 1', cardSub: 'Escapar de la casa' });
+                if (t > 4.4) hud.set({ cardOn: true, cardTitle: 'MISIÓN 1', cardSub: 'Escapar de la casa' });
             },
             exit: () => { hud.set({ cardOn: false, vignette: 0.5 }) },
         };
