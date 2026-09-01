@@ -251,7 +251,16 @@ export function collide(x, z, y, rad, lowProfile) {
             const dx = x - nx, dz = z - nz;
             const d2 = dx * dx + dz * dz;
             if (d2 >= rad * rad) continue;
-            const d = Math.sqrt(d2) || 1e-4;
+            if (d2 < 1e-8) {
+                /* Quedo adentro de la caja: no hay direccion de salida que
+                   sacar de la distancia, asi que se sale por el lado mas
+                   cercano. Pasa al teletransportarse o entrando muy rapido. */
+                const ex = x - cx, ez = z - cz;
+                if (Math.abs(ex) > Math.abs(ez)) x = cx + Math.sign(ex || 1) * (half + rad);
+                else z = cz + Math.sign(ez || 1) * (half + rad);
+                continue;
+            }
+            const d = Math.sqrt(d2);
             const push = (rad - d) / d;
             x += dx * push; z += dz * push;
         }

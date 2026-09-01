@@ -376,6 +376,10 @@ class Dungeon {
         this.keys = {};
         addEventListener('keydown', e => {
             this.keys[e.code] = true;
+            /* El deslizamiento se engancha en el keydown y no leyendo la tecla
+               cada frame: un toque corto puede caer entero entre dos frames y
+               perderse, justo cuando mas rapido va todo. */
+            if (e.code === 'KeyX' || e.code === 'Space') this.slideRequested = true;
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
         });
         addEventListener('keyup', e => { this.keys[e.code] = false });
@@ -464,7 +468,7 @@ class Dungeon {
         /* Deslizamiento: corto, muy rapido y con la camara tirada al piso.
            Es la unica forma de cruzar los huecos sin frenar a agacharse. */
         this.slideCd = Math.max(0, (this.slideCd || 0) - dt);
-        const wantSlide = !!(k.KeyX || k.Space) || this.slideRequested;
+        const wantSlide = !!this.slideRequested;
         this.slideRequested = false;
         if (this.slideT > 0) this.slideT -= dt;
         else if (wantSlide && this.slideCd <= 0 && Math.hypot(fwd, str) > 0.35) {
