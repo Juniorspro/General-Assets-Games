@@ -111,6 +111,49 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima vuelta (2026-09-01): **BARRIO** — la cámara de la cinemática se queda fija
+
+Pedido, después de que la vuelta anterior bajara las amplitudes a la mitad y siguiera temblando:
+*"arreglá el temblor de la cinemática, que sea fijo pero con movimiento suave"*.
+
+#### LO QUE TEMBLABA NO ERA LA AMPLITUD SINO LA FRECUENCIA
+
+Es el diagnóstico que faltaba, y explica por qué bajar los números a la mitad no había servido de
+nada. Lo que quedaba moviendo la cámara era:
+
+- el **cabeceo del paso** (`sy`, `sx`, `rl`, `pt` de `cuerpo()`), que sale de la fase de la caminata:
+  a 1,28 m/s con zancada de 0,80 son **1,6 pisadas por segundo**;
+- y cinco senos a **1,97 · 1,43 · 1,9 · 1,23 y 1,61 Hz**.
+
+A esa velocidad **cualquier amplitud se lee a temblor, aunque midiera un milímetro**. Un plano de cine
+no cabecea con cada pisada. Se van los cinco senos rápidos y el cabeceo del paso entero.
+
+**Y NO SE DEJA QUIETA DEL TODO, porque «fijo» no es «congelado».** Queda una deriva que sale del
+**reloj y no del paso**: 0,83 · 0,61 · 0,42 · 0,29 y 0,23 Hz, o sea vueltas de siete a veintisiete
+segundos, con amplitudes de un centímetro. Eso es respirar. Y quedan **dos** y no una en cada eje, por
+la razón de siempre: un seno solo se repite igual y el ojo lo aprende; dos de frecuencias que no son
+múltiplos entre sí, no.
+
+#### Y HUBO QUE ARREGLAR LA MEDICIÓN ANTES QUE LA CÁMARA
+
+El temblor se mide con la **segunda diferencia de la trayectoria** —cuánto cambia el desplazamiento
+entre muestra y muestra— sobre el plano A a 20 Hz. Los primeros números salieron así:
+
+    10,000 mm de mediana · 14,142 de rms · 17,321 el peor
+
+y esos tres números son **10·√1, 10·√2 y 10·√3**. O sea que no estaba midiendo la cámara: estaba
+midiendo el redondeo. La sonda `cine` devuelve la posición con `toFixed(2)`, y con un paso de
+cuantización de un centímetro la segunda diferencia sólo puede valer 0, 10, 14,1 o 17,3 mm. Con cinco
+decimales:
+
+| | rms | mediana | el peor |
+|---|---|---|---|
+| antes | 2,309 mm | 1,065 | 9,003 |
+| **ahora** | **0,011 mm** | **0,010** | **0,022** |
+
+**Doscientas diez veces menos.** Es la tercera vez en este proyecto que la medición está mal antes que
+el juego, y la firma es siempre la misma: números demasiado redondos.
+
 ### Septuagésima novena vuelta (2026-09-01): **BARRIO** — la puerta lleva al cielo, y hay parkour entre nubes
 
 Pedido: *"que sea en primera persona una vez termina la cinemática, pero que sí demos sombra del
