@@ -170,12 +170,24 @@
         "preset:run"
       ],
       "nota": "cada animación se cobra aparte de el rig: pedir las que hacen falta, no una lista especulativa"
+    },
+    "cielo_360": {
+      "estado": "PROBADO A MEDIAS — sirve como domo, NO como HDRI",
+      "prompt_usado": "equirectangular 360 panorama skybox, full spherical HDRI sky, dramatic sunset clouds, clean horizon line, seamless left-right wrap, no ground, no buildings, no text",
+      "medido": {
+        "relacion_devuelta": "1.792 en vez de 2.0 — hay que reescalar a 2:1 antes de usar",
+        "costura_izq_der": "4,87/255 contra 1,97 de media entre columnas vecinas (2,5x) y 3,91 del peor salto interior — o sea que la costura existe pero esta en el orden del peor detalle del propio cielo, no es un corte",
+        "mitad_de_abajo": "es la de arriba ESPEJADA: 12,33/255 de diferencia contra 45,03 del testigo corrido, 3,7x mas parecida de lo que daria el azar. El modelo finge el equirect espejando.",
+        "polos": "la fila del cenit tiene desviacion 20,3 — no es un punto unico, asi que se retuerce al mapear"
+      },
+      "conclusion": "sirve de domo en un juego donde el SUELO tape la mitad inferior, previo reescalado a 2:1. No sirve de HDRI para iluminar ni para reflejos: la mitad de abajo es mentira y los polos se retuercen."
     }
   },
   "trampas": {
     "respuestas_desordenadas": "el servidor contesta a medida que termina cada llamada, así que la lista cruda NO viene en el orden en que se pidió. Emparejar por posición cruza los resultados EN SILENCIO — ya pasó: el asfalto llegó con el output_path de la vereda. Hay que ordenar por el `id` del JSON-RPC (rz.py ya lo hace).",
     "publish_to_rezona_app": "ES IRREVERSIBLE. No llamarlo nunca sin pedido explícito.",
     "mcp_no_cargado": "los MCP se cargan al ARRANCAR la sesión. Si no está, se le habla por stdio: python3 herramientas/rezona/rz.py tools",
-    "fetch_no_devuelve_pero_baja": "`fetch_generated_asset` BAJA el archivo y despues NO contesta: el proceso del MCP se queda colgado hasta que rz.py corta por timeout y tira TimeoutExpired. Medido el 2026-09-01: la imagen quedo completa en disco a los pocos segundos (1,8 MB, PNG con su IEND) y la excepcion salto 300 s despues. O sea que la excepcion NO significa que fallo. Despues de un fetch hay que MIRAR EL ARCHIVO EN DISCO, no el codigo de salida; y conviene bajar de a uno, porque un lote encadenado se come un timeout entero por asset."
+    "fetch_no_devuelve_pero_baja": "`fetch_generated_asset` BAJA el archivo y despues NO contesta: el proceso del MCP se queda colgado hasta que rz.py corta por timeout y tira TimeoutExpired. Medido el 2026-09-01: la imagen quedo completa en disco a los pocos segundos (1,8 MB, PNG con su IEND) y la excepcion salto 300 s despues. O sea que la excepcion NO significa que fallo. Despues de un fetch hay que MIRAR EL ARCHIVO EN DISCO, no el codigo de salida; y conviene bajar de a uno, porque un lote encadenado se come un timeout entero por asset.",
+    "el_size_es_sugerencia_no_contrato": "`size` NO se respeta y el servidor NO avisa. Pedido 2048x1024, devuelto 1376x768 (relacion 1.792, no 2.0) con `ignored_params: null` — o sea que dijo que no ignoro nada. Medido el 2026-09-01. Hay que MEDIR el alto y el ancho del archivo bajado; para un cielo equirectangular, que necesita 2:1 exacto, esto no es un detalle: mal la relacion, el horizonte se dobla al mapear sobre la esfera."
   }
 }
