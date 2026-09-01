@@ -45,6 +45,30 @@ import glb
 FUENTE = os.environ.get('PASO_SRC', '/tmp/rez_barrio/assets/peaton_rig-g1.glb')
 N = 24                      # muestras por ciclo
 
+# ── CUÁNTO MIDE UN PASO, Y POR QUÉ SE ELIGE ACÁ Y NO EN EL JUEGO ──
+# El clip trae su propia zancada: medida sobre el retarget, el pie recorre 53 cm
+# caminando y 68 corriendo. Ese número ES el paso: durante el apoyo el pie está
+# clavado en el piso, así que el cuerpo avanza exactamente lo que el pie barre
+# hacia atrás. Si el juego avanza otra cosa, los pies PATINAN — y con `0,82` a
+# 3,15 m/s eso eran casi cuatro pasos por segundo deslizándose, que es lo que el
+# jugador vio como «pasos de hormiga».
+#
+# Así que el paso se fija acá, se amplifica el ciclo hasta que el pie lo recorra
+# de verdad, y el juego lee el número medido. La cadencia sale sola:
+# `pasos por segundo = velocidad / paso`, y un humano camina a 1,9-2,4.
+# Y NO SE PUEDE ESTIRAR MUCHO: probado, para llevar la carrera a 1,15 m hace
+# falta amplificar 2,70 y ahí el ciclo se rompe —el pie sube 71 cm y la cadera
+# baja 75—. Más allá de 1,3 o 1,4 deja de ser el mismo movimiento. Así que el
+# paso se estira poco y LA VELOCIDAD BAJA para que la cadencia dé humana:
+#   caminar  1,90 m/s ÷ 0,70 m = 2,7 pasos por segundo
+#   correr   3,20 m/s ÷ 0,78 m = 4,1
+# contra los 3,8 y 7,3 que daba antes, que es exactamente «pasos de hormiga».
+# Y el de correr se estira MENOS que el de caminar aunque el paso sea más largo:
+# amplificar dobla más la rodilla, así que el tobillo más bajo del ciclo sube y
+# la cadera tiene que bajar a buscarlo. Con el objetivo en 0,90 la cadera se
+# hundía 37 cm, o sea corriendo en cuclillas.
+PASO_OBJ = {'camina': 0.70, 'corre': 0.78}
+
 #   Tripo            →  el rig del juego
 MAPA = [
     ('Hip',      'Hips'),
@@ -141,6 +165,33 @@ def muestra(t, v, u):
     if float(np.dot(a, b)) < 0: b = -b
     q = a + (b - a) * f
     return q / np.linalg.norm(q)
+
+
+def amplifica(tabla, rep_local, amp):
+    """estira el ciclo sobre su propia pose de reposo.
+    No se puede multiplicar un cuaternión: lo que se amplifica es el DELTA
+    contra el reposo, `rest · slerp(1, rest⁻¹·q, amp)`, que para amp = 1 devuelve
+    exactamente lo que entró."""
+    out = {}
+    for h, v in tabla.items():
+        r = rep_local[h]
+        fila = []
+        for q in v:
+            q = np.array(q, dtype=np.float64)
+            d = qmul(qinv(r), q)
+            if d[3] < 0: d = -d
+            ang = 2.0 * np.arccos(np.clip(d[3], -1, 1))
+            ejn = np.linalg.norm(d[:3])
+            if ejn < 1e-9:
+                nd = np.array([0.0, 0, 0, 1])
+            else:
+                ej = d[:3] / ejn
+                a2 = ang * amp / 2.0
+                nd = np.array([ej[0]*np.sin(a2), ej[1]*np.sin(a2), ej[2]*np.sin(a2), np.cos(a2)])
+            nq = qmul(r, nd)
+            fila.append([round(float(x), 4) for x in nq / np.linalg.norm(nq)])
+        out[h] = fila
+    return out
 
 
 def clip(nombre, js_s, bn_s, pad_s, idx_s, rep_s,
@@ -282,7 +333,14 @@ def main():
                         glb.mundo(js_d, idx_d['RightFoot'], pad_d)[1, 3]))
     print('tobillo en reposo %.3f m' % TOBILLO)
 
-    salida, alturas = {}, {}
+    # la pose de reposo LOCAL de cada hueso del destino, que es contra lo que se
+    # amplifica el ciclo
+    rep_loc = {}
+    for _, d_nom in MAPA:
+        rep_loc[d_nom] = np.array(js_d['nodes'][idx_d[d_nom]].get('rotation', [0, 0, 0, 1]),
+                                  dtype=np.float64)
+
+    salida, alturas, pasos = {}, {}, {}
     for nom, clave in (('preset:walk', 'camina'), ('preset:run', 'corre')):
         t = clip(nom, js_s, bn_s, pad_s, idx_s, rep_s,
                  js_d, pad_d, idx_d, rep_d, orden, Q)
@@ -291,7 +349,23 @@ def main():
         # múltiplo de π y el cabeceo de la cámara sale de ella. Si el clip
         # entrara con su fase original, el sonido caería en el aire. Se gira la
         # tabla para que el pie izquierdo toque el suelo en la fase 0.
+        # ── Y SE ESTIRA HASTA QUE EL PASO MIDA LO QUE TIENE QUE MEDIR ──
+        # Dos pasadas y no una fórmula: el recorrido del pie no es lineal con el
+        # ángulo del muslo —hay rodilla y tobillo en el medio— así que se mide,
+        # se corrige y se vuelve a medir. Con dos pasadas cierra dentro del 2 %.
+        obj = PASO_OBJ[clave]
+        amp = 1.0
+        for _ in range(3):
+            tt = amplifica(t, rep_loc, amp) if abs(amp - 1) > 1e-6 else t
+            dd = mide(js_d, idx_d, pad_d, tt, N)
+            largo = (dd['izq']['adelante'] + dd['der']['adelante']) / 2
+            if largo < 1e-4: break
+            amp *= obj / largo
+        t = amplifica(t, rep_loc, amp)
         d = mide(js_d, idx_d, pad_d, t, N)
+        print('   %s: ampliado x%.2f · paso %.3f m' % (clave, amp,
+              (d['izq']['adelante'] + d['der']['adelante']) / 2))
+        pasos[clave] = round((d['izq']['adelante'] + d['der']['adelante']) / 2, 3)
         g = d['bajo']
         if g:
             t = {h: v[g:] + v[:g] for h, v in t.items()}
@@ -307,7 +381,16 @@ def main():
         for kk in range(N):
             l = fk_pie(js_d, idx_d, pad_d, t, kk, 'LeftFoot')[1]
             r = fk_pie(js_d, idx_d, pad_d, t, kk, 'RightFoot')[1]
-            dy.append(round(float(TOBILLO - min(l, r)), 4))
+            dy.append(float(TOBILLO - min(l, r)))
+        # ── PERO EL REBOTE SE TOPA, PORQUE UNA CARRERA TIENE VUELO ──
+        # Siguiendo al pie más bajo cuadro por cuadro, en los cuadros en que los
+        # DOS pies están en el aire el cuerpo se va a buscarlos: medido, en la
+        # carrera la cadera se hundía 26 cm, o sea corriendo en cuclillas. Lo
+        # correcto es que el cuerpo nunca baje más de un palmo por debajo de su
+        # punto más alto; en esos cuadros los pies no tocan, que es justamente lo
+        # que hace un vuelo. El rebote vertical de una carrera real son 9-10 cm.
+        tope = max(dy) - 0.11
+        dy = [round(max(v, tope), 4) for v in dy]
         salida[clave] = t
         alturas[clave] = dy
         print(clave, 'girada', g, d, 'cadera', min(dy), max(dy))
@@ -326,8 +409,15 @@ def main():
         txt += "const PASO_%s = [\n%s\n];\n" % (clave.upper(), ',\n'.join(filas))
     txt += ("/* cuánto baja la cadera en cada fase para que el pie de apoyo toque */\n"
             "const PASO_Y = { camina: %s, corre: %s };\n"
+            "/* ── CUÁNTOS METROS AVANZA EL CUERPO EN CADA PASO ──\n"
+            "   Medido sobre el ciclo, no elegido: durante el apoyo el pie está clavado\n"
+            "   en el piso, así que el cuerpo avanza exactamente lo que el pie barre\n"
+            "   hacia atrás. El juego divide por esto para avanzar la fase, y con eso el\n"
+            "   patinaje es CERO por construcción. */\n"
+            "const PASO_M = { camina: %.3f, corre: %.3f };\n"
             % (json.dumps(alturas['camina'], separators=(',', ':')),
-               json.dumps(alturas['corre'], separators=(',', ':'))))
+               json.dumps(alturas['corre'], separators=(',', ':')),
+               pasos['camina'], pasos['corre']))
     p = os.path.join(AQUI, 'partes', 'q.js')
     io.open(p, 'w', encoding='utf8').write(txt)
     print(p, len(txt), 'caracteres')

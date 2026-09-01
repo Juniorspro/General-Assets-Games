@@ -225,10 +225,14 @@ const CINEMA = {
       x: this.x0 + this.adx*av, z: this.z0 + this.adz*av, f,
       /* el ocho: el vertical va al DOBLE de frecuencia que el lateral, porque
          hay dos pisadas por ciclo y una sola oscilación de cadera */
-      sy: Math.abs(Math.sin(f)) * 0.036,
-      sx: Math.cos(f) * 0.030,
-      rl: Math.cos(f) * 0.017,
-      pt: Math.sin(f*2) * 0.007
+      /* Y LAS CUATRO AMPLITUDES BAJAN A LA MITAD, por el mismo reporte que el
+         cabeceo del juego: 3,6 cm de subida y 3,0 de vaivén dos veces por
+         segundo no se leen a caminata sino a temblor. Un cabeceo real caminando
+         son dos centímetros. */
+      sy: Math.abs(Math.sin(f)) * 0.018,
+      sx: Math.cos(f) * 0.014,
+      rl: Math.cos(f) * 0.008,
+      pt: Math.sin(f*2) * 0.003
     };
   },
 
@@ -264,8 +268,14 @@ const CINEMA = {
          múltiplos entre sí: así el ciclo no se repite y no se lee a animación.
          Sin esto, los tramos en los que mira al frente parecen una cámara
          montada en un trípode que camina. */
-      yaw += Math.sin(t*0.83)*0.013 + Math.sin(t*1.97 + 1.3)*0.0075;
-      pit += Math.sin(t*0.61 + 2.1)*0.010 + Math.sin(t*1.43)*0.005;
+      /* ── EL TEMBLOR DE LA CINEMÁTICA BAJA A LA MITAD ──
+         Reporte: *«tiembla mucho en la cinemática, agregá más suavidad»*. Los
+         senos rápidos —1,97 y 1,43 Hz— son los que se leen a temblor y no a
+         cámara en mano; los lentos son los que dan el aire de que alguien la
+         está llevando. Así que los rápidos se cortan a un tercio y los lentos
+         casi no se tocan: lo que se va es el temblor, no el movimiento. */
+      yaw += Math.sin(t*0.83)*0.010 + Math.sin(t*1.97 + 1.3)*0.0025;
+      pit += Math.sin(t*0.61 + 2.1)*0.008 + Math.sin(t*1.43)*0.0016;
 
       cam.position.set(c.x + der.x*c.sx, alturaSuelo(c.x, c.z) + OJO + c.sy,
                        c.z + der.z*c.sx);

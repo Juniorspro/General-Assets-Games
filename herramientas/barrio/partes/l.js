@@ -163,6 +163,7 @@ function cargaPersonaje(){
   PJ.malla.receiveShadow = true;
   despejaCabeza();
   armaCaraSprites();
+  mideOjo();
 }
 
 /* ══════════════════ LO QUE QUEDABA DE LA CABEZA ══════════════════
@@ -584,6 +585,7 @@ function pasoPersonaje(dt){
     torsion('RightForeArm', GESTO.palma * PALMA_A);
   }
   pasoCaraSprites(dt);
+
 }
 
 /* ══════════════════════ LA CARA DIBUJADA ══════════════════════
@@ -776,8 +778,41 @@ function pasoCaraSprites(dt){
    de los cincuenta grados, y LA PELVIS Y LAS PIERNAS NO SE MUEVEN, así que los
    pies siguen pisando el suelo. Lo que se deforma es la cintura, que es
    justamente lo único que desde adentro no se ve. */
+/* ── LA CABEZA SE ACHICA EN PRIMERA PERSONA, Y SE PROBÓ LO CONTRARIO ──
+   Pedido: *«que la cabeza se vea por más que me tape visión»*. Se implementó
+   entera la primera persona de verdad —la cámara metida en el globo del ojo,
+   el corrimiento del cuerpo medido cuadro a cuadro sobre el hueso `caraOjos`,
+   el tronco enderezado y el plano de recorte a 3,5 cm— y NO SE PUEDE con este
+   modelo. La razón es una medida suya y está en los huesos: lleva **los ojos
+   21,7 cm por delante del esternón** (z 0,281 contra 0,064), cuando en una
+   persona son ocho o diez. Con el lente ahí, mirando hacia abajo lo que se ve
+   es el AGUJERO DEL CUELLO por dentro y el forro del torso — fotografiado en
+   las cuatro combinaciones de cabeza y enderezado, las cuatro se ven rotas.
+   Así que en primera persona la cabeza sigue achicándose a la centésima parte,
+   que es el truco de siempre y el correcto: una cámara en la cabeza no puede
+   ver la cabeza, sólo su interior. La cabeza se ve con VISTA, que para eso
+   está. */
 const PJ_ADELANTO = 0.020;
+let PJ_CABEZA_FP = 0.01;
 const PJ_TORSO = { y: -0.155, z: 0.030 };
+/* ── DÓNDE ESTÁ EL OJO DEL MODELO, EN SU PROPIO MARCO ──
+   Se mide una vez, con el personaje en reposo y sin girar: cuánto adelante y a
+   qué altura está el hueso `caraOjos` respecto del origen del cuerpo, que está
+   entre los pies. Es el número con el que se descartó la primera persona de
+   verdad —0,281 de adelante contra 0,064 del esternón— y queda medido acá para
+   que la próxima vez no haya que volver a averiguarlo. */
+function mideOjo(){
+  const b = PJ.idx['caraOjos']; if (!b) return;
+  const gy = PJ.grupo.rotation.y, gp = PJ.grupo.position.clone();
+  PJ.grupo.rotation.y = 0; PJ.grupo.position.set(0, 0, 0);
+  PJ.grupo.updateMatrixWorld(true);
+  const v = new T.Vector3(); b.getWorldPosition(v);
+  PJ.grupo.rotation.y = gy; PJ.grupo.position.copy(gp);
+  PJ.grupo.updateMatrixWorld(true);
+  /* el modelo mira a su +Z local, así que su «adelante» es +z */
+  PJ.ojoZ = v.z; PJ.ojoY = v.y;
+}
+
 function ponPersonaje(x, z, yaw, suelo, fp){
   if (!PJ.ok) return;
   PJ.grupo.visible = true;
@@ -797,7 +832,7 @@ function ponPersonaje(x, z, yaw, suelo, fp){
        torso ABIERTO por arriba y la cámara mirando adentro; el cuello entero, en
        cambio, cae veinte centímetros por debajo del ojo —o sea fuera del cuadro
        mirando al frente— y su tapón cierra el agujero que deja la cabeza. */
-    if (PJ.idx['Head']) PJ.idx['Head'].scale.setScalar(fp ? 0.01 : 1);
+    if (PJ.idx['Head']) PJ.idx['Head'].scale.setScalar(fp ? PJ_CABEZA_FP : 1);
     mueveH('Spine02', 0, fp ? PJ_TORSO.y : 0, fp ? PJ_TORSO.z : 0);
     /* y el plano de recorte se aleja: lo que queda del hombro y de la capucha
        está a menos de quince centímetros del ojo */

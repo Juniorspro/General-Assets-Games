@@ -1,9 +1,21 @@
 
 /* ══════════════════════════ EL JUGADOR ══════════════════════════ */
 const OJO = 1.66;
-const VEL = 3.15, CORRE = 6.0;
+/* ── LA VELOCIDAD SALE DE LA CADENCIA, Y LA CADENCIA ES UN DATO DEL CUERPO ──
+   Reporte: *«que sean pasos reales, no hormigas»*. Estaba en 3,15 y 6,0 con un
+   paso clavado de 0,82 m, o sea **3,8 y 7,3 pasos por segundo**: nadie da siete
+   pasos por segundo, y encima el ciclo sólo barre 0,70 m con el pie, así que
+   los pies PATINABAN el resto. Un humano camina a 1,9-2,4 pasos por segundo y
+   corre a 3-4.
+   Ahora el paso lo pone el ciclo (`PASO_M`, medido al hornearlo) y la velocidad
+   sale de multiplicar por la cadencia que se quiere:
+       caminar  1,90 ÷ 0,70 = 2,7 pasos por segundo
+       correr   3,20 ÷ 0,77 = 4,1
+   Se paga que el barrio se cruza más despacio, y es el precio de que los pies
+   pisen donde parece que pisan. */
+const VEL = 1.90, CORRE = 3.20;
 const JUG = { x: 0, z: -MITAD + CALLE*0.5, y: 0, yaw: 0, pitch: -0.03, vx: 0, vz: 0 };
-const AND = { fase: 0, v: 0, ojo: OJO, roll: 0, fov: 70, lado: 0 };
+const AND = { fase: 0, v: 0, ojo: OJO, roll: 0, fov: 70, lado: 0, arriba: 0, costado: 0 };
 
 /* ── LA ALTURA DEL SUELO ──
    Un damero no necesita un mapa de alturas: o estás en la calle, o estás en la
@@ -281,19 +293,40 @@ function ponCam(dt){
      deslizarse, no a caminar. Y ahora que hay un cuerpo con piernas, la
      zancada tiene que ser la de verdad o los pies patinan — que es el defecto
      que en RECREO tenia a Baldi a 2,7 metros por paso. */
-  AND.fase += Math.PI * (AND.v * dt) / 0.82;   /* 0,82 m por medio paso, de verdad */
+  /* Y EL METRAJE DEL PASO NO ESTÁ ESCRITO ACÁ: lo trae el ciclo. `PASO_M` es
+     cuánto barre el pie hacia atrás durante el apoyo, medido sobre la tabla al
+     hornearla, y durante el apoyo el pie está clavado en el piso — así que si
+     el cuerpo avanza ESE número, el patinaje es cero por construcción. Con un
+     número escrito a mano al lado de otro medido, los dos se separan el día que
+     se cambia el ciclo. */
+  const _pk = cl((AND.v - VEL) / (CORRE - VEL), 0, 1);
+  const _pm = (typeof PASO_M !== 'undefined')
+              ? PASO_M.camina + (PASO_M.corre - PASO_M.camina) * _pk : 0.82;
+  AND.fase += Math.PI * (AND.v * dt) / _pm;
   if (AND.v > 0.5 && (MODO === 'juego' || MODO === 'cuarto') && !PAUSA){
     if (Math.floor(AND.fase / Math.PI) !== Math.floor(faseAnt / Math.PI))
       son('paso', 0.42 + rapido*0.4);
   }
+  /* ── EL CABECEO BAJA A LA MITAD Y ADEMÁS SE SUAVIZA ──
+     Reporte: *«tiembla mucho... más suave al correr y sin temblar»*. Corriendo
+     el ojo subía y bajaba 7 cm y se corría 5,6 de costado **cuatro veces por
+     segundo**, y eso a esta velocidad no se lee a caminata: se lee a que
+     tiembla la mano que filma. Un cabeceo real caminando son 2-3 cm.
+     Y no alcanza con bajar los números: el seno cambia de golpe en cada apoyo,
+     así que además se pasa por un filtro de primer orden —el mismo `lerp` con
+     el que ya se suavizan el alabeo y el campo—, que le saca el pico sin
+     quitarle el ritmo. */
   const amp = cl(andando * 1.3, 0, 1);
-  const arriba = Math.abs(Math.sin(AND.fase)) * (0.030 + rapido*0.040) * amp;
-  const costado = Math.cos(AND.fase) * (0.026 + rapido*0.030) * amp;
+  const objArriba = Math.abs(Math.sin(AND.fase)) * (0.016 + rapido*0.014) * amp;
+  const objCostado = Math.cos(AND.fase) * (0.013 + rapido*0.010) * amp;
+  AND.arriba = lerp(AND.arriba, objArriba, Math.min(1, dt*11));
+  AND.costado = lerp(AND.costado, objCostado, Math.min(1, dt*11));
+  const arriba = AND.arriba, costado = AND.costado;
   const quieto = cl(1 - andando*1.7, 0, 1);
   const resp = Math.sin(RELOJ.value*1.15) * 0.017 * quieto;
 
   AND.ojo = lerp(AND.ojo, OJO, Math.min(1, dt*9));
-  const objRoll = Math.cos(AND.fase) * (0.014 + rapido*0.016) * amp - AND.lado*0.05;
+  const objRoll = Math.cos(AND.fase) * (0.006 + rapido*0.006) * amp - AND.lado*0.05;
   AND.roll = lerp(AND.roll, objRoll, Math.min(1, dt*10));
   const objFov = 70 + rapido*7;
   AND.fov = lerp(AND.fov, objFov, Math.min(1, dt*3.2));
@@ -351,7 +384,7 @@ function ponCam(dt){
      tiembla el pulso de quien filma. */
   const bob = tercera ? 0.35 : 1;
   const ojoY = JUG.y + AND.ojo + arriba*bob + resp*bob;
-  cam.rotation.set(JUG.pitch + Math.sin(AND.fase*2)*0.004*amp*bob, JUG.yaw, AND.roll*bob);
+  cam.rotation.set(JUG.pitch + Math.sin(AND.fase*2)*0.0018*amp*bob, JUG.yaw, AND.roll*bob);
   if (!tercera){
     CAM3.d = 0;   /* la camara ESTA en el ojo: al volver a tercera sale de ahi */
     cam.position.set(JUG.x + cy*costado, ojoY, JUG.z - sy*costado);

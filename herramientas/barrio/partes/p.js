@@ -202,8 +202,41 @@ function texturasCiudad(){
    Es la misma cuenta que en el barrio dejó las hiladas de ladrillo en 5,5 cm y
    no en 22. */
 const CIU_W = 12.8, CIU_H = 13.6;   /* lo que cubre una copia de la fachada */
+/* ── LAS FOTOS DE LA CIUDAD PISAN A LOS LIENZOS CUANDO SE LEEN ──
+   Misma regla que las siete texturas del barrio y que los muebles: la ciudad se
+   arma con los lienzos dibujados por código —que ya funcionan— y la foto entra
+   encima. Si un base64 estuviera roto, esa superficie se queda con su dibujo.
+   Y LA REPETICIÓN SE RECALCULA, no se copia: el lienzo cubre `CIU_W × CIU_H` y
+   la foto cubre lo suyo (`CIU_M`, contado sobre ella). Copiar la repetición tal
+   cual dejaría pisos de diez metros — es el mismo defecto que en el barrio dejó
+   las hiladas de ladrillo en 8,3 cm. */
+function fotoCiudad(nom, mat, mw, mh, emisiva){
+  if (typeof CIU_B64 === 'undefined' || !CIU_B64[nom]) return;
+  const pon = (b64, campo, esColor) => {
+    const im = new Image();
+    im.onload = () => {
+      const t = new T.Texture(im);
+      t.wrapS = t.wrapT = T.MirroredRepeatWrapping;
+      t.magFilter = T.LinearFilter; t.minFilter = T.LinearMipmapLinearFilter;
+      t.anisotropy = 4;
+      if (esColor) t.colorSpace = T.SRGBColorSpace;
+      const m = CIU_M[nom];
+      t.repeat.set(mw / m[0], mh / m[1]);
+      t.needsUpdate = true;
+      mat[campo] = t; mat.needsUpdate = true;
+      CIUGEN.puestas++;
+    };
+    im.onerror = () => {};
+    CIUGEN.pedidas++;
+    im.src = 'data:image/webp;base64,' + b64;
+  };
+  pon(CIU_B64[nom], 'map', true);
+  if (emisiva && CIU_B64[nom + 'E']) pon(CIU_B64[nom + 'E'], 'emissiveMap', true);
+}
+const CIUGEN = { pedidas: 0, puestas: 0 };
+
 function armaCiudad(g){
-  const fach = [], losa = [], antena = [];
+  const fach = [], fach2 = [], losa = [], antena = [];
   const R = CU_AZ.x1 + 8;
   /* NUESTRA TORRE PRIMERO, y es la única cuyo tamaño no se sortea: la azotea
      tiene que caer justo donde está el cuarto. */
@@ -228,9 +261,25 @@ function armaCiudad(g){
     const hmax = d < 120 ? 62 : 104;
     const h = (d > 150 && az() < 0.25) ? azr(62, 112) : azr(16, hmax);
     const an = azr(12, 26), fo = azr(12, 26);
-    fach.push({ g: geoCaja, p:[cx, h/2, cz], s:[an, h, fo],
-                u:[an/CIU_W, h/CIU_H] });
-    losa.push({ g: geoCaja, p:[cx, h + 0.35, cz], s:[an + 0.8, 0.7, fo + 0.8] });
+    /* ── LOS ALTOS SE ANGOSTAN AL SUBIR, Y ESO ES LO QUE HACE UN HORIZONTE ──
+       Una torre que es un prisma parejo de cien metros se lee a caja; lo que
+       distingue una silueta de ciudad de un gráfico de barras son los
+       RETRANQUEOS: el edificio sube, se corta, y sigue más angosto. Uno de cada
+       tres por encima de cincuenta metros lo lleva, y siempre por encima de la
+       mitad, que es donde se ve. */
+    const cual = az() < 0.5 ? fach : fach2;
+    const corta = h > 50 && az() < 0.62;
+    const hb = corta ? h * azr(0.55, 0.75) : h;
+    cual.push({ g: geoCaja, p:[cx, hb/2, cz], s:[an, hb, fo],
+                u:[an/CIU_W, hb/CIU_H] });
+    if (corta){
+      const an2 = an * azr(0.55, 0.78), fo2 = fo * azr(0.55, 0.78);
+      losa.push({ g: geoCaja, p:[cx, hb + 0.3, cz], s:[an + 0.7, 0.6, fo + 0.7] });
+      cual.push({ g: geoCaja, p:[cx, hb + (h - hb)/2, cz], s:[an2, h - hb, fo2],
+                  u:[an2/CIU_W, (h - hb)/CIU_H] });
+    }
+    losa.push({ g: geoCaja, p:[cx, h + 0.35, cz],
+                s:[(corta ? an*0.78 : an) + 0.8, 0.7, (corta ? fo*0.78 : fo) + 0.8] });
     if (az() < 0.30){
       const ax = cx + azr(-an*0.3, an*0.3), az2 = cz + azr(-fo*0.3, fo*0.3);
       const ah = azr(4, 11);
@@ -242,19 +291,32 @@ function armaCiudad(g){
                   s:[azr(2.4, 4.4), 2.4, azr(2.4, 4.4)] });
     }
   }
+  /* DOS FAMILIAS DE FACHADA Y NO UNA. Con una sola foto repetida en doscientos
+     edificios, la ciudad se lee a un edificio copiado doscientas veces: lo que
+     hace que un skyline se lea es que haya torres de oficina al lado de bloques
+     de departamentos. Cuesta UNA llamada de dibujo más. */
   const matFach = new T.MeshLambertMaterial({
     map: texFach, emissive: 0xffffff, emissiveMap: texFachE, emissiveIntensity: 0.9,
     flatShading: true });
+  const matFach2 = matFach.clone();
+  fotoCiudad('fachada', matFach, CIU_W, CIU_H, true);
+  fotoCiudad('fachada2', matFach2, CIU_W, CIU_H, true);
   const m1 = new T.Mesh(fundir(fach), matFach);
   m1.receiveShadow = false; g.add(m1);
-  const matLosa = new T.MeshLambertMaterial({ color: 0x171b21, flatShading: true });
+  if (fach2.length){
+    const mB = new T.Mesh(fundir(fach2), matFach2);
+    mB.receiveShadow = false; g.add(mB);
+  }
+  const matLosa = new T.MeshLambertMaterial({ color: 0x9aa0a8, flatShading: true });
+  fotoCiudad('azotea', matLosa, 26, 26, false);
   const m2 = new T.Mesh(fundir(losa.concat(antena)), matLosa);
   g.add(m2);
 
   /* el suelo de la ciudad, noventa y seis metros abajo */
-  const suelo = new T.Mesh(new T.PlaneGeometry(1400, 1400),
-    new T.MeshLambertMaterial({ map: texCalles, color: 0x8a8f98,
-      emissive: 0xffffff, emissiveMap: texCallesE, emissiveIntensity: 0.85 }));
+  const matSuelo = new T.MeshLambertMaterial({ map: texCalles, color: 0x8a8f98,
+      emissive: 0xffffff, emissiveMap: texCallesE, emissiveIntensity: 0.85 });
+  fotoCiudad('calle', matSuelo, 1400, 1400, true);
+  const suelo = new T.Mesh(new T.PlaneGeometry(1400, 1400), matSuelo);
   suelo.rotation.x = -Math.PI/2;
   suelo.position.y = 0.02;
   g.add(suelo);

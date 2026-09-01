@@ -518,6 +518,9 @@ async function arranca(){
        forma de saber qué eje de `giraH` es la flexión de una pierna: los ejes de
        un rig no se adivinan, se giran y se mira dónde quedó la punta. Es la
        misma sonda que en RECREO costó una vuelta con los brazos de Baldi. */
+    ciudad: () => ({ pedidas: CIUGEN.pedidas, puestas: CIUGEN.puestas }),
+    cabezaFP: (v) => { PJ_CABEZA_FP = v; PJ.primeraPersona = null;
+      ponPersonaje(JUG.x, JUG.z, JUG.yaw, JUG.y, vistaFP()); return PJ_CABEZA_FP; },
     ejeH: (n, dest, ax, ay, az) => {
       if (!PJ.ok) return 'no';
       const v = new T.Vector3(), w = new T.Vector3();
