@@ -56,7 +56,17 @@ class Langosta {
                 const b2 = new THREE.Box3().setFromObject(o);
                 const c = b2.getCenter(new THREE.Vector3());
                 o.position.set(-c.x, -b2.min.y, -c.z);
-                o.traverse(n => { if (n.isMesh) n.castShadow = true });
+                o.traverse(n => {
+                    if (!n.isMesh) return;
+                    n.castShadow = true;
+                    /* La malla viene clarita y con la cara muy legible. Un
+                       tinte gris frio la apaga: multiplica la foto, no la
+                       reemplaza, asi que las vendas y el hueso siguen ahi
+                       pero dejan de brillar como un juguete. */
+                    const m = n.material;
+                    if (m && m.color) { m.color.setHex(0x6f7076); m.roughness = 1; }
+                    if (m && m.emissive) m.emissive.setHex(0x000000);
+                });
                 this.giroModelo.add(o);
                 this.modelo = o;
                 this.listo = true;
@@ -75,10 +85,18 @@ class Langosta {
         }
 
         /* Un halo tenue: en un pasillo negro, sin esto aparece encima tuyo sin
-           aviso y eso no asusta, enoja. */
-        this.luz = new THREE.PointLight(0x9fb4c8, 2.2, 8, 2);
-        this.luz.position.y = ALTO_BICHO * 0.75;
+           aviso y eso no asusta, enoja. Va BAJO, a la altura del pecho. */
+        this.luz = new THREE.PointLight(0x8ea4bc, 1.5, 7, 2);
+        this.luz.position.y = ALTO_BICHO * 0.45;
         this.raiz.add(this.luz);
+
+        /* Y una luz que le pega a la cara DESDE ABAJO. Es el truco mas viejo
+           que hay: la misma cara alumbrada de arriba es una persona y
+           alumbrada de abajo es otra cosa. Las cuencas se hunden y la
+           mandibula tira sombra para arriba. */
+        this.luzCara = new THREE.PointLight(0xbcd0e0, 2.6, 1.9, 2.4);
+        this.luzCara.position.set(0, ALTO_BICHO * 0.80, -0.22);
+        this.raiz.add(this.luzCara);
         escena.add(this.raiz);
 
         this.pos = new THREE.Vector2(0, 0);
@@ -108,7 +126,10 @@ class Langosta {
            zancada lo tira para un lado y lo levanta un poco. */
         const g = this.giroModelo;
         g.rotation.z = Math.sin(this.paso * 2) * 0.085 * amp;
-        g.rotation.x = -0.05 - 0.09 * amp;                 // se inclina al avanzar
+        /* Cazando se echa MUCHO mas para adelante: un bicho derecho camina,
+           uno encorvado te viene a buscar. */
+        const caza = this.estado === 'caza' ? 1 : 0;
+        g.rotation.x = -0.05 - 0.09 * amp - 0.20 * caza;
         g.position.y = Math.abs(Math.sin(this.paso * 2)) * 0.075 * amp;
         // y se contonea de adelante hacia atras, medio paso mas tarde
         g.position.z = Math.sin(this.paso * 2 + 1.1) * 0.05 * amp;

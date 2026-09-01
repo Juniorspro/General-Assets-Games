@@ -100,11 +100,20 @@ progreso, se pierde el viaje.
 
 ### El bicho
 
-Mide **3,20 m** y es una **malla generada con Rezona a partir del turnaround
-del modelo real**: zancos terminados en púas negras en vez de pies, brazos
-igual de largos con púas en vez de manos, torso de hueso, trapo oscuro en la
-cadera y una columna vendada por cabeza con una carita de marfil y una maraña
-de sogas. 2.597 triángulos, 163 KB.
+Mide **3,20 m** y es una **malla generada con Rezona** a partir del turnaround
+del modelo real: zancos terminados en púas negras en vez de pies, brazos igual
+de largos con púas en vez de manos, torso de hueso, trapo oscuro en la cadera
+y una columna de soga por cabeza con una maraña de tentáculos. 2.756
+triángulos, 239 KB.
+
+**La primera vuelta salió con cara de dibujito** —ojos redondos con
+esclerótica blanca, iris verde, cejas y una boca sonriente—, o sea simpática
+en vez de aterradora. Se rehízo pidiendo explícitamente cuencas negras vacías
+sin globo ocular ni iris ni cejas, y la boca abierta en un grito. En el juego
+además va con un tinte gris frío encima y **luz desde abajo de la cara**: es
+el truco más viejo que hay, la misma cara alumbrada de arriba es una persona
+y alumbrada de abajo es otra cosa. Y cazando se encorva 0,20 rad más: un bicho
+derecho camina, uno encorvado te viene a buscar.
 
 **El rig no se usó.** Se pidió a Rezona el rig con `preset:walk` y
 `preset:run` y volvió con los dos clips, pero **la malla sale aplastada** —
