@@ -182,7 +182,7 @@
                 this.setActorVisible(!1);
                 this.stepAt = -1;
                 P.set({ fade: 1, dread: 0, cardTitle: "", cardSub: "" });
-                A.fov = 46; A.updateProjectionMatrix();
+                A.fov = 54; A.updateProjectionMatrix();
                 if (this.hitLight) { this.hitLight.position.set(doorX + .1, y0 + 2.25, doorZ + .9); this.hitLight.intensity = 0; this.hitLight.visible = !0 }
                 // entra por detras, a la izquierda, fuera de cuadro
                 placeLady(doorX + .3, doorZ + .15, .1, "preset:idle");
@@ -192,7 +192,15 @@
                 let st = this.shotTime, L = this.oldLady;
                 if (st < 1.15) P.set({ fade: HA(1 - st / .8, 0, 1) });
                 L && L.update(dt, st < 1.15 ? 1.35 : .9);
-                if (st > .78) { L && (L.root.visible = !0); this.ladySwing((st - .78) / .55) }
+                if (st > .78) {
+                    L && (L.root.visible = !0);
+                    // el golpe cae detras de la camara; lo que se ve despues es
+                    // como levanta el bate de nuevo, parada encima
+                    let k = st < 1.33 ? (st - .78) / .55
+                        : st < 2.4 ? HP(1, .36, aD(HA((st - 1.45) / .95, 0, 1)))
+                            : .36;
+                    this.ladySwing(k);
+                }
                 if (st < 1.15) {
                     // ultimo paso adentro, todavia de espaldas a ella
                     let z = HP(doorZ + 1.3, doorZ + 1.8, Mi(HA(st / 1.15, 0, 1)));
