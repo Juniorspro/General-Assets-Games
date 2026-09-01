@@ -85,7 +85,7 @@ class Dungeon {
 
         /* El farol del jugador. Como somos chicos, alcanza poco y las paredes
            se pierden hacia arriba en la oscuridad: eso es lo que las agranda. */
-        this.lamp = new THREE.PointLight(0xffc98a, 26, 26, 1.7);
+        this.lamp = new THREE.PointLight(0xffc98a, 19, 30, 1.55);
         this.lamp.castShadow = true;
         this.lamp.shadow.mapSize.set(1024, 1024);
         this.lamp.shadow.bias = -0.004;
@@ -125,6 +125,9 @@ class Dungeon {
 
     buildLevel(lv, wallMat, floorMat, ceilMat) {
         const base = LEVELS[lv].base;
+        const group = new THREE.Group();
+        this.scene.add(group);
+        (this.levelGroups || (this.levelGroups = []))[lv] = group;
         const boxes = [];
         // las paredes se juntan en tiras horizontales: una malla, no mil cajas
         for (let r = 0; r < H; r++) {
@@ -147,7 +150,7 @@ class Dungeon {
             worldUV(merged, 2.4);
             const walls = new THREE.Mesh(merged, wallMat);
             walls.castShadow = walls.receiveShadow = true;
-            this.scene.add(walls);
+            group.add(walls);
             boxes.forEach(g => g.dispose());
         }
 
@@ -178,20 +181,20 @@ class Dungeon {
             worldUV(fg, 2.4);
             const fm = new THREE.Mesh(fg, floorMat);
             fm.receiveShadow = true;
-            this.scene.add(fm);
+            group.add(fm);
             floors.forEach(g => g.dispose());
             const cg = mergeGeos(ceils);
             worldUV(cg, 3);
-            this.scene.add(new THREE.Mesh(cg, ceilMat));
+            group.add(new THREE.Mesh(cg, ceilMat));
             ceils.forEach(g => g.dispose());
         }
 
-        this.placeTorches(lv, base);
+        this.placeTorches(lv, base, group);
     }
 
     /* Antorchas contra las paredes de las salas grandes: dan un punto de fuga
        y hacen leer la altura, que es lo que vende el tamano. */
-    placeTorches(lv, base) {
+    placeTorches(lv, base, group) {
         const rng = new Rng(0x7A0 + lv * 977);
         const flameGeo = new THREE.SphereGeometry(0.09, 8, 6);
         const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb552 });
@@ -208,10 +211,10 @@ class Dungeon {
             const y = base + 2.6;
             const L = new THREE.PointLight(0xff9d4a, 9, 13, 1.9);
             L.position.set(px, y, pz);
-            this.scene.add(L);
+            group.add(L);
             const f = new THREE.Mesh(flameGeo, flameMat);
             f.position.copy(L.position);
-            this.scene.add(f);
+            group.add(f);
             (this.torches || (this.torches = [])).push({ L, f, phase: rng.range(0, 9) });
             placed++;
         }
@@ -395,13 +398,18 @@ class Dungeon {
         if (Math.abs(cam.fov - wantFov) > 0.05) { cam.fov = lerp(cam.fov, wantFov, sat(dt * 5)); cam.updateProjectionMatrix() }
 
         this.lamp.position.set(this.pos.x, this.y + this.eyeY + 0.12, this.pos.z);
-        this.lamp.intensity = 26 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 2.2;
+        this.lamp.intensity = 19 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.8;
 
         for (const t of this.torches || []) {
             const f = 0.75 + 0.25 * Math.sin(this.t * 7 + t.phase) * Math.sin(this.t * 2.3 + t.phase);
             t.L.intensity = 9 * f;
             t.f.scale.setScalar(0.85 + f * 0.3);
         }
+
+        /* Solo se dibuja el nivel en el que esta y el de al lado. Son tres
+           laberintos enteros y el farol proyecta sombra en todo lo visible. */
+        for (let i = 0; i < this.levelGroups.length; i++)
+            this.levelGroups[i].visible = Math.abs(LEVELS[i].base - this.y) < LEVEL_H * 1.35;
 
         this.updateHud();
         this.renderer.render(this.scene, this.camera);
@@ -447,3 +455,4 @@ requestAnimationFrame(loop);
 window.__game = game;
 window.__STAIRS = STAIR_BOXES;   // sondas para las pruebas
 window.__LEVELS = LEVELS;
+window.__toWorld = toWorld;
