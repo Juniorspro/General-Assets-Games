@@ -51,10 +51,16 @@ Reemplaza al montaje de días que caminaba al personaje en círculo hasta el dí
 9. `wake-locked`: despierta a parpadeos, se levanta y la puerta está cerrada por
    fuera.
 
-El modelo de la vieja se generó con Tripo (imagen → 3D → rig). El servicio de
-rigging ignoró el clip de golpe que se le pidió y devolvió solo `walk/idle/jump`,
-así que **el batazo está animado a mano sobre los huesos** del brazo y la columna,
-después de que corre el mixer: así el impacto cae en el frame exacto.
+El modelo de la vieja se generó con Tripo (imagen → 3D → rig), **sin bate**: el
+generador lo devolvía curvado. El bate es geometría hecha en código (mango, barril
+cónico, pomo y punta) colgada del hueso `R_Hand`, así sale perfectamente recto y
+se puede reusar.
+
+Los nombres de animación del rig van con prefijo (`preset:walk`); pedirlos como
+`walk` hace que el servicio los ignore en silencio y devuelva un set por defecto.
+No existe un clip de golpe, así que **el batazo está animado a mano sobre los
+huesos** del brazo y la columna, después de que corre el mixer: el impacto cae en
+el frame exacto.
 
 ### Escena 2 — POV manejando y el contrato
 1. `pov-drive` (6 s): primera persona bien puesta en el asiento del conductor.
@@ -95,7 +101,7 @@ aparición de la vieja en el sótano (`reveal`).
 modelos/car_body.glb    carrocería SIN ruedas (12.850 tris, 1024² WebP PBR)
 modelos/car_wheel.glb   una rueda suelta       (4.012 tris, 512² WebP PBR)
 modelos/phone.glb       celular                (2.380 tris, 512² WebP PBR)
-modelos/vieja.glb       la vieja con el bate, rigueada (walk/idle/jump)
+modelos/vieja.glb       la vieja rigueada (preset:walk / preset:idle), sin bate
 audio/vo_office_{es,en,pt}.mp3   la oferta del contrato
 audio/vo_player_{es,en,pt}.mp3   "Acepto." / "I'll take it." / "Eu aceito."
 referencias/            las imágenes que se usaron para generar cada modelo
