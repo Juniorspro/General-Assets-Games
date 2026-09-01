@@ -65,7 +65,7 @@ sola malla en vez de 300 cajas.
 
 ### El bosque y el viento
 420 árboles instanciados (tronco + 6 ramas + 14 tarjetas de hoja) en 3 draw
-calls, más 5.200 matas de pasto. El viento es un `onBeforeCompile` que empuja
+calls, más 20.000 matas de pasto. El viento es un `onBeforeCompile` que empuja
 los vértices en el vertex shader, con tres modos: las ramas casi no se mueven,
 las hojas flamean y el pasto se dobla desde la base.
 
@@ -85,6 +85,36 @@ silencio.
 El bate de la vieja es geometría hecha en código colgada del hueso `R_Hand`:
 el generado salía curvado.
 
+### Cosas que costaron y por qué
+
+Las dejo anotadas porque son las que se vuelven a morder solas:
+
+- **El auto salía negro.** La pintura es metálica y no había nada que
+  reflejar. Se arregló poniendo el panorama del cielo como `scene.environment`
+  vía `PMREMGenerator`; de paso levanta todos los demás materiales PBR.
+- **El bosque lejano parecía palos blancos.** No eran las texturas: era la
+  niebla a 260 m lavando todo. Ahora arranca a 190 m y sólo tapa el borde.
+- **El parabrisas quedaba opaco.** Los umbrales de `splitGlass` estaban en
+  metros, y el GLB viene cuantizado: el atributo de posición guarda enteros
+  normalizados con la escala en el nodo, así que ningún valor fijo en metros
+  engancha. El test va en fracciones del bounding box de la propia malla.
+- **El chico flotaba dentro del auto.** La pose de sentado rota las piernas
+  pero no mueve el root, así que apoyarlo por los pies lo dejaba parado con la
+  cabeza afuera. Se lo ancla por la pelvis al punto del asiento, medido
+  después de aplicar la pose.
+- **La cámara POV filmaba el forro de la capucha.** El buzo tiene capucha
+  pesada al cuello, así que un ojo puesto en el hueso de la cabeza queda
+  adentro. Va a un punto fijo bastante adelante del cráneo.
+- **Saltar a un plano mostraba la escena equivocada.** Cada plano ahora arma
+  su propio escenario (`roadSetup()` / `houseSetup()`) y fija su look, FOV y
+  visibilidades, en vez de heredar lo que dejó el anterior.
+- **Las paredes estiraban el papel.** Las cajas de `BoxGeometry` traen UV 0..1
+  por cara, así que un tramo largo estira y uno corto comprime. Se reproyectan
+  las UV desde la posición de mundo.
+- **La vieja patinaba al perseguir.** Su rig sólo trajo `walk` e `idle`;
+  pedirle `run` devolvía nada. `Rig.play` acepta un `fallback` y la cadencia
+  sale de la velocidad real.
+
 ### El audio
 La radio y el ambiente son mp3 generados; el resto (chirrido de gomas, golpe
 grave, latidos, crujidos, grito, drone de tensión) está sintetizado con
@@ -103,6 +133,9 @@ window.__CRASH_SKIP=1 // saltear la cinemática
 Planos: `0` travelling · `1` el auto pasa · `2` POV con el celular ·
 `3` levanta la vista · `4` la silueta · `5` el volantazo · `6` se va de la ruta ·
 `7` el impacto · `8` se desmaya · `9` parpadea · `10` se incorpora · `11` la ve pasar.
+
+Cada plano se puede entrar en frío: arma su propio escenario, así que saltar a
+cualquiera muestra lo que tiene que mostrar.
 
 ## Archivos
 
