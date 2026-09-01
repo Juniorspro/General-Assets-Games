@@ -147,6 +147,7 @@ modelos/        boy.glb (rigueado) · car_body · car_wheel · phone · vieja
 texturas/       pared y piso de la casa, corteza, hoja, pasto, cielo
 audio/          music · ambience · crash
 referencias/    la foto del Bentley y la referencia en T-pose del chico
+preview/        un cuadro de cada momento
 ```
 
 ### Reconstruir
