@@ -57,7 +57,12 @@ export class Director {
         /* Cada plano arma su propio escenario. Depender de lo que dejo el
            anterior hace que saltar (o entrar en frio desde la consola) muestre
            la escena equivocada o directamente negro. */
+        const clearHud = () => hud.set({
+            fade: 0, flash: 0, blur: 0, lids: 0, cardOn: false, hudOn: false,
+            skipOn: true, sub: '',
+        });
         const roadSetup = () => {
+            clearHud();
             g.engine.look('road-day');
             g.road.group.visible = true;
             g.house.group.visible = false;
@@ -68,6 +73,7 @@ export class Director {
             g.keyMesh.visible = false;
         };
         const houseSetup = () => {
+            clearHud();
             g.engine.look('house');
             g.house.group.visible = true;
             g.road.group.visible = false;
@@ -87,7 +93,7 @@ export class Director {
                 roadSetup();
                 car().setHeadlights(false);
                 g.boySeat(true, false);
-                hud.set({ fade: 1, sub: '', cardOn: false, hudOn: false, skipOn: true, vignette: 0.25, blur: 0, lids: 0 });
+                hud.set({ fade: 1, vignette: 0.25 });   // este si abre desde negro
                 g.audio.playMusic(0.55);
                 cam().fov = 46; cam().updateProjectionMatrix();
             },
@@ -303,7 +309,7 @@ export class Director {
                 cam().fov = 68; cam().updateProjectionMatrix();
                 cam().position.set(g.wakeSpot.x, 0.22, g.wakeSpot.z);
                 g.audio.playAmbience(0.5);
-                hud.set({ fade: 1, blur: 1, lids: 1, vignette: 0.9 });
+                hud.set({ fade: 1, blur: 1, lids: 1, vignette: 0.9 });   // despierta en negro
             },
             update: () => {
                 const t = this.t;

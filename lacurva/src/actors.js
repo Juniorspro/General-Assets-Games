@@ -84,7 +84,11 @@ export class Car {
         this.group = new THREE.Group();
         this.body = null; this.glass = null;
         this.hubs = []; this.steer = 0; this.wheelSpin = 0;
-        this.LENGTH = 5.35; this.WHEEL_D = 0.74; this.CLEARANCE = 0.15;
+        this.LENGTH = 5.35;
+        /* Medido sobre la propia malla: el hueco del guardabarros llega a
+           0,69 m y el punto mas bajo de la carroceria ya esta al ras, asi que
+           la rueda entra justa y el cuerpo no necesita levantarse. */
+        this.WHEEL_D = 0.67; this.CLEARANCE = 0;
     }
     async load(bodyUrl, wheelUrl) {
         const g = await loadGLB(bodyUrl);
@@ -96,7 +100,7 @@ export class Car {
             o.castShadow = true; o.receiveShadow = true;
             if (o.material) { o.material.envMapIntensity = 0.9; o.material.roughness = Math.min(o.material.roughness ?? 0.5, 0.55) }
         });
-        body.position.y += this.CLEARANCE;
+        if (this.CLEARANCE) body.position.y += this.CLEARANCE;
         this.group.add(body);
         this.body = body;
 
@@ -110,7 +114,7 @@ export class Car {
         proto.position.y = 0;
         proto.traverse(o => { if (o.isMesh) { o.castShadow = true } });
 
-        const halfW = 0.98, front = this.LENGTH * 0.295, r = this.WHEEL_D / 2;
+        const halfW = 1.02, front = this.LENGTH * 0.295, r = this.WHEEL_D / 2;
         const spots = [[-halfW, front], [halfW, front], [-halfW, -front], [halfW, -front]];
         spots.forEach(([x, z], i) => {
             const hub = new THREE.Group();
