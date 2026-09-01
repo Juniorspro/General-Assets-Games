@@ -152,9 +152,9 @@ class Game {
         const cam = this.engine.camera;
         this.engine.scene.add(cam);          // si no, los hijos de la camara no se dibujan
         if (this.phoneModel) {
-            // tamano real: el modelo ya viene normalizado a 14,8 cm de alto
+            // el clon ya trae la escala normalizada a 14,8 cm de alto:
+            // tocarle el scale la pisa y el celular sale del tamano del GLB crudo
             const v = this.phoneModel.clone(true);
-            v.scale.setScalar(1);
             v.position.set(0.19, -0.16, -0.42);
             v.rotation.set(-0.42, 0.26, 0.10);
             v.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = false } });
