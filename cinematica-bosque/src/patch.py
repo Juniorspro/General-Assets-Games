@@ -16,32 +16,44 @@ TXT = {
         "office1": "Buenas noches. Tenemos un trabajo para usted. Limpieza y remodelación completa de una casa.",
         "office2": "La dueña es una señora mayor, vive sola allá en el bosque. El pago es el doble de lo habitual.",
         "accept": "Acepto.",
+        "hello": "\u00bfHola?",
+        "caller": "\u00bfHablo con el encargado de la remodelaci\u00f3n?",
     },
     "en": {
         "office1": "Good evening. We have a job for you. A full cleaning and remodeling of a house.",
         "office2": "The owner is an elderly lady, she lives alone out in the woods. The pay is double the usual.",
         "accept": "I'll take it.",
+        "hello": "Hello?",
+        "caller": "Am I speaking with the man who does the remodeling?",
     },
     "pt": {
         "office1": "Boa noite. Temos um trabalho para você. Limpeza e reforma completa de uma casa.",
         "office2": "A dona é uma senhora idosa, mora sozinha lá na floresta. O pagamento é o dobro do normal.",
         "accept": "Eu aceito.",
+        "hello": "Al\u00f4?",
+        "caller": "Falo com o respons\u00e1vel pela reforma?",
     },
 }
-VOT = {"es": {"office": 14.66, "accept": 0.79},
-       "en": {"office": 11.45, "accept": 0.74},
-       "pt": {"office": 12.67, "accept": 2.26}}
+VOT = {"es": {"office": 14.66, "accept": 0.79, "hello": 0.43, "caller": 2.35},
+       "en": {"office": 11.45, "accept": 0.74, "hello": 1.70, "caller": 2.18},
+       "pt": {"office": 12.67, "accept": 2.26, "hello": 1.30, "caller": 2.45}}
 
 def preamble():
     vo = {}
     for lang in ("es", "en", "pt"):
         vo[lang] = {"office": durl(f"{AST}/vo_office_{lang}.mp3", "audio/mpeg"),
-                    "accept": durl(f"{AST}/vo_player_{lang}.mp3", "audio/mpeg")}
+                    "accept": durl(f"{AST}/vo_player_{lang}.mp3", "audio/mpeg"),
+                    "hello": durl(f"{AST}/vo_hello_{lang}.mp3", "audio/mpeg"),
+                    "caller": durl(f"{AST}/vo_caller_{lang}.mp3", "audio/mpeg")}
     parts = [
         'var CDLV_CAR_BODY=%s;' % json.dumps(durl(f"{AST}/car_body.glb", "model/gltf-binary")),
         'var CDLV_CAR_WHEEL=%s;' % json.dumps(durl(f"{AST}/car_wheel.glb", "model/gltf-binary")),
         'var CDLV_PHONE=%s;' % json.dumps(durl(f"{AST}/phone.glb", "model/gltf-binary")),
         'var CDLV_OFFICE=%s;' % json.dumps(durl(f"{AST}/office.jpg", "image/jpeg")),
+        'var CDLV_GRASS=%s;' % json.dumps(durl(f"{AST}/grass_card.webp", "image/webp")),
+        'var CDLV_LEAF=%s;' % json.dumps(durl(f"{AST}/leaf_card.webp", "image/webp")),
+        'var CDLV_BARK=%s;' % json.dumps(durl(f"{AST}/bark.jpg", "image/jpeg")),
+        'var CDLV_SKY=%s;' % json.dumps(durl(f"{AST}/sky.jpg", "image/jpeg")),
         'var CDLV_VO=%s;' % json.dumps(vo),
         'var CDLV_TXT=%s;' % json.dumps(TXT, ensure_ascii=False),
         'var CDLV_VOT=%s;' % json.dumps(VOT),
@@ -53,11 +65,10 @@ def preamble():
 REPLACEMENTS = [
     # 1. constructor: fields + new builders
     ("this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildShots()",
-     "this.fogSheets=[],this.grassBlades=[],this.grass=null,this.dust=null,this.pov=null,this.split=null,"
-     "this.driver=null,this.vo=null,this._v1=new Y,this._v2=new Y,this._v3=new Y,"
-     "this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildForest(),this.buildGrass(),"
-     "this.buildDust(),this.driver=this.buildDriver(),this.car.group.add(this.driver),"
-     "this.driver.position.set(.45,.62,-.22),this.driver.visible=!1,this.buildPov(),this.loadCarModel(),"
+     "this.fogSheets=[],this.grass=null,this.dust=null,this.sky=null,this.split=null,this.povRig=null,"
+     "this.driverRig=null,this.phoneHolder=null,this.vo=null,this._v1=new Y,this._v2=new Y,this._v3=new Y,"
+     "this.startWind(),this.resolveLandmarks(),this.buildRoad(),this.buildExterior(),this.buildForest(),"
+     "this.buildGrass(),this.buildSky(),this.buildDust(),this.loadCarModel(),this.buildRigs(),"
      "this.buildSplit(),this.buildShots()"),
     # 2b. asfalto y banquina un poco mas claros para que se lean de noche
     ("t=new _A({color:1316122,roughness:.95})", "t=new _A({color:2238250,roughness:.95})"),
@@ -75,7 +86,7 @@ REPLACEMENTS = [
      "{group:A,proc:pr,wheels:j,lights:z}"),
     # 4. look(): iluminacion y niebla del bosque
     ('}=this.deps;A==="day"?',
-     '}=this.deps;A==="forest-night"?(D.intensity=1.5,D.color.set(8230328),D.groundColor.set(2500141),'
+     '}=this.deps;this.sky&&(this.sky.visible=A!=="night-interior"),A==="forest-night"?(D.intensity=1.5,D.color.set(8230328),D.groundColor.set(2500141),'
      'P.intensity=3,P.color.set(13292284),t.intensity=0,i.fog.color.set(3360090),i.fog.near=5,i.fog.far=60,'
      'i.background.set(3360090)):A==="day"?'),
     # 5. insertar las escenas nuevas al principio
@@ -88,9 +99,10 @@ REPLACEMENTS = [
      "update:(s,o)=>{if(P.set({fade:HA(1-s*7,0,1)}),!this.rig){let j=Math.sin(o*7.5)*.5+.5;"),
     # 7. finish/dispose limpian lo nuevo
     ("finish(){this.finished=!0,this.engine?.stop()",
-     "finish(){this.finished=!0,this.splitHide(),this.stopVo(),this.pov&&(this.pov.group.visible=!1),"
-     "this.grass&&(this.grass.visible=!1),this.dust&&(this.dust.mesh.visible=!1),"
-     "this.driver&&(this.driver.visible=!1),this.engine?.stop()"),
+     "finish(){this.finished=!0,this.splitHide(),this.stopVo(),"
+     "this.povRig&&(this.povRig.root.visible=!1),this.driverRig&&(this.driverRig.root.visible=!1),"
+     "this.phoneHolder&&(this.phoneHolder.visible=!1),this.grass&&(this.grass.visible=!1),"
+     "this.dust&&(this.dust.mesh.visible=!1),this.engine?.stop()"),
     ("dispose(){this.rig?.dispose()",
      "dispose(){this.splitHide(),this.split&&this.split.wrap.remove(),this.stopVo(),"
      "this.forest&&this.deps.scene.remove(this.forest),this.rig?.dispose()"),

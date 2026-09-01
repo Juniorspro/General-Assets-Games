@@ -1,6 +1,7 @@
     /* ============ ESCENAS NUEVAS: bosque + POV + contrato ============ */
     introShots(A, P, D, i, t) {
-        let CAR = () => this.car.group, TXT = CDLV_TXT[CDLV_LANG] || CDLV_TXT.es, VOT = CDLV_VOT[CDLV_LANG] || CDLV_VOT.es;
+        let TXT = CDLV_TXT[CDLV_LANG] || CDLV_TXT.es, VOT = CDLV_VOT[CDLV_LANG] || CDLV_VOT.es;
+        let showRig = (rig, on) => { rig && (rig.root.visible = on) };
         let pass = {
             id: "forest-pass",
             duration: 7.2,
@@ -11,8 +12,9 @@
                 this.grass && (this.grass.visible = !0);
                 this.dust && (this.dust.mesh.visible = !0);
                 this.setActorVisible(!1);
-                this.pov && (this.pov.group.visible = !1);
-                this.driver && (this.driver.visible = !0);
+                showRig(this.povRig, !1);
+                showRig(this.driverRig, !0);
+                this.phoneHolder && (this.phoneHolder.visible = !1);
                 this.car.group.visible = !0;
                 this.car.group.position.set(-80, 0, t - 1.9);
                 this.car.group.rotation.y = Math.PI / 2;
@@ -24,7 +26,7 @@
             update: (p, tt, dt) => {
                 let st = this.shotTime;
                 P.set({ fade: HA(1 - st / 1.6, 0, 1) });
-                let car = CAR(), spd = 33;
+                let car = this.car.group, spd = 33;
                 car.position.x += spd * dt;
                 for (let w of this.car.wheels) w.rotation.x += dt * 26;
                 let dx = car.position.x;
@@ -36,14 +38,12 @@
                 if (!this.whooshed && dx > -6) { this.whooshed = !0; Mg() }
                 this.updateDust(dt);
                 this.driftFog(dt);
-                this.swayGrass(tt, Math.exp(-Math.abs(dx - 1) * .12) * (dx > 0 ? 1 : .25));
                 let lift = Mi(HA((st - 1) / 6, 0, 1));
                 A.position.set(2.1, .22 + lift * .05, t + 4.6);
                 A.lookAt(HP(-2.4, 7.5, HA((st - 2.2) / 3.2, 0, 1)), .58, t - 1.6);
                 this.handheld(.004);
                 let near = HA(1 - Math.abs(dx - 2) / 22, 0, 1);
                 for (let l of this.car.lights) l.intensity = 26 + near * 90;
-
             },
             exit: () => { this.grass && (this.grass.visible = !1) }
         };
@@ -52,9 +52,9 @@
             duration: 6,
             enter: () => {
                 this.look("forest-night");
-                this.driver && (this.driver.visible = !1);
-                this.pov && (this.pov.group.visible = !0);
-                this.poseArms(0, 0);
+                showRig(this.driverRig, !1);
+                showRig(this.povRig, !0);
+                this.seatPose(this.povRig, 0, 0);
                 this.car.group.position.set(-115, 0, t - 1.9);
                 this.car.group.rotation.y = Math.PI / 2;
                 A.fov = 68; A.updateProjectionMatrix();
@@ -71,27 +71,36 @@
         };
         let call = {
             id: "pov-phone",
-            duration: 8.4,
+            duration: 9.8,
             enter: () => {
                 this.rangAt = [.5, 1.55, 2.6]; this.rangIdx = 0;
-                this.pov && this.pov.phoneHolder && (this.pov.phoneHolder.visible = !1);
+                this.phoneHolder && (this.phoneHolder.visible = !1);
                 A.fov = 68; A.updateProjectionMatrix();
+                call.tHello = 4.15;
+                call.tCaller = call.tHello + VOT.hello + .55;
+                call.captions = [
+                    { from: call.tHello, to: call.tHello + VOT.hello + .7, text: TXT.hello },
+                    { from: call.tCaller, to: call.tCaller + VOT.caller + .8, text: TXT.caller }
+                ];
+                call.saidHello = !1; call.saidCaller = !1;
                 P.set({ subtitle: "" });
             },
             update: (p, tt, dt) => {
-                let st = this.shotTime, pov = this.pov;
+                let st = this.shotTime;
                 this.car.group.position.x += HP(17, 8.5, HA((st - 3) / 4, 0, 1)) * dt;
                 for (let w of this.car.wheels) w.rotation.x += dt * HP(14, 7, HA((st - 3) / 4, 0, 1));
                 while (this.rangIdx < this.rangAt.length && st >= this.rangAt[this.rangIdx]) { this.ringPhone(); this.rangIdx++ }
                 let reach = HA((st - 1.7) / 1.1, 0, 1), k = HA((st - 2.9) / 1.1, 0, 1);
-                this.poseArms(aD(k), aD(reach));
-                if (pov && pov.phoneHolder) pov.phoneHolder.visible = st > 2.75;
-                let zoom = aD(HA((st - 3.9) / 2.6, 0, 1));
+                this.seatPose(this.povRig, aD(k), aD(reach));
+                this.phoneHolder && (this.phoneHolder.visible = st > 2.75);
+                if (!call.saidHello && st >= call.tHello) { call.saidHello = !0; this.playVo("hello") }
+                if (!call.saidCaller && st >= call.tCaller) { call.saidCaller = !0; this.playVo("caller") }
+                let zoom = aD(HA((st - 5) / 2.6, 0, 1));
                 A.fov = HP(68, 31, zoom); A.updateProjectionMatrix();
                 this.povHead(A, 1 - zoom * .7);
-                if (pov && pov.phoneHolder && zoom > 0) {
-                    pov.phoneHolder.getWorldPosition(this._v3);
-                    this._v2.set(.45, 1.12, 14); this.car.group.localToWorld(this._v2);
+                if (this.phoneHolder && zoom > 0) {
+                    this.phoneHolder.getWorldPosition(this._v3);
+                    this._v2.set(.45, 1.10, 14); this.car.group.localToWorld(this._v2);
                     this._v2.lerp(this._v3, zoom);
                     A.lookAt(this._v2);
                 }
@@ -117,14 +126,14 @@
                 A.fov = 31; A.updateProjectionMatrix();
             },
             update: (p, tt, dt) => {
-                let st = this.shotTime, pov = this.pov;
+                let st = this.shotTime;
                 this.car.group.position.x += 4.5 * dt;
                 for (let w of this.car.wheels) w.rotation.x += dt * 3.6;
                 this.povHead(A, .3);
-                if (pov && pov.phoneHolder) {
-                    pov.phoneHolder.getWorldPosition(this._v3);
+                if (this.phoneHolder) {
+                    this.phoneHolder.getWorldPosition(this._v3);
                     A.lookAt(this._v3);
-                    pov.phoneLight && (pov.phoneLight.intensity = 1.4 + Math.sin(tt * 3) * .18);
+                    this.phoneLight && (this.phoneLight.intensity = 1.4 + Math.sin(tt * 3) * .18);
                 }
                 let lineP = Mi(HA(st / .34, 0, 1)),
                     panelP = Mi(HA((st - .34) / .72, 0, 1));
@@ -141,9 +150,9 @@
             },
             exit: () => {
                 this.splitHide(); this.stopVo();
-                this.pov && (this.pov.group.visible = !1);
-                this.pov && this.pov.phoneHolder && (this.pov.phoneHolder.visible = !1);
-                this.driver && (this.driver.visible = !1);
+                showRig(this.povRig, !1);
+                showRig(this.driverRig, !1);
+                this.phoneHolder && (this.phoneHolder.visible = !1);
                 this.dust && (this.dust.mesh.visible = !1);
                 this.setActorVisible(!0);
                 A.fov = 44; A.updateProjectionMatrix();
