@@ -3,16 +3,23 @@
 import * as THREE from 'three';
 import {
     CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
-    toWorld, toCell, isOpen, isStairCell, surfaceAt, levelAt, collide, spawnOn,
+    toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
 } from './map.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
 /* Somos chicos: el ojo va a 55 cm y las paredes miden 7 m, asi que un pasillo
    de 2,2 m se lee como una nave. Todo lo demas sale de esta escala. */
-const EYE = 0.55, CROUCH_EYE = 0.34, RADIUS = 0.26;
+const EYE = 0.55, CROUCH_EYE = 0.34, SLIDE_EYE = 0.19, RADIUS = 0.26;
 const WALK = 2.3, RUN = 4.6, CROUCH_SPD = 1.2;
 const FOV = 100;
+/* El deslizamiento es corto y violento a proposito: mucha velocidad al
+   principio, la camara se tira al piso y el FOV pega un tiron. */
+const SLIDE_TIME = 0.85, SLIDE_SPEED = 8.2, SLIDE_COOLDOWN = 0.45;
+
+/* Altura de las bandas de la pared, como en las fotos: zocalo crema, moldura
+   de madera, papel rojo y cornisa arriba. */
+const WAINSCOT = 2.55, RAIL_H = 0.16, CORNICE = 0.34;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -109,57 +116,92 @@ class Dungeon {
     }
 
     build() {
-        const wallMat = new THREE.MeshStandardMaterial({
-            map: A.wall ? tex(A.wall, [1, 1]) : null,
-            color: A.wall ? 0xffffff : 0x6b6b73, roughness: 0.95,
-        });
-        const floorMat = new THREE.MeshStandardMaterial({
-            map: A.floor ? tex(A.floor, [1, 1]) : null,
-            color: A.floor ? 0xffffff : 0x4c4a46, roughness: 0.96,
-        });
-        const ceilMat = new THREE.MeshStandardMaterial({ color: 0x14151b, roughness: 1 });
-
-        for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv, wallMat, floorMat, ceilMat);
-        this.buildStairs(floorMat);
+        /* La pared no es una sola textura: son bandas, como en las fotos.
+           Zocalo crema abajo, moldura de madera, papel rojo arriba y cornisa. */
+        this.mats = {
+            paper: new THREE.MeshStandardMaterial({
+                map: A.paper ? tex(A.paper, [1, 1]) : null,
+                color: A.paper ? 0xffffff : 0x6e1c22, roughness: 0.92,
+            }),
+            wainscot: new THREE.MeshStandardMaterial({
+                map: A.wainscot ? tex(A.wainscot, [1, 1]) : null,
+                color: A.wainscot ? 0xffffff : 0xcfc4ad, roughness: 0.88,
+            }),
+            wood: new THREE.MeshStandardMaterial({ color: 0x4a2e1c, roughness: 0.7 }),
+            floor: new THREE.MeshStandardMaterial({
+                map: A.floor ? tex(A.floor, [1, 1]) : null,
+                color: A.floor ? 0xffffff : 0x3a2417, roughness: 0.72,
+            }),
+            ceil: new THREE.MeshStandardMaterial({ color: 0x2a1c12, roughness: 0.9 }),
+            dark: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 }),
+        };
+        for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv);
+        this.buildStairs(this.mats.floor);
     }
 
-    buildLevel(lv, wallMat, floorMat, ceilMat) {
+    /* Una tira de pared, partida en sus bandas. `y0` permite arrancar arriba
+       del piso: es lo que deja el hueco rectangular por el que se pasa. */
+    wallStrip(out, cx, cz, w, d, base, y0) {
+        const push = (bucket, h, yy) => {
+            if (h <= 0.001) return;
+            const g = new THREE.BoxGeometry(w, h, d);
+            g.translate(cx, base + yy + h / 2, cz);
+            out[bucket].push(g);
+        };
+        const wainTop = Math.max(y0, WAINSCOT);
+        push('wainscot', wainTop - y0, y0);
+        push('wood', RAIL_H, wainTop);
+        push('paper', WALL_H - CORNICE - wainTop - RAIL_H, wainTop + RAIL_H);
+        push('wainscot', CORNICE, WALL_H - CORNICE);
+    }
+
+    buildLevel(lv) {
         const base = LEVELS[lv].base;
         const group = new THREE.Group();
         this.scene.add(group);
         (this.levelGroups || (this.levelGroups = []))[lv] = group;
-        const boxes = [];
-        // las paredes se juntan en tiras horizontales: una malla, no mil cajas
+
+        const out = { paper: [], wainscot: [], wood: [], dark: [] };
+        const solid = (c, r) => c < W && !isOpen(lv, c, r) && !isHole(lv, c, r);
+
+        /* Tiras horizontales de pared, cortadas en los huecos. El hueco se
+           emite aparte porque arranca a media altura, no en el piso. */
         for (let r = 0; r < H; r++) {
             let run = 0;
             for (let c = 0; c <= W; c++) {
-                const solid = c < W && !isOpen(lv, c, r);
-                if (solid) { run++; continue }
+                if (solid(c, r)) { run++; continue }
                 if (run) {
                     const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
                     const [, z] = toWorld(c - run, r);
-                    const g = new THREE.BoxGeometry(run * CELL, WALL_H, CELL);
-                    g.translate((x0 + x1) / 2, base + WALL_H / 2, z);
-                    boxes.push(g);
+                    this.wallStrip(out, (x0 + x1) / 2, z, run * CELL, CELL, base, 0);
                     run = 0;
+                }
+                if (c < W && isHole(lv, c, r)) {
+                    const [hx, hz] = toWorld(c, r);
+                    this.wallStrip(out, hx, hz, CELL, CELL, base, HOLE_H);
+                    // el fondo del hueco, para que no se vea el vacio al cruzar
+                    const jamb = new THREE.BoxGeometry(CELL, HOLE_H, 0.06);
+                    jamb.translate(hx, base + HOLE_H / 2, hz);
+                    out.dark.push(jamb);
                 }
             }
         }
-        if (boxes.length) {
-            const merged = mergeGeos(boxes);
-            worldUV(merged, 2.4);
-            const walls = new THREE.Mesh(merged, wallMat);
-            walls.castShadow = walls.receiveShadow = true;
-            group.add(walls);
-            boxes.forEach(g => g.dispose());
+        for (const kind of Object.keys(out)) {
+            if (!out[kind].length) continue;
+            const merged = mergeGeos(out[kind]);
+            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'wainscot' ? 1.25 : 0.7);
+            const m = new THREE.Mesh(merged, this.mats[kind]);
+            m.castShadow = m.receiveShadow = true;
+            group.add(m);
+            out[kind].forEach(g => g.dispose());
         }
 
-        // piso y techo solo bajo las celdas abiertas, en tiras como las paredes
+        // piso y techo: bajo las celdas abiertas y tambien bajo los huecos
         const floors = [], ceils = [];
         for (let r = 0; r < H; r++) {
             let run = 0;
             for (let c = 0; c <= W; c++) {
-                const open = c < W && isOpen(lv, c, r) && !isStairCell(c, r);
+                const open = c < W && (isOpen(lv, c, r) || isHole(lv, c, r)) && !isStairCell(c, r);
                 if (open) { run++; continue }
                 if (run) {
                     const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
@@ -178,45 +220,106 @@ class Dungeon {
         }
         if (floors.length) {
             const fg = mergeGeos(floors);
-            worldUV(fg, 2.4);
-            const fm = new THREE.Mesh(fg, floorMat);
+            worldUV(fg, 1.5);
+            const fm = new THREE.Mesh(fg, this.mats.floor);
             fm.receiveShadow = true;
             group.add(fm);
             floors.forEach(g => g.dispose());
             const cg = mergeGeos(ceils);
-            worldUV(cg, 3);
-            group.add(new THREE.Mesh(cg, ceilMat));
+            worldUV(cg, 2.2);
+            group.add(new THREE.Mesh(cg, this.mats.ceil));
             ceils.forEach(g => g.dispose());
         }
 
-        this.placeTorches(lv, base, group);
+        this.placeChandeliers(lv, base, group);
+        this.placeFurniture(lv, base, group);
     }
 
-    /* Antorchas contra las paredes de las salas grandes: dan un punto de fuga
-       y hacen leer la altura, que es lo que vende el tamano. */
-    placeTorches(lv, base, group) {
+    /* Arañas colgando del techo, como en las fotos. Son la unica luz fija:
+       dan altura al espacio y dejan el piso en penumbra. */
+    placeChandeliers(lv, base, group) {
         const rng = new Rng(0x7A0 + lv * 977);
-        const flameGeo = new THREE.SphereGeometry(0.09, 8, 6);
-        const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb552 });
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: .6, metalness: .35 });
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdda2 });
+        const bulbGeo = new THREE.SphereGeometry(.055, 7, 5);
+        const ringGeo = new THREE.TorusGeometry(.42, .035, 6, 14);
+        const chainGeo = new THREE.CylinderGeometry(.02, .02, 1, 4);
         let placed = 0;
-        for (let i = 0; i < 3000 && placed < 26; i++) {
+        for (let i = 0; i < 4000 && placed < 20; i++) {
+            const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
+            if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
+            // solo donde hay lugar: en un pasillo de una celda queda pegada
+            let room = true;
+            for (let dr = -1; dr <= 1 && room; dr++)
+                for (let dc = -1; dc <= 1; dc++)
+                    if (!isOpen(lv, c + dc, r + dr)) { room = false; break }
+            if (!room) continue;
+
+            const [x, z] = toWorld(c, r);
+            const g = new THREE.Group();
+            g.position.set(x, base, z);
+            const chain = new THREE.Mesh(chainGeo, armMat);
+            chain.scale.y = 1.1;
+            chain.position.y = WALL_H - 0.55;
+            g.add(chain);
+            const ring = new THREE.Mesh(ringGeo, armMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = WALL_H - 1.1;
+            g.add(ring);
+            for (let k = 0; k < 6; k++) {
+                const a = k / 6 * Math.PI * 2;
+                const b = new THREE.Mesh(bulbGeo, bulbMat);
+                b.position.set(Math.cos(a) * .42, WALL_H - 1.0, Math.sin(a) * .42);
+                g.add(b);
+            }
+            const L = new THREE.PointLight(0xffca86, 13, 17, 1.7);
+            L.position.y = WALL_H - 1.15;
+            g.add(L);
+            group.add(g);
+            (this.lamps || (this.lamps = [])).push({ L, phase: rng.range(0, 9) });
+            placed++;
+        }
+    }
+
+    /* Roperos y comodas contra las paredes: llenan las salas grandes y de paso
+       dan referencia de tamano, que es de lo que se trata todo esto. */
+    placeFurniture(lv, base, group) {
+        const rng = new Rng(0xF0E + lv * 313);
+        const wood = new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: .62 });
+        const dark = new THREE.MeshStandardMaterial({ color: 0x3a2415, roughness: .7 });
+        const pieces = [];
+        let placed = 0;
+        for (let i = 0; i < 6000 && placed < 34; i++) {
             const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
             if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
-            // que tenga pared al lado, para colgarla
-            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr));
+            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
             if (!dirs.length) continue;
             const [dc, dr] = dirs[Math.floor(rng.next() * dirs.length)];
             const [x, z] = toWorld(c, r);
-            const px = x + dc * (CELL / 2 - 0.12), pz = z + dr * (CELL / 2 - 0.12);
-            const y = base + 2.6;
-            const L = new THREE.PointLight(0xff9d4a, 9, 13, 1.9);
-            L.position.set(px, y, pz);
-            group.add(L);
-            const f = new THREE.Mesh(flameGeo, flameMat);
-            f.position.copy(L.position);
-            group.add(f);
-            (this.torches || (this.torches = [])).push({ L, f, phase: rng.range(0, 9) });
+            const tall = rng.next() < .45;
+            const w = tall ? 1.15 : 1.25, hgt = tall ? 2.05 : 0.95, d = tall ? .62 : .55;
+            const along = dc ? d : w, across = dc ? w : d;
+            const px = x + dc * (CELL / 2 - (dc ? d : 0) / 2 - .06);
+            const pz = z + dr * (CELL / 2 - (dr ? d : 0) / 2 - .06);
+            const body = new THREE.BoxGeometry(along, hgt, across);
+            body.translate(px, base + hgt / 2, pz);
+            pieces.push({ g: body, m: wood });
+            // dos puertas o cajones marcados con una caja fina mas oscura
+            const inset = new THREE.BoxGeometry(along * .82, hgt * (tall ? .58 : .34), across * .82);
+            inset.translate(px + dc * .02, base + hgt * (tall ? .62 : .55), pz + dr * .02);
+            pieces.push({ g: inset, m: dark });
             placed++;
+        }
+        for (const mat of [wood, dark]) {
+            const list = pieces.filter(p => p.m === mat).map(p => p.g);
+            if (!list.length) continue;
+            const merged = mergeGeos(list);
+            worldUV(merged, .8);
+            const m = new THREE.Mesh(merged, mat);
+            m.castShadow = m.receiveShadow = true;
+            group.add(m);
+            list.forEach(g => g.dispose());
         }
     }
 
@@ -331,6 +434,12 @@ class Dungeon {
                 if (t.identifier === this.look.id) { this.look.active = false; this.look.id = -1 }
             }
         };
+        // boton de deslizar, como el DESLIZAR de las fotos
+        const slideBtn = document.getElementById('slide');
+        const fire = e => { e.preventDefault(); e.stopPropagation(); this.slideRequested = true };
+        slideBtn.addEventListener('touchstart', fire, { passive: false });
+        slideBtn.addEventListener('mousedown', fire);
+
         addEventListener('touchstart', onStart, { passive: false });
         addEventListener('touchmove', onMove, { passive: false });
         addEventListener('touchend', onEnd);
@@ -351,11 +460,29 @@ class Dungeon {
            pasado el 70% del recorrido entra en carrera sin apretar nada. */
         const stickRun = sm > 0.7 && -this.stick.y > 0.55;
         this.crouch = !!(k.KeyC || k.ControlLeft || k.ControlRight);
-        const wantRun = (!!(k.ShiftLeft || k.ShiftRight) || stickRun) && !this.crouch && this.stamina > 0.02;
+
+        /* Deslizamiento: corto, muy rapido y con la camara tirada al piso.
+           Es la unica forma de cruzar los huecos sin frenar a agacharse. */
+        this.slideCd = Math.max(0, (this.slideCd || 0) - dt);
+        const wantSlide = !!(k.KeyX || k.Space) || this.slideRequested;
+        this.slideRequested = false;
+        if (this.slideT > 0) this.slideT -= dt;
+        else if (wantSlide && this.slideCd <= 0 && Math.hypot(fwd, str) > 0.35) {
+            this.slideT = SLIDE_TIME;
+            this.slideCd = SLIDE_TIME + SLIDE_COOLDOWN;
+            this.slideDir = null;
+            this.slideSide = Math.random() < 0.5 ? -1 : 1;
+        }
+        const sliding = this.slideT > 0;
+
+        const wantRun = (!!(k.ShiftLeft || k.ShiftRight) || stickRun) && !this.crouch && !sliding && this.stamina > 0.02;
 
         const moving = Math.hypot(fwd, str);
         let spd = this.crouch ? CROUCH_SPD : wantRun ? RUN : WALK;
-        if (sm > 0.12 && !wantRun) spd *= clamp(sm, 0.35, 1);
+        if (sm > 0.12 && !wantRun && !sliding) spd *= clamp(sm, 0.35, 1);
+        // el envion arranca fuerte y se va apagando
+        const slideK = sliding ? this.slideT / SLIDE_TIME : 0;
+        if (sliding) spd = lerp(WALK * 0.9, SLIDE_SPEED, slideK * slideK);
 
         this.running = wantRun && moving > 0.05;
         if (this.running) this.stamina = Math.max(0, this.stamina - dt * 0.22);
@@ -364,11 +491,19 @@ class Dungeon {
         const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
         let vx = (-sin * fwd + cos * str), vz = (-cos * fwd - sin * str);
         const len = Math.hypot(vx, vz) || 1;
-        const speed = spd * Math.min(moving, 1);
-        vx = vx / len * speed; vz = vz / len * speed;
+        vx /= len; vz /= len;
+        // deslizando la direccion queda fijada al arrancar: no se dobla
+        if (sliding) {
+            if (!this.slideDir) this.slideDir = moving > 0.05 ? [vx, vz] : [-sin, -cos];
+            [vx, vz] = this.slideDir;
+        }
+        const speed = spd * (sliding ? 1 : Math.min(moving, 1));
+        vx *= speed; vz *= speed;
 
+        // agachado o deslizando se pasa por los huecos de las paredes
+        const low = sliding || this.crouch;
         let nx = this.pos.x + vx * dt, nz = this.pos.z + vz * dt;
-        [nx, nz] = collide(nx, nz, this.y, RADIUS);
+        [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
         this.pos.set(nx, 0, nz);
 
         // la altura sigue la superficie: escaleras arriba y abajo sin fisica
@@ -381,29 +516,35 @@ class Dungeon {
            poco mas al girar, como si el cuerpo acompanara. */
         const turn = (this.lastYaw === undefined ? 0 : this.yaw - this.lastYaw);
         this.lastYaw = this.yaw;
-        const wantRoll = clamp(-str * 0.055 - turn * 2.2, -0.11, 0.11)
+        let wantRoll = clamp(-str * 0.055 - turn * 2.2, -0.11, 0.11)
             + Math.sin(this.bob * 0.5) * (this.running ? 0.016 : 0.009);
-        this.roll = lerp(this.roll, wantRoll, sat(dt * 7));
+        // el tiron del deslizamiento: rola fuerte y tiembla mientras dura
+        if (sliding) wantRoll += this.slideSide * (0.16 * slideK + 0.03 * Math.sin(this.t * 41) * slideK);
+        this.roll = lerp(this.roll, wantRoll, sat(dt * (sliding ? 18 : 7)));
 
-        const eye = this.crouch ? CROUCH_EYE : EYE;
-        this.eyeY = lerp(this.eyeY ?? eye, eye, sat(dt * 10));
-        const bobY = Math.sin(this.bob) * (this.running ? 0.028 : 0.017);
+        const eye = sliding ? SLIDE_EYE : this.crouch ? CROUCH_EYE : EYE;
+        // al tirarse baja de golpe; al levantarse vuelve suave
+        this.eyeY = lerp(this.eyeY ?? eye, eye, sat(dt * (sliding ? 26 : 9)));
+        const bobY = sliding ? 0 : Math.sin(this.bob) * (this.running ? 0.028 : 0.017);
 
         const cam = this.camera;
         cam.position.set(this.pos.x, this.y + this.eyeY + bobY, this.pos.z);
         cam.rotation.order = 'YXZ';
-        cam.rotation.set(this.pitch, this.yaw, this.roll);
-        // el FOV se abre un toque al correr
-        const wantFov = FOV + (this.running ? 6 : 0);
-        if (Math.abs(cam.fov - wantFov) > 0.05) { cam.fov = lerp(cam.fov, wantFov, sat(dt * 5)); cam.updateProjectionMatrix() }
+        // deslizando la cabeza tambien se va para atras
+        cam.rotation.set(this.pitch + (sliding ? -0.16 * slideK : 0), this.yaw, this.roll);
+        // el FOV se abre al correr y pega un tiron al deslizar
+        const wantFov = FOV + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
+        if (Math.abs(cam.fov - wantFov) > 0.05) {
+            cam.fov = lerp(cam.fov, wantFov, sat(dt * (sliding ? 22 : 5)));
+            cam.updateProjectionMatrix();
+        }
 
         this.lamp.position.set(this.pos.x, this.y + this.eyeY + 0.12, this.pos.z);
         this.lamp.intensity = 19 + Math.sin(this.t * 9.1) * Math.sin(this.t * 3.3) * 1.8;
 
-        for (const t of this.torches || []) {
-            const f = 0.75 + 0.25 * Math.sin(this.t * 7 + t.phase) * Math.sin(this.t * 2.3 + t.phase);
-            t.L.intensity = 9 * f;
-            t.f.scale.setScalar(0.85 + f * 0.3);
+        for (const l of this.lamps || []) {
+            const f = 0.9 + 0.1 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
+            l.L.intensity = 13 * f;
         }
 
         /* Solo se dibuja el nivel en el que esta y el de al lado. Son tres
@@ -425,7 +566,8 @@ class Dungeon {
         fill.style.width = (this.stamina * 100) + '%';
         fill.style.background = this.stamina < 0.25 ? '#b4483c' : '#c9c2ae';
         const st = document.getElementById('state');
-        const want = this.crouch ? 'agachado' : this.running ? 'corriendo' : '';
+        const want = this.slideT > 0 ? 'deslizando'
+            : this.crouch ? 'agachado' : this.running ? 'corriendo' : '';
         if (this._state !== want) { this._state = want; st.textContent = want }
         const p = document.getElementById('prompt');
         const locked = document.pointerLockElement === this.renderer.domElement;
@@ -448,6 +590,7 @@ function loop(now) {
     window.__DUNGEON = {
         x: +game.pos.x.toFixed(2), z: +game.pos.z.toFixed(2), y: +game.y.toFixed(2),
         level: levelAt(game.y), running: game.running, roll: +game.roll.toFixed(3),
+        sliding: (game.slideT || 0) > 0, eye: +(game.eyeY || 0).toFixed(2),
         fov: +game.camera.fov.toFixed(1),
     };
 }
@@ -456,3 +599,5 @@ window.__game = game;
 window.__STAIRS = STAIR_BOXES;   // sondas para las pruebas
 window.__LEVELS = LEVELS;
 window.__toWorld = toWorld;
+import * as MAP from './map.js';
+window.__MAP = MAP;

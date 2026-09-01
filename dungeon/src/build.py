@@ -8,8 +8,9 @@ DIST = os.path.join(GAME, "assets", "dist")
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/user/General-Assets-Games/elplano.html"
 
 ASSETS = {
-    "wall":  ("stone_wall.webp",  "image/webp"),
-    "floor": ("stone_floor.webp", "image/webp"),
+    "paper":    ("damask.webp",     "image/webp"),
+    "wainscot": ("wainscot.webp",   "image/webp"),
+    "floor":    ("wood_floor.webp", "image/webp"),
 }
 
 

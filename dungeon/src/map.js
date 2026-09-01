@@ -146,6 +146,34 @@ export const toCell = (x, z) => [Math.floor(x / CELL + W / 2), Math.floor(z / CE
 export const isOpen = (lv, c, r) =>
     c >= 0 && r >= 0 && c < W && r < H && !!LEVELS[lv].grid[key(c, r)];
 
+/* Agujeros: pared con un hueco rectangular abajo que comunica los dos lados.
+   Solo se pasa agachado o deslizando, asi que son atajos para escapar.
+   Se eligen paredes que separen dos espacios abiertos de verdad. */
+export const HOLE_H = 0.62;              // alto del hueco, en metros
+export const HOLES = LEVELS.map(() => new Uint8Array(W * H));
+
+(function carveHoles() {
+    for (let lv = 0; lv < LEVELS.length; lv++) {
+        const rng = new Rng(0x40E5 + lv * 131);
+        let made = 0;
+        for (let i = 0; i < 9000 && made < 22; i++) {
+            const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
+            if (isOpen(lv, c, r) || isStairCell(c, r)) continue;
+            const horiz = isOpen(lv, c - 1, r) && isOpen(lv, c + 1, r)
+                && !isOpen(lv, c, r - 1) && !isOpen(lv, c, r + 1);
+            const vert = isOpen(lv, c, r - 1) && isOpen(lv, c, r + 1)
+                && !isOpen(lv, c - 1, r) && !isOpen(lv, c + 1, r);
+            if (!horiz && !vert) continue;
+            HOLES[lv][key(c, r)] = 1;
+            made++;
+        }
+    }
+})();
+
+export const isHole = (lv, c, r) =>
+    c >= 0 && r >= 0 && c < W && r < H && !!HOLES[lv][key(c, r)];
+
+
 /* Rectangulo de una escalera en coordenadas de mundo, mas su eje de subida. */
 function stairBox(s) {
     const [dc, dr] = s.dir, pc = dr, pr = dc;
@@ -188,7 +216,7 @@ export function surfaceAt(x, z, yHint) {
     // sobre la rampa no hay piso plano que valga
     if (!isStairCell(c, r)) {
         for (let lv = 0; lv < LEVELS.length; lv++) {
-            if (!isOpen(lv, c, r)) continue;
+            if (!isOpen(lv, c, r) && !isHole(lv, c, r)) continue;
             const d = Math.abs(LEVELS[lv].base - yHint);
             if (d < bestD) { bestD = d; best = LEVELS[lv].base }
         }
@@ -208,13 +236,14 @@ export function levelAt(y) {
 
 /* Empuja un circulo fuera de las paredes del nivel en el que esta. Dentro de
    una escalera no hay colision de grilla: la caja ya la delimita. */
-export function collide(x, z, y, rad) {
+export function collide(x, z, y, rad, lowProfile) {
     for (const { box } of STAIR_BOXES) if (inBox(box, x, z)) return [x, z];
     const lv = levelAt(y);
     const [c0, r0] = toCell(x, z);
     for (let r = r0 - 1; r <= r0 + 1; r++) {
         for (let c = c0 - 1; c <= c0 + 1; c++) {
             if (isOpen(lv, c, r)) continue;
+            if (lowProfile && isHole(lv, c, r)) continue;   // se pasa por abajo
             const [cx, cz] = toWorld(c, r);
             const half = CELL / 2;
             const nx = Math.max(cx - half, Math.min(x, cx + half));
