@@ -57,7 +57,7 @@ export function splitGlass(mesh) {
         e1.subVectors(p1, p0).multiply(size);
         e2.subVectors(p2, p0).multiply(size);
         nn.crossVectors(e1, e2).normalize();
-        const isGlass = hy > 0.70 && hz > 0.26 && hz < 0.48 && Math.abs(nn.y) > 0.45;
+        const isGlass = hy > 0.70 && hy < 0.96 && hz > 0.26 && hz < 0.46 && Math.abs(nn.y) > 0.45;
         (isGlass ? glass : keep).push(a[t], a[t + 1], a[t + 2]);
     }
     if (!glass.length) return null;
@@ -65,9 +65,9 @@ export function splitGlass(mesh) {
     geo.setIndex(new THREE.BufferAttribute(new Arr(keep), 1));
     const gg = geo.clone();
     gg.setIndex(new THREE.BufferAttribute(new Arr(glass), 1));
-    const gm = new THREE.Mesh(gg, new THREE.MeshPhysicalMaterial({
-        color: 0xaebdc6, roughness: 0.06, metalness: 0, transmission: 0.92,
-        transparent: true, opacity: 0.36, thickness: 0.02, side: THREE.DoubleSide,
+    const gm = new THREE.Mesh(gg, new THREE.MeshStandardMaterial({
+        color: 0xc6d4dd, roughness: 0.05, metalness: 0,
+        transparent: true, opacity: 0.17, side: THREE.DoubleSide,
         depthWrite: false,
     }));
     gm.renderOrder = 3;

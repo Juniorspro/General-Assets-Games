@@ -99,6 +99,7 @@ export class House {
             return g;
         });
         const merged = mergeGeos(wallGeos);
+        worldUV(merged, 2.2);
         const walls = new THREE.Mesh(merged, wallMat);
         walls.castShadow = walls.receiveShadow = true;
         G.add(walls);
@@ -196,7 +197,7 @@ export class House {
         const inward = facing;                       // +1 mira a +Z, -1 a -Z
         const glow = new THREE.Mesh(
             new THREE.PlaneGeometry(1.15, 1.35),
-            new THREE.MeshBasicMaterial({ color: 0x8fb0e6, fog: false }));
+            new THREE.MeshBasicMaterial({ color: 0x5c78ad, fog: false }));
         glow.position.set(0, 1.55, 0.02 * inward);
         glow.rotation.y = inward > 0 ? 0 : Math.PI;
         g.add(glow);
@@ -270,6 +271,25 @@ export class House {
         const c = R.c0, r = R.r0;
         return { c, r, pos: toWorld(c, r) };
     }
+}
+
+/* Reproyecta las UV desde la posicion de mundo, eligiendo el plano por la
+   normal dominante. Asi todas las paredes tienen la misma densidad de texel
+   sin importar cuan largo sea el tramo. */
+function worldUV(geo, scale) {
+    const pos = geo.getAttribute('position'), nor = geo.getAttribute('normal');
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i)), nz = Math.abs(nor.getZ(i));
+        let u, v;
+        if (ny > nx && ny > nz) { u = x; v = z }
+        else if (nx > nz) { u = z; v = y }
+        else { u = x; v = y }
+        uv[i * 2] = u / scale;
+        uv[i * 2 + 1] = v / scale;
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
 function mergeGeos(list) {

@@ -356,9 +356,10 @@ export class Director {
                 cam().fov = 68; cam().updateProjectionMatrix();
                 g.audio.playAmbience(0.5);
                 hud.set({ fade: 0, blur: 0, lids: 0, flash: 0, vignette: 0.6 });
-                // la vieja cruza el fondo del pasillo, lejos, sin mirarlo
-                const [ax, az] = toWorld(3, 8);
-                const [bx, bz] = toWorld(20, 8);
+                // cruza el pasillo justo por delante del vano de la sala:
+                // es lo unico que se ve desde donde despierta
+                const [ax, az] = toWorld(0, 8);
+                const [bx, bz] = toWorld(9, 8);
                 g.lady.root.visible = true;
                 g.lady.root.position.set(ax, 0, az);
                 g.ladyCross = { ax, az, bx, bz };
@@ -377,9 +378,10 @@ export class Director {
                 const turn = smooth(sat((t - 0.5) / 2.2));
                 cam().position.set(w.x, 1.62 + Math.sin(t * 1.4) * 0.01, w.z);
                 cam().rotation.set(0, 0, 0);
-                const tx = lerp(w.x + 0.1, c.ax + (c.bx - c.ax) * 0.5, turn);
-                const tz = lerp(w.z + 2.2, c.az, turn);
-                cam().lookAt(tx, 1.5, tz);
+                const door = toWorld(4, 10);       // el vano que da al pasillo
+                const tx = lerp(w.x + 0.1, door[0], turn);
+                const tz = lerp(w.z + 2.2, door[1] - 1.2, turn);
+                cam().lookAt(tx, 1.45, tz);
                 g.house.flicker(this.elapsed);
 
                 if (t > 3.9) hud.set({ cardOn: true, cardTitle: 'MISIÓN 1', cardSub: 'Escapar de la casa' });
