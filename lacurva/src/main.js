@@ -335,7 +335,9 @@ function loop(now) {
         game.director.shots[game.director.index]?.exit?.();
         game.director.goto(j);
     }
-    if (window.__CRASH_SKIP) { window.__CRASH_SKIP = false; if (game.phase === 'cine') game.director.skip() }
+    // se consume solo cuando se puede actuar: pedirlo antes de que arranque
+    // la cinematica no tiene que perder el pedido
+    if (window.__CRASH_SKIP && game.phase === 'cine') { window.__CRASH_SKIP = false; game.director.skip() }
 }
 requestAnimationFrame(loop);
 window.__game = game;
