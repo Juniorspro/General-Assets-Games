@@ -50,19 +50,32 @@ def main():
         print('\nel servidor contestó algo que no es la lista:\n' + t[:400])
         return 1
 
-    nuevos = 0
+    # ── SE REFRESCAN LOS CONOCIDOS; LOS AJENOS SE LISTAN, NO SE ESCRIBEN ──
+    # La version anterior anotaba TODO lo que devolvia el servidor. Medido: la
+    # cuenta tiene 20 proyectos y sólo 5 son de este repo, asi que un refresco
+    # metia 15 nombres de proyectos ajenos en un archivo que se commitea a un
+    # repo PUBLICO. Y el inventario existe para decir que proyecto es cual
+    # PARA LOS JUEGOS DE ACA: los otros no le sirven a una sesion nueva.
+    # Los nuevos se muestran igual, para poder anotar a mano el que si haga
+    # falta — con su `usar_para`, que es el dato que el servidor no tiene.
+    ajenos = []
     for p in items:
         pid = p.get('public_id') or p.get('id')
         if not pid:
             continue
-        if pid not in d['proyectos']:
-            d['proyectos'][pid] = {'nombre': p.get('name', ''), 'usar_para': ''}
-            nuevos += 1
-        else:
+        if pid in d['proyectos']:
             d['proyectos'][pid]['nombre'] = p.get('name', d['proyectos'][pid]['nombre'])
+        else:
+            ajenos.append((pid, p.get('name', '')))
     io.open(EST, 'w', encoding='utf8').write(
         json.dumps(d, ensure_ascii=False, indent=2) + '\n')
-    print('\n%d proyectos en el servidor · %d nuevos anotados' % (len(items), nuevos))
+    print('\n%d proyectos en el servidor · %d anotados aca, nombres refrescados'
+          % (len(items), len(d['proyectos'])))
+    if ajenos:
+        print('\n%d en el servidor que NO estan anotados (no se escriben solos:'
+              ' si alguno es de este repo, agregalo a mano con su `usar_para`):' % len(ajenos))
+        for pid, n in ajenos:
+            print('  %-10s %s' % (pid, n))
     return 0
 
 

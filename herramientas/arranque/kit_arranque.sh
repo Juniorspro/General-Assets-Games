@@ -146,7 +146,6 @@ cat > herramientas/rezona/estado.json <<'__FIN_HERRAMIENTAS_REZONA_ESTADO_JSON__
     "login` con un código de un solo uso, y `.rezona/` está en .gitignore.",
     "Refrescar con: python3 herramientas/rezona/estado.py"
   ],
-
   "proyectos": {
     "PwVerjWD": {
       "nombre": "BARRIO — texturas y assets",
@@ -155,9 +154,20 @@ cat > herramientas/rezona/estado.json <<'__FIN_HERRAMIENTAS_REZONA_ESTADO_JSON__
     "aCIjanpu": {
       "nombre": "LEMI Assets 3D",
       "usar_para": "assets de LEMI"
+    },
+    "uSEsgNXL": {
+      "nombre": "BARRIO — assets",
+      "usar_para": "segundo proyecto de BARRIO; el de las texturas es PwVerjWD — ver la nota de duplicados"
+    },
+    "ZFiGfVQs": {
+      "nombre": "BARRIO personaje",
+      "usar_para": "el personaje de BARRIO: cuerpo, cara, rig y ciclo de paso"
+    },
+    "zQflBRio": {
+      "nombre": "LEMI",
+      "usar_para": "segundo proyecto de LEMI; el de los assets 3D es aCIjanpu — ver la nota de duplicados"
     }
   },
-
   "carpeta_de_descarga": {
     "ruta": "/tmp/rez_barrio",
     "por_que_fuera_del_repo": [
@@ -168,40 +178,57 @@ cat > herramientas/rezona/estado.json <<'__FIN_HERRAMIENTAS_REZONA_ESTADO_JSON__
     ],
     "init": "cd /tmp/rez_barrio && npx rezona@latest init"
   },
-
   "assets_generados": {
     "texturas_barrio": {
-      "output_paths": ["assets/asfalto-g1.png", "assets/vereda-g1.png", "assets/pasto-g1.png",
-                       "assets/madera-g1.png", "assets/ladrillo-g1.png", "assets/tabla-g1.png",
-                       "assets/teja-g1.png"],
+      "output_paths": [
+        "assets/asfalto-g1.png",
+        "assets/vereda-g1.png",
+        "assets/pasto-g1.png",
+        "assets/madera-g1.png",
+        "assets/ladrillo-g1.png",
+        "assets/tabla-g1.png",
+        "assets/teja-g1.png"
+      ],
       "en_el_juego": "pasto y madera; las otras cinco ganaron las de Higgsfield",
       "hornea": "TEX_DIR=/tmp/tex3 python3 herramientas/barrio/hornear_tex.py"
     },
     "ciudad": {
-      "output_paths": ["assets/fachada-g1.png", "assets/fachada2-g1.png",
-                       "assets/calleaerea-g1.png", "assets/azotea-g1.png"],
+      "output_paths": [
+        "assets/fachada-g1.png",
+        "assets/fachada2-g1.png",
+        "assets/calleaerea-g1.png",
+        "assets/azotea-g1.png"
+      ],
       "hornea": "CIU_DIR=/tmp/ciu python3 herramientas/barrio/hornear_ciudad.py"
     },
     "muebles": {
-      "output_paths": ["assets/velador2-g1.glb", "assets/silla2-g1.glb",
-                       "assets/mesita2-g1.glb", "assets/comoda2-g1.glb"],
+      "output_paths": [
+        "assets/velador2-g1.glb",
+        "assets/silla2-g1.glb",
+        "assets/mesita2-g1.glb",
+        "assets/comoda2-g1.glb"
+      ],
       "nota": "la tanda SIN el 2 es la vieja, la que salió corrupta por el decimado",
       "hornea": "MUE_DIR=/tmp/mue2 python3 herramientas/barrio/hornear_muebles.py"
     },
     "ciclo_de_paso": {
-      "output_paths": ["assets/peaton-g1.glb", "assets/peaton_rig-g1.glb"],
+      "output_paths": [
+        "assets/peaton-g1.glb",
+        "assets/peaton_rig-g1.glb"
+      ],
       "source_task_id_del_peaton": "gtask-49a4e33f1b244aebb72b",
       "nota": "`submit_rig3d_generation` sólo acepta el task_id de un modelo PROPIO, así que no se puede riggear el personaje que ya tiene el juego: se riggea un peatón y se retargetea el MOVIMIENTO",
       "hornea": "python3 herramientas/barrio/hornear_paso.py"
     }
   },
-
   "parametros_que_funcionaron": {
     "submit_model3d_generation": {
       "texture": true,
       "pbr": false,
       "texture_quality": "detailed",
-      "extra": { "face_limit": 6000 },
+      "extra": {
+        "face_limit": 6000
+      },
       "por_que_face_limit": "sin él Tripo devuelve UN MILLÓN de triángulos y decimarlo a dos mil es tirar el 99,8 % — el simplificador se come los tiradores de los cajones y los muebles salen corruptos",
       "prompt_que_sale_bien": "un objeto solo, formas limpias, foto de producto sobre fondo blanco liso, objeto entero visible, centrado"
     },
@@ -210,18 +237,30 @@ cat > herramientas/rezona/estado.json <<'__FIN_HERRAMIENTAS_REZONA_ESTADO_JSON__
       "por_que_sin_sombras": "un pedido de «textura» que no dice «sin sombras» devuelve una foto con la luz horneada, y esa luz pelea con la del juego en cada superficie"
     },
     "submit_rig3d_generation": {
-      "animations": ["preset:walk", "preset:run"],
+      "animations": [
+        "preset:walk",
+        "preset:run"
+      ],
       "nota": "cada animación se cobra aparte de el rig: pedir las que hacen falta, no una lista especulativa"
     }
   },
-
   "trampas": {
     "respuestas_desordenadas": "el servidor contesta a medida que termina cada llamada, así que la lista cruda NO viene en el orden en que se pidió. Emparejar por posición cruza los resultados EN SILENCIO — ya pasó: el asfalto llegó con el output_path de la vereda. Hay que ordenar por el `id` del JSON-RPC (rz.py ya lo hace).",
     "publish_to_rezona_app": "ES IRREVERSIBLE. No llamarlo nunca sin pedido explícito.",
     "mcp_no_cargado": "los MCP se cargan al ARRANCAR la sesión. Si no está, se le habla por stdio: python3 herramientas/rezona/rz.py tools"
-  }
+  },
+  "proyectos_duplicados": [
+    "HAY DOS PROYECTOS POR JUEGO EN EL SERVIDOR, y la regla es uno por juego.",
+    "BARRIO: PwVerjWD (texturas y assets) y uSEsgNXL (assets), mas ZFiGfVQs (personaje).",
+    "LEMI:   aCIjanpu (LEMI Assets 3D) y zQflBRio (LEMI).",
+    "Los que valen y contra los que esta anotado todo lo horneado son PwVerjWD y",
+    "aCIjanpu: generar ahi salvo que el usuario diga otra cosa. Los otros existen en",
+    "el servidor y se anotan para que una sesion nueva no crea que son proyectos",
+    "nuevos y empiece a repartir assets del mismo juego en dos lados.",
+    "El servidor tiene 20 proyectos en total; los que no son de este repo NO se",
+    "anotan aca a proposito: no le sirven a nadie y el repo es publico."
+  ]
 }
-
 __FIN_HERRAMIENTAS_REZONA_ESTADO_JSON__
 chmod 644 herramientas/rezona/estado.json
 echo '  . herramientas/rezona/estado.json'
@@ -279,25 +318,37 @@ def main():
         print('\nel servidor contestó algo que no es la lista:\n' + t[:400])
         return 1
 
-    nuevos = 0
+    # ── SE REFRESCAN LOS CONOCIDOS; LOS AJENOS SE LISTAN, NO SE ESCRIBEN ──
+    # La version anterior anotaba TODO lo que devolvia el servidor. Medido: la
+    # cuenta tiene 20 proyectos y sólo 5 son de este repo, asi que un refresco
+    # metia 15 nombres de proyectos ajenos en un archivo que se commitea a un
+    # repo PUBLICO. Y el inventario existe para decir que proyecto es cual
+    # PARA LOS JUEGOS DE ACA: los otros no le sirven a una sesion nueva.
+    # Los nuevos se muestran igual, para poder anotar a mano el que si haga
+    # falta — con su `usar_para`, que es el dato que el servidor no tiene.
+    ajenos = []
     for p in items:
         pid = p.get('public_id') or p.get('id')
         if not pid:
             continue
-        if pid not in d['proyectos']:
-            d['proyectos'][pid] = {'nombre': p.get('name', ''), 'usar_para': ''}
-            nuevos += 1
-        else:
+        if pid in d['proyectos']:
             d['proyectos'][pid]['nombre'] = p.get('name', d['proyectos'][pid]['nombre'])
+        else:
+            ajenos.append((pid, p.get('name', '')))
     io.open(EST, 'w', encoding='utf8').write(
         json.dumps(d, ensure_ascii=False, indent=2) + '\n')
-    print('\n%d proyectos en el servidor · %d nuevos anotados' % (len(items), nuevos))
+    print('\n%d proyectos en el servidor · %d anotados aca, nombres refrescados'
+          % (len(items), len(d['proyectos'])))
+    if ajenos:
+        print('\n%d en el servidor que NO estan anotados (no se escriben solos:'
+              ' si alguno es de este repo, agregalo a mano con su `usar_para`):' % len(ajenos))
+        for pid, n in ajenos:
+            print('  %-10s %s' % (pid, n))
     return 0
 
 
 if __name__ == '__main__':
     sys.exit(main())
-
 __FIN_HERRAMIENTAS_REZONA_ESTADO_PY__
 chmod 755 herramientas/rezona/estado.py
 echo '  . herramientas/rezona/estado.py'
