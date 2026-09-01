@@ -227,8 +227,8 @@ export class House {
         this.buildWindow(21, 16, -1);     // despensa
 
         // una bombita colgando en el pasillo, apenas viva
-        const [hx, hz] = toWorld(11, 8);
-        const bulb = new THREE.PointLight(0xffd9a0, 9, 16, 1.7);
+        const [hx, hz] = toWorld(6, 8);
+        const bulb = new THREE.PointLight(0xffd9a0, 13, 18, 1.6);
         bulb.position.set(hx, WALL_H - 0.5, hz);
         bulb.castShadow = true;
         bulb.shadow.mapSize.set(512, 512);
@@ -253,7 +253,7 @@ export class House {
     flicker(t) {
         if (!this.bulb) return;
         const f = 0.72 + 0.28 * Math.sin(t * 11.3) * Math.sin(t * 3.1) + (Math.random() < 0.012 ? -0.5 : 0);
-        this.bulb.intensity = Math.max(1.2, 9 * f);
+        this.bulb.intensity = Math.max(1.8, 13 * f);
         this.bulbGlass.material.color.setScalar(Math.min(1, 0.5 + f * 0.6));
     }
 
