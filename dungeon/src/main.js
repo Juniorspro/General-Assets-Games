@@ -19,7 +19,10 @@ const SLIDE_TIME = 0.85, SLIDE_SPEED = 8.2, SLIDE_COOLDOWN = 0.45;
 
 /* Altura de las bandas de la pared, como en las fotos: zocalo crema, moldura
    de madera, papel rojo y cornisa arriba. */
-const WAINSCOT = 2.55, RAIL_H = 0.16, CORNICE = 0.34;
+/* La moldura va baja: desde 55 cm de altura, un zocalo de dos metros y medio
+   se come toda la vista y no se ve el papel. Asi el rojo domina, que es como
+   se ve en las fotos. */
+const WAINSCOT = 1.05, RAIL_H = 0.13, CORNICE = 0.45;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -132,7 +135,7 @@ class Dungeon {
                 map: A.floor ? tex(A.floor, [1, 1]) : null,
                 color: A.floor ? 0xffffff : 0x3a2417, roughness: 0.72,
             }),
-            ceil: new THREE.MeshStandardMaterial({ color: 0x2a1c12, roughness: 0.9 }),
+            ceil: new THREE.MeshStandardMaterial({ color: 0x3b2717, roughness: 0.85 }),
             dark: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 }),
         };
         for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv);

@@ -1,8 +1,9 @@
-# El plano — dungeon en primera persona
+# El plano — mansión en primera persona
 
-`elplano.html`, un solo archivo de 1,3 MB. Sale del plano dibujado a mano
+`elplano.html`, un solo archivo de 0,94 MB. Sale del plano dibujado a mano
 (`plano-original.jpg`), **girado 90°**, en tres niveles conectados por
-escaleras que suben y bajan de verdad.
+escaleras que suben y bajan de verdad, con el look de mansión de las
+capturas: papel damasco rojo, zócalo crema, parquet de nogal y arañas.
 
 ## La escala es el truco
 
@@ -21,11 +22,56 @@ lo que agranda el lugar, más que el tamaño real del mapa.
 
 **FOV 100**, que abre a 106 al correr.
 
+## Las paredes
+
+No son una textura sola: son bandas, como en las fotos.
+
+| | |
+|---|---|
+| Zócalo crema | 0 → 1,05 m |
+| Moldura de madera | 1,05 → 1,18 m |
+| Papel damasco rojo | 1,18 → 6,55 m |
+| Cornisa | 6,55 → 7 m |
+
+La moldura va **baja** a propósito: desde 55 cm de altura, un zócalo a la
+altura real (2,5 m) se come toda la vista y no se ve el papel. Con la moldura
+a 1,05 el rojo domina, que es como se ve en las capturas.
+
+Las arañas colgando del techo son la única luz fija, y roperos y cómodas
+contra las paredes llenan las salas — de paso dan una referencia de tamaño,
+que es de lo que se trata todo esto.
+
+## Deslizamiento
+
+`ESPACIO` / `X`, o el botón **DESLIZAR** en táctil. Dura 0,85 s y es corto y
+violento a propósito:
+
+- la dirección **se fija al arrancar**: no se dobla en el aire
+- la cámara cae de golpe a **19 cm** y vuelve suave
+- **rola 0,16 rad** hacia un lado, con temblor encima
+- el **FOV pega un tirón de 22°** (100 → 122) y decae
+- la velocidad arranca en 8,2 m/s y se apaga sola
+
+Se engancha en el `keydown` y no leyendo la tecla cada frame: un toque corto
+puede caer entero entre dos frames y perderse, justo cuando más rápido va
+todo.
+
+## Los agujeros en las paredes
+
+Unos 20 por nivel: huecos rectangulares de **62 cm** al pie de algunas
+paredes, que comunican dos espacios de verdad (sólo se abren donde hay
+espacio abierto a los dos lados).
+
+**De pie no pasás** — te frena a 1,36 m. Agachado o deslizando, cruzás. Son
+atajos para cuando estás escapando, no puertas.
+
 ## Controles
 
 - **WASD / flechas** moverse · **Shift** correr · **C** agacharse
+- **Espacio / X** deslizarse
 - **Mouse** mirar (click para tomar el puntero)
-- **Táctil**: joystick abajo a la izquierda, el resto de la pantalla para mirar
+- **Táctil**: joystick abajo a la izquierda, botón **DESLIZAR** a la derecha,
+  el resto de la pantalla para mirar
 
 **Carrera automática:** el joystick no tiene botón de correr. Pasado el **70%**
 del recorrido y empujando hacia arriba, arranca a correr solo; más abajo, la
@@ -83,7 +129,7 @@ src/map.js      la grilla, las escaleras, colisión y altura de superficie
 src/main.js     motor, jugador, controles, cámara
 src/build.py    bundlea con esbuild y mete las texturas como data URLs
 src/shell.html  HUD y joystick
-texturas/       piedra de pared y losas de piso
+texturas/       papel damasco, zócalo crema y parquet de nogal
 plano-original.jpg   el dibujo del que salió
 ```
 
