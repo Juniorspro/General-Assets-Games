@@ -209,7 +209,7 @@ export class Road {
 
     buildGrass(A) {
         const rng = new Rng(777);
-        const N = 14000;
+        const N = 20000;
         const mat = new THREE.MeshStandardMaterial({
             map: A.grassField ? tex(A.grassField) : null,
             color: A.grass ? 0xffffff : 0x5c6b34,
@@ -219,7 +219,7 @@ export class Road {
         const m = new THREE.Matrix4(), p = new THREE.Vector3(), s = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler();
         for (let i = 0; i < N; i++) {
             // se concentra cerca del asfalto, que es lo unico que se llega a ver
-            let x = rng.range(-26, 26);
+            let x = rng.range(-48, 48);
             if (Math.abs(x) < 4.6) x += Math.sign(x || 1) * 4.6;
             e.set(0, rng.range(0, Math.PI), 0); q.setFromEuler(e);
             p.set(x, 0, rng.range(-this.length / 2, this.length / 2));

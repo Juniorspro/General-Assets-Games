@@ -10,14 +10,22 @@ export class Director {
     constructor(game) {
         this.g = game;
         this.shots = this.build();
+        let acc = 0;
+        this.startAt = this.shots.map(s => { const a = acc; acc += s.duration; return a });
         this.index = 0; this.t = 0; this.elapsed = 0;
         this.done = false;
         this.started = false;
     }
+    /* Entra a un plano dejando el reloj global donde ese plano espera. */
+    goto(i) {
+        this.index = i;
+        this.t = 0;
+        this.elapsed = this.startAt[i];
+        this.shots[i].enter?.();
+    }
     start() {
         this.started = true;
-        this.index = 0; this.t = 0; this.elapsed = 0;
-        this.shots[0].enter?.();
+        this.goto(0);
     }
     skip() { if (!this.done) { this.shots[this.index]?.exit?.(); this.finish() } }
     finish() {
@@ -31,10 +39,8 @@ export class Director {
         sh.update?.(dt);
         if (this.t >= sh.duration) {
             sh.exit?.();
-            this.index++;
-            if (this.index >= this.shots.length) return this.finish();
-            this.t = 0;
-            this.shots[this.index].enter?.();
+            if (this.index + 1 >= this.shots.length) return this.finish();
+            this.goto(this.index + 1);
         }
     }
 
@@ -254,8 +260,6 @@ export class Director {
                 g.house.group.visible = true;
                 g.boySeat(false);
                 g.phoneVisible(false);
-                const [wx, wz] = toWorld(4, 13);        // en el piso de la sala
-                g.wakeSpot = new THREE.Vector3(wx, 0, wz);
                 cam().fov = 68; cam().updateProjectionMatrix();
                 cam().position.set(wx, 0.22, wz);
                 g.audio.playAmbience(0.5);

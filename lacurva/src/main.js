@@ -11,6 +11,9 @@ import { Audio } from './audio.js';
 
 /* Los assets llegan como data URLs inyectadas por el empaquetador. */
 const A = window.CRASH_ASSETS || {};
+/* Punto de la cadera del conductor, en coordenadas del auto. El Bentley del
+   que salio el modelo es ingles, asi que el volante cae a la derecha. */
+const SEAT = { x: 0.45, y: 0.55, z: -0.35 };
 
 class Game {
     constructor() {
@@ -55,6 +58,11 @@ class Game {
         await this.buildPhone();
         this.buildKey();
         this.buildTorch();
+
+        const [wx, wz] = toWorld(4, 13);
+        this.wakeSpot = new THREE.Vector3(wx, 0, wz);
+        const [ax, az] = toWorld(3, 8), [bx] = toWorld(20, 8);
+        this.ladyCross = { ax, az, bx, bz: az };
 
         this.director = new Director(this);
         this.escape = new Escape(this);
@@ -142,13 +150,23 @@ class Game {
         this.boy.root.visible = on;
         if (!on) return;
         this.setHeadHidden(this.boy, !!hideHead);
-        const c = this.car.group;
-        this.boy.root.position.copy(c.position);
-        this.boy.root.rotation.y = c.rotation.y;
-        // sentado al volante, corrido al asiento del conductor
-        const off = new THREE.Vector3(0.45, 0.34, -0.11).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.rotation.y);
-        this.boy.root.position.add(off);
         this.seatPose(0);
+        this.placeInSeat();
+    }
+    /* Lo ancla por la cadera y no por los pies. Sentado, el rig sigue midiendo
+       1,78 m de pie: apoyarlo por los pies lo deja con la cabeza medio metro
+       arriba del auto. Se mide donde quedo la pelvis y se corrige el root. */
+    placeInSeat() {
+        const c = this.car.group, r = this.boy.root;
+        r.rotation.y = c.rotation.y;
+        r.position.copy(c.position);
+        r.updateMatrixWorld(true);
+        const pelvis = this.boy.bones.Pelvis || this.boy.bones.Hip;
+        if (!pelvis) { r.position.y += 0.34; return }
+        const cur = pelvis.getWorldPosition(this._v1 || (this._v1 = new THREE.Vector3()));
+        const seat = (this._v2 || (this._v2 = new THREE.Vector3())).set(SEAT.x, SEAT.y, SEAT.z);
+        c.localToWorld(seat);
+        r.position.add(seat.sub(cur));
     }
     seatPose(reach) {
         const b = this.boy.bones, set = (n, x, y, z) => b[n] && b[n].rotation.set(x, y, z);
@@ -231,14 +249,8 @@ class Game {
         if (this.phase === 'cine') {
             this.director.update(dt);
             this.boy.update(dt);
-            if (this.boy.root.visible && this.director.shots[this.director.index]?.id !== 'reveal') {
-                // el rig sigue al auto mientras dura la parte de la ruta
-                const c = this.car.group;
-                this.boy.root.position.copy(c.position);
-                this.boy.root.rotation.y = c.rotation.y;
-                const off = new THREE.Vector3(0.45, 0.34, -0.11).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.rotation.y);
-                this.boy.root.position.add(off);
-            }
+            // el rig sigue al auto mientras dura la parte de la ruta
+            if (this.boy.root.visible && this.car.group.visible) this.placeInSeat();
         } else if (this.phase === 'escape') {
             this.escape.update(dt, this.t);
         }
@@ -305,8 +317,7 @@ function loop(now) {
         const j = Math.max(0, Math.min(game.director.shots.length - 1, window.__CRASH_JUMP | 0));
         window.__CRASH_JUMP = null;
         game.director.shots[game.director.index]?.exit?.();
-        game.director.index = j; game.director.t = 0;
-        game.director.shots[j]?.enter?.();
+        game.director.goto(j);
     }
     if (window.__CRASH_SKIP) { window.__CRASH_SKIP = false; if (game.phase === 'cine') game.director.skip() }
 }
