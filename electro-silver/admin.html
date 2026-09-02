@@ -329,7 +329,7 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
 <header class="top"><div class="caja">
   <span class="marca">
     <svg><use href="#marca"/></svg>
-    <span><b>Panel de publicaciones</b><span>Electro Silver</span></span>
+    <span><b>Panel de publicaciones</b><span id="quien">Electro Silver</span></span>
   </span>
   <span class="chip-con demo" id="chip"><i></i><span id="chip-t">Modo demostración</span></span>
   <button type="button" class="bt" id="b-config">Configurar</button>
@@ -643,7 +643,9 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
       <p class="dice" style="margin-top:12px">Pegalo en el cuadro grande, apretá <b>Run</b> (o Ctrl+Enter)
         y volvé acá.</p>
       <details class="manual"><summary>Ver el texto</summary>
-<pre id="sql">create table if not exists publicaciones (
+<pre id="sql">-- Se puede correr las veces que quieras: no pisa nada.
+-- Un mismo proyecto sirve para varios locales: los separa la columna "negocio".
+create table if not exists publicaciones (
   id           uuid primary key default gen_random_uuid(),
   creado       timestamptz not null default now(),
   titulo       text not null,
@@ -656,6 +658,10 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
   imagen_url   text,
   visible      boolean not null default true
 );
+
+-- por si la tabla ya existía de antes
+alter table publicaciones add column if not exists negocio text not null default 'electro-silver';
+create index if not exists publicaciones_negocio_idx on publicaciones (negocio, creado desc);
 
 alter table publicaciones enable row level security;
 
@@ -749,8 +755,14 @@ var $=function(i){return document.getElementById(i)};
    mail y contraseña. La clave anon es pública por diseño: no deja escribir nada. */
 var CFG_FIJA = { url:"", key:"" };
 
+/* Qué local es éste. Un mismo proyecto de Supabase sirve para varios:
+   cada panel y cada web usan su propio NEGOCIO y no se ven entre ellos.
+   Para el próximo cliente: copiar los dos archivos y cambiar esta línea
+   (acá y la de index.html). Nada más. */
+var NEGOCIO="electro-silver";
+
 var CLAVE_CFG="electrosilver.cfg.v1";
-var CLAVE_PUBS="electrosilver.pubs.v1";
+var CLAVE_PUBS="pubs."+NEGOCIO+".v1";
 var TABLA="publicaciones", BUCKET="publicaciones";
 
 /* ── configuración y cliente ─────────────────────────────────────── */
@@ -915,7 +927,8 @@ function grabarLocal(l){
 var pubs=[];
 function cargar(){
   if(sb){
-    return sb.from(TABLA).select("*").order("creado",{ascending:false}).then(function(r){
+    return sb.from(TABLA).select("*").eq("negocio",NEGOCIO)
+      .order("creado",{ascending:false}).then(function(r){
       if(r.error){ avisar("No pudimos leer las publicaciones: "+r.error.message, true); pubs=[]; }
       else pubs=r.data||[];
       pintarFilas();
@@ -931,9 +944,11 @@ function idNuevo(){
 function guardar(reg, blob){
   if(sb){
     if(!sesion) return Promise.reject(new Error("Hay que entrar con tu usuario para publicar"));
+    reg.negocio=NEGOCIO;
     var subir = blob
       ? sb.storage.from(BUCKET).upload(
-          Date.now()+"-"+Math.random().toString(36).slice(2,8)+(blob.type.indexOf("webp")>0?".webp":".jpg"),
+          NEGOCIO+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+
+            (blob.type.indexOf("webp")>0?".webp":".jpg"),
           blob, {contentType:blob.type, cacheControl:"31536000"})
         .then(function(r){
           if(r.error) throw r.error;
@@ -943,7 +958,7 @@ function guardar(reg, blob){
     return subir.then(function(url){
       reg.imagen_url=url;
       var q = reg.id
-        ? sb.from(TABLA).update(reg).eq("id",reg.id)
+        ? sb.from(TABLA).update(reg).eq("id",reg.id).eq("negocio",NEGOCIO)
         : sb.from(TABLA).insert(reg);
       return q.then(function(r){ if(r.error) throw r.error; });
     });
@@ -961,7 +976,7 @@ function guardar(reg, blob){
 function borrar(id){
   if(sb){
     if(!sesion) return Promise.reject(new Error("Hay que entrar con tu usuario"));
-    return sb.from(TABLA).delete().eq("id",id).then(function(r){ if(r.error) throw r.error; });
+    return sb.from(TABLA).delete().eq("id",id).eq("negocio",NEGOCIO).then(function(r){ if(r.error) throw r.error; });
   }
   var l=leerLocal().filter(function(p){ return p.id!==id; });
   grabarLocal(l);
@@ -1812,6 +1827,7 @@ if(sb){
 } else {
   pintarChip("demo","Modo demostración");
 }
+$("quien").textContent=NEGOCIO.replace(/-/g," ");
 pintarMagia();
 limpiar();
 cargar();

@@ -213,3 +213,45 @@ trabajos programados y manda un mail para reactivarlos.
 **No hay copias de seguridad automáticas.** El botón «Bajar copia» del panel se
 trae la lista de publicaciones (los textos y los enlaces a las fotos, no las
 fotos). Conviene bajarla de vez en cuando.
+
+
+## Un mismo proyecto de Supabase para varios locales
+
+Sí se puede, y conviene: el plan gratis deja **2 proyectos activos**, pero un
+proyecto solo aguanta muchos locales. Los separa la columna `negocio`.
+
+Al principio de `admin.html` y dentro de `index.html` hay una línea igual:
+
+```js
+var NEGOCIO="electro-silver";
+```
+
+Para el próximo cliente: copiás los dos archivos a otra carpeta, cambiás esa
+línea en los dos por ejemplo a `"ferreteria-lopez"`, y listo. Comparten el
+proyecto, la clave y el usuario, pero:
+
+- cada panel ve sólo sus publicaciones
+- cada web muestra sólo las suyas
+- las fotos van a carpetas separadas dentro del mismo depósito
+- el SQL se corre una sola vez, nunca más
+
+Probado con dos locales a la vez: ninguno ve al otro.
+
+### Antes de sumar el segundo
+
+Corré de nuevo el bloque de SQL del asistente. Es el mismo, se puede correr las
+veces que quieras, y agrega la columna `negocio` a la tabla si no estaba.
+
+### Un aviso sobre los permisos
+
+Con las políticas actuales, cualquiera que **inicie sesión** puede escribir en
+cualquier local. Mientras el único usuario seas vos, no hay problema. Si algún
+día le das su propio usuario a cada cliente, hay que cambiar la política para
+que cada uno toque nada más que lo suyo. Avisame y la escribo.
+
+### Y lo que sí comparten
+
+Los 500 MB de base, el 1 GB de fotos y los 5 GB de tráfico son del proyecto
+entero, así que se reparten entre todos los locales. Y si el proyecto se pausa,
+se apagan todas las webs juntas — por eso el despertador es más importante
+cuantos más locales tengas.
