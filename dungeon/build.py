@@ -127,10 +127,15 @@ def main():
         for clave, ruta, mime, _ in tabla:
             data[clave] = durl_abs(ruta, mime)
     else:
-        sha = sha_actual()
-        if not sha:
+        sha = sha_actual() or "local"
+        if not sha and not any(a.startswith("--base=") for a in sys.argv):
             raise SystemExit("sin git no se puede armar el enlace del CDN; usa --embebido")
         base = "https://cdn.jsdelivr.net/gh/%s@%s/dungeon/" % (REPO, sha)
+        # --base sirve para probar el cargador contra un servidor local: el
+        # navegador del contenedor no sale a internet, pero la logica es la misma
+        for a in sys.argv[1:]:
+            if a.startswith("--base="):
+                base = a.split("=", 1)[1]
         for clave, ruta, mime, rel in tabla:
             url = base + rel
             data[clave] = url

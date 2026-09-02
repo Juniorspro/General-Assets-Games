@@ -224,6 +224,52 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## Los assets ya no van embebidos: se bajan en paralelo
+
+El juego era **un HTML de 7,1 MB** con todo adentro como data URL: las
+texturas, los doce muebles, la langosta, los cuadros y el menú. El teléfono
+tiene que bajarlo entero —más el tercio que agrega base64— antes de pintar el
+primer píxel, y no hay forma de mostrar progreso: o está el HTML o no está.
+
+Ahora los archivos viven en el repo y los sirve **jsDelivr**, que sirve
+cualquier repo público de GitHub.
+
+**7,12 MB → 0,68 MB de HTML**, más 4,84 MB de assets que se bajan aparte.
+
+### Se fija a un COMMIT, no a la rama
+
+jsDelivr cachea una rama **doce horas**. Apuntando a la rama, cambiar un
+mueble no se vería hasta el día siguiente. Con el sha, cada build pide
+exactamente los archivos de ese commit y la caché juega a favor.
+
+Eso obliga a un orden: **los assets tienen que estar commiteados antes de
+buildear**. `build.py` avisa por consola si hay cambios sin commitear en
+`dungeon/`.
+
+### El progreso se mide en bytes, no en archivos
+
+`src/carga.js` pide todo de a ocho a la vez y lee el progreso del cuerpo de la
+respuesta con un reader. Contando archivos terminados, con doce archivos de
+tamaños muy distintos, la barra salta de 30 a 70 y se queda.
+
+Lo bajado se guarda como **blob** y se reemplaza la URL por la del blob: si no,
+three vuelve a pedir el archivo al armar la escena. Iría a la caché, pero eso
+depende de las cabeceras y no quiero depender de eso.
+
+### Y si no baja, se juega igual
+
+Cada archivo que falla se saltea, la barra igual llega al final y el menú dice
+cuántos faltaron. **Probado apuntando a una carpeta que no existe: los 26
+fallan, el juego arranca igual** —las noventa arañas, el mapa y las paredes con
+sus colores de reserva— y no se rompe nada.
+
+Medido contra un servidor local: **26 de 26 en 187 ms**, la barra en 100 % con
+el texto en MB, y el `src` del logo es un `blob:` — o sea que el intercambio
+funcionó y nada se pide dos veces.
+
+**El costo:** hace falta internet la primera vez. `python3 build.py salida.html
+--embebido` vuelve a generar el archivo autocontenido de siempre.
+
 ## El arranque: el cajón, el hueco y la caída
 
 En el original no aparecés en la casa: aparecés **arriba**, en un cajón de
