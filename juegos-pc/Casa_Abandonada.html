@@ -15,6 +15,9 @@
   #stage{position:fixed;top:0;left:0;transform-origin:top left;overflow:hidden;background:#000}
   #stage.rot{transform:translateX(100vw) rotate(90deg)}
   canvas{display:block}
+  #sa{position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;
+    padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
+            env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   #hud{position:absolute;inset:0;pointer-events:none;color:#cfc9b8}
   #dot{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;
     border-radius:50%;background:rgba(226,220,200,.42)}
@@ -103,22 +106,11 @@
     transition:opacity 1.6s ease}
   #end{background:linear-gradient(180deg,rgba(0,0,0,.94),rgba(0,0,0,.98))}
   #end .note2{max-width:74%;text-align:center;line-height:1.9;margin-top:22px}
-  /* ─ margenes seguros (notch y barra de inicio) ─ */
-  #hud{--si-l:env(safe-area-inset-left,0px);  --si-r:env(safe-area-inset-right,0px);
-       --si-t:env(safe-area-inset-top,0px);   --si-b:env(safe-area-inset-bottom,0px);
-       --sz-l:var(--si-l); --sz-r:var(--si-r); --sz-t:var(--si-t); --sz-b:var(--si-b)}
-  #stage.rot #hud{--sz-l:var(--si-t); --sz-r:var(--si-b);
-                  --sz-t:var(--si-r); --sz-b:var(--si-l)}
-  #torch   {right:calc(24px + var(--sz-r)); bottom:calc(22px + var(--sz-b))}
-  #use     {right:calc(24px + var(--sz-r)); bottom:calc(112px + var(--sz-b))}
-  #pauseBtn{left:calc(22px + var(--sz-l));  top:calc(18px + var(--sz-t))}
-  #osd     {left:calc(74px + var(--sz-l));  top:calc(20px + var(--sz-t))}
-  #stamp   {left:calc(26px + var(--sz-l));  bottom:calc(22px + var(--sz-b))}
-  #hint    {left:calc(26px + var(--sz-l));  bottom:calc(78px + var(--sz-b))}
 
 </style>
 </head>
 <body>
+<div id="sa"></div>
 <div id="stage">
   <div id="hud">
     <div id="flash"></div><div id="fade"></div>
@@ -177,10 +169,24 @@ const V3=THREE.Vector3, rnd=(a,b)=>a+Math.random()*(b-a);
 /* ══════════ escenario girado 90° ══════════ */
 const stage=document.getElementById('stage');
 let rotated=false,VW=0,VH=0;
+const saEl=document.getElementById('sa');
+function safeArea(){
+  const c=getComputedStyle(saEl);
+  return {t:parseFloat(c.paddingTop)||0, r:parseFloat(c.paddingRight)||0,
+          b:parseFloat(c.paddingBottom)||0, l:parseFloat(c.paddingLeft)||0};
+}
 function layout(){
-  const w=innerWidth,h=innerHeight;
+  const w=innerWidth,h=innerHeight, S=safeArea();
   rotated=h>w; stage.classList.toggle('rot',rotated);
-  VW=rotated?h:w; VH=rotated?w:h;
+  if(rotated){
+    VW=Math.max(2,h-S.t-S.b); VH=Math.max(2,w-S.l-S.r);
+    stage.style.left='0px'; stage.style.top=S.t+'px';
+    stage.style.transform='translateX('+(w-S.r)+'px) rotate(90deg)';
+  }else{
+    VW=Math.max(2,w-S.l-S.r); VH=Math.max(2,h-S.t-S.b);
+    stage.style.left=S.l+'px'; stage.style.top=S.t+'px';
+    stage.style.transform='none';
+  }
   stage.style.width=VW+'px'; stage.style.height=VH+'px';
   if(window.renderer){
     renderer.setSize(VW,VH,false);
@@ -192,7 +198,8 @@ function layout(){
     postMat.uniforms.uSrc.value.set(sw,sh);
   }
 }
-const toLocal=(cx,cy)=>rotated?{x:cy,y:innerWidth-cx}:{x:cx,y:cy};
+const toLocal=(cx,cy)=>{ const S=safeArea();
+  return rotated ? {x:cy-S.t, y:(innerWidth-S.r)-cx} : {x:cx-S.l, y:cy-S.t}; };
 const dLocal=(dx,dy)=>rotated?{x:dy,y:-dx}:{x:dx,y:dy};
 
 /* ══════════ renderer ══════════ */
