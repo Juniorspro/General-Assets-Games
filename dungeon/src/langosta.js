@@ -62,13 +62,22 @@ class Langosta {
                     if (!n.isMesh) return;
                     n.castShadow = true;
                     if (n.material && n.material.isMeshBasicMaterial) return;  // las cuencas
-                    /* La malla viene clarita y con la cara muy legible. Un
-                       tinte gris frio la apaga: multiplica la foto, no la
-                       reemplaza, asi que las vendas y el hueso siguen ahi
-                       pero dejan de brillar como un juguete. */
+                    /* SE TIENE QUE VER. El tinte gris de antes lo dejaba en
+                       110 de brillo contra una pared de 127 —medido—: un 13%
+                       de contraste, o sea invisible. Te mataba algo que no
+                       llegabas a ver, y eso no es miedo, es un bug.
+
+                       El tinte ahora es claro, y sobre todo la malla lleva
+                       EMISIVO: un piso de brillo propio que no depende de
+                       ninguna luz. Es lo que hace que se lea igual contra una
+                       pared clara que en un pasillo negro — y un bicho al que
+                       tenés que ver venir necesita exactamente eso. */
                     const m = n.material;
-                    if (m && m.color) { m.color.setHex(0x6f7076); m.roughness = 1; }
-                    if (m && m.emissive) m.emissive.setHex(0x000000);
+                    if (m && m.color) { m.color.setHex(0xb4b0a6); m.roughness = 1; }
+                    if (m && m.emissive) {
+                        m.emissive.setHex(0x8d8474);
+                        m.emissiveIntensity = 1;
+                    }
                     n.frustumCulled = false;
                 });
                 this.giroModelo.add(o);
@@ -82,8 +91,8 @@ class Langosta {
 
         /* Un halo tenue: en un pasillo negro, sin esto aparece encima tuyo sin
            aviso y eso no asusta, enoja. Va BAJO, a la altura del pecho. */
-        this.luz = new THREE.PointLight(0x8ea4bc, 1.5, 7, 2);
-        this.luz.position.y = ALTO_BICHO * 0.45;
+        this.luz = new THREE.PointLight(0x9fb6cc, 3.4, 11, 1.8);
+        this.luz.position.y = ALTO_BICHO * 0.5;
         this.raiz.add(this.luz);
 
         /* Y una luz que le pega a la cara DESDE ABAJO. Es el truco mas viejo
@@ -92,7 +101,7 @@ class Langosta {
            mandibula tira sombra para arriba. */
         /* ROJA. En el juego se le describe siempre igual: "alto, delgado, de
            cara roja", y en la embestida la cara roja llena la pantalla. */
-        this.luzCara = new THREE.PointLight(0xff2a18, 3.4, 2.2, 2.2);
+        this.luzCara = new THREE.PointLight(0xff2a18, 4.2, 2.6, 2.0);
         this.luzCara.position.set(0, ALTO_BICHO * 0.80, -0.22);
         this.raiz.add(this.luzCara);
         escena.add(this.raiz);

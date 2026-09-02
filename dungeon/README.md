@@ -179,6 +179,27 @@ cabeza acompaña con retraso, que es lo que la hace parecer pesada.
 Medido sobre el archivo construido: el muslo va de +0,226 a −0,320, la rodilla
 llega a −0,822 y el codo a −0,235.
 
+#### Se tiene que ver
+
+Estuvo **invisible** y te mataba igual. No era que faltara dibujarlo: se midió
+y estaban las **13 mallas presentes, visibles, sin recorte de frustum y las 13
+proyectando dentro de la pantalla**. El problema era el contraste.
+
+| | brillo del bicho | brillo del fondo | contraste |
+|---|---|---|---|
+| antes | 110 | 127 | **0,87** |
+| ahora | 166 | 131 | **1,27** |
+
+Con 0,87 el bicho era un 13% **más oscuro** que la pared de atrás: a esa
+diferencia el ojo no lo separa del fondo. Lo tapaba el tinte gris que yo le
+había puesto para que no pareciera un juguete — funcionó demasiado bien.
+
+Lo que lo arregla es **emisivo**: un piso de brillo propio que no depende de
+ninguna luz de la escena. Es lo correcto para este bicho y no un parche: se
+lee igual contra una pared clara que en un pasillo negro, y algo que te tiene
+que ver venir necesita exactamente eso. El tinte además se aclaró, el halo
+pasó de 1,5 a 3,4 y la luz roja de la cara de 3,4 a 4,2.
+
 #### La cara
 
 La primera malla vino con **ojos de dibujito** —redondos, con esclerótica
