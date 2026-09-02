@@ -112,8 +112,12 @@ export const comandos = {
   estado: {
     descripcion: "Salud del bot: tiempo encendido y memoria",
     uso: "/estado",
-    ejecutar(_args, ctx) {
+    async ejecutar(_args, ctx) {
       const mem = process.memoryUsage().rss / 1024 / 1024;
+      const { activo } = await import("./ia.js");
+      let prov = null;
+      try { prov = activo(); } catch { prov = null; }
+      ctx.ia = prov ? `${prov.nombre} · ${prov.modelo}` : "apagada";
       return (
         "📊 *Estado*\n```\n" +
         tabla([
@@ -122,7 +126,7 @@ export const comandos = {
           ["Memoria", `${mem.toFixed(0)} MB`],
           ["Node", process.version],
           ["Proveedor", ctx.proveedor],
-          ["IA", process.env.ANTHROPIC_API_KEY ? "conectada" : "apagada"],
+          ["IA", ctx.ia || "apagada"],
         ]) +
         "\n```"
       );
@@ -130,33 +134,49 @@ export const comandos = {
   },
 
   ia: {
-    descripcion: "Le pregunta a Claude (necesita ANTHROPIC_API_KEY)",
+    descripcion: "Le pregunta a una IA (Groq, Gemini, Claude...)",
     uso: "/ia ¿por qué el cielo es azul?",
     async ejecutar(args) {
       if (!args) return "Escribe la pregunta.\nEjemplo: `/ia resume qué es una API`";
-      if (!process.env.ANTHROPIC_API_KEY) {
-        return "🔌 La IA está apagada.\nPon tu `ANTHROPIC_API_KEY` en el archivo `.env` y reinicia el bot.";
+      const { activo, preguntar } = await import("./ia.js");
+      if (!activo()) {
+        const { PROVEEDORES } = await import("./ia.js");
+        const opciones = Object.values(PROVEEDORES)
+          .filter((p) => p.clave !== "IA_API_KEY")
+          .map((p) => `• *${p.nombre}* — \`${p.clave}\``)
+          .join("\n");
+        return (
+          "🔌 La IA está apagada.\nPon *una* de estas claves en el archivo `.env`:\n\n" +
+          opciones +
+          "\n\nVarias son gratis. El bot detecta sola cuál pusiste."
+        );
       }
       try {
-        const { default: Anthropic } = await import("@anthropic-ai/sdk");
-        const cliente = new Anthropic();
-        const respuesta = await cliente.messages.create({
-          model: "claude-opus-5",
-          max_tokens: 1024,
-          system:
-            "Respondes dentro de WhatsApp. Sé breve y directo: máximo 6 líneas, " +
-            "sin encabezados ni listas largas. Usa *negrita* de WhatsApp si hace falta. " +
-            "Escribe en español neutro.",
-          messages: [{ role: "user", content: args }],
-        });
-        const texto = respuesta.content
-          .filter((b) => b.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim();
-        return texto || "La IA no devolvió texto.";
+        const { texto, prov } = await preguntar(args);
+        return `${texto}\n\n_— ${prov.nombre} · ${prov.modelo}_`;
       } catch (error) {
-        return `⚠️ La IA falló: ${error?.message || error}`;
+        return `⚠️ ${error?.message || error}`;
+      }
+    },
+  },
+
+  modelos: {
+    descripcion: "Lista los modelos del proveedor de IA activo",
+    uso: "/modelos",
+    async ejecutar() {
+      try {
+        const { listarModelos } = await import("./ia.js");
+        const { prov, modelos } = await listarModelos();
+        if (!modelos.length) return `${prov.nombre} no devolvió ningún modelo.`;
+        const lista = modelos.slice(0, 40).map((m) => `• \`${m}\``).join("\n");
+        const sobran = modelos.length > 40 ? `\n_…y ${modelos.length - 40} más._` : "";
+        return (
+          `🧠 *${prov.nombre}* — ${modelos.length} modelos\n` +
+          `Usando ahora: \`${prov.modelo}\`\n\n${lista}${sobran}\n\n` +
+          "_Cambia el que uses con `IA_MODELO=` en el `.env`._"
+        );
+      } catch (error) {
+        return `⚠️ ${error?.message || error}`;
       }
     },
   },

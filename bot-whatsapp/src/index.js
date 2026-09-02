@@ -1,14 +1,15 @@
 import "dotenv/config";
 
-const proveedor = (process.env.PROVEEDOR || "web").toLowerCase();
+const proveedor = (process.env.PROVEEDOR || "baileys").toLowerCase();
 
 const disponibles = {
+  baileys: () => import("./proveedores/baileys.js"),
   web: () => import("./proveedores/web.js"),
   cloud: () => import("./proveedores/cloud.js"),
 };
 
 if (!disponibles[proveedor]) {
-  console.error(`Proveedor desconocido: "${proveedor}". Usa "web" o "cloud".`);
+  console.error(`Proveedor desconocido: "${proveedor}". Usa "baileys", "web" o "cloud".`);
   process.exit(1);
 }
 

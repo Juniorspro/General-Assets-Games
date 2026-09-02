@@ -15,7 +15,7 @@ const ctx = {
 const sueltos = process.argv.slice(2);
 const bateria = sueltos.length
   ? [sueltos.join(" ")]
-  : ["/bot", "/ping", "/hora", "/eco hola mundo", "/dado 20", "/id", "/estado", "/noexiste", "hola"];
+  : ["/bot", "/ping", "/hora", "/eco hola mundo", "/dado 20", "/id", "/estado", "/ia hola", "/noexiste", "hola"];
 
 for (const texto of bateria) {
   const salida = await responder({ ...ctx, texto, recibidoEn: Date.now() });
