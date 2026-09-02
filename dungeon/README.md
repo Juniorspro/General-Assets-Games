@@ -224,6 +224,48 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## Que se vea: cuerpo oscuro, cara pálida
+
+Tercera vuelta con lo mismo —*"el monstruo es invisible"*— y esta vez el
+diagnóstico salió de medir, no de mirar.
+
+Las dos veces anteriores la causa fue otra: primero el emisivo, después el
+empaquetador que buscaba el modelo en la carpeta equivocada. Con el archivo ya
+cargando, quedó a la vista la de verdad: **el bicho era beige claro
+(`0xb4b0a6`) y la casa nueva tiene dos salas enteras de yeso blanco**. El tinte
+estaba elegido contra el laberinto oscuro de antes; contra una pared de yeso a
+siete metros el bicho y la pared daban el mismo brillo.
+
+Ahora es como se lo describe en todos lados —*muy alto, de miembros negros y
+delgados, con una cara pálida*—:
+
+- **cuerpo gris oscuro** (`0x2a2724`) con un piso de emisivo, no negro puro:
+  negro puro desaparecería en un pasillo apagado;
+- **cabeza clara** (`0xc9c2b2`) con su emisivo: es el ancla visual en la
+  oscuridad, y es lo que se ve primero cuando dobla una esquina;
+- **contorno**: una copia agrandada un 4,5% con las caras dadas vuelta, en
+  negro. Es lo que garantiza que recorte contra **cualquier** fondo.
+
+Para poder teñir la cabeza distinto del cuerpo hubo que arreglar algo del rig:
+**todos los huesos compartían el material de la malla original**, así que teñir
+uno teñía el bicho entero. Ahora cada hueso clona el suyo. Y se le saca el mapa
+de textura, porque el atlas de Tripo es beige y le ganaba al tinte.
+
+Medido con dos capturas idénticas, una con la malla y otra sin ella, restadas:
+
+| dónde | la silueta tapa un fondo de | y lo baja a | diferencia |
+|---|---|---|---|
+| pared de yeso blanco, 7 m | 140 | 85 | **55 niveles** |
+| pasillo iluminado, 7 m | 138 | 86 | **52 niveles** |
+| pasillo con las arañas apagadas | 135 | 64 | **71 niveles** |
+
+Y la cara pálida hace lo contrario donde hace falta: en el pasillo iluminado
+sube 1746 px de 145 a 187, y a oscuras de 66 a 126. Contra el 13 % de contraste
+que se midió la primera vez, esto se ve en las tres situaciones.
+
+En la embestida el contorno **se apaga**: a sesenta centímetros la silueta
+negra se comía la cara.
+
 ## La embestida
 
 Cuando te agarra, el juego original hace esto —sacado de mirar el momento del

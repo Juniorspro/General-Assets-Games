@@ -60,10 +60,30 @@ class Langosta {
                 if (!rig) return;
                 const o = rig.cont;
                 this.art = rig.grupos;
+                this.contornos = rig.contornos || [];
+                /* CUERPO OSCURO, CARA CLARA. Es como se describe al bicho en
+                   todos lados —"muy alto, de miembros negros y delgados, con
+                   una cara palida"— y ademas es lo unico que funciona en esta
+                   casa: antes era beige entero, y contra la pared de yeso
+                   blanco de la sala grande era literalmente invisible. Medido.
+
+                   El cuerpo no va a negro puro: va gris oscuro con un piso de
+                   emisivo, para que en un pasillo negro no se funda con el
+                   fondo. Lo que lo recorta contra el yeso es el contorno. */
+                const CUERPO = { c: 0x2a2724, e: 0x191614 };
+                const CARA = { c: 0xc9c2b2, e: 0x6e6558 };
+                for (const [hueso, malla] of Object.entries(rig.mallas || {})) {
+                    const t = hueso === 'cabeza' ? CARA : CUERPO;
+                    const m = malla.material;
+                    if (!m) continue;
+                    if (m.map) m.map = null;      // el atlas de Tripo es beige: tapa el tinte
+                    if (m.color) { m.color.setHex(t.c); m.roughness = 1; m.metalness = 0 }
+                    if (m.emissive) { m.emissive.setHex(t.e); m.emissiveIntensity = 1 }
+                }
                 o.traverse(n => {
                     if (!n.isMesh) return;
                     n.castShadow = true;
-                    if (n.material && n.material.isMeshBasicMaterial) return;  // las cuencas
+                    if (n.material && n.material.isMeshBasicMaterial) return;  // cuencas y contorno
                     /* SE TIENE QUE VER. El tinte gris de antes lo dejaba en
                        110 de brillo contra una pared de 127 —medido—: un 13%
                        de contraste, o sea invisible. Te mataba algo que no
@@ -74,12 +94,6 @@ class Langosta {
                        ninguna luz. Es lo que hace que se lea igual contra una
                        pared clara que en un pasillo negro — y un bicho al que
                        tenés que ver venir necesita exactamente eso. */
-                    const m = n.material;
-                    if (m && m.color) { m.color.setHex(0xb4b0a6); m.roughness = 1; }
-                    if (m && m.emissive) {
-                        m.emissive.setHex(0x8d8474);
-                        m.emissiveIntensity = 1;
-                    }
                     n.frustumCulled = false;
                 });
                 this.giroModelo.add(o);
@@ -121,6 +135,7 @@ class Langosta {
     caraRoja(on) {
         if (!this.modelo || this._rojo === on) return;
         this._rojo = on;
+        for (const co of this.contornos || []) co.visible = !on;   // a 60 cm estorba
         this.modelo.traverse(n => {
             if (!n.isMesh || !n.material || n.material.isMeshBasicMaterial) return;
             const m = n.material;

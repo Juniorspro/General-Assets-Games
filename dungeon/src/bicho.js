@@ -91,7 +91,7 @@ export function construirBicho(escena3d, alto) {
     }
 
     const piv = pivotes();
-    const grupos = {}, mallas = {};
+    const grupos = {}, mallas = {}, contornos = [];
     const raiz = new THREE.Group();
     for (const h of Object.keys(bolsas)) {
         const B = bolsas[h];
@@ -103,12 +103,28 @@ export function construirBicho(escena3d, alto) {
         const P = piv[h] || [0, 0, 0];
         // el pivote al origen: asi girar el grupo gira alrededor de la articulacion
         g.translate(-P[0], -P[1], -P[2]);
-        const m = new THREE.Mesh(g, fuente.material);
+        /* Material PROPIO por hueso. Antes todos compartian el material de la
+           malla original, asi que teñir la cabeza teñia el bicho entero y no
+           habia forma de que el cuerpo fuera oscuro y la cara clara. */
+        const m = new THREE.Mesh(g, fuente.material.clone());
         m.castShadow = true;
         const grupo = new THREE.Group();
         grupo.position.set(P[0], P[1], P[2]);
         grupo.add(m);
-        grupos[h] = grupo; mallas[h] = m;
+
+        /* CONTORNO: una copia agrandada con las caras dadas vuelta, en negro.
+           Es lo que garantiza que se vea contra CUALQUIER fondo: contra la
+           pared de yeso blanco de la sala grande recorta en negro, y contra un
+           pasillo oscuro le dibuja el borde. Sin esto, el bicho beige contra
+           una pared blanca es literalmente invisible — se midio. */
+        const gc = g.clone();
+        const co = new THREE.Mesh(gc, new THREE.MeshBasicMaterial({
+            color: 0x07080a, side: THREE.BackSide,
+        }));
+        co.scale.setScalar(1.045);
+        grupo.add(co);
+
+        grupos[h] = grupo; mallas[h] = m; contornos.push(co);
     }
     // colgar cada hueso de su padre, restando el pivote del padre
     for (const h of Object.keys(grupos)) {
@@ -160,5 +176,5 @@ export function construirBicho(escena3d, alto) {
 
     const cont = new THREE.Group();
     cont.add(raiz);
-    return { cont, grupos, huesos: Object.keys(bolsas) };
+    return { cont, grupos, mallas, contornos, huesos: Object.keys(bolsas) };
 }
