@@ -124,6 +124,77 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima tercera vuelta (2026-09-02): **LA CASA** — luz volumétrica, y un cono no puede serla
+
+Pedido: *"la luz de la linterna ilumina las sábanas o muebles de forma muy directa. Podrías añadir un
+efecto de volumetric lighting o polvo en suspensión más denso dentro del haz"*.
+
+#### EL POLVO YA ESTABA Y NO SERVÍA PARA NADA
+
+Mil cuarenta motas, con `PointsMaterial` — que **no recibe luz**. O sea que cada mota tenía el mismo
+brillo dentro del haz y a tres metros en la oscuridad, y eso no se lee a polvo en suspensión: se lee a
+manchitas pegadas encima de la imagen. Lo único que convierte una mota en polvo iluminado es que se
+**encienda al entrar en el cono**, y eso hay que calcularlo por mota: ángulo contra el eje de la
+linterna con penumbra, por la caída de la distancia. Va con `ShaderMaterial` propio, y **una mota en el
+haz se dibuja más grande y no sólo más clara**, que es lo que la hace leer a mota y no a píxel.
+
+**Y LA DERIVA PASA AL VERTEX SHADER.** Eran seis senos por mota en JavaScript, o sea que la densidad se
+pagaba en el hilo principal. Con la deriva en GLSL y el envoltorio por módulo alrededor de la cámara,
+agregar motas cuesta **cero** trabajo de JS.
+
+**LA DENSIDAD ES CANTIDAD SOBRE VOLUMEN, y lo que importa es la densidad DENTRO DEL CONO** — un volumen
+chico y pegado al jugador: a tres metros el cono mide unos 6 m³. Con las 760 motas originales
+repartidas en 14 × 2,6 × 14 —1,5 por m³— dentro del haz había **nueve motas**. De ahí que no se viera.
+
+#### UN CONO NO PUEDE SER UN HAZ VOLUMÉTRICO EN PRIMERA PERSONA
+
+Es el hallazgo de la vuelta. El haz era un `ConeGeometry` con un shader de `rim`, y lo rehice como una
+integral de grosor —`1 − r²` con r la distancia al eje— convencido de que ahí estaba el problema.
+Medido con una sonda nueva: el cono entero, con su perfil y su ruido, aportaba **+1,1 % de brillo y
+×1,01 en los brillos altos**. O sea nada.
+
+La razón es geométrica y no se arregla con ningún shader: **un cono es una SUPERFICIE, y visto desde su
+propio vértice —que es exactamente donde está el ojo— el rayo de visión sólo lo toca en el BORDE.** Toda
+la malla se proyecta como un anillo delgado a 25 grados del centro. El `1 − r²` se evalúa sobre la
+superficie, donde r vale 1 siempre, así que el perfil da cero justo donde tenía que dar el máximo.
+
+Lo que de verdad se ve mirando por el eje de una linterna es un **halo redondo centrado en el eje**, con
+vetas que se mueven. Eso es una **placa que mira a la cámara**, no un cono: un cuadrado a 0,35 m que
+abarca el mismo semiángulo. Con eso el aporte del haz pasó de +1,1 % a +61 %.
+
+#### Y LA OCLUSIÓN NO PUEDE SER BINARIA
+
+Con la placa a 1,05 m y prueba de profundidad, el aporte medido saltaba de **+68 % en un pasillo a
++0,1 % en un cuarto**: el efecto se prendía y se apagaba de golpe, que se ve peor que no tenerlo. El halo
+tiene que ser proporcional a **la columna de aire que la luz cruza**. Así que la placa va sin prueba de
+profundidad y la oclusión **se mide**: `aireLibre()` marcha por la lista de cajas de colisión —la misma
+contra la que choca el cuerpo— y devuelve a qué distancia hay pared. Cuesta **0,015 ms por cuadro** con
+94 cajas. Medido después, y ahora es proporcional: pasillo largo `den 0,93` → **+19 %**; cuarto 0,57 →
++5,7 %; sala 0,52 → +2,0 %.
+
+#### LA MEDICIÓN TUVO QUE ARREGLARSE DOS VECES ANTES DE MEDIR ALGO
+
+1. **La sonda se pisaba con el bucle.** Apagar el haz y el polvo una vez no sirve: `beam.visible` y la
+   rampa de `uI` se reescriben en **cada** cuadro. Hizo falta `POLVO_ON` — la misma lección que el
+   parpadeo de la fogata en LEMI y la cara en RECREO.
+2. **Y comparar dos capturas seguidas no mide nada en este juego.** Entre una y otra titila una bombilla,
+   salta el glitch de cinta y la batería de la linterna cae al azar: medido, el ruido entre dos cuadros
+   *iguales* mueve **más** píxeles (38 %) que el efecto (27 %), y con cuatro cuadros promediados el signo
+   se daba vuelta —el efecto salía "−16 %"—. `aporte()` dibuja **dos veces el mismo instante** (el bucle
+   no avanza dentro de la sonda) y resta. Recién ahí los números quieren decir algo.
+
+**Y LO QUE FALTABA EN EL POLVO ERA ÁREA EN PANTALLA, NO BRILLO.** Subiendo su ganancia: ×4 → +3,6 % ·
+×16 → +7,7 % · ×64 → +11,1 %, o sea que **satura**: los píxeles de las motas ya estaban al máximo y el
+techo lo ponía cuánta pantalla cubren. Las motas subieron de 0,019-0,030 m a 0,034-0,050.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+**3.340 motas** en cuatro campos (cuatro llamadas de dibujo), aporte **+12,3 %** de brillo medio y
+**×2,16** en los brillos altos, `aireLibre` en 0,015 ms por cuadro, 21 programas (sin cambio). Lienzo
+visible al 100 %, pantalla usada 1,000, render 1581×727, estiramiento 1,743, campo 111,1 × 67,67,
+linterna con desvío **0°** y el haz en **[0,0]** también girando 30 muestras, alabeo **0**, la mira en el
+centro exacto, HUD sin un solo solapamiento, 4 de 4 texturas, fusión estática idéntica, **cero errores**.
+
 ### Octogésima segunda vuelta (2026-09-02): **LA CASA** — el lienzo desbordaba su marco, y a dpr 1 eso es invisible
 
 Reporte, ya cansado, después de cinco vueltas mías: *"hermano que no ves que a vos sí te muestra bien

@@ -680,6 +680,25 @@ function wall(x1,z1,x2,z2,h,openings,mat,y0){
   seg(cur,L,0,h);
 }
 
+/* ══════════ CUANTO AIRE ILUMINADO HAY DELANTE ══════════
+   El halo del haz tiene que ser proporcional a la columna de aire que la luz
+   cruza: en un pasillo largo se ve, contra una pared a medio metro no hay nada
+   que iluminar. Con la placa a 0,35 m y prueba de profundidad, la oclusion es
+   binaria y SALTA —medido, el aporte pasaba de +68% en un pasillo a +0,1% en un
+   cuarto, o sea que el efecto se prendia y se apagaba—. Asi que la placa va sin
+   prueba de profundidad y la oclusion se MIDE: se marcha por la lista de cajas
+   de colision, que es lo mismo contra lo que choca el cuerpo. */
+function aireLibre(ox,oy,oz,dx,dy,dz,max){
+  const paso=0.28;
+  for(let t=paso;t<=max;t+=paso){
+    const x=ox+dx*t, y=oy+dy*t, z=oz+dz*t;
+    if(!inHouse(x,z)) return t;
+    for(let i=0;i<COL.length;i++){ const c=COL[i];
+      if(x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&y>c.y0&&y<c.y1) return t; }
+  }
+  return max;
+}
+
 /* ══════════ planta (idéntica a la versión anterior) ══════════ */
 const HX0=-8,HX1=8,HZ0=-6,HZ1=6;
 const HOLE={x0:-7.2,x1:-3.0,z0:-5.4,z1:-3.6};
@@ -1335,26 +1354,63 @@ const fill=new THREE.PointLight(0x1d3049,0.26,9,2); scene.add(fill);
 
 /* haz visible de la linterna */
 const BEAM=11;
+const TORCH_ANG=0.44;     // el mismo semiangulo que el cono de luz, con su margen
+/* ══════════ EL HAZ ES UNA COLUMNA, NO UN CONTORNO ══════════
+   El haz venia iluminado por `rim` —o sea 1-|dot(N,V)|, que es maximo en la
+   SILUETA del cono— asi que lo que se dibujaba era un tubo hueco: dos lineas
+   claras a los costados y nada en el medio. Eso no se lee a luz volumetrica,
+   se lee a un cono de alambre.
+   Lo que hace ver una columna de luz es el GROSOR de aire iluminado que el rayo
+   de vision cruza, y en un cono eso es maximo en el EJE y cero en el borde: un
+   perfil `1-r²` con r la distancia al eje en fracciones del radio local. Encima
+   la luz cae con la distancia y el aire no es homogeneo, asi que va multiplicado
+   por un ruido 3D que se mueve — ahi aparecen las vetas de polvo. */
+/* ══════════ Y NO PUEDE SER UN CONO ══════════
+   Un cono es una SUPERFICIE, y visto desde su propio vertice —que es justo donde
+   esta el ojo en primera persona— el rayo de vision solo lo toca en el BORDE:
+   toda la malla se proyecta como un anillo delgado a 25 grados del centro.
+   Medido con la sonda de aporte: el cono entero, con su perfil y su ruido,
+   sumaba **1,1% de brillo y x1,01 en los brillos altos**, o sea nada.
+   Lo que de verdad se ve mirando por el eje de una linterna en aire con polvo es
+   un HALO redondo centrado en el eje, con vetas que se mueven despacio. Eso es
+   una placa que mira a la camara, no un cono: un cuadrado a 1,05 m que abarca
+   exactamente el semiangulo del cono. Con prueba de profundidad puesta, asi que
+   pegado a una pared el halo desaparece. */
+const BEAM_D=0.35;
 const beam=new THREE.Mesh(
-  (()=>{const g=new THREE.ConeGeometry(Math.tan(0.44)*BEAM,BEAM,20,1,true);
-    g.rotateX(-Math.PI/2); g.translate(0,0,-BEAM/2); return g;})(),
+  new THREE.PlaneGeometry(Math.tan(TORCH_ANG)*BEAM_D*2,Math.tan(TORCH_ANG)*BEAM_D*2),
   new THREE.ShaderMaterial({
-    transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
-    side:THREE.DoubleSide,fog:false,
-    uniforms:{uI:{value:1.0}},
-    vertexShader:`varying vec3 vP;varying vec3 vN;varying vec3 vV;
-      void main(){vP=position;vec4 mv=modelViewMatrix*vec4(position,1.0);
-      vV=normalize(-mv.xyz);vN=normalize(normalMatrix*normal);
-      gl_Position=projectionMatrix*mv;}`,
-    fragmentShader:`varying vec3 vP;varying vec3 vN;varying vec3 vV;uniform float uI;
+    transparent:true,depthWrite:false,depthTest:false,
+    blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false,
+    uniforms:{uI:{value:1.0},uT:{value:0},uDen:{value:1.0}},
+    vertexShader:`varying vec2 vU;
+      void main(){vU=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`varying vec2 vU; uniform float uI,uT,uDen;
+      /* ruido de valor 3D, trilineal: ocho hashes por muestra y una muestra por
+         fragmento. Alcanza para vetas de polvo y no cuesta nada. */
+      float h31(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453123); }
+      float vn(vec3 p){
+        vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+        float a=mix(mix(mix(h31(i+vec3(0,0,0)),h31(i+vec3(1,0,0)),f.x),
+                        mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
+                    mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),
+                        mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z);
+        return a;
+      }
       void main(){
-        float t=clamp(1.0+vP.z/${BEAM}.0,0.0,1.0);
-        float rim=1.0-abs(dot(normalize(vN),normalize(vV)));
-        float a=pow(t,2.1)*pow(rim,1.3)*0.34*uI;
-        gl_FragColor=vec4(0.80,0.88,1.00,a);}`
+        /* distancia al eje del haz, 0 en el centro y 1 en el borde del cono */
+        vec2 c=vU-0.5; float r=clamp(length(c)*2.0,0.0,1.0);
+        /* el grosor de aire iluminado que cruza el rayo es maximo en el eje */
+        float perfil=pow(1.0-r*r,1.7);
+        /* vetas de polvo: dos escalas que se arrastran, en el marco del haz, asi
+           que giran con la vista igual que el aire iluminado */
+        vec3 q=vec3(c*5.5,uT*0.28);
+        float humo=0.46+0.72*vn(q)+0.30*vn(q*2.7+11.3);
+        float a=perfil*humo*0.13*uI*uDen;
+        gl_FragColor=vec4(0.82,0.89,1.00,clamp(a,0.0,1.0));}`
   }));
 beam.frustumCulled=false;
-beam.position.set(0,0,-0.14); beam.rotation.set(0,0,0);
+beam.position.set(0,0,-BEAM_D); beam.rotation.set(0,0,0);
 camera.add(beam);
 
 /* bombillas titilantes con halo */
@@ -2068,23 +2124,107 @@ const moteTex=(()=>{
   }));
   t.encoding=THREE.sRGBEncoding; return t;
 })();
+/* ══════════ EL POLVO REACCIONA AL HAZ ══════════
+   El polvo ya existia —mil motas— y no servia de nada: iba con `PointsMaterial`,
+   que NO RECIBE LUZ, asi que cada mota tenia el mismo brillo dentro del haz y a
+   tres metros en la oscuridad. Eso no se lee a polvo en suspension: se lee a
+   manchitas pegadas encima de la imagen.
+   Lo unico que convierte una mota en polvo iluminado es que se ENCIENDA cuando
+   entra en el cono, y eso hay que calcularlo por mota: angulo contra el eje de
+   la linterna, con penumbra, por la caida de la distancia. Fuera del cono queda
+   un resto minimo, que es lo que se ve de verdad en un cuarto a oscuras.
+
+   Y LA DERIVA PASA AL VERTEX SHADER. Antes eran seis senos por mota en
+   JavaScript, o sea que la densidad se pagaba en el hilo principal; con la
+   deriva en GLSL y el envoltorio por modulo alrededor de la camara, agregar
+   motas cuesta CERO trabajo de JS — y por eso se puede triplicar la densidad. */
 const dustFields=[];
-function dustField(n,size,op,rise,spread){
+const dustMat=[];
+const _pLuz=new THREE.Vector3(), _dLuz=new THREE.Vector3(), _vTam=new THREE.Vector2();
+let _motas=0;
+/* POLVO_ON: null = lo maneja el juego. La sonda tiene que poder APAGARLO para
+   comparar el mismo cuadro con y sin polvo, y sin esto no puede: el bucle
+   reescribe beam.visible y rampa uI en CADA cuadro, asi que un apagado de una
+   sola vez se deshace al cuadro siguiente. Es la misma leccion que el parpadeo
+   de la fogata en LEMI. */
+let POLVO_ON=null;
+function dustField(n,size,op,rise,spread,alto){
+  alto=alto||2.9;
   const a=new Float32Array(n*3);
   for(let i=0;i<n;i++){
-    a[i*3]=rnd(-spread,spread); a[i*3+1]=rnd(0,2.6); a[i*3+2]=rnd(-spread,spread);
+    a[i*3]=rnd(-spread,spread); a[i*3+1]=rnd(-alto/2,alto/2); a[i*3+2]=rnd(-spread,spread);
   }
   const geo=new THREE.BufferGeometry();
+  /* la semilla ES `position`: el vertex shader la lee de ahi y no hay dos
+     atributos apuntando al mismo buffer */
   geo.setAttribute('position',new THREE.BufferAttribute(a,3));
-  const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:moteTex,color:0xe8dcc0,
-    size,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending,
-    sizeAttenuation:true}));
+  const mat=new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false,
+    uniforms:{
+      uMapa:{value:moteTex}, uT:{value:0}, uOp:{value:op}, uI:{value:1},
+      uCam:{value:new THREE.Vector3()}, uLPos:{value:new THREE.Vector3()},
+      uLDir:{value:new THREE.Vector3(0,0,-1)},
+      uCos:{value:Math.cos(TORCH_ANG)}, uEsc:{value:300},
+      uTam:{value:size}, uCaja:{value:new THREE.Vector3(spread*2,alto,spread*2)},
+      uSube:{value:rise}
+    },
+    vertexShader:`
+      uniform float uT,uOp,uI,uCos,uEsc,uTam,uSube;
+      uniform vec3 uCam,uLPos,uLDir,uCaja;
+      varying float vB;
+      void main(){
+        /* deriva: dos senos por eje, de periodos que no son multiplos entre si,
+           asi que el remolino no se repite igual nunca */
+        vec3 p=position;
+        p.x+=sin(uT*0.37+position.z*3.1)*0.20+sin(uT*0.11+position.y*2.0)*0.09;
+        p.y+=sin(uT*0.23+position.x*2.7)*0.12+uT*uSube;
+        p.z+=cos(uT*0.31+position.x*3.4)*0.20+cos(uT*0.09+position.y*1.7)*0.09;
+        /* el polvo SIEMPRE rodea al jugador: se envuelve por modulo alrededor de
+           la camara, asi que nunca se agota ni queda atras */
+        p=mod(p-uCam+uCaja*0.5,uCaja)-uCaja*0.5+uCam;
+        /* cuanto la enciende la linterna */
+        vec3 h=p-uLPos; float d=length(h);
+        float ca=dot(h/max(d,1e-4),uLDir);
+        float cono=smoothstep(uCos-0.02,uCos+0.20,ca);
+        float caida=1.0/(1.0+0.30*d*d);
+        vB=uOp*(0.11+6.2*cono*caida*uI);
+        vec4 mv=modelViewMatrix*vec4(p,1.0);
+        /* una mota en el haz se ve mas GRANDE, no solo mas clara: es lo que hace
+           que se lea a mota de polvo brillando y no a pixel encendido */
+        gl_PointSize=uTam*(1.0+1.3*cono*uI)*(uEsc/max(-mv.z,0.05));
+        gl_Position=projectionMatrix*mv;
+      }`,
+    fragmentShader:`
+      uniform sampler2D uMapa; varying float vB;
+      void main(){
+        float m=texture2D(uMapa,gl_PointCoord).a;
+        /* con mezcla aditiva el aporte es rgb*a: el brillo va en el color —que
+           puede pasar de 1 y sumar— y el alfa es solo la forma redonda de la
+           mota. Metiendo vB en los dos, el aporte saldria al CUADRADO. */
+        gl_FragColor=vec4(vec3(0.91,0.86,0.75)*clamp(vB,0.0,3.0),m);
+      }`
+  });
+  const pts=new THREE.Points(geo,mat);
   pts.frustumCulled=false; scene.add(pts);
-  dustFields.push({geo,arr:a,n,rise,spread,mat:pts.material,base:op});
+  dustFields.push({mat,base:op}); _motas+=n;
+  dustMat.push(mat);
 }
-dustField(760,0.030,0.55,0.0022,7);   // motas finas
-dustField(190,0.075,0.30,0.0011,6);   // pelusas más grandes
-dustField(90 ,0.150,0.13,0.0006,5);   // hilachas que flotan cerca
+/* LA DENSIDAD ES CANTIDAD SOBRE VOLUMEN, no cantidad, y lo que importa es la
+   densidad DENTRO DEL CONO, que es un volumen chico y pegado al jugador: a tres
+   metros el cono mide unos 6 m3. Con las 760 motas originales repartidas en
+   14x2,6x14 —1,5 por m3— dentro del haz habia NUEVE motas. De ahi que no se
+   leyera a polvo en suspension.
+   Y como la deriva ahora la hace la GPU, subir la cantidad no cuesta un solo
+   ciclo de JavaScript: lo unico que se paga son vertices. */
+/* Y LO QUE FALTABA ERA AREA EN PANTALLA, NO BRILLO. Medido subiendo la ganancia
+   del polvo: x4 -> +3,6% · x16 -> +7,7% · x64 -> +11,1%, o sea que SATURA: los
+   pixeles de las motas ya estaban al maximo y el techo lo ponia cuanta pantalla
+   cubren. Con 0,019 m a un metro una mota mide 16 px en el telefono y 6 en el
+   banco — una mota de polvo iluminada se ve, no se adivina. */
+dustField(1200,0.050,0.52,0.022,5.5);       // motas finas, todo el cuarto
+dustField(1800,0.034,0.40,0.014,3.0,2.6);   // EL POLVILLO DEL HAZ
+dustField(230 ,0.075,0.30,0.011 ,6);        // pelusas mas grandes
+dustField(110 ,0.150,0.13,0.006 ,5);        // hilachas que flotan cerca
 
 /* ══════════ audio ══════════ */
 let A=null;
@@ -3020,8 +3160,16 @@ function tick(){
   const bat=1-0.15*Math.max(0,Math.sin(T*0.29))-(Math.random()<0.0035?0.65:0);
   const lit=(torchOn&&!torchCut)||state==='menu';
   torch.intensity=lit?3.9*bat:0;
-  beam.visible=lit;
-  if(lit){ beam.material.uniforms.uI.value=bat*(inHouse(P.x,P.z)?1:0.6); }
+  beam.visible=lit&&(POLVO_ON!==false);
+  if(lit){ const bu=beam.material.uniforms;
+    bu.uI.value=bat*(inHouse(P.x,P.z)?1:0.6);
+    bu.uT.value=T;
+    /* adentro el aire tiene polvo; afuera, a la intemperie, casi nada. Y por
+       encima de eso, cuanta columna de aire iluminado hay delante de verdad. */
+    const aire=aireLibre(camera.position.x,camera.position.y,camera.position.z,
+                         tDir.x,tDir.y,tDir.z,5.6);
+    const meta=(inHouse(P.x,P.z)?1.0:0.34)*(0.10+0.90*Math.min(1,Math.max(0,(aire-0.45)/2.3)));
+    bu.uDen.value+=(meta-bu.uDen.value)*Math.min(dt*2.2,1); }
   halo.position.copy(camera.position);
   halo.intensity=(reading?0.85:(lit?0.40*bat:0.14));
   halo.distance=reading?2.2:4.0;
@@ -3098,21 +3246,27 @@ function tick(){
   for(const w of sway) w.o.rotation.z=w.base+Math.sin(T*w.sp+w.ph)*w.amp;
   shaftMat.uniforms.uT.value=T;
 
-  /* polvo: remolinos lentos, más denso adentro */
+  /* POLVO: la deriva la hace el vertex shader, aca solo viajan siete numeros.
+     Antes eran seis senos por mota en JavaScript. */
   const insideNow=inHouse(P.x,P.z);
-  for(const f of dustFields){
-    const da=f.arr, sp=f.spread;
-    for(let i=0;i<f.n;i++){
-      const o=i*3;
-      da[o]  +=Math.sin(T*.37+i*1.7)*.0019+Math.sin(T*.11+i)*.0008;
-      da[o+1]+=f.rise*(0.7+0.6*Math.sin(T*.5+i));
-      da[o+2]+=Math.cos(T*.31+i*2.1)*.0019+Math.cos(T*.09+i)*.0008;
-      if(da[o+1]>camera.position.y+2.1) da[o+1]=camera.position.y-1.5;
-      if(Math.abs(da[o]-camera.position.x)>sp) da[o]=camera.position.x+rnd(-sp*.85,sp*.85);
-      if(Math.abs(da[o+2]-camera.position.z)>sp) da[o+2]=camera.position.z+rnd(-sp*.85,sp*.85);
+  {
+    const lp=_pLuz, ld=_dLuz;
+    torch.getWorldPosition(lp);
+    torch.target.getWorldPosition(ld); ld.sub(lp).normalize();
+    const encendida=(torchOn&&!torchCut)||state==='menu';
+    for(const m of dustMat){
+      const u=m.uniforms;
+      u.uT.value=T;
+      u.uCam.value.copy(camera.position);
+      u.uLPos.value.copy(lp); u.uLDir.value.copy(ld);
+      u.uEsc.value=renderer.getDrawingBufferSize(_vTam).y*0.5;
+      const meta=(POLVO_ON===null?(encendida?bat:0):(POLVO_ON?bat:0));
+      u.uI.value+=(meta-u.uI.value)*Math.min(dt*6,1);
     }
-    f.geo.attributes.position.needsUpdate=true;
-    f.mat.opacity+=((insideNow?f.base:f.base*0.28)-f.mat.opacity)*Math.min(dt*1.5,1);
+    for(const f of dustFields){
+      const o=f.mat.uniforms.uOp;
+      o.value+=((insideNow?f.base:f.base*0.30)-o.value)*Math.min(dt*1.5,1);
+    }
   }
 
   /* mezcla del ambiente según dónde esté el jugador */
@@ -3345,6 +3499,74 @@ window.__casa={
     return {res:[w,h], brillo_max:+mx.toFixed(1), pixeles:n,
             pico:[fx(bx/w), fx(1-by/h)],
             centro:[fx((sx/n)/w), fx(1-(sy/n)/h)]};
+  },
+  /* CUANTO APORTAN EL HAZ Y EL POLVO, medido sobre EL MISMO CUADRO.
+     Comparar dos capturas seguidas no sirve: entre una y otra titila una
+     bombilla, salta el glitch de cinta y la bateria de la linterna cae al azar,
+     y esa varianza se come la señal —medido, el ruido entre dos cuadros iguales
+     mueve mas pixeles que el efecto—. Aca se dibuja dos veces el MISMO instante
+     (el bucle no avanza dentro de la sonda) y se restan. */
+  aporte(g,soloHaz,soloPolvo){
+    g=(g===undefined?1:g);
+    const prev=POLVO_ON, vis=beam.visible;
+    const ui=dustMat.map(m=>m.uniforms.uI.value);
+    const op=dustMat.map(m=>m.uniforms.uOp.value);
+    const w=rt.width,h=rt.height,buf=new Uint8Array(w*h*4);
+    const lee=()=>{
+      renderer.setRenderTarget(rt); renderer.render(scene,camera);
+      renderer.readRenderTargetPixels(rt,0,0,w,h,buf);
+      renderer.setRenderTarget(null);
+      let sum=0,alto=0;
+      for(let i=0;i<w*h;i++){
+        const l=0.299*buf[i*4]+0.587*buf[i*4+1]+0.114*buf[i*4+2];
+        sum+=l; if(l>100) alto++;
+      }
+      return {medio:sum/(w*h), altos:100*alto/(w*h)};
+    };
+    beam.visible=false; for(const m of dustMat) m.uniforms.uI.value=0;
+    const sin=lee();
+    beam.visible=!soloPolvo;
+    for(let i=0;i<dustMat.length;i++){
+      dustMat[i].uniforms.uI.value=soloHaz?0:1;
+      dustMat[i].uniforms.uOp.value=op[i]*g;
+    }
+    const con=lee();
+    beam.visible=vis;
+    dustMat.forEach((m,i)=>{m.uniforms.uI.value=ui[i]; m.uniforms.uOp.value=op[i];});
+    POLVO_ON=prev;
+    return {res:[w,h], motas:_motas, ganancia:g,
+            que:soloHaz?'solo el haz':(soloPolvo?'solo el polvo':'los dos'),
+            sin:{medio:+sin.medio.toFixed(3), altos:+sin.altos.toFixed(3)},
+            con:{medio:+con.medio.toFixed(3), altos:+con.altos.toFixed(3)},
+            aporte_niveles:+(con.medio-sin.medio).toFixed(3),
+            aporte_pct:+(100*(con.medio/Math.max(sin.medio,1e-6)-1)).toFixed(1),
+            altos_x:+(con.altos/Math.max(sin.altos,1e-6)).toFixed(2)};
+  },
+  /* el haz y el polvo: cuantas motas hay, en que caja, y con que fuerza las
+     enciende la linterna. Se puede apagar todo para comparar el mismo cuadro. */
+  polvo(on){
+    if(on!==undefined){ POLVO_ON=(on===null?null:!!on);
+      if(POLVO_ON===false){ beam.visible=false;
+        for(const m of dustMat) m.uniforms.uI.value=0; } }
+    const R=[];
+    for(const m of dustMat){ const u=m.uniforms;
+      const c=u.uCaja.value, n=c.x*c.y*c.z;
+      R.push({op:+u.uOp.value.toFixed(3), i:+u.uI.value.toFixed(3),
+              tam:u.uTam.value, caja:[+c.x.toFixed(1),+c.y.toFixed(1),+c.z.toFixed(1)],
+              m3:+n.toFixed(0)}); }
+    /* lo que cuesta medir el aire libre, que es lo unico que este efecto le
+       saca al hilo principal: la deriva del polvo la hace la GPU */
+    camera.getWorldDirection(_dLuz);
+    const t0=performance.now();
+    let aire=0; for(let k=0;k<300;k++) aire=aireLibre(camera.position.x,camera.position.y,
+      camera.position.z,_dLuz.x,_dLuz.y,_dLuz.z,5.6);
+    const msAire=(performance.now()-t0)/300;
+    return {campos:R, motas:_motas, cajas_colision:COL.length,
+            aire_m:+aire.toFixed(2), ms_aire_por_cuadro:+msAire.toFixed(4),
+            puntos_dibujados:dustMat.length, haz:beam.visible,
+            haz_i:+beam.material.uniforms.uI.value.toFixed(3),
+            haz_den:+beam.material.uniforms.uDen.value.toFixed(3),
+            angulo_grados:+(TORCH_ANG*180/Math.PI).toFixed(1)};
   },
   escombros(){ return {piezas:_escombros.n,
       ladeo_medio:+(_escombros.suma/Math.max(_escombros.n,1)).toFixed(4),
