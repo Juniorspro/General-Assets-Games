@@ -4,16 +4,19 @@ import base64, json, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME = os.path.dirname(HERE)
-DIST = os.path.join(GAME, "assets", "dist")
+# Las texturas viven DENTRO del repo, no en una carpeta de trabajo de al lado:
+# si no, un clon limpio no puede reconstruir el juego. assets/dist queda como
+# alternativa para las que todavia se generan afuera.
+DIST = os.path.join(HERE, "texturas")
+DIST_ALT = os.path.join(GAME, "assets", "dist")
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/user/General-Assets-Games/elplano.html"
 
-# El look sale de las capturas de partida del juego original: papel damasco
-# VERDE arriba del listel, zocalo crema abajo, techo de tablas de pino y
-# alfombra bordo. El rojo de antes era de otro juego.
+# El look sale de las capturas: papel damasco VERDE, cornisa crema, y tablas
+# para la veta del zocalo naranja. La alfombra roja ya no es un archivo — se
+# dibuja en un canvas al arrancar, junto con el yeso y el hormigon (deco.js).
 ASSETS = {
     "paper":    ("papel_verde.webp",  "image/webp"),
     "wainscot": ("wainscot.webp",     "image/webp"),
-    "floor":    ("alfombra.webp",     "image/webp"),
     "ceil":     ("techo_tablas.webp", "image/webp"),
 }
 
@@ -25,8 +28,13 @@ MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon"
 MUE_DIR = os.path.join(HERE, "muebles", "hd")
 
 
+def ruta_tex(name):
+    p = os.path.join(DIST, name)
+    return p if os.path.exists(p) else os.path.join(DIST_ALT, name)
+
+
 def durl(name, mime):
-    with open(os.path.join(DIST, name), "rb") as f:
+    with open(ruta_tex(name), "rb") as f:
         return "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode())
 
 
@@ -45,7 +53,7 @@ def main():
     ], check=True, cwd=GAME)
     bundle = open(bundle_path, encoding="utf-8").read()
 
-    missing = [n for n, (f, _) in ASSETS.items() if not os.path.exists(os.path.join(DIST, f))]
+    missing = [n for n, (f, _) in ASSETS.items() if not os.path.exists(ruta_tex(f))]
     if missing:
         raise SystemExit("faltan assets: %s" % ", ".join(missing))
 

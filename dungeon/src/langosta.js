@@ -20,6 +20,7 @@ import { CLIPS } from './animdata.js';
 import * as S from './sonido.js';
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
+    SALAS, salaPorId, salaEn, centroSala,
 } from './map.js';
 
 const COLORES = [
@@ -221,6 +222,19 @@ export class Mision {
 
     celdaAlAzar() { return this.celdasLibres[this.rng.int(0, this.celdasLibres.length - 1)] }
 
+    /* Una celda de la sala que no sea el centro y que este libre de verdad. */
+    rincon(sala) {
+        const cc = sala.c + (sala.w >> 1), cr = sala.r + (sala.h >> 1);
+        const cand = [];
+        for (let r = sala.r; r < sala.r + sala.h; r++)
+            for (let c = sala.c; c < sala.c + sala.w; c++) {
+                if (c === cc && r === cr) continue;
+                if (!isOpen(NIVEL, c, r) || isStairCell(c, r)) continue;
+                cand.push([c, r]);
+            }
+        return cand.length ? cand[this.rng.int(0, cand.length - 1)] : [cc, cr];
+    }
+
     lejosDe(x, z) {
         let mejor = this.celdaAlAzar(), d = -1;
         for (let i = 0; i < 40; i++) {
@@ -231,27 +245,22 @@ export class Mision {
         return mejor;
     }
 
-    /* Un cuarto con 3x3 celdas abiertas: ahi van las TRES baldosas juntas y la
-       trampilla del techo. En el juego original es una sola "colored-pad room",
-       no tres baldosas desparramadas por la casa — desparramadas, el juego es
-       caminar, y juntas es un rompecabezas. */
+    /* La sala de las baldosas ya NO se busca: esta escrita en el mapa. Es la
+       sala 'pads' —yeso blanco con tachas, siete por cinco celdas, vacia— y
+       las tres baldosas van en fila en el medio, como en la foto del juego
+       original, donde estan las tres pegadas contra la pared del fondo. */
     salaDePads() {
-        const cand = [];
-        for (let r = 3; r < H - 3; r++) {
-            for (let c = 3; c < W - 3; c++) {
-                let libre = true;
-                for (let dr = -1; dr <= 1 && libre; dr++)
-                    for (let dc = -1; dc <= 1; dc++)
-                        if (!isOpen(NIVEL, c + dc, r + dr) || isStairCell(c + dc, r + dr)) { libre = false; break }
-                if (libre) cand.push([c, r]);
-            }
-        }
-        return cand.length ? cand[this.rng.int(0, cand.length - 1)] : this.celdaAlAzar();
+        const s = salaPorId(NIVEL, 'pads');
+        return s ? centroSala(s) : this.celdaAlAzar();
     }
 
     armarCubos() {
         this.cubos = []; this.baldosas = [];
-        const geo = new THREE.BoxGeometry(.34, .34, .34);
+        /* El cubo del juego original NO es un dado: es un bloque de un metro
+           que brilla entero, tapa medio pasillo y hay que empujarlo. Medido
+           contra el personaje en la captura de la biblioteca da 1,1 m. */
+        const LADO = 1.05;
+        const geo = new THREE.BoxGeometry(LADO, LADO, LADO);
         /* Rectangulo plano pintado en el piso, como en el juego: un disco que
            brilla parece un objeto, y esto es una marca. */
         const marca = new THREE.PlaneGeometry(1.25, .80);
@@ -259,18 +268,32 @@ export class Mision {
 
         const [sc, sr] = this.salaDePads();
         this.salaPads = [sc, sr];
-        this.forrarSala(sc, sr);
         const fila = [[-1, 0], [0, 0], [1, 0]];
 
+        /* Un cubo por sala con nombre, no tres celdas al azar: en el original
+           cada bloque esta en un cuarto que se reconoce —la biblioteca, el
+           deposito, el cuarto— y buscarlos es recorrer la casa, no barrer un
+           laberinto celda por celda. */
+        const cunas = ['biblioteca', 'deposito', 'dormitorio', 'comedor', 'vestibulo']
+            .map(id => salaPorId(NIVEL, id)).filter(Boolean);
         COLORES.forEach((col, i) => {
             const m = new THREE.MeshStandardMaterial({
-                color: col.hex, roughness: .55, emissive: col.hex, emissiveIntensity: .30,
+                color: col.hex, roughness: .5, emissive: col.hex, emissiveIntensity: 1.15,
             });
-            // los cubos SI van desparramados: buscarlos es medio juego
-            const c = this.celdaAlAzar(), [x, z] = toWorld(c[0], c[1]);
+            const cuna = cunas[i % cunas.length];
+            /* Adentro pero NO en el centro: el centro es donde caes cuando
+               entras y donde va el mueble grande de la sala, asi que ahi el
+               bloque queda encima tuyo o encima de un sillon. */
+            const c = cuna ? this.rincon(cuna) : this.celdaAlAzar();
+            const [x, z] = toWorld(c[0], c[1]);
             const cubo = new THREE.Mesh(geo, m);
-            cubo.position.set(x, this.base + .20, z);
+            cubo.position.set(x, this.base + LADO / 2, z);
             cubo.castShadow = true;
+            // el bloque se ve de lejos porque tira luz propia, como en el juego
+            const luzCubo = new THREE.PointLight(col.hex, 2.6, 6.5, 2);
+            luzCubo.position.set(x, this.base + LADO, z);
+            this.grupo.add(luzCubo);
+            cubo.userData.luz = luzCubo;
             this.grupo.add(cubo);
             this.cubos.push({ ...col, obj: cubo, mat: m, puesto: false });
 
@@ -317,65 +340,67 @@ export class Mision {
         this.sogaPos = [sx, sz];
     }
 
-    /* La sala de las baldosas es de HORMIGON claro, no empapelada: en el juego
-       original es lo unico que rompe con los pasillos verdes, y por eso se
-       reconoce de lejos y funciona como punto de referencia en un laberinto.
-       Se forra por dentro con un cascaron: sale mas barato que meter mano en
-       el generador del nivel y no puede romper el laberinto. */
-    forrarSala(sc, sr) {
-        const g = new THREE.Group();
-        const mat = new THREE.MeshStandardMaterial({ color: 0xb9b3a6, roughness: .95 });
-        const piso = new THREE.MeshStandardMaterial({ color: 0x8e8a80, roughness: .96 });
-        const R = 1;                      // radio en celdas: 3x3
-        const [x0, z0] = toWorld(sc - R, sr - R);
-        const [x1, z1] = toWorld(sc + R, sr + R);
-        const ax = x1 - x0 + CELL, az = z1 - z0 + CELL;
-        const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-        const alto = WALL_H - 0.02;
-        const eps = 0.03;
-
-        const suelo = new THREE.Mesh(new THREE.PlaneGeometry(ax, az), piso);
-        suelo.rotation.x = -Math.PI / 2;
-        suelo.position.set(cx, this.base + 0.014, cz);
-        suelo.receiveShadow = true;
-        g.add(suelo);
-        const techo = new THREE.Mesh(new THREE.PlaneGeometry(ax, az), mat);
-        techo.rotation.x = Math.PI / 2;
-        techo.position.set(cx, this.base + WALL_H - 0.01, cz);
-        g.add(techo);
-
-        for (const [dx, dz, an] of [[0, -1, ax], [0, 1, ax], [-1, 0, az], [1, 0, az]]) {
-            const m = new THREE.Mesh(new THREE.PlaneGeometry(an, alto), mat);
-            m.position.set(cx + dx * (ax / 2 - eps), this.base + alto / 2, cz + dz * (az / 2 - eps));
-            m.rotation.y = dx ? -dx * Math.PI / 2 : (dz > 0 ? Math.PI : 0);
-            m.receiveShadow = true;
-            g.add(m);
+    armarSalida() {
+        /* La puerta ya no cae en la celda mas lejana al azar: va en la sala
+           'salida'. En el juego original la salida es una DOBLE PUERTA GRIS
+           con un cartel verde de EXIT encima, al final de un pasillo blanco —
+           no una hoja verde brillando en cualquier pared. */
+        const sala = salaPorId(NIVEL, 'salida');
+        let c;
+        if (sala) {
+            // contra la pared del fondo de la sala, centrada
+            c = [sala.c + (sala.w >> 1), sala.r + sala.h - 1];
+            if (!isOpen(NIVEL, c[0], c[1])) c = centroSala(sala);
+        } else {
+            c = this.lejosDe(this.origen.x, this.origen.z);
         }
+        const [x, z] = toWorld(c[0], c[1]);
+        this.salida = { x, z, abierta: false };
+
+        const gris = new THREE.MeshStandardMaterial({ color: 0x8e9095, roughness: .55, metalness: .25 });
+        const grisOsc = new THREE.MeshStandardMaterial({ color: 0x5c5f63, roughness: .6, metalness: .3 });
+        const g = new THREE.Group();
+        g.position.set(x, this.base, z);
+        /* Que mire al cuarto: la hoja se apoya contra la pared que tenga
+           detras. Sin esto la puerta siempre miraba a +Z y desde adentro se
+           veia el dorso gris con el cartel del otro lado. */
+        const atras = [[0, 1], [0, -1], [1, 0], [-1, 0]]
+            .find(([dc, dr]) => !isOpen(NIVEL, c[0] - dc, c[1] - dr)) || [0, 1];
+        g.rotation.y = Math.atan2(atras[0], atras[1]);
+
+        // el marco, mas ancho que la hoja: es lo que da el portal
+        const marco = new THREE.Mesh(new THREE.BoxGeometry(2.06, 2.72, .16), grisOsc);
+        marco.position.y = 1.36;
+        g.add(marco);
+        // las DOS hojas, con su junta al medio y su barral horizontal
+        this.hojasSalida = [];
+        for (const sg of [-1, 1]) {
+            const hoja = new THREE.Mesh(new THREE.BoxGeometry(0.92, 2.44, .09), gris);
+            hoja.position.set(sg * 0.475, 1.24, .10);
+            hoja.castShadow = true;
+            g.add(hoja);
+            const barra = new THREE.Mesh(new THREE.BoxGeometry(0.72, .07, .07),
+                new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: .35, metalness: .7 }));
+            barra.position.set(sg * 0.475, 1.05, .17);
+            g.add(barra);
+            this.hojasSalida.push(hoja);
+        }
+        this.hojaSalida = this.hojasSalida[0];
+
+        /* El cartel: caja verde encima del marco, encendida. Es lo unico verde
+           del mapa, asi que se lee desde el otro lado del pasillo. */
+        const cartel = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.30, .07),
+            new THREE.MeshStandardMaterial({
+                color: 0x25aa4e, roughness: .5, emissive: 0x2fdd6a, emissiveIntensity: 1.5,
+            }));
+        cartel.position.set(0, 2.92, .12);
+        g.add(cartel);
+        const L = new THREE.PointLight(0x53ff92, 5.5, 9, 2);
+        L.position.set(0, 2.6, .6);
+        g.add(L);
+        this.luzSalida = L;
         this.grupo.add(g);
     }
-
-    armarSalida() {
-        const c = this.lejosDe(this.origen.x, this.origen.z), [x, z] = toWorld(c[0], c[1]);
-        this.salida = { x, z, abierta: false };
-        const marco = new THREE.Mesh(
-            new THREE.BoxGeometry(1.5, 2.4, .18),
-            new THREE.MeshStandardMaterial({ color: 0x18301c, roughness: .8 }));
-        marco.position.set(x, this.base + 1.2, z);
-        this.grupo.add(marco);
-        const hoja = new THREE.Mesh(
-            new THREE.BoxGeometry(1.16, 2.1, .10),
-            new THREE.MeshStandardMaterial({
-                color: 0x2f8f4a, roughness: .55, emissive: 0x1c7a3a, emissiveIntensity: .7,
-            }));
-        hoja.position.set(x, this.base + 1.05, z + .1);
-        this.grupo.add(hoja);
-        this.hojaSalida = hoja;
-        const L = new THREE.PointLight(0x53ff92, 5.5, 9, 2);
-        L.position.set(x, this.base + 1.6, z + .6);
-        this.grupo.add(L);
-        this.luzSalida = L;
-    }
-
     /* La llave vive en uno de los muebles revisables, elegido al azar entre los
        que quedaron colocados: por eso se elige DESPUES de poblar el nivel. */
     esconderLlave(revisables) {
@@ -451,7 +476,8 @@ export class Mision {
             S.click(0.2);
         } else if (o.tipo === 'poner') {
             const c = this.empujando, b = this.baldosas.find(b => b.id === c.id);
-            c.obj.position.set(b.x, this.base + .18, b.z);
+            c.obj.position.set(b.x, this.base + 0.53, b.z);
+            if (c.obj.userData.luz) c.obj.userData.luz.position.set(b.x, this.base + 1.05, b.z);
             c.puesto = true;
             c.mat.emissiveIntensity = .9;
             this.empujando = null;
@@ -537,7 +563,8 @@ export class Mision {
         if (this.empujando) {
             const c = this.empujando.obj;
             const fx = -Math.sin(jug.yaw || 0), fz = -Math.cos(jug.yaw || 0);
-            c.position.set(jug.x + fx * 0.62, this.base + 0.17, jug.z + fz * 0.62);
+            c.position.set(jug.x + fx * 0.95, this.base + 0.53, jug.z + fz * 0.95);
+            if (c.userData.luz) c.userData.luz.position.set(c.position.x, this.base + 1.05, c.position.z);
             const mov = Math.hypot(jug.x - (this._px ?? jug.x), jug.z - (this._pz ?? jug.z));
             this._raspa = (this._raspa || 0) + mov;
             if (this._raspa > 0.55) { this._raspa = 0; S.arrastre(0.16) }
@@ -655,7 +682,7 @@ export class Mision {
 
         if (this.salida.abierta) {
             this.luzSalida.intensity = 14;
-            this.hojaSalida.visible = false;
+            for (const h of this.hojasSalida) h.visible = false;   // se abren las dos
         }
     }
 

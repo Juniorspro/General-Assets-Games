@@ -80,48 +80,116 @@ function rotate90(g) {
     return out;
 }
 
-/* Cada nivel: laberinto + sus salas grandes propias. */
+/* Cada nivel: laberinto + sus salas grandes propias. Las salas se recortan
+   DESPUES de rotar para que sus coordenadas sean las mismas que usa todo el
+   resto del juego: si se recortaran antes, la lista de salas de abajo estaria
+   escrita en un sistema de coordenadas que no existe en ningun otro lado. */
 function buildLevel(seed, rooms, loops) {
     const g = new Uint8Array(W * H);
     const rng = new Rng(seed);
     carveMaze(g, rng, 1, 1);
-    for (const [c, r, w, h] of rooms) carveRoom(g, c, r, w, h);
     openLoops(g, rng, loops);
-    return rotate90(g);
+    const out = rotate90(g);
+    for (const s of rooms) carveRoom(out, s.c, s.r, s.w, s.h);
+    return out;
 }
+
+
+/* LAS SALAS, ESCRITAS A MANO.
+
+   Antes eran cinco rectangulos anonimos por nivel, sacados al azar, y todos
+   se veian igual: papel verde, alfombra, y adentro muebles sueltos. Eso es
+   justo el mapa generico que no queremos. Ahora cada sala tiene NOMBRE y TEMA,
+   y el tema decide el papel, el piso, la luz y que muebles entran.
+
+   Los temas salen de mirar las capturas del juego original:
+     pasillo    papel damasco verde salvia, zocalo naranja, alfombra roja
+     pads       yeso blanco con tachas redondas, las tres baldosas de color
+     biblioteca estanterias en las cuatro paredes, casi sin luz
+     reloj      el reloj de pie, el sofa y el retrato de la senora
+     deposito   cajones de madera apilados
+     capilla    el crucifijo en la pared, un solo farol
+     salida     blanco, techo de placas, la doble puerta gris con el cartel
+     sotano     hormigon gris, columnas, bombitas sueltas
+*/
+export const SALAS = [
+    [   // planta baja
+        { id: 'vestibulo',  nombre: 'el vestibulo',   tema: 'pasillo',    c: 3,  r: 3,  w: 4, h: 4 },
+        { id: 'pads',       nombre: 'la sala blanca', tema: 'pads',       c: 12, r: 3,  w: 7, h: 5 },
+        { id: 'reloj',      nombre: 'el salon',       tema: 'reloj',      c: 23, r: 4,  w: 5, h: 5 },
+        { id: 'biblioteca', nombre: 'la biblioteca',  tema: 'biblioteca', c: 3,  r: 12, w: 5, h: 5 },
+        { id: 'deposito',   nombre: 'el deposito',    tema: 'deposito',   c: 22, r: 13, w: 5, h: 4 },
+        { id: 'comedor',    nombre: 'el comedor',     tema: 'pasillo',    c: 12, r: 20, w: 5, h: 5 },
+        { id: 'dormitorio', nombre: 'el cuarto',      tema: 'pasillo',    c: 3,  r: 24, w: 4, h: 4 },
+        { id: 'salida',     nombre: 'la salida',      tema: 'salida',     c: 23, r: 23, w: 5, h: 5 },
+    ],
+    [   // nivel alto
+        { id: 'galeria',    nombre: 'la galeria',     tema: 'pasillo',    c: 11, r: 11, w: 7, h: 5 },
+        { id: 'capilla',    nombre: 'la capilla',     tema: 'capilla',    c: 23, r: 3,  w: 5, h: 5 },
+        { id: 'desvan',     nombre: 'el desvan',      tema: 'deposito',   c: 3,  r: 21, w: 5, h: 5 },
+        { id: 'estudio',    nombre: 'el estudio',     tema: 'biblioteca', c: 4,  r: 4,  w: 4, h: 4 },
+        { id: 'costura',    nombre: 'el costurero',   tema: 'reloj',      c: 20, r: 21, w: 5, h: 5 },
+    ],
+    [   // cisternas
+        { id: 'cisterna',   nombre: 'la cisterna',    tema: 'sotano',     c: 5,  r: 5,  w: 6, h: 6 },
+        { id: 'calderas',   nombre: 'las calderas',   tema: 'sotano',     c: 18, r: 17, w: 6, h: 6 },
+        { id: 'bodega',     nombre: 'la bodega',      tema: 'deposito',   c: 5,  r: 19, w: 5, h: 5 },
+        { id: 'pozo',       nombre: 'el pozo',        tema: 'sotano',     c: 19, r: 5,  w: 5, h: 5 },
+        { id: 'medio',      nombre: 'el cruce',       tema: 'sotano',     c: 12, r: 12, w: 4, h: 4 },
+    ],
+];
+
+/* En que sala cae una celda, o null si es pasillo. La busqueda es lineal
+   porque son ocho salas: una tabla indexada costaria mas de mantener que de
+   recorrer. */
+export function salaEn(lv, c, r) {
+    for (const s of SALAS[lv])
+        if (c >= s.c && c < s.c + s.w && r >= s.r && r < s.r + s.h) return s;
+    return null;
+}
+export function salaPorId(lv, id) { return SALAS[lv].find(s => s.id === id) || null }
+export const temaEn = (lv, c, r) => {
+    if (lv === 2) { const s = salaEn(lv, c, r); return s ? s.tema : 'sotano' }
+    const s = salaEn(lv, c, r);
+    return s ? s.tema : 'pasillo';
+};
+/* Centro de una sala, en celdas. */
+export const centroSala = s => [s.c + (s.w >> 1), s.r + (s.h >> 1)];
 
 /* Las salas grandes van sobre coordenadas del dibujo; la rotacion las mueve
    junto con todo lo demas. */
 export const LEVELS = [
-    {   // planta baja: el patio grande y dos salas laterales
+    {   // planta baja: el piso empapelado, el que se ve en casi todas las fotos
         base: 0,
         name: 'Planta baja',
-        /* Cuartos de casa, no patios: la mas grande es de 5x5 celdas, o sea
-           11 m de lado. Antes habia una de 9x9 (20 m) y una de 13x13 (29 m). */
-        grid: buildLevel(0xC0FFEE, [[4, 4, 5, 5], [20, 6, 4, 4], [13, 20, 5, 5],
-                                    [8, 13, 4, 4], [22, 20, 4, 4]], 34),
+        /* Cuartos de casa, no patios: la mas grande es de 7x5 celdas, o sea
+           15x11 m. Antes habia una de 9x9 (20 m) y una de 13x13 (29 m). */
+        grid: buildLevel(0xC0FFEE, SALAS[0], 34),
     },
-    {   // arriba: una sola nave enorme y galerias
+    {   // arriba: galeria, capilla y desvan
         base: LEVEL_H,
         name: 'Nivel alto',
-        grid: buildLevel(0x51EED0, [[12, 12, 5, 5], [4, 21, 4, 4], [23, 4, 4, 4],
-                                    [5, 5, 4, 4], [19, 21, 4, 4]], 28),
+        grid: buildLevel(0x51EED0, SALAS[1], 28),
     },
-    {   // abajo: cisternas cuadradas
+    {   // abajo: hormigon, columnas y bombitas
         base: -LEVEL_H,
         name: 'Cisternas',
-        grid: buildLevel(0xBEEF11, [[6, 6, 4, 4], [18, 18, 5, 5], [6, 20, 4, 4],
-                                    [20, 6, 4, 4], [12, 12, 4, 4]], 30),
+        grid: buildLevel(0xBEEF11, SALAS[2], 30),
     },
 ];
 
 /* Escaleras: rectangulo de `len` celdas de largo por `w` de ancho, que sube de
    `a` a `b`. Se marcan como piso en los dos niveles para poder entrar y salir. */
+/* Las cuatro estan CORRIDAS de las salas con nombre a proposito: antes la del
+   noreste subia por adentro de la capilla y te dejaba una baranda cruzando el
+   cuarto, y la del sudeste desembocaba dentro de la sala de la salida. Los
+   cuatro sitios de abajo salieron de barrer la grilla buscando rectangulos que
+   no pisen ninguna sala de NINGUNO de los dos niveles que conectan. */
 export const STAIRS = [
-    { a: 0, b: 1, c: 14, r: 14, dir: [1, 0], len: 7, w: 3 },
-    { a: 0, b: 2, c: 6, r: 24, dir: [0, 1], len: 6, w: 3 },
-    { a: 0, b: 1, c: 24, r: 8, dir: [0, -1], len: 6, w: 2 },
-    { a: 0, b: 2, c: 22, r: 22, dir: [1, 0], len: 6, w: 2 },
+    { a: 0, b: 1, c: 8,  r: 8,  dir: [1, 0],  len: 7, w: 3 },
+    { a: 0, b: 2, c: 8,  r: 25, dir: [1, 0],  len: 6, w: 3 },
+    { a: 0, b: 1, c: 19, r: 8,  dir: [0, 1],  len: 6, w: 2 },
+    { a: 0, b: 2, c: 26, r: 12, dir: [-1, 0], len: 6, w: 2 },
 ];
 
 /* Las celdas de la rampa se marcan aparte. Si tambien fueran piso de cada

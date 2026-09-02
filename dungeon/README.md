@@ -106,12 +106,14 @@ lo que un sintetizador hace bien. El grito suena **sólo al pasar de tranquilo a
 caza**: si sonara todo el rato que te ve, en diez segundos deja de significar
 algo.
 
-## La sala de las baldosas es de hormigón
+## La sala de las baldosas es de yeso blanco
 
 En el original es lo único que rompe con los pasillos verdes, y por eso se
-reconoce de lejos y funciona como punto de referencia en un laberinto. Acá se
-forra por dentro con un cascarón claro: sale más barato que meterle mano al
-generador del nivel y no puede romper el laberinto.
+reconoce de lejos y funciona como punto de referencia en un laberinto. Ya no se
+forra por dentro con un cascarón: la sala está **escrita en el mapa** con el
+tema `pads`, así que sus paredes salen de yeso blanco con tachas redondas
+directamente del generador de niveles, y desde el pasillo se ve el encuentro
+yeso/papel que sale en la foto del crucifijo.
 
 También salieron de mirar las partidas: los **cuadros con marco dorado** en las
 paredes, y que **una de cada cinco lámparas parpadea fuerte**, con cortes secos
@@ -221,6 +223,76 @@ hundida, que es justo el efecto buscado.
 Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
+
+## El mapa, mirado foto por foto
+
+El mapa era un laberinto generado con cinco rectángulos anónimos por nivel.
+Todos los cuartos se veían igual y el juego era un pasillo verde infinito. Se
+rehizo mirando **todo el material que existe del original**: las dos capturas
+oficiales de la página de Roblox (universo `10530261598`), seis capturas de
+partida sacadas del walkthrough de allthings.how, y dos análisis
+escena-por-escena de dos gameplays completos de YouTube. Las seis capturas
+quedaron en `referencia/mapa-*.png` para poder comparar.
+
+Lo que las fotos dicen, y que el mapa NO tenía:
+
+| En la foto | Antes | Ahora |
+|---|---|---|
+| alfombra roja tejida | piso de madera | textura de alfombra dibujada en canvas |
+| zócalo **naranja** bajo | zócalo crema de 1,12 m + moldura | zócalo naranja de 36 cm |
+| marco naranja en cada puerta | no había | jambas + dintel en cada entrada |
+| puertas con pared arriba | huecos de piso a techo | dintel a 2,78 m |
+| casetón oscuro con la araña | techo plano | panel oscuro + borde crema |
+| arañas doradas | hierro negro | bronce |
+| frases pintadas en la pared | no había | cuatro por nivel, negras |
+| yeso blanco con tachas | papel verde en todos lados | la sala de las baldosas y la salida |
+| hormigón y columnas | papel verde | el sótano |
+| cajones apilados | no había | el depósito y el desván |
+| doble puerta gris + cartel EXIT | una hoja verde | dos hojas, barral y cartel |
+| bloques de un metro que brillan | dados de 34 cm | 1,05 m, con luz propia |
+
+### Las salas ahora tienen nombre
+
+`SALAS` en `map.js` es una lista escrita a mano: dieciocho salas con `id`,
+`nombre` y **`tema`**, y el tema decide el papel, el piso, la luz y los muebles.
+Los rectángulos se recortan **después** de rotar la grilla, así que sus
+coordenadas son las mismas que usa todo el resto del juego.
+
+```
+planta baja  vestíbulo · sala blanca (baldosas) · salón (reloj) · biblioteca
+             depósito · comedor · cuarto · salida
+nivel alto   galería · capilla · desván · estudio · costurero
+cisternas    cisterna · calderas · bodega · pozo · cruce
+```
+
+- **biblioteca** — estanterías contra las cuatro paredes, como la foto del cubo rojo
+- **sala blanca** — vacía, yeso con tachas, las tres baldosas en fila
+- **salón** — el reloj de pie, el sofá y la cómoda
+- **capilla** — dos filas de sillas con pasillo al medio y el crucifijo
+- **depósito** — pilas de dos y tres cajones de listones contra las paredes
+- **sótano** — hormigón, columnas, sin marcos de madera
+- **salida** — blanca, la doble puerta gris con el cartel verde
+
+Los tres cubos ya no caen en celdas al azar: uno por sala con nombre
+(biblioteca, depósito, cuarto), en un rincón y no en el centro —el centro es
+por donde entrás y donde va el mueble grande.
+
+### Las escaleras se corrieron
+
+Las cuatro escaleras estaban escritas a mano y **tres de las cuatro pasaban por
+adentro de las salas nuevas**: una subía por el medio de la capilla dejando una
+baranda cruzando el cuarto, otra desembocaba dentro de la sala de la salida. Se
+barrió la grilla buscando rectángulos que no pisen ninguna sala de **ninguno de
+los dos niveles** que conecta cada escalera, y se eligió uno por cuadrante.
+
+Medido después del cambio:
+
+- **1703 celdas abiertas de los tres niveles, 100 % alcanzables**; las
+  dieciocho salas, enteras
+- **1535 celdas de piso barridas: peor caída 0,00 m** (antes 0,49)
+- **799 celdas sólidas: 0 sin salida**
+- la cadena entera —tres cubos, pinza, cableado, tarjeta, llave, puerta— llega
+  a `escapo`
 
 ## Los muebles: uno por uno, y ordenados
 
@@ -529,8 +601,10 @@ cuesta seis pases de render, y son las únicas cuya rueda se llega a ver.
 
 ## El mapa
 
-Tres niveles de 31×31, girados 90°: **planta alta** (+8,2 m), **planta baja**
-y **cisternas** (−8,2 m), con salas grandes recortadas encima del laberinto.
+Tres niveles de 31×31, girados 90°: **planta alta** (+5,9 m), **planta baja**
+y **cisternas** (−5,9 m). El laberinto se genera, se rota, y **después** se
+recortan encima las salas escritas a mano de `SALAS` — así las coordenadas de
+la lista son las mismas que usa todo el resto del juego.
 El laberinto se genera con un backtracker y después se rompen unas 30 paredes
 sueltas: un laberinto perfecto es un árbol y te obliga a desandar todo el
 tiempo.
@@ -543,14 +617,20 @@ la escalera no sube nunca.
 ## Archivos
 
 ```
-src/map.js       la grilla, escaleras, colisión y altura de superficie
-src/main.js      motor, jugador, controles, cámara
+src/map.js       la grilla, las SALAS con nombre, escaleras, colisión, altura
+src/main.js      motor, jugador, controles, cámara, y el armado del nivel
+src/deco.js      texturas dibujadas en canvas, frases de pared, cajones, cruz
 src/pantalla.js  el marco girado y la traducción de coordenadas
-src/piernas.js   el modelo de vista de las piernas
-src/muebles.js   carga, escala, orientación y colisión de los muebles
+src/r15.js       el cuerpo de quince partes del jugador
+src/animdata.js  los clips de animación de Roblox, horneados
+src/muebles.js   carga, escala, orientación, colisión y reparto por tema
 src/langosta.js  la misión y el bicho
-src/shell.html   HUD y joystick
-muebles/*.glb    las ocho piezas horneadas
+src/calidad.js   el menú de gráficos
+src/sonido.js    todo el audio, sintetizado
+shell.html       HUD y joystick
+texturas/*.webp  papel, cornisa y vetas (las demás se dibujan al arrancar)
+muebles/hd/*.glb las ocho piezas horneadas en alta
+referencia/      las capturas del juego original con las que se comparó
 ```
 
 ### Reconstruir

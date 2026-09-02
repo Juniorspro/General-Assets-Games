@@ -13,7 +13,7 @@
       pieza mire hacia (dx,dz) el giro es atan2(-dz, dx), no atan2(dz,dx). */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CELL, W, H, Rng, toWorld, isOpen, isStairCell, isHole } from './map.js';
+import { CELL, W, H, Rng, toWorld, isOpen, isStairCell, isHole, SALAS } from './map.js';
 
 /* alto en metros · si va contra la pared · si se puede revisar por la llave */
 export const CATALOGO = {
@@ -104,6 +104,74 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
                 if (!isOpen(lv, c + dc, r + dr)) return false;
         return true;
     };
+
+    /* --- 0. LAS SALAS CON NOMBRE ---------------------------------------
+       Cada sala del mapa tiene tema, y el tema decide que entra. La biblioteca
+       va forrada de estanterias contra las cuatro paredes; el salon tiene el
+       reloj de pie, el sofa y el sillon encarado; la sala de las baldosas y la
+       salida quedan VACIAS a proposito, porque ahi hay que poder correr. Las
+       celdas de estas salas se marcan ocupadas, asi que los pasos genericos de
+       mas abajo no les meten nada encima. */
+    const pegadoA = (c, r) => [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+    const alRas = (nombre, c, r, dc, dr) => {
+        const prof = modelos[nombre] ? modelos[nombre].tam.z : 0.5;
+        return poner(nombre, c, r, miraHacia(-dc, -dr),
+                     dc * (CELL / 2 - prof / 2 - 0.04), dr * (CELL / 2 - prof / 2 - 0.04));
+    };
+
+    for (const sala of SALAS[lv]) {
+        const celdas = [];
+        for (let r = sala.r; r < sala.r + sala.h; r++)
+            for (let c = sala.c; c < sala.c + sala.w; c++)
+                if (isOpen(lv, c, r) && !isStairCell(c, r)) celdas.push([c, r]);
+        if (!celdas.length) continue;
+        const cc = sala.c + (sala.w >> 1), cr = sala.r + (sala.h >> 1);
+
+        if (sala.tema === 'biblioteca' && hay('estanteria')) {
+            // pared a pared: es lo que se ve en la foto del cubo rojo
+            for (const [c, r] of celdas) {
+                const d = pegadoA(c, r);
+                if (!d.length || ocupadas.has(c + ',' + r)) continue;
+                alRas('estanteria', c, r, d[0][0], d[0][1]);
+            }
+        } else if (sala.tema === 'reloj') {
+            // el reloj de pie contra la pared, el sofa en otra, el sillon mirandolo
+            let hecho = 0;
+            for (const [c, r] of celdas) {
+                const d = pegadoA(c, r);
+                if (!d.length || ocupadas.has(c + ',' + r)) continue;
+                if (hecho === 0 && hay('reloj')) { alRas('reloj', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 1 && hay('sofa')) { alRas('sofa', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 2 && hay('comoda')) { alRas('comoda', c, r, d[0][0], d[0][1]); hecho++ }
+            }
+            /* El sillon va corrido del centro: el centro de la sala es por donde
+               se entra y por donde pasa el bicho, y un sillon ahi te traba. */
+            if (hay('sillon') && libre(cc + 1, cr)) poner('sillon', cc + 1, cr, miraHacia(-1, 0));
+        } else if (sala.tema === 'capilla' && hay('silla')) {
+            // dos filas de sillas encaradas al fondo, como bancos de iglesia
+            const pasillo = sala.c + (sala.w >> 1);   // el pasillo del medio
+            for (const [c, r] of celdas) {
+                if (((r - sala.r) % 2) || c === pasillo || ocupadas.has(c + ',' + r)) continue;
+                poner('silla', c, r, miraHacia(0, -1));
+            }
+        } else if (sala.tema === 'pasillo') {
+            // cuarto de casa: mesa con sus sillas, y un armario contra la pared
+            if (hay('mesa') && libre(cc, cr)) {
+                poner('mesa', cc, cr, 0);
+                for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+                    if (libre(cc + dc, cr + dr) && hay('silla'))
+                        poner('silla', cc + dc, cr + dr, miraHacia(-dc, -dr), -dc * 0.25, -dr * 0.25);
+            }
+            for (const [c, r] of celdas) {
+                const d = pegadoA(c, r);
+                if (!d.length || ocupadas.has(c + ',' + r)) continue;
+                if (hay('armario')) { alRas('armario', c, r, d[0][0], d[0][1]); break }
+            }
+        }
+        // vacias o ya vestidas: nadie mas mete nada acá
+        for (const [c, r] of celdas) ocupadas.add(c + ',' + r);
+    }
 
     /* --- 1. LAS SALAS: juegos de muebles, no piezas sueltas ------------- */
     const contraPared = ['armario', 'comoda', 'estanteria', 'reloj'].filter(hay);

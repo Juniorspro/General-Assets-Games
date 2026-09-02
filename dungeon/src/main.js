@@ -4,8 +4,9 @@ import * as THREE from 'three';
 import {
     CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
     toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
-    medirParedes, rescatar,
+    medirParedes, rescatar, SALAS, salaEn, salaPorId, temaEn, centroSala,
 } from './map.js';
+import { texAlfombra, texYeso, texHormigon, texFrase, FRASES, pilaDeCajones, crucifijo } from './deco.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
 import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
@@ -26,12 +27,30 @@ const FOV = 100;
    principio, la camara se tira al piso y el FOV pega un tiron. */
 const SLIDE_TIME = 0.85, SLIDE_SPEED = 9.2, SLIDE_COOLDOWN = 0.45;
 
-/* Altura de las bandas de la pared, como en las fotos: zocalo crema, moldura
-   de madera, papel rojo y cornisa arriba. */
-/* La moldura va baja: desde 55 cm de altura, un zocalo de dos metros y medio
-   se come toda la vista y no se ve el papel. Asi el rojo domina, que es como
-   se ve en las fotos. */
-const WAINSCOT = 1.12, RAIL_H = 0.12, CORNICE = 0.34;
+/* Las bandas de la pared, medidas sobre las capturas del juego original.
+   NO hay zocalo alto de madera ni moldura a media altura: lo que hay es un
+   zocalo NARANJA bajo —35 cm, del mismo naranja que enmarca cada puerta—, el
+   papel damasco verde salvia desde ahi hasta arriba, y una cornisa crema. El
+   naranja contra el verde y la alfombra roja es toda la paleta de la casa. */
+const ZOCALO = 0.36, CORNICE = 0.26;
+/* Las puertas son portales altos con pared arriba, no huecos de piso a techo:
+   es lo primero que se ve en la foto del pasillo largo. */
+const ALTO_PUERTA = 2.78, MARCO_E = 0.13;
+
+/* Que bandas lleva cada tema de sala. `null` = 'lo que sobra hasta la cornisa'. */
+const BANDAS = {
+    casa:     [['zocalo', ZOCALO], ['paper', null], ['cornisa', CORNICE]],
+    yeso:     [['yeso', null], ['cornisa', CORNICE]],
+    hormigon: [['hormigon', null]],
+};
+const GRUPO_TEMA = {
+    pads: 'yeso', salida: 'yeso', sotano: 'hormigon',
+};
+const grupoDe = tema => GRUPO_TEMA[tema] || 'casa';
+const PISO_TEMA = { salida: 'blanco', sotano: 'hormigon' };
+const pisoDe = tema => PISO_TEMA[tema] || 'alfombra';
+const TECHO_TEMA = { salida: 'blanco', sotano: 'hormigon' };
+const techoDe = tema => TECHO_TEMA[tema] || 'cornisa';
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -134,7 +153,9 @@ class Dungeon {
         this.farolesConSombra = 3;
         this.distPisos = 1.35;
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
-        this.cajasMuebles = [];
+        /* Los cajones del deposito y las columnas del sotano ya son solidos:
+           se arman con el nivel, asi que entran a la lista antes que nada. */
+        this.cajasMuebles = [...(this.cajasDeco || [])];
 
         /* Los muebles llegan tarde y no pasa nada: el nivel ya esta armado y
            entran encima. Un base64 roto cuesta una comoda, no la pantalla. */
@@ -169,49 +190,82 @@ class Dungeon {
     build() {
         /* La pared no es una sola textura: son bandas, como en las fotos.
            Zocalo crema abajo, moldura de madera, papel rojo arriba y cornisa. */
+        const alfombra = texAlfombra(), yeso = texYeso(), hormigon = texHormigon();
         this.mats = {
             paper: new THREE.MeshStandardMaterial({
                 map: A.paper ? tex(A.paper, [1, 1]) : null,
                 color: A.paper ? 0x93bcac : 0x44584f, roughness: 0.92,
             }),
-            wainscot: new THREE.MeshStandardMaterial({
+            // el naranja del zocalo y de los marcos: es la firma de la casa
+            zocalo: new THREE.MeshStandardMaterial({
+                map: A.ceil ? tex(A.ceil, [1, 1]) : null,
+                color: A.ceil ? 0xe07a2c : 0xc06a26, roughness: 0.72,
+            }),
+            cornisa: new THREE.MeshStandardMaterial({
                 map: A.wainscot ? tex(A.wainscot, [1, 1]) : null,
-                color: A.wainscot ? 0xffffff : 0xcfc4ad, roughness: 0.88,
+                color: A.wainscot ? 0xd8cfbc : 0xcfc4ad, roughness: 0.88,
             }),
-            // listel y cornisa: madera miel, como el marco de las fotos
-            wood: new THREE.MeshStandardMaterial({
-                map: A.ceil ? tex(A.ceil, [1, 1]) : null,
-                color: A.ceil ? 0x7c6f5c : 0x8a6034, roughness: 0.66,
-            }),
-            floor: new THREE.MeshStandardMaterial({
-                map: A.floor ? tex(A.floor, [1, 1]) : null,
-                color: A.floor ? 0xffffff : 0x4a1518, roughness: 0.94,
-            }),
-            // el techo es de tablas, no un color plano
-            ceil: new THREE.MeshStandardMaterial({
-                map: A.ceil ? tex(A.ceil, [1, 1]) : null,
-                color: A.ceil ? 0x968c78 : 0x3b2717, roughness: 0.85,
-            }),
+            // yeso blanco con tachas: la sala de las baldosas y la salida
+            yeso: new THREE.MeshStandardMaterial({ map: yeso, roughness: 0.95 }),
+            hormigon: new THREE.MeshStandardMaterial({ map: hormigon, roughness: 0.98 }),
+            alfombra: new THREE.MeshStandardMaterial({ map: alfombra, roughness: 1 }),
+            blanco: new THREE.MeshStandardMaterial({ color: 0xe6e4de, roughness: 0.7 }),
             dark: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 }),
         };
+        // el techo del pasillo es el mismo crema de la cornisa
+        this.mats.floor = this.mats.alfombra;
+        this.mats.ceil = this.mats.cornisa;
         for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv);
         this.buildStairs(this.mats.floor);
     }
 
     /* Una tira de pared, partida en sus bandas. `y0` permite arrancar arriba
        del piso: es lo que deja el hueco rectangular por el que se pasa. */
-    wallStrip(out, cx, cz, w, d, base, y0) {
-        const push = (bucket, h, yy) => {
-            if (h <= 0.001) return;
-            const g = new THREE.BoxGeometry(w, h, d);
-            g.translate(cx, base + yy + h / 2, cz);
-            out[bucket].push(g);
-        };
-        const wainTop = Math.max(y0, WAINSCOT);
-        push('wainscot', wainTop - y0, y0);
-        push('wood', RAIL_H, wainTop);
-        push('paper', WALL_H - CORNICE - wainTop - RAIL_H, wainTop + RAIL_H);
-        push('wainscot', CORNICE, WALL_H - CORNICE);
+    wallStrip(out, cx, cz, w, d, base, y0, tema, y1 = WALL_H) {
+        const bandas = BANDAS[grupoDe(tema)];
+        // lo que miden las bandas fijas; el relleno se queda con el resto
+        const fijo = bandas.reduce((a, [, h]) => a + (h || 0), 0);
+        let y = 0;
+        for (const [mat, h] of bandas) {
+            const alto = h === null ? Math.max(0, WALL_H - fijo) : h;
+            // cada banda se recorta contra [y0, y1]: asi un hueco que arranca a
+            // media altura no corre las bandas de arriba, las corta
+            const a = Math.max(y, y0), b = Math.min(y + alto, y1);
+            y += alto;
+            if (b - a <= 0.001) continue;
+            const g = new THREE.BoxGeometry(w, b - a, d);
+            g.translate(cx, base + (a + b) / 2, cz);
+            (out[mat] || (out[mat] = [])).push(g);
+        }
+    }
+
+    /* El tema de una pared sale de la sala que toca. Si toca dos, gana la que
+       no es pasillo: asi el yeso blanco de la sala de las baldosas llega hasta
+       el borde y se ve el encuentro yeso/papel que sale en las fotos. */
+    temaPared(lv, c, r) {
+        let mejor = null;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (!isOpen(lv, c + dc, r + dr)) continue;
+            const t = temaEn(lv, c + dc, r + dr);
+            if (grupoDe(t) !== 'casa') return t;
+            if (!mejor) mejor = t;
+        }
+        return mejor || temaEn(lv, c, r);
+    }
+
+    /* Una celda es PUERTA si esta apretada entre dos paredes y separa dos
+       ambientes distintos: la entrada de una sala, no cada tramo de pasillo.
+       Devuelve el eje por el que se pasa, o null. */
+    esPuerta(lv, c, r) {
+        if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) return null;
+        const sol = (dc, dr) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr);
+        const ejes = [];
+        if (sol(1, 0) && sol(-1, 0) && isOpen(lv, c, r - 1) && isOpen(lv, c, r + 1)) ejes.push([0, 1]);
+        if (sol(0, 1) && sol(0, -1) && isOpen(lv, c - 1, r) && isOpen(lv, c + 1, r)) ejes.push([1, 0]);
+        if (!ejes.length) return null;
+        const [dc, dr] = ejes[0];
+        const a = salaEn(lv, c - dc, r - dr), b = salaEn(lv, c + dc, r + dr), aca = salaEn(lv, c, r);
+        return (a !== b || a !== aca) ? [dc, dr] : null;
     }
 
     buildLevel(lv) {
@@ -220,24 +274,32 @@ class Dungeon {
         this.scene.add(group);
         (this.levelGroups || (this.levelGroups = []))[lv] = group;
 
-        const out = { paper: [], wainscot: [], wood: [], dark: [] };
+        const out = { dark: [] };
         const solid = (c, r) => c < W && !isOpen(lv, c, r) && !isHole(lv, c, r);
 
-        /* Tiras horizontales de pared, cortadas en los huecos. El hueco se
-           emite aparte porque arranca a media altura, no en el piso. */
+        /* Tiras horizontales de pared, cortadas en los huecos Y en los cambios
+           de tema: una tira que cruza del papel al yeso tendria que ser de un
+           material solo, asi que se parte. */
         for (let r = 0; r < H; r++) {
-            let run = 0;
+            let run = 0, tema = null;
+            const cerrar = c => {
+                if (!run) return;
+                const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
+                const [, z] = toWorld(c - run, r);
+                this.wallStrip(out, (x0 + x1) / 2, z, run * CELL, CELL, base, 0, tema);
+                run = 0;
+            };
             for (let c = 0; c <= W; c++) {
-                if (solid(c, r)) { run++; continue }
-                if (run) {
-                    const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
-                    const [, z] = toWorld(c - run, r);
-                    this.wallStrip(out, (x0 + x1) / 2, z, run * CELL, CELL, base, 0);
-                    run = 0;
+                if (solid(c, r)) {
+                    const t = this.temaPared(lv, c, r);
+                    if (run && t !== tema) cerrar(c);
+                    tema = t; run++;
+                    continue;
                 }
+                cerrar(c);
                 if (c < W && isHole(lv, c, r)) {
                     const [hx, hz] = toWorld(c, r);
-                    this.wallStrip(out, hx, hz, CELL, CELL, base, HOLE_H);
+                    this.wallStrip(out, hx, hz, CELL, CELL, base, HOLE_H, this.temaPared(lv, c, r));
                     // el fondo del hueco, para que no se vea el vacio al cruzar
                     const jamb = new THREE.BoxGeometry(CELL, HOLE_H, 0.06);
                     jamb.translate(hx, base + HOLE_H / 2, hz);
@@ -245,56 +307,203 @@ class Dungeon {
                 }
             }
         }
+
+        /* Las puertas: dintel de pared arriba y el marco naranja. Sin el dintel
+           las salas se abren de piso a techo y la casa parece un galpon con
+           tabiques; con el, cada sala tiene su portal, como en las fotos. */
+        const marcos = [];
+        for (let r = 1; r < H - 1; r++) {
+            for (let c = 1; c < W - 1; c++) {
+                const eje = this.esPuerta(lv, c, r);
+                if (!eje) continue;
+                // el sotano es hormigon pelado: ahi no hay marcos de madera
+                if (grupoDe(temaEn(lv, c, r)) === 'hormigon') continue;
+                const [dc, dr] = eje;
+                const [x, z] = toWorld(c, r);
+                const tema = temaEn(lv, c, r);
+                // pared arriba del hueco
+                this.wallStrip(out, x, z, CELL, CELL, base, ALTO_PUERTA, tema);
+                // jambas y dintel, del naranja del zocalo
+                const largo = CELL + MARCO_E;
+                for (const sg of [1, -1]) {
+                    const g = new THREE.BoxGeometry(dc ? MARCO_E : MARCO_E, ALTO_PUERTA, dc ? MARCO_E : MARCO_E);
+                    g.translate(x + (dr ? sg * (CELL / 2 - MARCO_E / 2) : 0),
+                                base + ALTO_PUERTA / 2,
+                                z + (dc ? sg * (CELL / 2 - MARCO_E / 2) : 0));
+                    marcos.push(g);
+                }
+                const din = new THREE.BoxGeometry(dr ? CELL : MARCO_E * 1.6, MARCO_E, dc ? CELL : MARCO_E * 1.6);
+                din.translate(x, base + ALTO_PUERTA - MARCO_E / 2, z);
+                marcos.push(din);
+            }
+        }
+        if (marcos.length) {
+            const mg = mergeGeos(marcos);
+            worldUV(mg, 0.55);
+            const mm = new THREE.Mesh(mg, this.mats.zocalo);
+            mm.castShadow = mm.receiveShadow = true;
+            group.add(mm);
+            marcos.forEach(g => g.dispose());
+        }
+
         for (const kind of Object.keys(out)) {
             if (!out[kind].length) continue;
             const merged = mergeGeos(out[kind]);
             /* Metros que cubre cada foto: el damasco tiene unos dos motivos y
                medio por lado y un motivo real mide ~0,38 m, o sea 0,95 m; el
-               listel de madera repite corto para que se le vea la veta. */
-            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'wainscot' ? 1.25 : 0.55);
+               zocalo repite corto para que se le vea la veta. */
+            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'cornisa' ? 1.25
+                          : kind === 'yeso' ? 2.4 : kind === 'hormigon' ? 2.0 : 0.55);
             const m = new THREE.Mesh(merged, this.mats[kind]);
             m.castShadow = m.receiveShadow = true;
             group.add(m);
             out[kind].forEach(g => g.dispose());
         }
 
-        // piso y techo: bajo las celdas abiertas y tambien bajo los huecos
-        const floors = [], ceils = [];
+        /* Piso y techo, tambien por tema: alfombra roja en la casa, hormigon en
+           el sotano, placas blancas en la salida. */
+        const pisos = {}, techos = {};
         for (let r = 0; r < H; r++) {
-            let run = 0;
+            let run = 0, pt = null, tt = null;
+            const cerrar = c => {
+                if (!run) return;
+                const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
+                const [, z] = toWorld(c - run, r);
+                const f = new THREE.PlaneGeometry(run * CELL, CELL);
+                f.rotateX(-Math.PI / 2);
+                f.translate((x0 + x1) / 2, base + 0.001, z);
+                (pisos[pt] || (pisos[pt] = [])).push(f);
+                const k = new THREE.PlaneGeometry(run * CELL, CELL);
+                k.rotateX(Math.PI / 2);
+                k.translate((x0 + x1) / 2, base + WALL_H, z);
+                (techos[tt] || (techos[tt] = [])).push(k);
+                run = 0;
+            };
             for (let c = 0; c <= W; c++) {
                 const open = c < W && (isOpen(lv, c, r) || isHole(lv, c, r)) && !isStairCell(c, r);
-                if (open) { run++; continue }
-                if (run) {
-                    const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
-                    const [, z] = toWorld(c - run, r);
-                    const f = new THREE.PlaneGeometry(run * CELL, CELL);
-                    f.rotateX(-Math.PI / 2);
-                    f.translate((x0 + x1) / 2, base + 0.001, z);
-                    floors.push(f);
-                    const k = new THREE.PlaneGeometry(run * CELL, CELL);
-                    k.rotateX(Math.PI / 2);
-                    k.translate((x0 + x1) / 2, base + WALL_H, z);
-                    ceils.push(k);
-                    run = 0;
+                if (open) {
+                    const t = temaEn(lv, c, r);
+                    const np = pisoDe(t), nt = techoDe(t);
+                    if (run && (np !== pt || nt !== tt)) cerrar(c);
+                    pt = np; tt = nt; run++;
+                    continue;
+                }
+                cerrar(c);
+            }
+        }
+        for (const [tabla, esc, sombra] of [[pisos, 1.35, true], [techos, 2.2, false]]) {
+            for (const kind of Object.keys(tabla)) {
+                const g = mergeGeos(tabla[kind]);
+                worldUV(g, esc);
+                const m = new THREE.Mesh(g, this.mats[kind]);
+                m.receiveShadow = sombra;
+                group.add(m);
+                tabla[kind].forEach(x => x.dispose());
+            }
+        }
+
+        this.vestirSalas(lv, base, group);
+        this.pintarFrases(lv, base, group);
+        this.placeChandeliers(lv, base, group);
+        this.colgarCuadros(lv, base, group);
+    }
+
+    /* Lo que hace que una sala sea ESA sala y no un rectangulo mas: los cajones
+       del deposito, el crucifijo de la capilla, las columnas del sotano. Los
+       muebles de verdad los pone poblar(); aca va lo que no es un mueble. */
+    vestirSalas(lv, base, group) {
+        const rng = new Rng(0x5A1A + lv * 313);
+        this.cajasDeco || (this.cajasDeco = []);
+        const bloquear = (x, z, hx, hz, alto) =>
+            this.cajasDeco.push({ x, z, hx, hz, base, alto });
+
+        for (const sala of SALAS[lv]) {
+            const cs = [];
+            for (let r = sala.r; r < sala.r + sala.h; r++)
+                for (let c = sala.c; c < sala.c + sala.w; c++)
+                    if (isOpen(lv, c, r) && !isStairCell(c, r)) cs.push([c, r]);
+            if (!cs.length) continue;
+
+            if (sala.tema === 'deposito') {
+                /* Cajones apilados contra las paredes, dejando el centro libre:
+                   apilados en el medio el cuarto no se camina. */
+                for (const [c, r] of cs) {
+                    const pegado = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                        .some(([dc, dr]) => !isOpen(lv, c + dc, r + dr));
+                    if (!pegado || rng.next() > 0.55) continue;
+                    if (this.esPuerta(lv, c, r)) continue;   // no tapar una entrada
+                    const [x, z] = toWorld(c, r);
+                    const p = pilaDeCajones(rng);
+                    p.position.set(x + (rng.next() - .5) * .3, base, z + (rng.next() - .5) * .3);
+                    group.add(p);
+                    bloquear(p.position.x, p.position.z, 0.55, 0.55, 2.8);
+                }
+            }
+
+            if (sala.tema === 'capilla') {
+                // el crucifijo va alto, en la pared del fondo, mirando al cuarto
+                for (const [c, r] of cs) {
+                    const d = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                        .find(([dc, dr]) => !isOpen(lv, c + dc, r + dr));
+                    if (!d) continue;
+                    const [x, z] = toWorld(c, r);
+                    const cru = crucifijo();
+                    cru.position.set(x + d[0] * (CELL / 2 - .08), base + 2.35, z + d[1] * (CELL / 2 - .08));
+                    cru.rotation.y = d[0] ? -d[0] * Math.PI / 2 : (d[1] > 0 ? Math.PI : 0);
+                    group.add(cru);
+                    break;
+                }
+            }
+
+            if (sala.tema === 'sotano') {
+                /* Columnas de hormigon: el sotano del original se lee por las
+                   columnas, no por el color. Van en las celdas pares del medio
+                   para no tapar ninguna entrada. */
+                const col = new THREE.CylinderGeometry(.28, .32, WALL_H, 8);
+                for (const [c, r] of cs) {
+                    if ((c % 2) || (r % 2)) continue;
+                    const dentro = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                        .every(([dc, dr]) => isOpen(lv, c + dc, r + dr));
+                    if (!dentro) continue;
+                    const [x, z] = toWorld(c, r);
+                    const m = new THREE.Mesh(col, this.mats.hormigon);
+                    m.position.set(x, base + WALL_H / 2, z);
+                    m.castShadow = m.receiveShadow = true;
+                    group.add(m);
+                    bloquear(x, z, 0.34, 0.34, WALL_H);
                 }
             }
         }
-        if (floors.length) {
-            const fg = mergeGeos(floors);
-            worldUV(fg, 1.35);
-            const fm = new THREE.Mesh(fg, this.mats.floor);
-            fm.receiveShadow = true;
-            group.add(fm);
-            floors.forEach(g => g.dispose());
-            const cg = mergeGeos(ceils);
-            worldUV(cg, 2.2);   // ~16 tablas por foto y la tabla mide ~14 cm
-            group.add(new THREE.Mesh(cg, this.mats.ceil));
-            ceils.forEach(g => g.dispose());
-        }
+    }
 
-        this.placeChandeliers(lv, base, group);
-        this.colgarCuadros(lv, base, group);
+    /* Las frases pintadas en la pared. Son las mismas que se leen en las fotos
+       del juego original y hacen dos cosas: te dicen que hacer sin un tutorial,
+       y te dan una referencia para saber por que pasillo ya pasaste. */
+    pintarFrases(lv, base, group) {
+        const rng = new Rng(0xF2A5 + lv * 17);
+        const sitios = [];
+        for (let r = 2; r < H - 2; r++) {
+            for (let c = 2; c < W - 2; c++) {
+                if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) continue;
+                if (grupoDe(temaEn(lv, c, r)) === 'hormigon') continue;
+                const d = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                    .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+                if (d.length !== 1) continue;      // pared limpia y larga, no una esquina
+                sitios.push([c, r, d[0]]);
+            }
+        }
+        const cuantas = Math.min(4, sitios.length);
+        for (let i = 0; i < cuantas; i++) {
+            const [c, r, [dc, dr]] = sitios[rng.int(0, sitios.length - 1)];
+            const txt = FRASES[(lv * 2 + i) % FRASES.length];
+            const [x, z] = toWorld(c, r);
+            const m = new THREE.Mesh(
+                new THREE.PlaneGeometry(2.02, 1.01),
+                new THREE.MeshBasicMaterial({ map: texFrase(txt), transparent: true, depthWrite: false }));
+            m.position.set(x + dc * (CELL / 2 - .05), base + 1.78, z + dr * (CELL / 2 - .05));
+            m.rotation.y = dc ? -dc * Math.PI / 2 : (dr > 0 ? Math.PI : 0);
+            group.add(m);
+        }
     }
 
     /* Faroles colgando del techo. La luz va dentro del aro, asi que el aro y
@@ -302,8 +511,10 @@ class Dungeon {
        que hace que se lean como lamparas y no como bolitas flotando. */
     placeChandeliers(lv, base, group) {
         const rng = new Rng(0x7A0 + lv * 977);
-        // hierro negro forjado, no bronce: es lo que cuelga en el juego original
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x0e0e0c, roughness: .55, metalness: .3 });
+        /* Bronce, no hierro negro: en las capturas del pasillo largo la araña
+           es claramente dorada y con velas. El hierro negro se perdia contra el
+           techo y las lamparas se leian como bolitas flotando. */
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x9c7a2e, roughness: .38, metalness: .75 });
         const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdda2 });
         const bulbGeo = new THREE.SphereGeometry(.05, 7, 5);
         const chainGeo = new THREE.CylinderGeometry(.018, .018, 1, 4);
@@ -315,6 +526,20 @@ class Dungeon {
             g.position.set(x, base, z);
             const rad = big ? .46 : .3, drop = big ? 1.15 : .8;
             const arms = big ? 8 : 5;
+
+            /* El hueco oscuro del techo. En las fotos cada araña cuelga de un
+               casetón hundido casi negro con un borde crema: el techo plano y
+               parejo era lo que mas delataba que esto no era la casa. */
+            const cof = new THREE.Mesh(new THREE.PlaneGeometry(CELL * .92, CELL * .92), this.mats.dark);
+            cof.rotation.x = Math.PI / 2;
+            cof.position.y = WALL_H - 0.012;
+            g.add(cof);
+            const borde = new THREE.Mesh(
+                new THREE.TorusGeometry(CELL * .5, .05, 4, 4), this.mats.cornisa);
+            borde.rotation.x = Math.PI / 2;
+            borde.rotation.z = Math.PI / 4;
+            borde.position.y = WALL_H - 0.05;
+            g.add(borde);
 
             const chain = new THREE.Mesh(chainGeo, armMat);
             chain.scale.y = drop;
