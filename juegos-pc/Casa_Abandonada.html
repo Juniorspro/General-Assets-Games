@@ -30,7 +30,7 @@
   body.ui-off #count{opacity:0!important}
   #place{position:absolute;left:50%;top:26px;transform:translateX(-50%);font-size:12.5px;
     letter-spacing:.16em;color:rgba(214,206,184,.45);text-shadow:0 1px 4px #000;transition:opacity .5s}
-  #hint{position:absolute;left:26px;bottom:24px;font-size:12.5px;line-height:1.7;
+  #hint{position:absolute;left:26px;bottom:78px;font-size:12.5px;line-height:1.7;
     color:rgba(206,200,182,.6);text-shadow:0 1px 4px #000;transition:opacity 1s}
   #hint b{color:#e6dfc6;font-weight:600}
   /* ─ menús ─ */
@@ -2963,6 +2963,66 @@ function tick(){
   renderer.setRenderTarget(null);
   renderer.render(postScene,postCam);
 }
+/* ══════════ sondas de medicion (no tocan el juego) ══════════ */
+window.__casa={
+  ver:'v14',
+  est(){ const i=renderer.info; i.autoReset=false; return {
+    llamadas:i.render.calls, triangulos:i.render.triangles,
+    programas:i.programs?i.programs.length:-1,
+    texturas:i.memory.textures, geometrias:i.memory.geometries,
+    fov:+camera.fov.toFixed(2), near:camera.near, far:camera.far,
+    niebla:scene.fog?{tipo:scene.fog.constructor.name,d:scene.fog.density}:null,
+    fondo:scene.background?'#'+scene.background.getHexString():null,
+    hijos:scene.children.length, estado:state }; },
+  cero(){ renderer.info.autoReset=false; renderer.info.reset(); return 'listo'; },
+  jug(){ return {x:+P.x.toFixed(3),z:+P.z.toFixed(3),y:+P.y.toFixed(3),
+    yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),nivel:P.level,
+    bobY:+P.bobY.toFixed(4),bobX:+P.bobX.toFixed(4),roll:+P.roll.toFixed(4),
+    sprint:+P.sprint.toFixed(2),panic:+P.panic.toFixed(2)}; },
+  /* EL TEMBLOR SE MIDE CON LA SEGUNDA DIFERENCIA de la trayectoria de la
+     camara: cuanto CAMBIA el desplazamiento entre muestra y muestra. Una
+     camara que se traslada parejo da cero; una que vibra da un numero. Se
+     devuelve en milimetros y SIN redondear, porque redondeando a centesimas
+     lo unico que se mide es el redondeo. */
+  temblor(n,ms){ n=n||90; ms=ms||16; const P0=[],R0=[];
+    return new Promise(res=>{ let k=0; const id=setInterval(()=>{
+      P0.push(camera.position.clone()); R0.push(camera.rotation.z);
+      if(++k>=n){ clearInterval(id);
+        const d2=[],r2=[];
+        for(let i=2;i<P0.length;i++){
+          d2.push(P0[i].clone().sub(P0[i-1]).sub(P0[i-1].clone().sub(P0[i-2])).length()*1000);
+          r2.push(Math.abs((R0[i]-R0[i-1])-(R0[i-1]-R0[i-2]))*1000);
+        }
+        const or=a=>a.slice().sort((x,y)=>x-y);
+        const rms=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
+        res({muestras:d2.length,
+             pos_rms:+rms(d2).toFixed(4), pos_med:+or(d2)[d2.length>>1].toFixed(4), pos_peor:+Math.max(...d2).toFixed(4),
+             roll_rms:+rms(r2).toFixed(4), roll_peor:+Math.max(...r2).toFixed(4)});
+      } },ms); }); },
+  hud(){ const ids=['stamp','hint','torch','use','pauseBtn','osd','count','prompt','note','dot'];
+    const R={},k=[];
+    for(const i of ids){ const e=document.getElementById(i); if(!e) continue;
+      const c=getComputedStyle(e);
+      if(c.display==='none'||c.visibility==='hidden'||+c.opacity===0){R[i]='oculto';continue;}
+      const b=e.getBoundingClientRect(); if(b.width<1||b.height<1){R[i]='vacio';continue;}
+      R[i]=[Math.round(b.left),Math.round(b.top),Math.round(b.right),Math.round(b.bottom)]; k.push(i); }
+    const ch=[]; for(let a=0;a<k.length;a++) for(let b=a+1;b<k.length;b++){
+      const p=R[k[a]],q=R[k[b]];
+      if(p[0]<q[2]&&q[0]<p[2]&&p[1]<q[3]&&q[1]<p[3]) ch.push(k[a]+' x '+k[b]); }
+    return {cajas:R,choques:ch}; },
+  /* de que esta hecha cada textura: lienzo dibujado o imagen de verdad */
+  texturas(){ const v={lienzo:0,imagen:0,otra:0,mapas:0}; const vis=new Set();
+    scene.traverse(o=>{ const ms=o.material?(Array.isArray(o.material)?o.material:[o.material]):[];
+      for(const m of ms) for(const k of ['map','normalMap','roughnessMap','aoMap','emissiveMap']){
+        const t=m&&m[k]; if(!t||vis.has(t.uuid))continue; vis.add(t.uuid); v.mapas++;
+        const im=t.image; if(!im){v.otra++;continue;}
+        if(im instanceof HTMLCanvasElement) v.lienzo++;
+        else if(im instanceof HTMLImageElement||im instanceof ImageBitmap) v.imagen++;
+        else v.otra++; } });
+    return v; },
+  pon(k,v){ if(k==='fov'){camera.fov=v;camera.updateProjectionMatrix();} return this.est(); }
+};
+
 tick();
 })();
 </script>
