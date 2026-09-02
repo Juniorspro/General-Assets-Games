@@ -374,6 +374,135 @@ esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** mie
 es que se ve, que camina, que caza y que te alcanza.
 
 
+### Octogésima cuarta vuelta (2026-09-02): **PUERTA BLANCA** — dieciséis defectos de la araña, y el susto levantaba media araña de costado
+
+Pedido: *"arregla todos los posibles bugs con la araña en el nivel 6, por favor arregla hasta los
+errores más pequeños"*.
+
+#### EL GRANDE: `lado` NO ERA UN LADO, Y EL SUSTO LEVANTABA LAS CUATRO PATAS DE LA DERECHA
+
+`araGrito` elegía las patas «de adelante» con `(i % 4) < 2`. Comprobado sobre la propia geometría en
+vez de leyendo el nombre de la variable:
+
+| i | az | dirección | cuadrante | `(i%4)<2` |
+|---|---|---|---|---|
+| 0 | +0,55 | 121° | **atrás**-der | sí |
+| 1 | +1,15 | 156° | **atrás**-der | sí |
+| 2 | +1,95 | 202° | atrás-izq | no |
+| 3 | +2,55 | 236° | atrás-izq | no |
+| 4 | −0,55 | 58° | adelante-der | sí |
+| 5 | −1,15 | 24° | adelante-der | sí |
+| 6 | −1,95 | 338° | adelante-izq | no |
+| 7 | −2,55 | 304° | adelante-izq | no |
+
+O sea que ese selector devuelve **dos de atrás y dos de adelante: las cuatro del lado derecho**. La
+araña se encabritaba de costado, y en movimiento eso no se distingue de una pose cualquiera — sólo
+sale midiendo dónde queda cada pie.
+
+**Y LA CAUSA DE FONDO ES QUE `az` ESTABA MAL DOCUMENTADO.** El fémur sale por el +X local del pivote,
+y con `rotation.y = az` eso apunta a `(cos az · −sin az)`: **az positivo manda la pata hacia ATRÁS**,
+y el rumbo en grados es φ = 90 + az. La variable se llamaba `lado` y no era un lado, era el signo de
+az, o sea adelante/atrás. Con `i >= 4` —guardado ahora como `p.delantera`, donde se sabe de qué pata
+se trata— los cuatro pies de adelante pasan de 0,04 a **5,14–5,50 m** y los cuatro de atrás se quedan
+en el piso.
+
+#### CINCO MÁS DE LA MISMA POSE
+
+- **LAS CUATRO PATAS DE ADELANTE CONVERGÍAN EN VEZ DE ABRIRSE**, o sea que se cruzaban delante de la
+  cara justo en el plano que tiene que mostrar la cara. El signo sale de una cuenta y no de tantear:
+  abrir es aumentar el componente lateral `|cos az|`, cuya derivada tiene el signo de **−sin(2·az)**.
+- **LOS COLMILLOS TAMBIÉN.** El Euler es XYZ, o sea `R = Rx·Ry·Rz`: la Z se aplica **primero**, en el
+  marco del colmillo, y con la X en 2,24 rad la punta termina yendo hacia −x cuando z es positivo. El
+  comentario decía «se abren» y el código los cerraba.
+- **Y SE QUEDABAN ABIERTOS PARA SIEMPRE.** `araGrito` los abre y `araPose` no los tocaba, así que
+  después de un agarrón la araña seguía **toda la partida** con los colmillos abiertos y torcidos. El
+  reposo se escribe en `araPose`, que corre todos los cuadros: es la regla de siempre en este
+  proyecto, una línea que corre en cada vuelta gana contra una que corre una vez.
+- **LAS CUATRO PATAS DE ATRÁS FLOTABAN 46 CENTÍMETROS** mientras se encabritaba, porque el cuerpo
+  entero sube 0,42 y ellas no se estiraban. Se estiran lo que el cuerpo sube, y el ángulo sale de la
+  cuenta: con la rodilla en 2,778 hay que bajar 3,198, y `3,2·sin(0,96 + t) = −3,198` da **t = −2,50**.
+  Medido: los pies de atrás pasan de 0,46 a **−0,07…+0,03**.
+- **EL CABECEO DEL PLANO SE MEDÍA CONTRA EL ORIGEN Y NO CONTRA LA CARA**, que está 1,44 m más
+  adelante: el ángulo salía casi la mitad del que hace falta y los ocho ojos quedaban por encima del
+  centro del cuadro. Medido, `ojoPantalla` pasa de **y 0,413 a y 0,508**, con x en 0,503.
+
+#### LA CARA ERA UN CARTEL FLOTANDO DELANTE DE UNA PUNTA
+
+La placa oscura que la vuelta anterior puso detrás de los ojos era una **caja plana en z = 1,38**
+delante de un cefalotórax que **termina en punta en z = 1,33**. Calculado sobre la ecuación del
+elipsoide: en el centro asomaba un centímetro, en las esquinas de abajo quedaba a **18 cm** de la
+superficie, y las de arriba caían **fuera de la cabeza**. Se lee bien de frente —que es exactamente el
+único ángulo desde el que yo la había fotografiado— y como un cartel negro despegado desde cualquier
+otro.
+
+Ahora es un **bulto elipsoidal chato que sale del cefalotórax**, y sus cinco números salen de resolver
+tres condiciones: que quepa dentro del contorno del cefalotórax en su punto más bajo, su ecuador y su
+punto más alto (0,00 < 0,591 · **0,560 < 0,682** · 0,00 < 0,203), que asome unos diez centímetros por
+la punta (**0,110**), y que deje sitio para que los ocho ojos caigan en la parte **curva** y no en el
+borde. Por construcción no puede flotar.
+
+**Y LOS OCHO OJOS ESTABAN EN UN z FIJO SOBRE UNA CABEZA CURVA:** los de las puntas quedaban 15 cm por
+delante de la superficie, porque el elipsoide baja de z = 1,27 en el centro a 1,12 en el borde. Ahora
+el z de cada ojo sale de la ecuación del propio bulto, hundido un 12 % para que se vean medio metidos
+y no pegados encima. Medido, los ocho con `q` entre 0,505 y 0,872 — o sea todos en la parte curva.
+
+#### EL AGARRÓN TE METÍA DENTRO DE LA CABEZA
+
+`dist < 1.6` se mide contra el **origen** del grupo, y la cara vive 1,44 m más adelante: los últimos
+cuadros antes del agarrón tenían el ojo del jugador **a dieciséis centímetros de los colmillos**. A
+2,6 la cara queda a 1,16 m y se ve venir. Es la misma resta que arregló el encuadre del susto.
+
+#### EL CAMINO: CUATRO COSAS
+
+- **CUANDO EL NODO MÁS CERCANO A ELLA Y EL DEL JUGADOR SON EL MISMO, VA DERECHO — y ahí el grafo no
+  protege nada.** Medido: con el jugador metido en un compartimiento del baño el tramo recto cruzaba
+  un tabique, y en el primer pasillo del depósito una estantería de 2,4 m. **Diez nodos nuevos, uno
+  por bolsillo alcanzable**: los tres compartimientos del baño con sus dos nodos de corredor, y los
+  tres pasillos del depósito con sus tres bocas. **28 nodos y 27 arcos**, y la auditoría los verifica
+  todos.
+- **Y AHORA COMPRUEBA TAMBIÉN QUE EL GRAFO SEA CONEXO** (`nodosAislados`). Un nodo suelto hace que la
+  tabla de saltos devuelva el destino tal cual y la araña se vaya derecho hacia él atravesando lo que
+  haya; con veintiocho nodos y arcos escritos a mano eso es un olvido de una línea.
+- **EL BFS CORRÍA DOS VECES POR CUADRO** y alojaba tres arrays cada vez —dos `Array(n).fill()` y una
+  cola con `shift()`, que en un array es O(n)— para contestar algo que **no cambia nunca**: el grafo
+  es fijo desde que se construye el local. Tabla de saltos precalculada: 784 bytes y una sola pasada
+  al arrancar.
+- **EL RUMBO SE RECALCULABA CON LA META ENCIMA.** Al pasar por un nodo intermedio `d` cae casi a cero
+  un cuadro antes de que el grafo entregue el siguiente, y ahí `vx/d` es ruido: la araña giraba de
+  golpe y volvía. Por debajo de 35 cm se sigue con el rumbo que traía. Y el destino de ronda podía
+  sortearse **a sí mismo**, y entonces la condición se cumple otra vez al cuadro siguiente.
+
+#### EL REINICIO, LAS TELAS Y UNA FUGA
+
+- **LA VIDA NUEVA ARRANCABA CON LA VELOCIDAD DEL AGARRÓN.** El lerp tarda un segundo en bajar de 5,0
+  a 2,2, así que la araña empezaba rondando a velocidad de caza; y con la luz roja en 1,5 que le dejó
+  el grito hasta el primer cuadro de `araPaso`.
+- **PODÍA TEJER ENCIMA DE UNA PARTE O DE LA BANDEJA.** Desde que el depósito y el baño tienen nodos,
+  el 26 está a **1,2 m del pan**; y a la bandeja el jugador tiene que volver **cuatro veces**. Es el
+  mismo defecto que ya tenía la tela del piso de la cocina a 58 cm de la carne, y ahora se evita por
+  construcción: zona de exclusión de 3,4 m alrededor de las cuatro partes, la bandeja y la salida.
+- **Y CADA MUERTE DEJABA SEIS GEOMETRÍAS Y SEIS MATERIALES HUÉRFANOS EN LA GPU.** `remove()` saca del
+  grafo pero deja los buffers; más la hamburguesa a medio armar, hasta cuatro grupos por vida. Medido
+  con tres muertes seguidas: **63 → 63 → 63 geometrías**, cuando antes habrían sido 63 → 69 → 75.
+
+#### MEDIDO AL CERRAR
+
+Auditoría: 28.152 de 28.152 celdas alcanzables · 4 de 4 partes alcanzables y ninguna tapada ·
+**28 nodos, 27 arcos, 0 sucios, 0 aislados** · 359 piezas en 15 mallas. Sonda nueva `araPatas()`, que
+es la que hace visible todo lo de arriba: en reposo **4 pies apoyados en 0,04 y 4 levantados en 0,63**
+alternados, uno por cuadrante; en el grito **los 4 de adelante en 5,14–5,50 y los 4 de atrás en
+−0,07…+0,03**. Caja envolvente 6,8 × 3,15 × 6,4 m con el piso en **0,00**. Susto: `deFrente: true`,
+ojos en **x 0,503 · y 0,508**. Partida completa 4/4 en orden y salida a `end`; cadena 5 → 6; tela
+`atrapado 2,54` y caza a 5,0; los siete estados. `window.__errs` vacío en las diez corridas. El HTML
+pasó de 1,54 a **1,56 MB**.
+
+**LO QUE NO ARREGLÉ, Y ES HONESTO DECIRLO:** la araña no tiene colisión con la geometría, así que en
+el último tramo —cuando ya está en el mismo nodo que el jugador— puede rozar un mueble; los diez nodos
+nuevos acortan ese tramo pero no lo eliminan. Y sus patas miden 6,8 m de punta a punta contra vanos de
+2 a 4 m, así que al cruzar una puerta las atraviesa. Las dos cosas se arreglan con un cuerpo de
+colisión propio, y es otra vuelta.
+
+
 ### Octogésima tercera vuelta (2026-09-02): **PUERTA BLANCA** — el nivel 6 no se podía recorrer
 
 Pedido: *"arregla todos los posibles bugs y errores que hayan en el nivel 6, arregla hasta los errores

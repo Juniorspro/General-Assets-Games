@@ -731,6 +731,20 @@ s = cambiar(s, """    flores: function () {""",
         }
         if (alto > 1.2) arcos.push({ arco: a, alto: +alto.toFixed(2), en: donde });
       });
+      // Y EL GRAFO TIENE QUE SER CONEXO: si un nodo queda suelto, la tabla de
+      // saltos devuelve el destino tal cual y la arana se va derecho hacia el,
+      // atravesando lo que haya en el medio. Con veintiocho nodos y arcos
+      // escritos a mano eso es un olvido de una linea.
+      const alc2 = new Uint8Array(ST_NODOS.length); alc2[0] = 1;
+      const cola2 = [0];
+      for (let qi = 0; qi < cola2.length; qi++) {
+        const nn = cola2[qi];
+        for (let j = 0; j < ST_VEC[nn].length; j++) {
+          if (!alc2[ST_VEC[nn][j]]) { alc2[ST_VEC[nn][j]] = 1; cola2.push(ST_VEC[nn][j]); }
+        }
+      }
+      const nodosAislados = [];
+      for (let i = 0; i < ST_NODOS.length; i++) if (!alc2[i]) nodosAislados.push(i);
       // y los nodos: uno metido dentro de un mueble hace que el BFS mande a la
       // arana a un sitio que no existe
       const nodosSucios = [];
@@ -751,8 +765,26 @@ s = cambiar(s, """    flores: function () {""",
                alcanzadas: alc, sueltas: sueltas, partes: partes,
                bandeja: llega(ST_BANDEJA.x, ST_BANDEJA.z),
                salida: llega(ST_SALIDA.x, ST_SALIDA.z),
+               nodos: ST_NODOS.length, arcos: ST_ARCOS.length,
                arcosSucios: arcos, nodosSucios: nodosSucios,
-               fusion: stFusion };
+               nodosAislados: nodosAislados, fusion: stFusion };
+    },
+    // LAS OCHO PATAS, UNA POR UNA: si es de adelante, donde tiene el pie y la
+    // rodilla en el mundo, y donde cae el pie en el marco de la arana. Es la
+    // unica forma de comprobar que el susto levanta LA MITAD DE ADELANTE y no
+    // media arana de costado — con `(i % 4) < 2` levantaba las cuatro del lado
+    // derecho y en movimiento eso no se distingue de una pose cualquiera.
+    araPatas: function () {
+      ARA.g.updateMatrixWorld(true);
+      return ARA.patas.map(function (p, i) {
+        const pie = new THREE.Vector3(3.2, 0, 0).applyMatrix4(p.tPiv.matrixWorld);
+        const rod = new THREE.Vector3(0, 0, 0).applyMatrix4(p.tPiv.matrixWorld);
+        const loc = ARA.g.worldToLocal(pie.clone());
+        return { i: i, del: p.delantera, az: +p.az.toFixed(2),
+                 pieY: +pie.y.toFixed(2), rodY: +rod.y.toFixed(2),
+                 adel: +loc.z.toFixed(2), lado: +loc.x.toFixed(2),
+                 lat: +Math.abs(loc.x).toFixed(2) };
+      });
     },
     // QUE MIRA LA CAMARA DURANTE EL SUSTO. Los ojos viven en el +Z local y el
     // abdomen en el -Z, asi que alcanza con proyectar los dos: si el abdomen
@@ -871,6 +903,16 @@ s = s if SOLO else cambiar(s,
     'la pose de la arana en el screamer')
 
 # la camara mira los quelIceros y no el piso: sus ojos viven en y=1,78 y con la
+# EL CABECEO SE MIDE CONTRA LA CARA Y NO CONTRA EL ORIGEN. La cara de la arana
+# esta 1,44 m mas cerca del lente que su grupo, asi que con `dist` el angulo
+# salia casi la mitad de lo que hace falta y los ocho ojos quedaban por encima
+# del centro del cuadro (medido: y 0,413 en vez de 0,50).
+s = s if SOLO else cambiar(s,
+    """    const want = Math.atan2(headY - (player.position.y + EYE_HEIGHT), Math.max(dist, 0.3));""",
+    """    const distCara = isSpider ? Math.max(dist - 1.44, 0.5) : dist;
+    const want = Math.atan2(headY - (player.position.y + EYE_HEIGHT), Math.max(distCara, 0.3));""",
+    'el cabeceo del susto apunta a la cara')
+
 # encabritada suben a 2,2
 s = s if SOLO else cambiar(s,
     """    const headY = isExec ? (player.position.y + 2.2) : (isSaw ? (player.position.y + 2.5) : (isApe ? (player.position.y + 1.9)""",

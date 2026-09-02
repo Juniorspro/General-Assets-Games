@@ -7510,6 +7510,7 @@ window.__PB_N6 = {
     // que es lo unico que un ojo encendido tiene que hacer.
     const ojoMat = new THREE.MeshBasicMaterial({ color: 0xff2a10, toneMapped: false });
     const colmillo = new THREE.MeshStandardMaterial({ color: 0x1d1512, roughness: 0.35 });
+    ARA.colmillos = [];
 
     // cuerpo: cefalotorax chato y un abdomen mucho mas grande y alto. La
     // proporcion es lo que separa una arana de un bicho de seis patas: el
@@ -7543,29 +7544,52 @@ window.__PB_N6 = {
       pelos.push(pelo);
     }
     ARA.g.add(stUnir(pelos, quitina, true));
+    // ---- LA CARA: un bulto que SALE del cefalotorax ----
+    // El intento anterior era una placa oscura plana en z=1,38, y eso no se
+    // apoya en nada: el cefalotorax es un elipsoide que TERMINA EN PUNTA en
+    // z=1,33, asi que en el centro la placa asomaba un centimetro y en sus
+    // esquinas —calculado sobre la ecuacion del elipsoide— quedaba a 18 cm de
+    // la superficie, y las de arriba directamente fuera de la cabeza. Un cartel
+    // negro flotando delante de una punta. Se lee bien de frente, que es donde
+    // yo la habia fotografiado, y mal desde cualquier otro angulo.
+    // Un bulto elipsoidal ancho y CHATO cabe dentro del contorno del
+    // cefalotorax a la altura de su ecuador y asoma 11 cm por la punta: por
+    // construccion no puede flotar, y ademas es la cara que tiene una arana.
+    // Los cinco numeros salen de resolver tres condiciones sobre la ecuacion
+    // del cefalotorax, no de tantear: el bulto tiene que caber dentro de su
+    // contorno en su punto mas bajo, su ecuador y su punto mas alto (0,00 <
+    // 0,591 · 0,560 < 0,682 · 0,00 < 0,203), asomar unos diez centimetros por
+    // la punta (0,110), y dejar sitio para que los ocho ojos caigan en la parte
+    // CURVA y no en el borde. Con ay = 0,34 el bulto salia por arriba de la
+    // cabeza y los dos ojos de las puntas caian justo en el rim (q = 0,000).
+    const CARA = { x: 0, y: 1.70, z: 1.04, ax: 0.56, ay: 0.28, az: 0.40 };
+    const cara = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10),
+      new THREE.MeshStandardMaterial({ color: 0x16100d, roughness: 0.4,
+                                       emissive: 0x080403, emissiveIntensity: 1.0 }));
+    cara.scale.set(CARA.ax, CARA.ay, CARA.az);
+    cara.position.set(CARA.x, CARA.y, CARA.z);
+    ARA.g.add(cara);
+
     // ocho ojos en dos filas, que es como los tiene de verdad. Van fundidos por
     // lo mismo que los pelos: no se mueven y no los toca nadie.
+    // Y SE APOYAN EN LA SUPERFICIE DEL BULTO, no en un z fijo: con una fila
+    // plana los de los extremos quedaban 15 cm por delante de la cabeza —el
+    // elipsoide baja de z=1,27 en el centro a 1,12 en el borde— o sea flotando.
+    // El z sale de la ecuacion del propio bulto, hundido un 12 % para que se
+    // vean medio metidos y no pegados encima.
     const ojos = [];
     for (let i = 0; i < 8; i++) {
       const fila = i < 4 ? 0 : 1;
       const k = i % 4;
-      // 0,19 y 0,13 y no 0,14 y 0,10: son lo UNICO que dice "cara de arana", y
-      // en el plano del susto —a 2,2 m— con el tamano anterior se perdian entre
-      // las rodillas, que a esa distancia son ocho bolas palidas del mismo
-      // tamano. Mas grandes, el racimo rojo es lo primero que se ve.
-      const o = new THREE.Mesh(new THREE.SphereGeometry(fila ? 0.10 : 0.15, 8, 6), ojoMat);
-      o.position.set((k - 1.5) * (fila ? 0.26 : 0.34), 1.80 - fila * 0.22, 1.43);
+      const r = fila ? 0.10 : 0.15;
+      const ox = (k - 1.5) * (fila ? 0.19 : 0.24);
+      const oy = fila ? 1.61 : 1.78;
+      const u = (ox - CARA.x) / CARA.ax, v = (oy - CARA.y) / CARA.ay;
+      const q = Math.max(0, 1 - u * u - v * v);
+      const o = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), ojoMat);
+      o.position.set(ox, oy, CARA.z + CARA.az * Math.sqrt(q) * 0.88);
       ojos.push(o);
     }
-    // UNA PLACA OSCURA DETRAS DEL RACIMO. Los ocho ojos son rojos y sin luz,
-    // pero el foco del susto ilumina la quitina de alrededor hasta casi el mismo
-    // valor: medido en la captura, el racimo se perdia sobre un fondo palido. Va
-    // sin luz y casi negra, asi que ningun flash la puede levantar y el rojo se
-    // recorta contra ella — que es ademas la cara que tiene una arana de verdad.
-    const cara = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.62, 0.07),
-                                new THREE.MeshBasicMaterial({ color: 0x0c0806, toneMapped: false }));
-    cara.position.set(0, 1.70, 1.38);
-    ARA.g.add(cara);
     ARA.g.add(stUnir(ojos, ojoMat, true));
     // quelIceros y colmillos
     for (let s = -1; s <= 1; s += 2) {
@@ -7576,8 +7600,10 @@ window.__PB_N6 = {
       const c = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.52, 6), colmillo);
       c.position.set(s * 0.24, 1.12, 1.5);
       c.rotation.x = Math.PI - 0.35;
+      // el signo de apertura se guarda con el colmillo y no se deduce del
+      // indice del array, que es lo que ya salio mal una vez
+      c.userData.afuera = -s;
       ARA.g.add(c);
-      ARA.colmillos = ARA.colmillos || [];
       ARA.colmillos.push(c);
     }
 
@@ -7585,10 +7611,20 @@ window.__PB_N6 = {
     // Cada una: pivote en el cuerpo -> femur hacia AFUERA Y ARRIBA -> rodilla ->
     // tibia hacia abajo. Ese codo por encima del lomo es la silueta de arana; con
     // las patas rectas queda un insecto.
+    // OJO CON `az`: el femur sale por el +X local del pivote, y con
+    // rotation.y = az eso apunta a (cos az · −sin az). O sea que az POSITIVO
+    // manda la pata HACIA ATRAS y az negativo hacia adelante — el rumbo en
+    // grados es phi = 90 + az. Medido, los ocho quedan asi:
+    //   i=0,1  az +0,55 +1,15  ->  121 y 156 grados  ->  ATRAS-derecha
+    //   i=2,3  az +1,95 +2,55  ->  202 y 236         ->  ATRAS-izquierda
+    //   i=4,5  az -0,55 -1,15  ->   58 y  24         ->  ADELANTE-derecha
+    //   i=6,7  az -1,95 -2,55  ->  338 y 304         ->  ADELANTE-izquierda
+    // Cuatro adelante y cuatro atras, dos por lado: es la planta correcta. Lo
+    // que esta mal es el NOMBRE `lado`, que no es un lado sino el signo de az.
     const AZ = [0.55, 1.15, 1.95, 2.55];
     for (let i = 0; i < 8; i++) {
-      const lado = i < 4 ? 1 : -1;
-      const az = AZ[i % 4] * lado;
+      const atras = i < 4 ? 1 : -1;
+      const az = AZ[i % 4] * atras;
       const piv = new THREE.Object3D();
       piv.position.set(0, 1.55, 0.35);
       piv.rotation.y = az;
@@ -7612,7 +7648,19 @@ window.__PB_N6 = {
       tib.rotation.z = Math.PI / 2;
       tPiv.add(tib);
 
+      // `delantera` se guarda AQUI, donde se sabe de que pata se trata, en vez
+      // de recalcularse con un indice: araGrito usaba `(i % 4) < 2`, que
+      // selecciona i = 0,1,4,5 — o sea DOS DE ATRAS Y DOS DE ADELANTE, las
+      // cuatro del lado derecho. El susto levantaba media arana en vez de la
+      // mitad de adelante, y eso se lee a que se cae de costado.
+      // `afuera` dice para donde hay que girar el pivote para que la pata se
+      // ABRA, y sale de una cuenta y no de tantear: abrir es aumentar el
+      // |componente lateral| = |cos az|, cuya derivada tiene el signo de
+      // −sin(2·az). Con az −0,55 y −1,15 (adelante-derecha) hay que subir az;
+      // con −1,95 y −2,55 (adelante-izquierda) hay que bajarlo.
       ARA.patas.push({ piv: piv, fPiv: fPiv, tPiv: tPiv, az: az,
+                       delantera: i >= 4,
+                       afuera: Math.sin(2 * az) < 0 ? 1 : -1,
                        fase: (i % 2 === 0 ? 0 : Math.PI) + (i < 4 ? 0 : Math.PI) });
     }
     ARA.g.position.set(-16, ARA_Y, 8);
@@ -7647,6 +7695,16 @@ window.__PB_N6 = {
     // el cuerpo cabecea al doble de la frecuencia del paso, porque hay dos
     // apoyos por ciclo
     ARA.cef.position.y = 1.62 + Math.sin(t * 2) * 0.045 * (vel > 0.4 ? 1 : 0.3);
+    // Y LOS COLMILLOS VUELVEN A SU SITIO. araGrito los abre y no los cerraba
+    // nadie: araPose no los tocaba, asi que despues de un agarron la arana se
+    // quedaba con los colmillos abiertos y torcidos PARA TODA LA PARTIDA. El
+    // reposo se escribe aca y no en el reinicio, por la regla de siempre en este
+    // proyecto: una linea que corre todos los cuadros gana contra una que corre
+    // una vez.
+    for (let i = 0; i < ARA.colmillos.length; i++) {
+      ARA.colmillos[i].rotation.x = Math.PI - 0.35;
+      ARA.colmillos[i].rotation.z = 0;
+    }
   }
 
   // ---- la pose del agarron ----
@@ -7659,22 +7717,35 @@ window.__PB_N6 = {
     const kk = clamp(k * 1.7, 0, 1);
     for (let i = 0; i < 8; i++) {
       const p = ARA.patas[i];
-      const delantera = (i % 4) < 2;
-      if (delantera) {
+      if (p.delantera) {
         p.fPiv.rotation.z = lerp(0.96, 1.62, kk) + Math.sin(elapsed * 23 + i) * 0.07;
         p.tPiv.rotation.z = lerp(-2.01, -0.62, kk);
-        p.piv.rotation.y = p.az + (p.az > 0 ? -0.40 : 0.40) * kk;
+        // Y SE ABREN HACIA AFUERA. Con el signo anterior las cuatro se movian
+        // hacia az = 0, o sea CONVERGIAN sobre el eje de la mirada: se cruzaban
+        // delante de la cara justo en el plano donde hay que ver la cara.
+        p.piv.rotation.y = p.az + p.afuera * 0.40 * kk;
       } else {
+        // Y LAS DE ATRAS SE ESTIRAN LO QUE EL CUERPO SUBE, asi que siguen
+        // APOYADAS mientras la arana se encabrita. Medido, con la tibia en
+        // −2,01 los cuatro pies quedaban a 46 cm del piso —el grupo sube 0,42—
+        // o sea el bicho flotando de atras. El angulo sale de la cuenta: con la
+        // rodilla en 2,778 hace falta bajar 3,198 para dejar el pie en −0,42
+        // local, y 3,2·sin(0,96+t) = −3,198 da t = −2,50.
         p.fPiv.rotation.z = 0.96 + Math.sin(elapsed * 13 + i) * 0.05;
-        p.tPiv.rotation.z = -2.01;
+        p.tPiv.rotation.z = lerp(-2.01, -2.50, kk);
         p.piv.rotation.y = p.az;
       }
     }
     // los colmillos se abren y bajan: es lo unico que queda en el centro del
     // cuadro cuando las patas ya se fueron por los bordes
-    ARA.colmillos.forEach(function (c, i) {
+    // Y LOS COLMILLOS TAMBIEN SE ABREN Y NO SE CIERRAN. El Euler es XYZ, o sea
+    // R = Rx·Ry·Rz: la Z se aplica PRIMERO, en el marco del colmillo, y con la
+    // X en 2,24 rad la punta termina yendo hacia −x cuando z es positivo.
+    // Medido asi, el signo anterior hacia converger los dos colmillos sobre el
+    // eje en vez de separarlos, al reves de lo que dice este comentario.
+    ARA.colmillos.forEach(function (c) {
       c.rotation.x = Math.PI - 0.35 - 0.55 * kk;
-      c.rotation.z = (i ? 1 : -1) * 0.45 * kk;
+      c.rotation.z = c.userData.afuera * 0.45 * kk;
     });
     // y se encabrita: sube el cuerpo entero en vez de inclinarlo, porque
     // inclinar el grupo alrededor de su origen mete las patas traseras un metro
@@ -7726,8 +7797,33 @@ window.__PB_N6 = {
     stTelas.push(w);
     return w;
   }
+  // LOS SITIOS DONDE UNA TELA SERIA UN PEAJE Y NO UN MECANISMO. La arana teje
+  // donde esta parada, y desde que el deposito y el bano tienen nodos ese sitio
+  // puede caer justo encima de una parte —el nodo 26 esta a 1,2 m del pan— o de
+  // la bandeja, donde el jugador tiene que volver CUATRO veces. Es el mismo
+  // defecto que ya tenia la tela del piso de la cocina a 58 cm de la carne, y
+  // ahora se evita por construccion en vez de moviendo una constante.
+  const stNoTela = stPartes.map(function (p) { return [p.x, p.z]; })
+    .concat([[ST_BANDEJA.x, ST_BANDEJA.z], [ST_SALIDA.x, ST_SALIDA.z]]);
+  function stSitioDeTela(x, z) {
+    for (let i = 0; i < stNoTela.length; i++) {
+      if (Math.hypot(x - stNoTela[i][0], z - stNoTela[i][1]) < 3.4) return false;
+    }
+    return true;
+  }
+
   function stTelasIniciales() {
-    while (stTelas.length) { const w = stTelas.pop(); storeGroup.remove(w.mesh); }
+    // Y SE SUELTAN LOS BUFFERS. `remove` saca del grafo pero deja la geometria y
+    // el material en la GPU: cada vez que la arana te agarraba, el reinicio
+    // dejaba seis geometrias y seis materiales huerfanos, y una partida con
+    // veinte muertes son ciento veinte. La textura de la tela NO se toca: es una
+    // sola, compartida por todas.
+    while (stTelas.length) {
+      const w = stTelas.pop();
+      storeGroup.remove(w.mesh);
+      w.mesh.geometry.dispose();
+      w.mesh.material.dispose();
+    }
     // LAS DE LOS VANOS SE PONEN DE ENTRADA, y no al azar: son las que garantizan
     // que el jugador se cruce con el mecanismo antes de que la arana lo elija
     // por el.
@@ -7779,10 +7875,30 @@ window.__PB_N6 = {
     [13, 13.2],     // 14 la puerta del bano
     [9.8, 13.2],    // 15 bano, corredor de entrada
     [-6, 19.8],     // 16 camino al deposito
-    [-16, 20.4]     // 17 deposito, pasillo del norte
+    [-11.45, 20.5], // 17 deposito, pasillo del norte, boca del 3er corredor
+    // LOS DIEZ DE ABAJO SON PARA QUE LA ARANA NO CRUCE MUEBLES EN EL ULTIMO
+    // TRAMO. Cuando el nodo mas cercano a ella y el mas cercano al jugador son
+    // EL MISMO, va derecho al jugador — y ahi el grafo ya no protege nada:
+    // medido, con el jugador metido en el compartimiento del oeste del bano
+    // (6 · 15) el tramo recto desde el corredor cruzaba un tabique, y con el
+    // jugador en el primer pasillo del deposito (-18,6 · 16) cruzaba una
+    // estanteria de 2,4 m. Un nodo por bolsillo alcanzable arregla la clase
+    // entera de defecto sin tocar el algoritmo.
+    [7.6, 13.2],    // 18 bano, corredor frente al compartimiento oeste
+    [7.6, 15.7],    // 19 bano, compartimiento oeste
+    [9.8, 15.7],    // 20 bano, compartimiento del medio (donde esta la TAPA)
+    [11.95, 13.2],  // 21 bano, corredor frente al compartimiento este
+    [11.95, 15.7],  // 22 bano, compartimiento este
+    [-15.05, 20.5], // 23 deposito, pasillo del norte, boca del 2do corredor
+    [-18.65, 20.5], // 24 deposito, pasillo del norte, boca del 1er corredor
+    [-11.45, 16],   // 25 deposito, 3er corredor
+    [-15.05, 16],   // 26 deposito, 2do corredor (donde esta el PAN)
+    [-18.65, 16]    // 27 deposito, 1er corredor
   ];
   const ST_ARCOS = [[0,1],[1,2],[2,3],[2,4],[4,5],[5,6],[5,7],[7,8],[2,9],
-                    [9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[11,16],[16,17]];
+                    [9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[11,16],[16,17],
+                    [15,18],[18,19],[15,20],[15,21],[21,22],
+                    [17,23],[23,24],[17,25],[23,26],[24,27]];
   const ST_VEC = ST_NODOS.map(function () { return []; });
   ST_ARCOS.forEach(function (a) { ST_VEC[a[0]].push(a[1]); ST_VEC[a[1]].push(a[0]); });
   function stNodoDe(x, z) {
@@ -7793,24 +7909,34 @@ window.__PB_N6 = {
     }
     return mej;
   }
-  function stSiguienteNodo(desde, hasta) {
-    if (desde === hasta) return hasta;
-    const prev = new Array(ST_NODOS.length).fill(-1);
-    const vis = new Array(ST_NODOS.length).fill(false);
-    const cola = [desde]; vis[desde] = true;
-    while (cola.length) {
-      const n = cola.shift();
-      if (n === hasta) break;
-      for (let i = 0; i < ST_VEC[n].length; i++) {
-        const m = ST_VEC[n][i];
-        if (!vis[m]) { vis[m] = true; prev[m] = n; cola.push(m); }
+  // LA TABLA DE SALTOS SE CALCULA UNA VEZ, no un BFS por cuadro. El que habia
+  // corria en cada vuelta del bucle y alojaba tres arrays cada vez —dos
+  // Array(n).fill() y una cola con shift(), que en un array es O(n)— o sea
+  // basura para el recolector sesenta veces por segundo para contestar algo que
+  // NO CAMBIA NUNCA: el grafo es fijo desde que se construye el local. Con
+  // veintiocho nodos son 784 bytes y una sola pasada al arrancar.
+  const ST_SIG = ST_NODOS.map(function () { return new Int16Array(ST_NODOS.length); });
+  {
+    const N = ST_NODOS.length;
+    for (let s0 = 0; s0 < N; s0++) {
+      const prev = new Int16Array(N).fill(-1), vis = new Uint8Array(N);
+      const cola = [s0]; vis[s0] = 1;
+      for (let qi = 0; qi < cola.length; qi++) {
+        const nn = cola[qi];
+        for (let j = 0; j < ST_VEC[nn].length; j++) {
+          const m = ST_VEC[nn][j];
+          if (!vis[m]) { vis[m] = 1; prev[m] = nn; cola.push(m); }
+        }
+      }
+      for (let d0 = 0; d0 < N; d0++) {
+        if (d0 === s0 || !vis[d0]) { ST_SIG[s0][d0] = d0; continue; }
+        let c = d0, guarda = 0;
+        while (prev[c] !== s0 && prev[c] >= 0 && guarda++ < N) c = prev[c];
+        ST_SIG[s0][d0] = prev[c] === s0 ? c : d0;
       }
     }
-    if (!vis[hasta]) return desde;
-    let c = hasta;
-    while (prev[c] !== -1 && prev[c] !== desde) c = prev[c];
-    return prev[c] === -1 ? hasta : c;
   }
+  function stSiguienteNodo(desde, hasta) { return ST_SIG[desde][hasta]; }
 
   // ==================================================================
   // LOGICA DEL NIVEL 6
@@ -7848,11 +7974,23 @@ window.__PB_N6 = {
       p.g.visible = true; p.halo.visible = true;
       p.g.position.set(p.x, p.base, p.z);
     });
-    while (stPila.length) { const m = stPila.pop(); storeGroup.remove(m); }
+    // lo mismo con la hamburguesa a medio armar: cada parte puesta es un grupo
+    // con geometria propia, y hasta cuatro por vida. Los materiales son
+    // compartidos (stMatPan, stMatCarne...) y no se sueltan.
+    while (stPila.length) {
+      const m = stPila.pop();
+      storeGroup.remove(m);
+      m.traverse(function (o) { if (o.geometry) o.geometry.dispose(); });
+    }
     stSalida.group.visible = false;
     stTelasIniciales();
     ARA.estado = 'ronda';
-    ARA.cazaT = 0; ARA.tejeCd = 11;
+    // Y EN REPOSO. Sin esto la vida nueva arrancaba con la velocidad del agarron
+    // —el lerp tarda un segundo en bajar de 5,0 a 2,2— o sea con la arana
+    // rondando a velocidad de caza, y con la luz roja en 1,5 que le dejo el
+    // grito hasta el primer cuadro de araPaso.
+    ARA.cazaT = 0; ARA.tejeCd = 11; ARA.vel = 0; ARA.fase = 0;
+    ARA.luz.intensity = 0.18;
     // CON 0 REAPARECIA HUNDIDA: se construye en ARA_Y —la caja envolvente da
     // negativo con el grupo en cero— y el reinicio lo pisaba, asi que la
     // primera vida la tenia apoyada y todas las demas enterradas hasta el
@@ -7935,6 +8073,11 @@ window.__PB_N6 = {
 
     const vx = metaX - ARA.g.position.x, vz = metaZ - ARA.g.position.z;
     const d = Math.hypot(vx, vz) || 1;
+    // EL RUMBO SE CONGELA CUANDO LA META ESTA ENCIMA. Al pasar por un nodo
+    // intermedio `d` cae casi a cero un cuadro antes de que el BFS entregue el
+    // siguiente, y ahi vx/d y vz/d son ruido: la arana giraba de golpe y
+    // volvia. Por debajo de 35 cm se sigue con el rumbo que traia.
+    const rumboVale = d > 0.35;
     // 5,0 contra 4,3 de caminar y 7,7 de correr: caminando NO se le gana y
     // corriendo si. Esa es toda la tension del nivel, y es una resta.
     const velObj = ARA.estado === 'caza' ? 5.0 : 2.2;
@@ -7943,11 +8086,13 @@ window.__PB_N6 = {
     ARA.g.position.z += (vz / d) * ARA.vel * delta;
     ARA.g.position.y = ARA_Y;
 
-    const rumbo = Math.atan2(vx, vz);
-    let dr = rumbo - ARA.g.rotation.y;
-    while (dr > Math.PI) dr -= Math.PI * 2;
-    while (dr < -Math.PI) dr += Math.PI * 2;
-    ARA.g.rotation.y += dr * Math.min(delta * 4.5, 1);
+    if (rumboVale) {
+      const rumbo = Math.atan2(vx, vz);
+      let dr = rumbo - ARA.g.rotation.y;
+      while (dr > Math.PI) dr -= Math.PI * 2;
+      while (dr < -Math.PI) dr += Math.PI * 2;
+      ARA.g.rotation.y += dr * Math.min(delta * 4.5, 1);
+    }
 
     ARA.fase += delta * (2.6 + ARA.vel * 1.35);
     araPose(ARA.fase, ARA.vel);
@@ -7955,15 +8100,25 @@ window.__PB_N6 = {
 
     if (ARA.estado === 'ronda') {
       if (Math.hypot(ARA.g.position.x - ARA.wp.x, ARA.g.position.z - ARA.wp.z) < 2.2) {
-        const n = ST_NODOS[Math.floor(Math.random() * ST_NODOS.length)];
-        ARA.wp.set(n[0], 0, n[1]);
+        // Y NO PUEDE SORTEAR EL QUE YA TIENE: cayendo en el mismo nodo la
+        // condicion se cumple otra vez al cuadro siguiente y la arana se queda
+        // sorteando en el sitio hasta que la suerte le da otro.
+        let k2 = Math.floor(Math.random() * (ST_NODOS.length - 1));
+        for (let t2 = 0; t2 < ST_NODOS.length; t2++) {
+          const cand = ST_NODOS[(k2 + t2) % ST_NODOS.length];
+          if (Math.abs(cand[0] - ARA.wp.x) > 0.01 || Math.abs(cand[1] - ARA.wp.z) > 0.01) {
+            ARA.wp.set(cand[0], 0, cand[1]);
+            break;
+          }
+        }
       }
       ARA.tejeCd -= delta;
       // Y NO LA TEJE ENCIMA DEL JUGADOR. Durante los cinco segundos de gracia
       // la arana sigue en ronda aunque este al lado, asi que podia dejar una
       // tela bajo los pies: tres segundos clavado por algo que aparecio debajo
       // no es una trampa, es un castigo sin aviso.
-      if (ARA.tejeCd <= 0 && stTelas.length < 12 && dist > 7) {
+      if (ARA.tejeCd <= 0 && stTelas.length < 12 && dist > 7 &&
+          stSitioDeTela(ARA.g.position.x, ARA.g.position.z)) {
         ARA.tejeCd = rand(11, 17);
         stNuevaTela(ARA.g.position.x, ARA.g.position.z, rand(1.3, 1.9));
       }
@@ -8064,7 +8219,12 @@ window.__PB_N6 = {
     }
 
     // ---- te alcanza ----
-    if (ST.grace <= 0 && dist < 1.6 && catchGuard <= 0 && !transitioning) {
+    // 2,6 Y NO 1,6, y es la misma resta que corrigio el encuadre del susto:
+    // `dist` se mide contra el ORIGEN del grupo y la cara vive 1,44 m mas
+    // adelante. Con 1,6 los ultimos cuadros antes del agarron tenian el ojo del
+    // jugador A DIECISEIS CENTIMETROS de los colmillos, o sea dentro de la
+    // cabeza. Con 2,6 la cara queda a 1,16 m: se ve venir.
+    if (ST.grace <= 0 && dist < 2.6 && catchGuard <= 0 && !transitioning) {
       triggerScreamer('spider', ARA.g);
     }
     // LA CINTA SE DEGRADA CON LA CERCANIA, y eso ya lo hace el juego: este
@@ -8701,7 +8861,8 @@ window.__PB_N6 = {
     // camera locked on its face, shaking hard
     const headY = isSpider ? 2.2 : (isExec ? (player.position.y + 2.2) : (isSaw ? (player.position.y + 2.5) : (isApe ? (player.position.y + 1.9)
       : (isWrap ? 2.35 : (isBat ? (player.position.y + 1.55) : (isDog ? 1.6 : 3.05))))));
-    const want = Math.atan2(headY - (player.position.y + EYE_HEIGHT), Math.max(dist, 0.3));
+    const distCara = isSpider ? Math.max(dist - 1.44, 0.5) : dist;
+    const want = Math.atan2(headY - (player.position.y + EYE_HEIGHT), Math.max(distCara, 0.3));
     pitch = lerp(pitch, want, Math.min(delta * 14, 1));
     player.rotation.y = yaw;
     pitchObj.rotation.x = pitch;
@@ -12053,6 +12214,20 @@ window.__PB_N6 = {
         }
         if (alto > 1.2) arcos.push({ arco: a, alto: +alto.toFixed(2), en: donde });
       });
+      // Y EL GRAFO TIENE QUE SER CONEXO: si un nodo queda suelto, la tabla de
+      // saltos devuelve el destino tal cual y la arana se va derecho hacia el,
+      // atravesando lo que haya en el medio. Con veintiocho nodos y arcos
+      // escritos a mano eso es un olvido de una linea.
+      const alc2 = new Uint8Array(ST_NODOS.length); alc2[0] = 1;
+      const cola2 = [0];
+      for (let qi = 0; qi < cola2.length; qi++) {
+        const nn = cola2[qi];
+        for (let j = 0; j < ST_VEC[nn].length; j++) {
+          if (!alc2[ST_VEC[nn][j]]) { alc2[ST_VEC[nn][j]] = 1; cola2.push(ST_VEC[nn][j]); }
+        }
+      }
+      const nodosAislados = [];
+      for (let i = 0; i < ST_NODOS.length; i++) if (!alc2[i]) nodosAislados.push(i);
       // y los nodos: uno metido dentro de un mueble hace que el BFS mande a la
       // arana a un sitio que no existe
       const nodosSucios = [];
@@ -12073,8 +12248,26 @@ window.__PB_N6 = {
                alcanzadas: alc, sueltas: sueltas, partes: partes,
                bandeja: llega(ST_BANDEJA.x, ST_BANDEJA.z),
                salida: llega(ST_SALIDA.x, ST_SALIDA.z),
+               nodos: ST_NODOS.length, arcos: ST_ARCOS.length,
                arcosSucios: arcos, nodosSucios: nodosSucios,
-               fusion: stFusion };
+               nodosAislados: nodosAislados, fusion: stFusion };
+    },
+    // LAS OCHO PATAS, UNA POR UNA: si es de adelante, donde tiene el pie y la
+    // rodilla en el mundo, y donde cae el pie en el marco de la arana. Es la
+    // unica forma de comprobar que el susto levanta LA MITAD DE ADELANTE y no
+    // media arana de costado — con `(i % 4) < 2` levantaba las cuatro del lado
+    // derecho y en movimiento eso no se distingue de una pose cualquiera.
+    araPatas: function () {
+      ARA.g.updateMatrixWorld(true);
+      return ARA.patas.map(function (p, i) {
+        const pie = new THREE.Vector3(3.2, 0, 0).applyMatrix4(p.tPiv.matrixWorld);
+        const rod = new THREE.Vector3(0, 0, 0).applyMatrix4(p.tPiv.matrixWorld);
+        const loc = ARA.g.worldToLocal(pie.clone());
+        return { i: i, del: p.delantera, az: +p.az.toFixed(2),
+                 pieY: +pie.y.toFixed(2), rodY: +rod.y.toFixed(2),
+                 adel: +loc.z.toFixed(2), lado: +loc.x.toFixed(2),
+                 lat: +Math.abs(loc.x).toFixed(2) };
+      });
     },
     // QUE MIRA LA CAMARA DURANTE EL SUSTO. Los ojos viven en el +Z local y el
     // abdomen en el -Z, asi que alcanza con proyectar los dos: si el abdomen
