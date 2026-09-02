@@ -1256,15 +1256,20 @@ function pintarBarra(p, hecho, total) {
 async function arrancar() {
     const t0 = performance.now();
     const r = await precargar(A, A_MAN, pintarBarra);
-    if (r.fallados.length) {
+    const t = document.getElementById('mcarga-txt');
+    if (r.corte) {
+        if (t) t.textContent = 'LA RED VA LENTA — SE ENTRA IGUAL';
+    } else if (r.fallados.length) {
         console.warn('no bajaron:', r.fallados.join(', '));
-        const t = document.getElementById('mcarga-txt');
         if (t) t.textContent = 'FALTARON ' + r.fallados.length + ' ARCHIVOS — SE JUEGA IGUAL';
+    } else if (t) {
+        t.textContent = 'LISTO';
     }
     window.__CARGA = { ms: Math.round(performance.now() - t0), ...r, n: Object.keys(A_MAN).length };
     game = new Dungeon();
     window.__game = game;
     armarMenu();
+    sonarBotones();
     requestAnimationFrame(loop);
 }
 
@@ -1274,6 +1279,21 @@ arrancar();
    termina de cargar y las texturas se suben a la GPU mientras mirás la
    pantalla— pero el jugador no se mueve y el bicho no ronda. */
 const boot = document.getElementById('boot');
+/* Un solo enganche para todos los botones del juego: cualquier cosa que se
+   pueda apretar suena. Va por delegación en el documento, así los botones que
+   aparecen después —los chips de gráficos, por ejemplo— también entran. */
+function sonarBotones() {
+    const suena = e => {
+        const t = e.target.closest('.tbtn, .niv, #mjugar, #btn-graficos, #graficos-cerrar');
+        if (!t) return;
+        despertarAudio();
+        if (t.id === 'mjugar') S.confirmar();
+        else if (t.id === 'graficos-cerrar') S.cancelar();
+        else S.boton(t.classList.contains('tbtn') ? 0.75 : 1);
+    };
+    addEventListener('pointerdown', suena, { passive: true, capture: true });
+}
+
 function armarMenu() {
     const A2 = window.DUNGEON_ASSETS || {};
     const poner = (id, url, fondo) => {
@@ -1290,15 +1310,31 @@ function armarMenu() {
 
     const carga = document.getElementById('mcarga');
     const jugar = document.getElementById('mjugar');
-    jugar.style.visibility = 'hidden';
-    /* El botón aparece cuando los muebles terminaron de entrar: si dejás
-       empezar antes, el primer cuarto se puebla delante tuyo. */
+    /* El botón NO se esconde. Antes esperaba a que los muebles terminaran de
+       entrar y, si alguno no llegaba, no aparecía nunca: quedabas mirando el
+       menú sin forma de entrar. Ahora entra siempre y los muebles caen
+       después si es que caen. */
     const listo = () => {
-        if (!game.modelosMuebles) return setTimeout(listo, 200);
-        carga.style.display = 'none';
-        jugar.style.visibility = 'visible';
+        if (!game.modelosMuebles) return setTimeout(listo, 250);
+        carga.style.opacity = '0';
     };
-    setTimeout(listo, 400);
+    setTimeout(listo, 300);
+    setTimeout(() => { carga.style.opacity = '0' }, 9000);   // por las dudas
+
+    /* El mismo selector de calidad que el panel, pero en el menú: elegir
+       ANTES de entrar evita el primer minuto a tres cuadros por segundo. */
+    for (const n of ['bajo', 'medio', 'alto', 'ultra']) {
+        const e = document.getElementById('mcal-' + n);
+        if (!e) continue;
+        e.addEventListener('click', () => {
+            game.calidad.aplicar(n);
+            for (const m of ['bajo', 'medio', 'alto', 'ultra']) {
+                const o = document.getElementById('mcal-' + m);
+                if (o) o.classList.toggle('sel', m === n);
+            }
+        });
+        e.classList.toggle('sel', game.calidad && game.calidad.nivel === n);
+    }
 
     jugar.addEventListener('click', () => {
         despertarAudio();

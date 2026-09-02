@@ -224,6 +224,50 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## "No entra al juego": faltaba un timeout
+
+Se reprodujo abriendo el archivo tal como lo abre el jugador —`file://`, con la
+red cortada—: **la barra se clavaba en 20 % y el juego no se construía nunca.**
+
+La causa: `fetch` sin `AbortController` puede quedarse colgado **para siempre**
+—pasa con una conexión que se corta a mitad, que es lo normal en un teléfono— y
+el arranque esperaba a que terminaran los veintiséis. Un solo archivo colgado
+dejaba el juego sin arrancar.
+
+Tres redes, no una:
+
+1. **Timeout por archivo** (9 s) y **un reintento**.
+2. **Techo global de 12 s**: pasado eso se arranca con lo que haya. Más vale
+   entrar con la casa a medio vestir que mirar una barra.
+3. **El botón JUGAR ya no se esconde.** Antes esperaba a que los muebles
+   terminaran de entrar y, si alguno no llegaba, no aparecía nunca.
+
+Medido con la red muerta: el juego se construye a los **12,0 s**, JUGAR
+funciona y aparecés en el cajón con las noventa arañas. Y el archivo
+autocontenido, abierto desde `file://`, arranca en **1 ms sin un solo error**.
+
+## Los botones
+
+Cuatro círculos iguales con texto distinto obligan a leer para saber cuál es
+cuál, y en movimiento no se lee. Ahora cada uno tiene **su dibujo y su color**:
+
+| botón | dibujo | color |
+|---|---|---|
+| USAR | una mano | ámbar |
+| AGACHARSE | flecha abajo sobre una línea | azul |
+| CARRERA | doble punta, como un avance rápido | verde |
+| DESLIZAR | una onda que se tira | naranja |
+
+Todos con hundido al apretar, y el de USAR se enciende en ámbar cuando hay algo
+que agarrar. La rueda de gráficos gira al tocarla. Los chips del panel y el
+selector nuevo **del menú** —para elegir la calidad ANTES de entrar, y no pasar
+el primer minuto a tres cuadros por segundo— son del mismo idioma.
+
+Y **todo lo que se puede apretar suena**: un golpecito de madera en cada botón,
+dos notas que suben en JUGAR, dos que bajan al cerrar. Va por delegación en el
+documento, así los botones que aparecen después también entran. Un botón sin
+sonido en un celular se siente roto.
+
 ## Los assets ya no van embebidos: se bajan en paralelo
 
 El juego era **un HTML de 7,1 MB** con todo adentro como data URL: las

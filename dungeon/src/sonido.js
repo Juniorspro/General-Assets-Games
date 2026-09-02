@@ -166,6 +166,78 @@ export function viento(v) {
     vientoGan.gain.setTargetAtTime(Math.max(0.0001, v * 0.34), t, 0.12);
 }
 
+/* ------------------------------------------------------- los botones */
+/* Un botón sin sonido en un celular se siente roto: no hay resistencia, no hay
+   nada. Tres sonidos distintos, cortos, y ninguno musical — la casa no tiene
+   por qué sonar a menú de app. */
+
+/* El toque de cualquier botón: un golpecito de madera. */
+export function boton(v = 1) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(390, t);
+    o.frequency.exponentialRampToValueAtTime(160, t + 0.055);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16 * v, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.1);
+    const n = ruido(0.05), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 2100; f.Q.value = 1.2;
+    ng.gain.setValueAtTime(0.10 * v, t);
+    ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.055);
+    n.connect(f); f.connect(ng); ng.connect(master);
+    n.start(t); n.stop(t + 0.06);
+}
+
+/* Confirmar: dos notas que suben. Es el JUGAR y el subir la calidad. */
+export function confirmar() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [[294, 0], [440, 0.075]].forEach(([f, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'triangle'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + d);
+        g.gain.linearRampToValueAtTime(0.13, t + d + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0005, t + d + 0.26);
+        o.connect(g); g.connect(master);
+        o.start(t + d); o.stop(t + d + 0.3);
+    });
+}
+
+/* Y el que baja: cerrar el panel, bajar la calidad. */
+export function cancelar() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [[392, 0], [262, 0.07]].forEach(([f, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'triangle'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + d);
+        g.gain.linearRampToValueAtTime(0.10, t + d + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0005, t + d + 0.22);
+        o.connect(g); g.connect(master);
+        o.start(t + d); o.stop(t + d + 0.26);
+    });
+}
+
+/* El crujido de la puerta que se abre al final. */
+export function puerta() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const n = ruido(1.5), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.Q.value = 8;
+    f.frequency.setValueAtTime(210, t);
+    f.frequency.linearRampToValueAtTime(680, t + 1.1);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.24, t + 0.15);
+    g.gain.setValueAtTime(0.24, t + 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
+    n.connect(f); f.connect(g); g.connect(master);
+    n.start(t); n.stop(t + 1.5);
+}
+
 /* --------------------------------------------------------------- la música */
 /* Todo sintetizado. Un mp3 de menú son 700 KB para algo que son cuatro notas
    y un colchón; acá es un acorde sostenido con un arpegio encima. */

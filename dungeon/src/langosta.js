@@ -575,6 +575,7 @@ export class Mision {
         } else if (o.tipo === 'salir') {
             this.salida.abierta = true;
             this.terminado = 'escapo';
+            S.puerta();
             S.musicaFinal();
         }
     }
