@@ -17,6 +17,7 @@ import { despertarAudio } from './sonido.js';
 import * as S from './sonido.js';
 import { Calidad } from './calidad.js';
 import { Intro, ALTO_CAJA } from './intro.js';
+import { precargar } from './carga.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -1236,13 +1237,44 @@ class Dungeon {
 }
 
 /* ------------------------------------------------------------------ arranque */
-const game = new Dungeon();
+/* ------------------------------------------------------ CARGA Y ARRANQUE */
+/* El juego NO se construye hasta que los assets están. Antes se construía de
+   una y las texturas iban entrando de a poco encima; con los archivos ahora
+   fuera del HTML eso significaría arrancar con la casa gris. */
+let game = null;
+const A_MAN = window.DUNGEON_MANIFIESTO || {};
+
+function pintarBarra(p, hecho, total) {
+    const b = document.querySelector('#mbarra i');
+    const t = document.getElementById('mcarga-txt');
+    if (b) b.style.width = (p * 100).toFixed(1) + '%';
+    if (t) t.textContent = total
+        ? `CARGANDO ${(hecho / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`
+        : 'CARGANDO…';
+}
+
+async function arrancar() {
+    const t0 = performance.now();
+    const r = await precargar(A, A_MAN, pintarBarra);
+    if (r.fallados.length) {
+        console.warn('no bajaron:', r.fallados.join(', '));
+        const t = document.getElementById('mcarga-txt');
+        if (t) t.textContent = 'FALTARON ' + r.fallados.length + ' ARCHIVOS — SE JUEGA IGUAL';
+    }
+    window.__CARGA = { ms: Math.round(performance.now() - t0), ...r, n: Object.keys(A_MAN).length };
+    game = new Dungeon();
+    window.__game = game;
+    armarMenu();
+    requestAnimationFrame(loop);
+}
+
+arrancar();
 /* ------------------------------------------------------------------ EL MENU */
 /* El juego arranca PAUSADO en el menú. El bucle corre igual —así el mapa
    termina de cargar y las texturas se suben a la GPU mientras mirás la
    pantalla— pero el jugador no se mueve y el bicho no ronda. */
 const boot = document.getElementById('boot');
-(function armarMenu() {
+function armarMenu() {
     const A2 = window.DUNGEON_ASSETS || {};
     const poner = (id, url, fondo) => {
         const e = document.getElementById(id);
@@ -1279,11 +1311,12 @@ const boot = document.getElementById('boot');
     const arrancarMusica = () => { despertarAudio(); S.musicaMenu() };
     for (const ev of ['pointerdown', 'keydown', 'touchstart'])
         addEventListener(ev, arrancarMusica, { once: true, passive: true });
-})();
+}
 
 let last = performance.now();
 function loop(now) {
     requestAnimationFrame(loop);
+    if (!game) return;
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
     game.update(dt);
@@ -1311,8 +1344,6 @@ function loop(now) {
         fov: +game.camera.fov.toFixed(1),
     };
 }
-requestAnimationFrame(loop);
-window.__game = game;
 window.__LEVELS = LEVELS;
 window.__toWorld = toWorld;
 import * as MAP from './map.js';
