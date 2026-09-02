@@ -374,6 +374,136 @@ esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** mie
 es que se ve, que camina, que caza y que te alcanza.
 
 
+### Octogésima quinta vuelta (2026-09-02): **PUERTA BLANCA** — las treinta texturas procedurales pasan a foto, y la escala tuvo que medirse tres veces
+
+Pedido: *"puedes detectar las texturas procedurales de todos los niveles y reveer y generar a todas una
+versión hecha con IA PBR realista y god que pegue con el ambiente? no hay límites solo genera todas"*.
+
+Los seis niveles se dibujaban con **treinta lienzos 2D hechos por código** —`makeWallTexture`,
+`makeLockerTex`, `makeFlagstoneTex`, la piel de la muñeca, del simio, del verdugo…—. Ahora
+**veinticuatro son fotos generadas con Rezona Lab**, con su relieve y su rugosidad derivados en el
+navegador. Vive en `herramientas/puerta/pedir_pbr.py` (los pedidos), `hornear_pbr.py` (el horneado) y
+`pbr.py` (el lado del juego), y `armar.py` lo inyecta.
+
+#### PRIMERO HUBO QUE ENCONTRARLAS, Y NO SE PUEDEN BUSCAR POR NOMBRE
+
+Un lienzo no sabe cómo se llama: es un `CanvasTexture` metido en un `map` de algún material creado
+seiscientas líneas más allá. Así que cada registro —`TEX`, `FTEX`, `STEX`, `LTEX`, `DTEX` y los cinco
+sueltos— pasa por `pbNombra()`, que le escribe el nombre en `userData`. Con eso la foto encuentra su
+lienzo sin que nadie tenga que saber qué material lo usa.
+
+**Y `userData` NO SIEMPRE ESTÁ:** la build minificada de r128 no lo inicializa en el constructor de
+`Texture`, así que asignarle una clave adentro **tira** y se lleva el módulo entero. **Y los clones no
+lo heredan:** `Texture.copy` lo copia en la fuente de three.js y en esta build no. Medido,
+`escuela_wall` aparecía con **cero materiales** porque las paredes largas usan `wallLong`, que es un
+clon y llegaba sin nombre. Los cuatro clones se nombran a mano.
+
+Quedan **seis lienzos a propósito**: `campo_cloud`, `campo_macro`, `campo_petal`, `campo_center`,
+`campo_glow` y `campo_grass`. Los cinco primeros son **sprites y no superficies** —una nube o un pétalo
+no tienen escala en metros ni relieve que derivar— y el pasto del campo ya es foto desde la vuelta 81.
+
+#### LA ESCALA: TRES UNIDADES, Y LAS DOS PRIMERAS DABAN RESPUESTAS MALAS
+
+Es la regla 6 del horneado —la repetición nueva sale de que los metros que cubre un mosaico pasen a ser
+los que la foto muestra— y todo el trabajo estuvo en **sobre qué se promedia ese número**.
+
+1. **POR NOMBRE: mal.** `biblio_wall` es a la vez la pared (clon a 9×1,4, un mosaico cada 0,58 m) **y
+   el cielorraso** (1×1 estirado sobre **61,48 m**). Con la mediana de los dos juntos al cielorraso le
+   tocaba una repetición de **0,48**, o sea **media baldosa sobre sesenta metros** — peor que el lienzo
+   que venía a reemplazar. Lo mismo el del calabozo, que estira un mosaico sobre **68,41 m**.
+2. **POR TEXTURA: todavía mal.** `biblio_carpet` es la misma textura en una **alfombra de 16×12 m** y
+   en **el vestido de la muñeca**, que mide centímetros. Medido, la mediana caía en **0,062 m** y la
+   alfombra se llevaba un mosaico de dieciséis metros.
+3. **POR MATERIAL: eso sí.** Un material se usa para una sola clase de superficie. Y ahí los números
+   cierran: el cielorraso de la biblioteca pasa a repetición **53,8**, el del calabozo a **45,3**, el
+   piso de la escuela a **62,2**, la tierra de la granja a **61,8**, y la alfombra a **8,41** — que
+   sobre 13,85 m de plano son mosaicos de **1,65 m** contra los 1,60 que la foto muestra.
+
+**Y LA ESCALA SE CUANTIZA A PASOS DE 19 %** (raíz cuarta de dos), que es un escalón que el ojo no ve y
+lo que decide cuántas texturas hay que subir a la GPU: lo que distingue una de otra no es el material
+sino la repetición, así que `granja_metal` —trece materiales— cabe en seis.
+
+#### EL HALLAZGO QUE AHORRÓ CIEN SUBIDAS: r128 TIENE UNA SOLA TRANSFORMACIÓN DE UV POR MATERIAL
+
+La primera versión clonaba el relieve y la rugosidad **por escala**, y eso son dos texturas por grupo:
+ciento y pico de subidas a la GPU para mostrar dos imágenes (en r128 la textura de WebGL se indexa por
+objeto `Texture`, así que un clon es una subida entera).
+
+**No hacía falta ninguna.** Comprobado leyendo el propio bundle: three.js elige el primero de `map`,
+`specularMap`, `displacementMap`, `normalMap`, `bumpMap`, `roughnessMap`… y copia **su** matriz en el
+uniform `uvTransform`, que usan todos. O sea que con `map` puesto **la repetición del mapa de normales
+no la lee nadie**. Van compartidos, y sale gratis que el relieve cuadre con la foto: es la *misma*
+transformación, no dos que hay que mantener iguales.
+
+La excepción es la criatura, que **no tiene mapa de color** —`makeSkinMaps` devuelve relieve y
+rugosidad sobre un color plano— así que ahí el que manda la transformación es el mapa de normales y sí
+hace falta uno por escala.
+
+#### LO QUE SE DERIVA EN EL NAVEGADOR, Y POR QUÉ NO SE PIDE COMO IMAGEN
+
+Viaja **una foto por textura y nada más**. El relieve y la rugosidad se calculan al cargar, y no es
+sólo para ahorrar cuarenta y seis descargas: derivados de la **misma** imagen, cuadran por construcción
+— pedidos aparte habría relieve que no coincide con lo que se ve.
+
+Tres cosas que hay que hacer bien:
+
+- **La altura se lee en lineal.** En sRGB los oscuros pesan de más y el relieve sale con pozos donde
+  sólo hay una mancha de color.
+- **El gradiente envuelve por los bordes.** La textura se repite; leyendo clavado en el borde queda una
+  línea de relieve falso en cada costura.
+- **LA RUGOSIDAD NO PUEDE PASAR DE 1, PORQUE three.js MULTIPLICA.** El mapa va de `1−c` a 1, así que un
+  mapa sólo puede **bajar** la rugosidad — y sin compensar, cada foto se lleva puesto el valor que cada
+  material tenía calibrado. El escalar del material se divide por la media medida del mapa (0,72 a
+  0,88 según la textura).
+- Y **no se pisa una rugosidad que ya estaba**: la de la criatura sale de `makeSkinMaps` y está
+  calibrada; reemplazarla por una derivada de otra imagen cambia algo que nadie pidió.
+
+El relieve se deriva **a la mitad del lado** de la foto, y no es un recorte a ojo: es la *derivada* de
+la luminancia, o sea un dato de baja frecuencia, y el juego dibuja a `postScale` 0,62 con tope de 486
+px y el filtro de VHS encima. Cuesta la cuarta parte de memoria de video y no se distingue.
+
+#### EL TINTE SE RECALCULA, QUE ES LA REGLA 7
+
+three.js multiplica `map × vertexColor × material.color`, así que el color del material es un **tinte
+sobre la imagen**: cambiar la foto sin recalcularlo corre el color de toda la superficie. El factor sale
+de dividir **en lineal** el promedio del lienzo por el de la foto, topado en 1. Medido, va de
+`[0,109 · 0,097 · 0,085]` en el muro del calabozo —la foto es nueve veces más clara que el lienzo— a
+`[1 · 1 · 1]` en la piel de la muñeca, que ya coincidía.
+
+#### Y EL LIENZO QUE YA NO USA NADIE SE SUELTA
+
+three.js **no libera** una textura porque deje de estar en un material: la subida vive hasta que alguien
+llama a `dispose()`. Sin barrer, los treinta lienzos seguían ocupando memoria de video para no dibujar
+nada. El barrido corre **cuando terminaron las veinticuatro** —no por foto: una que falle deja su lienzo
+en uso y hay que poder distinguirlo del que ya nadie mira— y es seguro por construcción: recorre la
+escena, junta todo lo que sigue referenciado y suelta el resto. Medido: **25 lienzos, 19,7 MB**.
+
+#### MEDIDO AL CERRAR
+
+**24 de 24 fotos puestas, 0 fallos**, en los siete estados (room · field · farm · school · library ·
+dungeon · store) y volviendo al 1. Las llamadas de dibujo no se mueven —269 en la escuela contra 267 del
+control, 45 en la biblioteca contra 45, 18 en el local contra 18— y los triángulos tampoco: **esto no
+agrega geometría, cambia píxeles**. El control **es el mismo binario con `?nopbr`**: comparar contra el
+commit anterior mediría dos cosas a la vez y encima ese HTML no tiene las sondas nuevas, así que no se
+le puede preguntar lo mismo.
+
+El precio real no son bytes de HTML sino **memoria de video**: de **32,3 MB en 40 texturas a 77,1 MB en
+112**, menos los 19,7 que el barrido devuelve. El HTML pasó de 1,56 a **2,70 MB**, y ese mega y pico son
+las 24 fotos en WebP (820 KB de binario). `window.__errs` vacío en las catorce corridas.
+
+Y la regresión completa del nivel 6 sigue en pie con las texturas puestas: auditoría **28.152 de 28.152
+celdas alcanzables · 4 de 4 partes · 28 nodos, 27 arcos, 0 sucios, 0 aislados · 359 piezas en 15
+mallas**, partida completa 4/4 en orden y salida a `end`, la araña con **4 pies apoyados en 0,04 y 4
+levantados** en reposo y **los 4 de adelante en 6,09–6,29** en el grito, susto `deFrente: true` con los
+ojos en x 0,496 · y 0,481. Nivel 1 intacto: 4 especies, 20 flores, 63.700 triángulos.
+
+**LO QUE NO SE PUDO COMPROBAR, Y ES HONESTO DECIRLO:** los metros que cubre cada foto están
+**declarados** en `pedir_pbr.py` —es lo que se le pidió al generador, cuatro hiladas de bloque, seis
+tablas de 40 cm, un damero de cuatro por cuatro— y no medidos sobre la imagen que volvió. Si el
+generador puso seis hiladas donde se le pidieron cuatro, la escala de esa textura sale un cincuenta por
+ciento corrida. Se comprueba contando las hiladas con el perfil de filas de la propia imagen, como se
+hizo con el pasto en la vuelta 81, y es otra vuelta.
+
 ### Octogésima cuarta vuelta (2026-09-02): **PUERTA BLANCA** — dieciséis defectos de la araña, y el susto levantaba media araña de costado
 
 Pedido: *"arregla todos los posibles bugs con la araña en el nivel 6, por favor arregla hasta los

@@ -47,6 +47,7 @@ cielo_b64 = b64(os.path.join(ASSETS, 'cielo360.webp'))
 pasto_js = io.open(os.path.join(ASSETS, 'pasto.js'), encoding='utf8').read()
 flores_js = io.open(os.path.join(ASSETS, 'flores.js'), encoding='utf8').read()
 n6_js = io.open(os.path.join(ASSETS, 'n6.js'), encoding='utf8').read()
+pbr_js = io.open(os.path.join(ASSETS, 'pbr.js'), encoding='utf8').read()
 
 assets = """
 <script>
@@ -55,8 +56,8 @@ assets = """
    horneado con herramientas/puerta/. Van en su propio <script> a proposito:
    asi la parte del juego que uno lee no empieza con medio mega de base64. */
 window.__PB_CIELO = '%s';
-%s%s%s</script>
-""" % (cielo_b64, pasto_js, flores_js, n6_js)
+%s%s%s%s</script>
+""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js)
 
 s = s if SOLO else cambiar(s, '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
@@ -769,6 +770,97 @@ s = cambiar(s, """    flores: function () {""",
                arcosSucios: arcos, nodosSucios: nodosSucios,
                nodosAislados: nodosAislados, fusion: stFusion };
     },
+    // EL INVENTARIO DE TEXTURAS PROCEDURALES, con LOS METROS QUE CUBRE CADA
+    // MOSAICO medidos y no supuestos. Es la regla 6 del horneado: sin ese numero
+    // una foto de ladrillo sale con hiladas de 22 cm y la pared se lee a casa de
+    // munecas. Y no se puede deducir del codigo —depende de la geometria, de la
+    // UV y de la repeticion a la vez— asi que se mide sobre las mallas que de
+    // verdad la usan: area del triangulo en el mundo dividida por su area en UV
+    // da metros por unidad de UV, y eso sobre la repeticion da metros por
+    // mosaico. Devuelve tambien el promedio de color EN LINEAL, que es lo que la
+    // regla 7 necesita para recalcular el tinte cuando entre la foto.
+    texturas: function () {
+      const acc = {};
+      const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+      const _ab = new THREE.Vector3(), _ac = new THREE.Vector3(), _n = new THREE.Vector3();
+      scene.traverse(function (o) {
+        if (!o.isMesh || !o.geometry) return;
+        const g = o.geometry, pos = g.attributes.position, uv = g.attributes.uv;
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        ms.forEach(function (m) {
+          if (!m) return;
+          ['map', 'bumpMap', 'normalMap', 'roughnessMap'].forEach(function (slot) {
+            const t = m[slot];
+            if (!t || !t.userData || !t.userData.pbNombre) return;
+            const nom = t.userData.pbNombre;
+            // SE AGRUPA POR (nombre · repeticion): el mismo lienzo con dos
+            // repeticiones cubre metros distintos, y la mediana de los dos no
+            // describe a ninguno de los dos.
+            const clave = nom + '@' + (+t.repeat.x.toFixed(2)) + 'x' + (+t.repeat.y.toFixed(2));
+            const A = acc[clave] || (acc[clave] = { nom: nom, mallas: 0, mats: 0, ranuras: {}, mpm: [],
+                                               rep: [t.repeat.x, t.repeat.y],
+                                               lienzo: t.image ? t.image.width : 0 });
+            A.mats++; A.ranuras[slot] = (A.ranuras[slot] || 0) + 1;
+            if (!pos || !uv || A.mpm.length >= 24) return;
+            A.mallas++;
+            o.updateWorldMatrix(true, false);
+            const idx = g.index;
+            const tri = idx ? idx.count / 3 : pos.count / 3;
+            for (let k = 0; k < Math.min(tri, 40); k++) {
+              const i0 = idx ? idx.getX(k * 3) : k * 3;
+              const i1 = idx ? idx.getX(k * 3 + 1) : k * 3 + 1;
+              const i2 = idx ? idx.getX(k * 3 + 2) : k * 3 + 2;
+              _a.fromBufferAttribute(pos, i0).applyMatrix4(o.matrixWorld);
+              _b.fromBufferAttribute(pos, i1).applyMatrix4(o.matrixWorld);
+              _c.fromBufferAttribute(pos, i2).applyMatrix4(o.matrixWorld);
+              _ab.subVectors(_b, _a); _ac.subVectors(_c, _a);
+              const areaW = 0.5 * _n.crossVectors(_ab, _ac).length();
+              const u0 = uv.getX(i0), v0 = uv.getY(i0);
+              const areaU = 0.5 * Math.abs((uv.getX(i1) - u0) * (uv.getY(i2) - v0) -
+                                           (uv.getX(i2) - u0) * (uv.getY(i1) - v0));
+              if (areaU < 1e-9 || areaW < 1e-9) continue;
+              const mpu = Math.sqrt(areaW / areaU);
+              const r = Math.max(t.repeat.x, 0.0001);
+              A.mpm.push(mpu / r);
+            }
+          });
+        });
+      });
+      // el promedio de color de cada lienzo, EN LINEAL
+      Object.keys(PB_PROC).forEach(function (nom) {
+        const t = PB_PROC[nom];
+        const clave = nom + '@' + (+t.repeat.x.toFixed(2)) + 'x' + (+t.repeat.y.toFixed(2));
+        const A = acc[clave] || (acc[clave] = { nom: nom, mallas: 0, mats: 0, ranuras: {}, mpm: [],
+                                            rep: [t.repeat.x, t.repeat.y],
+                                            lienzo: t.image ? t.image.width : 0 });
+        try {
+          const img = t.image;
+          const cc = document.createElement('canvas');
+          cc.width = cc.height = 48;
+          const xx = cc.getContext('2d');
+          xx.drawImage(img, 0, 0, 48, 48);
+          const d = xx.getImageData(0, 0, 48, 48).data;
+          let r = 0, g2 = 0, b = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            r += Math.pow(d[i] / 255, 2.2); g2 += Math.pow(d[i + 1] / 255, 2.2); b += Math.pow(d[i + 2] / 255, 2.2);
+          }
+          const nn = d.length / 4;
+          A.lin = [+(r / nn).toFixed(4), +(g2 / nn).toFixed(4), +(b / nn).toFixed(4)];
+        } catch (e) { A.lin = null; }
+      });
+      const out = {};
+      Object.keys(acc).sort().forEach(function (k) {
+        const A = acc[k];
+        A.mpm.sort(function (x, y) { return x - y; });
+        out[k] = { nom: A.nom, mats: A.mats, mallas: A.mallas, ranuras: A.ranuras,
+                   rep: [+A.rep[0].toFixed(2), +A.rep[1].toFixed(2)], lienzo: A.lienzo,
+                   metrosPorMosaico: A.mpm.length ? +A.mpm[Math.floor(A.mpm.length / 2)].toFixed(3) : null,
+                   mpmMin: A.mpm.length ? +A.mpm[0].toFixed(3) : null,
+                   mpmMax: A.mpm.length ? +A.mpm[A.mpm.length - 1].toFixed(3) : null,
+                   lin: A.lin };
+      });
+      return out;
+    },
     // LAS OCHO PATAS, UNA POR UNA: si es de adelante, donde tiene el pie y la
     // rodilla en el mundo, y donde cae el pie en el marco de la arana. Es la
     // unica forma de comprobar que el susto levanta LA MITAD DE ADELANTE y no
@@ -837,6 +929,90 @@ s = cambiar(s, """    flores: function () {""",
                piso: +b.min.y.toFixed(2) };
     },
     flores: function () {""", 'sonda del local')
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8 · EL REGISTRO DE TEXTURAS PROCEDURALES
+# ══════════════════════════════════════════════════════════════════════════════
+# Cada lienzo dibujado por codigo lleva ahora su nombre en `userData`, y eso es
+# lo unico que hace falta para que la foto lo encuentre despues: no hay que
+# saber que material la usa ni donde se creo el material. `Texture.clone()`
+# copia userData en r128, asi que las clonadas con otra repeticion —wallLong,
+# libWallLong, dunWallLong— se reconocen igual.
+s = s if SOLO else cambiar(s,
+    """  // draws a shape 9 times (wrapped) so the tile is seamless""",
+    """  const PB_PROC = {};
+  function pbNombra(o, pre) {
+    Object.keys(o).forEach(function (k) {
+      const t = o[k];
+      // `userData` NO SIEMPRE ESTA: la build minificada de r128 no lo inicializa
+      // en el constructor de Texture, asi que asignar dentro tira. Se crea.
+      if (t && t.isTexture) {
+        if (!t.userData) t.userData = {};
+        t.userData.pbNombre = pre + '_' + k;
+        PB_PROC[pre + '_' + k] = t;
+      }
+    });
+    return o;
+  }
+
+  // draws a shape 9 times (wrapped) so the tile is seamless""",
+    'pbNombra')
+
+import pbr
+s = s if SOLO else cambiar(s,
+    """  // draws a shape 9 times (wrapped) so the tile is seamless""",
+    pbr.JS + """\n  // draws a shape 9 times (wrapped) so the tile is seamless""",
+    'el modulo de texturas PBR')
+
+for lit, pre, que in [
+    ("""    wall: makeWallTexture()\n  };""", 'campo', 'campo'),
+    ("""    rust: makeMetalTex('#6b4a33')\n  };""", 'granja', 'granja'),
+    ("""    locker: makeLockerTex()\n  };""", 'escuela', 'escuela'),
+    ("""    stone: makeStoneTex()\n  };""", 'biblio', 'biblioteca'),
+]:
+    s = s if SOLO else cambiar(s, lit, lit + "\n  pbNombra(%s, '%s');" % (
+        {'campo':'TEX','granja':'FTEX','escuela':'STEX','biblio':'LTEX'}[pre], pre), 'nombrar ' + que)
+
+# LAS CLONADAS NO HEREDAN `userData`. `Texture.copy` lo copia en la fuente de
+# three.js, pero en esta build minificada de r128 no: medido, `escuela_wall`
+# aparecia con CERO materiales porque las paredes largas usan `wallLong`, que es
+# un clon, y el clon llegaba sin nombre. Se nombran las cuatro a mano.
+s = s if SOLO else cambiar(s, """  wallShort.repeat.set(2, 1);""",
+    """  wallShort.repeat.set(2, 1);
+  wallLong.userData = { pbNombre: 'escuela_wall' };
+  wallShort.userData = { pbNombre: 'escuela_wall' };""", 'nombrar los clones de la escuela')
+s = s if SOLO else cambiar(s, """  libWallLong.repeat.set(9, 1.4);""",
+    """  libWallLong.repeat.set(9, 1.4);
+  libWallLong.userData = { pbNombre: 'biblio_wall' };""", 'nombrar el clon de la biblioteca')
+s = s if SOLO else cambiar(s, """  dunWallLong.repeat.set(8, 1.1);""",
+    """  dunWallLong.repeat.set(8, 1.1);
+  dunWallLong.userData = { pbNombre: 'calabozo_wall' };""", 'nombrar el clon del calabozo')
+
+s = s if SOLO else cambiar(s,
+    """  const DTEX = { floor: makeFlagstoneTex(), wall: makeDunWallTex(), straw: makeStrawTex() };""",
+    """  const DTEX = { floor: makeFlagstoneTex(), wall: makeDunWallTex(), straw: makeStrawTex() };
+  pbNombra(DTEX, 'calabozo');""", 'nombrar calabozo')
+
+s = s if SOLO else cambiar(s, """  const PORC = makePorcelainTex();""",
+    """  const PORC = makePorcelainTex();
+  pbNombra({ piel: PORC }, 'muneca');""", 'nombrar la muneca')
+s = s if SOLO else cambiar(s, """  const NECRO = makeNecroticTex();""",
+    """  const NECRO = makeNecroticTex();
+  pbNombra({ piel: NECRO }, 'simio');""", 'nombrar el simio')
+s = s if SOLO else cambiar(s, """  const BUTCHER = makeButcherSkinTex();""",
+    """  const BUTCHER = makeButcherSkinTex();
+  pbNombra({ piel: BUTCHER }, 'verdugo');""", 'nombrar el verdugo')
+s = s if SOLO else cambiar(s, """  const HOODTEX = makeHoodTex();""",
+    """  const HOODTEX = makeHoodTex();
+  pbNombra({ tela: HOODTEX }, 'capucha');""", 'nombrar la capucha')
+s = s if SOLO else cambiar(s, """  const SKIN = makeSkinMaps();""",
+    """  const SKIN = makeSkinMaps();
+  // la criatura no tiene mapa de color: makeSkinMaps devuelve relieve y
+  // rugosidad sobre un color plano. Se nombra el relieve, que es el que una
+  // foto de piel puede mejorar de verdad.
+  pbNombra({ piel: SKIN.bump }, 'criatura');""", 'nombrar la criatura')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -948,6 +1124,86 @@ s = s if SOLO else cambiar(s, """  function updateTape(delta, elapsed) {
       return;
     }
     glitchCd -= delta;""", 'apagar el post para medir')
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9 · EL ARRANQUE DE LAS TEXTURAS PBR, Y LA SONDA QUE LAS MIDE
+# ══════════════════════════════════════════════════════════════════════════════
+# VA JUSTO ANTES DE `animate()` Y NO ANTES. `pbPbrJunta()` recorre la escena una
+# sola vez para averiguar que material usa cada lienzo y cuantos metros cubre un
+# mosaico, asi que tiene que correr cuando los SIETE niveles ya estan
+# construidos —los seis de base.html mas el local, que se arma en el cuerpo del
+# modulo—. Llamado antes, la mitad de los materiales no existe todavia y esas
+# superficies se quedarian con el lienzo para siempre, sin fallar.
+s = s if SOLO else cambiar(s, """  animate();
+})();""",
+    """  pbPbrArranca();
+  animate();
+})();""", 'arrancar las texturas PBR')
+
+s = s if SOLO else cambiar(s, """    flores: function () {""",
+    """    // que llego de verdad: cuantas fotos se pusieron, con que repeticion
+    // nueva, cuanto tinte y con que rugosidad efectiva. Sin esto, "las texturas
+    // estan puestas" no se puede afirmar — un base64 que no decodifica deja la
+    // superficie con su lienzo y no avisa.
+    pbr: function () {
+      const r = { puestas: pbPbrPuestas, fallos: pbPbrFallos, sueltas: pbPbrSueltas, sueltasMb: pbPbrSueltasMb,
+                  declaradas: window.__PB_PBR ? Object.keys(window.__PB_PBR).length : 0,
+                  lienzos: Object.keys(PB_PROC).length, tex: [] };
+      Object.keys(PB_PBR_INFO).sort().forEach(function (n) {
+        const i = PB_PBR_INFO[n], d = (window.__PB_PBR || {})[n] || {};
+        const usos = PB_PBR_USOS[n] || [];
+        // LAS ESCALAS QUE SALIERON, UNA POR GRUPO: una sola cifra por nombre
+        // promedia superficies que no tienen nada que ver —la alfombra de la
+        // biblioteca y el vestido de la muneca son la misma textura— y esa
+        // media es exactamente el numero que ya dio dos respuestas malas.
+        const g = {};
+        usos.forEach(function (u) {
+          const k = (u.esc || 0).toFixed(2);
+          if (!g[k]) g[k] = { esc: +k, mats: 0, mpm: u.mpm ? +u.mpm.toFixed(3) : null,
+                              rep0: +u.tex.repeat.x.toFixed(2),
+                              rep: +(u.tex.repeat.x * (u.esc || 1)).toFixed(2) };
+          g[k].mats++;
+        });
+        r.tex.push({ n: n, mats: usos.length, texGpu: i.texturas || 0, mFoto: d.m || null,
+                     grupos: Object.keys(g).sort().map(function (k) { return g[k]; }),
+                     tinte: i.tinte ? i.tinte.map(function (v) { return +v.toFixed(3); }) : null,
+                     rMedia: i.rMedia ? +i.rMedia.toFixed(3) : null,
+                     // `puesta` NO se puede juzgar por la ranura original: en la
+                     // criatura era `bumpMap` y se anula a proposito. Lo que
+                     // prueba que la foto entro es el mapa de normales derivado.
+                     puesta: !!(usos[0] && usos[0].mat.normalMap) });
+      });
+      return r;
+    },
+    // LO QUE CUESTAN LAS FOTOS EN MEMORIA DE VIDEO, que es el precio real de
+    // esta vuelta: no son bytes de HTML sino texturas subidas a la GPU.
+    pbrMem: function () {
+      const v = new Set(); let n = 0, b = 0;
+      const R = function (t) {
+        if (!t || v.has(t)) return; v.add(t);
+        const im = t.image; if (!im || !im.width) return;
+        n++; b += im.width * im.height * 4 * 1.34;   // 1,34 por los mipmaps
+      };
+      scene.traverse(function (o) {
+        if (!o.material) return;
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
+          if (!m) return;
+          ['map', 'bumpMap', 'normalMap', 'roughnessMap', 'metalnessMap',
+           'emissiveMap', 'alphaMap', 'aoMap'].forEach(function (k) { R(m[k]); });
+        });
+      });
+      return { texturas: n, mb: +(b / 1048576).toFixed(1) };
+    },
+    // el inventario de lienzos: cuales quedaron SIN foto y por que
+    pbrSinFoto: function () {
+      const falta = [];
+      Object.keys(PB_PROC).forEach(function (n) {
+        if (!window.__PB_PBR || !window.__PB_PBR[n]) falta.push(n + ' (no se genero)');
+        else if (!PB_PBR_USOS[n]) falta.push(n + ' (ningun material la usa)');
+      });
+      return falta;
+    },
+    flores: function () {""", 'la sonda de las texturas PBR')
 
 io.open(SAL, 'w', encoding='utf8').write(s)
 print('%s  %d -> %d bytes' % (SAL, n0, len(s)))
