@@ -222,6 +222,55 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## Los muebles: uno por uno, y ordenados
+
+Los ocho props estaban deformes porque salían con **934–2191 triángulos**: a
+esa cuenta una estantería pierde los estantes y queda un bloque con manchas.
+Se regeneraron **de a uno**, cada uno con su propia descripción y con
+`face_limit: 20000`, y se hornearon con `--simplify-error 0.0004` y textura de
+1024. Resultado medido:
+
+| Mueble | Antes | Ahora |
+|---|---|---|
+| armario | 1876 | 15 402 |
+| cómoda | 1204 | 12 690 |
+| estantería | 2191 | 17 596 |
+| reloj | 1522 | 14 118 |
+| sofá | 1840 | 16 244 |
+| mesa | 934 | 8 874 |
+| silla | 1108 | 10 366 |
+| sillón | 1690 | 15 030 |
+
+2,7 MB los ocho. Cada uno se verificó con una hoja de contacto de cuatro
+vistas antes de aceptarlo, y los ocho miran a **+X** (Tripo normaliza así), que
+es lo que asume `miraHacia(dx,dz) = atan2(-dz, dx)`.
+
+**Y ahora están ordenados.** Antes cada mueble caía en una celda al azar con un
+ángulo al azar, y un cuarto con tres sillas apuntando a tres lados distintos se
+lee como escombro, no como una casa. `poblar()` ahora:
+
+- redondea todos los ángulos a los cuatro de la grilla;
+- camina las piezas de pared **en orden de mapa** y pone una cada cuatro
+  lugares válidos, pegada a la pared y mirando al cuarto;
+- arma juegos de **mesa + sillas** alrededor de la mesa;
+- pone los sillones **de a dos, enfrentados**;
+- apoya los sofás contra la pared.
+
+## Los pisos falsos eran las escaleras
+
+Te caías por el piso justo donde había una escalera debajo. La causa: una
+escalera marca sus celdas **en los tres niveles**, y `surfaceAt` daba prioridad
+a la rampa siempre, así que parado en el piso de arriba la altura que devolvía
+era la de la rampa de abajo. Regla nueva: **la rampa sólo gana si queda a menos
+de medio metro por debajo de donde estás**; si no, se busca el piso plano más
+cercano.
+
+```js
+const rampaSirve = best !== null && best >= yHint - 0.5;
+```
+
+**Barrido de las 1634 celdas abiertas de los tres niveles: peor caída 0,49 m.**
+
 ## El cuerpo: R15, con rodillas
 
 **El R6 estricto NO tiene rodillas ni codos** — son seis partes rígidas y eso
