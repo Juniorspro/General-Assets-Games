@@ -194,16 +194,22 @@ function layout(){
   const w=innerWidth,h=innerHeight, S=safeArea();
   const AW=Math.max(2,w-S.l-S.r), AH=Math.max(2,h-S.t-S.b);
   rotated=h>w; stage.classList.toggle('rot',rotated);
+  /* centrado en la ventana y despues empujado dentro del area segura */
+  const centrar=(tam,total,i0,i1)=>{
+    const a=(total-tam)/2;                       // centrado en la ventana
+    if(tam>=total-i0-i1) return i0;              // no entra: pegado al margen
+    return Math.max(i0, Math.min(total-i1-tam, a));
+  };
   if(rotated){
     /* girado, el escenario ocupa VH de ancho y VW de alto en la pantalla */
     VH=Math.max(2,Math.min(AW,AH/ASP)); VW=VH*ASP;
-    const X0=S.l+(AW-VH)/2, Y0=S.t+(AH-VW)/2;
+    const X0=centrar(VH,w,S.l,S.r), Y0=centrar(VW,h,S.t,S.b);
     stgL=0; stgT=Y0; stgX1=X0+VH;
     stage.style.left='0px'; stage.style.top=Y0+'px';
     stage.style.transform='translateX('+stgX1+'px) rotate(90deg)';
   }else{
     VW=Math.max(2,Math.min(AW,AH*ASP)); VH=VW/ASP;
-    stgL=S.l+(AW-VW)/2; stgT=S.t+(AH-VH)/2; stgX1=0;
+    stgL=centrar(VW,w,S.l,S.r); stgT=centrar(VH,h,S.t,S.b); stgX1=0;
     stage.style.left=stgL+'px'; stage.style.top=stgT+'px';
     stage.style.transform='none';
   }
@@ -2563,7 +2569,17 @@ function startGame(){
 document.getElementById('btnRewind').addEventListener('click',()=>{
   endEl.classList.add('hide'); resetWorld(); setState('menu');
 });
-document.getElementById('btnStart').addEventListener('click',startGame);
+function aPantallaCompleta(){
+  const e=document.documentElement;
+  const f=e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen;
+  if(!f||document.fullscreenElement||document.webkitFullscreenElement) return;
+  try{ const r=f.call(e,{navigationUI:'hide'}); if(r&&r.catch) r.catch(()=>{}); }catch(_){}
+}
+/* al entrar y salir de pantalla completa la ventana cambia de tamaño, y el
+   evento de resize no siempre llega: se recoloca a mano. */
+for(const ev of ['fullscreenchange','webkitfullscreenchange'])
+  addEventListener(ev,()=>setTimeout(layout,60));
+document.getElementById('btnStart').addEventListener('click',()=>{ aPantallaCompleta(); startGame(); });
 document.getElementById('btnResume').addEventListener('click',()=>setState('play'));
 document.getElementById('btnMenu').addEventListener('click',()=>setState('menu'));
 pauseBtn.addEventListener('click',e=>{e.stopPropagation(); if(state==='play'&&!fin) setState('paused');});
@@ -3121,6 +3137,8 @@ window.__casa={
     fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
     aspecto:+camera.aspect.toFixed(3), fovK:+fovK.toFixed(3),
     cuadro:[Math.round(VW),Math.round(VH)],
+    colocado:[Math.round(stgL),Math.round(stgT),Math.round(stgX1)],
+    pantalla_completa:!!(document.fullscreenElement||document.webkitFullscreenElement),
     near:camera.near, far:camera.far,
     niebla:scene.fog?{tipo:scene.fog.constructor.name,d:scene.fog.density}:null,
     fondo:scene.background?'#'+scene.background.getHexString():null,
