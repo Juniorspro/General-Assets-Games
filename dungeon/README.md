@@ -100,63 +100,63 @@ progreso, se pierde el viaje.
 
 ### El bicho
 
-Mide **3,20 m** y es una **malla generada con Rezona** a partir del turnaround
+Mide **3,20 m** y es la **malla generada con Rezona** a partir del turnaround
 del modelo real: zancos terminados en púas negras en vez de pies, brazos igual
 de largos con púas en vez de manos, torso de hueso, trapo oscuro en la cadera
-y una columna de soga por cabeza con una maraña de tentáculos. 2.756
-triángulos, 239 KB.
+y una columna de soga por cabeza con una maraña de tentáculos.
 
-**La primera vuelta salió con cara de dibujito** —ojos redondos con
-esclerótica blanca, iris verde, cejas y una boca sonriente—, o sea simpática
-en vez de aterradora. Se rehízo pidiendo explícitamente cuencas negras vacías
-sin globo ocular ni iris ni cejas, y la boca abierta en un grito. En el juego
-además va con un tinte gris frío encima y **luz desde abajo de la cara**: es
-el truco más viejo que hay, la misma cara alumbrada de arriba es una persona
-y alumbrada de abajo es otra cosa. Y cazando se encorva 0,20 rad más: un bicho
-derecho camina, uno encorvado te viene a buscar.
+#### El rig: varillas rígidas, no un esqueleto con pesos
 
-**El rig no se usó.** Se pidió a Rezona el rig con `preset:walk` y
-`preset:run` y volvió con los dos clips, pero **la malla sale aplastada** —
-también la copia sin animar, así que no es el clip sino el esqueleto: un
-preset humanoide no le entra a un bicho de zancos sin pies. Se comprobó
-renderizándolo aparte antes de meterlo.
+Se le pidió a Rezona el rig con `preset:walk` y `preset:run` y volvió con los
+dos clips, pero **la malla sale aplastada** — también la copia sin animar, así
+que no es el clip: un esqueleto humanoide con pesos suaves no le entra a un
+bicho de zancos sin pies. Se comprobó renderizándolo aparte.
 
-Así que camina **procedural**: el balanceo lateral de la zancada, el rebote
-vertical, la inclinación al avanzar y un contoneo medio paso más tarde. En
-zancos eso es exactamente la caminata. Una figura que se traslada sin
-moverse se lee como un cartel, no como algo que camina.
+Así que el rig se hace en `bicho.js`, **partiendo la malla en varillas
+rígidas**. Es lo que corresponde: es un títere de palos. Una pantorrilla que
+gira entera alrededor de la rodilla es exactamente lo que hace una pierna de
+zanco, y el suavizado de un skin no aportaría nada salvo artefactos en las
+uniones.
 
-Lleva un halo tenue encima: en un pasillo negro, sin eso aparece arriba tuyo
-sin aviso, y eso no asusta, enoja.
+**Los cortes salieron de medir, no de suponer.** Se recorrió el bicho en
+rebanadas horizontales mirando cuánto se ensancha en el eje lateral:
 
-Camina por la grilla con una búsqueda en anchura sobre 31×31, que cuesta nada
-y se rehace cada medio segundo cazando y cada 1,2 s rondando.
+| | |
+|---|---|
+| A `\|z\|` > 0,105 | aparecen los brazos |
+| El ancho se derrumba en y = 0,27 | ahí está el hombro |
+| Debajo de y = −0,28 | sólo quedan las dos piernas |
 
-## Los muebles
+Diez huesos: cabeza, torso, dos muslos, dos pantorrillas, dos brazos y dos
+antebrazos. Las caderas marcan la zancada; **las rodillas van medio ciclo más
+tarde y sólo se doblan hacia atrás**, que es lo que hace una rodilla; los
+brazos van cruzados con las piernas y los codos casi no se mueven, cuelgan. La
+cabeza acompaña con retraso, que es lo que la hace parecer pesada.
 
-Ocho piezas generadas con **Tripo** (Rezona Lab) y horneadas: **652 KB las
-ocho juntas**, entre 934 y 2.191 triángulos cada una, textura de 512 en WebP.
-Una sola sin tocar pesaba 1,4 MB.
+Medido sobre el archivo construido: el muslo va de +0,226 a −0,320, la rodilla
+llega a −0,822 y el codo a −0,235.
 
-```
-armario · cómoda · estantería · reloj de pie · mesa · silla · sillón · sofá
-```
+#### La cara
 
-Dos cosas que hay que saber de lo que devuelve Tripo:
+La primera malla vino con **ojos de dibujito** —redondos, con esclerótica
+blanca, iris verde, cejas y una boca sonriente—, o sea simpática en vez de
+aterradora.
 
-1. **Vienen normalizadas** a un cubo de lado 1. El alto real lo pone el juego,
-   no el archivo: cada pieza lleva su altura en metros en `CATALOGO`.
-2. **Todas miran a +X.** Se comprobó girando cada una en cuatro y mirando en
-   cuál se le ve el frente — las ocho dieron lo mismo. Así que para que una
-   pieza mire hacia `(dx,dz)` el giro es `atan2(-dz, dx)`, no `atan2(dz,dx)`.
+Parchear la textura **no se pudo**: los islotes UV del atlas de 4096² se pisan
+entre sí, así que pintar por posición 3D tapaba un ojo y el otro no. Se
+comprobó con una banda **roja** de prueba: cayó justo sobre el ojo izquierdo y
+se cortó en la nariz.
 
-Las que van contra la pared miran al centro del cuarto; las sueltas (mesas,
-sillas, sofás) sólo entran donde hay 3×3 abierto, o sea en las salas. Y
-**ninguna cae sobre el punto de aparición ni sus vecinas**: sin eso el juego
-arrancaba con la cara adentro de un ropero.
+Se resuelve con **geometría**, que no depende del atlas: una banda oscura que
+cruza toda la cara a la altura medida de los ojos, más un tajo por boca. La
+altura es firme (la banda roja lo confirmó); el z de cada ojo no se pudo medir,
+así que **se eliminó el parámetro dudoso** en vez de seguir midiendo — una
+banda tapa los dos ojos donde sea que estén, y encima se lee como cuenca
+hundida, que es justo el efecto buscado.
 
-Los muebles llegan tarde y no pasa nada: el nivel ya está armado y entran
-encima. Un base64 roto cuesta una cómoda, no la pantalla.
+Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
+—la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
+cosa— y, cazando, se encorva 0,20 rad más.
 
 ## El cuerpo en primera persona
 

@@ -15,6 +15,7 @@
    no entra: son la salida de verdad cuando ya te vio. */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { construirBicho } from './bicho.js';
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
 } from './map.js';
@@ -50,15 +51,16 @@ class Langosta {
         const url = assets && assets.bicho;
         if (url) {
             new GLTFLoader().loadAsync(url).then(g => {
-                const o = g.scene;
-                const b = new THREE.Box3().setFromObject(o);
-                o.scale.setScalar(ALTO_BICHO / (b.max.y - b.min.y));
-                const b2 = new THREE.Box3().setFromObject(o);
-                const c = b2.getCenter(new THREE.Vector3());
-                o.position.set(-c.x, -b2.min.y, -c.z);
+                /* Se parte en varillas rigidas y se le cuelgan las cuencas.
+                   Ver bicho.js: el rig de Rezona aplasta la malla. */
+                const rig = construirBicho(g.scene, ALTO_BICHO);
+                if (!rig) return;
+                const o = rig.cont;
+                this.art = rig.grupos;
                 o.traverse(n => {
                     if (!n.isMesh) return;
                     n.castShadow = true;
+                    if (n.material && n.material.isMeshBasicMaterial) return;  // las cuencas
                     /* La malla viene clarita y con la cara muy legible. Un
                        tinte gris frio la apaga: multiplica la foto, no la
                        reemplaza, asi que las vendas y el hueso siguen ahi
@@ -73,14 +75,6 @@ class Langosta {
                 /* Si el rig vino con animaciones, se usan; si no, el cuerpo se
                    mece a mano. Un bicho de zancos que se traslada sin moverse
                    se lee como un cartel, no como algo que camina. */
-                if (g.animations && g.animations.length) {
-                    this.mixer = new THREE.AnimationMixer(o);
-                    this.clips = {};
-                    for (const c of g.animations) this.clips[c.name.toLowerCase()] = c;
-                    const primero = g.animations[0];
-                    this.accion = this.mixer.clipAction(primero);
-                    this.accion.play();
-                }
             }).catch(() => { });
         }
 
@@ -116,10 +110,32 @@ class Langosta {
         this.paso += dt * (1.0 + vel * 0.95);
         const amp = Math.min(1, vel / 2.6);
 
-        if (this.mixer) {
-            // el clip corre al ritmo del paso, asi que los pies no patinan
-            this.mixer.timeScale = 0.55 + vel * 0.42;
-            this.mixer.update(dt);
+        /* Las articulaciones. La zancada la marcan las caderas; las rodillas
+           van medio ciclo mas tarde y SOLO se doblan hacia atras, que es lo que
+           hace una rodilla. Los brazos van cruzados con las piernas y los codos
+           casi no se mueven: cuelgan. */
+        const A = this.art;
+        if (A) {
+            const f = this.paso * 2;
+            for (const [l, s] of [['I', -1], ['D', 1]]) {
+                const fase = s > 0 ? Math.PI : 0;
+                const sw = Math.sin(f + fase);
+                if (A['muslo' + l]) A['muslo' + l].rotation.x = sw * 0.52 * amp;
+                if (A['pantorrilla' + l])
+                    A['pantorrilla' + l].rotation.x = -Math.max(0, -sw + 0.25) * 0.95 * amp;
+                const sb = Math.sin(f + (s > 0 ? 0 : Math.PI));
+                if (A['brazo' + l]) {
+                    A['brazo' + l].rotation.x = sb * 0.30 * amp - 0.04;
+                    A['brazo' + l].rotation.z = s * 0.07;
+                }
+                if (A['antebrazo' + l])
+                    A['antebrazo' + l].rotation.x = -0.10 - Math.abs(sb) * 0.22 * amp;
+            }
+            // la cabeza acompana con retraso: es lo que la hace parecer pesada
+            if (A.cabeza) {
+                A.cabeza.rotation.z = Math.sin(f - 0.7) * 0.06 * amp;
+                A.cabeza.rotation.x = 0.05 + (this.estado === 'caza' ? 0.16 : 0);
+            }
         }
 
         /* Anda en zancos: el balanceo lateral es lo que da la caminata. Cada
