@@ -27,6 +27,8 @@ export const MAPA = {
     pasoMadera: { clave: 'snd_paso_madera', variantes: 2, vol: 0.9 },
     pisada:     { clave: 'snd_pisada',    variantes: 2, vol: 1 },
     grito:      { clave: 'snd_grito',     vol: 1 },
+    screamer:   { clave: 'snd_screamer',  vol: 1 },
+    voz:        { clave: 'snd_voz',       variantes: 3, vol: 0.8 },
     gruñido:    { clave: 'snd_grunido',   vol: 0.9 },
     golpe:      { clave: 'snd_golpe',     vol: 1 },
     cajon:      { clave: 'snd_cajon',     vol: 0.9 },

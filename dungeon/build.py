@@ -43,6 +43,7 @@ SND_DIR = os.path.join(HERE, "sonidos")
 SONIDOS = ["ambiente", "persecucion", "paso_1", "paso_2", "paso_3",
            "correr_1", "correr_2", "correr_3", "deslizar",
            "paso_madera_1", "paso_madera_2", "pisada_1", "pisada_2",
+           "screamer", "voz_1", "voz_2", "voz_3",
            "grito", "grunido", "golpe", "cajon", "portazo", "campana", "riser"]
 
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.

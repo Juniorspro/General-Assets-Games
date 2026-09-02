@@ -640,7 +640,9 @@ export class Mision {
         const f = this.escena.fog;
         this.nieblaPrevia = f ? [f.near, f.far] : null;
         this.bicho.estado = 'embiste';
-        S.grito();
+        /* El screamer, no el grito: el momento mas fuerte del juego sonaba
+           igual que el aviso de veinte segundos antes. */
+        S.screamer();
         S.golpe();
         this.decir('te agarró');
     }
@@ -808,6 +810,17 @@ export class Mision {
             if (this.tGru <= 0) {
                 this.tGru = 7 + Math.random() * 9;
                 if (b.estado !== 'caza') S.gruñido(0.35 + 0.5 * cerca);
+            }
+            /* Y ADEMAS se habla solo. El gruñido es el aviso de que existe y
+               por eso es raro; esto es otra cosa —chasquea, resopla, murmura—
+               y suena aunque no tenga la menor idea de donde estas. Sale mas
+               seguido y mucho mas bajo, si no tapa al gruñido y deja de dar
+               miedo: lo que asusta es que se le escape un ruido, no que grite.
+               No suena cazando: ahi ya esta el grito y la musica. */
+            this.tVoz = (this.tVoz || 3) - dt;
+            if (this.tVoz <= 0) {
+                this.tVoz = 3.5 + Math.random() * 5;
+                if (b.estado !== 'caza') S.vozBicho(0.30 + 0.55 * cerca);
             }
             if (dist < 7.5) {
                 this.tLat = (this.tLat || 0) - dt;

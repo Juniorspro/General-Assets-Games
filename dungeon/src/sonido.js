@@ -193,6 +193,54 @@ export function latido(vol) {
     }
 }
 
+/* EL SCREAMER: el grito de cuando te AGARRA, que no es el de cuando te ve.
+   Antes la embestida reusaba `grito()` y el momento mas fuerte del juego sonaba
+   igual que el aviso de veinte segundos antes. Este dura mas, empieza arriba y
+   se rompe. Como toda la voz del bicho, sale por radio quebrada. */
+export function screamer() {
+    if (ctx && puente.tocar && puente.tocar('screamer', 1)) return;
+    if (!ctx) return;
+    const t = ctx.currentTime, dur = 1.6;
+    const n = ruido(dur), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.Q.value = 2.2;
+    f.frequency.setValueAtTime(2600, t);
+    f.frequency.setValueAtTime(2600, t + 0.7);
+    f.frequency.exponentialRampToValueAtTime(520, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    n.connect(f); f.connect(g); g.connect(master);
+    n.start(t); n.stop(t + dur);
+    for (const [d, fr] of [[0, 380], [0.1, 610]]) {
+        const o = ctx.createOscillator(), og = ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(fr, t + d);
+        o.frequency.exponentialRampToValueAtTime(fr * 0.42, t + dur);
+        og.gain.setValueAtTime(0.11, t + d);
+        og.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+        o.connect(og); og.connect(master);
+        o.start(t + d); o.stop(t + dur);
+    }
+}
+
+/* LA VOZ SUELTA: el bicho hablandose solo mientras camina. Se llama `vozBicho`
+   y no `voz` porque `voz` ya es el ayudante de osciladores de mas abajo — dos
+   declaraciones del mismo nombre y el modulo entero no compila. */
+/* El bicho hablandose solo mientras camina. No es una alarma —
+   suena aunque no sepa donde estas— y por eso va bajo y seguido. */
+export function vozBicho(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('voz', vol)) return;
+    if (!ctx || vol <= 0.002) return;
+    const t = ctx.currentTime, dur = 0.9;
+    const n = ruido(dur), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.6;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16 * vol, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    n.connect(f); f.connect(g); g.connect(master);
+    n.start(t); n.stop(t + dur);
+}
+
 /* El grito, cuando te ve. Ruido pasado por un filtro que barre hacia arriba,
    mas dos osciladores desafinados: eso es lo que hace que raspe. */
 export function grito() {

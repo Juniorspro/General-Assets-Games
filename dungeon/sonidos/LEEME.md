@@ -22,8 +22,10 @@ Veinte sonidos, **361 KB los veinte juntos**.
 | `paso_madera_1..2.ogg` | pasos en el cajón del arranque | 0,160 s | hueco 0,242 s |
 | `deslizar.ogg` | tirarse al piso | 0,800 s | `SLIDE_TIME` 0,85 s |
 | `pisada_1..2.ogg` | la pisada del bicho | 0,240 s | hueco 0,323 s |
-| `grito.ogg` | el chillido de cuando te ve | 1,10 s | — |
-| `grunido.ogg` | el gruñido lejano | 1,80 s | — |
+| `grito.ogg` | el chillido de cuando te ve | 1,10 s | radio |
+| `screamer.ogg` | el grito de cuando te agarra | 1,70 s | radio |
+| `voz_1..3.ogg` | el bicho hablándose solo al caminar | ~1,0 s | radio |
+| `grunido.ogg` | el gruñido lejano | 1,60 s | radio |
 | `golpe.ogg` | aterrizar y la embestida | 0,55 s | — |
 | `cajon.ogg` | revisar un mueble | 0,95 s | — |
 | `portazo.ogg` | la puerta de salida | 0,70 s | — |
@@ -35,6 +37,53 @@ idéntico veinte veces se lee como un error, no como un paso.
 
 **`grunido`, sin eñe.** El nombre viaja adentro de una URL del CDN y ahí el
 UTF-8 hay que escaparlo. La clave en `src/muestras.js` es `snd_grunido`.
+
+## La voz del bicho va por radio quebrada
+
+Los seis sonidos de la voz —`grito`, `screamer`, `voz_1..3` y `grunido`— pasan
+por la misma cadena en el horneado. **El carácter no se le pide al generador**:
+lo hace distinto cada vez y no hay forma de verificarlo. Acá sale igual para
+todos y se mide.
+
+Son siete pasos, cada uno con su motivo:
+
+1. pasabanda 300–3400 Hz, cuatro polos por lado — la banda de radio;
+2. campana de +6 dB en 1,8 kHz — el «honk» del parlante chico;
+3. recorte blando con `tanh` — la saturación del transmisor;
+4. cuantización a 7 bits — la aspereza digital;
+5. **cortes al azar** de 15 a 70 ms — lo QUEBRADO, la señal que se pierde;
+6. cama de estática filtrada + chasquidos — el ruido del canal;
+7. **la banda otra vez, a la salida.**
+
+Todo se remuestrea a 16 kHz antes de empezar: una radio *es* angosta, a 16 kHz
+no se pierde nada de 300–3400 Hz y el filtrado tarda un tercio.
+
+### El paso 7 no estaba y era el que hacía falta
+
+Con seis pasos, cinco de los seis sonidos quedaban bien pero **el gruñido tenía
+el 66,6 % de su energía por debajo de 300 Hz** — de radio no tenía nada. La
+causa: el gruñido es casi todo grave, y **la saturación del paso 3 regenera los
+graves que el paso 1 había sacado**. Un transmisor real filtra lo que emite, no
+lo que entra. Con el filtro de salida:
+
+| sonido | <300 Hz | 300–3400 Hz | >3400 Hz |
+|---|---|---|---|
+| grito | 0,6 % | **99,3 %** | 0,1 % |
+| screamer | 0,2 % | **99,7 %** | 0,1 % |
+| grunido | 9,8 % | **90,2 %** | 0,0 % |
+| voz_1..3 | 0,1–0,2 % | **95,9–99,7 %** | 0,1–0,4 % |
+
+El gruñido pasó de 66,6 % a 9,8 % de graves fuera de banda: ahora lo llevan sus
+armónicos, que es justo lo que una radio le hace a una voz grave.
+
+### Y dos cosas que el juego no hacía
+
+- **La embestida reusaba `grito()`**, así que el momento más fuerte del juego
+  sonaba igual que el aviso de veinte segundos antes. Ahora tiene el suyo.
+- **El bicho no hacía ruido caminando.** El gruñido lejano sale cada 7–16 s y es
+  el aviso de que existe; la voz suelta sale cada 3,5–8,5 s y mucho más baja, y
+  suena aunque no tenga idea de dónde estás. Ninguna de las dos suena cazando:
+  ahí ya están el grito y la música.
 
 ## La regla que faltaba: el tope sale de la cadencia, no del gusto
 
