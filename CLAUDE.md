@@ -269,6 +269,63 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Octogésima octava vuelta (2026-09-02): **PUERTA BLANCA** — un menú principal y se va el selector de niveles
+
+Pedido: *"quiero que quites el selector de niveles y agregues un menú principal con 3 funciones.
+iniciar el juego. calidad gráfica (alta, media y baja) y selector de idioma"*. Vive en
+`herramientas/puerta/menu.py`.
+
+#### HABÍA DOS PANTALLAS PREGUNTANDO LO MISMO
+
+El juego abría con `#boot` —título y las tres fichas de calidad— y al tocar una ficha saltaba a
+`#menu`, que traía la lista de seis niveles **más otra fila de calidad**. O sea dos pantallas
+seguidas antes de jugar y la calidad pedida dos veces. Con el idioma adentro, `#boot` no tiene nada
+propio que pedir: se borra entero (marcado, `openBoot`, las fichas y su marcado) y `openMenu()` pasa
+a ser lo primero que corre. **Una pantalla, tres cosas.**
+
+#### EL SELECTOR DE NIVELES ERA UN ATAJO DE DESARROLLO
+
+Los seis niveles **ya se encadenan solos** —la cadena 5 → 6 está verificada desde la vuelta 83— así
+que la lista era un atajo puesto en el menú del jugador. EMPEZAR arranca en el prólogo y de ahí lo
+lleva la historia.
+
+**Y EL ATAJO NO DESAPARECE, SE MUDA A UNA SONDA.** `__pb.nivel(n)` salta a un nivel igual que las
+fichas: sin eso, los quince planes del banco que empiezan tocando `.lv[data-lv="6"]` dejarían de
+poder probar el nivel 6, y una prueba que no se puede correr no prueba nada. Medido: `__pb.nivel(6)`
+aterriza en `store` con 18 llamadas y 7.544 triángulos.
+
+**Y EMPEZAR SE ESCONDE CON LA PARTIDA EMPEZADA.** Desde la pausa, "empezar" volvería al prólogo y
+tiraría la partida a la basura sin avisar; ahí lo que corresponde es Continuar, que es el que ya
+aparecía con `levelStarted`.
+
+#### EL IDIOMA CUBRE EL MENÚ Y LOS AVISOS, Y ES **UN** PARCHE
+
+Los cincuenta avisos del juego se traducen por una **tabla indexada por el texto en castellano**
+dentro de `showToast`, no por clave: eso es lo que permite que sea un solo parche en vez de
+cincuenta, y lo que no esté en la tabla **sale en castellano y nunca vacío**. El idioma arranca del
+`navigator.language` y **no se guarda en `localStorage`**: este juego no usa disco en ninguna parte y
+en una ventana privada `localStorage` **tira** — agregar la primera dependencia de disco justo en el
+arranque del menú es cambiar un juego que no puede fallar por uno que sí.
+
+#### DOS DEFECTOS PROPIOS, LOS DOS DEL ARMADO
+
+- **Un ancla que aparecía dos veces.** `    if (postReady) resizePost();` está en `updateLayout` y
+  en `applyQuality`: el `assert` de `cambiar()` lo cantó en voz alta en vez de dejar el parche puesto
+  en la función equivocada. Es la segunda vez en este juego que ese assert salva una vuelta.
+- **Y el primer plan del banco daba `click falla` en los seis botones**, con todas las sondas
+  contestando bien. No era el menú: a los tres segundos el `#boot` seguía encima y `#menu` estaba en
+  `display:none`. Lo dijo `elementFromPoint`, que devolvió `boot` — la caja del botón medía
+  `0 × 0`. **Una sonda que dice que el botón existe no dice que se pueda tocar.**
+
+#### MEDIDO AL CERRAR
+
+Menú: **0 fichas de nivel**, 1 botón de empezar, 3 de calidad y 3 de idioma. Los tres idiomas cambian
+el menú en vivo (`Un sueño con seis puertas` · `A dream with six doors` · `Um sonho com seis portas`,
+con EMPEZAR / START / COMEÇAR) y la ficha elegida se marca. Las tres calidades se aplican en caliente
+(16 llamadas en baja contra 17 en alta) con su ficha marcada. EMPEZAR deja `empezado: true` en el
+prólogo, y `__pb.nivel(6)` llega al local. `window.__errs` y `window.__pbFallas` vacíos. El HTML pasó
+de 2,99 a **2,99 MB** (el menú no trae un solo byte de asset).
+
 ### Octogésima segunda vuelta (2026-09-02): **PUERTA BLANCA** — el nivel 6, un local de comida rápida y una araña que teje
 
 Pedido: *"al pasar la puerta del nivel 5 el jugador sea llevado al nivel 6 … una tienda de comida

@@ -518,13 +518,12 @@ s = s if SOLO else cambiar(s, """      skyDome.visible = true;
 # ══════════════════════════════════════════════════════════════════════════════
 sys.path.insert(0, AQUI)
 import campo
+import menu
 import nivel6
 import red
 
 # la ficha del menu, despues del nivel 5
-s = s if SOLO else cambiar(s, """        <div class="lv" data-lv="5">""",
-            nivel6.MENU_FICHA.replace('data-lv="6"', 'data-lv="6"') + """        <div class="lv" data-lv="5">""",
-            'ficha del nivel 6')
+# LA FICHA DEL NIVEL 6 EN EL MENU YA NO VA: el selector de niveles se fue entero.
 
 # el HUD y el aviso de atrapado, al lado de los otros
 s = s if SOLO else cambiar(s, '    <div id="vhs-hud">',
@@ -1286,6 +1285,63 @@ s = s if SOLO else cambiar(s, red.CTX_VIEJO, red.CONTEXTO.strip(), 'la perdida d
 s = s if SOLO else cambiar(s, """  let quality = LOW ? 'media' : 'alta';""",
     """  let quality = (location.search.indexOf('bajo') >= 0) ? 'baja' : (LOW ? 'media' : 'alta');""",
     'el arranque en calidad baja')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 12 · EL MENU PRINCIPAL: EMPEZAR, CALIDAD E IDIOMA
+# ══════════════════════════════════════════════════════════════════════════════
+s = s if SOLO else cambiar(s, menu.VIEJO_SUB, menu.NUEVO_SUB, 'el subtitulo del menu')
+s = s if SOLO else cambiar(s, menu.VIEJO_Q, menu.NUEVO_Q, 'empezar, calidad e idioma')
+# el selector de niveles se va entero
+j4 = s.index('      <div class="levels">')
+j5 = s.index('      <button id="menu-play"')
+s = s if SOLO else cambiar(s, s[j4:j5], '', 'sacar el selector de niveles')
+s = s if SOLO else cambiar(s, '  #vhs-hud {', menu.CSS + '\n  #vhs-hud {', 'el CSS del menu')
+
+# el idioma va DESPUES de `menuResume` —lo usa `pbPintaIdioma`— y antes del
+# cableado, que necesita `startLevel` y `quality`
+s = s if SOLO else cambiar(s, "  let levelStarted = false;",
+    "  let levelStarted = false;" + menu.JS, 'el idioma')
+s = s if SOLO else cambiar(s, "  menuResume.addEventListener('click', closeMenu);",
+    menu.WIRE + "  menuResume.addEventListener('click', closeMenu);", 'el cableado del menu')
+
+# la lista de niveles ya no esta, asi que el listener que la recorria tampoco; y
+# el atajo se muda a una sonda para que los quince planes del banco sigan
+# pudiendo probar el nivel 6
+s = s if SOLO else cambiar(s, """  Array.prototype.forEach.call(menuEl.querySelectorAll('.lv'), (el) => {
+    el.addEventListener('click', () => { startLevel(parseInt(el.getAttribute('data-lv'), 10)); });
+  });
+""", '', 'sacar el listener de las fichas')
+
+# la calidad elegida se marca
+s = s if SOLO else cambiar(s, """    postCap = high ? 486 : (med ? 400 : 320);
+    if (postReady) resizePost();""",
+    """    postCap = high ? 486 : (med ? 400 : 320);
+    if (postReady) resizePost();
+    try { pbMarcaCalidad(); } catch (e) {}""", 'marcar la calidad elegida')
+
+s = s if SOLO else cambiar(s, """  window.__pb = {""",
+    """  window.__pb = {
+    // EL ATAJO A UN NIVEL, que antes eran las fichas del menu. Sin esto los
+    // planes del banco no pueden probar el nivel 6 y una prueba que no se puede
+    // correr no prueba nada.
+    nivel: function (n) { startLevel(n | 0); return n | 0; },
+    idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
+    'la sonda de nivel e idioma')
+
+# LA PANTALLA DE ARRANQUE SE VA: el menu es lo primero que se ve
+s = s if SOLO else cambiar(s, menu.VIEJO_BOOT, '', 'sacar el marcado del boot')
+s = s if SOLO else cambiar(s, menu.VIEJO_OPENBOOT, '', 'sacar openBoot y las fichas de calidad')
+s = s if SOLO else cambiar(s, menu.VIEJO_QCARD_SEL, '', 'sacar el marcado de las fichas de calidad')
+s = s if SOLO else cambiar(s, menu.VIEJO_BOOTEL, '', 'sacar la referencia al boot')
+s = s if SOLO else cambiar(s, "  openBoot();", "  openMenu();", 'abrir el menu al arrancar')
+s = s if SOLO else cambiar(s, menu.VIEJO_OPEN, menu.NUEVO_OPEN, 'empezar solo sin partida')
+
+# LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
+s = s if SOLO else cambiar(s, """  function showToast(text, duration) {
+    toastEl.textContent = text;""",
+    """  function showToast(text, duration) {
+    toastEl.textContent = pbTrad(text);""", 'traducir los avisos')
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 9 · EL ARRANQUE DE LAS TEXTURAS PBR, Y LA SONDA QUE LAS MIDE
