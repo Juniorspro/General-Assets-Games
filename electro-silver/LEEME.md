@@ -139,26 +139,39 @@ mire el código fuente puede borrar toda la base.
 
 ## El botón mágico de la descripción
 
-Debajo del cuadro de descripción hay un botón con una chispa: escribís cuatro
-palabras sueltas y la IA te devuelve la descripción redactada. Se puede deshacer
-de un toque si no gusta.
+Debajo del cuadro de descripción hay un botón con una chispa. Escribís las
+palabras sueltas de siempre y te devuelve la descripción redactada, con un
+«deshacer» al lado.
 
-La IA recibe el título, el rubro, el precio y las cuotas además de lo que
-escribiste, así que la descripción sale con datos de verdad. Y tiene prohibido
-inventar: si no le pasás una medida o una garantía, no la nombra.
+**No pide nada.** No hay clave, ni cuenta, ni internet: el redactor está dentro
+de la propia página. Por eso no se puede romper ni quedar sin cuota.
 
-**Para activarlo** hace falta una clave gratis de Google AI Studio
-(aistudio.google.com/apikey, no pide tarjeta). El panel te guía: «activar el
-botón» al lado de la chispa.
+Qué hace, con un ejemplo real:
 
-**Ojo con esta clave, que no es como la de Supabase.** Ésta sí sirve desde
-cualquier lado. Cuando la web esté publicada, entrá a la clave en Google Cloud,
-en **Application restrictions** elegí **Websites** y agregá tu dominio: así sólo
-funciona desde tu página. Mientras tanto el plan gratis tiene tope diario, así
-que el daño posible es que alguien te gaste la cuota del día.
+    heladera grande 2 puertas no frost, la llevamos el mismo dia
+    → Grande dos puertas No Frost. Con entrega el mismo día en Presidencia Roca.
 
-El panel prueba varios modelos hasta encontrar uno que exista en tu cuenta
-(gemini-3.8-flash, 3.5, 2.5, 2.0) y se queda con el que anduvo.
+- pone las tildes que se comen al escribir rápido (dia, garantia, automatico…)
+- escribe bien el vocabulario del rubro (no frost → No Frost, 8kg → 8 kg,
+  50 pulg → 50 pulgadas, 3000 fg → 3000 frigorías, 4k → 4K, s/interes → sin interés)
+- pasa a letras los números que se cuentan (2 puertas → dos puertas) cuidando el
+  género (1 año → un año, 1 puerta → una puerta)
+- baja los gritos: MUY ECONOMICO!!! → Muy económico.
+- saca del principio lo que ya dice el título, para no repetirlo, pero nunca se
+  come un número (si no, «80 litros» quedaba en «litros»)
+- arma aparte la frase de entrega o de instalación cuando la mencionás
+- corta en 240 caracteres por palabra entera
+
+### Si querés una IA de verdad además
+
+El enlace «usar una IA en la nube» al lado del botón permite enchufar la API de
+Google Gemini, que reescribe de cero con más vuelo. Es gratis pero hay que sacar
+una clave en aistudio.google.com/apikey. Es **opcional**: sin eso el botón anda
+igual. Y si la nube falla o se queda sin cuota, cae solo al redactor de la página.
+
+Ojo con esa clave si la usás: al revés de la de Supabase, sirve desde cualquier
+lado. Restringila por dominio en Google Cloud (Application restrictions →
+Websites) cuando publiques.
 
 El ícono está en `imagenes/chispa.png` (blanco sobre transparente, se usa como
 máscara para que tome el color del botón) y en `imagenes/chispa-color.png`.

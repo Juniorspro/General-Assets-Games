@@ -376,7 +376,7 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
             <textarea id="detalle" maxlength="240" placeholder="Dos puertas, acero, A+. Entrega en el día en Roca."></textarea>
             <div class="magia">
               <button type="button" class="bmagia" id="b-magia">
-                <span class="ch"></span>Mejorar con IA</button>
+                <span class="ch"></span>Mejorar el texto</button>
               <span class="estado" id="magia-estado"></span>
               <button type="button" class="deshacer" id="b-deshacer" hidden>deshacer</button>
               <button type="button" class="config-ia" id="b-config-ia" hidden>activar el botón</button>
@@ -496,9 +496,10 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
     <section class="etapa" data-etapa="8" hidden>
       <div class="entrar-caja">
         <div class="chispa-grande"></div>
-        <h3>El botón mágico</h3>
-        <p class="dice">Escribís cuatro palabras y la IA te devuelve la descripción redactada.
-          Necesita una clave de Google, que es gratis y se saca en un minuto.</p>
+        <h3>Una IA en la nube (opcional)</h3>
+        <p class="dice">El botón mágico ya funciona sin esto: lo redacta la propia página, al
+          instante y sin internet. Si querés que además reescriba de cero, con más vuelo,
+          se le puede enchufar la IA de Google. Es gratis pero hay que sacar una clave.</p>
       </div>
       <ol class="pasitos">
         <li>Entrá a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
@@ -520,7 +521,7 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
       </div>
       <div class="acciones">
         <button type="button" class="bp" id="b-probar-ia">Probar y guardar</button>
-        <button type="button" class="bs" id="b-sin-ia">Seguir sin esto</button>
+        <button type="button" class="bs" id="b-sin-ia">Dejarlo como está</button>
         <button type="button" class="bd" id="b-borrar-ia" hidden>borrar la clave</button>
       </div>
     </section>
@@ -1272,6 +1273,152 @@ $("b-paso2").addEventListener("click",function(){
   });
 });
 
+/* Redactor de descripciones para un local de electrodomésticos.
+   No sale a internet: son reglas sobre el vocabulario del rubro. */
+function crearRedactor(){
+  "use strict";
+
+  var VOCAB=[
+    [/\bno\s*-?\s*frost\b/gi,"No Frost"], [/\bnofrost\b/gi,"No Frost"],
+    [/\bsmart\s*tv\b/gi,"Smart TV"], [/\bfull\s*hd\b/gi,"Full HD"],
+    [/\b4\s*k\b/gi,"4K"], [/\bled\b/gi,"LED"], [/\bqled\b/gi,"QLED"],
+    [/\bbtu\b/gi,"BTU"], [/\bhdmi\b/gi,"HDMI"], [/\busb\b/gi,"USB"],
+    [/\binverter\b/gi,"Inverter"], [/\bwi\s*-?\s*fi\b/gi,"wifi"],
+    [/\bfr[ií]o\s*(?:\/|y|-)?\s*calor\b/gi,"frío y calor"],
+    [/\bacero\s+inox\b/gi,"acero inoxidable"],
+    [/\b(\d+)\s*fg\b/gi,"$1 frigorías"],
+    [/\b(\d+(?:[.,]\d+)?)\s*(?:lts?\.?|litross?)\b/gi,"$1 litros"],
+    [/\b(\d+(?:[.,]\d+)?)\s*l\b/g,"$1 litros"],
+    [/\b(\d+(?:[.,]\d+)?)\s*(?:kgs?\.?|kilos?)\b/gi,"$1 kg"],
+    [/\b(\d+)\s*(?:cms?\.?|cent[ií]metros?)\b/gi,"$1 cm"],
+    [/\b(\d+)\s*(?:mts?\.?|metros?)\b/gi,"$1 m"],
+    [/\b(\d+)\s*rpm\b/gi,"$1 rpm"],
+    [/\b(\d+)\s*(?:w|watts?)\b/gi,"$1 W"],
+    [/\b(\d+)\s*(?:pulg\.?|pulgadas?|”|")\b/gi,"$1 pulgadas"],
+    [/\ba\s*\+\s*\+\s*\+/gi,"A+++"], [/\ba\s*\+\s*\+/gi,"A++"], [/\ba\s*\+(?!\+)/gi,"A+"],
+    [/\bs\/\s*inter[eé]s\b/gi,"sin interés"],
+    [/\bctas?\b/gi,"cuotas"]
+  ];
+
+  var TILDES={ dia:"día", dias:"días", frio:"frío", garantia:"garantía",
+    instalacion:"instalación", recuperacion:"recuperación", refrigeracion:"refrigeración",
+    credito:"crédito", debito:"débito", electrico:"eléctrico", electrica:"eléctrica",
+    automatico:"automático", automatica:"automática", rapido:"rápido", rapida:"rápida",
+    telefono:"teléfono", tecnico:"técnico", envio:"envío", ano:"año", anos:"años",
+    interes:"interés", energia:"energía", mas:"más", tambien:"también", facil:"fácil",
+    util:"útil", proximo:"próximo", ultimo:"último", unico:"único", comodo:"cómodo",
+    economico:"económico", economica:"económica", plastico:"plástico", metalico:"metálico",
+    metalica:"metálica", termico:"térmico", termica:"térmica", electronico:"electrónico",
+    aca:"acá", ademas:"además", asi:"así", frigorias:"frigorías", presion:"presión",
+    conexion:"conexión", opcion:"opción", version:"versión", maxima:"máxima", minima:"mínima",
+    capacidad:"capacidad", numero:"número", pequeno:"pequeño", bano:"baño", manana:"mañana" };
+
+  var NUMS={ "1":"un","2":"dos","3":"tres","4":"cuatro","5":"cinco","6":"seis",
+             "7":"siete","8":"ocho","9":"nueve","10":"diez" };
+  var FEMENINOS=/^(puertas?|hornallas?|velocidades?|bocas?|ruedas?|bandejas?|canastas?|tinas?)$/i;
+  var CONTABLES=/\b(\d{1,2})\s+(puertas?|hornallas?|velocidades?|niveles?|programas?|cajones?|estantes?|bocas?|ruedas?|bandejas?|canastas?|tinas?|a[nñ]os?)\b/gi;
+
+  var SIGLAS=/^(LED|QLED|BTU|HDMI|USB|TV|4K|A|W|L|LG|OK)$/;
+
+  function limpiar(t){
+    return String(t||"")
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,"")
+      .replace(/\s+/g," ")
+      .replace(/\s+([,.;:])/g,"$1")
+      .replace(/([,.;:])(?=[^\s\d])/g,"$1 ")     /* no separa 1,7 ni 1.200 */
+      .replace(/!+/g,".")
+      .replace(/\.{2,}/g,".")
+      .trim();
+  }
+  function destildar(p){ return p.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase(); }
+
+  function bajarGritos(t){
+    return t.replace(/\b[A-ZÁÉÍÓÚÑ]{3,}\b/g, function(p){
+      if(SIGLAS.test(p)) return p;
+      return p.toLowerCase();          /* la mayúscula la pone el punto, no el grito */
+    });
+  }
+  function ponerTildes(t){
+    return t.replace(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/g, function(p){
+      if(/[A-ZÁÉÍÓÚÑ]/.test(p.slice(1))) return p;
+      var l=destildar(p), r=TILDES[l];
+      if(!r || r===l) return p;
+      return p[0]===p[0].toUpperCase() ? r[0].toUpperCase()+r.slice(1) : r;
+    });
+  }
+  function vocabulario(t){
+    VOCAB.forEach(function(par){ t=t.replace(par[0],par[1]); });
+    t=t.replace(CONTABLES,function(_,n,s){
+      var pal=NUMS[n]||n;
+      if(n==="1" && FEMENINOS.test(s)) pal="una";
+      return pal+" "+s.toLowerCase();
+    });
+    return t;
+  }
+  /* se come del principio las palabras que ya están en el título */
+  function quitarTitulo(t, titulo){
+    if(!titulo) return t;
+    var enTitulo={};
+    destildar(titulo).split(/[^a-z0-9+]+/).forEach(function(p){ if(p) enTitulo[p]=true; });
+    var pal=t.split(/\s+/), i=0;
+    /* sólo palabras, nunca números: si se come el "80" queda "litros de piso" */
+    while(i<pal.length && /^[a-záéíóúñ]/i.test(pal[i]) &&
+          enTitulo[destildar(pal[i]).replace(/[^a-z0-9+]/g,"")]) i++;
+    if(i===0 || i>=pal.length) return t;           /* nada, o se lo comería entero */
+    var resto=pal.slice(i).join(" ").replace(/^[,;.\s]+/,"");
+    return resto.split(/\s+/).length>=2 ? resto : t;
+  }
+
+  var CIERRES=[
+    {re:/\b(mismo d[ií]a|en el d[ií]a|hoy mismo)\b/i, txt:"Con entrega el mismo día en Presidencia Roca."},
+    {re:/\b(instala(?:ci[oó]n|mos)|instalado)\b/i,    txt:"La instalación la hacemos nosotros."},
+    {re:/\b(env[ií]o|llevamos|entrega(?:mos)?|domicilio)\b/i, txt:"Lo llevamos a domicilio."}
+  ];
+
+  function oraciones(t){
+    return t.split(/(?<=[.])\s+/).map(function(x){ return x.trim(); }).filter(Boolean);
+  }
+  function capitalizar(f){ return f ? f[0].toLocaleUpperCase("es")+f.slice(1) : f; }
+  function terminar(f){
+    f=f.replace(/[\s,;:]+$/,"");
+    return !f ? "" : (/[.?]$/.test(f) ? f : f+".");
+  }
+
+  function redactar(datos){
+    var t=limpiar(datos.detalle||"");
+    if(!t) return {texto:"", cambios:[], vacio:true};
+    var cambios=[], antes;
+
+    antes=t; t=bajarGritos(t);       if(t!==antes) cambios.push("bajamos las mayúsculas");
+    antes=t; t=vocabulario(t);       if(t!==antes) cambios.push("vocabulario del rubro");
+    antes=t; t=ponerTildes(t);       if(t!==antes) cambios.push("tildes");
+    antes=t; t=quitarTitulo(t, datos.titulo);
+                                     if(t!==antes) cambios.push("sacamos lo que ya dice el título");
+
+    var cierres=[];
+    CIERRES.forEach(function(c){
+      if(!c.txt || !c.re.test(t)) return;
+      t=t.replace(new RegExp("[,;]?\\s*(?:y\\s+)?(?:se\\s+lo\\s+|te\\s+lo\\s+|te\\s+la\\s+|lo\\s+|la\\s+)?"+
+        "[^,.;]*(?:"+c.re.source.replace(/^\\b|\\b$/g,"")+")[^,.;]*","i"),"");
+      if(cierres.indexOf(c.txt)<0) cierres.push(c.txt);
+    });
+    if(cierres.length) cambios.push("armamos la frase de entrega");
+
+    var cuerpo=oraciones(limpiar(t)).map(function(f){
+      return capitalizar(f.replace(/^(y|con que|que)\s+/i,""));
+    }).filter(function(f){ return f.replace(/[^a-záéíóúñ0-9]/gi,"").length>2; }).map(terminar);
+
+    var salida=limpiar(cuerpo.concat(cierres).join(" "));
+    if(salida.length>238){
+      salida=terminar(salida.slice(0,236).replace(/\s+\S*$/,""));
+      cambios.push("recortamos a 240");
+    }
+    return {texto:salida, cambios:cambios, vacio:!salida};
+  }
+  return redactar;
+}
+var redactarLocal = crearRedactor();
+
 /* ── el botón mágico ─────────────────────────────────────────────── */
 var MODELOS=["gemini-3.8-flash","gemini-3.5-flash","gemini-2.5-flash","gemini-2.0-flash"];
 var IA_URL="https://generativelanguage.googleapis.com/v1beta/interactions";
@@ -1347,9 +1494,12 @@ var textoAntes=null;
 function pintarMagia(){
   var hayClave=!!cfg.ia_key;
   $("b-magia").hidden=false;
+  $("b-magia").disabled=false;
   $("b-config-ia").hidden=hayClave;
-  $("b-magia").disabled=!hayClave;
-  $("b-magia").title = hayClave ? "" : "Hay que activar el botón primero";
+  $("b-config-ia").textContent="usar una IA en la nube";
+  $("b-magia").title = hayClave
+    ? "Lo reescribe la IA de Google"
+    : "Lo reescribe la propia página, sin depender de internet";
 }
 $("b-config-ia").addEventListener("click",function(){ abrirModal(8); });
 $("b-magia").addEventListener("click",function(){
@@ -1357,9 +1507,21 @@ $("b-magia").addEventListener("click",function(){
   if(!d.titulo && !d.detalle){
     avisar("Escribí al menos el título o unas palabras de la descripción", true); return; }
   var b=$("b-magia"), est=$("magia-estado");
-  b.disabled=true; b.classList.add("pensando"); est.textContent="pensando…";
-  $("b-deshacer").hidden=true;
   textoAntes=$("detalle").value;
+  $("b-deshacer").hidden=true;
+
+  /* sin clave: lo hace la propia página, al instante y sin internet */
+  if(!cfg.ia_key){
+    var r=redactarLocal({titulo:d.titulo, detalle:d.detalle});
+    if(r.vacio){ avisar("Escribí unas palabras en la descripción y volvé a tocar", true); return; }
+    $("detalle").value=r.texto;
+    pintarPrevia();
+    est.textContent = r.cambios.length ? r.cambios.slice(0,2).join(" · ") : "ya estaba bien";
+    $("b-deshacer").hidden=false;
+    return;
+  }
+
+  b.disabled=true; b.classList.add("pensando"); est.textContent="pensando…";
   pedirConReserva(INSTRUCCION, contexto()).then(function(t){
     t=t.replace(/^["'«»\s]+|["'«»\s]+$/g,"");
     if(t.length>240) t=t.slice(0,237).replace(/\s+\S*$/,"")+"…";
@@ -1381,6 +1543,13 @@ $("b-magia").addEventListener("click",function(){
       avisar("No se pudo llegar a Google. ¿Hay internet? En la vista previa de Claude está bloqueado.", true);
     } else {
       avisar("La IA no respondió: "+m, true);
+    }
+    /* que no quede sin hacer nada: lo redacta la página */
+    var r=redactarLocal({titulo:d.titulo, detalle:textoAntes});
+    if(!r.vacio && r.texto!==textoAntes){
+      $("detalle").value=r.texto; pintarPrevia();
+      est.textContent="lo redactó la página";
+      $("b-deshacer").hidden=false;
     }
   }).then(function(){
     b.disabled=false; b.classList.remove("pensando"); pintarMagia();
