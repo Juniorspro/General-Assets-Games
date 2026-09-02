@@ -2,11 +2,13 @@
    escaleras que suben y bajan, y camara que se inclina al moverse. */
 import * as THREE from 'three';
 import {
-    CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
-    toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
-    medirParedes, rescatar, SALAS, salaEn, salaPorId, temaEn, centroSala,
+    CELL, WALL_H, GROSOR, ARRANQUE, FLECHA, ALTO_PUERTA, HOLE_H, W, H, LEVELS, Rng,
+    SECTORES, SEC, sectorEn, sectorIdx, sectorPorId, temaEn, centroSector, esPiso,
+    NADA, PARED, PUERTA, GATERA, paredV, paredH, hayPared,
+    toWorld, toCell, bordeX, bordeZ, isOpen, surfaceAt, levelAt, collide, spawnOn,
+    medirParedes, rescatar, SALAS, salaEn, salaPorId, centroSala,
 } from './map.js';
-import { texAlfombra, texYeso, texHormigon, texFrase, FRASES, pilaDeCajones, crucifijo } from './deco.js';
+import { texAlfombra, texYeso, texHormigon, texBaldosa, texTabla, texFrase, FRASES, pilaDeCajones, tablon, crucifijo } from './deco.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
 import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
@@ -27,30 +29,11 @@ const FOV = 100;
    principio, la camara se tira al piso y el FOV pega un tiron. */
 const SLIDE_TIME = 0.85, SLIDE_SPEED = 9.2, SLIDE_COOLDOWN = 0.45;
 
-/* Las bandas de la pared, medidas sobre las capturas del juego original.
-   NO hay zocalo alto de madera ni moldura a media altura: lo que hay es un
-   zocalo NARANJA bajo —35 cm, del mismo naranja que enmarca cada puerta—, el
-   papel damasco verde salvia desde ahi hasta arriba, y una cornisa crema. El
-   naranja contra el verde y la alfombra roja es toda la paleta de la casa. */
-const ZOCALO = 0.36, CORNICE = 0.26;
-/* Las puertas son portales altos con pared arriba, no huecos de piso a techo:
-   es lo primero que se ve en la foto del pasillo largo. */
-const ALTO_PUERTA = 2.78, MARCO_E = 0.13;
-
-/* Que bandas lleva cada tema de sala. `null` = 'lo que sobra hasta la cornisa'. */
-const BANDAS = {
-    casa:     [['zocalo', ZOCALO], ['paper', null], ['cornisa', CORNICE]],
-    yeso:     [['yeso', null], ['cornisa', CORNICE]],
-    hormigon: [['hormigon', null]],
-};
-const GRUPO_TEMA = {
-    pads: 'yeso', salida: 'yeso', sotano: 'hormigon',
-};
-const grupoDe = tema => GRUPO_TEMA[tema] || 'casa';
-const PISO_TEMA = { salida: 'blanco', sotano: 'hormigon' };
-const pisoDe = tema => PISO_TEMA[tema] || 'alfombra';
-const TECHO_TEMA = { salida: 'blanco', sotano: 'hormigon' };
-const techoDe = tema => TECHO_TEMA[tema] || 'cornisa';
+/* Las bandas de una cara de tabique, medidas sobre las capturas: zocalo de
+   madera naranja abajo, papel damasco arriba, y un riel de la misma madera
+   donde arranca la boveda. NO hay zocalo crema alto ni moldura a media altura:
+   eso era de otra casa. */
+const ZOCALO = 0.34, RIEL = 0.20;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -110,22 +93,25 @@ class Dungeon {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.06;
+        this.renderer.toneMappingExposure = 1.12;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0d1018);
+        this.scene.background = new THREE.Color(0x090705);
         /* La niebla arrancaba a 6 m y se comia el cuarto entero. Ahora empieza
            donde termina el alcance del farol y cierra mucho mas lejos: se ve
            el fondo del pasillo, que es lo que se pedia. */
-        this.scene.fog = new THREE.Fog(0x0d1018, 8, 52);
+        /* La niebla es CALIDA y arranca lejos. Antes era azul noche a 52 m y en una
+           casa de cien metros el fondo de cada pasillo se veia celeste: parecia
+           que la casa daba a la calle. */
+        this.scene.fog = new THREE.Fog(0x090705, 9, 52);
         this.camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.02, 300);
 
         /* Luz de relleno de verdad: antes el ambiente estaba en 0,06 y todo
            lo que el farol no tocaba era negro liso. Sube el piso de luz sin
            aplanar, porque el hemisferico sigue teniendo cielo y suelo. */
-        this.scene.add(new THREE.HemisphereLight(0x7d90b8, 0x2a1e14, 0.85));
-        this.scene.add(new THREE.AmbientLight(0xffeedd, 0.16));
+        this.scene.add(new THREE.HemisphereLight(0x6b6455, 0x2a1e14, 0.55));
+        this.scene.add(new THREE.AmbientLight(0xffeedd, 0.22));
 
         /* El farol del jugador. Como somos chicos, alcanza poco y las paredes
            se pierden hacia arriba en la oscuridad: eso es lo que las agranda. */
@@ -151,6 +137,7 @@ class Dungeon {
 
         this.cuerpo = new R15(this.scene, EYE);
         this.farolesConSombra = 3;
+        this.lucesVivas = 10;
         this.distPisos = 1.35;
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         /* Los cajones del deposito y las columnas del sotano ya son solidos:
@@ -188,479 +175,537 @@ class Dungeon {
     }
 
     build() {
-        /* La pared no es una sola textura: son bandas, como en las fotos.
-           Zocalo crema abajo, moldura de madera, papel rojo arriba y cornisa. */
-        const alfombra = texAlfombra(), yeso = texYeso(), hormigon = texHormigon();
+        /* La pared de la casa, medida sobre las capturas: zocalo de madera
+           naranja abajo, papel damasco verde-azulado, y una banda de madera
+           arriba donde arranca la boveda. La madera es GRUESA y sobresale: es
+           lo primero que se ve en las fotos del desvan. */
+        const alfombra = texAlfombra(), yeso = texYeso();
+        const hormigon = texHormigon(), baldosa = texBaldosa();
         this.mats = {
-            paper: new THREE.MeshStandardMaterial({
+            papel: new THREE.MeshStandardMaterial({
                 map: A.paper ? tex(A.paper, [1, 1]) : null,
-                color: A.paper ? 0x93bcac : 0x44584f, roughness: 0.92,
+                color: A.paper ? 0x93a79b : 0x64796d, roughness: 0.93,
             }),
-            // el naranja del zocalo y de los marcos: es la firma de la casa
-            zocalo: new THREE.MeshStandardMaterial({
+            madera: new THREE.MeshStandardMaterial({
                 map: A.ceil ? tex(A.ceil, [1, 1]) : null,
-                color: A.ceil ? 0xe07a2c : 0xc06a26, roughness: 0.72,
+                color: A.ceil ? 0x9c6a30 : 0x8d5122, roughness: 0.62,
             }),
-            cornisa: new THREE.MeshStandardMaterial({
-                map: A.wainscot ? tex(A.wainscot, [1, 1]) : null,
-                color: A.wainscot ? 0xd8cfbc : 0xcfc4ad, roughness: 0.88,
-            }),
-            // yeso blanco con tachas: la sala de las baldosas y la salida
             yeso: new THREE.MeshStandardMaterial({ map: yeso, roughness: 0.95 }),
             hormigon: new THREE.MeshStandardMaterial({ map: hormigon, roughness: 0.98 }),
+            // la baldosa gris de la sala blanca, no un piso de banco
+            gris: new THREE.MeshStandardMaterial({ map: baldosa, color: 0xb9b5ab, roughness: 0.5 }),
             alfombra: new THREE.MeshStandardMaterial({ map: alfombra, roughness: 1 }),
+            baldosa: new THREE.MeshStandardMaterial({ map: baldosa, color: 0xb2ada2, roughness: 0.45, metalness: 0.04 }),
+            // la boveda y los techos planos: tabla clara, casi crema
+            tabla: new THREE.MeshStandardMaterial({
+                map: texTabla(), roughness: 0.88, side: THREE.DoubleSide,
+            }),
             blanco: new THREE.MeshStandardMaterial({ color: 0xe6e4de, roughness: 0.7 }),
             dark: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1 }),
         };
-        // el techo del pasillo es el mismo crema de la cornisa
+        // nombres viejos que todavia usan otros archivos
+        this.mats.paper = this.mats.papel;
         this.mats.floor = this.mats.alfombra;
-        this.mats.ceil = this.mats.cornisa;
-        for (let lv = 0; lv < LEVELS.length; lv++) this.buildLevel(lv);
-        this.buildStairs(this.mats.floor);
+        this.mats.ceil = this.mats.tabla;
+        this.mats.cornisa = this.mats.madera;
+        this.mats.zocalo = this.mats.madera;
+
+        const casa = new THREE.Group();
+        this.scene.add(casa);
+        this.casa = casa;
+        this.levelGroups = [casa];
+
+        this.construirTabiques(casa);
+        this.construirPisoYTecho(casa);
+        this.construirBovedas(casa);
+        this.vestirSectores(0, 0, casa);
+        this.pintarFrases(0, 0, casa);
+        this.colgarCuadros(0, 0, casa);
+        this.placeChandeliers(0, 0, casa);
     }
 
-    /* Una tira de pared, partida en sus bandas. `y0` permite arrancar arriba
-       del piso: es lo que deja el hueco rectangular por el que se pasa. */
-    wallStrip(out, cx, cz, w, d, base, y0, tema, y1 = WALL_H) {
-        const bandas = BANDAS[grupoDe(tema)];
-        // lo que miden las bandas fijas; el relleno se queda con el resto
-        const fijo = bandas.reduce((a, [, h]) => a + (h || 0), 0);
+    /* Las bandas de una cara de tabique, de abajo hacia arriba. */
+    bandas(tema) {
+        if (tema === 'salon' || tema === 'salida') return [['yeso', WALL_H]];
+        if (tema === 'taller') return [['hormigon', WALL_H]];
+        return [['madera', ZOCALO], ['papel', WALL_H - ZOCALO - RIEL], ['madera', RIEL]];
+    }
+
+    /* Una cara de tabique: un tramo de `largo` metros, pegado al borde, con sus
+       bandas. `y0` deja el hueco de la gatera; `y1` corta bajo el dintel. */
+    caraTabique(out, cx, cz, largo, esp, horizontal, tema, y0, y1) {
         let y = 0;
-        for (const [mat, h] of bandas) {
-            const alto = h === null ? Math.max(0, WALL_H - fijo) : h;
-            // cada banda se recorta contra [y0, y1]: asi un hueco que arranca a
-            // media altura no corre las bandas de arriba, las corta
+        for (const [mat, alto] of this.bandas(tema)) {
             const a = Math.max(y, y0), b = Math.min(y + alto, y1);
             y += alto;
-            if (b - a <= 0.001) continue;
-            const g = new THREE.BoxGeometry(w, b - a, d);
-            g.translate(cx, base + (a + b) / 2, cz);
+            if (b - a <= 0.002) continue;
+            const g = new THREE.BoxGeometry(horizontal ? largo : esp, b - a, horizontal ? esp : largo);
+            g.translate(cx, (a + b) / 2, cz);
             (out[mat] || (out[mat] = [])).push(g);
         }
     }
 
-    /* El tema de una pared sale de la sala que toca. Si toca dos, gana la que
-       no es pasillo: asi el yeso blanco de la sala de las baldosas llega hasta
-       el borde y se ve el encuentro yeso/papel que sale en las fotos. */
-    temaPared(lv, c, r) {
-        let mejor = null;
-        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            if (!isOpen(lv, c + dc, r + dr)) continue;
-            const t = temaEn(lv, c + dc, r + dr);
-            if (grupoDe(t) !== 'casa') return t;
-            if (!mejor) mejor = t;
-        }
-        return mejor || temaEn(lv, c, r);
-    }
+    /* Los tabiques. Cada uno se emite en DOS lozas de medio espesor, una por
+       cara, con el tema del sector que tiene enfrente: por eso desde el pasillo
+       ves papel y desde la sala blanca ves yeso, que es lo que pasa en la foto
+       donde el yeso y el papel se tocan en la esquina. */
+    construirTabiques(grupo) {
+        const out = {}, marcos = [], oscuro = [];
+        const S = GROSOR / 2;
 
-    /* Una celda es PUERTA si esta apretada entre dos paredes y separa dos
-       ambientes distintos: la entrada de una sala, no cada tramo de pasillo.
-       Devuelve el eje por el que se pasa, o null. */
-    esPuerta(lv, c, r) {
-        if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) return null;
-        const sol = (dc, dr) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr);
-        const ejes = [];
-        if (sol(1, 0) && sol(-1, 0) && isOpen(lv, c, r - 1) && isOpen(lv, c, r + 1)) ejes.push([0, 1]);
-        if (sol(0, 1) && sol(0, -1) && isOpen(lv, c - 1, r) && isOpen(lv, c + 1, r)) ejes.push([1, 0]);
-        if (!ejes.length) return null;
-        const [dc, dr] = ejes[0];
-        const a = salaEn(lv, c - dc, r - dr), b = salaEn(lv, c + dc, r + dr), aca = salaEn(lv, c, r);
-        return (a !== b || a !== aca) ? [dc, dr] : null;
-    }
+        const emitir = (vertical, i, j0, j1, valor, tA, tB) => {
+            const largo = (j1 - j0 + 1) * CELL;
+            const cFijo = vertical ? bordeX(i) : bordeZ(i);
+            const cMedio = vertical ? bordeZ(j0) + largo / 2 : bordeX(j0) + largo / 2;
+            const y0 = valor === GATERA ? HOLE_H : 0;
+            const y1 = valor === PUERTA ? WALL_H : WALL_H;
+            const desde = valor === PUERTA ? ALTO_PUERTA : y0;
 
-    buildLevel(lv) {
-        const base = LEVELS[lv].base;
-        const group = new THREE.Group();
-        this.scene.add(group);
-        (this.levelGroups || (this.levelGroups = []))[lv] = group;
-
-        const out = { dark: [] };
-        const solid = (c, r) => c < W && !isOpen(lv, c, r) && !isHole(lv, c, r);
-
-        /* Tiras horizontales de pared, cortadas en los huecos Y en los cambios
-           de tema: una tira que cruza del papel al yeso tendria que ser de un
-           material solo, asi que se parte. */
-        for (let r = 0; r < H; r++) {
-            let run = 0, tema = null;
-            const cerrar = c => {
-                if (!run) return;
-                const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
-                const [, z] = toWorld(c - run, r);
-                this.wallStrip(out, (x0 + x1) / 2, z, run * CELL, CELL, base, 0, tema);
-                run = 0;
-            };
-            for (let c = 0; c <= W; c++) {
-                if (solid(c, r)) {
-                    const t = this.temaPared(lv, c, r);
-                    if (run && t !== tema) cerrar(c);
-                    tema = t; run++;
-                    continue;
-                }
-                cerrar(c);
-                if (c < W && isHole(lv, c, r)) {
-                    const [hx, hz] = toWorld(c, r);
-                    this.wallStrip(out, hx, hz, CELL, CELL, base, HOLE_H, this.temaPared(lv, c, r));
-                    // el fondo del hueco, para que no se vea el vacio al cruzar
-                    const jamb = new THREE.BoxGeometry(CELL, HOLE_H, 0.06);
-                    jamb.translate(hx, base + HOLE_H / 2, hz);
-                    out.dark.push(jamb);
-                }
+            for (const [tema, lado] of [[tA, -1], [tB, 1]]) {
+                if (tema === null) continue;
+                const off = (tA === null || tB === null) ? 0 : lado * S / 2;
+                const esp = (tA === null || tB === null) ? GROSOR : S;
+                const cx = vertical ? cFijo + off : cMedio;
+                const cz = vertical ? cMedio : cFijo + off;
+                this.caraTabique(out, cx, cz, largo, esp, !vertical, tema, desde, y1);
             }
-        }
-
-        /* Las puertas: dintel de pared arriba y el marco naranja. Sin el dintel
-           las salas se abren de piso a techo y la casa parece un galpon con
-           tabiques; con el, cada sala tiene su portal, como en las fotos. */
-        const marcos = [];
-        for (let r = 1; r < H - 1; r++) {
-            for (let c = 1; c < W - 1; c++) {
-                const eje = this.esPuerta(lv, c, r);
-                if (!eje) continue;
-                // el sotano es hormigon pelado: ahi no hay marcos de madera
-                if (grupoDe(temaEn(lv, c, r)) === 'hormigon') continue;
-                const [dc, dr] = eje;
-                const [x, z] = toWorld(c, r);
-                const tema = temaEn(lv, c, r);
-                // pared arriba del hueco
-                this.wallStrip(out, x, z, CELL, CELL, base, ALTO_PUERTA, tema);
-                // jambas y dintel, del naranja del zocalo
-                const largo = CELL + MARCO_E;
-                for (const sg of [1, -1]) {
-                    const g = new THREE.BoxGeometry(dc ? MARCO_E : MARCO_E, ALTO_PUERTA, dc ? MARCO_E : MARCO_E);
-                    g.translate(x + (dr ? sg * (CELL / 2 - MARCO_E / 2) : 0),
-                                base + ALTO_PUERTA / 2,
-                                z + (dc ? sg * (CELL / 2 - MARCO_E / 2) : 0));
+            if (valor === GATERA) {
+                // el fondo del hueco, para no ver el vacio al cruzar agachado
+                const g = new THREE.BoxGeometry(vertical ? GROSOR * 1.1 : largo, HOLE_H, vertical ? largo : GROSOR * 1.1);
+                g.translate(vertical ? cFijo : cMedio, HOLE_H / 2 - HOLE_H, vertical ? cMedio : cFijo);
+                g.translate(0, HOLE_H, 0);
+                g.scale(1, 0.001, 1);
+                oscuro.push(g);
+            }
+            if (valor === PUERTA) {
+                /* Marco: dos jambas gruesas en las puntas y un dintel cruzado.
+                   Sobresale del tabique porque en las fotos la madera es un
+                   marco aplicado, no un canto de la pared. */
+                const E = GROSOR * 2.1, J = 0.26;
+                for (const p of [j0, j1 + 1]) {
+                    const q = vertical ? bordeZ(p) : bordeX(p);
+                    const g = new THREE.BoxGeometry(vertical ? E : J, ALTO_PUERTA, vertical ? J : E);
+                    g.translate(vertical ? cFijo : q, ALTO_PUERTA / 2, vertical ? q : cFijo);
                     marcos.push(g);
                 }
-                const din = new THREE.BoxGeometry(dr ? CELL : MARCO_E * 1.6, MARCO_E, dc ? CELL : MARCO_E * 1.6);
-                din.translate(x, base + ALTO_PUERTA - MARCO_E / 2, z);
-                marcos.push(din);
+                const d = new THREE.BoxGeometry(vertical ? E : largo + J, J, vertical ? largo + J : E);
+                d.translate(vertical ? cFijo : cMedio, ALTO_PUERTA - J / 2, vertical ? cMedio : cFijo);
+                marcos.push(d);
             }
+        };
+
+        /* Se recorren los bordes juntando tramos seguidos con el mismo valor y
+           los mismos dos temas: un tramo largo es una caja sola. */
+        const recorrer = (vertical) => {
+            const nI = vertical ? W + 1 : H + 1;
+            const nJ = vertical ? H : W;
+            for (let i = 0; i < nI; i++) {
+                let ini = -1, val = 0, tA = null, tB = null;
+                for (let j = 0; j <= nJ; j++) {
+                    let v = 0, a = null, b = null;
+                    if (j < nJ) {
+                        v = vertical ? paredV(i, j) : paredH(j, i);
+                        if (v !== NADA) {
+                            const sa = vertical ? sectorEn(i - 1, j) : sectorEn(j, i - 1);
+                            const sb = vertical ? sectorEn(i, j) : sectorEn(j, i);
+                            a = sa ? sa.tema : null; b = sb ? sb.tema : null;
+                        }
+                    }
+                    const igual = ini >= 0 && v === val && a === tA && b === tB;
+                    if (!igual && ini >= 0) { emitir(vertical, i, ini, j - 1, val, tA, tB); ini = -1 }
+                    if (v !== NADA && !igual) { ini = j; val = v; tA = a; tB = b }
+                }
+            }
+        };
+        recorrer(true); recorrer(false);
+
+        for (const kind of Object.keys(out)) {
+            const merged = mergeGeos(out[kind]);
+            worldUV(merged, kind === 'papel' ? 0.95 : kind === 'yeso' ? 2.4
+                          : kind === 'hormigon' ? 2.0 : 0.60);
+            const m = new THREE.Mesh(merged, this.mats[kind]);
+            m.castShadow = m.receiveShadow = true;
+            grupo.add(m);
+            out[kind].forEach(g => g.dispose());
         }
         if (marcos.length) {
             const mg = mergeGeos(marcos);
-            worldUV(mg, 0.55);
-            const mm = new THREE.Mesh(mg, this.mats.zocalo);
+            worldUV(mg, 0.60);
+            const mm = new THREE.Mesh(mg, this.mats.madera);
             mm.castShadow = mm.receiveShadow = true;
-            group.add(mm);
+            grupo.add(mm);
             marcos.forEach(g => g.dispose());
         }
+    }
 
-        for (const kind of Object.keys(out)) {
-            if (!out[kind].length) continue;
-            const merged = mergeGeos(out[kind]);
-            /* Metros que cubre cada foto: el damasco tiene unos dos motivos y
-               medio por lado y un motivo real mide ~0,38 m, o sea 0,95 m; el
-               zocalo repite corto para que se le vea la veta. */
-            worldUV(merged, kind === 'paper' ? 0.95 : kind === 'cornisa' ? 1.25
-                          : kind === 'yeso' ? 2.4 : kind === 'hormigon' ? 2.0 : 0.55);
-            const m = new THREE.Mesh(merged, this.mats[kind]);
-            m.castShadow = m.receiveShadow = true;
-            group.add(m);
-            out[kind].forEach(g => g.dispose());
-        }
-
-        /* Piso y techo, tambien por tema: alfombra roja en la casa, hormigon en
-           el sotano, placas blancas en la salida. */
+    /* Piso y techo plano. El techo del pasillo NO se emite: ahi va la boveda. */
+    construirPisoYTecho(grupo) {
+        const PISO = { salon: 'baldosa', salida: 'blanco', taller: 'hormigon' };
         const pisos = {}, techos = {};
         for (let r = 0; r < H; r++) {
-            let run = 0, pt = null, tt = null;
-            const cerrar = c => {
-                if (!run) return;
-                const [x0] = toWorld(c - run, r), [x1] = toWorld(c - 1, r);
-                const [, z] = toWorld(c - run, r);
-                const f = new THREE.PlaneGeometry(run * CELL, CELL);
-                f.rotateX(-Math.PI / 2);
-                f.translate((x0 + x1) / 2, base + 0.001, z);
+            let ini = -1, pt = null, tt = null;
+            const cerrar = (c) => {
+                if (ini < 0) return;
+                const largo = (c - ini) * CELL;
+                const cx = bordeX(ini) + largo / 2, cz = bordeZ(r) + CELL / 2;
+                const f = new THREE.PlaneGeometry(largo, CELL);
+                f.rotateX(-Math.PI / 2); f.translate(cx, 0.001, cz);
                 (pisos[pt] || (pisos[pt] = [])).push(f);
-                const k = new THREE.PlaneGeometry(run * CELL, CELL);
-                k.rotateX(Math.PI / 2);
-                k.translate((x0 + x1) / 2, base + WALL_H, z);
-                (techos[tt] || (techos[tt] = [])).push(k);
-                run = 0;
+                if (tt) {
+                    const k = new THREE.PlaneGeometry(largo, CELL);
+                    k.rotateX(Math.PI / 2); k.translate(cx, WALL_H, cz);
+                    (techos[tt] || (techos[tt] = [])).push(k);
+                }
+                ini = -1;
             };
             for (let c = 0; c <= W; c++) {
-                const open = c < W && (isOpen(lv, c, r) || isHole(lv, c, r)) && !isStairCell(c, r);
-                if (open) {
-                    const t = temaEn(lv, c, r);
-                    const np = pisoDe(t), nt = techoDe(t);
-                    if (run && (np !== pt || nt !== tt)) cerrar(c);
-                    pt = np; tt = nt; run++;
-                    continue;
-                }
-                cerrar(c);
+                const s = c < W ? sectorEn(c, r) : null;
+                const np = s ? (PISO[s.tema] || 'alfombra') : null;
+                const nt = s ? (s.pasillo ? null : (s.tema === 'taller' ? 'hormigon' : 'tabla')) : null;
+                if (!s) { cerrar(c); continue }
+                if (ini >= 0 && (np !== pt || nt !== tt)) cerrar(c);
+                if (ini < 0) { ini = c; pt = np; tt = nt }
             }
         }
-        for (const [tabla, esc, sombra] of [[pisos, 1.35, true], [techos, 2.2, false]]) {
+        /* El techo TIENE que recibir sombra: la rueda de la araña se proyecta
+           contra el, y es la firma visual del juego. Estaba en false y por eso
+           el techo salia parejo por mas que las luces proyectaran. */
+        for (const [tabla, esc, sombra] of [[pisos, 1.35, true], [techos, 0.78, true]]) {
             for (const kind of Object.keys(tabla)) {
+                if (!kind || kind === 'null') continue;
                 const g = mergeGeos(tabla[kind]);
                 worldUV(g, esc);
                 const m = new THREE.Mesh(g, this.mats[kind]);
                 m.receiveShadow = sombra;
-                group.add(m);
+                grupo.add(m);
                 tabla[kind].forEach(x => x.dispose());
             }
         }
-
-        this.vestirSalas(lv, base, group);
-        this.pintarFrases(lv, base, group);
-        this.placeChandeliers(lv, base, group);
-        this.colgarCuadros(lv, base, group);
     }
 
-    /* Lo que hace que una sala sea ESA sala y no un rectangulo mas: los cajones
-       del deposito, el crucifijo de la capilla, las columnas del sotano. Los
-       muebles de verdad los pone poblar(); aca va lo que no es un mueble. */
-    vestirSalas(lv, base, group) {
-        const rng = new Rng(0x5A1A + lv * 313);
-        this.cajasDeco || (this.cajasDeco = []);
-        const bloquear = (x, z, hx, hz, alto) =>
-            this.cajasDeco.push({ x, z, hx, hz, base, alto });
+    /* La boveda de canon del pasillo. Es LA forma del juego original: el
+       pasillo no tiene techo plano, tiene un tunel de tabla que arranca a
+       2,95 m y sube 1,50 m mas en el eje. La araña cuelga del eje y su rueda
+       se proyecta contra la curva — esa sombra es medio el juego. */
+    arco(ejeX, uc, tA, tB, hw, base) {
+        const N = 14;
+        const pos = [], nor = [], uv = [], idxs = [];
+        for (let i = 0; i <= N; i++) {
+            const a = Math.PI * i / N;
+            const u = -hw * Math.cos(a), v = FLECHA * Math.sin(a);
+            // normal de la elipse, hacia adentro
+            let nx = FLECHA * Math.cos(a), ny = -hw * Math.sin(a);
+            const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+            for (let k = 0; k < 2; k++) {
+                const t = k ? tB : tA;
+                pos.push(ejeX ? t : uc + u, base + v, ejeX ? uc + u : t);
+                nor.push(ejeX ? 0 : nx, ny, ejeX ? nx : 0);
+                uv.push(a * hw / 0.78, t / 0.78);
+            }
+        }
+        for (let i = 0; i < N; i++) {
+            const p = i * 2;
+            idxs.push(p, p + 1, p + 2, p + 1, p + 3, p + 2);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+        g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
+        g.setIndex(idxs);
+        return g;
+    }
 
-        for (const sala of SALAS[lv]) {
-            const cs = [];
-            for (let r = sala.r; r < sala.r + sala.h; r++)
-                for (let c = sala.c; c < sala.c + sala.w; c++)
-                    if (isOpen(lv, c, r) && !isStairCell(c, r)) cs.push([c, r]);
-            if (!cs.length) continue;
+    construirBovedas(grupo) {
+        const bov = [], costillas = [];
+        for (let i = 0; i < SECTORES.length; i++) {
+            const s = SECTORES[i];
+            if (!s.pasillo) continue;
+            const ejeX = s.eje === 'x';
+            const nLargo = ejeX ? s.w : s.h;      // a lo largo del pasillo
+            const nAncho = ejeX ? s.h : s.w;      // el ancho, que es la luz del arco
+            const hw = nAncho * CELL / 2;
+            const uCentro = ejeX ? bordeZ(s.r) + hw : bordeX(s.c) + hw;
+            /* Solo los tramos que este sector todavia posee: en los cruces el
+               pasillo horizontal se quedo con las celdas, asi que el vertical
+               corta ahi y la boveda que cruza es una sola. */
+            let ini = -1;
+            for (let k = 0; k <= nLargo; k++) {
+                let mio = false;
+                if (k < nLargo) {
+                    mio = true;
+                    for (let m = 0; m < nAncho && mio; m++) {
+                        const c = ejeX ? s.c + k : s.c + m;
+                        const r = ejeX ? s.r + m : s.r + k;
+                        if (sectorIdx(c, r) !== i) mio = false;
+                    }
+                }
+                if (mio && ini < 0) ini = k;
+                if (!mio && ini >= 0) {
+                    const tA = ejeX ? bordeX(s.c + ini) : bordeZ(s.r + ini);
+                    const tB = ejeX ? bordeX(s.c + k) : bordeZ(s.r + k);
+                    bov.push(this.arco(ejeX, uCentro, tA, tB, hw, ARRANQUE));
+                    // costilla de madera en cada punta del tramo
+                    for (const t of [tA, tB]) {
+                        const d = t === tA ? 0.30 : -0.30;
+                        costillas.push(this.arco(ejeX, uCentro, t, t + d, hw * 0.985, ARRANQUE - 0.04));
+                    }
+                    ini = -1;
+                }
+            }
+        }
+        if (bov.length) {
+            const m = new THREE.Mesh(mergeGeos(bov), this.mats.tabla);
+            m.receiveShadow = true;
+            grupo.add(m);
+            bov.forEach(g => g.dispose());
+        }
+        if (costillas.length) {
+            const mat = this.mats.madera.clone();
+            mat.side = THREE.DoubleSide;
+            const m = new THREE.Mesh(mergeGeos(costillas), mat);
+            m.receiveShadow = true;
+            grupo.add(m);
+            costillas.forEach(g => g.dispose());
+        }
+    }
 
-            if (sala.tema === 'deposito') {
-                /* Cajones apilados contra las paredes, dejando el centro libre:
-                   apilados en el medio el cuarto no se camina. */
-                for (const [c, r] of cs) {
-                    const pegado = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                        .some(([dc, dr]) => !isOpen(lv, c + dc, r + dr));
-                    if (!pegado || rng.next() > 0.55) continue;
-                    if (this.esPuerta(lv, c, r)) continue;   // no tapar una entrada
+    /* Lo que hace que un sector sea ESE sector y no un rectangulo mas. Los
+       muebles de verdad los reparte poblar(); aca va lo que no es un mueble:
+       cajones, tablones apoyados, columnas y el crucifijo. */
+    vestirSectores(lv, base, grupo) {
+        const rng = new Rng(0x5A1A97);
+        this.cajasDeco = [];
+        const bloquear = (x, z, hx, hz, alto) => this.cajasDeco.push({ x, z, hx, hz, base: 0, alto });
+        const contraPared = (c, r) => [[1, 0], [-1, 0], [0, 1], [0, -1]]
+            .find(([dc, dr]) => hayPared(c, r, dc, dr) === PARED);
+
+        for (const s of SECTORES) {
+            if (s.pasillo) continue;
+            const celdas = [];
+            for (let r = s.r; r < s.r + s.h; r++)
+                for (let c = s.c; c < s.c + s.w; c++) celdas.push([c, r]);
+
+            if (s.tema === 'deposito') {
+                for (const [c, r] of celdas) {
+                    const d = contraPared(c, r);
+                    if (!d || rng.next() > 0.72) continue;
                     const [x, z] = toWorld(c, r);
-                    const p = pilaDeCajones(rng);
-                    p.position.set(x + (rng.next() - .5) * .3, base, z + (rng.next() - .5) * .3);
-                    group.add(p);
-                    bloquear(p.position.x, p.position.z, 0.55, 0.55, 2.8);
+                    if (rng.next() < 0.72) {
+                        const p = pilaDeCajones(rng);
+                        p.position.set(x + (rng.next() - .5) * .3, 0, z + (rng.next() - .5) * .3);
+                        grupo.add(p);
+                        bloquear(p.position.x, p.position.z, 0.55, 0.55, 2.8);
+                    } else {
+                        // el tablon de contrachapado apoyado contra la pared
+                        const t = tablon();
+                        t.position.set(x - d[0] * (CELL / 2 - 0.45), 0, z - d[1] * (CELL / 2 - 0.45));
+                        t.rotation.y = Math.atan2(-d[0], -d[1]);
+                        t.rotation.x = 0;
+                        grupo.add(t);
+                        bloquear(t.position.x, t.position.z, 0.7, 0.35, 2.0);
+                    }
                 }
             }
 
-            if (sala.tema === 'capilla') {
-                // el crucifijo va alto, en la pared del fondo, mirando al cuarto
-                for (const [c, r] of cs) {
-                    const d = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                        .find(([dc, dr]) => !isOpen(lv, c + dc, r + dr));
+            if (s.tema === 'capilla') {
+                for (const [c, r] of celdas) {
+                    const d = contraPared(c, r);
                     if (!d) continue;
                     const [x, z] = toWorld(c, r);
                     const cru = crucifijo();
-                    cru.position.set(x + d[0] * (CELL / 2 - .08), base + 2.35, z + d[1] * (CELL / 2 - .08));
+                    cru.position.set(x + d[0] * (CELL / 2 - .10), 2.45, z + d[1] * (CELL / 2 - .10));
                     cru.rotation.y = d[0] ? -d[0] * Math.PI / 2 : (d[1] > 0 ? Math.PI : 0);
-                    group.add(cru);
+                    grupo.add(cru);
                     break;
                 }
             }
 
-            if (sala.tema === 'sotano') {
-                /* Columnas de hormigon: el sotano del original se lee por las
-                   columnas, no por el color. Van en las celdas pares del medio
-                   para no tapar ninguna entrada. */
-                const col = new THREE.CylinderGeometry(.28, .32, WALL_H, 8);
-                for (const [c, r] of cs) {
-                    if ((c % 2) || (r % 2)) continue;
-                    const dentro = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                        .every(([dc, dr]) => isOpen(lv, c + dc, r + dr));
-                    if (!dentro) continue;
+            if (s.tema === 'taller') {
+                const col = new THREE.CylinderGeometry(.30, .34, WALL_H, 8);
+                for (const [c, r] of celdas) {
+                    if (((c - s.c) % 4) || ((r - s.r) % 4) || contraPared(c, r)) continue;
                     const [x, z] = toWorld(c, r);
                     const m = new THREE.Mesh(col, this.mats.hormigon);
-                    m.position.set(x, base + WALL_H / 2, z);
+                    m.position.set(x, WALL_H / 2, z);
                     m.castShadow = m.receiveShadow = true;
-                    group.add(m);
-                    bloquear(x, z, 0.34, 0.34, WALL_H);
+                    grupo.add(m);
+                    bloquear(x, z, 0.36, 0.36, WALL_H);
+                }
+            }
+
+            if (s.tema === 'salon') {
+                /* Las dos columnas de la sala blanca. En la foto hay una
+                   enorme con la baldosa roja encendida pegada: son la
+                   referencia para saber donde estas en una nave de 31 m. */
+                for (const [dc, dr] of [[3, 4], [s.w - 4, 4]]) {
+                    const [x, z] = toWorld(s.c + dc, s.r + dr);
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(1.5, WALL_H, 1.5), this.mats.yeso);
+                    m.position.set(x, WALL_H / 2, z);
+                    m.castShadow = m.receiveShadow = true;
+                    grupo.add(m);
+                    bloquear(x, z, 0.80, 0.80, WALL_H);
                 }
             }
         }
     }
 
-    /* Las frases pintadas en la pared. Son las mismas que se leen en las fotos
-       del juego original y hacen dos cosas: te dicen que hacer sin un tutorial,
-       y te dan una referencia para saber por que pasillo ya pasaste. */
-    pintarFrases(lv, base, group) {
-        const rng = new Rng(0xF2A5 + lv * 17);
+    /* Las frases pintadas en la pared, en mayusculas negras. Son las mismas
+       que se leen en las capturas y hacen dos cosas: te dicen que hacer sin un
+       tutorial, y te dan una referencia en una casa que se repite. */
+    pintarFrases(lv, base, grupo) {
+        const rng = new Rng(0xF2A5B);
         const sitios = [];
-        for (let r = 2; r < H - 2; r++) {
-            for (let c = 2; c < W - 2; c++) {
-                if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) continue;
-                if (grupoDe(temaEn(lv, c, r)) === 'hormigon') continue;
-                const d = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                    .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
-                if (d.length !== 1) continue;      // pared limpia y larga, no una esquina
+        for (let r = 1; r < H - 1; r++) {
+            for (let c = 1; c < W - 1; c++) {
+                const s = sectorEn(c, r);
+                if (!s || s.tema === 'taller') continue;
+                const d = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dc, dr]) => hayPared(c, r, dc, dr) === PARED);
+                if (d.length !== 1) continue;
                 sitios.push([c, r, d[0]]);
             }
         }
-        const cuantas = Math.min(4, sitios.length);
-        for (let i = 0; i < cuantas; i++) {
+        for (let i = 0; i < Math.min(FRASES.length, sitios.length); i++) {
             const [c, r, [dc, dr]] = sitios[rng.int(0, sitios.length - 1)];
-            const txt = FRASES[(lv * 2 + i) % FRASES.length];
             const [x, z] = toWorld(c, r);
             const m = new THREE.Mesh(
-                new THREE.PlaneGeometry(2.02, 1.01),
-                new THREE.MeshBasicMaterial({ map: texFrase(txt), transparent: true, depthWrite: false }));
-            m.position.set(x + dc * (CELL / 2 - .05), base + 1.78, z + dr * (CELL / 2 - .05));
+                new THREE.PlaneGeometry(2.05, 1.03),
+                new THREE.MeshBasicMaterial({ map: texFrase(FRASES[i]), transparent: true, depthWrite: false }));
+            m.position.set(x + dc * (CELL / 2 - .06), 1.80, z + dr * (CELL / 2 - .06));
             m.rotation.y = dc ? -dc * Math.PI / 2 : (dr > 0 ? Math.PI : 0);
-            group.add(m);
+            grupo.add(m);
         }
     }
 
-    /* Faroles colgando del techo. La luz va dentro del aro, asi que el aro y
-       los brazos proyectan su sombra de rueda sobre el techo: es el detalle
-       que hace que se lean como lamparas y no como bolitas flotando. */
-    placeChandeliers(lv, base, group) {
-        const rng = new Rng(0x7A0 + lv * 977);
-        /* Bronce, no hierro negro: en las capturas del pasillo largo la araña
-           es claramente dorada y con velas. El hierro negro se perdia contra el
-           techo y las lamparas se leian como bolitas flotando. */
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x9c7a2e, roughness: .38, metalness: .75 });
-        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdda2 });
-        const bulbGeo = new THREE.SphereGeometry(.05, 7, 5);
-        const chainGeo = new THREE.CylinderGeometry(.018, .018, 1, 4);
-        const armGeo = new THREE.BoxGeometry(.44, .035, .05);
-
-        const hang = (c, r, big) => {
-            const [x, z] = toWorld(c, r);
-            const g = new THREE.Group();
-            g.position.set(x, base, z);
-            const rad = big ? .46 : .3, drop = big ? 1.15 : .8;
-            const arms = big ? 8 : 5;
-
-            /* El hueco oscuro del techo. En las fotos cada araña cuelga de un
-               casetón hundido casi negro con un borde crema: el techo plano y
-               parejo era lo que mas delataba que esto no era la casa. */
-            const cof = new THREE.Mesh(new THREE.PlaneGeometry(CELL * .92, CELL * .92), this.mats.dark);
-            cof.rotation.x = Math.PI / 2;
-            cof.position.y = WALL_H - 0.012;
-            g.add(cof);
-            const borde = new THREE.Mesh(
-                new THREE.TorusGeometry(CELL * .5, .05, 4, 4), this.mats.cornisa);
-            borde.rotation.x = Math.PI / 2;
-            borde.rotation.z = Math.PI / 4;
-            borde.position.y = WALL_H - 0.05;
-            g.add(borde);
-
-            const chain = new THREE.Mesh(chainGeo, armMat);
-            chain.scale.y = drop;
-            chain.position.y = WALL_H - drop / 2;
-            chain.castShadow = true;
-            g.add(chain);
-
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(rad, .03, 6, 16), armMat);
-            ring.rotation.x = Math.PI / 2;
-            ring.position.y = WALL_H - drop;
-            ring.castShadow = true;
-            g.add(ring);
-
-            for (let k = 0; k < arms; k++) {
-                const a = k / arms * Math.PI * 2;
-                // el brazo que va del centro al aro: es lo que dibuja la rueda
-                const arm = new THREE.Mesh(armGeo, armMat);
-                arm.scale.x = rad / .22;
-                arm.position.set(Math.cos(a) * rad / 2, WALL_H - drop, Math.sin(a) * rad / 2);
-                arm.rotation.y = -a;
-                arm.castShadow = true;
-                g.add(arm);
-
-                const b = new THREE.Mesh(bulbGeo, bulbMat);
-                b.position.set(Math.cos(a) * rad, WALL_H - drop + .09, Math.sin(a) * rad);
-                g.add(b);
-            }
-
-            // la luz va justo debajo del aro: proyecta la rueda hacia arriba
-            const L = new THREE.PointLight(0xffdcb0, big ? 20 : 12, big ? 28 : 20, 1.7);
-            L.position.y = WALL_H - drop - .04;
-            L.shadow.mapSize.set(512, 512);
-            L.shadow.bias = -0.006;
-            L.shadow.camera.near = 0.08;
-            g.add(L);
-            group.add(g);
-            (this.lamps || (this.lamps = [])).push({ L, base: big ? 20 : 12, phase: rng.range(0, 9), malo: rng.next() < 0.2 });
-        };
-
-        /* Rejilla floja: un farol cada pocas celdas, en salas y en pasillos.
-           Antes solo iban donde habia 3x3 libre, asi que los pasillos —que son
-           casi todo el mapa— quedaban a oscuras. */
-        const STEP = 4;
-        for (let r = 1; r < H - 1; r++) {
-            for (let c = 1; c < W - 1; c++) {
-                if ((c % STEP) || (r % STEP)) continue;
-                if (!isOpen(lv, c, r) || isStairCell(c, r) || isHole(lv, c, r)) continue;
-                let open3 = true;
-                for (let dr = -1; dr <= 1 && open3; dr++)
-                    for (let dc = -1; dc <= 1; dc++)
-                        if (!isOpen(lv, c + dc, r + dr)) { open3 = false; break }
-                hang(c, r, open3);
-            }
+    /* Los cuadros. En el original son retratos con marco dorado y un dibujo a
+       lapiz que mira de costado; son lo unico que le da personalidad a una
+       casa que si no se repite. Los dibujos vienen generados y entran como
+       textura; si no llegan, queda el lienzo oscuro y no se rompe nada. */
+    colgarCuadros(lv, base, grupo) {
+        const rng = new Rng(0xC0AD7);
+        const marco = new THREE.MeshStandardMaterial({ color: 0xc9a24a, roughness: .42, metalness: .55 });
+        const lienzos = [];
+        for (let i = 1; i <= 4; i++) {
+            const u = A['cuadro' + i];
+            lienzos.push(new THREE.MeshStandardMaterial(
+                u ? { map: tex(u, [1, 1]), roughness: .92 } : { color: 0x2a231c, roughness: .9 }));
         }
-    }
-
-    /* Cuadros colgados. En el juego original las paredes tienen retratos con
-       marco dorado, y son lo unico que le da personalidad a un pasillo que si
-       no se repite. De paso sirven de referencia para saber por donde pasaste. */
-    colgarCuadros(lv, base, group) {
-        const rng = new Rng(0xC0AD + lv * 71);
-        const marco = new THREE.MeshStandardMaterial({ color: 0x8a6a30, roughness: .55, metalness: .4 });
-        const lienzo = new THREE.MeshStandardMaterial({ color: 0x2a231c, roughness: .9 });
         let n = 0;
-        for (let i = 0; i < 5000 && n < 16; i++) {
+        for (let i = 0; i < 9000 && n < 26; i++) {
             const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
-            if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
-            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+            const s = sectorEn(c, r);
+            if (!s || s.tema === 'taller' || s.tema === 'salon') continue;
+            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dc, dr]) => hayPared(c, r, dc, dr) === PARED);
             if (!dirs.length) continue;
             const [dc, dr] = dirs[Math.floor(rng.next() * dirs.length)];
             const [x, z] = toWorld(c, r);
-            const an = rng.range(.55, .85), al = rng.range(.55, .95);
-            const px = x + dc * (CELL / 2 - .06), pz = z + dr * (CELL / 2 - .06);
+            const an = rng.range(.80, 1.15), al = an * rng.range(1.15, 1.35);
+            const px = x + dc * (CELL / 2 - .07), pz = z + dr * (CELL / 2 - .07);
             const yaw = dc ? -dc * Math.PI / 2 : (dr > 0 ? Math.PI : 0);
-            const m = new THREE.Mesh(new THREE.BoxGeometry(an, al, .05), marco);
-            m.position.set(px, base + 2.05, pz);
+            const m = new THREE.Mesh(new THREE.BoxGeometry(an, al, .07), marco);
+            m.position.set(px, 2.15, pz);
             m.rotation.y = yaw;
             m.castShadow = true;
-            group.add(m);
-            const l = new THREE.Mesh(new THREE.PlaneGeometry(an * .84, al * .84), lienzo);
-            l.position.set(px - dc * .033, base + 2.05, pz - dr * .033);
+            grupo.add(m);
+            const l = new THREE.Mesh(new THREE.PlaneGeometry(an * .82, al * .82),
+                lienzos[n % lienzos.length]);
+            l.position.set(px - dc * .042, 2.15, pz - dr * .042);
             l.rotation.y = yaw;
-            group.add(l);
+            grupo.add(l);
             n++;
         }
     }
 
-    /* Escalones de verdad. El movimiento usa la rampa suave de surfaceAt, pero
-       lo que se ve son peldanos: una rampa lisa no se lee como escalera. */
-    buildStairs(floorMat) {
-        const geos = [];
-        for (const { s, box } of STAIR_BOXES) {
-            const yA = LEVELS[s.a].base, yB = LEVELS[s.b].base;
-            const rise = yB - yA;
-            const steps = Math.max(6, Math.round(Math.abs(rise) / 0.34));
-            const [dc, dr] = s.dir;
-            const alongX = !!dc;
-            const runLen = alongX ? box.maxX - box.minX : box.maxZ - box.minZ;
-            const wide = alongX ? box.maxZ - box.minZ : box.maxX - box.minX;
-            const stepRun = runLen / steps;
-            for (let i = 0; i < steps; i++) {
-                const t0 = i / steps, t1 = (i + 1) / steps;
-                const top = yA + rise * t1;
-                const h = Math.abs(top - yA) + 0.4;
-                const g = new THREE.BoxGeometry(alongX ? stepRun : wide, h, alongX ? wide : stepRun);
-                // desde el pie hacia arriba, segun el sentido de la escalera
-                const f0 = (dc > 0 || dr > 0) ? t0 : 1 - t1;
-                const cx = alongX ? box.minX + runLen * f0 + stepRun / 2 : (box.minX + box.maxX) / 2;
-                const cz = alongX ? (box.minZ + box.maxZ) / 2 : box.minZ + runLen * f0 + stepRun / 2;
-                g.translate(cx, Math.min(yA, top) - 0.4 + h / 2, cz);
-                geos.push(g);
+    /* Las arañas de rueda. Hierro negro, ocho velas, y la luz DENTRO del aro:
+       por eso el aro y los rayos se proyectan sobre la boveda y se ve la rueda
+       de sombra que es la firma visual del juego. */
+    placeChandeliers(lv, base, grupo) {
+        const rng = new Rng(0x7A0FF);
+        const hierro = new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: .52, metalness: .45 });
+        const vela = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: .9 });
+        const llama = new THREE.MeshBasicMaterial({ color: 0xffd79a });
+        const llamaGeo = new THREE.SphereGeometry(.055, 7, 5);
+        const velaGeo = new THREE.CylinderGeometry(.035, .04, .20, 6);
+        const cadenaGeo = new THREE.CylinderGeometry(.016, .016, 1, 4);
+
+        const colgar = (c, r, techo, grande) => {
+            const [x, z] = toWorld(c, r);
+            const g = new THREE.Group();
+            g.position.set(x, 0, z);
+            /* Cuelga BAJO. Pegada al techo, la araña quema un disco blanco
+               encima y la rueda no se ve; a metro y medio, el techo queda en
+               penumbra y la sombra de los rayos se lee entera. */
+            const rad = grande ? .62 : .46, caida = grande ? 1.45 : 1.15;
+            const brazos = grande ? 8 : 6;
+            const yAro = techo - caida;
+
+            const cad = new THREE.Mesh(cadenaGeo, hierro);
+            cad.scale.y = caida; cad.position.y = techo - caida / 2;
+            cad.castShadow = true; g.add(cad);
+
+            const aro = new THREE.Mesh(new THREE.TorusGeometry(rad, .035, 5, 18), hierro);
+            aro.rotation.x = Math.PI / 2; aro.position.y = yAro;
+            aro.castShadow = true; g.add(aro);
+            const aro2 = new THREE.Mesh(new THREE.TorusGeometry(rad * .55, .028, 5, 14), hierro);
+            aro2.rotation.x = Math.PI / 2; aro2.position.y = yAro + .06;
+            aro2.castShadow = true; g.add(aro2);
+
+            const rayo = new THREE.BoxGeometry(rad, .028, .045);
+            for (let k = 0; k < brazos; k++) {
+                const a = k / brazos * Math.PI * 2;
+                const b = new THREE.Mesh(rayo, hierro);
+                b.position.set(Math.cos(a) * rad / 2, yAro, Math.sin(a) * rad / 2);
+                b.rotation.y = -a;
+                b.castShadow = true; g.add(b);
+                const v = new THREE.Mesh(velaGeo, vela);
+                v.position.set(Math.cos(a) * rad, yAro + .13, Math.sin(a) * rad);
+                g.add(v);
+                const f = new THREE.Mesh(llamaGeo, llama);
+                f.position.set(Math.cos(a) * rad, yAro + .27, Math.sin(a) * rad);
+                g.add(f);
+            }
+
+            /* La luz va 75 cm DEBAJO del aro, no pegada. Pegada al aro, la luz
+               sale casi en el plano de la rueda y esta no tapa nada hacia
+               arriba: el techo queda limpio. A 75 cm, la rueda se proyecta
+               contra el techo aumentada unas tres veces — que es exactamente
+               la rueda de sombra que se ve en las fotos del juego. */
+            const L = new THREE.PointLight(0xffd7a8, grande ? 15 : 11, grande ? 24 : 19, 1.85);
+            L.position.y = yAro - 0.75;
+            /* La camara de sombra por defecto llega a 500 m: con un mapa de
+               512 eso deja media docena de centimetros por texel y la rueda
+               —que es un aro de 3,5 cm— no proyecta nada. Recortada a 13 m la
+               sombra de los rayos aparece sobre la boveda, que es de lo que se
+               trata todo esto. */
+            L.shadow.mapSize.set(1024, 1024);
+            L.shadow.bias = -0.0016;
+            L.shadow.camera.near = 0.05;
+            L.shadow.camera.far = 13;
+            L.shadow.radius = 2;
+            g.add(L);
+            grupo.add(g);
+            (this.lamps || (this.lamps = [])).push({
+                L, base: grande ? 15 : 11, phase: rng.range(0, 9), malo: rng.next() < 0.18,
+            });
+        };
+
+        for (const s of SECTORES) {
+            if (s.pasillo) {
+                // en fila por el eje del pasillo, colgando del vertice de la boveda
+                const ejeX = s.eje === 'x';
+                const largo = ejeX ? s.w : s.h;
+                const medio = ejeX ? s.r + (s.h >> 1) : s.c + (s.w >> 1);
+                for (let k = 2; k < largo; k += 3) {
+                    const c = ejeX ? s.c + k : medio, r = ejeX ? medio : s.r + k;
+                    if (!esPiso(c, r)) continue;
+                    colgar(c, r, ARRANQUE + FLECHA - 0.02, false);
+                }
+            } else {
+                const paso = s.tema === 'salon' ? 3 : 4;
+                for (let r = s.r + 1; r < s.r + s.h - 1; r += paso)
+                    for (let c = s.c + 1; c < s.c + s.w - 1; c += paso)
+                        colgar(c, r, WALL_H - 0.02, s.tema === 'salon');
             }
         }
-        if (!geos.length) return;
-        const merged = mergeGeos(geos);
-        worldUV(merged, 2.4);
-        const m = new THREE.Mesh(merged, floorMat);
-        m.castShadow = m.receiveShadow = true;
-        this.scene.add(m);
-        geos.forEach(g => g.dispose());
     }
 
     initPlayer() {
@@ -669,16 +714,16 @@ class Dungeon {
         this.pos = new THREE.Vector3(s.x, 0, s.z);
         this.y = 0;
         this.pitch = 0;
-        // arrancar mirando a un lado abierto, no contra la pared
-        const dirs = [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]];
+        // arrancar mirando a un lado sin tabique, no contra la pared
+        const [sc, sr] = toCell(s.x, s.z);
         this.yaw = 0;
-        for (const [dc, dr, yaw] of dirs) {
-            if (isOpen(0, s.c + dc, s.r + dr)) { this.yaw = yaw; break }
+        for (const [dc, dr, yaw] of [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]]) {
+            if (!hayPared(sc, sr, dc, dr) && esPiso(sc + dc, sr + dr)) { this.yaw = yaw; break }
         }
         this.celdasVedadas = [];
         for (let dr = -2; dr <= 2; dr++)
             for (let dc = -2; dc <= 2; dc++)
-                this.celdasVedadas.push((s.c + dc) + ',' + (s.r + dr));
+                this.celdasVedadas.push((sc + dc) + ',' + (sr + dr));
     }
 
     bindInput() {
@@ -876,21 +921,14 @@ class Dungeon {
         /* Y la red: si igual quedaste dentro de algo solido, se sale de una vez
            a la celda abierta mas cerca. Pasa al pararse adentro de un hueco de
            62 cm, o al reaparecer encima de una pared. */
-        const salvado = rescatar(nx, nz, this.y, low);
+        const salvado = rescatar(nx, nz);
         if (salvado) { nx = salvado[0]; nz = salvado[1]; this.rescates = (this.rescates || 0) + 1 }
         this.pos.set(nx, 0, nz);
 
-        /* La altura sigue la superficie. El salto entre niveles se hace de
-           GOLPE y no interpolando: mientras interpolabas, `levelAt(y)` ya
-           devolvia el otro nivel y la colision usaba la grilla equivocada —
-           por eso habia paredes que se atravesaban y pisos por los que se
-           caia. Solo se suaviza el escalon chico de una escalera. */
-        const surf = surfaceAt(nx, nz, this.y);
-        if (surf !== null) {
-            this.y = Math.abs(surf - this.y) > LEVEL_H * 0.4
-                ? surf
-                : lerp(this.y, surf, sat(dt * 22));
-        }
+        /* La casa es UNA planta. Toda la familia de bugs de pisos falsos y
+           paredes que se atravesaban venia de tener tres grillas apiladas y
+           tener que adivinar en cual estabas; ahora el piso es cero y punto. */
+        this.y = 0;
 
         this.bob += dt * (moving > 0.05 ? (this.running ? 13 : 8.5) : 0);
         // cuanto baja por segundo: con eso se sabe si esta cayendo
@@ -996,7 +1034,26 @@ class Dungeon {
                 if (l.L.castShadow !== want) l.L.castShadow = want;
             }
         }
+        /* CULLING DE LUCES. La casa tiene noventa arañas y three evalua TODAS
+           las luces en cada fragmento: con noventa point lights no dibuja ni
+           un cuadro. Se dejan encendidas las N mas cercanas y nada mas. El
+           numero es FIJO —siempre las mismas N— porque si cambia, three
+           recompila el shader y el juego pega un tiron cada vez. */
+        this._tLuz = (this._tLuz || 0) + dt;
+        if (this._tLuz > 0.22 && this.lamps) {
+            this._tLuz = 0;
+            const px = this.pos.x, pz = this.pos.z;
+            for (const l of this.lamps) {
+                const p = l.L.getWorldPosition(this._vLuz || (this._vLuz = new THREE.Vector3()));
+                l.d = (p.x - px) ** 2 + (p.z - pz) ** 2;
+            }
+            const orden = this.lamps.slice().sort((a, b) => a.d - b.d);
+            const N = Math.min(this.lucesVivas || 10, orden.length);
+            for (let i = 0; i < orden.length; i++) orden[i].L.visible = i < N;
+        }
+
         for (const l of this.lamps || []) {
+            if (!l.L.visible) continue;
             const base = l.base;
             let f = 0.92 + 0.08 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
             /* Una de cada cinco parpadea FUERTE, con cortes secos. Un titileo
@@ -1008,11 +1065,6 @@ class Dungeon {
             }
             l.L.intensity = base * f;
         }
-
-        /* Solo se dibuja el nivel en el que esta y el de al lado. Son tres
-           laberintos enteros y el farol proyecta sombra en todo lo visible. */
-        for (let i = 0; i < this.levelGroups.length; i++)
-            this.levelGroups[i].visible = Math.abs(LEVELS[i].base - this.y) < LEVEL_H * this.distPisos;
 
         this.updateHud();
         this.calidad.tic(dt);
@@ -1128,7 +1180,6 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 window.__game = game;
-window.__STAIRS = STAIR_BOXES;   // sondas para las pruebas
 window.__LEVELS = LEVELS;
 window.__toWorld = toWorld;
 import * as MAP from './map.js';

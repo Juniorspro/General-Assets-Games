@@ -1,19 +1,35 @@
-/* El mapa: tres niveles de laberinto denso como el plano dibujado, con salas
-   grandes cuadradas encima, y escaleras que suben y bajan de verdad.
+/* El mapa: UNA planta, paredes FINAS y sectores grandes.
+   ---------------------------------------------------------------------------
+   Lo de antes eran tres laberintos de 31x31 donde la pared ocupaba una celda
+   ENTERA: 2,2 m de espesor. Por eso las salas parecian bunkers, los pasillos
+   tuneles y no habia forma de que se leyera como una casa.
 
-   La grilla se genera en vez de escribirse a mano: el plano es un laberinto de
-   pasillos angostos, y un backtracker da exactamente eso sin riesgo de dejar
-   un cuarto sin salida. Encima se recortan las salas y se abren atajos. */
+   Ahora:
 
-/* La escala sale de MEDIR el juego original en las capturas de partida: el
-   personaje de Roblox mide ~1,7 m, el pasillo entra como dos anchos de
-   personaje y el techo queda como a tres alturas. Antes las paredes iban a
-   7 m con el ojo a 55 cm —trece veces nuestra altura— y eso convertia cada
-   cuarto en una nave de catedral. */
-export const CELL = 2.2;          // ancho de pasillo, en metros
-export const WALL_H = 4.6;        // techo de casa, no de catedral
-export const LEVEL_H = 5.9;       // separacion entre pisos
-export const W = 31, H = 31;      // impar: el laberinto se carva en celdas impares
+     - una sola planta, como el juego original ("single-stage nest")
+     - la pared es un tabique de 22 cm que vive en el BORDE entre dos celdas,
+       no en la celda
+     - el piso se reparte en SECTORES grandes: nueve salas de 24 a 31 m de lado
+       y cuatro pasillos de 7,2 m de ancho que las cosen
+     - entre dos sectores hay tabique, y el tabique se abre en PUERTAS; entre
+       dos pasillos no hay nada, asi que los pasillos son un solo espacio
+
+   Es la casa de algo que mide tres metros y pico: los cuartos tienen que
+   dejarlo pasar. */
+
+export const CELL = 2.4;            // lado de celda, en metros
+export const WALL_H = 4.6;          // techo plano de las salas
+export const GROSOR = 0.22;         // espesor del tabique
+export const ARRANQUE = 2.95;       // donde arranca la boveda del pasillo
+export const FLECHA = 1.50;         // cuanto sube la boveda por encima
+export const ALTO_PUERTA = 2.85;    // dintel
+export const HOLE_H = 1.05;         // alto de la gatera
+export const W = 41, H = 33;
+
+/* Queda UN nivel. El resto del juego pregunta por niveles, asi que la lista
+   sigue existiendo con un solo elemento y LEVEL_H deja de tener sentido. */
+export const LEVELS = [{ base: 0, name: 'La casa' }];
+export const LEVEL_H = 0;
 
 export class Rng {
     constructor(seed) { this.s = seed >>> 0 || 1 }
@@ -23,420 +39,275 @@ export class Rng {
     pick(a) { return a[Math.floor(this.next() * a.length)] }
 }
 
-const key = (c, r) => r * W + c;
+/* ------------------------------------------------------------- los sectores */
+/* Los pasillos van PRIMERO y el horizontal pisa al vertical en los cruces: asi
+   la boveda que cruza es una sola y no dos que se pelean por el mismo techo.
 
-/* Laberinto perfecto sobre las celdas impares (backtracker iterativo). */
-function carveMaze(g, rng, startC, startR) {
-    const stack = [[startC, startR]];
-    g[key(startC, startR)] = 1;
-    while (stack.length) {
-        const [c, r] = stack[stack.length - 1];
-        const dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
-        for (let i = dirs.length - 1; i > 0; i--) {
-            const j = Math.floor(rng.next() * (i + 1));
-            [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
-        }
-        let moved = false;
-        for (const [dc, dr] of dirs) {
-            const nc = c + dc, nr = r + dr;
-            if (nc <= 0 || nr <= 0 || nc >= W - 1 || nr >= H - 1) continue;
-            if (g[key(nc, nr)]) continue;
-            g[key(c + dc / 2, r + dr / 2)] = 1;
-            g[key(nc, nr)] = 1;
-            stack.push([nc, nr]);
-            moved = true;
-            break;
-        }
-        if (!moved) stack.pop();
+   tema:  pasillo  papel damasco, zocalo y marco de madera, boveda de canon
+          salon    la sala de las baldosas: yeso blanco con tachas, piso de baldosa
+          libros   estanterias de pared a pared, casi sin luz
+          reloj    el reloj de pie, el sofa, los cuadros
+          deposito cajones apilados y tablones apoyados
+          capilla  bancos y el crucifijo
+          cocina   mesas largas
+          salida   blanco, la doble puerta gris con el cartel
+          taller   el sotano de antes, ahora un ala de hormigon */
+export const SECTORES = [
+    { id: 'pas-o', nombre: 'el ala oeste',   tema: 'pasillo', pasillo: true, eje: 'z', c: 11, r: 1,  w: 3,  h: 31 },
+    { id: 'pas-e', nombre: 'el ala este',    tema: 'pasillo', pasillo: true, eje: 'z', c: 27, r: 1,  w: 3,  h: 31 },
+    { id: 'pas-n', nombre: 'la galeria alta', tema: 'pasillo', pasillo: true, eje: 'x', c: 1, r: 9,  w: 39, h: 3 },
+    { id: 'pas-s', nombre: 'la galeria baja', tema: 'pasillo', pasillo: true, eje: 'x', c: 1, r: 21, w: 39, h: 3 },
+
+    { id: 'vestibulo',  nombre: 'el vestibulo',    tema: 'reloj',    c: 1,  r: 1,  w: 10, h: 8 },
+    { id: 'salon',      nombre: 'la sala blanca',  tema: 'salon',    c: 14, r: 1,  w: 13, h: 8 },
+    { id: 'biblioteca', nombre: 'la biblioteca',   tema: 'libros',   c: 30, r: 1,  w: 10, h: 8 },
+    { id: 'comedor',    nombre: 'el comedor',      tema: 'cocina',   c: 1,  r: 12, w: 10, h: 9 },
+    { id: 'galeria',    nombre: 'la galeria',      tema: 'reloj',    c: 14, r: 12, w: 13, h: 9 },
+    { id: 'capilla',    nombre: 'la capilla',      tema: 'capilla',  c: 30, r: 12, w: 10, h: 9 },
+    { id: 'deposito',   nombre: 'el deposito',     tema: 'deposito', c: 1,  r: 24, w: 10, h: 8 },
+    { id: 'taller',     nombre: 'el taller',       tema: 'taller',   c: 14, r: 24, w: 13, h: 8 },
+    { id: 'salida',     nombre: 'la salida',       tema: 'salida',   c: 30, r: 24, w: 10, h: 8 },
+];
+
+const idx = (c, r) => c + r * W;
+export const SEC = new Int16Array(W * H).fill(-1);
+(function pintar() {
+    for (let i = 0; i < SECTORES.length; i++) {
+        const s = SECTORES[i];
+        for (let r = s.r; r < s.r + s.h; r++)
+            for (let c = s.c; c < s.c + s.w; c++)
+                if (c > 0 && r > 0 && c < W && r < H) SEC[idx(c, r)] = i;
     }
+})();
+
+export const dentro = (c, r) => c >= 0 && r >= 0 && c < W && r < H;
+export const sectorIdx = (c, r) => (dentro(c, r) ? SEC[idx(c, r)] : -1);
+export const sectorEn = (c, r) => { const i = sectorIdx(c, r); return i < 0 ? null : SECTORES[i] };
+export const sectorPorId = id => SECTORES.find(s => s.id === id) || null;
+export const temaEn = (c, r) => { const s = sectorEn(c, r); return s ? s.tema : 'pasillo' };
+export const centroSector = s => [s.c + (s.w >> 1), s.r + (s.h >> 1)];
+
+/* --------------------------------------------------------------- las paredes */
+/* NADA = pasa, PARED = tabique entero, PUERTA = hueco con marco y dintel,
+   GATERA = tabique con un hueco de 1,05 m abajo (se cruza agachado). */
+export const NADA = 0, PARED = 1, PUERTA = 2, GATERA = 3;
+
+/* EV[c + r*(W+1)] : borde vertical en x = c, o sea entre (c-1,r) y (c,r).
+   EH[c + r*W]     : borde horizontal en z = r, entre (c,r-1) y (c,r). */
+export const EV = new Uint8Array((W + 1) * H);
+export const EH = new Uint8Array(W * (H + 1));
+const iv = (c, r) => c + r * (W + 1);
+const ih = (c, r) => c + r * W;
+
+export const paredV = (c, r) => (c < 0 || c > W || r < 0 || r >= H) ? PARED : EV[iv(c, r)];
+export const paredH = (c, r) => (c < 0 || c >= W || r < 0 || r > H) ? PARED : EH[ih(c, r)];
+
+/* El tabique entre (c,r) y su vecino en (dc,dr). */
+export function hayPared(c, r, dc, dr) {
+    if (dc > 0) return paredV(c + 1, r);
+    if (dc < 0) return paredV(c, r);
+    if (dr > 0) return paredH(c, r + 1);
+    return paredH(c, r);
 }
 
-/* Vacia un rectangulo entero: son las salas grandes que pidio el plano. */
-function carveRoom(g, c0, r0, w, h) {
-    for (let r = r0; r < r0 + h; r++)
-        for (let c = c0; c < c0 + w; c++)
-            if (c > 0 && r > 0 && c < W - 1 && r < H - 1) g[key(c, r)] = 1;
-}
-
-/* Rompe paredes sueltas para que el laberinto tenga vueltas y no sea un arbol:
-   un arbol perfecto obliga a desandar todo el tiempo y se hace pesado. */
-function openLoops(g, rng, n) {
-    let done = 0, guard = 0;
-    while (done < n && guard++ < n * 60) {
-        const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
-        if (g[key(c, r)]) continue;
-        const h = g[key(c - 1, r)] && g[key(c + 1, r)];
-        const v = g[key(c, r - 1)] && g[key(c, r + 1)];
-        if (h !== v) { g[key(c, r)] = 1; done++ }
-    }
-}
-
-/* Gira la grilla 90 grados. El plano se lee de costado, como pidio. */
-function rotate90(g) {
-    const out = new Uint8Array(W * H);
+(function levantarParedes() {
+    /* Un borde lleva tabique si separa dos sectores distintos, o si separa el
+       piso del vacio. Dos pasillos NO se separan: es un solo espacio. */
+    const parte = (a, b) => {
+        if (a < 0 && b < 0) return NADA;
+        if (a < 0 || b < 0) return PARED;
+        if (a === b) return NADA;
+        if (SECTORES[a].pasillo && SECTORES[b].pasillo) return NADA;
+        return PARED;
+    };
     for (let r = 0; r < H; r++)
+        for (let c = 0; c <= W; c++)
+            EV[iv(c, r)] = parte(sectorIdx(c - 1, r), sectorIdx(c, r));
+    for (let r = 0; r <= H; r++)
         for (let c = 0; c < W; c++)
-            out[key(H - 1 - r, c)] = g[key(c, r)];
-    return out;
-}
+            EH[ih(c, r)] = parte(sectorIdx(c, r - 1), sectorIdx(c, r));
+})();
 
-/* Cada nivel: laberinto + sus salas grandes propias. Las salas se recortan
-   DESPUES de rotar para que sus coordenadas sean las mismas que usa todo el
-   resto del juego: si se recortaran antes, la lista de salas de abajo estaria
-   escrita en un sistema de coordenadas que no existe en ningun otro lado. */
-function buildLevel(seed, rooms, loops) {
-    const g = new Uint8Array(W * H);
-    const rng = new Rng(seed);
-    carveMaze(g, rng, 1, 1);
-    openLoops(g, rng, loops);
-    const out = rotate90(g);
-    for (const s of rooms) carveRoom(out, s.c, s.r, s.w, s.h);
-    return out;
-}
-
-
-/* LAS SALAS, ESCRITAS A MANO.
-
-   Antes eran cinco rectangulos anonimos por nivel, sacados al azar, y todos
-   se veian igual: papel verde, alfombra, y adentro muebles sueltos. Eso es
-   justo el mapa generico que no queremos. Ahora cada sala tiene NOMBRE y TEMA,
-   y el tema decide el papel, el piso, la luz y que muebles entran.
-
-   Los temas salen de mirar las capturas del juego original:
-     pasillo    papel damasco verde salvia, zocalo naranja, alfombra roja
-     pads       yeso blanco con tachas redondas, las tres baldosas de color
-     biblioteca estanterias en las cuatro paredes, casi sin luz
-     reloj      el reloj de pie, el sofa y el retrato de la senora
-     deposito   cajones de madera apilados
-     capilla    el crucifijo en la pared, un solo farol
-     salida     blanco, techo de placas, la doble puerta gris con el cartel
-     sotano     hormigon gris, columnas, bombitas sueltas
-*/
-export const SALAS = [
-    [   // planta baja
-        { id: 'vestibulo',  nombre: 'el vestibulo',   tema: 'pasillo',    c: 3,  r: 3,  w: 4, h: 4 },
-        { id: 'pads',       nombre: 'la sala blanca', tema: 'pads',       c: 12, r: 3,  w: 7, h: 5 },
-        { id: 'reloj',      nombre: 'el salon',       tema: 'reloj',      c: 23, r: 4,  w: 5, h: 5 },
-        { id: 'biblioteca', nombre: 'la biblioteca',  tema: 'biblioteca', c: 3,  r: 12, w: 5, h: 5 },
-        { id: 'deposito',   nombre: 'el deposito',    tema: 'deposito',   c: 22, r: 13, w: 5, h: 4 },
-        { id: 'comedor',    nombre: 'el comedor',     tema: 'pasillo',    c: 12, r: 20, w: 5, h: 5 },
-        { id: 'dormitorio', nombre: 'el cuarto',      tema: 'pasillo',    c: 3,  r: 24, w: 4, h: 4 },
-        { id: 'salida',     nombre: 'la salida',      tema: 'salida',     c: 23, r: 23, w: 5, h: 5 },
-    ],
-    [   // nivel alto
-        { id: 'galeria',    nombre: 'la galeria',     tema: 'pasillo',    c: 11, r: 11, w: 7, h: 5 },
-        { id: 'capilla',    nombre: 'la capilla',     tema: 'capilla',    c: 23, r: 3,  w: 5, h: 5 },
-        { id: 'desvan',     nombre: 'el desvan',      tema: 'deposito',   c: 3,  r: 21, w: 5, h: 5 },
-        { id: 'estudio',    nombre: 'el estudio',     tema: 'biblioteca', c: 4,  r: 4,  w: 4, h: 4 },
-        { id: 'costura',    nombre: 'el costurero',   tema: 'reloj',      c: 20, r: 21, w: 5, h: 5 },
-    ],
-    [   // cisternas
-        { id: 'cisterna',   nombre: 'la cisterna',    tema: 'sotano',     c: 5,  r: 5,  w: 6, h: 6 },
-        { id: 'calderas',   nombre: 'las calderas',   tema: 'sotano',     c: 18, r: 17, w: 6, h: 6 },
-        { id: 'bodega',     nombre: 'la bodega',      tema: 'deposito',   c: 5,  r: 19, w: 5, h: 5 },
-        { id: 'pozo',       nombre: 'el pozo',        tema: 'sotano',     c: 19, r: 5,  w: 5, h: 5 },
-        { id: 'medio',      nombre: 'el cruce',       tema: 'sotano',     c: 12, r: 12, w: 4, h: 4 },
-    ],
-];
-
-/* En que sala cae una celda, o null si es pasillo. La busqueda es lineal
-   porque son ocho salas: una tabla indexada costaria mas de mantener que de
-   recorrer. */
-export function salaEn(lv, c, r) {
-    for (const s of SALAS[lv])
-        if (c >= s.c && c < s.c + s.w && r >= s.r && r < s.r + s.h) return s;
-    return null;
-}
-export function salaPorId(lv, id) { return SALAS[lv].find(s => s.id === id) || null }
-export const temaEn = (lv, c, r) => {
-    if (lv === 2) { const s = salaEn(lv, c, r); return s ? s.tema : 'sotano' }
-    const s = salaEn(lv, c, r);
-    return s ? s.tema : 'pasillo';
-};
-/* Centro de una sala, en celdas. */
-export const centroSala = s => [s.c + (s.w >> 1), s.r + (s.h >> 1)];
-
-/* Las salas grandes van sobre coordenadas del dibujo; la rotacion las mueve
-   junto con todo lo demas. */
-export const LEVELS = [
-    {   // planta baja: el piso empapelado, el que se ve en casi todas las fotos
-        base: 0,
-        name: 'Planta baja',
-        /* Cuartos de casa, no patios: la mas grande es de 7x5 celdas, o sea
-           15x11 m. Antes habia una de 9x9 (20 m) y una de 13x13 (29 m). */
-        grid: buildLevel(0xC0FFEE, SALAS[0], 34),
-    },
-    {   // arriba: galeria, capilla y desvan
-        base: LEVEL_H,
-        name: 'Nivel alto',
-        grid: buildLevel(0x51EED0, SALAS[1], 28),
-    },
-    {   // abajo: hormigon, columnas y bombitas
-        base: -LEVEL_H,
-        name: 'Cisternas',
-        grid: buildLevel(0xBEEF11, SALAS[2], 30),
-    },
-];
-
-/* Escaleras: rectangulo de `len` celdas de largo por `w` de ancho, que sube de
-   `a` a `b`. Se marcan como piso en los dos niveles para poder entrar y salir. */
-/* Las cuatro estan CORRIDAS de las salas con nombre a proposito: antes la del
-   noreste subia por adentro de la capilla y te dejaba una baranda cruzando el
-   cuarto, y la del sudeste desembocaba dentro de la sala de la salida. Los
-   cuatro sitios de abajo salieron de barrer la grilla buscando rectangulos que
-   no pisen ninguna sala de NINGUNO de los dos niveles que conectan. */
-export const STAIRS = [
-    { a: 0, b: 1, c: 8,  r: 8,  dir: [1, 0],  len: 7, w: 3 },
-    { a: 0, b: 2, c: 8,  r: 25, dir: [1, 0],  len: 6, w: 3 },
-    { a: 0, b: 1, c: 19, r: 8,  dir: [0, 1],  len: 6, w: 2 },
-    { a: 0, b: 2, c: 26, r: 12, dir: [-1, 0], len: 6, w: 2 },
-];
-
-/* Las celdas de la rampa se marcan aparte. Si tambien fueran piso de cada
-   nivel, el piso plano competiria con la rampa en el mismo XZ y ganaria
-   siempre: la escalera no subiria nunca. Aca son transitables (sin pared)
-   pero su altura sale solo de la escalera. */
-export const STAIR_CELLS = new Uint8Array(W * H);
-
-(function openStairCells() {
-    for (const s of STAIRS) {
-        const [dc, dr] = s.dir;
-        const pc = dr, pr = dc;          // perpendicular, para el ancho
-        for (let i = -1; i <= s.len; i++) {
-            for (let k = 0; k < s.w; k++) {
-                const c = s.c + dc * i + pc * k, r = s.r + dr * i + pr * k;
-                if (c <= 0 || r <= 0 || c >= W - 1 || r >= H - 1) continue;
-                if (i < 0) { LEVELS[s.a].grid[key(c, r)] = 1; continue }        // desembarco de abajo
-                if (i >= s.len) { LEVELS[s.b].grid[key(c, r)] = 1; continue }   // y el de arriba
-                LEVELS[s.a].grid[key(c, r)] = 1;
-                LEVELS[s.b].grid[key(c, r)] = 1;
-                STAIR_CELLS[key(c, r)] = 1;
+(function abrirPuertas() {
+    /* Cada lado de cada sala se recorre buscando tramos seguidos contra el
+       MISMO vecino, y cada tramo recibe una puerta cada seis celdas. Una sala
+       de veinticuatro metros con una sola puerta se recorre entera para nada;
+       con tres, se atraviesa. */
+    const abrir = (poner, largo, desde) => {
+        const n = Math.max(1, Math.min(3, Math.floor(largo / 6)));
+        for (let k = 0; k < n; k++) {
+            const centro = desde + Math.round((largo * (k + 0.5)) / n) - 1;
+            for (let d = 0; d < 2; d++) {
+                const p = Math.min(desde + largo - 1, Math.max(desde, centro + d));
+                poner(p);
             }
+        }
+    };
+    const tramos = (n, vecino) => {
+        const out = [];
+        let ini = 0, act = vecino(0);
+        for (let k = 1; k <= n; k++) {
+            const v = k < n ? vecino(k) : -999;
+            if (v !== act) { out.push([ini, k - ini, act]); ini = k; act = v }
+        }
+        return out;
+    };
+    for (let i = 0; i < SECTORES.length; i++) {
+        const s = SECTORES[i];
+        if (s.pasillo) continue;
+        // oeste y este
+        for (const [borde, fuera] of [[s.c, s.c - 1], [s.c + s.w, s.c + s.w]]) {
+            for (const [ini, largo, vec] of tramos(s.h, k => sectorIdx(fuera, s.r + k))) {
+                if (vec < 0 || largo < 2) continue;
+                abrir(p => { if (EV[iv(borde, s.r + p)] === PARED) EV[iv(borde, s.r + p)] = PUERTA }, largo, ini);
+            }
+        }
+        // norte y sur
+        for (const [borde, fuera] of [[s.r, s.r - 1], [s.r + s.h, s.r + s.h]]) {
+            for (const [ini, largo, vec] of tramos(s.w, k => sectorIdx(s.c + k, fuera))) {
+                if (vec < 0 || largo < 2) continue;
+                abrir(p => { if (EH[ih(s.c + p, borde)] === PARED) EH[ih(s.c + p, borde)] = GATERA_O_PUERTA(s.c + p, borde) }, largo, ini);
+            }
+        }
+    }
+    function GATERA_O_PUERTA() { return PUERTA }
+})();
+
+(function abrirGateras() {
+    /* Las gateras: tabiques que quedaron cerrados y que estan LEJOS de una
+       puerta. Son la salida de verdad cuando ya te vio, asi que tienen que
+       estar donde no hay puerta, no al lado de una. */
+    const rng = new Rng(0x9A7E4);
+    const lejosV = (c, r) => {
+        for (let k = -3; k <= 3; k++) if (paredV(c, r + k) === PUERTA) return false;
+        return true;
+    };
+    const lejosH = (c, r) => {
+        for (let k = -3; k <= 3; k++) if (paredH(c + k, r) === PUERTA) return false;
+        return true;
+    };
+    let hechas = 0;
+    for (let intento = 0; intento < 6000 && hechas < 14; intento++) {
+        if (rng.next() < 0.5) {
+            const c = rng.int(1, W - 1), r = rng.int(1, H - 2);
+            if (EV[iv(c, r)] !== PARED || sectorIdx(c - 1, r) < 0 || sectorIdx(c, r) < 0) continue;
+            if (!lejosV(c, r)) continue;
+            EV[iv(c, r)] = GATERA; hechas++;
+        } else {
+            const c = rng.int(1, W - 2), r = rng.int(1, H - 1);
+            if (EH[ih(c, r)] !== PARED || sectorIdx(c, r - 1) < 0 || sectorIdx(c, r) < 0) continue;
+            if (!lejosH(c, r)) continue;
+            EH[ih(c, r)] = GATERA; hechas++;
         }
     }
 })();
 
-export const isStairCell = (c, r) =>
-    c >= 0 && r >= 0 && c < W && r < H && !!STAIR_CELLS[key(c, r)];
-
+/* ------------------------------------------------------------ coordenadas */
 export const toWorld = (c, r) => [(c - W / 2 + 0.5) * CELL, (r - H / 2 + 0.5) * CELL];
 export const toCell = (x, z) => [Math.floor(x / CELL + W / 2), Math.floor(z / CELL + H / 2)];
-export const isOpen = (lv, c, r) =>
-    c >= 0 && r >= 0 && c < W && r < H && !!LEVELS[lv].grid[key(c, r)];
+export const bordeX = c => (c - W / 2) * CELL;      // x del borde vertical c
+export const bordeZ = r => (r - H / 2) * CELL;      // z del borde horizontal r
 
-/* Agujeros: pared con un hueco rectangular abajo que comunica los dos lados.
-   Solo se pasa agachado o deslizando, asi que son atajos para escapar.
-   Se eligen paredes que separen dos espacios abiertos de verdad. */
-export const HOLE_H = 1.02;              // alto del hueco, en metros
-export const HOLES = LEVELS.map(() => new Uint8Array(W * H));
+/* Compatibilidad: el resto del juego todavia pregunta por niveles. */
+export const isOpen = (lv, c, r) => sectorIdx(c, r) >= 0;
+export const esPiso = (c, r) => sectorIdx(c, r) >= 0;
+export const isStairCell = () => false;
+export const isHole = () => false;
+export const STAIRS = [];
+export const STAIR_BOXES = [];
+export const levelAt = () => 0;
+export const surfaceAt = () => 0;
 
-(function carveHoles() {
-    for (let lv = 0; lv < LEVELS.length; lv++) {
-        const rng = new Rng(0x40E5 + lv * 131);
-        let made = 0;
-        for (let i = 0; i < 9000 && made < 22; i++) {
-            const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
-            if (isOpen(lv, c, r) || isStairCell(c, r)) continue;
-            const horiz = isOpen(lv, c - 1, r) && isOpen(lv, c + 1, r)
-                && !isOpen(lv, c, r - 1) && !isOpen(lv, c, r + 1);
-            const vert = isOpen(lv, c, r - 1) && isOpen(lv, c, r + 1)
-                && !isOpen(lv, c - 1, r) && !isOpen(lv, c + 1, r);
-            if (!horiz && !vert) continue;
-            HOLES[lv][key(c, r)] = 1;
-            made++;
-        }
-    }
-})();
+/* ------------------------------------------------------------- la colision */
+/* Un tabique es una caja fina. Se empuja al jugador por la cara mas cercana,
+   igual que con los muebles: si entra dentro, la distancia no da direccion. */
+function cajaV(c, r) { return { x: bordeX(c), z: bordeZ(r) + CELL / 2, hx: GROSOR / 2, hz: CELL / 2 } }
+function cajaH(c, r) { return { x: bordeX(c) + CELL / 2, z: bordeZ(r), hx: CELL / 2, hz: GROSOR / 2 } }
 
-export const isHole = (lv, c, r) =>
-    c >= 0 && r >= 0 && c < W && r < H && !!HOLES[lv][key(c, r)];
+const bloquea = (v, agachado) => v === PARED || (v === GATERA && !agachado);
 
-
-/* Rectangulo de una escalera en coordenadas de mundo, mas su eje de subida. */
-function stairBox(s) {
-    const [dc, dr] = s.dir, pc = dr, pr = dc;
-    const c0 = s.c, r0 = s.r;
-    const c1 = s.c + dc * (s.len - 1) + pc * (s.w - 1);
-    const r1 = s.r + dr * (s.len - 1) + pr * (s.w - 1);
-    const [ax, az] = toWorld(Math.min(c0, c1), Math.min(r0, r1));
-    const [bx, bz] = toWorld(Math.max(c0, c1), Math.max(r0, r1));
-    return {
-        minX: ax - CELL / 2, maxX: bx + CELL / 2,
-        minZ: az - CELL / 2, maxZ: bz + CELL / 2,
-    };
-}
-export const STAIR_BOXES = STAIRS.map(s => ({ s, box: stairBox(s) }));
-
-/* Altura de la escalera en un punto: 0 al pie, 1 arriba. */
-function stairT(s, box, x, z) {
-    const [dc, dr] = s.dir;
-    if (dc) {
-        const t = (x - box.minX) / Math.max(box.maxX - box.minX, 1e-4);
-        return dc > 0 ? t : 1 - t;
-    }
-    const t = (z - box.minZ) / Math.max(box.maxZ - box.minZ, 1e-4);
-    return dr > 0 ? t : 1 - t;
-}
-const inBox = (b, x, z) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
-
-/* Superficie caminable mas cercana a `yHint`. Los niveles se pisan en XZ, asi
-   que la altura actual del jugador es la que desempata. */
-export function surfaceAt(x, z, yHint) {
-    const [c, r] = toCell(x, z);
-    let best = null, bestD = 1e9;
-    for (const { s, box } of STAIR_BOXES) {
-        if (!inBox(box, x, z)) continue;
-        const t = Math.min(1, Math.max(0, stairT(s, box, x, z)));
-        const y = LEVELS[s.a].base + (LEVELS[s.b].base - LEVELS[s.a].base) * t;
-        const d = Math.abs(y - yHint);
-        if (d < bestD) { bestD = d; best = y }
-    }
-    /* PISOS PLANOS. Antes, si la celda era de escalera se descartaban TODOS,
-       y ahi estaba el agujero: una escalera marca sus celdas para los tres
-       niveles, asi que caminando por el piso de arriba justo encima del hueco
-       de una escalera te quedabas sin piso y caias a la rampa. Pasó de verdad.
-
-       La regla correcta no es "hay escalera o no", es DONDE esta la rampa:
-       la rampa manda solo si esta a la altura de tus pies o mas arriba —que es
-       cuando la estas subiendo o bajando—, y si esta muy por debajo se ignora
-       y vale el piso plano. Medio metro de tolerancia alcanza: bajando una
-       escalera el escalon es mas chico que eso. */
-    const rampaSirve = best !== null && best >= yHint - 0.5;
-    if (!rampaSirve) {
-        best = null; bestD = 1e9;
-        for (let lv = 0; lv < LEVELS.length; lv++) {
-            if (!isOpen(lv, c, r) && !isHole(lv, c, r)) continue;
-            const d = Math.abs(LEVELS[lv].base - yHint);
-            if (d < bestD) { bestD = d; best = LEVELS[lv].base }
-        }
-        /* Si no hay ningun piso plano —estas de verdad sobre el hueco— vuelve
-           la rampa, que es mejor que quedarse sin superficie. */
-        if (best === null) {
-            for (const { s: e, box } of STAIR_BOXES) {
-                if (!inBox(box, x, z)) continue;
-                const t = Math.min(1, Math.max(0, stairT(e, box, x, z)));
-                best = LEVELS[e.a].base + (LEVELS[e.b].base - LEVELS[e.a].base) * t;
-            }
-        }
-    }
-    return best;
-}
-
-/* En que nivel esta parado, para elegir contra que grilla chocar. */
-export function levelAt(y) {
-    let best = 0, bestD = 1e9;
-    for (let lv = 0; lv < LEVELS.length; lv++) {
-        const d = Math.abs(LEVELS[lv].base - y);
-        if (d < bestD) { bestD = d; best = lv }
-    }
-    return best;
-}
-
-/* Empuja un circulo fuera de las paredes del nivel en el que esta. Dentro de
-   una escalera no hay colision de grilla: la caja ya la delimita. */
-export function collide(x, z, y, rad, lowProfile) {
-    for (const { box } of STAIR_BOXES) if (inBox(box, x, z)) return [x, z];
-    const lv = levelAt(y);
+export function collide(x, z, y, rad, agachado) {
     const [c0, r0] = toCell(x, z);
     for (let r = r0 - 1; r <= r0 + 1; r++) {
         for (let c = c0 - 1; c <= c0 + 1; c++) {
-            if (isOpen(lv, c, r)) continue;
-            if (lowProfile && isHole(lv, c, r)) continue;   // se pasa por abajo
-            const [cx, cz] = toWorld(c, r);
-            const half = CELL / 2;
-            const nx = Math.max(cx - half, Math.min(x, cx + half));
-            const nz = Math.max(cz - half, Math.min(z, cz + half));
-            const dx = x - nx, dz = z - nz;
-            const d2 = dx * dx + dz * dz;
-            if (d2 >= rad * rad) continue;
-            if (d2 < 1e-8) {
-                /* Quedo adentro de la caja: no hay direccion de salida que
-                   sacar de la distancia, asi que se sale por el lado mas
-                   cercano. Pasa al teletransportarse o entrando muy rapido. */
-                const ex = x - cx, ez = z - cz;
-                if (Math.abs(ex) > Math.abs(ez)) x = cx + Math.sign(ex || 1) * (half + rad);
-                else z = cz + Math.sign(ez || 1) * (half + rad);
-                continue;
+            if (r < 0 || r >= H) continue;
+            const bordes = [];
+            if (c >= 0 && c <= W) { if (bloquea(paredV(c, r), agachado)) bordes.push(cajaV(c, r)) }
+            if (c + 1 >= 0 && c + 1 <= W) { if (bloquea(paredV(c + 1, r), agachado)) bordes.push(cajaV(c + 1, r)) }
+            if (c >= 0 && c < W) {
+                if (bloquea(paredH(c, r), agachado)) bordes.push(cajaH(c, r));
+                if (bloquea(paredH(c, r + 1), agachado)) bordes.push(cajaH(c, r + 1));
             }
-            const d = Math.sqrt(d2);
-            const push = (rad - d) / d;
-            x += dx * push; z += dz * push;
+            for (const b of bordes) {
+                const dx = x - b.x, dz = z - b.z;
+                const px = b.hx + rad - Math.abs(dx), pz = b.hz + rad - Math.abs(dz);
+                if (px <= 0 || pz <= 0) continue;
+                if (px < pz) x = b.x + Math.sign(dx || 1) * (b.hx + rad);
+                else z = b.z + Math.sign(dz || 1) * (b.hz + rad);
+            }
         }
     }
     return [x, z];
 }
 
-/* Rescate: si el jugador quedo DENTRO de algo solido, lo saca.
-   ---------------------------------------------------------------------------
-   El empuje normal saca de una caja, pero con dos cajas encontradas —una pared
-   y un mueble, por ejemplo— cada una te devuelve a la otra y quedas trabado.
-   Esto es la red: se comprueba si la celda donde estas es solida de verdad y,
-   si lo es, se salta a la celda abierta mas cercana. No corrige de a poco: te
-   pone donde se puede estar y listo. */
-export function rescatar(x, z, y, lowProfile) {
-    const lv = levelAt(y);
-    const [c0, r0] = toCell(x, z);
-    const bien = (c, r) => isOpen(lv, c, r) || (lowProfile && isHole(lv, c, r));
-    if (bien(c0, r0)) return null;
-    let mejor = null, dm = 1e9;
-    for (let d = 1; d <= 3 && !mejor; d++) {
-        for (let dr = -d; dr <= d; dr++) {
-            for (let dc = -d; dc <= d; dc++) {
-                if (Math.max(Math.abs(dc), Math.abs(dr)) !== d) continue;
-                const c = c0 + dc, r = r0 + dr;
-                if (!isOpen(lv, c, r)) continue;
-                const [wx, wz] = toWorld(c, r);
+/* Si quedaste fuera del piso, volves a la celda de piso mas cercana. Con una
+   sola planta y paredes finas esto casi no salta, pero es la red. */
+export function rescatar(x, z) {
+    const [c, r] = toCell(x, z);
+    if (esPiso(c, r)) return null;
+    let mejor = null, d = 1e9;
+    for (let rad = 1; rad <= 6 && !mejor; rad++) {
+        for (let dr = -rad; dr <= rad; dr++)
+            for (let dc = -rad; dc <= rad; dc++) {
+                if (Math.max(Math.abs(dc), Math.abs(dr)) !== rad) continue;
+                if (!esPiso(c + dc, r + dr)) continue;
+                const [wx, wz] = toWorld(c + dc, r + dr);
                 const dd = (wx - x) ** 2 + (wz - z) ** 2;
-                if (dd < dm) { dm = dd; mejor = [wx, wz] }
+                if (dd < d) { d = dd; mejor = [wx, wz] }
             }
-        }
     }
     return mejor;
 }
 
-/* Distancias a las paredes, medidas EN VIVO.
-   ---------------------------------------------------------------------------
-   No son constantes del generador: se miden desde donde estas parado, cada
-   cuadro, caminando la grilla celda por celda en las cuatro direcciones hasta
-   chocar. Asi el juego sabe de verdad si esta en un pasillo angosto o en el
-   medio de una sala, y no porque alguien lo escribio en una tabla.
+export function spawnOn(lv, rng) {
+    const s = sectorPorId('vestibulo');
+    const [c, r] = centroSector(s);
+    const [x, z] = toWorld(c + rng.int(-2, 2), r + rng.int(-2, 2));
+    return { x, z, y: 0 };
+}
 
-   Devuelve metros: cuanto hay hasta la pared en cada sentido, el ancho y el
-   largo del hueco en el que estas, y que tan encajonado estas (0 = sala
-   abierta, 1 = pasillo de una celda).
-
-   El hueco de 62 cm cuenta como pared: para medir el espacio en el que te
-   movés, un agujero por el que solo pasás agachado no es una salida. */
-export function medirParedes(x, z, y, maxCeldas = 14) {
-    const lv = levelAt(y);
+/* ----------------------------------------------------- medir el espacio */
+/* Cuanto hay hasta el tabique en cada direccion, en metros. Con sectores de
+   veinticuatro metros esto es lo que te dice si estas en un pasillo o en una
+   nave, y el juego lo usa para saber si podes esconderte. */
+export function medirParedes(x, z, y, maxCeldas = 20) {
     const [c0, r0] = toCell(x, z);
-    const libre = (c, r) => isOpen(lv, c, r) && !isHole(lv, c, r);
     const tirar = (dc, dr) => {
-        let n = 0;
-        while (n < maxCeldas && libre(c0 + dc * (n + 1), r0 + dr * (n + 1))) n++;
-        // desde el punto exacto hasta la cara de la pared, no de centro a centro
-        const [cx, cz] = toWorld(c0, r0);
-        const desde = dc ? (dc > 0 ? x - cx : cx - x) : (dr > 0 ? z - cz : cz - z);
-        return n * CELL + CELL / 2 - desde;
+        let c = c0, r = r0, n = 0;
+        while (n < maxCeldas) {
+            const v = hayPared(c, r, dc, dr);
+            if (v === PARED || v === GATERA) break;
+            c += dc; r += dr; n++;
+            if (!esPiso(c, r)) break;
+        }
+        return n * CELL + CELL / 2;
     };
-    const este = tirar(1, 0), oeste = tirar(-1, 0);
-    const sur = tirar(0, 1), norte = tirar(0, -1);
+    const norte = tirar(0, -1), sur = tirar(0, 1), este = tirar(1, 0), oeste = tirar(-1, 0);
     const ancho = este + oeste, largo = norte + sur;
-    const menor = Math.min(ancho, largo);
+    const s = sectorEn(c0, r0);
     return {
         norte, sur, este, oeste, ancho, largo,
-        // 1 cuando el hueco mide una celda; 0 cuando mide cuatro o mas
-        encajonado: Math.max(0, Math.min(1, (CELL * 4 - menor) / (CELL * 3))),
-        enSala: menor > CELL * 2.5,
+        encajonado: Math.max(0, 1 - Math.min(ancho, largo) / 6),
+        enSala: !!(s && !s.pasillo),
+        sector: s ? s.id : null,
     };
 }
 
-/* Un punto libre cualquiera del nivel, para arrancar la partida. */
-export function spawnOn(lv, rng) {
-    for (let i = 0; i < 4000; i++) {
-        const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
-        if (isOpen(lv, c, r)) { const [x, z] = toWorld(c, r); return { x, z, c, r } }
-    }
-    const [x, z] = toWorld(1, 1);
-    return { x, z, c: 1, r: 1 };
-}
+/* ------------------------------------------------- compatibilidad de salas */
+/* El resto del juego habla de SALAS y de niveles; los sectores son lo mismo
+   con otro nombre, asi que se expone la lista envuelta en un array de un
+   nivel para no tener que tocar cada archivo. */
+export const SALAS = [SECTORES];
+export const salaEn = (lv, c, r) => sectorEn(c, r);
+export const salaPorId = (lv, id) => sectorPorId(id);
+export const centroSala = centroSector;

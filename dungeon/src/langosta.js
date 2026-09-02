@@ -19,8 +19,8 @@ import { construirBicho } from './bicho.js';
 import { CLIPS } from './animdata.js';
 import * as S from './sonido.js';
 import {
-    CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
-    SALAS, salaPorId, salaEn, centroSala,
+    CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, esPiso, hayPared,
+    PARED, GATERA, SECTORES, sectorEn, sectorPorId, centroSector,
 } from './map.js';
 
 const COLORES = [
@@ -29,7 +29,7 @@ const COLORES = [
     { id: 'azul', hex: 0x2f7fd8, nombre: 'azul' },
 ];
 const ALCANCE = 1.5;          // hasta donde llega la mano
-const NIVEL = 0;              // todo el bucle pasa en la planta baja
+const NIVEL = 0;              // queda UNA planta: la casa entera
 
 /* ------------------------------------------------------------------ el bicho */
 /* Mide 2,6 m. Con el ojo a 55 cm eso es casi cinco veces nuestra altura: por
@@ -199,7 +199,7 @@ export class Mision {
         this.celdasLibres = [];
         for (let r = 2; r < H - 2; r++)
             for (let c = 2; c < W - 2; c++)
-                if (isOpen(NIVEL, c, r) && !isStairCell(c, r) && !isHole(NIVEL, c, r))
+                if (esPiso(c, r))
                     this.celdasLibres.push([c, r]);
 
         this.origen = origen || { x: 0, z: 0 };
@@ -229,7 +229,7 @@ export class Mision {
         for (let r = sala.r; r < sala.r + sala.h; r++)
             for (let c = sala.c; c < sala.c + sala.w; c++) {
                 if (c === cc && r === cr) continue;
-                if (!isOpen(NIVEL, c, r) || isStairCell(c, r)) continue;
+                if (!esPiso(c, r)) continue;
                 cand.push([c, r]);
             }
         return cand.length ? cand[this.rng.int(0, cand.length - 1)] : [cc, cr];
@@ -250,8 +250,8 @@ export class Mision {
        las tres baldosas van en fila en el medio, como en la foto del juego
        original, donde estan las tres pegadas contra la pared del fondo. */
     salaDePads() {
-        const s = salaPorId(NIVEL, 'pads');
-        return s ? centroSala(s) : this.celdaAlAzar();
+        const s = sectorPorId('salon');
+        return s ? centroSector(s) : this.celdaAlAzar();
     }
 
     armarCubos() {
@@ -274,11 +274,11 @@ export class Mision {
            cada bloque esta en un cuarto que se reconoce —la biblioteca, el
            deposito, el cuarto— y buscarlos es recorrer la casa, no barrer un
            laberinto celda por celda. */
-        const cunas = ['biblioteca', 'deposito', 'dormitorio', 'comedor', 'vestibulo']
-            .map(id => salaPorId(NIVEL, id)).filter(Boolean);
+        const cunas = ['biblioteca', 'deposito', 'capilla', 'comedor', 'vestibulo']
+            .map(id => sectorPorId(id)).filter(Boolean);
         COLORES.forEach((col, i) => {
             const m = new THREE.MeshStandardMaterial({
-                color: col.hex, roughness: .5, emissive: col.hex, emissiveIntensity: 1.15,
+                color: col.hex, roughness: .5, emissive: col.hex, emissiveIntensity: 0.82,
             });
             const cuna = cunas[i % cunas.length];
             /* Adentro pero NO en el centro: el centro es donde caes cuando
@@ -345,12 +345,12 @@ export class Mision {
            'salida'. En el juego original la salida es una DOBLE PUERTA GRIS
            con un cartel verde de EXIT encima, al final de un pasillo blanco —
            no una hoja verde brillando en cualquier pared. */
-        const sala = salaPorId(NIVEL, 'salida');
+        const sala = sectorPorId('salida');
         let c;
         if (sala) {
             // contra la pared del fondo de la sala, centrada
             c = [sala.c + (sala.w >> 1), sala.r + sala.h - 1];
-            if (!isOpen(NIVEL, c[0], c[1])) c = centroSala(sala);
+            if (!esPiso(c[0], c[1])) c = centroSector(sala);
         } else {
             c = this.lejosDe(this.origen.x, this.origen.z);
         }
@@ -365,7 +365,7 @@ export class Mision {
            detras. Sin esto la puerta siempre miraba a +Z y desde adentro se
            veia el dorso gris con el cartel del otro lado. */
         const atras = [[0, 1], [0, -1], [1, 0], [-1, 0]]
-            .find(([dc, dr]) => !isOpen(NIVEL, c[0] - dc, c[1] - dr)) || [0, 1];
+            .find(([dc, dr]) => hayPared(c[0], c[1], -dc, -dr) === PARED) || [0, 1];
         g.rotation.y = Math.atan2(atras[0], atras[1]);
 
         // el marco, mas ancho que la hoja: es lo que da el portal
@@ -530,7 +530,7 @@ export class Mision {
     /* Camino por la grilla, sin diagonales. El mapa es de 31x31, asi que una
        busqueda entera cuesta nada y se rehace cada medio segundo. */
     camino(c0, r0, c1, r1) {
-        if (!isOpen(NIVEL, c1, r1)) return [];
+        if (!esPiso(c1, r1)) return [];
         const previo = new Int32Array(W * H).fill(-1);
         const cola = [c0 + r0 * W];
         previo[c0 + r0 * W] = c0 + r0 * W;
@@ -541,9 +541,11 @@ export class Mision {
                 const nc = c + dc, nr = r + dr;
                 if (nc < 0 || nr < 0 || nc >= W || nr >= H) continue;
                 const k = nc + nr * W;
-                if (previo[k] !== -1 || !isOpen(NIVEL, nc, nr)) continue;
-                // por los huecos de 62 cm no entra: mide 2,6 m
-                if (isHole(NIVEL, nc, nr) && !isOpen(NIVEL, nc, nr)) continue;
+                if (previo[k] !== -1 || !esPiso(nc, nr)) continue;
+                /* El tabique corta el paso, y por la gatera NO entra: mide 3,2 m
+                   y el hueco tiene 1,05. Ese es el sentido de las gateras. */
+                const pared = hayPared(c, r, dc, dr);
+                if (pared === PARED || pared === GATERA) continue;
                 previo[k] = n;
                 cola.push(k);
             }
@@ -694,7 +696,11 @@ export class Mision {
         for (let i = 1; i < n; i++) {
             const t = i / n;
             const [c, r] = toCell(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t);
-            if (!isOpen(NIVEL, c, r)) return false;
+            if (!esPiso(c, r)) return false;
+            if (i > 1) {
+                const [pc, pr] = toCell(x0 + (x1 - x0) * (i - 1) / n, z0 + (z1 - z0) * (i - 1) / n);
+                if ((pc !== c || pr !== r) && hayPared(pc, pr, c - pc, r - pr)) return false;
+            }
         }
         return true;
     }

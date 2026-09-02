@@ -18,20 +18,20 @@
 
 export const NIVELES = {
     bajo: {
-        nombre: 'Bajo', pix: 0.55, sombras: false, mapa: 512, faroles: 0,
-        pisos: 0.6, niebla: [6, 34], contorno: false, aniso: 1,
+        nombre: 'Bajo', pix: 0.55, sombras: false, mapa: 512, faroles: 0, luces: 6,
+        pisos: 0.6, niebla: [7, 38], contorno: false, aniso: 1,
     },
     medio: {
-        nombre: 'Medio', pix: 0.85, sombras: true, mapa: 512, faroles: 1,
-        pisos: 1.0, niebla: [8, 46], contorno: true, aniso: 4,
+        nombre: 'Medio', pix: 0.85, sombras: true, mapa: 512, faroles: 2, luces: 10,
+        pisos: 1.0, niebla: [9, 52], contorno: true, aniso: 4,
     },
     alto: {
-        nombre: 'Alto', pix: 1.3, sombras: true, mapa: 1024, faroles: 3,
-        pisos: 1.35, niebla: [8, 52], contorno: true, aniso: 8,
+        nombre: 'Alto', pix: 1.3, sombras: true, mapa: 1024, faroles: 4, luces: 14,
+        pisos: 1.35, niebla: [10, 62], contorno: true, aniso: 8,
     },
     ultra: {
-        nombre: 'Ultra', pix: 2, sombras: true, mapa: 2048, faroles: 5,
-        pisos: 1.35, niebla: [9, 64], contorno: true, aniso: 16,
+        nombre: 'Ultra', pix: 2, sombras: true, mapa: 2048, faroles: 6, luces: 18,
+        pisos: 1.35, niebla: [12, 78], contorno: true, aniso: 16,
     },
 };
 const ORDEN = ['bajo', 'medio', 'alto', 'ultra'];
@@ -82,6 +82,9 @@ export class Calidad {
             if (l.L.shadow) l.L.shadow.mapSize.set(Math.min(N.mapa, 1024), Math.min(N.mapa, 1024));
             if (!N.sombras) l.L.castShadow = false;
         }
+        /* Cuantas arañas quedan encendidas a la vez. Es lo que mas pesa de
+           todo: cada point light se evalua en cada fragmento de lo que se ve. */
+        j.lucesVivas = N.luces;
         j.distPisos = N.pisos;
         j.scene.fog.near = N.niebla[0];
         j.scene.fog.far = N.niebla[1];

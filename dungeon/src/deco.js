@@ -49,22 +49,28 @@ export const texAlfombra = () => lienzo(256, (g, n) => {
    Sin ellas es una pared blanca y con ellas es un galpon. */
 export const texYeso = () => lienzo(256, (g, n) => {
     g.fillStyle = '#d9d2c4'; g.fillRect(0, 0, n, n);
-    for (let k = 0; k < 300; k++) {          // vetas del revoque
-        g.strokeStyle = `rgba(150,142,128,${0.05 + Math.random() * 0.07})`;
-        g.lineWidth = 1 + Math.random() * 3;
+    for (let k = 0; k < 220; k++) {          // vetas del revoque, apenas
+        g.strokeStyle = `rgba(160,152,138,${0.025 + Math.random() * 0.035})`;
+        g.lineWidth = 1 + Math.random() * 2.4;
         g.beginPath();
         const y = Math.random() * n;
         g.moveTo(0, y);
         g.bezierCurveTo(n / 3, y + (Math.random() - .5) * 26, 2 * n / 3, y + (Math.random() - .5) * 26, n, y + (Math.random() - .5) * 14);
         g.stroke();
     }
-    for (let y = 20; y < n; y += 42) {
-        for (let x = 24; x < n; x += 38) {
-            const px = x + (Math.random() - .5) * 10, py = y + (Math.random() - .5) * 10;
-            g.fillStyle = 'rgba(90,84,74,0.55)';
-            g.beginPath(); g.arc(px, py, 3.1, 0, 7); g.fill();
-            g.fillStyle = 'rgba(255,252,244,0.7)';
-            g.beginPath(); g.arc(px - .9, py - .9, 1.5, 0, 7); g.fill();
+    /* Las tachas. Son cabezas de perno: un disco oscuro con su sombra abajo y
+       un brillo arriba. Sin el par sombra/brillo se leen como manchas. */
+    for (let y = 18; y < n; y += 36) {
+        for (let x = 20; x < n; x += 34) {
+            const px = x + (Math.random() - .5) * 8, py = y + (Math.random() - .5) * 8;
+            g.fillStyle = 'rgba(112,104,92,0.42)';
+            g.beginPath(); g.arc(px + 1.2, py + 1.6, 4.2, 0, 7); g.fill();
+            g.fillStyle = 'rgba(196,188,172,0.95)';
+            g.beginPath(); g.arc(px, py, 3.6, 0, 7); g.fill();
+            g.fillStyle = 'rgba(96,88,76,0.75)';
+            g.beginPath(); g.arc(px, py, 3.6, 0.6, 2.6); g.fill();
+            g.fillStyle = 'rgba(255,253,246,0.9)';
+            g.beginPath(); g.arc(px - 1.1, py - 1.2, 1.5, 0, 7); g.fill();
         }
     }
 });
@@ -88,6 +94,58 @@ export const texHormigon = () => lienzo(256, (g, n) => {
         g.fillStyle = `rgba(60,58,54,${0.1 + Math.random() * 0.3})`;
         g.fillRect(Math.random() * n, Math.random() * n, 1, 1);
     }
+});
+
+/* La tabla clara de la boveda y de los techos. En las fotos el techo NO es
+   marron: son tablas casi crema, muy claras, y la veta corre A LO LARGO del
+   pasillo. Por eso las rayas van verticales en la textura: el mapeo de la
+   boveda pone la U cruzando el arco y la V a lo largo. */
+export const texTabla = () => lienzo(256, (g, n) => {
+    g.fillStyle = '#cfc4a8'; g.fillRect(0, 0, n, n);
+    const ancho = n / 6;
+    for (let i = 0; i < 6; i++) {
+        const v = (Math.random() - 0.5) * 22;
+        g.fillStyle = `rgb(${208 + v},${196 + v},${170 + v})`;
+        g.fillRect(i * ancho, 0, ancho - 1, n);
+        for (let k = 0; k < 30; k++) {      // veta
+            g.strokeStyle = `rgba(150,136,110,${0.05 + Math.random() * 0.09})`;
+            g.lineWidth = 0.8 + Math.random() * 1.6;
+            g.beginPath();
+            const x = i * ancho + Math.random() * ancho;
+            g.moveTo(x, 0);
+            g.bezierCurveTo(x + (Math.random() - .5) * 7, n / 3, x + (Math.random() - .5) * 7, 2 * n / 3, x, n);
+            g.stroke();
+        }
+        g.strokeStyle = 'rgba(120,108,86,0.5)'; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(i * ancho, 0); g.lineTo(i * ancho, n); g.stroke();
+    }
+});
+
+/* Baldosa grande de piedra: es el piso de la sala de las baldosas, que en la
+   foto NO es alfombra sino losas grises brillosas con la junta marcada. */
+export const texBaldosa = () => lienzo(256, (g, n) => {
+    g.fillStyle = '#9a958a'; g.fillRect(0, 0, n, n);
+    const lado = n / 2;
+    for (let y = 0; y < 2; y++) {
+        for (let x = 0; x < 2; x++) {
+            const v = 12 + Math.random() * 26;
+            g.fillStyle = `rgb(${150 + v},${146 + v},${136 + v})`;
+            g.fillRect(x * lado + 2, y * lado + 2, lado - 4, lado - 4);
+            // veta de la piedra
+            for (let k = 0; k < 26; k++) {
+                g.strokeStyle = `rgba(120,116,108,${0.05 + Math.random() * 0.08})`;
+                g.lineWidth = 1 + Math.random() * 2;
+                g.beginPath();
+                const yy = y * lado + Math.random() * lado;
+                g.moveTo(x * lado, yy);
+                g.lineTo(x * lado + lado, yy + (Math.random() - .5) * 18);
+                g.stroke();
+            }
+        }
+    }
+    g.strokeStyle = 'rgba(70,68,64,0.55)'; g.lineWidth = 3;
+    g.strokeRect(0, 0, lado, lado); g.strokeRect(lado, 0, lado, lado);
+    g.strokeRect(0, lado, lado, lado); g.strokeRect(lado, lado, lado, lado);
 });
 
 /* Las frases pintadas en la pared. En el juego original son mayusculas negras
@@ -167,6 +225,38 @@ export function pilaDeCajones(rng) {
         c.rotation.y = (rng.next() - .5) * 0.5;
         g.add(c);
     }
+    return g;
+}
+
+/* El tablon de contrachapado apoyado contra la pared. Sale tal cual en la foto
+   del desvan: una placa clara con los nudos marcados, ligeramente inclinada. */
+export function tablon() {
+    const g = new THREE.Group();
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#d9cfb4'; c.fillRect(0, 0, 128, 128);
+    for (let k = 0; k < 90; k++) {
+        c.strokeStyle = `rgba(160,146,116,${0.06 + Math.random() * 0.1})`;
+        c.lineWidth = 1 + Math.random() * 2;
+        c.beginPath();
+        const y = Math.random() * 128;
+        c.moveTo(0, y);
+        c.bezierCurveTo(42, y + (Math.random() - .5) * 16, 86, y + (Math.random() - .5) * 16, 128, y + (Math.random() - .5) * 10);
+        c.stroke();
+    }
+    for (let k = 0; k < 16; k++) {   // los nudos
+        c.fillStyle = 'rgba(70,58,40,0.75)';
+        c.beginPath(); c.arc(Math.random() * 128, Math.random() * 128, 1.4 + Math.random() * 1.6, 0, 7); c.fill();
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const placa = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.25, 0.055),
+        new THREE.MeshStandardMaterial({ map: t, roughness: .95 }));
+    placa.position.set(0, 0.66, 0.16);
+    placa.rotation.x = -0.19;          // apoyado, no clavado
+    placa.castShadow = placa.receiveShadow = true;
+    g.add(placa);
     return g;
 }
 

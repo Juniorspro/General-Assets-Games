@@ -224,6 +224,125 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## La casa nueva: una planta, paredes finas, sectores grandes
+
+El mapa anterior tenía tres laberintos apilados de 31×31 donde **la pared
+ocupaba una celda entera: 2,20 m de espesor**. Por eso las salas parecían
+búnkers y los pasillos túneles, y por eso había toda una familia de bugs de
+pisos falsos: había que adivinar en cuál de las tres grillas estabas.
+
+Se rehizo desde cero contra las capturas nuevas:
+
+- **una sola planta**, como el juego original, que es un *single-stage nest*;
+- la pared es un **tabique de 22 cm** que vive en el **borde** entre dos
+  celdas, no en la celda;
+- el piso se reparte en **sectores**: nueve salas de 24 a 31 m de lado y
+  cuatro pasillos de 7,2 m de ancho que las cosen;
+- entre dos sectores hay tabique y el tabique se abre en **puertas**; entre
+  dos pasillos no hay nada, así que los cuatro pasillos son un solo espacio.
+
+Es la casa de algo que mide tres metros y pico: los cuartos tienen que dejarlo
+pasar. Son **6964 m² de casa**, 1209 celdas de piso, 302 tabiques, 56 puertas
+y 14 gateras.
+
+### El tabique se emite en dos caras
+
+Cada tabique sale como **dos lozas de medio espesor**, una por cara, con el
+tema del sector que tiene enfrente. Por eso desde el pasillo ves papel damasco
+y desde la sala blanca ves yeso, y en la esquina se ve el encuentro yeso/papel
+que sale en la foto del crucifijo. Con una caja sola eso no se puede.
+
+### La bóveda de cañón
+
+El pasillo del original **no tiene techo plano**: tiene un túnel de tabla clara
+que arranca a 2,95 m y sube 1,50 m más en el eje. Se construye como una tira de
+arco extruida a lo largo del tramo, con una **costilla de madera** en cada
+punta que tapa la junta donde un pasillo cruza al otro.
+
+Los tramos se emiten sólo donde el sector **todavía posee** sus celdas: en los
+cruces el pasillo horizontal se quedó con ellas, así que el vertical corta ahí
+y la bóveda que cruza es una sola.
+
+### Las ruedas de sombra
+
+Es la firma visual del juego y costó dos cosas:
+
+1. **La luz va 75 cm DEBAJO del aro**, no pegada a él. Pegada, la luz sale casi
+   en el plano de la rueda, la rueda no tapa nada hacia arriba y el techo queda
+   limpio. A 75 cm, la rueda se proyecta contra el techo aumentada unas tres
+   veces.
+2. **El techo tiene que recibir sombra.** Estaba en `receiveShadow = false` y
+   por eso el techo salía parejo por más que las luces proyectaran.
+
+Además la cámara de sombra del *point light* llega por defecto a 500 m: con un
+mapa de 512 eso deja varios centímetros por texel y un aro de 3,5 cm no
+proyecta nada. Recortada a 13 m, aparece.
+
+Y las arañas **cuelgan bajo** (1,15–1,45 m). Pegadas al techo queman un disco
+blanco encima y no se ve nada.
+
+### Culling de luces
+
+La casa tiene **noventa arañas** y three evalúa TODAS las luces en cada
+fragmento: con noventa *point lights* no dibuja ni un cuadro. Quedan
+encendidas las **N más cercanas** —6 en bajo, 10 en medio, 14 en alto, 18 en
+ultra— y el número es **fijo**: si cambia, three recompila el shader y el juego
+pega un tirón cada vez.
+
+### Los sectores
+
+```
+vestíbulo · sala blanca · biblioteca
+comedor   · galería     · capilla
+depósito  · taller      · salida
+                    + los cuatro pasillos
+```
+
+| tema | qué lo hace |
+|---|---|
+| `pasillo` | damasco, zócalo y marco de madera, bóveda de cañón |
+| `salon` | yeso blanco con tachas, piso de baldosa, dos columnas, las tres baldosas |
+| `libros` | estanterías de pared a pared, una vitrina cada cinco |
+| `reloj` | el reloj de pie, el piano, el sofá, la cómoda, la vitrina |
+| `capilla` | bancos de iglesia en filas con pasillo al medio, el crucifijo |
+| `deposito` | pilas de cajones y tablones de contrachapado apoyados |
+| `cocina` | mesas largas con las sillas de los dos lados |
+| `taller` | hormigón, columnas, sin marcos de madera |
+| `salida` | blanco, la doble puerta gris con el cartel |
+
+### Los props nuevos
+
+Cuatro más, generados de a uno y horneados como los otros ocho: **piano**
+(1,28 m), **banco de iglesia** (0,98 m), **mesa larga** (0,78 m) y **vitrina**
+(2,05 m, se revisa buscando la llave). Los doce juntos pesan 4,1 MB.
+
+Y los que no son mallas: los **cajones de listones**, el **tablón de
+contrachapado** apoyado contra la pared, las **columnas** y el **crucifijo**,
+todos armados con geometría.
+
+### Los cuadros
+
+Los retratos de las paredes son **dibujos generados**: cuatro bocetos a lápiz
+sobre papel viejo —una cara de ojos enormes, una mujer de ojos hundidos, la
+figura de patas largas en el umbral, y una casa cuyas ventanas forman una
+sonrisa—, recortados a 256×341. Los cuatro pesan 52 KB.
+
+### Los botones
+
+Los controles táctiles se rehicieron con el aspecto del original en el celular:
+**círculos grandes translúcidos, texto blanco sin adornos y sin bordes finos**.
+Chicos y con letra espaciada no se leían de un vistazo y encima no se acertaban
+con el pulgar en movimiento.
+
+### Medido
+
+- **1209 celdas de piso, 1209 alcanzables** cruzando puertas
+- **0 celdas de piso desde las que haga falta un rescate**
+- 12 modelos de mueble, 213 sólidos, 55 muebles revisables
+- los tres cubos en biblioteca, depósito y capilla; las tres baldosas en la
+  sala blanca; la puerta en la salida
+- la cadena entera llega a `escapo`
+
 ## El mapa, mirado foto por foto
 
 El mapa era un laberinto generado con cinco rectángulos anónimos por nivel.
@@ -328,20 +447,13 @@ lee como escombro, no como una casa. `poblar()` ahora:
 - pone los sillones **de a dos, enfrentados**;
 - apoya los sofás contra la pared.
 
-## Los pisos falsos eran las escaleras
+## Los pisos falsos: se fueron con las escaleras
 
-Te caías por el piso justo donde había una escalera debajo. La causa: una
-escalera marca sus celdas **en los tres niveles**, y `surfaceAt` daba prioridad
-a la rampa siempre, así que parado en el piso de arriba la altura que devolvía
-era la de la rampa de abajo. Regla nueva: **la rampa sólo gana si queda a menos
-de medio metro por debajo de donde estás**; si no, se busca el piso plano más
-cercano.
-
-```js
-const rampaSirve = best !== null && best >= yHint - 0.5;
-```
-
-**Barrido de las 1634 celdas abiertas de los tres niveles: peor caída 0,49 m.**
+Te caías por el piso donde había una escalera debajo, porque una escalera
+marcaba sus celdas **en los tres niveles** y `surfaceAt` daba prioridad a la
+rampa. Se arregló midiendo (peor caída 0,49 m → 0,00), y después **el problema
+desapareció solo**: la casa nueva es una planta, el piso es cero y no hay nada
+que adivinar.
 
 ## El cuerpo: R15, con rodillas
 
@@ -601,23 +713,15 @@ cuesta seis pases de render, y son las únicas cuya rueda se llega a ver.
 
 ## El mapa
 
-Tres niveles de 31×31, girados 90°: **planta alta** (+5,9 m), **planta baja**
-y **cisternas** (−5,9 m). El laberinto se genera, se rota, y **después** se
-recortan encima las salas escritas a mano de `SALAS` — así las coordenadas de
-la lista son las mismas que usa todo el resto del juego.
-El laberinto se genera con un backtracker y después se rompen unas 30 paredes
-sueltas: un laberinto perfecto es un árbol y te obliga a desandar todo el
-tiempo.
-
-Las celdas de la rampa están **excluidas del piso plano de cada nivel**. Los
-niveles ocupan el mismo XZ, así que si la rampa y el piso son ambos
-candidatos, el piso gana siempre por estar más cerca de tu altura actual — y
-la escalera no sube nunca.
+Una planta de 41×33 celdas de 2,4 m: **98 × 79 m**, 6964 m² de piso. Nueve
+salas con nombre y cuatro pasillos de 7,2 m de ancho, tabiques de 22 cm en los
+bordes, 56 puertas con marco y dintel, 14 gateras. Sin laberinto generado y sin
+escaleras: la casa está escrita a mano en `SECTORES`.
 
 ## Archivos
 
 ```
-src/map.js       la grilla, las SALAS con nombre, escaleras, colisión, altura
+src/map.js       la grilla, los SECTORES, los tabiques, puertas y colisión
 src/main.js      motor, jugador, controles, cámara, y el armado del nivel
 src/deco.js      texturas dibujadas en canvas, frases de pared, cajones, cruz
 src/pantalla.js  el marco girado y la traducción de coordenadas
@@ -630,6 +734,7 @@ src/sonido.js    todo el audio, sintetizado
 shell.html       HUD y joystick
 texturas/*.webp  papel, cornisa y vetas (las demás se dibujan al arrancar)
 muebles/hd/*.glb las ocho piezas horneadas en alta
+cuadros/*.webp   los cuatro dibujos generados que van en los marcos
 referencia/      las capturas del juego original con las que se comparó
 ```
 

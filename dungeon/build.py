@@ -20,9 +20,15 @@ ASSETS = {
     "ceil":     ("techo_tablas.webp", "image/webp"),
 }
 
+# Los cuadros de las paredes: dibujos a lapiz generados y recortados a 256x341.
+# Los cuatro juntos pesan 52 KB.
+CUADROS = 4
+CUA_DIR = os.path.join(HERE, "cuadros")
+
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
 # Van como data URL igual que las texturas: el juego es UN archivo.
-MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa"]
+MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa",
+           "piano", "banco", "mesalarga", "vitrina"]
 # Los muebles de alta: 8-18 mil triangulos cada uno y textura de 1024, contra
 # los 1-2 mil y 512 de la primera tanda. Se generaron de a uno, con su prompt.
 MUE_DIR = os.path.join(HERE, "muebles", "hd")
@@ -66,6 +72,10 @@ def main():
         # si falta una pieza el juego igual entra: el modulo la saltea
         if os.path.exists(ruta):
             data["mueble_" + nombre] = durl_abs(ruta, "model/gltf-binary")
+    for i in range(1, CUADROS + 1):
+        pc = os.path.join(CUA_DIR, "cuadro%d.webp" % i)
+        if os.path.exists(pc):
+            data["cuadro%d" % i] = durl_abs(pc, "image/webp")
         else:
             print("  (sin %s)" % nombre)
     shell = open(os.path.join(HERE, "shell.html"), encoding="utf-8").read()

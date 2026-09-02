@@ -13,7 +13,9 @@
       pieza mire hacia (dx,dz) el giro es atan2(-dz, dx), no atan2(dz,dx). */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CELL, W, H, Rng, toWorld, isOpen, isStairCell, isHole, SALAS } from './map.js';
+import {
+    CELL, W, H, Rng, toWorld, esPiso, hayPared, PARED, SECTORES, sectorEn,
+} from './map.js';
 
 /* alto en metros · si va contra la pared · si se puede revisar por la llave */
 export const CATALOGO = {
@@ -25,6 +27,13 @@ export const CATALOGO = {
     mesa:       { alto: 0.80, pared: false, revisable: false },
     silla:      { alto: 1.05, pared: false, revisable: false },
     sillon:     { alto: 1.15, pared: false, revisable: false },
+    /* La segunda tanda, para la casa grande: el piano del salon, los bancos de
+       la capilla, la mesa larga del comedor y la vitrina, que tambien se
+       revisa buscando la llave. */
+    piano:      { alto: 1.28, pared: true,  revisable: false },
+    banco:      { alto: 0.98, pared: false, revisable: false },
+    mesalarga:  { alto: 0.78, pared: false, revisable: false },
+    vitrina:    { alto: 2.05, pared: true,  revisable: true },
 };
 
 /* Un mueble mira a +X, asi que para mirar hacia (dx,dz) hay que girar asi. */
@@ -97,11 +106,16 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
         return true;
     };
 
-    const libre = (c, r) => isOpen(lv, c, r) && !isStairCell(c, r) && !ocupadas.has(c + ',' + r);
+    const libre = (c, r) => esPiso(c, r) && !ocupadas.has(c + ',' + r);
+    /* Sitio holgado: las nueve celdas son piso y ninguna de las cuatro caras
+       tiene tabique. Con paredes finas ya no alcanza con mirar si la celda de
+       al lado es piso — puede serlo y haber un tabique en el medio. */
     const ancho = (c, r) => {
         for (let dr = -1; dr <= 1; dr++)
             for (let dc = -1; dc <= 1; dc++)
-                if (!isOpen(lv, c + dc, r + dr)) return false;
+                if (!esPiso(c + dc, r + dr)) return false;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+            if (hayPared(c, r, dc, dr)) return false;
         return true;
     };
 
@@ -112,28 +126,34 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
        salida quedan VACIAS a proposito, porque ahi hay que poder correr. Las
        celdas de estas salas se marcan ocupadas, asi que los pasos genericos de
        mas abajo no les meten nada encima. */
+    /* Contra que pared esta una celda: ahora la pared es un tabique en el
+       borde, asi que se pregunta por el borde y no por la celda vecina. */
     const pegadoA = (c, r) => [[1, 0], [-1, 0], [0, 1], [0, -1]]
-        .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+        .filter(([dc, dr]) => hayPared(c, r, dc, dr) === PARED);
     const alRas = (nombre, c, r, dc, dr) => {
         const prof = modelos[nombre] ? modelos[nombre].tam.z : 0.5;
         return poner(nombre, c, r, miraHacia(-dc, -dr),
                      dc * (CELL / 2 - prof / 2 - 0.04), dr * (CELL / 2 - prof / 2 - 0.04));
     };
 
-    for (const sala of SALAS[lv]) {
+    for (const sala of SECTORES) {
+        if (sala.pasillo) continue;
         const celdas = [];
         for (let r = sala.r; r < sala.r + sala.h; r++)
             for (let c = sala.c; c < sala.c + sala.w; c++)
-                if (isOpen(lv, c, r) && !isStairCell(c, r)) celdas.push([c, r]);
+                if (esPiso(c, r)) celdas.push([c, r]);
         if (!celdas.length) continue;
         const cc = sala.c + (sala.w >> 1), cr = sala.r + (sala.h >> 1);
 
-        if (sala.tema === 'biblioteca' && hay('estanteria')) {
+        if (sala.tema === 'libros' && hay('estanteria')) {
             // pared a pared: es lo que se ve en la foto del cubo rojo
+            let k = 0;
             for (const [c, r] of celdas) {
                 const d = pegadoA(c, r);
                 if (!d.length || ocupadas.has(c + ',' + r)) continue;
-                alRas('estanteria', c, r, d[0][0], d[0][1]);
+                // una vitrina cada cinco estanterias: rompe la pared repetida
+                const pieza = (hay('vitrina') && (k++ % 5) === 4) ? 'vitrina' : 'estanteria';
+                alRas(pieza, c, r, d[0][0], d[0][1]);
             }
         } else if (sala.tema === 'reloj') {
             // el reloj de pie contra la pared, el sofa en otra, el sillon mirandolo
@@ -142,8 +162,10 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
                 const d = pegadoA(c, r);
                 if (!d.length || ocupadas.has(c + ',' + r)) continue;
                 if (hecho === 0 && hay('reloj')) { alRas('reloj', c, r, d[0][0], d[0][1]); hecho++ }
-                else if (hecho === 1 && hay('sofa')) { alRas('sofa', c, r, d[0][0], d[0][1]); hecho++ }
-                else if (hecho === 2 && hay('comoda')) { alRas('comoda', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 1 && hay('piano')) { alRas('piano', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 2 && hay('sofa')) { alRas('sofa', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 3 && hay('comoda')) { alRas('comoda', c, r, d[0][0], d[0][1]); hecho++ }
+                else if (hecho === 4 && hay('vitrina')) { alRas('vitrina', c, r, d[0][0], d[0][1]); hecho++ }
             }
             /* El sillon va corrido del centro: el centro de la sala es por donde
                se entra y por donde pasa el bicho, y un sillon ahi te traba. */
@@ -155,7 +177,19 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
                 if (((r - sala.r) % 2) || c === pasillo || ocupadas.has(c + ',' + r)) continue;
                 poner('silla', c, r, miraHacia(0, -1));
             }
-        } else if (sala.tema === 'pasillo') {
+        } else if (sala.tema === 'cocina' && hay('mesalarga')) {
+            /* La mesa larga en el eje del comedor, con las sillas de los dos
+               lados mirandola. Una casa de un bicho de tres metros come en una
+               mesa de seis, no en una mesita cuadrada. */
+            const fila = cr;
+            for (let c = sala.c + 2; c < sala.c + sala.w - 2; c += 2) {
+                if (!libre(c, fila)) continue;
+                poner('mesalarga', c, fila, 0);
+                for (const dr of [-1, 1])
+                    if (libre(c, fila + dr) && hay('silla'))
+                        poner('silla', c, fila + dr, miraHacia(0, -dr), 0, -dr * 0.22);
+            }
+        } else if (sala.tema === 'cocina') {
             // cuarto de casa: mesa con sus sillas, y un armario contra la pared
             if (hay('mesa') && libre(cc, cr)) {
                 poner('mesa', cc, cr, 0);
@@ -174,7 +208,7 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
     }
 
     /* --- 1. LAS SALAS: juegos de muebles, no piezas sueltas ------------- */
-    const contraPared = ['armario', 'comoda', 'estanteria', 'reloj'].filter(hay);
+    const contraPared = ['armario', 'comoda', 'estanteria', 'reloj', 'vitrina', 'piano'].filter(hay);
     const salas = [];
     for (let r = 3; r < H - 3; r++) {
         for (let c = 3; c < W - 3; c++) {
@@ -211,8 +245,7 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
     for (let r = 1; r < H - 1 && puestos < 34; r++) {
         for (let c = 1; c < W - 1 && puestos < 34; c++) {
             if (!libre(c, r)) continue;
-            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+            const dirs = pegadoA(c, r);
             if (!dirs.length) continue;
             // uno cada cuatro sitios validos: apretados quedan como un deposito
             if (paso++ % 4) continue;
@@ -236,7 +269,7 @@ export function poblar(modelos, lv, base, grupo, semilla, evitar) {
             for (let c = 2; c < W - 2 && n < 6; c += 3) {
                 if (!libre(c, r) || !ancho(c, r)) continue;
                 const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-                    .filter(([dc, dr]) => !isOpen(lv, c + dc * 2, r + dr * 2));
+                    .filter(([dc, dr]) => hayPared(c + dc, r + dr, dc, dr) === PARED);
                 if (!dirs.length) continue;
                 const [dc, dr] = dirs[0];
                 poner('sofa', c, r, miraHacia(-dc, -dr), dc * 0.5, dr * 0.5);
