@@ -257,6 +257,28 @@ máxima zancada:
 O sea que abría las piernas un 98,5 % **de costado**. Literalmente caminaba
 de lado, y la primera vez lo di por arreglado sin medirlo.
 
+### Y después corría inclinado, por lo mismo
+
+Arreglada la zancada, el torso seguía torcido. Intenté arreglarlo con
+`rotation.order = 'YXZ'` creyendo que así el giro de 90° se aplicaba primero.
+**No**: en three, orden YXZ significa `R = Ry·Rx·Rz`, y la que se aplica
+**última al vector** es `Ry` — o sea que `Rx` sigue actuando en el espacio del
+modelo. El orden no cambiaba nada.
+
+Es el mismo eje que las piernas: como el modelo mira a +X, **inclinarse hacia
+adelante es girar sobre Z**, y el balanceo lateral de la zancada es el que va
+sobre X.
+
+Medido sobre la posición de la cabeza respecto de los pies, cazando:
+
+| | cabeza adelante | cabeza al costado | proporción lateral |
+|---|---|---|---|
+| antes | 0,011 m | **0,512 m** | **97,9 %** |
+| ahora | **0,508 m** | 0,004 m | **0,7 %** |
+
+Ahora sí: derecho cuando ronda, encorvado hacia adelante cuando te viene a
+buscar.
+
 ## Los botones, con imágenes generadas
 
 Los dibujos ya no son SVG a mano: son imágenes generadas. Un **disco de hierro

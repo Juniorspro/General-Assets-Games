@@ -226,15 +226,23 @@ class Langosta {
         /* El cuerpo entero: el balanceo lateral de la zancada y la inclinacion.
            Cazando se echa mucho mas para adelante — uno derecho camina, uno
            encorvado te viene a buscar. */
-        /* Y el cuerpo entero necesita ORDEN YXZ. Con el orden por defecto
-           (XYZ) la inclinación se aplica ANTES del giro de 90°, así que
-           inclinarse "adelante" lo inclinaba de costado en el mundo. Con YXZ
-           el giro va primero y recién después la inclinación, ya en el eje
-           que corresponde. */
+        /* EL TORSO VA EN EL MISMO EJE QUE LAS PIERNAS, por la misma razón.
+
+           Probé arreglarlo con `rotation.order = 'YXZ'` pensando que así el
+           giro de 90° se aplicaba primero. No: en three, orden YXZ significa
+           R = Ry·Rx·Rz, y la que se aplica ÚLTIMA al vector es Ry — o sea que
+           Rx sigue actuando en el espacio del modelo. El orden no cambiaba
+           nada y el bicho corría inclinado de costado.
+
+           Medido: la cabeza quedaba 0,51 m al costado y 0,011 m adelante, el
+           97,9 % de la inclinación era lateral.
+
+           Como el modelo mira a +X: inclinarse hacia adelante es girar sobre
+           Z (negativo lleva la cabeza hacia +X), y el balanceo lateral de la
+           zancada es el que va sobre X. */
         const g = this.giroModelo;
-        g.rotation.order = 'YXZ';
-        g.rotation.z = Math.sin(this.fase * Math.PI * 2) * 0.075 * amp;
-        g.rotation.x = k.ca * 0.8 - 0.05 - (caza ? 0.20 : 0);
+        g.rotation.x = Math.sin(this.fase * Math.PI * 2) * 0.075 * amp;
+        g.rotation.z = k.ca * 0.8 - 0.05 - (caza ? 0.20 : 0);
         // sube y baja dos veces por ciclo, una por zancada
         g.position.y = Math.abs(Math.sin(this.fase * Math.PI * 2)) * 0.09 * amp;
     }
