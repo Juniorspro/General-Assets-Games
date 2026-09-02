@@ -7,7 +7,7 @@ import {
     medirParedes, rescatar,
 } from './map.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
-import { R6 } from './r6.js';
+import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
 import { despertarAudio } from './sonido.js';
@@ -129,7 +129,7 @@ class Dungeon {
         this.running = false; this.crouch = false;
         this.visited = new Set();
 
-        this.cuerpo = new R6(this.scene, EYE);
+        this.cuerpo = new R15(this.scene, EYE);
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         this.cajasMuebles = [];
 

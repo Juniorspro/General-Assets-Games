@@ -201,40 +201,68 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
-## El cuerpo: un R6 de verdad
+## El cuerpo: R15, con rodillas
 
-**R6 son seis partes y nada más**: cabeza, torso, dos brazos y dos piernas. No
-tiene codos ni rodillas — es lo que lo hace R6 y no R15, y meterle una rodilla
-sería mentir.
+**El R6 estricto NO tiene rodillas ni codos** — son seis partes rígidas y eso
+es justo lo que lo define. Lo que se ve en el juego original, y lo que Roblox
+usa por defecto desde hace años, es **R15**: quince partes, con rodilla, codo,
+muñeca, cintura y cuello. Por eso las piernas se doblan al correr.
 
-Las medidas son las de Roblox, en **studs**:
+Las quince:
+
+```
+Cabeza · TorsoAlto · TorsoBajo
+BrazoAlto · BrazoBajo · Mano        (×2)
+PiernaAlta · PiernaBaja · Pie       (×2)
+```
+
+Medidas del rig por defecto, en **studs**. La documentación pública de Roblox
+da **rangos** y no un número fijo —las proporciones cambian con el tipo de
+cuerpo—, así que estas son las del rig en bloques del Rig Builder:
 
 | pieza | studs |
 |---|---|
-| torso | 2 × 2 × 1 |
-| brazo | 1 × 2 × 1 |
-| pierna | 1 × 2 × 1 |
-| cabeza | 2 × 1 × 1 con la malla escalada 1,25 → **2,5 × 1,25 × 1,25** |
+| TorsoAlto | 2 × 1,6 × 1 |
+| TorsoBajo | 2 × 0,4 × 1 |
+| BrazoAlto · BrazoBajo | 1 × 1,2 × 1 |
+| Mano · Pie | 1 × 0,4 × 1 |
+| PiernaAlta · PiernaBaja | 1 × 1,2 × 1 |
+| Cabeza | 2 × 1 × 1 con malla 1,25 |
 
-Alto total **5,25 studs**; el ojo va en el centro de la cabeza, a **4,625**.
+Alto = piernas 2,8 + torso 2,0 + cabeza 1,0 = **5,8 studs**, que es por qué un
+R15 es más alto que un R6 (5).
 
-Las articulaciones también son las de Roblox: **el hombro va en la esquina de
-arriba y afuera del torso**, no en el centro del costado, y por eso el brazo de
-un R6 cuelga pegado y gira desde el vértice. Ese detalle es medio R6.
+### La rodilla no va en fase con la cadera
 
-El cuerpo se escala para que la cabeza caiga justo en el ojo del juego:
-**0,216 m por stud**, o sea 1,14 m de alto. Las proporciones son exactas; el
-tamaño es el de este juego.
+Se generó una referencia de un R15 corriendo de perfil y se midió sobre ella.
+Lo que muestra:
 
-**La animación es la del juego**: brazo derecho con pierna izquierda, todo
-rígido, girando sólo en el hombro y la cadera. Medido sobre el archivo final,
-corriendo: brazo I −0,84 y brazo D +0,84, pierna I +0,74 y pierna D −0,74 — o
-sea contrafase perfecta, y el brazo y la pierna del mismo lado opuestos entre
-sí, como corresponde.
+- la pierna de **atrás** lleva la rodilla doblada **casi 90°**, recogiendo el pie
+- la de **adelante** va **casi estirada** para apoyar
 
-Va **18 cm detrás del ojo**: el techo del torso le queda 13 cm abajo a la
-cabeza, así que pegado ocupa un tercio de pantalla. Roblox directamente
-esconde el cuerpo en primera persona por esto mismo.
+O sea que la flexión **no es simétrica** con la cadera. La primera versión usaba
+un coseno y doblaba las dos rodillas por igual — se veía como un muñeco
+arrastrando las piernas. Ahora el máximo cae con la pierna atrás, con medio
+radián de adelanto para que ya venga recogiendo al pasar por abajo.
+
+Medido corriendo, sobre el archivo final:
+
+| | pierna adelante | pierna atrás |
+|---|---|---|
+| cadera | +0,86 (49°) | −0,86 |
+| **rodilla** | **−0,09 (5°)** | **−1,31 (75°)** |
+| codo | −1,37 (78°) | −1,09 |
+| cintura | −0,24 (14° adelante) | |
+
+### Cada parte con su color y su contorno
+
+En la referencia cada pieza tiene su color y una **línea negra alrededor**. Sin
+eso —y así estaba— el cuerpo entero era una mancha del mismo tono: al correr
+no se distinguía una pierna del torso y parecía que no se movía nada.
+
+Ahora: camisa gris, **jean azul**, piel en antebrazos y manos, **zapatillas
+rojas con suela clara**. Y contorno con el truco viejo de la tinta — una copia
+de cada pieza apenas más grande, dibujada por dentro.
 
 ### Los estados de animación
 
