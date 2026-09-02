@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { construirBicho } from './bicho.js';
+import { CLIPS } from './animdata.js';
 import * as S from './sonido.js';
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
@@ -119,49 +120,54 @@ class Langosta {
         this.ruta = []; this.destino = null; this.recalcular = 0;
     }
 
-    animar(dt, vel) {
-        this.paso += dt * (1.0 + vel * 0.95);
-        const amp = Math.min(1, vel / 2.6);
+    /* Muestrea un clip real de Roblox. Mismo lector que usa el jugador. */
+    muestra(nombre, fase) {
+        const c = CLIPS[nombre];
+        const n = c.n, f = ((fase % 1) + 1) % 1 * n;
+        const a = Math.floor(f) % n, b = (a + 1) % n, t = f - Math.floor(f);
+        const o = {};
+        for (const k in c.k) o[k] = c.k[k][a] + (c.k[k][b] - c.k[k][a]) * t;
+        return o;
+    }
 
-        /* Las articulaciones. La zancada la marcan las caderas; las rodillas
-           van medio ciclo mas tarde y SOLO se doblan hacia atras, que es lo que
-           hace una rodilla. Los brazos van cruzados con las piernas y los codos
-           casi no se mueven: cuelgan. */
+    animar(dt, vel) {
+        /* La zancada sale del clip REAL de Roblox, el mismo que usa el
+           jugador, no de un seno inventado. Pero el bicho no es una persona:
+           mide 3,2 m, camina en zancos y no tiene pies, asi que cada canal va
+           con su factor. La rodilla es la que mas se baja — una pata de zanco
+           no se pliega 144 grados como una pierna. */
+        const largoZancada = 3.6;               // metros por ciclo, a su escala
+        this.fase = (this.fase || 0) + dt * Math.max(vel, 0.35) / largoZancada;
+        const caza = this.estado === 'caza';
+        const k = this.muestra(caza ? 'correr' : 'caminar', this.fase);
+        const amp = Math.min(1, 0.45 + vel / 3.2);
+
         const A = this.art;
         if (A) {
-            const f = this.paso * 2;
-            for (const [l, s] of [['I', -1], ['D', 1]]) {
-                const fase = s > 0 ? Math.PI : 0;
-                const sw = Math.sin(f + fase);
-                if (A['muslo' + l]) A['muslo' + l].rotation.x = sw * 0.52 * amp;
-                if (A['pantorrilla' + l])
-                    A['pantorrilla' + l].rotation.x = -Math.max(0, -sw + 0.25) * 0.95 * amp;
-                const sb = Math.sin(f + (s > 0 ? 0 : Math.PI));
+            const CAD = 0.95, ROD = 0.42, HOM = 0.55, COD = 0.30;
+            for (const l of ['I', 'D']) {
+                if (A['muslo' + l]) A['muslo' + l].rotation.x = k['p' + l] * CAD * amp;
+                if (A['pantorrilla' + l]) A['pantorrilla' + l].rotation.x = k['r' + l] * ROD * amp;
                 if (A['brazo' + l]) {
-                    A['brazo' + l].rotation.x = sb * 0.30 * amp - 0.04;
-                    A['brazo' + l].rotation.z = s * 0.07;
+                    A['brazo' + l].rotation.x = k['h' + l] * HOM * amp - 0.05;
+                    A['brazo' + l].rotation.z = (l === 'I' ? -1 : 1) * 0.08;
                 }
-                if (A['antebrazo' + l])
-                    A['antebrazo' + l].rotation.x = -0.10 - Math.abs(sb) * 0.22 * amp;
+                if (A['antebrazo' + l]) A['antebrazo' + l].rotation.x = k['c' + l] * COD * amp;
             }
-            // la cabeza acompana con retraso: es lo que la hace parecer pesada
             if (A.cabeza) {
-                A.cabeza.rotation.z = Math.sin(f - 0.7) * 0.06 * amp;
-                A.cabeza.rotation.x = 0.05 + (this.estado === 'caza' ? 0.16 : 0);
+                A.cabeza.rotation.x = k.cz * 0.5 + (caza ? 0.16 : 0);
+                A.cabeza.rotation.z = Math.sin(this.fase * Math.PI * 2 - 0.7) * 0.05 * amp;
             }
         }
 
-        /* Anda en zancos: el balanceo lateral es lo que da la caminata. Cada
-           zancada lo tira para un lado y lo levanta un poco. */
+        /* El cuerpo entero: el balanceo lateral de la zancada y la inclinacion.
+           Cazando se echa mucho mas para adelante — uno derecho camina, uno
+           encorvado te viene a buscar. */
         const g = this.giroModelo;
-        g.rotation.z = Math.sin(this.paso * 2) * 0.085 * amp;
-        /* Cazando se echa MUCHO mas para adelante: un bicho derecho camina,
-           uno encorvado te viene a buscar. */
-        const caza = this.estado === 'caza' ? 1 : 0;
-        g.rotation.x = -0.05 - 0.09 * amp - 0.20 * caza;
-        g.position.y = Math.abs(Math.sin(this.paso * 2)) * 0.075 * amp;
-        // y se contonea de adelante hacia atras, medio paso mas tarde
-        g.position.z = Math.sin(this.paso * 2 + 1.1) * 0.05 * amp;
+        g.rotation.z = Math.sin(this.fase * Math.PI * 2) * 0.075 * amp;
+        g.rotation.x = k.ca * 0.8 - 0.05 - (caza ? 0.20 : 0);
+        // sube y baja dos veces por ciclo, una por zancada
+        g.position.y = Math.abs(Math.sin(this.fase * Math.PI * 2)) * 0.09 * amp;
     }
 }
 

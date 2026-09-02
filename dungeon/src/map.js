@@ -223,12 +223,32 @@ export function surfaceAt(x, z, yHint) {
         const d = Math.abs(y - yHint);
         if (d < bestD) { bestD = d; best = y }
     }
-    // sobre la rampa no hay piso plano que valga
-    if (!isStairCell(c, r)) {
+    /* PISOS PLANOS. Antes, si la celda era de escalera se descartaban TODOS,
+       y ahi estaba el agujero: una escalera marca sus celdas para los tres
+       niveles, asi que caminando por el piso de arriba justo encima del hueco
+       de una escalera te quedabas sin piso y caias a la rampa. Pasó de verdad.
+
+       La regla correcta no es "hay escalera o no", es DONDE esta la rampa:
+       la rampa manda solo si esta a la altura de tus pies o mas arriba —que es
+       cuando la estas subiendo o bajando—, y si esta muy por debajo se ignora
+       y vale el piso plano. Medio metro de tolerancia alcanza: bajando una
+       escalera el escalon es mas chico que eso. */
+    const rampaSirve = best !== null && best >= yHint - 0.5;
+    if (!rampaSirve) {
+        best = null; bestD = 1e9;
         for (let lv = 0; lv < LEVELS.length; lv++) {
             if (!isOpen(lv, c, r) && !isHole(lv, c, r)) continue;
             const d = Math.abs(LEVELS[lv].base - yHint);
             if (d < bestD) { bestD = d; best = LEVELS[lv].base }
+        }
+        /* Si no hay ningun piso plano —estas de verdad sobre el hueco— vuelve
+           la rampa, que es mejor que quedarse sin superficie. */
+        if (best === null) {
+            for (const { s: e, box } of STAIR_BOXES) {
+                if (!inBox(box, x, z)) continue;
+                const t = Math.min(1, Math.max(0, stairT(e, box, x, z)));
+                best = LEVELS[e.a].base + (LEVELS[e.b].base - LEVELS[e.a].base) * t;
+            }
         }
     }
     return best;

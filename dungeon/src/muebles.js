@@ -18,13 +18,13 @@ import { CELL, W, H, Rng, toWorld, isOpen, isStairCell, isHole } from './map.js'
 /* alto en metros · si va contra la pared · si se puede revisar por la llave */
 export const CATALOGO = {
     armario:    { alto: 2.00, pared: true,  revisable: true },
-    comoda:     { alto: 1.15, pared: true,  revisable: true },
+    comoda:     { alto: 1.10, pared: true,  revisable: true },
     estanteria: { alto: 2.10, pared: true,  revisable: true },
     reloj:      { alto: 2.30, pared: true,  revisable: false },
-    mesa:       { alto: 0.85, pared: false, revisable: false },
+    sofa:       { alto: 0.95, pared: true,  revisable: false },
+    mesa:       { alto: 0.80, pared: false, revisable: false },
     silla:      { alto: 1.05, pared: false, revisable: false },
     sillon:     { alto: 1.15, pared: false, revisable: false },
-    sofa:       { alto: 1.00, pared: false, revisable: false },
 };
 
 /* Un mueble mira a +X, asi que para mirar hacia (dx,dz) hay que girar asi. */
@@ -57,70 +57,124 @@ export function cargarMuebles(assets) {
     return Promise.all(tareas).then(() => listos);
 }
 
-/* Coloca los muebles de un nivel. Devuelve las cajas para chocar y la lista
-   de los que se pueden revisar, que es donde aparece la llave. */
+/* Coloca los muebles de un nivel, EN ORDEN.
+   ---------------------------------------------------------------------------
+   Antes iba todo al azar: celda al azar, giro al azar y un desplazamiento al
+   azar encima. Una mesa a 37 grados en el medio de un cuarto no se lee como
+   una casa, se lee como un volquete. Ahora:
+
+   - los giros van pegados a la grilla, de a 90 grados, nunca en diagonal;
+   - lo que va contra la pared se recorre EN ORDEN por el mapa, uno cada tantas
+     celdas, y queda al ras y mirando al cuarto;
+   - en las salas se arman JUEGOS: una mesa con sus sillas alrededor mirandola,
+     o un sofa contra la pared con su sillon al lado.
+
+   Devuelve las cajas para chocar y los muebles que se pueden revisar. */
 export function poblar(modelos, lv, base, grupo, semilla, evitar) {
     const rng = new Rng(semilla);
-    const contraPared = Object.keys(CATALOGO).filter(n => CATALOGO[n].pared && modelos[n]);
-    const sueltos = Object.keys(CATALOGO).filter(n => !CATALOGO[n].pared && modelos[n]);
     const cajas = [], revisables = [];
-    /* Las celdas donde no puede ir nada: la de aparicion y sus vecinas.
-       Sin esto se aparece adentro de un ropero, que fue lo que paso. */
     const ocupadas = new Set(evitar || []);
-    if (!contraPared.length && !sueltos.length) return { cajas, revisables };
+    const hay = n => !!modelos[n];
 
-    const poner = (nombre, c, r, giro, dentro) => {
+    const poner = (nombre, c, r, giro, dx = 0, dz = 0) => {
         const m = modelos[nombre];
+        if (!m) return false;
         const o = m.plantilla.clone(true);
         const [x, z] = toWorld(c, r);
-        o.position.set(x + dentro[0], base, z + dentro[1]);
+        o.position.set(x + dx, base, z + dz);
         o.rotation.y = giro;
         grupo.add(o);
         ocupadas.add(c + ',' + r);
-        /* La caja para chocar se calcula del tamano YA girado, no del bbox del
-           mundo: el bbox de un objeto girado 45° es mas grande que el objeto. */
         const cs = Math.abs(Math.cos(giro)), sn = Math.abs(Math.sin(giro));
         const ax = m.tam.x * cs + m.tam.z * sn, az = m.tam.x * sn + m.tam.z * cs;
         const caja = {
             x: o.position.x, z: o.position.z,
-            hx: ax / 2 * 0.86, hz: az / 2 * 0.86,  // un pelo mas chico: rozar no es chocar
+            hx: ax / 2 * 0.86, hz: az / 2 * 0.86,
             base, alto: CATALOGO[nombre].alto,
         };
         cajas.push(caja);
         if (CATALOGO[nombre].revisable) revisables.push({ ...caja, nombre, obj: o, lv });
-        return o;
+        return true;
     };
 
-    // contra la pared, mirando hacia el lado abierto
-    let n = 0;
-    for (let i = 0; i < 9000 && n < 30 && contraPared.length; i++) {
-        const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
-        if (!isOpen(lv, c, r) || isStairCell(c, r) || ocupadas.has(c + ',' + r)) continue;
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-            .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
-        if (!dirs.length) continue;
-        const [dc, dr] = dirs[rng.int(0, dirs.length - 1)];
-        const nombre = contraPared[rng.int(0, contraPared.length - 1)];
-        const prof = modelos[nombre].tam.z;
-        // pegado a la pared y mirando al centro del cuarto: -dc, -dr
-        poner(nombre, c, r, miraHacia(-dc, -dr),
-            [dc * (CELL / 2 - prof / 2 - 0.05), dr * (CELL / 2 - prof / 2 - 0.05)]);
-        n++;
+    const libre = (c, r) => isOpen(lv, c, r) && !isStairCell(c, r) && !ocupadas.has(c + ',' + r);
+    const ancho = (c, r) => {
+        for (let dr = -1; dr <= 1; dr++)
+            for (let dc = -1; dc <= 1; dc++)
+                if (!isOpen(lv, c + dc, r + dr)) return false;
+        return true;
+    };
+
+    /* --- 1. LAS SALAS: juegos de muebles, no piezas sueltas ------------- */
+    const contraPared = ['armario', 'comoda', 'estanteria', 'reloj'].filter(hay);
+    const salas = [];
+    for (let r = 3; r < H - 3; r++) {
+        for (let c = 3; c < W - 3; c++) {
+            if (!ancho(c, r) || ocupadas.has(c + ',' + r)) continue;
+            // una sala cada cinco celdas: sin esto se pisan entre si
+            if (salas.some(([sc, sr]) => Math.abs(sc - c) < 5 && Math.abs(sr - r) < 5)) continue;
+            salas.push([c, r]);
+        }
+    }
+    for (const [c, r] of salas) {
+        if (rng.next() < 0.55 && hay('mesa')) {
+            /* Mesa al centro y las sillas alrededor MIRANDOLA. El giro de cada
+               silla sale de la direccion hacia la mesa, asi que siempre da un
+               multiplo de 90 y quedan encaradas de verdad. */
+            poner('mesa', c, r, 0);
+            const lados = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            let n = 0;
+            for (const [dc, dr] of lados) {
+                if (n >= 3 || rng.next() < 0.35) continue;
+                if (!libre(c + dc, r + dr)) continue;
+                poner('silla', c + dc, r + dr, miraHacia(-dc, -dr), -dc * 0.25, -dr * 0.25);
+                n++;
+            }
+        } else if (hay('sillon')) {
+            // dos sillones encarados, como un rincon de sentarse
+            poner('sillon', c, r, miraHacia(0, 1), 0, -0.35);
+            if (libre(c, r + 1)) poner('sillon', c, r + 1, miraHacia(0, -1), 0, 0.35);
+        }
+        ocupadas.add(c + ',' + r);
     }
 
-    // sueltos: solo donde hay 3x3 abierto, o sea en las salas
-    let s = 0;
-    for (let i = 0; i < 9000 && s < 22 && sueltos.length; i++) {
-        const c = rng.int(2, W - 3), r = rng.int(2, H - 3);
-        if (ocupadas.has(c + ',' + r) || isStairCell(c, r)) continue;
-        let libre = true;
-        for (let dr = -1; dr <= 1 && libre; dr++)
-            for (let dc = -1; dc <= 1; dc++)
-                if (!isOpen(lv, c + dc, r + dr)) { libre = false; break }
-        if (!libre) continue;
-        const nombre = sueltos[rng.int(0, sueltos.length - 1)];
-        poner(nombre, c, r, rng.range(0, Math.PI * 2), [rng.range(-.25, .25), rng.range(-.25, .25)]);
-        s++;
+    /* --- 2. CONTRA LA PARED: recorrido en orden, al ras ----------------- */
+    let paso = 0, puestos = 0;
+    for (let r = 1; r < H - 1 && puestos < 34; r++) {
+        for (let c = 1; c < W - 1 && puestos < 34; c++) {
+            if (!libre(c, r)) continue;
+            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+            if (!dirs.length) continue;
+            // uno cada cuatro sitios validos: apretados quedan como un deposito
+            if (paso++ % 4) continue;
+            const [dc, dr] = dirs[rng.int(0, dirs.length - 1)];
+            const nombre = contraPared[puestos % contraPared.length];
+            const prof = modelos[nombre].tam.z;
+            if (poner(nombre, c, r, miraHacia(-dc, -dr),
+                      dc * (CELL / 2 - prof / 2 - 0.04), dr * (CELL / 2 - prof / 2 - 0.04))) {
+                puestos++;
+                // dejar respirar: nada pegado al de al lado
+                ocupadas.add((c + 1) + ',' + r);
+                ocupadas.add(c + ',' + (r + 1));
+            }
+        }
+    }
+
+    /* --- 3. Los sofas, contra la pared y mirando al cuarto -------------- */
+    if (hay('sofa')) {
+        let n = 0;
+        for (let r = 2; r < H - 2 && n < 6; r += 3) {
+            for (let c = 2; c < W - 2 && n < 6; c += 3) {
+                if (!libre(c, r) || !ancho(c, r)) continue;
+                const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                    .filter(([dc, dr]) => !isOpen(lv, c + dc * 2, r + dr * 2));
+                if (!dirs.length) continue;
+                const [dc, dr] = dirs[0];
+                poner('sofa', c, r, miraHacia(-dc, -dr), dc * 0.5, dr * 0.5);
+                n++;
+            }
+        }
     }
     return { cajas, revisables };
 }

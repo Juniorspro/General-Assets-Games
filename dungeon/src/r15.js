@@ -196,12 +196,25 @@ export class R15 {
         };
 
         if (est.deslizando) {
+            /* Roblox no trae deslizamiento. Las piernas salen de la pose de
+               SENTADO, que es el unico dato real de Roblox con la pierna al
+               frente y la rodilla doblada (cadera +1,61 · rodilla -1,23), y de
+               ahi se estira: al arrancar la pierna va casi extendida y se va
+               recogiendo hacia la de sentado a medida que frena. El torso se
+               echa para atras, que es lo que hace la diferencia entre estar
+               sentado y estar tirado. */
             const k = est.k || 0;
+            const S = this.clip('sentado', 0);
+            const est2 = 1 - k;                        // 0 al arrancar, 1 al frenar
+            const cad = S.pI * (0.72 + 0.28 * est2);
+            const rod = S.rI * (0.35 + 0.65 * est2);
             return { ...cero,
-                pI: 1.30 * (0.4 + 0.6 * k), pD: 1.30 * (0.4 + 0.6 * k),
-                rI: -0.55, rD: -0.55, tI: -0.35, tD: -0.35,
-                hI: -1.00 - 0.30 * k, hD: -1.00 - 0.30 * k, cI: 1.10, cD: 1.10,
-                abZ: 0.34, piZ: 0.12, ca: -0.60 * k, cz: 0.35 };
+                pI: cad, pD: cad * 0.92,
+                rI: rod, rD: rod * 0.8,
+                tI: S.tI, tD: S.tI,
+                hI: -1.05 - 0.30 * k, hD: -1.05 - 0.30 * k,
+                cI: 1.05, cD: 1.05,
+                abZ: 0.34, piZ: 0.12, ca: -0.62 * k, cz: 0.35 };
         }
         if (est.agachado) {
             const sw = Math.sin(this.fase * Math.PI * 2) * 0.22 * Math.min(1, v / 2);

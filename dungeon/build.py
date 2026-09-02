@@ -20,7 +20,9 @@ ASSETS = {
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
 # Van como data URL igual que las texturas: el juego es UN archivo.
 MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa"]
-MUE_DIR = os.path.join(HERE, "muebles")
+# Los muebles de alta: 8-18 mil triangulos cada uno y textura de 1024, contra
+# los 1-2 mil y 512 de la primera tanda. Se generaron de a uno, con su prompt.
+MUE_DIR = os.path.join(HERE, "muebles", "hd")
 
 
 def durl(name, mime):
