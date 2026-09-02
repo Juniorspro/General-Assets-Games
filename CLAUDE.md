@@ -9119,6 +9119,25 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - [ ] **Bots con slide-cancel** (pedido viejo).
 - [ ] **Menú de skins / personalización de ropa** (pedido viejo).
 
+## Modo de trabajo: GOTY (máxima calidad, mínimo desperdicio)
+
+Pedido el 2026-09-02 y vigente para todas las sesiones. El detalle está en
+`.claude/MODO-GOTY.md`; lo esencial:
+
+- El ahorro sale de eliminar **desperdicio** —lecturas repetidas, búsquedas
+  duplicadas, herramientas sin propósito, explicaciones de más, refactors no
+  relacionados, overengineering— **nunca de eliminar trabajo necesario**.
+- **No se sacrifica por tokens**: investigación, comprensión, testing, robustez,
+  validaciones, manejo de errores, seguridad ni compatibilidad. Si hacen falta
+  diez archivos se tocan diez; si hacen falta veinte pruebas se corren veinte.
+- La profundidad se adapta a la dificultad, no a un presupuesto fijo.
+- Los bugs se arreglan **en la causa raíz**, no tapando el síntoma.
+- Optimizar sólo después de medir el cuello de botella.
+- La implementación puede ser compleja; **la respuesta final es compacta** —qué
+  se hizo, qué se validó, qué queda— y sin cadena de pensamiento.
+- No preguntar lo que se puede averiguar; preguntar sólo si la ambigüedad
+  cambiaría la implementación por completo.
+
 ## Reglas fijas de este usuario
 
 - **Nunca** usar cuadros de `AskUserQuestion`: *"elimina este tipo de cuadros porque se
