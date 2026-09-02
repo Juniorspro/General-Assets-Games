@@ -28,7 +28,7 @@ function fuenteImg(r, movil = false) {
   const rel = `${dir}/${r.id}.webp`;
   const abs = path.join(RAIZ, rel);
   if (!fs.existsSync(abs)) return null;
-  return EMBEBIDO && !movil ? `data:image/webp;base64,${b64(abs)}` : rel;
+  return EMBEBIDO ? `data:image/webp;base64,${b64(abs)}` : rel;
 }
 
 const porFamilia = {};
