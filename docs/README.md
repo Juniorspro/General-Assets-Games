@@ -5,6 +5,10 @@ Página estática, un solo archivo, sin dependencias ni build.
 - **En vivo:** https://juniorspro.github.io/General-Assets-Games/
 - **Fuente:** [`docs/index.html`](index.html)
 
+También vive aquí la [**Biblioteca de Estilos**](biblioteca/) — 122 sitios de
+referencia capturados en vivo con Playwright, con su paleta y tipografías
+extraídas del CSS de cada página.
+
 ## Qué hace
 
 Convierte una frase en lenguaje natural ("PS5 Slim usada con dos controles, máximo 7000")
