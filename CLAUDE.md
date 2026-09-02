@@ -124,6 +124,147 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima sexta vuelta (2026-09-02): **LA CASA** — el trueno llega tarde, y el relámpago trae su propia dirección
+
+Pedido: *"mejora los sonidos que caigan truenos y que la luz del trueno afecte a la iluminación"*.
+
+#### ERAN DOS EFECTOS PEGADOS, NO UN FENÓMENO
+
+`thunder()` disparaba el ruido y **en la misma línea** llamaba a `lightning()`. Destello y trueno en el
+mismo instante. La luz viaja al toque y el sonido a 343 m/s, así que un rayo a un kilómetro se ve tres
+segundos antes de oírse — y **ese retardo es lo único que convierte un fogonazo y un ruido en una
+tormenta**. La lección ya estaba escrita en este repo desde BARRIO (*"el trueno llega después, con el
+retardo proporcional a la distancia"*) y este juego no la aplicaba.
+
+Ahora cada rayo se sortea con una **distancia** y un **azimut**, y de la distancia salen las cuatro
+cosas que la distancia decide de verdad: cuánto tarda el trueno (`d/343`), si hay chasquido o sólo
+retumbo, cuánto suena y cuánto ilumina. Medido con el analizador, con el rayo cayendo en el segundo
+1,40:
+
+| | pico en la banda baja | contra el fondo | retardo medido | esperado |
+|---|---|---|---|---|
+| 300 m | 0,007968 | **×15,8** | **0,91 s** | 0,87 s |
+| 2600 m | 0,002098 | ×3,1 | **8,12 s** | 7,58 s |
+
+O sea: un rayo cerca es un latigazo que llega casi encima del destello, y uno lejos es un rumor que
+llega ocho segundos después. Y en la traza del de 300 m se ve **el retumbo rodando**: el golpe en 2,38 s
+y después dos crestas más en 3,22 y 4,48.
+
+#### EL TRUENO ERA UN SOLO SOPLIDO, Y SU ATAQUE DURABA UN TERCIO DE SEGUNDO
+
+Un `nsrc` pasado por un pasabajos que barría de 190 a 46 Hz, con `env(g, 0.35, …)`: **el ataque de un
+chasquido son cinco milisegundos**, no trescientos cincuenta. Eso no es un trueno, es un *whoosh*. Y era
+el mismo sonido siempre, sin sitio y sin distancia.
+
+Ahora son **dos cosas, y la distancia decide cuál se oye**:
+- **EL CHASQUIDO** es el tramo del canal que uno tiene más cerca: banda ancha, ataque de 4 ms, un
+  bandpass que cae de 2100 a 520 Hz en 220 ms. Se lo come el aire, que absorbe los agudos con la
+  distancia — **por eso un trueno lejano es sólo retumbo, y eso no es una elección de mezcla sino la
+  razón física de que suene así**. Con `filo=(1-d/1400)^1,6`, a 1,4 km ya no queda nada.
+- **EL RETUMBO** es el resto del canal llegando a destiempo más los rebotes: de tres a seis ráfagas
+  repartidas en hasta cuatro segundos, cada una más abajo y más floja. **Con una sola ráfaga no rueda,
+  sopla.**
+- Más un **sub que se siente** (58 → 26 Hz) sólo en los rayos cercanos: un chasquido cerca no se oye,
+  golpea. Es el mismo recurso que ya usaba el sacudón del final.
+- Y **paneo estéreo desde el azimut**, relativo a hacia dónde mira el jugador.
+
+#### DOS NÚMEROS QUE LA MEDICIÓN CORRIGIÓ, Y LOS DOS DEJABAN EL RAYO LEJANO MUDO
+
+1. **El corte del pasabajos era demasiado bajo.** Con `55+245·(1-d/4200)`, a 2,6 km quedaba en **148 Hz**:
+   eso deja pasar el 0,7 % de la banda y el retumbo se hundía bajo la lluvia — medido en la banda baja,
+   **×1,9 sobre el fondo, o sea nada**. El aire se come lo de arriba de un kilohercio; de 200 a 500 Hz
+   sobrevive casi todo, y ése es el cuerpo del retumbo. Pasó a `120+480·(1-d/5000)`, o sea 350 Hz a
+   2,6 km.
+2. **Y la caída de nivel era demasiado dura.** `1/(1+d/700)` deja un rayo a 2,6 km por debajo del manto
+   de lluvia: se ve el destello y **no llega nada**, que es peor que el defecto que la vuelta arregla. Un
+   trueno lejano se oye de sobra; lo que pierde con la distancia son los agudos, no el cuerpo. Quedó en
+   `1/(1+d/2200)`.
+
+**Y LA MEDICIÓN NO SE PODÍA HACER EN rms TOTAL.** Con el manto de lluvia en 0,021 de rms, un trueno
+lejano da 0,025: indistinguible. El trueno vive por debajo de 250 Hz y el manto tiene un pasaaltos en
+360, así que **en la banda baja se separan solos** — entró un analizador colgado del maestro que devuelve
+rms, pico y la energía por debajo de 250 Hz. Sin él, "el trueno suena" y "el trueno llega tarde" son dos
+afirmaciones que no se pueden comprobar.
+
+#### EL DESTELLO SUBÍA LA LUNA, Y AHÍ ESTÁ TODO EL DEFECTO DE LA LUZ
+
+`lightBoost` alimentaba `hemi`, `moon` y el relleno. Pero **un rayo cae donde cae, no donde está la
+luna**: con la luna subida, las caras que se encienden son **las mismas de siempre** y lo único que
+cambia es cuánto. Eso no se lee a relámpago, se lee a que alguien subió el dimmer.
+
+Ahora hay una **direccional propia plantada en el azimut del rayo**, y el azimut se sortea en cada uno.
+Medido con el mismo destello (0,85) desde dos direcciones opuestas, sobre el mismo instante dibujado dos
+veces:
+
+| azimut | brillo medio | sube | mitad izquierda | mitad derecha |
+|---|---|---|---|---|
+| 1,047 | 21,6 → **78,1** | **+262 %** | +272 % | +253 % |
+| 4,190 (opuesto) | 21,6 → **53,0** | **+145 %** | +185 % | +113 % |
+
+**El mismo destello da +262 % desde un lado y +145 % desde el otro** —un factor 1,8— y desde el segundo
+azimut el reparto izquierda/derecha se abre a 185 contra 113. Eso es lo que la luna subida no podía
+hacer. No tira sombra, igual que la luna: este juego ya rehace el mapa de sombra del spot en cada cuadro
+y un segundo mapa por 120 ms no se paga.
+
+Y el hemisférico sube **más** que la luna ahora (0,9 contra 0,35 por unidad de destello): en un relámpago
+lo que se enciende es el cielo entero, y eso es ambiente y no una direccional.
+
+#### LOS HACES DEL TECHO SON LO QUE MÁS LO CUENTA
+
+Son las tres columnas por las que el cuarto ve el cielo, así que un fogonazo afuera tiene que hacerlas
+estallar. La ganancia se **multiplica** sobre la de fábrica. Barrido a destello 0,85 —un rayo a 150 m, el
+peor caso— con la linterna apagada:
+
+| multiplicador | qué se ve |
+|---|---|
+| 8,5 | un borrón blanco sólido: se pierden las tablas de adentro y la columna deja de tener forma |
+| 5,0 | sigue muy quemado, las tablas recién se adivinan |
+| **3,0** | **blanco casi puro pero con las tablas en silueta, el papel de la pared y el cuadro legibles, y la columna con canto** |
+| 1,6 | se lee todo y el haz no estalla: es un cuarto claro, no un fogonazo |
+
+Queda en 3,0: **un relámpago tiene que quemar el haz sin borrarlo.** Y los parches de cielo de los tres
+boquetes se blanquean con la misma curva.
+
+#### EL DESTELLO ES UNA FUNCIÓN DEL TIEMPO, EVALUADA EN EL BUCLE
+
+La versión anterior eran **cinco `setTimeout` anidados con otro `setTimeout` de 70 ms adentro de cada
+uno**. Eso corre fuera del reloj del cuadro, así que en un teléfono lento el destello puede caer
+**entero** entre dos cuadros y no verse, y en uno rápido es un escalón cuadrado que se prende y se apaga.
+Un relámpago real sube en menos de un milisegundo y decae exponencialmente en decenas: eso es una **suma
+de exponenciales**, y una suma de exponenciales se puede evaluar en cualquier instante. Medido, la forma:
+pico a los 12 ms, cola de 500-650 ms, y el pico escala con la distancia (150 m → 0,691 · 300 m → 0,538 ·
+2600 m → 0,305 · 3800 m → 0,220).
+
+**Y DE UNO A CINCO GOLPES DE RETORNO.** Con `rnd·rnd·5` el 64 % de los rayos salía de un solo golpe, y un
+golpe solo no titila: se enciende y se apaga. Con `rnd^1,7` el 38 % queda simple y el 62 % parpadea, que
+es la proporción que tiene un relámpago de verdad.
+
+#### LA TORMENTA SE MUEVE, Y EXISTE AUNQUE NO HAYA AUDIO
+
+La cadencia estaba **adentro de `initAudio()`**, o sea que sin permiso de sonido no caía un solo rayo.
+Ahora el reloj vive en `tormentaPaso(dt)` y el audio es un consumidor (`A.trueno(d,az,yaw)` si está).
+El **núcleo de la tormenta deriva** —una que tira rayos siempre a la misma distancia es un metrónomo, no
+un clima— y de su distancia sale la cadencia: 7-23 s con la tormenta encima, 20-58 s cuando se fue.
+Medido en 23,5 s de reloj de juego: un rayo a 1152 m desde un núcleo de 1391, con el núcleo derivando de
+1476 a 1116 m.
+
+**Y LOS TRES RAYOS DEL FINAL YA NO SE SORTEAN.** Son el revelado de la figura, y con una distancia al azar
+podía salir uno lejano —que casi no ilumina y cuyo trueno llega diez segundos después— justo en el golpe
+de la escena. Van a 380, 270 y 150 m, cada vez más cerca, y con el azimut en `yaw+π`: la luz viene **de
+adelante del jugador**, o sea que la figura queda a contraluz, que es el único encuadre en el que se lee.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Trueno: **×15,8 sobre el fondo a 300 m con 0,91 s de retardo** y ×3,1 a 2600 m con 8,12 s. Relámpago:
++262 % de brillo desde un azimut contra +145 % desde el opuesto, luz de rayo 4,42, haz ×3,5 (0,048 →
+0,1704), parches de cielo blanqueados. En reposo la tormenta deja **exactamente** los valores de antes
+—haz 0,048 · hemi 0,5 · luna 0,30— o sea que no hay residuo. **Nada regresó:** 0 cajas de colisión en el
+canal de la escalera, linterna con desvío **0°**, haz en **[0,0]**, alabeo **0**, corrida 0 cm, y con la
+vista girando 30 muestras el peor desvío sigue en 0; el foco cae en [0,492 · 0,557]. 157-252 llamadas de
+dibujo, 35,6-37,0 k triángulos, **22 programas** (los mismos: la direccional nueva no agrega uno), 63
+texturas. `window.__errs` vacío en las siete corridas. El HTML pasó de 480 a **496 KB**, y no entró un
+solo asset: el trueno son tres capas de ruido filtrado y el relámpago es una suma de exponenciales.
+
 ### Octogésima quinta vuelta (2026-09-02): **LA CASA** — la caldera tapaba la escalera, y un haz no es una cáscara
 
 Pedido: *"que en la entrada del sótano no haya nada tapando la entrada y que la luz que entra por el

@@ -896,7 +896,7 @@ function inclina(h){
 const SH_ESC=[1.00,0.87,0.745,0.62,0.495,0.37,0.245];   // escala de cada cáscara
 const SH_ENS=1.16;                                       // el haz se abre al bajar
 const _shV=[], _shS=[];
-let _hazMalla=null; const _hazInc=[]; let _luzForz=null;
+let _hazMalla=null; const _hazInc=[]; let _luzForz=null; const _cielos=[];
 let _dibEsc=0, _triEsc=0;
 const dripSystems=[];
 HOLES.forEach((h,hi)=>{
@@ -947,6 +947,7 @@ HOLES.forEach((h,hi)=>{
     new THREE.MeshBasicMaterial({color:0x3a4a68,fog:false}));
   sky.rotation.x=Math.PI/2;
   sky.position.set(cx-DER_X*1.5,WH+1.5,cz-DER_Z*1.5); scene.add(sky);
+  _cielos.push(sky);   // un relámpago enciende el cielo, no sólo el cuarto
 
   /* haz de luna: siete cáscaras anidadas, inclinadas como la luna */
   {
@@ -1500,6 +1501,20 @@ const hemi=new THREE.HemisphereLight(0x243a58,0x080b0e,0.50); scene.add(hemi);
 const moon=new THREE.DirectionalLight(0x7d9ad0,0.30);
 moon.position.set(LUNA.x,LUNA.y,LUNA.z); scene.add(moon);
 
+/* ══════════ EL RELÁMPAGO TRAE SU PROPIA DIRECCIÓN ══════════
+   Antes el destello subía la intensidad de la LUNA, y ahí está el defecto que
+   se ve sin medir nada: un rayo cae donde cae, no donde está la luna, asi que
+   con la luna subida las caras que se encienden son las MISMAS de siempre y lo
+   unico que cambia es cuanto. Eso no se lee a relampago, se lee a que alguien
+   subio el dimmer.
+   Con una direccional propia, plantada en el azimut del rayo, las paredes que
+   dan a la tormenta se encienden y las que le dan la espalda no. Ese reparto es
+   todo el efecto, y cambia en cada rayo porque el azimut se sortea.
+   NO TIRA SOMBRA, igual que la luna: este juego ya rehace el mapa de sombra del
+   spot en cada cuadro y un segundo mapa por 120 ms no se paga. */
+const rayoLuz=new THREE.DirectionalLight(0xd8e2ff,0);
+rayoLuz.position.set(0,40,60); scene.add(rayoLuz);
+
 /* el spot se mueve todos los frames, así que el shadow map se re-renderiza siempre:
    512 con radio alto cuesta la mitad y en esta paleta no se nota */
 const torch=new THREE.SpotLight(0xe6ecf4,3.9,26,0.42,0.58,1.3);
@@ -1967,12 +1982,18 @@ function runFinale(){
     vhs.g=1; vhs.hold=0.45; vhs.roll=rnd(-1.4,1.4);
     shakeKick(0.45); if(A) A.hit();
   });
-  beat(2,4.6,()=>{ placeFigure(6.0); figure.visible=true; lightning(); });
-  beat(3,6.8,()=>{ placeFigure(3.2); lightning(); shakeKick(0.6); if(A) A.hit(); });
+  /* LOS TRES RAYOS DEL FINAL NO SE SORTEAN: son el revelado de la figura, y con
+     una distancia al azar podia salir uno lejano —que casi no ilumina y cuyo
+     trueno llega diez segundos despues— justo en el golpe de la escena. Van
+     cerca y cada vez mas cerca (1,1 s de trueno, 0,8 y 0,4), y el azimut es
+     `yaw+PI`, o sea que la luz viene DE ADELANTE del jugador: eso pone a la
+     figura a contraluz, que es el unico encuadre en el que se lee. */
+  beat(2,4.6,()=>{ placeFigure(6.0); figure.visible=true; lightning(380,P.yaw+Math.PI); });
+  beat(3,6.8,()=>{ placeFigure(3.2); lightning(270,P.yaw+Math.PI); shakeKick(0.6); if(A) A.hit(); });
   beat(4,8.6,()=>{
     placeFigure(1.15);
     vhs.g=1; vhs.hold=0.9; vhs.roll=rnd(-2.2,2.2);
-    lightning();
+    lightning(150,P.yaw+Math.PI);
   });
   beat(5,9.8,()=>{ fadeEl.style.opacity=1; });
   beat(6,11.8,()=>{
@@ -2402,6 +2423,30 @@ function initAudio(){
   comp.attack.value=0.006; comp.release.value=0.3;
   const master=ctx.createGain(); master.gain.value=0.85;
   comp.connect(master); master.connect(ctx.destination);
+  /* ANALIZADOR COLGADO DEL MAESTRO. Sin esto, "el trueno suena" y "el trueno
+     llega tarde" son dos afirmaciones que no se pueden comprobar: lo unico que
+     se sabria es que la llamada no tiro excepcion. Con el analizador el retardo
+     se MIDE, que es justo el defecto que esta vuelta arregla. */
+  const ana=ctx.createAnalyser(); ana.fftSize=2048; ana.smoothingTimeConstant=0;
+  const anaBuf=new Float32Array(ana.fftSize);
+  const anaFrq=new Float32Array(ana.frequencyBinCount);
+  master.connect(ana);
+  /* Y SE MIDE TAMBIEN LA BANDA BAJA. Un trueno vive por debajo de 200 Hz y el
+     manto de lluvia tiene un pasaaltos en 360, asi que en la banda baja se
+     separan solos. En rms total un trueno lejano es INDISTINGUIBLE de la lluvia
+     —medido: 0,025 contra 0,023 de fondo— y entonces la medicion no puede decir
+     si llego ni cuando. */
+  const binHz=ctx.sampleRate/ana.fftSize;
+  const binTope=Math.max(2,Math.round(250/binHz));   // el manto de lluvia tiene un pasaaltos en 360
+  function nivel(){
+    ana.getFloatTimeDomainData(anaBuf);
+    let sum=0,pk=0;
+    for(let i=0;i<anaBuf.length;i++){ const v=anaBuf[i]; sum+=v*v; const a=Math.abs(v); if(a>pk)pk=a; }
+    ana.getFloatFrequencyData(anaFrq);
+    let lo=0;
+    for(let i=1;i<=binTope;i++) lo+=Math.pow(10,anaFrq[i]/20);
+    return {rms:Math.sqrt(sum/anaBuf.length), pico:pk, bajos:lo/binTope};
+  }
   const amb=ctx.createGain(); amb.gain.value=1; amb.connect(comp);   // baja en los silencios
 
   /* ─── reverb con respuesta al impulso generada ─── */
@@ -2696,22 +2741,103 @@ function initAudio(){
     later(gust,(d+R(6,17))*1000);
   }
 
-  /* ─── truenos ─── */
-  function thunder(){
-    if(idle()){ later(thunder,6000); return; }
-    const s=nsrc(false), g=ctx.createGain(), f=ctx.createBiquadFilter();
-    f.type='lowpass';
-    f.frequency.setValueAtTime(R(95,190),t());
-    f.frequency.linearRampToValueAtTime(46,t()+3);
-    const d=R(2.6,4.4);
-    env(g,0.35,R(0.20,0.36),d);
-    s.connect(f); f.connect(g);
-    const duck=ctx.createGain(); duck.gain.value=0.75;
-    g.connect(duck); duck.connect(comp);
-    const sd=ctx.createGain(); sd.gain.value=0.5; g.connect(sd); sd.connect(revBus);
-    s.start(); s.stop(t()+d+0.4);
-    if(typeof lightning==='function') lightning();
-    later(thunder, R(20000,52000));
+  /* ═══════════ TRUENOS ═══════════
+     LO QUE HABIA ERA UN SOLO SOPLIDO. Un `nsrc` pasado por un pasabajos que
+     barria de 190 a 46 Hz, con ATAQUE DE 0,20 A 0,36 s: eso no es un trueno, es
+     un whoosh — el ataque de un chasquido son cinco milisegundos. Y era el mismo
+     sonido siempre, sin sitio y sin distancia.
+
+     UN TRUENO SON DOS COSAS Y LA DISTANCIA DECIDE CUAL SE OYE:
+     · EL CHASQUIDO es el tramo del canal que uno tiene mas cerca: banda ancha,
+       ataque de 4 ms, doscientos milisegundos. Se lo come el aire, que absorbe
+       los agudos con la distancia — por eso un trueno lejano es SOLO retumbo, y
+       eso no es una eleccion de mezcla sino la razon fisica de que suene asi.
+     · EL RETUMBO es el resto del canal llegando a destiempo, mas los rebotes
+       del suelo y de las nubes. Van de tres a seis rafagas repartidas en hasta
+       cuatro segundos, cada una un poco mas abajo y mas floja: eso es lo que
+       hace que RUEDE en vez de soplar. Con una sola rafaga no rueda.
+
+     Y EL CORTE DEL PASABAJOS SALE DE LA DISTANCIA, no de un sorteo: 300 Hz
+     encima, 55 a cuatro kilometros. */
+  function trueno(dist,az,yaw){
+    if(idle()) return;
+    const d=Math.max(120,Math.min(4200,dist||1200));
+    const espera=d/343;                       // el retardo, que es todo el punto
+    /* EL NIVEL NO CAE CON 1/d NI CON 1/d^2. Con 1/(1+d/700) un rayo a 2,6 km
+       quedaba POR DEBAJO del manto de lluvia —medido, 0,025 de rms contra 0,023
+       de fondo— o sea que se veia el destello y no llegaba nada, que es peor que
+       el defecto que esta vuelta arregla. Un trueno lejano se oye de sobra: lo
+       que pierde con la distancia son los agudos, no el cuerpo. */
+    const nivel=1.0/(1.0+d/2200);             // 300 m -> 0,88 · 3800 m -> 0,37
+    /* el aire se come los agudos: a 1,4 km ya no queda chasquido */
+    const filo=Math.pow(Math.max(0,1-d/1400),1.6);
+    /* EL CORTE ERA DEMASIADO BAJO Y AHI SE PERDIA EL TRUENO LEJANO. Con
+       55+245*(1-d/4200), a 2,6 km el pasabajos quedaba en 148 Hz: eso deja pasar
+       el 0,7% de la banda y el retumbo se hundia bajo la lluvia —medido en la
+       banda baja, x1,9 sobre el fondo, o sea nada—. El aire se come lo de arriba
+       de un kilohercio; de 200 a 500 Hz sobrevive casi todo, y ese es el cuerpo
+       del retumbo. */
+    const fc=120+480*Math.max(0,1-d/5000);
+    /* de que lado suena, respecto de donde mira el jugador */
+    const pan=Math.max(-1,Math.min(1,Math.sin(az-(yaw||0))*0.85));
+
+    const T0=t()+espera;
+    /* ── el chasquido ── */
+    if(filo>0.02){
+      const s=nsrc(false), g=ctx.createGain(), bp=ctx.createBiquadFilter();
+      bp.type='bandpass'; bp.Q.value=0.7;
+      bp.frequency.setValueAtTime(2100,T0);
+      bp.frequency.exponentialRampToValueAtTime(520,T0+0.22);
+      g.gain.setValueAtTime(0.0001,T0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002,0.62*nivel*filo),T0+0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001,T0+0.30);
+      s.connect(bp); bp.connect(g);
+      const p=panner(pan); if(p){ g.connect(p); p.connect(comp); } else g.connect(comp);
+      const sd=ctx.createGain(); sd.gain.value=0.55; g.connect(sd); sd.connect(revBus);
+      s.start(T0); s.stop(T0+0.5);
+      /* SUB QUE SE SIENTE, solo cerca: un chasquido cercano no se oye, golpea.
+         Es el mismo recurso que ya usa el sacudon del final. */
+      if(filo>0.35){
+        const o=ctx.createOscillator(), og=ctx.createGain();
+        o.type='sine';
+        o.frequency.setValueAtTime(58,T0); o.frequency.exponentialRampToValueAtTime(26,T0+0.55);
+        og.gain.setValueAtTime(0.0001,T0);
+        og.gain.exponentialRampToValueAtTime(0.42*filo,T0+0.012);
+        og.gain.exponentialRampToValueAtTime(0.0001,T0+0.70);
+        o.connect(og); og.connect(comp); o.start(T0); o.stop(T0+0.8);
+      }
+    }
+    /* ── el retumbo, en rafagas ── */
+    const raf=3+Math.floor(Math.random()*4);
+    let off=filo>0.35?0.05:R(0,0.5);
+    for(let i=0;i<raf;i++){
+      const s=nsrc(false), g=ctx.createGain(), lp=ctx.createBiquadFilter();
+      lp.type='lowpass'; lp.Q.value=0.9;
+      const f0=fc*R(0.85,1.5)*(1-i*0.10);
+      lp.frequency.setValueAtTime(Math.max(40,f0),T0+off);
+      lp.frequency.linearRampToValueAtTime(Math.max(34,f0*0.55),T0+off+1.6);
+      const atk=R(0.03,0.14)+i*0.02, dec=R(0.7,1.9)+i*0.18;
+      const amp=0.58*nivel*Math.pow(0.78,i)*R(0.7,1.25);
+      g.gain.setValueAtTime(0.0001,T0+off);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002,amp),T0+off+atk);
+      g.gain.exponentialRampToValueAtTime(0.0001,T0+off+atk+dec);
+      s.connect(lp); lp.connect(g);
+      const p=panner(pan*R(0.4,1.0)); if(p){ g.connect(p); p.connect(comp); } else g.connect(comp);
+      const sd=ctx.createGain(); sd.gain.value=0.62; g.connect(sd); sd.connect(revBus);
+      s.start(T0+off); s.stop(T0+off+atk+dec+0.3);
+      off+=R(0.28,0.95);
+    }
+    /* LA LLUVIA SE AGACHA Y DESPUES CRECE, y solo con un rayo cerca. Sin la
+       agachada el trueno pelea contra el manto de lluvia y pierde; sin el
+       crecimiento posterior el cielo no reacciona a nada. */
+    if(filo>0.3){
+      const k=0.55+0.45*(1-filo);
+      amb.gain.cancelScheduledValues(T0);
+      amb.gain.setValueAtTime(amb.gain.value,T0);
+      amb.gain.linearRampToValueAtTime(k,T0+0.10);
+      amb.gain.linearRampToValueAtTime(1.14,T0+1.9);
+      amb.gain.linearRampToValueAtTime(1.0,T0+7.0);
+    }
   }
 
   /* ─── silencios y latido ─── */
@@ -2748,7 +2874,9 @@ function initAudio(){
   }
 
   later(dripLoop,2200); later(ambientEvent,6000); later(gust,3000);
-  later(thunder,9000);  later(silence,45000);
+  later(silence,45000);
+  /* LOS TRUENOS YA NO SE AGENDAN ACA. La cadencia vive en tormentaPaso(), que
+     corre en el bucle: puesta aca, sin permiso de audio no caia un solo rayo. */
 
   /* ─── mezcla según dónde esté el jugador ─── */
   let tension=0, dread=0, ending=false;
@@ -2915,7 +3043,7 @@ function initAudio(){
     master.gain.cancelScheduledValues(t());
     master.gain.linearRampToValueAtTime(Math.max(0.0001,vol*(paused?0.12:1)),t()+0.25);
   }
-  A={ctx,step,update,isQuiet:()=>quiet,door:doorMove,click:clickSw,handle,
+  A={ctx,step,update,isQuiet:()=>quiet,door:doorMove,click:clickSw,handle,trueno,nivel,
      fall:impactFall,bang:slam,roomNoise,hush,hit:bigHit,reset:unhush,scare:scareHit,
      setDread:v=>{dread=v;},
      setVolume:v=>{vol=v;applyVol();},
@@ -2925,13 +3053,144 @@ function initAudio(){
 
 const flashEl=document.getElementById('flash');
 let lightBoost=0;
-function lightning(){
-  [0,90,150,260,330].forEach((d,i)=>setTimeout(()=>{
-    const up=i%2===0;
-    lightBoost=up?rnd(1.8,3.4):0.3;
-    flashEl.style.opacity=up?0.26:0.05;
-    setTimeout(()=>{lightBoost=0;flashEl.style.opacity=0;},70);
-  },d));
+
+/* ══════════════════════════ LA TORMENTA ══════════════════════════
+   ANTES ERAN DOS EFECTOS PEGADOS Y NO UN FENÓMENO. `thunder()` disparaba el
+   ruido y en la misma linea llamaba a `lightning()`: destello y trueno en el
+   MISMO instante. La luz viaja al toque y el sonido a 343 m/s, asi que un rayo
+   a un kilometro se ve tres segundos antes de oirse — y ese retardo es lo unico
+   que convierte un fogonazo y un ruido en una tormenta. La leccion ya estaba
+   escrita en este repo desde BARRIO y este juego no la aplicaba.
+
+   AHORA HAY UN SOLO RELOJ Y EL RAYO TIENE SITIO. Cada rayo se sortea con una
+   DISTANCIA y un AZIMUT, y de la distancia salen las cuatro cosas que la
+   distancia decide de verdad:
+     · cuanto tarda el trueno            → d / 343
+     · si hay chasquido o solo retumbo   → el aire se come los agudos
+     · cuanto suena                      → 1/(1+d/700)
+     · y cuanto ilumina
+   Con eso un rayo cerca es un latigazo y uno lejos es un rumor del otro lado
+   del campo, sin que haya dos listas de sonidos.
+
+   Y EL DESTELLO ES UNA FUNCIÓN DEL TIEMPO, EVALUADA EN EL BUCLE. La version
+   anterior eran cinco `setTimeout` anidados con otro `setTimeout` de 70 ms
+   adentro de cada uno: eso corre fuera del reloj del cuadro, asi que en un
+   telefono lento el destello puede caer ENTERO entre dos cuadros y no verse, y
+   en uno rapido es un escalon cuadrado que se prende y se apaga. Un relampago
+   real sube en menos de un milisegundo y decae exponencialmente en decenas: eso
+   es una suma de exponenciales, y una suma de exponenciales se puede evaluar en
+   cualquier instante.
+
+   Y LA TORMENTA EXISTE AUNQUE NO HAYA AUDIO. La cadencia estaba adentro de
+   `initAudio()`, o sea que sin permiso de sonido no caia un solo rayo. Ahora el
+   reloj vive aca y el audio es un consumidor: `A.trueno(d,az)` si esta. */
+const TORM={
+  t:0, prox:5.5,
+  nucleo:1500,        // a que distancia esta el nucleo de la tormenta, en metros
+  deriva:-1,          // se acerca (-1) o se va (+1)
+  golpes:[],          // los sub-destellos vivos de los rayos recientes
+  flash:0, az:0, ult:0, n:0, fijo:null   // `fijo` es para las sondas: clava el destello
+};
+const TORM_MIN=140, TORM_MAX=3800;
+const SH_BASE=0.048;                    // la ganancia de fabrica del haz del techo
+/* CUANTO MULTIPLICA UN RELAMPAGO LA GANANCIA DEL HAZ. Barrido a destello 0,85
+   —o sea un rayo a 150 m, el peor caso— con la linterna apagada:
+     8,5 -> el haz es un borron blanco solido: se pierden las tablas de adentro
+            y la columna deja de tener forma
+     5,0 -> sigue muy quemado, las tablas recien se adivinan
+     3,0 -> blanco casi puro PERO con las tablas en silueta adentro, el papel de
+            la pared y el cuadro colgado legibles, y la columna con canto
+     1,6 -> se lee todo y el haz no estalla: es un cuarto claro, no un fogonazo
+   Queda en 3,0: un relampago tiene que quemar el haz sin borrarlo. */
+let SH_RAYO=3.0;
+const _cieloBase=new THREE.Color(0x3a4a68), _BLANCO=new THREE.Color(0xe8eeff);
+let _flashDom=-1;
+
+/* un rayo: distancia en metros y azimut en radianes. Sin argumentos se sortea
+   uno acorde al nucleo de la tormenta. */
+function lightning(dist,az){
+  const d=(dist===undefined)
+    ? Math.max(TORM_MIN,Math.min(TORM_MAX, TORM.nucleo*rnd(0.55,1.6)))
+    : Math.max(TORM_MIN,Math.min(TORM_MAX,dist));
+  const a=(az===undefined)? Math.random()*6.2832 : az;
+  TORM.az=a; TORM.ult=d; TORM.n++;
+
+  /* CUANTO ILUMINA: la caida no es 1/d^2 sino mucho mas floja, porque el rayo
+     no es un punto sino un canal de kilometros y lo que llega al cuarto es la
+     mitad del cielo encendida. Con 1/d^2 un rayo a 2 km no se veria. */
+  const pot=1.0/(1.0+d/1100);
+
+  /* DE UNO A CINCO GOLPES DE RETORNO, que es lo que hace que un relampago
+     titile en vez de encenderse una vez. Separados 40-130 ms, cada uno con su
+     propia caida: los cortos son los que se leen a chispazo. */
+  /* CON `rnd*rnd*5` EL 64% DE LOS RAYOS SALIA DE UN SOLO GOLPE, y un golpe solo
+     no titila: se enciende y se apaga, que es lo que hacia la version anterior.
+     Con `rnd^1.7` el 38% queda simple y el 62% parpadea, que es la proporcion
+     que tiene un relampago de verdad. */
+  const golpes=1+Math.floor(Math.pow(Math.random(),1.7)*4.99);
+  let off=0;
+  for(let i=0;i<golpes;i++){
+    TORM.golpes.push({t0:TORM.t+off, amp:pot*rnd(0.55,1.0)*(i?rnd(0.35,0.9):1),
+                      tau:rnd(0.022,0.085)});
+    off+=rnd(0.040,0.130);
+  }
+  /* y un resplandor largo y debil: el canal tarda en apagarse */
+  TORM.golpes.push({t0:TORM.t, amp:pot*0.20, tau:rnd(0.18,0.34)});
+
+  if(A&&A.trueno) A.trueno(d,a,P.yaw);
+  return {dist:+d.toFixed(0), az:+a.toFixed(3), golpes:golpes+1};
+}
+
+function tormentaPaso(dt){
+  TORM.t+=dt;
+  /* el nucleo se mueve: una tormenta que tira rayos siempre a la misma
+     distancia es un metronomo, no un clima */
+  TORM.nucleo+=TORM.deriva*dt*rnd(6,26);
+  if(TORM.nucleo<TORM_MIN*1.5){ TORM.nucleo=TORM_MIN*1.5; TORM.deriva=1; }
+  if(TORM.nucleo>TORM_MAX*0.85){ TORM.nucleo=TORM_MAX*0.85; TORM.deriva=-1; }
+
+  if(state==='play'&&!fin){
+    TORM.prox-=dt;
+    if(TORM.prox<=0){
+      lightning();
+      /* mas cerca el nucleo, mas seguido cae: de 7-22 s encima a 20-58 s lejos */
+      const k=(TORM.nucleo-TORM_MIN)/(TORM_MAX-TORM_MIN);
+      TORM.prox=rnd(7+k*13, 22+k*36);
+    }
+  }
+
+  /* EL DESTELLO: suma de exponenciales con una subida de 4 ms. La subida no es
+     un detalle de gusto: sin ella el primer cuadro del rayo salta de 0 al pico
+     y eso, en un juego que dibuja con cinta VHS encima, se lee a error de
+     compresion y no a luz. */
+  let f=0;
+  for(let i=TORM.golpes.length-1;i>=0;i--){
+    const g=TORM.golpes[i], x=TORM.t-g.t0;
+    if(x<0) continue;
+    if(x>g.tau*7){ TORM.golpes.splice(i,1); continue; }
+    f+=g.amp*Math.min(1,x/0.004)*Math.exp(-x/g.tau);
+  }
+  TORM.flash=(TORM.fijo===null)?Math.min(2.6,f):TORM.fijo;
+  lightBoost=TORM.flash*1.35;          // lo que ya consumian la luna y el relleno
+
+  /* LA DIRECCIONAL DEL RAYO, en el azimut del ultimo */
+  const el=0.62;                        // 35 grados de elevacion
+  rayoLuz.position.set(Math.sin(TORM.az)*Math.cos(el)*60, Math.sin(el)*60,
+                       Math.cos(TORM.az)*Math.cos(el)*60);
+  rayoLuz.intensity=TORM.flash*5.2;
+
+  /* LOS HACES DEL TECHO SON LO QUE MAS LO CUENTA: son las tres columnas por
+     donde el cuarto ve el cielo, asi que un fogonazo afuera tiene que hacerlas
+     estallar. La ganancia se multiplica sobre la de fabrica, no se reemplaza. */
+  shaftMat.uniforms.uA.value=SH_BASE*(1+TORM.flash*SH_RAYO);
+  const cf=Math.min(1,TORM.flash*0.85);
+  for(const c of _cielos) c.material.color.copy(_cieloBase).lerp(_BLANCO,cf);
+
+  /* y el velo en el OJO, que va despues del post: es lo unico que puede pasar
+     de blanco, porque una pantalla no tiene mas rango. Va con la misma curva
+     que la luz, no con un escalon de 0,26. */
+  const o=Math.min(0.30,TORM.flash*0.19);
+  if(Math.abs(o-_flashDom)>0.004){ flashEl.style.opacity=o.toFixed(3); _flashDom=o; }
 }
 
 /* ══════════ entrada ══════════ */
@@ -3334,8 +3593,13 @@ function tick(){
   halo.position.copy(camera.position);
   halo.intensity=(reading?0.85:(lit?0.40*bat:0.14));
   halo.distance=reading?2.2:4.0;
+  /* la tormenta va ANTES de las luces: de ella sale lightBoost, y calculada
+     despues las luces usarian el destello del cuadro anterior */
+  tormentaPaso(dt);
   fill.position.copy(camera.position); fill.intensity=0.26+lightBoost*0.25;
-  hemi.intensity=0.5+lightBoost*0.6; moon.intensity=0.30+lightBoost*0.9;
+  /* el hemisferico sube mas que la luna: en un relampago lo que se enciende es
+     el cielo entero, y eso es ambiente y no una direccional */
+  hemi.intensity=0.5+lightBoost*0.9; moon.intensity=0.30+lightBoost*0.35;
 
   /* bombillas */
   flickT+=dt;
@@ -3575,6 +3839,100 @@ function tick(){
 /* ══════════ sondas de medicion (no tocan el juego) ══════════ */
 window.__casa={
   ver:'v14',
+  /* ══════════ LA TORMENTA ══════════ */
+  tormenta(){ return {t:+TORM.t.toFixed(2), nucleo_m:Math.round(TORM.nucleo),
+    deriva:TORM.deriva, prox_s:+TORM.prox.toFixed(2), rayos:TORM.n,
+    ultimo_m:Math.round(TORM.ult), azimut:+TORM.az.toFixed(3),
+    flash:+TORM.flash.toFixed(4), golpes_vivos:TORM.golpes.length,
+    luz_rayo:+rayoLuz.intensity.toFixed(3), hemi:+hemi.intensity.toFixed(3),
+    luna:+moon.intensity.toFixed(3), haz:+shaftMat.uniforms.uA.value.toFixed(4),
+    velo:flashEl.style.opacity||'0', min_m:TORM_MIN, max_m:TORM_MAX,
+    audio:!!(A&&A.trueno)}; },
+  /* tira un rayo a mano: la cadencia normal es de decenas de segundos y no se
+     puede esperar a que caiga uno para medirlo */
+  rayo(d,az){ return lightning(d,az); },
+  /* CLAVA EL DESTELLO. Un relampago dura cien milisegundos y el banco dibuja a
+     seis cuadros por segundo: fotografiarlo al vuelo es lotería. Con `fijar` el
+     valor se sostiene y la foto y la medicion caen donde uno quiere. `null` lo
+     devuelve al reloj de la tormenta. */
+  fijar(v,az,shr){ TORM.fijo=(v===null?null:v); if(az!==undefined) TORM.az=az;
+    if(shr!==undefined) SH_RAYO=shr;
+    return {fijo:TORM.fijo, az:+TORM.az.toFixed(3), sh_rayo:SH_RAYO}; },
+  /* CUANTO ILUMINA EL RELAMPAGO, medido sobre EL MISMO INSTANTE dos veces —el
+     bucle no avanza dentro de la sonda— porque entre dos capturas seguidas
+     titila una bombilla y salta el glitch de cinta. Y se mide por MITADES de
+     pantalla: lo que hay que probar no es que suba el brillo (eso lo hacia la
+     version vieja subiendo la luna) sino que suba DE UN LADO, que es lo que
+     distingue una luz con direccion de un dimmer. */
+  rayoLuzMide(v,az){
+    v=(v===undefined?0.8:v);
+    const prev=TORM.fijo, pa=TORM.az;
+    const w=rt.width,h=rt.height,buf=new Uint8Array(w*h*4);
+    const lee=()=>{
+      renderer.setRenderTarget(rt); renderer.render(scene,camera);
+      renderer.readRenderTargetPixels(rt,0,0,w,h,buf);
+      renderer.setRenderTarget(null);
+      let iz=0,de=0,ni=0,nd=0;
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const l=0.299*buf[i]+0.587*buf[i+1]+0.114*buf[i+2];
+        if(x<w/2){iz+=l;ni++;} else {de+=l;nd++;}
+      }
+      return {izq:iz/ni, der:de/nd, medio:(iz+de)/(ni+nd)};
+    };
+    TORM.fijo=0; tormentaPaso(0); const sin=lee();
+    if(az!==undefined) TORM.az=az;
+    TORM.fijo=v; tormentaPaso(0); const con=lee();
+    TORM.fijo=prev; TORM.az=pa; tormentaPaso(0);
+    return {res:[w,h], flash:v, azimut:+(az===undefined?pa:az).toFixed(3),
+            luz_rayo:+(v*5.2).toFixed(2), haz:+(SH_BASE*(1+v*SH_RAYO)).toFixed(4), sh_rayo:SH_RAYO,
+            sin:{izq:+sin.izq.toFixed(2), der:+sin.der.toFixed(2), medio:+sin.medio.toFixed(2)},
+            con:{izq:+con.izq.toFixed(2), der:+con.der.toFixed(2), medio:+con.medio.toFixed(2)},
+            sube_medio_pct:+(100*(con.medio-sin.medio)/Math.max(sin.medio,0.01)).toFixed(1),
+            sube_izq_pct:+(100*(con.izq-sin.izq)/Math.max(sin.izq,0.01)).toFixed(1),
+            sube_der_pct:+(100*(con.der-sin.der)/Math.max(sin.der,0.01)).toFixed(1)};
+  },
+  /* LA FORMA DEL DESTELLO, muestreada sobre el reloj de la tormenta y no sobre
+     el del cuadro: asi el numero no depende de a cuantos cuadros corra el banco.
+     Devuelve la curva y a que instante cae el pico. */
+  destello(d,n,paso){
+    n=n||60; paso=paso||0.012;
+    const gs=TORM.golpes.slice(), t0=TORM.t, az=TORM.az;
+    TORM.golpes.length=0; TORM.t=0;
+    lightning(d===undefined?400:d, az);
+    const gs2=TORM.golpes.slice();
+    const curva=[];
+    for(let i=0;i<n;i++){
+      const tt=i*paso; let f=0;
+      for(const g of gs2){ const x=tt-g.t0; if(x<0) continue;
+        f+=g.amp*Math.min(1,x/0.004)*Math.exp(-x/g.tau); }
+      curva.push(+Math.min(2.6,f).toFixed(4));
+    }
+    TORM.golpes.length=0; for(const g of gs) TORM.golpes.push(g); TORM.t=t0;
+    let pk=0,pi=0; curva.forEach((v,i)=>{ if(v>pk){pk=v;pi=i;} });
+    let fin=curva.length-1; while(fin>0&&curva[fin]<pk*0.02) fin--;
+    return {dist_m:d===undefined?400:d, muestras:n, paso_s:paso,
+            pico:pk, pico_en_ms:Math.round(pi*paso*1000),
+            dura_ms:Math.round(fin*paso*1000),
+            retardo_trueno_s:+(Math.max(120,Math.min(4200,d===undefined?400:d))/343).toFixed(2),
+            curva};
+  },
+  /* ESCUCHA: muestrea el analizador del maestro durante una ventana. Es lo
+     unico que prueba que el trueno llego, y CUANDO llego. */
+  oir(ms,paso){
+    if(!(A&&A.nivel)) return Promise.resolve({error:'sin audio'});
+    ms=ms||9000; paso=paso||60;
+    const R=[], t0=performance.now();
+    return new Promise(res=>{
+      const id=setInterval(()=>{
+        const n=A.nivel();
+        R.push([+((performance.now()-t0)/1000).toFixed(2),+n.rms.toFixed(5),+n.pico.toFixed(4),+(n.bajos||0).toFixed(6)]);
+        if(performance.now()-t0>=ms){ clearInterval(id);
+          let pk=0,pt=0; for(const r of R) if(r[2]>pk){pk=r[2];pt=r[0];}
+          const base=R.slice(0,6).reduce((a,r)=>a+r[1],0)/Math.min(6,R.length);
+          res({muestras:R.length, fondo_rms:+base.toFixed(5),
+               pico:pk, pico_en_s:pt, curva:R}); }
+      },paso); }); },
   /* ══════════ QUE TAPA LA BOCA DEL SOTANO ══════════
      Los escombros se siembran al azar en cada carga, asi que "esta despejado"
      no se puede comprobar mirando UNA partida: hay que preguntarle a la escena.
