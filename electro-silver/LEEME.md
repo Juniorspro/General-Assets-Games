@@ -175,3 +175,41 @@ Websites) cuando publiques.
 
 El ícono está en `imagenes/chispa.png` (blanco sobre transparente, se usa como
 máscara para que tome el color del botón) y en `imagenes/chispa-color.png`.
+
+
+## Lo único que hay que vigilar de Supabase
+
+El plan gratis **pausa el proyecto si pasa una semana sin actividad**. No lo borra:
+queda dormido y hay que entrar al panel de Supabase y darle «Restore». Mientras
+está dormido, la sección «Novedades del local» de la web queda vacía.
+
+Cada visita a la web cuenta como actividad, porque la página consulta las
+publicaciones al cargar. O sea: si el negocio tiene aunque sea una visita por
+semana, no se pausa nunca. El riesgo es una semana muerta.
+
+Para que no dependa de eso, el repo tiene `.github/workflows/despertar-supabase.yml`,
+que le pega al proyecto cada 3 días. Se enciende cargando dos variables, una vez:
+
+> Settings → Secrets and variables → Actions → pestaña **Variables** → New variable
+> - `SUPABASE_URL` → `https://xxxxxxxx.supabase.co`
+> - `SUPABASE_ANON_KEY` → la clave anon public
+
+Van como *variables* y no como *secrets* porque la clave anon es pública.
+Sin cargarlas el trabajo no falla: avisa y se va.
+
+Un detalle de GitHub: si el repo pasa 60 días sin ningún commit, desactiva los
+trabajos programados y manda un mail para reactivarlos.
+
+### Los demás límites del plan gratis
+
+| límite | cuánto | qué significa acá |
+|---|---|---|
+| Base de datos | 500 MB | Las publicaciones son texto: no se llena nunca |
+| Fotos | 1 GB | A ~150 KB por foto comprimida, unas 6.500 publicaciones |
+| Tráfico | 5 GB por mes | Unas 2.700 visitas mensuales cargando las novedades |
+| Usuarios | 50.000 | Sobra: el único usuario sos vos |
+| Proyectos activos | 2 | Ya usás uno |
+
+**No hay copias de seguridad automáticas.** El botón «Bajar copia» del panel se
+trae la lista de publicaciones (los textos y los enlaces a las fotos, no las
+fotos). Conviene bajarla de vez en cuando.
