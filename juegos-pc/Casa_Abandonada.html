@@ -316,6 +316,7 @@ scene.background=new THREE.Color(0x04060a);
 scene.fog=new THREE.FogExp2(0x060910,0.052);
 const camera=new THREE.PerspectiveCamera(74,1,0.05,140);
 camera.rotation.order='YXZ'; window.camera=camera;
+scene.add(camera);
 layout(); addEventListener('resize',layout);
 addEventListener('orientationchange',()=>setTimeout(layout,150));
 
@@ -1180,7 +1181,9 @@ torch.castShadow=true;
 torch.shadow.mapSize.set(512,512);
 torch.shadow.camera.near=0.25; torch.shadow.camera.far=22;
 torch.shadow.bias=-0.0022; torch.shadow.normalBias=0.034; torch.shadow.radius=1.9;
-scene.add(torch,torch.target);
+torch.position.set(0,0,-0.14);       // adelante del ojo, sobre el eje de la vista
+torch.target.position.set(0,0,-1);   // un metro al frente, en el marco de la camara
+camera.add(torch,torch.target);
 const halo=new THREE.PointLight(0xd9e2ee,0.36,4.0,2); scene.add(halo);
 const fill=new THREE.PointLight(0x1d3049,0.26,9,2); scene.add(fill);
 
@@ -1204,7 +1207,9 @@ const beam=new THREE.Mesh(
         float a=pow(t,2.1)*pow(rim,1.3)*0.34*uI;
         gl_FragColor=vec4(0.80,0.88,1.00,a);}`
   }));
-beam.frustumCulled=false; scene.add(beam);
+beam.frustumCulled=false;
+beam.position.set(0,0,-0.14); beam.rotation.set(0,0,0);
+camera.add(beam);
 
 /* bombillas titilantes con halo */
 const glowTex=(()=>{const t=new THREE.CanvasTexture(makeCanvas(64,(g,s)=>{
@@ -2551,7 +2556,7 @@ function startGame(){
   resetWorld();
   begin();
   P.x=-0.65; P.z=5.25; P.y=0; P.level=0;
-  P.yaw=0; P.pitch=-0.02; P.vx=P.vz=0; P.roll=0;
+  P.yaw=0; P.pitch=0; P.vx=P.vz=0; P.roll=0;
   setState('play');
   setTimeout(()=>{ if(state==='play') hint.style.opacity=0; },7000);
 }
@@ -2669,7 +2674,7 @@ addEventListener('mousemove',e=>{
 
 /* ══════════ jugador ══════════ */
 /* aparece en la entrada, de cara al pasillo (hacia -Z) */
-const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:-0.02,
+const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:0,
   vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:74,sprint:0,stepPh:0,panic:0};
 const R=0.32, EYE=1.66;
 const WALK=1.15, RUN=2.0;          // marcha lenta: tensión
@@ -2768,7 +2773,7 @@ function tick(){
   const strafe=(P.vx*cy-P.vz*sy)/2.4;
   P.yawVel*=Math.pow(0.0018,dt);
   const tr=-strafe*0.09+P.yawVel*1.25+Math.sin(P.bob)*0.012*amp+Math.sin(P.breath*0.5)*0.005;
-  P.roll+=(Math.max(-0.15,Math.min(0.15,tr))-P.roll)*Math.min(dt*5.5,1);
+  P.roll+=(0-P.roll)*Math.min(dt*5.5,1);   // sin alabeo: el horizonte no se tuerce
   P.lean+=((-P.sprint*0.022)-P.lean)*Math.min(dt*4,1);
 
   camera.position.set(P.x+P.bobX*cy, P.y+EYE+P.bobY+brY, P.z-P.bobX*sy);
@@ -2778,7 +2783,10 @@ function tick(){
   const hZ=Math.sin(T*0.23+1.9)*0.6+Math.sin(T*0.61+0.4)*0.25;
   camera.position.x+=hR*0.011; camera.position.z+=hP*0.011;
   camera.position.y+=Math.sin(T*0.47+1.1)*0.006;
-  camera.rotation.set(P.pitch+P.lean+hP*0.0075, P.yaw+hR*0.0090, P.roll+hZ*0.0125);
+  /* SOLO lo que el jugador pide. La deriva del pulso sigue existiendo pero
+     unicamente en la POSICION —un centimetro, suave— que es lo que da el aire
+     de camara en mano sin girar la vista por su cuenta. */
+  camera.rotation.set(P.pitch+P.lean, P.yaw, 0);
 
   P.panic=Math.max(0,P.panic-dt*0.16);
   if(shakeUpdate(dt)){
@@ -2798,19 +2806,11 @@ function tick(){
 
   /* linterna: retardo, temblor y batería inestable */
   camera.getWorldDirection(tDir);
-  tPos.copy(camera.position).addScaledVector(tDir,0.14); tPos.y-=0.13;
-  torch.position.lerp(tPos,Math.min(dt*16,1));
-  _aim.copy(camera.position).addScaledVector(tDir,9);
-  _aim.x+=Math.sin(T*1.6)*0.09+Math.sin(T*0.55)*0.15;
-  _aim.y+=Math.sin(T*2.2)*0.07+Math.sin(P.bob*2)*0.09*amp;
-  tAim.lerp(_aim,Math.min(dt*6.5,1));
-  torch.target.position.copy(tAim); torch.target.updateMatrixWorld();
   const bat=1-0.15*Math.max(0,Math.sin(T*0.29))-(Math.random()<0.0035?0.65:0);
   const lit=(torchOn&&!torchCut)||state==='menu';
   torch.intensity=lit?3.9*bat:0;
   beam.visible=lit;
-  if(lit){ beam.position.copy(torch.position); beam.lookAt(tAim);
-    beam.material.uniforms.uI.value=bat*(inHouse(P.x,P.z)?1:0.6); }
+  if(lit){ beam.material.uniforms.uI.value=bat*(inHouse(P.x,P.z)?1:0.6); }
   halo.position.copy(camera.position);
   halo.intensity=(reading?0.85:(lit?0.40*bat:0.14));
   halo.distance=reading?2.2:4.0;
@@ -3066,6 +3066,38 @@ window.__casa={
   },
   fundido(){ return _FUND; },
   fotos(){ return {puestas:_fotosPuestas, fallaron:_fotosFallo, total:Object.keys(FOTOS).length}; },
+  /* desvio entre adonde mira la camara y adonde apunta la linterna. Cero es
+     que van pegadas. Se mide TAMBIEN girando, que es donde el retardo aparecia. */
+  luz(){
+    scene.updateMatrixWorld(true);
+    const dc=new THREE.Vector3(), pl=new THREE.Vector3(), pt=new THREE.Vector3();
+    camera.getWorldDirection(dc);
+    torch.getWorldPosition(pl); torch.target.getWorldPosition(pt);
+    const dl=pt.clone().sub(pl).normalize();
+    const ang=Math.acos(Math.max(-1,Math.min(1,dc.dot(dl))))*180/Math.PI;
+    // adonde cae en pantalla el centro del haz, a 6 m
+    const q=pl.clone().addScaledVector(dl,6).project(camera);
+    // y cuanto se corre la lampara del ojo, de costado y en alto
+    const dif=pl.clone().sub(camera.position);
+    const der=new THREE.Vector3().crossVectors(dc,new THREE.Vector3(0,1,0)).normalize();
+    return {desvio_grados:+ang.toFixed(4),
+            haz_en_pantalla:[+q.x.toFixed(4),+q.y.toFixed(4)],
+            corrida_costado_cm:+(dif.dot(der)*100).toFixed(2),
+            corrida_alto_cm:+(dif.y*100).toFixed(2),
+            alabeo:+camera.rotation.z.toFixed(5),
+            encendida:torch.intensity>0, haz:beam.visible,
+            padre_luz:torch.parent===camera, padre_haz:beam.parent===camera};
+  },
+  /* gira la vista a lo bestia y devuelve el peor desvio durante el giro */
+  girar(vel,n){ vel=vel||3.0; n=n||40; const R=[];
+    return new Promise(res=>{ let k=0;
+      const id=setInterval(()=>{ P.yaw+=vel*0.016; P.pitch=Math.sin(k*0.3)*0.5;
+        const L=this.luz(); R.push(L.desvio_grados);
+        if(++k>=n){ clearInterval(id);
+          res({muestras:R.length, peor_desvio:+Math.max(...R).toFixed(4),
+               medio:+(R.reduce((a,b)=>a+b,0)/R.length).toFixed(4),
+               alabeo:+camera.rotation.z.toFixed(5)}); }
+      },16); }); },
   papeles(){ const R=[]; const B=new THREE.Box3();
     for(const p of papers){
       const g=p.front.geometry, at=g.attributes.position;
