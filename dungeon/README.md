@@ -224,6 +224,46 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## Los botones no andaban en el celular: `preventDefault`
+
+El menú se veía perfecto y **ningún botón respondía**. La causa, encontrada
+reproduciendo el caso exacto del jugador —**teléfono en vertical, con toques de
+verdad**—:
+
+El `touchstart` del juego está puesto en la ventana y hacía `preventDefault()`
+en **cualquier** toque, porque lo necesita para que arrastrar no scrollee la
+página. Y `preventDefault()` en un `touchstart` **cancela el `click` sintético**
+que el navegador iba a mandar después. Los botones del menú escuchaban `click`.
+Nunca se enteraban.
+
+En una computadora andaba, porque ahí el click sale de `mousedown` y no del
+toque — **por eso todas las pruebas anteriores lo daban por bueno**. Estaban
+corriendo en horizontal y con mouse; el jugador está en vertical y con el dedo.
+
+Dos arreglos:
+
+1. **Si el dedo cae sobre un control, el handler global no existe**: se sale
+   antes de tocar el evento (`#boot, #graficos, .tbtn, .niv, button`).
+2. **Los botones escuchan el toque, no el click**: `touchstart` + `mousedown`
+   con un candado de 300 ms para que un toque no dispare dos veces.
+
+### Probado con toques reales, en vertical
+
+El banco ahora abre el juego en **412×892 con `hasTouch`** y toca con
+`touchscreen.tap`, que es lo que hace un dedo:
+
+| control | resultado |
+|---|---|
+| chip GRÁFICOS → Alto | `calidad = alto` |
+| JUGAR | `enMenu = false` |
+| AGACHARSE (mantenido) | `crouch: true` mientras, `false` al soltar |
+| DESLIZAR (con joystick) | `slideT = 0,80` |
+| USAR | `usarPedido: false → true` |
+| rueda de gráficos | panel abierto |
+
+Y el archivo autocontenido, abierto como `file://` en vertical: **girado, JUGAR
+funciona, aparecés en el cajón, cero errores**.
+
 ## "No entra al juego": faltaba un timeout
 
 Se reprodujo abriendo el archivo tal como lo abre el jugador —`file://`, con la

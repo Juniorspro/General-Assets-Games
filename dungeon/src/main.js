@@ -823,7 +823,22 @@ class Dungeon {
            El centro del joystick sale de offsetLeft/offsetTop y no de
            getBoundingClientRect: el rect de un elemento girado es su caja
            alineada a los ejes de la pantalla, no la del elemento. */
+        /* SI EL DEDO CAE SOBRE UN CONTROL, ESTE HANDLER NO EXISTE.
+
+           Era el bug que dejaba el menú muerto en el celular: este `touchstart`
+           está puesto en la ventana y hacía `preventDefault()` en CUALQUIER
+           toque. Y `preventDefault()` en un touchstart CANCELA el `click`
+           sintético que el navegador iba a mandar después — así que los
+           botones del menú, que escuchaban `click`, no se enteraban nunca.
+
+           En una computadora andaba, porque ahí el click viene de `mousedown`
+           y no del toque. Por eso las pruebas en horizontal con el mouse lo
+           daban por bueno. */
+        const esControl = e => e.target && e.target.closest &&
+            e.target.closest('#boot, #graficos, .tbtn, .niv, button');
+
         const onStart = e => {
+            if (esControl(e)) return;
             for (const t of e.changedTouches) {
                 const [mx, my] = aMarco(t.clientX, t.clientY);
                 const inStick = mx < vistaAncho() * 0.5;
@@ -840,6 +855,7 @@ class Dungeon {
             e.preventDefault();
         };
         const onMove = e => {
+            if (esControl(e) && !this.stick.active && !this.look.active) return;
             for (const t of e.changedTouches) {
                 if (this.stick.active && t.identifier === this.stick.id) {
                     const [mx, my] = aMarco(t.clientX, t.clientY);
@@ -1282,6 +1298,28 @@ const boot = document.getElementById('boot');
 /* Un solo enganche para todos los botones del juego: cualquier cosa que se
    pueda apretar suena. Va por delegación en el documento, así los botones que
    aparecen después —los chips de gráficos, por ejemplo— también entran. */
+/* Un botón que anda en el celular Y en la computadora.
+
+   `click` no sirve: cualquier `preventDefault()` en el touchstart lo mata, y
+   el juego necesita ese preventDefault para que arrastrar no scrollee la
+   página. Así que se escucha el toque y el mouse directo, con un candado de
+   300 ms para que un toque no dispare las dos veces. */
+function alTocar(el, fn) {
+    if (!el) return el;
+    let ultimo = 0;
+    const disparar = e => {
+        const ahora = performance.now();
+        if (ahora - ultimo < 300) return;
+        ultimo = ahora;
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        fn(e);
+    };
+    el.addEventListener('touchstart', disparar, { passive: false });
+    el.addEventListener('mousedown', disparar);
+    return el;
+}
+
 function sonarBotones() {
     const suena = e => {
         const t = e.target.closest('.tbtn, .niv, #mjugar, #btn-graficos, #graficos-cerrar');
@@ -1291,7 +1329,8 @@ function sonarBotones() {
         else if (t.id === 'graficos-cerrar') S.cancelar();
         else S.boton(t.classList.contains('tbtn') ? 0.75 : 1);
     };
-    addEventListener('pointerdown', suena, { passive: true, capture: true });
+    for (const ev of ['touchstart', 'mousedown'])
+        addEventListener(ev, suena, { passive: true, capture: true });
 }
 
 function armarMenu() {
@@ -1326,7 +1365,7 @@ function armarMenu() {
     for (const n of ['bajo', 'medio', 'alto', 'ultra']) {
         const e = document.getElementById('mcal-' + n);
         if (!e) continue;
-        e.addEventListener('click', () => {
+        alTocar(e, () => {
             game.calidad.aplicar(n);
             for (const m of ['bajo', 'medio', 'alto', 'ultra']) {
                 const o = document.getElementById('mcal-' + m);
@@ -1336,7 +1375,7 @@ function armarMenu() {
         e.classList.toggle('sel', game.calidad && game.calidad.nivel === n);
     }
 
-    jugar.addEventListener('click', () => {
+    alTocar(jugar, () => {
         despertarAudio();
         S.callarMusica();
         game.enMenu = false;
