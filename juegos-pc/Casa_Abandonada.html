@@ -49,8 +49,18 @@
   .ov{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:0;pointer-events:auto;
     background:linear-gradient(180deg,rgba(4,6,10,.72),rgba(4,6,10,.86));
-    opacity:1;transition:opacity .45s ease}
-  .ov.hide{opacity:0;pointer-events:none}
+    opacity:1;transition:opacity .45s ease,visibility 0s}
+  /* UNA CAPA ESCONDIDA NO PUEDE SEGUIR ATRAPANDO TOQUES, y con opacity 0 y
+     pointer-events:none todavia lo hacia: `.btn` se reescribe pointer-events
+     a auto, y pointer-events se hereda, asi que el hijo pisaba al padre.
+     Medido: el boton "cuadro" del panel de pausa —escondido— quedaba ENCIMA de
+     "entrar" del menu (se pisan en las dos resoluciones probadas), asi que
+     tocar entrar podia darle al boton invisible. `visibility:hidden` no se
+     compone ni se prueba contra el puntero, gane quien gane por especificidad;
+     el retardo en la transicion deja que el fundido de salida se vea. */
+  .ov.hide{opacity:0;pointer-events:none;visibility:hidden;
+    transition:opacity .45s ease,visibility 0s .45s}
+  .ov.hide .btn,.ov.hide input{pointer-events:none}
   .ttl{font-size:27px;letter-spacing:.42em;font-weight:300;color:#e9e2cd;
     text-indent:.42em;text-shadow:0 2px 18px rgba(0,0,0,.8)}
   .sub{margin-top:12px;font-size:11px;letter-spacing:.26em;color:rgba(200,194,176,.45);
@@ -151,6 +161,7 @@
     <label class="sl">volumen<input type="range" id="slVol" min="0" max="100" value="85"></label>
     <label class="sl">cinta<input type="range" id="slGrain" min="0" max="100" value="48"></label>
     <label class="sl">campo<input type="range" id="slFov" min="65" max="110" value="90"></label>
+    <button class="btn gh" id="btnCuadro">cuadro: pantalla llena</button>
     <div class="rule"></div>
     <div class="note2" style="margin-top:0;line-height:1.9">izquierda para caminar · derecha para mirar<br>
       el joystick al borde apura el paso</div>
@@ -189,7 +200,7 @@ function safeArea(){
    estira tanto las esquinas que un mueble contra el borde sale barrido: eso
    es la mitad del "se ve todo raro". Una camara de mano ronda los 65-75; 80
    deja margen para jugar sin deformar. */
-let HFOV=90;              // 90 es el horizontal clasico de un primera persona
+let HFOV=100;             // el horizontal DE REFERENCIA a 16:9; ver la nota de abajo
 const HFOV_MIN=65, HFOV_MAX=110;
 /* SE GUARDA. Llevo tres vueltas adivinando este numero —117, 100, 80— y cada
    vez el que lo mira es otro: depende del tamaño de la pantalla, de a que
@@ -208,7 +219,29 @@ try{ const g=localStorage.getItem('casa_hfov');
    invertir exactamente la misma colocacion; recalculandola por su cuenta,
    cualquier cambio de aca la desincroniza y los toques quedan corridos sin que
    nada falle a la vista. */
-const ASP=16/9;
+const ASP=16/9;               // el aspecto de REFERENCIA del que sale el campo
+/* ══════════ Y EL CUADRO LLENA LA PANTALLA ══════════
+   Encajarlo en 16:9 a la fuerza fue un error, y se puede poner en numeros. En
+   una pantalla de 2756x1268 —aspecto 2,174, que es un telefono cualquiera de
+   hoy— contra la version original de pantalla completa:
+
+   | | campo | mundo visible | pantalla usada | las dos juntas |
+   |---|---|---|---|---|
+   | original, pantalla llena | 117,2 x 74,0 | 100% | 100% | 100% |
+   | 16:9 encajado | 90,0 x 58,7 | 46% | 82% | **37%** |
+
+   O sea un cuarto de lo que se veia antes. La mitad se perdio en las barras
+   negras y la otra mitad en el campo.
+
+   Asi que el cuadro llena la pantalla y el campo se corrige por aspecto: lo que
+   se mantiene igual en cualquier pantalla es el VERTICAL que sale de HFOV a
+   16:9, y el horizontal lo pone el aspecto de verdad. Es el Hor+ de siempre:
+   una pantalla mas ancha muestra MAS de costado y nunca menos, y ademas la
+   composicion vertical —el techo, el piso, el horizonte— es la misma para
+   todos, que era todo el motivo de haber puesto un formato fijo.
+   La cinta 16:9 queda como opcion para quien quiera las barras. */
+let CINTA=false;
+try{ CINTA = localStorage.getItem('casa_cuadro')==='cinta'; }catch(e){}
 let stgL=0, stgT=0, stgX1=0;   // izquierda, arriba, y el borde derecho girado
 function layout(){
   const w=innerWidth,h=innerHeight, S=safeArea();
@@ -222,13 +255,15 @@ function layout(){
   };
   if(rotated){
     /* girado, el escenario ocupa VH de ancho y VW de alto en la pantalla */
-    VH=Math.max(2,Math.min(AW,AH/ASP)); VW=VH*ASP;
+    if(CINTA){ VH=Math.max(2,Math.min(AW,AH/ASP)); VW=VH*ASP; }
+    else     { VH=Math.max(2,AW); VW=Math.max(2,AH); }
     const X0=centrar(VH,w,S.l,S.r), Y0=centrar(VW,h,S.t,S.b);
     stgL=0; stgT=Y0; stgX1=X0+VH;
     stage.style.left='0px'; stage.style.top=Y0+'px';
     stage.style.transform='translateX('+stgX1+'px) rotate(90deg)';
   }else{
-    VW=Math.max(2,Math.min(AW,AH*ASP)); VH=VW/ASP;
+    if(CINTA){ VW=Math.max(2,Math.min(AW,AH*ASP)); VH=VW/ASP; }
+    else     { VW=Math.max(2,AW); VH=Math.max(2,AH); }
     stgL=centrar(VW,w,S.l,S.r); stgT=centrar(VH,h,S.t,S.b); stgX1=0;
     stage.style.left=stgL+'px'; stage.style.top=stgT+'px';
     stage.style.transform='none';
@@ -2618,6 +2653,13 @@ document.getElementById('slSens').addEventListener('input',e=>{
   SENS=0.0038*(e.target.value/100);});
 document.getElementById('slVol').addEventListener('input',e=>{
   if(A&&A.setVolume) A.setVolume(e.target.value/100);});
+{ const bc=document.getElementById('btnCuadro');
+  const pinta=()=>bc.textContent='cuadro: '+(CINTA?'cinta 16:9':'pantalla llena');
+  pinta();
+  bc.addEventListener('click',()=>{
+    CINTA=!CINTA; pinta();
+    try{ localStorage.setItem('casa_cuadro',CINTA?'cinta':'lleno'); }catch(err){}
+    layout(); }); }
 { const sf=document.getElementById('slFov');
   sf.value=HFOV;                              // el deslizador arranca en lo guardado
   sf.addEventListener('input',e=>{
@@ -2872,10 +2914,12 @@ function tick(){
         grados a ritmo de pulmon, y un zoom que va y viene solo no se lee a
         respiracion — se lee a que el mundo se hincha y se desinfla. Lo unico
         que lo abre es correr, y poco.
-        Y el numero que se escribe es el HORIZONTAL; el vertical sale del
-        aspecto, asi que el encuadre es el mismo en cualquier pantalla. */
+        HFOV es el horizontal DE REFERENCIA a 16:9; lo que se le escribe a la
+        camara es el VERTICAL que sale de ahi, y es el mismo en toda pantalla.
+        El horizontal de verdad lo pone camera.aspect, asi que una pantalla mas
+        ancha muestra mas de costado: Hor+, y nunca menos. */
   P.fov+=((HFOV+P.sprint*3)-P.fov)*Math.min(dt*4,1);
-  const vf=2*Math.atan(Math.tan(P.fov*Math.PI/360)/camera.aspect)*180/Math.PI;
+  const vf=2*Math.atan(Math.tan(P.fov*Math.PI/360)/ASP)*180/Math.PI;
   if(Math.abs(camera.fov-vf)>0.002){ camera.fov=vf; camera.updateProjectionMatrix(); }
 
   /* linterna: retardo, temblor y batería inestable */
@@ -3217,7 +3261,12 @@ window.__casa={
     texturas:i.memory.textures, geometrias:i.memory.geometries,
     fov_vert:+camera.fov.toFixed(2),
     fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
-    aspecto:+camera.aspect.toFixed(3), fov_horiz_pedido:+P.fov.toFixed(2),
+    aspecto:+camera.aspect.toFixed(3), fov_ref_16_9:+P.fov.toFixed(2),
+    cuadro:CINTA?'cinta':'lleno', cuadro_px:[Math.round(VW),Math.round(VH)],
+    pantalla_px:[innerWidth,innerHeight],
+    /* fraccion de la pantalla que ocupa el cuadro, y el angulo solido relativo
+       a 16:9 con el mismo HFOV — o sea cuanto mundo se ve de mas o de menos */
+    pantalla_usada:+((VW*VH)/(innerWidth*innerHeight)).toFixed(3),
     cuadro:[Math.round(VW),Math.round(VH)],
     colocado:[Math.round(stgL),Math.round(stgT),Math.round(stgX1)],
     pantalla_completa:!!(document.fullscreenElement||document.webkitFullscreenElement),

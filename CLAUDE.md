@@ -107,9 +107,87 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
+- **`Casa_Abandonada.html` es "LA CASA"** (~242 KB, cuatro texturas de foto y nada mas: la casa,
+  los papeles, los escombros y el cielo se dibujan por codigo). Llego de afuera como
+  `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
+  primera persona: una cinta VHS del 12 de marzo de 1994, linterna, papeles que se leen, y todo el
+  cuadro pasa por un post de cinta —curvatura de tubo, aberracion, arrastre de croma, lineas de
+  barrido, grano y viñeteado— dibujado a 0,68 de resolucion. Usa **three r128 UMD desde cdnjs**, o sea
+  global `THREE` y **sin gestion de color**: el `material.color` llega crudo al shader y las texturas
+  con `sRGBEncoding` si se decodifican, asi que un tinte se calcula como multiplicacion directa y no
+  con ida y vuelta de gamma. **La camara tiene UN SOLO ESCRITOR** y la orientacion sale de yaw y
+  pitch con un cuaternion YXZ: el alabeo no existe. **El cuadro llena la pantalla** y el campo se
+  corrige por aspecto (Hor+: `HFOV` es el horizontal de referencia a 16:9 y lo que se mantiene es el
+  vertical), con la cinta 16:9 como opcion. Campo y cuadro se eligen en la pausa y se guardan.
+
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Octogésima primera vuelta (2026-09-02): **LA CASA** — el 16:9 costaba un cuarto de lo que se ve
+
+Reporte, después de tres vueltas mías tocando la cámara a ciegas: *"hermano que no ves que a vos sí te
+muestra bien y a mí no, incluso en fullscreen yo veo un cuarto de lo que se debe ver"*. Tenía razón y
+el número es exacto.
+
+#### PRIMERO: LA CÁMARA NO ESTABA ROTA, Y ESO SE MIDIÓ SOBRE **SU** CAPTURA
+
+Analizando el JPEG que mandó —2756×1268— la mira cae en (1383 · 632) y el centro del cuadro está en
+(1383 · 635,5): **0 px de desvío en x y 3 en y**. El cuadro está centrado en el teléfono (barras de
+262 y 251 px, y esos 11 px son ruido del JPEG en el borde), el aspecto es 1,7745 contra 1,7778, y nada
+está recortado a blanco (máximo 208). O sea que estuve tres vueltas arreglando algo que no estaba mal.
+**La lección de método: cuando el usuario insiste y las mediciones dicen que está bien, lo que está
+mal es la PREGUNTA, no la respuesta.** Medir su captura —y no la mía— fue lo que lo destapó.
+
+#### EL DEFECTO ERA MÍO Y VENÍA DE "HAZLO 16:9"
+
+Encajar el cuadro en 16:9 a la fuerza cuesta dos cosas a la vez, y en su pantalla de aspecto 2,174:
+
+| | campo | mundo visible | pantalla usada | las dos juntas |
+|---|---|---|---|---|
+| original, pantalla llena | 117,2 × 74,0 | 100 % | 100 % | 100 % |
+| **16:9 encajado** | 90,0 × 58,7 | **46 %** | **82 %** | **37 %** |
+
+**37 %, o sea un cuarto.** La mitad se perdió en las barras negras y la otra mitad en el campo. Y las
+dos pérdidas las metí yo: la primera con el formato fijo, la segunda bajando el campo de 117 a 100 y
+después a 80 porque *"el fov está muy raro"*.
+
+**EL CUADRO LLENA LA PANTALLA Y EL CAMPO SE CORRIGE POR ASPECTO.** El motivo por el que existía el
+formato fijo era que el encuadre no dependiera del teléfono, y eso se consigue sin barras: lo que se
+mantiene igual en toda pantalla es el **vertical** que sale de `HFOV` a 16:9, y el horizontal lo pone
+el aspecto de verdad. Es el Hor+ de siempre — una pantalla más ancha muestra **más** de costado y
+nunca menos, y la composición vertical (el techo, el piso, el horizonte) es idéntica para todos.
+Medido en 1378×634: `lleno` da 111,1 × 67,67 usando el 100 % de la pantalla, `cinta 16:9` da
+100,0 × **67,67** usando el 81,8 % — **el vertical no se mueve**, que es la propiedad que había que
+conservar. La cinta queda como opción en la pausa, con el campo, y las dos se guardan.
+
+#### Y UN DEFECTO DE VERDAD QUE APARECIÓ DE PASO: LA CAPA ESCONDIDA SEGUÍA ATRAPANDO TOQUES
+
+`.ov.hide` tenía `opacity:0` y `pointer-events:none`, y no alcanzaba: **`.btn` se reescribe
+`pointer-events:auto`**, y como esa propiedad se hereda, el hijo le gana al padre. Medido con
+`elementFromPoint` sobre el centro de "entrar": devolvía **`btnCuadro`** —un botón del panel de pausa,
+invisible— en las dos resoluciones probadas. O sea que tocar *entrar* podía darle a un botón que no se
+ve. Con `visibility:hidden` la capa no se compone ni se prueba contra el puntero, gane quien gane por
+especificidad, y el retardo en la transición deja que el fundido de salida se siga viendo. Es la misma
+lección que en LEMI costó una vuelta con `#hud`, ahora con un hijo pisando al padre.
+
+#### Y LA CÁMARA, QUE IGUAL HABÍA QUE REHACER
+
+Tenía **cuatro escritores** pisándose en el mismo cuadro —el balanceo, el sacudón, el paseo del menú y
+un fov que respiraba— así que la vista final era la suma de cuatro cosas que nadie podía seguir. Ahora
+hay uno solo, en cinco pasos, y nada más en el juego toca `position`, `quaternion` ni `fov`. La
+orientación sale de dos números y de ninguno más; el alabeo **no existe**, no hay una línea capaz de
+escribirlo. Se fue el fov que respiraba (movía el encuadre dos grados a ritmo de pulmón: no se lee a
+respiración, se lee a que el mundo se hincha) y la deriva de "cámara en mano" (tres senos por eje: un
+centímetro que nadie pidió, moviéndose siempre). Medido, movimiento que nadie pidió estando parado:
+**rms 0,5537 → 0,1283 mm y el peor 3,58 → 0,71**.
+
+#### Y DOS DEL BANCO, QUE PARECÍAN DEL JUEGO
+
+`prep2.py` no reescribía el three r128 de **cdnjs** —sólo unpkg— así que la página moría con
+`THREE is not defined` y las once sondas contestaban `__casa is not defined`, que se lee a error del
+juego. `armar.sh` ahora baja el archivo. Y el paso de foto del plan se llama **`n`** y no `shot`: con
+la clave equivocada no falla nada, simplemente no hay capturas.
 
 ### Octogésima vuelta (2026-09-01): **BARRIO** — la cámara de la cinemática se queda fija
 
