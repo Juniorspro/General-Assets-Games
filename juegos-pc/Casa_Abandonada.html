@@ -175,6 +175,8 @@ function safeArea(){
   return {t:parseFloat(c.paddingTop)||0, r:parseFloat(c.paddingRight)||0,
           b:parseFloat(c.paddingBottom)||0, l:parseFloat(c.paddingLeft)||0};
 }
+const HFOV_TOPE=100;      // grados de campo horizontal, el maximo que se permite
+let fovK=1;               // factor que lleva el vertical de diseño al que entra en el tope
 function layout(){
   const w=innerWidth,h=innerHeight, S=safeArea();
   rotated=h>w; stage.classList.toggle('rot',rotated);
@@ -190,7 +192,11 @@ function layout(){
   stage.style.width=VW+'px'; stage.style.height=VH+'px';
   if(window.renderer){
     renderer.setSize(VW,VH,false);
-    camera.aspect=VW/VH; camera.updateProjectionMatrix();
+    camera.aspect=VW/VH;
+    /* el vertical mas grande que no pasa el tope horizontal, en este aspecto */
+    const vTope=2*Math.atan(Math.tan(HFOV_TOPE*Math.PI/360)/camera.aspect)*180/Math.PI;
+    fovK=Math.min(1, vTope/74);
+    camera.updateProjectionMatrix();
     const pr=renderer.getPixelRatio(), RS=0.68;
     const sw=Math.max(2,Math.floor(VW*pr*RS)), sh=Math.max(2,Math.floor(VH*pr*RS));
     rt.setSize(sw,sh);
@@ -2770,7 +2776,7 @@ function tick(){
     camera.rotation.set(-0.05+Math.sin(T*0.16)*0.022, Math.atan2(x,z), Math.sin(T*0.12)*0.014);
   }
   P.fov+=((74+P.sprint*5+P.panic*7+brFov)-P.fov)*Math.min(dt*4,1);
-  camera.fov=P.fov; camera.updateProjectionMatrix();
+  camera.fov=P.fov*fovK; camera.updateProjectionMatrix();
 
   /* linterna: retardo, temblor y batería inestable */
   camera.getWorldDirection(tDir);
@@ -3061,7 +3067,10 @@ window.__casa={
     llamadas:i.render.calls, triangulos:i.render.triangles,
     programas:i.programs?i.programs.length:-1,
     texturas:i.memory.textures, geometrias:i.memory.geometries,
-    fov:+camera.fov.toFixed(2), near:camera.near, far:camera.far,
+    fov_vert:+camera.fov.toFixed(2),
+    fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
+    aspecto:+camera.aspect.toFixed(3), fovK:+fovK.toFixed(3),
+    near:camera.near, far:camera.far,
     niebla:scene.fog?{tipo:scene.fog.constructor.name,d:scene.fog.density}:null,
     fondo:scene.background?'#'+scene.background.getHexString():null,
     hijos:scene.children.length, estado:state }; },
