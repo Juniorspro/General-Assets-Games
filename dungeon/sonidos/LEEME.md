@@ -76,6 +76,25 @@ lo que entra. Con el filtro de salida:
 El gruñido pasó de 66,6 % a 9,8 % de graves fuera de banda: ahora lo llevan sus
 armónicos, que es justo lo que una radio le hace a una voz grave.
 
+### El screamer se eligió midiendo, no escuchando
+
+Se generaron tres candidatas del mismo momento y ganó la que dio mejor número.
+Un grito desgarrado no es uno fuerte: es uno cuya **amplitud se sacude sola**, y
+esa sacudida vive entre 30 y 150 Hz del espectro de la **envolvente**. Eso es lo
+que el oído lee como una voz que se raja, frente a un tono limpio y sostenido.
+Se mide después de la cadena de radio, que es lo que termina sonando.
+
+| candidata | aspereza (30–150 Hz de la envolvente) | sostenido (>−12 dB del pico) |
+|---|---|---|
+| a | **32,25 %** | 1,9 % |
+| **b — la que quedó** | 26,56 % | **37,2 %** |
+| c | 12,82 % | 19,3 % |
+
+La `a` era la más áspera de las tres y no servía: sonaba fuerte apenas el 1,9 %
+de su duración, o sea un chasquido, y la embestida dura 1,30 s — no la habría
+cubierto. Por eso la decisión es el **producto** de las dos columnas y no la
+aspereza sola.
+
 ### Y dos cosas que el juego no hacía
 
 - **La embestida reusaba `grito()`**, así que el momento más fuerte del juego
