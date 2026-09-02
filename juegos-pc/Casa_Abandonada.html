@@ -181,8 +181,14 @@ function safeArea(){
   return {t:parseFloat(c.paddingTop)||0, r:parseFloat(c.paddingRight)||0,
           b:parseFloat(c.paddingBottom)||0, l:parseFloat(c.paddingLeft)||0};
 }
-const HFOV_TOPE=100;      // grados de campo horizontal, el maximo que se permite
-let fovK=1;               // factor que lleva el vertical de diseño al que entra en el tope
+/* EL CAMPO SE ESCRIBE EN HORIZONTAL, que es lo que el jugador percibe; el
+   vertical se deriva del aspecto. Al reves —que es como estaba— el mismo
+   numero da otro encuadre en cada relacion de pantalla.
+   Estuvo en 117 (sin tope), despues en 100, y a 100 la proyeccion rectilinea
+   estira tanto las esquinas que un mueble contra el borde sale barrido: eso
+   es la mitad del "se ve todo raro". Una camara de mano ronda los 65-75; 80
+   deja margen para jugar sin deformar. */
+const HFOV=80;
 /* ══════════ el cuadro es 16:9 y punto ══════════
    Antes el escenario se estiraba a lo que midiera la ventana, asi que el
    encuadre dependia del telefono: en 19,5:9 se veia una cosa y en 4:3 otra, y
@@ -226,10 +232,7 @@ function layout(){
   if(window.renderer){
     renderer.setSize(VW,VH,false);
     camera.aspect=VW/VH;
-    /* el vertical mas grande que no pasa el tope horizontal, en este aspecto */
-    const vTope=2*Math.atan(Math.tan(HFOV_TOPE*Math.PI/360)/camera.aspect)*180/Math.PI;
-    fovK=Math.min(1, vTope/74);
-    camera.updateProjectionMatrix();
+    camera.updateProjectionMatrix();   // el fov lo escribe la camara, no esto
     const pr=renderer.getPixelRatio(), RS=0.68;
     const sw=Math.max(2,Math.floor(VW*pr*RS)), sh=Math.max(2,Math.floor(VH*pr*RS));
     rt.setSize(sw,sh);
@@ -264,7 +267,7 @@ const postMat=new THREE.ShaderMaterial({
   uniforms:{
     tDiffuse:{value:rt.texture},
     uTime:{value:0}, uRes:{value:new THREE.Vector2(1,1)}, uSrc:{value:new THREE.Vector2(1,1)},
-    uAberr:{value:1.0}, uGrain:{value:0.085}, uVig:{value:0.88},
+    uAberr:{value:1.0}, uGrain:{value:0.085}, uVig:{value:0.62},
     uGlitch:{value:0}, uJump:{value:0}, uWob:{value:0.5}, uBright:{value:1.06}
   },
   vertexShader:[
@@ -284,7 +287,7 @@ const postMat=new THREE.ShaderMaterial({
     '  y.x-0.272*y.y-0.647*y.z, y.x-1.106*y.y+1.703*y.z);}',
     'void main(){',
     '  vec2 uv=vUv; vec2 cc=uv-0.5;',
-    '  uv+=cc*dot(cc,cc)*0.052;',                       // curvatura del tubo
+    '  uv+=cc*dot(cc,cc)*0.016;',                       // curvatura del tubo (era 0.052: a esa fuerza una pared recta se arquea y el centro deja de estar donde uno cree)
     '  vec2 uvb=uv;',
     '  uv.y=fract(uv.y+uJump);',                        // la imagen se corre
     '  float wob=sin(uv.y*118.0+uTime*7.0)*0.0007+sin(uv.y*11.0-uTime*1.3)*0.0017;',
@@ -331,6 +334,7 @@ scene.background=new THREE.Color(0x04060a);
 scene.fog=new THREE.FogExp2(0x060910,0.052);
 const camera=new THREE.PerspectiveCamera(74,1,0.05,140);
 camera.rotation.order='YXZ'; window.camera=camera;
+const _camEu=new THREE.Euler(0,0,0,'YXZ');   // el unico sitio que arma la orientacion de la camara
 scene.add(camera);
 layout(); addEventListener('resize',layout);
 addEventListener('orientationchange',()=>setTimeout(layout,150));
@@ -2709,7 +2713,7 @@ addEventListener('mousemove',e=>{
 /* ══════════ jugador ══════════ */
 /* aparece en la entrada, de cara al pasillo (hacia -Z) */
 const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:0,
-  vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:74,sprint:0,stepPh:0,panic:0};
+  vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0};
 const R=0.32, EYE=1.66;
 const WALK=1.15, RUN=2.0;          // marcha lenta: tensión
 
@@ -2794,49 +2798,67 @@ function tick(){
     }
   }
 
-  /* balanceo, respiración, inclinación */
+  /* ══════════════════ LA CÁMARA ══════════════════
+     Rehecha de cero. La anterior no estaba rota en una linea: tenia CUATRO
+     ESCRITORES pisandose —el balanceo, el sacudon, el paseo del menu y el fov
+     de la respiracion— asi que la vista final era la suma de cuatro cosas que
+     nadie podia seguir. Ahora hay uno solo, en cinco pasos y en orden, y nada
+     mas en el juego toca position, quaternion ni fov.
+
+     LA ORIENTACION SALE DE DOS NUMEROS Y DE NINGUNO MAS: yaw y pitch, los dos
+     que mueve el dedo. Se arma con un cuaternion desde un Euler YXZ con la Z
+     en cero, asi que el alabeo no queda "amortiguado a cero": NO EXISTE — no
+     hay una sola linea capaz de escribirlo. */
+
   P.bob+=dt*v*2.6;
   const amp=Math.min(v/1.4,1.15);
-  P.bobY+=(Math.sin(P.bob*2)*0.042*amp-P.bobY)*Math.min(dt*13,1);
-  P.bobX+=(Math.sin(P.bob)*0.036*amp-P.bobX)*Math.min(dt*13,1);
+  P.bobY+=(Math.sin(P.bob*2)*0.030*amp-P.bobY)*Math.min(dt*13,1);
+  P.bobX+=(Math.sin(P.bob)*0.020*amp-P.bobX)*Math.min(dt*13,1);
   P.breath+=dt*(0.75+P.sprint*1.7+P.panic*3.4);
   const rest=1-Math.min(v/1.4,1);
-  const brY=Math.sin(P.breath)*(0.013+rest*0.020+P.sprint*0.013+P.panic*0.030);
-  const brFov=Math.sin(P.breath)*(0.4+P.sprint*0.7+P.panic*1.6);
-
-  const strafe=(P.vx*cy-P.vz*sy)/2.4;
+  const brY=Math.sin(P.breath)*(0.009+rest*0.013+P.panic*0.018);
   P.yawVel*=Math.pow(0.0018,dt);
-  const tr=-strafe*0.09+P.yawVel*1.25+Math.sin(P.bob)*0.012*amp+Math.sin(P.breath*0.5)*0.005;
-  P.roll+=(0-P.roll)*Math.min(dt*5.5,1);   // sin alabeo: el horizonte no se tuerce
-  P.lean+=((-P.sprint*0.022)-P.lean)*Math.min(dt*4,1);
+  P.roll=0; P.lean=0;                      // quedan solo para que las sondas los lean
 
+  /* 1 · DONDE ESTA EL OJO. A la altura del ojo y en el eje del cuerpo. Se fue
+        la deriva de "camara en mano" (tres senos por eje): un centimetro que
+        no pidio nadie, moviendose todo el tiempo, es exactamente lo que se
+        siente como que el encuadre no se queda quieto. */
   camera.position.set(P.x+P.bobX*cy, P.y+EYE+P.bobY+brY, P.z-P.bobX*sy);
-  /* pulso de cámara doméstica: deriva lenta e imperfecta */
-  const hR=Math.sin(T*0.29)*0.55+Math.sin(T*0.71+1.3)*0.30+Math.sin(T*1.63+2.1)*0.14;
-  const hP=Math.sin(T*0.34+0.7)*0.5+Math.sin(T*0.83+2.4)*0.28+Math.sin(T*1.9)*0.11;
-  const hZ=Math.sin(T*0.23+1.9)*0.6+Math.sin(T*0.61+0.4)*0.25;
-  camera.position.x+=hR*0.011; camera.position.z+=hP*0.011;
-  camera.position.y+=Math.sin(T*0.47+1.1)*0.006;
-  /* SOLO lo que el jugador pide. La deriva del pulso sigue existiendo pero
-     unicamente en la POSICION —un centimetro, suave— que es lo que da el aire
-     de camara en mano sin girar la vista por su cuenta. */
-  camera.rotation.set(P.pitch+P.lean, P.yaw, 0);
 
+  /* 2 · HACIA DONDE MIRA. Nada mas que lo que pidio el dedo.
+        El tope de cabeceo va antes de armar la rotacion, no despues de
+        haberla escrito: en YXZ el pitch se degenera en ±π/2. */
+  P.pitch=Math.max(-1.35,Math.min(1.35,P.pitch));
+  _camEu.set(P.pitch,P.yaw,0);
+  camera.quaternion.setFromEuler(_camEu);
+
+  /* 3 · EL SACUDON MUEVE EL OJO, NUNCA LA MIRADA. Antes tambien sumaba
+        rotacion, y su componente Z es alabeo: un golpe torcia el horizonte y
+        eso no se lee a susto, se lee a que el juego se rompio. */
   P.panic=Math.max(0,P.panic-dt*0.16);
   if(shakeUpdate(dt)){
     camera.position.x+=shk.p.x; camera.position.y+=shk.p.y; camera.position.z+=shk.p.z;
-    camera.rotation.x+=shk.r.x; camera.rotation.y+=shk.r.y; camera.rotation.z+=shk.r.z;
   }
-  /* con order YXZ el pitch se degenera en ±π/2 y la vista se traba: nunca llegar ahí */
-  camera.rotation.x=Math.max(-1.42,Math.min(1.42,camera.rotation.x));
-  if(state==='menu'){                       // paseo lento alrededor de la casa
+
+  /* 4 · EL PASEO DEL MENU ES ESTE MISMO ESCRITOR y no otro colgado al final */
+  if(state==='menu'){
     const a=T*0.042+2.2;
     const x=Math.cos(a)*11.4, z=Math.sin(a)*9.6;
     camera.position.set(x,1.95+Math.sin(T*0.21)*0.22,z);
-    camera.rotation.set(-0.05+Math.sin(T*0.16)*0.022, Math.atan2(x,z), Math.sin(T*0.12)*0.014);
+    _camEu.set(-0.05+Math.sin(T*0.16)*0.022, Math.atan2(x,z), 0);
+    camera.quaternion.setFromEuler(_camEu);
   }
-  P.fov+=((74+P.sprint*5+P.panic*7+brFov)-P.fov)*Math.min(dt*4,1);
-  camera.fov=P.fov*fovK; camera.updateProjectionMatrix();
+
+  /* 5 · EL CAMPO. Se fue el fov que respiraba: movia el encuadre casi dos
+        grados a ritmo de pulmon, y un zoom que va y viene solo no se lee a
+        respiracion — se lee a que el mundo se hincha y se desinfla. Lo unico
+        que lo abre es correr, y poco.
+        Y el numero que se escribe es el HORIZONTAL; el vertical sale del
+        aspecto, asi que el encuadre es el mismo en cualquier pantalla. */
+  P.fov+=((HFOV+P.sprint*3)-P.fov)*Math.min(dt*4,1);
+  const vf=2*Math.atan(Math.tan(P.fov*Math.PI/360)/camera.aspect)*180/Math.PI;
+  if(Math.abs(camera.fov-vf)>0.002){ camera.fov=vf; camera.updateProjectionMatrix(); }
 
   /* linterna: retardo, temblor y batería inestable */
   camera.getWorldDirection(tDir);
@@ -3153,7 +3175,7 @@ window.__casa={
     texturas:i.memory.textures, geometrias:i.memory.geometries,
     fov_vert:+camera.fov.toFixed(2),
     fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
-    aspecto:+camera.aspect.toFixed(3), fovK:+fovK.toFixed(3),
+    aspecto:+camera.aspect.toFixed(3), fov_horiz_pedido:+P.fov.toFixed(2),
     cuadro:[Math.round(VW),Math.round(VH)],
     colocado:[Math.round(stgL),Math.round(stgT),Math.round(stgX1)],
     pantalla_completa:!!(document.fullscreenElement||document.webkitFullscreenElement),
@@ -3231,7 +3253,7 @@ window.__casa={
         else if(im instanceof HTMLImageElement||im instanceof ImageBitmap) v.imagen++;
         else v.otra++; } });
     return v; },
-  pon(k,v){ if(k==='fov'){camera.fov=v;camera.updateProjectionMatrix();} return this.est(); }
+  pon(k,v){ if(k==='fov'){P.fov=v;} return this.est(); }
 };
 
 /* ══════════ fundir lo estatico ══════════

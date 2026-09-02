@@ -12,6 +12,12 @@ s = s.replace('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/visi
 s = s.replace('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm', './mp/wasm')
 s = s.replace('https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', './mp/hand_landmarker.task')
 s = re.sub(r'https://cdn\.jsdelivr\.net/gh/[^/]+/[^@]+@[0-9a-f]+/assets/fp/', './fp/', s)
+# three r128 UMD desde cdnjs. Chromium en el contenedor NO usa el proxy de salida (curl si),
+# asi que sin esto la pagina entera muere con 'THREE is not defined' y todas las sondas
+# contestan '__casa is not defined' — que parece un error del juego y es del banco.
+# El archivo se baja una vez:  curl -sL -o /tmp/ui/three128.min.js \
+#   https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
+s = s.replace('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', './three128.min.js')
 s = s.replace('</head>', '<script>window.__errs=[];addEventListener("error",e=>window.__errs.push(String(e.message)));</script></head>')
 io.open(dst, 'w', encoding='utf8').write(s)
 print(dst, len(s))
