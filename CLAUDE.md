@@ -269,6 +269,111 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Octogésima segunda vuelta (2026-09-02): **PUERTA BLANCA** — el nivel 6, un local de comida rápida y una araña que teje
+
+Pedido: *"al pasar la puerta del nivel 5 el jugador sea llevado al nivel 6 … una tienda de comida
+rápida … buscar y ordenar las partes de una hamburguesa (4) para luego escapar … la entidad será una
+araña gigante (hazla demasiado terrorífica) … podrá poner sus telas en el piso y entre puerta para que
+al pasar el jugador quede atrapado unos 3 segundos (en esos segundos la araña activará modo caza)"*.
+
+Vive en `herramientas/puerta/nivel6.py`, que `armar.py` inyecta con quince parches. Va **aparte** de
+`armar.py` porque son mil líneas de JS y mezclarlas con los parches del nivel 1 vuelve ilegibles las
+dos cosas.
+
+#### EL LOCAL, Y POR QUÉ ES GRANDE
+
+47 × 38 m de adentro, seis ambientes: salón con ventanales y reservados, mostrador con su cartel de
+menú, cocina con planchas y campana, cámara frigorífica, depósito, baños y pasillo trasero. **Las
+cuatro partes viven en cuatro ambientes DISTINTOS**: con todo en una sala, buscar no sería buscar.
+
+**Y LA PUERTA DEL BAÑO MEDÍA 30 CENTÍMETROS.** El hueco salió de restar dos muros y nadie lo había
+contado: el jugador mide 0,84 de ancho, así que el baño era una habitación sellada con la parte de
+`TAPA` adentro. Pasó a 2,3 m.
+
+#### LA HAMBURGUESA SE ARMA EN ORDEN, Y LA BANDEJA ES QUIEN LO SABE
+
+`ST_ORDEN` es `pan · carne · queso · tapa`, y la bandeja **sólo acepta la que toca**. Verificado por el
+camino del jugador: juntando primero el queso y yendo a la bandeja, `puestas` queda en **0** y el
+cartel dice qué falta. Con las cuatro encima, `puestas 4` y la puerta de atrás se abre.
+El orden se lee **en el HUD** y no en un cartel que aparece una vez: un aviso de dos segundos que ya
+se fue no sirve cuando uno vuelve del depósito tres minutos después.
+
+#### LA ARAÑA: TRES DEFECTOS, Y LOS TRES DE BULTO
+
+Va **dibujada por código y no generada**, y es una decisión: esta cosa tiene que caminar con ocho
+patas y arrinconarte. Una malla generada llega estática y riggear ocho patas a mano es más trabajo que
+construirlas articuladas de entrada.
+
+1. **SALÍA COMO UNA MANCHA NEGRA.** Quitina en `0x14100f` —que es lo que uno escribe pensando en una
+   araña— en un local en penumbra: ni patas, ni volumen, ni silueta. **El negro absoluto no tiene
+   sombreado que mostrar.** Va gris pardo con brillo húmedo y un emisivo bajo que garantiza que nunca
+   caiga a negro puro. Es el mismo defecto que ya costó una vuelta con el camello de LEMI y con las
+   ruedas del auto.
+2. **LAS PATAS ESTABAN AL REVÉS.** Con `fPiv.rotation.z = -1.15` el fémur **baja** y la tibia sube: la
+   rodilla terminaba en el piso y el pie en el aire, así que el bicho se leía a bulto con patitas. Los
+   dos ángulos salen de una cuenta y no de tantear: con el pivote en y = 1,55 y un fémur de 1,5 a 0,96
+   rad la rodilla queda en **2,78**, y una tibia de **3,2** a −1,05 rad de horizontal baja justo esos
+   2,78 hasta el suelo. Ese codo por encima del lomo **es** la silueta de araña.
+3. **Y SE HUNDÍA 11 CENTÍMETROS EN EL PISO**, medido con la caja envolvente (`min.y = −0,11`). Un bicho
+   enterrado hasta el tobillo no se apoya: flota al revés.
+
+Caja final: **4,86 × 3,02 × 3,04 m** — más alta que el jugador. Marcha de tetrápodo alterno: cuatro
+patas apoyadas mientras las otras cuatro avanzan; con todas juntas se lee a titiritero.
+
+**Y NO CAMINA EN LÍNEA RECTA: HAY UN GRAFO.** Con seis ambientes unidos por cinco vanos, ir derecho al
+jugador la clava en la primera pared. Trece nodos y un BFS, y entre dos nodos vecinos hay línea limpia
+**por construcción**, que es lo que evita tener que probar contra paredes cada cuadro.
+
+**LA VELOCIDAD ES UNA RESTA:** ronda a 2,2 y caza a **5,0**, contra 4,3 de caminar y 7,74 de correr.
+Caminando no se le gana y corriendo sí. Esa es toda la tensión del nivel.
+
+#### LAS TELAS, QUE SON EL PEDIDO
+
+Seis de entrada: cuatro **en los vanos** —el paso del mostrador, la puerta de la cocina, la de la
+cámara y la del depósito— y dos en el piso; la araña teje una más cada 11-17 s mientras ronda, hasta
+doce. Las de los vanos van de entrada a propósito: son las que garantizan que el jugador se cruce con
+el mecanismo antes de que la araña lo elija por él.
+
+**Y LO QUE HACE QUE LA TELA IMPORTE NO ES QUEDARSE PEGADO, ES QUE ELLA SE ENTERA.** Medido pisando una:
+`atrapado 2,64`, la tela pasa a usada, y la araña salta a **`caza`** en el mismo cuadro y acelera a 5.
+Sin ese renglón la tela sería una molestia de tres segundos.
+
+**La tela se hornea distinto que las otras cinco texturas:** el generador la devuelve blanca sobre
+negro y el juego necesita **alfa**, que sale de la luminancia de la propia foto con rampa —con un corte
+duro los hilos quedan dentados—. Medido: el 24,4 % de la imagen es hilo.
+
+#### DOS DEFECTOS PROPIOS QUE SÓLO SALIERON MIDIENDO
+
+- **EL REINICIO NO TE DEVOLVÍA A LA ENTRADA.** El screamer corría, `resetStore` corría, y las partes
+  seguían en la mano: uno reaparecía **encima de la parte que acababa de perder** y la volvía a juntar
+  al cuadro siguiente, con el bicho a medio metro. Los otros cinco niveles sí reposicionan.
+- **LA CINTA SE ROMPÍA JUSTO CUANDO HABÍA QUE VER.** `entityProximity` alimenta el glitch del post, y
+  yo lo puse en `1 − dist/16`: con la araña a cinco metros eso metía **0,41 de glitch fijo**, o sea que
+  cuanto más cerca estaba la cosa que te mata, menos se veía. Topado en 0,55.
+
+#### Y UNA CORRECCIÓN A LA VUELTA ANTERIOR
+
+En la vuelta 81 escribí que *"el look VHS es CSS, no una pasada de WebGL"*. **Es falso**: hay una pasada
+de post-proceso con su render target y su shader (línea 10127 de `base.html`), y de ahí salen el
+glitch, el rodillo y el grano. Lo descubrí porque apagar los cuatro divs de CSS no limpiaba la imagen.
+
+#### MEDIDO AL CERRAR
+
+Cadena **5 → 6 verificada de verdad**: forzando `dunDone` y cruzando el portón del calabozo se aterriza
+en `store`. Partida completa del 6 por el camino del jugador: **4 de 4 partes**, armada en orden
+(`puestas 4`), la araña pasa a caza, y la puerta de atrás lleva a `end`. La bandeja **rechaza** la parte
+fuera de orden (`puestas 0` con sólo el queso). Tela: `atrapado 2,64` y caza en el acto. Agarrón:
+screamer, y las partes vuelven a **`[false,false,false,false]`**. Los **siete estados** cargan —room ·
+field · farm · school · library · dungeon · store— con el cielo del nivel 1 intacto. **130 llamadas de
+dibujo en el salón y 165 en la cocina**, 3.400 a 4.400 triángulos. `window.__errs` vacío en las once
+corridas. El HTML pasó de 1,09 a **1,52 MB**, y esos 430 KB son las seis texturas del local.
+
+**LO QUE NO PUDE COMPROBAR:** el reloj del banco corre a **0,4× el de pared** con render por software
+—medido, `catchGuard` baja 1,05 en 2,6 s reales— así que todo lo que dura segundos de juego hay que
+esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** miedo: lo que está medido
+es que se ve, que camina, que caza y que te alcanza.
+
+
 ### Octogésima vuelta (2026-09-01): **BARRIO** — la cámara de la cinemática se queda fija
 
 Pedido, después de que la vuelta anterior bajara las amplitudes a la mitad y siguiera temblando:

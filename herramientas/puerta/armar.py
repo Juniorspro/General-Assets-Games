@@ -46,6 +46,7 @@ if SOLO:
 cielo_b64 = b64(os.path.join(ASSETS, 'cielo360.webp'))
 pasto_js = io.open(os.path.join(ASSETS, 'pasto.js'), encoding='utf8').read()
 flores_js = io.open(os.path.join(ASSETS, 'flores.js'), encoding='utf8').read()
+n6_js = io.open(os.path.join(ASSETS, 'n6.js'), encoding='utf8').read()
 
 assets = """
 <script>
@@ -54,8 +55,8 @@ assets = """
    horneado con herramientas/puerta/. Van en su propio <script> a proposito:
    asi la parte del juego que uno lee no empieza con medio mega de base64. */
 window.__PB_CIELO = '%s';
-%s%s</script>
-""" % (cielo_b64, pasto_js, flores_js)
+%s%s%s</script>
+""" % (cielo_b64, pasto_js, flores_js, n6_js)
 
 s = s if SOLO else cambiar(s, '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
@@ -317,7 +318,7 @@ SONDAS = r"""
     // false se cuenta el cuadro entero, pasada de sombra incluida.
     est: function () {
       const i = renderer.info.render;
-      return { llamadas: i.calls, triangulos: i.triangles, empezado: levelStarted,
+      return { llamadas: i.calls, triangulos: i.triangles, nivel: gameState, empezado: levelStarted,
                 geometrias: renderer.info.memory.geometries,
                 texturas: renderer.info.memory.textures };
     },
@@ -503,6 +504,195 @@ s = s if SOLO else cambiar(s, """      skyDome.visible = true;
       cloudGroup.visible = true;""",
             """      skyDome.visible = true;
       cloudGroup.visible = false;""", 'apagar nubes sprite')
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7 · EL NIVEL 6: EL LOCAL DE COMIDA RAPIDA Y LA ARANA
+# ══════════════════════════════════════════════════════════════════════════════
+sys.path.insert(0, AQUI)
+import nivel6
+
+# la ficha del menu, despues del nivel 5
+s = s if SOLO else cambiar(s, """        <div class="lv" data-lv="5">""",
+            nivel6.MENU_FICHA.replace('data-lv="6"', 'data-lv="6"') + """        <div class="lv" data-lv="5">""",
+            'ficha del nivel 6')
+
+# el HUD y el aviso de atrapado, al lado de los otros
+s = s if SOLO else cambiar(s, '    <div id="vhs-hud">',
+            nivel6.HUD + nivel6.TRAP_DIV + '    <div id="vhs-hud">', 'HUD del nivel 6')
+
+s = s if SOLO else cambiar(s, '  #vhs-hud {', nivel6.CSS + '\n  #vhs-hud {', 'CSS del nivel 6')
+
+# el juego entero
+s = s if SOLO else cambiar(s, '  // ==================================================================\n'
+                              '  // Game state\n',
+            nivel6.JS + '\n  // ==================================================================\n'
+                        '  // Game state\n', 'nivel 6')
+
+# ---- cableado ----
+s = s if SOLO else cambiar(s, """  function hideAllLevels() {
+    roomGroup.visible = false;""",
+            """  function hideAllLevels() {
+    storeGroup.visible = false;
+    stHud.style.display = 'none';
+    stTrap.style.display = 'none';
+    roomGroup.visible = false;""", 'esconder el local')
+
+# el local es interior: ni domo ni nubes, y una niebla corta que hace que el
+# fondo de cada ambiente se pierda antes de la pared siguiente
+s = s if SOLO else cambiar(s, """    } else if (mode === 'field') {
+      scene.background = null;""",
+            """    } else if (mode === 'store') {
+      scene.background = new THREE.Color(0x05060a);
+      scene.fog = new THREE.FogExp2(0x0a0c12, 0.030);
+      setFieldLights(false);
+      setRoomLights(false);
+      setFarmLights(false);
+      dunAmbient.visible = false;
+      libAmbient.visible = false;
+      schoolAmbient.visible = false;
+      skyDome.visible = false;
+      cloudGroup.visible = false;
+    } else if (mode === 'field') {
+      scene.background = null;""", 'entorno del local')
+
+s = s if SOLO else cambiar(s, """      resetDungeon(true);
+      if (n === 0) enterRoom();""",
+            """      resetDungeon(true);
+      resetStore(true);
+      if (n === 0) enterRoom();""", 'reset del local al elegir nivel')
+
+s = s if SOLO else cambiar(s, """      else if (n === 4) enterLibrary();
+      else enterDungeon();""",
+            """      else if (n === 4) enterLibrary();
+      else if (n === 5) enterDungeon();
+      else enterStore();""", 'entrar al nivel 6')
+
+# LA PUERTA DEL CALABOZO YA NO TERMINA EL JUEGO: LLEVA AL LOCAL
+s = s if SOLO else cambiar(s, """        transitioning = true;
+        endTitle.innerHTML = '⛓️ Saliste del calabozo';
+        endText.textContent = 'Encendiste las tres antorchas y cruzaste el portón con el verdugo pisándote los talones. Fin de esta versión de la demo.';
+        transitionToEnd();
+        return;""",
+            """        transitioning = true;
+        transitionToStore();
+        return;""", 'salida del calabozo al nivel 6')
+
+s = s if SOLO else cambiar(s, """        else if (kind === 'exec' || kind === 'axe') resetDungeon();""",
+            """        else if (kind === 'exec' || kind === 'axe') resetDungeon();
+        else if (kind === 'spider') resetStore();""", 'reinicio tras el screamer')
+
+s = s if SOLO else cambiar(s, """    } else if (gameState === 'dungeon') {
+      player.position.y = 0;
+      updateDungeonLogic(delta, elapsed);
+    }""",
+            """    } else if (gameState === 'dungeon') {
+      player.position.y = 0;
+      updateDungeonLogic(delta, elapsed);
+    } else if (gameState === 'store') {
+      player.position.y = 0;
+      updateStoreLogic(delta, elapsed);
+    }""", 'bucle del nivel 6')
+
+s = s if SOLO else cambiar(s, """       gameState === 'library' || gameState === 'dungeon');""",
+            """       gameState === 'library' || gameState === 'dungeon' || gameState === 'store');""",
+            'correr en el local')
+
+# PEGADO A LA TELA NO SE CAMINA, y va en el mismo sitio donde el juego ya frena
+# al que esta escondido: dos maneras distintas de quedarse quieto terminan
+# desincronizandose el dia que se toque una.
+s = s if SOLO else cambiar(s, """    if (hiding) { rawLen = 0; inputX = 0; inputZ = 0; running = false; }""",
+            """    const pegado = (gameState === 'store' && ST.atrapado > 0);
+    if (hiding || pegado) { rawLen = 0; inputX = 0; inputZ = 0; running = false; }""",
+            'no caminar pegado a la tela')
+
+s = s if SOLO else cambiar(s, """      dunGroup.visible = false;
+      dunHud.style.display = 'none';
+      hideBtn.style.display = 'none';
+      hideMask.style.display = 'none';
+      hiding = null;
+      hideCd = 0;""",
+            """      dunGroup.visible = false;
+      dunHud.style.display = 'none';
+      storeGroup.visible = false;
+      stHud.style.display = 'none';
+      stTrap.style.display = 'none';
+      hideBtn.style.display = 'none';
+      hideMask.style.display = 'none';
+      hiding = null;
+      hideCd = 0;""", 'apagar el local al terminar')
+
+# la sonda del nivel 6
+s = cambiar(s, """    flores: function () {""",
+            """    // fuerza el final del calabozo para poder PROBAR la cadena 5 -> 6 sin
+    // encender las tres antorchas a mano. La salida del calabozo esta detras de
+    // dunDone, asi que sin esto el enlace no se puede verificar y habria que
+    // darlo por bueno leyendo el codigo.
+    ganaCalabozo: function () { dunDone = true; return dunDone; },
+    // por que NO salta el agarron: las tres condiciones que lo bloquean
+    porQueNoAgarra: function () {
+      return { grace: +ST.grace.toFixed(2), catchGuard: +catchGuard.toFixed(2),
+               transitioning: transitioning, screamActivo: scream.active,
+               d: +Math.hypot(player.position.x - ARA.g.position.x,
+                              player.position.z - ARA.g.position.z).toFixed(2) };
+    },
+    local: function () {
+      return { partes: ST_ORDEN.map(function (i) { return !!ST.tengo[i]; }),
+               puestas: ST.puestas, hecho: ST.hecho,
+               atrapado: +ST.atrapado.toFixed(2),
+               telas: stTelas.length, telasUsadas: stTelas.filter(function (w) { return w.usada; }).length,
+               arana: { estado: ARA.estado,
+                        x: +ARA.g.position.x.toFixed(1), z: +ARA.g.position.z.toFixed(1),
+                        d: +Math.hypot(player.position.x - ARA.g.position.x,
+                                       player.position.z - ARA.g.position.z).toFixed(1),
+                        vel: +ARA.vel.toFixed(2) },
+               texturas: stTexPuestas };
+    },
+    // pone al jugador donde haga falta para probar sin caminar veinte metros
+    irA: function (x, z) { player.position.set(x, 0, z); return { x: x, z: z }; },
+    arana: function (x, z) { ARA.g.position.set(x, 0, z); return 'ok'; },
+    // GIGANTE ES UN NUMERO, no una impresion: la caja envolvente de la arana
+    // con las patas abiertas, en metros
+    // apaga los velos de VHS para fotografiar. NO cambia el juego: son cuatro
+    // divs de CSS por encima del lienzo, y con el grano y el glitch puestos no
+    // hay forma de juzgar si una cosa oscura se ve o no.
+    limpio: function (v) {
+      ['grade', 'vignette', 'vhs-hud', 'vhs-tracking'].forEach(function (id) {
+        const e = document.getElementById(id);
+        if (e) e.style.visibility = v ? 'hidden' : '';
+      });
+      // el glitch NO es CSS: sale de una pasada de post-proceso con su render
+      // target. Sin apagarlo, media captura sale con la imagen partida en
+      // bandas y no hay forma de juzgar si algo se ve.
+      // UNA LINEA QUE CORRE TODOS LOS CUADROS GANA SIEMPRE CONTRA UNA QUE
+      // CORRE UNA VEZ: apagarlo aca no alcanzaba porque updateTape se lo vuelve
+      // a subir con la cercania de la entidad. Va una bandera que el bucle
+      // respeta.
+      window.__pbLimpio = !!v;
+      if (v) { glitchT = 0; postU.uGlitch.value = 0; postU.uRoll.value = 0; postU.uDread.value = 0; }
+      return !!v;
+    },
+    // el metodo que ya sirvio con las flores: apagar UNA cosa y contar cuantos
+    // pixeles cambian dice si se ve; mirar la foto, no
+    aranaVer: function (v) { ARA.g.visible = !!v; return ARA.g.visible; },
+    aranaCaja: function () {
+      ARA.g.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(ARA.g);
+      return { ancho: +(b.max.x - b.min.x).toFixed(2),
+               alto: +(b.max.y - b.min.y).toFixed(2),
+               largo: +(b.max.z - b.min.z).toFixed(2),
+               piso: +b.min.y.toFixed(2) };
+    },
+    flores: function () {""", 'sonda del local')
+
+s = s if SOLO else cambiar(s, """  function updateTape(delta, elapsed) {
+    glitchCd -= delta;""",
+            """  function updateTape(delta, elapsed) {
+    if (window.__pbLimpio) {
+      postU.uGlitch.value = 0; postU.uRoll.value = 0; postU.uDread.value = 0;
+      vhsTracking.style.opacity = '0';
+      return;
+    }
+    glitchCd -= delta;""", 'apagar el post para medir')
 
 io.open(SAL, 'w', encoding='utf8').write(s)
 print('%s  %d -> %d bytes' % (SAL, n0, len(s)))
