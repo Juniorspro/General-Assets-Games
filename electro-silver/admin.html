@@ -230,6 +230,17 @@ pre{background:var(--grafito);color:#D6E0EC;padding:15px;border-radius:var(--r);
 .hallazgo .m{width:19px;height:19px;flex:none;border-radius:50%;display:grid;place-items:center;
   font-size:12px;font-weight:700;background:rgba(255,255,255,.7)}
 .hallazgo b{font-family:var(--M);font-size:12.5px;word-break:break-all}
+.entrar-caja{max-width:440px;margin:0 auto;padding:12px 0 8px;text-align:center}
+.entrar-caja .candado{width:60px;height:60px;margin:0 auto 16px;border-radius:50%;
+  background:var(--rayosuave);display:grid;place-items:center;font-size:26px}
+.entrar-caja h3{font-size:26px}
+.entrar-caja .dice{margin:8px auto 22px;max-width:38ch}
+.entrar-caja .dos,.entrar-caja .campo,.entrar-caja .nota,.entrar-caja .hallazgos{text-align:left}
+.bp.ancho{width:100%;padding:14px;margin-top:6px;justify-content:center}
+.abajo-entrar{display:flex;gap:18px;justify-content:center;margin-top:16px}
+.abajo-entrar button{font-size:13px;color:var(--gris);text-decoration:underline}
+.abajo-entrar button:hover{color:var(--rayo)}
+.chip-con.entrar{background:rgba(11,91,211,.22);color:#9CC2FF;cursor:pointer}
 .listo{text-align:center;padding:8px 0 22px}
 .listo .tilde{width:66px;height:66px;margin:0 auto 16px;border-radius:50%;background:var(--verdesuave);
   color:var(--verde);display:grid;place-items:center;font-size:32px}
@@ -454,6 +465,41 @@ a.bp,a.bs{display:inline-flex;align-items:center;justify-content:center;text-dec
   <div class="adentro">
 
     <!-- 0 · presentación -->
+    <!-- entrar: cuando el proyecto ya está conectado y sólo falta la sesión -->
+    <section class="etapa" data-etapa="9" hidden>
+      <div class="entrar-caja">
+        <div class="candado">🔒</div>
+        <h3>Entrá para publicar</h3>
+        <p class="dice" id="entrar-dice">El proyecto ya está conectado. Poné tu mail y tu
+          contraseña, los mismos que elegiste cuando lo configuraste.</p>
+
+        <div id="entrar-cfg" hidden>
+          <div class="nota"><b>Falta decir cuál es tu proyecto.</b>
+            Entrá a <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com/dashboard</a>,
+            abrí tu proyecto, andá a <b>Project Settings → API</b> y pegá acá abajo lo que veas.
+            Se pide una sola vez.</div>
+          <div class="campo">
+            <label class="et" for="entrar-pegote">Dirección y clave del proyecto</label>
+            <textarea id="entrar-pegote" rows="3" placeholder="https://abcdefgh.supabase.co&#10;eyJhbGciOiJIUzI1NiIs…"></textarea>
+          </div>
+          <div class="hallazgos" id="hallazgos9"></div>
+        </div>
+
+        <div class="dos">
+          <div class="campo"><label class="et" for="log-mail">Mail</label>
+            <input type="email" id="log-mail" autocomplete="username" placeholder="vos@gmail.com"></div>
+          <div class="campo"><label class="et" for="log-pass">Contraseña</label>
+            <input type="password" id="log-pass" autocomplete="current-password" placeholder="········"></div>
+        </div>
+        <div class="hallazgos" id="hallazgos-log"></div>
+        <button type="button" class="bp ancho" id="b-entrar">Entrar</button>
+        <div class="abajo-entrar">
+          <button type="button" id="b-otro">Conectar otro proyecto</button>
+          <button type="button" id="b-olvide">Olvidé la contraseña</button>
+        </div>
+      </div>
+    </section>
+
     <section class="etapa" data-etapa="0">
       <div class="hero-asis">
         <div class="num">4</div>
@@ -638,6 +684,10 @@ create policy "fotos borra el dueno" on storage.objects
 (function(){
 "use strict";
 var $=function(i){return document.getElementById(i)};
+/* Si acá van la dirección y la clave anon, el panel arranca conectado y sólo pide
+   mail y contraseña. La clave anon es pública por diseño: no deja escribir nada. */
+var CFG_FIJA = { url:"", key:"" };
+
 var CLAVE_CFG="electrosilver.cfg.v1";
 var CLAVE_PUBS="electrosilver.pubs.v1";
 var TABLA="publicaciones", BUCKET="publicaciones";
@@ -646,6 +696,7 @@ var TABLA="publicaciones", BUCKET="publicaciones";
 function leerCfg(){ try{ return JSON.parse(localStorage.getItem(CLAVE_CFG)||"{}")||{}; }catch(e){ return {}; } }
 function grabarCfg(c){ try{ localStorage.setItem(CLAVE_CFG, JSON.stringify(c)); }catch(e){} }
 var cfg=leerCfg(), sb=null, sesion=null;
+if(CFG_FIJA.url && CFG_FIJA.key){ cfg.url=CFG_FIJA.url; cfg.key=CFG_FIJA.key; }
 
 function crearCliente(){
   if(!cfg.url || !cfg.key) return null;
@@ -1019,26 +1070,43 @@ function irA(n){
   document.querySelectorAll(".etapa").forEach(function(el){
     el.hidden = (+el.dataset.etapa)!==n;
   });
-  $("marcha-b").style.width=(n/ETAPAS*100)+"%";
-  $("modal-paso").textContent = n===0?"" : (n>=ETAPAS?"listo":"paso "+n+" de 4");
-  $("modal-tit").textContent = n>=ETAPAS ? "Ya está" : "Que la vea todo el mundo";
+  var esEntrar = n===9;
+  $("marcha-b").style.width = esEntrar ? "100%" : (n/ETAPAS*100)+"%";
+  $("modal-paso").textContent = esEntrar ? "" : (n===0?"" : (n>=ETAPAS?"listo":"paso "+n+" de 4"));
+  $("modal-tit").textContent = esEntrar ? "Iniciar sesión"
+    : (n>=ETAPAS ? "Ya está" : "Que la vea todo el mundo");
+  if(esEntrar){
+    var falta = !(cfg.url && cfg.key);
+    $("entrar-cfg").hidden = !falta;
+    $("entrar-dice").textContent = falta
+      ? "Decime cuál es tu proyecto y con qué usuario entrás. Después no lo pide más."
+      : "El proyecto ya está conectado. Poné tu mail y tu contraseña, los mismos que elegiste cuando lo configuraste.";
+    setTimeout(function(){ ($("log-mail").value?$("log-pass"):$("log-mail")).focus(); },240);
+  }
   var d=$("modal").querySelector(".adentro"); if(d) d.scrollTop=0;
 }
 document.querySelectorAll("[data-ir]").forEach(function(b){
   b.addEventListener("click",function(){ irA(+b.dataset.ir); });
 });
-function abrirModal(){
+function abrirModal(donde){
   $("velo").classList.add("ver"); $("modal").classList.add("ver");
   document.body.style.overflow="hidden";
-  irA( (cfg.url&&cfg.key) ? (sesion?5:2) : 0 );
+  if(typeof donde==="number") irA(donde);
+  else if(sesion) irA(5);
+  else if(cfg.url && cfg.key) irA(9);   /* proyecto listo: sólo falta entrar */
+  else irA(0);
   if(cfg.url) { $("cfg-url").value=cfg.url; $("cfg-key").value=cfg.key||""; }
-  if(cfg.mail) $("cfg-mail").value=cfg.mail;
+  if(cfg.mail){ $("cfg-mail").value=cfg.mail; $("log-mail").value=cfg.mail; }
 }
 function cerrarModal(){
   $("velo").classList.remove("ver"); $("modal").classList.remove("ver");
   document.body.style.overflow="";
 }
-$("b-config").addEventListener("click",abrirModal);
+$("b-config").addEventListener("click",function(){ abrirModal(); });
+$("chip").addEventListener("click",function(){
+  if(!sesion && cfg.url && cfg.key) abrirModal(9);
+  else abrirModal();
+});
 $("b-cerrar").addEventListener("click",cerrarModal);
 $("b-mas-tarde").addEventListener("click",cerrarModal);
 $("b-terminar").addEventListener("click",cerrarModal);
@@ -1137,6 +1205,63 @@ $("b-paso2").addEventListener("click",function(){
       irA(3); setTimeout(function(){ $("b-paso3").click(); },250);
     }
   });
+});
+
+/* ── entrar ──────────────────────────────────────────────────────── */
+$("entrar-pegote").addEventListener("input",function(){
+  var caja=$("hallazgos9"); caja.innerHTML="";
+  var r=extraer(this.value);
+  if(r.secreta) marca(caja,"mal","!","Ésa es la clave <b>secreta</b>: no la uses acá. La ignoré.");
+  if(r.url) marca(caja,"ok","✓","Proyecto: <b>"+r.url+"</b>");
+  if(r.key) marca(caja,"ok","✓","Clave pública, termina en <b>…"+r.key.slice(-8)+"</b>");
+  if(!r.url || !r.key) marca(caja,"duda","?","Pegá las dos cosas: la dirección "+
+    "<b>https://…supabase.co</b> y la clave <b>anon public</b>.");
+});
+$("b-entrar").addEventListener("click",function(){
+  var caja=$("hallazgos-log"); caja.innerHTML="";
+  var mail=$("log-mail").value.trim(), pass=$("log-pass").value;
+  if(!cfg.url || !cfg.key){
+    var r=extraer($("entrar-pegote").value);
+    if(!r.url || !r.key){
+      marca(caja,"mal","!","Primero pegá la dirección y la clave del proyecto.");
+      return;
+    }
+    cfg.url=r.url; cfg.key=r.key; grabarCfg(cfg); sb=crearCliente();
+  }
+  if(!sb) sb=crearCliente();
+  if(!sb){ marca(caja,"mal","!","No se pudo conectar con el proyecto."); return; }
+  if(!mail || !pass){ marca(caja,"mal","!","Falta el mail o la contraseña."); return; }
+  var b=$("b-entrar"); b.disabled=true; b.innerHTML='<span class="girando"></span>Entrando…';
+  sb.auth.signInWithPassword({email:mail,password:pass}).then(function(r){
+    b.disabled=false; b.textContent="Entrar";
+    if(r.error){
+      var m=r.error.message||"";
+      if(/invalid login|credentials/i.test(m))
+        marca(caja,"mal","!","Mail o contraseña incorrectos. Si no te acordás, cambiala en Supabase: "+
+          '<a href="'+ligaPanel("/auth/users")+'" target="_blank" rel="noopener">Authentication → Users</a>, '+
+          "los tres puntitos del usuario → <b>Reset password</b>.");
+      else if(/confirm/i.test(m))
+        marca(caja,"duda","?",'Falta confirmar el mail. Abrí <a href="'+ligaPanel("/auth/providers")+
+          '" target="_blank" rel="noopener">Authentication → Sign In / Providers</a>, en <b>Email</b> '+
+          'destildá <b>Confirm email</b>, guardá y probá de nuevo.');
+      else marca(caja,"mal","!","No entró: <b>"+m+"</b>");
+      return;
+    }
+    sesion=r.data.session; cfg.mail=mail; grabarCfg(cfg);
+    $("log-pass").value="";
+    pintarChip("viva","Publicando en vivo");
+    avisar("Entraste. Ya podés publicar para todos.");
+    cargar(); cerrarModal();
+  });
+});
+$("log-pass").addEventListener("keydown",function(e){ if(e.key==="Enter") $("b-entrar").click(); });
+$("log-mail").addEventListener("keydown",function(e){ if(e.key==="Enter") $("log-pass").focus(); });
+$("b-otro").addEventListener("click",function(){ irA(0); });
+$("b-olvide").addEventListener("click",function(){
+  var caja=$("hallazgos-log"); caja.innerHTML="";
+  marca(caja,"duda","?",'Se cambia en Supabase: abrí <a href="'+ligaPanel("/auth/users")+
+    '" target="_blank" rel="noopener">Authentication → Users</a>, tocá los tres puntitos del '+
+    'usuario y elegí <b>Reset password</b>. Después volvé y entrá con la nueva.');
 });
 
 /* ── paso 3: verificar la base ───────────────────────────────────── */
@@ -1293,12 +1418,15 @@ $("b-desconectar").addEventListener("click",function(){
 /* ── arranque ────────────────────────────────────────────────────── */
 sb=crearCliente();
 if(sb){
-  pintarChip("demo","Sólo lectura");
+  pintarChip("entrar","Entrar para publicar");
   sb.auth.getSession().then(function(r){
     sesion=(r.data && r.data.session) || null;
-    pintarChip(sesion?"viva":"demo", sesion?"Publicando en vivo":"Sólo lectura");
-    if(!sesion) avisar("Estás conectado pero sin sesión: entrá para poder publicar", true);
+    if(sesion){ pintarChip("viva","Publicando en vivo"); cargar(); }
+    else { pintarChip("entrar","Entrar para publicar"); abrirModal(9); }
   });
+} else if(CFG_FIJA.url){
+  pintarChip("entrar","Entrar para publicar");
+  abrirModal(9);
 } else {
   pintarChip("demo","Modo demostración");
 }

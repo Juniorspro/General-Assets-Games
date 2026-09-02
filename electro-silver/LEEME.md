@@ -78,6 +78,25 @@ Aparece en la web arriba de todo, en «Novedades del local».
 La foto se achica sola a 1200 px y se guarda en webp: una foto de celular de 4 MB
 queda en 100-200 KB. Eso es lo que hace que el plan gratis alcance.
 
+### Entrar
+
+Si el proyecto ya está conectado, el panel abre directo en una pantalla de
+**mail y contraseña**. Nada más. La sesión queda guardada, así que no lo pide
+en cada visita.
+
+Si abrís el panel en otra computadora o en otro navegador, esa misma pantalla
+te pide una vez la dirección del proyecto y la clave anon (te dice dónde
+encontrarlas). Para saltear eso para siempre, completá al principio del
+archivo:
+
+```js
+var CFG_FIJA = { url:"https://xxxx.supabase.co", key:"eyJhbGciOi…" };
+```
+
+Con eso el panel arranca apuntado al proyecto en cualquier dispositivo y sólo
+pide usuario y contraseña. La clave anon puede ir escrita ahí: es pública por
+diseño y no deja escribir nada.
+
 ### Dos modos
 
 **Sin configurar nada** guarda en el navegador. Sirve para probar todo el flujo,
