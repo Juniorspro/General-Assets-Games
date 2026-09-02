@@ -9,6 +9,7 @@ import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pa
 import { Cuerpo } from './cuerpo.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
+import { despertarAudio } from './sonido.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -283,6 +284,7 @@ class Dungeon {
         }
 
         this.placeChandeliers(lv, base, group);
+        this.colgarCuadros(lv, base, group);
     }
 
     /* Faroles colgando del techo. La luz va dentro del aro, asi que el aro y
@@ -339,7 +341,7 @@ class Dungeon {
             L.shadow.camera.near = 0.08;
             g.add(L);
             group.add(g);
-            (this.lamps || (this.lamps = [])).push({ L, base: big ? 20 : 12, phase: rng.range(0, 9) });
+            (this.lamps || (this.lamps = [])).push({ L, base: big ? 20 : 12, phase: rng.range(0, 9), malo: rng.next() < 0.2 });
         };
 
         /* Rejilla floja: un farol cada pocas celdas, en salas y en pasillos.
@@ -356,6 +358,38 @@ class Dungeon {
                         if (!isOpen(lv, c + dc, r + dr)) { open3 = false; break }
                 hang(c, r, open3);
             }
+        }
+    }
+
+    /* Cuadros colgados. En el juego original las paredes tienen retratos con
+       marco dorado, y son lo unico que le da personalidad a un pasillo que si
+       no se repite. De paso sirven de referencia para saber por donde pasaste. */
+    colgarCuadros(lv, base, group) {
+        const rng = new Rng(0xC0AD + lv * 71);
+        const marco = new THREE.MeshStandardMaterial({ color: 0x8a6a30, roughness: .55, metalness: .4 });
+        const lienzo = new THREE.MeshStandardMaterial({ color: 0x2a231c, roughness: .9 });
+        let n = 0;
+        for (let i = 0; i < 5000 && n < 16; i++) {
+            const c = rng.int(1, W - 2), r = rng.int(1, H - 2);
+            if (!isOpen(lv, c, r) || isStairCell(c, r)) continue;
+            const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+                .filter(([dc, dr]) => !isOpen(lv, c + dc, r + dr) && !isHole(lv, c + dc, r + dr));
+            if (!dirs.length) continue;
+            const [dc, dr] = dirs[Math.floor(rng.next() * dirs.length)];
+            const [x, z] = toWorld(c, r);
+            const an = rng.range(.55, .85), al = rng.range(.55, .95);
+            const px = x + dc * (CELL / 2 - .06), pz = z + dr * (CELL / 2 - .06);
+            const yaw = dc ? -dc * Math.PI / 2 : (dr > 0 ? Math.PI : 0);
+            const m = new THREE.Mesh(new THREE.BoxGeometry(an, al, .05), marco);
+            m.position.set(px, base + 2.05, pz);
+            m.rotation.y = yaw;
+            m.castShadow = true;
+            group.add(m);
+            const l = new THREE.Mesh(new THREE.PlaneGeometry(an * .84, al * .84), lienzo);
+            l.position.set(px - dc * .033, base + 2.05, pz - dr * .033);
+            l.rotation.y = yaw;
+            group.add(l);
+            n++;
         }
     }
 
@@ -414,6 +448,11 @@ class Dungeon {
 
     bindInput() {
         this.keys = {};
+        /* El navegador no deja sonar hasta que hay un gesto del usuario, asi
+           que el audio se despierta con el primer toque, click o tecla. */
+        const arranque = () => despertarAudio();
+        for (const ev of ['pointerdown', 'touchstart', 'keydown'])
+            addEventListener(ev, arranque, { once: false, passive: true });
         addEventListener('keydown', e => {
             this.keys[e.code] = true;
             /* El deslizamiento se engancha en el keydown y no leyendo la tecla
@@ -613,7 +652,13 @@ class Dungeon {
         // deslizando la cabeza tambien se va para atras
         /* Al tirarse la cabeza cae y se mira las propias piernas: sin esto quedan
            abajo del borde de la pantalla y el deslizamiento no se ve. */
-        cam.rotation.set(this.pitch + (sliding ? -0.24 * slideK : 0), this.yaw, this.roll);
+        /* El susto: la camara tiembla y la pantalla pega un flash rojo. Es la
+           mitad del efecto de que te vea; sin eso, el grito suena solo. */
+        const su = this.mision.susto || 0;
+        const tx = su > 0 ? Math.sin(this.t * 47) * 0.045 * su : 0;
+        const tz = su > 0 ? Math.sin(this.t * 61 + 1.3) * 0.055 * su : 0;
+        cam.rotation.set(this.pitch + (sliding ? -0.24 * slideK : 0) + tx,
+                         this.yaw, this.roll + tz);
         // el FOV se abre al correr y pega un tiron al deslizar
         const wantFov = FOV + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
         if (Math.abs(cam.fov - wantFov) > 0.05) {
@@ -634,7 +679,7 @@ class Dungeon {
             this.mision.usar(this.pos.x, this.y, this.pos.z);
         }
         this.mision.actualizar(dt, {
-            x: this.pos.x, y: this.y, z: this.pos.z,
+            x: this.pos.x, y: this.y, z: this.pos.z, yaw: this.yaw,
             corriendo: this.running, agachado: this.crouch, deslizando: sliding,
         });
         if (this.mision.reaparecer) {
@@ -675,7 +720,14 @@ class Dungeon {
         }
         for (const l of this.lamps || []) {
             const base = l.base;
-            const f = 0.92 + 0.08 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
+            let f = 0.92 + 0.08 * Math.sin(this.t * 5.7 + l.phase) * Math.sin(this.t * 1.9 + l.phase);
+            /* Una de cada cinco parpadea FUERTE, con cortes secos. Un titileo
+               parejo en todas se lee como un error de render; unas pocas que se
+               cortan se leen como una instalacion vieja. */
+            if (l.malo) {
+                const t = this.t * 7.3 + l.phase;
+                f *= (Math.sin(t) * Math.sin(t * 2.7) > 0.45) ? 0.18 : 1;
+            }
             l.L.intensity = base * f;
         }
 
@@ -736,6 +788,13 @@ class Dungeon {
             document.getElementById('aviso').textContent = av;
             document.getElementById('aviso').style.opacity = av ? '1' : '0';
         }
+        const su = Math.min(1, M.susto || 0);
+        if (this._susto !== (su > 0.02)) {
+            this._susto = su > 0.02;
+        }
+        const fl = document.getElementById('flash');
+        if (fl) fl.style.opacity = (su * 0.45).toFixed(3);
+
         if (M.terminado === 'escapo' && !this._fin) {
             this._fin = true;
             document.getElementById('fin').classList.add('ver');

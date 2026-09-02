@@ -66,14 +66,57 @@ tres alturas.
 
 Con el ojo a 55 cm contra paredes de 7 m, cada cuarto era una nave de catedral.
 
-## El bucle: cuatro pasos
+## El bucle, sacado de mirar dos partidas completas
 
-1. **Los tres cubos** —rojo, amarillo, azul— a la baldosa de su color. **De a
-   uno**: no se pueden cargar dos.
-2. Con los tres puestos **baja una soga** del techo. Ahí está la **pinza**.
-3. La **llave** está en **uno** de los 24 muebles que se pueden revisar, al
-   azar. Hay que abrirlos.
-4. La **puerta verde** pide primero la pinza y después la llave.
+Se analizaron dos walkthroughs enteros escena por escena, y de ahí salió todo
+esto — no de la memoria ni de un resumen:
+
+1. **Los tres cubos** —rojo, amarillo, azul— a la baldosa de su color. **No se
+   levantan: se EMPUJAN** por el piso, raspando. Por eso va de a uno y por eso
+   cruzar la casa con uno es la parte que duele.
+2. Con los tres puestos se abre la **trampilla del techo** y **cae la pinza al
+   piso** con un clanc metálico. Hay que agacharse a levantarla — en el peor
+   momento posible.
+3. La **llave** está en **uno** de los 24 muebles que se revisan, al azar.
+4. La puerta tiene **TRES cerraduras**: el **cableado** se corta con la pinza,
+   el **lector** quiere la **tarjeta** y la **cerradura** la llave.
+
+### La tarjeta la lleva ÉL
+
+Es el paso que faltaba y es el mejor del juego: la tarjeta azul le cuelga del
+pecho al bicho. **Sólo se la podés sacar por atrás** — el ángulo se mide contra
+su frente, y de frente el cartel dice *TE ESTÁ MIRANDO* y nada más. Sacársela
+lo despierta al instante.
+
+## Pasos → respiración → verlo
+
+En el juego original el bicho **se anuncia**, y eso no es adorno: es la
+mecánica que te da tiempo de retirarte.
+
+| distancia | qué escuchás |
+|---|---|
+| 26 m | los **pasos**, cada vez más seguido si te está cazando |
+| 13 m | la **respiración** |
+| 7,5 m | el **latido**, que se acelera al acercarse |
+| te ve | el **grito**, una sola vez, con flash rojo y temblor de cámara |
+
+Todo **sintetizado con WebAudio**, no en archivos: cuatro mp3 serían medio mega
+en un juego que entero pesa dos, y estos cuatro son ruido y envolventes, justo
+lo que un sintetizador hace bien. El grito suena **sólo al pasar de tranquilo a
+caza**: si sonara todo el rato que te ve, en diez segundos deja de significar
+algo.
+
+## La sala de las baldosas es de hormigón
+
+En el original es lo único que rompe con los pasillos verdes, y por eso se
+reconoce de lejos y funciona como punto de referencia en un laberinto. Acá se
+forra por dentro con un cascarón claro: sale más barato que meterle mano al
+generador del nivel y no puede romper el laberinto.
+
+También salieron de mirar las partidas: los **cuadros con marco dorado** en las
+paredes, y que **una de cada cinco lámparas parpadea fuerte**, con cortes secos
+— un titileo parejo en todas se lee como un error de render; unas pocas que se
+cortan se leen como una instalación vieja.
 
 ## Perfil bajo, o él viene
 

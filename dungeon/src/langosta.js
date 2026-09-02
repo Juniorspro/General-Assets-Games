@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { construirBicho } from './bicho.js';
+import * as S from './sonido.js';
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, isOpen, isStairCell, isHole, surfaceAt,
 } from './map.js';
@@ -164,9 +165,11 @@ export class Mision {
         this.grupo = new THREE.Group();
         escena.add(this.grupo);
 
-        this.llevando = null;        // el cubo en la mano, de a uno
+        this.empujando = null;       // el cubo que voy arrastrando, de a uno
         this.tienePinza = false;
         this.tieneLlave = false;
+        this.tieneTarjeta = false;   // la que lleva EL encima
+        this.cortado = false;        // el cableado de la puerta, ya cortado
         this.puestos = 0;
         this.terminado = null;       // 'escapo'
         this.aviso = '';
@@ -184,6 +187,16 @@ export class Mision {
         this.armarCubos();
         this.armarSalida();
         this.bicho = new Langosta(escena, this.base, assets);
+        /* La tarjeta azul la lleva EL colgada del pecho: hay que verla para
+           entender que la unica forma de salir es acercarsele. */
+        this.tarjetaObj = new THREE.Mesh(
+            new THREE.BoxGeometry(0.20, 0.13, 0.015),
+            new THREE.MeshStandardMaterial({
+                color: 0x2f7fd8, roughness: .5, emissive: 0x1b4f8c, emissiveIntensity: .8,
+            }));
+        this.tarjetaObj.position.set(-0.16, ALTO_BICHO * 0.60, 0);
+        this.tarjetaObj.rotation.y = Math.PI / 2;
+        this.bicho.raiz.add(this.tarjetaObj);
         const p = this.lejosDe(this.origen.x, this.origen.z);
         this.bicho.reubicar(p[0], p[1]);
     }
@@ -228,6 +241,7 @@ export class Mision {
 
         const [sc, sr] = this.salaDePads();
         this.salaPads = [sc, sr];
+        this.forrarSala(sc, sr);
         const fila = [[-1, 0], [0, 0], [1, 0]];
 
         COLORES.forEach((col, i) => {
@@ -274,6 +288,7 @@ export class Mision {
             h.position.set(s * .018, .09, 0); h.rotation.z = -s * .18; pinza.add(h);
         }
         pinza.position.set(sx, this.base + 1.05, sz);
+        this.pinzaCaida = false;
         this.soga.position.set(sx - sx, 0, sz - sz);
         this.soga.position.set(0, 0, 0);
         cuerda.position.x = sx; cuerda.position.z = sz;
@@ -282,6 +297,43 @@ export class Mision {
         this.soga.visible = false;
         this.grupo.add(this.soga);
         this.sogaPos = [sx, sz];
+    }
+
+    /* La sala de las baldosas es de HORMIGON claro, no empapelada: en el juego
+       original es lo unico que rompe con los pasillos verdes, y por eso se
+       reconoce de lejos y funciona como punto de referencia en un laberinto.
+       Se forra por dentro con un cascaron: sale mas barato que meter mano en
+       el generador del nivel y no puede romper el laberinto. */
+    forrarSala(sc, sr) {
+        const g = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0xb9b3a6, roughness: .95 });
+        const piso = new THREE.MeshStandardMaterial({ color: 0x8e8a80, roughness: .96 });
+        const R = 1;                      // radio en celdas: 3x3
+        const [x0, z0] = toWorld(sc - R, sr - R);
+        const [x1, z1] = toWorld(sc + R, sr + R);
+        const ax = x1 - x0 + CELL, az = z1 - z0 + CELL;
+        const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+        const alto = WALL_H - 0.02;
+        const eps = 0.03;
+
+        const suelo = new THREE.Mesh(new THREE.PlaneGeometry(ax, az), piso);
+        suelo.rotation.x = -Math.PI / 2;
+        suelo.position.set(cx, this.base + 0.014, cz);
+        suelo.receiveShadow = true;
+        g.add(suelo);
+        const techo = new THREE.Mesh(new THREE.PlaneGeometry(ax, az), mat);
+        techo.rotation.x = Math.PI / 2;
+        techo.position.set(cx, this.base + WALL_H - 0.01, cz);
+        g.add(techo);
+
+        for (const [dx, dz, an] of [[0, -1, ax], [0, 1, ax], [-1, 0, az], [1, 0, az]]) {
+            const m = new THREE.Mesh(new THREE.PlaneGeometry(an, alto), mat);
+            m.position.set(cx + dx * (ax / 2 - eps), this.base + alto / 2, cz + dz * (az / 2 - eps));
+            m.rotation.y = dx ? -dx * Math.PI / 2 : (dz > 0 ? Math.PI : 0);
+            m.receiveShadow = true;
+            g.add(m);
+        }
+        this.grupo.add(g);
     }
 
     armarSalida() {
@@ -323,24 +375,44 @@ export class Mision {
         if (Math.abs(y - this.base) > 1.5) return null;
         const cerca = (ax, az) => Math.hypot(ax - x, az - z) < ALCANCE;
 
-        if (this.llevando) {
+        if (this.empujando) {
             for (const b of this.baldosas)
-                if (b.id === this.llevando.id && cerca(b.x, b.z))
-                    return { tipo: 'poner', texto: 'DEJAR EL CUBO ' + b.nombre.toUpperCase() };
+                if (b.id === this.empujando.id && cerca(b.x, b.z))
+                    return { tipo: 'poner', texto: 'DEJARLO EN LA BALDOSA' };
             return { tipo: 'soltar', texto: 'SOLTAR EL CUBO' };
         }
         for (const c of this.cubos)
             if (!c.puesto && cerca(c.obj.position.x, c.obj.position.z))
-                return { tipo: 'tomar', cubo: c, texto: 'AGARRAR EL CUBO ' + c.nombre.toUpperCase() };
+                return { tipo: 'tomar', cubo: c, texto: 'EMPUJAR EL CUBO ' + c.nombre.toUpperCase() };
         if (this.soga.visible && !this.tienePinza && cerca(this.sogaPos[0], this.sogaPos[1]))
-            return { tipo: 'pinza', texto: 'TIRAR DE LA SOGA' };
+            return { tipo: 'pinza', texto: this.pinzaCaida ? 'AGARRAR LA PINZA' : 'TIRAR DE LA SOGA' };
+        /* La tarjeta la lleva EL. Solo se la podes sacar por atras: si te esta
+           mirando, ni te acercas. El angulo se mide contra su frente. */
+        if (!this.tieneTarjeta) {
+            const b = this.bicho;
+            const dx = x - b.pos.x, dz = z - b.pos.y;
+            const d = Math.hypot(dx, dz);
+            if (d < 2.3) {
+                // su frente es (-sin yaw, -cos yaw), como la camara
+                const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
+                const cos = (fx * dx + fz * dz) / (d || 1);
+                if (cos < -0.20) return { tipo: 'tarjeta', texto: 'SACARLE LA TARJETA' };
+                return { tipo: 'nada', texto: 'TE ESTÁ MIRANDO' };
+            }
+        }
         if (!this.tieneLlave && this.revisables)
             for (const m of this.revisables)
                 if (!this.revisados.has(m) && cerca(m.x, m.z))
                     return { tipo: 'revisar', mueble: m, texto: 'REVISAR EL ' + m.nombre.toUpperCase() };
         if (cerca(this.salida.x, this.salida.z)) {
-            if (!this.tienePinza) return { tipo: 'nada', texto: 'HACE FALTA LA PINZA' };
-            if (!this.tieneLlave) return { tipo: 'nada', texto: 'HACE FALTA LA LLAVE' };
+            /* La puerta tiene TRES cerraduras, como en el juego: el cableado se
+               corta con la pinza, el lector quiere la tarjeta y la cerradura la
+               llave. Recien ahi sube. */
+            if (!this.cortado) return this.tienePinza
+                ? { tipo: 'cortar', texto: 'CORTAR EL CABLEADO' }
+                : { tipo: 'nada', texto: 'HACE FALTA LA PINZA' };
+            if (!this.tieneTarjeta) return { tipo: 'nada', texto: 'FALTA LA TARJETA — LA TIENE ÉL' };
+            if (!this.tieneLlave) return { tipo: 'nada', texto: 'FALTA LA LLAVE' };
             return { tipo: 'salir', texto: 'ABRIR LA PUERTA' };
         }
         return null;
@@ -350,36 +422,60 @@ export class Mision {
         const o = this.mirando(x, y, z);
         if (!o) return;
         if (o.tipo === 'tomar') {
-            this.llevando = o.cubo;
-            o.cubo.obj.visible = false;
-            this.decir('cubo ' + o.cubo.nombre + ' en la mano — uno por vez');
+            /* No se levanta: se EMPUJA por el piso, como en el juego. Por eso
+               no se pueden llevar dos, y por eso cruzar la casa con uno es la
+               parte que duele. */
+            this.empujando = o.cubo;
+            S.click(0.3);
+            this.decir('empujando el cubo ' + o.cubo.nombre + ' — de a uno');
         } else if (o.tipo === 'soltar') {
-            const c = this.llevando;
-            c.obj.position.set(x, this.base + .18, z);
-            c.obj.visible = true;
-            this.llevando = null;
+            this.empujando = null;
+            S.click(0.2);
         } else if (o.tipo === 'poner') {
-            const c = this.llevando, b = this.baldosas.find(b => b.id === c.id);
+            const c = this.empujando, b = this.baldosas.find(b => b.id === c.id);
             c.obj.position.set(b.x, this.base + .18, b.z);
-            c.obj.visible = true;
             c.puesto = true;
             c.mat.emissiveIntensity = .9;
-            this.llevando = null;
+            this.empujando = null;
+            S.click(0.45);
             this.puestos++;
             if (this.puestos === 3) {
                 this.soga.visible = true;
-                this.decir('los tres puestos — bajo una soga del techo');
+                this.decir('los tres puestos — se abrió la trampilla del techo');
             } else {
                 this.decir('van ' + this.puestos + ' de 3');
             }
         } else if (o.tipo === 'pinza') {
-            this.tienePinza = true;
-            this.pinzaObj.visible = false;
-            this.decir('pinza');
+            if (!this.pinzaCaida) {
+                /* Primero CAE al piso con un clanc metalico, y recien despues
+                   se levanta: es lo que hace el juego, y de paso te obliga a
+                   agacharte en el peor momento. */
+                this.pinzaCaida = true;
+                this.pinzaObj.position.y = this.base + 0.07;
+                S.click(0.5);
+                this.decir('cayó la pinza');
+            } else {
+                this.tienePinza = true;
+                this.pinzaObj.visible = false;
+                S.click(0.3);
+                this.decir('pinza');
+            }
         } else if (o.tipo === 'revisar') {
             this.revisados.add(o.mueble);
             if (o.mueble === this.conLlave) { this.tieneLlave = true; this.decir('¡la llave!') }
             else this.decir('nada acá');
+        } else if (o.tipo === 'cortar') {
+            this.cortado = true;
+            S.click(0.4);
+            this.decir('cableado cortado — falta la tarjeta y la llave');
+        } else if (o.tipo === 'tarjeta') {
+            this.tieneTarjeta = true;
+            if (this.tarjetaObj) this.tarjetaObj.visible = false;
+            S.click(0.35);
+            this.decir('¡la tarjeta!');
+            // sacarsela lo despierta, obviamente
+            this.bicho.estado = 'caza'; this.bicho.alerta = 1;
+            this.bicho.ultimo = [x, z];
         } else if (o.tipo === 'salir') {
             this.salida.abierta = true;
             this.terminado = 'escapo';
@@ -419,6 +515,17 @@ export class Mision {
         if (this.avisoT > 0) this.avisoT -= dt;
         const b = this.bicho;
 
+        /* El cubo que se empuja va delante tuyo, a ras del piso, y raspa. */
+        if (this.empujando) {
+            const c = this.empujando.obj;
+            const fx = -Math.sin(jug.yaw || 0), fz = -Math.cos(jug.yaw || 0);
+            c.position.set(jug.x + fx * 0.62, this.base + 0.17, jug.z + fz * 0.62);
+            const mov = Math.hypot(jug.x - (this._px ?? jug.x), jug.z - (this._pz ?? jug.z));
+            this._raspa = (this._raspa || 0) + mov;
+            if (this._raspa > 0.55) { this._raspa = 0; S.arrastre(0.16) }
+        }
+        this._px = jug.x; this._pz = jug.z;
+
         /* El ruido: correr lo hace, caminar poco, agachado nada. Se apaga solo.
            Es la traduccion literal del cartel de la pared. */
         const hace = jug.deslizando ? 1.5 : jug.corriendo ? 1.0 : jug.agachado ? 0 : 0.22;
@@ -436,7 +543,30 @@ export class Mision {
         const ve = mismoPiso && dist < 16 && this.libre(b.pos.x, b.pos.y, jug.x, jug.z)
             && (dist < 2.5 || mirandoA > dist * 0.2);
 
+        /* Pasos → respiracion → verlo. Ese es el orden con el que se anuncia
+           en el juego original, y es lo que te da tiempo de retirarte. El
+           volumen sale de la distancia, no de un temporizador. */
+        if (mismoPiso && dist < 26) {
+            const cerca = 1 - Math.min(1, dist / 26);
+            this.tPaso = (this.tPaso || 0) + dt * (b.estado === 'caza' ? 3.1 : 1.5);
+            if (this.tPaso > 1) { this.tPaso = 0; S.paso(0.34 * cerca * cerca) }
+            if (dist < 13) {
+                this.tResp = (this.tResp || 0) - dt;
+                if (this.tResp <= 0) { this.tResp = 2.4; S.respiro(0.30 * (1 - dist / 13)) }
+            }
+            if (dist < 7.5) {
+                this.tLat = (this.tLat || 0) - dt;
+                if (this.tLat <= 0) {
+                    this.tLat = 0.52 + dist * 0.05;
+                    S.latido(0.38 * (1 - dist / 7.5));
+                }
+            }
+        }
+
         if ((oye || ve) && !this.terminado) {
+            /* El grito va SOLO al pasar de tranquilo a caza. Si sonara todo el
+               tiempo que te ve, en diez segundos deja de significar nada. */
+            if (b.estado !== 'caza') { S.grito(); this.susto = 1 }
             b.estado = 'caza';
             b.alerta = 1;
             b.ultimo = [jug.x, jug.z];
@@ -488,11 +618,7 @@ export class Mision {
         // te agarro
         if (!this.terminado && mismoPiso && dist < 0.95) {
             this.atrapadas++;
-            if (this.llevando) {
-                this.llevando.obj.position.set(jug.x, this.base + .18, jug.z);
-                this.llevando.obj.visible = true;
-                this.llevando = null;
-            }
+            this.empujando = null;
             const p = this.lejosDe(jug.x, jug.z);
             const [nx, nz] = toWorld(p[0], p[1]);
             this.reaparecer = [nx, nz];
@@ -500,8 +626,12 @@ export class Mision {
             b.reubicar(q[0], q[1]);
             b.estado = 'ronda'; b.alerta = 0;
             this.ruido = 0;
+            this.susto = 1.4;
+            S.grito();
             this.decir('te agarró');
         }
+
+        if (this.susto > 0) this.susto = Math.max(0, this.susto - dt * 1.5);
 
         if (this.salida.abierta) {
             this.luzSalida.intensity = 14;
@@ -525,9 +655,11 @@ export class Mision {
     /* Lo que muestra el HUD: la lista de pendientes, en orden. */
     tareas() {
         if (this.terminado === 'escapo') return ['ESCAPASTE'];
-        if (this.puestos < 3) return ['cubos en su baldosa: ' + this.puestos + '/3'];
-        if (!this.tienePinza) return ['tirá de la soga que bajó del techo'];
+        if (this.puestos < 3) return ['empujá los cubos a su baldosa: ' + this.puestos + '/3'];
+        if (!this.tienePinza) return ['la pinza, en la trampilla del techo'];
         if (!this.tieneLlave) return ['la llave está en un mueble — revisalos'];
-        return ['a la puerta verde'];
+        if (!this.cortado) return ['cortá el cableado de la puerta'];
+        if (!this.tieneTarjeta) return ['la tarjeta la lleva ÉL — por atrás'];
+        return ['a la puerta'];
     }
 }
