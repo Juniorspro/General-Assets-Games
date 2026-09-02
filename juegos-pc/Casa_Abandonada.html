@@ -150,6 +150,7 @@
     <label class="sl">mirada<input type="range" id="slSens" min="30" max="200" value="100"></label>
     <label class="sl">volumen<input type="range" id="slVol" min="0" max="100" value="85"></label>
     <label class="sl">cinta<input type="range" id="slGrain" min="0" max="100" value="48"></label>
+    <label class="sl">campo<input type="range" id="slFov" min="65" max="110" value="90"></label>
     <div class="rule"></div>
     <div class="note2" style="margin-top:0;line-height:1.9">izquierda para caminar · derecha para mirar<br>
       el joystick al borde apura el paso</div>
@@ -188,7 +189,14 @@ function safeArea(){
    estira tanto las esquinas que un mueble contra el borde sale barrido: eso
    es la mitad del "se ve todo raro". Una camara de mano ronda los 65-75; 80
    deja margen para jugar sin deformar. */
-const HFOV=80;
+let HFOV=90;              // 90 es el horizontal clasico de un primera persona
+const HFOV_MIN=65, HFOV_MAX=110;
+/* SE GUARDA. Llevo tres vueltas adivinando este numero —117, 100, 80— y cada
+   vez el que lo mira es otro: depende del tamaño de la pantalla, de a que
+   distancia se sostiene el telefono y del gusto. Un numero asi no se acierta
+   desde aca, se elige alla. */
+try{ const g=localStorage.getItem('casa_hfov');
+     if(g) HFOV=Math.max(HFOV_MIN,Math.min(HFOV_MAX,+g||HFOV)); }catch(e){}
 /* ══════════ el cuadro es 16:9 y punto ══════════
    Antes el escenario se estiraba a lo que midiera la ventana, asi que el
    encuadre dependia del telefono: en 19,5:9 se veia una cosa y en 4:3 otra, y
@@ -305,7 +313,7 @@ const postMat=new THREE.ShaderMaterial({
     '  vec3 sm=(texture2D(tDiffuse,uv-vec2(tx.x*2.5,0.0)).rgb',
     '          +texture2D(tDiffuse,uv-vec2(tx.x*5.5,0.0)).rgb)*0.5;',
     '  vec3 y0=toYIQ(col), y1=toYIQ(sm);',
-    '  y0.yz=mix(y0.yz,y1.yz,0.62)*1.20;',              // croma arrastrado y saturado
+    '  y0.yz=mix(y0.yz,y1.yz,0.42)*1.06;',              // croma arrastrado (era 0.62 y x1.20: a esa fuerza cada canto vertical sacaba una banda de arcoiris)
     '  col=toRGB(y0);',
     '  float lum=dot(col,vec3(0.299,0.587,0.114));',
     '  col=mix(col,col*vec3(0.84,0.97,1.15),0.55);',    // grado frío
@@ -2610,11 +2618,21 @@ document.getElementById('slSens').addEventListener('input',e=>{
   SENS=0.0038*(e.target.value/100);});
 document.getElementById('slVol').addEventListener('input',e=>{
   if(A&&A.setVolume) A.setVolume(e.target.value/100);});
+{ const sf=document.getElementById('slFov');
+  sf.value=HFOV;                              // el deslizador arranca en lo guardado
+  sf.addEventListener('input',e=>{
+    HFOV=Math.max(HFOV_MIN,Math.min(HFOV_MAX,+e.target.value));
+    /* no se toca P.fov: la camara lo persigue con su propia rampa, asi que
+       arrastrar el deslizador se ve como un zoom suave y no como saltos. Y de
+       paso este bloque no nombra a P, que se declara cien lineas mas abajo. */
+    try{ localStorage.setItem('casa_hfov',HFOV); }catch(err){} }); }
 document.getElementById('slGrain').addEventListener('input',e=>{
   const v=e.target.value/100;
   grain=0.19*v;
   postMat.uniforms.uAberr.value=0.3+1.6*v;
-  postMat.uniforms.uVig.value=0.55+0.5*v;});
+  /* el rango arranca donde arranca el uniforme: con 0.55+0.5*v, tocar el
+     deslizador saltaba de 0.62 a 0.79 sin que nadie lo pidiera */
+  postMat.uniforms.uVig.value=0.40+0.45*v;});
 setState('menu');
 
 function toggleTorch(){torchOn=!torchOn;torchBtn.classList.toggle('off',!torchOn);
@@ -3166,6 +3184,30 @@ window.__casa={
               apoyo:+p.homePos.y.toFixed(3), sombra:p.front.castShadow});
     }
     return R; },
+  /* DONDE CAE DE VERDAD EL FOCO DE LA LINTERNA, en fracciones de pantalla.
+     Que el eje del spot coincida con el eje de la vista es aritmetica y ya se
+     mide en luz(); esto mide otra cosa que ninguna cuenta contesta: donde se
+     ve la mancha. Se lee el destino de render —antes del post— porque el
+     viñeteado y el grano corren el centroide de brillo sin mover una luz. */
+  foco(){
+    renderer.setRenderTarget(rt); renderer.render(scene,camera);
+    const w=rt.width,h=rt.height,buf=new Uint8Array(w*h*4);
+    renderer.readRenderTargetPixels(rt,0,0,w,h,buf);
+    renderer.setRenderTarget(null);
+    const L=new Float32Array(w*h);
+    let mx=0,bx=0,by=0;
+    for(let i=0;i<w*h;i++){
+      const l=0.299*buf[i*4]+0.587*buf[i*4+1]+0.114*buf[i*4+2];
+      L[i]=l; if(l>mx){mx=l;bx=i%w;by=(i/w)|0;}
+    }
+    const um=mx*0.60; let sx=0,sy=0,n=0;
+    for(let i=0;i<w*h;i++) if(L[i]>=um){ sx+=i%w; sy+=(i/w)|0; n++; }
+    /* readRenderTargetPixels arranca por abajo: la Y de pantalla es 1-y/h */
+    const fx=v=>+v.toFixed(4);
+    return {res:[w,h], brillo_max:+mx.toFixed(1), pixeles:n,
+            pico:[fx(bx/w), fx(1-by/h)],
+            centro:[fx((sx/n)/w), fx(1-(sy/n)/h)]};
+  },
   escombros(){ return {piezas:_escombros.n,
       ladeo_medio:+(_escombros.suma/Math.max(_escombros.n,1)).toFixed(4),
       peor:+_escombros.peor.toFixed(4)}; },
