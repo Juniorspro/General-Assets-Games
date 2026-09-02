@@ -135,3 +135,30 @@ mire el código fuente puede borrar toda la base.
 
 «Bajar copia» te da un JSON con todas las publicaciones (y lo copia al portapapeles).
 «Subir copia» las vuelve a cargar, sólo en modo demostración.
+
+
+## El botón mágico de la descripción
+
+Debajo del cuadro de descripción hay un botón con una chispa: escribís cuatro
+palabras sueltas y la IA te devuelve la descripción redactada. Se puede deshacer
+de un toque si no gusta.
+
+La IA recibe el título, el rubro, el precio y las cuotas además de lo que
+escribiste, así que la descripción sale con datos de verdad. Y tiene prohibido
+inventar: si no le pasás una medida o una garantía, no la nombra.
+
+**Para activarlo** hace falta una clave gratis de Google AI Studio
+(aistudio.google.com/apikey, no pide tarjeta). El panel te guía: «activar el
+botón» al lado de la chispa.
+
+**Ojo con esta clave, que no es como la de Supabase.** Ésta sí sirve desde
+cualquier lado. Cuando la web esté publicada, entrá a la clave en Google Cloud,
+en **Application restrictions** elegí **Websites** y agregá tu dominio: así sólo
+funciona desde tu página. Mientras tanto el plan gratis tiene tope diario, así
+que el daño posible es que alguien te gaste la cuota del día.
+
+El panel prueba varios modelos hasta encontrar uno que exista en tu cuenta
+(gemini-3.8-flash, 3.5, 2.5, 2.0) y se queda con el que anduvo.
+
+El ícono está en `imagenes/chispa.png` (blanco sobre transparente, se usa como
+máscara para que tome el color del botón) y en `imagenes/chispa-color.png`.
