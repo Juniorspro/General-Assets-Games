@@ -35,5 +35,12 @@ token y firme la petición).
 
 ## Despliegue
 
-`.github/workflows/pages.yml` publica `docs/` en Pages en cada push a `main`.
-Alternativa sin Actions: Settings → Pages → Deploy from a branch → `main` / `/docs`.
+Pages sirve esta carpeta directamente desde la rama, sin build ni Actions:
+
+**Settings → Pages → Build and deployment → Source: `Deploy from a branch` →
+Branch: `main`, carpeta `/docs` → Save.**
+
+A partir de ahí cada push a `main` que toque `docs/` se publica solo en un par
+de minutos. Activar el sitio la primera vez requiere permisos de administrador
+del repositorio: el `GITHUB_TOKEN` de Actions no puede crearlo
+(`Resource not accessible by integration`), por eso no hay workflow.
