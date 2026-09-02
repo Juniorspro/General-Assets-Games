@@ -224,6 +224,52 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## Caminaba de costado: la zancada estaba en el eje equivocado
+
+Lo arreglé una vez cambiando el movimiento —"primero encara, después avanza"— y
+**seguía caminando de costado**, porque ese no era el problema. El cuerpo sí
+avanzaba derecho; **la animación era la que estaba girada 90°**.
+
+Los huesos viven en el espacio del modelo, y este modelo **mira a +X** —la cara
+está en +X, por eso `giroModelo` lo gira 90°—. Girar un muslo sobre su eje `x`
+es girarlo sobre su **propio eje de avance**: la pierna se abre de costado, no
+hacia adelante. La zancada entera se estaba haciendo en el plano equivocado.
+
+Para un modelo que mira a +X, la pierna avanza girando sobre **Z**: rotar
+(0,−1) sobre Z un ángulo positivo la lleva hacia +X, o sea al frente. Y lo que
+sí va en X es la abertura lateral del brazo.
+
+El cuerpo entero además necesitaba **orden YXZ**: con el orden por defecto la
+inclinación se aplica *antes* del giro de 90°, así que inclinarse "adelante" lo
+inclinaba de costado.
+
+### Medido, esta vez con A/B
+
+Se toma la separación entre las dos pantorrillas y se mide qué proporción de
+esa separación va **a lo largo de la dirección de avance**. En el momento de
+máxima zancada:
+
+| | separación máxima | va al frente |
+|---|---|---|
+| antes (eje `x`) | 0,64 m | **1,5 %** |
+| ahora (eje `z`) | 0,60 m | **95,5 %** |
+
+O sea que abría las piernas un 98,5 % **de costado**. Literalmente caminaba
+de lado, y la primera vez lo di por arreglado sin medirlo.
+
+## Los botones, con imágenes generadas
+
+Los dibujos ya no son SVG a mano: son imágenes generadas. Un **disco de hierro
+oxidado con remaches** de fondo para los cuatro botones táctiles, una **placa**
+para JUGAR y para los chips de gráficos, y cuatro **pictogramas** —la mano, el
+que se agacha, el que corre y el que se tira—.
+
+Van como cualquier otro asset: por CDN, con su barra de carga. Los seis
+archivos nuevos suman 158 KB.
+
+> Rezona no conectó en esta sesión (`CONNECT_TIMEOUT`), así que se generaron
+> con Higgsfield, el mismo que hizo el logo y el GANASTE.
+
 ## Los botones no andaban en el celular: `preventDefault`
 
 El menú se veía perfecto y **ningún botón respondía**. La causa, encontrada

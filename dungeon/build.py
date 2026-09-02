@@ -27,7 +27,8 @@ CUA_DIR = os.path.join(HERE, "cuadros")
 
 # El menú: el logo generado, el GANASTE, los dos recortes del bicho sacados del
 # propio juego con croma, y dos capturas difuminadas de fondo. Los seis: 328 KB.
-MENU = ["logo", "ganaste", "bicho-frente", "bicho-lado", "fondo1", "fondo2"]
+MENU = ["logo", "ganaste", "bicho-frente", "bicho-lado", "fondo1", "fondo2",
+        "btn-disco", "btn-placa", "ic-usar", "ic-agachar", "ic-correr", "ic-deslizar"]
 MENU_DIR = os.path.join(HERE, "menu")
 
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.

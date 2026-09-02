@@ -1346,6 +1346,14 @@ function armarMenu() {
     poner('mbicho-d', A2.menu_bicho_frente);
     poner('mlogo', A2.menu_logo);
     poner('fin-img', A2.menu_ganaste);
+    /* Los botones: el disco de hierro y la placa van por variable de CSS
+       —la URL recién se conoce al arrancar, porque es un blob— y los dibujos
+       entran como imágenes sueltas. */
+    const raiz = document.documentElement.style;
+    if (A2.menu_btn_disco) raiz.setProperty('--disco', `url(${A2.menu_btn_disco})`);
+    if (A2.menu_btn_placa) raiz.setProperty('--placa', `url(${A2.menu_btn_placa})`);
+    for (const n of ['usar', 'agachar', 'correr', 'deslizar'])
+        poner('ic-' + n, A2['menu_ic_' + n]);
 
     const carga = document.getElementById('mcarga');
     const jugar = document.getElementById('mjugar');

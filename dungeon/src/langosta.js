@@ -194,28 +194,45 @@ class Langosta {
         const k = this.muestra(caza ? 'correr' : 'caminar', this.fase);
         const amp = Math.min(1, 0.45 + vel / 3.2);
 
+        /* EL EJE DE LA ZANCADA ES Z, NO X. Acá estaba el "camina de costado".
+
+           Los huesos viven en el espacio del modelo, y este modelo MIRA A +X
+           —la cara está en +X, por eso `giroModelo` lo gira 90°—. Girar un
+           muslo sobre su eje X es girarlo sobre su propio eje de avance: la
+           pierna se abre de costado, no hacia adelante. La zancada entera se
+           estaba haciendo en el plano equivocado.
+
+           Para un modelo que mira a +X, la pierna avanza girando sobre Z:
+           rotar (0,-1) sobre Z un ángulo positivo la lleva hacia +X, o sea al
+           frente. Y lo que sí va en X es la abertura lateral del brazo. */
         const A = this.art;
         if (A) {
             const CAD = 0.95, ROD = 0.42, HOM = 0.55, COD = 0.30;
             for (const l of ['I', 'D']) {
-                if (A['muslo' + l]) A['muslo' + l].rotation.x = k['p' + l] * CAD * amp;
-                if (A['pantorrilla' + l]) A['pantorrilla' + l].rotation.x = k['r' + l] * ROD * amp;
+                if (A['muslo' + l]) A['muslo' + l].rotation.z = k['p' + l] * CAD * amp;
+                if (A['pantorrilla' + l]) A['pantorrilla' + l].rotation.z = k['r' + l] * ROD * amp;
                 if (A['brazo' + l]) {
-                    A['brazo' + l].rotation.x = k['h' + l] * HOM * amp - 0.05;
-                    A['brazo' + l].rotation.z = (l === 'I' ? -1 : 1) * 0.08;
+                    A['brazo' + l].rotation.z = k['h' + l] * HOM * amp - 0.05;
+                    A['brazo' + l].rotation.x = (l === 'I' ? -1 : 1) * 0.08;   // abertura
                 }
-                if (A['antebrazo' + l]) A['antebrazo' + l].rotation.x = k['c' + l] * COD * amp;
+                if (A['antebrazo' + l]) A['antebrazo' + l].rotation.z = k['c' + l] * COD * amp;
             }
             if (A.cabeza) {
-                A.cabeza.rotation.x = k.cz * 0.5 + (caza ? 0.16 : 0);
-                A.cabeza.rotation.z = Math.sin(this.fase * Math.PI * 2 - 0.7) * 0.05 * amp;
+                A.cabeza.rotation.z = k.cz * 0.5 + (caza ? 0.16 : 0);
+                A.cabeza.rotation.x = Math.sin(this.fase * Math.PI * 2 - 0.7) * 0.05 * amp;
             }
         }
 
         /* El cuerpo entero: el balanceo lateral de la zancada y la inclinacion.
            Cazando se echa mucho mas para adelante — uno derecho camina, uno
            encorvado te viene a buscar. */
+        /* Y el cuerpo entero necesita ORDEN YXZ. Con el orden por defecto
+           (XYZ) la inclinación se aplica ANTES del giro de 90°, así que
+           inclinarse "adelante" lo inclinaba de costado en el mundo. Con YXZ
+           el giro va primero y recién después la inclinación, ya en el eje
+           que corresponde. */
         const g = this.giroModelo;
+        g.rotation.order = 'YXZ';
         g.rotation.z = Math.sin(this.fase * Math.PI * 2) * 0.075 * amp;
         g.rotation.x = k.ca * 0.8 - 0.05 - (caza ? 0.20 : 0);
         // sube y baja dos veces por ciclo, una por zancada
