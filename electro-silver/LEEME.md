@@ -11,6 +11,7 @@ entera**, no los archivos sueltos.
 - [x] `<head>` con título, descripción, favicon, Open Graph y datos estructurados
       (`HomeGoodsStore` con dirección, horarios, coordenadas y las 6 localidades)
 - [x] `sitemap.xml` y `robots.txt`
+- [x] `admin.html` — panel para cargar publicaciones (foto + texto + precio + WhatsApp)
 - [ ] `imagenes/logo.png` — cuadrado, mínimo 512×512, PNG con fondo
 - [ ] Archivo de verificación de Google Search Console (mandame el nombre **y** la
       línea de adentro: si el archivo va vacío, la verificación falla)
@@ -66,3 +67,37 @@ que llama a un teléfono equivocado, menos:
 3. En Search Console, tocar "Verificar" (el archivo ya va a estar en su lugar)
 4. Crear o reclamar el Perfil de Empresa de Google — para un local de barrio esto
    pesa más que cualquier etiqueta del HTML
+
+
+## El panel de publicaciones (`admin.html`)
+
+Se abre en `tudominio/admin.html`. Cargás una foto, título, descripción, precio,
+cuotas y el WhatsApp, ves cómo va a quedar mientras escribís, y le das Publicar.
+Aparece en la web arriba de todo, en «Novedades del local».
+
+La foto se achica sola a 1200 px y se guarda en webp: una foto de celular de 4 MB
+queda en 100-200 KB. Eso es lo que hace que el plan gratis alcance.
+
+### Dos modos
+
+**Sin configurar nada** guarda en el navegador. Sirve para probar todo el flujo,
+pero las publicaciones sólo las ve quien usa esa computadora.
+
+**Conectado a Supabase** las guarda en internet y las ve todo el mundo. El botón
+«Configurar» del panel tiene los cuatro pasos, con el SQL listo para copiar y pegar.
+Es gratis y no pide tarjeta.
+
+### Sobre la seguridad
+
+La clave que se pega en el panel es la **anon public**, que es pública a propósito:
+no da permiso de escribir. Escribir requiere iniciar sesión con el usuario que creás
+en el paso 3, y eso lo controla el servidor, no la página. Así que aunque alguien
+abra `admin.html`, sin tu usuario y contraseña no puede publicar nada.
+
+La **service_role key** no va nunca en una página. Si la pegás ahí, cualquiera que
+mire el código fuente puede borrar toda la base.
+
+### Copias
+
+«Bajar copia» te da un JSON con todas las publicaciones (y lo copia al portapapeles).
+«Subir copia» las vuelve a cargar, sólo en modo demostración.

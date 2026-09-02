@@ -66,6 +66,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,700;0,900;1,400&family=Chivo+Mono:wght@400;500;700&family=Asap:wght@400;500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 :root{
   --blanco:#FBFBFC; --acero:#EFF2F6; --acero2:#E4E9F0; --hoja:#FFFFFF;
@@ -81,6 +82,8 @@
   --r:3px;
 }
 *{box-sizing:border-box}
+/* el atributo hidden lo pisa cualquier display de clase: hay que forzarlo */
+[hidden]{display:none!important}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--blanco);color:var(--tinta);font-family:var(--T);
   font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -228,6 +231,36 @@ h1 em{font-style:normal;color:var(--rayo3)}
   stroke-linecap:round;stroke-linejoin:round}
 .gar b{display:block;font-family:var(--D);font-weight:700;font-size:15.5px;letter-spacing:-.01em}
 .gar span{display:block;font-size:13.5px;color:var(--gris);line-height:1.45;margin-top:2px}
+
+/* ── novedades (lo que se carga desde el panel) ── */
+.nov-cab{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:clamp(16px,2.4vw,28px)}
+.nov-cab > .rot{margin-left:auto}   /* sólo el de la derecha, no el del eyebrow */
+.nov-tira{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,244px),1fr));
+  gap:clamp(12px,1.6vw,20px)}
+.nov{background:var(--hoja);border:1px solid var(--linea);border-radius:var(--r);overflow:hidden;
+  display:flex;flex-direction:column;
+  transition:border-color .3s,box-shadow .35s,transform .35s cubic-bezier(.19,1,.22,1)}
+.nov:hover{border-color:var(--gris2);box-shadow:0 22px 44px -30px rgba(12,18,25,.55);transform:translateY(-3px)}
+.nov .marco{position:relative;aspect-ratio:1/1;background:var(--acero);overflow:hidden}
+.nov .marco img{width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.19,1,.22,1)}
+.nov:hover .marco img{transform:scale(1.04)}
+.nov .baja{position:absolute;left:9px;top:9px;background:var(--brasa);color:#fff;font-family:var(--M);
+  font-size:10px;font-weight:700;padding:3px 7px;border-radius:2px}
+.nov .in{padding:13px 15px 15px;display:flex;flex-direction:column;flex:1}
+.nov .rub{font-family:var(--M);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--rayo)}
+.nov h3{font-size:16px;font-weight:700;margin:4px 0 3px;line-height:1.22}
+.nov p{margin:0 0 auto;font-size:13px;color:var(--gris)}
+.nov .pre{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:11px}
+.nov .pre b{font-family:var(--D);font-weight:900;font-size:21px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+.nov .pre s{font-family:var(--M);font-size:12px;color:var(--gris)}
+.nov .cuo{font-size:12.5px;color:var(--verde);font-weight:600;margin-top:2px}
+.nov .cuo b{font-family:var(--M)}
+.nov .wa{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--verde);
+  color:#fff;padding:10px;border-radius:var(--r);font-size:13.5px;font-weight:600;margin-top:12px;
+  text-decoration:none;transition:filter .2s}
+.nov .wa:hover{filter:brightness(1.1)}
+.nov .wa svg{width:15px;height:15px;fill:currentColor}
 
 /* ── categorías ── */
 .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,178px),1fr));
@@ -688,6 +721,15 @@ select.sel:focus,input.num:focus{outline:0;border-color:var(--rayo);box-shadow:0
   </div>
 </section>
 
+<section class="sec caja" id="novedades" hidden>
+  <div class="nov-cab">
+    <div><span class="eyebrow"><i></i><span class="rot">Recién cargado</span></span>
+      <h2>Novedades del local</h2></div>
+    <span class="rot" id="nov-fuente"></span>
+  </div>
+  <div class="nov-tira" id="nov-tira"></div>
+</section>
+
 <section class="sec caja" id="categorias">
   <div class="cab">
     <div><span class="eyebrow"><i></i><span class="rot">Rubros</span></span>
@@ -948,6 +990,7 @@ select.sel:focus,input.num:focus{outline:0;border-color:var(--rayo);box-shadow:0
     <li id="pie-tel"></li>
     <li id="pie-hor"></li>
     <li><a href="#local">Cómo llegar</a></li>
+    <li><a href="admin.html">Panel de publicaciones</a></li>
   </ul></div>
   <div class="legal">
     <span class="demo">Demostración</span>
@@ -2515,6 +2558,58 @@ if(!CHICO && THREE) (function(){
       g.globalAlpha=p.o; g.fillStyle="#9DC6FF";
       g.beginPath(); g.arc(p.x,p.y,p.r,0,6.2832); g.fill(); }
     g.globalAlpha=1; })(0);
+})();
+
+/* ── novedades: lo que se carga desde admin.html ─────────────────── */
+(function(){
+  var CLAVE_CFG="electrosilver.cfg.v1", CLAVE_PUBS="electrosilver.pubs.v1", TABLA="publicaciones";
+  function cfg(){ try{ return JSON.parse(localStorage.getItem(CLAVE_CFG)||"{}")||{}; }catch(e){ return {}; } }
+  function locales(){ try{ return JSON.parse(localStorage.getItem(CLAVE_PUBS)||"[]")||[]; }catch(e){ return []; } }
+  function waLink(num,p){
+    var n=(num||"").replace(/\D/g,""); if(!n) return "";
+    if(n.indexOf("54")!==0) n="549"+n.replace(/^0/,"");
+    var t="Hola! Vi la publicación de "+(p.titulo||"un producto")+
+          (p.precio?" a "+plata(p.precio):"")+". Me interesa, ¿sigue disponible?";
+    return "https://wa.me/"+n+"?text="+encodeURIComponent(t);
+  }
+  function pintar(l, fuente){
+    l=(l||[]).filter(function(p){ return p.visible!==false && p.titulo; });
+    if(!l.length) return;
+    $("nov-fuente").textContent=fuente;
+    $("nov-tira").innerHTML=l.slice(0,12).map(function(p){
+      var baja = (p.precio_antes>p.precio && p.precio>0)
+        ? Math.round((1-p.precio/p.precio_antes)*100) : 0;
+      var l2=waLink(p.whatsapp,p);
+      return '<article class="nov sube ya">'+
+        '<div class="marco">'+(baja?'<span class="baja">-'+baja+'%</span>':'')+
+          (p.imagen_url?'<img alt="'+(p.titulo||"").replace(/"/g,"&quot;")+'" loading="lazy" src="'+
+            p.imagen_url+'">':'')+'</div>'+
+        '<div class="in">'+
+          '<span class="rub">'+(p.rubro||"Oferta")+'</span>'+
+          '<h3>'+p.titulo+'</h3>'+
+          '<p>'+(p.detalle||"")+'</p>'+
+          '<div class="pre"><b>'+plata(p.precio)+'</b>'+
+            (baja?'<s>'+plata(p.precio_antes)+'</s>':'')+'</div>'+
+          (p.cuotas>0&&p.precio?'<div class="cuo">'+p.cuotas+' cuotas de <b>'+
+            plata(p.precio/p.cuotas)+'</b> sin interés</div>':'')+
+          (l2?'<a class="wa" href="'+l2+'" target="_blank" rel="noopener">'+
+            '<svg><use href="#wa"/></svg>Consultar</a>':'')+
+        '</div></article>';
+    }).join("");
+    $("novedades").hidden=false;
+  }
+  var c=cfg();
+  if(c.url && c.key && window.supabase && window.supabase.createClient){
+    try{
+      window.supabase.createClient(c.url,c.key)
+        .from(TABLA).select("*").eq("visible",true)
+        .order("creado",{ascending:false}).limit(12)
+        .then(function(r){ if(!r.error) pintar(r.data,"Cargadas desde el panel"); else pintar(locales(),"Guardadas en este navegador"); },
+              function(){ pintar(locales(),"Guardadas en este navegador"); });
+    }catch(e){ pintar(locales(),"Guardadas en este navegador"); }
+  } else {
+    pintar(locales(),"Guardadas en este navegador");
+  }
 })();
 
 /* ── entradas ────────────────────────────────────────────────────── */

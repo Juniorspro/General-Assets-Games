@@ -1,0 +1,993 @@
+<title>Panel de publicaciones — Electro Silver</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="imagenes/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;700;900&family=Chivo+Mono:wght@400;500;700&family=Asap:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --blanco:#F4F6F9; --hoja:#FFFFFF; --acero:#EDF0F5; --acero2:#E1E6ED;
+  --linea:#D5DCE5; --linea2:#E8ECF2;
+  --grafito:#101720; --grafito2:#1B2734; --grafito3:#2A3846;
+  --tinta:#0C1219; --tinta2:#39434F; --gris:#69737F; --gris2:#98A2AE;
+  --rayo:#0B5BD3; --rayo2:#2E7BF6; --rayosuave:#E7EFFD;
+  --brasa:#D9480F; --brasasuave:#FDEDE4;
+  --verde:#0F7B44; --verdesuave:#E3F3EA;
+  --rojo:#B02A18; --rojosuave:#FBE9E6;
+  --D:"Chivo",Helvetica,Arial,sans-serif;
+  --T:"Asap",Helvetica,Arial,sans-serif;
+  --M:"Chivo Mono",ui-monospace,monospace;
+  --r:4px;
+}
+*{box-sizing:border-box}
+/* el atributo hidden lo pisa cualquier display de clase: hay que forzarlo */
+[hidden]{display:none!important}
+body{margin:0;background:var(--blanco);color:var(--tinta);font-family:var(--T);font-size:15px;
+  line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{margin:0;font-family:var(--D);font-weight:900;line-height:1.1;letter-spacing:-.015em}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--rayo)}
+:focus-visible{outline:2px solid var(--rayo);outline-offset:2px}
+img{display:block;max-width:100%}
+.mono{font-family:var(--M);font-variant-numeric:tabular-nums}
+.rot{font-family:var(--M);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gris)}
+
+/* barra */
+.top{position:sticky;top:0;z-index:40;background:var(--grafito);color:#E7ECF2;
+  border-bottom:1px solid var(--grafito3)}
+.top .caja{max-width:1400px;margin:0 auto;padding:0 clamp(12px,2.4vw,28px);display:flex;
+  align-items:center;gap:12px;height:60px}
+.marca{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.marca svg{width:32px;height:32px;flex:none}
+.marca b{font-family:var(--D);font-weight:900;font-size:15.5px;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.marca span{font-family:var(--M);font-size:9px;letter-spacing:.16em;color:var(--gris2);display:block}
+.chip-con{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;
+  font-family:var(--M);font-size:11px;letter-spacing:.05em;flex:none}
+.chip-con i{width:7px;height:7px;border-radius:50%;background:currentColor;display:block}
+.chip-con.demo{background:rgba(217,72,15,.16);color:#FFA77A}
+.chip-con.viva{background:rgba(15,123,68,.2);color:#6EDCA0}
+.chip-con.error{background:rgba(176,42,24,.2);color:#FF9C8C}
+.bt{border:1.5px solid rgba(231,236,242,.3);padding:8px 14px;border-radius:var(--r);font-size:13.5px;
+  font-weight:600;color:#E7ECF2;transition:background .2s,border-color .2s;flex:none}
+.bt:hover{background:rgba(231,236,242,.1);border-color:#E7ECF2}
+
+/* cuerpo */
+.caja{max-width:1400px;margin:0 auto;padding:clamp(18px,2.6vw,32px) clamp(12px,2.4vw,28px) 120px}
+.tablero{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:clamp(16px,2vw,28px);
+  align-items:start}
+.tarjeta{background:var(--hoja);border:1px solid var(--linea);border-radius:var(--r);overflow:hidden}
+.tarjeta > header{padding:15px 18px;border-bottom:1px solid var(--linea2);display:flex;
+  align-items:center;gap:12px}
+.tarjeta > header h2{font-size:17px;font-weight:700}
+.tarjeta > header .rot{margin-left:auto}
+.cuerpo{padding:18px}
+
+/* formulario */
+.campo{margin-bottom:16px}
+.campo:last-child{margin-bottom:0}
+label.et{display:block;font-family:var(--M);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--gris);margin-bottom:6px}
+label.et b{color:var(--brasa);font-weight:400}
+input[type=text],input[type=number],input[type=email],input[type=password],textarea,select{
+  width:100%;border:1.5px solid var(--linea);background:var(--hoja);padding:10px 12px;
+  border-radius:var(--r);font-size:15px}
+textarea{resize:vertical;min-height:76px;line-height:1.5}
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--rayo);box-shadow:0 0 0 3px var(--rayosuave)}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tres{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.pista{font-size:12.5px;color:var(--gris);margin:5px 0 0}
+.pista.mal{color:var(--rojo)}
+.contador{float:right;font-family:var(--M);font-size:10.5px;color:var(--gris2)}
+.contador.cerca{color:var(--brasa)}
+
+/* zona de la foto */
+.zona{border:2px dashed var(--linea);border-radius:var(--r);background:var(--acero);
+  padding:26px 18px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+  position:relative}
+.zona:hover,.zona.encima{border-color:var(--rayo);background:var(--rayosuave)}
+.zona svg{width:30px;height:30px;stroke:var(--gris);fill:none;stroke-width:1.6;margin:0 auto 10px}
+.zona b{display:block;font-weight:600;font-size:15px}
+.zona span{display:block;font-size:13px;color:var(--gris);margin-top:3px}
+.zona input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.foto-lista{display:flex;gap:14px;align-items:flex-start}
+.foto-lista img{width:132px;height:132px;object-fit:cover;border:1px solid var(--linea);
+  border-radius:var(--r);background:var(--acero);flex:none}
+.foto-lista .info{min-width:0;flex:1;font-size:13px;color:var(--gris)}
+.foto-lista .info b{display:block;color:var(--tinta);font-size:14px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.foto-lista .peso{font-family:var(--M);font-size:12px;margin-top:4px}
+.foto-lista .peso s{color:var(--gris2)}
+.foto-lista .peso b{display:inline;color:var(--verde)}
+.foto-lista .quitar{margin-top:9px;font-family:var(--M);font-size:12px;color:var(--rojo);
+  text-decoration:underline}
+
+/* botones */
+.acciones{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:18px;
+  border-top:1px solid var(--linea2)}
+.bp{background:var(--rayo);color:#fff;padding:12px 24px;border-radius:var(--r);font-weight:600;
+  font-size:15px;transition:background .2s}
+.bp:hover{background:var(--rayo2)}
+.bp:disabled{background:var(--gris2);cursor:not-allowed}
+.bs{border:1.5px solid var(--linea);padding:12px 18px;border-radius:var(--r);font-weight:600;
+  font-size:15px;transition:border-color .2s,background .2s}
+.bs:hover{border-color:var(--tinta);background:var(--acero)}
+.bd{color:var(--rojo);font-size:14px;text-decoration:underline;margin-left:auto;align-self:center}
+
+/* vista previa */
+.previa{position:sticky;top:80px}
+.marco-previa{background:var(--acero);padding:22px;display:grid;place-items:center;min-height:300px}
+.tar{background:var(--hoja);border:1px solid var(--linea);border-radius:var(--r);overflow:hidden;
+  width:100%;max-width:290px;display:flex;flex-direction:column}
+.tar .marco{position:relative;aspect-ratio:1/1;background:var(--acero2);overflow:hidden}
+.tar .marco img{width:100%;height:100%;object-fit:cover}
+.tar .marco .nada{position:absolute;inset:0;display:grid;place-items:center;color:var(--gris2);
+  font-size:13px;text-align:center;padding:20px}
+.tar .et{position:absolute;left:9px;top:9px;background:var(--brasa);color:#fff;font-family:var(--M);
+  font-size:10px;font-weight:700;padding:3px 7px;border-radius:2px}
+.tar .in{padding:13px 15px 15px}
+.tar .rub{font-family:var(--M);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--rayo)}
+.tar h3{font-size:16.5px;font-weight:700;margin:4px 0 3px;line-height:1.22}
+.tar p{margin:0;font-size:13px;color:var(--gris)}
+.tar .precio{display:flex;align-items:baseline;gap:8px;margin-top:10px;flex-wrap:wrap}
+.tar .precio b{font-family:var(--D);font-weight:900;font-size:21px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+.tar .precio s{font-family:var(--M);font-size:12px;color:var(--gris)}
+.tar .cuo{font-size:12.5px;color:var(--verde);font-weight:600;margin-top:2px}
+.tar .cuo b{font-family:var(--M)}
+.tar .wa{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--verde);
+  color:#fff;padding:9px;border-radius:var(--r);font-size:13.5px;font-weight:600;margin-top:12px;
+  text-decoration:none}
+.tar .wa svg{width:15px;height:15px;fill:currentColor}
+
+/* lista de publicaciones */
+.lista{margin-top:clamp(16px,2vw,26px)}
+.fila{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;padding:13px 18px;
+  border-bottom:1px solid var(--linea2);align-items:center}
+.fila:last-child{border-bottom:0}
+.fila:hover{background:var(--acero)}
+.fila img{width:64px;height:64px;object-fit:cover;border-radius:3px;background:var(--acero2)}
+.fila .t{min-width:0}
+.fila .t b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.fila .t span{display:block;font-size:12.5px;color:var(--gris)}
+.fila .t .pre{font-family:var(--M);font-variant-numeric:tabular-nums;color:var(--tinta);font-weight:500}
+.fila .bs2{display:flex;gap:6px;flex:none}
+.mini{border:1.5px solid var(--linea);padding:6px 10px;border-radius:3px;font-family:var(--M);
+  font-size:11.5px;transition:border-color .2s,background .2s;white-space:nowrap}
+.mini:hover{border-color:var(--tinta);background:var(--hoja)}
+.mini.peligro:hover{border-color:var(--rojo);color:var(--rojo);background:var(--rojosuave)}
+.estado{display:inline-flex;align-items:center;gap:6px;font-family:var(--M);font-size:10.5px;
+  padding:3px 8px;border-radius:12px}
+.estado.si{background:var(--verdesuave);color:var(--verde)}
+.estado.no{background:var(--acero2);color:var(--gris)}
+.vacio{padding:44px 20px;text-align:center;color:var(--gris)}
+.vacio b{display:block;font-family:var(--D);font-weight:900;font-size:18px;color:var(--tinta);
+  margin-bottom:6px}
+
+/* modal de configuración */
+.velo{position:fixed;inset:0;z-index:60;background:rgba(12,18,25,.55);backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.velo.ver{opacity:1;pointer-events:auto}
+.modal{position:fixed;z-index:61;inset:auto 0 0 0;max-height:92svh;background:var(--blanco);
+  border-top:1px solid var(--linea);display:flex;flex-direction:column;
+  transform:translateY(101%);transition:transform .4s cubic-bezier(.19,1,.22,1);pointer-events:none}
+.modal.ver{transform:none;pointer-events:auto}
+.modal .cab{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--linea);
+  background:var(--hoja);flex:none}
+.modal .cab h2{font-size:18px;margin-right:auto}
+.modal .adentro{overflow:auto;padding:20px;max-width:820px;margin:0 auto;width:100%}
+.cerrar{width:34px;height:34px;border:1.5px solid var(--linea);border-radius:var(--r);display:grid;
+  place-items:center;font-family:var(--M)}
+.cerrar:hover{background:var(--acero)}
+.paso{border-left:2px solid var(--rayo);padding:2px 0 2px 16px;margin-bottom:22px}
+.paso h3{font-size:16px;font-weight:700;margin-bottom:5px}
+.paso p{margin:0 0 10px;font-size:14px;color:var(--tinta2)}
+pre{background:var(--grafito);color:#D6E0EC;padding:15px;border-radius:var(--r);overflow-x:auto;
+  font-family:var(--M);font-size:11.5px;line-height:1.6;margin:0}
+.copiar{display:inline-flex;align-items:center;gap:7px;margin-top:9px;font-family:var(--M);
+  font-size:12px;color:var(--rayo);text-decoration:underline}
+.nota{background:var(--brasasuave);border-left:3px solid var(--brasa);padding:13px 15px;
+  border-radius:0 var(--r) var(--r) 0;font-size:14px;margin:14px 0}
+.nota b{display:block;margin-bottom:3px}
+
+/* aviso */
+.aviso{position:fixed;z-index:80;left:50%;bottom:22px;transform:translate(-50%,18px);
+  background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);display:flex;
+  align-items:center;gap:11px;opacity:0;pointer-events:none;max-width:calc(100vw - 28px);
+  transition:opacity .3s,transform .4s cubic-bezier(.19,1,.22,1)}
+.aviso.ver{opacity:1;transform:translate(-50%,0)}
+.aviso i{width:7px;height:7px;border-radius:50%;background:#5BD69A;flex:none}
+.aviso.mal i{background:#FF8D78}
+.aviso span{font-size:13.5px}
+
+/* barra de publicar, pegada abajo en móvil */
+.publicar-fijo{display:none}
+
+@media (max-width:1080px){
+  .tablero{grid-template-columns:1fr}
+  .previa{position:static}
+  .marco-previa{min-height:0;padding:18px}
+  .tar{max-width:320px}
+}
+@media (max-width:640px){
+  .caja{padding-bottom:96px}
+  .dos,.tres{grid-template-columns:1fr}
+  /* dos filas: arriba la marca y el botón, abajo el estado a lo ancho */
+  .top .caja{height:auto;gap:8px;flex-wrap:wrap;padding-top:9px;padding-bottom:9px}
+  .marca span span{display:none}
+  .marca b{font-size:14.5px}
+  .chip-con{order:3;flex-basis:100%;justify-content:center;padding:5px 9px;
+    background:rgba(231,236,242,.08)}
+  .fila{grid-template-columns:52px minmax(0,1fr);gap:11px;row-gap:9px}
+  .fila img{width:52px;height:52px}
+  .fila .bs2{grid-column:1/-1}
+  .acciones .bp{flex:1}
+  .publicar-fijo{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--hoja);
+    border-top:1px solid var(--linea);padding:11px 14px calc(11px + env(safe-area-inset-bottom));
+    gap:10px;align-items:center}
+  .publicar-fijo .bp{flex:1;padding:13px}
+  .publicar-fijo .resumen{font-family:var(--M);font-size:11px;color:var(--gris);flex:none}
+}
+@media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="plata" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#F2F5F9"/><stop offset=".38" stop-color="#B9C4D1"/>
+    <stop offset=".55" stop-color="#E8EDF3"/><stop offset="1" stop-color="#8D9AA9"/>
+  </linearGradient>
+  <symbol id="marca" viewBox="0 0 48 48">
+    <rect x="1.5" y="1.5" width="45" height="45" rx="11" fill="url(#plata)"/>
+    <path d="M27.4 7 14 26.2h7.9L19.6 41 34 21.3h-8.2z" fill="#0B5BD3"/>
+  </symbol>
+  <symbol id="wa" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91C21.95 6.45 17.5 2 12.04 2m0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23a8.2 8.2 0 0 1 8.24 8.24c0 4.54-3.7 8.23-8.24 8.23m4.52-6.16c-.25-.13-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.16.25-.64.81-.79.98-.14.16-.29.18-.54.06-.25-.13-1.05-.39-1.99-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.09-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.49-.4-.42-.56-.43h-.47c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07s.89 2.4 1.01 2.56c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.22-.17-.47-.29"/></symbol>
+  <symbol id="subir" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+</defs></svg>
+
+<header class="top"><div class="caja">
+  <span class="marca">
+    <svg><use href="#marca"/></svg>
+    <span><b>Panel de publicaciones</b><span>Electro Silver</span></span>
+  </span>
+  <span class="chip-con demo" id="chip"><i></i><span id="chip-t">Modo demostración</span></span>
+  <button type="button" class="bt" id="b-config">Configurar</button>
+</div></header>
+
+<div class="caja">
+  <div class="tablero">
+
+    <div>
+      <section class="tarjeta">
+        <header>
+          <h2 id="titulo-form">Nueva publicación</h2>
+          <span class="rot" id="modo-form">Se agrega al final</span>
+        </header>
+        <div class="cuerpo">
+
+          <div class="campo">
+            <label class="et" for="archivo">Foto <b>·</b> obligatoria</label>
+            <div class="zona" id="zona">
+              <svg><use href="#subir"/></svg>
+              <b>Tocá para elegir la foto</b>
+              <span>o arrastrala acá · JPG, PNG o WEBP</span>
+              <input type="file" id="archivo" accept="image/*" aria-label="Elegir foto">
+            </div>
+            <div class="foto-lista" id="foto-lista" hidden>
+              <img id="foto-previa" alt="Vista previa de la foto elegida">
+              <div class="info">
+                <b id="foto-nombre"></b>
+                <div class="peso" id="foto-peso"></div>
+                <div id="foto-medidas"></div>
+                <button type="button" class="quitar" id="foto-quitar">quitar la foto</button>
+              </div>
+            </div>
+            <p class="pista">Se achica sola a 1200 px y se guarda en webp, así no come el plan gratis.</p>
+          </div>
+
+          <div class="campo">
+            <label class="et" for="titulo">Título <span class="contador" id="c-titulo">0/60</span></label>
+            <input type="text" id="titulo" maxlength="60" placeholder="Heladera No Frost 375 L">
+          </div>
+
+          <div class="campo">
+            <label class="et" for="detalle">Descripción <span class="contador" id="c-detalle">0/240</span></label>
+            <textarea id="detalle" maxlength="240" placeholder="Dos puertas, acero, A+. Entrega en el día en Roca."></textarea>
+          </div>
+
+          <div class="tres">
+            <div class="campo">
+              <label class="et" for="precio">Precio</label>
+              <input type="number" id="precio" min="0" step="1000" placeholder="1289000">
+              <p class="pista" id="precio-txt"></p>
+            </div>
+            <div class="campo">
+              <label class="et" for="antes">Precio anterior</label>
+              <input type="number" id="antes" min="0" step="1000" placeholder="opcional">
+              <p class="pista" id="antes-txt"></p>
+            </div>
+            <div class="campo">
+              <label class="et" for="cuotas">Cuotas sin interés</label>
+              <select id="cuotas">
+                <option value="0">Sin cuotas</option>
+                <option value="3">3 cuotas</option>
+                <option value="6">6 cuotas</option>
+                <option value="12" selected>12 cuotas</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="dos">
+            <div class="campo">
+              <label class="et" for="rubro">Rubro</label>
+              <select id="rubro">
+                <option value="Climatización">Climatización</option>
+                <option value="Frío">Frío</option>
+                <option value="Lavado">Lavado</option>
+                <option value="Cocina">Cocina</option>
+                <option value="Tecnología">Tecnología</option>
+                <option value="Electro chicos">Electro chicos</option>
+                <option value="Oferta">Oferta</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label class="et" for="whatsapp">WhatsApp para consultas</label>
+              <input type="text" id="whatsapp" placeholder="3725123456" inputmode="tel">
+              <p class="pista" id="wa-txt">Sin 0, sin 15 y sin espacios. Se guarda para las próximas.</p>
+            </div>
+          </div>
+
+          <div class="campo">
+            <label class="et"><input type="checkbox" id="visible" checked style="width:auto;margin-right:7px">
+              Publicarla ahora (si la destildás queda guardada pero no se ve en la web)</label>
+          </div>
+
+          <div class="acciones">
+            <button type="button" class="bp" id="b-publicar">Publicar</button>
+            <button type="button" class="bs" id="b-limpiar">Limpiar</button>
+            <button type="button" class="bd" id="b-cancelar" hidden>cancelar la edición</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="previa">
+      <section class="tarjeta">
+        <header><h2>Así se va a ver</h2><span class="rot">En la web</span></header>
+        <div class="marco-previa">
+          <article class="tar">
+            <div class="marco">
+              <img id="p-img" alt="" hidden>
+              <div class="nada" id="p-nada">Elegí una foto y vas viendo cómo queda</div>
+              <span class="et" id="p-baja" hidden></span>
+            </div>
+            <div class="in">
+              <span class="rub" id="p-rubro">Climatización</span>
+              <h3 id="p-titulo">Título de la publicación</h3>
+              <p id="p-detalle">La descripción va acá abajo.</p>
+              <div class="precio"><b id="p-precio">$0</b><s id="p-antes" hidden></s></div>
+              <div class="cuo" id="p-cuotas" hidden></div>
+              <a class="wa" id="p-wa" href="#" target="_blank" rel="noopener">
+                <svg><use href="#wa"/></svg>Consultar por WhatsApp</a>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="tarjeta lista">
+    <header>
+      <h2>Publicaciones</h2>
+      <span class="rot" id="cuenta">0</span>
+      <button type="button" class="mini" id="b-exportar">Bajar copia</button>
+      <button type="button" class="mini" id="b-importar">Subir copia</button>
+      <input type="file" id="archivo-json" accept="application/json" hidden>
+    </header>
+    <div id="filas"></div>
+  </section>
+</div>
+
+<div class="publicar-fijo">
+  <span class="resumen" id="resumen-fijo">sin foto</span>
+  <button type="button" class="bp" id="b-publicar-2">Publicar</button>
+</div>
+
+<div class="velo" id="velo"></div>
+<div class="modal" id="modal" role="dialog" aria-label="Configuración">
+  <div class="cab">
+    <h2>Conectar con Supabase</h2>
+    <button type="button" class="cerrar" id="b-cerrar" aria-label="Cerrar">✕</button>
+  </div>
+  <div class="adentro">
+
+    <div class="nota">
+      <b>Mientras tanto funciona igual.</b>
+      Sin conectar nada, el panel guarda las publicaciones en este navegador y la web las muestra.
+      Sirve para probarlo, pero sólo las ve quien use esta computadora. Para que las vea todo el
+      mundo hay que hacer los cuatro pasos de abajo, una sola vez.
+    </div>
+
+    <div class="paso">
+      <h3>1 · Crear el proyecto</h3>
+      <p>Entrá a <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a>, creá una
+        cuenta gratis y después un proyecto nuevo. No pide tarjeta. Anotá la contraseña que te pide para
+        la base, aunque no la vas a usar acá.</p>
+    </div>
+
+    <div class="paso">
+      <h3>2 · Crear la tabla y el depósito de fotos</h3>
+      <p>En el menú de la izquierda, <b>SQL Editor</b> → <b>New query</b>. Pegá esto entero y dale
+        <b>Run</b>. Crea la tabla, el bucket de imágenes y los permisos: cualquiera puede leer,
+        sólo vos podés escribir.</p>
+      <pre id="sql">create table if not exists publicaciones (
+  id           uuid primary key default gen_random_uuid(),
+  creado       timestamptz not null default now(),
+  titulo       text not null,
+  detalle      text,
+  precio       numeric,
+  precio_antes numeric,
+  cuotas       int  not null default 0,
+  rubro        text,
+  whatsapp     text,
+  imagen_url   text,
+  visible      boolean not null default true
+);
+
+alter table publicaciones enable row level security;
+
+-- Leer: cualquiera, para que la web pueda mostrarlas
+create policy "lectura publica" on publicaciones
+  for select using (true);
+
+-- Escribir: sólo con sesión iniciada
+create policy "escribe el dueno" on publicaciones
+  for all to authenticated using (true) with check (true);
+
+-- Depósito de fotos, con lectura pública
+insert into storage.buckets (id, name, public)
+values ('publicaciones', 'publicaciones', true)
+on conflict (id) do nothing;
+
+create policy "fotos lectura publica" on storage.objects
+  for select using (bucket_id = 'publicaciones');
+
+create policy "fotos escribe el dueno" on storage.objects
+  for insert to authenticated with check (bucket_id = 'publicaciones');
+
+create policy "fotos borra el dueno" on storage.objects
+  for delete to authenticated using (bucket_id = 'publicaciones');</pre>
+      <button type="button" class="copiar" id="b-copiar-sql">copiar el bloque</button>
+    </div>
+
+    <div class="paso">
+      <h3>3 · Crear tu usuario</h3>
+      <p><b>Authentication</b> → <b>Users</b> → <b>Add user</b> → <b>Create new user</b>. Poné un mail y una
+        contraseña y tildá «Auto Confirm User». Ése es el usuario con el que vas a entrar acá.</p>
+    </div>
+
+    <div class="paso">
+      <h3>4 · Pegar las dos claves</h3>
+      <p>Están en <b>Project Settings</b> → <b>API</b>. La <b>anon public</b> es la que va acá:
+        es pública a propósito y no da permiso de escribir, eso lo dan las reglas de arriba.
+        La <b>service_role</b> <b>no</b> se pega nunca en una página.</p>
+      <div class="dos">
+        <div class="campo">
+          <label class="et" for="cfg-url">Project URL</label>
+          <input type="text" id="cfg-url" placeholder="https://abcdefgh.supabase.co">
+        </div>
+        <div class="campo">
+          <label class="et" for="cfg-key">anon public key</label>
+          <input type="text" id="cfg-key" placeholder="eyJhbGciOi…">
+        </div>
+      </div>
+      <div class="dos">
+        <div class="campo">
+          <label class="et" for="cfg-mail">Tu mail</label>
+          <input type="email" id="cfg-mail" autocomplete="username" placeholder="vos@electrosilver.com.ar">
+        </div>
+        <div class="campo">
+          <label class="et" for="cfg-pass">Tu contraseña</label>
+          <input type="password" id="cfg-pass" autocomplete="current-password" placeholder="········">
+        </div>
+      </div>
+      <div class="acciones">
+        <button type="button" class="bp" id="b-conectar">Conectar y entrar</button>
+        <button type="button" class="bs" id="b-probar">Probar sin entrar</button>
+        <button type="button" class="bd" id="b-desconectar">borrar la configuración</button>
+      </div>
+      <p class="pista" id="cfg-estado"></p>
+    </div>
+
+    <div class="nota">
+      <b>Dónde queda cada cosa.</b>
+      La dirección y la clave anon quedan guardadas en este navegador para no pegarlas cada vez.
+      La contraseña no se guarda: si cerrás la sesión, la pedimos de nuevo. Y aunque alguien abra
+      esta página, sin usuario no puede publicar nada: las reglas del paso 2 lo impiden del lado
+      del servidor.
+    </div>
+  </div>
+</div>
+
+<div class="aviso" id="avisito" role="status" aria-live="polite"><i></i><span id="aviso-t"></span></div>
+
+<script>
+(function(){
+"use strict";
+var $=function(i){return document.getElementById(i)};
+var CLAVE_CFG="electrosilver.cfg.v1";
+var CLAVE_PUBS="electrosilver.pubs.v1";
+var TABLA="publicaciones", BUCKET="publicaciones";
+
+/* ── configuración y cliente ─────────────────────────────────────── */
+function leerCfg(){ try{ return JSON.parse(localStorage.getItem(CLAVE_CFG)||"{}")||{}; }catch(e){ return {}; } }
+function grabarCfg(c){ try{ localStorage.setItem(CLAVE_CFG, JSON.stringify(c)); }catch(e){} }
+var cfg=leerCfg(), sb=null, sesion=null;
+
+function crearCliente(){
+  if(!cfg.url || !cfg.key) return null;
+  if(!window.supabase || !window.supabase.createClient) return null;
+  try{ return window.supabase.createClient(cfg.url, cfg.key); }catch(e){ return null; }
+}
+function pintarChip(estado, texto){
+  var c=$("chip");
+  c.className="chip-con "+estado;
+  $("chip-t").textContent=texto;
+}
+function modo(){ return (sb && sesion) ? "vivo" : (sb ? "leyendo" : "demo"); }
+
+/* ── avisos ──────────────────────────────────────────────────────── */
+var relojAviso;
+function avisar(t, mal){
+  $("aviso-t").textContent=t;
+  $("avisito").className="aviso ver"+(mal?" mal":"");
+  clearTimeout(relojAviso);
+  relojAviso=setTimeout(function(){ $("avisito").classList.remove("ver"); }, mal?4600:2800);
+}
+
+/* ── plata y whatsapp ────────────────────────────────────────────── */
+function plata(n){ return "$"+Math.round(n||0).toLocaleString("es-AR"); }
+function waNumero(txt){
+  var d=(txt||"").replace(/\D/g,"");
+  if(!d) return "";
+  if(d.indexOf("54")===0) return d;
+  if(d.charAt(0)==="0") d=d.slice(1);
+  if(d.indexOf("15")===0 && d.length>10) d=d.slice(2);
+  return "549"+d;
+}
+function waLink(num, p){
+  var n=waNumero(num); if(!n) return "";
+  var t="Hola! Vi la publicación de "+(p.titulo||"un producto")+
+        (p.precio?" a "+plata(p.precio):"")+". Me interesa, ¿sigue disponible?";
+  return "https://wa.me/"+n+"?text="+encodeURIComponent(t);
+}
+
+/* ── la foto: se achica y se pasa a webp antes de subir ──────────── */
+var foto=null;   /* {nombre, dataURL, blob, w, h, pesoOrig, pesoFinal} */
+var MAX=1200;
+function tomarArchivo(f){
+  if(!f) return;
+  if(!/^image\//.test(f.type)){ avisar("Ese archivo no es una imagen", true); return; }
+  var lector=new FileReader();
+  lector.onload=function(){
+    var im=new Image();
+    im.onload=function(){
+      var w=im.naturalWidth, h=im.naturalHeight, e=Math.min(1, MAX/Math.max(w,h));
+      var nw=Math.round(w*e), nh=Math.round(h*e);
+      var c=document.createElement("canvas"); c.width=nw; c.height=nh;
+      var g=c.getContext("2d");
+      g.fillStyle="#FFFFFF"; g.fillRect(0,0,nw,nh);   /* los PNG con transparencia salen blancos */
+      g.drawImage(im,0,0,nw,nh);
+      var url;
+      try{ url=c.toDataURL("image/webp",0.82); }catch(err){ url=c.toDataURL("image/jpeg",0.85); }
+      if(url.indexOf("data:image/webp")!==0) url=c.toDataURL("image/jpeg",0.85);
+      c.toBlob(function(bl){
+        foto={ nombre:f.name, dataURL:url, blob:bl||null, w:nw, h:nh,
+               pesoOrig:f.size, pesoFinal:(bl?bl.size:Math.round(url.length*0.75)) };
+        pintarFoto(); pintarPrevia();
+      }, url.indexOf("webp")>0?"image/webp":"image/jpeg", 0.82);
+    };
+    im.onerror=function(){ avisar("No pudimos abrir esa imagen", true); };
+    im.src=lector.result;
+  };
+  lector.onerror=function(){ avisar("No pudimos leer el archivo", true); };
+  lector.readAsDataURL(f);
+}
+function kb(n){ return n>=1048576 ? (n/1048576).toFixed(1)+" MB" : Math.round(n/1024)+" KB"; }
+function pintarFoto(){
+  var hay=!!foto;
+  $("zona").hidden=hay;
+  $("foto-lista").hidden=!hay;
+  if(!hay) return;
+  $("foto-previa").src=foto.dataURL;
+  $("foto-nombre").textContent=foto.nombre;
+  $("foto-peso").innerHTML="<s>"+kb(foto.pesoOrig)+"</s> → <b>"+kb(foto.pesoFinal)+"</b>";
+  $("foto-medidas").textContent=foto.w+" × "+foto.h+" px";
+}
+$("archivo").addEventListener("change",function(){ tomarArchivo(this.files[0]); this.value=""; });
+$("foto-quitar").addEventListener("click",function(){ foto=null; pintarFoto(); pintarPrevia(); });
+["dragenter","dragover"].forEach(function(v){
+  $("zona").addEventListener(v,function(e){ e.preventDefault(); $("zona").classList.add("encima"); });
+});
+["dragleave","drop"].forEach(function(v){
+  $("zona").addEventListener(v,function(e){ e.preventDefault(); $("zona").classList.remove("encima"); });
+});
+$("zona").addEventListener("drop",function(e){
+  var f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) tomarArchivo(f);
+});
+
+/* ── vista previa en vivo ────────────────────────────────────────── */
+function datosForm(){
+  return {
+    titulo:$("titulo").value.trim(),
+    detalle:$("detalle").value.trim(),
+    precio:+$("precio").value||0,
+    precio_antes:+$("antes").value||0,
+    cuotas:+$("cuotas").value||0,
+    rubro:$("rubro").value,
+    whatsapp:$("whatsapp").value.trim(),
+    visible:$("visible").checked
+  };
+}
+function pintarPrevia(){
+  var d=datosForm();
+  $("p-img").hidden=!foto; $("p-nada").hidden=!!foto;
+  if(foto) $("p-img").src=foto.dataURL;
+  $("p-rubro").textContent=d.rubro;
+  $("p-titulo").textContent=d.titulo||"Título de la publicación";
+  $("p-detalle").textContent=d.detalle||"La descripción va acá abajo.";
+  $("p-precio").textContent=plata(d.precio);
+  var hayAntes=d.precio_antes>d.precio && d.precio>0;
+  $("p-antes").hidden=!hayAntes;
+  $("p-antes").textContent=hayAntes?plata(d.precio_antes):"";
+  $("p-baja").hidden=!hayAntes;
+  if(hayAntes) $("p-baja").textContent="-"+Math.round((1-d.precio/d.precio_antes)*100)+"%";
+  var hayCuo=d.cuotas>0 && d.precio>0;
+  $("p-cuotas").hidden=!hayCuo;
+  if(hayCuo) $("p-cuotas").innerHTML=d.cuotas+" cuotas de <b>"+plata(d.precio/d.cuotas)+"</b> sin interés";
+  var l=waLink(d.whatsapp,d);
+  $("p-wa").href=l||"#";
+  $("c-titulo").textContent=d.titulo.length+"/60";
+  $("c-titulo").className="contador"+(d.titulo.length>50?" cerca":"");
+  $("c-detalle").textContent=d.detalle.length+"/240";
+  $("c-detalle").className="contador"+(d.detalle.length>210?" cerca":"");
+  $("precio-txt").textContent=d.precio?plata(d.precio):"";
+  $("antes-txt").textContent=hayAntes?("baja del "+Math.round((1-d.precio/d.precio_antes)*100)+"%")
+    : (d.precio_antes&&d.precio_antes<=d.precio ? "tiene que ser mayor al precio" : "");
+  $("antes-txt").className="pista"+(d.precio_antes&&d.precio_antes<=d.precio?" mal":"");
+  $("wa-txt").textContent = d.whatsapp
+    ? ("Va a escribir a wa.me/"+waNumero(d.whatsapp))
+    : "Sin 0, sin 15 y sin espacios. Se guarda para las próximas.";
+  $("resumen-fijo").textContent = (foto?"foto lista":"sin foto") + (d.titulo?" · "+d.titulo.slice(0,18):"");
+}
+["titulo","detalle","precio","antes","cuotas","rubro","whatsapp","visible"].forEach(function(id){
+  $(id).addEventListener("input",pintarPrevia);
+  $(id).addEventListener("change",pintarPrevia);
+});
+
+/* ── guardado local (modo demostración) ──────────────────────────── */
+function leerLocal(){ try{ return JSON.parse(localStorage.getItem(CLAVE_PUBS)||"[]")||[]; }catch(e){ return []; } }
+function grabarLocal(l){
+  try{ localStorage.setItem(CLAVE_PUBS, JSON.stringify(l)); return true; }
+  catch(e){
+    avisar("Se llenó el espacio del navegador. Borrá alguna publicación vieja o conectá Supabase.", true);
+    return false;
+  }
+}
+
+/* ── leer y escribir, en el modo que corresponda ─────────────────── */
+var pubs=[];
+function cargar(){
+  if(sb){
+    return sb.from(TABLA).select("*").order("creado",{ascending:false}).then(function(r){
+      if(r.error){ avisar("No pudimos leer las publicaciones: "+r.error.message, true); pubs=[]; }
+      else pubs=r.data||[];
+      pintarFilas();
+    });
+  }
+  pubs=leerLocal();
+  pintarFilas();
+  return Promise.resolve();
+}
+function idNuevo(){
+  return "loc-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,7);
+}
+function guardar(reg, blob){
+  if(sb){
+    if(!sesion) return Promise.reject(new Error("Hay que entrar con tu usuario para publicar"));
+    var subir = blob
+      ? sb.storage.from(BUCKET).upload(
+          Date.now()+"-"+Math.random().toString(36).slice(2,8)+(blob.type.indexOf("webp")>0?".webp":".jpg"),
+          blob, {contentType:blob.type, cacheControl:"31536000"})
+        .then(function(r){
+          if(r.error) throw r.error;
+          return sb.storage.from(BUCKET).getPublicUrl(r.data.path).data.publicUrl;
+        })
+      : Promise.resolve(reg.imagen_url||"");
+    return subir.then(function(url){
+      reg.imagen_url=url;
+      var q = reg.id
+        ? sb.from(TABLA).update(reg).eq("id",reg.id)
+        : sb.from(TABLA).insert(reg);
+      return q.then(function(r){ if(r.error) throw r.error; });
+    });
+  }
+  /* local */
+  var l=leerLocal();
+  if(reg.id){
+    for(var i=0;i<l.length;i++) if(l[i].id===reg.id){ l[i]=Object.assign({},l[i],reg); break; }
+  } else {
+    reg.id=idNuevo(); reg.creado=new Date().toISOString();
+    l.unshift(reg);
+  }
+  return grabarLocal(l) ? Promise.resolve() : Promise.reject(new Error("no entró en el navegador"));
+}
+function borrar(id){
+  if(sb){
+    if(!sesion) return Promise.reject(new Error("Hay que entrar con tu usuario"));
+    return sb.from(TABLA).delete().eq("id",id).then(function(r){ if(r.error) throw r.error; });
+  }
+  var l=leerLocal().filter(function(p){ return p.id!==id; });
+  grabarLocal(l);
+  return Promise.resolve();
+}
+
+/* ── publicar ────────────────────────────────────────────────────── */
+var editando=null;
+function publicar(){
+  var d=datosForm();
+  if(!d.titulo){ avisar("Falta el título", true); $("titulo").focus(); return; }
+  if(!foto && !editando){ avisar("Falta la foto", true); return; }
+  if(!d.precio){ avisar("Falta el precio", true); $("precio").focus(); return; }
+  if(d.precio_antes && d.precio_antes<=d.precio){
+    avisar("El precio anterior tiene que ser mayor", true); $("antes").focus(); return; }
+
+  var reg={
+    titulo:d.titulo, detalle:d.detalle, precio:d.precio,
+    precio_antes:d.precio_antes||null, cuotas:d.cuotas, rubro:d.rubro,
+    whatsapp:waNumero(d.whatsapp), visible:d.visible
+  };
+  if(editando){ reg.id=editando.id; if(!foto) reg.imagen_url=editando.imagen_url; }
+  if(!sb && foto) reg.imagen_url=foto.dataURL;
+
+  var b=$("b-publicar"), b2=$("b-publicar-2");
+  b.disabled=b2.disabled=true; b.textContent=b2.textContent="Publicando…";
+  guardar(reg, sb?(foto?foto.blob:null):null)
+    .then(function(){
+      if(d.whatsapp){ cfg.wa=d.whatsapp; grabarCfg(cfg); }
+      avisar(editando?"Publicación actualizada":"Publicada, ya se ve en la web");
+      limpiar();
+      return cargar();
+    })
+    .catch(function(e){ avisar("No se pudo publicar: "+(e.message||e), true); })
+    .then(function(){
+      b.disabled=b2.disabled=false;
+      b.textContent=b2.textContent=editando?"Guardar cambios":"Publicar";
+    });
+}
+$("b-publicar").addEventListener("click",publicar);
+$("b-publicar-2").addEventListener("click",publicar);
+
+function limpiar(){
+  editando=null; foto=null;
+  ["titulo","detalle","precio","antes"].forEach(function(id){ $(id).value=""; });
+  $("cuotas").value="12"; $("visible").checked=true;
+  $("whatsapp").value=cfg.wa||"";
+  $("titulo-form").textContent="Nueva publicación";
+  $("modo-form").textContent="Se agrega al final";
+  $("b-publicar").textContent=$("b-publicar-2").textContent="Publicar";
+  $("b-cancelar").hidden=true;
+  pintarFoto(); pintarPrevia();
+}
+$("b-limpiar").addEventListener("click",limpiar);
+$("b-cancelar").addEventListener("click",limpiar);
+
+function editar(p){
+  editando=p; foto=null;
+  $("titulo").value=p.titulo||"";
+  $("detalle").value=p.detalle||"";
+  $("precio").value=p.precio||"";
+  $("antes").value=p.precio_antes||"";
+  $("cuotas").value=String(p.cuotas||0);
+  $("rubro").value=p.rubro||"Oferta";
+  $("whatsapp").value=p.whatsapp||cfg.wa||"";
+  $("visible").checked=p.visible!==false;
+  $("titulo-form").textContent="Editando";
+  $("modo-form").textContent=(p.titulo||"").slice(0,26);
+  $("b-publicar").textContent=$("b-publicar-2").textContent="Guardar cambios";
+  $("b-cancelar").hidden=false;
+  if(p.imagen_url){
+    $("zona").hidden=true; $("foto-lista").hidden=false;
+    $("foto-previa").src=p.imagen_url;
+    $("foto-nombre").textContent="Foto que ya tenía";
+    $("foto-peso").innerHTML="<b>sin cambios</b>";
+    $("foto-medidas").textContent="Elegí otra si la querés reemplazar";
+  } else pintarFoto();
+  $("p-img").hidden=!p.imagen_url; $("p-nada").hidden=!!p.imagen_url;
+  if(p.imagen_url) $("p-img").src=p.imagen_url;
+  pintarPrevia();
+  scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ── la lista ────────────────────────────────────────────────────── */
+function pintarFilas(){
+  $("cuenta").textContent=pubs.length+(pubs.length===1?" publicación":" publicaciones");
+  if(!pubs.length){
+    $("filas").innerHTML='<div class="vacio"><b>Todavía no hay ninguna</b>'+
+      'Cargá la primera con el formulario de arriba.</div>';
+    return;
+  }
+  $("filas").innerHTML=pubs.map(function(p,i){
+    return '<div class="fila" data-i="'+i+'">'+
+      '<img alt="" src="'+(p.imagen_url||"")+'">'+
+      '<div class="t"><b>'+(p.titulo||"(sin título)")+'</b>'+
+        '<span><span class="pre">'+plata(p.precio)+'</span>'+
+        (p.cuotas?" · "+p.cuotas+" cuotas":"")+' · '+(p.rubro||"")+'</span></div>'+
+      '<div class="bs2">'+
+        '<span class="estado '+(p.visible!==false?"si":"no")+'">'+
+          (p.visible!==false?"visible":"oculta")+'</span>'+
+        '<button type="button" class="mini" data-ed="'+i+'">editar</button>'+
+        '<button type="button" class="mini" data-ver="'+i+'">'+
+          (p.visible!==false?"ocultar":"mostrar")+'</button>'+
+        '<button type="button" class="mini peligro" data-del="'+i+'">borrar</button>'+
+      '</div></div>';
+  }).join("");
+}
+$("filas").addEventListener("click",function(e){
+  var ed=e.target.closest("[data-ed]"), ver=e.target.closest("[data-ver]"),
+      del=e.target.closest("[data-del]");
+  if(ed) editar(pubs[+ed.dataset.ed]);
+  else if(ver){
+    var p=pubs[+ver.dataset.ver];
+    guardar({id:p.id, visible:!(p.visible!==false), titulo:p.titulo, detalle:p.detalle,
+             precio:p.precio, precio_antes:p.precio_antes, cuotas:p.cuotas, rubro:p.rubro,
+             whatsapp:p.whatsapp, imagen_url:p.imagen_url}, null)
+      .then(function(){ avisar(p.visible!==false?"Quedó oculta":"Ya se ve en la web"); return cargar(); })
+      .catch(function(err){ avisar("No se pudo cambiar: "+(err.message||err), true); });
+  }
+  else if(del){
+    var q=pubs[+del.dataset.del];
+    if(!confirm('¿Borrar "'+(q.titulo||"esta publicación")+'"? No se puede deshacer.')) return;
+    borrar(q.id).then(function(){ avisar("Borrada"); return cargar(); })
+      .catch(function(err){ avisar("No se pudo borrar: "+(err.message||err), true); });
+  }
+});
+
+/* ── copia de seguridad ──────────────────────────────────────────── */
+$("b-exportar").addEventListener("click",function(){
+  var t=JSON.stringify(pubs,null,1);
+  /* el archivo y el portapapeles: dentro de un visor con descargas bloqueadas,
+     el enlace no hace nada y la copia sí */
+  try{
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([t],{type:"application/json"}));
+    a.download="publicaciones-electro-silver.json";
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){}
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){
+      avisar(pubs.length+" publicaciones: archivo bajado y copiado al portapapeles");
+    },function(){ avisar(pubs.length+" publicaciones bajadas"); });
+  } else avisar(pubs.length+" publicaciones bajadas");
+});
+$("b-importar").addEventListener("click",function(){ $("archivo-json").click(); });
+$("archivo-json").addEventListener("change",function(){
+  var f=this.files[0]; this.value=""; if(!f) return;
+  var l=new FileReader();
+  l.onload=function(){
+    try{
+      var d=JSON.parse(l.result);
+      if(!Array.isArray(d)) throw new Error("el archivo no tiene una lista");
+      if(sb){ avisar("La copia se sube sólo en modo demostración. Cargalas una por una.", true); return; }
+      var actual=leerLocal(), ids={};
+      actual.forEach(function(p){ ids[p.id]=true; });
+      d.forEach(function(p){ if(!ids[p.id]) actual.push(p); });
+      if(grabarLocal(actual)){ avisar(d.length+" publicaciones cargadas"); cargar(); }
+    }catch(e){ avisar("Ese archivo no sirve: "+e.message, true); }
+  };
+  l.readAsText(f);
+});
+
+/* ── modal de configuración ──────────────────────────────────────── */
+function abrirModal(){
+  $("cfg-url").value=cfg.url||"";
+  $("cfg-key").value=cfg.key||"";
+  $("cfg-mail").value=cfg.mail||"";
+  $("velo").classList.add("ver"); $("modal").classList.add("ver");
+  document.body.style.overflow="hidden";
+}
+function cerrarModal(){
+  $("velo").classList.remove("ver"); $("modal").classList.remove("ver");
+  document.body.style.overflow="";
+}
+$("b-config").addEventListener("click",abrirModal);
+$("b-cerrar").addEventListener("click",cerrarModal);
+$("velo").addEventListener("click",cerrarModal);
+addEventListener("keydown",function(e){ if(e.key==="Escape") cerrarModal(); });
+$("b-copiar-sql").addEventListener("click",function(){
+  var t=$("sql").textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(t).then(function(){ avisar("Bloque copiado"); },
+      function(){ avisar("Copialo a mano desde el cuadro", true); });
+  else avisar("Copialo a mano desde el cuadro", true);
+});
+
+function aplicarCfg(url,key){
+  cfg.url=url.replace(/\/+$/,""); cfg.key=key;
+  grabarCfg(cfg);
+  sb=crearCliente();
+  return sb;
+}
+$("b-probar").addEventListener("click",function(){
+  var u=$("cfg-url").value.trim(), k=$("cfg-key").value.trim();
+  if(!u||!k){ $("cfg-estado").textContent="Faltan la dirección o la clave."; return; }
+  if(!aplicarCfg(u,k)){ $("cfg-estado").textContent="No se pudo crear el cliente. ¿La dirección está bien?"; return; }
+  $("cfg-estado").textContent="Probando…";
+  sb.from(TABLA).select("id",{count:"exact",head:true}).then(function(r){
+    if(r.error){
+      $("cfg-estado").className="pista mal";
+      $("cfg-estado").textContent="Responde pero con error: "+r.error.message+
+        " · ¿corriste el bloque del paso 2?";
+      pintarChip("error","Con error");
+    } else {
+      $("cfg-estado").className="pista";
+      $("cfg-estado").textContent="Conecta bien. Hay "+(r.count||0)+
+        " publicaciones. Para poder publicar, entrá con tu usuario.";
+      pintarChip("demo","Sólo lectura");
+      cargar();
+    }
+  });
+});
+$("b-conectar").addEventListener("click",function(){
+  var u=$("cfg-url").value.trim(), k=$("cfg-key").value.trim();
+  var m=$("cfg-mail").value.trim(), p=$("cfg-pass").value;
+  if(!u||!k||!m||!p){ $("cfg-estado").textContent="Faltan datos: dirección, clave, mail y contraseña."; return; }
+  if(!aplicarCfg(u,k)){ $("cfg-estado").textContent="No se pudo crear el cliente."; return; }
+  $("cfg-estado").textContent="Entrando…";
+  sb.auth.signInWithPassword({email:m,password:p}).then(function(r){
+    if(r.error){
+      $("cfg-estado").className="pista mal";
+      $("cfg-estado").textContent="No entró: "+r.error.message;
+      pintarChip("error","No entró");
+      return;
+    }
+    sesion=r.data.session; cfg.mail=m; grabarCfg(cfg);
+    $("cfg-estado").className="pista";
+    $("cfg-estado").textContent="Listo, entraste como "+m+".";
+    pintarChip("viva","Publicando en vivo");
+    $("cfg-pass").value="";
+    avisar("Conectado. Ya podés publicar para todos.");
+    cargar(); cerrarModal();
+  });
+});
+$("b-desconectar").addEventListener("click",function(){
+  if(!confirm("¿Borrar la configuración de este navegador? Las publicaciones que ya subiste quedan.")) return;
+  if(sb && sb.auth) try{ sb.auth.signOut(); }catch(e){}
+  cfg={wa:cfg.wa}; grabarCfg(cfg); sb=null; sesion=null;
+  pintarChip("demo","Modo demostración");
+  $("cfg-url").value=""; $("cfg-key").value=""; $("cfg-pass").value="";
+  $("cfg-estado").textContent="Volvió al modo demostración.";
+  cargar();
+});
+
+/* ── arranque ────────────────────────────────────────────────────── */
+sb=crearCliente();
+if(sb){
+  pintarChip("demo","Sólo lectura");
+  sb.auth.getSession().then(function(r){
+    sesion=(r.data && r.data.session) || null;
+    pintarChip(sesion?"viva":"demo", sesion?"Publicando en vivo":"Sólo lectura");
+    if(!sesion) avisar("Estás conectado pero sin sesión: entrá para poder publicar", true);
+  });
+} else {
+  pintarChip("demo","Modo demostración");
+}
+limpiar();
+cargar();
+})();
+</script>
