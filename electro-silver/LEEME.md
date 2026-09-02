@@ -6,11 +6,32 @@ entera**, no los archivos sueltos.
 ## Estado
 
 - [x] Carpeta `imagenes/` creada
-- [ ] `index.html` — falta el HTML de la página (mandámelo y lo acomodo)
+- [x] `index.html` — página completa, 5,6 MB, todo embebido (no depende de internet
+      salvo las fuentes de Google y three.js)
+- [x] `<head>` con título, descripción, favicon, Open Graph y datos estructurados
+      (`HomeGoodsStore` con dirección, horarios, coordenadas y las 6 localidades)
+- [x] `sitemap.xml` y `robots.txt`
 - [ ] `imagenes/logo.png` — cuadrado, mínimo 512×512, PNG con fondo
-- [ ] `<head>` con título, descripción, favicon y datos estructurados
-- [ ] Archivo de verificación de Google Search Console
-- [ ] `sitemap.xml` y `robots.txt`
+- [ ] Archivo de verificación de Google Search Console (mandame el nombre **y** la
+      línea de adentro: si el archivo va vacío, la verificación falla)
+- [ ] Reemplazar los datos de ejemplo (ver abajo)
+
+## Qué hay que reemplazar antes de publicar
+
+Están marcados en el pie de la página y en comentarios del HTML:
+
+| dónde | qué dice ahora |
+|---|---|
+| JSON-LD y sección «El local» | Av. San Martín 480 · (3725) 00-0000 |
+| JSON-LD `geo` | -26.1333, -59.6000 (centro del pueblo, no del local) |
+| `canonical`, `og:url`, `og:image`, sitemap, robots | electrosilver.com.ar |
+| Precios del catálogo | valores de ejemplo |
+| Tarifas de instalación y de envío | valores de ejemplo |
+| Las tres opiniones | inventadas para la demostración |
+| Botón de WhatsApp | copia el mensaje al portapapeles; con `wa_link` cargado abre WhatsApp |
+
+El `wa_link` se carga en el JSON de datos que está dentro del propio `index.html`
+(buscá `"wa_link": ""` y poné `https://wa.me/549372500000`, con el número real).
 
 ## Datos del negocio que hacen falta
 
