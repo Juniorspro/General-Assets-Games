@@ -374,6 +374,77 @@ esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** mie
 es que se ve, que camina, que caza y que te alcanza.
 
 
+### Octogésima séptima vuelta (2026-09-02): **PUERTA BLANCA** — las cuatro formas de crashear, y una era invisible
+
+Pedido: *"quiero que arregles todos los posibles motivos de crasheo dentro del juego"*. Vive en
+`herramientas/puerta/red.py`.
+
+**QUÉ ES CRASHEAR EN UN JUEGO WEBGL.** No es una sola cosa, son cuatro, y cada una necesita su red.
+Lo que el juego ya tenía: `requestAnimationFrame` en la primera línea del bucle —así una excepción no
+lo mata— y `try` alrededor de la física y de los dos render. Lo que faltaba:
+
+1. **LO QUE ESTABA SUELTO ENTRE LOS `try`, y es el que no dejaba rastro.** La cámara, el domo del
+   cielo y `updateTape` corrían sin red. Si eso tira, el bucle **sigue girando** y el render no se
+   alcanza nunca: la imagen queda congelada para siempre y en la consola hay un error por cuadro.
+   Medido inyectando una falla en `updateTape`: antes la imagen se moría, ahora **se atrapa una vez,
+   `llamadas: 18` —o sea que sigue dibujando— y el jugador sigue caminando**.
+2. **LAS TRANSICIONES DE NIVEL NO PASABAN POR NINGUNA RED.** `fadeTo(cb)` corre `cb()` dentro de un
+   `setTimeout`, o sea fuera del bucle y fuera del envoltorio de `startLevel` — y ahí se construye el
+   nivel entero. Medido: el error salía como **"Uncaught"** y el velo negro del fundido se quedaba
+   puesto. Pantalla negra que no responde, que es exactamente lo que un jugador llama crasheo. Ahora
+   el velo se levanta igual y `window.__errs` queda **vacío**.
+3. **UN NaN.** Es el asesino silencioso de este repo: un NaN en la posición se propaga a la matriz de
+   la cámara y three.js deja de dibujar **todo** sin un solo mensaje. El vigía guarda **cinco números
+   y no la matriz** —posición, rumbo y cabeceo son lo que la alimenta, y comprobar la matriz llega
+   tarde: para cuando tiene NaN, el estado que lo produjo ya se guardó—. Medido: se recupera en
+   **un cuadro** y sigue dibujando. Y el `delta` también se comprueba, porque un `getDelta()` que
+   devuelve NaN mete NaN en todo lo que integra de una.
+4. **LA MEMORIA DE VIDEO, que ningún `try` puede agarrar.** 77,1 MB en 112 texturas es lo que de
+   verdad mata una pestaña en un teléfono modesto: el navegador la cierra. En el escalón bajo la foto
+   entra **a la mitad de lado** —cuesta la cuarta parte y no se ve, porque ahí el juego dibuja a
+   `postScale` 0,36 con tope de 320 px y el filtro de VHS encima—. Medido: **77,1 → 41,5 MB**.
+
+**Y LA PÉRDIDA DE CONTEXTO TENÍA UN LAZO INFINITO.** El juego recargaba, y si el contexto se pierde
+**por memoria** la página vuelve a pedir los mismos setenta y siete megas y lo vuelve a perder: recarga
+tras recarga, que es peor que quedarse en negro. Ahora recarga **una vez con `?bajo`** —que arranca en
+calidad baja y sin las fotos PBR— y si se pierde con `?bajo` ya puesto no recarga más: avisa y para.
+Sin `sessionStorage` a propósito: en una ventana privada tira, y una red que tira no es una red.
+
+**SE ENVUELVEN LAS FUNCIONES Y NO LOS LISTENERS.** Las declaraciones `function` están izadas con su
+cuerpo, así que arriba del módulo ya se las puede reasignar; y `addEventListener` captura el **valor**
+de la referencia al registrarse, así que envolverlas antes de los veinticinco registros las cubre
+todas — incluido el próximo que se agregue. A mano serían veinticinco parches. El caso grave es el
+dedo: **si `onTouchEnd` tira, el toque no se suelta nunca** y el jugador queda caminando contra una
+pared sin poder soltar.
+
+Y dos cambios de criterio en la recuperación: el aviso sale **una vez por sitio y no una por cuadro**
+—sesenta avisos por segundo tapan la pantalla con el error en vez de dejar jugar— y cuando algo falla
+siempre, se **abre el menú** en vez de pausar para siempre: `paused = true` a secas deja al jugador
+mirando una escena que no responde y sin nada que tocar.
+
+#### DOS ERRORES MÍOS DE MÉTODO, Y LOS DOS DEL MISMO TIPO
+
+Quise reemplazar el bucle entero cortando de `function animate() {` hasta `animate();`. **Las sondas
+viven ENTRE la función y su llamada**, así que el corte se las llevaba puestas — y no fallaba ahí:
+fallaba doscientas líneas después, cuando otro parche no encontraba su ancla adentro de las sondas que
+ya no existían. Lo mismo con el corte del `webglcontextlost`. La lección: **un corte grande de un
+archivo ya parchado es una apuesta; cuatro parches chicos sobre literales únicos no lo son.**
+
+#### MEDIDO AL CERRAR
+
+Cuatro fallas inyectadas a propósito y el juego sigue jugable en las cuatro: falla por cuadro
+(atrapada una vez, 18 llamadas de dibujo, se sigue caminando), NaN (recuperado en un cuadro),
+transición de nivel (atrapada, el nivel llega a `field`, `__errs` vacío) y toque. Memoria **41,5 MB
+contra 77,1**. Los **siete estados** cargan con 24/24 fotos PBR y 0 fallos, y la regresión del nivel 6
+sigue en pie: auditoría **28.152 de 28.152 celdas · 4 de 4 partes**, partida completa 4/4 en orden y
+salida a `end`. `window.__errs` vacío en las seis corridas. El HTML pasó de 2,97 a **2,98 MB**.
+
+**LO QUE NO PUDE COMPROBAR:** la rama del NaN persistente —120 cuadros seguidos con NaN, que abre el
+menú— no se pudo alcanzar, porque la recuperación funciona en **un** cuadro: forzando la posición a
+NaN sin estado sano guardado, el vigía la lleva a (0,0,0), que es finito, y el cuadro siguiente ya está
+bien. Y la pérdida de contexto está probada por lectura y no por ejecución: `WEBGL_lose_context` mata
+la corrida del banco.
+
 ### Octogésima sexta vuelta (2026-09-02): **PUERTA BLANCA** — el campo del nivel 1, y el pasto nunca fue verde
 
 Pedido: *"mejora al máximo las flores procedurales del campo también textura de mariposas y pasto en

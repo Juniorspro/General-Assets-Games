@@ -175,6 +175,22 @@ JS = r"""
     return { normal: tex(nd), rough: tex(rd), rMedia: rMedia };
   }
 
+  // ---- y en un telefono la foto entra a la mitad de lado ----
+  // EL PRECIO DE ESTAS FOTOS NO SON BYTES DE HTML SINO MEMORIA DE VIDEO: medido,
+  // 32,3 MB en 40 texturas contra 77,1 en 112. Y eso es lo que de verdad mata
+  // una pestaña en un telefono modesto — no una excepcion, el navegador la cierra
+  // y no hay `try` que lo agarre. A la mitad de lado cuesta la CUARTA PARTE, y no
+  // se ve: en el escalon bajo el juego dibuja a `postScale` 0,36 con tope de 320
+  // px y el filtro de VHS encima.
+  function pbPbrChica(img) {
+    if (!LOW && location.search.indexOf('bajo') < 0) return img;
+    const w = Math.max(64, img.width >> 1), h = Math.max(64, img.height >> 1);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    return c;
+  }
+
   // ---- poner una foto ----
   function pbPbrPon(nom, img) {
     const d = window.__PB_PBR[nom];
@@ -225,7 +241,7 @@ JS = r"""
       if (u.ranura === 'map') {
         let nt = porRep.get(clave);
         if (!nt) {
-          nt = new THREE.Texture(img);
+          nt = new THREE.Texture(pbPbrChica(img));
           nt.wrapS = nt.wrapT = THREE.MirroredRepeatWrapping;
           nt.repeat.set(rx, ry);
           nt.offset.copy(u.tex.offset);

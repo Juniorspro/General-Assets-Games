@@ -692,6 +692,48 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   const BASE_FOV = 90;
   const camera = new THREE.PerspectiveCamera(BASE_FOV, visualWidth / visualHeight, 0.1, 2000);
 
+
+  // ==================================================================
+  // RED CONTRA EL CRASHEO
+  // ==================================================================
+  window.__pbFallas = [];
+  const pbVistas = {};
+  function pbFalla(donde, err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    window.__pbFallas.push(donde + ': ' + msg);
+    if (window.__pbFallas.length > 60) window.__pbFallas.shift();
+    // UNA VEZ POR SITIO Y NO UNA POR CUADRO: un error dentro del bucle se
+    // repite sesenta veces por segundo, y sesenta avisos por segundo tapan la
+    // pantalla con el aviso del error en vez de dejar seguir jugando.
+    if (pbVistas[donde]) { pbVistas[donde]++; return; }
+    pbVistas[donde] = 1;
+    try { console.error('[pb:' + donde + ']', err); } catch (e) {}
+    try { showToast('Fallo ' + donde + ' — el juego sigue.', 4000); } catch (e) {}
+  }
+  function pbSeguro(fn, donde) {
+    return function () {
+      try { return fn.apply(this, arguments); }
+      catch (err) { pbFalla(donde, err); }
+    };
+  }
+  // y las que dejan el juego en un estado imposible si tiran a mitad de camino
+  startLevel = pbSeguro(startLevel, 'startLevel');
+  applyQuality = pbSeguro(applyQuality, 'applyQuality');
+  openMenu = pbSeguro(openMenu, 'openMenu');
+  closeMenu = pbSeguro(closeMenu, 'closeMenu');
+  hideAllLevels = pbSeguro(hideAllLevels, 'hideAllLevels');
+  ensureAudio = pbSeguro(ensureAudio, 'ensureAudio');
+  toggleFlashlight = pbSeguro(toggleFlashlight, 'toggleFlashlight');
+  toggleHide = pbSeguro(toggleHide, 'toggleHide');
+  updateTape = pbSeguro(updateTape, 'updateTape');
+  updateLayout = pbSeguro(updateLayout, 'updateLayout');
+  // EL DEDO ES EL CASO GRAVE. Si `onTouchEnd` tira, el toque no se suelta nunca
+  // y el jugador queda caminando contra una pared sin poder soltar: no es un
+  // error cosmetico, es el juego trabado.
+  onTouchStart = pbSeguro(onTouchStart, 'onTouchStart');
+  onTouchMove = pbSeguro(onTouchMove, 'onTouchMove');
+  onTouchEnd = pbSeguro(onTouchEnd, 'onTouchEnd');
+
   const player = new THREE.Object3D();
   const EYE_HEIGHT = 1.7;
   const pitchObj = new THREE.Object3D();
@@ -904,6 +946,22 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
     return { normal: tex(nd), rough: tex(rd), rMedia: rMedia };
   }
 
+  // ---- y en un telefono la foto entra a la mitad de lado ----
+  // EL PRECIO DE ESTAS FOTOS NO SON BYTES DE HTML SINO MEMORIA DE VIDEO: medido,
+  // 32,3 MB en 40 texturas contra 77,1 en 112. Y eso es lo que de verdad mata
+  // una pestaña en un telefono modesto — no una excepcion, el navegador la cierra
+  // y no hay `try` que lo agarre. A la mitad de lado cuesta la CUARTA PARTE, y no
+  // se ve: en el escalon bajo el juego dibuja a `postScale` 0,36 con tope de 320
+  // px y el filtro de VHS encima.
+  function pbPbrChica(img) {
+    if (!LOW && location.search.indexOf('bajo') < 0) return img;
+    const w = Math.max(64, img.width >> 1), h = Math.max(64, img.height >> 1);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    return c;
+  }
+
   // ---- poner una foto ----
   function pbPbrPon(nom, img) {
     const d = window.__PB_PBR[nom];
@@ -954,7 +1012,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       if (u.ranura === 'map') {
         let nt = porRep.get(clave);
         if (!nt) {
-          nt = new THREE.Texture(img);
+          nt = new THREE.Texture(pbPbrChica(img));
           nt.wrapS = nt.wrapT = THREE.MirroredRepeatWrapping;
           nt.repeat.set(rx, ry);
           nt.offset.copy(u.tex.offset);
@@ -9294,7 +9352,15 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   function fadeTo(callback) {
     fadeOverlay.style.opacity = '1';
     setTimeout(() => {
-      callback();
+      // Y EL VELO SE LEVANTA IGUAL SI LA CONSTRUCCION TIRA. Dejandolo puesto, el
+      // jugador queda mirando un rectangulo negro y no hay forma de saber que
+      // paso; levantandolo, al menos ve el menu o el nivel a medio armar y puede
+      // elegir otro.
+      try { callback(); }
+      catch (err) {
+        pbFalla('transicion', err);
+        try { paused = true; openMenu(); } catch (e) {}
+      }
       setTimeout(() => { fadeOverlay.style.opacity = '0'; }, 60);
     }, 480);
   }
@@ -9690,7 +9756,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
 
   const bootEl = document.getElementById('boot');
   const qminiEl = document.getElementById('qmini');
-  let quality = LOW ? 'media' : 'alta';
+  let quality = (location.search.indexOf('bajo') >= 0) ? 'baja' : (LOW ? 'media' : 'alta');
 
   function applyQuality(q) {
     quality = q;
@@ -12729,11 +12795,19 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   let renderErrors = 0;
 
   // a lost GPU context used to look like a hard crash; now it recovers
-  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     paused = true;
-    showToast('Se perdió el contexto gráfico. Recargando…', 6000);
-    setTimeout(() => { window.location.reload(); }, 2200);
+    const yaBajo = location.search.indexOf('bajo') >= 0;
+    if (yaBajo) {
+      showToast('Se perdio el contexto grafico otra vez. Cerra otras pestanas y volve a entrar.', 20000);
+      return;
+    }
+    showToast('Se perdio el contexto grafico. Recargando en calidad baja…', 6000);
+    setTimeout(() => {
+      const u = location.href.split('#')[0];
+      location.href = u + (u.indexOf('?') >= 0 ? '&' : '?') + 'bajo=1&nopbr=1';
+    }, 2200);
   }, false);
 
 
@@ -13263,6 +13337,33 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
                alphaTest: m.alphaTest, transparente: m.transparent,
                escala: +b.g.scale.x.toFixed(2) };
     },
+    // ROMPE ALGO A PROPOSITO. Una red sin probar no es una red: esto mete la
+    // falla y despues se comprueba que el juego SIGUE JUGABLE, que es lo unico
+    // que importa. 'cuadro' hace tirar updateTape una vez por cuadro —el caso
+    // que dejaba la imagen congelada para siempre—, 'nan' mete un NaN en la
+    // posicion, 'toque' hace tirar onTouchEnd —el dedo que no se suelta— y
+    // 'nivel' hace tirar la construccion de un nivel.
+    romper: function (que) {
+      if (que === 'cuadro') { updateTape = function () { throw new Error('falla inyectada en el cuadro'); }; }
+      else if (que === 'nan') { player.position.x = NaN; yaw = NaN; }
+      else if (que === 'nanfijo') { pbSano.vale = false; player.position.set(NaN, NaN, NaN); }
+      else if (que === 'toque') { onTouchEnd = function () { throw new Error('falla inyectada en el toque'); }; }
+      else if (que === 'nivel') { hideAllLevels = function () { throw new Error('falla inyectada en el nivel'); }; }
+      else if (que === 'contexto') {
+        const ext = renderer.getContext().getExtension('WEBGL_lose_context');
+        if (!ext) return 'no hay WEBGL_lose_context';
+        ext.loseContext();
+      } else return 'no se que es ' + que;
+      return 'roto: ' + que;
+    },
+    // el estado de las redes: fallas atrapadas, NaN recuperados y si el juego
+    // sigue dibujando
+    red: function () {
+      return { fallas: window.__pbFallas.slice(0, 8), nans: pbNaNs,
+               errBucle: loopErrors, errRender: renderErrors,
+               pausado: paused, llamadas: renderer.info.render.calls,
+               sanoVale: pbSano.vale };
+    },
     // LO QUE CUESTAN LAS FOTOS EN MEMORIA DE VIDEO, que es el precio real de
     // esta vuelta: no son bytes de HTML sino texturas subidas a la GPU.
     pbrMem: function () {
@@ -13297,10 +13398,50 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   };
   renderer.info.autoReset = false;
 
+
+  // el ultimo estado SANO, para poder volver de un NaN. Se guardan CINCO
+  // numeros y no la matriz: lo que alimenta la matriz de la camara son la
+  // posicion, el rumbo y el cabeceo, y comprobar la matriz llega tarde — para
+  // cuando tiene NaN, el estado que lo produjo ya se guardo.
+  const pbSano = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vale: false };
+  let pbNaNs = 0;
+  function pbVigiaNaN() {
+    const p = player.position;
+    if (Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z) &&
+        Number.isFinite(yaw) && Number.isFinite(pitch)) {
+      pbSano.x = p.x; pbSano.y = p.y; pbSano.z = p.z;
+      pbSano.yaw = yaw; pbSano.pitch = pitch; pbSano.vale = true;
+      return false;
+    }
+    // UN NaN NO PUEDE DEJAR LA PANTALLA EN NEGRO. Se propaga a la matriz de la
+    // camara y three.js deja de dibujar TODO, sin un solo mensaje en la consola.
+    pbNaNs++;
+    if (pbSano.vale) {
+      p.set(pbSano.x, pbSano.y, pbSano.z);
+      yaw = pbSano.yaw; pitch = pbSano.pitch;
+    } else { p.set(0, 0, 0); yaw = 0; pitch = 0; }
+    player.rotation.y = yaw;
+    pitchObj.rotation.x = pitch;
+    player.updateMatrixWorld(true);
+    if (pbNaNs === 1) pbFalla('NaN', new Error('posicion o vista no finita'));
+    // Y SI VUELVE CUADRO TRAS CUADRO, LA FUENTE ES PERSISTENTE. No se adivina
+    // que variable la produce —adivinar nombres es peor que no tocar nada—: se
+    // cuenta. Dos segundos seguidos quiere decir que volver al ultimo cuadro
+    // sano no alcanza, y ahi el menu es la unica salida. Mientras tanto el
+    // jugador VE la escena, que ya es mejor que el negro.
+    if (pbNaNs === 120) {
+      paused = true;
+      try { openMenu(); showToast('El nivel se rompio. Elegi otro.', 6000); } catch (e) {}
+    }
+    return true;
+  }
+
   function animate() {
     requestAnimationFrame(animate);
     renderer.info.reset();
-    const delta = Math.min(clock.getDelta(), 0.05);
+    let delta = clock.getDelta();
+    if (!Number.isFinite(delta) || delta < 0) delta = 0.016;
+    delta = Math.min(delta, 0.05);
     elapsedTime += delta;
     if (catchGuard > 0) catchGuard -= delta;
     uTime.value = elapsedTime;
@@ -13313,18 +13454,26 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       }
     } catch (err) {
       loopErrors++;
-      if (loopErrors === 1) {
-        console.error('[loop]', err);
-        showToast('Error: ' + (err && err.message ? err.message : err), 9000);
+      if (loopErrors === 1) pbFalla('bucle', err);
+      // `paused = true` A SECAS DEJA AL JUGADOR MIRANDO UNA ESCENA QUE NO
+      // RESPONDE y sin nada que tocar; con el menu abierto puede elegir otro
+      // nivel, que es lo unico que de verdad lo saca del pozo.
+      if (loopErrors === 240) {
+        paused = true;
+        try { openMenu(); showToast('El nivel fallo. Elegi otro.', 6000); } catch (e) {}
       }
-      if (loopErrors > 300) { paused = true; }
     }
+    pbVigiaNaN();
 
-    camera.getWorldPosition(uCamPos.value);
-    skyDome.position.set(uCamPos.value.x, 0, uCamPos.value.z);
-
-    updateTape(delta, elapsedTime);
-    postU.uTime.value = elapsedTime;
+    try {
+      camera.getWorldPosition(uCamPos.value);
+      skyDome.position.set(uCamPos.value.x, 0, uCamPos.value.z);
+      updateTape(delta, elapsedTime);
+      postU.uTime.value = elapsedTime;
+    } catch (err) {
+      loopErrors++;
+      if (loopErrors === 1) pbFalla('cuadro', err);
+    }
 
     const cur = frameFlip ? rtB : rtA;
     const prv = frameFlip ? rtA : rtB;

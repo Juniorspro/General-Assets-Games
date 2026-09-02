@@ -519,6 +519,7 @@ s = s if SOLO else cambiar(s, """      skyDome.visible = true;
 sys.path.insert(0, AQUI)
 import campo
 import nivel6
+import red
 
 # la ficha del menu, despues del nivel 5
 s = s if SOLO else cambiar(s, """        <div class="lv" data-lv="5">""",
@@ -1254,6 +1255,38 @@ s = s if SOLO else cambiar(s, """    flowers: LOW ? 170 : 240,
     clouds: LOW ? 9 : 16,
     butterflies: LOW ? 10 : 18,""", 'el presupuesto de pasto y mariposas')
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 11 · LAS REDES CONTRA EL CRASHEO
+# ══════════════════════════════════════════════════════════════════════════════
+
+# EL AYUDANTE VA ARRIBA DE TODO EL MODULO, y eso es lo que hace que alcance con
+# un parche. Las declaraciones `function` estan izadas con su cuerpo, asi que
+# desde el primer renglon ya se las puede reasignar; y `addEventListener` captura
+# el VALOR de la referencia al registrarse, asi que envolverlas antes de los
+# veinticinco registros las cubre todas — incluido el proximo que se agregue.
+s = s if SOLO else cambiar(s, """  const player = new THREE.Object3D();""",
+    red.AYUDANTE + """
+  const player = new THREE.Object3D();""", 'el ayudante de las redes')
+
+# EL CUADRO BAJO RED, EN CUATRO PARCHES CHICOS
+s = s if SOLO else cambiar(s, "  function animate() {", red.VIGIA + "\n  function animate() {", 'el vigia de NaN')
+s = s if SOLO else cambiar(s, red.DELTA_VIEJO, red.DELTA, 'el delta comprobado')
+s = s if SOLO else cambiar(s, red.CATCH_VIEJO, red.CATCH, 'el catch del bucle')
+s = s if SOLO else cambiar(s, red.MEDIO_VIEJO, red.MEDIO, 'lo que estaba suelto entre los try')
+s = s if SOLO else cambiar(s, red.FADE_VIEJO, red.FADE, 'el fundido de las transiciones')
+
+# LA PERDIDA DE CONTEXTO SIN LAZO DE RECARGAS. Ancla literal y no un corte: las
+# sondas viven ENTRE este listener y `function animate`, asi que cortar de uno a
+# otro se las lleva puestas.
+s = s if SOLO else cambiar(s, red.CTX_VIEJO, red.CONTEXTO.strip(), 'la perdida de contexto')
+
+# `?bajo` ARRANCA EN CALIDAD BAJA. Es a donde recarga la perdida de contexto, y
+# tambien sirve para que alguien con un telefono justo entre directo por ahi.
+s = s if SOLO else cambiar(s, """  let quality = LOW ? 'media' : 'alta';""",
+    """  let quality = (location.search.indexOf('bajo') >= 0) ? 'baja' : (LOW ? 'media' : 'alta');""",
+    'el arranque en calidad baja')
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 9 · EL ARRANQUE DE LAS TEXTURAS PBR, Y LA SONDA QUE LAS MIDE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1397,6 +1430,33 @@ s = s if SOLO else cambiar(s, """    flores: function () {""",
                lado: m.map && m.map.image ? m.map.image.width : 0,
                alphaTest: m.alphaTest, transparente: m.transparent,
                escala: +b.g.scale.x.toFixed(2) };
+    },
+    // ROMPE ALGO A PROPOSITO. Una red sin probar no es una red: esto mete la
+    // falla y despues se comprueba que el juego SIGUE JUGABLE, que es lo unico
+    // que importa. 'cuadro' hace tirar updateTape una vez por cuadro —el caso
+    // que dejaba la imagen congelada para siempre—, 'nan' mete un NaN en la
+    // posicion, 'toque' hace tirar onTouchEnd —el dedo que no se suelta— y
+    // 'nivel' hace tirar la construccion de un nivel.
+    romper: function (que) {
+      if (que === 'cuadro') { updateTape = function () { throw new Error('falla inyectada en el cuadro'); }; }
+      else if (que === 'nan') { player.position.x = NaN; yaw = NaN; }
+      else if (que === 'nanfijo') { pbSano.vale = false; player.position.set(NaN, NaN, NaN); }
+      else if (que === 'toque') { onTouchEnd = function () { throw new Error('falla inyectada en el toque'); }; }
+      else if (que === 'nivel') { hideAllLevels = function () { throw new Error('falla inyectada en el nivel'); }; }
+      else if (que === 'contexto') {
+        const ext = renderer.getContext().getExtension('WEBGL_lose_context');
+        if (!ext) return 'no hay WEBGL_lose_context';
+        ext.loseContext();
+      } else return 'no se que es ' + que;
+      return 'roto: ' + que;
+    },
+    // el estado de las redes: fallas atrapadas, NaN recuperados y si el juego
+    // sigue dibujando
+    red: function () {
+      return { fallas: window.__pbFallas.slice(0, 8), nans: pbNaNs,
+               errBucle: loopErrors, errRender: renderErrors,
+               pausado: paused, llamadas: renderer.info.render.calls,
+               sanoVale: pbSano.vale };
     },
     // LO QUE CUESTAN LAS FOTOS EN MEMORIA DE VIDEO, que es el precio real de
     // esta vuelta: no son bytes de HTML sino texturas subidas a la GPU.
