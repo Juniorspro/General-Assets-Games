@@ -84,8 +84,23 @@ queda en 100-200 KB. Eso es lo que hace que el plan gratis alcance.
 pero las publicaciones sólo las ve quien usa esa computadora.
 
 **Conectado a Supabase** las guarda en internet y las ve todo el mundo. El botón
-«Configurar» del panel tiene los cuatro pasos, con el SQL listo para copiar y pegar.
-Es gratis y no pide tarjeta.
+«Configurar» abre un asistente que va paso por paso y verifica cada uno antes de
+seguir. Es gratis y no pide tarjeta.
+
+Lo que hace solo el asistente:
+
+- abre la pantalla exacta de Supabase que hace falta en cada paso, con el enlace
+  armado para *tu* proyecto (no el genérico)
+- de un pegote cualquiera saca la dirección y la clave que sirve
+- **rechaza la clave secreta** (service_role) si la pegás de más, y te avisa
+- copia el SQL de un toque y después verifica que la tabla y el depósito existan
+- crea tu usuario y te deja adentro, sin volver al panel de Supabase
+- si la confirmación de mail está encendida, te dice exactamente dónde apagarla
+- sube a internet las publicaciones que ya tenías guardadas en el navegador, con
+  las fotos
+
+Lo único que no puedo hacer por vos es crear la cuenta y el proyecto, y apretar
+«Run» en el editor SQL: eso pide tu sesión de Supabase.
 
 ### Sobre la seguridad
 
