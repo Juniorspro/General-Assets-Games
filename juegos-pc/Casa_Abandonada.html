@@ -710,6 +710,49 @@ const stairY=x=>-3*Math.max(0,Math.min(1,(-3.0-x)/4.2));
 const inHole=(x,z)=>x>HOLE.x0-0.1&&x<HOLE.x1&&z>HOLE.z0&&z<HOLE.z1;
 const inHouse=(x,z)=>x>HX0&&x<HX1&&z>HZ0&&z<HZ1;
 
+/* ══════════ LA LUNA SE DECLARA UNA VEZ ══════════
+   De su direccion dependen DOS cosas: la direccional que tira las sombras y la
+   inclinacion de los haces que entran por los boquetes del techo. Escritas por
+   separado —y lo estaban: la luz en (-24,30,18) y el haz con un desplazamiento
+   a mano de 0,55— las sombras caen para un lado y los haces para otro, y eso
+   se ve sin medir nada. */
+const LUNA={x:-24,y:30,z:18};
+/* cuanto se corre un rayo en horizontal por cada metro que BAJA */
+const DER_X=-LUNA.x/LUNA.y, DER_Z=-LUNA.z/LUNA.y;
+
+/* ══════════ LOS CUARTOS, EN UNA SOLA TABLA ══════════
+   La usan las telarañas de los rincones y el recorte de los haces contra las
+   paredes. En dos copias, el dia que se mueva un tabique una de las dos queda
+   vieja y el defecto no falla: simplemente deja de coincidir. */
+const CUARTOS=[
+ [-1.7,1.7,-5.88,5.88,2.40],   // pasillo
+ [-7.88,-1.9,1.3,5.88,2.40],   // sala
+ [-7.88,-1.9,-2.5,1.1,2.40],   // cocina
+ [-7.88,-1.9,-5.88,-2.7,2.40], // trastero
+ [1.9,7.88,2.3,5.88,2.40],     // dormitorio 1
+ [1.9,7.88,-0.1,2.1,2.40],     // baño
+ [1.9,7.88,-5.88,-0.3,2.40],   // dormitorio 2
+ [-7.88,-1.9,-5.88,-0.1,-0.42] // sótano
+];
+const cuartoDe=(x,z)=>CUARTOS.find(r=>x>r[0]&&x<r[1]&&z>r[2]&&z<r[3]);
+
+/* ══════════ LO QUE NO SE PUEDE ENSUCIAR ══════════
+   La boca del sotano es un agujero en el piso: un escombro sembrado ahi no se
+   apoya en nada —queda FLOTANDO sobre el vacio— y desde arriba se lee como que
+   algo tapa la entrada. Y el pie de la escalera es el unico sitio por donde se
+   sale, asi que tampoco puede quedar tapado.
+
+   VA ACA Y NO EN CADA LLAMADA A debris(). Hay cuatro tandas de escombros y la
+   proxima que se agregue no se va a acordar de saltear la escalera; adentro de
+   debris() la regla se aplica sola. */
+const DESPEJADO=[
+  {x0:-7.45,x1:-2.55,z0:-5.55,z1:-3.45,y0:-3.45,y1:0.70},  // el hueco y su boca
+  {x0:-7.75,x1:-6.10,z0:-5.60,z1:-3.40,y0:-3.45,y1:-1.10}, // descanso de abajo
+  {x0:-3.10,x1:-2.20,z0:-5.20,z1:-3.70,y0:-0.20,y1:0.70}   // el paso de arriba
+];
+const despejado=(x,z,y)=>DESPEJADO.some(r=>
+  x>r.x0&&x<r.x1&&z>r.z0&&z<r.z1&&y>r.y0&&y<r.y1);
+
 [[-8,8,-3.6,6],[-8,8,-6,-5.4],[-8,-7.2,-5.4,-3.6],[-3.0,8,-5.4,-3.6]].forEach(r=>
   plane(r[1]-r[0],r[3]-r[2],M.floor,(r[0]+r[1])/2,0,(r[2]+r[3])/2));
 plane(6.2,6,M.conc,-4.9,-3,-3);
@@ -756,27 +799,105 @@ for(let x=-7.2;x<=7.21;x+=1.6){
 }
 
 /* — cada boquete: borde astillado, listones, luz de luna, goteras — */
+
+/* ══════════ EL HAZ DEL TECHO ES UN VOLUMEN, NO UNA CÁSCARA ══════════
+   Lo que habia era un tronco de piramide de UNA capa iluminado por `rim`, o sea
+   1-|dot(N,V)|, que es MAXIMO donde la superficie esta de canto al ojo y CERO
+   donde te mira de frente. Eso pinta exactamente lo contrario de un haz: el
+   centro —que es por donde el rayo de vision cruza mas aire iluminado— salia
+   oscuro y lo unico brillante era el contorno. Es el mismo defecto que ya habia
+   costado una vuelta con el cono de la linterna: una SUPERFICIE no puede ser un
+   volumen, por mas shader que se le ponga.
+
+   Ahora son SIETE CASCARAS ANIDADAS y la suma las convierte en volumen: por el
+   medio el rayo cruza las siete —catorce caras, porque cada cascara se atraviesa
+   entrando y saliendo— y por el borde cruza solo la de afuera. El maximo cae en
+   el centro POR CONSTRUCCION y no por un termino elegido a mano.
+
+   Y EL PESO POR CARA VA CON 1/|dot(N,V)| PERO TOPADO. El grosor de cascara que
+   cruza un rayo es tau/|cos| —de canto se atraviesa mas— pero con siete cascaras
+   el 1/cos crudo vuelve a inflar la silueta como hacia `rim`. Queda entre 0,73
+   y 1,00: la orilla se marca un 36% y no cinco veces.
+
+   TRES COSAS MAS QUE UN HAZ DE VERDAD TIENE Y ESTE NO TENIA:
+   · POLVO ADENTRO. El aire iluminado no es parejo: tiene vetas. Dos octavas de
+     ruido en coordenadas de MUNDO, derivando casi todas hacia abajo, que es como
+     cae el polvo. Sin esto un haz es un solido azul.
+   · NO SE APAGA AL LLEGAR AL PISO. `pow(t,1.35)` lo dejaba en cero contra el
+     suelo, asi que el haz no aterrizaba: se disolvia en el aire. Baja al 44% y
+     ahi se queda, y el charco del piso cierra.
+   · NO PULSA. El parpadeo era 0,14*sin(0,7t): eso no se lee a luna, se lee a que
+     alguien toca un dimmer. Queda una variacion de 0,17 rad/s —una nube que
+     pasa cada 37 s— y nada mas. */
 const shaftMat=new THREE.ShaderMaterial({
   transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
   side:THREE.DoubleSide,fog:false,
-  uniforms:{uT:{value:0}},
+  /* LA GANANCIA SE ELIGIO MIRANDO Y CON EL NUMERO AL LADO. Barridas cuatro
+     —0,085 · 0,065 · 0,048 · 0,034— con la linterna apagada y el mismo encuadre:
+     en 0,085 el haz es una pared de leche y la pared de atras pierde la textura
+     y el cuadro colgado; en 0,034 lo unico que queda son las motas. En 0,048 el
+     haz se lee como columna, las vetas se ven y detras se sigue leyendo el
+     revoque: +60,8% de brillo medio y x1,52 en los brillos altos. */
+  uniforms:{uT:{value:0},uH:{value:WH},uA:{value:0.048}},
   vertexShader:[
-    'varying vec3 vP;varying vec3 vN;varying vec3 vV;',
-    'void main(){vP=position;vec4 mv=modelViewMatrix*vec4(position,1.0);',
-    'vV=normalize(-mv.xyz);vN=normalize(normalMatrix*normal);',
-    'gl_Position=projectionMatrix*mv;}'
+    'attribute float aS;',
+    'varying vec3 vW;varying vec3 vN;varying vec3 vV;varying float vS;',
+    'void main(){vW=position;vS=aS;',
+    ' vec4 mv=modelViewMatrix*vec4(position,1.0);',
+    ' vV=normalize(-mv.xyz);vN=normalize(normalMatrix*normal);',
+    ' gl_Position=projectionMatrix*mv;}'
   ].join('\n'),
   fragmentShader:[
-    'varying vec3 vP;varying vec3 vN;varying vec3 vV;uniform float uT;',
+    'varying vec3 vW;varying vec3 vN;varying vec3 vV;varying float vS;',
+    'uniform float uT;uniform float uH;uniform float uA;',
+    'float h31(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}',
+    'float rui(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);',
+    ' return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),',
+    '                mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),',
+    '            mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),',
+    '                mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z);}',
     'void main(){',
-    '  float t=clamp(vP.y/2.6,0.0,1.0);',            // 1 arriba, 0 en el piso
-    '  float rim=1.0-abs(dot(normalize(vN),normalize(vV)));',
-    '  float flick=0.86+0.14*sin(uT*0.7)+0.05*sin(uT*2.3);',
-    '  float a=pow(t,1.35)*pow(rim,1.15)*0.30*flick;',
-    '  gl_FragColor=vec4(0.62,0.72,0.95,a);',
+    '  float t=clamp(vW.y/uH,0.0,1.0);',
+    '  float dens=0.44+0.56*t;',
+    '  dens*=smoothstep(0.0,0.034,1.0-t);',
+    '  float ndv=max(abs(dot(normalize(vN),normalize(vV))),0.30);',
+    '  float cru=0.62+0.38*(0.30/ndv);',
+    '  vec3 q1=vW*1.55+vec3( uT*0.035,-uT*0.110, uT*0.021);',
+    '  vec3 q2=vW*4.10+vec3(-uT*0.060,-uT*0.230, uT*0.040);',
+    '  float mot=0.58+0.42*(rui(q1)*0.64+rui(q2)*0.36);',
+    '  float pes=0.52+0.48*vS;',
+    '  vec3 col=mix(vec3(0.58,0.69,0.95),vec3(0.83,0.89,1.00),vS*vS);',
+    '  float nube=0.90+0.10*sin(uT*0.17)+0.04*sin(uT*0.41);',
+    '  gl_FragColor=vec4(col,uA*dens*cru*mot*pes*nube);',
     '}'
   ].join('\n')
 });
+/* ══════════ CUANTA INCLINACION ACEPTA EL CUARTO ══════════
+   El rayo de la luna se corre 0,80 m en x y 0,60 en -z por cada metro que baja,
+   asi que sobre los 2,42 m de altura son 1,94 y 1,45. Con eso el charco del
+   boquete del pasillo caeria DEL OTRO LADO de la pared —el pasillo mide 3,4 m
+   de ancho— y el del dormitorio 2 atravesaria la pared del este.
+   Se toma la inclinacion de la luna hasta donde el cuarto la aguanta: la
+   DIRECCION es siempre la de la luna, asi el haz y las sombras coinciden, y lo
+   unico que se recorta es cuanto. Se busca por muestreo y no por algebra de
+   signos, que es donde se equivoca uno. */
+function inclina(h){
+  const cx=(h.x0+h.x1)/2, cz=(h.z0+h.z1)/2;
+  const r=cuartoDe(cx,cz); if(!r) return 0.28;
+  const rad=Math.max(h.x1-h.x0,h.z1-h.z0)*0.62;   // el charco se desvanece en la orilla
+  let t=0;
+  for(let k=1;k<=40;k++){
+    const q=k/40, px=cx+DER_X*WH*q, pz=cz+DER_Z*WH*q;
+    if(px-rad<r[0]+0.08||px+rad>r[1]-0.08||pz-rad<r[2]+0.08||pz+rad>r[3]-0.08) break;
+    t=q;
+  }
+  return Math.max(0.18,t);
+}
+const SH_ESC=[1.00,0.87,0.745,0.62,0.495,0.37,0.245];   // escala de cada cáscara
+const SH_ENS=1.16;                                       // el haz se abre al bajar
+const _shV=[], _shS=[];
+let _hazMalla=null; const _hazInc=[]; let _luzForz=null;
+let _dibEsc=0, _triEsc=0;
 const dripSystems=[];
 HOLES.forEach((h,hi)=>{
   const cx=(h.x0+h.x1)/2, cz=(h.z0+h.z1)/2;
@@ -817,35 +938,42 @@ HOLES.forEach((h,hi)=>{
   /* vigas del entretecho, visibles por el agujero */
   for(let i=0;i<2;i++)
     box(w+0.5,0.11,0.09,M.wood,cx,WH+0.42+i*0.34,cz+rnd(-d/2,d/2),rnd(-0.2,0.2),false);
-  /* parche de cielo: el tejado también está abierto */
+  /* parche de cielo: el tejado también está abierto.
+     EL CIELO SE VE DEL LADO DE LA LUNA, no del lado donde cae la luz. Mirando
+     hacia arriba por el boquete uno mira CONTRA el rayo, asi que el parche va
+     corrido al reves que el charco del piso. Estaba en un +0,25/-0,2 escrito a
+     mano, que lo corria justo para el otro lado. */
   const sky=new THREE.Mesh(new THREE.PlaneGeometry(w*0.75,d*0.75),
-    new THREE.MeshBasicMaterial({color:0x2f3d57,fog:false}));
-  sky.rotation.x=Math.PI/2; sky.position.set(cx+0.25,WH+1.5,cz-0.2); scene.add(sky);
+    new THREE.MeshBasicMaterial({color:0x3a4a68,fog:false}));
+  sky.rotation.x=Math.PI/2;
+  sky.position.set(cx-DER_X*1.5,WH+1.5,cz-DER_Z*1.5); scene.add(sky);
 
-  /* haz de luna: tronco de pirámide desde el hueco hasta el piso */
+  /* haz de luna: siete cáscaras anidadas, inclinadas como la luna */
   {
-    const ox=0.55, oz=-0.42, H=WH;
+    const tt=inclina(h); _hazInc.push(+tt.toFixed(3));
+    const ox=DER_X*WH*tt, oz=DER_Z*WH*tt;
     const A=[[h.x0,h.z0],[h.x1,h.z0],[h.x1,h.z1],[h.x0,h.z1]];
-    const B=A.map(p=>[p[0]+ox+(p[0]-cx)*0.25, p[1]+oz+(p[1]-cz)*0.25]);
-    const v=[];
-    for(let i=0;i<4;i++){
-      const j=(i+1)%4;
-      const t0=[A[i][0]-cx,H,A[i][1]-cz], t1=[A[j][0]-cx,H,A[j][1]-cz];
-      const b0=[B[i][0]-cx,0,B[i][1]-cz], b1=[B[j][0]-cx,0,B[j][1]-cz];
-      v.push(...t0,...t1,...b1, ...t0,...b1,...b0);
+    for(let k=0;k<SH_ESC.length;k++){
+      const sc=SH_ESC[k], vs=k/(SH_ESC.length-1);
+      const Tp=A.map(p=>[cx+(p[0]-cx)*sc, WH, cz+(p[1]-cz)*sc]);
+      const Bp=A.map(p=>[cx+(p[0]-cx)*sc*SH_ENS+ox, 0, cz+(p[1]-cz)*sc*SH_ENS+oz]);
+      for(let i=0;i<4;i++){
+        const j=(i+1)%4;
+        _shV.push(...Tp[i],...Tp[j],...Bp[j], ...Tp[i],...Bp[j],...Bp[i]);
+        for(let q=0;q<6;q++) _shS.push(vs);
+      }
     }
-    const g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(v),3));
-    g.computeVertexNormals();
-    const shaft=new THREE.Mesh(g,shaftMat);
-    shaft.position.set(cx,0,cz); shaft.renderOrder=3; scene.add(shaft);
-    /* charco de luz en el piso */
+    /* charco de luz al PIE del haz, y no debajo del hueco */
     const pool=new THREE.Mesh(new THREE.PlaneGeometry(w*1.5,d*1.5),
       new THREE.MeshBasicMaterial({color:0x4a5c80,transparent:true,opacity:0.16,
         blending:THREE.AdditiveBlending,depthWrite:false,map:blobTex}));
     pool.rotation.x=-Math.PI/2; pool.position.set(cx+ox,floorY+0.015,cz+oz); scene.add(pool);
+    /* EL REBOTE VA A MEDIA ALTURA DEL HAZ Y NO PEGADO AL TECHO. Estaba en
+       WH-0.6, o sea iluminando el machimbre de alrededor del boquete; lo que una
+       columna de luz ilumina de verdad es el suelo donde cae y el zocalo de las
+       paredes que roza. */
     const ml=new THREE.PointLight(0x86a0cc,0.30,5.5,2);
-    ml.position.set(cx+ox*0.4,WH-0.6,cz+oz*0.4); scene.add(ml);
+    ml.position.set(cx+ox*0.62,WH*0.46,cz+oz*0.62); scene.add(ml);
   }
 
   /* gotera: hilo de gotas cayendo por el hueco */
@@ -870,6 +998,21 @@ HOLES.forEach((h,hi)=>{
     pud.rotation.x=-Math.PI/2; pud.position.set(gx,floorY+0.008,gz); scene.add(pud);
   }
 });
+
+/* LAS VEINTIUNA CASCARAS VAN EN UNA SOLA MALLA. Sueltas serian siete llamadas
+   de dibujo por boquete —veintiuna en total— para algo que la mezcla aditiva
+   suma sin importar el orden. Fundidas cuestan UNA, o sea DOS MENOS que los tres
+   troncos de antes. Las posiciones van en coordenadas de MUNDO y la malla se
+   queda en el origen: asi `position` ES la posicion de mundo y el ruido del
+   polvo no necesita otra matriz. */
+{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(_shV),3));
+  g.setAttribute('aS',new THREE.BufferAttribute(new Float32Array(_shS),1));
+  g.computeVertexNormals();
+  _hazMalla=new THREE.Mesh(g,shaftMat);
+  _hazMalla.renderOrder=3; scene.add(_hazMalla);
+}
 
 /* — tablas sueltas también en zonas sin boquete — */
 [[-3.2,-5.0,0.62,0.22],[6.3,1.4,0.5,0.3],[-1.0,5.2,0.55,0.24]].forEach(p=>{
@@ -939,9 +1082,19 @@ function pic(x,y,z,ry,w,h){
   return f;
 }
 const _escombros={n:0,suma:0,peor:0};
+let _debSalteados=0;
 function debris(x0,x1,z0,z1,n,y){
   for(let i=0;i<n;i++){
-    const x=rnd(x0,x1), z=rnd(z0,z1), t=Math.random();
+    /* se sortea de nuevo mientras caiga sobre la escalera al sotano. Diez
+       intentos y se descarta la pieza: con la region entera dentro de la zona
+       despejada, insistir seria un bucle infinito. */
+    let x=0,z=0,ok=false;
+    for(let k=0;k<10&&!ok;k++){
+      x=rnd(x0,x1); z=rnd(z0,z1);
+      ok=!despejado(x,z,(y||0)+0.15);
+    }
+    if(!ok){ _debSalteados++; continue; }
+    const t=Math.random();
     let m;
     if(t<.45) m=box(rnd(.5,1.3),.05,rnd(.08,.16),M.wood,x,(y||0)+.03,z,Math.random()*3,false,false);
     else if(t<.8) m=box(rnd(.1,.3),rnd(.05,.2),rnd(.1,.3),M.dark,x,(y||0)+.06,z,Math.random()*3,false,false);
@@ -1093,20 +1246,19 @@ debris(2.2,7.6,-5.7,-0.5,20);
 const oBench=box(1.6,0.75,0.7,M.wood,-6.4,-2.62,-1.2,0,true); blob(-6.4,-1.2,0.9,-3);
 box(1.3,1.3,0.35,M.wood,-3.0,-2.35,-0.4,0,true);
 [-2.8,-2.2,-1.75].forEach(y=>box(1.25,0.05,0.33,M.wood,-3.0,y,-0.4,0,false,false));
-const oBoiler=box(0.7,0.8,0.7,M.metal,-7.4,-2.6,-5.2,0.3,true); blob(-7.4,-5.2,0.7,-3);
+/* LA CALDERA ESTABA AL PIE DE LA ESCALERA. Medido con __casa.entrada(): su caja
+   de colision (x -7,84..-6,96 · z -5,64..-4,76) se metia 0,74 m dentro del canal
+   por donde pasa el cuerpo justo en el ultimo escalon —el hueco baja de x -3,0 a
+   -7,14 sobre z -5,4..-3,6— asi que era LO UNICO que tapaba la boca del sotano,
+   y encima del lado por el que se sale. Pasa a debajo de la escalera, que es
+   donde va una caldera en un sotano: ahi el escalon esta 1,76 m por encima de su
+   tapa, o sea que no puede estorbar por geometria y no por un numero elegido. */
+const oBoiler=box(0.7,0.8,0.7,M.metal,-3.7,-2.6,-4.9,0.3,true); blob(-3.7,-4.9,0.7,-3);
 box(0.5,0.5,0.5,M.wood,-5.2,-2.75,-5.0,0.6,true);
 debris(-7.6,-2.2,-5.6,-0.4,20,-3);
 
 /* — telarañas en todos los rincones altos — */
-[[-1.7,1.7,-5.88,5.88,2.40],   // pasillo
- [-7.88,-1.9,1.3,5.88,2.40],   // sala
- [-7.88,-1.9,-2.5,1.1,2.40],   // cocina
- [-7.88,-1.9,-5.88,-2.7,2.40], // trastero
- [1.9,7.88,2.3,5.88,2.40],     // dormitorio 1
- [1.9,7.88,-0.1,2.1,2.40],     // baño
- [1.9,7.88,-5.88,-0.3,2.40],   // dormitorio 2
- [-7.88,-1.9,-5.88,-0.1,-0.42] // sótano
-].forEach(r=>{
+CUARTOS.forEach(r=>{
   const c=[[r[0],r[2],0],[r[1],r[2],-Math.PI/2],[r[1],r[3],Math.PI],[r[0],r[3],Math.PI/2]];
   for(let i=c.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[c[i],c[j]]=[c[j],c[i]];}
   const n=3+(Math.random()<0.5?1:0);
@@ -1345,7 +1497,8 @@ const GATE=[-1.7,0.5];
 /* ══════════ luces ══════════ */
 scene.add(new THREE.AmbientLight(0x121a28,0.40));
 const hemi=new THREE.HemisphereLight(0x243a58,0x080b0e,0.50); scene.add(hemi);
-const moon=new THREE.DirectionalLight(0x7d9ad0,0.30); moon.position.set(-24,30,18); scene.add(moon);
+const moon=new THREE.DirectionalLight(0x7d9ad0,0.30);
+moon.position.set(LUNA.x,LUNA.y,LUNA.z); scene.add(moon);
 
 /* el spot se mueve todos los frames, así que el shadow map se re-renderiza siempre:
    512 con radio alto cuesta la mitad y en esta paleta no se nota */
@@ -3253,6 +3406,7 @@ function tick(){
   /* lo que cuelga se mece con la corriente */
   for(const w of sway) w.o.rotation.z=w.base+Math.sin(T*w.sp+w.ph)*w.amp;
   shaftMat.uniforms.uT.value=T;
+  if(_luzForz!==null){ torch.intensity=_luzForz?3.9:0; beam.visible=_luzForz&&beam.visible; }
 
   /* POLVO: la deriva la hace el vertex shader, aca solo viajan siete numeros.
      Antes eran seis senos por mota en JavaScript. */
@@ -3409,6 +3563,11 @@ function tick(){
   postMat.uniforms.uWob.value=vhs.wob;
   renderer.setRenderTarget(rt);
   renderer.render(scene,camera);
+  /* LO QUE CUESTA LA ESCENA SE ANOTA ACA Y NO EN LA SONDA. three.js pone
+     info.render a cero al empezar cada render(), asi que leerlo despues del
+     pase de post devuelve el pase de post: una llamada y dos triangulos. Es la
+     misma trampa que ya habia costado una medicion en Campo_de_Tiro. */
+  _dibEsc=renderer.info.render.calls; _triEsc=renderer.info.render.triangles;
   renderer.setRenderTarget(null);
   renderer.render(postScene,postCam);
   resPaso(raw*1000);
@@ -3416,6 +3575,106 @@ function tick(){
 /* ══════════ sondas de medicion (no tocan el juego) ══════════ */
 window.__casa={
   ver:'v14',
+  /* ══════════ QUE TAPA LA BOCA DEL SOTANO ══════════
+     Los escombros se siembran al azar en cada carga, asi que "esta despejado"
+     no se puede comprobar mirando UNA partida: hay que preguntarle a la escena.
+
+     Y SE MIDE CONTRA LAS CAJAS DE COLISION Y NO CONTRA LAS MALLAS. La primera
+     version recorria las mallas y probaba su Box3 contra el canal por donde
+     pasa el cuerpo; no sirve, y el numero que devolvia era una mentira redonda:
+     160 celdas de 160 bloqueadas. La casa entera esta FUNDIDA en unas pocas
+     mallas —mas los dos campos de polvo, que miden 26 m de lado— asi que la
+     caja envolvente de cualquiera de ellas contiene el hueco y "tapa todo" por
+     definicion. Una caja envolvente no puede resolver geometria fundida.
+     Lo que frena el cuerpo es COL, que va caja por caja y es exacto. */
+  entrada(){
+    const R=[], canal=x=>[stairY(x)+0.06, stairY(x)+1.85];
+    for(const c of COL){
+      if(c.x1<HOLE.x0||c.x0>HOLE.x1||c.z1<HOLE.z0||c.z0>HOLE.z1) continue;
+      const xm=Math.max(HOLE.x0,Math.min(HOLE.x1,(c.x0+c.x1)/2));
+      const [y0,y1]=canal(xm);
+      if(c.y1<=y0||c.y0>=y1) continue;
+      R.push({caja:[+c.x0.toFixed(2),+c.x1.toFixed(2),+c.y0.toFixed(2),
+                    +c.y1.toFixed(2),+c.z0.toFixed(2),+c.z1.toFixed(2)],
+              intrusion_m:+(Math.min(c.y1,y1)-Math.max(c.y0,y0)).toFixed(3)});
+    }
+    R.sort((p,q)=>q.intrusion_m-p.intrusion_m);
+    return {en_el_canal:R.length, cajas:R, escombros_salteados:_debSalteados,
+            hueco:[HOLE.x0,HOLE.x1,HOLE.z0,HOLE.z1],
+            zonas_despejadas:DESPEJADO.length};
+  },
+  /* baja la escalera CAMINANDO, con la fisica y el choque de verdad. Que no
+     haya nada en el canal es una condicion; llegar abajo es la prueba. */
+  bajar(n){ n=n||220;
+    P.x=-2.30; P.z=-4.50; P.yaw=Math.PI/2; P.pitch=0; P.vx=0; P.vz=0;
+    const t0=[P.x,P.z]; let minY=0, minX=0; const T0=performance.now(), traza=[]; let cuadros=0;
+    const rafOrig=window.requestAnimationFrame;
+    window.requestAnimationFrame=cb=>rafOrig.call(window,t=>{cuadros++;cb(t);});
+    return new Promise(res=>{ let k=0; keys.KeyW=true;
+      const id=setInterval(()=>{
+        if(P.y<minY) minY=P.y;
+        if(P.x<minX) minX=P.x;
+        if(k%24===0) traza.push([+P.x.toFixed(2),+P.y.toFixed(2)]);
+        if(++k>=n){ clearInterval(id); keys.KeyW=false;
+          window.requestAnimationFrame=rafOrig;
+          /* las cajas de colision que rodean el sitio donde quedo: si se clavo,
+             una de estas es la que lo frena, y sin nombrarla hay que adivinar */
+          const cerca=[];
+          for(const c of COL){
+            if(P.x<c.x0-0.6||P.x>c.x1+0.6||P.z<c.z0-0.6||P.z>c.z1+0.6) continue;
+            if(c.y1<P.y+0.05||c.y0>P.y+1.7) continue;
+            cerca.push([+c.x0.toFixed(2),+c.x1.toFixed(2),+c.y0.toFixed(2),
+                        +c.y1.toFixed(2),+c.z0.toFixed(2),+c.z1.toFixed(2)]);
+          }
+          res({estado:state, desde:t0, hasta:[+P.x.toFixed(2),+P.z.toFixed(2)],
+               x_mas_lejos:+minX.toFixed(2), seg_reloj:+((performance.now()-T0)/1000).toFixed(2), cuadros_dibujados:cuadros,
+               y_final:+P.y.toFixed(2), y_mas_bajo:+minY.toFixed(2),
+               en_el_hueco:inHole(P.x,P.z), traza,
+               llego_al_sotano:minY<-2.80, pasos:k, colisiones_cerca:cerca}); }
+      },16); }); },
+  /* la ganancia del haz, para barrerla y elegirla mirando y no a ojo */
+  gan(v){ if(v!==undefined) shaftMat.uniforms.uA.value=v;
+    const r=this.techo(); return {ganancia:shaftMat.uniforms.uA.value,
+      aporte_medio_pct:r.aporte_medio_pct, altos_x:r.altos_x,
+      medio:r.con.medio, altos:r.con.altos}; },
+  /* apaga la linterna para poder JUZGAR el haz del techo: un spot de 3,9 en el
+     eje de la vista lava cualquier cosa que este delante. `linterna(null)` la
+     devuelve al juego. */
+  linterna(on){ if(on===null){ _luzForz=null; } else { _luzForz=!!on; }
+    return {forzada:_luzForz, intensidad:+torch.intensity.toFixed(2)}; },
+  /* ══════════ CUANTO APORTA EL HAZ DEL TECHO ══════════
+     Mismo metodo que aporte(): se dibuja DOS VECES EL MISMO INSTANTE y se
+     resta. Comparar dos capturas seguidas no sirve en este juego —entre una y
+     otra titila una bombilla y salta el glitch de cinta— y ese ruido se come la
+     señal. */
+  techo(){
+    if(!_hazMalla) return {error:'sin malla de haz'};
+    const w=rt.width,h=rt.height,buf=new Uint8Array(w*h*4);
+    const lee=()=>{
+      renderer.setRenderTarget(rt); renderer.render(scene,camera);
+      renderer.readRenderTargetPixels(rt,0,0,w,h,buf);
+      renderer.setRenderTarget(null);
+      let sum=0,alto=0;
+      for(let i=0;i<w*h;i++){
+        const l=0.299*buf[i*4]+0.587*buf[i*4+1]+0.114*buf[i*4+2];
+        sum+=l; if(l>100) alto++;
+      }
+      return {medio:sum/(w*h), altos:100*alto/(w*h)};
+    };
+    const vis=_hazMalla.visible;
+    _hazMalla.visible=false; const sin=lee();
+    _hazMalla.visible=true;  const con=lee();
+    _hazMalla.visible=vis;
+    const g=_hazMalla.geometry;
+    return {res:[w,h], cascaras:SH_ESC.length, boquetes:HOLES.length,
+            vertices:g.attributes.position.count,
+            inclinacion:_hazInc, deriva:[+DER_X.toFixed(3),+DER_Z.toFixed(3)],
+            ganancia:shaftMat.uniforms.uA.value,
+            sin:{medio:+sin.medio.toFixed(3), altos:+sin.altos.toFixed(3)},
+            con:{medio:+con.medio.toFixed(3), altos:+con.altos.toFixed(3)},
+            aporte_medio_pct:+(100*(con.medio-sin.medio)/Math.max(sin.medio,0.001)).toFixed(1),
+            altos_x:+(con.altos/Math.max(sin.altos,0.001)).toFixed(2)};
+  },
   ir(x,z,y,pi){P.x=x;P.z=z;if(y!==undefined)P.yaw=y;if(pi!==undefined)P.pitch=pi;return this.jug();},
   dondePapel(i){const p=papers[i||0];return [+p.homePos.x.toFixed(2),+p.homePos.y.toFixed(2),+p.homePos.z.toFixed(2)];},
   /* promedio EN LINEAL del mapa de cada material. three.js multiplica
@@ -3590,8 +3849,8 @@ window.__casa={
   escombros(){ return {piezas:_escombros.n,
       ladeo_medio:+(_escombros.suma/Math.max(_escombros.n,1)).toFixed(4),
       peor:+_escombros.peor.toFixed(4)}; },
-  est(){ const i=renderer.info; i.autoReset=false; return {
-    llamadas:i.render.calls, triangulos:i.render.triangles,
+  est(){ const i=renderer.info; return {
+    llamadas:_dibEsc, triangulos:_triEsc,
     programas:i.programs?i.programs.length:-1,
     texturas:i.memory.textures, geometrias:i.memory.geometries,
     fov_vert:+camera.fov.toFixed(2),

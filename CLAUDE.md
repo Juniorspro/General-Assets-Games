@@ -124,6 +124,153 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima quinta vuelta (2026-09-02): **LA CASA** — la caldera tapaba la escalera, y un haz no es una cáscara
+
+Pedido: *"que en la entrada del sótano no haya nada tapando la entrada y que la luz que entra por el
+techo roto sea más realista"*.
+
+#### LA ENTRADA: ERA LA CALDERA, Y LO DIJO UNA SONDA NUEVA
+
+La boca del sótano es un agujero en el piso —`HOLE` x −7,2..−3,0 · z −5,4..−3,6— con una escalera que
+baja de y 0 a y −3. Bajarla **no se podía**, y no por los escombros: medido, la caja de colisión de la
+**caldera** (x −7,84..−6,96 · z −5,64..−4,76) se metía **0,74 m dentro del canal por donde pasa el
+cuerpo**, y justo en el último escalón, o sea del lado por el que se sale. Era lo único. Pasa a debajo
+de la escalera —que es donde va una caldera en un sótano— y ahí el escalón queda 1,76 m por encima de
+su tapa: no puede estorbar por geometría y no por un número elegido.
+
+**Y LOS ESCOMBROS SÍ PODÍAN CAER EN EL HUECO, aunque no fueran el defecto de hoy.** `debris()` siembra
+al azar en cada carga y una de sus cuatro tandas —`debris(-7.6,-2.4,-5.8,-2.9,14)`— cubre el hueco
+entero. Una pieza sembrada ahí no se apoya en nada: queda **flotando sobre el vacío**, y desde arriba
+eso se lee exactamente como que algo tapa la entrada. La regla va **adentro de `debris()`** y no en cada
+llamada: hay cuatro tandas y la próxima que se agregue no se va a acordar de saltear la escalera.
+Medido, el guarda salta 0 ó 1 vez por carga según la semilla — o sea que el defecto era intermitente,
+que es lo que lo hace difícil de reportar.
+
+#### DOS SONDAS, Y LA PRIMERA VERSIÓN DE UNA ESTABA MAL
+
+`entrada()` mide qué hay en el canal y `bajar()` **baja la escalera caminando**, con la física y el
+choque de verdad. Que el canal esté libre es una condición; llegar abajo es la prueba.
+
+**LA PRIMERA `entrada()` DEVOLVÍA UNA MENTIRA REDONDA: 160 celdas de 160 bloqueadas.** Recorría las
+mallas y probaba su `Box3` contra el canal. No sirve: la casa está **fundida** en unas pocas mallas
+—más los dos campos de polvo, que miden 26 m de lado— así que la caja envolvente de cualquiera de ellas
+contiene el hueco y "tapa todo" por definición. Los diez culpables que listaba eran cajas de −8 a 8 y
+de −13 a 13. **Una caja envolvente no puede resolver geometría fundida.** Lo que frena el cuerpo es
+`COL`, que va caja por caja y es exacto, y contra `COL` la respuesta fue una sola línea: la caldera.
+
+**Y `bajar()` MINTIÓ TAMBIÉN, por el banco y no por el juego.** La primera corrida a dpr 2,75 avanzó
+**6 cm en 3,86 s** y parecía confirmar el bloqueo. Lo que pasaba es que el banco dibujaba **UN cuadro**
+en esos 3,86 s: a 1581×727 por software, con 3.340 motas, el juego corre a 0,26 cuadros por segundo y
+el `dt` topado hace que la física casi no avance. Con dpr 1 en una ventana de 420×240 son 131 cuadros y
+la bajada sale entera. **Lo que se mide acá es la física, no los píxeles** — la misma lección que en
+LEMI obligó a medir la huida con el pixelado en 3,2.
+
+Medido al cerrar: **0 cajas en el canal** (era 1 con 0,74 m de intrusión) y la bajada de (−2,30 · −4,50)
+a (−7,58 · −4,50) con **y de 0 a −3**, `llego_al_sotano: true`, frenando sólo contra la pared oeste del
+sótano. La traza es monótona: no hay un escalón donde se trabe.
+
+#### EL HAZ DEL TECHO: EL MISMO DEFECTO QUE EL CONO DE LA LINTERNA, DOS VUELTAS DESPUÉS
+
+Era un tronco de pirámide de **una capa** iluminado por `rim` —o sea `1-|dot(N,V)|`, máximo donde la
+superficie está de canto al ojo y **cero donde te mira de frente**—. Eso pinta exactamente lo contrario
+de un haz: el centro, que es por donde el rayo de visión cruza más aire iluminado, salía oscuro, y lo
+único brillante era el contorno. Es la vuelta 83 otra vez con otro disfraz: **una SUPERFICIE no puede
+ser un volumen, por más shader que se le ponga.**
+
+**AHORA SON SIETE CÁSCARAS ANIDADAS y la suma las convierte en volumen.** Por el medio el rayo cruza las
+siete —catorce caras, porque cada cáscara se atraviesa entrando y saliendo— y por el borde cruza sólo la
+de afuera. **El máximo cae en el centro POR CONSTRUCCIÓN** y no por un término elegido a mano.
+
+**Y EL PESO POR CARA VA CON 1/|dot(N,V)| PERO TOPADO.** El grosor de cáscara que cruza un rayo es
+`τ/|cos|` —de canto se atraviesa más, y eso es físico— pero con siete cáscaras el `1/cos` crudo vuelve a
+inflar la silueta como hacía `rim`. Queda entre 0,73 y 1,00: la orilla se marca un 36 % y no cinco veces.
+
+**TRES COSAS MÁS QUE UN HAZ DE VERDAD TIENE Y ÉSTE NO TENÍA:**
+- **POLVO ADENTRO.** El aire iluminado no es parejo: tiene vetas. Dos octavas de ruido en coordenadas de
+  **mundo**, derivando casi todas hacia abajo, que es como cae el polvo. Sin esto un haz es un sólido azul.
+- **NO SE APAGA AL LLEGAR AL PISO.** `pow(t,1.35)` lo dejaba en cero contra el suelo, así que el haz no
+  aterrizaba: se disolvía en el aire. Baja al 44 % y ahí se queda, y el charco del piso cierra.
+- **NO PULSA.** El parpadeo era `0,14·sin(0,7t)`: eso no se lee a luna, se lee a que alguien toca un
+  dimmer. Queda una variación de 0,17 rad/s —una nube que pasa cada 37 s— y nada más.
+
+#### LA INCLINACIÓN SALE DE LA LUNA, Y LA LUNA SE DECLARA UNA VEZ
+
+De la dirección de la luna dependen **dos** cosas: la direccional que tira las sombras y la inclinación
+de los haces. Estaban escritas por separado —la luz en `(-24,30,18)` y el haz con un desplazamiento a
+mano de `(0,55 · -0,42)`— así que **las sombras caían para un lado y los haces para otro**, y eso se ve
+sin medir nada. Ahora hay una constante y de ella sale la deriva: **0,80 m en x y 0,60 en −z por cada
+metro que el rayo baja**, o sea 1,94 y 1,45 sobre los 2,42 m de altura. El anterior 0,55 era un 28 % de
+eso: el haz iba casi vertical.
+
+**PERO EL CUARTO NO SIEMPRE LA AGUANTA, y ésa es la parte que hubo que resolver.** Con la inclinación
+completa el charco del boquete del **pasillo** caería del otro lado de la pared —el pasillo mide 3,4 m
+de ancho— y el del dormitorio 2 atravesaría la pared del este. Se toma la inclinación de la luna **hasta
+donde el cuarto la aguanta**: la dirección es siempre la de la luna, así que haz y sombras coinciden, y
+lo único que se recorta es cuánto. Medido, los tres boquetes toman **0,80 · 0,65 · 0,40** — y el del
+pasillo es el que menos, que es lo que la geometría manda.
+Se busca por **muestreo y no por álgebra de signos**, que es donde se equivoca uno.
+
+**Y LOS CUARTOS PASAN A UNA SOLA TABLA.** El recorte los necesita y las telarañas ya tenían la lista
+inline: en dos copias, el día que se mueva un tabique una de las dos queda vieja y el defecto no falla,
+simplemente deja de coincidir.
+
+#### DOS COSAS MÁS QUE SÓLO APARECEN MIRANDO
+
+- **EL REBOTE ESTABA PEGADO AL TECHO.** La `PointLight` del boquete iba en `WH-0.6`, o sea iluminando el
+  machimbre de alrededor del agujero. Lo que una columna de luz ilumina de verdad es **el suelo donde cae
+  y el zócalo de las paredes que roza**: pasa a media altura del haz y corrida con la deriva.
+- **EL PARCHE DE CIELO ESTABA CORRIDO PARA EL LADO EQUIVOCADO.** Mirando hacia arriba por el boquete uno
+  mira **contra** el rayo, así que el cielo se ve del lado de la luna — al revés que el charco del piso.
+  Estaba en un `+0,25 / -0,2` escrito a mano, que lo corría justo para el otro lado.
+
+#### LA GANANCIA SE ELIGIÓ MIRANDO Y CON EL NÚMERO AL LADO
+
+Barridas cuatro con la linterna apagada y el mismo encuadre, con la sonda `techo()` —que dibuja **dos
+veces el mismo instante** y resta, igual que `aporte()`, porque entre dos capturas seguidas titila una
+bombilla y salta el glitch de cinta—:
+
+| ganancia | aporte de brillo medio | brillos altos | qué se ve |
+|---|---|---|---|
+| 0,085 | +108 % | ×2,69 | una pared de leche: la pared de atrás pierde la textura y el cuadro colgado |
+| 0,065 | +76 % | ×1,66 | todavía lechoso |
+| **0,048** | **+61 %** | **×1,52** | **el haz se lee como columna, las vetas se ven y detrás se sigue leyendo el revoque** |
+| 0,034 | +46 % | ×1,43 | quedan sólo las motas |
+
+**Y LA LINTERNA HAY QUE PODER APAGARLA PARA JUZGARLO.** Un spot de 3,9 sobre el eje de la vista lava
+cualquier cosa que esté delante: con la linterna puesta las cuatro ganancias se ven casi iguales. Entró
+`linterna(on)`, que fuerza el estado y con `null` lo devuelve al juego.
+
+#### Y CUESTA UNA LLAMADA DE DIBUJO MENOS QUE ANTES
+
+Las veintiuna cáscaras van en **una sola malla**: sueltas serían siete llamadas por boquete —veintiuna—
+para algo que la mezcla aditiva suma sin importar el orden. Fundidas cuestan **una, o sea dos menos que
+los tres troncos de antes**. Las posiciones van en coordenadas de **mundo** y la malla se queda en el
+origen: así `position` **es** la posición de mundo y el ruido del polvo no necesita otra matriz.
+504 vértices en total.
+
+#### DOS DEFECTOS DEL BANCO, LOS DOS DEL MISMO TIPO
+
+- **`domcontentloaded` no sirve para un juego grande.** No dispara hasta que el script sincrónico termina
+  de correr, y el de LA CASA arma la escena entera con SwiftShader por debajo: pasa de los 30 s de tope y
+  el banco muere con un `TimeoutError` que se lee como que la página está rota. Con `commit` se espera
+  sólo a que llegue la respuesta y el resto lo esperan los pasos `wait` del plan, que es lo que ya hacían.
+- **`renderer.info` se pone a cero al empezar cada `render()`**, así que leerlo en la sonda —después del
+  pase de post— devolvía **el pase de post: una llamada y dos triángulos**. Es la misma trampa que ya
+  había costado una medición en Campo\_de\_Tiro. El costo de la escena se anota en el bucle, justo después
+  de dibujarla.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+**0 cajas de colisión en el canal de la escalera** y la bajada caminada de punta a punta hasta y = −3.
+Haz: 7 cáscaras · 504 vértices · **1 malla** · inclinación [0,80 · 0,65 · 0,40] con deriva [0,80 · −0,60]
+· ganancia 0,048. **La linterna no se movió:** desvío **0°**, haz en **[0,0]**, corrida 0 cm de costado y
+0 de alto, alabeo **0**, y con la vista girando 30 muestras el peor desvío sigue en 0. El foco medido
+sobre el destino de render cae en **[0,5085 · 0,502]**, o sea el centro. 144-246 llamadas de dibujo,
+35,6-37,0 k triángulos, **22 programas** (los mismos que la vuelta anterior: el shader nuevo reemplaza al
+viejo, no se suma), 63 texturas. Pantalla usada 1,000, render 1581×727, estiramiento 1,743, campo
+111,1 × 67,67. **14 de 14 texturas de foto puestas, 0 fallidas, 0 destinos huérfanos.** `window.__errs`
+vacío en las nueve corridas. El HTML pasó de 454 a **480 KB**, y no entró un solo asset.
+
 ### Octogésima cuarta vuelta (2026-09-02): **LA CASA** — diez texturas de foto, y el nivel lo lleva la imagen
 
 Pedido: *"los muebles o bloques principales se ven blancos y planos … agregarles texturas de madera

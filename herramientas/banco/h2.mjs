@@ -29,7 +29,13 @@ pg.on('requestfinished',async r=>{ try{ const q=await r.response(); if(q&&q.stat
 pg.on('console',m=>{ if(m.type()==='error') console.log('[err]',m.text().slice(0,200)); });
 pg.on('response',r=>{ if(r.status()>=400) console.log('[404]', r.status(), r.url().slice(0,120)); });
 pg.on('pageerror',e=>console.log('[PAGE ERROR]',String(e).slice(0,400)));
-await pg.goto('http://127.0.0.1:8098/'+(process.env.PAGINA||'eco.html')+'?v='+Date.now(),{waitUntil:'domcontentloaded'});
+/* 'domcontentloaded' NO SIRVE PARA UN JUEGO GRANDE: no dispara hasta que el
+   script sincronico termina de correr, y el de LA CASA arma la escena entera
+   —cientos de mallas, catorce texturas— con SwiftShader por debajo. Medido, eso
+   pasa de los 30 s de tope y el banco muere con un TimeoutError que se lee como
+   que la pagina esta rota. Con 'commit' se espera solo a que llegue la respuesta
+   y el resto lo esperan los pasos `wait` del plan, que es lo que ya hacian. */
+await pg.goto('http://127.0.0.1:8098/'+(process.env.PAGINA||'eco.html')+'?v='+Date.now(),{waitUntil:'commit',timeout:120000});
 // EL RECORTE VA EXPLICITO. Sin clip, Page.captureScreenshot devolvia 1024x489 en una ventana de
 // 1024x576 -se comia los 87 px de abajo- y el pie de la cinematica parecia no existir cuando en
 // realidad estaba dibujado fuera de la foto. Con el clip del tamano de la ventana sale completo.
