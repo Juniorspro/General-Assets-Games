@@ -64,9 +64,16 @@ def main():
         raise SystemExit("faltan assets: %s" % ", ".join(missing))
 
     data = {k: durl(f, m) for k, (f, m) in ASSETS.items()}
-    bicho = os.path.join(MUE_DIR, "langosta.glb")
+    # La langosta vive en muebles/, no en muebles/hd/. Estaba SOLO en la carpeta
+    # de trabajo de al lado, asi que todo build hecho desde un clon limpio salia
+    # sin el bicho: te mataba algo que no existia. Ahora esta en el repo.
+    bicho = os.path.join(HERE, "muebles", "langosta.glb")
+    if not os.path.exists(bicho):
+        bicho = os.path.join(MUE_DIR, "langosta.glb")
     if os.path.exists(bicho):
         data["bicho"] = durl_abs(bicho, "model/gltf-binary")
+    else:
+        print("OJO: falta la langosta (muebles/langosta.glb)")
     for nombre in MUEBLES:
         ruta = os.path.join(MUE_DIR, nombre + ".glb")
         # si falta una pieza el juego igual entra: el modulo la saltea

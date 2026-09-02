@@ -855,7 +855,10 @@ class Dungeon {
         // teclado y joystick suman; el stick manda si esta empujado
         let fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
         let str = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
-        if (this.menuAbierto) { fwd = 0; str = 0; this.stick.x = this.stick.y = 0 }
+        /* Con el menu abierto no se camina. Y con la embestida encima
+           tampoco: ya estas muerto, lo unico que corre es el susto. */
+        const muerto = this.mision && this.mision.congelado && this.mision.congelado();
+        if (this.menuAbierto || muerto) { fwd = 0; str = 0; this.stick.x = this.stick.y = 0 }
         const sm = Math.hypot(this.stick.x, this.stick.y);
         if (sm > 0.12) { fwd = -this.stick.y; str = this.stick.x }
 
@@ -960,8 +963,13 @@ class Dungeon {
         /* El susto: la camara tiembla y la pantalla pega un flash rojo. Es la
            mitad del efecto de que te vea; sin eso, el grito suena solo. */
         const su = this.mision.susto || 0;
-        const tx = su > 0 ? Math.sin(this.t * 47) * 0.045 * su : 0;
-        const tz = su > 0 ? Math.sin(this.t * 61 + 1.3) * 0.055 * su : 0;
+        /* En la embestida el temblor es OTRO: cuatro veces mas grande y mas
+           rapido. El temblor de verte a lo lejos y el de tenerlo en la cara no
+           pueden ser el mismo, o el segundo no se siente. */
+        const emb = this.mision.congelado && this.mision.congelado() ? 1 : 0;
+        const amp = 1 + emb * 3.6, vel = 1 + emb * 0.7;
+        const tx = su > 0 ? Math.sin(this.t * 47 * vel) * 0.045 * su * amp : 0;
+        const tz = su > 0 ? Math.sin(this.t * 61 * vel + 1.3) * 0.055 * su * amp : 0;
         cam.rotation.set(this.pitch + (sliding ? -0.24 * slideK : 0) + tx,
                          this.yaw, this.roll + tz);
         // el FOV se abre al correr y pega un tiron al deslizar
@@ -969,7 +977,7 @@ class Dungeon {
            grados y el balanceo se achica. Un pasillo de 2,2 m con el mismo
            campo que una sala de 11 se lee como un tubo de ojo de pez. */
         const enc = this.espacio ? this.espacio.encajonado : 0;
-        const wantFov = FOV - enc * 7 + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
+        const wantFov = FOV - enc * 7 + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0) - emb * 18;
         if (Math.abs(cam.fov - wantFov) > 0.05) {
             cam.fov = lerp(cam.fov, wantFov, sat(dt * (sliding ? 22 : 5)));
             cam.updateProjectionMatrix();
@@ -996,6 +1004,9 @@ class Dungeon {
         }
         this.mision.actualizar(dt, {
             x: this.pos.x, y: this.y, z: this.pos.z, yaw: this.yaw,
+            // la embestida planta la cara sobre el rayo de la camara: le hace
+            // falta la inclinacion y la altura del ojo, no solo el giro
+            pitch: this.pitch, ojo: this.y + (this.eyeY || EYE),
             corriendo: this.running, agachado: this.crouch, deslizando: sliding,
         });
         if (this.mision.reaparecer) {
@@ -1120,8 +1131,13 @@ class Dungeon {
             document.getElementById('aviso').style.opacity = av ? '1' : '0';
         }
         const su = Math.min(1, M.susto || 0);
-        if (this._susto !== (su > 0.02)) {
-            this._susto = su > 0.02;
+        /* Durante la embestida se apaga TODO el HUD. En la captura del juego
+           no queda nada en pantalla salvo la mira: joystick, botones, tareas y
+           inventario encima de la cara arruinan el unico cuadro que importa. */
+        const emb = !!(M.congelado && M.congelado());
+        if (this._emb !== emb) {
+            this._emb = emb;
+            document.body.classList.toggle('embestida', emb);
         }
         const fl = document.getElementById('flash');
         if (fl) fl.style.opacity = (su * 0.45).toFixed(3);

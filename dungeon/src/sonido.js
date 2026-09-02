@@ -119,6 +119,32 @@ export function grito() {
     }
 }
 
+/* El golpe de la embestida. En el video, arriba del chillido hay un GOLPE
+   seco y grave —como si te tirara al piso— y es la mitad del susto: el
+   chillido solo se lee como un efecto, el golpe se lee como un cuerpo. */
+export function golpe() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    // el cuerpo del golpe: un seno que se desploma de 150 a 34 Hz
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(34, t + 0.42);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.85, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.55);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.6);
+    // y el chasquido de arriba, para que el golpe tenga borde
+    const n = ruido(0.22), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    f.type = 'lowpass'; f.frequency.setValueAtTime(2600, t);
+    f.frequency.exponentialRampToValueAtTime(240, t + 0.20);
+    ng.gain.setValueAtTime(0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.0005, t + 0.24);
+    n.connect(f); f.connect(ng); ng.connect(master);
+    n.start(t); n.stop(t + 0.25);
+}
+
 /* Un click seco para las interacciones, y un golpe para el cubo que se arrastra. */
 export function click(vol = 0.25) {
     if (!ctx) return;

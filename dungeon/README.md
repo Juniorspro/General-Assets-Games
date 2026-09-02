@@ -224,6 +224,62 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## La embestida
+
+Cuando te agarra, el juego original hace esto —sacado de mirar el momento del
+contacto cuadro por cuadro y de la captura que mandó el jugador
+(`referencia/embestida-original.png`)—:
+
+1. el contacto es **instantáneo y mata**: no hay vida ni forcejeo;
+2. la cámara **no se suelta** — sigue siendo primera persona, se ve la mira en
+   el medio de la cara;
+3. la cara **llena el cuadro entero**, iluminada de **rojo sangre**, con las
+   cuencas negras, sobre fondo completamente negro;
+4. la cámara tiembla fuerte y el campo se cierra de golpe;
+5. chillido **más un golpe grave**, y recién después la pantalla a negro;
+6. reaparecés lejos y el bicho vuelve a rondar.
+
+Cómo está hecho:
+
+- **La cara se planta sobre el rayo de la cámara**, no en un punto del mundo.
+  Se calcula el vector hacia adelante desde el giro y la inclinación y se pone
+  la cabeza ahí, así llena el cuadro mires a donde mires. Se acerca de 95 a
+  62 cm mientras dura. Más cerca la cara le pasa por adentro a la cámara y se
+  ven los polígonos de atrás: deja de ser una cara y es un error.
+- La raíz del bicho se baja `ALTO_BICHO × 0,9257`, que es dónde tiene los ojos
+  medidos sobre el rig. El cuerpo queda colgando abajo del piso y no se ve.
+- **El fondo negro no se pinta: se cierra la niebla a metro y medio.** Todo lo
+  que no es la cara queda del color de la niebla, que ya es casi negro, y la
+  cara —que está a 60 cm— se salva. Es una línea y sale gratis. Los valores
+  previos se guardan y se devuelven, porque el menú de gráficos también toca
+  la niebla.
+- **La cara se tiñe de rojo cambiando el material**, no sólo con una luz. La
+  malla lleva un emisivo claro —el que la hace visible en un pasillo negro— y
+  ese emisivo gana siempre: con una luz roja encima la cara salía **rosa**.
+- El temblor de cámara es **otro**: cuatro veces más grande y más rápido que el
+  de verlo a lo lejos, y el FOV se cierra 18°.
+- **Se apaga el HUD entero** y aparece la mira. Joystick, botones, tareas e
+  inventario encima de la cara arruinan el único cuadro que importa.
+- Audio: el chillido que ya estaba **más un golpe grave** nuevo —un seno que se
+  desploma de 150 a 34 Hz con un chasquido arriba—. El chillido solo se lee
+  como un efecto; el golpe se lee como un cuerpo.
+
+Y de paso apareció el bug de verdad detrás de *"la langosta ni siquiera se ve,
+te mata pero es invisible"*: **el empaquetador buscaba el modelo en la carpeta
+equivocada**. Cuando se agregaron los muebles de alta, `MUE_DIR` pasó a apuntar
+a `muebles/hd/`, y la línea del bicho usaba esa misma variable — pero la
+langosta vive en `muebles/`. Desde ese día el juego salía **sin el bicho**: te
+mataba algo que nunca se había cargado.
+
+En su momento eso se diagnosticó como falta de contraste y se le subió el
+emisivo. El emisivo estaba bien; lo que faltaba era el archivo. Ahora el
+empaquetador mira `muebles/` primero y avisa por consola si no lo encuentra,
+que es lo que tendría que haber hecho desde el principio.
+
+Medido después de la embestida: `embestida` vuelve a `null`, el bicho vuelve a
+`ronda`, **la niebla vuelve exactamente a los valores que tenía**, el jugador
+aparece a 93,7 m y la clase del HUD se saca sola.
+
 ## La casa nueva: una planta, paredes finas, sectores grandes
 
 El mapa anterior tenía tres laberintos apilados de 31×31 donde **la pared

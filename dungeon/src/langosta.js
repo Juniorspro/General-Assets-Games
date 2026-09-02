@@ -114,6 +114,28 @@ class Langosta {
         this.alerta = 0;
     }
 
+    /* La cara ROJA de la embestida. No alcanza con meterle una luz roja
+       encima: la malla lleva un EMISIVO claro —el que la hace visible en un
+       pasillo negro— y ese emisivo gana siempre, asi que la cara sale rosa.
+       Hay que cambiar el material y devolverlo despues. */
+    caraRoja(on) {
+        if (!this.modelo || this._rojo === on) return;
+        this._rojo = on;
+        this.modelo.traverse(n => {
+            if (!n.isMesh || !n.material || n.material.isMeshBasicMaterial) return;
+            const m = n.material;
+            if (!n.userData.tono) n.userData.tono = [m.color.getHex(), m.emissive.getHex(), m.emissiveIntensity];
+            if (on) {
+                m.color.setHex(0x6e0f0a);
+                m.emissive.setHex(0x3d0704);
+                m.emissiveIntensity = 1;
+            } else {
+                const [c, e, i] = n.userData.tono;
+                m.color.setHex(c); m.emissive.setHex(e); m.emissiveIntensity = i;
+            }
+        });
+    }
+
     reubicar(c, r) {
         const [x, z] = toWorld(c, r);
         this.pos.set(x, z);
@@ -194,6 +216,7 @@ export class Mision {
         this.aviso = '';
         this.avisoT = 0;
         this.atrapadas = 0;
+        this.embestida = null;      // temporizador del susto, null = no hay
         this.ruido = 0;
 
         this.celdasLibres = [];
@@ -526,6 +549,105 @@ export class Mision {
         }
     }
 
+    /* ------------------------------------------------------------ LA EMBESTIDA */
+    /* Como funciona el susto en el juego original, sacado de mirar el momento
+       del contacto cuadro por cuadro y de la captura que mando el jugador:
+
+         1. el contacto es instantaneo y mata: no hay vida ni forcejeo
+         2. la camara NO se suelta — sigue siendo primera persona, se ve la
+            mira en el medio de la cara
+         3. la cara llena el cuadro entero, iluminada de ROJO sangre, con las
+            cuencas negras, sobre un fondo completamente negro
+         4. la camara tiembla fuerte y el campo se cierra de golpe
+         5. chillido + un golpe grave, y recien despues la pantalla a negro
+         6. reapareces lejos y el bicho vuelve a rondar
+
+       Lo importante es el punto 3: el fondo negro no se pinta, se consigue
+       CERRANDO LA NIEBLA a dos metros. Todo lo que no es la cara queda del
+       color de la niebla, que ya es casi negro, y la cara —que esta a medio
+       metro— se salva. Es una linea y sale gratis. */
+    embestir(jug) {
+        if (this.embestida !== null && this.embestida !== undefined) return;
+        this.atrapadas++;
+        this.empujando = null;
+        this.embestida = 0;
+        this.ruido = 0;
+        /* La niebla se guarda para devolverla: el menu de graficos tambien la
+           toca, asi que hay que restaurar los valores que habia, no unos fijos. */
+        const f = this.escena.fog;
+        this.nieblaPrevia = f ? [f.near, f.far] : null;
+        this.bicho.estado = 'embiste';
+        S.grito();
+        S.golpe();
+        this.decir('te agarró');
+    }
+
+    /* Se llama todos los cuadros mientras dura. Devuelve true si sigue. */
+    animarEmbestida(dt, jug) {
+        const T = 1.30;
+        this.embestida += dt;
+        const k = Math.min(1, this.embestida / T);
+        const b = this.bicho;
+
+        /* La cara se planta SOBRE EL RAYO DE LA CAMARA, no en el mundo: asi
+           llena el cuadro mires a donde mires, que es lo que hace el juego.
+           Y se acerca de 0,85 m a 0,40 m mientras dura: la embestida. */
+        const p = jug.pitch || 0, y = jug.yaw || 0;
+        const cp = Math.cos(p);
+        const fx = -Math.sin(y) * cp, fy = Math.sin(p), fz = -Math.cos(y) * cp;
+        /* Frena a 62 cm. Mas cerca, la cara le pasa por adentro a la camara y
+           se ven los poligonos de atras: deja de ser una cara y es un error. */
+        const d = 0.95 - 0.33 * Math.min(1, k * 2.2);
+        const ojo = jug.ojo !== undefined ? jug.ojo : jug.y + 1.0;
+        const caraX = jug.x + fx * d, caraY = ojo + fy * d, caraZ = jug.z + fz * d;
+
+        // los ojos del bicho estan al 92,6% de su altura, medido sobre el rig
+        b.raiz.position.set(caraX, caraY - ALTO_BICHO * 0.9257, caraZ);
+        b.raiz.rotation.y = Math.atan2(fx, fz);        // encarado a la camara
+        b.pos.set(caraX, caraZ);
+        b.animar(dt, 0);
+
+        /* La luz de la cara, al mango y pegada: es la cara roja de la captura.
+           Va DELANTE de la cara, entre ella y vos, si no la nariz se come todo. */
+        b.caraRoja(true);
+        b.luzCara.position.set(0, ALTO_BICHO * 0.9257, -0.30);
+        b.luzCara.intensity = 30;
+        b.luzCara.distance = 2.2;
+        b.luz.intensity = 0;
+
+        // y todo lo demas a negro: la niebla se cierra a dos metros
+        const f = this.escena.fog;
+        if (f) { f.near = 0.30; f.far = 1.55 + 0.9 * (1 - k) }
+
+        this.susto = 1;
+        // la pantalla se va a negro sobre el final, no de entrada
+        this.negro = Math.max(0, (k - 0.62) / 0.38);
+
+        if (k >= 1) {
+            const pz = this.lejosDe(jug.x, jug.z);
+            const [nx, nz] = toWorld(pz[0], pz[1]);
+            this.reaparecer = [nx, nz];
+            const q = this.lejosDe(nx, nz);
+            b.reubicar(q[0], q[1]);
+            b.estado = 'ronda'; b.alerta = 0;
+            b.caraRoja(false);
+            b.luzCara.position.set(0, ALTO_BICHO * 0.80, -0.22);
+            b.luzCara.intensity = 4.2;
+            b.luzCara.distance = 2.6;
+            b.luz.intensity = 3.4;
+            if (f && this.nieblaPrevia) { f.near = this.nieblaPrevia[0]; f.far = this.nieblaPrevia[1] }
+            this.embestida = null;
+            this.susto = 1.4;
+            this.negro = 1;
+            return false;
+        }
+        return true;
+    }
+
+    /* Mientras dura la embestida no se camina ni se mira: el jugador ya esta
+       muerto, lo unico que pasa es el susto. */
+    congelado() { return this.embestida !== null && this.embestida !== undefined }
+
     /* ------------------------------------------------------------- el recorrido */
     /* Camino por la grilla, sin diagonales. El mapa es de 31x31, asi que una
        busqueda entera cuesta nada y se rehace cada medio segundo. */
@@ -559,6 +681,10 @@ export class Mision {
 
     actualizar(dt, jug) {
         if (this.avisoT > 0) this.avisoT -= dt;
+        /* Mientras te esta embistiendo no corre nada mas: ni la IA del bicho,
+           ni el ruido, ni el cubo que arrastrabas. Es un cuadro y medio en el
+           que lo unico que pasa es la cara. */
+        if (this.congelado()) { this.animarEmbestida(dt, jug); return }
         const b = this.bicho;
 
         /* El cubo que se empuja va delante tuyo, a ras del piso, y raspa. */
@@ -663,21 +789,7 @@ export class Mision {
         b.animar(dt, avanzo);
 
         // te agarro
-        if (!this.terminado && mismoPiso && dist < 0.95) {
-            this.atrapadas++;
-            this.empujando = null;
-            const p = this.lejosDe(jug.x, jug.z);
-            const [nx, nz] = toWorld(p[0], p[1]);
-            this.reaparecer = [nx, nz];
-            const q = this.lejosDe(nx, nz);
-            b.reubicar(q[0], q[1]);
-            b.estado = 'ronda'; b.alerta = 0;
-            this.ruido = 0;
-            this.susto = 1.4;
-            this.negro = 1;          // la pantalla se va a negro, como en el juego
-            S.grito();
-            this.decir('te agarró');
-        }
+        if (!this.terminado && mismoPiso && dist < 0.95) this.embestir(jug);
 
         if (this.susto > 0) this.susto = Math.max(0, this.susto - dt * 1.5);
         if (this.negro > 0) this.negro = Math.max(0, this.negro - dt * 0.9);
