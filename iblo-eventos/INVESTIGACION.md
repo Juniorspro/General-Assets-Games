@@ -224,7 +224,7 @@ defendible (egresados del interior chaqueño, pueblo por pueblo).
 
 | Dato | Por qué |
 |---|---|
-| Las 24 historias destacadas | el endpoint de highlights exige sesión iniciada (302) |
+| ~~Las historias destacadas~~ | **RESUELTO** — ver sección 9 |
 | Comentarios de los posts | idem |
 | Lista de seguidores / a quién siguen | idem |
 | Posts 161–171 | la API pública corta en 160 |
@@ -232,9 +232,87 @@ defendible (egresados del interior chaqueño, pueblo por pueblo).
 
 ---
 
+## 9. Historias destacadas y activas (vía InstaNavigation / insta-story.com)
+
+Los visores anónimos con Cloudflare (IGViewer, InstaAnon, Imginn, Pixwox, Dumpor)
+no pasan desde acá. **InstaNavigation sí**: su backend `insta-story.com` expone
+`api/v1/web/profile` y `api/v1/web/highlight-stories` sin captcha. Por ahí salió
+todo lo que sigue.
+
+### Historias activas
+**2 historias en vivo** al momento del relevamiento (subidas ~10 h antes), ambas
+video. Están guardadas en `destacadas/historia-activa-1.mp4` y `-2.mp4`. Una es
+un repost de `@delfinamartineez__` con el flyer del próximo evento; la otra
+etiqueta a `@5to.4ta.naturales_`, `@_anahi.gauna`, `@_mauri6`, `@guadii_rz_`,
+`@matissanchezz_`, `@milagr0s.fernandez`, `@moni_aguero8`.
+
+### Las 10 destacadas (216 historias en total)
+
+| Destacada | Historias | Periodo |
+|---|---|---|
+| 19.09👸🤴🌸🌼 | 1 | 20/08/2026 |
+| 🔥día del amigo🔥 | 20 | 24/06 → 21/07/2026 |
+| 🤠🤠 (Cowboy) | 25 | 03/06 → 15/06/2026 |
+| PRE//Euphoria | 32 | 24/04 → 06/05/2026 |
+| UPD | 28 | 11/03 → 22/03/2026 |
+| Destacada | 17 | 07/03 → 09/03/2026 |
+| The Best party | 37 | 07/01 → 20/01/2026 |
+| pronto+info | 1 | 19/11/2025 |
+| Pre5to | 28 | 25/10 → 18/11/2025 |
+| Halloween 2025🎃 | 27 | 05/10 → 04/11/2025 |
+
+Son **casi todo video**: 193 clips verticales contra apenas 23 imágenes. Una destacada por evento, abierta unas semanas antes y cerrada
+después: es su forma de archivar cada fiesta.
+
+> El perfil declara 24 destacadas pero la bandeja pública devuelve 10.
+> Las otras 14 probablemente estén archivadas u ocultas.
+
+### Lo que se lee en los flyers
+
+**Logo real de la marca:** un jarro de cerveza dibujado en línea con la palabra
+*Eventos* en cursiva encima y **IBLO** en mayúsculas grandes debajo. Fondo negro,
+tipografía condensada.
+
+**Diseñador de los flyers:** **Rulo.Creativo** — la firma aparece al pie de
+todas las piezas ("Powered by Rulo.Creativo 2024"). No es `@ep_publicidades`,
+que era el de 2023.
+
+**Halloween (01/11):** line-up Alan Inamorato ft Javier Ríos · conservadora
+gratis hasta 02:30 hs (sin vidrio) · **open party 00 hs** · Club Juventud,
+Margarita Belén.
+
+**Próximo evento — 19.09.26:** *Elección de Rey y Reina, Edición 2026*, con la
+Promo 2026. DJ Agus Mendoza (set live) y Maury Abraham conduciendo.
+**Club Juventud, Margarita Belén — 22:00 hs.**
+
+### Proveedores nuevos que aparecen sólo en las historias
+
+- **`@shine.glitter.stand`** — el stand de glitter de las fiestas Euphoria. Es
+  un proveedor externo, no algo propio.
+- **`@gm_sonido_iluminacion`** — sonido e iluminación.
+
+### Links a las carpetas de fotos
+
+Tres Drive públicos linkeados desde las historias (uno por evento):
+Cowboy, UPD y The Best Party. Los IDs están en `destacadas/` y en la sección 7.
+
+### Quiénes aparecen etiquetados (93 cuentas distintas)
+
+Arriba de todo `@myf.visuals` (15), después un grupo de gente que se repite en
+casi todos los eventos y que funciona como **staff / promotores**:
+`@luc1a_ookk` (13), `@joniromero__` (12), `@tatianapolich_` (10),
+`@magali_carballo0`, `@gimenez_ludmi_`, `@lourdes_sabao4`, `@orianabeloso`,
+`@gamarra_yoell` (6 c/u). Los DJs se repiten igual que en el feed:
+`@djalaninamorato` (9), `@dj_rodriiojedaa` (8), `@mativillalbadj` y
+`@djagusmendoza` (7 c/u), `@dj.apolo_` (5), `@javierriosdj` (4).
+
+---
+
 ## Archivos de este relevamiento
 
 - `publicaciones.txt` — las 160 publicaciones con fecha, tipo, likes,
   comentarios, reproducciones, geotag y el texto completo. Sin precios.
+- `destacadas/` — portadas y primeras miniaturas de las 10 destacadas + los
+  2 videos de las historias activas.
 - `imagenes/` — 40 imágenes de los posts con más repercusión + `perfil.jpg`.
   Bajadas porque las URLs del CDN de Instagram vencen.
