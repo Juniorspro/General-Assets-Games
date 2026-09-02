@@ -15,6 +15,11 @@
   #stage{position:fixed;top:0;left:0;transform-origin:top left;overflow:hidden;background:#000}
   #stage.rot{transform:translateX(100vw) rotate(90deg)}
   canvas{display:block}
+  #girar{position:fixed;inset:0;z-index:94;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:rgba(4,6,10,.92);color:#cfc9b8;
+    font-size:15px;letter-spacing:.14em;text-align:center;padding:24px;pointer-events:none}
+  #girar b{font-size:34px;font-weight:300;opacity:.75;animation:giroP 2.4s ease-in-out infinite}
+  @keyframes giroP{0%,100%{transform:rotate(0)}50%{transform:rotate(90deg)}}
   #sa{position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;
     padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
             env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
@@ -111,6 +116,7 @@
 </head>
 <body>
 <div id="sa"></div>
+<div id="girar"><b>&#9634;</b>girá el teléfono</div>
 <div id="stage">
   <div id="hud">
     <div id="flash"></div><div id="fade"></div>
@@ -214,6 +220,9 @@ function layout(){
     stage.style.transform='none';
   }
   stage.style.width=VW+'px'; stage.style.height=VH+'px';
+  { const g=document.getElementById('girar'), m=document.getElementById('menu');
+    const enMenu=m&&!m.classList.contains('hide');
+    g.style.display=(rotated&&enMenu)?'flex':'none'; }
   if(window.renderer){
     renderer.setSize(VW,VH,false);
     camera.aspect=VW/VH;
@@ -2569,17 +2578,26 @@ function startGame(){
 document.getElementById('btnRewind').addEventListener('click',()=>{
   endEl.classList.add('hide'); resetWorld(); setState('menu');
 });
+function trabarHorizontal(){
+  const o=screen.orientation;
+  if(!o||!o.lock) return;
+  try{ const r=o.lock('landscape'); if(r&&r.catch) r.catch(()=>{}); }catch(_){}
+}
 function aPantallaCompleta(){
   const e=document.documentElement;
   const f=e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen||e.msRequestFullscreen;
-  if(!f||document.fullscreenElement||document.webkitFullscreenElement) return;
-  try{ const r=f.call(e,{navigationUI:'hide'}); if(r&&r.catch) r.catch(()=>{}); }catch(_){}
+  if(document.fullscreenElement||document.webkitFullscreenElement){ trabarHorizontal(); return; }
+  if(!f){ trabarHorizontal(); return; }
+  /* el bloqueo SOLO vale en pantalla completa, asi que va despues y no antes */
+  try{ const r=f.call(e,{navigationUI:'hide'});
+       if(r&&r.then) r.then(trabarHorizontal,()=>{}); else trabarHorizontal();
+  }catch(_){ trabarHorizontal(); }
 }
 /* al entrar y salir de pantalla completa la ventana cambia de tamaño, y el
    evento de resize no siempre llega: se recoloca a mano. */
 for(const ev of ['fullscreenchange','webkitfullscreenchange'])
   addEventListener(ev,()=>setTimeout(layout,60));
-document.getElementById('btnStart').addEventListener('click',()=>{ aPantallaCompleta(); startGame(); });
+document.getElementById('btnStart').addEventListener('click',()=>{ aPantallaCompleta(); startGame(); layout(); });
 document.getElementById('btnResume').addEventListener('click',()=>setState('play'));
 document.getElementById('btnMenu').addEventListener('click',()=>setState('menu'));
 pauseBtn.addEventListener('click',e=>{e.stopPropagation(); if(state==='play'&&!fin) setState('paused');});
