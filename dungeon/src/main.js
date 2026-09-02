@@ -14,7 +14,9 @@ import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
 import { despertarAudio } from './sonido.js';
+import * as S from './sonido.js';
 import { Calidad } from './calidad.js';
+import { Intro, ALTO_CAJA } from './intro.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -138,6 +140,10 @@ class Dungeon {
         this.running = false; this.crouch = false;
         this.visited = new Set();
 
+        /* El arranque: el cajón de madera flotando y las nubes. Se crea antes
+           que el jugador porque initPlayer necesita saber a qué altura poner
+           la cámara. */
+        this.intro = new Intro(this.scene);
         this.cuerpo = new R15(this.scene, EYE);
         this.farolesConSombra = 3;
         this.lucesVivas = 10;
@@ -145,6 +151,7 @@ class Dungeon {
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         /* Los cajones del deposito y las columnas del sotano ya son solidos:
            se arman con el nivel, asi que entran a la lista antes que nada. */
+        this.enMenu = true;      // hasta que se apriete JUGAR
         this.cajasMuebles = [...(this.cajasDeco || [])];
 
         /* Los muebles llegan tarde y no pasa nada: el nivel ya esta armado y
@@ -749,8 +756,11 @@ class Dungeon {
     initPlayer() {
         const rng = new Rng(20260901);
         const s = spawnOn(0, rng);
-        this.pos = new THREE.Vector3(s.x, 0, s.z);
-        this.y = 0;
+        /* No aparecés en la casa: aparecés ARRIBA, en el cajón. La casa
+           empieza cuando te tirás por el hueco. */
+        const c = this.intro ? this.intro.centro : [s.x, s.z];
+        this.pos = new THREE.Vector3(c[0], 0, c[1] + CELL * 0.9);
+        this.y = this.intro ? ALTO_CAJA : 0;
         this.pitch = 0;
         // arrancar mirando a un lado sin tabique, no contra la pared
         const [sc, sr] = toCell(s.x, s.z);
@@ -896,7 +906,7 @@ class Dungeon {
         /* Con el menu abierto no se camina. Y con la embestida encima
            tampoco: ya estas muerto, lo unico que corre es el susto. */
         const muerto = this.mision && this.mision.congelado && this.mision.congelado();
-        if (this.menuAbierto || muerto) { fwd = 0; str = 0; this.stick.x = this.stick.y = 0 }
+        if (this.menuAbierto || muerto || this.enMenu) { fwd = 0; str = 0; this.stick.x = this.stick.y = 0 }
         const sm = Math.hypot(this.stick.x, this.stick.y);
         if (sm > 0.12) { fwd = -this.stick.y; str = this.stick.x }
 
@@ -957,19 +967,45 @@ class Dungeon {
            quedabas rebotando entre los dos sin poder salir. La pared tiene la
            ultima palabra porque es la que no se puede atravesar. */
         [nx, nz] = chocarMuebles(this.cajasMuebles, nx, nz, this.y, RADIUS * 0.8);
-        [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
+        /* Cayendo no hay paredes: estás por encima de la casa. Y en el cajón
+           tampoco, que tiene sus propios límites. */
+        if (!this.intro || this.intro.estado === 'jugando')
+            [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
 
         /* Y la red: si igual quedaste dentro de algo solido, se sale de una vez
            a la celda abierta mas cerca. Pasa al pararse adentro de un hueco de
            62 cm, o al reaparecer encima de una pared. */
-        const salvado = rescatar(nx, nz);
+        const salvado = (this.intro && this.intro.estado !== 'jugando') ? null : rescatar(nx, nz);
         if (salvado) { nx = salvado[0]; nz = salvado[1]; this.rescates = (this.rescates || 0) + 1 }
         this.pos.set(nx, 0, nz);
+        if (this.intro && this.intro.estado === 'caja') this.intro.encerrar(this.pos);
 
-        /* La casa es UNA planta. Toda la familia de bugs de pisos falsos y
-           paredes que se atravesaban venia de tener tres grillas apiladas y
-           tener que adivinar en cual estabas; ahora el piso es cero y punto. */
-        this.y = 0;
+        /* La casa es UNA planta, así que el piso es cero. Lo único que mueve
+           la altura es el arranque: el cajón está a 16,5 m y la caída es
+           gravedad de verdad —no una interpolación, que dura lo mismo desde
+           cualquier altura y se lee como un ascensor—. */
+        const I = this.enMenu ? null : this.intro;
+        if (I && I.estado === 'caja') {
+            this.y = ALTO_CAJA;
+            if (I.encerrar(this.pos)) { I.soltar(); this.slideT = 0 }
+        } else if (I && I.estado === 'cayendo') {
+            const vy = I.caer(dt);
+            this.y = Math.max(0, this.y + vy * dt);
+            // las nubes suben mientras caés: es lo que da la sensación
+            for (const n of I.nubes.children) {
+                n.position.y += dt * Math.min(26, -vy) * 0.55;
+                if (n.position.y > ALTO_CAJA) n.position.y = 0.5;
+            }
+            S.viento(Math.min(1, -vy / 22));
+            if (this.y <= 0.001) {
+                this.y = 0;
+                I.aterrizar();
+                this.mision.susto = 0.8;      // el golpe se siente
+                this.aterrizoEn = this.t;
+            }
+        } else {
+            this.y = 0;
+        }
 
         this.bob += dt * (moving > 0.05 ? (this.running ? 13 : 8.5) : 0);
         // cuanto baja por segundo: con eso se sabe si esta cayendo
@@ -1040,7 +1076,7 @@ class Dungeon {
             this.usarPedido = false;
             this.mision.usar(this.pos.x, this.y, this.pos.z);
         }
-        this.mision.actualizar(dt, {
+        if (!this.enMenu && (!this.intro || this.intro.estado === 'jugando')) this.mision.actualizar(dt, {
             x: this.pos.x, y: this.y, z: this.pos.z, yaw: this.yaw,
             // la embestida planta la cara sobre el rayo de la camara: le hace
             // falta la inclinacion y la altura del ojo, no solo el giro
@@ -1172,7 +1208,8 @@ class Dungeon {
         /* Durante la embestida se apaga TODO el HUD. En la captura del juego
            no queda nada en pantalla salvo la mira: joystick, botones, tareas y
            inventario encima de la cara arruinan el unico cuadro que importa. */
-        const emb = !!(M.congelado && M.congelado());
+        const emb = !!(M.congelado && M.congelado())
+            || this.enMenu || (this.intro && this.intro.estado !== 'jugando');
         if (this._emb !== emb) {
             this._emb = emb;
             document.body.classList.toggle('embestida', emb);
@@ -1193,14 +1230,56 @@ class Dungeon {
         if (M.terminado === 'escapo' && !this._fin) {
             this._fin = true;
             document.getElementById('fin').classList.add('ver');
+            document.body.classList.add('gano');   // el HUD estorba en el final
         }
     }
 }
 
 /* ------------------------------------------------------------------ arranque */
 const game = new Dungeon();
+/* ------------------------------------------------------------------ EL MENU */
+/* El juego arranca PAUSADO en el menú. El bucle corre igual —así el mapa
+   termina de cargar y las texturas se suben a la GPU mientras mirás la
+   pantalla— pero el jugador no se mueve y el bicho no ronda. */
 const boot = document.getElementById('boot');
-setTimeout(() => { boot.classList.add('gone'); setTimeout(() => boot.style.display = 'none', 700) }, 500);
+(function armarMenu() {
+    const A2 = window.DUNGEON_ASSETS || {};
+    const poner = (id, url, fondo) => {
+        const e = document.getElementById(id);
+        if (!e || !url) return;
+        if (fondo) e.style.backgroundImage = `url(${url})`; else e.src = url;
+    };
+    poner('mfondo-a', A2.menu_fondo1, true);
+    poner('mfondo-b', A2.menu_fondo2, true);
+    poner('mbicho-i', A2.menu_bicho_lado);
+    poner('mbicho-d', A2.menu_bicho_frente);
+    poner('mlogo', A2.menu_logo);
+    poner('fin-img', A2.menu_ganaste);
+
+    const carga = document.getElementById('mcarga');
+    const jugar = document.getElementById('mjugar');
+    jugar.style.visibility = 'hidden';
+    /* El botón aparece cuando los muebles terminaron de entrar: si dejás
+       empezar antes, el primer cuarto se puebla delante tuyo. */
+    const listo = () => {
+        if (!game.modelosMuebles) return setTimeout(listo, 200);
+        carga.style.display = 'none';
+        jugar.style.visibility = 'visible';
+    };
+    setTimeout(listo, 400);
+
+    jugar.addEventListener('click', () => {
+        despertarAudio();
+        S.callarMusica();
+        game.enMenu = false;
+        boot.classList.add('gone');
+        setTimeout(() => { boot.style.display = 'none' }, 700);
+    });
+    // la música del menú necesita un gesto: se engancha al primero que haya
+    const arrancarMusica = () => { despertarAudio(); S.musicaMenu() };
+    for (const ev of ['pointerdown', 'keydown', 'touchstart'])
+        addEventListener(ev, arrancarMusica, { once: true, passive: true });
+})();
 
 let last = performance.now();
 function loop(now) {

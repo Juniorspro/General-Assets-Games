@@ -224,6 +224,51 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
+## El arranque: el cajón, el hueco y la caída
+
+En el original no aparecés en la casa: aparecés **arriba**, en un cajón de
+madera oscuro, caminás hacia adelante, hay un hueco en el piso y te dejás caer.
+Recién ahí empieza la casa.
+
+Acá es lo mismo. El cajón flota a **16,5 m** sobre el vestíbulo, con su lámpara
+y el agujero al fondo. Al pisarlo te soltás y **la caída es gravedad de
+verdad** (19 m/s²), no una interpolación: interpolada dura lo mismo desde
+cualquier altura y se lee como un ascensor. Mientras caés pasan **nubes** —
+carteles con un degradado radial dibujado en un canvas, difuminadas a propósito
+porque a veinte metros por segundo un borde nítido delata el cartel— y suena el
+viento, que sube con la velocidad. Al tocar el piso hay golpe y sacudón.
+
+## El menú
+
+Con la forma del de Roblox: el título arriba, el botón grande en el medio, y el
+bicho **recortado** a los dos costados mirando hacia adentro.
+
+- **El logo** se generó y dice *THE HOUSE OF THE LOCUST* en letras agrietadas
+  que chorrean. Costó tres intentos: los generadores escriben *LOCUT*.
+- **Los recortes del bicho salen del propio juego**: se renderizó el modelo
+  contra un fondo magenta con el resto de la escena apagada, y se recortó por
+  croma. No es una ilustración parecida, es la criatura que te va a matar.
+- **El fondo son dos capturas del mapa**, difuminadas y cruzándose cada
+  diecisiete segundos, con viñeta encima.
+- El botón **JUGAR** no aparece hasta que los muebles terminaron de entrar: si
+  te deja empezar antes, el primer cuarto se puebla delante tuyo.
+
+Los seis archivos del menú pesan **328 KB**.
+
+Y el final es la palabra **GANASTE** generada igual —agrietada, chorreando— con
+un resplandor verde y el HUD apagado.
+
+## El audio, todo sintetizado
+
+No hay un solo mp3. El menú es un colchón grave en la menor con un arpegio
+lento y **desafinado a propósito** —afinado suena a menú de app—. El final son
+cuatro acordes que suben con el bajo sostenido debajo y un platillo de ruido en
+cada uno. El viento de la caída es ruido rosa filtrado que sube con la
+velocidad, y el golpe de la embestida es un seno que se desploma de 150 a 34 Hz
+con un chasquido arriba.
+
+Un mp3 de menú son 700 KB para algo que son cuatro notas y un colchón.
+
 ## Que se vea sin arruinarlo
 
 Tercera vuelta con *"el monstruo es invisible"*, y la primera en la que el

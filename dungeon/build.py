@@ -25,6 +25,11 @@ ASSETS = {
 CUADROS = 4
 CUA_DIR = os.path.join(HERE, "cuadros")
 
+# El menú: el logo generado, el GANASTE, los dos recortes del bicho sacados del
+# propio juego con croma, y dos capturas difuminadas de fondo. Los seis: 328 KB.
+MENU = ["logo", "ganaste", "bicho-frente", "bicho-lado", "fondo1", "fondo2"]
+MENU_DIR = os.path.join(HERE, "menu")
+
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
 # Van como data URL igual que las texturas: el juego es UN archivo.
 MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa",
@@ -79,6 +84,10 @@ def main():
         # si falta una pieza el juego igual entra: el modulo la saltea
         if os.path.exists(ruta):
             data["mueble_" + nombre] = durl_abs(ruta, "model/gltf-binary")
+    for nombre in MENU:
+        pm = os.path.join(MENU_DIR, nombre + ".webp")
+        if os.path.exists(pm):
+            data["menu_" + nombre.replace("-", "_")] = durl_abs(pm, "image/webp")
     for i in range(1, CUADROS + 1):
         pc = os.path.join(CUA_DIR, "cuadro%d.webp" % i)
         if os.path.exists(pc):
