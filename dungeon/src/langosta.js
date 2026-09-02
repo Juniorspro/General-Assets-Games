@@ -69,6 +69,7 @@ class Langosta {
                     const m = n.material;
                     if (m && m.color) { m.color.setHex(0x6f7076); m.roughness = 1; }
                     if (m && m.emissive) m.emissive.setHex(0x000000);
+                    n.frustumCulled = false;
                 });
                 this.giroModelo.add(o);
                 this.modelo = o;
@@ -89,7 +90,9 @@ class Langosta {
            que hay: la misma cara alumbrada de arriba es una persona y
            alumbrada de abajo es otra cosa. Las cuencas se hunden y la
            mandibula tira sombra para arriba. */
-        this.luzCara = new THREE.PointLight(0xbcd0e0, 2.6, 1.9, 2.4);
+        /* ROJA. En el juego se le describe siempre igual: "alto, delgado, de
+           cara roja", y en la embestida la cara roja llena la pantalla. */
+        this.luzCara = new THREE.PointLight(0xff2a18, 3.4, 2.2, 2.2);
         this.luzCara.position.set(0, ALTO_BICHO * 0.80, -0.22);
         this.raiz.add(this.luzCara);
         escena.add(this.raiz);
@@ -627,11 +630,13 @@ export class Mision {
             b.estado = 'ronda'; b.alerta = 0;
             this.ruido = 0;
             this.susto = 1.4;
+            this.negro = 1;          // la pantalla se va a negro, como en el juego
             S.grito();
             this.decir('te agarró');
         }
 
         if (this.susto > 0) this.susto = Math.max(0, this.susto - dt * 1.5);
+        if (this.negro > 0) this.negro = Math.max(0, this.negro - dt * 0.9);
 
         if (this.salida.abierta) {
             this.luzSalida.intensity = 14;

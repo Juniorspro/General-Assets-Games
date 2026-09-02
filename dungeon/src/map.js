@@ -278,6 +278,43 @@ export function collide(x, z, y, rad, lowProfile) {
     return [x, z];
 }
 
+/* Distancias a las paredes, medidas EN VIVO.
+   ---------------------------------------------------------------------------
+   No son constantes del generador: se miden desde donde estas parado, cada
+   cuadro, caminando la grilla celda por celda en las cuatro direcciones hasta
+   chocar. Asi el juego sabe de verdad si esta en un pasillo angosto o en el
+   medio de una sala, y no porque alguien lo escribio en una tabla.
+
+   Devuelve metros: cuanto hay hasta la pared en cada sentido, el ancho y el
+   largo del hueco en el que estas, y que tan encajonado estas (0 = sala
+   abierta, 1 = pasillo de una celda).
+
+   El hueco de 62 cm cuenta como pared: para medir el espacio en el que te
+   movés, un agujero por el que solo pasás agachado no es una salida. */
+export function medirParedes(x, z, y, maxCeldas = 14) {
+    const lv = levelAt(y);
+    const [c0, r0] = toCell(x, z);
+    const libre = (c, r) => isOpen(lv, c, r) && !isHole(lv, c, r);
+    const tirar = (dc, dr) => {
+        let n = 0;
+        while (n < maxCeldas && libre(c0 + dc * (n + 1), r0 + dr * (n + 1))) n++;
+        // desde el punto exacto hasta la cara de la pared, no de centro a centro
+        const [cx, cz] = toWorld(c0, r0);
+        const desde = dc ? (dc > 0 ? x - cx : cx - x) : (dr > 0 ? z - cz : cz - z);
+        return n * CELL + CELL / 2 - desde;
+    };
+    const este = tirar(1, 0), oeste = tirar(-1, 0);
+    const sur = tirar(0, 1), norte = tirar(0, -1);
+    const ancho = este + oeste, largo = norte + sur;
+    const menor = Math.min(ancho, largo);
+    return {
+        norte, sur, este, oeste, ancho, largo,
+        // 1 cuando el hueco mide una celda; 0 cuando mide cuatro o mas
+        encajonado: Math.max(0, Math.min(1, (CELL * 4 - menor) / (CELL * 3))),
+        enSala: menor > CELL * 2.5,
+    };
+}
+
 /* Un punto libre cualquiera del nivel, para arrancar la partida. */
 export function spawnOn(lv, rng) {
     for (let i = 0; i < 4000; i++) {

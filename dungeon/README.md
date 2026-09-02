@@ -201,28 +201,62 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
-## El cuerpo en primera persona
+## El cuerpo: un R6 de verdad
 
-Ya no son dos piernas al deslizarse: es un **cuerpo entero** —torso, brazos,
-piernas y botas— puesto en la escena a escala real, con los pies en el piso.
-Al mirar para abajo se ve el pecho y las piernas donde tienen que estar.
+**R6 son seis partes y nada más**: cabeza, torso, dos brazos y dos piernas. No
+tiene codos ni rodillas — es lo que lo hace R6 y no R15, y meterle una rodilla
+sería mentir.
 
-Dos cosas lo hacen funcionar:
+Las medidas son las de Roblox, en **studs**:
 
-- **Sigue el giro pero NO el cabeceo.** La cabeza mira para abajo; el cuerpo
-  se queda derecho. Si acompañara el cabeceo, mirar al piso te acostaría el
-  torso y verías la nuca de tu propio personaje.
-- **Va 2 cm detrás del ojo.** Con 20 cm quedaba entero detrás del plano de la
-  cámara y mirar para abajo no mostraba nada. Se midió.
+| pieza | studs |
+|---|---|
+| torso | 2 × 2 × 1 |
+| brazo | 1 × 2 × 1 |
+| pierna | 1 × 2 × 1 |
+| cabeza | 2 × 1 × 1 con la malla escalada 1,25 → **2,5 × 1,25 × 1,25** |
 
-**Material plano**, como las piernas viejas: el cuerpo pasa a medio metro de
-las arañas del techo y del propio farol, así que con un material que responde
-a la luz los hombros salían **blancos** —medido— y el cuerpo se leía como una
-mancha. Por lo mismo el farol se corrió **35 cm hacia adelante**: encima de la
-cabeza alumbraba los hombros y no el pasillo.
+Alto total **5,25 studs**; el ojo va en el centro de la cabeza, a **4,625**.
 
-Las poses son cuatro: caminar, correr (brazos más flexionados), agachado y
-deslizándose (piernas al frente, brazos atrás).
+Las articulaciones también son las de Roblox: **el hombro va en la esquina de
+arriba y afuera del torso**, no en el centro del costado, y por eso el brazo de
+un R6 cuelga pegado y gira desde el vértice. Ese detalle es medio R6.
+
+El cuerpo se escala para que la cabeza caiga justo en el ojo del juego:
+**0,216 m por stud**, o sea 1,14 m de alto. Las proporciones son exactas; el
+tamaño es el de este juego.
+
+**La animación es la del juego**: brazo derecho con pierna izquierda, todo
+rígido, girando sólo en el hombro y la cadera. Medido sobre el archivo final,
+corriendo: brazo I −0,84 y brazo D +0,84, pierna I +0,74 y pierna D −0,74 — o
+sea contrafase perfecta, y el brazo y la pierna del mismo lado opuestos entre
+sí, como corresponde.
+
+Va **18 cm detrás del ojo**: el techo del torso le queda 13 cm abajo a la
+cabeza, así que pegado ocupa un tercio de pantalla. Roblox directamente
+esconde el cuerpo en primera persona por esto mismo.
+
+## Las paredes se miden en vivo
+
+No son constantes del generador: **se miden desde donde estás parado, cada
+cuadro**, caminando la grilla celda por celda en las cuatro direcciones hasta
+chocar. Así el juego sabe de verdad si está en un pasillo o en el medio de una
+sala, y no porque alguien lo escribió en una tabla.
+
+El hueco de 62 cm cuenta como pared: para medir el espacio en el que te movés,
+un agujero por el que sólo pasás agachado no es una salida.
+
+Y se usa para algo: **en un pasillo angosto el FOV se cierra 7°** y el balanceo
+de la cámara se achica a la mitad. Un pasillo de 2,2 m con el mismo campo que
+una sala de 11 se lee como un tubo de ojo de pez.
+
+Medido en el archivo final: en un pasillo da `ancho 2,20 · largo 6,60 ·
+encajonado 1,00 · sala false`; en la sala de las baldosas, `ancho 37,4 · largo
+8,80 · encajonado 0,00 · sala true`.
+
+```js
+window.__DUNGEON.espacio   // ancho, largo, encajonado, sala
+```
 
 ## Sin barra de aguante
 

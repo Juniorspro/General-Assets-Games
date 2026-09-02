@@ -34,25 +34,31 @@ function ruido(dur) {
     return s;
 }
 
-/* Un golpe sordo: el pie de algo pesado sobre alfombra. */
+/* El paso. NO es un pie: son las puas de acero de los zancos contra el piso,
+   asi suena en el juego —un golpeteo metalico y ritmico, no un golpe sordo—.
+   Sale de un golpe grave con un ping agudo encima, que es lo que hace la
+   diferencia entre "algo camina" y "algo camina en zancos". */
 export function paso(vol) {
     if (!ctx || vol <= 0.002) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
-    o.frequency.setValueAtTime(92, t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.13);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.20);
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(52, t + 0.10);
+    g.gain.setValueAtTime(vol * 0.8, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.15);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.22);
-    // un poco de cuerpo: el roce de la madera
-    const n = ruido(0.09), f = ctx.createBiquadFilter(), gn = ctx.createGain();
-    f.type = 'bandpass'; f.frequency.value = 260; f.Q.value = 1.2;
-    gn.gain.setValueAtTime(vol * 0.5, t);
-    gn.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
-    n.connect(f); f.connect(gn); gn.connect(master);
-    n.start(t); n.stop(t + 0.1);
+    o.start(t); o.stop(t + 0.16);
+    // el ping del acero: dos parciales inarmonicos, cortos
+    for (const [fr, k] of [[1850, 1], [2790, 0.55]]) {
+        const oo = ctx.createOscillator(), gg = ctx.createGain();
+        oo.type = 'triangle';
+        oo.frequency.setValueAtTime(fr, t);
+        gg.gain.setValueAtTime(vol * 0.42 * k, t);
+        gg.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
+        oo.connect(gg); gg.connect(master);
+        oo.start(t); oo.stop(t + 0.1);
+    }
 }
 
 /* La respiracion. Aparece cuando ya esta cerca: es el segundo aviso. */

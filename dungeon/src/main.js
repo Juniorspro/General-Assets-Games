@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import {
     CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
     toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
+    medirParedes,
 } from './map.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
-import { Cuerpo } from './cuerpo.js';
+import { R6 } from './r6.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
 import { despertarAudio } from './sonido.js';
@@ -128,7 +129,7 @@ class Dungeon {
         this.running = false; this.crouch = false;
         this.visited = new Set();
 
-        this.cuerpo = new Cuerpo(this.scene);
+        this.cuerpo = new R6(this.scene, EYE);
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         this.cajasMuebles = [];
 
@@ -162,7 +163,7 @@ class Dungeon {
         this.mats = {
             paper: new THREE.MeshStandardMaterial({
                 map: A.paper ? tex(A.paper, [1, 1]) : null,
-                color: A.paper ? 0xa8bda0 : 0x4c5c44, roughness: 0.92,
+                color: A.paper ? 0x93bcac : 0x44584f, roughness: 0.92,
             }),
             wainscot: new THREE.MeshStandardMaterial({
                 map: A.wainscot ? tex(A.wainscot, [1, 1]) : null,
@@ -635,8 +636,9 @@ class Dungeon {
            poco mas al girar, como si el cuerpo acompanara. */
         const turn = (this.lastYaw === undefined ? 0 : this.yaw - this.lastYaw);
         this.lastYaw = this.yaw;
+        const apretado = this.espacio ? this.espacio.encajonado : 0;
         let wantRoll = clamp(-str * 0.055 - turn * 2.2, -0.11, 0.11)
-            + Math.sin(this.bob * 0.5) * (this.running ? 0.016 : 0.009);
+            + Math.sin(this.bob * 0.5) * (this.running ? 0.016 : 0.009) * (1 - apretado * 0.55);
         // el tiron del deslizamiento: rola fuerte y tiembla mientras dura
         if (sliding) wantRoll += this.slideSide * (0.16 * slideK + 0.03 * Math.sin(this.t * 41) * slideK);
         this.roll = lerp(this.roll, wantRoll, sat(dt * (sliding ? 18 : 7)));
@@ -660,7 +662,11 @@ class Dungeon {
         cam.rotation.set(this.pitch + (sliding ? -0.24 * slideK : 0) + tx,
                          this.yaw, this.roll + tz);
         // el FOV se abre al correr y pega un tiron al deslizar
-        const wantFov = FOV + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
+        /* Y se usa para algo: en un pasillo angosto el FOV se cierra unos
+           grados y el balanceo se achica. Un pasillo de 2,2 m con el mismo
+           campo que una sala de 11 se lee como un tubo de ojo de pez. */
+        const enc = this.espacio ? this.espacio.encajonado : 0;
+        const wantFov = FOV - enc * 7 + (this.running ? 6 : 0) + (sliding ? 22 * slideK : 0);
         if (Math.abs(cam.fov - wantFov) > 0.05) {
             cam.fov = lerp(cam.fov, wantFov, sat(dt * (sliding ? 22 : 5)));
             cam.updateProjectionMatrix();
@@ -671,6 +677,11 @@ class Dungeon {
             ojo: this.eyeY, vel: speed, corriendo: this.running,
             agachado: this.crouch, deslizando: sliding, k: slideK, t: this.t, dt,
         });
+
+        /* Las paredes se miden EN VIVO, no se leen de una tabla: cada cuadro se
+           camina la grilla en las cuatro direcciones hasta chocar. Con eso el
+           juego sabe si estás en un pasillo o en una sala, y lo usa. */
+        this.espacio = medirParedes(this.pos.x, this.pos.z, this.y);
 
         /* La mision y el bicho. El ruido sale de COMO te movés, no de donde
            estás: correr y deslizarse lo hacen, agachado no. */
@@ -794,6 +805,16 @@ class Dungeon {
         }
         const fl = document.getElementById('flash');
         if (fl) fl.style.opacity = (su * 0.45).toFixed(3);
+        const ng = document.getElementById('negro');
+        if (ng) ng.style.opacity = Math.min(1, (M.negro || 0)).toFixed(3);
+
+        // la bolsa: se enciende cada cosa cuando la tenés
+        for (const [id, tiene] of [['i-pinza', M.tienePinza], ['i-llave', M.tieneLlave],
+                                   ['i-tarjeta', M.tieneTarjeta]]) {
+            if (this['_' + id] === tiene) continue;
+            this['_' + id] = tiene;
+            document.getElementById(id).classList.toggle('hay', !!tiene);
+        }
 
         if (M.terminado === 'escapo' && !this._fin) {
             this._fin = true;
@@ -823,7 +844,11 @@ function loop(now) {
             estado: game.mision.bicho.estado, ruido: +game.mision.ruido.toFixed(2),
             atrapadas: game.mision.atrapadas,
         } : null,
-        cuerpo: game.cuerpo ? +game.cuerpo.raiz.scale.x.toFixed(2) : null,
+        cuerpo: game.cuerpo ? +game.cuerpo.raiz.scale.x.toFixed(3) : null,
+        espacio: game.espacio ? {
+            ancho: +game.espacio.ancho.toFixed(2), largo: +game.espacio.largo.toFixed(2),
+            encajonado: +game.espacio.encajonado.toFixed(2), sala: game.espacio.enSala,
+        } : null,
         muebles: (game.cajasMuebles || []).length,
         puestos: game.mision ? game.mision.puestos : 0,
         shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,
