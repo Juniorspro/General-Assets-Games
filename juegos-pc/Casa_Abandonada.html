@@ -2966,6 +2966,7 @@ function tick(){
 /* ══════════ sondas de medicion (no tocan el juego) ══════════ */
 window.__casa={
   ver:'v14',
+  fundido(){ return _FUND; },
   est(){ const i=renderer.info; i.autoReset=false; return {
     llamadas:i.render.calls, triangulos:i.render.triangles,
     programas:i.programs?i.programs.length:-1,
@@ -2975,6 +2976,30 @@ window.__casa={
     fondo:scene.background?'#'+scene.background.getHexString():null,
     hijos:scene.children.length, estado:state }; },
   cero(){ renderer.info.autoReset=false; renderer.info.reset(); return 'listo'; },
+  /* de donde salen las llamadas de dibujo: una malla = una llamada (salvo
+     instanciadas). Agrupa por material para ver que se podria fundir. */
+  composicion(){
+    const M=new Map(); let n=0, tri=0, inst=0;
+    scene.traverse(o=>{
+      if(!(o.isMesh||o.isLine||o.isPoints)) return;
+      n++;
+      if(o.isInstancedMesh) inst++;
+      const g=o.geometry;
+      if(g){ const pa=g.attributes&&g.attributes.position;
+        tri += g.index? g.index.count/3 : (pa? pa.count/3 : 0); }
+      let m=o.material; if(Array.isArray(m)) m=m[0];
+      let k='nada';
+      if(m){ let col='-'; try{ if(m.color) col=m.color.getHexString(); }catch(e){}
+        k=m.type+'/'+(m.map?'map':'plano')+'/#'+col+(m.transparent?'/tr':''); }
+      const e=M.get(k)||{n:0,tri:0}; e.n++; if(g&&g.attributes&&g.attributes.position)
+        e.tri += g.index? g.index.count/3 : g.attributes.position.count/3;
+      M.set(k,e);
+    });
+    const top=[...M.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,12)
+      .map(([k,v])=>k+'  ×'+v.n+'  ('+Math.round(v.tri)+' tri)');
+    return {mallas:n, instanciadas:inst, triangulos:Math.round(tri),
+            materiales:M.size, top};
+  },
   jug(){ return {x:+P.x.toFixed(3),z:+P.z.toFixed(3),y:+P.y.toFixed(3),
     yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),nivel:P.level,
     bobY:+P.bobY.toFixed(4),bobX:+P.bobX.toFixed(4),roll:+P.roll.toFixed(4),
@@ -3022,6 +3047,91 @@ window.__casa={
     return v; },
   pon(k,v){ if(k==='fov'){camera.fov=v;camera.updateProjectionMatrix();} return this.est(); }
 };
+
+/* ══════════ fundir lo estatico ══════════
+   MEDIDO ANTES DE TOCAR NADA: 798 mallas para 10.787 triangulos con solo 41
+   materiales distintos, o sea 673 llamadas de dibujo por cuadro. El peor grupo
+   son 223 mallas que comparten UN material y suman 2.676 triangulos — doce
+   triangulos cada una. Una malla es una llamada de dibujo, asi que se estaba
+   pagando el precio de un mundo grande para dibujar una casa chica.
+
+   Se funden solo las que se puede probar que no molestan:
+   · hijos DIRECTOS de la escena (lo que cuelga de un grupo se queda: las
+     puertas son grupos y su bisagra los mueve),
+   · opacas — fundir transparentes cambia el orden de dibujo y eso se ve,
+   · un solo material, sin morphs ni esqueleto,
+   · y que no esten en ninguna de las listas que el juego anima.
+
+   LAS COLISIONES NO SE ENTERAN: viven en COL como cajas planas, separadas de
+   las mallas. Por eso esto se puede hacer sin tocar el choque. */
+function fundirEstatico(){
+  const prot=new Set();
+  const marcar=e=>{ if(!e) return;
+    if(e.isObject3D){ e.traverse(x=>prot.add(x)); return; }
+    if(typeof e==='object') for(const k in e){ const v=e[k];
+      if(v&&v.isObject3D) v.traverse(x=>prot.add(x)); } };
+  // las listas que el juego mueve, prende, abre o hace caer
+  [INTER,sway,doors,papers,fallers,swingers,shutters,bulbs].forEach(L=>{
+    if(Array.isArray(L)) L.forEach(marcar); });
+
+  const grupos=new Map();
+  for(const o of scene.children){
+    if(!o.isMesh||o.isInstancedMesh||o.isSkinnedMesh) continue;
+    if(prot.has(o)) continue;
+    const g=o.geometry, m=o.material;
+    if(!g||!g.attributes||!g.attributes.position) continue;
+    if(Array.isArray(m)||!m) continue;
+    if(m.transparent||m.alphaTest>0) continue;      // el orden de dibujo importa
+    if(g.morphAttributes&&Object.keys(g.morphAttributes).length) continue;
+    const k=m.uuid+'|'+(o.castShadow?1:0)+'|'+(o.receiveShadow?1:0)+'|'+(o.renderOrder||0);
+    if(!grupos.has(k)) grupos.set(k,{m,cast:o.castShadow,rec:o.receiveShadow,
+                                    ro:o.renderOrder||0,l:[]});
+    grupos.get(k).l.push(o);
+  }
+
+  let fundidas=0, mallas=0;
+  let vSrc=0, sSrc=0, vDst=0, sDst=0;   // firma: cantidad de vertices y suma ponderada
+  for(const {m,cast,rec,ro,l} of grupos.values()){
+    if(l.length<2) continue;
+    const P=[],N=[],U=[];
+    const nm=new THREE.Matrix3();
+    for(const o of l){
+      o.updateWorldMatrix(true,false);
+      const g=o.geometry.index? o.geometry.toNonIndexed() : o.geometry;
+      const pa=g.attributes.position, na=g.attributes.normal, ua=g.attributes.uv;
+      nm.getNormalMatrix(o.matrixWorld);
+      const v=new THREE.Vector3();
+      for(let i=0;i<pa.count;i++){
+        v.fromBufferAttribute(pa,i).applyMatrix4(o.matrixWorld);
+        P.push(v.x,v.y,v.z);
+        vSrc++; sSrc+=v.x*0.7548776662+v.y*0.5698402909+v.z*0.3247179572;
+        if(na){ v.fromBufferAttribute(na,i).applyMatrix3(nm).normalize();
+                N.push(v.x,v.y,v.z); } else N.push(0,1,0);
+        if(ua) U.push(ua.getX(i),ua.getY(i)); else U.push(0,0);
+      }
+      if(g!==o.geometry) g.dispose();
+    }
+    const ng=new THREE.BufferGeometry();
+    ng.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+    ng.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+    ng.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+    ng.computeBoundingSphere();
+    { const pa=ng.attributes.position;
+      for(let i=0;i<pa.count;i++){ vDst++;
+        sDst+=pa.getX(i)*0.7548776662+pa.getY(i)*0.5698402909+pa.getZ(i)*0.3247179572; } }
+    const nmesh=new THREE.Mesh(ng,m);
+    nmesh.castShadow=cast; nmesh.receiveShadow=rec; nmesh.renderOrder=ro;
+    nmesh.matrixAutoUpdate=false;   // ya esta todo horneado en los vertices
+    for(const o of l){ scene.remove(o); o.geometry.dispose(); }
+    scene.add(nmesh);
+    fundidas+=l.length; mallas++;
+  }
+  return {fundidas, mallas, grupos:grupos.size,
+          vertices:vSrc, vertices_igual:vSrc===vDst,
+          firma_dif:Math.abs(sSrc-sDst),
+          identico: vSrc===vDst && Math.abs(sSrc-sDst)<1e-6*Math.max(1,Math.abs(sSrc))};
+}
+const _FUND=fundirEstatico();
 
 tick();
 })();
