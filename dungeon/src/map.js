@@ -278,6 +278,34 @@ export function collide(x, z, y, rad, lowProfile) {
     return [x, z];
 }
 
+/* Rescate: si el jugador quedo DENTRO de algo solido, lo saca.
+   ---------------------------------------------------------------------------
+   El empuje normal saca de una caja, pero con dos cajas encontradas —una pared
+   y un mueble, por ejemplo— cada una te devuelve a la otra y quedas trabado.
+   Esto es la red: se comprueba si la celda donde estas es solida de verdad y,
+   si lo es, se salta a la celda abierta mas cercana. No corrige de a poco: te
+   pone donde se puede estar y listo. */
+export function rescatar(x, z, y, lowProfile) {
+    const lv = levelAt(y);
+    const [c0, r0] = toCell(x, z);
+    const bien = (c, r) => isOpen(lv, c, r) || (lowProfile && isHole(lv, c, r));
+    if (bien(c0, r0)) return null;
+    let mejor = null, dm = 1e9;
+    for (let d = 1; d <= 3 && !mejor; d++) {
+        for (let dr = -d; dr <= d; dr++) {
+            for (let dc = -d; dc <= d; dc++) {
+                if (Math.max(Math.abs(dc), Math.abs(dr)) !== d) continue;
+                const c = c0 + dc, r = r0 + dr;
+                if (!isOpen(lv, c, r)) continue;
+                const [wx, wz] = toWorld(c, r);
+                const dd = (wx - x) ** 2 + (wz - z) ** 2;
+                if (dd < dm) { dm = dd; mejor = [wx, wz] }
+            }
+        }
+    }
+    return mejor;
+}
+
 /* Distancias a las paredes, medidas EN VIVO.
    ---------------------------------------------------------------------------
    No son constantes del generador: se miden desde donde estas parado, cada

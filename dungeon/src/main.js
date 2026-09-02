@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {
     CELL, WALL_H, LEVEL_H, W, H, LEVELS, STAIRS, STAIR_BOXES, Rng,
     toWorld, toCell, isOpen, isStairCell, isHole, HOLE_H, surfaceAt, levelAt, collide, spawnOn,
-    medirParedes,
+    medirParedes, rescatar,
 } from './map.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
 import { R6 } from './r6.js';
@@ -452,6 +452,9 @@ class Dungeon {
         /* El navegador no deja sonar hasta que hay un gesto del usuario, asi
            que el audio se despierta con el primer toque, click o tecla. */
         const arranque = () => despertarAudio();
+        // apenas hay un dedo, salen los controles tactiles
+        addEventListener('touchstart', () => document.body.classList.add('tactil'),
+            { once: true, passive: true });
         for (const ev of ['pointerdown', 'touchstart', 'keydown'])
             addEventListener(ev, arranque, { once: false, passive: true });
         addEventListener('keydown', e => {
@@ -585,7 +588,11 @@ class Dungeon {
         const wantSlide = !!this.slideRequested;
         this.slideRequested = false;
         if (this.slideT > 0) this.slideT -= dt;
-        else if (wantSlide && this.slideCd <= 0 && this.running && Math.hypot(fwd, str) > 0.35) {
+        /* Alcanza con estar MOVIENDOSE. Antes pedia ir corriendo, y en el
+           celular eso significa empujar el joystick pasado el 70%: el que
+           tocaba DESLIZAR caminando no veia pasar nada y el boton parecia
+           roto. */
+        else if (wantSlide && this.slideCd <= 0 && Math.hypot(fwd, str) > 0.25) {
             this.slideT = SLIDE_TIME;
             this.slideCd = SLIDE_TIME + SLIDE_COOLDOWN;
             this.slideDir = null;
@@ -622,15 +629,36 @@ class Dungeon {
         // agachado o deslizando se pasa por los huecos de las paredes
         const low = sliding || this.crouch;
         let nx = this.pos.x + vx * dt, nz = this.pos.z + vz * dt;
-        [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
+        /* Los muebles PRIMERO y las paredes despues. Al reves, el mueble te
+           empujaba adentro de una pared, la pared te devolvia al mueble y
+           quedabas rebotando entre los dos sin poder salir. La pared tiene la
+           ultima palabra porque es la que no se puede atravesar. */
         [nx, nz] = chocarMuebles(this.cajasMuebles, nx, nz, this.y, RADIUS * 0.8);
+        [nx, nz] = collide(nx, nz, this.y, sliding ? RADIUS * 0.7 : RADIUS, low);
+
+        /* Y la red: si igual quedaste dentro de algo solido, se sale de una vez
+           a la celda abierta mas cerca. Pasa al pararse adentro de un hueco de
+           62 cm, o al reaparecer encima de una pared. */
+        const salvado = rescatar(nx, nz, this.y, low);
+        if (salvado) { nx = salvado[0]; nz = salvado[1]; this.rescates = (this.rescates || 0) + 1 }
         this.pos.set(nx, 0, nz);
 
-        // la altura sigue la superficie: escaleras arriba y abajo sin fisica
+        /* La altura sigue la superficie. El salto entre niveles se hace de
+           GOLPE y no interpolando: mientras interpolabas, `levelAt(y)` ya
+           devolvia el otro nivel y la colision usaba la grilla equivocada —
+           por eso habia paredes que se atravesaban y pisos por los que se
+           caia. Solo se suaviza el escalon chico de una escalera. */
         const surf = surfaceAt(nx, nz, this.y);
-        if (surf !== null) this.y = lerp(this.y, surf, sat(dt * 14));
+        if (surf !== null) {
+            this.y = Math.abs(surf - this.y) > LEVEL_H * 0.4
+                ? surf
+                : lerp(this.y, surf, sat(dt * 22));
+        }
 
         this.bob += dt * (moving > 0.05 ? (this.running ? 13 : 8.5) : 0);
+        // cuanto baja por segundo: con eso se sabe si esta cayendo
+        this._caida = Math.max(0, ((this._yprev ?? this.y) - this.y) / Math.max(dt, 1e-4));
+        this._yprev = this.y;
 
         /* Inclinacion al moverse: rola hacia el lado al que se desplaza y un
            poco mas al girar, como si el cuerpo acompanara. */
@@ -676,6 +704,8 @@ class Dungeon {
             x: this.pos.x, y: this.y, z: this.pos.z, yaw: this.yaw,
             ojo: this.eyeY, vel: speed, corriendo: this.running,
             agachado: this.crouch, deslizando: sliding, k: slideK, t: this.t, dt,
+            empujando: !!this.mision.empujando,
+            cayendo: (this._caida || 0) > 0.9,
         });
 
         /* Las paredes se miden EN VIVO, no se leen de una tabla: cada cuadro se
@@ -758,7 +788,7 @@ class Dungeon {
             document.getElementById('level').textContent = LEVELS[lv].name;
         }
         // el boton de deslizar se enciende solo cuando hay carrera que aprovechar
-        const canSlide = this.running && this.slideCd <= 0;
+        const canSlide = this.slideCd <= 0 && !this.crouch;
         if (this._canSlide !== canSlide) {
             this._canSlide = canSlide;
             this.slideBtn && this.slideBtn.classList.toggle('on', canSlide);
@@ -850,6 +880,7 @@ function loop(now) {
             encajonado: +game.espacio.encajonado.toFixed(2), sala: game.espacio.enSala,
         } : null,
         muebles: (game.cajasMuebles || []).length,
+        rescates: game.rescates || 0,
         puestos: game.mision ? game.mision.puestos : 0,
         shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,
         fov: +game.camera.fov.toFixed(1),

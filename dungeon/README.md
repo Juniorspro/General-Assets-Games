@@ -236,6 +236,55 @@ Va **18 cm detrás del ojo**: el techo del torso le queda 13 cm abajo a la
 cabeza, así que pegado ocupa un tercio de pantalla. Roblox directamente
 esconde el cuerpo en primera persona por esto mismo.
 
+### Los estados de animación
+
+Un paquete de animación de Roblox trae **siete**: Run, Walk, Fall, Jump, Idle,
+Swim y Climb. El script `Animate` agrega encima **dos idles** —uno quieto y
+otro de *mirar alrededor* que salta cada tanto—, sentarse y las poses de
+herramienta. Acá están los que este juego usa de verdad más los propios:
+
+| estado | qué hace |
+|---|---|
+| **idle** | respira: los hombros se mecen 0,035 rad |
+| **idle 2** | cada 9–15 s mira alrededor — es lo que separa un idle de una estatua |
+| **walk** | brazos 0,55 / piernas 0,50, con rebote de 6 cm |
+| **run** | brazos 0,85 / piernas 0,75, rebote 10 cm y torso inclinado |
+| **fall** | brazos arriba y abiertos, piernas sueltas |
+| **crouch** | caderas a 0,85, brazos pegados, torso adelante |
+| **slide** | piernas al frente, brazos atrás, torso tirado |
+| **push** | los dos brazos al frente, a la altura del cubo |
+
+Los estados **se mezclan**, no saltan: interpolan a 13/s. Un R6 que cambia de
+pose de un cuadro al otro se ve como un glitch.
+
+### La cabeza no se dibuja
+
+El ojo está adentro de ella, así que al caminar se le veía la nuca por dentro
+y al mirar para abajo tapaba medio cuadro. Roblox esconde el personaje entero
+en primera persona por esto mismo; acá se esconde sólo la cabeza y el cuerpo
+queda.
+
+## Los tres bugs que trababan el juego
+
+**Paredes que se atravesaban y pisos por los que se caía.** El salto entre
+niveles se interpolaba, y mientras interpolabas `levelAt(y)` ya devolvía el
+otro nivel: la colisión usaba la grilla equivocada. Ahora el salto grande es
+**de golpe** y sólo se suaviza el escalón chico de una escalera.
+
+**Quedarse trabado.** Los muebles chocaban *después* de las paredes, así que
+el mueble te empujaba dentro de una pared, la pared te devolvía al mueble y
+rebotabas entre los dos. Ahora los muebles van **primero** y la pared tiene la
+última palabra. Encima hay una red: si igual quedaste dentro de algo sólido,
+`rescatar()` te saca a la celda abierta más cercana. **Barrido de las 271
+celdas sólidas del nivel: 0 sin salida.**
+
+**El botón de deslizar parecía roto.** Pedía ir corriendo, y en el celular eso
+significa empujar el joystick pasado el 70%: el que lo tocaba caminando no
+veía pasar nada. Ahora **alcanza con estar moviéndose**. Y los botones
+táctiles aparecen con la media query **y también** con una clase que el juego
+pone apenas ve un dedo — había teléfonos donde la media query no daba y el
+jugador se quedaba sin joystick, sin USAR y sin DESLIZAR.
+
 ## Las paredes se miden en vivo
 
 No son constantes del generador: **se miden desde donde estás parado, cada
