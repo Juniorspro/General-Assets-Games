@@ -374,6 +374,181 @@ esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** mie
 es que se ve, que camina, que caza y que te alcanza.
 
 
+### Octogésima tercera vuelta (2026-09-02): **PUERTA BLANCA** — el nivel 6 no se podía recorrer
+
+Pedido: *"arregla todos los posibles bugs y errores que hayan en el nivel 6, arregla hasta los errores
+más pequeños"*. Veintiséis, y los cinco que importan no se ven en ninguna captura.
+
+#### EL DEFECTO DE FONDO: NO HABÍA FORMA DE SABER SI EL LOCAL SE PODÍA CAMINAR
+
+Es la lección de la vuelta. Todo lo que se había medido del nivel 6 era «el jugador junta las cuatro
+partes» probado **teletransportándolo** a cada una con `irA()`, así que ninguna prueba tocaba nunca la
+pregunta de si se puede LLEGAR. Entró `__pb.auditoria()`: una rejilla de 20 cm sobre el local, cada
+celda libre si el **centro** del jugador cabe ahí —fuera de toda caja inflada por su radio y de todo
+círculo— y un relleno desde donde aparece. Si una parte no cae dentro del relleno, el nivel no se puede
+terminar.
+
+Y contestó dos cosas que ninguna foto muestra:
+
+- **EL BAÑO ERA UN CORREDOR DE 85 CENTÍMETROS CONTRA UN JUGADOR DE 84.** Los tabiques iban de z=13 a
+  16,6 y la puerta entra por x=13 entre z 12,15 y 14,6: el único paso a los otros compartimientos era
+  la franja z 12,15..13. Y por el norte tampoco, porque las piletas cruzaban de pared a pared dejando
+  60 cm. Con 85 cm el jugador queda **dentro de las dos cajas infladas a la vez** y el resolutor
+  —que hace una sola pasada— lo empuja en sentidos opuestos: no es «apretado», es quedarse trabado.
+- **EL DEPÓSITO, LO MISMO:** estanterías de z 13 a 20,5 dejando 0,85 al sur y 1,05 al norte.
+  Tabiques a 14,2..17,2 y estanterías a 13,5..19,5: los corredores pasan a 2,05 m.
+
+Medido al cerrar: **28.152 de 28.152 celdas libres alcanzables, cero sueltas**, y las cuatro partes, la
+bandeja y la salida dentro del relleno.
+
+#### TRES DE LAS CUATRO PARTES ESTABAN ADENTRO DE UN MUEBLE
+
+Y no se ve como un objeto tapado: se ve como un objeto que **no existe**, porque flota a 1,15 m dentro
+de una caja opaca. El pan caía dentro de la segunda estantería del depósito (x −17,4..−16,3), el queso
+dentro del estante del medio de la cámara (z 7,2..7,8) y la tapa dentro de un tabique del baño
+(x 8,55..8,85). Las tres pasan al pasillo de su ambiente, y la auditoría ahora comprueba las dos cosas
+por separado: que se **llegue** y que no esté **tapada**.
+
+**Y UNA TELA ESTABA A 58 CENTÍMETROS DE LA CARNE.** Eso salió jugando y no leyendo: la partida completa
+devolvió `atrapado 2,79` sin que el jugador hubiera pisado ninguna tela a propósito. La del piso de la
+cocina estaba en (−14 · 6,5) y la carne en (−13,5 · 6,8), o sea que agacharse a juntarla te dejaba
+pegado tres segundos **siempre**. Una tela en el camino es el mecanismo; una tela encima de lo que hay
+que juntar es un peaje.
+
+#### EL GRAFO DE LA ARAÑA PROMETÍA LÍNEA LIMPIA Y CUATRO DE SUS DOCE ARCOS NO LA TENÍAN
+
+El comentario decía «entre dos nodos vecinos SIEMPRE hay línea limpia, por construcción». Era falso en
+cuatro sitios, y uno era de bulto: **el arco de (1,5 · 15,5) a (18 · 16) atravesaba EL BAÑO ENTERO** —
+sus dos paredes y los tres tabiques—, porque el pasillo trasero no pasa por ahí: el baño ocupa x 5..13
+de z 12 a 18 y el paso libre es por z 18..21,7. Los otros tres cruzaban la estantería alta de la cocina
+(2,2 m), el estante del medio de la cámara (1,9 m) y dos estanterías del depósito (2,4 m).
+
+Diecisiete nodos y diecisiete arcos nuevos, **los diecisiete verificados por muestreo cada 25 cm contra
+cada caja del local**, reportando la más alta que cruzan. Y para eso las cajas tuvieron que aprender a
+guardar su altura: sin eso no hay forma de distinguir una mesada de 95 cm —que la araña pasa por encima,
+su cuerpo vive en 1,62— de una pared de 3,6. `arcosSucios: []` y `nodosSucios: []`.
+
+#### EL SCREAMER ENCUADRABA A LA CRIATURA DEL NIVEL 1
+
+`triggerScreamer('spider', ARA.g)` y **no había una sola rama que mirara ese `kind`**: caía al `else`,
+así que el plano del susto movía `entityGroup` —el bicho del campo— hasta la cara del jugador y lo
+posaba con `poseEntity`, mientras la araña se quedaba quieta donde te había agarrado. El `scream.ref`
+que se le pasa no lo leía nadie.
+
+Y encuadrarla bien costó tres capturas y una medición, porque **el plano de una araña no es el plano de
+una cabeza**:
+
+1. **La cara terminaba a 76 centímetros del lente.** `dist` coloca el **origen** del grupo, y en los
+   otros seis sustos la cara está a diez o veinte centímetros del origen. La de la araña está a
+   **1,44 m** —sus ocho ojos viven en z = +1,44 local— así que con el origen a 2,2 la cara quedaba a
+   0,76. Medido con una sonda nueva que proyecta los ojos y el abdomen a coordenadas de cámara:
+   `ojoCamZ −0,87`. Un racimo de ojos de 38 cm a esa distancia no se lee, tapa. Con el origen a 3,05 la
+   cara queda a 1,6 m y los ojos caen en **x 0,497 · y 0,413** del cuadro.
+   Esa sonda contestó además la pregunta que yo estaba por responder mirando: `deFrente: true` en los
+   tres instantes. Lo que yo leía como «se ve la panza» eran las **ocho rodillas por encima del lomo**,
+   que es justamente la silueta que se buscaba.
+2. **El foco quemaba la quitina.** Con la intensidad de los sustos humanos (8,5) y un bicho de 1,9 m de
+   abdomen a dos metros, la captura salía blanco puro y no se distinguía una pata de la panza. Va en
+   **1,1** con relleno 0,25, y la luz roja de la araña **baja** en vez de subir: es una luz de ambiente
+   para verla doblar una esquina a diez metros, y a dos la tiñe entera.
+3. **Y LOS OCHO OJOS PASABAN POR EL TONE MAPPING.** three.js tonemapea **todos** los materiales,
+   también los `MeshBasic`, y ACESFilmic convierte ese rojo en un rosa pálido del mismo valor que la
+   quitina iluminada. Con `toneMapped:false` el rojo sale rojo, y detrás va una placa casi negra
+   —también sin tonemapear, así que ningún flash la puede levantar— que es además la cara que tiene una
+   araña de verdad.
+
+Más una pose propia (`araGrito`): las cuatro patas de adelante se levantan y se abren, las cuatro de
+atrás se quedan apoyadas a otra frecuencia —con las ocho levantadas el bicho flota— y los colmillos se
+abren. Y se encabrita **subiendo el cuerpo entero** y no inclinando el grupo: inclinarlo alrededor de su
+origen mete las patas traseras un metro bajo el piso.
+
+#### `stPiezas` DECÍA «PARA FUNDIR AL FINAL» Y NADIE FUNDÍA NADA
+
+Un array vivo que no leía nadie y un comentario que describía algo que no pasaba. Medido: con las cajas
+sueltas el local costaba **331 llamadas de dibujo** mirando hacia el depósito y 328 en el salón. Una
+caja suelta es una llamada.
+
+No hay `BufferGeometryUtils` —el juego baja `three.min.js` de un CDN y nada más— así que la fusión va a
+mano en treinta líneas, con índice en **Uint32**: el salón solo pasa de 65.535 vértices y el desborde no
+avisa, dibuja triángulos que apuntan a cualquier lado.
+
+| | antes | ahora |
+|---|---|---|
+| salón hacia el frente | 51 | **18** |
+| salón hacia el mostrador | 328 | **75** |
+| cocina | 106 | **77** |
+| cámara | 29 | **21** |
+| depósito | 331 | **49** |
+| baño | 31 | **28** |
+
+**359 piezas → 15 mallas**, y no cambia un píxel. De paso los **40 pelos y los 8 ojos** de la araña, que
+eran cuarenta y ocho llamadas para cosas que no se mueven respecto del cuerpo, y las **nueve franjas del
+cartel de menú**, que creaban un material por franja.
+
+Y ahí apareció una fragilidad que la fusión iba a romper en silencio: la altura del cefalotórax se
+escribía como **`ARA.g.children[0].position.y`**, o sea apoyada en el ORDEN en que se construye el
+bicho. Agregar una pieza antes movía el índice y el cabeceo pasaba a mover otra cosa, sin fallar.
+
+#### LOS VENTANALES DEL FRENTE NO SE VEÍAN
+
+Estaban desde el primer día y el comentario decía que eran «lo único que deja entrar luz de afuera».
+Fotografiado desde el salón, el frente del local era **una pared de azulejo lisa**: un plano celeste al
+30 % de opacidad delante de una pared gris, con la pared opaca detrás y la noche del otro lado. Y encima
+ocupaba **exactamente el mismo z que la pared** (−16,85 a −16,55), o sea dos caras en el mismo plano.
+
+Un ventanal de noche no es un vidrio transparente: es un **rectángulo oscuro con el marco claro**. Ahora
+hay un panel de noche —un lienzo de 32 píxeles con el degradado del asfalto mojado y tres luces
+lejanas—, la carpintería con antepecho, dintel, jambas y parteluz, y el vidrio por delante para el
+brillo. Y la carpintería va **pintada y no cromo**: con metalness alto y sin mapa de entorno no hay nada
+que reflejar y el marco sale más oscuro que la pared, o sea al revés de lo que tiene que pasar.
+
+#### SIETE DEFECTOS MÁS, TODOS CHICOS Y TODOS REALES
+
+- **La pared sur de la cámara no tenía choque:** 3,6 m de alto y se cruzaba caminando, y del otro lado
+  hay una franja muerta de 65 cm.
+- **Las sillas se atravesaban.** El obstáculo era el radio de la **mesa** (0,78) y las sillas viven a
+  1,25: el jugador frenaba a 1,20 del centro, con el cuerpo metido dentro de la silla. Va como **un**
+  círculo de 1,55 y no cinco: cinco círculos superpuestos se empujan entre ellos y dejan al jugador
+  trabado, porque el resolutor hace una sola pasada.
+- **La araña reaparecía hundida.** Se construía en y=0,11 y `resetStore` lo pisaba con 0, así que la
+  primera vida la tenía apoyada y todas las demás enterradas hasta el tobillo. El número vive en un solo
+  sitio y salió de medir la caja envolvente: con 0,11 el piso daba **0,07**, o sea flotando. En 0,04 da
+  **0,00 en los tres instantes** que se midieron.
+- **`shakeAmount` con `Math.max` sobre una variable que nadie pone en cero.** Cada nivel la **escribe**
+  una vez por cuadro y ya; un `Math.max` sólo puede subir, así que el temblor de la tela quedaba puesto
+  para siempre. Se asigna.
+- **No había viñeta ni sacudón por cercanía**, y los otros cinco niveles los escriben todos los cuadros:
+  la única manera de saber que la tenías detrás era darse vuelta.
+- **`resetStore` no limpiaba lo que dejaba el screamer.** No pasa por `hideAllLevels` —sólo lo llaman el
+  agarrón y el arranque del nivel— así que el foco del susto, la flecha que apunta a la salida y la
+  viñeta se quedaban encendidos en la vida siguiente.
+- **Y `entityProximity` quedaba puesto al terminar el juego**, que es de los seis niveles y no sólo del
+  local: el bucle deja de llamar a `updateMovement` en `end` pero `updateTape` sigue corriendo, así que
+  la pantalla final heredaba el glitch del último cuadro con la cosa encima.
+- Más la pared norte de la cámara **duplicada** (la de cocina/pasillo en z=12 ya cubre x 3..23,7), un
+  hueco de dos celdas detrás de las piletas que el relleno no alcanzaba, y el código muerto:
+  `ARA.aturdida` —una guarda que nadie encendía nunca—, `ARA.comeT`, dos estados que no existen,
+  `ST.salidaAviso` y una propiedad `amb` colgada de un array.
+
+#### MEDIDO AL CERRAR
+
+Auditoría: **28.152 de 28.152 celdas alcanzables · 0 sueltas · 4 de 4 partes alcanzables y ninguna
+tapada · bandeja y salida alcanzables · 0 arcos sucios · 0 nodos sucios · 359 piezas en 15 mallas**.
+Partida completa por el mismo camino que usa el jugador: la bandeja **rechaza** la parte fuera de orden
+(`puestas 0` con sólo el queso), las cuatro se juntan y se arman en orden (`puestas 4`, `hecho`), y la
+puerta de atrás lleva a `end`. Cadena **5 → 6** verificada forzando `dunDone` y cruzando el portón.
+Tela: `atrapado 2,59`, la araña pasa a **caza a 5,0** en el acto, y suelta a los tres segundos. Agarrón:
+screamer con la araña **de frente** (`deFrente: true`, ojos a 1,68 m en x 0,497), y el reinicio devuelve
+las partes a `[false,false,false,false]` con el jugador en **(0 · −13)**, la araña en `ronda` a 32 m y la
+viñeta apagada. Los **siete estados** cargan, con el cielo del nivel 1 intacto (foto 1536×768, 4
+especies, 20 flores, 63.700 triángulos). `window.__errs` vacío en las trece corridas. El HTML pasó de
+1,52 a **1,54 MB**.
+
+**LO QUE NO PUDE COMPROBAR:** las flores gigantes del nivel 1 siguen plantándose con giro al azar, así
+que algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Sigue pendiente de la
+vuelta 81 y es otra vuelta: hay que medir una vez, por modelo, hacia dónde mira la cabeza.
+
+
 ### Octogésima vuelta (2026-09-01): **BARRIO** — la cámara de la cinemática se queda fija
 
 Pedido, después de que la vuelta anterior bajara las amplitudes a la mitad y siguiera temblando:

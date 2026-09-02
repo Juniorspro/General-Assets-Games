@@ -141,7 +141,8 @@ JS = r"""
                     (x1 + x2) / 2, y0 + h / 2, (z1 + z2) / 2);
     if (!sinChoque) {
       stBoxes.push({ minX: Math.min(x1, x2), maxX: Math.max(x1, x2),
-                     minZ: Math.min(z1, z2), maxZ: Math.max(z1, z2) });
+                     minZ: Math.min(z1, z2), maxZ: Math.max(z1, z2),
+                     y0: y0, y1: y1 });
     }
     return m;
   }
@@ -187,7 +188,9 @@ JS = r"""
     // camara frigorifica, al este de la cocina
     stMuro(13, 3.4, 13, 6.2);
     stMuro(13, 8.2, 13, 11.7);      // el hueco 6,2..8,2 es su puerta
-    stMuro(13, 11.7, 23.7, 11.7);
+    // (la pared norte de la camara la hace ya la de cocina/pasillo en z=12, que
+    //  cubre x 3..23,7: una segunda en 11,7 era un muro doble de 60 cm que
+    //  nadie ve desde ningun lado y una caja de choque de mas)
 
     // deposito, al oeste del pasillo
     stMuro(-9, 12, -9, 17.5);       // el hueco 17,5..21,7 es su puerta
@@ -210,9 +213,49 @@ JS += r"""
       color: 0x9fc4d8, roughness: 0.12, metalness: 0.0,
       transparent: true, opacity: 0.30
     });
+    // EL FRENTE ERA UNA PARED DE AZULEJO Y NADA MAS. Los siete ventanales
+    // estaban puestos desde el primer dia y no se veian: un plano celeste al
+    // 30 % de opacidad delante de una pared gris, con la pared OPACA detras y
+    // la noche del otro lado. Fotografiado desde el salon, el frente del local
+    // era un muro liso — y el comentario decia que eran "lo unico que deja
+    // entrar luz de afuera", que es una descripcion de algo que no pasaba.
+    // UN VENTANAL DE NOCHE NO ES UN VIDRIO TRANSPARENTE: es un rectangulo
+    // OSCURO con el marco claro. Eso se lee de una sin tocar la pared, y ademas
+    // es lo que se ve de verdad — la pared es opaca, asi que el panel oscuro ES
+    // el afuera.
+    const noche = (function () {
+      const c = document.createElement('canvas'); c.width = 32; c.height = 64;
+      const g = c.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, 0, 64);
+      gr.addColorStop(0, '#04060b');
+      gr.addColorStop(0.60, '#070a11');
+      gr.addColorStop(1, '#161d26');          // el asfalto mojado de la calle
+      g.fillStyle = gr; g.fillRect(0, 0, 32, 64);
+      // tres luces lejanas: es lo unico que dice que del otro lado hay algo, y
+      // cuestan un lienzo de 32 pixeles
+      [[6, 45, 6], [19, 41, 4], [27, 48, 3]].forEach(function (p) {
+        const h = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], p[2]);
+        h.addColorStop(0, 'rgba(255,212,148,0.95)');
+        h.addColorStop(1, 'rgba(255,212,148,0)');
+        g.fillStyle = h; g.beginPath(); g.arc(p[0], p[1], p[2], 0, 6.3); g.fill();
+      });
+      const t = new THREE.CanvasTexture(c);
+      if (THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
+      return new THREE.MeshBasicMaterial({ map: t });
+    })();
+    // carpinteria pintada y no cromo: con metalness alto y sin mapa de entorno
+    // no hay nada que reflejar y el marco sale mas oscuro que la pared, o sea
+    // al reves de lo que tiene que pasar
+    const carp = new THREE.MeshStandardMaterial({ color: 0xbcc2c9, roughness: 0.46, metalness: 0.12 });
     for (let i = 0; i < 7; i++) {
       const x = -19 + i * 6.3;
-      stCaja(x - 2.6, -16.85, x + 2.6, -16.55, 0.9, 2.9, vidrio, true);
+      stCaja(x - 2.6, -16.53, x + 2.6, -16.49, 0.9, 2.9, noche, true);   // la noche
+      stCaja(x - 2.6, -16.47, x + 2.6, -16.44, 0.9, 2.9, vidrio, true);  // el brillo del vidrio
+      stCaja(x - 2.74, -16.54, x + 2.74, -16.38, 0.76, 0.9, carp, true); // antepecho
+      stCaja(x - 2.74, -16.54, x + 2.74, -16.38, 2.9, 3.04, carp, true); // dintel
+      stCaja(x - 2.74, -16.54, x - 2.6, -16.38, 0.76, 3.04, carp, true); // jamba oeste
+      stCaja(x + 2.6, -16.54, x + 2.74, -16.38, 0.76, 3.04, carp, true); // jamba este
+      stCaja(x - 0.07, -16.55, x + 0.07, -16.40, 0.9, 2.9, carp, true);  // parteluz
     }
     // mesas y sillas
     for (let fx = 0; fx < 6; fx++) {
@@ -220,7 +263,13 @@ JS += r"""
         const x = -18 + fx * 7.2, z = -13.5 + fz * 5.2;
         stAdd(new THREE.CylinderGeometry(0.09, 0.09, 0.72, 8), stMatCromo, x, 0.36, z);
         stAdd(new THREE.BoxGeometry(1.5, 0.09, 1.5), stMatMesa, x, 0.74, z);
-        stObs.push({ x: x, z: z, radius: 0.78 });
+        // 0,78 es el radio de la MESA, y las sillas viven a 1,25: el jugador
+        // frenaba en 1,20 del centro, o sea con el cuerpo metido dentro de la
+        // silla. El obstaculo es el conjunto —mesa mas las cuatro sillas—, y va
+        // como UN circulo y no cinco: cinco circulos superpuestos se empujan
+        // entre ellos y dejan al jugador trabado, porque el resolutor hace una
+        // sola pasada.
+        stObs.push({ x: x, z: z, radius: 1.55 });
         for (let s = 0; s < 4; s++) {
           const a = s * Math.PI / 2 + 0.4;
           const sx = x + Math.cos(a) * 1.25, sz = z + Math.sin(a) * 1.25;
@@ -240,10 +289,14 @@ JS += r"""
       color: 0x14161a, roughness: 0.5, emissive: 0x2a1c06, emissiveIntensity: 0.9
     });
     stCaja(-14, 2.85, -2, 2.95, 2.05, 3.25, menu, true);
+    // DOS materiales y no uno por franja: cada material es una llamada de
+    // dibujo propia, asi que nueve rectangulos de veinte centimetros costaban
+    // nueve llamadas para pintar dos colores
+    const franjaA = new THREE.MeshBasicMaterial({ color: 0xffcf6a });
+    const franjaB = new THREE.MeshBasicMaterial({ color: 0xff8b4a });
     for (let i = 0; i < 9; i++) {
-      const franja = new THREE.MeshBasicMaterial({ color: i % 3 ? 0xffcf6a : 0xff8b4a });
       stCaja(-13.4 + i * 1.28, 2.79, -12.6 + i * 1.28, 2.83, 2.2 + (i % 3) * 0.28,
-             2.32 + (i % 3) * 0.28, franja, true);
+             2.32 + (i % 3) * 0.28, i % 3 ? franjaA : franjaB, true);
     }
     // cajas registradoras
     for (let i = 0; i < 3; i++) {
@@ -267,14 +320,19 @@ JS += r"""
       stCaja(-5.6 + i * 1.7, 4.5, -4.6 + i * 1.7, 5.1, 0.95, 1.0, stMatOscuro);
     }
     stCaja(-20, 8.4, -4, 9.6, 0, 0.95, stMatAcero);              // mesa de armado
-    stCaja(1, 4.2, 11, 5.0, 0, 2.2, stMatCromo);                 // estanteria alta
-    for (let i = 0; i < 3; i++) stCaja(1, 4.2, 11, 5.0, 0.6 + i * 0.55, 0.66 + i * 0.55, stMatAcero, true);
+    // termina en x=7,5 y no en 11: con 11 el tramo del grafo que va del paso
+    // del mostrador a la cocina la cruzaba por el medio, y mide 2,2 m de alto
+    stCaja(1, 4.2, 7.5, 5.0, 0, 2.2, stMatCromo);                // estanteria alta
+    for (let i = 0; i < 3; i++) stCaja(1, 4.2, 7.5, 5.0, 0.6 + i * 0.55, 0.66 + i * 0.55, stMatAcero, true);
   }
 
   // ---- camara frigorifica ----
   {
     const frio = new THREE.MeshStandardMaterial({ color: 0xc8d6dc, roughness: 0.55 });
-    stCaja(13.3, 3.7, 23.4, 3.9, 0, ST_ALTO, frio, true);
+    // CON `true` NO TENIA CHOQUE: una pared de 3,6 m de alto que se cruzaba
+    // caminando, y del otro lado hay una franja muerta de 65 cm entre ella y la
+    // linea del mostrador.
+    stCaja(13.3, 3.7, 23.4, 3.9, 0, ST_ALTO, frio);
     for (let i = 0; i < 3; i++) {
       stCaja(14.5, 5 + i * 2.2, 22.5, 5.6 + i * 2.2, 0, 1.9, frio);      // estantes
       stCaja(14.5, 5 + i * 2.2, 22.5, 5.6 + i * 2.2, 1.9, 1.98, stMatCromo, true);
@@ -289,8 +347,12 @@ JS += r"""
   {
     for (let i = 0; i < 4; i++) {
       const x = -21 + i * 3.6;
-      stCaja(x, 13, x + 1.1, 20.5, 0, 2.4, stMatCromo);
-      for (let j = 0; j < 3; j++) stCaja(x, 13, x + 1.1, 20.5, 0.7 + j * 0.65, 0.76 + j * 0.65, stMatAcero, true);
+      // IBAN DE z=13 A 20,5 y dejaban 85 cm al sur y 1,05 al norte: con el
+      // jugador en 84 cm de ancho, entrar al deposito era quedarse trabado
+      // entre dos cajas de choque que empujan en sentidos opuestos. De 13,5 a
+      // 19,5 el pasillo del norte pasa a 2,05 m y el del sur a 1,35.
+      stCaja(x, 13.5, x + 1.1, 19.5, 0, 2.4, stMatCromo);
+      for (let j = 0; j < 3; j++) stCaja(x, 13.5, x + 1.1, 19.5, 0.7 + j * 0.65, 0.76 + j * 0.65, stMatAcero, true);
       for (let j = 0; j < 6; j++) {
         stAdd(new THREE.BoxGeometry(0.85, 0.6, 0.7), stMatMesa,
               x + 0.55, 1.06 + (j % 3) * 0.65, 14 + Math.floor(j / 3) * 4.4);
@@ -301,11 +363,22 @@ JS += r"""
   // ---- banos ----
   {
     const loza = new THREE.MeshStandardMaterial({ color: 0xe6e6e2, roughness: 0.42 });
+    // EL BANO NO SE PODIA RECORRER, y es una resta. Los tabiques iban de z=13
+    // a 16,6 y la puerta entra por x=13 entre z 12,15 y 14,6: el unico paso
+    // hacia los otros compartimientos era la franja z 12,15..13, o sea 85 cm
+    // contra un jugador que mide 84. Y por el norte tampoco, porque las piletas
+    // cruzaban de pared a pared dejando 60 cm. Con los tabiques de 14,2 a 17,2
+    // el corredor de entrada pasa a 2,05 m, y las piletas se van al primer
+    // compartimiento, que es donde va un lavatorio.
     for (let i = 0; i < 3; i++) {
-      stMuro(6.5 + i * 2.2, 13, 6.5 + i * 2.2, 16.6, 2.2);
-      stAdd(new THREE.BoxGeometry(0.5, 0.42, 0.6), loza, 7.6 + i * 2.2, 0.21, 13.6);
+      stMuro(6.5 + i * 2.2, 14.2, 6.5 + i * 2.2, 17.2, 2.2);
+      stAdd(new THREE.BoxGeometry(0.5, 0.42, 0.6), loza, 7.6 + i * 2.2, 0.21, 16.4);
     }
-    stCaja(5.4, 17.2, 12.6, 17.8, 0.75, 0.9, loza);      // piletas
+    // PEGADAS A LA PARED DEL NORTE: con las piletas terminando en z=17,0 y la
+    // pared en 17,85 quedaba una franja de 85 cm detras de ellas que el relleno
+    // de la auditoria marcaba como libre y no alcanzaba —un hueco de dos celdas
+    // al que no se puede entrar—. Pegadas, no hay hueco.
+    stCaja(5.4, 15.0, 6.1, 17.7, 0.75, 0.9, loza);      // piletas, contra el oeste
   }
 
   // ---- luces: fluorescentes en fila, y uno que parpadea ----
@@ -323,10 +396,94 @@ JS += r"""
       // se lee a discoteca; con uno, se lee a que algo anda mal ahi.
       stLuces.push({ luz: l, base: 0.72, parpadea: i === 7 });
     });
-    const amb = new THREE.HemisphereLight(0xb9c6d4, 0x30302c, 0.42);
-    storeGroup.add(amb);
-    stLuces.amb = amb;
+    storeGroup.add(new THREE.HemisphereLight(0xb9c6d4, 0x30302c, 0.42));
   }
+
+  // ==================================================================
+  // FUNDIR EL LOCAL POR MATERIAL
+  // ==================================================================
+  // `stPiezas` se venia llenando desde la primera linea con el comentario "para
+  // fundir por material al final" Y NADIE FUNDIA NADA: era un array vivo que no
+  // leia nadie y un comentario que describia algo que no pasaba. Medido, con
+  // las cajas sueltas el local costaba 331 LLAMADAS DE DIBUJO mirando hacia el
+  // deposito y 328 en el salon — una caja suelta es una llamada, y con las
+  // sombras se paga dos veces.
+  // NO HAY BufferGeometryUtils: el juego baja three.min.js de un CDN y nada mas,
+  // asi que la fusion va a mano en vez de agregar otra descarga que puede no
+  // llegar. Son treinta lineas y no cambia un solo pixel.
+  function stFundir() {
+    const grupos = [], mats = [];
+    stPiezas.forEach(function (m) {
+      let k = mats.indexOf(m.material);
+      if (k < 0) { k = mats.length; mats.push(m.material); grupos.push([]); }
+      grupos[k].push(m);
+    });
+    let mallas = 0;
+    const piezas = stPiezas.length;
+    for (let k = 0; k < mats.length; k++) {
+      const lista = grupos[k];
+      if (lista.length < 2) { mallas++; continue; }
+      const malla = stUnir(lista, mats[k]);
+      lista.forEach(function (m) { storeGroup.remove(m); });
+      storeGroup.add(malla);
+      mallas++;
+    }
+    stPiezas.length = 0;
+    return { piezas: piezas, mallas: mallas };
+  }
+
+  // ---- la fusion propiamente dicha, que sirve para cualquier lista ----
+  function stUnir(lista, mat, recorta) {
+      let nv = 0, ni = 0;
+      lista.forEach(function (m) {
+        const p = m.geometry.attributes.position;
+        nv += p.count;
+        ni += m.geometry.index ? m.geometry.index.count : p.count;
+      });
+      const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2);
+      // Uint32 y no Uint16: el salon solo pasa de 65.535 vertices, y el desborde
+      // no avisa — dibuja triangulos que apuntan a cualquier lado
+      const idx = new Uint32Array(ni);
+      const nm = new THREE.Matrix3(), v = new THREE.Vector3();
+      let vo = 0, io = 0;
+      lista.forEach(function (m) {
+        m.updateMatrix();
+        const g = m.geometry, p = g.attributes.position, nn = g.attributes.normal, u = g.attributes.uv;
+        nm.getNormalMatrix(m.matrix);
+        for (let i = 0; i < p.count; i++) {
+          v.fromBufferAttribute(p, i).applyMatrix4(m.matrix);
+          pos[(vo + i) * 3] = v.x; pos[(vo + i) * 3 + 1] = v.y; pos[(vo + i) * 3 + 2] = v.z;
+          if (nn) {
+            v.fromBufferAttribute(nn, i).applyMatrix3(nm).normalize();
+            nor[(vo + i) * 3] = v.x; nor[(vo + i) * 3 + 1] = v.y; nor[(vo + i) * 3 + 2] = v.z;
+          }
+          if (u) { uv[(vo + i) * 2] = u.getX(i); uv[(vo + i) * 2 + 1] = u.getY(i); }
+        }
+        if (g.index) {
+          for (let i = 0; i < g.index.count; i++) idx[io + i] = g.index.getX(i) + vo;
+          io += g.index.count;
+        } else {
+          for (let i = 0; i < p.count; i++) idx[io + i] = vo + i;
+          io += p.count;
+        }
+        vo += p.count;
+        g.dispose();
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      const malla = new THREE.Mesh(geo, mat);
+      // FRUSTUM CULLED APAGADO para el local: la malla fundida lo abarca entero,
+      // asi que su esfera envolvente esta siempre a la vista y probarla es
+      // trabajo que no descarta nada. Para los pelos de la arana si conviene,
+      // porque la arana casi nunca esta en cuadro.
+      malla.frustumCulled = !!recorta;
+      malla.receiveShadow = true;
+      return malla;
+    }
+  const stFusion = stFundir();
 """
 
 C_PAN = '0xd8a05a'
@@ -378,11 +535,17 @@ JS += r"""
 
   const stPartes = [];
   {
+    // TRES DE LAS CUATRO ESTABAN DENTRO DE UN MUEBLE, y eso no se ve como un
+    // objeto tapado: se ve como un objeto que NO EXISTE, porque flota a 1,15 m
+    // dentro de una caja opaca. El pan caia dentro de la segunda estanteria del
+    // deposito (x -17,4..-16,3), el queso dentro del estante del medio de la
+    // camara (z 7,2..7,8) y la tapa dentro del tabique del bano (x 8,55..8,85).
+    // Las tres pasan al pasillo de su ambiente.
     const sitios = {
-      pan: [-16.5, 17.2],     // deposito
-      carne: [-13.5, 6.8],    // cocina, junto a la plancha
-      queso: [18.5, 7.4],     // camara frigorifica
-      tapa: [8.6, 14.4]       // banos
+      pan: [-15.0, 17.2],     // deposito, pasillo entre la 2a y la 3a estanteria
+      carne: [-13.5, 6.8],    // cocina, entre la mesada y la mesa de armado
+      queso: [18.5, 8.6],     // camara, pasillo entre el 2o y el 3er estante
+      tapa: [9.8, 15.5]       // bano, dentro del compartimiento del medio
     };
     ST_ORDEN.forEach(function (id) {
       const p = sitios[id];
@@ -446,16 +609,19 @@ JS += r"""
   // jugador. Una malla generada llega estatica; riggear ocho patas a mano es
   // mas trabajo que construirlas articuladas de entrada. Lo que da miedo aca es
   // el movimiento y la silueta, no el poro de la piel.
+  // 0,04 y no 0,11: medida la caja envolvente con el grupo en 0,11 el piso
+  // daba 0,07, o sea que la arana flotaba siete centimetros. El numero sale de
+  // la medicion y no de una cuenta a mano —la punta de la tibia queda en 0,003
+  // local y el radio del cono se la lleva un poco mas abajo.
+  const ARA_Y = 0.04;
   const ARA = {
     g: new THREE.Group(),
     patas: [],
-    estado: 'ronda',      // 'ronda' | 'caza' | 'teje' | 'come'
+    estado: 'ronda',      // 'ronda' | 'caza'
     vel: 0,
     fase: 0,
     wp: new THREE.Vector3(-16, 0, 8),
-    tejeCd: 9,
-    comeT: 0,
-    aturdida: 0
+    tejeCd: 9
   };
   {
     // EL NEGRO ABSOLUTO NO TIENE SOMBREADO QUE MOSTRAR. Con quitina en 0x14100f
@@ -472,7 +638,12 @@ JS += r"""
     const juntura = new THREE.MeshStandardMaterial({
       color: 0x6a1a12, roughness: 0.5, emissive: 0x180402, emissiveIntensity: 1.0
     });
-    const ojoMat = new THREE.MeshBasicMaterial({ color: 0xff3a22 });
+    // toneMapped EN FALSE: three.js pasa por el tone mapping TODOS los
+    // materiales, tambien los MeshBasic, y ACESFilmic convierte este rojo en un
+    // rosa palido. Medido en la captura del susto, los ocho ojos salian del
+    // mismo valor que la quitina iluminada. Sin tone mapping el rojo sale rojo,
+    // que es lo unico que un ojo encendido tiene que hacer.
+    const ojoMat = new THREE.MeshBasicMaterial({ color: 0xff2a10, toneMapped: false });
     const colmillo = new THREE.MeshStandardMaterial({ color: 0x1d1512, roughness: 0.35 });
 
     // cuerpo: cefalotorax chato y un abdomen mucho mas grande y alto. La
@@ -482,12 +653,20 @@ JS += r"""
     cef.scale.set(1.15, 0.62, 1.0);
     cef.position.set(0, 1.62, 0.55);
     ARA.g.add(cef);
+    // POR NOMBRE Y NO POR children[0]: la altura del cefalotorax se escribia
+    // como ARA.g.children[0].position.y, o sea apoyada en el ORDEN en que se
+    // construye el bicho. Fundir los pelos o agregar una pieza antes movia el
+    // indice y el cabeceo pasaba a mover otra cosa, sin fallar.
+    ARA.cef = cef;
     const abd = new THREE.Mesh(new THREE.SphereGeometry(0.95, 18, 14), quitina);
     abd.scale.set(1.0, 0.92, 1.28);
     abd.position.set(0, 1.78, -1.25);
     ARA.g.add(abd);
     // pelos del abdomen: cuarenta conos cortos. Es lo mas barato que existe para
-    // que una esfera deje de leerse a esfera.
+    // que una esfera deje de leerse a esfera — y VAN FUNDIDOS EN UNA MALLA,
+    // porque no se mueven respecto del cuerpo y cuarenta conos sueltos eran
+    // cuarenta llamadas de dibujo. Medido, la arana entera costaba unas ochenta.
+    const pelos = [];
     for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI;
       const pelo = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.34, 4), quitina);
@@ -496,18 +675,33 @@ JS += r"""
                         -1.25 + Math.sin(b) * Math.sin(a) * r * 1.2);
       pelo.lookAt(pelo.position.x * 3, pelo.position.y + 1.2, pelo.position.z * 3);
       pelo.rotateX(Math.PI / 2);
-      ARA.g.add(pelo);
+      pelos.push(pelo);
     }
-    // ocho ojos en dos filas, que es como los tiene de verdad
+    ARA.g.add(stUnir(pelos, quitina, true));
+    // ocho ojos en dos filas, que es como los tiene de verdad. Van fundidos por
+    // lo mismo que los pelos: no se mueven y no los toca nadie.
+    const ojos = [];
     for (let i = 0; i < 8; i++) {
       const fila = i < 4 ? 0 : 1;
       const k = i % 4;
-      const o = new THREE.Mesh(new THREE.SphereGeometry(fila ? 0.10 : 0.14, 8, 6), ojoMat);
-      o.position.set((k - 1.5) * (fila ? 0.26 : 0.32), 1.78 - fila * 0.2, 1.42);
-      ARA.g.add(o);
-      ARA.ojos = ARA.ojos || [];
-      ARA.ojos.push(o);
+      // 0,19 y 0,13 y no 0,14 y 0,10: son lo UNICO que dice "cara de arana", y
+      // en el plano del susto —a 2,2 m— con el tamano anterior se perdian entre
+      // las rodillas, que a esa distancia son ocho bolas palidas del mismo
+      // tamano. Mas grandes, el racimo rojo es lo primero que se ve.
+      const o = new THREE.Mesh(new THREE.SphereGeometry(fila ? 0.10 : 0.15, 8, 6), ojoMat);
+      o.position.set((k - 1.5) * (fila ? 0.26 : 0.34), 1.80 - fila * 0.22, 1.43);
+      ojos.push(o);
     }
+    // UNA PLACA OSCURA DETRAS DEL RACIMO. Los ocho ojos son rojos y sin luz,
+    // pero el foco del susto ilumina la quitina de alrededor hasta casi el mismo
+    // valor: medido en la captura, el racimo se perdia sobre un fondo palido. Va
+    // sin luz y casi negra, asi que ningun flash la puede levantar y el rojo se
+    // recorta contra ella — que es ademas la cara que tiene una arana de verdad.
+    const cara = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.62, 0.07),
+                                new THREE.MeshBasicMaterial({ color: 0x0c0806, toneMapped: false }));
+    cara.position.set(0, 1.70, 1.38);
+    ARA.g.add(cara);
+    ARA.g.add(stUnir(ojos, ojoMat, true));
     // quelIceros y colmillos
     for (let s = -1; s <= 1; s += 2) {
       const q = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.5, 7), juntura);
@@ -556,7 +750,7 @@ JS += r"""
       ARA.patas.push({ piv: piv, fPiv: fPiv, tPiv: tPiv, az: az,
                        fase: (i % 2 === 0 ? 0 : Math.PI) + (i < 4 ? 0 : Math.PI) });
     }
-    ARA.g.position.set(-16, 0.11, 8);
+    ARA.g.position.set(-16, ARA_Y, 8);
     ARA.g.visible = false;
     storeGroup.add(ARA.g);
 
@@ -587,7 +781,43 @@ JS += r"""
     }
     // el cuerpo cabecea al doble de la frecuencia del paso, porque hay dos
     // apoyos por ciclo
-    ARA.g.children[0].position.y = 1.62 + Math.sin(t * 2) * 0.045 * (vel > 0.4 ? 1 : 0.3);
+    ARA.cef.position.y = 1.62 + Math.sin(t * 2) * 0.045 * (vel > 0.4 ? 1 : 0.3);
+  }
+
+  // ---- la pose del agarron ----
+  // El screamer la pone a ochenta centimetros del ojo, y ahi la pose de caminar
+  // no dice nada: lo que hace una arana encima tuyo es LEVANTAR LAS CUATRO
+  // PATAS DE ADELANTE y abrir los colmillos. Las cuatro de atras se quedan
+  // apoyadas —si se levantan las ocho el bicho flota— y tiemblan a otra
+  // frecuencia, que es lo que impide que las ocho se lean como una sola pieza.
+  function araGrito(k, elapsed) {
+    const kk = clamp(k * 1.7, 0, 1);
+    for (let i = 0; i < 8; i++) {
+      const p = ARA.patas[i];
+      const delantera = (i % 4) < 2;
+      if (delantera) {
+        p.fPiv.rotation.z = lerp(0.96, 1.62, kk) + Math.sin(elapsed * 23 + i) * 0.07;
+        p.tPiv.rotation.z = lerp(-2.01, -0.62, kk);
+        p.piv.rotation.y = p.az + (p.az > 0 ? -0.40 : 0.40) * kk;
+      } else {
+        p.fPiv.rotation.z = 0.96 + Math.sin(elapsed * 13 + i) * 0.05;
+        p.tPiv.rotation.z = -2.01;
+        p.piv.rotation.y = p.az;
+      }
+    }
+    // los colmillos se abren y bajan: es lo unico que queda en el centro del
+    // cuadro cuando las patas ya se fueron por los bordes
+    ARA.colmillos.forEach(function (c, i) {
+      c.rotation.x = Math.PI - 0.35 - 0.55 * kk;
+      c.rotation.z = (i ? 1 : -1) * 0.45 * kk;
+    });
+    // y se encabrita: sube el cuerpo entero en vez de inclinarlo, porque
+    // inclinar el grupo alrededor de su origen mete las patas traseras un metro
+    // bajo el piso
+    ARA.g.position.y = ARA_Y + kk * 0.42;
+    // y su luz roja BAJA en vez de subir: es una luz de ambiente para verla
+    // doblar una esquina a diez metros, y a dos la tine de rojo entera
+    ARA.luz.intensity = 1.5 + Math.sin(elapsed * 31) * 0.4;
   }
 """
 
@@ -642,7 +872,11 @@ JS += r"""
     stNuevaTela(1.5, 12, 1.4, true, 0);           // cocina -> pasillo
     stNuevaTela(13, 7.2, 1.0, true, Math.PI / 2); // camara
     stNuevaTela(-9, 19.5, 2.0, true, Math.PI / 2);// deposito
-    stNuevaTela(-14, 6.5, 1.7);                   // dos en el piso de la cocina
+    // NO ENCIMA DE UNA PARTE: estaba en (-14 · 6,5) y la carne en (-13,5 · 6,8),
+    // o sea a 58 cm — medido jugando, agacharse a juntar la carne te dejaba
+    // pegado tres segundos SIEMPRE. Una tela en el camino es el mecanismo; una
+    // tela encima de lo que hay que juntar es un peaje.
+    stNuevaTela(-19, 7.2, 1.7);                   // dos en el piso de la cocina
     stNuevaTela(4, 9.5, 1.5);
   }
 
@@ -651,11 +885,41 @@ JS += r"""
   // seis ambientes unidos por cinco vanos, asi que el camino se resuelve con
   // trece nodos y un BFS: entre dos nodos vecinos SIEMPRE hay linea limpia, por
   // construccion, y eso es lo que hace que no haga falta probar contra paredes.
+  // LA PROMESA DEL GRAFO ES QUE ENTRE DOS NODOS VECINOS HAY LINEA LIMPIA, y
+  // cuatro de los doce arcos no la cumplian —o sea que la promesa era falsa y
+  // la arana atravesaba paredes en cuatro sitios distintos—:
+  //   · 7-8, de (1,5 · 15,5) a (18 · 16), cruzaba EL BANO ENTERO: sus dos
+  //     paredes y los tres tabiques. El pasillo trasero no pasa por ahi: el
+  //     bano ocupa x 5..13 de z 12 a 18, y el paso libre es por z 18..21,7.
+  //   · 1-2 cruzaba la estanteria alta de la cocina (2,2 m).
+  //   · 4-5 cruzaba el estante del medio de la camara (1,9 m).
+  //   · 11-12 cruzaba dos estanterias del deposito (2,4 m).
+  // Diecisiete nodos, y los diecisiete arcos verificados uno por uno contra
+  // cada caja del local. De paso la camara gana sus dos pasillos, asi que la
+  // arana llega hasta el queso por donde se camina y no por encima de un
+  // estante.
   const ST_NODOS = [
-    [0, -7], [10, 3.05], [6, 7.5], [-12, 7.5], [13, 7.2], [18, 7.5],
-    [1.5, 12], [1.5, 15.5], [18, 16], [13, 13.5], [8.5, 15.5], [-6, 19.5], [-16, 18]
+    [0, -7],        //  0 salon
+    [10, 3.05],     //  1 el paso del mostrador
+    [9, 7.0],       //  2 cocina, lado este
+    [-12, 7.5],     //  3 cocina, lado oeste
+    [13, 7.0],      //  4 la puerta de la camara
+    [14, 6.4],      //  5 camara, boca del pasillo sur
+    [20, 6.4],      //  6 camara, fondo del pasillo sur
+    [14, 8.6],      //  7 camara, boca del pasillo norte
+    [20, 8.6],      //  8 camara, fondo del pasillo norte
+    [1.5, 12],      //  9 la puerta al pasillo trasero
+    [1.5, 15.5],    // 10 pasillo trasero, tramo oeste
+    [1.5, 19.8],    // 11 pasillo del fondo, oeste
+    [18, 19.8],     // 12 pasillo del fondo, este  (la salida esta al lado)
+    [18, 16],       // 13 pasillo este
+    [13, 13.2],     // 14 la puerta del bano
+    [9.8, 13.2],    // 15 bano, corredor de entrada
+    [-6, 19.8],     // 16 camino al deposito
+    [-16, 20.4]     // 17 deposito, pasillo del norte
   ];
-  const ST_ARCOS = [[0,1],[1,2],[2,3],[2,4],[4,5],[2,6],[6,7],[7,8],[8,9],[9,10],[7,11],[11,12]];
+  const ST_ARCOS = [[0,1],[1,2],[2,3],[2,4],[4,5],[5,6],[5,7],[7,8],[2,9],
+                    [9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[11,16],[16,17]];
   const ST_VEC = ST_NODOS.map(function () { return []; });
   ST_ARCOS.forEach(function (a) { ST_VEC[a[0]].push(a[1]); ST_VEC[a[1]].push(a[0]); });
   function stNodoDe(x, z) {
@@ -695,7 +959,7 @@ JS += r"""
   const stTrap = document.getElementById('st-trap');
   const ST = {
     tengo: {}, puestas: 0, hecho: false,
-    atrapado: 0, grace: 0, msgCd: 0, salidaAviso: false
+    atrapado: 0, grace: 0, msgCd: 0
   };
 
   function stPintaHud() {
@@ -714,7 +978,7 @@ JS += r"""
 
   function resetStore(silent) {
     ST.tengo = {}; ST.puestas = 0; ST.hecho = false;
-    ST.atrapado = 0; ST.msgCd = 0; ST.salidaAviso = false;
+    ST.atrapado = 0; ST.msgCd = 0;
     // GRACIA AL EMPEZAR. Sin esto, reaparecer con la arana encima es una muerte
     // que nadie pudo evitar — la misma leccion que costo una vuelta en LEMI.
     ST.grace = 5;
@@ -727,11 +991,27 @@ JS += r"""
     stSalida.group.visible = false;
     stTelasIniciales();
     ARA.estado = 'ronda';
-    ARA.cazaT = 0; ARA.comeT = 0; ARA.aturdida = 0; ARA.tejeCd = 11;
-    ARA.g.position.set(-16, 0, 8);
+    ARA.cazaT = 0; ARA.tejeCd = 11;
+    // CON 0 REAPARECIA HUNDIDA: se construye en ARA_Y —la caja envolvente da
+    // negativo con el grupo en cero— y el reinicio lo pisaba, asi que la
+    // primera vida la tenia apoyada y todas las demas enterradas hasta el
+    // tobillo. El numero vive en un solo sitio.
+    ARA.g.position.set(-16, ARA_Y, 8);
+    ARA.g.rotation.set(0, 0, 0);
     ARA.wp.set(-12, 0, 7.5);
     ARA.g.visible = true;
     stTrap.style.display = 'none';
+    // LO QUE DEJABA PUESTO EL SCREAMER. resetStore no pasa por hideAllLevels
+    // —solo lo llaman el agarron y el arranque del nivel— asi que el foco del
+    // susto, la flecha que apunta a la salida, la viñeta y la cercania se
+    // quedaban encendidos en la vida siguiente. Los otros cinco reinicios ya
+    // hacen exactamente esto.
+    hideArrow();
+    flashSpot.intensity = 0;
+    flashFill.intensity = 0;
+    entityProximity = 0;
+    shakeAmount = 0;
+    vignetteEl.style.opacity = '0';
     // Y SE VUELVE A LA ENTRADA, como en los otros cinco niveles. Sin esto el
     // reinicio te deja parado donde la arana te agarro: medido, uno reaparecia
     // ENCIMA de la parte que acababa de perder y la volvia a juntar al cuadro
@@ -741,6 +1021,7 @@ JS += r"""
     yaw = 0; lastYaw = 0; pitch = 0;
     stamina = 100; slowT = 0;
     stPintaHud();
+
     if (!silent) showToast('El local vuelve a empezar. La bandeja esta vacia otra vez.', 4600);
   }
 
@@ -758,12 +1039,10 @@ JS += r"""
     boundary = ST_BOUNDS;
     boundaryType = 'box';
     stHud.style.display = 'flex';
-    stampina();
     hideArrow();
     showToast('Un local de comida rapida. Junta las 4 partes, armalas EN ORDEN sobre la bandeja y sali por atras. No pises las telas.', 7200);
     transitioning = false;
   }
-  function stampina() { stamina = 100; slowT = 0; }
   function transitionToStore() { fadeTo(enterStore); }
 
   // ---- la arana, cuadro a cuadro ----
@@ -771,8 +1050,6 @@ JS += r"""
     const px = player.position.x, pz = player.position.z;
     const dx = px - ARA.g.position.x, dz = pz - ARA.g.position.z;
     const dist = Math.hypot(dx, dz);
-
-    if (ARA.aturdida > 0) { ARA.aturdida -= delta; ARA.vel = 0; araPose(ARA.fase, 0); return dist; }
 
     // el modo caza tambien se apaga solo: una arana que te persigue para siempre
     // convierte el nivel en una carrera y no en una busqueda
@@ -803,6 +1080,7 @@ JS += r"""
     ARA.vel = lerp(ARA.vel, velObj, Math.min(delta * 3, 1));
     ARA.g.position.x += (vx / d) * ARA.vel * delta;
     ARA.g.position.z += (vz / d) * ARA.vel * delta;
+    ARA.g.position.y = ARA_Y;
 
     const rumbo = Math.atan2(vx, vz);
     let dr = rumbo - ARA.g.rotation.y;
@@ -820,7 +1098,11 @@ JS += r"""
         ARA.wp.set(n[0], 0, n[1]);
       }
       ARA.tejeCd -= delta;
-      if (ARA.tejeCd <= 0 && stTelas.length < 12) {
+      // Y NO LA TEJE ENCIMA DEL JUGADOR. Durante los cinco segundos de gracia
+      // la arana sigue en ronda aunque este al lado, asi que podia dejar una
+      // tela bajo los pies: tres segundos clavado por algo que aparecio debajo
+      // no es una trampa, es un castigo sin aviso.
+      if (ARA.tejeCd <= 0 && stTelas.length < 12 && dist > 7) {
         ARA.tejeCd = rand(11, 17);
         stNuevaTela(ARA.g.position.x, ARA.g.position.z, rand(1.3, 1.9));
       }
@@ -844,7 +1126,6 @@ JS += r"""
     // ---- las telas ----
     if (ST.atrapado > 0) {
       ST.atrapado -= delta;
-      shakeAmount = Math.max(shakeAmount, 0.09);
       stTrap.style.display = 'block';
       if (ST.atrapado <= 0) { stTrap.style.display = 'none'; showToast('Te soltaste.', 1400); }
     } else {
@@ -931,5 +1212,15 @@ JS += r"""
     // cuando hay que ver donde esta la cosa que te mata. Se topa en 0,55: se
     // siente que la cinta sufre y el bicho se sigue leyendo.
     entityProximity = Math.min(0.55, Math.max(0, 1 - dist / 13));
+    // Y LA VIÑETA Y EL SACUDON, QUE ERAN LO QUE FALTABA. Los otros cinco
+    // niveles escriben las dos todos los cuadros; el local no escribia ninguna,
+    // asi que la unica manera de saber que la tenias detras era darte vuelta.
+    // La viñeta va sobre el mismo numero, escalada aparte porque el tope de
+    // 0,55 esta puesto para el glitch y no para el oscurecimiento.
+    vignetteEl.style.opacity = String(clamp(entityProximity * 1.45, 0, 0.82));
+    // SE ASIGNA Y NO SE ACUMULA CON max(): nadie pone shakeAmount en cero por
+    // cuadro —cada nivel lo ESCRIBE una vez y ya— asi que un Math.max solo
+    // puede subir, y el temblor de la tela se quedaba puesto para siempre.
+    shakeAmount = entityProximity * 0.05 + (ST.atrapado > 0 ? 0.09 : 0);
   }
 """

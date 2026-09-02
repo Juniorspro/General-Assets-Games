@@ -647,9 +647,131 @@ s = cambiar(s, """    flores: function () {""",
                         vel: +ARA.vel.toFixed(2) },
                texturas: stTexPuestas };
     },
+    // LA AUDITORIA DEL LOCAL. Prueba que se pueda JUGAR y no que las cajas no
+    // se pisen: una rejilla de 20 cm, cada celda libre si el CENTRO del jugador
+    // cabe ahi —fuera de toda caja inflada por su radio y de todo circulo— y un
+    // relleno desde donde aparece. Si una parte no cae dentro del relleno, el
+    // nivel no se puede terminar. Eso es exactamente lo que pasaba con el
+    // corredor de 85 cm del bano contra un jugador de 84, y con las
+    // estanterias del deposito: dos numeros que ninguna captura muestra.
+    auditoria: function () {
+      const R = 0.42, PASO = 0.2;
+      const x0 = ST_BOUNDS.minX + R, x1 = ST_BOUNDS.maxX - R;
+      const z0 = ST_BOUNDS.minZ + R, z1 = ST_BOUNDS.maxZ - R;
+      const NX = Math.floor((x1 - x0) / PASO) + 1, NZ = Math.floor((z1 - z0) / PASO) + 1;
+      function libre(x, z) {
+        for (let i = 0; i < stBoxes.length; i++) {
+          const b = stBoxes[i];
+          if (x > b.minX - R && x < b.maxX + R && z > b.minZ - R && z < b.maxZ + R) return false;
+        }
+        for (let i = 0; i < stObs.length; i++) {
+          const o = stObs[i], rr = o.radius + R;
+          if ((x - o.x) * (x - o.x) + (z - o.z) * (z - o.z) < rr * rr) return false;
+        }
+        return true;
+      }
+      const ok = new Uint8Array(NX * NZ), vis = new Uint8Array(NX * NZ);
+      for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++)
+        ok[i * NZ + j] = libre(x0 + i * PASO, z0 + j * PASO) ? 1 : 0;
+      const si = Math.round((0 - x0) / PASO), sj = Math.round((-13 - z0) / PASO);
+      const raiz = si * NZ + sj;
+      if (!ok[raiz]) return { error: 'el jugador aparece dentro de un obstaculo' };
+      const cola = [raiz]; vis[raiz] = 1; let alc = 1;
+      const VEC = [[1,0],[-1,0],[0,1],[0,-1]];
+      while (cola.length) {
+        const c = cola.pop(), i = Math.floor(c / NZ), j = c % NZ;
+        for (let k = 0; k < 4; k++) {
+          const a = i + VEC[k][0], b = j + VEC[k][1];
+          if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+          const d = a * NZ + b;
+          if (vis[d] || !ok[d]) continue;
+          vis[d] = 1; cola.push(d); alc++;
+        }
+      }
+      function llega(x, z) {
+        const ri = Math.round((x - x0) / PASO), rj = Math.round((z - z0) / PASO);
+        const rad = Math.ceil(1.2 / PASO);
+        for (let a = ri - rad; a <= ri + rad; a++) for (let b = rj - rad; b <= rj + rad; b++) {
+          if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+          if (!vis[a * NZ + b]) continue;
+          const dx = (x0 + a * PASO) - x, dz = (z0 + b * PASO) - z;
+          if (dx * dx + dz * dz < 1.44) return true;
+        }
+        return false;
+      }
+      // Y CADA PARTE, ADEMAS, TIENE QUE VERSE: flota a 1,15 m, asi que una caja
+      // que la contenga la vuelve invisible aunque se la pueda juntar de al lado.
+      function dentro(x, z, y) {
+        for (let i = 0; i < stBoxes.length; i++) {
+          const b = stBoxes[i];
+          if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ && y > b.y0 && y < b.y1) {
+            return +b.y1.toFixed(2);
+          }
+        }
+        return 0;
+      }
+      const partes = {};
+      stPartes.forEach(function (p) {
+        partes[p.id] = { llega: llega(p.x, p.z), tapada: dentro(p.x, p.z, p.base) };
+      });
+      const arcos = [];
+      ST_ARCOS.forEach(function (a) {
+        const A = ST_NODOS[a[0]], B = ST_NODOS[a[1]];
+        const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+        const pasos = Math.max(2, Math.ceil(L / 0.25));
+        let alto = 0, donde = null;
+        for (let k = 0; k <= pasos; k++) {
+          const t = k / pasos, x = A[0] + (B[0] - A[0]) * t, z = A[1] + (B[1] - A[1]) * t;
+          for (let i = 0; i < stBoxes.length; i++) {
+            const b = stBoxes[i];
+            if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ && b.y1 > alto) {
+              alto = b.y1; donde = [+x.toFixed(1), +z.toFixed(1)];
+            }
+          }
+        }
+        if (alto > 1.2) arcos.push({ arco: a, alto: +alto.toFixed(2), en: donde });
+      });
+      // y los nodos: uno metido dentro de un mueble hace que el BFS mande a la
+      // arana a un sitio que no existe
+      const nodosSucios = [];
+      ST_NODOS.forEach(function (p, i) {
+        const h = dentro(p[0], p[1], 1.5);
+        if (h) nodosSucios.push({ nodo: i, alto: h });
+      });
+      // y DONDE quedan las celdas libres que el relleno no alcanza: un hueco
+      // suelto es normal (el rincon detras de una estanteria), pero si son
+      // muchas o caen en un ambiente entero es que falta un paso
+      const sueltas = [];
+      for (let i = 0; i < NX && sueltas.length < 8; i++)
+        for (let j = 0; j < NZ && sueltas.length < 8; j++)
+          if (ok[i * NZ + j] && !vis[i * NZ + j])
+            sueltas.push([+(x0 + i * PASO).toFixed(1), +(z0 + j * PASO).toFixed(1)]);
+      return { celdas: NX * NZ,
+               libres: ok.reduce(function (a, v) { return a + v; }, 0),
+               alcanzadas: alc, sueltas: sueltas, partes: partes,
+               bandeja: llega(ST_BANDEJA.x, ST_BANDEJA.z),
+               salida: llega(ST_SALIDA.x, ST_SALIDA.z),
+               arcosSucios: arcos, nodosSucios: nodosSucios,
+               fusion: stFusion };
+    },
+    // QUE MIRA LA CAMARA DURANTE EL SUSTO. Los ojos viven en el +Z local y el
+    // abdomen en el -Z, asi que alcanza con proyectar los dos: si el abdomen
+    // esta mas cerca del lente que los ojos, la arana esta de espaldas y el
+    // plano muestra la panza. Y de paso, donde caen los ojos en la pantalla.
+    araFrente: function () {
+      ARA.g.updateMatrixWorld(true);
+      const pOjo = new THREE.Vector3(0, 1.80, 1.44).applyMatrix4(ARA.g.matrixWorld);
+      const pAbd = new THREE.Vector3(0, 1.78, -1.25).applyMatrix4(ARA.g.matrixWorld);
+      const cam = camera.matrixWorldInverse || new THREE.Matrix4().copy(camera.matrixWorld).invert();
+      const vOjo = pOjo.clone().applyMatrix4(cam), vAbd = pAbd.clone().applyMatrix4(cam);
+      const nOjo = pOjo.clone().project(camera);
+      return { ojoCamZ: +vOjo.z.toFixed(2), abdCamZ: +vAbd.z.toFixed(2),
+               deFrente: vOjo.z > vAbd.z,
+               ojoPantalla: { x: +((nOjo.x + 1) / 2).toFixed(3), y: +((1 - nOjo.y) / 2).toFixed(3) } };
+    },
     // pone al jugador donde haga falta para probar sin caminar veinte metros
     irA: function (x, z) { player.position.set(x, 0, z); return { x: x, z: z }; },
-    arana: function (x, z) { ARA.g.position.set(x, 0, z); return 'ok'; },
+    arana: function (x, z) { ARA.g.position.set(x, ARA_Y, z); return 'ok'; },
     // GIGANTE ES UN NUMERO, no una impresion: la caja envolvente de la arana
     // con las patas abiertas, en metros
     // apaga los velos de VHS para fotografiar. NO cambia el juego: son cuatro
@@ -683,6 +805,97 @@ s = cambiar(s, """    flores: function () {""",
                piso: +b.min.y.toFixed(2) };
     },
     flores: function () {""", 'sonda del local')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ARREGLOS DEL NIVEL 6 QUE VIVEN EN base.html
+# ══════════════════════════════════════════════════════════════════════════════
+
+# EL SCREAMER DE LA ARANA ENCUADRABA A LA CRIATURA DEL NIVEL 1. `kind` llega
+# como 'spider' y no habia una sola rama que lo mirara, asi que caia al else:
+# el plano del susto movia `entityGroup` —el bicho del campo— hasta la cara del
+# jugador y lo posaba con poseEntity, mientras la arana se quedaba quieta donde
+# te habia agarrado. El `scream.ref` que se le pasa no lo leia nadie.
+s = s if SOLO else cambiar(s,
+    """    const isExec = scream.kind === 'exec' || scream.kind === 'axe';
+    const target = isExec ? execu.g : (isSaw ? doll.g : (isApe ? ape.g : (isWrap ? batman.g : (isBat ? scream.ref.g : (isDog ? dogGroup : entityGroup)))));""",
+    """    const isExec = scream.kind === 'exec' || scream.kind === 'axe';
+    const isSpider = scream.kind === 'spider';
+    const target = isSpider ? ARA.g : (isExec ? execu.g : (isSaw ? doll.g : (isApe ? ape.g : (isWrap ? batman.g : (isBat ? scream.ref.g : (isDog ? dogGroup : entityGroup))))));""",
+    'el screamer apunta a la arana')
+
+# y su altura: terrainH() devuelve el relieve del CAMPO, y el local esta en y=0
+s = s if SOLO else cambiar(s,
+    """    const gy = (isWrap || isSaw || isApe || isExec) ? player.position.y
+      : (isBat ? (player.position.y + 1.5) : (isDog ? 0 : terrainH(fx, fz)));""",
+    """    const gy = isSpider ? 0 : ((isWrap || isSaw || isApe || isExec) ? player.position.y
+      : (isBat ? (player.position.y + 1.5) : (isDog ? 0 : terrainH(fx, fz))));""",
+    'la arana se apoya en el piso del local')
+
+
+# LA DISTANCIA DEL PLANO: los otros seis sustos son cabezas humanas y se
+# resuelven a ochenta centimetros. Fotografiada, la arana a esa distancia es un
+# muro de bultos rosados —el abdomen mide 1,9 m de ancho y las patas 27 cm de
+# grosor— y no se lee ni el cuerpo ni los colmillos. Con la caja envolvente en
+# 6,7 x 3,2 x 6,3 m el plano tiene que abrirse: a 2,2 m entran la cara, los dos
+# quelIceros y las cuatro patas de adelante levantandose por los bordes.
+s = s if SOLO else cambiar(s,
+    """    const dist = isWrap ? lerp(1.9, 0.5, Math.min(1, k * 1.5)) : lerp(2.3, 0.8, Math.min(1, k * 1.9));""",
+    """    // 5,4 -> 3,05 Y NO 4,6 -> 2,2, y el motivo es una resta que costo dos
+    // capturas: `dist` coloca el ORIGEN del grupo, y en los otros seis sustos
+    // la cara esta a diez o veinte centimetros del origen. La de la arana esta
+    // a 1,44 m —sus ocho ojos viven en z = +1,44 local— asi que con el origen a
+    // 2,2 la cara terminaba a 76 CENTIMETROS del lente: medido con araFrente(),
+    // ojoCamZ -0,87. Un racimo de ojos de 38 cm a esa distancia no se lee, tapa.
+    // Con 3,05 la cara queda a 1,6 m, que es donde entra entera.
+    const dist = isSpider ? lerp(5.4, 3.05, Math.min(1, k * 1.7))
+      : (isWrap ? lerp(1.9, 0.5, Math.min(1, k * 1.5)) : lerp(2.3, 0.8, Math.min(1, k * 1.9)));""",
+    'el plano de la arana se abre')
+s = s if SOLO else cambiar(s,
+    """      flashSpot.intensity = (Math.random() < 0.22 ? 2.5 : 8.5);
+      flashFill.intensity = 1.4;
+    } else {
+      poseEntity(delta, elapsed * 3, { moving: true, speed: 8, frozen: false, lunge: true });""",
+    """      flashSpot.intensity = (Math.random() < 0.22 ? 2.5 : 8.5);
+      flashFill.intensity = 1.4;
+    } else if (isSpider) {
+      araGrito(k, elapsed);
+      // 2,6 y no 7,5: el foco cuelga de la camara con decay 1,3, asi que lo que
+      // esta a dos metros recibe tres veces y media mas que lo que esta a
+      // cuatro. Medido en la captura, con la intensidad de los sustos humanos
+      // la quitina salia BLANCO PURO y no se distinguia una pata de la panza.
+      flashSpot.intensity = (Math.random() < 0.28 ? 0.5 : 1.1);
+      flashFill.intensity = 0.25;
+    } else {
+      poseEntity(delta, elapsed * 3, { moving: true, speed: 8, frozen: false, lunge: true });""",
+    'la pose de la arana en el screamer')
+
+# la camara mira los quelIceros y no el piso: sus ojos viven en y=1,78 y con la
+# encabritada suben a 2,2
+s = s if SOLO else cambiar(s,
+    """    const headY = isExec ? (player.position.y + 2.2) : (isSaw ? (player.position.y + 2.5) : (isApe ? (player.position.y + 1.9)""",
+    """    const headY = isSpider ? 2.2 : (isExec ? (player.position.y + 2.2) : (isSaw ? (player.position.y + 2.5) : (isApe ? (player.position.y + 1.9)""",
+    'la camara del screamer mira la cara de la arana')
+
+s = s if SOLO else cambiar(s,
+    """      : (isWrap ? 2.35 : (isBat ? (player.position.y + 1.55) : (isDog ? 1.6 : 3.05)))));""",
+    """      : (isWrap ? 2.35 : (isBat ? (player.position.y + 1.55) : (isDog ? 1.6 : 3.05))))));""",
+    'cerrar el parentesis del headY')
+
+# LA CERCANIA SE QUEDABA PUESTA AL TERMINAR EL JUEGO: nadie la baja, y el
+# bucle deja de llamar a updateMovement en 'end' pero updateTape sigue
+# corriendo, asi que la pantalla final heredaba el glitch del ultimo cuadro con
+# la cosa encima. Es de todos los niveles, no solo del local.
+s = s if SOLO else cambiar(s, """      arrowEl.style.display = 'none';
+      distEl.style.display = 'none';
+      staticEl.style.opacity = '0';
+      vignetteEl.style.opacity = '0';""",
+    """      arrowEl.style.display = 'none';
+      distEl.style.display = 'none';
+      staticEl.style.opacity = '0';
+      entityProximity = 0;
+      shakeAmount = 0;
+      vignetteEl.style.opacity = '0';""", 'la pantalla final sin glitch heredado')
 
 s = s if SOLO else cambiar(s, """  function updateTape(delta, elapsed) {
     glitchCd -= delta;""",
