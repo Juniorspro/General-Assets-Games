@@ -97,6 +97,50 @@ export function pasoMadera(vol = 1) {
     n.start(t); n.stop(t + 0.07);
 }
 
+/* EL PASO CORRIENDO. No es el de caminar con mas volumen: el juego dispara uno
+   cada 0,242 s contra los 0,370 s de caminar, asi que tiene que ser MAS CORTO
+   ademas de mas duro. Con la muestra de caminar sonaba a zumbido continuo
+   —0,40 s de sonido cada 0,24 s se apilan— y esa era la queja. */
+export function correr(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('correr', vol)) return;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.04);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.34 * vol, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.08);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.09);
+    const n = ruido(0.07), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.8;
+    ng.gain.setValueAtTime(0.20 * vol, t);
+    ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.055);
+    n.connect(f); f.connect(ng); ng.connect(master);
+    n.start(t); n.stop(t + 0.07);
+}
+
+/* EL DESLIZAMIENTO DEL JUGADOR. No existia: la rama de deslizarse no llamaba a
+   ningun sonido, asi que tirarse al piso era mudo. Dura lo que dura el
+   deslizamiento (SLIDE_TIME = 0,85 s) y se dispara una sola vez al arrancar. */
+export function deslizar() {
+    if (ctx && puente.tocar && puente.tocar('deslizar', 1)) return;
+    if (!ctx) return;
+    const t = ctx.currentTime, dur = 0.8;
+    const n = ruido(dur), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.Q.value = 0.9;
+    // el roce frena: el filtro baja igual que la velocidad del cuerpo
+    f.frequency.setValueAtTime(1900, t);
+    f.frequency.exponentialRampToValueAtTime(360, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.30, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+    n.connect(f); f.connect(g); g.connect(master);
+    n.start(t); n.stop(t + dur);
+}
+
 /* La PISADA DEL BICHO: "heavy, slow footfalls from the creature". Pesada de
    verdad — mide tres metros y camina en zancos: golpe grave largo y un
    chasquido seco de la punta del zanco al apoyar. */

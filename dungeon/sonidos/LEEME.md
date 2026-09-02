@@ -11,26 +11,62 @@ sonido y nada más.
 
 ## Lo que hay
 
-| archivo | qué es | dura | pesa |
+Veinte sonidos, **361 KB los veinte juntos**.
+
+| archivo | qué es | dura | tope de dónde sale |
 |---|---|---|---|
-| `ambiente.ogg` | el colchón de la casa, en bucle | 8,90 s | 51,2 KB |
-| `persecucion.ogg` | la música de cuando te caza, en bucle | 8,10 s | 68,9 KB |
-| `paso_1..3.ogg` | pasos sobre alfombra | 0,40 s | 6,5–6,8 KB |
-| `paso_madera_1..2.ogg` | pasos sobre madera (el cajón) | 0,40 s | 7,4–7,6 KB |
-| `pisada_1..2.ogg` | la pisada del bicho | 0,70 s | 8,9–11,7 KB |
-| `grito.ogg` | el chillido de cuando te ve | 1,10 s | 14,4 KB |
-| `grunido.ogg` | el gruñido lejano | 1,80 s | 17,9 KB |
-| `golpe.ogg` | aterrizar y la embestida | 0,55 s | 9,2 KB |
-| `cajon.ogg` | revisar un mueble | 0,95 s | 10,4 KB |
-| `portazo.ogg` | la puerta de salida | 0,70 s | 10,0 KB |
-| `campana.ogg` | la campana del final | 3,20 s | 30,6 KB |
-| `riser.ogg` | el barrido de la corrida final | 3,40 s | 27,6 KB |
+| `ambiente.ogg` | el colchón de la casa, en bucle | 8,90 s | — |
+| `persecucion.ogg` | la música de la caza, en bucle | 8,10 s | — |
+| `paso_1..3.ogg` | pasos caminando, alfombra | 0,200 s | hueco 0,370 s |
+| `correr_1..3.ogg` | pasos corriendo | 0,150 s | hueco 0,242 s |
+| `paso_madera_1..2.ogg` | pasos en el cajón del arranque | 0,160 s | hueco 0,242 s |
+| `deslizar.ogg` | tirarse al piso | 0,800 s | `SLIDE_TIME` 0,85 s |
+| `pisada_1..2.ogg` | la pisada del bicho | 0,240 s | hueco 0,323 s |
+| `grito.ogg` | el chillido de cuando te ve | 1,10 s | — |
+| `grunido.ogg` | el gruñido lejano | 1,80 s | — |
+| `golpe.ogg` | aterrizar y la embestida | 0,55 s | — |
+| `cajon.ogg` | revisar un mueble | 0,95 s | — |
+| `portazo.ogg` | la puerta de salida | 0,70 s | — |
+| `campana.ogg` | la campana del final | 3,20 s | — |
+| `riser.ogg` | el barrido de la corrida final | 3,40 s | — |
 
 Las variantes numeradas se eligen al azar con ±6 % de tono: un paso repetido
 idéntico veinte veces se lee como un error, no como un paso.
 
 **`grunido`, sin eñe.** El nombre viaja adentro de una URL del CDN y ahí el
 UTF-8 hay que escaparlo. La clave en `src/muestras.js` es `snd_grunido`.
+
+## La regla que faltaba: el tope sale de la cadencia, no del gusto
+
+**Un sonido de paso más largo que el hueco entre dos pasos se pisa a sí mismo,
+y lo que se oye no son pasos sino un zumbido.** Es obvio dicho así y me costó
+una vuelta entera: horneé la primera tanda con topes «generosos a propósito»
+—0,40 s el paso, 0,70 s la pisada— sin cruzarlos nunca contra la cadencia a la
+que el juego los dispara.
+
+Los huecos salen del código, no de la intuición. En `main.js` el balanceo
+avanza `dt * (corriendo ? 13 : 8.5)` y cae un paso cada vez que cruza π, o sea
+`13/π = 4,14` pasos por segundo corriendo. En `langosta.js` el bicho pisa a
+`3,1` por segundo cuando te caza. De ahí:
+
+| disparo | veces/s | hueco | antes | ahora |
+|---|---|---|---|---|
+| paso caminando | 2,71 | 0,370 s | 0,400 s — solapa | 0,200 s — sobran 170 ms |
+| paso corriendo | 4,14 | 0,242 s | 0,400 s — solapa 158 ms | 0,150 s — sobran 92 ms |
+| pisada, buscando | 1,50 | 0,667 s | 0,700 s — solapa | 0,240 s — sobran 427 ms |
+| **pisada, cazando** | 3,10 | 0,323 s | **0,700 s — solapa 377 ms** | 0,240 s — sobran 83 ms |
+
+La fila que rompía todo es la última: con el bicho cazándote había **más de dos
+pisadas apiladas en todo momento**, permanentemente.
+
+Dos cosas más que faltaban directamente:
+
+- **correr no tenía sonido propio**, era el de caminar con más volumen — y
+  encima el que peor entraba en su hueco;
+- **deslizarse era mudo**: la rama del deslizamiento no llamaba a ningún sonido.
+
+Y al hornear tan corto, el cierre no puede ser de 20 ms fijos: en una muestra de
+0,15 s eso es un corte. Se hace sobre el **último 35 %** de lo que dure.
 
 ## Los dos números que hay que mirar si se regenera alguno
 

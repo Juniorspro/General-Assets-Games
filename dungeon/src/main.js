@@ -948,6 +948,7 @@ class Dungeon {
         else if (wantSlide && this.slideCd <= 0 && Math.hypot(fwd, str) > 0.25) {
             this.slideT = SLIDE_TIME;
             this.slideCd = SLIDE_TIME + SLIDE_COOLDOWN;
+            S.deslizar();          // tirarse al piso era mudo hasta ahora
             this.slideDir = null;
             this.slideSide = Math.random() < 0.5 ? -1 : 1;
         }
@@ -1035,7 +1036,11 @@ class Dungeon {
         if (moving > 0.05 && Math.floor(bobAntes / Math.PI) !== Math.floor(this.bob / Math.PI)) {
             const enCaja = this.intro && this.intro.estado === 'caja';
             const v = (this.running ? 0.55 : 0.34) * (this.crouch ? 0.4 : 1);
-            if (enCaja) S.pasoMadera(v); else S.paso(v);
+            /* Correr tiene su propio sonido, no el de caminar mas fuerte: el
+               juego dispara uno cada 0,242 s y el de caminar dura mas que eso. */
+            if (enCaja) S.pasoMadera(v);
+            else if (this.running) S.correr(v);
+            else S.paso(v);
         }
         // cuanto baja por segundo: con eso se sabe si esta cayendo
         this._caida = Math.max(0, ((this._yprev ?? this.y) - this.y) / Math.max(dt, 1e-4));

@@ -22,6 +22,8 @@ export const MAPA = {
     ambiente:   { clave: 'snd_ambiente',  bucle: true,  vol: 0.55 },
     persecucion:{ clave: 'snd_persecucion', bucle: true, vol: 0.5 },
     paso:       { clave: 'snd_paso',      variantes: 3, vol: 0.9 },
+    correr:     { clave: 'snd_correr',    variantes: 3, vol: 0.95 },
+    deslizar:   { clave: 'snd_deslizar',  vol: 0.85 },
     pasoMadera: { clave: 'snd_paso_madera', variantes: 2, vol: 0.9 },
     pisada:     { clave: 'snd_pisada',    variantes: 2, vol: 1 },
     grito:      { clave: 'snd_grito',     vol: 1 },

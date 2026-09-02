@@ -41,6 +41,7 @@ SND_DIR = os.path.join(HERE, "sonidos")
 # Sin ene: el nombre viaja dentro de una URL del CDN y ahi el UTF-8 hay que
 # escaparlo. `grunido.ogg` evita el problema entero.
 SONIDOS = ["ambiente", "persecucion", "paso_1", "paso_2", "paso_3",
+           "correr_1", "correr_2", "correr_3", "deslizar",
            "paso_madera_1", "paso_madera_2", "pisada_1", "pisada_2",
            "grito", "grunido", "golpe", "cajon", "portazo", "campana", "riser"]
 
