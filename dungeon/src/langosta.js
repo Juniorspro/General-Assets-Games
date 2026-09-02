@@ -61,24 +61,35 @@ class Langosta {
                 const o = rig.cont;
                 this.art = rig.grupos;
                 this.contornos = rig.contornos || [];
-                /* CUERPO OSCURO, CARA CLARA. Es como se describe al bicho en
-                   todos lados —"muy alto, de miembros negros y delgados, con
-                   una cara palida"— y ademas es lo unico que funciona en esta
-                   casa: antes era beige entero, y contra la pared de yeso
-                   blanco de la sala grande era literalmente invisible. Medido.
+                /* LA TEXTURA MANDA. El modelo trae su atlas —la cara tallada,
+                   los brazos vendados, los pantalones negros, los zancos— y es
+                   TODO lo que tiene de bueno. Dos intentos de hacerlo visible
+                   lo arruinaron:
 
-                   El cuerpo no va a negro puro: va gris oscuro con un piso de
-                   emisivo, para que en un pasillo negro no se funda con el
-                   fondo. Lo que lo recorta contra el yeso es el contorno. */
-                const CUERPO = { c: 0x2a2724, e: 0x191614 };
-                const CARA = { c: 0xc9c2b2, e: 0x6e6558 };
-                for (const [hueso, malla] of Object.entries(rig.mallas || {})) {
-                    const t = hueso === 'cabeza' ? CARA : CUERPO;
+                     1. teñirlo plano (color liso + emisivo liso) le lavaba el
+                        relieve: un emisivo constante le suma el mismo gris a
+                        cada pixel, asi que la cara tallada y el pantalon negro
+                        terminan igual de claros;
+                     2. anular el mapa directamente lo dejaba de plastilina.
+
+                   Lo correcto es dejar el color en blanco —o sea, la textura
+                   tal como esta pintada— y usar EMISSIVEMAP: el piso de brillo
+                   sigue el mapa en vez de inundarlo. Lo claro brilla un poco y
+                   lo negro sigue negro, asi que el relieve se conserva y en un
+                   pasillo apagado igual se lee.
+
+                   Y el contraste contra la pared de yeso blanco lo da el
+                   contorno negro, que no toca la textura. */
+                for (const malla of Object.values(rig.mallas || {})) {
                     const m = malla.material;
                     if (!m) continue;
-                    if (m.map) m.map = null;      // el atlas de Tripo es beige: tapa el tinte
-                    if (m.color) { m.color.setHex(t.c); m.roughness = 1; m.metalness = 0 }
-                    if (m.emissive) { m.emissive.setHex(t.e); m.emissiveIntensity = 1 }
+                    if (m.color) m.color.setHex(0xffffff);
+                    m.roughness = 0.95; m.metalness = 0;
+                    if (m.emissive) {
+                        if (m.map) m.emissiveMap = m.map;
+                        m.emissive.setHex(0x4a4640);
+                        m.emissiveIntensity = 1;
+                    }
                 }
                 o.traverse(n => {
                     if (!n.isMesh) return;
@@ -141,8 +152,11 @@ class Langosta {
             const m = n.material;
             if (!n.userData.tono) n.userData.tono = [m.color.getHex(), m.emissive.getHex(), m.emissiveIntensity];
             if (on) {
-                m.color.setHex(0x6e0f0a);
-                m.emissive.setHex(0x3d0704);
+                /* Tinte rojo MULTIPLICANDO la textura, no reemplazandola: la
+                   cara tallada tiene que seguir viendose, roja pero tallada.
+                   El emisivo baja para que la luz roja haga el trabajo. */
+                m.color.setHex(0xb03028);
+                m.emissive.setHex(0x1c0503);
                 m.emissiveIntensity = 1;
             } else {
                 const [c, e, i] = n.userData.tono;

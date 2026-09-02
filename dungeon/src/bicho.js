@@ -121,7 +121,7 @@ export function construirBicho(escena3d, alto) {
         const co = new THREE.Mesh(gc, new THREE.MeshBasicMaterial({
             color: 0x07080a, side: THREE.BackSide,
         }));
-        co.scale.setScalar(1.045);
+        co.scale.setScalar(1.06);
         grupo.add(co);
 
         grupos[h] = grupo; mallas[h] = m; contornos.push(co);

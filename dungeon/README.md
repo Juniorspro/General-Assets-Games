@@ -224,47 +224,55 @@ Y en el juego va con un tinte gris frío encima, **luz desde abajo de la cara**
 —la misma cara alumbrada de arriba es una persona y alumbrada de abajo es otra
 cosa— y, cazando, se encorva 0,20 rad más.
 
-## Que se vea: cuerpo oscuro, cara pálida
+## Que se vea sin arruinarlo
 
-Tercera vuelta con lo mismo —*"el monstruo es invisible"*— y esta vez el
-diagnóstico salió de medir, no de mirar.
+Tercera vuelta con *"el monstruo es invisible"*, y la primera en la que el
+diagnóstico salió de medir.
 
-Las dos veces anteriores la causa fue otra: primero el emisivo, después el
+Las dos causas anteriores fueron otras: el emisivo primero, y después el
 empaquetador que buscaba el modelo en la carpeta equivocada. Con el archivo ya
-cargando, quedó a la vista la de verdad: **el bicho era beige claro
-(`0xb4b0a6`) y la casa nueva tiene dos salas enteras de yeso blanco**. El tinte
-estaba elegido contra el laberinto oscuro de antes; contra una pared de yeso a
-siete metros el bicho y la pared daban el mismo brillo.
+cargando quedó a la vista la de verdad: **el bicho es pálido y la casa nueva
+tiene dos salas enteras de yeso blanco**. Contra una pared de yeso a siete
+metros, el bicho y la pared daban el mismo brillo.
 
-Ahora es como se lo describe en todos lados —*muy alto, de miembros negros y
-delgados, con una cara pálida*—:
+Y el primer arreglo fue peor que el problema: teñirlo plano —cuerpo gris
+oscuro, cara clara, sin mapa de textura— lo dejó de plastilina. **La textura es
+todo lo que el modelo tiene de bueno**: la cara tallada, los brazos vendados,
+los pantalones negros, los zancos. Dos formas de arruinarla:
 
-- **cuerpo gris oscuro** (`0x2a2724`) con un piso de emisivo, no negro puro:
-  negro puro desaparecería en un pasillo apagado;
-- **cabeza clara** (`0xc9c2b2`) con su emisivo: es el ancla visual en la
-  oscuridad, y es lo que se ve primero cuando dobla una esquina;
-- **contorno**: una copia agrandada un 4,5% con las caras dadas vuelta, en
-  negro. Es lo que garantiza que recorte contra **cualquier** fondo.
+1. **un emisivo constante** le suma el mismo gris a cada píxel, así que la cara
+   tallada y el pantalón negro terminan igual de claros;
+2. **anular el mapa** directamente, que es lo que hice.
 
-Para poder teñir la cabeza distinto del cuerpo hubo que arreglar algo del rig:
-**todos los huesos compartían el material de la malla original**, así que teñir
-uno teñía el bicho entero. Ahora cada hueso clona el suyo. Y se le saca el mapa
-de textura, porque el atlas de Tripo es beige y le ganaba al tinte.
+Lo que quedó:
+
+- **el color en blanco**: la textura tal como está pintada;
+- **`emissiveMap` = el mapa**, con un emisivo gris de fondo. El piso de brillo
+  *sigue* la textura en vez de inundarla: lo claro brilla un poco, lo negro
+  sigue negro, el relieve se conserva y en un pasillo apagado igual se lee;
+- **un contorno**: una copia agrandada un 6 % con las caras dadas vuelta, en
+  negro. Es lo único que da contraste contra el yeso blanco, y **no toca la
+  textura**.
+
+Para poder darle contorno hubo que arreglar algo del rig: **todos los huesos
+compartían el material de la malla original**. Ahora cada hueso clona el suyo.
 
 Medido con dos capturas idénticas, una con la malla y otra sin ella, restadas:
 
 | dónde | la silueta tapa un fondo de | y lo baja a | diferencia |
 |---|---|---|---|
-| pared de yeso blanco, 7 m | 140 | 85 | **55 niveles** |
-| pasillo iluminado, 7 m | 138 | 86 | **52 niveles** |
-| pasillo con las arañas apagadas | 135 | 64 | **71 niveles** |
+| pared de yeso blanco, 7 m | 138 | 88 | **50 niveles** |
+| pasillo iluminado, 7 m | 167 | 125 | **42 niveles** |
+| pasillo con las arañas apagadas | 143 | 68 | **76 niveles** |
 
-Y la cara pálida hace lo contrario donde hace falta: en el pasillo iluminado
-sube 1746 px de 145 a 187, y a oscuras de 66 a 126. Contra el 13 % de contraste
-que se midió la primera vez, esto se ve en las tres situaciones.
+Y donde hace falta hace lo contrario: las partes claras suben de 73 a 125
+contra el yeso, y de 40 a 104 en el pasillo a oscuras. Contra el 13 % de
+contraste de la primera vez, ahora se ve en las tres situaciones **y sigue
+siendo el modelo que era**.
 
-En la embestida el contorno **se apaga**: a sesenta centímetros la silueta
-negra se comía la cara.
+En la embestida el contorno **se apaga** —a sesenta centímetros la silueta
+negra se comía la cara— y el rojo se aplica **multiplicando** la textura, no
+reemplazándola: la cara tiene que seguir tallada, roja pero tallada.
 
 ## La embestida
 
