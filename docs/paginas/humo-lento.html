@@ -117,6 +117,71 @@ h1{font-size:clamp(44px,7vw,96px)}
 @keyframes corre{0%{transform:translateX(-100%)}60%,100%{transform:translateX(100%)}}
 
 
+
+/* ── transiciones ── */
+.progreso{position:absolute;left:0;right:0;bottom:-1px;height:1px;background:transparent}
+.progreso b{display:block;height:100%;width:0;background:var(--agave);
+  transition:width .12s linear}
+
+/* el texto de cada escena entra por líneas, no de golpe */
+.escena .interior>*{opacity:0;transform:translateY(20px);
+  transition:opacity .55s cubic-bezier(.19,1,.22,1),transform .68s cubic-bezier(.19,1,.22,1)}
+.escena.activa .interior>*{opacity:1;transform:none}
+.escena .interior>*:nth-child(1){transition-delay:.02s}
+.escena .interior>*:nth-child(2){transition-delay:.09s}
+.escena .interior>*:nth-child(3){transition-delay:.16s}
+.escena .interior>*:nth-child(4){transition-delay:.23s}
+.escena .interior>*:nth-child(5){transition-delay:.30s}
+
+/* las notas de cata entran una tras otra */
+.notas span{opacity:0;transform:translateY(10px) scale(.96);
+  transition:opacity .5s cubic-bezier(.19,1,.22,1),transform .5s cubic-bezier(.19,1,.22,1)}
+.escena.activa .notas span{opacity:1;transform:none}
+.escena.activa .notas span:nth-child(1){transition-delay:.30s}
+.escena.activa .notas span:nth-child(2){transition-delay:.36s}
+.escena.activa .notas span:nth-child(3){transition-delay:.42s}
+.escena.activa .notas span:nth-child(4){transition-delay:.48s}
+.escena.activa .notas span:nth-child(5){transition-delay:.54s}
+.escena.activa .notas span:nth-child(6){transition-delay:.60s}
+
+/* las cifras cuentan al entrar */
+.cifras div .v{font-variant-numeric:tabular-nums}
+
+/* el disco que vuela del botón a la bolsa */
+.vuela{position:fixed;z-index:70;width:26px;height:26px;border-radius:999px;pointer-events:none;
+  box-shadow:inset 0 -5px 10px rgba(0,0,0,.28),inset 0 4px 7px rgba(255,255,255,.42);
+  transition:transform .72s cubic-bezier(.5,-0.2,.3,1),opacity .72s ease}
+.bolsa .n{transition:transform .34s cubic-bezier(.2,1.7,.4,1)}
+.bolsa .n.golpe{transform:scale(1.55)}
+
+/* la bolsa: los renglones entran escalonados */
+.item{opacity:0;transform:translateX(16px);
+  animation:entraItem .5s cubic-bezier(.19,1,.22,1) forwards}
+@keyframes entraItem{to{opacity:1;transform:none}}
+
+/* las fotos se descubren de abajo arriba y respiran al desplazar */
+.banda img{clip-path:inset(0 0 100% 0);transform:scale(1.06);
+  transition:clip-path 1.15s cubic-bezier(.19,1,.22,1),transform 1.4s cubic-bezier(.19,1,.22,1)}
+.banda.abierta img{clip-path:inset(0 0 0 0);transform:scale(1)}
+.banda .cita{opacity:0;transform:translateY(22px);
+  transition:opacity .8s ease .25s,transform .9s cubic-bezier(.19,1,.22,1) .25s}
+.banda .firma{opacity:0;transition:opacity .8s ease .45s}
+.banda.abierta .cita{opacity:1;transform:none}
+.banda.abierta .firma{opacity:1}
+.placa img{clip-path:inset(0 0 100% 0);transition:clip-path 1s cubic-bezier(.19,1,.22,1)}
+.placa.abierta img{clip-path:inset(0 0 0 0)}
+
+/* el precio rueda al cambiar de variante */
+.precio.rueda,.compraFija .precio.rueda{animation:rueda .42s cubic-bezier(.19,1,.22,1)}
+@keyframes rueda{0%{transform:translateY(0);opacity:1}
+  45%{transform:translateY(-14px);opacity:0}
+  46%{transform:translateY(12px)}
+  100%{transform:translateY(0);opacity:1}}
+
+/* el disco de la variante elegida late una vez */
+.var[aria-pressed="true"] .disco{animation:late .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes late{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+
 /* ── fotografía del palenque ── */
 .banda{position:relative;margin:clamp(60px,9vw,120px) 0;overflow:hidden}
 .banda img{display:block;width:100%;height:clamp(300px,44vw,560px);object-fit:cover}
@@ -222,6 +287,8 @@ footer.pie b{color:var(--tinta2);font-weight:600}
 
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
+  .escena .interior>*,.notas span,.banda img,.banda .cita,.banda .firma,.placa img,.item{
+    opacity:1!important;transform:none!important;clip-path:none!important;animation:none!important}
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
   .suelta{opacity:1;transform:none}
 }
@@ -233,6 +300,7 @@ footer.pie b{color:var(--tinta2);font-weight:600}
     <a href="#origen">Origen</a><a href="#proceso">Proceso</a><a href="#palenque">Palenque</a><a href="#ficha">Ficha</a>
   </nav>
   <button class="bolsa" id="abrirBolsa" type="button">Bolsa <span class="n" id="cuenta">0</span></button>
+<div class="progreso"><b id="pbar"></b></div>
 </div></header>
 
 <div class="rollo" id="rollo">
@@ -430,9 +498,14 @@ function pintaElegido(){
   document.querySelectorAll(".var").forEach(function(b,i){
     b.setAttribute("aria-pressed", String(i===elegido));
   });
-  $("precioHero").innerHTML=pesos(v.precio)+'<small>MXN · 750 ml</small>';
+  [$("precioHero"),$("fijoPrecio")].forEach(function(el){
+    el.classList.remove("rueda"); void el.offsetWidth; el.classList.add("rueda");
+  });
+  setTimeout(function(){
+    $("precioHero").innerHTML=pesos(v.precio)+'<small>MXN · 750 ml</small>';
+    $("fijoPrecio").textContent=pesos(v.precio);
+  },190);
   $("fijoNombre").textContent=v.nombre;
-  $("fijoPrecio").textContent=pesos(v.precio);
   if (M.listo) M.tinte(v);
 }
 $("vars").addEventListener("click",function(e){
@@ -447,7 +520,7 @@ function pintaBolsa(){
   else{
     $("lista").innerHTML=bolsa.map(function(x,i){
       var v=VARIANTES.find(function(w){return w.id===x.id});
-      return '<div class="item"><span class="disco" style="background:#'+v.licor.toString(16).padStart(6,"0")+'"></span>'+
+      return '<div class="item" style="animation-delay:'+(i*70)+'ms"><span class="disco" style="background:#'+v.licor.toString(16).padStart(6,"0")+'"></span>'+
         '<span><b>'+v.nombre+'</b><i>750 ml · '+x.n+' ×</i></span>'+
         '<span class="p">'+pesos(v.precio*x.n)+'</span>'+
         '<button class="quitar" data-q="'+i+'" type="button">quitar</button></div>';
@@ -457,11 +530,31 @@ function pintaBolsa(){
     return a + VARIANTES.find(function(w){return w.id===x.id}).precio * x.n; },0);
   $("total").textContent=pesos(t);
 }
-function anadir(){
+function volar(desde, color){
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var a=desde.getBoundingClientRect(), b=$("abrirBolsa").getBoundingClientRect();
+  var d=document.createElement("div");
+  d.className="vuela";
+  d.style.background=color;
+  d.style.left=(a.left+a.width/2-13)+"px";
+  d.style.top=(a.top+a.height/2-13)+"px";
+  document.body.appendChild(d);
+  requestAnimationFrame(function(){
+    d.style.transform="translate("+(b.left+b.width/2-(a.left+a.width/2))+"px,"+
+      (b.top+b.height/2-(a.top+a.height/2))+"px) scale(.4)";
+    d.style.opacity=".25";
+  });
+  setTimeout(function(){ d.remove(); }, 780);
+}
+function anadir(ev){
   var v=VARIANTES[elegido];
   var y=bolsa.find(function(x){return x.id===v.id});
   if(y) y.n++; else bolsa.push({id:v.id,n:1});
-  pintaBolsa(); abrir(true);
+  if(ev&&ev.currentTarget) volar(ev.currentTarget, "#"+v.licor.toString(16).padStart(6,"0"));
+  pintaBolsa();
+  var n=$("cuenta"); n.classList.remove("golpe"); void n.offsetWidth; n.classList.add("golpe");
+  setTimeout(function(){ n.classList.remove("golpe"); },340);
+  setTimeout(function(){ abrir(true); },520);   // la bolsa abre cuando el disco llega
 }
 function abrir(si){
   $("cajon").classList.toggle("ver",si);
@@ -615,9 +708,13 @@ var M={listo:false};
     m.rotation.x=-Math.PI/2; m.position.y=CHICO?-1.28:-4.58; esc.add(m);
   })();
 
+  // El color no salta: se interpola. Y al cambiar de variante la botella
+  // se vacía y se vuelve a llenar, que es lo que hace creíble el cambio.
+  var metaVidrio=new THREE.Color(0xdfe6e0), metaLicor=new THREE.Color(0xf2f6f2),
+      metaAtenua=new THREE.Color(0xbfd8c8), relleno=1, tRelleno=-1;
   M.tinte=function(v){
-    vidrio.color.setHex(v.vidrio); vidrio.attenuationColor.setHex(v.atenua);
-    licor.color.setHex(v.licor); licor.attenuationColor.setHex(v.atenua);
+    metaVidrio.setHex(v.vidrio); metaLicor.setHex(v.licor); metaAtenua.setHex(v.atenua);
+    tRelleno=0;                        // arranca el vaciado
   };
   M.listo=true;
 
@@ -645,26 +742,97 @@ var M={listo:false};
   new IntersectionObserver(function(en){ visible=en[0].isIntersecting; },{threshold:0})
     .observe($("rollo"));
 
-  var p=0, pSuave=0;
+  var p=0, pSuave=0, vel=0, velSuave=0, chapoteo=0, chapoteoV=0;
   M.avance=function(v){ p=v; };
 
-  var ultimo=0, minMs=CHICO?33:0;
+  /* Una toma por escena, no un seno para todas: cada una tiene su encuadre,
+     su altura de cámara y su giro, y entre ellas se interpola con easing. */
+  var TOMAS = CHICO ? [
+    {gx: 0.5, gy:-1.2, gr:0.0, cz:26.0, cy:1.1, tz: 0.00},
+    {gx:-0.5, gy:-0.6, gr:2.1, cz:20.5, cy:2.0, tz: 0.05},
+    {gx: 0.5, gy:-1.6, gr:4.1, cz:24.0, cy:0.4, tz:-0.05},
+    {gx:-0.4, gy:-1.0, gr:6.0, cz:27.5, cy:1.3, tz: 0.02},
+  ] : [
+    {gx: 3.2, gy:-4.5, gr:0.0, cz:18.5, cy: 0.0, tz: 0.00},
+    {gx:-4.6, gy:-3.7, gr:2.2, cz:16.0, cy: 1.5, tz: 0.06},
+    {gx: 4.2, gy:-5.0, gr:4.1, cz:17.2, cy:-0.6, tz:-0.07},
+    {gx:-4.0, gy:-4.2, gr:6.1, cz:20.0, cy: 0.8, tz: 0.03},
+  ];
+  var suavizar=function(t){ return t*t*(3-2*t); };
+  function tomar(pp){
+    var pos=pp*(TOMAS.length-1);
+    var i=Math.max(0,Math.min(TOMAS.length-2,Math.floor(pos)));
+    var f=suavizar(Math.max(0,Math.min(1,pos-i)));
+    var a=TOMAS[i], b=TOMAS[i+1], o={};
+    for(var k in a) o[k]=a[k]+(b[k]-a[k])*f;
+    return o;
+  }
+  /* Campana centrada en la escena 2: ahí la botella se despieza. */
+  function campana(pp,centro,ancho){
+    return Math.max(0,1-Math.abs(pp-centro)/ancho);
+  }
+
+  var ultimo=0, minMs=CHICO?33:0, t0=performance.now();
   function cuadro(t){
     requestAnimationFrame(cuadro);
     if(!visible) return;
     if(minMs && (t-ultimo)<minMs) return;
-    ultimo=t;
+    var dt=Math.min(64, t-(ultimo||t)); ultimo=t;
+
+    var antes=pSuave;
     pSuave += (p-pSuave)*.085;
+    vel = (pSuave-antes);
+    velSuave += (vel-velSuave)*.2;
+
     if(!arrastrando){ velocidad*=.94; giroManual+=velocidad; }
 
-    grupo.rotation.y = pSuave*Math.PI*2.4 + giroManual + (lento?0:performance.now()*.00012);
-    grupo.rotation.z = Math.sin(pSuave*Math.PI*2)*.045;
-    grupo.position.x = Math.cos(pSuave*Math.PI*3) * (CHICO ? 0.5 : 3.0);
-    grupo.position.y = (CHICO?-1.2:-4.5) + Math.sin(pSuave*Math.PI*3)*.20;
-    var z = (CHICO?26:18.5) - Math.sin(pSuave*Math.PI*3)*1.9;
-    cam.position.z += (z-cam.position.z)*.08;
-    cam.position.y = (CHICO?1.1:0) + Math.sin(pSuave*Math.PI)*.75;
-    cam.lookAt(0,(CHICO?1.1:0) + Math.sin(pSuave*Math.PI)*.4,0);
+    /* el líquido se va detrás del movimiento, con muelle */
+    var empuje = -(velSuave*60 + velocidad*1.4);
+    chapoteoV += (empuje-chapoteo)*0.055 - chapoteoV*0.14;
+    chapoteo += chapoteoV;
+
+    var T=tomar(pSuave);
+
+    /* giro: la toma manda, el arrastre suma, y al desplazar rápido acelera */
+    grupo.rotation.y = T.gr + giroManual + (lento?0:(t-t0)*.00010) + velSuave*7;
+    grupo.rotation.z = T.tz + chapoteo*.05;
+    grupo.position.x = T.gx;
+    grupo.position.y = T.gy;
+
+    /* despiece: corcho, lacre y etiqueta se separan y vuelven */
+    var abre = campana(pSuave, 1/3, 0.26);
+    var e = suavizar(abre);
+    corcho.position.y = 8.06 + e*2.35;
+    corcho.rotation.z = e*0.30;
+    lacre.position.y  = 7.84 + e*1.30;
+    lacre.rotation.z  = -e*0.22;
+    etq.position.y    = 2.05 + e*0.10;
+    etq.scale.setScalar(1 + e*0.055);
+    etq.material.opacity = 1 - e*0.12;
+
+    /* vaciado y rellenado al cambiar de variante */
+    if(tRelleno >= 0){
+      tRelleno += dt/1000;
+      var d=1.05;
+      relleno = tRelleno < d*0.42
+        ? 1 - suavizar(tRelleno/(d*0.42))*0.88
+        : 0.12 + suavizar(Math.min(1,(tRelleno-d*0.42)/(d*0.58)))*0.88;
+      if(tRelleno > d){ relleno=1; tRelleno=-1; }
+    }
+    dentro.scale.y = relleno;
+    dentro.position.y = -(1-relleno)*0.15;
+
+    /* el color viaja, no salta */
+    vidrio.color.lerp(metaVidrio,.10);
+    vidrio.attenuationColor.lerp(metaAtenua,.10);
+    licor.color.lerp(metaLicor,.10);
+    if(licor.attenuationColor) licor.attenuationColor.lerp(metaAtenua,.10);
+
+    /* cámara: dolly suave hacia la toma, mirando algo más arriba al acercarse */
+    cam.position.z += (T.cz-cam.position.z)*.075;
+    cam.position.y += (T.cy-cam.position.y)*.075;
+    cam.position.x += (0-cam.position.x)*.06;
+    cam.lookAt(0, T.cy*0.45 + (CHICO?1.0:0), 0);
     ren.render(esc,cam);
   }
   cuadro();
@@ -674,6 +842,7 @@ var M={listo:false};
 
 /* ── avance del rollo y escenas que desaparecen ───────────────────── */
 var rollo=$("rollo"), escenas=[].slice.call(document.querySelectorAll(".escena"));
+var bandas=[].slice.call(document.querySelectorAll(".banda"));
 var barras=[].slice.call(document.querySelectorAll(".pasos i b"));
 var N=escenas.length;
 
@@ -694,8 +863,24 @@ function alDesplazar(){
     escenas[i].style.visibility=o<0.02?"hidden":"visible";
     barras[i].style.width=(Math.max(0,Math.min(1,1-Math.abs(pos-i)))*100)+"%";
   }
+  // la escena más cercana es la "activa": su texto entra por líneas
+  var cerca=Math.round(pos);
+  for(var k=0;k<N;k++) escenas[k].classList.toggle("activa", k===cerca && Math.abs(pos-cerca)<0.42);
+
   $("barra").classList.toggle("pegada", window.scrollY>12);
   $("compraFija").classList.toggle("ver", -caja.top > total*0.55);
+
+  // avance de toda la página
+  var alto=document.documentElement.scrollHeight-window.innerHeight;
+  $("pbar").style.width=(alto>0?Math.min(100,(window.scrollY/alto)*100):0)+"%";
+
+  // las fotos respiran un poco al pasar
+  for(var b=0;b<bandas.length;b++){
+    var r=bandas[b].getBoundingClientRect();
+    if(r.bottom<-200||r.top>window.innerHeight+200) continue;
+    var centro=(r.top+r.height/2-window.innerHeight/2)/window.innerHeight;
+    bandas[b].querySelector("img").style.objectPosition="50% "+(50+centro*9)+"%";
+  }
 }
 window.addEventListener("scroll",alDesplazar,{passive:true});
 window.addEventListener("resize",alDesplazar);
@@ -712,6 +897,32 @@ var obs=new IntersectionObserver(function(en){
 document.querySelectorAll(".suelta").forEach(function(el,i){
   el.style.transitionDelay=(i%4)*90+"ms"; obs.observe(el);
 });
+
+// las fotos se descubren cuando entran, una sola vez
+var obsFoto=new IntersectionObserver(function(en){
+  en.forEach(function(x){ if(x.isIntersecting){ x.target.classList.add("abierta"); obsFoto.unobserve(x.target); } });
+},{threshold:.22});
+document.querySelectorAll(".banda,.placa").forEach(function(el,i){
+  if(el.classList.contains("placa")) el.style.transitionDelay=(i%2)*140+"ms";
+  obsFoto.observe(el);
+});
+
+// las cifras del proceso cuentan hasta su valor
+var obsCifra=new IntersectionObserver(function(en){
+  en.forEach(function(x){
+    if(!x.isIntersecting) return;
+    obsCifra.unobserve(x.target);
+    var fin=parseInt(x.target.textContent,10);
+    if(isNaN(fin)) return;
+    var sufijo=x.target.innerHTML.replace(/^\d+/,""), t0=performance.now(), dur=900;
+    (function anda(t){
+      var f=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-f,3);
+      x.target.innerHTML=Math.round(fin*e)+sufijo;
+      if(f<1) requestAnimationFrame(anda);
+    })(t0);
+  });
+},{threshold:.6});
+document.querySelectorAll(".cifras .v").forEach(function(el){ obsCifra.observe(el); });
 
 pintaElegido(); pintaBolsa();
 })();
