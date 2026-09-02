@@ -315,7 +315,15 @@ demostraciones del repo). Es una demostración de sitio armada con este material
 que repintan la página entera, cuenta regresiva a la próxima fecha, el ciclo de
 egresados, servicios, archivo de fotos filtrable por año, equipo, zona y cuatro
 piezas 3D (bola de espejos, corona, sombrero y bafle) generadas para el sitio.
-Un solo archivo, todo embebido, 4,4 MB.
+Además: fondo de luces que se mueven en canvas y toman el color del tema, decoraciones
+generadas con IA por estética (calabaza, lazo, cetro, semáforo, cristales de hielo…),
+doce clips de sus propios reels en loop, y un botón de WhatsApp con mensaje distinto
+según la sección. Un solo archivo, todo embebido, 7,1 MB.
+
+El logo se rehízo: el emblema del jarro es una imagen generada y el wordmark usa
+Great Vibes para «Eventos» y Archivo Black para «IBLO».
+
+WhatsApp de contacto: **3725 44-9273** (`wa.me/5493725449273`).
 
 ## Archivos de este relevamiento
 
