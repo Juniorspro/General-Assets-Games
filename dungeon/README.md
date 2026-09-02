@@ -456,7 +456,65 @@ Los seis archivos del menú pesan **328 KB**.
 Y el final es la palabra **GANASTE** generada igual —agrietada, chorreando— con
 un resplandor verde y el HUD apagado.
 
-## El audio, todo sintetizado
+## El audio, contra el audio del juego real
+
+**No puedo escuchar.** Es una limitación mía y conviene decirla antes que
+fingir lo contrario. Lo que sí se puede hacer es dos cosas, y las dos dan
+números:
+
+1. **Que un modelo analice el audio de dos gameplays completos** y lo describa
+   evento por evento. Sale texto, pero texto específico: *"muffled carpet
+   thuds"*, *"heavy, slow footfalls from the creature"*, *"continuous sliding
+   sound of the cube against the floor"*.
+2. **Medir lo que sintetizo.** `medir()` renderiza cada sonido en un
+   `OfflineAudioContext` —sin reproducirlo— y devuelve duración útil, dónde
+   está el pico, cuánto tarda en caer, y en qué frecuencias está la energía
+   (Goertzel sobre 30 bandas logarítmicas). Así se puede comparar contra la
+   descripción con datos.
+
+### Lo que el análisis dijo que estaba mal
+
+| lo que dice el audio real | lo que había |
+|---|---|
+| *"muffled carpet thuds"* | un golpe **metálico** con dos armónicos agudos |
+| *"heavy, slow footfalls from the creature"* | el bicho usaba el mismo paso que el jugador |
+| *"continuous sliding sound of the cube"* | un tic cada 55 cm, que sonaba a pasos |
+| *"ambient low-frequency drone"* | **no había ambiente**: entre dos pasos, silencio digital |
+| *"distant, distorted low-pitched groan"* | sólo respiración |
+| *"fast-paced synth chase music"* | **el bicho te corría en silencio** |
+| *"click + wooden drawers opening and closing"* | un clic pelado |
+| *"loud slam → silencio → distant chime"* | la música épica entraba de una |
+| *"intense cinematic riser"* | no había |
+
+### Lo que quedó, medido
+
+| sonido | dur | dominante | banda | de dónde salió |
+|---|---|---|---|---|
+| `paso` | 0,10 s | 100 Hz | 83–120 | *muffled carpet thuds* |
+| `pasoMadera` | 0,10 s | 207 Hz | 173–249 | *footsteps on wood* |
+| `pisada` | 0,20 s | **69 Hz** | 69–83 | *heavy, slow footfalls* |
+| `gruñido` | 1,35 s | 83 Hz | 48–100 | *distant, distorted groan* |
+| `grito` | 0,75 s | **1072 Hz** | 1072–1287 | *abrupt, loud screech* |
+| `cajon` | 0,75 s | 144 Hz | 144–173 | *wooden drawers* |
+| `riser` | 3,15 s | barrido | 69–2673 | *cinematic riser* |
+| `portazo` | 0,25 s | 100 Hz | 100–120 | *loud slamming door* |
+| `campana` | 2,52 s | 516 Hz | cola 1,5 s | *distant chime* |
+
+### Tres falsos positivos que encontró el propio banco
+
+1. **Cuatro sonidos salían mudos**: `medir()` los llamaba sin argumento y
+   `0.34 * undefined` da `NaN`, así que el gain quedaba en `NaN`. Daban
+   "0,05 s a 40 Hz", que es como se ve el silencio.
+2. **El riser duraba 1,08 s de los 3 que debía**: con `Q = 4`, al barrer hacia
+   agudos pasa cada vez menos energía y el riser **se apaga mientras sube**.
+   Con `Q = 1,6` y la ganancia compensando, 3,15 s.
+3. **Y después medía 1,17 s igual**: el banco le pasaba `1` como volumen, pero
+   el primer argumento de `riser` es la **duración**. Medía un riser de un
+   segundo.
+
+Nada de esto se habría visto escuchando por encima.
+
+## El audio: por qué va sintetizado
 
 No hay un solo mp3. El menú es un colchón grave en la menor con un arpegio
 lento y **desafinado a propósito** —afinado suena a menú de app—. El final son

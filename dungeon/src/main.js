@@ -1024,7 +1024,16 @@ class Dungeon {
             this.y = 0;
         }
 
+        /* LOS PASOS DEL JUGADOR. En el original se oyen todo el tiempo y
+           cambian de superficie: madera en el cajón del arranque, alfombra
+           en la casa. Van con el balanceo, así que caen donde cae el pie. */
+        const bobAntes = this.bob;
         this.bob += dt * (moving > 0.05 ? (this.running ? 13 : 8.5) : 0);
+        if (moving > 0.05 && Math.floor(bobAntes / Math.PI) !== Math.floor(this.bob / Math.PI)) {
+            const enCaja = this.intro && this.intro.estado === 'caja';
+            const v = (this.running ? 0.55 : 0.34) * (this.crouch ? 0.4 : 1);
+            if (enCaja) S.pasoMadera(v); else S.paso(v);
+        }
         // cuanto baja por segundo: con eso se sabe si esta cayendo
         this._caida = Math.max(0, ((this._yprev ?? this.y) - this.y) / Math.max(dt, 1e-4));
         this._yprev = this.y;
@@ -1387,6 +1396,7 @@ function armarMenu() {
         despertarAudio();
         S.callarMusica();
         game.enMenu = false;
+        S.ambiente(1);       // el colchón de la casa, que no para nunca
         boot.classList.add('gone');
         setTimeout(() => { boot.style.display = 'none' }, 700);
     });
@@ -1431,3 +1441,4 @@ window.__LEVELS = LEVELS;
 window.__toWorld = toWorld;
 import * as MAP from './map.js';
 window.__MAP = MAP;
+window.__SONIDO = S;   // el banco mide los sonidos desde afuera

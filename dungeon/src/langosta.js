@@ -582,6 +582,7 @@ export class Mision {
                 this.decir('pinza');
             }
         } else if (o.tipo === 'revisar') {
+            S.cajon();
             this.revisados.add(o.mueble);
             if (o.mueble === this.conLlave) { this.tieneLlave = true; this.decir('¡la llave!') }
             else this.decir('nada acá');
@@ -600,8 +601,13 @@ export class Mision {
         } else if (o.tipo === 'salir') {
             this.salida.abierta = true;
             this.terminado = 'escapo';
-            S.puerta();
-            S.musicaFinal();
+            /* El final del original: portazo, SILENCIO, y recién después una
+               campana lejana. El silencio es parte del efecto, no un hueco —
+               por eso la música entra a los 1,4 s y no de una. */
+            S.callarMusica();
+            S.portazo();
+            setTimeout(() => S.campana(), 900);
+            setTimeout(() => S.musicaFinal(), 1400);
         }
     }
 
@@ -628,6 +634,7 @@ export class Mision {
         this.empujando = null;
         this.embestida = 0;
         this.ruido = 0;
+        S.musicaPersecucion(false);
         /* La niebla se guarda para devolverla: el menu de graficos tambien la
            toca, asi que hay que restaurar los valores que habia, no unos fijos. */
         const f = this.escena.fog;
@@ -749,10 +756,14 @@ export class Mision {
             const fx = -Math.sin(jug.yaw || 0), fz = -Math.cos(jug.yaw || 0);
             c.position.set(jug.x + fx * 0.95, this.base + 0.53, jug.z + fz * 0.95);
             if (c.userData.luz) c.userData.luz.position.set(c.position.x, this.base + 1.05, c.position.z);
+            /* Raspa CONTINUO mientras se mueve, no un tic cada medio metro:
+               en el juego real es "continuous sliding sound of the cube
+               against the floor". Con tics sonaba a pasos. */
             const mov = Math.hypot(jug.x - (this._px ?? jug.x), jug.z - (this._pz ?? jug.z));
-            this._raspa = (this._raspa || 0) + mov;
-            if (this._raspa > 0.55) { this._raspa = 0; S.arrastre(0.16) }
+            S.raspar(Math.min(1, mov / Math.max(dt, 1e-3) / 4));
         }
+        else if (this._raspando) { S.raspar(0); this._raspando = false }
+        if (this.empujando) this._raspando = true;
         this._px = jug.x; this._pz = jug.z;
 
         /* El ruido: correr lo hace, caminar poco, agachado nada. Se apaga solo.
@@ -786,10 +797,17 @@ export class Mision {
         if (mismoPiso && dist < 26) {
             const cerca = 1 - Math.min(1, dist / 26);
             this.tPaso = (this.tPaso || 0) + dt * (b.estado === 'caza' ? 3.1 : 1.5);
-            if (this.tPaso > 1) { this.tPaso = 0; S.paso(0.34 * cerca * cerca) }
+            if (this.tPaso > 1) { this.tPaso = 0; S.pisada(0.5 * cerca * cerca) }
             if (dist < 13) {
                 this.tResp = (this.tResp || 0) - dt;
                 if (this.tResp <= 0) { this.tResp = 2.4; S.respiro(0.30 * (1 - dist / 13)) }
+            }
+            /* El gruñido lejano: se oye cuando anda por ahí y todavía no sabe
+               dónde estás. Es el aviso de que existe, antes de verlo. */
+            this.tGru = (this.tGru || 6) - dt;
+            if (this.tGru <= 0) {
+                this.tGru = 7 + Math.random() * 9;
+                if (b.estado !== 'caza') S.gruñido(0.35 + 0.5 * cerca);
             }
             if (dist < 7.5) {
                 this.tLat = (this.tLat || 0) - dt;
@@ -804,7 +822,7 @@ export class Mision {
            algo y mira, CAZA te persigue porque te está viendo. */
         if (ve && !this.terminado) {
             // el grito va SOLO al pasar de no verte a verte
-            if (b.estado !== 'caza') { S.grito(); this.susto = 1 }
+            if (b.estado !== 'caza') { S.grito(); this.susto = 1; S.musicaPersecucion(true) }
             b.estado = 'caza';
             b.alerta = 1;
             b.ultimo = [jug.x, jug.z];
@@ -817,6 +835,7 @@ export class Mision {
                último lugar donde te vio y ahí se queda mirando un rato. */
             b.alerta -= dt * (b.estado === 'caza' ? 0.28 : 0.42);
             if (b.estado === 'caza' && b.alerta < 0.55) b.estado = 'busca';
+            if (b.estado === 'caza' && b.alerta < 0.55) S.musicaPersecucion(false);
             if (b.alerta <= 0) { b.estado = 'ronda'; b.destino = null }
         }
 
@@ -874,6 +893,13 @@ export class Mision {
 
         // te agarro
         if (!this.terminado && mismoPiso && dist < 0.95) this.embestir(jug);
+
+        /* El riser: cuando ya tenés todo y sólo falta la puerta, el pasillo
+           final del original tiene un barrido que sube. Suena UNA vez. */
+        if (!this._riser && this.tienePinza && this.tieneLlave && this.tieneTarjeta && this.cortado) {
+            this._riser = true;
+            S.riser(3);
+        }
 
         if (this.susto > 0) this.susto = Math.max(0, this.susto - dt * 1.5);
         if (this.negro > 0) this.negro = Math.max(0, this.negro - dt * 0.9);
