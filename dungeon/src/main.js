@@ -18,6 +18,9 @@ import * as S from './sonido.js';
 import { Calidad } from './calidad.js';
 import { Intro, ALTO_CAJA } from './intro.js';
 import { precargar } from './carga.js';
+import { cargarMuestras } from './muestras.js';
+import { puente } from './sonido.js';
+import * as MU from './muestras.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -1295,6 +1298,19 @@ async function arrancar() {
     window.__game = game;
     armarMenu();
     sonarBotones();
+    /* Las muestras se enganchan al sintetizador: cada sonido que tenga
+       archivo lo usa, y el que no, sigue sintetizado. Se decodifican con el
+       primer gesto, porque antes no hay contexto de audio. */
+    const engancharMuestras = async () => {
+        despertarAudio();
+        const ctx = S.contexto();
+        if (!ctx) return;
+        const n = await cargarMuestras(A, ctx);
+        window.__MUESTRAS = n;
+        if (n) { puente.tocar = MU.tocar; puente.bucle = MU.bucle }
+    };
+    for (const ev of ['pointerdown', 'touchstart', 'keydown'])
+        addEventListener(ev, engancharMuestras, { once: true, passive: true });
     requestAnimationFrame(loop);
 }
 

@@ -14,6 +14,15 @@
 
 let ctx = null, master = null;
 
+/* El puente a la capa de muestras. Se llena desde afuera para no crear una
+   dependencia circular: sonido.js no sabe que muestras.js existe. */
+export const puente = { tocar: null, bucle: null };
+
+/* El nodo del que cuelga todo. La capa de muestras necesita engancharse acá
+   y no en el destino, para que el volumen general valga también para ella. */
+export const salida = () => master;
+export const contexto = () => ctx;
+
 export function despertarAudio() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return }
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -44,6 +53,7 @@ function ruido(dur, repetir) {
    que había era un golpe metálico con dos armónicos agudos — de otro juego.
    Una alfombra no suena: absorbe. Queda un golpe grave y sordo y nada más. */
 export function paso(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('paso', vol)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
@@ -67,6 +77,7 @@ export function paso(vol = 1) {
 /* El paso sobre MADERA, para el cajón del arranque: "rapid rhythmic thumping
    of footsteps on wood". Mismo golpe pero más arriba y con el crujido. */
 export function pasoMadera(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('pasoMadera', vol)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
@@ -90,6 +101,7 @@ export function pasoMadera(vol = 1) {
    verdad — mide tres metros y camina en zancos: golpe grave largo y un
    chasquido seco de la punta del zanco al apoyar. */
 export function pisada(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('pisada', vol)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
@@ -140,6 +152,7 @@ export function latido(vol) {
 /* El grito, cuando te ve. Ruido pasado por un filtro que barre hacia arriba,
    mas dos osciladores desafinados: eso es lo que hace que raspe. */
 export function grito() {
+    if (ctx && puente.tocar && puente.tocar('grito', 1)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const n = ruido(1.1), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -175,6 +188,7 @@ export function grito() {
    seco y grave —como si te tirara al piso— y es la mitad del susto: el
    chillido solo se lee como un efecto, el golpe se lee como un cuerpo. */
 export function golpe() {
+    if (ctx && puente.tocar && puente.tocar('golpe', 1)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     // el cuerpo del golpe: un seno que se desploma de 150 a 34 Hz
@@ -225,6 +239,7 @@ export function viento(v) {
 let ambNodos = null, ambGan = null;
 export function ambiente(v = 1) {
     if (!ctx) return;
+    if (puente.bucle && puente.bucle('ambiente', v)) return;
     if (!ambNodos) {
         ambGan = ctx.createGain();
         ambGan.gain.value = 0.0001;
@@ -260,6 +275,7 @@ export function ambiente(v = 1) {
    chillido —ese es cuando te ve—: esto es lo que se oye cuando anda por ahí y
    todavía no sabe dónde estás. Grave, largo y distorsionado. */
 export function gruñido(vol = 1) {
+    if (ctx && puente.tocar && puente.tocar('gruñido', vol)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const forma = ctx.createWaveShaper();
@@ -312,6 +328,7 @@ export function raspar(v) {
    wooden drawers opening and closing". Son tres cosas: el clic del picaporte,
    el corredizo, y el golpe al cerrar. */
 export function cajon() {
+    if (ctx && puente.tocar && puente.tocar('cajon', 1)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     // clic del herraje
@@ -379,6 +396,7 @@ export function riser(dur = 3) {
    sound. Sudden transition to silence, then a distant chime" — el silencio es
    parte del efecto, no un hueco. */
 export function portazo() {
+    if (ctx && puente.tocar && puente.tocar('portazo', 1)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     const n = ruido(0.5), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -399,6 +417,7 @@ export function portazo() {
 }
 
 export function campana() {
+    if (ctx && puente.tocar && puente.tocar('campana', 1)) return;
     if (!ctx) return;
     const t = ctx.currentTime;
     // una campana lejana: parciales inarmónicos y una cola larga
@@ -424,6 +443,7 @@ export function campana() {
 let persNodos = [], persLoop = null, persGan = null;
 export function musicaPersecucion(on) {
     if (!ctx) return;
+    if (puente.bucle && puente.bucle('persecucion', on ? 1 : 0)) return;
     if (on) {
         if (persLoop) return;
         persGan = ctx.createGain();

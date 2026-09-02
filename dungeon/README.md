@@ -456,6 +456,37 @@ Los seis archivos del menú pesan **328 KB**.
 Y el final es la palabra **GANASTE** generada igual —agrietada, chorreando— con
 un resplandor verde y el HUD apagado.
 
+## Los sonidos en archivo: la ranura está, los archivos no
+
+`sonidos/` está vacío a propósito. El juego suena entero sin un solo archivo,
+porque todo está sintetizado — pero un colchón de ambiente hecho con tres senos
+es un colchón de tres senos, y se nota.
+
+`src/muestras.js` deja poner archivos **por encima** del sintetizador sin tirar
+nada: cada sonido pregunta primero si existe su muestra; si está la reproduce,
+y si no, cae al sintetizador de siempre. Se reemplaza **de a uno** — poner sólo
+el ambiente y dejar el resto sintetizado es una decisión válida.
+
+Detalles que importan:
+
+- las variantes numeradas (`paso_1`, `paso_2`, `paso_3`) se eligen al azar y se
+  reproducen con el tono corrido un ±6 %: un paso repetido idéntico veinte
+  veces se lee como un error, no como un paso;
+- `ambiente` y `persecucion` van en bucle con volumen, no disparadas;
+- el empaquetador toma solo cualquier `.ogg/.mp3/.m4a/.wav` que aparezca en la
+  carpeta, y van por CDN como el resto.
+
+`sonidos/LEEME.md` tiene la tabla de nombres, las duraciones y **las
+descripciones textuales del audio del juego real** para pasarle al generador.
+
+Probado con la carpeta vacía: 32 assets, **0 muestras**, cero errores, todos
+los sonidos suenan por el sintetizador y se entra al juego normal.
+
+> **Rezona no está disponible.** Su servidor MCP falló la conexión dos veces
+> seguidas (`CONNECT_TIMEOUT` a los 30 s). Y el audio de Higgsfield es sólo
+> voz: su propia herramienta dice que no se use para efectos ni música fuera
+> de su pipeline de juegos. Así que los archivos no se generaron todavía.
+
 ## El audio, contra el audio del juego real
 
 **No puedo escuchar.** Es una limitación mía y conviene decirla antes que

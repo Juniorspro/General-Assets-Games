@@ -31,6 +31,11 @@ MENU = ["logo", "ganaste", "bicho-frente", "bicho-lado", "fondo1", "fondo2",
         "btn-disco", "btn-placa", "ic-usar", "ic-agachar", "ic-correr", "ic-deslizar"]
 MENU_DIR = os.path.join(HERE, "menu")
 
+# Los sonidos EN ARCHIVO. Van vacios hasta que se generen: el juego suena igual
+# porque cada sonido cae al sintetizador si no encuentra su muestra. Se pueden
+# agregar de a uno.
+SND_DIR = os.path.join(HERE, "sonidos")
+
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
 # Van como data URL igual que las texturas: el juego es UN archivo.
 MUEBLES = ["armario", "comoda", "estanteria", "mesa", "reloj", "silla", "sillon", "sofa",
