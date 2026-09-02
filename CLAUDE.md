@@ -107,8 +107,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
-- **`Casa_Abandonada.html` es "LA CASA"** (~242 KB, cuatro texturas de foto y nada mas: la casa,
-  los papeles, los escombros y el cielo se dibujan por codigo). Llego de afuera como
+- **`Casa_Abandonada.html` es "LA CASA"** (~454 KB, de los cuales 200 son **catorce texturas de foto**
+  generadas con Rezona; los papeles, los escombros, el cielo y las telarañas se dibujan por codigo). Llego de afuera como
   `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
   primera persona: una cinta VHS del 12 de marzo de 1994, linterna, papeles que se leen, y todo el
   cuadro pasa por un post de cinta —curvatura de tubo, aberracion, arrastre de croma, lineas de
@@ -123,6 +123,80 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Octogésima cuarta vuelta (2026-09-02): **LA CASA** — diez texturas de foto, y el nivel lo lleva la imagen
+
+Pedido: *"los muebles o bloques principales se ven blancos y planos … agregarles texturas de madera
+vieja, tela desgastada o papel tapiz roto"*, y después *"hazlas con Rezona … a todo lo que sea
+procedural incluso pasto árboles y hojas"*.
+
+#### PRIMERO LA AUDITORÍA, QUE DIJO EXACTAMENTE CUÁLES
+
+Cuatro materiales tenían foto (piso, pared, cemento, machimbre) y de los demás **cinco iban en COLOR
+PLANO, sin una sola textura** — y son justo los que el jugador ve blancos: `cloth` (las sábanas, el
+colchón, la alfombra), `cera` (la bañera, el inodoro, el lavabo), `metal` (la heladera, la caldera),
+`dark` (el televisor, las mesas, los paneles de puerta) y `leaf` (las copas). Más `side`, que era el
+único con mapa que seguía en lienzo dibujado, y el **suelo de afuera, que era hormigón teñido de
+verde** — un clon suelto que ninguna sonda veía. Diez texturas nuevas, generadas con Rezona a la
+primera y las diez como muestra de material plana.
+
+#### EL NIVEL LO LLEVA LA IMAGEN, Y NO EL TINTE
+
+Las cuatro viejas van por **compensación**: el tinte del material cancela la diferencia entre el
+lienzo y la foto, así que el producto queda igual. Eso no se toca. Las diez nuevas van al revés, y por
+dos razones medidas:
+
+1. **LA COMPENSACIÓN NO ALCANZA CUANDO EL MATERIAL NO TENÍA MAPA.** Un tinte no pasa de blanco, y
+   conservar el brillo pedía **razón 37 en `dark` y 28 en `leaf`**: topadas, la superficie caía **82 %
+   y 69 %** y el televisor, las mesas y las copas se iban a negro.
+2. **Y COMPENSAR AL 100 % TIRA EL COLOR DE LA FOTO.** La madera de mueble promedia 0,319 de rojo
+   contra 0,040 de azul —ocho a uno— así que el tinte que la cancela es un gris azulado (`232527`) y
+   el barniz cálido, que es todo el motivo de haber pedido la foto, desaparece.
+
+Así que la imagen se **escala en lineal hasta que su promedio da el objetivo** y el tinte queda en
+**blanco**. El tono sale de la foto y el brillo de una tabla donde se puede razonar sobre el balance de
+la casa. Medido, las catorce caen en su objetivo con error de 8·10⁻⁵ o menos. Y **la escala va en
+lineal y no en sRGB**: escalando el byte se mueve el contraste además del brillo, y en un albedo eso se
+ve.
+
+#### CUATRO TRAMPAS, Y NINGUNA FALLA RUIDOSAMENTE
+
+- **UNA TEXTURA TIENE QUE NOMBRAR SUS MATERIALES.** La tubería reemplazaba el mapa en *todo* material
+  que usara la misma imagen, y eso alcanza con cuatro texturas. Con catorce se rompe: **`wood` y
+  `bark` comparten la foto del piso**, así que la entrada de la madera de mueble le pisaba el mapa al
+  piso *y* a los troncos, y cuál ganaba dependía de cuál imagen terminara de decodificar primero.
+- **UNA TABLA INDEXADA POR OTRA CLAVE NO FALLA: NO SE APLICA.** La de repeticiones estaba por
+  **material** y el armador la buscaba por **textura**, así que no coincidía nunca y las cinco nuevas
+  salieron en `1×1` — la sábana estirada de punta a punta del colchón, con pliegues de dos metros.
+- **EL TINTE DE r128 VA CRUDO.** Al calcular la referencia vieja lo pasé por gamma, y r128 lo usa tal
+  cual (`hex/255`): la referencia salía hasta diez veces más baja —`bark` daba 0,0006 en vez de
+  0,0058— y todos los porcentajes de antes-contra-ahora eran fantasía. El mapa **sí** se decodifica
+  por su encoding; el color del material **no**.
+- **Y LA REPETICIÓN ES `lado_de_la_cara / metros_que_cubre_la_foto`.** En una `BoxGeometry` la UV de
+  cada cara va de 0 a 1 sin importar cuánto mida, así que un material compartido entre una bañera de
+  1,6 m y una taza de 10 cm no puede tener un valor correcto para las dos: se elige el de la pieza que
+  más se mira.
+
+#### Y DOS AJUSTES QUE SALIERON DE MIRAR, NO DE CALCULAR
+
+La cama salió **quemada** —máximo 255 y el 2,47 % del cuadro por encima de 240— y el detalle de los
+pliegues desaparecía en blanco. **Y no era el halo del haz:** apagándolo, el máximo seguía en 250 y el
+brillo medio se movía 1,4 niveles, o sea que lo que se lavaba era el albedo de la propia sábana contra
+una linterna a metro y medio. Los tres objetivos altos bajaron un 25-40 %.
+
+Y **la chapa pintada y oxidada casi no es metal**: con `metalness 0,68` un mapa de pintura descascarada
+se ve como cromo sucio, porque lo único que refleja como metal es el óxido desnudo. Pasa a 0,12, y el
+esmalte saltado de 0,28 de rugosidad a 0,55.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+**14 de 14 texturas puestas, 0 fallidas, 0 destinos huérfanos.** 15 materiales con mapa; los únicos
+cuatro sin ninguno son `glass`, `web`, `webLine` y `water`, que son transparentes. 50 mapas y 63
+texturas en la GPU, 22 programas (uno más: los que estrenaron mapa de normales). Lienzo visible al
+100 %, pantalla usada 1,000, render 1581×727, campo 111,1 × 67,67, linterna con desvío **0°** y el haz
+en **[0,0]** también girando 30 muestras, alabeo **0**, la mira en el centro exacto, HUD sin un solo
+solapamiento, 3.340 motas, `aireLibre` en 0,004 ms, fusión estática idéntica, **cero errores**. El HTML
+pasó de 255 a **454 KB**, y esos 199 son las diez texturas.
 
 ### Octogésima tercera vuelta (2026-09-02): **LA CASA** — luz volumétrica, y un cono no puede serla
 
