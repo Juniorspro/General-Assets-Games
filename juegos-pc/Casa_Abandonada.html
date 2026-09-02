@@ -177,16 +177,34 @@ function safeArea(){
 }
 const HFOV_TOPE=100;      // grados de campo horizontal, el maximo que se permite
 let fovK=1;               // factor que lleva el vertical de diseño al que entra en el tope
+/* ══════════ el cuadro es 16:9 y punto ══════════
+   Antes el escenario se estiraba a lo que midiera la ventana, asi que el
+   encuadre dependia del telefono: en 19,5:9 se veia una cosa y en 4:3 otra, y
+   el campo horizontal se iba de 90 a 117 grados segun el aparato. Una cinta de
+   video tiene UN formato; ademas asi todos ven la misma composicion.
+   Lo que sobra queda en negro — que en un found footage no es un defecto.
+
+   EL ORIGEN DEL ESCENARIO SE GUARDA, NO SE RECALCULA. `toLocal` tiene que
+   invertir exactamente la misma colocacion; recalculandola por su cuenta,
+   cualquier cambio de aca la desincroniza y los toques quedan corridos sin que
+   nada falle a la vista. */
+const ASP=16/9;
+let stgL=0, stgT=0, stgX1=0;   // izquierda, arriba, y el borde derecho girado
 function layout(){
   const w=innerWidth,h=innerHeight, S=safeArea();
+  const AW=Math.max(2,w-S.l-S.r), AH=Math.max(2,h-S.t-S.b);
   rotated=h>w; stage.classList.toggle('rot',rotated);
   if(rotated){
-    VW=Math.max(2,h-S.t-S.b); VH=Math.max(2,w-S.l-S.r);
-    stage.style.left='0px'; stage.style.top=S.t+'px';
-    stage.style.transform='translateX('+(w-S.r)+'px) rotate(90deg)';
+    /* girado, el escenario ocupa VH de ancho y VW de alto en la pantalla */
+    VH=Math.max(2,Math.min(AW,AH/ASP)); VW=VH*ASP;
+    const X0=S.l+(AW-VH)/2, Y0=S.t+(AH-VW)/2;
+    stgL=0; stgT=Y0; stgX1=X0+VH;
+    stage.style.left='0px'; stage.style.top=Y0+'px';
+    stage.style.transform='translateX('+stgX1+'px) rotate(90deg)';
   }else{
-    VW=Math.max(2,w-S.l-S.r); VH=Math.max(2,h-S.t-S.b);
-    stage.style.left=S.l+'px'; stage.style.top=S.t+'px';
+    VW=Math.max(2,Math.min(AW,AH*ASP)); VH=VW/ASP;
+    stgL=S.l+(AW-VW)/2; stgT=S.t+(AH-VH)/2; stgX1=0;
+    stage.style.left=stgL+'px'; stage.style.top=stgT+'px';
     stage.style.transform='none';
   }
   stage.style.width=VW+'px'; stage.style.height=VH+'px';
@@ -204,8 +222,8 @@ function layout(){
     postMat.uniforms.uSrc.value.set(sw,sh);
   }
 }
-const toLocal=(cx,cy)=>{ const S=safeArea();
-  return rotated ? {x:cy-S.t, y:(innerWidth-S.r)-cx} : {x:cx-S.l, y:cy-S.t}; };
+const toLocal=(cx,cy)=>
+  rotated ? {x:cy-stgT, y:stgX1-cx} : {x:cx-stgL, y:cy-stgT};
 const dLocal=(dx,dy)=>rotated?{x:dy,y:-dx}:{x:dx,y:dy};
 
 /* ══════════ renderer ══════════ */
@@ -3070,6 +3088,7 @@ window.__casa={
     fov_vert:+camera.fov.toFixed(2),
     fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
     aspecto:+camera.aspect.toFixed(3), fovK:+fovK.toFixed(3),
+    cuadro:[Math.round(VW),Math.round(VH)],
     near:camera.near, far:camera.far,
     niebla:scene.fog?{tipo:scene.fog.constructor.name,d:scene.fog.density}:null,
     fondo:scene.background?'#'+scene.background.getHexString():null,
