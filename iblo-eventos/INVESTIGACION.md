@@ -310,7 +310,8 @@ casi todos los eventos y que funciona como **staff / promotores**:
 
 ## La página
 
-`index.html` es una demostración de sitio armada con este material: 9 estéticas
+La página vive en `docs/paginas/iblo.html` (misma carpeta que el resto de las
+demostraciones del repo). Es una demostración de sitio armada con este material: 9 estéticas
 que repintan la página entera, cuenta regresiva a la próxima fecha, el ciclo de
 egresados, servicios, archivo de fotos filtrable por año, equipo, zona y cuatro
 piezas 3D (bola de espejos, corona, sombrero y bafle) generadas para el sitio.
@@ -318,7 +319,7 @@ Un solo archivo, todo embebido, 4,4 MB.
 
 ## Archivos de este relevamiento
 
-- `index.html` — la página.
+- La página: `docs/paginas/iblo.html`
 - `publicaciones.txt` — las 160 publicaciones con fecha, tipo, likes,
   comentarios, reproducciones, geotag y el texto completo. Sin precios.
 - `destacadas/` — portadas y primeras miniaturas de las 10 destacadas + los
