@@ -24,6 +24,7 @@
    Alto = piernas 2,8 + torso 2,0 + cabeza 1,0 = 5,8 studs, que es por que un
    R15 es mas alto que un R6 (5). */
 import * as THREE from 'three';
+import { CLIPS } from './animdata.js';
 
 const D = {
     torsoAlto: [2, 1.6, 1], torsoBajo: [2, 0.4, 1],
@@ -158,94 +159,85 @@ export class R15 {
         this.paso = 0; this.tIdle = 0; this.mirando = 0;
     }
 
-    /* Los angulos de cada estado. Un paquete de animacion de Roblox trae
-       siete —Run, Walk, Fall, Jump, Idle, Swim, Climb— y el script Animate
-       agrega dos idles, sentarse y las poses de herramienta. Estos son los
-       que el juego usa, mas los propios. */
+    /* Muestrea un clip real de Roblox en una fase de 0 a 1.
+       Interpola lineal entre cuadros y cierra el ciclo con el primero, que es
+       lo que hace que la zancada no pegue un salto al repetir. */
+    clip(nombre, fase, cerrado = true) {
+        const c = CLIPS[nombre];
+        if (!c) return null;
+        const n = c.n;
+        const f = ((fase % 1) + 1) % 1 * n;
+        const a = Math.floor(f) % n;
+        const b = cerrado ? (a + 1) % n : Math.min(a + 1, n - 1);
+        const t = f - Math.floor(f);
+        const o = {};
+        for (const k in c.k) {
+            const v = c.k[k];
+            o[k] = v[a] + (v[b] - v[a]) * t;
+        }
+        return o;
+    }
+
+    /* Los estados.
+       ---------------------------------------------------------------------
+       Los de locomocion salen del clip de Roblox tal cual. Los tres que
+       Roblox no tiene —agacharse, deslizarse y empujar el cubo— son propios,
+       y estan escritos con la misma escala de angulos para que peguen. */
     pose(est) {
-        const v = est.vel, amp = Math.min(1, v / 3.2);
-        const p = this.paso;
-        const o = {
-            // hombro, codo, cadera, rodilla, tobillo, por lado
-            hI: 0, hD: 0, cI: 0, cD: 0, pI: 0, pD: 0, rI: 0, rD: 0, tI: 0, tD: 0,
-            abZ: 0.06, piZ: 0, cintura: -0.03, alto: 0,
+        const v = est.vel;
+        const cero = {
+            pI: 0, rI: 0, tI: 0, pD: 0, rD: 0, tD: 0,
+            hI: 0, cI: 0, mI: 0, hD: 0, cD: 0, mD: 0,
+            ca: 0, to: 0, cz: 0, abZ: 0.06, piZ: 0, alto: 0,
         };
+
         if (est.deslizando) {
             const k = est.k || 0;
-            o.pI = o.pD = 1.30 * (0.4 + 0.6 * k);
-            o.rI = o.rD = -0.55; o.tI = o.tD = -0.35;
-            o.hI = o.hD = -1.00 - 0.30 * k; o.cI = o.cD = -1.10;
-            o.abZ = 0.34; o.piZ = 0.12; o.cintura = -0.60 * k;
-            return o;
-        }
-        if (est.cayendo) {
-            o.hI = o.hD = -2.40; o.cI = o.cD = -0.55; o.abZ = 0.60;
-            o.pI = 0.45; o.pD = -0.15; o.rI = -0.80; o.rD = -0.25;
-            o.cintura = 0.12;
-            return o;
-        }
-        if (est.empujando) {
-            o.hI = o.hD = -1.25; o.cI = o.cD = -0.35; o.abZ = 0.18;
-            const sw = Math.sin(p);
-            o.pI = sw * 0.40 * amp; o.pD = -o.pI;
-            o.rI = -Math.max(0, sw) * 0.55 * amp; o.rD = -Math.max(0, -sw) * 0.55 * amp;
-            o.cintura = -0.18;
-            return o;
+            return { ...cero,
+                pI: 1.30 * (0.4 + 0.6 * k), pD: 1.30 * (0.4 + 0.6 * k),
+                rI: -0.55, rD: -0.55, tI: -0.35, tD: -0.35,
+                hI: -1.00 - 0.30 * k, hD: -1.00 - 0.30 * k, cI: 1.10, cD: 1.10,
+                abZ: 0.34, piZ: 0.12, ca: -0.60 * k, cz: 0.35 };
         }
         if (est.agachado) {
-            /* Agachado de verdad: la rodilla se dobla mucho, que es justo lo
-               que R6 no podia hacer. */
-            const sw = Math.sin(p) * 0.20 * amp;
-            o.pI = 1.05 + sw; o.pD = 1.05 - sw;
-            o.rI = -1.75 - sw; o.rD = -1.75 + sw;
-            o.tI = o.tD = 0.60; o.piZ = 0.08;
-            o.hI = -0.45 - sw; o.hD = -0.45 + sw;
-            o.cI = o.cD = -0.85; o.abZ = 0.16; o.cintura = 0.30;
-            o.alto = -0.55;
-            return o;
+            const sw = Math.sin(this.fase * Math.PI * 2) * 0.22 * Math.min(1, v / 2);
+            return { ...cero,
+                pI: 1.15 + sw, pD: 1.15 - sw, rI: -1.95 - sw, rD: -1.95 + sw,
+                tI: 0.65, tD: 0.65, piZ: 0.08,
+                hI: -0.45 - sw, hD: -0.45 + sw, cI: 1.05, cD: 1.05,
+                abZ: 0.16, to: 0.30, cz: 0.25, alto: -0.55 };
         }
-        if (v < 0.12) {
-            const r = Math.sin(this.tIdle * 1.6) * 0.035;
-            o.hI = r; o.hD = -r; o.cI = o.cD = -0.14; o.abZ = 0.08;
-            o.cintura = -0.02 + Math.sin(this.tIdle * 1.6) * 0.015;
-            if (this.mirando > 0) {
-                const m = Math.sin((1 - this.mirando) * Math.PI);
-                o.hD = -0.60 * m; o.cD = -0.95 * m; o.abZ = 0.08 + 0.22 * m;
-            }
-            return o;
+        if (est.empujando) {
+            const sw = Math.sin(this.fase * Math.PI * 2) * 0.42 * Math.min(1, v / 2.5);
+            return { ...cero,
+                pI: sw, pD: -sw,
+                rI: -Math.max(0, sw) * 0.75, rD: -Math.max(0, -sw) * 0.75,
+                hI: -1.25, hD: -1.25, cI: 0.55, cD: 0.55,
+                abZ: 0.18, to: -0.18 };
         }
+        if (est.cayendo) return { ...cero, ...this.clip('caer', this.fase, false), abZ: 0.55 };
+        if (v < 0.12) return { ...cero, ...this.clip('quieto', this.tIdle / CLIPS.quieto.dur) };
 
-        /* CAMINAR y CORRER. Acá está la diferencia con R6: la pierna que va
-           adelante levanta la RODILLA, y el codo va doblado. Corriendo, la
-           rodilla llega a 1,25 rad —unos 70°— que es lo que se ve en la
-           referencia; caminando apenas se dobla. */
-        const corr = est.corriendo;
-        const A = corr ? 1.05 : 0.62;       // amplitud de cadera
-        const B = corr ? 0.95 : 0.55;       // amplitud de hombro
-        const K = corr ? 1.35 : 0.55;       // cuanto se dobla la rodilla
-        const E = corr ? 1.15 : 0.42;       // cuanto se dobla el codo
-        const sw = Math.sin(p), sw2 = Math.sin(p + Math.PI);
-
-        o.pI = sw * A * amp;
-        o.pD = sw2 * A * amp;
-        /* LA RODILLA. En la referencia se ve claro: la pierna de ATRAS lleva
-           la rodilla doblada casi 90° recogiendo el pie, y la de ADELANTE va
-           casi estirada para apoyar. O sea que la flexion NO es simetrica con
-           la cadera — tiene su maximo con la pierna atras, y un adelanto de
-           medio radian para que ya venga recogiendo cuando pasa por abajo. */
-        const flex = f => Math.max(0, -Math.sin(f + 0.55));
-        o.rI = -(0.10 + flex(p) * K) * amp;
-        o.rD = -(0.10 + flex(p + Math.PI) * K) * amp;
-        // el pie acompana a la pantorrilla: la punta cae al recoger
-        o.tI = -o.rI * 0.45; o.tD = -o.rD * 0.45;
-
-        o.hI = -sw * B * amp; o.hD = -sw2 * B * amp;
-        o.cI = -E - Math.max(0, sw) * 0.35 * amp;
-        o.cD = -E - Math.max(0, sw2) * 0.35 * amp;
-        o.abZ = corr ? 0.12 : 0.07;
-        o.cintura = corr ? -0.26 * amp : -0.05;
-        // el rebote: sube dos veces por ciclo, una por zancada
-        o.alto = Math.abs(Math.sin(p)) * (corr ? 0.20 : 0.09) * amp;
+        /* CAMINAR o CORRER, del clip real. La mezcla entre los dos va por
+           velocidad: a 3 m/s ya es carrera entera. */
+        const cam = this.clip('caminar', this.fase);
+        const cor = this.clip('correr', this.fase);
+        const m = Math.max(0, Math.min(1, (v - 1.6) / 1.6));
+        const o = { ...cero };
+        for (const k in cam) o[k] = cam[k] + (cor[k] - cam[k]) * m;
+        /* Los BRAZOS van amortiguados y las piernas no.
+           El clip real levanta el antebrazo hasta 1,90 rad, o sea la mano a la
+           altura del pecho: visto desde una camara puesta en la cabeza, eso
+           tapa media pantalla. Roblox lo resuelve escondiendo el personaje
+           entero en primera persona; aca se bajan el hombro y sobre todo el
+           codo, y las piernas —que son las que se quieren ver— quedan clavadas
+           al clip. */
+        o.hI *= 0.72; o.hD *= 0.72;
+        o.cI *= 0.40; o.cD *= 0.40;
+        o.mI *= 0.40; o.mD *= 0.40;
+        o.abZ = 0.06 + m * 0.06;
+        // el rebote de la zancada: dos por ciclo
+        o.alto = Math.abs(Math.sin(this.fase * Math.PI * 2)) * (0.09 + m * 0.11);
         return o;
     }
 
@@ -259,7 +251,11 @@ export class R15 {
         r.rotation.y = est.yaw;      // acompaña el giro, NO el cabeceo
         r.scale.setScalar(est.ojo / OJO);
 
-        this.paso += est.dt * est.vel * 2.3;
+        /* La fase avanza con la velocidad para que el pie no patine: el ciclo
+           real de correr dura 0,667 s y cubre unos 4,4 m, o sea 6,6 m/s de
+           referencia. A otra velocidad, el ciclo se estira proporcional. */
+        const largoCiclo = 4.4;
+        this.fase = (this.fase || 0) + est.dt * Math.max(est.vel, 0.001) / largoCiclo;
         this.tIdle += est.dt;
         if (this.mirando > 0) this.mirando = Math.max(0, this.mirando - est.dt * 0.55);
         else if (est.vel < 0.12) {
@@ -270,19 +266,24 @@ export class R15 {
         const o = this.pose(est);
         const m = Math.min(1, est.dt * 15);
         const mez = (a, b) => a + (b - a) * m;
-        for (const [l, s, hK, cK, pK, rK, tK] of
-             [['I', -1, 'hI', 'cI', 'pI', 'rI', 'tI'], ['D', 1, 'hD', 'cD', 'pD', 'rD', 'tD']]) {
-            const H = this.hombro[l], C = this.codo[l];
+        for (const [l, s] of [['I', -1], ['D', 1]]) {
+            const H = this.hombro[l], C = this.codo[l], M = this.muneca[l];
             const P = this.pierna[l], R = this.rodilla[l], T = this.tobillo[l];
-            H.rotation.x = mez(H.rotation.x, o[hK]);
+            H.rotation.x = mez(H.rotation.x, o['h' + l]);
             H.rotation.z = mez(H.rotation.z, s * o.abZ);
-            C.rotation.x = mez(C.rotation.x, o[cK]);
-            P.rotation.x = mez(P.rotation.x, o[pK]);
+            C.rotation.x = mez(C.rotation.x, o['c' + l]);
+            M.rotation.x = mez(M.rotation.x, o['m' + l] || 0);
+            P.rotation.x = mez(P.rotation.x, o['p' + l]);
             P.rotation.z = mez(P.rotation.z, s * o.piZ);
-            R.rotation.x = mez(R.rotation.x, o[rK]);
-            T.rotation.x = mez(T.rotation.x, o[tK]);
+            R.rotation.x = mez(R.rotation.x, o['r' + l]);
+            T.rotation.x = mez(T.rotation.x, o['t' + l]);
         }
-        this.cintura.rotation.x = mez(this.cintura.rotation.x, o.cintura);
+        /* En R15 el LowerTorso es la raiz y el UpperTorso gira en la cintura,
+           que es exactamente como esta armado este rig: los tres canales del
+           clip entran derecho. */
+        this.cadera.rotation.x = mez(this.cadera.rotation.x, o.ca);
+        this.cintura.rotation.x = mez(this.cintura.rotation.x, o.to);
+        this.cuello.rotation.x = mez(this.cuello.rotation.x, o.cz);
         this.cadera.position.y = mez(this.cadera.position.y, PIERNA + o.alto);
     }
 }

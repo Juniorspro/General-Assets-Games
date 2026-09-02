@@ -232,27 +232,50 @@ cuerpo—, así que estas son las del rig en bloques del Rig Builder:
 Alto = piernas 2,8 + torso 2,0 + cabeza 1,0 = **5,8 studs**, que es por qué un
 R15 es más alto que un R6 (5).
 
-### La rodilla no va en fase con la cadera
+### Las animaciones son las de Roblox, sacadas del asset
 
-Se generó una referencia de un R15 corriendo de perfil y se midió sobre ella.
-Lo que muestra:
+No están a ojo ni copiadas de una foto. Se bajaron los **assets de las
+animaciones por defecto** desde `assetdelivery.roblox.com`, se parseó el
+formato binario `.rbxm` y se sacaron los ángulos de cada articulación en cada
+keyframe.
 
-- la pierna de **atrás** lleva la rodilla doblada **casi 90°**, recogiendo el pie
-- la de **adelante** va **casi estirada** para apoyar
-
-O sea que la flexión **no es simétrica** con la cadera. La primera versión usaba
-un coseno y doblaba las dos rodillas por igual — se veía como un muñeco
-arrastrando las piernas. Ahora el máximo cae con la pierna atrás, con medio
-radián de adelanto para que ya venga recogiendo al pasar por abajo.
-
-Medido corriendo, sobre el archivo final:
-
-| | pierna adelante | pierna atrás |
+| animación | asset | cuadros |
 |---|---|---|
-| cadera | +0,86 (49°) | −0,86 |
-| **rodilla** | **−0,09 (5°)** | **−1,31 (75°)** |
-| codo | −1,37 (78°) | −1,09 |
-| cintura | −0,24 (14° adelante) | |
+| correr | 913376220 | 16 a 24 fps · 0,667 s |
+| caminar | 913402848 | 25 |
+| quieto | 507766951 | 48 |
+| saltar | 507765000 | 27 |
+| caer | 507767968 | 19 |
+| trepar | 507765644 | 25 |
+
+Parsear el `.rbxm` no es abrir un JSON. Es un formato binario con trozos
+`INST` / `PROP` / `PRNT`, los arreglos van **intercalados** —primero todos los
+bytes 0 de cada número, después todos los 1— los enteros van en zigzag y
+acumulativos, los float tienen **el bit de signo rotado al final**, y el
+`CFrame` mezcla dos formatos en el mismo tipo: un byte de id por elemento, la
+matriz cruda sólo para los que dan 0, y recién después las posiciones, esas sí
+intercaladas. Está todo en `herramientas/rbxm.py`.
+
+**Y me corrigió dos cosas que yo había estimado mirando una foto quieta:**
+
+| | lo que yo tenía | lo que dice el asset |
+|---|---|---|
+| rodilla al correr | −1,35 (77°) | **−2,52 (144°)** |
+| cadera | seno simétrico ±1,05 | **+1,24 adelante / −0,34 atrás** |
+| codo | se estiraba a −0,42 | **nunca baja de +0,95** |
+
+La rodilla se dobla casi el doble de lo que yo creía, la cadera es
+**asimétrica** —tira mucho más hacia adelante que hacia atrás— y el codo no se
+estira **nunca** en todo el ciclo.
+
+La fase avanza con la velocidad y no con el tiempo, así el pie no patina: el
+ciclo real cubre unos 4,4 m.
+
+**Los brazos van amortiguados y las piernas no.** El clip real levanta el
+antebrazo hasta 1,90 rad —la mano a la altura del pecho—, y visto desde una
+cámara puesta en la cabeza eso tapa media pantalla. Roblox lo resuelve
+escondiendo el personaje entero en primera persona; acá se bajan el hombro a
+0,72 y el codo a 0,40, y las piernas quedan **clavadas al clip**.
 
 ### Cada parte con su color y su contorno
 
