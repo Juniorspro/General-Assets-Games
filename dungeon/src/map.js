@@ -23,7 +23,11 @@ export const GROSOR = 0.22;         // espesor del tabique
 export const ARRANQUE = 2.95;       // donde arranca la boveda del pasillo
 export const FLECHA = 1.50;         // cuanto sube la boveda por encima
 export const ALTO_PUERTA = 2.85;    // dintel
-export const HOLE_H = 1.05;         // alto de la gatera
+/* La gatera: un hueco BAJO y ANGOSTO, no un portal. A 1,05 m de alto y 2,4 m
+   de ancho se cruzaba caminando agachado sin pensarlo; a 78 cm y 1,15 m de
+   ancho hay que apuntar y tirarse, que es de lo que se trata. */
+export const HOLE_H = 0.78;         // alto de la gatera
+export const HOLE_W = 1.15;         // ancho del hueco, centrado en la celda
 export const W = 41, H = 33;
 
 /* Queda UN nivel. El resto del juego pregunta por niveles, asi que la lista
@@ -224,6 +228,20 @@ export const surfaceAt = () => 0;
 function cajaV(c, r) { return { x: bordeX(c), z: bordeZ(r) + CELL / 2, hx: GROSOR / 2, hz: CELL / 2 } }
 function cajaH(c, r) { return { x: bordeX(c) + CELL / 2, z: bordeZ(r), hx: CELL / 2, hz: GROSOR / 2 } }
 
+/* Los dos machones que dejan el hueco angosto en el medio de la celda. Son
+   sólidos SIEMPRE: agachado se pasa por el medio, no por el costado. */
+const LADO = (CELL - HOLE_W) / 2;
+function ladosV(c, r) {
+    const z0 = bordeZ(r);
+    return [{ x: bordeX(c), z: z0 + LADO / 2, hx: GROSOR / 2, hz: LADO / 2 },
+            { x: bordeX(c), z: z0 + CELL - LADO / 2, hx: GROSOR / 2, hz: LADO / 2 }];
+}
+function ladosH(c, r) {
+    const x0 = bordeX(c);
+    return [{ x: x0 + LADO / 2, z: bordeZ(r), hx: LADO / 2, hz: GROSOR / 2 },
+            { x: x0 + CELL - LADO / 2, z: bordeZ(r), hx: LADO / 2, hz: GROSOR / 2 }];
+}
+
 const bloquea = (v, agachado) => v === PARED || (v === GATERA && !agachado);
 
 export function collide(x, z, y, rad, agachado) {
@@ -232,12 +250,19 @@ export function collide(x, z, y, rad, agachado) {
         for (let c = c0 - 1; c <= c0 + 1; c++) {
             if (r < 0 || r >= H) continue;
             const bordes = [];
-            if (c >= 0 && c <= W) { if (bloquea(paredV(c, r), agachado)) bordes.push(cajaV(c, r)) }
-            if (c + 1 >= 0 && c + 1 <= W) { if (bloquea(paredV(c + 1, r), agachado)) bordes.push(cajaV(c + 1, r)) }
-            if (c >= 0 && c < W) {
-                if (bloquea(paredH(c, r), agachado)) bordes.push(cajaH(c, r));
-                if (bloquea(paredH(c, r + 1), agachado)) bordes.push(cajaH(c, r + 1));
-            }
+            const meterV = cc => {
+                if (cc < 0 || cc > W) return;
+                const v = paredV(cc, r);
+                if (bloquea(v, agachado)) bordes.push(cajaV(cc, r));
+                else if (v === GATERA) bordes.push(...ladosV(cc, r));
+            };
+            const meterH = rr => {
+                if (c < 0 || c >= W) return;
+                const v = paredH(c, rr);
+                if (bloquea(v, agachado)) bordes.push(cajaH(c, rr));
+                else if (v === GATERA) bordes.push(...ladosH(c, rr));
+            };
+            meterV(c); meterV(c + 1); meterH(r); meterH(r + 1);
             for (const b of bordes) {
                 const dx = x - b.x, dz = z - b.z;
                 const px = b.hx + rad - Math.abs(dx), pz = b.hz + rad - Math.abs(dz);

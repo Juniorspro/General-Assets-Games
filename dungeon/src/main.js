@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {
     CELL, WALL_H, GROSOR, ARRANQUE, FLECHA, ALTO_PUERTA, HOLE_H, W, H, LEVELS, Rng,
     SECTORES, SEC, sectorEn, sectorIdx, sectorPorId, temaEn, centroSector, esPiso,
-    NADA, PARED, PUERTA, GATERA, paredV, paredH, hayPared,
+    NADA, PARED, PUERTA, GATERA, paredV, paredH, hayPared, HOLE_W,
     toWorld, toCell, bordeX, bordeZ, isOpen, surfaceAt, levelAt, collide, spawnOn,
     medirParedes, rescatar, SALAS, salaEn, salaPorId, centroSala,
 } from './map.js';
@@ -93,25 +93,28 @@ class Dungeon {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.12;
+        /* La casa del original es CLARA: pasillos parejos, techos encendidos y
+           sombra sólo debajo de los muebles. La nuestra venía de un dungeon y
+           se notaba. Exposición, ambiente y hemisférica suben juntas. */
+        this.renderer.toneMappingExposure = 1.24;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x090705);
+        this.scene.background = new THREE.Color(0x0d0b08);
         /* La niebla arrancaba a 6 m y se comia el cuarto entero. Ahora empieza
            donde termina el alcance del farol y cierra mucho mas lejos: se ve
            el fondo del pasillo, que es lo que se pedia. */
         /* La niebla es CALIDA y arranca lejos. Antes era azul noche a 52 m y en una
            casa de cien metros el fondo de cada pasillo se veia celeste: parecia
            que la casa daba a la calle. */
-        this.scene.fog = new THREE.Fog(0x090705, 9, 52);
+        this.scene.fog = new THREE.Fog(0x0d0b08, 12, 70);
         this.camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.02, 300);
 
         /* Luz de relleno de verdad: antes el ambiente estaba en 0,06 y todo
            lo que el farol no tocaba era negro liso. Sube el piso de luz sin
            aplanar, porque el hemisferico sigue teniendo cielo y suelo. */
-        this.scene.add(new THREE.HemisphereLight(0x6b6455, 0x2a1e14, 0.55));
-        this.scene.add(new THREE.AmbientLight(0xffeedd, 0.22));
+        this.scene.add(new THREE.HemisphereLight(0x8b8270, 0x3a2c1e, 0.95));
+        this.scene.add(new THREE.AmbientLight(0xffeedd, 0.46));
 
         /* El farol del jugador. Como somos chicos, alcanza poco y las paredes
            se pierden hacia arriba en la oscuridad: eso es lo que las agranda. */
@@ -270,12 +273,23 @@ class Dungeon {
                 this.caraTabique(out, cx, cz, largo, esp, !vertical, tema, desde, y1);
             }
             if (valor === GATERA) {
-                // el fondo del hueco, para no ver el vacio al cruzar agachado
-                const g = new THREE.BoxGeometry(vertical ? GROSOR * 1.1 : largo, HOLE_H, vertical ? largo : GROSOR * 1.1);
-                g.translate(vertical ? cFijo : cMedio, HOLE_H / 2 - HOLE_H, vertical ? cMedio : cFijo);
-                g.translate(0, HOLE_H, 0);
-                g.scale(1, 0.001, 1);
-                oscuro.push(g);
+                /* El hueco no ocupa la celda entera: quedan dos machones a los
+                   costados, de (CELL - HOLE_W)/2 cada uno. Así hay que apuntar
+                   para meterse, en vez de cruzar de cualquier forma. */
+                const lado = (CELL - HOLE_W) / 2;
+                for (let j = j0; j <= j1; j++) {
+                    const q0 = vertical ? bordeZ(j) : bordeX(j);
+                    for (const off of [lado / 2, CELL - lado / 2]) {
+                        const cq = q0 + off;
+                        for (const [tema, ld] of [[tA, -1], [tB, 1]]) {
+                            if (tema === null) continue;
+                            const o2 = (tA === null || tB === null) ? 0 : ld * S / 2;
+                            const e2 = (tA === null || tB === null) ? GROSOR : S;
+                            this.caraTabique(out, vertical ? cFijo + o2 : cq, vertical ? cq : cFijo + o2,
+                                lado, e2, !vertical, tema, 0, HOLE_H);
+                        }
+                    }
+                }
             }
             if (valor === PUERTA) {
                 /* Marco: dos jambas gruesas en las puntas y un dintel cruzado.
@@ -620,90 +634,114 @@ class Dungeon {
        de sombra que es la firma visual del juego. */
     placeChandeliers(lv, base, grupo) {
         const rng = new Rng(0x7A0FF);
-        const hierro = new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: .52, metalness: .45 });
-        const vela = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: .9 });
-        const llama = new THREE.MeshBasicMaterial({ color: 0xffd79a });
-        const llamaGeo = new THREE.SphereGeometry(.055, 7, 5);
-        const velaGeo = new THREE.CylinderGeometry(.035, .04, .20, 6);
-        const cadenaGeo = new THREE.CylinderGeometry(.016, .016, 1, 4);
 
-        const colgar = (c, r, techo, grande) => {
-            const [x, z] = toWorld(c, r);
-            const g = new THREE.Group();
-            g.position.set(x, 0, z);
-            /* Cuelga BAJO. Pegada al techo, la araña quema un disco blanco
-               encima y la rueda no se ve; a metro y medio, el techo queda en
-               penumbra y la sombra de los rayos se lee entera. */
-            const rad = grande ? .62 : .46, caida = grande ? 1.45 : 1.15;
-            const brazos = grande ? 8 : 6;
-            const yAro = techo - caida;
+        /* INSTANCIAS, NO NOVENTA GRUPOS.
 
-            const cad = new THREE.Mesh(cadenaGeo, hierro);
-            cad.scale.y = caida; cad.position.y = techo - caida / 2;
-            cad.castShadow = true; g.add(cad);
+           Cada araña son la cadena, dos aros, ocho rayos, ocho velas y ocho
+           llamas: veintisiete mallas. Por noventa arañas eso daba DOS MIL
+           CUATROCIENTAS llamadas de dibujo sólo en lámparas, y era de lejos lo
+           que más pesaba de todo el juego.
 
-            const aro = new THREE.Mesh(new THREE.TorusGeometry(rad, .035, 5, 18), hierro);
-            aro.rotation.x = Math.PI / 2; aro.position.y = yAro;
-            aro.castShadow = true; g.add(aro);
-            const aro2 = new THREE.Mesh(new THREE.TorusGeometry(rad * .55, .028, 5, 14), hierro);
-            aro2.rotation.x = Math.PI / 2; aro2.position.y = yAro + .06;
-            aro2.castShadow = true; g.add(aro2);
-
-            const rayo = new THREE.BoxGeometry(rad, .028, .045);
+           Ahora cada tamaño se hornea en UNA geometría —el metal por un lado y
+           las llamas por otro— y se dibuja con InstancedMesh: cuatro llamadas
+           en total para las noventa. El titileo sigue funcionando porque lo que
+           parpadea es la luz, no la malla. */
+        const armarPlantilla = (rad, caida, brazos) => {
+            const metal = [], fuego = [];
+            const yAro = -caida;
+            const cad = new THREE.CylinderGeometry(.016, .016, caida, 5);
+            cad.translate(0, -caida / 2, 0);
+            metal.push(cad);
+            const aro = new THREE.TorusGeometry(rad, .035, 5, 18);
+            aro.rotateX(Math.PI / 2); aro.translate(0, yAro, 0);
+            metal.push(aro);
+            const aro2 = new THREE.TorusGeometry(rad * .55, .028, 5, 14);
+            aro2.rotateX(Math.PI / 2); aro2.translate(0, yAro + .06, 0);
+            metal.push(aro2);
             for (let k = 0; k < brazos; k++) {
-                const a = k / brazos * Math.PI * 2;
-                const b = new THREE.Mesh(rayo, hierro);
-                b.position.set(Math.cos(a) * rad / 2, yAro, Math.sin(a) * rad / 2);
-                b.rotation.y = -a;
-                b.castShadow = true; g.add(b);
-                const v = new THREE.Mesh(velaGeo, vela);
-                v.position.set(Math.cos(a) * rad, yAro + .13, Math.sin(a) * rad);
-                g.add(v);
-                const f = new THREE.Mesh(llamaGeo, llama);
-                f.position.set(Math.cos(a) * rad, yAro + .27, Math.sin(a) * rad);
-                g.add(f);
+                const ang = k / brazos * Math.PI * 2;
+                const cs = Math.cos(ang), sn = Math.sin(ang);
+                const b = new THREE.BoxGeometry(rad, .028, .045);
+                b.rotateY(-ang);
+                b.translate(cs * rad / 2, yAro, sn * rad / 2);
+                metal.push(b);
+                const v = new THREE.CylinderGeometry(.035, .04, .20, 6);
+                v.translate(cs * rad, yAro + .13, sn * rad);
+                metal.push(v);
+                const f = new THREE.SphereGeometry(.055, 6, 4);
+                f.translate(cs * rad, yAro + .27, sn * rad);
+                fuego.push(f);
             }
+            const unir = list => {
+                for (const g of list) if (!g.getAttribute('uv')) {
+                    const n = g.getAttribute('position').count;
+                    g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+                }
+                const m = mergeGeos(list);
+                list.forEach(g => g.dispose());
+                return m;
+            };
+            return { metal: unir(metal), fuego: unir(fuego), yAro };
+        };
 
-            /* La luz va 75 cm DEBAJO del aro, no pegada. Pegada al aro, la luz
-               sale casi en el plano de la rueda y esta no tapa nada hacia
-               arriba: el techo queda limpio. A 75 cm, la rueda se proyecta
-               contra el techo aumentada unas tres veces — que es exactamente
-               la rueda de sombra que se ve en las fotos del juego. */
-            const L = new THREE.PointLight(0xffd7a8, grande ? 15 : 11, grande ? 24 : 19, 1.85);
-            L.position.y = yAro - 0.75;
-            /* La camara de sombra por defecto llega a 500 m: con un mapa de
-               512 eso deja media docena de centimetros por texel y la rueda
-               —que es un aro de 3,5 cm— no proyecta nada. Recortada a 13 m la
-               sombra de los rayos aparece sobre la boveda, que es de lo que se
-               trata todo esto. */
-            L.shadow.mapSize.set(1024, 1024);
-            L.shadow.bias = -0.0016;
-            L.shadow.camera.near = 0.05;
-            L.shadow.camera.far = 13;
-            L.shadow.radius = 2;
-            g.add(L);
-            grupo.add(g);
-            (this.lamps || (this.lamps = [])).push({
-                L, base: grande ? 15 : 11, phase: rng.range(0, 9), malo: rng.next() < 0.18,
-            });
+        const hierro = new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: .52, metalness: .45 });
+        const llama = new THREE.MeshBasicMaterial({ color: 0xffd79a });
+        const P = {
+            chico: armarPlantilla(0.46, 1.15, 6),
+            grande: armarPlantilla(0.62, 1.45, 8),
+        };
+        const sitios = { chico: [], grande: [] };
+
+        const anotar = (c, r, techo, grande) => {
+            const [x, z] = toWorld(c, r);
+            sitios[grande ? 'grande' : 'chico'].push([x, techo, z, grande]);
         };
 
         for (const s of SECTORES) {
             if (s.pasillo) {
-                // en fila por el eje del pasillo, colgando del vertice de la boveda
                 const ejeX = s.eje === 'x';
                 const largo = ejeX ? s.w : s.h;
                 const medio = ejeX ? s.r + (s.h >> 1) : s.c + (s.w >> 1);
                 for (let k = 2; k < largo; k += 3) {
                     const c = ejeX ? s.c + k : medio, r = ejeX ? medio : s.r + k;
                     if (!esPiso(c, r)) continue;
-                    colgar(c, r, ARRANQUE + FLECHA - 0.02, false);
+                    anotar(c, r, ARRANQUE + FLECHA - 0.02, false);
                 }
             } else {
                 const paso = s.tema === 'salon' ? 3 : 4;
                 for (let r = s.r + 1; r < s.r + s.h - 1; r += paso)
                     for (let c = s.c + 1; c < s.c + s.w - 1; c += paso)
-                        colgar(c, r, WALL_H - 0.02, s.tema === 'salon');
+                        anotar(c, r, WALL_H - 0.02, s.tema === 'salon');
+            }
+        }
+
+        const M = new THREE.Matrix4();
+        for (const tam of ['chico', 'grande']) {
+            const lista = sitios[tam];
+            if (!lista.length) continue;
+            const plant = P[tam];
+            for (const [geo, mat, sombra] of [[plant.metal, hierro, true], [plant.fuego, llama, false]]) {
+                const im = new THREE.InstancedMesh(geo, mat, lista.length);
+                im.castShadow = sombra;
+                im.frustumCulled = false;
+                lista.forEach(([x, y, z], i) => { M.makeTranslation(x, y, z); im.setMatrixAt(i, M) });
+                im.instanceMatrix.needsUpdate = true;
+                grupo.add(im);
+            }
+            /* Las luces sí son objetos sueltos: son lo único que no se puede
+               instanciar, y por eso hay culling. */
+            for (const [x, y, z, grande] of lista) {
+                const L = new THREE.PointLight(0xffd7a8, grande ? 19 : 14, grande ? 26 : 21, 1.75);
+                L.position.set(x, y + plant.yAro - 0.75, z);
+                L.shadow.mapSize.set(1024, 1024);
+                L.shadow.bias = -0.0016;
+                L.shadow.camera.near = 0.05;
+                L.shadow.camera.far = 13;
+                L.shadow.radius = 2;
+                grupo.add(L);
+                (this.lamps || (this.lamps = [])).push({
+                    L, base: grande ? 19 : 14, phase: rng.range(0, 9), malo: rng.next() < 0.15,
+                });
             }
         }
     }

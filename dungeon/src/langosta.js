@@ -737,13 +737,21 @@ export class Mision {
         const dist = Math.hypot(dx, dz);
         const mismoPiso = Math.abs(jug.y - this.base) < 2.0;
 
-        /* Te oye si hacés ruido y estás cerca; te ve si estás en su cono y no
-           hay pared en el medio. Agachado el radio de escucha se parte al
-           medio, que es para lo que sirve agacharse. */
-        const oye = mismoPiso && this.ruido > 0.55 && dist < 9 + this.ruido * 5;
+        /* VER Y OIR SON DISTINTOS.
+
+           Ver es DIRECCIONAL: tiene que tenerte en su cono de visión y sin
+           pared en el medio. Antes había un `dist < 2.5 ||` que lo hacía verte
+           por la espalda si estabas cerca, y eso rompía lo único que el juego
+           te pide hacer: acercártele por atrás a sacarle la tarjeta.
+
+           Oír no es direccional, pero YA NO TE PERSIGUE: te manda a
+           investigar el ruido. Si te agachaste no hacés ruido, así que
+           agachado detrás de él sos invisible hasta que se dé vuelta. */
         const mirandoA = Math.cos(b.yaw) * (-dz) + (-Math.sin(b.yaw)) * dx;
-        const ve = mismoPiso && dist < 16 && this.libre(b.pos.x, b.pos.y, jug.x, jug.z)
-            && (dist < 2.5 || mirandoA > dist * 0.2);
+        const enCono = mirandoA > dist * 0.34;          // ±70 grados
+        const ve = mismoPiso && dist < 17 && enCono
+            && this.libre(b.pos.x, b.pos.y, jug.x, jug.z);
+        const oye = mismoPiso && this.ruido > 0.70 && dist < 8 + this.ruido * 5;
 
         /* Pasos → respiracion → verlo. Ese es el orden con el que se anuncia
            en el juego original, y es lo que te da tiempo de retirarte. El
@@ -765,34 +773,46 @@ export class Mision {
             }
         }
 
-        if ((oye || ve) && !this.terminado) {
-            /* El grito va SOLO al pasar de tranquilo a caza. Si sonara todo el
-               tiempo que te ve, en diez segundos deja de significar nada. */
+        /* Tres estados, no dos: RONDA da vueltas, BUSCA va hasta donde sonó
+           algo y mira, CAZA te persigue porque te está viendo. */
+        if (ve && !this.terminado) {
+            // el grito va SOLO al pasar de no verte a verte
             if (b.estado !== 'caza') { S.grito(); this.susto = 1 }
             b.estado = 'caza';
             b.alerta = 1;
             b.ultimo = [jug.x, jug.z];
-        } else if (b.estado === 'caza') {
-            b.alerta -= dt * 0.18;
-            if (b.alerta <= 0) b.estado = 'ronda';
+        } else if (oye && !this.terminado && b.estado !== 'caza') {
+            b.estado = 'busca';
+            b.alerta = Math.max(b.alerta, 0.75);
+            b.ultimo = [jug.x, jug.z];
+        } else if (b.estado === 'caza' || b.estado === 'busca') {
+            /* Al perderte de vista NO se olvida de golpe: sigue hasta el
+               último lugar donde te vio y ahí se queda mirando un rato. */
+            b.alerta -= dt * (b.estado === 'caza' ? 0.28 : 0.42);
+            if (b.estado === 'caza' && b.alerta < 0.55) b.estado = 'busca';
+            if (b.alerta <= 0) { b.estado = 'ronda'; b.destino = null }
         }
 
-        const vel = b.estado === 'caza' ? 3.6 : 1.35;
+        /* Más rápido que vos, pero poco: corriendo vas a 5,4 y él a 5,9. Se
+           le escapa deslizándose —9,2 por menos de un segundo— y por las
+           gateras, que es para lo que están. Y en cada esquina pierde tiempo
+           girando, porque camina para adelante y no de costado. */
+        const vel = b.estado === 'caza' ? 5.9 : b.estado === 'busca' ? 2.6 : 1.35;
         b.recalcular -= dt;
         if (b.recalcular <= 0 || !b.ruta.length) {
-            b.recalcular = b.estado === 'caza' ? 0.45 : 1.2;
+            b.recalcular = b.estado === 'caza' ? 0.35 : b.estado === 'busca' ? 0.6 : 1.2;
             /* toCell devuelve un PAR, no un objeto. Leyendole .c y .r salia
                undefined, el camino volvia vacio y el bicho no se movia nunca
                del lugar donde aparecio. */
             const [ac, ar] = toCell(b.pos.x, b.pos.y);
             let meta;
-            if (b.estado === 'caza') meta = toCell(b.ultimo[0], b.ultimo[1]);
+            if (b.estado === 'caza' || b.estado === 'busca') meta = toCell(b.ultimo[0], b.ultimo[1]);
             else {
                 if (!b.destino || !b.ruta.length) b.destino = this.celdaAlAzar();
                 meta = b.destino;
             }
             b.ruta = this.camino(ac, ar, meta[0], meta[1]);
-            if (b.estado !== 'caza' && !b.ruta.length) b.destino = this.celdaAlAzar();
+            if (b.estado === 'ronda' && !b.ruta.length) b.destino = this.celdaAlAzar();
         }
 
         let avanzo = 0;
@@ -801,16 +821,24 @@ export class Mision {
             const [tx, tz] = toWorld(tc, tr);
             let vx = tx - b.pos.x, vz = tz - b.pos.y;
             const d = Math.hypot(vx, vz);
-            if (d < 0.22) b.ruta.shift();
+            if (d < 0.30) b.ruta.shift();
             else {
                 vx /= d; vz /= d;
-                const paso = vel * dt;
-                b.pos.x += vx * paso; b.pos.y += vz * paso;
-                avanzo = vel;
-                // mira a donde camina; el modelo apunta a -Z como la camara
+                /* PRIMERO ENCARA, DESPUES AVANZA. Antes se desplazaba derecho
+                   hacia la próxima celda mientras el giro venía atrás, así que
+                   en cada esquina cruzaba DE COSTADO — patinando de lado como
+                   si lo arrastraran. Ahora sólo se mueve hacia donde mira, y
+                   la velocidad se multiplica por lo alineado que esté: si
+                   todavía no encaró, gira en el lugar. */
                 const quiere = Math.atan2(-vx, -vz);
-                let dif = ((quiere - b.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-                b.yaw += dif * Math.min(1, dt * 7);
+                const dif = ((quiere - b.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+                const giroMax = (b.estado === 'caza' ? 3.6 : 2.4) * dt;
+                b.yaw += Math.max(-giroMax, Math.min(giroMax, dif));
+                const alineado = Math.max(0, Math.cos(dif));
+                const paso = vel * dt * alineado;
+                const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
+                b.pos.x += fx * paso; b.pos.y += fz * paso;
+                avanzo = vel * alineado;
             }
         }
         b.raiz.position.x = b.pos.x; b.raiz.position.z = b.pos.y;

@@ -18,20 +18,20 @@
 
 export const NIVELES = {
     bajo: {
-        nombre: 'Bajo', pix: 0.55, sombras: false, mapa: 512, faroles: 0, luces: 6,
-        pisos: 0.6, niebla: [7, 38], contorno: false, aniso: 1,
+        nombre: 'Bajo', pix: 0.6, sombras: false, mapa: 512, faroles: 0, luces: 5,
+        niebla: [9, 34], contorno: false, aniso: 1,
     },
     medio: {
-        nombre: 'Medio', pix: 0.85, sombras: true, mapa: 512, faroles: 2, luces: 10,
-        pisos: 1.0, niebla: [9, 52], contorno: true, aniso: 4,
+        nombre: 'Medio', pix: 1, sombras: true, mapa: 512, faroles: 2, luces: 10,
+        niebla: [11, 52], contorno: true, aniso: 4,
     },
     alto: {
-        nombre: 'Alto', pix: 1.3, sombras: true, mapa: 1024, faroles: 4, luces: 14,
-        pisos: 1.35, niebla: [10, 62], contorno: true, aniso: 8,
+        nombre: 'Alto', pix: 1.5, sombras: true, mapa: 1024, faroles: 5, luces: 16,
+        niebla: [13, 74], contorno: true, aniso: 8,
     },
     ultra: {
-        nombre: 'Ultra', pix: 2, sombras: true, mapa: 2048, faroles: 6, luces: 18,
-        pisos: 1.35, niebla: [12, 78], contorno: true, aniso: 16,
+        nombre: 'Ultra', pix: 2, sombras: true, mapa: 2048, faroles: 6, luces: 22,
+        niebla: [16, 100], contorno: true, aniso: 16,
     },
 };
 const ORDEN = ['bajo', 'medio', 'alto', 'ultra'];
@@ -75,17 +75,31 @@ export class Calidad {
                     m.needsUpdate = true;
             });
         }
+        /* CAMBIAR mapSize NO HACE NADA si el mapa ya está reservado: three lo
+           asigna una vez y se queda con esa textura para siempre. Hay que
+           tirarla a mano para que la vuelva a crear con el tamaño nuevo. Por
+           eso ultra usaba el mapa de sombras del primer nivel que se hubiera
+           cargado y las sombras se veían igual en los cuatro. */
+        const remapear = (L, lado) => {
+            if (!L.shadow || L.shadow.mapSize.x === lado) return;
+            L.shadow.mapSize.set(lado, lado);
+            if (L.shadow.map) { L.shadow.map.dispose(); L.shadow.map = null }
+        };
         j.lamp.castShadow = N.sombras;
-        if (j.lamp.shadow) j.lamp.shadow.mapSize.set(N.mapa, N.mapa);
+        remapear(j.lamp, N.mapa);
         j.farolesConSombra = N.faroles;
         for (const l of j.lamps || []) {
-            if (l.L.shadow) l.L.shadow.mapSize.set(Math.min(N.mapa, 1024), Math.min(N.mapa, 1024));
+            remapear(l.L, Math.min(N.mapa, 1024));
             if (!N.sombras) l.L.castShadow = false;
         }
+        /* El contorno del bicho también entra en el presupuesto: duplica sus
+           mallas. En bajo se apaga. */
+        const bicho = j.mision && j.mision.bicho;
+        if (bicho && bicho.contornos)
+            for (const c of bicho.contornos) c.visible = N.contorno;
         /* Cuantas arañas quedan encendidas a la vez. Es lo que mas pesa de
            todo: cada point light se evalua en cada fragmento de lo que se ve. */
         j.lucesVivas = N.luces;
-        j.distPisos = N.pisos;
         j.scene.fog.near = N.niebla[0];
         j.scene.fog.far = N.niebla[1];
         j.camera.far = N.niebla[1] * 3;
