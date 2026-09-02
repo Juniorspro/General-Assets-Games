@@ -14,9 +14,9 @@ que la pone `npx rezona@latest login` con un código de un solo uso. Este repo e
 público: la llave adentro sería la llave publicada. Por eso `.rezona/` está en el
 `.gitignore` y este script no la lee ni la imprime nunca.
 """
-import json, subprocess, sys
+import json, shutil, subprocess, sys
 
-CMD = ['npx', '-y', 'rezona@latest', 'mcp']
+CMD = ['rezona', 'mcp'] if shutil.which('rezona') else ['npx', '-y', 'rezona@latest', 'mcp']
 
 
 def rpc(mensajes, espera=300):

@@ -456,36 +456,67 @@ Los seis archivos del menú pesan **328 KB**.
 Y el final es la palabra **GANASTE** generada igual —agrietada, chorreando— con
 un resplandor verde y el HUD apagado.
 
-## Los sonidos en archivo: la ranura está, los archivos no
+## Los sonidos en archivo: los dieciséis, generados
 
-`sonidos/` está vacío a propósito. El juego suena entero sin un solo archivo,
-porque todo está sintetizado — pero un colchón de ambiente hecho con tres senos
-es un colchón de tres senos, y se nota.
+`sonidos/` ya no está vacío. Los **dieciséis sonidos están generados con Rezona
+Lab** y horneados a ogg mono: **296 KB los dieciséis juntos**, de los cuales el
+`ambiente` —el único que suena todo el tiempo— son 51 KB.
 
-`src/muestras.js` deja poner archivos **por encima** del sintetizador sin tirar
-nada: cada sonido pregunta primero si existe su muestra; si está la reproduce,
-y si no, cae al sintetizador de siempre. Se reemplaza **de a uno** — poner sólo
-el ambiente y dejar el resto sintetizado es una decisión válida.
+El sintetizador sigue estando y sigue siendo la red. `src/muestras.js` pone los
+archivos **por encima**: cada sonido pregunta primero si existe su muestra; si
+está la reproduce, y si no, cae al sintetizador de siempre. Borrar un `.ogg` de
+la carpeta degrada ese sonido y nada más.
 
 Detalles que importan:
 
 - las variantes numeradas (`paso_1`, `paso_2`, `paso_3`) se eligen al azar y se
   reproducen con el tono corrido un ±6 %: un paso repetido idéntico veinte
   veces se lee como un error, no como un paso;
-- `ambiente` y `persecucion` van en bucle con volumen, no disparadas;
-- el empaquetador toma solo cualquier `.ogg/.mp3/.m4a/.wav` que aparezca en la
-  carpeta, y van por CDN como el resto.
+- `ambiente` y `persecucion` van en bucle con volumen, no disparadas, y se
+  **cruzan consigo mismos 1,5 s** al hornearlos para que no se oiga la costura;
+- `grunido.ogg` va **sin eñe**: el nombre viaja adentro de una URL del CDN y
+  ahí el UTF-8 hay que escaparlo;
+- el empaquetador toma cualquier `.ogg/.mp3/.m4a/.wav` de la carpeta y van por
+  CDN como el resto.
 
-`sonidos/LEEME.md` tiene la tabla de nombres, las duraciones y **las
-descripciones textuales del audio del juego real** para pasarle al generador.
+Medido en el banco, celular vertical 412×892: **48 assets, 0 fallados,
+16 muestras decodificadas**, se entra al juego y se camina.
 
-Probado con la carpeta vacía: 32 assets, **0 muestras**, cero errores, todos
-los sonidos suenan por el sintetizador y se entra al juego normal.
+### El generador devuelve ruido blanco y dice `ready`
 
-> **Rezona no está disponible.** Su servidor MCP falló la conexión dos veces
-> seguidas (`CONNECT_TIMEOUT` a los 30 s). Y el audio de Higgsfield es sólo
-> voz: su propia herramienta dice que no se use para efectos ni música fuera
-> de su pipeline de juegos. Así que los archivos no se generaron todavía.
+Cuatro de los dieciséis —`ambiente`, `persecucion`, `pisada_1`,
+`paso_madera_2`— volvieron como **estática pura** en la primera vuelta, con el
+`status: ready` más tranquilo del mundo. Escucharlos no era una opción. Se
+miden:
+
+```
+                20    60   120   250   500  1000  2000  4000  8000 16000 Hz
+ambiente (mal)   0   -10   -12   -15   -11   -11    -9    -7    -4    -8
+ambiente (bien)  0    -4   -14   -33   -51   -62   -65   -62   -62   -80
+```
+
+**Un sonido real cae a −40 dB o menos en 16 kHz; la estática se queda en −5.**
+Ese solo número separó los doce buenos de los cuatro malos, y es el chequeo que
+corre sobre cualquier regeneración antes de que entre al juego.
+
+Lo que los arregló fue sacarles del prompt las palabras `hum`, `air` y `noise`
+—que el modelo leyó como «estática»— y pedir **tono explícito**: *"sustained
+low bass note around 55 Hz"* en vez de *"soft mechanical hum"*, más un
+`"no hiss, no static, no white noise"` al final. Las cuatro salieron bien a la
+segunda.
+
+### Y el MCP de Rezona no estaba roto
+
+Decía `CONNECT_TIMEOUT` a los 30 s, y la conclusión fácil —«Rezona no está
+disponible»— era falsa. El comando era `npx -y rezona@latest mcp`, y en un
+contenedor recién levantado eso primero **baja el paquete**: más que los 30 s
+que espera el handshake. Medido: **1,1 s** con npx ya cacheado, **0,3 s** con
+`npm i -g rezona` y `"command": "rezona"`.
+
+Pero nada de eso hacía falta para generar: `herramientas/rezona/rz.py` habla el
+mismo JSON-RPC por stdio **con 300 s de espera**, así que se come el arranque
+frío sin despeinarse. Los dieciséis sonidos se generaron con el MCP caído, en
+la misma sesión. El detalle está en `sonidos/LEEME.md` y en el skill `arranque`.
 
 ## El audio, contra el audio del juego real
 

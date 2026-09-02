@@ -367,6 +367,7 @@ export function cajon() {
    barrido que sube dos octavas y media en tres segundos. */
 export function riser(dur = 3) {
     if (!ctx) return;
+    if (puente.tocar && puente.tocar('riser', 1)) return;
     const t = ctx.currentTime;
     const n = ruido(dur + 0.3), f = ctx.createBiquadFilter(), g = ctx.createGain();
     /* Q baja y ganancia que sube fuerte: con Q alto, al barrer hacia agudos

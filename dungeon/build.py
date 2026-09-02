@@ -35,6 +35,14 @@ MENU_DIR = os.path.join(HERE, "menu")
 # porque cada sonido cae al sintetizador si no encuentra su muestra. Se pueden
 # agregar de a uno.
 SND_DIR = os.path.join(HERE, "sonidos")
+# Los nombres son los del `MAPA` de src/muestras.js: cada uno entra como
+# `snd_<nombre>` y ese es el que busca la capa de muestras. Los que falten no
+# rompen nada — ese sonido cae al sintetizador y el juego suena igual.
+# Sin ene: el nombre viaja dentro de una URL del CDN y ahi el UTF-8 hay que
+# escaparlo. `grunido.ogg` evita el problema entero.
+SONIDOS = ["ambiente", "persecucion", "paso_1", "paso_2", "paso_3",
+           "paso_madera_1", "paso_madera_2", "pisada_1", "pisada_2",
+           "grito", "grunido", "golpe", "cajon", "portazo", "campana", "riser"]
 
 # Los muebles generados con Tripo y horneados a 512 y ~1,5 k triangulos.
 # Van como data URL igual que las texturas: el juego es UN archivo.
@@ -105,6 +113,9 @@ def juntar_assets():
     for i in range(1, CUADROS + 1):
         t.append(("cuadro%d" % i, os.path.join(CUA_DIR, "cuadro%d.webp" % i),
                   "image/webp", "cuadros/cuadro%d.webp" % i))
+    for n in SONIDOS:
+        t.append(("snd_" + n, os.path.join(SND_DIR, n + ".ogg"),
+                  "audio/ogg", "sonidos/%s.ogg" % n))
     return [x for x in t if os.path.exists(x[1])]
 
 

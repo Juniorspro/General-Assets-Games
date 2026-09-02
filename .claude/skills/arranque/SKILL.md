@@ -100,6 +100,16 @@ vale.** Y ojo:
 
 ### Rezona Lab (Tripo + imagen)
 
+> **Si el MCP dice `CONNECT_TIMEOUT`, el servidor NO está roto.** El comando era
+> `npx -y rezona@latest mcp`, y en un contenedor recién levantado eso primero **baja el
+> paquete** — más que los 30 s que espera el handshake. Medido: 1,1 s con npx ya cacheado,
+> **0,3 s** con `npm i -g rezona` y `"command": "rezona"`. Y el cliente **cachea la falla para
+> toda la sesión**: arreglar el `.claude.json` no la revive, hace falta una sesión nueva.
+>
+> **Eso no bloquea nada.** El `rz.py` de acá abajo espera 300 s, así que se come el arranque
+> frío sin despeinarse: cuando el MCP no está, se genera igual por stdio, en la misma sesión.
+> Ya se generaron los dieciséis sonidos del juego así, con el MCP caído.
+
 MCP declarado en `.mcp.json`. **Los MCP se cargan al arrancar la sesión**, así que si no está
 cargado se le habla por stdio con el cliente chiquito del repo:
 
@@ -123,6 +133,14 @@ python3 herramientas/rezona/rz.py call submit_model3d_generation '{"project_id":
 - **Las respuestas vuelven desordenadas.** Emparejar por posición cruza los resultados en silencio
   — hay que ordenar por el `id` del JSON-RPC. Ya pasó: el asfalto llegó con el `output_path` de la
   vereda.
+- **`fetch_generated_asset` quiere `project_id` y `output_path`, no sólo el `task_id`** —y
+  escribe relativo al **cwd del servidor**, así que el script se corre parado en
+  `/tmp/rez_x`, no en el repo. Parado en el repo, el `.rezona/` termina en el árbol.
+- **El generador de audio devuelve ruido blanco con `status: ready`.** Cuatro de dieciséis.
+  No hay forma de escucharlos: se miden. Un sonido real cae a −40 dB o menos en la banda de
+  16 kHz; la estática se queda en −5. Está contado en `dungeon/sonidos/LEEME.md`.
+- **Tope de 12 generaciones en vuelo.** `GENERATION_TOO_MANY_IN_FLIGHT` y
+  `生成服务暂时不可用` son las dos transitorias: de a seis y reintentando, salen.
 - **`publish_to_rezona_app` es IRREVERSIBLE.** No llamarlo nunca sin pedido explícito.
 
 ### Higgsfield
