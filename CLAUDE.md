@@ -124,6 +124,84 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima segunda vuelta (2026-09-02): **LA CASA** — el lienzo desbordaba su marco, y a dpr 1 eso es invisible
+
+Reporte, ya cansado, después de cinco vueltas mías: *"hermano que no ves que a vos sí te muestra bien
+y a mí no"*. La causa de fondo era **una sola línea de CSS que no existía**, y ninguna de mis
+mediciones podía verla.
+
+#### `setSize(...,false)` NO TOCA EL ESTILO, Y EL LIENZO NO TENÍA ANCHO EN CSS
+
+El lienzo se creaba con `renderer.setSize(VW,VH,false)`. Con `updateStyle` en falso three.js **no
+escribe `style.width`**, y la única regla del lienzo en la hoja de estilos es `canvas{display:block}`.
+Un lienzo sin ancho en CSS mide en layout **lo que digan sus atributos**, y el atributo vale
+`VW · pixelRatio`. O sea que la caja del lienzo termina midiendo `VW · pixelRatio` **píxeles de CSS**,
+no VW. Y `#stage` tiene `overflow:hidden` con `transform-origin:top left`.
+
+Reproducido en el banco, a dpr 2,75 y en una ventana de 1002×461:
+
+| dpr | pixelRatio | lienzo en CSS | escenario | se ve |
+|---|---|---|---|---|
+| 1 | 1,00 | 1378×634 | 1378×634 | **100 %** |
+| **2,75** | **1,50** | **1503×691** | **1002×461** | **44,5 %** |
+
+**A dpr 1 el factor es exactamente 1 y no pasa absolutamente nada.** Por eso mis once corridas de
+banco, todas a dpr 1, mostraban el juego perfecto. En un teléfono de dpr 2,75 el jugador veía el
+44,5 % del cuadro **y la esquina de arriba a la izquierda**.
+
+**Y ESO EXPLICA LAS DOS COSAS QUE VENÍA REPORTANDO, LAS DOS LITERALES:**
+- *"el centro no está en el centro"* — el centro del render caía fuera del recorte; **la mira sí
+  estaba centrada, porque es DOM y vive en el escenario, no en el lienzo**. Medí la mira sobre su
+  propia captura, la encontré a 0 px del centro, y concluí que la cámara estaba bien. Estaba bien: lo
+  que estaba mal era el lienzo debajo, y yo estaba midiendo la capa de arriba.
+- *"veo un cuarto de lo que se debe ver"* — 0,445 del recorte × 0,82 del 16:9 que yo había metido =
+  **36,5 %**. Un cuarto.
+
+#### LA LECCIÓN, Y ES DE MÉTODO
+
+**El banco tenía `deviceScaleFactor:1` clavado en dos sitios, y ésa era la zona ciega.** Un defecto
+que dependa de `devicePixelRatio` es invisible a dpr 1 y arruina el juego en cualquier teléfono, que
+anda entre 2 y 3,5. `h2.mjs` acepta ahora `DPR=` y hay que probar con 2,75 **siempre** que se toque
+resolución, tamaño de lienzo o destino de render. Y la regla general: cuando el usuario insiste y
+todas mis mediciones dicen que está bien, **estoy midiendo la capa equivocada** — acá medí la cámara,
+la proyección, el HUD y el recorte del escenario antes de mirar la caja del propio lienzo.
+
+#### DE PASO, UNA SOLA ESCALA DE RENDER Y EN PÍXELES DEL APARATO
+
+Había **dos reducciones encadenadas** —el pixelRatio topado en 1,5 y el destino de render al 0,68 del
+lienzo— y las dos se multiplican contra la pantalla de verdad: `estiramiento = dpr / (pr · RS)`. En un
+monitor de dpr 1 eso da 1,47 y se ve nítido; en un teléfono de dpr 2,75 da **2,70**. Ahora hay un
+número —a qué fracción de la pantalla real se dibuja— el destino de render mide **lo mismo** que el
+lienzo (así que la ampliación interior desaparece) y la única que queda es la del navegador, que la
+hace el compositor y es gratis. Con tope de **1,15 millones de píxeles** y un control que se mide solo
+—escalones de razón 1,09, o sea 1,19 en píxeles, por debajo de la banda muerta de 1,36, así que no
+puede oscilar—. Medido en su pantalla: estiramiento **2,70 → 1,74**, y el render pasa de 0,48 a 1,15
+millones de píxeles.
+
+#### Y EL GRANO PESABA MÁS QUE LA IMAGEN
+
+Medido sobre su captura: mediana de brillo **17 sobre 255**, el 47 % de los píxeles por debajo de 16, y
+el grano en **9,1 niveles de rms** — más de la mitad de la señal. A eso el ojo no le lee una cinta, le
+lee estática. Y el peso estaba **al revés**: `(1,25 - 0,8·lum)` pone el grano en su máximo justo donde
+la imagen es más oscura, que es el 95 % del cuadro. Pasó a `(0,72 + 0,34·lum)` y el nivel de fábrica de
+0,088 a 0,063: **grano 8,0 → 5,0 medido en el juego**.
+
+**Y EL LEVANTE DE SOMBRAS VA POR POTENCIA, NO POR MULTIPLICACIÓN.** Con el cuadro en 0,067 de sRGB,
+multiplicar por 1,2 da 0,08 y no se ve nada; una potencia menor que 1 abre los oscuros sin tocar los
+claros. Medido en la misma corrida, cambiando sólo el exponente: **1,00 → mediana 9 · 0,87 → 13 ·
+0,74 → 24 · 0,62 → 30**. Queda en 0,74 de fábrica (mediana 24, con el 17 % de píxeles bajo 16 contra
+el 47 % de antes) y con perilla **brillo** de 60 a 180, que da de 15 a 66 de mediana — porque cuánto
+brillo hace falta depende de la pantalla y de la luz del cuarto, y eso no se acierta desde acá.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Lienzo 1002×461 dentro de un escenario de 1002×461 → **se ve el 100 %**. Pantalla usada 1,000. Render
+1581×727 (el tope exacto de 1,15 M), estiramiento 1,743. Campo 111,1 × 67,67. Linterna con desvío
+**0°** y el haz en **[0,0]**, también girando la vista 40 muestras a 3 rad/s. Alabeo **0**. La mira en
+(501,5 · 230,5) contra un centro de (501 · 230,5). HUD sin un solo solapamiento. 4 de 4 texturas de
+foto, fusión estática idéntica, **cero errores de página**. Y "entrar" volvió a ser el elemento de
+arriba en su propio centro, que la capa de pausa escondida le estaba robando el toque.
+
 ### Octogésima primera vuelta (2026-09-02): **LA CASA** — el 16:9 costaba un cuarto de lo que se ve
 
 Reporte, después de tres vueltas mías tocando la cámara a ciegas: *"hermano que no ves que a vos sí te

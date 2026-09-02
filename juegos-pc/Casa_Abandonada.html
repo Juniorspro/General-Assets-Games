@@ -160,7 +160,8 @@
     <label class="sl">mirada<input type="range" id="slSens" min="30" max="200" value="100"></label>
     <label class="sl">volumen<input type="range" id="slVol" min="0" max="100" value="85"></label>
     <label class="sl">cinta<input type="range" id="slGrain" min="0" max="100" value="48"></label>
-    <label class="sl">campo<input type="range" id="slFov" min="65" max="110" value="90"></label>
+    <label class="sl">campo<input type="range" id="slFov" min="65" max="110" value="100"></label>
+    <label class="sl">brillo<input type="range" id="slBri" min="60" max="180" value="100"></label>
     <button class="btn gh" id="btnCuadro">cuadro: pantalla llena</button>
     <div class="rule"></div>
     <div class="note2" style="margin-top:0;line-height:1.9">izquierda para caminar · derecha para mirar<br>
@@ -202,6 +203,7 @@ function safeArea(){
    deja margen para jugar sin deformar. */
 let HFOV=100;             // el horizontal DE REFERENCIA a 16:9; ver la nota de abajo
 const HFOV_MIN=65, HFOV_MAX=110;
+let _escReal=0.62;        // la escala que quedo despues del tope de pixeles
 /* SE GUARDA. Llevo tres vueltas adivinando este numero —117, 100, 80— y cada
    vez el que lo mira es otro: depende del tamaño de la pantalla, de a que
    distancia se sostiene el telefono y del gusto. Un numero asi no se acierta
@@ -240,6 +242,43 @@ const ASP=16/9;               // el aspecto de REFERENCIA del que sale el campo
    composicion vertical —el techo, el piso, el horizonte— es la misma para
    todos, que era todo el motivo de haber puesto un formato fijo.
    La cinta 16:9 queda como opcion para quien quiera las barras. */
+/* ══════════ LA ESCALA DE RENDER, EN PIXELES DEL APARATO ══════════
+   Aca estaba la otra mitad del "a vos te muestra bien y a mi no", y es una
+   multiplicacion. Habia DOS reducciones encadenadas —el pixelRatio topado en
+   1,5 y el destino de render al 0,68 del lienzo— y las dos se multiplican
+   contra la pantalla de VERDAD, no contra los px de CSS:
+
+       estiramiento = dpr / (pr x RS)
+
+   En un monitor de dpr 1 eso da 1 / 0,68 = 1,47 y se ve nitido. En un telefono
+   de dpr 2,75 da 2,75 / 1,02 = **2,70**: el mismo juego dibujado a poco mas de
+   un tercio de la resolucion de la pantalla y estirado encima. Por eso mis
+   capturas se veian bien y las suyas eran una mancha.
+
+   Ahora hay UN numero —a que fraccion de la pantalla real se dibuja— y una
+   sola ampliacion, la del navegador, que ademas es gratis (la hace el
+   compositor). El destino de render pasa a medir lo mismo que el lienzo, asi
+   que la ampliacion interior desaparece del todo. */
+let ESC=0.62;
+const ESC_MIN=0.34, ESC_MAX=0.92, PIX_MAX=1.15e6;
+/* CONTROL: no puedo medir el telefono de nadie desde aca, asi que el juego se
+   mide solo. Escalones geometricos de razon 1,09 —o sea 1,19 en pixeles, por
+   debajo de la banda muerta de 1,36— asi que no puede oscilar; asimetrico, con
+   enfriamiento, y la racha que hace falta para subir se duplica en cada subida. */
+const RES={t:[],ult:0,racha:0,pide:3};
+function resPaso(ms){
+  RES.t.push(ms); if(RES.t.length<40) return;
+  const a=RES.t.slice().sort((x,y)=>x-y), med=a[a.length>>1]; RES.t.length=0;
+  const T=performance.now(); if(T-RES.ult<1200) return;
+  if(med>21.5 && ESC>ESC_MIN){
+    ESC=Math.max(ESC_MIN,ESC/1.09); RES.ult=T; RES.racha=0; layout();
+  }else if(med<15.8 && ESC<ESC_MAX){
+    if(++RES.racha>=RES.pide){
+      ESC=Math.min(ESC_MAX,ESC*1.09); RES.ult=T; RES.racha=0;
+      RES.pide=Math.min(48,RES.pide*2); layout();
+    }
+  }else RES.racha=0;
+}
 let CINTA=false;
 try{ CINTA = localStorage.getItem('casa_cuadro')==='cinta'; }catch(e){}
 let stgL=0, stgT=0, stgX1=0;   // izquierda, arriba, y el borde derecho girado
@@ -276,11 +315,38 @@ function layout(){
     renderer.setSize(VW,VH,false);
     camera.aspect=VW/VH;
     camera.updateProjectionMatrix();   // el fov lo escribe la camara, no esto
-    const pr=renderer.getPixelRatio(), RS=0.68;
-    const sw=Math.max(2,Math.floor(VW*pr*RS)), sh=Math.max(2,Math.floor(VH*pr*RS));
+    /* el tope de pixeles va sobre la pantalla de VERDAD: una de 3,5 millones
+       no puede pedir el mismo trabajo que una de 800 mil */
+    const dpr=devicePixelRatio||1, dw=VW*dpr, dh=VH*dpr;
+    let e=ESC;
+    if(dw*dh*e*e>PIX_MAX) e=Math.sqrt(PIX_MAX/(dw*dh));
+    e=Math.max(0.20,Math.min(ESC_MAX,e));
+    renderer.setPixelRatio(dpr*e);
+    renderer.setSize(VW,VH,false);
+    /* ══════════ Y EL LIENZO SE MIDE EN CSS A MANO ══════════
+       Aca estaba el defecto de fondo de todas estas vueltas, y no se podia ver
+       desde una pantalla de dpr 1. `setSize(...,false)` no toca el estilo, y el
+       lienzo no tiene ancho en CSS: entonces su caja de layout termina midiendo
+       `VW * pixelRatio` PIXELES DE CSS. Con el pixelRatio topado en 1,5 y un
+       telefono de dpr 2,75 eso es 1,5 veces el escenario — y el escenario tiene
+       `overflow:hidden` con `transform-origin:top left`.
+       Medido, reproducido en el banco a dpr 2,75: lienzo 1503x691 dentro de un
+       escenario de 1002x461, o sea que el jugador veia el **44,5%** del cuadro,
+       y la esquina de ARRIBA A LA IZQUIERDA. El centro del render no caia en el
+       centro de la pantalla; la mira, que es DOM y vive en el escenario, si.
+       De ahi salian las dos cosas que venia reportando: "el centro no esta en el
+       centro" y "veo un cuarto de lo que se debe ver" (0,445 x 0,82 del 16:9 =
+       36,5%). A dpr 1 el factor es 1 y no pasa absolutamente nada, y por eso
+       ninguna de mis capturas lo mostro nunca. */
+    const cv=renderer.domElement;
+    cv.style.width=VW+'px'; cv.style.height=VH+'px';
+    /* el destino de render mide LO MISMO que el lienzo: la unica ampliacion
+       que queda es la del navegador, de una sola pasada */
+    const sw=Math.max(2,Math.floor(dw*e)), sh=Math.max(2,Math.floor(dh*e));
     rt.setSize(sw,sh);
-    postMat.uniforms.uRes.value.set(VW*pr,VH*pr);
+    postMat.uniforms.uRes.value.set(sw,sh);
     postMat.uniforms.uSrc.value.set(sw,sh);
+    _escReal=e;
   }
 }
 const toLocal=(cx,cy)=>
@@ -293,7 +359,15 @@ window.renderer=renderer;
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputEncoding=THREE.sRGBEncoding;
-renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.02;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+/* 95% del cuadro medido por debajo de 64 sobre 255 y la mitad por debajo de 16.
+   La casa tiene que estar oscura, pero eso ya no es oscuro: es negro. Y cuanto
+   brillo hace falta depende de la pantalla y de la luz del cuarto donde se
+   juega, o sea que no se acierta desde aca — va con perilla. */
+let BRILLO=1.0;
+try{ const g=localStorage.getItem('casa_brillo');
+     if(g) BRILLO=Math.max(0.6,Math.min(1.8,+g||1)); }catch(e){}
+renderer.toneMappingExposure=1.02*BRILLO;
 stage.insertBefore(renderer.domElement,stage.firstChild);
 
 /* ─── post-proceso: grano, aberración cromática y viñeteado ─── */
@@ -310,8 +384,9 @@ const postMat=new THREE.ShaderMaterial({
   uniforms:{
     tDiffuse:{value:rt.texture},
     uTime:{value:0}, uRes:{value:new THREE.Vector2(1,1)}, uSrc:{value:new THREE.Vector2(1,1)},
-    uAberr:{value:1.0}, uGrain:{value:0.085}, uVig:{value:0.62},
-    uGlitch:{value:0}, uJump:{value:0}, uWob:{value:0.5}, uBright:{value:1.06}
+    uAberr:{value:1.0}, uGrain:{value:0.062}, uVig:{value:0.62},
+    uGlitch:{value:0}, uJump:{value:0}, uWob:{value:0.5}, uBright:{value:1.06},
+    uLift:{value:0.74}
   },
   vertexShader:[
     'varying vec2 vUv;',
@@ -320,7 +395,7 @@ const postMat=new THREE.ShaderMaterial({
   fragmentShader:[
     'uniform sampler2D tDiffuse;',
     'uniform vec2 uRes,uSrc;',
-    'uniform float uTime,uAberr,uGrain,uVig,uGlitch,uJump,uWob,uBright;',
+    'uniform float uTime,uAberr,uGrain,uVig,uGlitch,uJump,uWob,uBright,uLift;',
     'varying vec2 vUv;',
     'float h1(float x){return fract(sin(x*127.1)*43758.5453123);}',
     'float h2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}',
@@ -357,10 +432,19 @@ const postMat=new THREE.ShaderMaterial({
     '  col*=1.0-0.085*sl*sl;',                          // líneas de barrido
     '  col*=1.0-0.026*mod(floor(uv.y*260.0)+floor(uTime*48.0),2.0);',
     '  float n=h2(uv*uRes*0.5+vec2(fract(uTime*41.0),fract(uTime*17.0))*131.0);',
-    '  col+=(n-0.5)*uGrain*(1.25-0.8*lum);',            // ruido de cinta
+    /* EL GRANO PESABA MAS QUE LA IMAGEN. Medido sobre una captura del juego en
+       un telefono: mediana de brillo 17 sobre 255 y el grano en 9,1 niveles de
+       rms, o sea mas de la mitad de la señal — a eso el ojo no le lee una cinta,
+       le lee estatica. Y el peso estaba AL REVES: (1,25-0,8*lum) lo pone en su
+       maximo justo donde la imagen es mas oscura, que es el 95% del cuadro. */
+    '  col+=(n-0.5)*uGrain*(0.72+0.34*lum);',           // ruido de cinta
     '  float stt=step(0.9925-uGlitch*0.035,h1(floor(uv.y*200.0)-floor(uTime*18.0)*7.1));',
     '  col+=stt*(0.09+0.26*uGlitch)*h2(uv*uRes);',      // rayas que cruzan
     '  col=mix(col,vec3(dot(col,vec3(0.333)))+(h2(uv*uRes*1.7+uTime)-0.5)*0.4,hs*0.85);',
+    /* levante de sombras: una potencia menor que 1 abre los oscuros sin tocar
+       los claros, que es lo que hace falta cuando el cuadro es casi todo negro.
+       Un multiplicador no sirve: 0,067 x 1,2 sigue siendo 0,08. */
+    '  col=pow(max(col,0.0),vec3(uLift));',
     '  float r2=dot(cc,cc);',
     '  col*=mix(1.0,smoothstep(0.62,0.05,r2),uVig);',   // viñeteado
     '  vec2 ob=step(vec2(0.0),uvb)*step(uvb,vec2(1.0));',
@@ -2555,7 +2639,7 @@ const hint=document.getElementById('hint'),torchBtn=document.getElementById('tor
 const placeEl=document.getElementById('place');
 const move={x:0,y:0}; let moveId=null,lookId=null,lookPrev={x:0,y:0},origin={x:0,y:0};
 const keys={}; let started=false, torchOn=true;
-let grain=0.088;
+let grain=0.063;   // el mismo que da el deslizador en su posicion de fabrica (0,132 x 0,48)
 /* ─── estado de la cinta ─── */
 const vhs={timer:rnd(3,8),g:0,hold:0,roll:0,jump:0,wob:0.5};
 const MES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
@@ -2653,6 +2737,15 @@ document.getElementById('slSens').addEventListener('input',e=>{
   SENS=0.0038*(e.target.value/100);});
 document.getElementById('slVol').addEventListener('input',e=>{
   if(A&&A.setVolume) A.setVolume(e.target.value/100);});
+{ const sb=document.getElementById('slBri');
+  const pon=v=>{ BRILLO=v/100;
+    renderer.toneMappingExposure=1.02*BRILLO;
+    /* el levante acompaña: subir solo la exposicion quema los claros antes de
+       que se vean los oscuros, que es de donde hay que sacar la imagen */
+    postMat.uniforms.uLift.value=1.0-0.26*BRILLO; };
+  sb.value=Math.round(BRILLO*100); pon(+sb.value);
+  sb.addEventListener('input',e=>{ pon(+e.target.value);
+    try{ localStorage.setItem('casa_brillo',(+e.target.value/100).toFixed(2)); }catch(err){} }); }
 { const bc=document.getElementById('btnCuadro');
   const pinta=()=>bc.textContent='cuadro: '+(CINTA?'cinta 16:9':'pantalla llena');
   pinta();
@@ -2670,7 +2763,7 @@ document.getElementById('slVol').addEventListener('input',e=>{
     try{ localStorage.setItem('casa_hfov',HFOV); }catch(err){} }); }
 document.getElementById('slGrain').addEventListener('input',e=>{
   const v=e.target.value/100;
-  grain=0.19*v;
+  grain=0.132*v;
   postMat.uniforms.uAberr.value=0.3+1.6*v;
   /* el rango arranca donde arranca el uniforme: con 0.55+0.5*v, tocar el
      deslizador saltaba de 0.62 a 0.79 sin que nadie lo pidiera */
@@ -3156,6 +3249,7 @@ function tick(){
   renderer.render(scene,camera);
   renderer.setRenderTarget(null);
   renderer.render(postScene,postCam);
+  resPaso(raw*1000);
 }
 /* ══════════ sondas de medicion (no tocan el juego) ══════════ */
 window.__casa={
@@ -3263,6 +3357,12 @@ window.__casa={
     fov_horiz:+(2*Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*180/Math.PI).toFixed(1),
     aspecto:+camera.aspect.toFixed(3), fov_ref_16_9:+P.fov.toFixed(2),
     cuadro:CINTA?'cinta':'lleno', cuadro_px:[Math.round(VW),Math.round(VH)],
+    esc:+_escReal.toFixed(3), esc_pedida:+ESC.toFixed(3),
+    render_px:[rt.width,rt.height],
+    /* cuanto estira el navegador del lienzo a la pantalla: 1 seria 1:1 */
+    estiramiento:+((VW*(devicePixelRatio||1))/rt.width).toFixed(3),
+    brillo:+BRILLO.toFixed(2), lift:+postMat.uniforms.uLift.value.toFixed(3),
+    grano:+postMat.uniforms.uGrain.value.toFixed(4),
     pantalla_px:[innerWidth,innerHeight],
     /* fraccion de la pantalla que ocupa el cuadro, y el angulo solido relativo
        a 16:9 con el mismo HFOV — o sea cuanto mundo se ve de mas o de menos */

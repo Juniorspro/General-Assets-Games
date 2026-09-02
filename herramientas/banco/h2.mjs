@@ -17,7 +17,12 @@ const nav=await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194
  // forma de probar ni el microfono de Eco ni el handtracking de Recreo.
  '--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
 const MOVIL=!!process.env.MOVIL;   // telefono de verdad: pointer:coarse y user agent de Android
-const ctx=await nav.newContext(Object.assign({viewport:{width:W,height:H},hasTouch:!PC,deviceScaleFactor:1},
+/* DPR: hasta ahora estaba clavado en 1 y esa era una ZONA CIEGA del banco.
+   Un defecto que dependa de devicePixelRatio —por ejemplo un lienzo cuyo tamaño
+   en CSS sale del ratio y desborda su contenedor— es INVISIBLE a dpr 1 y arruina
+   el juego en cualquier telefono moderno, que anda entre 2 y 3,5. */
+const DPR=+(process.env.DPR||1)||1;
+const ctx=await nav.newContext(Object.assign({viewport:{width:W,height:H},hasTouch:!PC,deviceScaleFactor:DPR},
   MOVIL? { isMobile:true, hasTouch:true, userAgent:'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' } : {}));
 const pg=await ctx.newPage(); const cdp=await ctx.newCDPSession(pg);
 pg.on('requestfinished',async r=>{ try{ const q=await r.response(); if(q&&q.status()>=400) console.log('[HTTP]',q.status(),r.url().slice(0,140)); }catch(e){} });
@@ -30,7 +35,7 @@ await pg.goto('http://127.0.0.1:8098/'+(process.env.PAGINA||'eco.html')+'?v='+Da
 // realidad estaba dibujado fuera de la foto. Con el clip del tamano de la ventana sale completo.
 // El navegador a veces se pone en escala de pagina 0,849 y entonces la foto sale con marco negro
 // y encogida aunque el DOM mida exactamente 1024x576. Se fija en 1 y listo.
-await cdp.send('Emulation.setDeviceMetricsOverride',{width:W,height:H,deviceScaleFactor:1,
+await cdp.send('Emulation.setDeviceMetricsOverride',{width:W,height:H,deviceScaleFactor:DPR,
   mobile:MOVIL, screenWidth:W, screenHeight:H, positionX:0, positionY:0}).catch(()=>{});
 await cdp.send('Emulation.setPageScaleFactor',{pageScaleFactor:1}).catch(()=>{});
 const foto=async n=>{ const r=await cdp.send('Page.captureScreenshot',{format:'png',
