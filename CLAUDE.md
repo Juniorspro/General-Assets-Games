@@ -107,7 +107,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
-- **`Casa_Abandonada.html` es "LA CASA"** (~454 KB, de los cuales 200 son **catorce texturas de foto**
+- **`Casa_Abandonada.html` es "CASA 13"** (~505 KB, de los cuales 200 son **catorce texturas de foto**
   generadas con Rezona; los papeles, los escombros, el cielo y las telarañas se dibujan por codigo). Llego de afuera como
   `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
   primera persona: una cinta VHS del 12 de marzo de 1994, linterna, papeles que se leen, y todo el
@@ -118,11 +118,106 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   con ida y vuelta de gamma. **La camara tiene UN SOLO ESCRITOR** y la orientacion sale de yaw y
   pitch con un cuaternion YXZ: el alabeo no existe. **El cuadro llena la pantalla** y el campo se
   corrige por aspecto (Hor+: `HFOV` es el horizontal de referencia a 16:9 y lo que se mantiene es el
-  vertical), con la cinta 16:9 como opcion. Campo y cuadro se eligen en la pausa y se guardan.
+  vertical), con la cinta 16:9 como opcion. Campo y cuadro se eligen en la pausa y se guardan. El menu es la **etiqueta de la cinta** —esquinas
+en chanfle, punto de REC y banda de tracking— con **tres idiomas (ES/EN/PT)** y los ajustes desde ahi;
+las ocho hojas guardan **la clave y no el texto**, asi que cambiar de idioma repinta las que ya se
+encontraron.
 
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Octogésima séptima vuelta (2026-09-02): **CASA 13** — el menú es una etiqueta de cinta, y las hojas guardan la clave
+
+Pedido: *"mejora el menú principal y que el Título del juego sea casa 13 y que en el menú principal
+puedas elegir el idioma y las configuraciones"*.
+
+#### EL MENÚ ERA UN PANEL, Y UN PANEL NO ES DE NINGÚN JUEGO
+
+Un rectángulo oscuro con un título y dos botones es el menú de cualquier cosa: no dice nada del juego
+que hay detrás. Y acá **el juego ya tiene una identidad muy concreta** —una cinta VHS del 12 de marzo
+de 1994, con su REC, su contador SP y su fecha quemada en la esquina— así que el menú tenía que ser
+**la etiqueta de la cinta**: las dos esquinas de arriba en chanfle (los dos `::before`/`::after` con
+`skewX` de ±38°, que es lo que le da al cassette su silueta), el punto rojo de grabación titilando al
+lado de GRABACIÓN 03, y una **banda de tracking** cruzando despacio. No hay una sola imagen nueva: son
+cuatro reglas de CSS.
+
+**Y LA BANDA SE APAGA CON `prefers-reduced-motion`.** Es una animación que cruza la pantalla en bucle
+y no aporta información: para quien tenga el sistema en movimiento reducido eso no es ambiente, es
+molestia.
+
+#### EL TÍTULO VA EN LOS DOS SITIOS
+
+`<title>` **y** el cartel del menú. El `<title>` es lo que se ve en la pestaña, en el historial y —lo
+que importa acá— **en el ícono de la pantalla de inicio de un iPhone**, que es como el usuario abre
+este juego. Con uno solo de los dos, el juego se llama de dos maneras distintas según dónde se lo mire.
+
+#### TRES IDIOMAS, Y LA TABLA SE LLAMA `TX` Y NO `t`
+
+Es la misma lección que ya está escrita en este archivo desde Z Force y no hay motivo para volver a
+pagarla: **una función global de una letra la pisa cualquier cosa que comparta la página, y cuando se
+pisa no falla el idioma, falla TODO**, porque no queda un solo texto que no pase por ahí.
+
+Unas sesenta claves por idioma: el menú, los cinco ajustes, los avisos, los rótulos de los cuartos, los
+nombres de lo que se puede examinar y las ocho hojas. El idioma se guarda (`casa13_idioma`) y, la
+primera vez, **sale de `navigator.language`**: quien abre el juego en un teléfono en inglés no tiene
+por qué encontrarse un menú en castellano y tener que adivinar cuál de las tres letras es la suya.
+
+#### **LAS HOJAS GUARDAN LA CLAVE Y NO EL TEXTO**, Y ÉSE ES EL TRABAJO DE VERDAD
+
+Las ocho hojas no son DOM: cada una es una **textura dibujada en un lienzo**, o sea que su texto se
+resuelve **una sola vez**, cuando la hoja se construye. Guardando el texto ya traducido, cambiar de
+idioma dejaría en castellano **las ocho hojas que el jugador ya encontró** — y las hojas son
+literalmente el argumento del juego. Es el mismo defecto que en Eco costó una vuelta.
+
+Así que la hoja guarda `ck` (`p1`..`p8`) y `repintaPapeles()` rehace las ocho texturas, con
+`dispose()` de la vieja: sin eso, cambiar de idioma tres veces deja veinticuatro lienzos de 512×724
+ocupando memoria de GPU que nadie dibuja.
+
+**Y UNA CAPTURA NO PRUEBA QUE SE HAYAN REPINTADO.** La primera sonda devolvía `mapa: true` para las
+ocho, que es cierto y no dice nada: un mapa existía antes también. La foto tampoco servía —llegar
+caminando hasta una hoja a 0,26 cuadros por segundo es una expedición—. Lo que sí prueba es **la firma
+de los píxeles del propio lienzo**: `hoja(i)` recorre el `getImageData` y devuelve un número. Medido,
+las ocho hojas en los tres idiomas:
+
+| | firmas | distintas |
+|---|---|---|
+| 8 hojas × 3 idiomas | 24 | **24** |
+
+Y hoja por hoja, `es ≠ en ≠ pt` en las ocho. Eso es lo que quiere decir que se repintaron.
+
+#### AJUSTES NO ES UN PANEL NUEVO: ES EL DE LA PAUSA CON OTRA PUERTA
+
+El panel de pausa ya tiene los cinco controles —campo, cuadro, brillo, grano, volumen—. Escribir un
+segundo panel para el menú sería mantener dos listas de deslizadores que el día que se agregue un
+ajuste se van a separar, y **el que se olvide va a ser justo el del menú**, que es el que nadie prueba.
+`abreCfg(desdeMenu)` abre el mismo panel y cambia tres cosas: el título pasa a AJUSTES en vez de PAUSA,
+el botón de salir dice VOLVER en vez de SEGUIR, y **MENÚ PRINCIPAL se esconde** —desde el menú, "volver
+al menú" no lleva a ningún lado.
+
+#### DOS COSAS QUE SÓLO APARECEN AL CAMBIAR DE IDIOMA CON EL JUEGO CORRIENDO
+
+- **El rótulo del cuarto se escribe una vez al entrar**, así que cambiando de idioma parado en el mismo
+  cuarto se quedaba en el anterior hasta cruzar una puerta. `lastRoom=null` lo obliga a rehacerse.
+- **El botón del cuadro arma su texto solo** (`quadro: tela cheia`), o sea que no lo alcanza el barrido
+  por `data-i18n`: se lo llama aparte.
+
+#### Y UN DEFECTO DEL BANCO QUE COSTÓ UNA CORRIDA
+
+`__casa is not defined` con la página cargada. No era el juego: el banco sirve **su propia copia**
+(`casa.html`, la que escribe `prep2.py`) y yo estaba pidiendo la ruta del repo, que ahí es un 404. La
+firma es inconfundible en el log —`[SRV 404] /juegos-pc/...`— y aun así se lee a error del juego.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+24 firmas de hoja, **24 distintas**. Los tres idiomas alcanzan al DOM (18 elementos), al botón de la
+linterna, al del cuadro, a los rótulos de cuarto y a las ocho hojas. AJUSTES desde el menú abre el panel
+con título AJUSTES, botón VOLVER y MENÚ PRINCIPAL oculto. **Nada regresó:** linterna con desvío **0°**,
+haz en **[0,0]**, corrida 0 cm, alabeo **0**, y con la vista girando 40 muestras el peor desvío sigue en
+0; el foco cae en [0,528 · 0,483]; HUD **sin un solo solapamiento**; **14 de 14 texturas de foto
+puestas, 0 fallidas, 0 destinos huérfanos**; 255 llamadas de dibujo, 37,0 k triángulos, **22 programas**
+y 63 texturas —los mismos de la vuelta anterior—; `window.__errs` vacío en las seis corridas. El HTML
+pasó de 496 a **505 KB**, y no entró un solo asset.
 
 ### Octogésima sexta vuelta (2026-09-02): **LA CASA** — el trueno llega tarde, y el relámpago trae su propia dirección
 
