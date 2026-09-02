@@ -530,6 +530,46 @@ Y la regresión completa sigue en pie: los **siete estados** cargan con las 24 f
 levantados** en reposo y `deFrente: true` con los ojos en x 0,499 · y 0,510. `window.__errs` vacío en
 las trece corridas. El HTML pasó de 2,70 a **2,97 MB**, y esos 270 KB son las seis fotos del campo.
 
+#### Y DESPUÉS, EN LA MISMA VUELTA: **MENOS TELARAÑAS EN EL NIVEL 6**
+
+Pedido: *"reduce la cantidad de telarañas en el nivel 6"*. Tres números las gobiernan y bajan los tres:
+las que entran de arranque **de 6 a 3**, el tope **de 12 a 7** y el ritmo de tejido de 11-17 s a
+**18-26**.
+
+**DOS VANOS Y NO CUATRO, Y ES UNA CUENTA DEL RECORRIDO.** El local tiene seis ambientes unidos por
+**cinco** vanos y había tela en cuatro de los cinco, o sea que casi todo paso de una sala a otra
+costaba tres segundos. Y no se cruzan una vez: las cuatro partes se juntan de a una y hay que **volver
+a la bandeja cuatro veces**, así que el mismo vano se pasa seis u ocho veces por partida. Eso deja de
+ser un mecanismo y pasa a ser un peaje — que es exactamente lo que este mismo archivo ya había anotado
+sobre la tela que estaba encima de la carne. Quedan la del **mostrador**, que es el primer paso de la
+partida y garantiza que el jugador se cruce con el mecanismo antes de que la araña lo elija por él, y
+la del **depósito**, que es el ambiente más profundo. En el piso queda **una** en vez de dos.
+
+**Y ACÁ LA SONDA CORRIGIÓ UNA AFIRMACIÓN DE LA VUELTA 82.** Ahí escribí *"hasta doce"*, y doce era el
+tope del código, no lo que pasaba. Midiendo cinco minutos con una sonda nueva que **adelanta el reloj
+de la araña** —el banco corre a la quinta parte del reloj de pared, así que llegar al tope tejiendo
+cada veinte segundos son diez minutos de espera, y una prueba que no se puede correr no prueba nada—:
+
+| | al entrar | a los 5 min | en ronda | dentro de una zona de exclusión |
+|---|---|---|---|---|
+| antes | **6** | **8** | 300 s de 300 | **273 s** |
+| ahora | **3** | **4** | 300 de 300 | 274,6 s |
+
+O sea que las telas **se parten al medio**, y de paso apareció por qué el tope nunca se alcanzaba: la
+araña pasa el **91 % de su tiempo de ronda parada dentro de una zona de exclusión** —los 3,4 m
+alrededor de las cuatro partes, la bandeja y la salida— así que el reloj del tejido se vence y se queda
+vencido esperando un sitio legal (`tejeCd` medido en **−265**). Es de antes de esta vuelta: el control
+—**el mismo binario con los tres números viejos**, porque el HTML del commit anterior no tiene la sonda
+y no se le puede preguntar lo mismo— da 273 s contra 274,6, o sea idéntico. **No se arregla a
+propósito:** arreglarlo haría que la araña tejiera MÁS, que es lo contrario de lo que se pidió.
+
+**Y EL MECANISMO SIGUE EN PIE, que es lo único que no se podía romper.** Pisando las dos que quedan:
+`atrapado 2,36` en el piso de la cocina y `2,03` en el vano del mostrador, con la araña pasando a
+**`caza` a 4,65 y 5,0 m/s** en el acto. Más la regresión completa: auditoría **28.152 de 28.152 celdas ·
+4 de 4 partes · 0 arcos sucios**, partida completa 4/4 en orden y salida a `end`, y la araña con su pose
+de reposo y `deFrente: true` con los ojos en x 0,502 · y 0,482. `window.__errs` vacío en las seis
+corridas.
+
 **LO QUE NO QUEDÓ REDONDO, Y ES HONESTO DECIRLO:** al pétalo magenta le queda un **5,1 %** de fondo
 alcanzable desde el borde —está en el reborde de arriba, donde la punta se corta y las filas se
 copian—. Probé entrar un 3 % del contorno para sacarlo y **midió peor** (6,5 %), así que lo saqué: un

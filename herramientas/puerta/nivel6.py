@@ -621,7 +621,7 @@ JS += r"""
     vel: 0,
     fase: 0,
     wp: new THREE.Vector3(-16, 0, 8),
-    tejeCd: 9
+    tejeCd: 16
   };
   {
     // EL NEGRO ABSOLUTO NO TIENE SOMBREADO QUE MOSTRAR. Con quitina en 0x14100f
@@ -961,19 +961,25 @@ JS += r"""
       w.mesh.geometry.dispose();
       w.mesh.material.dispose();
     }
-    // LAS DE LOS VANOS SE PONEN DE ENTRADA, y no al azar: son las que garantizan
-    // que el jugador se cruce con el mecanismo antes de que la arana lo elija
-    // por el.
+    // ── DOS VANOS Y NO CUATRO, Y ES UNA CUENTA DEL RECORRIDO ──
+    // El local tiene seis ambientes unidos por CINCO vanos, y habia tela en
+    // cuatro de los cinco: o sea que casi todo paso de una sala a otra costaba
+    // tres segundos. Y no se cruzan una vez — las cuatro partes se juntan de a
+    // una y hay que volver a la bandeja CUATRO VECES, asi que el mismo vano se
+    // pasa seis u ocho veces por partida. Eso deja de ser un mecanismo y pasa a
+    // ser un peaje, que es exactamente lo que este mismo archivo ya habia
+    // anotado sobre la tela que estaba encima de la carne.
+    //
+    // Quedan las dos que hacen falta: la del mostrador, que es el primer paso de
+    // la partida y garantiza que el jugador se cruce con el mecanismo antes de
+    // que la arana lo elija por el; y la del deposito, que es el ambiente mas
+    // profundo. La de la cocina y la de la camara se van.
     stNuevaTela(10, 3.05, 1.9, true, 0);          // el paso del mostrador
-    stNuevaTela(1.5, 12, 1.4, true, 0);           // cocina -> pasillo
-    stNuevaTela(13, 7.2, 1.0, true, Math.PI / 2); // camara
     stNuevaTela(-9, 19.5, 2.0, true, Math.PI / 2);// deposito
-    // NO ENCIMA DE UNA PARTE: estaba en (-14 · 6,5) y la carne en (-13,5 · 6,8),
-    // o sea a 58 cm — medido jugando, agacharse a juntar la carne te dejaba
-    // pegado tres segundos SIEMPRE. Una tela en el camino es el mecanismo; una
-    // tela encima de lo que hay que juntar es un peaje.
-    stNuevaTela(-19, 7.2, 1.7);                   // dos en el piso de la cocina
-    stNuevaTela(4, 9.5, 1.5);
+    // Y UNA SOLA EN EL PISO. No encima de una parte: la que estaba en
+    // (-14 · 6,5) caia a 58 cm de la carne y agacharse a juntarla te dejaba
+    // pegado tres segundos SIEMPRE.
+    stNuevaTela(-19, 7.2, 1.7);                   // el piso de la cocina
   }
 
   // ---- el grafo por el que anda la arana ----
@@ -1128,7 +1134,7 @@ JS += r"""
     // —el lerp tarda un segundo en bajar de 5,0 a 2,2— o sea con la arana
     // rondando a velocidad de caza, y con la luz roja en 1,5 que le dejo el
     // grito hasta el primer cuadro de araPaso.
-    ARA.cazaT = 0; ARA.tejeCd = 11; ARA.vel = 0; ARA.fase = 0;
+    ARA.cazaT = 0; ARA.tejeCd = 16; ARA.vel = 0; ARA.fase = 0;
     ARA.luz.intensity = 0.18;
     // CON 0 REAPARECIA HUNDIDA: se construye en ARA_Y —la caja envolvente da
     // negativo con el grupo en cero— y el reinicio lo pisaba, asi que la
@@ -1256,9 +1262,16 @@ JS += r"""
       // la arana sigue en ronda aunque este al lado, asi que podia dejar una
       // tela bajo los pies: tres segundos clavado por algo que aparecio debajo
       // no es una trampa, es un castigo sin aviso.
-      if (ARA.tejeCd <= 0 && stTelas.length < 12 && dist > 7 &&
+      // EL TOPE BAJA DE DOCE A SIETE Y EL RITMO SE ESTIRA. Doce telas en un
+      // local de 47 x 38 m es una cada ciento cincuenta metros cuadrados, y
+      // tejiendo cada 11-17 s se llegaba al tope en menos de tres minutos —
+      // antes de terminar de juntar las cuatro partes. Con siete y cada 18-26 s,
+      // la ultima aparece pasados los dos minutos y medio y el local no se
+      // termina de tapar. Ojo: las USADAS siguen contando para el tope, asi que
+      // pisar telas hace que la arana teja menos, no mas.
+      if (ARA.tejeCd <= 0 && stTelas.length < 7 && dist > 7 &&
           stSitioDeTela(ARA.g.position.x, ARA.g.position.z)) {
-        ARA.tejeCd = rand(11, 17);
+        ARA.tejeCd = rand(18, 26);
         stNuevaTela(ARA.g.position.x, ARA.g.position.z, rand(1.3, 1.9));
       }
     }

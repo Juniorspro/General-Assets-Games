@@ -904,6 +904,35 @@ s = cambiar(s, """    flores: function () {""",
     // pone al jugador donde haga falta para probar sin caminar veinte metros
     irA: function (x, z) { player.position.set(x, 0, z); return { x: x, z: z }; },
     arana: function (x, z) { ARA.g.position.set(x, ARA_Y, z); return 'ok'; },
+    // ADELANTA EL RELOJ DE LA ARAÑA, que es la unica forma de MEDIR el tope de
+    // telas. El banco dibuja por software y corre a la quinta parte del reloj de
+    // pared: llegar al tope tejiendo cada 18-26 s son diez minutos de espera, y
+    // una prueba que no se puede correr no prueba nada. Esto llama al mismo paso
+    // que el bucle, con el mismo delta topado, asi que mide el juego y no una
+    // maqueta.
+    aranaAdelanta: function (segundos) {
+      const dt = 0.05;
+      const n = Math.min(20000, Math.round((segundos || 60) / dt));
+      // y se cuenta CUANTO TIEMPO PASA EN RONDA, que es el unico momento en que
+      // teje: si la arana esta en caza, el reloj del tejido no corre y el tope
+      // no se alcanza nunca — sin este numero, "no llego al tope" no distingue
+      // un tope que sobra de un tejido que no funciona
+      let enRonda = 0, sitioMalo = 0, cerca = 0;
+      for (let i = 0; i < n; i++) {
+        araPaso(dt, i * dt);
+        if (ARA.estado === 'ronda') {
+          enRonda += dt;
+          const d2 = Math.hypot(player.position.x - ARA.g.position.x,
+                                player.position.z - ARA.g.position.z);
+          if (d2 <= 7) cerca += dt;
+          else if (!stSitioDeTela(ARA.g.position.x, ARA.g.position.z)) sitioMalo += dt;
+        }
+      }
+      return { telas: stTelas.length, usadas: stTelas.filter(function (w) { return w.usada; }).length,
+               estado: ARA.estado, tejeCd: +ARA.tejeCd.toFixed(1),
+               sRonda: +enRonda.toFixed(1), sCaza: +((n * dt) - enRonda).toFixed(1),
+               sCerca: +cerca.toFixed(1), sSitioMalo: +sitioMalo.toFixed(1) };
+    },
     // GIGANTE ES UN NUMERO, no una impresion: la caja envolvente de la arana
     // con las patas abiertas, en metros
     // apaga los velos de VHS para fotografiar. NO cambia el juego: son cuatro
