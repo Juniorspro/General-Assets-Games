@@ -1,0 +1,928 @@
+<title>Sabueso de Ofertas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#F1F2ED; --surface:#FFFFFF; --surface-2:#E8EAE1;
+  --ink:#15181C; --ink-2:#5A6068; --ink-3:#8A9098;
+  --rule:#D2D5CB; --rule-2:#BFC3B7;
+  --accent:#1B3BE8; --accent-soft:#E4E8FF; --accent-ink:#FFFFFF;
+  --good:#0B7A4B; --good-soft:#DCF0E6;
+  --warn:#9E6A05; --warn-soft:#F6ECD4;
+  --bad:#B3261E; --bad-soft:#F8E2DF;
+  --shadow:0 1px 0 rgba(21,24,28,.04), 0 8px 24px -16px rgba(21,24,28,.30);
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Hanken Grotesk","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1114; --surface:#181B20; --surface-2:#22262C;
+    --ink:#EDEFEA; --ink-2:#A4ABB2; --ink-3:#767D85;
+    --rule:#2B3037; --rule-2:#3A414A;
+    --accent:#8098FF; --accent-soft:#1C2440; --accent-ink:#0B0D10;
+    --good:#46C68C; --good-soft:#12291F;
+    --warn:#E0A83C; --warn-soft:#2C2412;
+    --bad:#F2705F; --bad-soft:#331917;
+    --shadow:0 1px 0 rgba(0,0,0,.30), 0 10px 28px -18px rgba(0,0,0,.80);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1114; --surface:#181B20; --surface-2:#22262C;
+  --ink:#EDEFEA; --ink-2:#A4ABB2; --ink-3:#767D85;
+  --rule:#2B3037; --rule-2:#3A414A;
+  --accent:#8098FF; --accent-soft:#1C2440; --accent-ink:#0B0D10;
+  --good:#46C68C; --good-soft:#12291F;
+  --warn:#E0A83C; --warn-soft:#2C2412;
+  --bad:#F2705F; --bad-soft:#331917;
+  --shadow:0 1px 0 rgba(0,0,0,.30), 0 10px 28px -18px rgba(0,0,0,.80);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--body); font-size:15.5px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:var(--display); margin:0; text-wrap:balance; letter-spacing:-.02em}
+a{color:inherit}
+button{font:inherit; color:inherit; cursor:pointer}
+:focus-visible{outline:2.5px solid var(--accent); outline-offset:2px; border-radius:3px}
+.wrap{max-width:1040px; margin:0 auto; padding:0 20px}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:var(--mono); font-size:11px; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3);
+}
+
+/* ---------- barra superior ---------- */
+.top{
+  border-bottom:1.5px solid var(--rule); background:var(--surface);
+  position:sticky; top:0; z-index:20;
+}
+.top .wrap{display:flex; align-items:center; gap:16px; height:58px}
+.brand{
+  font-family:var(--display); font-weight:900; font-stretch:118%;
+  font-size:19px; letter-spacing:.01em; text-transform:uppercase;
+  display:flex; align-items:center; gap:9px;
+}
+.brand .dot{
+  width:11px; height:11px; border-radius:50%; background:var(--accent);
+  box-shadow:0 0 0 4px var(--accent-soft);
+}
+.top-spacer{flex:1}
+.ctrl{
+  display:flex; align-items:center; gap:7px; font-family:var(--mono);
+  font-size:12px; color:var(--ink-2);
+}
+.ctrl select{
+  font-family:var(--mono); font-size:12px; padding:5px 8px;
+  background:var(--paper); color:var(--ink);
+  border:1.5px solid var(--rule); border-radius:2px;
+}
+.status{
+  display:inline-flex; align-items:center; gap:6px; font-family:var(--mono);
+  font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+  padding:5px 9px; border-radius:2px; border:1.5px solid var(--rule);
+  color:var(--ink-2); white-space:nowrap;
+}
+.status .led{width:7px; height:7px; border-radius:50%; background:var(--ink-3)}
+.status[data-on="1"]{border-color:var(--good); color:var(--good)}
+.status[data-on="1"] .led{background:var(--good)}
+.status[data-on="0"]{border-color:var(--warn); color:var(--warn)}
+.status[data-on="0"] .led{background:var(--warn)}
+
+/* ---------- orden de búsqueda: la etiqueta ---------- */
+.orden{padding:38px 0 8px}
+.orden h1{
+  font-size:clamp(34px,5.6vw,54px); font-weight:900; font-stretch:112%;
+  line-height:.96; letter-spacing:-.035em; max-width:15ch;
+}
+.orden h1 em{font-style:normal; color:var(--accent)}
+.orden .lede{
+  margin:14px 0 0; max-width:58ch; color:var(--ink-2); font-size:16.5px;
+}
+.tag{
+  margin-top:26px; background:var(--surface); border:1.5px solid var(--ink);
+  border-radius:3px; box-shadow:var(--shadow); position:relative;
+  display:grid; grid-template-columns:56px 1fr;
+}
+.tag-hole{
+  border-right:1.5px dashed var(--rule-2);
+  display:flex; align-items:flex-start; justify-content:center; padding-top:20px;
+}
+.tag-hole span{
+  width:17px; height:17px; border-radius:50%;
+  border:1.5px solid var(--rule-2); background:var(--paper);
+}
+.tag-body{padding:18px 20px 16px}
+.tag label{display:block; margin-bottom:9px}
+#q{
+  width:100%; border:0; background:transparent; color:var(--ink);
+  font-family:var(--body); font-size:20px; line-height:1.42; font-weight:500;
+  resize:vertical; min-height:76px; padding:0;
+}
+#q::placeholder{color:var(--ink-3); font-weight:400}
+#q:focus{outline:none}
+.tag-foot{
+  display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+  border-top:1.5px dashed var(--rule); margin-top:14px; padding-top:14px;
+}
+.go{
+  background:var(--accent); color:var(--accent-ink); border:0; border-radius:2px;
+  font-family:var(--display); font-weight:800; font-stretch:108%;
+  text-transform:uppercase; letter-spacing:.045em; font-size:14px;
+  padding:11px 20px; transition:transform .12s ease, filter .12s ease;
+}
+.go:hover{filter:brightness(1.1)}
+.go:active{transform:translateY(1px)}
+.go[disabled]{opacity:.5; cursor:progress}
+.ejemplos{display:flex; flex-wrap:wrap; gap:7px; margin-left:auto}
+.ej{
+  background:transparent; border:1.5px solid var(--rule); border-radius:2px;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-2);
+  padding:6px 9px; transition:border-color .12s ease, color .12s ease;
+}
+.ej:hover{border-color:var(--accent); color:var(--accent)}
+
+/* ---------- lectura ---------- */
+.seccion{padding:34px 0 0}
+.seccion-cab{
+  display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+  border-bottom:1.5px solid var(--rule); padding-bottom:9px;
+}
+.seccion-cab h2{
+  font-size:15px; font-weight:800; font-stretch:106%;
+  text-transform:uppercase; letter-spacing:.05em;
+}
+.seccion-cab .n{
+  font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:600;
+}
+.seccion-cab .hint{margin-left:auto; font-size:12.5px; color:var(--ink-3)}
+
+.lectura{display:grid; grid-template-columns:1.15fr .85fr; gap:22px; align-items:start}
+@media (max-width:760px){.lectura{grid-template-columns:1fr}}
+.campos{display:flex; flex-direction:column; gap:0}
+.campo{
+  display:grid; grid-template-columns:118px 1fr; gap:14px;
+  padding:9px 0; border-bottom:1px solid var(--rule);
+}
+.campo:last-child{border-bottom:0}
+.campo dt{
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); padding-top:3px;
+}
+.campo dd{margin:0; display:flex; flex-wrap:wrap; gap:6px}
+.chip{
+  font-family:var(--mono); font-size:12px; padding:3px 8px; border-radius:2px;
+  background:var(--surface-2); border:1px solid var(--rule);
+}
+.chip.si{background:var(--good-soft); border-color:transparent; color:var(--good)}
+.chip.no{background:var(--bad-soft); border-color:transparent; color:var(--bad)}
+.chip.no::before{content:"−  "; font-weight:600}
+.campo dd .plain{color:var(--ink); font-weight:600}
+
+/* techo de precio */
+.techo{
+  background:var(--surface); border:1.5px solid var(--rule); border-radius:3px;
+  padding:16px 18px 18px;
+}
+.techo .val{
+  font-family:var(--display); font-weight:900; font-stretch:104%;
+  font-size:38px; line-height:1; letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums; display:flex; align-items:baseline; gap:7px;
+}
+.techo .val .cur{font-size:14px; color:var(--ink-3); font-weight:600; letter-spacing:.04em}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:26px;
+  background:transparent; margin:12px 0 0;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:5px; border-radius:0; background:var(--rule);
+}
+input[type=range]::-moz-range-track{height:5px; background:var(--rule)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:19px; height:19px; margin-top:-7px;
+  border-radius:50%; background:var(--accent); border:3px solid var(--surface);
+  box-shadow:0 0 0 1.5px var(--accent);
+}
+input[type=range]::-moz-range-thumb{
+  width:14px; height:14px; border-radius:50%; background:var(--accent);
+  border:3px solid var(--surface); box-shadow:0 0 0 1.5px var(--accent);
+}
+.techo .nota{font-size:12.5px; color:var(--ink-3); margin-top:6px}
+
+/* ---------- veredicto de precio ---------- */
+.escala{
+  background:var(--surface); border:1.5px solid var(--rule); border-radius:3px;
+  padding:20px 22px 16px;
+}
+.escala .frase{font-size:17px; max-width:64ch; margin:0 0 20px}
+.escala .frase b{font-weight:700}
+.barra{position:relative; height:38px; margin-bottom:8px}
+.zonas{display:flex; height:14px; border-radius:2px; overflow:hidden}
+.zona{position:relative}
+.z1{background:var(--good)}
+.z2{background:var(--warn)}
+.z3{background:var(--bad)}
+.marca{
+  position:absolute; top:-7px; bottom:0; width:2.5px; background:var(--ink);
+  transform:translateX(-50%);
+}
+.marca::after{
+  content:attr(data-l); position:absolute; top:-19px; left:50%;
+  transform:translateX(-50%); white-space:nowrap;
+  font-family:var(--mono); font-size:10.5px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase;
+  background:var(--ink); color:var(--paper); padding:2px 6px; border-radius:2px;
+}
+.ticks{
+  display:flex; justify-content:space-between; font-family:var(--mono);
+  font-size:11.5px; color:var(--ink-3); font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--rule); padding-top:7px;
+}
+.ticks b{display:block; color:var(--ink); font-weight:600; font-size:13px}
+.ticks span{text-align:center}
+.ticks span:first-child{text-align:left}
+.ticks span:last-child{text-align:right}
+
+/* ---------- pases ---------- */
+.pases{display:flex; flex-direction:column; gap:11px}
+.pase{
+  position:relative; display:grid; grid-template-columns:62px 1fr auto;
+  align-items:center; gap:0;
+  background:var(--surface); border:1.5px solid var(--rule); border-radius:3px;
+  text-decoration:none; overflow:hidden;
+  transition:border-color .14s ease, transform .14s ease;
+}
+.pase:hover{border-color:var(--accent); transform:translateX(2px)}
+.pase::before,.pase::after{
+  content:""; position:absolute; left:62px; width:13px; height:13px;
+  border-radius:50%; background:var(--paper); transform:translate(-50%,-50%);
+  border:1.5px solid var(--rule);
+}
+.pase::before{top:0}
+.pase::after{top:100%}
+.pase .stub{
+  align-self:stretch; border-right:1.5px dashed var(--rule);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; padding:16px 0; background:var(--surface-2);
+}
+.pase .stub .rank{
+  font-family:var(--display); font-weight:900; font-size:22px; line-height:1;
+  font-stretch:100%; color:var(--ink);
+}
+.pase .stub .lbl{
+  font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+.pase .cuerpo{padding:13px 18px; min-width:0}
+.pase .sitio{
+  font-family:var(--display); font-weight:800; font-stretch:104%; font-size:16px;
+  display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+}
+.badge{
+  font-family:var(--mono); font-size:10px; letter-spacing:.07em;
+  text-transform:uppercase; padding:2px 6px; border-radius:2px;
+  background:var(--accent-soft); color:var(--accent); font-weight:600;
+}
+.badge.gris{background:var(--surface-2); color:var(--ink-3)}
+.pase .filtros{
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-2);
+  margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.pase .por{font-size:12.5px; color:var(--ink-3); margin-top:3px}
+.pase .abrir{
+  padding:0 20px; font-family:var(--display); font-weight:800;
+  text-transform:uppercase; letter-spacing:.05em; font-size:12.5px;
+  color:var(--accent); white-space:nowrap;
+}
+.pase .abrir span{display:inline-block; transition:transform .14s ease}
+.pase:hover .abrir span{transform:translateX(3px)}
+@media (max-width:640px){
+  .pase{grid-template-columns:52px 1fr}
+  .pase::before,.pase::after{left:52px}
+  .pase .abrir{grid-column:2; padding:0 18px 14px; text-align:right}
+}
+
+/* ---------- trampas y regateo ---------- */
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start}
+@media (max-width:760px){.duo{grid-template-columns:1fr}}
+.trampas{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
+.trampas li{
+  display:grid; grid-template-columns:22px 1fr; gap:10px;
+  padding:11px 0; border-bottom:1px solid var(--rule); font-size:14.5px;
+}
+.trampas li:last-child{border-bottom:0}
+.trampas li::before{
+  content:"!"; font-family:var(--mono); font-weight:600; font-size:12px;
+  width:22px; height:22px; border-radius:50%; display:grid; place-items:center;
+  background:var(--bad-soft); color:var(--bad);
+}
+.guion{display:flex; flex-direction:column; gap:10px}
+.msg{
+  background:var(--surface); border:1.5px solid var(--rule);
+  border-left:3px solid var(--accent); border-radius:3px;
+  padding:12px 14px; font-size:14.5px; position:relative;
+}
+.msg .copiar{
+  position:absolute; top:9px; right:9px; background:transparent;
+  border:1px solid var(--rule); border-radius:2px; font-family:var(--mono);
+  font-size:10px; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-3); padding:3px 7px;
+}
+.msg .copiar:hover{border-color:var(--accent); color:var(--accent)}
+.msg p{margin:0; padding-right:62px}
+
+/* ---------- radar ---------- */
+.radar{width:100%; border-collapse:collapse; font-size:14px}
+.radar th{
+  text-align:left; font-family:var(--mono); font-size:10.5px; font-weight:500;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);
+  padding:0 10px 8px 0; border-bottom:1.5px solid var(--rule);
+}
+.radar td{padding:11px 10px 11px 0; border-bottom:1px solid var(--rule); vertical-align:top}
+.radar td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+.radar .acciones{text-align:right; white-space:nowrap}
+.mini{
+  background:transparent; border:1.5px solid var(--rule); border-radius:2px;
+  font-family:var(--mono); font-size:11px; color:var(--ink-2); padding:4px 8px;
+}
+.mini:hover{border-color:var(--accent); color:var(--accent)}
+.mini.borrar:hover{border-color:var(--bad); color:var(--bad)}
+.vacio{color:var(--ink-3); font-size:14px; padding:14px 0}
+
+/* ---------- pie ---------- */
+.nota-fria{
+  margin-top:44px; border-top:1.5px solid var(--rule); padding:18px 0 46px;
+  font-size:13px; color:var(--ink-3); max-width:76ch;
+}
+.nota-fria b{color:var(--ink-2); font-weight:600}
+.oculto{display:none !important}
+.cargando{
+  display:flex; align-items:center; gap:10px; font-family:var(--mono);
+  font-size:12.5px; color:var(--ink-2); padding:16px 0;
+}
+.pulso{
+  width:9px; height:9px; border-radius:50%; background:var(--accent);
+  animation:pulso 1.1s ease-in-out infinite;
+}
+@keyframes pulso{0%,100%{opacity:.25; transform:scale(.7)}50%{opacity:1; transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important; transition-duration:.01ms !important}
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>Sabueso</div>
+    <div class="top-spacer"></div>
+    <div class="ctrl">
+      <label for="pais" class="eyebrow">País</label>
+      <select id="pais">
+        <option value="MX">México</option>
+        <option value="AR">Argentina</option>
+        <option value="CO">Colombia</option>
+        <option value="CL">Chile</option>
+        <option value="PE">Perú</option>
+        <option value="UY">Uruguay</option>
+        <option value="ES">España</option>
+      </select>
+    </div>
+    <div class="status" id="estado" data-on="?"><span class="led"></span><span id="estado-txt">Conectando</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="orden">
+    <h1>Dile qué buscas.<br>Te armo la <em>cacería</em>.</h1>
+    <p class="lede">Escribe en tu idioma, con tu presupuesto y tus manías. El sabueso traduce eso a búsquedas
+      con filtros ya puestos en MercadoLibre, Marketplace, eBay y compañía — y te dice si tu techo de precio
+      es realista antes de que pierdas la tarde.</p>
+
+    <form class="tag" id="form">
+      <div class="tag-hole"><span></span></div>
+      <div class="tag-body">
+        <label for="q" class="eyebrow">Orden de búsqueda</label>
+        <textarea id="q" rows="2" placeholder="PS5 Slim usada con dos controles, máximo 7000, que no sea la digital ni caja pelada"></textarea>
+        <div class="tag-foot">
+          <button class="go" type="submit" id="go">Rastrear</button>
+          <div class="ejemplos">
+            <button class="ej" type="button">iPhone 13 128GB batería &gt;85%, hasta 6500</button>
+            <button class="ej" type="button">Bici de ruta talla 54 aluminio usada</button>
+            <button class="ej" type="button">Lavadora 20kg seminueva, no Whirlpool</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="seccion">
+    <div class="seccion-cab">
+      <span class="n mono">01</span><h2>Lectura de la orden</h2>
+      <span class="hint" id="hint-lectura">Ejemplo cargado — escribe el tuyo arriba</span>
+    </div>
+    <div class="lectura">
+      <dl class="campos" id="campos"></dl>
+      <div class="techo">
+        <div class="eyebrow">Techo de precio</div>
+        <div class="val"><span id="techo-val">7,000</span><span class="cur" id="techo-cur">MXN</span></div>
+        <input type="range" id="techo" min="200" max="30000" step="100" value="7000" aria-label="Techo de precio">
+        <div class="nota">Mueve el techo y todos los enlaces de abajo se rearman al instante.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion" id="sec-veredicto">
+    <div class="seccion-cab">
+      <span class="n mono">02</span><h2>¿Tu techo es realista?</h2>
+      <span class="hint">Rangos de referencia, mercado de segunda mano</span>
+    </div>
+    <div class="escala">
+      <p class="frase" id="veredicto"></p>
+      <div class="barra">
+        <div class="zonas">
+          <div class="zona z1" id="z1"></div>
+          <div class="zona z2" id="z2"></div>
+          <div class="zona z3" id="z3"></div>
+        </div>
+        <div class="marca" id="marca" data-l="Tu techo"></div>
+      </div>
+      <div class="ticks">
+        <span><b id="t1">—</b>chollo, cómpralo ya</span>
+        <span><b id="t2">—</b>precio justo</span>
+        <span><b id="t3">—</b>te están viendo la cara</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <div class="seccion-cab">
+      <span class="n mono">03</span><h2>Pases de búsqueda</h2>
+      <span class="hint">Ordenados por dónde suele aparecer primero</span>
+    </div>
+    <div class="pases" id="pases"></div>
+  </section>
+
+  <section class="seccion">
+    <div class="duo">
+      <div>
+        <div class="seccion-cab">
+          <span class="n mono">04</span><h2>Trampas de este producto</h2>
+        </div>
+        <ul class="trampas" id="trampas"></ul>
+      </div>
+      <div>
+        <div class="seccion-cab">
+          <span class="n mono">05</span><h2>Qué escribirle al vendedor</h2>
+        </div>
+        <div class="guion" id="guion"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <div class="seccion-cab">
+      <span class="n mono">06</span><h2>Radar</h2>
+      <span class="hint">Se guarda en este navegador, nada sale de aquí</span>
+    </div>
+    <table class="radar" id="radar-tabla">
+      <thead><tr>
+        <th style="width:44%">Búsqueda</th><th>País</th><th>Techo</th><th>Guardada</th><th></th>
+      </tr></thead>
+      <tbody id="radar-body"></tbody>
+    </table>
+    <div class="vacio oculto" id="radar-vacio">Todavía no guardas ninguna cacería. Rastrea algo y aparecerá aquí.</div>
+  </section>
+
+  <p class="nota-fria">
+    <b>Cómo funciona de verdad.</b> Esta página no descarga listados de MercadoLibre ni de nadie: el visor de
+    artefactos bloquea las peticiones a sitios externos. Lo que hace es leer tu frase, calcular el rango de
+    precio con el que deberías negociar y construir la URL exacta de cada marketplace con los filtros ya
+    aplicados, para que abras la pestaña y caigas directo en los resultados buenos. Los rangos de precio son
+    estimaciones de referencia, no cotizaciones en vivo — confírmalos con lo que veas al abrir.
+  </p>
+</main>
+
+<script>
+(function(){
+"use strict";
+
+var SITIOS = {
+  MX:{ml:"listado.mercadolibre.com.mx", mlN:"MercadoLibre México", cur:"MXN", sym:"$", amz:"amazon.com.mx", loc:"es-MX", olx:null,  max:60000},
+  AR:{ml:"listado.mercadolibre.com.ar", mlN:"MercadoLibre Argentina", cur:"ARS", sym:"$", amz:null, loc:"es-AR", olx:null, max:3000000},
+  CO:{ml:"listado.mercadolibre.com.co", mlN:"MercadoLibre Colombia", cur:"COP", sym:"$", amz:null, loc:"es-CO", olx:"olx.com.co", max:12000000},
+  CL:{ml:"listado.mercadolibre.cl",     mlN:"MercadoLibre Chile", cur:"CLP", sym:"$", amz:null, loc:"es-CL", olx:null, max:3000000},
+  PE:{ml:"listado.mercadolibre.com.pe", mlN:"MercadoLibre Perú", cur:"PEN", sym:"S/", amz:null, loc:"es-PE", olx:"olx.com.pe", max:20000},
+  UY:{ml:"listado.mercadolibre.com.uy", mlN:"MercadoLibre Uruguay", cur:"UYU", sym:"$", amz:null, loc:"es-UY", olx:null, max:200000},
+  ES:{ml:null, mlN:null, cur:"EUR", sym:"€", amz:"amazon.es", loc:"es-ES", olx:"wallapop.com", max:5000}
+};
+
+var EJEMPLO = {
+  q:"PS5 Slim usada con dos controles, máximo 7000, que no sea la digital ni caja pelada",
+  producto:"PlayStation 5 Slim (lector de discos)",
+  consulta:"playstation 5 slim usada",
+  condicion:"Usado, en buen estado",
+  variantes:["ps5 slim","playstation 5 slim","ps5 slim disco"],
+  incluir:["dos controles","con caja"],
+  excluir:["digital","para piezas","no lee discos","solo caja","fat"],
+  techo:7000,
+  precio:{chollo:5600,justo:7200,caro:9000},
+  veredicto:"Tu techo de 7,000 cae justo debajo del precio corriente: <b>vas a encontrar, pero tienes que ser rápido</b>. Las unidades con dos controles suelen irse entre 7,200 y 8,000, así que filtra por más baratas y negocia el segundo control aparte.",
+  trampas:[
+    "La versión Digital se anuncia como “Slim” sin aclarar que no tiene lector de discos. Pide foto de la ranura frontal.",
+    "“Caja pelada” o “solo caja” colado en la descripción: el anuncio es la caja vacía, no la consola.",
+    "Consola bloqueada por cuenta: pide que la enciendan en video y muestren el menú de usuarios.",
+    "Precio 40% bajo mercado con vendedor sin reputación y pago fuera de la plataforma. Es el timo clásico."
+  ],
+  regateo:[
+    "Hola, me interesa. ¿Me pasas foto del número de serie y de la ranura de discos encendida? Si todo está bien la recojo hoy mismo.",
+    "Vi tres iguales entre 6,400 y 6,800 esta semana. Te ofrezco 6,500 en efectivo y voy yo por ella, sin regateos después.",
+    "¿Cuántas horas de uso tiene y por qué la vendes? Si trae los dos controles con joystick sin drift cerramos al precio que pides."
+  ]
+};
+
+var estado = {
+  pais:"MX",
+  datos:null,
+  techo:EJEMPLO.techo,
+  ia:null,
+  cargando:false,
+  esEjemplo:true
+};
+
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- utilidades ---------- */
+function limpiaAcentos(s){
+  return s.normalize ? s.normalize("NFD").replace(/[\u0300-\u036f]/g,"") : s;
+}
+function slug(s){
+  return limpiaAcentos(String(s).toLowerCase())
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+}
+function fmt(n){
+  var s = SITIOS[estado.pais];
+  try{ return new Intl.NumberFormat(s.loc,{maximumFractionDigits:0}).format(Math.round(n)); }
+  catch(e){ return String(Math.round(n)); }
+}
+function dinero(n){ return SITIOS[estado.pais].sym + fmt(n); }
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];
+  });
+}
+function precioDelTexto(t){
+  var m = String(t).replace(/[.,](?=\d{3}\b)/g,"").match(/(?:max(?:imo)?|hasta|tope|menos de|por debajo de|presupuesto de|hasta los)\D{0,12}(\d{3,9})/i);
+  if(!m) m = String(t).replace(/[.,](?=\d{3}\b)/g,"").match(/\b(\d{3,9})\b/);
+  return m ? parseInt(m[1],10) : null;
+}
+
+/* ---------- construcción de enlaces ---------- */
+function pases(){
+  var d = estado.datos, s = SITIOS[estado.pais], techo = estado.techo;
+  var base = d.consulta || d.producto;
+  var enc = encodeURIComponent(base);
+  var negativos = (d.excluir||[]).filter(function(w){ return !/\s/.test(w) && w.length > 2; })
+                   .slice(0,5).map(function(w){ return "-" + w; }).join(" ");
+  var encNeg = encodeURIComponent(base + (negativos ? " " + negativos : ""));
+  var lista = [];
+
+  if(s.ml){
+    lista.push({
+      sitio: s.mlN,
+      badge: "Mejor inventario",
+      url: "https://" + s.ml + "/" + slug(base) + "_PriceRange_0-" + techo + "_OrderId_PRICE",
+      filtros: "q=“" + base + "” · precio 0–" + fmt(techo) + " · orden: menor precio",
+      por: "MercadoLibre ignora los signos −, así que las palabras vetadas las descartas tú al ojear los títulos."
+    });
+    lista.push({
+      sitio: s.mlN + " · recién publicados",
+      badge: "Llegar primero",
+      url: "https://" + s.ml + "/" + slug(base) + "_PriceRange_0-" + Math.round(techo*1.15) + "_OrderId_BEGINS*DESC",
+      filtros: "mismo filtro · orden: más nuevos · techo +15%",
+      por: "Los chollos duran horas. Esta pestaña es la que hay que refrescar dos veces al día."
+    });
+  }
+  lista.push({
+    sitio: "Marketplace de Facebook",
+    badge: "Donde está lo barato",
+    url: "https://www.facebook.com/marketplace/search?query=" + enc + "&maxPrice=" + techo,
+    filtros: "query=“" + base + "” · maxPrice=" + techo + " · tu zona",
+    por: "Venta directa sin comisión: aquí es donde de verdad se regatea y donde bajan más el precio."
+  });
+  if(s.olx){
+    lista.push({
+      sitio: s.olx.indexOf("wallapop")>=0 ? "Wallapop" : "OLX",
+      badge: "Segunda mano local",
+      url: s.olx.indexOf("wallapop")>=0
+        ? "https://es.wallapop.com/app/search?keywords=" + enc + "&max_sale_price=" + techo + "&order_by=price_low_to_high"
+        : "https://www." + s.olx + "/items/q-" + slug(base) + "?search%5Bfilter_float_price%3Ato%5D=" + techo,
+      filtros: "búsqueda local · tope " + fmt(techo),
+      por: "Menos volumen, pero vendedores particulares con prisa por vender."
+    });
+  }
+  lista.push({
+    sitio: "eBay",
+    badge: "Acepta filtros negativos",
+    url: "https://www.ebay.com/sch/i.html?_nkw=" + encNeg + "&_udhi=" + techo + "&_sop=15&LH_BIN=1",
+    filtros: "_nkw incluye " + (negativos || "sin exclusiones") + " · máx " + fmt(techo) + " · precio+envío más bajo",
+    por: "El único donde las palabras vetadas se aplican solas con el signo menos delante."
+  });
+  lista.push({
+    sitio: "Google Shopping",
+    badge: "Barrido general",
+    url: "https://www.google.com/search?tbm=shop&q=" + encNeg + "&tbs=mr:1,price:1,ppr_max:" + techo,
+    filtros: "todo el mercado · ppr_max=" + techo + " · ordenado por precio",
+    por: "Barre tiendas y marketplaces que no se te habrían ocurrido, incluidas liquidaciones de outlet."
+  });
+  if(s.amz){
+    lista.push({
+      sitio: "Amazon " + estado.pais + " · reacondicionado",
+      badge: "Con garantía",
+      url: "https://www." + s.amz + "/s?k=" + enc + "&s=price-asc-rank",
+      filtros: "orden: precio ascendente · mira la pestaña Renewed",
+      por: "Más caro que un particular, pero con devolución. Úsalo como techo de comparación."
+    });
+  }
+  return lista;
+}
+
+/* ---------- render ---------- */
+function pintaLectura(){
+  var d = estado.datos;
+  var filas = [
+    ["Producto", "<span class='plain'>" + esc(d.producto) + "</span>"],
+    ["Condición", "<span class='chip'>" + esc(d.condicion) + "</span>"],
+    ["Consulta", "<span class='chip'>" + esc(d.consulta) + "</span>"],
+    ["Variantes", (d.variantes||[]).map(function(v){ return "<span class='chip'>" + esc(v) + "</span>"; }).join("") || "<span class='chip'>—</span>"],
+    ["Debe traer", (d.incluir||[]).map(function(v){ return "<span class='chip si'>" + esc(v) + "</span>"; }).join("") || "<span class='chip'>lo que sea</span>"],
+    ["Descartar", (d.excluir||[]).map(function(v){ return "<span class='chip no'>" + esc(v) + "</span>"; }).join("") || "<span class='chip'>nada</span>"]
+  ];
+  $("campos").innerHTML = filas.map(function(f){
+    return "<div class='campo'><dt>" + f[0] + "</dt><dd>" + f[1] + "</dd></div>";
+  }).join("");
+}
+
+function pintaVeredicto(){
+  var d = estado.datos, p = d.precio;
+  var sec = $("sec-veredicto");
+  if(!p || !p.justo){ sec.classList.add("oculto"); return; }
+  sec.classList.remove("oculto");
+  var lo = p.chollo, mid = p.justo, hi = p.caro;
+  $("t1").textContent = "hasta " + dinero(lo);
+  $("t2").textContent = dinero(mid);
+  $("t3").textContent = dinero(hi) + "+";
+  var tope = Math.max(hi * 1.25, estado.techo * 1.05);
+  $("z1").style.flex = (lo / tope) * 100;
+  $("z2").style.flex = ((mid - lo) / tope) * 100;
+  $("z3").style.flex = ((tope - mid) / tope) * 100;
+  var pct = Math.min(99.4, Math.max(.6, (estado.techo / tope) * 100));
+  $("marca").style.left = pct + "%";
+
+  var txt;
+  if(estado.techo < lo){
+    txt = "Tu techo de <b>" + dinero(estado.techo) + "</b> está por debajo de lo que se ve en el mercado. " +
+          "Puedes encontrarlo, pero será una unidad con detalle o una venta de urgencia — deja el radar puesto y revisa a diario.";
+  } else if(estado.techo <= mid){
+    txt = d.veredicto || ("Tu techo de <b>" + dinero(estado.techo) + "</b> cae en zona de chollo: hay unidades, pero se van rápido. Ordena por más recientes y escribe primero.");
+  } else if(estado.techo <= hi){
+    txt = "Con <b>" + dinero(estado.techo) + "</b> compras hoy sin drama. Tu ventaja es negociar: baja al menos hasta " +
+          dinero(mid) + " antes de cerrar, que es el precio corriente.";
+  } else {
+    txt = "Estás dispuesto a pagar <b>" + dinero(estado.techo) + "</b> por algo que se vende en " + dinero(mid) +
+          ". Baja el techo: filtrar más alto solo te muestra los anuncios sobrevalorados primero.";
+  }
+  $("veredicto").innerHTML = txt;
+}
+
+function pintaPases(){
+  var lista = pases();
+  $("pases").innerHTML = lista.map(function(p, i){
+    return "<a class='pase' href='" + esc(p.url) + "' target='_blank' rel='noopener noreferrer'>" +
+      "<div class='stub'><div class='rank'>" + (i+1) + "</div><div class='lbl'>pase</div></div>" +
+      "<div class='cuerpo'>" +
+        "<div class='sitio'>" + esc(p.sitio) + "<span class='badge" + (i>2?" gris":"") + "'>" + esc(p.badge) + "</span></div>" +
+        "<div class='filtros'>" + esc(p.filtros) + "</div>" +
+        "<div class='por'>" + esc(p.por) + "</div>" +
+      "</div>" +
+      "<div class='abrir'>Abrir <span>→</span></div>" +
+    "</a>";
+  }).join("");
+}
+
+function pintaTrampas(){
+  var d = estado.datos;
+  $("trampas").innerHTML = (d.trampas||[]).map(function(t){
+    return "<li>" + esc(t) + "</li>";
+  }).join("") || "<li>Sin trampas conocidas para esta búsqueda.</li>";
+  $("guion").innerHTML = (d.regateo||[]).map(function(m, i){
+    return "<div class='msg'><button class='copiar' type='button' data-i='" + i + "'>Copiar</button><p>" + esc(m) + "</p></div>";
+  }).join("");
+}
+
+function pintaTodo(){
+  var s = SITIOS[estado.pais];
+  $("techo-cur").textContent = s.cur;
+  $("techo").max = s.max;
+  $("techo").step = s.max > 500000 ? 5000 : (s.max > 50000 ? 500 : 100);
+  if(estado.techo > s.max) estado.techo = s.max;
+  $("techo").value = estado.techo;
+  $("techo-val").textContent = fmt(estado.techo);
+  pintaLectura(); pintaVeredicto(); pintaPases(); pintaTrampas();
+  $("hint-lectura").textContent = estado.esEjemplo
+    ? "Ejemplo cargado — escribe el tuyo arriba"
+    : (estado.ia ? "Leído por la IA" : "Lectura literal · IA no disponible en esta vista");
+}
+
+/* ---------- IA ---------- */
+function respaldo(q){
+  var techo = precioDelTexto(q);
+  var negativos = [];
+  var re = /(?:que no sea|sin|ni|excepto|nada de)\s+([a-záéíóúñ0-9 ]{3,24})/gi, m;
+  while((m = re.exec(q))) negativos.push(m[1].trim().split(/,| y /)[0]);
+  var limpio = q.replace(/(?:m[aá]x(?:imo)?|hasta|tope|presupuesto)[^,.]*/gi,"")
+                .replace(/(?:que no sea|sin|ni|excepto|nada de)[^,.]*/gi,"")
+                .replace(/\s{2,}/g," ").replace(/[,.]\s*$/,"").trim();
+  return {
+    producto: limpio.charAt(0).toUpperCase() + limpio.slice(1),
+    consulta: limpio.toLowerCase(),
+    condicion: /usad|segunda|seminuev/i.test(q) ? "Usado" : "Cualquiera",
+    variantes: [],
+    incluir: [],
+    excluir: negativos.concat(["para piezas","no funciona","solo caja","replica"]),
+    precio: null,
+    veredicto: "",
+    trampas: [
+      "Pide siempre fotos reales del producto encendido, no capturas del catálogo del fabricante.",
+      "Desconfía de cualquier precio 40% por debajo del resto: es el anzuelo más viejo del mercado.",
+      "Nunca pagues por transferencia fuera de la plataforma; pierdes toda protección de compra.",
+      "Revisa la reputación y la antigüedad del vendedor antes que el precio."
+    ],
+    regateo: [
+      "Hola, sigue disponible? ¿Me pasas fotos reales y el motivo de venta? Si todo cuadra lo tomo esta semana.",
+      "Vi otros parecidos más baratos esta semana. ¿Cierras en " + (techo ? fmt(Math.round(techo*0.88)) : "un poco menos") + " en efectivo y paso yo a recogerlo?",
+      "¿Tiene garantía, factura o caja? Con eso pago lo que pides, sin factura tendríamos que ajustar."
+    ],
+    techo: techo
+  };
+}
+
+var PROMPT = [
+  "Eres un cazador profesional de gangas en marketplaces de segunda mano de Latinoamérica y España.",
+  "Analiza la orden de búsqueda del usuario y responde SOLO con un objeto JSON válido, sin texto alrededor y sin markdown.",
+  "",
+  "Esquema exacto:",
+  '{"producto":string,"consulta":string,"condicion":string,"variantes":[string],"incluir":[string],"excluir":[string],',
+  '"precio":{"chollo":number,"justo":number,"caro":number},"veredicto":string,"trampas":[string],"regateo":[string]}',
+  "",
+  "Reglas:",
+  "- consulta: 2 a 5 palabras, en minúsculas, tal como se escribiría en el buscador de MercadoLibre. Sin marcas de puntuación.",
+  "- variantes: hasta 3 formas alternativas de nombrar el mismo producto que usan los vendedores.",
+  "- incluir: accesorios o condiciones que el usuario pidió expresamente. Máximo 4, en 1-3 palabras.",
+  "- excluir: hasta 6 palabras trampa que ensucian los resultados de ESTE producto en concreto (variantes equivocadas, 'para piezas', 'solo caja', clones).",
+  "- precio: precios REALES de segunda mano en la moneda y el país indicados. chollo = percentil bajo, justo = precio corriente, caro = sobreprecio. Números enteros, sin separadores.",
+  "- veredicto: una o dos frases dirigidas al usuario comparando su techo con el mercado. Puedes usar <b></b> una vez. Sin saludos.",
+  "- trampas: 3 o 4 estafas o defectos concretos de ESTE producto, no consejos genéricos. Cada una dice qué pedir o revisar.",
+  "- regateo: 3 mensajes listos para enviar por chat al vendedor, en tuteo, breves y con una cifra o petición concreta.",
+  "- Escribe todo en español neutro."
+].join("\n");
+
+function pedirIA(q){
+  if(!estado.ia) return Promise.reject(new Error("sin ia"));
+  var s = SITIOS[estado.pais];
+  var entrada = PROMPT + "\n\nPaís: " + $("pais").options[$("pais").selectedIndex].text +
+    "\nMoneda: " + s.cur + "\nFecha: " + new Date().toISOString().slice(0,10) +
+    "\nOrden de búsqueda del usuario: \"" + q + "\"" +
+    "\nTecho de precio que indicó: " + (precioDelTexto(q) || "no lo dijo, dedúcelo del mercado");
+  return estado.ia.json(entrada, {modelTier:"default", cache:true});
+}
+
+function rastrear(q){
+  if(!q.trim() || estado.cargando) return;
+  estado.cargando = true;
+  $("go").disabled = true;
+  $("go").textContent = "Rastreando";
+  $("pases").innerHTML = "<div class='cargando'><span class='pulso'></span>El sabueso está leyendo la orden y calculando precios de mercado…</div>";
+
+  var base = respaldo(q);
+  var techoTexto = base.techo;
+
+  var listo = function(d, viaIA){
+    estado.datos = d;
+    estado.esEjemplo = false;
+    var s = SITIOS[estado.pais];
+    var nuevoTecho = techoTexto || (d.precio && d.precio.justo ? Math.round(d.precio.justo) : estado.techo);
+    estado.techo = Math.min(Math.max(nuevoTecho, 200), s.max);
+    estado.cargando = false;
+    $("go").disabled = false;
+    $("go").textContent = "Rastrear";
+    pintaTodo();
+    $("hint-lectura").textContent = viaIA ? "Leído por la IA" : "Lectura literal · IA no disponible en esta vista";
+    guarda(q);
+    document.getElementById("sec-veredicto").scrollIntoView({behavior:"smooth", block:"start"});
+  };
+
+  pedirIA(q).then(function(r){
+    if(!r || !r.consulta) throw new Error("respuesta vacía");
+    r.trampas = (r.trampas && r.trampas.length) ? r.trampas : base.trampas;
+    r.regateo = (r.regateo && r.regateo.length) ? r.regateo : base.regateo;
+    listo(r, true);
+  }).catch(function(){
+    listo(base, false);
+  });
+}
+
+/* ---------- radar (localStorage) ---------- */
+var CLAVE = "sabueso.radar.v1";
+function leeRadar(){
+  try{ return JSON.parse(localStorage.getItem(CLAVE) || "[]"); }catch(e){ return []; }
+}
+function escribeRadar(v){
+  try{ localStorage.setItem(CLAVE, JSON.stringify(v.slice(0,12))); }catch(e){}
+}
+function guarda(q){
+  var v = leeRadar().filter(function(x){ return x.q !== q; });
+  v.unshift({q:q, pais:estado.pais, techo:estado.techo, cur:SITIOS[estado.pais].cur, t:Date.now()});
+  escribeRadar(v); pintaRadar();
+}
+function cuando(t){
+  var m = Math.round((Date.now()-t)/60000);
+  if(m < 1) return "ahora";
+  if(m < 60) return "hace " + m + " min";
+  var h = Math.round(m/60);
+  if(h < 24) return "hace " + h + " h";
+  return "hace " + Math.round(h/24) + " d";
+}
+function pintaRadar(){
+  var v = leeRadar();
+  $("radar-vacio").classList.toggle("oculto", v.length > 0);
+  $("radar-tabla").classList.toggle("oculto", v.length === 0);
+  $("radar-body").innerHTML = v.map(function(x, i){
+    return "<tr>" +
+      "<td>" + esc(x.q) + "</td>" +
+      "<td class='num'>" + x.pais + "</td>" +
+      "<td class='num'>" + x.cur + " " + fmt(x.techo) + "</td>" +
+      "<td class='num'>" + cuando(x.t) + "</td>" +
+      "<td class='acciones'>" +
+        "<button class='mini' data-r='" + i + "'>Repetir</button> " +
+        "<button class='mini borrar' data-d='" + i + "'>Quitar</button>" +
+      "</td></tr>";
+  }).join("");
+}
+
+/* ---------- eventos ---------- */
+$("form").addEventListener("submit", function(e){ e.preventDefault(); rastrear($("q").value); });
+Array.prototype.forEach.call(document.querySelectorAll(".ej"), function(b){
+  b.addEventListener("click", function(){ $("q").value = b.textContent.replace(/&gt;/g,">"); $("q").focus(); rastrear($("q").value); });
+});
+$("techo").addEventListener("input", function(){
+  estado.techo = parseInt(this.value,10);
+  $("techo-val").textContent = fmt(estado.techo);
+  pintaVeredicto(); pintaPases();
+});
+$("pais").addEventListener("change", function(){
+  estado.pais = this.value;
+  pintaTodo();
+});
+$("guion").addEventListener("click", function(e){
+  var b = e.target.closest(".copiar"); if(!b) return;
+  var txt = b.parentNode.querySelector("p").textContent;
+  var ok = function(){ b.textContent = "Copiado"; setTimeout(function(){ b.textContent = "Copiar"; }, 1600); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok, ok); }
+  else { ok(); }
+});
+$("radar-body").addEventListener("click", function(e){
+  var b = e.target.closest("button"); if(!b) return;
+  var v = leeRadar();
+  if(b.dataset.d !== undefined){ v.splice(+b.dataset.d,1); escribeRadar(v); pintaRadar(); return; }
+  if(b.dataset.r !== undefined){
+    var x = v[+b.dataset.r];
+    $("pais").value = x.pais; estado.pais = x.pais;
+    $("q").value = x.q; rastrear(x.q);
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+});
+
+/* ---------- arranque ---------- */
+estado.datos = EJEMPLO;
+$("q").value = EJEMPLO.q;
+pintaTodo();
+pintaRadar();
+
+if(window.claude && typeof window.claude.use === "function"){
+  window.claude.use("sample").then(function(s){
+    estado.ia = s;
+    $("estado").dataset.on = s ? "1" : "0";
+    $("estado-txt").textContent = s ? "IA activa" : "Modo manual";
+  }, function(){
+    $("estado").dataset.on = "0";
+    $("estado-txt").textContent = "Modo manual";
+  });
+} else {
+  $("estado").dataset.on = "0";
+  $("estado-txt").textContent = "Modo manual";
+}
+})();
+</script>
