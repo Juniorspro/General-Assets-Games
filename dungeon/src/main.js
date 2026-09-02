@@ -11,6 +11,7 @@ import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
 import { Mision } from './langosta.js';
 import { despertarAudio } from './sonido.js';
+import { Calidad } from './calidad.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -130,6 +131,8 @@ class Dungeon {
         this.visited = new Set();
 
         this.cuerpo = new R15(this.scene, EYE);
+        this.farolesConSombra = 3;
+        this.distPisos = 1.35;
         this.mision = new Mision(this.scene, { x: this.pos.x, z: this.pos.z }, A);
         this.cajasMuebles = [];
 
@@ -146,6 +149,12 @@ class Dungeon {
             }
             this.mision.esconderLlave(revisables);
         });
+
+        /* El menu de graficos va ULTIMO: aplica los ajustes apenas se crea, y
+           si se creara antes, los valores por defecto de mas abajo del
+           constructor le pisarian lo que acaba de poner. Ya paso: arrancaba en
+           medio pero con los tres faroles de alto proyectando. */
+        this.calidad = new Calidad(this);
     }
 
     /* El tamano sale del MARCO girado, no de la ventana: en vertical el marco
@@ -520,6 +529,8 @@ class Dungeon {
                     if (d > R) { dx = dx / d * R; dy = dy / d * R }
                     this.stick.x = dx / R; this.stick.y = dy / R;
                     setKnob(dx, dy);
+                } else if (this.menuAbierto) {
+                    // con el menu abierto el dedo no mueve la camara
                 } else if (this.look.active && t.identifier === this.look.id) {
                     const [dx, dy] = deltaMarco(t.clientX - this.look.lx, t.clientY - this.look.ly);
                     this.yaw -= dx * 0.005;
@@ -574,6 +585,7 @@ class Dungeon {
         // teclado y joystick suman; el stick manda si esta empujado
         let fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
         let str = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+        if (this.menuAbierto) { fwd = 0; str = 0; this.stick.x = this.stick.y = 0 }
         const sm = Math.hypot(this.stick.x, this.stick.y);
         if (sm > 0.12) { fwd = -this.stick.y; str = this.stick.x }
 
@@ -752,7 +764,7 @@ class Dungeon {
                 l.L.getWorldPosition(this._lp || (this._lp = new THREE.Vector3()));
                 l.d = this._lp.distanceToSquared({ x: px, y: py + 1, z: pz });
             }
-            const near = this.lamps.slice().sort((a, b) => a.d - b.d).slice(0, 3);
+            const near = this.lamps.slice().sort((a, b) => a.d - b.d).slice(0, this.farolesConSombra);
             const set = new Set(near);
             for (const l of this.lamps) {
                 const want = set.has(l);
@@ -775,9 +787,10 @@ class Dungeon {
         /* Solo se dibuja el nivel en el que esta y el de al lado. Son tres
            laberintos enteros y el farol proyecta sombra en todo lo visible. */
         for (let i = 0; i < this.levelGroups.length; i++)
-            this.levelGroups[i].visible = Math.abs(LEVELS[i].base - this.y) < LEVEL_H * 1.35;
+            this.levelGroups[i].visible = Math.abs(LEVELS[i].base - this.y) < LEVEL_H * this.distPisos;
 
         this.updateHud();
+        this.calidad.tic(dt);
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -881,6 +894,8 @@ function loop(now) {
         } : null,
         muebles: (game.cajasMuebles || []).length,
         rescates: game.rescates || 0,
+        calidad: game.calidad ? game.calidad.nivel : null,
+        fps: game.calidad ? game.calidad.fps : 0,
         puestos: game.mision ? game.mision.puestos : 0,
         shadowing: (game.lamps || []).filter(l => l.L.castShadow).length,
         fov: +game.camera.fov.toFixed(1),

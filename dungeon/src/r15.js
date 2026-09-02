@@ -63,6 +63,7 @@ export class R15 {
            su linea negra alrededor, y es lo que hace que se lean como piezas
            separadas en vez de como un bulto. */
         const CONT = 0.06;
+        this.contornos = [];   // para poder apagarlos en calidad baja
         const pieza = (d, mat, grupo) => {
             const g = new THREE.BoxGeometry(d[0], d[1], d[2]);
             g.translate(0, -d[1] / 2, 0);
@@ -71,7 +72,9 @@ export class R15 {
             grupo.add(m);
             const go = new THREE.BoxGeometry(d[0] + CONT, d[1] + CONT, d[2] + CONT);
             go.translate(0, -d[1] / 2, 0);
-            grupo.add(new THREE.Mesh(go, tinta));
+            const mo = new THREE.Mesh(go, tinta);
+            grupo.add(mo);
+            this.contornos.push(mo);
             return m;
         };
 
@@ -93,6 +96,7 @@ export class R15 {
             D.torsoAlto[0] + CONT, D.torsoAlto[1] + CONT, D.torsoAlto[2] + CONT), tinta);
         tao.position.copy(ta.position);
         this.cintura.add(tao);
+        this.contornos.push(tao);
         this.cadera.add(this.cintura);
         this.torsoAlto = ta;
 

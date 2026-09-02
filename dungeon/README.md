@@ -336,6 +336,47 @@ táctiles aparecen con la media query **y también** con una clase que el juego
 pone apenas ve un dedo — había teléfonos donde la media query no daba y el
 jugador se quedaba sin joystick, sin USAR y sin DESLIZAR.
 
+## El menú de gráficos
+
+El engranaje arriba a la derecha, con los **fps** al lado. Cuatro niveles, y
+la elección **se guarda en el navegador**.
+
+Arranca en **medio** y no en alto a propósito: más vale que el primer minuto
+vaya fluido y que suba el que quiera.
+
+| | resolución | sombras | faroles que proyectan | pisos dibujados | niebla | contorno |
+|---|---|---|---|---|---|---|
+| **Bajo** | ×0,55 | **no** | 0 | sólo el tuyo | 34 m | no |
+| **Medio** | ×0,85 | 512 | 1 | 2 | 46 m | sí |
+| **Alto** | ×1,3 | 1024 | 3 | 3 | 52 m | sí |
+| **Ultra** | ×2 | 2048 | 5 | 3 | 64 m | sí |
+
+Toca lo que **de verdad** cuesta, en orden de cuánto pesa:
+
+1. **La resolución.** Es la palanca más grande y la más barata: de ×2 a ×0,55
+   son **trece veces menos píxeles** que sombrear.
+2. **Las sombras.** Una luz puntual con sombra cuesta **seis pases de render**
+   —uno por cara del cubo—, así que cada farol que proyecta es como dibujar la
+   escena seis veces más. Por eso el nivel no cambia sólo la resolución del
+   mapa de sombras: cambia **cuántos faroles proyectan**.
+3. **Cuántos niveles se dibujan.** El mapa son tres laberintos enteros; en bajo
+   se dibuja sólo en el que estás.
+4. **El contorno del cuerpo**, que duplica sus mallas.
+
+La resolución se limita al `devicePixelRatio` real: pedir ×2 en una pantalla
+que es ×1 es dibujar cuatro veces de gusto.
+
+Dos cosas que hubo que resolver:
+
+- **Prender y apagar sombras obliga a recompilar los materiales.** Sin marcar
+  `needsUpdate` en todos, el shader viejo sigue puesto y el botón no hace nada.
+- **El menú se crea último en el constructor.** Aplica los ajustes apenas
+  nace, y creándolo antes los valores por defecto de más abajo se los pisaban:
+  arrancaba en medio pero con los tres faroles de alto proyectando. Medido y
+  corregido.
+
+Con el menú abierto el dedo no mueve la cámara ni el joystick.
+
 ## Las paredes se miden en vivo
 
 No son constantes del generador: **se miden desde donde estás parado, cada
