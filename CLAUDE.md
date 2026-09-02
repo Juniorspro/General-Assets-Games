@@ -374,6 +374,168 @@ esperarlo el doble y medio. Y no puedo juzgar si la araña da **suficiente** mie
 es que se ve, que camina, que caza y que te alcanza.
 
 
+### Octogésima sexta vuelta (2026-09-02): **PUERTA BLANCA** — el campo del nivel 1, y el pasto nunca fue verde
+
+Pedido: *"mejora al máximo las flores procedurales del campo también textura de mariposas y pasto en
+más cantidad"*. Vive en `herramientas/puerta/campo.py` (la geometría), `pedir_campo.py` (las seis
+imágenes) y `hornear_campo.py` (el horneado), y `armar.py` los inyecta.
+
+#### EL HALLAZGO DE LA VUELTA: EL PASTO NUNCA FUE VERDE, ERA PÁLIDO
+
+Subir la densidad no arregló el pasto: lo **destapó**. Con mil briznas por parche, lo que apareció en
+la captura fueron **tiras de papel blanco** clavadas en el suelo. Y el defecto venía de antes de esta
+vuelta — fotografiado el commit anterior con el mismo encuadre, las briznas ya eran pálidas; con
+cuatrocientas treinta no se notaba.
+
+La causa es de gamma: `new THREE.Color(0x9dc257)` guarda **0,615 · 0,760 · 0,341** y r128 los usa como
+**lineales**, así que la salida los codifica a sRGB y devuelve **204 · 226 · 158** — y con el sol
+encima eso se va al blanco. Es el mismo defecto que ya costó una vuelta con los globos verdes de
+RECREO y con el color por vértice del personaje de BARRIO. Con `convertSRGBToLinear()` el verde vuelve
+a ser el verde que dice el número.
+
+**Y ESTABA DOS VECES.** Los siete tintes de pétalo (`PETAL_TINTS`) tenían exactamente el mismo
+problema: `0xff7d9b` es un rosa fuerte y salía **255 · 187 · 208**, o sea rosa pálido. Medido en la
+captura, las cabezas de las doscientas cuarenta flores salían casi blancas por más que la tabla tenga
+siete colores vivos. Convertidos, hubo que **subirles la luz 0,11 en HSL**, porque la tabla se escribió
+contra el espacio equivocado y en lineal quedan más oscuros de lo que se veían.
+
+#### LAS FLORES: UNA SOLA GEOMETRÍA ERA EL PROBLEMA, NO LOS PÉTALOS
+
+Doscientas cuarenta flores eran **un modelo** con tinte y escala uniforme, así que a dos metros se ve
+el mismo objeto doscientas cuarenta veces. Ahora hay **tres especies** —margarita de veintisiete
+pétalos finos, amapola de once anchos y acopados, campanilla de catorce casi verticales— más sépalos,
+una cuarta hoja y escala **no uniforme** por instancia.
+
+**LA ESPECIE ES DEL MANCHÓN Y NO DE LA FLOR, y las dos razones apuntan al mismo lado.** La barata:
+mezclando especies dentro de un trozo hacen falta tres mallas de pétalos y tres de disco por trozo en
+vez de una y una. Y la buena: **las flores de verdad crecen en manchones de una misma clase**, así que
+un campo con las tres barajadas se lee a jardín de vivero. Medido: 31 manchones, **70 · 38 · 62** flores
+de cada especie.
+
+**Y LOS TROZOS SE PARTEN DE 4×4 A 6×6 POR EL RECORTE.** Con trozos de sesenta metros la esfera
+envolvente mide cincuenta y tres y el frustum no descarta casi nada —o sea que las cuarenta y ocho
+mallas se dibujaban casi siempre—; con cuarenta mide treinta y ocho y ahí sí recorta. Eso es lo que
+explica que los **triángulos BAJEN** con todo esto encima.
+
+**EL SIGNO DEL `tilt` SE CALCULÓ Y ES AL REVÉS DE LO QUE UNO ESCRIBIRÍA.** El pétalo crece sobre +Z y
+el Euler es `YXZ`, así que `Rx(tilt)` manda (0,0,1) a (0, −sin tilt, cos tilt): **tilt negativo LEVANTA
+el pétalo y positivo lo hace caer**. Es lo único que separa una margarita de una campanilla.
+
+**Y EL PRESUPUESTO SE MIDIÓ, PORQUE EL PRIMER COMENTARIO MENTÍA.** Escribí que la flor nueva gastaba
+menos triángulos que la vieja, y con el disco en 12×8 de esfera + 5×14 de toro + cono de 9 costaba
+**335** contra los 246 del que había: la flor salía un 15 % **más** cara. Con 10×6, 4×10 y 7 el disco
+cuesta 201 y la flor cierra en **965 · 755 · 705** contra los 820 de la vieja, o sea el mismo
+presupuesto. El comentario recién ahí pasó a ser cierto.
+
+#### LAS MARIPOSAS: EL ALA SE PROYECTABA EN EL 0,8 % DEL ALTO
+
+Eran dos `makePetalGeo` de color liso. Ahora la silueta del ala vive en el **alfa de una foto** —tres
+especies: monarca, morfo azul y papilio— y el ala son dos triángulos, así que el borde es exacto y no
+cuesta cien triángulos de contorno. Va con `alphaTest` y no con transparencia, que es la lección de las
+cercas de piquetes de BARRIO: un material transparente no escribe profundidad y dos alas cruzadas se
+dibujan en el orden equivocado.
+
+**Y ACÁ LA SONDA ENCONTRÓ LO QUE UNA CAPTURA NO MOSTRABA.** La primera versión reportaba la mariposa
+*en cuadro, delante de la cámara, a 4,6 m* — los tres ciertos— y **en la foto no había ninguna**.
+Plantándola a tres metros del ojo y midiendo su caja en píxeles: **x 4,1 % · y 0,8 % del alto**. Las
+alas estaban en el plano XZ, o sea horizontales, y con la cámara a su misma altura un cuadrilátero
+visto de canto **es una línea**. Tres arreglos, los tres medidos:
+
+1. **El reposo va levantado.** Una mariposa en vuelo no lleva las alas planas, las lleva en una V: el
+   reposo pasa a 0,62 rad y el aleteo barre de −0,10 a +1,34.
+2. **Vuelan más alto** (2,1 a 5,2 m en vez de 1,1 a 4,4): con el ojo en 1,60 la mitad quedaba justo a
+   la altura de la vista, que es el peor ángulo posible para un ala.
+3. **Y SON GRANDES A PROPÓSITO.** Con el ala en 0,36 el bicho ocupaba **26 píxeles** a tres metros, o
+   sea que la foto del ala no se veía y no servía de nada haberla generado. Y agrandarla no rompe la
+   escala: **las flores de este campo miden cinco metros**, así que una mariposa de diez centímetros
+   sería invisible al lado de una margarita de la altura de una casa. Queda en poco más de un metro,
+   con variación por bicho. Medido después: **6,3 % de ancho por 6,5 % de alto**.
+
+Más: el emisivo del ala sube de 0,12 a **0,38**, porque volando a cuatro metros la mariposa está
+**contra el cielo** y el sol le da por atrás — medido, el monarca salía como una silueta negra. Y no es
+maquillaje: un ala de mariposa es fina y traslúcida, a contraluz se enciende de verdad. El rumbo pasa a
+salir de **hacia dónde se está moviendo** y no de la tangente de un círculo que ya no recorre, con
+alabeo hacia adentro de la curva y aleteo a ráfagas. Y **arrancan sobre una flor de verdad** y no en un
+punto al azar.
+
+#### EL PASTO: CUATRO VECES MÁS Y EL DOBLE DE ALCANCE
+
+Nueve parches de 22 m con 430 briznas, y el desvanecido del shader cortando en **31,2 m**: más allá de
+eso el campo era la foto del suelo y nada más. Ahora son **veinticinco parches** —el 3×3 de siempre más
+un anillo exterior— y el desvanecido va a 45-54 m.
+
+**EL ANILLO EXTERIOR LLEVA BRIZNAS DE LA MITAD DE TRIÁNGULOS**, y no es una economía caprichosa: viven
+de cuarenta a cincuenta y cinco metros, o sea que una brizna entera mide un píxel y medio. Con cuatro
+triángulos en vez de ocho el anillo cuesta un tercio del interior y tapa el doble de superficie. Y el
+desvanecido **tuvo que correrse al borde de afuera**: dejándolo donde estaba, el anillo nuevo nace ya
+desvanecido y no se ve ni uno.
+
+Más un **tinte por brizna**: con el color sólo en los vértices las mil briznas del parche son la misma
+brizna y el prado se lee a alfombra por muchas que haya. Cuesta un buffer de instancia y ni un
+triángulo.
+
+#### LAS SEIS FOTOS, Y EL PÉTALO SE DESENROLLA
+
+Los tres papeles de mariposa salieron perfectos. **Los pétalos volvieron con su propia silueta y su
+fondo** —uno blanco sobre negro y el otro magenta sobre rojo oscuro—, que es justo lo que el prompt
+pedía que no pasara, y así no se pueden usar: la silueta ya la pone la geometría, así que cada pétalo
+saldría con un contorno negro dibujado adentro.
+
+**LO QUE SE HIZO NO FUE VOLVER A GENERAR, FUE DESENROLLARLO.** Fila por fila se busca dónde empieza y
+dónde termina el tejido y ese tramo se estira hasta ocupar el ancho entero. Queda tejido puro de borde
+a borde y las venas conservan su abanico, que es lo que un relleno plano no puede dar. Tres cosas que
+hubo que arreglar y las tres se vieron en el horneado y no en el código:
+
+- **El tramo más largo SEGUIDO, y no del primer al último píxel de tejido:** con `xs[0]..xs[-1]` una
+  mota de sombra a un costado estira el tramo hasta el borde y arrastra fondo adentro — dejaba una cuña
+  negra en la base del pétalo blanco.
+- **La máscara se cierra antes de medirla.** Las venas granate del pétalo magenta caen **dentro** del
+  umbral del fondo rojo oscuro, así que la máscara queda agujereada, el tramo más largo de cada fila es
+  un pedazo al azar y estirarlo embadurna: la primera versión salió una mancha horizontal.
+- **Y SIN VOLTEO.** La primera versión lo tenía, y el verde de la base del pétalo salía **en la punta**:
+  `out[0]` es la punta —el barrido arranca arriba, donde el pétalo es ancho— y three.js lee la fila 0 de
+  la imagen en `uv.y = 1`, que es justo donde la geometría pone la punta.
+
+**Y EL EJE DEL CUERPO DE LA MARIPOSA SE MIDE POR SIMETRÍA.** El primer intento tomaba la columna con
+más tinta, y en la morfo azul el borde oscuro del ala tiene más tinta que el cuerpo: el eje salía en
+**x = 614** sobre una imagen de 1024, o sea que la mitad derecha se cortaba adentro del ala. Probando
+cada columna y quedándose con la que hace que la máscara y su espejo se parezcan más, los tres dan
+**512 · 512 · 513**.
+
+#### MEDIDO AL CERRAR
+
+**6 de 6 fotos decodificadas, 0 fallos.** El campo, con la sonda nueva: **6.760 briznas** en 25 parches
+—9 cerca y 16 lejos— con el pasto llegando a **83,7 m**; **31 manchones** con 70 · 38 · 62 flores de
+cada especie; **10 mariposas**. Ojo con esos números: el banco emula táctil en 412 px de ancho, o sea
+que corre **el escalón bajo**; el alto es 9×1.150 + 16×300 = **15.150 briznas** por construcción. Contra
+el escalón bajo de antes —9×190 = 1.710— son **cuatro veces más pasto**.
+
+Cuatro encuadres fijos, el mismo binario contra el commit anterior:
+
+| | antes | ahora |
+|---|---|---|
+| A · el claro | 99 llamadas · 376.334 tri | **205 · 367.007** |
+| B · hacia las flores | 100 · 383.650 | **187 · 369.751** |
+| C · al ras del pasto | 99 · 372.262 | **208 · 377.886** |
+| D · entre las flores | 93 · 361.398 | **152 · 352.615** |
+
+**Las llamadas de dibujo se duplican y los triángulos BAJAN**, que es el intercambio que se eligió: los
++100 son 16 parches de pasto más los manchones de flor partidos más finos, y esos trozos más chicos son
+justamente los que hacen que el frustum descarte lo que antes se dibujaba siempre. El nivel 3 de este
+mismo juego ya costaba 269 llamadas, así que 205 está adentro del rango del juego.
+
+Y la regresión completa sigue en pie: los **siete estados** cargan con las 24 fotos PBR puestas
+(24/24, 0 fallos), auditoría del local **28.152 de 28.152 celdas · 4 de 4 partes · 28 nodos, 27 arcos,
+0 sucios**, partida completa 4/4 en orden y salida a `end`, la araña con **4 pies apoyados y 4
+levantados** en reposo y `deFrente: true` con los ojos en x 0,499 · y 0,510. `window.__errs` vacío en
+las trece corridas. El HTML pasó de 2,70 a **2,97 MB**, y esos 270 KB son las seis fotos del campo.
+
+**LO QUE NO QUEDÓ REDONDO, Y ES HONESTO DECIRLO:** al pétalo magenta le queda un **5,1 %** de fondo
+alcanzable desde el borde —está en el reborde de arriba, donde la punta se corta y las filas se
+copian—. Probé entrar un 3 % del contorno para sacarlo y **midió peor** (6,5 %), así que lo saqué: un
+ajuste que empeora el número no se deja puesto por parecer razonable. Y las flores gigantes del nivel 1
+siguen plantándose con giro al azar desde la vuelta 81, así que algunas muestran el dorso de la cabeza.
+
 ### Octogésima quinta vuelta (2026-09-02): **PUERTA BLANCA** — las treinta texturas procedurales pasan a foto, y la escala tuvo que medirse tres veces
 
 Pedido: *"puedes detectar las texturas procedurales de todos los niveles y reveer y generar a todas una

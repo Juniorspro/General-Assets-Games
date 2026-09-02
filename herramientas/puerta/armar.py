@@ -31,6 +31,12 @@ def cambiar(s, viejo, nuevo, que):
 
 
 s = io.open(BASE, encoding='utf8').read()
+# UNA COPIA INTACTA PARA CORTAR BLOQUES ENTEROS. Los parches chicos se hacen con
+# `cambiar(s, viejo, nuevo)`, que exige que el ancla sea unica; pero reemplazar
+# los cien renglones de las flores o del pasto pide el texto EXACTO del original,
+# y `s` ya viene con parches encima. Cortando de `base` el ancla es el original y
+# el assert de `cambiar` sigue comprobando que ese bloque este una sola vez.
+base = s
 n0 = len(s)
 
 # SOLO_SONDAS=1 arma el CONTROL: base.html con las sondas y nada mas. Sin esto no
@@ -48,6 +54,7 @@ pasto_js = io.open(os.path.join(ASSETS, 'pasto.js'), encoding='utf8').read()
 flores_js = io.open(os.path.join(ASSETS, 'flores.js'), encoding='utf8').read()
 n6_js = io.open(os.path.join(ASSETS, 'n6.js'), encoding='utf8').read()
 pbr_js = io.open(os.path.join(ASSETS, 'pbr.js'), encoding='utf8').read()
+campo_js = io.open(os.path.join(ASSETS, 'campo.js'), encoding='utf8').read()
 
 assets = """
 <script>
@@ -56,8 +63,8 @@ assets = """
    horneado con herramientas/puerta/. Van en su propio <script> a proposito:
    asi la parte del juego que uno lee no empieza con medio mega de base64. */
 window.__PB_CIELO = '%s';
-%s%s%s%s</script>
-""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js)
+%s%s%s%s%s</script>
+""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js, campo_js)
 
 s = s if SOLO else cambiar(s, '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
@@ -510,6 +517,7 @@ s = s if SOLO else cambiar(s, """      skyDome.visible = true;
 # 7 · EL NIVEL 6: EL LOCAL DE COMIDA RAPIDA Y LA ARANA
 # ══════════════════════════════════════════════════════════════════════════════
 sys.path.insert(0, AQUI)
+import campo
 import nivel6
 
 # la ficha del menu, despues del nivel 5
@@ -1125,6 +1133,98 @@ s = s if SOLO else cambiar(s, """  function updateTape(delta, elapsed) {
     }
     glitchCd -= delta;""", 'apagar el post para medir')
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10 · EL CAMPO DEL NIVEL 1: FLORES, MARIPOSAS Y PASTO
+# ══════════════════════════════════════════════════════════════════════════════
+
+# LAS SEIS FOTOS DEL CAMPO NO PASAN POR LA TUBERIA PBR, y no es un olvido: esa
+# tuberia mide cuantos metros cubre un mosaico y reescala la repeticion, y todo
+# eso sale de que la textura SE REPITA. Un petalo no se repite —la foto se mapea
+# una vez, u a lo ancho y v de la base a la punta— asi que reescalarla seria
+# estirar el dibujo. Van en su propio blob y pisan el lienzo cuando decodifican.
+s = s if SOLO else cambiar(s, """  const TEX = {
+    grass: makeGrassTexture(),""",
+    """  function pbCampoFoto(b64, nom, srgb) {
+    // NACE CON EL LIENZO PUESTO Y LA FOTO LO PISA CUANDO LLEGA. Un data URI se
+    // decodifica de forma asincronica, asi que un material que naciera esperando
+    // la foto daria veinte cuadros en negro; y una que falle cuesta una
+    // superficie, no el nivel.
+    const t = new THREE.Texture();
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    if (srgb && THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
+    const im = new Image();
+    im.onload = function () {
+      t.image = im; t.needsUpdate = true;
+      if (window.__pbCampoTex) window.__pbCampoTex.push(nom);
+    };
+    im.onerror = function () { if (window.__pbCampoErr) window.__pbCampoErr.push(nom); };
+    im.src = 'data:image/webp;base64,' + b64;
+    return t;
+  }
+  window.__pbCampoTex = [];
+  window.__pbCampoErr = [];
+  const CAMPO = window.__PB_CAMPO || null;
+
+  const TEX = {
+    grass: makeGrassTexture(),""", 'el cargador de las fotos del campo')
+
+# y el intercambio: el lienzo queda de respaldo si la foto no llega
+s = s if SOLO else cambiar(s, """    petal: makePetalTexture(),
+    center: makeCenterTexture(),""",
+    """    petal: (CAMPO && CAMPO.petal) ? pbCampoFoto(CAMPO.petal.b64, 'petal', true) : makePetalTexture(),
+    petal2: (CAMPO && CAMPO.petal2) ? pbCampoFoto(CAMPO.petal2.b64, 'petal2', true) : makePetalTexture(),
+    center: (CAMPO && CAMPO.center) ? pbCampoFoto(CAMPO.center.b64, 'center', true) : makeCenterTexture(),
+    bfly: (CAMPO && CAMPO.bfly) ? CAMPO.bfly.map(function (b, i) {
+      return pbCampoFoto(b, 'bfly' + i, true);
+    }) : null,""", 'las fotos del petalo, el disco y las mariposas')
+
+# ── la geometria del petalo, aparte de makePetalGeo ──
+s = s if SOLO else cambiar(s, """  // Bends a cylinder into an organic curved stalk""",
+    campo.PETALO + """
+  // Bends a cylinder into an organic curved stalk""", 'makePetalGeo2')
+
+# ── las tres especies reemplazan al modelo unico ──
+i0 = base.index("  // --- Giant flowers: real procedural petals, instanced by part ---")
+i1 = base.index("  const FLOWER_COUNT = Q.flowers;")
+s = s if SOLO else cambiar(s, base[i0:i1],
+    "  // --- Giant flowers: three procedural species, instanced by part ---\n"
+    + campo.ESPECIES + campo.MATERIALES + "\n", 'las tres especies de flor')
+
+# ── el plantado ──
+i2 = base.index("  // hidden flowers must stop colliding, or you bump into thin air")
+s = s if SOLO else cambiar(s, base[i1:i2], campo.PLANTADO + "\n", 'el plantado por manchones')
+
+# ── el pasto ──
+i3 = base.index("  // --- Grass: 3x3 instanced patches that follow the player ---")
+i4 = base.index("  // --- Giant flowers: real procedural petals, instanced by part ---")
+s = s if SOLO else cambiar(s, base[i3:i4], campo.PASTO + "\n", 'el pasto denso con anillo exterior')
+
+# ── las mariposas ──
+i5 = base.index("  // --- Butterflies ---")
+i6 = base.index("  // --- Pickup bursts ---")
+s = s if SOLO else cambiar(s, base[i5:i6], campo.MARIPOSAS + "\n", 'las mariposas con textura')
+
+i7 = base.index("    // Butterflies\n    for (const b of butterflies) {")
+i8 = base.index("    // Rainbow flowers: hue cycling, sparkles, pickup")
+s = s if SOLO else cambiar(s, base[i7:i8], campo.VUELO.lstrip('\n') + "\n", 'el vuelo de las mariposas')
+
+# ── los presupuestos ──
+# EL PASTO SUBE MUCHO Y LAS FLORES NO. El pedido fue "pasto en mas cantidad", y
+# la geometria nueva de las flores ya gasta menos triangulos por flor que la
+# vieja —la margarita tiene 27 petalos de 20 triangulos donde antes habia 18 de
+# 24, y el disco bajo de 246 a 224— asi que el presupuesto que se libera va al
+# pasto, que es lo que se pidio.
+s = s if SOLO else cambiar(s, """    flowers: LOW ? 170 : 240,
+    bladesPerPatch: LOW ? 190 : 430,
+    clouds: LOW ? 9 : 16,
+    butterflies: LOW ? 6 : 12,""",
+    """    flowers: LOW ? 170 : 240,
+    bladesPerPatch: LOW ? 520 : 1150,
+    bladesFar: LOW ? 130 : 300,
+    clouds: LOW ? 9 : 16,
+    butterflies: LOW ? 10 : 18,""", 'el presupuesto de pasto y mariposas')
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 9 · EL ARRANQUE DE LAS TEXTURAS PBR, Y LA SONDA QUE LAS MIDE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1174,6 +1274,100 @@ s = s if SOLO else cambiar(s, """    flores: function () {""",
                      puesta: !!(usos[0] && usos[0].mat.normalMap) });
       });
       return r;
+    },
+    // EL CAMPO: que salio de verdad. Sin esto, "hay mas pasto" y "hay tres
+    // especies" son dos frases: lo que se puede afirmar es cuantas briznas hay,
+    // a que distancia llega la ultima, y cuantos manchones de cada especie.
+    campo: function () {
+      let briznas = 0, cerca = 0, lejos = 0, maxD = 0;
+      grassPatches.forEach(function (p) {
+        briznas += p.mesh.count;
+        if (p.cel.lejos) lejos++; else cerca++;
+        const d = Math.hypot(p.mesh.position.x - player.position.x,
+                             p.mesh.position.z - player.position.z) + GRASS_CELL * 0.71;
+        if (p.mesh.visible && d > maxD) maxD = d;
+      });
+      const porEsp = [0, 0, 0], triEsp = [], cerc = [null, null, null];
+      const _mm = new THREE.Matrix4(), _v = new THREE.Vector3();
+      flowerChunks.forEach(function (m) {
+        const k = m[1].userData.esp;
+        if (k === undefined) return;
+        porEsp[k] += m[1].count;
+        for (let i = 0; i < m[1].count; i++) {
+          m[1].getMatrixAt(i, _mm);
+          _v.setFromMatrixPosition(_mm).add(m[1].position);
+          const d = Math.hypot(_v.x, _v.z);
+          if (!cerc[k] || d < cerc[k].d) cerc[k] = { d: +d.toFixed(1), x: +_v.x.toFixed(1), z: +_v.z.toFixed(1) };
+        }
+      });
+      FLOWER_SP.forEach(function (sp) {
+        triEsp.push({ petalos: sp.petalGeo.index.count / 3, disco: sp.centerGeo.index.count / 3 });
+      });
+      return {
+        briznas: briznas, parchesCerca: cerca, parchesLejos: lejos,
+        alcance: +maxD.toFixed(1),
+        flores: flowerChunks.length ? flowerChunks.reduce(function (a, m) { return a + m[1].count; }, 0) : 0,
+        manchones: flowerChunks.length, porEspecie: porEsp,
+        triangulosPorFlor: triEsp,
+        triTallo: flowerStemGeo.index.count / 3,
+        mariposas: butterflies.length,
+        fotos: (window.__pbCampoTex || []).slice(), fallos: (window.__pbCampoErr || []).slice(),
+        // la flor MAS CERCANA de cada especie, para poder fotografiar las tres
+        cercanas: cerc,
+        // y donde esta la mariposa mas cercana, con su tamaño EN PANTALLA: que
+        // exista y que este en cuadro son dos cosas distintas, y ya costo una
+        // vuelta en LEMI dar por bueno un bicho que se proyectaba detras de la
+        // camara
+        mariposa: (function () {
+          let mej = null;
+          butterflies.forEach(function (b) {
+            const d = Math.hypot(b.g.position.x - player.position.x,
+                                 b.g.position.z - player.position.z);
+            if (!mej || d < mej.d) mej = { d: +d.toFixed(1), b: b };
+          });
+          if (!mej) return null;
+          const p3 = mej.b.g.position;
+          const v = p3.clone().project(camera);
+          return { d: mej.d, x: +p3.x.toFixed(1), y: +p3.y.toFixed(2), z: +p3.z.toFixed(1),
+                   pantalla: { x: +((v.x + 1) / 2).toFixed(3), y: +((1 - v.y) / 2).toFixed(3) },
+                   delante: v.z < 1,
+                   aleteo: +mej.b.pl.rotation.z.toFixed(2) };
+        })()
+      };
+    },
+    // LA MARIPOSA, PLANTADA DELANTE DE LA CAMARA Y MEDIDA EN PIXELES. Que se
+    // proyecte dentro del rectangulo no prueba que se dibuje: ya costo una
+    // vuelta en LEMI dar por bueno un camello que el frustum descartaba. Esta
+    // mueve la mariposa a tres metros del ojo y devuelve la caja del ala en
+    // fracciones de pantalla mas el estado del material.
+    bfPrueba: function (d) {
+      if (!butterflies.length) return null;
+      const b = butterflies[0];
+      const dd = d || 3;
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      b.home.set(player.position.x + fx * dd, 0, player.position.z + fz * dd);
+      b.rad = 0; b.hgt = EYE_HEIGHT;
+      b.g.position.set(b.home.x, player.position.y + EYE_HEIGHT, b.home.z);
+      b.pl.rotation.z = -0.62; b.pr.rotation.z = 0.62;   // la pose de reposo
+      b.g.updateMatrixWorld(true);
+      renderer.render(scene, camera);
+      const ala = b.pr.children[0];
+      const g = ala.geometry, pos = g.attributes.position;
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, delante = true;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(ala.matrixWorld).project(camera);
+        if (v.z >= 1) delante = false;
+        x0 = Math.min(x0, (v.x + 1) / 2); x1 = Math.max(x1, (v.x + 1) / 2);
+        y0 = Math.min(y0, (1 - v.y) / 2); y1 = Math.max(y1, (1 - v.y) / 2);
+      }
+      const m = ala.material;
+      return { caja: { x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)] },
+               delante: delante, visible: ala.visible && b.g.visible,
+               mapa: !!(m.map && m.map.image && m.map.image.width),
+               lado: m.map && m.map.image ? m.map.image.width : 0,
+               alphaTest: m.alphaTest, transparente: m.transparent,
+               escala: +b.g.scale.x.toFixed(2) };
     },
     // LO QUE CUESTAN LAS FOTOS EN MEMORIA DE VIDEO, que es el precio real de
     // esta vuelta: no son bytes de HTML sino texturas subidas a la GPU.
