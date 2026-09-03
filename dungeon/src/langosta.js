@@ -159,8 +159,8 @@ class Langosta {
                 /* Tinte rojo MULTIPLICANDO la textura, no reemplazandola: la
                    cara tallada tiene que seguir viendose, roja pero tallada.
                    El emisivo baja para que la luz roja haga el trabajo. */
-                m.color.setHex(0xb03028);
-                m.emissive.setHex(0x1c0503);
+                m.color.setHex(0xd0100c);
+                m.emissive.setHex(0x300604);
                 m.emissiveIntensity = 1;
             } else {
                 const [c, e, i] = n.userData.tono;
@@ -680,7 +680,8 @@ export class Mision {
            Va DELANTE de la cara, entre ella y vos, si no la nariz se come todo. */
         b.caraRoja(true);
         b.luzCara.position.set(0, ALTO_BICHO * 0.9257, -0.30);
-        b.luzCara.intensity = 30;
+        b.luzCara.color.setHex(0xff0a04);   // rojo puro, no naranja
+        b.luzCara.intensity = 42;
         b.luzCara.distance = 2.2;
         b.luz.intensity = 0;
 
@@ -701,6 +702,7 @@ export class Mision {
             b.estado = 'ronda'; b.alerta = 0;
             b.caraRoja(false);
             b.luzCara.position.set(0, ALTO_BICHO * 0.80, -0.22);
+            b.luzCara.color.setHex(0xff2a18);
             b.luzCara.intensity = 4.2;
             b.luzCara.distance = 2.6;
             b.luz.intensity = 3.4;
