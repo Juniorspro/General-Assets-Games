@@ -2273,13 +2273,31 @@ const figure=(()=>{
   legs.position.y=0.46;
   const body=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.21,1.02,10),mat);
   body.position.y=1.40;
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.135,12,9),mat);
-  head.position.y=2.01;
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.142,14,11),mat);
+  head.position.y=2.01; head.scale.set(0.96,1.16,0.94);
+  /* LA CARA EXISTE PORQUE AHORA SE MIRA DE CERCA. A tres metros esta figura era
+     una silueta y una esfera alcanzaba; a 68 cm una esfera lisa sobre un
+     cilindro se lee a MUÑECO DE NIEVE —fotografiado, es exactamente eso—. Dos
+     cuencas y una boca no cambian la silueta, asi que de lejos no se nota.
+     Y van APOYADAS SOBRE LA SUPERFICIE y no adentro: este material es opaco y
+     escribe profundidad, o sea que una esfera metida dentro de la cabeza no se
+     ve —es la diferencia con el fantasma de la ventana, que va sin profundidad
+     y por eso puede llevar los ojos por dentro. */
+  const hueco=new THREE.MeshStandardMaterial({color:0x04060a,roughness:1,metalness:0});
+  const cara=[];
+  [-1,1].forEach(sx=>{
+    const o=new THREE.Mesh(new THREE.SphereGeometry(0.034,10,8),hueco);
+    o.position.set(sx*0.062,2.01+0.030,0.1164); o.scale.set(1.05,0.90,0.70);
+    cara.push(o);
+  });
+  const boca=new THREE.Mesh(new THREE.SphereGeometry(0.032,10,8),hueco);
+  boca.position.set(0,2.01-0.070,0.1208); boca.scale.set(1.6,0.75,0.60);
+  cara.push(boca);
   [-1,1].forEach(s=>{
     const a=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.045,0.86,8),mat);
     a.position.set(s*0.22,1.42,0.02); a.rotation.z=s*0.06; g.add(a);
   });
-  g.add(legs,body,head);
+  g.add(legs,body,head); cara.forEach(o=>g.add(o));
   g.traverse(o=>{o.castShadow=true;});
   g.visible=false; scene.add(g);
   return g;
@@ -2288,7 +2306,13 @@ let glimpseT=0;
 function placeFigure(dist,ang){
   const a=(ang===undefined?P.yaw:ang);
   figure.position.set(P.x-Math.sin(a)*dist, P.y, P.z-Math.cos(a)*dist);
-  figure.rotation.y=a+Math.PI;                  // siempre de cara al jugador
+  /* DE CARA AL JUGADOR, Y ESTABA AL REVES. La figura se coloca en
+     `P + (-sin a, -cos a)·d`, asi que para mirar al jugador su +Z tiene que
+     apuntar a `(sin a, cos a)`, o sea `rotation.y = a` — con `a+PI` apuntaba
+     justo para el otro lado y lo que se veia era la NUCA. Nunca se noto porque
+     era una silueta sin cara; se vio en el primer plano del susto, midiendo:
+     el ojo daba 0,80 m de distancia con la cabeza a 0,68. */
+  figure.rotation.y=a;
 }
 /* ¿este punto está libre de paredes y muebles? */
 function freeSpot(x,z,y){
@@ -2317,6 +2341,96 @@ function evGlimpse(){
     return;
   }
 }
+
+/* ══════════ EL SUSTO DEL SÓTANO ══════════
+   Una zona, una sola vez, y un segundo.
+
+   POR QUE EL SOTANO Y NO OTRO SITIO: es el unico cuarto de la casa al que hay
+   que BAJAR, el unico sin una sola ventana —o sea sin el resplandor de la calle
+   que hay en todos los demas— y encima hay que ir si o si, porque la tercera
+   cinta esta ahi. Un susto en una zona que el jugador puede no pisar nunca no
+   es un susto: es codigo muerto. La zona cae entre el pie de la escalera y la
+   cinta, asi que salta al entrar y no al agarrarla — dos cosas distintas en el
+   mismo instante se leen como una sola.
+
+   NO SE LE SACA EL CONTROL AL JUGADOR. `SCR` no aparece en la linea que pone la
+   entrada en cero (`state!=='play'||reading||cinta||fin`), asi que durante el
+   segundo entero se puede seguir caminando y girando; lo que hace la escena es
+   ponerse DELANTE de donde uno mire, que es lo que la hace inevitable sin
+   congelar nada.
+
+   Y LA CRIATURA ES LA QUE YA HAY. Este juego tiene una sola cosa viva —la
+   silueta que asoma y la del final— y meterle un monstruo nuevo aca seria
+   contar que hay dos. */
+const SCR={x:-6.60,z:-3.40,r:1.90, dur:1.05, rueda:0.24, t:-1, hecho:false, luz:0.26, lint:0.12, fl:null};
+/* una luz que cuelga de la camara: el flash de una filmadora. Sin ella, en el
+   sotano con la linterna apagada el susto es un bulto negro sobre negro — la
+   misma leccion que costo una vuelta en LEMI. */
+const scrLuz=new THREE.PointLight(0xd8e2ee,0,3.2,1.6);
+scrLuz.position.set(0,0,0.10); camera.add(scrLuz);
+function scrArranca(){
+  if(SCR.hecho||SCR.t>=0||fin||reading||cinta||state!=='play') return false;
+  SCR.hecho=true; SCR.t=0;
+  glimpseT=0;                                   // nadie mas maneja la figura
+  figure.visible=true;
+  /* la interferencia: fuerte y CORTA. La cola la apaga `vhsPaso` sola, que
+     desde esta vuelta cierra en cero en vez de quedarse clavada. */
+  vhs.g=1; vhs.hold=0.16; vhs.roll=rnd(-2.6,2.6);
+  vhs.timer=Math.max(vhs.timer,4);
+  shakeKick(0.5);
+  if(A&&A.hit) A.hit();
+  setTension(Math.min(1,tension+0.30));
+  return true;
+}
+function scrPaso(dt){
+  if(SCR.t<0) return;
+  SCR.t+=dt;
+  const k=Math.min(1,SCR.t/SCR.dur);
+  if(SCR.t>=SCR.dur){
+    /* VUELVE A LA NORMALIDAD EN EL MISMO CUADRO: la figura se apaga, la luz se
+       apaga y el post no suma nada mas. Lo unico que queda vivo es la cola del
+       glitch, que es cinta y no susto. */
+    figure.visible=false; scrLuz.intensity=0; SCR.t=-1; vhs.hold=0;
+    return;
+  }
+  /* LA CABEZA VA SOBRE EL EJE DE LA VISTA, no en un punto del mundo. La figura
+     mide 2,14 m y su cabeza esta en +2,01: colocada por los pies a un metro,
+     la cabeza queda 35 cm POR ENCIMA del ojo y a esa distancia eso es fuera de
+     cuadro. Se coloca la CABEZA y el cuerpo cuelga de ella. */
+  /* LA INTERFERENCIA ES BREVE Y EL RESTO DEL SEGUNDO SE VE. `roll` decae con
+     una exponencial y tarda mas de un segundo en morirse: dejandolo, la imagen
+     rueda en vertical DURANTE TODO el susto y la criatura nunca llega a leerse
+     —fotografiado, lo que llenaba el cuadro era el cuello, con la cabeza
+     partida por la costura del fract—. Se corta a mano a los 0,24 s: golpe de
+     estatica, la imagen se endereza, y ahi esta. */
+  if(SCR.t>SCR.rueda&&vhs.roll) vhs.roll=0;
+  const d=0.86-0.34*k;                           // se viene encima
+  camera.getWorldDirection(_scrDir);
+  const ex=P.x, ey=P.y+EYE, ez=P.z;
+  figure.position.set(ex+_scrDir.x*d, ey+_scrDir.y*d*0.55+0.04-2.01, ez+_scrDir.z*d);
+  figure.rotation.y=P.yaw;
+  /* el parpadeo es una onda CUADRADA: un seno se lee a que alguien mueve un
+     dimmer, y lo que hace una bombilla que se corta es prenderse y apagarse */
+  const fl=(SCR.fl!==null)?SCR.fl:(Math.sin(SCR.t*57)>0?1:0);
+  const caida=1-k*k;                             // se va apagando hacia el final
+  PM.brillo*=(0.55+0.47*fl)*caida+(1-caida);
+  PM.grano*=1+0.9*caida;
+  PM.aberr+=1.5*caida;
+  PM.vig+=0.12*caida;
+  /* LA LUZ VA BAJA Y ESO SE MIDIO. A 0,76 m con caida 1,6 el factor de
+     distancia es 1,5, asi que una intensidad de 3 deja la cara en BLANCO PURO:
+     fotografiado, el susto era una mancha blanca sin forma. Es la misma cuenta
+     que en LEMI quemaba las manos delante del screamer. */
+  scrLuz.intensity=SCR.luz*(0.62+0.55*fl)*caida;
+  /* Y LA LINTERNA SE VA CASI DEL TODO, que es la otra mitad de la misma cuenta:
+     el spot de 3,9 apunta al eje de la vista, o sea justo a la cara que esta a
+     68 cm. Con la linterna puesta no hay flash que valga — la cara sale blanca
+     igual. Una filmadora a la que se le corta la luz en ese instante es
+     exactamente lo que este juego es. */
+  torch.intensity*=SCR.lint+(1-SCR.lint)*(1-caida);
+  const bu=beam.material.uniforms; bu.uI.value*=SCR.lint+(1-SCR.lint)*(1-caida);
+}
+const _scrDir=new THREE.Vector3();
 
 /* ══════════ final ══════════ */
 const fadeEl=document.getElementById('fade'), endEl=document.getElementById('end');
@@ -2770,20 +2884,35 @@ function reproducir(ck){
   cintaTxEl.textContent=''; cintaTxEl.style.opacity=1;
   noteEl.style.opacity=0; noteT=0;
 }
+/* ══════════ EL POST TIENE UN SOLO ESCRITOR ══════════
+   Habia tres sitios escribiendo `uGrain`: la cinta lo subia x3,1 y el bucle lo
+   volvia a poner en `grain` DOS LINEAS DESPUES, todos los cuadros — o sea que
+   el grano de la cinta no se vio nunca. Lo mismo el viñeteado: el deslizador lo
+   dejaba en su valor y `cintaPaso` lo devolvia a 0,62 de fabrica, tirando lo
+   que el jugador acababa de elegir.
+   Ahora la base la ponen los ajustes (`VIG`, `ABERR`) y todo lo demas MULTIPLICA
+   o SUMA sobre un objeto que se pone en cero al empezar cada cuadro; el bucle
+   escribe una sola vez, al final. Es la misma doctrina que la camara. */
+let VIG=0.62, ABERR=1.0;
+const PM={grano:1,brillo:1,vig:0,aberr:0};
+function pmCero(){ PM.grano=1; PM.brillo=1; PM.vig=0; PM.aberr=0; }
+function pmAplicar(){
+  const u=postMat.uniforms;
+  u.uGrain.value=grain*PM.grano;
+  u.uBright.value=1.06*PM.brillo;
+  u.uVig.value=Math.min(0.98,VIG+PM.vig);
+  u.uAberr.value=ABERR+PM.aberr;
+}
 function cintaPaso(dt){
   /* la rampa hace que entrar y salir no sea un corte: 0,7 s para adentro y
      1,1 para afuera, que es lo que tarda un aparato en enganchar la cinta. */
   const meta=!!cinta;
   cintaK+=((meta?1:0)-cintaK)*Math.min(dt*(meta?1.4:0.9),1);
-  if(cintaK>0.002){
-    const u=postMat.uniforms;
-    u.uBright.value=1.06-0.84*cintaK;
-    u.uVig.value=0.62+0.33*cintaK;
-    u.uGrain.value=grain*(1+2.1*cintaK);
-  }else if(cintaK<=0.002&&cintaK>0){
-    cintaK=0;
-    const u=postMat.uniforms;
-    u.uBright.value=1.06; u.uVig.value=0.62; u.uGrain.value=grain;
+  if(cintaK<=0.002) cintaK=0;
+  if(cintaK>0){
+    PM.brillo*=1-0.79*cintaK;      // 1,06 -> 0,22 con la cinta puesta
+    PM.vig+=0.33*cintaK;
+    PM.grano*=1+2.1*cintaK;
   }
   if(!cinta) return;
   promptEl.style.opacity=0; dotEl.classList.remove('act');
@@ -3938,6 +4067,7 @@ function setState(v){
 }
 function resetWorld(){
   fin=null; torchCut=false; lastPaper=false; glimpseT=0; figure.visible=false;
+  SCR.t=-1; SCR.hecho=false; scrLuz.intensity=0;
   hideGhost(); gh.cool=0; gh.pending=0; shakeReset(); P.panic=0;
   fadeEl.style.opacity=0; endEl.classList.add('hide');
   torchOn=true; torchBtn.classList.remove('off'); torchTx.textContent=TX('linterna');
@@ -3962,9 +4092,7 @@ function resetWorld(){
   /* las cintas */
   cintasT=0; cinta=null; finalLista=false; cintaK=0;
   cintaTxEl.style.opacity=0; recEl.innerHTML='<b></b>'+TX('rec');
-  postMat.uniforms.uBright.value=1.06;
-  postMat.uniforms.uVig.value=0.62;
-  postMat.uniforms.uGrain.value=grain;
+  pmCero(); pmAplicar();
   cintas.forEach(t=>{ t.tomada=false; t.g.visible=(t!==cintaFinal); });
   /* los objetos sueltos vuelven a su sitio: si no, uno movido por evMover se
      queda ahi y la partida nueva arranca con la casa ya alterada. */
@@ -4091,10 +4219,10 @@ document.getElementById('slVol').addEventListener('input',e=>{
 document.getElementById('slGrain').addEventListener('input',e=>{
   const v=e.target.value/100;
   grain=0.132*v;
-  postMat.uniforms.uAberr.value=0.3+1.6*v;
+  ABERR=0.3+1.6*v;
   /* el rango arranca donde arranca el uniforme: con 0.55+0.5*v, tocar el
      deslizador saltaba de 0.62 a 0.79 sin que nadie lo pidiera */
-  postMat.uniforms.uVig.value=0.40+0.45*v;});
+  VIG=0.40+0.45*v; pmAplicar();});
 setState('menu');
 
 function toggleTorch(){torchOn=!torchOn;torchBtn.classList.toggle('off',!torchOn);
@@ -4526,6 +4654,9 @@ function tick(){
 
   /* la cinta que se esta reproduciendo —y la rampa de salida, que sigue
      corriendo un segundo despues de que la cinta termino— */
+  /* el post se pone en cero ANTES de que nadie sume: la cinta, el susto y los
+     ajustes escriben sobre el mismo objeto y el bucle lo aplica una sola vez */
+  pmCero();
   if(state==='play'||cintaK>0) cintaPaso(dt);
 
   /* director de eventos: los intervalos se acortan a medida que leés.
@@ -4538,6 +4669,11 @@ function tick(){
 
   /* la silueta que asoma y desaparece */
   if(glimpseT>0){ glimpseT-=dt; if(glimpseT<=0) figure.visible=false; }
+
+  /* ─── el susto de la zona: una sola vez ─── */
+  if(!SCR.hecho&&SCR.t<0&&state==='play'&&!reading&&!cinta&&!fin&&P.y<-1.5
+     &&Math.hypot(P.x-SCR.x,P.z-SCR.z)<SCR.r) scrArranca();
+  scrPaso(dt);
 
   /* ─── el fantasma de la ventana ─── */
   if(gh.cool>0) gh.cool-=dt;
@@ -4612,7 +4748,7 @@ function tick(){
   osdUpdate();
 
   postMat.uniforms.uTime.value=T;
-  postMat.uniforms.uGrain.value=grain;
+  pmAplicar();
   postMat.uniforms.uGlitch.value=vhs.g;
   postMat.uniforms.uJump.value=vhs.jump;
   postMat.uniforms.uWob.value=vhs.wob;
@@ -4645,6 +4781,63 @@ window.__casa={
       jump:+vhs.jump.toFixed(4), timer:+vhs.timer.toFixed(2),
       uGlitch:+u.uGlitch.value.toFixed(6), uJump:+u.uJump.value.toFixed(4),
       uWob:+u.uWob.value.toFixed(3)}; },
+  /* ══════════ EL SUSTO DE LA ZONA ══════════
+     `susto()` no dice solo "esta encendido": PROYECTA la cabeza de la criatura
+     a fracciones de pantalla y dice si esta DELANTE de la camara. Un punto a la
+     espalda proyecta igual, dado vuelta, y cae dentro del rectangulo — es la
+     trampa que en RECREO dio un autobus "entero y centrado" con la camara
+     mirando para el otro lado. */
+  susto(){
+    const cab=new THREE.Vector3(0,2.01,0);
+    figure.updateWorldMatrix(true,false);
+    cab.applyMatrix4(figure.matrixWorld);
+    const v=cab.clone().project(camera);
+    const d=cab.clone().sub(camera.position);
+    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+    const u=postMat.uniforms;
+    return {hecho:SCR.hecho, t:SCR.t<0?null:+SCR.t.toFixed(3),
+      visible:figure.visible, dist_m:+d.length().toFixed(2),
+      delante:d.dot(dir)>0,
+      pantalla:[+((v.x+1)/2).toFixed(3), +((1-v.y)/2).toFixed(3)],
+      piezas:figure.children.length,
+      ojo:(()=>{ const o=figure.children.find(c=>c.geometry&&c.geometry.parameters
+             &&Math.abs(c.geometry.parameters.radius-0.034)<1e-6);
+        if(!o) return null; const w=new THREE.Vector3();
+        o.getWorldPosition(w); const q=w.clone().project(camera);
+        return {vis:o.visible, mat:o.material.color.getHexString(),
+          pant:[+((q.x+1)/2).toFixed(3),+((1-q.y)/2).toFixed(3)],
+          d:+w.distanceTo(camera.position).toFixed(3)}; })(),
+      luz:+scrLuz.intensity.toFixed(2), luz_padre:scrLuz.parent===camera,
+      cam_en_escena:!!camera.parent, linterna:+torch.intensity.toFixed(2),
+      brillo_cuadro:(()=>{ const w=rt.width,h=rt.height,bf=new Uint8Array(w*h*4);
+        renderer.setRenderTarget(rt); renderer.render(scene,camera);
+        renderer.readRenderTargetPixels(rt,0,0,w,h,bf); renderer.setRenderTarget(null);
+        let sm=0,mx=0; for(let i=0;i<w*h;i++){ const l=0.299*bf[i*4]+0.587*bf[i*4+1]+0.114*bf[i*4+2];
+          sm+=l; if(l>mx)mx=l; } return {medio:+(sm/(w*h)).toFixed(2), max:+mx.toFixed(0)}; })(),
+      uBright:+u.uBright.value.toFixed(3), uGrain:+u.uGrain.value.toFixed(4),
+      uAberr:+u.uAberr.value.toFixed(2), uGlitch:+u.uGlitch.value.toFixed(3)};
+  },
+  /* adelanta el susto con el paso fijo del juego, sin dibujar: el banco corre
+     a tres cuadros por segundo y esperar el segundo entero son siete de reloj */
+  sustoCorre(seg){ const paso=1/60; let n=Math.round((seg||0.5)/paso);
+    while(n-->0){ vhsPaso(paso); scrPaso(paso); }
+    return this.susto(); },
+  /* deja al jugador en la zona: la que dispara es la MISMA condicion del bucle,
+     no una llamada directa a scrArranca — si el disparo se rompiera, una sonda
+     que llama a la funcion seguiria contestando que todo anda */
+  aZona(otra){ P.x=SCR.x; P.z=SCR.z; P.y=-3; P.level=-3; P.vx=P.vz=0;
+    if(otra){ SCR.hecho=false; SCR.t=-1; }
+    if(otra&&otra.luz!==undefined) SCR.luz=otra.luz;
+    if(otra&&otra.lint!==undefined) SCR.lint=otra.lint;
+    if(otra&&otra.fl!==undefined) SCR.fl=otra.fl;
+    return {en:[P.x,P.y,P.z], dist:+Math.hypot(P.x-SCR.x,P.z-SCR.z).toFixed(2)}; },
+  /* camina n cuadros mientras dure lo que dure: prueba que NO se bloquean los
+     controles durante el susto */
+  empuja(n){ n=n||30; const x0=P.x,z0=P.z;
+    return new Promise(res=>{ let k=0; keys.KeyW=true;
+      const id=setInterval(()=>{ if(++k>=n){ clearInterval(id); keys.KeyW=false;
+        res({movio_m:+Math.hypot(P.x-x0,P.z-z0).toFixed(3),
+             susto_t:SCR.t<0?null:+SCR.t.toFixed(2)}); } },16); }); },
   glitch(g,hold,roll){ vhs.g=g; vhs.hold=hold||0; vhs.roll=roll||0;
     vhs.timer=999; return this.vhs(); },
   /* mueve el reloj del glitch sin dibujar: el banco corre a 6 cuadros por

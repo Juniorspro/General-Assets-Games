@@ -136,6 +136,100 @@ sintetizado si un clip no decodifica.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Nonagésima segunda vuelta (2026-09-03): **CASA 13** — el susto del sótano, y la figura estaba de espaldas
+
+Pedido: *"agrega un screamer con estilo VHS. Cuando el jugador llegue a una zona determinada, activa el
+evento una sola vez: la cámara tendrá una interferencia VHS breve, aparecerá una criatura de terror muy
+cerca de la cámara durante aproximadamente 1 segundo y reproducirá un sonido repentino. Después, la
+criatura desaparecerá y la cámara volverá inmediatamente a la normalidad. Agrega parpadeo de pantalla,
+ruido VHS y un pequeño efecto de distorsión, sin bloquear permanentemente los controles"*.
+
+#### LA ZONA ES EL SÓTANO, Y NO ES UNA ELECCIÓN DE GUSTO
+
+Es el único cuarto al que hay que **bajar**, el único **sin una sola ventana** —o sea sin el resplandor
+de la calle que tienen los otros siete— y hay que ir **sí o sí**, porque la tercera cinta está ahí. Un
+susto en una zona que el jugador puede no pisar nunca no es un susto: es código muerto. Cae **entre el
+pie de la escalera y la cinta** (radio 1,90 m), así que salta al entrar y no al agarrarla — dos cosas
+distintas en el mismo instante se leen como una sola.
+
+**Y SE COMPRUEBA CAMINANDO, no teletransportando.** `bajar(1400)` baja la escalera con la física de
+verdad: llega a (−7,58 · −4,50) con y = −3 y al llegar `hecho` ya es **true**. Volver a entrar a la
+zona **no lo repite** (medido: `visible:false`, `t:null`).
+
+#### LA CRIATURA ES LA QUE YA HABÍA, Y ESTUVO DE ESPALDAS DESDE SIEMPRE
+
+Este juego tiene **una** cosa viva —la silueta que asoma y la del final— y meterle un monstruo nuevo
+acá sería contar que hay dos. Pero al ponerla a sesenta centímetros apareció un defecto viejo que
+ninguna captura podía mostrar: `placeFigure` dice en su comentario *"siempre de cara al jugador"* y
+hacía lo contrario. La figura se coloca en `P + (−sin a, −cos a)·d`, así que para mirar al jugador su
++Z tiene que apuntar a `(sin a, cos a)`, o sea `rotation.y = a` — con `a+π` apuntaba justo al otro lado
+y **lo que se veía era la nuca**. Nunca se notó porque era una silueta sin cara.
+
+**Lo cantó la sonda y no el ojo:** el ojo daba **0,80 m** de distancia con la cabeza a **0,68** — o sea
+que la cara estaba *más lejos* que el centro del cráneo. Corregido, el ojo queda en 0,55 contra 0,70.
+
+**Y AHORA TIENE CARA, porque ahora se mira de cerca.** A tres metros una esfera sobre un cilindro
+alcanza; a 68 cm eso se lee a **muñeco de nieve** —fotografiado, es exactamente eso—. Dos cuencas y una
+boca no cambian la silueta, así que de lejos no se nota. **Van apoyadas SOBRE la superficie y no
+adentro**: este material es opaco y escribe profundidad, o sea que una esfera metida dentro de la cabeza
+no se ve — es la diferencia con el fantasma de la ventana, que va sin profundidad y por eso sí puede
+llevar los ojos por dentro. Los tres centros se resuelven contra el elipsoide de la cabeza
+(0,1363 × 0,1647 × 0,1335), no a ojo.
+
+#### CUATRO COSAS QUE SÓLO APARECIERON FOTOGRAFIANDO
+
+1. **LA CABEZA SALÍA BLANCA, y no era mi flash: era la linterna.** Un spot de 3,9 apuntando al eje de
+   la vista contra una cara a 68 cm no lo arregla ninguna intensidad de relleno — con la linterna
+   puesta, las tres pruebas dieron una bola blanca sin forma. Se apaga al 12 % mientras dura, que
+   además es lo que hace una filmadora a la que se le va la luz justo ahí.
+2. **Y EL FLASH ESTABA TRES VECES DE MÁS.** A 0,76 m con caída 1,6 el factor de distancia es **1,5**,
+   así que una intensidad de 3 llega como 4,7. Barrido y medido sobre el destino de render: 3,09 →
+   máximo **255** (blanco puro), 0,26 → máximo **125** y la cara legible.
+3. **LA IMAGEN RODABA DURANTE TODO EL SUSTO.** `roll` decae con una exponencial y tarda **1,26 s** en
+   morirse: dejándolo, la costura del `fract` cruza la cara el segundo entero y lo que llena el cuadro
+   es el cuello. Se corta a mano a los **0,24 s** — golpe de estática, la imagen se endereza, y ahí
+   está la criatura.
+4. **EL PARPADEO ES UNA ONDA CUADRADA.** Un seno se lee a que alguien mueve un dimmer; lo que hace una
+   bombilla que se corta es prenderse y apagarse. Va a 9 Hz, y los dos escalones se fotografiaron por
+   separado forzando la fase, porque el banco dibuja a tres cuadros por segundo y sacar la foto en la
+   fase equivocada devuelve una pantalla negra que no prueba nada.
+
+#### EL POST PASA A TENER UN SOLO ESCRITOR, Y ESO DESTAPÓ UN DEFECTO VIEJO
+
+Había **tres** sitios escribiendo `uGrain`: `cintaPaso` lo subía ×3,1 y el bucle lo volvía a poner en
+`grain` **dos líneas después**, todos los cuadros — o sea que **el grano de la cinta no se vio nunca**.
+Lo mismo el viñeteado: el deslizador lo dejaba en su valor y `cintaPaso` lo devolvía a 0,62 de fábrica,
+tirando lo que el jugador acababa de elegir.
+
+Ahora la base la ponen los ajustes (`VIG`, `ABERR`) y todo lo demás **multiplica o suma** sobre un
+objeto que se pone en cero al empezar cada cuadro; el bucle escribe una sola vez, al final. Es la misma
+doctrina que la cámara. Medido con una cinta sonando a `k = 0,353`: grano **0,1097** —o sea
+0,063 × (1 + 2,1·k)— y brillo **0,764** = 1,06 × (1 − 0,79·k). Antes los dos quedaban en su valor de
+fábrica.
+
+#### NO SE LE SACA EL CONTROL AL JUGADOR, Y ESO TAMBIÉN SE MIDE
+
+`SCR` **no aparece** en la línea que pone la entrada en cero (`state!=='play'||reading||cinta||fin`),
+así que durante el segundo entero se camina y se gira. Lo que hace la escena es ponerse **delante de
+donde uno mire** —la cabeza va sobre el eje de la vista, no en un punto del mundo— que es lo que la hace
+inevitable sin congelar nada. Medido: `empuja(20)` mueve al jugador **con el susto corriendo**.
+
+**Y LA CABEZA SE COLOCA, NO LOS PIES.** La figura mide 2,14 m con su cabeza en +2,01: puesta por los
+pies a un metro, la cabeza queda **35 cm por encima del ojo** y a esa distancia eso es fuera de cuadro.
+Medido al final: la cabeza cae en **[0,50 · 0,48]** de la pantalla, o sea el centro exacto.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Susto: dispara caminando, **una sola vez**, cabeza en [0,50 · 0,48] a 0,67 m y delante de la cámara,
+grano ×1,9, aberración 1,0 → 2,5, brillo alternando 0,59 / 1,08, glitch 1,0. Al terminar, **en el mismo
+cuadro**: brillo **1,06**, grano **0,063**, aberración **1,00**, linterna **3,9**, figura apagada.
+Sonido: fondo rms 0,0305 y **pico 0,4646** — el grito sigue siendo lo más fuerte del juego. **Nada
+regresó:** partida completa 3 de 3 cintas + la cuarta + el final (`paso 1`), linterna con desvío **0°**,
+haz en **[0,0]**, alabeo **0** con la vista girando 40 muestras, HUD **sin un solo solapamiento** en
+892×412, 732×412, 800×360 y 1280×720, **14 de 14 texturas de foto puestas**, **19 de 19 sonidos
+decodificados**, **22 programas y 63 texturas** —los mismos, la luz nueva y las tres piezas de la cara
+no agregaron ninguno—, `window.__errs` vacío en las trece corridas.
+
 ### Nonagésima primera vuelta (2026-09-03): **CASA 13** — la banda que no se movía nunca más, y se camina despacio
 
 Reporte, con una captura del teléfono en la que una franja gris de estática cruza el cuadro a dos
