@@ -55,6 +55,7 @@ flores_js = io.open(os.path.join(ASSETS, 'flores.js'), encoding='utf8').read()
 n6_js = io.open(os.path.join(ASSETS, 'n6.js'), encoding='utf8').read()
 pbr_js = io.open(os.path.join(ASSETS, 'pbr.js'), encoding='utf8').read()
 campo_js = io.open(os.path.join(ASSETS, 'campo.js'), encoding='utf8').read()
+audio_js = io.open(os.path.join(ASSETS, 'audio.js'), encoding='utf8').read()
 
 assets = """
 <script>
@@ -63,8 +64,8 @@ assets = """
    horneado con herramientas/puerta/. Van en su propio <script> a proposito:
    asi la parte del juego que uno lee no empieza con medio mega de base64. */
 window.__PB_CIELO = '%s';
-%s%s%s%s%s</script>
-""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js, campo_js)
+%s%s%s%s%s%s</script>
+""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js, campo_js, audio_js)
 
 s = s if SOLO else cambiar(s, '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
@@ -521,6 +522,7 @@ import campo
 import menu
 import orden
 import despertar
+import sonido
 import nivel6
 import red
 
@@ -1344,6 +1346,14 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
                bandas: PB_PARP_A.style.height, habla: PB_HABLA.style.opacity,
                frase: PB_HABLA.textContent.slice(0, 40) };
     },
+    // EL SONIDO. `audio()` dice cuantos decodificaron y que cama esta puesta;
+    // `oye(n)` dispara uno y devuelve el nivel MEDIDO en el maestro.
+    audio: function () {
+      return { declarados: Object.keys(PB_SON_B).length, decodificados: pbSonListo,
+               fallados: pbSonFalla, cama: PB_CAMA.nom, suena: !!PB_CAMA.src,
+               nivel: pbSonNivel() };
+    },
+    oye: function (n) { const ok = pbSon(n, 1); return { sono: ok, nivel: pbSonNivel() }; },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
     'la sonda de nivel e idioma')
 
@@ -1366,6 +1376,40 @@ s = s if SOLO else cambiar(s, despertar.MARCA, despertar.MARCADO, 'el marcado de
 s = s if SOLO else cambiar(s, "  #vhs-hud {", despertar.CSS + "\n  #vhs-hud {", 'el CSS de despertarse')
 s = s if SOLO else cambiar(s, despertar.VIEJO_ROOM, despertar.NUEVO_ROOM, 'arrancar la animacion en el cuarto')
 s = s if SOLO else cambiar(s, despertar.VIEJO_LOOP, despertar.NUEVO_LOOP, 'el bucle mientras se despierta')
+
+# LOS SONIDOS GENERADOS
+s = s if SOLO else cambiar(s, "  function showToast(text, duration) {",
+    sonido.JS + "\n  function showToast(text, duration) {", 'el modulo de sonido')
+
+# las diez funciones de sonido intentan la muestra ANTES del oscilador
+for firma, son, vol in sonido.MUESTRAS:
+    viejo = "  function %s {" % firma
+    s = s if SOLO else cambiar(s, viejo,
+        viejo + "\n    if (pbSon('%s', %s)) return;   // la muestra manda; el oscilador es la red" % (son, vol),
+        'la muestra de ' + son)
+
+# las acciones, cada una en su disparador
+for ancl, son, vol in sonido.ACCIONES:
+    esp = ancl[:len(ancl) - len(ancl.lstrip())]
+    s = s if SOLO else cambiar(s, ancl,
+        "%spbSon('%s', %s);\n%s" % (esp, son, vol, ancl), 'el sonido de ' + son)
+
+# LA CAMA DEL SITIO: se pide todos los cuadros y `pbCama` sale sola si no
+# cambio. Va contra `gameState` y no contra `setEnvironment`, que agrupa
+# ambientes de luz y no de sonido.
+s = s if SOLO else cambiar(s, "    updateTape(delta, elapsedTime);",
+    "    if (PB_CAMA_DE[gameState]) pbCama(PB_CAMA_DE[gameState]);\n    updateTape(delta, elapsedTime);",
+    'la cama del sitio')
+
+# LA PISADA VA ATADA A LA FASE DEL CABECEO: el mismo numero mueve la camara y
+# dispara el sonido, asi que no se pueden desincronizar.
+s = s if SOLO else cambiar(s, "    const bobRoll = Math.sin(bobTimer * 0.5) * bobAmp * 0.3;",
+    "    const bobRoll = Math.sin(bobTimer * 0.5) * bobAmp * 0.3;\n    pbPasoSuena(bobTimer, isMoving && bobAmp > 0.012);",
+    'la pisada')
+
+# la puerta de cada nivel suena al cruzarla
+s = s if SOLO else cambiar(s, "    fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });",
+    "    pbSon('a_puerta', 0.9);\n    fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });", 'la puerta al pasar de nivel')
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {

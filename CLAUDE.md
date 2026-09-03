@@ -269,6 +269,83 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima primera vuelta (2026-09-03): **PUERTA BLANCA** — veinticinco sonidos generados, y el nivel se mide después de codificar
+
+Pedido: *"genera con Rezona sonidos y que los guardes en el repo y que no dependa de proyectos en
+Rezona para generar dichos assets genera sonidos a cada monstruo acción y mapa ambiental"*. Vive en
+`herramientas/puerta/pedir_audio.py` (los pedidos), `hornear_audio.py` (el horneado) y `sonido.py`
+(el lado del juego).
+
+**8 monstruos** —la criatura del campo, el perro, la muñeca, la cajita de música, el verdugo, el
+simio, los murciélagos y la araña—, **10 acciones** —pisada, puerta, agarrar, código mal, código
+bien, antorcha, gasolina, libro, telaraña y sierra— y **7 camas de ambiente, una por sitio**.
+**385 KB de MP3, 515 en base64.** El juego no toca Rezona en ejecución: lo que usa es el binario del
+repo, y todo se generó en el proyecto descartable, sin crear ninguno nuevo.
+
+#### EL HALLAZGO DE LA VUELTA: EL NIVEL SE MIDE SOBRE EL MP3 YA ESCRITO
+
+Nivelé los veinticinco por **rms** en el float —monstruos 0,150, acciones 0,110, camas 0,055, que es
+la escala de siempre en este repo— y los di por buenos. Medidos sobre el MP3 terminado daban **0,100
+· 0,074 · 0,037**: exactamente **dos tercios** de lo pedido, y el mismo factor en las tres familias.
+
+La causa no es el nivelador: es que **a 24 kbps el codificador se lleva casi todo el brillo**, y en un
+chillido o en una pisada la mayor parte de la energía está ahí. Así que la cuenta que se hizo en el
+float describe un archivo que no existe. `hornear_audio.py` **cierra el lazo**: escribe, mide lo que
+se va a oír, corrige y vuelve a escribir, hasta tres veces. Medido después: **monstruos 0,150 ·
+acciones 0,110 · camas 0,055**, los veinticinco dentro de un 6 % de su objetivo.
+
+**Y ANTES DE ESO HUBO OTRO DEFECTO DEL MISMO NIVELADOR:** la `tanh` que aplasta la punta tenía la
+fuerza clavada en 1,6, así que el que decidía el nivel final era el **tope de pico** y no el objetivo:
+el glugueo de la gasolina —cresta 26— quedaba cuatro veces por debajo. Ahora la fuerza se **busca**,
+de la más suave a la más dura, y se toma la primera que llega: lo que ya tiene poca cresta no se
+aplasta de gusto.
+
+#### 17 DE 25 FALLARON, Y EL GUION NO SE ENTERABA
+
+`submit_audio_generation` devolvió `PROVIDER_UNAVAILABLE / NOIZ_FAILED` en diecisiete de los
+veinticinco, marcado por el propio servidor como **`retryable: true`**. Sin reintento el guion termina
+diciendo "listo" con dos tercios de los sonidos sin generar, **y no falla: se queda callado**. Reencola
+hasta cinco veces por clip; con eso salieron los veinticinco.
+
+#### LOS PROMPTS PIDEN UN SONIDO FUERTE, Y ES LA LECCIÓN DE REZUNO OTRA VEZ
+
+*"Un chasquido suave"* devuelve un archivo con pico 0,005, o sea silencio. Los prompts describen el
+**objeto físico** y piden *fuerte, cerca y seco* —«una campanita de latón golpeada dos veces», «ocho
+patas duras corriendo sobre baldosas»— y **el nivel lo pone el código**, nunca el prompt.
+
+#### LO PROCEDURAL NO SE BORRA
+
+Las diez funciones `playX` que el juego ya tenía siguen enteras: lo único que se les agrega es una
+primera línea que intenta la muestra y **cae al oscilador si el MP3 no decodifica**. Un juego mudo por
+un decodificador es peor que un juego con bips, y ya pasó una vez en Campo de Tiro.
+
+#### LA CAMA NUNCA SONABA EN EL PRÓLOGO, Y NO FALLABA NADA
+
+`pbCama(nom)` anotaba el nombre **antes** de arrancar la fuente. Con el MP3 todavía decodificando, la
+cama quedaba marcada como puesta y el `if` de la primera línea no la volvía a intentar **nunca**:
+medido en el cuarto, `cama: b_room` con **`suena: false` y nivel 0** — el prólogo entero en silencio.
+El nombre se anota recién cuando la fuente arrancó de verdad. Medido después: **rms 0,0325 en el
+cuarto**.
+
+Y la cama va con un `BufferSource` en bucle y no con un `<audio loop>`: el loop de un `<audio>` vuelve
+al cero con un hueco de milisegundos y en un clip de ocho segundos eso se escucha en cada vuelta. Más
+la **cola fundida sobre la cabeza** al hornear, que es la costura de una textura en una dimensión.
+
+#### LA PISADA VA ATADA A LA FASE DEL CABECEO
+
+`bobTimer` es el número que mueve la cámara, así que el sonido y el balanceo **son el mismo número** y
+no se pueden desincronizar. Es la corrección que en Maicol convirtió veinticuatro pisadas por segundo
+superpuestas —o sea ruido blanco— en un trote.
+
+#### MEDIDO AL CERRAR
+
+**25 de 25 declarados, 25 decodificados, 0 fallados.** Medido con un analizador colgado del maestro,
+que es lo único que prueba que sonó: cama del cuarto **rms 0,0325**, un monstruo encima **0,178**
+—o sea **5,5 veces la cama**— y una acción 0,177. La cama cambia con el sitio, jugado de verdad:
+`b_room` → `b_store` → `b_school`, las tres sonando. **269 llamadas de dibujo y 39.468 triángulos en
+la escuela**, o sea sin cambio: esto no agrega geometría. `window.__errs` y `window.__pbFallas` vacíos
+en las dos corridas. El HTML pasó de 3,00 a **3,53 MB**, y esos 515 KB son los veinticinco sonidos.
+
 ### Nonagésima vuelta (2026-09-03): **PUERTA BLANCA** — el prólogo abre despertándose en el piso
 
 Pedido: *"haz que al principio en la habitación negra haya una animación del jugador despertándose en
