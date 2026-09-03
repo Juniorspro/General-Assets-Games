@@ -160,6 +160,20 @@ function dibCuadro(k, i, x, y, alto, esp, lienzo){
   return true;
 }
 
+/* ── Y UNA VARIANTE CON ANCHO PROPIO, QUE HACE FALTA MAS DE LO QUE PARECE ──
+   `dibCuadro` saca el ancho de la proporción del cuadro, que es lo correcto para
+   un personaje. Pero un bloque de TORRE se CORTA: su ancho cambia piso a piso,
+   así que dibujar el sprite proporcional deja el bloque angosto con la imagen
+   entera del ancho — o sea que lo que se ve no es lo que choca. Acá el ancho y
+   el alto los pone quien llama, y el sprite se estira. */
+function dibCuadroWH(k, i, x, y, w, h, lienzo){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const src = lienzo || o.im;
+  g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, x - w/2, y - h/2, w, h);
+  return true;
+}
+
 /* ── EL TEÑIDO: LA HOJA SE PINTA UNA VEZ Y SE GUARDA ──
    El personaje se generó con la ropa BLANCA para poder pintarla del color que
    la regla pida. Pintar por cuadro serían tres operaciones de lienzo sesenta

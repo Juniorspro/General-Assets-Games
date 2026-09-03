@@ -441,6 +441,22 @@ const JUEGO = {
   pinta(g){
     for (const p of TG.tubos){
       const i = p.i;
+      /* ── LA ENTRADA EN ESCENA ──
+         Cada tubo llega en su turno, creciendo desde su base y con el rebote
+         que trae `entradaK`. Y en régimen `entradaK` devuelve 1, así que el
+         `scale` es la identidad y en partida esto no cuesta nada: no hay un
+         segundo camino de dibujo que se pueda desincronizar del primero. */
+      const ke = entradaK(i, TG.tubos.length);
+      if (ke <= 0) continue;
+      const esc = ke < 1;
+      if (esc){
+        g.save();
+        /* se escala desde la BASE del tubo y no desde su centro: creciendo desde
+           el centro, el tubo se hunde en la mesa la mitad de su alto */
+        g.translate(p.x, p.y + p.h);
+        g.scale(1, ke);
+        g.translate(-p.x, -(p.y + p.h));
+      }
       tTubo(g, p, i === T_sel);
       const a = T_tubos[i];
       for (let k = 0; k < a.length; k++){
@@ -450,6 +466,7 @@ const JUEGO = {
         const alza = (i === T_sel && k === a.length-1) ? 16 : 0;
         tBola(g, b.x, b.y - alza, TG.r, a[k]);
       }
+      if (esc) g.restore();
     }
     if (T_anim){
       /* el arco: la bola sube, cruza y baja. En linea recta atraviesa los tubos

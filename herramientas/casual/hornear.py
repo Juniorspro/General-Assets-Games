@@ -22,6 +22,7 @@ Y la escala de la escala de frutas se ajusto a lo que volvio: nueve y no diez.
 Pelear con el generador para que devuelva la manzana habria costado dos
 generaciones para agregar una fruta redonda y roja que se confunde con el caqui.
 """
+import re
 import io, json, os, sys
 from PIL import Image
 import numpy as np
@@ -57,6 +58,47 @@ JUEGOS = {
                       # faltan, justo en el orden de T_COL
                       celdas=[(0,0),(0,1),(0,2),(0,3),(0,4),(0,5),(0,6),(0,7),
                               (2,4),(2,5),(2,6),(2,7)]),
+    },
+    'torre': {
+        # ── LA REJA VOLVIO 2x4 Y NO 4x2, Y SE MIDIO ──
+        # Se pidieron cuatro columnas por dos filas y el generador devolvio dos
+        # por cuatro. No es un error suyo: la reja del prompt es una sugerencia,
+        # y por eso las celdas salen de LO QUE MIDIO y no de lo que se pidio.
+        'bloques': dict(archivo='sp_bloques.png', tipo='hoja', lado=192,
+                        celdas=[(0,0),(0,1),(1,0),(1,1),(2,0),(2,1),(3,0),(3,1)]),
+    },
+    'dados': {
+        # volvio 3x3: las seis caras estan en las dos primeras filas y la
+        # tercera las repite. Se leen las dos de arriba.
+        'caras': dict(archivo='sp_dados.png', tipo='hoja', lado=160,
+                      celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
+        # ── ESTA VA CON REJA DECLARADA, Y ES LA EXCEPCION ──
+        # Medida por islas da [6,5,4,4]: el icono «1→6» son tres glifos sueltos
+        # y la primera fila cuenta seis columnas. Con la reja declarada 4x4 cada
+        # celda cae donde tiene que caer.
+        'reliq': dict(archivo='sp_reliq.png', tipo='hoja', lado=96, reja=(4, 4),
+                      celdas=[(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3),
+                              (2,0),(2,1),(2,2),(2,3)]),
+    },
+    'canica': {
+        # la reja volvio con DOS filas: arriba una canica sola centrada y abajo
+        # las tres piezas. Las celdas se leen de la de abajo, que es la buena —
+        # y por eso la reja se MIDE y no se supone.
+        'cosas': dict(archivo='sp_canica.png', tipo='hoja', lado=160,
+                      celdas=[(1,0),(1,1),(1,2)]),
+        'mejo': dict(archivo='sp_mejo.png', tipo='hoja', lado=96, reja=(4, 4),
+                     celdas=[(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3),
+                             (2,0),(2,1),(2,2),(2,3)]),
+        'madera': dict(archivo='sp_madera.png', tipo='tex', lado=384),
+    },
+    'chispa': {
+        'metal': dict(archivo='sp_metal.png', tipo='tex', lado=256),
+    },
+    'piedra': {
+        'manos': dict(archivo='sp_manos.png', tipo='hoja', lado=224,
+                      celdas=[(0,0),(0,1),(0,2)]),
+        'iconos': dict(archivo='sp_cartas.png', tipo='hoja', lado=96, reja=(4, 4),
+                       celdas=[(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3)]),
     },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
@@ -203,9 +245,28 @@ def celda_cuadrada(im, caja, lado):
     return lienzo.resize((lado, lado), Image.LANCZOS)
 
 
+def reja_fija(im, cols, filas):
+    """La reja cortada en partes iguales, sin medir.
+
+    ── CUANDO MEDIR NO SIRVE, Y HAY UN CASO CONCRETO ──
+    `mide_reja` separa por islas de tinta, y eso es lo correcto casi siempre:
+    encuentra la reja aunque el generador la haya puesto donde se le cantó. Pero
+    falla cuando UN dibujo son varias islas — medido, la hoja de reliquias tiene
+    un icono que dice «1→6», o sea TRES glifos separados, y la fila se midió con
+    seis columnas en vez de cuatro. A partir de ahí los índices están corridos y
+    cada carta muestra el icono de otra, que es peor que no tener icono.
+    Con la reja declarada, cada celda es un rectángulo exacto y el relleno de
+    alfa se sigue haciendo por celda, así que no se pierde nada de lo otro.
+    """
+    W, H = im.size
+    cw, ch = W/cols, H/filas
+    return [[(int(c*cw), int(f*ch), int((c+1)*cw), int((f+1)*ch))
+             for c in range(cols)] for f in range(filas)]
+
+
 def hoja(nom, cf):
     im = abre(cf['archivo'])
-    reja = mide_reja(im)
+    reja = (reja_fija(im, *cf['reja']) if cf.get('reja') else mide_reja(im))
     lado = cf['lado']
     piezas = []
     for (f, c) in cf['celdas']:
@@ -281,6 +342,31 @@ def sello(nom, cf):
     return p, 1, cf['lado'], cf['lado'], None, cuerpos([p])
 
 
+def textura(nom, cf):
+    """una textura para repetir con `createPattern`, COSIDA por los bordes.
+
+    ── Y ACA SI HAY QUE COSERLA A MANO ──
+    En three.js la costura se resuelve con `MirroredRepeatWrapping`: la copia de
+    al lado va dada vuelta, asi que los dos bordes que se tocan son el MISMO
+    borde y la costura no puede existir. Un contexto 2D no tiene eso —
+    `createPattern` solo repite— asi que la unica salida es fundir la banda de
+    un borde sobre la opuesta. Ensucia un poco el centro, que es el precio, y
+    para una madera de fondo detras de un laberinto es invisible.
+    """
+    im = abre(cf['archivo']).convert('RGB')
+    L = cf.get('lado', 256)
+    im = im.resize((L, L), Image.LANCZOS)
+    a = np.asarray(im).astype(np.float32)
+    b = max(4, int(L*0.12))
+    f = np.linspace(0, 1, b).reshape(1, -1, 1)
+    # el borde derecho se funde sobre el izquierdo, y despues igual en vertical
+    a[:, :b] = a[:, :b]*f + a[:, L-b:][:, ::-1]*(1 - f)
+    fv = f.reshape(-1, 1, 1)
+    a[:b, :] = a[:b, :]*fv + a[L-b:, :][::-1]*(1 - fv)
+    out = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGB')
+    return out, 1, L, L, None, ([1.0], [0.5])
+
+
 def webp(im, q=86):
     b = io.BytesIO()
     im.save(b, 'WEBP', quality=q, method=6)
@@ -304,7 +390,8 @@ def main():
             if not os.path.exists(p):
                 print('  falta crudo/%s, se saltea' % cf['archivo'])
                 continue
-            fn = hoja if cf['tipo'] == 'hoja' else sello
+            fn = (hoja if cf['tipo'] == 'hoja' else
+                  (textura if cf['tipo'] == 'tex' else sello))
             tira, n, w, h, medida, cu = fn(nom, cf)
             b = webp(tira)
             img[nom] = dict(d=dataurl(b), n=n, w=w, h=h, esc=cu[0], cy=cu[1])
@@ -314,12 +401,28 @@ def main():
                      ('  (reja medida ' + 'x'.join(map(str, medida)) + ')') if medida else ''))
         if not img:
             continue
+        # ── SE MERGEA, NO SE PISA ──
+        # Este script escribia el archivo entero con `{'img': img, 'son': {}}`,
+        # y desde que hay tres horneados que escriben ahi —los sprites, los
+        # fondos y el audio— eso BORRA el trabajo de los otros dos: correr este
+        # dejaba los ocho juegos sin fondo y sin musica. Y no falla: el juego
+        # arranca igual, con `AS.son` vacio, y se ve como que el audio nunca se
+        # hizo. Se lee lo que hay y se actualizan SOLO las claves propias.
         dest = os.path.join(ASSETS, j + '.js')
-        cuerpo = ('/* Generado por herramientas/casual/hornear.py — NO editar a mano.\n'
-                  '   Las imagenes crudas viven en herramientas/casual/crudo/ y no se versionan\n'
-                  '   enteras: lo que se versiona es esto, que es lo que el juego usa. */\n'
-                  'const AS = ' + json.dumps({'img': img, 'son': {}}, ensure_ascii=False) + ';\n')
-        io.open(dest, 'w', encoding='utf8').write(cuerpo)
+        AS = {'img': {}, 'son': {}}
+        cab = ('/* Generado por herramientas/casual/hornear*.py — NO editar a mano.\n'
+               '   Las imagenes crudas viven en herramientas/casual/crudo/ y no se versionan\n'
+               '   enteras: lo que se versiona es esto, que es lo que el juego usa. */\n')
+        if os.path.exists(dest):
+            t = io.open(dest, encoding='utf8').read()
+            m = re.search(r'const AS = (\{.*\});\s*$', t, re.S)
+            if m:
+                AS = json.loads(m.group(1))
+            cab = t[:t.index('const AS =')]
+        AS.setdefault('img', {}).update(img)
+        AS.setdefault('son', {})
+        io.open(dest, 'w', encoding='utf8').write(
+            cab + 'const AS = ' + json.dumps(AS, ensure_ascii=False) + ';\n')
         print('%-9s -> %s  %.1f KB de assets' % (j, dest, total/1024))
 
 

@@ -373,7 +373,12 @@ function rBloque(g, x, y, w, i, gi){
   g.save();
   g.translate(x, y);
   if (gi) g.rotate(gi);
-  if (dibCuadro('bloques', i % 8, 0, h/2, h, false)){ g.restore(); return; }
+  /* ── EL SPRITE SE ESTIRA AL ANCHO DE VERDAD ──
+     Con `dibCuadro` el ancho sale de la proporción del cuadro, y un bloque de
+     este juego se CORTA: a los veinte pisos mide un tercio de lo que medía. Con
+     el sprite proporcional, lo que se ve no es lo que choca — y en un juego que
+     se pierde por ancho, eso es hacer perder al jugador por el dibujo. */
+  if (dibCuadroWH('bloques', i % 8, 0, 0, w, h)){ g.restore(); return; }
   const gr = g.createLinearGradient(0, -h/2, 0, h/2);
   gr.addColorStop(0, rColor(i));
   gr.addColorStop(1, rColorOsc(i));

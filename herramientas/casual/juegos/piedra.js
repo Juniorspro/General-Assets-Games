@@ -618,11 +618,16 @@ function pMano(g, x, y, r, sim, mia){
   g.fillStyle = '#000'; g.fill();
   g.globalAlpha = 1;
   g.restore();
-  if (sim < 0){
-    /* el puño de la cuenta atrás: es el símbolo de piedra, que es lo que se hace
-       de verdad mientras se cuenta */
-    pSimbolo(g, x, y, r*0.62, 0, col);
-  } else pSimbolo(g, x, y, r*0.62, sim, col);
+  /* ── LA DEL RIVAL VIENE DADA VUELTA, Y ESO SE PERDIÓ AL SACAR EL ANTEBRAZO ──
+     Medido en la captura: los dos puños apuntaban para el mismo lado, o sea que
+     parecían dos manos del mismo jugador. Lo que dice que hay dos personas
+     enfrentadas no es la posición —una arriba y otra abajo— sino que las manos
+     entren desde lados opuestos, que es lo que pasa en una mesa de verdad. */
+  g.save();
+  g.translate(x, y);
+  if (!mia) g.rotate(Math.PI);
+  pSimbolo(g, 0, 0, r*0.62, sim < 0 ? 0 : sim, col);
+  g.restore();
 }
 /* ── EL SÍMBOLO NECESITA SOMBRA Y CONTORNO, Y ESO COSTÓ UNA CAPTURA ──
    La primera versión dibujaba los nudillos DEL MISMO COLOR que el puño, con el
@@ -634,6 +639,14 @@ function pMano(g, x, y, r, sim, mia){
        misma cuenta que hace que la canica de CANICA se lea a esfera—, y
      · un CONTORNO oscuro, que es lo que la separa del fondo. */
 function pSimbolo(g, x, y, r, sim, col){
+  /* ── LA MANO GENERADA PISA A LA DIBUJADA ──
+     Y la dibujada se queda entera de respaldo, que es la regla del repo: un
+     data URI decodifica de forma asincrónica, así que los primeros cuadros —o
+     todos, si la imagen no llega— tienen que tener mano igual. Va con el ancho
+     y el alto propios porque los tres cuadros salen del mismo lado de la reja y
+     una mano abierta es más ancha que un puño: proporcional, la tijera saldría
+     recortada. */
+  if (dibCuadroWH('manos', sim, x, y, r*2.5, r*2.5)) return;
   g.save(); g.translate(x, y);
   /* el degradado va de un tono claro arriba a la izquierda al color base: es
      una luz, no un adorno, y viene del mismo lado en los tres símbolos */
@@ -727,9 +740,12 @@ function pCartas(g, lista){
   for (let i = 0; i < lista.length; i++){
     const x = PC.x0 + i*(PC.w + 14);
     caja2(x, PC.y, PC.w, PC.h, 18, 'rgba(16,10,18,.95)', 'rgba(255,138,92,.60)');
-    texto(TX('m_' + lista[i].k), x + PC.w/2, PC.y + 40, 19, '#ffd76a', '800', 'center');
+    const ii = P_CARTAS.findIndex(c => c.k === lista[i].k);
+    const conIc = ii >= 0 && dibCuadroWH('iconos', ii, x + PC.w/2, PC.y + 46, 52, 52);
+    const y0 = conIc ? PC.y + 92 : PC.y + 40;
+    texto(TX('m_' + lista[i].k), x + PC.w/2, y0, 19, '#ffd76a', '800', 'center');
     const pal = TX('d_' + lista[i].k).split(' ');
-    let ln = '', yy = PC.y + 84;
+    let ln = '', yy = y0 + 34;
     for (const p of pal){
       const pr = ln ? ln + ' ' + p : p;
       g.font = '600 15px ui-sans-serif,system-ui,sans-serif';

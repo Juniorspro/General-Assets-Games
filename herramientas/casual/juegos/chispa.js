@@ -444,8 +444,16 @@ const JUEGO = {
 function cCano(g, x, y, m, on, gi, fuente){
   const p = cCelXY(x, y), s = CG.s;
   const gr = s*0.20, largo = s*0.5;
+  /* ── LA ENTRADA EN ESCENA, EN DIAGONAL ──
+     El índice no es `cIx(x,y)` sino `x+y`: por índice de celda la reja se llena
+     fila por fila y se lee a una barra que baja, y en diagonal se lee a que la
+     reja se armó desde una esquina. Es el mismo número de líneas y se ve
+     completamente distinto. */
+  const ke = entradaK(x + y, C_W + C_H - 2);
+  if (ke <= 0) return;
   g.save();
   g.translate(p.x, p.y);
+  if (ke < 1) g.scale(ke, ke);
   if (gi) g.rotate(gi);
   const col = on ? '#f2c33c' : '#4a5a68';
   const bor = on ? '#8a6410' : '#26313b';
@@ -456,6 +464,13 @@ function cCano(g, x, y, m, on, gi, fuente){
     g.fillStyle = '#f2c33c'; g.fill();
     g.restore();
   }
+  /* ── EL METAL GENERADO VA SOBRE EL CAÑO APAGADO Y NO SOBRE EL ENCENDIDO ──
+     Un caño con corriente tiene que leerse por su COLOR, que es la única señal
+     de que la corriente llegó; poniéndole la foto encima, el dorado se ensucia
+     con la veta y el jugador pierde de un cuadro a otro la información que este
+     juego entero existe para dar. El apagado, en cambio, no informa nada más que
+     «no llega», así que ahí la textura es todo ganancia. */
+  const met = on ? null : patron('metal');
   g.lineCap = 'butt';
   for (let d = 0; d < 4; d++){
     if (!(m & (1 << d))) continue;
@@ -465,6 +480,8 @@ function cCano(g, x, y, m, on, gi, fuente){
     g.fillRect(-gr/2 - 2, -largo, gr + 4, largo + 2);
     g.fillStyle = col;
     g.fillRect(-gr/2, -largo, gr, largo + 2);
+    if (met){ g.globalAlpha = 0.62; g.fillStyle = met;
+              g.fillRect(-gr/2, -largo, gr, largo + 2); g.globalAlpha = 1; }
     /* la veta clara del medio: es lo que hace que un brazo se lea a caño y no a
        un palito, y cuesta un rectángulo */
     g.fillStyle = on ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.07)';
@@ -478,6 +495,8 @@ function cCano(g, x, y, m, on, gi, fuente){
   caja2(-cs/2 - 2, -cs/2 - 2, cs + 4, cs + 4, 4, bor, null);
   g.fillStyle = col;
   caja2(-cs/2, -cs/2, cs, cs, 3, col, null);
+  if (met){ g.globalAlpha = 0.62; caja2(-cs/2, -cs/2, cs, cs, 3, met, null);
+            g.globalAlpha = 1; }
   if (fuente){
     /* la fuente: un disco propio, porque es la única celda que el jugador tiene
        que poder encontrar de una ojeada */

@@ -248,3 +248,40 @@ function ambAdelante(){
      así que pinta los bordes y no tapa el tablero */
   ambDestello();
 }
+
+/* ══════════════════ LA ENTRADA EN ESCENA ══════════════════
+   Lo que separa un tablero que APARECE de uno que ENTRA. Es lo más barato que
+   existe —un escalar por pieza— y es lo que más se nota, porque el primer
+   cuadro de cada nivel es el único que el jugador mira entero.
+
+   ── POR QUÉ ESCALONADA Y NO TODA JUNTA ──
+   Con todas las piezas entrando a la vez, el tablero completo se agranda de
+   golpe: se lee a que la pantalla hizo zoom, no a que las piezas llegaron.
+   Escalonando el arranque por índice, cada pieza llega en su turno y lo que se
+   lee es una repartida. El desfase total se topa, porque en un tablero de
+   ochenta celdas un desfase por celda serían cuatro segundos antes de poder
+   tocar nada.
+
+   ── Y `entradaK` DEVUELVE 1 CUANDO NO HAY ENTRADA ──
+   O sea que multiplicar por él no cambia nada en régimen: un juego lo puede
+   meter en su dibujo sin un `if`, y eso es lo que hace que no haya dos caminos
+   —uno con animación y otro sin— que se puedan desincronizar. */
+const ENT = { t: 0, dur: 0.62, desf: 0.34 };
+function entradaArranca(dur, desf){
+  ENT.t = 0;
+  ENT.dur = dur || 0.62;
+  ENT.desf = desf == null ? 0.34 : desf;
+}
+function entradaPaso(dt){ if (ENT.t <= ENT.dur + ENT.desf) ENT.t += dt; }
+/* el `k` de la pieza `i` de `n`: 0 antes de que le toque, 1 cuando llegó */
+function entradaK(i, n){
+  if (ENT.t > ENT.dur + ENT.desf) return 1;
+  const d = n > 1 ? ENT.desf*(i/(n - 1)) : 0;
+  const u = (ENT.t - d)/ENT.dur;
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  /* pasa de largo y vuelve: una pieza que llega y se clava se lee a que se
+     pegó, y una que rebota un cinco por ciento se lee a que la apoyaron */
+  return 1 + Math.sin(u*Math.PI)*0.10 - (1 - u)*(1 - u);
+}
+const entradaVa = () => ENT.t <= ENT.dur + ENT.desf;

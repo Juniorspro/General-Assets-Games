@@ -452,7 +452,17 @@ const JUEGO = {
     /* los dados */
     for (let i = 0; i < D_dados.length; i++){
       const d = D_dados[i], c = dCaja(i);
+      /* la entrada en escena: los dados caen sobre el fieltro uno por uno */
+      const ke = entradaK(i, D_dados.length);
+      if (ke <= 0) continue;
+      if (ke < 1){
+        g.save();
+        g.translate(c.x + c.s/2, c.y + c.s/2);
+        g.scale(ke, ke);
+        g.translate(-(c.x + c.s/2), -(c.y + c.s/2));
+      }
       dDado(g, c.x, c.y - (d.guardado ? 20 : 0), c.s, d.v, d.guardado, d.gi);
+      if (ke < 1) g.restore();
     }
     /* ── LO QUE LOS DADOS VALEN AHORA MISMO ──
        El nombre del combo y los puntos que pagaria, arriba de la fila. Es la
@@ -704,6 +714,21 @@ function dDado(g, x, y, s, v, guardado, gi){
   g.beginPath(); g.ellipse(0, s*0.56, s*0.42, s*0.10, 0, 0, 7);
   g.fillStyle = '#000'; g.fill();
   g.restore();
+  /* ── LA CARA GENERADA, Y EL TEÑIDO DEL GUARDADO SE QUEDA ──
+     El dado horneado es blanco de marfil, así que un dado guardado se sigue
+     marcando con el velo dorado ENCIMA en vez de con otro sprite: seis caras
+     por dos estados serían doce imágenes para decir algo que un velo dice. */
+  if (dibCuadroWH('caras', Math.max(0, Math.min(5, v - 1)), 0, 0, s, s)){
+    if (guardado){
+      g.globalAlpha = 0.34;
+      caja2(-s/2, -s/2, s, s, s*0.18, '#f2c33c', null);
+      g.globalAlpha = 1;
+      g.strokeStyle = '#f2c33c'; g.lineWidth = 3;
+      caja2(-s/2, -s/2, s, s, s*0.18, null, '#f2c33c');
+    }
+    g.restore();
+    return;
+  }
   if (!dibCuadro('dados', v - 1, 0, s/2, s, false)){
     const r = s*0.20;
     /* el cuerpo con degradado y el canto claro arriba: un cuadrado de un solo

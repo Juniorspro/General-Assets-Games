@@ -1268,10 +1268,21 @@ const JUEGO = {
     g.beginPath(); g.moveTo(0, bMuerte()); g.lineTo(AN, bMuerte()); g.stroke();
     g.setLineDash([]);
     g.restore();
-    for (let f = 0; f < B_g.length; f++) for (let c = 0; c < bAncho(f); c++){
-      if (B_g[f][c] < 0) continue;
-      const p = bXY(f, c);
-      bBurbuja(g, p.x, p.y, B_r, B_g[f][c]);
+    /* ── LA ENTRADA EN ESCENA: FILA POR FILA Y DESDE ARRIBA ──
+       Acá el índice SÍ es la fila y no la diagonal, y es al revés que en CHISPA
+       por una razón: el tablero de este juego cuelga del techo, así que lo que
+       se lee a natural es que las filas bajen en orden. Escalonar por celda
+       daría cincuenta y seis llegadas, o sea casi dos segundos antes del primer
+       tiro. */
+    for (let f = 0; f < B_g.length; f++){
+      const ke = entradaK(f, B_g.length);
+      if (ke <= 0) continue;
+      for (let c = 0; c < bAncho(f); c++){
+        if (B_g[f][c] < 0) continue;
+        const p = bXY(f, c);
+        /* baja desde el techo y llega con el rebote de `entradaK` */
+        bBurbuja(g, p.x, p.y - (1 - ke)*(p.y - B_y0 + B_r*2), B_r, B_g[f][c]);
+      }
     }
     for (const c of B_caen) bBurbuja(g, c.x, c.y, B_r, c.col);
     if (B_bola) bBurbuja(g, B_bola.x, B_bola.y, B_r, B_bola.col);
@@ -1874,6 +1885,20 @@ function dibCuadro(k, i, x, y, alto, esp, lienzo){
   if (esp) g.scale(-1, 1);
   g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, -w/2, -alto, w, alto);
   g.restore();
+  return true;
+}
+
+/* ── Y UNA VARIANTE CON ANCHO PROPIO, QUE HACE FALTA MAS DE LO QUE PARECE ──
+   `dibCuadro` saca el ancho de la proporción del cuadro, que es lo correcto para
+   un personaje. Pero un bloque de TORRE se CORTA: su ancho cambia piso a piso,
+   así que dibujar el sprite proporcional deja el bloque angosto con la imagen
+   entera del ancho — o sea que lo que se ve no es lo que choca. Acá el ancho y
+   el alto los pone quien llama, y el sprite se estira. */
+function dibCuadroWH(k, i, x, y, w, h, lienzo){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const src = lienzo || o.im;
+  g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, x - w/2, y - h/2, w, h);
   return true;
 }
 
@@ -2586,6 +2611,43 @@ function ambAdelante(){
      así que pinta los bordes y no tapa el tablero */
   ambDestello();
 }
+
+/* ══════════════════ LA ENTRADA EN ESCENA ══════════════════
+   Lo que separa un tablero que APARECE de uno que ENTRA. Es lo más barato que
+   existe —un escalar por pieza— y es lo que más se nota, porque el primer
+   cuadro de cada nivel es el único que el jugador mira entero.
+
+   ── POR QUÉ ESCALONADA Y NO TODA JUNTA ──
+   Con todas las piezas entrando a la vez, el tablero completo se agranda de
+   golpe: se lee a que la pantalla hizo zoom, no a que las piezas llegaron.
+   Escalonando el arranque por índice, cada pieza llega en su turno y lo que se
+   lee es una repartida. El desfase total se topa, porque en un tablero de
+   ochenta celdas un desfase por celda serían cuatro segundos antes de poder
+   tocar nada.
+
+   ── Y `entradaK` DEVUELVE 1 CUANDO NO HAY ENTRADA ──
+   O sea que multiplicar por él no cambia nada en régimen: un juego lo puede
+   meter en su dibujo sin un `if`, y eso es lo que hace que no haya dos caminos
+   —uno con animación y otro sin— que se puedan desincronizar. */
+const ENT = { t: 0, dur: 0.62, desf: 0.34 };
+function entradaArranca(dur, desf){
+  ENT.t = 0;
+  ENT.dur = dur || 0.62;
+  ENT.desf = desf == null ? 0.34 : desf;
+}
+function entradaPaso(dt){ if (ENT.t <= ENT.dur + ENT.desf) ENT.t += dt; }
+/* el `k` de la pieza `i` de `n`: 0 antes de que le toque, 1 cuando llegó */
+function entradaK(i, n){
+  if (ENT.t > ENT.dur + ENT.desf) return 1;
+  const d = n > 1 ? ENT.desf*(i/(n - 1)) : 0;
+  const u = (ENT.t - d)/ENT.dur;
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  /* pasa de largo y vuelve: una pieza que llega y se clava se lee a que se
+     pegó, y una que rebota un cinco por ciento se lee a que la apoyaron */
+  return 1 + Math.sin(u*Math.PI)*0.10 - (1 - u)*(1 - u);
+}
+const entradaVa = () => ENT.t <= ENT.dur + ENT.desf;
 /* ══════════════════════ EL ARMADO Y EL BUCLE ══════════════════════
    Todo lo que sigue es del núcleo y ninguno de los cinco juegos lo toca. El
    contrato de un juego es corto a propósito:
@@ -2778,6 +2840,9 @@ function empieza(n){
   rachaCero();
   jugoCero();
   JUEGO.arranca(NIVEL);
+  /* la entrada en escena arranca DESPUES de `arranca()`, porque cuantas piezas
+     hay lo decide el nivel que se acaba de generar */
+  entradaArranca();
   MODO = 'juega';
   verPantalla(null);
   musQuiere('mus');
@@ -2886,7 +2951,7 @@ function bucle(){
     /* el ambiente corre SIEMPRE, también en el menú y en el panel de final: es
        lo que hace que las cuatro pantallas se vean del mismo lugar en vez de
        cuatro pantallas distintas pegadas */
-    ambPaso(dt); destPaso(dt);
+    ambPaso(dt); destPaso(dt); entradaPaso(dt);
     if (MODO === 'juega' || MODO === 'fin') jugoPaso(dt);
   }
 

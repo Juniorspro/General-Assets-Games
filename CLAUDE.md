@@ -508,6 +508,86 @@ cámara existen en el banco: lo que está probado es el camino entero con sensor
 sacudida llega a `tira()`, la inclinación mueve la canica, el gesto se lee en el «¡ya!»— y no cómo se
 siente sacudir un teléfono de verdad.
 
+#### Y DESPUÉS, EN LA MISMA VUELTA: **LO PROCEDURAL PASA A SER GENERADO**
+
+Pedido: *"cambia todo lo procedural por cosas generadas con Rezona si YAYAYAYAYAYYAHS FULL JUEGAZO
+ANIMADO ANIMACIONES ETC"*. Nueve hojas más: las tres manos de PIEDRA, los ocho bloques de TORRE, las
+seis caras de dado, la canica con su chispa y su pozo, dos texturas embaldosadas —madera y metal— y
+**tres hojas de iconos**, una por juego con cartas.
+
+**LOS DOCE ICONOS DE CADA HOJA COINCIDEN UNO A UNO CON SU LISTA**, y eso no es suerte: el prompt
+enumera los doce **en el orden de la lista del código**, así que el índice de la carta es el índice
+del sprite y no hace falta una tabla que alguien tenga que mantener.
+
+**LA REJA QUE SE PIDE ES UNA SUGERENCIA.** Se pidieron los bloques en 4×2 y volvieron en **2×4**; los
+dados en 3×2 y volvieron en **3×3 con la última fila repetida**; la canica volvió con una fila de una
+celda y otra de tres. Por eso las celdas del manifiesto salen de **lo que `mide_reja` midió** y no de
+lo que se pidió — y el `assert` de la fila fue justamente lo que lo cantó en voz alta en vez de
+hornear ocho bloques cruzados.
+
+**Y HAY UN CASO EN QUE MEDIR NO SIRVE.** La hoja de reliquias se midió `[6,5,4,4]`: uno de sus iconos
+dice **«1→6», que son TRES glifos sueltos**, así que la primera fila cuenta seis columnas y a partir
+de ahí cada carta muestra el icono de otra. Ahí la reja va **declarada** y cada celda es un rectángulo
+exacto; el relleno de alfa se sigue haciendo por celda, así que no se pierde nada de lo otro.
+
+**Y `hornear.py` PISABA EL ARCHIVO ENTERO.** Escribía `{'img': img, 'son': {}}`, y desde que hay TRES
+horneados que escriben ahí —sprites, fondos y audio— correr éste **borraba el trabajo de los otros
+dos**: los ocho juegos quedaban sin fondo y sin música. Y no falla: el juego arranca igual, con
+`AS.son` vacío, y se ve como que el audio nunca se hizo. Ahora los tres mergean.
+
+**TRES COSAS QUE NO SE PODÍAN RESOLVER CON EL GANCHO DE SIEMPRE:**
+
+1. **EL BLOQUE DE TORRE SE CORTA, ASÍ QUE SU SPRITE HAY QUE ESTIRARLO.** `dibCuadro` saca el ancho de
+   la proporción del cuadro, que es lo correcto para un personaje; un bloque de este juego mide a los
+   veinte pisos un tercio de lo que medía. Con el sprite proporcional, **lo que se ve no es lo que
+   choca** — y en un juego que se pierde por ancho, eso es hacer perder al jugador por el dibujo.
+   Entró `dibCuadroWH`, donde el ancho y el alto los pone quien llama.
+2. **EL METAL DE CHISPA VA SÓLO SOBRE EL CAÑO APAGADO.** Un caño con corriente tiene que leerse por su
+   COLOR, que es la única señal de que la corriente llegó; con la foto encima, el dorado se ensucia
+   con la veta y el jugador pierde de un cuadro a otro la información que ese juego entero existe para
+   dar. El apagado no informa nada más que «no llega», así que ahí la textura es todo ganancia.
+3. **Y LA MADERA VA COMO PATRÓN ANCLADO AL MUNDO.** `createPattern` queda atado al origen de la
+   TRANSFORMACIÓN del contexto y no al rectángulo que se rellena: dibujado sin correr el lienzo, el
+   patrón se desliza por debajo de la bandeja cuando la bandeja cambia de sitio entre pisos.
+
+#### LA ENTRADA EN ESCENA, QUE ES LO QUE PIDE «ANIMADO»
+
+`entradaK(i, n)` en el núcleo: un escalar por pieza que va de 0 a 1 con **desfase por índice**. Con
+todas las piezas entrando a la vez el tablero completo se agranda de golpe y se lee a que la pantalla
+hizo zoom; escalonado, se lee a una repartida. Y **pasa de largo y vuelve**: una pieza que llega y se
+clava se lee a que se pegó.
+
+**DEVUELVE 1 EN RÉGIMEN, y eso es lo que lo hace seguro:** multiplicar por él no cambia nada una vez
+que la entrada terminó, así que un juego lo mete en su dibujo sin un `if` y no hay dos caminos —uno
+con animación y otro sin— que se puedan desincronizar.
+
+**Y EL ÍNDICE NO ES SIEMPRE EL MISMO, QUE ES LA MITAD DEL EFECTO.** En CHISPA y CANICA es `x+y`, o sea
+la DIAGONAL: por índice de celda la reja se llena fila por fila y se lee a una barra que baja. En
+BURBUJAS sí es la fila, y es al revés a propósito: ese tablero cuelga del techo, así que lo natural es
+que las filas bajen en orden. En CANICA, además, las paredes se **saltean** en vez de escalarse:
+escalar cada una obligaría a un `save`/`restore` por pared y perdería el trazo único, que es lo que
+hace que el laberinto cueste una orden de dibujo.
+
+#### TRES DEFECTOS QUE SÓLO SE VIERON EN LA CAPTURA, Y UNO QUE TIRÓ EL MÓDULO
+
+- **LAS DOS MANOS DE PIEDRA APUNTABAN PARA EL MISMO LADO.** El giro del rival vivía en `pMano`, que se
+  reescribió al sacar el antebrazo. Lo que dice que hay dos personas enfrentadas no es la posición
+  —una arriba y otra abajo— sino que las manos entren desde lados opuestos.
+- **LA SALIDA DE CANICA NO SE LEÍA.** Estaba en 0,12 de alfa, y sobre la madera generada era un
+  rectángulo gris que no se distinguía de una tabla: el jugador no sabía a dónde ir hasta juntar la
+  última chispa. Cerrada va con una cruz —«acá es, y todavía no»— y abierta se enciende y late.
+- **Y `const bx` DECLARADO DOS VECES EN LA MISMA FUNCIÓN.** La caja de la salida y la barra del reloj
+  lo usaban las dos: no es un aviso, **tira al parsear y se lleva el módulo entero** — medido, el juego
+  se quedaba en la pantalla de idioma con `__J` sin definir. Es la undécima vez en este repo.
+
+#### MEDIDO AL CERRAR
+
+**8 de 8**: assets cargados con `falladas: 0` (hasta 4 imágenes por juego), 10 de 10 clips
+decodificados, **cero solapamientos de HUD en castellano y en portugués**, los auto-jugadores corriendo
+—FRUTAS 21.229 puntos y 163 fusiones, TORRE 43 pisos con 13 perfectos, DADOS ronda 15, CANICA piso 7,
+PIEDRA duelo 4 con tasa 0,53 en cuatro mil vueltas— y `window.__errs` vacío en las veintiséis corridas.
+Tamaños: 542 · 500 · 457 · 453 · 481 · 627 · 559 · 666 KB.
+
 ### Nonagésima sexta vuelta (2026-09-03): **LOS CINCO MINIJUEGOS** — no se podía empezar a jugar, y la capa que les faltaba
 
 Reporte: *"mejora todo las mecánicas gráficos no quería taaan simple también sonidos etc, también que

@@ -492,10 +492,21 @@ const JUEGO = {
     g.beginPath(); g.moveTo(0, bMuerte()); g.lineTo(AN, bMuerte()); g.stroke();
     g.setLineDash([]);
     g.restore();
-    for (let f = 0; f < B_g.length; f++) for (let c = 0; c < bAncho(f); c++){
-      if (B_g[f][c] < 0) continue;
-      const p = bXY(f, c);
-      bBurbuja(g, p.x, p.y, B_r, B_g[f][c]);
+    /* ── LA ENTRADA EN ESCENA: FILA POR FILA Y DESDE ARRIBA ──
+       Acá el índice SÍ es la fila y no la diagonal, y es al revés que en CHISPA
+       por una razón: el tablero de este juego cuelga del techo, así que lo que
+       se lee a natural es que las filas bajen en orden. Escalonar por celda
+       daría cincuenta y seis llegadas, o sea casi dos segundos antes del primer
+       tiro. */
+    for (let f = 0; f < B_g.length; f++){
+      const ke = entradaK(f, B_g.length);
+      if (ke <= 0) continue;
+      for (let c = 0; c < bAncho(f); c++){
+        if (B_g[f][c] < 0) continue;
+        const p = bXY(f, c);
+        /* baja desde el techo y llega con el rebote de `entradaK` */
+        bBurbuja(g, p.x, p.y - (1 - ke)*(p.y - B_y0 + B_r*2), B_r, B_g[f][c]);
+      }
     }
     for (const c of B_caen) bBurbuja(g, c.x, c.y, B_r, c.col);
     if (B_bola) bBurbuja(g, B_bola.x, B_bola.y, B_r, B_bola.col);

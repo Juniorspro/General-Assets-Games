@@ -727,22 +727,55 @@ function kSorteaOferta(){
 function kPinta(g){
   kGeo();
   const s = KG.s;
-  /* la bandeja */
+  /* ── LA BANDEJA, Y SU MADERA VA COMO PATRON ANCLADO AL MUNDO ──
+     `createPattern` queda atado al origen de la TRANSFORMACION del contexto, no
+     al rectángulo que se rellena: dibujado sin correr el lienzo, el patrón se
+     desliza por debajo de la bandeja cuando la bandeja cambia de sitio entre
+     pisos. Es exactamente el defecto que ya costó una vuelta con el piso de
+     MANCHA. */
+  const pat = patron('madera');
   caja2(KG.x0 - 10, KG.y0 - 10, K_W*s + 20, K_H*s + 20, 14,
         'rgba(26,20,14,.78)', 'rgba(255,220,168,.22)');
+  if (pat){
+    g.save();
+    g.beginPath();
+    caja2(KG.x0 - 10, KG.y0 - 10, K_W*s + 20, K_H*s + 20, 14, null, null);
+    g.clip();
+    g.translate(KG.x0, KG.y0);
+    g.globalAlpha = 0.72;
+    g.fillStyle = pat;
+    g.fillRect(-10, -10, K_W*s + 20, K_H*s + 20);
+    g.restore();
+  }
   /* el piso de cada celda, con una trama que ancla el laberinto al mundo */
   g.fillStyle = 'rgba(255,235,205,.045)';
   for (let y = 0; y < K_H; y++) for (let x = 0; x < K_W; x++)
     if ((x + y) & 1) g.fillRect(KG.x0 + x*s, KG.y0 + y*s, s, s);
 
-  /* la salida: clara y con un halo cuando ya se puede usar */
+  /* ── LA SALIDA, Y SU ESTADO CERRADO TAMBIÉN TIENE QUE LEERSE ──
+     Estaba en 0,12 de alfa sobre la madera y medido en la captura era un
+     rectángulo gris que no se distinguía de una tabla: el jugador no sabía a
+     dónde tenía que ir hasta juntar la última chispa. Cerrada va marcada con una
+     cruz de trazos —o sea «acá es, y todavía no»— y abierta se enciende con un
+     halo que late. Las dos cosas dicen lo mismo del sitio y distinto del estado,
+     que es exactamente lo que hace falta. */
   const listo = K_chis.every(c => c.t);
   const sx = (K_sal % K_W), sy = (K_sal/K_W)|0;
-  g.fillStyle = listo ? 'rgba(138,215,255,.42)' : 'rgba(138,215,255,.12)';
-  g.fillRect(KG.x0 + sx*s + 3, KG.y0 + sy*s + 3, s - 6, s - 6);
+  const bx = KG.x0 + sx*s + 3, by = KG.y0 + sy*s + 3, bs = s - 6;
   if (listo){
-    g.strokeStyle = 'rgba(138,215,255,.85)'; g.lineWidth = 3;
-    g.strokeRect(KG.x0 + sx*s + 3, KG.y0 + sy*s + 3, s - 6, s - 6);
+    const la = 0.62 + 0.20*Math.sin(performance.now()*0.006);
+    g.globalAlpha = 0.35;
+    disco(bx + bs/2, by + bs/2, bs*0.82, '#8ad7ff');
+    g.globalAlpha = 1;
+    caja2(bx, by, bs, bs, 8, 'rgba(138,215,255,' + la.toFixed(2) + ')',
+          'rgba(220,245,255,.95)');
+  } else {
+    caja2(bx, by, bs, bs, 8, 'rgba(138,215,255,.14)', 'rgba(138,215,255,.55)');
+    g.strokeStyle = 'rgba(138,215,255,.55)'; g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(bx + bs*0.26, by + bs*0.26); g.lineTo(bx + bs*0.74, by + bs*0.74);
+    g.moveTo(bx + bs*0.74, by + bs*0.26); g.lineTo(bx + bs*0.26, by + bs*0.74);
+    g.stroke();
   }
 
   /* los pozos: un disco negro con reborde. Sin el reborde, sobre una bandeja
@@ -751,9 +784,11 @@ function kPinta(g){
   for (let i = 0; i < K_pozo.length; i++){
     if (!K_pozo[i]) continue;
     const px = kPX((i % K_W) + 0.5), py = kPY(((i/K_W)|0) + 0.5);
-    disco(px, py, kPozoR()*s, '#080604');
+    const pr = kPozoR()*s;
+    if (dibCuadroWH('cosas', 2, px, py, pr*2.3, pr*2.3)) continue;
+    disco(px, py, pr, '#080604');
     g.strokeStyle = 'rgba(255,220,168,.30)'; g.lineWidth = 2;
-    g.beginPath(); g.arc(px, py, kPozoR()*s, 0, 7); g.stroke();
+    g.beginPath(); g.arc(px, py, pr, 0, 7); g.stroke();
   }
 
   /* las chispas */
@@ -761,17 +796,27 @@ function kPinta(g){
     if (c.t) continue;
     const px = kPX((c.i % K_W) + 0.5), py = kPY(((c.i/K_W)|0) + 0.5);
     const la = 1 + Math.sin(performance.now()*0.004 + c.i)*0.14;
-    disco(px, py, s*0.15*la, '#ffd76a');
-    g.globalAlpha = 0.35;
-    disco(px, py, s*0.26*la, '#ffd76a');
+    /* el halo va SIEMPRE, también con el sprite puesto: es lo que hace que la
+       chispa se vea de lejos en un laberinto oscuro, y una imagen recortada no
+       lo puede traer porque el halo es aditivo sobre lo que haya detrás */
+    g.globalAlpha = 0.30;
+    disco(px, py, s*0.30*la, '#ffd76a');
     g.globalAlpha = 1;
+    if (!dibCuadroWH('cosas', 1, px, py, s*0.46*la, s*0.46*la))
+      disco(px, py, s*0.15*la, '#ffd76a');
   }
 
-  /* las paredes, en un solo trazo */
+  /* ── LAS PAREDES, EN UN SOLO TRAZO Y CON LA ENTRADA EN DIAGONAL ──
+     Un `stroke()` por pared serían doscientas órdenes de dibujo por cuadro para
+     pintar líneas que no se mueven. Y la entrada se hace saltando las paredes
+     que todavía no llegaron, no escalando: escalar cada una obligaría a un
+     `save`/`restore` por pared y perdería el trazo único, que es justamente lo
+     que hace que el laberinto cueste una orden. */
   g.strokeStyle = '#e8c79a'; g.lineWidth = Math.max(3, s*0.09);
   g.lineCap = 'round';
   g.beginPath();
   for (let y = 0; y < K_H; y++) for (let x = 0; x < K_W; x++){
+    if (entradaK(x + y, K_W + K_H - 2) <= 0) continue;
     const m = K_mur[kIx(x, y)], X = KG.x0 + x*s, Y = KG.y0 + y*s;
     if (m & 1){ g.moveTo(X, Y); g.lineTo(X + s, Y); }
     if (m & 8){ g.moveTo(X, Y); g.lineTo(X, Y + s); }
@@ -805,9 +850,14 @@ function kPinta(g){
   /* el reloj, como un arco arriba del laberinto: se lee de reojo, que es lo que
      hace falta cuando las dos manos están ocupadas sosteniendo el aparato */
   const u = this && K_reloj > 0 ? K_relojT/K_reloj : 0;
-  const bw = Math.min(430, AN - 120), bx = (AN - bw)/2, by = KG.y0 - 46;
-  caja2(bx, by, bw, 14, 7, 'rgba(255,255,255,.08)', null);
-  if (u > 0) caja2(bx, by, Math.max(14, bw*u), 14, 7,
+  /* ── Y ESTAS TRES NO SE LLAMAN `bx`/`by` ──
+     La caja de la salida ya usa esos nombres en la MISMA función, y un `const`
+     declarado dos veces en el mismo ámbito no es un aviso: tira al parsear y se
+     lleva el módulo entero — medido, el juego se quedaba en la pantalla de
+     idioma con `__J` sin definir. Es la undécima vez en este repo. */
+  const rw = Math.min(430, AN - 120), rx = (AN - rw)/2, ry = KG.y0 - 46;
+  caja2(rx, ry, rw, 14, 7, 'rgba(255,255,255,.08)', null);
+  if (u > 0) caja2(rx, ry, Math.max(14, rw*u), 14, 7,
                    u < 0.25 ? '#ff6a5a' : '#8ad7ff', null);
 
   /* ── Y SE DICE POR QUÉ SE FALLÓ ──
@@ -826,6 +876,7 @@ function kPinta(g){
 }
 
 function kCanica(g, x, y, r){
+  if (dibCuadroWH('cosas', 0, x, y, r*2.2, r*2.2)) return;
   const gr = g.createRadialGradient(x - r*0.34, y - r*0.34, r*0.1, x, y, r);
   gr.addColorStop(0, '#ffffff');
   gr.addColorStop(0.42, '#bfe8ff');
@@ -849,10 +900,17 @@ function kCartas(g, lista){
     const x = KC.x0 + i*(KC.w + 14);
     caja2(x, KC.y, KC.w, KC.h, 18, 'rgba(18,14,10,.94)', 'rgba(255,220,168,.55)');
     const n = (K_mej[lista[i].k] || 0);
-    texto(TX('m_' + lista[i].k), x + KC.w/2, KC.y + 40, 19, '#ffd76a', '800', 'center');
+    /* el icono generado, arriba del nombre: en una carta que se elige en dos
+       segundos, la forma se reconoce antes que el texto — y el índice sale del
+       orden de `K_MEJ`, o sea que la hoja y la lista no pueden desalinearse sin
+       que alguien mueva las dos */
+    const ii = K_MEJ.findIndex(m => m.k === lista[i].k);
+    const conIc = ii >= 0 && dibCuadroWH('mejo', ii, x + KC.w/2, KC.y + 46, 52, 52);
+    const y0 = conIc ? KC.y + 92 : KC.y + 40;
+    texto(TX('m_' + lista[i].k), x + KC.w/2, y0, 19, '#ffd76a', '800', 'center');
     /* la descripción va partida a mano por ancho: un `fillText` no envuelve */
     const pal = TX('d_' + lista[i].k).split(' ');
-    let ln = '', yy = KC.y + 84;
+    let ln = '', yy = y0 + 34;
     for (const p of pal){
       const pr = ln ? ln + ' ' + p : p;
       g.font = '600 15px ui-sans-serif,system-ui,sans-serif';
