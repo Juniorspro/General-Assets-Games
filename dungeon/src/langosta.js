@@ -18,6 +18,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { construirBicho } from './bicho.js';
 import { CLIPS } from './animdata.js';
 import * as S from './sonido.js';
+
+/* Hasta dónde te sigue sin verte una vez que te cazó. El mapa mide unos
+   98 x 79 m, así que 30 m es mucho pero se puede romper. */
+const CORREA = 30;
 import {
     CELL, WALL_H, W, H, LEVELS, Rng, toWorld, toCell, esPiso, hayPared,
     PARED, GATERA, SECTORES, sectorEn, sectorPorId, centroSector,
@@ -844,19 +848,32 @@ export class Mision {
             b.alerta = Math.max(b.alerta, 0.75);
             b.ultimo = [jug.x, jug.z];
         } else if (b.estado === 'caza' || b.estado === 'busca') {
-            /* Al perderte de vista NO se olvida de golpe: sigue hasta el
-               último lugar donde te vio y ahí se queda mirando un rato. */
-            b.alerta -= dt * (b.estado === 'caza' ? 0.28 : 0.42);
-            if (b.estado === 'caza' && b.alerta < 0.55) b.estado = 'busca';
-            if (b.estado === 'caza' && b.alerta < 0.55) S.musicaPersecucion(false);
-            if (b.alerta <= 0) { b.estado = 'ronda'; b.destino = null }
+            /* LA CORREA: una vez que te caza no te suelta por perderte de
+               vista un segundo. Mientras estés a menos de 30 m sabe dónde
+               estás y va derecho, mire para donde mire — sólo aflojá cuando
+               lograste alejarte de verdad. Antes bastaba con salirle del cono
+               1,6 s y pasaba a 'busca', que es por qué se lo sacaba de encima
+               doblando una esquina. */
+            if (b.estado === 'caza' && mismoPiso && dist < CORREA) {
+                b.alerta = 1;
+                b.ultimo = [jug.x, jug.z];      // sigue sabiendo dónde estás
+            } else {
+                /* Y recién acá se olvida: sigue hasta el último lugar donde te
+                   vio y ahí se queda mirando un rato. */
+                b.alerta -= dt * (b.estado === 'caza' ? 0.28 : 0.42);
+                if (b.estado === 'caza' && b.alerta < 0.55) {
+                    b.estado = 'busca';
+                    S.musicaPersecucion(false);
+                }
+                if (b.alerta <= 0) { b.estado = 'ronda'; b.destino = null }
+            }
         }
 
         /* Más rápido que vos, pero poco: corriendo vas a 5,4 y él a 5,9. Se
            le escapa deslizándose —9,2 por menos de un segundo— y por las
            gateras, que es para lo que están. Y en cada esquina pierde tiempo
            girando, porque camina para adelante y no de costado. */
-        const vel = b.estado === 'caza' ? 5.9 : b.estado === 'busca' ? 2.6 : 1.35;
+        const vel = b.estado === 'caza' ? 6.6 : b.estado === 'busca' ? 2.9 : 1.35;
         b.recalcular -= dt;
         if (b.recalcular <= 0 || !b.ruta.length) {
             b.recalcular = b.estado === 'caza' ? 0.35 : b.estado === 'busca' ? 0.6 : 1.2;
