@@ -21,7 +21,46 @@ function bucle(){
   if (GIRO.listo) calculaInclinacion();
 
   ren.info.autoReset = false; ren.info.reset();
+  /* ══════ TRES PASADAS, Y EL ORDEN ES LO QUE SE MIDIÓ ══════
+     Un plano se saca adelante de todo con `depthTest:false`. Un MODELO no:
+     sin prueba de profundidad sus propias caras de atrás se dibujan encima de
+     las de adelante y la cosa sale del revés; y CON la prueba puesta, la pared
+     de una esquina —que está a un metro— lo entierra, que es el mismo defecto
+     que ya costó una vuelta con las caras. Medido: se veían los dos ojos
+     flotando y ni un pixel del cuerpo.
+     La salida es la de cualquier primera persona: cada cosa en su capa y una
+     pasada por capa, borrando la profundidad entre pasadas.
+
+         1. el mundo          (capa 0)
+         2. el susto modelo   (capa 3) — ninguna pared lo puede tapar
+         3. la tabla y el bol (capa 2) — SIEMPRE al final
+
+     Y la tercera pasada no es un detalle: con dos pasadas el modelo salía
+     dibujado ENCIMA del bol —medido en la captura, la figura parada arriba del
+     cuenco— porque el borrado de profundidad no distingue qué está más cerca.
+     La tabla es lo más cercano que hay y por eso va última.
+
+     TRAMPA DE three.js, y costó una medición: `autoClear = false` NO alcanza.
+     Cuando `scene.background` es un Color, `WebGLBackground.render()` pone
+     `forceClear = true` y limpia igual — el fondo no es un objeto de la escena,
+     es una orden de borrado disfrazada. Hay que sacarlo para las pasadas 2 y 3. */
+  ren.info.autoReset = false; ren.info.reset();
+  const hayModelo = !!(ACT.obj && ACT.s && ACT.s.fam === 'modelo');
+  const fondo = escena.background;
+  cam.layers.disable(2); cam.layers.disable(CAPA_SUSTO);
   ren.render(escena, cam);
+  escena.background = null;
+  ren.autoClear = false;
+  if (hayModelo){
+    cam.layers.disable(0); cam.layers.enable(CAPA_SUSTO);
+    ren.clearDepth(); ren.render(escena, cam);
+    cam.layers.disable(CAPA_SUSTO);
+  } else cam.layers.disable(0);
+  cam.layers.enable(2);
+  ren.clearDepth(); ren.render(escena, cam);
+  ren.autoClear = true;
+  escena.background = fondo;
+  cam.layers.enable(0);
   DIB = ren.info.render.calls; TRI = ren.info.render.triangles;
 
   _cuadros++; _acumF += dt;
@@ -191,7 +230,7 @@ window.__P = {
     const fuera = [], v = new T.Vector3();
     cam.updateMatrixWorld(true);
     for (const s of SUSTOS){
-      if (s.fam !== 'cara' && s.fam !== 'sombra' && s.fam !== 'bicho') continue;
+      if (['cara','sombra','bicho','modelo'].indexOf(s.fam) < 0) continue;
       /* `atras` está DETRÁS del lente a propósito: es un susto que no se ve y
          que sólo suena y sacude. Contarlo como «fuera de cuadro» sería exigirle
          a la comprobación que desapruebe justo lo que se buscaba. */
@@ -202,7 +241,7 @@ window.__P = {
       if (x < 0.02 || x > 0.98 || y < 0.02 || y > 0.98 || v.z > 1)
         fuera.push(s.fam + ':' + s.donde + ' → ' + x.toFixed(2) + ',' + y.toFixed(2));
     }
-    return JSON.stringify({ mira: SUSTOS.filter(s => ['cara','sombra','bicho'].indexOf(s.fam) >= 0).length,
+    return JSON.stringify({ mira: SUSTOS.filter(s => ['cara','sombra','bicho','modelo'].indexOf(s.fam) >= 0).length,
                             fuera: fuera.length, cuales: fuera });
   },
   /* dispara un susto y lo DEJA quieto, para poder fotografiarlo */

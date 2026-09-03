@@ -203,6 +203,90 @@ function cami(g, b, w, h, esc){
    linterna —medido en la captura, un bicho plateado sobre la tabla—, y un bicho
    que brilla se lee a juguete. Quitina: casi negra y apenas satinada. */
 const matBicho = new T.MeshStandardMaterial({ color: 0x14100e, roughness: 0.52, metalness: 0.10 });
+const matBulto = new T.MeshStandardMaterial({ color: 0x2b2723, roughness: 0.88, metalness: 0.0 });
+/* los ojos van con `fog:false` y sin luz: son lo único visible con la linterna
+   apagada, y con niebla se iban a negro justo en el susto que más los necesita.
+   `depthTest:false` para que no queden enterrados en la pared de una esquina,
+   que es el mismo defecto que ya costó una vuelta con las caras. */
+const matOjo = new T.MeshBasicMaterial({ color: 0xe8d9a8, fog: false, depthTest: false });
+
+/* ══════════ LOS SUSTOS QUE SON UN MODELO 3D ══════════
+   Un plano con una foto funciona para una cara a cuarenta centímetros: la
+   linterna casi no se mueve en 0,4 s y no hay con qué comparar. Pero un bulto
+   que aparece a metro y medio en un pasillo con una luz que tiembla SE DELATA —
+   no recibe la luz por un lado, no tiene canto, y al moverse la cabeza no
+   cambia de forma. Para eso hacen falta modelos.
+
+   Se cargan en DIFERIDO y con respaldo: un GLB que no decodifica no puede
+   dejar un susto sin nada en pantalla, porque un susto invisible es idéntico a
+   un susto que no se disparó — el mismo síntoma que ya costó dos vueltas acá.
+   Mientras el modelo no está, el bulto se dibuja por código. */
+const Z_MODELO = 1.7;
+/* la capa en la que viven los sustos que son modelo: se dibuja en una segunda
+   pasada con la profundidad borrada. La declara acá el que la usa. */
+const CAPA_SUSTO = 3;
+const MODELOS = {};                /* clave → Object3D listo para clonar */
+const _cargador = { l: null, pedidos: {} };
+function pideModelo(clave){
+  if (MODELOS[clave] !== undefined) return MODELOS[clave];
+  if (typeof AS === 'undefined' || !AS['mod_' + clave]) { MODELOS[clave] = null; return null; }
+  if (_cargador.pedidos[clave]) return null;
+  _cargador.pedidos[clave] = true;
+  if (!_cargador.l) _cargador.l = new GLTFLoader();
+  _cargador.l.load(AS['mod_' + clave], (g) => {
+    const o = g.scene;
+    /* ── SE NORMALIZA LA ALTURA, Y NO ES COSMÉTICO ──
+       Los generadores devuelven la malla metida en una caja de lado 2, sin
+       relación con metros. Puesta cruda, la misma cosa mide dos metros o veinte
+       centímetros según qué tanda salió, y un susto que aparece del tamaño de
+       una moneda no es un susto. Se mide la caja y se escala al alto que toca. */
+    const caja = new T.Box3().setFromObject(o);
+    const alto = Math.max(0.01, caja.max.y - caja.min.y);
+    o.scale.setScalar(1 / alto);          /* queda de 1 m; cada susto lo reescala */
+    o.position.y = -caja.min.y / alto;    /* apoyado en su propio cero */
+    o.traverse(m => {
+      if (!m.isMesh) return;
+      m.castShadow = false; m.receiveShadow = false;
+      /* niebla apagada: el bulto está a metro y medio y la niebla cierra a doce,
+         así que no le quita casi nada — pero con la linterna APAGADA, que es
+         cuando aparece la mitad de estos sustos, el modelo se iba a negro
+         absoluto y desaparecía. */
+      if (m.material){ m.material.fog = false; }
+    });
+    MODELOS[clave] = o;
+  }, undefined, () => { MODELOS[clave] = null; });
+  return null;
+}
+
+/* el respaldo por código: una figura encorvada. No pretende ser el modelo —
+   pretende que el susto EXISTA mientras el modelo baja. */
+function bultoCodigo(){
+  /* ── Y ESTE RESPALDO SALIÓ COMO UNA MANCHA BEIGE TAPANDO LA PANTALLA ──
+     Dos causas, y las dos de escala. Primera: la figura se arma con medidas de
+     persona —1,59 m de alto— y después el susto la multiplica por `s.alto`,
+     que también está en metros. O sea 1,59 × 1,85 = **2,94 metros**. El modelo
+     que baja del GLB SÍ se normaliza a un metro antes de escalar; el respaldo
+     no, y por eso los dos no eran comparables. Se normaliza acá, adentro, así
+     que los dos caminos entregan lo mismo: una cosa de un metro.
+     Segunda: puesta a 1,30 m del ojo, una figura de 1,85 m ocupa el cuadro
+     entero de arriba abajo (a esa distancia entran ±0,63 m de alto). Eso lo
+     arregla `Z_MODELO`, más abajo. */
+  const raiz = new T.Group();
+  const g = new T.Group(), m = matBulto;
+  g.scale.setScalar(1 / 1.585);
+  raiz.add(g);
+  const torso = new T.Mesh(new T.SphereGeometry(0.30, 10, 8), m);
+  torso.scale.set(1, 1.25, 0.78); torso.position.y = 1.02; g.add(torso);
+  const cab = new T.Mesh(new T.SphereGeometry(0.145, 10, 8), m);
+  cab.position.set(0, 1.44, 0.06); cab.scale.set(1, 1.1, 1.05); g.add(cab);
+  for (const lado of [-1, 1]){
+    const br = new T.Mesh(new T.CapsuleGeometry(0.052, 0.52, 4, 6), m);
+    br.position.set(lado*0.28, 0.86, 0.05); br.rotation.z = lado*0.22; g.add(br);
+    const pi = new T.Mesh(new T.CapsuleGeometry(0.070, 0.62, 4, 6), m);
+    pi.position.set(lado*0.12, 0.36, 0); g.add(pi);
+  }
+  return raiz;
+}
 
 function armaObjeto(s){
   const g = new T.Group();
@@ -243,6 +327,35 @@ function armaObjeto(s){
        que tiene que leerse. */
     m.position.z = -0.75;
     g.add(m);
+  } else if (s.fam === 'modelo'){
+    const mod = pideModelo(s.modelo);
+    const o = mod ? mod.clone(true) : bultoCodigo();
+    o.scale.multiplyScalar(s.alto || 1.8);
+    /* ── UN MODELO SE PARA MÁS LEJOS QUE UNA CARA, Y LA CUENTA ES LA DEL MARCO ──
+       Los sitios del catálogo están a 1,05-1,55 m porque están pensados para
+       una cara de 70 cm. Una PERSONA de 1,85 m puesta ahí ocupa el cuadro
+       entero: a 1,30 m entran ±0,63 m de alto y la figura mide casi tres veces
+       eso. Medido en la captura, el bulto salía como una pared beige y no se
+       veía ni el pasillo ni de qué tamaño era la cosa.
+       Se empuja 1,7 m más atrás: a 3 m entran ±1,46 m de alto, así que una
+       persona entra completa con pasillo alrededor — y ahí sí se lee que hay
+       ALGUIEN PARADO, que es lo que tiene que leerse. */
+    o.position.z = -Z_MODELO;
+    o.traverse(m => m.layers.set(CAPA_SUSTO));
+    /* el cero del modelo va al piso del pasillo, que respecto del ojo está 1,58
+       m abajo. Sin esto la cosa aparece flotando a la altura de la cara, y algo
+       que flota se lee a truco y no a alguien parado ahí. */
+    o.position.y = -1.58;
+    g.add(o);
+    /* dos ojos que emiten luz propia: es lo único del modelo que se ve con la
+       linterna apagada, y la mitad de estos sustos pasan con la luz apagada */
+    for (const lado of [-1, 1]){
+      const e = new T.Mesh(new T.SphereGeometry(0.021, 6, 5), matOjo);
+      e.position.set(lado*0.055, (s.alto || 1.8) * 0.815 - 1.58, 0.10 - Z_MODELO);
+      e.renderOrder = 31;
+      e.layers.set(CAPA_SUSTO);
+      g.add(e);
+    }
   } else if (s.fam === 'bicho'){
     /* la araña: cuerpo en dos partes y patas QUEBRADAS. Una pata recta se lee a
        palito clavado; el codo es lo que la hace caminar aunque esté quieta. */
@@ -305,7 +418,7 @@ function disparaSusto(s){
   if (ACT.s) return;
   ACT.s = s; ACT.t = 0; ACT.fijo = false;
   const p = DONDE[s.donde] || DONDE.frente;
-  if (s.fam === 'cara' || s.fam === 'sombra' || s.fam === 'bicho'){
+  if (['cara','sombra','bicho','modelo'].indexOf(s.fam) >= 0){
     const o = armaObjeto(s);
     o.position.set(p[0], p[1], p[2]);
     /* ── NADA DE `lookAt` EN UN HIJO DE LA CÁMARA ──

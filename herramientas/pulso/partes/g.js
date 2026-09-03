@@ -30,6 +30,7 @@ luz.castShadow = true;
 luz.shadow.mapSize.set(1024, 1024);
 luz.shadow.camera.near = 0.1; luz.shadow.camera.far = 16;
 luz.shadow.bias = -0.0022; luz.shadow.normalBias = 0.028;
+luz.layers.enable(3);      /* la linterna también ilumina a los sustos que son modelo */
 cam.add(luz); cam.add(luz.target);
 /* la luz de la capa 2: sólo la tabla, el bol y el agua. Va un poco a la
    izquierda y arriba para que el bol tenga un lado iluminado y otro en sombra —
@@ -42,11 +43,12 @@ cam.add(luzTabla);
    esto no se ve NADA a los costados y el pasillo deja de tener ancho */
 const amb = new T.HemisphereLight(0x33383f, 0x14120f, 0.32);
 amb.layers.enable(2);            /* el ambiente sí llega a la tabla */
+amb.layers.enable(3);            /* y a los sustos que son modelo */
 escena.add(amb);
 
 /* ══════════════════════════ LOS SUSTOS ══════════════════════════
-   Treinta y dos, y lo que los hace treinta y dos no son treinta y dos modelos:
-   son SEIS FAMILIAS combinadas con dónde y cuándo pasan. Un catálogo de treinta
+   Cuarenta y cuatro, y lo que los hace cuarenta y cuatro no son cuarenta y
+   cuatro assets: son SIETE FAMILIAS combinadas con dónde y cuándo pasan. Un catálogo de treinta
    y dos assets distintos sería medio mega de descarga para cosas que se ven
    0,4 segundos; lo que el jugador recuerda no es la cara, es el susto.
 
@@ -54,7 +56,7 @@ escena.add(amb);
    RESPINGO, no un problema. No te toca, no te frena, no te empuja. Lo único que
    hace es lograr que tu mano se mueva sola — y de eso se encarga el giroscopio.
    Un susto que además te empujara sería castigarte dos veces por lo mismo. */
-const SUS_FAM = ['cara', 'sombra', 'golpe', 'luz', 'bicho', 'susurro'];
+const SUS_FAM = ['cara', 'sombra', 'golpe', 'luz', 'bicho', 'susurro', 'modelo'];
 const SUSTOS = [];
 function armaCatalogo(){
   SUSTOS.length = 0;
@@ -94,11 +96,32 @@ function armaCatalogo(){
     ['susurro', 'oidoD',       0.90, 0.64, 'susurro',  'no'],
     ['susurro', 'nombre',      1.20, 0.70, 'susurro',  'no'],
     ['susurro', 'risa',        1.00, 0.66, 'risa',     'no'],
-    ['susurro', 'respira',     1.40, 0.42, 'respira',  'no']
+    ['susurro', 'respira',     1.40, 0.42, 'respira',  'no'],
+    /* ── LA SÉPTIMA FAMILIA: LOS QUE SON UN MODELO 3D ──
+       Doce, y el catálogo pasa de 32 a 44. Se pidieron «más sustos, incluso de
+       modelos 3D que aparecen de la nada», y ése es exactamente el hueco que
+       quedaba: las seis familias de antes o dibujaban un plano o no dibujaban
+       nada, así que ningún susto tenía VOLUMEN. Una cosa con volumen a metro y
+       medio, con la linterna moviéndose encima, es de otra categoría — y por eso
+       éstos duran más (0,55 a 1,20 s): un plano hay que sacarlo rápido antes de
+       que se note que es un plano, y un modelo aguanta que lo mires.
+       El séptimo campo es la clave del modelo y el octavo su altura en metros. */
+    ['modelo',  'frente',      0.70, 1.00, 'grito',    'apaga',    'colgado',  1.85],
+    ['modelo',  'bulto',       0.90, 0.78, 'susurro',  'no',       'encorvado',1.45],
+    ['modelo',  'rincon',      0.65, 0.86, 'grito',    'parpadea', 'encorvado',1.70],
+    ['modelo',  'asoma',       0.60, 0.90, 'grito',    'no',       'colgado',  1.80],
+    ['modelo',  'cruza',       0.80, 0.72, 'paso',     'no',       'perro',    0.85],
+    ['modelo',  'piso',        1.00, 0.68, 'chirrido', 'no',       'perro',    0.80],
+    ['modelo',  'encima',      0.75, 0.94, 'grito',    'apaga',    'colgado',  1.60],
+    ['modelo',  'cuelga',      1.20, 0.62, 'metal',    'no',       'colgado',  1.55],
+    ['modelo',  'costadoI',    0.55, 0.88, 'grito',    'no',       'encorvado',1.75],
+    ['modelo',  'costadoD',    0.55, 0.88, 'grito',    'no',       'perro',    0.90],
+    ['modelo',  'esquina',     0.62, 0.96, 'grito',    'rojo',     'encorvado',1.80],
+    ['modelo',  'puerta',      0.85, 0.80, 'portazo',  'no',       'colgado',  1.90]
   ];
   for (const v of V)
     SUSTOS.push({ id: id++, fam: v[0], donde: v[1], dur: v[2], fuerza: v[3],
-                  son: v[4], luz: v[5] });
+                  son: v[4], luz: v[5], modelo: v[6], alto: v[7] });
   return SUSTOS.length;
 }
 
