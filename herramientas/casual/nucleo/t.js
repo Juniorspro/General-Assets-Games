@@ -14,15 +14,24 @@ const TXB = {
   es: { jugar:'JUGAR', como:'CÓMO SE JUEGA', otra:'OTRA VEZ', menu:'MENÚ',
         mejor:'MEJOR', salta:'TOCÁ PARA SALTEAR', pts:'PUNTOS',
         finBien:'¡BIEN!', finMal:'SE TERMINÓ', nuevoRec:'RÉCORD NUEVO',
-        racha:'RACHA' },
+        racha:'RACHA', niveles:'NIVELES', nivel:'NIVEL', movs:'MOVIDAS',
+        deshacer:'DESHACER', reiniciar:'REINICIAR', salir:'SALIR',
+        seguir:'SEGUIR', ganaste:'¡NIVEL LISTO!', perdiste:'NO SALIÓ',
+        proximo:'SIGUIENTE', progreso:'{0} DE {1}' },
   en: { jugar:'PLAY', como:'HOW TO PLAY', otra:'AGAIN', menu:'MENU',
         mejor:'BEST', salta:'TAP TO SKIP', pts:'POINTS',
         finBien:'NICE!', finMal:'GAME OVER', nuevoRec:'NEW RECORD',
-        racha:'STREAK' },
+        racha:'STREAK', niveles:'LEVELS', nivel:'LEVEL', movs:'MOVES',
+        deshacer:'UNDO', reiniciar:'RESTART', salir:'EXIT',
+        seguir:'CONTINUE', ganaste:'LEVEL CLEAR!', perdiste:'NO LUCK',
+        proximo:'NEXT', progreso:'{0} OF {1}' },
   pt: { jugar:'JOGAR', como:'COMO JOGAR', otra:'DE NOVO', menu:'MENU',
         mejor:'MELHOR', salta:'TOQUE PARA PULAR', pts:'PONTOS',
         finBien:'BOA!', finMal:'ACABOU', nuevoRec:'NOVO RECORDE',
-        racha:'SEQUÊNCIA' }
+        racha:'SEQUÊNCIA', niveles:'NÍVEIS', nivel:'NÍVEL', movs:'JOGADAS',
+        deshacer:'DESFAZER', reiniciar:'REINICIAR', salir:'SAIR',
+        seguir:'CONTINUAR', ganaste:'NÍVEL FEITO!', perdiste:'NÃO DEU',
+        proximo:'PRÓXIMO', progreso:'{0} DE {1}' }
 };
 /* ── LA TABLA DEL JUEGO SE FUSIONA CON LA DEL NÚCLEO, NO LA REEMPLAZA ──
    Cada juego trae sus propias frases y hereda las siete del núcleo. Si cada

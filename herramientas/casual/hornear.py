@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mete los assets generados con Rezona adentro de cada HTML, en base64.
 
-    python3 herramientas/tiktok/hornear.py
+    python3 herramientas/casual/hornear.py
 
 Los originales viven en herramientas/tiktok/crudo/ tal como los devolvio Rezona
 (PNG de 1 a 2,5 MB y MP3 estereo de 400 KB). De aca salen siempre reducidos, asi
@@ -478,7 +478,7 @@ def main():
                 continue
             son[clave] = base64.b64encode(b).decode()
             info.append('%s %s %s' % (clave, tipo, m))
-        js = ('/* GENERADO por herramientas/tiktok/hornear.py — no editar a mano.\n'
+        js = ('/* GENERADO por herramientas/casual/hornear.py — no editar a mano.\n'
               '   Los assets estan generados con Rezona; el crudo vive en\n'
               '   herramientas/tiktok/crudo/ y de aca salen reducidos. */\n'
               'const AS = ' + json.dumps({'img': img, 'son': son}, separators=(',', ':')) + ';\n')

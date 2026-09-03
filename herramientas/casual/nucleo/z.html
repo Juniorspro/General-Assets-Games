@@ -3,31 +3,55 @@
    contrato de un juego es corto a propósito:
 
        JT              las frases, por idioma
+       JUEGO.tipo      'niveles' (progreso guardado) o 'puntos' (sin fin)
+       JUEGO.nivelesTotal   cuántos, en los de niveles
        JUEGO.planos    la cinemática: [{dur, pie, dibuja(g,u,t)}]
-       JUEGO.arranca() poner el estado en cero
+       JUEGO.arranca(n)     poner el estado en cero; n = nivel
        JUEGO.paso(dt)  la simulación, en pasos de 1/60
-       JUEGO.pinta(g)  el dibujo, en unidades de 720×1280
+       JUEGO.pinta(g)  el dibujo, en unidades de 720 x AL
        JUEGO.baja/mueve/sube(x,y)   el verbo
-       JUEGO.marca     el número que va arriba
-       JUEGO.resta     0..1 para la barra de abajo, o null si no hay reloj
+       JUEGO.marca     el número grande de arriba
+       JUEGO.sub       el rótulo debajo del número (o null)
+       JUEGO.ficI/ficD las dos fichas de los costados (o null)
+       JUEGO.resta     0..1 para la barra de abajo, o null si no hay
        JUEGO.vivo      cuando pasa a false, se termina
+       JUEGO.gano      si el nivel salió
+       JUEGO.estrellas 1..3 al ganar un nivel
+       JUEGO.deshacer()     y JUEGO.puedeDeshacer
+       JUEGO.juegaSolo(n, azar)
 
-   Un juego que necesite algo más que eso probablemente no sea un minijuego. */
+   ── POR QUE HAY DOS TIPOS Y NO UNO ──
+   Los tres rompecabezas necesitan progreso, reja de niveles, deshacer y
+   estrellas; los dos de destreza necesitan récord y nada de eso. Metidos en un
+   solo molde, cada juego arrastraría la mitad de una interfaz que no usa — y
+   eso se ve: un botón DESHACER en un juego donde no hay nada que deshacer se
+   lee a juego roto. El tipo decide qué interfaz existe. */
 
 let PUNTOS = 0, MEJOR = 0;
+let NIVEL = 1;
 
 /* ── EL RÉCORD SE INTENTA GUARDAR Y PUEDE FALLAR ──
    `localStorage` TIRA en una ventana privada, y esto se abre desde enlaces. Sin
    el `try` el juego no arranca en la mitad de los casos raros, que es peor que
    no tener récord. */
-const CLAVE = 'tt_' + JUEGO.id;
+const CLAVE = 'cas_' + JUEGO.id;
 try { MEJOR = parseInt(localStorage.getItem(CLAVE) || '0', 10) || 0; } catch(e){}
 function guardaMejor(){
   try { localStorage.setItem(CLAVE, String(MEJOR)); } catch(e){}
 }
+const esNiv = () => JUEGO.tipo === 'niveles';
 
 function pintaJuego(){
-  $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
+  if (esNiv()){
+    /* en un juego de niveles el récord no significa nada: lo que el jugador
+       quiere ver es cuánto le falta y cuántas estrellas juntó */
+    const c = progContados();
+    $('mejor').textContent = TX('progreso', c.hechos, progTotal()) +
+      (c.estrellas ? '  ·  ★ ' + c.estrellas : '');
+    $('bJugar').textContent = c.hechos > 0 ? TX('seguir') : TX('jugar');
+  } else {
+    $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
+  }
   if (JUEGO.pintaTextos) JUEGO.pintaTextos();
 }
 window.pintaJuego = pintaJuego;
@@ -75,59 +99,96 @@ function jugar(){
   if (AUD && AUD.state === 'suspended') AUD.resume();
   if (!_vistaCine){
     _vistaCine = true;
-    cineArranca(empieza);
+    /* la cinemática se ve UNA vez y después va a su botón. Obligatoria en cada
+       partida es un peaje, y eso ya costó una vuelta en POMPOM. */
+    cineArranca(traslaCine);
     return;
   }
-  empieza();
+  traslaCine();
 }
-function empieza(){
+/* después de la cinemática: los de niveles van a la reja y los de puntaje
+   arrancan de una. Un selector de niveles en un juego sin niveles sería una
+   pantalla de más entre el dedo y el juego. */
+function traslaCine(){
+  if (esNiv()) verNiveles(); else empieza();
+}
+function empieza(n){
   /* el pie de la cinemática se apaga acá también: normalmente lo apaga
      `cineTermina`, pero la sonda que salta a un instante de la cinemática lo
      deja encendido y entonces la partida arranca con un subtítulo puesto */
   $('cine').classList.remove('on');
   $('salta').classList.remove('on');
   PUNTOS = 0;
+  NIVEL = esNiv() ? (n || progSiguiente()) : 1;
   rachaCero();
   jugoCero();
-  JUEGO.arranca();
+  JUEGO.arranca(NIVEL);
   MODO = 'juega';
   verPantalla(null);
   musQuiere('mus');
-  $('sub').textContent = TX('pts');
+  /* los botones de partida existen sólo donde hay algo que deshacer */
+  $('acc').hidden = !esNiv();
   pintaHud();
 }
 function termina(){
   MODO = 'fin';
   musQuiere('menu');
-  const rec = PUNTOS > MEJOR;
-  if (rec){ MEJOR = PUNTOS; guardaMejor(); }
-  son(rec ? 'gana' : 'pierde');
-  musAgacha(0.30, 1.4);
-  $('finT').textContent = rec ? TX('nuevoRec') : (JUEGO.gano ? TX('finBien') : TX('finMal'));
-  $('finP').textContent = PUNTOS + ' ' + TX('pts') + (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
-  /* ── LA MEJOR RACHA VA EN EL CARTEL, SALVO DONDE ES MECÁNICA ──
-     Es la segunda cosa que el jugador quiere superar y sin mostrarla el
-     multiplicador no deja rastro. Pero en MANCHA y en RASPÁ la racha no paga en
-     puntos sino en el ancho de la brocha, y ahí el contador cuenta celdas
-     robadas o limpiadas: medido, daba 349 y 7.882 en una partida de cuarenta y
-     cinco segundos. Un número así en el cartel del final no informa nada, así
-     que esos dos lo declaran apagado (`PIEL.rachaFin`). */
-  const plF = (typeof PIEL !== 'undefined') ? PIEL : {};
-  if (COMBO.max > 3 && plF.rachaFin !== false)
-    $('finP').textContent += '  ·  ' + TX('racha') + ' ' + COMBO.max;
+  $('acc').hidden = true;
+  const gano = !!JUEGO.gano;
+  if (esNiv()){
+    const e = gano ? Math.max(1, Math.min(3, JUEGO.estrellas|0)) : 0;
+    if (gano) progGana(NIVEL, e);
+    son(gano ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('finT').textContent = gano ? TX('ganaste') : TX('perdiste');
+    const es = $('estr');
+    es.hidden = !gano;
+    if (gano) es.textContent = '★'.repeat(e) + '☆'.repeat(3-e);
+    $('finP').textContent = TX('nivel') + ' ' + NIVEL +
+      (JUEGO.finP ? '  ·  ' + JUEGO.finP : '');
+    /* OTRA VEZ pasa a ser SIGUIENTE cuando el nivel salió: repetir un nivel que
+       ya salió es lo último que quiere hacer alguien que lo acaba de pasar */
+    const hayMas = gano && NIVEL < progTotal();
+    $('bOtra').textContent = hayMas ? TX('proximo') : TX('otra');
+    $('bOtra').dataset.sig = hayMas ? '1' : '';
+  } else {
+    const rec = PUNTOS > MEJOR;
+    if (rec){ MEJOR = PUNTOS; guardaMejor(); }
+    son(rec ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('estr').hidden = true;
+    $('finT').textContent = rec ? TX('nuevoRec') : (gano ? TX('finBien') : TX('finMal'));
+    $('finP').textContent = PUNTOS + ' ' + TX('pts') +
+      (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
+    if (COMBO.max > 3) $('finP').textContent += '  ·  ' + TX('racha') + ' ' + COMBO.max;
+    $('bOtra').textContent = TX('otra');
+    $('bOtra').dataset.sig = '';
+  }
   verPantalla('pFin');
   pintaJuego();
 }
 
 function pintaHud(){
   $('marca').textContent = JUEGO.marca != null ? JUEGO.marca : PUNTOS;
+  $('sub').textContent = JUEGO.sub != null ? JUEGO.sub
+    : (esNiv() ? TX('nivel') + ' ' + NIVEL : TX('pts'));
+  /* las dos fichas de los costados: cada juego pone lo que cambia adentro del
+     nivel y las apaga con null. Escribirlas siempre dejaría un rótulo vacío
+     dibujado, que se lee a hueco y no a ficha apagada. */
+  for (const [id, v] of [['ficI', JUEGO.ficI], ['ficD', JUEGO.ficD]]){
+    const e = $(id);
+    e.hidden = v == null;
+    if (v != null) e.textContent = v;
+  }
+  const b = $('bDes');
+  if (b) b.disabled = !JUEGO.puedeDeshacer;
   const r = JUEGO.resta;
   const rel = $('reloj');
   rel.style.display = r == null ? 'none' : 'block';
   if (r != null){
-    const b = $('relojB');
-    b.style.width = (Math.max(0, Math.min(1, r))*100).toFixed(1) + '%';
-    b.classList.toggle('poco', r < 0.25);
+    const bb = $('relojB');
+    bb.style.width = (Math.max(0, Math.min(1, r))*100).toFixed(1) + '%';
+    bb.classList.toggle('poco', r < 0.25);
   }
 }
 
@@ -187,8 +248,25 @@ for (const b of document.querySelectorAll('[data-lang]'))
   });
 $('bJugar').addEventListener('click', (e) => { e.stopPropagation(); jugar(); });
 $('bComo').addEventListener('click', (e) => { e.stopPropagation(); cineArranca(alMenu); });
-$('bOtra').addEventListener('click', (e) => { e.stopPropagation(); empieza(); });
 $('bMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bNMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bOtra').addEventListener('click', (e) => {
+  e.stopPropagation();
+  /* SIGUIENTE avanza el nivel; OTRA VEZ repite el mismo */
+  empieza(esNiv() ? (NIVEL + ($('bOtra').dataset.sig ? 1 : 0)) : undefined);
+});
+$('bDes').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!JUEGO.puedeDeshacer) return;
+  son('clic'); JUEGO.deshacer(); pintaHud();
+});
+$('bRei').addEventListener('click', (e) => { e.stopPropagation(); son('clic'); empieza(NIVEL); });
+$('bSal').addEventListener('click', (e) => {
+  e.stopPropagation(); son('clic');
+  /* salir de un nivel vuelve A LA REJA y no al menú: el jugador quiere elegir
+     otro nivel, no volver a la portada */
+  if (esNiv()) verNiveles(); else alMenu();
+});
 
 /* ══════════════════════ SONDAS ══════════════════════
    Todo lo que el banco necesita, y nada que el juego use. Un juego que se
@@ -203,7 +281,7 @@ addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e
 
 window.__J = {
   id: JUEGO.id,
-  estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR,
+  estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR, nivel: NIVEL,
     marca: JUEGO.marca, resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3),
     vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height],
     /* el ultimo toque que ENTRO por el camino de verdad (lienzo -> baja): es lo
@@ -224,8 +302,16 @@ window.__J = {
      encima —el fondo pasaba de 28 a 43— y yo lo lei como que el plano estaba
      mal iluminado. El pixel del lienzo daba 28 en los dos casos. Una sonda que
      deja un velo encima no fotografia lo que le piden. */
+  /* ── Y APAGA EL HUD, QUE ES LO QUE `cineArranca` HACE Y LA SONDA NO HACIA ──
+     Medido en la foto del segundo plano: el marcador, el rotulo PUNTOS, el
+     multiplicador y la ficha de la derecha quedaban DIBUJADOS ENCIMA de la
+     cinematica, porque la sonda saltaba desde una partida y nadie apagaba el
+     HUD. En el juego de verdad no pasa nunca; en la foto parecia un defecto de
+     la cinematica. Una sonda que no reproduce el estado del juego fotografia
+     otra cosa. */
   cine: (t) => { armaAudio(); CINE.on = true; MODO = 'cine'; CINE.gracia = 9e9;
                  _flash = 0; $('flash').style.opacity = '0';
+                 $('hud').classList.remove('on'); $('acc').hidden = true;
                  CINE.dur = JUEGO.planos.reduce((a,p) => a+p.dur, 0);
                  CINE.t = Math.max(0, Math.min(CINE.dur - 0.01, t));
                  CONGELADO = true;
@@ -271,14 +357,24 @@ window.__J = {
      solapa en una pantalla chica sin mirar una captura */
   cajas: () => {
     const out = {};
-    for (const id of ['marca','sub','reloj','cine','finT','finP','mejor']){
+    for (const id of ['marca','sub','ficI','ficD','reloj','acc','cine','finT','finP','mejor','estr','tituN','rejaN']){
       const e = $(id); if (!e) continue;
       const r = e.getBoundingClientRect();
       /* «visible» tiene que incluir que MIDA algo: un elemento adentro de un
          panel con `display:none` devuelve una caja de 0×0 y decía visible */
-      const vis = r.width > 0 && r.height > 0 &&
-                  getComputedStyle(e).display !== 'none' &&
-                  +getComputedStyle(e.closest('.pan') || e).opacity !== 0;
+      /* ── LA OPACIDAD SE MULTIPLICA HASTA EL MARCO ──
+         Mirando solo el panel mas cercano, los elementos del HUD daban
+         `vis:true` con el HUD entero en `opacity:0`: medido en la foto de la
+         cinematica, la sonda informaba el marcador visible cuando en pantalla
+         no habia nada. La opacidad de un antepasado apaga a todos sus hijos, y
+         acá los hijos son justamente lo que se quiere medir. */
+      let op = 1;
+      for (let a = e; a && a !== document.body; a = a.parentElement){
+        const cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden'){ op = 0; break; }
+        op *= +cs.opacity;
+      }
+      const vis = r.width > 0 && r.height > 0 && op > 0.02;
       out[id] = { x: Math.round(r.left), y: Math.round(r.top),
                   w: Math.round(r.width), h: Math.round(r.height), vis };
     }
@@ -288,7 +384,33 @@ window.__J = {
      —lo hace `empieza()`— asi que dos corridas seguidas informaban el puntaje
      de la anterior y el numero mentia sin que nada fallara */
   juegaSolo: (n, azar) => { PUNTOS = 0; rachaCero();
-    return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); }
+    return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); },
+  /* ── LAS SONDAS DE PROGRESO ──
+     Sin esto, probar el nivel 140 obliga a jugar los 139 anteriores, o sea que
+     no se prueba nunca. `nivel(n)` entra derecho; `prog()` dice qué quedó
+     guardado; `borra()` deja el disco limpio para que dos corridas seguidas no
+     se contaminen — que es el defecto que ya hizo que un puntaje mintiera. */
+  nivel: (n) => { empieza(n); return JSON.stringify({ modo: MODO, nivel: NIVEL,
+                    marca: JUEGO.marca, vivo: !!JUEGO.vivo }); },
+  niveles: () => { verNiveles(); return JSON.stringify({ modo: MODO,
+                    total: progTotal(), abiertos: (() => { let k = 0;
+                      for (let i = 1; i <= progTotal(); i++) if (progAbierto(i)) k++;
+                      return k; })() }); },
+  prog: () => JSON.stringify({ tipo: JUEGO.tipo, total: progTotal(),
+    sig: progSiguiente(), est: PROG.est, cont: progContados(), mejor: MEJOR }),
+  borra: () => { PROG.est = {}; PROG.ultimo = 1; MEJOR = 0;
+                 try { localStorage.removeItem(P_CLAVE); localStorage.removeItem(CLAVE); } catch(e){}
+                 return true; },
+  /* el auditor de niveles: cada juego de niveles comprueba que los suyos SE
+     PUEDEN pasar. Un nivel generado y no comprobado es un nivel roto que
+     todavia no se sabe — costo siete niveles imposibles en Maicol. */
+  audita: (desde, hasta) => JSON.stringify(
+    JUEGO.audita ? JUEGO.audita(desde || 1, hasta || progTotal()) : 'sin auditoria'),
+  deshacer: () => { if (!JUEGO.puedeDeshacer) return 'no'; JUEGO.deshacer();
+                    return JSON.stringify({ marca: JUEGO.marca, puede: !!JUEGO.puedeDeshacer }); },
+  /* la sonda propia de cada juego: el estado de su tablero sin tener que mirar
+     una captura. Es lo unico que distingue «se ve raro» de un numero. */
+  ver: () => JSON.stringify(JUEGO.ver ? JUEGO.ver() : 'sin ver')
 };
 
 /* ── LA VENTANA DE LA RACHA SE ADELANTA CON LA SIMULACIÓN, NO CON EL DIBUJO ──
@@ -308,6 +430,7 @@ JUEGO.paso = (dt) => { comboPaso(dt); _pasoJuego(dt); };
 
 /* ══════════════════════ ARRANQUE ══════════════════════ */
 medir();
+progCarga();
 cargaImg();
 pieles();
 pintaIdioma();

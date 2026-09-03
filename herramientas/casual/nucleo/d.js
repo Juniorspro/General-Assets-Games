@@ -1,6 +1,6 @@
 /* ══════════════════ LOS ASSETS GENERADOS ══════════════════
    Las imágenes y el sonido están generados con Rezona y horneados en base64
-   dentro del archivo por `herramientas/tiktok/hornear.py`. Este módulo es lo
+   dentro del archivo por `herramientas/casual/hornear.py`. Este módulo es lo
    único que los conoce: los juegos piden `IMG.pj` o `dibCuadro('pj', 2, …)` y
    no saben de dónde salió.
 

@@ -95,6 +95,16 @@ function son(tipo, k){
     if (b) b.frequency.linearRampToValueAtTime(1400, t + 0.09);
   } else if (tipo === 'clic'){
     ruido(t, 0.035, 1800, 1.4, 0.12*v);
+  } else if (tipo === 'pop'){
+    /* una burbuja que revienta: un golpe de ruido corto y agudo mas un tono que
+       cae rapido. El tono solo suena a bip; el ruido solo, a chasquido. */
+    ruido(t, 0.05, 1500 + 900*Math.random(), 1.1, 0.14*v);
+    tono(t, 900, 320, 0.07, 0.09*v, 'sine');
+  } else if (tipo === 'caida'){
+    /* algo apoyandose: casi todo grave, porque lo que dice «peso» es lo de
+       abajo. Con un tono agudo se lee a boton y no a bloque. */
+    tono(t, 150, 62, 0.13, 0.16*v, 'sine');
+    ruido(t, 0.06, 220, 0.7, 0.10*v, 'lowpass');
   }
 }
 function rachaCero(){ _racha = 0; }

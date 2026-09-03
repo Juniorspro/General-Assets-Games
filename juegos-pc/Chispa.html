@@ -1,0 +1,2143 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>CHISPA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#07070b;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:#f2eee6;user-select:none;-webkit-user-select:none;touch-action:none}
+
+/* ══════════ EL MARCO ES VERTICAL Y NO SE GIRA ══════════
+   Al revés de los juegos 3D de este repo, que se dibujan apaisados adentro de un
+   teléfono vertical. Un casual se juega con el teléfono como uno lo tiene y un
+   solo pulgar: girarlo sería pedirle al jugador que cambie de postura.
+   El lienzo se dibuja con el ANCHO clavado en 720 y el alto según la forma de
+   la pantalla —lo calcula `medir()`— así que el marco la llena entera y una
+   ficha de 40 px mide lo mismo en un teléfono de 360 y en uno de 1440. */
+#caja{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  overflow:hidden;background:#000;--ac:#f2eee6}
+canvas{display:block;width:100%;height:100%}
+/* ══════════ EL TELON DEL MENU ══════════
+   En el menu el lienzo no dibuja nada, asi que sin esto el menu es un panel
+   gris sobre negro — o sea la pantalla de opciones de cualquier cosa. Es el
+   MISMO fondo generado que usa la partida, asi que el menu y el juego se ven
+   del mismo sitio, y va en DOM y no en el lienzo porque no hay que redibujarlo
+   sesenta veces por segundo para que quede quieto.
+   ── Y NO RECIBE TOQUES, QUE ES LO QUE ROMPIO EL JUEGO UNA VEZ ──
+   Un elemento con `opacity:0` SIGUE RECIBIENDO el dedo. Medido con
+   `elementFromPoint` en el medio de la pantalla y en partida: lo que estaba
+   debajo del dedo era `tela` y no el lienzo, o sea que NINGUN toque llegaba al
+   juego. Y no lo vio ninguna sonda, porque las sondas llaman a `JUEGO.baja`
+   directo y se saltean todo el camino entre el dedo y el juego. */
+#tela{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;
+  transition:opacity .6s;z-index:1;pointer-events:none}
+#tela.on{opacity:1}
+
+/* ══════════ LO QUE VA EN DOM Y LO QUE VA EN EL LIENZO ══════════
+   En el lienzo: el juego y las cinemáticas. En DOM: sólo el texto que hay que
+   TRADUCIR y que tiene que quedar nítido en cualquier densidad de pantalla.
+   Un texto dibujado en un lienzo de 720 se ve borroso en un teléfono de 1440, y
+   el nombre del juego es justo lo que se mira primero. */
+.pan{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:2.6vh;padding:6vw;text-align:center;z-index:5;
+  background:linear-gradient(180deg,rgba(7,7,11,.34) 0%,rgba(7,7,11,.74) 44%,
+    rgba(7,7,11,.93) 100%)}
+.pan.on{display:flex}
+/* ── EL TAMAÑO DEL TÍTULO SALE DEL LARGO DEL NOMBRE ──
+   Con 11vw clavado, un nombre de diez letras —con un cuarto de em de espaciado
+   entre cada una— mide mas que el marco y sale CORTADO por los dos lados.
+   `--h1` lo calcula el arranque a partir de la cantidad de letras, así que el
+   próximo nombre largo entra solo. */
+.pan h1{font-size:clamp(26px,var(--h1,11vw),64px);letter-spacing:.26em;font-weight:800;
+  text-indent:.26em;line-height:1;
+  text-shadow:0 0 30px var(--ac),0 4px 22px #000}
+.em{width:clamp(90px,27vw,158px);height:auto;margin-bottom:-1.4vh;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.75))}
+.em[hidden]{display:none}
+#pFin h1{font-size:clamp(24px,7.5vw,42px);letter-spacing:.16em;text-indent:.16em}
+.pan p{font-size:clamp(12px,3.4vw,17px);line-height:1.6;opacity:.62;max-width:24em}
+.fila{display:flex;gap:2.6vw;flex-wrap:wrap;justify-content:center}
+.bt{appearance:none;border:1px solid rgba(255,255,255,.20);background:rgba(255,255,255,.05);
+  color:inherit;font:inherit;font-size:clamp(12px,3.5vw,16px);font-weight:700;
+  letter-spacing:.16em;padding:1.5vh 5.5vw;border-radius:999px;cursor:pointer}
+.bt.p{background:var(--ac);color:#0b0b10;border-color:var(--ac)}
+.bt:disabled{opacity:.34}
+.bt.ch{padding:.9vh 3.4vw;font-size:11px;letter-spacing:.12em}
+
+/* ══════════ EL SELECTOR DE NIVELES ══════════
+   Los tres juegos de niveles necesitan una reja con el progreso: qué está
+   abierto, cuántas estrellas dio cada uno. Y tiene que poder DESLIZARSE, porque
+   son doscientos niveles y en un teléfono entran veinte por pantalla.
+   `justify-content:flex-start` a propósito: centrado, con la reja más alta que
+   el marco, el navegador recorta por ARRIBA y las primeras filas quedan
+   inalcanzables — un defecto clásico de flex con overflow. */
+#pNiveles{justify-content:flex-start;padding-top:4vh;gap:1.8vh}
+#rejaN{display:grid;grid-template-columns:repeat(5,1fr);gap:2.2vw;width:100%;
+  max-width:520px;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;padding:1vh .5vw 3vh}
+.nv{position:relative;aspect-ratio:1;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.05);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;cursor:pointer;
+  font-weight:800;font-size:clamp(13px,4vw,19px);color:inherit;font-family:inherit}
+.nv.hecho{border-color:var(--ac);background:rgba(255,255,255,.10)}
+.nv.trabado{opacity:.26;cursor:default}
+.nv .es{font-size:9px;letter-spacing:.08em;color:#ffd76a;line-height:1;height:9px}
+#tituN{font-size:clamp(15px,4.6vw,22px);letter-spacing:.2em;font-weight:800}
+
+/* ══════════ EL HUD ══════════
+   Arriba el número grande —los puntos en los de puntaje, el nivel en los de
+   niveles— y debajo su rótulo. A los costados, dos fichas chicas para lo que
+   cambia dentro del nivel (movimientos, burbujas que quedan). */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;z-index:4}
+#hud.on{opacity:1}
+#marca{position:absolute;top:2.2vh;left:0;right:0;text-align:center;
+  font-size:clamp(28px,9.4vw,54px);font-weight:800;letter-spacing:.04em;
+  text-shadow:0 3px 18px rgba(0,0,0,.75)}
+#sub{position:absolute;top:calc(2.2vh + 10.6vw);left:0;right:0;text-align:center;
+  font-size:clamp(10px,3vw,14px);letter-spacing:.28em;opacity:.55}
+.fic{position:absolute;top:2.4vh;font-size:clamp(10px,3vw,14px);letter-spacing:.14em;
+  font-weight:700;opacity:.72;padding:.7vh 3vw;border-radius:999px;
+  background:rgba(7,7,11,.5);border:1px solid rgba(255,255,255,.12)}
+#ficI{left:3.5vw}
+#ficD{right:3.5vw}
+.fic[hidden]{display:none}
+/* ── LA FICHA DEL MULTIPLICADOR ──
+   Debajo del marcador y con su propia barrita: la barra es la ventana de la
+   racha, o sea el tiempo que queda para que el próximo acierto la sostenga. Sin
+   la barra, la racha se corta sola y el jugador no sabe por qué. */
+#combo{position:absolute;top:calc(2.2vh + 15vw);left:0;right:0;text-align:center;
+  font-size:clamp(18px,6vw,34px);font-weight:800;letter-spacing:.06em;
+  color:#ffd76a;text-shadow:0 0 18px rgba(255,215,106,.6),0 3px 12px #000;
+  opacity:0;transform:scale(.7);transition:opacity .18s,transform .18s}
+#combo.on{opacity:1;transform:scale(1)}
+#comboV{position:absolute;top:calc(2.2vh + 22vw);left:38%;right:38%;height:4px;
+  background:rgba(255,255,255,.10);border-radius:3px;overflow:hidden;
+  opacity:0;transition:opacity .18s}
+#combo.on ~ #comboV{opacity:.8}
+#comboB{height:100%;width:0;background:#ffd76a}
+#reloj{position:absolute;left:12%;right:12%;bottom:3.2vh;height:6px;
+  background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
+#relojB{height:100%;width:100%;background:#f2eee6}
+#relojB.poco{background:#e0553f}
+/* ══════════ LOS BOTONES DE PARTIDA ══════════
+   DESHACER y REINICIAR sólo existen en los juegos de niveles, y son la mitad de
+   lo que hace que un rompecabezas se pueda jugar: sin deshacer, un movimiento
+   mal pensado cuesta el nivel entero y el jugador cierra el juego. Van con
+   `pointer-events:auto` porque el HUD entero está en `none` — si no, el botón
+   se ve y no se puede tocar, que es exactamente el defecto que ya costó una
+   vuelta con el telón. */
+#acc{position:absolute;left:0;right:0;bottom:2.4vh;display:flex;gap:3vw;
+  justify-content:center;pointer-events:auto}
+#acc[hidden]{display:none}
+#acc .bt{background:rgba(7,7,11,.62)}
+/* ── Y NO RECIBEN EL DEDO CON EL HUD APAGADO ──
+   `#hud` va a `opacity:0` entre partidas, y un elemento invisible SIGUE
+   RECIBIENDO toques: con `pointer-events:auto` clavado, los tres botones se
+   quedarían comiendo el dedo por encima del menú. Es exactamente el defecto que
+   ya dejó un juego sin poder empezar, y ahí lo causaba el telón. */
+#hud:not(.on) #acc{pointer-events:none}
+
+/* el pie de la cinemática: el único texto de una cinemática, y va en DOM por lo
+   mismo que el título — hay que poder traducirlo y tiene que leerse */
+#cine{position:absolute;left:8%;right:8%;bottom:9vh;text-align:center;z-index:5;
+  font-size:clamp(13px,3.8vw,19px);line-height:1.5;opacity:0;transition:opacity .5s;
+  text-shadow:0 2px 16px #000;pointer-events:none}
+#cine.on{opacity:.96}
+#salta{position:absolute;right:4vw;top:3vh;z-index:6;font-size:11px;letter-spacing:.2em;
+  opacity:0;transition:opacity .4s;pointer-events:none}
+#salta.on{opacity:.4}
+
+#estr{font-size:clamp(22px,7vw,38px);letter-spacing:.18em;color:#ffd76a;
+  text-shadow:0 0 20px rgba(255,215,106,.55)}
+#estr[hidden]{display:none}
+
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7}
+#velo{position:absolute;inset:0;background:#07070b;opacity:0;pointer-events:none;
+  z-index:6;transition:opacity .45s}
+#velo.on{opacity:1}
+</style></head><body>
+<div id="caja">
+  <canvas id="c"></canvas>
+  <div id="tela"></div>
+  <div id="hud">
+    <div id="marca">0</div>
+    <div id="sub"></div>
+    <div class="fic" id="ficI" hidden></div>
+    <div class="fic" id="ficD" hidden></div>
+    <div id="combo"></div>
+    <div id="comboV"><div id="comboB"></div></div>
+    <div id="reloj"><div id="relojB"></div></div>
+    <div id="acc" hidden>
+      <button class="bt ch" id="bDes" data-i18n="deshacer"></button>
+      <button class="bt ch" id="bRei" data-i18n="reiniciar"></button>
+      <button class="bt ch" id="bSal" data-i18n="salir"></button>
+    </div>
+  </div>
+  <div id="cine"></div>
+  <div id="salta"></div>
+  <div id="velo"></div>
+  <div id="flash"></div>
+
+  <div class="pan on" id="pIdioma">
+    <img class="em" id="emI" alt="" hidden>
+    <h1>CHISPA</h1>
+    <div class="fila">
+      <button class="bt p" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <img class="em" id="emM" alt="" hidden>
+    <h1>CHISPA</h1>
+    <p data-i18n="sub"></p>
+    <div class="fila">
+      <button class="bt p" id="bJugar" data-i18n="jugar"></button>
+      <button class="bt" id="bComo" data-i18n="como"></button>
+    </div>
+    <p id="mejor" style="opacity:.42;letter-spacing:.2em;font-size:12px"></p>
+    <div class="fila" style="gap:1.8vw">
+      <button class="bt ch" data-lang="es">ES</button>
+      <button class="bt ch" data-lang="en">EN</button>
+      <button class="bt ch" data-lang="pt">PT</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pNiveles">
+    <div id="tituN" data-i18n="niveles"></div>
+    <div id="rejaN"></div>
+    <div class="fila"><button class="bt ch" id="bNMenu" data-i18n="menu"></button></div>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h1 id="finT"></h1>
+    <div id="estr" hidden></div>
+    <p id="finP"></p>
+    <div class="fila">
+      <button class="bt p" id="bOtra" data-i18n="otra"></button>
+      <button class="bt" id="bMenu" data-i18n="menu"></button>
+    </div>
+  </div>
+</div>
+<script type="importmap">{"imports":{}}</script>
+<script type="module">
+/* ══════════════════════ EL MARCO Y EL RELOJ ══════════════════════ */
+const $ = (i) => document.getElementById(i);
+
+/* ── EL ANCHO DE DISEÑO ES FIJO Y EL ALTO NO ──
+   Todo lo que un juego escribe —una posición, un radio, un tamaño de letra—
+   está en unidades de diseño con el ancho clavado en 720, así que una moneda de
+   40 px mide lo mismo en un teléfono de 360 y en uno de 1440. Eso es lo que
+   evita el defecto que aparece sólo en un tamaño de pantalla y que nadie puede
+   reproducir.
+
+   PERO EL ALTO NO PUEDE SER FIJO, y eso se vio en la primera captura: con
+   720×1280 clavado —9:16, la relación de un teléfono de 2016— en un teléfono de
+   hoy (412×892, o sea 0,46) el marco entraba por el ancho y quedaban DOS BANDAS
+   NEGRAS arriba y abajo. Un minijuego que se abre adentro de TikTok tiene que
+   ocupar la pantalla entera; una banda negra se lee a que el juego está roto.
+   Así que el alto se calcula de la pantalla y los juegos lo leen: lo que se
+   ancla abajo se escribe como `AL - algo`, no como un número. Se topa arriba y
+   abajo para que una ventana de escritorio muy ancha o muy alta no deforme el
+   diseño — ahí sí quedan bandas, y ahí sí corresponde. */
+const AN = 720;
+let AL = 1280;
+const AL_MIN = 1100, AL_MAX = 1760;
+
+const lienzo = $('c');
+const g = lienzo.getContext('2d');
+const caja = $('caja');
+let ESC = 1, DPR = 1;
+
+function medir(){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  /* el alto de diseño sale de la forma de la pantalla, así que el marco la llena
+     entera y no hay bandas */
+  let e = vw / AN;
+  AL = Math.round(vh / e);
+  if (AL < AL_MIN){ AL = AL_MIN; e = vh / AL; }
+  else if (AL > AL_MAX){ AL = AL_MAX; e = vh / AL; }
+  const w = Math.round(AN * e), h = Math.round(AL * e);
+  caja.style.width = w + 'px'; caja.style.height = h + 'px';
+  /* ── EL PIXEL RATIO VA TOPADO EN 2, Y ESO ESTÁ MEDIDO EN OTRO JUEGO ──
+     En Maicol se midió que dibujar al doble de la resolución de diseño costaba
+     la mitad de los cuadros y no compraba ni un detalle, porque no hay más
+     detalle que dar: los dibujos están hechos para 720 de ancho. Con 2 el texto
+     y los bordes quedan finos y no se paga un tercer múltiplo. */
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  lienzo.width = Math.round(w * DPR);
+  lienzo.height = Math.round(h * DPR);
+  ESC = (w * DPR) / AN;
+  g.setTransform(ESC, 0, 0, ESC, 0, 0);
+  g.imageSmoothingEnabled = true;
+}
+addEventListener('resize', () => setTimeout(medir, 60));
+addEventListener('orientationchange', () => setTimeout(medir, 120));
+
+/* ── EL RELOJ: PASO FIJO DE 60 CON TOPE ──
+   Un minijuego que se juega por reflejos NO PUEDE depender de los cuadros por
+   segundo del aparato: si la moneda cae más rápido en un teléfono lento, es
+   otro juego. La simulación va a 60 pasos fijos y el dibujo sale de donde
+   quedó. Y el `dt` se topa en un cuarto de segundo, porque una pestaña que
+   estuvo dormida no puede simular un minuto de golpe. */
+const PASO = 1/60;
+let _acum = 0, _ultimo = performance.now();
+let MODO = 'idioma';      /* idioma · menu · como · cine · juega · fin */
+let PAUSA = false, CONGELADO = false;
+let fps = 0, _cuadros = 0, _acumF = 0;
+
+/* la entrada: un solo verbo. Llega normalizada a las unidades de diseño, así
+   que un juego nunca ve un píxel de pantalla. */
+const TOQUE = { x: 0, y: 0, abajo: false, movido: false, n: 0 };
+function aDiseno(ev){
+  const r = lienzo.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  return { x: (t.clientX - r.left) / r.width * AN,
+           y: (t.clientY - r.top) / r.height * AL };
+}
+/* ── EL `preventDefault` DE UN `touchstart` CANCELA EL CLICK, Y ESO DEJABA EL
+       JUEGO SIN PODER EMPEZAR ──
+   Los cuatro escuchas estaban colgados de la VENTANA, así que un toque en el
+   botón JUGAR o en el de idioma pasaba primero por acá, llegaba a
+   `preventDefault()` —el juego consume el toque— y el navegador entonces NO
+   sintetiza el `click`. En el banco no se veía: Playwright despacha un click de
+   ratón de verdad y ese camino no pasa por el táctil. En un teléfono, tocar
+   JUGAR no hacía absolutamente nada.
+
+   Ahora la entrada del juego cuelga del LIENZO. Los paneles viven por encima
+   (`z-index 5`), así que mientras hay un panel abierto el lienzo no recibe nada
+   y los botones son botones; en partida no hay panel y el lienzo recibe todo.
+   `touchend`/`mouseup` siguen en la ventana a propósito: un arrastre que
+   termina afuera del marco tiene que soltar igual. */
+function baja(ev){
+  const p = aDiseno(ev);
+  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.abajo = true; TOQUE.movido = false; TOQUE.n++;
+  if (MODO === 'cine'){ cineSalta(); return; }
+  if (MODO === 'juega' && JUEGO.baja) JUEGO.baja(p.x, p.y);
+  if (ev.cancelable) ev.preventDefault();
+}
+function mueve(ev){
+  const p = aDiseno(ev);
+  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.movido = true;
+  if (MODO === 'juega' && TOQUE.abajo && JUEGO.mueve) JUEGO.mueve(p.x, p.y);
+  if (ev.cancelable) ev.preventDefault();
+}
+function sube(){
+  if (MODO === 'juega' && JUEGO.sube) JUEGO.sube(TOQUE.x, TOQUE.y);
+  TOQUE.abajo = false;
+}
+lienzo.addEventListener('touchstart', baja, { passive: false });
+lienzo.addEventListener('touchmove', mueve, { passive: false });
+addEventListener('touchend', sube, { passive: true });
+addEventListener('touchcancel', sube, { passive: true });
+lienzo.addEventListener('mousedown', baja);
+addEventListener('mousemove', (e) => { if (TOQUE.abajo) mueve(e); });
+addEventListener('mouseup', sube);
+/* la barra espaciadora hace de toque EN EL MEDIO del marco: es lo que permite
+   probarlo en una notebook sin fingir un táctil. Y va con las coordenadas de
+   diseño y no con las del evento, porque un `keydown` no trae ninguna — con
+   `clientX` en cero el toque caía en el borde izquierdo, que en un juego de
+   tocar la mitad es una respuesta equivocada. */
+function toqueMedio(){
+  if (MODO === 'cine'){ cineSalta(); return; }
+  TOQUE.x = AN/2; TOQUE.y = AL/2; TOQUE.abajo = true;
+  if (MODO === 'juega' && JUEGO.baja) JUEGO.baja(AN/2, AL/2);
+  if (MODO === 'juega' && JUEGO.sube) JUEGO.sube(AN/2, AL/2);
+  TOQUE.abajo = false;
+}
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'Enter') toqueMedio();
+});
+/* ══════════════════════════════ CHISPA ══════════════════════════════
+   Una reja de caños desordenados. Se toca un caño y gira noventa grados. Gana
+   cuando la corriente sale de la fuente y llega a todos.
+
+   POR QUE ESTE GENERO: es el unico de los cinco que se puede resolver del todo
+   con la cabeza antes de tocar nada, y encima da una respuesta VISUAL inmediata
+   —el caño se enciende— asi que el jugador aprende la regla sin que nadie se la
+   explique. Y no tiene azar: dos personas con el mismo nivel tienen el mismo
+   problema.
+
+   ── LOS NIVELES SE PUEDEN RESOLVER POR CONSTRUCCION, Y ESO NO ES UN ATAJO ──
+   Se genera un ARBOL DE EXPANSION sobre la reja —desde la fuente, en orden al
+   azar— y la mascara de cada celda es el conjunto de aristas del arbol que la
+   tocan. En esa orientacion la corriente llega a todas las celdas: es una
+   propiedad del arbol, no algo que haya que comprobar. Despues se gira cada
+   caño al azar. O sea que la solucion existe SIEMPRE y ademas se sabe cual es,
+   asi que el minimo de giros es exacto y se puede pedir de vuelta: para cada
+   caño, cuantos noventa grados le faltan.
+
+   Y ESE MINIMO ES LA VARA DE LAS TRES ESTRELLAS. Con un numero escrito a mano
+   —«veinte giros»— la vara no tendria nada que ver con el nivel: uno de 4x5
+   necesita ocho giros y uno de 7x9 casi cuarenta. */
+
+const C_NIVELES = 150;
+/* las cuatro direcciones en orden N E S O, que es el orden de los bits de la
+   mascara: girar noventa grados a la derecha es rotar los bits uno a la
+   izquierda, y eso es lo que hace que girar sea una linea */
+const C_DX = [0, 1, 0, -1], C_DY = [-1, 0, 1, 0];
+
+let C_W = 5, C_H = 6;
+let C_m = [];                  /* la mascara de cada celda, 0..15 */
+let C_sol = [];                /* la mascara resuelta: de ahi sale el minimo */
+let C_on = [];                 /* si la corriente llega */
+let C_fx = 0, C_fy = 0;        /* la fuente */
+let C_giros = 0, C_min = 0, C_hist = [];
+let C_lat = 0;                 /* el latido del encendido, cosmético */
+let C_azar = 3;
+let C_gi = [];                 /* el giro dibujado, para que se vea girar */
+function cAz(){ C_azar = (C_azar*1664525 + 1013904223) >>> 0; return C_azar / 4294967296; }
+
+const cIx = (x, y) => y*C_W + x;
+function cRot(m, k){
+  k = ((k % 4) + 4) % 4;
+  return ((m << k) | (m >> (4 - k))) & 15;
+}
+/* cuantos giros de noventa le faltan a la celda para quedar como la solucion.
+   Un cano recto tiene dos orientaciones validas y una cruz cuatro, asi que se
+   toma el MINIMO — sin eso el minimo saldria mas alto que el real y las tres
+   estrellas serian imposibles. */
+function cFaltan(i){
+  for (let k = 0; k < 4; k++) if (cRot(C_m[i], k) === C_sol[i]) return k;
+  return 0;
+}
+function cMinimo(){
+  let s = 0;
+  for (let i = 0; i < C_m.length; i++) s += cFaltan(i);
+  return s;
+}
+
+function cConf(n){
+  const w = Math.min(7, 4 + Math.floor((n - 1)/34));
+  const h = Math.min(9, 5 + Math.floor((n - 1)/22));
+  return { w, h };
+}
+
+function cGenera(n){
+  const cf = cConf(n);
+  C_W = cf.w; C_H = cf.h;
+  C_azar = (n*2654435761 + 99991) >>> 0;
+  const N = C_W*C_H;
+  C_sol = new Array(N).fill(0);
+  /* la fuente arranca en el borde de abajo, que es de donde uno espera que
+     venga la corriente en una pantalla vertical */
+  C_fx = Math.floor(cAz()*C_W); C_fy = C_H - 1;
+  /* ── EL ARBOL SE ARMA CON UNA FRONTERA AL AZAR (PRIM) ──
+     Con una busqueda en profundidad sale un arbol de pasillos larguisimos y
+     casi sin ramas: el nivel se resuelve en una tira y no se siente un
+     rompecabezas. Con la frontera al azar el arbol se ramifica, o sea que hay
+     cruces y T, que son las piezas interesantes. */
+  const vis = new Array(N).fill(false);
+  vis[cIx(C_fx, C_fy)] = true;
+  const front = [];
+  const empuja = (x, y) => {
+    for (let d = 0; d < 4; d++){
+      const nx = x + C_DX[d], ny = y + C_DY[d];
+      if (nx < 0 || ny < 0 || nx >= C_W || ny >= C_H) continue;
+      if (vis[cIx(nx, ny)]) continue;
+      front.push([x, y, d, nx, ny]);
+    }
+  };
+  empuja(C_fx, C_fy);
+  while (front.length){
+    const k = Math.floor(cAz()*front.length);
+    const [x, y, d, nx, ny] = front[k];
+    front[k] = front[front.length-1]; front.pop();
+    if (vis[cIx(nx, ny)]) continue;
+    vis[cIx(nx, ny)] = true;
+    C_sol[cIx(x, y)] |= (1 << d);
+    C_sol[cIx(nx, ny)] |= (1 << ((d + 2) % 4));
+    empuja(nx, ny);
+  }
+  /* ── NO SE DESORDENA TODO, Y ESO SALIO DE MEDIR EL NIVEL 1 ──
+     Girando las veinte celdas al azar, el minimo del nivel 1 salia en TREINTA
+     giros: son un giro y medio por caño, o sea el nivel entero rehecho de cero
+     antes de que el jugador sepa la regla. Eso no es dificultad, es trabajo.
+     La fraccion de caños que se toca arranca en el 45 % y llega al 100 % cerca
+     del nivel 90, asi que la dificultad crece por dos lados a la vez —la reja
+     se agranda y el desorden se completa— y el primer nivel se resuelve en unos
+     nueve giros.
+     Y se pide un piso de caños mal puestos igual: un desorden que por
+     casualidad deje el tablero casi resuelto es un regalo publicado como
+     nivel. */
+  const frac = Math.min(1, 0.45 + (n - 1)*0.0062);
+  let m = null;
+  for (let intento = 0; intento < 8; intento++){
+    m = C_sol.slice();
+    let mal = 0;
+    for (let i = 0; i < N; i++){
+      if (cAz() > frac) continue;
+      /* uno, dos o tres cuartos de vuelta: cero seria no tocarlo, y eso ya lo
+         decide la fraccion de arriba */
+      m[i] = cRot(m[i], 1 + Math.floor(cAz()*3));
+      if (m[i] !== C_sol[i]) mal++;
+    }
+    if (mal >= Math.max(3, Math.ceil(N*frac*0.55))) break;
+  }
+  return { m, sol: C_sol.slice(), fx: C_fx, fy: C_fy, w: C_W, h: C_H };
+}
+
+/* ── LA CORRIENTE PIDE QUE LOS DOS CAÑOS SE MIREN ──
+   Con «este caño apunta al de al lado» alcanzaría para que la corriente pase
+   por un caño que apunta a una pared. El paso existe sólo si el vecino apunta
+   de vuelta, que es lo que hace que girar un caño apague media reja de golpe —
+   y eso es lo que se ve y lo que engancha. */
+function cCorriente(){
+  const N = C_W*C_H;
+  C_on = new Array(N).fill(false);
+  const i0 = cIx(C_fx, C_fy);
+  C_on[i0] = true;
+  const pila = [[C_fx, C_fy]];
+  while (pila.length){
+    const [x, y] = pila.pop();
+    const m = C_m[cIx(x, y)];
+    for (let d = 0; d < 4; d++){
+      if (!(m & (1 << d))) continue;
+      const nx = x + C_DX[d], ny = y + C_DY[d];
+      if (nx < 0 || ny < 0 || nx >= C_W || ny >= C_H) continue;
+      const j = cIx(nx, ny);
+      if (C_on[j]) continue;
+      if (!(C_m[j] & (1 << ((d + 2) % 4)))) continue;
+      C_on[j] = true;
+      pila.push([nx, ny]);
+    }
+  }
+  let n = 0;
+  for (const v of C_on) if (v) n++;
+  return n;
+}
+function cHecho(){ return cCorriente() === C_W*C_H; }
+
+const JT = {
+  es: { sub:'Girá los caños hasta que la corriente llegue a todos.',
+        c1:'La corriente sale de acá.',
+        c2:'Tocá un caño y gira noventa grados.',
+        c3:'Cuando llega a todos, listo. Menos giros, más estrellas.',
+        girosC:'GIROS', apagados:'APAGADOS' },
+  en: { sub:'Rotate the pipes until the current reaches every one.',
+        c1:'The current comes from here.',
+        c2:'Tap a pipe and it turns ninety degrees.',
+        c3:'Reach them all and you are done. Fewer turns, more stars.',
+        girosC:'TURNS', apagados:'DARK' },
+  pt: { sub:'Gire os tubos até a corrente chegar em todos.',
+        c1:'A corrente sai daqui.',
+        c2:'Toque num tubo e ele gira noventa graus.',
+        c3:'Quando chega em todos, pronto. Menos giros, mais estrelas.',
+        girosC:'GIROS', apagados:'APAGADOS' }
+};
+const PIEL = { ac:'#f2c33c', tela:'fondo' };
+const SON_ALIAS = { bien:'chispa', toque:'gira', pierde:'perder', gana:'gana', clic:'clic' };
+
+let CG = { s: 80, x0: 0, y0: 0 };
+function cGeo(){
+  /* la celda sale del ancho Y del alto disponibles, así que una reja de 7x9
+     entra en un teléfono corto igual que una de 4x5 */
+  const dispW = AN - 48, dispH = AL - 170 - 170;
+  CG.s = Math.floor(Math.min(dispW/C_W, dispH/C_H));
+  CG.x0 = (AN - CG.s*C_W)/2;
+  CG.y0 = 170 + (dispH - CG.s*C_H)/2;
+}
+function cCelXY(x, y){ return { x: CG.x0 + x*CG.s + CG.s/2, y: CG.y0 + y*CG.s + CG.s/2 }; }
+
+const JUEGO = {
+  id: 'chispa',
+  tipo: 'niveles',
+  nivelesTotal: C_NIVELES,
+  vivo: true, gano: false, estrellas: 0, finP: '',
+  get marca(){ return C_giros; },
+  get sub(){ return TX('girosC'); },
+  get ficI(){ return TX('nivel') + ' ' + NIVEL; },
+  get ficD(){ return '★★★ ' + C_min; },
+  resta: null,
+  get puedeDeshacer(){ return C_hist.length > 0; },
+
+  planos: [
+    { dur: 2.8, pie: 'c1', dibuja(g, u){
+        cFondo(g);
+        cDemo(g, u, 0);
+      } },
+    { dur: 3.4, pie: 'c2', dibuja(g, u){
+        cFondo(g);
+        cDemo(g, u, 1);
+      } },
+    { dur: 3.2, pie: 'c3', dibuja(g, u){
+        cFondo(g);
+        cDemo(g, u, 2);
+      } }
+  ],
+
+  arranca(n){
+    const gen = cGenera(n || 1);
+    C_m = gen.m; C_sol = gen.sol;
+    C_gi = new Array(C_m.length).fill(0);
+    C_giros = 0; C_hist.length = 0; C_lat = 0;
+    C_min = cMinimo();
+    cGeo();
+    cCorriente();
+    this.vivo = true; this.gano = false; this.estrellas = 0; this.finP = '';
+  },
+
+  paso(dt){
+    cGeo();
+    if (C_lat > 0) C_lat = Math.max(0, C_lat - dt*2.2);
+    /* el giro dibujado se acerca a cero: sin esto el caño CAMBIA de orientación
+       en un cuadro y no se ve girar, se ve parpadear */
+    for (let i = 0; i < C_gi.length; i++)
+      if (C_gi[i] !== 0) C_gi[i] += (0 - C_gi[i]) * Math.min(1, dt*13);
+  },
+
+  baja(px, py){
+    if (!this.vivo) return;
+    cGeo();
+    const x = Math.floor((px - CG.x0)/CG.s), y = Math.floor((py - CG.y0)/CG.s);
+    if (x < 0 || y < 0 || x >= C_W || y >= C_H) return;
+    const i = cIx(x, y);
+    C_hist.push(i);
+    C_m[i] = cRot(C_m[i], 1);
+    C_gi[i] = -Math.PI/2;          /* nace girado al revés y vuelve: eso ES el giro */
+    C_giros++;
+    const antes = C_on.filter(Boolean).length;
+    const ahora = cCorriente();
+    if (ahora > antes){ son('bien', 0.55 + Math.min(0.4, (ahora-antes)*0.06)); C_lat = 1; }
+    else son('toque', 0.55);
+    /* ── EL PREMIO PARCIAL ES PRENDER CAÑOS, NO GANAR ──
+       Sin nada que pagar hasta el final, un nivel de 7x9 son cuarenta giros sin
+       una sola señal de que va bien. Cada caño que se enciende paga. */
+    if (ahora > antes){
+      const p = cCelXY(x, y);
+      sumaPuntos((ahora - antes)*8, p.x, p.y - CG.s*0.6);
+      chispas(p.x, p.y, Math.min(16, 4 + (ahora-antes)*2), '#ffd76a', 110);
+    }
+    if (ahora === C_W*C_H){
+      this.gano = true;
+      /* tres estrellas es el minimo exacto mas un 20 %: el minimo es alcanzable
+         por construccion, asi que la vara no es un deseo */
+      const vara3 = Math.max(C_min, Math.ceil(C_min*1.2));
+      this.estrellas = C_giros <= vara3 ? 3 : (C_giros <= C_min*2 ? 2 : 1);
+      this.finP = TX('girosC') + ' ' + C_giros + '  ·  ★★★ ' + vara3;
+      fogonazo(0.34);
+      sacude(0.3);
+      this.vivo = false;
+    }
+  },
+
+  deshacer(){
+    if (!C_hist.length) return;
+    const i = C_hist.pop();
+    C_m[i] = cRot(C_m[i], 3);
+    C_gi[i] = Math.PI/2;
+    C_giros = Math.max(0, C_giros - 1);
+    cCorriente();
+  },
+
+  fondo(g){ cGeo(); cFondo(g); },
+
+  pinta(g){
+    const s = CG.s;
+    /* la reja primero: sin las celdas dibujadas, los caños flotan y no se ve
+       dónde termina uno y empieza el otro */
+    for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++){
+      const p = cCelXY(x, y), i = cIx(x, y);
+      g.fillStyle = C_on[i] ? 'rgba(242,195,60,.07)' : 'rgba(255,255,255,.028)';
+      caja2(p.x - s/2 + 2, p.y - s/2 + 2, s - 4, s - 4, 8, g.fillStyle, null);
+    }
+    for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++)
+      cCano(g, x, y, C_m[cIx(x, y)], C_on[cIx(x, y)], C_gi[cIx(x, y)],
+            x === C_fx && y === C_fy);
+    /* los apagados que quedan: es el único número que importa mientras se
+       juega, y va en el tablero y no arriba porque ahí se mira */
+    const off = C_W*C_H - C_on.filter(Boolean).length;
+    if (off > 0)
+      texto(off + ' ' + TX('apagados'), AN/2, CG.y0 - 22, 22,
+            'rgba(242,238,230,.42)', '700', 'center');
+  },
+
+  /* ── EL AUTO-JUGADOR JUEGA LA SOLUCION QUE EL GENERADOR SABE ──
+     No es hacer trampa: es lo unico que demuestra que la solucion del generador
+     se puede JUGAR tocando celdas —o sea que girar en el juego y girar en el
+     generador son la misma operacion—. Y que los giros que gasta coincidan con
+     el minimo calculado es la prueba de que la cuenta de `cFaltan` es correcta;
+     si difieren, hay dos definiciones de «girado». */
+  juegaSolo(n, azar){
+    const res = [];
+    const desde = Math.max(1, n || 1);
+    const hasta = Math.min(C_NIVELES, desde + (azar ? 11 : 23));
+    for (let nv = desde; nv <= hasta; nv++){
+      this.arranca(nv);
+      const esperado = C_min;
+      if (azar){
+        /* el que gira al azar: por lejos no llega, y esa distancia es la que
+           dice que el nivel pide pensar */
+        for (let k = 0; k < esperado*3 && this.vivo; k++){
+          const x = Math.floor(cAz()*C_W), y = Math.floor(cAz()*C_H);
+          this.baja(cCelXY(x, y).x, cCelXY(x, y).y);
+        }
+      } else {
+        for (let y = 0; y < C_H && this.vivo; y++) for (let x = 0; x < C_W && this.vivo; x++){
+          const i = cIx(x, y);
+          let f = cFaltan(i);
+          const p = cCelXY(x, y);
+          for (let k = 0; k < f && this.vivo; k++) this.baja(p.x, p.y);
+        }
+      }
+      res.push({ n: nv, min: esperado, giros: C_giros, gano: !!this.gano,
+                 est: this.estrellas, apagados: C_W*C_H - C_on.filter(Boolean).length,
+                 reja: C_W + 'x' + C_H });
+    }
+    const malos = res.filter(r => !r.gano);
+    return { probados: res.length, ganados: res.length - malos.length,
+             malos: malos.map(r => ({ n: r.n, apagados: r.apagados })),
+             /* si los giros jugados no son el mínimo, `cFaltan` y el juego no
+                están de acuerdo en qué es «girar» */
+             desajuste: res.filter(r => r.gano && r.giros !== r.min).map(r => r.n),
+             est3: res.filter(r => r.est === 3).length,
+             muestra: res.slice(0, 6) };
+  },
+
+  audita(desde, hasta){
+    let mMin = 999, mMax = 0, mSum = 0, n = 0;
+    const rotos = [], faciles = [];
+    for (let nv = desde; nv <= hasta; nv++){
+      const gen = cGenera(nv);
+      C_m = gen.m; C_sol = gen.sol;
+      /* que la SOLUCION prenda todo: es la propiedad del árbol y por eso tiene
+         que valer siempre. Si falla, el generador no está armando un árbol. */
+      const guard = C_m;
+      C_m = gen.sol.slice();
+      const todo = cCorriente() === C_W*C_H;
+      C_m = guard;
+      if (!todo) rotos.push(nv);
+      /* y que ningun brazo de la solucion apunte afuera de la reja: es una
+         propiedad del arbol y por eso tiene que valer en los ciento cincuenta */
+      for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++){
+        const mm = gen.sol[cIx(x,y)];
+        for (let d = 0; d < 4; d++){
+          if (!(mm & (1<<d))) continue;
+          const nx = x+C_DX[d], ny = y+C_DY[d];
+          if (nx<0||ny<0||nx>=C_W||ny>=C_H){ if (rotos.indexOf(nv) < 0) rotos.push(nv); }
+        }
+      }
+      const mn = cMinimo();
+      /* un nivel que nace resuelto o casi es un regalo publicado como nivel.
+         La vara sigue la fraccion de desorden: pedirle al nivel 1 el mismo
+         minimo que al 150 seria pedirle que no sea el nivel 1. */
+      const fr = Math.min(1, 0.45 + (nv - 1)*0.0062);
+      if (mn < Math.ceil(C_W*C_H*fr*0.45)) faciles.push(nv);
+      mMin = Math.min(mMin, mn); mMax = Math.max(mMax, mn); mSum += mn; n++;
+    }
+    return { desde, hasta, solucionRota: rotos, muyFaciles: faciles,
+             minMin: mMin, minMax: mMax, minMedio: +(mSum/Math.max(1,n)).toFixed(1) };
+  },
+
+  ver(){
+    const off = C_W*C_H - C_on.filter(Boolean).length;
+    return { nivel: NIVEL, reja: C_W + 'x' + C_H, giros: C_giros, min: C_min,
+             apagados: off, hecho: off === 0, hist: C_hist.length,
+             fuente: [C_fx, C_fy], celda: CG.s,
+             /* ── LO QUE SE COMPRUEBA ES LA SOLUCION Y NO EL TABLERO A MEDIO JUGAR ──
+                La primera version contaba los brazos de caños encendidos que
+                apuntan afuera de la reja y devolvia 1 en el nivel 1: yo lo lei
+                como una fuga y NO LO ES — un caño girado a medio jugar puede
+                perfectamente apuntar a la pared, es un brazo muerto y nada mas
+                (la corriente ya no pasa: `cCorriente` comprueba los limites).
+                Lo que si seria un defecto de verdad es que la SOLUCION tenga un
+                brazo apuntando afuera, porque entonces el arbol estaria mal
+                armado y la mascara resuelta no seria la del arbol. Eso tiene
+                que ser cero siempre. */
+             solFuera: (() => { let k = 0;
+               for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++){
+                 const m = C_sol[cIx(x,y)];
+                 for (let d = 0; d < 4; d++){
+                   if (!(m & (1<<d))) continue;
+                   const nx = x+C_DX[d], ny = y+C_DY[d];
+                   if (nx<0||ny<0||nx>=C_W||ny>=C_H) k++;
+                 }
+               } return k; })(),
+             /* y los brazos muertos del tablero actual, que son informacion y
+                no un error: sirven para ver de un numero si el jugador dejo
+                caños mirando la pared */
+             brazosMuertos: (() => { let k = 0;
+               for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++){
+                 const m = C_m[cIx(x,y)];
+                 for (let d = 0; d < 4; d++){
+                   if (!(m & (1<<d))) continue;
+                   const nx = x+C_DX[d], ny = y+C_DY[d];
+                   if (nx<0||ny<0||nx>=C_W||ny>=C_H) k++;
+                 }
+               } return k; })() };
+  }
+};
+
+/* ══════════ EL CAÑO ══════════
+   Un brazo por cada bit de la máscara, más el cubo del centro. Y el encendido
+   no es sólo otro color: lleva un halo y el centro más claro, porque en una
+   reja de sesenta caños un cambio de tono no se ve de una ojeada. */
+function cCano(g, x, y, m, on, gi, fuente){
+  const p = cCelXY(x, y), s = CG.s;
+  const gr = s*0.20, largo = s*0.5;
+  g.save();
+  g.translate(p.x, p.y);
+  if (gi) g.rotate(gi);
+  const col = on ? '#f2c33c' : '#4a5a68';
+  const bor = on ? '#8a6410' : '#26313b';
+  if (on){
+    g.save();
+    g.globalAlpha = 0.16 + 0.10*C_lat;
+    g.beginPath(); g.arc(0, 0, s*0.52, 0, 7);
+    g.fillStyle = '#f2c33c'; g.fill();
+    g.restore();
+  }
+  g.lineCap = 'butt';
+  for (let d = 0; d < 4; d++){
+    if (!(m & (1 << d))) continue;
+    g.save();
+    g.rotate(d*Math.PI/2);        /* d=0 es el norte y rotar lleva a E, S, O */
+    g.fillStyle = bor;
+    g.fillRect(-gr/2 - 2, -largo, gr + 4, largo + 2);
+    g.fillStyle = col;
+    g.fillRect(-gr/2, -largo, gr, largo + 2);
+    /* la veta clara del medio: es lo que hace que un brazo se lea a caño y no a
+       un palito, y cuesta un rectángulo */
+    g.fillStyle = on ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.07)';
+    g.fillRect(-gr*0.20, -largo, gr*0.22, largo);
+    g.restore();
+  }
+  /* el cubo del centro: sin él, dos brazos opuestos se leen a dos palitos
+     separados y una curva se lee a una L rota */
+  const cs = gr*1.42;
+  g.fillStyle = bor;
+  caja2(-cs/2 - 2, -cs/2 - 2, cs + 4, cs + 4, 4, bor, null);
+  g.fillStyle = col;
+  caja2(-cs/2, -cs/2, cs, cs, 3, col, null);
+  if (fuente){
+    /* la fuente: un disco propio, porque es la única celda que el jugador tiene
+       que poder encontrar de una ojeada */
+    g.beginPath(); g.arc(0, 0, s*0.20, 0, 7);
+    g.fillStyle = '#fff6d0'; g.fill();
+    g.lineWidth = 3; g.strokeStyle = '#f2c33c'; g.stroke();
+  } else if (on){
+    g.beginPath(); g.arc(0, 0, gr*0.30, 0, 7);
+    g.fillStyle = '#fff6d0'; g.fill();
+  }
+  g.restore();
+}
+
+/* la demo: una reja chiquita de verdad, con los mismos caños y la misma
+   corriente, así que lo que se ve en la escena es lo que se ve jugando */
+function cDemo(g, u, etapa){
+  const gm = C_m, gs = C_sol, gw = C_W, gh = C_H, gf = [C_fx, C_fy], gg = C_gi;
+  const dg = cGenera(7);
+  C_m = dg.sol.slice(); C_sol = dg.sol.slice();
+  C_gi = new Array(C_m.length).fill(0);
+  if (etapa === 0){
+    /* sólo la fuente encendida: se desarma todo menos ella */
+    for (let i = 0; i < C_m.length; i++) if (i !== cIx(C_fx, C_fy)) C_m[i] = cRot(C_m[i], 1);
+  } else if (etapa === 1){
+    const k = Math.floor(u*4) % 4;
+    for (let i = 0; i < C_m.length; i++) if (i % 3 === 0) C_m[i] = cRot(C_m[i], 1);
+    const c = cIx(Math.floor(C_W/2), Math.floor(C_H/2));
+    C_m[c] = cRot(dg.sol[c], k);
+    C_gi[c] = -(u*4 % 1)*Math.PI/2;
+  }
+  cGeo();
+  cCorriente();
+  const s = CG.s;
+  for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++){
+    const p = cCelXY(x, y), i = cIx(x, y);
+    const f = C_on[i] ? 'rgba(242,195,60,.07)' : 'rgba(255,255,255,.028)';
+    caja2(p.x - s/2 + 2, p.y - s/2 + 2, s - 4, s - 4, 8, f, null);
+  }
+  for (let y = 0; y < C_H; y++) for (let x = 0; x < C_W; x++)
+    cCano(g, x, y, C_m[cIx(x, y)], C_on[cIx(x, y)], C_gi[cIx(x, y)],
+          x === C_fx && y === C_fy);
+  if (etapa === 2){
+    const e = Math.min(3, 1 + Math.floor(u*3.2));
+    texto('★'.repeat(e) + '☆'.repeat(3-e), AN/2, CG.y0 - 30, 42, '#ffd76a', '800', 'center');
+  }
+  C_m = gm; C_sol = gs; C_W = gw; C_H = gh; C_fx = gf[0]; C_fy = gf[1]; C_gi = gg;
+  cGeo();
+  cCorriente();
+}
+
+function cFondo(g){
+  if (dibCubre('fondo')) return;
+  const gr = g.createLinearGradient(0, 0, 0, AL);
+  gr.addColorStop(0, '#12121c');
+  gr.addColorStop(0.5, '#1c1c2a');
+  gr.addColorStop(1, '#0c0c14');
+  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* una trama de puntos: es lo unico que hace que el fondo no sea un degradado
+     liso, y va anclada al mundo asi que no titila */
+  g.fillStyle = 'rgba(255,255,255,.035)';
+  for (let y = 40; y < AL; y += 56) for (let x = 26; x < AN; x += 56){
+    g.beginPath(); g.arc(x, y, 2, 0, 7); g.fill();
+  }
+}
+/* ══════════════════════ LOS TRES IDIOMAS ══════════════════════
+   La pantalla de idioma va ANTES del menú, que es la lección de los otros seis
+   juegos de este repo: elegir el idioma adentro de un menú ya escrito en un
+   idioma que no entendés no sirve de nada, porque para cuando lo encontrás ya
+   leíste todo sin entenderlo.
+
+   Y NO SE GUARDA NADA EN DISCO. `localStorage` TIRA en una ventana privada, y
+   un minijuego que se abre desde un enlace se abre en ventanas raras todo el
+   tiempo. El idioma sale de `navigator.language` y el jugador lo cambia con los
+   tres botones chicos del menú. La única cosa que sí se intenta guardar es el
+   récord, y va envuelta en `try` justamente porque puede tirar. */
+let LANG = 'en';
+const TXB = {
+  es: { jugar:'JUGAR', como:'CÓMO SE JUEGA', otra:'OTRA VEZ', menu:'MENÚ',
+        mejor:'MEJOR', salta:'TOCÁ PARA SALTEAR', pts:'PUNTOS',
+        finBien:'¡BIEN!', finMal:'SE TERMINÓ', nuevoRec:'RÉCORD NUEVO',
+        racha:'RACHA', niveles:'NIVELES', nivel:'NIVEL', movs:'MOVIDAS',
+        deshacer:'DESHACER', reiniciar:'REINICIAR', salir:'SALIR',
+        seguir:'SEGUIR', ganaste:'¡NIVEL LISTO!', perdiste:'NO SALIÓ',
+        proximo:'SIGUIENTE', progreso:'{0} DE {1}' },
+  en: { jugar:'PLAY', como:'HOW TO PLAY', otra:'AGAIN', menu:'MENU',
+        mejor:'BEST', salta:'TAP TO SKIP', pts:'POINTS',
+        finBien:'NICE!', finMal:'GAME OVER', nuevoRec:'NEW RECORD',
+        racha:'STREAK', niveles:'LEVELS', nivel:'LEVEL', movs:'MOVES',
+        deshacer:'UNDO', reiniciar:'RESTART', salir:'EXIT',
+        seguir:'CONTINUE', ganaste:'LEVEL CLEAR!', perdiste:'NO LUCK',
+        proximo:'NEXT', progreso:'{0} OF {1}' },
+  pt: { jugar:'JOGAR', como:'COMO JOGAR', otra:'DE NOVO', menu:'MENU',
+        mejor:'MELHOR', salta:'TOQUE PARA PULAR', pts:'PONTOS',
+        finBien:'BOA!', finMal:'ACABOU', nuevoRec:'NOVO RECORDE',
+        racha:'SEQUÊNCIA', niveles:'NÍVEIS', nivel:'NÍVEL', movs:'JOGADAS',
+        deshacer:'DESFAZER', reiniciar:'REINICIAR', salir:'SAIR',
+        seguir:'CONTINUAR', ganaste:'NÍVEL FEITO!', perdiste:'NÃO DEU',
+        proximo:'PRÓXIMO', progreso:'{0} DE {1}' }
+};
+/* ── LA TABLA DEL JUEGO SE FUSIONA CON LA DEL NÚCLEO, NO LA REEMPLAZA ──
+   Cada juego trae sus propias frases y hereda las siete del núcleo. Si cada
+   juego tuviera que repetir «JUGAR» y «MENÚ» en tres idiomas, serían veintiún
+   cadenas duplicadas por juego y la primera que se corrija va a quedar
+   corregida en uno solo. */
+const TXT = {};
+for (const l of ['es','en','pt']) TXT[l] = Object.assign({}, TXB[l], (JT[l] || {}));
+
+function TX(k, ...a){
+  let s = (TXT[LANG] && TXT[LANG][k]) != null ? TXT[LANG][k]
+        : (TXT.es[k] != null ? TXT.es[k] : k);
+  /* los patrones con hueco: `{0}` se reemplaza por el argumento. Una frase con
+     un número adentro no se puede armar concatenando, porque el número no cae
+     en el mismo lugar en los tres idiomas. */
+  return String(s).replace(/\{(\d)\}/g, (_, i) => a[i] != null ? a[i] : '');
+}
+
+function pintaIdioma(){
+  document.documentElement.lang = LANG;
+  for (const e of document.querySelectorAll('[data-i18n]'))
+    e.textContent = TX(e.dataset.i18n);
+  for (const b of document.querySelectorAll('[data-lang]'))
+    b.classList.toggle('p', b.dataset.lang === LANG);
+  $('salta').textContent = TX('salta');
+  if (window.pintaJuego) window.pintaJuego();
+}
+
+function ponIdioma(l){ LANG = l; pintaIdioma(); }
+
+/* el idioma del aparato, y sólo si es uno de los tres */
+(() => {
+  const n = (navigator.language || 'en').slice(0,2).toLowerCase();
+  if (n === 'es' || n === 'pt') LANG = n;
+})();
+/* ══════════════════════════ EL SONIDO ══════════════════════════
+   Procedural y sin un solo archivo, y acá eso no es una limitación sino la
+   respuesta correcta: un minijuego de TikTok se abre desde un enlace y tiene
+   que estar jugable en el primer segundo. Medio mega de MP3 antes del primer
+   cuadro es exactamente lo que hace que alguien se vaya.
+
+   Y LA ESCALA ESTÁ ESCALONADA, que es la regla que ya se midió en Eco, en
+   RECREO y en PULSO: la cama de fondo tiene que quedar MUY por debajo de un
+   acierto, porque si compiten, el acierto deja de ser un acontecimiento y pasa
+   a ser un matiz. Fondo 0,03 · toque 0,10 · acierto 0,18 · error 0,22 · final
+   0,30. */
+let AUD = null, MAESTRO = null, ANAL = null, RUIDO = null, CAMA = null;
+let SILENCIO = false;
+
+function armaAudio(){
+  if (AUD) return;
+  try { AUD = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  MAESTRO = AUD.createGain(); MAESTRO.gain.value = 0.9;
+  MAESTRO.connect(AUD.destination);
+  ANAL = AUD.createAnalyser(); ANAL.fftSize = 1024; MAESTRO.connect(ANAL);
+  /* un segundo de ruido blanco generado una vez: cada golpe es el mismo ruido
+     con otro filtro y otro sobre, así que no hay que generar nada más */
+  const n = AUD.sampleRate;
+  RUIDO = AUD.createBuffer(1, n, n);
+  const d = RUIDO.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
+}
+
+function env(gn, t0, at, dur, pico){
+  gn.gain.setValueAtTime(0.0001, t0);
+  gn.gain.exponentialRampToValueAtTime(Math.max(0.0002, pico), t0 + at);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+}
+function tono(t0, f0, f1, dur, pico, tipo){
+  if (!AUD) return;
+  const o = AUD.createOscillator(); o.type = tipo || 'sine';
+  o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+  const gn = AUD.createGain(); o.connect(gn); gn.connect(MAESTRO);
+  env(gn, t0, Math.min(0.02, dur*0.2), dur, pico);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function ruido(t0, dur, f, q, pico, tipo){
+  if (!AUD) return null;
+  const s = AUD.createBufferSource(); s.buffer = RUIDO; s.loop = true;
+  const b = AUD.createBiquadFilter(); b.type = tipo || 'bandpass';
+  b.frequency.value = f; b.Q.value = q;
+  const gn = AUD.createGain();
+  s.connect(b); b.connect(gn); gn.connect(MAESTRO);
+  env(gn, t0, Math.min(0.01, dur*0.2), dur, pico);
+  s.start(t0); s.stop(t0 + dur + 0.05);
+  return b;
+}
+
+/* ── LA ESCALA PENTATÓNICA NO ES UN GUSTO ──
+   Un acierto suena cien veces por partida. En cualquier otra escala, dos notas
+   seguidas pueden sonar mal juntas y a los treinta segundos molesta; en
+   pentatónica cualquier nota pega con cualquier otra. Es la misma decisión que
+   en POMPOM, y ahí se notó al primer minuto de juego. */
+const PENTA = [0, 2, 4, 7, 9];
+function nota(i){ /* i = grado, sube por octavas */
+  const o = Math.floor(i / 5), s = PENTA[((i % 5) + 5) % 5];
+  return 220 * Math.pow(2, (s + 12*o) / 12);
+}
+
+let _racha = 0;
+function son(tipo, k){
+  if (!AUD || SILENCIO) return;
+  const t = AUD.currentTime, v = k == null ? 1 : k;
+  if (tipo === 'toque'){
+    tono(t, 620, 460, 0.05, 0.10*v, 'sine');
+  } else if (tipo === 'bien'){
+    /* ── LA RACHA SUBE DE NOTA, Y ES LO QUE ENGANCHA ──
+       Con una nota fija, veinte aciertos son el mismo sonido veinte veces. Con
+       la escala subiendo, la racha SE ESCUCHA: el jugador oye que va bien antes
+       de mirar el número, y perder la racha se siente porque el tono vuelve
+       abajo. Es la mitad del enganche de un minijuego y cuesta dos líneas. */
+    _racha = Math.min(_racha + 1, 14);
+    tono(t, nota(_racha + 4), nota(_racha + 4)*1.5, 0.16, 0.18*v, 'triangle');
+    tono(t + 0.03, nota(_racha + 9), nota(_racha + 9), 0.10, 0.07*v, 'sine');
+  } else if (tipo === 'mal'){
+    _racha = 0;
+    tono(t, 190, 78, 0.30, 0.22*v, 'sawtooth');
+    ruido(t, 0.16, 260, 0.8, 0.14*v, 'lowpass');
+  } else if (tipo === 'gana'){
+    _racha = 0;
+    for (let i = 0; i < 5; i++)
+      tono(t + i*0.085, nota(6 + i*2), nota(6 + i*2), 0.30, 0.30, 'triangle');
+  } else if (tipo === 'pierde'){
+    _racha = 0;
+    for (let i = 0; i < 3; i++)
+      tono(t + i*0.13, nota(8 - i*3), nota(8 - i*3)*0.98, 0.34, 0.24, 'sawtooth');
+  } else if (tipo === 'raspa'){
+    const b = ruido(t, 0.09, 2600, 0.6, 0.13*v);
+    if (b) b.frequency.linearRampToValueAtTime(1400, t + 0.09);
+  } else if (tipo === 'clic'){
+    ruido(t, 0.035, 1800, 1.4, 0.12*v);
+  } else if (tipo === 'pop'){
+    /* una burbuja que revienta: un golpe de ruido corto y agudo mas un tono que
+       cae rapido. El tono solo suena a bip; el ruido solo, a chasquido. */
+    ruido(t, 0.05, 1500 + 900*Math.random(), 1.1, 0.14*v);
+    tono(t, 900, 320, 0.07, 0.09*v, 'sine');
+  } else if (tipo === 'caida'){
+    /* algo apoyandose: casi todo grave, porque lo que dice «peso» es lo de
+       abajo. Con un tono agudo se lee a boton y no a bloque. */
+    tono(t, 150, 62, 0.13, 0.16*v, 'sine');
+    ruido(t, 0.06, 220, 0.7, 0.10*v, 'lowpass');
+  }
+}
+function rachaCero(){ _racha = 0; }
+
+/* la cama: dos senos muy graves y desafinados entre sí, que baten cada pocos
+   segundos. Dos senos idénticos suenan a tono de prueba; desafinados suenan a
+   instrumento, y es lo que ya se midió en POMPOM. */
+function camaFondo(on){
+  if (!AUD) return;
+  if (on && !CAMA){
+    const o = AUD.createOscillator(); o.type = 'sine'; o.frequency.value = 55;
+    const o2 = AUD.createOscillator(); o2.type = 'sine'; o2.frequency.value = 82.4;
+    const gn = AUD.createGain(); gn.gain.value = 0.030;
+    o.connect(gn); o2.connect(gn); gn.connect(MAESTRO);
+    o.start(); o2.start();
+    CAMA = { o, o2, gn };
+  } else if (!on && CAMA){
+    CAMA.gn.gain.setTargetAtTime(0.0001, AUD.currentTime, 0.25);
+    const c = CAMA; CAMA = null;
+    setTimeout(() => { try { c.o.stop(); c.o2.stop(); } catch(e){} }, 900);
+  }
+}
+function pico(){
+  if (!ANAL) return 0;
+  const a = new Uint8Array(ANAL.fftSize);
+  ANAL.getByteTimeDomainData(a);
+  let m = 0;
+  for (const v of a) m = Math.max(m, Math.abs(v - 128) / 128);
+  return +m.toFixed(4);
+}
+/* ══════════════════ LOS ASSETS GENERADOS ══════════════════
+   Las imágenes y el sonido están generados con Rezona y horneados en base64
+   dentro del archivo por `herramientas/casual/hornear.py`. Este módulo es lo
+   único que los conoce: los juegos piden `IMG.pj` o `dibCuadro('pj', 2, …)` y
+   no saben de dónde salió.
+
+   ── Y NADA REEMPLAZA NADA HASTA QUE LLEGA ──
+   Es la regla del repo y acá pesa más que en ningún otro juego: un data URI se
+   decodifica de forma ASINCRÓNICA, así que un juego que naciera esperando la
+   foto daría un cuadro —o veinte— en negro justo en el primer segundo, que es
+   el único que un minijuego tiene para engancharte. Todo lo dibujado por código
+   sigue en pie y la imagen lo PISA cuando está lista. Si una no decodifica,
+   cuesta esa pieza y no la pantalla. */
+
+const IMG = {}, SON = {};
+let AS_LISTAS = 0, AS_PEDIDAS = 0, AS_FALLADAS = 0;
+
+function cargaImg(){
+  if (typeof AS === 'undefined' || !AS.img) return;
+  for (const k in AS.img){
+    const m = AS.img[k];
+    const o = { ok: false, n: m.n || 1, w: m.w || 0, h: m.h || 0,
+                im: new Image(), msk: null, cache: {} };
+    IMG[k] = o; AS_PEDIDAS++;
+    o.im.onload = () => {
+      o.ok = true; AS_LISTAS++;
+      if (!o.w){ o.w = o.im.width; o.h = o.im.height; }
+    };
+    o.im.onerror = () => { AS_FALLADAS++; };
+    o.im.src = m.d;
+    if (m.m){ o.msk = new Image(); o.msk.src = m.m; }
+  }
+}
+
+/* el sonido necesita el contexto, así que se carga cuando el contexto existe —
+   o sea con el primer toque. Ningún navegador deja sonar nada antes de un
+   gesto, así que decodificar antes sería trabajo tirado. */
+let _sonPedido = false;
+function cargaSon(){
+  if (_sonPedido || !AUD || typeof AS === 'undefined' || !AS.son) return;
+  _sonPedido = true;
+  for (const k in AS.son){
+    const b = atob(AS.son[k]);
+    const ab = new ArrayBuffer(b.length), v = new Uint8Array(ab);
+    for (let i = 0; i < b.length; i++) v[i] = b.charCodeAt(i);
+    AUD.decodeAudioData(ab, (buf) => {
+      SON[k] = buf;
+      /* ── Y SI EL TEMA QUE HACE FALTA ERA ESTE, ARRANCA AHORA ──
+         `decodeAudioData` es asincronico, asi que el primer pedido de musica
+         casi siempre llega ANTES de que el buffer exista: sin esto, el menu
+         se quedaria con la cama de osciladores para siempre y el tema
+         generado no sonaria nunca. */
+      if (_musK === k) musQuiere(k);
+    }, () => {});
+  }
+}
+
+/* ══════════ LA MÚSICA ══════════
+   Va con `BufferSource` en bucle y no con un `<audio loop>`: el loop de un
+   `<audio>` vuelve al cero con un hueco de milisegundos y en un tema de nueve
+   segundos eso se escucha en cada vuelta. Más la cola fundida sobre la cabeza,
+   que la pone el horneado.
+
+   Y SE CRUZAN, no se cortan: el menú y la partida son dos temas, y un corte en
+   seco entre los dos se lee a error y no a que empezó el juego. */
+const MUS_VOL = { menu: 0.30, mus: 0.26 };
+let MUS = null;
+
+function musPon(k){
+  if (!AUD) return;
+  if (MUS && MUS.k === k) return;
+  if (MUS){
+    const v = MUS; MUS = null;
+    v.gn.gain.cancelScheduledValues(AUD.currentTime);
+    v.gn.gain.setTargetAtTime(0.0001, AUD.currentTime, 0.28);
+    setTimeout(() => { try { v.src.stop(); } catch(e){} }, 1200);
+  }
+  if (!k || !SON[k]) return;
+  const src = AUD.createBufferSource();
+  src.buffer = SON[k]; src.loop = true;
+  const gn = AUD.createGain(); gn.gain.value = 0.0001;
+  src.connect(gn); gn.connect(MAESTRO);
+  src.start();
+  gn.gain.setTargetAtTime(MUS_VOL[k] != null ? MUS_VOL[k] : 0.26, AUD.currentTime, 0.35);
+  MUS = { k, src, gn };
+}
+/* ── QUE TEMA QUIERE EL JUEGO ──
+   Un solo sitio decide si suena la muestra o la cama de osciladores, y se
+   acuerda de lo que se le pidio para poder arrancarlo cuando el buffer llegue.
+   Repartido en cinco llamadas, el dia que se agregue una pantalla va a quedar
+   una sin musica y nadie se va a enterar hasta jugarla. */
+let _musK = null;
+function musQuiere(k){
+  _musK = k;
+  cargaSon();
+  if (k && SON[k]){ camaFondo(false); musPon(k); return; }
+  musPon(null);
+  camaFondo(!!k);
+}
+
+/* la música se agacha mientras suena algo importante: si compiten, el
+   acontecimiento deja de ser un acontecimiento y pasa a ser un matiz */
+function musAgacha(k, seg){
+  if (!MUS) return;
+  const g0 = MUS_VOL[MUS.k] != null ? MUS_VOL[MUS.k] : 0.26;
+  MUS.gn.gain.cancelScheduledValues(AUD.currentTime);
+  MUS.gn.gain.setTargetAtTime(g0*k, AUD.currentTime, 0.05);
+  MUS.gn.gain.setTargetAtTime(g0, AUD.currentTime + (seg || 0.5), 0.25);
+}
+
+/* ══════════ EL SONIDO: LA MUESTRA PRIMERO Y EL OSCILADOR DE RED ══════════
+   `son()` sigue siendo el de siempre —está medido y funciona— y esto lo
+   ENVUELVE: si el juego declaró un alias y la muestra decodificó, suena la
+   muestra; si no, suena el sintetizado. Un juego mudo por un decodificador es
+   peor que un juego con bips, y ya pasó una vez en este repo. */
+const _sonProc = son;
+son = function(tipo, k){
+  if (!AUD || SILENCIO) return;
+  const al = (typeof SON_ALIAS !== 'undefined' && SON_ALIAS) ? SON_ALIAS[tipo] : null;
+  if (al && SON[al]){
+    if (tipo === 'bien') _racha = Math.min(_racha + 1, 14);
+    else if (tipo === 'mal' || tipo === 'gana' || tipo === 'pierde') _racha = 0;
+    const src = AUD.createBufferSource();
+    src.buffer = SON[al];
+    const gn = AUD.createGain();
+    gn.gain.value = (k == null ? 1 : k) * 0.85;
+    src.connect(gn); gn.connect(MAESTRO);
+    src.start();
+    return;
+  }
+  _sonProc(tipo, k);
+};
+
+/* ══════════ DIBUJO ══════════ */
+
+/* el fondo se dibuja por COVER y no estirado: la imagen viene 720x1280 y el
+   alto de diseño se mueve entre 1100 y 1760 según la pantalla, así que
+   estirándola la entrada del boliche sale aplastada en un teléfono largo */
+function dibCubre(k){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const e = Math.max(AN/o.im.width, AL/o.im.height);
+  const w = o.im.width*e, h = o.im.height*e;
+  g.drawImage(o.im, (AN - w)/2, (AL - h)/2, w, h);
+  return true;
+}
+
+/* un cuadro de una hoja de sprites, centrado en x y APOYADO en y (los pies),
+   que es como se piensa un personaje. `esp` lo espeja. */
+function dibCuadro(k, i, x, y, alto, esp, lienzo){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const src = lienzo || o.im;
+  const e = alto / o.h, w = o.w*e;
+  g.save();
+  g.translate(x, y);
+  if (esp) g.scale(-1, 1);
+  g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, -w/2, -alto, w, alto);
+  g.restore();
+  return true;
+}
+
+/* ── EL TEÑIDO: LA HOJA SE PINTA UNA VEZ Y SE GUARDA ──
+   El personaje se generó con la ropa BLANCA para poder pintarla del color que
+   la regla pida. Pintar por cuadro serían tres operaciones de lienzo sesenta
+   veces por segundo para obtener siempre lo mismo: se hornea una hoja por
+   color la primera vez que se pide y después son copias.
+
+   `multiply` sobre blanco devuelve el color exacto y sobre el contorno oscuro
+   lo deja oscuro, que es justo lo que tiene que pasar. Y donde la máscara es
+   transparente no cambia nada, así que la piel y el pelo no se tocan. */
+function tenido(k, color){
+  const o = IMG[k];
+  if (!o || !o.ok) return null;
+  if (o.cache[color]) return o.cache[color];
+  /* ── Y NO SE CACHEA UN TEÑIDO HECHO SIN LA MÁSCARA ──
+     La máscara es una segunda imagen y decodifica DESPUÉS de la hoja. Sin esta
+     guarda, el primer cuadro teñía con la hoja entera de máscara —o sea todo el
+     sprite, piel incluida— y GUARDABA eso para siempre: medido en la captura,
+     el visitante salía azul de la cara a las zapatillas.
+     Mientras la máscara no esté, se devuelve la hoja cruda sin teñir y sin
+     guardar nada: un visitante de blanco por dos cuadros es infinitamente mejor
+     que uno pintado entero por el resto de la partida. */
+  if (AS.img[k] && AS.img[k].m && !(o.msk && o.msk.complete)) return o.im;
+  const c = document.createElement('canvas');
+  c.width = o.im.width; c.height = o.im.height;
+  const x = c.getContext('2d');
+  x.drawImage(o.im, 0, 0);
+  const t = document.createElement('canvas');
+  t.width = c.width; t.height = c.height;
+  const y = t.getContext('2d');
+  /* la máscara es la de la ropa si la hay; si no, el sprite entero (que en ese
+     caso se generó blanco a propósito, como la bola de MANCHA) */
+  y.drawImage(o.msk && o.msk.complete ? o.msk : o.im, 0, 0);
+  y.globalCompositeOperation = 'source-in';
+  y.fillStyle = color; y.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = 'multiply';
+  x.drawImage(t, 0, 0);
+  o.cache[color] = c;
+  return c;
+}
+
+/* una textura como patrón repetible, guardada. Se hornean embaldosadas de
+   verdad (la banda del borde fundida sobre el opuesto), así que se repiten sin
+   espejo y sin costura. */
+function patron(k){
+  const o = IMG[k];
+  if (!o || !o.ok) return null;
+  if (!o.pat) o.pat = g.createPattern(o.im, 'repeat');
+  return o.pat;
+}
+
+/* un sello (la salpicadura, la bola) teñido y girado. El sello se horneó con el
+   RGB en blanco puro, así que el color sale exacto y no multiplicado por lo que
+   la generación hubiera puesto de gris. */
+function dibSello(k, x, y, r, gi, color){
+  const c = tenido(k, color);
+  if (!c) return false;
+  g.save();
+  g.translate(x, y);
+  if (gi) g.rotate(gi);
+  g.drawImage(c, -r, -r, r*2, r*2);
+  g.restore();
+  return true;
+}
+
+function asEstado(){
+  return { pedidas: AS_PEDIDAS, listas: AS_LISTAS, falladas: AS_FALLADAS,
+           son: Object.keys(SON).length,
+           mus: MUS ? MUS.k : null };
+}
+/* ══════════════════ EL JUGO Y LA RACHA ══════════════════
+   Lo que separa un minijuego de una demostración de una mecánica. Va en el
+   núcleo y no en cada juego por la razón de siempre —cinco copias divergen— y
+   porque acá hay algo más: la RACHA es una segunda capa de juego que los cinco
+   heredan de una.
+
+   ── POR QUÉ UN MULTIPLICADOR Y NO PUNTOS MÁS GRANDES ──
+   Un minijuego de cuarenta segundos con un solo verbo tiene un problema de
+   diseño concreto: la décima vez que hacés la cosa vale lo mismo que la
+   primera, así que a los quince segundos ya sabés cuánto vas a sacar. Con el
+   multiplicador la partida tiene una CURVA: los primeros cuatro aciertos valen
+   uno, el quinto vale dos, y a partir de ahí cada error no cuesta un punto,
+   cuesta la escalera entera. Eso convierte «tocar bien» en «no cortar la
+   racha», que es una decisión aunque el verbo sea el mismo.
+
+   Y LA VENTANA ES DE TIEMPO Y NO SÓLO DE ACIERTOS: dudar también corta. En un
+   juego que se filma, eso es lo que hace que el jugador se apure. */
+
+const COMBO = { n: 0, t: 0, mult: 1, max: 0, brillo: 0 };
+const COMBO_VENT = 2.8;          /* segundos de gracia entre dos aciertos */
+const COMBO_ESC = 4;             /* aciertos por escalón */
+const COMBO_TOPE = 5;            /* x5 y no más: con x10 la última partida borra
+                                    todas las anteriores y el récord deja de
+                                    querer decir algo */
+
+function comboCero(){
+  COMBO.n = 0; COMBO.t = 0; COMBO.mult = 1; COMBO.brillo = 0;
+  pintaCombo();
+}
+function comboSuma(){
+  COMBO.n++;
+  COMBO.t = COMBO_VENT;
+  const m = Math.min(COMBO_TOPE, 1 + Math.floor(COMBO.n / COMBO_ESC));
+  if (m !== COMBO.mult){
+    COMBO.mult = m;
+    COMBO.brillo = 1;
+    /* el escalón suena, y suena distinto de un acierto: si sonara igual, subir
+       de multiplicador no se notaría hasta mirar el número */
+    son('combo');
+    sacude(0.35);
+  }
+  if (COMBO.n > COMBO.max) COMBO.max = COMBO.n;
+  pintaCombo();
+}
+function comboCorta(){
+  if (COMBO.n === 0 && COMBO.mult === 1) return;
+  COMBO.n = 0; COMBO.mult = 1; COMBO.t = 0; COMBO.brillo = 0;
+  pintaCombo();
+}
+function comboPaso(dt){
+  if (COMBO.brillo > 0) COMBO.brillo -= dt*2.2;
+  if (COMBO.t <= 0) return;
+  COMBO.t -= dt;
+  if (COMBO.t <= 0) comboCorta();
+  else if (COMBO.mult > 1) pintaCombo();
+}
+
+/* la ficha del multiplicador vive en DOM como el resto del HUD: es un número
+   que tiene que quedar nítido en cualquier densidad de pantalla. Y se escribe
+   sólo cuando cambia, salvo la barra de la ventana, que es un ancho. */
+let _comboUlt = '';
+function pintaCombo(){
+  const e = $('combo');
+  if (!e) return;
+  const v = COMBO.mult > 1 ? ('x' + COMBO.mult) : '';
+  if (v !== _comboUlt){ e.textContent = v; _comboUlt = v; e.classList.toggle('on', !!v); }
+  const b = $('comboB');
+  if (b) b.style.width = (COMBO.t > 0 ? (COMBO.t/COMBO_VENT*100) : 0).toFixed(0) + '%';
+}
+
+/* ── SUMAR PUNTOS PASA POR UN SOLO SITIO ──
+   Acá se aplica el multiplicador, se sube la racha y sale el número flotante.
+   Repartido, cada juego tendría que acordarse de las tres cosas y la primera
+   que se olvide es el número, que es justo lo que hace que el punto se sienta
+   ganado. */
+function sumaPuntos(n, x, y){
+  comboSuma();
+  const g0 = n * COMBO.mult;
+  PUNTOS += g0;
+  if (x != null) flota('+' + g0, x, y, COMBO.mult > 1 ? '#ffd76a' : '#f2eee6',
+                       COMBO.mult > 1 ? 44 : 34);
+  return g0;
+}
+
+/* ══════════ PARTÍCULAS ══════════
+   Con gravedad y con roce, y el color lo elige quien las tira. Son la
+   diferencia entre «el bicho desapareció» y «le pegué»: sin nada, un objeto que
+   se va del cuadro se lee a error de dibujo. */
+const PART = [];
+const PART_TOPE = 220;           /* tope duro: sin él, una racha larga en MANCHA
+                                    llena el array y el cuadro se cae */
+function chispas(x, y, n, col, fuerza){
+  const f = fuerza || 1;
+  for (let i = 0; i < n && PART.length < PART_TOPE; i++){
+    const a = Math.random()*6.283, v = (90 + Math.random()*260)*f;
+    PART.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v - 60*f,
+                r: 3 + Math.random()*6, t: 0.38 + Math.random()*0.42, T: 0, col });
+  }
+}
+function partPaso(dt){
+  for (let i = PART.length - 1; i >= 0; i--){
+    const p = PART[i];
+    p.T += dt;
+    if (p.T >= p.t){ PART.splice(i, 1); continue; }
+    p.vy += 1500*dt;
+    p.vx *= 1 - 2.2*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+}
+
+/* ══════════ NÚMEROS FLOTANTES ══════════ */
+const FLOT = [];
+function flota(txt, x, y, col, tam){
+  if (FLOT.length > 24) FLOT.shift();
+  FLOT.push({ txt, x, y, col: col || '#f2eee6', tam: tam || 34, t: 0.9, T: 0 });
+}
+function flotPaso(dt){
+  for (let i = FLOT.length - 1; i >= 0; i--){
+    const f = FLOT[i];
+    f.T += dt;
+    if (f.T >= f.t) FLOT.splice(i, 1);
+  }
+}
+
+/* ══════════ SACUDÓN ══════════
+   Se aplica SÓLO a la capa del juego y no al fondo: sacudiendo el fondo
+   aparecen dos franjas negras en los bordes, y eso se ve peor que no sacudir.
+   Y decae rápido: un sacudón de medio segundo no es un golpe, es un terremoto. */
+let SAC = 0;
+function sacude(k){ SAC = Math.min(1.4, SAC + k); }
+function sacPaso(dt){ if (SAC > 0) SAC = Math.max(0, SAC - dt*4.2); }
+function sacAplica(){
+  if (SAC <= 0.002) return false;
+  const k = SAC*SAC;               /* al cuadrado: el final del sacudón se apaga
+                                      y no queda un temblor largo y parejo */
+  g.save();
+  g.translate((Math.random() - 0.5)*26*k, (Math.random() - 0.5)*26*k);
+  return true;
+}
+
+/* los tres cosméticos van con el `dt` del reloj y no con el paso fijo: son
+   dibujo, así que tienen que verse igual de suaves a 30 y a 120 cuadros. La
+   ventana de la racha NO está acá — vive adentro de la simulación, porque en
+   dos de los cinco juegos el multiplicador es física y no puntos. */
+function jugoPaso(dt){
+  partPaso(dt); flotPaso(dt); sacPaso(dt);
+}
+function jugoPinta(){
+  for (const p of PART){
+    const u = 1 - p.T/p.t;
+    g.globalAlpha = Math.min(1, u*1.8);
+    disco(p.x, p.y, p.r*u, p.col);
+  }
+  g.globalAlpha = 1;
+  for (const f of FLOT){
+    const u = f.T/f.t;
+    g.globalAlpha = Math.min(1, (1 - u)*2.2);
+    /* sube y frena: con velocidad constante se lee a texto que se desliza */
+    texto(f.txt, f.x, f.y - 80*(1 - (1 - u)*(1 - u)), f.tam*(1 + 0.14*(1 - u)), f.col);
+    g.globalAlpha = 1;
+  }
+}
+function jugoCero(){ PART.length = 0; FLOT.length = 0; SAC = 0; comboCero(); }
+/* ══════════════════════ EL PROGRESO Y LA REJA DE NIVELES ══════════════════════
+   Lo que separa un casual adictivo de un minijuego: que lo que hiciste QUEDE.
+   Sin progreso guardado, un rompecabezas de doscientos niveles es el nivel 1
+   doscientas veces — no hay a qué volver.
+
+   TRES COSAS QUE ESTO TIENE QUE HACER BIEN:
+
+   1. NO PUEDE FALLAR SI NO HAY DISCO. `localStorage` TIRA en una ventana
+      privada, y esto se abre desde enlaces todo el tiempo. Todo va envuelto en
+      `try`: sin disco el juego se juega igual y lo único que se pierde es el
+      progreso, que es infinitamente mejor que una pantalla en blanco.
+   2. LO QUE SE GUARDA ES LO MEJOR, NO LO ÚLTIMO. Rejugar un nivel que ya salió
+      con tres estrellas y hacerlo con una no puede BAJARLE la nota: eso castiga
+      justamente al que vuelve a jugar.
+   3. EL FORMATO TIENE QUE SOBREVIVIR A UN JSON ROTO. Una versión anterior del
+      juego, un dedo en la consola, media escritura: `JSON.parse` tira y ahí se
+      cae el módulo entero. Va con `try` y con respaldo a vacío. */
+
+const PROG = { est: {}, ultimo: 1 };
+const P_CLAVE = 'cas_' + JUEGO.id + '_prog';
+
+function progCarga(){
+  try {
+    const s = localStorage.getItem(P_CLAVE);
+    if (!s) return;
+    const o = JSON.parse(s);
+    if (o && typeof o === 'object'){
+      if (o.est && typeof o.est === 'object') PROG.est = o.est;
+      if (o.ultimo) PROG.ultimo = o.ultimo|0;
+    }
+  } catch(e){ PROG.est = {}; PROG.ultimo = 1; }
+}
+function progGuarda(){
+  try { localStorage.setItem(P_CLAVE, JSON.stringify(PROG)); } catch(e){}
+}
+/* cuántos niveles tiene este juego; los de puntaje devuelven 0 */
+function progTotal(){ return JUEGO.nivelesTotal || 0; }
+/* el 1 siempre está abierto; el resto pide que el anterior esté hecho */
+function progAbierto(n){ return n <= 1 || PROG.est[n-1] != null; }
+function progHecho(n){ return PROG.est[n] != null; }
+function progEstrellas(n){ return PROG.est[n] || 0; }
+/* el primero que falta: es el nivel que abre el botón JUGAR, así que quien
+   vuelve al juego sigue donde estaba en vez de tener que buscarlo en la reja */
+function progSiguiente(){
+  const T = progTotal();
+  for (let n = 1; n <= T; n++) if (!progHecho(n)) return n;
+  return T;                      /* están todos: se queda en el último */
+}
+function progGana(n, estrellas){
+  const e = Math.max(1, Math.min(3, estrellas|0));
+  if (!(PROG.est[n] > e)) PROG.est[n] = e;   /* nunca baja la nota */
+  PROG.ultimo = Math.max(PROG.ultimo, Math.min(progTotal(), n+1));
+  progGuarda();
+}
+function progContados(){
+  let n = 0, e = 0;
+  for (const k in PROG.est){ n++; e += PROG.est[k]|0; }
+  return { hechos: n, estrellas: e };
+}
+
+/* ── LA REJA SE ARMA UNA VEZ Y DESPUÉS SÓLO SE REPINTA ──
+   Doscientos botones creados de nuevo en cada visita al selector son doscientos
+   nodos que el navegador tiene que descartar y volver a hacer, y encima se
+   pierde la posición del deslizamiento: el jugador vuelve del nivel 140 y la
+   reja lo deja arriba de todo, mirando el 1. */
+let _rejaHecha = false;
+function rejaArma(){
+  const T = progTotal();
+  if (_rejaHecha || !T) return;
+  const r = $('rejaN');
+  r.innerHTML = '';
+  for (let n = 1; n <= T; n++){
+    const b = document.createElement('button');
+    b.className = 'nv';
+    b.dataset.n = n;
+    b.innerHTML = '<span class="num">' + n + '</span><span class="es"></span>';
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const k = +b.dataset.n;
+      if (!progAbierto(k)) return;
+      son('clic');
+      empieza(k);
+    });
+    r.appendChild(b);
+  }
+  /* el alto de la reja sale de lo que sobra entre el título y el botón MENÚ; en
+     px y no en vh porque el marco puede ser más chico que la ventana */
+  r.style.maxHeight = Math.round(caja.clientHeight * 0.66) + 'px';
+  _rejaHecha = true;
+}
+function rejaPinta(){
+  const T = progTotal();
+  if (!T) return;
+  const r = $('rejaN');
+  for (const b of r.children){
+    const n = +b.dataset.n;
+    const ab = progAbierto(n), e = progEstrellas(n);
+    b.classList.toggle('trabado', !ab);
+    b.classList.toggle('hecho', e > 0);
+    b.disabled = !ab;
+    b.querySelector('.es').textContent = e ? '★'.repeat(e) : '';
+  }
+}
+function verNiveles(){
+  MODO = 'niveles';
+  rejaArma();
+  rejaPinta();
+  verPantalla('pNiveles');
+  /* deja a la vista el primero que falta: con doscientos niveles, abrir la reja
+     arriba de todo obliga a deslizar medio minuto para llegar a donde uno iba */
+  const b = $('rejaN').querySelector('[data-n="' + progSiguiente() + '"]');
+  if (b) $('rejaN').scrollTop = Math.max(0, b.offsetTop - $('rejaN').clientHeight*0.35);
+}
+/* ══════════════════════ LA CINEMÁTICA ══════════════════════
+   Cuatro o cinco planos de tres segundos, dibujados en el MISMO lienzo con la
+   misma tinta que el juego. Nada de fotos: una imagen pegada arriba de un juego
+   de dos colores se ve pegada arriba, y eso ya costó una vuelta en POMPOM.
+
+   TRES REGLAS, Y LAS TRES SALEN DE HABERSE EQUIVOCADO ANTES:
+
+   1. ES UNA FUNCIÓN DEL TIEMPO, NO UNA MÁQUINA DE ESTADOS. `cinePon(t)` recibe
+      el segundo y dibuja. Por eso la prueba puede fotografiar el segundo 7,4
+      sin esperar siete segundos, y por eso los defectos de encuadre se
+      encuentran mirando un instante en vez de mirando el código.
+
+   2. SE PUEDE SALTEAR, CON GRACIA DE MEDIO SEGUNDO. Una cinemática obligatoria
+      se ve una vez; vista cinco veces es un peaje, y un minijuego se abre
+      veinte veces. La gracia no es capricho: el mismo toque que apretó JUGAR
+      llega a veces como un segundo evento y se la comería entera — es
+      exactamente la guarda que hizo falta en BARRIO y en POMPOM.
+
+   3. SÓLO LA PRIMERA VEZ. Después queda en su botón del menú. */
+const CINE = { on: false, t: 0, dur: 0, plano: -1, gracia: 0, alTerminar: null };
+
+function cineArranca(alTerminar){
+  CINE.on = true; CINE.t = 0; CINE.plano = -1; CINE.gracia = 0.55;
+  CINE.alTerminar = alTerminar || null;
+  CINE.dur = JUEGO.planos.reduce((a, p) => a + p.dur, 0);
+  MODO = 'cine';
+  $('cine').classList.add('on');
+  $('salta').classList.add('on');
+  $('hud').classList.remove('on');
+  for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+}
+function cineSalta(){
+  if (!CINE.on || CINE.gracia > 0) return;
+  cineTermina();
+}
+function cineTermina(){
+  CINE.on = false;
+  $('cine').classList.remove('on');
+  $('salta').classList.remove('on');
+  const f = CINE.alTerminar; CINE.alTerminar = null;
+  if (f) f();
+}
+/* qué plano cae en el segundo `t`, y cuánto lleva ese plano corrido */
+function cineDonde(t){
+  let acum = 0;
+  for (let i = 0; i < JUEGO.planos.length; i++){
+    const p = JUEGO.planos[i];
+    if (t < acum + p.dur || i === JUEGO.planos.length - 1)
+      return { i, p, u: Math.max(0, Math.min(1, (t - acum) / p.dur)) };
+    acum += p.dur;
+  }
+  return { i: 0, p: JUEGO.planos[0], u: 0 };
+}
+function cinePon(t){
+  const d = cineDonde(t);
+  /* el pie se escribe SÓLO cuando cambia de plano: escribir en el DOM en cada
+     cuadro obliga al navegador a recalcular el layout sesenta veces por segundo
+     para poner el mismo texto */
+  if (d.i !== CINE.plano){
+    CINE.plano = d.i;
+    $('cine').textContent = d.p.pie ? TX(d.p.pie) : '';
+  }
+  g.save();
+  d.p.dibuja(g, d.u, t);
+  g.restore();
+  /* entra y sale de negro: un corte seco desde el menú se lee a error */
+  const fEnt = Math.min(1, t / 0.5);
+  const fSal = Math.min(1, Math.max(0, (CINE.dur - t) / 0.5));
+  const k = 1 - Math.min(fEnt, fSal);
+  if (k > 0.001){ g.fillStyle = 'rgba(7,7,11,' + k.toFixed(3) + ')'; g.fillRect(0, 0, AN, AL); }
+}
+function cinePaso(dt){
+  if (CINE.gracia > 0) CINE.gracia -= dt;
+  CINE.t += dt;
+  if (CINE.t >= CINE.dur) cineTermina();
+}
+
+/* ── HERRAMIENTAS DE DIBUJO QUE LOS CINCO JUEGOS COMPARTEN ──
+   No es una biblioteca por prolijidad: es que un redondeo o un degradado
+   escritos cinco veces terminan siendo cinco cosas distintas, y entonces los
+   cinco juegos dejan de verse de la misma familia. */
+function caja2(x, y, w, h, r, relleno, borde){
+  g.beginPath();
+  const rr = Math.min(r, w/2, h/2);
+  g.moveTo(x + rr, y);
+  g.arcTo(x + w, y, x + w, y + h, rr);
+  g.arcTo(x + w, y + h, x, y + h, rr);
+  g.arcTo(x, y + h, x, y, rr);
+  g.arcTo(x, y, x + w, y, rr);
+  g.closePath();
+  if (relleno){ g.fillStyle = relleno; g.fill(); }
+  if (borde){ g.strokeStyle = borde; g.lineWidth = 3; g.stroke(); }
+}
+function texto(s, x, y, tam, col, peso, alin){
+  g.fillStyle = col || '#f2eee6';
+  g.font = (peso || 800) + ' ' + tam + 'px ui-sans-serif,system-ui,sans-serif';
+  g.textAlign = alin || 'center';
+  g.textBaseline = 'middle';
+  g.fillText(s, x, y);
+}
+function disco(x, y, r, col){
+  g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+}
+/* el grano: lo mismo que en los juegos 3D del repo, un plano de un solo color
+   se lee a plástico y con grano se lee a superficie */
+function grano(x, y, w, h, k, n){
+  g.save();
+  for (let i = 0; i < (n || 90); i++){
+    g.fillStyle = 'rgba(255,255,255,' + (Math.random()*k).toFixed(3) + ')';
+    g.fillRect(x + Math.random()*w, y + Math.random()*h, 2, 2);
+  }
+  g.restore();
+}
+const suave = (u) => u*u*(3 - 2*u);
+/* ══════════════════════ EL ARMADO Y EL BUCLE ══════════════════════
+   Todo lo que sigue es del núcleo y ninguno de los cinco juegos lo toca. El
+   contrato de un juego es corto a propósito:
+
+       JT              las frases, por idioma
+       JUEGO.tipo      'niveles' (progreso guardado) o 'puntos' (sin fin)
+       JUEGO.nivelesTotal   cuántos, en los de niveles
+       JUEGO.planos    la cinemática: [{dur, pie, dibuja(g,u,t)}]
+       JUEGO.arranca(n)     poner el estado en cero; n = nivel
+       JUEGO.paso(dt)  la simulación, en pasos de 1/60
+       JUEGO.pinta(g)  el dibujo, en unidades de 720 x AL
+       JUEGO.baja/mueve/sube(x,y)   el verbo
+       JUEGO.marca     el número grande de arriba
+       JUEGO.sub       el rótulo debajo del número (o null)
+       JUEGO.ficI/ficD las dos fichas de los costados (o null)
+       JUEGO.resta     0..1 para la barra de abajo, o null si no hay
+       JUEGO.vivo      cuando pasa a false, se termina
+       JUEGO.gano      si el nivel salió
+       JUEGO.estrellas 1..3 al ganar un nivel
+       JUEGO.deshacer()     y JUEGO.puedeDeshacer
+       JUEGO.juegaSolo(n, azar)
+
+   ── POR QUE HAY DOS TIPOS Y NO UNO ──
+   Los tres rompecabezas necesitan progreso, reja de niveles, deshacer y
+   estrellas; los dos de destreza necesitan récord y nada de eso. Metidos en un
+   solo molde, cada juego arrastraría la mitad de una interfaz que no usa — y
+   eso se ve: un botón DESHACER en un juego donde no hay nada que deshacer se
+   lee a juego roto. El tipo decide qué interfaz existe. */
+
+let PUNTOS = 0, MEJOR = 0;
+let NIVEL = 1;
+
+/* ── EL RÉCORD SE INTENTA GUARDAR Y PUEDE FALLAR ──
+   `localStorage` TIRA en una ventana privada, y esto se abre desde enlaces. Sin
+   el `try` el juego no arranca en la mitad de los casos raros, que es peor que
+   no tener récord. */
+const CLAVE = 'cas_' + JUEGO.id;
+try { MEJOR = parseInt(localStorage.getItem(CLAVE) || '0', 10) || 0; } catch(e){}
+function guardaMejor(){
+  try { localStorage.setItem(CLAVE, String(MEJOR)); } catch(e){}
+}
+const esNiv = () => JUEGO.tipo === 'niveles';
+
+function pintaJuego(){
+  if (esNiv()){
+    /* en un juego de niveles el récord no significa nada: lo que el jugador
+       quiere ver es cuánto le falta y cuántas estrellas juntó */
+    const c = progContados();
+    $('mejor').textContent = TX('progreso', c.hechos, progTotal()) +
+      (c.estrellas ? '  ·  ★ ' + c.estrellas : '');
+    $('bJugar').textContent = c.hechos > 0 ? TX('seguir') : TX('jugar');
+  } else {
+    $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
+  }
+  if (JUEGO.pintaTextos) JUEGO.pintaTextos();
+}
+window.pintaJuego = pintaJuego;
+
+function verPantalla(p){
+  for (const e of document.querySelectorAll('.pan')) e.classList.remove('on');
+  if (p) $(p).classList.add('on');
+  $('hud').classList.toggle('on', p === null);
+  /* el telón se enciende con cualquier panel y se apaga en partida: en partida
+     el lienzo dibuja su propio fondo y dejarlo encendido serían dos fondos
+     superpuestos */
+  $('tela').classList.toggle('on', p !== null);
+}
+
+/* ── LA PIEL DEL JUEGO ──
+   El color de acento, el telón del menú y el emblema. Los cinco comparten la
+   estructura y no la piel: cinco menús del mismo gris con el mismo panel se
+   leen a cinco pantallas de opciones de la misma aplicación, y eso es lo que
+   hace que ninguno se recuerde. */
+function pieles(){
+  const pl = (typeof PIEL !== 'undefined') ? PIEL : {};
+  /* el ancho que ocupa el título es, aproximadamente, letras x (0,6 + 0,26) em:
+     de ahí sale el tamaño que lo deja adentro del marco con aire a los costados */
+  const L = ($('pMenu').querySelector('h1').textContent || '').trim().length || 6;
+  caja.style.setProperty('--h1', Math.min(11, 78/L).toFixed(2) + 'vw');
+  if (pl.ac) caja.style.setProperty('--ac', pl.ac);
+  if (typeof AS === 'undefined' || !AS.img) return;
+  const f = AS.img[pl.tela || 'fondo'];
+  if (f) $('tela').style.backgroundImage = 'url(' + f.d + ')';
+  const e = AS.img.em;
+  if (e) for (const id of ['emI','emM']){ const n = $(id); n.src = e.d; n.hidden = false; }
+}
+
+function alMenu(){
+  MODO = 'menu';
+  musQuiere('menu');
+  verPantalla('pMenu');
+  pintaJuego();
+}
+
+let _vistaCine = false;
+function jugar(){
+  armaAudio();
+  cargaSon();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  if (!_vistaCine){
+    _vistaCine = true;
+    /* la cinemática se ve UNA vez y después va a su botón. Obligatoria en cada
+       partida es un peaje, y eso ya costó una vuelta en POMPOM. */
+    cineArranca(traslaCine);
+    return;
+  }
+  traslaCine();
+}
+/* después de la cinemática: los de niveles van a la reja y los de puntaje
+   arrancan de una. Un selector de niveles en un juego sin niveles sería una
+   pantalla de más entre el dedo y el juego. */
+function traslaCine(){
+  if (esNiv()) verNiveles(); else empieza();
+}
+function empieza(n){
+  /* el pie de la cinemática se apaga acá también: normalmente lo apaga
+     `cineTermina`, pero la sonda que salta a un instante de la cinemática lo
+     deja encendido y entonces la partida arranca con un subtítulo puesto */
+  $('cine').classList.remove('on');
+  $('salta').classList.remove('on');
+  PUNTOS = 0;
+  NIVEL = esNiv() ? (n || progSiguiente()) : 1;
+  rachaCero();
+  jugoCero();
+  JUEGO.arranca(NIVEL);
+  MODO = 'juega';
+  verPantalla(null);
+  musQuiere('mus');
+  /* los botones de partida existen sólo donde hay algo que deshacer */
+  $('acc').hidden = !esNiv();
+  pintaHud();
+}
+function termina(){
+  MODO = 'fin';
+  musQuiere('menu');
+  $('acc').hidden = true;
+  const gano = !!JUEGO.gano;
+  if (esNiv()){
+    const e = gano ? Math.max(1, Math.min(3, JUEGO.estrellas|0)) : 0;
+    if (gano) progGana(NIVEL, e);
+    son(gano ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('finT').textContent = gano ? TX('ganaste') : TX('perdiste');
+    const es = $('estr');
+    es.hidden = !gano;
+    if (gano) es.textContent = '★'.repeat(e) + '☆'.repeat(3-e);
+    $('finP').textContent = TX('nivel') + ' ' + NIVEL +
+      (JUEGO.finP ? '  ·  ' + JUEGO.finP : '');
+    /* OTRA VEZ pasa a ser SIGUIENTE cuando el nivel salió: repetir un nivel que
+       ya salió es lo último que quiere hacer alguien que lo acaba de pasar */
+    const hayMas = gano && NIVEL < progTotal();
+    $('bOtra').textContent = hayMas ? TX('proximo') : TX('otra');
+    $('bOtra').dataset.sig = hayMas ? '1' : '';
+  } else {
+    const rec = PUNTOS > MEJOR;
+    if (rec){ MEJOR = PUNTOS; guardaMejor(); }
+    son(rec ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('estr').hidden = true;
+    $('finT').textContent = rec ? TX('nuevoRec') : (gano ? TX('finBien') : TX('finMal'));
+    $('finP').textContent = PUNTOS + ' ' + TX('pts') +
+      (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
+    if (COMBO.max > 3) $('finP').textContent += '  ·  ' + TX('racha') + ' ' + COMBO.max;
+    $('bOtra').textContent = TX('otra');
+    $('bOtra').dataset.sig = '';
+  }
+  verPantalla('pFin');
+  pintaJuego();
+}
+
+function pintaHud(){
+  $('marca').textContent = JUEGO.marca != null ? JUEGO.marca : PUNTOS;
+  $('sub').textContent = JUEGO.sub != null ? JUEGO.sub
+    : (esNiv() ? TX('nivel') + ' ' + NIVEL : TX('pts'));
+  /* las dos fichas de los costados: cada juego pone lo que cambia adentro del
+     nivel y las apaga con null. Escribirlas siempre dejaría un rótulo vacío
+     dibujado, que se lee a hueco y no a ficha apagada. */
+  for (const [id, v] of [['ficI', JUEGO.ficI], ['ficD', JUEGO.ficD]]){
+    const e = $(id);
+    e.hidden = v == null;
+    if (v != null) e.textContent = v;
+  }
+  const b = $('bDes');
+  if (b) b.disabled = !JUEGO.puedeDeshacer;
+  const r = JUEGO.resta;
+  const rel = $('reloj');
+  rel.style.display = r == null ? 'none' : 'block';
+  if (r != null){
+    const bb = $('relojB');
+    bb.style.width = (Math.max(0, Math.min(1, r))*100).toFixed(1) + '%';
+    bb.classList.toggle('poco', r < 0.25);
+  }
+}
+
+/* el fogonazo: va en CSS y no en el lienzo a propósito, porque tiene que poder
+   encenderse en el mismo cuadro en que pasa algo sin esperar al dibujo */
+let _flash = 0;
+function fogonazo(v){ _flash = Math.max(_flash, v); }
+function pasoFogonazo(dt){
+  if (_flash <= 0) return;
+  _flash = Math.max(0, _flash - dt*4.2);
+  $('flash').style.opacity = _flash.toFixed(3);
+}
+
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora = performance.now();
+  let dt = Math.min((ahora - _ultimo)/1000, 0.25);
+  _ultimo = ahora;
+
+  if (!CONGELADO){
+    if (MODO === 'cine'){
+      cinePaso(dt);
+    } else if (MODO === 'juega' && !PAUSA){
+      _acum += dt;
+      let n = 0;
+      while (_acum >= PASO && n < 8){ JUEGO.paso(PASO); _acum -= PASO; n++; }
+      if (n >= 8) _acum = 0;      /* si el aparato no llega, va en cámara lenta y no se cuelga */
+      if (!JUEGO.vivo) termina();
+    }
+    pasoFogonazo(dt);
+    if (MODO === 'juega' || MODO === 'fin') jugoPaso(dt);
+  }
+
+  g.clearRect(0, 0, AN, AL);
+  if (MODO === 'cine') cinePon(CINE.t);
+  else if (JUEGO.fondo) JUEGO.fondo(g);
+  if (MODO === 'juega' || MODO === 'fin'){
+    /* el sacudón envuelve SÓLO la capa del juego: sacudiendo el fondo aparecen
+       dos franjas negras en los bordes */
+    const sac = sacAplica();
+    JUEGO.pinta(g);
+    jugoPinta();
+    if (sac) g.restore();
+  }
+  if (MODO === 'juega') pintaHud();
+
+  _cuadros++; _acumF += dt;
+  if (_acumF >= 0.5){ fps = Math.round(_cuadros/_acumF); _cuadros = 0; _acumF = 0; }
+}
+
+/* ══════════════════════ LOS BOTONES ══════════════════════ */
+for (const b of document.querySelectorAll('[data-lang]'))
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ponIdioma(b.dataset.lang);
+    if (MODO === 'idioma') alMenu();
+  });
+$('bJugar').addEventListener('click', (e) => { e.stopPropagation(); jugar(); });
+$('bComo').addEventListener('click', (e) => { e.stopPropagation(); cineArranca(alMenu); });
+$('bMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bNMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bOtra').addEventListener('click', (e) => {
+  e.stopPropagation();
+  /* SIGUIENTE avanza el nivel; OTRA VEZ repite el mismo */
+  empieza(esNiv() ? (NIVEL + ($('bOtra').dataset.sig ? 1 : 0)) : undefined);
+});
+$('bDes').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!JUEGO.puedeDeshacer) return;
+  son('clic'); JUEGO.deshacer(); pintaHud();
+});
+$('bRei').addEventListener('click', (e) => { e.stopPropagation(); son('clic'); empieza(NIVEL); });
+$('bSal').addEventListener('click', (e) => {
+  e.stopPropagation(); son('clic');
+  /* salir de un nivel vuelve A LA REJA y no al menú: el jugador quiere elegir
+     otro nivel, no volver a la portada */
+  if (esNiv()) verNiveles(); else alMenu();
+});
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Todo lo que el banco necesita, y nada que el juego use. Un juego que se
+   prueba sólo mirando capturas se prueba mal: acá se puede jugar solo, saltar a
+   un instante de la cinemática y leer el estado. */
+/* el arnes de pruebas inyecta su propio `__errs` en el <head>, o sea ANTES de que
+   este modulo se evalue: pisandolo con un array nuevo se perderian justamente los
+   errores del arranque, que son los que importan */
+window.__errs = window.__errs || [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+
+window.__J = {
+  id: JUEGO.id,
+  estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR, nivel: NIVEL,
+    marca: JUEGO.marca, resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3),
+    vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height],
+    /* el ultimo toque que ENTRO por el camino de verdad (lienzo -> baja): es lo
+       unico que distingue «el juego no reacciono» de «el dedo no llego» */
+    toque: [Math.round(TOQUE.x), Math.round(TOQUE.y), TOQUE.abajo, TOQUE.n || 0] }),
+  lang: (l) => { ponIdioma(l); return LANG; },
+  menu: () => { alMenu(); return MODO; },
+  jugar: () => { jugar(); return MODO; },
+  empieza: () => { empieza(); return MODO; },
+  /* la cinemática en un instante exacto, CONGELADA. Sin congelar, entre que la
+     sonda escribe el segundo y el navegador entrega la foto el bucle ya la
+     corrió y la captura sale de otro instante — es el defecto que ya costó una
+     vuelta en BARRIO y otra en PULSO. */
+  /* Y APAGA EL FOGONAZO ANTES DE CONGELAR. `pasoFogonazo` corre dentro del
+     `if (!CONGELADO)`, asi que congelando con el fogonazo a medio apagar el
+     velo blanco de CSS QUEDA PUESTO para siempre: medido, una foto de la
+     cinematica sacada justo despues de un golpe salia con un 6 % de blanco
+     encima —el fondo pasaba de 28 a 43— y yo lo lei como que el plano estaba
+     mal iluminado. El pixel del lienzo daba 28 en los dos casos. Una sonda que
+     deja un velo encima no fotografia lo que le piden. */
+  /* ── Y APAGA EL HUD, QUE ES LO QUE `cineArranca` HACE Y LA SONDA NO HACIA ──
+     Medido en la foto del segundo plano: el marcador, el rotulo PUNTOS, el
+     multiplicador y la ficha de la derecha quedaban DIBUJADOS ENCIMA de la
+     cinematica, porque la sonda saltaba desde una partida y nadie apagaba el
+     HUD. En el juego de verdad no pasa nunca; en la foto parecia un defecto de
+     la cinematica. Una sonda que no reproduce el estado del juego fotografia
+     otra cosa. */
+  cine: (t) => { armaAudio(); CINE.on = true; MODO = 'cine'; CINE.gracia = 9e9;
+                 _flash = 0; $('flash').style.opacity = '0';
+                 $('hud').classList.remove('on'); $('acc').hidden = true;
+                 CINE.dur = JUEGO.planos.reduce((a,p) => a+p.dur, 0);
+                 CINE.t = Math.max(0, Math.min(CINE.dur - 0.01, t));
+                 CONGELADO = true;
+                 for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+                 $('cine').classList.add('on');
+                 cinePon(CINE.t);
+                 return JSON.stringify({ t: +CINE.t.toFixed(2), dur: +CINE.dur.toFixed(2),
+                                         plano: CINE.plano, pie: $('cine').textContent }); },
+  correr: () => { CONGELADO = false; return true; },
+  /* toca en unidades de diseño, por el mismo camino que un dedo */
+  toca: (x, y) => { if (JUEGO.baja) JUEGO.baja(x, y);
+                    if (JUEGO.sube) JUEGO.sube(x, y);
+                    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo }); },
+  /* ── UN ARRASTRE OCUPA TIEMPO, Y ESO HUBO QUE MEDIRLO ──
+     La primera version solo llamaba a `mueve` veinte veces seguidas, sin
+     simular. Sirve para un juego que reacciona en el evento —RASPA borra la
+     mugre ahi mismo— y NO SIRVE para uno cuyo movimiento vive en `paso`:
+     medido en MANCHA, el dedo dejaba el destino puesto, la mancha no se movia
+     ni un pixel y el arrastre devolvia 0 %. Y no fallaba: contestaba.
+     Ahora cada muestra adelanta la simulacion, que es lo que pasa de verdad
+     cuando un dedo cruza la pantalla en un tercio de segundo. */
+  arrastra: (x0, y0, x1, y1, n, pasos) => {
+    const N = n || 20, P = pasos == null ? 2 : pasos;
+    if (JUEGO.baja) JUEGO.baja(x0, y0);
+    for (let i = 1; i <= N; i++){
+      if (JUEGO.mueve) JUEGO.mueve(x0 + (x1-x0)*i/N, y0 + (y1-y0)*i/N);
+      for (let k = 0; k < P && JUEGO.vivo; k++) JUEGO.paso(PASO);
+    }
+    if (JUEGO.sube) JUEGO.sube(x1, y1);
+    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo });
+  },
+  /* avanza la simulación sin dibujar: así una partida de cuarenta segundos se
+     prueba en un instante y no en cuarenta segundos */
+  avanza: (segs) => { const n = Math.round(segs*60);
+                      for (let i = 0; i < n && JUEGO.vivo; i++) JUEGO.paso(PASO);
+                      return JSON.stringify({ vivo: !!JUEGO.vivo, puntos: PUNTOS,
+                                              resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3) }); },
+  pico: () => pico(),
+  combo: () => JSON.stringify({ n: COMBO.n, mult: COMBO.mult, max: COMBO.max,
+    t: +COMBO.t.toFixed(2), part: PART.length, flot: FLOT.length, sac: +SAC.toFixed(2) }),
+  assets: () => JSON.stringify(asEstado()),
+  /* la caja de cada elemento visible del DOM, para poder comprobar que nada se
+     solapa en una pantalla chica sin mirar una captura */
+  cajas: () => {
+    const out = {};
+    for (const id of ['marca','sub','ficI','ficD','reloj','acc','cine','finT','finP','mejor','estr','tituN','rejaN']){
+      const e = $(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      /* «visible» tiene que incluir que MIDA algo: un elemento adentro de un
+         panel con `display:none` devuelve una caja de 0×0 y decía visible */
+      /* ── LA OPACIDAD SE MULTIPLICA HASTA EL MARCO ──
+         Mirando solo el panel mas cercano, los elementos del HUD daban
+         `vis:true` con el HUD entero en `opacity:0`: medido en la foto de la
+         cinematica, la sonda informaba el marcador visible cuando en pantalla
+         no habia nada. La opacidad de un antepasado apaga a todos sus hijos, y
+         acá los hijos son justamente lo que se quiere medir. */
+      let op = 1;
+      for (let a = e; a && a !== document.body; a = a.parentElement){
+        const cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden'){ op = 0; break; }
+        op *= +cs.opacity;
+      }
+      const vis = r.width > 0 && r.height > 0 && op > 0.02;
+      out[id] = { x: Math.round(r.left), y: Math.round(r.top),
+                  w: Math.round(r.width), h: Math.round(r.height), vis };
+    }
+    return JSON.stringify(out);
+  },
+  /* el marcador se pone en cero antes de cada corrida: `arranca()` no lo toca
+     —lo hace `empieza()`— asi que dos corridas seguidas informaban el puntaje
+     de la anterior y el numero mentia sin que nada fallara */
+  juegaSolo: (n, azar) => { PUNTOS = 0; rachaCero();
+    return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); },
+  /* ── LAS SONDAS DE PROGRESO ──
+     Sin esto, probar el nivel 140 obliga a jugar los 139 anteriores, o sea que
+     no se prueba nunca. `nivel(n)` entra derecho; `prog()` dice qué quedó
+     guardado; `borra()` deja el disco limpio para que dos corridas seguidas no
+     se contaminen — que es el defecto que ya hizo que un puntaje mintiera. */
+  nivel: (n) => { empieza(n); return JSON.stringify({ modo: MODO, nivel: NIVEL,
+                    marca: JUEGO.marca, vivo: !!JUEGO.vivo }); },
+  niveles: () => { verNiveles(); return JSON.stringify({ modo: MODO,
+                    total: progTotal(), abiertos: (() => { let k = 0;
+                      for (let i = 1; i <= progTotal(); i++) if (progAbierto(i)) k++;
+                      return k; })() }); },
+  prog: () => JSON.stringify({ tipo: JUEGO.tipo, total: progTotal(),
+    sig: progSiguiente(), est: PROG.est, cont: progContados(), mejor: MEJOR }),
+  borra: () => { PROG.est = {}; PROG.ultimo = 1; MEJOR = 0;
+                 try { localStorage.removeItem(P_CLAVE); localStorage.removeItem(CLAVE); } catch(e){}
+                 return true; },
+  /* el auditor de niveles: cada juego de niveles comprueba que los suyos SE
+     PUEDEN pasar. Un nivel generado y no comprobado es un nivel roto que
+     todavia no se sabe — costo siete niveles imposibles en Maicol. */
+  audita: (desde, hasta) => JSON.stringify(
+    JUEGO.audita ? JUEGO.audita(desde || 1, hasta || progTotal()) : 'sin auditoria'),
+  deshacer: () => { if (!JUEGO.puedeDeshacer) return 'no'; JUEGO.deshacer();
+                    return JSON.stringify({ marca: JUEGO.marca, puede: !!JUEGO.puedeDeshacer }); },
+  /* la sonda propia de cada juego: el estado de su tablero sin tener que mirar
+     una captura. Es lo unico que distingue «se ve raro» de un numero. */
+  ver: () => JSON.stringify(JUEGO.ver ? JUEGO.ver() : 'sin ver')
+};
+
+/* ── LA VENTANA DE LA RACHA SE ADELANTA CON LA SIMULACIÓN, NO CON EL DIBUJO ──
+   Estaba en `jugoPaso`, que corre una vez por CUADRO con el `dt` de reloj. Para
+   las partículas y el sacudón eso es correcto —son cosméticos— pero la racha
+   NO es cosmética: en MANCHA engorda la brocha y en RASPÁ el pincel, o sea que
+   es física. Y peor: los auto-jugadores llaman a `JUEGO.paso` directo, así que
+   la ventana no se vencía nunca y el multiplicador se quedaba clavado en x5 —
+   medido, `racha 622` en una partida de 45 s de MANCHA y `7.882` en RASPÁ, que
+   son números que ninguna persona puede hacer.
+   Envolver `JUEGO.paso` una vez es lo único que garantiza que la racha caduque
+   en los seis caminos que existen (el bucle, `avanza`, y los cinco
+   auto-jugadores) sin repetir la llamada en cada juego. Es el mismo recurso con
+   el que `d.js` envuelve `son()`. */
+const _pasoJuego = JUEGO.paso.bind(JUEGO);
+JUEGO.paso = (dt) => { comboPaso(dt); _pasoJuego(dt); };
+
+/* ══════════════════════ ARRANQUE ══════════════════════ */
+medir();
+progCarga();
+cargaImg();
+pieles();
+pintaIdioma();
+pintaJuego();
+bucle();
+</script></body></html>

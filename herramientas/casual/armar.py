@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Arma juegos-pc/<Juego>.html pegando el nucleo mas el archivo del juego.
 
-    python3 herramientas/tiktok/armar.py puerta
-    python3 herramientas/tiktok/armar.py            (todos)
+    python3 herramientas/casual/armar.py frutas
+    python3 herramientas/casual/armar.py            (todos)
 
 POR QUE HAY UN NUCLEO Y NO CINCO JUEGOS ENTEROS: los cinco comparten el menu,
 los tres idiomas, la cinematica, el audio, el bucle de paso fijo y las sondas.
@@ -23,8 +23,9 @@ entero. Ya paso nueve veces en este repo.
   i.js        el sonido
   d.js        los assets generados: cargador, musica, tenido  (envuelve son())
   j.js        el jugo: racha con multiplicador, particulas, flotantes, sacudon
+  p.js        el progreso guardado y la reja de niveles  (lee JUEGO.nivelesTotal)
   c.js        la cinematica y las herramientas de dibujo
-  z.html      el armado, el bucle y las sondas        (lee JUEGO)
+  z.html      el armado, el bucle y las sondas        (lee JUEGO y todo lo de arriba)
 """
 import io, os, re, sys
 
@@ -36,11 +37,11 @@ ASSETS = os.path.join(AQUI, 'assets')
 
 # id -> (archivo de salida, nombre que se ve)
 CATALOGO = {
-    'puerta':     ('Puerta.html',     'PUERTA'),
-    'raspa':      ('Raspa.html',      'RASPÁ'),
-    'seguidores': ('Seguidores.html', 'SEGUIDORES'),
-    'mancha':     ('Mancha.html',     'MANCHA'),
-    'raro':       ('Raro.html',       'EL RARO'),
+    'frutas':   ('Frutas.html',   'FRUTAS'),
+    'tubos':    ('Tubos.html',    'TUBOS'),
+    'torre':    ('Torre.html',    'TORRE'),
+    'burbujas': ('Burbujas.html', 'BURBUJAS'),
+    'chispa':   ('Chispa.html',   'CHISPA'),
 }
 
 
@@ -55,6 +56,7 @@ def arma(jid):
         os.path.join(NUCLEO, 'i.js'),
         os.path.join(NUCLEO, 'd.js'),
         os.path.join(NUCLEO, 'j.js'),
+        os.path.join(NUCLEO, 'p.js'),
         os.path.join(NUCLEO, 'c.js'),
         os.path.join(NUCLEO, 'z.html'),
     ]
