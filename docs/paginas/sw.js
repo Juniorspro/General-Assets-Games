@@ -9,8 +9,9 @@
    dueño abre la app en la puerta del boliche sin señal y al menos la ve, aunque
    no pueda publicar hasta que vuelva. */
 
-const CACHE = "iblo-panel-v1";
-const ARMAZON = ["/iblo-app.html", "/icono-192.png", "/icono-512.png"];
+const CACHE = "iblo-panel-v2";
+/* la URL real no lleva .html: Pages se lo saca con un 308 */
+const ARMAZON = ["/iblo-app", "/icono-192.png", "/icono-512.png"];
 
 self.addEventListener("install", (ev) => {
   ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARMAZON)).then(() => self.skipWaiting()));
@@ -39,6 +40,6 @@ self.addEventListener("fetch", (ev) => {
         }
         return r;
       })
-      .catch(() => caches.match(ev.request).then((c) => c || caches.match("/iblo-app.html")))
+      .catch(() => caches.match(ev.request).then((c) => c || caches.match("/iblo-app")))
   );
 });

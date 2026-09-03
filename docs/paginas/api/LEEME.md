@@ -35,6 +35,17 @@ adentro— y **nunca `/api/`**: una respuesta vieja de la API sería peor que un
 error, porque mostraría publicaciones que ya no están. Red primero, caché de
 respaldo: sin señal el dueño abre la app y la ve, aunque no pueda publicar.
 
+**Ojo con la URL en el manifiesto**: Pages le saca el `.html` con un 308, así
+que la página real es `/iblo-app` y no `/iblo-app.html`. El manifiesto arrancó
+apuntando al `.html` y con eso la propia app quedaba fuera de su `scope`, que es
+lo que decide si abre a pantalla completa o como una pestaña más. `start_url`,
+`scope` e `id` van sin extensión.
+
+El HTML se sirve con `cache-control: public, max-age=0, must-revalidate` y el
+service worker es red-primero, así que **un despliegue nuevo se ve en la app la
+próxima vez que se abre**, sin reinstalar el APK. Probado: con el service worker
+ya instalado, se desplegó un cambio y la segunda apertura lo mostró.
+
 Para el APK (una TWA) hace falta además `/.well-known/assetlinks.json` con la
 huella SHA-256 de la clave con que se firma. Sin eso el APK abre igual pero con
 la barra del navegador arriba. La clave vive fuera del repo: si se pierde, no se
