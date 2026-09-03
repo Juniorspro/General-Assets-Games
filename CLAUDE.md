@@ -229,6 +229,114 @@ moviéndose mientras dura, la criatura de pie sobre sus propios pies (L\_Foot �
 HUD **sin un solo solapamiento** en 892×412, 732×412, 800×360 y 1280×720, **17 de 17 texturas de foto
 puestas**, `window.__errs` vacío en las nueve corridas.
 
+### Nonagésima sexta vuelta (2026-09-03): **CASA 13** — el cabeceo iba a otro reloj que la pisada
+
+Pedido: *"que los pasos sean más lentos y el movimiento y también mejora el movimiento de las
+cámaras"*.
+
+#### HABÍA DOS RELOJES DESCRIBIENDO LA MISMA CAMINATA
+
+Es el defecto de la vuelta y estaba **escrito en un comentario que decía lo contrario**. El de `ZANC`
+afirmaba desde su primera línea que era *"la MISMA cuenta para el sonido y para el cabeceo, así que no
+se pueden separar"*. No lo era:
+
+| | avanza | un ciclo cada |
+|---|---|---|
+| la pisada | `dt·v·(π/ZANC)` | **0,80 m** |
+| el cabeceo | `dt·v·2,6` | **1,21 m** |
+
+O sea que la cabeza se hundía **una vez y media por pisada** y las dos cosas **derivaban entre sí para
+siempre**: el pie tocaba el piso con la cabeza en cualquier punto de su recorrido. Y no se ve como un
+error, se ve como que la cámara flota — que es exactamente lo que se pidió arreglar.
+
+Ahora las tres cosas —el sonido, el hundimiento y el cabezazo— salen de `P.stepPh`:
+- **VERTICAL `−cos(2·ph)`**: un hundimiento por pisada, y el mínimo cae **exactamente en la pisada**,
+  que es donde la cabeza está más abajo de verdad. El máximo cae en el apoyo medio.
+- **LATERAL `sin(ph)`**: un ciclo por **zancada**, o sea la mitad de la frecuencia del vertical —el
+  ocho de siempre, porque hay dos pisadas por ciclo— con cero en las pisadas y el máximo en el apoyo
+  medio, que es cuando la pelvis está más corrida.
+
+**Y PARA ESO LA FASE TUVO QUE PASAR DE ENVOLVERSE EN π A ENVOLVERSE EN 2π.** Envuelta en π —una
+pisada— `sin(ph)` es siempre del mismo signo y el cuerpo se iría **de un solo lado**: para distinguir
+un pie del otro hace falta la zancada entera, y la pisada pasa a caer en cada cruce de π.
+
+Medido sobre la propia función —`cabeceoDe` es pura, así que la sonda mide **la regla y no una copia**:
+
+| | |
+|---|---|
+| hundimientos por zancada | **2** |
+| ciclos laterales por zancada | **1** |
+| desfase entre la pisada y el mínimo | **0 y 0,0004 rad** |
+| vertical en las dos pisadas | **−1 y −1** (lo más abajo) |
+| lateral en las dos pisadas | 0 y 0 · en los apoyos medios **+1 y −1** |
+
+Y medido **en el bucle de verdad** con `cabeceoVivo`, que es lo que prueba que el bucle la use —una
+función perfecta que nadie llama da los mismos números—: caminando, vertical **±1,95 cm**, lateral
+±1,34 y el cabezazo **±0,25°**, con el máximo del vertical cayendo en `ph ≈ 1,62` (el apoyo medio está
+en π/2 = 1,571).
+
+#### EL CABEZAZO VA EN LA ROTACIÓN DIBUJADA Y NO EN `P.pitch`
+
+Medio grado hacia abajo en cada pisada. Escrito en `P.pitO` —el objetivo— el amortiguador de la vista
+lo **desharía solo**; escrito en `P.pitch` pelearía con el resorte. Va sumado al Euler que se le pasa
+a la cámara, o sea **adentro del único escritor**, que es la misma doctrina de siempre.
+
+#### LA AMPLITUD SE MEDÍA CONTRA UN 1,4 ESCRITO A MANO
+
+`amp = min(v/1.4, 1.15)`, y ese 1,4 era la carrera de tres vueltas atrás. Con la carrera en 0,96 el
+cabeceo quedaba al **69 % de lo elegido corriendo a fondo** y bajar la velocidad lo habría apagado
+más todavía — o sea que cada vez que se pide "más lento" el cabeceo se apaga solo. Referido a `RUN`
+la escala se acomoda sola, y como la frecuencia bajó a la mitad las amplitudes subieron un 15 %:
+**una oscilación lenta y profunda se lee a peso; una rápida y chata se lee a temblor.**
+
+#### MÁS LENTO, TERCERA VEZ, Y EL NÚMERO QUE SE SIENTE ES SEGUNDOS POR PISADA
+
+Las tres bajadas fueron pedidas: 0,82 → 0,70 → **0,56** de marcha y 1,45 → 1,20 → **0,96** de carrera.
+Y la zancada sube de 0,80 a **0,86**, que es la palanca que hace la pisada más lenta **sin tocar cuánto
+se avanza**:
+
+| | m/s | segundos por pisada | Hz |
+|---|---|---|---|
+| marcha | 0,56 | **1,54** | 0,65 |
+| carrera | 0,96 | **0,90** | 1,12 |
+
+La casa mide 16 m de largo y a 0,56 m/s se cruza en 29 s. Y **la lentitud es lo que hace que el
+cabeceo se lea a peso**: la lección de BARRIO es que lo que tiembla no es la amplitud sino la
+frecuencia, y a 0,65 Hz la misma amplitud que a 1,6 Hz era pulso pasa a ser alguien que carga algo.
+
+Medido caminando de verdad por el mismo camino que usa el jugador, con la zancada saliendo de metros
+sobre medios pasos: **0,86 m exactos y 0 % perdido** en los cuatro casos —teclado marcha, teclado
+carrera, joystick en el aro (0,56) y joystick pasado (0,96)—, o sea que el paso no patina.
+
+#### Y LA SONDA ESTUVO MAL DOS VECES ANTES DE ESTAR BIEN
+
+1. **Dividía metros por pisadas enteras**, y el pedazo de paso sin cerrar daba **1,03 m de zancada
+   donde hay 0,86**. Se cuenta la fracción que queda.
+2. **Y la fracción estaba contada dos veces.** La fase se envuelve en 2π, así que su mitad alta **ya
+   está contada** en el número de pisadas: sumándola cruda, la sonda denunciaba **exactamente 0,86 m
+   perdidos** cada vez que la corrida terminaba en la segunda pisada de la zancada. Con el módulo, 0.
+
+**Y AHORA LA MEDICIÓN SE DELATA SOLA:** la fase avanza con `dt·v` igual que la posición, así que
+metros y medios pasos tienen que dar la misma zancada. Si no dan, el cuerpo chocó contra algo y siguió
+empujando —pasa cuando el director abre una puerta en el camino, y pasó— y el número no vale. Eso lo
+dice `perdido_pct` y por eso el 21 % de una corrida se pudo descartar en vez de creerle.
+
+#### MEDIDO AL CERRAR, A dpr 1
+
+Cabeceo: 2 hundimientos y 1 ciclo lateral por zancada, desfase **0**, y en vivo ±1,95 cm · ±1,34 cm ·
+±0,25°. Marcha 0,56 · carrera 0,96 · zancada **0,86 exacta con 0 % perdido** en los cuatro caminos de
+entrada · frenada 0,216 m. **La vista no se movió:** asentamiento **0,367 s al 90 %** y 0,567 al 99 %,
+sobrepico **0,00 %**, tope 3,19 rad/s, retraso 5,4° a un arrastre normal. **Nada regresó:** bajada
+**caminada** de (−2,30 · −4,50) a (−7,58 · −4,50) con y de 0 a −3 peldaño por peldaño y
+`llego_al_sotano: true`, escalera **0 · 0 · 0**, UV del suelo **0**, partida completa 3 de 3 cintas +
+la cuarta + el final (`paso 1` → `paso 7`), susto una sola vez con el post de vuelta en brillo 1,06 ·
+grano 0,063 · aberración 1,00 · linterna 3,9, las cinco acciones en su duración con el aro a 183-185°
+a la mitad y la cancelación por distancia, la linterna con su recorrido y su rampa en los dos
+sentidos, ritmo con huecos de 33,7 a 59,7 s, linterna con desvío **0°**, haz en **[0,0]**, alabeo
+**0** con la vista girando 40 muestras, HUD **sin un solo solapamiento** en 892×412, 732×412, 800×360
+y 1280×720, **17 de 17 texturas de foto y 0 huérfanas**, **19 de 19 sonidos**, fusión estática
+idéntica, 22 programas y 63 texturas —los mismos—, `window.__errs` vacío en las once corridas.
+
 ### Nonagésima quinta vuelta (2026-09-03): **CASA 13** — el pasto tapaba la escalera, y las acciones cuestan tiempo
 
 Pedido: *"asegurate de que el bloque del piso superior y el tramo de las escaleras del sótano estén

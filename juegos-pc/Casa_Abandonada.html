@@ -4892,7 +4892,7 @@ addEventListener('mousemove',e=>{
 /* ══════════ jugador ══════════ */
 /* aparece en la entrada, de cara al pasillo (hacia -Z) */
 const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:0,
-  vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0,
+  vx:0,vz:0,bobY:0,bobX:0,bobP:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0,
   /* LA VISTA TIENE UN OBJETIVO Y UNA VELOCIDAD, y `yaw`/`pitch` pasan a ser lo
      que se DIBUJA. El dedo escribe el objetivo; entre los dos hay un
      amortiguador, que es lo unico que hace que la camara no arranque ni pare de
@@ -4937,20 +4937,44 @@ function ponVista(y,pi){
   if(pi!==undefined){ P.pitch=P.pitO=pi; P.pitV=0; }
 }
 const _sv={v:0};
-/* CUANTO SE AVANZA. La casa mide 27 m de lado y se recorre entera en menos de
-   un minuto: a esa velocidad no se mira, se pasa. Y lo que este juego tiene es
-   justamente lo que hay que mirar —los muebles que tapan las cintas, los
-   papeles, la puerta que se movio sola—. Baja a paso de alguien que entra a
-   una casa a oscuras con una camara en la mano.
-   LA ZANCADA NO SE TOCA Y NO HACE FALTA: `stepPh` avanza con `dt*v`, asi que
-   el paso mide siempre π/3 = 1,05 m y lo unico que cambia es cada cuanto cae.
-   Lo mismo el cabeceo y el nivel de la pisada, que salen de `v`. */
-const WALK=0.70, RUN=1.20;
-/* CUANTO MIDE UN PASO. Salia de `dt*v*3.0`, o sea π/3 = 1,05 m: a 0,70 m/s eso
-   es una pisada cada segundo y medio, que no se lee a caminar sino a arrastrar
-   los pies. A 0,80 m de zancada la pisada cae cada 1,14 s. Y sigue siendo la
-   MISMA cuenta para el sonido y para el cabeceo, asi que no se pueden separar. */
-const ZANC=0.80;
+/* CUANTO SE AVANZA. Tercera vuelta bajandolo, y las tres pedidas: 0,82 → 0,70
+   → 0,56 de marcha y 1,45 → 1,20 → 0,96 de carrera. La casa mide 16 m de largo
+   y a 0,56 m/s se cruza en 29 s: eso ya no es ir de un cuarto al siguiente, es
+   recorrer un pasillo mirando lo que hay a los lados —que es lo unico que este
+   juego tiene—.
+   LA ZANCADA NO SE ACOMODA SOLA Y HAY QUE TOCARLA: `stepPh` avanza con `dt·v`,
+   asi que el paso mide SIEMPRE `ZANC` metros y lo que cambia es cada cuanto
+   cae. Bajar la velocidad ya hace la pisada mas lenta; subir la zancada la
+   hace mas lenta todavia sin tocar cuanto se avanza. */
+const WALK=0.56, RUN=0.96;
+/* CUANTO MIDE UN PASO, y de aca sale CADA CUANTO CAE: segundos por pisada =
+   zancada / velocidad. A 0,56 m/s con 0,86 de zancada la pisada cae cada
+   1,54 s —0,65 Hz— y corriendo cada 0,90.
+   Y ESA LENTITUD ES LO QUE HACE QUE EL CABECEO SE LEA A PESO Y NO A TEMBLOR:
+   la leccion de BARRIO es que lo que tiembla no es la amplitud sino la
+   FRECUENCIA —a 1,6 pisadas por segundo cualquier amplitud se lee a pulso que
+   no responde—. A 0,65 Hz la misma amplitud se lee a alguien que carga algo. */
+const ZANC=0.86;
+/* ══════════ EL CABECEO SALE DE LA FASE DEL PASO Y DE NINGUN OTRO RELOJ ══════════
+   Habia DOS relojes describiendo la misma caminata: la pisada avanzaba
+   `dt·v·(π/ZANC)` —o sea una cada 0,80 m— y el cabeceo `dt·v·2,6`, que da un
+   hundimiento cada 1,21 m. O sea que la cabeza bajaba una vez y media por
+   pisada y las dos cosas DERIVABAN entre si para siempre: el pie tocaba el
+   piso con la cabeza en cualquier punto de su recorrido. Y el comentario de
+   `ZANC` decia desde entonces que era "la MISMA cuenta para el sonido y para
+   el cabeceo" — lo decia el comentario, no el codigo.
+   Ahora las tres cosas —el sonido, el hundimiento y el cabezazo— salen de
+   `P.stepPh`, que avanza π por pisada:
+     · VERTICAL `-cos(2·ph)`: un hundimiento por pisada, y el minimo cae
+       EXACTAMENTE en la pisada (ph = 0 y π), que es donde la cabeza esta mas
+       abajo de verdad. El maximo cae en el apoyo medio.
+     · LATERAL `sin(ph)`: un ciclo por ZANCADA, o sea la mitad de la frecuencia
+       del vertical —el ocho de siempre, porque hay dos pisadas por ciclo— y
+       cero en las pisadas, maximo en el apoyo medio, que es cuando la pelvis
+       esta mas corrida.
+   Es una funcion pura, asi que la sonda mide EL MISMO codigo que el bucle. */
+const BOB_Y=0.034, BOB_X=0.023, BOB_PIT=0.0075;
+function cabeceoDe(ph){ return {y:-Math.cos(ph*2), x:Math.sin(ph)}; }
 const ACEL=4.4, FRENO=2.3;
 
 function resolve(){
@@ -5040,10 +5064,13 @@ function tick(){
 
   const v=Math.hypot(P.vx,P.vz);
 
-  /* pasos sincronizados con la marcha */
+  /* pasos sincronizados con la marcha. LA FASE VA DE 0 A 2π —una ZANCADA, o
+     sea dos pisadas— porque el balanceo lateral necesita distinguir un pie del
+     otro: envuelta en π, `sin(ph)` seria siempre del mismo signo y el cuerpo se
+     iria de un solo lado. La pisada cae en cada cruce de π. */
+  const _phAnt=P.stepPh;
   P.stepPh+=dt*v*(Math.PI/ZANC);
-  if(P.stepPh>Math.PI){
-    P.stepPh-=Math.PI;
+  if(Math.floor(P.stepPh/Math.PI)>Math.floor(_phAnt/Math.PI)){
     _pasosN++;
     if(A&&v>0.22){
       const out=!inHouse(P.x,P.z);
@@ -5054,6 +5081,7 @@ function tick(){
       A.step(surf, 0.45+Math.min(v/RUN,1)*0.55);
     }
   }
+  if(P.stepPh>=Math.PI*2) P.stepPh-=Math.PI*2;
 
   /* ══════════════════ LA CÁMARA ══════════════════
      Rehecha de cero. La anterior no estaba rota en una linea: tenia CUATRO
@@ -5067,12 +5095,21 @@ function tick(){
      en cero, asi que el alabeo no queda "amortiguado a cero": NO EXISTE — no
      hay una sola linea capaz de escribirlo. */
 
-  P.bob+=dt*v*2.6;
-  const amp=Math.min(v/1.4,1.15);
-  P.bobY+=(Math.sin(P.bob*2)*0.030*amp-P.bobY)*Math.min(dt*13,1);
-  P.bobX+=(Math.sin(P.bob)*0.020*amp-P.bobX)*Math.min(dt*13,1);
+  /* LA AMPLITUD SE MIDE CONTRA `RUN` Y NO CONTRA UN 1,4 ESCRITO A MANO: con la
+     carrera en 0,96 ese 1,4 dejaba el cabeceo al 40 % de lo que se habia
+     elegido incluso corriendo a fondo, y bajar la velocidad lo habria apagado
+     mas todavia. Referido a la carrera, la escala se acomoda sola. */
+  const _cb=cabeceoDe(P.stepPh);
+  const amp=Math.min(v/RUN,1);
+  P.bobY+=(_cb.y*BOB_Y*amp-P.bobY)*Math.min(dt*13,1);
+  P.bobX+=(_cb.x*BOB_X*amp-P.bobX)*Math.min(dt*13,1);
+  /* EL CABEZAZO VA EN LA ROTACION DIBUJADA Y NO EN `P.pitch`: escrito en el
+     objetivo, el amortiguador de la vista lo desharia solo. Son 0,43° hacia
+     abajo en cada pisada —medio grado— y es lo que separa una camara que
+     flota de una que alguien lleva en la mano. */
+  P.bobP+=(_cb.y*BOB_PIT*amp-P.bobP)*Math.min(dt*13,1);
   P.breath+=dt*(0.75+P.sprint*1.7+P.panic*3.4);
-  const rest=1-Math.min(v/1.4,1);
+  const rest=1-Math.min(v/RUN,1);
   const brY=Math.sin(P.breath)*(0.009+rest*0.013+P.panic*0.018);
   P.yawVel*=Math.pow(0.0018,dt);
   P.roll=0; P.lean=0;                      // quedan solo para que las sondas los lean
@@ -5096,7 +5133,7 @@ function tick(){
     _sv.v=P.pitV; P.pitch=suaveAng(P.pitch,P.pitO,_sv,VISTA_T,dt,VISTA_TOPE); P.pitV=_sv.v;
   }
   P.pitch=Math.max(-1.35,Math.min(1.35,P.pitch));
-  _camEu.set(P.pitch,P.yaw,0);
+  _camEu.set(P.pitch+P.bobP,P.yaw,0);
   camera.quaternion.setFromEuler(_camEu);
 
   /* 3 · EL SACUDON MUEVE EL OJO, NUNCA LA MIRADA. Antes tambien sumaba
@@ -6039,6 +6076,11 @@ window.__casa={
      trampa que ya costo una medicion en LEMI. */
   marcha(n,correr,empuje){ n=n||150;
     P.x=-0.65; P.z=5.00; ponVista(0,0); P.vx=0; P.vz=0; P.sprint=correr?1:0;
+    /* LA FASE ARRANCA EN CERO Y SE CUENTA LA FRACCION QUE QUEDA. Dividiendo
+       metros por pisadas enteras la zancada sale mal por el pedazo de paso que
+       queda sin cerrar —medido, 1,03 m donde hay 0,86— y encima por la fase
+       con la que venia la corrida anterior. */
+    P.stepPh=0;
     const x0=P.x, z0=P.z, p0=_pasosN;
     let vmax=0;
     return new Promise(res=>{ let k=0;
@@ -6052,12 +6094,74 @@ window.__casa={
         if(++k>=n){ clearInterval(id); keys.KeyW=false; keys.ShiftLeft=false;
           move.x=move.y=move.r=0;
           const d=Math.hypot(P.x-x0,P.z-z0), pas=_pasosN-p0;
+          /* LA FASE SE ENVUELVE EN 2π —una zancada, dos pisadas— asi que su mitad
+             alta YA ESTA CONTADA en `pas`: sumandola cruda, la sonda contaba un
+             paso de mas y denunciaba exactamente 0,86 m perdidos cada vez que la
+             corrida terminaba en la segunda pisada de la zancada. */
+          const medios=pas+(P.stepPh%Math.PI)/Math.PI;
           res({tope_ajustado:correr?RUN:WALK, empuje:empuje===undefined?null:empuje,
                v_max_medida:+vmax.toFixed(3),
                metros:+d.toFixed(2), pasos:pas,
-               zancada_m:pas?+(d/pas).toFixed(2):null,
+               zancada_m:medios>0.05?+(d/medios).toFixed(3):null,
+               seg_por_pisada:vmax>0.01?+(ZANC/vmax).toFixed(3):null,
+               /* LA MEDICION SE DELATA SOLA. La fase avanza con `dt·v` igual que
+                  la posicion, asi que metros y medios pasos tienen que dar la
+                  misma zancada; si no, el cuerpo choco contra algo y siguio
+                  empujando —pasa cuando el director abre una puerta en el
+                  camino— y el numero de zancada no vale. */
+               esperado_m:+(medios*ZANC).toFixed(2),
+               perdido_pct:medios>0.05?+((1-d/(medios*ZANC))*100).toFixed(1):null,
                desde:[x0,z0], hasta:[+P.x.toFixed(2),+P.z.toFixed(2)]}); }
       },16); }); },
+  /* ══════════ EL CABECEO, MEDIDO SOBRE LA MISMA FUNCION QUE DIBUJA ══════════
+     `cabeceoDe` es pura, asi que esto no es una copia de la regla: es la regla.
+     Lo que se comprueba es lo que se rompio durante nueve vueltas —que el
+     minimo del hundimiento caiga EXACTAMENTE en la pisada— y de paso cada
+     cuanto cae, que es lo que se pidio. */
+  cabeceo(){
+    const N=1440, y=[], x=[];
+    for(let i=0;i<N;i++){ const c=cabeceoDe(i/N*Math.PI*2); y.push(c.y); x.push(c.x); }
+    const picos=(a,cmp)=>{ const R=[];
+      for(let i=0;i<N;i++){ const p=a[(i+N-1)%N], q=a[i], r=a[(i+1)%N];
+        if(cmp(q,p)&&cmp(q,r)) R.push(+((i/N*Math.PI*2)).toFixed(3)); }
+      return R; };
+    const minY=picos(y,(q,o)=>q<=o), minX=picos(x,(q,o)=>q<=o);
+    /* las dos pisadas caen en ph = 0 y π */
+    const pis=[0,Math.PI];
+    const desfase=pis.map(p=>{
+      let mej=1e9; for(const m of minY){ let d=Math.abs(m-p);
+        d=Math.min(d,Math.abs(2*Math.PI-d)); if(d<mej) mej=d; }
+      return +mej.toFixed(4); });
+    return {
+      marcha:WALK, carrera:RUN, zancada_m:ZANC,
+      seg_por_pisada:{marcha:+(ZANC/WALK).toFixed(3), carrera:+(ZANC/RUN).toFixed(3)},
+      hz_pisada:{marcha:+(WALK/ZANC).toFixed(3), carrera:+(RUN/ZANC).toFixed(3)},
+      hundimientos_por_zancada:minY.length, ciclos_lateral_por_zancada:minX.length,
+      desfase_pisada_rad:desfase,
+      y_en_las_pisadas:[+cabeceoDe(0).y.toFixed(3),+cabeceoDe(Math.PI).y.toFixed(3)],
+      x_en_las_pisadas:[+cabeceoDe(0).x.toFixed(3),+cabeceoDe(Math.PI).x.toFixed(3)],
+      x_signos_por_pisada:[+cabeceoDe(Math.PI/2).x.toFixed(3),+cabeceoDe(Math.PI*1.5).x.toFixed(3)],
+      pico_a_pico_cm:{vertical:+(BOB_Y*2*100).toFixed(1), lateral:+(BOB_X*2*100).toFixed(1)},
+      cabezazo_grados_pp:+(BOB_PIT*2*180/Math.PI).toFixed(2),
+      amp_en_marcha:+(WALK/RUN).toFixed(3) };
+  },
+  /* Y ESTA MIDE QUE EL BUCLE LA USE: camina de verdad y anota fase y balanceo
+     cuadro a cuadro. La de arriba mide la funcion; sin esta, una funcion
+     perfecta que nadie llama daria los mismos numeros. */
+  cabeceoVivo(n){ n=n||70;
+    P.x=-0.65; P.z=5.00; ponVista(0,0); P.vx=0; P.vz=0; P.sprint=0; P.stepPh=0;
+    const tr=[], raf=window.requestAnimationFrame; keys.KeyW=true;
+    return new Promise(res=>{ const f=()=>{
+      tr.push([+P.stepPh.toFixed(3),+P.bobY.toFixed(4),+P.bobX.toFixed(4),+P.bobP.toFixed(4)]);
+      if(tr.length<n){ raf.call(window,f); return; }
+      keys.KeyW=false;
+      const y=tr.map(r=>r[1]), x=tr.map(r=>r[2]), p=tr.map(r=>r[3]);
+      res({cuadros:tr.length,
+        y_cm:[+(Math.min(...y)*100).toFixed(2),+(Math.max(...y)*100).toFixed(2)],
+        x_cm:[+(Math.min(...x)*100).toFixed(2),+(Math.max(...x)*100).toFixed(2)],
+        pit_grados:[+(Math.min(...p)*180/Math.PI).toFixed(2),+(Math.max(...p)*180/Math.PI).toFixed(2)],
+        muestra:tr.slice(8,26)});
+    }; raf.call(window,f); }); },
   /* la ganancia del haz, para barrerla y elegirla mirando y no a ojo */
   gan(v){ if(v!==undefined) shaftMat.uniforms.uA.value=v;
     const r=this.techo(); return {ganancia:shaftMat.uniforms.uA.value,
@@ -6327,7 +6431,8 @@ window.__casa={
   },
   jug(){ return {x:+P.x.toFixed(3),z:+P.z.toFixed(3),y:+P.y.toFixed(3),
     yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),nivel:P.level,
-    bobY:+P.bobY.toFixed(4),bobX:+P.bobX.toFixed(4),roll:+P.roll.toFixed(4),
+    bobY:+P.bobY.toFixed(4),bobX:+P.bobX.toFixed(4),bobP:+P.bobP.toFixed(4),
+    fase:+P.stepPh.toFixed(3),roll:+P.roll.toFixed(4),
     sprint:+P.sprint.toFixed(2),panic:+P.panic.toFixed(2)}; },
   /* EL TEMBLOR SE MIDE CON LA SEGUNDA DIFERENCIA de la trayectoria de la
      camara: cuanto CAMBIA el desplazamiento entre muestra y muestra. Una
