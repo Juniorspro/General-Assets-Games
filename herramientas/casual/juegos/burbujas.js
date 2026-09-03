@@ -99,7 +99,9 @@ function bGeo(){
   B_r = Math.floor((AN - 24) / (B_COLS*2));
   B_x0 = (AN - B_COLS*B_r*2)/2;
   B_paso = Math.round(B_r*1.732);
-  B_y0 = 168 + B_r;
+  /* el techo arranca debajo del HUD: con 168 la primera fila quedaba pegada al
+     rotulo QUEDAN, medido en la captura */
+  B_y0 = 196 + B_r;
 }
 /* la línea de la que se dispara y la de perder */
 function bCanon(){ return { x: AN/2, y: AL - 190 }; }
@@ -181,11 +183,26 @@ function bLlenaCola(){
 }
 
 function bConf(n){
-  const col = Math.min(B_COL.length, 3 + Math.floor((n - 1)/24));
-  const filas = Math.min(9, 4 + Math.floor((n - 1)/14));
+  /* ── LA CURVA SE RETOCO PORQUE LOS NIVELES ALTOS ERAN IMPOSIBLES ──
+     La primera version llegaba a NUEVE filas y SIETE colores, y medido con el
+     auto-jugador sobre los niveles 100 a 119: limpio CERO de veinte. No era el
+     presupuesto de tiros —varios terminaron con veinte tiros de sobra y
+     perdieron por llegar a la linea de abajo—: era que un tablero de nueve
+     filas con siete colores no se puede vaciar hasta cero, porque con siete
+     colores los racimos casi no se forman y cada burbuja que se pega empuja el
+     tablero mas abajo.
+
+     Y la auditoria del generador NO lo veia, porque mira como NACE el tablero y
+     no si se puede terminar. Lo unico que lo encontro fue jugarlo.
+
+     La dificultad pasa a venir de la densidad y del presupuesto, que son las
+     dos palancas que no rompen la partida: cinco colores como maximo y siete
+     filas como maximo. */
+  const col = Math.min(5, 3 + Math.floor((n - 1)/40));
+  const filas = Math.min(7, 4 + Math.floor((n - 1)/24));
   /* la densidad sube con el nivel: con todo lleno desde el nivel 1 no hay por
      dónde entrar y el primer tiro es a ciegas */
-  const dens = Math.min(0.94, 0.62 + n*0.0022);
+  const dens = Math.min(0.90, 0.62 + n*0.0022);
   return { col, filas, dens };
 }
 function bGenera(n){
@@ -244,6 +261,8 @@ const JUEGO = {
   get ficI(){ return TX('nivel') + ' ' + NIVEL; },
   get ficD(){ return TX('tirosC') + ' ' + (B_tope - B_tiros); },
   get resta(){ return B_tope ? Math.max(0, (B_tope - B_tiros)/B_tope) : null; },
+  /* no hay `deshacer`: un tiro ya salio y no se puede devolver. El nucleo ve
+     que el metodo no esta y no dibuja el boton. */
   puedeDeshacer: false,
 
   planos: [
@@ -313,7 +332,16 @@ const JUEGO = {
        tenga dos compañeras del mismo color al lado, o sea que cuesta TRES
        tiros y no uno. El presupuesto es el piso teorico por tres y medio, y
        eso es lo que el auto-jugador demuestra que alcanza. */
-    B_tope = Math.max(16, Math.ceil(B_quedan/3 * 3.5));
+    /* ── Y EL PISO IMPORTA MAS QUE EL FACTOR EN LOS TABLEROS CHICOS ──
+       Con `max(16, ...)` el auto-jugador limpiaba veinte de veinte; despues
+       BAJE EL TECHO 28 unidades para que la primera fila no quedara pegada al
+       HUD, y con eso cambiaron todas las trayectorias y dos niveles —el 5 y el
+       12— se quedaron sin tiros con una y dos burbujas puestas. El presupuesto
+       estaba justo y no se sabia. En un tablero chico cada burbuja cuesta mas,
+       porque hay menos vecinos con los que armar racimo: el piso sube a 18 y se
+       le suman cuatro de aire. LECCION: cualquier cambio de geometria mueve el
+       resultado del auto-jugador, asi que hay que volver a correrlo. */
+    B_tope = Math.max(18, Math.ceil(B_quedan/3 * 4.0) + 5);
     this.vivo = true; this.gano = false; this.estrellas = 0; this.finP = '';
   },
 
@@ -476,7 +504,9 @@ const JUEGO = {
     const desde = Math.max(1, n || 1);
     const hasta = Math.min(B_NIVELES, desde + (azar ? 7 : 19));
     for (let nv = desde; nv <= hasta; nv++){
-      this.arranca(nv);
+      /* por la cadena de verdad: `empieza` pone el nivel y `termina` guarda
+         las estrellas, asi que el progreso queda probado y no supuesto */
+      empieza(nv);
       let vueltas = 0;
       while (this.vivo && vueltas < 4000){
         if (!B_bola){
@@ -487,6 +517,7 @@ const JUEGO = {
         this.paso(1/60);
         vueltas++;
       }
+      if (!this.vivo) termina();
       res.push({ n: nv, gano: !!this.gano, tiros: B_tiros, tope: B_tope,
                  est: this.estrellas, quedan: B_quedan });
     }
@@ -592,7 +623,13 @@ function bSimula(x, y, a, col){
 
 function bBurbuja(g, x, y, r, ci){
   const col = B_COL[ci] || '#888';
-  if (dibCuadro('burbujas', ci, x, y + r, r*2, false)) return;
+  /* ── UNA SOLA BURBUJA BLANCA Y LAS SIETE SALEN TENIDAS ──
+     Es una generacion en vez de siete, y ademas no puede pasar que dos colores
+     queden con brillos distintos: el brillo especular y el borde de luz son
+     literalmente los mismos pixeles en las siete. `tenido()` multiplica sobre
+     blanco, asi que el color sale exacto y el gris del cuerpo se convierte en
+     el sombreado. */
+  if (dibSello('burbujas', x, y, r, 0, col)) return;
   const gr = g.createRadialGradient(x - r*0.32, y - r*0.34, r*0.05, x, y, r*1.02);
   gr.addColorStop(0, '#ffffff');
   gr.addColorStop(0.26, col);

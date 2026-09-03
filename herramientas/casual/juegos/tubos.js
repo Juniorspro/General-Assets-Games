@@ -454,7 +454,12 @@ const JUEGO = {
     const desde = Math.max(1, n || 1);
     const hasta = Math.min(T_NIVELES, desde + (azar ? 11 : 23));
     for (let nv = desde; nv <= hasta; nv++){
-      this.arranca(nv);
+      /* ── POR LA CADENA DE VERDAD Y NO POR `arranca` ──
+         Llamando a `arranca` directo, el auto-jugador probaba que el nivel
+         se puede resolver y NO probaba nada de lo que pasa al resolverlo:
+         `empieza` es quien pone el nivel y `termina` quien guarda las
+         estrellas, asi que el progreso quedaba sin una sola prueba. */
+      empieza(nv);
       const camino = T_cam;
       let mov = 0;
       if (camino){
@@ -467,6 +472,7 @@ const JUEGO = {
           mov++;
         }
       }
+      if (!this.vivo) termina();
       res.push({ n: nv, cota: T_min, largo: camino ? camino.length : -1,
                  jugadas: mov, gano: !!this.gano,
                  est: this.estrellas, hecho: tHecho(T_tubos) });
@@ -479,6 +485,8 @@ const JUEGO = {
              /* que las movidas del solver y las jugadas coincidan es la prueba
                 de que la regla es UNA: si difieren, hay dos reglas */
              desajuste: res.filter(r => r.jugadas !== r.largo).map(r => r.n),
+             est3: res.filter(r => r.est === 3).length,
+             est: [1,2,3].map(k => res.filter(r => r.est === k).length),
              muestra: res.slice(0, 6) };
   },
 

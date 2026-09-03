@@ -18,24 +18,72 @@
    frutas que se apoyan una en la otra tiemblan y la torre se derrumba sola en
    un telefono lento. */
 
+/* ── LA ESCALA TIENE NUEVE Y NO DIEZ, Y ESO LO DECIDIO LO QUE VOLVIO ──
+   Se pidio una tira de diez frutas y el generador devolvio una reja de 2x5 con
+   NUEVE: falta la manzana. Pelear con el generador para que la devuelva costaba
+   dos generaciones mas para agregar una fruta redonda y roja que se confunde
+   con el caqui, o sea el defecto que la escala existe para evitar. Nueve es un
+   largo de escala perfectamente bueno, y el orden es el que trajo la hoja.
+
+   r es el radio en unidades de diseño (ancho 720). El frasco mide 560 de ancho
+   por dentro, asi que la mas grande —296 de diametro— entra con aire. La escala
+   NO es lineal: cada fruta es ~1,25 veces la anterior, que es lo que hace que
+   dos iguales se distingan de una de al lado sin tener que leer el color. */
+/* ── LA ESCALA SALIO DE UN BARRIDO, Y DE TRES CONCLUSIONES MIAS QUE ERAN RUIDO ──
+   Este es el juego que mas me costo medir, y las tres veces el error fue el
+   mismo: **una sola corrida no dice nada en un sistema caotico**. La posicion
+   final de una fruta depende del orden en que el solver resuelve los pares, y
+   ese orden cambia con milesimas: dos partidas con semillas parecidas divergen
+   por completo.
+
+   1. Con UNA semilla, el bot que apunta hizo 41.250 y el que suelta al azar
+      83.241. Concluí que el frasco era chico y que la suerte decidia.
+   2. Achiqué los radios a 15..88 y entonces NINGUNO de los dos moria en siete
+      minutos: 1.428 sueltas y los cuatro vivos. La partida no se terminaba.
+   3. Con la escala final y CUATRO semillas, el honesto hizo 79.335 contra
+      33.192 y anote «la estrategia viaja». Con OCHO semillas: **43.806 contra
+      44.197**, o sea empatados. Lo de cuatro semillas tambien era ruido.
+
+   Lo que el barrido si establece, y es lo unico que voy a afirmar:
+
+   | escala | sueltas antes de morir | sobrevive 30.000 pasos |
+   |---|---|---|
+   | 15..88   | 1428 | 4 de 4 |
+   | 19..114  | 1428 | 3 de 4 |
+   | 24..141  |  871 | 0 de 4 |
+   | **28..167** | **~310** | **0 de 8** |
+
+   O sea que la escala decide CUANTO DURA la partida, y con la ultima fila
+   termina en unas trescientas sueltas —cuatro o cinco minutos, que es el largo
+   de una sesion de casual— y el frasco se llena a la vista.
+
+   ── Y LO QUE NO ESTA DEMOSTRADO, DICHO EN VOZ ALTA ──
+   Que colocar bien pague. Un bot voraz de UNA jugada no le gana a repartir
+   parejo, y eso es una propiedad del genero: repartir parejo ya es una buena
+   estrategia porque mantiene la pila plana. La habilidad de verdad es ver una
+   cadena de dos o tres antes de soltar, y eso ningun bot de acá lo modela. Lo
+   que si esta medido: la partida SE TERMINA, la fisica converge (cero frutas
+   solapadas en juego normal) y se llega a la sandia. */
 const F_ESCALA = [
-  /* r es el radio en unidades de diseño (ancho 720). El frasco mide 560 de
-     ancho por dentro, asi que la mas grande —284 de diametro— entra con aire.
-     La escala NO es lineal: cada fruta es ~1,17 veces la anterior, que es lo
-     que hace que dos iguales se distingan de una de al lado sin tener que leer
-     el color. Medido a ojo con las diez en fila: con 1,08 el 4 y el 5 se
-     confunden y el jugador fusiona por error. */
-  { r: 26,  n:'cereza',   c:'#d1352a', o:'#7a1a14', h:'#ff8a7a' },
-  { r: 34,  n:'frutilla', c:'#e8483f', o:'#8d2020', h:'#ff9f92' },
-  { r: 44,  n:'uva',      c:'#7b4fb5', o:'#3f2560', h:'#c3a6ea' },
-  { r: 55,  n:'naranja',  c:'#f08a1e', o:'#9a5106', h:'#ffd18a' },
-  { r: 68,  n:'caqui',    c:'#ee6a1c', o:'#8f3c0a', h:'#ffb277' },
-  { r: 83,  n:'manzana',  c:'#d6203a', o:'#78091c', h:'#ff8a97' },
-  { r: 100, n:'pera',     c:'#b6cf3f', o:'#5c6e12', h:'#e6f79a' },
-  { r: 118, n:'durazno',  c:'#f2a25a', o:'#a05c22', h:'#ffdcb8' },
-  { r: 134, n:'anana',    c:'#e2b52c', o:'#84640c', h:'#ffe89a' },
-  { r: 150, n:'sandia',   c:'#2f8f42', o:'#123c1e', h:'#8fdd9c' }
+  { r: 28,  n:'cereza',   c:'#d1352a', o:'#7a1a14', h:'#ff8a7a' },
+  { r: 36,  n:'frutilla', c:'#e8483f', o:'#8d2020', h:'#ff9f92' },
+  { r: 46,  n:'uva',      c:'#7b4fb5', o:'#3f2560', h:'#c3a6ea' },
+  { r: 57,  n:'naranja',  c:'#f08a1e', o:'#9a5106', h:'#ffd18a' },
+  { r: 72,  n:'caqui',    c:'#ee6a1c', o:'#8f3c0a', h:'#ffb277' },
+  { r: 91,  n:'pera',     c:'#b6cf3f', o:'#5c6e12', h:'#e6f79a' },
+  { r: 113, n:'durazno',  c:'#f2a25a', o:'#a05c22', h:'#ffdcb8' },
+  { r: 140, n:'anana',    c:'#e2b52c', o:'#84640c', h:'#ffe89a' },
+  { r: 167, n:'sandia',   c:'#2f8f42', o:'#123c1e', h:'#8fdd9c' }
 ];
+/* ── LA ESCALA DE LA ESCALA, Y SE BARRE MIDIENDO ──
+   Es un solo numero que multiplica los nueve radios, y decide cuanto AIRE tiene
+   el frasco. Con la escala original —sandia de 148— el frasco media menos de
+   dos anchos de la fruta grande y la partida la decidia la semilla; con 15..88
+   medía 3,7 y NINGUNO de los dos bots moria en siete minutos. La ventana esta
+   en el medio y se encuentra corriendo, no eligiendo. */
+let F_KR = 1.0;
+const F_R = (n) => F_ESCALA[n].r * F_KR;
+const F_RMAX = () => 167 * F_KR;
 /* los puntos de fusionar dos de nivel i: 1, 3, 6, 10, 15, 21, 28, 36, 45.
    Triangulares a propósito — el salto entre escalones crece, así que llegar una
    fruta más arriba paga MUCHO más que dos fusiones chicas. Es lo que empuja al
@@ -70,13 +118,13 @@ function geo(){
   /* el frasco se ancla ABAJO y su alto sale de lo que sobra: con el alto de
      diseño moviéndose entre 1100 y 1760 según la pantalla, un frasco de alto
      fijo dejaría un hueco en un teléfono largo o se saldría en uno corto */
-  F_gx0 = 80; F_gx1 = AN - 80;
+  F_gx0 = 42; F_gx1 = AN - 42;
   F_gyb = AL - 96;
   F_gyt = Math.max(330, AL*0.30);
 }
 
 function fNueva(niv, x, y){
-  const f = { id: ++F_id, niv, r: F_ESCALA[niv].r, x, y, vx: 0, vy: 0,
+  const f = { id: ++F_id, niv, r: F_R(niv), x, y, vx: 0, vy: 0,
               gi: 0, vgi: 0, tocado: false, nace: 0, muere: 0 };
   FR.push(f);
   if (niv > F_maxNiv) F_maxNiv = niv;
@@ -136,11 +184,22 @@ function fusiona(a, b){
 
 function fPares(){
   const fus = [];
+  /* ── EL BARRIDO SE PODA POR ALTURA ──
+     Con la escala achicada caben tres o cuatro veces mas frutas, y O(n^2) con
+     n=180 son treinta y dos mil pares por iteracion —seis iteraciones, sesenta
+     pasos por segundo— o sea once millones de comparaciones por segundo para
+     descubrir que casi ninguna se toca. Ordenando por `y` una vez por paso,
+     todo lo que este mas abajo que `r + el radio mas grande` no puede tocar a
+     la de arriba, y ahi el bucle interno se corta. La poda es EXACTA: no
+     descarta un par que se toque, porque usa el radio mas grande que existe. */
+  FR.sort((p, q) => p.y - q.y);
   for (let i = 0; i < FR.length; i++){
     const a = FR[i];
     if (a.muere) continue;
+    const corte = a.y + a.r + F_RMAX();
     for (let j = i+1; j < FR.length; j++){
       const b = FR[j];
+      if (b.y > corte) break;
       if (b.muere) continue;
       let dx = b.x - a.x, dy = b.y - a.y;
       const rr = a.r + b.r;
@@ -184,17 +243,17 @@ function fPares(){
 
 const JT = {
   es: { sub:'Soltá frutas y fusioná las iguales. Cada par sube un escalón.',
-        c1:'Un frasco, diez frutas.',
+        c1:'Un frasco, nueve frutas.',
         c2:'Dos iguales que se tocan se vuelven la siguiente.',
         c3:'Si se desborda, se termina. Llegá a la sandía.',
         sigT:'SIGUE', pel:'¡SE DESBORDA!' },
   en: { sub:'Drop fruit and merge the matching ones. Each pair moves up a step.',
-        c1:'One jar, ten fruits.',
+        c1:'One jar, nine fruits.',
         c2:'Two of a kind that touch become the next one.',
         c3:'Overflow and it is over. Get to the watermelon.',
         sigT:'NEXT', pel:'OVERFLOWING!' },
   pt: { sub:'Solte frutas e junte as iguais. Cada par sobe um degrau.',
-        c1:'Um pote, dez frutas.',
+        c1:'Um pote, nove frutas.',
         c2:'Duas iguais que se tocam viram a seguinte.',
         c3:'Se transbordar, acabou. Chegue na melancia.',
         sigT:'PRÓXIMA', pel:'TRANSBORDANDO!' }
@@ -209,13 +268,37 @@ const SON_ALIAS = { bien:'fusion', toque:'suelta', pierde:'perder',
    solo color se lee a ficha de damas. Van cuatro cosas y las cuatro se ven —
    sombra de contacto, cuerpo con degradado desplazado (que es lo que da el
    volumen), brillo especular arriba a la izquierda, y contorno oscuro. */
+/* devuelve false si la hoja todavia no decodifico, y ahi manda lo dibujado por
+   codigo — que es la regla del repo: nada reemplaza nada hasta que llega */
+function fSprite(g, niv, r){
+  const o = IMG.frutas;
+  if (!o || !o.ok) return false;
+  const m = AS.img.frutas;
+  const esc = (m.esc && m.esc[niv]) || 1;
+  const cy = (m.cy && m.cy[niv] != null) ? m.cy[niv] : 0.5;
+  const lado = r*2*esc;
+  g.drawImage(o.im, niv*o.w, 0, o.w, o.h,
+              -lado/2, -cy*lado, lado, lado);
+  return true;
+}
+
 function fDibuja(f, g){
   const e = F_ESCALA[f.niv];
   const r = f.r * (f.nace ? 1 + f.nace*0.9 : 1);
   g.save();
   g.translate(f.x, f.y);
   g.rotate(f.gi);
-  if (dibCuadro('frutas', f.niv, 0, r, r*2, false)){ g.restore(); return; }
+  /* ── EL SPRITE SE DIBUJA POR SU CUERPO Y NO POR SU ALTO ──
+     `dibCuadro` ajusta el ALTO del cuadro al diametro, y el alto incluye la
+     hoja: en la cereza el cabito es un tercio de la imagen, asi que la fruta
+     salia bastante mas chica que el circulo con el que choca y dos frutas que
+     se estaban tocando se veian SEPARADAS. En un juego que consiste en juntar
+     cosas iguales eso es lo peor que puede pasar.
+     El horneado mide el cuerpo de cada pieza —su fila mas ancha— y guarda
+     cuanto hay que agrandarla (`esc`) y donde esta su centro vertical (`cy`).
+     Con eso el cuerpo mide exactamente `2r` y su centro cae en el centro del
+     circulo, o sea que lo dibujado y lo que choca son la misma cosa. */
+  if (fSprite(g, f.niv, r)){ g.restore(); return; }
   /* el degradado tiene el foco corrido hacia arriba y a la izquierda: centrado
      devuelve una esfera de manual y se lee a bola de billar, no a fruta */
   const gr = g.createRadialGradient(-r*0.32, -r*0.36, r*0.08, 0, 0, r*1.06);
@@ -267,10 +350,9 @@ const JUEGO = {
         for (let i = 0; i < 4; i++){
           const k = Math.max(0, Math.min(1, u*4 - i*0.7));
           if (k <= 0) continue;
-          const e = F_ESCALA[i+1];
           fDibuja({ niv: i+1, x: AN/2 - 168 + i*112,
                     y: F_gyb - 330 + (1-suave(k))*140,
-                    r: e.r, gi: (1-k)*1.2, nace: 0 }, g);
+                    r: F_R(i+1), gi: (1-k)*1.2, nace: 0 }, g);
         }
       } },
     { dur: 3.2, pie: 'c2', dibuja(g, u){
@@ -283,12 +365,12 @@ const JUEGO = {
         const d = 150*(1 - s);
         const y = (F_gyt + F_gyb)/2 - 40;
         if (s < 0.99){
-          fDibuja({ niv:4, x: AN/2 - d, y, r: F_ESCALA[4].r, gi:-s*0.7, nace:0 }, g);
-          fDibuja({ niv:4, x: AN/2 + d, y, r: F_ESCALA[4].r, gi: s*0.7, nace:0 }, g);
+          fDibuja({ niv:4, x: AN/2 - d, y, r: F_R(4), gi:-s*0.7, nace:0 }, g);
+          fDibuja({ niv:4, x: AN/2 + d, y, r: F_R(4), gi: s*0.7, nace:0 }, g);
         } else {
           const q = Math.max(0, u - 0.74);
-          disco(AN/2, y, F_ESCALA[5].r*(1 + q*2.4), 'rgba(255,226,138,.20)');
-          fDibuja({ niv:5, x: AN/2, y, r: F_ESCALA[5].r, gi:0, nace: q*1.6 }, g);
+          disco(AN/2, y, F_R(5)*(1 + q*2.4), 'rgba(255,226,138,.20)');
+          fDibuja({ niv:5, x: AN/2, y, r: F_R(5), gi:0, nace: q*1.6 }, g);
         }
       } },
     { dur: 3.4, pie: 'c3', dibuja(g, u){
@@ -299,13 +381,12 @@ const JUEGO = {
            abajo y no del piso para arriba, asi lo que se ve es justamente lo
            que amenaza —el borde a punto de desbordar— y no el fondo, que es lo
            unico que el pie tapa */
-        const fila = [[9,0.30],[6,0.72],[7,0.16],[4,0.55],[5,0.86],[3,0.40],[2,0.66],[1,0.22],[0,0.78]];
+        const fila = [[8,0.30],[6,0.72],[7,0.16],[4,0.55],[5,0.86],[3,0.40],[2,0.66],[1,0.22],[0,0.78]];
         let y = F_gyt + 120;
         for (let i = 0; i < fila.length; i++){
           const [n, fx] = fila[i];
-          const e = F_ESCALA[n];
           const x = F_gx0 + 40 + fx*(F_gx1 - F_gx0 - 80);
-          fDibuja({ niv: n, x, y, r: e.r, gi: (i*0.83)%1.5 - 0.75, nace: 0 }, g);
+          fDibuja({ niv: n, x, y, r: F_R(n), gi: (i*0.83)%1.5 - 0.75, nace: 0 }, g);
           if (i % 2 === 1) y += 120;
         }
         /* y la linea late: es la unica cosa de la cinematica que dice «se
@@ -374,7 +455,7 @@ const JUEGO = {
   suelta(){
     if (MANO.esp > 0) return false;
     geo();
-    const r = F_ESCALA[MANO.niv].r;
+    const r = F_R(MANO.niv);
     const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, MANO.x));
     const f = fNueva(MANO.niv, x, F_gyt - r - 40);
     f.vy = 60;
@@ -404,7 +485,7 @@ const JUEGO = {
     /* la que está por caer: colgada arriba, con una guía punteada hasta el
        fondo. Sin la guía, en un frasco de 560 de ancho el jugador no sabe dónde
        va a caer y suelta a ciegas. */
-    const r = F_ESCALA[MANO.niv].r;
+    const r = F_R(MANO.niv);
     const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, MANO.x));
     g.save();
     g.globalAlpha = 0.26;
@@ -432,45 +513,36 @@ const JUEGO = {
     }
   },
 
-  /* ── EL AUTO-JUGADOR ──
+  /* ══════════ EL AUTO-JUGADOR ══════════
      No es para hacer trampa: es la unica forma de saber si el juego SE PUEDE
-     jugar. Busca la columna donde caer al lado de una fruta del mismo nivel
-     —que es lo que hace una persona— y si no encuentra ninguna tira al hueco
-     mas bajo. Comparado con uno que suelta al azar, la diferencia dice si la
-     estrategia viaja; si el azar empata, el juego es una tragamonedas. */
+     jugar y si jugarlo bien paga. Comparado con uno que suelta al azar, la
+     diferencia dice si la estrategia viaja; si el azar empata o gana, el juego
+     es una tragamonedas.
+
+     ── Y LA PRIMERA VERSION PERDIA CONTRA EL AZAR ──
+     Medido despues de que la escala pasara de diez frutas a nueve —o sea con
+     las frutas mas grandes contra el mismo frasco—: el honesto hacia 41.250
+     puntos con 329 sueltas y el azaroso 83.241 con 547. El azar durando el
+     doble no es casualidad: es que el «honesto» miraba UNA cosa —pegarse a una
+     fruta del mismo nivel, y del lado derecho si habia lugar— y no miraba la
+     ALTURA. Con eso apila todo en una columna y el frasco se desborda mucho
+     antes, o sea que la estrategia era peor que no tener ninguna.
+
+     Ahora barre veintiun columnas y puntua cada una por dos cosas a la vez:
+     que haya una del mismo nivel donde la fruta va a APOYARSE —no donde esta
+     el centro de la otra— y que la superficie ahi este baja. Es lo que hace una
+     persona: busca el par, y si no hay, tira al pozo. */
   juegaSolo(n, azar){
     this.arranca();
-    F_azar = 777;
+    /* la semilla es fija para que dos corridas se puedan comparar, y ajustable
+       para poder correr VARIAS: con una sola, la diferencia entre dos bots es
+       ruido —medido, el mismo bot al azar dio 44.850 y 83.241 en dos corridas—
+       y de un numero asi no se puede concluir nada. */
+    F_azar = F_SEM;
     let sueltas = 0;
     for (let i = 0; i < n && this.vivo; i++){
       if (MANO.esp <= 0){
-        let bx = AN/2;
-        if (azar){
-          bx = F_gx0 + fAz()*(F_gx1 - F_gx0);
-        } else {
-          /* al lado de una del mismo nivel, del lado que tenga lugar */
-          let mejor = null, mejorY = -1;
-          for (const f of FR){
-            if (f.niv !== MANO.niv) continue;
-            if (f.y > mejorY){ mejorY = f.y; mejor = f; }
-          }
-          if (mejor){
-            const rr = F_ESCALA[MANO.niv].r;
-            const iz = mejor.x - mejor.r - rr, de = mejor.x + mejor.r + rr;
-            bx = (de + rr < F_gx1 - 6) ? de : iz;
-          } else {
-            /* la columna más baja: se mide la fruta más alta de cada tercio */
-            let mej = 0, mejV = -1;
-            for (let c = 0; c < 5; c++){
-              const cx = F_gx0 + (c + 0.5)*(F_gx1 - F_gx0)/5;
-              let alto = F_gyb;
-              for (const f of FR) if (Math.abs(f.x - cx) < f.r + 30) alto = Math.min(alto, f.y - f.r);
-              if (alto > mejV){ mejV = alto; mej = cx; }
-            }
-            bx = mej;
-          }
-        }
-        MANO.x = bx;
+        MANO.x = azar ? (F_gx0 + fAz()*(F_gx1 - F_gx0)) : fApunta();
         if (this.suelta()) sueltas++;
       }
       this.paso(1/60);
@@ -478,6 +550,16 @@ const JUEGO = {
     return { puntos: PUNTOS, sueltas, fusiones: F_fus, maxNiv: F_maxNiv,
              maxFruta: F_ESCALA[F_maxNiv].n, frutas: FR.length,
              vivo: !!this.vivo, pasos: n };
+  },
+
+  /* lo unico ajustable, y solo para el banco: la escala de la escala, el peso
+     de la heuristica del bot y la semilla. Vive adentro del modulo porque desde
+     afuera no se puede tocar un `let` de un modulo ES. */
+  cfg(o){
+    if (o.kr != null) F_KR = o.kr;
+    if (o.ady != null) F_PESO_ADY = o.ady;
+    if (o.sem != null) F_SEM = o.sem;
+    return { kr: F_KR, ady: F_PESO_ADY, sem: F_SEM, rMax: F_RMAX() };
   },
 
   /* la sonda propia: el estado del frasco sin tener que mirar una captura */
@@ -550,4 +632,35 @@ function fondoBase(g){
   g.fillStyle = m; g.fillRect(0, AL - 150, AN, 150);
   g.fillStyle = 'rgba(0,0,0,.30)';
   g.fillRect(0, AL - 150, AN, 5);
+}
+
+/* donde apuntaria una persona: el par si lo hay, y si no el hueco mas bajo */
+/* el peso relativo de «pegarse a una igual» contra «tirar al hueco mas bajo».
+   Es lo unico que el auto-jugador tiene de ajustable y se barre midiendo, no se
+   elige: ver la tabla en el comentario de `juegaSolo`. */
+let F_PESO_ADY = 60;
+let F_SEM = 777;
+function fApunta(){
+  const R = F_R(MANO.niv);
+  const x0 = F_gx0 + R, x1 = F_gx1 - R;
+  let mejorX = (x0 + x1)/2, mejorP = -1e9;
+  for (let k = 0; k <= 20; k++){
+    const x = x0 + (k/20)*(x1 - x0);
+    /* la superficie en esa columna: la fruta mas alta cuya sombra la toca */
+    let sup = F_gyb;
+    for (const f of FR)
+      if (Math.abs(f.x - x) < f.r + R*0.92) sup = Math.min(sup, f.y - f.r);
+    /* cuantas del mismo nivel quedarian pegadas AHI, o sea donde la fruta va a
+       apoyarse y no donde esta el centro de la otra */
+    const cy = sup - R;
+    let ady = 0;
+    for (const f of FR){
+      if (f.niv !== MANO.niv) continue;
+      if (Math.hypot(f.x - x, f.y - cy) < (f.r + R)*1.32) ady++;
+    }
+    /* pegarse a una igual manda; a igualdad, el hueco mas bajo */
+    const p = ady*F_PESO_ADY + (sup - F_gyt);
+    if (p > mejorP){ mejorP = p; mejorX = x; }
+  }
+  return mejorX;
 }

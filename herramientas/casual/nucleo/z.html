@@ -126,14 +126,22 @@ function empieza(n){
   MODO = 'juega';
   verPantalla(null);
   musQuiere('mus');
-  /* los botones de partida existen sólo donde hay algo que deshacer */
+  /* ── LOS BOTONES DE PARTIDA, Y CADA UNO SOLO SI SIRVE ──
+     La fila existe en los juegos de niveles. Pero DESHACER solo tiene sentido
+     donde hay algo que deshacer: en BURBUJAS un tiro ya salio y no se puede
+     devolver, asi que el boton quedaba dibujado y APAGADO para siempre — y un
+     boton que nunca se puede tocar no se lee a «no hay nada que deshacer», se
+     lee a juego roto. Si el juego no trae `deshacer`, el boton no existe. */
   $('acc').hidden = !esNiv();
+  $('bDes').hidden = !JUEGO.deshacer;
+  document.body.classList.toggle('conAcc', esNiv());
   pintaHud();
 }
 function termina(){
   MODO = 'fin';
   musQuiere('menu');
   $('acc').hidden = true;
+  document.body.classList.remove('conAcc');
   const gano = !!JUEGO.gano;
   if (esNiv()){
     const e = gano ? Math.max(1, Math.min(3, JUEGO.estrellas|0)) : 0;
@@ -410,7 +418,68 @@ window.__J = {
                     return JSON.stringify({ marca: JUEGO.marca, puede: !!JUEGO.puedeDeshacer }); },
   /* la sonda propia de cada juego: el estado de su tablero sin tener que mirar
      una captura. Es lo unico que distingue «se ve raro» de un numero. */
-  ver: () => JSON.stringify(JUEGO.ver ? JUEGO.ver() : 'sin ver')
+  ver: () => JSON.stringify(JUEGO.ver ? JUEGO.ver() : 'sin ver'),
+  /* ── LOS AJUSTES DEL BANCO PASAN POR ACA Y NO POR `eval` ──
+     Barri la escala de las frutas con `eval('F_KR='+k)` desde el banco y los
+     cuatro valores dieron EXACTAMENTE el mismo resultado —el mismo puntaje
+     hasta la unidad y las mismas 1.428 sueltas—, que es la firma de un
+     parametro que no toca nada. La causa: esto es un modulo ES, asi que sus
+     `let` de nivel superior NO estan en el ambito global y un `eval` desde
+     afuera crea otra variable con el mismo nombre. La medicion no medio nada y
+     no fallo: contesto.
+     Un ajuste tiene que entrar por una funcion que viva ADENTRO del modulo. */
+  cfg: (o) => JSON.stringify(JUEGO.cfg ? JUEGO.cfg(o || {}) : 'sin cfg'),
+  /* ── LOS SOLAPAMIENTOS SE CUENTAN, NO SE MIRAN ──
+     `cajas()` devuelve las cajas y hay que cruzarlas a mano, y eso es
+     exactamente lo que no se hace: el reloj de BURBUJAS estuvo dibujado ENCIMA
+     de la fila de botones y lo vi en una captura y no en un numero. Esto
+     devuelve los pares que se pisan, asi que un elemento nuevo que caiga sobre
+     otro se denuncia solo en la proxima corrida. */
+  solapes: () => {
+    const ids = ['marca','sub','ficI','ficD','reloj','acc','cine','estr',
+                 'finT','finP','mejor','tituN','rejaN'];
+    const cajas = [];
+    for (const id of ids){
+      const e = $(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      let op = 1;
+      for (let a = e; a && a !== document.body; a = a.parentElement){
+        const cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden'){ op = 0; break; }
+        op *= +cs.opacity;
+      }
+      if (!(r.width > 0 && r.height > 0 && op > 0.02)) continue;
+      /* ── LA CAJA QUE IMPORTA ES LA DEL TEXTO, NO LA DEL ELEMENTO ──
+         `#marca` va `left:0;right:0` con el texto centrado, asi que su caja
+         mide el ancho entero del marco y las dos fichas de los costados caen
+         adentro sin tocar una sola letra. La primera version denunciaba tres
+         choques por juego que no existen —y una sonda que grita en falso es
+         peor que no tener sonda, porque el proximo choque de verdad se lee como
+         mas ruido—. Con un `Range` sobre el contenido se obtiene lo que de
+         verdad se pinta. Es el mismo error que ya costo una medicion en BARRIO
+         con la caja alineada a los ejes. */
+      let caja = r;
+      if (e.firstChild){
+        try {
+          const rg = document.createRange();
+          rg.selectNodeContents(e);
+          const rt = rg.getBoundingClientRect();
+          if (rt.width > 1 && rt.height > 1) caja = rt;
+        } catch(err){}
+      }
+      cajas.push([id, caja]);
+    }
+    const out = [];
+    for (let i = 0; i < cajas.length; i++) for (let j = i+1; j < cajas.length; j++){
+      const [ai, a] = cajas[i], [bi, b] = cajas[j];
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      /* dos pixeles de tolerancia: un borde que toca al de al lado no es un
+         solapamiento, y con tolerancia cero cualquier par apilado da positivo */
+      if (w > 2 && h > 2) out.push(ai + '/' + bi + ' ' + Math.round(w) + 'x' + Math.round(h));
+    }
+    return JSON.stringify({ visibles: cajas.map(c => c[0]), choques: out });
+  }
 };
 
 /* ── LA VENTANA DE LA RACHA SE ADELANTA CON LA SIMULACIÓN, NO CON EL DIBUJO ──

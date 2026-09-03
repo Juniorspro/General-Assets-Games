@@ -313,7 +313,9 @@ const JUEGO = {
     const desde = Math.max(1, n || 1);
     const hasta = Math.min(C_NIVELES, desde + (azar ? 11 : 23));
     for (let nv = desde; nv <= hasta; nv++){
-      this.arranca(nv);
+      /* por la cadena de verdad: `empieza` pone el nivel y `termina` guarda
+         las estrellas, asi que el progreso queda probado y no supuesto */
+      empieza(nv);
       const esperado = C_min;
       if (azar){
         /* el que gira al azar: por lejos no llega, y esa distancia es la que
@@ -330,6 +332,7 @@ const JUEGO = {
           for (let k = 0; k < f && this.vivo; k++) this.baja(p.x, p.y);
         }
       }
+      if (!this.vivo) termina();
       res.push({ n: nv, min: esperado, giros: C_giros, gano: !!this.gano,
                  est: this.estrellas, apagados: C_W*C_H - C_on.filter(Boolean).length,
                  reja: C_W + 'x' + C_H });

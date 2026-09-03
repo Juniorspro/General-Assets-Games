@@ -1,490 +1,326 @@
 #!/usr/bin/env python3
-"""Mete los assets generados con Rezona adentro de cada HTML, en base64.
+"""Hornea los assets crudos a base64 dentro de assets/<juego>.js
 
-    python3 herramientas/casual/hornear.py
+    python3 herramientas/casual/hornear.py frutas tubos burbujas
 
-Los originales viven en herramientas/tiktok/crudo/ tal como los devolvio Rezona
-(PNG de 1 a 2,5 MB y MP3 estereo de 400 KB). De aca salen siempre reducidos, asi
-que el crudo es la fuente y nunca lo que viaja.
+POR QUE HAY UN HORNEADO Y NO SE PEGAN LOS PNG TAL CUAL: lo que devuelve un
+generador de imagenes no se puede usar directamente. Vuelve en dos mil pixeles
+de lado, con el fondo puesto, y —esto es lo que mas cuesta— CON LA REJA QUE SE LE
+PIDIO Y NO CON LA QUE VOLVIO.
 
-POR QUE HORNEAR Y NO ENLAZAR: cada minijuego es UN archivo. Un `<img src>` a un
-CDN significa que el juego no arranca sin red, y estos se abren desde un enlace
-en un telefono, en el subte.
+── EL MODELO NO CUENTA A PEDIDO, Y ESO YA COSTO UNA VUELTA EN OTRO JUEGO ──
+Se pidio «una tira horizontal de exactamente 10 frutas en una sola fila» y
+volvio una reja de 2x5 con NUEVE frutas (falta la manzana). Se pidio «12 esferas
+en una sola fila» y volvio una reja de 3x8 con lineas separadoras y colores
+repetidos. Las piezas estan perfectas; la disposicion no es la que se pidio.
+Asi que el horneado NO supone la reja: la MIDE —islas de filas y de columnas
+sobre la mascara de fondo— y despues se le dice de que celdas sacar cada pieza.
+Con las coordenadas escritas a mano, regenerar la imagen corre todo veinte
+pixeles y no falla: sale una fruta cortada al medio.
 
-LAS CINCO DECISIONES DE TAMANO, Y TODAS SALEN DE PARA QUE SE USA CADA COSA:
-
-  · FONDOS a 720x1280 WebP q70. Es exactamente el marco de diseno, asi que
-    subirlo mas es mandar pixeles que nadie va a ver. Van recortados por COVER
-    y no estirados: la generacion vuelve en 896x1200 (0,747) y el marco de un
-    telefono de hoy es 0,46 — estirando, la entrada del boliche sale aplastada.
-
-  · LAS HOJAS DE SPRITES SE CORTAN EN CELDAS IGUALES Y SE RECORTAN CON LA CAJA
-    UNION. Recortando cada cuadro a SU propia caja, el personaje cambia de
-    tamano y de centro en cada cuadro y al animar TIEMBLA — es exactamente el
-    defecto que costo una vuelta en Maicol. Con la caja union los cuatro
-    comparten tamano y alineacion por construccion.
-
-  · LAS TEXTURAS a 512 y EMBALDOSADAS DE VERDAD (banda fundida sobre el borde
-    opuesto). `MirroredRepeatWrapping` saca la costura y deja simetria espejo,
-    que sobre una placa de metal se lee a calidoscopio.
-
-  · LA MUSICA a mono 22 kHz 48 kbps con LA COLA FUNDIDA SOBRE LA CABEZA. Un tema
-    cortado en seco y puesto en bucle da un golpe cada vuelta que se escucha mas
-    que la musica. De 396 KB estereo a unos 110.
-
-  · Y EL NIVEL SE MIDE SOBRE EL MP3 YA ESCRITO. Nivelar el float y dar el numero
-    por bueno es creerle a una cuenta que no se hizo: a 48 kbps el codificador
-    se lleva parte del brillo y un chasquido puede caer un tercio. Se escribe,
-    se mide, se corrige y se vuelve a escribir.
+Y la escala de la escala de frutas se ajusto a lo que volvio: nueve y no diez.
+Pelear con el generador para que devuelva la manzana habria costado dos
+generaciones para agregar una fruta redonda y roja que se confunde con el caqui.
 """
-import base64, io, json, pathlib, sys
-import numpy as np
+import io, json, os, sys
 from PIL import Image
-import av
+import numpy as np
 
-RAIZ = pathlib.Path(__file__).resolve().parents[2]
-CRUDO = RAIZ / 'herramientas/tiktok/crudo'
-SALIDA = RAIZ / 'herramientas/tiktok/assets'
+AQUI = os.path.dirname(os.path.abspath(__file__))
+CRUDO = os.path.join(AQUI, 'crudo')
+ASSETS = os.path.join(AQUI, 'assets')
 
 # ── QUE LLEVA CADA JUEGO ──
-# Solo lo que ese juego dibuja o suena. La musica de menu la comparten los cinco
-# porque el menu es el mismo momento en los cinco; la de partida es propia,
-# porque cambiar de juego tiene que oirse.
+# `celdas` es la lista de (fila, columna) de la reja MEDIDA, en el orden en el
+# que el juego las indexa. Es lo unico que hay que rehacer si se regenera la
+# imagen, y lo hace visible en vez de esconderlo en un recorte.
 JUEGOS = {
-    'puerta': {
-        'img': [('fondo', 'puerta_fondo', 'fondo', {}),
-                ('gente', 'puerta_gente', 'hoja', {'n': 4, 'alto': 330, 'ropa': True, 'cab': True}),
-                ('em',    'em_puerta',     'emblema', {'ancho': 300}),
-                ('vip',   'puerta_vip',    'sello', {'lado': 220})],
-        'son': [('mus', 'mus_puerta', 'mus'), ('menu', 'mus_menu', 'mus'),
-                ('pase', 'sfx_pase', 'sfx'), ('no', 'sfx_buzz', 'sfx'),
-                ('combo', 'sfx_combo', 'sfx'), ('ovacion', 'sfx_ovacion', 'sfx'),
-                ('abucheo', 'sfx_abucheo', 'sfx')],
+    'frutas': {
+        'frutas': dict(archivo='frutas_hoja.png', tipo='hoja', lado=192,
+                       # la reja volvio 2x5 con nueve piezas: cinco arriba y
+                       # cuatro abajo, en orden de tamano
+                       celdas=[(0,0),(0,1),(0,2),(0,3),(0,4),(1,0),(1,1),(1,2),(1,3)]),
     },
-    'raspa': {
-        'img': [('fondo',  'raspa_fondo',   'fondo', {}),
-                ('em',     'em_raspa',      'emblema', {'ancho': 300}),
-                ('s0',     'raspa_limpio',  'tex', {'lado': 512}),
-                ('s1',     'raspa_azulejo', 'tex', {'lado': 512}),
-                ('s2',     'raspa_madera',  'tex', {'lado': 512}),
-                ('m0',     'raspa_mugre',   'tex', {'lado': 512}),
-                ('m1',     'raspa_hollin',  'tex', {'lado': 512}),
-                ('pincel', 'raspa_pincel',  'sello', {'lado': 220})],
-        'son': [('mus', 'mus_raspa', 'mus'), ('menu', 'mus_menu', 'mus'),
-                ('raspa', 'sfx_raspa', 'sfx'), ('combo', 'sfx_combo', 'sfx')],
+    'tubos': {
+        # ── SIN `lineas` A PROPOSITO, Y ESO SE MIDIO ──
+        # Las lineas separadoras de la reja YA son magenta claro, asi que el
+        # relleno desde el borde se las lleva y la reja se mide igual (8x8x8).
+        # El paso de erosion que las borraba a mano hacia lo contrario de lo que
+        # se queria: dilatar el fondo cuatro pixeles CRUZA el contorno oscuro de
+        # una bola, conecta su interior con el fondo, y entonces el relleno
+        # entra y le vacia el medio — medido, a la violeta y a la rosa les
+        # quedaba un anillo. Un paso que se puso para arreglar un defecto y que
+        # causa otro peor se saca, no se ajusta.
+        'bolas': dict(archivo='bolas_hoja.png', tipo='hoja', lado=128,
+                      # la reja volvio 3x8 con repetidos: la primera fila trae
+                      # los ocho primeros colores y la tercera los cuatro que
+                      # faltan, justo en el orden de T_COL
+                      celdas=[(0,0),(0,1),(0,2),(0,3),(0,4),(0,5),(0,6),(0,7),
+                              (2,4),(2,5),(2,6),(2,7)]),
     },
-    'seguidores': {
-        'img': [('fondo',  'seg_fondo',   'fondo', {}),
-                ('pj',     'seg_pj',      'hoja', {'n': 4, 'alto': 300}),
-                ('iconos', 'seg_iconos',  'hoja', {'n': 3, 'alto': 200}),
-                ('em',     'em_seguidores', 'emblema', {'ancho': 300}),
-                ('extras', 'seg_extras',  'hoja', {'n': 2, 'alto': 200})],
-        'son': [('mus', 'mus_seguidores', 'mus'), ('menu', 'mus_menu', 'mus'),
-                ('cor', 'sfx_corazon', 'sfx'), ('hater', 'sfx_hater', 'sfx'),
-                ('combo', 'sfx_combo', 'sfx'), ('power', 'sfx_power', 'sfx')],
-    },
-    'mancha': {
-        'img': [('piso',    'mancha_piso',    'tex', {'lado': 512}),
-                ('salpica', 'mancha_salpica', 'sello', {'lado': 256}),
-                ('bola',    'mancha_pj',      'sello', {'lado': 220}),
-                ('em',      'em_mancha',      'emblema', {'ancho': 300}),
-                ('items',   'mancha_items',   'hoja', {'n': 2, 'alto': 200})],
-        'son': [('mus', 'mus_mancha', 'mus'), ('menu', 'mus_menu', 'mus'),
-                ('splat', 'sfx_splat', 'sfx'), ('combo', 'sfx_combo', 'sfx'),
-                ('power', 'sfx_power', 'sfx'), ('bomba', 'sfx_bomba', 'sfx')],
-    },
-    'raro': {
-        'img': [('fondo',   'raro_fondo',   'fondo', {}),
-                ('objetos', 'raro_objetos', 'hoja', {'n': 6, 'alto': 220}),
-                ('em',      'em_raro',      'emblema', {'ancho': 300}),
-                ('objetos2','raro_objetos2','hoja', {'n': 6, 'alto': 220})],
-        'son': [('mus', 'mus_raro', 'mus'), ('menu', 'mus_menu', 'mus'),
-                ('combo', 'sfx_combo', 'sfx')],
+    'burbujas': {
+        # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
+        # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es
+        # una generacion en vez de siete y ademas no puede pasar que dos colores
+        # queden con brillos distintos.
+        'burbujas': dict(archivo='burbuja_blanca.png', tipo='sello', lado=160,
+                         blanco=True),
     },
 }
 
 
-# ══════════════════════ IMAGEN ══════════════════════
-
 def abre(n):
-    p = CRUDO / (n + '-g1.png')
-    if not p.exists():
-        return None
-    return Image.open(p).convert('RGBA')
+    return Image.open(os.path.join(CRUDO, n)).convert('RGB')
 
 
-def webp(im, q, alfa=False):
+def _dist_magenta(a):
+    return np.sqrt((a[:,:,0]-255.0)**2 + a[:,:,1]**2.0 + (a[:,:,2]-255.0)**2)
+
+
+def mascara_fondo(im, umbral=150):
+    """El alfa GLOBAL, por distancia al magenta. Sirve para MEDIR la reja y no
+    para recortar: ver `alfa_celda`, que es la que recorta."""
+    return np.clip((_dist_magenta(np.asarray(im).astype(np.float32)) - umbral*0.42)
+                   / (umbral*0.58), 0, 1).astype(np.float32)
+
+
+def alfa_celda(im, caja, umbral=150, margen=3):
+    """El alfa de UNA celda: relleno desde las esquinas de esa celda.
+
+    ── TRES INTENTOS Y LOS DOS PRIMEROS FALLARON DE MANERAS DISTINTAS ──
+    1. UMBRAL GLOBAL de distancia al magenta: diez bolas de doce salieron
+       perfectas y a la VIOLETA y a la ROSA se les vacio el medio. La causa no es
+       el numero: el violeta y el rosa ESTAN cerca del magenta en RGB, asi que
+       cualquier umbral que saque el fondo tambien les saca el cuerpo. Es la
+       falla clasica del recorte por color cuando el color de la llave aparece
+       en el sujeto, y no hay umbral que la arregle.
+    2. RELLENO DESDE LAS ESQUINAS DEL CUADRO: separa por CONEXION en vez de por
+       color —el fondo toca el borde y el centro de una bola no— y eso si
+       distingue las dos cosas. Pero en la hoja de bolas el generador dibujo
+       LINEAS SEPARADORAS OSCURAS, y esas lineas encierran el fondo de cada
+       celda: el relleno no llega y cada bola sale con su rectangulo magenta
+       puesto. Y el paso que borraba las lineas a mano era peor todavia:
+       dilatar el fondo cuatro pixeles CRUZA el contorno oscuro de la bola,
+       conecta su interior con el fondo, y el relleno vuelve a vaciarla.
+    3. RELLENO POR CELDA, que es lo que quedo: la caja de la celda la da la reja
+       ya medida, sus cuatro esquinas son fondo por geometria —un cuadrado
+       alrededor de un circulo— y desde ahi el relleno cubre el fondo de esa
+       celda sin poder salir ni entrar. Las lineas quedan AFUERA de la caja, asi
+       que ni hace falta borrarlas.
+    """
+    from PIL import ImageDraw
+    x0, y0, x1, y1 = caja
+    X0 = max(0, x0 - margen); Y0 = max(0, y0 - margen)
+    X1 = min(im.width, x1 + margen); Y1 = min(im.height, y1 + margen)
+    rec = im.crop((X0, Y0, X1, Y1))
+    d = _dist_magenta(np.asarray(rec).astype(np.float32))
+    mg = d < umbral
+    # el `.copy()` no es decorativo: una imagen hecha con `fromarray` comparte
+    # el buffer con el array y las escrituras de `floodfill` no vuelven por
+    # `asarray` — medido, el relleno informaba 0 % de fondo con las esquinas ya
+    # marcadas en 128, o sea que habia funcionado y no se veia
+    m = Image.fromarray(np.where(mg, 255, 0).astype(np.uint8), 'L').copy()
+    w, h = rec.size
+    semillas = [(0,0), (w-1,0), (0,h-1), (w-1,h-1),
+                (w//2,0), (w//2,h-1), (0,h//2), (w-1,h//2)]
+    hubo = False
+    for sx, sy in semillas:
+        if m.getpixel((sx, sy)) == 255:
+            ImageDraw.floodfill(m, (sx, sy), 128, thresh=0)
+            hubo = True
+    rampa = np.clip((d - umbral*0.42)/(umbral*0.58), 0, 1)
+    if not hubo:
+        # ninguna semilla cayo en fondo: la pieza llena la celda de punta a
+        # punta. Ahi el umbral es lo unico que queda, y se dice en voz alta.
+        print('    ojo: la celda %s no tiene esquina de fondo, se recorta por umbral' % (caja,))
+        al = rampa
+    else:
+        al = np.where(np.array(m) == 128, rampa, 1.0)
+    # y se devuelve recortado a la caja PEDIDA y no a la ampliada: el margen
+    # existe para tener esquinas de fondo, y las lineas separadoras viven ahi
+    dx, dy = x0 - X0, y0 - Y0
+    return (rec.crop((dx, dy, dx + (x1-x0), dy + (y1-y0))),
+            al[dy:dy + (y1-y0), dx:dx + (x1-x0)])
+
+
+def islas(v, umb, minlar):
+    out, ini = [], None
+    for i, x in enumerate(v > umb):
+        if x and ini is None:
+            ini = i
+        elif not x and ini is not None:
+            if i - ini >= minlar:
+                out.append((ini, i))
+            ini = None
+    if ini is not None and len(v) - ini >= minlar:
+        out.append((ini, len(v)))
+    return out
+
+
+def mide_reja(im, al=None):
+    """Devuelve reja[fila][col] = (x0,y0,x1,y1), medida y no supuesta.
+
+    Y la tinta sale de la MISMA mascara que el recorte: con un umbral propio,
+    una bola violeta se mide como dos islas —el anillo que sobrevive al
+    umbral— y la reja informa columnas que no existen.
+    """
+    if al is None:
+        al = mascara_fondo(im)
+    tinta = al > 0.5
+    fil = tinta.sum(axis=1)
+    F = islas(fil, max(1, fil.max()*0.02), int(im.height*0.04))
+    reja = []
+    for (y0, y1) in F:
+        c = tinta[y0:y1].sum(axis=0)
+        C = islas(c, max(1, c.max()*0.05), int(im.width*0.010))
+        # el alto de cada celda se recorta a su propia tinta: la banda de la
+        # fila abarca la mas alta y una fruta chica quedaria centrada mal
+        cel = []
+        for (x0, x1) in C:
+            t = tinta[y0:y1, x0:x1]
+            ys = np.where(t.any(axis=1))[0]
+            cel.append((x0, y0 + int(ys[0]), x1, y0 + int(ys[-1]) + 1))
+        reja.append(cel)
+    return reja
+
+
+def celda_cuadrada(im, caja, lado):
+    """La celda recortada y centrada en un cuadrado del lado pedido.
+
+    EL CUADRADO ES EL LADO MAYOR y no el ancho: el juego dibuja cada pieza con
+    `dibCuadro`, que ajusta el ALTO de la celda al diametro. Con celdas de
+    proporciones distintas, una pera saldria con el mismo alto que una sandia y
+    ademas estirada a lo ancho. Con el cuadrado del lado mayor, cada pieza
+    conserva su forma y llena su diametro por el lado que le toca.
+    """
+    rec, al = alfa_celda(im, caja)
+    w, h = rec.size
+    lc = max(w, h)
+    rgba = rec.convert('RGBA')
+    rgba.putalpha(Image.fromarray(np.clip(al*255, 0, 255).astype(np.uint8)))
+    lienzo = Image.new('RGBA', (lc, lc), (0, 0, 0, 0))
+    lienzo.paste(rgba, ((lc-w)//2, (lc-h)//2), rgba)
+    return lienzo.resize((lado, lado), Image.LANCZOS)
+
+
+def hoja(nom, cf):
+    im = abre(cf['archivo'])
+    reja = mide_reja(im)
+    lado = cf['lado']
+    piezas = []
+    for (f, c) in cf['celdas']:
+        assert f < len(reja), '%s: la reja midio %d filas y se pidio la %d' % (nom, len(reja), f)
+        assert c < len(reja[f]), '%s: la fila %d midio %d celdas y se pidio la %d' % (nom, f, len(reja[f]), c)
+        piezas.append(celda_cuadrada(im, reja[f][c], lado))
+    tira = Image.new('RGBA', (lado*len(piezas), lado), (0, 0, 0, 0))
+    for i, p in enumerate(piezas):
+        tira.paste(p, (i*lado, 0), p)
+    return tira, len(piezas), lado, lado, [len(r) for r in reja], cuerpos(piezas)
+
+
+def cuerpos(piezas):
+    """Para cada pieza, cuanto mide su CUERPO y donde esta su centro.
+
+    ── POR QUE HACE FALTA, Y SE VIO EN UNA CAPTURA DEL JUEGO ──
+    El juego dibuja cada fruta con su ALTO igual al diametro de choque. Pero el
+    alto del sprite incluye la HOJA y el cabito, que en la cereza son un tercio
+    de la imagen: la fruta se dibuja bastante mas chica que el circulo con el
+    que choca, asi que dos frutas que se estan tocando se ven SEPARADAS y una
+    fusion parece un error. En un juego que consiste en juntar cosas iguales,
+    eso es lo peor que puede pasar.
+
+    El cuerpo se mide sin suponer nada: la fila mas ANCHA de la pieza es su
+    diametro —para una fruta redonda es exacto y para una pera es su parte mas
+    gruesa, que es la que choca— y esa misma fila dice donde esta el centro
+    vertical del cuerpo. Se devuelven las dos cosas en fraccion del lado, asi
+    que el juego las multiplica por el radio y no depende del tamano al que se
+    horneo.
+    """
+    esc, cy = [], []
+    for p in piezas:
+        a = np.asarray(p)[:, :, 3] > 90
+        anchos = a.sum(axis=1)
+        i = int(anchos.argmax())
+        bw = max(1, int(anchos[i])) / float(p.width)
+        esc.append(round(1.0/bw, 4))
+        cy.append(round((i + 0.5)/float(p.height), 4))
+    return esc, cy
+
+
+def sello(nom, cf):
+    """Una sola pieza, recortada a su caja. Si va a tenirse, el RGB se lleva a
+    blanco casi puro: `tenido()` multiplica, asi que sobre blanco el color sale
+    exacto y sobre un gris sale multiplicado por ese gris.
+
+    Y NO SE BLANQUEA TODO: solo lo que ya era claro. Forzando el RGB entero a
+    blanco se van el contorno y la sombra de abajo, y la pieza queda un disco
+    plano — es exactamente lo que paso una vez con la bola de otro juego.
+    """
+    im = abre(cf['archivo'])
+    al = mascara_fondo(im)
+    ys = np.where(al.any(axis=1))[0]
+    xs = np.where(al.any(axis=0))[0]
+    caja = (int(xs[0]), int(ys[0]), int(xs[-1])+1, int(ys[-1])+1)
+    p = celda_cuadrada(im, caja, cf['lado'])
+    if cf.get('blanco'):
+        a = np.asarray(p).astype(np.float32)
+        lum = a[:,:,:3].mean(axis=2)
+        # ── SOLO LO CASI BLANCO SE LLEVA A BLANCO ──
+        # Con el corte en 132 de luminancia, «casi todo» pasaba el umbral y la
+        # burbuja salia un disco PLANO: se iban el brillo especular, el borde de
+        # luz y la sombra de abajo, o sea las tres cosas por las que valia la
+        # pena generarla. Y tenida, un disco plano es peor que la burbuja
+        # dibujada por codigo.
+        # `tenido()` MULTIPLICA, asi que el gris del cuerpo no molesta: un
+        # cuerpo en 0,90 por el color da ese color un poco mas oscuro, que es
+        # justamente el sombreado. Lo unico que tiene que ser blanco puro es lo
+        # que tiene que salir blanco en las siete: el brillo y el borde.
+        k = np.clip((lum - 232.0)/23.0, 0, 1)[:,:,None]
+        a[:,:,:3] = a[:,:,:3]*(1-k) + 255.0*k
+        p = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    return p, 1, cf['lado'], cf['lado'], None, cuerpos([p])
+
+
+def webp(im, q=86):
     b = io.BytesIO()
-    im.save(b, 'WEBP', quality=q, method=6, exact=alfa)
+    im.save(b, 'WEBP', quality=q, method=6)
     return b.getvalue()
-
-
-def cover(im, w, h):
-    """recorta y escala para llenar w x h sin deformar: se elige el lado que
-       aprieta y se corta el sobrante por el centro"""
-    e = max(w / im.width, h / im.height)
-    im = im.resize((max(1, round(im.width*e)), max(1, round(im.height*e))), Image.LANCZOS)
-    x = (im.width - w)//2
-    y = (im.height - h)//2
-    return im.crop((x, y, x + w, y + h))
-
-
-def embaldosa(im, f=0.16):
-    """la banda del borde se funde sobre el borde opuesto, asi que el izquierdo
-       ES la continuacion del derecho y se puede repetir sin espejo"""
-    a = np.asarray(im.convert('RGB')).astype(np.float32)
-    h, w, _ = a.shape
-    kx, ky = int(w*f), int(h*f)
-    t = np.linspace(0, 1, kx, dtype=np.float32)[None, :, None]
-    base = a[:, :w-kx].copy()
-    base[:, :kx] = base[:, :kx]*t + a[:, w-kx:]*(1-t)
-    t = np.linspace(0, 1, ky, dtype=np.float32)[:, None, None]
-    out = base[:h-ky].copy()
-    out[:ky] = out[:ky]*t + base[h-ky:]*(1-t)
-    return Image.fromarray(np.clip(out, 0, 255).astype('uint8'))
-
-
-def sin_lineas(im, r=3, d=4):
-    """── LA GENERACION DIBUJA EL MARCO DE CADA CELDA, Y SE VE ──
-    Las tres hojas volvieron con un rectangulo finito alrededor de cada cuadro
-    —el modelo dibuja la grilla que se le pidio— y eso no es inofensivo: la caja
-    union se lo lleva adentro y en PUERTA, donde la ropa se TINE, ese marco se
-    pinto del color de la ropa. Medido en la captura: un rectangulo rojo
-    alrededor de la persona, en el medio de la puerta.
-
-    Se saca por EROSION: el marco es una linea de uno a tres pixeles y la figura
-    es una mancha gruesa, asi que erosionando 2 px la linea desaparece entera y
-    de la figura sobrevive el interior; dilatando 3 px se recupera el contorno.
-    No hace falta saber donde estaba la linea ni de que color era.
-    """
-    a = np.asarray(im)
-    al = a[..., 3]
-    m = al > 40
-    e = m.copy()
-    for dx, dy in ((r, 0), (-r, 0), (0, r), (0, -r)):
-        e &= np.roll(m, (dy, dx), (0, 1))
-    k = e.copy()
-    for i in range(1, d+1):
-        for dx, dy in ((i, 0), (-i, 0), (0, i), (0, -i), (i, i), (-i, -i), (i, -i), (-i, i)):
-            k |= np.roll(e, (dy, dx), (0, 1))
-    fuera = int((m & ~k).sum())
-    b = a.copy()
-    b[..., 3] = np.where(k, al, 0)
-    return Image.fromarray(b, 'RGBA'), fuera
-
-
-def caja_union(celdas):
-    """la caja que contiene el dibujo de TODAS las celdas. Es lo unico que
-       garantiza que los cuadros no bailen al animar."""
-    cajas = [c.split()[3].getbbox() for c in celdas]
-    cajas = [b for b in cajas if b]
-    if not cajas:
-        return None
-    return (min(b[0] for b in cajas), min(b[1] for b in cajas),
-            max(b[2] for b in cajas), max(b[3] for b in cajas))
-
-
-def mide_cabeza(celda):
-    """── DONDE ESTA LA CABEZA, MEDIDO Y NO SUPUESTO ──
-    Los rasgos de las reglas de PUERTA —el gorro, los lentes, la bufanda— se
-    dibujan por codigo ENCIMA del sprite generado, y no se pueden poner a ojo:
-    un gorro con un desplazamiento fijo queda flotando sobre la cabeza en un
-    cuadro y metido en la frente en el otro.
-
-    Y LA PRIMERA VERSION DE ESTA MEDICION ESTABA MAL DE DOS FORMAS, las dos
-    encontradas imprimiendo el ancho fila por fila en vez de razonarlo:
-
-      · TOMABA LA FILA 0 COMO LA CORONILLA, y en la fila 0 habia SIETE pixeles
-        sueltos repartidos de x=36 a x=189: restos del marco de la celda que la
-        erosion no alcanzo a limpiar. La cabeza de verdad empieza en la fila 30.
-        Ahora una fila cuenta como coronilla solo si tiene un ancho de verdad.
-
-      · Y BUSCABA EL HOMBRO COMO «la fila que pasa 1,5 veces el ancho de la
-        cabeza», que con este dibujo recien se cumple en la fila 126 — o sea
-        cincuenta filas DESPUES del cuello. El percentil salia 99 px contra los
-        62 que mide la cabeza, y con ese numero los rasgos quedaban repartidos
-        una cabeza y media mas arriba: medido en la captura, la bufanda cruzaba
-        los ojos y los lentes estaban en el nacimiento del pelo.
-
-    Lo que si es inconfundible en el perfil es el CUELLO: es el minimo de ancho
-    entre la coronilla y los hombros (22 px contra 62 de la cabeza y 88 del
-    hombro). De ahi sale el ALTO de la cabeza, que es la medida que los rasgos
-    necesitan de verdad.
-    """
-    a = np.asarray(celda)[..., 3]
-    h, w = a.shape
-    anchos = np.array([(a[y] > 40).sum() for y in range(h)], dtype=np.int32)
-    minimo = max(6, int(w*0.12))
-    filas = np.where(anchos >= minimo)[0]
-    if not len(filas):
-        return None
-    y0 = int(filas[0])
-    # la cabeza: desde la coronilla hasta el minimo de ancho (el cuello)
-    tope = min(h, y0 + int(h*0.55))
-    banda = anchos[y0:tope]
-    if len(banda) < 8:
-        return None
-    pico = int(banda[:max(3, len(banda)//2)].max())
-    # el cuello es el minimo despues de la fila donde la cabeza es mas ancha
-    imax = int(np.argmax(banda[:max(3, len(banda)//2)]))
-    resto = banda[imax:]
-    icuello = imax + int(np.argmin(resto))
-    if icuello - 0 < 6:
-        icuello = min(len(banda) - 1, imax + 6)
-    alto_cab = int(icuello)
-    ys, xs = np.where(a[y0:y0+alto_cab] > 40)
-    cx = float(xs.mean()) if len(xs) else w/2
-    return [round(cx, 1), round(y0, 1), round(float(alto_cab), 1)]
-
-
-def hoja(im, n, alto, ropa=False, cab=False):
-    """corta la hoja en n celdas iguales, recorta con la caja union y devuelve
-       una tira de n cuadros de `alto` px. Si `ropa`, devuelve tambien la
-       mascara de lo blanco, que es lo que despues se pinta del color que toque."""
-    im, fuera = sin_lineas(im)
-    if fuera:
-        print('   (se saco %d px de lineas de celda)' % fuera)
-    w = im.width // n
-    celdas = [im.crop((i*w, 0, (i+1)*w, im.height)) for i in range(n)]
-    caja = caja_union(celdas)
-    if caja:
-        celdas = [c.crop(caja) for c in celdas]
-    e = alto / celdas[0].height
-    wf = max(1, round(celdas[0].width*e))
-    celdas = [c.resize((wf, alto), Image.LANCZOS) for c in celdas]
-    tira = Image.new('RGBA', (wf*n, alto), (0, 0, 0, 0))
-    for i, c in enumerate(celdas):
-        tira.paste(c, (i*wf, 0))
-    extra = None
-    if ropa:
-        extra = mascara_ropa(tira)
-    cabs = [mide_cabeza(c) for c in celdas] if cab else None
-    return tira, wf, alto, extra, cabs
-
-
-def mascara_ropa(im):
-    """── LA ROPA SE TINE, LA PIEL NO ──
-    El personaje se genero con la ropa BLANCA justamente para poder pintarla del
-    color que la regla pida. Pero un tinte sobre el sprite entero tine tambien la
-    cara y las manos, y un tipo verde no es un tipo con remera verde.
-    La mascara es «pixel opaco, muy claro y sin color»: eso es exactamente la
-    ropa blanca y nada mas — la piel tiene color, el pelo y el contorno son
-    oscuros. Sale con el RGB en blanco y el dibujo en el ALFA, asi el juego la
-    puede pintar de cualquier color con dos operaciones de lienzo.
-    """
-    a = np.asarray(im).astype(np.float32)
-    r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    mx = np.maximum(np.maximum(r, g), b)
-    mn = np.minimum(np.minimum(r, g), b)
-    sat = np.where(mx > 0, (mx - mn)/np.maximum(mx, 1), 0)
-    m = (al > 40) & (mx > 205) & (sat < 0.14)
-    # se suaviza un pixel: con un corte duro el borde de la remera queda dentado
-    msk = Image.fromarray((m*255).astype('uint8'), 'L')
-    from PIL import ImageFilter
-    msk = msk.filter(ImageFilter.GaussianBlur(0.7))
-    out = Image.new('RGBA', im.size, (255, 255, 255, 0))
-    out.putalpha(msk)
-    return out
-
-
-def sello(im, lado, blanco=False):
-    """recorta al contenido y encaja en un cuadrado sin deformar"""
-    caja = im.split()[3].getbbox()
-    if caja:
-        im = im.crop(caja)
-    im.thumbnail((lado, lado), Image.LANCZOS)
-    out = Image.new('RGBA', (lado, lado), (0, 0, 0, 0))
-    out.paste(im, ((lado - im.width)//2, (lado - im.height)//2))
-    if blanco:
-        # ── SE BLANQUEA LO QUE YA ES CLARO Y NADA MAS ──
-        # El RGB en blanco puro hace que el tinte del juego de el color exacto y
-        # no el color multiplicado por lo que la generacion haya puesto de gris.
-        # PERO BLANQUEANDO TODO se van tambien los contornos y los ojos: medido
-        # en la captura, la bola de MANCHA salia un disco de color liso sin cara,
-        # porque su dibujo es cuerpo blanco MAS lineas oscuras y las lineas
-        # quedaron blancas. Se blanquea por encima de un umbral de luminancia.
-        a = np.asarray(out).astype(np.float32)
-        lum = a[..., 0]*0.299 + a[..., 1]*0.587 + a[..., 2]*0.114
-        m = lum > 150
-        for c in range(3):
-            a[..., c] = np.where(m, 255, a[..., c])
-        out = Image.fromarray(np.clip(a, 0, 255).astype('uint8'), 'RGBA')
-    return out
-
-
-def procesa_img(clave, nombre, tipo, op):
-    im = abre(nombre)
-    if im is None:
-        print('   falta crudo/%s-g1.png' % nombre)
-        return None
-    if tipo == 'fondo':
-        return {'d': dataurl(webp(cover(im, 720, 1280), 70))}
-    if tipo == 'tex':
-        t = embaldosa(im).resize((op['lado'], op['lado']), Image.LANCZOS)
-        return {'d': dataurl(webp(t, 76))}
-    if tipo == 'emblema':
-        caja = im.split()[3].getbbox()
-        if caja:
-            im = im.crop(caja)
-        e = op['ancho'] / im.width
-        im = im.resize((op['ancho'], max(1, round(im.height*e))), Image.LANCZOS)
-        return {'d': dataurl(webp(im, 82, True))}
-    if tipo == 'sello':
-        s = sello(im, op['lado'], blanco=(clave in ('salpica', 'bola')))
-        return {'d': dataurl(webp(s, 84, True))}
-    if tipo == 'hoja':
-        tira, wf, hf, msk, cabs = hoja(im, op['n'], op['alto'],
-                                       op.get('ropa', False), op.get('cab', False))
-        r = {'d': dataurl(webp(tira, 82, True)), 'n': op['n'], 'w': wf, 'h': hf}
-        if msk is not None:
-            r['m'] = dataurl(webp(msk, 78, True))
-        if cabs and all(cabs):
-            r['cab'] = cabs
-        return r
-    raise SystemExit('tipo raro: ' + tipo)
 
 
 def dataurl(b):
+    import base64
     return 'data:image/webp;base64,' + base64.b64encode(b).decode()
 
 
-# ══════════════════════ AUDIO ══════════════════════
-
-HZ = 22050
-
-
-def leer_audio(p, hz=HZ):
-    c = av.open(p if hasattr(p, "read") else str(p))
-    re = av.audio.resampler.AudioResampler(format='s16', layout='mono', rate=hz)
-    tr = []
-    for cuadro in c.decode(audio=0):
-        for f in re.resample(cuadro):
-            tr.append(f.to_ndarray().reshape(-1))
-    c.close()
-    if not tr:
-        return np.zeros(1, dtype=np.float32)
-    return np.concatenate(tr).astype(np.float32) / 32768.0
-
-
-def sin_silencio(a, hz, umbral=0.012, cola=0.04):
-    """recorta el silencio de las DOS PUNTAS y nada mas. Los efectos generados
-       vienen con medio segundo de aire adelante, y medio segundo de retardo en
-       un golpe se siente como que el juego no responde."""
-    fuerte = np.abs(a) > umbral
-    if not fuerte.any():
-        return a
-    i, j = np.argmax(fuerte), len(a) - np.argmax(fuerte[::-1])
-    k = int(hz*cola)
-    return a[max(0, i-k):min(len(a), j+k)]
-
-
-def bucle(a, hz, fundido=0.9):
-    """── LA COLA SE FUNDE SOBRE LA CABEZA ──
-    Un tema cortado en seco y puesto a repetir da un golpe seco en cada vuelta,
-    y ese golpe se escucha mas que la musica. Es la misma costura de una textura
-    pero en una dimension."""
-    k = int(hz*fundido)
-    if len(a) < k*3:
-        return a
-    t = np.linspace(0, 1, k, dtype=np.float32)
-    out = a[:len(a)-k].copy()
-    out[:k] = out[:k]*t + a[len(a)-k:]*(1-t)
-    return out
-
-
-def nivela(a, rms_obj, pico_max=0.95):
-    """nivela por RMS y aplasta la punta con una tanh cuya fuerza se BUSCA.
-       Con la fuerza clavada, el que decide el nivel final es el tope de pico y
-       no el objetivo: un glugueo de cresta 26 queda cuatro veces por debajo."""
-    r = float(np.sqrt(np.mean(a*a)))
-    if r < 1e-6:
-        return a
-    a = a * (rms_obj / r)
-    for f in (1.0, 1.4, 2.0, 2.8, 4.0, 6.0):
-        b = np.tanh(a*f)/f
-        r2 = float(np.sqrt(np.mean(b*b)))
-        if r2 > 1e-6:
-            b = b*(rms_obj/r2)
-        if np.max(np.abs(b)) <= pico_max:
-            return b
-    return np.clip(b, -pico_max, pico_max)
-
-
-def a_mp3(a, hz, kbps):
-    b = io.BytesIO()
-    c = av.open(b, 'w', format='mp3')
-    st = c.add_stream('libmp3lame', rate=hz)
-    st.bit_rate = kbps*1000
-    try:
-        st.layout = 'mono'
-    except Exception:
-        pass
-    pcm = np.clip(a*32767, -32768, 32767).astype('int16').reshape(1, -1)
-    cuadro = av.AudioFrame.from_ndarray(pcm, format='s16', layout='mono')
-    cuadro.sample_rate = hz
-    for p in st.encode(cuadro):
-        c.mux(p)
-    for p in st.encode(None):
-        c.mux(p)
-    c.close()
-    return b.getvalue()
-
-
-def procesa_son(nombre, tipo):
-    p = CRUDO / (nombre + '-g1.mp3')
-    if not p.exists():
-        print('   falta crudo/%s-g1.mp3' % nombre)
-        return None, None
-    a = leer_audio(p)
-    if tipo == 'mus':
-        a = bucle(a, HZ)
-        obj, kbps = 0.115, 48
-    else:
-        a = sin_silencio(a, HZ)
-        obj, kbps = 0.200, 56
-    # ── EL LAZO CERRADO: se escribe, se mide lo que se va a oir, se corrige ──
-    a = nivela(a, obj)
-    for _ in range(3):
-        b = a_mp3(a, HZ, kbps)
-        med = leer_audio(io.BytesIO(b))
-        r = float(np.sqrt(np.mean(med*med)))
-        if r < 1e-6:
-            break
-        if abs(r - obj)/obj < 0.06:
-            break
-        a = nivela(a*(obj/r), obj)
-    return b, {'seg': round(len(a)/HZ, 2), 'rms': round(r, 4), 'kb': len(b)//1024}
-
-
-# ══════════════════════ ARMADO ══════════════════════
-
 def main():
     pedidos = sys.argv[1:] or list(JUEGOS)
-    SALIDA.mkdir(parents=True, exist_ok=True)
-    for jid in pedidos:
-        cfg = JUEGOS[jid]
-        img, son, info = {}, {}, []
-        print(jid)
-        for clave, nombre, tipo, op in cfg['img']:
-            r = procesa_img(clave, nombre, tipo, op)
-            if r is None:
+    for j in pedidos:
+        if j not in JUEGOS:
+            print('no hay assets declarados para ' + j)
+            continue
+        img, total = {}, 0
+        for nom, cf in JUEGOS[j].items():
+            p = os.path.join(CRUDO, cf['archivo'])
+            if not os.path.exists(p):
+                print('  falta crudo/%s, se saltea' % cf['archivo'])
                 continue
-            img[clave] = r
-            n = len(r['d'])*3//4//1024 + (len(r.get('m', ''))*3//4//1024)
-            info.append('%s %s %d KB' % (clave, tipo, n))
-        for clave, nombre, tipo in cfg['son']:
-            b, m = procesa_son(nombre, tipo)
-            if b is None:
-                continue
-            son[clave] = base64.b64encode(b).decode()
-            info.append('%s %s %s' % (clave, tipo, m))
-        js = ('/* GENERADO por herramientas/casual/hornear.py — no editar a mano.\n'
-              '   Los assets estan generados con Rezona; el crudo vive en\n'
-              '   herramientas/tiktok/crudo/ y de aca salen reducidos. */\n'
-              'const AS = ' + json.dumps({'img': img, 'son': son}, separators=(',', ':')) + ';\n')
-        (SALIDA / (jid + '.js')).write_text(js, encoding='utf8')
-        print('  ' + '\n  '.join(info))
-        print('  -> assets/%s.js  %d KB' % (jid, len(js)//1024))
+            fn = hoja if cf['tipo'] == 'hoja' else sello
+            tira, n, w, h, medida, cu = fn(nom, cf)
+            b = webp(tira)
+            img[nom] = dict(d=dataurl(b), n=n, w=w, h=h, esc=cu[0], cy=cu[1])
+            total += len(b)
+            print('  %-10s %d piezas de %dx%d  %5.1f KB%s'
+                  % (nom, n, w, h, len(b)/1024,
+                     ('  (reja medida ' + 'x'.join(map(str, medida)) + ')') if medida else ''))
+        if not img:
+            continue
+        dest = os.path.join(ASSETS, j + '.js')
+        cuerpo = ('/* Generado por herramientas/casual/hornear.py — NO editar a mano.\n'
+                  '   Las imagenes crudas viven en herramientas/casual/crudo/ y no se versionan\n'
+                  '   enteras: lo que se versiona es esto, que es lo que el juego usa. */\n'
+                  'const AS = ' + json.dumps({'img': img, 'son': {}}, ensure_ascii=False) + ';\n')
+        io.open(dest, 'w', encoding='utf8').write(cuerpo)
+        print('%-9s -> %s  %.1f KB de assets' % (j, dest, total/1024))
 
 
 main()
