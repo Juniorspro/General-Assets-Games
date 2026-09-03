@@ -21,9 +21,76 @@ let SEM = 1;
 function rnd(){ SEM = (SEM * 1664525 + 1013904223) >>> 0; return SEM / 4294967296; }
 const rr = (a, b) => a + rnd() * (b - a);
 
+/* ── EL PASILLO NO SE PUEDE CRUZAR CONSIGO MISMO ──
+   Y ésta era la causa de «el personaje atraviesa paredes». Los tramos se
+   tiraban al azar doblando ±90° sin mirar por dónde ya había pasado: con tramos
+   de 6 a 14 metros, cuatro vueltas del mismo lado vuelven al punto de partida y
+   el generador construye el tramo nuevo ENCIMA del viejo. Donde eso pasa, las
+   paredes de un tramo cruzan el otro de lado a lado, y el jugador —que camina
+   por el centro del pasillo y no puede elegir— las atraviesa. No era el andar:
+   era el mapa.
+   Se lleva una grilla de ocupación de un metro con el ancho del pasillo. Un
+   tramo que pisa una celda ya ocupada se rechaza y se prueban el otro lado y
+   largos cada vez más cortos. Si nada entra, el pasillo termina ahí: un pasillo
+   un poco más corto es infinitamente mejor que uno que se cruza. */
+const OCU = new Set();
+function bandaTramo(x, z, dir, desde, hasta){
+  const dx = DIRS[dir][0], dz = DIRS[dir][1];
+  const r = Math.ceil(ANCHO/2);
+  const out = [];
+  for (let q = desde; q <= hasta; q += 1){
+    const cx = x + dx*q, cz = z + dz*q;
+    /* un tramo ocupa una BANDA y no una línea: sin el ancho, dos tramos
+       paralelos a un metro «no se cruzan» y en el mundo comparten la pared */
+    for (let a = -r; a <= r; a++)
+      out.push(Math.round(cx + (-dz)*a) + ',' + Math.round(cz + (dx)*a));
+  }
+  return out;
+}
+function marcaTramo(x, z, dir, largo){
+  for (const c of bandaTramo(x, z, dir, -2, largo + 2)) OCU.add(c);
+}
+function cabeTramo(x, z, dir, largo){
+  /* las celdas del arranque son las de la esquina y por definición las comparte
+     con el tramo anterior, así que no cuentan como choque */
+  const propias = new Set(bandaTramo(x, z, dir, -3, 3));
+  for (const c of bandaTramo(x, z, dir, -2, largo + 2))
+    if (OCU.has(c) && !propias.has(c)) return false;
+  return true;
+}
+
+/* ── Y LA PROHIBICIÓN DE CRUZARSE HIZO EL PASILLO MÁS CORTO ──
+   Medido apenas entró: `{tramos: 6, metros: 57}` contra los 120 pedidos. Es la
+   consecuencia obvia y aun así no la vi hasta medirla — un camino que no puede
+   pisar donde ya pisó se acorrala, y cuando ningún giro entra, el generador
+   cortaba ahí. O sea que arreglar «atraviesa paredes» dejaba la mitad del
+   pasillo sin construir, y como la meta era la constante 120, el jugador
+   caminaba treinta metros más allá del final.
+   Se arregla con dos cosas y las dos son necesarias:
+     · SE REINTENTA EL CAMINO ENTERO. Un intento que se acorrala no se arregla
+       desde adentro; con otra semilla el mismo generador sale. Doscientos
+       intentos son un milisegundo y no hace falta ser más inteligente que eso.
+     · LA META SALE DEL PASILLO QUE SE CONSTRUYÓ, no de una constante. Si algún
+       día ningún intento llega, el juego será más corto pero terminará donde
+       hay puerta — y no en el aire, treinta metros después. */
 function armaCamino(semilla, metros){
+  let mejor = null;
+  for (let intento = 0; intento < 200; intento++){
+    const r = intentaCamino((semilla + intento*2654435761) >>> 0, metros);
+    if (!mejor || r.metros > mejor.metros){ mejor = r; mejor.tramos = CAMINO.slice(); }
+    if (r.metros >= metros) return r;
+  }
+  /* ninguno llegó: se rearma el mejor */
+  CAMINO.length = 0;
+  for (const t of mejor.tramos) CAMINO.push(t);
+  LARGO_TOTAL = mejor.metros;
+  return { tramos: CAMINO.length, vueltas: mejor.vueltas, metros: mejor.metros };
+}
+
+function intentaCamino(semilla, metros){
   SEM = semilla >>> 0;
   CAMINO.length = 0;
+  OCU.clear();
   let x = 0, z = 0, dir = 0, total = 0, vueltas = 0;
   /* el primer tramo es largo y recto A PROPÓSITO: los primeros diez segundos el
      jugador está aprendiendo a no volcar el bol, y meterle una esquina ahí es
@@ -31,17 +98,27 @@ function armaCamino(semilla, metros){
   let largo = 11;
   while (total < metros){
     CAMINO.push({ x, z, dir, largo });
+    marcaTramo(x, z, dir, largo);
     x += DIRS[dir][0] * largo; z += DIRS[dir][1] * largo;
     total += largo;
     /* dobla a un lado o al otro, nunca 180: un pasillo que se dobla sobre sí
        mismo se cruza consigo mismo y se ve el mismo tramo dos veces */
-    dir = (dir + (rnd() < 0.5 ? 1 : 3)) % 4;
+    const primero = rnd() < 0.5 ? 1 : 3;
+    let puesto = false;
+    for (const giro of [primero, 4 - primero]){
+      const d2 = (dir + giro) % 4;
+      for (let L = Math.round(rr(7, 14)); L >= 5; L -= 2){
+        if (cabeTramo(x, z, d2, L)){ dir = d2; largo = L; puesto = true; break; }
+      }
+      if (puesto) break;
+    }
+    if (!puesto) break;
     vueltas++;
-    largo = Math.round(rr(6, 14));
   }
   LARGO_TOTAL = total;
   return { tramos: CAMINO.length, vueltas, metros: total };
 }
+
 
 /* dónde está el jugador a `d` metros de recorrido, y hacia dónde mira.
    Una sola función: la usan la cámara, el andar, los sustos y las sondas. Con
@@ -59,20 +136,47 @@ function enCamino(d){
   }
   return { x: 0, z: 0, dx: 0, dz: 1, tramo: 0, resta: 0, dir: 0 };
 }
-/* el rumbo en radianes, interpolado en la esquina para que la cámara no salte */
-function rumboEn(d){
-  const GIRO = 1.7;                       /* metros que dura la vuelta */
+/* ── LA ESQUINA SE DOBLA EN EL CAMINO Y NO SÓLO EN LA MIRADA ──
+   Antes la POSICIÓN seguía la quebrada exacta —codo de 90° en el vértice— y sólo
+   el RUMBO se suavizaba a lo largo de 1,7 m. O sea que durante casi dos metros
+   el jugador miraba en diagonal mientras el cuerpo seguía yendo derecho por el
+   tramo viejo: en pantalla eso es caminar de costado, y es la otra mitad de «no
+   camina hacia adelante».
+   Ahora la esquina es una curva: en la ventana de ±R metros alrededor del
+   vértice se funden las dos rectas con un suavizado, y el pasillo tiene 1,2 m
+   de medio ancho, así que la curva pasa holgada.
+   Y EL RUMBO SALE DE LA DERIVADA DE ESA MISMA CURVA, no de una segunda cuenta:
+   así «hacia dónde mira» y «hacia dónde avanza» son la misma cosa POR
+   CONSTRUCCIÓN y no pueden volver a desincronizarse. */
+const R_ESQ = 1.7;
+function puntoCamino(d){
   const a = enCamino(d);
   const t = CAMINO[a.tramo];
-  const yaw0 = Math.atan2(DIRS[t.dir][0], DIRS[t.dir][1]);
-  if (a.resta > GIRO || a.tramo >= CAMINO.length - 1) return yaw0;
-  const sig = CAMINO[a.tramo + 1];
-  let yaw1 = Math.atan2(DIRS[sig.dir][0], DIRS[sig.dir][1]);
-  let dif = yaw1 - yaw0;
-  while (dif > Math.PI) dif -= Math.PI*2;
-  while (dif < -Math.PI) dif += Math.PI*2;
-  const u = 1 - a.resta / GIRO;
-  return yaw0 + dif * (u*u*(3 - 2*u));     /* suavizado: una vuelta con codo se lee a tirón */
+  const adelante = a.resta < R_ESQ && a.tramo < CAMINO.length - 1;
+  const atras = (t.largo - a.resta) < R_ESQ && a.tramo > 0;
+  if (!adelante && !atras) return { x: a.x, z: a.z };
+  let iA, iB, s;                 /* tramo previo, tramo siguiente, distancia al vértice */
+  if (adelante){ iA = a.tramo; iB = a.tramo + 1; s = -a.resta; }
+  else { iA = a.tramo - 1; iB = a.tramo; s = t.largo - a.resta; }
+  const tA = CAMINO[iA], tB = CAMINO[iB];
+  const vx = tA.x + DIRS[tA.dir][0]*tA.largo, vz = tA.z + DIRS[tA.dir][1]*tA.largo;
+  const ax = DIRS[tA.dir][0], az = DIRS[tA.dir][1];
+  const bx = DIRS[tB.dir][0], bz = DIRS[tB.dir][1];
+  const u = Math.max(0, Math.min(1, (s + R_ESQ) / (2*R_ESQ)));
+  const w = u*u*(3 - 2*u);
+  return { x: vx + ax*s*(1-w) + bx*s*w, z: vz + az*s*(1-w) + bz*s*w };
+}
+function rumboEn(d){
+  /* diferencia finita sobre la curva: seis centímetros alcanzan, y así no hay
+     que derivar a mano un suavizado que se puede medir */
+  const h = 0.06;
+  const p0 = puntoCamino(Math.max(0, d - h)), p1 = puntoCamino(d + h);
+  const dx = p1.x - p0.x, dz = p1.z - p0.z;
+  if (Math.abs(dx) + Math.abs(dz) < 1e-9){
+    const t = CAMINO[enCamino(d).tramo];
+    return Math.atan2(DIRS[t.dir][0], DIRS[t.dir][1]);
+  }
+  return Math.atan2(dx, dz);
 }
 
 function fundir(piezas, mat){

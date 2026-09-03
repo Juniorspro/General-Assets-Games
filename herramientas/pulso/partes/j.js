@@ -1,13 +1,22 @@
 
 /* ══════════════════════════ LA PARTIDA ══════════════════════════ */
+/* `meta` arranca en 120 —el largo que se le PIDE al generador— y `empieza()` la
+   reescribe con el largo que de verdad salió. */
 const JUEGO = { d: 0, vel: 1.05, t: 0, semilla: 1, meta: 120, vivo: false, causa: '' };
+const META_PEDIDA = 120;
 /* 1,05 m/s es un paso de alguien que lleva algo y no quiere volcarlo. Con 1,6
    —que fue el primer valor— el pasillo pasa volando, las esquinas llegan antes
    de que el bol se estabilice y todo el juego es corregir. */
 
 function empieza(){
   JUEGO.semilla = (Date.now() ^ (Math.random()*1e9)) >>> 0;
-  const info = armaCamino(JUEGO.semilla, JUEGO.meta);
+  const info = armaCamino(JUEGO.semilla, META_PEDIDA);
+  /* ── LA META SALE DEL PASILLO CONSTRUIDO ──
+     Era la constante 120 y el pasillo puede salir más corto (el generador no se
+     puede cruzar consigo mismo, así que a veces se acorrala). Con dos números
+     distintos para la misma cosa, el jugador caminaba más allá de la puerta
+     hasta un final que no existe. Uno solo, y no pueden discrepar. */
+  JUEGO.meta = Math.round(LARGO_TOTAL);
   armaMapa();
   armaCatalogo();
   armaAgenda();
@@ -79,7 +88,11 @@ function pasoJuego(dt){
 }
 
 function ponCamara(){
-  const p = enCamino(JUEGO.d);
+  /* `puntoCamino` y no `enCamino`: la primera es la curva con las esquinas
+     redondeadas y la segunda la quebrada exacta. El rumbo sale de la derivada
+     de la curva, así que hay que caminar por la MISMA curva — con la quebrada,
+     mirada y avance vuelven a discrepar en cada vuelta. */
+  const p = puntoCamino(JUEGO.d);
   const yaw = rumboEn(JUEGO.d);
   /* el cabeceo del paso, chico: es una persona que camina despacio con las dos
      manos ocupadas, no alguien corriendo */

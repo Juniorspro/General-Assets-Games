@@ -266,6 +266,110 @@ window.__P = {
     return JSON.stringify({ medio: +(s/n).toFixed(1), max: mx|0,
                             pctEncendido: +(100*enc/n).toFixed(1) });
   },
+  /* mide los 32 gritos: dispara cada uno y lee el pico del analizador. Un
+     catálogo de gritos que no se mide es un catálogo de gritos que puede tener
+     la mitad en silencio y nadie se entera. */
+  gritos: async () => {
+    armaAudio();
+    if (AUD && AUD.state === 'suspended') await AUD.resume();
+    const out = [];
+    for (let i = 0; i < GRITOS.length; i++){
+      const G = grito(i, 1, AUD.currentTime + 0.01);
+      await new Promise(r => setTimeout(r, 190));
+      out.push({ id: i, timbre: G.timbre, f0: +G.f0.toFixed(0),
+                 dur: +G.dur.toFixed(2), q: G.quiebra ? 1 : 0, pico: pico() });
+      await new Promise(r => setTimeout(r, 40));
+    }
+    const p = out.map(o => o.pico);
+    return JSON.stringify({ n: out.length, mudos: p.filter(v => v < 0.02).length,
+      picoMin: Math.min(...p), picoMax: Math.max(...p),
+      timbres: [...new Set(out.map(o => o.timbre))],
+      f0s: [...new Set(out.map(o => o.f0))].length, quiebran: out.filter(o => o.q).length });
+  },
+  /* arma N pasillos con semillas distintas y mide los largos: es la única
+     forma de saber si la prohibición de cruzarse deja el pasillo corto, porque
+     con una sola semilla se ve el caso que tocó y nada más */
+  mapas: (n) => {
+    const L = [], V = [];
+    for (let i = 0; i < (n || 40); i++){
+      const r = armaCamino((i*2654435761 + 7) >>> 0, 120);
+      L.push(r.metros); V.push(r.vueltas);
+    }
+    return JSON.stringify({ n: L.length, min: Math.min(...L), max: Math.max(...L),
+      bajo120: L.filter(v => v < 120).length,
+      vueltasMin: Math.min(...V), vueltasMax: Math.max(...V) });
+  },
+  /* ══════ LA PRUEBA DE QUE NO ESTÁ INVERTIDO ══════
+     El reporte fue «cae la tabla y el bol sube, todo invertido». Lo que hay que
+     comprobar no es el signo de un sensor —cada teléfono reporta lo suyo— sino
+     una invariante que se puede escribir sin ambigüedad:
+
+         EL BOL SE MUEVE HACIA EL LADO BAJO DE LA TABLA QUE SE DIBUJA.
+
+     Así que se toma la tabla YA DIBUJADA, se le saca la normal de su propio
+     cuaternión, se proyecta al plano y se compara con hacia dónde se movió el
+     bol. Si el producto escalar es positivo, dibujo y física coinciden; si es
+     negativo, están invertidos — y da igual de qué lado esté el error. */
+  pruebaTabla: () => {
+    const casos = [[0.30, 0], [-0.30, 0], [0, 0.30], [0, -0.30], [0.21, 0.21]];
+    const out = [];
+    const n = new T.Vector3();
+    for (const [ix, iz] of casos){
+      reiniciaBol();
+      DEDO.ix = ix; DEDO.iz = iz;
+      ponTabla();
+      gTabla.updateMatrixWorld(true);
+      /* la normal de la tabla dibujada, en el marco de la cámara */
+      n.set(0, 1, 0).applyQuaternion(gTabla.quaternion);
+      for (let i = 0; i < 60; i++) pasoBol(1/60, null);
+      const dot = n.x*BOL.x + n.z*BOL.z;
+      out.push({ inc: [ix, iz], normal: [+n.x.toFixed(3), +n.z.toFixed(3)],
+                 bol: [+BOL.x.toFixed(3), +BOL.z.toFixed(3)],
+                 dot: +dot.toFixed(4), ok: dot > 0 });
+    }
+    reiniciaBol(); DEDO.ix = DEDO.iz = 0;
+    return JSON.stringify({ casos: out, todosOk: out.every(o => o.ok) });
+  },
+  /* ¿el jugador camina siempre por dentro del pasillo? Se recorre el largo
+     entero cada cinco centímetros y se mide la distancia a la línea de centro
+     del tramo más cercano. Más de medio ancho = está adentro de una pared. Una
+     diagonal por dentro de un muro dura un segundo y en una foto no se ve. */
+  paredes: () => {
+    let peor = 0, fuera = 0, pasos = 0, dPeor = 0;
+    for (let d = 0; d <= LARGO_TOTAL; d += 0.05){
+      const p = puntoCamino(d);
+      let mejor = 1e9;
+      for (const t of CAMINO){
+        const ax = t.x, az = t.z;
+        const bx = t.x + DIRS[t.dir][0]*t.largo, bz = t.z + DIRS[t.dir][1]*t.largo;
+        const vx = bx-ax, vz = bz-az, wx = p.x-ax, wz = p.z-az;
+        const L2 = vx*vx + vz*vz;
+        const u = Math.max(0, Math.min(1, (wx*vx + wz*vz)/L2));
+        const dx = p.x - (ax + vx*u), dz = p.z - (az + vz*u);
+        mejor = Math.min(mejor, Math.hypot(dx, dz));
+      }
+      pasos++;
+      if (mejor > peor){ peor = mejor; dPeor = d; }
+      if (mejor > ANCHO/2 - 0.05) fuera++;
+    }
+    return JSON.stringify({ pasos, fuera, peor: +peor.toFixed(3),
+                            enMetro: +dPeor.toFixed(1), medioAncho: ANCHO/2 });
+  },
+  /* ¿avanza hacia donde mira? Se compara el rumbo con la dirección en la que de
+     verdad se movió el punto. Un ángulo grande es caminar de costado. */
+  deFrente: () => {
+    let peor = 0, dPeor = 0; const h = 0.05;
+    for (let d = h; d <= LARGO_TOTAL - h; d += 0.05){
+      const p0 = puntoCamino(d - h), p1 = puntoCamino(d + h);
+      const mov = Math.atan2(p1.x - p0.x, p1.z - p0.z);
+      let dif = rumboEn(d) - mov;
+      while (dif > Math.PI) dif -= Math.PI*2;
+      while (dif < -Math.PI) dif += Math.PI*2;
+      dif = Math.abs(dif);
+      if (dif > peor){ peor = dif; dPeor = d; }
+    }
+    return JSON.stringify({ peorGrados: +(peor*180/Math.PI).toFixed(2), enMetro: +dPeor.toFixed(1) });
+  },
   giro: () => ({ hay: GIRO.hay, listo: GIRO.listo, permiso: GIRO.permiso,
                  crudo: GIRO.crudo, inc: inclinacion() }),
   /* mete una orientación falsa, que es la única forma de probar el giroscopio
@@ -289,4 +393,6 @@ armaMapa();
 armaCatalogo();
 medir();
 bucle();
-</script></body></html>
+</script>
+</div>
+</body></html>

@@ -63,14 +63,35 @@ const _vArriba = new T.Vector3();
 function calculaInclinacion(){
   /* la desviación contra el calibrado, EN CUATERNIÓN */
   _qE.copy(GIRO.calInv).multiply(GIRO.q);
-  /* ── LA INCLINACIÓN ES ADÓNDE APUNTA EL «ARRIBA» DE LA TABLA ──
-     Y no un ángulo de Euler, por lo del punto 3. Se toma el eje Y del marco
-     desviado: si la tabla está derecha apunta a (0,1,0); si se inclina, sus
-     componentes x y z SON la pendiente, y de ahí sale la aceleración del bol
-     sin una sola función trigonométrica. */
-  _vArriba.set(0, 1, 0).applyQuaternion(_qE);
-  GIRO.incZ = _vArriba.z;     /* adelante-atrás */
-  GIRO.incX = _vArriba.x;     /* costado */
+  /* ══════ ACÁ ESTABA EL «TODO INVERTIDO», Y ERA EL EJE EQUIVOCADO ══════
+     Tomaba el eje **Y** del marco desviado como la normal de la tabla. El eje Y
+     de este cuaternión es EL BORDE DE ARRIBA DE LA PANTALLA, no la cara del
+     teléfono: `qDeOrientacion` termina en el marco de una cámara —X a la
+     derecha de la pantalla, Y arriba de la pantalla, Z saliendo hacia la cara—.
+     La consecuencia se puede escribir: girando el teléfono en su propio plano
+     (como un volante), la Y desviada se va a −X y el juego lee «la tabla se
+     cayó para la izquierda» cuando el jugador no inclinó NADA; y en cambio
+     inclinando de verdad hacia un lado —que es girar alrededor del eje de
+     arriba de la pantalla— la Y no se mueve y el juego no lee nada.
+     El teléfono se lleva COMO UNA BANDEJA, así que la normal de la tabla es la
+     PANTALLA: el eje Z. Con la normal bien, «derecha» e «izquierda» salen de
+     los ejes de la pantalla y las dos cosas coinciden con la mano.
+
+     Y ESTO NO ES UN CAMBIO DE SIGNO: es cambiar qué eje se mide. Un cambio de
+     signo habría arreglado un caso y roto el otro, que es lo que pasa cuando se
+     invierten controles a ciegas. */
+  _vArriba.set(0, 0, 1).applyQuaternion(_qE);
+  const nx = _vArriba.x, ny = _vArriba.y;
+  /* de los ejes de la PANTALLA a los ejes de la TABLA. La tabla vive en el
+     marco de la cámara: +X a la derecha y +Z hacia el jugador, así que «el
+     fondo de la tabla» es −Z y le corresponde el arriba de la pantalla. Y si el
+     cuadro se dibuja girado, los dos ejes se giran con él — por eso pasa por
+     `GIRO_VIS`, que es el ángulo con el que se está dibujando. */
+  const c = Math.cos(GIRO_VIS), s2 = Math.sin(GIRO_VIS);
+  const rx = nx*c + ny*s2;          /* componente en el «derecha» que ve el jugador */
+  const ry = -nx*s2 + ny*c;         /* componente en el «arriba» que ve el jugador */
+  GIRO.incX = rx;
+  GIRO.incZ = -ry;
 }
 
 function calibrar(){
@@ -113,8 +134,17 @@ function arrastreMueve(e){
   if (!DEDO.on || GIRO.hay) return;
   const t = e.touches ? e.touches[0] : e;
   const k = 1 / Math.max(240, Math.min(W, H));
-  DEDO.ix += (t.clientX - DEDO.x) * k * 1.6;
-  DEDO.iz += (t.clientY - DEDO.y) * k * 1.6;
+  /* ── EL DEDO TAMBIÉN SE GIRA CON EL CUADRO ──
+     `clientX/clientY` vienen en coordenadas de la VENTANA, y el juego puede
+     estar dibujado 90° girado adentro. Sin esta rotación, con el teléfono de
+     costado arrastrar «a la derecha» —que para el jugador es a la derecha—
+     mueve la tabla hacia adelante. Es el mismo cruce de ejes que tenía el
+     giroscopio, en la otra entrada. */
+  const c = Math.cos(GIRO_VIS), s2 = Math.sin(GIRO_VIS);
+  const px = t.clientX - DEDO.x, py = t.clientY - DEDO.y;
+  const rx = px*c + py*s2, ry = -px*s2 + py*c;
+  DEDO.ix += rx * k * 1.6;
+  DEDO.iz += ry * k * 1.6;
   DEDO.ix = Math.max(-0.9, Math.min(0.9, DEDO.ix));
   DEDO.iz = Math.max(-0.9, Math.min(0.9, DEDO.iz));
   DEDO.x = t.clientX; DEDO.y = t.clientY;
@@ -128,9 +158,14 @@ addEventListener('mousedown', arrastreInicio);
 addEventListener('mousemove', arrastreMueve);
 addEventListener('mouseup', arrastreFin);
 
-/* la inclinación que el juego consume, venga de donde venga */
+/* la inclinación que el juego consume, venga de donde venga.
+   Devuelve LA NORMAL DE LA TABLA proyectada: (x, z) es hacia dónde se recuesta
+   el «arriba» de la tabla. Todo lo que la usa —la física del bol y el dibujo de
+   la tabla— tiene que leerla con ese significado y no como «pendiente». */
 function inclinacion(){
   const s = CFG.sens === 'suave' ? 0.72 : CFG.sens === 'dura' ? 1.5 : 1.0;
   if (GIRO.hay && GIRO.listo) return { x: GIRO.incX * s, z: GIRO.incZ * s };
+  /* el dedo: arrastrar a la derecha recuesta la tabla a la derecha, y arrastrar
+     hacia abajo la recuesta hacia el jugador (+Z de la tabla) */
   return { x: DEDO.ix * s, z: DEDO.iz * s };
 }

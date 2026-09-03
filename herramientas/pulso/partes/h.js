@@ -265,31 +265,38 @@ function armaObjeto(s){
   return g;
 }
 
-/* ── DÓNDE SE PONE CADA SUSTO, Y LA PANTALLA ES VERTICAL ──
+/* ── DÓNDE SE PONE CADA SUSTO, Y LAS POSICIONES SALEN DEL ENCUADRE ──
    En el marco de la CÁMARA, así el susto está siempre donde el jugador mira y
    no depende de hacia dónde dobló el pasillo.
 
-   Y ACÁ ESTUVO EL DEFECTO QUE MÁS COSTÓ VER: las primeras posiciones estaban
-   pensadas para una pantalla ancha. Este juego es VERTICAL, y en vertical el
-   campo horizontal es angostísimo — con 66° de campo vertical y una relación de
-   412/892, el campo horizontal da **33,4 grados**, o sea que a un metro de
-   distancia sólo entran ±30 cm de ancho contra ±65 de alto.
-   Medido con `dondeSusto()`, el susto de esquina caía en x = 1,155 de pantalla:
-   FUERA DEL CUADRO. Y no fallaba nada — el susto sonaba, sacudía y no se veía,
-   que es indistinguible de un susto que no se disparó.
+   ESTAS POSICIONES SE REESCRIBIERON DOS VECES Y LAS DOS POR LO MISMO: estaban
+   puestas a ojo para un encuadre que después cambió.
+     · Primera vez: escritas pensando en una pantalla ancha y el juego era
+       VERTICAL. Con 66° verticales y 412×892 el campo horizontal da 33°, o sea
+       ±0,30 m de ancho por metro: el susto de esquina caía en x = 1,155 de
+       pantalla, FUERA DEL CUADRO. Y no fallaba nada — sonaba, sacudía y no se
+       veía, que es indistinguible de un susto que no se disparó.
+     · Segunda vez: el juego pasó a ser HORIZONTAL, y con eso el ancho se
+       triplica y el alto se achica. Las posiciones vertiacles quedaban todas
+       apiladas en la franja del medio.
 
-   Las posiciones nuevas salen de la cuenta y no del ojo:
-       ancho máximo a distancia d = 0,300 · d
-       alto  máximo a distancia d = 0,649 · d
-   y cada una se queda entre el 76 % y el 91 % de ese máximo — pegada al borde,
-   que es donde más asusta, pero adentro. `sustosEnCuadro()` lo comprueba solo. */
+   Así que ahora salen de la cuenta y no del ojo. Con 52° verticales, y tomando
+   el aspecto más angosto que puede tocar —16:9, porque un teléfono más ancho
+   sólo agrega margen—:
+       ancho máximo a distancia d = 0,867 · d
+       alto  máximo a distancia d = 0,488 · d
+   y cada susto se queda por debajo del 80 % de ese máximo: pegado al borde, que
+   es donde más asusta, pero adentro en cualquier teléfono. `sustosEnCuadro()`
+   lo comprueba solo y es lo único que impide que esto vuelva a pasar. */
 const DONDE = {
-  frente:   [0,  0.02, -1.15], costadoI: [-0.26, -0.05, -0.95], costadoD: [0.26, -0.05, -0.95],
-  abajo:    [0, -0.52, -0.95], techo:    [0, 0.55, -1.00],      esquina:  [0.28, -0.05, -1.10],
-  atras:    [0, -0.05, 0.85],  cruza:    [-0.34, -0.30, -1.50], puerta:   [0.30, -0.18, -1.25],
-  pared:    [-0.30, -0.10, -1.15], caida: [0.22, -0.60, -1.10], vidrio:   [-0.24, 0.25, -1.05],
-  piso:     [0.10, -0.50, -0.95], tabla: [0.06, -0.30, -0.62],  enjambre: [0, -0.30, -1.30],
-  oidoI:    [-0.5, 0, 0.2],     oidoD:   [0.5, 0, 0.2],         nombre:   [0, 0, -0.6],
+  frente:   [0, -0.02, -1.30], costadoI: [-0.62, -0.02, -1.05], costadoD: [0.62, -0.02, -1.05],
+  abajo:    [0, -0.38, -1.05], techo:    [0, 0.40, -1.05],       esquina:  [0.70, -0.02, -1.20],
+  atras:    [0, -0.02, 0.85],  cruza:    [-0.80, -0.22, -1.55],  puerta:   [0.72, -0.12, -1.35],
+  pared:    [-0.72, -0.08, -1.30], caida: [0.55, -0.44, -1.25],  vidrio:   [-0.58, 0.30, -1.15],
+  piso:     [0.28, -0.40, -1.05], tabla: [0.10, -0.22, -0.62],   enjambre: [0, -0.20, -1.45],
+  bulto:    [-0.34, -0.14, -1.60], rincon: [0.86, -0.10, -1.50], asoma:    [-0.90, -0.06, -1.45],
+  encima:   [0, 0.34, -1.20],  cuelga:   [0.30, 0.30, -1.35],
+  oidoI:    [-0.5, 0, 0.2],     oidoD:   [0.5, 0, 0.2],          nombre:   [0, 0, -0.6],
   risa:     [0, 0, -0.9],       respira: [0, -0.1, 0.3],
   apagon:   [0, 0, -1], parpadeo: [0, 0, -1], fogonazo: [0, 0, -1], rojo: [0, 0, -1]
 };
@@ -310,7 +317,11 @@ function disparaSusto(s){
     o.rotation.y = Math.atan2(-p[0], -p[2]);
     cam.add(o); ACT.obj = o;
   }
-  son(s.son, s.fuerza);
+  /* ── CADA SUSTO LLEVA SU PROPIO GRITO, Y ES POR NÚMERO ──
+     `s.id` elige la variante, así que el susto 17 suena SIEMPRE igual y nunca
+     igual al 18. Con un grito al azar, dos sustos seguidos pueden salir con la
+     misma voz y ahí se rompe la ilusión de que hay más de una cosa. */
+  son(s.son, s.fuerza, s.id);
   /* ── LA SACUDIDA: UN IMPULSO CON DIRECCIÓN, NO UN TEMBLOR AL AZAR ──
      Va hacia donde apareció el susto, porque un respingo real es alejarse de la
      cosa. Y es un IMPULSO —entra una vez— y no una fuerza sostenida: si durara,

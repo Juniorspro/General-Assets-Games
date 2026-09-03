@@ -32,9 +32,25 @@ const OLA_W = 7.4, OLA_Z = 0.28, R_BOL = 0.075;
 
 function pasoBol(dt, sacudida){
   const inc = inclinacion();
-  /* la aceleración sale directo de la pendiente: la componente horizontal del
-     «arriba» de la tabla ES el seno del ángulo, así que no hace falta un asin */
-  let ax = -inc.x * G_BOL, az = -inc.z * G_BOL;
+  /* ══════ FÍSICA DE VERDAD, Y EL SIGNO ESTABA AL REVÉS ══════
+     Estaba en `ax = -inc.x * G`, o sea que el bol se iba en contra de donde se
+     recuesta la tabla. Es exactamente al revés, y se comprueba con un plato:
+     inclinar el plato con el lado derecho ABAJO deja su normal apuntando
+     arriba-y-A LA DERECHA, y la bola rueda a la derecha. La bola va SIEMPRE
+     hacia donde se recuesta la normal.
+     Y la cuenta no es «la componente por g» sino la proyección de la gravedad
+     sobre el plano, que es lo que de verdad acelera a un cuerpo apoyado:
+
+         a = g − (g·n)·n        con g = (0, −G, 0) y n unitaria
+
+     de donde las dos componentes horizontales quedan a = G·ny·(nx, nz). El
+     factor `ny` es la parte que no está en ninguna aproximación de ángulo
+     chico, y es la que hace que la cuenta se porte bien en todo el rango: con
+     la tabla casi vertical, `ny` tiende a cero y la aceleración también, en vez
+     de crecer sin límite como haría un seno mal usado. */
+  const nx = inc.x, nz = inc.z;
+  const ny = Math.sqrt(Math.max(0, 1 - nx*nx - nz*nz));
+  let ax = G_BOL * ny * nx, az = G_BOL * ny * nz;
   if (sacudida){ ax += sacudida.x; az += sacudida.z; }
   BOL.vx += ax * dt; BOL.vz += az * dt;
   const f = Math.min(1, ROCE_BOL * dt);
@@ -133,7 +149,13 @@ function ponTabla(){
      abajo caía fuera del cuadro y sólo se veía el bol flotando. Medido a 66° de
      campo, a 0,70 m entran 0,91 m de alto, así que −0,30 deja la tabla en el
      tercio de abajo con los dos listones adentro. */
-  gTabla.position.set(0, -0.335, -0.66);
+  /* ── Y LA TABLA SE MOVIÓ AL PASAR A HORIZONTAL ──
+     Estaba en (0, −0,335, −0,66), medido para un cuadro vertical donde a 0,66 m
+     entran ±0,43 m de alto. Horizontal entran ±0,32, así que el borde de abajo
+     quedaba fuera del cuadro y sólo se veía el bol flotando. A −0,24 la tabla
+     entera cae en el tercio de abajo con los dos listones adentro, y los 0,62 m
+     de ancho ocupan poco más de la mitad del ancho visible. */
+  gTabla.position.set(0, -0.205, -0.52);
   gTabla.rotation.set(Math.asin(Math.max(-1, Math.min(1, inc.z))) * 0.9,
                       0,
                       -Math.asin(Math.max(-1, Math.min(1, inc.x))) * 0.9);

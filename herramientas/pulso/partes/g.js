@@ -19,7 +19,11 @@
    entra el pasillo entero sin quemar lo de cerca. Y sí, físicamente una luz cae
    con el cuadrado; una linterna en un juego de terror tiene que MOSTRAR el
    pasillo, y ése es el trabajo. */
-const luz = new T.SpotLight(0xffe9cf, 22, 22, 0.66, 0.50, 0.90);
+/* el ángulo subió de 0,66 a 0,88 rad al pasar el juego a horizontal: el campo
+   pasó de 33° a 93° de ancho y un cono de 76° dejaba los dos tercios laterales
+   del cuadro en negro. Una linterna no ilumina todo lo que se ve, pero tampoco
+   una franja en el medio. */
+const luz = new T.SpotLight(0xffe9cf, 22, 22, 0.88, 0.55, 0.90);
 luz.position.set(0.05, -0.12, 0);
 luz.target.position.set(0, -0.18, -1);
 luz.castShadow = true;
