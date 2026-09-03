@@ -42,6 +42,26 @@ a mano cuando el dueño quiere otra.
 Las seis horas de gracia que aparecen en todos lados son para que una fiesta no
 desaparezca de la web mientras todavía se está haciendo.
 
+## Historias: no
+
+El botón «Nuevo» lee **publicaciones del feed**, no historias. La ruta del feed
+(`/api/v1/feed/user/<cuenta>/username/`) anda sin sesión con el `X-IG-App-ID`
+del cliente web, pero las historias y los destacados no: probadas sin sesión,
+`highlights_tray`, `reels_tray` y `reels_media` devuelven vacío o nada.
+
+Los espejos que las muestran sin login (insta-story y compañía) no son base para
+esto: el endpoint de destacados que servía en septiembre ya tira 502. Montar el
+laburo diario del dueño sobre eso es que se rompa solo y en silencio.
+
+Las dos salidas de verdad, si algún día se pide:
+
+- **La captura.** Es lo que hay hoy y no necesita nada: el dueño saca captura de
+  la historia y la manda por la solapa IA, que ya lee imágenes con `_ia.js`.
+- **La Graph API de Instagram**, que es la oficial. La cuenta es de empresa, así
+  que con una app de Meta y un token de larga duración se pueden leer las
+  historias propias. Hay que crear la app, vincular la cuenta, guardar el token
+  como secreto del Worker y renovarlo cada ~60 días.
+
 ## El botón «Nuevo»
 
 `POST /api/sugerir` mira los posteos de `@iblo_eventos` y publica los que sirven.
