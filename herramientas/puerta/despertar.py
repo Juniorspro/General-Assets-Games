@@ -118,6 +118,21 @@ JS = r"""
     showToast('Camina hacia la puerta blanca…', 4200);
   }
 
+  // CORTA LA ANIMACION SIN DAR EL AVISO, para `hideAllLevels`: sin esto, saltar
+  // a otro sitio mientras se despierta deja la animacion corriendo ahi —medido,
+  // en el cuarto blanco seguia escrita la frase del despertar y el ojo seguia
+  // subiendo— y `pbDespiertaTermina` no sirve porque muestra el aviso del cuarto.
+  function pbDespiertaCorta() {
+    if (!PB_DESP.on) return;
+    PB_DESP.on = false;
+    PB_DESP.fijo = false;
+    PB_PARP.style.display = 'none';
+    PB_HABLA.style.opacity = '0';
+    pitchObj.position.y = EYE_HEIGHT;
+    camera.rotation.z = 0;
+    currentRoll = 0;
+  }
+
   function pbDespiertaPaso(delta) {
     // `fijo` es para el banco: sin el, la sonda pone un instante y el bucle lo
     // corre antes de que se saque la foto, asi que la captura no es del

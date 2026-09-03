@@ -9432,7 +9432,7 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
     } catch (e) {}
   }
 
-  const PB_CAMA_DE = { room: 'b_room', field: 'b_field', farm: 'b_farm',
+  const PB_CAMA_DE = { room: 'b_room', white: 'b_room', field: 'b_field', farm: 'b_farm',
                        school: 'b_school', library: 'b_library',
                        dungeon: 'b_dungeon', store: 'b_store' };
 
@@ -9454,6 +9454,172 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
     const a = Math.floor(pbPasoFase / Math.PI), b = Math.floor(bt / Math.PI);
     pbPasoFase = bt;
     if (b !== a) pbSon('a_paso', 0.5, 0.92 + Math.random() * 0.16);
+  }
+
+
+  // ==================================================================
+  // EL EPILOGO: EL CUARTO BLANCO
+  // ==================================================================
+  const blancoGroup = new THREE.Group();
+  blancoGroup.visible = false;
+  scene.add(blancoGroup);
+
+  const BLANCO = { minX: -5, maxX: 5, minZ: -9, maxZ: 8 };
+  const BL_PUERTA = new THREE.Vector3(0, 0, -9.4);
+
+  // EL LIENZO DEL YESO: casi blanco, con grano. No usa `TEX.wall` porque esa
+  // es la foto de hormigon sucio y el producto `map x color` la devuelve
+  // oscura por mas blanco que sea el tinte.
+  const blTex = (function () {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fbfbfa'; g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 5200; i++) {
+      const v = 236 + Math.floor(Math.random() * 20);
+      g.fillStyle = 'rgb(' + v + ',' + v + ',' + (v - 1) + ')';
+      g.fillRect(Math.random() * 128, Math.random() * 128, 1, 1);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(4, 4);
+    return t;
+  })();
+
+  // TRES BLANCOS DISTINTOS: es lo unico que dibuja las esquinas de un cuarto
+  // blanco. Con uno solo, el cuarto es un rectangulo vacio.
+  const blPared = new THREE.MeshStandardMaterial({
+    map: blTex, color: 0xffffff, roughness: 0.94, metalness: 0.0
+  });
+  const blPiso = new THREE.MeshStandardMaterial({
+    map: blTex, color: 0xd2d8e2, roughness: 0.58, metalness: 0.05
+  });
+  const blTecho = new THREE.MeshStandardMaterial({
+    map: blTex, color: 0xc6c6c4, roughness: 0.96, metalness: 0.0
+  });
+
+  const blSuelo = new THREE.Mesh(new THREE.PlaneGeometry(12, 20), blPiso);
+  blSuelo.rotation.x = -Math.PI / 2;
+  blSuelo.position.set(0, 0, -0.5);
+  blancoGroup.add(blSuelo);
+
+  const blCielo = new THREE.Mesh(new THREE.PlaneGeometry(12, 20), blTecho);
+  blCielo.rotation.x = Math.PI / 2;
+  blCielo.position.set(0, 6, -0.5);
+  blancoGroup.add(blCielo);
+
+  const blGeoLR = new THREE.PlaneGeometry(20, 6);
+  const blIzq = new THREE.Mesh(blGeoLR, blPared);
+  blIzq.position.set(-6, 3, -0.5); blIzq.rotation.y = Math.PI / 2;
+  blancoGroup.add(blIzq);
+  const blDer = blIzq.clone(); blDer.position.x = 6; blDer.rotation.y = -Math.PI / 2;
+  blancoGroup.add(blDer);
+
+  const blFondo = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), blPared);
+  blFondo.position.set(0, 3, 8.5); blFondo.rotation.y = Math.PI;
+  blancoGroup.add(blFondo);
+
+  const blFrente = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), blPared);
+  blFrente.position.set(0, 3, -9.6);
+  blancoGroup.add(blFrente);
+
+  // LA PUERTA NEGRA. Sin luz a proposito: tiene que ser lo unico oscuro del
+  // cuadro y ninguna luz puede levantarla.
+  const blNegro = new THREE.MeshBasicMaterial({ color: 0x05050a });
+  const blHoja = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 3.5), blNegro);
+  blHoja.position.set(0, 1.75, -9.55);
+  blancoGroup.add(blHoja);
+
+  // el marco: un rectangulo negro sin marco se lee a agujero en el render
+  const blMarcoMat = new THREE.MeshStandardMaterial({
+    // EL MARCO TUVO QUE OSCURECERSE. Con 0xbfc2c8 sobre una pared que mide 242
+    // de 255 no se veia ninguno: el marco desaparecia y quedaba un rectangulo
+    // negro flotando, que es justo lo que el marco existe para evitar.
+    color: 0x7c8188, roughness: 0.7, metalness: 0.08
+  });
+  function blViga(w, h, x, y) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.14), blMarcoMat);
+    m.position.set(x, y, -9.5);
+    blancoGroup.add(m);
+  }
+  blViga(0.20, 3.72, -1.05, 1.86);
+  blViga(0.20, 3.72, 1.05, 1.86);
+  blViga(2.30, 0.20, 0, 3.62);
+  // el umbral en el piso, que es lo que dice que se puede pasar
+  const blUmbral = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.04, 0.5), blMarcoMat);
+  blUmbral.position.set(0, 0.02, -9.2);
+  blancoGroup.add(blUmbral);
+
+  // LA LUZ: hemisferico con el SUELO CLARO, al reves que en todo el resto del
+  // juego. Lo que rebota aca es blanco, asi que un suelo oscuro deja el piso y
+  // la parte de abajo de las paredes en gris sucio.
+  const blHemi = new THREE.HemisphereLight(0xffffff, 0xdfe3ea, 1.15);
+  blHemi.visible = false;
+  scene.add(blHemi);
+  const blAmb = new THREE.AmbientLight(0xffffff, 0.85);
+  blAmb.visible = false;
+  scene.add(blAmb);
+
+  function blancoLuces(v) { blHemi.visible = v; blAmb.visible = v; }
+
+  const BL_FRASE = 'Mi alma encontró el descanso que siempre necesité.';
+  const BL = { fin: 0, hecho: false };   // `fin` > 0 mientras corre el cierre
+
+  function entraBlanco() {
+    gameState = 'white';
+    hideAllLevels();
+    blancoGroup.visible = true;
+    blancoLuces(true);
+    setEnvironment('room');            // apaga el sol, el cielo y las otras luces
+    scene.background = new THREE.Color(0xf2f4f7);
+    scene.fog = new THREE.FogExp2(0xf2f4f7, 0.012);
+    roomAmbient.visible = false;
+    doorLight.visible = false;
+    player.position.set(0, 0, 6);
+    groundY = 0;
+    yaw = 0; lastYaw = 0; pitch = 0;
+    obstacles = [];
+    boxObstacles = [];
+    boundary = BLANCO;
+    boundaryType = 'box';
+    stamina = 100;
+    BL.fin = 0; BL.hecho = false;
+    PB_HABLA.style.opacity = '0';
+    showToast('Camina hacia la puerta negra…', 4200);
+    transitioning = false;
+  }
+
+  function blancoLogica(delta) {
+    if (BL.fin > 0) {
+      // EL CIERRE LE SACA EL CONTROL: 3,2 s en los que se lee la frase y la
+      // imagen se va a blanco. Terminar en el mismo cuadro en que se toca la
+      // puerta tira a la basura lo unico que este cuarto tiene que decir.
+      BL.fin += delta;
+      const k = Math.min(BL.fin / 3.2, 1);
+      blAmb.intensity = 0.85 + k * 2.6;
+      blHemi.intensity = 1.15 + k * 2.2;
+      if (BL.fin >= 3.2) {
+        // `hecho` para que el cierre no se rearme. Medido sin el: `fadeTo`
+        // tarda 480 ms en cambiar `gameState`, y en esos cuadros el disparador
+        // se vuelve a cumplir y la secuencia arranca de nuevo — `fin 0,38` y la
+        // luz de ambiente quedandose en 1,16 despues de terminar.
+        BL.hecho = true;
+        BL.fin = 0;
+        blAmb.intensity = 0.85; blHemi.intensity = 1.15;
+        PB_HABLA.style.opacity = '0';
+        endTitle.innerHTML = '&#9675; Descanso';
+        endText.textContent = pbTrad(BL_FRASE);
+        transitionToEnd();
+      }
+      return;
+    }
+    const dx = player.position.x - BL_PUERTA.x, dz = player.position.z - BL_PUERTA.z;
+    if (!BL.hecho && !transitioning && Math.hypot(dx, dz) < 1.8) {
+      BL.fin = 0.0001;
+      pbSon('a_puerta', 0.9);
+      PB_HABLA.textContent = pbTrad(BL_FRASE);
+      PB_HABLA.style.opacity = '1';
+      document.body.classList.add('pb-desp');   // fuera la interfaz: no hay nada que tocar
+    }
   }
 
   function showToast(text, duration) {
@@ -9964,8 +10130,11 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
   // cual, asi que un aviso sin traducir sale en castellano y nunca vacio.
   const PB_TOAST = {
     en: {
+      'Mi alma encontró el descanso que siempre necesité.': 'My soul found the rest it always needed.',
       'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': "I don't know where I am or who I am, but it no longer matters. I just want to get out of here.",
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Six doors, six places, and not one of them was a way out. End of this version of the demo.',
+      'Camina hacia la puerta negra…': 'Walk to the black door…',
+      'Camina hacia la puerta negra…': 'Caminhe até a porta preta…',
       'Camina hacia la puerta blanca…': 'Walk to the white door…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Find 3 rainbow flowers 🌈 in the field',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 A door opened in the middle of the field. Follow the arrow.',
@@ -10009,6 +10178,7 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'The store starts over. The tray is empty again.'
     },
     pt: {
+      'Mi alma encontró el descanso que siempre necesité.': 'Minha alma encontrou o descanso que sempre precisei.',
       'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': 'Não sei onde estou nem quem sou, mas já não importa. Só quero sair daqui.',
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Seis portas, seis lugares, e nenhum era uma saída. Fim desta versão da demo.',
       'Camina hacia la puerta blanca…': 'Caminhe até a porta branca…',
@@ -10119,12 +10289,10 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
   function pbSiguiente() {
     pbPaso++;
     if (pbPaso >= PB_ORDEN.length) {
-      // EL TEXTO DEL FINAL ES GENERICO A PROPOSITO: con el orden sorteado, el
-      // ultimo nivel cambia en cada partida, asi que un final que hable del
-      // calabozo o del local seria falso cinco de cada seis veces.
-      endTitle.innerHTML = '&#128682; Cruzaste las seis puertas';
-      endText.textContent = pbTrad('Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.');
-      transitionToEnd();
+      // LA ULTIMA PUERTA NO TERMINA EL JUEGO: LLEVA AL CUARTO BLANCO. El final
+      // de verdad esta del otro lado de la puerta negra.
+      pbSon('a_puerta', 0.9);
+      fadeTo(entraBlanco);
       return;
     }
     pbSon('a_puerta', 0.9);
@@ -10187,6 +10355,21 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
     showToast('Camina hacia la puerta blanca…', 4200);
   }
 
+  // CORTA LA ANIMACION SIN DAR EL AVISO, para `hideAllLevels`: sin esto, saltar
+  // a otro sitio mientras se despierta deja la animacion corriendo ahi —medido,
+  // en el cuarto blanco seguia escrita la frase del despertar y el ojo seguia
+  // subiendo— y `pbDespiertaTermina` no sirve porque muestra el aviso del cuarto.
+  function pbDespiertaCorta() {
+    if (!PB_DESP.on) return;
+    PB_DESP.on = false;
+    PB_DESP.fijo = false;
+    PB_PARP.style.display = 'none';
+    PB_HABLA.style.opacity = '0';
+    pitchObj.position.y = EYE_HEIGHT;
+    camera.rotation.z = 0;
+    currentRoll = 0;
+  }
+
   function pbDespiertaPaso(delta) {
     // `fijo` es para el banco: sin el, la sonda pone un instante y el bucle lo
     // corre antes de que se saque la foto, asi que la captura no es del
@@ -10234,6 +10417,12 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
 
 
   function hideAllLevels() {
+    // OJO: `hideAllLevels` la llama `entraBlanco` tambien, asi que el grupo se
+    // apaga aca y se enciende DESPUES; al reves quedaria invisible.
+    blancoGroup.visible = false;
+    blancoLuces(false);
+    pbDespiertaCorta();
+    document.body.classList.remove('pb-desp');
     storeGroup.visible = false;
     stHud.style.display = 'none';
     stTrap.style.display = 'none';
@@ -12947,6 +13136,9 @@ window.__PB_SON = {"a_agarra":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMgAAA
     } else if (gameState === 'dungeon') {
       player.position.y = 0;
       updateDungeonLogic(delta, elapsed);
+    } else if (gameState === 'white') {
+      player.position.y = 0;
+      blancoLogica(delta);
     } else if (gameState === 'store') {
       player.position.y = 0;
       updateStoreLogic(delta, elapsed);
@@ -13273,6 +13465,18 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
                nivel: pbSonNivel() };
     },
     oye: function (n) { const ok = pbSon(n, 1); return { sono: ok, nivel: pbSonNivel() }; },
+    // EL EPILOGO. `blanco()` salta al cuarto blanco sin jugar los seis niveles;
+    // `blancoVer()` devuelve su estado.
+    blanco: function () { pbPaso = PB_ORDEN.length; fadeTo(entraBlanco); return 'white'; },
+    blancoVer: function () {
+      const c = new THREE.Box3().setFromObject(blHoja);
+      return { nivel: gameState, visible: blancoGroup.visible, fin: +BL.fin.toFixed(2),
+               piezas: blancoGroup.children.length,
+               puerta: [+c.min.x.toFixed(2), +c.min.y.toFixed(2), +c.max.x.toFixed(2), +c.max.y.toFixed(2)],
+               dist: +Math.hypot(player.position.x, player.position.z - BL_PUERTA.z).toFixed(2),
+               habla: PB_HABLA.style.opacity, frase: PB_HABLA.textContent.slice(0, 30),
+               amb: +blAmb.intensity.toFixed(2) };
+    },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },
     // OJO: renderer.info se pone a cero al empezar cada render(), asi que
     // leerlo despues del cuadro deja solo la ultima pasada. Con autoReset en

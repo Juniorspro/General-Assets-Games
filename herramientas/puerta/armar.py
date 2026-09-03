@@ -523,6 +523,7 @@ import menu
 import orden
 import despertar
 import sonido
+import blanco
 import nivel6
 import red
 
@@ -1354,6 +1355,18 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
                nivel: pbSonNivel() };
     },
     oye: function (n) { const ok = pbSon(n, 1); return { sono: ok, nivel: pbSonNivel() }; },
+    // EL EPILOGO. `blanco()` salta al cuarto blanco sin jugar los seis niveles;
+    // `blancoVer()` devuelve su estado.
+    blanco: function () { pbPaso = PB_ORDEN.length; fadeTo(entraBlanco); return 'white'; },
+    blancoVer: function () {
+      const c = new THREE.Box3().setFromObject(blHoja);
+      return { nivel: gameState, visible: blancoGroup.visible, fin: +BL.fin.toFixed(2),
+               piezas: blancoGroup.children.length,
+               puerta: [+c.min.x.toFixed(2), +c.min.y.toFixed(2), +c.max.x.toFixed(2), +c.max.y.toFixed(2)],
+               dist: +Math.hypot(player.position.x, player.position.z - BL_PUERTA.z).toFixed(2),
+               habla: PB_HABLA.style.opacity, frase: PB_HABLA.textContent.slice(0, 30),
+               amb: +blAmb.intensity.toFixed(2) };
+    },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
     'la sonda de nivel e idioma')
 
@@ -1410,6 +1423,15 @@ s = s if SOLO else cambiar(s, "    const bobRoll = Math.sin(bobTimer * 0.5) * bo
 # la puerta de cada nivel suena al cruzarla
 s = s if SOLO else cambiar(s, "    fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });",
     "    pbSon('a_puerta', 0.9);\n    fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });", 'la puerta al pasar de nivel')
+
+# EL EPILOGO: EL CUARTO BLANCO CON LA PUERTA NEGRA
+# el JS va DESPUES de `pbSon` y `PB_HABLA`, que es lo que usa el cierre
+s = s if SOLO else cambiar(s, "  function showToast(text, duration) {",
+    blanco.JS + "\n  function showToast(text, duration) {", 'el cuarto blanco')
+s = s if SOLO else cambiar(s, blanco.VIEJO_FIN, blanco.NUEVO_FIN, 'la ultima puerta lleva al blanco')
+s = s if SOLO else cambiar(s, blanco.VIEJO_CADENA, blanco.NUEVO_CADENA, 'la logica del cuarto blanco')
+s = s if SOLO else cambiar(s, blanco.VIEJO_ESCONDE, blanco.NUEVO_ESCONDE, 'apagar el cuarto blanco')
+s = s if SOLO else cambiar(s, blanco.CAMA[0], blanco.CAMA[1], 'la cama del cuarto blanco')
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {

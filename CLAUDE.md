@@ -269,6 +269,80 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima segunda vuelta (2026-09-03): **PUERTA BLANCA** — el epílogo: un cuarto blanco y una puerta negra
+
+Pedido: *"cuando el jugador pase la última puerta del último nivel sea llevado a una habitación
+totalmente blanca con una puerta negra y cuando el jugador pase por esa puerta el juego acabe y el
+jugador diga «mi alma encontró el descanso que siempre necesito»"*. Vive en
+`herramientas/puerta/blanco.py`.
+
+#### ES EL PRÓLOGO DADO VUELTA, Y POR ESO LAS MEDIDAS SON LAS MISMAS
+
+El cuarto negro con la puerta blanca abre el juego; el cuarto blanco con la puerta negra lo cierra.
+Reusar el mismo cajón de 12 × 20 × 6 y el mismo límite de choque no es pereza: significa que la
+geometría y el disparador de la puerta **ya están probados**, y que las dos piezas se leen como la
+misma habitación vista al final.
+
+#### EL MAPA NO PODÍA SER `TEX.wall`, Y SALIÓ GRIS OSCURO
+
+Primer intento: las tres superficies con `map: TEX.wall` y un tinte casi blanco. Medido con
+`__pb.brillo`, las cinco franjas del cuadro daban **entre 48 y 86 sobre 255** — o sea gris oscuro, no
+blanco. La causa es la vuelta 85: desde entonces `TEX.wall` es una **foto de hormigón sucio**, y
+three.js multiplica `map × color`, así que un tinte blanco sobre una foto oscura devuelve la foto
+oscura. Con un lienzo propio de yeso casi blanco: **240-242 de 255**.
+
+**UN BLANCO PLANO NO ES UN CUARTO, ES UNA PANTALLA EN BLANCO.** Si el piso, las paredes y el techo son
+el mismo blanco y la luz es pareja, no hay una sola arista que se lea. Hacen falta tres cosas: **tres
+blancos distintos** (piso más frío, paredes blancas, techo apenas gris), **un hemisférico con el suelo
+CLARO** —al revés que en todo el resto del juego, donde el suelo del hemisférico es casi negro, porque
+acá lo que rebota es blanco— y el **grano del lienzo**, que es lo que separa una pared de un plano de
+CSS.
+
+#### LA PUERTA NEGRA NECESITA MARCO, Y EL MARCO TUVO QUE OSCURECERSE
+
+Un rectángulo negro puro sobre una pared blanca se lee a **agujero en el render**, no a puerta. Va con
+jambas, dintel y umbral. Y el primer marco —`0xbfc2c8`— **no se veía en la captura**: contra una pared
+que mide 242 de 255, un gris claro desaparece, así que quedaba exactamente el rectángulo flotando que
+el marco existe para evitar. En `0x7c8188` se lee.
+La hoja va **sin luz** (`MeshBasic`) a propósito: tiene que ser lo único oscuro del cuadro y ninguna
+luz puede levantarla.
+
+#### EL CIERRE LE SACA EL CONTROL, Y NO SE PUEDE REARMAR
+
+Al cruzar: 3,2 s en los que la frase aparece en el medio de la pantalla, la interfaz se apaga y la luz
+se va a blanco. Terminar en el mismo cuadro en que se toca la puerta tira a la basura lo único que
+este cuarto tiene que decir.
+
+**Y HUBO QUE PONERLE UNA BANDERA.** Medido sin ella: `fadeTo` tarda 480 ms en cambiar `gameState`, y en
+esos cuadros el disparador se vuelve a cumplir y la secuencia **arranca de nuevo** — `fin 0,38` y la
+luz de ambiente quedándose en 1,16 después de haber terminado. No se ve, porque el cartel del final lo
+tapa, pero es real.
+
+#### LA FRASE LA DICE EL JUGADOR, ASÍ QUE VA DONDE HABLA EL JUGADOR
+
+Reusa `#pb-habla`, que es el mismo sitio donde habla al despertarse: son la misma voz, al principio y
+al final. Y va **también en el cartel del final**, porque el cartel es lo que queda en pantalla. En los
+tres idiomas.
+
+#### UN DEFECTO DE OTRA VUELTA QUE ESTE CUARTO DESTAPÓ
+
+Saltando al epílogo con la sonda mientras el prólogo se estaba despertando, **la animación del
+despertar seguía corriendo ahí**: medido, en el cuarto blanco seguía escrita *"No sé dónde estoy…"* y
+el ojo seguía subiendo. `PB_DESP.on` no lo apagaba nadie al cambiar de sitio. Ahora `hideAllLevels`
+llama a `pbDespiertaCorta()`, que la termina **sin dar el aviso** —`pbDespiertaTermina` muestra el
+"camina hacia la puerta blanca", que en otro nivel es un cartel que miente—.
+
+#### MEDIDO AL CERRAR
+
+Cuarto blanco: **241-242 de 255** en las cinco franjas (era 48-86), 11 piezas, la puerta negra
+proyectando de −0,95 a 0,95 y de 0 a 3,5 m. Cruzándola: `fin 1,1` con la frase puesta y la luz
+subiendo a 1,74, y después **`end`** con el cartel diciendo *"Mi alma encontró el descanso que siempre
+necesité."* y el título `○ Descanso`; `fin 0` y la luz de vuelta en 0,85, o sea que no se rearma.
+Partida completa por la cadena: los **seis niveles sorteados** y el séptimo paso llega a **`white`** con
+el jugador a 15,4 m de la puerta. 12 llamadas de dibujo y 64 triángulos en el cuarto. `window.__errs` y
+`window.__pbFallas` vacíos en las cinco corridas. El HTML pasó de 3,53 a **3,53 MB** (el cuarto no trae
+un solo byte de asset: el yeso es un lienzo de 128 px).
+
 ### Nonagésima primera vuelta (2026-09-03): **PUERTA BLANCA** — veinticinco sonidos generados, y el nivel se mide después de codificar
 
 Pedido: *"genera con Rezona sonidos y que los guardes en el repo y que no dependa de proyectos en
