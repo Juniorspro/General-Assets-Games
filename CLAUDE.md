@@ -137,6 +137,98 @@ sintetizado si un clip no decodifica.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Nonagésima cuarta vuelta (2026-09-03): **CASA 13** — la vista pesa un kilo y medio
+
+Pedido: *"reducir la velocidad de movimiento y giro del personaje, haciendo que camine de forma más
+pausada y suavizando la sensibilidad de los controles... incorporar inercia o un leve smoothing evita
+que la cámara y el desplazamiento se detengan de golpe, logrando que se sienta como si realmente se
+estuviera sosteniendo una pesada cámara de video en la mano"*.
+
+#### EL GIRO ERA INSTANTÁNEO Y NO SE PODÍA SUAVIZAR BAJANDO LA SENSIBILIDAD
+
+Los dos manejadores de entrada escribían `P.yaw` **directo**: la vista llegaba a donde el dedo la
+dejaba en el mismo cuadro, así que bajar la sensibilidad sólo cambiaba cuánto gira por píxel — nunca
+con cuánto peso llega. Son **dos cosas distintas** y hacían falta las dos.
+
+Ahora `P.yaw` y `P.pitch` son **lo que se dibuja**, el dedo escribe `P.yawO`/`P.pitO` —el objetivo— y
+en medio hay un amortiguador. Medido, un escalón de un radián:
+
+| | asentamiento al 90 % | al 99 % | velocidad angular máxima |
+|---|---|---|---|
+| como estaba | **0,017 s** (un cuadro) | 0,017 | **60 rad/s** (sin tope) |
+| ahora | **0,367 s** | 0,567 | **3,19** (tope 3,4) |
+
+**ES LA SOLUCIÓN ANALÍTICA DE UN RESORTE, NO UN EULER EXPLÍCITO.** Con el `dt` topado en 0,05 y un
+resorte lo bastante rápido para que la vista responda, `k·dt` se pasa de la frontera de estabilidad y
+la cámara oscila en vez de asentarse. La forma cerrada es estable para cualquier paso, que es lo que
+hace falta en un juego que corre a quince cuadros en un teléfono y a ciento veinte en un monitor.
+Medido con el paso tres veces más grueso: **0,40 s contra 0,367**, o sea un 9 % — o sea que el peso de
+la vista no depende de a cuántos cuadros dibuje el aparato.
+
+**Y LLEVA GUARDA DE SOBREPICO: 0,00 %.** Una vista que se pasa del objetivo y vuelve no se lee a peso,
+se lee a que el pulso no responde.
+
+**EL PASO DEL AMORTIGUADOR VA EN EL BUCLE Y NO EN EL MANEJADOR.** Un dedo dispara diez `touchmove` en
+un cuadro; el amortiguador tiene que avanzar **una vez**, con el `dt` del cuadro. Es la misma doctrina
+del único escritor de la cámara.
+
+**Y EL ERROR DE GUIÑADA SE ENVUELVE A (−π, π].** Sin eso, girar cruzando el corte hace que el
+amortiguador tome el camino largo y la vista pegue la vuelta entera.
+
+#### CUÁNTO SE ATRASA, QUE ES EL NÚMERO QUE SE SIENTE
+
+Un seguidor críticamente amortiguado de tiempo T se queda atrás **T·ω** en régimen, así que el peso se
+paga en retraso mientras el dedo arrastra:
+
+| arrastre | 150 px/s | 300 px/s | 625 px/s | 1250 px/s (manotazo) |
+|---|---|---|---|---|
+| retraso | **2,7°** | **5,4°** | 11,3° | 22,7° |
+
+Un arrastre normal son unos 300 px/s: cinco grados y medio, que es exactamente el peso que se pidió.
+Un manotazo paga veintitrés, y de ahí el **tope de 3,4 rad/s** — sin tope, un dedo que cruza la
+pantalla de un golpe deja el objetivo a media vuelta y la vista pega el latigazo entero.
+
+#### ACELERAR Y FRENAR NO SON LO MISMO, Y ESTABAN CON LA MISMA CONSTANTE
+
+`P.vx += (objetivo − P.vx)·dt·5,2` para las dos cosas: soltar el joystick frenaba el cuerpo con la
+misma brusquedad con la que arranca, y eso es lo que se siente como estar clavado al suelo. Ahora
+acelera a 4,4 y frena a 2,3. Medido, lo que anda **después** de soltar:
+
+| | v al soltar | sigue |
+|---|---|---|
+| como estaba | 0,819 m/s | **0,116 m** |
+| ahora | 0,696 | **0,25 m** |
+
+#### Y MÁS DESPACIO, OTRA VEZ
+
+Marcha **0,82 → 0,70 m/s**, carrera **1,45 → 1,20**, vista **0,0031 → 0,0024** rad por píxel y el ratón
+0,0017 → 0,0013 (el deslizador de la pausa sigue multiplicando la primera).
+
+**LA ZANCADA HUBO QUE ACORTARLA, y sale de una división.** `stepPh += dt·v·3,0` da un paso de π/3 =
+1,05 m *por construcción*; a 0,70 m/s eso es **una pisada cada segundo y medio**, que no se lee a
+caminar sino a arrastrar los pies. Con 0,80 m de zancada cae cada 1,14 s. Y sigue siendo la misma
+cuenta para el sonido y para el cabeceo, así que no se pueden separar.
+
+#### LAS SONDAS TUVIERON QUE APRENDER QUE HAY UN OBJETIVO
+
+Seis sitios escribían `P.yaw`/`P.pitch` de un salto —el arranque y cinco sondas— y con el amortiguador
+puesto eso ya no alcanza: el objetivo viejo sigue ahí y el amortiguador **deshace el salto solo**.
+`ponVista(y,p)` escribe los tres —objetivo, dibujado y velocidad— y la usan todos.
+Y `girar` pasó a mover el **objetivo**: moviendo lo dibujado, la prueba mediría su propia escritura
+peleándose con el resorte en vez de medir el juego.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Vista: asentamiento **0,367 s al 90 %** y 0,567 al 99 %, sobrepico **0,00 %**, tope 3,19 rad/s, retraso
+5,4° a un arrastre normal, y **0,40 s con el paso a 0,05** —o sea estable—. El bucle lo aplica solo:
+moviendo el objetivo 0,8 rad, lo dibujado lo persigue de 0,005 a 0,49 sin que nadie más escriba yaw.
+Marcha 0,70 · carrera 1,20 · zancada 0,80 m · frenada 0,25 m. **Nada regresó:** partida completa 3 de 3
+cintas + la cuarta + el final (`paso 1`), el susto dispara caminando y una sola vez con el jugador
+moviéndose mientras dura, la criatura de pie sobre sus propios pies (L\_Foot −2,69 con el grupo en
+−2,68), linterna con desvío **0°**, haz en **[0,0]**, alabeo **0** con la vista girando 40 muestras,
+HUD **sin un solo solapamiento** en 892×412, 732×412, 800×360 y 1280×720, **17 de 17 texturas de foto
+puestas**, `window.__errs` vacío en las nueve corridas.
+
 ### Nonagésima tercera vuelta (2026-09-03): **CASA 13** — la criatura es un modelo generado y riggeado
 
 Pedido: *"mejora el cuerpo del screamer y su textura como el de este modelo"* con la foto de una mujer

@@ -4431,7 +4431,19 @@ function osdUpdate(){
   stime.textContent=p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());
   tapeEl.innerHTML='SP&nbsp;&nbsp;'+Math.floor(sec/3600)+':'+p(Math.floor(sec/60)%60)+':'+p(sec%60);
 }
-let SENS=0.0031; const MAXS=60;   // la vista tambien va mas despacio; el deslizador la sube
+/* ══════════ LO QUE TARDA LA VISTA ══════════
+   `VISTA_T` es el tiempo de asentamiento del amortiguador: cuanto tarda la
+   camara en llegar a donde el dedo la dejo. Cero es la vista instantanea de
+   antes; mucho es un pulso que no responde. 0,14 s es lo que tarda una mano en
+   frenar un kilo y medio de plastico.
+   `VISTA_TOPE` acota la velocidad angular en radianes por segundo: sin tope, un
+   dedo que cruza la pantalla de un golpe deja el objetivo a media vuelta y la
+   vista pega el latigazo entero. */
+const VISTA_T=0.14, VISTA_TOPE=3.4;
+/* LA SENSIBILIDAD BAJA OTRA VEZ, y el amortiguador la suaviza aparte: son dos
+   cosas distintas —cuanto gira por pixel de dedo, y con cuanto peso llega—. El
+   deslizador de la pausa sigue multiplicando la primera. */
+let SENS=0.0024; const SENS_RAT=0.0013; const MAXS=60;
 
 /* ─── estados: menu · play · paused ─── */
 let state='menu';
@@ -4487,7 +4499,7 @@ function startGame(){
   resetWorld();
   begin();
   P.x=-0.65; P.z=5.25; P.y=0; P.level=0;
-  P.yaw=0; P.pitch=0; P.vx=P.vz=0; P.roll=0;
+  ponVista(0,0); P.vx=P.vz=0; P.roll=0; P.yawV=P.pitV=0;
   setState('play');
   setTimeout(()=>{ if(state==='play') showNote(TX('objCinta')); },2600);
   setTimeout(()=>{ if(state==='play') hint.style.opacity=0; },7000);
@@ -4570,7 +4582,7 @@ for(const b of document.querySelectorAll('#idi .lg'))
 pauseBtn.addEventListener('click',e=>{e.stopPropagation(); if(state==='play'&&!fin) setState('paused');});
 menuEl.addEventListener('pointerdown',()=>initAudio(),{once:true});
 document.getElementById('slSens').addEventListener('input',e=>{
-  SENS=0.0031*(e.target.value/100);});
+  SENS=0.0024*(e.target.value/100);});
 document.getElementById('slVol').addEventListener('input',e=>{
   if(A&&A.setVolume) A.setVolume(e.target.value/100);});
 { const sb=document.getElementById('slBri');
@@ -4668,7 +4680,7 @@ addEventListener('touchmove',e=>{
       move.x=dx/MAXS; move.y=dy/MAXS;
     }else if(t.identifier===lookId){
       const d=dLocal(t.clientX-lookPrev.x,t.clientY-lookPrev.y);
-      P.yaw-=d.x*SENS; P.pitch=Math.max(-1.3,Math.min(1.3,P.pitch-d.y*SENS));
+      P.yawO-=d.x*SENS; P.pitO=Math.max(-1.28,Math.min(1.28,P.pitO-d.y*SENS));
       P.yawVel+=-d.x*SENS; lookPrev={x:t.clientX,y:t.clientY};
     }
   }
@@ -4701,15 +4713,58 @@ addEventListener('mousemove',e=>{
     paperRX=Math.max(-1.5,Math.min(1.5,paperRX+e.movementY*0.006));
     return;
   }
-  P.yaw-=e.movementX*0.0017; P.pitch=Math.max(-1.3,Math.min(1.3,P.pitch-e.movementY*0.0017));
-  P.yawVel+=-e.movementX*0.0017;
+  P.yawO-=e.movementX*SENS_RAT; P.pitO=Math.max(-1.28,Math.min(1.28,P.pitO-e.movementY*SENS_RAT));
+  P.yawVel+=-e.movementX*SENS_RAT;
 });
 
 /* ══════════ jugador ══════════ */
 /* aparece en la entrada, de cara al pasillo (hacia -Z) */
 const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:0,
-  vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0};
+  vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0,
+  /* LA VISTA TIENE UN OBJETIVO Y UNA VELOCIDAD, y `yaw`/`pitch` pasan a ser lo
+     que se DIBUJA. El dedo escribe el objetivo; entre los dos hay un
+     amortiguador, que es lo unico que hace que la camara no arranque ni pare de
+     golpe — una filmadora de 1994 pesa un kilo y medio y no se detiene en el
+     cuadro en que uno suelta. */
+  yawO:0,pitO:0,yawV:0,pitV:0};
 const R=0.32, EYE=1.66;
+
+/* ══════════ EL AMORTIGUADOR DE LA VISTA ══════════
+   Es la solucion analitica de un resorte criticamente amortiguado (el
+   SmoothDamp de siempre) y NO un Euler explicito: con el `dt` topado en 0,05 y
+   un resorte lo bastante rapido para que la vista responda, `k·dt` se pasa de
+   la frontera de estabilidad y la camara oscila en vez de asentarse. Esta forma
+   es estable para cualquier dt, que es lo que hace falta en un juego que corre
+   a 15 cuadros en un telefono y a 120 en un monitor.
+
+   `tope` acota la velocidad: un dedo que cruza la pantalla de un golpe deja el
+   objetivo a media vuelta, y sin tope la vista pega el latigazo entero. */
+function suaveAng(act,obj,vel,tSuav,dt,tope){
+  const om=2/Math.max(tSuav,1e-4), x=om*dt;
+  const ex=1/(1+x+0.48*x*x+0.235*x*x*x);
+  const org=obj;
+  let ch=act-obj;
+  if(tope!==undefined){ const m=tope*tSuav; ch=Math.max(-m,Math.min(m,ch)); }
+  obj=act-ch;
+  const tmp=(vel.v+om*ch)*dt;
+  vel.v=(vel.v-om*tmp)*ex;
+  let out=obj+(ch+tmp)*ex;
+  /* guarda de sobrepico: sin ella la vista se pasa del objetivo y vuelve, y eso
+     en primera persona no se lee a peso, se lee a que el pulso no responde */
+  if((org-act>0)===(out>org)){ out=org; vel.v=dt>0?(out-org)/dt:0; }
+  return out;
+}
+/* el error de guiñada se envuelve a (-π,π]: sin esto, girar cruzando el corte
+   hace que el amortiguador tome el camino largo y la vista pegue la vuelta */
+const envAng=(a)=>{ a=(a+Math.PI)%(Math.PI*2); if(a<0)a+=Math.PI*2; return a-Math.PI; };
+/* PONE LA VISTA DE UN SALTO: objetivo, dibujado y velocidad, los tres. Lo usan
+   el arranque y las sondas — escribiendo solo `yaw`, el amortiguador lo trae de
+   vuelta al objetivo viejo y el salto se deshace solo. */
+function ponVista(y,pi){
+  if(y!==undefined){ P.yaw=P.yawO=y; P.yawV=0; }
+  if(pi!==undefined){ P.pitch=P.pitO=pi; P.pitV=0; }
+}
+const _sv={v:0};
 /* CUANTO SE AVANZA. La casa mide 27 m de lado y se recorre entera en menos de
    un minuto: a esa velocidad no se mira, se pasa. Y lo que este juego tiene es
    justamente lo que hay que mirar —los muebles que tapan las cintas, los
@@ -4718,7 +4773,13 @@ const R=0.32, EYE=1.66;
    LA ZANCADA NO SE TOCA Y NO HACE FALTA: `stepPh` avanza con `dt*v`, asi que
    el paso mide siempre π/3 = 1,05 m y lo unico que cambia es cada cuanto cae.
    Lo mismo el cabeceo y el nivel de la pisada, que salen de `v`. */
-const WALK=0.82, RUN=1.45;
+const WALK=0.70, RUN=1.20;
+/* CUANTO MIDE UN PASO. Salia de `dt*v*3.0`, o sea π/3 = 1,05 m: a 0,70 m/s eso
+   es una pisada cada segundo y medio, que no se lee a caminar sino a arrastrar
+   los pies. A 0,80 m de zancada la pisada cae cada 1,14 s. Y sigue siendo la
+   MISMA cuenta para el sonido y para el cabeceo, asi que no se pueden separar. */
+const ZANC=0.80;
+const ACEL=4.4, FRENO=2.3;
 
 function resolve(){
   const feet=P.y, head=P.y+1.62;
@@ -4788,8 +4849,14 @@ function tick(){
   /* frente = (-sin, -cos) · derecha = (cos, -sin) */
   const tvx=(ix*cy + iz*sy)*spd;
   const tvz=(iz*cy - ix*sy)*spd;
-  P.vx+=(tvx-P.vx)*Math.min(dt*5.2,1);
-  P.vz+=(tvz-P.vz)*Math.min(dt*5.2,1);
+  /* ─ ACELERAR Y FRENAR NO SON LO MISMO ─
+     Con una sola constante, soltar el joystick para el cuerpo con la misma
+     brusquedad con la que arranca, y eso es lo que se siente como que el
+     personaje esta clavado al suelo. Frenar va mas lento que acelerar: al
+     soltar, el cuerpo sigue unos treinta centimetros y se para. */
+  const kv=(mag>0.05?ACEL:FRENO);
+  P.vx+=(tvx-P.vx)*Math.min(dt*kv,1);
+  P.vz+=(tvz-P.vz)*Math.min(dt*kv,1);
   P.x+=P.vx*dt; P.z+=P.vz*dt;
   resolve();
 
@@ -4802,7 +4869,7 @@ function tick(){
   const v=Math.hypot(P.vx,P.vz);
 
   /* pasos sincronizados con la marcha */
-  P.stepPh+=dt*v*3.0;
+  P.stepPh+=dt*v*(Math.PI/ZANC);
   if(P.stepPh>Math.PI){
     P.stepPh-=Math.PI;
     _pasosN++;
@@ -4847,6 +4914,15 @@ function tick(){
   /* 2 · HACIA DONDE MIRA. Nada mas que lo que pidio el dedo.
         El tope de cabeceo va antes de armar la rotacion, no despues de
         haberla escrito: en YXZ el pitch se degenera en ±π/2. */
+  /* ─ la vista sigue al objetivo con peso ─
+     Va ACA, en el unico escritor de la camara, y no en los manejadores de
+     entrada: el dedo puede disparar diez eventos en un cuadro y el
+     amortiguador tiene que avanzar una sola vez, con el dt del cuadro. */
+  if(dt>0){
+    const e=envAng(P.yaw-P.yawO);
+    _sv.v=P.yawV; P.yaw=P.yawO+suaveAng(e,0,_sv,VISTA_T,dt,VISTA_TOPE); P.yawV=_sv.v;
+    _sv.v=P.pitV; P.pitch=suaveAng(P.pitch,P.pitO,_sv,VISTA_T,dt,VISTA_TOPE); P.pitV=_sv.v;
+  }
   P.pitch=Math.max(-1.35,Math.min(1.35,P.pitch));
   _camEu.set(P.pitch,P.yaw,0);
   camera.quaternion.setFromEuler(_camEu);
@@ -5282,7 +5358,7 @@ window.__casa={
     figure.updateMatrixWorld(true);
     _luzForz=true;
     const v=new THREE.Vector3(); (FIG?FIG.marca:figure.userData.cab).getWorldPosition(v);
-    P.pitch=Math.atan2(v.y-(P.y+EYE),d);
+    ponVista(undefined,Math.atan2(v.y-(P.y+EYE),d));
     const b=new THREE.Box3().setFromObject(figure);
     /* la camara la coloca el bucle, no una sonda: se proyecta con la del ultimo
        cuadro dibujado, asi que la segunda llamada —despues de dejar correr unos
@@ -5370,8 +5446,8 @@ window.__casa={
       const x=q.x+Math.cos(a)*d, z=q.z+Math.sin(a)*d;
       if(!freeSpot(x,z,q.y<-1?-3:0)) continue;
       P.x=x; P.z=z; P.y=q.y<-1?-3:0; P.level=P.y;
-      P.yaw=Math.atan2(-(q.x-x),-(q.z-z));
-      P.pitch=Math.max(-1.35,Math.min(0.4,
+      ponVista(Math.atan2(-(q.x-x),-(q.z-z)));
+      P.pitO=P.pitch=Math.max(-1.35,Math.min(0.4,
         -Math.atan2((P.y+EYE)-q.y, Math.hypot(q.x-x,q.z-z))));
       P.vx=P.vz=0;
       return {desde:[+x.toFixed(2),+z.toFixed(2)],dist:+Math.hypot(q.x-x,q.z-z).toFixed(2)};
@@ -5556,7 +5632,7 @@ window.__casa={
   /* baja la escalera CAMINANDO, con la fisica y el choque de verdad. Que no
      haya nada en el canal es una condicion; llegar abajo es la prueba. */
   bajar(n){ n=n||220;
-    P.x=-2.30; P.z=-4.50; P.yaw=Math.PI/2; P.pitch=0; P.vx=0; P.vz=0;
+    P.x=-2.30; P.z=-4.50; ponVista(Math.PI/2,0); P.vx=0; P.vz=0;
     const t0=[P.x,P.z]; let minY=0, minX=0; const T0=performance.now(), traza=[]; let cuadros=0;
     const rafOrig=window.requestAnimationFrame;
     window.requestAnimationFrame=cb=>rafOrig.call(window,t=>{cuadros++;cb(t);});
@@ -5582,6 +5658,57 @@ window.__casa={
                en_el_hueco:inHole(P.x,P.z), traza,
                llego_al_sotano:minY<-2.80, pasos:k, colisiones_cerca:cerca}); }
       },16); }); },
+  /* ══════════ EL PESO DE LA VISTA ══════════
+     `vistaCurva` corre el MISMO amortiguador que el bucle con un dt fijo y
+     devuelve la curva: cuanto tarda en llegar al 90 y al 99 %, si se pasa, y la
+     velocidad angular maxima. Es una funcion pura, asi que medirla con dt fijo
+     mide exactamente lo que el juego hace — y el banco dibuja a tres cuadros
+     por segundo, o sea que muestrear el bucle no puede ver un asentamiento de
+     dos decimas. Que el bucle de verdad la llame lo prueba `vistaViva`. */
+  vistaCurva(paso,dt,n){ paso=paso||1.0; dt=dt||1/60; n=n||120;
+    const v={v:0}; let act=paso, t90=null, t99=null, peor=0, vmax=0, ant=act;
+    for(let i=1;i<=n;i++){
+      act=suaveAng(act,0,v,VISTA_T,dt,VISTA_TOPE);
+      const rec=1-Math.abs(act)/paso;
+      if(t90===null&&rec>=0.90) t90=+(i*dt).toFixed(3);
+      if(t99===null&&rec>=0.99) t99=+(i*dt).toFixed(3);
+      if(act*paso<0) peor=Math.max(peor,Math.abs(act)/paso);
+      vmax=Math.max(vmax,Math.abs(act-ant)/dt); ant=act;
+    }
+    return {paso, t90, t99, sobrepico_pct:+(peor*100).toFixed(2),
+            vel_max_rad_s:+vmax.toFixed(2), resto:+Math.abs(act).toFixed(5)}; },
+  /* CUANTO SE ATRASA LA VISTA MIENTRAS EL DEDO ARRASTRA. Es el numero que se
+     siente: un seguidor criticamente amortiguado con tiempo T se queda atras
+     T·ω en regimen. Un arrastre normal son unos 300 px/s, o sea 0,72 rad/s con
+     la sensibilidad de fabrica; un manotazo llega a 1250 px/s. */
+  vistaRetraso(w,dt,n){ w=w||0.72; dt=dt||1/60; n=n||240;
+    const v={v:0}; let act=0, obj=0;
+    for(let i=0;i<n;i++){ obj+=w*dt;
+      act=obj+suaveAng(act-obj,0,v,VISTA_T,dt,VISTA_TOPE); }
+    const at=obj-act;
+    return {rad_s:w, px_s:Math.round(w/SENS), retraso_rad:+at.toFixed(4),
+            retraso_grados:+(at*180/Math.PI).toFixed(1),
+            vel_alcanzada:+((w<=VISTA_TOPE)?w:VISTA_TOPE).toFixed(2)}; },
+  /* y esto prueba que el BUCLE lo aplica: se mueve el objetivo y se mira si lo
+     dibujado lo persigue solo, sin que nadie mas escriba yaw */
+  vistaViva(paso){ paso=paso||0.8;
+    const y0=P.yaw; P.yawO=P.yaw+paso;
+    return new Promise(res=>{ const R=[]; let k=0;
+      const id=setInterval(()=>{ R.push(+(P.yaw-y0).toFixed(4));
+        if(++k>=26){ clearInterval(id);
+          res({objetivo:+paso.toFixed(3), curva:R,
+               llego:+(P.yaw-y0).toFixed(4), vel:+P.yawV.toFixed(4)}); } },40); }); },
+  /* ══════════ LA FRENADA DEL CUERPO ══════════
+     Cuanto sigue andando despues de soltar. Cero es estar clavado al suelo. */
+  frenada(n){ n=n||120;
+    P.x=-0.65; P.z=5.00; ponVista(0,0); P.vx=0; P.vz=0; P.sprint=0;
+    return new Promise(res=>{ let k=0; keys.KeyW=true; let x1=0,z1=0,vSol=0;
+      const id=setInterval(()=>{
+        if(++k===n){ keys.KeyW=false; x1=P.x; z1=P.z; vSol=Math.hypot(P.vx,P.vz); }
+        if(k>=n*2){ clearInterval(id);
+          res({v_al_soltar:+vSol.toFixed(3),
+               sigue_m:+Math.hypot(P.x-x1,P.z-z1).toFixed(3),
+               v_final:+Math.hypot(P.vx,P.vz).toFixed(4)}); } },16); }); },
   /* ══════════ CUANTO SE AVANZA ══════════
      Lo que se mide es |v| EN METROS POR SEGUNDO y la zancada en metros: los
      dos son propiedades de la fisica y no dependen de a cuantos cuadros dibuje
@@ -5589,7 +5716,7 @@ window.__casa={
      metros contra el reloj de pared daria diez veces menos, que es la misma
      trampa que ya costo una medicion en LEMI. */
   marcha(n,correr,empuje){ n=n||150;
-    P.x=-0.65; P.z=5.00; P.yaw=0; P.pitch=0; P.vx=0; P.vz=0; P.sprint=correr?1:0;
+    P.x=-0.65; P.z=5.00; ponVista(0,0); P.vx=0; P.vz=0; P.sprint=correr?1:0;
     const x0=P.x, z0=P.z, p0=_pasosN;
     let vmax=0;
     return new Promise(res=>{ let k=0;
@@ -5652,7 +5779,7 @@ window.__casa={
             aporte_medio_pct:+(100*(con.medio-sin.medio)/Math.max(sin.medio,0.001)).toFixed(1),
             altos_x:+(con.altos/Math.max(sin.altos,0.001)).toFixed(2)};
   },
-  ir(x,z,y,pi){P.x=x;P.z=z;if(y!==undefined)P.yaw=y;if(pi!==undefined)P.pitch=pi;return this.jug();},
+  ir(x,z,y,pi){P.x=x;P.z=z;ponVista(y,pi);return this.jug();},
   dondePapel(i){const p=papers[i||0];return [+p.homePos.x.toFixed(2),+p.homePos.y.toFixed(2),+p.homePos.z.toFixed(2)];},
   /* promedio EN LINEAL del mapa de cada material. three.js multiplica
      map x color, asi que cambiar la imagen sin recalcular el tinte corre el
@@ -5712,7 +5839,7 @@ window.__casa={
   /* gira la vista a lo bestia y devuelve el peor desvio durante el giro */
   girar(vel,n){ vel=vel||3.0; n=n||40; const R=[];
     return new Promise(res=>{ let k=0;
-      const id=setInterval(()=>{ P.yaw+=vel*0.016; P.pitch=Math.sin(k*0.3)*0.5;
+      const id=setInterval(()=>{ P.yawO+=vel*0.016; P.pitO=Math.sin(k*0.3)*0.5;
         const L=this.luz(); R.push(L.desvio_grados);
         if(++k>=n){ clearInterval(id);
           res({muestras:R.length, peor_desvio:+Math.max(...R).toFixed(4),
