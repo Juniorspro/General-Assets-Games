@@ -549,6 +549,24 @@ section[id]{scroll-margin-top:80px}
   border-radius:var(--curva); color:var(--tenue); margin-top:30px}
 .sinEnt b{display:block; font:400 24px/1.1 var(--gordo); text-transform:uppercase; color:var(--papel); margin-bottom:8px}
 .cargandoEnt{padding:40px; text-align:center; color:var(--tenue); margin-top:30px}
+
+/* ============ ARCHIVO QUE VIENE DE INSTAGRAM ============ */
+.igRej{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-top:30px}
+.igPost{position:relative; display:block; border-radius:14px; overflow:hidden; border:1px solid var(--linea);
+  background:var(--humo); aspect-ratio:1; text-decoration:none; transition:transform .25s, border-color .25s}
+.igPost:hover{transform:translateY(-4px); border-color:var(--ac)}
+.igPost img{width:100%; height:100%; object-fit:cover}
+.igPost .tapa{position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end;
+  padding:34px 12px 11px; background:linear-gradient(transparent 42%, rgba(5,4,9,.92));
+  opacity:0; transition:opacity .25s}
+.igPost:hover .tapa{opacity:1}
+.igPost .tapa b{font:700 10.5px/1 var(--cond); letter-spacing:.16em; color:var(--ac)}
+.igPost .tipo{position:absolute; right:10px; top:10px; font-style:normal; padding:4px 8px;
+  border-radius:999px; background:rgba(8,7,12,.8); font:700 9px/1 var(--cond);
+  letter-spacing:.14em; text-transform:uppercase}
+.igPost .pie{margin-top:6px; font-size:12.5px; line-height:1.4; color:var(--papel);
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+@media(hover:none){ .igPost .tapa{opacity:1; background:linear-gradient(transparent 55%, rgba(5,4,9,.9))} }
 /* ============================================================
    VERSIÓN MÓVIL — otra estructura, no el escritorio encogido
    ============================================================ */
@@ -790,8 +808,12 @@ body[data-pg="esteticas"] .waFlota, body[data-pg="reels"] .waFlota{display:none}
 .mEnt .contacto .w{background:var(--ac); color:#09060e}
 .mEnt .contacto .i{border:1px solid var(--linea); color:var(--papel)}
 .mEnt .contacto svg{width:16px; height:16px}
+
+/* ---- archivo de instagram en celular ---- */
+.igRej{grid-template-columns:repeat(2,1fr); gap:7px; margin-top:16px}
 </style>
 <body data-pg="inicio" data-modo="m">
+<style id="colorDest"></style>
 <canvas id="luces" aria-hidden="true"></canvas>
 <div class="velolux" aria-hidden="true"></div>
 <div id="destello" aria-hidden="true"></div>
@@ -824,16 +846,12 @@ body[data-pg="esteticas"] .waFlota, body[data-pg="reels"] .waFlota{display:none}
 </section>
 
 <section class="mbloq">
-  <div class="mcaja"><span class="mrot">La próxima</span></div>
+  <div class="mcaja"><span class="mrot" id="dSub">La próxima</span></div>
   <div class="mfecha">
-    <h3>Elección de Rey y Reina</h3>
-    <div class="dia">19<i>.</i>09<i>.</i>26</div>
-    <ul>
-      <li><b>Lugar</b> Club Juventud, Margarita Belén</li>
-      <li><b>Arranca</b> 22:00 hs</li>
-      <li><b>Cabina</b> DJ Agus Mendoza · set live</li>
-      <li><b>Conduce</b> Maury Abraham</li>
-    </ul>
+    <h3 id="dTitulo">Elección de Rey y Reina</h3>
+    <div class="dia" id="dFecha">19<i>.</i>09<i>.</i>26</div>
+    <p class="baja" id="dDetalle" style="margin:8px 0 0"></p>
+    <div class="datos" id="dChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
     <div class="mreloj" id="reloj" aria-live="polite">
       <div><strong data-r="d">--</strong><small>días</small></div>
       <div><strong data-r="h">--</strong><small>hs</small></div>
@@ -1173,7 +1191,8 @@ function b64buf(t){
   for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
   return u.buffer;
 }
-function mallaDeGLB(buf){
+function mallaDeGLB(buf, opc){
+  opc = opc || {};
   var dv=new DataView(buf),off=12,gl=null,bin=null;
   while(off<dv.byteLength){var L=dv.getUint32(off,true),T=dv.getUint32(off+4,true);
     if(T===0x4E4F534A) gl=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,off+8,L)));
@@ -1210,6 +1229,17 @@ function mallaDeGLB(buf){
   var c3=new THREE.Vector3(); b.getCenter(c3);
   var s=2.2/Math.max(t3.x,t3.y,t3.z);
   g.translate(-c3.x,-c3.y,-c3.z); g.scale(s,s,s);
+  // una pieza plana (un cartel) tiene que mirar a la cámara, no quedar de canto
+  if(opc.plano){
+    if(t3.x < t3.y && t3.x < t3.z) g.rotateY(-Math.PI/2);
+    else if(t3.y < t3.x && t3.y < t3.z) g.rotateX(-Math.PI/2);
+    g.computeBoundingBox();
+    var b2=g.boundingBox, t4=new THREE.Vector3(); b2.getSize(t4);
+    var c4=new THREE.Vector3(); b2.getCenter(c4);
+    g.translate(-c4.x,-c4.y,-c4.z);
+    var s2=2.35/Math.max(t4.x,t4.y);
+    g.scale(s2,s2,s2);
+  }
   var md=(gl.materials||[{}])[pr.material||0]||{}, pbr=md.pbrMetallicRoughness||{};
   var mat=new THREE.MeshStandardMaterial({color:0xffffff,metalness:1,roughness:1,envMapIntensity:1.25,
     map:pbr.baseColorTexture?tex(pbr.baseColorTexture.index,true):null,
@@ -1250,7 +1280,7 @@ function nuevoVisor(cv, glb, opc){
   ren.toneMapping=THREE.ACESFilmicToneMapping; ren.toneMappingExposure=1.1;
   esc=new THREE.Scene(); estudio(ren,esc); luces(esc);
   cam=new THREE.PerspectiveCamera(30,1,.05,60); cam.position.set(0,0,opc.z||5.6);
-  try{ malla=mallaDeGLB(b64buf(glb)); esc.add(malla); }
+  try{ malla=mallaDeGLB(b64buf(glb), opc); esc.add(malla); }
   catch(e){ return null; }
   function medir(){
     var w=cv.clientWidth||300, h=cv.clientHeight||300;
@@ -1270,8 +1300,14 @@ function nuevoVisor(cv, glb, opc){
   (function lazo(){
     if(!vivo) return;
     requestAnimationFrame(lazo);
-    if(!arrastra) giroY+=vel;
-    malla.rotation.y=giroY; malla.rotation.x=giroX;
+    if(opc.vaiven){
+      if(!arrastra) giroY = Math.sin(Date.now()/2600)*0.40;
+      malla.rotation.y=giroY;
+      malla.rotation.x=giroX + Math.sin(Date.now()/3700)*0.06;
+    } else {
+      if(!arrastra) giroY+=vel;
+      malla.rotation.y=giroY; malla.rotation.x=giroX;
+    }
     if(opc.flota) malla.position.y=Math.sin(Date.now()/1400)*.09;
     ren.render(esc,cam);
   })();
@@ -1385,23 +1421,28 @@ setTimeout(pintarFotos,0);
   $("mnums").innerHTML=h;
 })();
 /* ---------------- cuenta regresiva ---------------- */
-(function(){
-  var meta=new Date("2026-09-19T22:00:00-03:00").getTime();
-  var r=$("reloj"), campos={};
-  ["d","h","m","s"].forEach(function(k){ campos[k]=r.querySelector('[data-r="'+k+'"]'); });
-  function tic(){
-    var f=meta-Date.now();
-    if(f<=0){ r.innerHTML='<div style="grid-column:1/-1"><strong>ES HOY</strong><small>nos vemos en el Club Juventud</small></div>'; return; }
-    var s=Math.floor(f/1000);
-    campos.d.textContent=Math.floor(s/86400);
-    campos.h.textContent=String(Math.floor(s%86400/3600)).padStart(2,"0");
-    campos.m.textContent=String(Math.floor(s%3600/60)).padStart(2,"0");
-    campos.s.textContent=String(s%60).padStart(2,"0");
-    setTimeout(tic,1000);
-  }
-  tic();
-})();
-
+var pararReloj = null;
+function arrancarReloj(meta){
+  var r = $("reloj"); if(!r) return;
+  if(pararReloj) { clearTimeout(pararReloj); pararReloj = null; }
+  var campos = {};
+  ["d","h","m","s"].forEach(function(k){ campos[k] = r.querySelector('[data-r="'+k+'"]'); });
+  if(!campos.d) return;
+  (function tic(){
+    var f = meta - Date.now();
+    if(f <= 0){
+      r.innerHTML = '<div style="grid-column:1/-1"><strong>ES HOY</strong><small>nos vemos allá</small></div>';
+      return;
+    }
+    var s = Math.floor(f/1000);
+    campos.d.textContent = Math.floor(s/86400);
+    campos.h.textContent = String(Math.floor(s%86400/3600)).padStart(2,"0");
+    campos.m.textContent = String(Math.floor(s%3600/60)).padStart(2,"0");
+    campos.s.textContent = String(s%60).padStart(2,"0");
+    pararReloj = setTimeout(tic, 1000);
+  })();
+}
+arrancarReloj(new Date("2026-09-19T22:00:00-03:00").getTime());
 
 /* ---------- entradas en venta, salen de la app del dueño ---------- */
 (function(){
@@ -1453,6 +1494,40 @@ setTimeout(pintarFotos,0);
     });
 })();
 
-if(typeof THREE!=="undefined" && MODELOS.bola && $("cvBola")) nuevoVisor($("cvBola"), MODELOS.bola, {vel:0.006, flota:true, z:5.4});
+
+
+/* ---------- la próxima fecha sale de la app ---------- */
+(function(){
+  var col = $("colorDest");
+  fetch("https://iblo-eventos.pages.dev/api/destacado")
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      var d = j.destacado; if(!d) return;
+      var tono = (j.colores||{})[d.color];
+      if(tono){
+        var zona = document.querySelector(".proxima") || document.querySelector(".mfecha");
+        if(zona){ zona.style.setProperty("--ac", tono); zona.style.setProperty("--acs", rgbDe(tono)); }
+      }
+      if($("dTitulo") && d.titulo)   $("dTitulo").textContent = d.titulo;
+      if($("dSub") && d.subtitulo)   $("dSub").textContent = d.subtitulo;
+      if($("dFecha") && d.fecha)     $("dFecha").innerHTML = esc(d.fecha).replace(/\./g,'<i>.</i>');
+      if($("dDetalle") && d.detalle) $("dDetalle").textContent = d.detalle;
+      var chips = [];
+      if(d.lugar) chips.push(["Lugar", d.lugar]);
+      if(d.hora)  chips.push(["Arranca", d.hora]);
+      if($("dChips") && chips.length){
+        var h=""; for(var i=0;i<chips.length;i++)
+          h += '<span class="chip"><b>'+esc(chips[i][0])+'</b> '+esc(chips[i][1])+'</span>';
+        $("dChips").innerHTML = h;
+      }
+      if(d.cuando && window.arrancarReloj) arrancarReloj(d.cuando);
+    })
+    .catch(function(){});
+  function rgbDe(h){
+    h=h.replace("#",""); if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var n=parseInt(h,16); return (n>>16&255)+","+(n>>8&255)+","+(n&255);
+  }
+})();
+
 
 </script>

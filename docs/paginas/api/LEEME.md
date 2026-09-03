@@ -12,6 +12,10 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `DELETE /api/entradas?id=` | Da de baja una publicación. Requiere sesión. |
 | `GET /api/mias` | Todas las publicaciones, incluso las dadas de baja. Requiere sesión. |
 | `POST /api/mejorar` | Reescribe la descripción con Workers AI. Sin sesión. |
+| `GET /api/destacado` | El aviso de la portada, con su color. Sin sesión. |
+| `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
+| `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
+| `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
 
 ## Cómo está atado
 
@@ -30,6 +34,19 @@ Contra la fuerza bruta, la tabla `intentos` guarda los fallos y `login` frena co
 **8 fallos desde una misma IP** o **25 contra el mismo usuario**, en una ventana de 15
 minutos. El tope por usuario es el que importa: no se esquiva cambiando de IP. Al entrar
 bien se borra el historial de esa IP y de ese usuario.
+
+## El archivo de Instagram
+
+`instagram.js` lee `api/v1/feed/user/iblo_eventos/username/` con la cabecera
+`X-IG-App-ID`, la misma vía pública que se usó en el relevamiento. **Sale desde los
+servidores de Cloudflare y funciona** (probado: 200 y 12 items). No hay tarea programada:
+se refresca sola cuando pasaron 2 horas y alguien entra a la página. Guarda hasta 4
+publicaciones nuevas por visita para no pasarse del tiempo de CPU, y conserva las
+últimas 60.
+
+Las imágenes se bajan y se guardan en base64 dentro de D1 (20-40 KB cada una) porque
+**las URLs del CDN de Instagram vencen**; si sólo se guardara el link, el archivo se
+rompería en unos días.
 
 ## Trampas que costaron encontrar
 
