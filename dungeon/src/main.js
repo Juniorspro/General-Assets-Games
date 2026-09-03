@@ -21,6 +21,7 @@ import { precargar } from './carga.js';
 import { cargarMuestras } from './muestras.js';
 import { puente } from './sonido.js';
 import * as MU from './muestras.js';
+import { t, aplicarHTML, setIdioma, idiomaActual, IDIOMAS, alCambiarIdioma } from './idioma.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -1215,7 +1216,7 @@ class Dungeon {
         const lv = levelAt(this.y);
         if (this._lv !== lv) {
             this._lv = lv;
-            document.getElementById('level').textContent = LEVELS[lv].name;
+            document.getElementById('level').textContent = t('level');
         }
         if (this.boostBtn) {
             this.boostBtn.classList.toggle('on', this.boosting);
@@ -1232,9 +1233,9 @@ class Dungeon {
             this.runBtn && this.runBtn.classList.toggle('on', !!this.autoRun);
         }
         const st = document.getElementById('state');
-        const want = this.slideT > 0 ? 'deslizando'
-            : this.crouch ? 'agachado'
-                : this.running ? (this.autoRun ? 'corriendo · automático' : 'corriendo') : '';
+        const want = this.slideT > 0 ? t('sliding')
+            : this.crouch ? t('crouching')
+                : this.running ? (this.autoRun ? t('runningAuto') : t('running')) : '';
         if (this._state !== want) { this._state = want; st.textContent = want }
         const p = document.getElementById('prompt');
         const locked = document.pointerLockElement === this.renderer.domElement;
@@ -1302,30 +1303,38 @@ class Dungeon {
 let game = null;
 const A_MAN = window.DUNGEON_MANIFIESTO || {};
 
+alCambiarIdioma(() => {
+    if (!game) return;
+    game._lv = game._state = game._tarea = game._foco = game._aviso = undefined;
+});
+
 function pintarBarra(p, hecho, total) {
     const b = document.querySelector('#mbarra i');
-    const t = document.getElementById('mcarga-txt');
+    /* `tx` y no `t`: `t` es la funcion de traducir y una constante local con
+       ese nombre la tapa adentro de la funcion. */
+    const tx = document.getElementById('mcarga-txt');
     if (b) b.style.width = (p * 100).toFixed(1) + '%';
-    if (t) t.textContent = total
-        ? `CARGANDO ${(hecho / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`
-        : 'CARGANDO…';
+    if (tx) tx.textContent = total
+        ? t('loadingMb', (hecho / 1e6).toFixed(1), (total / 1e6).toFixed(1))
+        : t('loading');
 }
 
 async function arrancar() {
     const t0 = performance.now();
     const r = await precargar(A, A_MAN, pintarBarra);
-    const t = document.getElementById('mcarga-txt');
+    const tx = document.getElementById('mcarga-txt');
     if (r.corte) {
-        if (t) t.textContent = 'LA RED VA LENTA — SE ENTRA IGUAL';
+        if (tx) tx.textContent = t('slowNet');
     } else if (r.fallados.length) {
         console.warn('no bajaron:', r.fallados.join(', '));
-        if (t) t.textContent = 'FALTARON ' + r.fallados.length + ' ARCHIVOS — SE JUEGA IGUAL';
-    } else if (t) {
-        t.textContent = 'LISTO';
+        if (tx) tx.textContent = t('missing', r.fallados.length);
+    } else if (tx) {
+        tx.textContent = t('ready');
     }
     window.__CARGA = { ms: Math.round(performance.now() - t0), ...r, n: Object.keys(A_MAN).length };
     game = new Dungeon();
     window.__game = game;
+    aplicarHTML();
     armarMenu();
     sonarBotones();
     /* Las muestras se enganchan al sintetizador: cada sonido que tenga
@@ -1422,6 +1431,22 @@ function armarMenu() {
     };
     setTimeout(listo, 300);
     setTimeout(() => { carga.style.opacity = '0' }, 9000);   // por las dudas
+
+    /* EL IDIOMA. Va antes que la calidad porque es lo primero que hay que
+       poder leer: si el menú está en un idioma que no entendés, el selector de
+       gráficos tampoco te sirve. */
+    for (const L of IDIOMAS) {
+        const e = document.getElementById('mlang-' + L.id);
+        if (!e) continue;
+        alTocar(e, () => {
+            setIdioma(L.id);
+            for (const M of IDIOMAS) {
+                const o = document.getElementById('mlang-' + M.id);
+                if (o) o.classList.toggle('sel', M.id === L.id);
+            }
+        });
+        e.classList.toggle('sel', idiomaActual() === L.id);
+    }
 
     /* El mismo selector de calidad que el panel, pero en el menú: elegir
        ANTES de entrar evita el primer minuto a tres cuadros por segundo. */

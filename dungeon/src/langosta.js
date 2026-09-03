@@ -18,6 +18,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { construirBicho } from './bicho.js';
 import { CLIPS } from './animdata.js';
 import * as S from './sonido.js';
+import { t } from './idioma.js';
 
 /* Hasta dónde te sigue sin verte una vez que te cazó. El mapa mide unos
    98 x 79 m, así que 30 m es mucho pero se puede romper. */
@@ -502,14 +503,14 @@ export class Mision {
         if (this.empujando) {
             for (const b of this.baldosas)
                 if (b.id === this.empujando.id && cerca(b.x, b.z))
-                    return { tipo: 'poner', texto: 'DEJARLO EN LA BALDOSA' };
-            return { tipo: 'soltar', texto: 'SOLTAR EL CUBO' };
+                    return { tipo: 'poner', texto: t('focusPlace') };
+            return { tipo: 'soltar', texto: t('focusDrop') };
         }
         for (const c of this.cubos)
             if (!c.puesto && cerca(c.obj.position.x, c.obj.position.z))
-                return { tipo: 'tomar', cubo: c, texto: 'EMPUJAR EL CUBO ' + c.nombre.toUpperCase() };
+                return { tipo: 'tomar', cubo: c, texto: t('focusPush', t(c.nombre)) };
         if (this.soga.visible && !this.tienePinza && cerca(this.sogaPos[0], this.sogaPos[1]))
-            return { tipo: 'pinza', texto: this.pinzaCaida ? 'AGARRAR LA PINZA' : 'TIRAR DE LA SOGA' };
+            return { tipo: 'pinza', texto: this.pinzaCaida ? t('focusGrabPliers') : t('focusPullRope') };
         /* La tarjeta la lleva EL. Solo se la podes sacar por atras: si te esta
            mirando, ni te acercas. El angulo se mide contra su frente. */
         if (!this.tieneTarjeta) {
@@ -520,24 +521,24 @@ export class Mision {
                 // su frente es (-sin yaw, -cos yaw), como la camara
                 const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
                 const cos = (fx * dx + fz * dz) / (d || 1);
-                if (cos < -0.20) return { tipo: 'tarjeta', texto: 'SACARLE LA TARJETA' };
-                return { tipo: 'nada', texto: 'TE ESTÁ MIRANDO' };
+                if (cos < -0.20) return { tipo: 'tarjeta', texto: t('focusTakeCard') };
+                return { tipo: 'nada', texto: t('focusWatching') };
             }
         }
         if (!this.tieneLlave && this.revisables)
             for (const m of this.revisables)
                 if (!this.revisados.has(m) && cerca(m.x, m.z))
-                    return { tipo: 'revisar', mueble: m, texto: 'REVISAR EL ' + m.nombre.toUpperCase() };
+                    return { tipo: 'revisar', mueble: m, texto: t('focusSearch', t(m.nombre)) };
         if (cerca(this.salida.x, this.salida.z)) {
             /* La puerta tiene TRES cerraduras, como en el juego: el cableado se
                corta con la pinza, el lector quiere la tarjeta y la cerradura la
                llave. Recien ahi sube. */
             if (!this.cortado) return this.tienePinza
-                ? { tipo: 'cortar', texto: 'CORTAR EL CABLEADO' }
-                : { tipo: 'nada', texto: 'HACE FALTA LA PINZA' };
-            if (!this.tieneTarjeta) return { tipo: 'nada', texto: 'FALTA LA TARJETA — LA TIENE ÉL' };
-            if (!this.tieneLlave) return { tipo: 'nada', texto: 'FALTA LA LLAVE' };
-            return { tipo: 'salir', texto: 'ABRIR LA PUERTA' };
+                ? { tipo: 'cortar', texto: t('focusCut') }
+                : { tipo: 'nada', texto: t('focusNeedPliers') };
+            if (!this.tieneTarjeta) return { tipo: 'nada', texto: t('focusNeedCard') };
+            if (!this.tieneLlave) return { tipo: 'nada', texto: t('focusNeedKey') };
+            return { tipo: 'salir', texto: t('focusOpen') };
         }
         return null;
     }
@@ -551,7 +552,7 @@ export class Mision {
                parte que duele. */
             this.empujando = o.cubo;
             S.click(0.3);
-            this.decir('empujando el cubo ' + o.cubo.nombre + ' — de a uno');
+            this.decir(t('sayPushing', t(o.cubo.nombre)));
         } else if (o.tipo === 'soltar') {
             this.empujando = null;
             S.click(0.2);
@@ -566,9 +567,9 @@ export class Mision {
             this.puestos++;
             if (this.puestos === 3) {
                 this.soga.visible = true;
-                this.decir('los tres puestos — se abrió la trampilla del techo');
+                this.decir(t('sayAllPlaced'));
             } else {
-                this.decir('van ' + this.puestos + ' de 3');
+                this.decir(t('sayProgress', this.puestos));
             }
         } else if (o.tipo === 'pinza') {
             if (!this.pinzaCaida) {
@@ -578,27 +579,27 @@ export class Mision {
                 this.pinzaCaida = true;
                 this.pinzaObj.position.y = this.base + 0.07;
                 S.click(0.5);
-                this.decir('cayó la pinza');
+                this.decir(t('sayPliersFell'));
             } else {
                 this.tienePinza = true;
                 this.pinzaObj.visible = false;
                 S.click(0.3);
-                this.decir('pinza');
+                this.decir(t('sayPliers'));
             }
         } else if (o.tipo === 'revisar') {
             S.cajon();
             this.revisados.add(o.mueble);
-            if (o.mueble === this.conLlave) { this.tieneLlave = true; this.decir('¡la llave!') }
-            else this.decir('nada acá');
+            if (o.mueble === this.conLlave) { this.tieneLlave = true; this.decir(t('sayKey')) }
+            else this.decir(t('sayNothing'));
         } else if (o.tipo === 'cortar') {
             this.cortado = true;
             S.click(0.4);
-            this.decir('cableado cortado — falta la tarjeta y la llave');
+            this.decir(t('sayCut'));
         } else if (o.tipo === 'tarjeta') {
             this.tieneTarjeta = true;
             if (this.tarjetaObj) this.tarjetaObj.visible = false;
             S.click(0.35);
-            this.decir('¡la tarjeta!');
+            this.decir(t('sayCard'));
             // sacarsela lo despierta, obviamente
             this.bicho.estado = 'caza'; this.bicho.alerta = 1;
             this.bicho.ultimo = [x, z];
@@ -648,7 +649,7 @@ export class Mision {
            igual que el aviso de veinte segundos antes. */
         S.screamer();
         S.golpe();
-        this.decir('te agarró');
+        this.decir(t('sayCaught'));
     }
 
     /* Se llama todos los cuadros mientras dura. Devuelve true si sigue. */
@@ -961,12 +962,12 @@ export class Mision {
 
     /* Lo que muestra el HUD: la lista de pendientes, en orden. */
     tareas() {
-        if (this.terminado === 'escapo') return ['ESCAPASTE'];
-        if (this.puestos < 3) return ['empujá los cubos a su baldosa: ' + this.puestos + '/3'];
-        if (!this.tienePinza) return ['la pinza, en la trampilla del techo'];
-        if (!this.tieneLlave) return ['la llave está en un mueble — revisalos'];
-        if (!this.cortado) return ['cortá el cableado de la puerta'];
-        if (!this.tieneTarjeta) return ['la tarjeta la lleva ÉL — por atrás'];
-        return ['a la puerta'];
+        if (this.terminado === 'escapo') return [t('taskEscaped')];
+        if (this.puestos < 3) return [t('taskCubes', this.puestos)];
+        if (!this.tienePinza) return [t('taskPliers')];
+        if (!this.tieneLlave) return [t('taskKey')];
+        if (!this.cortado) return [t('taskCut')];
+        if (!this.tieneTarjeta) return [t('taskCard')];
+        return [t('taskDoor')];
     }
 }

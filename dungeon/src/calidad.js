@@ -16,6 +16,8 @@
    La eleccion se guarda en el navegador. Y arranca en medio y no en alto: mas
    vale que el primer minuto vaya fluido y que suba el que quiera. */
 
+import { t } from './idioma.js';
+
 export const NIVELES = {
     bajo: {
         nombre: 'Bajo', pix: 0.6, sombras: false, mapa: 512, faroles: 0, luces: 5,
@@ -150,7 +152,7 @@ export class Calidad {
         if (!d) return;
         const N = NIVELES[this.nivel];
         const pr = Math.min(N.pix, devicePixelRatio || 1);
-        d.textContent = 'resolución ×' + pr.toFixed(2)
+        d.textContent = t('resolution', pr.toFixed(2))
             + ' · sombras ' + (N.sombras ? N.mapa : 'no')
             + ' · faroles que proyectan ' + N.faroles;
     }
