@@ -12,9 +12,21 @@ Se despliega subiendo la carpeta ya armada, sin build:
 
 ```sh
 export CLOUDFLARE_API_TOKEN=...        # token de cuenta, NUNCA al repo
-export CLOUDFLARE_ACCOUNT_ID=65d82a1d3c6b280cf892511df2900a99
-npx wrangler pages deploy <carpeta> --project-name=iblo-eventos --branch=main --commit-dirty=true
+./armar-sitio.sh                       # arma sitio/ desde docs/paginas/
+cd sitio && npx wrangler pages deploy . --project-name=iblo-eventos --branch=main --commit-dirty=true
 ```
+
+**Usá el script, no copies la carpeta a mano.** Tiene tres pasos que no se
+adivinan y que ya se perdieron una vez, con la portada del sitio rota como
+resultado:
+
+- `docs/paginas/index.html` es el índice del **repo**, no la portada. Copiado tal
+  cual, `iblo-eventos.pages.dev` muestra «Páginas del repo» en vez del sitio. La
+  portada es `iblo.html`, que además detecta sola si el que entra está en teléfono
+  y lo manda a `/m/iblo`.
+- La API va en `functions/api/`, no en `api/`.
+- `wrangler` compila las funciones sólo si se lo corre **parado adentro** de la
+  carpeta. Si no dice «Compiled Worker successfully», la API contesta 405.
 
 El token necesita la política **Account → Cloudflare Pages → Edit**. Con sólo *Read*
 la creación del proyecto devuelve `Authentication error` (código 10000), que
