@@ -1,0 +1,3501 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>CASTILLO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#07070b;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:#f2eee6;user-select:none;-webkit-user-select:none;touch-action:none}
+
+/* ══════════ EL MARCO ES VERTICAL Y NO SE GIRA ══════════
+   Al revés de los juegos 3D de este repo, que se dibujan apaisados adentro de un
+   teléfono vertical. Un casual se juega con el teléfono como uno lo tiene y un
+   solo pulgar: girarlo sería pedirle al jugador que cambie de postura.
+   El lienzo se dibuja con el ANCHO clavado en 720 y el alto según la forma de
+   la pantalla —lo calcula `medir()`— así que el marco la llena entera y una
+   ficha de 40 px mide lo mismo en un teléfono de 360 y en uno de 1440. */
+#caja{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  overflow:hidden;background:#000;--ac:#f2eee6}
+canvas{display:block;width:100%;height:100%}
+/* ══════════ EL TELON DEL MENU ══════════
+   En el menu el lienzo no dibuja nada, asi que sin esto el menu es un panel
+   gris sobre negro — o sea la pantalla de opciones de cualquier cosa. Es el
+   MISMO fondo generado que usa la partida, asi que el menu y el juego se ven
+   del mismo sitio, y va en DOM y no en el lienzo porque no hay que redibujarlo
+   sesenta veces por segundo para que quede quieto.
+   ── Y NO RECIBE TOQUES, QUE ES LO QUE ROMPIO EL JUEGO UNA VEZ ──
+   Un elemento con `opacity:0` SIGUE RECIBIENDO el dedo. Medido con
+   `elementFromPoint` en el medio de la pantalla y en partida: lo que estaba
+   debajo del dedo era `tela` y no el lienzo, o sea que NINGUN toque llegaba al
+   juego. Y no lo vio ninguna sonda, porque las sondas llaman a `JUEGO.baja`
+   directo y se saltean todo el camino entre el dedo y el juego. */
+#tela{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;
+  transition:opacity .6s;z-index:1;pointer-events:none}
+#tela.on{opacity:1}
+
+/* ══════════ LO QUE VA EN DOM Y LO QUE VA EN EL LIENZO ══════════
+   En el lienzo: el juego y las cinemáticas. En DOM: sólo el texto que hay que
+   TRADUCIR y que tiene que quedar nítido en cualquier densidad de pantalla.
+   Un texto dibujado en un lienzo de 720 se ve borroso en un teléfono de 1440, y
+   el nombre del juego es justo lo que se mira primero. */
+.pan{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:2.6vh;padding:6vw;text-align:center;z-index:5;
+  background:linear-gradient(180deg,rgba(7,7,11,.34) 0%,rgba(7,7,11,.74) 44%,
+    rgba(7,7,11,.93) 100%)}
+.pan.on{display:flex}
+/* ── EL TAMAÑO DEL TÍTULO SALE DEL LARGO DEL NOMBRE ──
+   Con 11vw clavado, un nombre de diez letras —con un cuarto de em de espaciado
+   entre cada una— mide mas que el marco y sale CORTADO por los dos lados.
+   `--h1` lo calcula el arranque a partir de la cantidad de letras, así que el
+   próximo nombre largo entra solo. */
+.pan h1{font-size:clamp(26px,var(--h1,11vw),64px);letter-spacing:.26em;font-weight:800;
+  text-indent:.26em;line-height:1;
+  text-shadow:0 0 30px var(--ac),0 4px 22px #000}
+.em{width:clamp(90px,27vw,158px);height:auto;margin-bottom:-1.4vh;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.75))}
+.em[hidden]{display:none}
+#pFin h1{font-size:clamp(24px,7.5vw,42px);letter-spacing:.16em;text-indent:.16em}
+.pan p{font-size:clamp(12px,3.4vw,17px);line-height:1.6;opacity:.62;max-width:24em}
+.fila{display:flex;gap:2.6vw;flex-wrap:wrap;justify-content:center}
+.bt{appearance:none;border:1px solid rgba(255,255,255,.20);background:rgba(255,255,255,.05);
+  color:inherit;font:inherit;font-size:clamp(12px,3.5vw,16px);font-weight:700;
+  letter-spacing:.16em;padding:1.5vh 5.5vw;border-radius:999px;cursor:pointer}
+.bt.p{background:var(--ac);color:#0b0b10;border-color:var(--ac)}
+.bt:disabled{opacity:.34}
+.bt.ch{padding:.9vh 3.4vw;font-size:11px;letter-spacing:.12em}
+
+/* ══════════ EL SELECTOR DE NIVELES ══════════
+   Los tres juegos de niveles necesitan una reja con el progreso: qué está
+   abierto, cuántas estrellas dio cada uno. Y tiene que poder DESLIZARSE, porque
+   son doscientos niveles y en un teléfono entran veinte por pantalla.
+   `justify-content:flex-start` a propósito: centrado, con la reja más alta que
+   el marco, el navegador recorta por ARRIBA y las primeras filas quedan
+   inalcanzables — un defecto clásico de flex con overflow. */
+#pNiveles{justify-content:flex-start;padding-top:4vh;gap:1.8vh}
+#rejaN{display:grid;grid-template-columns:repeat(5,1fr);gap:2.2vw;width:100%;
+  max-width:520px;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;padding:1vh .5vw 3vh}
+.nv{position:relative;aspect-ratio:1;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.05);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;cursor:pointer;
+  font-weight:800;font-size:clamp(13px,4vw,19px);color:inherit;font-family:inherit}
+.nv.hecho{border-color:var(--ac);background:rgba(255,255,255,.10)}
+.nv.trabado{opacity:.26;cursor:default}
+.nv .es{font-size:9px;letter-spacing:.08em;color:#ffd76a;line-height:1;height:9px}
+#tituN{font-size:clamp(15px,4.6vw,22px);letter-spacing:.2em;font-weight:800}
+
+/* ══════════ EL HUD ══════════
+   Arriba el número grande —los puntos en los de puntaje, el nivel en los de
+   niveles— y debajo su rótulo. A los costados, dos fichas chicas para lo que
+   cambia dentro del nivel (movimientos, burbujas que quedan). */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;z-index:4}
+#hud.on{opacity:1}
+#marca{position:absolute;top:2.2vh;left:0;right:0;text-align:center;
+  font-size:clamp(28px,9.4vw,54px);font-weight:800;letter-spacing:.04em;
+  text-shadow:0 3px 18px rgba(0,0,0,.75)}
+#sub{position:absolute;top:calc(2.2vh + 10.6vw);left:0;right:0;text-align:center;
+  font-size:clamp(10px,3vw,14px);letter-spacing:.28em;opacity:.55}
+.fic{position:absolute;top:2.4vh;font-size:clamp(10px,3vw,14px);letter-spacing:.14em;
+  font-weight:700;opacity:.72;padding:.7vh 3vw;border-radius:999px;
+  background:rgba(7,7,11,.5);border:1px solid rgba(255,255,255,.12)}
+#ficI{left:3.5vw}
+#ficD{right:3.5vw}
+.fic[hidden]{display:none}
+/* ── LA FICHA DEL MULTIPLICADOR ──
+   Debajo del marcador y con su propia barrita: la barra es la ventana de la
+   racha, o sea el tiempo que queda para que el próximo acierto la sostenga. Sin
+   la barra, la racha se corta sola y el jugador no sabe por qué. */
+#combo{position:absolute;top:calc(2.2vh + 15vw);left:0;right:0;text-align:center;
+  font-size:clamp(18px,6vw,34px);font-weight:800;letter-spacing:.06em;
+  color:#ffd76a;text-shadow:0 0 18px rgba(255,215,106,.6),0 3px 12px #000;
+  opacity:0;transform:scale(.7);transition:opacity .18s,transform .18s}
+#combo.on{opacity:1;transform:scale(1)}
+#comboV{position:absolute;top:calc(2.2vh + 22vw);left:38%;right:38%;height:4px;
+  background:rgba(255,255,255,.10);border-radius:3px;overflow:hidden;
+  opacity:0;transition:opacity .18s}
+#combo.on ~ #comboV{opacity:.8}
+#comboB{height:100%;width:0;background:#ffd76a}
+#reloj{position:absolute;left:12%;right:12%;bottom:3.2vh;height:6px;
+  background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
+/* ── Y SUBE CUANDO HAY FILA DE BOTONES ──
+   Medido con `cajas()` en BURBUJAS: el reloj caia en y 857 y la fila de botones
+   ocupaba de 840 a 871, o sea la barra dibujada por ENCIMA de DESHACER. Los dos
+   viven anclados abajo y ninguno sabia del otro. */
+body.conAcc #reloj{bottom:9.6vh}
+#relojB{height:100%;width:100%;background:#f2eee6}
+#relojB.poco{background:#e0553f}
+/* ══════════ LOS BOTONES DE PARTIDA ══════════
+   DESHACER y REINICIAR sólo existen en los juegos de niveles, y son la mitad de
+   lo que hace que un rompecabezas se pueda jugar: sin deshacer, un movimiento
+   mal pensado cuesta el nivel entero y el jugador cierra el juego. Van con
+   `pointer-events:auto` porque el HUD entero está en `none` — si no, el botón
+   se ve y no se puede tocar, que es exactamente el defecto que ya costó una
+   vuelta con el telón. */
+#acc{position:absolute;left:0;right:0;bottom:2.4vh;display:flex;gap:3vw;
+  justify-content:center;pointer-events:auto}
+#acc[hidden]{display:none}
+#acc .bt{background:rgba(7,7,11,.62)}
+/* ── Y NO RECIBEN EL DEDO CON EL HUD APAGADO ──
+   `#hud` va a `opacity:0` entre partidas, y un elemento invisible SIGUE
+   RECIBIENDO toques: con `pointer-events:auto` clavado, los tres botones se
+   quedarían comiendo el dedo por encima del menú. Es exactamente el defecto que
+   ya dejó un juego sin poder empezar, y ahí lo causaba el telón. */
+#hud:not(.on) #acc{pointer-events:none}
+
+/* el pie de la cinemática: el único texto de una cinemática, y va en DOM por lo
+   mismo que el título — hay que poder traducirlo y tiene que leerse */
+#cine{position:absolute;left:8%;right:8%;bottom:9vh;text-align:center;z-index:5;
+  font-size:clamp(13px,3.8vw,19px);line-height:1.5;opacity:0;transition:opacity .5s;
+  text-shadow:0 2px 16px #000;pointer-events:none}
+#cine.on{opacity:.96}
+#salta{position:absolute;right:4vw;top:3vh;z-index:6;font-size:11px;letter-spacing:.2em;
+  opacity:0;transition:opacity .4s;pointer-events:none}
+#salta.on{opacity:.4}
+
+#estr{font-size:clamp(22px,7vw,38px);letter-spacing:.18em;color:#ffd76a;
+  text-shadow:0 0 20px rgba(255,215,106,.55)}
+#estr[hidden]{display:none}
+
+/* ══════════ EL VIDEO DE LA CAMARA ══════════
+   Dos pixeles y transparente, NO `display:none`. Un video que el compositor
+   considera que no se dibuja puede DEJAR DE ENTREGAR CUADROS, y sin cuadros no
+   hay deteccion: es la leccion de RECREO, donde esconderlo dejaba el juego sin
+   manos sin un solo error en la consola. */
+#camVid{position:absolute;left:0;top:0;width:2px;height:2px;opacity:0;
+  pointer-events:none;z-index:0}
+/* la linea de estado del sensor: permanente y en el MENU, no un aviso de dos
+   segundos dentro de la partida. Un aviso de dos segundos en una pantalla que
+   no se esta mirando no es un aviso — y el motivo por el que el sensor no anda
+   es justamente lo que el jugador necesita saber antes de empezar. */
+#sensor{font-size:clamp(10px,2.9vw,13px);letter-spacing:.14em;opacity:.62;
+  line-height:1.5;max-width:22em}
+#sensor.mal{color:#ffc98a;opacity:.85}
+#sensor[hidden]{display:none}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7}
+#velo{position:absolute;inset:0;background:#07070b;opacity:0;pointer-events:none;
+  z-index:6;transition:opacity .45s}
+#velo.on{opacity:1}
+</style></head><body>
+<div id="caja">
+  <canvas id="c"></canvas>
+  <video id="camVid" playsinline muted autoplay></video>
+  <div id="tela"></div>
+  <div id="hud">
+    <div id="marca">0</div>
+    <div id="sub"></div>
+    <div class="fic" id="ficI" hidden></div>
+    <div class="fic" id="ficD" hidden></div>
+    <div id="combo"></div>
+    <div id="comboV"><div id="comboB"></div></div>
+    <div id="reloj"><div id="relojB"></div></div>
+    <div id="acc" hidden>
+      <button class="bt ch" id="bDes" data-i18n="deshacer"></button>
+      <button class="bt ch" id="bRei" data-i18n="reiniciar"></button>
+      <button class="bt ch" id="bSal" data-i18n="salir"></button>
+    </div>
+  </div>
+  <div id="cine"></div>
+  <div id="salta"></div>
+  <div id="velo"></div>
+  <div id="flash"></div>
+
+  <div class="pan on" id="pIdioma">
+    <img class="em" id="emI" alt="" hidden>
+    <h1>CASTILLO</h1>
+    <div class="fila">
+      <button class="bt p" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <img class="em" id="emM" alt="" hidden>
+    <h1>CASTILLO</h1>
+    <p data-i18n="sub"></p>
+    <div class="fila">
+      <button class="bt p" id="bJugar" data-i18n="jugar"></button>
+      <button class="bt" id="bComo" data-i18n="como"></button>
+    </div>
+    <p id="sensor" hidden></p>
+    <p id="mejor" style="opacity:.42;letter-spacing:.2em;font-size:12px"></p>
+    <div class="fila" style="gap:1.8vw">
+      <button class="bt ch" data-lang="es">ES</button>
+      <button class="bt ch" data-lang="en">EN</button>
+      <button class="bt ch" data-lang="pt">PT</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pNiveles">
+    <div id="tituN" data-i18n="niveles"></div>
+    <div id="rejaN"></div>
+    <div class="fila"><button class="bt ch" id="bNMenu" data-i18n="menu"></button></div>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h1 id="finT"></h1>
+    <div id="estr" hidden></div>
+    <p id="finP"></p>
+    <div class="fila">
+      <button class="bt p" id="bOtra" data-i18n="otra"></button>
+      <button class="bt" id="bMenu" data-i18n="menu"></button>
+    </div>
+  </div>
+</div>
+<script type="importmap">{"imports":{}}</script>
+<script type="module">
+/* ══════════════════════ EL MARCO Y EL RELOJ ══════════════════════ */
+const $ = (i) => document.getElementById(i);
+
+/* ── EL ANCHO DE DISEÑO ES FIJO Y EL ALTO NO ──
+   Todo lo que un juego escribe —una posición, un radio, un tamaño de letra—
+   está en unidades de diseño con el ancho clavado en 720, así que una moneda de
+   40 px mide lo mismo en un teléfono de 360 y en uno de 1440. Eso es lo que
+   evita el defecto que aparece sólo en un tamaño de pantalla y que nadie puede
+   reproducir.
+
+   PERO EL ALTO NO PUEDE SER FIJO, y eso se vio en la primera captura: con
+   720×1280 clavado —9:16, la relación de un teléfono de 2016— en un teléfono de
+   hoy (412×892, o sea 0,46) el marco entraba por el ancho y quedaban DOS BANDAS
+   NEGRAS arriba y abajo. Un minijuego que se abre adentro de TikTok tiene que
+   ocupar la pantalla entera; una banda negra se lee a que el juego está roto.
+   Así que el alto se calcula de la pantalla y los juegos lo leen: lo que se
+   ancla abajo se escribe como `AL - algo`, no como un número. Se topa arriba y
+   abajo para que una ventana de escritorio muy ancha o muy alta no deforme el
+   diseño — ahí sí quedan bandas, y ahí sí corresponde. */
+const AN = 720;
+let AL = 1280;
+const AL_MIN = 1100, AL_MAX = 1760;
+
+const lienzo = $('c');
+const g = lienzo.getContext('2d');
+const caja = $('caja');
+let ESC = 1, DPR = 1;
+
+function medir(){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  /* el alto de diseño sale de la forma de la pantalla, así que el marco la llena
+     entera y no hay bandas */
+  let e = vw / AN;
+  AL = Math.round(vh / e);
+  if (AL < AL_MIN){ AL = AL_MIN; e = vh / AL; }
+  else if (AL > AL_MAX){ AL = AL_MAX; e = vh / AL; }
+  const w = Math.round(AN * e), h = Math.round(AL * e);
+  caja.style.width = w + 'px'; caja.style.height = h + 'px';
+  /* ── EL PIXEL RATIO VA TOPADO EN 2, Y ESO ESTÁ MEDIDO EN OTRO JUEGO ──
+     En Maicol se midió que dibujar al doble de la resolución de diseño costaba
+     la mitad de los cuadros y no compraba ni un detalle, porque no hay más
+     detalle que dar: los dibujos están hechos para 720 de ancho. Con 2 el texto
+     y los bordes quedan finos y no se paga un tercer múltiplo. */
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  lienzo.width = Math.round(w * DPR);
+  lienzo.height = Math.round(h * DPR);
+  ESC = (w * DPR) / AN;
+  g.setTransform(ESC, 0, 0, ESC, 0, 0);
+  g.imageSmoothingEnabled = true;
+}
+addEventListener('resize', () => setTimeout(medir, 60));
+addEventListener('orientationchange', () => setTimeout(medir, 120));
+
+/* ── EL RELOJ: PASO FIJO DE 60 CON TOPE ──
+   Un minijuego que se juega por reflejos NO PUEDE depender de los cuadros por
+   segundo del aparato: si la moneda cae más rápido en un teléfono lento, es
+   otro juego. La simulación va a 60 pasos fijos y el dibujo sale de donde
+   quedó. Y el `dt` se topa en un cuarto de segundo, porque una pestaña que
+   estuvo dormida no puede simular un minuto de golpe. */
+const PASO = 1/60;
+let _acum = 0, _ultimo = performance.now();
+let MODO = 'idioma';      /* idioma · menu · como · cine · juega · fin */
+let PAUSA = false, CONGELADO = false;
+let fps = 0, _cuadros = 0, _acumF = 0;
+
+/* la entrada: un solo verbo. Llega normalizada a las unidades de diseño, así
+   que un juego nunca ve un píxel de pantalla. */
+const TOQUE = { x: 0, y: 0, abajo: false, movido: false, n: 0 };
+function aDiseno(ev){
+  const r = lienzo.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  return { x: (t.clientX - r.left) / r.width * AN,
+           y: (t.clientY - r.top) / r.height * AL };
+}
+/* ── EL `preventDefault` DE UN `touchstart` CANCELA EL CLICK, Y ESO DEJABA EL
+       JUEGO SIN PODER EMPEZAR ──
+   Los cuatro escuchas estaban colgados de la VENTANA, así que un toque en el
+   botón JUGAR o en el de idioma pasaba primero por acá, llegaba a
+   `preventDefault()` —el juego consume el toque— y el navegador entonces NO
+   sintetiza el `click`. En el banco no se veía: Playwright despacha un click de
+   ratón de verdad y ese camino no pasa por el táctil. En un teléfono, tocar
+   JUGAR no hacía absolutamente nada.
+
+   Ahora la entrada del juego cuelga del LIENZO. Los paneles viven por encima
+   (`z-index 5`), así que mientras hay un panel abierto el lienzo no recibe nada
+   y los botones son botones; en partida no hay panel y el lienzo recibe todo.
+   `touchend`/`mouseup` siguen en la ventana a propósito: un arrastre que
+   termina afuera del marco tiene que soltar igual. */
+function baja(ev){
+  const p = aDiseno(ev);
+  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.abajo = true; TOQUE.movido = false; TOQUE.n++;
+  if (MODO === 'cine'){ cineSalta(); return; }
+  if (MODO === 'juega' && JUEGO.baja) JUEGO.baja(p.x, p.y);
+  if (ev.cancelable) ev.preventDefault();
+}
+function mueve(ev){
+  const p = aDiseno(ev);
+  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.movido = true;
+  if (MODO === 'juega' && TOQUE.abajo && JUEGO.mueve) JUEGO.mueve(p.x, p.y);
+  if (ev.cancelable) ev.preventDefault();
+}
+function sube(){
+  if (MODO === 'juega' && JUEGO.sube) JUEGO.sube(TOQUE.x, TOQUE.y);
+  TOQUE.abajo = false;
+}
+lienzo.addEventListener('touchstart', baja, { passive: false });
+lienzo.addEventListener('touchmove', mueve, { passive: false });
+addEventListener('touchend', sube, { passive: true });
+addEventListener('touchcancel', sube, { passive: true });
+lienzo.addEventListener('mousedown', baja);
+addEventListener('mousemove', (e) => { if (TOQUE.abajo) mueve(e); });
+addEventListener('mouseup', sube);
+/* la barra espaciadora hace de toque EN EL MEDIO del marco: es lo que permite
+   probarlo en una notebook sin fingir un táctil. Y va con las coordenadas de
+   diseño y no con las del evento, porque un `keydown` no trae ninguna — con
+   `clientX` en cero el toque caía en el borde izquierdo, que en un juego de
+   tocar la mitad es una respuesta equivocada. */
+function toqueMedio(){
+  if (MODO === 'cine'){ cineSalta(); return; }
+  TOQUE.x = AN/2; TOQUE.y = AL/2; TOQUE.abajo = true;
+  if (MODO === 'juega' && JUEGO.baja) JUEGO.baja(AN/2, AL/2);
+  if (MODO === 'juega' && JUEGO.sube) JUEGO.sube(AN/2, AL/2);
+  TOQUE.abajo = false;
+}
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'Enter') toqueMedio();
+});
+/* ══════════════════════ EL GIROSCOPIO Y LA SACUDIDA ══════════════════════
+   Dos cosas distintas que salen del mismo aparato: cuanto esta INCLINADO el
+   telefono (`deviceorientation`) y cuando lo SACUDEN (`devicemotion`). La
+   primera es una posicion y la segunda un acontecimiento, y por eso se leen de
+   dos eventos y no de uno.
+
+   ── POR QUE NO SE USA LA CAMARA PARA ESTO ──
+   Es la leccion de BARRIO: para saber para donde esta mirando el jugador, lo
+   obvio seria detectar la cara. Y no hace falta — el telefono YA sabe como esta
+   orientado, sin camara, sin modelo y sin un milisegundo de deteccion. La
+   orientacion del aparato ES la postura del jugador, porque el aparato lo tiene
+   en la mano.
+
+   ── LAS CINCO COSAS QUE HAY QUE HACER BIEN, Y CADA UNA COSTO UNA VUELTA ──
+   1. EL PERMISO DE iOS. Desde iOS 13, `deviceorientation` no dispara hasta que
+      `DeviceOrientationEvent.requestPermission()` se llama DENTRO de un gesto
+      del usuario. Llamado en el arranque, la promesa se rechaza y el juego se
+      queda sin sensor sin decir por que.
+   2. EL CERO ES LA POSTURA EN LA QUE SE EMPEZO. Nadie juega con el telefono
+      perfectamente vertical: con un cero absoluto, el juego arranca inclinado.
+   3. ZONA MUERTA. Una mano nunca esta quieta, y sin zona muerta el mundo
+      tiembla despacio todo el tiempo. 1,6 grados, que es lo que se midio en
+      BARRIO.
+   4. LA VUELTA CORTA. `beta` y `gamma` dan la vuelta: cruzando de 179 a -179 la
+      diferencia cruda son 358 grados y el mundo pega media vuelta.
+   5. LA SACUDIDA SE MIDE EN EL CAMBIO Y NO EN LA MAGNITUD. La gravedad ya son
+      9,8: mirando el modulo de la aceleracion, el telefono quieto parece estar
+      sacudiendose siempre. Lo que distingue una sacudida es que el vector
+      CAMBIE rapido. */
+
+const GIRO = {
+  estado: 'no',        /* no · pidiendo · lista · negado · sin · insegura */
+  on: false,
+  x: 0, y: 0,          /* la inclinacion, de -1 a 1, ya con cero y zona muerta */
+  crudo: { b: 0, g: 0, a: 0 },
+  cero: { b: 0, g: 0, a: 0 },
+  hayCero: false,
+  n: 0,                /* eventos recibidos: distingue «no hay sensor» de «no llego ninguno» */
+  sac: 0,              /* fuerza de la ultima sacudida, decae */
+  sacN: 0,
+  sacPico: 0,
+  _sacFrio: 0,
+  _ult: null,
+  /* ── LO QUE CADA JUEGO AJUSTA ──
+     `rango` son los grados de inclinacion que valen 1: un laberinto quiere poco
+     (se juega con muñeca) y una camara quiere mas. `recentra` es la constante de
+     tiempo con la que el cero persigue la postura actual — un juego de mirar la
+     quiere para que dejar el telefono torcido no te deje mirando al techo, y un
+     laberinto NO la quiere, porque ahi el cero es el nivel del piso. */
+  rango: 30,
+  recentra: 0,
+  zona: 1.6
+};
+const GIRO_SAC_UMB = 22;      /* m/s^2 de CAMBIO para que cuente como sacudida */
+const GIRO_SAC_FRIO = 0.42;   /* segundos entre dos sacudidas */
+
+/* la vuelta corta: la diferencia entre dos angulos, siempre en (-180, 180] */
+function giroDelta(a, b){
+  let d = a - b;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+
+function giroEvento(e){
+  if (e.beta == null && e.gamma == null) return;   /* el evento existe y viene vacio */
+  GIRO.n++;
+  GIRO.crudo.b = e.beta || 0;
+  GIRO.crudo.g = e.gamma || 0;
+  GIRO.crudo.a = e.alpha || 0;
+  if (!GIRO.hayCero) giroCero();
+  GIRO.on = true;
+  giroCalcula();
+}
+function giroCero(){
+  GIRO.cero.b = GIRO.crudo.b; GIRO.cero.g = GIRO.crudo.g; GIRO.cero.a = GIRO.crudo.a;
+  GIRO.hayCero = true;
+}
+function giroCalcula(){
+  /* en vertical, `gamma` es inclinar de costado y `beta` adelante y atras */
+  const dg = giroDelta(GIRO.crudo.g, GIRO.cero.g);
+  const db = giroDelta(GIRO.crudo.b, GIRO.cero.b);
+  const z = GIRO.zona;
+  const ap = (d) => {
+    const s = Math.sign(d), m = Math.abs(d);
+    if (m <= z) return 0;
+    return Math.max(-1, Math.min(1, s*(m - z)/GIRO.rango));
+  };
+  GIRO.x = ap(dg);
+  GIRO.y = ap(db);
+}
+
+/* ── LA SACUDIDA ──
+   Se mira el CAMBIO del vector de aceleracion entre dos eventos. Y con
+   `accelerationIncludingGravity`, que es la que existe en todos los aparatos —
+   `acceleration` sin gravedad la informa solo una parte de ellos, y la
+   diferencia entre dos lecturas ya le quita la gravedad, porque la gravedad no
+   cambia. */
+function giroMocion(e){
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if (!a || a.x == null) return;
+  const p = GIRO._ult;
+  GIRO._ult = { x: a.x, y: a.y, z: a.z };
+  if (!p) return;
+  const d = Math.hypot(a.x - p.x, a.y - p.y, a.z - p.z);
+  GIRO.sacPico = Math.max(GIRO.sacPico, d);
+  if (d > GIRO_SAC_UMB && GIRO._sacFrio <= 0){
+    GIRO._sacFrio = GIRO_SAC_FRIO;
+    giroSacudida(Math.min(1, (d - GIRO_SAC_UMB)/34 + 0.35));
+  }
+}
+/* quien quiera enterarse se cuelga de acá: el juego pone `GIRO.alSacudir` */
+function giroSacudida(k){
+  GIRO.sac = Math.max(GIRO.sac, k);
+  GIRO.sacN++;
+  if (GIRO.alSacudir) GIRO.alSacudir(k);
+}
+
+function giroPaso(dt){
+  if (GIRO._sacFrio > 0) GIRO._sacFrio = Math.max(0, GIRO._sacFrio - dt);
+  if (GIRO.sac > 0) GIRO.sac = Math.max(0, GIRO.sac - dt*3.2);
+  /* el recentrado va DESPACIO y solo cuando el juego lo pide: rapido, el mundo
+     se endereza solo mientras uno lo esta inclinando y no se puede jugar */
+  if (GIRO.recentra > 0 && GIRO.hayCero){
+    const k = Math.min(1, dt/GIRO.recentra);
+    GIRO.cero.b += giroDelta(GIRO.crudo.b, GIRO.cero.b)*k;
+    GIRO.cero.g += giroDelta(GIRO.crudo.g, GIRO.cero.g)*k;
+    giroCalcula();
+  }
+}
+
+/* ── SE PIDE DENTRO DE UN GESTO, Y DEVUELVE SI QUEDO ANDANDO ──
+   Y no bloquea: si el permiso se niega o el aparato no tiene sensor, el juego
+   tiene que seguir siendo jugable con el dedo. Cada juego trae su respaldo. */
+async function giroPide(){
+  if (GIRO.estado === 'lista' || GIRO.estado === 'pidiendo') return GIRO.on;
+  GIRO.estado = 'pidiendo';
+  /* sin HTTPS los sensores no existen en varios navegadores, y ahi no hay
+     permiso que negar: ni preguntan. Es la causa mas facil de confundir con un
+     error del juego. */
+  if (!window.isSecureContext && location.protocol !== 'file:'){
+    GIRO.estado = 'insegura'; return false;
+  }
+  if (typeof DeviceOrientationEvent === 'undefined'){ GIRO.estado = 'sin'; return false; }
+  const DOE = DeviceOrientationEvent, DME = window.DeviceMotionEvent;
+  try {
+    if (DOE && typeof DOE.requestPermission === 'function'){
+      const r = await DOE.requestPermission();
+      if (r !== 'granted'){ GIRO.estado = 'negado'; return false; }
+    }
+    if (DME && typeof DME.requestPermission === 'function'){
+      try { await DME.requestPermission(); } catch(e){}
+    }
+  } catch(e){ GIRO.estado = 'negado'; return false; }
+  addEventListener('deviceorientation', giroEvento, { passive: true });
+  addEventListener('devicemotion', giroMocion, { passive: true });
+  GIRO.estado = 'lista';
+  /* ── Y SE COMPRUEBA QUE LLEGUE ALGO ──
+     En una notebook `deviceorientation` se registra sin error y NUNCA dispara:
+     el estado diria «lista» con el sensor muerto, y el juego esperaria para
+     siempre una inclinacion que no va a llegar. A los 1,2 s, si no llego ni un
+     evento, se declara sin sensor y entra el respaldo. */
+  setTimeout(() => { if (GIRO.n === 0 && GIRO.estado === 'lista') GIRO.estado = 'sin'; }, 1200);
+  return true;
+}
+
+function giroVer(){
+  return { estado: GIRO.estado, on: GIRO.on, n: GIRO.n,
+           x: +GIRO.x.toFixed(3), y: +GIRO.y.toFixed(3),
+           crudo: [Math.round(GIRO.crudo.b), Math.round(GIRO.crudo.g)],
+           cero: [Math.round(GIRO.cero.b), Math.round(GIRO.cero.g)],
+           sac: +GIRO.sac.toFixed(2), sacN: GIRO.sacN,
+           sacPico: +GIRO.sacPico.toFixed(1),
+           rango: GIRO.rango, recentra: GIRO.recentra };
+}
+/* ══════════════════════ LA MANO POR LA CAMARA ══════════════════════
+   MediaPipe lee la mano y de los veintiun puntos sale UNA cosa: que gesto es.
+   No se dibuja la mano en 3D ni se apunta con ella —eso ya lo hacen RECREO y
+   RezUno—: acá lo unico que hace falta es piedra, papel o tijera, o sea un
+   simbolo, y un simbolo es mucho mas barato y mucho mas robusto que una
+   posicion.
+
+   ── TODO LO QUE SIGUE SALE DE DOS JUEGOS QUE YA COSTARON SUS VUELTAS ──
+   1. LA CAMARA SE PIDE CON `exact` Y NO COMO PREFERENCIA. `facingMode:'user'` a
+      secas es un DESEO: el navegador abre la que quiera. Con `exact`, si la
+      peticion vuelve ES esa camara; si no hay, tira y se prueba la otra.
+   2. LA ENTRADA VA A 640x480 Y NO A 256x192. Medido en RezUno: diez veces mas
+      pixeles NO cuestan mas —MediaPipe redimensiona adentro al tamano de sus
+      modelos— y bajarla es regalar deteccion a cambio de nada.
+   3. LOS UMBRALES VAN BAJOS (0,4 / 0,4 / 0,3). Soltar una mano ya encontrada no
+      cuesta un cuadro: la medicion siguiente tiene que volver a correr el
+      buscador de palma, que es la parte cara. Dudar sale mas caro que seguir.
+   4. LA MEDICION CUELGA DEL CUADRO DE CAMARA y no del de render: con
+      `requestVideoFrameCallback` corre una vez por cuadro de camara, que es lo
+      unico que puede traer datos nuevos.
+   5. GPU PRIMERO Y CPU DE RESPALDO: en telefonos viejos el delegado de GPU tira
+      al crear la tarea, y un detector a 15 por segundo en CPU sigue siendo
+      jugable.
+   6. DOS CDN: el detector es una descarga de un tercero, y si ese tercero no
+      contesta el juego se queda sin manos y el jugador no puede hacer nada.
+   7. EL GESTO NO SE TOMA, SE SOSTIENE. Un gesto mal leido en un juego donde el
+      gesto es la jugada es una derrota que el jugador no entiende: cada lectura
+      tiene que ganar tres cuadros seguidos para valer. */
+
+const MANO_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+const MANO_CDN = [
+  { js: MANO_URL, wasm: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm' },
+  { js: 'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+    wasm: 'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm' }];
+const MANO_MODELO = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const MANO_ENT_W = 640, MANO_ENT_H = 480;
+
+const MANO = {
+  estado: 'no',      /* no · pidiendo · lista · permiso · camara · cdn · modelo · insegura */
+  det: null, vid: null, usa: '', espejo: true, delegado: '',
+  pts: null,         /* los 21 puntos crudos, para dibujar */
+  dedos: -1,         /* cuantos estirados, crudo */
+  gesto: null,       /* 'piedra' · 'papel' · 'tijera' · null, ya votado */
+  gestoCrudo: null,
+  n: 0, hz: 0,
+  _votos: [], _ultT: 0, _huecos: 0
+};
+/* ── LA CAMARA FRONTAL, Y ACA SI ES LA CORRECTA ──
+   Al reves de RECREO y RezUno, donde se mete la mano POR DETRAS del telefono
+   para que entre en la escena. Piedra papel o tijera se juega mostrando la mano
+   DE FRENTE, como se juega de verdad, y el jugador tiene que poder verse: con la
+   trasera habria que apuntar el telefono para el otro lado y jugar a ciegas. */
+const MANO_PREF = 'user';
+
+function manoFallo(q){ MANO.estado = q; if (window.pintaMano) window.pintaMano(); }
+
+async function manoPide(){
+  if (MANO.estado === 'lista' || MANO.estado === 'pidiendo') return MANO.estado === 'lista';
+  MANO.estado = 'pidiendo';
+  if (window.pintaMano) window.pintaMano();
+  /* sin HTTPS `navigator.mediaDevices` NO EXISTE, asi que no hay permiso que
+     negar: el navegador ni pregunta */
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ manoFallo('insegura'); return false; }
+  const pedir = (v) => navigator.mediaDevices.getUserMedia({
+    video: Object.assign({ width: { ideal: MANO_ENT_W }, height: { ideal: MANO_ENT_H },
+                           frameRate: { ideal: 60 } }, v), audio: false });
+  let flujo = null, cierto = '';
+  const otra = MANO_PREF === 'user' ? 'environment' : 'user';
+  try { flujo = await pedir({ facingMode: { exact: MANO_PREF } }); cierto = MANO_PREF; }
+  catch(e){
+    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')){ manoFallo('permiso'); return false; }
+    try { flujo = await pedir({ facingMode: { exact: otra } }); cierto = otra; }
+    catch(e2){
+      if (e2 && (e2.name === 'NotAllowedError' || e2.name === 'SecurityError')){ manoFallo('permiso'); return false; }
+      try { flujo = await pedir({}); }
+      catch(e3){ manoFallo((e3 && (e3.name === 'NotFoundError' || e3.name === 'OverconstrainedError')) ? 'camara' : 'permiso'); return false; }
+    }
+  }
+  const v = $('camVid');
+  v.srcObject = flujo; MANO.vid = v;
+  try { await v.play(); } catch(e){}
+  try {
+    const tr = flujo.getVideoTracks()[0];
+    const s = tr.getSettings ? tr.getSettings() : {};
+    /* ── EL ESPEJO SE LEE DEL TRACK Y LA REGLA ES ASIMETRICA ──
+       Una camara que NO dice para donde mira no es la trasera: un telefono
+       informa su `facingMode` y una webcam callada es de las que apuntan a la
+       cara. Medido en el banco, `getSettings()` de una camara de notebook no
+       trae la clave, y suponer «trasera» dejaba la imagen sin espejo. */
+    MANO.usa = cierto || s.facingMode || 'user';
+    MANO.espejo = (MANO.usa !== 'environment');
+  } catch(e){ MANO.usa = cierto || 'user'; MANO.espejo = true; }
+
+  let vision = null;
+  for (const cdn of MANO_CDN){
+    try { vision = await import(/* @vite-ignore */ cdn.js); MANO.cdn = cdn; break; } catch(e){}
+  }
+  if (!vision){ manoFallo('cdn'); return false; }
+  try {
+    const fs = await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm);
+    for (const del of ['GPU','CPU']){
+      try {
+        MANO.det = await vision.HandLandmarker.createFromOptions(fs, {
+          baseOptions: { modelAssetPath: MANO_MODELO, delegate: del },
+          runningMode: 'VIDEO', numHands: 1,
+          minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4,
+          minTrackingConfidence: 0.3 });
+        MANO.delegado = del; break;
+      } catch(e){}
+    }
+  } catch(e){}
+  if (!MANO.det){ manoFallo('modelo'); return false; }
+  MANO.estado = 'lista';
+  if (window.pintaMano) window.pintaMano();
+  manoLazo();
+  return true;
+}
+
+/* la medicion cuelga del cuadro de CAMARA: es lo unico que puede traer datos
+   nuevos, y colgada del render se mide dos veces el mismo cuadro */
+function manoLazo(){
+  const v = MANO.vid;
+  if (!v || !MANO.det) return;
+  const paso = () => {
+    if (!MANO.det) return;
+    try {
+      const t = performance.now();
+      const r = MANO.det.detectForVideo(v, t);
+      manoLee(r && r.landmarks && r.landmarks[0] ? r.landmarks[0] : null);
+      if (MANO._ultT) MANO.hz = Math.round(1000/Math.max(1, t - MANO._ultT));
+      MANO._ultT = t;
+      MANO.n++;
+    } catch(e){}
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
+    else setTimeout(paso, 40);
+  };
+  if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
+  else setTimeout(paso, 40);
+}
+
+/* ══════════ DE VEINTIUN PUNTOS A UN SIMBOLO ══════════
+   ── TODO SE MIDE EN PROPORCION AL TAMANO DE LA PALMA ──
+   La mano puede estar a veinte centimetros o a un metro de la camara, asi que
+   ninguna distancia en pixeles sirve. La palma —muñeca al nudillo del medio— es
+   invariante a la distancia Y al tamano de la mano de quien juega. Es la misma
+   regla que en RECREO.
+
+   ── Y EL PULGAR NO SE MIDE COMO LOS DEMAS ──
+   Los otros cuatro se estiran ALEJANDO la punta de la muñeca. El pulgar se abre
+   hacia el COSTADO, y su punta puede quedar a la misma distancia de la muñeca
+   abierto o cerrado: se mide contra el nudillo del MENIQUE, del que se aleja al
+   abrirse y al que le cruza por delante al cerrarse. Sin esa distincion, «cinco
+   dedos» no existe. */
+const M_TIP = [4, 8, 12, 16, 20], M_PIP = [3, 6, 10, 14, 18];
+function manoLee(pts){
+  MANO.pts = pts;
+  if (!pts){
+    MANO.dedos = -1; MANO.gestoCrudo = null;
+    MANO._huecos++;
+    /* ── LA CADUCIDAD SE MIDE EN HUECOS Y NO EN MILISEGUNDOS ──
+       280 ms fijos son once mediciones a 40 Hz y tres y media a 12: en un
+       aparato lento, dos fallos seguidos borraban el gesto. */
+    if (MANO._huecos > 5){ MANO.gesto = null; MANO._votos.length = 0; }
+    return;
+  }
+  MANO._huecos = 0;
+  const d = (a, b) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+  const palma = Math.max(0.0001, d(0, 9));
+  const est = [];
+  /* el pulgar: abierto se aleja del nudillo del meñique */
+  est.push(d(4, 17)/palma > 0.92);
+  for (let i = 1; i < 5; i++){
+    /* la punta mas lejos de la muñeca que la falange de en medio */
+    est.push(d(M_TIP[i], 0) > d(M_PIP[i], 0)*1.14);
+  }
+  const n = est.filter(Boolean).length;
+  MANO.dedos = n;
+  let g = null;
+  if (n <= 1) g = 'piedra';
+  else if (n >= 4) g = 'papel';
+  else if (n === 2 && est[1] && est[2]) g = 'tijera';
+  /* dos dedos que NO son el indice y el medio no son tijera: es una mano a
+     medio cerrar, y tomarla por tijera es perder una ronda por una lectura */
+  MANO.gestoCrudo = g;
+  MANO._votos.push(g);
+  if (MANO._votos.length > 3) MANO._votos.shift();
+  if (MANO._votos.length === 3 && MANO._votos[0] === MANO._votos[1] &&
+      MANO._votos[1] === MANO._votos[2]) MANO.gesto = MANO._votos[0];
+}
+
+function manoVer(){
+  return { estado: MANO.estado, usa: MANO.usa, espejo: MANO.espejo,
+           delegado: MANO.delegado, n: MANO.n, hz: MANO.hz,
+           dedos: MANO.dedos, gesto: MANO.gesto, crudo: MANO.gestoCrudo,
+           pts: MANO.pts ? MANO.pts.length : 0, huecos: MANO._huecos };
+}
+/* la sonda: una mano de mentira con los dedos que se pidan, para poder probar
+   el camino entero sin una camara */
+function manoFalsa(dedos, tijera){
+  const p = [];
+  for (let i = 0; i < 21; i++) p.push({ x: 0.5, y: 0.5, z: 0 });
+  p[0] = { x: 0.5, y: 0.9, z: 0 };      /* muñeca */
+  p[9] = { x: 0.5, y: 0.62, z: 0 };     /* nudillo del medio: la palma mide 0,28 */
+  p[17] = { x: 0.40, y: 0.68, z: 0 };   /* nudillo del meñique */
+  const abierto = [];
+  if (tijera){ abierto.push(1, 2); }
+  else if (dedos >= 4){ abierto.push(0, 1, 2, 3, 4); }
+  else for (let i = 1; i <= dedos; i++) abierto.push(i);
+  for (let i = 0; i < 5; i++){
+    const ab = abierto.indexOf(i) >= 0;
+    const bx = 0.34 + i*0.08;
+    if (i === 0){
+      /* el pulgar: abierto se va al costado y lejos del meñique */
+      p[3] = { x: ab ? 0.72 : 0.50, y: 0.74, z: 0 };
+      p[4] = { x: ab ? 0.82 : 0.46, y: 0.70, z: 0 };
+    } else {
+      p[M_PIP[i]] = { x: bx, y: 0.56, z: 0 };
+      p[M_TIP[i]] = { x: bx, y: ab ? 0.30 : 0.66, z: 0 };
+    }
+  }
+  manoLee(p);
+  return manoVer();
+}
+/* ══════════════════════════════ CASTILLO ══════════════════════════════
+   Una catapulta de este lado y del otro una torre de piedra con el rey adentro.
+   Se arrastra para tensar, la piedra sale y la torre SE DERRUMBA: lo que gana el
+   nivel no es acertarle al rey sino tirarle la torre encima.
+
+   ── POR QUÉ ESTO NO ES ARCO CON OTRO DIBUJO ──
+   En ARCO el blanco es una persona y lo único que importa es dónde pega la
+   flecha. Acá el blanco es una ESTRUCTURA, y lo que importa es dónde pegarle
+   PARA QUE SE CAIGA: el mismo tiro que le saca veinte de vida a un arquero puede
+   no hacer nada contra un muro o tirar la torre entera si le da a la columna que
+   la sostiene. El verbo no es apuntar, es leer el edificio.
+
+   Y por eso la escena CAMBIA entre tiro y tiro: la torre que queda después del
+   primero es otro problema que el que había. Un juego de artillería con el
+   blanco intacto es el mismo tiro repetido.
+
+   ── LA FÍSICA: AABB CON IMPULSOS, Y LA ROTACIÓN ES COSMÉTICA ──
+   Los bloques no rotan mientras están apoyados. Es una decisión y no una
+   limitación: un solver de OBB con rotación necesita SAT, puntos de contacto y
+   varias pasadas para no temblar, y a este tamaño —bloques de treinta píxeles en
+   un teléfono— la diferencia visible es casi ninguna. Lo que SÍ rota es un
+   bloque en el aire, que es cuando se nota, y al apoyar el giro vuelve a cero.
+   La misma decisión que ya se tomó con los dados guardados de DADOS. */
+
+const K_MUNDO = 1250;
+const K_G = 1500;
+const K_VMAX = 1300;
+const K_TENSA = 250;
+const K_ALTO_A = 0.82;         /* dónde cae el suelo en la pantalla */
+const K_OJO = 40;
+
+/* ── LOS MATERIALES ──
+   La madera se rompe, la piedra pesa y el hielo resbala. Tres números por
+   material y de ahí sale todo el juego: qué conviene golpear primero, qué
+   aguanta y qué se lleva puesto lo de arriba al caerse. */
+const K_MAT = [
+  { k: 'madera', col: '#a8763c', bor: '#6b4820', dens: 0.75, vida: 26, roce: 0.62 },
+  { k: 'piedra', col: '#9a9a96', bor: '#5e5e5a', dens: 1.55, vida: 60, roce: 0.70 },
+  { k: 'hielo',  col: '#8fd4e8', bor: '#4a8fa8', dens: 0.55, vida: 16, roce: 0.16 },
+];
+
+let K_bloques = [];            /* {x,y,w,h,vx,vy,mat,vida,gi,vgi,quieto} */
+let K_rey = null;
+let K_piedra = null;
+let K_estela = [];
+let K_nivel = 1, K_tiros = 0, K_tope = 0, K_puntos = 0;
+let K_fase = 'apunta';         /* apunta · vuela · asienta · fin */
+let K_t = 0, K_lento = 0;
+let K_arr = null;
+let K_msg = '', K_msgT = 0;      /* el aviso corto del impacto */
+let K_asentando = false;         /* los 90 pasos previos: no hacen dano */
+let K_rotos = 0;                 /* bloques que se rompieron con el ultimo tiro */
+let K_camX = 0, K_camZ = 1, K_camMX = 0, K_camMZ = 1;
+let K_azar = 11;
+function kAz(){ K_azar = (K_azar*1664525 + 1013904223) >>> 0; return K_azar / 4294967296; }
+
+const K_NIVELES = 60;
+const kSuelo = () => 420;
+
+/* ══════════ EL GENERADOR DE TORRES ══════════
+   Cinco plantas, y cada una se elige por el nivel: las primeras son pilares y
+   dintel —que se caen de un golpe bien puesto— y las últimas mezclan piedra con
+   hielo, que es lo que obliga a pensar en qué orden pegarle.
+
+   ── Y LA TORRE SE DEJA ASENTAR ANTES DE EMPEZAR ──
+   Generada y puesta a jugar en el mismo cuadro, los bloques caen unos píxeles al
+   resolverse los contactos y la torre «se mueve sola» antes del primer tiro. Se
+   simulan noventa pasos con el jugador congelado, así que lo que ve es una torre
+   que ya está en reposo. */
+function kPlanta(tipo, x0, ancho, y, mat){
+  const b = [];
+  const put = (x, yy, w, h, m) => b.push({ x, y: yy, w, h, mat: m,
+    vida: K_MAT[m].vida, vx: 0, vy: 0, gi: 0, vgi: 0, quieto: 0 });
+  if (tipo === 0){
+    /* pilares y dintel: la planta clásica, y la que enseña que pegarle a una
+       pata tira todo lo de arriba */
+    put(x0, y - 60, 22, 60, mat);
+    put(x0 + ancho - 22, y - 60, 22, 60, mat);
+    put(x0 - 6, y - 78, ancho + 12, 18, mat);
+  } else if (tipo === 1){
+    /* muro macizo: aguanta de frente y se lleva todo si se le saca la base */
+    put(x0, y - 46, ancho, 46, mat);
+  } else if (tipo === 2){
+    /* tres pilares: más estable, hay que sacar dos */
+    const w = 20, sep = (ancho - w)/2;
+    for (let i = 0; i < 3; i++) put(x0 + i*sep - (i === 2 ? w : 0), y - 56, w, 56, mat);
+    put(x0 - 6, y - 74, ancho + 12, 18, mat);
+  } else {
+    /* cámara hueca: dos pilares anchos y un techo, con sitio para el rey */
+    put(x0, y - 72, 30, 72, mat);
+    put(x0 + ancho - 30, y - 72, 30, 72, mat);
+    put(x0 - 8, y - 92, ancho + 16, 20, mat);
+  }
+  return b;
+}
+
+function kGenera(n){
+  K_azar = (n*2654435761) >>> 0;
+  for (let i = 0; i < 6; i++) kAz();
+  const plantas = Math.min(5, 2 + Math.floor((n - 1)/9));
+  const x0 = K_MUNDO - 420, ancho = 170;
+  const b = [];
+  let y = kSuelo();
+  for (let p = 0; p < plantas; p++){
+    /* el hielo sólo aparece pasado el nivel 12, y nunca en la planta de abajo:
+       una base de hielo hace que la torre se caiga sola y el nivel se gana sin
+       tirar */
+    let mat = 0;
+    if (n > 5) mat = kAz() < 0.45 ? 1 : 0;
+    if (n > 12 && p > 0 && kAz() < 0.30) mat = 2;
+    const tipo = p === plantas - 1 ? 3 : (kAz()*3)|0;
+    const dx = (kAz() - 0.5)*22;
+    const pl = kPlanta(tipo, x0 + dx, ancho, y, mat);
+    for (const z of pl) b.push(z);
+    y -= (tipo === 3 ? 92 : (tipo === 1 ? 46 : (tipo === 0 ? 78 : 74)));
+  }
+  /* ── EL REY VA APOYADO, Y ESE «−r» NO ES UN DETALLE ──
+     `y + 92` es la SUPERFICIE sobre la que se para (el techo de la planta de
+     abajo), así que poniendo ahí su CENTRO queda medio rey enterrado en el
+     bloque. Y enterrado, el empuje de separación lo saca por una normal
+     degenerada —el centro justo sobre el borde da distancia cero— y lo manda
+     para abajo atravesando la torre: medido, nacía herido en los 60 niveles. */
+  const rr = 17;
+  const rey = { x: x0 + ancho/2, y: y + 92 - rr - 1, r: rr, vida: 100, vx: 0, vy: 0 };
+  /* los tiros que da el nivel: sale de las PLANTAS y no de un número a mano —
+     una torre de cinco pisos con tres tiros es imposible y con doce es un
+     trámite */
+  const tope = 2 + plantas;
+  return { b, rey, tope };
+}
+
+/* ══════════ LOS TEXTOS ══════════ */
+const JT = {
+  es: { sub:'Arrastrá para tensar. Tirale la torre encima al rey.',
+        c1:'Arrastrá hacia atrás para tensar la catapulta.',
+        c2:'La torre se cae. Pegale donde la sostiene.',
+        c3:'El rey se lleva lo que le caiga encima. Sesenta castillos.',
+        nivelC:'CASTILLO', tirosC:'TIROS', reyC:'REY',
+        derrumbe:'¡SE CAE!', golpe:'GOLPE', gano:'¡EL REY CAYÓ!',
+        madera:'MADERA', piedra:'PIEDRA', hielo:'HIELO' },
+  en: { sub:'Drag to draw. Bring the tower down on the king.',
+        c1:'Drag back to load the catapult.',
+        c2:'The tower falls. Hit what holds it up.',
+        c3:'Whatever lands on the king hurts him. Sixty castles.',
+        nivelC:'CASTLE', tirosC:'SHOTS', reyC:'KING',
+        derrumbe:'IT FALLS!', golpe:'HIT', gano:'THE KING IS DOWN!',
+        madera:'WOOD', piedra:'STONE', hielo:'ICE' },
+  pt: { sub:'Arraste para esticar. Derrube a torre no rei.',
+        c1:'Arraste para trás para carregar a catapulta.',
+        c2:'A torre cai. Acerte no que a sustenta.',
+        c3:'O que cair em cima do rei machuca. Sessenta castelos.',
+        nivelC:'CASTELO', tirosC:'TIROS', reyC:'REI',
+        derrumbe:'ESTÁ CAINDO!', golpe:'ACERTOU', gano:'O REI CAIU!',
+        madera:'MADEIRA', piedra:'PEDRA', hielo:'GELO' }
+};
+const PIEL = { ac:'#c98a3c', tela:'fondo' };
+const SON_ALIAS = { bien:'clava', toque:'tensa', pierde:'grito', gana:'gana',
+                    clic:'clic', caida:'tira' };
+const AMB = {
+  foto: 'k_fondo',
+  cielo: ['#3a4f7a', '#c9a06a'],
+  haz: 0.10,
+  vineta: 0.38,
+  part: { n: 14, dir: 'cae', forma: 'disco', col: '#e8d0a8',
+          r0: 1.4, r1: 3.4, v0: 8, v1: 24, amp: 44, gira: 0,
+          a0: 0.08, a1: 0.20 }
+};
+
+/* ══════════ LA CÁMARA ══════════ */
+function kCam(g){
+  g.save();
+  g.translate(AN/2, AL*K_ALTO_A);
+  g.scale(K_camZ, K_camZ);
+  g.translate(-K_camX, -(kSuelo() - K_OJO));
+}
+function kAMundo(px, py){
+  return { x: (px - AN/2)/K_camZ + K_camX,
+           y: (py - AL*K_ALTO_A)/K_camZ + kSuelo() - K_OJO };
+}
+function kCamPaso(dt){
+  if (K_fase === 'vuela' && K_piedra){ K_camMX = K_piedra.x; K_camMZ = 0.84; }
+  else {
+    K_camMX = K_MUNDO*0.5 + 60;
+    K_camMZ = Math.max(0.42, Math.min(0.9, AN/(K_MUNDO*0.86)));
+  }
+  const k = Math.min(1, dt*(K_fase === 'vuela' ? 6.5 : 3.2));
+  K_camX += (K_camMX - K_camX)*k;
+  K_camZ += (K_camMZ - K_camZ)*k;
+}
+
+const JUEGO = {
+  id: 'castillo',
+  tipo: 'niveles',
+  nivelesTotal: K_NIVELES,
+  vivo: true, gano: false, estrellas: 0, finP: '',
+  get marca(){ return Math.max(0, K_tope - K_tiros); },
+  get sub(){ return TX('tirosC'); },
+  get ficI(){ return TX('nivelC') + ' ' + NIVEL; },
+  get ficD(){ return TX('reyC') + ' ' + Math.max(0, Math.round(K_rey ? K_rey.vida : 0)); },
+  get resta(){ return K_rey ? Math.max(0, Math.min(1, K_rey.vida/100)) : 0; },
+
+  planos: [
+    { dur: 3.0, pie: 'c1', dibuja(g, u){ kDemo(g, u, 0); } },
+    { dur: 3.4, pie: 'c2', dibuja(g, u){ kDemo(g, u, 1); } },
+    { dur: 3.2, pie: 'c3', dibuja(g, u){ kDemo(g, u, 2); } }
+  ],
+
+  arranca(n){
+    K_nivel = n || 1;
+    const G = kGenera(K_nivel);
+    K_bloques = G.b; K_rey = G.rey; K_tope = G.tope;
+    K_tiros = 0; K_puntos = 0; K_piedra = null; K_estela.length = 0;
+    K_fase = 'apunta'; K_t = 0; K_lento = 0; K_arr = null;
+    K_msg = ''; K_msgT = 0; K_rotos = 0;
+    this.vivo = true; this.gano = false; this.estrellas = 0; this.finP = '';
+    /* ── LA TORRE SE ASIENTA ANTES DE EMPEZAR ──
+       Sin esto los bloques caen unos píxeles en los primeros cuadros y la torre
+       parece moverse sola antes de que nadie la toque. */
+    K_asentando = true;
+    for (let i = 0; i < 90; i++) kFisica(1/60);
+    K_asentando = false;
+    /* el asentado puede haber roto algo: se limpia DESPUÉS, que si no el primer
+       tiro nace con el contador del arranque puesto y el aviso miente */
+    K_rotos = 0; K_msg = ''; K_msgT = 0;
+    K_camX = K_MUNDO*0.5 + 60; K_camZ = 0.58;
+  },
+
+  paso(dt){
+    const dtm = K_lento > 0 ? dt*0.24 : dt;
+    if (K_lento > 0) K_lento = Math.max(0, K_lento - dt);
+    if (K_msgT > 0) K_msgT = Math.max(0, K_msgT - dt);
+    kCamPaso(dt);
+    kFisica(dtm);
+    if (K_fase === 'vuela'){
+      const p = K_piedra;
+      p.vy += K_G*dtm;
+      p.x += p.vx*dtm; p.y += p.vy*dtm;
+      p.gi += p.vgi*dtm;
+      K_estela.push({ x: p.x, y: p.y, t: 0.55 });
+      if (K_estela.length > 80) K_estela.shift();
+      for (const e of K_estela) e.t -= dtm;
+      const z = kPiedraChoca(p, dtm);
+      if (z || p.y > kSuelo() || p.x < -200 || p.x > K_MUNDO + 260){
+        if (p.y > kSuelo() && !z){ p.y = kSuelo(); son('caida', 0.5); }
+        K_piedra = null;
+        K_fase = 'asienta'; K_t = 0;
+      }
+      return;
+    }
+    if (K_fase === 'asienta'){
+      K_t += dt;
+      /* se espera a que TODO se quede quieto y no un tiempo fijo: con un tiempo
+         fijo, un derrumbe largo se corta a la mitad y el nivel se juzga con la
+         torre todavía cayéndose */
+      if ((kTodoQuieto() && K_t > 0.5) || K_t > 6) this.termina();
+      return;
+    }
+  },
+
+  termina(){
+    if (K_rey.vida <= 0){
+      this.gano = true;
+      /* tres estrellas es ganar con la mitad de los tiros: el tope sale de las
+         plantas, así que la vara escala con el castillo y no es un deseo */
+      const v3 = Math.max(1, Math.ceil(K_tope*0.5));
+      this.estrellas = K_tiros <= v3 ? 3 : (K_tiros <= K_tope - 1 ? 2 : 1);
+      this.finP = TX('tirosC') + ' ' + K_tiros + '  ·  ★★★ ' + v3;
+      son('gana', 1); destella('#ffd76a', 1.0);
+      this.vivo = false;
+      return;
+    }
+    if (K_tiros >= K_tope){ son('pierde'); this.vivo = false; return; }
+    K_fase = 'apunta'; K_t = 0; K_arr = null;
+  },
+
+  tira(ang, f){
+    const v = Math.max(0.14, Math.min(1, f))*K_VMAX;
+    K_piedra = { x: 120, y: kSuelo() - 96, r: 15,
+                 vx: Math.cos(ang)*v, vy: -Math.sin(ang)*v, gi: 0, vgi: 6 };
+    K_estela.length = 0;
+    K_rotos = 0; K_msg = ''; K_msgT = 0;
+    K_tiros++;
+    K_fase = 'vuela';
+    son('caida', 0.9); sacude(0.14);
+  },
+
+  baja(px, py){
+    if (MODO !== 'juega' || K_fase !== 'apunta') return;
+    K_arr = { x0: px, y0: py, x: px, y: py };
+    son('toque', 0.5);
+  },
+  mueve(px, py){ if (K_arr){ K_arr.x = px; K_arr.y = py; } },
+  sube(){
+    if (!K_arr || K_fase !== 'apunta'){ K_arr = null; return; }
+    const t = kTension();
+    K_arr = null;
+    if (t.f < 0.10) return;
+    this.tira(t.ang, t.f);
+  },
+
+  fondo(g){},
+  pinta(g){ kPinta(g); },
+
+  /* ══════════ EL AUTO-JUGADOR ══════════
+     El honesto le apunta a la PATA MÁS BAJA que sostiene la torre; el otro tira
+     a cualquier bloque. Si leer el edificio no sirviera, los dos ganarían igual
+     de seguido — y eso es toda la diferencia entre este juego y ARCO. */
+  juegaSolo(n, azar){
+    let gana = 0, malos = [], tiros = 0;
+    const dt = 1/60;
+    for (let niv = 1; niv <= (n || K_NIVELES); niv++){
+      this.arranca(niv);
+      let v = 0;
+      while (this.vivo && v < 9000){
+        v++;
+        if (K_fase === 'apunta'){
+          const b = azar ? K_bloques[(Math.random()*K_bloques.length)|0] : kBotBlanco();
+          if (!b) break;
+          const t = kTiroA(b.x + b.w/2, b.y + b.h/2);
+          this.tira(t.ang, t.f);
+          tiros++;
+        }
+        this.paso(dt);
+      }
+      if (this.gano) gana++; else malos.push(niv);
+    }
+    return JSON.stringify({ niveles: (n || K_NIVELES), gana,
+                            malos: malos.slice(0, 10), nMalos: malos.length,
+                            tiros });
+  },
+
+  /* ── LA AUDITORÍA ──
+     Que la torre nazca EN REPOSO y que el rey NO esté ya muerto al empezar. Lo
+     segundo parece imposible y es exactamente lo que pasa si una planta de hielo
+     cae en la base: la torre se desarma sola y el nivel se gana sin tirar. */
+  audita(a, b){
+    const malos = [];
+    let minB = 1e9, maxB = 0, minT = 99, maxT = 0;
+    for (let n = (a || 1); n <= (b || K_NIVELES); n++){
+      this.arranca(n);
+      const fall = [];
+      if (K_rey.vida < 100) fall.push('el rey nace herido');
+      if (!kTodoQuieto()) fall.push('la torre no asienta');
+      if (K_bloques.length < 4) fall.push('torre muy chica');
+      /* el rey tiene que estar APOYADO en algo y no flotando */
+      let sost = false;
+      for (const z of K_bloques)
+        if (Math.abs(K_rey.y + K_rey.r - z.y) < 6 &&
+            K_rey.x > z.x - 10 && K_rey.x < z.x + z.w + 10) sost = true;
+      if (!sost) fall.push('el rey flota');
+      if (fall.length) malos.push([n, fall[0]]);
+      minB = Math.min(minB, K_bloques.length); maxB = Math.max(maxB, K_bloques.length);
+      minT = Math.min(minT, K_tope); maxT = Math.max(maxT, K_tope);
+    }
+    return JSON.stringify({ niveles: (b || K_NIVELES) - (a || 1) + 1,
+                            malos: malos.slice(0, 8), nMalos: malos.length,
+                            bloques: [minB, maxB], tiros: [minT, maxT] });
+  },
+
+  ver(){
+    return JSON.stringify({
+      nivel: K_nivel, fase: K_fase, tiros: K_tiros, tope: K_tope,
+      rey: Math.round(K_rey ? K_rey.vida : -1),
+      bloques: K_bloques.length, quieto: kTodoQuieto(),
+      piedra: K_piedra ? [Math.round(K_piedra.x), Math.round(K_piedra.y)] : null,
+      cam: [Math.round(K_camX), +K_camZ.toFixed(2)],
+      vivo: this.vivo, gano: this.gano, est: this.estrellas });
+  },
+  cfg(o){
+    /* ── LA SONDA DEL ASENTADO ──
+       «la torre no asienta» no dice QUÉ se mueve. `mov` devuelve el bloque más
+       rápido y cuánto, que es lo único con lo que se puede decidir si falta
+       tiempo o si hay uno que no para nunca. */
+    if (o.pasos){ K_asentando = true; for (let i = 0; i < o.pasos; i++) kFisica(1/60); K_asentando = false; }
+    if (o.mov){
+      let m = -1, q = null;
+      for (const b of K_bloques){
+        const v = Math.max(Math.abs(b.vx), Math.abs(b.vy));
+        if (v > m){ m = v; q = b; }
+      }
+      return JSON.stringify({ max: +m.toFixed(1), n: K_bloques.length,
+        b: q ? [Math.round(q.x), Math.round(q.y), q.w, q.h, q.quieto, Math.round(q.vida)] : null,
+        rey: [Math.round(K_rey.x), Math.round(K_rey.y), +K_rey.vy.toFixed(1)],
+        quieto: kTodoQuieto() });
+    }
+    if (o.tira) this.tira(o.tira[0], o.tira[1]);
+    if (o.aBlanco){ const t = kTiroA(o.aBlanco[0], o.aBlanco[1]); this.tira(t.ang, t.f); }
+    return this.ver();
+  }
+};
+
+function kTension(){
+  if (!K_arr) return { ang: 0.8, f: 0 };
+  const dx = K_arr.x0 - K_arr.x, dy = K_arr.y0 - K_arr.y;
+  return { ang: Math.atan2(-dy, Math.max(1, Math.abs(dx))),
+           f: Math.min(1, Math.hypot(dx, dy)/K_TENSA) };
+}
+
+/* ── EL TIRO A UN PUNTO, RESUELTO SOBRE EL TIEMPO DE VUELO ──
+   Es la misma solución que en ARCO y por la misma razón: fijado un `t`, las dos
+   ecuaciones se desacoplan y tienen forma cerrada, así que para cada `t` hay un
+   tiro exacto y sólo hay que elegir el de velocidad mínima. Acá no hay viento,
+   pero el método sirve igual y evita la trampa de la bisección sobre el ángulo,
+   que en ARCO dio 24 casos malos de 60. */
+function kTiroA(bx, by){
+  const x0 = 120, y0 = kSuelo() - 96;
+  const dx = bx - x0, dy = by - y0;
+  if (dx <= 0) return { ang: 0.9, f: 1 };
+  let mej = null;
+  for (let k = 0; k <= 70; k++){
+    const t = 0.20 + k*(3.2 - 0.20)/70;
+    const vx = dx/t, vy = (dy - K_G*t*t/2)/t;
+    const v = Math.hypot(vx, vy);
+    if (!mej || v < mej.v) mej = { t, vx, vy, v, ang: Math.atan2(-vy, vx) };
+  }
+  return { ang: mej.ang, f: Math.min(1, mej.v/K_VMAX) };
+}
+
+/* ── A QUÉ LE APUNTA EL BOT ──
+   A la pieza más BAJA de la columna más cargada, o sea a la pata que sostiene
+   más peso. No es un truco: es lo que hace una persona que ya entendió que
+   sacarle la base a una torre la tira entera. */
+function kBotBlanco(){
+  let mej = null, mejP = -1;
+  for (const b of K_bloques){
+    if (b.vida <= 0) continue;
+    /* cuánto peso tiene encima: los bloques cuyo x se solapa y están más arriba */
+    let p = 0;
+    for (const o of K_bloques)
+      if (o !== b && o.y + o.h <= b.y + 4 &&
+          o.x < b.x + b.w && o.x + o.w > b.x) p += o.w*o.h*K_MAT[o.mat].dens;
+    /* se prefiere lo bajo y cargado, y se castiga lo que ya está roto */
+    const s = p*(1 + (kSuelo() - b.y)/400) - b.vida*6;
+    if (s > mejP){ mejP = s; mej = b; }
+  }
+  return mej;
+}
+
+/* ══════════ LA FÍSICA ══════════ */
+function kFisica(dt){
+  const n = K_bloques.length;
+  for (const b of K_bloques){
+    if (b.vida <= 0) continue;
+    b.vy += K_G*dt;
+    b.x += b.vx*dt; b.y += b.vy*dt;
+    /* la rotación es COSMÉTICA y sólo en el aire: apoyado vuelve a cero, así que
+       un bloque en reposo nunca queda torcido y el apilado sigue siendo AABB */
+    if (b.quieto <= 0) b.gi += b.vgi*dt;
+    else b.gi += (0 - b.gi)*Math.min(1, dt*8);
+  }
+  if (K_rey){
+    K_rey.vy += K_G*dt;
+    K_rey.x += K_rey.vx*dt; K_rey.y += K_rey.vy*dt;
+  }
+  /* ── DOS PASADAS DE CONTACTOS ──
+     Con una, una pila de cinco bloques se hunde: el de abajo se resuelve contra
+     el suelo y los de arriba se quedan penetrando hasta el cuadro siguiente. Con
+     dos, la pila se sostiene y no hace falta un solver iterativo entero. */
+  for (let pasada = 0; pasada < 2; pasada++){
+    for (const b of K_bloques){
+      if (b.vida <= 0) continue;
+      if (b.y + b.h > kSuelo()){
+        const vy = b.vy;
+        b.y = kSuelo() - b.h;
+        if (vy > 240) kDana(b, vy*0.05);
+        b.vy = 0;
+        b.vx *= K_MAT[b.mat].roce;
+        b.quieto++;
+        b.vgi = 0;
+      }
+      for (const o of K_bloques){
+        if (o === b || o.vida <= 0) continue;
+        if (b.x + b.w <= o.x || b.x >= o.x + o.w) continue;
+        if (b.y + b.h <= o.y || b.y >= o.y + o.h) continue;
+        /* se separa por el eje de MENOR penetración: por el otro, dos bloques
+           apilados se empujarían de costado y la torre se abriría sola */
+        const py1 = (b.y + b.h) - o.y, py2 = (o.y + o.h) - b.y;
+        const px1 = (b.x + b.w) - o.x, px2 = (o.x + o.w) - b.x;
+        const py = Math.min(py1, py2), px = Math.min(px1, px2);
+        if (py <= px){
+          const dv = Math.abs(b.vy - o.vy);
+          if (py === py1){ b.y -= py; if (dv > 260) kDana(b, dv*0.04), kDana(o, dv*0.04);
+                           b.vy = Math.min(0, b.vy); b.quieto++; b.vgi = 0; }
+          else { b.y += py; b.vy = Math.max(0, b.vy); }
+          b.vx *= K_MAT[b.mat].roce;
+        } else {
+          if (px === px1){ b.x -= px*0.5; o.x += px*0.5; }
+          else { b.x += px*0.5; o.x -= px*0.5; }
+          const t = (b.vx - o.vx)*0.5;
+          b.vx -= t; o.vx += t;
+        }
+      }
+      if (Math.abs(b.vx) < 3 && Math.abs(b.vy) < 3) b.quieto++;
+      else b.quieto = 0;
+    }
+    /* ── EL REY: LO QUE LE CAE ENCIMA LE DUELE ──
+       El daño sale de la energía del bloque y no de que lo toque: un bloque
+       apoyado sobre él no puede matarlo de a poco, que es lo que pasaría con un
+       daño por contacto. */
+    if (K_rey){
+      if (K_rey.y + K_rey.r > kSuelo()){
+        K_rey.y = kSuelo() - K_rey.r; K_rey.vy = 0; K_rey.vx *= 0.7;
+      }
+      for (const o of K_bloques){
+        if (o.vida <= 0) continue;
+        const cx = Math.max(o.x, Math.min(K_rey.x, o.x + o.w));
+        const cy = Math.max(o.y, Math.min(K_rey.y, o.y + o.h));
+        const d = Math.hypot(K_rey.x - cx, K_rey.y - cy);
+        if (d > K_rey.r) continue;
+        const e = K_asentando ? 0 : Math.abs(o.vy - K_rey.vy) + Math.abs(o.vx)*0.4;
+        if (e > 200){
+          const dn = Math.min(60, e*o.w*o.h*K_MAT[o.mat].dens/22000);
+          if (dn > 2){
+            K_rey.vida -= dn;
+            son('bien', Math.min(1, 0.4 + dn/60));
+            chispas(K_rey.x, K_rey.y, 10, '#ff6a5a', 130);
+            K_lento = Math.max(K_lento, 0.35);
+            sacude(0.3);
+          }
+        }
+        /* ── EL EMPUJE PARA AFUERA, Y LA NORMAL DEGENERADA ──
+           Con el centro DENTRO de la caja, `rey − punto más cercano` vale cero y
+           dividir por su módulo devuelve cualquier cosa. Ahí la salida correcta
+           es la misma que entre dos bloques: el eje de MENOR penetración. */
+        let nx = K_rey.x - cx, ny = K_rey.y - cy;
+        let l = Math.hypot(nx, ny);
+        if (l < 0.001){
+          const pi = K_rey.x - o.x, pd = (o.x + o.w) - K_rey.x;
+          const pa = K_rey.y - o.y, pb = (o.y + o.h) - K_rey.y;
+          const m = Math.min(pi, pd, pa, pb);
+          nx = m === pi ? -1 : (m === pd ? 1 : 0);
+          ny = m === pa ? -1 : (m === pb ? 1 : 0);
+          l = 1;
+          K_rey.x += nx*(m + K_rey.r); K_rey.y += ny*(m + K_rey.r);
+        } else {
+          K_rey.x += nx/l*(K_rey.r - d); K_rey.y += ny/l*(K_rey.r - d);
+        }
+        if (ny < 0){ K_rey.vy = Math.min(0, K_rey.vy); }
+      }
+    }
+  }
+}
+function kDana(b, d){
+  /* ── EL ASENTADO NO ES PARTIDA, ASÍ QUE NO PUEDE LASTIMAR ──
+     Los noventa pasos previos existen para que la torre nazca quieta; si además
+     rompen bloques, el jugador empieza con un castillo agrietado que él no tocó
+     y el primer tiro se juzga contra otra torre. */
+  if (K_asentando) return;
+  if (d < 1) return;
+  b.vida -= d;
+  if (b.vida <= 0){
+    chispas(b.x + b.w/2, b.y + b.h/2, 12, K_MAT[b.mat].col, 150);
+    son('toque', 0.6);
+    K_rotos++;
+    /* ── EL AVISO SALE DE CUÁNTO SE ROMPIÓ Y NO DE QUE HAYA PEGADO ──
+       «GOLPE» en cada choque no dice nada: la piedra siempre le pega a algo. Lo
+       que el jugador necesita saber es si el tiro TIRÓ la torre, y eso es una
+       cuenta de bloques rotos. */
+    if (K_rotos >= 3){ K_msg = 'derrumbe'; K_msgT = 1.5; }
+  }
+}
+function kTodoQuieto(){
+  for (const b of K_bloques)
+    if (b.vida > 0 && (Math.abs(b.vx) > 6 || Math.abs(b.vy) > 6)) return false;
+  return !K_rey || (Math.abs(K_rey.vx) < 6 && Math.abs(K_rey.vy) < 6);
+}
+function kPiedraChoca(p, dt){
+  /* por segmento, como en ARCO: la piedra va a 1300 unidades por segundo, o sea
+     veintiuna por cuadro, y contra el punto atraviesa un bloque de veintidós */
+  const px = p.x - p.vx*dt, py = p.y - p.vy*dt;
+  for (let i = 1; i <= 6; i++){
+    const t = i/6, x = px + (p.x - px)*t, y = py + (p.y - py)*t;
+    for (const b of K_bloques){
+      if (b.vida <= 0) continue;
+      if (x < b.x - p.r || x > b.x + b.w + p.r) continue;
+      if (y < b.y - p.r || y > b.y + b.h + p.r) continue;
+      const e = Math.hypot(p.vx, p.vy);
+      kDana(b, e*0.055);
+      b.vx += p.vx*0.055; b.vy += p.vy*0.045;
+      b.vgi = (Math.random() - 0.5)*5;
+      b.quieto = 0;
+      son('caida', 0.8); sacude(0.35);
+      if (!K_msgT){ K_msg = 'golpe'; K_msgT = 0.9; }
+      chispas(x, y, 12, K_MAT[b.mat].col, 190);
+      K_lento = 0.3;
+      return b;
+    }
+    if (K_rey){
+      const d = Math.hypot(x - K_rey.x, y - K_rey.y);
+      if (d < p.r + K_rey.r){
+        K_rey.vida -= 42;
+        K_rey.vx += p.vx*0.10; K_rey.vy += p.vy*0.10 - 120;
+        son('bien', 1); sacude(0.7); destella('#ff6a5a', 0.8);
+        K_msg = 'gano'; K_msgT = 1.6;
+        chispas(x, y, 20, '#ff6a5a', 220);
+        K_lento = 0.6;
+        return { rey: true };
+      }
+    }
+  }
+  return null;
+}
+
+/* ══════════════════════════════ EL DIBUJO ══════════════════════════════ */
+
+/* ── UN BLOQUE ──
+   El material se lee por color, pero el color solo no dice CUÁNTO LE QUEDA, y
+   eso es la mitad de la decisión: pegarle otra vez a la pata que ya está rajada
+   o abrir una nueva. Las grietas salen del daño, así que el bloque muestra su
+   propia vida sin un número encima. */
+function kBloque(g, b){
+  if (b.vida <= 0) return;
+  const m = K_MAT[b.mat];
+  const cx = b.x + b.w/2, cy = b.y + b.h/2;
+  g.save();
+  if (Math.abs(b.gi) > 0.002){ g.translate(cx, cy); g.rotate(b.gi); g.translate(-cx, -cy); }
+  if (!dibCuadroWH('k_bloques', b.mat, cx, cy, b.w, b.h)){
+    g.fillStyle = m.col;
+    g.fillRect(b.x, b.y, b.w, b.h);
+    /* la cara de arriba más clara: es lo único que le da volumen a un
+       rectángulo plano, y cuesta un relleno */
+    g.fillStyle = 'rgba(255,255,255,.18)';
+    g.fillRect(b.x, b.y, b.w, Math.min(7, b.h*0.22));
+    g.fillStyle = 'rgba(0,0,0,.16)';
+    g.fillRect(b.x, b.y + b.h - Math.min(6, b.h*0.18), b.w, Math.min(6, b.h*0.18));
+    /* el despiece: sin él un muro de cuarenta y seis de alto se lee a caja de
+       cartón, y las hiladas son lo que lo hace pesar */
+    if (b.mat !== 2){
+      g.strokeStyle = 'rgba(0,0,0,.13)'; g.lineWidth = 1.5;
+      for (let y = b.y + 16; y < b.y + b.h - 4; y += 16){
+        g.beginPath(); g.moveTo(b.x + 2, y); g.lineTo(b.x + b.w - 2, y); g.stroke();
+      }
+    }
+    g.strokeStyle = m.bor; g.lineWidth = 2.5;
+    g.strokeRect(b.x + 1.25, b.y + 1.25, b.w - 2.5, b.h - 2.5);
+  }
+  const k = 1 - b.vida/m.vida;
+  if (k > 0.12){
+    g.save();
+    g.beginPath(); g.rect(b.x, b.y, b.w, b.h); g.clip();
+    g.strokeStyle = 'rgba(20,14,10,' + (0.20 + k*0.5).toFixed(2) + ')';
+    g.lineWidth = 1 + k*2.2; g.lineCap = 'round';
+    /* las grietas son deterministas por bloque: sorteadas cada cuadro,
+       parpadearían — y un bloque que titila se lee a error de dibujo */
+    const s0 = ((b.x*7 + b.y*13)|0);
+    const n = 1 + Math.round(k*3);
+    for (let i = 0; i < n; i++){
+      const r1 = ((s0 + i*97) % 100)/100, r2 = ((s0 + i*211) % 100)/100;
+      const x = b.x + b.w*(0.18 + r1*0.64), y = b.y + b.h*(0.15 + r2*0.7);
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + (r1 - 0.5)*b.w*0.5, y + (0.35 + r2*0.4)*b.h*0.5);
+      g.lineTo(x + (r2 - 0.5)*b.w*0.7, y + (0.7 + r1*0.3)*b.h*0.6);
+      g.stroke();
+    }
+    g.restore();
+  }
+  g.restore();
+}
+
+/* ── EL REY ──
+   Chiquito, con corona, y con la cara del susto cuando le queda poca vida. Es el
+   único personaje del cuadro, así que es lo único a lo que hay que mirarle la
+   cara: los bloques no la tienen y por eso el ojo va derecho a él. */
+function kReyDib(g){
+  if (!K_rey) return;
+  const R = K_rey, v = R.vida/100;
+  g.save();
+  g.globalAlpha = 0.3;
+  g.beginPath(); g.ellipse(R.x, R.y + R.r - 1, R.r*1.1, 4.5, 0, 0, 7);
+  g.fillStyle = '#000'; g.fill();
+  g.restore();
+  if (!dibCuadro('k_rey', v > 0.5 ? 0 : 1, R.x, R.y + R.r, R.r*2.7)){
+    /* capa, cuerpo, cabeza y corona: cuatro piezas y el contorno */
+    g.beginPath();
+    g.moveTo(R.x - R.r*1.15, R.y + R.r);
+    g.lineTo(R.x - R.r*0.55, R.y - R.r*0.25);
+    g.lineTo(R.x + R.r*0.55, R.y - R.r*0.25);
+    g.lineTo(R.x + R.r*1.15, R.y + R.r);
+    g.closePath();
+    g.fillStyle = '#a83c46'; g.fill();
+    g.strokeStyle = 'rgba(30,18,14,.6)'; g.lineWidth = 2; g.stroke();
+    disco(R.x, R.y - R.r*0.5, R.r*0.62, '#e8b48a');
+    g.beginPath(); g.arc(R.x, R.y - R.r*0.5, R.r*0.62, 0, 7); g.stroke();
+    /* la corona: tres puntas, que es lo que la separa de un sombrero */
+    g.beginPath();
+    const cy = R.y - R.r*1.02, w = R.r*0.78;
+    g.moveTo(R.x - w, cy);
+    g.lineTo(R.x - w, cy - R.r*0.5); g.lineTo(R.x - w*0.5, cy - R.r*0.18);
+    g.lineTo(R.x, cy - R.r*0.62);    g.lineTo(R.x + w*0.5, cy - R.r*0.18);
+    g.lineTo(R.x + w, cy - R.r*0.5); g.lineTo(R.x + w, cy);
+    g.closePath();
+    g.fillStyle = '#ffd76a'; g.fill(); g.stroke();
+    /* los ojos: dos puntos abiertos, y cerrados con la mitad de la vida */
+    g.fillStyle = '#2a1e18';
+    if (v > 0.5){
+      g.beginPath(); g.arc(R.x - R.r*0.24, R.y - R.r*0.55, 1.9, 0, 7); g.fill();
+      g.beginPath(); g.arc(R.x + R.r*0.24, R.y - R.r*0.55, 1.9, 0, 7); g.fill();
+    } else {
+      g.strokeStyle = '#2a1e18'; g.lineWidth = 2;
+      for (const s of [-1, 1]){
+        g.beginPath();
+        g.arc(R.x + s*R.r*0.24, R.y - R.r*0.48, 3, Math.PI, 0);
+        g.stroke();
+      }
+    }
+  }
+  /* la barra de vida sobre la cabeza: la ficha del HUD dice el número pero está
+     arriba de todo, y en el instante del derrumbe nadie mira ahí */
+  if (v < 1){
+    const w = 46, x = R.x - w/2, y = R.y - R.r*2.5;
+    g.fillStyle = 'rgba(14,10,8,.6)'; g.fillRect(x - 1, y - 1, w + 2, 8);
+    g.fillStyle = v > 0.5 ? '#7fd07a' : (v > 0.22 ? '#ffd76a' : '#ff6a5a');
+    g.fillRect(x, y, w*v, 6);
+  }
+}
+
+/* ── LA CATAPULTA ──
+   El brazo se mueve con la tensión de verdad, así que la máquina DICE cuánta
+   fuerza lleva el tiro antes de soltar. Un brazo quieto con un número al lado es
+   la misma información y no se siente. */
+function kCatapulta(g){
+  const x = 120, y = kSuelo();
+  const t = K_fase === 'apunta' && K_arr ? kTension() : { ang: 0.85, f: 0.12 };
+  g.save();
+  g.translate(x, y);
+  g.save();
+  g.globalAlpha = 0.3;
+  g.beginPath(); g.ellipse(0, 0, 62, 10, 0, 0, 7); g.fillStyle = '#000'; g.fill();
+  g.restore();
+  if (!dibCuadro('k_catapulta', 0, 0, 0, 132)){
+    /* el bastidor */
+    g.strokeStyle = '#6b4820'; g.lineWidth = 11; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-46, -4); g.lineTo(46, -4); g.stroke();
+    g.beginPath(); g.moveTo(-30, -4); g.lineTo(6, -62); g.stroke();
+    g.beginPath(); g.moveTo(34, -4); g.lineTo(6, -62); g.stroke();
+    /* las ruedas: son lo que dice que esto es una máquina y no un andamio */
+    for (const rx of [-38, 34]){
+      disco(rx, -6, 15, '#5a3f1e');
+      g.strokeStyle = '#3a2810'; g.lineWidth = 3;
+      g.beginPath(); g.arc(rx, -6, 15, 0, 7); g.stroke();
+      disco(rx, -6, 4.5, '#c98a3c');
+    }
+    /* el brazo, girado por la tensión: en reposo apunta adelante y al tensar
+       se va para atrás, que es exactamente lo que hace el dedo */
+    g.save();
+    g.translate(6, -62);
+    g.rotate(-0.55 + t.f*1.5);
+    g.strokeStyle = '#8a6134'; g.lineWidth = 10;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(-58, -12); g.stroke();
+    /* la cuchara con la piedra dentro mientras se apunta */
+    g.beginPath(); g.arc(-60, -14, 12, 0.6, 4.2); g.strokeStyle = '#6b4820';
+    g.lineWidth = 5; g.stroke();
+    if (K_fase === 'apunta') disco(-60, -18, 11, '#8e8e8a');
+    g.restore();
+    /* la soga tensada, del brazo al bastidor */
+    g.strokeStyle = 'rgba(240,230,210,.7)'; g.lineWidth = 2.5;
+    g.beginPath();
+    g.moveTo(6 - Math.cos(-0.55 + t.f*1.5)*0, -62);
+    g.lineTo(-44, -6);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/* ── LA GUÍA DEL TIRO ──
+   Ocho puntos y no la parábola entera, por lo mismo que en ARCO: con la
+   trayectoria completa el juego se resuelve solo, y sin nada un jugador nuevo no
+   entiende qué hace el arrastre. */
+function kGuia(g){
+  const t = kTension();
+  let x = 120, y = kSuelo() - 96;
+  let vx = Math.cos(t.ang)*t.f*K_VMAX, vy = -Math.sin(t.ang)*t.f*K_VMAX;
+  const h = 0.06;
+  g.fillStyle = 'rgba(255,246,224,.8)';
+  for (let i = 0; i < 8; i++){
+    vy += K_G*h; x += vx*h; y += vy*h;
+    g.globalAlpha = 0.85 - i*0.09;
+    g.beginPath(); g.arc(x, y, 7 - i*0.55, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+/* ── EL TENSOR EN PANTALLA ──
+   Va en coordenadas de PANTALLA y no del mundo: la cámara se aleja hasta 0,42 y
+   un medidor dibujado en el mundo se achicaría justo cuando hay que leerlo. */
+function kTensor(g){
+  const t = kTension();
+  const x = AN*0.5, y = AL - 150, w = AN*0.6;
+  caja2(x - w/2, y, w, 20, 10, 'rgba(14,10,8,.55)', 'rgba(255,246,224,.25)');
+  const c = t.f > 0.86 ? '#ff6a5a' : (t.f > 0.55 ? '#ffd76a' : '#7fd07a');
+  caja2(x - w/2 + 3, y + 3, (w - 6)*t.f, 14, 7, c, null);
+  texto(Math.round(t.ang*57.3) + '°', x, y - 14, 26, 'rgba(242,238,230,.8)', '800', 'center');
+}
+
+/* ── LA LEYENDA DE MATERIALES ──
+   Tres cuadraditos con su nombre. Sin esto el hielo es «el bloque celeste» y no
+   hay forma de saber que es el que menos aguanta: el juego pide leer el edificio
+   y para leerlo hay que saber el alfabeto. */
+function kLeyenda(g){
+  const usados = [];
+  for (const b of K_bloques) if (b.vida > 0 && usados.indexOf(b.mat) < 0) usados.push(b.mat);
+  usados.sort();
+  let x = 24;
+  const y = AL - 62;
+  for (const m of usados){
+    const M = K_MAT[m];
+    caja2(x, y, 18, 18, 4, M.col, M.bor);
+    texto(TX(M.k), x + 25, y + 15, 19, 'rgba(242,238,230,.72)', '700', 'left');
+    x += 32 + TX(M.k).length*11;
+  }
+}
+
+function kPinta(g){
+  kCam(g);
+
+  /* el suelo: un rectángulo y su labio claro. La colina de ARCO acá sería un
+     problema —una catapulta y una torre tienen que estar en el MISMO plano o el
+     tiro deja de poder calcularse a ojo— así que el suelo es recto a propósito */
+  const pat = patron('k_pasto');
+  g.fillStyle = '#4a4034';
+  g.fillRect(-400, kSuelo(), K_MUNDO + 800, 3000);
+  if (pat){
+    g.save();
+    g.beginPath(); g.rect(-400, kSuelo(), K_MUNDO + 800, 3000); g.clip();
+    g.globalAlpha = 0.7; g.fillStyle = pat;
+    g.fillRect(-400, kSuelo(), K_MUNDO + 800, 3000);
+    g.restore();
+  }
+  g.strokeStyle = '#7f6a4a'; g.lineWidth = 6;
+  g.beginPath(); g.moveTo(-400, kSuelo()); g.lineTo(K_MUNDO + 400, kSuelo()); g.stroke();
+
+  /* la traza del tiro anterior, desvanecida: es lo que convierte «fallé» en
+     «fallé por poco y para arriba» */
+  if (K_estela.length){
+    g.beginPath();
+    let n = 0;
+    for (const e of K_estela){
+      if (e.t <= 0) continue;
+      if (n++ === 0) g.moveTo(e.x, e.y); else g.lineTo(e.x, e.y);
+    }
+    g.strokeStyle = 'rgba(255,246,224,.4)';
+    g.lineWidth = Math.max(2, 4/K_camZ*0.5); g.lineCap = 'round'; g.stroke();
+  }
+
+  kCatapulta(g);
+  /* ── LOS BLOQUES SE PINTAN DE ABAJO HACIA ARRIBA ──
+     Con el orden del array, un bloque que se cayó y quedó adelante se dibuja
+     detrás del que sigue en pie y se ve atravesándolo. */
+  const orden = K_bloques.slice().sort((a, b) => (a.y + a.h) - (b.y + b.h));
+  for (const b of orden) kBloque(g, b);
+  kReyDib(g);
+
+  if (K_piedra){
+    const p = K_piedra;
+    g.save();
+    g.translate(p.x, p.y); g.rotate(p.gi);
+    if (!dibCuadro('k_piedra', 0, 0, p.r, p.r*2)){
+      disco(0, 0, p.r, '#8e8e8a');
+      g.strokeStyle = '#5a5a56'; g.lineWidth = 3;
+      g.beginPath(); g.arc(0, 0, p.r, 0, 7); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.22)';
+      g.beginPath(); g.arc(-p.r*0.3, -p.r*0.32, p.r*0.34, 0, 7); g.fill();
+    }
+    g.restore();
+  }
+
+  if (K_arr && K_fase === 'apunta') kGuia(g);
+
+  g.restore();
+
+  /* ══ lo que va en pantalla y no en el mundo ══ */
+  if (K_arr && K_fase === 'apunta') kTensor(g);
+  kLeyenda(g);
+  if (K_msgT > 0){
+    const al = Math.min(1, K_msgT/0.4);
+    const col = K_msg === 'gano' ? '255,106,90'
+              : (K_msg === 'derrumbe' ? '255,215,106' : '242,238,230');
+    texto(TX(K_msg), AN/2, AL*0.28, K_msg === 'golpe' ? 40 : 54,
+          'rgba(' + col + ',' + al.toFixed(2) + ')', '800', 'center');
+  }
+  if (K_fase === 'apunta' && !K_arr && K_tiros === 0)
+    texto(TX('c1'), AN/2, AL - 104, 22, 'rgba(242,238,230,.5)', '700', 'center');
+}
+
+/* ══════════ LA CINEMÁTICA ══════════
+   Tres planos, y cada uno es una función del instante `u`: se guarda el estado,
+   se arma el plano, se pinta y se devuelve todo. Así el plano se puede
+   fotografiar en cualquier momento sin haber corrido los anteriores — la lección
+   que ya costó una vuelta con la cinemática de BARRIO. */
+function kDemo(g, u, plano){
+  const gn = K_nivel, gb = K_bloques, gr = K_rey, gf = K_fase, ga = K_arr;
+  const gp = K_piedra, ge = K_estela, gx = K_camX, gz = K_camZ;
+  const gm = K_msg, gmt = K_msgT, gt = K_tiros;
+
+  const G = kGenera(plano === 2 ? 26 : 4);
+  K_bloques = G.b; K_rey = G.rey; K_tiros = 0;
+  K_estela = []; K_piedra = null; K_msg = ''; K_msgT = 0; K_arr = null;
+  K_fase = 'apunta';
+  K_asentando = true;
+  for (let i = 0; i < 90; i++) kFisica(1/60);
+  K_asentando = false;
+  K_camX = K_MUNDO*0.5 + 60;
+  K_camZ = Math.max(0.42, Math.min(0.9, AN/(K_MUNDO*0.86)));
+
+  if (plano === 0){
+    /* el arrastre, que es el verbo entero y no se puede contar con una frase */
+    const d = 40 + u*200;
+    K_arr = { x0: AN*0.32, y0: AL*0.60,
+              x: AN*0.32 - d*0.84, y: AL*0.60 + d*0.52 };
+  } else if (plano === 1){
+    /* el derrumbe: se le pega a la pata cargada y se adelanta la simulación
+       hasta el instante pedido, así el plano MUESTRA la torre cayéndose en vez
+       de decir que se cae */
+    const b = kBotBlanco();
+    const t = kTiroA(b.x + b.w/2, b.y + b.h/2);
+    const v = t.f*K_VMAX;
+    K_piedra = { x: 120, y: kSuelo() - 96, r: 15,
+                 vx: Math.cos(t.ang)*v, vy: -Math.sin(t.ang)*v, gi: 0, vgi: 6 };
+    K_fase = 'vuela';
+    const dt = 1/120, T = 0.4 + u*2.4;
+    for (let s = 0; s < T; s += dt){
+      kFisica(dt);
+      if (K_piedra){
+        K_piedra.vy += K_G*dt;
+        K_piedra.x += K_piedra.vx*dt; K_piedra.y += K_piedra.vy*dt;
+        K_piedra.gi += K_piedra.vgi*dt;
+        K_estela.push({ x: K_piedra.x, y: K_piedra.y, t: 0.5 });
+        if (kPiedraChoca(K_piedra, dt) || K_piedra.y > kSuelo()){
+          K_piedra = null; K_fase = 'asienta';
+        }
+      }
+    }
+    K_lento = 0;
+    if (K_piedra){ K_camX = K_piedra.x; K_camZ = 0.8; }
+  } else {
+    /* el rey aplastado: es la promesa del juego, así que el último plano la
+       muestra hecha y no la anuncia */
+    K_rey.vida = 22;
+    K_msg = 'gano'; K_msgT = 1.5;
+    const dt = 1/120;
+    for (const b of K_bloques) if (kAz() < 0.55){ b.vida = 0; }
+    for (let s = 0; s < 1.2; s += dt) kFisica(dt);
+  }
+  kPinta(g);
+
+  K_nivel = gn; K_bloques = gb; K_rey = gr; K_fase = gf; K_arr = ga;
+  K_piedra = gp; K_estela = ge; K_camX = gx; K_camZ = gz;
+  K_msg = gm; K_msgT = gmt; K_tiros = gt;
+}
+/* ══════════════════════ LOS TRES IDIOMAS ══════════════════════
+   La pantalla de idioma va ANTES del menú, que es la lección de los otros seis
+   juegos de este repo: elegir el idioma adentro de un menú ya escrito en un
+   idioma que no entendés no sirve de nada, porque para cuando lo encontrás ya
+   leíste todo sin entenderlo.
+
+   Y NO SE GUARDA NADA EN DISCO. `localStorage` TIRA en una ventana privada, y
+   un minijuego que se abre desde un enlace se abre en ventanas raras todo el
+   tiempo. El idioma sale de `navigator.language` y el jugador lo cambia con los
+   tres botones chicos del menú. La única cosa que sí se intenta guardar es el
+   récord, y va envuelta en `try` justamente porque puede tirar. */
+let LANG = 'en';
+const TXB = {
+  es: { jugar:'JUGAR', como:'CÓMO SE JUEGA', otra:'OTRA VEZ', menu:'MENÚ',
+        mejor:'MEJOR', salta:'TOCÁ PARA SALTEAR', pts:'PUNTOS',
+        finBien:'¡BIEN!', finMal:'SE TERMINÓ', nuevoRec:'RÉCORD NUEVO',
+        racha:'RACHA', niveles:'NIVELES', nivel:'NIVEL', movs:'MOVIDAS',
+        deshacer:'DESHACER', reiniciar:'REINICIAR', salir:'SALIR',
+        seguir:'SEGUIR', ganaste:'¡NIVEL LISTO!', perdiste:'NO SALIÓ',
+        proximo:'SIGUIENTE', progreso:'{0} DE {1}',
+        gNo:'Se juega inclinando el teléfono', gSi:'Giroscopio listo',
+        gSin:'Este aparato no tiene giroscopio · se juega con el dedo',
+        gNeg:'Permiso de movimiento negado · se juega con el dedo',
+        gIns:'Sin HTTPS no hay sensores · se juega con el dedo',
+        mNo:'Se juega con la mano por la cámara', mSi:'Cámara lista',
+        mPerm:'Permiso de cámara negado · se juega tocando',
+        mCam:'No hay cámara · se juega tocando',
+        mCdn:'No se pudo bajar el detector · se juega tocando',
+        mMod:'No arrancó el detector · se juega tocando',
+        mIns:'Sin HTTPS no hay cámara · se juega tocando' },
+  en: { jugar:'PLAY', como:'HOW TO PLAY', otra:'AGAIN', menu:'MENU',
+        mejor:'BEST', salta:'TAP TO SKIP', pts:'POINTS',
+        finBien:'NICE!', finMal:'GAME OVER', nuevoRec:'NEW RECORD',
+        racha:'STREAK', niveles:'LEVELS', nivel:'LEVEL', movs:'MOVES',
+        deshacer:'UNDO', reiniciar:'RESTART', salir:'EXIT',
+        seguir:'CONTINUE', ganaste:'LEVEL CLEAR!', perdiste:'NO LUCK',
+        proximo:'NEXT', progreso:'{0} OF {1}',
+        gNo:'Tilt the phone to play', gSi:'Gyroscope ready',
+        gSin:'This device has no gyroscope · play with your finger',
+        gNeg:'Motion permission denied · play with your finger',
+        gIns:'No sensors without HTTPS · play with your finger',
+        mNo:'Play with your hand through the camera', mSi:'Camera ready',
+        mPerm:'Camera permission denied · play by tapping',
+        mCam:'No camera · play by tapping',
+        mCdn:'Could not download the detector · play by tapping',
+        mMod:'The detector did not start · play by tapping',
+        mIns:'No camera without HTTPS · play by tapping' },
+  pt: { jugar:'JOGAR', como:'COMO JOGAR', otra:'DE NOVO', menu:'MENU',
+        mejor:'MELHOR', salta:'TOQUE PARA PULAR', pts:'PONTOS',
+        finBien:'BOA!', finMal:'ACABOU', nuevoRec:'NOVO RECORDE',
+        racha:'SEQUÊNCIA', niveles:'NÍVEIS', nivel:'NÍVEL', movs:'JOGADAS',
+        deshacer:'DESFAZER', reiniciar:'REINICIAR', salir:'SAIR',
+        seguir:'CONTINUAR', ganaste:'NÍVEL FEITO!', perdiste:'NÃO DEU',
+        proximo:'PRÓXIMO', progreso:'{0} DE {1}',
+        gNo:'Jogue inclinando o telefone', gSi:'Giroscópio pronto',
+        gSin:'Este aparelho não tem giroscópio · jogue com o dedo',
+        gNeg:'Permissão de movimento negada · jogue com o dedo',
+        gIns:'Sem HTTPS não há sensores · jogue com o dedo',
+        mNo:'Jogue com a mão pela câmera', mSi:'Câmera pronta',
+        mPerm:'Permissão de câmera negada · jogue tocando',
+        mCam:'Sem câmera · jogue tocando',
+        mCdn:'Não baixou o detector · jogue tocando',
+        mMod:'O detector não iniciou · jogue tocando',
+        mIns:'Sem HTTPS não há câmera · jogue tocando' }
+};
+/* ── LA TABLA DEL JUEGO SE FUSIONA CON LA DEL NÚCLEO, NO LA REEMPLAZA ──
+   Cada juego trae sus propias frases y hereda las siete del núcleo. Si cada
+   juego tuviera que repetir «JUGAR» y «MENÚ» en tres idiomas, serían veintiún
+   cadenas duplicadas por juego y la primera que se corrija va a quedar
+   corregida en uno solo. */
+const TXT = {};
+for (const l of ['es','en','pt']) TXT[l] = Object.assign({}, TXB[l], (JT[l] || {}));
+
+function TX(k, ...a){
+  let s = (TXT[LANG] && TXT[LANG][k]) != null ? TXT[LANG][k]
+        : (TXT.es[k] != null ? TXT.es[k] : k);
+  /* los patrones con hueco: `{0}` se reemplaza por el argumento. Una frase con
+     un número adentro no se puede armar concatenando, porque el número no cae
+     en el mismo lugar en los tres idiomas. */
+  return String(s).replace(/\{(\d)\}/g, (_, i) => a[i] != null ? a[i] : '');
+}
+
+function pintaIdioma(){
+  document.documentElement.lang = LANG;
+  for (const e of document.querySelectorAll('[data-i18n]'))
+    e.textContent = TX(e.dataset.i18n);
+  for (const b of document.querySelectorAll('[data-lang]'))
+    b.classList.toggle('p', b.dataset.lang === LANG);
+  $('salta').textContent = TX('salta');
+  if (window.pintaJuego) window.pintaJuego();
+}
+
+function ponIdioma(l){ LANG = l; pintaIdioma(); }
+
+/* el idioma del aparato, y sólo si es uno de los tres */
+(() => {
+  const n = (navigator.language || 'en').slice(0,2).toLowerCase();
+  if (n === 'es' || n === 'pt') LANG = n;
+})();
+/* ══════════════════════════ EL SONIDO ══════════════════════════
+   Procedural y sin un solo archivo, y acá eso no es una limitación sino la
+   respuesta correcta: un minijuego de TikTok se abre desde un enlace y tiene
+   que estar jugable en el primer segundo. Medio mega de MP3 antes del primer
+   cuadro es exactamente lo que hace que alguien se vaya.
+
+   Y LA ESCALA ESTÁ ESCALONADA, que es la regla que ya se midió en Eco, en
+   RECREO y en PULSO: la cama de fondo tiene que quedar MUY por debajo de un
+   acierto, porque si compiten, el acierto deja de ser un acontecimiento y pasa
+   a ser un matiz. Fondo 0,03 · toque 0,10 · acierto 0,18 · error 0,22 · final
+   0,30. */
+let AUD = null, MAESTRO = null, ANAL = null, RUIDO = null, CAMA = null;
+let SILENCIO = false;
+
+function armaAudio(){
+  if (AUD) return;
+  try { AUD = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  MAESTRO = AUD.createGain(); MAESTRO.gain.value = 0.9;
+  MAESTRO.connect(AUD.destination);
+  ANAL = AUD.createAnalyser(); ANAL.fftSize = 1024; MAESTRO.connect(ANAL);
+  /* un segundo de ruido blanco generado una vez: cada golpe es el mismo ruido
+     con otro filtro y otro sobre, así que no hay que generar nada más */
+  const n = AUD.sampleRate;
+  RUIDO = AUD.createBuffer(1, n, n);
+  const d = RUIDO.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
+}
+
+function env(gn, t0, at, dur, pico){
+  gn.gain.setValueAtTime(0.0001, t0);
+  gn.gain.exponentialRampToValueAtTime(Math.max(0.0002, pico), t0 + at);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+}
+function tono(t0, f0, f1, dur, pico, tipo){
+  if (!AUD) return;
+  const o = AUD.createOscillator(); o.type = tipo || 'sine';
+  o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+  const gn = AUD.createGain(); o.connect(gn); gn.connect(MAESTRO);
+  env(gn, t0, Math.min(0.02, dur*0.2), dur, pico);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function ruido(t0, dur, f, q, pico, tipo){
+  if (!AUD) return null;
+  const s = AUD.createBufferSource(); s.buffer = RUIDO; s.loop = true;
+  const b = AUD.createBiquadFilter(); b.type = tipo || 'bandpass';
+  b.frequency.value = f; b.Q.value = q;
+  const gn = AUD.createGain();
+  s.connect(b); b.connect(gn); gn.connect(MAESTRO);
+  env(gn, t0, Math.min(0.01, dur*0.2), dur, pico);
+  s.start(t0); s.stop(t0 + dur + 0.05);
+  return b;
+}
+
+/* ── LA ESCALA PENTATÓNICA NO ES UN GUSTO ──
+   Un acierto suena cien veces por partida. En cualquier otra escala, dos notas
+   seguidas pueden sonar mal juntas y a los treinta segundos molesta; en
+   pentatónica cualquier nota pega con cualquier otra. Es la misma decisión que
+   en POMPOM, y ahí se notó al primer minuto de juego. */
+const PENTA = [0, 2, 4, 7, 9];
+function nota(i){ /* i = grado, sube por octavas */
+  const o = Math.floor(i / 5), s = PENTA[((i % 5) + 5) % 5];
+  return 220 * Math.pow(2, (s + 12*o) / 12);
+}
+
+let _racha = 0;
+function son(tipo, k){
+  if (!AUD || SILENCIO) return;
+  const t = AUD.currentTime, v = k == null ? 1 : k;
+  if (tipo === 'toque'){
+    tono(t, 620, 460, 0.05, 0.10*v, 'sine');
+  } else if (tipo === 'bien'){
+    /* ── LA RACHA SUBE DE NOTA, Y ES LO QUE ENGANCHA ──
+       Con una nota fija, veinte aciertos son el mismo sonido veinte veces. Con
+       la escala subiendo, la racha SE ESCUCHA: el jugador oye que va bien antes
+       de mirar el número, y perder la racha se siente porque el tono vuelve
+       abajo. Es la mitad del enganche de un minijuego y cuesta dos líneas. */
+    _racha = Math.min(_racha + 1, 14);
+    tono(t, nota(_racha + 4), nota(_racha + 4)*1.5, 0.16, 0.18*v, 'triangle');
+    tono(t + 0.03, nota(_racha + 9), nota(_racha + 9), 0.10, 0.07*v, 'sine');
+  } else if (tipo === 'mal'){
+    _racha = 0;
+    tono(t, 190, 78, 0.30, 0.22*v, 'sawtooth');
+    ruido(t, 0.16, 260, 0.8, 0.14*v, 'lowpass');
+  } else if (tipo === 'gana'){
+    _racha = 0;
+    for (let i = 0; i < 5; i++)
+      tono(t + i*0.085, nota(6 + i*2), nota(6 + i*2), 0.30, 0.30, 'triangle');
+  } else if (tipo === 'pierde'){
+    _racha = 0;
+    for (let i = 0; i < 3; i++)
+      tono(t + i*0.13, nota(8 - i*3), nota(8 - i*3)*0.98, 0.34, 0.24, 'sawtooth');
+  } else if (tipo === 'raspa'){
+    const b = ruido(t, 0.09, 2600, 0.6, 0.13*v);
+    if (b) b.frequency.linearRampToValueAtTime(1400, t + 0.09);
+  } else if (tipo === 'clic'){
+    ruido(t, 0.035, 1800, 1.4, 0.12*v);
+  } else if (tipo === 'pop'){
+    /* una burbuja que revienta: un golpe de ruido corto y agudo mas un tono que
+       cae rapido. El tono solo suena a bip; el ruido solo, a chasquido. */
+    ruido(t, 0.05, 1500 + 900*Math.random(), 1.1, 0.14*v);
+    tono(t, 900, 320, 0.07, 0.09*v, 'sine');
+  } else if (tipo === 'caida'){
+    /* algo apoyandose: casi todo grave, porque lo que dice «peso» es lo de
+       abajo. Con un tono agudo se lee a boton y no a bloque. */
+    tono(t, 150, 62, 0.13, 0.16*v, 'sine');
+    ruido(t, 0.06, 220, 0.7, 0.10*v, 'lowpass');
+  }
+}
+function rachaCero(){ _racha = 0; }
+
+/* la cama: dos senos muy graves y desafinados entre sí, que baten cada pocos
+   segundos. Dos senos idénticos suenan a tono de prueba; desafinados suenan a
+   instrumento, y es lo que ya se midió en POMPOM. */
+function camaFondo(on){
+  if (!AUD) return;
+  if (on && !CAMA){
+    const o = AUD.createOscillator(); o.type = 'sine'; o.frequency.value = 55;
+    const o2 = AUD.createOscillator(); o2.type = 'sine'; o2.frequency.value = 82.4;
+    const gn = AUD.createGain(); gn.gain.value = 0.030;
+    o.connect(gn); o2.connect(gn); gn.connect(MAESTRO);
+    o.start(); o2.start();
+    CAMA = { o, o2, gn };
+  } else if (!on && CAMA){
+    CAMA.gn.gain.setTargetAtTime(0.0001, AUD.currentTime, 0.25);
+    const c = CAMA; CAMA = null;
+    setTimeout(() => { try { c.o.stop(); c.o2.stop(); } catch(e){} }, 900);
+  }
+}
+function pico(){
+  if (!ANAL) return 0;
+  const a = new Uint8Array(ANAL.fftSize);
+  ANAL.getByteTimeDomainData(a);
+  let m = 0;
+  for (const v of a) m = Math.max(m, Math.abs(v - 128) / 128);
+  return +m.toFixed(4);
+}
+/* ══════════════════ LOS ASSETS GENERADOS ══════════════════
+   Las imágenes y el sonido están generados con Rezona y horneados en base64
+   dentro del archivo por `herramientas/casual/hornear.py`. Este módulo es lo
+   único que los conoce: los juegos piden `IMG.pj` o `dibCuadro('pj', 2, …)` y
+   no saben de dónde salió.
+
+   ── Y NADA REEMPLAZA NADA HASTA QUE LLEGA ──
+   Es la regla del repo y acá pesa más que en ningún otro juego: un data URI se
+   decodifica de forma ASINCRÓNICA, así que un juego que naciera esperando la
+   foto daría un cuadro —o veinte— en negro justo en el primer segundo, que es
+   el único que un minijuego tiene para engancharte. Todo lo dibujado por código
+   sigue en pie y la imagen lo PISA cuando está lista. Si una no decodifica,
+   cuesta esa pieza y no la pantalla. */
+
+const IMG = {}, SON = {};
+let AS_LISTAS = 0, AS_PEDIDAS = 0, AS_FALLADAS = 0;
+
+function cargaImg(){
+  if (typeof AS === 'undefined' || !AS.img) return;
+  for (const k in AS.img){
+    const m = AS.img[k];
+    const o = { ok: false, n: m.n || 1, w: m.w || 0, h: m.h || 0,
+                im: new Image(), msk: null, cache: {} };
+    IMG[k] = o; AS_PEDIDAS++;
+    o.im.onload = () => {
+      o.ok = true; AS_LISTAS++;
+      if (!o.w){ o.w = o.im.width; o.h = o.im.height; }
+    };
+    o.im.onerror = () => { AS_FALLADAS++; };
+    o.im.src = m.d;
+    if (m.m){ o.msk = new Image(); o.msk.src = m.m; }
+  }
+}
+
+/* el sonido necesita el contexto, así que se carga cuando el contexto existe —
+   o sea con el primer toque. Ningún navegador deja sonar nada antes de un
+   gesto, así que decodificar antes sería trabajo tirado. */
+let _sonPedido = false;
+function cargaSon(){
+  if (_sonPedido || !AUD || typeof AS === 'undefined' || !AS.son) return;
+  _sonPedido = true;
+  for (const k in AS.son){
+    const b = atob(AS.son[k]);
+    const ab = new ArrayBuffer(b.length), v = new Uint8Array(ab);
+    for (let i = 0; i < b.length; i++) v[i] = b.charCodeAt(i);
+    AUD.decodeAudioData(ab, (buf) => {
+      SON[k] = buf;
+      /* ── Y SI EL TEMA QUE HACE FALTA ERA ESTE, ARRANCA AHORA ──
+         `decodeAudioData` es asincronico, asi que el primer pedido de musica
+         casi siempre llega ANTES de que el buffer exista: sin esto, el menu
+         se quedaria con la cama de osciladores para siempre y el tema
+         generado no sonaria nunca. */
+      if (_musK === k) musQuiere(k);
+    }, () => {});
+  }
+}
+
+/* ══════════ LA MÚSICA ══════════
+   Va con `BufferSource` en bucle y no con un `<audio loop>`: el loop de un
+   `<audio>` vuelve al cero con un hueco de milisegundos y en un tema de nueve
+   segundos eso se escucha en cada vuelta. Más la cola fundida sobre la cabeza,
+   que la pone el horneado.
+
+   Y SE CRUZAN, no se cortan: el menú y la partida son dos temas, y un corte en
+   seco entre los dos se lee a error y no a que empezó el juego. */
+const MUS_VOL = { menu: 0.30, mus: 0.26 };
+let MUS = null;
+
+function musPon(k){
+  if (!AUD) return;
+  if (MUS && MUS.k === k) return;
+  if (MUS){
+    const v = MUS; MUS = null;
+    v.gn.gain.cancelScheduledValues(AUD.currentTime);
+    v.gn.gain.setTargetAtTime(0.0001, AUD.currentTime, 0.28);
+    setTimeout(() => { try { v.src.stop(); } catch(e){} }, 1200);
+  }
+  if (!k || !SON[k]) return;
+  const src = AUD.createBufferSource();
+  src.buffer = SON[k]; src.loop = true;
+  const gn = AUD.createGain(); gn.gain.value = 0.0001;
+  src.connect(gn); gn.connect(MAESTRO);
+  src.start();
+  gn.gain.setTargetAtTime(MUS_VOL[k] != null ? MUS_VOL[k] : 0.26, AUD.currentTime, 0.35);
+  MUS = { k, src, gn };
+}
+/* ── QUE TEMA QUIERE EL JUEGO ──
+   Un solo sitio decide si suena la muestra o la cama de osciladores, y se
+   acuerda de lo que se le pidio para poder arrancarlo cuando el buffer llegue.
+   Repartido en cinco llamadas, el dia que se agregue una pantalla va a quedar
+   una sin musica y nadie se va a enterar hasta jugarla. */
+let _musK = null;
+function musQuiere(k){
+  _musK = k;
+  cargaSon();
+  if (k && SON[k]){ camaFondo(false); musPon(k); return; }
+  musPon(null);
+  camaFondo(!!k);
+}
+
+/* la música se agacha mientras suena algo importante: si compiten, el
+   acontecimiento deja de ser un acontecimiento y pasa a ser un matiz */
+function musAgacha(k, seg){
+  if (!MUS) return;
+  const g0 = MUS_VOL[MUS.k] != null ? MUS_VOL[MUS.k] : 0.26;
+  MUS.gn.gain.cancelScheduledValues(AUD.currentTime);
+  MUS.gn.gain.setTargetAtTime(g0*k, AUD.currentTime, 0.05);
+  MUS.gn.gain.setTargetAtTime(g0, AUD.currentTime + (seg || 0.5), 0.25);
+}
+
+/* ══════════ EL SONIDO: LA MUESTRA PRIMERO Y EL OSCILADOR DE RED ══════════
+   `son()` sigue siendo el de siempre —está medido y funciona— y esto lo
+   ENVUELVE: si el juego declaró un alias y la muestra decodificó, suena la
+   muestra; si no, suena el sintetizado. Un juego mudo por un decodificador es
+   peor que un juego con bips, y ya pasó una vez en este repo. */
+const _sonProc = son;
+son = function(tipo, k){
+  if (!AUD || SILENCIO) return;
+  const al = (typeof SON_ALIAS !== 'undefined' && SON_ALIAS) ? SON_ALIAS[tipo] : null;
+  if (al && SON[al]){
+    if (tipo === 'bien') _racha = Math.min(_racha + 1, 14);
+    else if (tipo === 'mal' || tipo === 'gana' || tipo === 'pierde') _racha = 0;
+    const src = AUD.createBufferSource();
+    src.buffer = SON[al];
+    const gn = AUD.createGain();
+    gn.gain.value = (k == null ? 1 : k) * 0.85;
+    src.connect(gn); gn.connect(MAESTRO);
+    src.start();
+    return;
+  }
+  _sonProc(tipo, k);
+};
+
+/* ══════════ DIBUJO ══════════ */
+
+/* el fondo se dibuja por COVER y no estirado: la imagen viene 720x1280 y el
+   alto de diseño se mueve entre 1100 y 1760 según la pantalla, así que
+   estirándola la entrada del boliche sale aplastada en un teléfono largo */
+function dibCubre(k){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const e = Math.max(AN/o.im.width, AL/o.im.height);
+  const w = o.im.width*e, h = o.im.height*e;
+  g.drawImage(o.im, (AN - w)/2, (AL - h)/2, w, h);
+  return true;
+}
+
+/* un cuadro de una hoja de sprites, centrado en x y APOYADO en y (los pies),
+   que es como se piensa un personaje. `esp` lo espeja. */
+function dibCuadro(k, i, x, y, alto, esp, lienzo){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const src = lienzo || o.im;
+  const e = alto / o.h, w = o.w*e;
+  g.save();
+  g.translate(x, y);
+  if (esp) g.scale(-1, 1);
+  g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, -w/2, -alto, w, alto);
+  g.restore();
+  return true;
+}
+
+/* ── Y UNA VARIANTE CON ANCHO PROPIO, QUE HACE FALTA MAS DE LO QUE PARECE ──
+   `dibCuadro` saca el ancho de la proporción del cuadro, que es lo correcto para
+   un personaje. Pero un bloque de TORRE se CORTA: su ancho cambia piso a piso,
+   así que dibujar el sprite proporcional deja el bloque angosto con la imagen
+   entera del ancho — o sea que lo que se ve no es lo que choca. Acá el ancho y
+   el alto los pone quien llama, y el sprite se estira. */
+function dibCuadroWH(k, i, x, y, w, h, lienzo){
+  const o = IMG[k];
+  if (!o || !o.ok) return false;
+  const src = lienzo || o.im;
+  g.drawImage(src, (i % o.n)*o.w, 0, o.w, o.h, x - w/2, y - h/2, w, h);
+  return true;
+}
+
+/* ── EL TEÑIDO: LA HOJA SE PINTA UNA VEZ Y SE GUARDA ──
+   El personaje se generó con la ropa BLANCA para poder pintarla del color que
+   la regla pida. Pintar por cuadro serían tres operaciones de lienzo sesenta
+   veces por segundo para obtener siempre lo mismo: se hornea una hoja por
+   color la primera vez que se pide y después son copias.
+
+   `multiply` sobre blanco devuelve el color exacto y sobre el contorno oscuro
+   lo deja oscuro, que es justo lo que tiene que pasar. Y donde la máscara es
+   transparente no cambia nada, así que la piel y el pelo no se tocan. */
+function tenido(k, color){
+  const o = IMG[k];
+  if (!o || !o.ok) return null;
+  if (o.cache[color]) return o.cache[color];
+  /* ── Y NO SE CACHEA UN TEÑIDO HECHO SIN LA MÁSCARA ──
+     La máscara es una segunda imagen y decodifica DESPUÉS de la hoja. Sin esta
+     guarda, el primer cuadro teñía con la hoja entera de máscara —o sea todo el
+     sprite, piel incluida— y GUARDABA eso para siempre: medido en la captura,
+     el visitante salía azul de la cara a las zapatillas.
+     Mientras la máscara no esté, se devuelve la hoja cruda sin teñir y sin
+     guardar nada: un visitante de blanco por dos cuadros es infinitamente mejor
+     que uno pintado entero por el resto de la partida. */
+  if (AS.img[k] && AS.img[k].m && !(o.msk && o.msk.complete)) return o.im;
+  const c = document.createElement('canvas');
+  c.width = o.im.width; c.height = o.im.height;
+  const x = c.getContext('2d');
+  x.drawImage(o.im, 0, 0);
+  const t = document.createElement('canvas');
+  t.width = c.width; t.height = c.height;
+  const y = t.getContext('2d');
+  /* la máscara es la de la ropa si la hay; si no, el sprite entero (que en ese
+     caso se generó blanco a propósito, como la bola de MANCHA) */
+  y.drawImage(o.msk && o.msk.complete ? o.msk : o.im, 0, 0);
+  y.globalCompositeOperation = 'source-in';
+  y.fillStyle = color; y.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = 'multiply';
+  x.drawImage(t, 0, 0);
+  o.cache[color] = c;
+  return c;
+}
+
+/* una textura como patrón repetible, guardada. Se hornean embaldosadas de
+   verdad (la banda del borde fundida sobre el opuesto), así que se repiten sin
+   espejo y sin costura. */
+function patron(k){
+  const o = IMG[k];
+  if (!o || !o.ok) return null;
+  if (!o.pat) o.pat = g.createPattern(o.im, 'repeat');
+  return o.pat;
+}
+
+/* un sello (la salpicadura, la bola) teñido y girado. El sello se horneó con el
+   RGB en blanco puro, así que el color sale exacto y no multiplicado por lo que
+   la generación hubiera puesto de gris. */
+function dibSello(k, x, y, r, gi, color){
+  const c = tenido(k, color);
+  if (!c) return false;
+  g.save();
+  g.translate(x, y);
+  if (gi) g.rotate(gi);
+  g.drawImage(c, -r, -r, r*2, r*2);
+  g.restore();
+  return true;
+}
+
+function asEstado(){
+  return { pedidas: AS_PEDIDAS, listas: AS_LISTAS, falladas: AS_FALLADAS,
+           son: Object.keys(SON).length,
+           mus: MUS ? MUS.k : null };
+}
+/* ══════════════════ EL JUGO Y LA RACHA ══════════════════
+   Lo que separa un minijuego de una demostración de una mecánica. Va en el
+   núcleo y no en cada juego por la razón de siempre —cinco copias divergen— y
+   porque acá hay algo más: la RACHA es una segunda capa de juego que los cinco
+   heredan de una.
+
+   ── POR QUÉ UN MULTIPLICADOR Y NO PUNTOS MÁS GRANDES ──
+   Un minijuego de cuarenta segundos con un solo verbo tiene un problema de
+   diseño concreto: la décima vez que hacés la cosa vale lo mismo que la
+   primera, así que a los quince segundos ya sabés cuánto vas a sacar. Con el
+   multiplicador la partida tiene una CURVA: los primeros cuatro aciertos valen
+   uno, el quinto vale dos, y a partir de ahí cada error no cuesta un punto,
+   cuesta la escalera entera. Eso convierte «tocar bien» en «no cortar la
+   racha», que es una decisión aunque el verbo sea el mismo.
+
+   Y LA VENTANA ES DE TIEMPO Y NO SÓLO DE ACIERTOS: dudar también corta. En un
+   juego que se filma, eso es lo que hace que el jugador se apure. */
+
+const COMBO = { n: 0, t: 0, mult: 1, max: 0, brillo: 0 };
+const COMBO_VENT = 2.8;          /* segundos de gracia entre dos aciertos */
+const COMBO_ESC = 4;             /* aciertos por escalón */
+const COMBO_TOPE = 5;            /* x5 y no más: con x10 la última partida borra
+                                    todas las anteriores y el récord deja de
+                                    querer decir algo */
+
+function comboCero(){
+  COMBO.n = 0; COMBO.t = 0; COMBO.mult = 1; COMBO.brillo = 0;
+  pintaCombo();
+}
+function comboSuma(){
+  COMBO.n++;
+  COMBO.t = COMBO_VENT;
+  const m = Math.min(COMBO_TOPE, 1 + Math.floor(COMBO.n / COMBO_ESC));
+  if (m !== COMBO.mult){
+    COMBO.mult = m;
+    COMBO.brillo = 1;
+    /* el escalón suena, y suena distinto de un acierto: si sonara igual, subir
+       de multiplicador no se notaría hasta mirar el número */
+    son('combo');
+    sacude(0.35);
+  }
+  if (COMBO.n > COMBO.max) COMBO.max = COMBO.n;
+  pintaCombo();
+}
+function comboCorta(){
+  if (COMBO.n === 0 && COMBO.mult === 1) return;
+  COMBO.n = 0; COMBO.mult = 1; COMBO.t = 0; COMBO.brillo = 0;
+  pintaCombo();
+}
+function comboPaso(dt){
+  if (COMBO.brillo > 0) COMBO.brillo -= dt*2.2;
+  if (COMBO.t <= 0) return;
+  COMBO.t -= dt;
+  if (COMBO.t <= 0) comboCorta();
+  else if (COMBO.mult > 1) pintaCombo();
+}
+
+/* la ficha del multiplicador vive en DOM como el resto del HUD: es un número
+   que tiene que quedar nítido en cualquier densidad de pantalla. Y se escribe
+   sólo cuando cambia, salvo la barra de la ventana, que es un ancho. */
+let _comboUlt = '';
+function pintaCombo(){
+  const e = $('combo');
+  if (!e) return;
+  const v = COMBO.mult > 1 ? ('x' + COMBO.mult) : '';
+  if (v !== _comboUlt){ e.textContent = v; _comboUlt = v; e.classList.toggle('on', !!v); }
+  const b = $('comboB');
+  if (b) b.style.width = (COMBO.t > 0 ? (COMBO.t/COMBO_VENT*100) : 0).toFixed(0) + '%';
+}
+
+/* ── SUMAR PUNTOS PASA POR UN SOLO SITIO ──
+   Acá se aplica el multiplicador, se sube la racha y sale el número flotante.
+   Repartido, cada juego tendría que acordarse de las tres cosas y la primera
+   que se olvide es el número, que es justo lo que hace que el punto se sienta
+   ganado. */
+function sumaPuntos(n, x, y){
+  comboSuma();
+  const g0 = n * COMBO.mult;
+  PUNTOS += g0;
+  if (x != null) flota('+' + g0, x, y, COMBO.mult > 1 ? '#ffd76a' : '#f2eee6',
+                       COMBO.mult > 1 ? 44 : 34);
+  return g0;
+}
+
+/* ══════════ PARTÍCULAS ══════════
+   Con gravedad y con roce, y el color lo elige quien las tira. Son la
+   diferencia entre «el bicho desapareció» y «le pegué»: sin nada, un objeto que
+   se va del cuadro se lee a error de dibujo. */
+const PART = [];
+const PART_TOPE = 220;           /* tope duro: sin él, una racha larga en MANCHA
+                                    llena el array y el cuadro se cae */
+function chispas(x, y, n, col, fuerza){
+  const f = fuerza || 1;
+  for (let i = 0; i < n && PART.length < PART_TOPE; i++){
+    const a = Math.random()*6.283, v = (90 + Math.random()*260)*f;
+    PART.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v - 60*f,
+                r: 3 + Math.random()*6, t: 0.38 + Math.random()*0.42, T: 0, col });
+  }
+}
+function partPaso(dt){
+  for (let i = PART.length - 1; i >= 0; i--){
+    const p = PART[i];
+    p.T += dt;
+    if (p.T >= p.t){ PART.splice(i, 1); continue; }
+    p.vy += 1500*dt;
+    p.vx *= 1 - 2.2*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+}
+
+/* ══════════ NÚMEROS FLOTANTES ══════════ */
+const FLOT = [];
+function flota(txt, x, y, col, tam){
+  if (FLOT.length > 24) FLOT.shift();
+  FLOT.push({ txt, x, y, col: col || '#f2eee6', tam: tam || 34, t: 0.9, T: 0 });
+}
+function flotPaso(dt){
+  for (let i = FLOT.length - 1; i >= 0; i--){
+    const f = FLOT[i];
+    f.T += dt;
+    if (f.T >= f.t) FLOT.splice(i, 1);
+  }
+}
+
+/* ══════════ SACUDÓN ══════════
+   Se aplica SÓLO a la capa del juego y no al fondo: sacudiendo el fondo
+   aparecen dos franjas negras en los bordes, y eso se ve peor que no sacudir.
+   Y decae rápido: un sacudón de medio segundo no es un golpe, es un terremoto. */
+let SAC = 0;
+function sacude(k){ SAC = Math.min(1.4, SAC + k); }
+function sacPaso(dt){ if (SAC > 0) SAC = Math.max(0, SAC - dt*4.2); }
+function sacAplica(){
+  if (SAC <= 0.002) return false;
+  const k = SAC*SAC;               /* al cuadrado: el final del sacudón se apaga
+                                      y no queda un temblor largo y parejo */
+  g.save();
+  g.translate((Math.random() - 0.5)*26*k, (Math.random() - 0.5)*26*k);
+  return true;
+}
+
+/* los tres cosméticos van con el `dt` del reloj y no con el paso fijo: son
+   dibujo, así que tienen que verse igual de suaves a 30 y a 120 cuadros. La
+   ventana de la racha NO está acá — vive adentro de la simulación, porque en
+   dos de los cinco juegos el multiplicador es física y no puntos. */
+function jugoPaso(dt){
+  partPaso(dt); flotPaso(dt); sacPaso(dt);
+}
+function jugoPinta(){
+  for (const p of PART){
+    const u = 1 - p.T/p.t;
+    g.globalAlpha = Math.min(1, u*1.8);
+    disco(p.x, p.y, p.r*u, p.col);
+  }
+  g.globalAlpha = 1;
+  for (const f of FLOT){
+    const u = f.T/f.t;
+    g.globalAlpha = Math.min(1, (1 - u)*2.2);
+    /* sube y frena: con velocidad constante se lee a texto que se desliza */
+    texto(f.txt, f.x, f.y - 80*(1 - (1 - u)*(1 - u)), f.tam*(1 + 0.14*(1 - u)), f.col);
+    g.globalAlpha = 1;
+  }
+}
+function jugoCero(){ PART.length = 0; FLOT.length = 0; SAC = 0; comboCero(); }
+/* ══════════════════════ EL PROGRESO Y LA REJA DE NIVELES ══════════════════════
+   Lo que separa un casual adictivo de un minijuego: que lo que hiciste QUEDE.
+   Sin progreso guardado, un rompecabezas de doscientos niveles es el nivel 1
+   doscientas veces — no hay a qué volver.
+
+   TRES COSAS QUE ESTO TIENE QUE HACER BIEN:
+
+   1. NO PUEDE FALLAR SI NO HAY DISCO. `localStorage` TIRA en una ventana
+      privada, y esto se abre desde enlaces todo el tiempo. Todo va envuelto en
+      `try`: sin disco el juego se juega igual y lo único que se pierde es el
+      progreso, que es infinitamente mejor que una pantalla en blanco.
+   2. LO QUE SE GUARDA ES LO MEJOR, NO LO ÚLTIMO. Rejugar un nivel que ya salió
+      con tres estrellas y hacerlo con una no puede BAJARLE la nota: eso castiga
+      justamente al que vuelve a jugar.
+   3. EL FORMATO TIENE QUE SOBREVIVIR A UN JSON ROTO. Una versión anterior del
+      juego, un dedo en la consola, media escritura: `JSON.parse` tira y ahí se
+      cae el módulo entero. Va con `try` y con respaldo a vacío. */
+
+const PROG = { est: {}, ultimo: 1 };
+const P_CLAVE = 'cas_' + JUEGO.id + '_prog';
+
+function progCarga(){
+  try {
+    const s = localStorage.getItem(P_CLAVE);
+    if (!s) return;
+    const o = JSON.parse(s);
+    if (o && typeof o === 'object'){
+      if (o.est && typeof o.est === 'object') PROG.est = o.est;
+      if (o.ultimo) PROG.ultimo = o.ultimo|0;
+    }
+  } catch(e){ PROG.est = {}; PROG.ultimo = 1; }
+}
+function progGuarda(){
+  try { localStorage.setItem(P_CLAVE, JSON.stringify(PROG)); } catch(e){}
+}
+/* cuántos niveles tiene este juego; los de puntaje devuelven 0 */
+function progTotal(){ return JUEGO.nivelesTotal || 0; }
+/* el 1 siempre está abierto; el resto pide que el anterior esté hecho */
+function progAbierto(n){ return n <= 1 || PROG.est[n-1] != null; }
+function progHecho(n){ return PROG.est[n] != null; }
+function progEstrellas(n){ return PROG.est[n] || 0; }
+/* el primero que falta: es el nivel que abre el botón JUGAR, así que quien
+   vuelve al juego sigue donde estaba en vez de tener que buscarlo en la reja */
+function progSiguiente(){
+  const T = progTotal();
+  for (let n = 1; n <= T; n++) if (!progHecho(n)) return n;
+  return T;                      /* están todos: se queda en el último */
+}
+function progGana(n, estrellas){
+  const e = Math.max(1, Math.min(3, estrellas|0));
+  if (!(PROG.est[n] > e)) PROG.est[n] = e;   /* nunca baja la nota */
+  PROG.ultimo = Math.max(PROG.ultimo, Math.min(progTotal(), n+1));
+  progGuarda();
+}
+function progContados(){
+  let n = 0, e = 0;
+  for (const k in PROG.est){ n++; e += PROG.est[k]|0; }
+  return { hechos: n, estrellas: e };
+}
+
+/* ── LA REJA SE ARMA UNA VEZ Y DESPUÉS SÓLO SE REPINTA ──
+   Doscientos botones creados de nuevo en cada visita al selector son doscientos
+   nodos que el navegador tiene que descartar y volver a hacer, y encima se
+   pierde la posición del deslizamiento: el jugador vuelve del nivel 140 y la
+   reja lo deja arriba de todo, mirando el 1. */
+let _rejaHecha = false;
+function rejaArma(){
+  const T = progTotal();
+  if (_rejaHecha || !T) return;
+  const r = $('rejaN');
+  r.innerHTML = '';
+  for (let n = 1; n <= T; n++){
+    const b = document.createElement('button');
+    b.className = 'nv';
+    b.dataset.n = n;
+    b.innerHTML = '<span class="num">' + n + '</span><span class="es"></span>';
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const k = +b.dataset.n;
+      if (!progAbierto(k)) return;
+      son('clic');
+      empieza(k);
+    });
+    r.appendChild(b);
+  }
+  /* el alto de la reja sale de lo que sobra entre el título y el botón MENÚ; en
+     px y no en vh porque el marco puede ser más chico que la ventana */
+  r.style.maxHeight = Math.round(caja.clientHeight * 0.66) + 'px';
+  _rejaHecha = true;
+}
+function rejaPinta(){
+  const T = progTotal();
+  if (!T) return;
+  const r = $('rejaN');
+  for (const b of r.children){
+    const n = +b.dataset.n;
+    const ab = progAbierto(n), e = progEstrellas(n);
+    b.classList.toggle('trabado', !ab);
+    b.classList.toggle('hecho', e > 0);
+    b.disabled = !ab;
+    b.querySelector('.es').textContent = e ? '★'.repeat(e) : '';
+  }
+}
+function verNiveles(){
+  MODO = 'niveles';
+  rejaArma();
+  rejaPinta();
+  verPantalla('pNiveles');
+  /* deja a la vista el primero que falta: con doscientos niveles, abrir la reja
+     arriba de todo obliga a deslizar medio minuto para llegar a donde uno iba */
+  const b = $('rejaN').querySelector('[data-n="' + progSiguiente() + '"]');
+  if (b) $('rejaN').scrollTop = Math.max(0, b.offsetTop - $('rejaN').clientHeight*0.35);
+}
+/* ══════════════════════ LA CINEMÁTICA ══════════════════════
+   Cuatro o cinco planos de tres segundos, dibujados en el MISMO lienzo con la
+   misma tinta que el juego. Nada de fotos: una imagen pegada arriba de un juego
+   de dos colores se ve pegada arriba, y eso ya costó una vuelta en POMPOM.
+
+   TRES REGLAS, Y LAS TRES SALEN DE HABERSE EQUIVOCADO ANTES:
+
+   1. ES UNA FUNCIÓN DEL TIEMPO, NO UNA MÁQUINA DE ESTADOS. `cinePon(t)` recibe
+      el segundo y dibuja. Por eso la prueba puede fotografiar el segundo 7,4
+      sin esperar siete segundos, y por eso los defectos de encuadre se
+      encuentran mirando un instante en vez de mirando el código.
+
+   2. SE PUEDE SALTEAR, CON GRACIA DE MEDIO SEGUNDO. Una cinemática obligatoria
+      se ve una vez; vista cinco veces es un peaje, y un minijuego se abre
+      veinte veces. La gracia no es capricho: el mismo toque que apretó JUGAR
+      llega a veces como un segundo evento y se la comería entera — es
+      exactamente la guarda que hizo falta en BARRIO y en POMPOM.
+
+   3. SÓLO LA PRIMERA VEZ. Después queda en su botón del menú. */
+const CINE = { on: false, t: 0, dur: 0, plano: -1, gracia: 0, alTerminar: null };
+
+function cineArranca(alTerminar){
+  CINE.on = true; CINE.t = 0; CINE.plano = -1; CINE.gracia = 0.55;
+  CINE.alTerminar = alTerminar || null;
+  CINE.dur = JUEGO.planos.reduce((a, p) => a + p.dur, 0);
+  MODO = 'cine';
+  $('cine').classList.add('on');
+  $('salta').classList.add('on');
+  $('hud').classList.remove('on');
+  for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+}
+function cineSalta(){
+  if (!CINE.on || CINE.gracia > 0) return;
+  cineTermina();
+}
+function cineTermina(){
+  CINE.on = false;
+  $('cine').classList.remove('on');
+  $('salta').classList.remove('on');
+  const f = CINE.alTerminar; CINE.alTerminar = null;
+  if (f) f();
+}
+/* qué plano cae en el segundo `t`, y cuánto lleva ese plano corrido */
+function cineDonde(t){
+  let acum = 0;
+  for (let i = 0; i < JUEGO.planos.length; i++){
+    const p = JUEGO.planos[i];
+    if (t < acum + p.dur || i === JUEGO.planos.length - 1)
+      return { i, p, u: Math.max(0, Math.min(1, (t - acum) / p.dur)) };
+    acum += p.dur;
+  }
+  return { i: 0, p: JUEGO.planos[0], u: 0 };
+}
+function cinePon(t){
+  const d = cineDonde(t);
+  /* el pie se escribe SÓLO cuando cambia de plano: escribir en el DOM en cada
+     cuadro obliga al navegador a recalcular el layout sesenta veces por segundo
+     para poner el mismo texto */
+  if (d.i !== CINE.plano){
+    CINE.plano = d.i;
+    $('cine').textContent = d.p.pie ? TX(d.p.pie) : '';
+  }
+  g.save();
+  d.p.dibuja(g, d.u, t);
+  g.restore();
+  /* entra y sale de negro: un corte seco desde el menú se lee a error */
+  const fEnt = Math.min(1, t / 0.5);
+  const fSal = Math.min(1, Math.max(0, (CINE.dur - t) / 0.5));
+  const k = 1 - Math.min(fEnt, fSal);
+  if (k > 0.001){ g.fillStyle = 'rgba(7,7,11,' + k.toFixed(3) + ')'; g.fillRect(0, 0, AN, AL); }
+}
+function cinePaso(dt){
+  if (CINE.gracia > 0) CINE.gracia -= dt;
+  CINE.t += dt;
+  if (CINE.t >= CINE.dur) cineTermina();
+}
+
+/* ── HERRAMIENTAS DE DIBUJO QUE LOS CINCO JUEGOS COMPARTEN ──
+   No es una biblioteca por prolijidad: es que un redondeo o un degradado
+   escritos cinco veces terminan siendo cinco cosas distintas, y entonces los
+   cinco juegos dejan de verse de la misma familia. */
+function caja2(x, y, w, h, r, relleno, borde){
+  g.beginPath();
+  const rr = Math.min(r, w/2, h/2);
+  g.moveTo(x + rr, y);
+  g.arcTo(x + w, y, x + w, y + h, rr);
+  g.arcTo(x + w, y + h, x, y + h, rr);
+  g.arcTo(x, y + h, x, y, rr);
+  g.arcTo(x, y, x + w, y, rr);
+  g.closePath();
+  if (relleno){ g.fillStyle = relleno; g.fill(); }
+  if (borde){ g.strokeStyle = borde; g.lineWidth = 3; g.stroke(); }
+}
+function texto(s, x, y, tam, col, peso, alin){
+  g.fillStyle = col || '#f2eee6';
+  g.font = (peso || 800) + ' ' + tam + 'px ui-sans-serif,system-ui,sans-serif';
+  g.textAlign = alin || 'center';
+  g.textBaseline = 'middle';
+  g.fillText(s, x, y);
+}
+function disco(x, y, r, col){
+  g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+}
+/* el grano: lo mismo que en los juegos 3D del repo, un plano de un solo color
+   se lee a plástico y con grano se lee a superficie */
+function grano(x, y, w, h, k, n){
+  g.save();
+  for (let i = 0; i < (n || 90); i++){
+    g.fillStyle = 'rgba(255,255,255,' + (Math.random()*k).toFixed(3) + ')';
+    g.fillRect(x + Math.random()*w, y + Math.random()*h, 2, 2);
+  }
+  g.restore();
+}
+const suave = (u) => u*u*(3 - 2*u);
+/* ══════════════════ EL AMBIENTE: LO QUE HACE QUE UN FONDO SEA UN LUGAR ══════════════════
+
+   Los seis juegos se dibujaban sobre un degradado de dos colores. Un degradado
+   no está mal —es limpio y no le pelea el cuadro al juego— pero está QUIETO, y
+   una pantalla en la que lo único que se mueve son las fichas que uno toca se
+   lee a maqueta. Lo que la vuelve un lugar son tres cosas, y ninguna de las
+   tres se ve de frente:
+
+   1. LA FOTO, que pone la materia (madera, fieltro, agua, placa de circuito).
+   2. ALGO QUE SE MUEVE DESPACIO Y NO ES DEL JUEGO — hojas que caen, burbujas
+      que suben, polvo en el haz de luz. Tiene que ser LENTO: cualquier cosa que
+      se mueva a la velocidad de las fichas compite con ellas, y en un juego de
+      puntería eso no es decoración, es ruido.
+   3. LA LUZ: un haz que barre y una viñeta. La viñeta no es maquillaje —empuja
+      la vista al centro, que es exactamente donde está el juego.
+
+   Y VA EN EL NÚCLEO Y NO EN CADA JUEGO por la razón de siempre: escrito seis
+   veces son seis cosas parecidas y los seis dejan de verse de la misma familia.
+   Cada juego declara `AMB` y nada más. */
+
+const AMB_DEF = { foto: null, cielo: ['#141821', '#090b10'], niebla: null,
+                  part: null, haz: 0, vineta: 0.42, granoK: 0,
+                  /* cuánto MÁS grande que el marco se dibuja la foto, para que
+                     sobre alto y se la pueda correr. Sólo TORRE lo usa. */
+                  despK: 0 };
+/* el desplazamiento lo escribe el juego, de 0 (abajo del todo) a 1 (arriba) */
+let AMB_DESP = 0;
+let _amb = null, _ambT = 0;
+function ambCfg(){
+  if (!_amb) _amb = Object.assign({}, AMB_DEF,
+                                  (typeof AMB !== 'undefined' && AMB) ? AMB : {});
+  return _amb;
+}
+
+/* ── LAS PARTÍCULAS DE FONDO ──
+   Son un array fijo que se recicla por módulo, no una lista que crece: el fondo
+   corre en TODAS las pantallas —menú, cinemática, partida, panel de final— así
+   que una lista que crece con el tiempo se come el cuadro en un menú que quedó
+   abierto tres minutos. */
+const AMBP = [];
+let _ambN = 0;
+function ambSiembra(){
+  const c = ambCfg();
+  AMBP.length = 0; _ambN = 0;
+  if (!c.part) return;
+  _ambN = c.part.n || 0;
+  for (let i = 0; i < _ambN; i++) AMBP.push(ambNace(true));
+}
+function ambNace(inicial){
+  const p = ambCfg().part;
+  const arr = p.dir === 'sube' ? -1 : 1;
+  return {
+    x: Math.random()*AN,
+    /* al sembrar se reparten por todo el alto; después nacen fuera del marco,
+       porque si no aparecen de la nada en el medio de la pantalla */
+    y: inicial ? Math.random()*AL : (arr > 0 ? -40 : AL + 40),
+    r: p.r0 + Math.random()*(p.r1 - p.r0),
+    v: (p.v0 + Math.random()*(p.v1 - p.v0))*arr,
+    fase: Math.random()*6.283,
+    /* la deriva de costado sale de un seno, y su FRECUENCIA es propia de cada
+       partícula: con una sola frecuencia las cuarenta se mecen a la vez y se
+       lee a una fila, no a cosas sueltas */
+    w: 0.25 + Math.random()*0.55,
+    amp: p.amp*(0.4 + Math.random()*0.9),
+    gi: Math.random()*6.283, vgi: (Math.random() - 0.5)*p.gira,
+    a: p.a0 + Math.random()*(p.a1 - p.a0)
+  };
+}
+function ambPaso(dt){
+  _ambT += dt;
+  if (AMBP.length !== _ambN) ambSiembra();
+  const c = ambCfg();
+  if (!c.part) return;
+  for (let i = 0; i < AMBP.length; i++){
+    const p = AMBP[i];
+    p.y += p.v*dt;
+    p.fase += p.w*dt;
+    p.gi += p.vgi*dt;
+    if (p.v > 0 ? p.y > AL + 60 : p.y < -60) AMBP[i] = ambNace(false);
+  }
+}
+function ambPintaPart(){
+  const c = ambCfg();
+  if (!c.part) return;
+  const f = c.part.forma || 'disco';
+  for (const p of AMBP){
+    const x = p.x + Math.sin(p.fase)*p.amp;
+    g.globalAlpha = p.a;
+    if (f === 'burbuja'){
+      /* una burbuja no es un disco: es un anillo con un punto de luz arriba a la
+         izquierda. Con un disco liso se lee a moneda. */
+      g.strokeStyle = c.part.col; g.lineWidth = Math.max(1, p.r*0.22);
+      g.beginPath(); g.arc(x, p.y, p.r, 0, 7); g.stroke();
+      g.globalAlpha = p.a*0.9;
+      disco(x - p.r*0.34, p.y - p.r*0.34, p.r*0.24, c.part.col);
+    } else if (f === 'hoja'){
+      g.save(); g.translate(x, p.y); g.rotate(p.gi);
+      g.fillStyle = c.part.col;
+      g.beginPath();
+      g.ellipse(0, 0, p.r, p.r*0.44, 0, 0, 7);
+      g.fill();
+      g.restore();
+    } else if (f === 'raya'){
+      /* una chispa que sube deja estela: un disco solo se lee a mota */
+      g.strokeStyle = c.part.col;
+      g.lineWidth = Math.max(1, p.r*0.7);
+      g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x, p.y); g.lineTo(x, p.y + (p.v > 0 ? -1 : 1)*p.r*4.5);
+      g.stroke();
+    } else {
+      disco(x, p.y, p.r, c.part.col);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+function ambFotoDesp(k, despK, u){
+  const o = IMG[k];
+  if (!o || !o.ok){ return; }
+  const H = AL*(1 + despK);
+  const e = Math.max(AN/o.im.width, H/o.im.height);
+  const w = o.im.width*e, h = o.im.height*e;
+  /* u=0 muestra el borde de ABAJO de la foto y u=1 el de arriba: en TORRE eso
+     es el suelo al empezar y el cielo alto al llegar */
+  const y = -(h - AL)*(1 - Math.max(0, Math.min(1, u)));
+  g.drawImage(o.im, (AN - w)/2, y, w, h);
+}
+
+/* ── EL HAZ DE LUZ ──
+   Dos cuñas claras que bajan desde arriba y se abren, con las dos frecuencias
+   sin múltiplo común entre sí para que el barrido no se repita nunca igual. Es
+   lo más barato que existe para que un plano de un solo color deje de leerse a
+   plástico, y es la misma lección del grano de los juegos 3D del repo. */
+function ambHaz(k){
+  if (k <= 0) return;
+  for (let i = 0; i < 2; i++){
+    const t = _ambT*(i ? 0.055 : 0.083) + i*2.1;
+    const cx = AN*(0.5 + Math.sin(t)*0.42);
+    const an = AN*(0.16 + 0.05*Math.sin(t*1.7));
+    const gr = g.createLinearGradient(0, 0, 0, AL*0.82);
+    gr.addColorStop(0, 'rgba(255,246,224,' + (k*(i ? 0.5 : 0.75)).toFixed(3) + ')');
+    gr.addColorStop(1, 'rgba(255,246,224,0)');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.moveTo(cx - an*0.30, 0);
+    g.lineTo(cx + an*0.30, 0);
+    g.lineTo(cx + an*1.9, AL*0.82);
+    g.lineTo(cx - an*1.9, AL*0.82);
+    g.closePath(); g.fill();
+  }
+}
+
+/* ── LA VIÑETA ──
+   Va SIEMPRE y va última: cierra los bordes y empuja la vista al medio. Y va
+   sobre el fondo y no sobre el juego, porque oscurecer las fichas de las puntas
+   sería quitarle contraste justo a lo que hay que tocar. */
+function ambVineta(k){
+  if (k <= 0) return;
+  const r = Math.max(AN, AL)*0.78;
+  const gr = g.createRadialGradient(AN/2, AL*0.48, r*0.34, AN/2, AL*0.48, r);
+  gr.addColorStop(0, 'rgba(0,0,0,0)');
+  gr.addColorStop(1, 'rgba(0,0,0,' + k.toFixed(3) + ')');
+  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+}
+
+/* ── EL DESTELLO ──
+   Un pulso de color desde los bordes cuando pasa algo bueno. Es el hermano del
+   sacudón: el sacudón dice «golpe» y el destello dice «bien». Los dos juntos
+   en el mismo acontecimiento se leen a error, así que cada juego elige.
+   Y va DESPUÉS de la viñeta, o sea encima del fondo pero debajo del juego: un
+   fogonazo por encima de las fichas las tapa justo en el cuadro en que el
+   jugador está mirando qué pasó. */
+let DEST = 0, DEST_C = '#ffd76a';
+function destella(col, k){ DEST = Math.min(1, DEST + (k || 0.7)); DEST_C = col || '#ffd76a'; }
+function destPaso(dt){ if (DEST > 0) DEST = Math.max(0, DEST - dt*2.6); }
+function ambDestello(){
+  if (DEST <= 0.004) return;
+  const k = DEST*DEST;
+  const r = Math.max(AN, AL)*0.8;
+  const gr = g.createRadialGradient(AN/2, AL*0.48, r*0.42, AN/2, AL*0.48, r);
+  gr.addColorStop(0, 'rgba(0,0,0,0)');
+  gr.addColorStop(1, hexA(DEST_C, k*0.55));
+  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+}
+function hexA(h, a){
+  const n = parseInt(h.slice(1), 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a.toFixed(3) + ')';
+}
+
+/* ── Y ACÁ SE ARMA TODO, EN ORDEN ──
+   cielo → foto → haz → partículas → niebla del suelo → viñeta → destello.
+   El orden importa y no es arbitrario: la foto va sobre el cielo porque puede
+   no llegar (y entonces el cielo es lo que se ve); el haz va DEBAJO de las
+   partículas porque lo que hace que un haz se lea a haz es el polvo que flota
+   dentro de él, no la cuña sola. */
+/* ── Y VA PARTIDO EN DOS, CON EL JUEGO EN EL MEDIO ──
+   Ésta es la decisión de arquitectura de la capa y no es cosmética. Si el
+   ambiente se dibujara entero y después el juego encima, la viñeta quedaría
+   DEBAJO de las fichas y no cerraría nada; y si el juego dibujara primero, su
+   mesa taparía la foto. Lo que va detrás es el lugar (cielo, foto, luz, cosas
+   flotando) y lo que va delante es la ATMÓSFERA (niebla del suelo, grano,
+   viñeta, destello), que tiene que pasar por encima de las piezas del juego
+   para que el juego esté DENTRO del cuadro y no pegado arriba.
+
+   En el medio, cada juego pinta sólo lo suyo: la mesa de FRUTAS, el techo del
+   tablero de BURBUJAS, las nubes que bajan de TORRE. Ninguno vuelve a pintar un
+   degradado de pantalla completa — ése es trabajo del ambiente y hacerlo dos
+   veces es tapar la foto. */
+function ambAtras(){
+  const c = ambCfg();
+  const gr = g.createLinearGradient(0, 0, 0, AL);
+  gr.addColorStop(0, c.cielo[0]);
+  gr.addColorStop(1, c.cielo[1]);
+  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* ── LA FOTO, Y EN TORRE SE MUEVE ──
+     Con la foto clavada, el cielo de TORRE contradice a sus propias nubes —que
+     bajan con la cámara— y subir cuarenta pisos se ve igual que subir dos, que
+     es justo el defecto que las nubes existen para arreglar. Así que la foto se
+     dibuja `despK` más alta de lo que hace falta y se corre con la cámara: lo
+     que sobra es exactamente el recorrido, o sea que nunca puede quedar un
+     hueco por construcción. */
+  if (c.foto){
+    if (c.despK > 0) ambFotoDesp(c.foto, c.despK, AMB_DESP);
+    else dibCubre(c.foto);
+  }
+  ambHaz(c.haz);
+  ambPintaPart();
+  if (c.niebla){
+    /* la niebla del borde de abajo: es lo que apoya el juego sobre el fondo en
+       vez de dejarlo flotando encima de una foto */
+    const n = g.createLinearGradient(0, AL*0.62, 0, AL);
+    n.addColorStop(0, hexA(c.niebla, 0));
+    n.addColorStop(1, hexA(c.niebla, 0.75));
+    g.fillStyle = n; g.fillRect(0, AL*0.62, AN, AL*0.38);
+  }
+  /* ── Y LA VIÑETA VA ACÁ, DETRÁS DEL JUEGO, Y ES A PROPÓSITO ──
+     Encima se vería más «de película», y sería un error medible: oscurecería
+     las fichas de los bordes justo en los juegos cuyo tablero llega al ancho
+     entero —la jarra de FRUTAS, la reja de CHISPA—, o sea que le quitaría
+     contraste a lo único que hay que tocar. La viñeta es del LUGAR, no de la
+     lente. */
+  ambVineta(c.vineta);
+}
+function ambAdelante(){
+  const c = ambCfg();
+  if (c.granoK > 0) grano(0, 0, AN, AL, c.granoK, 140);
+  /* el destello sí va encima, y puede: es un radial con el centro transparente,
+     así que pinta los bordes y no tapa el tablero */
+  ambDestello();
+}
+
+/* ══════════════════ LA ENTRADA EN ESCENA ══════════════════
+   Lo que separa un tablero que APARECE de uno que ENTRA. Es lo más barato que
+   existe —un escalar por pieza— y es lo que más se nota, porque el primer
+   cuadro de cada nivel es el único que el jugador mira entero.
+
+   ── POR QUÉ ESCALONADA Y NO TODA JUNTA ──
+   Con todas las piezas entrando a la vez, el tablero completo se agranda de
+   golpe: se lee a que la pantalla hizo zoom, no a que las piezas llegaron.
+   Escalonando el arranque por índice, cada pieza llega en su turno y lo que se
+   lee es una repartida. El desfase total se topa, porque en un tablero de
+   ochenta celdas un desfase por celda serían cuatro segundos antes de poder
+   tocar nada.
+
+   ── Y `entradaK` DEVUELVE 1 CUANDO NO HAY ENTRADA ──
+   O sea que multiplicar por él no cambia nada en régimen: un juego lo puede
+   meter en su dibujo sin un `if`, y eso es lo que hace que no haya dos caminos
+   —uno con animación y otro sin— que se puedan desincronizar. */
+const ENT = { t: 0, dur: 0.62, desf: 0.34 };
+function entradaArranca(dur, desf){
+  ENT.t = 0;
+  ENT.dur = dur || 0.62;
+  ENT.desf = desf == null ? 0.34 : desf;
+}
+function entradaPaso(dt){ if (ENT.t <= ENT.dur + ENT.desf) ENT.t += dt; }
+/* el `k` de la pieza `i` de `n`: 0 antes de que le toque, 1 cuando llegó */
+function entradaK(i, n){
+  if (ENT.t > ENT.dur + ENT.desf) return 1;
+  const d = n > 1 ? ENT.desf*(i/(n - 1)) : 0;
+  const u = (ENT.t - d)/ENT.dur;
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  /* pasa de largo y vuelve: una pieza que llega y se clava se lee a que se
+     pegó, y una que rebota un cinco por ciento se lee a que la apoyaron */
+  return 1 + Math.sin(u*Math.PI)*0.10 - (1 - u)*(1 - u);
+}
+const entradaVa = () => ENT.t <= ENT.dur + ENT.desf;
+/* ══════════════════════ EL ARMADO Y EL BUCLE ══════════════════════
+   Todo lo que sigue es del núcleo y ninguno de los cinco juegos lo toca. El
+   contrato de un juego es corto a propósito:
+
+       JT              las frases, por idioma
+       JUEGO.tipo      'niveles' (progreso guardado) o 'puntos' (sin fin)
+       JUEGO.usa       ['giro'] y/o ['mano']: que sensores pedir al tocar JUGAR
+       JUEGO.nivelesTotal   cuántos, en los de niveles
+       JUEGO.planos    la cinemática: [{dur, pie, dibuja(g,u,t)}]
+       JUEGO.arranca(n)     poner el estado en cero; n = nivel
+       JUEGO.paso(dt)  la simulación, en pasos de 1/60
+       JUEGO.pinta(g)  el dibujo, en unidades de 720 x AL
+       JUEGO.baja/mueve/sube(x,y)   el verbo
+       JUEGO.marca     el número grande de arriba
+       JUEGO.sub       el rótulo debajo del número (o null)
+       JUEGO.ficI/ficD las dos fichas de los costados (o null)
+       JUEGO.resta     0..1 para la barra de abajo, o null si no hay
+       JUEGO.vivo      cuando pasa a false, se termina
+       JUEGO.gano      si el nivel salió
+       JUEGO.estrellas 1..3 al ganar un nivel
+       JUEGO.deshacer()     y JUEGO.puedeDeshacer
+       JUEGO.juegaSolo(n, azar)
+
+   ── POR QUE HAY DOS TIPOS Y NO UNO ──
+   Los tres rompecabezas necesitan progreso, reja de niveles, deshacer y
+   estrellas; los dos de destreza necesitan récord y nada de eso. Metidos en un
+   solo molde, cada juego arrastraría la mitad de una interfaz que no usa — y
+   eso se ve: un botón DESHACER en un juego donde no hay nada que deshacer se
+   lee a juego roto. El tipo decide qué interfaz existe. */
+
+let PUNTOS = 0, MEJOR = 0;
+let NIVEL = 1;
+
+/* ── EL RÉCORD SE INTENTA GUARDAR Y PUEDE FALLAR ──
+   `localStorage` TIRA en una ventana privada, y esto se abre desde enlaces. Sin
+   el `try` el juego no arranca en la mitad de los casos raros, que es peor que
+   no tener récord. */
+const CLAVE = 'cas_' + JUEGO.id;
+try { MEJOR = parseInt(localStorage.getItem(CLAVE) || '0', 10) || 0; } catch(e){}
+function guardaMejor(){
+  try { localStorage.setItem(CLAVE, String(MEJOR)); } catch(e){}
+}
+const esNiv = () => JUEGO.tipo === 'niveles';
+
+/* ══════════ LA LINEA DE ESTADO DEL SENSOR ══════════
+   Va en el MENU y es permanente. Un aviso de dos segundos dentro de la partida
+   no es un aviso: en RECREO el permiso de camara se pedia desde un boton chico
+   que ya se veia elegido, nadie lo tocaba, y el juego arrancaba sin camara sin
+   decir por que. Acá el motivo se lee ANTES de empezar, y cada falla tiene su
+   propio texto — «no anda» sirve para nada, «sin HTTPS no hay sensores» se
+   puede arreglar. */
+function pintaSensor(){
+  const e = $('sensor');
+  const usa = JUEGO.usa || [];
+  if (!usa.length){ e.hidden = true; return; }
+  e.hidden = false;
+  const T = [];
+  let mal = false;
+  if (usa.indexOf('giro') >= 0){
+    const m = { no:'gNo', pidiendo:'gNo', lista:'gSi', sin:'gSin',
+                negado:'gNeg', insegura:'gIns' };
+    T.push(TX(m[GIRO.estado] || 'gNo'));
+    if (GIRO.estado === 'sin' || GIRO.estado === 'negado' || GIRO.estado === 'insegura') mal = true;
+  }
+  if (usa.indexOf('mano') >= 0){
+    const m = { no:'mNo', pidiendo:'mNo', lista:'mSi', permiso:'mPerm',
+                camara:'mCam', cdn:'mCdn', modelo:'mMod', insegura:'mIns' };
+    T.push(TX(m[MANO.estado] || 'mNo'));
+    if (['permiso','camara','cdn','modelo','insegura'].indexOf(MANO.estado) >= 0) mal = true;
+  }
+  e.textContent = T.join('  ·  ');
+  e.classList.toggle('mal', mal);
+}
+window.pintaMano = pintaSensor;
+
+function pintaJuego(){
+  if (esNiv()){
+    /* en un juego de niveles el récord no significa nada: lo que el jugador
+       quiere ver es cuánto le falta y cuántas estrellas juntó */
+    const c = progContados();
+    $('mejor').textContent = TX('progreso', c.hechos, progTotal()) +
+      (c.estrellas ? '  ·  ★ ' + c.estrellas : '');
+    $('bJugar').textContent = c.hechos > 0 ? TX('seguir') : TX('jugar');
+  } else {
+    $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
+  }
+  if (JUEGO.pintaTextos) JUEGO.pintaTextos();
+  pintaSensor();
+}
+window.pintaJuego = pintaJuego;
+
+function verPantalla(p){
+  for (const e of document.querySelectorAll('.pan')) e.classList.remove('on');
+  if (p) $(p).classList.add('on');
+  $('hud').classList.toggle('on', p === null);
+  /* el telón se enciende con cualquier panel y se apaga en partida: en partida
+     el lienzo dibuja su propio fondo y dejarlo encendido serían dos fondos
+     superpuestos */
+  $('tela').classList.toggle('on', p !== null);
+}
+
+/* ── LA PIEL DEL JUEGO ──
+   El color de acento, el telón del menú y el emblema. Los cinco comparten la
+   estructura y no la piel: cinco menús del mismo gris con el mismo panel se
+   leen a cinco pantallas de opciones de la misma aplicación, y eso es lo que
+   hace que ninguno se recuerde. */
+function pieles(){
+  const pl = (typeof PIEL !== 'undefined') ? PIEL : {};
+  /* el ancho que ocupa el título es, aproximadamente, letras x (0,6 + 0,26) em:
+     de ahí sale el tamaño que lo deja adentro del marco con aire a los costados */
+  const L = ($('pMenu').querySelector('h1').textContent || '').trim().length || 6;
+  caja.style.setProperty('--h1', Math.min(11, 78/L).toFixed(2) + 'vw');
+  if (pl.ac) caja.style.setProperty('--ac', pl.ac);
+  if (typeof AS === 'undefined' || !AS.img) return;
+  const f = AS.img[pl.tela || 'fondo'];
+  if (f) $('tela').style.backgroundImage = 'url(' + f.d + ')';
+  const e = AS.img.em;
+  if (e) for (const id of ['emI','emM']){ const n = $(id); n.src = e.d; n.hidden = false; }
+}
+
+function alMenu(){
+  MODO = 'menu';
+  musQuiere('menu');
+  verPantalla('pMenu');
+  pintaJuego();
+}
+
+/* ── EL AUDIO ARRANCA CON EL PRIMER GESTO, SEA EL QUE SEA ──
+   Estaba enganchado sólo a JUGAR, y ahí hay un defecto que no falla: el menú
+   pide su tema con `musQuiere('menu')` ANTES de que exista el contexto de
+   audio, así que `cargaSon()` salía sin hacer nada y la música del menú no
+   sonaba nunca — medido, `son:0` y `mus:null` con los quince clips horneados
+   adentro del archivo. El primer gesto de verdad es el botón de idioma, no
+   JUGAR, y ningún navegador deja sonar nada antes de uno.
+   Va en CAPTURA y sobre el documento: en cada botón habría que acordarse en los
+   que hay y en el próximo que se agregue. */
+let _audioDesp = false;
+function despiertaAudio(){
+  if (_audioDesp) return;
+  _audioDesp = true;
+  armaAudio();
+  cargaSon();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  /* y se vuelve a pedir el tema que estaba puesto: para cuando el contexto
+     existe, `musQuiere` ya corrió una vez y se rindió */
+  if (_musK) musQuiere(_musK);
+}
+for (const ev of ['pointerdown', 'click', 'keydown'])
+  document.addEventListener(ev, despiertaAudio, true);
+
+let _vistaCine = false;
+function jugar(){
+  despiertaAudio();
+  armaAudio();
+  cargaSon();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  /* ── LOS SENSORES SE PIDEN ACA Y NO EN EL ARRANQUE ──
+     Desde iOS 13 el permiso de movimiento hay que pedirlo DENTRO de un gesto
+     del usuario, y el permiso de camara conviene por lo mismo: pedidos al
+     cargar, el gesto ya expiro cuando la promesa llega y Safari los rechaza SIN
+     mostrar el cartelito. Tocar JUGAR es el gesto que todos hacen.
+     Y no se espera: los dos degradan a dedo, asi que la partida arranca igual y
+     el sensor entra cuando este. */
+  const usa = JUEGO.usa || [];
+  if (usa.indexOf('giro') >= 0) giroPide().then(pintaSensor).catch(() => {});
+  if (usa.indexOf('mano') >= 0) manoPide().then(pintaSensor).catch(() => {});
+  if (!_vistaCine){
+    _vistaCine = true;
+    /* la cinemática se ve UNA vez y después va a su botón. Obligatoria en cada
+       partida es un peaje, y eso ya costó una vuelta en POMPOM. */
+    cineArranca(traslaCine);
+    return;
+  }
+  traslaCine();
+}
+/* después de la cinemática: los de niveles van a la reja y los de puntaje
+   arrancan de una. Un selector de niveles en un juego sin niveles sería una
+   pantalla de más entre el dedo y el juego. */
+function traslaCine(){
+  if (esNiv()) verNiveles(); else empieza();
+}
+function empieza(n){
+  /* el pie de la cinemática se apaga acá también: normalmente lo apaga
+     `cineTermina`, pero la sonda que salta a un instante de la cinemática lo
+     deja encendido y entonces la partida arranca con un subtítulo puesto */
+  $('cine').classList.remove('on');
+  $('salta').classList.remove('on');
+  PUNTOS = 0;
+  NIVEL = esNiv() ? (n || progSiguiente()) : 1;
+  rachaCero();
+  jugoCero();
+  JUEGO.arranca(NIVEL);
+  /* la entrada en escena arranca DESPUES de `arranca()`, porque cuantas piezas
+     hay lo decide el nivel que se acaba de generar */
+  entradaArranca();
+  MODO = 'juega';
+  verPantalla(null);
+  musQuiere('mus');
+  /* ── LOS BOTONES DE PARTIDA, Y CADA UNO SOLO SI SIRVE ──
+     La fila existe en los juegos de niveles. Pero DESHACER solo tiene sentido
+     donde hay algo que deshacer: en BURBUJAS un tiro ya salio y no se puede
+     devolver, asi que el boton quedaba dibujado y APAGADO para siempre — y un
+     boton que nunca se puede tocar no se lee a «no hay nada que deshacer», se
+     lee a juego roto. Si el juego no trae `deshacer`, el boton no existe. */
+  $('acc').hidden = !esNiv();
+  $('bDes').hidden = !JUEGO.deshacer;
+  document.body.classList.toggle('conAcc', esNiv());
+  pintaHud();
+}
+function termina(){
+  MODO = 'fin';
+  musQuiere('menu');
+  $('acc').hidden = true;
+  document.body.classList.remove('conAcc');
+  const gano = !!JUEGO.gano;
+  if (esNiv()){
+    const e = gano ? Math.max(1, Math.min(3, JUEGO.estrellas|0)) : 0;
+    if (gano) progGana(NIVEL, e);
+    son(gano ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('finT').textContent = gano ? TX('ganaste') : TX('perdiste');
+    const es = $('estr');
+    es.hidden = !gano;
+    if (gano) es.textContent = '★'.repeat(e) + '☆'.repeat(3-e);
+    $('finP').textContent = TX('nivel') + ' ' + NIVEL +
+      (JUEGO.finP ? '  ·  ' + JUEGO.finP : '');
+    /* OTRA VEZ pasa a ser SIGUIENTE cuando el nivel salió: repetir un nivel que
+       ya salió es lo último que quiere hacer alguien que lo acaba de pasar */
+    const hayMas = gano && NIVEL < progTotal();
+    $('bOtra').textContent = hayMas ? TX('proximo') : TX('otra');
+    $('bOtra').dataset.sig = hayMas ? '1' : '';
+  } else {
+    const rec = PUNTOS > MEJOR;
+    if (rec){ MEJOR = PUNTOS; guardaMejor(); }
+    son(rec ? 'gana' : 'pierde');
+    musAgacha(0.30, 1.4);
+    $('estr').hidden = true;
+    $('finT').textContent = rec ? TX('nuevoRec') : (gano ? TX('finBien') : TX('finMal'));
+    $('finP').textContent = PUNTOS + ' ' + TX('pts') +
+      (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
+    if (COMBO.max > 3) $('finP').textContent += '  ·  ' + TX('racha') + ' ' + COMBO.max;
+    $('bOtra').textContent = TX('otra');
+    $('bOtra').dataset.sig = '';
+  }
+  verPantalla('pFin');
+  pintaJuego();
+}
+
+function pintaHud(){
+  $('marca').textContent = JUEGO.marca != null ? JUEGO.marca : PUNTOS;
+  $('sub').textContent = JUEGO.sub != null ? JUEGO.sub
+    : (esNiv() ? TX('nivel') + ' ' + NIVEL : TX('pts'));
+  /* las dos fichas de los costados: cada juego pone lo que cambia adentro del
+     nivel y las apaga con null. Escribirlas siempre dejaría un rótulo vacío
+     dibujado, que se lee a hueco y no a ficha apagada. */
+  for (const [id, v] of [['ficI', JUEGO.ficI], ['ficD', JUEGO.ficD]]){
+    const e = $(id);
+    e.hidden = v == null;
+    if (v != null) e.textContent = v;
+  }
+  const b = $('bDes');
+  if (b) b.disabled = !JUEGO.puedeDeshacer;
+  const r = JUEGO.resta;
+  const rel = $('reloj');
+  rel.style.display = r == null ? 'none' : 'block';
+  if (r != null){
+    const bb = $('relojB');
+    bb.style.width = (Math.max(0, Math.min(1, r))*100).toFixed(1) + '%';
+    bb.classList.toggle('poco', r < 0.25);
+  }
+}
+
+/* el fogonazo: va en CSS y no en el lienzo a propósito, porque tiene que poder
+   encenderse en el mismo cuadro en que pasa algo sin esperar al dibujo */
+let _flash = 0;
+function fogonazo(v){ _flash = Math.max(_flash, v); }
+function pasoFogonazo(dt){
+  if (_flash <= 0) return;
+  _flash = Math.max(0, _flash - dt*4.2);
+  $('flash').style.opacity = _flash.toFixed(3);
+}
+
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora = performance.now();
+  let dt = Math.min((ahora - _ultimo)/1000, 0.25);
+  _ultimo = ahora;
+
+  if (!CONGELADO){
+    if (MODO === 'cine'){
+      cinePaso(dt);
+    } else if (MODO === 'juega' && !PAUSA){
+      _acum += dt;
+      let n = 0;
+      while (_acum >= PASO && n < 8){ JUEGO.paso(PASO); _acum -= PASO; n++; }
+      if (n >= 8) _acum = 0;      /* si el aparato no llega, va en cámara lenta y no se cuelga */
+      if (!JUEGO.vivo) termina();
+    }
+    pasoFogonazo(dt);
+    giroPaso(dt);
+    /* el ambiente corre SIEMPRE, también en el menú y en el panel de final: es
+       lo que hace que las cuatro pantallas se vean del mismo lugar en vez de
+       cuatro pantallas distintas pegadas */
+    ambPaso(dt); destPaso(dt); entradaPaso(dt);
+    if (MODO === 'juega' || MODO === 'fin') jugoPaso(dt);
+  }
+
+  g.clearRect(0, 0, AN, AL);
+  if (MODO === 'cine') cinePon(CINE.t);
+  else {
+    ambAtras();
+    if (JUEGO.fondo) JUEGO.fondo(g);
+    if (MODO === 'juega' || MODO === 'fin'){
+      /* el sacudón envuelve SÓLO la capa del juego: sacudiendo el fondo
+         aparecen dos franjas negras en los bordes */
+      const sac = sacAplica();
+      JUEGO.pinta(g);
+      jugoPinta();
+      if (sac) g.restore();
+    }
+    /* y la atmósfera va ENCIMA del juego: una viñeta debajo de las fichas no
+       cierra nada, y un destello debajo tampoco se ve */
+    ambAdelante();
+  }
+  if (MODO === 'juega') pintaHud();
+
+  _cuadros++; _acumF += dt;
+  if (_acumF >= 0.5){ fps = Math.round(_cuadros/_acumF); _cuadros = 0; _acumF = 0; }
+}
+
+/* ══════════════════════ LOS BOTONES ══════════════════════ */
+for (const b of document.querySelectorAll('[data-lang]'))
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ponIdioma(b.dataset.lang);
+    if (MODO === 'idioma') alMenu();
+  });
+$('bJugar').addEventListener('click', (e) => { e.stopPropagation(); jugar(); });
+$('bComo').addEventListener('click', (e) => { e.stopPropagation(); cineArranca(alMenu); });
+$('bMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bNMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+$('bOtra').addEventListener('click', (e) => {
+  e.stopPropagation();
+  /* SIGUIENTE avanza el nivel; OTRA VEZ repite el mismo */
+  empieza(esNiv() ? (NIVEL + ($('bOtra').dataset.sig ? 1 : 0)) : undefined);
+});
+$('bDes').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!JUEGO.puedeDeshacer) return;
+  son('clic'); JUEGO.deshacer(); pintaHud();
+});
+$('bRei').addEventListener('click', (e) => { e.stopPropagation(); son('clic'); empieza(NIVEL); });
+$('bSal').addEventListener('click', (e) => {
+  e.stopPropagation(); son('clic');
+  /* salir de un nivel vuelve A LA REJA y no al menú: el jugador quiere elegir
+     otro nivel, no volver a la portada */
+  if (esNiv()) verNiveles(); else alMenu();
+});
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Todo lo que el banco necesita, y nada que el juego use. Un juego que se
+   prueba sólo mirando capturas se prueba mal: acá se puede jugar solo, saltar a
+   un instante de la cinemática y leer el estado. */
+/* el arnes de pruebas inyecta su propio `__errs` en el <head>, o sea ANTES de que
+   este modulo se evalue: pisandolo con un array nuevo se perderian justamente los
+   errores del arranque, que son los que importan */
+window.__errs = window.__errs || [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+
+window.__J = {
+  id: JUEGO.id,
+  estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR, nivel: NIVEL,
+    marca: JUEGO.marca, resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3),
+    vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height],
+    /* el ultimo toque que ENTRO por el camino de verdad (lienzo -> baja): es lo
+       unico que distingue «el juego no reacciono» de «el dedo no llego» */
+    toque: [Math.round(TOQUE.x), Math.round(TOQUE.y), TOQUE.abajo, TOQUE.n || 0] }),
+  lang: (l) => { ponIdioma(l); return LANG; },
+  menu: () => { alMenu(); return MODO; },
+  jugar: () => { jugar(); return MODO; },
+  empieza: () => { empieza(); return MODO; },
+  /* la cinemática en un instante exacto, CONGELADA. Sin congelar, entre que la
+     sonda escribe el segundo y el navegador entrega la foto el bucle ya la
+     corrió y la captura sale de otro instante — es el defecto que ya costó una
+     vuelta en BARRIO y otra en PULSO. */
+  /* Y APAGA EL FOGONAZO ANTES DE CONGELAR. `pasoFogonazo` corre dentro del
+     `if (!CONGELADO)`, asi que congelando con el fogonazo a medio apagar el
+     velo blanco de CSS QUEDA PUESTO para siempre: medido, una foto de la
+     cinematica sacada justo despues de un golpe salia con un 6 % de blanco
+     encima —el fondo pasaba de 28 a 43— y yo lo lei como que el plano estaba
+     mal iluminado. El pixel del lienzo daba 28 en los dos casos. Una sonda que
+     deja un velo encima no fotografia lo que le piden. */
+  /* ── Y APAGA EL HUD, QUE ES LO QUE `cineArranca` HACE Y LA SONDA NO HACIA ──
+     Medido en la foto del segundo plano: el marcador, el rotulo PUNTOS, el
+     multiplicador y la ficha de la derecha quedaban DIBUJADOS ENCIMA de la
+     cinematica, porque la sonda saltaba desde una partida y nadie apagaba el
+     HUD. En el juego de verdad no pasa nunca; en la foto parecia un defecto de
+     la cinematica. Una sonda que no reproduce el estado del juego fotografia
+     otra cosa. */
+  cine: (t) => { armaAudio(); CINE.on = true; MODO = 'cine'; CINE.gracia = 9e9;
+                 _flash = 0; $('flash').style.opacity = '0';
+                 $('hud').classList.remove('on'); $('acc').hidden = true;
+                 CINE.dur = JUEGO.planos.reduce((a,p) => a+p.dur, 0);
+                 CINE.t = Math.max(0, Math.min(CINE.dur - 0.01, t));
+                 CONGELADO = true;
+                 for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+                 $('cine').classList.add('on');
+                 cinePon(CINE.t);
+                 return JSON.stringify({ t: +CINE.t.toFixed(2), dur: +CINE.dur.toFixed(2),
+                                         plano: CINE.plano, pie: $('cine').textContent }); },
+  correr: () => { CONGELADO = false; return true; },
+  /* toca en unidades de diseño, por el mismo camino que un dedo */
+  toca: (x, y) => { if (JUEGO.baja) JUEGO.baja(x, y);
+                    if (JUEGO.sube) JUEGO.sube(x, y);
+                    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo }); },
+  /* ── UN ARRASTRE OCUPA TIEMPO, Y ESO HUBO QUE MEDIRLO ──
+     La primera version solo llamaba a `mueve` veinte veces seguidas, sin
+     simular. Sirve para un juego que reacciona en el evento —RASPA borra la
+     mugre ahi mismo— y NO SIRVE para uno cuyo movimiento vive en `paso`:
+     medido en MANCHA, el dedo dejaba el destino puesto, la mancha no se movia
+     ni un pixel y el arrastre devolvia 0 %. Y no fallaba: contestaba.
+     Ahora cada muestra adelanta la simulacion, que es lo que pasa de verdad
+     cuando un dedo cruza la pantalla en un tercio de segundo. */
+  arrastra: (x0, y0, x1, y1, n, pasos) => {
+    const N = n || 20, P = pasos == null ? 2 : pasos;
+    if (JUEGO.baja) JUEGO.baja(x0, y0);
+    for (let i = 1; i <= N; i++){
+      if (JUEGO.mueve) JUEGO.mueve(x0 + (x1-x0)*i/N, y0 + (y1-y0)*i/N);
+      for (let k = 0; k < P && JUEGO.vivo; k++) JUEGO.paso(PASO);
+    }
+    if (JUEGO.sube) JUEGO.sube(x1, y1);
+    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo });
+  },
+  /* avanza la simulación sin dibujar: así una partida de cuarenta segundos se
+     prueba en un instante y no en cuarenta segundos */
+  avanza: (segs) => { const n = Math.round(segs*60);
+                      for (let i = 0; i < n && JUEGO.vivo; i++) JUEGO.paso(PASO);
+                      return JSON.stringify({ vivo: !!JUEGO.vivo, puntos: PUNTOS,
+                                              resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3) }); },
+  pico: () => pico(),
+  /* ── SONDAS DE AUDIO ──
+     `son()` vive adentro del módulo, así que desde el banco no se lo puede
+     llamar: un `eval` no alcanza el ámbito de un módulo ES. Sin esto, «el audio
+     anda» sólo se podría afirmar comprobando que la llamada no tiró. */
+  son: (t, k) => { despiertaAudio(); son(t, k == null ? 1 : k); return t; },
+  audio: () => JSON.stringify({
+    ctx: AUD ? AUD.state : 'no', son: Object.keys(SON).length,
+    mus: MUS ? MUS.k : null, pedido: _musK,
+    /* qué alias tiene muestra de verdad y cuál cae al oscilador: es la única
+       forma de distinguir «suena el generado» de «suena el bip de respaldo» */
+    alias: Object.fromEntries(Object.entries(
+      (typeof SON_ALIAS !== 'undefined' && SON_ALIAS) || {})
+      .map(([t, a]) => [t, !!SON[a]]))
+  }),
+  combo: () => JSON.stringify({ n: COMBO.n, mult: COMBO.mult, max: COMBO.max,
+    t: +COMBO.t.toFixed(2), part: PART.length, flot: FLOT.length, sac: +SAC.toFixed(2) }),
+  assets: () => JSON.stringify(asEstado()),
+  /* la caja de cada elemento visible del DOM, para poder comprobar que nada se
+     solapa en una pantalla chica sin mirar una captura */
+  cajas: () => {
+    const out = {};
+    for (const id of ['marca','sub','ficI','ficD','reloj','acc','cine','finT','finP','mejor','estr','tituN','rejaN']){
+      const e = $(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      /* «visible» tiene que incluir que MIDA algo: un elemento adentro de un
+         panel con `display:none` devuelve una caja de 0×0 y decía visible */
+      /* ── LA OPACIDAD SE MULTIPLICA HASTA EL MARCO ──
+         Mirando solo el panel mas cercano, los elementos del HUD daban
+         `vis:true` con el HUD entero en `opacity:0`: medido en la foto de la
+         cinematica, la sonda informaba el marcador visible cuando en pantalla
+         no habia nada. La opacidad de un antepasado apaga a todos sus hijos, y
+         acá los hijos son justamente lo que se quiere medir. */
+      let op = 1;
+      for (let a = e; a && a !== document.body; a = a.parentElement){
+        const cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden'){ op = 0; break; }
+        op *= +cs.opacity;
+      }
+      const vis = r.width > 0 && r.height > 0 && op > 0.02;
+      out[id] = { x: Math.round(r.left), y: Math.round(r.top),
+                  w: Math.round(r.width), h: Math.round(r.height), vis };
+    }
+    return JSON.stringify(out);
+  },
+  /* el marcador se pone en cero antes de cada corrida: `arranca()` no lo toca
+     —lo hace `empieza()`— asi que dos corridas seguidas informaban el puntaje
+     de la anterior y el numero mentia sin que nada fallara */
+  juegaSolo: (n, azar) => { PUNTOS = 0; rachaCero();
+    return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); },
+  /* ── LAS SONDAS DE PROGRESO ──
+     Sin esto, probar el nivel 140 obliga a jugar los 139 anteriores, o sea que
+     no se prueba nunca. `nivel(n)` entra derecho; `prog()` dice qué quedó
+     guardado; `borra()` deja el disco limpio para que dos corridas seguidas no
+     se contaminen — que es el defecto que ya hizo que un puntaje mintiera. */
+  nivel: (n) => { empieza(n); return JSON.stringify({ modo: MODO, nivel: NIVEL,
+                    marca: JUEGO.marca, vivo: !!JUEGO.vivo }); },
+  niveles: () => { verNiveles(); return JSON.stringify({ modo: MODO,
+                    total: progTotal(), abiertos: (() => { let k = 0;
+                      for (let i = 1; i <= progTotal(); i++) if (progAbierto(i)) k++;
+                      return k; })() }); },
+  prog: () => JSON.stringify({ tipo: JUEGO.tipo, total: progTotal(),
+    sig: progSiguiente(), est: PROG.est, cont: progContados(), mejor: MEJOR }),
+  borra: () => { PROG.est = {}; PROG.ultimo = 1; MEJOR = 0;
+                 try { localStorage.removeItem(P_CLAVE); localStorage.removeItem(CLAVE); } catch(e){}
+                 return true; },
+  /* el auditor de niveles: cada juego de niveles comprueba que los suyos SE
+     PUEDEN pasar. Un nivel generado y no comprobado es un nivel roto que
+     todavia no se sabe — costo siete niveles imposibles en Maicol. */
+  audita: (desde, hasta) => JSON.stringify(
+    JUEGO.audita ? JUEGO.audita(desde || 1, hasta || progTotal()) : 'sin auditoria'),
+  deshacer: () => { if (!JUEGO.puedeDeshacer) return 'no'; JUEGO.deshacer();
+                    return JSON.stringify({ marca: JUEGO.marca, puede: !!JUEGO.puedeDeshacer }); },
+  /* la sonda propia de cada juego: el estado de su tablero sin tener que mirar
+     una captura. Es lo unico que distingue «se ve raro» de un numero. */
+  ver: () => JSON.stringify(JUEGO.ver ? JUEGO.ver() : 'sin ver'),
+  /* ── LOS AJUSTES DEL BANCO PASAN POR ACA Y NO POR `eval` ──
+     Barri la escala de las frutas con `eval('F_KR='+k)` desde el banco y los
+     cuatro valores dieron EXACTAMENTE el mismo resultado —el mismo puntaje
+     hasta la unidad y las mismas 1.428 sueltas—, que es la firma de un
+     parametro que no toca nada. La causa: esto es un modulo ES, asi que sus
+     `let` de nivel superior NO estan en el ambito global y un `eval` desde
+     afuera crea otra variable con el mismo nombre. La medicion no medio nada y
+     no fallo: contesto.
+     Un ajuste tiene que entrar por una funcion que viva ADENTRO del modulo. */
+  cfg: (o) => JSON.stringify(JUEGO.cfg ? JUEGO.cfg(o || {}) : 'sin cfg'),
+  /* ── LOS SENSORES SE INYECTAN, PORQUE EL BANCO NO TIENE NI GIROSCOPIO NI MANO ──
+     Sin esto, todo lo que cuelga de un sensor queda sin una sola prueba y se
+     descubre roto en el telefono. `giroPon` mete una inclinacion en grados por
+     el mismo camino que el evento del sistema, `giroSac` una sacudida, y
+     `manoFalsa` una mano con los dedos que se pidan. */
+  giro: () => JSON.stringify(giroVer()),
+  giroPon: (b, g, a) => { giroEvento({ beta: b, gamma: g, alpha: a || 0 });
+                          return JSON.stringify(giroVer()); },
+  giroCero: () => { giroCero(); return JSON.stringify(giroVer()); },
+  giroSac: (k) => { giroSacudida(k == null ? 0.8 : k); return JSON.stringify(giroVer()); },
+  mano: () => JSON.stringify(manoVer()),
+  manoPon: (dedos, tijera) => JSON.stringify(manoFalsa(dedos, !!tijera)),
+  /* y «sacar la mano» son SEIS mediciones vacias y no una: la caducidad se mide
+     en huecos, asi que con una sola llamada el gesto sigue puesto — y eso no es
+     un defecto, es la guarda que impide que dos fallos seguidos del detector
+     borren la jugada */
+  manoNada: (n) => { for (let i = 0; i < (n || 6); i++) manoLee(null);
+                     return JSON.stringify(manoVer()); },
+  /* ── LOS SOLAPAMIENTOS SE CUENTAN, NO SE MIRAN ──
+     `cajas()` devuelve las cajas y hay que cruzarlas a mano, y eso es
+     exactamente lo que no se hace: el reloj de BURBUJAS estuvo dibujado ENCIMA
+     de la fila de botones y lo vi en una captura y no en un numero. Esto
+     devuelve los pares que se pisan, asi que un elemento nuevo que caiga sobre
+     otro se denuncia solo en la proxima corrida. */
+  solapes: () => {
+    const ids = ['marca','sub','ficI','ficD','reloj','acc','cine','estr',
+                 'finT','finP','mejor','tituN','rejaN'];
+    const cajas = [];
+    for (const id of ids){
+      const e = $(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      let op = 1;
+      for (let a = e; a && a !== document.body; a = a.parentElement){
+        const cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden'){ op = 0; break; }
+        op *= +cs.opacity;
+      }
+      if (!(r.width > 0 && r.height > 0 && op > 0.02)) continue;
+      /* ── LA CAJA QUE IMPORTA ES LA DEL TEXTO, NO LA DEL ELEMENTO ──
+         `#marca` va `left:0;right:0` con el texto centrado, asi que su caja
+         mide el ancho entero del marco y las dos fichas de los costados caen
+         adentro sin tocar una sola letra. La primera version denunciaba tres
+         choques por juego que no existen —y una sonda que grita en falso es
+         peor que no tener sonda, porque el proximo choque de verdad se lee como
+         mas ruido—. Con un `Range` sobre el contenido se obtiene lo que de
+         verdad se pinta. Es el mismo error que ya costo una medicion en BARRIO
+         con la caja alineada a los ejes. */
+      let caja = r;
+      if (e.firstChild){
+        try {
+          const rg = document.createRange();
+          rg.selectNodeContents(e);
+          const rt = rg.getBoundingClientRect();
+          if (rt.width > 1 && rt.height > 1) caja = rt;
+        } catch(err){}
+      }
+      cajas.push([id, caja]);
+    }
+    const out = [];
+    for (let i = 0; i < cajas.length; i++) for (let j = i+1; j < cajas.length; j++){
+      const [ai, a] = cajas[i], [bi, b] = cajas[j];
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      /* dos pixeles de tolerancia: un borde que toca al de al lado no es un
+         solapamiento, y con tolerancia cero cualquier par apilado da positivo */
+      if (w > 2 && h > 2) out.push(ai + '/' + bi + ' ' + Math.round(w) + 'x' + Math.round(h));
+    }
+    return JSON.stringify({ visibles: cajas.map(c => c[0]), choques: out });
+  }
+};
+
+/* ── LA VENTANA DE LA RACHA SE ADELANTA CON LA SIMULACIÓN, NO CON EL DIBUJO ──
+   Estaba en `jugoPaso`, que corre una vez por CUADRO con el `dt` de reloj. Para
+   las partículas y el sacudón eso es correcto —son cosméticos— pero la racha
+   NO es cosmética: en MANCHA engorda la brocha y en RASPÁ el pincel, o sea que
+   es física. Y peor: los auto-jugadores llaman a `JUEGO.paso` directo, así que
+   la ventana no se vencía nunca y el multiplicador se quedaba clavado en x5 —
+   medido, `racha 622` en una partida de 45 s de MANCHA y `7.882` en RASPÁ, que
+   son números que ninguna persona puede hacer.
+   Envolver `JUEGO.paso` una vez es lo único que garantiza que la racha caduque
+   en los seis caminos que existen (el bucle, `avanza`, y los cinco
+   auto-jugadores) sin repetir la llamada en cada juego. Es el mismo recurso con
+   el que `d.js` envuelve `son()`. */
+const _pasoJuego = JUEGO.paso.bind(JUEGO);
+JUEGO.paso = (dt) => { comboPaso(dt); _pasoJuego(dt); };
+
+/* ══════════════════════ ARRANQUE ══════════════════════ */
+medir();
+progCarga();
+cargaImg();
+pieles();
+pintaIdioma();
+pintaJuego();
+bucle();
+</script></body></html>
