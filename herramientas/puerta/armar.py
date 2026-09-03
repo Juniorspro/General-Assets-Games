@@ -519,6 +519,7 @@ s = s if SOLO else cambiar(s, """      skyDome.visible = true;
 sys.path.insert(0, AQUI)
 import campo
 import menu
+import orden
 import nivel6
 import red
 
@@ -583,8 +584,8 @@ s = s if SOLO else cambiar(s, """        transitioning = true;
         transitionToEnd();
         return;""",
             """        transitioning = true;
-        transitionToStore();
-        return;""", 'salida del calabozo al nivel 6')
+        pbSiguiente();
+        return;""", 'salida del calabozo al que toque')
 
 s = s if SOLO else cambiar(s, """        else if (kind === 'exec' || kind === 'axe') resetDungeon();""",
             """        else if (kind === 'exec' || kind === 'axe') resetDungeon();
@@ -1301,7 +1302,7 @@ s = s if SOLO else cambiar(s, '  #vhs-hud {', menu.CSS + '\n  #vhs-hud {', 'el C
 # el idioma va DESPUES de `menuResume` —lo usa `pbPintaIdioma`— y antes del
 # cableado, que necesita `startLevel` y `quality`
 s = s if SOLO else cambiar(s, "  let levelStarted = false;",
-    "  let levelStarted = false;" + menu.JS, 'el idioma')
+    "  let levelStarted = false;" + menu.JS + orden.JS, 'el idioma y el orden')
 s = s if SOLO else cambiar(s, "  menuResume.addEventListener('click', closeMenu);",
     menu.WIRE + "  menuResume.addEventListener('click', closeMenu);", 'el cableado del menu')
 
@@ -1326,6 +1327,11 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
     // planes del banco no pueden probar el nivel 6 y una prueba que no se puede
     // correr no prueba nada.
     nivel: function (n) { startLevel(n | 0); return n | 0; },
+    // EL ORDEN SORTEADO, para poder comprobar que no se repite y que los seis
+    // estan. `mezcla` sortea de nuevo y devuelve el orden nuevo.
+    orden: function () { return { orden: PB_ORDEN.slice(), paso: pbPaso }; },
+    mezcla: function () { return pbMezclaOrden(); },
+    siguiente: function () { pbSiguiente(); return { paso: pbPaso, orden: PB_ORDEN.slice() }; },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
     'la sonda de nivel e idioma')
 
@@ -1336,6 +1342,12 @@ s = s if SOLO else cambiar(s, menu.VIEJO_QCARD_SEL, '', 'sacar el marcado de las
 s = s if SOLO else cambiar(s, menu.VIEJO_BOOTEL, '', 'sacar la referencia al boot')
 s = s if SOLO else cambiar(s, "  openBoot();", "  openMenu();", 'abrir el menu al arrancar')
 s = s if SOLO else cambiar(s, menu.VIEJO_OPEN, menu.NUEVO_OPEN, 'empezar solo sin partida')
+
+# LAS SEIS SALIDAS PASAN POR UNA SOLA PUERTA
+for que, viejo, nvo in orden.SALIDAS:
+    s = s if SOLO else cambiar(s, viejo, nvo, que)
+s = s if SOLO else cambiar(s, orden.VIEJO_STORE, orden.NUEVO_STORE, 'la puerta de servicio del local')
+s = s if SOLO else cambiar(s, orden.VIEJO_START, orden.NUEVO_START, 'el paso al saltar a un nivel')
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {

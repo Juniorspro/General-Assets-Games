@@ -8908,9 +8908,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       if (!transitioning &&
           Math.hypot(player.position.x - ST_SALIDA.x, player.position.z - ST_SALIDA.z) < 2.2) {
         transitioning = true;
-        endTitle.innerHTML = '&#127828; Saliste del local';
-        endText.textContent = 'Armaste la hamburguesa entera con esa cosa pisandote los talones y cruzaste la puerta de servicio. Fin de esta version de la demo.';
-        transitionToEnd();
+        pbSiguiente();
         return;
       }
     }
@@ -9813,6 +9811,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   // cual, asi que un aviso sin traducir sale en castellano y nunca vacio.
   const PB_TOAST = {
     en: {
+      'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Six doors, six places, and not one of them was a way out. End of this version of the demo.',
       'Camina hacia la puerta blanca…': 'Walk to the white door…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Find 3 rainbow flowers 🌈 in the field',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 A door opened in the middle of the field. Follow the arrow.',
@@ -9856,6 +9855,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'The store starts over. The tray is empty again.'
     },
     pt: {
+      'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Seis portas, seis lugares, e nenhum era uma saída. Fim desta versão da demo.',
       'Camina hacia la puerta blanca…': 'Caminhe até a porta branca…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Encontre 3 flores arco-íris 🌈 no campo',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 Uma porta abriu no meio do campo. Siga a flecha.',
@@ -9921,6 +9921,58 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
     Array.prototype.forEach.call(document.querySelectorAll('#qmini button'), function (b) {
       b.classList.toggle('sel', b.getAttribute('data-q') === quality);
     });
+  }
+
+  // ==================================================================
+  // EL ORDEN DE LOS NIVELES
+  // ==================================================================
+  // La habitacion (0) no esta en la lista: es el prologo y va siempre primera.
+  // Los seis que si se sortean son el campo, la granja, la escuela, la
+  // biblioteca, el calabozo y el local.
+  const PB_NIVELES = [1, 2, 3, 4, 5, 6];
+  let PB_ORDEN = PB_NIVELES.slice();
+  let pbPaso = -1; // -1 es el prologo; de 0 en adelante indexa PB_ORDEN
+
+  // Fisher-Yates y no `sort(() => Math.random() - 0.5)`: ese comparador no es
+  // consistente, asi que el reparto que devuelve depende del algoritmo de
+  // ordenamiento del navegador y no es uniforme en ninguno.
+  function pbMezclaOrden() {
+    PB_ORDEN = PB_NIVELES.slice();
+    for (let i = PB_ORDEN.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = PB_ORDEN[i]; PB_ORDEN[i] = PB_ORDEN[j]; PB_ORDEN[j] = t;
+    }
+    pbPaso = -1;
+    return PB_ORDEN.slice();
+  }
+
+  // EL MISMO if-chain QUE `startLevel`, EN UN SOLO SITIO. Escrito dos veces, el
+  // dia que se agregue un nivel uno de los dos se queda corto y el nivel nuevo
+  // se vuelve inalcanzable por el camino del jugador pero alcanzable por la
+  // sonda, que es el defecto mas difícil de ver que puede tener esto.
+  function pbEntra(n) {
+    if (n === 0) enterRoom();
+    else if (n === 1) enterField();
+    else if (n === 2) enterFarm();
+    else if (n === 3) enterSchool();
+    else if (n === 4) enterLibrary();
+    else if (n === 5) enterDungeon();
+    else enterStore();
+  }
+
+  // LA UNICA PUERTA DE SALIDA DE CUALQUIER NIVEL.
+  function pbSiguiente() {
+    pbPaso++;
+    if (pbPaso >= PB_ORDEN.length) {
+      // EL TEXTO DEL FINAL ES GENERICO A PROPOSITO: con el orden sorteado, el
+      // ultimo nivel cambia en cada partida, asi que un final que hable del
+      // calabozo o del local seria falso cinco de cada seis veces.
+      endTitle.innerHTML = '&#128682; Cruzaste las seis puertas';
+      endText.textContent = pbTrad('Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.');
+      transitionToEnd();
+      return;
+    }
+    fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });
   }
 
 
@@ -9994,6 +10046,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   }
   function startLevel(n) {
     closeMenu();
+    pbPaso = (n === 0) ? -1 : PB_ORDEN.indexOf(n);
     if (scream.active) { scream.active = false; screamerEl.style.display = 'none'; }
     levelStarted = true;
     transitioning = true;
@@ -10020,7 +10073,10 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   document.getElementById('menu-play').addEventListener('click', function (e) {
     e.preventDefault();
     // EMPEZAR ARRANCA EN EL PROLOGO Y LA HISTORIA HACE EL RESTO: los seis
-    // niveles ya se encadenan solos, asi que no hace falta elegir ninguno.
+    // niveles se encadenan solos, en orden sorteado. La mezcla va ACA y no al
+    // cargar el modulo: sorteada una sola vez, volver al menu y empezar otra
+    // vez daria exactamente la misma partida.
+    pbMezclaOrden();
     startLevel(0);
   });
   Array.prototype.forEach.call(document.querySelectorAll('#imini button'), function (b) {
@@ -10634,7 +10690,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       const dxd = player.position.x - EXIT_DOOR_POS.x, dzd = player.position.z - EXIT_DOOR_POS.z;
       if (Math.hypot(dxd, dzd) < 2.1 && !transitioning) {
         transitioning = true;
-        transitionToFarm();
+        pbSiguiente();
         return;
       }
     }
@@ -11009,7 +11065,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       pointArrowAt(GATE_POS.x, GATE_POS.z, 3.5);
       if (Math.hypot(player.position.x - GATE_POS.x, player.position.z - GATE_POS.z) < 2.2 && !transitioning) {
         transitioning = true;
-        transitionToSchool();
+        pbSiguiente();
         return;
       }
     } else if (carryingGas && nearestGen) {
@@ -11136,7 +11192,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       pointArrowAt(SCHOOL_EXIT.x, SCHOOL_EXIT.z, 3);
       if (Math.hypot(player.position.x - SCHOOL_EXIT.x, player.position.z - SCHOOL_EXIT.z) < 2.2 && !transitioning) {
         transitioning = true;
-        transitionToLibrary();
+        pbSiguiente();
         return;
       }
     } else if (foundCount >= 3) {
@@ -11846,7 +11902,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       if (Math.hypot(player.position.x - LIB_EXIT.x, player.position.z - LIB_EXIT.z) < 2.2 &&
           libFloor === 0 && !transitioning) {
         transitioning = true;
-        transitionToDungeon();
+        pbSiguiente();
         return;
       }
     } else if (libCarrying && wanted) {
@@ -12242,7 +12298,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       pointArrowAt(DUN_EXIT.x, DUN_EXIT.z + 1.6, 3);
       if (!hiding && Math.hypot(player.position.x, player.position.z - 35.6) < 2.2 && !transitioning) {
         transitioning = true;
-        transitionToStore();
+        pbSiguiente();
         return;
       }
     } else {
@@ -12604,7 +12660,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
     if (gameState === 'room') {
       updateRoomVisuals(delta, elapsed);
       const dx = player.position.x - DOOR_POS.x, dz = player.position.z - DOOR_POS.z;
-      if (!transitioning && Math.hypot(dx, dz) < 1.6) { transitioning = true; transitionToField(); }
+      if (!transitioning && Math.hypot(dx, dz) < 1.6) { transitioning = true; pbSiguiente(); }
     } else if (gameState === 'field') {
       // walk over the rolling terrain
       groundY = lerp(groundY, terrainH(player.position.x, player.position.z), Math.min(delta * 12, 1));
@@ -12922,6 +12978,11 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     // planes del banco no pueden probar el nivel 6 y una prueba que no se puede
     // correr no prueba nada.
     nivel: function (n) { startLevel(n | 0); return n | 0; },
+    // EL ORDEN SORTEADO, para poder comprobar que no se repite y que los seis
+    // estan. `mezcla` sortea de nuevo y devuelve el orden nuevo.
+    orden: function () { return { orden: PB_ORDEN.slice(), paso: pbPaso }; },
+    mezcla: function () { return pbMezclaOrden(); },
+    siguiente: function () { pbSiguiente(); return { paso: pbPaso, orden: PB_ORDEN.slice() }; },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },
     // OJO: renderer.info se pone a cero al empezar cada render(), asi que
     // leerlo despues del cuadro deja solo la ultima pasada. Con autoReset en

@@ -124,6 +124,7 @@ JS = r"""
   // cual, asi que un aviso sin traducir sale en castellano y nunca vacio.
   const PB_TOAST = {
     en: {
+      'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Six doors, six places, and not one of them was a way out. End of this version of the demo.',
       'Camina hacia la puerta blanca…': 'Walk to the white door…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Find 3 rainbow flowers 🌈 in the field',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 A door opened in the middle of the field. Follow the arrow.',
@@ -167,6 +168,7 @@ JS = r"""
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'The store starts over. The tray is empty again.'
     },
     pt: {
+      'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Seis portas, seis lugares, e nenhum era uma saída. Fim desta versão da demo.',
       'Camina hacia la puerta blanca…': 'Caminhe até a porta branca…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Encontre 3 flores arco-íris 🌈 no campo',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 Uma porta abriu no meio do campo. Siga a flecha.',
@@ -240,7 +242,10 @@ WIRE = r"""
   document.getElementById('menu-play').addEventListener('click', function (e) {
     e.preventDefault();
     // EMPEZAR ARRANCA EN EL PROLOGO Y LA HISTORIA HACE EL RESTO: los seis
-    // niveles ya se encadenan solos, asi que no hace falta elegir ninguno.
+    // niveles se encadenan solos, en orden sorteado. La mezcla va ACA y no al
+    // cargar el modulo: sorteada una sola vez, volver al menu y empezar otra
+    // vez daria exactamente la misma partida.
+    pbMezclaOrden();
     startLevel(0);
   });
   Array.prototype.forEach.call(document.querySelectorAll('#imini button'), function (b) {

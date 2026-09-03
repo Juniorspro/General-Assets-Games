@@ -269,6 +269,75 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Octogésima novena vuelta (2026-09-03): **PUERTA BLANCA** — los niveles salen sorteados
+
+Pedido: *"quiero que hagas que los niveles sean al azar (el primer nivel siempre será la habitación
+negra)"*. Vive en `herramientas/puerta/orden.py`.
+
+#### EL ORDEN NO VIVÍA EN NINGÚN SITIO: ESTABA ESCRITO SEIS VECES
+
+Ése es el defecto de fondo y es lo que hacía que esto no fuera un cambio de una línea. La puerta del
+cuarto llamaba a `transitionToField`, la salida del campo a `transitionToFarm`, el portón de la
+granja a `transitionToSchool`, y así — o sea que el orden estaba repartido en **seis condiciones de
+choque a dos mil líneas de distancia una de otra**, cada una nombrando a mano el nivel siguiente. Con
+eso, cambiar el orden es editar seis sitios y olvidarse de uno deja un nivel **inalcanzable sin que
+nada avise**.
+
+Ahora los seis llaman a `pbSiguiente()` y el orden vive en un array. Medido: `transitionToField` y
+sus cinco hermanas quedan con **una sola aparición en el archivo, que es su propia definición** — o
+sea cero llamadas.
+
+**Y EL if-chain DE ENTRADA TAMBIÉN ESTABA DOS VECES**, en `startLevel` y ahora en `pbSiguiente`.
+Escrito dos veces, el día que se agregue un nivel uno de los dos se queda corto y el nivel nuevo pasa
+a ser **alcanzable por la sonda y no por el jugador**, que es el defecto más difícil de ver que esto
+puede tener. Va en `pbEntra(n)` y lo usan los dos.
+
+#### EL PRÓLOGO NO ENTRA EN EL SORTEO, Y ES UNA DECISIÓN
+
+La habitación negra no tiene mecánica ni enemigo —es un cuarto y una puerta— y lo único que hace es
+enseñar a caminar y a mirar. Sorteada en el medio, un jugador que viene de la biblioteca aterriza en
+un tutorial; sorteada al final, el juego **termina en la pieza más vacía que tiene**. Se sortean los
+seis que sí son niveles.
+
+#### EL ÚLTIMO NIVEL LLEVA AL FINAL, SEA CUAL SEA
+
+El final estaba clavado en la puerta de servicio del local, que era el sexto. Con el orden sorteado el
+local puede salir tercero, así que el juego se habría terminado ahí **con tres niveles sin jugar** —
+y peor, sin que nada fallara: la pantalla de victoria habría aparecido igual. Ahora quien decide es
+`pbSiguiente()`: si no queda nada en la lista, termina.
+
+**Y EL TEXTO DEL FINAL PASA A SER GENÉRICO A PROPÓSITO.** El que había hablaba del calabozo o del
+local; con el orden sorteado eso es falso cinco de cada seis veces.
+
+#### DOS COSAS QUE HAY QUE HACER BIEN
+
+- **La mezcla va en EMPEZAR y no al cargar el módulo.** Sorteada una sola vez, volver al menú y
+  empezar otra vez daría exactamente la misma partida.
+- **Y es Fisher-Yates, no `sort(() => Math.random() - 0.5)`.** Ese comparador no es consistente, así
+  que el reparto que devuelve depende del algoritmo de ordenamiento del navegador y no es uniforme en
+  ninguno.
+- **`startLevel(n)` deja el paso donde corresponde** (`pbPaso = PB_ORDEN.indexOf(n)`). Sin eso, saltar
+  a un nivel con la sonda y salir de él mandaba al primero de la lista, y las pruebas del banco
+  medirían una cadena que el jugador no tiene.
+
+#### UN DEFECTO DE LA PRUEBA, Y DEL TIPO DE SIEMPRE
+
+La primera corrida teletransportaba a `(0,0)` para cruzar la puerta del cuarto y el disparador **no
+saltaba**: la puerta está en `z = −9,4` y el radio es 1,6. La medición decía `tras_la_puerta: room` y
+parecía que la puerta no llamaba a nada — cuando lo que pasaba es que el jugador estaba a nueve metros
+de ella. Con `(0, −8,6)` la puerta dispara y el paso avanza.
+
+#### MEDIDO AL CERRAR
+
+**Doce sorteos, los doce distintos**, y todos con los seis niveles del 1 al 6 sin repetir ni faltar.
+Partida completa por la cadena, con el orden `[3,5,4,1,2,6]`: EMPEZAR deja `room` con `paso −1`, la
+**puerta del cuarto cruzada de verdad** lleva a `school` con `paso 0`, y de ahí `dungeon · library ·
+field · farm · store` en el orden exacto del array, y el séptimo paso llega a **`end`** con el texto
+genérico traducido. `__pb.nivel(6)` sigue aterrizando en el local con **`paso 2`**, o sea el índice
+que le toca, y saliendo de ahí la cadena continúa en `dungeon`. Auditoría del local intacta: **28.152
+de 28.152 celdas · 4 de 4 partes**. `window.__errs` y `window.__pbFallas` vacíos en las tres corridas.
+El HTML pasó de 2,99 a **3,00 MB**.
+
 ### Octogésima octava vuelta (2026-09-02): **PUERTA BLANCA** — un menú principal y se va el selector de niveles
 
 Pedido: *"quiero que quites el selector de niveles y agregues un menú principal con 3 funciones.
