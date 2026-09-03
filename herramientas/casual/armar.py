@@ -48,6 +48,7 @@ CATALOGO = {
     'dados':    ('Dados.html',    'DADOS'),
     'canica':   ('Canica.html',   'CANICA'),
     'piedra':   ('Piedra.html',   'PIEDRA'),
+    'arco':     ('Arco.html',     'ARCO'),
 }
 
 
