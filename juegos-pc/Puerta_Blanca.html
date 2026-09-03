@@ -340,6 +340,34 @@
      idioma esta el juego, y es justamente lo que uno viene a mirar */
   #imini button.sel, #qmini button.sel { background: rgba(232,238,245,.9); color: #0b0d10; }
 
+
+  /* LOS PARPADOS: dos bandas y no un velo. Van por encima del HUD (15) y por
+     DEBAJO del menu (18): un parpado tapa el juego, no la pantalla de pausa. */
+  #pb-parp { position: absolute; inset: 0; pointer-events: none; z-index: 16; display: none; }
+  #pb-parp i { position: absolute; left: -2%; width: 104%; height: 0; background: #000; display: block; }
+  #pb-parp i:first-child { top: 0; }
+  #pb-parp i:last-child { bottom: 0; }
+  /* LA LINEA VA EN EL MEDIO Y NO EN LA FRANJA DEL AVISO: un aviso dice que
+     hacer, esto es alguien hablando. */
+  #pb-habla {
+    position: absolute; left: 8%; right: 8%; top: 50%; z-index: 17;
+    text-align: center; font: 400 clamp(14px, 4.2vw, 20px)/1.5 inherit;
+    color: #eef2f8; text-shadow: 0 0 18px rgba(0,0,0,1), 0 2px 10px rgba(0,0,0,1);
+    opacity: 0; transition: opacity .7s ease; pointer-events: none;
+  }
+  /* MIENTRAS SE DESPIERTA NO HAY INTERFAZ. Medido en la captura: se veian la
+     mira, el joystick, el boton de correr y el reloj de la cinta encima de un
+     plano en el que el jugador no puede hacer ninguna de esas cosas — un
+     joystick dibujado sobre una escena que no responde se lee a juego trabado. */
+  body.pb-desp #crosshair,
+  body.pb-desp #joystick-zone,
+  body.pb-desp #run-btn,
+  body.pb-desp #light-btn,
+  body.pb-desp #menu-btn,
+  body.pb-desp #vhs-hud,
+  body.pb-desp #info,
+  body.pb-desp #tap-lock-hint { display: none !important; }
+
   #vhs-hud {
     position: absolute; inset: 0; pointer-events: none; z-index: 7;
     font-family: "Courier New", ui-monospace, monospace;
@@ -418,6 +446,8 @@
     <div id="tap-lock-hint">Haz clic para capturar el mouse · Shift para correr</div>
     <div id="rainbow-counter">🌈 <span id="rainbow-count">0</span>/3</div>
     <div id="toast"></div>
+    <div id="pb-parp"><i></i><i></i></div>
+    <div id="pb-habla"></div>
     <div id="vignette"></div>
     <div id="screamer"></div>
     <div id="lib-hud">
@@ -9811,6 +9841,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
   // cual, asi que un aviso sin traducir sale en castellano y nunca vacio.
   const PB_TOAST = {
     en: {
+      'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': "I don't know where I am or who I am, but it no longer matters. I just want to get out of here.",
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Six doors, six places, and not one of them was a way out. End of this version of the demo.',
       'Camina hacia la puerta blanca…': 'Walk to the white door…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Find 3 rainbow flowers 🌈 in the field',
@@ -9855,6 +9886,7 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'The store starts over. The tray is empty again.'
     },
     pt: {
+      'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': 'Não sei onde estou nem quem sou, mas já não importa. Só quero sair daqui.',
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Seis portas, seis lugares, e nenhum era uma saída. Fim desta versão da demo.',
       'Camina hacia la puerta blanca…': 'Caminhe até a porta branca…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Encontre 3 flores arco-íris 🌈 no campo',
@@ -9975,6 +10007,107 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
     fadeTo(() => { pbEntra(PB_ORDEN[pbPaso]); });
   }
 
+  // ==================================================================
+  // DESPERTARSE EN EL PISO
+  // ==================================================================
+  const PB_PARP = document.getElementById('pb-parp');
+  const PB_PARP_A = PB_PARP.firstElementChild;
+  const PB_PARP_B = PB_PARP.lastElementChild;
+  const PB_HABLA = document.getElementById('pb-habla');
+  const PB_DESP_FRASE = 'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.';
+  const PB_DESP = { on: false, t: 0, dur: 8.4, fijo: false };
+
+  // LOS PARPADOS COMO UNA TABLA DE TIEMPOS Y NO COMO SENOS: un parpadeo no es
+  // periodico. Cada par es (segundo, cuanto esta cerrado el ojo de 0 a 1), y se
+  // interpola entre uno y el siguiente.
+  const PB_PARPADEO = [
+    [0.00, 1.00], [1.15, 1.00], [1.55, 0.42], [1.95, 0.92],
+    [2.55, 0.20], [3.05, 0.62], [3.85, 0.06], [4.60, 0.00]
+  ];
+  function pbParpado(t) {
+    const T = PB_PARPADEO;
+    if (t <= T[0][0]) return T[0][1];
+    for (let i = 1; i < T.length; i++) {
+      if (t <= T[i][0]) {
+        const k = (t - T[i - 1][0]) / (T[i][0] - T[i - 1][0]);
+        const s = k * k * (3 - 2 * k); // suave en las dos puntas: un parpado frena
+        return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * s;
+      }
+    }
+    return T[T.length - 1][1];
+  }
+
+  function pbDespiertaEmpieza() {
+    PB_DESP.on = true;
+    PB_DESP.t = 0;
+    PB_PARP.style.display = 'block';
+    PB_HABLA.textContent = pbTrad(PB_DESP_FRASE);
+    PB_HABLA.style.opacity = '0';
+    document.body.classList.add('pb-desp');
+    yaw = 0; lastYaw = 0; pitch = -0.62;
+  }
+
+  function pbDespiertaTermina() {
+    if (!PB_DESP.on) return;
+    PB_DESP.on = false;
+    PB_PARP.style.display = 'none';
+    PB_PARP_A.style.height = '0';
+    PB_PARP_B.style.height = '0';
+    PB_HABLA.style.opacity = '0';
+    document.body.classList.remove('pb-desp');
+    pitch = 0;
+    pitchObj.position.y = EYE_HEIGHT;
+    pitchObj.rotation.x = 0;
+    camera.rotation.z = 0;
+    currentRoll = 0;
+    showToast('Camina hacia la puerta blanca…', 4200);
+  }
+
+  function pbDespiertaPaso(delta) {
+    // `fijo` es para el banco: sin el, la sonda pone un instante y el bucle lo
+    // corre antes de que se saque la foto, asi que la captura no es del
+    // instante que se pidio. Es la misma leccion que ya costo una vuelta en
+    // BARRIO con la cinematica.
+    if (!PB_DESP.fijo) PB_DESP.t += delta;
+    const t = PB_DESP.t;
+
+    const c = pbParpado(t) * 50;
+    PB_PARP_A.style.height = c.toFixed(2) + '%';
+    PB_PARP_B.style.height = c.toFixed(2) + '%';
+
+    // LEVANTARSE ARRANCA DESPUES DE ABRIR LOS OJOS, no a la vez: mirando la
+    // captura, subiendo desde el primer cuadro el cuerpo ya estaba de pie
+    // cuando los parpados todavia estaban cerrados, y entonces el plano no
+    // muestra a nadie tirado en el piso.
+    const k = Math.min(Math.max((t - 3.5) / 3.3, 0), 1);
+    const s = k * k * (3 - 2 * k);
+    pitchObj.position.y = 0.18 + (EYE_HEIGHT - 0.18) * s;
+    // el alabeo se va ANTES que la altura: primero se endereza la cabeza y
+    // despues el cuerpo se levanta, que es el orden en que lo hace una persona
+    const kr = Math.min(Math.max((t - 3.5) / 2.2, 0), 1);
+    const sr = kr * kr * (3 - 2 * kr);
+    const roll = 1.12 * (1 - sr);
+    pitch = -0.62 * (1 - s) + Math.sin(t * 1.7) * 0.012 * (1 - s);
+
+    player.rotation.y = yaw;
+    pitchObj.rotation.x = pitch;
+    camera.position.set(0, Math.sin(t * 2.3) * 0.008, 0);
+    camera.rotation.z = roll;
+    currentRoll = roll;
+
+    if (t > 2.9 && PB_HABLA.style.opacity !== '1') PB_HABLA.style.opacity = '1';
+    if (t > 7.2 && PB_HABLA.style.opacity !== '0') PB_HABLA.style.opacity = '0';
+    if (!PB_DESP.fijo && t >= PB_DESP.dur) pbDespiertaTermina();
+  }
+
+  // SE PUEDE SALTEAR DESPUES DEL PRIMER SEGUNDO, no antes: el mismo toque que
+  // apreto EMPEZAR llega a veces como un segundo evento y se la comeria entera.
+  (function () {
+    const salta = function () { if (PB_DESP.on && PB_DESP.t > 1) pbDespiertaTermina(); };
+    window.addEventListener('pointerdown', salta, true);
+    window.addEventListener('keydown', salta, true);
+  })();
+
 
   function hideAllLevels() {
     storeGroup.visible = false;
@@ -10024,7 +10157,10 @@ window.__PB_CAMPO = {"petal":{"b64":"UklGRgRrAABXRUJQVlA4IPhqAACQpQGdASqAAYABPj0
     boundary = ROOM;
     boundaryType = 'box';
     stamina = 100;
-    showToast('Camina hacia la puerta blanca…', 4200);
+    // EL AVISO SE MUDA AL FINAL DE LA ANIMACION: 'camina hacia la puerta' con
+    // el jugador todavia tirado en el piso y sin control es una instruccion que
+    // no se puede seguir, y para cuando se puede el aviso ya se fue.
+    pbDespiertaEmpieza();
     transitioning = false;
   }
 
@@ -12983,6 +13119,17 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     orden: function () { return { orden: PB_ORDEN.slice(), paso: pbPaso }; },
     mezcla: function () { return pbMezclaOrden(); },
     siguiente: function () { pbSiguiente(); return { paso: pbPaso, orden: PB_ORDEN.slice() }; },
+    // DESPERTARSE. `desp(t)` congela la animacion en ese segundo para poder
+    // fotografiarla; `desp()` sin numero devuelve el estado y la descongela.
+    desp: function (t) {
+      if (typeof t === 'number') { PB_DESP.fijo = true; PB_DESP.t = t; pbDespiertaPaso(0); }
+      else PB_DESP.fijo = false;
+      return { on: PB_DESP.on, t: +PB_DESP.t.toFixed(3), parp: +pbParpado(PB_DESP.t).toFixed(3),
+               ojo: +pitchObj.position.y.toFixed(3), alabeo: +camera.rotation.z.toFixed(3),
+               cabeceo: +pitchObj.rotation.x.toFixed(3),
+               bandas: PB_PARP_A.style.height, habla: PB_HABLA.style.opacity,
+               frase: PB_HABLA.textContent.slice(0, 40) };
+    },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },
     // OJO: renderer.info se pone a cero al empezar cada render(), asi que
     // leerlo despues del cuadro deja solo la ultima pasada. Con autoReset en
@@ -13618,6 +13765,11 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     try {
       if (scream.active) {
         updateScreamer(delta, elapsedTime);
+      } else if (PB_DESP.on && !paused) {
+        // NO SE LLAMA A updateMovement A PROPOSITO: esa funcion escribe la
+        // altura del ojo, el cabeceo y el alabeo al final, asi que corriendo
+        // las dos el ultimo en escribir gana y la animacion se pisa sola.
+        pbDespiertaPaso(delta);
       } else if (!paused && gameState !== 'end') {
         updateMovement(delta, elapsedTime);
       }

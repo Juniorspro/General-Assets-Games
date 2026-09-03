@@ -269,6 +269,83 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima vuelta (2026-09-03): **PUERTA BLANCA** — el prólogo abre despertándose en el piso
+
+Pedido: *"haz que al principio en la habitación negra haya una animación del jugador despertándose en
+el piso y diciendo «nose donde estoy o quien soy, pero ya no importa solo quiero salir de aqui»"*.
+Vive en `herramientas/puerta/despertar.py`.
+
+#### NO ES UN VIDEO NI UNA SEGUNDA ESCENA: ES DÓNDE ESTÁ EL OJO
+
+El cuarto ya existe y ya está iluminado; lo único que falta es **la altura del ojo** y que no se
+pueda caminar todavía. Así que son ocho segundos y pico de una función del tiempo que escribe
+`pitchObj.position.y`, el cabeceo y el alabeo — los mismos tres números que ya escriben la agachada y
+el escondite. **Cero geometría nueva y cero assets**: el HTML sube 1 KB.
+
+#### DESPERTARSE SON TRES COSAS Y NINGUNA SOLA ALCANZA
+
+1. **La altura del ojo**, de **0,18 a 1,70 m**. Con la cabeza a un palmo del piso lo que entra en el
+   cuadro es el zócalo y el suelo, que es lo que se ve tirado.
+2. **EL ALABEO, de 1,12 rad a 0.** Sin eso no está tirado: está **agachado**. La cabeza apoyada de
+   costado es lo único que dice que el cuerpo está en el piso, y en la captura se lee de una — la
+   puerta blanca aparece girada.
+3. **Los párpados, que son DOS BANDAS y no un velo.** Un fundido desde negro se lee a transición de
+   video; dos bandas que se abren, se cierran a medias y se vuelven a abrir se leen a alguien
+   abriendo los ojos. Es la misma lección que ya costó una vuelta en Eco.
+
+**Y EL PARPADEO VA COMO UNA TABLA DE TIEMPOS Y NO COMO UN SENO**, porque un parpadeo no es periódico:
+ocho pares (segundo, cuánto está cerrado) interpolados con `smoothstep`, que además arranca y termina
+frenando — que es lo que hace un párpado.
+
+**EL ORDEN IMPORTA: primero se endereza la cabeza y después se levanta el cuerpo.** El alabeo se va en
+2,2 s y la altura tarda 3,3, así que la cabeza deja de estar de costado antes de que el cuerpo suba,
+que es el orden en que lo hace una persona. Y **levantarse arranca recién en el segundo 3,5, después
+de abrir los ojos**: subiendo desde el primer cuadro, el cuerpo ya estaba de pie con los párpados
+todavía cerrados y entonces el plano no mostraba a nadie tirado.
+
+#### DOS DEFECTOS QUE SÓLO APARECIERON MIRANDO LA CAPTURA
+
+- **LA INTERFAZ SEGUÍA DIBUJADA ENCIMA.** La mira, el joystick, el botón de correr y el reloj de la
+  cinta, todos sobre un plano en el que el jugador no puede hacer ninguna de esas cosas — y un
+  joystick dibujado sobre una escena que no responde no se lee a cinemática, se lee a **juego
+  trabado**. Se apagan con una clase en el `body`. Medido después: barriendo todo lo visible del HUD,
+  **el único elemento encendido es el de los párpados**.
+- **La línea caía justo en el borde de la banda de abajo** y con el texto casi gris sobre un cuarto
+  casi negro. Va al medio del hueco entre los párpados y con sombra opaca.
+
+#### `updateMovement` NO SE LLAMA MIENTRAS SE DESPIERTA, Y ES A PROPÓSITO
+
+Esa función escribe la altura del ojo, el cabeceo y el alabeo **al final de su cuerpo**, así que
+corriendo las dos el último en escribir gana y la animación se pisa sola. Mientras `PB_DESP.on` está
+puesto, el bucle llama a `pbDespiertaPaso` **en vez** de a `updateMovement`, y ahí la animación es la
+única dueña de la cámara. De paso eso deja al jugador clavado sin ninguna bandera extra: el disparador
+de la puerta vive dentro de `updateMovement`.
+
+**Y EL AVISO SE MUDÓ AL FINAL.** `enterRoom` decía *"camina hacia la puerta blanca"* en el primer
+cuadro: una instrucción que no se puede seguir, y para cuando se puede el aviso ya se fue.
+
+#### SE PUEDE SALTEAR, CON UN SEGUNDO DE GRACIA
+
+Un toque o una tecla después del primer segundo la termina. La gracia no es capricho: el mismo toque
+que apretó EMPEZAR llega a veces como un segundo evento y se la comería entera — es exactamente la
+guarda que ya hizo falta en la cinemática de BARRIO.
+
+#### LA SONDA TUVO QUE PODER CONGELARLA
+
+`__pb.desp(t)` pone el instante **y frena el reloj de la animación**. Sin eso, la sonda escribe un
+segundo, el bucle lo corre, y la foto sale de otro instante: los párpados aparecen abiertos en la
+captura del ojo cerrado. Es la misma lección que ya costó una vuelta con la cinemática de BARRIO.
+
+#### MEDIDO AL CERRAR
+
+Siete instantes fotografiados con la animación congelada: **t 0,4** párpado 1,00 · ojo 0,18 · alabeo
+1,12 → **t 4,6** párpado 0,00 · ojo 0,574 · alabeo 0,56 → **t 7,0** ojo **1,700** · alabeo 0 ·
+cabeceo 0. La frase aparece en el segundo 2,9 y se va en el 7,2, en los tres idiomas. **Con la
+animación corriendo y el jugador puesto encima de la puerta, la puerta NO dispara** (`room`), y al
+terminar la animación la cadena sigue sola (`school`, que era el primero del sorteo). Interfaz: **un
+solo elemento visible**, el de los párpados. `window.__errs` y `window.__pbFallas` vacíos en las tres
+corridas. El HTML pasó de 3,00 a **3,00 MB**.
+
 ### Octogésima novena vuelta (2026-09-03): **PUERTA BLANCA** — los niveles salen sorteados
 
 Pedido: *"quiero que hagas que los niveles sean al azar (el primer nivel siempre será la habitación

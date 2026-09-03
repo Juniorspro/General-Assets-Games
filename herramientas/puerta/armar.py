@@ -520,6 +520,7 @@ sys.path.insert(0, AQUI)
 import campo
 import menu
 import orden
+import despertar
 import nivel6
 import red
 
@@ -1302,7 +1303,7 @@ s = s if SOLO else cambiar(s, '  #vhs-hud {', menu.CSS + '\n  #vhs-hud {', 'el C
 # el idioma va DESPUES de `menuResume` —lo usa `pbPintaIdioma`— y antes del
 # cableado, que necesita `startLevel` y `quality`
 s = s if SOLO else cambiar(s, "  let levelStarted = false;",
-    "  let levelStarted = false;" + menu.JS + orden.JS, 'el idioma y el orden')
+    "  let levelStarted = false;" + menu.JS + orden.JS + despertar.JS + despertar.SALTA, 'el idioma, el orden y el despertar')
 s = s if SOLO else cambiar(s, "  menuResume.addEventListener('click', closeMenu);",
     menu.WIRE + "  menuResume.addEventListener('click', closeMenu);", 'el cableado del menu')
 
@@ -1332,6 +1333,17 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
     orden: function () { return { orden: PB_ORDEN.slice(), paso: pbPaso }; },
     mezcla: function () { return pbMezclaOrden(); },
     siguiente: function () { pbSiguiente(); return { paso: pbPaso, orden: PB_ORDEN.slice() }; },
+    // DESPERTARSE. `desp(t)` congela la animacion en ese segundo para poder
+    // fotografiarla; `desp()` sin numero devuelve el estado y la descongela.
+    desp: function (t) {
+      if (typeof t === 'number') { PB_DESP.fijo = true; PB_DESP.t = t; pbDespiertaPaso(0); }
+      else PB_DESP.fijo = false;
+      return { on: PB_DESP.on, t: +PB_DESP.t.toFixed(3), parp: +pbParpado(PB_DESP.t).toFixed(3),
+               ojo: +pitchObj.position.y.toFixed(3), alabeo: +camera.rotation.z.toFixed(3),
+               cabeceo: +pitchObj.rotation.x.toFixed(3),
+               bandas: PB_PARP_A.style.height, habla: PB_HABLA.style.opacity,
+               frase: PB_HABLA.textContent.slice(0, 40) };
+    },
     idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
     'la sonda de nivel e idioma')
 
@@ -1348,6 +1360,12 @@ for que, viejo, nvo in orden.SALIDAS:
     s = s if SOLO else cambiar(s, viejo, nvo, que)
 s = s if SOLO else cambiar(s, orden.VIEJO_STORE, orden.NUEVO_STORE, 'la puerta de servicio del local')
 s = s if SOLO else cambiar(s, orden.VIEJO_START, orden.NUEVO_START, 'el paso al saltar a un nivel')
+
+# DESPERTARSE EN EL PISO
+s = s if SOLO else cambiar(s, despertar.MARCA, despertar.MARCADO, 'el marcado de los parpados')
+s = s if SOLO else cambiar(s, "  #vhs-hud {", despertar.CSS + "\n  #vhs-hud {", 'el CSS de despertarse')
+s = s if SOLO else cambiar(s, despertar.VIEJO_ROOM, despertar.NUEVO_ROOM, 'arrancar la animacion en el cuarto')
+s = s if SOLO else cambiar(s, despertar.VIEJO_LOOP, despertar.NUEVO_LOOP, 'el bucle mientras se despierta')
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {
