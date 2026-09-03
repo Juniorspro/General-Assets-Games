@@ -903,7 +903,14 @@ function aDemo(g, u, plano){
     A_el.vida = A_el.max*0.34;
     A_ultZona = 'cabeza'; A_ultT = 1.4;
   }
+  /* ── Y LA CINEMATICA DIBUJA SU PROPIO AMBIENTE ──
+     En modo `cine` el bucle NO llama a `ambAtras`: la pantalla se limpia y lo
+     unico que se pinta es lo que devuelve el plano. Sin esto, los tres planos
+     salen sobre NEGRO —medido en la captura, el fondo generado no aparecia por
+     ningun lado— y la cinematica se ve de otro juego que la partida. */
+  ambAtras();
   aPinta(g);
+  ambAdelante();
   A_duelo = gd; A_fase = gf; A_turno = gt; A_arrastre = ga;
   A_flecha = gfl; A_viento = gv; A_ultZona = gz; A_ultT = gzt;
 }

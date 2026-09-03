@@ -22,11 +22,22 @@
    bloque en el aire, que es cuando se nota, y al apoyar el giro vuelve a cero.
    La misma decisión que ya se tomó con los dados guardados de DADOS. */
 
-const K_MUNDO = 1250;
+/* ── EL MUNDO MIDE 820 Y NO 1250, Y ESO SE MIDIÓ EN LA CAPTURA ──
+   Con 1250, encuadrar la catapulta y la torre a la vez deja el zoom en 0,67: la
+   torre —que mide 170 de ancho— sale en SESENTA Y CINCO PÍXELES sobre una
+   pantalla de 412, o sea que el edificio que hay que leer no se lee. Y leerlo es
+   el juego entero. Con 820 el tramo util baja de 730 a 570 y el zoom sube a
+   1,26: la torre pasa a 123 pixeles de ancho y unos 280 de alto. El precio es
+   que el tiro es mas corto, y eso se ve en los bots, no en una opinion. */
+const K_MUNDO = 820;
 const K_G = 1500;
 const K_VMAX = 1300;
 const K_TENSA = 250;
-const K_ALTO_A = 0.82;         /* dónde cae el suelo en la pantalla */
+/* ── EL SUELO CAE EN EL 0,74 Y NO EN EL 0,82 ──
+   Con 0,82 el pie de la torre quedaba tapado por la leyenda y por los dos
+   botones de abajo, que son DOM: la base de la cámara del rey —o sea justo lo
+   que hay que mirar para saber donde pegarle— salía cortada. */
+const K_ALTO_A = 0.74;
 const K_OJO = 40;
 
 /* ── LOS MATERIALES ──
@@ -49,6 +60,7 @@ let K_t = 0, K_lento = 0;
 let K_arr = null;
 let K_msg = '', K_msgT = 0;      /* el aviso corto del impacto */
 let K_asentando = false;         /* los 90 pasos previos: no hacen dano */
+let K_eMax = 0;                  /* la energia mas alta con la que algo toco al rey */
 let K_rotos = 0;                 /* bloques que se rompieron con el ultimo tiro */
 let K_camX = 0, K_camZ = 1, K_camMX = 0, K_camMZ = 1;
 let K_azar = 11;
@@ -94,36 +106,87 @@ function kPlanta(tipo, x0, ancho, y, mat){
   return b;
 }
 
+/* ── EL REY VA ABAJO, Y ESO NO ES UN DETALLE DE COMPOSICIÓN ──
+   La primera version lo ponia en la camara de ARRIBA. Y ahi el juego no se
+   podia ganar como dice su propio subtitulo: si el rey esta en lo mas alto, lo
+   unico que puede caerle encima es su propio techo, y todo lo que uno le tire a
+   la torre se desarma HACIA LOS COSTADOS dejandolo de pie. Medido con la traza
+   tiro a tiro: en los niveles de dos plantas el derrumbe le sacaba CERO, y los
+   unicos puntos venian de pegarle a el con la piedra, 42 cada uno, con cuatro
+   tiros de tope para bajar cien de vida.
+
+   Con la camara en la BASE, todo lo que hay arriba es peso que se le puede
+   tirar encima, que es literalmente el verbo del juego. Y de paso queda
+   protegido de un tiro directo: sus dos pilares le tapan los costados y su
+   techo le tapa el arco, asi que la piedra no lo alcanza hasta que la
+   estructura se rompe. */
 function kGenera(n){
   K_azar = (n*2654435761) >>> 0;
   for (let i = 0; i < 6; i++) kAz();
-  const plantas = Math.min(5, 2 + Math.floor((n - 1)/9));
+  const plantas = Math.min(6, 2 + Math.floor((n - 1)/10));
   const x0 = K_MUNDO - 420, ancho = 170;
   const b = [];
   let y = kSuelo();
+  let camX = x0;
+  /* ── EL ZÓCALO: LA CÁMARA NO SIEMPRE ESTÁ EN EL SUELO ──
+     Con la cámara SIEMPRE en la base, el punto débil está siempre en el mismo
+     sitio y el nivel 60 se juega igual que el 1 — medido, el bot ganaba los
+     sesenta con el mismo tiro a (845,384) repetido. Con el zócalo, las patas
+     que hay que sacar son las del muro macizo de abajo y el tiro plano ya no
+     llega a la altura de la cámara. */
+  const zocalo = n > 15 && kAz() < 0.42;
+  if (zocalo){
+    for (const z of kPlanta(1, x0, ancho, y, 1)) b.push(z);
+    y -= 46;
+  }
   for (let p = 0; p < plantas; p++){
     /* el hielo sólo aparece pasado el nivel 12, y nunca en la planta de abajo:
        una base de hielo hace que la torre se caiga sola y el nivel se gana sin
        tirar */
-    let mat = 0;
-    if (n > 5) mat = kAz() < 0.45 ? 1 : 0;
-    if (n > 12 && p > 0 && kAz() < 0.30) mat = 2;
-    const tipo = p === plantas - 1 ? 3 : (kAz()*3)|0;
-    const dx = (kAz() - 0.5)*22;
+    /* ── LA CÁMARA DEL REY ES SIEMPRE DE PIEDRA, Y ESO SE MIDIÓ ──
+       Con la cámara de madera, el techo se rompe DE UN TIRO —la piedra llega
+       con unos 900 de velocidad y eso son 50 de daño contra 26 de vida— y
+       entonces el peso que tenía que caerle encima al rey se evapora en el
+       mismo tiro que iba a tirárselo. Medido con la traza: `enc` pasaba de 2457
+       a 0 y la energía con la que algo tocó al rey era CERO en los cuatro
+       tiros. De piedra aguanta el primer golpe y hay que sacarle las patas. */
+    let mat = p === 0 ? 1 : 0;
+    if (p > 0 && n > 5) mat = kAz() < 0.45 ? 1 : 0;
+    if (p > 0 && n > 12 && kAz() < 0.30) mat = 2;
+    const tipo = p === 0 ? 3 : (kAz()*3)|0;
+    const dx = p === 0 ? 0 : (kAz() - 0.5)*22;
+    if (p === 0) camX = x0 + dx;
     const pl = kPlanta(tipo, x0 + dx, ancho, y, mat);
     for (const z of pl) b.push(z);
     y -= (tipo === 3 ? 92 : (tipo === 1 ? 46 : (tipo === 0 ? 78 : 74)));
   }
-  /* ── EL REY VA APOYADO, Y ESE «−r» NO ES UN DETALLE ──
-     `y + 92` es la SUPERFICIE sobre la que se para (el techo de la planta de
-     abajo), así que poniendo ahí su CENTRO queda medio rey enterrado en el
-     bloque. Y enterrado, el empuje de separación lo saca por una normal
-     degenerada —el centro justo sobre el borde da distancia cero— y lo manda
-     para abajo atravesando la torre: medido, nacía herido en los 60 niveles. */
+  /* apoyado en el suelo, adentro de la camara. El «−r−1» no es un detalle:
+     poniendo el CENTRO sobre la superficie queda medio rey enterrado, y
+     enterrado el empuje de separacion sale por una normal degenerada y lo manda
+     para abajo atravesando el piso. */
   const rr = 17;
-  const rey = { x: x0 + ancho/2, y: y + 92 - rr - 1, r: rr, vida: 100, vx: 0, vy: 0 };
+  const reyY = (zocalo ? kSuelo() - 46 : kSuelo()) - rr - 1;
+  const rey = { x: camX + ancho/2, y: reyY, r: rr, vida: 100, vx: 0, vy: 0 };
+
+  /* ── LA BARBACANA: EL MURO QUE TAPA EL TIRO PLANO ──
+     Sin ella hay UNA respuesta y es siempre la misma: el tiro plano y rápido a
+     la pata izquierda de la cámara. Un muro de madera delante la tapa, y
+     entonces el nivel pide otra cosa —romperlo primero, o pasar por arriba y
+     caer sobre el techo—. Va de MADERA y no de piedra a propósito: de piedra
+     serían dos tiros de peaje en todos los niveles, que es alargar y no
+     complicar. Y se rompe o se vuelca hacia adentro, así que a veces el propio
+     muro es la herramienta. */
+  if (n > 7 && kAz() < 0.55){
+    const mx = x0 - 54;
+    let my = kSuelo();
+    for (let i = 0; i < 2; i++){
+      b.push({ x: mx, y: my - 62, w: 26, h: 62, mat: 0, vida: K_MAT[0].vida,
+               vx: 0, vy: 0, gi: 0, vgi: 0, quieto: 0 });
+      my -= 62;
+    }
+  }
   /* los tiros que da el nivel: sale de las PLANTAS y no de un número a mano —
-     una torre de cinco pisos con tres tiros es imposible y con doce es un
+     una torre de seis pisos con tres tiros es imposible y con doce es un
      trámite */
   const tope = 2 + plantas;
   return { b, rey, tope };
@@ -157,7 +220,7 @@ const PIEL = { ac:'#c98a3c', tela:'fondo' };
 const SON_ALIAS = { bien:'clava', toque:'tensa', pierde:'grito', gana:'gana',
                     clic:'clic', caida:'tira' };
 const AMB = {
-  foto: 'k_fondo',
+  foto: 'f_castillo',
   cielo: ['#3a4f7a', '#c9a06a'],
   haz: 0.10,
   vineta: 0.38,
@@ -180,8 +243,11 @@ function kAMundo(px, py){
 function kCamPaso(dt){
   if (K_fase === 'vuela' && K_piedra){ K_camMX = K_piedra.x; K_camMZ = 0.84; }
   else {
-    K_camMX = K_MUNDO*0.5 + 60;
-    K_camMZ = Math.max(0.42, Math.min(0.9, AN/(K_MUNDO*0.86)));
+    /* el tramo util va de la catapulta al borde derecho de la torre, no del
+       cero al ancho del mundo: entre medio no hay nada que mirar */
+    const i0 = 60, i1 = K_MUNDO - 420 + 230;
+    K_camMX = (i0 + i1)/2;
+    K_camMZ = Math.max(0.42, Math.min(1.45, AN/(i1 - i0)));
   }
   const k = Math.min(1, dt*(K_fase === 'vuela' ? 6.5 : 3.2));
   K_camX += (K_camMX - K_camX)*k;
@@ -222,7 +288,8 @@ const JUEGO = {
     /* el asentado puede haber roto algo: se limpia DESPUÉS, que si no el primer
        tiro nace con el contador del arranque puesto y el aviso miente */
     K_rotos = 0; K_msg = ''; K_msgT = 0;
-    K_camX = K_MUNDO*0.5 + 60; K_camZ = 0.58;
+    K_camX = (60 + K_MUNDO - 420 + 230)/2;
+    K_camZ = Math.max(0.42, Math.min(1.45, AN/(K_MUNDO - 420 + 170)));
   },
 
   paso(dt){
@@ -314,9 +381,17 @@ const JUEGO = {
       while (this.vivo && v < 9000){
         v++;
         if (K_fase === 'apunta'){
-          const b = azar ? K_bloques[(Math.random()*K_bloques.length)|0] : kBotBlanco();
-          if (!b) break;
-          const t = kTiroA(b.x + b.w/2, b.y + b.h/2);
+          let mira;
+          if (azar){
+            /* el bot al azar le apunta a UN bloque cualquiera, que es lo que
+               hace alguien que todavia no entendio que la torre sostiene algo */
+            const vivos = K_bloques.filter(z => z.vida > 0);
+            if (!vivos.length){ mira = { x: K_rey.x, y: K_rey.y }; }
+            else { const z = vivos[(Math.random()*vivos.length)|0];
+                   mira = { x: z.x + z.w/2, y: z.y + z.h/2 }; }
+          } else mira = kBotMira();
+          if (!mira) break;
+          const t = azar ? kTiroA(mira.x, mira.y) : kBotTiro(mira);
           this.tira(t.ang, t.f);
           tiros++;
         }
@@ -343,11 +418,20 @@ const JUEGO = {
       if (!kTodoQuieto()) fall.push('la torre no asienta');
       if (K_bloques.length < 4) fall.push('torre muy chica');
       /* el rey tiene que estar APOYADO en algo y no flotando */
-      let sost = false;
+      let sost = Math.abs(K_rey.y + K_rey.r - kSuelo()) < 6;
       for (const z of K_bloques)
         if (Math.abs(K_rey.y + K_rey.r - z.y) < 6 &&
             K_rey.x > z.x - 10 && K_rey.x < z.x + z.w + 10) sost = true;
       if (!sost) fall.push('el rey flota');
+      /* ── Y NO PUEDE ESTAR EXPUESTO DE ENTRADA ──
+         La camara existe para que la piedra NO lo alcance de un tiro directo:
+         sin techo encima, el nivel se gana con tres tiros a la cabeza y la torre
+         no hace falta para nada. */
+      let techo = false;
+      for (const z of K_bloques)
+        if (z.y + z.h <= K_rey.y && z.x < K_rey.x + 20 && z.x + z.w > K_rey.x - 20)
+          techo = true;
+      if (!techo) fall.push('el rey sin techo');
       if (fall.length) malos.push([n, fall[0]]);
       minB = Math.min(minB, K_bloques.length); maxB = Math.max(maxB, K_bloques.length);
       minT = Math.min(minT, K_tope); maxT = Math.max(maxT, K_tope);
@@ -385,6 +469,42 @@ const JUEGO = {
     }
     if (o.tira) this.tira(o.tira[0], o.tira[1]);
     if (o.aBlanco){ const t = kTiroA(o.aBlanco[0], o.aBlanco[1]); this.tira(t.ang, t.f); }
+    /* ── UN NIVEL JUGADO PASO A PASO, CON LA VIDA DEL REY EN CADA TIRO ──
+       «gana 41 de 60» no dice por que fallan los diez primeros. Esto devuelve a
+       que le apunto, cuanto le saco al rey y cuantos bloques rompio cada tiro,
+       que es lo unico con lo que se puede decidir si falta dano o falta puntería. */
+    if (o.traza){
+      this.arranca(o.traza);
+      const dt = 1/60, tr = [];
+      let v = 0;
+      while (this.vivo && v < 9000){
+        v++;
+        if (K_fase === 'apunta'){
+          const m = kBotMira();
+          const antes = K_rey.vida, rotos0 = K_bloques.filter(z => z.vida <= 0).length;
+          const t = kBotTiro(m);
+          this.tira(t.ang, t.f);
+          while (K_fase !== 'apunta' && this.vivo && v < 9000){ this.paso(dt); v++; }
+          /* cuanto peso quedo SOBRE el rey y a que altura: si el derrumbe le
+             saca cero, esto dice si es que no le cayo nada o si le cayo despacio */
+          let enc = 0;
+          for (const z of K_bloques)
+            if (z.vida > 0 && z.y + z.h <= K_rey.y + 4 &&
+                z.x < K_rey.x + 34 && z.x + z.w > K_rey.x - 34)
+              enc += z.w*z.h*K_MAT[z.mat].dens;
+          tr.push({ a: m.rey ? 'rey' : [Math.round(m.x), Math.round(m.y)],
+                    dano: Math.round(antes - K_rey.vida),
+                    rotos: K_bloques.filter(z => z.vida <= 0).length - rotos0,
+                    rey: Math.round(K_rey.vida),
+                    pos: [Math.round(K_rey.x), Math.round(K_rey.y)],
+                    enc: Math.round(enc), eMax: Math.round(K_eMax) });
+          K_eMax = 0;
+          continue;
+        }
+        this.paso(dt);
+      }
+      return JSON.stringify({ nivel: o.traza, tope: K_tope, gano: this.gano, tr });
+    }
     return this.ver();
   }
 };
@@ -416,24 +536,103 @@ function kTiroA(bx, by){
   return { ang: mej.ang, f: Math.min(1, mej.v/K_VMAX) };
 }
 
-/* ── A QUÉ LE APUNTA EL BOT ──
-   A la pieza más BAJA de la columna más cargada, o sea a la pata que sostiene
-   más peso. No es un truco: es lo que hace una persona que ya entendió que
-   sacarle la base a una torre la tira entera. */
-function kBotBlanco(){
+/* ── EL TIRO QUE DE VERDAD LLEGA, Y NO EL DE VELOCIDAD MÍNIMA ──
+   `kTiroA` devuelve la parábola más barata que pasa por un punto, y eso está
+   bien para un blanco al aire libre. Acá casi nunca sirve: apuntando a una pata
+   de la cámara —abajo de todo y detrás de un techo de 186 de ancho— la parábola
+   más barata BAJA sobre el blanco, o sea que atraviesa el techo antes de
+   llegar. Medido con la traza: el tiro que iba a la pata rompía el techo, y el
+   peso que tenía que caerle encima al rey se evaporaba en el mismo tiro.
+
+   Lo que hace una persona es tirar más PLANO. Así que se prueban veinte tiempos
+   de vuelo, se SIMULA cada trayectoria contra los bloques —sin romper nada— y
+   se elige el más rápido que de verdad pegue en el blanco. Es la misma cuenta
+   que el juego ya usa para la piedra, con el daño apagado. */
+function kSimTiro(ang, f){
+  let x = 120, y = kSuelo() - 96;
+  let vx = Math.cos(ang)*f*K_VMAX, vy = -Math.sin(ang)*f*K_VMAX;
+  const dt = 1/240;
+  for (let i = 0; i < 900; i++){
+    vy += K_G*dt; x += vx*dt; y += vy*dt;
+    if (y > kSuelo() || x > K_MUNDO + 200) return null;
+    if (K_rey && Math.hypot(x - K_rey.x, y - K_rey.y) < 15 + K_rey.r)
+      return 'rey';
+    for (const b of K_bloques){
+      if (b.vida <= 0) continue;
+      if (x < b.x - 15 || x > b.x + b.w + 15) continue;
+      if (y < b.y - 15 || y > b.y + b.h + 15) continue;
+      return b;
+    }
+  }
+  return null;
+}
+
+function kBotTiro(mira){
+  const x0 = 120, y0 = kSuelo() - 96;
+  const dx = mira.x - x0, dy = mira.y - y0;
+  const cand = [];
+  for (let k = 0; k <= 20; k++){
+    const t = 0.22 + k*(2.6 - 0.22)/20;
+    const vx = dx/t, vy = (dy - K_G*t*t/2)/t;
+    if (vx <= 0) continue;
+    const v = Math.hypot(vx, vy);
+    if (v > K_VMAX) continue;
+    cand.push({ ang: Math.atan2(-vy, vx), f: v/K_VMAX, v });
+  }
+  /* del más rápido al más lento: el plano llega antes y pega más fuerte */
+  cand.sort((a, b) => b.v - a.v);
+  for (const c of cand){
+    const z = kSimTiro(c.ang, c.f);
+    const pega = mira.rey ? z === 'rey'
+               : (z && z !== 'rey' && Math.abs(z.x + z.w/2 - mira.x) < 40 &&
+                  Math.abs(z.y + z.h/2 - mira.y) < 40);
+    if (pega) return c;
+  }
+  return cand.length ? cand[cand.length - 1] : kTiroA(mira.x, mira.y);
+}
+
+/* ── A QUÉ LE APUNTA EL BOT, Y ES LA MITAD DEL JUEGO ──
+   La primera version apuntaba a «la pieza mas baja de la columna mas cargada»,
+   o sea a lo que TIRA la torre. Y medido, eso empataba con el bot al azar: 35
+   contra 33 de 60. La razon es que este juego NO se gana tirando la torre, se
+   gana aplastando al rey — y una torre que se desarma para los costados deja al
+   rey de pie en el suelo, intacto.
+
+   Asi que el peso que decide no es el que hay encima del BLOQUE: es el que hay
+   encima DEL REY. Un pilar que sostiene mil kilos que van a caer tres metros al
+   costado no vale nada; el que sostiene el techo de la camara vale el nivel. Y
+   cuando ya no queda nada arriba del rey, lo unico que queda es pegarle a el.
+
+   `mira()` devuelve un PUNTO y no un bloque, justamente para poder decir «al
+   rey» sin un caso especial en quien la llama. */
+function kBotMira(){
+  if (!K_rey) return null;
+  const rx0 = K_rey.x - 34, rx1 = K_rey.x + 34;
+  let encima = 0;
+  for (const o of K_bloques)
+    if (o.vida > 0 && o.y + o.h <= K_rey.y && o.x < rx1 && o.x + o.w > rx0)
+      encima += o.w*o.h*K_MAT[o.mat].dens;
+  if (encima < 1200) return { x: K_rey.x, y: K_rey.y, rey: true };
+
   let mej = null, mejP = -1;
   for (const b of K_bloques){
     if (b.vida <= 0) continue;
-    /* cuánto peso tiene encima: los bloques cuyo x se solapa y están más arriba */
     let p = 0;
-    for (const o of K_bloques)
-      if (o !== b && o.y + o.h <= b.y + 4 &&
-          o.x < b.x + b.w && o.x + o.w > b.x) p += o.w*o.h*K_MAT[o.mat].dens;
-    /* se prefiere lo bajo y cargado, y se castiga lo que ya está roto */
+    for (const o of K_bloques){
+      if (o === b || o.vida <= 0) continue;
+      if (o.y + o.h > b.y + 4) continue;                  /* no esta por encima */
+      if (o.x >= b.x + b.w || o.x + o.w <= b.x) continue; /* b no lo sostiene */
+      /* lo que esta sobre el rey pesa el triple: es lo que va a caerle encima */
+      const sobreRey = o.x < rx1 && o.x + o.w > rx0 && o.y + o.h <= K_rey.y;
+      p += o.w*o.h*K_MAT[o.mat].dens*(sobreRey ? 3 : 1);
+    }
+    /* se prefiere lo bajo y cargado, y se castiga lo que ya esta sano: pegarle
+       otra vez a la pata rajada cuesta menos que abrir una nueva */
     const s = p*(1 + (kSuelo() - b.y)/400) - b.vida*6;
     if (s > mejP){ mejP = s; mej = b; }
   }
-  return mej;
+  if (!mej) return { x: K_rey.x, y: K_rey.y, rey: true };
+  return { x: mej.x + mej.w/2, y: mej.y + mej.h/2, rey: false };
 }
 
 /* ══════════ LA FÍSICA ══════════ */
@@ -517,6 +716,7 @@ function kFisica(dt){
       if (K_rey.y + K_rey.r > kSuelo()){
         K_rey.y = kSuelo() - K_rey.r; K_rey.vy = 0; K_rey.vx *= 0.7;
       }
+      let carga = 0;
       for (const o of K_bloques){
         if (o.vida <= 0) continue;
         const cx = Math.max(o.x, Math.min(K_rey.x, o.x + o.w));
@@ -524,10 +724,17 @@ function kFisica(dt){
         const d = Math.hypot(K_rey.x - cx, K_rey.y - cy);
         if (d > K_rey.r) continue;
         const e = K_asentando ? 0 : Math.abs(o.vy - K_rey.vy) + Math.abs(o.vx)*0.4;
+        if (e > K_eMax) K_eMax = e;
         if (e > 200){
           const dn = Math.min(60, e*o.w*o.h*K_MAT[o.mat].dens/22000);
-          if (dn > 2){
-            K_rey.vida -= dn;
+          /* ── Y EL GOLPE NO SE COBRA DOS VECES POR CUADRO ──
+             Con el dano dentro del bucle de pasadas, un bloque apoyado que
+             rebota sumaba sesenta por pasada: medido, el rey terminaba en −180
+             de un solo derrumbe. El `pasada === 0` va en el DANO y no como un
+             `continue`: saltear la pasada entera se lleva puesto el empuje de
+             separacion y el rey se hunde dentro del bloque. */
+          if (dn > 2 && pasada === 0){
+            K_rey.vida = Math.max(0, K_rey.vida - dn);
             son('bien', Math.min(1, 0.4 + dn/60));
             chispas(K_rey.x, K_rey.y, 10, '#ff6a5a', 130);
             K_lento = Math.max(K_lento, 0.35);
@@ -552,6 +759,59 @@ function kFisica(dt){
           K_rey.x += nx/l*(K_rey.r - d); K_rey.y += ny/l*(K_rey.r - d);
         }
         if (ny < 0){ K_rey.vy = Math.min(0, K_rey.vy); }
+        /* lo que le quedó APOYADO encima, que es distinto del golpe */
+        if (o.y + o.h <= K_rey.y + 2) carga += o.w*o.h*K_MAT[o.mat].dens;
+      }
+      /* ── Y QUEDAR ENTERRADO MATA, QUE ES EL VERBO DEL JUEGO ──
+         El golpe solo no alcanza: un techo que cae treinta y siete unidades
+         llega despacio, y con el daño atado a la energía el derrumbe le sacaba
+         cero. Lo que este juego promete no es acertarle un pedrazo al rey: es
+         tirarle la torre encima, y una torre encima aplasta aunque haya llegado
+         sin velocidad. La carga se mide en cada paso, así que una viga apoyada
+         tarda y media planta lo mata en un segundo. */
+      /* ── Y SE COBRA UNA VEZ POR CUADRO, NO UNA POR PASADA ──
+         Dentro del bucle de pasadas se cobraba DOBLE, y como `asienta` espera a
+         que todo se quede quieto —hasta seis segundos— el rey terminaba en
+         −2072 de vida. El numero no se ve, pero un dano que depende de cuantas
+         pasadas tenga el solver es un dano que cambia solo el dia que se toque
+         el solver. */
+      if (!K_asentando && carga > 900 && pasada === 0)
+        K_rey.vida = Math.max(0, K_rey.vida - dt*Math.min(45, (carga - 900)/900*10));
+    }
+  }
+  /* ── LO QUE QUEDA EN VOLADIZO SE VUELCA ──
+     Es la pieza que faltaba, y sin ella este juego no existe. Con AABB puro y
+     sin rotacion, un techo de 186 apoyado en dos pilares queda PERFECTAMENTE
+     sostenido cuando se rompe uno solo: no hay torque que lo tumbe, asi que
+     sacarle una pata a la torre no hace absolutamente nada. Medido con la traza:
+     el bot rompia una pata por tiro y `eMax` —la energia con la que algo toco al
+     rey— era CERO en los cuatro tiros de cada nivel, con el rey clavado en
+     (915,403) de principio a fin.
+
+     El arreglo no es meter un solver con rotacion, que necesita SAT, puntos de
+     contacto y varias pasadas para no temblar. Es la aproximacion de siempre:
+     un bloque cuyo CENTRO cae fuera del tramo que lo sostiene se vuelca. Cuesta
+     un barrido por cuadro, no toca el solver, y devuelve exactamente la lectura
+     que el juego pide — sacale la pata y lo de arriba se viene abajo. */
+  if (!K_asentando){
+    for (const b of arr){
+      if (b.vida <= 0) continue;
+      if (b.y + b.h >= kSuelo() - 2) continue;       /* apoyado en el suelo */
+      let s0 = 1e9, s1 = -1e9;
+      for (const o of arr){
+        if (o === b || o.vida <= 0) continue;
+        if (Math.abs(o.y - (b.y + b.h)) > 3) continue;
+        const a1 = Math.max(b.x, o.x), a2 = Math.min(b.x + b.w, o.x + o.w);
+        if (a2 <= a1) continue;
+        s0 = Math.min(s0, a1); s1 = Math.max(s1, a2);
+      }
+      if (s1 < s0) continue;                         /* nada lo sostiene: ya cae */
+      const com = b.x + b.w/2, m = 3;
+      if (com < s0 - m || com > s1 + m){
+        const sg = com < s0 ? -1 : 1;
+        b.vx += sg*170*dt;
+        b.vgi += sg*3.4*dt;
+        b.quieto = 0;
       }
     }
   }
@@ -596,7 +856,13 @@ function kPiedraChoca(p, dt){
       if (x < b.x - p.r || x > b.x + b.w + p.r) continue;
       if (y < b.y - p.r || y > b.y + b.h + p.r) continue;
       const e = Math.hypot(p.vx, p.vy);
-      kDana(b, e*0.055);
+      /* ── 0,040 Y NO 0,055, Y EL NUMERO SALE DE LA TABLA DE MATERIALES ──
+         La piedra llega con unos 900 de velocidad: con 0,055 son 50 de dano y
+         eso ROMPE UN PILAR DE PIEDRA DE UN TIRO (vida 60), o sea que los tres
+         materiales se comportan igual y la tabla no significa nada. Con 0,040
+         son 36: la madera (26) y el hielo (16) caen de un golpe y la piedra
+         necesita dos. Ahi el material pasa a ser una decision. */
+      kDana(b, e*0.040);
       b.vx += p.vx*0.055; b.vy += p.vy*0.045;
       b.vgi = (Math.random() - 0.5)*5;
       b.quieto = 0;
@@ -749,7 +1015,20 @@ function kCatapulta(g){
   g.globalAlpha = 0.3;
   g.beginPath(); g.ellipse(0, 0, 62, 10, 0, 0, 7); g.fillStyle = '#000'; g.fill();
   g.restore();
-  if (!dibCuadro('k_catapulta', 0, 0, 0, 132)){
+  /* ── LA MAQUINA SE MECE CON LA TENSION, Y ESO ES UNA DECISION ──
+     El sprite generado trae el brazo en una pose fija, asi que usandolo tal cual
+     se pierde lo unico que ata el gesto a la maquina: el brazo que se va para
+     atras mientras uno arrastra. Se recupera meciendo la maquina ENTERA sobre su
+     base —una catapulta cargandose se echa para atras— y la precision la sigue
+     dando la barra de tension, que vive en pantalla. Con el respaldo dibujado
+     por codigo el brazo si gira, porque ahi es una pieza aparte. */
+  const mecido = -t.f*0.11;
+  g.save();
+  g.rotate(mecido);
+  const conSprite = dibCuadro('k_catapulta', 0, 0, 0, 150);
+  if (conSprite && K_fase === 'apunta') disco(-14, -104, 13, '#8e8e8a');
+  g.restore();
+  if (!conSprite){
     /* el bastidor */
     g.strokeStyle = '#6b4820'; g.lineWidth = 11; g.lineCap = 'round';
     g.beginPath(); g.moveTo(-46, -4); g.lineTo(46, -4); g.stroke();
@@ -823,12 +1102,23 @@ function kLeyenda(g){
   for (const b of K_bloques) if (b.vida > 0 && usados.indexOf(b.mat) < 0) usados.push(b.mat);
   usados.sort();
   let x = 24;
-  const y = AL - 62;
+  /* ── Y VA ARRIBA, NO ABAJO ──
+     Abajo viven REINICIAR y SALIR, que los pone el nucleo en DOM, y ademas el
+     pie de la torre: medido en la captura, «MADERA» y «PIEDRA» salian por
+     detras de los dos botones Y encima de la camara del rey. Un solapamiento
+     con el HUD no lo puede ver `solapes()`, porque esto se dibuja en el lienzo y
+     aquello en el DOM. */
+  const y = AL*0.105;
   for (const m of usados){
     const M = K_MAT[m];
     caja2(x, y, 18, 18, 4, M.col, M.bor);
-    texto(TX(M.k), x + 25, y + 15, 19, 'rgba(242,238,230,.72)', '700', 'left');
-    x += 32 + TX(M.k).length*11;
+    const nom = TX(M.k);
+    texto(nom, x + 25, y + 15, 19, 'rgba(242,238,230,.72)', '700', 'left');
+    /* ── EL ANCHO SE MIDE, NO SE ESTIMA ──
+       Estaba en `largo * 11` y en la captura «MADERA» se comia el cuadradito de
+       «PIEDRA»: una letra ancha y una angosta no miden lo mismo, y encima el
+       nombre cambia con el idioma. */
+    x += 25 + g.measureText(nom).width + 22;
   }
 }
 
@@ -900,8 +1190,13 @@ function kPinta(g){
     texto(TX(K_msg), AN/2, AL*0.28, K_msg === 'golpe' ? 40 : 54,
           'rgba(' + col + ',' + al.toFixed(2) + ')', '800', 'center');
   }
-  if (K_fase === 'apunta' && !K_arr && K_tiros === 0)
-    texto(TX('c1'), AN/2, AL - 104, 22, 'rgba(242,238,230,.5)', '700', 'center');
+  /* el `MODO === 'juega'` no sobra: los planos de la cinematica dejan la fase en
+     `apunta` con cero tiros, asi que sin esto la linea de ayuda salia cruzada
+     con el pie de la cinematica en los tres planos */
+  if (MODO === 'juega' && K_fase === 'apunta' && !K_arr && K_tiros === 0)
+    /* a 250 del borde y no a 104: ahi abajo estan la barra del nucleo y los dos
+       botones, y en la captura la linea salia cruzada por la barra */
+    texto(TX('c1'), AN/2, AL - 250, 22, 'rgba(242,238,230,.62)', '700', 'center');
 }
 
 /* ══════════ LA CINEMÁTICA ══════════
@@ -921,8 +1216,8 @@ function kDemo(g, u, plano){
   K_asentando = true;
   for (let i = 0; i < 90; i++) kFisica(1/60);
   K_asentando = false;
-  K_camX = K_MUNDO*0.5 + 60;
-  K_camZ = Math.max(0.42, Math.min(0.9, AN/(K_MUNDO*0.86)));
+  K_camX = (60 + K_MUNDO - 420 + 230)/2;
+  K_camZ = Math.max(0.42, Math.min(1.45, AN/(K_MUNDO - 420 + 170)));
 
   if (plano === 0){
     /* el arrastre, que es el verbo entero y no se puede contar con una frase */
@@ -933,8 +1228,8 @@ function kDemo(g, u, plano){
     /* el derrumbe: se le pega a la pata cargada y se adelanta la simulación
        hasta el instante pedido, así el plano MUESTRA la torre cayéndose en vez
        de decir que se cae */
-    const b = kBotBlanco();
-    const t = kTiroA(b.x + b.w/2, b.y + b.h/2);
+    const m = kBotMira();
+    const t = kBotTiro(m);
     const v = t.f*K_VMAX;
     K_piedra = { x: 120, y: kSuelo() - 96, r: 15,
                  vx: Math.cos(t.ang)*v, vy: -Math.sin(t.ang)*v, gi: 0, vgi: 6 };
@@ -963,7 +1258,14 @@ function kDemo(g, u, plano){
     for (const b of K_bloques) if (kAz() < 0.55){ b.vida = 0; }
     for (let s = 0; s < 1.2; s += dt) kFisica(dt);
   }
+  /* ── Y LA CINEMATICA DIBUJA SU PROPIO AMBIENTE ──
+     En modo `cine` el bucle NO llama a `ambAtras`: la pantalla se limpia y lo
+     unico que se pinta es lo que devuelve el plano. Sin esto, los tres planos
+     salen sobre NEGRO —medido en la captura, el fondo generado no aparecia por
+     ningun lado— y la cinematica se ve de otro juego que la partida. */
+  ambAtras();
   kPinta(g);
+  ambAdelante();
 
   K_nivel = gn; K_bloques = gb; K_rey = gr; K_fase = gf; K_arr = ga;
   K_piedra = gp; K_estela = ge; K_camX = gx; K_camZ = gz;

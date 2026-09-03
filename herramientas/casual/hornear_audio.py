@@ -57,6 +57,8 @@ POR_JUEGO = {j: 'm_' + j for j in
 PROPIOS = {
     'arco': {'tensa': 'a_tensa', 'tira': 'a_tira', 'clava': 'a_clava',
              'grito': 'a_grito', 'mus': 'm_arco'},
+    'castillo': {'tensa': 'k_tensa', 'tira': 'k_tira', 'clava': 'k_clava',
+                 'grito': 'k_grito', 'mus': 'm_castillo'},
 }
 
 RMS_MUS = 0.045          # la cama

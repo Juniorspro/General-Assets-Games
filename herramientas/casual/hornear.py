@@ -123,6 +123,25 @@ JUEGOS = {
                         celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
         'a_pasto': dict(archivo='a_pasto.png', tipo='tex', lado=320),
     },
+    'castillo': {
+        # ── ACA LA REJA SE MIDE Y NO SE DECLARA, Y ES AL REVES QUE EN ARCO ──
+        # Estas hojas volvieron SIN lineas separadoras, asi que `mide_reja`
+        # acierta: 3x2 en los bloques (fila 1 en y 367..657) y 2x2 en el rey.
+        # Declarandolas 3x2 sobre los 1024 de alto, la fila 1 caia en y 512..1024
+        # —o sea la tira de abajo del bloque mas magenta— y las tres piezas
+        # salian en 3,9 KB entre las tres, que es la firma de un recorte vacio.
+        # De los bloques se toma la fila de ABAJO: la de arriba trae una piedra
+        # gris lisa y la de abajo el ladrillo, que es lo que se lee a piedra.
+        'k_bloques': dict(archivo='k_bloques.png', tipo='hoja', lado=192,
+                          celdas=[(1,0),(1,1),(1,2)]),
+        'k_rey': dict(archivo='k_rey.png', tipo='hoja', lado=224,
+                      celdas=[(0,0),(0,1)]),
+        'k_catapulta': dict(archivo='k_catapulta.png', tipo='hoja', lado=256,
+                            celdas=[(0,0)]),
+        'k_piedra': dict(archivo='k_piedra.png', tipo='hoja', lado=128,
+                         celdas=[(0,0)]),
+        'k_pasto': dict(archivo='k_pasto.png', tipo='tex', lado=320),
+    },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
         # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es
@@ -200,7 +219,17 @@ def alfa_celda(im, caja, umbral=150, margen=3):
         print('    ojo: la celda %s no tiene esquina de fondo, se recorta por umbral' % (caja,))
         al = rampa
     else:
-        al = np.where(np.array(m) == 128, rampa, 1.0)
+        # ── Y EL MAGENTA ENCERRADO TAMBIEN ES FONDO ──
+        # El relleno separa por CONEXION, y eso falla cuando el fondo queda
+        # encerrado por el propio dibujo: la catapulta tiene tres huecos
+        # triangulares entre las vigas, el relleno no entra, y en la captura del
+        # juego salieron TRES TRIANGULOS MAGENTA en el medio de la maquina.
+        # Un pixel a cuarenta y cinco de distancia del magenta puro no existe en
+        # madera ni en piedra, asi que ahi la conexion no hace falta. El umbral
+        # va estricto a proposito: la falla que el relleno vino a arreglar era
+        # con violetas y rosas, que estan CERCA del magenta pero no encima.
+        al = np.where(np.array(m) == 128, rampa,
+                      np.where(d < umbral*0.30, 0.0, 1.0))
     # y se devuelve recortado a la caja PEDIDA y no a la ampliada: el margen
     # existe para tener esquinas de fondo, y las lineas separadoras viven ahi
     dx, dy = x0 - X0, y0 - Y0
