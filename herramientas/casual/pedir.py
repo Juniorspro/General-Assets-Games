@@ -163,6 +163,53 @@ JUEGOS = {
                  ' flute line and sparse koto plucks, 96 BPM, minor key,'
                  ' watchful.' + LOOP),
   }},
+ 'nieve': {
+  'img': {
+   'f_nieve': ('A snowy alpine slope seen from above and behind: a pale grey'
+               ' sky and jagged peaks along the top, deep powder snow with ski'
+               ' tracks along the bottom edge, cold flat light, drifting snow.'
+               + FONDO, '9:16'),
+   'n_esqui': ('Three cartoon skiers seen from BEHIND going away from the'
+               ' camera, full body with skis and poles, red jacket: the first'
+               ' STRAIGHT down the slope, the second LEANING LEFT in a turn, the'
+               ' third LEANING RIGHT in a turn.' + (REJA % (3, 1)) + MAG, '1:1'),
+   'n_arbol': ('Three snow covered obstacles seen from the front: a tall pine'
+               ' tree with heavy snow, a bare dead tree, and a grey boulder half'
+               ' buried in snow.' + (REJA % (3, 1)) + MAG, '1:1'),
+   'n_piso': ('A seamless tileable texture of fresh white powder snow with soft'
+              ' wind ripples' + TEX, '1:1'),
+  },
+  'son': {
+   'n_tensa': 'A loud close-up ski edge carving into hard snow, dry, short.',
+   'n_tira':  'A loud whoosh of skis accelerating through powder snow, close-up, dry.',
+   'n_clava': 'A loud crash into a tree with snow falling, close-up, single hit.',
+   'n_grito': 'A loud short male yell of alarm, dry close-up recording, single hit, no words.',
+   'm_nieve': ('Fast winter downhill music: driving synth arpeggios, punchy'
+               ' drums and a bright lead, 138 BPM, major key, rushing.' + LOOP),
+  }},
+ 'grua': {
+  'img': {
+   'f_grua': ('A construction site at dawn seen from the side: a pale orange'
+              ' sky and half built towers with scaffolding along the top,'
+              ' rubble, barrels and steel beams along the bottom edge, warm low'
+              ' light, dust in the air.' + FONDO, '9:16'),
+   'g_carga': ('Three heavy crane loads hanging from a hook seen from the side:'
+               ' a wooden crate, a stack of steel beams tied with rope, and a'
+               ' concrete block.' + (REJA % (3, 1)) + MAG, '1:1'),
+   'g_base': ('Three construction targets seen from the side: an empty wooden'
+              ' pallet on the ground, a low brick wall being built, and a flat'
+              ' concrete foundation.' + (REJA % (3, 1)) + MAG, '1:1'),
+   'g_piso': ('A seamless tileable texture of grey construction site gravel and'
+              ' dried mud' + TEX, '1:1'),
+  },
+  'son': {
+   'g_tensa': 'A loud close-up creak of a steel cable under load, dry, short.',
+   'g_tira':  'A loud clank of a crane hook releasing, chain rattling, close-up, dry.',
+   'g_clava': 'A loud heavy crate landing hard on wood, close-up, single hit.',
+   'g_grito': 'A loud metallic crash of a load hitting the ground, close-up, single hit.',
+   'm_grua': ('Industrial work music: a steady mechanical pulse, low brass stabs'
+              ' and clanking percussion, 102 BPM, minor key, methodical.' + LOOP),
+  }},
 }
 
 
