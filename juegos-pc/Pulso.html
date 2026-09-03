@@ -1158,7 +1158,6 @@ luz.castShadow = true;
 luz.shadow.mapSize.set(1024, 1024);
 luz.shadow.camera.near = 0.1; luz.shadow.camera.far = 16;
 luz.shadow.bias = -0.0022; luz.shadow.normalBias = 0.028;
-luz.layers.enable(3);      /* la linterna también ilumina a los sustos que son modelo */
 cam.add(luz); cam.add(luz.target);
 /* la luz de la capa 2: sólo la tabla, el bol y el agua. Va un poco a la
    izquierda y arriba para que el bol tenga un lado iluminado y otro en sombra —
@@ -1167,6 +1166,22 @@ const luzTabla = new T.PointLight(0xffe3c4, 1.15, 2.4, 1.0);
 luzTabla.position.set(-0.16, 0.10, -0.05);
 luzTabla.layers.set(2);
 cam.add(luzTabla);
+/* ── Y LOS SUSTOS QUE SON MODELO TAMBIÉN TIENEN SU LUZ ──
+   Están a dos metros y medio, o sea al final del alcance útil de la linterna:
+   medido en la captura, cuatro de seis figuras salían como un bulto oscuro
+   sobre un pasillo oscuro y no se leía ni que había alguien. Subirle la
+   intensidad a la linterna arreglaría el susto y quemaría el pasillo, que es el
+   mismo empate en el que ya caí dos veces con esta luz.
+   Con la capa 3 aparte se puede iluminar SÓLO al susto: un cono tenue, sin
+   sombra —no hay nada que la reciba en esa capa— y con caída suave, así la
+   figura se lee a cualquier distancia sin tocar un pixel del pasillo. Que el
+   susto se vea no es una concesión: un susto que no se ve es un susto que no
+   pasó. */
+const luzSusto = new T.SpotLight(0xfff2e2, 9.5, 9, 1.00, 0.62, 0.55);
+luzSusto.position.set(0, 0.10, 0);
+luzSusto.target.position.set(0, -0.30, -1);
+luzSusto.layers.set(3);
+cam.add(luzSusto); cam.add(luzSusto.target);
 /* un piso mínimo para que lo que está fuera del cono no sea negro absoluto: sin
    esto no se ve NADA a los costados y el pasillo deja de tener ancho */
 const amb = new T.HemisphereLight(0x33383f, 0x14120f, 0.32);
@@ -1510,7 +1525,11 @@ const matOjo = new T.MeshBasicMaterial({ color: 0xe8d9a8, fog: false, depthTest:
    dejar un susto sin nada en pantalla, porque un susto invisible es idéntico a
    un susto que no se disparó — el mismo síntoma que ya costó dos vueltas acá.
    Mientras el modelo no está, el bulto se dibuja por código. */
-const Z_MODELO = 1.7;
+/* 1,15 y no 1,7: con 1,7 las figuras quedaban a más de tres metros, al final
+   del alcance de la linterna y en el borde del cuadro. A 2,2-2,7 m entran
+   completas (a 2,5 m entran ±1,22 m de alto contra 1,85 de figura) y siguen
+   lejos de la tabla. */
+const Z_MODELO = 1.15;
 /* la capa en la que viven los sustos que son modelo: se dibuja en una segunda
    pasada con la profundidad borrada. La declara acá el que la usa. */
 const CAPA_SUSTO = 3;
@@ -1547,34 +1566,119 @@ function pideModelo(clave){
   return null;
 }
 
-/* el respaldo por código: una figura encorvada. No pretende ser el modelo —
-   pretende que el susto EXISTA mientras el modelo baja. */
-function bultoCodigo(){
-  /* ── Y ESTE RESPALDO SALIÓ COMO UNA MANCHA BEIGE TAPANDO LA PANTALLA ──
-     Dos causas, y las dos de escala. Primera: la figura se arma con medidas de
-     persona —1,59 m de alto— y después el susto la multiplica por `s.alto`,
-     que también está en metros. O sea 1,59 × 1,85 = **2,94 metros**. El modelo
-     que baja del GLB SÍ se normaliza a un metro antes de escalar; el respaldo
-     no, y por eso los dos no eran comparables. Se normaliza acá, adentro, así
-     que los dos caminos entregan lo mismo: una cosa de un metro.
-     Segunda: puesta a 1,30 m del ojo, una figura de 1,85 m ocupa el cuadro
-     entero de arriba abajo (a esa distancia entran ±0,63 m de alto). Eso lo
-     arregla `Z_MODELO`, más abajo. */
-  const raiz = new T.Group();
-  const g = new T.Group(), m = matBulto;
-  g.scale.setScalar(1 / 1.585);
-  raiz.add(g);
-  const torso = new T.Mesh(new T.SphereGeometry(0.30, 10, 8), m);
-  torso.scale.set(1, 1.25, 0.78); torso.position.y = 1.02; g.add(torso);
-  const cab = new T.Mesh(new T.SphereGeometry(0.145, 10, 8), m);
-  cab.position.set(0, 1.44, 0.06); cab.scale.set(1, 1.1, 1.05); g.add(cab);
+/* ══════════ LAS TRES FIGURAS, CONSTRUIDAS POR CÓDIGO ══════════
+   Empezaron como un respaldo para cuando un GLB no decodifica, y quedaron como
+   lo que se ve. La razón es medible: el primer intento era un óvalo con brazos
+   y en la captura salía como una MANCHA BEIGE LISA — un modelo generado de mil
+   triángulos no se distingue de eso a metro y medio con una linterna encima,
+   porque lo que hace que una figura asuste no es la cantidad de triángulos: es
+   la SILUETA y es la CARA.
+
+   Así que hay tres siluetas que se leen distinto de un vistazo —una altísima y
+   flaca, una encorvada con la espalda enorme, y una en cuatro patas— y todas
+   llevan en la cabeza una de las seis caras fotorrealistas que YA están
+   horneadas. Eso da lo que ninguna de las dos mitades daba sola: un cuerpo con
+   volumen de verdad, que recibe la luz de la linterna por un lado y se oscurece
+   del otro, con una cara que es una foto.
+
+   Y el GLB sigue teniendo prioridad: si `AS.mod_<clave>` existe, se usa. Esto
+   es lo que hay mientras no exista, y no es un placeholder — es jugable. */
+const matPiel = new T.MeshStandardMaterial({ color: 0x554a41, roughness: 0.90, metalness: 0.0 });
+const matTrapo = new T.MeshStandardMaterial({ color: 0x1e1c1a, roughness: 0.96, metalness: 0.0 });
+
+/* la cara va en un plano pegado a la cabeza. No se «mira a la cámara» con
+   `lookAt` —eso ya costó una vuelta acá: `lookAt` trabaja en coordenadas de
+   MUNDO y estos objetos son hijos de la cámara— sino que se deja mirando a +Z
+   local, que ES el lente por construcción. */
+function caraEnCabeza(v, tam){
+  const m = new T.Mesh(new T.PlaneGeometry(tam, tam),
+    new T.MeshBasicMaterial({ map: caraTex(v), transparent: true, depthWrite: false, fog: false }));
+  m.renderOrder = 2;
+  return m;
+}
+
+function hueso(r, largo, mat){ return new T.Mesh(new T.CapsuleGeometry(r, largo, 4, 7), mat); }
+
+/* ── ALTÍSIMA Y FLACA ──
+   Mide 1 m como todas (el susto la reescala), y su silueta es «demasiado alta
+   para este pasillo»: brazos que le llegan a las rodillas y hombros angostos.
+   Lo que la hace leer es la PROPORCIÓN, no el detalle. */
+function figuraColgado(){
+  const raiz = new T.Group(), g = new T.Group();
+  g.scale.setScalar(1/1.85); raiz.add(g);
+  const torso = hueso(0.105, 0.62, matTrapo);
+  torso.position.y = 1.16; torso.scale.set(1, 1, 0.72); g.add(torso);
+  const cuello = hueso(0.032, 0.09, matPiel); cuello.position.y = 1.56; g.add(cuello);
+  const cab = new T.Mesh(new T.SphereGeometry(0.088, 12, 10), matPiel);
+  cab.position.set(0, 1.68, 0); cab.scale.set(0.92, 1.12, 0.95); g.add(cab);
+  const c = caraEnCabeza(0, 0.20); c.position.set(0, 1.68, 0.082); g.add(c);
   for (const lado of [-1, 1]){
-    const br = new T.Mesh(new T.CapsuleGeometry(0.052, 0.52, 4, 6), m);
-    br.position.set(lado*0.28, 0.86, 0.05); br.rotation.z = lado*0.22; g.add(br);
-    const pi = new T.Mesh(new T.CapsuleGeometry(0.070, 0.62, 4, 6), m);
-    pi.position.set(lado*0.12, 0.36, 0); g.add(pi);
+    const br = hueso(0.034, 0.44, matPiel);
+    br.position.set(lado*0.135, 1.20, 0.02); br.rotation.z = lado*0.10; g.add(br);
+    const ant = hueso(0.028, 0.42, matPiel);
+    ant.position.set(lado*0.175, 0.76, 0.05); br.rotation.z = lado*0.06; g.add(ant);
+    const pi = hueso(0.048, 0.52, matTrapo); pi.position.set(lado*0.072, 0.56, 0); g.add(pi);
+    const pa = hueso(0.040, 0.46, matTrapo); pa.position.set(lado*0.072, 0.13, 0.01); g.add(pa);
   }
   return raiz;
+}
+
+/* ── ENCORVADA ──
+   La espalda es lo más grande de la figura y la cabeza cuelga por delante, más
+   abajo que los hombros. Es la silueta de algo que no camina como una persona. */
+function figuraEncorvado(){
+  const raiz = new T.Group(), g = new T.Group();
+  g.scale.setScalar(1/1.42); raiz.add(g);
+  const lomo = new T.Mesh(new T.SphereGeometry(0.30, 12, 10), matTrapo);
+  lomo.position.set(0, 1.05, -0.06); lomo.scale.set(0.92, 0.80, 1.05); g.add(lomo);
+  const pecho = new T.Mesh(new T.SphereGeometry(0.19, 10, 8), matTrapo);
+  pecho.position.set(0, 0.86, 0.10); g.add(pecho);
+  /* la cabeza ADELANTE del lomo y no adentro: a z = 0,30 quedaba metida dentro
+     de la esfera del lomo —que llega a 0,25 con su escala— y en la captura se
+     veía la espalda y nada más. Una figura encorvada sin cara es una piedra. */
+  const cab = new T.Mesh(new T.SphereGeometry(0.098, 12, 10), matPiel);
+  cab.position.set(0, 0.97, 0.44); cab.scale.set(0.95, 1.05, 1); g.add(cab);
+  const c = caraEnCabeza(3, 0.23); c.position.set(0, 0.96, 0.535); g.add(c);
+  for (const lado of [-1, 1]){
+    const br = hueso(0.045, 0.40, matPiel);
+    br.position.set(lado*0.24, 0.80, 0.06); br.rotation.z = lado*0.42; g.add(br);
+    const ant = hueso(0.036, 0.38, matPiel);
+    ant.position.set(lado*0.36, 0.46, 0.14); ant.rotation.x = 0.35; g.add(ant);
+    const pi = hueso(0.062, 0.34, matTrapo);
+    pi.position.set(lado*0.11, 0.50, -0.02); g.add(pi);
+    const pa = hueso(0.050, 0.36, matTrapo);
+    pa.position.set(lado*0.11, 0.16, 0.02); g.add(pa);
+  }
+  return raiz;
+}
+
+/* ── EN CUATRO PATAS ──
+   La única que no es bípeda, y por eso es la que más cambia el susto: aparece
+   ABAJO, donde el jugador no está mirando porque está mirando el bol. */
+function figuraPerro(){
+  const raiz = new T.Group(), g = new T.Group();
+  g.scale.setScalar(1/0.82); raiz.add(g);
+  const cuerpo = new T.Mesh(new T.SphereGeometry(0.22, 12, 9), matPiel);
+  cuerpo.position.set(0, 0.50, 0); cuerpo.scale.set(0.80, 0.72, 1.45); g.add(cuerpo);
+  const cuello = hueso(0.052, 0.16, matPiel);
+  cuello.position.set(0, 0.56, 0.30); cuello.rotation.x = 1.15; g.add(cuello);
+  const cab = new T.Mesh(new T.SphereGeometry(0.085, 10, 9), matPiel);
+  cab.position.set(0, 0.60, 0.42); cab.scale.set(0.86, 0.92, 1.30); g.add(cab);
+  const c = caraEnCabeza(5, 0.19); c.position.set(0, 0.60, 0.545); g.add(c);
+  for (const lado of [-1, 1]) for (const z of [0.20, -0.20]){
+    const p1 = hueso(0.030, 0.22, matPiel);
+    p1.position.set(lado*0.14, 0.36, z); g.add(p1);
+    const p2 = hueso(0.024, 0.24, matPiel);
+    p2.position.set(lado*0.155, 0.12, z + 0.03); g.add(p2);
+  }
+  const cola = hueso(0.018, 0.34, matPiel);
+  cola.position.set(0, 0.56, -0.34); cola.rotation.x = 0.75; g.add(cola);
+  return raiz;
+}
+
+const FIGURAS = { colgado: figuraColgado, encorvado: figuraEncorvado, perro: figuraPerro };
+function bultoCodigo(clave){
+  return (FIGURAS[clave] || figuraEncorvado)();
 }
 
 function armaObjeto(s){
@@ -1618,7 +1722,7 @@ function armaObjeto(s){
     g.add(m);
   } else if (s.fam === 'modelo'){
     const mod = pideModelo(s.modelo);
-    const o = mod ? mod.clone(true) : bultoCodigo();
+    const o = mod ? mod.clone(true) : bultoCodigo(s.modelo);
     o.scale.multiplyScalar(s.alto || 1.8);
     /* ── UN MODELO SE PARA MÁS LEJOS QUE UNA CARA, Y LA CUENTA ES LA DEL MARCO ──
        Los sitios del catálogo están a 1,05-1,55 m porque están pensados para
@@ -1630,21 +1734,26 @@ function armaObjeto(s){
        persona entra completa con pasillo alrededor — y ahí sí se lee que hay
        ALGUIEN PARADO, que es lo que tiene que leerse. */
     o.position.z = -Z_MODELO;
+    /* ── UNA FIGURA SE PARA EN EL PISO, SIEMPRE ──
+       El sitio del catálogo trae una altura pensada para una cara, y aplicarla
+       a un modelo lo hunde o lo hace flotar: medido, `modelo:piso` traía
+       y = −0,40 y el modelo ya se apoya 1,58 abajo, así que la cosa quedaba
+       cuarenta centímetros DEBAJO del piso y no se veía nada. De un sitio, un
+       modelo usa el costado y la distancia; la altura la decide el suelo. */
+    g.position.y = 0;
     o.traverse(m => m.layers.set(CAPA_SUSTO));
     /* el cero del modelo va al piso del pasillo, que respecto del ojo está 1,58
        m abajo. Sin esto la cosa aparece flotando a la altura de la cara, y algo
        que flota se lee a truco y no a alguien parado ahí. */
     o.position.y = -1.58;
     g.add(o);
-    /* dos ojos que emiten luz propia: es lo único del modelo que se ve con la
-       linterna apagada, y la mitad de estos sustos pasan con la luz apagada */
-    for (const lado of [-1, 1]){
-      const e = new T.Mesh(new T.SphereGeometry(0.021, 6, 5), matOjo);
-      e.position.set(lado*0.055, (s.alto || 1.8) * 0.815 - 1.58, 0.10 - Z_MODELO);
-      e.renderOrder = 31;
-      e.layers.set(CAPA_SUSTO);
-      g.add(e);
-    }
+    /* ── LOS DOS OJOS SUELTOS SE FUERON, Y NO ES UN AHORRO ──
+       Estaban puestos cuando la figura era una mancha sin rasgos: eran lo único
+       que decía «esto está vivo». Con una cara fotorrealista en la cabeza son
+       dos puntos amarillos flotando POR DELANTE de esa cara —van con
+       `depthTest:false`, así que ni siquiera quedan detrás— y lo que hacían era
+       arruinar lo único que asustaba. Si el GLB que venga no tiene ojos, se
+       ponen en el GLB y no acá. */
   } else if (s.fam === 'bicho'){
     /* la araña: cuerpo en dos partes y patas QUEBRADAS. Una pata recta se lee a
        palito clavado; el codo es lo que la hace caminar aunque esté quieta. */

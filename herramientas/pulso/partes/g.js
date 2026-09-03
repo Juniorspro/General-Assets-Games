@@ -30,7 +30,6 @@ luz.castShadow = true;
 luz.shadow.mapSize.set(1024, 1024);
 luz.shadow.camera.near = 0.1; luz.shadow.camera.far = 16;
 luz.shadow.bias = -0.0022; luz.shadow.normalBias = 0.028;
-luz.layers.enable(3);      /* la linterna también ilumina a los sustos que son modelo */
 cam.add(luz); cam.add(luz.target);
 /* la luz de la capa 2: sólo la tabla, el bol y el agua. Va un poco a la
    izquierda y arriba para que el bol tenga un lado iluminado y otro en sombra —
@@ -39,6 +38,22 @@ const luzTabla = new T.PointLight(0xffe3c4, 1.15, 2.4, 1.0);
 luzTabla.position.set(-0.16, 0.10, -0.05);
 luzTabla.layers.set(2);
 cam.add(luzTabla);
+/* ── Y LOS SUSTOS QUE SON MODELO TAMBIÉN TIENEN SU LUZ ──
+   Están a dos metros y medio, o sea al final del alcance útil de la linterna:
+   medido en la captura, cuatro de seis figuras salían como un bulto oscuro
+   sobre un pasillo oscuro y no se leía ni que había alguien. Subirle la
+   intensidad a la linterna arreglaría el susto y quemaría el pasillo, que es el
+   mismo empate en el que ya caí dos veces con esta luz.
+   Con la capa 3 aparte se puede iluminar SÓLO al susto: un cono tenue, sin
+   sombra —no hay nada que la reciba en esa capa— y con caída suave, así la
+   figura se lee a cualquier distancia sin tocar un pixel del pasillo. Que el
+   susto se vea no es una concesión: un susto que no se ve es un susto que no
+   pasó. */
+const luzSusto = new T.SpotLight(0xfff2e2, 9.5, 9, 1.00, 0.62, 0.55);
+luzSusto.position.set(0, 0.10, 0);
+luzSusto.target.position.set(0, -0.30, -1);
+luzSusto.layers.set(3);
+cam.add(luzSusto); cam.add(luzSusto.target);
 /* un piso mínimo para que lo que está fuera del cono no sea negro absoluto: sin
    esto no se ve NADA a los costados y el pasillo deja de tener ancho */
 const amb = new T.HemisphereLight(0x33383f, 0x14120f, 0.32);
