@@ -1097,9 +1097,8 @@ JS += r"""
   function stPintaHud() {
     let n = 0;
     ST_ORDEN.forEach(function (id) { if (ST.tengo[id]) n++; });
-    stChip.innerHTML = ST.hecho
-      ? '&#127828; Lista &#183; sali por atras'
-      : '&#127828; Partes ' + (n + ST.puestas) + '/4';
+    if (ST.hecho) pbUI(stChip, 'partesLista');
+    else pbUI(stChip, 'partes', n + ST.puestas);
     for (let i = 0; i < 4; i++) {
       const el = document.getElementById('st-p' + i);
       const id = ST_ORDEN[i];

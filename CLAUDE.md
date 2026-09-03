@@ -269,6 +269,114 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima cuarta vuelta (2026-09-03): **PUERTA BLANCA** — el idioma llega a cada palabra, y un panel de pausa con tres barras
+
+Pedido: *"haz que cuando el juego se traduzca a algún idioma, se traduzca en su totalidad a ese idioma,
+cada palabra y cada frase debe ser traducida / también agrega un botón de pausa donde se podrá bajar o
+subir el volumen de la música y de los efectos de sonido, también una barra de sensibilidad de
+pantalla"*. Vive en `herramientas/puerta/ajustes.py`.
+
+#### LA TRADUCCIÓN NO SE AUDITA A OJO: ENTRÓ UNA SONDA QUE BARRE EL DOM
+
+Es lo que ordena toda la vuelta. «Traducir todo» escrito como lista a mano garantiza olvidarse de una,
+y una ficha en castellano en medio de un juego en inglés no falla: se queda ahí. `__pb.textos()` recorre
+**todos** los nodos de texto del `body` más los `[placeholder]`, dice si cada uno está visible y cuáles
+quedaron sin traducir. Medido al empezar: **47 cadenas visibles y 19 en castellano**.
+
+**Y LA PRIMERA VERSIÓN DE ESA SONDA MENTÍA PARA LOS DOS LADOS.** Adivinaba por acentos y por un
+diccionario de palabras, y eso da:
+
+| | lo que decía | lo que había |
+|---|---|---|
+| en inglés | **`castellano: 0`** | `ESCONDERSE` · `📚 Libros 0/5` · `ROJO ?` en pantalla |
+| en portugués | `castellano: 6` | **cero** — flagueaba *Média*, *MÚSICA*, *Código de saída* |
+
+Ninguna heurística sirve acá, porque el portugués y el castellano comparten casi todo. Lo que sí es
+exacto: **comparar contra los valores EN CASTELLANO de las propias tablas**. Una cadena está sin traducir
+si coincide con la versión castellana de una clave cuya traducción al idioma puesto es **distinta**. Cero
+falsos positivos por construcción, y encuentra `ESCONDERSE` aunque no tenga un solo acento.
+
+**Y LAS ENTIDADES HAY QUE DECODIFICARLAS.** La tabla escribe `&#128218; Libros {0}/{1}` y el DOM devuelve
+el emoji: comparando cadenas crudas, la ficha de libros no coincidía con su propia clave y la sonda la
+daba por traducida. Se decodifica con un `<span>` de descarte, y los `{0}` se comparan como expresión.
+
+**LA SONDA DETECTA EL DEFECTO, que es lo único que la vuelve una prueba.** Inyectando `ESCONDERSE` a mano
+en el HUD con el juego en inglés, la auditoría lo canta: `["(oculto) hide-btn :: ESCONDERSE"]`.
+
+#### LAS FICHAS CON CONTADOR NO SE ARREGLAN CON UNA CADENA
+
+`📚 Libros 3/5` es un **patrón**, no un texto: `pbT('libros', 3, 5)` sustituye `{0}` y `{1}`. Y hay una
+trampa que sólo aparece cambiando de idioma en partida: escribiendo con `innerHTML` la ficha se queda en
+el idioma viejo **hasta la próxima vez que su número cambie**, o sea que con tres libros puestos en la
+biblioteca hay que juntar el cuarto para que la ficha se traduzca. `pbUI(el, clave, ...)` **se acuerda**
+de los argumentos en el propio elemento, así que `pbRepintaHud()` la vuelve a pintar con su valor de
+verdad. Los nueve escritores de las cuatro fichas pasan por ahí.
+
+**Y EL MARCADO ESTÁTICO NECESITA SUS ARGUMENTOS.** Un `data-ui` solo alcanza para un rótulo fijo; una
+ficha con contador escrita en el HTML se quedaría en castellano hasta que alguien la toque. Va con
+`data-uia="[0,5]"` —los argumentos en JSON— así el primer repintado ya sale bien.
+
+**LOS DOS NOMBRES DE UN COLOR SALEN DE LA MISMA TABLA.** El código de salida usa el nombre corto en la
+ficha (`AMAR.`) y el largo en el aviso (`AMARILLO`), y estaban los dos escritos en el objeto del color.
+Con `pbColC(k)` y `pbColL(k)` no pueden decir cosas distintas.
+
+#### MEDIDO: CERO CASTELLANOS EN CINCO CORRIDAS
+
+`castellano: 0` en inglés y en portugués, en el **menú**, en el **local** (nivel 6, que es el que más
+fichas tiene) y en la **escuela** (nivel 3, el del código de colores). Las 53 cadenas visibles quedan
+traducidas, incluidas las cuatro fichas con contador, los tres colores, el botón de esconderse, los
+visemas del keypad, las cuatro partes de la hamburguesa y el texto del final.
+
+#### LAS TRES BARRAS: DOS BUSES DE AUDIO Y UN MULTIPLICADOR
+
+Hasta esta vuelta **todo colgaba del maestro o directo de `ctx.destination`**, así que no había dónde
+poner una perilla: bajar «la música» habría bajado también los gritos. Entran dos nodos de ganancia
+—`pbBusMus` y `pbBusFx`— entre lo que suena y el maestro, y ahí sí una barra es una multiplicación.
+
+**Y LOS DIECIOCHO OSCILADORES DE RESPALDO ESTABAN COLGADOS DE `ctx.destination`**, o sea que la barra de
+efectos no los habría tocado nunca — y son justamente los que suenan cuando un MP3 no decodifica. Se
+cambian los dieciocho de una, con el maestro excluido a mano (colgarlo de sí mismo sería un lazo) y un
+`assert` de la cuenta para que no se cuele otro.
+
+Medido con el analizador colgado del maestro, que es lo único que prueba que sonó:
+
+| | pico | rms |
+|---|---|---|
+| la cama del campo, música en 0,75 | 0,027 | **0,023** |
+| la misma, música en **0** | 0 | **0** |
+| un grito, efectos en 0,9 | 0,480 | 0,227 |
+| el mismo, efectos en **0** | 0 | **0** |
+| un grito, efectos en 1,0 | 0,559 | 0,254 |
+
+**LA SENSIBILIDAD ES UN FACTOR EN LOS DOS SITIOS QUE MUEVEN LA VISTA**, el del ratón y el del dedo. Con
+un solo sitio parchado, en teléfono la barra no haría nada — que es el aparato en el que se juega.
+Medido con toques sintéticos, un arrastre de 100 px: **−0,3800 rad con la barra en 1,00, −0,7600 en 2,00
+y −0,1520 en 0,40**, o sea exactamente ×2 y ×0,4.
+
+#### UN DEFECTO DE LA MEDICIÓN, Y DEL TIPO DE SIEMPRE
+
+El primer arrastre sintético era **horizontal** y devolvía `yaw 0` en las tres sensibilidades: parecía
+que el multiplicador no estaba conectado. No lo era — **este juego se dibuja apaisado dentro de un marco
+vertical**, así que `toVisualDelta` da vuelta los ejes y un arrastre horizontal de pantalla es un
+movimiento **vertical** de la vista. Arrastrando en el otro eje los números aparecen. Es la tercera vez
+en este repo que la sonda está mal antes que el juego.
+
+#### EL PANEL VA EN LA PAUSA QUE YA EXISTÍA
+
+No hay botón nuevo: el menú de pausa es el mismo `#menu` que ya abría el botón ☰, y las tres barras se
+meten encima de CONTINUAR. Un segundo panel obligaría a duplicar el idioma y la calidad, que son
+justamente las dos cosas que ya viven ahí. Medido en 412×892: **cero solapamientos** entre los ocho
+elementos apilados, y las tres barras con su número al costado.
+
+#### MEDIDO AL CERRAR
+
+`castellano: 0` en las cinco corridas de auditoría, y la sonda **detecta** una cadena inyectada. Los dos
+buses silencian lo suyo y sólo lo suyo. Sensibilidad ×2 y ×0,4 medidas en el juego. Partida completa por
+la cadena: los **seis niveles sorteados** (`[2,3,1,5,6,4]`), el séptimo paso llega a **`white`** con la
+frase en inglés, y `__pb.nivel(6)` aterriza en el local con la cama `b_store` sonando. **32 de 32
+sonidos decodificados, 0 fallados.** `window.__errs` y `window.__pbFallas` vacíos en las siete corridas.
+El HTML pasó de 3,61 a **3,62 MB** (el panel y las tablas no traen un solo byte de asset).
+
 ### Nonagésima tercera vuelta (2026-09-03): **PUERTA BLANCA** — un grito propio para cada entidad
 
 Pedido: *"recorta estos 7 audios y agregalos como screams de cada entidad, dale a cada entidad un

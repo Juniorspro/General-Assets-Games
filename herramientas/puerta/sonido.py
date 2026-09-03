@@ -74,7 +74,7 @@ JS = r"""
       if (tono) src.playbackRate.value = tono;
       const g = ctx.createGain();
       g.gain.value = (vol === undefined ? 1 : vol);
-      src.connect(g); g.connect(pbSonMaster);
+      src.connect(g); g.connect(pbSalidaFx(ctx));
       src.start();
       return true;
     } catch (e) { return false; }
@@ -98,7 +98,7 @@ JS = r"""
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain(); g.gain.value = 1;
-      src.connect(g); g.connect(pbSonMaster);
+      src.connect(g); g.connect(pbSalidaFx(ctx));
       src.onended = function () { if (pbGritoSrc === src) pbGritoSrc = null; };
       src.start();
       pbGritoSrc = src;
@@ -140,7 +140,7 @@ JS = r"""
       g.gain.value = 0;
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(PB_CAMA_VOL, t + 1.2);
-      src.connect(g); g.connect(pbSonMaster);
+      src.connect(g); g.connect(pbSalidaMus(ctx));
       src.start();
       PB_CAMA.src = src; PB_CAMA.gan = g; PB_CAMA.nom = nom;
     } catch (e) {}

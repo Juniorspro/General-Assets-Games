@@ -10,7 +10,7 @@ salida a mano es trabajo que el proximo armado pisa.
 Cada parche lleva su ancla y un assert: si el dia de manana base.html cambia y
 el ancla no esta, esto FALLA EN VOZ ALTA en vez de escribir un archivo a medias.
 """
-import io, os, sys
+import io, re, os, sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
@@ -22,6 +22,17 @@ import base64
 
 def b64(p):
     return base64.b64encode(io.open(p, 'rb').read()).decode('ascii')
+
+
+def cambiar_todo(s, viejo, nuevo, que, veces):
+    """reemplaza TODAS las apariciones y comprueba que sean las esperadas.
+
+    Con `cambiar` habria que escribir un ancla por sitio y el dia que aparezca
+    una decima el parche no falla: deja el texto sin traducir y nadie se entera.
+    """
+    n = s.count(viejo)
+    assert n == veces, 'el ancla de %s aparece %d veces, se esperaban %d' % (que, n, veces)
+    return s.replace(viejo, nuevo)
 
 
 def cambiar(s, viejo, nuevo, que):
@@ -525,6 +536,7 @@ import orden
 import despertar
 import sonido
 import blanco
+import ajustes
 import nivel6
 import red
 
@@ -1370,7 +1382,75 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
                habla: PB_HABLA.style.opacity, frase: PB_HABLA.textContent.slice(0, 30),
                amb: +blAmb.intensity.toFixed(2) };
     },
-    idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },""",
+    idioma: function (i) { if (i) { pbIdi = i; pbPintaIdioma(); } return pbIdi; },
+    // LA AUDITORIA DEL TEXTO: barre TODO lo visible —nodos de texto,
+    // placeholders y las variables de CSS que llevan rotulo— y devuelve lo que
+    // sigue en castellano con el juego puesto en otro idioma. Sin esto,
+    // 'traducilo todo' es una lista escrita a mano que siempre se queda corta.
+    // LA AUDITORIA DE TEXTOS. No adivina por acentos ni por diccionario —eso
+    // daba 0 castellanos con "ESCONDERSE" en pantalla y 6 falsos en portugues,
+    // o sea que mentia para los dos lados—. Compara cada cadena visible contra
+    // los VALORES EN CASTELLANO de las tablas: una cadena esta sin traducir si
+    // coincide con la version castellana de una clave cuya traduccion al idioma
+    // puesto es DISTINTA. Los patrones con {0} se comparan como expresion.
+    // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos
+    // buses. Sin leer la ganancia del nodo, mover la barra podria no llegar a
+    // ningun lado y la sonda diria que si.
+    ajustes: function () {
+      return { mus: pbVolMus, fx: pbVolFx, sens: +pbSens.toFixed(3),
+               gMus: pbBusMus ? +pbBusMus.gain.value.toFixed(3) : null,
+               gFx: pbBusFx ? +pbBusFx.gain.value.toFixed(3) : null };
+    },
+    textos: function () {
+      const esc = function (x) { return x.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); };
+      const pat = function (x) {
+        return new RegExp('^' + esc(x).replace(/\\\\\\{(\\d)\\\\\\}/g, '.{0,24}') + '$');
+      };
+      // (castellano, traduccion) de todo lo que tiene tabla
+      const pares = [];
+      // LAS ENTIDADES SE DECODIFICAN. La tabla escribe `&#128218;` y el DOM
+      // devuelve el emoji: sin esto la ficha de libros no coincidia con su
+      // propia clave y la auditoria la daba por traducida.
+      const dec = document.createElement('span');
+      const txt = function (x) { dec.innerHTML = x; return (dec.textContent || '').trim(); };
+      const mete = function (es, otro) {
+        if (typeof es !== 'string' || typeof otro !== 'string') return;
+        if (es === otro) return;                 // no hay nada que traducir
+        pares.push([pat(txt(es)), es]);
+      };
+      Object.keys(PB_UI.es).forEach(function (k) { mete(PB_UI.es[k], PB_UI[pbIdi][k]); });
+      Object.keys(PB_MENU.es).forEach(function (k) { mete(PB_MENU.es[k], PB_MENU[pbIdi][k]); });
+      Object.keys(PB_TOAST).forEach(function (k) { mete(k, PB_TOAST[k][pbIdi]); });
+      const vis = function (e) {
+        if (!e) return false;
+        for (let n = e; n && n !== document.body; n = n.parentElement) {
+          const st = getComputedStyle(n);
+          if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.02) return false;
+        }
+        return true;
+      };
+      const out = [];
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let nd;
+      while ((nd = w.nextNode())) {
+        const t = (nd.nodeValue || '').replace(/\s+/g, ' ').trim();
+        if (t.length < 2) continue;
+        const el = nd.parentElement;
+        if (!el || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+        out.push({ txt: t, id: el.id || el.className || el.tagName, visible: vis(el) });
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('[placeholder]'), function (e) {
+        out.push({ txt: e.getAttribute('placeholder'), id: e.id || 'placeholder', visible: vis(e) });
+      });
+      const cast = pbIdi === 'es' ? [] : out.filter(function (o) {
+        for (let i = 0; i < pares.length; i++) if (pares[i][0].test(o.txt)) return true;
+        return false;
+      });
+      return { total: out.length, castellano: cast.length, idioma: pbIdi,
+               lista: cast.map(function (o) { return (o.visible ? '' : '(oculto) ') + o.id + ' :: ' + o.txt; }),
+               todo: out.map(function (o) { return o.id + ' :: ' + o.txt; }) };
+    },
+""",
     'la sonda de nivel e idioma')
 
 # LA PANTALLA DE ARRANQUE SE VA: el menu es lo primero que se ve
@@ -1442,6 +1522,137 @@ s = s if SOLO else cambiar(s, "    playScreech();\n    if (kind === 'saw') playG
     // muestra —un navegador que no decodifica— el susto tiene que sonar igual.
     if (!pbGrito(kind)) playScreech();
     if (kind === 'saw') playGiggle(0.22);""", 'el grito de cada entidad')
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EL JUEGO TRADUCIDO ENTERO, Y EL PANEL DE PAUSA
+# ══════════════════════════════════════════════════════════════════════════════
+s = s if SOLO else cambiar(s, "  function showToast(text, duration) {",
+    ajustes.JS + "\n  function showToast(text, duration) {", 'la tabla de la interfaz')
+s = s if SOLO else cambiar(s, "  #vhs-hud {", ajustes.CSS + "\n  #vhs-hud {", 'el CSS de las barras')
+s = s if SOLO else cambiar(s, ajustes.MARCA_PANEL, ajustes.PANEL, 'el panel de pausa')
+s = s if SOLO else cambiar(s, "  menuResume.addEventListener('click', closeMenu);",
+    ajustes.WIRE + "\n  menuResume.addEventListener('click', closeMenu);", 'el cableado de las barras')
+
+# ── EL MARCADO ESTATICO: `data-ui` y lo pinta `pbRepintaHud` ──────────────────
+ESTATICO = [
+ ('<div id="info">Joystick para moverte · arrastra para mirar · botón CORRER para esprintar</div>',
+  '<div id="info" data-ui="info">Joystick para moverte · arrastra para mirar · botón CORRER para esprintar</div>'),
+ ('<div id="tap-lock-hint">Haz clic para capturar el mouse · Shift para correr</div>',
+  '<div id="tap-lock-hint" data-ui="tapLock">Haz clic para capturar el mouse · Shift para correr</div>'),
+ ('<div class="chip" id="book-chip">Llevas un libro</div>',
+  '<div class="chip" id="book-chip" data-ui="libroLlevas">Llevas un libro</div>'),
+ ('<div class="chip">&#128274; C&oacute;digo de salida</div>',
+  '<div class="chip" data-ui="codigo">&#128274; C&oacute;digo de salida</div>'),
+ ('<div class="hint">Introduce los 3 d&iacute;gitos en ese orden</div>',
+  '<div class="hint" data-ui="cdDigitos">Introduce los 3 d&iacute;gitos en ese orden</div>'),
+ ('<div id="run-btn"><div class="ring"></div><span>CORRER</span></div>',
+  '<div id="run-btn"><div class="ring"></div><span data-ui="correr">CORRER</span></div>'),
+ ('<div class="chip" id="gas-chip">&#9981; Llevas un bid&oacute;n</div>',
+  '<div class="chip" id="gas-chip" data-ui="bidon">&#9981; Llevas un bid&oacute;n</div>'),
+ ('<h1>🌟 ¡Encontraste la salida!</h1>', '<h1 data-ui="finTitulo">🌟 ¡Encontraste la salida!</h1>'),
+ ('<button id="restart-btn">Jugar de nuevo</button>',
+  '<button id="restart-btn" data-ui="deNuevo">Jugar de nuevo</button>'),
+ ('<div class="slot s0" id="kp0">_<small>ROJO</small></div>',
+  '<div class="slot s0" id="kp0">_<small data-ui="rojo">ROJO</small></div>'),
+ ('<div class="slot s1" id="kp1">_<small>AZUL</small></div>',
+  '<div class="slot s1" id="kp1">_<small data-ui="azul">AZUL</small></div>'),
+ ('<div class="slot s2" id="kp2">_<small>AMARILLO</small></div>',
+  '<div class="slot s2" id="kp2">_<small data-ui="amarillo">AMARILLO</small></div>'),
+ ('<div id="st-trap"><div id="st-trap-txt">ATRAPADO</div></div>',
+  '<div id="st-trap"><div id="st-trap-txt" data-ui="atrapado">ATRAPADO</div></div>'),
+ ('<span id="st-p0">PAN</span><span id="st-p1">CARNE</span><span id="st-p2">QUESO</span><span id="st-p3">TAPA</span>',
+  '<span id="st-p0" data-ui="pan">PAN</span><span id="st-p1" data-ui="carne">CARNE</span>'
+  '<span id="st-p2" data-ui="queso">QUESO</span><span id="st-p3" data-ui="tapaHb">TAPA</span>'),
+]
+for viejo, nvo in ESTATICO:
+    s = s if SOLO else cambiar(s, viejo, nvo, 'data-ui de ' + viejo[:34])
+
+# el texto del final no lleva data-ui: lo escribe `pbSiguiente` con su clave
+s = s if SOLO else cambiar(s,
+    '<p>Cruzaste la puerta con la llave de las flores arcoíris. Fin de esta versión de la demo.</p>',
+    '<p data-ui="finTexto">Cruzaste la puerta con la llave de las flores arcoíris. Fin de esta versión de la demo.</p>',
+    'el texto del final')
+
+# ── EL MARCADO QUE FALTABA ───────────────────────────────────────────────────
+# las tres fichas con contador llevan sus argumentos en `data-uia`, y los tres
+# colores del codigo su propia clave
+for viejo, nvo in (
+  ('<div class="chip" id="shelf-chip">&#128218; Libros 0/5</div>',
+   '<div class="chip" id="shelf-chip" data-ui="libros" data-uia="[0,5]">&#128218; Libros 0/5</div>'),
+  ('<div class="chip" id="torch-chip">&#128293; Antorchas 0/3</div>',
+   '<div class="chip" id="torch-chip" data-ui="antorchas" data-uia="[0,3]">&#128293; Antorchas 0/3</div>'),
+  ('<div class="chip" id="st-chip">&#127828; Partes 0/4</div>',
+   '<div class="chip" id="st-chip" data-ui="partes" data-uia="[0]">&#127828; Partes 0/4</div>'),
+  ('<div class="chip" id="gen-chip">&#9889; Generadores 0/3</div>',
+   '<div class="chip" id="gen-chip" data-ui="generadores" data-uia="[0,3]">&#9889; Generadores 0/3</div>'),
+  ('<div id="hide-btn">ESCONDERSE</div>', '<div id="hide-btn" data-ui="esconderse">ESCONDERSE</div>'),
+  ('<span class="cs-red cs-unknown" id="cs-red">ROJO ?</span>',
+   '<span class="cs-red cs-unknown" id="cs-red" data-ui="cQred">ROJO ?</span>'),
+  ('<span class="cs-blue cs-unknown" id="cs-blue">AZUL ?</span>',
+   '<span class="cs-blue cs-unknown" id="cs-blue" data-ui="cQblue">AZUL ?</span>'),
+  ('<span class="cs-yellow cs-unknown" id="cs-yellow">AMAR. ?</span>',
+   '<span class="cs-yellow cs-unknown" id="cs-yellow" data-ui="cQyellow">AMAR. ?</span>'),
+):
+    s = s if SOLO else cambiar(s, viejo, nvo, 'data-ui de ' + viejo[:38])
+
+# ── LAS FICHAS CON CONTADOR: patron y no cadena, y por `pbUI` ────────────────
+# Van por pbUI y no por innerHTML porque pbUI SE ACUERDA del contador: al
+# cambiar de idioma la ficha se repinta con su valor de verdad en vez de
+# quedarse en el idioma viejo hasta la proxima vez que el numero cambie.
+FICHAS = (
+  ("genChip.innerHTML = '&#9889; Generadores 0/3'", "pbUI(genChip, 'generadores', 0, 3)", 2),
+  ("genChip.innerHTML = '&#9889; Generadores ' + gensRunning + '/3'",
+   "pbUI(genChip, 'generadores', gensRunning, 3)", 1),
+  ("shelfChip.innerHTML = '&#128218; Libros 0/5'", "pbUI(shelfChip, 'libros', 0, 5)", 2),
+  ("shelfChip.innerHTML = '&#128218; Libros ' + libShelved + '/5'",
+   "pbUI(shelfChip, 'libros', libShelved, 5)", 1),
+  ("torchChip.innerHTML = '&#128293; Antorchas 0/3'", "pbUI(torchChip, 'antorchas', 0, 3)", 2),
+  ("torchChip.innerHTML = '&#128293; Antorchas ' + torchesLit + '/3'",
+   "pbUI(torchChip, 'antorchas', torchesLit, 3)", 1),
+)
+for viejo, nvo, veces in FICHAS:
+    s = s if SOLO else cambiar_todo(s, viejo, nvo, viejo[:26], veces)
+s = s if SOLO else cambiar_todo(s, "textContent = 'ESCONDERSE'",
+    "textContent = pbT('esconderse')", 'esconderse', 5)
+s = s if SOLO else cambiar(s, "hideBtn.textContent = 'SALIR';",
+    "hideBtn.textContent = pbT('salir');", 'salir del escondite')
+s = s if SOLO else cambiar(s, "runBtn.querySelector('span').textContent = 'SHIFT';",
+    "runBtn.querySelector('span').textContent = pbT('shift');", 'shift en PC')
+s = s if SOLO else cambiar(s, "bookChip.textContent = 'Llevas: ' + b.topic.name;",
+    "bookChip.textContent = pbT('llevas', b.topic.name);", 'el libro que se lleva')
+s = s if SOLO else cambiar(s, "csEls[n.color.key].textContent = n.color.css + ' ?';",
+    "pbUI(csEls[n.color.key], 'cQ' + n.color.key);", 'los tres colores del codigo')
+# la hoja encontrada: la ficha con su digito y el aviso con el nombre largo
+s = s if SOLO else cambiar(s, "        el.textContent = n.color.css + ' ' + n.digit;",
+    "        el.textContent = pbColC(n.color.key) + ' ' + n.digit;", 'la ficha con el digito')
+s = s if SOLO else cambiar(s, "n.color.label + ' ' + n.digit, 3200);",
+    "pbColL(n.color.key) + ' ' + n.digit, 3200);", 'el aviso de la hoja')
+
+# ── EL IDIOMA REPINTA TAMBIEN EL HUD ─────────────────────────────────────────
+s = s if SOLO else cambiar(s, "    Array.prototype.forEach.call(document.querySelectorAll('#imini button'), function (b) {\n      b.classList.toggle('sel', b.getAttribute('data-idi') === pbIdi);\n    });",
+    "    Array.prototype.forEach.call(document.querySelectorAll('#imini button'), function (b) {\n      b.classList.toggle('sel', b.getAttribute('data-idi') === pbIdi);\n    });\n    try { pbRepintaHud(); } catch (e) {}",
+    'repintar el HUD al cambiar de idioma')
+
+# ── LA SENSIBILIDAD, EN LOS DOS SITIOS QUE MUEVEN LA VISTA ───────────────────
+s = s if SOLO else cambiar(s, "      yaw -= dx * 0.0026;\n      pitch -= dy * 0.0026;",
+    "      yaw -= dx * 0.0026 * pbSens;\n      pitch -= dy * 0.0026 * pbSens;", 'sensibilidad del raton')
+s = s if SOLO else cambiar(s, "        yaw -= dx * 0.0038;\n        pitch -= dy * 0.0038;",
+    "        yaw -= dx * 0.0038 * pbSens;\n        pitch -= dy * 0.0038 * pbSens;", 'sensibilidad del dedo')
+
+# ── EL AUDIO PASA POR LOS DOS BUSES ──────────────────────────────────────────
+# las muestras y los gritos al bus de efectos, la cama al de musica
+# LOS OSCILADORES DE RESPALDO: diecisiete sitios colgados de `ctx.destination`,
+# o sea que la barra de efectos no los habria tocado nunca. El maestro y su
+# analizador NO se toca: es el que va al parlante.
+# 18 sitios cuelgan de `ctx.destination` y por eso la barra de efectos no los
+# habria tocado nunca. Se cambian los 18 de una: el maestro (`pbSonMaster`) se
+# excluye a mano, porque ES el que va al parlante y colgarlo de si mismo seria
+# un lazo. El assert de la cuenta es lo que garantiza que no se cuele otro.
+_dest = [m for m in re.findall(r"(\w+)\.connect\(ctx\.destination\)", s) if m != 'pbSonMaster']
+assert len(_dest) == 18, 'esperaba 18 osciladores sueltos, hay %d' % len(_dest)
+if not SOLO:
+    s = re.sub(r"(?<!pbSonMaster)\.connect\(ctx\.destination\)", ".connect(pbSalidaFx(ctx))", s)
+    assert s.count('.connect(pbSalidaFx(ctx))') == 20, 'no quedaron los 20 en el bus de efectos'
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {
