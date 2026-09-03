@@ -46,6 +46,8 @@ CATALOGO = {
     'burbujas': ('Burbujas.html', 'BURBUJAS'),
     'chispa':   ('Chispa.html',   'CHISPA'),
     'dados':    ('Dados.html',    'DADOS'),
+    'canica':   ('Canica.html',   'CANICA'),
+    'piedra':   ('Piedra.html',   'PIEDRA'),
 }
 
 

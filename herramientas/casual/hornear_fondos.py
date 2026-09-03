@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Los seis fondos generados con Rezona, horneados en base64 dentro de cada juego.
+"""Las imagenes ENTERAS de cada juego —los fondos y la tira de rivales— horneadas
+en base64 adentro del archivo.
 
 POR QUE ES UN SCRIPT APARTE DE `hornear.py`: aquel corta hojas de sprites —mide
 la reja, hace el relleno por celda, calcula la escala de cada cuerpo— y un fondo
@@ -28,7 +29,7 @@ CRUDO = os.environ.get('FONDO_DIR', '/tmp/rez_cas/assets/casual')
 LADO = int(os.environ.get('FONDO_LADO', '720'))
 CAL = int(os.environ.get('FONDO_CAL', '82'))
 
-JUEGOS = ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados']
+JUEGOS = ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica', 'piedra']
 
 
 def hornea(jid):
@@ -73,7 +74,56 @@ def mete(jid, dat):
         cab + 'const AS = ' + json.dumps(AS, separators=(',', ':')) + ';\n')
 
 
+def tira(src, cols, filas, ancho):
+    """una reja de retratos pasada a una TIRA de `cols*filas` cuadros en fila.
+
+    `dibCuadro()` asume los cuadros en fila, que es lo correcto —un atlas de una
+    fila se indexa con una multiplicacion— pero el generador devuelve la reja que
+    se le pidio. Se corta aca y no en el juego: en el juego habria que llevar dos
+    numeros mas y el dia que la reja cambie, el codigo del juego se rompe."""
+    im = Image.open(src).convert('RGB')
+    W, H = im.size
+    cw, ch = W//cols, H//filas
+    alto = int(ancho*ch/cw)
+    out = Image.new('RGB', (ancho*cols*filas, alto))
+    k = 0
+    for f in range(filas):
+        for c in range(cols):
+            # ── Y SE RECORTA UN MARGEN DE CADA CELDA ──
+            # El generador dibuja la reja que se le pide, o sea que deja una
+            # linea de separacion de fondo alrededor de cada retrato. Sin el
+            # margen esa linea entra en el cuadro y el retrato sale con un
+            # marco magenta que no pinto nadie.
+            mx, my = int(cw*0.045), int(ch*0.045)
+            ce = im.crop((c*cw + mx, f*ch + my, (c+1)*cw - mx, (f+1)*ch - my))
+            ce = ce.resize((ancho, alto), Image.LANCZOS)
+            out.paste(ce, (k*ancho, 0)); k += 1
+    b = io.BytesIO()
+    out.save(b, 'WEBP', quality=CAL, method=6)
+    return b.getvalue(), ancho, alto, cols*filas
+
+
 def main():
+    # la tira de rivales de PIEDRA: seis retratos en una reja de 3x2
+    src = os.path.join(CRUDO, 'r_piedra-g1.png')
+    if os.path.exists(src) and ('piedra' in (sys.argv[1:] or JUEGOS)):
+        d, w, h, n = tira(src, 3, 2, 220)
+        p = os.path.join(ASSETS, 'piedra.js')
+        cab = ('/* Generado por herramientas/casual/hornear*.py — NO editar a mano. */\n')
+        AS = {'img': {}, 'son': {}}
+        if os.path.exists(p):
+            t = io.open(p, encoding='utf-8').read()
+            m = re.search(r'const AS = (\{.*\});\s*$', t, re.S)
+            if m:
+                AS = json.loads(m.group(1))
+            cab = t[:t.index('const AS =')]
+        AS.setdefault('img', {})['rivales'] = {
+            'd': 'data:image/webp;base64,' + base64.b64encode(d).decode(),
+            'n': n, 'w': w, 'h': h}
+        io.open(p, 'w', encoding='utf-8').write(
+            cab + 'const AS = ' + json.dumps(AS, separators=(',', ':')) + ';\n')
+        print('%-9s -> %6.1f KB  tira de %d retratos de %dx%d'
+              % ('rivales', len(d)*4/3/1024, n, w, h))
     for j in (sys.argv[1:] or JUEGOS):
         d = hornea(j)
         if d is None:

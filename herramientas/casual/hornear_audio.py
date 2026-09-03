@@ -46,7 +46,7 @@ FX = {'fusion': 's_fusion', 'suelta': 's_suelta', 'pop': 's_pop', 'clic': 's_cli
 # el tema de partida de cada juego entra con la clave `mus`, que es la que el
 # nucleo pide: asi el juego no tiene que saber como se llama su propio tema
 POR_JUEGO = {j: 'm_' + j for j in
-             ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados']}
+             ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica', 'piedra']}
 
 RMS_MUS = 0.045          # la cama
 RMS_FX = 0.150           # un acierto: mas de tres veces la cama

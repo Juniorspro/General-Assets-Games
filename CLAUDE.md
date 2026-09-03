@@ -280,6 +280,234 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima séptima vuelta (2026-09-03): **OCHO CASUALES** — los fondos generados, y dos juegos de sensor
+
+Pedido, en dos partes: *"hace juegos simples pero súper adictivos roguelike cartas etc que use
+características como giroscopio o cámara todo no esos que ya hiciste"* y después, mirando las
+capturas, *"decora más esos fondo ya te la sabes animaciones gods efectos assets generados en Rezona
+todote"*.
+
+Los ocho viven en `herramientas/casual/` (`nucleo/` + `juegos/` + `assets/`) y se arman con
+`python3 herramientas/casual/armar.py`. Los cinco de la vuelta anterior —FRUTAS · TUBOS · TORRE ·
+BURBUJAS · CHISPA— más tres nuevos: **DADOS** (roguelike de dados que se tiran SACUDIENDO el
+teléfono), **CANICA** (laberinto que se inclina de verdad, roguelike por pisos) y **PIEDRA** (piedra
+papel o tijera contra seis rivales, leído por la cámara).
+
+#### EL NÚCLEO APRENDE DOS SENSORES, CON SONDAS INYECTABLES
+
+El banco no tiene ni giroscopio ni cámara, así que sin sondas nada de esto se podría afirmar.
+
+- **`g.js` — la inclinación y la SACUDIDA.** Son dos cosas distintas del mismo aparato y se leen de
+  dos eventos: la primera es una posición y la segunda un acontecimiento. **La sacudida se mide en el
+  CAMBIO del vector de aceleración y no en su módulo**: la gravedad ya son 9,8, así que mirando el
+  módulo el teléfono quieto parece estar sacudiéndose siempre. Y con
+  `accelerationIncludingGravity`, que existe en todos los aparatos —`acceleration` sin gravedad la
+  informa sólo una parte— porque la diferencia entre dos lecturas ya le quita la gravedad.
+  Más las cinco de siempre: el permiso de iOS **dentro de un gesto**, el cero es la postura en la que
+  se empezó, zona muerta de 1,6 grados, el ángulo por la **vuelta corta** (cruzar de 179 a −179 pega
+  media vuelta), y **se comprueba que llegue algo** — en una notebook `deviceorientation` se registra
+  sin error y no dispara nunca, así que el estado diría «lista» con el sensor muerto y el juego
+  esperaría para siempre.
+- **`m.js` — la mano por la cámara.** Devuelve UN gesto y nada más: no dibuja la mano ni apunta con
+  ella. Cámara **frontal** —al revés de RECREO y RezUno— porque piedra papel o tijera se juega
+  mostrando la mano de frente. Con `exact`, dos CDN, GPU→CPU, entrada a 640×480, umbrales bajos, la
+  medición colgada de `requestVideoFrameCallback`, y **la caducidad medida en HUECOS y no en
+  milisegundos**: 280 ms fijos son once medidas a 40 Hz y tres y media a 12, así que en un aparato
+  lento dos fallos seguidos borraban el gesto.
+
+#### `f.js`: EL AMBIENTE VA PARTIDO EN DOS, CON EL JUEGO EN EL MEDIO
+
+Los ocho fondos están generados con Rezona, verticales y **con el centro vacío a propósito** — el
+detalle va en las bandas de arriba y de abajo, que es lo único que un cover vertical conserva. Y la
+capa que los usa se parte: **detrás el LUGAR** (cielo, foto, haz de luz, cosas flotando, viñeta) y
+**delante la atmósfera** (grano, destello). Si se dibujara entera y el juego encima, la viñeta
+quedaría debajo de las fichas y no cerraría nada; y si el juego dibujara primero, su mesa taparía la
+foto.
+
+**LA VIÑETA VA DETRÁS, Y ES UNA DECISIÓN.** Encima se vería más «de película» y sería un error
+medible: oscurecería las fichas de los bordes justo en los tableros que llegan al ancho entero —la
+jarra de FRUTAS, la reja de CHISPA—, o sea que le quitaría contraste a lo único que hay que tocar. La
+viñeta es del LUGAR, no de la lente.
+
+Cada juego declara `AMB` y nada más: hojas que caen (FRUTAS), polvo en el haz (TUBOS, DADOS,
+CANICA), burbujas que suben **dibujadas como anillo con punto de luz** —un disco liso se lee a
+moneda y encima se confundiría con las del tablero—, chispas **como raya con estela**, motas de neón.
+Todas van LENTAS: cualquier cosa que se mueva a la velocidad de las fichas compite con ellas.
+
+#### TRES DEFECTOS DE FONDO QUE SÓLO SALIERON MIRANDO CAPTURAS
+
+1. **EL VELO DEL FRASCO DE FRUTAS TAPABA LA FOTO.** Estaba en 0,20 de alfa con un degradado que
+   terminaba en azul marino: con la cocina puesta, el interior del frasco era un panel gris que se
+   comía el mantel a cuadros y enfriaba de golpe la mitad cálida del cuadro — o sea que la foto que se
+   acababa de poner no se veía justo donde se juega. Baja a 0,09 y degrada de arriba abajo, que es
+   además cómo se ve un vidrio de verdad: se nota arriba, donde la pared se curva, y casi no al ras
+   del fondo.
+2. **LAS NUBES DE TORRE ERAN DOS ELIPSES Y AL LADO DE NUBES PINTADAS SE LEÍAN A MANCHAS DE
+   SUCIEDAD.** Una nube de dos óvalos duros no puede convivir con nubes de foto, porque al lado se le
+   ve el borde. Pasan a bandas con degradado en los dos cantos, que no tienen borde en ningún lado. Y
+   **se apagan al ras del suelo**, porque ahí lo que hay detrás es la ciudad de la foto y no cielo.
+3. **Y LA FOTO DE TORRE ESTABA QUIETA, QUE CONTRADICE A SUS PROPIAS NUBES.** Con el cielo clavado,
+   subir cuarenta pisos volvía a verse igual que subir dos — que es exactamente el defecto que las
+   nubes existen para arreglar. La foto se dibuja `despK` más alta de lo que hace falta y se corre con
+   la cámara: lo que sobra **es** el recorrido, así que no puede quedar un hueco por construcción.
+
+#### `fogonazo()` PASA A `destella(color)` EN LOS OCHO
+
+El fogonazo es un velo blanco de pantalla completa: sube el brillo de TODO, tablero incluido, justo
+en el cuadro en que el jugador está mirando qué pasó. El destello es un radial con el centro
+transparente, así que pinta los bordes y deja el medio limpio — y encima lleva el **color del
+acontecimiento**, que dice qué pasó sin escribir nada.
+
+#### EL AUDIO NO SONABA AUNQUE ESTUVIERA HORNEADO ADENTRO
+
+Quince clips generados —siete temas y ocho efectos— y `son:0` con `mus:null` en las ocho capturas. El
+contexto de audio se creaba **sólo en JUGAR**, así que `alMenu()` pedía su tema antes de que
+existiera y `cargaSon()` salía sin hacer nada. **El primer gesto de verdad es el botón de idioma, no
+JUGAR**, y ningún navegador deja sonar nada antes de uno: ahora despierta con el primer
+`pointerdown`/`click`/`keydown`, en captura sobre el documento — en cada botón habría que acordarse
+en los que hay y en el próximo que se agregue.
+
+Y **el nivel se mide sobre el MP3 ya escrito y no sobre el float**, que es la lección de PUERTA
+BLANCA: a bitrate bajo el codificador se lleva casi todo el brillo, y en un chasquido ahí está la
+mayor parte de la energía. Se escribe, se mide lo que se va a oír, se corrige y se vuelve a escribir.
+Los siete temas cierran en rms 0,042-0,043 contra 0,045 de objetivo. **Tres efectos quedan en
+0,098-0,118 contra 0,150 y se dejan así**: son transitorios, su energía está en dos centésimas de
+segundo, y aplastarlos hasta el objetivo los convertiría en un zumbido — su PICO sí llega al tope.
+
+#### DADOS: LA CURVA DEL OBJETIVO SALIÓ DE UN BARRIDO, NO DE ELEGIRLA
+
+Cinco dados, tres tiradas, tres manos por ronda, y una reliquia al llegar al objetivo. **La tirada es
+una SACUDIDA**, con botón de respaldo porque en una notebook no hay sensor.
+
+| razón del objetivo | honesto | al azar |
+|---|---|---|
+| 1,42 | **16 [14-17]** | 8 [5-11] |
+| 1,55 | 12 [9-12] | 6 [5-7] |
+| 1,70 | 8 [8-10] | 5 [3-5] |
+| 1,85 | 7 [7-8] | 3 [3-5] |
+
+Se eligió 1,42: es donde decidir qué guardar vale **el doble**, que es lo único que prueba que hay un
+juego adentro y no una máquina tragamonedas. Y **las reliquias van con TOPE**: sin él el bot llegó a
+la ronda 419 con 1,4e16 — una mejora multiplicativa sin techo convierte el roguelike en una cuenta
+que se va al infinito.
+
+Tres cosas de puesta en escena que salieron de una captura: **el margen del dado es 120 y no 80**
+porque se dibuja GIRADO y girado 45 grados su media diagonal es 1,41 veces su medio lado (el primero
+de la fila llegaba a cinco píxeles del borde); **el guardado se endereza**, porque un dado torcido se
+lee a «todavía está rodando» justo en los que ya están apartados; y **el combo grande y el chiquito
+no se dibujan a la vez** — «ESCALERA» salía dos veces, una encima de la otra, porque el que acaba de
+pagar y el que vale ahora son el mismo.
+
+Y **la barra del objetivo se metió en el hueco que había**: entre la fila de dados y el botón quedaban
+560 puntos de nada, y el único sitio donde se leía cuánto faltaba era una barra de tres píxeles pegada
+al borde de abajo. En un juego cuyo verbo entero es «llegar al objetivo», eso es esconder la pregunta.
+
+#### CANICA: LOS CIEN PISOS SE COMPRUEBAN, Y DOS DEFECTOS SALIERON DEL BOT
+
+Se inclina el teléfono y la canica rueda. Hay que juntar las chispas y salir antes del reloj. Al salir
+se elige una de doce mejoras y se baja al piso siguiente.
+
+**LAS CUATRO PROPIEDADES DE UN PISO JUGABLE, COMPROBADAS UNA POR UNA:** la salida es la celda más
+lejana EN PASOS (en la esquina puede quedar a tres celdas con atajos); **los pozos no pueden caer en
+el camino obligado** —y el camino obligado no es la recta a la salida sino el recorrido que pasa por
+todas las chispas: protegiendo sólo la recta, un pozo puede quedar en el único acceso a una chispa y
+entonces el piso pide algo que no se puede juntar—; las chispas van una por tercio de profundidad; y
+**el reloj sale del recorrido MEDIDO** y no de un número a mano. Medido: **100 de 100 pisos válidos,
+0 malos**, reloj de 23 a 71 s, recorrido de 18 a 77 pasos.
+
+Dos defectos que sólo destapó el auto-jugador:
+
+- **QUEDARSE SIN TIEMPO TERMINABA LA CORRIDA ENTERA con las tres vidas intactas.** El bot al azar
+  moría en el piso 1 con `caidas: 0` y `vidas: 3`, que es la firma exacta de un camino de derrota que
+  no pasa por las vidas. En un roguelike de pisos el reloj tiene que ser una presión y no una
+  guillotina: ahora cuesta una vida y se reintenta el piso **con el reloj entero**, porque reintentar
+  con dos segundos no es un reintento.
+- **EL MARGEN DEL RELOJ ERA CONSTANTE, o sea que la dificultad no crecía.** Con factor 2,6 en los cien
+  pisos, el reloj crece exactamente igual que el laberinto y el piso 100 se siente igual que el 10 —
+  lo único que crecía era el tamaño. Baja de 2,6 a 1,7 a lo largo de la corrida, y ahí sí **aparece un
+  techo**: el bot honesto pasó de sobrevivir 30.000 vueltas a morir en el **piso 40**.
+
+Medido al cerrar: honesto **piso 40, 17.100 puntos, 6 caídas**; al azar **piso 1, 3 caídas, 0 vidas**.
+
+#### PIEDRA: EL RIVAL QUE JUEGA AL AZAR ES EL MÁS DIFÍCIL, Y ESO ES UN TEOREMA
+
+Piedra papel o tijera entre dos personas es azar puro: contra alguien uniforme la estrategia óptima es
+jugar uniforme, y ahí no hay nada que decidir. Lo que lo vuelve un juego es que **los seis rivales no
+juegan uniforme**: el pibe repite, la abuela cicla, el luchador te copia, el tahúr juega lo que le gana
+a tu última, el robot cuenta tu símbolo más frecuente, y el encapuchado tira al azar. Cada uno tiene un
+agujero, y encontrarlo es el juego — **por eso el encapuchado va último de cada vuelta**.
+
+`audita()` juega mil doscientas rondas contra cada cabeza con un jugador que explota su agujero y con
+uno uniforme:
+
+| rival | explotando | uniforme |
+|---|---|---|
+| el pibe (repite) | **0,999** | 0,336 |
+| la abuela (cicla) | **0,996** | 0,323 |
+| el luchador (copia) | **0,997** | 0,321 |
+| el tahúr (vence) | **0,996** | 0,349 |
+| el robot (frecuencia) | **0,747** | 0,344 |
+| el encapuchado (azar) | **0,339** | 0,323 |
+
+O sea que **cada cabeza tiene el agujero que dice tener y el encapuchado no tiene ninguno** — 0,339 es
+un tercio. Sin esta auditoría, una cabeza mal escrita —el ciclo que no cicla— se vería exactamente
+igual que una que anda: como un rival que juega raro.
+
+**Y APARECIERON DOS DEFECTOS DE BULTO, LOS DOS EN LA COMPARACIÓN DE BOTS:**
+
+1. **LA CARTA «EMPATE A FAVOR» SOLA GANABA LA CORRIDA.** Con todos los empates a tu favor, la tasa de
+   ganar una ronda pasa de un tercio a DOS tercios: medido, el auto-jugador que tira **uniforme** —que
+   no decide nada— la sacó temprano y llegó al duelo 36 con tasa 0,646, cuando sin ella muere en el 2.
+   Una carta que convierte al que juega al azar en el que gana no es una mejora, es un botón de ganar.
+   Acotada a **una por duelo**.
+2. **EL MODELO DEL BOT SOBREVIVÍA ENTRE DUELOS.** Los marcadores de los tres predictores vivían en una
+   global, y cada rival es una cabeza distinta: el selector llegaba al duelo cuatro eligiendo el
+   predictor que le servía al pibe para jugar contra el luchador. Medido, **el honesto pasó de morir en
+   el duelo 4-6 a llegar al 26**, y la diferencia era ésa y nada más. Ahora el modelo vive **dentro de
+   `P_h`**, así que `dueloNuevo()` lo resetea por construcción y no hay un sitio del que olvidarse.
+
+Y para que la escalera tuviera techo, **desde la tercera vuelta el rival miente a veces**: con
+probabilidad `1-p` juega uniforme en vez de su estrategia, y `p` baja de 1 a 0,45. No es hacer trampa:
+es que el rival también aprende a no ser leído.
+
+Medido al cerrar: honesto **duelo 27-28 con tasa 0,50-0,53**; al azar **duelo 2-5 con tasa 0,28-0,32**.
+
+**Y DOS COSAS DE DIBUJO QUE COSTARON SUS CAPTURAS:** las manos llevaban antebrazo *«porque una mano
+flotando no se lee a brazo»*, y con el radio en 150 el antebrazo mide 195 de largo — lo que apareció
+fueron **dos cápsulas rosas gigantes** en las que no se distinguía el puño del papel, o sea que el
+detalle agregado para que se leyera mejor era justo lo que impedía leer nada. Se fue, y quedó el
+símbolo solo. Y **los nudillos estaban del mismo color que el puño**: un bulto del mismo color que su
+fondo no existe, así que salían dos discos rosas lisos. Lo que hace legible una silueta plana son un
+**degradado** —la misma cuenta que hace que la canica se lea a esfera— y un **contorno oscuro**.
+
+#### MEDIDO AL CERRAR
+
+**8 de 8 juegos**: los fondos cargados (`falladas: 0`), **10 de 10 clips decodificados** en cada uno y
+**todos los alias con muestra** —o sea que ninguno cae al oscilador—, la música cambiando sola de menú
+a partida, fondo en 0,008-0,023 de pico contra 0,23-0,51 de un acierto, **cero solapamientos de HUD en
+castellano y en portugués**, y `window.__errs` vacío en las treinta y una corridas.
+
+Los ocho auto-jugadores, que es lo único que prueba que hay una decisión adentro:
+
+| | honesto | al azar |
+|---|---|---|
+| FRUTAS | 13.159 puntos, 115 fusiones, llega al ananá | (empatan: ver la vuelta 96) |
+| TUBOS | 200 de 200 niveles con solución probada | — |
+| TORRE | 28 pisos, 8 perfectos | — |
+| BURBUJAS | 111 de 111 niveles limpiados | — |
+| CHISPA | 150 de 150 con `solucionRota: []` | — |
+| **DADOS** | ronda **16 [14-17]** | 8 [5-11] |
+| **CANICA** | **piso 40**, 17.100 puntos | piso 1, 0 vidas |
+| **PIEDRA** | **duelo 27-28**, tasa 0,53 | duelo 2-5, tasa 0,30 |
+
+Tamaños: 539 · 497 · 428 · 450 · 474 · 551 · 457 · 602 KB.
+
+**LO QUE NO PUDE COMPROBAR:** no puedo escuchar, así que de los quince clips está medido que
+decodifican y a qué nivel suenan, no si el tema de DADOS pega con DADOS. Y ni el giroscopio ni la
+cámara existen en el banco: lo que está probado es el camino entero con sensores inyectados —la
+sacudida llega a `tira()`, la inclinación mueve la canica, el gesto se lee en el «¡ya!»— y no cómo se
+siente sacudir un teléfono de verdad.
+
 ### Nonagésima sexta vuelta (2026-09-03): **LOS CINCO MINIJUEGOS** — no se podía empezar a jugar, y la capa que les faltaba
 
 Reporte: *"mejora todo las mecánicas gráficos no quería taaan simple también sonidos etc, también que
