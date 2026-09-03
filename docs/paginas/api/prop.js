@@ -1,4 +1,5 @@
 import { json, preflight, exigirSesion } from "./_comun.js";
+import { traducirFalla } from "./_ia.js";
 export const onRequestOptions = preflight;
 
 /* Genera el adorno de una publicación: un objeto suelto sobre pantalla verde.
@@ -88,7 +89,7 @@ export async function onRequestPost({ request, env }) {
     const r = await env.AI.run(MODELO, { prompt: objeto + ENCUADRE, steps: 6 });
     img = String(r?.image || "");
   } catch (e) {
-    return json({ error: "No pude generar el adorno. Probá de nuevo." }, 502);
+    return json({ error: traducirFalla(e) }, 502);
   }
   if (!img) return json({ error: "El generador no devolvió nada. Probá de nuevo." }, 502);
 

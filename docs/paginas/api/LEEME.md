@@ -23,6 +23,19 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
 
+## El cupo de la IA
+
+El plan gratis de Workers AI trae **10.000 «neuronas» por día** y las lecturas de
+imagen las gastan rápido. Cuando se acaba, la IA devuelve un `4006` que no le
+dice nada a nadie; `traducirFalla` en `_ia.js` lo convierte en «por hoy se acabó
+el cupo, se repone mañana, mientras tanto cargala a mano», que es lo que el dueño
+necesita saber. Lo mismo con los errores de saturación.
+
+Por eso también importan las podas de llamadas: `/api/sugerir` no redacta el
+texto del aviso mientras propone (lo hace al publicar, una llamada menos por
+candidato) y saltea las historias que son la misma imagen comparando una huella
+antes de gastar la lectura.
+
 ## La app en el teléfono
 
 El panel es una **PWA instalable**: `app.webmanifest` + `sw.js` + los tres iconos

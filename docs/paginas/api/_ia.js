@@ -166,6 +166,21 @@ async function escribirDetalle(env, p, fuente) {
   return t.length > 20 ? t.slice(0, 400) : "";
 }
 
+/* El plan gratis de Workers AI trae 10.000 «neuronas» por día y las lecturas de
+   imagen las gastan rápido. Cuando se acaban, el error que devuelve no le dice
+   nada al dueño, así que lo traducimos: no está roto, se repone mañana. */
+export function traducirFalla(e) {
+  const t = String((e && e.message) || e || "");
+  if (/neurons|daily free allocation|exceeded.*limit|3040/i.test(t)) {
+    return "Por hoy se acabó el cupo gratis de la IA. Se repone mañana. " +
+           "Mientras tanto podés cargarla a mano.";
+  }
+  if (/capacity|overload|503|429/i.test(t)) {
+    return "La IA está saturada en este momento. Probá en un rato.";
+  }
+  return "La IA no respondió. Probá de nuevo o cargalo a mano.";
+}
+
 /* Red de seguridad contra el invento. Si el modelo devuelve un título o una
    fecha que no aparecen por ningún lado en lo que le dimos, no es una lectura:
    es una alucinación. Pasó de verdad —con varias imágenes a la vez las llamadas
@@ -183,7 +198,8 @@ function saleDeLaFuente(valor, fuente) {
 }
 
 /* El corazón. Devuelve { propuesta, cuandoMs, leyoFlyer } o { error, codigo }. */
-export async function proponer(env, texto, imagen) {
+export async function proponer(env, texto, imagen, opc) {
+  opc = opc || {};
   texto = sinAdornos(texto).slice(0, 900);
   if (!texto && !imagen) return { error: "Contame qué querés publicar.", codigo: 400 };
 
@@ -243,8 +259,8 @@ export async function proponer(env, texto, imagen) {
        historia que sólo dice nombre, fecha y lugar— devolvía el título vacío
        dos de cada tres veces; con el reintento entra casi siempre. */
     if (!d || !tituloSano(d.titulo)) d = await extraer(fuente, 0);
-  } catch {
-    return { error: "La IA no respondió. Probá de nuevo o cargalo a mano.", codigo: 502 };
+  } catch (e) {
+    return { error: traducirFalla(e), codigo: 502 };
   }
   if (!d) return { error: "No pude entender eso. Probá contándolo más simple.", codigo: 422 };
 
@@ -297,10 +313,15 @@ export async function proponer(env, texto, imagen) {
      con entradas a la venta aparece en «Próximamente» y en «Entradas» a la vez. */
   p.tipo = fech ? "proximamente" : p.precio ? "entrada" : "aviso";
 
-  try {
-    const t = await escribirDetalle(env, p, fuente);
-    if (t) p.detalle = t;
-  } catch {}
+  /* La segunda llamada, la que redacta el aviso, es un tercio del tiempo total.
+     Cuando esto es sólo un candidato que el dueño todavía no miró, no se hace:
+     se redacta al publicar. Así buscar en Instagram es bastante más rápido. */
+  if (!opc.sinRedactar) {
+    try {
+      const t = await escribirDetalle(env, p, fuente);
+      if (t) p.detalle = t;
+    } catch {}
+  }
 
   /* Lo que falta lo sacamos de la salida, no de lo que diga el modelo:
      listaba campos que sí había completado. */

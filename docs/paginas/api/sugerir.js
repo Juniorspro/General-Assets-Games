@@ -11,7 +11,7 @@ export const onRequestOptions = preflight;
    Un posteo no se propone dos veces: al publicarlo queda su código en `origen`. */
 
 const CUENTA    = "iblo_eventos";
-const TOPE      = 4;    /* cuántas se piensan por toque: cada una son ~12 segundos */
+const TOPE      = 4;    /* por vuelta; la app encadena vueltas y va mostrando el avance */
 const MINIMO    = 30;   /* pie de foto más corto que esto no se mira */
 const GRACIA    = 6 * 3600e3;
 
@@ -35,14 +35,25 @@ export async function onRequestPost({ request, env }) {
   if (!env.AI) return json({ error: "La IA no está disponible." }, 503);
   if (!env.DB) return json({ error: "sin base de datos" }, 503);
 
-  /* lo que ya se usó alguna vez, sea posteo o historia */
+  /* Lo que ya se usó alguna vez, sea posteo o historia, y lo que ya se miró y no
+     servía. Sin lo segundo, tocar «Buscar» de nuevo volvía a masticar los mismos
+     y nunca avanzaba al resto. */
   const usados = new Set(
     ((await env.DB.prepare(
       "SELECT origen FROM publicaciones WHERE origen IS NOT NULL"
     ).all()).results || []).map((r) => r.origen)
   );
+  for (const r of ((await env.DB.prepare("SELECT clave FROM revisados").all()).results || [])) {
+    usados.add(r.clave);
+  }
 
   const descartadas = [];
+
+  /* Se anota sólo lo que no va a cambiar por volver a intentarlo. Un «no la pude
+     leer» es pasajero y merece otra oportunidad la próxima vez. */
+  const anotar = (clave, motivo) =>
+    env.DB.prepare("INSERT OR IGNORE INTO revisados (clave, motivo, cuando) VALUES (?,?,?)")
+      .bind(clave, motivo, Date.now()).run().catch(() => {});
   const cola = [];      /* lo que se va a pensar, en orden de prioridad */
 
   /* ---------- 1. las historias, que son lo más fresco ---------- */
@@ -67,6 +78,7 @@ export async function onRequestPost({ request, env }) {
     if (usados.has(post.codigo)) continue;
     if (!pareceAviso(post.texto)) {
       descartadas.push({ codigo: post.codigo, de: "publicación", por: "no anuncia nada, son fotos o saludos" });
+      await anotar(post.codigo, "no anuncia nada");
       continue;
     }
     cola.push({ de: "publicacion", clave: post.codigo, texto: post.texto, imagenYa: post.imagen || "" });
@@ -94,6 +106,19 @@ export async function onRequestPost({ request, env }) {
         descartadas.push({ codigo: it.clave, de: "historia", por: "no pude bajar la imagen" });
         continue;
       }
+      /* El dueño sube el mismo flyer en varias historias seguidas. Antes se
+         gastaba una lectura de IA en cada una para descubrir después que eran
+         la misma. Con una huella de la imagen se saltean sin gastar nada. */
+      const huella = "h:" + imagen.length + ":" +
+        imagen.slice(200, 260) + imagen.slice(-40);
+      if (usados.has(huella)) {
+        descartadas.push({ codigo: it.clave, de: "historia", por: "es la misma imagen que otra" });
+        await anotar(it.clave, "imagen repetida");
+        continue;
+      }
+      usados.add(huella);
+      await anotar(huella, "huella de imagen");
+
       /* La guardamos igual que un posteo: así al publicar la app manda sólo el
          código y la foto no viaja de vuelta —son cientos de kilobytes— y de paso
          queda registrada para no volver a bajarla. */
@@ -103,17 +128,19 @@ export async function onRequestPost({ request, env }) {
     }
 
     let res;
-    try { res = await proponer(env, it.texto || "", imagen); }
+    try { res = await proponer(env, it.texto || "", imagen, { sinRedactar: true }); }
     catch { res = { error: "no la pude leer" }; }
     if (res.error) { descartadas.push({ codigo: it.clave, de: it.de, por: res.error }); continue; }
 
     const p = res.propuesta, ms = res.cuandoMs;
 
     if (ms && ms < ahora - GRACIA) {
-      descartadas.push({ codigo: it.clave, de: it.de, por: "la fecha ya pasó" }); continue;
+      descartadas.push({ codigo: it.clave, de: it.de, por: "la fecha ya pasó" });
+      await anotar(it.clave, "fecha vieja"); continue;
     }
     if (!ms && !p.precio) {
-      descartadas.push({ codigo: it.clave, de: it.de, por: "no dice ni fecha ni precio" }); continue;
+      descartadas.push({ codigo: it.clave, de: it.de, por: "no dice ni fecha ni precio" });
+      await anotar(it.clave, "sin fecha ni precio"); continue;
     }
 
     const { error, fila } = limpiarPublicacion({ ...p, cuando: ms, destacado: false });
@@ -157,7 +184,7 @@ export async function onRequestPost({ request, env }) {
         ).bind(it.clave, repe.id).run();
         descartadas.push({ codigo: it.clave, de: it.de,
                            por: "ya estaba publicada («" + repe.titulo + "»)" });
-        continue;
+        await anotar(it.clave, "ya publicada"); continue;
       }
     }
 
