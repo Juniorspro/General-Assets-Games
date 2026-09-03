@@ -342,6 +342,24 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
 .previa[data-pos="izq-abajo"] .pegote{left:6px; bottom:6px; transform:rotate(7deg)}
 .previa.conAdorno[data-pos$="-arriba"]:not(.conFoto) .cuerpo{padding-top:96px}
 .previa.conAdorno[data-pos$="-abajo"] .cuerpo{padding-bottom:86px}
+
+/* ---------- varias imágenes de una ---------- */
+.tiraFotos{display:flex; gap:8px; flex-wrap:wrap; margin-top:9px}
+.tiraFotos figure{position:relative; margin:0; width:74px; height:74px; border-radius:12px;
+  overflow:hidden; border:1px solid var(--linea); background:#000}
+.tiraFotos img{width:100%; height:100%; object-fit:cover}
+.tiraFotos button{position:absolute; right:3px; top:3px; width:21px; height:21px; padding:0;
+  border-radius:50%; border:0; cursor:pointer; background:rgba(8,7,12,.86); color:var(--papel);
+  font:600 13px/1 var(--cond); display:grid; place-items:center}
+.tiraFotos figure.mal{outline:2px solid var(--mal)}
+
+/* cada propuesta cuando vienen varias */
+.bloqueProp{margin-bottom:16px}
+.bloqueProp > .cual{display:flex; align-items:center; gap:9px; margin-bottom:9px;
+  font:600 10.5px/1 var(--cond); letter-spacing:.18em; text-transform:uppercase; color:var(--tenue)}
+.bloqueProp > .cual b{color:var(--ac); font-family:var(--cond)}
+.bloqueProp .noSalio{padding:14px 15px; border-radius:14px; font-size:14px;
+  border:1px dashed var(--linea); color:var(--tenue)}
 </style>
 <div class="luzFondo" aria-hidden="true"></div>
 <div class="grano" aria-hidden="true"></div>
@@ -464,13 +482,15 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
       <div class="ejemplos" id="ejemplos"></div>
 
       <div class="campo" style="margin-top:16px">
-        <label>Flyer, foto o captura <span style="text-transform:none; letter-spacing:0">(si tenés)</span></label>
+        <label>Flyers o capturas <span style="text-transform:none; letter-spacing:0">(si tenés)</span></label>
         <div class="suelta" id="sueltaIA">
-          <input type="file" accept="image/*" aria-label="Elegir el flyer">
+          <input type="file" accept="image/*" multiple aria-label="Elegir las imágenes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M12 3v13M7 8l5-5 5 5"/></svg>
-          <b>Mandarle una imagen</b>
-          <small>El flyer, o la captura de una historia. Lo lee y saca fecha, lugar y precio solo.</small>
+          <b>Mandarle imágenes</b>
+          <small>Los flyers, o las capturas de tus historias. Podés mandar varias juntas
+                 y te arma una publicación por cada una.</small>
         </div>
+        <div class="tiraFotos" id="tiraIA" hidden></div>
         <div class="pesoFoto" id="pesoIA" hidden></div>
       </div>
 
@@ -480,9 +500,7 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
 
       <div id="propuesta" hidden>
         <div class="separa"><span id="tituloProp">Esto entendí</span></div>
-        <div class="fichaProp" id="fichaProp"></div>
-        <div class="faltan" id="faltan" hidden></div>
-        <div class="dosBotones" id="botonesProp"></div>
+        <div id="listaProp"></div>
       </div>
 
       <div class="modoManual">
@@ -979,18 +997,63 @@ function cajonFoto(idCaja, idPeso, alCambiar, vacio){
   return estado;
 }
 
-var VACIA_IA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
-  'stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>' +
-  '<path d="M12 3v13M7 8l5-5 5 5"/></svg><b>Mandarle una imagen</b>' +
-  '<small>El flyer, o la captura de una historia. Lo lee y saca fecha, lugar y precio solo.</small>';
 var VACIA_F = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
   'stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>' +
   '<path d="M12 3v13M7 8l5-5 5 5"/></svg><b>Elegir foto</b>' +
   '<small>Se achica sola. Podés dejarla vacía.</small>';
 
-var fotoIA = cajonFoto("sueltaIA", "pesoIA", function(b64, err){
-  decir("avisoAsis", err || "", err ? "mal" : "");
-}, VACIA_IA);
+/* El cajón de la IA acepta varias de una: el dueño saca captura de tres historias
+   y las manda juntas. Cada una sale como una publicación aparte. */
+var TOPE_FOTOS = 6;
+var fotosIA = [];
+
+function pintarTira(){
+  var t = $("tiraIA");
+  t.hidden = !fotosIA.length;
+  t.innerHTML = fotosIA.map(function(f, i){
+    return '<figure><img alt="" src="' + f + '">' +
+           '<button type="button" data-q="' + i + '" aria-label="Sacar esta">×</button></figure>';
+  }).join("");
+  $("pesoIA").hidden = !fotosIA.length;
+  if (fotosIA.length){
+    var kb = Math.round(fotosIA.reduce(function(a, f){ return a + f.length; }, 0) / 1365);
+    $("pesoIA").textContent = fotosIA.length + (fotosIA.length === 1 ? " imagen · " : " imágenes · ") + kb + " KB";
+  }
+  $("btVerIA").textContent = fotosIA.length > 1
+    ? "Armar las " + fotosIA.length + " publicaciones"
+    : "Armar la publicación";
+}
+$("tiraIA").addEventListener("click", function(ev){
+  var b = ev.target.closest("button[data-q]"); if (!b) return;
+  fotosIA.splice(+b.dataset.q, 1);
+  pintarTira();
+});
+
+function sumarFotos(ev){
+  var fs = [].slice.call(ev.target.files || []); if (!fs.length) return;
+  decir("avisoAsis", "");
+  var quedan = TOPE_FOTOS - fotosIA.length;
+  if (fs.length > quedan){
+    decir("avisoAsis", "De a " + TOPE_FOTOS + " como mucho. Tomé las primeras " + quedan + ".", "");
+    fs = fs.slice(0, quedan);
+  }
+  /* Cada una se guarda en su lugar, no con push: comprimir es asincrónico y
+     terminaban en cualquier orden, distinto del que las eligió el dueño. */
+  var base = fotosIA.length, hueco = new Array(fs.length), faltan = fs.length;
+  function acomodar(){
+    if (--faltan > 0) return;
+    for (var k = 0; k < hueco.length; k++) if (hueco[k]) fotosIA[base + k] = hueco[k];
+    fotosIA = fotosIA.filter(Boolean);
+    pintarTira();
+  }
+  fs.forEach(function(f, k){
+    if (!/^image\//.test(f.type)){ decir("avisoAsis", "Alguna no era una imagen.", "mal"); acomodar(); return; }
+    comprimir(f, function(b64){ hueco[k] = b64; acomodar(); },
+                 function(){ decir("avisoAsis", "Una no la pude leer.", "mal"); acomodar(); });
+  });
+  ev.target.value = "";   // que se pueda volver a elegir la misma
+}
+$("sueltaIA").querySelector("input").addEventListener("change", sumarFotos);
 
 var fotoF = cajonFoto("suelta", "pesoFoto", function(b64, err){
   decir("avisoCargar", err || "", err ? "mal" : "");
@@ -1029,55 +1092,113 @@ function fichaDe(p, imagen){
 }
 
 /* La IA arma la propuesta y la muestra. Nada sube a la web hasta que el dueño
-   toca «Publicar»: lo pidió así después de probar el modo automático. */
+   toca «Publicar»: lo pidió así después de probar el modo automático.
+   Si mandó varias imágenes, es una llamada y una propuesta por cada una. */
 function llamarIA(){
   var texto = $("aTexto").value.trim();
-  if (!texto && !fotoIA.b64){ decir("avisoAsis", "Escribile algo o mandale el flyer.", "mal"); return; }
-  var bt = $("btVerIA"), original = "Armar la publicación";
+  if (!texto && !fotosIA.length){
+    decir("avisoAsis", "Escribile algo o mandale una imagen.", "mal"); return;
+  }
+  var bt = $("btVerIA"), original = bt.textContent;
+  var tandas = fotosIA.length ? fotosIA.slice() : [""];
   decir("avisoAsis", "");
+  $("listaProp").innerHTML = "";
   $("propuesta").hidden = true;
-  cargando(bt, true, original);
-  pedir("/asistente", { metodo:"POST", cuerpo:{ texto: texto, imagen: fotoIA.b64, publicar: false } })
-    .then(function(j){
-      propuestaViva = j.propuesta;
-      $("tituloProp").textContent = j.leyoFlyer ? "Esto saqué del flyer" : "Esto entendí";
-      $("fichaProp").innerHTML = fichaDe(j.propuesta, fotoIA.b64);
-      var f = j.propuesta.falta || [];
-      $("faltan").hidden = !f.length;
-      if (f.length) $("faltan").innerHTML = "<b>Quedó sin:</b> " + esc(f.join(", ")) +
-        ". Si hace falta, cargalo a mano.";
-      $("botonesProp").innerHTML =
-        '<button class="bt p" type="button" id="btSubirProp">Publicar</button>' +
-        '<button class="bt s" type="button" id="btEditarProp">Editar y decorar</button>';
+  bt.disabled = true;
+  bt.innerHTML = '<span class="giro"></span>' +
+    (tandas.length > 1 ? "Leyendo las " + tandas.length + "…" : "Un segundo…");
+
+  /* Una por vez, no en paralelo: con dos llamadas a la vez la IA se degradaba y
+     devolvía cualquier cosa para la segunda. Tarda más, pero no inventa. */
+  var salidas = new Array(tandas.length), turno = 0;
+  function siguiente(){
+    if (turno >= tandas.length) return Promise.resolve();
+    var i = turno++;
+    if (tandas.length > 1){
+      bt.innerHTML = '<span class="giro"></span>Leyendo ' + (i + 1) + " de " + tandas.length + "…";
+    }
+    return pedir("/asistente", { metodo:"POST", cuerpo:{ texto: texto, imagen: tandas[i], publicar: false } })
+      .then(function(j){ salidas[i] = { ok: j }; }, function(e){ salidas[i] = { mal: e.message }; })
+      .then(siguiente);
+  }
+
+  siguiente()
+    .then(function(){
+      var hubo = 0;
+      $("listaProp").innerHTML = "";
+      salidas.forEach(function(r, i){
+        var caja = document.createElement("div");
+        caja.className = "bloqueProp";
+        if (tandas.length > 1){
+          caja.innerHTML = '<div class="cual"><b>' + (i + 1) + " de " + tandas.length + '</b>' +
+            (r.ok ? esc(r.ok.propuesta.titulo) : "no salió") + '</div>';
+        }
+        if (r.mal){
+          caja.innerHTML += '<div class="noSalio">' + esc(r.mal) + '</div>';
+          $("listaProp").appendChild(caja);
+          return;
+        }
+        hubo++;
+        var p = r.ok.propuesta;
+        var ficha = document.createElement("div");
+        ficha.className = "fichaProp";
+        ficha.innerHTML = fichaDe(p, tandas[i]);
+        caja.appendChild(ficha);
+
+        var f = p.falta || [];
+        if (f.length){
+          var fa = document.createElement("div");
+          fa.className = "faltan";
+          fa.innerHTML = "<b>Quedó sin:</b> " + esc(f.join(", ")) + ". Si hace falta, cargalo a mano.";
+          caja.appendChild(fa);
+        }
+
+        var bots = document.createElement("div");
+        bots.className = "dosBotones";
+        var pub = document.createElement("button");
+        pub.className = "bt p"; pub.type = "button"; pub.textContent = "Publicar";
+        pub.onclick = function(){ publicarPropuesta(p, tandas[i], pub, caja); };
+        var edi = document.createElement("button");
+        edi.className = "bt s"; edi.type = "button"; edi.textContent = "Editar y decorar";
+        edi.onclick = function(){ volcarEnFormulario(p, tandas[i]); };
+        bots.appendChild(pub); bots.appendChild(edi);
+        caja.appendChild(bots);
+        $("listaProp").appendChild(caja);
+      });
+
+      $("tituloProp").textContent = tandas.length > 1
+        ? "Salieron " + hubo + " de " + tandas.length
+        : (salidas[0] && salidas[0].ok && salidas[0].ok.leyoFlyer ? "Esto saqué de la imagen" : "Esto entendí");
       $("propuesta").hidden = false;
-      $("btSubirProp").onclick = function(){ publicarPropuesta(propuestaViva, fotoIA.b64, $("btSubirProp")); };
-      $("btEditarProp").onclick = function(){ volcarEnFormulario(propuestaViva, fotoIA.b64); };
       $("propuesta").scrollIntoView({ behavior:"smooth", block:"nearest" });
     })
-    .catch(function(e){ decir("avisoAsis", e.message, "mal"); })
-    .then(function(){ cargando(bt, false, original); });
+    .then(function(){ bt.disabled = false; bt.textContent = original; });
 }
 
-/* Sube lo que propuso la IA, tal cual está. */
-function publicarPropuesta(p, imagen, bt){
+/* Sube una propuesta tal cual está. */
+function publicarPropuesta(p, imagen, bt, caja){
   var original = bt.textContent;
   decir("avisoAsis", "");
   cargando(bt, true, original);
   pedir("/publicaciones", { metodo:"POST", cuerpo: cuerpoDe(p, { imagen: imagen }) })
     .then(function(j){
-      ultimaPublicada = j.id;
-      decir("avisoAsis", "Publicada. Ya se ve en la web.", "bien");
-      $("botonesProp").innerHTML =
-        '<button class="bt s" type="button" id="btVerWeb">Ver en la web</button>' +
-        '<button class="bt s" type="button" id="btBajarYa">Bajarla</button>';
-      $("btVerWeb").onclick = function(){
-        window.open("https://iblo-eventos.pages.dev/publicaciones", "_blank");
-      };
-      $("btBajarYa").onclick = function(){ bajar(ultimaPublicada, function(){
-        decir("avisoAsis", "Listo, la bajé de la web.", "bien");
-        $("propuesta").hidden = true; refrescarTablero();
+      var id = j.id;
+      caja.querySelector(".dosBotones").innerHTML = "";
+      var listo = document.createElement("div");
+      listo.className = "faltan";
+      listo.innerHTML = "<b>Publicada.</b> Ya se ve en la web.";
+      caja.insertBefore(listo, caja.querySelector(".dosBotones"));
+      var baja = document.createElement("button");
+      baja.className = "bt s"; baja.type = "button"; baja.textContent = "Bajarla";
+      baja.onclick = function(){ bajar(id, function(){
+        listo.innerHTML = "<b>Bajada.</b> Ya no se ve en la web.";
+        baja.remove(); refrescarTablero();
       }); };
-      $("aTexto").value = ""; fotoIA.limpiar();
+      var ver = document.createElement("button");
+      ver.className = "bt s"; ver.type = "button"; ver.textContent = "Ver en la web";
+      ver.onclick = function(){ window.open("https://iblo-eventos.pages.dev/publicaciones", "_blank"); };
+      caja.querySelector(".dosBotones").appendChild(ver);
+      caja.querySelector(".dosBotones").appendChild(baja);
       refrescarTablero();
     })
     .catch(function(e){ decir("avisoAsis", e.message, "mal"); cargando(bt, false, original); });
@@ -1099,6 +1220,7 @@ function cuerpoDe(p, extra){
 }
 
 var propuestaViva = null, ultimaPublicada = 0;
+pintarTira();
 $("btVerIA").addEventListener("click", llamarIA);
 
 /* ---------- el botón «Nuevo»: lo último de Instagram ----------

@@ -22,7 +22,7 @@ const ESQUEMA = {
       description: "Nombre corto de la fiesta, dos a seis palabras, sin emojis ni hashtags ni arrobas ni " +
         "comillas. Ej: Halloween 2026, Cowboy Night, Fiesta Zonal de la Primavera. OJO: «IBLO», «IbLo» e " +
         "«IBLO Eventos» son la productora que organiza, NUNCA el nombre de la fiesta. Nunca copies el texto " +
-        "entero acá." },
+        "entero acá, ni una descripción de colores o de estética." },
     subtitulo: { type: "string",
       description: "Bajada de cuatro a ocho palabras. Vacío si no hay con qué armarla." },
     fecha: { type: "string",
@@ -82,6 +82,31 @@ function tituloSano(t) {
   return casoNormal(limpio);
 }
 
+/* El modelo completa bien lugar, hora y fecha pero cada dos por tres deja
+   `titulo` vacío y mete el nombre de la fiesta en `detalle`. Visto y medido: de
+   seis lecturas de la misma historia, tres salían así. En vez de reintentar y
+   rezar, lo buscamos donde lo pone. */
+function rescatarTitulo(d, delFlyer) {
+  const corto = (t) => {
+    const v = limpiar(t, 90).replace(/@\S+/g, "").trim();
+    return v && v.split(/\s+/).length <= 8 ? v : "";
+  };
+  const deDetalle = corto(d.detalle);
+  if (deDetalle) return deDetalle;
+  const deSub = corto(d.subtitulo);
+  if (deSub) return deSub;
+  /* última: el primer renglón del flyer que no sea una fecha, una hora o un precio */
+  for (const linea of String(delFlyer || "").split("\n")) {
+    const l = linea.replace(/^[^:]{0,22}:\s*/, "").trim();     // «Nombre de la fiesta: X»
+    if (!l || l.length < 3) continue;
+    if (/^\W*[\d.:/$-]+\W*$/.test(l)) continue;                 // 05.12.26, 23:00 HS, $9.000
+    if (/^\s*(open|hora|fecha|lugar|precio|entradas?)\b/i.test(l)) continue;
+    const v = corto(l);
+    if (v) return v;
+  }
+  return "";
+}
+
 /* Mira el flyer y devuelve lo que dice, en texto plano. No decide nada. */
 async function leerFlyer(env, imagen) {
   const r = await env.AI.run(MODELO_OJO, {
@@ -95,8 +120,17 @@ async function leerFlyer(env, imagen) {
     max_tokens: 400,
     temperature: 0.1,
   });
-  const t = r?.response ?? r?.choices?.[0]?.message?.content ?? "";
-  return String(t).trim().slice(0, 1200);
+  const t = String(r?.response ?? r?.choices?.[0]?.message?.content ?? "").trim().slice(0, 1200);
+  /* La línea «Onda:» es andamiaje nuestro, para elegir el color. Va aparte y bien
+     rotulada: mezclada con la transcripción, el extractor la tomaba de título
+     («Onda: azul oscuro a negro degradé» quedó como nombre de una fiesta). */
+  const corte = t.search(/^\s*onda\s*:/im);
+  if (corte < 0) return { texto: t, onda: "" };
+  const antes = t.slice(0, corte).trim();
+  const onda = t.slice(corte).replace(/^\s*onda\s*:/i, "").trim().slice(0, 120);
+  /* A veces contesta sólo la estética y se olvida de transcribir. Mejor mandar
+     todo junto que quedarse sin fuente. */
+  return antes ? { texto: antes, onda } : { texto: t, onda: "" };
 }
 
 /* Escribe el texto del aviso. Suelto, no dentro del esquema: en modo json_schema
@@ -127,17 +161,44 @@ async function escribirDetalle(env, p, fuente) {
   return t.length > 20 ? t.slice(0, 400) : "";
 }
 
+/* Red de seguridad contra el invento. Si el modelo devuelve un título o una
+   fecha que no aparecen por ningún lado en lo que le dimos, no es una lectura:
+   es una alucinación. Pasó de verdad —con varias imágenes a la vez las llamadas
+   se degradaban y copiaba el ejemplo que tenía el prompt— así que además de
+   sacar el ejemplo, esto lo agarra venga de donde venga. */
+function saleDeLaFuente(valor, fuente) {
+  if (!valor) return true;
+  const limpio = (t) => t.toLowerCase().replace(/[^a-z0-9áéíóúñ]/g, "");
+  const f = limpio(fuente);
+  /* alcanza con que dos palabras del título estén en la fuente */
+  const palabras = valor.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+  if (!palabras.length) return limpio(valor).length < 4 || f.includes(limpio(valor));
+  const dentro = palabras.filter((w) => f.includes(limpio(w))).length;
+  return dentro >= Math.min(2, palabras.length);
+}
+
 /* El corazón. Devuelve { propuesta, cuandoMs, leyoFlyer } o { error, codigo }. */
 export async function proponer(env, texto, imagen) {
   texto = sinAdornos(texto).slice(0, 900);
   if (!texto && !imagen) return { error: "Contame qué querés publicar.", codigo: 400 };
 
-  let delFlyer = "";
-  if (imagen) { try { delFlyer = await leerFlyer(env, imagen); } catch {} }
+  let delFlyer = "", onda = "";
+  if (imagen) {
+    try { const l = await leerFlyer(env, imagen); delFlyer = l.texto; onda = l.onda; } catch {}
+    /* Leer la imagen es el paso que más falla: un par de veces de cada cinco
+       volvía casi vacío y la publicación se perdía por eso. Un reintento. */
+    if (delFlyer.length < 15) {
+      try { const l = await leerFlyer(env, imagen); if (l.texto.length > delFlyer.length) {
+        delFlyer = l.texto; onda = l.onda || onda;
+      } } catch {}
+    }
+  }
 
   const fuente = [
     texto ? "Lo que escribió el dueño: " + texto : "",
     delFlyer ? "Lo que dice el flyer que mandó: " + delFlyer : "",
+    onda ? "Estética del flyer (esto es SÓLO para elegir el color, no es el nombre " +
+           "de la fiesta ni va en ningún otro campo): " + onda : "",
   ].filter(Boolean).join("\n");
   if (!fuente) return { error: "No pude leer ni el texto ni la imagen. Escribime qué querés publicar.", codigo: 422 };
 
@@ -149,20 +210,14 @@ export async function proponer(env, texto, imagen) {
     "Si además te paso lo que dice un flyer y no coincide con lo que escribió el dueño, MANDA LO QUE ESCRIBIÓ EL DUEÑO: " +
     "el flyer sólo sirve para completar lo que él no dijo.";
 
-  async function extraer(fuenteTexto) {
+  async function extraer(fuenteTexto, calor) {
     const r = await env.AI.run(MODELO, {
       messages: [
         { role: "system", content: sistema },
-        { role: "user", content: "el 6 de junio cowboy night en el club juventud, opening 00:30, entradas 8 mil" },
-        { role: "assistant", content: JSON.stringify({
-            titulo:"Cowboy Night", subtitulo:"Noche wéstern con toro mecánico",
-            fecha:"06.06.26", cuando:"2026-06-06T00:30", lugar:"Club Juventud", hora:"opening 00:30",
-            detalle:"Se viene la Cowboy Night en el Club Juventud. Abrimos 00:30 y entrás de bota y sombrero.",
-            precio:"$8.000", color:"naranja" }) },
         { role: "user", content: fuenteTexto },
       ],
       max_tokens: 700,
-      temperature: 0.2,
+      temperature: calor == null ? 0.2 : calor,
       response_format: { type: "json_schema", json_schema: ESQUEMA },
     });
     const crudo = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? "");
@@ -179,10 +234,20 @@ export async function proponer(env, texto, imagen) {
     if ((!d || !tituloSano(d.titulo)) && texto && delFlyer) {
       d = await extraer("Lo que escribió el dueño: " + texto);
     }
+    /* Y si sigue sin título, un reintento en frío. Con fuentes cortas —una
+       historia que sólo dice nombre, fecha y lugar— devolvía el título vacío
+       dos de cada tres veces; con el reintento entra casi siempre. */
+    if (!d || !tituloSano(d.titulo)) d = await extraer(fuente, 0);
   } catch {
     return { error: "La IA no respondió. Probá de nuevo o cargalo a mano.", codigo: 502 };
   }
   if (!d) return { error: "No pude entender eso. Probá contándolo más simple.", codigo: 422 };
+
+  if (!tituloSano(d.titulo)) {
+    const rescatado = rescatarTitulo(d, delFlyer);
+    /* si el nombre estaba en el detalle, ese campo se vuelve a escribir más abajo */
+    if (rescatado) d = { ...d, titulo: rescatado };
+  }
 
   const p = {
     titulo: tituloSano(d.titulo),
@@ -206,6 +271,15 @@ export async function proponer(env, texto, imagen) {
 
   /* «22:00» solo queda seco en la web; «22:00 hs» es como se dice */
   if (/^\d{1,2}[:.]\d{2}$/.test(p.hora)) p.hora = p.hora.replace(".", ":") + " hs";
+
+  if (p.titulo && !saleDeLaFuente(p.titulo, fuente)) {
+    return { error: "Lo que leí no coincide con lo que me mandaste. Probá de nuevo, de a una imagen.",
+             codigo: 422 };
+  }
+  /* A la fecha NO se le aplica esta guardia: «6 de diciembre» sale como
+     «06.12.26» y nunca va a coincidir literal con la fuente. Borraba fechas
+     buenas. De la fecha ya se encarga `leerFecha`, que sólo acepta lo que el
+     modelo escribió con forma de fecha. */
 
   if (!p.titulo) {
     return { error: imagen

@@ -42,6 +42,24 @@ a mano cuando el dueño quiere otra.
 Las seis horas de gracia que aparecen en todos lados son para que una fiesta no
 desaparezca de la web mientras todavía se está haciendo.
 
+## Varias imágenes de una
+
+La solapa IA acepta hasta seis imágenes juntas y arma una publicación por cada
+una: el dueño saca captura de tres historias y las manda en tanda.
+
+Se procesan **de a una, no en paralelo**. Con dos llamadas a la vez la IA se
+degradaba y devolvía cualquier cosa para la segunda; lo peor es *qué* devolvía:
+copiaba el ejemplo que el prompt traía como few-shot, así que salían dos
+publicaciones idénticas de una fiesta que no existía. Por eso el few-shot ya no
+está —las descripciones del esquema alcanzan— y además quedó `saleDeLaFuente`,
+que descarta un título cuyas palabras no aparezcan en lo que le dimos.
+
+Ojo con esa guardia: **a la fecha no se le aplica**. «6 de diciembre» sale como
+«06.12.26» y nunca coincide literal con la fuente, así que borraba fechas buenas.
+
+Las miniaturas se guardan en su lugar, no con `push`: comprimir es asincrónico y
+terminaban en orden distinto del que las eligió el dueño.
+
 ## Historias: no
 
 El botón «Nuevo» lee **publicaciones del feed**, no historias. La ruta del feed
@@ -203,3 +221,12 @@ rompería en unos días.
   lo mandaba con tipo «entrada» y una fiesta con entradas a la venta se publicaba
   sin precio. Ahora se manda siempre que esté escrito, y con eso la publicación
   sale también en la solapa Entradas.
+- **El nombre de la fiesta no siempre viene en `titulo`.** Midiéndolo: de seis
+  lecturas de la misma historia, tres traían lugar, hora y fecha perfectos y el
+  nombre metido en `detalle`, con `titulo` vacío. Reintentar no alcanzaba (fallaba
+  la mitad de las veces igual); `rescatarTitulo` lo busca donde el modelo lo pone
+  —`detalle`, `subtitulo`, o el primer renglón del flyer que no sea fecha, hora
+  ni precio.
+- **La línea «Onda:» del prompt se filtraba al título.** Es andamiaje nuestro
+  para elegir el color; iba pegada a la transcripción y una publicación quedó
+  llamándose «Onda: azul oscuro a negro degradé». Ahora viaja aparte y rotulada.
