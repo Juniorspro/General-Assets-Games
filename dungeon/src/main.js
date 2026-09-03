@@ -31,11 +31,12 @@ const A = window.DUNGEON_ASSETS || {};
    7 m y cada cuarto salia del tamano de una iglesia. */
 const EYE = 1.00, CROUCH_EYE = 0.60, SLIDE_EYE = 0.34, RADIUS = 0.30;
 const WALK = 2.9, RUN = 5.4, CROUCH_SPD = 1.5;
-/* EL IMPULSO: un tiron corto para zafar, no una segunda velocidad de crucero.
-   7,6 es mas que los 6,6 del bicho, asi que sirve para sacarle distancia; dura
-   dos segundos y se recarga a la mitad de rapido, o sea que gastarlo entero
-   cuesta cuatro segundos de espera y no se puede vivir corriendo. */
-const BOOST_SPD = 7.6, BOOST_TIME = 2.0, BOOST_RECARGA = 0.55;
+/* EL IMPULSO: un interruptor, y sin limite de tiempo. 7,6 es mas que los 6,6
+   del bicho, asi que sirve para sacarle distancia. Se toca una vez y sigue —
+   sueltes o no el boton— hasta que lo tocas de nuevo.
+   Antes tenia dos segundos de carga y se apagaba solo, que en la mano se
+   siente igual que un boton que no queda puesto: era lo que habia que sacar. */
+const BOOST_SPD = 7.6;
 const FOV = 106;
 /* El deslizamiento es corto y violento a proposito: mucha velocidad al
    principio, la camara se tira al piso y el FOV pega un tiron. */
@@ -148,7 +149,7 @@ class Dungeon {
 
         this.t = 0; this.roll = 0; this.bob = 0; this.pitch = 0; this.yaw = 0;
         this.running = false; this.crouch = false;
-        this.boostT = BOOST_TIME; this.boosting = false; this.boostHold = false;
+        this.boosting = false; this.boostHold = false;
         this.visited = new Set();
 
         /* El arranque: el cajón de madera flotando y las nubes. Se crea antes
@@ -915,7 +916,7 @@ class Dungeon {
         this.slideBtn = btn('slide', () => { this.slideRequested = true });
         this.runBtn = btn('runtoggle', () => { this.autoRun = !this.autoRun });
         /* Interruptor, no botón que se mantiene: se toca una vez y sigue
-           hasta que lo tocás de nuevo (o hasta que se acaba la carga). */
+           hasta que lo tocás de nuevo. */
         this.boostBtn = btn('boost', () => { this.boostHold = !this.boostHold });
         btn('crouch', () => { this.touchCrouch = true }, () => { this.touchCrouch = false });
         this.usarBtn = btn('usar', () => { this.usarPedido = true });
@@ -974,13 +975,7 @@ class Dungeon {
            tenes tu velocidad y sumarle esta seria romper las dos mecanicas. */
         const quiereBoost = (!!k.KeyQ || this.boostHold)
             && !this.crouch && !sliding && moving > 0.05;
-        this.boosting = quiereBoost && this.boostT > 0;
-        this.boostT = this.boosting
-            ? Math.max(0, this.boostT - dt)
-            : Math.min(BOOST_TIME, this.boostT + dt * BOOST_RECARGA);
-        /* Al vaciarse se apaga solo. Si el interruptor quedara puesto, volvería
-           a prenderse con la primera gota de carga y sería un tironeo. */
-        if (this.boostT <= 0) this.boostHold = false;
+        this.boosting = quiereBoost;
         let spd = this.crouch ? CROUCH_SPD : wantRun ? RUN : WALK;
         if (sm > 0.12 && !wantRun && !sliding) spd *= clamp(sm, 0.35, 1);
         if (this.boosting) spd = BOOST_SPD;
@@ -1218,10 +1213,9 @@ class Dungeon {
             this._lv = lv;
             document.getElementById('level').textContent = t('level');
         }
-        if (this.boostBtn) {
-            this.boostBtn.classList.toggle('on', this.boosting);
-            this.boostBtn.classList.toggle('vacio', this.boostT < 0.25);
-        }
+        /* Se enciende con el interruptor puesto, no con `boosting`: parado no
+           te movés, pero el botón sigue puesto y tiene que decirlo. */
+        if (this.boostBtn) this.boostBtn.classList.toggle('on', !!this.boostHold);
         // el boton de deslizar se enciende solo cuando hay carrera que aprovechar
         const canSlide = this.slideCd <= 0 && !this.crouch;
         if (this._canSlide !== canSlide) {
