@@ -300,9 +300,9 @@ Cowboy, UPD y The Best Party. Los IDs están en `destacadas/` y en la sección 7
 
 Arriba de todo `@myf.visuals` (15), después un grupo de gente que se repite en
 casi todos los eventos y que funciona como **staff / promotores**:
-`@luc1a_ookk` (13), `@joniromero__` (12), `@tatianapolich_` (10),
-`@magali_carballo0`, `@gimenez_ludmi_`, `@lourdes_sabao4`, `@orianabeloso`,
-`@gamarra_yoell` (6 c/u). Los DJs se repiten igual que en el feed:
+`@luc1a_ookk` (13), `@joniromero__` (12), `@lourdes_sabao4` (6) y varias cuentas
+más de gente del staff. (A pedido de IBLO se quitaron de esta lista y de la página
+cinco nombres que ya no están en el equipo.) Los DJs se repiten igual que en el feed:
 `@djalaninamorato` (9), `@dj_rodriiojedaa` (8), `@mativillalbadj` y
 `@djagusmendoza` (7 c/u), `@dj.apolo_` (5), `@javierriosdj` (4).
 
