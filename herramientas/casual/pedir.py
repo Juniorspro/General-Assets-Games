@@ -112,6 +112,57 @@ JUEGOS = {
    'm_pesca': ('Calm seaside music: a soft nylon guitar, a warm pad and light'
                ' hand percussion, 92 BPM, major key, patient.' + LOOP),
   }},
+ 'salto': {
+  'img': {
+   'f_salto': ('A vast canyon at golden hour seen from the side: towering red'
+               ' rock walls and a hazy sun along the top, a river far below and'
+               ' floating dust along the bottom edge, warm rim light.'
+               + FONDO, '9:16'),
+   'v_heroe': ('Two cartoon adventurers in STRICT SIDE PROFILE facing RIGHT,'
+               ' full body, brown jacket and boots: the first CROUCHED low'
+               ' ready to jump, the second STRETCHED mid-air in a long leap.'
+               + (REJA % (2, 1)) + MAG, '1:1'),
+   'v_roca': ('Three floating rock platforms seen from the side, flat grassy'
+              ' top and a jagged broken bottom: a wide one, a medium one and a'
+              ' narrow one.' + (REJA % (3, 1)) + MAG, '1:1'),
+   'v_piedra': ('A seamless tileable texture of warm red canyon sandstone with'
+                ' horizontal strata' + TEX, '1:1'),
+  },
+  'son': {
+   'v_tensa': 'A loud close-up creak of boots crouching on gravel, dry, short.',
+   'v_tira':  'A loud jump grunt with a scuff of gravel, close-up, dry, single hit.',
+   'v_clava': 'A loud landing thud on rock with a puff of dust, close-up, single hit.',
+   'v_grito': 'A loud short male shout of falling, dry close-up, single hit, no words.',
+   'm_salto': ('Adventurous chase music: driving hand drums, a plucked string'
+               ' ostinato and a bright flute, 124 BPM, major key, propulsive.'
+               + LOOP),
+  }},
+ 'esquiva': {
+  'img': {
+   'f_esquiva': ('A moonlit dojo courtyard seen from the side: dark tiled roofs'
+                 ' and a huge pale moon along the top, raked sand and stone'
+                 ' lanterns along the bottom edge, cold blue light, drifting'
+                 ' petals.' + FONDO, '9:16'),
+   'e_ninja': ('Two cartoon samurai in STRICT SIDE PROFILE facing RIGHT, full'
+               ' body with a katana: the first in a READY stance sword low, the'
+               ' second in a full FORWARD SLASH.' + (REJA % (2, 1)) + MAG, '1:1'),
+   'e_rival': ('Three cartoon enemy warriors in STRICT SIDE PROFILE facing'
+               ' LEFT, full body, each winding up a different attack: one'
+               ' raising a sword overhead, one thrusting a spear straight'
+               ' forward, one swinging a heavy axe low.' + (REJA % (3, 1))
+               + MAG, '1:1'),
+   'e_piso': ('A seamless tileable texture of raked pale zen garden sand with'
+              ' fine parallel grooves' + TEX, '1:1'),
+  },
+  'son': {
+   'e_tensa': 'A loud close-up whoosh of a sword being raised, cloth and steel, dry, short.',
+   'e_tira':  'A loud fast katana slash through the air, close-up, dry, single hit.',
+   'e_clava': 'A loud sharp clash of two steel blades, close-up, single hit, dry.',
+   'e_grito': 'A loud short male battle shout, dry close-up recording, single hit, no words.',
+   'm_esquiva': ('Tense eastern duel music: a low taiko pulse, a shakuhachi'
+                 ' flute line and sparse koto plucks, 96 BPM, minor key,'
+                 ' watchful.' + LOOP),
+  }},
 }
 
 

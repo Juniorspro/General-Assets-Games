@@ -65,6 +65,10 @@ PROPIOS = {
               'grito': 'd_grito', 'mus': 'm_duelo'},
     'pesca': {'tensa': 's_tensa', 'tira': 's_tira', 'clava': 's_clava',
               'grito': 's_grito', 'mus': 'm_pesca'},
+    'salto': {'tensa': 'v_tensa', 'tira': 'v_tira', 'clava': 'v_clava',
+              'grito': 'v_grito', 'mus': 'm_salto'},
+    'esquiva': {'tensa': 'e_tensa', 'tira': 'e_tira', 'clava': 'e_clava',
+                'grito': 'e_grito', 'mus': 'm_esquiva'},
 }
 
 RMS_MUS = 0.045          # la cama

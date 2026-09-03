@@ -53,6 +53,7 @@ CATALOGO = {
     'penal':    ('Penal.html',    'PENAL'),
     'duelo':    ('Duelo.html',    'DUELO'),
     'pesca':    ('Pesca.html',    'PESCA'),
+    'salto':    ('Salto.html',    'SALTO'),
 }
 
 

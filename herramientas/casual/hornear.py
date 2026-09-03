@@ -179,6 +179,24 @@ JUEGOS = {
                         reja=(2, 4), celdas=[(0,0),(0,1),(1,1),(2,0),(3,0),(3,1)]),
         's_agua': dict(archivo='s_agua.png', tipo='tex', lado=320),
     },
+    'salto': {
+        # 2x2 con las filas repetidas: agachado y en el aire, los dos a la derecha
+        'v_heroe': dict(archivo='v_heroe.png', tipo='hoja', lado=224,
+                        reja=(2, 2), celdas=[(0,0),(0,1)]),
+        'v_roca': dict(archivo='v_roca.png', tipo='hoja', lado=256,
+                       celdas=[(0,0),(0,1),(0,2)]),
+        'v_piedra': dict(archivo='v_piedra.png', tipo='tex', lado=320),
+    },
+    'esquiva': {
+        'e_ninja': dict(archivo='e_ninja.png', tipo='hoja', lado=256,
+                        celdas=[(0,0),(0,1)]),
+        # ── VOLVIO 2x2 CON CUATRO GUERREROS Y NO 3x1 CON TRES ──
+        # Y el cuarto es un escudo, que no es un ataque. Las tres celdas se
+        # eligen mirando la hoja: espada arriba, lanza al frente y hacha abajo.
+        'e_rival': dict(archivo='e_rival.png', tipo='hoja', lado=256,
+                        reja=(2, 2), celdas=[(0,0),(0,1),(1,1)]),
+        'e_piso': dict(archivo='e_piso.png', tipo='tex', lado=320),
+    },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
         # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es
