@@ -599,6 +599,7 @@ section[id]{scroll-margin-top:80px}
 .ent.pub[data-pos$="-arriba"]:not(.conFoto) .cuerpo{padding-top:104px}
 .ent.pub[data-pos$="-abajo"] .cuerpo{padding-bottom:96px}
 .entradas{padding-top:22px}
+[hidden]{display:none!important}
 /* ============================================================
    VERSIÓN MÓVIL — otra estructura, no el escritorio encogido
    ============================================================ */
@@ -907,7 +908,8 @@ body[data-pg="esteticas"] .waFlota, body[data-pg="reels"] .waFlota{display:none}
   </div>
 </section>
 
-<section class="mbloq">
+<!-- Igual que en escritorio: la muestra la API o no se muestra. -->
+<section class="mbloq" id="fecha" hidden>
   <div class="mcaja"><span class="mrot" id="dSub">La próxima</span></div>
   <div class="mfecha">
     <h3 id="dTitulo">Elección de Rey y Reina</h3>
@@ -1511,33 +1513,57 @@ arrancarReloj(new Date("2026-09-19T22:00:00-03:00").getTime());
 
 
 
-/* ---------- la próxima fecha sale de la app ---------- */
+/* ---------- la próxima fecha ----------
+   Manda la API, no el HTML. La sección viene oculta y sólo se muestra si hay
+   una fecha por venir; el orden lo decide el servidor, que devuelve siempre la
+   más cercana que todavía no pasó. Así, cuando una fiesta se vence, la siguiente
+   ocupa su lugar sola, y si no hay ninguna no se muestra nada en vez de dejar
+   colgado el último evento, que era lo que pasaba. */
 (function(){
-  var col = $("colorDest");
-  fetch("https://iblo-eventos.pages.dev/api/destacado")
+  var seccion = $("fecha");
+  var enlaces = [].slice.call(document.querySelectorAll('a[href="#fecha"]'));
+
+  function esconder(){
+    if(seccion) seccion.hidden = true;
+    /* los links que llevan acá no pueden quedar apuntando a la nada */
+    enlaces.forEach(function(a){ a.hidden = true; });
+  }
+
+  fetch("https://iblo-eventos.pages.dev/api/destacado", { cache: "no-store" })
     .then(function(r){ return r.json(); })
     .then(function(j){
-      var d = j.destacado; if(!d) return;
+      var d = j.destacado;
+      if(!d || !d.titulo){ esconder(); return; }
+
       var tono = (j.colores||{})[d.color];
       if(tono){
         var zona = document.querySelector(".proxima") || document.querySelector(".mfecha");
         if(zona){ zona.style.setProperty("--ac", tono); zona.style.setProperty("--acs", rgbDe(tono)); }
       }
-      if($("dTitulo") && d.titulo)   $("dTitulo").textContent = d.titulo;
-      if($("dSub") && d.subtitulo)   $("dSub").textContent = d.subtitulo;
-      if($("dFecha") && d.fecha)     $("dFecha").innerHTML = esc(d.fecha).replace(/\./g,'<i>.</i>');
-      if($("dDetalle") && d.detalle) $("dDetalle").textContent = d.detalle;
+      if($("dTitulo")) $("dTitulo").textContent = d.titulo;
+      if($("dSub"))    $("dSub").textContent = d.subtitulo || "La próxima";
+      if($("dFecha"))  $("dFecha").innerHTML = d.fecha ? esc(d.fecha).replace(/\./g,'<i>.</i>') : "";
+      if($("dDetalle")){
+        $("dDetalle").textContent = d.detalle || "";
+        $("dDetalle").hidden = !d.detalle;
+      }
       var chips = [];
       if(d.lugar) chips.push(["Lugar", d.lugar]);
       if(d.hora)  chips.push(["Arranca", d.hora]);
-      if($("dChips") && chips.length){
-        var h=""; for(var i=0;i<chips.length;i++)
-          h += '<span class="chip"><b>'+esc(chips[i][0])+'</b> '+esc(chips[i][1])+'</span>';
-        $("dChips").innerHTML = h;
+      if($("dChips")){
+        $("dChips").innerHTML = chips.map(function(c){
+          return '<span class="chip"><b>'+esc(c[0])+'</b> '+esc(c[1])+'</span>';
+        }).join("");
+        $("dChips").hidden = !chips.length;
       }
+      if($("reloj")) $("reloj").hidden = !d.cuando;
       if(d.cuando && window.arrancarReloj) arrancarReloj(d.cuando);
+
+      if(seccion) seccion.hidden = false;
+      enlaces.forEach(function(a){ a.hidden = false; });
     })
-    .catch(function(){});
+    .catch(esconder);
+
   function rgbDe(h){
     h=h.replace("#",""); if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     var n=parseInt(h,16); return (n>>16&255)+","+(n>>8&255)+","+(n&255);

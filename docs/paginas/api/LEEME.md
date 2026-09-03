@@ -23,6 +23,22 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
 
+## El cartel de la portada rota solo
+
+`/api/destacado` devuelve **la fecha más cercana que todavía no pasó**, así que
+cuando una fiesta se vence la siguiente ocupa su lugar sola, sin tocar nada.
+
+La parte que faltaba estaba en la página, no en la API: el evento venía escrito a
+mano en el HTML y el guión sólo lo reemplazaba si la API traía algo (`if(!d)
+return`). Es decir que cuando no quedara ninguna fecha por venir, la web iba a
+seguir mostrando la última para siempre. Ahora la sección **arranca oculta** y la
+muestra la API; si no hay nada por venir no se muestra nada, y los links que
+apuntan a `#fecha` se esconden con ella. Igual en escritorio y en móvil.
+
+Probado moviendo las fechas: con dos publicadas manda la más cercana, al vencerse
+esa pasa la otra sola, y al vencerse las dos la sección desaparece de las dos
+versiones del sitio.
+
 ## El cupo de la IA
 
 El plan gratis de Workers AI trae **10.000 «neuronas» por día** y las lecturas de
