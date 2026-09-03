@@ -1,12 +1,15 @@
 import { json, preflight, exigirSesion } from "./_comun.js";
+import { CAMPOS } from "./_pub.js";
 export const onRequestOptions = preflight;
-/* lo que ve el dueño en la app: incluye las dadas de baja */
+
+/* Todo lo que subió el dueño, incluso lo dado de baja. Sólo con sesión. */
 export async function onRequestGet({ request, env }) {
-  if (!env.DB) return json({ error: "sin base de datos" }, 503);
-  const usuario = await exigirSesion(request, env);
-  if (!usuario) return json({ error: "Volvé a iniciar sesión." }, 401);
+  if (!env.DB) return json({ publicaciones: [] });
+  if (!(await exigirSesion(request, env))) return json({ error: "Volvé a iniciar sesión." }, 401);
   const r = await env.DB.prepare(
-    "SELECT id, titulo, descripcion, precio, imagen, estado, creado FROM entradas ORDER BY creado DESC LIMIT 60"
+    `SELECT ${CAMPOS}, estado, tocado FROM publicaciones ORDER BY creado DESC LIMIT 120`
   ).all();
-  return json({ usuario, entradas: r.results || [] });
+  const publicaciones = r.results || [];
+  /* `entradas` es el nombre que usaba la app anterior */
+  return json({ publicaciones, entradas: publicaciones });
 }

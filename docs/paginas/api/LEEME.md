@@ -7,7 +7,10 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 |---|---|
 | `GET /api/estado` | Dice si el servidor y la IA están vivos. Sin sesión. |
 | `POST /api/login` | Usuario y contraseña; devuelve la sesión. |
-| `GET /api/entradas` | Las entradas publicadas. Es lo que lee la web. Sin sesión. |
+| `GET /api/publicaciones` | Todo lo publicado. `?solapa=proximamente\|entradas\|avisos` filtra una solapa de la web. Sin sesión. |
+| `POST /api/publicaciones` | Sube una publicación de cualquier tipo. Requiere sesión. |
+| `DELETE /api/publicaciones?id=` | La baja de la web. Requiere sesión. |
+| `GET /api/entradas` | Las entradas publicadas, con la forma vieja. Es lo que leía la página de entradas. Sin sesión. |
 | `POST /api/entradas` | Publica una entrada. Requiere sesión. |
 | `DELETE /api/entradas?id=` | Da de baja una publicación. Requiere sesión. |
 | `GET /api/mias` | Todas las publicaciones, incluso las dadas de baja. Requiere sesión. |
@@ -16,7 +19,26 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
-| `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Requiere sesión. |
+| `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo y devuelve la fila creada. Requiere sesión. |
+
+## Una sola tabla
+
+Todo lo que sube el dueño vive en `publicaciones`, con un `tipo`
+(`proximamente`, `entrada`, `aviso`). Antes había una tabla por cosa y el
+dueño tenía que acertar dónde cargarla.
+
+Las solapas de la web **no miran el `tipo`, miran el contenido** (`filtroSolapa`
+en `_pub.js`): próximamente es lo que tiene fecha futura, entradas es lo que
+tiene precio y sigue vigente, avisos es lo que no tiene ni una cosa ni la otra.
+Así una fiesta con entradas a la venta sale en las dos solapas sola, y elegir
+mal el tipo no rompe nada.
+
+El cartel de la portada (`/api/destacado`) es **la fecha más cercana que todavía
+no pasó**. Se publica y aparece sola; el `destacado = 1` es sólo para fijar una
+a mano cuando el dueño quiere otra.
+
+Las seis horas de gracia que aparecen en todos lados son para que una fiesta no
+desaparezca de la web mientras todavía se está haciendo.
 
 ## Cómo está atado
 
@@ -65,3 +87,13 @@ rompería en unos días.
   propiedad del esquema. Aun así contesta cortito: por eso `/api/asistente` hace una
   segunda llamada en texto libre sólo para el `detalle`, y decide `tipo` en el código
   (una regex sobre el texto del dueño), no en el modelo.
+- **Los modelos con visión de Workers AI no son todos usables.**
+  `llama-3.2-11b-vision-instruct` pide aceptar una licencia antes de correr, y
+  `llava-1.5-7b` inventa. El que anda sin trámite y lee bien un flyer es
+  `@cf/meta/llama-4-scout-17b-16e-instruct`, con la imagen como `image_url`
+  (data URI) dentro de `messages`.
+- **Cuando el flyer dice una cosa y el dueño escribió otra, el modelo se planta
+  y devuelve el título vacío.** El prompt le aclara que manda lo que escribió el
+  dueño, y si aun así vuelve vacío, `/api/asistente` reintenta con el texto solo.
+- **El `falta` que devuelve el modelo miente**: listaba campos que había
+  completado. Se calcula en el código, mirando qué quedó vacío de verdad.
