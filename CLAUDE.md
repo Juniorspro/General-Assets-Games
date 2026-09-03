@@ -269,6 +269,79 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima tercera vuelta (2026-09-03): **PUERTA BLANCA** — un grito propio para cada entidad
+
+Pedido: *"recorta estos 7 audios y agregalos como screams de cada entidad, dale a cada entidad un
+scream distinto (dale el scream que creas más adecuado a cada entidad)"*, con siete MP3 de Freesound
+y de jusatti890 adjuntos. Vive en `herramientas/puerta/hornear_gritos.py`, que conserva el nombre del
+archivo de origen de cada uno.
+
+#### LAS OCHO ENTIDADES SONABAN TODAS IGUAL
+
+`triggerScreamer(kind, ref)` tiene ocho disparadores —`entity · dog · wrap · saw · ape · exec · axe ·
+spider`— y los ocho llamaban a **la misma** `playScreech()`, que es un oscilador. O sea que el simio
+del calabozo y la araña del local gritaban con la misma onda cuadrada.
+
+#### EL REPARTO SALE DE MEDIR LOS SIETE, NO DE ESCUCHARLOS
+
+No puedo escuchar, así que lo que decide es lo que se puede medir: **cuánto dura** y **qué tan agudo
+es** —los cruces por cero por segundo, que es un proxy grosero del brillo— y con eso cada entidad se
+lleva el que le corresponde **por tamaño**:
+
+| archivo | dur | zc | a quién |
+|---|---|---|---|
+| monsterscream345668 | 1,30 s | 2074 | **entity** · la criatura del campo (corto y seco) |
+| scaryscream381274 | 5,43 s | **1958** | **ape** · el simio (el más grave de los siete) |
+| scream40662 | 3,34 s | **4303** | **wrap** · la cosa de la escuela (el más agudo y fino) |
+| sfx490899 | 18,24 s | 2861 | **saw** · la biblioteca |
+| sfx490909 | 30,02 s | 2286 | **exec** · el verdugo **y su hacha** |
+| sfx490884 | 10,03 s | 2863 | **dog** · el perro |
+| sfx490905 | 18,24 s | 2964 | **spider** · la araña |
+
+**EL VERDUGO Y EL HACHA COMPARTEN, y es lo correcto:** siete archivos para ocho disparadores, y el par
+que se repite tiene que ser el que en la ficción **es una sola cosa** — el hacha la tira él.
+
+#### SE RECORTA LA RÁFAGA DE MÁS ENERGÍA Y NO EL PICO MÁS ALTO
+
+Un archivo de treinta segundos trae respiraciones, ambiente y a veces un chasquido al final que **mide
+más que el grito**: quedándose con el pico se recorta el chasquido. La energía —amplitud *por*
+duración— no se deja engañar. Es la lección de los ladridos de RECREO, y acá encima hacía falta la
+suma acumulada de cuadrados: barriendo a lo bruto, treinta segundos por una ventana de dos son
+O(n·w) y el guion se arrastra.
+
+Y **entra y sale con rampa** (20 ms y 280 ms): un corte en seco en medio de un grito da un click que
+se escucha más que el grito.
+
+#### DOS GRITOS ENCIMA NO SON MÁS MIEDO: SON DISTORSIÓN
+
+Medido disparando los siete con 300 ms de separación —o sea superpuestos, porque duran de 1,3 a
+2,2 s— el nivel del maestro **se acumulaba hasta pico 1,66 y rms 0,52**, o sea recortando. En el juego
+no puede pasar (`triggerScreamer` sale si ya hay uno y deja `catchGuard` en 4), pero la red cuesta
+cinco líneas: **el grito es una sola voz y el nuevo corta al anterior**. Medido después: pico 0,42 a
+0,72 y rms 0,22-0,24 en los siete, o sea sin suma. Es la regla de «hay un personaje, o sea una boca»
+de RECREO.
+
+#### EL NIVEL ES EL MÁS ALTO DEL JUEGO, Y TIENE QUE SERLO
+
+rms **0,22** contra 0,150 de un monstruo, 0,110 de una acción y 0,055 de la cama: el screamer es el
+único momento en que el juego habla más fuerte que el jugador. Medido sobre el MP3 ya escrito, con el
+mismo lazo cerrado de la vuelta 91.
+
+**Y LOS GRITOS ENTRAN EN LA MISMA BOLSA** que los otros veinticinco sonidos (`PB_SON_B` es la unión de
+los dos blobs): así los decodifica el mismo lazo, los mide la misma sonda y salen por el mismo
+maestro. Dos caminos de audio en paralelo es lo que garantiza que uno de los dos quede sin probar. Y
+`playScreech()` **queda de red**: sin muestra, el susto suena igual.
+
+#### MEDIDO AL CERRAR
+
+**32 declarados, 32 decodificados, 0 fallados** (25 sonidos + 7 gritos). Los siete disparados uno por
+uno: los siete suenan, con `axe` resolviendo al alias de `exec`, y un `kind` inexistente devuelve
+`false` —o sea que la red del oscilador se puede alcanzar—. **Y el camino de verdad está probado**: la
+araña traída al lado del jugador en el local lo agarra y `__pbGritoUlt` queda en **`spider`**, no en un
+grito compartido. Niveles: rms 0,217-0,241 y pico 0,42-0,72, sin acumulación. `window.__errs` y
+`window.__pbFallas` vacíos en las dos corridas. El HTML pasó de 3,53 a **3,61 MB**, y esos 73 KB son
+los siete gritos.
+
 ### Nonagésima segunda vuelta (2026-09-03): **PUERTA BLANCA** — el epílogo: un cuarto blanco y una puerta negra
 
 Pedido: *"cuando el jugador pase la última puerta del último nivel sea llevado a una habitación

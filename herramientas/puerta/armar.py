@@ -56,6 +56,7 @@ n6_js = io.open(os.path.join(ASSETS, 'n6.js'), encoding='utf8').read()
 pbr_js = io.open(os.path.join(ASSETS, 'pbr.js'), encoding='utf8').read()
 campo_js = io.open(os.path.join(ASSETS, 'campo.js'), encoding='utf8').read()
 audio_js = io.open(os.path.join(ASSETS, 'audio.js'), encoding='utf8').read()
+gritos_js = io.open(os.path.join(ASSETS, 'gritos.js'), encoding='utf8').read()
 
 assets = """
 <script>
@@ -64,8 +65,8 @@ assets = """
    horneado con herramientas/puerta/. Van en su propio <script> a proposito:
    asi la parte del juego que uno lee no empieza con medio mega de base64. */
 window.__PB_CIELO = '%s';
-%s%s%s%s%s%s</script>
-""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js, campo_js, audio_js)
+%s%s%s%s%s%s%s</script>
+""" % (cielo_b64, pasto_js, flores_js, n6_js, pbr_js, campo_js, audio_js, gritos_js)
 
 s = s if SOLO else cambiar(s, '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
@@ -1351,10 +1352,12 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
     // `oye(n)` dispara uno y devuelve el nivel MEDIDO en el maestro.
     audio: function () {
       return { declarados: Object.keys(PB_SON_B).length, decodificados: pbSonListo,
+               gritos: Object.keys(window.__PB_GRITO || {}).length,
                fallados: pbSonFalla, cama: PB_CAMA.nom, suena: !!PB_CAMA.src,
                nivel: pbSonNivel() };
     },
     oye: function (n) { const ok = pbSon(n, 1); return { sono: ok, nivel: pbSonNivel() }; },
+    grita: function (k) { const ok = pbGrito(k); return { sono: ok, nivel: pbSonNivel() }; },
     // EL EPILOGO. `blanco()` salta al cuarto blanco sin jugar los seis niveles;
     // `blancoVer()` devuelve su estado.
     blanco: function () { pbPaso = PB_ORDEN.length; fadeTo(entraBlanco); return 'white'; },
@@ -1432,6 +1435,13 @@ s = s if SOLO else cambiar(s, blanco.VIEJO_FIN, blanco.NUEVO_FIN, 'la ultima pue
 s = s if SOLO else cambiar(s, blanco.VIEJO_CADENA, blanco.NUEVO_CADENA, 'la logica del cuarto blanco')
 s = s if SOLO else cambiar(s, blanco.VIEJO_ESCONDE, blanco.NUEVO_ESCONDE, 'apagar el cuarto blanco')
 s = s if SOLO else cambiar(s, blanco.CAMA[0], blanco.CAMA[1], 'la cama del cuarto blanco')
+
+# CADA ENTIDAD TIENE SU GRITO
+s = s if SOLO else cambiar(s, "    playScreech();\n    if (kind === 'saw') playGiggle(0.22);",
+    """    // EL GRITO ES EL DE ESA ENTIDAD, y el oscilador queda de red: sin
+    // muestra —un navegador que no decodifica— el susto tiene que sonar igual.
+    if (!pbGrito(kind)) playScreech();
+    if (kind === 'saw') playGiggle(0.22);""", 'el grito de cada entidad')
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {

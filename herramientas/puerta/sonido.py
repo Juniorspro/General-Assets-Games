@@ -27,7 +27,12 @@ JS = r"""
   // ==================================================================
   // LOS SONIDOS GENERADOS
   // ==================================================================
-  const PB_SON_B = window.__PB_SON || {};
+  // LOS GRITOS ENTRAN EN LA MISMA BOLSA que el resto: asi los decodifica el
+  // mismo lazo, los mide la misma sonda y suenan por el mismo maestro. Dos
+  // caminos de audio en paralelo es lo que garantiza que uno de los dos quede
+  // sin probar.
+  const PB_SON_B = Object.assign({}, window.__PB_SON || {}, window.__PB_GRITO || {});
+  const PB_GRITO_ALIAS = window.__PB_GRITO_ALIAS || {};
   const PB_SON_BUF = {};
   let pbSonMaster = null, pbSonAna = null, pbSonListo = 0, pbSonFalla = 0;
 
@@ -71,6 +76,33 @@ JS = r"""
       g.gain.value = (vol === undefined ? 1 : vol);
       src.connect(g); g.connect(pbSonMaster);
       src.start();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // EL GRITO DE CADA ENTIDAD. Devuelve false si no hay muestra, para que el
+  // screamer caiga al oscilador de siempre.
+  //
+  // Y ES UNA SOLA VOZ: el grito nuevo CORTA al anterior. En el juego dos no se
+  // pisan —`triggerScreamer` sale si ya hay uno y deja `catchGuard` en 4— pero
+  // medido disparando siete seguidos, la suma llega a pico 1,66, o sea
+  // recortando. Un grito encima de otro no es mas miedo: es distorsion.
+  let pbGritoSrc = null;
+  function pbGrito(kind) {
+    const ctx = pbSonArranca();
+    const k = PB_GRITO_ALIAS[kind] || kind;
+    const buf = ctx && PB_SON_BUF['s_' + k];
+    if (!buf) return false;
+    try {
+      if (pbGritoSrc) { try { pbGritoSrc.stop(); } catch (e) {} }
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain(); g.gain.value = 1;
+      src.connect(g); g.connect(pbSonMaster);
+      src.onended = function () { if (pbGritoSrc === src) pbGritoSrc = null; };
+      src.start();
+      pbGritoSrc = src;
+      window.__pbGritoUlt = k;   // para el banco: que grito sono de verdad
       return true;
     } catch (e) { return false; }
   }
