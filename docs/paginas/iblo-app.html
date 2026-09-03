@@ -280,9 +280,11 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
 .deIg{margin-top:20px; padding:17px; border-radius:var(--curva);
   background:linear-gradient(135deg,rgba(195,75,255,.14),rgba(255,30,142,.1));
   border:1px solid var(--linea)}
-.deIg .txt b{display:block; font:400 21px/1.05 var(--gordo); text-transform:uppercase}
+/* «>» a propósito: sin eso agarra también los <b> del párrafo y salían tamaño título */
+.deIg .txt > b{display:block; font:400 21px/1.05 var(--gordo); text-transform:uppercase}
 .deIg .txt small{display:block; margin:6px 0 14px; color:var(--tenue); font-size:13.5px; line-height:1.45}
 .deIg .txt small span{color:var(--ac)}
+.deIg .txt small b{color:var(--papel); font-weight:700}
 .acc.nuevo{border-color:rgba(195,75,255,.5)}
 .acc.nuevo .ico{background:rgba(195,75,255,.16); color:#dcaaff}
 
@@ -360,6 +362,18 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
 .bloqueProp > .cual b{color:var(--ac); font-family:var(--cond)}
 .bloqueProp .noSalio{padding:14px 15px; border-radius:14px; font-size:14px;
   border:1px dashed var(--linea); color:var(--tenue)}
+
+/* ---------- candidatos: de dónde salió cada uno ---------- */
+.cand{position:relative}
+.cand .sello2{position:absolute; right:13px; top:13px; padding:4px 10px; border-radius:999px;
+  font:600 9.5px/1.5 var(--cond); letter-spacing:.14em; text-transform:uppercase;
+  background:rgba(255,255,255,.08); color:var(--tenue)}
+.cand.deHistoria{border-color:rgba(195,75,255,.42)}
+.cand.deHistoria .sello2{background:rgba(195,75,255,.18); color:#dcaaff}
+.cand h4{padding-right:82px}
+.yaEsta{margin-top:11px; padding:12px 14px; border-radius:13px; font-size:13.5px; line-height:1.5;
+  border:1px dashed rgba(232,191,78,.5); background:rgba(232,191,78,.07); color:#f0dfa8}
+.yaEsta b{color:#ffe9a8}
 </style>
 <div class="luzFondo" aria-hidden="true"></div>
 <div class="grano" aria-hidden="true"></div>
@@ -462,8 +476,9 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
       <div class="deIg">
         <div class="txt">
           <b>Traelo de Instagram</b>
-          <small>Lee las <b>publicaciones</b> de <span>@iblo_eventos</span> y arma las que anuncian
-                 algo. Las <b>historias</b> no las puede leer: de esas mandale una captura acá abajo.</small>
+          <small>Lee las <b>historias</b> y las <b>publicaciones</b> de <span>@iblo_eventos</span>,
+                 arma las que anuncian algo y te las muestra para que las subas vos.
+                 Lo que ya subiste no lo repite.</small>
         </div>
         <button class="bt p" id="btNuevo" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
@@ -1224,8 +1239,8 @@ pintarTira();
 $("btVerIA").addEventListener("click", llamarIA);
 
 /* ---------- el botón «Nuevo»: lo último de Instagram ----------
-   Trae candidatos armados y los muestra; no sube nada hasta que el dueño toca
-   «Publicar» en el que quiera. */
+   Lee las historias y las publicaciones del feed, arma los candidatos y los
+   muestra; no sube nada hasta que el dueño toca en el que quiera. */
 function traerDeIg(){
   var bt = $("btNuevo"), original = bt.innerHTML;
   decir("avisoNuevo", "");
@@ -1236,44 +1251,63 @@ function traerDeIg(){
   pedir("/sugerir", { metodo:"POST", cuerpo:{} })
     .then(function(j){
       var c = j.candidatos || [], d = j.descartadas || [];
+      var h = j.historias || {};
+
+      var resumen = [];
+      if (h.error) resumen.push("las historias no las pude ver");
+      else if (h.total) resumen.push(h.total + (h.total === 1 ? " historia" : " historias") + " en la cuenta");
+      if (j.quedan) resumen.push("quedan " + j.quedan + " sin mirar, tocá Nuevo de nuevo");
+
       if (!c.length){
-        decir("avisoNuevo", d.length
-          ? "Miré tus últimos posteos y no encontré nada para publicar."
-          : "No encontré posteos nuevos en Instagram.", "");
+        decir("avisoNuevo", (d.length
+          ? "Miré lo último y no encontré nada para publicar"
+          : "No encontré nada nuevo") +
+          (resumen.length ? ". " + resumen.join(", ") + "." : "."), h.error ? "mal" : "");
       } else {
-        decir("avisoNuevo", c.length === 1
-          ? "Encontré una. Mirala y si va, publicala."
-          : "Encontré " + c.length + ". Mirá cada una y publicá la que va.", "bien");
+        decir("avisoNuevo", "Encontré " + c.length + (c.length === 1 ? ". Mirala" : ". Mirá cada una") +
+          " y publicá la que va" + (resumen.length ? ". " + resumen.join(", ") + "." : "."), "bien");
       }
 
-      var h = c.map(function(p, i){
+      var html = c.map(function(p, i){
         var filas = [["Fecha", p.fecha], ["Lugar", p.lugar], ["Hora", p.hora], ["Precio", p.precio]]
           .filter(function(f){ return f[1]; })
           .map(function(f){ return '<div class="fila"><b>' + f[0] + '</b><span>' + esc(f[1]) + '</span></div>'; })
           .join("");
-        return '<div class="cand" data-i="' + i + '">' +
+        var deDonde = p.de === "historia" ? "De una historia" : "De un posteo";
+        if (p.juntadas > 1) deDonde = "De " + p.juntadas + " historias";
+        if (p.conFoto) deDonde += ", con su foto";
+
+        var botones = p.yaEsta
+          ? '<button class="bt p" type="button" data-hacer="act" data-i="' + i + '">Agregarle ' +
+              esc(p.yaEsta.suma.join(" y ")) + '</button>' +
+            '<button class="bt s" type="button" data-hacer="pub" data-i="' + i + '">Subirla aparte</button>'
+          : '<button class="bt p" type="button" data-hacer="pub" data-i="' + i + '">Publicar</button>' +
+            '<button class="bt s" type="button" data-hacer="edit" data-i="' + i + '">Editar y decorar</button>';
+
+        return '<div class="cand' + (p.de === "historia" ? " deHistoria" : "") + '" data-i="' + i + '">' +
+          '<span class="sello2">' + (p.de === "historia" ? "Historia" : "Posteo") + '</span>' +
           '<h4>' + esc(p.titulo) + '</h4>' +
           (p.subtitulo ? '<span class="sub">' + esc(p.subtitulo) + '</span>' : '') +
           filas +
           (p.detalle ? '<p>' + esc(p.detalle) + '</p>' : '') +
-          '<span class="pista" style="margin-top:9px">De tu posteo de Instagram' +
-            (p.conFoto ? ", con su foto" : "") + '.</span>' +
-          '<div class="dosBotones">' +
-            '<button class="bt p" type="button" data-hacer="pub" data-i="' + i + '">Publicar</button>' +
-            '<button class="bt s" type="button" data-hacer="edit" data-i="' + i + '">Editar y decorar</button>' +
-          '</div></div>';
+          (p.yaEsta
+            ? '<div class="yaEsta">Esta fiesta <b>ya está publicada</b> como «' + esc(p.yaEsta.titulo) +
+              '». Lo nuevo que trae es ' + esc(p.yaEsta.suma.join(" y ")) + '.</div>'
+            : '') +
+          '<span class="pista" style="margin-top:9px">' + deDonde + '.</span>' +
+          '<div class="dosBotones">' + botones + '</div></div>';
       }).join("");
 
       if (d.length){
         var por = {};
         d.forEach(function(x){ por[x.por] = (por[x.por] || 0) + 1; });
-        h += '<div class="saltadas"><b>No usé ' + d.length +
-             (d.length === 1 ? " posteo:</b> " : " posteos:</b> ") +
+        html += '<div class="saltadas"><b>No usé ' + d.length +
+             (d.length === 1 ? " cosa:</b> " : " cosas:</b> ") +
              Object.keys(por).map(function(k){ return k + " (" + por[k] + ")"; }).join(", ") + '.</div>';
       }
       candidatosIg = c;
-      $("resNuevo").innerHTML = h;
-      $("resNuevo").hidden = !h;
+      $("resNuevo").innerHTML = html;
+      $("resNuevo").hidden = !html;
     })
     .catch(function(e){ decir("avisoNuevo", e.message, "mal"); })
     .then(function(){ bt.disabled = false; bt.innerHTML = original; });
@@ -1285,24 +1319,33 @@ $("accNuevo").addEventListener("click", function(){ irA("pAsis"); traerDeIg(); }
 $("resNuevo").addEventListener("click", function(ev){
   var b = ev.target.closest("button[data-hacer]"); if (!b) return;
   var p = candidatosIg[+b.dataset.i]; if (!p) return;
+  var caja = b.closest(".cand");
 
   if (b.dataset.hacer === "edit"){
     /* la foto vive en el servidor; el formulario la vuelve a pedir al publicar */
     volcarEnFormulario(p, "");
     origenPendiente = p.codigo;
-    decir("avisoCargar", "Sale de tu posteo de Instagram. La foto se le pega sola al publicar.", "");
+    decir("avisoCargar", "Sale de " + (p.de === "historia" ? "una historia" : "un posteo") +
+      " tuyo. La foto se le pega sola al publicar.", "");
     return;
   }
-  var caja = b.closest(".cand");
+
+  var actualiza = b.dataset.hacer === "act";
+  var texto = b.textContent;
   b.disabled = true;
-  cargando(b, true, "Publicar");
-  pedir("/publicaciones", { metodo:"POST", cuerpo: cuerpoDe(p, { origen: p.codigo }) })
+  cargando(b, true, texto);
+  var cuerpo = cuerpoDe(p, { origen: p.codigo });
+  if (actualiza) cuerpo.actualizar = p.yaEsta.id;
+
+  pedir("/publicaciones", { metodo:"POST", cuerpo: cuerpo })
     .then(function(){
       caja.innerHTML = '<h4>' + esc(p.titulo) + '</h4>' +
-        '<span class="pista" style="margin-top:7px">Publicada. Ya se ve en la web.</span>';
+        '<span class="pista" style="margin-top:7px">' +
+        (actualiza ? "Actualizada. Ya se ve en la web con lo nuevo." : "Publicada. Ya se ve en la web.") +
+        '</span>';
       refrescarTablero();
     })
-    .catch(function(e){ cargando(b, false, "Publicar"); b.disabled = false; decir("avisoNuevo", e.message, "mal"); });
+    .catch(function(e){ cargando(b, false, texto); b.disabled = false; decir("avisoNuevo", e.message, "mal"); });
 });
 
 /* ---------- cargar a mano ---------- */

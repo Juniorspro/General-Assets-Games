@@ -1,23 +1,24 @@
 import { json, preflight, exigirSesion } from "./_comun.js";
 import { limpiarPublicacion } from "./_pub.js";
-import { proponer, sinAdornos } from "./_ia.js";
+import { proponer } from "./_ia.js";
 import { sincronizar } from "./_ig.js";
+import { traerHistorias, bajarMedio } from "./_historias.js";
 export const onRequestOptions = preflight;
 
-/* El botón «Nuevo» de la app: trae lo último de Instagram y arma las
-   publicaciones que valen la pena, pero NO las sube. Devuelve los candidatos
-   para que el dueño los mire y toque publicar el que quiera; el que toca sube
-   por `POST /api/publicaciones` con el `origen` puesto, y de ahí sale también
-   la foto del posteo sin volver a subirla.
+/* El botón «Nuevo» de la app: mira lo último de Instagram —las publicaciones del
+   feed y las historias— y arma las que valen la pena, pero NO las sube. Devuelve
+   los candidatos para que el dueño los mire y toque publicar el que quiera.
    Un posteo no se propone dos veces: al publicarlo queda su código en `origen`. */
 
-const CUANTOS = 5;      /* posteos que revisa por toque */
-const MINIMO  = 30;     /* pie de foto más corto que esto no se mira */
-const GRACIA  = 6 * 3600e3;
+const CUENTA    = "iblo_eventos";
+const TOPE      = 4;    /* cuántas se piensan por toque: cada una son ~12 segundos */
+const MINIMO    = 30;   /* pie de foto más corto que esto no se mira */
+const GRACIA    = 6 * 3600e3;
 
 /* Un pie de foto que no nombra ni una fecha ni un precio no anuncia nada: son las
    fotos de la fiesta del finde, los agradecimientos, los memes. Se descartan sin
-   gastar una llamada a la IA, y de paso evita que invente una fecha que no existe. */
+   gastar una llamada a la IA, y de paso evita que invente una fecha que no existe.
+   A las historias no se les aplica: no tienen texto, la imagen es todo. */
 const FECHA_SUELTA = /\b\d{1,2}\s*[/.\-]\s*\d{1,2}\b|\b\d{1,2}\s+de\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)/i;
 const PLATA = /\$\s*\d|\b\d{1,3}\s*mil\b|\bpreventa\b|\bentradas?\b.{0,20}\b\d/i;
 export function pareceAviso(texto) {
@@ -25,88 +26,149 @@ export function pareceAviso(texto) {
   return FECHA_SUELTA.test(t) || PLATA.test(t);
 }
 
+/* Los códigos de historia se guardan con prefijo para no chocar con los del feed */
+const claveHistoria = (id) => "st:" + id;
+
 export async function onRequestPost({ request, env }) {
   const usuario = await exigirSesion(request, env);
   if (!usuario) return json({ error: "Volvé a iniciar sesión." }, 401);
   if (!env.AI) return json({ error: "La IA no está disponible." }, 503);
   if (!env.DB) return json({ error: "sin base de datos" }, 503);
 
-  /* primero traemos lo último de Instagram, para pensar con datos frescos */
+  /* lo que ya se usó alguna vez, sea posteo o historia */
+  const usados = new Set(
+    ((await env.DB.prepare(
+      "SELECT origen FROM publicaciones WHERE origen IS NOT NULL"
+    ).all()).results || []).map((r) => r.origen)
+  );
+
+  const descartadas = [];
+  const cola = [];      /* lo que se va a pensar, en orden de prioridad */
+
+  /* ---------- 1. las historias, que son lo más fresco ---------- */
+  let hist = { historias: [] };
+  try { hist = await traerHistorias(CUENTA); } catch (e) { hist = { error: String(e).slice(0, 90) }; }
+
+  for (const h of hist.historias || []) {
+    if (usados.has(claveHistoria(h.id))) continue;
+    cola.push({ de: "historia", clave: claveHistoria(h.id), medio: h.medio });
+  }
+  const historiasNuevas = cola.length;
+
+  /* ---------- 2. las publicaciones del feed ---------- */
   let sync = null;
   try { sync = await sincronizar(env); } catch (e) { sync = { error: String(e).slice(0, 120) }; }
 
-  /* los posteos que todavía no se usaron para publicar nada */
   const r = await env.DB.prepare(
-    `SELECT codigo, texto, imagen, publicado FROM ig
-     WHERE length(texto) >= ?
-       AND codigo NOT IN (SELECT origen FROM publicaciones WHERE origen IS NOT NULL)
-     ORDER BY publicado DESC LIMIT ?`
-  ).bind(MINIMO, CUANTOS).all();
-  const posts = r.results || [];
-  if (!posts.length) return json({ candidatos: [], descartadas: [], revisados: 0, sync, sinNovedad: true });
+    `SELECT codigo, texto, imagen FROM ig WHERE length(texto) >= ? ORDER BY publicado DESC LIMIT 12`
+  ).bind(MINIMO).all();
 
-  const descartadas = [];
-  const mirables = posts.filter((p) => {
-    if (pareceAviso(p.texto)) return true;
-    descartadas.push({ codigo: p.codigo, por: "no anuncia nada, son fotos o saludos" });
-    return false;
-  });
+  for (const post of r.results || []) {
+    if (usados.has(post.codigo)) continue;
+    if (!pareceAviso(post.texto)) {
+      descartadas.push({ codigo: post.codigo, de: "publicación", por: "no anuncia nada, son fotos o saludos" });
+      continue;
+    }
+    cola.push({ de: "publicacion", clave: post.codigo, texto: post.texto, imagenYa: post.imagen || "" });
+  }
 
-  /* Cada posteo se piensa con el mismo motor que usa el asistente: el pie de
-     foto hace de «lo que dijo el dueño» y la foto de flyer. Todos a la vez. */
-  const pensados = await Promise.all(
-    mirables.map((p) =>
-      proponer(env, p.texto, p.imagen || "").catch(() => ({ error: "no la pude leer" }))
-    )
-  );
+  if (!cola.length) {
+    return json({ candidatos: [], descartadas, revisados: 0, sync,
+                  historias: hist.error ? { error: hist.error } : { total: (hist.historias || []).length },
+                  sinNovedad: true });
+  }
 
-  const ahora = Date.now();
+  const quedan = Math.max(0, cola.length - TOPE);
+  const mirar = cola.slice(0, TOPE);
+
+  /* ---------- 3. pensarlas, de a una ----------
+     En paralelo la IA se degrada y devuelve cualquier cosa; medido y sufrido. */
   const candidatos = [];
+  const ahora = Date.now();
 
-  for (let i = 0; i < mirables.length; i++) {
-    const post = mirables[i], res = pensados[i];
-    if (res.error) { descartadas.push({ codigo: post.codigo, por: res.error }); continue; }
+  for (const it of mirar) {
+    let imagen = it.imagenYa || "";
+    if (it.de === "historia") {
+      try { imagen = await bajarMedio(it.medio); } catch { imagen = ""; }
+      if (!imagen) {
+        descartadas.push({ codigo: it.clave, de: "historia", por: "no pude bajar la imagen" });
+        continue;
+      }
+      /* La guardamos igual que un posteo: así al publicar la app manda sólo el
+         código y la foto no viaja de vuelta —son cientos de kilobytes— y de paso
+         queda registrada para no volver a bajarla. */
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO ig (codigo, texto, imagen, tipo, publicado, guardado) VALUES (?,?,?,?,?,?)"
+      ).bind(it.clave, "", imagen, "historia", Date.now(), Date.now()).run();
+    }
+
+    let res;
+    try { res = await proponer(env, it.texto || "", imagen); }
+    catch { res = { error: "no la pude leer" }; }
+    if (res.error) { descartadas.push({ codigo: it.clave, de: it.de, por: res.error }); continue; }
 
     const p = res.propuesta, ms = res.cuandoMs;
 
-    /* un aviso de una fiesta que ya pasó no es novedad */
     if (ms && ms < ahora - GRACIA) {
-      descartadas.push({ codigo: post.codigo, por: "la fecha ya pasó" });
-      continue;
+      descartadas.push({ codigo: it.clave, de: it.de, por: "la fecha ya pasó" }); continue;
     }
-    /* sin fecha y sin precio no hay nada que anunciar */
     if (!ms && !p.precio) {
-      descartadas.push({ codigo: post.codigo, por: "no dice ni fecha ni precio" });
-      continue;
+      descartadas.push({ codigo: it.clave, de: it.de, por: "no dice ni fecha ni precio" }); continue;
     }
 
-    /* El dueño suele tener la fiesta ya cargada a mano antes de postearla en IG.
-       Si hay una publicada con la misma fecha (mismo día) o el mismo nombre, es
-       la misma: no la duplicamos, sólo dejamos anotado de qué posteo salió para
-       no volver a mirarlo. */
-    const repe = await env.DB.prepare(
-      `SELECT id, titulo FROM publicaciones
-       WHERE estado = 'publicada'
-         AND ((? > 0 AND cuando > 0 AND abs(cuando - ?) < 43200000)
-              OR lower(titulo) = lower(?))
-       LIMIT 1`
-    ).bind(ms, ms, p.titulo).first();
-    if (repe) {
-      await env.DB.prepare(
-        "UPDATE publicaciones SET origen = ? WHERE id = ? AND origen IS NULL"
-      ).bind(post.codigo, repe.id).run();
-      descartadas.push({ codigo: post.codigo, por: "ya estaba publicada («" + repe.titulo + "»)" });
-      continue;
-    }
-
-    /* lo pasamos por la misma limpieza que si lo estuviéramos guardando, así lo
-       que el dueño ve en la app es exactamente lo que se va a publicar */
     const { error, fila } = limpiarPublicacion({ ...p, cuando: ms, destacado: false });
-    if (error) { descartadas.push({ codigo: post.codigo, por: error }); continue; }
+    if (error) { descartadas.push({ codigo: it.clave, de: it.de, por: error }); continue; }
 
-    /* la foto no viaja: son cientos de kilobytes cada una y ya está en el server */
-    candidatos.push({ ...fila, codigo: post.codigo, conFoto: !!post.imagen, falta: p.falta || [] });
+    /* Dos historias seguidas suelen ser de la misma fiesta: la primera con el
+       flyer y la segunda con el precio. Si ya hay un candidato igual en esta
+       misma tanda, no se ofrece dos veces; se le completa lo que le falte. */
+    const igual = candidatos.find((c) =>
+      c.titulo.toLowerCase() === fila.titulo.toLowerCase() ||
+      (ms > 0 && c.cuando > 0 && Math.abs(c.cuando - ms) < 43200000));
+    if (igual) {
+      for (const campo of ["subtitulo","detalle","fecha","lugar","hora","precio"]) {
+        if (!igual[campo] && fila[campo]) igual[campo] = fila[campo];
+      }
+      if (!igual.cuando && ms) igual.cuando = ms;
+      igual.juntadas = (igual.juntadas || 1) + 1;
+      continue;
+    }
+
+    /* ¿ya hay una publicación de esta misma fiesta? Mismo día o mismo nombre.
+       No la descartamos: puede traer un dato que a la otra le falta —el precio,
+       casi siempre, porque en la historia lo ponen y en el posteo no—. */
+    const repe = await env.DB.prepare(
+      `SELECT id, titulo, precio, imagen FROM publicaciones
+       WHERE estado = 'publicada'
+         AND ((? > 0 AND cuando > 0 AND abs(cuando - ?) < 43200000) OR lower(titulo) = lower(?))
+       LIMIT 1`
+    ).bind(ms, ms, fila.titulo).first();
+
+    let yaEsta = null;
+    if (repe) {
+      const suma = [];
+      if (fila.precio && !repe.precio) suma.push("el precio");
+      if (fila.imagen && !repe.imagen) suma.push("la foto");
+      yaEsta = { id: repe.id, titulo: repe.titulo, suma };
+      if (!suma.length) {
+        /* nada nuevo que aportar: se anota el origen para no volver a mirarla */
+        await env.DB.prepare(
+          "UPDATE publicaciones SET origen = ? WHERE id = ? AND origen IS NULL"
+        ).bind(it.clave, repe.id).run();
+        descartadas.push({ codigo: it.clave, de: it.de,
+                           por: "ya estaba publicada («" + repe.titulo + "»)" });
+        continue;
+      }
+    }
+
+    /* la foto no viaja: ya está del lado del servidor, se busca por el código */
+    const { imagen: _f, ...liviana } = fila;
+    candidatos.push({ ...liviana, codigo: it.clave, de: it.de, conFoto: !!imagen,
+                      yaEsta, falta: p.falta || [] });
   }
 
-  return json({ candidatos, descartadas, revisados: posts.length, sync });
+  return json({
+    candidatos, descartadas, revisados: mirar.length, quedan, sync,
+    historias: hist.error ? { error: hist.error } : { total: (hist.historias || []).length, nuevas: historiasNuevas },
+  });
 }

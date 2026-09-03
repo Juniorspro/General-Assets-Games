@@ -46,7 +46,12 @@ const ESQUEMA = {
 /* El modelo a veces escribe la palabra «falta» en vez de dejar el campo vacío. */
 const VACIO = /^(falta|faltante|no especificado|sin datos|n\/?a|ninguno|desconocido|-{1,3})$/i;
 const limpiar = (v, n) => {
-  const t = String(v == null ? "" : v).replace(/^["'\s,.:;]+|["'\s,.:;]+$/g, "").slice(0, n);
+  const t = String(v == null ? "" : v)
+    /* el modelo a veces escapa comillas y acentos y quedaba «Margarita Bel\'en» */
+    .replace(/\\(['"`])/g, "$1")
+    .replace(/\\(?=[a-záéíóúñ])/gi, "")
+    .replace(/^["'\s,.:;]+|["'\s,.:;]+$/g, "")
+    .slice(0, n);
   return VACIO.test(t) ? "" : t;
 };
 /* los pies de foto de Instagram vienen cargados de emojis, hashtags y arrobas */

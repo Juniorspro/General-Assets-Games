@@ -51,6 +51,33 @@ export async function onRequestPost({ request, env }) {
   const { error, fila } = limpiarPublicacion(b);
   if (error) return json({ error }, 400);
 
+  /* Actualizar una que ya está en vez de subir otra igual. Pasa seguido con las
+     historias: el dueño ya cargó la fiesta y la historia trae un dato nuevo
+     —el precio, casi siempre—. Sólo se pisan los campos que vienen con algo. */
+  const actualizar = Number(b.actualizar || 0);
+  if (actualizar) {
+    const antes = await env.DB.prepare(
+      "SELECT * FROM publicaciones WHERE id = ?"
+    ).bind(actualizar).first();
+    if (!antes) return json({ error: "Esa publicación ya no está." }, 404);
+
+    /* Sólo se completa lo que está vacío. Nunca se pisa lo que el dueño ya
+       cargó: la primera versión reemplazaba el lugar que él había escrito bien
+       («Club Juventud, Margarita Belén») por la lectura del flyer, que venía
+       peor. Agregar sí, sobrescribir no. */
+    const campos = ["subtitulo","detalle","fecha","cuando","lugar","hora",
+                    "precio","imagen","adorno","adorno_pos"];
+    const nuevos = campos.filter((c) => fila[c] && !antes[c]);
+    if (!nuevos.length) return json({ error: "No hay nada nuevo que ponerle." }, 400);
+
+    await env.DB.prepare(
+      "UPDATE publicaciones SET " + nuevos.map((c) => c + " = ?").join(", ") +
+      ", origen = COALESCE(origen, ?), tocado = ? WHERE id = ?"
+    ).bind(...nuevos.map((c) => fila[c]), origen || null, Date.now(), actualizar).run();
+
+    return json({ ok: true, id: actualizar, actualizada: true, cambio: nuevos });
+  }
+
   const id = await guardar(env, fila, usuario, origen || null);
   const { imagen, adorno, ...liviana } = fila;
   return json({ ok: true, id, publicacion: { id, ...liviana, conFoto: !!imagen, conAdorno: !!adorno } });

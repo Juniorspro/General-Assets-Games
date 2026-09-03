@@ -60,46 +60,65 @@ Ojo con esa guardia: **a la fecha no se le aplica**. «6 de diciembre» sale com
 Las miniaturas se guardan en su lugar, no con `push`: comprimir es asincrónico y
 terminaban en orden distinto del que las eligió el dueño.
 
-## Historias: no
+## Historias
 
-El botón «Nuevo» lee **publicaciones del feed**, no historias. La ruta del feed
-(`/api/v1/feed/user/<cuenta>/username/`) anda sin sesión con el `X-IG-App-ID`
-del cliente web, pero las historias y los destacados no: probadas sin sesión,
-`highlights_tray`, `reels_tray` y `reels_media` devuelven vacío o nada.
+Sí, se leen. La ruta del feed de Instagram anda sin sesión, pero las historias
+no: `highlights_tray`, `reels_tray` y `reels_media` devuelven vacío sin cuenta.
+Así que salen de un visor público, que es lo que usa cualquiera para verlas sin
+loguearse.
 
-Los espejos que las muestran sin login (insta-story y compañía) no son base para
-esto: el endpoint de destacados que servía en septiembre ya tira 502. Montar el
-laburo diario del dueño sobre eso es que se rompa solo y en silencio.
+El detalle que costó: **casi todos esos visores están detrás de un captcha de
+Cloudflare** y un Worker es justo el bot que bloquean. Probados y descartados:
+anonyig (`CAPTCHA_REQUIRED` y encima pide firma), dumpor («Verify you are
+human»), imginn, storiesig, iganony, inflact, insta-story. El que contesta con un
+GET pelado es `insta-story-viewer.io`:
 
-Las dos salidas de verdad, si algún día se pide:
+    content.php?url=<cuenta>                    → perfil
+    content.php?url=<cuenta>&method=allstories  → historias
 
-- **La captura.** Es lo que hay hoy y no necesita nada: el dueño saca captura de
-  la historia y la manda por la solapa IA, que ya lee imágenes con `_ia.js`.
-- **La Graph API de Instagram**, que es la oficial. La cuenta es de empresa, así
-  que con una app de Meta y un token de larga duración se pueden leer las
-  historias propias. Hay que crear la app, vincular la cuenta, guardar el token
-  como secreto del Worker y renovarlo cada ~60 días.
+Devuelve `{"status":"ok","html":"…"}`. De cada tarjeta sacamos el **id del medio
+en Instagram**, que viene en el link de descarga (`…_iblo_eventos_39781187875…`);
+ese es el ancla para no proponer dos veces la misma. La foto fija sale del
+`poster` del video y se baja por el proxy del propio visor (`media.php`), que es
+el que lleva la firma del CDN de Instagram.
 
-## El botón «Nuevo»
+`_historias.js` está armado como **cadena de espejos**, no atado a un sitio: el
+día que ése se caiga o se ponga captcha se prueba el siguiente, y si no anda
+ninguno la app lo dice en vez de quedarse muda. Las publicaciones del feed no
+dependen de esto.
 
-`POST /api/sugerir` mira los posteos de `@iblo_eventos` y publica los que sirven.
+## El botón «Nuevo»## El botón «Nuevo»
+
+`POST /api/sugerir` mira las **historias** y los **posteos** de `@iblo_eventos` y
+devuelve los que sirven, armados como publicación. No sube nada.
 El orden en que filtra importa, porque cada paso ahorra el siguiente:
 
 1. **Los que ya se usaron quedan afuera.** Cuando publica algo desde un posteo, le
    guarda el código del posteo en `origen`. Así el botón se puede tocar todas las
    veces que se quiera sin repetir nada.
 2. **Prefiltro sin IA** (`pareceAviso` en `sugerir.js`): si el pie de foto no
-   nombra ni una fecha ni un precio, se descarta ahí mismo. Eso saca las fotos de
+   nombra ni una fecha ni un precio, se descarta ahí mismo. **A las historias no
+   se les aplica**: no tienen texto, la imagen es todo lo que hay. Eso saca las fotos de
    la fiesta del finde, los agradecimientos y los memes sin gastar una llamada, y
    —más importante— **evita que el modelo invente una fecha**, que es lo que hacía
    cuando se le daba un posteo sin fecha.
 3. **Cada posteo pasa por el mismo motor que el asistente** (`_ia.js`): el pie de
    foto hace de «lo que dijo el dueño» y la imagen de flyer. Todos en paralelo.
 4. **Se descarta lo que ya pasó** y lo que quedó sin fecha ni precio.
-5. **No duplica lo que ya está arriba**: si hay una publicación con la misma fecha
+5. **Junta las historias de la misma fiesta.** Suelen ser varias seguidas: una
+   con el flyer y otra con el precio. Si dos candidatos de la misma tanda tienen
+   el mismo nombre o el mismo día, se ofrecen como uno solo, completándose entre
+   ellos.
+6. **No duplica lo que ya está arriba**: si hay una publicación con la misma fecha
    (mismo día) o el mismo nombre, es la misma fiesta. No la vuelve a publicar; le
    anota el `origen` a la que ya estaba, para no volver a mirar ese posteo. Pasa
    seguido, porque el dueño carga la fiesta a mano antes de postearla en IG.
+   Pero si trae algo que a la publicada le falta —el precio, casi siempre, porque
+   en la historia lo ponen y en el posteo no— se ofrece como **«agregarle el
+   precio»**, que va por `POST /api/publicaciones` con `actualizar: <id>`.
+   Esa actualización **sólo completa lo vacío, nunca pisa** lo que el dueño
+   cargó: la primera versión le reemplazó un lugar bien escrito a mano por la
+   lectura del flyer, que venía peor.
 
 ## Nada se publica sin que el dueño lo vea
 
@@ -230,3 +249,9 @@ rompería en unos días.
 - **La línea «Onda:» del prompt se filtraba al título.** Es andamiaje nuestro
   para elegir el color; iba pegada a la transcripción y una publicación quedó
   llamándose «Onda: azul oscuro a negro degradé». Ahora viaja aparte y rotulada.
+- **Sólo se procesan cuatro por toque.** Cada una son unos doce segundos (visión,
+  extracción y el texto del aviso), y en paralelo la IA se degrada. La respuesta
+  dice cuántas quedaron sin mirar y la app lo muestra.
+- **La foto de la historia no viaja de vuelta.** Se guarda en la tabla `ig` con
+  el código `st:<id>`, igual que un posteo, así al publicar la app manda sólo el
+  código y `POST /api/publicaciones` la busca ahí.
