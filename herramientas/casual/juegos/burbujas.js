@@ -249,7 +249,25 @@ const JT = {
         tirosC:'TIROS', quedanC:'FALTAM' }
 };
 const PIEL = { ac:'#3fa9e0', tela:'fondo' };
-const SON_ALIAS = { bien:'pop', toque:'tiro', pierde:'perder', gana:'gana', clic:'clic' };
+const SON_ALIAS = { bien:'pop', toque:'suelta', pierde:'perder', gana:'gana',
+                    clic:'clic', caida:'caida' };
+
+/* ══════════ EL AMBIENTE ══════════
+   Adentro de un acuario. Las burbujas que suben están dibujadas como ANILLO con
+   un punto de luz y no como disco: un disco liso a este tamaño se lee a moneda,
+   y encima se confundiría con las burbujas del tablero, que son justamente lo
+   que hay que apuntar. Éstas son mucho más chicas y mucho más tenues por la
+   misma razón. */
+const AMB = {
+  foto: 'f_burbujas',
+  cielo: ['#101a3a', '#0a1024'],
+  haz: 0.15,
+  vineta: 0.42,
+  part: { n: 24, dir: 'sube', forma: 'burbuja', col: '#a8e6ff',
+          r0: 3, r1: 9, v0: 26, v1: 74, amp: 30, gira: 0,
+          a0: 0.10, a1: 0.26 }
+};
+
 
 const JUEGO = {
   id: 'burbujas',
@@ -405,7 +423,7 @@ const JUEGO = {
         /* lo que se cae paga el doble: es el premio del tiro pensado, y sin la
            diferencia de puntos reventar tres al azar valdría lo mismo */
         sumaPuntos(cae.length*20, AN/2, AL*0.5);
-        fogonazo(0.22);
+        destella('#a8e6ff', 0.45 + Math.min(0.55, cae.length*0.06));
         sacude(0.24);
         son('gana', 0.5);
       }
@@ -677,12 +695,7 @@ function bDemo(g, filas){
   }
 }
 function bFondo(g){
-  if (dibCubre('fondo')) return;
-  const gr = g.createLinearGradient(0, 0, 0, AL);
-  gr.addColorStop(0, '#101a3a');
-  gr.addColorStop(0.55, '#16274f');
-  gr.addColorStop(1, '#0a1024');
-  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* el degradado y la foto los pone `ambAtras()`: acá va el techo del tablero */
   /* el techo del que cuelgan: sin él la primera fila flota y no se entiende de
      qué está agarrado el tablero */
   g.fillStyle = 'rgba(242,238,230,.10)';

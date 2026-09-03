@@ -104,7 +104,14 @@ const FR = [];             /* las frutas vivas */
 let F_gx0 = 80, F_gx1 = 640, F_gyb = 1100, F_gyt = 420;   /* el frasco, lo pone geo() */
 let F_id = 0;
 
-const MANO = { x: 360, niv: 0, sig: 0, esp: 0, tira: false };
+/* ── SE LLAMA COLG Y NO MANO, Y ESO ES UNA LECCION DEL REPO ──
+   Se llamaba `MANO` —la fruta que cuelga esperando que la suelten— y el nucleo
+   estreno un modulo de camara que declara `const MANO`. Todo esto termina
+   siendo UN modulo ES, asi que dos `const` con el mismo nombre no dan
+   `undefined`: tiran `Identifier 'MANO' has already been declared` y se llevan
+   el modulo ENTERO, o sea que el juego no arranca. Es la decima vez en este
+   repo que una colision de nivel superior cuesta una corrida. */
+const COLG = { x: 360, niv: 0, sig: 0, esp: 0, tira: false };
 let F_pel = 0, F_vivo = true, F_maxNiv = 0, F_fus = 0, F_cad = 0, F_cadN = 0;
 let F_azar = 12345;
 
@@ -165,7 +172,13 @@ function fusiona(a, b){
   if (niv >= F_ESCALA.length){
     /* dos sandías se van del frasco: es el premio grande y encima libera el
        espacio, que es lo que le da a la partida una segunda vida */
-    fogonazo(0.55);
+/* ── DESTELLO EN VEZ DE FOGONAZO ──
+    El fogonazo es un velo blanco de pantalla completa: sube el brillo de
+    TODO, tablero incluido, justo en el cuadro en que el jugador está
+    mirando qué pasó. El destello es un radial con el centro transparente,
+    así que pinta los bordes y deja el medio limpio — y encima lleva el
+    COLOR del acontecimiento, que dice qué pasó sin escribir nada. */
+    destella('#ffe89a', 1.0);
     sacude(0.6);
     sumaPuntos(120, mx, my - 90);
     chispas(mx, my, 40, '#ffe89a', 420);
@@ -262,6 +275,22 @@ const PIEL = { ac:'#ff9a2e', tela:'fondo' };
 const SON_ALIAS = { bien:'fusion', toque:'suelta', pierde:'perder',
                     gana:'gana', clic:'clic' };
 
+/* ══════════ EL AMBIENTE ══════════
+   Cocina cálida, y las hojas que caen son lo único que se mueve además de la
+   fruta. Van POCAS y LENTAS a propósito: en un juego cuya decisión entera es
+   dónde soltar, cualquier cosa que cruce el cuadro rápido compite con la fruta
+   que está cayendo — y ahí el jugador mira la hoja y suelta mal. */
+const AMB = {
+  foto: 'f_frutas',
+  cielo: ['#2b1a3d', '#1a1020'],
+  niebla: '#2e1c15',
+  haz: 0.10,
+  vineta: 0.44,
+  part: { n: 16, dir: 'cae', forma: 'hoja', col: '#c98a4a',
+          r0: 7, r1: 15, v0: 22, v1: 52, amp: 46, gira: 0.9,
+          a0: 0.10, a1: 0.24 }
+};
+
 /* ══════════ EL DIBUJO DE UNA FRUTA ══════════
    Arranca dibujada por código y la hoja generada la PISA cuando decodifica, que
    es la regla del repo. Y lo dibujado no es un círculo plano: un disco de un
@@ -331,7 +360,7 @@ const JUEGO = {
   get marca(){ return PUNTOS; },
   get sub(){ return TX('pts'); },
   get ficI(){ return null; },
-  get ficD(){ return TX('sigT') + ' ' + (MANO.sig + 1); },
+  get ficD(){ return TX('sigT') + ' ' + (COLG.sig + 1); },
   resta: null,
 
   /* ── LOS SUJETOS VAN POR ENCIMA DEL PIE, Y ESO SE MIDIO EN UNA FOTO ──
@@ -405,15 +434,15 @@ const JUEGO = {
     FR.length = 0; F_id = 0;
     F_pel = 0; F_vivo = true; F_maxNiv = 0; F_fus = 0; F_cad = 0; F_cadN = 0;
     F_azar = (Date.now() ^ 0x9e3779b9) >>> 0;
-    MANO.x = AN/2; MANO.esp = 0.5; MANO.tira = false;
-    MANO.niv = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
-    MANO.sig = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
+    COLG.x = AN/2; COLG.esp = 0.5; COLG.tira = false;
+    COLG.niv = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
+    COLG.sig = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
     this.vivo = true; this.gano = false;
   },
 
   paso(dt){
     geo();
-    if (MANO.esp > 0) MANO.esp = Math.max(0, MANO.esp - dt);
+    if (COLG.esp > 0) COLG.esp = Math.max(0, COLG.esp - dt);
     if (F_cad > 0){ F_cad -= dt; if (F_cad <= 0) F_cadN = 0; }
 
     for (const f of FR){
@@ -448,22 +477,22 @@ const JUEGO = {
 
   /* el dedo apunta y al soltarlo cae. Un toque suelto también sirve, que es lo
      que hace que se pueda jugar rápido con el pulgar. */
-  baja(x){ MANO.tira = true; MANO.x = x; },
-  mueve(x){ if (MANO.tira) MANO.x = x; },
-  sube(){ if (MANO.tira) this.suelta(); MANO.tira = false; },
+  baja(x){ COLG.tira = true; COLG.x = x; },
+  mueve(x){ if (COLG.tira) COLG.x = x; },
+  sube(){ if (COLG.tira) this.suelta(); COLG.tira = false; },
 
   suelta(){
-    if (MANO.esp > 0) return false;
+    if (COLG.esp > 0) return false;
     geo();
-    const r = F_R(MANO.niv);
-    const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, MANO.x));
-    const f = fNueva(MANO.niv, x, F_gyt - r - 40);
+    const r = F_R(COLG.niv);
+    const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, COLG.x));
+    const f = fNueva(COLG.niv, x, F_gyt - r - 40);
     f.vy = 60;
     f.vgi = (fAz() - 0.5)*3;
     son('toque');
-    MANO.niv = MANO.sig;
-    MANO.sig = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
-    MANO.esp = F_ESPERA;
+    COLG.niv = COLG.sig;
+    COLG.sig = F_SUELTA[Math.floor(fAz()*F_SUELTA.length)];
+    COLG.esp = F_ESPERA;
     return true;
   },
 
@@ -485,17 +514,17 @@ const JUEGO = {
     /* la que está por caer: colgada arriba, con una guía punteada hasta el
        fondo. Sin la guía, en un frasco de 560 de ancho el jugador no sabe dónde
        va a caer y suelta a ciegas. */
-    const r = F_R(MANO.niv);
-    const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, MANO.x));
+    const r = F_R(COLG.niv);
+    const x = Math.max(F_gx0 + r, Math.min(F_gx1 - r, COLG.x));
     g.save();
     g.globalAlpha = 0.26;
     g.strokeStyle = '#f2eee6'; g.lineWidth = 2; g.setLineDash([10, 12]);
     g.beginPath(); g.moveTo(x, F_gyt - 8); g.lineTo(x, F_gyb - 6); g.stroke();
     g.setLineDash([]);
     g.restore();
-    const alfa = MANO.esp > 0 ? 0.35 : 1;
+    const alfa = COLG.esp > 0 ? 0.35 : 1;
     g.save(); g.globalAlpha = alfa;
-    fDibuja({ niv: MANO.niv, x, y: F_gyt - r - 40, r, gi: 0, nace: 0 }, g);
+    fDibuja({ niv: COLG.niv, x, y: F_gyt - r - 40, r, gi: 0, nace: 0 }, g);
     g.restore();
     /* la escala, chica y al costado: es la unica ayuda que este juego necesita
        —saber que viene despues de la que tenes— y va como fichas y no como
@@ -506,7 +535,7 @@ const JUEGO = {
       const e = F_ESCALA[i];
       g.beginPath(); g.arc(xx, yy, rr*0.72, 0, 7);
       g.fillStyle = i <= F_maxNiv ? e.c : 'rgba(255,255,255,.10)'; g.fill();
-      if (i === MANO.niv){
+      if (i === COLG.niv){
         g.beginPath(); g.arc(xx, yy, rr*0.72 + 5, 0, 7);
         g.strokeStyle = '#f2eee6'; g.lineWidth = 2; g.stroke();
       }
@@ -541,8 +570,8 @@ const JUEGO = {
     F_azar = F_SEM;
     let sueltas = 0;
     for (let i = 0; i < n && this.vivo; i++){
-      if (MANO.esp <= 0){
-        MANO.x = azar ? (F_gx0 + fAz()*(F_gx1 - F_gx0)) : fApunta();
+      if (COLG.esp <= 0){
+        COLG.x = azar ? (F_gx0 + fAz()*(F_gx1 - F_gx0)) : fApunta();
         if (this.suelta()) sueltas++;
       }
       this.paso(1/60);
@@ -565,7 +594,7 @@ const JUEGO = {
   /* la sonda propia: el estado del frasco sin tener que mirar una captura */
   ver(){
     return { frutas: FR.length, maxNiv: F_maxNiv, fusiones: F_fus,
-             pel: +F_pel.toFixed(2), mano: MANO.niv, sig: MANO.sig,
+             pel: +F_pel.toFixed(2), mano: COLG.niv, sig: COLG.sig,
              /* la altura de la pila: es lo que dice si el frasco se está
                 llenando, y no se puede leer de ninguna otra variable */
              alto: FR.length ? +(F_gyb - Math.min.apply(null, FR.map(f => f.y - f.r))).toFixed(0) : 0,
@@ -589,10 +618,18 @@ const JUEGO = {
    los tres cantos gruesos, y un reflejo vertical en la pared izquierda. */
 function frascoDibuja(g, k){
   const w = F_gx1 - F_gx0, h = F_gyb - F_gyt;
+  /* ── EL VELO BAJÓ DE 0,20 A 0,09, Y VA DE ARRIBA ABAJO ──
+     Medido en la captura contra la foto de cocina: con 0,20 de un degradado que
+     terminaba en azul marino, el interior del frasco era un panel gris que
+     tapaba el mantel a cuadros y enfriaba de golpe la mitad cálida del cuadro —
+     o sea que la foto que se acababa de poner no se veía justo donde se juega.
+     Un vidrio de verdad tampoco es parejo: se ve arriba, donde la pared se
+     curva hacia el observador, y casi no se ve al ras del fondo. */
   g.save();
-  g.globalAlpha = 0.20*k;
-  const gr = g.createLinearGradient(F_gx0, F_gyt, F_gx1, F_gyb);
-  gr.addColorStop(0, '#7fd8ff'); gr.addColorStop(1, '#1d3b52');
+  const gr = g.createLinearGradient(0, F_gyt, 0, F_gyb);
+  gr.addColorStop(0, 'rgba(196,232,255,' + (0.15*k).toFixed(3) + ')');
+  gr.addColorStop(0.55, 'rgba(160,205,235,' + (0.07*k).toFixed(3) + ')');
+  gr.addColorStop(1, 'rgba(140,190,225,' + (0.02*k).toFixed(3) + ')');
   g.fillStyle = gr;
   g.fillRect(F_gx0, F_gyt, w, h);
   g.restore();
@@ -619,12 +656,8 @@ function frascoDibuja(g, k){
 }
 
 function fondoBase(g){
-  if (dibCubre('fondo')) return;
-  const gr = g.createLinearGradient(0, 0, 0, AL);
-  gr.addColorStop(0, '#2b1a3d');
-  gr.addColorStop(0.52, '#3d2138');
-  gr.addColorStop(1, '#1a1020');
-  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* el degradado y la foto los pone `ambAtras()`: acá va SÓLO la mesa. Pintar
+     otro degradado de pantalla completa taparía la foto de fondo. */
   /* la mesa: una banda más clara abajo. Sin ella el frasco flota en un
      degradado y no se apoya en nada. */
   const m = g.createLinearGradient(0, AL - 150, 0, AL);
@@ -641,7 +674,7 @@ function fondoBase(g){
 let F_PESO_ADY = 60;
 let F_SEM = 777;
 function fApunta(){
-  const R = F_R(MANO.niv);
+  const R = F_R(COLG.niv);
   const x0 = F_gx0 + R, x1 = F_gx1 - R;
   let mejorX = (x0 + x1)/2, mejorP = -1e9;
   for (let k = 0; k <= 20; k++){
@@ -655,7 +688,7 @@ function fApunta(){
     const cy = sup - R;
     let ady = 0;
     for (const f of FR){
-      if (f.niv !== MANO.niv) continue;
+      if (f.niv !== COLG.niv) continue;
       if (Math.hypot(f.x - x, f.y - cy) < (f.r + R)*1.32) ady++;
     }
     /* pegarse a una igual manda; a igualdad, el hueco mas bajo */

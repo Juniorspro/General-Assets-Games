@@ -4,6 +4,7 @@
 
        JT              las frases, por idioma
        JUEGO.tipo      'niveles' (progreso guardado) o 'puntos' (sin fin)
+       JUEGO.usa       ['giro'] y/o ['mano']: que sensores pedir al tocar JUGAR
        JUEGO.nivelesTotal   cuántos, en los de niveles
        JUEGO.planos    la cinemática: [{dur, pie, dibuja(g,u,t)}]
        JUEGO.arranca(n)     poner el estado en cero; n = nivel
@@ -41,6 +42,37 @@ function guardaMejor(){
 }
 const esNiv = () => JUEGO.tipo === 'niveles';
 
+/* ══════════ LA LINEA DE ESTADO DEL SENSOR ══════════
+   Va en el MENU y es permanente. Un aviso de dos segundos dentro de la partida
+   no es un aviso: en RECREO el permiso de camara se pedia desde un boton chico
+   que ya se veia elegido, nadie lo tocaba, y el juego arrancaba sin camara sin
+   decir por que. Acá el motivo se lee ANTES de empezar, y cada falla tiene su
+   propio texto — «no anda» sirve para nada, «sin HTTPS no hay sensores» se
+   puede arreglar. */
+function pintaSensor(){
+  const e = $('sensor');
+  const usa = JUEGO.usa || [];
+  if (!usa.length){ e.hidden = true; return; }
+  e.hidden = false;
+  const T = [];
+  let mal = false;
+  if (usa.indexOf('giro') >= 0){
+    const m = { no:'gNo', pidiendo:'gNo', lista:'gSi', sin:'gSin',
+                negado:'gNeg', insegura:'gIns' };
+    T.push(TX(m[GIRO.estado] || 'gNo'));
+    if (GIRO.estado === 'sin' || GIRO.estado === 'negado' || GIRO.estado === 'insegura') mal = true;
+  }
+  if (usa.indexOf('mano') >= 0){
+    const m = { no:'mNo', pidiendo:'mNo', lista:'mSi', permiso:'mPerm',
+                camara:'mCam', cdn:'mCdn', modelo:'mMod', insegura:'mIns' };
+    T.push(TX(m[MANO.estado] || 'mNo'));
+    if (['permiso','camara','cdn','modelo','insegura'].indexOf(MANO.estado) >= 0) mal = true;
+  }
+  e.textContent = T.join('  ·  ');
+  e.classList.toggle('mal', mal);
+}
+window.pintaMano = pintaSensor;
+
 function pintaJuego(){
   if (esNiv()){
     /* en un juego de niveles el récord no significa nada: lo que el jugador
@@ -53,6 +85,7 @@ function pintaJuego(){
     $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
   }
   if (JUEGO.pintaTextos) JUEGO.pintaTextos();
+  pintaSensor();
 }
 window.pintaJuego = pintaJuego;
 
@@ -92,11 +125,45 @@ function alMenu(){
   pintaJuego();
 }
 
-let _vistaCine = false;
-function jugar(){
+/* ── EL AUDIO ARRANCA CON EL PRIMER GESTO, SEA EL QUE SEA ──
+   Estaba enganchado sólo a JUGAR, y ahí hay un defecto que no falla: el menú
+   pide su tema con `musQuiere('menu')` ANTES de que exista el contexto de
+   audio, así que `cargaSon()` salía sin hacer nada y la música del menú no
+   sonaba nunca — medido, `son:0` y `mus:null` con los quince clips horneados
+   adentro del archivo. El primer gesto de verdad es el botón de idioma, no
+   JUGAR, y ningún navegador deja sonar nada antes de uno.
+   Va en CAPTURA y sobre el documento: en cada botón habría que acordarse en los
+   que hay y en el próximo que se agregue. */
+let _audioDesp = false;
+function despiertaAudio(){
+  if (_audioDesp) return;
+  _audioDesp = true;
   armaAudio();
   cargaSon();
   if (AUD && AUD.state === 'suspended') AUD.resume();
+  /* y se vuelve a pedir el tema que estaba puesto: para cuando el contexto
+     existe, `musQuiere` ya corrió una vez y se rindió */
+  if (_musK) musQuiere(_musK);
+}
+for (const ev of ['pointerdown', 'click', 'keydown'])
+  document.addEventListener(ev, despiertaAudio, true);
+
+let _vistaCine = false;
+function jugar(){
+  despiertaAudio();
+  armaAudio();
+  cargaSon();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  /* ── LOS SENSORES SE PIDEN ACA Y NO EN EL ARRANQUE ──
+     Desde iOS 13 el permiso de movimiento hay que pedirlo DENTRO de un gesto
+     del usuario, y el permiso de camara conviene por lo mismo: pedidos al
+     cargar, el gesto ya expiro cuando la promesa llega y Safari los rechaza SIN
+     mostrar el cartelito. Tocar JUGAR es el gesto que todos hacen.
+     Y no se espera: los dos degradan a dedo, asi que la partida arranca igual y
+     el sensor entra cuando este. */
+  const usa = JUEGO.usa || [];
+  if (usa.indexOf('giro') >= 0) giroPide().then(pintaSensor).catch(() => {});
+  if (usa.indexOf('mano') >= 0) manoPide().then(pintaSensor).catch(() => {});
   if (!_vistaCine){
     _vistaCine = true;
     /* la cinemática se ve UNA vez y después va a su botón. Obligatoria en cada
@@ -227,19 +294,30 @@ function bucle(){
       if (!JUEGO.vivo) termina();
     }
     pasoFogonazo(dt);
+    giroPaso(dt);
+    /* el ambiente corre SIEMPRE, también en el menú y en el panel de final: es
+       lo que hace que las cuatro pantallas se vean del mismo lugar en vez de
+       cuatro pantallas distintas pegadas */
+    ambPaso(dt); destPaso(dt);
     if (MODO === 'juega' || MODO === 'fin') jugoPaso(dt);
   }
 
   g.clearRect(0, 0, AN, AL);
   if (MODO === 'cine') cinePon(CINE.t);
-  else if (JUEGO.fondo) JUEGO.fondo(g);
-  if (MODO === 'juega' || MODO === 'fin'){
-    /* el sacudón envuelve SÓLO la capa del juego: sacudiendo el fondo aparecen
-       dos franjas negras en los bordes */
-    const sac = sacAplica();
-    JUEGO.pinta(g);
-    jugoPinta();
-    if (sac) g.restore();
+  else {
+    ambAtras();
+    if (JUEGO.fondo) JUEGO.fondo(g);
+    if (MODO === 'juega' || MODO === 'fin'){
+      /* el sacudón envuelve SÓLO la capa del juego: sacudiendo el fondo
+         aparecen dos franjas negras en los bordes */
+      const sac = sacAplica();
+      JUEGO.pinta(g);
+      jugoPinta();
+      if (sac) g.restore();
+    }
+    /* y la atmósfera va ENCIMA del juego: una viñeta debajo de las fichas no
+       cierra nada, y un destello debajo tampoco se ve */
+    ambAdelante();
   }
   if (MODO === 'juega') pintaHud();
 
@@ -358,6 +436,20 @@ window.__J = {
                       return JSON.stringify({ vivo: !!JUEGO.vivo, puntos: PUNTOS,
                                               resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3) }); },
   pico: () => pico(),
+  /* ── SONDAS DE AUDIO ──
+     `son()` vive adentro del módulo, así que desde el banco no se lo puede
+     llamar: un `eval` no alcanza el ámbito de un módulo ES. Sin esto, «el audio
+     anda» sólo se podría afirmar comprobando que la llamada no tiró. */
+  son: (t, k) => { despiertaAudio(); son(t, k == null ? 1 : k); return t; },
+  audio: () => JSON.stringify({
+    ctx: AUD ? AUD.state : 'no', son: Object.keys(SON).length,
+    mus: MUS ? MUS.k : null, pedido: _musK,
+    /* qué alias tiene muestra de verdad y cuál cae al oscilador: es la única
+       forma de distinguir «suena el generado» de «suena el bip de respaldo» */
+    alias: Object.fromEntries(Object.entries(
+      (typeof SON_ALIAS !== 'undefined' && SON_ALIAS) || {})
+      .map(([t, a]) => [t, !!SON[a]]))
+  }),
   combo: () => JSON.stringify({ n: COMBO.n, mult: COMBO.mult, max: COMBO.max,
     t: +COMBO.t.toFixed(2), part: PART.length, flot: FLOT.length, sac: +SAC.toFixed(2) }),
   assets: () => JSON.stringify(asEstado()),
@@ -429,6 +521,24 @@ window.__J = {
      no fallo: contesto.
      Un ajuste tiene que entrar por una funcion que viva ADENTRO del modulo. */
   cfg: (o) => JSON.stringify(JUEGO.cfg ? JUEGO.cfg(o || {}) : 'sin cfg'),
+  /* ── LOS SENSORES SE INYECTAN, PORQUE EL BANCO NO TIENE NI GIROSCOPIO NI MANO ──
+     Sin esto, todo lo que cuelga de un sensor queda sin una sola prueba y se
+     descubre roto en el telefono. `giroPon` mete una inclinacion en grados por
+     el mismo camino que el evento del sistema, `giroSac` una sacudida, y
+     `manoFalsa` una mano con los dedos que se pidan. */
+  giro: () => JSON.stringify(giroVer()),
+  giroPon: (b, g, a) => { giroEvento({ beta: b, gamma: g, alpha: a || 0 });
+                          return JSON.stringify(giroVer()); },
+  giroCero: () => { giroCero(); return JSON.stringify(giroVer()); },
+  giroSac: (k) => { giroSacudida(k == null ? 0.8 : k); return JSON.stringify(giroVer()); },
+  mano: () => JSON.stringify(manoVer()),
+  manoPon: (dedos, tijera) => JSON.stringify(manoFalsa(dedos, !!tijera)),
+  /* y «sacar la mano» son SEIS mediciones vacias y no una: la caducidad se mide
+     en huecos, asi que con una sola llamada el gesto sigue puesto — y eso no es
+     un defecto, es la guarda que impide que dos fallos seguidos del detector
+     borren la jugada */
+  manoNada: (n) => { for (let i = 0; i < (n || 6); i++) manoLee(null);
+                     return JSON.stringify(manoVer()); },
   /* ── LOS SOLAPAMIENTOS SE CUENTAN, NO SE MIRAN ──
      `cajas()` devuelve las cajas y hay que cruzarlas a mano, y eso es
      exactamente lo que no se hace: el reloj de BURBUJAS estuvo dibujado ENCIMA

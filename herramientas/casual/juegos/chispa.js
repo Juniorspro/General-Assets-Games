@@ -176,7 +176,23 @@ const JT = {
         girosC:'GIROS', apagados:'APAGADOS' }
 };
 const PIEL = { ac:'#f2c33c', tela:'fondo' };
-const SON_ALIAS = { bien:'chispa', toque:'gira', pierde:'perder', gana:'gana', clic:'clic' };
+const SON_ALIAS = { bien:'fusion', toque:'clic', pierde:'perder', gana:'gana', clic:'clic' };
+
+/* ══════════ EL AMBIENTE ══════════
+   Una placa de circuito de cerca. Las chispas suben dibujadas como RAYA y no
+   como punto, porque una chispa que sube deja estela: con un disco se lee a
+   mota de polvo, que es lo contrario de lo que este juego cuenta. */
+const AMB = {
+  foto: 'f_chispa',
+  cielo: ['#12121c', '#0c0c14'],
+  haz: 0.05,
+  vineta: 0.46,
+  granoK: 0.020,
+  part: { n: 18, dir: 'sube', forma: 'raya', col: '#7fe8ff',
+          r0: 1.2, r1: 2.6, v0: 40, v1: 110, amp: 22, gira: 0,
+          a0: 0.10, a1: 0.30 }
+};
+
 
 let CG = { s: 80, x0: 0, y0: 0 };
 function cGeo(){
@@ -265,7 +281,7 @@ const JUEGO = {
       const vara3 = Math.max(C_min, Math.ceil(C_min*1.2));
       this.estrellas = C_giros <= vara3 ? 3 : (C_giros <= C_min*2 ? 2 : 1);
       this.finP = TX('girosC') + ' ' + C_giros + '  ·  ★★★ ' + vara3;
-      fogonazo(0.34);
+      destella('#7fe8ff', 1.0);
       sacude(0.3);
       this.vivo = false;
     }
@@ -513,12 +529,7 @@ function cDemo(g, u, etapa){
 }
 
 function cFondo(g){
-  if (dibCubre('fondo')) return;
-  const gr = g.createLinearGradient(0, 0, 0, AL);
-  gr.addColorStop(0, '#12121c');
-  gr.addColorStop(0.5, '#1c1c2a');
-  gr.addColorStop(1, '#0c0c14');
-  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* el degradado y la foto los pone `ambAtras()`: acá queda la trama de puntos */
   /* una trama de puntos: es lo unico que hace que el fondo no sea un degradado
      liso, y va anclada al mundo asi que no titila */
   g.fillStyle = 'rgba(255,255,255,.035)';

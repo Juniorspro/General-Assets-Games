@@ -79,8 +79,24 @@ const JT = {
         alto:'ALTURA', perf:'CERTEIRO!', anchoC:'LARGURA' }
 };
 const PIEL = { ac:'#4fd8c6', tela:'fondo' };
-const SON_ALIAS = { bien:'apoya', toque:'corta', pierde:'perder',
-                    gana:'gana', clic:'clic', caida:'apoya' };
+const SON_ALIAS = { bien:'fusion', toque:'clic', pierde:'perder',
+                    gana:'gana', clic:'clic', caida:'caida' };
+
+/* ══════════ EL AMBIENTE ══════════
+   Atardecer sobre una ciudad. TORRE es el único de los seis que no lleva
+   partículas propias, y no es un olvido: ya tiene sus nubes, que bajan con la
+   cámara y son la única cosa en pantalla que dice que uno subió cuarenta pisos.
+   Agregarle polvo encima sería taparlas con algo que no informa nada. */
+const AMB = {
+  foto: 'f_torre',
+  cielo: ['#0b1e2c', '#2a5566'],
+  haz: 0,
+  vineta: 0.34,
+  despK: 0.42,
+  part: { n: 12, dir: 'sube', forma: 'disco', col: '#ffe6bc',
+          r0: 1.2, r1: 2.8, v0: 10, v1: 26, amp: 70, gira: 0,
+          a0: 0.06, a1: 0.16 }
+};
 
 const JUEGO = {
   id: 'torre',
@@ -145,6 +161,11 @@ const JUEGO = {
   },
 
   paso(dt){
+    /* ── Y EL CIELO SE CORRE CON LA ALTURA ──
+       Se satura a los cuarenta pisos: por encima de eso el cielo ya llegó
+       arriba y seguir corriéndolo no diría nada nuevo, sólo dejaría el borde
+       de la foto entrando en el cuadro. */
+    AMB_DESP = Math.min(1, R_camY/(R_ALTO*40));
     /* la cámara persigue la meta con un lerp: moviéndola de golpe cada piso, la
        torre salta cuarenta y seis píxeles y se lee a error de dibujo */
     R_camMeta = Math.max(0, (R_pisos.length - 5)*R_ALTO);
@@ -204,7 +225,7 @@ const JUEGO = {
       R_perf = 1;
       sumaPuntos(20 + R_pisos.length*2, nx, rPisoY(m.i) - 30);
       chispas(nx, rPisoY(m.i), 16, '#ffd76a', 220);
-      fogonazo(0.20);
+      destella('#ffd76a', 0.45 + Math.min(0.5, R_pisos.length*0.02));
       sacude(0.16);
       son('bien', 1);
     } else {
@@ -380,25 +401,34 @@ function rDemo(g, n, _){
 }
 
 function rFondo(g){
-  if (dibCubre('fondo')) return;
-  const gr = g.createLinearGradient(0, 0, 0, AL);
-  gr.addColorStop(0, '#0b1e2c');
-  gr.addColorStop(0.5, '#16374a');
-  gr.addColorStop(1, '#2a5566');
-  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* el degradado y la foto los pone `ambAtras()`: acá quedan las nubes y el
+     suelo, que son las dos cosas que se mueven con la cámara */
   /* ── LAS NUBES SE MUEVEN CON LA CAMARA, Y ESO ES TODA LA SENSACION DE SUBIR ──
      Con el fondo quieto, la torre crece y la pantalla no dice nada: subir
-     cuarenta pisos se ve igual que subir dos. Las nubes bajan a un tercio de la
-     camara y se repiten por modulo, asi que siempre hay nubes y nunca hay una
-     costura adentro del cuadro. */
+     cuarenta pisos se ve igual que subir dos. Bajan a un tercio de la camara y
+     se repiten por modulo, asi que siempre hay nubes y nunca hay una costura
+     adentro del cuadro.
+
+     ── Y PASARON DE ELIPSES A BANDAS, QUE ES LO QUE COSTO UNA CAPTURA ──
+     Con la foto de atardecer puesta, las dos elipses grises se leian a manchas
+     de suciedad sobre el cielo pintado: una nube dibujada con dos ovalos duros
+     no puede convivir con nubes de verdad, porque al lado se ve el borde. Una
+     BANDA con degradado en los dos cantos no tiene borde en ningun lado, asi
+     que se lee a bruma y se funde con la foto en vez de pelearle.
+     Y se apagan del todo cuando la camara todavia no subio: al ras del suelo lo
+     que hay detras es la ciudad de la foto, no cielo. */
   const desp = (R_camY*0.34) % 420;
-  g.fillStyle = 'rgba(255,255,255,.055)';
-  for (let k = -1; k < Math.ceil(AL/420) + 1; k++){
+  const kn = Math.min(1, R_camY/(R_ALTO*4));
+  if (kn > 0.01) for (let k = -1; k < Math.ceil(AL/420) + 1; k++){
     const y = k*420 + desp;
-    g.beginPath();
-    g.ellipse(AN*0.24, y + 60, 190, 44, 0, 0, 7); g.fill();
-    g.beginPath();
-    g.ellipse(AN*0.78, y + 250, 230, 52, 0, 0, 7); g.fill();
+    for (const [cy, hh, a] of [[60, 52, 0.075], [250, 64, 0.055]]){
+      const gr = g.createLinearGradient(0, y + cy - hh, 0, y + cy + hh);
+      gr.addColorStop(0, 'rgba(255,255,255,0)');
+      gr.addColorStop(0.5, 'rgba(255,255,255,' + (a*kn).toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr;
+      g.fillRect(0, y + cy - hh, AN, hh*2);
+    }
   }
   /* el suelo, sólo mientras la cámara no subió: dibujado siempre, se ve una
      banda marrón flotando a cincuenta pisos de altura */

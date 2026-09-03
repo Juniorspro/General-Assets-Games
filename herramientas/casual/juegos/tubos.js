@@ -246,8 +246,22 @@ const JT = {
         movsC:'JOG' }
 };
 const PIEL = { ac:'#3fa9e0', tela:'fondo' };
-const SON_ALIAS = { bien:'encaja', toque:'agarra', pierde:'perder',
+const SON_ALIAS = { bien:'fusion', toque:'suelta', pierde:'perder',
                     gana:'gana', clic:'clic' };
+
+/* ══════════ EL AMBIENTE ══════════
+   Repisa de botica en penumbra. El polvo flotando en el haz frío es lo que hace
+   que un estante de vidrio se lea a un sitio con aire adentro, y es lo más
+   barato que hay: dieciséis discos de dos píxeles. */
+const AMB = {
+  foto: 'f_tubos',
+  cielo: ['#0e2436', '#08161f'],
+  haz: 0.09,
+  vineta: 0.40,
+  part: { n: 20, dir: 'cae', forma: 'disco', col: '#9fd8ee',
+          r0: 1.4, r1: 3.4, v0: 7, v1: 22, amp: 34, gira: 0,
+          a0: 0.08, a1: 0.22 }
+};
 
 /* ══════════ LA GEOMETRIA DE LOS TUBOS ══════════
    Sale de cuántos hay: con posiciones escritas a mano, el nivel de once colores
@@ -363,7 +377,13 @@ const JUEGO = {
           sumaPuntos(50, p.x, p.y - 40);
           chispas(p.x, p.y - 20, 18, T_COL[b[0]], 200);
           sacude(0.18);
-          fogonazo(0.16);
+          /* ── DESTELLO EN VEZ DE FOGONAZO ──
+          El fogonazo es un velo blanco de pantalla completa: sube el brillo de
+          TODO, tablero incluido, justo en el cuadro en que el jugador está
+          mirando qué pasó. El destello es un radial con el centro transparente,
+          así que pinta los bordes y deja el medio limpio — y encima lleva el
+          COLOR del acontecimiento, que dice qué pasó sin escribir nada. */
+          destella(T_COL[b[0]], 0.6);
         }
         if (tHecho(T_tubos)){
           this.gano = true;
@@ -582,12 +602,7 @@ function tTubo(g, p, sel){
 }
 
 function tFondo(g){
-  if (dibCubre('fondo')) return;
-  const gr = g.createLinearGradient(0, 0, 0, AL);
-  gr.addColorStop(0, '#0e2436');
-  gr.addColorStop(0.55, '#123449');
-  gr.addColorStop(1, '#08161f');
-  g.fillStyle = gr; g.fillRect(0, 0, AN, AL);
+  /* el degradado y la foto los pone `ambAtras()` */
   /* la mesa de vidrio: una banda con brillo. Es lo unico que apoya los tubos en
      algo y cuesta dos rectangulos. */
   g.fillStyle = 'rgba(255,255,255,.035)';

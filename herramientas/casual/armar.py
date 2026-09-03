@@ -17,6 +17,8 @@ entero. Ya paso nueve veces en este repo.
 
   a.html      el marco, el CSS y las pantallas
   b.js        el lienzo, el reloj y la entrada        (define $, AN, AL, g, MODO)
+  g.js        el giroscopio y la sacudida              (define GIRO; usa nada)
+  m.js        la mano por la camara                    (define MANO; usa $)
   assets/<j>  las imagenes y el sonido en base64      (define AS; lo escribe hornear.py)
   <juego>.js  las reglas                              (define JT y JUEGO)
   t.js        los idiomas                             (lee JT, usa $)
@@ -25,6 +27,7 @@ entero. Ya paso nueve veces en este repo.
   j.js        el jugo: racha con multiplicador, particulas, flotantes, sacudon
   p.js        el progreso guardado y la reja de niveles  (lee JUEGO.nivelesTotal)
   c.js        la cinematica y las herramientas de dibujo
+  f.js        el ambiente: foto de fondo, particulas, haz, vineta, destello
   z.html      el armado, el bucle y las sondas        (lee JUEGO y todo lo de arriba)
 """
 import io, os, re, sys
@@ -42,6 +45,7 @@ CATALOGO = {
     'torre':    ('Torre.html',    'TORRE'),
     'burbujas': ('Burbujas.html', 'BURBUJAS'),
     'chispa':   ('Chispa.html',   'CHISPA'),
+    'dados':    ('Dados.html',    'DADOS'),
 }
 
 
@@ -50,6 +54,8 @@ def arma(jid):
     partes = [
         os.path.join(NUCLEO, 'a.html'),
         os.path.join(NUCLEO, 'b.js'),
+        os.path.join(NUCLEO, 'g.js'),
+        os.path.join(NUCLEO, 'm.js'),
         os.path.join(ASSETS, jid + '.js'),
         os.path.join(JUEGOS, jid + '.js'),
         os.path.join(NUCLEO, 't.js'),
@@ -58,6 +64,7 @@ def arma(jid):
         os.path.join(NUCLEO, 'j.js'),
         os.path.join(NUCLEO, 'p.js'),
         os.path.join(NUCLEO, 'c.js'),
+        os.path.join(NUCLEO, 'f.js'),
         os.path.join(NUCLEO, 'z.html'),
     ]
     trozos = []
