@@ -9,6 +9,15 @@ LA IDEA: el HUD de este juego es el visor de una camara, asi que los controles
 son LOS BOTONES DE LA PROPIA CAMARA — goma gastada, plastico de 1994, serigrafia
 borrada. Y el menu es la etiqueta de la cinta, asi que su panel es papel viejo.
 
+NADA QUEDA A LA VISTA EN LA APP DE REZONA. Todo se genera en un unico proyecto
+descartable —`YlgCbidN`, «tmp — descartable, borrar»— y lo que se conserva es la
+copia horneada del repo. NO se crea un proyecto con el nombre del juego: queda
+listado en la app para cualquiera que la abra. Y no se puede borrar por codigo:
+medido, el MCP no tiene `delete_project`, el CLI tampoco lo tiene, y
+`DELETE /api/projects/{id}` EXISTE pero devuelve 403 con la credencial de API
+—hace falta una de sesion—. O sea que el balde se vacia a mano desde la app; lo
+unico que se puede garantizar desde aca es que ahi no haya nada identificable.
+
 TRES TRAMPAS QUE YA COSTARON UNA VUELTA (estan en herramientas/rezona/estado.json):
 · las respuestas llegan DESORDENADAS: rz.py ordena por el `id` del JSON-RPC.
 · `size` es una sugerencia y el servidor NO avisa que la ignoro: hay que medir
@@ -22,7 +31,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(AQUI, '..', 'rezona'))
 import rz
 
-PROY = 'hAojbYrD'
+PROY = 'YlgCbidN'   # el balde descartable, NUNCA uno con el nombre del juego
 TAREAS = os.path.join(AQUI, 'tareas.json')
 
 PLANO = ('straight-on orthographic top-down product photo, centered, flat even '

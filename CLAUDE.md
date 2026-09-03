@@ -107,7 +107,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
-- **`Casa_Abandonada.html` es "CASA 13"** (~505 KB, de los cuales 200 son **catorce texturas de foto**
+- **`Casa_Abandonada.html` es "CASA 13"** (~896 KB, de los cuales 276 son **doce voces de cinta**
+  y 200 **catorce texturas de foto**
   generadas con Rezona; los papeles, los escombros, el cielo y las telarañas se dibujan por codigo). Llego de afuera como
   `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
   primera persona: una cinta VHS del 12 de marzo de 1994, linterna, papeles que se leen, y todo el
@@ -121,11 +122,146 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   vertical), con la cinta 16:9 como opcion. Campo y cuadro se eligen en la pausa y se guardan. El menu es la **etiqueta de la cinta** —esquinas
 en chanfle, punto de REC y banda de tracking— con **tres idiomas (ES/EN/PT)** y los ajustes desde ahi;
 las ocho hojas guardan **la clave y no el texto**, asi que cambiar de idioma repinta las que ya se
-encontraron.
+encontraron. **El objetivo son TRES CINTAS VHS** —sala, dormitorio 1 y sotano, cada una tapada por
+un mueble— y con las tres aparece **una cuarta encima del televisor**: al reproducirla se descubre
+que la grabo el propio jugador, con la misma fecha y la misma hora que el HUD lleva quemada desde el
+primer cuadro, y ahi termina el juego. Mientras suena una cinta la pantalla se apaga con el PROPIO
+post (brillo 0,22) y el reloj quemado pasa a ser el de la cinta. No hay enemigos: los sustos son un
+director de eventos —puertas, bombillas, cosas que se caen, persianas, ruidos de otro cuarto, pasos
+que cruzan y objetos que se intercambian de sitio— que acelera con la tension.
 
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Octogésima novena vuelta (2026-09-03): **CASA 13** — tres cintas, y la última la grabaste vos
+
+Pedido: *"el objetivo principal del jugador es encontrar 3 cintas VHS escondidas … al recoger cada
+cinta, el jugador puede reproducirla y escuchar una parte de la historia … después de encontrar las 3
+debe aparecer una última grabación en un lugar específico … agrega pequeños eventos de terror … no
+agregues enemigos ni hagas el mapa más grande"*.
+
+#### LO PRIMERO FUE MIRAR QUÉ HABÍA, Y CINCO DE LOS SEIS SUSTOS YA ESTABAN
+
+El director de eventos existe desde hace vueltas y ya hacía **puertas que se mueven solas**
+(`evDoor`), **bombillas que titilan** (`evLight`), **cosas que se caen** (`evFall`), persianas
+golpeando y **ruidos en otro cuarto** (`evNoise`), más la silueta y el fantasma de la ventana, todo
+con la cadencia acortándose según la tensión. Escribir eso de nuevo habría sido agregar un segundo
+director que se desincroniza con el primero. Lo que **no** estaba y el pedido nombra son dos:
+
+- **PASOS QUE CRUZAN.** No es un ruido: es un recorrido. Lo que asusta de unos pasos no es el golpe
+  sino que el segundo suene más cerca que el primero, así que son de cuatro a siete pisadas con
+  intervalo de zancada real (0,44 a 0,58 s) y el paneo moviéndose a lo largo de dos metros y medio,
+  siempre en un cuarto que **no** es el tuyo — así nunca hay nada que ver donde suenan.
+- **COSAS QUE CAMBIAN DE LUGAR.** Se **intercambian** dos objetos sueltos que estén los dos fuera del
+  encuadre: la taza pasa a la estantería y el frasco a la mesa. Intercambiarlos —y no mover uno— es
+  lo que garantiza que los dos queden apoyados en un sitio donde algo puede estar.
+
+**Y LA PRIMERA VERSIÓN DE `evMover` NO MOVÍA NADA: 0 de 40 intentos.** Pedía que el objeto estuviera
+«en reposo» comparando su altura con `f.rest`, y **`rest` no es dónde el objeto está: es la altura del
+PISO**, la que usa cuando se cae. Una lata sobre la mesada está en y 1,01 con `rest` 0,05, así que la
+condición era falsa para los siete objetos y el evento nunca se disparó. Lo único que hace falta saber
+es que no se esté cayendo. Medido después: **40 de 40**.
+
+#### EL AUDIO DE LOS PASOS NO SE PUEDE MEDIR SOBRE EL MAESTRO, Y ESO CAMBIÓ LA PRUEBA
+
+Medido: una pisada lejana da **0,093 de pico contra 0,091 del fondo**, o sea que se pierde entre los
+transitorios de la lluvia — y el `roomNoise` que el juego ya tenía mide exactamente lo mismo (0,091).
+Subí el nivel, volví a medir, y seguía sin separarse. Seis tandas encimadas sí llegan a 0,152, lo que
+prueba que **suenan**; lo que no sirve es el instrumento.
+
+Lo que sí se puede comprobar es **la cadencia**, que es el rasgo que las hace pisadas y no un golpe:
+un contador dentro de `pasoEn`. Medido: **5 pisadas en la primera tanda y 7 en la segunda**, las dos
+dentro del rango de diseño. Una prueba que no puede ver lo que mide no se arregla subiendo el volumen
+del juego.
+
+#### LAS CUATRO GRABACIONES
+
+Tres cintas —sala, dormitorio 1 y sótano, una por cuarto y las tres tapadas por un mueble, así que
+hay que rodearlo— y **la cuarta aparece encima del televisor**, que es el sitio específico y el único
+de la casa donde hay con qué reproducirla.
+
+**AL LEVANTARLA SE REPRODUCE SOLA Y NO HAY INVENTARIO.** La cámara ya está en la mano del jugador y no
+hay nada más que hacer con una cinta: un inventario con su botón de reproducir sería una pantalla más
+para una decisión que no existe.
+
+**LA HISTORIA SALE DE LO QUE LAS HOJAS YA DECÍAN** —la segunda noche sin luz, el ruido del sótano, «nos
+vamos el jueves, no vuelvas por el resto», y el diario firmado H. que dice «bajé a cerrar la llave de
+paso, el agua ya pasó el segundo escalón»— y el remate es que **la última cinta la grabó el jugador**:
+misma fecha y misma hora que el HUD lleva quemada en la esquina desde el primer cuadro.
+
+**Y POR ESO LA FECHA DE LA CINTA SE ESCRIBE CON EL MISMO FORMATO QUE LA QUEMADA**, «12 MAR 1994» y no
+«12 03 1994»: de eso depende el remate, y dos formatos distintos rompen la comparación justo en el
+instante en que hay que hacerla.
+
+#### LA CINTA NO SE DIBUJA CON UNA CAPA NEGRA ENCIMA
+
+Lo que se ve mientras suena se hace con **el post que el juego ya tiene**: el brillo baja a 0,22, el
+viñeteado se cierra a 0,95, el grano se triplica y el glitch late. Un velo de DOM quedaría por
+**encima** del filtro y se leería a cartel de otra aplicación; bajando el propio post, lo que se apaga
+es la imagen de la filmadora, que es lo que pasa cuando se reproduce una cinta. El `REC` pasa a
+`REPRODUCIR` y el reloj quemado pasa a ser el de la cinta.
+
+**Y HAY QUE APAGAR LO DEMÁS TODOS LOS CUADROS, no al empezar.** Medido en la captura: el rótulo del
+foco, el aviso del objetivo y el botón USAR seguían encendidos los tres encima del subtítulo —cuatro
+textos a la vez—. Y no alcanza con apagarlos una vez, porque el bucle **apaga el rayo mientras hay
+cinta**, así que lo último que quedó escrito se queda escrito.
+
+#### EL SUBTÍTULO NO VA CENTRADO EN LA PANTALLA SINO EN LA FRANJA LIBRE
+
+Abajo a la izquierda está la fecha quemada —que durante la cinta es lo que hay que poder leer— y abajo
+a la derecha la tecla de la linterna. Las dos miden **lo mismo en cualquier pantalla**, así que el
+hueco entre ellas se angosta en absoluto mientras un ancho en porcentaje se angosta más despacio:
+medido, con el 82 % el subtítulo se montaba sobre la fecha, y con el 66 % entraba en 892×412 y volvía a
+montarse en 732×412 y en 800×360. Con márgenes en píxeles entra en los cuatro tamaños probados.
+
+#### DOCE VOCES, Y EL SERVIDOR REPARTE ENTRE MODELOS SIN DECIRLO
+
+Cuatro grabaciones × tres idiomas, generadas con Rezona. **Los clips no salen todos del mismo
+backend**: medido, cinco de doce volvieron a 8-9 s —unas catorce letras por segundo, o sea habla
+normal— y siete a **28-39 s para el mismo texto**, algunos además a otro muestreo. El servidor no dice
+qué modelo usó ni acepta que se lo fije, así que la única palanca es volver a pedir los largos; a la
+tercera vuelta los doce salieron cortos. Queda además un **tope de 12,5 s cortando en un silencio**,
+que no es una mutilación: una cinta de 1994 que pierde señal es exactamente lo que este juego es, y el
+subtítulo sigue porque **su tiempo lo manda el texto y no el audio**.
+
+Horneadas a **300-3400 Hz y 12 kHz de muestreo**: no es una degradación, es lo que mide una VHS
+saliendo por el parlante de una filmadora, y con la banda cortada en 3400 guardar 22050 son doce mil
+hercios de silencio. **192 KB las doce.**
+
+**Y EL NIVEL SE MIDE DESPUÉS DE CODIFICAR Y SE CORRIGE.** La banda más el codificador se llevan el
+**37 % del rms**, así que el nivel de diseño no se alcanza nunca de una sola pasada — es la misma
+lección que en RezUno costó un campanazo que se caía de 0,46 a 0,146. Medido en el juego: fondo de
+lluvia **0,0207 de rms** y la cinta sonando **0,1122, o sea 5,4 veces**.
+
+#### LAS HOJAS DEJAN DE TERMINAR EL JUEGO
+
+El final lo cierra la cuarta cinta. Con las dos condiciones vivas, leer las ocho hojas disparaba el
+final **antes** de que apareciera la última cinta y el objetivo principal quedaba sin resolver. Las
+hojas pasan a ser el trasfondo: suman tensión (al 55 %) pero no la mandan.
+
+#### DOS DEFECTOS DE LA MEDICIÓN, LOS DOS DEL MISMO TIPO
+
+- **El banco no puede esperar una cinta.** Dibuja a seis cuadros por segundo y el `dt` está topado en
+  0,05, así que un segundo de reloj de pared son **tres décimas de juego**: la primera corrida
+  «perdió» la segunda cinta porque `tomaCinta` la rechazó —correctamente— mientras la primera seguía
+  sonando. `correCinta(seg)` llama a la **misma** `cintaPaso` con el paso fijo del juego, así que se
+  ejercita el código de verdad y lo único que no se ejercita es el dibujo, que se comprueba con fotos.
+- **La sonda que lleva al jugador hasta una cinta miraba la pared.** El cabeceo estaba clavado en
+  −0,35 rad y una cinta en el piso a 0,85 m del ojo está **63 grados** por debajo del horizonte: la
+  foto salía con la ventana del fondo y parecía que la cinta no se dibujaba.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Partida completa por el camino del jugador: **3 de 3 cintas levantadas** en sala, dormitorio 1 y
+sótano, la cuarta **aparece** encima del televisor, se reproduce con el reloj en `12 MAR 1994 ·
+23:47`, y el final llega a la pantalla de cierre con el texto nuevo. Voz **5,4 veces la lluvia**;
+pisadas **5 y 7** por tanda; objetos que cambian de lugar **40 de 40** y **30 de 30**. **Nada
+regresó:** 6 firmas de hoja en tres idiomas todas distintas, linterna con desvío **0°**, haz en
+**[0,0]**, alabeo **0** con la vista girando 40 muestras, HUD **sin un solo solapamiento** en 892×412,
+732×412, 800×360 y 1280×720 con el subtítulo auditado, **14 de 14 texturas de foto puestas**, **22
+programas y 63 texturas** —los mismos de la vuelta anterior—, `window.__errs` vacío en las trece
+corridas. El HTML pasó de 618 a **894 KB**, y esos 276 son las doce voces.
 
 ### Octogésima octava vuelta (2026-09-03): **CASA 13** — la etiqueta es papel de verdad y los controles son las teclas de la cámara
 
