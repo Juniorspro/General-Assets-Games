@@ -275,6 +275,25 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
   font:600 9.5px/1 var(--cond); letter-spacing:.1em; text-transform:uppercase}
 .tabs svg{width:21px; height:21px}
 .tabs .act{color:var(--ac); background:rgba(255,30,142,.11)}
+
+/* ---------- traer de Instagram ---------- */
+.deIg{margin-top:20px; padding:17px; border-radius:var(--curva);
+  background:linear-gradient(135deg,rgba(195,75,255,.14),rgba(255,30,142,.1));
+  border:1px solid var(--linea)}
+.deIg .txt b{display:block; font:400 21px/1.05 var(--gordo); text-transform:uppercase}
+.deIg .txt small{display:block; margin:6px 0 14px; color:var(--tenue); font-size:13.5px; line-height:1.45}
+.deIg .txt small span{color:var(--ac)}
+.acc.nuevo{border-color:rgba(195,75,255,.5)}
+.acc.nuevo .ico{background:rgba(195,75,255,.16); color:#dcaaff}
+
+.creada{display:flex; gap:12px; align-items:center; padding:12px; border-radius:14px;
+  background:var(--carta); border:1px solid var(--linea); margin-top:9px}
+.creada .txt{flex:1; min-width:0}
+.creada .txt b{display:block; font:400 17px/1.15 var(--gordo); text-transform:uppercase}
+.creada .txt span{display:block; margin-top:3px; font-size:12.5px; color:var(--tenue)}
+.saltadas{margin-top:12px; padding:12px 14px; border-radius:13px; border:1px dashed var(--linea);
+  color:var(--tenue); font-size:13px; line-height:1.5}
+.saltadas b{color:var(--papel)}
 </style>
 <div class="luzFondo" aria-hidden="true"></div>
 <div class="grano" aria-hidden="true"></div>
@@ -336,6 +355,12 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
           <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
         </button>
 
+        <button class="acc nuevo" type="button" id="accNuevo">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+          <span><b>Nuevo desde Instagram</b><small>Mira lo último que subiste a IG y lo publica en la web.</small></span>
+          <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+        </button>
+
         <button class="acc" type="button" data-ir="pCargar" data-tipo="proximamente">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><circle cx="12" cy="15.5" r="2" fill="currentColor" stroke="none"/></svg></span>
           <span><b>Próxima fecha</b><small>La fiesta que se viene, con cuenta regresiva en la portada.</small></span>
@@ -368,7 +393,22 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
       <h2>Decile qué <em>se viene</em></h2>
       <p class="baja">Escribilo como se lo contarías a un amigo, o mandale el flyer y que lo lea ella. Publica sola en la web.</p>
 
-      <div class="campo" style="margin-top:20px">
+      <div class="deIg">
+        <div class="txt">
+          <b>Traelo de Instagram</b>
+          <small>Lee lo último que subiste a <span>@iblo_eventos</span>, se queda con lo que anuncia
+                 algo y lo publica en la web. Lo que ya subió no lo repite.</small>
+        </div>
+        <button class="bt p" id="btNuevo" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+          Nuevo</button>
+        <div class="aviso" id="avisoNuevo" hidden></div>
+        <div id="resNuevo" hidden></div>
+      </div>
+
+      <div class="separa"><span>o contale vos</span></div>
+
+      <div class="campo">
         <label for="aTexto">Contale</label>
         <textarea id="aTexto" maxlength="900" style="min-height:118px"
           placeholder="el 25 de octubre hacemos halloween en el club juventud, arranca 00hs, entradas a 10 mil la general"></textarea>
@@ -671,7 +711,10 @@ document.addEventListener("click", function(ev){
 
 /* ---------- el tablero de inicio ---------- */
 function refrescarTablero(){
-  fetch(API + "/publicaciones").then(function(r){ return r.json(); }).then(function(j){
+  /* sin no-store el navegador guarda la respuesta 30 segundos y los números
+     quedan viejos justo después de publicar algo */
+  fetch(API + "/publicaciones", { cache: "no-store" })
+    .then(function(r){ return r.json(); }).then(function(j){
     var t = j.publicaciones || [], ahora = Date.now() - 6*3600e3;
     var vig = function(p){ return p.cuando && p.cuando > ahora; };
     var n = {
@@ -868,6 +911,60 @@ function llamarIA(publicar, bt, textoBt){
 var propuestaViva = null, ultimaPublicada = 0;
 $("btPubIA").addEventListener("click", function(){ llamarIA(true, $("btPubIA"), "Publicalo vos"); });
 $("btVerIA").addEventListener("click", function(){ llamarIA(false, $("btVerIA"), "Mostrame antes de subir"); });
+
+/* ---------- el botón «Nuevo»: publicar lo último de Instagram ---------- */
+function traerDeIg(){
+  var bt = $("btNuevo"), original = bt.innerHTML;
+  decir("avisoNuevo", "");
+  $("resNuevo").hidden = true;
+  bt.disabled = true;
+  bt.innerHTML = '<span class="giro"></span>Mirando Instagram…';
+
+  pedir("/sugerir", { metodo:"POST", cuerpo:{} })
+    .then(function(j){
+      var c = j.creadas || [], d = j.descartadas || [];
+      if (!c.length){
+        decir("avisoNuevo", d.length
+          ? "Miré tus últimos posteos y no había nada nuevo para publicar."
+          : "No encontré posteos nuevos en Instagram.", "");
+      } else {
+        decir("avisoNuevo", c.length === 1
+          ? "Publiqué una: ya se ve en la web."
+          : "Publiqué " + c.length + ": ya se ven en la web.", "bien");
+      }
+      var h = c.map(function(p){
+        var cuando = p.fecha ? p.fecha : p.precio ? p.precio : "sin fecha";
+        return '<div class="creada" data-fila="' + p.id + '">' +
+          '<div class="txt"><b>' + esc(p.titulo) + '</b>' +
+            '<span>' + esc(cuando) + (p.lugar ? " · " + esc(p.lugar) : "") +
+            (p.conFoto ? " · con foto" : "") + '</span></div>' +
+          '<button class="bajar" type="button" data-id="' + p.id + '">Bajar</button></div>';
+      }).join("");
+
+      if (d.length){
+        var por = {};
+        d.forEach(function(x){ por[x.por] = (por[x.por] || 0) + 1; });
+        h += '<div class="saltadas"><b>No usé ' + d.length +
+             (d.length === 1 ? " posteo:</b> " : " posteos:</b> ") +
+             Object.keys(por).map(function(k){ return k + " (" + por[k] + ")"; }).join(", ") + '.</div>';
+      }
+      $("resNuevo").innerHTML = h;
+      $("resNuevo").hidden = !h;
+      refrescarTablero();
+    })
+    .catch(function(e){ decir("avisoNuevo", e.message, "mal"); })
+    .then(function(){ bt.disabled = false; bt.innerHTML = original; });
+}
+$("btNuevo").addEventListener("click", traerDeIg);
+$("accNuevo").addEventListener("click", function(){ irA("pAsis"); traerDeIg(); });
+$("resNuevo").addEventListener("click", function(ev){
+  var b = ev.target.closest("button[data-id]"); if (!b) return;
+  b.disabled = true; b.textContent = "…";
+  bajar(b.dataset.id, function(){
+    var f = b.closest(".creada"); if (f) f.remove();
+    refrescarTablero();
+  });
+});
 
 /* ---------- cargar a mano ---------- */
 var tipoActual = "proximamente", colorActual = "magenta";

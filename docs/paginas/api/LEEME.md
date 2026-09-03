@@ -19,6 +19,7 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
+| `POST /api/sugerir` | El botón «Nuevo» de la app: trae lo último de Instagram, se queda con los posteos que anuncian algo y los publica en la web. Devuelve qué creó y qué descartó, con el motivo. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo y devuelve la fila creada. Requiere sesión. |
 
 ## Una sola tabla
@@ -39,6 +40,27 @@ a mano cuando el dueño quiere otra.
 
 Las seis horas de gracia que aparecen en todos lados son para que una fiesta no
 desaparezca de la web mientras todavía se está haciendo.
+
+## El botón «Nuevo»
+
+`POST /api/sugerir` mira los posteos de `@iblo_eventos` y publica los que sirven.
+El orden en que filtra importa, porque cada paso ahorra el siguiente:
+
+1. **Los que ya se usaron quedan afuera.** Cuando publica algo desde un posteo, le
+   guarda el código del posteo en `origen`. Así el botón se puede tocar todas las
+   veces que se quiera sin repetir nada.
+2. **Prefiltro sin IA** (`pareceAviso` en `sugerir.js`): si el pie de foto no
+   nombra ni una fecha ni un precio, se descarta ahí mismo. Eso saca las fotos de
+   la fiesta del finde, los agradecimientos y los memes sin gastar una llamada, y
+   —más importante— **evita que el modelo invente una fecha**, que es lo que hacía
+   cuando se le daba un posteo sin fecha.
+3. **Cada posteo pasa por el mismo motor que el asistente** (`_ia.js`): el pie de
+   foto hace de «lo que dijo el dueño» y la imagen de flyer. Todos en paralelo.
+4. **Se descarta lo que ya pasó** y lo que quedó sin fecha ni precio.
+5. **No duplica lo que ya está arriba**: si hay una publicación con la misma fecha
+   (mismo día) o el mismo nombre, es la misma fiesta. No la vuelve a publicar; le
+   anota el `origen` a la que ya estaba, para no volver a mirar ese posteo. Pasa
+   seguido, porque el dueño carga la fiesta a mano antes de postearla en IG.
 
 ## Cómo está atado
 
@@ -97,3 +119,14 @@ rompería en unos días.
   dueño, y si aun así vuelve vacío, `/api/asistente` reintenta con el texto solo.
 - **El `falta` que devuelve el modelo miente**: listaba campos que había
   completado. Se calcula en el código, mirando qué quedó vacío de verdad.
+- **El que sabe leer el flyer no es el que sabe ponerle nombre a la fiesta.**
+  A `llama-4-scout` se le pedía todo junto y devolvía «IBLO Eventos» de título
+  (el logo de la imagen) o el pie de foto entero copiado. Ahora scout sólo
+  transcribe la imagen y `llama-3.3-70b` saca los datos del texto, que es lo que
+  hace bien. Los dos pasos viven en `_ia.js`, uno solo para las dos rutas que
+  piensan: cada arreglo de calidad vale para las dos.
+- **El modelo escribe la fecha como se le canta**: `2026-09-19T22:00`,
+  `19/09/2026`, `19.09.26`, `19/09`, `18 de julio de 2026`. Pedirle un formato
+  exacto y validarlo con una regex tiraba a la basura publicaciones buenas.
+  `leerFecha` en `_pub.js` las entiende todas (día primero, y sin año toma la
+  próxima que no pasó) y arma el timestamp y el texto que se muestra.

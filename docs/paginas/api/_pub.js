@@ -76,8 +76,10 @@ export function limpiarPublicacion(b) {
   };
 }
 
-/* Guarda una publicación nueva. Si es la destacada, le saca el cartel a la anterior. */
-export async function guardar(env, fila, autor) {
+/* Guarda una publicación nueva. Si es la destacada, le saca el cartel a la anterior.
+   `origen` es el código del posteo de Instagram del que salió, cuando salió de ahí:
+   sirve para no volver a publicar el mismo dos veces. */
+export async function guardar(env, fila, autor, origen) {
   const ahora = Date.now();
   if (fila.destacado) {
     await env.DB.prepare(
@@ -87,12 +89,101 @@ export async function guardar(env, fila, autor) {
   const r = await env.DB.prepare(
     `INSERT INTO publicaciones
        (tipo, titulo, subtitulo, detalle, fecha, cuando, lugar, hora, precio,
-        color, imagen, destacado, estado, autor, creado, tocado)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'publicada',?,?,?)`
+        color, imagen, destacado, estado, autor, creado, tocado, origen)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'publicada',?,?,?,?)`
   ).bind(
     fila.tipo, fila.titulo, fila.subtitulo, fila.detalle, fila.fecha, fila.cuando,
     fila.lugar, fila.hora, fila.precio, fila.color, fila.imagen, fila.destacado,
-    autor, ahora, ahora
+    autor, ahora, ahora, origen || null
   ).run();
   return r.meta?.last_row_id;
+}
+
+/* ---------------------------------------------------------------------------
+   Fechas. El modelo escribe la fecha como se le canta: «2026-09-19T22:00»,
+   «19/09/2026», «19.09.26», «19/09». Pedirle un formato exacto no alcanza, así
+   que las entendemos todas acá y armamos nosotros el timestamp y el texto que
+   se muestra. Siempre día primero, que es como se escribe acá.
+   --------------------------------------------------------------------------- */
+
+const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+/* saca la hora de un texto suelto: «22:00 hs», «open 00:30», «23hs» */
+export function leerHora(txt) {
+  const t = String(txt || "");
+  let m = t.match(/(\d{1,2})\s*[:.]\s*(\d{2})/);
+  if (m) return { h: +m[1], m: +m[2] };
+  m = t.match(/(\d{1,2})\s*(?:hs?\b|horas?\b)/i);
+  if (m) return { h: +m[1], m: 0 };
+  return null;
+}
+
+export function leerFecha(txt, hora, ahora = Date.now()) {
+  const t = String(txt || "").trim();
+  if (!t) return null;
+
+  let a = null, me = null, d = null, h = null, mi = null;
+
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/);
+  if (m) { a = +m[1]; me = +m[2]; d = +m[3]; if (m[4]) { h = +m[4]; mi = +m[5]; } }
+
+  if (a === null) {
+    m = t.match(/^(\d{1,2})\s*[/.\-]\s*(\d{1,2})(?:\s*[/.\-]\s*(\d{2,4}))?/);
+    if (m) {
+      d = +m[1]; me = +m[2];
+      if (m[3]) { a = +m[3]; if (a < 100) a += 2000; }
+    }
+  }
+  /* y a veces la escribe con letras: «18 de julio de 2026» */
+  if (d === null) {
+    m = t.match(/(\d{1,2})\s*(?:de\s+)?([a-záéíóú]{3,10})(?:\s*(?:de\s+)?(\d{4}))?/i);
+    if (m) {
+      const tres = m[2].toLowerCase().slice(0, 3);
+      const i = MESES.indexOf(tres === "set" ? "sep" : tres);
+      if (i >= 0) { d = +m[1]; me = i + 1; if (m[3]) a = +m[3]; }
+    }
+  }
+  if (d === null || me === null || d < 1 || d > 31 || me < 1 || me > 12) return null;
+
+  /* la hora que dijeron aparte le gana a la que venga pegada a la fecha */
+  const hs = leerHora(hora) || (h !== null ? { h, m: mi } : null) || { h: 22, m: 0 };
+  if (hs.h > 23 || hs.m > 59) return null;
+
+  /* sin año: el próximo que todavía no pasó */
+  if (a === null) {
+    const y = new Date(ahora).getFullYear();
+    a = y;
+    if (Date.UTC(a, me - 1, d, hs.h + 3, hs.m) < ahora - 12 * 3600e3) a = y + 1;
+  }
+  if (a < 2024 || a > 2100) return null;
+
+  /* Chaco es UTC-3 todo el año */
+  const ms = Date.UTC(a, me - 1, d, hs.h + 3, hs.m);
+  if (!Number.isFinite(ms)) return null;
+
+  return {
+    ms,
+    /* como se muestra en la web: 19.09.26 */
+    texto: String(d).padStart(2, "0") + "." + String(me).padStart(2, "0") + "." + String(a).slice(2),
+    hora: String(hs.h).padStart(2, "0") + ":" + String(hs.m).padStart(2, "0") + " hs",
+  };
+}
+
+/* Los flyers vienen todos en mayúscula y el título quedaba GRITANDO.
+   Sólo la baja si TODO el texto está en mayúscula; si el dueño escribió
+   «Halloween IBLO» respetamos su mezcla. */
+const CHICAS = new Set(["de","del","la","las","el","los","y","en","a","con","por","para","un","una"]);
+/* siglas que se escriben en mayúscula aunque el resto baje */
+const SIGLAS = new Set(["iblo","dj","djs","vip","mc","rrpp","led","after","bs","as"]);
+export function casoNormal(t) {
+  if (!t) return t;
+  const puroAlto = t === t.toUpperCase() && /[A-ZÁÉÍÓÚÑ]{3}/.test(t);
+  const puroBajo = t === t.toLowerCase() && /[a-záéíóúñ]{3}/.test(t);
+  if (!puroAlto && !puroBajo) return t;
+  return t.toLowerCase().split(/(\s+|[-/])/).map((p, i) => {
+    if (!/[a-záéíóúñ]/.test(p)) return p;
+    if (SIGLAS.has(p)) return p.toUpperCase();
+    if (i > 0 && CHICAS.has(p)) return p;
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  }).join("");
 }
