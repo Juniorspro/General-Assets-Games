@@ -770,7 +770,7 @@ const postMat=new THREE.ShaderMaterial({
     '  uv+=cc*dot(cc,cc)*0.016;',                       // curvatura del tubo (era 0.052: a esa fuerza una pared recta se arquea y el centro deja de estar donde uno cree)
     '  vec2 uvb=uv;',
     '  uv.y=fract(uv.y+uJump);',                        // la imagen se corre
-    '  float wob=sin(uv.y*118.0+uTime*7.0)*0.0007+sin(uv.y*11.0-uTime*1.3)*0.0017;',
+    '  float wob=sin(uv.y*118.0+uTime*4.4)*0.0007+sin(uv.y*11.0-uTime*0.85)*0.0017;',   // el bamboleo respira mas despacio
     '  uv.x+=wob*uWob;',                                // bamboleo de tracking
     '  float by=floor(uv.y*22.0);',
     '  float act=step(1.0-uGlitch*0.55,h1(by*1.7+floor(uTime*14.0)*3.1));',
@@ -792,7 +792,7 @@ const postMat=new THREE.ShaderMaterial({
     '  col=col*1.02+vec3(0.016,0.020,0.034);',          // negros lavados de cinta
     '  float sl=sin(uv.y*3.14159*430.0);',
     '  col*=1.0-0.085*sl*sl;',                          // líneas de barrido
-    '  col*=1.0-0.026*mod(floor(uv.y*260.0)+floor(uTime*48.0),2.0);',
+    '  col*=1.0-0.026*mod(floor(uv.y*260.0)+floor(uTime*30.0),2.0);',
     '  float n=h2(uv*uRes*0.5+vec2(fract(uTime*41.0),fract(uTime*17.0))*131.0);',
     /* EL GRANO PESABA MAS QUE LA IMAGEN. Medido sobre una captura del juego en
        un telefono: mediana de brillo 17 sobre 255 y el grano en 9,1 niveles de
@@ -3866,11 +3866,46 @@ const hint=document.getElementById('hint'),torchBtn=document.getElementById('tor
    descendientes— asi que la sonda del banco no cambia. */
 const torchTx=document.getElementById('torchTx');
 const placeEl=document.getElementById('place');
-const move={x:0,y:0}; let moveId=null,lookId=null,lookPrev={x:0,y:0},origin={x:0,y:0};
+const move={x:0,y:0,r:0}; let moveId=null,lookId=null,lookPrev={x:0,y:0},origin={x:0,y:0};
 const keys={}; let started=false, torchOn=true;
 let grain=0.063;   // el mismo que da el deslizador en su posicion de fabrica (0,132 x 0,48)
 /* ─── estado de la cinta ─── */
 const vhs={timer:rnd(3,8),g:0,hold:0,roll:0,jump:0,wob:0.5};
+/* EL GLITCH SE APAGA DEL TODO, Y ESE ERA EL DEFECTO.
+   `roll` decaia con una exponencial —Math.pow(0.04,dt)— o sea que se hace
+   diminuto y NUNCA llega a cero. Y `uJump` se escribia como `roll?jump:0`, asi
+   que con un roll de una millonesima la condicion seguia siendo verdadera y el
+   uniforme quedaba clavado en el valor que tuviera `jump`. En el shader eso es
+   `uv.y=fract(uv.y+uJump)`: la imagen corrida una fraccion fija para siempre,
+   con la costura del fract cruzando la pantalla — una banda horizontal que no
+   se mueve nunca mas. No es que el efecto sea muy fuerte: es que no termina.
+
+   Ahora las dos cosas se CIERRAN: por debajo del umbral se ponen en cero, y
+   antes de eso la imagen vuelve a su sitio por el camino corto (hacia 0 o
+   hacia 1, que en un fract son el mismo punto), asi que la costura se va
+   deslizando fuera del cuadro en vez de apagarse de golpe. */
+function vhsPaso(raw){
+  vhs.timer-=raw;
+  if(vhs.timer<=0){
+    const strong=Math.random()<0.24;
+    vhs.g=strong?rnd(0.55,0.9):rnd(0.14,0.42);
+    vhs.hold=strong?rnd(0.08,0.24):rnd(0.04,0.14);
+    vhs.roll=(strong&&Math.random()<0.40)?rnd(-1.3,1.3):0;
+    vhs.timer=rnd(5,18);
+  }
+  if(vhs.hold>0) vhs.hold-=raw;
+  else{
+    vhs.g*=Math.pow(0.015,raw);   if(vhs.g<0.004) vhs.g=0;
+    vhs.roll*=Math.pow(0.05,raw); if(Math.abs(vhs.roll)<0.06) vhs.roll=0;
+  }
+  if(vhs.roll) vhs.jump=(vhs.jump+vhs.roll*raw+1)%1;
+  else if(vhs.jump){
+    const meta=vhs.jump>0.5?1:0;
+    vhs.jump+=(meta-vhs.jump)*Math.min(raw*5,1);
+    if(Math.abs(meta-vhs.jump)<0.0015) vhs.jump=0;
+  }
+  vhs.wob+=((0.5+vhs.g*2.4)-vhs.wob)*Math.min(raw*6,1);
+}
 const MES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
 let tapeT=0,lastSec=-1;
 const sdate=document.getElementById('sdate'),stime=document.getElementById('stime'),
@@ -3885,7 +3920,7 @@ function osdUpdate(){
   stime.textContent=p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());
   tapeEl.innerHTML='SP&nbsp;&nbsp;'+Math.floor(sec/3600)+':'+p(Math.floor(sec/60)%60)+':'+p(sec%60);
 }
-let SENS=0.0038; const MAXS=60;
+let SENS=0.0031; const MAXS=60;   // la vista tambien va mas despacio; el deslizador la sube
 
 /* ─── estados: menu · play · paused ─── */
 let state='menu';
@@ -3896,7 +3931,7 @@ function setState(v){
   menuEl.classList.toggle('hide',v!=='menu');
   pauseEl.classList.toggle('hide',v!=='paused');
   document.body.classList.toggle('ui-off',v!=='play');
-  move.x=move.y=0; moveId=null; lookId=null;
+  move.x=move.y=move.r=0; moveId=null; lookId=null;
   stickBase.classList.remove('on'); stickKnob.classList.remove('on');
   if(A&&A.setPaused) A.setPaused(v!=='play');
   if(v!=='play'&&document.pointerLockElement) document.exitPointerLock();
@@ -4025,7 +4060,7 @@ for(const b of document.querySelectorAll('#idi .lg'))
 pauseBtn.addEventListener('click',e=>{e.stopPropagation(); if(state==='play'&&!fin) setState('paused');});
 menuEl.addEventListener('pointerdown',()=>initAudio(),{once:true});
 document.getElementById('slSens').addEventListener('input',e=>{
-  SENS=0.0038*(e.target.value/100);});
+  SENS=0.0031*(e.target.value/100);});
 document.getElementById('slVol').addEventListener('input',e=>{
   if(A&&A.setVolume) A.setVolume(e.target.value/100);});
 { const sb=document.getElementById('slBri');
@@ -4113,6 +4148,11 @@ addEventListener('touchmove',e=>{
     if(t.identifier===moveId){
       const p=toLocal(t.clientX,t.clientY);
       let dx=p.x-origin.x,dy=p.y-origin.y,d=Math.hypot(dx,dy);
+      /* LA EMPUJADA SE GUARDA ANTES DE RECORTARLA. Un joystick de pulgar se
+         lleva al borde para caminar normal: midiendo la desviacion YA topada,
+         llegar al aro es correr y la velocidad de caminar no se puede elegir.
+         Correr es empujar MAS ALLA del aro, y eso solo existe sin recortar. */
+      move.r=d/MAXS;
       if(d>MAXS){dx=dx/d*MAXS;dy=dy/d*MAXS;}
       stickKnob.style.left=(origin.x+dx)+'px'; stickKnob.style.top=(origin.y+dy)+'px';
       move.x=dx/MAXS; move.y=dy/MAXS;
@@ -4125,7 +4165,7 @@ addEventListener('touchmove',e=>{
   e.preventDefault();
 },{passive:false});
 function endT(e){for(const t of e.changedTouches){
-  if(t.identifier===moveId){moveId=null;move.x=move.y=0;
+  if(t.identifier===moveId){moveId=null;move.x=move.y=move.r=0;
     stickBase.classList.remove('on');stickKnob.classList.remove('on');}
   if(t.identifier===lookId)lookId=null;}}
 addEventListener('touchend',endT,{passive:false});
@@ -4151,8 +4191,8 @@ addEventListener('mousemove',e=>{
     paperRX=Math.max(-1.5,Math.min(1.5,paperRX+e.movementY*0.006));
     return;
   }
-  P.yaw-=e.movementX*0.0021; P.pitch=Math.max(-1.3,Math.min(1.3,P.pitch-e.movementY*0.0021));
-  P.yawVel+=-e.movementX*0.0021;
+  P.yaw-=e.movementX*0.0017; P.pitch=Math.max(-1.3,Math.min(1.3,P.pitch-e.movementY*0.0017));
+  P.yawVel+=-e.movementX*0.0017;
 });
 
 /* ══════════ jugador ══════════ */
@@ -4160,7 +4200,15 @@ addEventListener('mousemove',e=>{
 const P={x:-0.65,z:5.25,y:0,level:0,yaw:0,pitch:0,
   vx:0,vz:0,bob:0,bobY:0,bobX:0,breath:0,roll:0,lean:0,yawVel:0,fov:HFOV,sprint:0,stepPh:0,panic:0};
 const R=0.32, EYE=1.66;
-const WALK=1.15, RUN=2.0;          // marcha lenta: tensión
+/* CUANTO SE AVANZA. La casa mide 27 m de lado y se recorre entera en menos de
+   un minuto: a esa velocidad no se mira, se pasa. Y lo que este juego tiene es
+   justamente lo que hay que mirar —los muebles que tapan las cintas, los
+   papeles, la puerta que se movio sola—. Baja a paso de alguien que entra a
+   una casa a oscuras con una camara en la mano.
+   LA ZANCADA NO SE TOCA Y NO HACE FALTA: `stepPh` avanza con `dt*v`, asi que
+   el paso mide siempre π/3 = 1,05 m y lo unico que cambia es cada cuanto cae.
+   Lo mismo el cabeceo y el nivel de la pisada, que salen de `v`. */
+const WALK=0.82, RUN=1.45;
 
 function resolve(){
   const feet=P.y, head=P.y+1.62;
@@ -4198,7 +4246,7 @@ const tDir=new V3(), tPos=new V3(), tAim=new V3(0,1.5,-1);
 /* preasignados: antes se creaban Vector3/Quaternion/Euler nuevos en cada frame */
 const _aim=new V3(), _tp=new V3();
 const _eu=new THREE.Euler(0,0,0,'YXZ'), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion();
-let lastRoom='', flickT=0;
+let lastRoom='', flickT=0, _pasosN=0;   // los pasos se cuentan aca y no en el audio: la cadencia existe con el sonido apagado
 
 function tick(){
   requestAnimationFrame(tick);
@@ -4212,9 +4260,17 @@ function tick(){
   if(keys.KeyS||keys.ArrowDown)iz+=1;
   if(keys.KeyA||keys.ArrowLeft)ix-=1;
   if(keys.KeyD||keys.ArrowRight)ix+=1;
+  /* CORRER SE PIDE CON EL DEDO O CON SHIFT, Y EL DEDO ES EL DEL JOYSTICK.
+     Estaba escrito `mag>0.93` sobre el vector YA MEZCLADO con el teclado, y una
+     tecla de direccion da magnitud 1 exacta: o sea que con teclado se corria
+     SIEMPRE y la velocidad de caminar no existia. Es el mismo defecto que en
+     RezUno tenia al jugador corriendo todo el tiempo por medir la desviacion
+     del joystick despues de recortarla. La empujada del joystick se mide sobre
+     el joystick. */
+  const empuje=move.r;
   let mag=Math.hypot(ix,iz); if(mag>1){ix/=mag;iz/=mag;mag=1;}
 
-  const wantRun=(mag>0.93)||keys.ShiftLeft||keys.ShiftRight;
+  const wantRun=(empuje>1.30)||keys.ShiftLeft||keys.ShiftRight;
   P.sprint+=((wantRun&&mag>0.3?1:0)-P.sprint)*Math.min(dt*3,1);
   const spd=(WALK+P.sprint*(RUN-WALK))*mag;
 
@@ -4222,8 +4278,8 @@ function tick(){
   /* frente = (-sin, -cos) · derecha = (cos, -sin) */
   const tvx=(ix*cy + iz*sy)*spd;
   const tvz=(iz*cy - ix*sy)*spd;
-  P.vx+=(tvx-P.vx)*Math.min(dt*7.5,1);
-  P.vz+=(tvz-P.vz)*Math.min(dt*7.5,1);
+  P.vx+=(tvx-P.vx)*Math.min(dt*5.2,1);
+  P.vz+=(tvz-P.vz)*Math.min(dt*5.2,1);
   P.x+=P.vx*dt; P.z+=P.vz*dt;
   resolve();
 
@@ -4239,6 +4295,7 @@ function tick(){
   P.stepPh+=dt*v*3.0;
   if(P.stepPh>Math.PI){
     P.stepPh-=Math.PI;
+    _pasosN++;
     if(A&&v>0.22){
       const out=!inHouse(P.x,P.z);
       const surf = P.y<-1.2 ? 'conc'
@@ -4550,25 +4607,14 @@ function tick(){
   if(noteT>0){ noteT-=dt; if(noteT<=0) noteEl.style.opacity=0; }
 
   /* ─── cinta: interferencias ocasionales ─── */
-  vhs.timer-=raw;
-  if(vhs.timer<=0){
-    const strong=Math.random()<0.28;
-    vhs.g=strong?rnd(0.65,1.0):rnd(0.18,0.5);
-    vhs.hold=strong?rnd(0.12,0.45):rnd(0.05,0.2);
-    vhs.roll=(strong&&Math.random()<0.45)?rnd(-1.6,1.6):0;
-    vhs.timer=rnd(3.5,14);
-  }
-  if(vhs.hold>0) vhs.hold-=raw;
-  else{ vhs.g*=Math.pow(0.015,raw); vhs.roll*=Math.pow(0.04,raw); }
-  vhs.jump=(vhs.jump+vhs.roll*raw+1)%1;
-  vhs.wob+=((0.5+vhs.g*2.4)-vhs.wob)*Math.min(raw*6,1);
+  vhsPaso(raw);
   if(state==='play') tapeT+=raw;   // la cinta sólo corre mientras se juega
   osdUpdate();
 
   postMat.uniforms.uTime.value=T;
   postMat.uniforms.uGrain.value=grain;
   postMat.uniforms.uGlitch.value=vhs.g;
-  postMat.uniforms.uJump.value=vhs.roll?vhs.jump:0;
+  postMat.uniforms.uJump.value=vhs.jump;
   postMat.uniforms.uWob.value=vhs.wob;
   renderer.setRenderTarget(rt);
   renderer.render(scene,camera);
@@ -4589,6 +4635,23 @@ window.__casa={
      por el MISMO camino que el jugador —userData.iFn— y no llamando a
      tomaCinta: si el registro de interaccion se rompiera, una sonda que llama a
      la funcion directo seguiria contestando que todo anda. */
+  /* ── LA CINTA COMO EFECTO ──
+     `vhs()` devuelve el estado del glitch Y los uniformes que de verdad llegan
+     al shader. Hacen falta los dos: `roll` puede ser un residuo invisible y
+     aun asi dejar `uJump` clavado, que es lo que se ve como una banda que no
+     se mueve nunca mas. */
+  vhs(){ const u=postMat.uniforms;
+    return {g:+vhs.g.toFixed(6), hold:+vhs.hold.toFixed(3), roll:+vhs.roll.toFixed(6),
+      jump:+vhs.jump.toFixed(4), timer:+vhs.timer.toFixed(2),
+      uGlitch:+u.uGlitch.value.toFixed(6), uJump:+u.uJump.value.toFixed(4),
+      uWob:+u.uWob.value.toFixed(3)}; },
+  glitch(g,hold,roll){ vhs.g=g; vhs.hold=hold||0; vhs.roll=roll||0;
+    vhs.timer=999; return this.vhs(); },
+  /* mueve el reloj del glitch sin dibujar: el banco corre a 6 cuadros por
+     segundo y esperar catorce segundos de reloj de pared son cuatro de juego */
+  correVhs(seg){ const paso=1/60; let n=Math.round(seg/paso);
+    while(n-->0) vhsPaso(paso);
+    return this.vhs(); },
   cintas(){ return {llevadas:cintasT, finalVisible:cintaFinal.g.visible,
     sonando:cinta?cinta.ck:null, k:+cintaK.toFixed(3),
     piezas:cintas.map(t=>({ck:t.ck,tomada:t.tomada,vis:t.g.visible,
@@ -4820,6 +4883,33 @@ window.__casa={
                y_final:+P.y.toFixed(2), y_mas_bajo:+minY.toFixed(2),
                en_el_hueco:inHole(P.x,P.z), traza,
                llego_al_sotano:minY<-2.80, pasos:k, colisiones_cerca:cerca}); }
+      },16); }); },
+  /* ══════════ CUANTO SE AVANZA ══════════
+     Lo que se mide es |v| EN METROS POR SEGUNDO y la zancada en metros: los
+     dos son propiedades de la fisica y no dependen de a cuantos cuadros dibuje
+     el banco —que aca son seis por segundo con el dt topado en 0,05—. Medir
+     metros contra el reloj de pared daria diez veces menos, que es la misma
+     trampa que ya costo una medicion en LEMI. */
+  marcha(n,correr,empuje){ n=n||150;
+    P.x=-0.65; P.z=5.00; P.yaw=0; P.pitch=0; P.vx=0; P.vz=0; P.sprint=correr?1:0;
+    const x0=P.x, z0=P.z, p0=_pasosN;
+    let vmax=0;
+    return new Promise(res=>{ let k=0;
+      /* con `empuje` se entra por el JOYSTICK y no por el teclado: es el unico
+         camino donde se puede probar que llegar al aro camina y pasarlo corre */
+      if(empuje!==undefined){ const c=Math.min(empuje,1);
+        move.x=0; move.y=-c; move.r=empuje; }
+      else { keys.KeyW=true; if(correr) keys.ShiftLeft=true; }
+      const id=setInterval(()=>{
+        const v=Math.hypot(P.vx,P.vz); if(v>vmax) vmax=v;
+        if(++k>=n){ clearInterval(id); keys.KeyW=false; keys.ShiftLeft=false;
+          move.x=move.y=move.r=0;
+          const d=Math.hypot(P.x-x0,P.z-z0), pas=_pasosN-p0;
+          res({tope_ajustado:correr?RUN:WALK, empuje:empuje===undefined?null:empuje,
+               v_max_medida:+vmax.toFixed(3),
+               metros:+d.toFixed(2), pasos:pas,
+               zancada_m:pas?+(d/pas).toFixed(2):null,
+               desde:[x0,z0], hasta:[+P.x.toFixed(2),+P.z.toFixed(2)]}); }
       },16); }); },
   /* la ganancia del haz, para barrerla y elegirla mirando y no a ojo */
   gan(v){ if(v!==undefined) shaftMat.uniforms.uA.value=v;

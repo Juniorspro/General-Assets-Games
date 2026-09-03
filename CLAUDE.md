@@ -136,6 +136,96 @@ sintetizado si un clip no decodifica.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Nonagésima primera vuelta (2026-09-03): **CASA 13** — la banda que no se movía nunca más, y se camina despacio
+
+Reporte, con una captura del teléfono en la que una franja gris de estática cruza el cuadro a dos
+tercios de altura: *"arregla eso que el efecto de la cámara no se trabe y que el movimiento de
+personaje sea más lento y mejora el efecto de la cámara que todo vaya despacio para que no avances muy
+rápido y así veas más el mapa"*.
+
+#### LA FRANJA NO ERA UN GLITCH NUEVO: ERA LA DE ABAJO, LLEVADA AL MEDIO Y OLVIDADA AHÍ
+
+La conmutación de cabezas (`hs`) vive **en el borde de abajo del cuadro** —`smoothstep(0.052,0.0,uv.y)`,
+o sea el 5% inferior— porque es donde una VHS la pone. Y encima el post hace
+`uv.y=fract(uv.y+uJump)`, que corre la imagen entera en vertical.
+
+`uJump` salía de `vhs.roll?vhs.jump:0`, y **`roll` decaía con una exponencial**: `Math.pow(0.04,dt)` se
+hace diminuto y **no llega nunca a cero**. Con un roll de una millonésima el ternario sigue siendo
+verdadero, así que el uniforme se quedaba clavado en el `jump` que hubiera en ese instante — un número
+repartido parejo entre 0 y 1. Medido en el juego corriendo, disparando un susto y esperando quince
+segundos:
+
+| | uJump al final |
+|---|---|
+| como estaba | **0,6697** |
+| ahora | **0** |
+
+Con 0,67 la imagen queda corrida dos tercios **para siempre**, y con ella la banda de estática de abajo
+se muda a un tercio de altura y ahí se queda. Fotografiado, es exactamente la captura del reporte. No
+era que el efecto fuera muy fuerte: era que **no terminaba**.
+
+**Y NO SE ARREGLA CON UN UMBRAL EN EL TERNARIO, porque el defecto es que la imagen quede corrida.** Las
+dos cosas se cierran: por debajo del umbral `roll` y `g` se ponen en **cero exacto**, y antes de eso
+`jump` vuelve a su sitio **por el camino corto** —hacia 0 o hacia 1, que en un `fract` son el mismo
+punto— así que la costura se desliza fuera del cuadro en vez de apagarse de golpe. Medido paso a paso:
+roll 1,4 → 0 en 1,5 s, y `jump` en 0 a los 3,5.
+
+**Y LA PRUEBA DETECTA EL DEFECTO**, que es lo que la hace valer: revertidas las dos líneas sobre el
+mismo binario, `uJump` vuelve a quedarse en 0,6697.
+
+#### EL TECLADO CORRÍA SIEMPRE, Y ESO ERA LA MITAD DE «VAS MUY RÁPIDO»
+
+`wantRun=(mag>0.93)` estaba escrito sobre el vector **ya mezclado con el teclado**, y una tecla de
+dirección da magnitud **1 exacta**: o sea que con W se corría siempre y `WALK` no existía. Es el mismo
+defecto que en RezUno tenía al jugador corriendo todo el tiempo por medir la desviación del joystick
+**después** de recortarla.
+
+**Y EL JOYSTICK TENÍA LA OTRA MITAD, literal.** `move` guardaba la desviación **topada** en el aro, así
+que llevar el pulgar al borde —que es lo que hace cualquiera para caminar normal— era pedir carrera.
+Ahora se guarda `move.r` **antes** de recortar y correr es empujar **más allá** del aro (1,30).
+
+Medido, caminando de verdad por el pasillo:
+
+| | tope ajustado | v medida | metros | zancada |
+|---|---|---|---|---|
+| **antes**, con W | 1,15 | **2,00** (o sea corriendo) | 6,22 | 1,24 m |
+| ahora, con W | 0,82 | **0,82** | 2,70 | 1,35 m |
+| ahora, W + Shift | 1,45 | **1,45** | 5,30 | 1,06 m |
+| joystick al aro (1,00) | — | **0,82** | 3,42 | 1,14 m |
+| joystick pasado (1,45) | — | **1,45** | 5,77 | 0,96 m |
+
+O sea que quien jugaba con teclado se movía a **2,00 m/s y ahora va a 0,82: dos veces y media más
+despacio**. Y la carrera baja de 2,0 a 1,45.
+
+**LA ZANCADA NO HUBO QUE TOCARLA Y ÉSA ES LA PRUEBA DE QUE ESTABA BIEN DERIVADA:** `stepPh` avanza con
+`dt*v`, así que el paso mide siempre π/3 = 1,05 m y lo único que cambia es cada cuánto cae. Lo mismo el
+cabeceo y el nivel de la pisada, que salen de `v`.
+
+**Y LA MEDICIÓN VA EN METROS POR SEGUNDO, no en metros contra el reloj de pared.** El banco dibuja a
+seis cuadros por segundo con el `dt` topado en 0,05: dividir por el reloj de pared da diez veces menos,
+que es la misma trampa que ya costó una medición en LEMI.
+
+#### Y LO DEMÁS TAMBIÉN VA MÁS DESPACIO
+
+La aceleración pasa de `dt*7,5` a `dt*5,2` —el cuerpo pesa más—, la vista de 0,0038 a 0,0031 (el
+deslizador la sigue subiendo) y el ratón de 0,0021 a 0,0017. El bamboleo de tracking respira más lento
+(7,0 → 4,4 y 1,3 → 0,85 rad/s) y el parpadeo de entrelazado baja de 48 a 30 Hz, que a 60 cuadros dejaba
+de leerse a cinta y pasaba a ser un estrobo. Los glitches salen menos seguido (3,5-14 s → **5-18**) y
+duran menos (el fuerte, 0,12-0,45 s → 0,08-0,24).
+
+**LO QUE NO SE TOCÓ ES CADA CUÁNTO SE RESORTEA LA BANDA** (`floor(uTime*14.0)`): bajarlo haría que cada
+patrón durara más, o sea que se leería **más** trabado — justo lo contrario del pedido.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Partida completa por el camino del jugador: **3 de 3 cintas**, la cuarta aparece, se reproduce y el
+final arranca (`paso 1`). Glitch: `uJump` en **0** contra 0,6697 de antes, y en la foto la banda de
+estática vuelve al borde de abajo. Marcha 0,82 · carrera 1,45 · zancada 1,05 m. **Nada regresó:**
+linterna con desvío **0°**, haz en **[0,0]**, alabeo **0** con la vista girando 40 muestras, HUD **sin
+un solo solapamiento** en 892×412, 732×412, 800×360 y 1280×720, **14 de 14 texturas de foto puestas**,
+**22 programas y 63 texturas** —los mismos de la vuelta anterior—, `window.__errs` vacío en las once
+corridas.
+
 ### Nonagésima vuelta (2026-09-03): **CASA 13** — cada cuarto suena distinto, y la criatura tiene garganta
 
 Pedido: *"genera con Rezona sonidos y que los guardes en el repo y que no dependa de proyectos en Rezona
