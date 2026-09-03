@@ -107,8 +107,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
-- **`Casa_Abandonada.html` es "CASA 13"** (~896 KB, de los cuales 276 son **doce voces de cinta**
-  y 200 **catorce texturas de foto**
+- **`Casa_Abandonada.html` es "CASA 13"** (~1,08 MB, de los cuales 276 son **doce voces de cinta**,
+  202 **diecinueve sonidos generados** y 200 **catorce texturas de foto**
   generadas con Rezona; los papeles, los escombros, el cielo y las telarañas se dibujan por codigo). Llego de afuera como
   `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
   primera persona: una cinta VHS del 12 de marzo de 1994, linterna, papeles que se leen, y todo el
@@ -128,11 +128,101 @@ que la grabo el propio jugador, con la misma fecha y la misma hora que el HUD ll
 primer cuadro, y ahi termina el juego. Mientras suena una cinta la pantalla se apaga con el PROPIO
 post (brillo 0,22) y el reloj quemado pasa a ser el de la cinta. No hay enemigos: los sustos son un
 director de eventos —puertas, bombillas, cosas que se caen, persianas, ruidos de otro cuarto, pasos
-que cruzan y objetos que se intercambian de sitio— que acelera con la tension.
+que cruzan y objetos que se intercambian de sitio— que acelera con la tension. **Cada cuarto tiene
+su propia cama de ambiente** y la criatura tiene voz propia; todo lo generado degrada al
+sintetizado si un clip no decodifica.
 
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Nonagésima vuelta (2026-09-03): **CASA 13** — cada cuarto suena distinto, y la criatura tiene garganta
+
+Pedido: *"genera con Rezona sonidos y que los guardes en el repo y que no dependa de proyectos en Rezona
+para generar dichos assets, genera sonidos a cada monstruo acción y mapa ambiental"*.
+
+#### QUÉ SE GENERA Y QUÉ NO, QUE ES LA DECISIÓN DE LA VUELTA
+
+Este juego nació con **todo** el audio sintetizado y eso sigue siendo lo correcto para lo paramétrico:
+la lluvia no se puede grabar —un clip se corta en cada vuelta y ese corte se escucha más que la
+lluvia— y el trueno necesita distancia, azimut y retardo, o sea que **tiene** que calcularse. Lo que
+gana con una grabación es lo que un oscilador no puede fingir, y son tres cosas:
+
+- **Las camas de cuarto.** Hasta acá los ocho cuartos sonaban igual salvo por la reverb y por el
+  filtro de la lluvia. Cinco camas —casa, cocina, baño, sótano, trastero— son lo que convierte ocho
+  cajas en ocho sitios. Medido, el fondo de cada cuarto: **sótano 0,0173 · baño 0,0278 · cocina
+  0,0271 · pasillo 0,0214**.
+- **La criatura.** Una garganta no es un oscilador con un pasabanda. Y **la silueta del pasillo tenía
+  la misma voz que una viga**: sonaba `roomNoise`, o sea exactamente el ruido que hace la casa vacía.
+  Ahora respira o gruñe si está cerca y grita a lo lejos si está lejos.
+- **Los golpes con materia.** Un chirrido de bisagra, un frasco que rueda, una persiana. Medido sobre
+  un fondo de 0,086: **puerta 0,389 · persiana 0,327 · caída 0,307**, contra un procedural que se
+  perdía entre los transitorios de la lluvia.
+
+#### TODO DEGRADA, Y ESO ES UNA LÍNEA
+
+`sfx()` devuelve `false` cuando el clip no está, así que cada sitio es
+`if(sfx(...)) return;` seguido del sintetizado de siempre. Un clip que no decodifica —o un navegador
+sin MP3— deja el juego **exactamente como estaba antes de esta vuelta**. Verificado corriendo con los
+19 clips vacíos: los siete eventos suenan y `window.__errs` queda vacío.
+
+#### EL PROYECTO SE BUSCA POR NOMBRE, NO SE ESCRIBE
+
+El servidor pide un `project_id` en cada generación, así que no se puede generar «sin proyecto». Lo
+que sí se puede es que **ningún proyecto sea parte de la cadena**: `herramientas/rezona/balde.py`
+busca el balde descartable por nombre y **lo crea si no está**. Con el id escrito a mano, borrarlo
+desde la app deja todas las llamadas contestando `PROJECT_NOT_FOUND` — pasó esta misma vuelta con el
+proyecto de la anterior.
+
+**Y NO SE PUEDE BORRAR POR CÓDIGO, medido por tres caminos:** el MCP no tiene `delete_project`, el CLI
+tampoco, y `DELETE /api/projects/{id}` **existe pero contesta 403** con la credencial de API. El balde
+se vacía a mano; lo que se puede garantizar desde acá es que ahí no haya nada identificable.
+
+#### TRES COSAS DEL SERVIDOR QUE COSTARON LA MITAD DE LA VUELTA
+
+1. **Hay un límite de cuántas generaciones se mandan seguidas.** De 19 pasaron **5** y las otras 14
+   volvieron con `GENERATION_RATE_LIMITED`; un segundo intento de cuatro dio **0 de 4**. El límite es
+   por tiempo y una tanda grande se lo come entero: se manda de a **tres con dos minutos de espera**.
+2. **EL PROVEEDOR DE SONIDO SE CAE Y VUELVE, Y UN TASK_ID FALLIDO SE VE IGUAL QUE UNO BUENO.** Cinco
+   de los diecinueve terminaron en `failed` con `PROVIDER_UNAVAILABLE` / `NOIZ_FAILED` y
+   `retryable: true`. O sea que no alcanza con reintentar lo que no se envió: hay que **mirar el
+   estado** y volver a pedir lo que falló, o el bucle se declara terminado con cinco clips que no
+   existen — que es literalmente lo que pasó, y el script imprimió «están las 19» con cinco huecos.
+3. **El `duration` que se pide no se respeta.** Pedidos de 1 a 3 s volvieron de **3,3 a 6,3**. Se topa
+   al hornear, con un fundido de 80 ms para que el corte no sea un chasquido: un interruptor de tres
+   segundos y medio no es un interruptor, y sin topar los diecinueve clips pesaban el doble.
+
+#### LAS CAMAS ARRANCAN LAS CINCO Y SÓLO CAMBIA CUÁL TIENE GANANCIA
+
+Encendiendo y apagando fuentes se paga un click en cada puerta que se cruza, y cruzar puertas es lo
+que este juego hace. **Y se intenta arrancarlas hasta que estén las cinco, no una sola vez:** los
+clips se decodifican en paralelo y terminan en instantes distintos, así que marcando «listo» en el
+primer intento que encuentra alguno, las camas que decodificaron un cuadro después no arrancarían
+nunca — y el defecto no falla, simplemente ese cuarto se queda con la cama de la casa.
+
+**Y LA CAMA SALE DE `roomName()`, que ya corría una vez por cuadro para el rótulo.** Con una segunda
+tabla de cuartos, lo que se oye y lo que dice el cartel se separan el día que se mueva un tabique.
+
+#### EL NIVEL SALE DE LA ESCALA QUE EL JUEGO YA TENÍA MEDIDA
+
+Lluvia **0,0207** y voz de las cintas **0,1122**: de ahí salen los diecinueve. Una cama de cuarto
+tiene que colorear el sitio sin competir con la lluvia (0,012 a 0,016) y el grito tiene que ser lo más
+fuerte que suena (0,149). Y se mide **después de codificar**, con una corrección: los diecinueve caen
+dentro del 4 % de su objetivo.
+
+**Y EL CLACK DE LA CINTA BAJÓ DESPUÉS DE MEDIRLO.** Suena **al mismo tiempo** que arranca la voz de la
+grabación, y el pico conjunto llegaba a 0,73: el plástico va por debajo de la voz, no encima.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+**19 de 19 clips decodificados**, 151,4 KB horneados. Los cinco cuartos con su cama y su fondo
+distinto. Partida completa por el camino del jugador: 3 de 3 cintas, la cuarta aparece, se reproduce y
+el final llega a la pantalla de cierre. **Nada regresó:** linterna con desvío **0°**, haz en **[0,0]**,
+alabeo **0** con la vista girando 40 muestras, HUD **sin un solo solapamiento** en 892×412, 732×412,
+800×360 y 1280×720, 6 firmas de hoja en tres idiomas todas distintas, ajustes desde el menú, **14 de
+14 texturas de foto puestas**, **22 programas y 63 texturas** —los mismos de la vuelta anterior—,
+pisadas 7 por tanda, objetos que cambian de lugar **30 de 30**, `window.__errs` vacío en las nueve
+corridas. El HTML pasó de 896 KB a **1,08 MB**, y esos 202 son los diecinueve sonidos.
 
 ### Octogésima novena vuelta (2026-09-03): **CASA 13** — tres cintas, y la última la grabaste vos
 

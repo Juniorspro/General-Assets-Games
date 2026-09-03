@@ -70,7 +70,11 @@ if __name__ == '__main__':
     AQUI = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(AQUI, '..', 'rezona'))
     import rz
-    PROY = 'YlgCbidN'   # el balde descartable, NUNCA uno con el nombre del juego
+    # EL PROYECTO NO SE ESCRIBE A MANO: se busca por nombre y se crea si no
+    # esta. Con el id clavado, borrar el balde desde la app deja todas las
+    # llamadas contestando PROJECT_NOT_FOUND — ya paso una vez.
+    from balde import balde
+    PROY = balde()
     TAR = os.path.join(AQUI, 'tareas_voz.json')
 
     def clave(c, i): return '%s_%s' % (c['ck'], i)

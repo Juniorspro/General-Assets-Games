@@ -31,7 +31,11 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(AQUI, '..', 'rezona'))
 import rz
 
-PROY = 'YlgCbidN'   # el balde descartable, NUNCA uno con el nombre del juego
+# EL PROYECTO NO SE ESCRIBE A MANO: se busca por nombre y se crea si no esta.
+# Con el id clavado, borrar el balde desde la app deja todas las llamadas
+# contestando PROJECT_NOT_FOUND — ya paso una vez.
+from balde import balde
+PROY = balde()
 TAREAS = os.path.join(AQUI, 'tareas.json')
 
 PLANO = ('straight-on orthographic top-down product photo, centered, flat even '
