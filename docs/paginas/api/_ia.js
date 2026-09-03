@@ -1,4 +1,5 @@
 import { leerFecha, casoNormal } from "./_pub.js";
+import { pedirIA } from "./_modelos.js";
 
 /* ---------------------------------------------------------------------------
    Lo que convierte texto suelto (y el flyer, si hay) en una publicación.
@@ -7,11 +8,6 @@ import { leerFecha, casoNormal } from "./_pub.js";
    Está acá y no repetido en cada una porque cada arreglo de calidad tiene que
    valer para las dos.
    --------------------------------------------------------------------------- */
-
-/* Texto suelto. Es el que mejor le pone nombre a la fiesta. */
-const MODELO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-/* Multimodal, sólo para leer el flyer. Es el que no pide aceptar licencia. */
-const MODELO_OJO = "@cf/meta/llama-4-scout-17b-16e-instruct";
 
 export const COLORES = ["magenta","violeta","oro","verde","cian","rojo","naranja","blanco"];
 
@@ -114,18 +110,14 @@ function rescatarTitulo(d, delFlyer) {
 
 /* Mira el flyer y devuelve lo que dice, en texto plano. No decide nada. */
 async function leerFlyer(env, imagen) {
-  const r = await env.AI.run(MODELO_OJO, {
-    messages: [{ role: "user", content: [
+  const r = await pedirIA(env, [{ role: "user", content: [
       { type: "text", text:
         "Es el flyer de una fiesta. Transcribí en castellano TODO el texto que se lee: nombre de la " +
         "fiesta, fecha, hora, lugar, precios, quién toca. Después, en una línea aparte que empiece con " +
         "«Onda:», describí en pocas palabras la estética (colores, temática). No inventes nada que no se lea." },
       { type: "image_url", image_url: { url: imagen } },
-    ] }],
-    max_tokens: 400,
-    temperature: 0.1,
-  });
-  const t = String(r?.response ?? r?.choices?.[0]?.message?.content ?? "").trim().slice(0, 1200);
+    ] }], { conImagen: true, tope: 400, calor: 0.1 });
+  const t = String(r.texto || "").trim().slice(0, 1200);
   /* La línea «Onda:» es andamiaje nuestro, para elegir el color. Va aparte y bien
      rotulada: mezclada con la transcripción, el extractor la tomaba de título
      («Onda: azul oscuro a negro degradé» quedó como nombre de una fiesta). */
@@ -149,19 +141,15 @@ async function escribirDetalle(env, p, fuente) {
     p.hora   ? "Hora: " + p.hora : "",
     p.precio ? "Entradas: " + p.precio : "",
   ].filter(Boolean).join(". ");
-  const r = await env.AI.run(MODELO, {
-    messages: [
+  const r = await pedirIA(env, [
       { role: "system", content:
         "Escribís el texto de un aviso para IBLO Eventos, productora de fiestas de Margarita Belén, Chaco. " +
         "Español rioplatense con voseo, con energía pero sin exagerar. Dos o tres frases, máximo 45 palabras. " +
         "Usá SOLO los datos que te doy, no agregues ninguno. Sin emojis, sin hashtags, sin arrobas, " +
         "sin comillas. Devolvé únicamente el texto." },
       { role: "user", content: datos + "\n" + fuente },
-    ],
-    max_tokens: 200,
-    temperature: 0.55,
-  });
-  const t = String(r?.response || "").trim()
+    ], { tope: 200, calor: 0.55 });
+  const t = String(r.texto || "").trim()
     .replace(/^["'«»]+|["'«»]+$/g, "").replace(/@\S+/g, "").replace(/\s+/g, " ");
   return t.length > 20 ? t.slice(0, 400) : "";
 }
@@ -232,16 +220,11 @@ export async function proponer(env, texto, imagen, opc) {
     "el flyer sólo sirve para completar lo que él no dijo.";
 
   async function extraer(fuenteTexto, calor) {
-    const r = await env.AI.run(MODELO, {
-      messages: [
-        { role: "system", content: sistema },
-        { role: "user", content: fuenteTexto },
-      ],
-      max_tokens: 700,
-      temperature: calor == null ? 0.2 : calor,
-      response_format: { type: "json_schema", json_schema: ESQUEMA },
-    });
-    const crudo = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? "");
+    const r = await pedirIA(env, [
+      { role: "system", content: sistema },
+      { role: "user", content: fuenteTexto },
+    ], { esquema: ESQUEMA, tope: 700, calor: calor == null ? 0.2 : calor });
+    const crudo = r.texto;
     const a = crudo.indexOf("{"), z = crudo.lastIndexOf("}");
     if (a < 0 || z <= a) return null;
     try { return JSON.parse(crudo.slice(a, z + 1)); } catch { return null; }

@@ -819,11 +819,40 @@ function sacarVerde(im, listo){
   cx.drawImage(im, 0, 0, an, al);
   var d = cx.getImageData(0, 0, an, al), p = d.data, n = an * al;
 
-  /* 1. alfa y quitada del reflejo verde */
+  /* 0. de qué color es el fondo.
+     Antes se daba por hecho que era verde puro, y con eso el recorte sólo servía
+     para el generador de Cloudflare. Mirando las cuatro esquinas sirve para
+     cualquier fondo parejo, venga de donde venga la imagen. */
+  var esq = [[2,2],[an-3,2],[2,al-3],[an-3,al-3]], sr = 0, sg = 0, sb = 0;
+  for (var q = 0; q < 4; q++){
+    var kk = ((esq[q][1] * an) + esq[q][0]) * 4;
+    sr += p[kk]; sg += p[kk+1]; sb += p[kk+2];
+  }
+  var fr = sr/4, fg = sg/4, fb = sb/4;
+  /* ¿las esquinas se parecen entre sí? si no, el fondo no es parejo y no hay
+     nada que recortar con confianza: se vuelve al criterio de verde de siempre */
+  var disp = 0;
+  for (var q2 = 0; q2 < 4; q2++){
+    var k2 = ((esq[q2][1] * an) + esq[q2][0]) * 4;
+    disp = Math.max(disp, Math.abs(p[k2]-fr) + Math.abs(p[k2+1]-fg) + Math.abs(p[k2+2]-fb));
+  }
+  var fondoParejo = disp < 90;
+  var esVerde = fg - Math.max(fr, fb) > 26;
+
+  /* 1. alfa: lo parecido al fondo se va, y al resto se le saca el rebote verde */
   for (var i = 0; i < n; i++){
     var k = i * 4, r = p[k], g = p[k+1], b = p[k+2];
     var otro = r > b ? r : b;
     var verde = g - otro;
+
+    if (fondoParejo && !esVerde){
+      /* fondo liso de cualquier color: se mide la distancia a ese color */
+      var d0 = Math.abs(r-fr) + Math.abs(g-fg) + Math.abs(b-fb);
+      if (d0 < 60){ p[k+3] = 0; continue; }
+      if (d0 < 110){ p[k+3] = Math.round(255 * ((d0 - 60) / 50)); }
+      continue;
+    }
+
     if (verde > 26 && g > 70){ p[k+3] = 0; continue; }
     if (verde > 4){
       var f = verde / 26;                        // 0 en el objeto, 1 en el fondo
@@ -901,7 +930,7 @@ var esc = function(s){ return String(s).replace(/[&<>"]/g,function(c){
 var COLORES = { magenta:"#ff1e8e", violeta:"#c34bff", oro:"#e8bf4e", verde:"#2ce65a",
                 cian:"#2fd8e8", rojo:"#ff2020", naranja:"#e8863a", blanco:"#f4f1f6" };
 
-var sesion = null, usuario = null, iaViva = false;
+var sesion = null, usuario = null, iaViva = false, iaQuienes = {};
 try { sesion = localStorage.getItem("iblo.sesion"); usuario = localStorage.getItem("iblo.usuario"); } catch(e){}
 
 /* ---------- red ---------- */
@@ -934,7 +963,7 @@ function cargando(bt, si, textoNormal){
 
 /* ---------- ingreso ---------- */
 pedir("/estado").then(function(j){
-  iaViva = !!j.ia;
+  iaViva = !!j.ia; iaQuienes = j.proveedores || {};
   $("bajaIng").textContent = "Entrá con tu usuario para subir a la web.";
   if (sesion) abrirApp();
 }).catch(function(){
@@ -965,7 +994,10 @@ function abrirApp(){
   $("ajUsuario").textContent = usuario || "—";
   $("ajServidor").textContent = "iblo-eventos.pages.dev";
   $("ajBase").innerHTML = '<span class="si">conectada</span>';
-  $("ajIA").innerHTML = iaViva ? '<span class="si">activa</span>' : '<span class="no">sin IA</span>';
+  var nombres = Object.keys(iaQuienes).filter(function(k){ return iaQuienes[k]; });
+  $("ajIA").innerHTML = nombres.length
+    ? '<span class="si">' + nombres.join(" + ") + '</span>'
+    : '<span class="no">sin IA</span>';
   $("ajWa").textContent = "3725 44-9273";
   $("ajIg").textContent = "@" + IG;
   refrescarTablero();

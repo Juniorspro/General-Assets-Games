@@ -39,6 +39,51 @@ Probado moviendo las fechas: con dos publicadas manda la más cercana, al vencer
 esa pasa la otra sola, y al vencerse las dos la sección desaparece de las dos
 versiones del sitio.
 
+## De dónde sale la IA
+
+`_modelos.js` es una cadena, no un proveedor solo: Cloudflare (sin clave, la de
+casa) y detrás OpenRouter, Groq, Gemini, Cerebras y GitHub Models. Cada uno entra
+sólo si su clave está guardada como secreto del Worker:
+
+    cd sitio && wrangler pages secret put GROQ_API_KEY --project-name iblo-eventos
+
+Ojo: **el secreto recién toma efecto en el despliegue siguiente.** Si no, sigue
+sin verlo.
+
+Se salta al próximo de la fila cuando el error es de **cupo, saturación o clave
+mala** —una clave vencida no tiene que dejar sin IA a los que sí andan; eso se
+descubrió probando con una clave falsa, que cortaba la cadena—. Con cualquier
+otro error se corta, porque un pedido mal armado va a fallar igual con todos. Si
+varios fallan, se reporta el de cupo, que es el que le dice algo al dueño.
+
+Los que no saben mirar imágenes (Cerebras) se saltean solos cuando lo que se pide
+es leer un flyer.
+
+### Por qué no hay ninguno sin clave
+
+Se buscó a fondo, probando generación real desde la IP del Worker, no listados:
+Pollinations (402; el único URL que contesta es una respuesta cacheada), Hack
+Club, HuggingFace, api.airforce, DeepInfra, ArliAI, glhf, Cohere, Mistral,
+Together, NVIDIA NIM, Ollama cloud (todos 401) y DuckDuckGo (418, desafío
+anti-bot). Puter.js sí existe y es legítimo, pero devuelve `auth_canceled`: le
+pide cuenta al usuario final. Lo único keyless que anda es la generación de
+imágenes de Pollinations, y su fondo sale con degradado, así que el recorte no lo
+puede sacar.
+
+### Cuánto se gasta de verdad
+
+Medido con la API de analytics de Cloudflare, por llamada:
+
+| | neuronas |
+|---|---|
+| texto | ~20 |
+| leer un flyer | ~19 |
+| **generar un adorno (flux)** | **~250** |
+
+Publicar algo con la IA son tres llamadas: unas 60 neuronas. Con 10.000 por día
+entran ~165 publicaciones o ~40 adornos. **El dueño no va a llegar al límite en
+uso normal**; el día que se agotó fue por 425 llamadas de prueba en 24 horas.
+
 ## El cupo de la IA
 
 El plan gratis de Workers AI trae **10.000 «neuronas» por día** y las lecturas de
