@@ -142,6 +142,43 @@ JUEGOS = {
                          celdas=[(0,0)]),
         'k_pasto': dict(archivo='k_pasto.png', tipo='tex', lado=320),
     },
+    'penal': {
+        'p_gente': dict(archivo='p_gente.png', tipo='hoja', lado=224,
+                        celdas=[(0,0)]),
+        # volvio 2x2 con las filas repetidas: parado y volando, los dos mirando
+        # a la derecha. El juego ESPEJA el que se tira para el otro lado.
+        'p_arquero': dict(archivo='p_arquero.png', tipo='hoja', lado=256,
+                          reja=(2, 2), celdas=[(0,0),(0,1)]),
+        'p_bola': dict(archivo='p_bola.png', tipo='hoja', lado=128, celdas=[(0,0)]),
+        'p_pasto': dict(archivo='p_pasto.png', tipo='tex', lado=320),
+    },
+    'duelo': {
+        # ── Y ACA LA REJA SE MIDE JUSTAMENTE PORQUE HAY LINEAS ──
+        # La hoja volvio con una cruz separadora encima de las dos figuras.
+        # Declarando la reja 2x1, las celdas se parten EN la linea, las cuatro
+        # esquinas caen sobre ella y el relleno desde el borde no encuentra
+        # fondo: se cae al umbral y las lineas SOBREVIVEN — medido en la
+        # captura, dos rayas oscuras cruzando a los dos pistoleros. `mide_reja`
+        # devuelve cajas ajustadas a las figuras, con la linea AFUERA.
+        # Y MIDE TRES COLUMNAS, NO DOS: la linea vertical es una isla de tinta
+        # como cualquier otra, asi que cuenta como celda. La del medio ES la
+        # linea — medido en la captura, el rival salia como una raya negra
+        # vertical de doscientos pixeles — y las figuras son la 0 y la 2.
+        'd_tipos': dict(archivo='d_tipos.png', tipo='hoja', lado=256,
+                        celdas=[(0,0),(0,2)]),
+        'd_tierra': dict(archivo='d_tierra.png', tipo='tex', lado=320),
+    },
+    'pesca': {
+        's_pescador': dict(archivo='s_pescador.png', tipo='hoja', lado=224,
+                           celdas=[(0,0)]),
+        # ── VOLVIO 2x4 CON OCHO PECES Y NO 3x2 CON SEIS ──
+        # Y dos son repetidos (dos dorados y dos lubinas), asi que las celdas se
+        # eligen MIRANDO la hoja: trucha, dorado, lubina, atun, raya y aguja, en
+        # el orden en que el juego los indexa.
+        's_peces': dict(archivo='s_peces.png', tipo='hoja', lado=224,
+                        reja=(2, 4), celdas=[(0,0),(0,1),(1,1),(2,0),(3,0),(3,1)]),
+        's_agua': dict(archivo='s_agua.png', tipo='tex', lado=320),
+    },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
         # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es

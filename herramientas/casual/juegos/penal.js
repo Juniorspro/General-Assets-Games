@@ -99,9 +99,20 @@ function pGenera(n){
      Con el aro cayendo a 0,75 el bot honesto —que prueba dos mil doscientos
      tiros por nivel— metia el 30 % y ganaba veinte de cincuenta: si el que
      tiene control perfecto no llega, una persona con el dedo no llega nunca. */
-  const meta = { x: lado*(P_ANCHO/2 - 0.85), y: alto ? P_ALTO - 0.55 : 0.75,
+  const meta = { x: lado*(P_ANCHO/2 - 1.30), y: alto ? P_ALTO - 0.55 : 0.75,
                  r: Math.max(1.15, 1.95 - (n - 1)*0.016) };
+  pAcota(meta);
   return { b, arq, meta, tope: 5, goles: Math.min(4, 2 + Math.floor((n - 1)/16)) };
+}
+
+/* ── EL ARO TIENE QUE CABER ADENTRO DEL ARCO ──
+   Medido en la captura, con el centro a 2,81 m del medio y radio 1,95 el aro
+   llegaba a 4,76 contra los 3,66 del poste: SE SALIA por el costado, y medio aro
+   dibujado fuera del arco no dice donde hay que meterla, dice cualquier cosa. */
+function pAcota(m){
+  m.r = Math.min(m.r, P_ANCHO/2 - Math.abs(m.x) + 0.35,
+                 P_ALTO - m.y + 0.45, m.y + 0.60);
+  m.r = Math.max(0.85, m.r);
 }
 
 /* ══════════ LA PROYECCIÓN ══════════
@@ -167,7 +178,11 @@ const JUEGO = {
     for (let i = 0; i < 6 && !pBusca(this.meta, true).entra; i++){
       /* el aro se topa en 2,4: mas grande se sale del arco por los costados y
          deja de decir donde hay que meterla, que es para lo que existe */
+      /* al aflojar, el aro crece Y se corre hacia el centro: creciendo solo, se
+         sale por el costado del arco y deja de decir donde hay que meterla */
       this.meta.r = Math.min(2.4, this.meta.r*1.14);
+      this.meta.x *= 0.88;
+      pAcota(this.meta);
       if (i >= 2 && P_barrera.length > 1) P_barrera.pop();
     }
     P_tiros = 0; P_goles = 0;
@@ -549,7 +564,12 @@ function pBarrera(g){
     const sy = w.y || 0;
     const p = pProy(w.x, sy, z), q = pProy(w.x, w.alt + sy, z);
     const an = 0.46*p.e;
-    if (!dibCuadroWH('p_gente', 0, p.x, (p.y + q.y)/2, an*1.15, p.y - q.y)){
+    /* ── VA POR ALTO Y NO ESTIRADO ──
+       `dibCuadroWH` estira el sprite al ancho y al alto que se le den, que es lo
+       correcto para un bloque de CASTILLO —cambia de forma piso a piso— y lo
+       incorrecto para una persona: estirada se deforma. El alto lo pone la
+       proyeccion y el ancho sale de la proporcion del cuadro. */
+    if (!dibCuadro('p_gente', 0, p.x, p.y, p.y - q.y)){
       caja2(p.x - an/2, q.y, an, p.y - q.y, an*0.28, '#2f4f7a', 'rgba(10,14,22,.6)');
       disco(p.x, q.y - an*0.30, an*0.34, '#e8b48a');
       /* las manos delante de la cara: es lo que dice que esto es una barrera */
@@ -569,7 +589,9 @@ function pArquero(g){
   const p = pProy(P_arq.x, 0, 0.4), q = pProy(P_arq.x, 1.85, 0.4);
   const an = 0.62*p.e;
   const tir = Math.abs(P_arq.x) > 0.3;
-  if (!dibCuadroWH('p_arquero', tir ? 1 : 0, p.x, (p.y + q.y)/2, an*1.5, p.y - q.y)){
+  /* y el que se tira se ESPEJA segun el lado: el sprite volvio volando hacia la
+     derecha, asi que sin espejo el arquero se tira siempre para el mismo lado */
+  if (!dibCuadro('p_arquero', tir ? 1 : 0, p.x, p.y, p.y - q.y, tir && P_arq.x < 0)){
     g.save();
     if (tir){ g.translate(p.x, (p.y + q.y)/2); g.rotate(Math.sign(P_arq.x)*0.55);
               g.translate(-p.x, -(p.y + q.y)/2); }
