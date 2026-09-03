@@ -23,6 +23,23 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
 
+## La app en el teléfono
+
+El panel es una **PWA instalable**: `app.webmanifest` + `sw.js` + los tres iconos
+(`icono-192`, `icono-512` y el `icono-mask`, que Android recorta en círculo y por
+eso lleva más margen). Con eso Chrome ofrece «Instalar aplicación» y queda en la
+pantalla de inicio con su icono, a pantalla completa y sin barra de navegador.
+
+El service worker guarda **sólo el armazón** —el HTML, que ya trae el CSS y el JS
+adentro— y **nunca `/api/`**: una respuesta vieja de la API sería peor que un
+error, porque mostraría publicaciones que ya no están. Red primero, caché de
+respaldo: sin señal el dueño abre la app y la ve, aunque no pueda publicar.
+
+Para el APK (una TWA) hace falta además `/.well-known/assetlinks.json` con la
+huella SHA-256 de la clave con que se firma. Sin eso el APK abre igual pero con
+la barra del navegador arriba. La clave vive fuera del repo: si se pierde, no se
+puede publicar una actualización de esa misma app, hay que empezar con otra.
+
 ## Una sola tabla
 
 Todo lo que sube el dueño vive en `publicaciones`, con un `tipo`
