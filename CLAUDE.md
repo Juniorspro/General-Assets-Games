@@ -280,6 +280,180 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
+
+Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer
+una key cada que querés"*, y a mitad de camino *"si tienes Rezona haz con Rezona cada maldito assets
+yayayaya"*. Salieron **nueve**: ARCO · CASTILLO · PENAL · DUELO · PESCA · SALTO · ESQUIVA · NIEVE ·
+GRÚA, todos sobre el mismo núcleo de `herramientas/casual/` y con **todos los assets generados con
+Rezona** — nada dibujado por código salvo el respaldo.
+
+#### LA REGLA QUE ORDENA LOS NUEVE: UN VERBO CADA UNO, Y NINGUNO SE REPITE
+
+Nueve juegos de tirarle a algo son un juego copiado nueve veces si el gesto es el mismo. Lo que los
+separa no es el tema sino **qué se decide**:
+
+| | qué se elige | y qué lo vuelve difícil |
+|---|---|---|
+| **ARCO** | un vector (ángulo y fuerza) | el viento cambia cada tiro |
+| **CASTILLO** | dónde pega, no a quién | no se gana acertándole al rey: se gana tirándole la torre encima |
+| **PENAL** | **un camino**, la curva del dedo | la barrera tapa el recto |
+| **DUELO** | **un instante**, cuánto sostener | la mira se cierra y el otro también espera |
+| **PESCA** | una **modulación sostenida** | el hilo se corta si no aflojás |
+| **SALTO** | **un número** | las rocas se mueven mientras cargás |
+| **ESQUIVA** | una **dirección** | te avisan uno y te tiran otro |
+| **NIEVE** | **conducir**, y el dedo no se levanta nunca | girar cuesta velocidad |
+| **GRÚA** | un instante, pero **el correcto no es el obvio** | la carga sale de costado, así que hay que soltar ANTES |
+
+#### LO QUE SE REPITIÓ EN LOS NUEVE, Y ES LA LECCIÓN DE FONDO
+
+**LA PUNTERÍA SE RESUELVE SIMULANDO CONTRA LO QUE HAY, NUNCA CON UNA FÓRMULA CERRADA A UN PUNTO.** La
+parábola dice dónde cae y no dice si llega. En CASTILLO el bot barre veinte tiempos de vuelo **contra
+los bloques**; en PENAL el barrido de 11×8×25 incluye **al arquero** —sin él el bot honesto sacaba
+21,7 % teniendo gol en los cincuenta niveles—; en GRÚA el vuelo se prueba contra el andamio.
+
+**Y EL NIVEL NO SE PLANTA Y DESPUÉS SE COMPRUEBA: SE PLANTA DONDE CAYÓ UN TIRO QUE YA SE VOLÓ.** Es lo
+que hace GRÚA —se elige una soltada al azar, se vuela, y la base va ahí— y es la forma más barata de
+que un nivel imposible **no pueda existir**. Cuando el orden es al revés hay que relajar y reintentar,
+que es lo que hacen PENAL (`meta.r *= 1,14`, después `meta.x *= 0,88`, y a las dos vueltas se cae un
+integrante de la barrera) y SALTO.
+
+**LA SEPARACIÓN ENTRE EL BOT HONESTO Y EL DEL AZAR ES LA ÚNICA PRUEBA DE QUE HAY UNA DECISIÓN ADENTRO.**
+Medido en los nueve binarios que se publican:
+
+| | auditoría | honesto | al azar |
+|---|---|---|---|
+| ARCO | — | 63 tiros / 63 aciertos, tasa **1,000** | 327/102, **0,312** |
+| CASTILLO | 0 malos de 60 | **50/60** en 221 tiros | 4/60 en 373 |
+| PENAL | 0 de 50 | **38/50**, tasa 0,674 | 0/50, 0,032 |
+| DUELO | 0 de 40 | **29/40**, tasa 0,719 | 1/40, 0,139 |
+| PESCA | 0 de 45 | **45/45** | 4/45 |
+| SALTO | 0 de 55 | **55/55**, tasa 0,96 | 0/55, 0,229 |
+| ESQUIVA | 0 de 45 | **45/45**, tasa 1,000 | 35/45, 0,789 |
+| NIEVE | 0 de 50 | **47/50**, tasa 0,989 | 0/50, 0,466 |
+| GRÚA | 0 de 45 | **45/45**, 144 de 144 tiros, tasa 1,000 | 7/45, 0,209 |
+
+#### CASTILLO: EL REY ESTABA ARRIBA, Y POR ESO EL JUEGO NO SE PODÍA GANAR
+
+Es el que más costó y el que más enseña. Tres defectos encadenados, y ninguno se veía mirando:
+
+1. **EL REY NACÍA HERIDO EN 60 DE 60 NIVELES.** Se lo colocaba con su **centro** sobre la superficie de
+   apoyo, o sea medio enterrado, y ahí la normal de separación es degenerada: la resolución lo empujaba
+   **hacia abajo, a través de la torre**. Se arregla apoyándolo por su base y con un respaldo por el eje
+   de menor penetración.
+2. **43 DE 60 TORRES NO SE ASENTABAN NUNCA.** Cada par de bloques se resolvía **dos veces** y la segunda
+   pasada empujaba al de abajo hacia abajo. Con los pares por índice `i < j` y moviendo **sólo el cuerpo
+   de arriba**, se asientan las sesenta.
+3. **Y LOS DOS BOTS EMPATABAN (40 contra 39).** Esa es la firma exacta de un juego cuya condición de
+   victoria no es la que uno cree: el rey no se gana por impacto, se gana por **aplastamiento**. Lo que
+   lo destrabó fueron cuatro cosas a la vez: el bot pondera la masa que hay **encima** del rey ×3, el rey
+   se muda a la cámara de la **planta baja**, entra el **vuelco por voladizo** —un bloque cuyo centro de
+   masa se sale de sus apoyos se cae— y el daño por carga. Y para que un solo tiro no ganara todos los
+   niveles igual, el punto débil se mueve: barbacana y zócalo.
+
+#### PENAL: LA PROYECCIÓN ESTABA DADA VUELTA, Y EL ARCO ERA MÁS ANCHO QUE LA PANTALLA
+
+`z + P_OJO` en vez de `(P_DIST + P_OJO) − z`: o sea que las cosas **crecían** al alejarse. Y la cámara
+no tenía altura, así que el suelo no tenía perspectiva. Con `P_OJO 6,2`, `P_ALTOC 1,6`, `P_FOCO 1500` y
+el horizonte en 0,34 del alto, el arco entra y la pelota se ve.
+
+**Y LA TENSIÓN DE LA CURVA SE MIDE POR EL MÁXIMO Y NO POR EL PROMEDIO.** La distancia con signo de cada
+punto del recorrido a la cuerda: promediada, una **S** se cancela y devuelve cero — que es exactamente
+el gesto que un jugador hace cuando duda. El máximo no se deja engañar.
+
+#### DUELO: EL BLANCO ESTABA AL REVÉS
+
+`hypot(x, y*1.6) < r` castiga el error **vertical** sobre un blanco que es una persona, o sea alto y
+angosto: apuntarle a la cabeza o a los pies fallaba y apuntar de costado acertaba. Es una elipse y sus
+semiejes son los del cuerpo: `hypot(x/0.085, y/0.19) < 1`.
+
+#### PESCA: EL COMBATE DURABA UN MINUTO
+
+Recoger a 7,5 con el hilo sin tope daba peleas de sesenta segundos, que en un juego de un verbo es una
+espera y no una tensión. Recoger 15 y el hilo topado en 118 m. Más dos cosas de dibujo que sólo se ven
+mirando: **el pescador estaba parado en el mar** (entró un muelle) y **el pez era una mancha de 49
+píxeles**, porque el quinto argumento de `dibCuadro` es el **alto** de la caja y `celda_cuadrada` centra
+en un cuadrado — un pez apaisado ahí dentro sale diminuto.
+
+#### SALTO: SE ATERRIZABA DE COSTADO
+
+`y >= tapa` sigue siendo cierto en los cuadros siguientes: el héroe seguía cayendo **y avanzando** —hasta
+seiscientos píxeles— y se «apoyaba» en cualquier roca por la que pasara de lado. Medido, eso **más que
+duplicaba** la ventana de carga: el bot al azar acertaba el 51 % de sus saltos donde la geometría da 22.
+Con la prueba de **cruce** (`vy > 0` y la altura cruzada entre este cuadro y el anterior) el azar cayó a
+0,229, que es el número que la cuenta predice.
+
+#### ESQUIVA: ESQUIVAR TEMPRANO TIENE QUE SER LEGAL
+
+Castigar la esquiva anticipada convierte al bot rápido en un espantapájaros —medido, tasa 0,000— y, lo
+que importa, borra la finta: si esquivar antes del aviso siempre pierde, la finta no engaña a nadie
+porque nadie puede reaccionar antes. Ahora una esquiva temprana se juzga contra **el ataque de verdad**,
+y ahí el rival que avisa uno y tira otro empieza a cobrar (el bot al azar aguanta hasta el duelo 34).
+
+#### NIEVE: EL CONTROLADOR SE ESCRIBIÓ TRES VECES Y CADA VUELTA SE MIDIÓ
+
+Con la corrección proporcional a secas ganaba **28 de 50**. Dos cambios lo llevaron a 47:
+
+- **LA RAMPA SE DESCUENTA DEL TIEMPO, NO SE COMPENSA CON UN FACTOR A OJO.** La inclinación llega con
+  constante 1/5 s, así que de los `T` segundos que quedan sólo se puede contar con `T − 0,2` a
+  inclinación plena. Un factor fijo queda bien a **una sola** distancia: corto cuando falta poco y
+  exagerado cuando falta mucho.
+- **SE APUNTA AL BORDE QUE MIRA A LA PUERTA SIGUIENTE, NO AL MEDIO.** Entrar por el medio es tirar a la
+  basura medio hueco de ventaja — y la cuenta del generador ya contaba con ella, porque mide el
+  corrimiento de borde a borde.
+
+Y un defecto de dibujo que sólo salió de una captura: **los postes se plantan por su borde de adentro y
+no por su centro.** Los tres obstáculos tienen anchos distintos —el peñasco mide el doble que el pino—
+así que puestos todos a la misma distancia del canto de la cinta, el peñasco se metía **54 unidades
+dentro del hueco**: el dibujo prometía menos paso del que las reglas dan, y eso hace corregir de más por
+algo que no existe.
+
+#### GRÚA: EL MOMENTO CORRECTO NO ES CUANDO PASA POR ENCIMA
+
+Al soltar, la carga se lleva la velocidad que traía, que es **perpendicular al cable**: sale disparada de
+costado y sigue viajando mientras cae. Soltarla justo encima del blanco la manda de largo. Y el andamio
+cierra la ventana por el otro lado, porque soltar demasiado temprano la manda baja.
+
+**CUÁNTO PUEDE ALEJARSE LA BASE NO ES UNA CONSTANTE.** Con la hamacada chica del nivel 1 el alcance
+máximo son unas 260 unidades: exigiendo 330 se rechazaban **todos** los tiros y los ocho primeros niveles
+salían **sin una sola carga** — y el juego se caía leyendo una carga indefinida. El umbral crece con la
+amplitud, y si la dificultad pedida no da un tiro **se baja la dificultad**: un nivel vacío no es fácil,
+es un nivel que no existe.
+
+**Y LA CARGA SE RECORTA, PORQUE EL SPRITE TRAE SU PROPIO CABLE.** Se pidió «una carga colgando de un
+gancho», así que el **42 % de arriba** de cada cuadro es cable y gancho —medido fila por fila sobre la
+imagen, la caja arranca en el 42 % y las sogas se abren desde el 38—. Dibujado entero quedaban **dos**
+cables, el propio y el del juego, y en el vuelo un gancho flotando sobre la caja.
+
+#### LOS ASSETS: TODO REZONA, Y TRES REGLAS QUE COSTARON SU GENERACIÓN
+
+Sesenta y cinco tareas en el proyecto descartable `YlgCbidN`. `pedir.py` pide, `traer.py` trae,
+`hornear*.py` hornea. Y **`crudo/tareas.json` se versiona aunque los PNG no**: perder el `task_id` es
+perder el asset pagado.
+
+1. **LA REJA PEDIDA ES UNA SUGERENCIA, Y SE MIDE.** Se pidieron tres esquiadores en 3×1 y volvieron
+   **2×3 con las filas repetidas**; tres guerreros en 3×1 y volvieron **2×2 con cuatro, y el cuarto es
+   un escudo**. Las celdas salen de lo que `mide_reja` midió, no de lo que se pidió.
+2. **Y HAY UN CASO EN QUE MEDIR NO ALCANZA:** las dos últimas celdas de `g_base` volvieron con el fondo
+   **lila y no magenta puro**, así que el relleno desde el borde no las separa y la reja medida las junta
+   en una sola de 688 píxeles. Las tres piezas que hacen falta están enteras en la fila de arriba.
+3. **EL MAGENTA ENCERRADO POR LA PROPIA GEOMETRÍA NO SE ALCANZA DESDE EL BORDE.** La catapulta de
+   CASTILLO salía con **tres triángulos magenta** adentro del bastidor. El relleno desde afuera no llega;
+   la regla que sí sirve es «magenta puro donde sea es fondo», y el suavizado se hace después.
+4. **`traer.py` INFORMABA 0 DE 9 TRAÍDOS Y HABÍA TRAÍDO LOS NUEVE:** `destination_dir` se ignora y el
+   servidor escribe en la carpeta marcada con `.rezona/`. Hay que leer `absolute_path` de la respuesta.
+   Y esa carpeta —13 MB de crudo dentro del repo— quedó en `.gitignore`.
+
+#### Y UN DEFECTO DE LA SONDA DEL NÚCLEO, QUE ES EL QUE MÁS COSTÓ ENCONTRAR
+
+`__J.juegaSolo` hacía `JSON.stringify` sobre una cadena que **ya era JSON**, así que el promedio de las
+corridas devolvía `null` en todos los campos **sin un solo error**. Es la enésima vez en este repo que la
+medición está mal antes que el juego, y la firma es siempre la misma: un resultado imposible que llega
+sin fallar.
+
+**LO QUE NO SE PUDO COMPROBAR:** no puedo escuchar, así que de los clips generados está medido que
+decodifican y a qué nivel suenan, no si el tema de NIEVE pega con NIEVE.
+
 ### Nonagésima séptima vuelta (2026-09-03): **OCHO CASUALES** — los fondos generados, y dos juegos de sensor
 
 Pedido, en dos partes: *"hace juegos simples pero súper adictivos roguelike cartas etc que use
