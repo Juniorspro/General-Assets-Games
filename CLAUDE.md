@@ -107,7 +107,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
-- **`Casa_Abandonada.html` es "CASA 13"** (~1,08 MB, de los cuales 276 son **doce voces de cinta**,
+- **`Casa_Abandonada.html` es "CASA 13"** (~1,64 MB, de los cuales 411 son **la criatura en 3D**
+  —modelo generado y riggeado, 41 huesos y dos clips—, 276 son **doce voces de cinta**,
   202 **diecinueve sonidos generados** y 200 **catorce texturas de foto**
   generadas con Rezona; los papeles, los escombros, el cielo y las telarañas se dibujan por codigo). Llego de afuera como
   `casaabandonadav14.html` y se sigue mejorando en el sitio, sin partir en trozos. Found footage en
@@ -135,6 +136,132 @@ sintetizado si un clip no decodifica.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
+
+### Nonagésima tercera vuelta (2026-09-03): **CASA 13** — la criatura es un modelo generado y riggeado
+
+Pedido: *"mejora el cuerpo del screamer y su textura como el de este modelo"* con la foto de una mujer
+pálida de camisón blanco manchado y pelo negro tapándole la cara, y después *"genera con Rezona el
+modelo 3D de la imagen usada como referencia y riggeala para animarla"*.
+
+#### PRIMERO EL CUERPO POR CÓDIGO, QUE ES EL QUE QUEDA DE RESPALDO
+
+Antes de generar nada se rehizo la figura de primitivas: la mortaja es un **perfil de revolución** que
+cae en campana, la cabeza cuelga de un tronco inclinado, **los brazos cuelgan del grupo y no del
+tronco** —colgados del tronco inclinado se van hacia atrás, y un brazo cuelga a plomo por definición—,
+los pies asoman del ruedo y una cortina de mechones tapa la cara. Y **1,72 m en vez de 2,14**: la
+anterior era más alta que el marco de una puerta. Más **tres texturas generadas** —lino sucio con
+manchas de humedad, piel muerta y pelo mojado, 30 KB las tres—.
+
+Eso no se tira cuando entra el modelo: **es lo que se ve mientras el paquete no decodifique.** Es la
+misma regla que las catorce texturas de foto.
+
+#### EL MODELO: IMAGEN → 3D → RIG, TODO EN EL BALDE DESCARTABLE
+
+`source_url` pide una URL pública, así que la referencia del usuario no se puede mandar directo: se
+genera **una referencia propia en pose de A** —brazos separados del cuerpo, cuerpo entero, fondo liso—
+y de ahí sale el `public_url` que alimenta el image-to-3D. Volvió con **11.886 triángulos** y, riggeado,
+con **41 huesos de nombre estándar** (Root, Hip, Spine01/02, Head, L/R\_Upperarm, Forearm, Hand,
+Thigh, Calf, Foot, ToeBase, Clavicle) y tres clips de 126 canales.
+
+**Y EL GENERADOR TIENE QUE HACER LA REDUCCIÓN ÉL** (`extra:{face_limit:12000}`): decimar después
+destruye la malla, que es la lección que ya costó una tanda en BARRIO.
+
+**LOS NOMBRES DE ANIMACIÓN SON UN VOCABULARIO CERRADO** con prefijo `preset:` y los desconocidos se
+**ignoran en silencio** —la respuesta trae `ignored_animations` y hay que mirarlo—, como mucho cinco
+por tarea. Es lo que ya estaba anotado desde el visor 3D.
+
+#### DE 4 MB A 411 KB, Y CADA NÚMERO A LO QUE ES
+
+El GLB riggeado pesa **3,98 MB** y 2,1 son tres JPEG de 4096 —color, metálico-rugosidad y normales—.
+Queda **el color a 512** (47,9 KB): este juego dibuja a 0,52 de resolución, de noche, y le pasa grano,
+croma arrastrado y líneas de barrido encima. Normales a byte, UV a ushort, posiciones a short
+normalizado sobre el semieje mayor, pesos e índices de hueso a byte, y los clips **muestreados a una
+tabla**: 12 Hz los lentos, 24 la caminata, con **sólo los huesos que de verdad se mueven** (8 en el
+idle, 12 en la caminata, contra 41) — un tercio del paquete era guardar los `*Twist*` quietos.
+
+**Y LOS CLIPS NO VAN EN UN `AnimationMixer`**: trae su propio reloj y se desincroniza del paso fijo,
+del susto y de la pausa. La tabla se evalúa con el `dt` del bucle, que es el único reloj que este juego
+tiene. Es la misma decisión que la tabla por fase de BARRIO.
+
+#### TRES DEFECTOS QUE NO FALLAN NI AVISAN, Y LOS TRES SE MIDIERON
+
+1. **`skinning:true` ES OBLIGATORIO EN r128.** Sin esa bandera el programa se compila sin las matrices
+   de hueso: la malla se dibuja en su pose de bind mientras los huesos —y con ellos la marca del
+   cráneo, que es la que el susto usa para colocarla— se animan por su cuenta. O sea que el susto
+   encuadra un punto y la criatura está en otro sitio: **el cuadro sale negro y nada falla.** La bandera
+   se fue en r151 y este juego es un r128 UMD.
+2. **`computeBoundingBox` NO DESNORMALIZA en r128.** `getX` devuelve el short crudo, así que la caja de
+   una posición normalizada sale de **65534 de alto**: la escala se calculaba en 2,4·10⁻⁵ y la criatura
+   se dibujaba del tamaño de una mota, con la marca del cráneo igual en su sitio. La caja del bind pasa
+   a ir **en el paquete y en unidades originales**; el shader sí desnormaliza, que lo hace el hardware.
+3. **`const FIG3D` NO QUEDA EN `window`.** Es un binding del ámbito global léxico de un script clásico,
+   así que preguntarle a `window` daba siempre falso y la criatura generada no entraba nunca.
+
+#### `preset:hurt` NO ERA UN SACUDÓN, Y ESO SÓLO SE VE MIDIENDO
+
+El susto arrancó usando `hurt` con el argumento de que un sacudón es lo que hace algo que se te viene
+encima. Fotografiado, la criatura salía **acostada**. Un nombre no dice lo que una animación hace, así
+que se midió la altura de mundo de cinco huesos a mitad de cada clip:
+
+| | Head | Spine02 | Hip | L\_Foot | L\_Hand |
+|---|---|---|---|---|---|
+| idle | 1,303 | 1,051 | 0,776 | **0,009** | 0,767 |
+| walk | 1,296 | 1,047 | 0,776 | **0,006** | 0,775 |
+| hurt | 1,250 | 1,023 | 0,776 | **0,676** | 1,033 |
+
+En `hurt` el pie queda a **67,6 cm del suelo** —altura de rodilla— con la mano a 1,03: es un
+trastabillón con una pierna en el aire, y una criatura que se te viene encima de pie no puede estar
+levantando una rodilla. Sale del paquete y el susto va con `idle`: lo que lo mueve es el acercamiento,
+el gesto de la cabeza y el sacudón, no un clip enlatado que le cambia la postura.
+
+**Y LA SONDA QUE LO DESTAPÓ ESTABA MAL ANTES DE ESTAR BIEN.** `sustoCorre` llamaba a `scrPaso` sin
+volver a evaluar el clip, y `figGira` **premultiplica** sobre lo que el clip dejó: treinta y seis pasos
+dejaban la cabeza girada treinta y seis veces de más y la criatura salía acostada **por la sonda**. Una
+sonda que no respeta el orden del bucle no está midiendo el juego.
+
+#### DOS COSAS QUE HAY QUE HACER SOBRE UN RIG AJENO
+
+- **EL CENTRO DEL CRÁNEO SE MIDE.** El hueso `Head` está en la **base** del cráneo: apuntando ahí, el
+  susto encuadra el cuello. Se promedian los **806 vértices** cuyo peso dominante es ese hueso y el
+  punto se lleva al espacio local del hueso con su matriz de bind inversa, así que después sigue la
+  animación sin una sola cuenta por cuadro.
+- **EL GESTO VA EN EJES DE MUNDO.** Los ejes locales de un hueso son los que dejó el bind, o sea que no
+  significan nada: escribir `rotation.x` le borra su rotación de reposo y el personaje se dobla en dos
+  —lo que en RECREO costó una vuelta con los brazos—. `figGira` gira alrededor de un eje del mundo con
+  `inv(Pw)·d·Pw`, y **se premultiplica después de evaluar el clip** para que el gesto y la animación se
+  compongan en vez de pelearse. El eje es **el «derecha» de la cámara**, así que la cabeza se levanta
+  hacia el lente mire uno donde mire.
+
+#### EL ENCUADRE DEL SUSTO CAMBIÓ, Y NO POR GUSTO
+
+La figura de primitivas era cabeza y hombros y a 40 cm entraba justa. Ésta tiene **una melena de 45 cm
+colgando delante de la cara**, y a 40 cm lo único que llena el cuadro es pelo negro. Va a **0,98 → 0,66
+m**, donde entran la cabeza, los hombros y el camisón manchado. Y **dónde cae la cabeza se calcula**:
+subir el punto de mira `s` metros lo mueve `s/(2·d·tan(fov/2))` de pantalla, así que el encuadre no
+cambia cuando el jugador mueve el deslizador del campo.
+
+#### EL POST TAMBIÉN SE ORDENÓ, Y DESTAPÓ UN DEFECTO VIEJO
+
+Había **tres** sitios escribiendo `uGrain`: la cinta lo subía ×3,1 y el bucle lo volvía a poner en
+`grain` dos líneas después, todos los cuadros — o sea que **el grano de la cinta no se vio nunca**. Y
+el viñeteado del deslizador lo pisaba `cintaPaso` con su valor de fábrica. Ahora la base la ponen los
+ajustes y todo lo demás multiplica o suma sobre un objeto que se pone en cero al empezar cada cuadro:
+un solo escritor, como la cámara. Medido con una cinta a `k=0,353`: grano **0,1097** y brillo **0,764**,
+que son exactamente las fórmulas.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Modelo: **11.886 triángulos · 8.137 vértices · 41 huesos · 2 clips**, marca del cráneo sobre **806
+vértices**, textura puesta, **23 de 23 piezas de código apagadas**. De pie sobre sus propios pies
+durante el susto: Head −1,38 · Spine02 −1,63 · Hip −1,91 · **L\_Foot −2,69 con el grupo en −2,68**.
+Susto: dispara caminando, **una sola vez**, cabeza en [0,50 · 0,30], el jugador **se mueve** mientras
+dura, y al terminar **en el mismo cuadro** brillo 1,06 · grano 0,063 · aberración 1,00 · linterna 3,9.
+Costo: **24 programas y 65 texturas** con la criatura en pantalla —dos programas y dos texturas más que
+antes, y son el material con piel y su variante de sombra—. **Nada regresó:** partida completa 3 de 3
+cintas + la cuarta + el final (`paso 1`), linterna con desvío **0°**, alabeo **0** con la vista girando
+40 muestras, HUD **sin un solo solapamiento**, **17 de 17 texturas de foto puestas y 0 huérfanas**,
+`window.__errs` vacío en las diecinueve corridas. El HTML pasó de 1,08 a **1,64 MB**, y 411 KB de esos
+son la criatura.
 
 ### Nonagésima segunda vuelta (2026-09-03): **CASA 13** — el susto del sótano, y la figura estaba de espaldas
 
