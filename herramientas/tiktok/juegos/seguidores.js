@@ -23,19 +23,19 @@
 
 const JT = {
   es: { sub: 'Juntá los corazones.\nEsquivá los haters. Tres vidas.',
-        seg: 'SEGUIDORES', vidas: 'VIDAS',
+        seg: 'SEGUIDORES', vidas: 'VIDAS', escudo: 'ESCUDO', doble: '¡DOBLE!',
         c1: 'Empezás con cero.',
         c2: 'Los corazones caen.',
         c3: 'Los haters también.',
         c4: 'Movete con el dedo.' },
   en: { sub: 'Catch the hearts.\nDodge the haters. Three lives.',
-        seg: 'FOLLOWERS', vidas: 'LIVES',
+        seg: 'FOLLOWERS', vidas: 'LIVES', escudo: 'SHIELD', doble: 'DOUBLE!',
         c1: 'You start at zero.',
         c2: 'Hearts fall.',
         c3: 'So do haters.',
         c4: 'Slide your finger.' },
   pt: { sub: 'Pegue os corações.\nDesvie dos haters. Três vidas.',
-        seg: 'SEGUIDORES', vidas: 'VIDAS',
+        seg: 'SEGUIDORES', vidas: 'VIDAS', escudo: 'ESCUDO', doble: 'DOBRO!',
         c1: 'Você começa em zero.',
         c2: 'Os corações caem.',
         c3: 'Os haters também.',
@@ -49,13 +49,26 @@ const JT = {
    esquivar. El rayo sube el número sin apretar el tablero. */
 /* la piel del menú y los sonidos generados */
 const PIEL = { ac: '#e0553f', tela: 'fondo' };
-const SON_ALIAS = { bien: 'cor', mal: 'hater' };
+const SON_ALIAS = { bien: 'cor', mal: 'hater', combo: 'combo', poder: 'power' };
 
+/* ── CINCO COSAS Y NO TRES ──
+   Dos alcanzarían para el juego y las otras tres están por lo que le hacen a la
+   CURVA y a la decisión:
+     · el RAYO sube el número sin apretar el tablero (más corazones serían menos
+       hueco para esquivar);
+     · el ESCUDO se come un hater entero, así que pasa a haber un momento en el
+       que conviene ir A BUSCAR algo en vez de esquivar;
+     · la ESTRELLA duplica todo por seis segundos, y eso convierte «juntar» en
+       «juntar AHORA», que es la única forma de que un juego de reflejos tenga
+       una decisión adentro. */
 const COSAS = {
   corazon: { r: 34, col: '#e0553f', vale: 1 },
   rayo:    { r: 32, col: '#e8c34a', vale: 5 },
-  hater:   { r: 36, col: '#2a2a36', vale: 0 }
+  hater:   { r: 36, col: '#2a2a36', vale: 0 },
+  escudo:  { r: 34, col: '#5ad7d7', vale: 0 },
+  estrella:{ r: 34, col: '#ffd76a', vale: 0 }
 };
+const DOBLE_DUR = 6;
 
 const VMAX = 1100;                  /* px de diseño por segundo: cruzar el marco cuesta 0,65 s */
 const R_JUG = 42;
@@ -65,7 +78,7 @@ const YJ = () => AL - 230;          /* el personaje vive anclado abajo, así que
 
 const S = {
   x: 360, tx: 360, vidas: 3, seg: 0, t: 0, cd: 0, inv: 0,
-  cosas: [], pisos: 0, aviso: 0, guino: 0
+  cosas: [], pisos: 0, aviso: 0, guino: 0, escudo: 0, doble: 0, avisoP: 0, txtP: ''
 };
 
 const JUEGO = {
@@ -113,6 +126,7 @@ const JUEGO = {
     S.x = S.tx = AN/2;
     S.vidas = 3; S.seg = 0; S.t = 0; S.cd = 0.7; S.inv = 0;
     S.cosas.length = 0; S.pisos = 0; S.aviso = 0; S.guino = 0;
+    S.escudo = 0; S.doble = 0; S.avisoP = 0; S.txtP = ''; S.tomEsc = 0; S.tomEst = 0;
     JUEGO.vivo = true; JUEGO.gano = false; JUEGO.marca = '0'; JUEGO.resta = null;
   },
 
@@ -121,6 +135,8 @@ const JUEGO = {
     if (S.inv > 0) S.inv -= dt;
     if (S.aviso > 0) S.aviso -= dt;
     if (S.guino > 0) S.guino -= dt;
+    if (S.avisoP > 0) S.avisoP -= dt;
+    if (S.doble > 0) S.doble = Math.max(0, S.doble - dt);
 
     /* ── EL PERSONAJE VA AL DESTINO CON TECHO DE VELOCIDAD ── */
     const d = S.tx - S.x, m = VMAX*dt;
@@ -154,11 +170,26 @@ const JUEGO = {
       if (dx*dx + dy*dy < R_TOCA*R_TOCA){
         S.cosas.splice(i, 1);
         if (c.k === 'hater') golpe();
-        else {
-          S.seg += COSAS[c.k].vale;
-          PUNTOS = S.seg;
+        else if (c.k === 'escudo'){
+          S.escudo = 1; S.tomEsc = (S.tomEsc || 0) + 1;
+          S.avisoP = 1.3; S.txtP = TX('escudo');
+          son('poder');
+          chispas(c.x, c.y, 18, '#5ad7d7');
+          sacude(0.3);
+        } else if (c.k === 'estrella'){
+          S.doble = DOBLE_DUR; S.tomEst = (S.tomEst || 0) + 1;
+          S.avisoP = 1.3; S.txtP = TX('doble');
+          son('poder');
+          chispas(c.x, c.y, 22, '#ffd76a');
+          sacude(0.4);
+        } else {
+          /* el puntaje pasa por `sumaPuntos`: ahí vive el multiplicador de la
+             racha, y la estrella lo duplica encima */
+          sumaPuntos(COSAS[c.k].vale * (S.doble > 0 ? 2 : 1), c.x, c.y);
+          S.seg = PUNTOS;
           S.guino = 0.22;
           son('bien');
+          chispas(c.x, c.y, c.k === 'rayo' ? 16 : 8, COSAS[c.k].col);
         }
       }
     }
@@ -181,6 +212,29 @@ const JUEGO = {
        se ve igual que recibir un golpe y no haberlo recibido */
     const ver = S.inv <= 0 || Math.floor(S.inv*14) % 2 === 0;
     if (ver && !munecoSprite(g, S.x, YJ() + 30, 1, S.guino > 0)) muneco(g, S.x, YJ(), 1, 0, S.guino > 0);
+    /* la burbuja del escudo: alrededor del personaje y latiendo, así se sabe que
+       está puesto sin tener que leer nada */
+    if (S.escudo > 0){
+      const la = 1 + 0.05*Math.sin(S.t*7);
+      g.strokeStyle = 'rgba(90,215,215,.75)'; g.lineWidth = 5;
+      g.beginPath(); g.arc(S.x, YJ() - 84, 96*la, 0, 7); g.stroke();
+      g.globalAlpha = 0.13;
+      disco(S.x, YJ() - 84, 96*la, '#5ad7d7');
+      g.globalAlpha = 1;
+    }
+    /* el reloj de la estrella: una barra corta y nada más. Un número contando
+       hacia atrás en un juego de esquivar es una cosa más que mirar. */
+    if (S.doble > 0){
+      const w = 200*(S.doble/DOBLE_DUR);
+      caja2(360 - 100, 232, 200, 8, 4, 'rgba(255,255,255,.10)', null);
+      caja2(360 - 100, 232, w, 8, 4, '#ffd76a', null);
+      texto(TX('doble'), 360, 214, 22, 'rgba(255,215,106,.9)');
+    }
+    if (S.avisoP > 0){
+      g.globalAlpha = Math.min(1, S.avisoP*1.4);
+      texto(S.txtP, 360, YJ() - 300, 40, '#ffd76a');
+      g.globalAlpha = 1;
+    }
     vidasDibujo(g);
   },
 
@@ -204,7 +258,8 @@ const JUEGO = {
       v++;
     }
     return { vueltas: v, segundos: +(v/60).toFixed(1), seguidores: S.seg,
-             puntos: PUNTOS, vidas: S.vidas, golpes: S.pisos,
+             puntos: PUNTOS, vidas: S.vidas, golpes: S.pisos, escudos: S.tomEsc || 0,
+             estrellas: S.tomEst || 0, racha: COMBO.max,
              cosas: S.cosas.length, vivo: JUEGO.vivo };
   }
 };
@@ -219,7 +274,13 @@ function decideSeg(){
     const dt = (yj - c.y) / c.v;
     if (c.k === 'hater'){
       if (Math.abs(c.x - S.x) < 190 && dt < 0.95 && (!peor || dt < peor.dt)) peor = { c, dt };
-    } else if (!mejor || dt < mejor.dt) mejor = { c, dt };
+    } else {
+      /* un poder vale más que un corazón, así que el bot lo prefiere aunque
+         esté más lejos: sin esto no habría forma de saber si los poderes se
+         pueden agarrar de verdad */
+      const pr = (c.k === 'escudo' || c.k === 'estrella') ? dt - 0.6 : dt;
+      if (!mejor || pr < mejor.pr) mejor = { c, dt, pr };
+    }
   }
   if (peor) return peor.c.x < AN/2 ? AN - 90 : 90;
   return mejor ? mejor.c.x : S.x;
@@ -227,7 +288,23 @@ function decideSeg(){
 
 function golpe(){
   if (S.inv > 0) return;
+  /* ── EL ESCUDO SE COME EL GOLPE Y NO LA VIDA ──
+     Y corta la racha igual: si no la cortara, el escudo sería una licencia para
+     dejar de esquivar, que es justo lo que el juego pide hacer. */
+  if (S.escudo > 0){
+    S.escudo = 0; S.inv = 0.75;
+    comboCorta();
+    son('mal', 0.5);
+    fogonazo(0.18);
+    sacude(0.5);
+    chispas(S.x, YJ() - 60, 20, '#5ad7d7');
+    S.avisoP = 0.9; S.txtP = '−' + TX('escudo');
+    return;
+  }
   S.vidas--; S.pisos++; S.inv = 0.75;
+  comboCorta();
+  sacude(0.9);
+  chispas(S.x, YJ() - 60, 16, '#e0553f', 0.9);
   S.aviso = 0.9;
   son('mal');
   fogonazo(0.30);
@@ -264,8 +341,16 @@ const CERCA_Y = 230;
 function suelta(vel){
   const pHater = Math.min(0.56, 0.24 + S.t*0.009);
   const pRayo = S.t > 8 ? 0.07 : 0;
+  /* los dos poderes son RAROS a propósito: uno cada quince segundos más o menos.
+     Un poder que aparece seguido deja de ser un momento y pasa a ser parte del
+     fondo — y encima el escudo sólo tiene sentido si no lo tenés puesto. */
+  const pEsc = (S.t > 6 && S.escudo <= 0) ? 0.035 : 0;
+  const pEst = (S.t > 12 && S.doble <= 0) ? 0.030 : 0;
   const r = Math.random();
-  const k = r < pRayo ? 'rayo' : (r < pRayo + pHater ? 'hater' : 'corazon');
+  const k = r < pEsc ? 'escudo'
+          : r < pEsc + pEst ? 'estrella'
+          : r < pEsc + pEst + pRayo ? 'rayo'
+          : r < pEsc + pEst + pRayo + pHater ? 'hater' : 'corazon';
   let x = 0, sirve = false;
   for (let i = 0; i < 12 && !sirve; i++){
     x = 80 + Math.random()*(AN - 160);
@@ -317,6 +402,27 @@ function fondoSeg(g, off){
 const ICONO = { corazon: 0, rayo: 1, hater: 2 };
 
 function cosa(g, c){
+  /* los dos poderes viven en su propia hoja de dos iconos */
+  if (c.k === 'escudo' || c.k === 'estrella'){
+    const e = IMG.extras;
+    const r = COSAS[c.k].r*1.5;
+    /* laten, y eso no es adorno: es lo que los separa de las cinco cosas que
+       caen todo el tiempo */
+    const la = 1 + 0.10*Math.sin(c.gi*3);
+    if (e && e.ok){
+      g.save(); g.translate(c.x, c.y); g.rotate(Math.sin(c.gi)*0.12);
+      g.globalAlpha = 0.30;
+      disco(0, 0, r*1.25*la, COSAS[c.k].col);
+      g.globalAlpha = 1;
+      g.drawImage(e.im, (c.k === 'escudo' ? 0 : 1)*e.w, 0, e.w, e.h,
+                  -r*la, -r*la, r*2*la, r*2*la);
+      g.restore();
+      return;
+    }
+    g.globalAlpha = 0.30; disco(c.x, c.y, r*1.2, COSAS[c.k].col); g.globalAlpha = 1;
+    disco(c.x, c.y, r*0.7*la, COSAS[c.k].col);
+    return;
+  }
   const o = IMG.iconos;
   if (o && o.ok){
     const r = COSAS[c.k].r*1.42;      /* el icono trae su propio aire alrededor */

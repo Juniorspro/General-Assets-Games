@@ -23,19 +23,19 @@
 
 const JT = {
   es: { sub: 'Pintá más que los otros tres.\nPisar su pintura la roba.',
-        tuyo: 'TUYO', finBien: '¡LA CANCHA ES TUYA!', finMal: 'TE PINTARON MÁS',
+        tuyo: 'TUYO', balde: '¡BROCHA GORDA!', bomba: '¡BOMBA!', racha: 'RACHA', finBien: '¡LA CANCHA ES TUYA!', finMal: 'TE PINTARON MÁS',
         c1: 'Una cancha vacía.',
         c2: 'Y otros tres.',
         c3: 'Pintá con el dedo.',
         c4: 'Cuarenta y cinco segundos.' },
   en: { sub: 'Paint more than the other three.\nStepping on their paint steals it.',
-        tuyo: 'YOURS', finBien: 'THE FIELD IS YOURS!', finMal: 'THEY OUT-PAINTED YOU',
+        tuyo: 'YOURS', balde: 'BIG BRUSH!', bomba: 'BOMB!', racha: 'STREAK', finBien: 'THE FIELD IS YOURS!', finMal: 'THEY OUT-PAINTED YOU',
         c1: 'An empty field.',
         c2: 'And three others.',
         c3: 'Paint with your finger.',
         c4: 'Forty-five seconds.' },
   pt: { sub: 'Pinte mais que os outros três.\nPisar na tinta deles rouba.',
-        tuyo: 'SEU', finBien: 'A QUADRA É SUA!', finMal: 'PINTARAM MAIS QUE VOCÊ',
+        tuyo: 'SEU', balde: 'ROLO GRANDE!', bomba: 'BOMBA!', racha: 'SEQUÊNCIA', finBien: 'A QUADRA É SUA!', finMal: 'PINTARAM MAIS QUE VOCÊ',
         c1: 'Uma quadra vazia.',
         c2: 'E outros três.',
         c3: 'Pinte com o dedo.',
@@ -48,13 +48,24 @@ const JT = {
    encontrarse de una ojeada. */
 /* la piel del menú: acá el telón es el piso de la cancha, porque este juego no
    tiene fondo propio — lo que se mira es la cancha */
-const PIEL = { ac: '#e8b46a', tela: 'piso' };
-const SON_ALIAS = { bien: 'splat' };
+const PIEL = { ac: '#e8b46a', tela: 'piso', rachaFin: false };
+const SON_ALIAS = { bien: 'splat', poder: 'power', combo: 'combo' };
 
 const DUE = ['#e8b46a', '#3f8f5c', '#3a63b8', '#9a5fb8'];
 const CEL = 40;
 const DUR = 45;
 const R_PINTA = 38;
+/* ── LOS DOS OBJETOS DE LA CANCHA ──
+   Uno cada nueve segundos y nunca los dos a la vez. Están por lo mismo que los
+   poderes de SEGUIDORES: sin ellos, la partida es cuarenta y cinco segundos de
+   la misma acción y la única decisión es a dónde ir. Con ellos hay un momento
+   en el que conviene DEJAR de pintar para ir a buscar algo, y eso es una
+   decisión con costo.
+     · el BALDE engorda la brocha un 80 % por siete segundos
+     · la BOMBA pinta de golpe un círculo de tres celdas de radio */
+const OBJ_CADA = 9;
+const BALDE_DUR = 7;
+const BOMBA_R = 3.2;            /* en celdas */
 const VEL_JUG = 430;
 const VEL_BOT = 395;      /* apenas más lentos: con la misma velocidad, tres bots
                              que nunca se equivocan de camino ganan siempre */
@@ -63,7 +74,8 @@ const M = {
   cols: 0, filas: 0, x0: 0, y0: 0, w: 0, h: 0,
   rej: null, of: null, og: null,
   t: 0, cuenta: [0, 0, 0, 0], libres: 0,
-  yo: null, bots: [], toque: false
+  yo: null, bots: [], toque: false,
+  objs: [], objCd: 0, balde: 0, avisoP: 0, txtP: '', robadas: 0
 };
 
 const JUEGO = {
@@ -85,6 +97,8 @@ const JUEGO = {
   arranca(){
     armaCancha();
     M.t = 0; M.toque = false;
+    M.objs.length = 0; M.objCd = 4.5; M.balde = 0; M.avisoP = 0; M.txtP = '';
+    M.robadas = 0; M.tomados = 0;
     M.yo = mancha(0, M.x0 + M.w*0.5, M.y0 + M.h*0.78);
     M.bots = [
       mancha(1, M.x0 + M.w*0.15, M.y0 + M.h*0.14, 'virgen'),
@@ -105,9 +119,13 @@ const JUEGO = {
        tocar en la otra punta pintaría la otra punta sin cruzar la cancha. Con
        techo de velocidad, la pintura es exactamente el camino que se hizo. */
     if (M.toque) mueveHacia(M.yo, TOQUE.x, TOQUE.y, VEL_JUG, dt);
+    if (M.balde > 0) M.balde = Math.max(0, M.balde - dt);
+    if (M.avisoP > 0) M.avisoP -= dt;
     pinta1(M.yo);
+    objsPaso(dt);
 
     for (const b of M.bots){
+      if (b.balde > 0) b.balde = Math.max(0, b.balde - dt);
       b.cd -= dt;
       if (b.cd <= 0 || cerca(b, b.tx, b.ty, 26)){ b.cd = 0.35; destinoBot(b); }
       mueveHacia(b, b.tx, b.ty, VEL_BOT, dt);
@@ -131,9 +149,15 @@ const JUEGO = {
     /* el borde de la cancha: sin él la pintura flota sobre el fondo y no se sabe
        dónde termina lo que se puede pintar */
     caja2(M.x0 - 3, M.y0 - 3, M.w + 6, M.h + 6, 14, null, 'rgba(242,238,230,.20)');
+    for (const o of M.objs) objDibujo(g, o);
     for (const b of M.bots) manchaDibujo(g, b);
     manchaDibujo(g, M.yo, true);
     barra(g);
+    if (M.avisoP > 0){
+      g.globalAlpha = Math.min(1, M.avisoP*1.5);
+      texto(M.txtP, 360, M.y0 - 34, 34, '#ffd76a');
+      g.globalAlpha = 1;
+    }
   },
 
   baja(x, y){ M.toque = true; TOQUE.x = x; TOQUE.y = y; },
@@ -166,7 +190,8 @@ const JUEGO = {
     return { vueltas: v, segundos: +(v/60).toFixed(1),
              celdas: tot, libres: M.libres,
              cuenta: M.cuenta.slice(), pct: M.cuenta.map(c => +(c/tot*100).toFixed(1)),
-             puntos: PUNTOS, gano: JUEGO.gano, vivo: JUEGO.vivo };
+             puntos: PUNTOS, gano: JUEGO.gano, vivo: JUEGO.vivo,
+             robadas: M.robadas, objetos: M.tomados || 0, racha: COMBO.max };
   }
 };
 
@@ -268,8 +293,21 @@ function celdaColor(i, j, d){
 /* pinta el disco de una mancha sobre la grilla. Sólo toca las celdas cuyo
    CENTRO cae adentro del radio: con el borde alcanzaría, la mancha pintaría una
    celda tocándola con un píxel y el trazo saldría más gordo de lo que se ve. */
+/* ── LA BROCHA CRECE CON LA RACHA, Y NO CON PUNTOS ──
+   En los otros cuatro juegos el multiplicador de la racha da puntos. Acá el
+   marcador es el porcentaje de la cancha —que es el resultado de verdad y no se
+   puede multiplicar sin mentir— así que la racha paga en MECÁNICA: cada escalón
+   engorda la brocha un 12 %. Es la misma capa compartida usada de otra forma, y
+   se siente más que un número.
+   La racha se sube robando celdas de otro (`pinta1` la cuenta), o sea que
+   premia meterse en el territorio ajeno en vez de pintar el piso vacío. */
+function radioPinta(e){
+  if (e.d !== 0) return R_PINTA * (e.balde > 0 ? 1.8 : 1);
+  return R_PINTA * (M.balde > 0 ? 1.8 : 1) * (1 + (COMBO.mult - 1)*0.12);
+}
+
 function pinta1(e){
-  const r = R_PINTA, r2 = r*r;
+  const r = radioPinta(e), r2 = r*r;
   const i0 = Math.max(0, Math.floor((e.x - r - M.x0)/CEL));
   const i1 = Math.min(M.cols - 1, Math.floor((e.x + r - M.x0)/CEL));
   const j0 = Math.max(0, Math.floor((e.y - r - M.y0)/CEL));
@@ -283,7 +321,20 @@ function pinta1(e){
     if (ant < 0) M.libres--; else M.cuenta[ant]--;
     M.rej[k] = e.d; M.cuenta[e.d]++;
     celdaColor(i, j, e.d);
-    if (e.d === 0){ e.son = (e.son || 0) + 1; }
+    if (e.d === 0){
+      e.son = (e.son || 0) + 1;
+      /* robar sube la racha; pintar piso vacío no. Sin esa distinción la racha
+         se sostiene sola caminando por el vacío y deja de querer decir nada. */
+      if (ant > 0){
+        M.robadas++;
+        /* cada CATORCE y no cada cuatro: con cuatro, un pincelazo sobre pintura
+           ajena llegaba a x5 en un segundo y la brocha ancha pasaba a ser el
+           estado normal — o sea que la racha dejaba de ser una decisión. Con
+           catorce hay que sostener el robo unos segundos, y pintar piso vacío
+           (que es lo seguro) no la sube nunca. */
+        if (M.robadas % 14 === 0) comboSuma();
+      }
+    }
   }
   /* el sonido va por celdas pintadas y no por cuadro: con un sonido por cuadro
      serían sesenta por segundo, o sea ruido blanco. Es la misma corrección que
@@ -291,10 +342,86 @@ function pinta1(e){
   if (e.d === 0 && e.son >= 5){ e.son = 0; son('raspa', 0.7); }
 }
 
+/* ══════════════════════ LOS OBJETOS ══════════════════════ */
+
+function objsPaso(dt){
+  M.objCd -= dt;
+  if (M.objCd <= 0 && M.objs.length === 0 && M.t < DUR - 6){
+    M.objCd = OBJ_CADA;
+    /* nace lejos del jugador: naciendo encima, agarrarlo no cuesta nada y deja
+       de ser una decisión */
+    let x = 0, y = 0;
+    for (let i = 0; i < 14; i++){
+      x = M.x0 + 40 + Math.random()*(M.w - 80);
+      y = M.y0 + 40 + Math.random()*(M.h - 80);
+      if (Math.hypot(x - M.yo.x, y - M.yo.y) > Math.min(M.w, M.h)*0.42) break;
+    }
+    M.objs.push({ k: Math.random() < 0.55 ? 'balde' : 'bomba', x, y, gi: 0 });
+  }
+  for (let i = M.objs.length - 1; i >= 0; i--){
+    const o = M.objs[i];
+    o.gi += dt*3;
+    /* lo agarra CUALQUIERA, y eso es lo que lo hace una carrera: si sólo lo
+       pudiera agarrar el jugador, sería un regalo y no un objeto */
+    const todos = [M.yo].concat(M.bots);
+    for (const e of todos){
+      if (Math.hypot(e.x - o.x, e.y - o.y) > R_PINTA + 26) continue;
+      M.objs.splice(i, 1);
+      if (o.k === 'balde'){
+        if (e.d === 0){ M.balde = BALDE_DUR; M.avisoP = 1.2; M.txtP = TX('balde');
+                        M.tomados = (M.tomados || 0) + 1; son('poder'); sacude(0.35); }
+        else e.balde = BALDE_DUR;
+        chispas(o.x, o.y, 18, DUE[e.d]);
+      } else {
+        bomba(o.x, o.y, e.d);
+        if (e.d === 0){ M.avisoP = 1.2; M.txtP = TX('bomba'); M.tomados = (M.tomados || 0) + 1; }
+        son('bien', 1.2);
+        sacude(0.8);
+        chispas(o.x, o.y, 26, DUE[e.d], 1.4);
+      }
+      break;
+    }
+  }
+}
+
+/* la bomba pinta un círculo entero de una: es el único momento del juego en que
+   se gana cancha sin caminarla */
+function bomba(x, y, d){
+  const r = BOMBA_R*CEL, r2 = r*r;
+  const i0 = Math.max(0, Math.floor((x - r - M.x0)/CEL));
+  const i1 = Math.min(M.cols - 1, Math.floor((x + r - M.x0)/CEL));
+  const j0 = Math.max(0, Math.floor((y - r - M.y0)/CEL));
+  const j1 = Math.min(M.filas - 1, Math.floor((y + r - M.y0)/CEL));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++){
+    const cx = M.x0 + i*CEL + CEL/2, cy = M.y0 + j*CEL + CEL/2;
+    if ((cx - x)*(cx - x) + (cy - y)*(cy - y) > r2) continue;
+    const k = j*M.cols + i, ant = M.rej[k];
+    if (ant === d) continue;
+    if (ant < 0) M.libres--; else M.cuenta[ant]--;
+    M.rej[k] = d; M.cuenta[d]++;
+    celdaColor(i, j, d);
+  }
+}
+
+function objDibujo(g, o){
+  const e = IMG.items;
+  const r = 30*(1 + 0.10*Math.sin(o.gi));
+  g.globalAlpha = 0.30;
+  disco(o.x, o.y, r*1.5, o.k === 'balde' ? '#f2eee6' : '#e0553f');
+  g.globalAlpha = 1;
+  if (e && e.ok){
+    g.drawImage(e.im, (o.k === 'balde' ? 0 : 1)*e.w, 0, e.w, e.h,
+                o.x - r, o.y - r, r*2, r*2);
+    return;
+  }
+  caja2(o.x - r*0.7, o.y - r*0.7, r*1.4, r*1.4, r*0.3,
+        o.k === 'balde' ? '#f2eee6' : '#20202a', '#0b0b10');
+}
+
 /* ══════════════════════ LAS MANCHAS ══════════════════════ */
 
 function mancha(d, x, y, perso){
-  return { d, x, y, tx: x, ty: y, cd: 0, perso: perso || null,
+  return { d, x, y, tx: x, ty: y, cd: 0, perso: perso || null, balde: 0,
            dx: Math.random() - 0.5, dy: Math.random() - 0.5, son: 0, gi: Math.random()*6 };
 }
 
@@ -356,6 +483,14 @@ function destinoBot(b){
     if (!sirve) continue;
     const cx = M.x0 + i*CEL + CEL/2, cy = M.y0 + j*CEL + CEL/2;
     let d = Math.hypot(cx - b.x, cy - b.y);
+    /* ── Y NO PUEDE ELEGIR LA CELDA DE AL LADO ──
+       Con la cancha llena, la celda ajena más cercana está siempre a un paso, y
+       entonces el bot se queda oscilando en dos metros cuadrados: medido, el
+       auto-jugador «honesto» sacaba 27,8 % y el que se movía AL AZAR le ganaba
+       con 33,8 %, que es la firma exacta de una estrategia que no viaja. Con un
+       mínimo de dos celdas y media el bot recorre, y de paso deja de verse
+       tonto en pantalla. */
+    if (d < CEL*2.5) continue;
     /* al ladrón le interesa TU pintura más que el piso vacío, así que el piso
        vacío se penaliza en vez de descartarse: descartándolo, con la cancha sin
        una celda tuya el bot se queda quieto */

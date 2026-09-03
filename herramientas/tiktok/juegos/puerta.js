@@ -19,21 +19,21 @@
 const JT = {
   es: { sub: 'Sos el de la puerta. Dejás entrar o no.\nLa regla cambia sola y nadie te la dice.',
         si: 'ENTRA', no: 'NO', vidas: 'VIDAS', cambio: 'CAMBIÓ LA REGLA',
-        gratis: 'ESTE NO TE COSTÓ NADA',
+        gratis: 'ESTE NO TE COSTÓ NADA', vip: 'VIP', vipOk: '¡ENTRÓ EL VIP!',
         c1: 'Viernes. La cola da la vuelta a la manzana.',
         c2: 'El encargado te da la lista de quiénes pueden entrar.',
         c3: 'Y la quema adelante tuyo.',
         c4: 'Arreglate.' },
   en: { sub: "You work the door. Let them in, or don't.\nThe rule changes on its own and nobody tells you.",
         si: 'IN', no: 'NO', vidas: 'LIVES', cambio: 'THE RULE CHANGED',
-        gratis: 'THAT ONE WAS FREE',
+        gratis: 'THAT ONE WAS FREE', vip: 'VIP', vipOk: 'THE VIP IS IN!',
         c1: 'Friday night. The queue goes around the block.',
         c2: 'The manager hands you the list of who gets in.',
         c3: 'And burns it in front of you.',
         c4: 'Figure it out.' },
   pt: { sub: 'Você é o da porta. Deixa entrar ou não.\nA regra muda sozinha e ninguém te avisa.',
         si: 'ENTRA', no: 'NÃO', vidas: 'VIDAS', cambio: 'A REGRA MUDOU',
-        gratis: 'ESSA FOI DE GRAÇA',
+        gratis: 'ESSA FOI DE GRAÇA', vip: 'VIP', vipOk: 'O VIP ENTROU!',
         c1: 'Sexta. A fila dá a volta no quarteirão.',
         c2: 'O gerente te dá a lista de quem pode entrar.',
         c3: 'E queima na sua frente.',
@@ -52,7 +52,7 @@ const PIEL = { ac: '#e8b46a', tela: 'fondo' };
 /* los sonidos generados que reemplazan a los osciladores. Si una muestra no
    decodificó, suena el sintetizado de siempre — un juego mudo por un
    decodificador es peor que un juego con bips. */
-const SON_ALIAS = { bien: 'pase', mal: 'no' };
+const SON_ALIAS = { bien: 'pase', mal: 'no', combo: 'combo', gana: 'ovacion', pierde: 'abucheo' };
 
 const ROPA = [
   { n: 'rojo',    c: '#c8412f' },
@@ -79,9 +79,20 @@ const REGLAS = [
   { id: 'color',     ok: (p, r) => p.ropa === r.color }
 ];
 
+/* ── EL VIP: UNA EXCEPCIÓN A LA REGLA, Y VALE TRES ──
+   Cada tanto llega alguien con la tarjeta dorada, y ése ENTRA SIEMPRE, diga lo
+   que diga la regla. Es la única excepción del juego y está por dos razones.
+   La de diseño: en un juego donde la regla es secreta, una excepción VISIBLE es
+   el único momento en que el jugador está seguro — y estar seguro una vez cada
+   tanto es lo que hace soportable no estar seguro el resto del tiempo.
+   La de ritmo: vale tres puntos, así que la racha y el VIP juntos son el pico
+   de la partida. */
+const VIP_CADA = 7;              /* uno cada siete, contando desde el último */
+
 const P = {
   vidas: 3, aciertos: 0, regla: null, desdeCambio: 0, gratis: false,
-  per: null, fase: 'entra', ft: 0, limite: 2.6, cartel: 0, aviso: 0, avisoT: 0
+  per: null, fase: 'entra', ft: 0, limite: 2.6, cartel: 0, aviso: 0, avisoT: 0,
+  desdeVip: 0, ovacion: 0
 };
 
 const JUEGO = {
@@ -99,7 +110,7 @@ const JUEGO = {
           const k = i/8;
           const x = 150 + k*520 + Math.sin(u*2 + i)*4;
           const s = 1 - k*0.62;
-          siluetaCola(g, x, 900 - k*250, s, 0.30 + (1-k)*0.45);
+          siluetaCola(g, x, 900 - k*250, s, 0.30 + (1-k)*0.45, k*2.1);
         }
       } },
     { dur: 3.0, pie: 'c2', dibuja: (g, u) => {
@@ -144,6 +155,7 @@ const JUEGO = {
   arranca(){
     P.vidas = 3; P.aciertos = 0; P.desdeCambio = 0; P.gratis = false;
     P.cartel = 0; P.aviso = 0; P.avisoT = 0;
+    P.desdeVip = 0; P.ovacion = 0; P.avisoVip = false;
     P.limite = 2.6;
     nuevaRegla();
     P.gratis = false;          /* la primera regla de la partida no da error gratis
@@ -153,6 +165,8 @@ const JUEGO = {
   },
 
   paso(dt){
+    if (P.ovacion > 0) P.ovacion = Math.max(0, P.ovacion - dt);
+    else if (P.ovacion < 0) P.ovacion = Math.min(0, P.ovacion + dt);
     if (P.cartel > 0) P.cartel -= dt;
     if (P.avisoT > 0) P.avisoT -= dt;
     P.ft += dt;
@@ -207,6 +221,14 @@ const JUEGO = {
     if (P.avisoT > 0){
       g.globalAlpha = Math.min(1, P.avisoT/0.7);
       texto(TX('gratis'), 360, SU() - 178, 24, '#8fd6a8');
+      g.globalAlpha = 1;
+    }
+    /* el cartel del VIP: va donde el del error gratis, porque son los dos el
+       mismo tipo de aviso —«esto que acaba de pasar era especial»— y nunca
+       pueden salir en el mismo cuadro */
+    if (P.aviso > 0 && P.avisoVip){
+      g.globalAlpha = Math.min(1, P.aviso/0.8);
+      texto(TX('vipOk'), 360, SU() - 178, 28, '#ffd76a');
       g.globalAlpha = 1;
     }
   },
@@ -284,6 +306,13 @@ function nuevaPersona(){
      dos personas, más o menos, tiene que ser la que hay que rechazar: eso es lo
      que convierte la regla en información. */
   if (Math.random() < 0.5) forzar(p, !P.regla.ok(p, P.regla));
+  /* ── EL VIP ──
+     Uno cada siete, y NUNCA el primero de la partida: la primera persona es la
+     que le enseña al jugador que la regla existe, y una excepción ahí enseña lo
+     contrario. */
+  P.desdeVip++;
+  p.vip = P.aciertos > 2 && P.desdeVip >= VIP_CADA && Math.random() < 0.55;
+  if (p.vip) P.desdeVip = 0;
   P.per = p;
   P.fase = 'entra'; P.ft = 0;
   JUEGO.resta = 1;
@@ -303,16 +332,32 @@ function forzar(p, aQuePase){
 }
 
 function resuelve(dejaEntrar){
-  const debia = P.regla.ok(P.per, P.regla);
+  /* el VIP entra SIEMPRE: es la única excepción del juego y la lleva puesta a
+     la vista, así que preguntarle a la regla sería preguntar de más */
+  const debia = P.per.vip ? true : P.regla.ok(P.per, P.regla);
   const bien = dejaEntrar !== null && dejaEntrar === debia;
   P.per.entro = dejaEntrar === true;
   P.fase = 'sale'; P.ft = 0;
   JUEGO.resta = null;
   if (bien){
-    P.aciertos++; PUNTOS = P.aciertos; JUEGO.marca = P.aciertos;
+    P.aciertos++;
     P.desdeCambio++;
+    /* ── EL PUNTAJE PASA POR `sumaPuntos`, QUE ES DONDE VIVE EL MULTIPLICADOR ──
+       Antes el marcador ERA la cuenta de aciertos, así que el décimo acierto
+       valía lo mismo que el primero y a los quince segundos ya sabías cuánto
+       ibas a sacar. Ahora un acierto vale uno por el multiplicador de la racha,
+       y el VIP vale tres. */
+    const g0 = sumaPuntos(P.per.vip ? 3 : 1, 360, SU() - 420);
+    JUEGO.marca = PUNTOS;
     son('bien');
-    fogonazo(0.10);
+    chispas(360, SU() - 400, P.per.vip ? 22 : 10, P.per.vip ? '#ffd76a' : '#7fd0a0');
+    fogonazo(P.per.vip ? 0.22 : 0.10);
+    if (P.per.vip){
+      P.aviso = 1.6; P.avisoVip = true;
+      P.ovacion = 1.2;
+      sacude(0.5);
+      son('gana', 0.5);       /* la ovación del generado; el respaldo es la fanfarria */
+    }
     /* ── SE ACELERA, Y ES LO ÚNICO QUE HACE DE CURVA ──
        De 2,6 s a 1,15 s en veinte aciertos. Un minijuego no necesita niveles:
        necesita que la misma cosa se vuelva más difícil sin avisar. */
@@ -321,7 +366,12 @@ function resuelve(dejaEntrar){
     if (P.desdeCambio >= 7) nuevaRegla();
   } else {
     son('mal');
+    comboCorta();
     fogonazo(0.34);
+    sacude(0.7);
+    chispas(360, SU() - 400, 14, '#e0553f', 0.8);
+    P.ovacion = -1.2;           /* el abucheo */
+    son('pierde', 0.45);
     if (P.gratis){
       /* el error gratis: el primero después de un cambio no cuesta vida */
       P.gratis = false;
@@ -396,10 +446,22 @@ function puertaDibujo(g, k){
   g.globalAlpha = 1;
 }
 
+/* ── LA COLA REACCIONA, Y ES LO QUE HACE QUE HAYA TESTIGOS ──
+   Las siluetas saltan con un acierto de VIP y se agachan con un error. No
+   cambia nada del juego y cambia todo de lo que se siente: hasta ahora el
+   jugador decidía solo en una calle vacía. `P.ovacion` va de +1,2 a −1,2 y las
+   siluetas la leen con un desfase por silueta, porque una cola que salta toda
+   junta se lee a una animación y no a gente. */
+
 /* la silueta de la cola: sólo contorno, sin cara. Una silueta con cara ya no es
    una silueta y deja de leerse a «uno más de la fila». */
-function siluetaCola(g, x, y, s, a){
-  g.save(); g.translate(x, y); g.scale(s, s);
+function siluetaCola(g, x, y, s, a, fase){
+  /* el salto y la agachada: el desfase sale de la posición y no del azar, así
+     que la misma silueta se mueve igual todas las veces */
+  let dy = 0;
+  if (P.ovacion > 0) dy = -Math.abs(Math.sin(P.ovacion*9 + (fase || 0)))*46*Math.min(1, P.ovacion);
+  else if (P.ovacion < 0) dy = Math.min(1, -P.ovacion)*18;
+  g.save(); g.translate(x, y + dy); g.scale(s, s);
   g.fillStyle = 'rgba(8,8,14,' + a.toFixed(3) + ')';
   g.beginPath(); g.arc(0, -150, 42, 0, 7); g.fill();
   caja2(-52, -108, 104, 150, 26, 'rgba(8,8,14,' + a.toFixed(3) + ')', null);
@@ -537,7 +599,28 @@ function rasgos(g, p, hx, hy, d, e){
     caja2(hx - d*0.23, y, d*0.46, d*0.22, d*0.10, '#c8412f', 'rgba(0,0,0,.25)');
     caja2(hx + d*0.04, y + d*0.18, d*0.15, d*0.50, d*0.07, '#b03a2a', null);
   }
-  if (p.pase){
+  /* ── LA TARJETA DEL VIP ──
+     Va donde el pase normal pero DORADA, más grande y con un halo: el jugador
+     tiene que poder distinguirla del pase común de un vistazo, porque el pase
+     común es uno de los seis rasgos de la regla y el VIP es una excepción. Dos
+     tarjetas parecidas serían la peor confusión posible en este juego. */
+  if (p.vip){
+    const y = hy + d*1.22;
+    const o = IMG.vip;
+    g.save();
+    g.globalAlpha = 0.35;
+    disco(hx, y + d*0.34, d*0.52, '#ffd76a');
+    g.globalAlpha = 1;
+    if (o && o.ok){
+      const w = d*0.72;
+      g.drawImage(o.im, hx - w/2, y - d*0.10, w, w*o.im.height/o.im.width);
+    } else {
+      caja2(hx - d*0.26, y + d*0.14, d*0.52, d*0.36, d*0.06, '#e8c34a', 'rgba(90,60,10,.5)');
+      texto(TX('vip'), hx, y + d*0.32, d*0.24, '#5a3f10');
+    }
+    g.restore();
+  }
+  if (p.pase && !p.vip){
     const y = hy + d*1.34;
     g.strokeStyle = 'rgba(240,238,230,.75)'; g.lineWidth = Math.max(2, d*0.04);
     g.beginPath(); g.moveTo(hx - d*0.18, y); g.lineTo(hx - d*0.04, y + d*0.44); g.stroke();

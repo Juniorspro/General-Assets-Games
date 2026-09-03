@@ -21,7 +21,8 @@ entero. Ya paso nueve veces en este repo.
   <juego>.js  las reglas                              (define JT y JUEGO)
   t.js        los idiomas                             (lee JT, usa $)
   i.js        el sonido
-  d.js        los assets generados: cargador, musica, teñido  (envuelve son())
+  d.js        los assets generados: cargador, musica, tenido  (envuelve son())
+  j.js        el jugo: racha con multiplicador, particulas, flotantes, sacudon
   c.js        la cinematica y las herramientas de dibujo
   z.html      el armado, el bucle y las sondas        (lee JUEGO)
 """
@@ -53,6 +54,7 @@ def arma(jid):
         os.path.join(NUCLEO, 't.js'),
         os.path.join(NUCLEO, 'i.js'),
         os.path.join(NUCLEO, 'd.js'),
+        os.path.join(NUCLEO, 'j.js'),
         os.path.join(NUCLEO, 'c.js'),
         os.path.join(NUCLEO, 'z.html'),
     ]

@@ -88,6 +88,7 @@ function empieza(){
   $('salta').classList.remove('on');
   PUNTOS = 0;
   rachaCero();
+  jugoCero();
   JUEGO.arranca();
   MODO = 'juega';
   verPantalla(null);
@@ -104,6 +105,16 @@ function termina(){
   musAgacha(0.30, 1.4);
   $('finT').textContent = rec ? TX('nuevoRec') : (JUEGO.gano ? TX('finBien') : TX('finMal'));
   $('finP').textContent = PUNTOS + ' ' + TX('pts') + (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
+  /* ── LA MEJOR RACHA VA EN EL CARTEL, SALVO DONDE ES MECÁNICA ──
+     Es la segunda cosa que el jugador quiere superar y sin mostrarla el
+     multiplicador no deja rastro. Pero en MANCHA y en RASPÁ la racha no paga en
+     puntos sino en el ancho de la brocha, y ahí el contador cuenta celdas
+     robadas o limpiadas: medido, daba 349 y 7.882 en una partida de cuarenta y
+     cinco segundos. Un número así en el cartel del final no informa nada, así
+     que esos dos lo declaran apagado (`PIEL.rachaFin`). */
+  const plF = (typeof PIEL !== 'undefined') ? PIEL : {};
+  if (COMBO.max > 3 && plF.rachaFin !== false)
+    $('finP').textContent += '  ·  ' + TX('racha') + ' ' + COMBO.max;
   verPantalla('pFin');
   pintaJuego();
 }
@@ -147,12 +158,20 @@ function bucle(){
       if (!JUEGO.vivo) termina();
     }
     pasoFogonazo(dt);
+    if (MODO === 'juega' || MODO === 'fin') jugoPaso(dt);
   }
 
   g.clearRect(0, 0, AN, AL);
   if (MODO === 'cine') cinePon(CINE.t);
   else if (JUEGO.fondo) JUEGO.fondo(g);
-  if (MODO === 'juega' || MODO === 'fin') JUEGO.pinta(g);
+  if (MODO === 'juega' || MODO === 'fin'){
+    /* el sacudón envuelve SÓLO la capa del juego: sacudiendo el fondo aparecen
+       dos franjas negras en los bordes */
+    const sac = sacAplica();
+    JUEGO.pinta(g);
+    jugoPinta();
+    if (sac) g.restore();
+  }
   if (MODO === 'juega') pintaHud();
 
   _cuadros++; _acumF += dt;
@@ -186,7 +205,10 @@ window.__J = {
   id: JUEGO.id,
   estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR,
     marca: JUEGO.marca, resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3),
-    vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height] }),
+    vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height],
+    /* el ultimo toque que ENTRO por el camino de verdad (lienzo -> baja): es lo
+       unico que distingue «el juego no reacciono» de «el dedo no llego» */
+    toque: [Math.round(TOQUE.x), Math.round(TOQUE.y), TOQUE.abajo, TOQUE.n || 0] }),
   lang: (l) => { ponIdioma(l); return LANG; },
   menu: () => { alMenu(); return MODO; },
   jugar: () => { jugar(); return MODO; },
@@ -242,6 +264,8 @@ window.__J = {
                       return JSON.stringify({ vivo: !!JUEGO.vivo, puntos: PUNTOS,
                                               resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3) }); },
   pico: () => pico(),
+  combo: () => JSON.stringify({ n: COMBO.n, mult: COMBO.mult, max: COMBO.max,
+    t: +COMBO.t.toFixed(2), part: PART.length, flot: FLOT.length, sac: +SAC.toFixed(2) }),
   assets: () => JSON.stringify(asEstado()),
   /* la caja de cada elemento visible del DOM, para poder comprobar que nada se
      solapa en una pantalla chica sin mirar una captura */
@@ -266,6 +290,21 @@ window.__J = {
   juegaSolo: (n, azar) => { PUNTOS = 0; rachaCero();
     return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); }
 };
+
+/* ── LA VENTANA DE LA RACHA SE ADELANTA CON LA SIMULACIÓN, NO CON EL DIBUJO ──
+   Estaba en `jugoPaso`, que corre una vez por CUADRO con el `dt` de reloj. Para
+   las partículas y el sacudón eso es correcto —son cosméticos— pero la racha
+   NO es cosmética: en MANCHA engorda la brocha y en RASPÁ el pincel, o sea que
+   es física. Y peor: los auto-jugadores llaman a `JUEGO.paso` directo, así que
+   la ventana no se vencía nunca y el multiplicador se quedaba clavado en x5 —
+   medido, `racha 622` en una partida de 45 s de MANCHA y `7.882` en RASPÁ, que
+   son números que ninguna persona puede hacer.
+   Envolver `JUEGO.paso` una vez es lo único que garantiza que la racha caduque
+   en los seis caminos que existen (el bucle, `avanza`, y los cinco
+   auto-jugadores) sin repetir la llamada en cada juego. Es el mismo recurso con
+   el que `d.js` envuelve `son()`. */
+const _pasoJuego = JUEGO.paso.bind(JUEGO);
+JUEGO.paso = (dt) => { comboPaso(dt); _pasoJuego(dt); };
 
 /* ══════════════════════ ARRANQUE ══════════════════════ */
 medir();

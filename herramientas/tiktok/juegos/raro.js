@@ -15,17 +15,17 @@
 
 const JT = {
   es: { sub: 'Uno es distinto. Tocalo.\nCada acierto agranda la grilla.',
-        nivel: 'NIVEL',
+        nivel: 'NIVEL', rapido: '¡RÁPIDO!',
         c1: 'Todos iguales.',
         c2: 'Casi todos.',
         c3: 'Encontralo antes de que se acabe.' },
   en: { sub: 'One is different. Tap it.\nEvery hit makes the grid bigger.',
-        nivel: 'LEVEL',
+        nivel: 'LEVEL', rapido: 'FAST!',
         c1: 'All the same.',
         c2: 'Almost all.',
         c3: 'Find it before time runs out.' },
   pt: { sub: 'Um é diferente. Toque nele.\nCada acerto aumenta a grade.',
-        nivel: 'NÍVEL',
+        nivel: 'NÍVEL', rapido: 'RÁPIDO!',
         c1: 'Todos iguais.',
         c2: 'Quase todos.',
         c3: 'Ache antes do tempo acabar.' }
@@ -37,7 +37,7 @@ const JT = {
    deja de ser el mismo juego. */
 /* la piel del menú y el sonido */
 const PIEL = { ac: '#f0d060', tela: 'fondo' };
-const SON_ALIAS = {};
+const SON_ALIAS = { combo: 'combo' };
 
 const TONOS = ['#e0553f', '#3f8f5c', '#3a63b8', '#c9a227', '#9a5fb8', '#2fa3a3'];
 
@@ -75,6 +75,7 @@ const JUEGO = {
   paso(dt){
     if (R.aviso > 0) R.aviso -= dt;
     if (R.brillo > 0) R.brillo -= dt*2.4;
+    if (R.avisoR > 0) R.avisoR -= dt;
     R.t += dt;
     JUEGO.resta = 1 - R.t / R.limite;
     if (R.t >= R.limite){ JUEGO.vivo = false; JUEGO.gano = R.nivel > 8; }
@@ -107,6 +108,11 @@ const JUEGO = {
        «NIVEL 1» cruzado con «PUNTOS»— y el HUD vive en DOM, asi que el lienzo
        no puede saber que esta ahi si no se lo mide. */
     texto(TX('nivel') + ' ' + R.nivel, 360, AL - 104, 26, 'rgba(242,238,230,.42)');
+    if (R.avisoR > 0){
+      g.globalAlpha = Math.min(1, R.avisoR*1.5);
+      texto(TX('rapido'), 360, AL - 150, 30, '#ffd76a');
+      g.globalAlpha = 1;
+    }
   },
 
   baja(x, y){
@@ -115,10 +121,22 @@ const JUEGO = {
     if (i < 0 || j < 0 || i >= R.cols || j >= R.filas) return;
     const k = j*R.cols + i;
     if (k === R.raro){
-      R.ultimo = { x: c.x0 + i*c.p + c.p/2, y: c.y0 + j*c.p + c.p/2 };
+      const px = c.x0 + i*c.p + c.p/2, py = c.y0 + j*c.p + c.p/2;
+      R.ultimo = { x: px, y: py };
       R.brillo = 1;
-      R.nivel++; PUNTOS = R.nivel - 1; JUEGO.marca = PUNTOS;
+      /* ── EL BONO POR RAPIDEZ, Y ES LO QUE CONVIERTE «ENCONTRAR» EN JUGAR ──
+         Antes el marcador ERA el nivel, así que encontrarlo en medio segundo y
+         encontrarlo en el último instante valían lo mismo — o sea que el reloj
+         sólo servía para perder. Ahora el que sobra da hasta dos puntos extra,
+         y con el multiplicador de la racha encima, apurarse paga. */
+      const sobra = Math.max(0, 1 - R.t/R.limite);
+      const extra = sobra > 0.66 ? 2 : (sobra > 0.33 ? 1 : 0);
+      sumaPuntos(1 + extra, px, py);
+      JUEGO.marca = PUNTOS;
+      R.nivel++;
       son('bien');
+      chispas(px, py, 10 + extra*6, extra === 2 ? '#ffd76a' : '#7fd0a0');
+      if (extra === 2){ R.avisoR = 0.9; sacude(0.25); }
       nivelRaro();
     } else {
       /* ── TOCAR MAL CUESTA TIEMPO, NO UNA VIDA ──
@@ -129,7 +147,10 @@ const JUEGO = {
       R.t += 1.5;
       R.fallos++;
       son('mal');
+      comboCorta();
       fogonazo(0.20);
+      sacude(0.5);
+      chispas(x, y, 10, '#e0553f', 0.8);
       if (R.t >= R.limite){ JUEGO.vivo = false; JUEGO.gano = R.nivel > 8; }
     }
   },
@@ -164,7 +185,10 @@ function nivelRaro(){
   R.limite = Math.max(2.2, 6.5 - n*0.30);
   R.t = 0;
   R.raro = (Math.random() * (R.cols*R.filas)) | 0;
-  R.base = (Math.random()*TONOS.length)|0;
+  /* el objeto de la ronda sale de los doce si las dos hojas llegaron; si sólo
+     llegó una, de los seis. Y el tono de respaldo sigue saliendo de TONOS. */
+  const tot = objetosTotal();
+  R.base = (Math.random()*(tot || TONOS.length))|0;
   /* una sola clase de diferencia por ronda, y se endurece con el nivel */
   const clases = n < 3 ? ['tono'] : n < 6 ? ['tono','tamano'] : ['tono','tamano','giro','forma'];
   R.tipo = clases[(Math.random()*clases.length)|0];
@@ -195,10 +219,9 @@ function celda(){
    serían tres operaciones de lienzo por ficha y hay hasta cincuenta y cuatro
    fichas en pantalla. */
 const _lavado = {};
-function objetoLavado(i, col, k){
-  const o = IMG.objetos;
+function objetoLavado(o, i, col, k){
   if (!o || !o.ok) return null;
-  const cl = i + '|' + col + '|' + k.toFixed(2);
+  const cl = (o === IMG.objetos ? 'a' : 'b') + i + '|' + col + '|' + k.toFixed(2);
   if (_lavado[cl]) return _lavado[cl];
   const c = document.createElement('canvas');
   c.width = o.w; c.height = o.h;
@@ -211,15 +234,38 @@ function objetoLavado(i, col, k){
   return c;
 }
 
+/* ── DOCE OBJETOS Y NO SEIS ──
+   Dos hojas de seis. Con seis, a partir del nivel siete el jugador ya vio todos
+   y la ronda deja de estrenar nada; con doce el mundo del juego dura el doble y
+   no cuesta un solo cambio de mecánica. `hojaDe` elige la hoja según el objeto,
+   así que agregar una tercera hoja es agregarla acá y nada más. */
+function hojaDe(i){
+  const a = IMG.objetos, b = IMG.objetos2;
+  if (b && b.ok && i >= (a && a.ok ? a.n : 6)) return { o: b, i: i - (a.ok ? a.n : 6) };
+  return { o: a, i };
+}
+function objetosTotal(){
+  const a = IMG.objetos, b = IMG.objetos2;
+  return ((a && a.ok) ? a.n : 0) + ((b && b.ok) ? b.n : 0);
+}
+
 function fichaSprite(g, x, y, r, raro){
-  const o = IMG.objetos;
+  const tot = objetosTotal();
+  if (!tot) return false;
+  const sel = hojaDe(R.base % tot);
+  const o = sel.o;
   if (!o || !o.ok) return false;
-  let i = R.base % o.n, rr = r*1.55, gi = 0, lav = null;
+  let i = sel.i, rr = r*1.55, gi = 0, lav = null;
   if (raro){
-    if (R.tipo === 'tono') lav = objetoLavado(i, '#f2eee6', R.delta*0.42);
+    if (R.tipo === 'tono') lav = objetoLavado(o, i, '#f2eee6', R.delta*0.42);
     else if (R.tipo === 'tamano') rr = r*1.55*(1 - R.delta*0.30);
     else if (R.tipo === 'giro') gi = R.delta*0.70;
-    else if (R.tipo === 'forma') i = (R.base + 1 + (R.nivel % (o.n - 1))) % o.n;
+    else if (R.tipo === 'forma'){
+      /* el objeto distinto sale de la MISMA hoja: dos hojas pueden tener
+         estilos apenas distintos, y con uno de cada hoja la diferencia sería el
+         estilo y no la forma */
+      i = (sel.i + 1 + (R.nivel % (o.n - 1))) % o.n;
+    }
   }
   g.save();
   g.translate(x, y);
@@ -237,10 +283,12 @@ function ficha(g, x, y, r, raro){
      ronda sería imposible. La gota tiene un lado en punta, así que el giro se
      ve — pero sólo si TODAS son gotas, porque si sólo la rara lo fuera, la
      diferencia sería la forma y no el giro. */
-  let col = TONOS[R.base], rr = r, gi = 0;
+  /* R.base ahora llega a once (doce objetos), así que el respaldo dibujado
+     indexa con módulo o devuelve undefined y la ficha sale transparente */
+  let col = TONOS[R.base % TONOS.length], rr = r, gi = 0;
   let forma = R.tipo === 'giro' ? 'gota' : 'disco';
   if (raro){
-    if (R.tipo === 'tono') col = mezcla(TONOS[R.base], '#f2eee6', R.delta*0.55);
+    if (R.tipo === 'tono') col = mezcla(TONOS[R.base % TONOS.length], '#f2eee6', R.delta*0.55);
     else if (R.tipo === 'tamano') rr = r * (1 - R.delta*0.30);
     else if (R.tipo === 'giro') gi = R.delta*0.55;
     else if (R.tipo === 'forma') forma = 'caja';

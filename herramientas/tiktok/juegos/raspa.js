@@ -22,17 +22,17 @@
 
 const JT = {
   es: { sub: 'Pasá el dedo. Dejalo limpio.\nCuando termina uno, viene otro.',
-        limpio: 'LIMPIO', placa: 'PLACA',
+        limpio: 'LIMPIO', placa: 'PLACA', dura: 'ESA NO SALE DE UNA',
         c1: 'Alguien dejó esto así.',
         c2: 'Y se fue.',
         c3: 'Pasá el dedo.' },
   en: { sub: 'Drag your finger. Get it clean.\nWhen one is done, the next shows up.',
-        limpio: 'CLEAN', placa: 'PLATE',
+        limpio: 'CLEAN', placa: 'PLATE', dura: 'THAT ONE NEEDS TWO PASSES',
         c1: 'Somebody left this like that.',
         c2: 'And walked away.',
         c3: 'Drag your finger.' },
   pt: { sub: 'Passe o dedo. Deixe limpo.\nQuando acaba um, vem outro.',
-        limpio: 'LIMPO', placa: 'PLACA',
+        limpio: 'LIMPO', placa: 'PLACA', dura: 'ESSA NÃO SAI DE UMA',
         c1: 'Alguém deixou isso assim.',
         c2: 'E foi embora.',
         c3: 'Passe o dedo.' }
@@ -43,8 +43,8 @@ const JT = {
    placa cinco se ve igual que la uno y el juego se termina en la cabeza del
    jugador antes de terminarse en la pantalla. */
 /* la piel del menú y el sonido generado del raspado */
-const PIEL = { ac: '#c8945a', tela: 'fondo' };
-const SON_ALIAS = { raspa: 'raspa' };
+const PIEL = { ac: '#c8945a', tela: 'fondo', rachaFin: false };
+const SON_ALIAS = { raspa: 'raspa', combo: 'combo', bien: 'raspa' };
 
 /* ── LAS CUATRO SUCIEDADES PASAN A SER FOTOS ──
    `sup` y `sucio` nombran las texturas generadas —la superficie limpia de abajo
@@ -132,6 +132,25 @@ const JUEGO = {
       caja2(z.x - 6, z.y - 6, z.w + 12, z.h + 12, 14, null, '#8fd6a8');
       g.globalAlpha = 1;
     }
+    /* ── EL CEPILLO SE VE, Y ES LA MITAD DE LO QUE HACE QUE SE SIENTA TÁCTIL ──
+       Hasta ahora el dedo borraba mugre y no había NADA en pantalla que dijera
+       con qué. Un cepillo dibujado en el punto del dedo, girado hacia donde
+       viene moviéndose y con el tamaño del pincel de verdad —que crece con la
+       racha— convierte «desaparece la mugre» en «lo estoy limpiando». Y se
+       dibuja sólo cuando el dedo está apoyado. */
+    if (TOQUE.abajo && S.ult){
+      const o = IMG.pincel, r = pincelR()*0.95;
+      const gi = S.gi || 0;
+      g.save();
+      g.translate(z.x + S.ult.x, z.y + S.ult.y);
+      g.rotate(gi);
+      g.globalAlpha = 0.22;
+      disco(0, 0, r*0.9, '#000000');
+      g.globalAlpha = 1;
+      if (o && o.ok) g.drawImage(o.im, -r, -r*1.05, r*2, r*2.1);
+      else { caja2(-r*0.62, -r*0.8, r*1.24, r*1.6, r*0.28, '#8a6a45', '#3a2a18'); }
+      g.restore();
+    }
   },
 
   baja(x, y){ S.ult = null; raspa(x, y); },
@@ -184,13 +203,40 @@ function nuevaPlaca(){
   S.cols = Math.ceil(z.w / CEL); S.filas = Math.ceil(z.h / CEL);
   S.total = S.cols * S.filas;
   S.lim = new Uint8Array(S.total);
-  S.hechas = 0; S.pct = 0;
+  /* la dureza por celda: un puñado de manchones que necesitan dos pasadas. El
+     manchón es redondo y no una celda sola: una celda dura suelta se lee a que
+     el dedo no agarró, y un manchón se lee a mancha. */
+  S.dur = new Uint8Array(S.total);
+  S.duros = [];
+  const nD = 3 + ((Math.random()*3)|0);
+  for (let d = 0; d < nD; d++){
+    const cx = Math.random()*S.cols, cy = Math.random()*S.filas;
+    const rr = 1.6 + Math.random()*1.8;
+    S.duros.push({ cx, cy, rr });
+    for (let j = 0; j < S.filas; j++) for (let i = 0; i < S.cols; i++)
+      if (Math.hypot(i + 0.5 - cx, j + 0.5 - cy) < rr) S.dur[j*S.cols + i] = 1;
+  }
+  S.hechas = 0; S.pct = 0; S.nuevas = 0;
   /* el lienzo de la mugre, a la resolución de la zona. Se rehace por placa y no
      por cuadro: crear un lienzo cuesta, borrar un agujero no. */
   S.cap = document.createElement('canvas');
   S.cap.width = Math.round(z.w); S.cap.height = Math.round(z.h);
   S.gc = S.cap.getContext('2d');
   pintaMugre(S.gc, S.cap.width, S.cap.height, MUGRE[S.tipo]);
+  /* ── LAS MANCHAS DURAS SE DIBUJAN MÁS OSCURAS ──
+     Y eso no es decoración: una celda que necesita dos pasadas y se ve igual
+     que las demás se lee a que el dedo no agarró. Dibujadas oscuras, el jugador
+     las ve ANTES de tocarlas y decide en qué orden limpiar, que es justamente
+     el recorrido que la mecánica quiere que exista. */
+  for (const d of S.duros){
+    const x = d.cx*CEL, y = d.cy*CEL, r = d.rr*CEL;
+    const gr = S.gc.createRadialGradient(x, y, r*0.15, x, y, r);
+    gr.addColorStop(0, 'rgba(18,14,10,.80)');
+    gr.addColorStop(0.7, 'rgba(24,18,12,.55)');
+    gr.addColorStop(1, 'rgba(24,18,12,0)');
+    S.gc.fillStyle = gr;
+    S.gc.beginPath(); S.gc.arc(x, y, r, 0, 7); S.gc.fill();
+  }
 }
 
 function pintaMugre(c, w, h, m){
@@ -237,15 +283,26 @@ function pintaMugre(c, w, h, m){
    borra la LÍNEA desde donde estaba hasta donde está, que es exactamente lo que
    hizo el dedo. */
 const PINCEL = 54;
+
+/* ── EL PINCEL CRECE CON LA RACHA ──
+   Como en MANCHA, acá el multiplicador de la racha no puede pagar en puntos sin
+   mentir —el marcador son placas terminadas— así que paga en MECÁNICA: cada
+   escalón engorda el pincel un 14 %, hasta un 56 % más. Y la racha se sube
+   limpiando de a tramos (cada dieciséis celdas nuevas), así que se sostiene
+   mientras el dedo AVANZA y se corta cuando uno se queda frotando el mismo
+   lugar — que es exactamente el hábito que este juego tiene que desalentar. */
+function pincelR(){ return PINCEL * (1 + (COMBO.mult - 1)*0.14); }
+
 function raspa(x, y){
   if (!S.gc || !JUEGO.vivo) return;
   const z = zona();
+  const P = pincelR();
   const lx = x - z.x, ly = y - z.y;
-  if (lx < -PINCEL || ly < -PINCEL || lx > z.w + PINCEL || ly > z.h + PINCEL){ S.ult = null; return; }
+  if (lx < -P || ly < -P || lx > z.w + P || ly > z.h + P){ S.ult = null; return; }
   const c = S.gc;
   c.save();
   c.globalCompositeOperation = 'destination-out';
-  c.lineWidth = PINCEL; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.lineWidth = P; c.lineCap = 'round'; c.lineJoin = 'round';
   c.strokeStyle = '#000';
   c.beginPath();
   if (S.ult){ c.moveTo(S.ult.x, S.ult.y); c.lineTo(lx, ly); }
@@ -253,6 +310,18 @@ function raspa(x, y){
   c.stroke();
   c.restore();
   marca(S.ult ? S.ult.x : lx, S.ult ? S.ult.y : ly, lx, ly);
+  /* el giro del cepillo lo da la dirección del movimiento, suavizada: tomándolo
+     crudo, un dedo que tiembla hace girar el cepillo como un ventilador */
+  if (S.ult){
+    const dx = lx - S.ult.x, dy = ly - S.ult.y;
+    if (dx*dx + dy*dy > 9){
+      const obj = Math.atan2(dy, dx) - Math.PI/2;
+      let d = obj - (S.gi || 0);
+      while (d > Math.PI) d -= 6.283;
+      while (d < -Math.PI) d += 6.283;
+      S.gi = (S.gi || 0) + d*0.25;
+    }
+  }
   S.ult = { x: lx, y: ly };
   S.pasada += 1;
   if (S.pasada % 5 === 0) son('raspa', 0.9);
@@ -265,7 +334,7 @@ function raspa(x, y){
 function marca(x0, y0, x1, y1){
   const d = Math.hypot(x1-x0, y1-y0);
   const n = Math.max(1, Math.ceil(d / (CEL*0.5)));
-  const r = PINCEL/2;
+  const r = pincelR()/2;
   for (let s = 0; s <= n; s++){
     const x = x0 + (x1-x0)*s/n, y = y0 + (y1-y0)*s/n;
     const i0 = Math.max(0, Math.floor((x - r)/CEL)), i1 = Math.min(S.cols-1, Math.floor((x + r)/CEL));
@@ -274,10 +343,22 @@ function marca(x0, y0, x1, y1){
       const cx = (i + 0.5)*CEL, cy = (j + 0.5)*CEL;
       if (Math.hypot(cx - x, cy - y) > r) continue;
       const k = j*S.cols + i;
-      if (!S.lim[k]){ S.lim[k] = 1; S.hechas++; }
+      /* ── LAS MANCHAS DURAS NECESITAN DOS PASADAS ──
+         `S.dur[k]` dice cuántas pasadas le faltan a esa celda. Con una sola
+         dureza, limpiar es barrer una vez y no hay nada que decidir; con
+         celdas que no salen de una, el jugador tiene que VOLVER — y eso
+         convierte el barrido en un recorrido. Se dibujan más oscuras, así que
+         se ven antes de tocarlas. */
+      if (!S.lim[k]){
+        if (S.dur[k] > 0){ S.dur[k]--; continue; }
+        S.lim[k] = 1; S.hechas++; S.nuevas++;
+      }
     }
   }
   S.pct = S.hechas / S.total;
+  /* la racha se sube por tramos limpiados y no por celda: por celda subiría
+     dieciséis veces en un solo movimiento del dedo */
+  while (S.nuevas >= 16){ S.nuevas -= 16; comboSuma(); }
 }
 
 function placaLista(){
@@ -287,8 +368,13 @@ function placaLista(){
      de un juego táctil. Con 94 %, las cuatro esquinas se perdonan y todo lo que
      se ve como mugre hay que sacarlo. */
   S.placa++;
-  PUNTOS = S.placa - 1; JUEGO.marca = PUNTOS;
+  /* diez puntos por placa, por el multiplicador de la racha: el marcador deja
+     de ser «cuántas placas» y pasa a ser «cuántas placas Y cómo» */
+  sumaPuntos(10, AN/2, zona().y + zona().h*0.5);
+  JUEGO.marca = PUNTOS;
   son('bien');
+  chispas(AN/2, zona().y + zona().h*0.5, 26, '#ffd76a', 1.3);
+  sacude(0.6);
   S.brillo = 1;
   fogonazo(0.12);
   /* cada placa da tiempo, así que jugar bien alarga la partida en vez de

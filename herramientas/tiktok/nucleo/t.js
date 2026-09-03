@@ -13,13 +13,16 @@ let LANG = 'en';
 const TXB = {
   es: { jugar:'JUGAR', como:'CÓMO SE JUEGA', otra:'OTRA VEZ', menu:'MENÚ',
         mejor:'MEJOR', salta:'TOCÁ PARA SALTEAR', pts:'PUNTOS',
-        finBien:'¡BIEN!', finMal:'SE TERMINÓ', nuevoRec:'RÉCORD NUEVO' },
+        finBien:'¡BIEN!', finMal:'SE TERMINÓ', nuevoRec:'RÉCORD NUEVO',
+        racha:'RACHA' },
   en: { jugar:'PLAY', como:'HOW TO PLAY', otra:'AGAIN', menu:'MENU',
         mejor:'BEST', salta:'TAP TO SKIP', pts:'POINTS',
-        finBien:'NICE!', finMal:'GAME OVER', nuevoRec:'NEW RECORD' },
+        finBien:'NICE!', finMal:'GAME OVER', nuevoRec:'NEW RECORD',
+        racha:'STREAK' },
   pt: { jugar:'JOGAR', como:'COMO JOGAR', otra:'DE NOVO', menu:'MENU',
         mejor:'MELHOR', salta:'TOQUE PARA PULAR', pts:'PONTOS',
-        finBien:'BOA!', finMal:'ACABOU', nuevoRec:'NOVO RECORDE' }
+        finBien:'BOA!', finMal:'ACABOU', nuevoRec:'NOVO RECORDE',
+        racha:'SEQUÊNCIA' }
 };
 /* ── LA TABLA DEL JUEGO SE FUSIONA CON LA DEL NÚCLEO, NO LA REEMPLAZA ──
    Cada juego trae sus propias frases y hereda las siete del núcleo. Si cada

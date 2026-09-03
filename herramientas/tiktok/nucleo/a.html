@@ -29,8 +29,14 @@ canvas{display:block;width:100%;height:100%}
    MISMO fondo generado que usa la partida, asi que el menu y el juego se ven
    del mismo sitio, y va en DOM y no en el lienzo porque no hay que redibujarlo
    sesenta veces por segundo para que quede quieto. */
+/* ── Y NO RECIBE TOQUES, QUE ES LO QUE ROMPIO EL JUEGO ──
+   Un elemento con `opacity:0` SIGUE RECIBIENDO el dedo. Medido con
+   `elementFromPoint` en el medio de la pantalla y en partida: lo que estaba
+   debajo del dedo era `tela` y no el lienzo, o sea que NINGUN toque llegaba al
+   juego. Y no lo vio ninguna sonda, porque las sondas llaman a `JUEGO.baja`
+   directo y se saltean todo el camino entre el dedo y el juego. */
 #tela{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;
-  transition:opacity .6s;z-index:1}
+  transition:opacity .6s;z-index:1;pointer-events:none}
 #tela.on{opacity:1}
 
 /* ══════════ LO QUE VA EN DOM Y LO QUE VA EN EL LIENZO ══════════
@@ -86,6 +92,20 @@ canvas{display:block;width:100%;height:100%}
   text-shadow:0 3px 18px rgba(0,0,0,.75)}
 #sub{position:absolute;top:calc(2.4vh + 11vw);left:0;right:0;text-align:center;
   font-size:clamp(10px,3vw,14px);letter-spacing:.28em;opacity:.55}
+/* ── LA FICHA DEL MULTIPLICADOR ──
+   Debajo del marcador y con su propia barrita: la barra es la ventana de la
+   racha, o sea el tiempo que queda para que el próximo acierto la sostenga. Sin
+   la barra, la racha se corta sola y el jugador no sabe por qué. */
+#combo{position:absolute;top:calc(2.4vh + 15vw);left:0;right:0;text-align:center;
+  font-size:clamp(18px,6vw,34px);font-weight:800;letter-spacing:.06em;
+  color:#ffd76a;text-shadow:0 0 18px rgba(255,215,106,.6),0 3px 12px #000;
+  opacity:0;transform:scale(.7);transition:opacity .18s,transform .18s}
+#combo.on{opacity:1;transform:scale(1)}
+#comboV{position:absolute;top:calc(2.4vh + 22vw);left:38%;right:38%;height:4px;
+  background:rgba(255,255,255,.10);border-radius:3px;overflow:hidden;
+  opacity:0;transition:opacity .18s}
+#combo.on ~ #comboV{opacity:.8}
+#comboB{height:100%;width:0;background:#ffd76a}
 #reloj{position:absolute;left:12%;right:12%;bottom:3.2vh;height:6px;
   background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
 #relojB{height:100%;width:100%;background:#f2eee6}
@@ -112,6 +132,8 @@ canvas{display:block;width:100%;height:100%}
   <div id="hud">
     <div id="marca">0</div>
     <div id="sub"></div>
+    <div id="combo"></div>
+    <div id="comboV"><div id="comboB"></div></div>
     <div id="reloj"><div id="relojB"></div></div>
   </div>
   <div id="cine"></div>

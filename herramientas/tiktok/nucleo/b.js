@@ -65,16 +65,30 @@ let fps = 0, _cuadros = 0, _acumF = 0;
 
 /* la entrada: un solo verbo. Llega normalizada a las unidades de diseño, así
    que un juego nunca ve un píxel de pantalla. */
-const TOQUE = { x: 0, y: 0, abajo: false, movido: false };
+const TOQUE = { x: 0, y: 0, abajo: false, movido: false, n: 0 };
 function aDiseno(ev){
   const r = lienzo.getBoundingClientRect();
   const t = ev.touches ? ev.touches[0] : ev;
   return { x: (t.clientX - r.left) / r.width * AN,
            y: (t.clientY - r.top) / r.height * AL };
 }
+/* ── EL `preventDefault` DE UN `touchstart` CANCELA EL CLICK, Y ESO DEJABA EL
+       JUEGO SIN PODER EMPEZAR ──
+   Los cuatro escuchas estaban colgados de la VENTANA, así que un toque en el
+   botón JUGAR o en el de idioma pasaba primero por acá, llegaba a
+   `preventDefault()` —el juego consume el toque— y el navegador entonces NO
+   sintetiza el `click`. En el banco no se veía: Playwright despacha un click de
+   ratón de verdad y ese camino no pasa por el táctil. En un teléfono, tocar
+   JUGAR no hacía absolutamente nada.
+
+   Ahora la entrada del juego cuelga del LIENZO. Los paneles viven por encima
+   (`z-index 5`), así que mientras hay un panel abierto el lienzo no recibe nada
+   y los botones son botones; en partida no hay panel y el lienzo recibe todo.
+   `touchend`/`mouseup` siguen en la ventana a propósito: un arrastre que
+   termina afuera del marco tiene que soltar igual. */
 function baja(ev){
   const p = aDiseno(ev);
-  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.abajo = true; TOQUE.movido = false;
+  TOQUE.x = p.x; TOQUE.y = p.y; TOQUE.abajo = true; TOQUE.movido = false; TOQUE.n++;
   if (MODO === 'cine'){ cineSalta(); return; }
   if (MODO === 'juega' && JUEGO.baja) JUEGO.baja(p.x, p.y);
   if (ev.cancelable) ev.preventDefault();
@@ -89,10 +103,11 @@ function sube(){
   if (MODO === 'juega' && JUEGO.sube) JUEGO.sube(TOQUE.x, TOQUE.y);
   TOQUE.abajo = false;
 }
-addEventListener('touchstart', baja, { passive: false });
-addEventListener('touchmove', mueve, { passive: false });
+lienzo.addEventListener('touchstart', baja, { passive: false });
+lienzo.addEventListener('touchmove', mueve, { passive: false });
 addEventListener('touchend', sube, { passive: true });
-addEventListener('mousedown', baja);
+addEventListener('touchcancel', sube, { passive: true });
+lienzo.addEventListener('mousedown', baja);
 addEventListener('mousemove', (e) => { if (TOQUE.abajo) mueve(e); });
 addEventListener('mouseup', sube);
 /* la barra espaciadora hace de toque EN EL MEDIO del marco: es lo que permite

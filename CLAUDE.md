@@ -280,6 +280,130 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima sexta vuelta (2026-09-03): **LOS CINCO MINIJUEGOS** — no se podía empezar a jugar, y la capa que les faltaba
+
+Reporte: *"mejora todo las mecánicas gráficos no quería taaan simple también sonidos etc, también que
+no entra el juego o sea no se puede empezar a jugar"*.
+
+#### EL BLOQUEADOR ERAN DOS BUGS, Y MIS SONDAS NO PODÍAN VERLOS
+
+Los dos los introdujo la vuelta anterior con la piel del menú, y los dos son del camino que va **del
+dedo al juego** — que es justamente el único camino que las sondas de este núcleo no recorren:
+`__J.toca` y `__J.arrastra` llaman a `JUEGO.baja` **directo**. O sea que todo lo que pase entre el
+dedo y esa función es invisible para ellas, y ahí estaban los dos.
+
+1. **`#tela` RECIBÍA EL DEDO.** Un elemento con `opacity:0` **sigue recibiendo** el puntero. Medido
+   con `elementFromPoint` en el medio de la pantalla y en partida: lo que había debajo del dedo era
+   `DIV#tela` y no el lienzo, así que **ningún toque llegaba al juego**. Con `pointer-events:none`
+   pasa a ser `CANVAS#c`.
+
+2. **Y EL `preventDefault` DE UN `touchstart` CANCELA EL CLICK.** Los cuatro escuchas estaban
+   colgados de la **ventana**, así que un toque en JUGAR o en el botón de idioma pasaba primero por
+   el manejador del juego, llegaba a `preventDefault()` —el juego consume el toque— y el navegador
+   entonces **no sintetiza el `click`**. En un teléfono, tocar JUGAR no hacía absolutamente nada. En
+   el banco no se veía porque Playwright despacha un click de ratón de verdad y ese camino no pasa
+   por el táctil.
+   La entrada del juego pasa a colgar del **lienzo**. Los paneles viven por encima (`z-index 5`), así
+   que mientras hay un panel abierto el lienzo no recibe nada y los botones son botones; en partida
+   no hay panel y el lienzo recibe todo. `touchend` sigue en la ventana a propósito: un arrastre que
+   termina afuera del marco tiene que soltar igual.
+
+**LA PRUEBA QUE FALTABA, Y SE EQUIVOCÓ DOS VECES ANTES DE SERVIR.** Ahora se despacha un `TouchEvent`
+de verdad sobre el lienzo y se comprueba que el estado cambia. La primera versión decía que no pasaba
+nada, y estaba mal por dos razones: **hay que esperar un cuadro** —`JUEGO.resta` se recalcula en
+`paso`, no en el manejador del toque— y **hacía falta saber si el dedo había llegado**, que es lo que
+distingue «el juego no reaccionó» de «el toque no entró». Con un contador de toques en la sonda quedó
+claro que el toque sí entraba (`toque:[216,468,true,1]`), y con la espera de un cuadro se ve el efecto:
+en EL RARO, tocar una ficha equivocada mueve el reloj de **0,952 a 0,664**, que es exactamente el
+castigo de un segundo y medio.
+
+#### LA CAPA QUE LES FALTABA A LOS CINCO: RACHA CON MULTIPLICADOR
+
+Vive en `nucleo/j.js` y la heredan los cinco. Un minijuego de cuarenta segundos con un solo verbo
+tiene un problema de diseño concreto: **la décima vez que hacés la cosa vale lo mismo que la
+primera**, así que a los quince segundos ya sabés cuánto vas a sacar. Con el multiplicador la partida
+tiene una curva —cuatro aciertos suben un escalón, hasta x5— y un error deja de costar un punto para
+costar la escalera entera. Eso convierte «tocar bien» en «no cortar la racha», que es una decisión
+aunque el verbo sea el mismo. Y la ventana es **de tiempo** además de aciertos: dudar también corta.
+
+**Y EN DOS DE LOS CINCO EL MULTIPLICADOR NO PAGA EN PUNTOS, PAGA EN MECÁNICA.** En MANCHA el marcador
+es el porcentaje de la cancha y en RASPÁ son placas terminadas: los dos son resultados que no se
+pueden multiplicar sin mentir. Así que ahí la racha **engorda la brocha** (12 % por escalón) y **el
+pincel** (14 %), y se siente más que un número. Los dos declaran `PIEL.rachaFin = false`, porque su
+contador cuenta celdas y un «RACHA 7.882» en el cartel del final no informa nada.
+
+Más partículas con gravedad, números flotantes que suben frenando, y sacudón —que envuelve **sólo la
+capa del juego**: sacudiendo el fondo aparecen dos franjas negras en los bordes.
+
+#### LA VENTANA DE LA RACHA SE ADELANTABA EN EL CAMINO EQUIVOCADO
+
+Estaba en `jugoPaso`, que corre una vez por **cuadro** con el `dt` de reloj. Para las partículas y el
+sacudón eso es correcto —son cosméticos— pero la racha no es cosmética: es física en dos juegos. Y
+peor: los auto-jugadores llaman a `JUEGO.paso` directo, así que **la ventana no se vencía nunca** y el
+multiplicador se quedaba clavado en x5 — medido, `racha 622` en una partida de 45 s de MANCHA y
+**7.882** en RASPÁ, que son números que ninguna persona puede hacer.
+Se arregla envolviendo `JUEGO.paso` **una vez** (el mismo recurso con el que `d.js` envuelve `son()`):
+así la racha caduca en los seis caminos que existen —el bucle, `avanza` y los cinco auto-jugadores—
+sin repetir la llamada en cada juego.
+
+#### LO QUE GANÓ CADA UNO
+
+- **PUERTA** — el **VIP**: cada tanto llega alguien con la tarjeta dorada generada y ése entra
+  siempre, diga lo que diga la regla. Es la única excepción del juego y está por dos razones: en un
+  juego donde la regla es secreta, una excepción **visible** es el único momento en que el jugador
+  está seguro, y estar seguro una vez cada tanto es lo que hace soportable no estarlo el resto del
+  tiempo. Vale tres puntos, así que la racha y el VIP juntos son el pico de la partida. Y **la cola
+  de atrás reacciona**: salta con un VIP y se agacha con un error, con un desfase que sale de la
+  posición de cada silueta —una cola que salta toda junta se lee a una animación y no a gente—. Más
+  la ovación y el abucheo generados.
+- **SEGUIDORES** — dos poderes: el **escudo** se come un hater entero (y corta la racha igual: si no
+  la cortara, sería una licencia para dejar de esquivar) y la **estrella** duplica seis segundos. Los
+  dos son raros a propósito, uno cada quince segundos: un poder que aparece seguido deja de ser un
+  momento. Y el bot honesto los prefiere aunque estén más lejos, que es lo único que prueba que se
+  pueden agarrar.
+- **EL RARO** — **bono por rapidez**: antes el marcador era el nivel, así que encontrarlo en medio
+  segundo y encontrarlo en el último instante valían lo mismo — el reloj sólo servía para perder.
+  Ahora el tiempo que sobra da hasta dos puntos extra. Y **doce objetos en vez de seis**: con seis, a
+  partir del nivel siete el jugador ya vio todos.
+- **MANCHA** — **balde** (brocha 80 % más ancha siete segundos) y **bomba** (pinta un círculo de tres
+  celdas). Nacen lejos del jugador y **los puede agarrar cualquiera**: si sólo los pudiera agarrar
+  uno, serían un regalo y no una carrera.
+- **RASPÁ** — **manchas duras** que necesitan dos pasadas, dibujadas más oscuras para que se vean
+  antes de tocarlas (una celda que no sale de una y se ve igual que las demás se lee a que el dedo no
+  agarró). Y **el cepillo se ve**: hasta ahora el dedo borraba mugre y no había nada en pantalla que
+  dijera con qué.
+
+#### DOS AJUSTES QUE SALIERON DE COMPARAR LOS DOS AUTO-JUGADORES
+
+- **El bot «honesto» de MANCHA perdía contra el que se movía al azar**, 27,8 % contra 33,8 %. Ésa es
+  la firma exacta de una estrategia que **no viaja**: con la cancha llena, la celda ajena más cercana
+  está siempre a un paso, así que el bot se quedaba oscilando en dos metros cuadrados. Con un mínimo
+  de dos celdas y media recorre — y de paso los tres bots dejan de verse tontos en pantalla.
+- **Y la racha de MANCHA subía cada cuatro celdas robadas**, o sea que un pincelazo sobre pintura
+  ajena llegaba a x5 en un segundo y la brocha ancha pasaba a ser el estado normal. Cada catorce hay
+  que sostener el robo unos segundos, y pintar piso vacío —que es lo seguro— no la sube nunca.
+
+#### MEDIDO AL CERRAR
+
+**26 de 26 assets cargados y 0 fallados** en los cinco (4 · 8 · 5 · 5 · 4 imágenes y 7 · 4 · 6 · 6 · 3
+sonidos), con diez assets nuevos generados en esta vuelta (la tarjeta VIP, el escudo y la estrella,
+el balde y la bomba, el cepillo, seis objetos más y cinco efectos). El toque de verdad llega al lienzo
+en los cinco y el botón JUGAR queda arriba de todo (`BUTTON#bJugar` bajo el dedo en el menú,
+`CANVAS#c` en partida). **39 a 60 cuadros por segundo** con render por software. Cero solapamientos
+entre los siete elementos del HUD. `window.__errs` vacío en las veintiocho corridas.
+
+Los dos auto-jugadores, con el multiplicador puesto:
+
+| | honesto | al azar |
+|---|---|---|
+| PUERTA | 426 aciertos, **1.201 puntos** (o sea ×2,8 de multiplicador medio) | 4 aciertos y muere |
+| EL RARO | nivel 2.401, **35.892 puntos**, 0 fallos | nivel 2 con 7 fallos |
+| SEGUIDORES | 40 s, 104 seguidores, 1 escudo tomado | 14 s, 5 seguidores |
+| MANCHA | **32,5 %**, 1.323 celdas robadas | 17,7 % |
+| RASPÁ | barriendo, **121 placas** y 6.000 puntos | picoteando, 7 placas |
+
+Tamaños: 412 · 429 · 461 · 478 · 626 KB.
+
 ### Nonagésima quinta vuelta (2026-09-03): **CINCO MINIJUEGOS ESTILO TIKTOK** — un núcleo compartido y todos los assets generados con Rezona
 
 Pedido: *"hagamos 5 minijuegos estilo tiktok dame ideas y hazmes HTML con menús simples, selección
