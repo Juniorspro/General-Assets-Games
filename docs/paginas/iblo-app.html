@@ -1631,6 +1631,53 @@ $("btSinAdorno").addEventListener("click", function(){
 
 /* mejorar el texto con la IA */
 var textoAntes = null;
+/* ---------- el respaldo, cuando el servidor se queda sin cupo ----------
+   Pollinations contesta gratis y sin cuenta, pero limita el escalón anónimo a un
+   pedido por dirección IP. Desde el servidor eso no sirve: todos los Workers de
+   Cloudflare salen por las mismas IP y siempre hay alguien en la cola. Desde acá
+   sí, porque la conexión es la del teléfono del dueño y no la comparte con nadie.
+
+   Va por GET porque el POST pide clave. Las instrucciones se pegan arriba del
+   pedido, que para reescribir un párrafo alcanza y sobra. */
+function iaDeRespaldo(sistema, pedido){
+  var u = "https://text.pollinations.ai/" +
+          encodeURIComponent(sistema + "\n\n---\n\n" + pedido) +
+          "?referrer=iblo-eventos.pages.dev";
+  return fetch(u).then(function(r){
+    return r.text().then(function(t){
+      /* cuando no le da el cupo contesta un JSON de error, a veces con un 200 */
+      if (!r.ok || /^\s*\{"error"/.test(t)) throw new Error("sin respaldo");
+      t = t.trim();
+      if (!t || t.length > 1200) throw new Error("sin respaldo");
+      return t;
+    });
+  });
+}
+
+/* ¿el error del servidor es «se acabó el cupo»? Sólo ahí vale la pena el rodeo:
+   si el pedido está mal, el respaldo va a fallar igual. */
+function esFaltaDeCupo(e){
+  return /cupo|saturad|l[ií]mite/i.test(String(e && e.message || ""));
+}
+
+/* Los modelos a veces devuelven todo el aviso entre comillas. Se sacan sólo si
+   abren y cierran el texto entero: si no, sacar la primera dejaba la de adentro
+   suelta y el aviso salía con media comilla colgando. */
+function sinComillas(t){
+  t = String(t).trim();
+  var pares = { '"': '"', "'": "'", "\u00ab": "\u00bb", "\u201c": "\u201d" };
+  var f = t.charAt(0);
+  if (pares[f] && t.charAt(t.length - 1) === pares[f]) return t.slice(1, -1).trim();
+  return t;
+}
+
+var SISTEMA_AVISO =
+  "Sos el community manager de IBLO Eventos, una productora de fiestas de Margarita Belén, Chaco. " +
+  "Reescribís avisos en español rioplatense (voseo), con energía pero sin exagerar. " +
+  "No inventes ningún dato que no esté en el texto: ni fechas, ni lugares, ni precios, ni nombres. " +
+  "Máximo 40 palabras, dos o tres frases. Sin hashtags, sin emojis, sin comillas. " +
+  "Devolvé únicamente el texto final, nada más.";
+
 $("btMagia").addEventListener("click", function(){
   var d = $("detalle").value.trim();
   if (d.length < 6){ decir("avisoCargar", "Escribí algo primero, aunque sea suelto.", "mal"); return; }
@@ -1639,11 +1686,20 @@ $("btMagia").addEventListener("click", function(){
   cargando(bt, true, original);
   pedir("/mejorar", { metodo:"POST", cuerpo:{ texto: d, titulo: $("titulo").value.trim(),
                                               precio: $("precio").value.trim() } })
+    .catch(function(e){
+      /* el servidor sin cupo no tiene que dejar al dueño sin poder mejorar el texto */
+      if (!esFaltaDeCupo(e)) throw e;
+      return iaDeRespaldo(SISTEMA_AVISO, d)
+        .then(function(t){ return { texto: t, de: "respaldo" }; })
+        .catch(function(){ throw e; });   // que lea el mensaje del servidor, no el mío
+    })
     .then(function(j){
       textoAntes = d;
-      $("detalle").value = j.texto || d;
+      $("detalle").value = sinComillas(j.texto || d);
       $("btDeshacer").hidden = false;
       refrescarPrevia();
+      if (j.de === "respaldo")
+        decir("avisoCargar", "El cupo de la IA de casa está agotado, así que lo escribió la de respaldo. Revisalo antes de publicar.", "ok");
     })
     .catch(function(e){ decir("avisoCargar", e.message, "mal"); })
     .then(function(){ cargando(bt, false, original); });

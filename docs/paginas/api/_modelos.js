@@ -6,10 +6,17 @@
    las comen rápido. Cuando eso pasa, la app se queda sin IA hasta el otro día.
 
    Por eso esto es una cadena y no un proveedor solo. Los de afuera piden una
-   clave —se revisaron los dos directorios de APIs públicas y no hay ninguno
-   serio que genere texto o lea imágenes sin registrarse— así que cada uno entra
-   en juego sólo si su clave está guardada como secreto del Worker. Si no hay
-   ninguna, funciona igual que siempre con Workers AI sola.
+   clave, así que cada uno entra en juego sólo si la suya está guardada como
+   secreto del Worker. Si no hay ninguna, funciona igual que siempre con Workers
+   AI sola.
+
+   Pollinations, la única que contesta sin cuenta ni clave, NO está en esta lista
+   y no es un olvido: desde un Worker no se puede usar. Todos los Workers salen
+   por unas pocas direcciones IP compartidas, y Pollinations limita el escalón
+   anónimo a un pedido encolado por IP. Desde acá contesta siempre lo mismo
+   —«Queue full for IP: 2a06:98c0:3600::103»—, seis de seis veces que se probó.
+   Sí anda desde el teléfono del dueño, que tiene su propia conexión, así que el
+   respaldo con Pollinations está en la app y no en el servidor.
 
    Para agregar una:
      cd sitio && wrangler pages secret put OPENROUTER_API_KEY --project-name iblo-eventos

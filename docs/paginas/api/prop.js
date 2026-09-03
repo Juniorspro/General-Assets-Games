@@ -95,6 +95,31 @@ async function objetoRecordado(env, pista) {
   } catch { return ""; }
 }
 
+/* Cuántos adornos nuevos por día. A ~250 neuronas cada uno son 3.000 de las
+   10.000, y quedan 7.000 —unas 350 llamadas— para leer flyers y escribir avisos. */
+const TOPE_DIA = 12;
+
+const hoy = () => new Date().toISOString().slice(0, 10);
+
+async function gastadosHoy(env) {
+  if (!env.DB) return 0;
+  try {
+    const f = await env.DB.prepare("SELECT salida FROM cache_ia WHERE huella = ?")
+      .bind("adornos:" + hoy()).first();
+    return f ? Number(f.salida) || 0 : 0;
+  } catch { return 0; }
+}
+
+async function anotarGasto(env) {
+  if (!env.DB) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO cache_ia (huella, salida, creado) VALUES (?, '1', ?) " +
+      "ON CONFLICT(huella) DO UPDATE SET salida = CAST(CAST(salida AS INTEGER) + 1 AS TEXT)"
+    ).bind("adornos:" + hoy(), Date.now()).run();
+  } catch {}
+}
+
 async function recordarObjeto(env, pista, objeto) {
   if (!env.DB) return;
   try {
@@ -141,6 +166,15 @@ export async function onRequestPost({ request, env }) {
     if (guardado) return json({ objeto, clave, deDonde, recortado: guardado, deLaBase: true });
   }
 
+  /* generar uno nuevo sí gasta, y el cupo lo comparte con el que lee y escribe */
+  const gastados = await gastadosHoy(env);
+  if (gastados >= TOPE_DIA) {
+    return json({ error:
+      "Por hoy ya se generaron " + TOPE_DIA + " adornos nuevos, que es lo que se " +
+      "puede sin dejar a la IA sin cupo para leer flyers y escribir avisos. Mañana " +
+      "se repone. Los adornos que ya están guardados los podés seguir usando." }, 429);
+  }
+
   let img = "";
   try {
     const r = await env.AI.run(MODELO, { prompt: objeto + ENCUADRE, steps: 6 });
@@ -149,8 +183,10 @@ export async function onRequestPost({ request, env }) {
     return json({ error: traducirFalla(e) }, 502);
   }
   if (!img) return json({ error: "El generador no devolvió nada. Probá de nuevo." }, 502);
+  await anotarGasto(env);
 
-  return json({ objeto, clave, deDonde, imagen: "data:image/jpeg;base64," + img });
+  return json({ objeto, clave, deDonde, quedan: TOPE_DIA - gastados - 1,
+                imagen: "data:image/jpeg;base64," + img });
 }
 
 /* La app manda acá el recorte ya hecho, para que el próximo que pida lo mismo no

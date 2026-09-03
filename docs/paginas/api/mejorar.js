@@ -1,20 +1,19 @@
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Max-Age": "86400",
-};
-const json = (o, s = 200) =>
-  new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json; charset=utf-8" } });
+import { json, preflight } from "./_comun.js";
+import { traducirFalla } from "./_ia.js";
+import { pedirIA } from "./_modelos.js";
 
-export const onRequestOptions = () => new Response(null, { headers: CORS });
+export const onRequestOptions = preflight;
 
+/* Reescribe el texto del aviso. Antes le hablaba a Workers AI directo, así que el
+   día que se acababa el cupo devolvía el error crudo del proveedor —«4006: you
+   have used up your daily free allocation»— y encima no aprovechaba la cadena.
+   Ahora pasa por `pedirIA` como todo lo demás: si Cloudflare está sin cupo sigue
+   con el que le toque, y si no hay ninguno el dueño lee algo en castellano. */
 export async function onRequestPost({ request, env }) {
   let cuerpo;
   try { cuerpo = await request.json(); } catch { return json({ error: "cuerpo inválido" }, 400); }
   const texto = String(cuerpo.texto || "").slice(0, 900).trim();
   if (!texto) return json({ error: "falta el texto" }, 400);
-  if (!env.AI) return json({ error: "sin IA disponible" }, 503);
 
   const sistema =
     "Sos el community manager de IBLO Eventos, una productora de fiestas de Margarita Belén, Chaco. " +
@@ -24,20 +23,20 @@ export async function onRequestPost({ request, env }) {
     "Devolvé únicamente el texto final, nada más.";
 
   try {
-    const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-      messages: [
-        { role: "system", content: sistema },
-        { role: "user", content: texto },
-      ],
-      max_tokens: 180,
-      temperature: 0.6,
-    });
-    let salida = String(r?.response || "").trim()
-      .replace(/^["'«»]+|["'«»]+$/g, "")
-      .replace(/\s+/g, " ");
-    if (!salida) return json({ error: "sin respuesta" }, 502);
-    return json({ texto: salida });
+    const { texto: salida, de } = await pedirIA(env, [
+      { role: "system", content: sistema },
+      { role: "user", content: texto },
+    ], { tope: 180, calor: 0.6 });
+
+    /* sólo se sacan las comillas que envuelven todo el aviso: sacar la primera
+       que apareciera dejaba la de adentro suelta */
+    const pares = { '"': '"', "'": "'", "«": "»", "“": "”" };
+    let limpio = String(salida).trim().replace(/\s+/g, " ");
+    const f = limpio.charAt(0);
+    if (pares[f] && limpio.endsWith(pares[f])) limpio = limpio.slice(1, -1).trim();
+    if (!limpio) return json({ error: "La IA contestó vacío. Probá de nuevo." }, 502);
+    return json({ texto: limpio, de });
   } catch (e) {
-    return json({ error: "falló la IA", detalle: String(e).slice(0, 200) }, 502);
+    return json({ error: traducirFalla(e) }, 502);
   }
 }

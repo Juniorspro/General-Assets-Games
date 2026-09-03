@@ -14,7 +14,7 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/entradas` | Publica una entrada. Requiere sesión. |
 | `DELETE /api/entradas?id=` | Da de baja una publicación. Requiere sesión. |
 | `GET /api/mias` | Todas las publicaciones, incluso las dadas de baja. Requiere sesión. |
-| `POST /api/mejorar` | Reescribe la descripción con Workers AI. Sin sesión. |
+| `POST /api/mejorar` | Reescribe la descripción. Pasa por la cadena de proveedores como todo lo demás; si se queda sin cupo, la app lo reintenta contra Pollinations desde el teléfono. Sin sesión. |
 | `GET /api/destacado` | El aviso de la portada, con su color. Sin sesión. |
 | `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
@@ -60,6 +60,27 @@ varios fallan, se reporta el de cupo, que es el que le dice algo al dueño.
 Los que no saben mirar imágenes (Cerebras) se saltean solos cuando lo que se pide
 es leer un flyer.
 
+### Pollinations: gratis y sin cuenta, pero desde la app
+
+Es la única keyless que de verdad contesta, y estaba mal descartada. El truco es
+el parámetro **`referrer`**: sin él devuelve `402 Payment Required` aunque uno no
+mande ninguna clave. Con él, `GET https://text.pollinations.ai/<pedido>?referrer=…`
+contesta 200. Sólo por GET y sólo texto: el POST con formato de OpenAI y todo
+modelo que no sea `openai-fast` piden clave.
+
+**Desde el Worker no sirve.** Todos los Workers de Cloudflare salen por unas pocas
+IP compartidas y Pollinations limita el escalón anónimo a un pedido encolado por
+IP; desde el servidor la respuesta es siempre la misma —«Queue full for IP:
+2a06:98c0:3600::103»—, seis de seis veces que se probó. Por eso **no está en la
+cadena de `_modelos.js`** y el respaldo vive en la app: el teléfono del dueño
+tiene su propia conexión y no la comparte con nadie.
+
+Cómo quedó: si `/api/mejorar` falla **por cupo**, la app pide el texto a
+Pollinations desde el teléfono y avisa que lo escribió el respaldo, para que el
+dueño lo lea antes de publicar. Si el respaldo también falla, se muestra el
+mensaje del servidor, no uno mío. Si el error del servidor no es de cupo, ni se
+intenta: un pedido mal armado va a fallar igual.
+
 ### Por qué no hay ninguno sin clave
 
 Se buscó a fondo, probando generación real desde la IP del Worker, no listados:
@@ -84,6 +105,19 @@ Medido con la API de analytics de Cloudflare, por llamada:
 Publicar algo con la IA son tres llamadas: unas 60 neuronas. Con 10.000 por día
 entran ~165 publicaciones o ~40 adornos. **El dueño no va a llegar al límite en
 uso normal**; el día que se agotó fue por 425 llamadas de prueba en 24 horas.
+
+### El cupo es uno solo, y por eso hay tope de adornos
+
+No hay un cupo para texto y otro para imágenes: son las mismas 10.000 neuronas.
+Como un adorno vale doce veces lo que vale leer un flyer, una tarde de probar
+adornos deja a la app sin poder leer ni escribir por el resto del día —que es
+justo lo que se usa todos los días—.
+
+Así que `/api/prop` no genera más de **12 adornos nuevos por día** (los que salen
+de la biblioteca no cuentan, porque no gastan). Son 3.000 neuronas; quedan 7.000,
+unas 350 llamadas de texto, reservadas para lo que importa. La cuenta se lleva en
+`cache_ia` con la huella `adornos:AAAA-MM-DD`, y al llegar al tope se contesta 429
+explicando que mañana se repone y que los guardados se siguen pudiendo usar.
 
 ## El cupo de la IA
 
