@@ -114,6 +114,12 @@ python3 herramientas/rezona/rz.py call submit_model3d_generation '{"project_id":
   — hay que ordenar por el `id` del JSON-RPC. Ya pasó: el asfalto llegó con el `output_path` de la
   vereda.
 - **`publish_to_rezona_app` es IRREVERSIBLE.** No llamarlo nunca sin pedido explícito.
+- **TODO SE GENERA EN UN SOLO PROYECTO DESCARTABLE** (`YlgCbidN`, «tmp — descartable, borrar»), no en
+  uno por juego. Pedido del usuario: nada queda a la vista en la app de Rezona Lab como si fuera un
+  trabajo. Lo que vale es la copia del repo; el proyecto es un andamio. **Y el borrado no se puede
+  hacer desde acá**: `DELETE` y `PATCH` de `/api/projects/{id}` devuelven **403 PAT_ROUTE_FORBIDDEN**
+  con credencial de API, así que lo único que está de nuestro lado es que haya **uno** y que su
+  nombre diga que se puede borrar.
 
 ### Higgsfield
 
