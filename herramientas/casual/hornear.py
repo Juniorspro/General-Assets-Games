@@ -197,6 +197,27 @@ JUEGOS = {
                         reja=(2, 2), celdas=[(0,0),(0,1),(1,1)]),
         'e_piso': dict(archivo='e_piso.png', tipo='tex', lado=320),
     },
+    'nieve': {
+        # volvio 2x3 con las filas repetidas: derecho, inclinado a la izquierda
+        # y a la derecha, en ese orden, en la fila de arriba
+        'n_esqui': dict(archivo='n_esqui.png', tipo='hoja', lado=224,
+                        celdas=[(0,0),(0,1),(0,2)]),
+        'n_arbol': dict(archivo='n_arbol.png', tipo='hoja', lado=256,
+                        celdas=[(0,0),(0,1),(0,2)]),
+        'n_piso': dict(archivo='n_piso.png', tipo='tex', lado=320),
+    },
+    'grua': {
+        'g_carga': dict(archivo='g_carga.png', tipo='hoja', lado=256,
+                        celdas=[(0,0),(0,1),(0,2)]),
+        # ── LA TERCERA FILA NO SE MIDE, Y POR ESO SE LEE LA PRIMERA ──
+        # Las dos ultimas celdas volvieron con el fondo lila y no magenta puro,
+        # asi que el relleno desde el borde no las separa y la reja medida las
+        # junta en una sola de 688 pixeles. Las tres piezas que hacen falta
+        # estan enteras en la fila de arriba.
+        'g_base': dict(archivo='g_base.png', tipo='hoja', lado=256,
+                       celdas=[(0,0),(0,1),(0,2)]),
+        'g_piso': dict(archivo='g_piso.png', tipo='tex', lado=320),
+    },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
         # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es

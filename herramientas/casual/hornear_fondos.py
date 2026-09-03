@@ -31,7 +31,7 @@ CAL = int(os.environ.get('FONDO_CAL', '82'))
 
 JUEGOS = ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica',
           'piedra', 'arco', 'castillo', 'penal', 'duelo', 'pesca',
-          'salto', 'esquiva']
+          'salto', 'esquiva', 'nieve', 'grua']
 
 
 def hornea(jid):
