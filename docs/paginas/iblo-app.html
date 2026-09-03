@@ -192,7 +192,7 @@ h1,h2,h3{margin:0; line-height:.98; font-family:var(--gordo); font-weight:400; t
     <img id="embIng" alt="" src="">
     <span><span class="firma">Eventos</span><span class="nombre">IBLO</span></span>
   </div>
-  <h1 id="tituloIng">Panel de entradas</h1>
+  <h1>Panel de entradas</h1>
   <p id="bajaIng">Cargando…</p>
 
   <form id="formIng" autocomplete="on">
@@ -205,7 +205,6 @@ h1,h2,h3{margin:0; line-height:.98; font-family:var(--gordo); font-weight:400; t
       <label for="clave">Contraseña</label>
       <input id="clave" name="password" type="password" autocomplete="current-password"
              placeholder="••••••••" required>
-      <span class="pista" id="pistaClave" hidden>Mínimo 8 caracteres. Anotala, no hay forma de recuperarla.</span>
     </div>
     <button class="bt p" id="btIng" type="submit">Entrar</button>
   </form>
@@ -330,7 +329,7 @@ var $   = function(i){ return document.getElementById(i); };
 var esc = function(s){ return String(s).replace(/[&<>"]/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
 
-var sesion = null, usuario = null, hayCuenta = null, iaViva = false;
+var sesion = null, usuario = null, iaViva = false;
 try { sesion = localStorage.getItem("iblo.sesion"); usuario = localStorage.getItem("iblo.usuario"); } catch(e){}
 
 /* ---------- red ---------- */
@@ -362,40 +361,28 @@ function cargando(bt, si, textoNormal){
 }
 
 /* ---------- ingreso ---------- */
-function pintarIngreso(){
-  var nuevo = hayCuenta === false;
-  $("tituloIng").textContent = nuevo ? "Creá la cuenta" : "Panel de entradas";
-  $("bajaIng").textContent = nuevo
-    ? "Todavía no hay cuenta. Elegí el usuario y la contraseña del dueño; después nadie más va a poder crear otra."
-    : "Entrá con tu usuario para subir entradas.";
-  $("btIng").textContent = nuevo ? "Crear la cuenta y entrar" : "Entrar";
-  $("clave").setAttribute("autocomplete", nuevo ? "new-password" : "current-password");
-  $("pistaClave").hidden = !nuevo;
-}
 pedir("/estado").then(function(j){
-  hayCuenta = !!j.hayCuenta; iaViva = !!j.ia;
-  pintarIngreso();
+  iaViva = !!j.ia;
+  $("bajaIng").textContent = "Entrá con tu usuario para subir entradas.";
   if (sesion) abrirApp();
 }).catch(function(){
-  $("bajaIng").textContent = "No hay conexión con el servidor. Probá de nuevo con internet.";
+  $("bajaIng").textContent = "No hay conexión con el servidor. Fijate el internet y volvé a probar.";
 });
 
 $("formIng").addEventListener("submit", function(ev){
   ev.preventDefault();
   var u = $("usuario").value.trim().toLowerCase(), c = $("clave").value;
-  var nuevo = hayCuenta === false;
   decir("avisoIng", "");
-  var bt = $("btIng"), txt = bt.textContent;
-  cargando(bt, true, txt);
-  pedir(nuevo ? "/registrar" : "/login", { metodo: "POST", cuerpo: { usuario: u, clave: c } })
+  var bt = $("btIng");
+  cargando(bt, true, "Entrar");
+  pedir("/login", { metodo: "POST", cuerpo: { usuario: u, clave: c } })
     .then(function(j){
       sesion = j.sesion; usuario = j.usuario;
       try { localStorage.setItem("iblo.sesion", sesion); localStorage.setItem("iblo.usuario", usuario); } catch(e){}
-      hayCuenta = true;
       abrirApp();
     })
     .catch(function(e){ decir("avisoIng", e.message, "mal"); })
-    .then(function(){ cargando(bt, false, txt); });
+    .then(function(){ cargando(bt, false, "Entrar"); });
 });
 
 function abrirApp(){
