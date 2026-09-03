@@ -147,6 +147,10 @@ const UI_PIEZAS=['papel','tira','linterna','usar','pausa','aro','perilla'];
      tiene el testigo prendido. */
   .con-ui #torch i{filter:brightness(.60) drop-shadow(0 0 5px rgba(232,196,110,.5))}
   .con-ui #torch.off i{filter:brightness(.34) saturate(.5);opacity:.9}
+  /* LA TECLA APRETADA SE VE. El recorrido dura 0,26 s y sin acuse el jugador
+     vuelve a apretarla creyendo que no lo escucharon. */
+  #torch.busy{transform:scale(.94)}
+  .con-ui #torch.busy i{filter:brightness(.85) drop-shadow(0 0 8px rgba(232,196,110,.6))}
   .con-ui #use{border:0;background:var(--ui-usar) center/100% 100% no-repeat;
     text-shadow:0 1px 3px rgba(0,0,0,.9)}
   .con-ui #use:active{background-color:transparent;filter:brightness(1.35)}
@@ -159,7 +163,12 @@ const UI_PIEZAS=['papel','tira','linterna','usar','pausa','aro','perilla'];
   body.ui-off #count{opacity:0!important}
   #place{position:absolute;left:50%;top:26px;transform:translateX(-50%);font-size:12.5px;
     letter-spacing:.16em;color:rgba(214,206,184,.45);text-shadow:0 1px 4px #000;transition:opacity .5s}
-  #hint{position:absolute;left:26px;bottom:78px;font-size:12.5px;line-height:1.7;
+  /* LA LEYENDA SUBE UNA FRANJA. Estaba en la misma banda que `#note` —los dos
+     abajo, uno a la izquierda y el otro centrado— y un aviso centrado se ancha
+     con el texto: medido, en 892 px de ancho quedaban 8 px de aire y en 732 se
+     montaban 71. Y el defecto no se veia en las auditorias porque la leyenda se
+     apaga a los 7 s y las sondas median despues. */
+  #hint{position:absolute;left:26px;bottom:124px;font-size:12.5px;line-height:1.7;
     color:rgba(206,200,182,.6);text-shadow:0 1px 4px #000;transition:opacity 1s}
   #hint b{color:#e6dfc6;font-weight:600}
   /* EL SUBTITULO DE LA CINTA NO LLEVA FONDO PROPIO. Mientras suena, el post ya
@@ -233,7 +242,7 @@ const UI_PIEZAS=['papel','tira','linterna','usar','pausa','aro','perilla'];
     align-items:center;justify-content:center;gap:3px;opacity:.55}
   #pauseBtn i{width:2px;height:13px;background:#ded6bd;display:block}
   body.ui-off #torch,body.ui-off #use,body.ui-off #stickBase,body.ui-off #stickKnob,
-  body.ui-off #prompt,body.ui-off #note,body.ui-off #dot,body.ui-off #hint,
+  body.ui-off #prompt,body.ui-off #note,body.ui-off #dot,body.ui-off #hint,body.ui-off #acc,
   body.ui-off #place,body.ui-off #pauseBtn{opacity:0!important;pointer-events:none!important}
   #use{position:absolute;right:24px;bottom:112px;min-width:96px;height:52px;padding:0 16px;
     border-radius:26px;border:1px solid rgba(226,214,180,.5);background:rgba(38,34,26,.55);
@@ -245,6 +254,16 @@ const UI_PIEZAS=['papel','tira','linterna','usar','pausa','aro','perilla'];
   #prompt{position:absolute;left:50%;top:calc(50% + 22px);transform:translateX(-50%);
     font-size:12px;letter-spacing:.09em;color:rgba(232,222,196,.82);text-shadow:0 1px 4px #000;
     opacity:0;transition:opacity .2s;white-space:nowrap}
+  /* EL ARO DE LA ACCION va en la MIRA y no en el boton: lo que se esta mirando
+     esta en el centro de la pantalla, y el boton vive en la esquina de abajo a
+     la derecha. Es un `conic-gradient` con una mascara radial, o sea cero
+     triangulos y cero assets. Si el navegador no sabe enmascarar queda un
+     disco en vez de un aro: se ve peor y sigue diciendo lo mismo. */
+  #acc{position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;
+    border-radius:50%;pointer-events:none;opacity:0;transition:opacity .12s;
+    background:conic-gradient(rgba(232,207,148,.9) var(--p,0deg),rgba(0,0,0,0) 0);
+    -webkit-mask:radial-gradient(closest-side,transparent 68%,#000 71%);
+    mask:radial-gradient(closest-side,transparent 68%,#000 71%)}
   #dot{transition:width .18s,height .18s,background .18s,margin .18s}
   #dot.act{width:9px;height:9px;margin:-4.5px 0 0 -4.5px;background:rgba(255,240,205,.9)}
   #note{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:62%;
@@ -346,6 +365,7 @@ const UI_PIEZAS=['papel','tira','linterna','usar','pausa','aro','perilla'];
   <div id="hud">
     <div id="flash"></div><div id="fade"></div>
     <div id="dot"></div>
+    <div id="acc"></div>
     <div id="stickBase"></div><div id="stickKnob"></div>
     <div id="place"></div>
     <div id="torch"><i></i><span id="torchTx"></span></div>
@@ -1086,7 +1106,22 @@ function aireLibre(ox,oy,oz,dx,dy,dz,max){
 /* ══════════ planta (idéntica a la versión anterior) ══════════ */
 const HX0=-8,HX1=8,HZ0=-6,HZ1=6;
 const HOLE={x0:-7.2,x1:-3.0,z0:-5.4,z1:-3.6};
-const stairY=x=>-3*Math.max(0,Math.min(1,(-3.0-x)/4.2));
+/* ══════════ LA ESCALERA SE DECLARA UNA VEZ ══════════
+   De aca salen las DOS cosas que tienen que coincidir: las cajas que se
+   DIBUJAN y la altura por la que CAMINA el cuerpo. Estaban escritas por
+   separado —doce peldanos de 0,25 de alza contra un piso que era una RAMPA
+   continua de 3 m en 4,2— y eso no falla ni avisa: medido peldano por peldano,
+   el cuerpo flotaba hasta 25 cm por encima de la tapa que estaba pisando y se
+   hundia hasta 8,6 cm en la de abajo. Un peldano y su altura son el mismo
+   numero, asi que hay uno. */
+const PELD={x0:-3.0,huella:0.36,alza:0.25,n:12,z:-4.5,ancho:1.8};
+/* EL EPSILON NO ES ADORNO: 1,8/0,36 da 5,000000000000001 en coma flotante, asi
+   que `ceil` devuelve 6 y en el canto exacto de tres de los doce peldanos el
+   cuerpo bajaba un escalon 36 cm antes de tiempo —medido, 25 cm hundido en
+   x=-4,80—. Con el epsilon el canto pertenece al peldano de arriba, que es el
+   mismo que devuelve el rayo. */
+const escN=x=>Math.max(0,Math.min(PELD.n,Math.ceil((PELD.x0-x)/PELD.huella-1e-6)));
+const stairY=x=>-PELD.alza*escN(x);
 const inHole=(x,z)=>x>HOLE.x0-0.1&&x<HOLE.x1&&z>HOLE.z0&&z<HOLE.z1;
 const inHouse=(x,z)=>x>HX0&&x<HX1&&z>HZ0&&z<HZ1;
 
@@ -1422,8 +1457,26 @@ wall(-1.8,-6,-1.8,0,2.6,[],M.conc,-3);
 wall(-8,-6,-8,0,2.6,[],M.conc,-3);
 wall(-8,-6,-1.8,-6,2.6,[],M.conc,-3);
 
-for(let i=0;i<12;i++) box(0.36,0.3,1.8,M.wood,-3.0-0.36*(i+0.5),-0.25*(i+1)-0.15,-4.5,0,false);
+for(let i=0;i<PELD.n;i++) box(PELD.huella,0.3,PELD.ancho,M.wood,
+  PELD.x0-PELD.huella*(i+0.5),-PELD.alza*(i+1)-0.15,PELD.z,0,false);
 box(0.12,3.2,0.12,M.wood,-7.05,-1.5,-3.7);
+/* ══════════ EL CANTO DEL ENTREPISO SE CIERRA ══════════
+   La losa de arriba es un plano que mira ARRIBA y el cielorraso del sotano uno
+   que mira ABAJO, asi que entre los dos quedaba un canto de 38 cm ABIERTO en
+   toda la vuelta del hueco: medido con rayos horizontales desde el medio de la
+   escalera, 11 de 12 salian sin tocar nada, y por ahi se ve el vacio. En la
+   boca el hueco mide 25 cm mas, porque el primer peldano arranca en -0,25 y la
+   losa esta en 0.
+   Las cuatro piezas van sin colision —por ese canto se camina— y sin sombra:
+   son seis centimetros de madera de canto. */
+{
+  const y0=-0.38, h=-y0, yc=y0/2, t=0.06, LX=HOLE.x1-HOLE.x0+t*2;
+  box(LX,h,t,M.wood,(HOLE.x0+HOLE.x1)/2,yc,HOLE.z0-t/2,0,false,false);
+  box(LX,h,t,M.wood,(HOLE.x0+HOLE.x1)/2,yc,HOLE.z1+t/2,0,false,false);
+  const LZ=HOLE.z1-HOLE.z0;
+  box(t,h,LZ,M.wood,HOLE.x0-t/2,yc,(HOLE.z0+HOLE.z1)/2,0,false,false);
+  box(t,h,LZ,M.wood,HOLE.x1+t/2,yc,(HOLE.z0+HOLE.z1)/2,0,false,false);
+}
 
 /* marcos de puerta y zócalos: detalle que da escala */
 function frame(cx,cz,horiz,w){
@@ -1735,7 +1788,31 @@ for(let i=0;i<7;i++){
   gm.normalMap=M.conc.normalMap.clone(); gm.normalMap.needsUpdate=true; gm.normalMap.repeat.set(28,28);
   gm.color.setHex(0x4a5040); gm.roughness=0.9;
   M.suelo=gm;
-  plane(120,120,gm,0,-0.02,0);
+  /* ── EL SUELO DE AFUERA NO PASA POR DEBAJO DE LA CASA ──
+     Era UN plano de 120 m en y=-0,02, o sea que TAPABA la boca del sotano:
+     medido tirando rayos hacia abajo por el medio de la escalera, el primer
+     cuerpo opaco era el pasto en TODO el hueco, hasta 2,77 m por encima del
+     peldano que el cuerpo estaba pisando. Mirando el hueco desde el living lo
+     que se veia era cesped, no la escalera.
+     Va como una VUELTA alrededor de la planta, metida 10 cm por debajo de los
+     muros para que en el zocalo no quede una ranura de 2 cm por la que se vea
+     el vacio.
+     Y LA UV SE ESCRIBE EN METROS DE MUNDO. La de un `PlaneGeometry` va de 0 a
+     1 sea cual sea su tamano, asi que con `repeat` compartido cada franja
+     mostraria 28 copias de su propio ancho —la del norte mide 120 m y la del
+     oeste 52— y la costura entre dos franjas seria un cambio de escala. Con la
+     UV atada al mundo la costura no puede existir. */
+  const MET=120/28;          // los metros que cubria una copia con el plano de 120
+  gm.map.repeat.set(1,1); gm.normalMap.repeat.set(1,1);
+  const RX=7.9, RZ=5.9, F=60;
+  [[-F,F,RZ,F],[-F,F,-F,-RZ],[-F,-RX,-RZ,RZ],[RX,F,-RZ,RZ]].forEach(r=>{
+    const w=r[1]-r[0], d=r[3]-r[2];
+    const m=plane(w,d,gm,(r[0]+r[1])/2,-0.02,(r[2]+r[3])/2);
+    const uv=m.geometry.attributes.uv;
+    for(let i=0;i<uv.count;i++)
+      uv.setXY(i,(r[0]+uv.getX(i)*w)/MET,(r[3]-uv.getY(i)*d)/MET);
+    uv.needsUpdate=true;
+  });
 }
 /* charcos: reflejan la poca luz que hay */
 [[-3.4,8.2,1.5],[2.6,7.4,1.1],[-6.5,-8.0,1.7],[9.0,2.0,1.3],[-9.5,3.5,1.2],[5.0,-8.5,1.4]]
@@ -1995,11 +2072,19 @@ bulb(6.4,2.10,3.6,0xffd49a,5,0.36);
 
 /* ══════════ interacciones ══════════ */
 const INTER=[];
-function register(mesh,label,fn){
-  mesh.userData.iLabel=label; mesh.userData.iFn=fn; INTER.push(mesh);
+function register(mesh,label,fn,tipo){
+  mesh.userData.iLabel=label; mesh.userData.iFn=fn;
+  /* CADA COSA TARDA LO QUE TARDA. El tipo viaja con el objeto y no con quien
+     lo usa: si la duracion la eligiera `doUse`, un objeto nuevo entraria con
+     la de por omision y nadie se enteraria. */
+  mesh.userData.iTipo=tipo||'mirar'; INTER.push(mesh);
 }
 
 /* — puertas con bisagra — */
+/* UNA PUERTA PESA. Con 3,4 la hoja llegaba a destino en tres decimas: eso no
+   se lee a puerta, se lee a que alguien la corrio de un manotazo. A 1,6 tarda
+   un segundo y pico en asentarse, que es lo que tarda una de madera maciza. */
+const PUERTA_V=1.6;
 const doors=[];
 function updateDoorCol(d){
   const a=d.angle, L=d.hinge*d.W;
@@ -2022,12 +2107,12 @@ function makeDoor(x,z,axis,hinge,swing,ajar){
   kn.position.set(axis==='z'?0.055:hinge*W*0.84,-0.05,axis==='z'?hinge*W*0.84:0.055);
   g.add(kn);
   const col={x0:0,x1:0,z0:0,z1:0,y0:0.02,y1:H}; COL.push(col);
-  const d={g,axis,hinge,swing,W,col,angle:0,target:0,open:false,ajar:ajar||0};
+  const d={g,axis,hinge,swing,W,col,angle:0,target:0,open:false,ajar:ajar||0,speed:PUERTA_V};
   if(ajar){ d.open=true; d.angle=d.target=swing*ajar; g.rotation.y=d.angle; }
   doors.push(d); updateDoorCol(d);
   const act=()=>{ d.open=!d.open; d.target=d.open?swing*1.48:0; if(A)A.door(); };
   const lp=()=>d.open?TX('cerrarP'):TX('abrirP');
-  register(leaf,lp,act); register(panel,lp,act);
+  register(leaf,lp,act,'puerta'); register(panel,lp,act,'puerta');
   return d;
 }
 makeDoor(-1.8,3.0,'z', 1,-1,0.55);   // sala
@@ -2044,7 +2129,7 @@ function lightSwitch(x,y,z,idx){
   lev.position.set(x-0.02*Math.sign(x||1),y,z); scene.add(lev);
   const act=()=>{ const b=bulbs[idx]; b.on=!b.on; if(A)A.click(); };
   const lbl=()=>bulbs[idx].on?TX('apagarL'):TX('prenderL');
-  register(plate,lbl,act); register(lev,lbl,act);
+  register(plate,lbl,act,'llave'); register(lev,lbl,act,'llave');
 }
 lightSwitch(-1.68,1.12,4.7,0);      // pasillo
 lightSwitch(-1.92,1.12,-1.1,1);     // cocina
@@ -2060,7 +2145,7 @@ function showNote(txt){
 }
 /* CLAVES Y NO TEXTO: el rotulo se re-evalua cada cuadro y la nota se resuelve
    al mostrarla, asi que cambiar de idioma alcanza a las dos. */
-function examine(mesh,k){ register(mesh,()=>TX('x'+k),()=>showNote(TX('n'+k))); }
+function examine(mesh,k){ register(mesh,()=>TX('x'+k),()=>showNote(TX('n'+k)),'mirar'); }
 examine(oSofa,'Sofa');
 examine(oTV,'TV');
 examine(oPic,'Pic');
@@ -2079,11 +2164,47 @@ const useBtn=document.getElementById('use'), promptEl=document.getElementById('p
 const dotEl=document.getElementById('dot');
 const ray=new THREE.Raycaster(); ray.near=0; ray.far=2.7;
 let focusObj=null, rayT=0;
+const accEl=document.getElementById('acc');
+/* ══════════ LAS ACCIONES CUESTAN TIEMPO ══════════
+   Abrir una puerta, dar una llave de luz o levantar una cinta pasaban EN EL
+   MISMO CUADRO en que se apretaba el boton, y eso es lo que hace que una casa
+   se recorra como un menu: se toca, pasa, se toca lo siguiente. Ahora cada
+   accion dura lo que dura la mano que se estira, y el gesto se VE: un aro que
+   se llena en la mira.
+
+   NO SE LE SACA EL CONTROL AL JUGADOR, igual que en el susto: se sigue
+   caminando y girando mientras dura. Lo unico que no se puede es empezar dos a
+   la vez —repicar el boton abriria y cerraria la misma puerta— y ALEJARSE LA
+   CANCELA, porque una mano no llega a tres metros. */
+const ACC={t:0,dur:0,fn:null,obj:null};
+const ACC_DUR={puerta:0.92,llave:0.52,mirar:0.68,papel:0.62,cinta:1.05};
+const _accP=new THREE.Vector3();
+function accAro(){
+  const k=ACC.fn?Math.min(1,ACC.t/ACC.dur):0;
+  accEl.style.opacity=ACC.fn?1:0;
+  accEl.style.setProperty('--p',(k*360).toFixed(1)+'deg');
+}
+function accCorta(){ ACC.fn=null; ACC.obj=null; ACC.t=0; accAro(); }
+function accPide(fn,tipo,obj){
+  if(ACC.fn) return;
+  ACC.fn=fn; ACC.obj=obj||null; ACC.t=0; ACC.dur=ACC_DUR[tipo]||0.6;
+  if(A&&A.handle) A.handle();          // la mano que se estira, no lo que agarra
+  accAro();
+}
+function accPaso(dt){
+  if(!ACC.fn) return;
+  if(ACC.obj){ ACC.obj.getWorldPosition(_accP);
+    if(_accP.distanceTo(camera.position)>3.2){ accCorta(); return; } }
+  ACC.t+=dt;
+  if(ACC.t>=ACC.dur){ const f=ACC.fn; ACC.fn=null; ACC.obj=null; ACC.t=0; accAro(); f(); }
+  else accAro();
+}
 function doUse(){
-  if(!focusObj) return;
-  focusObj.userData.iFn();
-  const l=focusObj.userData.iLabel;
-  promptEl.textContent=typeof l==='function'?l():l;
+  if(!focusObj||ACC.fn) return;
+  const o=focusObj;
+  accPide(()=>{ o.userData.iFn();
+    const l=o.userData.iLabel;
+    promptEl.textContent=typeof l==='function'?l():l; }, o.userData.iTipo, o);
 }
 /* leyendo, el botón dice "dejar": antes llamaba a doUse() y reabría el papel */
 useBtn.addEventListener('click',e=>{e.stopPropagation();
@@ -2240,8 +2361,8 @@ function makePaper(x,y,z,ry,kind,ck,sign){
   p.kind=kind; p.ck=ck; p.sign=sign;   // para repintarlas al cambiar de idioma
   papers.push(p);
   const lr=()=>TX('leer');
-  register(front,lr,()=>openPaper(p));
-  register(back ,lr,()=>openPaper(p));
+  register(front,lr,()=>openPaper(p),'papel');
+  register(back ,lr,()=>openPaper(p),'papel');
   return p;
 }
 function openPaper(p){
@@ -2275,12 +2396,19 @@ makePaper(-6.2,0.012,-4.2,2.3,'diario','p7');
 makePaper(-6.3,-2.24,-1.05,0.15,'nota','p8','H.');
 
 /* ══════════ tensión: la casa se pone peor a medida que leés ══════════ */
-let tension=0, lastPaper=false;
+let tension=0, tensionV=0, lastPaper=false;
 const FOG0=scene.fog.density;
+/* LA NIEBLA SIGUE A LA TENSION Y NO SALTA CON ELLA. El susto sube la tension
+   0,30 de golpe: escrita aca, la densidad del aire cambiaba en UN cuadro y eso
+   se ve como que la escena cambio de sitio. El numero lo pone quien lo sabe y
+   el aire tarda dos segundos en cerrarse. */
 function setTension(v){
   tension=Math.max(0,Math.min(1,v));
-  scene.fog.density=FOG0+tension*0.026;          // el aire se cierra
   if(A&&A.setDread) A.setDread(tension);
+}
+function tensionPaso(dt){
+  tensionV+=(tension-tensionV)*Math.min(dt*0.5,1);
+  scene.fog.density=FOG0+tensionV*0.026;
 }
 
 /* ══════════ el que mira desde el pasillo ══════════ */
@@ -3027,7 +3155,15 @@ shutter( 3.35,1.5,6.13,'x');
 shutter( 8.13,1.5,3.05,'z');
 
 /* — el director: elige qué pasa y cuándo — */
-let evT=rnd(22,40);
+/* ── ZONAS DE EXPLORACION SILENCIOSA ──
+   El director venia con un intervalo de 26 a 58 s acortado por la tension y
+   nada mas: con la tension arriba eso deja un evento cada diez segundos, uno
+   pisando al otro. Una casa que hace ruido todo el tiempo deja de dar miedo,
+   porque un susto necesita silencio del que salir.
+   Ahora, DESPUES DE CADA EVENTO hay una ventana en la que no puede pasar nada
+   (6 a 14 s) y CADA TERCERO entra una pausa larga de 30 a 50: el rato en el que
+   uno recorre la casa y no se oye mas que la lluvia. */
+let evT=rnd(22,40), evCalma=0, evCuenta=0;
 function evDoor(){
   const cand=doors.filter(d=>!seen(d.g.position.x,d.g.position.z));
   const d=(cand.length?cand:doors)[Math.floor(Math.random()*(cand.length||doors.length))];
@@ -3039,7 +3175,7 @@ function evDoor(){
                       : d.swing*(Math.random()<0.5?rnd(0.05,0.2):rnd(0.75,1.2));
   d.open = Math.abs(d.target)>0.1;
   if(A) A.door(panOf(d.g.position.x,d.g.position.z));
-  setTimeout(()=>{d.speed=3.4;d.drifting=false;},5000);
+  setTimeout(()=>{d.speed=PUERTA_V;d.drifting=false;},5000);
 }
 function evLight(){
   const on=bulbs.filter(b=>b.on), off=bulbs.filter(b=>!b.on);
@@ -3161,6 +3297,20 @@ function fireEvent(){
   }
   pick.f();
 }
+/* EL RELOJ DEL DIRECTOR EN SU PROPIA FUNCION. Asi la sonda del ritmo corre EL
+   MISMO codigo que el bucle con `DIR_MUDO` puesto —un reloj medido sobre una
+   copia de la regla no mide el juego, mide la copia— y de paso diez minutos de
+   cadencia se pueden medir sin esperarlos. */
+let DIR_MUDO=false, _dirN=0;
+function dirPaso(dt){
+  if(evCalma>0){ evCalma-=dt; return; }
+  evT-=dt;
+  if(evT>0) return;
+  _dirN++;
+  if(!DIR_MUDO) fireEvent();
+  evCuenta++; evCalma=rnd(6,14);
+  evT=(evCuenta%3===0)?rnd(30,50):rnd(26,58)*(1-tension*0.62);
+}
 function fireEventFallback(){
   const alt=DIRECTOR.filter(e=>e.f!==spawnGhost&&e.w>0);
   const e=alt[Math.floor(Math.random()*alt.length)];
@@ -3213,7 +3363,7 @@ function makeCinta(d){
   const t={g,ck:d.ck,tomada:false};
   cintas.push(t);
   const lb=()=>TX('agarrar');
-  register(cuerpo,lb,()=>tomaCinta(t)); register(rot,lb,()=>tomaCinta(t));
+  register(cuerpo,lb,()=>tomaCinta(t),'cinta'); register(rot,lb,()=>tomaCinta(t),'cinta');
   return t;
 }
 CINTAS_POS.forEach(makeCinta);
@@ -4464,9 +4614,10 @@ function resetWorld(){
   SCR.t=-1; SCR.hecho=false; scrLuz.intensity=0;
   hideGhost(); gh.cool=0; gh.pending=0; shakeReset(); P.panic=0;
   fadeEl.style.opacity=0; endEl.classList.add('hide');
-  torchOn=true; torchBtn.classList.remove('off'); torchTx.textContent=TX('linterna');
+  torchOn=true; torchK=1; torchPend=-1; torchBtn.classList.remove('off','busy');
+  torchTx.textContent=TX('linterna'); accCorta();
   doors.forEach(d=>{
-    d.drifting=false; d.speed=3.4; d.open=d.ajar>0;
+    d.drifting=false; d.speed=PUERTA_V; d.open=d.ajar>0;
     d.angle=d.target=d.swing*d.ajar; d.g.rotation.y=d.angle; updateDoorCol(d);
   });
   fallers.forEach(f=>{
@@ -4478,11 +4629,11 @@ function resetWorld(){
     p.read=false; p.returning=false; p.grp.renderOrder=0;
     p.grp.position.copy(p.homePos); p.grp.quaternion.copy(p.homeQ);
   });
-  reading=null; readCount=0; setTension(0);
+  reading=null; readCount=0; setTension(0); tensionV=0; scene.fog.density=FOG0;
   focusObj=null; promptEl.style.opacity=0;
   useBtn.textContent=TX('usar'); useBtn.classList.remove('show'); dotEl.classList.remove('act');
   countEl.style.opacity=0; noteEl.style.opacity=0; noteT=0;
-  evT=rnd(22,40); tapeT=0; lastSec=-1;
+  evT=rnd(22,40); evCalma=0; evCuenta=0; tapeT=0; lastSec=-1;
   /* las cintas */
   cintasT=0; cinta=null; finalLista=false; cintaK=0;
   cintaTxEl.style.opacity=0; recEl.innerHTML='<b></b>'+TX('rec');
@@ -4619,8 +4770,29 @@ document.getElementById('slGrain').addEventListener('input',e=>{
   VIG=0.40+0.45*v; pmAplicar();});
 setState('menu');
 
-function toggleTorch(){torchOn=!torchOn;torchBtn.classList.toggle('off',!torchOn);
-  torchTx.textContent=torchOn?TX('linterna'):TX('apagada');}
+/* ══════════ LA LINTERNA TARDA ══════════
+   La tecla tiene recorrido y el filamento tarda en llegar: el golpe del
+   interruptor y la luz no caen en el mismo instante. Van 0,26 s de recorrido
+   —con el click al apretar, que es lo que dice que el juego te escucho— y
+   despues una rampa: sube mas lento de lo que baja, porque un filamento se
+   calienta despacio y se corta de golpe.
+   Y NO SE PUEDE REPICAR LA TECLA mientras el recorrido esta en curso. */
+let torchK=1, torchPend=-1;
+function toggleTorch(){
+  if(torchPend>=0) return;
+  torchPend=0.26; torchBtn.classList.add('busy');
+  if(A&&A.click) A.click();
+}
+function torchPaso(dt){
+  if(torchPend>=0){ torchPend-=dt;
+    if(torchPend<0){ torchOn=!torchOn; torchPend=-1;
+      torchBtn.classList.remove('busy');
+      torchBtn.classList.toggle('off',!torchOn);
+      torchTx.textContent=torchOn?TX('linterna'):TX('apagada'); } }
+  const meta=torchOn?1:0;
+  torchK+=(meta-torchK)*Math.min(dt*(torchOn?6.2:9.5),1);
+  if(torchK<0.004) torchK=0; else if(torchK>0.996) torchK=1;
+}
 torchBtn.addEventListener('click',e=>{e.stopPropagation();toggleTorch();});
 function begin(){
   if(started) return;
@@ -4959,11 +5131,15 @@ function tick(){
   /* linterna: retardo, temblor y batería inestable */
   camera.getWorldDirection(tDir);
   const bat=1-0.15*Math.max(0,Math.sin(T*0.29))-(Math.random()<0.0035?0.65:0);
-  const lit=(torchOn&&!torchCut)||state==='menu';
-  torch.intensity=lit?3.9*bat:0;
+  torchPaso(dt);
+  /* UN SOLO NUMERO decide cuanta linterna hay, y de el cuelgan las cinco cosas
+     que la usan: el spot, el haz, el polvo, el relleno y el halo. */
+  const kL=(state==='menu')?1:(torchCut?0:torchK);
+  const lit=kL>0.02;
+  torch.intensity=3.9*bat*kL;
   beam.visible=lit&&(POLVO_ON!==false);
   if(lit){ const bu=beam.material.uniforms;
-    bu.uI.value=bat*(inHouse(P.x,P.z)?1:0.6);
+    bu.uI.value=bat*kL*(inHouse(P.x,P.z)?1:0.6);
     bu.uT.value=T;
     /* adentro el aire tiene polvo; afuera, a la intemperie, casi nada. Y por
        encima de eso, cuanta columna de aire iluminado hay delante de verdad. */
@@ -4972,7 +5148,9 @@ function tick(){
     const meta=(inHouse(P.x,P.z)?1.0:0.34)*(0.10+0.90*Math.min(1,Math.max(0,(aire-0.45)/2.3)));
     bu.uDen.value+=(meta-bu.uDen.value)*Math.min(dt*2.2,1); }
   halo.position.copy(camera.position);
-  halo.intensity=(reading?0.85:(lit?0.40*bat:0.14));
+  /* EL HALO NO SALTA: con el ternario, apagar la linterna lo tiraba de 0,40 a
+     0,14 en un cuadro. Sumado sobre la base, la transicion la hace la rampa. */
+  halo.intensity=(reading?0.85:(0.14+0.26*bat*kL));
   halo.distance=reading?2.2:4.0;
   /* la tormenta va ANTES de las luces: de ella sale lightBoost, y calculada
      despues las luces usarian el destello del cuadro anterior */
@@ -5060,14 +5238,14 @@ function tick(){
     const lp=_pLuz, ld=_dLuz;
     torch.getWorldPosition(lp);
     torch.target.getWorldPosition(ld); ld.sub(lp).normalize();
-    const encendida=(torchOn&&!torchCut)||state==='menu';
+    const encendida=kL>0.02;
     for(const m of dustMat){
       const u=m.uniforms;
       u.uT.value=T;
       u.uCam.value.copy(camera.position);
       u.uLPos.value.copy(lp); u.uLDir.value.copy(ld);
       u.uEsc.value=renderer.getDrawingBufferSize(_vTam).y*0.5;
-      const meta=(POLVO_ON===null?(encendida?bat:0):(POLVO_ON?bat:0));
+      const meta=(POLVO_ON===null?(encendida?bat*kL:0):(POLVO_ON?bat:0));
       u.uI.value+=(meta-u.uI.value)*Math.min(dt*6,1);
     }
     for(const f of dustFields){
@@ -5120,10 +5298,7 @@ function tick(){
   /* director de eventos: los intervalos se acortan a medida que leés.
      MIENTRAS SUENA UNA CINTA NO PASA NADA MAS: la cinta es la escena, y una
      persiana golpeando encima de la unica voz del juego la tapa. */
-  if(state==='play'&&!fin&&!cinta){
-    evT-=dt;
-    if(evT<=0){ fireEvent(); evT=rnd(26,58)*(1-tension*0.62); }
-  }
+  if(state==='play'&&!fin&&!cinta) dirPaso(dt);
 
   /* la silueta que asoma y desaparece */
   if(glimpseT>0){ glimpseT-=dt; if(glimpseT<=0) figure.visible=false; }
@@ -5170,10 +5345,13 @@ function tick(){
   /* puertas: apertura suave */
   for(const d of doors){
     if(Math.abs(d.target-d.angle)>0.0008){
-      d.angle+=(d.target-d.angle)*Math.min(dt*(d.speed||3.4),1);
+      d.angle+=(d.target-d.angle)*Math.min(dt*(d.speed||PUERTA_V),1);
       d.g.rotation.y=d.angle; updateDoorCol(d);
     }
   }
+
+  accPaso(dt);
+  tensionPaso(dt);
 
   /* papel en la mano */
   if(reading){
@@ -5658,6 +5836,150 @@ window.__casa={
                en_el_hueco:inHole(P.x,P.z), traza,
                llego_al_sotano:minY<-2.80, pasos:k, colisiones_cerca:cerca}); }
       },16); }); },
+  /* ══════════ LA BOCA DEL SOTANO, MEDIDA ══════════
+     "Esta bien soldado" no se puede contestar mirando: se le pregunta a la
+     escena con rayos. Tres cosas distintas y las tres se confunden entre si:
+
+     · `peldanos`: por donde CAMINA el cuerpo (`stairY`, que es una rampa) contra
+       lo que hay DIBUJADO debajo. Si no coinciden, los pies flotan o se hunden.
+     · `ranura`: el canto del entrepiso. El piso de arriba esta en y=0 y el
+       cielorraso del sotano en -0,38, asi que alrededor del hueco queda una
+       franja de 38 cm que, si nadie la cierra, se ve como un tajo por el que
+       entra el vacio.
+     · `caras`: de que lado mira cada plano. Un plano de una cara puesto al
+       reves no falla: desaparece, y por el agujero se ve lo que hay detras. */
+  /* ── LO QUE HAY DELANTE Y CUANTO TARDA EN PASAR ── */
+  inter(){ const c={};
+    INTER.forEach(o=>{ const t=o.userData.iTipo||'?'; c[t]=(c[t]||0)+1; });
+    const pri={}; for(const t of Object.keys(c)) pri[t]=INTER.findIndex(o=>o.userData.iTipo===t);
+    return {total:INTER.length, por_tipo:c, primero:pri, duraciones:ACC_DUR}; },
+  aro(){ return {activo:!!ACC.fn, t:+ACC.t.toFixed(3), dur:ACC.dur,
+    op:+parseFloat(getComputedStyle(accEl).opacity).toFixed(2),
+    p:accEl.style.getPropertyValue('--p')}; },
+  /* Pone la camara delante de un interactivo y lo usa POR EL MISMO CAMINO QUE
+     EL BOTON: `doUse` agenda y el bucle la cumple. Lo que esto mide es la
+     ESPERA, no el rayo —que ya tiene su propia sonda. */
+  usaCerca(k,lejos){ const o=INTER[k]; if(!o) return 'no hay';
+    o.getWorldPosition(_accP);
+    camera.position.set(_accP.x,_accP.y+0.15,_accP.z+0.8);
+    accCorta(); focusObj=o; const tipo=o.userData.iTipo;
+    doUse();
+    if(!ACC.fn) return {k,tipo,error:'no agendo'};
+    if(lejos) camera.position.set(_accP.x+9,_accP.y,_accP.z);
+    const paso=1/60; let hecho=-1, mitad=null;
+    for(let i=0;i<240&&ACC.fn;i++){
+      const t0=ACC.t; accPaso(paso);
+      if(mitad===null&&ACC.fn&&t0<ACC.dur*0.5&&ACC.t>=ACC.dur*0.5)
+        mitad=+parseFloat(accEl.style.getPropertyValue('--p')).toFixed(0);
+      if(!ACC.fn&&t0>0) hecho=i+1;
+    }
+    return {k,tipo,dur:ACC_DUR[tipo],pasos:hecho,seg:+(hecho/60).toFixed(3),
+            aro_mitad_grados:mitad, cancelada:hecho<0}; },
+  /* la linterna con su recorrido de tecla y su rampa de filamento */
+  linternaK(){ return {on:torchOn, k:+torchK.toFixed(3), pend:+torchPend.toFixed(3),
+    spot:+torch.intensity.toFixed(2), halo:+halo.intensity.toFixed(3)}; },
+  correLint(seg){ const paso=1/60, n=Math.round((seg||1)/paso), tr=[];
+    for(let i=0;i<n;i++){ torchPaso(paso);
+      if(i%6===0) tr.push([+((i+1)*paso).toFixed(2),+torchK.toFixed(3)]); }
+    return {on:torchOn, k:+torchK.toFixed(3), traza:tr}; },
+  /* el ritmo del director, con el reloj de verdad y sin hacer ruido */
+  ritmo(seg){ const paso=1/60, n=Math.round((seg||600)/paso);
+    const gT=evT, gC=evCalma, gN=evCuenta;
+    DIR_MUDO=true; _dirN=0;
+    const hue=[]; let t=0, ult=0;
+    for(let i=0;i<n;i++){ t+=paso; const a=_dirN; dirPaso(paso);
+      if(_dirN>a){ hue.push(+(t-ult).toFixed(1)); ult=t; } }
+    DIR_MUDO=false; evT=gT; evCalma=gC; evCuenta=gN;
+    hue.shift();
+    if(!hue.length) return {tension:+tension.toFixed(2), eventos:_dirN, huecos:[]};
+    return {tension:+tension.toFixed(2), eventos:_dirN, huecos:hue,
+      min:+Math.min(...hue).toFixed(1),
+      med:+(hue.reduce((a,b)=>a+b,0)/hue.length).toFixed(1)}; },
+  niebla(){ return {tension:+tension.toFixed(3), suave:+tensionV.toFixed(3),
+    densidad:+scene.fog.density.toFixed(5)}; },
+  correNiebla(seg){ const paso=1/60, n=Math.round((seg||3)/paso), tr=[];
+    for(let i=0;i<n;i++){ tensionPaso(paso);
+      if(i%30===0) tr.push([+((i+1)*paso).toFixed(2),+scene.fog.density.toFixed(5)]); }
+    return {suave:+tensionV.toFixed(3), densidad:+scene.fog.density.toFixed(5), traza:tr}; },
+  /* LA UV DEL SUELO DE AFUERA ESTA ATADA AL MUNDO, asi que la costura entre las
+     cuatro franjas de la vuelta no puede existir: se comprueba vertice por
+     vertice contra la posicion de mundo. Cero es exacto. */
+  suelo(){ const MET=120/28; let n=0, peor=0, mallas=0;
+    const v=new THREE.Vector3();
+    scene.traverse(o=>{ if(!o.isMesh||o.material!==M.suelo) return; mallas++;
+      o.updateWorldMatrix(true,false);
+      const p=o.geometry.attributes.position, u=o.geometry.attributes.uv;
+      for(let i=0;i<p.count;i++){
+        v.fromBufferAttribute(p,i).applyMatrix4(o.matrixWorld);
+        peor=Math.max(peor,Math.abs(u.getX(i)-v.x/MET),Math.abs(u.getY(i)-v.z/MET));
+        n++; } });
+    return {mallas, vertices:n, peor_desvio_uv:+peor.toFixed(6),
+            repeat:[M.suelo.map.repeat.x,M.suelo.map.repeat.y]}; },
+  escalera(){
+    const R=new THREE.Raycaster(), ab=new THREE.Vector3(0,-1,0),
+          ar=new THREE.Vector3(0,1,0);
+    /* SOLO LO QUE TAPA DE VERDAD. El primer barrido daba "hay algo a y=0,012
+       cruzando el hueco entero" y ese algo era un CHARCO DE LUZ: aditivo,
+       transparente y con `depthWrite:false`, o sea que no oculta un solo pixel.
+       Un rayo que le pega a un decorado no esta midiendo si el piso esta
+       cerrado. Se filtran los que no escriben profundidad. */
+    const tapa=m=>m&&m.depthWrite!==false&&!(m.transparent&&m.opacity<0.9)
+      &&m.blending!==THREE.AdditiveBlending;
+    const lista=[]; scene.traverse(o=>{ if(o.isMesh&&o.visible&&tapa(o.material)) lista.push(o); });
+    /* QUE COSA ES LA QUE TOCA EL RAYO. "Hay algo a y=0,012" no sirve para nada:
+       puede ser el piso, un escombro, una telaraña o el suelo de afuera metido
+       por debajo de la casa, y cada una se arregla distinto. */
+    const nom=o=>{ for(const k of Object.keys(M)) if(M[k]===o.material) return k;
+      return (o.material&&o.material.name)||'?'; };
+    const que=h=>{ if(!h.length) return 'nada'; const o=h[0].object, g=o.geometry;
+      const pr=g.parameters||{};
+      return nom(o)+' '+g.type+' '+[pr.width,pr.height,pr.depth].filter(v=>v!==undefined)
+        .map(v=>+(+v).toFixed(2)).join('x')+' en y='+(+o.position.y.toFixed(3))
+        +(o.material&&o.material.side===THREE.DoubleSide?' 2caras':''); };
+    const peldanos=[];
+    /* EL BARRIDO NO CAE EN NINGUN CANTO DE PELDANO. En el canto exacto las
+       tapas de los dos peldanos vecinos contienen la muestra y el rayo elige
+       cualquiera de las dos, asi que la sonda denunciaba 25 cm de desvio donde
+       la altura del cuerpo coincide con una de las dos. Con -2,90 y paso 0,15
+       ninguna muestra cae en un multiplo de 0,36. */
+    for(let x=-2.90;x>=-7.45;x-=0.15){
+      /* EL RAYO SALE DEL OJO DEL CUERPO QUE ESTA AHI, no de una altura fija: al
+         pie de la escalera el cuerpo camina POR DEBAJO de la losa, asi que un
+         rayo desde 1,4 mide la losa y no el piso, y devolvia 3 m de diferencia
+         donde no hay ninguna. */
+      R.set(new THREE.Vector3(x,(inHole(x,-4.5)?stairY(x):0)+1.4,-4.5),ab);
+      const h=R.intersectObjects(lista,false);
+      const y=h.length?h[0].point.y:null;
+      const cam=inHole(x,-4.5)?stairY(x):0;
+      peldanos.push({x:+x.toFixed(2), dibujado:y===null?null:+y.toFixed(3),
+        camina:+cam.toFixed(3), dif_cm:y===null?null:+((cam-y)*100).toFixed(1),
+        que:que(h)});
+    }
+    const dif=peldanos.filter(p=>p.dif_cm!==null).map(p=>p.dif_cm);
+    /* la ranura del entrepiso: rayos desde el medio del hueco hacia los cuatro
+       lados, a la altura del tajo. Si no chocan con nada, el tajo esta abierto. */
+    const ranura=[];
+    for(const y of [-0.06,-0.19,-0.32]){
+      for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
+        R.set(new THREE.Vector3(-5.1,y,-4.5),
+              new THREE.Vector3(d[0],0,d[1]).normalize());
+        const h=R.intersectObjects(lista,false);
+        const lim=d[0]?(d[0]>0?2.1:2.1):0.9;   // media medida del hueco + margen
+        ranura.push({y, dir:d[0]?(d[0]>0?'+x':'-x'):(d[1]>0?'+z':'-z'),
+          d:h.length?+h[0].distance.toFixed(2):null, que:que(h),
+          cierra:!!(h.length&&h[0].distance<lim+0.35)});
+      }
+    }
+    /* y desde abajo: mirando para arriba desde el sotano, junto al canto */
+    const arriba=[];
+    for(const q of [[-3.05,-4.5],[-7.15,-4.5],[-5.1,-3.65],[-5.1,-5.35],[-5.1,-4.5]]){
+      R.set(new THREE.Vector3(q[0],-2.2,q[1]),ar);
+      const h=R.intersectObjects(lista,false);
+      arriba.push({en:q, y:h.length?+h[0].point.y.toFixed(3):null, que:que(h)});
+    }
+    return {peldanos, peor_flote_cm:Math.max(...dif), peor_hundido_cm:Math.min(...dif),
+            ranura, ranura_abierta:ranura.filter(r=>!r.cierra).length, arriba};
+  },
   /* ══════════ EL PESO DE LA VISTA ══════════
      `vistaCurva` corre el MISMO amortiguador que el bucle con un dt fijo y
      devuelve la curva: cuanto tarda en llegar al 90 y al 99 %, si se pasa, y la

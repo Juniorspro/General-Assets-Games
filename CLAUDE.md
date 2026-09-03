@@ -229,6 +229,133 @@ moviéndose mientras dura, la criatura de pie sobre sus propios pies (L\_Foot �
 HUD **sin un solo solapamiento** en 892×412, 732×412, 800×360 y 1280×720, **17 de 17 texturas de foto
 puestas**, `window.__errs` vacío en las nueve corridas.
 
+### Nonagésima quinta vuelta (2026-09-03): **CASA 13** — el pasto tapaba la escalera, y las acciones cuestan tiempo
+
+Pedido: *"asegurate de que el bloque del piso superior y el tramo de las escaleras del sótano estén
+perfectamente soldados o unidos en el motor 3D. A veces queda un espacio vacío (un gap) o una cara
+invertida que hace que el motor renderice mal la perspectiva en ese sector … ralentizando las
+interacciones del jugador, como hacer que abrir puertas, encender objetos o usar la linterna no sea
+instantáneo … regular el ritmo con zonas de exploración silenciosa y transiciones menos abruptas"*.
+
+#### LA COSTURA: TRES DEFECTOS, Y LOS TRES SALIERON DE UNA SONDA Y NO DE MIRAR
+
+`escalera()` tira un rayo hacia abajo cada 15 cm por el eje de la escalera y compara **por dónde
+camina el cuerpo** contra **qué hay dibujado ahí**, más doce rayos horizontales por el canto del
+entrepiso. Los tres defectos son de los que no fallan ni avisan:
+
+1. **EL SUELO DE AFUERA TAPABA LA BOCA DEL SÓTANO.** Era **un** plano de 120 m en y = −0,02, o sea
+   que pasaba por debajo de la casa entera — y por el único agujero que el piso tiene, el hueco de
+   la escalera, lo que se veía era **césped**. Medido, el primer cuerpo opaco era el pasto en todo el
+   hueco, hasta **2,77 m por encima** del peldaño que el cuerpo estaba pisando. Pasa a ser una
+   **vuelta** alrededor de la planta, metida 10 cm por debajo de los muros para que en el zócalo no
+   quede la ranura de 2 cm por la que se vería el vacío.
+   **Y LA UV SE ESCRIBE EN METROS DE MUNDO.** La de un `PlaneGeometry` va de 0 a 1 sea cual sea su
+   tamaño, así que con el `repeat` compartido cada franja mostraría 28 copias de **su propio** ancho
+   —la del norte mide 120 m y la del oeste 52— y la costura entre dos franjas sería un cambio de
+   escala. Atada al mundo la costura **no puede existir**: medido vértice por vértice, desvío **0**.
+2. **EL CANTO DEL ENTREPISO ESTABA ABIERTO EN TODA LA VUELTA.** La losa de arriba es un plano que
+   mira **arriba** y el cielorraso del sótano uno que mira **abajo**, así que entre los dos queda un
+   canto de 38 cm sin una sola cara. Medido: **11 de 12** rayos horizontales salían sin tocar nada.
+   Y en la boca el hueco mide 25 cm más, porque el primer peldaño arranca en −0,25 y la losa está en
+   0. Cuatro fajas de 6 cm, sin colisión —por ese canto se camina— y sin sombra.
+3. **EL CUERPO NO CAMINABA POR LOS PELDAÑOS QUE SE DIBUJAN.** Había **dos** descripciones de la misma
+   escalera: doce cajas de 0,25 de alza y un piso que era una **rampa** continua de 3 m en 4,2.
+   Medido, el cuerpo flotaba hasta **21,4 cm** por encima de la tapa que estaba pisando y se hundía
+   **7,1** en la de abajo. Ahora hay **un** `PELD` y de él salen las dos cosas.
+
+**Y EL EPSILON DE `escN` NO ES ADORNO:** 1,8/0,36 da **5,000000000000001** en coma flotante, así que
+`ceil` devuelve 6 y en el canto exacto de tres de los doce peldaños el cuerpo bajaba un escalón
+36 cm antes de tiempo — medido, 25 cm hundido en x = −4,80.
+
+**Y LA SONDA ESTUVO MAL DOS VECES ANTES DE ESTAR BIEN**, las dos por medir en el sitio equivocado:
+- **Tiraba el rayo desde una altura fija (1,4 m).** Al pie de la escalera el cuerpo camina **por
+  debajo de la losa**, así que el rayo medía la losa y devolvía **3 m** de diferencia donde no hay
+  ninguna. Sale del ojo del cuerpo que está ahí.
+- **Y muestreaba justo en el canto de un peldaño.** Ahí las tapas de los dos vecinos contienen la
+  muestra y el rayo elige cualquiera de las dos: denunciaba 25 cm de desvío donde la altura del
+  cuerpo coincide con una de las dos. Con −2,90 y paso 0,15 ninguna muestra cae en un múltiplo de
+  0,36.
+
+**LA PRUEBA DETECTA LOS TRES, cada uno por su lado**, revirtiéndolos de a uno sobre el mismo binario:
+el pasto vuelve → **−123 cm** hundido; sin las fajas → **11 de 12** abierto; con la rampa →
+**+21,4 / −7,1 cm**. Y con los tres puestos: **0 · 0 · 0**.
+
+#### LAS ACCIONES CUESTAN TIEMPO, Y EL TIPO VIAJA CON EL OBJETO
+
+Abrir una puerta, dar una llave de luz o levantar una cinta pasaban **en el mismo cuadro** en que se
+apretaba el botón, y eso es lo que hace que una casa se recorra como un menú: se toca, pasa, se toca
+lo siguiente. `doUse` ya no llama a la acción: la **agenda**, y el gesto se ve —un aro que se llena
+en la mira, `conic-gradient` con máscara radial, cero triángulos y cero assets—.
+
+**LA DURACIÓN VIAJA CON EL OBJETO Y NO CON QUIEN LO USA** (`register(..., tipo)`): eligiéndola en
+`doUse`, un objeto nuevo entraría con la de por omisión y nadie se enteraría. Medido, las cinco por
+el mismo camino que el botón: puerta **0,933 s** · llave 0,533 · mirar 0,683 · papel 0,633 · cinta
+**1,050** —cada una un paso de 1/60 por encima de su número, que es el redondeo— con el aro en
+183-185° a la mitad.
+
+**NO SE LE SACA EL CONTROL AL JUGADOR**, igual que en el susto: se sigue caminando y girando.
+Lo único que no se puede es empezar dos a la vez —repicar el botón abriría y cerraría la misma
+puerta— y **alejarse la cancela**, porque una mano no llega a tres metros: medido, agendada y con la
+cámara corrida 9 m, `cancelada: true`.
+
+**Y LA PUERTA PESA.** Con 3,4 la hoja llegaba a destino en tres décimas: eso no se lee a puerta, se
+lee a que alguien la corrió de un manotazo. A **1,6** tarda un segundo y pico en asentarse.
+
+#### LA LINTERNA NO ES UN INTERRUPTOR DE PANTALLA
+
+La tecla tiene recorrido y el filamento tarda en llegar. Van **0,26 s** de recorrido —con el click al
+apretar, que es lo que dice que el juego te escuchó, y la tecla que **no se puede repicar** mientras
+dura— y después una rampa que **sube más lento de lo que baja**, porque un filamento se calienta
+despacio y se corta de golpe. Medido: apretar deja `pend 0,26` con la luz todavía entera; a los
+0,3 s ya está en `off` con k 0,596; a los 0,8 en **0**; y al volver a apretar, 0,26 s de nada y k
+llega a 1 a los **1,12 s**.
+
+**Y UN SOLO NÚMERO DECIDE CUÁNTA LINTERNA HAY** (`kL`), del que cuelgan las cinco cosas que la usan:
+el spot, el haz, el polvo, el relleno y el halo. **El halo dejó de saltar**: con el ternario, apagar
+la linterna lo tiraba de 0,40 a 0,14 en un cuadro; sumado sobre la base (0,14 + 0,26·k) la
+transición la hace la rampa y en k = 1 da exactamente los 0,40 de antes.
+
+#### ZONAS DE EXPLORACIÓN SILENCIOSA, Y LA NIEBLA DEJA DE SALTAR
+
+El director venía con un intervalo de 26 a 58 s acortado por la tensión y nada más: con la tensión
+arriba eso deja un evento cada diez segundos, uno pisando al otro. Una casa que hace ruido todo el
+tiempo deja de dar miedo, porque **un susto necesita silencio del que salir**. Ahora, después de cada
+evento hay una ventana en la que no puede pasar nada (6 a 14 s) y **cada tercero** entra una pausa
+larga de 30 a 50: el rato en el que uno recorre la casa y no se oye más que la lluvia. Medido a
+tensión 0,29 sobre quince minutos: huecos de **33,7 a 56,1 s, media 44,4** — antes esa misma tensión
+daba 21,3 a 47,6 con media 34 y sin un solo silencio garantizado.
+
+**Y EL RELOJ DEL DIRECTOR VIVE EN SU PROPIA FUNCIÓN**, con `DIR_MUDO`, así que la sonda del ritmo
+corre **el mismo código** que el bucle: un reloj medido sobre una copia de la regla no mide el juego,
+mide la copia.
+
+**LA NIEBLA SIGUE A LA TENSIÓN Y NO SALTA CON ELLA.** El susto sube la tensión 0,30 de golpe, y la
+densidad del aire se escribía dentro de `setTension`: cambiaba en **un cuadro**, y eso se ve como que
+la escena cambió de sitio. Ahora el número lo pone quien lo sabe y el aire tarda dos segundos en
+cerrarse — medido, 0,05206 → 0,05899 en seis segundos, sin un escalón.
+
+#### UN DEFECTO VIEJO DEL HUD QUE LAS AUDITORÍAS NO PODÍAN VER
+
+`#hint` —la leyenda de controles— y `#note` —el aviso del objetivo— vivían en la **misma banda**, uno
+a la izquierda y el otro centrado; y un aviso centrado se ancha con el texto. Medido: en 892 px de
+ancho quedaban 8 px de aire y en **732 se montaban 71**. No aparecía en ninguna auditoría porque la
+leyenda se apaga a los 7 s y las sondas medían después. La leyenda sube una franja (78 → 124 px) y
+ahora `choques: []` en los cuatro tamaños **con las dos cosas en pantalla a la vez**.
+
+#### MEDIDO AL CERRAR, A dpr 1 y 2,75
+
+Escalera: **0 cm de flote, 0 de hundido, 0 de 12 rayos abiertos**, y bajada **caminada** de
+(−2,30 · −4,50) a (−7,55 · −4,50) con y hasta **−3** y `llego_al_sotano: true`. Suelo de afuera: 4
+franjas en 1 malla, **desvío de UV 0** sobre sus 24 vértices. Acciones: 56 interactivos en 5 tipos,
+las cinco duraciones medidas, la cancelación por distancia verificada. Linterna: la rampa completa
+en los dos sentidos. Ritmo: huecos 33,7-56,1 s. **Nada regresó:** partida completa 3 de 3 cintas +
+la cuarta + el final (`paso 1` → `paso 7`), susto **una sola vez** bajando la escalera y con el post
+de vuelta en brillo 1,06 · grano 0,063 · aberración 1,00 · linterna 3,9, linterna con desvío **0°**,
+haz en **[0,0]**, alabeo **0** con la vista girando 40 muestras, HUD **sin un solo solapamiento** en
+892×412, 732×412, 800×360 y 1280×720, **17 de 17 texturas de foto puestas y 0 huérfanas**, **19 de 19
+sonidos**, fusión estática idéntica, 252 llamadas y 22 programas —los mismos—, `window.__errs` vacío
+en las dieciséis corridas. El HTML pasó de 1,64 a **1,67 MB**, y no entró un solo asset.
+
 ### Nonagésima tercera vuelta (2026-09-03): **CASA 13** — la criatura es un modelo generado y riggeado
 
 Pedido: *"mejora el cuerpo del screamer y su textura como el de este modelo"* con la foto de una mujer
