@@ -20,7 +20,8 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
 | `POST /api/sugerir` | El botón «Nuevo» de la app: trae lo último de Instagram y devuelve los posteos que anuncian algo ya armados como publicación, más qué descartó y por qué. **No sube nada**: el dueño mira y toca publicar. Requiere sesión. |
-| `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Requiere sesión. |
+| `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Si ese objeto ya está en la biblioteca lo devuelve ya recortado y no gasta IA; con `rehacer: true` genera uno nuevo igual. Requiere sesión. |
+| `PUT /api/prop` | La app deja acá el recorte terminado, para que el próximo que pida lo mismo salga gratis. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
 
 ## El cartel de la portada rota solo
@@ -259,6 +260,36 @@ El recorte tiene tres pasos y los tres hacen falta:
 Se trabaja sobre una copia de 512 px: es cuatro veces menos laburo que el
 original de 1024 y el recorte final igual sale de 420.
 
+### La biblioteca: por qué el adorno se genera una sola vez
+
+Medido, un adorno son **~250 neuronas**: doce veces lo que cuesta leer un flyer, y
+con 10.000 por día son apenas 40. Es lo único caro que hay acá; todo lo demás
+junto no llega. Así que en vez de buscar más proveedores, se dejó de gastar dos
+veces en lo mismo.
+
+Cuando la app termina de recortar manda el recorte con `PUT /api/prop` y queda en
+la tabla `adornos`, con el nombre en inglés del objeto como clave. El `POST`
+consulta esa tabla **antes** de llamar al generador: si el sombrero de vaquero ya
+está, vuelve en medio segundo, sin IA, y suma uno a `usos`. Como el objeto sale de
+la tabla de estéticas, «noche wéstern» y «fiesta vaquera» caen en la misma clave y
+comparten el mismo dibujo. El botón **Otro** manda `rehacer` y sí genera uno
+nuevo, que reemplaza al guardado: si al dueño no le gustó el que había, no tiene
+sentido conservarlo.
+
+La otra llamada, la que elige qué objeto pedir cuando no pega ninguna estética, se
+guarda en `cache_ia` con la pista como huella. La segunda vez que se escriba esa
+misma fiesta tampoco cuesta.
+
+Con eso el uso normal —el dueño publica sus fiestas, que se repiten temporada a
+temporada— tiende a cero: la primera Halloween del año gasta, las demás no.
+
+Probado contra la base de verdad: se guarda un recorte, el siguiente pedido de
+«noche western» y el de «fiesta vaquera» vuelven con `deLaBase: true` y `usos`
+en 2, `rehacer: true` saltea la biblioteca y va al generador, y el `PUT` sin
+sesión da 401. Del lado de la app, en teléfono y en computadora, el adorno
+guardado se pinta sin pasar por el canvas y el recién generado se recorta y se
+manda al `PUT` sin trabar la pantalla.
+
 En la tarjeta el adorno va **adentro** —la tarjeta recorta lo que se sale— y se
 le hace lugar: se apoya sobre la foto si hay foto, y si no hay se le reserva una
 banda arriba con `padding`. Sin eso le tapaba el título.
@@ -266,6 +297,8 @@ banda arriba con `padding`. Sin eso le tapaba el título.
 ## Cómo está atado
 
 - Base **D1** llamada `iblo` (`27c22f67-3b11-4c92-bb75-37f30f63b84d`), atada como `DB`.
+  Tablas propias de esto: `adornos` (`concepto`, `imagen`, `usos`, `creado`) y
+  `cache_ia` (`huella`, `salida`, `creado`).
 - **Workers AI** atada como `AI`, modelo `@cf/meta/llama-3.3-70b-instruct-fp8-fast`.
 - Variable secreta `SECRETO`, con la que se firma la sesión (HMAC-SHA256, 30 días).
 - Contraseña: PBKDF2-SHA256 con sal por usuario.

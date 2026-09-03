@@ -5,7 +5,15 @@ export const onRequestOptions = preflight;
 /* Genera el adorno de una publicación: un objeto suelto sobre pantalla verde.
    El recorte lo hace la app en el teléfono, con canvas: el verde se saca ahí y
    no acá, porque el plan gratis de Workers corta a los 10 ms de CPU y pasar un
-   millón de píxeles no entra. */
+   millón de píxeles no entra.
+
+   Cada adorno cuesta ~250 neuronas: doce veces lo que cuesta leer un flyer, y
+   con 10.000 por día son apenas 40. Por eso hay biblioteca: el recorte terminado
+   se guarda en `adornos` con el nombre del objeto como clave, y la próxima vez
+   que toque el mismo sombrero de vaquero sale de ahí, sin gastar nada. El
+   botón «Otro» manda `rehacer` y sí genera uno nuevo, que reemplaza al guardado.
+   La elección del objeto (la llamada de texto) se guarda en `cache_ia`, así la
+   segunda vez tampoco cuesta esa. */
 
 const MODELO = "@cf/black-forest-labs/flux-1-schnell";
 const MODELO_TEXTO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
@@ -62,6 +70,39 @@ const ENCUADRE =
   /* el rebote verde de la pantalla sobre el objeto es lo que dejaba halo al recortar */
   "the object itself has no green tint and no green reflections on it, flat even lighting";
 
+/* la clave con la que se guarda: el objeto, sin mayúsculas ni espacios de más */
+function claveDe(objeto) {
+  return String(objeto).toLowerCase().replace(/\s+/g, " ").trim().slice(0, 90);
+}
+
+/* La biblioteca es de conveniencia: si la base falla, se genera y listo. */
+async function deLaBiblioteca(env, clave) {
+  if (!env.DB) return "";
+  try {
+    const f = await env.DB.prepare("SELECT imagen FROM adornos WHERE concepto = ?").bind(clave).first();
+    if (!f || !f.imagen) return "";
+    await env.DB.prepare("UPDATE adornos SET usos = usos + 1 WHERE concepto = ?").bind(clave).run();
+    return String(f.imagen);
+  } catch { return ""; }
+}
+
+async function objetoRecordado(env, pista) {
+  if (!env.DB) return "";
+  try {
+    const f = await env.DB.prepare("SELECT salida FROM cache_ia WHERE huella = ?")
+      .bind("objeto:" + claveDe(pista)).first();
+    return f ? String(f.salida) : "";
+  } catch { return ""; }
+}
+
+async function recordarObjeto(env, pista, objeto) {
+  if (!env.DB) return;
+  try {
+    await env.DB.prepare("INSERT OR REPLACE INTO cache_ia (huella, salida, creado) VALUES (?, ?, ?)")
+      .bind("objeto:" + claveDe(pista), objeto, Date.now()).run();
+  } catch {}
+}
+
 export async function onRequestPost({ request, env }) {
   if (!(await exigirSesion(request, env))) return json({ error: "Volvé a iniciar sesión." }, 401);
   if (!env.AI) return json({ error: "La IA no está disponible." }, 503);
@@ -79,9 +120,25 @@ export async function onRequestPost({ request, env }) {
     objeto = objetoDe(pista);
     deDonde = "tabla";
     if (!objeto) {
-      try { objeto = await elegirObjeto(env, pista); deDonde = "ia"; } catch {}
+      objeto = await objetoRecordado(env, pista);
+      if (objeto) deDonde = "recordado";
+    }
+    if (!objeto) {
+      try {
+        objeto = await elegirObjeto(env, pista);
+        deDonde = "ia";
+        if (objeto) await recordarObjeto(env, pista, objeto);
+      } catch {}
     }
     if (!objeto) { objeto = "a shiny disco ball"; deDonde = "por defecto"; }
+  }
+
+  const clave = claveDe(objeto);
+
+  /* lo mismo ya recortado de otra vez: sale gratis y al instante */
+  if (!b.rehacer) {
+    const guardado = await deLaBiblioteca(env, clave);
+    if (guardado) return json({ objeto, clave, deDonde, recortado: guardado, deLaBase: true });
   }
 
   let img = "";
@@ -93,5 +150,30 @@ export async function onRequestPost({ request, env }) {
   }
   if (!img) return json({ error: "El generador no devolvió nada. Probá de nuevo." }, 502);
 
-  return json({ objeto, deDonde, imagen: "data:image/jpeg;base64," + img });
+  return json({ objeto, clave, deDonde, imagen: "data:image/jpeg;base64," + img });
+}
+
+/* La app manda acá el recorte ya hecho, para que el próximo que pida lo mismo no
+   gaste. Si no se puede guardar no pasa nada: el adorno ya lo tiene el dueño. */
+export async function onRequestPut({ request, env }) {
+  if (!(await exigirSesion(request, env))) return json({ error: "Volvé a iniciar sesión." }, 401);
+  if (!env.DB) return json({ guardado: false });
+
+  let b; try { b = await request.json(); } catch { return json({ error: "cuerpo inválido" }, 400); }
+  const clave = claveDe(b.clave || "");
+  const recortado = String(b.recortado || "");
+  if (!clave || !recortado.startsWith("data:image/")) return json({ error: "falta el recorte" }, 400);
+  /* una fila de D1 no es lugar para un archivo grande; el recorte de 420 px
+     entra holgado, y si algún día no entra se deja pasar sin guardar */
+  if (recortado.length > 700000) return json({ guardado: false, motivo: "pesa demasiado" });
+
+  try {
+    await env.DB.prepare(
+      "INSERT INTO adornos (concepto, imagen, usos, creado) VALUES (?, ?, 0, ?) " +
+      "ON CONFLICT(concepto) DO UPDATE SET imagen = excluded.imagen, creado = excluded.creado"
+    ).bind(clave, recortado, Date.now()).run();
+    return json({ guardado: true, clave });
+  } catch (e) {
+    return json({ guardado: false, motivo: String(e && e.message || e).slice(0, 120) });
+  }
 }

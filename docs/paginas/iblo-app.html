@@ -1574,7 +1574,17 @@ $("esquinas").addEventListener("click", function(ev){
   [].forEach.call($("esquinas").children, function(x){ x.classList.toggle("viva", x === b); });
 });
 
-function generarAdorno(){
+function mostrarAdorno(recorte, texto, bt, original){
+  adorno = recorte;
+  $("adImg").src = recorte;
+  $("adQue").textContent = texto;
+  $("adornoHecho").hidden = false;
+  bt.innerHTML = original;
+  refrescarPrevia();
+}
+
+/* `rehacer` es el botón «Otro»: pide uno nuevo aunque ya haya uno guardado. */
+function generarAdorno(rehacer){
   var pista = [$("titulo").value, $("subtitulo").value, $("detalle").value].join(" ").trim();
   var objeto = $("adObjeto").value.trim();
   if (!pista && !objeto){
@@ -1584,20 +1594,25 @@ function generarAdorno(){
   var bt = $("btAdorno"), original = bt.innerHTML;
   decir("avisoAdorno", "");
   cargando(bt, true, original);
-  pedir("/prop", { metodo:"POST", cuerpo:{ pista: pista, objeto: objeto } })
+  pedir("/prop", { metodo:"POST", cuerpo:{ pista: pista, objeto: objeto, rehacer: !!rehacer } })
     .then(function(j){
+      /* ya estaba recortado de otra vez: no hay nada que generar ni que pasar
+         por el canvas, viene listo y no gastó nada de IA */
+      if (j.deLaBase && j.recortado){
+        mostrarAdorno(j.recortado, "Salió: " + j.objeto + " · guardado de antes, no gastó IA.", bt, original);
+        return;
+      }
       return new Promise(function(ok, mal){
         var im = new Image();
         im.onload = function(){
           sacarVerde(im, function(recorte){
             if (!recorte) { mal(new Error("El recorte salió vacío. Probá generarlo de nuevo.")); return; }
-            adorno = recorte;
-            $("adImg").src = recorte;
-            $("adQue").textContent = "Salió: " + j.objeto + " · " +
-              Math.round(recorte.length / 1365) + " KB, con el fondo ya sacado.";
-            $("adornoHecho").hidden = false;
-            $("btAdorno").innerHTML = original;
-            refrescarPrevia();
+            mostrarAdorno(recorte, "Salió: " + j.objeto + " · " +
+              Math.round(recorte.length / 1365) + " KB, con el fondo ya sacado.", bt, original);
+            /* queda en la biblioteca para la próxima fiesta con la misma onda.
+               Si no se puede guardar, el dueño ya tiene el suyo: no se avisa. */
+            if (j.clave) pedir("/prop", { metodo:"PUT", cuerpo:{ clave: j.clave, recortado: recorte } })
+              .catch(function(){});
             ok();
           });
         };
@@ -1608,8 +1623,8 @@ function generarAdorno(){
     .catch(function(e){ decir("avisoAdorno", e.message, "mal"); })
     .then(function(){ cargando(bt, false, original); });
 }
-$("btAdorno").addEventListener("click", generarAdorno);
-$("btOtroAdorno").addEventListener("click", generarAdorno);
+$("btAdorno").addEventListener("click", function(){ generarAdorno(false); });
+$("btOtroAdorno").addEventListener("click", function(){ generarAdorno(true); });
 $("btSinAdorno").addEventListener("click", function(){
   adorno = ""; $("adornoHecho").hidden = true; $("adImg").src = ""; refrescarPrevia();
 });
