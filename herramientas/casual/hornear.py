@@ -100,6 +100,29 @@ JUEGOS = {
         'iconos': dict(archivo='sp_cartas.png', tipo='hoja', lado=96, reja=(4, 4),
                        celdas=[(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3)]),
     },
+    'arco': {
+        # ── LOS SEIS ARQUEROS VAN DE PERFIL Y MIRANDO A LA DERECHA ──
+        # El juego ESPEJA al que tira desde el otro extremo, asi que con uno de
+        # frente y otro de tres cuartos, al espejarlos uno queda mirando al
+        # publico y el otro a la nada. Una sola orientacion y el espejo hace el
+        # resto — por eso el prompt lo pide y por eso la reja se mide igual.
+        # ── LAS DOS REJAS VAN DECLARADAS, Y MIRANDO LA IMAGEN ──
+        # Se pidieron 3x2 en las dos. `a_cosas` volvio 3x2 y `a_arqueros` volvio
+        # 4x2 con OCHO figuras: el generador metio dos encapuchados casi iguales.
+        # Y `mide_reja` contesto 4x4 y 3x3 en cada una, porque las lineas
+        # separadoras que el modelo dibuja parten las filas en islas de mas. Con
+        # la reja declarada cada celda cae donde tiene que caer; es la misma
+        # excepcion que ya hizo falta con la hoja de reliquias de DADOS.
+        # De los ocho arqueros se toman SEIS distintos: se saltea el segundo
+        # encapuchado y el noble de azul.
+        'a_arqueros': dict(archivo='a_arqueros.png', tipo='hoja', lado=224,
+                           reja=(4, 2),
+                           celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,3)]),
+        'a_cosas': dict(archivo='a_cosas.png', tipo='hoja', lado=160,
+                        reja=(3, 2),
+                        celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
+        'a_pasto': dict(archivo='a_pasto.png', tipo='tex', lado=320),
+    },
     'burbujas': {
         # una sola burbuja BLANCA y las siete salen tinendola en el navegador con
         # `tenido()`, que multiplica sobre blanco y devuelve el color exacto. Es

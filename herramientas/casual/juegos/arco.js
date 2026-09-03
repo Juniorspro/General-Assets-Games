@@ -31,7 +31,14 @@ const A_G = 1350;              /* gravedad: sale de querer un vuelo de ~1,6 s */
 const A_VMAX = 1380;           /* la velocidad con el arco tensado al tope */
 const A_TENSA = 260;           /* cuánto hay que arrastrar para el tope */
 const A_VIDA = 100;
-const A_ALTO = 150;            /* el alto del arquero: lo usan el dibujo Y el choque */
+/* ── EL ALTO DEL ARQUERO, MEDIDO EN PANTALLA Y NO ELEGIDO ──
+   Lo usan el dibujo Y el choque, que es lo que garantiza que se le pegue a lo
+   que se ve. Estaba en 150 y en un telefono de 412x892 eso da SETENTA pixeles
+   de alto en el duelo 1 y CINCUENTA Y SIETE en el 6 —medido con `ver()`: el
+   zoom en reposo sale de la separacion, 0,82 y 0,67— o sea menos del ocho por
+   ciento de la pantalla para el unico personaje del juego. En 260 pasa a 122 y
+   100 pixeles, que es la escala a la que la cara y el arco se leen. */
+const A_ALTO = 260;
 
 /* ── LOS DOCE RIVALES ──
    `p` es la puntería: cuánto se desvía del tiro perfecto, en fracción. `v` es
@@ -138,7 +145,7 @@ const SON_ALIAS = { bien:'clava', toque:'tensa', pierde:'grito', gana:'gana',
 
 /* ══════════ EL AMBIENTE ══════════ */
 const AMB = {
-  foto: 'a_fondo',
+  foto: 'f_arco',
   cielo: ['#2e4a6b', '#c98a5a'],
   haz: 0.10,
   vineta: 0.36,
@@ -796,7 +803,11 @@ function aBarras(g){
     const u = Math.max(0, a.vida/a.max);
     if (u > 0) caja2(x + 2, y + 2, Math.max(h - 4, (w - 4)*u), h - 4, 9, col, null);
     texto(Math.round(a.vida), x + w/2, y + h/2 + 1, 14, '#12100a', '800', 'center');
-    dibCuadro('a_arqueros', a.cara % 6, esp ? x + w + 22 : x - 22, y + h + 16, 40, esp);
+    /* ── Y LA CARA VA DEBAJO DE LA BARRA, NO AL COSTADO ──
+       Al costado quedaba en `x − 22` = 4 y en `AN − 4`, o sea MITAD AFUERA del
+       cuadro por los dos lados: medido en la captura, dos figuras cortadas
+       pegadas a los bordes. Debajo entra entera y no tapa el numero. */
+    dibCuadro('a_arqueros', a.cara % 6, esp ? AN - 32 : 32, y + h + 46, 44, esp);
   }
 }
 
@@ -859,7 +870,9 @@ function aDemo(g, u, plano){
   JUEGO.dueloNuevo();
   A_viento = plano === 1 ? 240 : 60;
   A_camX = (A_yo.x + A_el.x)/2;
-  A_camZ = Math.max(0.42, Math.min(0.92, AN/(Math.abs(A_el.x - A_yo.x) + 320)));
+  /* el mismo encuadre que en partida, y no una copia con otros numeros: con
+     320 de margen la cinematica mostraba arqueros mas chicos que el juego */
+  A_camZ = Math.max(0.46, Math.min(1.05, AN/(Math.abs(A_el.x - A_yo.x) + 170)));
   if (plano === 0){
     /* se ve el arrastre: es el verbo entero del juego y no se puede contar con
        una frase */

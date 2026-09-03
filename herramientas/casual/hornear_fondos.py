@@ -29,13 +29,19 @@ CRUDO = os.environ.get('FONDO_DIR', '/tmp/rez_cas/assets/casual')
 LADO = int(os.environ.get('FONDO_LADO', '720'))
 CAL = int(os.environ.get('FONDO_CAL', '82'))
 
-JUEGOS = ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica', 'piedra']
+JUEGOS = ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica',
+          'piedra', 'arco']
 
 
 def hornea(jid):
-    src = os.path.join(CRUDO, 'f_%s-g1.png' % jid)
+    # `crudo/` es lo que el repo versiona; el directorio con `-g1` es donde el
+    # servidor deja la descarga. Se prueban los dos, en ese orden.
+    AQUI2 = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(AQUI2, 'crudo', 'f_%s.png' % jid)
     if not os.path.exists(src):
-        print('  falta %s' % src)
+        src = os.path.join(CRUDO, 'f_%s-g1.png' % jid)
+    if not os.path.exists(src):
+        print('  falta f_%s.png' % jid)
         return None
     im = Image.open(src).convert('RGB')
     # cuadrada y centrada: si volviera con otra proporcion, el recorte central

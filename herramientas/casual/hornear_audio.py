@@ -48,6 +48,17 @@ FX = {'fusion': 's_fusion', 'suelta': 's_suelta', 'pop': 's_pop', 'clic': 's_cli
 POR_JUEGO = {j: 'm_' + j for j in
              ['frutas', 'tubos', 'torre', 'burbujas', 'chispa', 'dados', 'canica', 'piedra']}
 
+# ── Y LOS JUEGOS QUE TRAEN SUS PROPIOS EFECTOS ──
+# Los ocho casuales comparten los ocho efectos porque comparten los verbos:
+# tocar, caer, fusionar. Un duelo de arqueros no: tensar un arco, soltarlo y
+# clavar una flecha no son «pop» ni «dado» con otro nombre, y usarlos seria
+# ponerle a un juego el sonido de otro. La clave de la izquierda es la que el
+# juego pide (via SON_ALIAS) y la de la derecha el archivo generado.
+PROPIOS = {
+    'arco': {'tensa': 'a_tensa', 'tira': 'a_tira', 'clava': 'a_clava',
+             'grito': 'a_grito', 'mus': 'm_arco'},
+}
+
 RMS_MUS = 0.045          # la cama
 RMS_FX = 0.150           # un acierto: mas de tres veces la cama
 SR_MUS, KB_MUS = 22050, 48
@@ -131,7 +142,11 @@ def nivela(x, obj):
 
 
 def hornea(nom, mus):
-    src = os.path.join(CRUDO, nom + '-g1.mp3')
+    # `crudo/` es lo que el repo versiona; el directorio con `-g1` es donde el
+    # servidor deja la descarga. Se prueban los dos, en ese orden.
+    src = os.path.join(AQUI, 'crudo', nom + '.mp3')
+    if not os.path.exists(src):
+        src = os.path.join(CRUDO, nom + '-g1.mp3')
     if not os.path.exists(src):
         return None, 'falta'
     x = lee(src)
@@ -168,6 +183,21 @@ def mete(jid, son):
         cab + 'const AS = ' + json.dumps(AS, separators=(',', ':')) + ';\n')
 
 
+def presta(jid, claves):
+    """Los clips ya horneados de otro juego, tal cual."""
+    p = os.path.join(ASSETS, jid + '.js')
+    if not os.path.exists(p):
+        print('  no hay de donde prestar (%s)' % jid)
+        return {}
+    m = re.search(r'const AS = (\{.*\});\s*$', io.open(p, encoding='utf-8').read(), re.S)
+    if not m:
+        return {}
+    src = json.loads(m.group(1)).get('son', {})
+    out = {k: src[k] for k in claves if k in src}
+    print('  prestados de %s: %s' % (jid, ', '.join(sorted(out)) or 'nada'))
+    return out
+
+
 def main():
     cache = {}
 
@@ -187,6 +217,22 @@ def main():
                 son[k] = base64.b64encode(d).decode()
         for k, n in FX.items():
             d = dat(n, False)
+            if d:
+                son[k] = base64.b64encode(d).decode()
+        mete(j, son)
+
+    for j, propios in PROPIOS.items():
+        print(j)
+        son = {}
+        # ── LO COMPARTIDO SE PRESTA DE OTRO JUEGO YA HORNEADO ──
+        # El tema del menu y los efectos de interfaz son los mismos en los diez
+        # juegos, y ya estan horneados. Volver a generarlos costaria cuatro
+        # llamadas para obtener algo que sonaria DISTINTO, y entonces el menu de
+        # ARCO tendria otra musica que el de los otros ocho sin que nadie lo
+        # haya pedido. Se copian los bytes, que ademas es exacto.
+        son.update(presta('dados', ['menu', 'clic', 'gana', 'perder']))
+        for k, n in propios.items():
+            d = dat(n, n.startswith('m_'))
             if d:
                 son[k] = base64.b64encode(d).decode()
         mete(j, son)

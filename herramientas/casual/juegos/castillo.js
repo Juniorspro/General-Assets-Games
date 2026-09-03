@@ -452,12 +452,24 @@ function kFisica(dt){
     K_rey.vy += K_G*dt;
     K_rey.x += K_rey.vx*dt; K_rey.y += K_rey.vy*dt;
   }
-  /* ── DOS PASADAS DE CONTACTOS ──
-     Con una, una pila de cinco bloques se hunde: el de abajo se resuelve contra
-     el suelo y los de arriba se quedan penetrando hasta el cuadro siguiente. Con
-     dos, la pila se sostiene y no hace falta un solver iterativo entero. */
+  /* ── DOS PASADAS DE CONTACTOS, Y CADA PAR SE RESUELVE UNA SOLA VEZ ──
+     Con una pasada, una pila de cinco bloques se hunde: el de abajo se resuelve
+     contra el suelo y los de arriba se quedan penetrando hasta el cuadro
+     siguiente.
+
+     Y EL PAR VA POR ÍNDICES, `i < j`, que es lo que costó la primera versión.
+     Recorriendo todos contra todos, el contacto entre A y B se resolvía DOS
+     veces —una con A de sujeto y otra con B— y la segunda usaba la penetración
+     por el otro lado, así que empujaba al de abajo HACIA ABAJO. Medido, la torre
+     se hundía sola: 43 de 60 niveles seguían moviéndose después de noventa
+     pasos, con un bloque clavado en 25 de velocidad vertical, que es
+     exactamente un paso de gravedad sin cancelar.
+
+     Y sólo se mueve EL DE ARRIBA. Separando a medias, el de abajo se hunde en lo
+     que lo sostiene y la pila entera baja un poco en cada contacto. */
+  const arr = K_bloques;
   for (let pasada = 0; pasada < 2; pasada++){
-    for (const b of K_bloques){
+    for (const b of arr){
       if (b.vida <= 0) continue;
       if (b.y + b.h > kSuelo()){
         const vy = b.vy;
@@ -465,33 +477,37 @@ function kFisica(dt){
         if (vy > 240) kDana(b, vy*0.05);
         b.vy = 0;
         b.vx *= K_MAT[b.mat].roce;
-        b.quieto++;
         b.vgi = 0;
       }
-      for (const o of K_bloques){
-        if (o === b || o.vida <= 0) continue;
-        if (b.x + b.w <= o.x || b.x >= o.x + o.w) continue;
-        if (b.y + b.h <= o.y || b.y >= o.y + o.h) continue;
-        /* se separa por el eje de MENOR penetración: por el otro, dos bloques
-           apilados se empujarían de costado y la torre se abriría sola */
-        const py1 = (b.y + b.h) - o.y, py2 = (o.y + o.h) - b.y;
-        const px1 = (b.x + b.w) - o.x, px2 = (o.x + o.w) - b.x;
-        const py = Math.min(py1, py2), px = Math.min(px1, px2);
+    }
+    for (let i = 0; i < n; i++){
+      const a = arr[i];
+      if (a.vida <= 0) continue;
+      for (let j = i + 1; j < n; j++){
+        const b = arr[j];
+        if (b.vida <= 0) continue;
+        const px = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        if (px <= 0) continue;
+        const py = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (py <= 0) continue;
         if (py <= px){
-          const dv = Math.abs(b.vy - o.vy);
-          if (py === py1){ b.y -= py; if (dv > 260) kDana(b, dv*0.04), kDana(o, dv*0.04);
-                           b.vy = Math.min(0, b.vy); b.quieto++; b.vgi = 0; }
-          else { b.y += py; b.vy = Math.max(0, b.vy); }
-          b.vx *= K_MAT[b.mat].roce;
+          /* el de arriba es el de centro más alto; con los centros empatados,
+             el que viene cayendo más rápido */
+          const ca = a.y + a.h/2, cb = b.y + b.h/2;
+          const sup = ca < cb ? a : (cb < ca ? b : (a.vy > b.vy ? a : b));
+          const dv = Math.abs(a.vy - b.vy);
+          if (dv > 260){ kDana(a, dv*0.04); kDana(b, dv*0.04); }
+          sup.y -= py;
+          sup.vy = Math.min(0, sup.vy);
+          sup.vx *= K_MAT[sup.mat].roce;
+          sup.vgi = 0;
         } else {
-          if (px === px1){ b.x -= px*0.5; o.x += px*0.5; }
-          else { b.x += px*0.5; o.x -= px*0.5; }
-          const t = (b.vx - o.vx)*0.5;
-          b.vx -= t; o.vx += t;
+          const s = (a.x + a.w/2) < (b.x + b.w/2) ? -1 : 1;
+          a.x += s*px*0.5; b.x -= s*px*0.5;
+          const t = (a.vx - b.vx)*0.5;
+          a.vx -= t; b.vx += t;
         }
       }
-      if (Math.abs(b.vx) < 3 && Math.abs(b.vy) < 3) b.quieto++;
-      else b.quieto = 0;
     }
     /* ── EL REY: LO QUE LE CAE ENCIMA LE DUELE ──
        El daño sale de la energía del bloque y no de que lo toque: un bloque
@@ -538,6 +554,11 @@ function kFisica(dt){
         if (ny < 0){ K_rey.vy = Math.min(0, K_rey.vy); }
       }
     }
+  }
+  for (const b of arr){
+    if (b.vida <= 0) continue;
+    if (Math.abs(b.vx) < 3 && Math.abs(b.vy) < 3) b.quieto++;
+    else b.quieto = 0;
   }
 }
 function kDana(b, d){
