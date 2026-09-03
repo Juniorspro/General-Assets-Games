@@ -913,8 +913,9 @@ class Dungeon {
         };
         this.slideBtn = btn('slide', () => { this.slideRequested = true });
         this.runBtn = btn('runtoggle', () => { this.autoRun = !this.autoRun });
-        this.boostBtn = btn('boost', () => { this.boostHold = true },
-                                     () => { this.boostHold = false });
+        /* Interruptor, no botón que se mantiene: se toca una vez y sigue
+           hasta que lo tocás de nuevo (o hasta que se acaba la carga). */
+        this.boostBtn = btn('boost', () => { this.boostHold = !this.boostHold });
         btn('crouch', () => { this.touchCrouch = true }, () => { this.touchCrouch = false });
         this.usarBtn = btn('usar', () => { this.usarPedido = true });
 
@@ -976,6 +977,9 @@ class Dungeon {
         this.boostT = this.boosting
             ? Math.max(0, this.boostT - dt)
             : Math.min(BOOST_TIME, this.boostT + dt * BOOST_RECARGA);
+        /* Al vaciarse se apaga solo. Si el interruptor quedara puesto, volvería
+           a prenderse con la primera gota de carga y sería un tironeo. */
+        if (this.boostT <= 0) this.boostHold = false;
         let spd = this.crouch ? CROUCH_SPD : wantRun ? RUN : WALK;
         if (sm > 0.12 && !wantRun && !sliding) spd *= clamp(sm, 0.35, 1);
         if (this.boosting) spd = BOOST_SPD;
