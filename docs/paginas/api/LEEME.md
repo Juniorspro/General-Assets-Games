@@ -16,6 +16,7 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
+| `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Requiere sesión. |
 
 ## Cómo está atado
 
@@ -59,3 +60,8 @@ rompería en unos días.
 - Los modelos de Workers AI se dan de baja seguido: `@cf/meta/llama-3.1-8b-instruct`
   ya no existe. La lista viva está en
   `GET /accounts/{cuenta}/ai/models/search?task=Text Generation`.
+- **`response_format: {type:"json_schema"}` garantiza JSON válido pero el modelo deja de
+  seguir el system prompt.** Las reglas hay que meterlas en el `description` de cada
+  propiedad del esquema. Aun así contesta cortito: por eso `/api/asistente` hace una
+  segunda llamada en texto libre sólo para el `detalle`, y decide `tipo` en el código
+  (una regex sobre el texto del dueño), no en el modelo.

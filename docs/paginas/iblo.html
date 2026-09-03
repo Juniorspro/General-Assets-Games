@@ -584,7 +584,7 @@ section[id]{scroll-margin-top:80px}
     </a>
     <nav id="menu">
       <a href="iblo.html" data-pg="inicio">Inicio</a>
-      <a href="iblo.html#entradas">Entradas</a>
+      <a href="iblo-entradas.html" data-pg="entradas">Entradas</a>
       <a href="iblo-esteticas.html" data-pg="esteticas">Estéticas</a>
       <a href="iblo-reels.html" data-pg="reels">Reels</a>
       <a href="iblo-archivo.html" data-pg="archivo">Archivo</a>
@@ -652,17 +652,6 @@ section[id]{scroll-margin-top:80px}
   </div>
 </section>
 
-<section class="sec" id="entradas">
-  <div class="caja">
-    <div class="rev">
-      <span class="rotulo">A la venta</span>
-      <h2 class="tit">Entradas <em>disponibles</em></h2>
-      <p class="bajada">Lo que está abierto ahora mismo. Tocá WhatsApp y te reservamos.</p>
-    </div>
-    <div id="entradas-lista"></div>
-  </div>
-</section>
-
 <div class="franja" data-franja="8" aria-hidden="true"></div>
 
 <section class="sec">
@@ -691,6 +680,20 @@ section[id]{scroll-margin-top:80px}
       <a class="bt s" href="iblo-archivo.html">Ver el archivo</a>
     </div>
     <div class="tiras" data-tira="2" aria-hidden="true"></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="caja">
+    <div class="rev">
+      <span class="rotulo">Se actualiza solo</span>
+      <h2 class="tit">Lo último de <em>Instagram</em></h2>
+      <p class="bajada">Lo que subimos a la cuenta aparece acá sin que nadie lo copie a mano.</p>
+    </div>
+    <div class="igRej" id="igArchivo"></div>
+    <div class="botones" style="margin-top:22px">
+      <a class="bt s" href="iblo-archivo.html">Ver todo el archivo</a>
+    </div>
   </div>
 </section>
 
@@ -1227,55 +1230,6 @@ function arrancarReloj(meta){
 }
 arrancarReloj(new Date("2026-09-19T22:00:00-03:00").getTime());
 
-/* ---------- entradas en venta, salen de la app del dueño ---------- */
-(function(){
-  var caja = $("entradas-lista"); if(!caja) return;
-  var movil = document.body.dataset.modo === "m";
-  var ICO_W = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2m0 1.8a8.2 8.2 0 1 1-4.2 15.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 0 1 12 3.8m-3.3 4c-.2 0-.5.1-.7.4-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.2.9 2.6.7 3.1.7.5 0 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.6-.3-1.5-.7c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.5.3-.5v-.5l-.7-1.7c-.2-.4-.4-.4-.5-.4z"/></svg>';
-  var ICO_I = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>';
-  function cuando(ms){
-    var d=new Date(ms), h=Math.round((Date.now()-ms)/3600000);
-    if(h<1) return "recién";
-    if(h<24) return "hace "+h+" h";
-    var dd=Math.round(h/24);
-    if(dd<7) return "hace "+dd+(dd===1?" día":" días");
-    return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
-  }
-  caja.innerHTML = '<div class="cargandoEnt">Buscando entradas…</div>';
-  fetch("https://iblo-eventos.pages.dev/api/entradas")
-    .then(function(r){ return r.json(); })
-    .then(function(j){
-      var e = j.entradas || [];
-      if(!e.length){
-        caja.innerHTML = '<div class="sinEnt"><b>Todavía no hay entradas a la venta</b>' +
-          'Cuando abramos la próxima tanda aparece acá. Escribinos y te avisamos primero.</div>';
-        return;
-      }
-      var h = "";
-      for(var i=0;i<e.length;i++){ var x=e[i];
-        var msg = "Hola IBLO! Quiero entradas para: " + x.titulo;
-        h += '<article class="ent">' +
-          (x.imagen ? '<div class="foto"><img loading="lazy" alt="'+esc(x.titulo)+'" src="'+x.imagen+'">' +
-                      '<span class="sello">Entradas</span></div>' : '') +
-          '<div class="cuerpo">' +
-            '<span class="cuando">'+cuando(x.creado)+'</span>' +
-            '<h3>'+esc(x.titulo)+'</h3>' +
-            '<p>'+esc(x.descripcion)+'</p>' +
-            (x.precio ? '<span class="precio">'+esc(x.precio)+'</span>' : '') +
-            '<div class="contacto">' +
-              '<a class="w" target="_blank" rel="noopener" href="'+wa(msg)+'">'+ICO_W+'WhatsApp</a>' +
-              '<a class="i" target="_blank" rel="noopener" href="https://instagram.com/iblo_eventos">'+ICO_I+'Instagram</a>' +
-            '</div>' +
-          '</div></article>';
-      }
-      caja.className = movil ? "mEnt" : "entradas";
-      caja.innerHTML = h;
-    })
-    .catch(function(){
-      caja.innerHTML = '<div class="sinEnt"><b>No se pudieron cargar</b>' +
-        'Probá de nuevo en un rato, o escribinos por WhatsApp.</div>';
-    });
-})();
 
 
 if(typeof THREE!=="undefined"){
@@ -1316,5 +1270,28 @@ if(typeof THREE!=="undefined"){
   }
 })();
 
+
+/* ---------- archivo que se llena solo desde Instagram ---------- */
+(function(){
+  var caja = $("igArchivo"); if(!caja) return;
+  fetch("https://iblo-eventos.pages.dev/api/instagram")
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      var p = j.posts || [];
+      if(!p.length){ caja.parentNode.hidden = true; return; }
+      var h = "";
+      for(var i=0;i<p.length;i++){ var x=p[i];
+        var d = new Date(x.publicado);
+        var cuando = String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
+        h += '<a class="igPost" href="https://www.instagram.com/p/'+esc(x.codigo)+'/" target="_blank" rel="noopener">' +
+             (x.imagen ? '<img loading="lazy" alt="" src="'+x.imagen+'">' : '') +
+             '<span class="tapa"><b>'+esc(cuando)+'</b>' +
+             (x.tipo!=="foto" ? '<i class="tipo">'+esc(x.tipo)+'</i>' : '') +
+             '<span class="pie">'+esc((x.texto||"").split("\n")[0].slice(0,90))+'</span></span></a>';
+      }
+      caja.innerHTML = h;
+    })
+    .catch(function(){ caja.parentNode.hidden = true; });
+})();
 
 </script>
