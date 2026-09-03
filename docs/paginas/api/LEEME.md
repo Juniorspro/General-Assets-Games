@@ -19,8 +19,9 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/destacado` | Guarda el aviso desde la app. Requiere sesión. |
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
-| `POST /api/sugerir` | El botón «Nuevo» de la app: trae lo último de Instagram, se queda con los posteos que anuncian algo y los publica en la web. Devuelve qué creó y qué descartó, con el motivo. Requiere sesión. |
-| `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo y devuelve la fila creada. Requiere sesión. |
+| `POST /api/sugerir` | El botón «Nuevo» de la app: trae lo último de Instagram y devuelve los posteos que anuncian algo ya armados como publicación, más qué descartó y por qué. **No sube nada**: el dueño mira y toca publicar. Requiere sesión. |
+| `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Requiere sesión. |
+| `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
 
 ## Una sola tabla
 
@@ -61,6 +62,47 @@ El orden en que filtra importa, porque cada paso ahorra el siguiente:
    (mismo día) o el mismo nombre, es la misma fiesta. No la vuelve a publicar; le
    anota el `origen` a la que ya estaba, para no volver a mirar ese posteo. Pasa
    seguido, porque el dueño carga la fiesta a mano antes de postearla en IG.
+
+## Nada se publica sin que el dueño lo vea
+
+Las dos rutas que piensan devuelven una propuesta y no tocan la base. La app la
+muestra con todo lo que sacó —qué es, fecha, lugar, hora, precio, el texto— y
+recién publica cuando él toca «Publicar»; el otro camino es «Editar y decorar»,
+que lo lleva al formulario con todo cargado. Se probó publicando solo y el dueño
+prefirió mirar primero.
+
+Cuando la publicación sale de un posteo de Instagram, la app manda el `origen` y
+la foto **no viaja**: `POST /api/publicaciones` la busca en la tabla `ig` por ese
+código. Son cientos de kilobytes que ya están del lado del servidor.
+
+## Los adornos
+
+`POST /api/prop` devuelve el objeto de la temática **sobre pantalla verde**, y el
+recorte lo hace la app en el teléfono (`sacarVerde`, en `app-recorte.js`). El
+verde no se saca en el servidor porque el plan gratis de Workers corta a los
+10 ms de CPU y pasar un millón de píxeles no entra ahí ni cerca.
+
+Qué objeto pedir se resuelve primero con una tabla de las estéticas de la casa
+(wéstern → sombrero, Halloween → calabaza, realeza → corona…), que es instantáneo
+y predecible; sólo si no pega ninguna se le pregunta a la IA. El dueño también
+puede escribir él mismo qué quiere.
+
+El recorte tiene tres pasos y los tres hacen falta:
+
+1. **Alfa por «cuánto verde de más» tiene el píxel**, con banda blanda en el
+   borde, y bajándole el verde a lo que se queda. El generador pinta el rebote
+   verde de la pantalla sobre el objeto y eso es lo que dejaba un halo.
+2. **Se queda con la mancha más grande.** Tira la sombra del piso y las pelusas
+   del fondo que no eran lo bastante verdes como para que el umbral las saque.
+3. **Recorta al objeto** y lo baja a 420 px. Sale un WebP con transparencia de
+   5 a 20 KB, en unos 50 ms.
+
+Se trabaja sobre una copia de 512 px: es cuatro veces menos laburo que el
+original de 1024 y el recorte final igual sale de 420.
+
+En la tarjeta el adorno va **adentro** —la tarjeta recorta lo que se sale— y se
+le hace lugar: se apoya sobre la foto si hay foto, y si no hay se le reserva una
+banda arriba con `padding`. Sin eso le tapaba el título.
 
 ## Cómo está atado
 
@@ -130,3 +172,14 @@ rompería en unos días.
   exacto y validarlo con una regex tiraba a la basura publicaciones buenas.
   `leerFecha` en `_pub.js` las entiende todas (día primero, y sin año toma la
   próxima que no pasó) y arma el timestamp y el texto que se muestra.
+- **El precio venía suelto**: el modelo devuelve «8000» o «8 mil» tan seguido
+  como «$8.000». `precioSano` en `_ia.js` lo deja siempre con signo y separador,
+  cuidando de no comerse el espacio de antes (quedaba «y$15.000») y de no tocar
+  un «2x1».
+- **Una fecha ya pasada no aparece en ninguna solapa** —las tres miran lo
+  vigente— así que la app avisa antes de publicarla en vez de dejarla arriba y
+  que no se vea.
+- **El precio no es exclusivo de las entradas.** Al principio el formulario sólo
+  lo mandaba con tipo «entrada» y una fiesta con entradas a la venta se publicaba
+  sin precio. Ahora se manda siempre que esté escrito, y con eso la publicación
+  sale también en la solapa Entradas.

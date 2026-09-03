@@ -38,11 +38,22 @@ export async function onRequestPost({ request, env }) {
   if (!usuario) return json({ error: "Volvé a iniciar sesión." }, 401);
 
   let b; try { b = await request.json(); } catch { return json({ error: "cuerpo inválido" }, 400); }
+
+  /* Cuando la publicación sale de un posteo de Instagram, la foto ya está
+     guardada del lado del servidor: la app manda el código y no la vuelve a
+     subir, que serían cientos de kilobytes de ida y de vuelta. */
+  const origen = String(b.origen || "").slice(0, 40);
+  if (origen && !b.imagen) {
+    const post = await env.DB.prepare("SELECT imagen FROM ig WHERE codigo = ?").bind(origen).first();
+    if (post && post.imagen) b = { ...b, imagen: post.imagen };
+  }
+
   const { error, fila } = limpiarPublicacion(b);
   if (error) return json({ error }, 400);
 
-  const id = await guardar(env, fila, usuario);
-  return json({ ok: true, id, publicacion: { id, ...fila } });
+  const id = await guardar(env, fila, usuario, origen || null);
+  const { imagen, adorno, ...liviana } = fila;
+  return json({ ok: true, id, publicacion: { id, ...liviana, conFoto: !!imagen, conAdorno: !!adorno } });
 }
 
 /* Bajar una publicación. */

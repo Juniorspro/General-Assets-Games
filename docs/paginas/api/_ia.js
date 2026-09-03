@@ -57,6 +57,22 @@ export const sinAdornos = (t) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/* El modelo devuelve «8000» o «8 mil» tan seguido como «$8.000». Lo dejamos
+   siempre con signo y separador de miles, que es como se lee un precio acá. */
+export function precioSano(v) {
+  let t = limpiar(v, 60);
+  if (!t) return "";
+  t = t.replace(/\b(\d{1,3})\s*mil\b/gi, (_, n) => String(+n * 1000));
+  /* sin \s en el patrón: si se come el espacio de antes queda «y$15.000» */
+  return t.replace(/(\$ ?)?(\d[\d.,]*)/g, (todo, signo, num) => {
+    const digitos = num.replace(/\D/g, "");
+    if (!digitos || digitos.length > 9) return todo;
+    const n = Number(digitos);
+    if (n < 100) return todo;                      // «2x1», «$50» no se tocan
+    return "$" + n.toLocaleString("es-AR");
+  }).trim();
+}
+
 /* Un título de más de ocho palabras es el texto entero copiado, no un nombre. */
 function tituloSano(t) {
   const limpio = limpiar(t, 90).replace(/@\S+/g, "").replace(/\s+/g, " ").trim();
@@ -176,7 +192,7 @@ export async function proponer(env, texto, imagen) {
     lugar: casoNormal(limpiar(d.lugar, 90)),
     hora: limpiar(d.hora, 30),
     detalle: limpiar(d.detalle, 400),
-    precio: limpiar(d.precio, 60),
+    precio: precioSano(d.precio),
     color: COLORES.indexOf(String(d.color || "").trim()) >= 0 ? String(d.color).trim() : "magenta",
   };
 

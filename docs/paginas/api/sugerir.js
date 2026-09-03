@@ -1,12 +1,15 @@
 import { json, preflight, exigirSesion } from "./_comun.js";
-import { limpiarPublicacion, guardar } from "./_pub.js";
+import { limpiarPublicacion } from "./_pub.js";
 import { proponer, sinAdornos } from "./_ia.js";
 import { sincronizar } from "./_ig.js";
 export const onRequestOptions = preflight;
 
-/* El botón «Nuevo» de la app: trae lo último de Instagram y publica en la web
-   lo que sirva. Un posteo por publicación, y nunca dos veces el mismo (queda
-   guardado el código del posteo en `origen`). */
+/* El botón «Nuevo» de la app: trae lo último de Instagram y arma las
+   publicaciones que valen la pena, pero NO las sube. Devuelve los candidatos
+   para que el dueño los mire y toque publicar el que quiera; el que toca sube
+   por `POST /api/publicaciones` con el `origen` puesto, y de ahí sale también
+   la foto del posteo sin volver a subirla.
+   Un posteo no se propone dos veces: al publicarlo queda su código en `origen`. */
 
 const CUANTOS = 5;      /* posteos que revisa por toque */
 const MINIMO  = 30;     /* pie de foto más corto que esto no se mira */
@@ -40,10 +43,10 @@ export async function onRequestPost({ request, env }) {
      ORDER BY publicado DESC LIMIT ?`
   ).bind(MINIMO, CUANTOS).all();
   const posts = r.results || [];
-  if (!posts.length) return json({ creadas: [], descartadas: [], revisados: 0, sync, sinNovedad: true });
+  if (!posts.length) return json({ candidatos: [], descartadas: [], revisados: 0, sync, sinNovedad: true });
 
   const descartadas = [];
-  const candidatos = posts.filter((p) => {
+  const mirables = posts.filter((p) => {
     if (pareceAviso(p.texto)) return true;
     descartadas.push({ codigo: p.codigo, por: "no anuncia nada, son fotos o saludos" });
     return false;
@@ -52,16 +55,16 @@ export async function onRequestPost({ request, env }) {
   /* Cada posteo se piensa con el mismo motor que usa el asistente: el pie de
      foto hace de «lo que dijo el dueño» y la foto de flyer. Todos a la vez. */
   const pensados = await Promise.all(
-    candidatos.map((p) =>
+    mirables.map((p) =>
       proponer(env, p.texto, p.imagen || "").catch(() => ({ error: "no la pude leer" }))
     )
   );
 
   const ahora = Date.now();
-  const creadas = [];
+  const candidatos = [];
 
-  for (let i = 0; i < candidatos.length; i++) {
-    const post = candidatos[i], res = pensados[i];
+  for (let i = 0; i < mirables.length; i++) {
+    const post = mirables[i], res = pensados[i];
     if (res.error) { descartadas.push({ codigo: post.codigo, por: res.error }); continue; }
 
     const p = res.propuesta, ms = res.cuandoMs;
@@ -96,19 +99,14 @@ export async function onRequestPost({ request, env }) {
       continue;
     }
 
-    const { error, fila } = limpiarPublicacion({
-      ...p,
-      cuando: ms,
-      imagen: post.imagen || "",
-      destacado: false,   // la portada la gana sola la fecha más cercana
-    });
+    /* lo pasamos por la misma limpieza que si lo estuviéramos guardando, así lo
+       que el dueño ve en la app es exactamente lo que se va a publicar */
+    const { error, fila } = limpiarPublicacion({ ...p, cuando: ms, destacado: false });
     if (error) { descartadas.push({ codigo: post.codigo, por: error }); continue; }
 
-    const id = await guardar(env, fila, usuario, post.codigo);
-    /* la foto no vuelve en la respuesta: son cientos de kilobytes cada una */
-    const { imagen, ...sinFoto } = fila;
-    creadas.push({ id, ...sinFoto, conFoto: !!imagen, codigo: post.codigo });
+    /* la foto no viaja: son cientos de kilobytes cada una y ya está en el server */
+    candidatos.push({ ...fila, codigo: post.codigo, conFoto: !!post.imagen, falta: p.falta || [] });
   }
 
-  return json({ creadas, descartadas, revisados: posts.length, sync });
+  return json({ candidatos, descartadas, revisados: posts.length, sync });
 }

@@ -9,7 +9,8 @@ export const COLORES = {
 };
 
 export const CAMPOS =
-  "id, tipo, titulo, subtitulo, detalle, fecha, cuando, lugar, hora, precio, color, imagen, destacado, creado";
+  "id, tipo, titulo, subtitulo, detalle, fecha, cuando, lugar, hora, precio, color, imagen, " +
+  "adorno, adorno_pos, destacado, creado";
 
 /* El orden con el que se leen: lo que todavía no pasó primero y por fecha,
    y lo que no tiene fecha (los avisos) por cuándo se cargó. */
@@ -42,6 +43,9 @@ export const SOLAPAS = ["proximamente", "entradas", "avisos"];
 
 const t = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
 
+/* dónde se pega el adorno en la tarjeta */
+export const ESQUINAS = ["der-arriba", "izq-arriba", "der-abajo", "izq-abajo"];
+
 /* Deja el cuerpo del pedido listo para guardar. Devuelve {error} si algo no va. */
 export function limpiarPublicacion(b) {
   const tipo = TIPOS.includes(b.tipo) ? b.tipo : "aviso";
@@ -53,6 +57,13 @@ export function limpiarPublicacion(b) {
     return { error: "La imagen no tiene un formato que podamos guardar." };
   if (imagen.length > 900000)
     return { error: "La imagen pesa demasiado, sacale peso o mandá otra." };
+
+  /* el adorno es el recorte con fondo transparente que hizo la app */
+  const adorno = String(b.adorno || "");
+  if (adorno && !/^data:image\/(webp|png);base64,/.test(adorno))
+    return { error: "El adorno tiene que ser un recorte con fondo transparente." };
+  if (adorno.length > 500000)
+    return { error: "El adorno pesa demasiado." };
 
   let cuando = Number(b.cuando || 0);
   if (!Number.isFinite(cuando) || cuando < 0) cuando = 0;
@@ -70,6 +81,8 @@ export function limpiarPublicacion(b) {
       precio: t(b.precio, 60),
       color: COLORES[b.color] ? b.color : "magenta",
       imagen,
+      adorno,
+      adorno_pos: ESQUINAS.indexOf(b.adorno_pos) >= 0 ? b.adorno_pos : "der-arriba",
       /* sólo un «próximamente» puede ocupar el cartel de la portada */
       destacado: tipo === "proximamente" && b.destacado !== false ? 1 : 0,
     },
@@ -89,11 +102,12 @@ export async function guardar(env, fila, autor, origen) {
   const r = await env.DB.prepare(
     `INSERT INTO publicaciones
        (tipo, titulo, subtitulo, detalle, fecha, cuando, lugar, hora, precio,
-        color, imagen, destacado, estado, autor, creado, tocado, origen)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'publicada',?,?,?,?)`
+        color, imagen, adorno, adorno_pos, destacado, estado, autor, creado, tocado, origen)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'publicada',?,?,?,?)`
   ).bind(
     fila.tipo, fila.titulo, fila.subtitulo, fila.detalle, fila.fecha, fila.cuando,
-    fila.lugar, fila.hora, fila.precio, fila.color, fila.imagen, fila.destacado,
+    fila.lugar, fila.hora, fila.precio, fila.color, fila.imagen,
+    fila.adorno || "", fila.adorno_pos || "der-arriba", fila.destacado,
     autor, ahora, ahora, origen || null
   ).run();
   return r.meta?.last_row_id;
