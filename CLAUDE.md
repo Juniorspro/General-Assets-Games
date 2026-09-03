@@ -127,6 +127,133 @@ encontraron.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+### Octogésima octava vuelta (2026-09-03): **CASA 13** — la etiqueta es papel de verdad y los controles son las teclas de la cámara
+
+Pedido: *"genera imágenes con Rezona para el menú y los botones, que sea con la estética y también los
+controles personalizados etc"*. Siete imágenes generadas con Rezona Lab, horneadas con
+`herramientas/casa13/hornear_ui.py` y pegadas en el HTML entre dos marcas.
+
+#### LA IDEA, QUE ES LO QUE ORDENA TODO LO DEMÁS
+
+El HUD de este juego **ya es el visor de una filmadora** —el punto de REC, el contador SP, la fecha
+quemada en la esquina—. Así que los controles no son botones de una aplicación: son **las teclas de la
+cámara que uno tiene en la mano**. Eso es lo que justifica goma gastada, cromo rayado y una lamparita
+grabada, y es lo que decidió qué siete imágenes pedir. Y el menú, que ya era la etiqueta de la cinta,
+pasa a ser **papel de verdad**: cartón crema manchado, con la tinta oscura encima — el mismo lenguaje
+visual que las ocho hojas que se leen adentro del juego.
+
+#### CINCO COSAS DEL SERVIDOR QUE NO ESTABAN ANOTADAS Y AHORA SÍ
+
+1. **El parámetro es `project_id` y no `project_public_id`**, y **no hay `negative_prompt`**: lo que no
+   se quiere se dice en el prompt. Con los nombres viejos las siete llamadas vuelven con un
+   `VALIDATION_ERROR` que no dice cuál es el campo.
+2. **`transparent: true` lo recorta el servidor**, y le gana a cualquier recorte propio: el relleno
+   desde el borde se come los contornos oscuros de adentro de la pieza.
+3. **`check_generation_tasks` devuelve `public_url`**, un enlace sin autenticación. Con eso se baja por
+   `curl` y **se evita `fetch_generated_asset`, que baja el archivo y después se cuelga**: siete assets
+   serían siete timeouts encadenados. La clave del JSON es `items`.
+4. **El `size` sigue siendo una sugerencia** y hay que medir el archivo. Acá salieron los siete en
+   1024×1024, pero **el botón de USAR vino PARADO**: es una pastilla y el generador la devolvió
+   vertical (256×391) cuando en el juego es horizontal. Se acuesta en el horno y no con un `transform`
+   de CSS, que además giraría el texto que va encima.
+5. **Una etiqueta pedida "como objeto" vuelve con fondo alrededor.** La primera salió con forma
+   irregular sobre blanco, o sea recortar papel casi blanco sobre blanco — justo el caso donde un
+   umbral de luminancia se lleva medio dibujo. Se volvió a pedir **a sangre** —*"el papel llena el
+   cuadro, sin fondo visible"*— y entonces no hay nada que recortar: es una textura.
+
+#### EL TONO NO SE ELIGE, SE MIDE — Y ES LA MITAD DEL TRABAJO
+
+Las siete salen como **foto de producto**: cromo blanco, plástico gris claro, papel crema. Y este juego
+es casi negro. Puestas crudas son lo más brillante de la pantalla y se leen a calcomanía pegada encima.
+
+**LA ETIQUETA.** Medida sobre la propia captura, cruda daba **190 de brillo medio contra 10 del
+fondo: diecinueve veces**, o sea una lámpara en un cuarto oscuro. Barridas cuatro, con la foto al lado:
+
+| oscurecido | brillo medio | contra el fondo | qué se ve |
+|---|---|---|---|
+| .30/.46 | 142 | 13,9× | sigue siendo una lámpara |
+| **.44/.60** | **117** | **11,1×** | **papel iluminado, y todo se sigue leyendo** |
+| .56/.72 | 94 | 8,1× | EN/PT y «ajustes» se pierden |
+| .68/.82 | 74 | 6,5× | «ajustes» no existe |
+
+**Y ESE ES UN LÍMITE FÍSICO, NO UNA PREFERENCIA: menos luz sobre una hoja es MENOS CONTRASTE**, así que
+apagar el papel apaga la tinta con él. Queda en .44/.60 y lo secundario se recupera subiendo **la
+opacidad** de la tinta, que es la única palanca que no depende de cuánta luz haya.
+
+**LA TECLA DE LA LINTERNA.** Mismo método, midiendo el rectángulo del botón:
+
+| brillo | medio | máximo | qué se ve |
+|---|---|---|---|
+| 1,50 | 61 | **255** | el aro estalla y el halo se lee a dibujo |
+| 0,85 | 42 | 230 | el aro sigue siendo lo más claro del cuadro |
+| **0,60** | **32** | 230 | **se lee el metal, se lee la lamparita, y el halo dice «prendida» sin gritar** |
+| 0,42 | 27 | 230 | el aro casi desaparece y hay que buscar el control |
+
+**Y APAGADA TENÍA QUE BAJAR TAMBIÉN**: con el 0,72 de antes quedaba **más clara que la nueva
+prendida**, o sea que el estado se habría leído al revés. Quedó en 0,34 sin halo — medido, prendida da
+máximo 230 contra 141.
+
+**Y LA CINTA DE PEGAR NO ERA UN PROBLEMA DE BRILLO SINO DE TEMPERATURA.** Se veía pegada encima, y
+medida es **0,94 veces el papel**, o sea *más oscura*. Lo que la delataba es que es gris fría sobre
+papel crema. Un tinte cálido por canal y en lineal la mete en la misma familia.
+
+#### EL CHANFLE PASA A `clip-path`, Y NO ES UN CAMBIO DE GUSTO
+
+Las dos esquinas del cassette se dibujaban con `::before`/`::after`, o sea **una línea en diagonal**.
+Sobre un panel oscuro alcanza porque detrás no hay nada; con papel detrás, la esquina **sigue llena de
+papel** y la línea queda flotando. El recorte corta la hoja de verdad. Y la sombra pasa a
+`drop-shadow`: `box-shadow` sigue el rectángulo y volvería a dibujar las dos esquinas que el recorte
+acaba de sacar.
+
+#### EL RÓTULO DE LA LINTERNA NO ENTRA EN NINGÚN LADO, ASÍ QUE VA ADENTRO
+
+La tecla lleva una lamparita **grabada**, así que el texto no puede ir encima. Y afuera no hay sitio:
+medido, **abajo terminaba en 408 de 412** —debajo de la barra de gestos de cualquier teléfono— y
+arriba se le montaba a USAR (296..300 contra 295). Va adentro del botón, sobre el aro de metal, que es
+liso. Ahí el choque es **imposible por construcción**.
+
+**Y EL RÓTULO ENTRA A LA AUDITORÍA DEL HUD.** Se montó una vez sobre USAR y la sonda contestó
+`choques: []`, porque medía el botón y no el rótulo: **una auditoría que no mira una pieza no puede
+encontrarle un defecto**. De paso la auditoría aprendió a saltear los pares padre-hijo, que se pisan
+siempre por definición.
+
+#### `elemento.textContent = x` BORRA LOS HIJOS
+
+Con la chapa adentro del botón, cada encendido de linterna se la habría llevado puesta. El rótulo vive
+en su propio `<span>` y las tres escrituras van ahí. **Leer sigue funcionando** —`textContent` concatena
+a los descendientes— así que la sonda del banco no cambió.
+
+#### DEGRADAR MAL ACÁ NO ES VERSE PEOR: ES QUEDARSE SIN CONTROLES
+
+Todo lo de `.con-ui` empieza **borrando** el borde y el fondo dibujados —los que ya funcionaban— y los
+reemplaza por `var(--ui-...)`. Con una pieza de menos, esa variable queda sin definir, **la declaración
+entera se invalida** y el control pasa a ser un rectángulo transparente. Así que la clase se pone sólo
+si están las siete **y** si el navegador supo decodificar un WebP.
+
+**Y SE APLICA YA, SIN ESPERAR A `DOMContentLoaded`.** Esperarlo no aporta nada —`documentElement`
+existe desde que el parser vio el `<html>`— y cuesta caro: medido en el banco, este juego arma la
+escena en un script sincrónico y el documento **sigue en `loading` a los 2,5 segundos**, así que el
+menú se vería primero como el panel oscuro viejo y después saltaría a la etiqueta.
+
+#### UN DEFECTO VIEJO QUE APARECIÓ AL LLEGAR A AJUSTES DESDE EL MENÚ
+
+El panel de ajustes **no entraba en un teléfono acostado**, y lo que se comía era el **título**: medido
+a 892×412, `pTit` caía en −10..3 —diez píxeles fuera de la pantalla— porque el contenido mide 418 en
+una caja de 412 y **un flex centrado desborda por los dos lados**. Se recorta el aire de las tres
+reglas, que juntas ocupaban 150 px para separar cinco cosas, más un escalón extra por debajo de los
+380 px de alto. Medido después: entra en 892×412, 732×412 y 800×360.
+
+#### MEDIDO AL CERRAR, A dpr 2,75
+
+Siete imágenes, **80,9 KB en WebP** (108 en base64). Etiqueta en **117 de brillo medio contra 10 del
+fondo**; tecla prendida máximo 230 contra 141 apagada. Ajustes desde el menú abre con título AJUSTES,
+botón VOLVER y MENÚ PRINCIPAL oculto, y **entra entero en los tres tamaños**. **Nada regresó:** 24
+firmas de hoja en tres idiomas, todas distintas; linterna con desvío **0°**, haz en **[0,0]**, alabeo
+**0** con la vista girando 40 muestras; HUD **sin un solo solapamiento** con el rótulo nuevo auditado;
+**14 de 14 texturas de foto puestas, 0 fallidas**; **22 programas y 63 texturas**, los mismos de la
+vuelta anterior; `window.__errs` vacío en las once corridas. El HTML pasó de 505 a **618 KB**, y esos
+113 son las siete imágenes.
+
 ### Octogésima séptima vuelta (2026-09-02): **CASA 13** — el menú es una etiqueta de cinta, y las hojas guardan la clave
 
 Pedido: *"mejora el menú principal y que el Título del juego sea casa 13 y que en el menú principal
