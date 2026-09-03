@@ -1,0 +1,158 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>__TITULO__</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#07070b;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:#f2eee6;user-select:none;-webkit-user-select:none;touch-action:none}
+
+/* ══════════ EL MARCO ES VERTICAL Y NO SE GIRA ══════════
+   Al revés de los juegos 3D de este repo, que se dibujan apaisados adentro de un
+   teléfono vertical. Un minijuego de TikTok se juega EN LA APP, con el teléfono
+   como uno lo tiene y un solo pulgar: girarlo sería pedirle al jugador que
+   cambie de postura para algo que dura cuarenta segundos.
+   El lienzo se dibuja con el ANCHO clavado en 720 y el alto según la forma de
+   la pantalla —lo calcula `medir()`— así que el marco la llena entera y una
+   moneda de 40 px mide lo mismo en un teléfono de 360 y en uno de 1440. */
+#caja{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  overflow:hidden;background:#000;
+  /* el color de acento lo pone cada juego (PIEL.ac). Los cinco comparten la
+     estructura del menu y NO el color: cinco menus del mismo gris se leen a
+     cinco pantallas de opciones de la misma aplicacion. */
+  --ac:#f2eee6}
+canvas{display:block;width:100%;height:100%}
+/* ══════════ EL TELON DEL MENU ══════════
+   En el menu el lienzo no dibuja nada, asi que sin esto el menu es un panel
+   gris sobre negro — o sea la pantalla de opciones de cualquier cosa. Es el
+   MISMO fondo generado que usa la partida, asi que el menu y el juego se ven
+   del mismo sitio, y va en DOM y no en el lienzo porque no hay que redibujarlo
+   sesenta veces por segundo para que quede quieto. */
+#tela{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;
+  transition:opacity .6s;z-index:1}
+#tela.on{opacity:1}
+
+/* ══════════ LO QUE VA EN DOM Y LO QUE VA EN EL LIENZO ══════════
+   En el lienzo: el juego y las cinemáticas. En DOM: sólo el texto que hay que
+   TRADUCIR y que tiene que quedar nítido en cualquier densidad de pantalla.
+   Un texto dibujado en un lienzo de 720 se ve borroso en un teléfono de 1440, y
+   el nombre del juego es justo lo que se mira primero. */
+/* ── EL PANEL LLEVA VELO, Y NO ES UN GUSTO ──
+   Sin fondo, el panel de final quedaba escrito ENCIMA de la partida: medido en
+   la captura, «RÉCORD NUEVO» cruzado con la persona y con los dos botones del
+   juego. Y un panel opaco tampoco sirve — la calle de atrás es la mitad de lo
+   que hace que el menú se vea de este juego y no de una aplicación. Velo al
+   82 %: se lee todo y el fondo sigue estando. */
+.pan{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:2.8vh;padding:6vw;text-align:center;z-index:5;
+  /* degrade y no opacidad pareja: arriba se deja ver el arte del telon y abajo se
+     cierra, que es donde estan los botones y donde hay que leer */
+  background:linear-gradient(180deg,rgba(7,7,11,.34) 0%,rgba(7,7,11,.74) 44%,
+    rgba(7,7,11,.93) 100%)}
+.pan.on{display:flex}
+/* ── EL TAMAÑO DEL TÍTULO SALE DEL LARGO DEL NOMBRE ──
+   Con 11vw clavado, «SEGUIDORES» —diez letras con un cuarto de em de espaciado
+   entre cada una— medía mas que el marco y salía CORTADO por los dos lados,
+   medido en la captura del menú. `--h1` lo calcula el arranque a partir de la
+   cantidad de letras, así que el próximo nombre largo entra solo. */
+.pan h1{font-size:clamp(26px,var(--h1,11vw),64px);letter-spacing:.26em;font-weight:800;
+  text-indent:.26em;line-height:1;
+  /* el resplandor del titulo sale del acento del juego, asi que el nombre se lee
+     del color del juego sin tener que generar una imagen por titulo */
+  text-shadow:0 0 30px var(--ac),0 4px 22px #000}
+/* el emblema generado: es lo primero que se ve, y es lo que hace que el menu no
+   empiece con una palabra escrita con la tipografia del sistema */
+.em{width:clamp(90px,27vw,158px);height:auto;margin-bottom:-1.4vh;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.75))}
+.em[hidden]{display:none}
+/* el título del final es una frase y no el nombre del juego, así que con el
+   tamaño del nombre se partía en dos líneas y se comía los botones */
+#pFin h1{font-size:clamp(24px,7.5vw,42px);letter-spacing:.16em;text-indent:.16em}
+.pan p{font-size:clamp(12px,3.4vw,17px);line-height:1.6;opacity:.62;max-width:24em}
+.fila{display:flex;gap:2.6vw;flex-wrap:wrap;justify-content:center}
+.bt{appearance:none;border:1px solid rgba(255,255,255,.20);background:rgba(255,255,255,.05);
+  color:inherit;font:inherit;font-size:clamp(12px,3.5vw,16px);font-weight:700;
+  letter-spacing:.16em;padding:1.5vh 5.5vw;border-radius:999px;cursor:pointer}
+.bt.p{background:var(--ac);color:#0b0b10;border-color:var(--ac)}
+.bt:disabled{opacity:.34}
+
+/* el marcador: grande, arriba, y nada más. En un juego de cuarenta segundos no
+   hay nada que consultar además del número. */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;z-index:4}
+#hud.on{opacity:1}
+#marca{position:absolute;top:2.4vh;left:0;right:0;text-align:center;
+  font-size:clamp(30px,10vw,58px);font-weight:800;letter-spacing:.04em;
+  text-shadow:0 3px 18px rgba(0,0,0,.75)}
+#sub{position:absolute;top:calc(2.4vh + 11vw);left:0;right:0;text-align:center;
+  font-size:clamp(10px,3vw,14px);letter-spacing:.28em;opacity:.55}
+#reloj{position:absolute;left:12%;right:12%;bottom:3.2vh;height:6px;
+  background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
+#relojB{height:100%;width:100%;background:#f2eee6}
+#relojB.poco{background:#e0553f}
+
+/* el pie de la cinemática: el único texto de una cinemática, y va en DOM por lo
+   mismo que el título — hay que poder traducirlo y tiene que leerse */
+#cine{position:absolute;left:8%;right:8%;bottom:9vh;text-align:center;z-index:5;
+  font-size:clamp(13px,3.8vw,19px);line-height:1.5;opacity:0;transition:opacity .5s;
+  text-shadow:0 2px 16px #000;pointer-events:none}
+#cine.on{opacity:.96}
+#salta{position:absolute;right:4vw;top:3vh;z-index:6;font-size:11px;letter-spacing:.2em;
+  opacity:0;transition:opacity .4s;pointer-events:none}
+#salta.on{opacity:.4}
+
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7}
+#velo{position:absolute;inset:0;background:#07070b;opacity:0;pointer-events:none;
+  z-index:6;transition:opacity .45s}
+#velo.on{opacity:1}
+</style></head><body>
+<div id="caja">
+  <canvas id="c"></canvas>
+  <div id="tela"></div>
+  <div id="hud">
+    <div id="marca">0</div>
+    <div id="sub"></div>
+    <div id="reloj"><div id="relojB"></div></div>
+  </div>
+  <div id="cine"></div>
+  <div id="salta"></div>
+  <div id="velo"></div>
+  <div id="flash"></div>
+
+  <div class="pan on" id="pIdioma">
+    <img class="em" id="emI" alt="" hidden>
+    <h1>__NOMBRE__</h1>
+    <div class="fila">
+      <button class="bt p" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <img class="em" id="emM" alt="" hidden>
+    <h1>__NOMBRE__</h1>
+    <p data-i18n="sub"></p>
+    <div class="fila">
+      <button class="bt p" id="bJugar" data-i18n="jugar"></button>
+      <button class="bt" id="bComo" data-i18n="como"></button>
+    </div>
+    <p id="mejor" style="opacity:.42;letter-spacing:.2em;font-size:12px"></p>
+    <div class="fila" style="gap:1.8vw">
+      <button class="bt" data-lang="es" style="padding:.9vh 3.4vw;font-size:11px">ES</button>
+      <button class="bt" data-lang="en" style="padding:.9vh 3.4vw;font-size:11px">EN</button>
+      <button class="bt" data-lang="pt" style="padding:.9vh 3.4vw;font-size:11px">PT</button>
+    </div>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h1 id="finT"></h1>
+    <p id="finP"></p>
+    <div class="fila">
+      <button class="bt p" id="bOtra" data-i18n="otra"></button>
+      <button class="bt" id="bMenu" data-i18n="menu"></button>
+    </div>
+  </div>
+</div>
+<script type="importmap">{"imports":{}}</script>
+<script type="module">

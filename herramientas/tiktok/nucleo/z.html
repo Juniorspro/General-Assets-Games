@@ -1,0 +1,277 @@
+/* ══════════════════════ EL ARMADO Y EL BUCLE ══════════════════════
+   Todo lo que sigue es del núcleo y ninguno de los cinco juegos lo toca. El
+   contrato de un juego es corto a propósito:
+
+       JT              las frases, por idioma
+       JUEGO.planos    la cinemática: [{dur, pie, dibuja(g,u,t)}]
+       JUEGO.arranca() poner el estado en cero
+       JUEGO.paso(dt)  la simulación, en pasos de 1/60
+       JUEGO.pinta(g)  el dibujo, en unidades de 720×1280
+       JUEGO.baja/mueve/sube(x,y)   el verbo
+       JUEGO.marca     el número que va arriba
+       JUEGO.resta     0..1 para la barra de abajo, o null si no hay reloj
+       JUEGO.vivo      cuando pasa a false, se termina
+
+   Un juego que necesite algo más que eso probablemente no sea un minijuego. */
+
+let PUNTOS = 0, MEJOR = 0;
+
+/* ── EL RÉCORD SE INTENTA GUARDAR Y PUEDE FALLAR ──
+   `localStorage` TIRA en una ventana privada, y esto se abre desde enlaces. Sin
+   el `try` el juego no arranca en la mitad de los casos raros, que es peor que
+   no tener récord. */
+const CLAVE = 'tt_' + JUEGO.id;
+try { MEJOR = parseInt(localStorage.getItem(CLAVE) || '0', 10) || 0; } catch(e){}
+function guardaMejor(){
+  try { localStorage.setItem(CLAVE, String(MEJOR)); } catch(e){}
+}
+
+function pintaJuego(){
+  $('mejor').textContent = MEJOR > 0 ? TX('mejor') + ' · ' + MEJOR : '';
+  if (JUEGO.pintaTextos) JUEGO.pintaTextos();
+}
+window.pintaJuego = pintaJuego;
+
+function verPantalla(p){
+  for (const e of document.querySelectorAll('.pan')) e.classList.remove('on');
+  if (p) $(p).classList.add('on');
+  $('hud').classList.toggle('on', p === null);
+  /* el telón se enciende con cualquier panel y se apaga en partida: en partida
+     el lienzo dibuja su propio fondo y dejarlo encendido serían dos fondos
+     superpuestos */
+  $('tela').classList.toggle('on', p !== null);
+}
+
+/* ── LA PIEL DEL JUEGO ──
+   El color de acento, el telón del menú y el emblema. Los cinco comparten la
+   estructura y no la piel: cinco menús del mismo gris con el mismo panel se
+   leen a cinco pantallas de opciones de la misma aplicación, y eso es lo que
+   hace que ninguno se recuerde. */
+function pieles(){
+  const pl = (typeof PIEL !== 'undefined') ? PIEL : {};
+  /* el ancho que ocupa el título es, aproximadamente, letras x (0,6 + 0,26) em:
+     de ahí sale el tamaño que lo deja adentro del marco con aire a los costados */
+  const L = ($('pMenu').querySelector('h1').textContent || '').trim().length || 6;
+  caja.style.setProperty('--h1', Math.min(11, 78/L).toFixed(2) + 'vw');
+  if (pl.ac) caja.style.setProperty('--ac', pl.ac);
+  if (typeof AS === 'undefined' || !AS.img) return;
+  const f = AS.img[pl.tela || 'fondo'];
+  if (f) $('tela').style.backgroundImage = 'url(' + f.d + ')';
+  const e = AS.img.em;
+  if (e) for (const id of ['emI','emM']){ const n = $(id); n.src = e.d; n.hidden = false; }
+}
+
+function alMenu(){
+  MODO = 'menu';
+  musQuiere('menu');
+  verPantalla('pMenu');
+  pintaJuego();
+}
+
+let _vistaCine = false;
+function jugar(){
+  armaAudio();
+  cargaSon();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  if (!_vistaCine){
+    _vistaCine = true;
+    cineArranca(empieza);
+    return;
+  }
+  empieza();
+}
+function empieza(){
+  /* el pie de la cinemática se apaga acá también: normalmente lo apaga
+     `cineTermina`, pero la sonda que salta a un instante de la cinemática lo
+     deja encendido y entonces la partida arranca con un subtítulo puesto */
+  $('cine').classList.remove('on');
+  $('salta').classList.remove('on');
+  PUNTOS = 0;
+  rachaCero();
+  JUEGO.arranca();
+  MODO = 'juega';
+  verPantalla(null);
+  musQuiere('mus');
+  $('sub').textContent = TX('pts');
+  pintaHud();
+}
+function termina(){
+  MODO = 'fin';
+  musQuiere('menu');
+  const rec = PUNTOS > MEJOR;
+  if (rec){ MEJOR = PUNTOS; guardaMejor(); }
+  son(rec ? 'gana' : 'pierde');
+  musAgacha(0.30, 1.4);
+  $('finT').textContent = rec ? TX('nuevoRec') : (JUEGO.gano ? TX('finBien') : TX('finMal'));
+  $('finP').textContent = PUNTOS + ' ' + TX('pts') + (MEJOR > 0 ? '  ·  ' + TX('mejor') + ' ' + MEJOR : '');
+  verPantalla('pFin');
+  pintaJuego();
+}
+
+function pintaHud(){
+  $('marca').textContent = JUEGO.marca != null ? JUEGO.marca : PUNTOS;
+  const r = JUEGO.resta;
+  const rel = $('reloj');
+  rel.style.display = r == null ? 'none' : 'block';
+  if (r != null){
+    const b = $('relojB');
+    b.style.width = (Math.max(0, Math.min(1, r))*100).toFixed(1) + '%';
+    b.classList.toggle('poco', r < 0.25);
+  }
+}
+
+/* el fogonazo: va en CSS y no en el lienzo a propósito, porque tiene que poder
+   encenderse en el mismo cuadro en que pasa algo sin esperar al dibujo */
+let _flash = 0;
+function fogonazo(v){ _flash = Math.max(_flash, v); }
+function pasoFogonazo(dt){
+  if (_flash <= 0) return;
+  _flash = Math.max(0, _flash - dt*4.2);
+  $('flash').style.opacity = _flash.toFixed(3);
+}
+
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora = performance.now();
+  let dt = Math.min((ahora - _ultimo)/1000, 0.25);
+  _ultimo = ahora;
+
+  if (!CONGELADO){
+    if (MODO === 'cine'){
+      cinePaso(dt);
+    } else if (MODO === 'juega' && !PAUSA){
+      _acum += dt;
+      let n = 0;
+      while (_acum >= PASO && n < 8){ JUEGO.paso(PASO); _acum -= PASO; n++; }
+      if (n >= 8) _acum = 0;      /* si el aparato no llega, va en cámara lenta y no se cuelga */
+      if (!JUEGO.vivo) termina();
+    }
+    pasoFogonazo(dt);
+  }
+
+  g.clearRect(0, 0, AN, AL);
+  if (MODO === 'cine') cinePon(CINE.t);
+  else if (JUEGO.fondo) JUEGO.fondo(g);
+  if (MODO === 'juega' || MODO === 'fin') JUEGO.pinta(g);
+  if (MODO === 'juega') pintaHud();
+
+  _cuadros++; _acumF += dt;
+  if (_acumF >= 0.5){ fps = Math.round(_cuadros/_acumF); _cuadros = 0; _acumF = 0; }
+}
+
+/* ══════════════════════ LOS BOTONES ══════════════════════ */
+for (const b of document.querySelectorAll('[data-lang]'))
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ponIdioma(b.dataset.lang);
+    if (MODO === 'idioma') alMenu();
+  });
+$('bJugar').addEventListener('click', (e) => { e.stopPropagation(); jugar(); });
+$('bComo').addEventListener('click', (e) => { e.stopPropagation(); cineArranca(alMenu); });
+$('bOtra').addEventListener('click', (e) => { e.stopPropagation(); empieza(); });
+$('bMenu').addEventListener('click', (e) => { e.stopPropagation(); alMenu(); });
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Todo lo que el banco necesita, y nada que el juego use. Un juego que se
+   prueba sólo mirando capturas se prueba mal: acá se puede jugar solo, saltar a
+   un instante de la cinemática y leer el estado. */
+/* el arnes de pruebas inyecta su propio `__errs` en el <head>, o sea ANTES de que
+   este modulo se evalue: pisandolo con un array nuevo se perderian justamente los
+   errores del arranque, que son los que importan */
+window.__errs = window.__errs || [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+
+window.__J = {
+  id: JUEGO.id,
+  estado: () => JSON.stringify({ modo: MODO, puntos: PUNTOS, mejor: MEJOR,
+    marca: JUEGO.marca, resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3),
+    vivo: !!JUEGO.vivo, fps, esc: +ESC.toFixed(3), lienzo: [lienzo.width, lienzo.height] }),
+  lang: (l) => { ponIdioma(l); return LANG; },
+  menu: () => { alMenu(); return MODO; },
+  jugar: () => { jugar(); return MODO; },
+  empieza: () => { empieza(); return MODO; },
+  /* la cinemática en un instante exacto, CONGELADA. Sin congelar, entre que la
+     sonda escribe el segundo y el navegador entrega la foto el bucle ya la
+     corrió y la captura sale de otro instante — es el defecto que ya costó una
+     vuelta en BARRIO y otra en PULSO. */
+  /* Y APAGA EL FOGONAZO ANTES DE CONGELAR. `pasoFogonazo` corre dentro del
+     `if (!CONGELADO)`, asi que congelando con el fogonazo a medio apagar el
+     velo blanco de CSS QUEDA PUESTO para siempre: medido, una foto de la
+     cinematica sacada justo despues de un golpe salia con un 6 % de blanco
+     encima —el fondo pasaba de 28 a 43— y yo lo lei como que el plano estaba
+     mal iluminado. El pixel del lienzo daba 28 en los dos casos. Una sonda que
+     deja un velo encima no fotografia lo que le piden. */
+  cine: (t) => { armaAudio(); CINE.on = true; MODO = 'cine'; CINE.gracia = 9e9;
+                 _flash = 0; $('flash').style.opacity = '0';
+                 CINE.dur = JUEGO.planos.reduce((a,p) => a+p.dur, 0);
+                 CINE.t = Math.max(0, Math.min(CINE.dur - 0.01, t));
+                 CONGELADO = true;
+                 for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+                 $('cine').classList.add('on');
+                 cinePon(CINE.t);
+                 return JSON.stringify({ t: +CINE.t.toFixed(2), dur: +CINE.dur.toFixed(2),
+                                         plano: CINE.plano, pie: $('cine').textContent }); },
+  correr: () => { CONGELADO = false; return true; },
+  /* toca en unidades de diseño, por el mismo camino que un dedo */
+  toca: (x, y) => { if (JUEGO.baja) JUEGO.baja(x, y);
+                    if (JUEGO.sube) JUEGO.sube(x, y);
+                    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo }); },
+  /* ── UN ARRASTRE OCUPA TIEMPO, Y ESO HUBO QUE MEDIRLO ──
+     La primera version solo llamaba a `mueve` veinte veces seguidas, sin
+     simular. Sirve para un juego que reacciona en el evento —RASPA borra la
+     mugre ahi mismo— y NO SIRVE para uno cuyo movimiento vive en `paso`:
+     medido en MANCHA, el dedo dejaba el destino puesto, la mancha no se movia
+     ni un pixel y el arrastre devolvia 0 %. Y no fallaba: contestaba.
+     Ahora cada muestra adelanta la simulacion, que es lo que pasa de verdad
+     cuando un dedo cruza la pantalla en un tercio de segundo. */
+  arrastra: (x0, y0, x1, y1, n, pasos) => {
+    const N = n || 20, P = pasos == null ? 2 : pasos;
+    if (JUEGO.baja) JUEGO.baja(x0, y0);
+    for (let i = 1; i <= N; i++){
+      if (JUEGO.mueve) JUEGO.mueve(x0 + (x1-x0)*i/N, y0 + (y1-y0)*i/N);
+      for (let k = 0; k < P && JUEGO.vivo; k++) JUEGO.paso(PASO);
+    }
+    if (JUEGO.sube) JUEGO.sube(x1, y1);
+    return JSON.stringify({ puntos: PUNTOS, vivo: !!JUEGO.vivo });
+  },
+  /* avanza la simulación sin dibujar: así una partida de cuarenta segundos se
+     prueba en un instante y no en cuarenta segundos */
+  avanza: (segs) => { const n = Math.round(segs*60);
+                      for (let i = 0; i < n && JUEGO.vivo; i++) JUEGO.paso(PASO);
+                      return JSON.stringify({ vivo: !!JUEGO.vivo, puntos: PUNTOS,
+                                              resta: JUEGO.resta == null ? null : +JUEGO.resta.toFixed(3) }); },
+  pico: () => pico(),
+  assets: () => JSON.stringify(asEstado()),
+  /* la caja de cada elemento visible del DOM, para poder comprobar que nada se
+     solapa en una pantalla chica sin mirar una captura */
+  cajas: () => {
+    const out = {};
+    for (const id of ['marca','sub','reloj','cine','finT','finP','mejor']){
+      const e = $(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      /* «visible» tiene que incluir que MIDA algo: un elemento adentro de un
+         panel con `display:none` devuelve una caja de 0×0 y decía visible */
+      const vis = r.width > 0 && r.height > 0 &&
+                  getComputedStyle(e).display !== 'none' &&
+                  +getComputedStyle(e.closest('.pan') || e).opacity !== 0;
+      out[id] = { x: Math.round(r.left), y: Math.round(r.top),
+                  w: Math.round(r.width), h: Math.round(r.height), vis };
+    }
+    return JSON.stringify(out);
+  },
+  /* el marcador se pone en cero antes de cada corrida: `arranca()` no lo toca
+     —lo hace `empieza()`— asi que dos corridas seguidas informaban el puntaje
+     de la anterior y el numero mentia sin que nada fallara */
+  juegaSolo: (n, azar) => { PUNTOS = 0; rachaCero();
+    return JSON.stringify(JUEGO.juegaSolo ? JUEGO.juegaSolo(n || 3000, azar) : 'sin auto'); }
+};
+
+/* ══════════════════════ ARRANQUE ══════════════════════ */
+medir();
+cargaImg();
+pieles();
+pintaIdioma();
+pintaJuego();
+bucle();
+</script></body></html>

@@ -139,6 +139,17 @@ munecas.
   está dibujada por código como todo lo demás. Vive partido en `herramientas/barrio/partes/` y se arma
   con `python3 herramientas/barrio/armar.py`. **No reemplaza a `Vecindario.html`**, que es una
   cinemática de 38 segundos sin controles y sigue igual.
+- **Los cinco minijuegos estilo TikTok** viven en `herramientas/tiktok/` y se arman con
+  `python3 herramientas/tiktok/armar.py`. Comparten un **núcleo** (marco vertical de 720 de ancho,
+  tres idiomas, cinemática, reloj de 60 pasos fijos, audio, sondas y la piel del menú) y traen un
+  archivo de reglas cada uno más un archivo de assets generados con Rezona:
+  **`Puerta.html`** (~410 KB) el de la puerta del boliche, seis reglas que nadie te dice y el primer
+  error después de un cambio no cuesta vida; **`Raspa.html`** (~570 KB) raspar mugre con el dedo, con
+  las superficies y la suciedad de foto; **`Seguidores.html`** (~390 KB) juntar corazones y esquivar
+  haters con tres vidas; **`Mancha.html`** (~335 KB) cuarenta y cinco segundos pintando una cancha
+  contra tres bots con tres cabezas distintas; **`Raro.html`** (~320 KB) uno es distinto y hay que
+  tocarlo, con la grilla creciendo de a una tira. `hornear.py` mete los assets en base64 y
+  `crudo/tareas.json` guarda los `task_id` de Rezona, porque perder el id es perder el asset pagado.
 - **`Visor3D.html` es "Maicol 3D"** (~3,8 MB, casi todo el GLB en base64): visor del modelo generado
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
@@ -268,6 +279,205 @@ de 422 KB a **1,09 MB**, y esos 670 KB son el cielo (123 en base64), las cuatro 
 algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se arregla midiendo una vez
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
+
+### Nonagésima quinta vuelta (2026-09-03): **CINCO MINIJUEGOS ESTILO TIKTOK** — un núcleo compartido y todos los assets generados con Rezona
+
+Pedido: *"hagamos 5 minijuegos estilo tiktok dame ideas y hazmes HTML con menús simples, selección
+de idiomas cinemáticas, 2D, etc, investiga sobre los minijuegos de tiktok no hablo de los filtros
+sino que si hay minijuegos"*, y después —mirando la primera captura— *"no taaaan simples encima
+podés generar animaciones súper god y personajes mejor trabajados y también música sonidos y mejores
+menús personalizados y también tienes todo Rezona para hacer los assets que quieras"*.
+
+Salieron **cinco**: `Puerta.html` · `Raspa.html` · `Seguidores.html` · `Mancha.html` · `Raro.html`.
+Viven en `herramientas/tiktok/` (núcleo + un archivo por juego + `armar.py` + `hornear.py`) y pesan
+de **330 a 583 KB**, con todo adentro.
+
+#### LO QUE SÍ EXISTE EN TIKTOK, Y ORDENA LOS CINCO
+
+Los minijuegos son reales y no son filtros: hay una tanda en prueba dentro de la aplicación
+(*Fruit Frenzy*, *Tap the Difference*, *Beauty Salon* y compañía) y de mirarlos salen cuatro reglas
+que se respetaron en los cinco: **un solo verbo** (tocar, arrastrar, o nada más), **se juega en el
+primer segundo** (no hay tutorial obligatorio), **vertical y con un pulgar**, y **treinta a sesenta
+segundos por partida**. Y la que más pesó: **la mitad son de JUICIO y no de destreza**, porque lo
+que se filma es la cara del que se dio cuenta tarde. De ahí que PUERTA y EL RARO existan.
+
+#### EL NÚCLEO: UNO, Y NO CINCO VECES LO MISMO
+
+Los cinco comparten el marco, los tres idiomas, la cinemática, el reloj de paso fijo, el audio, las
+sondas y —desde el segundo pedido— la piel del menú. Escrito cinco veces, el día que se corrige un
+defecto quedan cuatro sin corregir, **y eso no es una hipótesis: es lo que pasó en este repo con las
+traducciones de Z Force** (137 claves en castellano contra 30 en inglés). El contrato de un juego es
+corto a propósito —`JT`, `PIEL`, `JUEGO.planos/arranca/paso/pinta/baja/mueve/sube`— y lo que
+necesite más que eso probablemente no sea un minijuego.
+
+**EL ALTO DE DISEÑO NO PUEDE SER FIJO, y se vio en la primera captura.** El ancho va clavado en 720
+—así una moneda de 40 px mide lo mismo en un teléfono de 360 y en uno de 1440— pero con 720×1280
+clavado, o sea 9:16, en un teléfono de hoy (412×892, 0,46) el marco entraba por el ancho y quedaban
+**dos bandas negras** arriba y abajo. Un minijuego que se abre adentro de una aplicación tiene que
+llenar la pantalla; una banda negra se lee a juego roto. El alto sale de la forma de la pantalla y
+lo que se ancla abajo se escribe `AL - algo`.
+
+#### LOS ASSETS: 22 GENERADOS CON REZONA, Y TRES DEFECTOS DEL PROVEEDOR
+
+Nueve imágenes de fondo y textura, tres hojas de sprites, cinco emblemas de menú, seis temas de
+música y seis efectos. Todo horneado a base64 por `hornear.py`, que es lo único que los conoce.
+
+- **El endpoint de sprites tenía la facturación caída y el de imagen no.**
+  `submit_sprite_generation` devolvió `CREDIT_RESERVE_FAILED` en los tres intentos y en el reintento;
+  `submit_image_generation` con el mismo pedido —«una hoja de cuatro cuadros en fila sobre fondo
+  transparente»— funcionó a la primera. Para el uso que se le da es lo mismo, porque la hoja **se
+  corta acá**.
+- Un audio volvió `PROVIDER_UNAVAILABLE / NOIZ_FAILED` marcado `retryable` y salió al reintentar, que
+  es exactamente lo que ya había pasado con los veinticinco sonidos de PUERTA BLANCA.
+- Y `1536x256` se rechaza con `VALIDATION_ERROR`: las hojas van en `1536x512`.
+
+**Y LA MÚSICA VUELVE DE DIEZ SEGUNDOS AUNQUE SE PIDAN VEINTE.** Los seis temas volvieron de ~10 s, o
+sea que `duration` es un techo y no una orden. Con la cola fundida sobre la cabeza un bucle de nueve
+segundos aguanta; anotado porque el que lo vuelva a pedir va a leer el mismo número.
+
+#### LAS HOJAS VINIERON CON EL MARCO DE CADA CELDA DIBUJADO, Y EN PUERTA SE PINTÓ DE ROJO
+
+Las tres hojas traen un rectángulo finito alrededor de cada cuadro —el modelo dibuja la grilla que se
+le pidió— y eso no es inofensivo: la caja unión se lo lleva adentro, y en PUERTA, donde **la ropa se
+tiñe**, el marco se pintó del color de la ropa. Medido en la captura: un rectángulo rojo alrededor de
+la persona, en el medio de la puerta.
+
+Se saca por **erosión**: el marco es una línea de uno a tres píxeles y la figura es una mancha
+gruesa, así que erosionando tres píxeles la línea desaparece entera y de la figura sobrevive el
+interior; dilatando cuatro se recupera el contorno. **36.708 píxeles** sacados, y no hace falta saber
+dónde estaba la línea ni de qué color era.
+
+#### LA MEDICIÓN DE LA CABEZA: DOS ERRORES MÍOS, LOS DOS ENCONTRADOS IMPRIMIENDO EL PERFIL
+
+Los rasgos de las seis reglas de PUERTA —el gorro, los lentes, la bufanda, el pase— se siguen
+dibujando por código **encima** del sprite generado, y ése reparto es el que hace que el juego siga
+siendo deducible: una imagen generada no se puede pedir «con gorro y sin lentes» sesenta veces sin
+que cambie la persona entera, así que la persona es una y los rasgos son cuatro cosas que se le
+ponen. Pero para eso hay que saber dónde está la cabeza, y no se puede poner a ojo.
+
+La primera versión midió mal de dos formas:
+
+1. **Tomó la fila 0 como la coronilla**, y en la fila 0 había **siete píxeles sueltos repartidos de
+   x=36 a x=189**: restos del marco de la celda que la erosión no alcanzó a limpiar. La cabeza de
+   verdad empieza en la fila 30.
+2. **Y buscó el hombro como «la fila que pasa 1,5 veces el ancho de la cabeza»**, que con este dibujo
+   recién se cumple en la fila 126 — o sea **cincuenta filas después del cuello**. El percentil salió
+   99 px contra los 62 que mide la cabeza.
+
+Con ese número los rasgos quedaron repartidos una cabeza y media más arriba: medido en la captura,
+**la bufanda cruzaba los ojos y los lentes estaban en el nacimiento del pelo**. Lo que sí es
+inconfundible en el perfil de anchos es el **cuello**: es el mínimo entre la coronilla y los hombros
+(22 px contra 62 de la cabeza y 88 del hombro). De ahí sale el ALTO de la cabeza, que es la medida
+que los rasgos necesitan. Medido después: `[[114, 28, 88], [113.6, 28, 88], [84.4, 28, 88],
+[84.3, 28, 164]]` — y el 164 es el cuadro del saludo, con los dos brazos levantados, así que el alto
+sale de la **mediana** de los cuatro: una cabeza no cambia de tamaño cuando alguien levanta los
+brazos.
+
+#### EL TEÑIDO CACHEÓ EL RESULTADO EQUIVOCADO, Y PARA SIEMPRE
+
+`tenido()` pinta la ropa blanca del color que la regla pida, usando la máscara de lo blanco que
+calcula el horneado. La máscara es una **segunda imagen** y decodifica después de la hoja: sin
+guarda, el primer cuadro teñía con la hoja entera de máscara —o sea todo el sprite, piel incluida— y
+**guardaba eso**. Medido en la captura: el visitante salía **azul de la cara a las zapatillas**.
+Mientras la máscara no esté se devuelve la hoja cruda sin teñir y sin guardar nada; un visitante de
+blanco por dos cuadros es infinitamente mejor que uno pintado entero por el resto de la partida.
+
+Del mismo tipo: **forzar el RGB a blanco puro se llevó los contornos y los ojos.** El sello se
+blanquea para que el tinte dé el color exacto, pero blanqueando *todo* la bola de MANCHA salió un
+disco de color liso sin cara, porque su dibujo es cuerpo blanco **más** líneas oscuras. Ahora se
+blanquea sólo por encima de un umbral de luminancia.
+
+#### `createPattern` QUEDA ATADO AL CONTEXTO QUE LO CREÓ
+
+Vale anotarlo porque no falla ruidosamente: **no pinta nada**. El piso de MANCHA y la mugre de RASPÁ
+se dibujan en lienzos aparte, así que su patrón tiene que crearse con el contexto **de ese lienzo** y
+no con el del juego.
+
+#### CINCO DEFECTOS DE LAS PROPIAS SONDAS, QUE ES LA MITAD DE LA VUELTA
+
+- **`arrastra` no adelantaba la simulación.** Servía para RASPÁ, que borra la mugre en el propio
+  evento, y **no servía** para MANCHA, cuyo movimiento vive en `paso`: el dedo dejaba el destino
+  puesto, la mancha no se movía ni un píxel y el arrastre devolvía **0 %**. Y no fallaba: contestaba.
+  Ahora cada muestra adelanta dos pasos, que es lo que pasa cuando un dedo cruza la pantalla en un
+  tercio de segundo.
+- **`__J.cine` congelaba el mundo y dejaba el fogonazo puesto.** `pasoFogonazo` corre dentro del
+  `if (!CONGELADO)`, así que congelando con el fogonazo a medio apagar el velo blanco de CSS queda
+  puesto: una foto de la cinemática sacada justo después de un golpe salía con un 6 % de blanco
+  encima —el fondo pasaba de 28 a 43— y yo lo leí como que el plano estaba mal iluminado. **El píxel
+  del lienzo daba 28 en los dos casos.** Una sonda que deja un velo encima no fotografía lo que le
+  piden.
+- **`cajas()` daba por visible un elemento de 0×0.** Un elemento dentro de un panel con
+  `display:none` devuelve una caja vacía y decía visible.
+- **El auto-jugador de PUERTA no llegaba a la fase de decidir.** Con ocho pasos por vuelta no
+  alcanzaba los 0,34 s (21 pasos) de la entrada: informaba 133 de 400 con las tres vidas puestas, o
+  sea *un juego fácil*. Con sesenta pasos: **600 de 600**.
+- **Y `juegaSolo` informaba el puntaje de la corrida anterior**, porque `arranca()` no toca `PUNTOS`
+  —lo hace `empieza()`—. El número mentía sin que nada fallara.
+
+#### SEGUIDORES: EL BOT AL AZAR SOBREVIVÍA SETENTA SEGUNDOS SIN UN GOLPE, Y ESO NO PUEDE SER AZAR
+
+El mejor hallazgo de la vuelta y salió de comparar los dos auto-jugadores. La regla de dónde nace
+cada cosa dice que un hater no puede nacer al lado de algo que valga puntos —juntar el corazón sería
+chocar el hater, o sea una moneda al aire—, y estaba escrita comparando contra **cualquier** cosa en
+pantalla (`c.y > -260`, que para una cosa viva es siempre verdadero). Cada corazón bloqueaba 300 px
+de los 560 que hay: con ocho cosas en el aire no quedaba un sitio libre, se agotaban los doce
+intentos y el respaldo soltaba **un corazón**. O sea que casi no salían haters.
+
+Lo cantó el bot: **70 segundos, cero golpes y sesenta corazones**. Si toca la mitad de los corazones
+tiene que tocar también su parte de los haters. Los tres números de la dificultad y el auto-jugador
+daban todos resultados plausibles y ninguno medía lo que yo creía. Lo que importa no es la distancia
+en x contra todo: es contra lo que llega **en el mismo momento** (230 px de altura son 0,4 s de
+caída). Medido después: el honesto aguanta 40-70 s con 35 a 99 seguidores y el del azar **muere en 12
+a 26 s con 4 a 16**.
+
+#### MANCHA: UNO DE CADA TRES RIVALES EXISTÍA SÓLO PARA HUNDIR AL JUGADOR
+
+Los tres bots son tres cabezas distintas a propósito —tres bots con la misma regla se leen a un bot
+copiado tres veces, van al mismo sitio y dejan la cancha vacía—. Pero el ladrón iba **siempre a la
+pintura del jugador**, y eso no es una personalidad: es un impuesto. Medido, el auto-jugador honesto
+perdía **21,6 % contra 29,7 y 30,8** de dos bots a los que nadie les robaba. Contra **el que va
+ganando** es justo, y de paso mantiene la partida cerca hasta el final. Medido después: honesto
+24-30 %, azar 16-19 %.
+
+#### DOS COSAS DE DIBUJO QUE SÓLO SE VEN MIRANDO
+
+- **El sello de pintura a 0,85 de la celda dejaba las cuatro esquinas sin cubrir** y la cancha se
+  leía a **lunares**. A 1,30 la mancha central pasa la celda entera y el recorte se queda con el
+  borde orgánico, que es lo único que se quería del sello. Y va **recortado a la celda**: si el
+  dibujo se pasara, el jugador vería pintura suya donde el marcador —que sale de la grilla— dice que
+  no tiene nada. El dibujo nunca puede prometer más de lo que la cuenta reconoce.
+- **«SEGUIDORES» salía cortado por los dos lados.** Diez letras con un cuarto de em de espaciado a
+  11vw miden más que el marco. El tamaño del título sale ahora del largo del nombre, así que el
+  próximo nombre largo entra solo. Y el rótulo NIVEL de EL RARO caía justo sobre la palabra PUNTOS
+  del HUD, que vive en DOM: el lienzo no puede saber que está ahí si no se lo mide.
+
+#### MEDIDO AL CERRAR
+
+**21 de 21 assets cargados y 0 fallados** en los cinco (3 · 7 · 4 · 4 · 3 imágenes, y 4 · 3 · 4 · 3 ·
+2 sonidos decodificados), con la música sonando en el menú y cambiando en la partida. Nivel: música
+sola **pico 0,078-0,086** y un acontecimiento **0,41** — o sea cinco veces, que es la escala de este
+repo. `window.__errs` **vacío en las veintitrés corridas**.
+
+Los dos auto-jugadores de cada juego, que es lo único que prueba que hay una decisión adentro:
+
+| | honesto | al azar |
+|---|---|---|
+| PUERTA | 2.800 aciertos de 2.800, 3 vidas, 400 cambios de regla | muere en **6 vueltas** con 3 aciertos |
+| EL RARO | nivel **2.801**, 0 fallos, grilla 6×9 | muere en el nivel 1 con 5 fallos |
+| SEGUIDORES | 40 s, 35 seguidores | 18 s, 4 seguidores |
+| MANCHA | **29 %** de la cancha | 19 % |
+| RASPÁ | barriendo, **136 placas** | picoteando, **1 placa** y se acaba el tiempo |
+
+Cinemáticas fotografiadas en instantes fijos en los cinco (11,6 · 7,4 · 9,0 · 8,6 · 7,4 s), los tres
+idiomas cambiando el menú en vivo, títulos adentro del marco en los cinco (el más ancho,
+SEGUIDORES, de 43 a 369 de 412) y **cero solapamientos** entre los siete elementos del HUD en
+412×892. 42-60 cuadros por segundo con render por software.
+
+**LO QUE NO PUDE COMPROBAR:** no puedo escuchar, así que de los seis temas y los seis efectos está
+medido que decodifican y a qué nivel suenan, no si el tema de MANCHA pega con MANCHA. Y el emblema de
+cada menú es un dibujo sin letras a propósito: el nombre lo sigue escribiendo la tipografía del
+sistema, así que cambia de forma según el aparato — se arregla generando el título como imagen, y es
+otra vuelta.
 
 ### Nonagésima cuarta vuelta (2026-09-03): **PUERTA BLANCA** — el idioma llega a cada palabra, y un panel de pausa con tres barras
 
