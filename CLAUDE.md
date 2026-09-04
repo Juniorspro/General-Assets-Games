@@ -154,24 +154,190 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
-- **`Dash.html` es "ROTOR"** (~733 KB, de los cuales 235 son la canción —extraída del video que
-  trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 las imágenes generadas: el
-  telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El género de Geometry Dash **en 3D
-  con three.js**, apaisado dentro de un teléfono vertical y **sin pantalla de «gira el celular»**.
-  La jugabilidad sigue siendo del plano XY —el género ES de dos ejes— y lo que es tridimensional es el
-  mundo: bloques extruidos, picos que son pirámides, el cubo tumbando de verdad, y **sombra de
-  contacto**, que es lo que lo apoya en el piso. **La cámara mira derecho por −Z**, así que x e y salen
-  exactamente lineales (medido: 1,00000) y se puede despegar en un bloque exacto. **Un nivel**, `OCHO FORMAS`, a
-  158 BPM —que es exactamente la velocidad 1× de Geometry Dash— con **los ocho modos**: cubo, nave,
-  bola, ovni, onda, robot, araña y columpio, más los **ocho orbes** y los pads. Los ocho salen de una
-  sola gravedad (`ápice = k²·2,4`), que es lo que hace que la grilla del compás siga valiendo al
-  cambiar de modo. **La música ES el reloj**: la x del
-  jugador sale de `AudioContext.currentTime` y no se integra, así que una tanda de cuadros perdidos
-  no puede correr el nivel respecto del tema. Un tiempo son cuatro bloques y el salto dura un tiempo
-  exacto, así que la gravedad y el impulso **salen de una cuenta** y el salto mide 4,00 bloques. Menú con demo jugándose detrás, lista de niveles con dificultad y monedas,
-  selector de icono, ajustes de música y efectos, **modo práctica con puntos de control** y
-  porcentaje guardado por nivel. Vive partido en `herramientas/dash/partes/` y se arma con
-  `python3 herramientas/dash/armar.py`.
+- **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
+  videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
+  generadas: el telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El
+  género de Geometry Dash **en 3D con three.js**, apaisado dentro de un teléfono vertical y **sin
+  pantalla de «gira el celular»**. La jugabilidad sigue siendo del plano XY —el género ES de dos ejes—
+  y lo que es tridimensional es el mundo: bloques extruidos con **cel shading fino y contorno de dos
+  píxeles**, picos que son pirámides, el cubo tumbando de verdad, y **sombra de contacto**. **La cámara
+  mira derecho por −Z**, así que x e y salen exactamente lineales (medido: 1,00000) y se puede despegar
+  en un bloque exacto. **Dos niveles**: `OCHO FORMAS` (158 BPM, 19 compases, los ocho modos, 302
+  bloques) y `CUATRO MINUTOS` (130 BPM, **136 compases, la canción entera**, 2.448 bloques, 18 tramos
+  con **tres velocidades** —0,75x, 1x y 1,5x— y **tres estilos**: sol de foto, neón sobre negro y
+  blanco minimalista, con una capa de sprites **por delante** del jugador y adornos dentro del mapa).
+  Los ocho modos salen de una sola gravedad (`ápice = k²·2,4`), que es lo que hace que la grilla del
+  compás siga valiendo al cambiar de modo; **la velocidad es del sitio** (`velEn(x)`) y no del cuerpo,
+  así que el reloj de audio y la x integrada del bot recorren el mismo camino. **La música ES el
+  reloj**: la x del jugador sale de `AudioContext.currentTime` y no se integra. Un tiempo son cuatro
+  bloques por velocidad y el salto dura un tiempo exacto, así que a 1,5x mide seis bloques y a 0,75x
+  tres. **Sobre un bloque se puede parar** (tolerancia de aterrizaje de un tercio, como en GD): lo
+  que mata son los picos —contra la caja interior del icono— y lo que se choca. Menú con demo detrás,
+  lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
+  guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
+  Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima cuarta vuelta (2026-09-04): **ROTOR** — la canción entera, tres velocidades, tres estilos y se puede parar sobre un bloque
+
+Pedido: *"haz un nivel ultra completo con esta canción también mejora los íconos y agrégale cell
+shading muy fino, también busca referencias e imágenes para el fondo y estilos animaciones transiciones
+e imágenes que incluso sirven para transiciones efectos todo por enfrente no solo por atrás o incluso
+dentro del mapa también que mejores los obstáculos y algunas cosas como los bloques qué moris si te
+quedas ahí andando eso no pasa en gd podés quedar ahí lo que te matan son los pinchos y cosas que
+chocas. también agrega no solamente un mapa de seguido sino que experimenta los estilos de GD y todas
+las formas de hacer mapas bien god toda la canción y recorta lo de tiktok al final"*, con un MP4 de
+cuatro minutos y cuarto.
+
+**Lo que no se pudo traer:** Higgsfield está en **cero créditos** y las cuatro wikis de GD contestan
+402, 404 y 403, así que no hay imagen nueva en esta vuelta. Todo lo visual sale de código o de los
+trece sprites y el telón que ya estaban horneados — y eso resultó ser lo correcto para la capa de
+adelante, que necesita justamente formas que ya se conocen del fondo.
+
+#### LA SEGUNDA CANCIÓN: 130 BPM, Y EL DETECTOR DIJO 65
+
+`hornear_musica.py` aprendió `--prefijo`, `--salida`, `--bpm-min` y `--kbps`, así que las dos
+canciones salen del mismo horneado y no de dos copias. El detector de tempo devolvió **65,0 BPM**: es
+la mitad —la autocorrelación en 130 da 0,689 contra 0,643 en 65— y 65 daría un salto de 0,92 s de
+aire, que no es GD. Con `--bpm-min 100` el tempo se duplica hasta pasar el piso. El «tun» cayó en
+**251,5 s** y el corte en 251,25; el primer tiempo en 0,1596 s. Quedan **251,01 s = 543,86 tiempos =
+135,96 compases**, a 48 kbps mono (1,47 MB de MP3, 1,96 en base64). A 1x son `4·130/60 = 8,67` bloques
+por segundo, la velocidad lenta de GD; 1,5x son 13, la rápida.
+
+#### LOS TRAMOS VIVEN EN LA TABLA DEL NIVEL, EN TIEMPOS Y CON VELOCIDAD
+
+Estaban en una constante `TRAMOS` de d.js con la x escrita a mano, al lado de una `pals` en b.js con
+la que tenían que coincidir índice a índice. Ahora `NIVELES[id].tramos` declara cada tramo en **tiempos
+de compás** (`b`) o en bloques (`w`), con su `vel`, su `modo`, su `arma` y su `estilo`; la x se
+acumula al generar (`w = b·4·vel`) y **el largo es la suma**. Los dieciocho del nivel nuevo suman 540
+tiempos: lo que sobra de la canción (3,86) es la meta y el acorde final.
+
+**LA VELOCIDAD ES DEL SITIO, NO DEL CUERPO.** `velEn(x)` mira la tabla y la usan la integración del
+bot (`avanza`), la onda (`vy = ±v·vel`) y el reloj de audio, que pasó a ser **por tramos**:
+`xDeTiempo(t)` empalma `x` y `t0` acumulados y dentro de cada tramo la pendiente es `4·vel`. Así la x
+que sale del tema y la x integrada **recorren exactamente el mismo camino**, y el portal de velocidad
+no toca al cuerpo: anuncia, una vez, con `c.vel`. En GD la velocidad cambia el avance y **no** el
+salto —el salto sigue durando un tiempo— así que a 1,5x mide seis bloques y a 0,75x tres, y por eso
+los constructores del nivel nuevo reciben `J = 4·vel`: «un pico cada dos tiempos» es `2·J` en las
+tres velocidades, y **las alturas no se escalan** porque la gravedad no cambia.
+
+#### SOBRE UN BLOQUE SE PUEDE ESTAR, Y LLEGAR DE COSTADO CERCA DEL CANTO NO MATA
+
+Es el reclamo textual del jugador y tenía razón. El eje de menor penetración a secas mata en cuanto el
+cuerpo toca un bloque con la base apenas por debajo de la cara de arriba: en ese primer paso la
+penetración horizontal es de un paso —0,14 bloques a 1x— y la vertical ya es mayor. En GD lo que mata
+es la **caja interior** del icono, un tercio del cuerpo, así que un canto a menos de un tercio de la
+base no la toca y el cuerpo se sube. Ahora `aterriza = dArriba <= 0,34 && vy <= 0` (y lo simétrico
+contra un techo con la gravedad invertida), y **lo mortal se prueba contra `cajaInterior`**, el 62 %
+del cuerpo centrado: pasar raspando un pico se siente a pasar raspando. Los dos niveles se
+re-auditaron con la regla nueva.
+
+#### EL NIVEL NUEVO: DIECIOCHO TRAMOS, Y LO QUE COSTÓ QUE SE PUDIERAN PASAR
+
+`intro · cubo2 · nave2 · bola2 · cuboRapido (1,5x) · onda2 (1,5x) · ovni2 · robot2 · arana2 ·
+columpio2 · lento (0,75x, con gravedad invertida) · naveRapida (1,5x) · escaleras (1,5x) · onda2 ·
+bola2 (1,5x) · robot2 · final2 · salida`. Cuatro cosas salieron de la aritmética antes de correr nada:
+
+- **Dos pilares en escalón a un tiempo exacto no se alcanzan.** El salto mide 4 y el despegue puede
+  ser en cualquier punto de los 2,43 del pilar, así que el aterrizaje cae entre 0,7 y 5,8 bloques
+  después del borde; con el segundo pilar a cuatro bloques del inicio del primero **no hay solape**, y
+  desde el piso un pilar de 3,0 no se pisa (el ápice es 2,4). Va a 3,0 del inicio y mide 2,6.
+- **A 0,75x no hay picos dobles.** El salto mide tres bloques y clarea 2,56 de pico; un doble con la
+  caja interior ocupa 2,53. Eso no es dificultad, es un cuadro de margen.
+- **Las escaleras suben 1,4 por escalón y no 1,6**: la cámara sube como mucho 3,2, así que el borde de
+  arriba de la vista queda en 8,6, y desde el cuarto escalón el ápice llega a 8,0. Con 1,6 se salía
+  del cuadro. Y los picos van a tiempo y medio: a un tiempo exacto —seis bloques a 1,5x, lo que mide
+  el salto— se aterriza justo en el siguiente.
+- **Las tres monedas van en tres tramos elegidos** (el pad de cubo2, el escalón de arriba, el pad rojo
+  del final, con la moneda en el ápice `6,7` que sale de `1,18²·2·2,4`). Los constructores tenían
+  once monedas y el tope es tres: se quedaban las tres primeras, todas en el primer minuto.
+
+**Y EL PILAR CON EL PICO ENCIMA** —la pieza más vista de GD— entró con `P.picoEn(x, y)`: pilar de 1,0
+y pico de 0,82, que se pasa por arriba con el arco entre `u` 0,21 y 0,79.
+
+Medido: **auditoría `ok: true` en los dos niveles** (100 % contra 7 % y 2 % del bot al azar), el nuevo
+con **3 de 3 monedas**; **24 de 24 fases** en OCHO FORMAS y **12 de 12** en CUATRO MINUTOS; y el bot
+**jugando la partida de verdad** termina el nivel nuevo al 100 % en el primer intento —15.019 pasos,
+5,6 s— con la pantalla de «¡COMPLETO! · 3/3 ◆». Modo práctica: 7 puntos de control en los primeros 41
+bloques.
+
+#### EL NIVEL LARGO SE VALIDA EN EL FONDO, POR REBANADAS
+
+Validarlo en la pantalla de carga costaba **5,0 s de hilo** (7,7 con el menú corriendo), y en un
+teléfono el doble. `juegaSolo` pasó a ser una rebanada única de `juegaSoloIter`, que guarda el cuerpo
+y avanza `n` pasos por llamada, y `validaFondo(id)` genera el nivel **en un mundo aparte** y cada seis
+milisegundos cambia `MUNDO` por ese mundo, avanza y lo devuelve: toda la física lee la variable, así
+que con una constante habría que pasarle el mundo a treinta funciones. El resultado queda en
+`VALIDADO[id]` y la ficha del nivel dice `!` si el bot no lo terminó. Medido: `ok: true` a los 7,7 s
+con el menú corriendo detrás, cero errores.
+
+#### DOS CANCIONES, Y LA SEGUNDA SE SUMA CUANDO LLEGA
+
+`CANCIONES` lleva la clave de cada nivel a su data URI **como función** —los dos `_B64` son constantes
+de otros archivos y la sola mención de una que no existe tira— y `musCarga(nivel)` decodifica sólo la
+del nivel. **Y apareció un defecto midiendo:** al entrar al nivel largo, `lista: true` y `rms: 0` — la
+fuente se creaba sólo al empezar un intento, así que si la decodificación (1,4 MB) terminaba después,
+**el primer intento se jugaba entero sin música**. Ahora `musEmpalma` arranca la muestra en el segundo
+que le corresponde al instante en que llegó (el reloj ya corre desde `musArranca`), y abrir la lista
+de niveles ya pide la segunda canción. Medido después: 2,5 s después de tocar la ficha, `on: true ·
+lista: true · rms 0,045`.
+
+**Y UN DEFECTO VIEJO, INVISIBLE PARA EL BANCO:** `pasoJuego` hacía `EST.x0 + xDeTiempo(t)`, y
+`musTiempo()` ya devuelve el tiempo desde el cero del nivel porque `t0` se corre hacia atrás al retomar
+un punto de control. O sea que **retomar en el bloque 100 con audio saltaba al 200** en el primer
+cuadro. El banco corre con `SIN_RELOJ`, que integra la x, y por eso nunca lo vio.
+
+#### EL CEL SHADING FINO: CINCO PASOS Y UNA CÁSCARA DE ANCHO CONSTANTE
+
+`MeshToonMaterial` con un mapa de degradado de **cinco** texeles (46 · 96 · 150 · 205 · 236): con dos o
+tres la escena se lee a dibujo animado y las caras del cubo se vuelven parches planos que compiten con
+los picos; con cinco y los dos de arriba juntos, el escalón se nota en la penumbra y no en la luz. El
+contorno es la misma malla dibujada por su cara de atrás **inflada en el shader un número fijo de
+bloques** (`uAncho` 0,042, o sea dos píxeles en un teléfono) **dividido por la escala de cada
+instancia**, que se lee de las columnas de `instanceMatrix`: escalando la matriz, un bloque de doce de
+ancho tendría un borde doce veces más grueso que uno de uno. Las cajas se inflan por `sign(position)`
+y las piezas redondas por la normal; **la cáscara comparte el buffer de matrices** con su malla, así
+que no puede quedar donde el bloque ya no está. El icono lleva su borde pieza por pieza (`conBorde`) y
+el cubo ganó el **marco** de cuatro listones del icono 1 de GD. Costo: de 29-37 llamadas a **44-51**,
+y de 12.300 a **~50.000 triángulos** (los 444 adornos con su cáscara son la mayor parte).
+
+#### LOS TRES ESTILOS, LA CAPA DE ADELANTE Y EL BARRIDO
+
+`ESTILOS` es un puñado de números sobre los mismos materiales: `sol` (telón de foto, reja tenue),
+`neon` (sin telón, cielo casi negro, reja al 30 %, canto ×1,35, bloques más oscuros) y `blanco` (cielo
+casi blanco, bloques al 45 % de valor, **el pico del color del acento** porque sobre blanco un pico
+blanco no existe, adornos del acento por lo mismo). Se aplican en `paletaPaso` con el color del tramo,
+así que un cambio de estilo es el mismo fundido de siete bloques. **Y `ponPaleta` planta el telón sin
+fundido**: medido, la foto del estilo blanco salía con el atardecer al 92 % detrás.
+
+**LA CAPA DE ADELANTE ESTÁ EN LOS MÁRGENES, Y ESO ES UNA CUENTA QUE HICE MAL DOS VECES.** Un punto a
+z = 4,2 se proyecta como si estuviera 1,74 veces más lejos del centro (`9,9/(9,9 − 4,2)`), así que en
+el plano de adelante se ve sólo `camY ± 2,65`. La primera versión los puso en y 5,4 a 8,4 y −1,2 a
+−2,0 —«arriba y abajo del cuadro»— y medido eso es **fuera** del cuadro: de 180 instancias, **una** en
+pantalla y en el borde, y apagar la capa movía el brillo 0,5 sobre 255. El margen de arriba es y 4,75 a
+5,25 (se proyecta en 6,2 a 7,1) y el de abajo 0,55 a 0,95 (cae en el faldón). Con dieciséis por sprite
+y tramo: **4 en cuadro** en los cuatro tramos con `frente` y 0 en los que no, brillo +2,6. Translúcida
+al 44 % porque lo que va por delante puede cruzarse con un pico.
+
+El **barrido** es una cortina del color nuevo pegada a la cámara que cruza en 0,55 s frenando al
+final, disparada desde `paletaPaso` en el mismo cuadro que el color (medido a 0,13 s del portal: `on`,
+opacidad 0,58). Los **adornos de adentro del mapa** —columnas y capiteles en el sol, postes con luz en
+el neón, bloques limpios en el blanco, cadenas colgando de los techos— salen del azar con semilla por
+tramo y viven a z negativa: no pueden tapar un pico. Y el **portal de velocidad** es el mismo óvalo a
+un tercio de alto, apoyado abajo, del color de la velocidad (naranja 0,75x · celeste 1x · verde 1,5x).
+
+#### MEDIDO AL CERRAR
+
+Auditoría `ok: true` en los dos; fases **24/24** y **12/12**; partida completa del nivel nuevo por el
+bot honesto al 100 % con 3/3 monedas; música del nivel nuevo sonando en el primer intento; **cero
+solapamientos** de HUD en vertical girado y en apaisado; la lista de niveles con las dos fichas y el
+`4` de INSANO; los tres idiomas en vivo; las tres calidades (535×247 · 758×350 · 892×412); capa de
+adelante 4/4/4/0; `window.__errs` vacío en las **ocho** corridas. El HTML pasó de 733 KB a **2,82 MB**,
+y esos dos megas son la canción.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de la segunda canción está medido que suena,
+a qué nivel y que empieza en un tiempo, no si el nivel «va» con ella. Y las formas y los estilos están
+juzgados en fotos a la resolución del juego, sin una sola referencia de GD a la vista — las cuatro
+fuentes siguen bloqueadas y Higgsfield en cero.
 
 ### Centésima vuelta (2026-09-04): **ROTOR**, un Geometry Dash de tres temas — la música es el reloj
 

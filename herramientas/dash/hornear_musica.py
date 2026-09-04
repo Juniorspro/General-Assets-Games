@@ -151,12 +151,33 @@ def mide_mp3(d):
 
 def main():
     if len(sys.argv) < 2:
-        print('uso: hornear_musica.py <video o audio>'); return 1
-    x = leer(sys.argv[1])
+        print('uso: hornear_musica.py <video o audio> [--prefijo MUS2] [--salida i_mus2.js] [--bpm-min 100] [--kbps 48]'); return 1
+    # ── UN ARCHIVO POR CANCION, Y EL PREFIJO ES EL NOMBRE DE LAS CONSTANTES ──
+    # Con un solo `i_mus.js` la segunda cancion pisaria a la primera; cada nivel
+    # declara `mus: 'MUS2'` y el juego busca `MUS2_B64`. El bitrate baja para los
+    # temas largos: cuatro minutos a 64 kbps son dos megas de HTML.
+    args = sys.argv[1:]
+    def opt(k, d):
+        if k in args:
+            i = args.index(k); v = args[i + 1]; del args[i:i + 2]; return v
+        return d
+    global BITRATE, SALIDA
+    prefijo = opt('--prefijo', 'MUS')
+    SALIDA = os.path.join(RAIZ, 'herramientas', 'dash', 'partes', opt('--salida', 'i_mus.js'))
+    bpm_min = float(opt('--bpm-min', '0'))
+    BITRATE = int(opt('--kbps', str(BITRATE//1000)))*1000
+    x = leer(args[0])
     m = x.mean(axis=0)
     print('entrada: %.2f s, pico %.3f, rms %.4f' % (len(m)/SR, np.abs(m).max(),
                                                     np.sqrt((m*m).mean())))
     bpm, ofs = tempo(flujo(m))
+    # ── EL DETECTOR PUEDE DEVOLVER LA MITAD DEL TEMPO, Y ESO SE DECIDE ACA ──
+    # Medido en la segunda cancion: la autocorrelacion da 0,689 en 65 BPM y 0,643
+    # en 130 —el MISMO tren de pulsos, contado de a dos o de a uno—. Para el juego
+    # la diferencia no es de gusto: el salto dura un tiempo, y a 65 BPM durarian
+    # 0,92 s (un cubo flotando) contra 0,46 a 130, que es el aire de GD. El primer
+    # tiempo de 65 es tambien un tiempo de 130, asi que la fase no cambia.
+    while bpm_min and bpm < bpm_min: bpm *= 2
     fin, tun = fin_tiktok(m)
     print('tempo %.2f BPM, primer tiempo en %.4f s' % (bpm, ofs))
     print('corte de cola en %.2f s (el «tun» arranca en %s)' % (fin, tun))
@@ -196,10 +217,10 @@ def main():
          '   (`v = 4·BPM/60`), o sea que el tempo de la cancion DEFINE el nivel. Y a',
          '   158 BPM eso da **10,53 bloques por segundo**, que es exactamente la',
          '   velocidad 1x de Geometry Dash (un bloque cada 0,095 s). */']
-    L.append('const MUS_BPM = %.1f;' % bpm)
-    L.append('const MUS_DUR = %.3f;              /* segundos de musica */' % dur)
-    L.append('const MUS_TIEMPOS = %.2f;           /* tiempos que dura */' % tiempos)
-    L.append("const MUS_B64 = 'data:audio/mpeg;base64,%s';" % base64.b64encode(d).decode())
+    L.append('const %s_BPM = %.1f;' % (prefijo, bpm))
+    L.append('const %s_DUR = %.3f;              /* segundos de musica */' % (prefijo, dur))
+    L.append('const %s_TIEMPOS = %.2f;           /* tiempos que dura */' % (prefijo, tiempos))
+    L.append("const %s_B64 = 'data:audio/mpeg;base64,%s';" % (prefijo, base64.b64encode(d).decode()))
     L.append('')
     with open(SALIDA, 'w', encoding='utf-8') as f:
         f.write('\n'.join(L))

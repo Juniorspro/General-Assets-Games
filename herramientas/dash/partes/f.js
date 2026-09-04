@@ -100,25 +100,90 @@ esc3.fog = NIEBLA;
 /* ══════════ LOS MATERIALES ══════════
    Uno por familia y no uno por objeto: cada material es un programa compilado y
    una llamada de dibujo. El color del tema se reescribe al cambiar de nivel. */
-const matSol  = new T.MeshLambertMaterial({ color: 0x171e2d });
-const matPiso = new T.MeshLambertMaterial({ color: 0x2a3448 });
+/* ══════════ EL CEL SHADING, Y POR QUE ES FINO ══════════
+   ── LA LUZ SE ESCALONA EN CINCO PASOS, NO EN DOS ──
+   `MeshToonMaterial` reparte la luz segun un mapa de degradado de N texeles: con
+   dos o tres, la escena se lee a dibujo animado de television y las caras de un
+   cubo se vuelven parches planos que compiten con los picos. Con CINCO pasos y
+   los dos de arriba muy juntos, lo que queda es un escalon en la sombra y una
+   cara iluminada casi continua: se lee a dibujado sin que el bloque deje de ser
+   un bloque. El pedido dice «cell shading muy fino», y fino es esto: el
+   escalonado se nota en la penumbra y no en la luz. */
+function mapaToon(){
+  const d = new Uint8Array([46, 96, 150, 205, 236]);
+  const t = new T.DataTexture(d, 5, 1, T.RedFormat);
+  t.minFilter = t.magFilter = T.NearestFilter; t.needsUpdate = true;
+  return t;
+}
+const TOON = mapaToon();
+const matSol  = new T.MeshToonMaterial({ color: 0x171e2d, gradientMap: TOON });
+const matPiso = new T.MeshToonMaterial({ color: 0x2a3448, gradientMap: TOON });
 const matCanto = new T.MeshBasicMaterial({ color: 0x2de2a8 });
-const matPico = new T.MeshLambertMaterial({ color: 0xeef4ff, emissive: 0x7f8fa6, emissiveIntensity: 0.35 });
+const matPico = new T.MeshToonMaterial({ color: 0xeef4ff, emissive: 0x7f8fa6, emissiveIntensity: 0.35, gradientMap: TOON });
 const matPad  = new T.MeshBasicMaterial({ color: 0xffffff });
 const matOrbe = new T.MeshBasicMaterial({ color: 0xffffff });
-const matSierra = new T.MeshLambertMaterial({ color: 0xdfe7f2, emissive: 0x445064, emissiveIntensity: 0.4 });
-const matMoneda = new T.MeshLambertMaterial({ color: 0xffd447, emissive: 0x8a6a10, emissiveIntensity: 0.7 });
+const matSierra = new T.MeshToonMaterial({ color: 0xdfe7f2, emissive: 0x445064, emissiveIntensity: 0.4, gradientMap: TOON });
+const matMoneda = new T.MeshToonMaterial({ color: 0xffd447, emissive: 0x8a6a10, emissiveIntensity: 0.7, gradientMap: TOON });
+/* ── EL CONTORNO ES UNA CASCARA DADA VUELTA, DE ANCHO CONSTANTE EN EL MUNDO ──
+   Es el truco de siempre: la misma malla, un poco mas grande, dibujada por su
+   cara de ATRAS, asi que lo unico que asoma es un borde alrededor de la
+   silueta. Lo que no es lo de siempre es como se agranda: escalando la matriz de
+   la instancia, un bloque de doce bloques de ancho tendria un borde doce veces
+   mas grueso que uno de uno. Aca la cascara se infla en el shader UN NUMERO FIJO
+   DE BLOQUES —`uAncho`— dividido por la escala de cada instancia, que se lee de
+   las columnas de `instanceMatrix`. Un bloque de 0,04 son dos pixeles en un
+   telefono: eso es «muy fino». Los solidos se inflan por `sign(position)` —una
+   caja crece derecho en sus tres ejes— y las piezas redondas por la normal. */
+const ANCHO_CONTORNO = 0.042;
+function matContorno(porNormal){
+  const m = new T.MeshBasicMaterial({ color: 0x07080e, side: T.BackSide, fog: true });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uAncho = { value: ANCHO_CONTORNO };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uAncho;')
+      .replace('#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 escI = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+        #else
+          vec3 escI = vec3(1.0);
+        #endif
+        ` + (porNormal ? 'transformed += normalize(normal)*uAncho/escI;'
+                       : 'transformed += sign(position)*uAncho/escI;'));
+    m.userData.sh = sh;
+  };
+  return m;
+}
+const matBordeCaja = matContorno(false);
+const matBordeRedondo = matContorno(true);
+/* el contorno de los picos es del color del pico oscurecido y no negro: un pico
+   blanco con borde negro se lee a dibujo de otro juego encima del nuestro */
+const matBordePico = matContorno(true); matBordePico.color.setHex(0x1a2030);
 const matPortalAro = new T.MeshBasicMaterial({ color: 0xffffff });
 const matPortalFondo = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.26,
                                                  depthWrite: false, side: T.DoubleSide });
+/* los adornos de adentro del mapa: piedra mate detras del plano de juego, y las
+   luces sin luz, que es lo que las hace leer a luces */
+const matAdorno = new T.MeshToonMaterial({ color: 0x1e2536, gradientMap: TOON });
+const matAdornoLuz = new T.MeshBasicMaterial({ color: 0xffffff });
+/* la capa de ADELANTE: translucida a proposito. Lo que pasa por delante del
+   jugador no puede tapar un pico, asi que se ve a traves, y no escribe
+   profundidad para que dos que se crucen no se recorten */
+const matFrente = new T.MeshBasicMaterial({ transparent: true, opacity: 0.44, depthWrite: false,
+                                            color: 0xffffff, fog: false });
 /* el portal late con el compas: la matriz de cada uno se reescribe por cuadro,
    que son ocho matrices y ninguna llamada de dibujo */
+/* ── Y EL PORTAL DE VELOCIDAD ES MAS CHICO Y MAS BAJO ──
+   En GD el portal de velocidad no es un ovalo de piso a techo: es una flecha
+   baja que se cruza sin poder esquivarla. Aca es el mismo ovalo a un tercio de
+   alto, apoyado abajo, del color de la velocidad a la que lleva. */
 function ponPortales(pulso){
   if (!INST.portalAro) return;
   const s = 1 + pulso*0.05;
   MUNDO.portales.forEach((p, i) => {
-    _m4.compose(new T.Vector3(p.x, 5.2, -PROF/2 + 0.35), _q.identity(),
-                new T.Vector3(0.95*s, 5.4*s, 1));
+    const vel = p.t === 'vel';
+    _m4.compose(new T.Vector3(p.x, vel ? 2.0 : 5.2, -PROF/2 + 0.35), _q.identity(),
+                new T.Vector3((vel ? 0.62 : 0.95)*s, (vel ? 2.1 : 5.4)*s, 1));
     INST.portalAro.setMatrixAt(i, _m4); INST.portalFondo.setMatrixAt(i, _m4);
   });
   INST.portalAro.instanceMatrix.needsUpdate = true;
@@ -252,10 +317,15 @@ const OCULTO = {};
 function ponTelon(){
   const e = TELON_TEX.p0;
   if (!e || !e.listo || OCULTO.telon){ telon.visible = false; return; }
-  telon.visible = true;
   if (matTelon.map !== e.tex){ matTelon.map = e.tex; matTelon.needsUpdate = true;
                                telonProp = e.prop; }
-  matTelon.opacity = Math.min(1, matTelon.opacity + 0.08);
+  /* la opacidad va hacia lo que pide el estilo: en el neon y en el blanco el
+     telon se apaga, y apagado no se dibuja */
+  const obj = ESTILO.telon;
+  matTelon.opacity += (obj - matTelon.opacity)*0.08;
+  if (Math.abs(matTelon.opacity - obj) < 0.01) matTelon.opacity = obj;
+  telon.visible = matTelon.opacity > 0.01;
+  if (!telon.visible) return;
   /* el corrimiento de la textura ES el paralaje: mover la camara un bloque tiene
      que correr la imagen `p` bloques de pantalla, o sea `p/VISTA_ANCHO` del ancho
      del plano, o sea eso por las copias que caben */
@@ -458,6 +528,13 @@ function mundo3D(){
   const mc = nuevaInst('sol', GEO.caja, matSol, cajas.length, true);
   cajas.forEach((r, i) => ponCaja(mc, i, r.x, r.y, r.w, r.h));
   if (mc) mc.instanceMatrix.needsUpdate = true;
+  /* ── LA CASCARA DEL CONTORNO COMPARTE LAS MATRICES, NO LAS COPIA ──
+     Es la misma geometria con el material de contorno y EL MISMO buffer de
+     matrices de instancia: si se copiara, el dia que un bloque se mueva el borde
+     se queda donde estaba. Y como `frustumCulled` esta apagado en las dos, la
+     cascara no puede desaparecer un cuadro antes que su bloque. */
+  const mcb = nuevaInst('solBorde', GEO.caja, matBordeCaja, cajas.length, false);
+  if (mcb){ mcb.instanceMatrix = mc.instanceMatrix; mcb.renderOrder = -1; }
 
   /* ── EL CANTO LUMINOSO VA EN LA CARA EN LA QUE SE APOYA ──
      Arriba en el piso y los bloques; ABAJO en un techo, porque ahi se apoya por
@@ -488,6 +565,24 @@ function mundo3D(){
     mi.setMatrixAt(i, _m4);
   });
   if (mi) mi.instanceMatrix.needsUpdate = true;
+  const mib = nuevaInst('picoBorde', GEO.pico, matBordePico, picos.length, false);
+  if (mib){ mib.instanceMatrix = mi.instanceMatrix; mib.renderOrder = -1; }
+
+  /* ── LOS ADORNOS DE ADENTRO DEL MAPA ──
+     Columnas, capiteles, postes y cadenas detras del plano de juego —en dos
+     mallas, la piedra y las luces— con su cascara de contorno. Salen de
+     `MUNDO.adornos`, que el generador arma por tramo con el estilo de cada uno. */
+  const ad = (MUNDO.adornos || []);
+  const piedra = ad.filter(a => a.t !== 'luz'), luces = ad.filter(a => a.t === 'luz');
+  const mad = nuevaInst('adorno', GEO.caja, matAdorno, piedra.length, false);
+  piedra.forEach((a, i) => ponCaja(mad, i, a.x, a.y, a.w, a.h, a.z, a.d));
+  if (mad){ mad.instanceMatrix.needsUpdate = true; mad.receiveShadow = true; }
+  const madb = nuevaInst('adornoBorde', GEO.caja, matBordeCaja, piedra.length, false);
+  if (madb){ madb.instanceMatrix = mad.instanceMatrix; madb.renderOrder = -1; }
+  const mal = nuevaInst('adornoLuz', GEO.caja, matAdornoLuz, luces.length, false);
+  luces.forEach((a, i) => ponCaja(mal, i, a.x, a.y, a.w, a.h, a.z, a.d));
+  if (mal) mal.instanceMatrix.needsUpdate = true;
+  armaFrente();
 
   const mpa = nuevaInst('pad', GEO.caja, matPad, MUNDO.pads.length, false);
   MUNDO.pads.forEach((p, i) => ponCaja(mpa, i, p.x, p.y + 0.02, 1, 0.20, -PROF/2, PROF*0.8));
@@ -549,7 +644,7 @@ function mundo3D(){
     mfp.instanceColor = new T.InstancedBufferAttribute(new Float32Array(np*3), 3);
     mfp.renderOrder = 1;
     MUNDO.portales.forEach((p, i) => {
-      _c.set(MODO_COL[p.t] || '#2de2a8');
+      _c.set(p.t === 'vel' ? (VEL_COL[p.k] || '#5ad9ff') : (MODO_COL[p.t] || '#2de2a8'));
       ma.setColorAt(i, _c); mfp.setColorAt(i, _c);
     });
     ma.instanceColor.needsUpdate = true; mfp.instanceColor.needsUpdate = true;
@@ -581,6 +676,103 @@ function armaMotas(N){
   mMotas.instanceMatrix.needsUpdate = true;
 }
 
+/* ══════════ LA CAPA DE ADELANTE ══════════
+   ── LO QUE EL PEDIDO LLAMA «TODO POR ENFRENTE, NO SOLO POR ATRAS» ──
+   Los mismos sprites del fondo, plantados a z POSITIVA —entre la camara y el
+   plano de juego— asi que pasan por delante del jugador y su paralaje es mayor
+   que el del nivel: es lo que en GD hace la capa de «foreground». Tres reglas,
+   las tres por el juego y no por la imagen:
+   · TRANSLUCIDA al 44 %: lo que va por delante puede cruzarse con un pico, y un
+     pico tapado es una muerte que no se ve venir. (Al 30 % y con cinco por tramo
+     no existia: medido, apagarla movia el brillo medio 0,5 sobre 255.)
+   · SOLO EN LOS TRAMOS QUE LA PIDEN (`frente` en la tabla): puesta en los
+     dieciocho seria ruido permanente y dejaria de leerse como un cambio.
+   · Y CHICA: a z = 4,2 la perspectiva agranda 1,74 veces, asi que un sprite de
+     0,9 bloques se ve de 1,6. Mas grande que eso compite con el nivel. */
+const FRENTE_Z = 4.2, FRENTE_N = 16, FRE = [];
+function armaFrente(){
+  for (const m of FRE) esc3.remove(m);
+  FRE.length = 0;
+  if (!DEC.length) return;
+  const tramos = (MUNDO.tramos || []).filter(T => T.frente);
+  if (!tramos.length) return;
+  /* cuatro sprites distintos, elegidos por indice fijo para que sean los mismos
+     en cada intento; cada uno con su malla porque cada uno tiene su textura */
+  const idx = [2, 5, 7, 10].filter(i => i < DEC.length);
+  idx.forEach((i, k) => {
+    const D = DEC[i];
+    const mat = matFrente.clone(); mat.map = D.mat.map; mat.alphaTest = 0.2;
+    const n = tramos.length*FRENTE_N;
+    const m = new T.InstancedMesh(new T.PlaneGeometry(1, 1), mat, n);
+    m.frustumCulled = false; m.renderOrder = 20;
+    let j = 0;
+    for (const T of tramos){
+      const paso = T.w/FRENTE_N;
+      for (let q = 0; q < FRENTE_N; q++){
+        const h = ((((i*2654435761 + q*40503 + k*1013904223 + (T.x | 0)*7919) >>> 0) ^ 0x9e3779b9) >>> 0)/4294967296;
+        const h2 = (((i*374761393 + q*668265263 + (T.x | 0)*2246822519) >>> 0))/4294967296;
+        const alto = 0.50 + 0.36*h2, ancho = alto*D.prop;
+        /* ── EN LOS DOS MARGENES DE LA PANTALLA, Y ESO ES UNA CUENTA ──
+           Un punto a z = 4,2 se proyecta como si estuviera en
+           `camY + (y − camY)·9,9/(9,9 − 4,2)`, o sea 1,74 veces mas lejos del
+           centro. La banda visible sobre el plano de juego es camY ± 4,6, asi
+           que en el plano de adelante se ve solo camY ± 2,65: con la camara en
+           2,8, de 0,2 a 5,4. La primera version los ponia en y 5,4 a 8,4 y en
+           −1,2 a −2,0 —«arriba y abajo del cuadro»— y medido eso es FUERA del
+           cuadro: de 180 instancias, una en pantalla, y en el borde. El margen
+           de arriba es y 4,75 a 5,25 (se proyecta en 6,2 a 7,1) y el de abajo
+           0,55 a 0,95 (se proyecta en el faldon, −1,1 a −0,4). Y van dieciseis
+           por sprite y tramo: con nueve, medido, habia UNA en pantalla. */
+        const y = h < 0.6 ? 4.75 + h*0.5 : 0.55 + h2*0.4;
+        const x = T.x + (q + 0.2 + 0.6*h)*paso + k*paso*0.25;
+        _m4.compose(_v.set(x, y, FRENTE_Z + k*0.15), _q.identity(), _v2.set(ancho, alto, 1));
+        m.setMatrixAt(j++, _m4);
+      }
+    }
+    m.count = j; m.instanceMatrix.needsUpdate = true;
+    m.userData.deco = D;
+    esc3.add(m); FRE.push(m);
+  });
+}
+
+/* ══════════ EL BARRIDO ══════════
+   ── EL CAMBIO DE TRAMO SE ANUNCIA CON UNA CORTINA QUE CRUZA LA PANTALLA ──
+   Es la transicion de GD: una franja del color nuevo que barre de izquierda a
+   derecha en medio segundo, por delante de todo. Va pegada a la camara —como el
+   cielo— asi que no depende de donde este el jugador, y su borde es un degradado
+   para que no se lea a rectangulo pegado encima. Se dispara desde `paletaPaso`,
+   en el MISMO cuadro en que cambia el color, asi que las dos cosas no pueden
+   desincronizarse. */
+function lienzoBarrido(){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 4;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 64, 0);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.35, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.65, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 4);
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
+}
+const matBarrido = new T.MeshBasicMaterial({ map: lienzoBarrido(), transparent: true, opacity: 0.62,
+                                             depthWrite: false, depthTest: false, fog: false, color: 0xffffff });
+const mBarrido = new T.Mesh(new T.PlaneGeometry(1, 1), matBarrido);
+mBarrido.renderOrder = 40; mBarrido.frustumCulled = false; mBarrido.visible = false;
+cam.add(mBarrido);
+const BARRE = { t: 0, T: 0.55 };
+function barre(col){ BARRE.t = BARRE.T; matBarrido.color.set(col); }
+function barrePaso(dt){
+  if (BARRE.t <= 0){ mBarrido.visible = false; return; }
+  BARRE.t = Math.max(0, BARRE.t - dt);
+  const k = 1 - BARRE.t/BARRE.T;
+  const z = -1.2, H = Math.abs(z)*Math.tan(FOV_Y*Math.PI/360), W = H*cam.aspect;
+  const ancho = W*0.9;
+  mBarrido.visible = true;
+  /* de izquierda a derecha, frenando al final: la cortina llega y se disuelve */
+  const x = -W - ancho*0.5 + (2*W + ancho)*(1 - Math.pow(1 - k, 2));
+  mBarrido.position.set(x, 0, z);
+  mBarrido.scale.set(ancho, 2*H*1.05, 1);
+  matBarrido.opacity = 0.62*(1 - k*k);
+}
+
 /* ══════════ LA PALETA ══════════
    Los materiales son compartidos, asi que cambiar de nivel es reescribir seis
    colores y no reconstruir nada. */
@@ -591,8 +783,29 @@ const _pa1 = new T.Color(), _pa2 = new T.Color();
 const _pb1 = new T.Color(), _pb2 = new T.Color();
 const palHex = (v) => (v[0] << 16) | (v[1] << 8) | v[2];
 
+/* ══════════ LOS TRES ESTILOS ══════════
+   ── UN ESTILO ES UN PUÑADO DE NUMEROS SOBRE LOS MISMOS MATERIALES ──
+   `sol` es el de siempre: el telon de foto, cielo claro, reja tenue. `neon` es
+   GD de noche: sin telon, cielo casi negro, la reja fuerte y el canto encendido,
+   los bloques mas oscuros. `blanco` es el minimalismo: cielo claro casi blanco,
+   bloques oscuros que se recortan, la reja apagada, el pico del color del acento
+   en vez de blanco —sobre blanco un pico blanco no existe—. Se aplican con el
+   color del tramo y se funden con el, asi que un cambio de estilo es el mismo
+   fundido de siete bloques que un cambio de color. */
+const ESTILOS = {
+  sol:    { telon: 1.0, cieloK: CIELO_K, reja: 0.11, rejaPulso: 0.10, canto: 1.0, picoBlanco: 1, solK: 0.55, pisoK: 0.60, exp: 1.10, motas: 0.28 },
+  neon:   { telon: 0.0, cieloK: 0.55,    reja: 0.30, rejaPulso: 0.26, canto: 1.35, picoBlanco: 1, solK: 0.30, pisoK: 0.36, exp: 1.02, motas: 0.55 },
+  blanco: { telon: 0.0, cieloK: 3.6,     reja: 0.05, rejaPulso: 0.04, canto: 0.9,  picoBlanco: 0, solK: 0.40, pisoK: 0.46, exp: 1.18, motas: 0.10 }
+};
+let ESTILO = ESTILOS.sol, ESTILO_NOM = 'sol';
+function estiloDe(x){
+  const T0 = tramoDe(x);
+  return (T0 && ESTILOS[T0.estilo]) ? T0.estilo : 'sol';
+}
+
 function ponColores(C1, C2){
-  matCanto.color.copy(C2);
+  const E = ESTILO;
+  matCanto.color.copy(C2).multiplyScalar(E.canto);
   matReja.color.copy(C2);
   /* las capas van del color del tema, y la de CERCA mas apagada: si las tres
      tuvieran el mismo brillo, la profundidad se perderia — lo que da distancia
@@ -608,7 +821,16 @@ function ponColores(C1, C2){
   matTelon.color.copy(C2).lerp(_c.setHex(0xffffff), 0.58);
   matPad.color.setHex(0xffd447);
   /* el cielo se tinta con el color del nivel, y el degradado ya trae la forma */
-  matCielo.color.copy(C1).multiplyScalar(CIELO_K);
+  matCielo.color.copy(C1).multiplyScalar(E.cieloK);
+  /* el pico: blanco en los estilos oscuros, del acento en el blanco */
+  if (E.picoBlanco){ matPico.color.setHex(0xeef4ff); matPico.emissive.setHex(0x7f8fa6); }
+  else { matPico.color.copy(C2); matPico.emissive.copy(C2).multiplyScalar(0.35); }
+  matAdornoLuz.color.copy(C2).lerp(_c.setHex(0xffffff), 0.35);
+  /* los adornos van del color del tema hacia una piedra oscura; en el estilo
+     blanco el tema ES claro, asi que ahi se toman del acento: sobre un cielo
+     casi blanco una columna clara no existe */
+  if (E.picoBlanco) matAdorno.color.copy(C1).lerp(_c.setHex(0x1e2536), 0.6);
+  else matAdorno.color.copy(C2).lerp(_c.setHex(0x222a3a), 0.5);
   /* ── EL BLOQUE Y EL PISO SALEN DEL COLOR DEL TEMA, PERO POR DEBAJO DEL CIELO ──
      Estaban en dos azules grises escritos a mano, y eso se veia: en el nivel 3
      —que es rojo— el piso salia AZUL y el techo del pasillo de la nave se leia a
@@ -621,9 +843,12 @@ function ponColores(C1, C2){
      funciona es MEZCLAR hacia un piso de gris: el bloque se queda con el tinte
      del tema y con un valor que no puede caer a cero, y el piso va un escalon
      por encima del bloque, que es lo que los separa. */
-  matSol.color.copy(C1).lerp(_c.setHex(0x2b3448), 0.55);
-  matPiso.color.copy(C1).lerp(_c.setHex(0x3d4a66), 0.60);
-  matFaldon.color.copy(C1).lerp(_c.setHex(0x3d4a63), 0.55);
+  matSol.color.copy(C1).lerp(_c.setHex(0x2b3448), E.solK);
+  matPiso.color.copy(C1).lerp(_c.setHex(0x3d4a66), E.pisoK);
+  matFaldon.color.copy(C1).lerp(_c.setHex(0x3d4a63), E.pisoK);
+  /* en el estilo blanco el cielo es casi blanco y los bloques tienen que ser
+     OSCUROS para recortarse: se les baja el valor a la mitad */
+  if (!E.picoBlanco){ matSol.color.multiplyScalar(0.45); matPiso.color.multiplyScalar(0.5); matFaldon.color.multiplyScalar(0.5); }
   /* ── Y EL SUELO DEL HEMISFERICO NO PUEDE SER EL COLOR DEL TEMA A SECAS ──
      Un `HemisphereLight` reparte segun hacia donde mira la cara: toda cara que
      mire al PISO recibe `groundColor`, y con el `C1` de este nivel —un ciruela
@@ -653,10 +878,15 @@ function ponColores(C1, C2){
      del recorte, que es justo la fila que cae en y = 0) y se multiplica por el
      tinte del telon, que es lo que el material le hace a la foto: asi la niebla
      y el horizonte son el MISMO producto y no dos cuentas que se separan. */
-  if (typeof IMG_HOR !== 'undefined' && telon.visible){
+  /* ── Y CON EL TELON APAGADO LA NIEBLA VUELVE AL CIELO DEL ESTILO ──
+     Sin foto detras, el horizonte es el cielo en degradado: `C1 · cieloK` en el
+     borde de arriba y gris `1/CIELO_K` abajo, o sea que la niebla es `C1` por la
+     relacion entre los dos. En el estilo blanco eso da un gris claro y en el neon
+     casi negro, que es lo que hay detras en cada caso. */
+  if (typeof IMG_HOR !== 'undefined' && telon.visible && E.telon > 0){
     const tc = matTelon.color;
     NIEBLA.color.setRGB(IMG_HOR[0]*tc.r, IMG_HOR[1]*tc.g, IMG_HOR[2]*tc.b);
-  } else NIEBLA.color.copy(C1);
+  } else NIEBLA.color.copy(C1).multiplyScalar(E.cieloK/CIELO_K);
   sol.color.setHex(0xffffff);
 }
 
@@ -688,8 +918,11 @@ function paletaPaso(N){
        Sin el destello el cambio se lee a que el juego cambio de nivel; con el, se
        lee a un cambio de tramo del tema. Va DESPUES de fijar el color de destino,
        porque el destello se pinta de ese color. */
-    if (nuevo){ destella('#' + _pb2.getHexString(), 0.52); sacude(0.16); }
+    if (nuevo){ destella('#' + _pb2.getHexString(), 0.52); sacude(0.16); barre('#' + _pb2.getHexString()); }
     PAL.i = sec; PAL.x0 = T0 ? T0.x : JUG.x; PAL.listo = false;
+    /* el estilo del tramo entra con el color: es la misma decision */
+    const en = estiloDe(JUG.x);
+    if (en !== ESTILO_NOM){ ESTILO_NOM = en; ESTILO = ESTILOS[en]; }
   }
   if (PAL.listo) return;
   const k = cl((JUG.x - PAL.x0)/PAL_FUNDE, 0, 1);
@@ -702,6 +935,13 @@ function paletaPaso(N){
 function ponPaleta(N){
   PAL.i = -1;
   paletaPaso(N);
+  /* ── Y EL TELON SE PLANTA EN LO QUE PIDE EL ESTILO, SIN FUNDIDO ──
+     `ponPaleta` es «poner la paleta de una»: la llaman el armado del nivel y la
+     sonda que fotografia un instante. El fundido del telon es por cuadro, asi
+     que sin esto la foto del estilo blanco salia con el atardecer al 92 %
+     detras —medido— y el primer cuadro de una partida arrancaba con el telon del
+     tramo anterior. */
+  matTelon.opacity = ESTILO.telon;
 }
 
 /* ══════════ EL JUGADOR ══════════
@@ -742,7 +982,19 @@ function sqPaso(dt){
   SQ.x += SQ.v*dt;
   SQ.x = cl(SQ.x, -0.34, 0.34);
 }
-const matJugA = new T.MeshLambertMaterial({ color: 0x2de2a8, emissive: 0x0e5a44, emissiveIntensity: 0.55 });
+const matJugA = new T.MeshToonMaterial({ color: 0x2de2a8, emissive: 0x0e5a44, emissiveIntensity: 0.55, gradientMap: TOON });
+/* ── EL ICONO LLEVA SU CONTORNO PIEZA POR PIEZA ──
+   Cada malla del icono con material A —el cuerpo, el fuselaje, el torso— recibe
+   una cascara hermana: misma geometria, material de contorno, hija del mismo
+   grupo asi que hereda posicion, giro y escala. El borde del icono es lo que en
+   GD lo separa del fondo a cualquier color: un cubo verde sobre un tramo verde
+   sigue teniendo silueta. */
+function conBorde(m, redondo){
+  const b = new T.Mesh(m.geometry, redondo ? matBordeRedondo : matBordeCaja);
+  b.position.copy(m.position); b.rotation.copy(m.rotation); b.scale.copy(m.scale);
+  b.renderOrder = -1;
+  return b;
+}
 const matJugB = new T.MeshBasicMaterial({ color: 0x5ad9ff });
 /* la cupula del ovni: vidrio, o sea el color secundario casi transparente */
 const matDomo = new T.MeshBasicMaterial({ color: 0x5ad9ff, transparent: true, opacity: 0.32,
@@ -763,17 +1015,27 @@ function cuboIcono(esc){
   const g = new T.Group();
   if (FORMAS[ICONO.forma] === 'diamante'){
     const cu = new T.Mesh(new T.OctahedronGeometry(0.62), matJugA);
-    cu.castShadow = true; g.add(cu);
+    cu.castShadow = true; g.add(cu); g.add(conBorde(cu, true));
     const nu = new T.Mesh(new T.OctahedronGeometry(0.30), matJugB);
     nu.position.z = 0.42; g.add(nu);
   } else if (FORMAS[ICONO.forma] === 'redondo'){
     const cu = new T.Mesh(GEO.esfera, matJugA);
-    cu.scale.setScalar(JUG_LADO*1.08); cu.castShadow = true; g.add(cu);
+    cu.scale.setScalar(JUG_LADO*1.08); cu.castShadow = true; g.add(cu); g.add(conBorde(cu, true));
     const nu = new T.Mesh(GEO.esfera, matJugB);
     nu.scale.setScalar(JUG_LADO*0.46); nu.position.z = 0.34; g.add(nu);
   } else {
     const cu = new T.Mesh(GEO.caja, matJugA);
-    cu.scale.setScalar(JUG_LADO); cu.castShadow = true; g.add(cu);
+    cu.scale.setScalar(JUG_LADO); cu.castShadow = true; g.add(cu); g.add(conBorde(cu, false));
+    /* ── EL CUBO DE GD TIENE MARCO ──
+       Un borde del color secundario en la cara de adelante, que es lo que
+       separa el icono 1 de una caja lisa: cuatro listones finos alrededor de la
+       cara, y adentro la cara con los dos ojos y la boca. */
+    const L = JUG_LADO, e = L*0.09;
+    for (const [sx, sy, w, h] of [[0, L/2 - e/2, L, e], [0, -L/2 + e/2, L, e],
+                                  [-L/2 + e/2, 0, e, L], [L/2 - e/2, 0, e, L]]){
+      const li = new T.Mesh(GEO.caja, matJugB);
+      li.scale.set(w, h, L*0.08); li.position.set(sx, sy, L*0.50); g.add(li);
+    }
     /* la cara: dos ojos y no un cuadrado, que es lo que en GD hace que un cubo
        sea alguien y no una caja */
     for (const sx of [-0.19, 0.19]){
@@ -819,7 +1081,7 @@ function ponIcono(){
        la foto: el cubo montado ocupaba mas que la nave). En GD la nave es el
        vehiculo y el cubo es el pasajero, asi que el fuselaje mide 0,42 de alto y
        el cubo va medio HUNDIDO en el, como en una cabina abierta. */
-    const fu = cajita(matJugA, 1.02, 0.42, 0.52, -0.04, -0.14); fu.castShadow = true; g.add(fu);
+    const fu = cajita(matJugA, 1.02, 0.42, 0.52, -0.04, -0.14); fu.castShadow = true; g.add(fu); g.add(conBorde(fu, false));
     g.add(cajita(matJugB, 1.06, 0.08, 0.56, -0.04, -0.06));              /* la franja */
     const tr = new T.Mesh(new T.ConeGeometry(0.20, 0.42, 10), matJugB);
     tr.rotation.z = -Math.PI/2; tr.position.set(0.68, -0.14, 0); g.add(tr);
@@ -835,7 +1097,7 @@ function ponIcono(){
   } else if (M === 'bola'){
     /* la bola rueda: el aro y el punto son lo que hace visible el giro */
     const cu = new T.Mesh(GEO.esfera, matJugA);
-    cu.scale.setScalar(0.88); cu.castShadow = true; g.add(cu);
+    cu.scale.setScalar(0.88); cu.castShadow = true; g.add(cu); g.add(conBorde(cu, true));
     const ar = new T.Mesh(GEO.aro, matJugB);
     ar.scale.setScalar(0.92); ar.position.z = 0.16; g.add(ar);
     const pu = new T.Mesh(GEO.esfera, matJugB);
@@ -843,7 +1105,7 @@ function ponIcono(){
   } else if (M === 'ovni'){
     /* el plato con su borde, y el cubo ADENTRO de la cupula de vidrio */
     const pl = new T.Mesh(new T.CylinderGeometry(0.34, 0.58, 0.20, 18), matJugA);
-    pl.position.y = -0.22; pl.castShadow = true; g.add(pl);
+    pl.position.y = -0.22; pl.castShadow = true; g.add(pl); g.add(conBorde(pl, true));
     const bo = new T.Mesh(GEO.aro, matJugB);
     bo.scale.set(1.36, 1.36, 0.7); bo.rotation.x = Math.PI/2; bo.position.y = -0.20; g.add(bo);
     const cu = cuboIcono(0.44); cu.position.y = 0.06; g.add(cu);
@@ -854,11 +1116,11 @@ function ponIcono(){
        es una punta de flecha y nada mas, y la cinta que deja es el personaje */
     const cu = new T.Mesh(new T.ConeGeometry(0.36, 0.96, 3), matJugA);
     cu.rotation.z = -Math.PI/2; cu.rotation.y = Math.PI/6; cu.scale.z = 0.55;
-    cu.castShadow = true; g.add(cu);
+    cu.castShadow = true; g.add(cu); g.add(conBorde(cu, true));
     g.add(cajita(matJugB, 0.34, 0.09, 0.30, -0.16, 0, 0.02));
   } else if (M === 'robot'){
     /* torso, cabeza y dos piernas con pie; las piernas se animan en `ponJug` */
-    const to = cajita(matJugA, 0.58, 0.50, 0.46, 0, 0.16); to.castShadow = true; g.add(to);
+    const to = cajita(matJugA, 0.58, 0.50, 0.46, 0, 0.16); to.castShadow = true; g.add(to); g.add(conBorde(to, false));
     g.add(cajita(matJugB, 0.30, 0.18, 0.30, 0.06, 0.50));
     g.add(cajita(matJugB, 0.10, 0.08, 0.10, 0.22, 0.52, 0.16));      /* el ojo */
     for (const sx of [-0.17, 0.17]){
@@ -868,7 +1130,7 @@ function ponIcono(){
       g.add(pi); JUGP.piernas.push(pi);
     }
   } else if (M === 'arana'){
-    const cu = cajita(matJugA, 0.74, 0.34, 0.54, -0.04, 0.02); cu.castShadow = true; g.add(cu);
+    const cu = cajita(matJugA, 0.74, 0.34, 0.54, -0.04, 0.02); cu.castShadow = true; g.add(cu); g.add(conBorde(cu, false));
     const ca = new T.Mesh(GEO.esfera, matJugB);
     ca.scale.setScalar(0.34); ca.position.set(0.40, 0.06, 0); g.add(ca);
     /* ocho patas, cuatro por lado, con la rodilla por ENCIMA del lomo: es la
@@ -1106,6 +1368,7 @@ function acerca(f){ EFE.zoom = f; }
 
 function efePaso(dt){
   estelaPaso(dt);
+  barrePaso(dt);
   EFE.sac = Math.max(0, EFE.sac - dt*3.4);
   EFE.zoom += (0 - EFE.zoom)*Math.min(1, dt*4.5);
   const a = EFE.sac*EFE.sac;                   /* al cuadrado: cae mas natural */
@@ -1227,7 +1490,7 @@ function pinta(){
 
   /* el canto y la reja laten con el compas: es lo unico estetico del juego y no
      cuesta ni una llamada de dibujo, porque los materiales son compartidos */
-  matReja.opacity = 0.11 + pulso*0.10;
+  matReja.opacity = ESTILO.reja + pulso*ESTILO.rejaPulso;
   /* el fondo late con el compas, y CADA CAPA CON SU FUERZA: latiendo todas
      igual, las tres se leen como una sola imagen y el paralaje deja de contar */
   /* la decoracion late con el compas: cada capa con su fuerza, porque latiendo
@@ -1243,8 +1506,16 @@ function pinta(){
        aerea, y es lo unico que separa el fondo del nivel */
     D.mat.color.copy(_pDeco).multiplyScalar(DECO_BRI[D.capa]*(1 + pulso*0.10));
   }
-  matMotas.opacity = 0.28 + pulso*0.42;
-  ren.toneMappingExposure = 1.10 + pulso*0.12;
+  matMotas.opacity = ESTILO.motas + pulso*0.42;
+  ren.toneMappingExposure = ESTILO.exp + pulso*0.12;
+  /* la capa de adelante se enciende solo en los tramos que la piden; las mallas
+     estan puestas en esos tramos, asi que fuera de ellos no hay nada que dibujar
+     en pantalla igual — pero si nada que recorrer */
+  for (const m of FRE){
+    const D = m.userData.deco;
+    m.visible = !!D.listo && !OCULTO.frente;
+    if (m.visible) m.material.color.copy(_p2).lerp(_c.setHex(0xffffff), 0.5);
+  }
 
   /* el jugador */
   ponJug();

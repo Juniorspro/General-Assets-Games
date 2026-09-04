@@ -55,7 +55,9 @@ function guardaProg(){
    la x — del tema en la partida de verdad, integrada en el bot y en el respaldo
    sin audio. */
 function avanza(c, med, dt, apretado, xForzada){
-  c.x = (xForzada == null) ? c.x + med.v*dt : xForzada;
+  /* la velocidad es la del TRAMO: 1x, 1,5x o 0,75x. Es la misma tabla de la
+     que sale `xDeTiempo`, asi que el reloj y la integracion no se separan. */
+  c.x = (xForzada == null) ? c.x + med.v*velEn(c.x)*dt : xForzada;
   pasoCuerpo(c, med, dt, apretado);
 }
 
@@ -107,7 +109,7 @@ function copia(c){
      de cada rama y la rama mide otro juego. */
   return { x: c.x, y: c.y, vy: c.vy, grav: c.grav, modo: c.modo,
            piso: c.piso, vivo: c.vivo, giro: c.giro, apretado: c.apretado,
-           carga: c.carga, mira: c.mira,
+           carga: c.carga, mira: c.mira, vel: c.vel,
            /* los orbes gastados son del INTENTO: la copia se los lleva para que
               un rollout no le gaste un orbe al cuerpo de verdad */
            uso: c.uso ? c.uso.slice() : null };
@@ -141,7 +143,10 @@ function botNave(c, med){
      pared en la que todavia estaba a x 151,43. Hay que mirar desde media caja
      para atras: mientras el cuerpo siga adentro de la ranura, la ranura es el
      destino. */
-  for (let d = -0.6; d <= 10; d += 0.4){
+  /* el barrido mide en bloques, y a 1,5x los mismos diez bloques son dos
+     tercios del tiempo: se estira con la velocidad del tramo */
+  const vk = velEn(c.x);
+  for (let d = -0.6; d <= 10*vk; d += 0.4){
     const h = huecoLibre(c.x + d, alto);
     if (h[1] - h[0] < alto - 1.2){ obj = (h[0] + h[1])*0.5 - JUG_LADO*0.5; break; }
   }
@@ -248,8 +253,13 @@ function botElige(c, med, pasos, mira){
   return prim;
 }
 
-/* juega el nivel que ya esta en MUNDO y devuelve cuanto llego */
-function juegaSolo(opt){
+/* ── EL BOT JUEGA POR REBANADAS, Y `juegaSolo` ES LA REBANADA UNICA ──
+   El iterador guarda el cuerpo y el contador y avanza `n` pasos por llamada:
+   asi el mismo bot valida un nivel de treinta segundos de una y uno de cuatro
+   minutos en el fondo, seis milisegundos por vez. Con dos bucles —uno entero y
+   uno por rebanadas— el dia que cambie una regla del bot uno de los dos queda
+   midiendo otro juego. */
+function juegaSoloIter(opt){
   const o = opt || {};
   const med = MUNDO.med;
   const azar = !!o.azar;
@@ -264,19 +274,60 @@ function juegaSolo(opt){
      un tramo que se pasa por casualidad */
   const c = {}; jugPone(c, o.x0 || 0);
   for (const ob of MUNDO.orbes) ob.usado = false;
-  let i = 0, tope = Math.ceil((MUNDO.largo/med.v)*60) + 400;
+  /* el tope en pasos sale del largo en TIEMPO, no en bloques: a 1,5x los mismos
+     bloques duran menos */
+  let i = 0, tope = Math.ceil(tiempoDeX(MUNDO.largo)*60/med.bpm*60) + 400;
   let mon = 0;
-  while (c.vivo && c.x < MUNDO.largo && i < tope){
-    const a = azar ? (az() < 0.10) : botElige(c, med, pasos, mira);
-    avanza(c, med, DT, a);
-    for (const m of MUNDO.monedas)
-      if (!m.tomada && Math.abs(m.x - c.x) < 0.7 && Math.abs(m.y - (c.y + 0.43)) < 0.8){
-        m.tomada = true; mon++;
+  const monedas = MUNDO.monedas, largo = MUNDO.largo;
+  return {
+    avanza(n){
+      for (let k = 0; k < n; k++){
+        if (!(c.vivo && c.x < largo && i < tope)) return true;
+        const a = azar ? (az() < 0.10) : botElige(c, med, pasos, mira);
+        avanza(c, med, DT, a);
+        for (const m of monedas)
+          if (!m.tomada && Math.abs(m.x - c.x) < 0.7 && Math.abs(m.y - (c.y + 0.43)) < 0.8){
+            m.tomada = true; mon++;
+          }
+        i++;
       }
-    i++;
-  }
-  return { pct: Math.round(cl(c.x/MUNDO.largo, 0, 1)*100), pasos: i, vivo: c.vivo,
-           murioEn: c.vivo ? -1 : Math.round(c.x), monedas: mon, largo: MUNDO.largo };
+      return !(c.vivo && c.x < largo && i < tope);
+    },
+    res(){
+      return { pct: Math.round(cl(c.x/largo, 0, 1)*100), pasos: i, vivo: c.vivo,
+               murioEn: c.vivo ? -1 : Math.round(c.x), monedas: mon, largo };
+    }
+  };
+}
+/* juega el nivel que ya esta en MUNDO y devuelve cuanto llego */
+function juegaSolo(opt){
+  const it = juegaSoloIter(opt);
+  while (!it.avanza(20000));
+  return it.res();
+}
+
+/* ══════════ LA VALIDACION DE FONDO ══════════
+   El nivel se genera en un mundo APARTE, y cada rebanada cambia `MUNDO` por ese
+   mundo, avanza seis milisegundos de bot y lo devuelve: el menu que corre
+   detras no se entera. El resultado queda en `VALIDADO[id]`, que es lo que la
+   lista de niveles y la sonda miran. Si el bot no lo termina, la ficha lo dice —
+   un nivel que no se puede pasar tiene que cantarlo el juego y no el jugador. */
+const VALIDADO = {};
+function validaFondo(id){
+  const Ma = MUNDO, M1 = mundoNuevo();
+  MUNDO = M1; generaNivel(id, 1); const it = juegaSoloIter({}); MUNDO = Ma;
+  const t0 = performance.now();
+  const paso = () => {
+    const Mv = MUNDO; MUNDO = M1;
+    const t1 = performance.now(); let fin = false;
+    while (!fin && performance.now() - t1 < 6) fin = it.avanza(30);
+    MUNDO = Mv;
+    if (!fin){ setTimeout(paso, 0); return; }
+    const r = it.res();
+    VALIDADO[id] = { ok: r.pct >= 100, pct: r.pct, murio: r.murioEn, monedas: r.monedas,
+                     ms: Math.round(performance.now() - t0) };
+  };
+  setTimeout(paso, 0);
 }
 
 /* ══════════ LA VALIDACION ══════════
@@ -320,20 +371,31 @@ function restaura(s){
   const c = s.c;
   JUG.x = c.x; JUG.y = c.y; JUG.vy = c.vy; JUG.grav = c.grav; JUG.modo = c.modo;
   JUG.piso = c.piso; JUG.vivo = true; JUG.giro = c.giro; JUG.apretado = false;
+  JUG.vel = c.vel; JUG.uso = c.uso ? c.uso.slice() : new Uint8Array(MUNDO.orbes.length);
   for (let i = 0; i < MUNDO.orbes.length; i++) MUNDO.orbes[i].usado = s.orbes[i];
   for (let i = 0; i < MUNDO.monedas.length; i++) MUNDO.monedas[i].tomada = s.mon[i];
 }
 
 /* las semillas validadas se buscan UNA vez, en la pantalla de carga: validar al
    entrar a un nivel serian dos segundos de nada justo cuando el jugador ya toco */
+/* ── Y LOS LARGOS SE VALIDAN EN EL FONDO ──
+   Un nivel de veinte compases se juega en doscientos milisegundos y se espera; uno
+   de ciento treinta y seis tarda cinco segundos y se valida en rebanadas mientras
+   el menu corre. El corte esta en cuarenta compases, que son unos ocho décimas
+   de segundo de bot. Las semillas ya no eligen geometria —los dos niveles estan
+   escritos— asi que la de un nivel largo es 1 y punto. */
 const SEMILLAS = [];
 function preparaNiveles(){
-  for (let i = 0; i < NIVELES.length; i++){ armaNivel(i); SEMILLAS[i] = MUNDO.semilla; }
+  for (let i = 0; i < NIVELES.length; i++){
+    if ((NIVELES[i].compases || 0) <= 40){ armaNivel(i); SEMILLAS[i] = MUNDO.semilla; }
+    else { SEMILLAS[i] = 1; validaFondo(i); }
+  }
   return SEMILLAS.slice();
 }
 
 function arranca(nivel){
   EST.nivel = nivel;
+  musCarga(nivel);
   generaNivel(nivel, SEMILLAS[nivel] || 1);
   EST.mejor = PROG.niv[nivel].mejor;
   EST.gano = false; EST.muerto = 0;
@@ -406,7 +468,13 @@ function pasoJuego(dt, apretado){
      adelantar la simulacion sin esperarla en tiempo real. Y no es un atajo: es
      el mismo camino que usa el juego cuando no hay audio. */
   const t = SIN_RELOJ ? null : musTiempo();
-  const xf = t == null ? null : cl(EST.x0 + xDeTiempo(t), EST.x0, MUNDO.largo + 8);
+  /* ── LA X DEL RELOJ ES ABSOLUTA: NO SE LE SUMA EL PUNTO DE PARTIDA ──
+     `musTiempo()` ya devuelve el tiempo musical desde el CERO del nivel —el t0
+     se corre hacia atras al retomar un punto de control— y `xDeTiempo` lo lleva
+     a bloques absolutos. Estaba escrito `EST.x0 + xDeTiempo(t)`, o sea que al
+     retomar en el bloque 100 el primer cuadro con audio saltaba al 200. El banco
+     no lo veia porque corre con `SIN_RELOJ`, que integra la x. */
+  const xf = t == null ? null : cl(xDeTiempo(t), EST.x0, MUNDO.largo + 8);
   /* ── EL SALTO PEDIDO SE GUARDA UNAS CENTESIMAS ──
      Un toque puede durar menos que un paso de fisica —16 ms— y entonces se
      perderia entero. Con el pedido guardado, un toque cortito cuenta igual. */

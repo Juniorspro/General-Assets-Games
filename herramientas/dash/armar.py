@@ -23,7 +23,7 @@ import io, os, sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PARTES = os.path.join(AQUI, 'partes')
-ORDEN = ['a.html', 'i_mus.js', 'i_img.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'z.html']
+ORDEN = ['a.html', 'i_mus.js', 'i_mus2.js', 'i_img.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'z.html']
 
 trozos = []
 for n in ORDEN:

@@ -100,7 +100,7 @@ function pintaLista(){
       + '<div class="n">' + N.nom + '</div>'
       + '<div class="d" style="color:' + cc + '99">' + difNom(N.dif) + ' · ' + N.bpm + ' BPM · ' + N.compases + '</div>'
       + '<div class="mo" style="color:' + (P.mon.some(m => m) ? '#ffd447' : 'rgba(255,255,255,.22)') + '">' + mon + '</div>'
-      + '<div class="cara d' + N.dif + '">' + (P.hecho ? '✓' : N.dif) + '</div>'
+      + '<div class="cara d' + N.dif + '">' + (P.hecho ? '✓' : (VALIDADO[i] && !VALIDADO[i].ok ? '!' : N.dif)) + '</div>'
       + '<i class="pb" style="width:' + P.mejor + '%"></i>';
     b.onclick = () => { son('clic'); entra(i); };
     L.appendChild(b);
@@ -153,7 +153,8 @@ function pintaHud(forzar){
     HUD.mej = EST.mejor;
     $('mejor').textContent = TX('mejor') + ' ' + EST.mejor + '%';
   }
-  const t = NIVELES[EST.nivel].nom + ' · ' + NIVELES[EST.nivel].bpm;
+  const vk = velEn(JUG.x);
+  const t = NIVELES[EST.nivel].nom + ' · ' + NIVELES[EST.nivel].bpm + (vk !== 1 ? ' · ' + vk + 'x' : '');
   if (forzar || HUD.tema !== t){ HUD.tema = t; $('tema').textContent = t; }
   /* ── Y EL MODO SE DICE, PORQUE LAS REGLAS CAMBIAN OCHO VECES ──
      En un nivel de un solo modo el rotulo seria ruido; con ocho, lo que el dedo
@@ -198,11 +199,13 @@ function sigue(){
 }
 function salir(){ EST.corriendo = false; musPara(); pantalla('pMenu'); pintaLista(); }
 
-/* ── CON UN SOLO NIVEL, JUGAR ENTRA DIRECTO ──
-   Una lista de un elemento no es una eleccion, es un peaje: dos toques para hacer
-   lo unico que se puede hacer. La pantalla de niveles se queda igual —muestra el
-   mejor porcentaje y las monedas— y se llega por el boton de al lado. */
-$('bJugar').onclick = () => { son('clic'); entra(0); };
+/* ── CON DOS NIVELES, JUGAR ABRE LA LISTA ──
+   Con uno solo entraba directo, porque una lista de un elemento es un peaje. Con
+   dos temas la lista ES la eleccion: cada ficha dice el nombre, el tempo, la
+   dificultad, el mejor porcentaje y las monedas. */
+/* y abrir la lista ya pide la segunda cancion: asi para cuando se toca la ficha
+   la decodificacion lleva un segundo de ventaja */
+$('bJugar').onclick = () => { son('clic'); pintaLista(); pantalla('pNiveles'); musCarga(1); };
 $('bNiv') && ($('bNiv').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); });
 $('bIconos').onclick = () => { son('clic'); pantalla('pIconos'); pintaFilas(); };
 $('bAjustes').onclick = () => { son('clic'); pantalla('pAjustes'); pintaFilas(); };
@@ -411,7 +414,7 @@ window.__R = {
     return { p: EST.p, nivel: EST.nivel, nom: NIVELES[EST.nivel].nom, pct: EST.pct,
              mejor: EST.mejor, intentos: EST.intentos, practica: EST.practica,
              corriendo: EST.corriendo, gano: EST.gano, chk: CHK.lista.length,
-             lang: LANG, cal: CALIDAD, semillas: SEMILLAS.slice(),
+             lang: LANG, cal: CALIDAD, semillas: SEMILLAS.slice(), validado: VALIDADO,
              jug: { x: +JUG.x.toFixed(3), y: +JUG.y.toFixed(3), vy: +JUG.vy.toFixed(3),
                     modo: JUG.modo, grav: JUG.grav, piso: JUG.piso, vivo: JUG.vivo },
              largo: MUNDO.largo, pasos: PASOS, errs: window.__errs.length };
@@ -556,15 +559,45 @@ window.__R = {
      en la cadena de orbes del final arrancando unos pasos mas tarde (una corrida
      partida en tres tandas empezo con otra fase y cayo en x 286,4). Un tramo que
      depende de la fase de entrada es un tramo que se pasa por casualidad. */
-  fases(n){
-    generaNivel(0, 1);
-    const out = [], paso = MUNDO.med.v/60;
+  fases(n, nivel){
+    generaNivel(nivel | 0, 1);
+    const out = [], paso = MUNDO.med.v*velEn(0)/60;
     for (let k = 0; k < (n || 12); k++){
       const r = juegaSolo({ x0: paso*k/(n || 12) });
       out.push({ k, pct: r.pct, murio: r.murioEn });
     }
     return out;
   },
+  /* la capa de adelante, medida: donde caen sus instancias en pantalla y cuanto
+     miden, comparado contra un bloque del plano de juego */
+  frente(){
+    const out = [];
+    const _mm = new T.Matrix4(), _pp = new T.Vector3(), _ss = new T.Vector3(), _qq = new T.Quaternion();
+    cam.updateMatrixWorld(true);
+    for (const m of FRE){
+      for (let i = 0; i < m.count; i++){
+        m.getMatrixAt(i, _mm); _mm.decompose(_pp, _qq, _ss);
+        const a = _pp.clone().project(cam);
+        if (Math.abs(a.x) > 1.2 || Math.abs(a.y) > 1.2) continue;
+        const b = _pp.clone().add(new T.Vector3(0, _ss.y, 0)).project(cam);
+        out.push({ x: +((a.x + 1)/2).toFixed(3), y: +((1 - a.y)/2).toFixed(3),
+                   altoPant: +Math.abs((b.y - a.y)/2).toFixed(3), altoMundo: +_ss.y.toFixed(2), z: +_pp.z.toFixed(1) });
+      }
+    }
+    const bloque = Math.abs((proy(JUG.x, 1)[1] - proy(JUG.x, 0)[1]));
+    return { enCuadro: out.length, total: FRE.reduce((a, m) => a + m.count, 0), bloquePant: +bloque.toFixed(3), lista: out.slice(0, 6) };
+  },
+  /* la tabla de tramos tal como quedo generada: x, ancho, velocidad y tiempos */
+  tramos(nivel){
+    generaNivel(nivel | 0, 1);
+    return { largo: +MUNDO.largo.toFixed(2), tiempos: +tiempoDeX(MUNDO.largo).toFixed(2),
+             portales: MUNDO.portales.map(p => [+p.x.toFixed(1), p.t, p.k || '']),
+             adornos: MUNDO.adornos.length,
+             t: MUNDO.tramos.map(T => [+T.x.toFixed(1), +T.w.toFixed(1), T.vel, +T.t0.toFixed(2),
+                                       +T.dur.toFixed(2), T.modo, T.estilo, T.arma]) };
+  },
+  /* que le paso al bot en el nivel `id` a partir de una x: para arreglar un tramo */
+  porQueX(id, x0){ return this.porQue(id, 1, x0); },
   juegaSolo(o){ return juegaSolo(o || {}); },
   preparar(){ return preparaNiveles(); },
   nivelInfo(i){
@@ -580,7 +613,7 @@ window.__R = {
     const b = new Uint8Array(ANAL.fftSize); ANAL.getByteTimeDomainData(b);
     let pico = 0, s = 0;
     for (let i = 0; i < b.length; i++){ const v = (b[i] - 128)/128; s += v*v; if (Math.abs(v) > pico) pico = Math.abs(v); }
-    return { hay: true, estado: AUD.state, on: MUS.on, bpm: MUS.bpm,
+    return { hay: true, estado: AUD.state, on: MUS.on, bpm: MUS.bpm, lista: musLista(EST.nivel),
              t: MUS.on ? +musTiempo().toFixed(3) : null,
              pico: +pico.toFixed(4), rms: +Math.sqrt(s/b.length).toFixed(4),
              mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2) };
@@ -598,6 +631,12 @@ window.__R = {
     o.deco = { n: DEC.length, listas: DEC.filter(D => D.listo).length };
     o.ocultos = Object.keys(OCULTO).filter(k => OCULTO[k]);
     o.niebla = { hex: '#' + NIEBLA.color.getHexString(), d: NIEBLA.density };
+    o.estilo = ESTILO_NOM;
+    o.frente = { mallas: FRE.length, vis: FRE.filter(m => m.visible).length,
+                 n: FRE.reduce((a, m) => a + m.count, 0) };
+    o.barrido = { on: mBarrido.visible, t: +BARRE.t.toFixed(3), opa: +matBarrido.opacity.toFixed(2) };
+    o.contorno = { ancho: ANCHO_CONTORNO, solBorde: !!INST.solBorde, picoBorde: !!INST.picoBorde,
+                   adornos: INST.adorno ? INST.adorno.count : 0 };
     return o;
   },
   oculta(k, v){
@@ -664,6 +703,7 @@ window.__R = {
      abajo, y esos tres se arreglan de maneras opuestas. */
   porQue(id, s, x0){
     generaNivel(id | 0, s || 1);
+    const T0 = tramoDe(x0 || 0);
     const med = MUNDO.med;
     const pasos = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
     const c = {}; jugPone(c, x0 || 0);
@@ -680,7 +720,9 @@ window.__R = {
     for (const r of cerca(MUNDO.iSol, c.x)) if (pisa(b, r)) tocaS.push([+r.x.toFixed(2), r.y, +r.w.toFixed(2), r.h, r.t]);
     const cerc = [];
     for (const r of cerca(MUNDO.iSol, c.x + 1)) cerc.push([+r.x.toFixed(2), r.y, +r.w.toFixed(2), r.h, r.t]);
+    const Tm = tramoDe(c.x);
     return { ok: false, pasos: i, x: +c.x.toFixed(2), y: +c.y.toFixed(2),
+             tramo: Tm ? [Tm.arma, +Tm.x.toFixed(1), Tm.vel, +(c.x - Tm.x).toFixed(2)] : null,
              prev: { x: +prev.x.toFixed(2), y: +prev.y.toFixed(2), vy: +prev.vy.toFixed(2),
                      piso: prev.piso, modo: prev.modo, grav: prev.grav },
              mat: tocaM, sol: tocaS, cercaSol: cerc,

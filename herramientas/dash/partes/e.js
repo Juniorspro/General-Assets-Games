@@ -17,7 +17,7 @@ const JUG = { x: 0, y: 0, vy: 0, grav: 1, modo: 'cubo', piso: false,
 function jugPone(c, x){
   c.x = x; c.y = 0; c.vy = 0; c.grav = 1; c.modo = 'cubo';
   c.piso = true; c.vivo = true; c.giro = 0; c.apretado = false;
-  c.carga = 0; c.mira = -1;
+  c.carga = 0; c.mira = -1; c.vel = velEn(x);
   /* ── LOS ORBES USADOS VIVEN EN EL CUERPO Y NO EN EL MUNDO ──
      Un orbe se gasta por INTENTO, y el bot corre docenas de intentos imaginarios
      por cuadro: con la marca en `MUNDO.orbes[i].usado`, un rollout que engancha
@@ -81,17 +81,32 @@ function chocaCuerpo(c, med, dt){
     const dIzq = (b.x + b.w) - r.x;
     const dDer = (r.x + r.w) - b.x;
     const vert = Math.min(dArriba, dAbajo), hor = Math.min(dIzq, dDer);
+    /* ── SOBRE UN BLOQUE SE PUEDE ESTAR, Y LLEGAR A EL DE COSTADO NO MATA SI SE
+       LLEGA CAYENDO CERCA DE SU CARA DE ARRIBA ──
+       Es la regla de Geometry Dash y era lo que faltaba: el eje de menor
+       penetracion a secas mata en cuanto el cuerpo toca un bloque con la base
+       apenas por debajo de la cara de arriba, porque en ese primer paso la
+       penetracion horizontal es de un paso —0,14 bloques a 1x— y la vertical ya
+       es mayor. Reportado por el jugador: «los bloques que moris si te quedas
+       ahi andando, eso no pasa en GD». En GD lo que mata es la caja INTERIOR del
+       icono —un tercio del cuerpo— asi que un bloque cuyo canto queda a menos de
+       un tercio de la base no la toca: el cuerpo se sube. Aca eso es
+       `dArriba <= 0,34` con el cuerpo cayendo (o parado); lo que si mata es
+       llegar con la base ya un tercio por debajo del canto, que es chocarlo.
+       Y con la gravedad invertida, lo mismo contra la cara de abajo. */
+    const aterriza = c.grav > 0 ? (dArriba <= 0.34 && c.vy <= 0.001)
+                                : (dAbajo <= 0.34 && c.vy >= -0.001);
     /* ── EL EJE DE MENOR PENETRACION ES EL UNICO QUE NO SE EQUIVOCA ──
        Es la misma regla que en CASTILLO y en PISTOLA. Con la normal sacada de
        centro a centro, un cubo medio metido en una losa se resuelve HACIA ADENTRO. */
-    if (vert <= hor + 0.02){
+    if (aterriza || vert <= hor + 0.02){
       /* ── EL GOLPE DEL ATERRIZAJE SE MIDE ANTES DE PONER LA VELOCIDAD EN CERO ──
          Y sale del propio `vy`, asi que un salto largo aplasta mas que un
          escaloncito. Solo para el jugador de verdad: `chocaCuerpo` la corren
          tambien las copias del bot, y si el bot sacudiera la camara los efectos
          irian por un camino que el dedo no recorre. */
       const golpe = Math.abs(c.vy);
-      if (dArriba < dAbajo){
+      if (aterriza ? (c.grav > 0) : (dArriba < dAbajo)){
         /* apoyado sobre la cara de arriba del solido */
         if (c.vy <= 0.001 || c.grav > 0){ c.y = r.y + r.h; c.vy = 0; if (c.grav > 0) c.piso = true; }
         else { c.y = r.y + r.h; c.vy = 0; }
@@ -108,7 +123,16 @@ function chocaCuerpo(c, med, dt){
       c.vivo = false; return;
     }
   }
-  for (const r of cerca(MUNDO.iMat, c.x)) if (pisa(caja(c), r)){ c.vivo = false; return; }
+  /* ── Y LO MORTAL SE PRUEBA CONTRA LA CAJA INTERIOR, COMO EN GD ──
+     El pico mata si toca la caja chica del icono, no su silueta entera: es lo
+     que hace que pasar raspando un pico se sienta a pasar raspando. La caja
+     interior mide el 62 % del cuerpo y va centrada. */
+  const bi = cajaInterior(c);
+  for (const r of cerca(MUNDO.iMat, c.x)) if (pisa(bi, r)){ c.vivo = false; return; }
+}
+function cajaInterior(c){
+  const h = JUG_LADO, k = 0.62;
+  return { x: c.x - h*k/2, y: c.y + h*(1 - k)/2, w: h*k, h: h*k };
 }
 
 /* ── UN PASO DE FISICA ──
@@ -151,7 +175,9 @@ function pasoCuerpo(c, med, dt, apretado){
        horizontal, asi que la trayectoria es una diagonal perfecta. Y como la x
        sale del reloj —`v` bloques por segundo— la vertical es `v` y nada mas.
        Por eso este modo es el mas dificil del genero: no perdona un cuadro. */
-    c.vy = (apretado ? 1 : -1)*med.v*c.grav;
+    /* y la horizontal lleva la velocidad del TRAMO: a 1,5x la onda sube 1,5 veces
+       mas rapido, que es lo que en GD hace que la onda rapida sea otra cosa */
+    c.vy = (apretado ? 1 : -1)*med.v*velEn(c.x)*c.grav;
     c.giro = (apretado ? 1 : -1)*c.grav*0.72;
 
   } else if (M === 'bola'){
@@ -163,7 +189,7 @@ function pasoCuerpo(c, med, dt, apretado){
     }
     c.vy -= med.g*dt*c.grav;
     /* la bola RUEDA: el giro sale del avance y no del tiempo en el aire */
-    c.giro -= med.v*dt*0.55*c.grav;
+    c.giro -= med.v*velEn(c.x)*dt*0.55*c.grav;
 
   } else if (M === 'ovni'){
     /* el ovni salta EN EL AIRE, tantas veces como se toque. Lo que lo acota es
@@ -236,7 +262,7 @@ function pasoCuerpo(c, med, dt, apretado){
     c.vy -= med.g*dt*c.grav;
     /* el cubo gira mientras esta en el aire y se endereza al caer: es lo unico
        que dice, sin texto, que el cubo no controla nada mientras vuela */
-    if (!c.piso) c.giro += med.v*dt*0.42*c.grav;
+    if (!c.piso) c.giro += med.v*velEn(c.x)*dt*0.42*c.grav;
     else c.giro = Math.round(c.giro/(Math.PI/2))*(Math.PI/2);
   }
   c.y += c.vy*dt;
@@ -305,6 +331,11 @@ function pasoCuerpo(c, med, dt, apretado){
     let cambio = false;
     if (p.t === 'grav'){ if (c.grav > 0){ c.grav = -1; c.vy = 0; cambio = true; } }
     else if (p.t === 'norm'){ if (c.grav < 0){ c.grav = 1; c.vy = 0; cambio = true; } }
+    /* ── EL PORTAL DE VELOCIDAD NO TOCA AL CUERPO: LA VELOCIDAD ES DEL SITIO ──
+       `velEn(x)` la decide la tabla de tramos, y asi la x que sale del reloj de
+       audio y la x integrada del bot recorren EXACTAMENTE el mismo camino. El
+       portal solo anuncia el cambio, una vez, y por eso se acuerda en `c.vel`. */
+    else if (p.t === 'vel'){ if (c.vel !== p.k){ c.vel = p.k; cambio = true; } }
     else if (MODOS[p.t]){
       if (c.modo !== p.t){
         c.modo = p.t; c.carga = 0; c.giro = 0; cambio = true;
@@ -318,8 +349,8 @@ function pasoCuerpo(c, med, dt, apretado){
     /* ── UN CAMBIO DE MODO SE ANUNCIA CON UN TIRON DE CAMARA ──
        Es lo unico que dice, sin texto, que las reglas acaban de cambiar. */
     if (cambio && c === JUG){
-      son('portal'); acerca(0.09); sacude(0.34);
-      destella(MODO_COL[p.t] || '#5ad9ff', 0.5);
+      son('portal'); acerca(p.t === 'vel' ? 0.05 : 0.09); sacude(p.t === 'vel' ? 0.18 : 0.34);
+      destella(p.t === 'vel' ? (VEL_COL[p.k] || '#5ad9ff') : (MODO_COL[p.t] || '#5ad9ff'), 0.5);
     }
   }
 }

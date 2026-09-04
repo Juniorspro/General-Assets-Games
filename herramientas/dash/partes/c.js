@@ -33,7 +33,7 @@ function armaAudio(){
   RUI = AUD.createBuffer(1, n, AUD.sampleRate);
   const d = RUI.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
-  musCarga();
+  musCarga(0);
 }
 
 const MUS = { on: false, t0: 0, bpm: 158, pista: 0, ganancia: 1 };
@@ -51,16 +51,56 @@ const MUS = { on: false, t0: 0, bpm: 158, pista: 0, ganancia: 1 };
    (0,348 s), asi que el instante cero de la muestra ES el tiempo cero del nivel y
    no hace falta ningun desfase en ejecucion. Un desfase acá seria un numero que
    hay que mantener en dos sitios. */
-let MUS_BUF = null, MUS_SRC = null, MUS_LISTA = false;
-function musCarga(){
-  armaAudio(); if (!AUD || MUS_LISTA || typeof MUS_B64 === 'undefined') return;
-  MUS_LISTA = true;
+/* ── DOS CANCIONES, Y CADA NIVEL DICE CUAL ES LA SUYA ──
+   `NIVELES[i].mus` es la clave; la tabla de aca la lleva al data URI. Van como
+   funciones y no como valores porque los dos `_B64` son constantes de otros
+   archivos y uno de los dos puede faltar —el horneado escribe uno por vez—: con
+   el valor directo, la sola mencion de una constante que no existe tira. */
+const CANCIONES = {
+  MUS:  () => (typeof MUS_B64  === 'undefined' ? null : MUS_B64),
+  MUS2: () => (typeof MUS2_B64 === 'undefined' ? null : MUS2_B64)
+};
+const MUS_BUFS = {}, MUS_PEDIDAS = {};
+let MUS_SRC = null;
+/* ── Y SE DECODIFICA SOLO LA QUE HACE FALTA ──
+   La segunda cancion son 1,4 MB de MP3 —cuatro minutos— y decodificarla al
+   arrancar cuesta memoria y segundos que el menu no necesita: se pide al entrar
+   al nivel, y el primer intento arranca en cuanto llega. Sin ella el reloj cae
+   al respaldo integrado y se juega igual. */
+function musCarga(nivel){
+  armaAudio(); if (!AUD) return;
+  const N = NIVELES[nivel == null ? 0 : nivel];
+  const k = (N && N.mus) || 'MUS';
+  if (MUS_PEDIDAS[k] || !CANCIONES[k]) return;
+  const uri = CANCIONES[k]();
+  if (!uri) return;
+  MUS_PEDIDAS[k] = true;
   /* el data URI se decodifica una sola vez y queda en memoria: un
      `BufferSource` nuevo por intento cuesta nada y es lo que permite arrancar
-     desde un punto de control sin volver a decodificar 235 KB */
-  fetch(MUS_B64).then(r => r.arrayBuffer()).then(a => AUD.decodeAudioData(a))
-    .then(b => { MUS_BUF = b; })
-    .catch(() => { MUS_LISTA = false; });
+     desde un punto de control sin volver a decodificar */
+  fetch(uri).then(r => r.arrayBuffer()).then(a => AUD.decodeAudioData(a))
+    .then(b => { MUS_BUFS[k] = b; musEmpalma(k); })
+    .catch(() => { MUS_PEDIDAS[k] = false; });
+}
+/* ── SI LA MUESTRA LLEGA CON LA PARTIDA YA CORRIENDO, SE SUMA DONDE VA ──
+   El reloj del juego corre desde `musArranca` aunque no haya muestra: `MUS.t0`
+   ya esta puesto y `musTiempo()` avanza. Asi que cuando la decodificacion
+   termina —la segunda cancion son 1,4 MB y tarda— la muestra arranca en el
+   segundo que le corresponde a ESE instante y entra en tiempo. Medido antes de
+   esto: el primer intento del nivel largo se jugaba entero sin musica (`lista:
+   true`, `rms: 0`), porque la fuente solo se creaba al empezar un intento. */
+function musEmpalma(k){
+  if (!MUS.on || MUS_SRC || !AUD) return;
+  const N = NIVELES[MUS.pista];
+  if (!N || (N.mus || 'MUS') !== k) return;
+  const buf = MUS_BUFS[k], t = musTiempo();
+  if (!buf || t == null || t < 0) return;
+  const seg = t*60/N.bpm;
+  if (seg >= buf.duration - 0.1) return;
+  MUS_SRC = AUD.createBufferSource();
+  MUS_SRC.buffer = buf;
+  MUS_SRC.connect(GMUS);
+  MUS_SRC.start(AUD.currentTime, seg);
 }
 
 function musArranca(nivel, desdeT){
@@ -75,15 +115,19 @@ function musArranca(nivel, desdeT){
   MUS.t0 = AUD.currentTime + 0.10 - d*T;
   MUS.ganancia = 1;
   musPara2();
-  if (MUS_BUF){
+  const buf = MUS_BUFS[N.mus || 'MUS'];
+  if (!buf) musCarga(nivel);
+  if (buf){
     MUS_SRC = AUD.createBufferSource();
-    MUS_SRC.buffer = MUS_BUF;
+    MUS_SRC.buffer = buf;
     MUS_SRC.connect(GMUS);
     /* arranca en el segundo que le corresponde al punto de control: el nivel y el
-       tema comparten la grilla, asi que el bloque 96 ES el tiempo 24 */
-    MUS_SRC.start(AUD.currentTime + 0.10, Math.min(MUS_BUF.duration - 0.05, d*T));
+       tema comparten la grilla, asi que el tiempo 24 ES el segundo 24·T */
+    MUS_SRC.start(AUD.currentTime + 0.10, Math.min(buf.duration - 0.05, d*T));
   }
 }
+/* si hay una muestra decodificada para el nivel: lo mira la sonda y la carga */
+function musLista(nivel){ const N = NIVELES[nivel || 0]; return !!MUS_BUFS[N.mus || 'MUS']; }
 function musPara2(){
   if (MUS_SRC){ try { MUS_SRC.stop(); } catch(e){} MUS_SRC.disconnect(); MUS_SRC = null; }
 }
