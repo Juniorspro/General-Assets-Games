@@ -280,6 +280,135 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima novena vuelta (2026-09-04): **PISTOLA**, el primer 3D simple — el retroceso es el motor
+
+Pedido: *"hagamos juegos 3D simple, haz una de una pistola con 10 niveles que hay obstáculos y malos que
+matar donde vos tap en la pantalla y dispara y se puede impulsar la pistola con físicas, tienes balas
+ilimitadas y tienes que matar a los ladrones también haz que al mantener la cámara se ponga lenta y salga
+una mira del arma o sea una línea para apuntar mejor y al soltar dispara"*.
+
+`juegos-pc/Pistola.html` (881 KB). Vive partido en `herramientas/pistola/partes/` y se arma con
+`python3 herramientas/pistola/armar.py`. **Vertical nativo**: el mundo es una torre, así que no hace falta
+girar el marco.
+
+#### LA DECISIÓN DE FONDO: EL RETROCESO **ES** EL MOVIMIENTO, ASÍ QUE EL PISO MIDE LO QUE UN TIRO LEVANTA
+
+El piso arrancó en 4,6 m con un retroceso de 9,4 m/s. Un tiro a fondo sube `v²/2g` = **1,84 m, o sea el
+40 % de un piso**: medido con el auto-jugador, la pistola se quedaba rebotando debajo de la primera losa
+—**maxY 4,47 contra 4,60**— y no mataba a **nadie en 600 tiros**. El juego no se podía terminar y en una
+captura eso no se ve: se ve una pistola moviéndose.
+
+Los tres números salen de una cuenta y no de tantear: con `g` 22 y el impulso en 11,5, un tiro recto hacia
+abajo levanta **exactamente 3,00 m**, que es el piso. Subir pasa a ser puntería y no carambola.
+
+#### Y EL AUTO-JUGADOR NO PODÍA SUBIR PORQUE APUNTABA AL LADRÓN Y NO AL HUECO
+
+Con el ladrón como único destino, «acercarse» empuja contra el canto de la losa. El destino se parte en
+dos: si el que toca está arriba, la meta es **el hueco de la losa de encima**, y cruzarlo puntúa aparte de
+acercarse a él —sin ese término el bot se queda un palmo por debajo para siempre, porque estar pegado a la
+losa puntúa casi igual que atravesarla. Es la misma lección que en NIEVE, donde apuntar al medio de la
+puerta tiraba a la basura medio hueco de ventaja.
+
+| | honesto | al azar |
+|---|---|---|
+| antes | 1 de 10, tasa **0,001** | 1 de 10, tasa 0,002 |
+| **ahora** | **10 de 10**, 235 tiros / 72 muertos, tasa **0,306** | 1-2 de 10, tasa **0,003** |
+
+Los dos daban lo mismo, que es la firma exacta de un juego en el que apuntar no importa.
+
+#### CUATRO DEFECTOS QUE SÓLO SALIERON MIDIENDO, Y NINGUNO SE VE EN UNA FOTO
+
+1. **QUINCE LADRONES METIDOS ADENTRO DE UNA CAJA.** Las ranuras estaban cada 0,70 m y un ladrón (0,68 de
+   ancho) al lado de una caja (0,84) suman **0,76 de medias anchuras**. Con 0,84 de paso no puede pasar.
+   Y el acero cuelga sobre el piso de **abajo**, cuyas ranuras se barajan por separado: se acorta hasta
+   dejar de tocarlos, porque un acero corto sigue tapando el tiro y uno adentro de un ladrón lo vuelve
+   imposible de matar.
+2. **LOS LADRONES APUNTABAN SETENTA Y CINCO CENTÍMETROS POR ENCIMA.** `P.y + 0.75` es la altura de un
+   cuerpo humano y la pistola no tiene cuerpo: es un punto de 13 cm de radio. Medido con la sonda del daño
+   —que planta la pistola quieta enfrente de un ladrón— disparaba dos veces en siete segundos y las **dos
+   balas pasaban por encima: cero impactos**. O sea que las tres vidas no significaban nada y el
+   auto-jugador terminaba los diez niveles con cero muertes en 238.000 vueltas. Corregido: **2 tiros,
+   2 impactos**.
+3. **Y ANTES DE ESO PROBÉ ADELANTAR EL TIRO, QUE ES LO QUE UNO ESCRIBIRÍA, Y ESTÁ MAL.** Con la gravedad
+   en 22 y casi un segundo entre el láser y el impacto, la predicción balística manda el punto **once
+   metros abajo** —más de tres pisos—: el ladrón apuntaba contra su propia losa y **no encendía el láser
+   ni una vez en 900 cuadros**. Predecir un segundo de una pistola que rebota no es difícil, es que no
+   significa nada. Lo que sí funciona es **acortar el horizonte**: el aviso baja de 0,95 a 0,45 s y la bala
+   sube a 0,75 de la del jugador, así que del láser al impacto pasa poco más de medio segundo. Esquivar
+   deja de ser adivinar y pasa a ser reaccionar, que es para lo que está la cámara lenta.
+4. **LA LISTA DE BALAS SE VACIABA ADENTRO DE SU PROPIO BUCLE.** `alGolpe('yo', …)` termina en
+   `pierdeVida`, que llama a `pistolaPone`, que hace `BAL.length = 0`. `Cannot read properties of undefined
+   (reading 't')` y se lleva la partida — y no es del bot: es el camino de **perder una vida**, que es el
+   que un jugador recorre.
+
+#### LOS ASSETS: CINCO TEXTURAS, OCHO CLIPS Y UN MODELO 3D, TODO REZONA
+
+Y **uno se generó, se probó y se descartó**, que vale más que los que entraron: el ladrón 3D volvió tal
+como se lo pidió —gorro negro, antifaz negro, suéter azul marino a rayas, 3.383 triángulos— y a cuarenta
+píxeles contra una pared azul oscura **es una mancha parda**: fotografiado al lado de la versión de cajas,
+no se distingue la cabeza del torso ni para dónde apunta. Le puse un emisivo cálido para levantarle los
+negros y siguió sin leerse. **Un modelo fotorrealista de cuarenta píxeles pierde contra seis cajas**,
+porque lo que hace que un personaje exista en una escena monocroma no es el detalle: es que su color no
+esté en ninguna otra parte y que su silueta tenga tres bloques planos.
+
+Con la **pistola** la comparación es al revés y por eso sí entró: se mira de cerca, está siempre en
+pantalla y gira entera. 3.078 triángulos, 94 KB.
+
+Tres cosas del horneado:
+- **`-si` pide un RATIO y el objetivo es un número de triángulos**, así que se cuenta lo que entra. Un
+  ratio no dice nada si no se sabe de cuánto se parte.
+- **El material se limpia ENTERO y no sólo el mapa de color.** Tripo devuelve **tres** imágenes —color,
+  metal-rugosidad y normales— y el horneado de vértices sólo le saca la primera: quedan `normalTexture` y
+  `metallicRoughnessTexture` apuntando a texturas que ya no existen, y gltfpack contesta **«invalid GLTF»
+  sin decir cuál**.
+- **El nivel del audio se mide sobre el MP3 ya escrito**, con el lazo cerrado: los ocho clips cierran
+  dentro del 6 % de su objetivo (disparo 0,114 contra 0,115; daño 0,184 contra 0,185; música 0,043 contra
+  0,045).
+
+**Y LOS CLIPS SE DECODIFICAN CON EL PRIMER GESTO, NO AL CARGAR.** `decodeAudioData` necesita un contexto y
+ningún navegador crea uno antes de un gesto de verdad: decodificando en el arranque el contexto está
+suspendido y los ocho clips se pierden en silencio.
+
+**LAS UV VAN EN METROS Y POR PIEZA.** Todas las cajas compartían `GEO.caja` y una `BoxGeometry` tiene sus
+UV de 0 a 1 por cara: con una sola geometría, una pared de doce metros y un pilar de tres muestran la misma
+cantidad de ladrillos. Los metros que cubre cada foto salen de lo que se le pidió al generador —ocho
+hiladas de bloque, tres metros de losa, cuatro tablas— y la geometría se cachea por tamaño redondeado.
+Y se repiten con `MirroredRepeatWrapping`, así que la costura no puede existir.
+
+#### DOS COSAS DE PUESTA EN ESCENA QUE SE VIERON MIRANDO
+
+- **Las tiras de luz eran una barra beige cruzando la pantalla entera.** Lo más luminoso del cuadro pasaba
+  a ser una raya de cinco metros: no se leía a iluminación, se leía a un error de dibujo tapando la torre.
+  Tres apliques de medio metro por piso dicen «esto es un techo con luces». Y su halo va con **degradado
+  radial y no con un color plano**: un plano parejo al 16 % se lee a **panel marrón** pegado a la pared —en
+  la captura los tres halos de cada piso parecían tres puertas—.
+- **El ladrón era un hidrante**: una caja de 0,52 con una esfera de 0,40 de diámetro encima y un ala de
+  0,60 de ancho. Lo que hace que una silueta de cuarenta píxeles se lea a alguien son tres cosas y ninguna
+  es el detalle: que la cabeza mida un séptimo del cuerpo, que haya **dos piernas separadas** —una caja
+  única se lee a pedestal— y que el antifaz corte la cara en dos.
+
+#### Y LAS CATORCE CAJAS DE CADA LADRÓN SE FUNDEN EN UNA MALLA
+
+Sueltas, cada caja es una llamada de dibujo: medido en el nivel 10, con catorce ladrones el cuadro costaba
+**365 llamadas** y casi doscientas eran los cuerpos. Ninguna de esas piezas se mueve respecto de las otras
+—lo único que gira es el brazo del arma— así que fundirlas no cambia un píxel. **365 → 146** en media y
+**61** en baja.
+
+#### MEDIDO AL CERRAR
+
+**15 de 15 assets cargados, 0 fallados** (5 texturas, 9 clips con la música sonando, 1 modelo). Auditoría
+del mapa **limpia en los diez niveles** —ningún ladrón fuera de la torre, metido en una caja o en el acero,
+ni flotando sin piso, y el hueco más angosto en 1,20 contra los 0,50 que la pistola necesita—. Daño
+verificado: **2 tiros del ladrón, 2 impactos**. Auto-jugadores **10 de 10 contra 1-2 de 10**, con tasa
+0,306 contra 0,003. **Cero solapamientos** entre los tres elementos del HUD. Los tres idiomas y las tres
+calidades en caliente (**61 · 146 · 152** llamadas de dibujo en el nivel 10). `window.__errs` vacío en las
+siete corridas.
+
+**LO QUE NO PUDE COMPROBAR:** no puedo escuchar, así que de los ocho clips está medido que decodifican y a
+qué nivel suenan, no si el tema pega con el juego. Y las tres vidas están probadas por la sonda del daño y
+no por los auto-jugadores: el honesto limpia un piso en poco más de un segundo desde que entra, así que
+nunca llega a comerse un tiro.
+
 ### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
 
 Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer

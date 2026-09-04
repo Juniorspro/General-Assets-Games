@@ -1,0 +1,359 @@
+
+/* ══════════════════════════ LA ENTRADA ══════════════════════════
+   ── UN SOLO GESTO: APRETAR, ARRASTRAR, SOLTAR ──
+   Apretar frena el tiempo y saca la mira; arrastrar de costado gira la pistola;
+   soltar dispara. Un toque seco es un mantener de cero segundos, asi que «tap y
+   dispara» sale del mismo camino y no hay dos ramas que puedan divergir. */
+const GIRO_DEDO = 0.010;      /* radianes por pixel de arrastre */
+function abajo(x, y){
+  despiertaAudio();
+  if (J.modo !== 'juega') return;
+  J.apretado = true;
+  J.dedo = { x, y };
+  J.angBase = P.ang;
+}
+function mueve(x, y){
+  if (!J.apretado || !J.dedo) return;
+  /* ── SE APUNTA CON EL ARRASTRE Y NO CON EL PUNTO DEL DEDO ──
+     Apuntando a donde uno toca, el dedo TAPA exactamente el sitio al que se le
+     esta apuntando — que en una pantalla de telefono es la mitad del blanco. Con
+     el arrastre relativo la mano queda donde uno la apoyo. */
+  P.ang = J.angBase + (x - J.dedo.x)*GIRO_DEDO - (y - J.dedo.y)*GIRO_DEDO*0.55;
+  P.vang *= 0.90;
+}
+function arriba(){
+  if (!J.apretado) return;
+  J.apretado = false; J.dedo = null;
+  if (J.modo !== 'juega') return;
+  if (dispara()){ son('tiro'); sacude(0.22); chispas(P.x + Math.cos(P.ang)*0.35,
+                                                    P.y + Math.sin(P.ang)*0.35, 5, 0xffd76a); }
+}
+const cv = ren.domElement;
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); abajo(e.clientX, e.clientY); });
+cv.addEventListener('pointermove', e => mueve(e.clientX, e.clientY));
+cv.addEventListener('pointerup', arriba);
+cv.addEventListener('pointercancel', arriba);
+addEventListener('keydown', e => { if (e.code === 'Space' && !e.repeat) abajo(innerWidth/2, innerHeight/2); });
+addEventListener('keyup', e => { if (e.code === 'Space') arriba(); });
+
+let _audioDesp = false;
+function despiertaAudio(){
+  if (_audioDesp) return;
+  _audioDesp = true;
+  armaAudio();
+  /* ── LOS CLIPS SE DECODIFICAN CON EL PRIMER GESTO, NO AL CARGAR ──
+     `decodeAudioData` necesita un contexto, y ningun navegador crea uno antes de
+     un gesto de verdad. Decodificando en el arranque el contexto esta suspendido
+     y los ocho clips se pierden en silencio. */
+  cargaSonidos();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  if (MUSK){ const k = MUSK; MUSK = null; musQuiere(k); }
+}
+for (const ev of ['pointerdown', 'click', 'keydown'])
+  document.addEventListener(ev, despiertaAudio, true);
+
+/* ══════════════════════════ EL BUCLE ══════════════════════════ */
+const rel = new T.Clock();
+let CONGELADO = false, SIN_POST = false;
+function bucle(){
+  requestAnimationFrame(bucle);
+  let dt = Math.min(0.25, rel.getDelta());
+  if (CONGELADO) dt = 0;
+  pasoJuego(dt);
+  pasoChispas(dt*lerp(1, M.lento, J.lento));
+  if (SAC > 0) SAC = Math.max(0, SAC - dt*4.2);
+  ponArma(); ponLadrones(); ponBalas(); ponMira(); ponCamara(dt);
+  $('aviso').classList.toggle('on', J.msgT > 0);
+  if (J.modo === 'juega') $('fLadrones').textContent = TX('ladrones') + ' ' + vivos();
+  post.uniforms.uT.value = performance.now()*0.001;
+  /* ── LAS DOS PASADAS SE CUENTAN JUNTAS ──
+     three.js pone `info.render` a cero al empezar CADA `render()`, asi que
+     leyendolo despues del cuadro queda solo la ultima pasada — que es un
+     rectangulo. Medido, el juego informaba «1 llamada, 2 triangulos» con la
+     torre entera en pantalla. Ya paso en Campo de Tiro. */
+  ren.info.autoReset = false;
+  ren.info.reset();
+  if (SIN_POST){ ren.setRenderTarget(null); ren.clear(); ren.render(esc, cam); }
+  else {
+    ren.setRenderTarget(RT); ren.clear(); ren.render(esc, cam);
+    ren.setRenderTarget(null); ren.render(escP, camP);
+  }
+}
+
+function ponArma(){
+  if (!gArma) return;
+  gArma.position.set(P.x, P.y, 0);
+  gArma.rotation.z = P.ang;
+  gArma.visible = J.modo === 'juega' || J.modo === 'fin';
+}
+function ponLadrones(){
+  for (const l of MUNDO.lad){
+    if (!l.g) continue;
+    l.g.visible = l.vivo;
+    if (!l.vivo) continue;
+    l.g.userData.brazo.rotation.z = l.mira;
+    /* el laser solo mientras avisa, y se acorta hasta donde de verdad llega */
+    const laser = l.g.userData.laser;
+    laser.visible = l.avisa > 0;
+    if (l.avisa > 0){
+      const h = rayo(l.x + Math.cos(l.tira)*0.5, l.y + 0.78 + Math.sin(l.tira)*0.5,
+                     Math.cos(l.tira), Math.sin(l.tira), 30, true);
+      const L = h ? h.t : 30;
+      const a = laser.geometry.attributes.position.array;
+      a[0] = 0.5; a[1] = 0; a[2] = 0; a[3] = 0.5 + L; a[4] = 0; a[5] = 0;
+      laser.geometry.attributes.position.needsUpdate = true;
+      laser.material.opacity = 0.35 + 0.55*(1 - l.avisa/AVISO);
+    }
+  }
+}
+
+/* ── LA CAMARA SIGUE A LA PISTOLA CON RESORTE Y SE ACOTA AL NIVEL ──
+   Sin acotarla, la pistola pegada al piso deja media pantalla mostrando lo que
+   hay debajo del suelo, que es nada. */
+let camY = 3, camXs = 0;
+function ponCamara(dt){
+  const k = Math.min(1, dt*4.6);
+  const objY = cl(P.y + 1.1, 4.2, Math.max(4.2, MUNDO.alto - 3.4));
+  camY += (objY - camY)*k;
+  camXs += (cl(P.x*0.34, -1.1, 1.1) - camXs)*k;
+  const s = SAC*0.09;
+  cam.position.set(CAM_X + camXs + (Math.random() - 0.5)*s,
+                   camY + CAM_Y + (Math.random() - 0.5)*s, CAM_Z);
+  camMira.set(camXs*0.5, camY, 0);
+  cam.lookAt(camMira);
+  sol.target.position.set(0, camY, 0);
+  sol.position.set(7, camY + 16, 11);
+}
+
+/* ══════════════════════════ EL MENU ══════════════════════════ */
+function pintaMenu(){
+  $('mSub').textContent = TX('sub');
+  $('mTexto').textContent = TX('texto');
+  $('bJugar').textContent = TX('jugar');
+  $('mPie').textContent = TX('pie');
+  $('bMenu').textContent = TX('menu');
+  const n = $('niveles'); n.innerHTML = '';
+  for (let i = 1; i <= NIVELES; i++){
+    const b = document.createElement('button');
+    b.textContent = i;
+    if (i <= J.hechos) b.className = 'hecho';
+    b.disabled = i > J.hechos + 1;
+    b.onclick = () => { son('clic'); empieza(i); };
+    n.appendChild(b);
+  }
+  const fc = $('filaCal'); fc.innerHTML = '';
+  for (const k of ['baja', 'media', 'alta']){
+    const b = document.createElement('button');
+    b.className = 'bt' + (CALIDAD === k ? ' sel' : '');
+    b.textContent = TX(k);
+    b.onclick = () => { son('clic'); aplicaCalidad(k); armaChispas(); pintaMenu(); };
+    fc.appendChild(b);
+  }
+  const fi = $('filaIdi'); fi.innerHTML = '';
+  for (const k of ['es', 'en', 'pt']){
+    const b = document.createElement('button');
+    b.className = 'bt' + (LANG === k ? ' sel' : '');
+    b.textContent = k.toUpperCase();
+    b.onclick = () => { son('clic'); ponIdioma(k); };
+    fi.appendChild(b);
+  }
+}
+function ponIdioma(l){
+  LANG = l;
+  try { localStorage.setItem('pistola_lang', l); } catch(e){}
+  $('idioma').classList.remove('on');
+  J.modo = 'menu';
+  $('menu').classList.add('on');
+  pintaMenu(); pintaHud();
+  musQuiere('menu');
+}
+$('bJugar').onclick = () => { son('clic'); empieza(Math.min(NIVELES, J.hechos + 1)); };
+$('bMenu').onclick = () => { son('clic'); J.modo = 'menu';
+  $('fin').classList.remove('on'); $('menu').classList.add('on'); pintaMenu(); musQuiere('menu'); };
+$('bSigue').onclick = () => {
+  son('clic');
+  if (J.fin === 'perdio'){ empieza(J.nivel); return; }
+  if ($('bSigue').dataset.ult){ J.modo = 'menu';
+    $('fin').classList.remove('on'); $('menu').classList.add('on'); pintaMenu(); return; }
+  empieza(Math.min(NIVELES, J.nivel + 1));
+};
+for (const b of document.querySelectorAll('#idioma button'))
+  b.onclick = () => ponIdioma(b.dataset.lang);
+
+/* ══════════════════════════ EL ARRANQUE ══════════════════════════ */
+function arranca(){
+  mide(); aplicaCalidad(CALIDAD); armaChispas();
+  generaNivel(1); construyeEscena(); pistolaPone(0, 0.9);
+  $('cBarra').style.width = '100%';
+  setTimeout(() => {
+    $('carga').classList.add('ido');
+    const guardado = carga();
+    if (guardado){ ponIdioma(LANG); }
+    else { J.modo = 'idioma'; $('idioma').classList.add('on'); }
+  }, 250);
+}
+carga();
+/* los assets generados entran DESPUES de que el juego ya se pueda jugar: si
+   ninguno llega, se juega con los materiales y los bips de siempre */
+cargaTexturas();
+cargaModelos();
+arranca();
+bucle();
+
+/* ══════════════════════════ LAS SONDAS ══════════════════════════
+   Nada de esto lo usa el juego: es lo unico con lo que se puede AFIRMAR algo.
+   Una medicion que no se puede repetir es una opinion. */
+window.__P = {
+  estado: () => JSON.stringify({
+    modo: J.modo, nivel: J.nivel, vidas: J.vidas, hechos: J.hechos,
+    lang: LANG, cal: CALIDAD, lento: +J.lento.toFixed(2),
+    pistola: [+P.x.toFixed(2), +P.y.toFixed(2), +P.ang.toFixed(2)],
+    vel: [+P.vx.toFixed(2), +P.vy.toFixed(2), +P.vang.toFixed(2)],
+    ladrones: MUNDO.lad.length, vivos: vivos(), balas: BAL.length,
+    losas: MUNDO.losas.length, cajas: MUNDO.cajas.length, acero: MUNDO.acero.length,
+    pisos: MUNDO.pisos, alto: +MUNDO.alto.toFixed(1),
+    llamadas: ren.info.render.calls, tri: ren.info.render.triangles }),
+  lang: (l) => { ponIdioma(l); return l; },
+  cal: (k) => { aplicaCalidad(k); armaChispas(); return k; },
+  nivel: (n) => { empieza(n); return JSON.stringify({ nivel: J.nivel, ladrones: MUNDO.lad.length }); },
+  jugar: () => { empieza(Math.min(NIVELES, J.hechos + 1)); return 'ok'; },
+  /* toque de verdad: apretar, arrastrar y soltar, que es el unico camino que el
+     jugador tiene. Sin esto, probar el disparo llamando a `dispara()` saltearia
+     justamente la parte que se puede romper. */
+  toca: (dx, dy, seg) => {
+    abajo(200, 400);
+    if (dx || dy) mueve(200 + (dx || 0), 400 + (dy || 0));
+    if (seg) for (let i = 0; i < seg*120; i++) simula(1/120);
+    const a = P.ang;
+    arriba();
+    return JSON.stringify({ ang: +a.toFixed(3), vx: +P.vx.toFixed(2), vy: +P.vy.toFixed(2),
+                            balas: BAL.length });
+  },
+  /* apretar y soltar por separado: el estado de APUNTAR solo existe mientras el
+     dedo esta abajo, asi que con `toca` —que aprieta y suelta— no se puede
+     fotografiar la mira ni la camara lenta. */
+  apreta: (dx, dy) => { abajo(200, 400); if (dx || dy) mueve(200 + (dx||0), 400 + (dy||0)); return 'ok'; },
+  suelta: () => { arriba(); return 'ok'; },
+  pasos: (n) => { for (let i = 0; i < (n || 60); i++) simula(1/120); return window.__P.estado(); },
+  congela: (v) => { CONGELADO = !!v; return String(CONGELADO); },
+  audio: () => JSON.stringify({ ctx: AUD ? AUD.state : 'no', son: Object.keys(SON).length,
+                                mus: MUS ? MUS.k : null }),
+  /* las cajas de todo lo visible del HUD, para poder comprobar que nada se pisa */
+  /* ── LEER EL BUFFER ES LA UNICA FORMA DE SABER SI ALGO SE VE ──
+     Un lienzo WebGL sin `preserveDrawingBuffer` sale en cero con `drawImage`, y
+     mirar la captura no distingue «esta oscuro» de «no se dibujo». */
+  brillo: () => {
+    const w = RT.width, h = RT.height;
+    const buf = new Uint8Array(w*h*4);
+    ren.readRenderTargetPixels(RT, 0, 0, w, h, buf);
+    let s = 0, mx = 0, n = 0;
+    const franjas = [0, 0, 0, 0, 0], fn = [0, 0, 0, 0, 0];
+    for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2){
+      const i = (y*w + x)*4;
+      const v = (buf[i]*0.299 + buf[i+1]*0.587 + buf[i+2]*0.114);
+      s += v; if (v > mx) mx = v; n++;
+      const f = Math.min(4, (y/h*5)|0); franjas[f] += v; fn[f]++;
+    }
+    return JSON.stringify({ medio: +(s/n).toFixed(1), max: Math.round(mx),
+                            franjas: franjas.map((v, i) => +(v/fn[i]).toFixed(1)),
+                            rt: [w, h] });
+  },
+  post: (v) => { SIN_POST = !v; return String(!SIN_POST); },
+  juegaSolo: (azar, tope, ciego) => juegaSolo(!!azar, tope, !!ciego),
+  assets: () => JSON.stringify({ listos: ASSETS_LISTOS, fallados: ASSETS_FALLADOS,
+                                 tex: Object.keys(TEX).length, mod: Object.keys(MOD.geo).length,
+                                 son: Object.keys(SON).length }),
+  audita: () => audita(),
+  /* ── LA PRUEBA DEL DAÑO, QUE EL AUTO-JUGADOR NO PUEDE DAR ──
+     El honesto mata antes de que le tiren y el del azar casi nunca sube, asi que
+     ninguno de los dos recorre el camino de perder una vida. Esta sonda planta
+     la pistola quieta enfrente de un ladron y cuenta los impactos. */
+  daño: () => {
+    generaNivel(1);
+    const l = MUNDO.lad[0];
+    /* hacia el centro y no «mas 1,6»: el primer ladron cae en x = 2,1 y la pared
+       esta en 2,7, asi que sumando salia FUERA de la torre — la sonda media una
+       pistola cayendo al vacio (y = −615) y no un ladron que no dispara. */
+    pistolaPone(l.x + (l.x > 0 ? -1.4 : 1.4), l.y + R_PIS + 0.01);
+    let hits = 0, laser = 0, tiros = 0;
+    const g = (q) => { if (q === 'yo') hits++; if (q === 'lad_tira') tiros++; };
+    for (let v = 0; v < 900; v++){
+      P.cd = 1;
+      pasoCuerpo(P, 1/120); pasoBalas(1/120, g); pasoLadrones(1/120, g);
+      if (l.avisa > 0) laser++;
+    }
+    const hh = rayo(l.x + Math.cos(l.mira)*0.5, l.y + 0.78 + Math.sin(l.mira)*0.5,
+                    Math.cos(l.mira), Math.sin(l.mira), 40, true);
+    return JSON.stringify({ impactos: hits, tirosLadron: tiros, cuadrosLaser: laser,
+      ladX: +l.x.toFixed(2), ladY: +l.y.toFixed(2), cd: +l.cd.toFixed(2),
+      px: +P.x.toFixed(2), py: +P.y.toFixed(2), apoyada: P.apoyada,
+      mira: +l.mira.toFixed(2), ht: hh ? +hh.t.toFixed(2) : null,
+      tipo: hh ? hh.tipo : null, d: +Math.hypot(P.x - l.x, P.y - l.y).toFixed(2) });
+  },
+  /* diagnostico: juega UN nivel y devuelve el recorrido, para ver DONDE se traba */
+  diag: (n, tope) => {
+    generaNivel(n || 1); pistolaPone(0, 0.9);
+    const dt = 1/120; let my = 0, mat = 0, tir = 0; const hist = [];
+    const g = (q) => { if (q === 'ladron') mat++; };
+    const T = tope || 12000;
+    for (let v = 0; v < T; v++){
+      if (P.cd <= 0){
+        P.ang = botElige(); P.vang = 0;
+        const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
+        P.cd = M.cadencia; tir++;
+        BAL.push({ x: P.x + dx*M.largo*0.55, y: P.y + dy*M.largo*0.55, dx, dy, v: M.bala, t: 1.3, mia: true });
+        aplicaRetro(P, P.ang);
+      }
+      pasoCuerpo(P, dt); pasoBalas(dt, g); pasoLadrones(dt, g);
+      if (P.y > my) my = P.y;
+      if (v % Math.round(T/10) === 0) hist.push([+P.x.toFixed(1), +P.y.toFixed(1), vivos()]);
+      if (vivos() === 0) break;
+    }
+    return JSON.stringify({ pisos: MUNDO.pisos, lad: MUNDO.lad.length, vivos: vivos(),
+      mat, tir, maxY: +my.toFixed(2), ys: MUNDO.lad.map(l => +l.y.toFixed(1)), hist });
+  },
+  /* ── DONDE CAE CADA COSA EN LA PANTALLA ──
+     «El ladron esta en la escena y es visible» no dice que se VEA: puede estar
+     fuera de cuadro, detras de una losa o del color del fondo. Se proyecta. */
+  donde: () => {
+    const v = new T.Vector3(), out = [];
+    cam.updateMatrixWorld();
+    const p3 = (x, y, z, q) => {
+      v.set(x, y, z).project(cam);
+      out.push([q, +((v.x + 1)/2).toFixed(3), +((1 - v.y)/2).toFixed(3),
+                v.z > -1 && v.z < 1]);
+    };
+    p3(P.x, P.y, 0, 'arma');
+    MUNDO.lad.forEach((l, i) => { if (l.vivo) p3(l.x, l.y + 0.75, 0, 'lad' + i); });
+    return JSON.stringify({ n: out.length, p: out });
+  },
+  luces: () => {
+    const l = [];
+    esc.traverse(o => { if (o.isLight) l.push([o.type, +o.intensity.toFixed(2),
+      o.color.getHexString(), o.position.toArray().map(q => +q.toFixed(1))]); });
+    return JSON.stringify({ luces: l, sombras: ren.shadowMap.enabled,
+                            expo: ren.toneMappingExposure,
+                            tono: ren.toneMapping, salida: ren.outputColorSpace });
+  },
+  solapes: () => {
+    const ids = ['fNivel', 'fVidas', 'fLadrones', 'aviso', 'pista'];
+    const c = [], ch = [];
+    for (const id of ids){
+      const e = $(id);
+      if (!e || !e.textContent.trim()) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      c.push([id, r]);
+    }
+    for (let i = 0; i < c.length; i++)
+      for (let j = i + 1; j < c.length; j++){
+        const a = c[i][1], b = c[j][1];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+          ch.push(c[i][0] + '×' + c[j][0]);
+      }
+    return JSON.stringify({ visibles: c.map(x => x[0]), choques: ch });
+  }
+};
+</script>
+</body>
+</html>
