@@ -87,6 +87,12 @@ let A_arrastre = null;         /* {x0,y0,x,y} mientras se tensa */
 let A_camX = 0, A_camZ = 1, A_camMX = 0, A_camMZ = 1;
 let A_sacIA = 0;               /* lo que el rival espera antes de tirar */
 let A_props = [];              /* la decoración del valle, sembrada por duelo */
+/* ── LAS FLECHAS CLAVADAS SE QUEDAN, Y ES LO MÁS BARATO QUE HAY ──
+   Cuesta tres números por flecha y convierte el valle en el registro del duelo:
+   al quinto turno se ve dónde vino fallando cada uno. Y no es sólo adorno —un
+   racimo de flechas a la izquierda del rival dice «me quedé corto» mejor que
+   cualquier cartel. */
+let A_clav = [];
 /* ── EL ESTADO DE ANIMACIÓN VIVE EN EL ARQUERO Y SE PONE POR UNA SOLA PUERTA ──
    Con la animación decidida en el sitio donde se dibuja, cada rama del juego
    tendría que acordarse de todas las demás: el que acaba de recibir un flechazo
@@ -353,7 +359,7 @@ const JUEGO = {
                   { x: A_el.x, w: 105, y: aBase(A_el.x) }];
     A_yo.y = aSuelo(A_yo.x); A_el.y = aSuelo(A_el.x);
     A_yo.pal = 0; A_el.pal = A_duelo % A_PAL.length;
-    A_yo.anim = 'quieto'; A_el.anim = 'listo';
+    A_yo.anim = 'quieto'; A_el.anim = 'listo'; A_clav.length = 0;
     A_yo.at = 0; A_el.at = 0;
     A_yo.vida = A_yo.max = A_VIDA + Math.min(40, A_rachaG*8);
     A_el.vida = A_el.max = A_riv.vida;
@@ -494,6 +500,12 @@ const JUEGO = {
     /* la flecha se queda clavada un instante: desapareciendo en el cuadro del
        golpe, el jugador no llega a ver DÓNDE pegó */
     A_flecha.clavada = true;
+    /* y después se queda en el valle. Doce y no más: pasadas doce, el suelo se
+       vuelve un peine y deja de decir nada. */
+    if (Math.abs(f.x) < A_MUNDO + 200){
+      A_clav.push({ x: f.x, y: Math.min(f.y, aSuelo(f.x) + 6), gi: f.gi });
+      if (A_clav.length > 12) A_clav.shift();
+    }
   },
 
   cambiaTurno(){
@@ -866,6 +878,15 @@ function aPinta(g){
 
   /* la decoración, ordenada por x para que la de adelante tape a la de atrás */
   for (const p of A_props) aProp(g, p);
+  /* ── LAS CLAVADAS SE ENDEREZAN PARA QUE SE LEAN ──
+     Una flecha que llega rasante se clava rasante, que es lo correcto y a esta
+     escala se ve como un triangulito blanco tirado en el pasto. Se les fuerza
+     un minimo de inclinacion: es mentira fisica de treinta grados a cambio de
+     que se lean a flechas clavadas, que es todo lo que tienen que hacer. */
+  for (const c of A_clav){
+    const gi = Math.max(0.62, Math.min(1.35, Math.abs(c.gi)))*(c.gi < 0 ? -1 : 1);
+    aFlecha(g, { x: c.x, y: c.y, gi }, 0.66);
+  }
 
   /* ── LA TRAZA DEL TIRO ANTERIOR ──
      Se queda puesta y desvanecida: es lo que convierte «fallé» en «fallé por
@@ -1484,8 +1505,9 @@ function aArquero(g, a, s, activo){
   }
 }
 
-function aFlecha(g, f){
+function aFlecha(g, f, al){
   g.save();
+  if (al) g.globalAlpha = al;
   g.translate(f.x, f.y);
   g.rotate(f.gi);
   caja2(-30, -2.5, 46, 5, 2, '#c9a06a', null);
@@ -1683,9 +1705,13 @@ function aTensor(g){
   g.restore();
   /* el aro de fuerza: se llena y cambia de color al llegar al tope, que es lo
      que dice «más no hay» sin escribirlo */
+  /* ── EL ARO VA POR ENCIMA DEL DEDO Y NO DEBAJO ──
+     Dibujado en el punto del arrastre queda TAPADO por el pulgar, que es
+     exactamente donde no sirve: el numero que dice cuanta fuerza llevas es lo
+     unico que hay que leer mientras se tensa. */
   const r = 46;
   g.save();
-  g.translate(a.x, a.y);
+  g.translate(a.x, a.y - 96);
   g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 7;
   g.beginPath(); g.arc(0, 0, r, 0, 7); g.stroke();
   g.strokeStyle = t.f >= 0.995 ? '#ff8a5c' : '#ffd76a';
