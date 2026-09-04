@@ -468,6 +468,42 @@ Medido al cerrar: **16 de 16 assets, 0 fallados**; auditoría limpia en los diez
 2 impactos**; honesto **10 de 10** con tasa 0,317 contra 0 de 10 y 0,003 del azar; `vang` en 0 en todas
 las corridas; cero solapamientos de HUD; `window.__errs` vacío.
 
+#### Y UNA TERCERA PASADA: **«NO GIRA, QUEDA AHÍ TIESO»** — Y EL GIRO ANDABA
+
+Reporte con captura. Lo primero fue **medir en vez de creerle o desmentirle**, disparando eventos de
+puntero de verdad contra el lienzo —no las sondas de ayuda, que se saltean justamente los listeners que
+podrían estar rotos—: un arrastre de 100 px lleva `P.ang` de **0,600 a 1,600 rad** y `gArma.rotation.z`
+lo sigue hasta el último decimal. O sea que el giro no estaba roto.
+
+**LO QUE ESTABA MAL ERA EL TAMAÑO EN PANTALLA, Y ESE ES EL NÚMERO QUE HABÍA QUE HABER MIRADO.** La cámara
+encuadra 5,4 m de ancho en 412 px: son **76 píxeles por metro**, así que una pistola de tamaño real mide
+**veinte píxeles** — y en veinte píxeles, 57 grados de giro mueven la punta del cañón diez. Desde el
+asiento del jugador eso es «tieso», y tenía razón: el giro estaba **por debajo del umbral en el que se
+ve**. La vuelta anterior yo había reducido el arma a tamaño realista *porque* venía cinco veces
+sobreescalada, y me pasé para el otro lado.
+
+Acá la pistola no es un accesorio: **es el personaje**, así que se dibuja a escala de personaje. A 0,42 m
+mide **37,6 px** y es el 28 % del alto de un ladrón, que es lo que hace este género.
+
+**Y UN PUNTO BRILLANTE EN LA BOCA, que es lo que de verdad hace visible el giro.** Un objeto chico
+girando sobre su centro casi no cambia de silueta; lo que sí se ve es un punto recorriendo un círculo. Va
+en `M.boca`, o sea exactamente de donde sale la bala: así el jugador no aprende «hacia dónde mira el arma»
+sino «de dónde va a salir el tiro», que es el dato útil.
+
+Medido: **37,6 × 34,8 px** con el arma horizontal y **23,9 × 34,2** girada a 1,49 rad — que ese número
+cambie *es* la prueba de que el giro se ve. Entró además `__P.armaPx()`, porque «0,29 m» no dice nada:
+lo que decide si un giro se percibe es cuántos píxeles mide en la pantalla del que juega.
+
+**Y EL CONTENEDOR SE REVIRTIÓ EN EL MEDIO**, por tercera vez en este repo: `HEAD` apareció en un commit de
+PULSO y `herramientas/pistola/` no existía. Lo que salvó la vuelta fue la regla que ya está escrita
+arriba: **comprobar contra `origin` con `git fetch` ANTES de sacar conclusiones**. `origin` tenía los dos
+commits y el árbol local no tenía nada propio, así que se recuperó con `git reset --hard`. Los cambios
+sueltos de PULSO que traía el árbol revertido quedaron en `git stash` y no se tiraron.
+
+Regresión al cerrar: 16 de 16 assets, auditoría limpia en los diez niveles, daño 2 tiros/2 impactos,
+honesto **10 de 10** con tasa 0,273 contra 0 de 10 del azar, cero solapamientos de HUD, `window.__errs`
+vacío.
+
 ### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
 
 Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer

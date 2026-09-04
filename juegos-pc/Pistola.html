@@ -171,11 +171,21 @@ const M = {
   bala: 46,              /* velocidad de la bala */
   rebote: 0.42,          /* cuánto conserva la pistola al rebotar */
   roceAng: 0.55,         /* cuánto se frena el giro por segundo */
-  largo: 0.29,           /* el largo de la pistola */
+  /* ── EL ARMA SE DIBUJA MAS GRANDE QUE UNA DE VERDAD, Y ES A PROPOSITO ──
+     La camara encuadra 5,4 m de ancho en 412 px: son 76 px por metro, o sea que
+     una pistola de tamaño real mide VEINTE PIXELES. Medido con los listeners de
+     verdad, un arrastre de 100 px la gira de 0,6 a 1,6 rad — o sea 57 grados— y
+     en veinte pixeles eso mueve la punta del cañon diez: desde el asiento del
+     jugador se lee «no gira, queda ahi tieso», y tenia razon. El giro no estaba
+     roto, estaba abajo del umbral en el que se ve.
+     Aca la pistola no es un accesorio: es el PERSONAJE, asi que se dibuja a la
+     escala de un personaje. A 0,42 mide 32 px y es el 28 % del alto de un
+     ladron — que es exactamente lo que hace este genero. */
+  largo: 0.42,           /* el largo de la pistola */
   /* de donde sale la bala, medido desde el centro: es el MISMO numero que usan
      el disparo, la linea de la mira y las chispas del fogonazo, asi que no
      pueden apuntar a sitios distintos */
-  boca: 0.145,
+  boca: 0.21,
   lento: 0.16,           /* el factor de la cámara lenta */
   entraLento: 0.10,      /* cuánto tarda en entrar y salir */
   cadencia: 0.22,        /* mínimo entre dos disparos */
@@ -1118,7 +1128,7 @@ const MAT = {
      medido en la captura, los tres halos de cada piso parecian tres puertas. Un
      radial no tiene borde en ningun lado, que es exactamente lo que le pasa a
      la luz. */
-  haloArma: new T.MeshBasicMaterial({ map: texHaloArma(), transparent: true, opacity: 0.72,
+  haloArma: new T.MeshBasicMaterial({ map: texHaloArma(), transparent: true, opacity: 0.52,
                                      blending: T.AdditiveBlending, depthWrite: false }),
   halo:  new T.MeshBasicMaterial({ map: texHalo(), transparent: true, opacity: 0.55,
                                    blending: T.AdditiveBlending, depthWrite: false }),
@@ -1570,8 +1580,21 @@ let gArma = null, gMira = null, gDest = null;
    tiene borde en ningun lado, o sea que no se lee a objeto. */
 function haloArma(){
   const m = new T.Mesh(GEO.plano, MAT.haloArma);
-  m.scale.set(1.45, 1.45, 1);
+  m.scale.set(1.30, 1.30, 1);
   m.position.z = -0.12;
+  m.userData.noSom = true;
+  return m;
+}
+
+/* ── UN PUNTO EN LA BOCA, QUE ES LO QUE HACE VISIBLE EL GIRO ──
+   Un objeto chico girando sobre su centro casi no cambia de silueta; lo que si
+   se ve es un punto brillante recorriendo un circulo. Va en `M.boca`, o sea
+   EXACTAMENTE de donde sale la bala: asi el jugador no aprende «hacia donde
+   mira el arma» sino «de donde va a salir el tiro», que es el dato util. */
+function puntoBoca(){
+  const m = new T.Mesh(GEO.esf, MAT.bala);
+  m.scale.setScalar(0.045);
+  m.position.set(M.boca, 0, 0.03);
   m.userData.noSom = true;
   return m;
 }
@@ -1586,6 +1609,7 @@ function armaPistola(){
     m.castShadow = CALIDADES[CALIDAD].sombras;
     g.add(m);
     g.add(haloArma());
+    g.add(puntoBoca());
     gArma = g; gCosas.add(gArma); return;
   }
   gArma = new T.Group();
@@ -2104,6 +2128,32 @@ window.__P = {
       largoM: M.largo, boca: M.boca, ang: +P.ang.toFixed(2), vang: +P.vang.toFixed(3) });
   },
   camLibre: () => { CAM_FIJA = false; CONGELADO = false; return 'ok'; },
+  /* el angulo del arma tal como lo ve el DIBUJO, no como lo guarda la fisica:
+     es la unica forma de saber si girar el dedo llega hasta la malla */
+  angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
+  angFis: () => +P.ang.toFixed(3),
+  /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
+     «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
+     mide en la pantalla del que juega. */
+  armaPx: () => {
+    if (!gArma) return 'no hay arma';
+    const g = MOD.geo.p_pistola;
+    if (!g) return 'sin modelo';
+    const b = g.boundingBox, v = new T.Vector3();
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    gArma.updateMatrixWorld(true);
+    for (const sx of [b.min.x, b.max.x]) for (const sy of [b.min.y, b.max.y])
+      for (const sz of [b.min.z, b.max.z]){
+        v.set(sx, sy, sz).applyMatrix4(gArma.matrixWorld).project(cam);
+        const px = (v.x*0.5 + 0.5)*ren.domElement.clientWidth;
+        const py = (0.5 - v.y*0.5)*ren.domElement.clientHeight;
+        x0 = Math.min(x0, px); x1 = Math.max(x1, px);
+        y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+      }
+    return JSON.stringify({ anchoPx: +(x1 - x0).toFixed(1), altoPx: +(y1 - y0).toFixed(1),
+                            marco: [ren.domElement.clientWidth, ren.domElement.clientHeight] });
+  },
+  apretadoVer: () => JSON.stringify({ apretado: J.apretado, dedo: J.dedo, modo: J.modo }),
   audita: () => audita(),
   /* ── LA PRUEBA DEL DAÑO, QUE EL AUTO-JUGADOR NO PUEDE DAR ──
      El honesto mata antes de que le tiren y el del azar casi nunca sube, asi que

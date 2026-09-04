@@ -31,11 +31,21 @@ const M = {
   bala: 46,              /* velocidad de la bala */
   rebote: 0.42,          /* cuánto conserva la pistola al rebotar */
   roceAng: 0.55,         /* cuánto se frena el giro por segundo */
-  largo: 0.29,           /* el largo de la pistola */
+  /* ── EL ARMA SE DIBUJA MAS GRANDE QUE UNA DE VERDAD, Y ES A PROPOSITO ──
+     La camara encuadra 5,4 m de ancho en 412 px: son 76 px por metro, o sea que
+     una pistola de tamaño real mide VEINTE PIXELES. Medido con los listeners de
+     verdad, un arrastre de 100 px la gira de 0,6 a 1,6 rad — o sea 57 grados— y
+     en veinte pixeles eso mueve la punta del cañon diez: desde el asiento del
+     jugador se lee «no gira, queda ahi tieso», y tenia razon. El giro no estaba
+     roto, estaba abajo del umbral en el que se ve.
+     Aca la pistola no es un accesorio: es el PERSONAJE, asi que se dibuja a la
+     escala de un personaje. A 0,42 mide 32 px y es el 28 % del alto de un
+     ladron — que es exactamente lo que hace este genero. */
+  largo: 0.42,           /* el largo de la pistola */
   /* de donde sale la bala, medido desde el centro: es el MISMO numero que usan
      el disparo, la linea de la mira y las chispas del fogonazo, asi que no
      pueden apuntar a sitios distintos */
-  boca: 0.145,
+  boca: 0.21,
   lento: 0.16,           /* el factor de la cámara lenta */
   entraLento: 0.10,      /* cuánto tarda en entrar y salir */
   cadencia: 0.22,        /* mínimo entre dos disparos */

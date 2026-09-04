@@ -61,7 +61,7 @@ const MAT = {
      medido en la captura, los tres halos de cada piso parecian tres puertas. Un
      radial no tiene borde en ningun lado, que es exactamente lo que le pasa a
      la luz. */
-  haloArma: new T.MeshBasicMaterial({ map: texHaloArma(), transparent: true, opacity: 0.72,
+  haloArma: new T.MeshBasicMaterial({ map: texHaloArma(), transparent: true, opacity: 0.52,
                                      blending: T.AdditiveBlending, depthWrite: false }),
   halo:  new T.MeshBasicMaterial({ map: texHalo(), transparent: true, opacity: 0.55,
                                    blending: T.AdditiveBlending, depthWrite: false }),
@@ -513,8 +513,21 @@ let gArma = null, gMira = null, gDest = null;
    tiene borde en ningun lado, o sea que no se lee a objeto. */
 function haloArma(){
   const m = new T.Mesh(GEO.plano, MAT.haloArma);
-  m.scale.set(1.45, 1.45, 1);
+  m.scale.set(1.30, 1.30, 1);
   m.position.z = -0.12;
+  m.userData.noSom = true;
+  return m;
+}
+
+/* ── UN PUNTO EN LA BOCA, QUE ES LO QUE HACE VISIBLE EL GIRO ──
+   Un objeto chico girando sobre su centro casi no cambia de silueta; lo que si
+   se ve es un punto brillante recorriendo un circulo. Va en `M.boca`, o sea
+   EXACTAMENTE de donde sale la bala: asi el jugador no aprende «hacia donde
+   mira el arma» sino «de donde va a salir el tiro», que es el dato util. */
+function puntoBoca(){
+  const m = new T.Mesh(GEO.esf, MAT.bala);
+  m.scale.setScalar(0.045);
+  m.position.set(M.boca, 0, 0.03);
   m.userData.noSom = true;
   return m;
 }
@@ -529,6 +542,7 @@ function armaPistola(){
     m.castShadow = CALIDADES[CALIDAD].sombras;
     g.add(m);
     g.add(haloArma());
+    g.add(puntoBoca());
     gArma = g; gCosas.add(gArma); return;
   }
   gArma = new T.Group();

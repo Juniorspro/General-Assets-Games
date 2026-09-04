@@ -296,6 +296,32 @@ window.__P = {
       largoM: M.largo, boca: M.boca, ang: +P.ang.toFixed(2), vang: +P.vang.toFixed(3) });
   },
   camLibre: () => { CAM_FIJA = false; CONGELADO = false; return 'ok'; },
+  /* el angulo del arma tal como lo ve el DIBUJO, no como lo guarda la fisica:
+     es la unica forma de saber si girar el dedo llega hasta la malla */
+  angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
+  angFis: () => +P.ang.toFixed(3),
+  /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
+     «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
+     mide en la pantalla del que juega. */
+  armaPx: () => {
+    if (!gArma) return 'no hay arma';
+    const g = MOD.geo.p_pistola;
+    if (!g) return 'sin modelo';
+    const b = g.boundingBox, v = new T.Vector3();
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    gArma.updateMatrixWorld(true);
+    for (const sx of [b.min.x, b.max.x]) for (const sy of [b.min.y, b.max.y])
+      for (const sz of [b.min.z, b.max.z]){
+        v.set(sx, sy, sz).applyMatrix4(gArma.matrixWorld).project(cam);
+        const px = (v.x*0.5 + 0.5)*ren.domElement.clientWidth;
+        const py = (0.5 - v.y*0.5)*ren.domElement.clientHeight;
+        x0 = Math.min(x0, px); x1 = Math.max(x1, px);
+        y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+      }
+    return JSON.stringify({ anchoPx: +(x1 - x0).toFixed(1), altoPx: +(y1 - y0).toFixed(1),
+                            marco: [ren.domElement.clientWidth, ren.domElement.clientHeight] });
+  },
+  apretadoVer: () => JSON.stringify({ apretado: J.apretado, dedo: J.dedo, modo: J.modo }),
   audita: () => audita(),
   /* ── LA PRUEBA DEL DAÑO, QUE EL AUTO-JUGADOR NO PUEDE DAR ──
      El honesto mata antes de que le tiren y el del azar casi nunca sube, asi que
