@@ -18,7 +18,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    ancho. Aca el mundo es una TORRE: se sube de piso en piso, asi que lo que hay
    que ver es alto y angosto. Girar el cuadro seria pelearse con la forma del
    nivel para despues volver a girarlo. */
-#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;
+  opacity:0;transition:opacity .2s}
+/* -- EL HUD SOLO EXISTE MIENTRAS SE JUEGA --
+   Con el menu translucido, las tres fichas se veian POR ENCIMA del titulo: en la
+   captura, «PISO 1/10» y «VIDAS 3» flotando sobre la portada. Un marcador que
+   cuenta una partida que todavia no empezo no informa nada, molesta. */
+body.jugando #hud{opacity:1}
 .fic{position:absolute;top:calc(env(safe-area-inset-top, 0px) + 12px);
   padding:7px 13px;border-radius:99px;background:rgba(12,15,22,.62);
   backdrop-filter:blur(7px);font:800 12px/1 system-ui,sans-serif;letter-spacing:.13em}
@@ -43,6 +49,17 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 #pista{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 96px);
   transform:translateX(-50%);font:700 12.5px/1.5 system-ui,sans-serif;
   color:rgba(230,236,245,.62);text-align:center;width:min(320px,82vw)}
+/* ── EL CARTEL DEL TUTORIAL VA ARRIBA Y NO ABAJO ──
+   Abajo esta la pistola, que es justo lo que el cartel te pide que mires; y en
+   el tercio de abajo tambien cae la linea de ayuda. Arriba hay hueco por
+   geometria: la torre es angosta y el cielorraso del piso de arriba esta vacio. */
+#tut{position:absolute;left:50%;top:calc(env(safe-area-inset-top, 0px) + 96px);
+  transform:translateX(-50%);width:min(330px,86vw);
+  padding:11px 15px;border-radius:14px;background:rgba(10,13,19,.80);
+  backdrop-filter:blur(8px);border:1px solid rgba(255,196,106,.30);
+  font:700 13.5px/1.45 system-ui,sans-serif;color:#ffe2a8;text-align:center;
+  opacity:0;transition:opacity .22s;pointer-events:none}
+#tut.on{opacity:1}
 #lento{position:absolute;inset:0;box-shadow:inset 0 0 130px rgba(90,150,255,.30);
   opacity:0;transition:opacity .18s}
 #lento.on{opacity:1}
@@ -68,10 +85,32 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    entenderlo. */
 #idioma,#menu,#fin{position:fixed;inset:0;z-index:95;display:none;place-items:center;
   background:radial-gradient(140% 100% at 50% 20%, #1a2030 0%, #10141d 55%, #080a10 100%)}
+/* -- EL MENU DEJA VER LA TORRE, Y NO CUESTA UN SOLO ASSET --
+   Un panel opaco encima de una escena 3D que ya esta dibujada tira a la basura
+   lo unico que este juego tiene para mostrar. El velo va como DEGRADADO y no
+   como opacidad pareja: cerrado arriba y abajo -donde estan el titulo y los
+   botones, que tienen que leerse- y abierto en el medio, que es por donde se ve
+   el edificio con sus luces. Es lo mismo que se hizo en POMPOM.
+   `#idioma` se queda opaco a proposito: aparece antes de que exista la escena. */
+#menu,#fin{background:linear-gradient(180deg,
+  rgba(8,10,16,.95) 0%, rgba(8,10,16,.90) 26%, rgba(10,13,20,.52) 46%,
+  rgba(10,13,20,.60) 62%, rgba(8,10,16,.93) 82%, rgba(8,10,16,.97) 100%)}
 #idioma.on,#menu.on,#fin.on{display:grid}
 .caja{text-align:center;width:min(330px,84vw)}
 .caja h1{font:200 clamp(28px,8vw,42px)/1 system-ui,sans-serif;letter-spacing:.28em;
   text-indent:.28em;color:#dbe6f4;margin-bottom:6px}
+/* -- EL TITULO DEL MENU LLEVA SU PROPIO TRATAMIENTO --
+   El nombre del juego es lo unico que se reconoce de lejos, asi que no puede ser
+   la misma tipografia fina del resto: va pesado, con el relleno de acero de la
+   pistola y un filo calido abajo, que es el color de las luces del edificio. */
+#menu h1,#carga h1,#fin h1{font-weight:800;letter-spacing:.20em;text-indent:.20em;
+  background:linear-gradient(180deg,#f6f9fc 0%,#c3ccd9 44%,#79828f 63%,#e9dcaa 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 12px rgba(0,0,0,.8))}
+/* la raya de abajo es el fogonazo: el unico acento calido del menu, y del mismo
+   ambar que las tiras de luz de la torre */
+#menu h1::after{content:'';display:block;width:76px;height:2px;margin:13px auto 0;
+  border-radius:2px;background:linear-gradient(90deg,transparent,#ffc46a,transparent)}
 .caja .sub{font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.24em;
   color:rgba(200,215,240,.42);text-transform:uppercase;margin-bottom:20px}
 .caja p{font-size:13px;line-height:1.6;color:rgba(215,228,245,.66);margin-bottom:18px}
@@ -108,6 +147,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <h1>PISTOLA</h1><div class="sub" id="mSub"></div>
   <p id="mTexto"></p>
   <button class="bt p" id="bJugar"></button>
+  <button class="bt" id="bTut"></button>
   <div id="niveles"></div>
   <div class="fila" id="filaCal"></div>
   <div class="fila" id="filaIdi"></div>
@@ -125,6 +165,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <div class="fic" id="fNivel"></div>
   <div class="fic" id="fVidas"></div>
   <div id="fLadrones"></div>
+  <div id="tut"></div>
   <div id="aviso"></div>
   <div id="pista"></div>
   <div id="lento"></div>

@@ -564,6 +564,59 @@ ciegas los habría tirado. La comprobación que corresponde no es «¿está suci
 `git branch -r --contains <commit>`: los cinco estaban en `origin/main`, o sea que no se perdía nada.
 **Comprobar antes de resetear, y comprobar contra TODOS los remotos, no sólo contra la propia rama.**
 
+#### QUINTA PASADA: **UN TUTORIAL GUIADO Y UN MENÚ QUE MUESTRA EL JUEGO**
+
+**EL TUTORIAL SON SEIS COSAS QUE HACER, NO SEIS CARTELES.** Cada paso **espera a que se haga la cosa** y
+hasta entonces no avanza: un tutorial que se pasa leyendo se saltea, y lo que se saltea es exactamente lo
+que después no se entiende. Es la regla que ya ordenó el de ECO y el de RECREO. Los pasos son *sos la
+pistola · mantené apretado · el tiempo se frena y gira sola · soltá cuando la línea toque al ladrón · el
+tiro te empuja, subí un piso · limpiá el piso*.
+
+**Y SOLTAR EN EL PASO 3 TE DEVUELVE AL 2.** El paso que pide sostener el gatillo no se puede aprobar
+soltando: si se suelta antes de los dos segundos, vuelve a pedirlo. Medido: `apreta` lleva del paso 1 al
+2, y `suelta` devuelve al 1.
+
+**LOS LADRONES NO TIRAN HASTA EL PASO 5.** Un tutorial en el que se puede morir enseña miedo y no la
+mecánica — el jugador sale corriendo antes de entender que el retroceso lo mueve. Se les corre el reloj
+(`cd = 999`), no se les toca la lógica, así que el que se despierta es el mismo ladrón de siempre.
+
+**Y VA CON EL RELOJ DE PANTALLA Y NO CON EL DEL MUNDO.** `dtm` está multiplicado por 0,16 mientras se
+mantiene apretado: contando con ése, el paso que **pide** mantener apretado duraría doce segundos en vez
+de dos, o sea que sería el más largo del tutorial justo por hacer lo que se le pidió.
+
+#### EL MENÚ DEJA VER LA TORRE, Y NO CUESTA UN SOLO ASSET
+
+Un panel opaco encima de una escena 3D que ya está dibujada tira a la basura lo único que este juego
+tiene para mostrar. El velo pasa a ser un **degradado** —cerrado arriba y abajo, donde están el título y
+los botones, y abierto en el medio— y la cámara del menú **sube sola por la torre** con el módulo del
+alto, así que llega arriba y vuelve a entrar por abajo sin salto. Cuesta cero assets y cero triángulos, y
+muestra exactamente lo que el juego es. Es lo mismo que se hizo en POMPOM.
+Más un título con relleno de acero y un filo ámbar —el color de las tiras de luz— y un botón de TUTORIAL
+que lo repite a mano: obligatorio la primera vez, repetible después, porque obligado siempre es un peaje.
+
+**Y EL HUD SE APAGA FUERA DE LA PARTIDA.** Con el menú translúcido, las tres fichas quedaban **por encima
+del título**: en la captura, «PISO 1/10» y «VIDAS 3» flotando sobre la portada. Un marcador que cuenta una
+partida que todavía no empezó no informa nada.
+
+**Y EL CARTEL DEL TUTORIAL SE VUELVE A PINTAR AL CAMBIAR DE IDIOMA.** Lo escribe `TUT.pinta()` una vez por
+paso, así que cambiando de idioma en el medio se quedaba en el anterior: medido, con el juego en inglés el
+cartel seguía diciendo *«Mantené el dedo apretado»*. Es el mismo defecto que ya costó una vuelta con las
+fichas de PUERTA BLANCA.
+
+#### MEDIDO AL CERRAR
+
+Tutorial recorrido por sondas: paso 0 con los tres ladrones dormidos (`cd 999`), `apreta` → paso 2,
+`suelta` → vuelta al 1, y el cartel en los **tres idiomas** con el mismo paso puesto. **Cero solapamientos**
+entre los cuatro elementos del HUD contando el cartel. Regresión completa intacta: 16 de 16 assets,
+auditoría limpia en los diez niveles, daño 2 tiros/2 impactos, honesto **10 de 10** con tasa 0,063 contra
+0 de 10 del azar, `window.__errs` vacío.
+
+**LO QUE NO SE PUDO HACER, Y ES HONESTO DECIRLO:** el arte generado del menú —un fondo 9:16 y el título
+como imagen— quedó pedido y sin generar. **Rezona perdió la credencial** cuando el contenedor se revirtió
+(vive en `~/.rezona/`, fuera del repo, y sólo la repone un login con código de un solo uso) y
+**Higgsfield contestó «Out of credits»**. Los prompts están escritos en `pedir.py` bajo `MENU` y el
+horneado ya sabe leerlos, así que entran con un comando cuando haya con qué.
+
 ### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
 
 Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer

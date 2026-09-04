@@ -65,9 +65,11 @@ function bucle(){
      dibuja se pisa sola en el cuadro siguiente: la foto sale del encuadre normal
      y parece que la sonda no hizo nada. Es la misma leccion que ya costo una
      vuelta con la cinematica de BARRIO. */
-  if (!CAM_FIJA) ponCamara(dt);
+  /* en el menu manda la deriva; en partida, el riel que sigue a la pistola */
+  if (!CAM_FIJA){ if (J.modo === 'juega' || J.modo === 'fin') ponCamara(dt); else camaraMenu(dt); }
   $('aviso').classList.toggle('on', J.msgT > 0);
   if (J.modo === 'juega') $('fLadrones').textContent = TX('ladrones') + ' ' + vivos();
+  document.body.classList.toggle('jugando', J.modo === 'juega');
   post.uniforms.uT.value = performance.now()*0.001;
   /* ── LAS DOS PASADAS SE CUENTAN JUNTAS ──
      three.js pone `info.render` a cero al empezar CADA `render()`, asi que
@@ -114,6 +116,27 @@ function ponLadrones(){
    Sin acotarla, la pistola pegada al piso deja media pantalla mostrando lo que
    hay debajo del suelo, que es nada. */
 let camY = 3, camXs = 0;
+/* -- LA CAMARA DEL MENU SUBE SOLA POR LA TORRE --
+   Con la camara clavada donde quedo la partida, el fondo del menu es una foto y
+   se lee a pantalla congelada. Subiendo despacio y orbitando apenas, la misma
+   escena que ya esta dibujada pasa a ser el arte del menu: cuesta cero assets y
+   cero triangulos, y muestra exactamente lo que el juego es.
+   La vuelta se hace con el modulo del alto de la torre, asi que no hay salto al
+   volver a empezar: llega arriba y vuelve a entrar por abajo. */
+let menuT = 0;
+function camaraMenu(dt){
+  menuT += dt;
+  const alto = Math.max(8, MUNDO.alto - 4.5);
+  const y = 2.2 + (menuT*0.85) % alto;
+  const o = Math.sin(menuT*0.19)*1.5;
+  cam.position.set(CAM_X + o, y + CAM_Y, CAM_Z + Math.cos(menuT*0.13)*1.1);
+  camMira.set(o*0.4, y, 0);
+  cam.lookAt(camMira);
+  camY = y;
+  sol.target.position.set(0, y, 0);
+  sol.position.set(7, y + 16, 11);
+}
+
 function ponCamara(dt){
   const k = Math.min(1, dt*4.6);
   /* ── EL PISO DEL ENCUADRE BAJA, PORQUE EL HEROE MIDE VEINTE PIXELES ──
@@ -137,6 +160,7 @@ function pintaMenu(){
   $('mSub').textContent = TX('sub');
   $('mTexto').textContent = TX('texto');
   $('bJugar').textContent = TX('jugar');
+  $('bTut').textContent = TUT.hecho ? TX('tut') : TX('tut') + ' ·';
   $('mPie').textContent = TX('pie');
   $('bMenu').textContent = TX('menu');
   const n = $('niveles'); n.innerHTML = '';
@@ -172,9 +196,18 @@ function ponIdioma(l){
   J.modo = 'menu';
   $('menu').classList.add('on');
   pintaMenu(); pintaHud();
+  /* -- EL CARTEL DEL TUTORIAL SE VUELVE A PINTAR, NO SE ACUERDA SOLO --
+     Lo escribe `TUT.pinta()` UNA vez por paso, asi que cambiando de idioma en el
+     medio se queda en el anterior hasta el paso siguiente. Medido: con el juego
+     puesto en ingles el cartel seguia diciendo «Mantene el dedo apretado». Es el
+     mismo defecto que ya costo una vuelta con las fichas de PUERTA BLANCA. */
+  if (TUT.on) TUT.pinta();
   musQuiere('menu');
 }
 $('bJugar').onclick = () => { son('clic'); empieza(Math.min(NIVELES, J.hechos + 1)); };
+/* el tutorial se puede repetir: obligatorio la primera vez y a mano despues.
+   `TUT.pedido` es lo que hace que `empieza(1)` lo arranque aunque ya este hecho. */
+$('bTut').onclick = () => { son('clic'); TUT.pedido = true; empieza(1); };
 $('bMenu').onclick = () => { son('clic'); J.modo = 'menu';
   $('fin').classList.remove('on'); $('menu').classList.add('on'); pintaMenu(); musQuiere('menu'); };
 $('bSigue').onclick = () => {
@@ -298,6 +331,13 @@ window.__P = {
      es la unica forma de saber si girar el dedo llega hasta la malla */
   angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
   angFis: () => +P.ang.toFixed(3),
+  /* el tutorial: en que paso esta y que dice, que es lo unico que se puede
+     comprobar sin jugarlo a mano */
+  tut: () => JSON.stringify({ on: TUT.on, paso: TUT.paso, hecho: TUT.hecho,
+                              cartel: $('tut').textContent,
+                              visible: $('tut').classList.contains('on'),
+                              ladCd: MUNDO.lad.map(l => Math.round(l.cd)) }),
+  tutPaso: (n) => { TUT.paso = n; TUT.t = 0; TUT.pinta(); return TUT.paso; },
   estadoVang: () => +P.vang.toFixed(3),
   /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
      «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
@@ -393,7 +433,7 @@ window.__P = {
                             tono: ren.toneMapping, salida: ren.outputColorSpace });
   },
   solapes: () => {
-    const ids = ['fNivel', 'fVidas', 'fLadrones', 'aviso', 'pista'];
+    const ids = ['fNivel', 'fVidas', 'fLadrones', 'tut', 'aviso', 'pista'];
     const c = [], ch = [];
     for (const id of ids){
       const e = $(id);

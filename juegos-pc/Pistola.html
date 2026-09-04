@@ -18,7 +18,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    ancho. Aca el mundo es una TORRE: se sube de piso en piso, asi que lo que hay
    que ver es alto y angosto. Girar el cuadro seria pelearse con la forma del
    nivel para despues volver a girarlo. */
-#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;
+  opacity:0;transition:opacity .2s}
+/* -- EL HUD SOLO EXISTE MIENTRAS SE JUEGA --
+   Con el menu translucido, las tres fichas se veian POR ENCIMA del titulo: en la
+   captura, «PISO 1/10» y «VIDAS 3» flotando sobre la portada. Un marcador que
+   cuenta una partida que todavia no empezo no informa nada, molesta. */
+body.jugando #hud{opacity:1}
 .fic{position:absolute;top:calc(env(safe-area-inset-top, 0px) + 12px);
   padding:7px 13px;border-radius:99px;background:rgba(12,15,22,.62);
   backdrop-filter:blur(7px);font:800 12px/1 system-ui,sans-serif;letter-spacing:.13em}
@@ -43,6 +49,17 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 #pista{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 96px);
   transform:translateX(-50%);font:700 12.5px/1.5 system-ui,sans-serif;
   color:rgba(230,236,245,.62);text-align:center;width:min(320px,82vw)}
+/* ── EL CARTEL DEL TUTORIAL VA ARRIBA Y NO ABAJO ──
+   Abajo esta la pistola, que es justo lo que el cartel te pide que mires; y en
+   el tercio de abajo tambien cae la linea de ayuda. Arriba hay hueco por
+   geometria: la torre es angosta y el cielorraso del piso de arriba esta vacio. */
+#tut{position:absolute;left:50%;top:calc(env(safe-area-inset-top, 0px) + 96px);
+  transform:translateX(-50%);width:min(330px,86vw);
+  padding:11px 15px;border-radius:14px;background:rgba(10,13,19,.80);
+  backdrop-filter:blur(8px);border:1px solid rgba(255,196,106,.30);
+  font:700 13.5px/1.45 system-ui,sans-serif;color:#ffe2a8;text-align:center;
+  opacity:0;transition:opacity .22s;pointer-events:none}
+#tut.on{opacity:1}
 #lento{position:absolute;inset:0;box-shadow:inset 0 0 130px rgba(90,150,255,.30);
   opacity:0;transition:opacity .18s}
 #lento.on{opacity:1}
@@ -68,10 +85,32 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
    entenderlo. */
 #idioma,#menu,#fin{position:fixed;inset:0;z-index:95;display:none;place-items:center;
   background:radial-gradient(140% 100% at 50% 20%, #1a2030 0%, #10141d 55%, #080a10 100%)}
+/* -- EL MENU DEJA VER LA TORRE, Y NO CUESTA UN SOLO ASSET --
+   Un panel opaco encima de una escena 3D que ya esta dibujada tira a la basura
+   lo unico que este juego tiene para mostrar. El velo va como DEGRADADO y no
+   como opacidad pareja: cerrado arriba y abajo -donde estan el titulo y los
+   botones, que tienen que leerse- y abierto en el medio, que es por donde se ve
+   el edificio con sus luces. Es lo mismo que se hizo en POMPOM.
+   `#idioma` se queda opaco a proposito: aparece antes de que exista la escena. */
+#menu,#fin{background:linear-gradient(180deg,
+  rgba(8,10,16,.95) 0%, rgba(8,10,16,.90) 26%, rgba(10,13,20,.52) 46%,
+  rgba(10,13,20,.60) 62%, rgba(8,10,16,.93) 82%, rgba(8,10,16,.97) 100%)}
 #idioma.on,#menu.on,#fin.on{display:grid}
 .caja{text-align:center;width:min(330px,84vw)}
 .caja h1{font:200 clamp(28px,8vw,42px)/1 system-ui,sans-serif;letter-spacing:.28em;
   text-indent:.28em;color:#dbe6f4;margin-bottom:6px}
+/* -- EL TITULO DEL MENU LLEVA SU PROPIO TRATAMIENTO --
+   El nombre del juego es lo unico que se reconoce de lejos, asi que no puede ser
+   la misma tipografia fina del resto: va pesado, con el relleno de acero de la
+   pistola y un filo calido abajo, que es el color de las luces del edificio. */
+#menu h1,#carga h1,#fin h1{font-weight:800;letter-spacing:.20em;text-indent:.20em;
+  background:linear-gradient(180deg,#f6f9fc 0%,#c3ccd9 44%,#79828f 63%,#e9dcaa 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 12px rgba(0,0,0,.8))}
+/* la raya de abajo es el fogonazo: el unico acento calido del menu, y del mismo
+   ambar que las tiras de luz de la torre */
+#menu h1::after{content:'';display:block;width:76px;height:2px;margin:13px auto 0;
+  border-radius:2px;background:linear-gradient(90deg,transparent,#ffc46a,transparent)}
 .caja .sub{font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.24em;
   color:rgba(200,215,240,.42);text-transform:uppercase;margin-bottom:20px}
 .caja p{font-size:13px;line-height:1.6;color:rgba(215,228,245,.66);margin-bottom:18px}
@@ -108,6 +147,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <h1>PISTOLA</h1><div class="sub" id="mSub"></div>
   <p id="mTexto"></p>
   <button class="bt p" id="bJugar"></button>
+  <button class="bt" id="bTut"></button>
   <div id="niveles"></div>
   <div class="fila" id="filaCal"></div>
   <div class="fila" id="filaIdi"></div>
@@ -125,6 +165,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <div class="fic" id="fNivel"></div>
   <div class="fic" id="fVidas"></div>
   <div id="fLadrones"></div>
+  <div id="tut"></div>
   <div id="aviso"></div>
   <div id="pista"></div>
   <div id="lento"></div>
@@ -240,6 +281,13 @@ const TXT = {
         p2:'Soltá cuando la línea apunte al ladrón. El tiro te empuja y te gira.',
         gano:'PISO LIMPIO', perdio:'TE AGARRARON', fin:'BANCO LIMPIO',
         finT:'Los diez pisos, sin ladrones.',
+                t0:'Sos la pistola. No hay pies: lo único que te mueve es el retroceso.',
+        t1:'Mantené el dedo apretado en cualquier lado de la pantalla.',
+        t2:'El tiempo se frena y sale la línea. La pistola gira sola: vos elegís cuándo.',
+        t3:'Soltá justo cuando la línea toque al ladrón.',
+        t4:'El tiro te empujó. Apuntá para abajo y disparate para arriba: subí un piso.',
+        t5:'Ya está. Limpiá el piso y seguí subiendo.',
+        tut:'TUTORIAL', tutFin:'TUTORIAL HECHO',
         calidad:'GRÁFICOS', baja:'BAJA', media:'MEDIA', alta:'ALTA',
         pie:'Mantené para frenar el tiempo. Soltá en el ángulo justo.' },
   en: { sub:'TEN FLOORS AND ONE GUN', jugar:'PLAY', menu:'MENU', sigue:'NEXT',
@@ -250,6 +298,13 @@ const TXT = {
         p2:'Release when the line points at a thief. The shot pushes and spins you.',
         gano:'FLOOR CLEARED', perdio:'THEY GOT YOU', fin:'BANK CLEARED',
         finT:'All ten floors, no thieves left.',
+                t0:'You are the gun. No feet: the only thing that moves you is recoil.',
+        t1:'Press and hold anywhere on the screen.',
+        t2:'Time slows and the line appears. The gun spins on its own: you pick the moment.',
+        t3:'Release right when the line touches the thief.',
+        t4:'The shot pushed you. Aim down and shoot yourself up: climb one floor.',
+        t5:'That\'s it. Clear the floor and keep climbing.',
+        tut:'TUTORIAL', tutFin:'TUTORIAL DONE',
         calidad:'GRAPHICS', baja:'LOW', media:'MEDIUM', alta:'HIGH',
         pie:'Hold to slow time. Release at the right angle.' },
   pt: { sub:'DEZ ANDARES E UMA PISTOLA', jugar:'JOGAR', menu:'MENU', sigue:'PRÓXIMO',
@@ -260,6 +315,13 @@ const TXT = {
         p2:'Solte quando a linha apontar ao ladrão. O tiro te empurra e te gira.',
         gano:'ANDAR LIMPO', perdio:'TE PEGARAM', fin:'BANCO LIMPO',
         finT:'Os dez andares, sem ladrões.',
+                t0:'Você é a pistola. Não tem pés: a única coisa que te move é o recuo.',
+        t1:'Segure o dedo em qualquer lugar da tela.',
+        t2:'O tempo desacelera e aparece a linha. A pistola gira sozinha: você escolhe quando.',
+        t3:'Solte bem quando a linha tocar o ladrão.',
+        t4:'O tiro te empurrou. Mire para baixo e atire para subir: suba um andar.',
+        t5:'Pronto. Limpe o andar e continue subindo.',
+        tut:'TUTORIAL', tutFin:'TUTORIAL FEITO',
         calidad:'GRÁFICOS', baja:'BAIXA', media:'MÉDIA', alta:'ALTA',
         pie:'Segure para frear o tempo. Solte no ângulo certo.' }
 };
@@ -839,6 +901,11 @@ function pasoJuego(dt){
   $('lento').classList.toggle('on', J.lento > 0.35);
 
   if (J.msgT > 0) J.msgT = Math.max(0, J.msgT - dt);
+  /* ── EL TUTORIAL VA CON EL RELOJ DE PANTALLA Y NO CON EL DEL MUNDO ──
+     `dtm` esta multiplicado por 0,16 mientras se mantiene apretado: un paso de
+     dos segundos duraria doce, o sea que el paso que PIDE mantener apretado
+     seria el mas largo del tutorial. */
+  TUT.pon(dt);
   if (J.modo !== 'juega') return;
 
   const dtm = dt*lerp(1, M.lento, J.lento);
@@ -863,7 +930,7 @@ function simula(dt){
 }
 
 function alGolpe(que, x, y, obj){
-  if (que === 'ladron'){ son('mata'); chispas(x, y, 16, 0xff5a4a); sacude(0.5); }
+  if (que === 'ladron'){ TUT.mato(); son('mata'); chispas(x, y, 16, 0xff5a4a); sacude(0.5); }
   else if (que === 'caja'){ son('caja'); chispas(x, y, 12, 0xc9a06a); sacude(0.3); }
   else if (que === 'muro'){ chispas(x, y, 5, 0xfff0c0); }
   else if (que === 'lad_tira'){ son('ladtira'); }
@@ -886,10 +953,77 @@ function empieza(n){
   pistolaPone(0, 0.9);
   J.modo = 'juega';
   $('menu').classList.remove('on'); $('fin').classList.remove('on');
-  $('pista').textContent = n <= 2 ? TX('p1') : '';
+  $('pista').textContent = (n <= 2 && TUT.hecho) ? TX('p1') : '';
+  $('tut').classList.remove('on');
+  /* el tutorial vive en el nivel 1: es el unico con tres ladrones y un solo
+     hueco, o sea el unico donde «subi un piso» significa una sola cosa */
+  if (n === 1 && (!TUT.hecho || TUT.pedido)){ TUT.pedido = false; TUT.arranca(); }
+  else TUT.on = false;
   pintaHud();
   musQuiere('juego');
 }
+
+/* ══════════════════════════ EL TUTORIAL GUIADO ══════════════════════════
+   ── CADA PASO ESPERA A QUE HAGAS LA COSA ──
+   No son seis carteles seguidos: son seis cosas que hacer, y hasta que no se
+   hacen el tutorial no avanza. Un tutorial que se pasa leyendo se saltea, y lo
+   que se saltea es exactamente lo que despues no se entiende. Es la regla que
+   ya ordeno el de ECO y el de RECREO en este repo.
+
+   ── Y LOS LADRONES NO TIRAN HASTA QUE APRENDISTE A DISPARAR ──
+   Un tutorial en el que se puede morir enseña miedo, no la mecanica: el jugador
+   sale corriendo antes de entender que el retroceso lo mueve. Los ladrones se
+   despiertan recien en el paso 5, que es cuando ya mato a uno.
+
+   ── SE VE UNA VEZ, Y DESPUES ESTA EN EL MENU ──
+   Obligatorio la primera vez y repetible a mano: obligado siempre es un peaje,
+   y este juego se vuelve a abrir muchas veces. */
+const TUT = {
+  on: false, paso: 0, t: 0, hecho: false, matoUno: false,
+  /* cuanto hay que sostener el gatillo para que el paso 3 se de por entendido:
+     dos segundos de camara lenta es lo que tarda la pistola en dar media vuelta,
+     o sea lo que hace falta para VER que gira sola */
+  SOSTEN: 2.0,
+  arranca(){
+    this.on = true; this.paso = 0; this.t = 0; this.matoUno = false;
+    /* los ladrones se duermen: se les corre el reloj, no se les toca la logica,
+       asi que el que se despierta en el paso 5 es el mismo ladron de siempre */
+    for (const l of MUNDO.lad){ l.cd = 999; l.avisa = 0; }
+    this.pinta();
+  },
+  termina(){
+    this.on = false; this.hecho = true;
+    for (const l of MUNDO.lad) l.cd = azr(0.6, 1.8);
+    $('tut').classList.remove('on');
+    try { localStorage.setItem('pistola_tut', '1'); } catch(e){}
+  },
+  /* el paso 5 lo dispara `alGolpe`, que es quien sabe que murio un ladron */
+  mato(){ if (this.on) this.matoUno = true; },
+  pinta(){
+    const e = $('tut');
+    e.textContent = TX('t' + this.paso);
+    e.classList.add('on');
+  },
+  pon(dt){
+    if (!this.on || J.modo !== 'juega') return;
+    this.t += dt;
+    const p = this.paso;
+    let listo = false;
+    if (p === 0) listo = this.t > 2.2;                       /* sos la pistola */
+    else if (p === 1) listo = J.apretado;                    /* mantene */
+    else if (p === 2){                                       /* mira y gira */
+      if (!J.apretado){ this.paso = 1; this.t = 0; this.pinta(); return; }
+      listo = this.t > this.SOSTEN;
+    }
+    else if (p === 3) listo = this.matoUno;                  /* solta y mata */
+    else if (p === 4){                                       /* subi un piso */
+      listo = P.y > M.piso + 0.4;
+      if (listo){ for (const l of MUNDO.lad) l.cd = azr(0.6, 1.8); }
+    }
+    else if (p === 5){ if (vivos() === 0) this.termina(); return; }
+    if (listo){ this.paso++; this.t = 0; this.pinta(); }
+  }
+};
 
 function gana(){
   J.modo = 'fin'; J.fin = 'gano';
@@ -931,6 +1065,7 @@ function guarda(){
   try { localStorage.setItem('pistola_hechos', String(J.hechos)); } catch(e){}
 }
 function carga(){
+  try { TUT.hecho = localStorage.getItem('pistola_tut') === '1'; } catch(e){}
   try {
     J.hechos = parseInt(localStorage.getItem('pistola_hechos') || '0', 10) || 0;
     const c = localStorage.getItem('pistola_cal');
@@ -2023,9 +2158,11 @@ function bucle(){
      dibuja se pisa sola en el cuadro siguiente: la foto sale del encuadre normal
      y parece que la sonda no hizo nada. Es la misma leccion que ya costo una
      vuelta con la cinematica de BARRIO. */
-  if (!CAM_FIJA) ponCamara(dt);
+  /* en el menu manda la deriva; en partida, el riel que sigue a la pistola */
+  if (!CAM_FIJA){ if (J.modo === 'juega' || J.modo === 'fin') ponCamara(dt); else camaraMenu(dt); }
   $('aviso').classList.toggle('on', J.msgT > 0);
   if (J.modo === 'juega') $('fLadrones').textContent = TX('ladrones') + ' ' + vivos();
+  document.body.classList.toggle('jugando', J.modo === 'juega');
   post.uniforms.uT.value = performance.now()*0.001;
   /* ── LAS DOS PASADAS SE CUENTAN JUNTAS ──
      three.js pone `info.render` a cero al empezar CADA `render()`, asi que
@@ -2072,6 +2209,27 @@ function ponLadrones(){
    Sin acotarla, la pistola pegada al piso deja media pantalla mostrando lo que
    hay debajo del suelo, que es nada. */
 let camY = 3, camXs = 0;
+/* -- LA CAMARA DEL MENU SUBE SOLA POR LA TORRE --
+   Con la camara clavada donde quedo la partida, el fondo del menu es una foto y
+   se lee a pantalla congelada. Subiendo despacio y orbitando apenas, la misma
+   escena que ya esta dibujada pasa a ser el arte del menu: cuesta cero assets y
+   cero triangulos, y muestra exactamente lo que el juego es.
+   La vuelta se hace con el modulo del alto de la torre, asi que no hay salto al
+   volver a empezar: llega arriba y vuelve a entrar por abajo. */
+let menuT = 0;
+function camaraMenu(dt){
+  menuT += dt;
+  const alto = Math.max(8, MUNDO.alto - 4.5);
+  const y = 2.2 + (menuT*0.85) % alto;
+  const o = Math.sin(menuT*0.19)*1.5;
+  cam.position.set(CAM_X + o, y + CAM_Y, CAM_Z + Math.cos(menuT*0.13)*1.1);
+  camMira.set(o*0.4, y, 0);
+  cam.lookAt(camMira);
+  camY = y;
+  sol.target.position.set(0, y, 0);
+  sol.position.set(7, y + 16, 11);
+}
+
 function ponCamara(dt){
   const k = Math.min(1, dt*4.6);
   /* ── EL PISO DEL ENCUADRE BAJA, PORQUE EL HEROE MIDE VEINTE PIXELES ──
@@ -2095,6 +2253,7 @@ function pintaMenu(){
   $('mSub').textContent = TX('sub');
   $('mTexto').textContent = TX('texto');
   $('bJugar').textContent = TX('jugar');
+  $('bTut').textContent = TUT.hecho ? TX('tut') : TX('tut') + ' ·';
   $('mPie').textContent = TX('pie');
   $('bMenu').textContent = TX('menu');
   const n = $('niveles'); n.innerHTML = '';
@@ -2130,9 +2289,18 @@ function ponIdioma(l){
   J.modo = 'menu';
   $('menu').classList.add('on');
   pintaMenu(); pintaHud();
+  /* -- EL CARTEL DEL TUTORIAL SE VUELVE A PINTAR, NO SE ACUERDA SOLO --
+     Lo escribe `TUT.pinta()` UNA vez por paso, asi que cambiando de idioma en el
+     medio se queda en el anterior hasta el paso siguiente. Medido: con el juego
+     puesto en ingles el cartel seguia diciendo «Mantene el dedo apretado». Es el
+     mismo defecto que ya costo una vuelta con las fichas de PUERTA BLANCA. */
+  if (TUT.on) TUT.pinta();
   musQuiere('menu');
 }
 $('bJugar').onclick = () => { son('clic'); empieza(Math.min(NIVELES, J.hechos + 1)); };
+/* el tutorial se puede repetir: obligatorio la primera vez y a mano despues.
+   `TUT.pedido` es lo que hace que `empieza(1)` lo arranque aunque ya este hecho. */
+$('bTut').onclick = () => { son('clic'); TUT.pedido = true; empieza(1); };
 $('bMenu').onclick = () => { son('clic'); J.modo = 'menu';
   $('fin').classList.remove('on'); $('menu').classList.add('on'); pintaMenu(); musQuiere('menu'); };
 $('bSigue').onclick = () => {
@@ -2256,6 +2424,13 @@ window.__P = {
      es la unica forma de saber si girar el dedo llega hasta la malla */
   angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
   angFis: () => +P.ang.toFixed(3),
+  /* el tutorial: en que paso esta y que dice, que es lo unico que se puede
+     comprobar sin jugarlo a mano */
+  tut: () => JSON.stringify({ on: TUT.on, paso: TUT.paso, hecho: TUT.hecho,
+                              cartel: $('tut').textContent,
+                              visible: $('tut').classList.contains('on'),
+                              ladCd: MUNDO.lad.map(l => Math.round(l.cd)) }),
+  tutPaso: (n) => { TUT.paso = n; TUT.t = 0; TUT.pinta(); return TUT.paso; },
   estadoVang: () => +P.vang.toFixed(3),
   /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
      «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
@@ -2351,7 +2526,7 @@ window.__P = {
                             tono: ren.toneMapping, salida: ren.outputColorSpace });
   },
   solapes: () => {
-    const ids = ['fNivel', 'fVidas', 'fLadrones', 'aviso', 'pista'];
+    const ids = ['fNivel', 'fVidas', 'fLadrones', 'tut', 'aviso', 'pista'];
     const c = [], ch = [];
     for (const id of ids){
       const e = $(id);

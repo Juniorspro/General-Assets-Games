@@ -21,6 +21,11 @@ function pasoJuego(dt){
   $('lento').classList.toggle('on', J.lento > 0.35);
 
   if (J.msgT > 0) J.msgT = Math.max(0, J.msgT - dt);
+  /* ── EL TUTORIAL VA CON EL RELOJ DE PANTALLA Y NO CON EL DEL MUNDO ──
+     `dtm` esta multiplicado por 0,16 mientras se mantiene apretado: un paso de
+     dos segundos duraria doce, o sea que el paso que PIDE mantener apretado
+     seria el mas largo del tutorial. */
+  TUT.pon(dt);
   if (J.modo !== 'juega') return;
 
   const dtm = dt*lerp(1, M.lento, J.lento);
@@ -45,7 +50,7 @@ function simula(dt){
 }
 
 function alGolpe(que, x, y, obj){
-  if (que === 'ladron'){ son('mata'); chispas(x, y, 16, 0xff5a4a); sacude(0.5); }
+  if (que === 'ladron'){ TUT.mato(); son('mata'); chispas(x, y, 16, 0xff5a4a); sacude(0.5); }
   else if (que === 'caja'){ son('caja'); chispas(x, y, 12, 0xc9a06a); sacude(0.3); }
   else if (que === 'muro'){ chispas(x, y, 5, 0xfff0c0); }
   else if (que === 'lad_tira'){ son('ladtira'); }
@@ -68,10 +73,77 @@ function empieza(n){
   pistolaPone(0, 0.9);
   J.modo = 'juega';
   $('menu').classList.remove('on'); $('fin').classList.remove('on');
-  $('pista').textContent = n <= 2 ? TX('p1') : '';
+  $('pista').textContent = (n <= 2 && TUT.hecho) ? TX('p1') : '';
+  $('tut').classList.remove('on');
+  /* el tutorial vive en el nivel 1: es el unico con tres ladrones y un solo
+     hueco, o sea el unico donde «subi un piso» significa una sola cosa */
+  if (n === 1 && (!TUT.hecho || TUT.pedido)){ TUT.pedido = false; TUT.arranca(); }
+  else TUT.on = false;
   pintaHud();
   musQuiere('juego');
 }
+
+/* ══════════════════════════ EL TUTORIAL GUIADO ══════════════════════════
+   ── CADA PASO ESPERA A QUE HAGAS LA COSA ──
+   No son seis carteles seguidos: son seis cosas que hacer, y hasta que no se
+   hacen el tutorial no avanza. Un tutorial que se pasa leyendo se saltea, y lo
+   que se saltea es exactamente lo que despues no se entiende. Es la regla que
+   ya ordeno el de ECO y el de RECREO en este repo.
+
+   ── Y LOS LADRONES NO TIRAN HASTA QUE APRENDISTE A DISPARAR ──
+   Un tutorial en el que se puede morir enseña miedo, no la mecanica: el jugador
+   sale corriendo antes de entender que el retroceso lo mueve. Los ladrones se
+   despiertan recien en el paso 5, que es cuando ya mato a uno.
+
+   ── SE VE UNA VEZ, Y DESPUES ESTA EN EL MENU ──
+   Obligatorio la primera vez y repetible a mano: obligado siempre es un peaje,
+   y este juego se vuelve a abrir muchas veces. */
+const TUT = {
+  on: false, paso: 0, t: 0, hecho: false, matoUno: false,
+  /* cuanto hay que sostener el gatillo para que el paso 3 se de por entendido:
+     dos segundos de camara lenta es lo que tarda la pistola en dar media vuelta,
+     o sea lo que hace falta para VER que gira sola */
+  SOSTEN: 2.0,
+  arranca(){
+    this.on = true; this.paso = 0; this.t = 0; this.matoUno = false;
+    /* los ladrones se duermen: se les corre el reloj, no se les toca la logica,
+       asi que el que se despierta en el paso 5 es el mismo ladron de siempre */
+    for (const l of MUNDO.lad){ l.cd = 999; l.avisa = 0; }
+    this.pinta();
+  },
+  termina(){
+    this.on = false; this.hecho = true;
+    for (const l of MUNDO.lad) l.cd = azr(0.6, 1.8);
+    $('tut').classList.remove('on');
+    try { localStorage.setItem('pistola_tut', '1'); } catch(e){}
+  },
+  /* el paso 5 lo dispara `alGolpe`, que es quien sabe que murio un ladron */
+  mato(){ if (this.on) this.matoUno = true; },
+  pinta(){
+    const e = $('tut');
+    e.textContent = TX('t' + this.paso);
+    e.classList.add('on');
+  },
+  pon(dt){
+    if (!this.on || J.modo !== 'juega') return;
+    this.t += dt;
+    const p = this.paso;
+    let listo = false;
+    if (p === 0) listo = this.t > 2.2;                       /* sos la pistola */
+    else if (p === 1) listo = J.apretado;                    /* mantene */
+    else if (p === 2){                                       /* mira y gira */
+      if (!J.apretado){ this.paso = 1; this.t = 0; this.pinta(); return; }
+      listo = this.t > this.SOSTEN;
+    }
+    else if (p === 3) listo = this.matoUno;                  /* solta y mata */
+    else if (p === 4){                                       /* subi un piso */
+      listo = P.y > M.piso + 0.4;
+      if (listo){ for (const l of MUNDO.lad) l.cd = azr(0.6, 1.8); }
+    }
+    else if (p === 5){ if (vivos() === 0) this.termina(); return; }
+    if (listo){ this.paso++; this.t = 0; this.pinta(); }
+  }
+};
 
 function gana(){
   J.modo = 'fin'; J.fin = 'gano';
@@ -113,6 +185,7 @@ function guarda(){
   try { localStorage.setItem('pistola_hechos', String(J.hechos)); } catch(e){}
 }
 function carga(){
+  try { TUT.hecho = localStorage.getItem('pistola_tut') === '1'; } catch(e){}
   try {
     J.hechos = parseInt(localStorage.getItem('pistola_hechos') || '0', 10) || 0;
     const c = localStorage.getItem('pistola_cal');

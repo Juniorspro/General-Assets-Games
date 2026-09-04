@@ -41,6 +41,27 @@ IMG = {
               ' running across it, dusty, TWO metres across.' + TEX,
 }
 
+# ── EL ARTE DEL MENU ──
+# El fondo va 9:16 con el CENTRO VACIO: ahi se apilan el titulo, JUGAR y las dos
+# filas de ajustes, y una foto con detalle en el medio los vuelve ilegibles.
+# Y el titulo va como IMAGEN y no como tipografia del sistema: `system-ui` es
+# Roboto en Android, San Francisco en iPhone y Segoe en Windows, o sea que el
+# nombre del juego cambia de forma segun el aparato.
+MENU = {
+  'p_menu': ('Vertical 9:16 poster background for a heist video game: the dark'
+             ' interior of a bank tower at night seen from below, concrete floor'
+             ' slabs receding upward, warm amber strip lights along each ceiling,'
+             ' cold blue shadows, heavy film grain. The CENTER of the image is'
+             ' empty and uncluttered so text can be placed on top. No text, no'
+             ' characters, no logo, no UI.', '9:16'),
+  'p_titulo': ('The single word "PISTOLA" written in bold heavy condensed'
+               ' uppercase letters, spelled exactly P-I-S-T-O-L-A, as a game'
+               ' logo: brushed gunmetal letters with a warm amber bevel and a'
+               ' thin dark outline, slight perspective, centered on a plain'
+               ' pure white background, nothing else in the image, no other'
+               ' words, no icons.', '16:9'),
+}
+
 MOD = {
   'p_pistola': 'A stylised low poly semi-automatic pistol, matte gunmetal grey'
                ' slide with a dark brown grip, clean chunky shapes, seen from'
@@ -89,6 +110,12 @@ def main():
     claves.append(k)
     llamadas.append(('submit_image_generation', {
       'project_id': P, 'prompt': p, 'aspect_ratio': '1:1',
+      'output_path': 'assets/' + k + '.png'}))
+  for k, (p, ar) in MENU.items():
+    if solo and k not in solo: continue
+    claves.append(k)
+    llamadas.append(('submit_image_generation', {
+      'project_id': P, 'prompt': p, 'aspect_ratio': ar,
       'output_path': 'assets/' + k + '.png'}))
   for k, p in MOD.items():
     if solo and k not in solo: continue
