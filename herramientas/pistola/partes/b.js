@@ -27,10 +27,22 @@ const M = {
      —que es lo que se pidio sacar— y la mira deja de significar algo, porque
      entre que uno apunta y suelta el caño ya se movio. Con el giro en cero,
      `P.ang` es EXACTAMENTE lo que el dedo dice y la linea es una promesa. */
-  retroGiro: 0,          /* el tirón angular: cero, ver arriba */
+  /* ── EL GIRO ES CONSECUENCIA DEL DISPARO, Y ESE ES EL JUEGO ──
+     La bala sale por la boca, que está a 21 cm del centro de masa: eso es un
+     PAR, y un par hace girar. Así que apuntar no es arrastrar el dedo — es
+     elegir el MOMENTO. La pistola gira sola después de cada tiro, el giro se
+     va frenando, y mantener apretado frena el tiempo para que se pueda soltar
+     justo cuando la línea pasa por el ladrón.
+     Y eso ordena todo lo demás: el retroceso ya movía la posición, ahora
+     también mueve la puntería, así que cada tiro paga dos cosas a la vez y
+     gastar uno para acomodarse es un tiro que no mata a nadie. */
+  retroGiro: 5.5,        /* el tirón angular de cada disparo, en rad/s */
   bala: 46,              /* velocidad de la bala */
   rebote: 0.42,          /* cuánto conserva la pistola al rebotar */
-  roceAng: 0.55,         /* cuánto se frena el giro por segundo */
+  /* el roce que frena el giro: con 1,1 cada tiro da unos 5 radianes —cuatro
+     quintos de vuelta— antes de quedarse quieto, que es lo que hace que soltar
+     tarde signifique otro ángulo y no el mismo */
+  roceAng: 1.1,          /* cuánto se frena el giro por segundo */
   /* ── EL ARMA SE DIBUJA MAS GRANDE QUE UNA DE VERDAD, Y ES A PROPOSITO ──
      La camara encuadra 5,4 m de ancho en 412 px: son 76 px por metro, o sea que
      una pistola de tamaño real mide VEINTE PIXELES. Medido con los listeners de
@@ -82,34 +94,34 @@ const azi = (a, b) => a + ((az()*(b - a + 1))|0);
 const TXT = {
   es: { sub:'DIEZ PISOS Y UNA PISTOLA', jugar:'JUGAR', menu:'MENÚ', sigue:'SIGUIENTE',
         reintenta:'DE NUEVO',
-        texto:'Sos la pistola. El retroceso te impulsa: cada tiro te empuja para atrás. Mantené apretado para que el tiempo vaya lento y ver la línea de mira, y soltá para disparar.',
+        texto:'Sos la pistola. Cada tiro te empuja para atrás Y te hace girar: la puntería no se arrastra, se elige el momento. Mantené apretado para que el tiempo vaya lento, mirá la línea, y soltá justo cuando pase por el ladrón.',
         nivel:'PISO', vidas:'VIDAS', ladrones:'LADRONES',
-        p1:'Mantené apretado: el tiempo se frena y aparece la mira.',
-        p2:'Soltá para disparar. El tiro te empuja al revés.',
+        p1:'La pistola gira sola. Mantené apretado: el tiempo se frena.',
+        p2:'Soltá cuando la línea apunte al ladrón. El tiro te empuja y te gira.',
         gano:'PISO LIMPIO', perdio:'TE AGARRARON', fin:'BANCO LIMPIO',
         finT:'Los diez pisos, sin ladrones.',
         calidad:'GRÁFICOS', baja:'BAJA', media:'MEDIA', alta:'ALTA',
-        pie:'Tocá y mantené para apuntar. Soltá para disparar.' },
+        pie:'Mantené para frenar el tiempo. Soltá en el ángulo justo.' },
   en: { sub:'TEN FLOORS AND ONE GUN', jugar:'PLAY', menu:'MENU', sigue:'NEXT',
         reintenta:'RETRY',
-        texto:'You are the gun. Recoil moves you: every shot pushes you back. Hold to slow time down and see the aim line, release to fire.',
+        texto:'You are the gun. Every shot pushes you back AND spins you: you do not drag to aim, you pick the moment. Hold to slow time down, watch the line, and release right when it crosses a thief.',
         nivel:'FLOOR', vidas:'LIVES', ladrones:'THIEVES',
-        p1:'Hold down: time slows and the aim line appears.',
-        p2:'Release to fire. The shot pushes you the other way.',
+        p1:'The gun spins on its own. Hold down: time slows.',
+        p2:'Release when the line points at a thief. The shot pushes and spins you.',
         gano:'FLOOR CLEARED', perdio:'THEY GOT YOU', fin:'BANK CLEARED',
         finT:'All ten floors, no thieves left.',
         calidad:'GRAPHICS', baja:'LOW', media:'MEDIUM', alta:'HIGH',
-        pie:'Touch and hold to aim. Release to shoot.' },
+        pie:'Hold to slow time. Release at the right angle.' },
   pt: { sub:'DEZ ANDARES E UMA PISTOLA', jugar:'JOGAR', menu:'MENU', sigue:'PRÓXIMO',
         reintenta:'DE NOVO',
-        texto:'Você é a pistola. O recuo te impulsiona: cada tiro te empurra para trás. Segure para o tempo ficar lento e ver a linha de mira, e solte para atirar.',
+        texto:'Você é a pistola. Cada tiro te empurra para trás E te faz girar: mirar não é arrastar, é escolher o momento. Segure para o tempo ficar lento, olhe a linha, e solte bem quando ela passar pelo ladrão.',
         nivel:'ANDAR', vidas:'VIDAS', ladrones:'LADRÕES',
-        p1:'Segure: o tempo desacelera e aparece a mira.',
-        p2:'Solte para atirar. O tiro te empurra ao contrário.',
+        p1:'A pistola gira sozinha. Segure: o tempo desacelera.',
+        p2:'Solte quando a linha apontar ao ladrão. O tiro te empurra e te gira.',
         gano:'ANDAR LIMPO', perdio:'TE PEGARAM', fin:'BANCO LIMPO',
         finT:'Os dez andares, sem ladrões.',
         calidad:'GRÁFICOS', baja:'BAIXA', media:'MÉDIA', alta:'ALTA',
-        pie:'Toque e segure para mirar. Solte para atirar.' }
+        pie:'Segure para frear o tempo. Solte no ângulo certo.' }
 };
 let LANG = 'en';
 const TX = (k) => (TXT[LANG] && TXT[LANG][k]) || TXT.es[k] || k;

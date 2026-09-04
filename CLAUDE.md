@@ -504,6 +504,66 @@ Regresión al cerrar: 16 de 16 assets, auditoría limpia en los diez niveles, da
 honesto **10 de 10** con tasa 0,273 contra 0 de 10 del azar, cero solapamientos de HUD, `window.__errs`
 vacío.
 
+#### CUARTA PASADA: **«QUE GIRE POR EL IMPULSO DE LA BALA, NO MANUALMENTE»** — y eso cambia el verbo
+
+No es un ajuste, es *otro juego*, y para mejor. La bala sale por la boca, que está a 21 cm del centro de
+masa: eso es un **par**, y un par hace girar. Así que apuntar deja de ser arrastrar el dedo y pasa a ser
+**elegir el momento**: la pistola gira sola después de cada tiro, el giro se frena por roce, y mantener
+apretado frena el tiempo para poder soltar justo cuando la línea pasa por el ladrón.
+
+**Y ESO ORDENA EL JUEGO ENTERO.** Con el dedo poniendo el ángulo, el retroceso no importaba y la física
+era decorado: uno apuntaba al ladrón, soltaba, y que la pistola saliera despedida era un efecto. Ahora
+cada tiro paga **dos cosas a la vez** —adónde va la bala y cómo queda la puntería para el siguiente— y
+gastar uno para acomodarse es un tiro que no mata a nadie. `retroGiro` 5,5 rad/s y `roceAng` 1,1: cuatro
+quintos de vuelta por disparo antes de quedarse quieto.
+
+#### EL BOT TAMBIÉN CAMBIA DE PREGUNTA, Y SI NO, NO PRUEBA NADA
+
+«Probar 48 ángulos y quedarse con el mejor» describe un juego que ya no existe: el ángulo no se elige,
+viene dado. Si el bot siguiera fijando `P.ang` a mano estaría jugando **otro juego**, y que ganara no
+probaría nada. Ahora la decisión es binaria por cuadro: soltar o dejar que siga girando.
+
+**LAS DOS PREGUNTAS TIENEN RESOLUCIONES DISTINTAS, Y ESO COSTÓ CUATRO NIVELES.** La primera versión
+miraba adelante con catorce muestras repartidas en los 5,5 radianes de giro restante: **22 grados por
+muestra**. Un ladrón a cinco metros mide 0,68 de ancho, o sea **ocho grados** — cabe entero entre dos
+muestras. Medido: **6 de 10**, y perdía justo los niveles llenos. Son dos cuentas y cada una se permite lo
+suyo: «¿viene un ángulo que mata?» es un rayo y nada más, así que se barre **cada tres grados**; «¿desde
+dónde conviene empujarse?» necesita volar la física un segundo, así que se mira grueso.
+
+Después apareció el defecto opuesto: con «disparar salvo que venga algo mucho mejor» tiraba **2.349 veces
+para 68 muertos** (tasa 0,029) porque cualquier ángulo mediocre pasaba el filtro. Con el filtro apretado
+—tiene que estar en el mejor de la vuelta que le queda *y* que ese mejor sirva— bajó a 1.148 tiros.
+
+**Y ESPERAR PUEDE SER MORIRSE.** Esperar la ventana de tiro significa **quedarse quieto**, y quedarse
+quieto adentro de un láser encendido es perder una vida: el bot perdía el nivel 10 *«sin vidas»* con 9 de
+14 ladrones vivos. Con un láser apuntando, el tiro deja de ser puntería y pasa a ser desplazamiento — que
+es exactamente la decisión que el juego quiere que el jugador tome.
+
+**Y EL PRESUPUESTO DE CUADROS ESCALA CON EL NIVEL.** Estaba fijo en 26.000 para los diez; el 10 tiene 14
+ladrones y 7 pisos, y jugado suelto se gana 14 de 14 en 188 tiros. *Un límite de medición que hace fallar
+la medición no mide nada.* Y `malos` pasó a decir **por qué** falló cada nivel: «sin vidas» y «sin reloj»
+piden arreglos opuestos y con un solo número no se distinguen.
+
+#### MEDIDO AL CERRAR
+
+Honesto **10 de 10**, 1.148 tiros / 72 muertos, tasa **0,063**, cero muertes. Al azar **0 de 10**, tasa
+**0,002**, ocho muertos en 3.589 tiros — treinta veces peor, y ahora los dos juegan de verdad el mismo
+juego porque **ninguno de los dos toca `P.ang`**. Arrastre medido con eventos de puntero reales:
+`arrastreCambiaAngulo: false`. Giro libre medido: 0,788 → 1,314 → 1,713 → 2,016 → 2,247 → 2,422 rad,
+frenándose; `vang` tras disparar: 5,96. Auditoría limpia, daño 2 tiros/2 impactos, 16 de 16 assets, arma
+38 px, cero solapamientos, `window.__errs` vacío.
+
+**LO QUE NO ESTÁ PROBADO:** corrí el bot «ciego» —sin el término de esquivar— esperando que muriera, y
+ganó 10 de 10 igual. Así que el desvío por peligro **arregló el nivel 10 pero no está demostrado que haga
+falta en general**: la diferencia entre ganar y perder ese nivel es sensible a cambios chicos de puntaje.
+Lo que sí está medido es la separación honesto/azar.
+
+**Y EL CONTENEDOR SE REVIRTIÓ DOS VECES MÁS** (van cuatro). La segunda fue peor que las otras: el `HEAD`
+local tenía **cinco commits que `origin` no tenía** —Sabueso, Pages, skills—, así que un `reset --hard` a
+ciegas los habría tirado. La comprobación que corresponde no es «¿está sucio?» sino
+`git branch -r --contains <commit>`: los cinco estaban en `origin/main`, o sea que no se perdía nada.
+**Comprobar antes de resetear, y comprobar contra TODOS los remotos, no sólo contra la propia rama.**
+
 ### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
 
 Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer

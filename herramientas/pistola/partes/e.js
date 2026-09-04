@@ -15,7 +15,9 @@ const R_PIS = M.largo*0.46;
 
 function pistolaPone(x, y){
   P.x = x; P.y = y; P.vx = 0; P.vy = 0;
-  P.ang = 0.6; P.vang = 0; P.cd = 0; P.vivo = true; P.apoyada = false;
+  /* arranca girando: una pistola quieta al empezar el nivel obliga a gastar el
+     primer tiro solo para que se mueva la punteria */
+  P.ang = 0.6; P.vang = 2.6; P.cd = 0; P.vivo = true; P.apoyada = false;
   BAL.length = 0;
 }
 
@@ -70,6 +72,13 @@ function chocaCuerpo(P){
 function pasoCuerpo(P, dt){
   P.vy -= M.g*dt;
   P.x += P.vx*dt; P.y += P.vy*dt;
+  /* ── EL ANGULO SE INTEGRA, PORQUE LA PUNTERIA ES FISICA ──
+     El giro no lo pone el dedo: lo pone el par de cada disparo, y se va
+     frenando por roce. Es lo unico que el auto-jugador tiene que PREVER para
+     elegir cuando soltar, y por eso vive en `pasoCuerpo` y no en la entrada:
+     asi el bot y el jugador ven exactamente la misma pistola. */
+  P.ang += P.vang*dt;
+  P.vang *= Math.exp(-M.roceAng*dt);
   chocaCuerpo(P);
   /* apoyada y quieta: se frena del todo, si no tiembla para siempre */
   if (P.apoyada && Math.abs(P.vy) < 0.5){
@@ -81,9 +90,13 @@ function pasoPistola(dt){ pasoCuerpo(P, dt); }
 
 /* el retroceso escrito una vez: lo usan el disparo de verdad y la prueba del
    auto-jugador, asi que no pueden predecir cosas distintas */
+/* el retroceso escrito una vez: empuja Y hace girar, y lo usan el disparo de
+   verdad y la prueba del auto-jugador, asi que no pueden predecir cosas
+   distintas */
 function aplicaRetro(c, ang){
   c.vx -= Math.cos(ang)*M.retro;
   c.vy -= Math.sin(ang)*M.retro;
+  c.vang += M.retroGiro;
 }
 
 function dispara(){

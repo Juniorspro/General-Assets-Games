@@ -4,22 +4,20 @@
    Apretar frena el tiempo y saca la mira; arrastrar de costado gira la pistola;
    soltar dispara. Un toque seco es un mantener de cero segundos, asi que «tap y
    dispara» sale del mismo camino y no hay dos ramas que puedan divergir. */
-const GIRO_DEDO = 0.010;      /* radianes por pixel de arrastre */
 function abajo(x, y){
   despiertaAudio();
   if (J.modo !== 'juega') return;
   J.apretado = true;
   J.dedo = { x, y };
-  J.angBase = P.ang;
 }
-function mueve(x, y){
-  if (!J.apretado || !J.dedo) return;
-  /* ── SE APUNTA CON EL ARRASTRE Y NO CON EL PUNTO DEL DEDO ──
-     Apuntando a donde uno toca, el dedo TAPA exactamente el sitio al que se le
-     esta apuntando — que en una pantalla de telefono es la mitad del blanco. Con
-     el arrastre relativo la mano queda donde uno la apoyo. */
-  P.ang = J.angBase + (x - J.dedo.x)*GIRO_DEDO - (y - J.dedo.y)*GIRO_DEDO*0.55;
-}
+/* ── ARRASTRAR NO APUNTA, Y ESA ES LA DECISION DE DISEÑO ──
+   Se probo apuntar con el arrastre y esta mal para este juego: si el dedo pone
+   el angulo, el retroceso deja de importar y la fisica pasa a ser decorado —
+   uno apunta al ladron, suelta, y que la pistola salga despedida es un efecto.
+   Con el giro puesto por el PAR del disparo, apuntar es elegir el MOMENTO, y
+   entonces cada tiro paga dos cosas a la vez: adonde va la bala y como queda la
+   punteria para el siguiente. El dedo solo hace una cosa: frenar el tiempo. */
+function mueve(x, y){}
 function arriba(){
   if (!J.apretado) return;
   J.apretado = false; J.dedo = null;
@@ -300,6 +298,7 @@ window.__P = {
      es la unica forma de saber si girar el dedo llega hasta la malla */
   angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
   angFis: () => +P.ang.toFixed(3),
+  estadoVang: () => +P.vang.toFixed(3),
   /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
      «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
      mide en la pantalla del que juega. */
@@ -356,11 +355,10 @@ window.__P = {
     const g = (q) => { if (q === 'ladron') mat++; };
     const T = tope || 12000;
     for (let v = 0; v < T; v++){
-      if (P.cd <= 0){
-        P.ang = botElige(); P.vang = 0;
+      if (P.cd <= 0 && botDispara()){
         const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
         P.cd = M.cadencia; tir++;
-        BAL.push({ x: P.x + dx*M.largo*0.55, y: P.y + dy*M.largo*0.55, dx, dy, v: M.bala, t: 1.3, mia: true });
+        BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca, dx, dy, v: M.bala, t: 1.3, mia: true });
         aplicaRetro(P, P.ang);
       }
       pasoCuerpo(P, dt); pasoBalas(dt, g); pasoLadrones(dt, g);

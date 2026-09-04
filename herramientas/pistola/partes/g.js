@@ -148,47 +148,135 @@ function botMeta(){
   return { x: bajo.x, y: bajo.y + 0.7, hueco: false };
 }
 
-function botElige(ciego){
-  const N = 48;
-  let mejor = null, mejorP = -1e9;
-  const bajo = botMeta();
-  for (let i = 0; i < N; i++){
-    const ang = i*(6.283/N);
-    const dx = Math.cos(ang), dy = Math.sin(ang);
-    let p = 0;
-    const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
-    if (h && h.tipo === 'ladron') p += 1000 - h.t*4;
-    else if (h && h.tipo === 'caja') p += 12;
-    /* y despues, donde queda uno: el tiro que mata pero te deja clavado abajo
-       cuesta el turno siguiente */
-    const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, cd: 0, apoyada: false };
-    aplicaRetro(c, ang);
-    for (let s = 0; s < 120; s++) pasoCuerpo(c, 1/120);
-    if (bajo){
-      /* acercarse al ladron mas bajo que queda vivo: es la unica direccion que
-         siempre sirve, porque hay que matarlos a todos */
-      const d0 = Math.hypot(P.x - bajo.x, P.y - bajo.y);
-      const d1 = Math.hypot(c.x - bajo.x, c.y - bajo.y);
-      p += (d0 - d1)*40;
-      /* y ganar altura vale, porque las losas tapan el tiro desde abajo */
-      p += (c.y - P.y)*14;
-      /* ── Y SE PREMIA HABER CRUZADO EL HUECO, no haberse acercado a el ──
-         Acercarse al hueco desde abajo y quedarse pegado a la losa puntua casi
-         igual que atravesarlo, asi que sin este termino el bot se queda un
-         palmo por debajo para siempre. */
-      if (bajo.hueco && c.y > bajo.y - 0.6) p += 260;
-    }
-    /* las balas enemigas en vuelo: pasar por donde va una es perder una vida */
-    for (const b of BAL){
-      if (b.mia || ciego) continue;
-      const ax = c.x - b.x, ay = c.y - b.y;
-      const t = cl(ax*b.dx + ay*b.dy, 0, b.v*0.8);
-      const ex = ax - b.dx*t, ey = ay - b.dy*t;
-      if (ex*ex + ey*ey < 0.36) p -= 400;
-    }
-    if (p > mejorP){ mejorP = p; mejor = ang; }
+/* ── Y AHORA EL BOT NO ELIGE UN ANGULO: ELIGE UN MOMENTO ──
+   Con el giro puesto por el par del disparo, «probar 48 angulos» describe un
+   juego que ya no existe — el angulo no se puede elegir, viene dado por la
+   fisica. Lo unico que hay es una decision binaria por cuadro: soltar ahora o
+   dejar que la pistola siga girando. Si el bot siguiera fijando `P.ang` a mano
+   estaria jugando OTRO juego, y entonces que ganara no probaria nada. */
+function botPuntua(ang, ciego){
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  let p = 0;
+  const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
+  if (h && h.tipo === 'ladron') p += 1000 - h.t*4;
+  else if (h && h.tipo === 'caja') p += 12;
+  /* y despues, donde queda uno: el tiro que mata pero te deja clavado abajo
+     cuesta el turno siguiente */
+  const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, vang: P.vang,
+              cd: 0, apoyada: false };
+  aplicaRetro(c, ang);
+  for (let s = 0; s < 120; s++) pasoCuerpo(c, 1/120);
+  const meta = botMeta();
+  if (meta){
+    const d0 = Math.hypot(P.x - meta.x, P.y - meta.y);
+    const d1 = Math.hypot(c.x - meta.x, c.y - meta.y);
+    p += (d0 - d1)*40;
+    /* ganar altura vale, porque las losas tapan el tiro desde abajo */
+    p += (c.y - P.y)*14;
+    /* ── Y SE PREMIA HABER CRUZADO EL HUECO, no haberse acercado a el ──
+       Acercarse al hueco desde abajo y quedarse pegado a la losa puntua casi
+       igual que atravesarlo, asi que sin este termino el bot se queda un palmo
+       por debajo para siempre. */
+    if (meta.hueco && c.y > meta.y - 0.6) p += 260;
   }
-  return mejor;
+  /* las balas enemigas en vuelo: pasar por donde va una es perder una vida */
+  for (const b of BAL){
+    if (b.mia || ciego) continue;
+    const ax = c.x - b.x, ay = c.y - b.y;
+    const t = cl(ax*b.dx + ay*b.dy, 0, b.v*0.8);
+    const ex = ax - b.dx*t, ey = ay - b.dy*t;
+    if (ex*ex + ey*ey < 0.36) p -= 400;
+  }
+  return p;
+}
+
+/* ── Y PARA DECIDIR HAY QUE MIRAR ADELANTE, NO SOLO AHORA ──
+   Soltar en el mejor angulo DE ESTE CUADRO no es jugar bien: casi siempre
+   conviene dejar que gire un poco mas. Pero el giro SE FRENA, asi que dejar
+   pasar el ultimo angulo util deja la pistola quieta apuntando a una pared, y
+   la unica forma de volver a mover la punteria es gastar un tiro. Esa es la
+   economia del juego entera.
+
+   ── LAS DOS PREGUNTAS TIENEN RESOLUCIONES DISTINTAS, Y ESO COSTO CUATRO NIVELES ──
+   La primera version miraba adelante con CATORCE muestras repartidas en los 5,5
+   radianes que le quedan de giro: 22 grados por muestra. Un ladron a cinco
+   metros mide 0,68 de ancho, o sea OCHO GRADOS — cabe entero entre dos muestras.
+   Medido, el bot honesto se quedaba en 6 de 10 y perdia justo los niveles
+   llenos (7 a 10), porque en un piso con muchos ladrones desperdiciaba las
+   ventanas de tiro.
+   La cuenta que hace falta no es una: son dos, y cada una se puede permitir lo
+   suyo. «¿viene un angulo que mata?» es un rayo y nada mas, asi que se barre
+   FINO —cada tres grados, mas fino que el blanco mas chico—. «¿desde donde
+   conviene empujarse?» necesita volar la fisica un segundo, asi que se mira
+   grueso, que para una decision de movimiento alcanza. */
+const BOT_FINO = 0.052;         /* rad: tres grados, la mitad de lo que mide el
+                                   blanco mas chico a la distancia mas larga */
+function botMata(ang){
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
+  return !!(h && h.tipo === 'ladron');
+}
+
+/* ── Y HAY UN CASO EN EL QUE ESPERAR ES MORIRSE ──
+   Esperar la ventana de tiro significa QUEDARSE QUIETO, y quedarse quieto
+   adentro de un laser encendido es perder una vida. Medido, el bot honesto
+   perdia el nivel 10 «sin vidas» con 9 de 14 ladrones todavia vivos: no se
+   quedaba sin reloj, se moria. Con un laser apuntandole, el tiro deja de ser
+   punteria y pasa a ser desplazamiento — que es exactamente la decision que el
+   juego quiere que el jugador tome. */
+function botPeligro(){
+  for (const l of MUNDO.lad){
+    if (!l.vivo || l.avisa <= 0) continue;
+    const ox = l.x + Math.cos(l.tira)*0.5, oy = l.y + 0.78 + Math.sin(l.tira)*0.5;
+    const ax = P.x - ox, ay = P.y - oy;
+    const t = Math.max(0, ax*Math.cos(l.tira) + ay*Math.sin(l.tira));
+    const ex = ax - Math.cos(l.tira)*t, ey = ay - Math.sin(l.tira)*t;
+    if (ex*ex + ey*ey < 0.42*0.42) return true;
+  }
+  /* y una bala enemiga ya en vuelo cuenta igual */
+  for (const b of BAL){
+    if (b.mia) continue;
+    const ax = P.x - b.x, ay = P.y - b.y;
+    const t = Math.max(0, ax*b.dx + ay*b.dy);
+    const ex = ax - b.dx*t, ey = ay - b.dy*t;
+    if (t < b.v*0.5 && ex*ex + ey*ey < 0.42*0.42) return true;
+  }
+  return false;
+}
+
+function botDispara(ciego){
+  /* cuanto le queda de giro: la integral de vang con roce es vang/roceAng */
+  const resto = P.vang/M.roceAng;
+  const sig = resto >= 0 ? 1 : -1;
+  if (botMata(P.ang)) return true;              /* el tiro entra: siempre */
+  if (Math.abs(resto) < 0.10) return true;      /* sin giro no hay eleccion */
+
+  /* ¿viene una ventana de tiro antes de que el giro se apague? entonces esperar
+     — salvo que haya un laser encima, porque ahi esperar es quedarse quieto */
+  const huir = !ciego && botPeligro();
+  if (!huir){
+    const n = Math.min(360, Math.floor(Math.abs(resto)/BOT_FINO));
+    for (let i = 1; i <= n; i++)
+      if (botMata(P.ang + sig*i*BOT_FINO)) return false;
+  }
+
+  /* ── NO HAY TIRO QUE MATE: ESTE SE GASTA EN MOVERSE, Y SE GASTA BIEN ──
+     Con «disparar salvo que venga algo mucho mejor», el bot tiraba 2.349 veces
+     para 68 muertos —una tasa de 0,029— porque cualquier angulo mediocre pasaba
+     el filtro y la pistola se la pasaba rebotando. Ahora tiene que estar en el
+     mejor de la vuelta que le queda Y que ese mejor sirva para algo: si toda la
+     vuelta es mala, conviene dejar que el giro se apague y recien ahi gastar el
+     tiro, que es lo que hace la escapatoria de arriba. */
+  const ahora = botPuntua(P.ang, ciego);
+  let mejor = ahora;
+  const G = 10;
+  for (let i = 1; i <= G; i++)
+    mejor = Math.max(mejor, botPuntua(P.ang + resto*(i/G), ciego));
+  /* con peligro encima no se puede esperar a la vuelta perfecta: se sale de la
+     linea con lo que haya */
+  if (huir) return ahora >= mejor - 160;
+  if (mejor < 6) return false;
+  return ahora >= mejor - 45;
 }
 
 function juegaSolo(azar, tope, ciego){
@@ -202,11 +290,21 @@ function juegaSolo(azar, tope, ciego){
       if (que === 'ladron') matados++;
       if (que === 'yo'){ vidas--; pistolaPone(0, 0.9); }
     };
-    while (v < (tope || 26000)){
+    /* ── EL PRESUPUESTO DE CUADROS ESCALA CON EL NIVEL ──
+       Estaba fijo en 26.000 para los diez. El nivel 10 tiene 14 ladrones y 7
+       pisos: jugado suelto se gana 14 de 14 en 188 tiros, pero dentro de la
+       tanda —y despues de una muerte, que devuelve la pistola al suelo— no le
+       alcanzaba el reloj y se anotaba como nivel imposible. Un limite de
+       medicion que hace fallar la medicion no mide nada. */
+    const TOPE = tope || (9000 + MUNDO.lad.length*2600);
+    while (v < TOPE){
       v++; vueltas++;
-      if (P.cd <= 0){
-        P.ang = azar ? Math.random()*6.283 : botElige(ciego);
-        P.vang = 0;
+      /* ── LOS DOS JUEGAN EL MISMO JUEGO: SOLO CAMBIA CUANDO SUELTAN ──
+         Ninguno de los dos toca `P.ang`, porque el jugador tampoco puede. El del
+         azar suelta cuando le toca; el honesto mira el mundo y espera el
+         angulo. Si los dos terminan igual, elegir el momento no importa y el
+         juego es un boton. */
+      if (P.cd <= 0 && (azar ? Math.random() < 0.02 : botDispara(ciego))){
         const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
         P.cd = M.cadencia;
         BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca,
@@ -220,7 +318,10 @@ function juegaSolo(azar, tope, ciego){
       if (vivos() === 0){ ok = true; break; }
       if (vidas <= 0){ muertes++; break; }
     }
-    if (ok) gana++; else malos.push(n);
+    /* por que fallo importa mas que que fallo: «se quedo sin vidas» y «se quedo
+       sin reloj» piden arreglos opuestos, y con un solo numero no se distinguen */
+    if (ok) gana++; else malos.push([n, vidas <= 0 ? 'sin vidas' : 'sin reloj',
+                                     vivos() + ' vivos de ' + MUNDO.lad.length]);
   }
   return JSON.stringify({ niveles: NIVELES, gana, malos, nMalos: malos.length,
                           tiros, matados, muertes, vueltas,

@@ -167,10 +167,22 @@ const M = {
      —que es lo que se pidio sacar— y la mira deja de significar algo, porque
      entre que uno apunta y suelta el caño ya se movio. Con el giro en cero,
      `P.ang` es EXACTAMENTE lo que el dedo dice y la linea es una promesa. */
-  retroGiro: 0,          /* el tirón angular: cero, ver arriba */
+  /* ── EL GIRO ES CONSECUENCIA DEL DISPARO, Y ESE ES EL JUEGO ──
+     La bala sale por la boca, que está a 21 cm del centro de masa: eso es un
+     PAR, y un par hace girar. Así que apuntar no es arrastrar el dedo — es
+     elegir el MOMENTO. La pistola gira sola después de cada tiro, el giro se
+     va frenando, y mantener apretado frena el tiempo para que se pueda soltar
+     justo cuando la línea pasa por el ladrón.
+     Y eso ordena todo lo demás: el retroceso ya movía la posición, ahora
+     también mueve la puntería, así que cada tiro paga dos cosas a la vez y
+     gastar uno para acomodarse es un tiro que no mata a nadie. */
+  retroGiro: 5.5,        /* el tirón angular de cada disparo, en rad/s */
   bala: 46,              /* velocidad de la bala */
   rebote: 0.42,          /* cuánto conserva la pistola al rebotar */
-  roceAng: 0.55,         /* cuánto se frena el giro por segundo */
+  /* el roce que frena el giro: con 1,1 cada tiro da unos 5 radianes —cuatro
+     quintos de vuelta— antes de quedarse quieto, que es lo que hace que soltar
+     tarde signifique otro ángulo y no el mismo */
+  roceAng: 1.1,          /* cuánto se frena el giro por segundo */
   /* ── EL ARMA SE DIBUJA MAS GRANDE QUE UNA DE VERDAD, Y ES A PROPOSITO ──
      La camara encuadra 5,4 m de ancho en 412 px: son 76 px por metro, o sea que
      una pistola de tamaño real mide VEINTE PIXELES. Medido con los listeners de
@@ -222,34 +234,34 @@ const azi = (a, b) => a + ((az()*(b - a + 1))|0);
 const TXT = {
   es: { sub:'DIEZ PISOS Y UNA PISTOLA', jugar:'JUGAR', menu:'MENÚ', sigue:'SIGUIENTE',
         reintenta:'DE NUEVO',
-        texto:'Sos la pistola. El retroceso te impulsa: cada tiro te empuja para atrás. Mantené apretado para que el tiempo vaya lento y ver la línea de mira, y soltá para disparar.',
+        texto:'Sos la pistola. Cada tiro te empuja para atrás Y te hace girar: la puntería no se arrastra, se elige el momento. Mantené apretado para que el tiempo vaya lento, mirá la línea, y soltá justo cuando pase por el ladrón.',
         nivel:'PISO', vidas:'VIDAS', ladrones:'LADRONES',
-        p1:'Mantené apretado: el tiempo se frena y aparece la mira.',
-        p2:'Soltá para disparar. El tiro te empuja al revés.',
+        p1:'La pistola gira sola. Mantené apretado: el tiempo se frena.',
+        p2:'Soltá cuando la línea apunte al ladrón. El tiro te empuja y te gira.',
         gano:'PISO LIMPIO', perdio:'TE AGARRARON', fin:'BANCO LIMPIO',
         finT:'Los diez pisos, sin ladrones.',
         calidad:'GRÁFICOS', baja:'BAJA', media:'MEDIA', alta:'ALTA',
-        pie:'Tocá y mantené para apuntar. Soltá para disparar.' },
+        pie:'Mantené para frenar el tiempo. Soltá en el ángulo justo.' },
   en: { sub:'TEN FLOORS AND ONE GUN', jugar:'PLAY', menu:'MENU', sigue:'NEXT',
         reintenta:'RETRY',
-        texto:'You are the gun. Recoil moves you: every shot pushes you back. Hold to slow time down and see the aim line, release to fire.',
+        texto:'You are the gun. Every shot pushes you back AND spins you: you do not drag to aim, you pick the moment. Hold to slow time down, watch the line, and release right when it crosses a thief.',
         nivel:'FLOOR', vidas:'LIVES', ladrones:'THIEVES',
-        p1:'Hold down: time slows and the aim line appears.',
-        p2:'Release to fire. The shot pushes you the other way.',
+        p1:'The gun spins on its own. Hold down: time slows.',
+        p2:'Release when the line points at a thief. The shot pushes and spins you.',
         gano:'FLOOR CLEARED', perdio:'THEY GOT YOU', fin:'BANK CLEARED',
         finT:'All ten floors, no thieves left.',
         calidad:'GRAPHICS', baja:'LOW', media:'MEDIUM', alta:'HIGH',
-        pie:'Touch and hold to aim. Release to shoot.' },
+        pie:'Hold to slow time. Release at the right angle.' },
   pt: { sub:'DEZ ANDARES E UMA PISTOLA', jugar:'JOGAR', menu:'MENU', sigue:'PRÓXIMO',
         reintenta:'DE NOVO',
-        texto:'Você é a pistola. O recuo te impulsiona: cada tiro te empurra para trás. Segure para o tempo ficar lento e ver a linha de mira, e solte para atirar.',
+        texto:'Você é a pistola. Cada tiro te empurra para trás E te faz girar: mirar não é arrastar, é escolher o momento. Segure para o tempo ficar lento, olhe a linha, e solte bem quando ela passar pelo ladrão.',
         nivel:'ANDAR', vidas:'VIDAS', ladrones:'LADRÕES',
-        p1:'Segure: o tempo desacelera e aparece a mira.',
-        p2:'Solte para atirar. O tiro te empurra ao contrário.',
+        p1:'A pistola gira sozinha. Segure: o tempo desacelera.',
+        p2:'Solte quando a linha apontar ao ladrão. O tiro te empurra e te gira.',
         gano:'ANDAR LIMPO', perdio:'TE PEGARAM', fin:'BANCO LIMPO',
         finT:'Os dez andares, sem ladrões.',
         calidad:'GRÁFICOS', baja:'BAIXA', media:'MÉDIA', alta:'ALTA',
-        pie:'Toque e segure para mirar. Solte para atirar.' }
+        pie:'Segure para frear o tempo. Solte no ângulo certo.' }
 };
 let LANG = 'en';
 const TX = (k) => (TXT[LANG] && TXT[LANG][k]) || TXT.es[k] || k;
@@ -606,7 +618,9 @@ const R_PIS = M.largo*0.46;
 
 function pistolaPone(x, y){
   P.x = x; P.y = y; P.vx = 0; P.vy = 0;
-  P.ang = 0.6; P.vang = 0; P.cd = 0; P.vivo = true; P.apoyada = false;
+  /* arranca girando: una pistola quieta al empezar el nivel obliga a gastar el
+     primer tiro solo para que se mueva la punteria */
+  P.ang = 0.6; P.vang = 2.6; P.cd = 0; P.vivo = true; P.apoyada = false;
   BAL.length = 0;
 }
 
@@ -661,6 +675,13 @@ function chocaCuerpo(P){
 function pasoCuerpo(P, dt){
   P.vy -= M.g*dt;
   P.x += P.vx*dt; P.y += P.vy*dt;
+  /* ── EL ANGULO SE INTEGRA, PORQUE LA PUNTERIA ES FISICA ──
+     El giro no lo pone el dedo: lo pone el par de cada disparo, y se va
+     frenando por roce. Es lo unico que el auto-jugador tiene que PREVER para
+     elegir cuando soltar, y por eso vive en `pasoCuerpo` y no en la entrada:
+     asi el bot y el jugador ven exactamente la misma pistola. */
+  P.ang += P.vang*dt;
+  P.vang *= Math.exp(-M.roceAng*dt);
   chocaCuerpo(P);
   /* apoyada y quieta: se frena del todo, si no tiembla para siempre */
   if (P.apoyada && Math.abs(P.vy) < 0.5){
@@ -672,9 +693,13 @@ function pasoPistola(dt){ pasoCuerpo(P, dt); }
 
 /* el retroceso escrito una vez: lo usan el disparo de verdad y la prueba del
    auto-jugador, asi que no pueden predecir cosas distintas */
+/* el retroceso escrito una vez: empuja Y hace girar, y lo usan el disparo de
+   verdad y la prueba del auto-jugador, asi que no pueden predecir cosas
+   distintas */
 function aplicaRetro(c, ang){
   c.vx -= Math.cos(ang)*M.retro;
   c.vy -= Math.sin(ang)*M.retro;
+  c.vang += M.retroGiro;
 }
 
 function dispara(){
@@ -941,47 +966,135 @@ function botMeta(){
   return { x: bajo.x, y: bajo.y + 0.7, hueco: false };
 }
 
-function botElige(ciego){
-  const N = 48;
-  let mejor = null, mejorP = -1e9;
-  const bajo = botMeta();
-  for (let i = 0; i < N; i++){
-    const ang = i*(6.283/N);
-    const dx = Math.cos(ang), dy = Math.sin(ang);
-    let p = 0;
-    const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
-    if (h && h.tipo === 'ladron') p += 1000 - h.t*4;
-    else if (h && h.tipo === 'caja') p += 12;
-    /* y despues, donde queda uno: el tiro que mata pero te deja clavado abajo
-       cuesta el turno siguiente */
-    const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, cd: 0, apoyada: false };
-    aplicaRetro(c, ang);
-    for (let s = 0; s < 120; s++) pasoCuerpo(c, 1/120);
-    if (bajo){
-      /* acercarse al ladron mas bajo que queda vivo: es la unica direccion que
-         siempre sirve, porque hay que matarlos a todos */
-      const d0 = Math.hypot(P.x - bajo.x, P.y - bajo.y);
-      const d1 = Math.hypot(c.x - bajo.x, c.y - bajo.y);
-      p += (d0 - d1)*40;
-      /* y ganar altura vale, porque las losas tapan el tiro desde abajo */
-      p += (c.y - P.y)*14;
-      /* ── Y SE PREMIA HABER CRUZADO EL HUECO, no haberse acercado a el ──
-         Acercarse al hueco desde abajo y quedarse pegado a la losa puntua casi
-         igual que atravesarlo, asi que sin este termino el bot se queda un
-         palmo por debajo para siempre. */
-      if (bajo.hueco && c.y > bajo.y - 0.6) p += 260;
-    }
-    /* las balas enemigas en vuelo: pasar por donde va una es perder una vida */
-    for (const b of BAL){
-      if (b.mia || ciego) continue;
-      const ax = c.x - b.x, ay = c.y - b.y;
-      const t = cl(ax*b.dx + ay*b.dy, 0, b.v*0.8);
-      const ex = ax - b.dx*t, ey = ay - b.dy*t;
-      if (ex*ex + ey*ey < 0.36) p -= 400;
-    }
-    if (p > mejorP){ mejorP = p; mejor = ang; }
+/* ── Y AHORA EL BOT NO ELIGE UN ANGULO: ELIGE UN MOMENTO ──
+   Con el giro puesto por el par del disparo, «probar 48 angulos» describe un
+   juego que ya no existe — el angulo no se puede elegir, viene dado por la
+   fisica. Lo unico que hay es una decision binaria por cuadro: soltar ahora o
+   dejar que la pistola siga girando. Si el bot siguiera fijando `P.ang` a mano
+   estaria jugando OTRO juego, y entonces que ganara no probaria nada. */
+function botPuntua(ang, ciego){
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  let p = 0;
+  const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
+  if (h && h.tipo === 'ladron') p += 1000 - h.t*4;
+  else if (h && h.tipo === 'caja') p += 12;
+  /* y despues, donde queda uno: el tiro que mata pero te deja clavado abajo
+     cuesta el turno siguiente */
+  const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, vang: P.vang,
+              cd: 0, apoyada: false };
+  aplicaRetro(c, ang);
+  for (let s = 0; s < 120; s++) pasoCuerpo(c, 1/120);
+  const meta = botMeta();
+  if (meta){
+    const d0 = Math.hypot(P.x - meta.x, P.y - meta.y);
+    const d1 = Math.hypot(c.x - meta.x, c.y - meta.y);
+    p += (d0 - d1)*40;
+    /* ganar altura vale, porque las losas tapan el tiro desde abajo */
+    p += (c.y - P.y)*14;
+    /* ── Y SE PREMIA HABER CRUZADO EL HUECO, no haberse acercado a el ──
+       Acercarse al hueco desde abajo y quedarse pegado a la losa puntua casi
+       igual que atravesarlo, asi que sin este termino el bot se queda un palmo
+       por debajo para siempre. */
+    if (meta.hueco && c.y > meta.y - 0.6) p += 260;
   }
-  return mejor;
+  /* las balas enemigas en vuelo: pasar por donde va una es perder una vida */
+  for (const b of BAL){
+    if (b.mia || ciego) continue;
+    const ax = c.x - b.x, ay = c.y - b.y;
+    const t = cl(ax*b.dx + ay*b.dy, 0, b.v*0.8);
+    const ex = ax - b.dx*t, ey = ay - b.dy*t;
+    if (ex*ex + ey*ey < 0.36) p -= 400;
+  }
+  return p;
+}
+
+/* ── Y PARA DECIDIR HAY QUE MIRAR ADELANTE, NO SOLO AHORA ──
+   Soltar en el mejor angulo DE ESTE CUADRO no es jugar bien: casi siempre
+   conviene dejar que gire un poco mas. Pero el giro SE FRENA, asi que dejar
+   pasar el ultimo angulo util deja la pistola quieta apuntando a una pared, y
+   la unica forma de volver a mover la punteria es gastar un tiro. Esa es la
+   economia del juego entera.
+
+   ── LAS DOS PREGUNTAS TIENEN RESOLUCIONES DISTINTAS, Y ESO COSTO CUATRO NIVELES ──
+   La primera version miraba adelante con CATORCE muestras repartidas en los 5,5
+   radianes que le quedan de giro: 22 grados por muestra. Un ladron a cinco
+   metros mide 0,68 de ancho, o sea OCHO GRADOS — cabe entero entre dos muestras.
+   Medido, el bot honesto se quedaba en 6 de 10 y perdia justo los niveles
+   llenos (7 a 10), porque en un piso con muchos ladrones desperdiciaba las
+   ventanas de tiro.
+   La cuenta que hace falta no es una: son dos, y cada una se puede permitir lo
+   suyo. «¿viene un angulo que mata?» es un rayo y nada mas, asi que se barre
+   FINO —cada tres grados, mas fino que el blanco mas chico—. «¿desde donde
+   conviene empujarse?» necesita volar la fisica un segundo, asi que se mira
+   grueso, que para una decision de movimiento alcanza. */
+const BOT_FINO = 0.052;         /* rad: tres grados, la mitad de lo que mide el
+                                   blanco mas chico a la distancia mas larga */
+function botMata(ang){
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
+  return !!(h && h.tipo === 'ladron');
+}
+
+/* ── Y HAY UN CASO EN EL QUE ESPERAR ES MORIRSE ──
+   Esperar la ventana de tiro significa QUEDARSE QUIETO, y quedarse quieto
+   adentro de un laser encendido es perder una vida. Medido, el bot honesto
+   perdia el nivel 10 «sin vidas» con 9 de 14 ladrones todavia vivos: no se
+   quedaba sin reloj, se moria. Con un laser apuntandole, el tiro deja de ser
+   punteria y pasa a ser desplazamiento — que es exactamente la decision que el
+   juego quiere que el jugador tome. */
+function botPeligro(){
+  for (const l of MUNDO.lad){
+    if (!l.vivo || l.avisa <= 0) continue;
+    const ox = l.x + Math.cos(l.tira)*0.5, oy = l.y + 0.78 + Math.sin(l.tira)*0.5;
+    const ax = P.x - ox, ay = P.y - oy;
+    const t = Math.max(0, ax*Math.cos(l.tira) + ay*Math.sin(l.tira));
+    const ex = ax - Math.cos(l.tira)*t, ey = ay - Math.sin(l.tira)*t;
+    if (ex*ex + ey*ey < 0.42*0.42) return true;
+  }
+  /* y una bala enemiga ya en vuelo cuenta igual */
+  for (const b of BAL){
+    if (b.mia) continue;
+    const ax = P.x - b.x, ay = P.y - b.y;
+    const t = Math.max(0, ax*b.dx + ay*b.dy);
+    const ex = ax - b.dx*t, ey = ay - b.dy*t;
+    if (t < b.v*0.5 && ex*ex + ey*ey < 0.42*0.42) return true;
+  }
+  return false;
+}
+
+function botDispara(ciego){
+  /* cuanto le queda de giro: la integral de vang con roce es vang/roceAng */
+  const resto = P.vang/M.roceAng;
+  const sig = resto >= 0 ? 1 : -1;
+  if (botMata(P.ang)) return true;              /* el tiro entra: siempre */
+  if (Math.abs(resto) < 0.10) return true;      /* sin giro no hay eleccion */
+
+  /* ¿viene una ventana de tiro antes de que el giro se apague? entonces esperar
+     — salvo que haya un laser encima, porque ahi esperar es quedarse quieto */
+  const huir = !ciego && botPeligro();
+  if (!huir){
+    const n = Math.min(360, Math.floor(Math.abs(resto)/BOT_FINO));
+    for (let i = 1; i <= n; i++)
+      if (botMata(P.ang + sig*i*BOT_FINO)) return false;
+  }
+
+  /* ── NO HAY TIRO QUE MATE: ESTE SE GASTA EN MOVERSE, Y SE GASTA BIEN ──
+     Con «disparar salvo que venga algo mucho mejor», el bot tiraba 2.349 veces
+     para 68 muertos —una tasa de 0,029— porque cualquier angulo mediocre pasaba
+     el filtro y la pistola se la pasaba rebotando. Ahora tiene que estar en el
+     mejor de la vuelta que le queda Y que ese mejor sirva para algo: si toda la
+     vuelta es mala, conviene dejar que el giro se apague y recien ahi gastar el
+     tiro, que es lo que hace la escapatoria de arriba. */
+  const ahora = botPuntua(P.ang, ciego);
+  let mejor = ahora;
+  const G = 10;
+  for (let i = 1; i <= G; i++)
+    mejor = Math.max(mejor, botPuntua(P.ang + resto*(i/G), ciego));
+  /* con peligro encima no se puede esperar a la vuelta perfecta: se sale de la
+     linea con lo que haya */
+  if (huir) return ahora >= mejor - 160;
+  if (mejor < 6) return false;
+  return ahora >= mejor - 45;
 }
 
 function juegaSolo(azar, tope, ciego){
@@ -995,11 +1108,21 @@ function juegaSolo(azar, tope, ciego){
       if (que === 'ladron') matados++;
       if (que === 'yo'){ vidas--; pistolaPone(0, 0.9); }
     };
-    while (v < (tope || 26000)){
+    /* ── EL PRESUPUESTO DE CUADROS ESCALA CON EL NIVEL ──
+       Estaba fijo en 26.000 para los diez. El nivel 10 tiene 14 ladrones y 7
+       pisos: jugado suelto se gana 14 de 14 en 188 tiros, pero dentro de la
+       tanda —y despues de una muerte, que devuelve la pistola al suelo— no le
+       alcanzaba el reloj y se anotaba como nivel imposible. Un limite de
+       medicion que hace fallar la medicion no mide nada. */
+    const TOPE = tope || (9000 + MUNDO.lad.length*2600);
+    while (v < TOPE){
       v++; vueltas++;
-      if (P.cd <= 0){
-        P.ang = azar ? Math.random()*6.283 : botElige(ciego);
-        P.vang = 0;
+      /* ── LOS DOS JUEGAN EL MISMO JUEGO: SOLO CAMBIA CUANDO SUELTAN ──
+         Ninguno de los dos toca `P.ang`, porque el jugador tampoco puede. El del
+         azar suelta cuando le toca; el honesto mira el mundo y espera el
+         angulo. Si los dos terminan igual, elegir el momento no importa y el
+         juego es un boton. */
+      if (P.cd <= 0 && (azar ? Math.random() < 0.02 : botDispara(ciego))){
         const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
         P.cd = M.cadencia;
         BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca,
@@ -1013,7 +1136,10 @@ function juegaSolo(azar, tope, ciego){
       if (vivos() === 0){ ok = true; break; }
       if (vidas <= 0){ muertes++; break; }
     }
-    if (ok) gana++; else malos.push(n);
+    /* por que fallo importa mas que que fallo: «se quedo sin vidas» y «se quedo
+       sin reloj» piden arreglos opuestos, y con un solo numero no se distinguen */
+    if (ok) gana++; else malos.push([n, vidas <= 0 ? 'sin vidas' : 'sin reloj',
+                                     vivos() + ' vivos de ' + MUNDO.lad.length]);
   }
   return JSON.stringify({ niveles: NIVELES, gana, malos, nMalos: malos.length,
                           tiros, matados, muertes, vueltas,
@@ -1836,22 +1962,20 @@ function musQuiere(k){
    Apretar frena el tiempo y saca la mira; arrastrar de costado gira la pistola;
    soltar dispara. Un toque seco es un mantener de cero segundos, asi que «tap y
    dispara» sale del mismo camino y no hay dos ramas que puedan divergir. */
-const GIRO_DEDO = 0.010;      /* radianes por pixel de arrastre */
 function abajo(x, y){
   despiertaAudio();
   if (J.modo !== 'juega') return;
   J.apretado = true;
   J.dedo = { x, y };
-  J.angBase = P.ang;
 }
-function mueve(x, y){
-  if (!J.apretado || !J.dedo) return;
-  /* ── SE APUNTA CON EL ARRASTRE Y NO CON EL PUNTO DEL DEDO ──
-     Apuntando a donde uno toca, el dedo TAPA exactamente el sitio al que se le
-     esta apuntando — que en una pantalla de telefono es la mitad del blanco. Con
-     el arrastre relativo la mano queda donde uno la apoyo. */
-  P.ang = J.angBase + (x - J.dedo.x)*GIRO_DEDO - (y - J.dedo.y)*GIRO_DEDO*0.55;
-}
+/* ── ARRASTRAR NO APUNTA, Y ESA ES LA DECISION DE DISEÑO ──
+   Se probo apuntar con el arrastre y esta mal para este juego: si el dedo pone
+   el angulo, el retroceso deja de importar y la fisica pasa a ser decorado —
+   uno apunta al ladron, suelta, y que la pistola salga despedida es un efecto.
+   Con el giro puesto por el PAR del disparo, apuntar es elegir el MOMENTO, y
+   entonces cada tiro paga dos cosas a la vez: adonde va la bala y como queda la
+   punteria para el siguiente. El dedo solo hace una cosa: frenar el tiempo. */
+function mueve(x, y){}
 function arriba(){
   if (!J.apretado) return;
   J.apretado = false; J.dedo = null;
@@ -2132,6 +2256,7 @@ window.__P = {
      es la unica forma de saber si girar el dedo llega hasta la malla */
   angDe: () => +(gArma ? gArma.rotation.z : P.ang).toFixed(3),
   angFis: () => +P.ang.toFixed(3),
+  estadoVang: () => +P.vang.toFixed(3),
   /* ── EL TAMAÑO DEL ARMA SE MIDE EN PIXELES Y NO EN METROS ──
      «0,29 m» no dice nada: lo que decide si un giro se ve es cuantos pixeles
      mide en la pantalla del que juega. */
@@ -2188,11 +2313,10 @@ window.__P = {
     const g = (q) => { if (q === 'ladron') mat++; };
     const T = tope || 12000;
     for (let v = 0; v < T; v++){
-      if (P.cd <= 0){
-        P.ang = botElige(); P.vang = 0;
+      if (P.cd <= 0 && botDispara()){
         const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
         P.cd = M.cadencia; tir++;
-        BAL.push({ x: P.x + dx*M.largo*0.55, y: P.y + dy*M.largo*0.55, dx, dy, v: M.bala, t: 1.3, mia: true });
+        BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca, dx, dy, v: M.bala, t: 1.3, mia: true });
         aplicaRetro(P, P.ang);
       }
       pasoCuerpo(P, dt); pasoBalas(dt, g); pasoLadrones(dt, g);
