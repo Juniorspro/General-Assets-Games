@@ -39,6 +39,39 @@ TEX = (' seen straight from above, even lighting, no shadows, no objects, no'
        ' text, edges must tile seamlessly.')
 
 JUEGOS = {
+ 'arco2': {
+  'img': {
+   # ── LA HOJA DE PIEZAS: ESTO ES UN RIG, NO UN SPRITE ──
+   # Se piden las partes SUELTAS porque el juego las arma con un esqueleto: con
+   # un personaje entero hay una pose y nada mas, y con doce piezas hay todas.
+   # Todas de perfil y mirando a la derecha, que es la regla de siempre.
+   'k_partes': ('A 2D game character CUT-OUT PARTS SHEET for a paper-doll rig:'
+                ' twelve separate body pieces of the SAME fantasy archer, all'
+                ' seen strictly from the SIDE facing RIGHT, each piece drawn on'
+                ' its own and NOT attached to the others. In reading order: a'
+                ' bare TORSO in a green leather tunic, a bare UPPER ARM, a bare'
+                ' FOREARM, an open HAND, a THIGH in brown trousers, a SHIN, a'
+                ' leather BOOT, a hooded CAPE, a QUIVER full of arrows, a curved'
+                ' wooden BOW with NO string, a single ARROW pointing right, and'
+                ' a leather BELT.' + (REJA % (4, 3)) + MAG, '1:1'),
+   'k_cabezas': ('Six heads of fantasy archers seen strictly from the SIDE'
+                 ' facing RIGHT, neck included, each a different character: a'
+                 ' young man with short hair, a bearded guard with a helmet, a'
+                 ' hunter with a hood, a woman with a braid, a big bald warrior'
+                 ' with warpaint, and an old mage with a long beard.'
+                 + (REJA % (3, 2)) + MAG, '1:1'),
+   'k_props': ('Six side-view fantasy valley props standing on nothing: a tall'
+               ' pine tree, a round oak tree, a mossy boulder, a leafy bush, a'
+               ' tall war banner on a pole, and a broken tree stump.'
+               + (REJA % (3, 2)) + MAG, '1:1'),
+   'k_terr': ('A seamless tileable texture of packed brown earth and grey rock'
+              ' strata, like the inside of a cliff' + TEX, '1:1'),
+   'k_medio': ('A long horizontal silhouette band of a distant pine forest'
+               ' ridge, dark blue-green, flat solid shapes with no detail, the'
+               ' TOP of the image is empty magenta and the trees sit along the'
+               ' bottom edge.' + MAG, '1:1'),
+  },
+  'son': {}},
  'penal': {
   'img': {
    'f_penal': ('A floodlit football stadium at night seen from behind the'

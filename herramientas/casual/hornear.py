@@ -101,6 +101,32 @@ JUEGOS = {
                        celdas=[(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3)]),
     },
     'arco': {
+        # ── LAS TRES REJAS VAN DECLARADAS, Y MIRANDO LA IMAGEN ──
+        # Las tres hojas volvieron con LINEAS SEPARADORAS NEGRAS dibujadas entre
+        # celda y celda, y una linea negra no es fondo: `mide_reja` la toma por
+        # tinta y parte cada fila en islas de mas. Con la reja declarada cada
+        # celda cae donde tiene que caer. Es la misma excepcion de la hoja de
+        # reliquias de DADOS.
+        'k_partes': dict(archivo='k_partes.png', tipo='hoja', lado=192,
+                         reja=(4, 3),
+                         # torso, brazo, antebrazo, mano / muslo, pierna, bota,
+                         # capa / carcaj, arco, flecha, cinto
+                         celdas=[(0,0),(0,1),(0,2),(0,3),
+                                 (1,0),(1,1),(1,2),(1,3),
+                                 (2,0),(2,1),(2,2),(2,3)]),
+        'k_cabezas': dict(archivo='k_cabezas.png', tipo='hoja', lado=224,
+                          reja=(3, 2),
+                          celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
+        'k_props': dict(archivo='k_props.png', tipo='hoja', lado=224,
+                        reja=(3, 2),
+                        celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
+        'k_terr': dict(archivo='k_terr.png', tipo='tex', lado=320),
+        # ── LA ARBOLEDA VA COMO UNA PIEZA SOLA Y NO COMO TEXTURA ──
+        # Es una silueta con la mitad de arriba vacia: horneada como textura se
+        # embaldosaria contra el cielo. Recortada a su caja queda la fila de
+        # arboles y nada mas, que es lo que el juego apoya sobre el horizonte.
+        'k_medio': dict(archivo='k_medio.png', tipo='hoja', lado=640,
+                        reja=(1, 1), celdas=[(0,0)]),
         # ── LOS SEIS ARQUEROS VAN DE PERFIL Y MIRANDO A LA DERECHA ──
         # El juego ESPEJA al que tira desde el otro extremo, asi que con uno de
         # frente y otro de tres cuartos, al espejarlos uno queda mirando al
@@ -115,12 +141,9 @@ JUEGOS = {
         # excepcion que ya hizo falta con la hoja de reliquias de DADOS.
         # De los ocho arqueros se toman SEIS distintos: se saltea el segundo
         # encapuchado y el noble de azul.
-        'a_arqueros': dict(archivo='a_arqueros.png', tipo='hoja', lado=224,
-                           reja=(4, 2),
-                           celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,3)]),
-        'a_cosas': dict(archivo='a_cosas.png', tipo='hoja', lado=160,
-                        reja=(3, 2),
-                        celdas=[(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]),
+        # `a_arqueros` y `a_cosas` se fueron con el sprite estatico: el cuerpo
+        # ahora es un esqueleto y la decoracion es `k_props`. Sesenta KB que se
+        # horneaban al HTML para que no los dibujara nadie.
         'a_pasto': dict(archivo='a_pasto.png', tipo='tex', lado=320),
     },
     'castillo': {
