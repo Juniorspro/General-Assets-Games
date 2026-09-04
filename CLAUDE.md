@@ -269,6 +269,126 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima sexta vuelta (2026-09-04): **PUERTA BLANCA** — un insecticida que hay que apuntar
+
+Pedido: *"agrega un insecticida para alejar a la araña"*. Dos latas en el local, cuatro cargas, y hay
+que **apuntar**.
+
+#### NO ES UN BOTÓN QUE LA MANDA LEJOS, Y ÉSA ES TODA LA DECISIÓN
+
+Si alcanzara con tocarlo, la araña deja de ser un peligro y el nivel se convierte en una lista de
+recados. Es un aerosol, o sea que tiene **dirección y alcance**, y **la carga se gasta igual si se
+falla** — eso es lo único que hace que apuntar importe. Alcance 6,5 m y ±40°, con el campo horizontal
+del juego en 58,7°: si la araña está **en pantalla y cerca**, le pega.
+
+Y **no la mata**. Este nivel es una huida, no un combate: matarla tira a la basura la única tensión
+que tiene. La espanta al nodo **más lejano del jugador** durante nueve segundos, corriendo a **5,6
+m/s** —más rápido que cazando, porque es pánico— y después vuelve a **ronda** y no a caza: un rociado
+bien puesto tiene que comprar una ventana limpia y no un respiro de dos segundos.
+
+**Y FUNCIONA TAMBIÉN EN LA HUIDA FINAL, que es donde importa.** `ST.hecho` reescribe `caza` en cada
+cuadro, así que sin una guarda el aerosol habría sido inútil justo en el único tramo en que de verdad
+te persiguen — un objeto que existe y no sirve para nada. Medido con la hamburguesa armada: `pega`,
+pasa a `huye`, se va a 36,5 m, y al terminar los nueve segundos vuelve a `caza`, que es lo correcto
+ahí.
+
+#### EL DEFECTO GRANDE: `camera.quaternion` NO ES EL DEL MUNDO
+
+El aerosol no le pegaba **nunca**, y la sonda lo cantó en un número: `cos −0,999` contra la araña
+mirándola **de frente** y `cos −1` mirándola **de espaldas`. Dos veces lo mismo es la firma de un
+rumbo que no depende del rumbo.
+
+La causa: `camera.quaternion` es el **local**, o sea relativo al pivote del cabeceo, así que
+`(0,0,−1)` transformado por él devuelve la dirección en el marco del padre y no en el mundo. Con
+`camera.getWorldQuaternion()` pasa a `cos 0,998` de frente y `−0,975` de espaldas.
+
+**Y ESTO SÓLO SE VIO PORQUE LA SONDA DEVUELVE EL COSENO Y LA DISTANCIA.** Una sonda que contestara
+`'falla'` habría dejado el defecto indistinguible de una puntería mal calibrada, y yo habría estado
+moviendo el umbral en vez de arreglar la cuenta.
+
+Medido, los cuatro casos:
+
+| | distancia | coseno (umbral 0,765) | resultado |
+|---|---|---|---|
+| apuntándole | 6,35 m | **0,998** | **pega** |
+| de espaldas | 6,35 m | −0,975 | falla |
+| apuntándole pero lejos | 8,17 m | 1,000 | falla |
+| de costado | 5,94 m | 0,592 | falla |
+
+#### DOS COSAS QUE SÓLO SE VIERON EN LA CAPTURA
+
+1. **LA LATA NO SE VEÍA, Y LA SONDA DECÍA QUE SÍ.** `latasVer()` la proyectaba en **x 0,500 · y 0,488**
+   —el centro exacto del cuadro, visible y delante— y en la foto no había nada. Un aerosol de verdad
+   mide veinte centímetros, y este juego dibuja a **372 × 172** con el filtro de VHS encima: a 2,6 m
+   eso es el 3,8 % del alto, o sea **seis píxeles**. Va al doble de tamaño, que es la misma cuenta que
+   ya hizo falta con las mariposas de LEMI y con las flores gigantes del campo. Y **el halo tuvo que
+   subir de 0,30 a 0,55 de opacidad y saturarse**: el de las partes es ámbar sobre el piso oscuro del
+   depósito, y la lata del salón cae sobre el damero blanco y negro, donde un verde claro al 30 % no
+   existe.
+2. **LA NUBE ERA UNA MANCHA BLANCA QUE TAPABA MEDIA PANTALLA.** Las veintiocho gotas nacían en el
+   **mismo punto** a 35 cm del ojo y ya con 11-23 cm de radio: veintiocho esferas translúcidas
+   encimadas a esa distancia son un fogonazo. Se reparten a lo largo del rayo (0,55 a 1,9 m), nacen en
+   5 cm y crecen — que además es lo que hace un aerosol.
+3. Y el aviso decía literalmente **`&#129524;`**: `showToast` escribe con `textContent`, así que una
+   entidad HTML sale tal cual. Los emoji de los toasts van literales; en las fichas del HUD, que se
+   escriben con `innerHTML`, la entidad está bien.
+
+#### EL SILBIDO: LA MUESTRA PRIMERO Y EL RUIDO FILTRADO DE RESPALDO
+
+Un sonido nuevo generado con Rezona (**7 KB**, `a_spray`), horneado por el mismo lazo cerrado de la
+vuelta 91: **rms 0,1089**, que es la escala de las acciones de este juego (0,110). Medido en el juego
+con el analizador colgado del maestro: **pico 0,355 · rms 0,115**.
+
+Y el respaldo **no es un parche**: un aerosol es literalmente ruido pasabanda con ataque rápido y
+cola larga, así que el oscilador es el sonido correcto y no una aproximación. Es el único caso de este
+juego donde lo procedural no pierde nada.
+
+**Y EL PROYECTO DESCARTABLE DE REZONA YA NO EXISTÍA:** `submit_audio_generation` devolvió
+`PROJECT_NOT_FOUND` —alguien borró `YlgCbidN`— así que se creó otro con el mismo nombre y las cuatro
+referencias del repo se movieron de una vez (`uSEsgNYW`).
+
+#### UN DEFECTO DE TRADUCCIÓN QUE LA AUDITORÍA NO PODÍA ENCONTRAR
+
+Leyendo la tabla apareció esto:
+
+    'Camina hacia la puerta negra…': 'Walk to the black door…',
+    'Camina hacia la puerta negra…': 'Caminhe até a porta preta…',
+
+Las dos en la tabla **inglesa**, con la clave repetida: en un objeto literal la segunda pisa a la
+primera, así que **en inglés ese aviso salía en portugués**. `__pb.textos()` no lo ve, y no es un
+defecto de la sonda: ella busca cadenas **sin traducir**, y ésta estaba traducida — al idioma
+equivocado. Es la clase de cosa que sólo encuentra leer la tabla.
+
+#### LO QUE HAY QUE HACER Y NO SE VE
+
+- **Las cargas NO se guardan entre vidas.** Guardándolas, se muere una vez, se juntan las dos latas
+  otra vez, y a la tercera hay ocho cargas: el nivel pasa a ser una acumulación.
+- **Y se topan en cuatro.** Sin tope, el día que se agregue una tercera lata el jugador podría
+  guardarse seis y la araña dejaría de importar.
+- **Las latas entran en la lista de sitios donde no se teje**, igual que las cuatro partes: una tela
+  encima de la única herramienta del nivel es un peaje, no un mecanismo.
+- **Las latas se auditan.** Una lata dentro de una estantería no rompe el nivel: lo deja sin su única
+  herramienta, y eso es peor porque no falla nada. Medido: **2 de 2 alcanzables y ninguna tapada**.
+- **Medio segundo de enfriamiento**, y el toque va por el **mismo manejador** que el de esconderse:
+  una segunda lista de botones táctiles se desincroniza el día que se agregue uno.
+- Las cuatro geometrías y los cuatro materiales **se comparten** entre las dos latas: creándolos
+  adentro de la función, dos latas son ocho geometrías y ocho materiales subidos a la GPU para dibujar
+  el mismo objeto dos veces.
+
+#### MEDIDO AL CERRAR
+
+Latas: 0 → 2 → 4 cargas juntándolas de verdad, topadas en 4, el botón aparece y desaparece con las
+cargas, y **al reiniciar vuelven las dos y las cargas quedan en 0**. Enfriamiento: dos toques seguidos
+dan `pega / sin` y gastan **una** carga. Auditoría del local intacta: **28.152 de 28.152 celdas · 4 de
+4 partes · 2 de 2 latas · 28 nodos, 0 arcos sucios, 0 aislados · 359 piezas en 15 mallas**. La araña
+sigue sin quedarse clavada (**0,10 s en 120**). Partida completa 4/4 en orden y salida al cuarto
+blanco. Los **seis niveles** cargan uno por uno. **33 de 33 sonidos decodificados, 0 fallados.** Los
+tres idiomas con `castellano: 0` y la ficha y el botón traducidos (ROCIAR / SPRAY / BORRIFAR), **cero
+solapamientos** entre los siete elementos del HUD. 18 llamadas de dibujo y 7.544 triángulos al entrar,
+o sea sin cambio; las dos latas son 8 mallas más 2 halos y desaparecen al juntarlas, y la nube es
+**una** malla instanciada de 28 gotas. `window.__errs` y `window.__pbFallas` vacíos en las diez
+corridas. El HTML pasó de 3,63 a **3,65 MB**.
+
 ### Nonagésima quinta vuelta (2026-09-03): **PUERTA BLANCA** — la araña se quedaba clavada en el corredor del baño
 
 Pedido: *"arregla los errores con la araña del nivel 6, haz que no se quede atrapada"*.

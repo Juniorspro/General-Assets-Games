@@ -124,11 +124,13 @@ JS = r"""
   // cual, asi que un aviso sin traducir sale en castellano y nunca vacio.
   const PB_TOAST = {
     en: {
+      'Rociaste el aire. La lata pierde una carga igual.': 'You sprayed thin air. The can loses a charge anyway.',
+      '\u{1F9F4} Le diste. Se va, y por unos segundos no te busca.': '\u{1F9F4} Direct hit. She backs off, and for a few seconds she is not hunting you.',
+      '\u{1F9F4} Lata de insecticida. Apunta y rocia para espantarla.': '\u{1F9F4} Can of bug spray. Aim and spray to scare her off.',
       'Mi alma encontró el descanso que siempre necesité.': 'My soul found the rest it always needed.',
       'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': "I don't know where I am or who I am, but it no longer matters. I just want to get out of here.",
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Six doors, six places, and not one of them was a way out. End of this version of the demo.',
       'Camina hacia la puerta negra…': 'Walk to the black door…',
-      'Camina hacia la puerta negra…': 'Caminhe até a porta preta…',
       'Camina hacia la puerta blanca…': 'Walk to the white door…',
       'Encuentra 3 flores arcoíris 🌈 en el campo': 'Find 3 rainbow flowers 🌈 in the field',
       '🔑 Una puerta se abrió en el centro del campo. Sigue la flecha.': '🔑 A door opened in the middle of the field. Follow the arrow.',
@@ -172,6 +174,9 @@ JS = r"""
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'The store starts over. The tray is empty again.'
     },
     pt: {
+      'Rociaste el aire. La lata pierde una carga igual.': 'Voce borrifou o ar. A lata perde uma carga do mesmo jeito.',
+      '\u{1F9F4} Le diste. Se va, y por unos segundos no te busca.': '\u{1F9F4} Acertou. Ela recua, e por alguns segundos nao te procura.',
+      '\u{1F9F4} Lata de insecticida. Apunta y rocia para espantarla.': '\u{1F9F4} Lata de inseticida. Mire e borrife para espanta-la.',
       'Mi alma encontró el descanso que siempre necesité.': 'Minha alma encontrou o descanso que sempre precisei.',
       'No sé dónde estoy ni quién soy, pero ya no importa. Solo quiero salir de aquí.': 'Não sei onde estou nem quem sou, mas já não importa. Só quero sair daqui.',
       'Seis puertas, seis sitios, y ninguno era una salida. Fin de esta version de la demo.': 'Seis portas, seis lugares, e nenhum era uma saída. Fim desta versão da demo.',
@@ -215,6 +220,7 @@ JS = r"""
       'Telarana. Estas pegado 3 segundos y te oyo.': 'Teia. Você fica preso 3 segundos e ela te ouviu.',
       'Te soltaste.': 'Você se soltou.',
       'Hamburguesa armada. La puerta de atras se abrio y ella lo sabe: CORRE.': 'Hambúrguer montado. A porta dos fundos abriu e ela sabe: CORRE.',
+      'Camina hacia la puerta negra…': 'Caminhe até a porta preta…',
       'El local vuelve a empezar. La bandeja esta vacia otra vez.': 'A loja começa de novo. A bandeja está vazia outra vez.'
     }
   };

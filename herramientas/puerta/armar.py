@@ -643,10 +643,32 @@ s = s if SOLO else cambiar(s, """      dunGroup.visible = false;
       storeGroup.visible = false;
       stHud.style.display = 'none';
       stTrap.style.display = 'none';
+      spBtn.style.display = 'none';
       hideBtn.style.display = 'none';
       hideMask.style.display = 'none';
       hiding = null;
       hideCd = 0;""", 'apagar el local al terminar')
+
+# ── EL INSECTICIDA: el boton, la tecla y el toque ────────────────────────────
+# el toque va en el MISMO manejador que el de esconderse: una segunda lista de
+# botones tactiles se desincroniza el dia que se agregue uno
+s = s if SOLO else cambiar(s,
+    "  window.addEventListener('keydown', (e) => { if (e.code === 'KeyF') toggleFlashlight(); });",
+    "  window.addEventListener('keydown', (e) => { if (e.code === 'KeyF') toggleFlashlight(); });\n"
+    "  spBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); stRociar(); });\n"
+    "  window.addEventListener('keydown', function (e) { if (e.code === 'KeyR' && !e.repeat) stRociar(); });",
+    'el boton y la tecla de rociar')
+s = s if SOLO else cambiar(s,
+    "      if (hRect.width > 0 && pointInRect(t.clientX, t.clientY, hRect)) {\n"
+    "        toggleHide();\n"
+    "      } else if",
+    "      const sRect = spBtn.getBoundingClientRect();\n"
+    "      if (sRect.width > 0 && pointInRect(t.clientX, t.clientY, sRect)) {\n"
+    "        stRociar();\n"
+    "      } else if (hRect.width > 0 && pointInRect(t.clientX, t.clientY, hRect)) {\n"
+    "        toggleHide();\n"
+    "      } else if",
+    'el toque de rociar')
 
 # la sonda del nivel 6
 s = cambiar(s, """    flores: function () {""",
@@ -790,6 +812,12 @@ s = cambiar(s, """    flores: function () {""",
       return { celdas: NX * NZ,
                libres: ok.reduce(function (a, v) { return a + v; }, 0),
                alcanzadas: alc, sueltas: sueltas, partes: partes,
+               // LAS LATAS TAMBIEN SE AUDITAN: una lata dentro de una
+               // estanteria no rompe el nivel, lo deja sin la unica herramienta
+               // que tiene — y eso es peor, porque no falla nada.
+               latas: stLatas.map(function (l) {
+                 return { llega: llega(l.x, l.z), tapada: dentro(l.x, l.z, 1.05) };
+               }),
                bandeja: llega(ST_BANDEJA.x, ST_BANDEJA.z),
                salida: llega(ST_SALIDA.x, ST_SALIDA.z),
                nodos: ST_NODOS.length, arcos: ST_ARCOS.length,
@@ -930,6 +958,39 @@ s = cambiar(s, """    flores: function () {""",
     // una prueba que no se puede correr no prueba nada. Esto llama al mismo paso
     // que el bucle, con el mismo delta topado, asi que mide el juego y no una
     // maqueta.
+    // LA SONDA DEL INSECTICIDA. `rociar` devuelve 'sin' | 'falla' | 'pega', que
+    // es lo que separa "el boton hizo algo" de "le pego": sin ese dato, una
+    // prueba que toca el boton y ve que la carga baja aprueba un aerosol que no
+    // alcanza a nada.
+    spray: function () {
+      return { cargas: SP.cargas, cd: +SP.cd.toFixed(2),
+               latas: stLatas.map(function (l) { return l.tomada ? 'tomada' : 'puesta'; }),
+               boton: spBtn.style.display, ficha: spChip.textContent.trim(),
+               nube: SP.nube.visible,
+               ult: SP.ult ? { d: +SP.ult.d.toFixed(2), cos: +SP.ult.cos.toFixed(3),
+                               umbral: +SP.COS.toFixed(3), alc: SP.ALC } : null,
+               arana: { estado: ARA.estado, huyeT: +ARA.huyeT.toFixed(2),
+                        d: +Math.hypot(player.position.x - ARA.g.position.x,
+                                       player.position.z - ARA.g.position.z).toFixed(2),
+                        vel: +ARA.vel.toFixed(2) } };
+    },
+    rociar: function () { return stRociar(); },
+    // DONDE CAE LA LATA EN PANTALLA. Una sonda que dice que existe no dice que
+    // se vea: esto la proyecta y devuelve la fraccion del cuadro.
+    latasVer: function () {
+      const v = new THREE.Vector3();
+      camera.updateMatrixWorld(true);
+      return stLatas.map(function (l) {
+        l.g.updateWorldMatrix(true, false);
+        v.set(l.x, l.base + 0.12, l.z).project(camera);
+        return { tomada: l.tomada, vis: l.g.visible, padre: !!l.g.parent,
+                 x: +((v.x + 1) / 2).toFixed(3), y: +((1 - v.y) / 2).toFixed(3),
+                 delante: v.z < 1,
+                 d: +Math.hypot(player.position.x - l.x, player.position.z - l.z).toFixed(2) };
+      });
+    },
+    // y poder plantar cargas sin caminar hasta la lata, para probar el apuntado
+    sprayCargas: function (n) { SP.cargas = n; SP.cd = 0; stPintaSpray(); return SP.cargas; },
     // LA SONDA DEL ATASCO. Corre el mismo paso que el bucle y busca la racha
     // mas larga en la que la arana NO SE MUEVE DE SITIO: el desplazamiento neto
     // de una ventana de 3 s. Un rumbo que gira o una pose que se anima no
@@ -1695,9 +1756,11 @@ s = s if SOLO else cambiar(s, "        yaw -= dx * 0.0038;\n        pitch -= dy 
 # un lazo. El assert de la cuenta es lo que garantiza que no se cuele otro.
 _dest = [m for m in re.findall(r"(\w+)\.connect\(ctx\.destination\)", s) if m != 'pbSonMaster']
 assert len(_dest) == 18, 'esperaba 18 osciladores sueltos, hay %d' % len(_dest)
+_ya = s.count('.connect(pbSalidaFx(ctx))')   # los que ya venian escritos asi
 if not SOLO:
     s = re.sub(r"(?<!pbSonMaster)\.connect\(ctx\.destination\)", ".connect(pbSalidaFx(ctx))", s)
-    assert s.count('.connect(pbSalidaFx(ctx))') == 20, 'no quedaron los 20 en el bus de efectos'
+    assert s.count('.connect(pbSalidaFx(ctx))') == _ya + 18, \
+        'no quedaron los 18 osciladores en el bus de efectos'
 
 # LOS AVISOS PASAN POR LA TABLA: un solo parche cubre los cincuenta que hay
 s = s if SOLO else cambiar(s, """  function showToast(text, duration) {

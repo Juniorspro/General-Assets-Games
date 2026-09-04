@@ -64,6 +64,9 @@ SFX = {
                      'threads stretching and snapping one by one'),
  'a_sierra':   (3.0, 'a big circular saw blade spinning up and running, the motor '
                      'whining and the blade singing in the air'),
+ 'a_spray':    (2.5, 'an aerosol insecticide can spraying: the valve opening with a '
+                     'sharp click and a long hard hiss of pressurised mist, the ball '
+                     'inside the can rattling once at the end'),
  # ── LAS CAMAS DE AMBIENTE, UNA POR SITIO ─────────────────────────────────────
  'b_room':     (12, CAMA + '. a small empty black concrete room: a very low hum, '
                     'faint dripping water far away, absolute stillness'),
@@ -81,7 +84,7 @@ SFX = {
                     'droning, a fluorescent tube ticking, a fryer fan whirring'),
 }
 
-PROY = os.environ.get('PB_PROY', 'YlgCbidN')   # el descartable
+PROY = os.environ.get('PB_PROY', 'uSEsgNYW')   # el descartable
 ESTADO = '/tmp/pb_audio_tareas.json'
 EN_VUELO = 10          # el tope de la cuenta son 12; se deja aire
 

@@ -24,10 +24,12 @@ MENU_FICHA = '''        <div class="lv" data-lv="6">
 
 HUD = '''    <div id="store-hud">
       <div class="chip" id="st-chip">&#127828; Partes 0/4</div>
+      <div class="chip" id="sp-chip" data-ui="insecticida" data-uia="[0]">&#129524; Insecticida 0</div>
       <div id="st-list">
         <span id="st-p0">PAN</span><span id="st-p1">CARNE</span><span id="st-p2">QUESO</span><span id="st-p3">TAPA</span>
       </div>
     </div>
+    <div id="spray-btn" data-ui="rociar">ROCIAR</div>
 '''
 
 CSS = '''
@@ -39,6 +41,21 @@ CSS = '''
     text-shadow: 0 1px 3px rgba(0,0,0,0.85);
   }
   #store-hud .chip { background: rgba(0,0,0,0.42); padding: 7px 13px; border-radius: 18px; }
+  /* la ficha se apaga sin cargas: un contador en cero que se lee igual que uno
+     con dos no dice si hay lata o no */
+  #sp-chip.vacio { opacity: 0.42; }
+  /* EL BOTON VA MAS ARRIBA QUE EL DE ESCONDERSE (bottom 132) aunque los dos
+     niveles no coexistan: si algun dia coexisten, se solapan y nadie se
+     entera hasta jugarlo. */
+  #spray-btn {
+    position: absolute; right: 30px; bottom: 196px;
+    padding: 10px 18px; border-radius: 22px; display: none;
+    pointer-events: auto; cursor: pointer; z-index: 9;
+    background: rgba(12,26,16,0.72); border: 2px solid rgba(150,255,170,0.55);
+    color: #cfffd8; font-size: 13.5px; font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  }
+  #spray-btn.gasta { transform: scale(0.92); border-color: rgba(255,255,255,0.9); }
   #st-list { display: flex; gap: 6px; }
   /* EL ORDEN SE LEE EN EL HUD, no en un cartel que aparece una vez. La bandeja
      rechaza la parte equivocada, asi que el jugador tiene que poder consultar
@@ -533,6 +550,222 @@ JS += r"""
     return g;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // EL INSECTICIDA: dos latas, cuatro cargas, y hay que APUNTAR
+  // ══════════════════════════════════════════════════════════════════════════
+  // POR QUE NO ES UN BOTON QUE LA MANDA LEJOS: si alcanzara con tocarlo, la
+  // arana dejaria de ser un peligro y el nivel se convierte en una lista de
+  // recados. Es un aerosol, o sea que tiene DIRECCION y ALCANCE, y la carga se
+  // gasta igual si se falla — eso es lo unico que hace que apuntar importe.
+  //
+  // Y NO LA MATA. Este nivel es una huida, no un combate: matarla tira a la
+  // basura la unica tension que tiene. La espanta.
+  const SP = {
+    cargas: 0, cd: 0, nube: null, part: [], ult: null,
+    ALC: 6.5,          // metros: a mas de esto el aerosol no llega
+    COS: Math.cos(0.70), // ±40°: el campo horizontal del juego son 58,7°, asi que
+                         // si la arana esta EN PANTALLA y cerca, le pega
+    HUIDA: 9.0,        // segundos que se va
+    TOPE: 4
+  };
+  const ST_LATAS = [
+    { x: -6.5, z: -8.0, cargas: 2 },   // salon, entre los reservados
+    { x: 1.5,  z: 18.6, cargas: 2 }    // pasillo trasero, camino al deposito
+  ];
+  const stLatas = [];
+  {
+    // la lata: cuerpo de chapa, franja de etiqueta, hombro y valvula. Dibujada
+    // por codigo — un aerosol de veinte centimetros no justifica bajar una malla.
+    // LAS CUATRO GEOMETRIAS Y LOS CUATRO MATERIALES SE COMPARTEN entre las dos
+    // latas: creandolos adentro de la funcion, dos latas son ocho geometrias y
+    // ocho materiales subidos a la GPU para dibujar el mismo objeto dos veces.
+    const LG = {
+      cuerpo: new THREE.CylinderGeometry(0.075, 0.075, 0.20, 12),
+      franja: new THREE.CylinderGeometry(0.077, 0.077, 0.055, 12),
+      hombro: new THREE.CylinderGeometry(0.042, 0.075, 0.035, 12),
+      boqui: new THREE.BoxGeometry(0.055, 0.045, 0.06)
+    };
+    const LM = {
+      cuerpo: new THREE.MeshStandardMaterial({ color: 0x2f7a44, roughness: 0.35, metalness: 0.55 }),
+      franja: new THREE.MeshStandardMaterial({ color: 0xe8e2c8, roughness: 0.6 }),
+      hombro: new THREE.MeshStandardMaterial({ color: 0x9aa0a4, roughness: 0.3, metalness: 0.8 }),
+      boqui: new THREE.MeshStandardMaterial({ color: 0xe6e9ea, roughness: 0.55 })
+    };
+    // EL HALO VA MAS FUERTE QUE EL DE LAS PARTES. El de ellas es ambar sobre el
+    // piso del deposito y de la camara, que son oscuros; la lata del salon cae
+    // sobre el damero blanco y negro, y ahi un verde claro al 30% no se ve.
+    const LMH = new THREE.MeshBasicMaterial({ color: 0x2bd45f, transparent: true,
+                                              opacity: 0.55, depthWrite: false });
+    const LGH = new THREE.CircleGeometry(0.85, 20);
+    function formaLata() {
+      const g = new THREE.Group();
+      const cuerpo = new THREE.Mesh(LG.cuerpo, LM.cuerpo); cuerpo.position.y = 0.10; g.add(cuerpo);
+      const franja = new THREE.Mesh(LG.franja, LM.franja); franja.position.y = 0.115; g.add(franja);
+      const hombro = new THREE.Mesh(LG.hombro, LM.hombro); hombro.position.y = 0.218; g.add(hombro);
+      const boquilla = new THREE.Mesh(LG.boqui, LM.boqui);
+      boquilla.position.set(0, 0.255, 0.008); g.add(boquilla);
+      // Y VA AL DOBLE DE TAMAÑO, A PROPOSITO. Un aerosol de verdad mide veinte
+      // centimetros, y este juego dibuja a 372 x 172 con el filtro de VHS
+      // encima: proyectada, una lata a escala real ocupa el 3,8% del alto del
+      // cuadro, o sea seis pixeles. Medido, en la captura no se veia. A 40 cm
+      // sigue leyendose a lata y se distingue del piso — es la misma cuenta que
+      // ya hizo falta con las mariposas de LEMI y con las flores del campo.
+      g.scale.setScalar(2.0);
+      return g;
+    }
+    ST_LATAS.forEach(function (p) {
+      const g = formaLata();
+      g.position.set(p.x, 1.15, p.z);
+      storeGroup.add(g);
+      const halo = new THREE.Mesh(LGH, LMH);
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.set(p.x, 0.03, p.z);
+      storeGroup.add(halo);
+      stLatas.push({ g: g, halo: halo, x: p.x, z: p.z, cargas: p.cargas,
+                     tomada: false, base: 1.15 });
+    });
+
+    // LA NUBE VA INSTANCIADA: veintiocho gotas sueltas serian veintiocho
+    // llamadas de dibujo para un efecto que dura un segundo.
+    const nube = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xbdf7c8, transparent: true,
+                                    opacity: 0.20, depthWrite: false }),
+      28);
+    nube.frustumCulled = false;
+    nube.visible = false;
+    storeGroup.add(nube);
+    SP.nube = nube;
+    for (let i = 0; i < 28; i++) SP.part.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), t: 0, dur: 1 });
+  }
+
+  function stPintaSpray() {
+    pbUI(spChip, 'insecticida', SP.cargas);
+    spChip.classList.toggle('vacio', SP.cargas <= 0);
+    spBtn.style.display = (gameState === 'store' && SP.cargas > 0) ? 'block' : 'none';
+  }
+
+  // EL SILBIDO: la muestra primero y el ruido filtrado de respaldo. Un aerosol
+  // es literalmente ruido pasabanda con ataque rapido, asi que el respaldo no
+  // es un parche: es el sonido correcto.
+  function stSpraySuena() {
+    if (typeof pbSon === 'function' && pbSon('a_spray', 1.0)) return;
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 0.85);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const k = i / len;
+      const env = Math.min(1, k * 40) * Math.pow(1 - k, 1.3);
+      d[i] = (Math.random() * 2 - 1) * env;
+    }
+    const nz = ctx.createBufferSource(); nz.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(5200, now);
+    bp.frequency.linearRampToValueAtTime(3100, now + 0.8);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.34, now);
+    g.gain.exponentialRampToValueAtTime(0.0005, now + 0.85);
+    nz.connect(bp); bp.connect(g); g.connect(pbSalidaFx(ctx));
+    nz.start(now); nz.stop(now + 0.86);
+    const cl = ctx.createOscillator();      // el clic de la valvula
+    cl.type = 'square'; cl.frequency.value = 1750;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.16, now);
+    cg.gain.exponentialRampToValueAtTime(0.0004, now + 0.05);
+    cl.connect(cg); cg.connect(pbSalidaFx(ctx));
+    cl.start(now); cl.stop(now + 0.06);
+  }
+
+  // ROCIAR. Devuelve 'sin' | 'falla' | 'pega', que es lo que mide el banco.
+  function stRociar() {
+    if (gameState !== 'store' || SP.cargas <= 0 || SP.cd > 0) return 'sin';
+    SP.cargas--; SP.cd = 0.75;
+    stPintaSpray();
+    stSpraySuena();
+    spBtn.classList.add('gasta');
+    setTimeout(function () { spBtn.classList.remove('gasta'); }, 140);
+
+    // la nube sale del ojo hacia donde se mira, con dispersion.
+    // OJO: `camera.quaternion` es el LOCAL, o sea relativo al pivote del
+    // cabeceo, asi que la direccion que devuelve no es la del mundo y no depende
+    // del rumbo. Medido, daba cos -0,999 contra la arana mirandola de frente Y
+    // de espaldas: el aerosol no le pegaba nunca. Va el del mundo.
+    const dir = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
+    const o = camera.getWorldPosition(new THREE.Vector3());
+    for (let i = 0; i < SP.part.length; i++) {
+      const q = SP.part[i];
+      q.p.copy(o).addScaledVector(dir, rand(0.55, 1.9));
+      q.p.x += rand(-0.14, 0.14); q.p.y += rand(-0.14, 0.14); q.p.z += rand(-0.14, 0.14);
+      q.v.copy(dir).multiplyScalar(rand(6.5, 10.5));
+      q.v.x += rand(-1.5, 1.5); q.v.y += rand(-1.0, 1.0); q.v.z += rand(-1.5, 1.5);
+      q.dur = rand(0.55, 0.95); q.t = q.dur;
+    }
+    SP.nube.visible = true;
+
+    // Y AHORA SI LE PEGA O NO. El angulo se mide contra el rumbo de la mirada
+    // en el plano, no en 3D: la arana es un bicho de cuatro metros apoyado en el
+    // piso y el cabeceo no deberia decidir si el aerosol la alcanza.
+    const ax = ARA.g.position.x - o.x, az = ARA.g.position.z - o.z;
+    const d2 = Math.hypot(ax, az) || 1;
+    const dl = Math.hypot(dir.x, dir.z) || 1;
+    const cos = (ax / d2) * (dir.x / dl) + (az / d2) * (dir.z / dl);
+    SP.ult = { d: d2, cos: cos, dir: [dir.x, dir.z] };
+    if (d2 > SP.ALC || cos < SP.COS) {
+      showToast('Rociaste el aire. La lata pierde una carga igual.', 2200);
+      return 'falla';
+    }
+    stEspanta();
+    return 'pega';
+  }
+
+  // LA ESPANTA: se va al nodo mas LEJANO del jugador, corriendo, y despues
+  // vuelve a ronda y no a caza — un rociado bien puesto tiene que comprar una
+  // ventana limpia, no un respiro de dos segundos.
+  function stEspanta() {
+    let mejor = 0, dmax = -1;
+    for (let i = 0; i < ST_NODOS.length; i++) {
+      const d = Math.hypot(ST_NODOS[i][0] - player.position.x,
+                           ST_NODOS[i][1] - player.position.z);
+      if (d > dmax) { dmax = d; mejor = i; }
+    }
+    ARA.estado = 'huye';
+    ARA.huyeT = SP.HUIDA;
+    ARA.cazaT = 0;
+    ARA.wp.set(ST_NODOS[mejor][0], 0, ST_NODOS[mejor][1]);
+    ARA.sig = -1;                       // replanea el camino desde donde esta
+    showToast('\u{1F9F4} Le diste. Se va, y por unos segundos no te busca.', 3000);
+  }
+
+  function stNubePaso(delta) {
+    if (!SP.nube.visible) return;
+    const m = new THREE.Matrix4();
+    let vivos = 0;
+    for (let i = 0; i < SP.part.length; i++) {
+      const q = SP.part[i];
+      if (q.t > 0) {
+        q.t -= delta;
+        q.p.addScaledVector(q.v, delta);
+        q.v.multiplyScalar(1 - Math.min(1, delta * 3.4));   // el aerosol frena
+        q.v.y -= delta * 0.5;
+        vivos++;
+        // nace chica y crece: una gota de aerosol se expande al alejarse
+        const edad = 1 - Math.max(0, q.t) / (q.dur || 1);
+        const r = 0.05 + edad * 0.26;
+        m.makeScale(r, r, r); m.setPosition(q.p);
+      } else {
+        m.makeScale(0.0001, 0.0001, 0.0001);
+      }
+      SP.nube.setMatrixAt(i, m);
+    }
+    SP.nube.instanceMatrix.needsUpdate = true;
+    if (!vivos) SP.nube.visible = false;
+  }
+
   const stPartes = [];
   {
     // TRES DE LAS CUATRO ESTABAN DENTRO DE UN MUEBLE, y eso no se ve como un
@@ -632,6 +865,7 @@ JS += r"""
     // venia sobre esa linea: 143 de 180 segundos en el mismo sitio, recorriendo
     // 396 metros sin moverse de lugar. Y en caza, 117 de 120 — o sea que NO
     // LLEGABA NUNCA al jugador.
+    huyeT: 0,       // los segundos que le queda de espantada
     nodo: -1,       // el nodo que ocupa de verdad
     sig: -1         // el nodo al que se comprometio a llegar
   };
@@ -953,6 +1187,7 @@ JS += r"""
   // defecto que ya tenia la tela del piso de la cocina a 58 cm de la carne, y
   // ahora se evita por construccion en vez de moviendo una constante.
   const stNoTela = stPartes.map(function (p) { return [p.x, p.z]; })
+    .concat(stLatas.map(function (l) { return [l.x, l.z]; }))
     .concat([[ST_BANDEJA.x, ST_BANDEJA.z], [ST_SALIDA.x, ST_SALIDA.z]]);
   function stSitioDeTela(x, z) {
     for (let i = 0; i < stNoTela.length; i++) {
@@ -1101,6 +1336,8 @@ JS += r"""
   // ==================================================================
   const stHud = document.getElementById('store-hud');
   const stChip = document.getElementById('st-chip');
+  const spChip = document.getElementById('sp-chip');
+  const spBtn = document.getElementById('spray-btn');
   const stTrap = document.getElementById('st-trap');
   const ST = {
     tengo: {}, puestas: 0, hecho: false,
@@ -1148,6 +1385,18 @@ JS += r"""
     // grito hasta el primer cuadro de araPaso.
     ARA.cazaT = 0; ARA.tejeCd = 16; ARA.vel = 0; ARA.fase = 0;
     ARA.nodo = -1; ARA.sig = -1;   // el camino se replanea desde donde reaparece
+    ARA.huyeT = 0;
+    // LAS LATAS VUELVEN Y LAS CARGAS SE PIERDEN. Guardar las cargas entre
+    // vidas convertiria el nivel en una acumulacion: se muere una vez, se
+    // juntan las dos latas otra vez, y a la tercera hay ocho cargas.
+    SP.cargas = 0; SP.cd = 0;
+    stLatas.forEach(function (l) {
+      l.tomada = false;
+      l.g.visible = true; l.halo.visible = true;
+      l.g.position.set(l.x, l.base, l.z);
+    });
+    SP.nube.visible = false;
+    stPintaSpray();
     ARA.luz.intensity = 0.18;
     // CON 0 REAPARECIA HUNDIDA: se construye en ARA_Y —la caja envolvente da
     // negativo con el grupo en cero— y el reinicio lo pisaba, asi que la
@@ -1196,6 +1445,9 @@ JS += r"""
     boundary = ST_BOUNDS;
     boundaryType = 'box';
     stHud.style.display = 'flex';
+    // despues de poner gameState: stPintaSpray lo lee para decidir el boton, y
+    // resetStore corre ANTES de que el estado sea 'store'
+    stPintaSpray();
     hideArrow();
     showToast('Un local de comida rapida. Junta las 4 partes, armalas EN ORDEN sobre la bandeja y sali por atras. No pises las telas.', 7200);
     transitioning = false;
@@ -1211,8 +1463,17 @@ JS += r"""
     // el modo caza tambien se apaga solo: una arana que te persigue para siempre
     // convierte el nivel en una carrera y no en una busqueda
     if (ARA.cazaT > 0) { ARA.cazaT -= delta; if (ARA.cazaT <= 0 && !ST.hecho) ARA.estado = 'ronda'; }
+    // EL INSECTICIDA MANDA POR ENCIMA DE TODO, TAMBIEN DE LA HUIDA FINAL. Sin
+    // esta guarda `ST.hecho` reescribia 'caza' al cuadro siguiente y la lata
+    // era inutil justo en el unico tramo en que de verdad te persiguen — o sea
+    // que el objeto existiria y no serviria para nada.
+    if (ARA.estado === 'huye') {
+      ARA.huyeT -= delta;
+      // y vuelve a RONDA y no a caza: un rociado bien puesto compra una ventana
+      if (ARA.huyeT <= 0) { ARA.estado = 'ronda'; ARA.cazaT = 0; }
+    }
     // ...salvo cuando la hamburguesa ya esta armada: ahi el nivel ES la huida
-    if (ST.hecho) ARA.estado = 'caza';
+    if (ST.hecho && ARA.estado !== 'huye') ARA.estado = 'caza';
 
     // te huele de cerca aunque no hayas pisado una tela
     if (ST.grace <= 0 && dist < 11 && ARA.estado === 'ronda') {
@@ -1264,7 +1525,9 @@ JS += r"""
     const rumboVale = d > 0.35;
     // 5,0 contra 4,3 de caminar y 7,7 de correr: caminando NO se le gana y
     // corriendo si. Esa es toda la tension del nivel, y es una resta.
-    const velObj = ARA.estado === 'caza' ? 5.0 : 2.2;
+    // huyendo va MAS RAPIDO que cazando: es panico, y ademas es lo que hace
+    // que la ventana de nueve segundos se sienta ganada
+    const velObj = ARA.estado === 'caza' ? 5.0 : (ARA.estado === 'huye' ? 5.6 : 2.2);
     ARA.vel = lerp(ARA.vel, velObj, Math.min(delta * 3, 1));
     ARA.g.position.x += (vx / d) * ARA.vel * delta;
     ARA.g.position.z += (vz / d) * ARA.vel * delta;
@@ -1280,7 +1543,8 @@ JS += r"""
 
     ARA.fase += delta * (2.6 + ARA.vel * 1.35);
     araPose(ARA.fase, ARA.vel);
-    ARA.luz.intensity = ARA.estado === 'caza' ? 0.9 + Math.sin(elapsed * 9) * 0.25 : 0.18;
+    ARA.luz.intensity = ARA.estado === 'caza' ? 0.9 + Math.sin(elapsed * 9) * 0.25
+                      : (ARA.estado === 'huye' ? 0.06 : 0.18);
 
     if (ARA.estado === 'ronda') {
       if (Math.hypot(ARA.g.position.x - ARA.wp.x, ARA.g.position.z - ARA.wp.z) < 2.2) {
@@ -1352,6 +1616,25 @@ JS += r"""
         }
       }
     }
+
+    // ---- juntar las latas de insecticida ----
+    if (SP.cd > 0) SP.cd -= delta;
+    stNubePaso(delta);
+    stLatas.forEach(function (l) {
+      if (l.tomada) return;
+      l.g.position.y = l.base + Math.sin(elapsed * 1.9 + l.z) * 0.05;
+      l.g.rotation.y += delta * 0.7;
+      if (Math.hypot(player.position.x - l.x, player.position.z - l.z) < 2.2) {
+        l.tomada = true;
+        l.g.visible = false; l.halo.visible = false;
+        // Y SE TOPA. Con las dos latas juntas son cuatro cargas, que es el tope:
+        // sin tope, agregar una tercera lata algun dia haria que el jugador
+        // pudiera guardarse seis y la arana dejaria de importar.
+        SP.cargas = Math.min(SP.TOPE, SP.cargas + l.cargas);
+        stPintaSpray();
+        showToast('\u{1F9F4} Lata de insecticida. Apunta y rocia para espantarla.', 3600);
+      }
+    });
 
     // ---- juntar las partes ----
     stPartes.forEach(function (p) {
