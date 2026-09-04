@@ -154,8 +154,9 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
-- **`Dash.html` es "ROTOR"** (~109 KB, **sin un solo asset**: los tres temas electrónicos son
-  osciladores y las cuatro texturas son lienzos de cuatro píxeles). El género de Geometry Dash **en 3D
+- **`Dash.html` es "ROTOR"** (~231 KB, de los cuales 78 son las cinco imágenes generadas —tres
+  telones de fondo, el fondo del menú y el sello—; los tres temas electrónicos siguen siendo
+  osciladores y pesan cero). El género de Geometry Dash **en 3D
   con three.js**, apaisado dentro de un teléfono vertical y **sin pantalla de «gira el celular»**.
   La jugabilidad sigue siendo del plano XY —el género ES de dos ejes— y lo que es tridimensional es el
   mundo: bloques extruidos, picos que son pirámides, el cubo tumbando de verdad, y **sombra de
@@ -416,6 +417,159 @@ del HUD, en vertical girado y en apaisado. Las tres calidades en caliente (535×
 **LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los tres temas está medido que suenan y a
 qué nivel, no si NEON DRIVE pega con NEON DRIVE. Y el bot juega con puntería de un paso de física: que
 los tres se puedan pasar está probado, cuánto cuestan **con un dedo** no.
+
+### Centésima primera vuelta (2026-09-04): **ROTOR** — fondos de foto, el color por tramos y un menú con imágenes
+
+Pedido, en dos partes: *"agrega mejores fondos animaciones y efectos de cámara menú etc"* y después
+*"pero genera imágenes para el fondo también cambios y destellos de colores y sobre todo un menú con
+imágenes personalizadas"*.
+
+Cinco imágenes generadas con Higgsfield (`z_image`, 0,15 créditos cada una), horneadas por
+`herramientas/dash/hornear_img.py` a `partes/i_img.js`: **78 KB las cinco**, y el HTML pasó de 134 a
+**231 KB**. Los PNG crudos no se versionan; `assets/dash/tareas.json` guarda el id de cada trabajo,
+porque perder el id es perder el asset pagado.
+
+#### EL TELÓN VA PEGADO A LA CÁMARA, Y ESO EVITA RESOLVER LA PERSPECTIVA
+
+Puesto en el mundo hay que colocarlo a mano: **un punto en y = 0 a ciento noventa unidades NO cae en
+la misma línea de pantalla que el piso, que está a diez** — cae veinte veces más cerca del centro.
+Pegado a la cámara —como el cielo, que ya estaba así— el paralaje se hace corriendo la **textura** y
+el borde de abajo sale de la única ecuación que hay: dos puntos caen en la misma línea de pantalla
+cuando `y/dist` coincide, o sea `y_telón = −190·camY/camZ`. Y el corrimiento se deriva igual: mover la
+cámara un bloque tiene que correr la imagen `p` bloques de pantalla, o sea `p·copias/VISTA_ANCHO` en
+la coordenada de textura.
+
+**Y SE REPITE EN ESPEJO**, que es la regla de las texturas de BARRIO: ninguna de estas fotos es
+continua por los bordes y coserlas ensucia el centro, que es lo que más se mira. Con
+`MirroredRepeat` los dos bordes que se tocan son **el mismo borde** y la costura no puede existir.
+
+**EL RECORTE SE MIDE, NO SE ELIGE.** El borde de abajo va a la línea del piso, así que todo lo que la
+foto traiga más abajo es peso que no se ve nunca: se busca la fila desde la cual la desviación por
+fila se derrumba, que es donde el dibujo se convierte en la banda plana del suelo. Medido: **75 %,
+81 % y 70 %** en las tres, y el fondo del menú **100 %** —no tiene banda plana, así que no se recorta.
+
+**Y LA SATURACIÓN BAJA AL 55 % AL HORNEAR.** El material multiplica `map × color` y el color sale del
+tramo de la paleta, que cambia cuatro veces por tema: a plena saturación el tinte no puede moverla y
+el cambio de color se pierde justo en lo que ocupa media pantalla.
+
+**LAS CAPAS DE GEOMETRÍA PESAN MENOS CON LA FOTO PUESTA** (rocas de 0,82 a 0,55): la foto ya trae las
+rocas y la cordillera, así que la geometría de encima suma poco y ensucia mucho. La ciudad es la
+excepción y se queda en 1,00 — sus torres se leen a torres **más cerca** que las de la foto, y ahí el
+paralaje se gana entero.
+
+#### EL COLOR CAMBIA POR TRAMOS, Y EL TRAMO SALE DE LA X
+
+Es lo que hace el género y es lo único que impide que un tema de dos minutos se sienta un pasillo.
+Once tramos en total —cuatro, tres y cuatro— cada uno con su pareja de fondo y acento, **todos en la
+misma familia a propósito**: un tramo verde y el siguiente rojo se leen a dos juegos, y lo que hay que
+leer es que el mismo tema dobló la esquina.
+
+**EL TRAMO NO SE CUENTA CON EL RELOJ DE AUDIO SINO CON LA X**, 128 bloques por tramo, que son 32
+tiempos, o sea ocho compases. Por dos razones: sin audio —el bot, la sonda— el reloj de la música no
+existe; y como **la x SALE del reloj**, contar bloques *es* contar compases. El fundido también va por
+x (siete bloques), así que no depende del `dt` y sale igual a 30 y a 144 cuadros.
+
+Medido, los once tramos: mint → cian → índigo → turquesa · violeta → rosa → azulado · naranja → ámbar
+→ carmín → rosa. Y el cambio **se anuncia con un destello del color nuevo**: medido en una corrida del
+bot, pico **0,48 exactamente en x = 128** y de vuelta a cero en 0,2 s, con un sacudón de 0,10.
+
+**Y EL BLOQUE Y EL PISO SALEN DEL COLOR DEL TEMA, PERO POR DEBAJO DEL CIELO.** Estaban en dos azules
+grises escritos a mano y eso se veía: en el nivel 3 —que es rojo— **el piso salía azul**. No se pueden
+derivar multiplicando: el cielo es `C1 · 2,2`, así que un multiplicador cerca de eso deja el bloque
+del color del cielo (eso ya había pasado), y con `C1 · 1,55` en un nivel cuyo `C1` es casi negro el
+techo del pasillo de la nave medía **(3, 0, 3) sobre 255**, o sea un agujero. Lo que funciona es
+**mezclar hacia un piso de gris**: el bloque se queda con el tinte del tema y con un valor que no
+puede caer a cero, y el piso va un escalón por encima. Medido después: piso de (27, 8, 17) a
+**(31, 26, 45)** en el nivel 3 y (13, 31, 52) en el 1.
+
+#### EL APLASTE: LA CUENTA ESTABA A MEDIAS Y LA MEDICIÓN LA COMPLETÓ
+
+El pico de un resorte al que se le da un empujón `v0` vale `v0/ω` **sin amortiguamiento**. Con ω = 13
+y un empujón de 1,8 la primera medición dio **7,7 %** donde la cuenta prometía 13,8, y ahí apareció la
+parte que faltaba: **el amortiguamiento se come el 36 % del pico**, porque el factor vale
+`exp(−ζ·arccos ζ/√(1−ζ²))` = 0,64. O sea que el empujón para un 14 % no es 1,8 sino 3,3 — y ese número
+se comprobó midiendo la curva y no derivándolo: **salto −14,1 % a los 0,08 s y aterrizaje +13,0 %**.
+
+**Y EL APLASTE SE ANCLA EN LA CARA QUE TOCA, NO EN EL CENTRO.** La escala de un grupo va alrededor de
+su origen y el origen estaba en el centro del cubo: aplastado media deformación, el cubo **se hunde**
+la mitad de eso en el piso, y estirado flota. Anclando la cara de apoyo —la de abajo apoyado, la de
+arriba con la gravedad invertida— el contacto se queda quieto, que es lo único que hace que la
+deformación se lea a deformación. Medido: error de anclaje **0 en los 34 pasos** de un salto entero.
+
+#### CINCO DEFECTOS DE LAS SONDAS, Y SON LA MITAD DE LA VUELTA
+
+Todos de la misma familia —**una sonda que adelanta la física y nada más está midiendo un juego que no
+existe**— y todos se veían como errores de dibujo:
+
+1. **EL RESORTE NO SE INTEGRABA NUNCA.** El bucle de verdad corre un paso de física y uno de efectos
+   por cuadro; adelantando sólo la física con el cuadro congelado, el empujón del salto (−3,3) seguía
+   entero en la velocidad del resorte **veintisiete pasos después** y el del aterrizaje (+3,25) lo
+   **cancelaba**: un aplaste de 0,05 donde el juego hace 14 %. Tres capturas seguidas salieron sin
+   cubo por esto.
+2. **LAS PARTÍCULAS NO ENVEJECÍAN**, así que ciento cincuenta pasos de chispas quedaban **todas**
+   puestas: la foto salía con una alfombra de escombros de punta a punta del piso.
+3. **Y LA CÁMARA SE QUEDABA DONDE ARRANCÓ.** Éste es el peor: después de 2.100 pasos del bot el
+   jugador proyectaba en **17,9 veces el ancho de la pantalla** — la foto salía con el nivel vacío y
+   sin cubo, que es exactamente lo que parecía un error de dibujo y era la sonda.
+   Ahora `pasos` y `autoJuega` adelantan **los seis relojes**: física, efectos, resorte, destello,
+   partículas, cámara y paleta.
+4. **EL JUGADOR SE COLOCABA ADENTRO DEL PINTADO.** Leyendo la posición del grupo con el cuadro
+   congelado, lo que se lee es la del **último cuadro dibujado**: medido, el anclaje del aplaste daba
+   0,3171 de error, que es exactamente la altura a la que estaba el jugador cuando se dibujó por
+   última vez. Con la colocación en su propia función (`ponJug`), la sonda la llama ella y mide el
+   instante que pidió. Es la quinta vez en este repo.
+5. **Y MEDÍ EL MENÚ CON `getBoundingClientRect` DENTRO DE UN MARCO GIRADO**, que devuelve la caja
+   alineada a los ejes: el título aparecía con 430 px de alto —que es su **ancho**— y la sonda
+   denunciaba veintidós solapamientos que no existen. Con `offsetTop`/`offsetHeight`, **cero**. Es la
+   misma trampa que ya había costado una medición en Eco.
+
+#### EL MENÚ, CON DOS IMÁGENES Y NINGUNA OBLIGATORIA
+
+Un **sello** —un rotor hexagonal— arriba del título, y el fondo de ciudad **sólo en la franja de
+arriba**: un telón de pantalla completa taparía el demo, que es lo único que este menú tiene para
+mostrar. Arriba, donde el velo ya está cerrado para que se lea el título, la foto no le quita nada a
+nadie. Y se desvanece hacia abajo con una máscara, así no queda un canto recto cruzando la pantalla.
+
+**LAS DOS SON ADORNOS Y DEGRADAN:** la clase que las enciende la pone el `onload` de la propia imagen
+y no el código que la pide — preguntar «¿llegó?» es lo único que distingue un menú con foto de un menú
+con un rectángulo vacío.
+
+**Y EL SELLO SE MIDE EN PÍXELES Y NO EN `vh`.** El marco está girado noventa grados, así que `vh` es
+el alto de la **ventana** —892— y no el lado corto del cuadro —412—: medido, `9vh` daba 80 px de sello
+y **el pie del menú se salía del cuadro**.
+
+#### LOS EFECTOS DE CÁMARA, Y POR QUÉ SON SÓLO DOS
+
+Sacudón y acercamiento, y ninguno más: **girar la cámara rompe la linealidad de la x**, que es la
+propiedad de la que depende que se pueda despegar en un bloque exacto. Una traslación pura de una
+cámara que mira derecho la conserva exactamente, y un acercamiento también —escala a los dos por
+igual, así que el cubo y el pico siguen alineados—. Más el **freno de la muerte**, que come tiempo de
+simulación y no de dibujo: se sigue dibujando, porque una pantalla congelada se lee a que el juego se
+colgó, y lo que se detiene son los pasos de física.
+
+**Y LA CRESTA SE PLANTA POR SU PUNTA Y NO POR SU CENTRO.** Con la altura sacada del tamaño, en la capa
+lejana —escala 3,4— un rombo medía sesenta y ocho bloques y su punta llegaba a doce: la «cordillera»
+era **una pared naranja tapando la banda por donde vuela la nave**, y encima se comía los rótulos del
+HUD. Se elige la altura de la punta y de ahí sale el centro, que es la media diagonal de un cuadrado
+girado cuarenta y cinco grados: 0,707 del lado.
+
+#### MEDIDO AL CERRAR
+
+Regresión completa intacta: **auditoría 3 de 3 al 100 %** en 504 ms, los tres niveles terminados por
+el auto-jugador **al 100 % en el primer intento** con 3/2/2 monedas y el progreso guardado, **7 puntos
+de control** puestos solos, las tres calidades en caliente (535×247 · 758×350 · 892×412), los tres
+idiomas en vivo, **cero solapamientos** de HUD en vertical girado y en apaisado, y el nivel 2
+terminado en apaisado con el marco `derecho` en 900×460. **18-19 llamadas de dibujo y 3.330-3.964
+triángulos** (eran 14-17 y 2.790-3.404: la diferencia es el telón y sus tres texturas). Menú: ocho
+elementos apilados sin un solo solapamiento y 18 px de aire abajo. `window.__errs` **vacío en las
+once corridas**.
+
+**LO QUE NO SE PUDO HACER, Y ES HONESTO DECIRLO:** el título sigue siendo tipografía y no una imagen,
+así que su forma cambia según el aparato. Pedirlo con letras cuesta un modelo que sepa deletrear
+—Recraft en modo vector, 2,5 créditos— y en la cuenta quedaban **1,2**; Rezona, que es la otra opción,
+**perdió la credencial cuando se revirtió el contenedor** y sólo la repone un login por código de un
+solo uso. Los prompts están escritos y el horneado ya sabe recortar por alfa, así que entra con un
+comando cuando haya con qué.
 
 ### Octogésima primera vuelta (2026-09-01): **PUERTA BLANCA**, el noveno juego — el cielo 360 y las flores gigantes del nivel 1
 

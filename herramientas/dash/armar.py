@@ -8,6 +8,7 @@ entero. Ya paso once veces en este repo.
 
   a.html   el marco, el CSS y las pantallas
   b.js     las medidas, los idiomas y el azar con semilla
+  i_img.js las imagenes generadas en base64 (lo escribe hornear_img.py)
   c.js     la musica: es la FUENTE DEL RELOJ, asi que va antes que todo
   d.js     los niveles: patrones pegados sobre la grilla del compas
   e.js     la fisica y los modos (cubo, nave, gravedad)
@@ -20,7 +21,7 @@ import io, os, sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PARTES = os.path.join(AQUI, 'partes')
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'z.html']
+ORDEN = ['a.html', 'b.js', 'i_img.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'z.html']
 
 trozos = []
 for n in ORDEN:

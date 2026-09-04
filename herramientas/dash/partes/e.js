@@ -51,12 +51,22 @@ function chocaCuerpo(c, med, dt){
        Es la misma regla que en CASTILLO y en PISTOLA. Con la normal sacada de
        centro a centro, un cubo medio metido en una losa se resuelve HACIA ADENTRO. */
     if (vert <= hor + 0.02){
+      /* ── EL GOLPE DEL ATERRIZAJE SE MIDE ANTES DE PONER LA VELOCIDAD EN CERO ──
+         Y sale del propio `vy`, asi que un salto largo aplasta mas que un
+         escaloncito. Solo para el jugador de verdad: `chocaCuerpo` la corren
+         tambien las copias del bot, y si el bot sacudiera la camara los efectos
+         irian por un camino que el dedo no recorre. */
+      const golpe = Math.abs(c.vy);
       if (dArriba < dAbajo){
         /* apoyado sobre la cara de arriba del solido */
         if (c.vy <= 0.001 || c.grav > 0){ c.y = r.y + r.h; c.vy = 0; if (c.grav > 0) c.piso = true; }
         else { c.y = r.y + r.h; c.vy = 0; }
       } else {
         c.y = r.y - b.h; c.vy = 0; if (c.grav < 0) c.piso = true;
+      }
+      if (c === JUG && c.piso && golpe > 4){
+        golpeaSq(Math.min(4.2, golpe*0.16));
+        sacude(Math.min(0.30, golpe*0.010));
       }
       b.y = c.y;
     } else {
@@ -104,22 +114,29 @@ function pasoCuerpo(c, med, dt, apretado){
   for (const p of MUNDO.pads){
     if (Math.abs(p.x + 0.5 - c.x) < 0.75 && Math.abs(c.y - p.y) < 0.5 && c.grav > 0){
       c.vy = med.impPad*c.grav; c.piso = false;
-      if (c === JUG) son('pad');
+      if (c === JUG){ son('pad'); golpeaSq(-4.7); sacude(0.40); destella('#ffd447', 0.42); }
     }
   }
   for (const o of MUNDO.orbes){
     if (o.usado || !apretado) continue;
     if (Math.abs(o.x - c.x) < 0.95 && Math.abs(o.y - (c.y + 0.43)) < 0.95){
       c.vy = med.imp*c.grav; o.usado = true;
-      if (c === JUG) son('salta');
+      if (c === JUG){ son('salta'); golpeaSq(-3.7); destella('#ffd447', 0.30); }
     }
   }
   for (const p of MUNDO.portales){
     if (Math.abs(p.x - c.x) > 0.55) continue;
-    if (p.t === 'grav' && c.grav > 0){ c.grav = -1; c.vy = 0; if (c === JUG) son('portal'); }
-    else if (p.t === 'norm' && c.grav < 0){ c.grav = 1; c.vy = 0; if (c === JUG) son('portal'); }
-    else if (p.t === 'nave' && c.modo !== 'nave'){ c.modo = 'nave'; if (c === JUG) son('portal'); }
-    else if (p.t === 'cubo' && c.modo !== 'cubo'){ c.modo = 'cubo'; if (c === JUG) son('portal'); }
+    let cambio = false;
+    if (p.t === 'grav' && c.grav > 0){ c.grav = -1; c.vy = 0; cambio = true; }
+    else if (p.t === 'norm' && c.grav < 0){ c.grav = 1; c.vy = 0; cambio = true; }
+    else if (p.t === 'nave' && c.modo !== 'nave'){ c.modo = 'nave'; cambio = true; }
+    else if (p.t === 'cubo' && c.modo !== 'cubo'){ c.modo = 'cubo'; cambio = true; }
+    /* ── UN CAMBIO DE MODO SE ANUNCIA CON UN TIRON DE CAMARA ──
+       Es lo unico que dice, sin texto, que las reglas acaban de cambiar. */
+    if (cambio && c === JUG){
+      son('portal'); acerca(0.09); sacude(0.34);
+      destella(p.t === 'nave' ? '#ff6ad5' : p.t === 'grav' ? '#ffd447' : '#5ad9ff', 0.5);
+    }
   }
 }
 
@@ -131,6 +148,6 @@ function intentaSalto(c, med){
   if (c.modo === 'nave') return false;
   if (!c.piso) return false;
   c.vy = med.imp*c.grav; c.piso = false;
-  if (c === JUG) son('salta');
+  if (c === JUG){ son('salta'); golpeaSq(-3.3); }
   return true;
 }

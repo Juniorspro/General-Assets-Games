@@ -57,13 +57,31 @@ const VISTA_ANCHO = 20;
 /* ══════════ LOS TRES NIVELES ══════════
    Cada uno con su tempo, su dificultad y su mezcla de modos. Los nombres son
    propios: esto es un juego del genero, no una copia de otro. */
+/* ── Y CADA UNO DECLARA SU FONDO ──
+   Tres niveles con el mismo fondo y otro tinte son tres veces el mismo nivel: lo
+   que hace que se sientan distintos no es el color sino la SILUETA del horizonte.
+   `fondo` elige la forma de las tres capas de paralaje —torres de ciudad, rocas
+   flotando, una cresta de picos— y `motas` cuantas particulas lejanas hay. */
 const NIVELES = [
   { id: 0, nom: 'NEON DRIVE',   bpm: 128, dif: 1, compases: 26, modos: ['cubo'],
-    col: [0x10, 0x1c, 0x30], col2: [0x2d, 0xe2, 0xa8] },
+    col: [0x10, 0x1c, 0x30], col2: [0x2d, 0xe2, 0xa8], fondo: 'ciudad', motas: 90,
+    /* ── LOS TRAMOS DE COLOR ──
+       Parejas de fondo-y-acento por tema, y la primera ES `col`/`col2` para que la
+       ficha del nivel y el icono sigan saliendo del mismo sitio. Van todas en la
+       misma FAMILIA a proposito: un tramo verde y el siguiente rojo se leen a dos
+       juegos, y lo que hay que leer es que el mismo tema doblo la esquina. */
+    pals: [[[0x10,0x1c,0x30], [0x2d,0xe2,0xa8]], [[0x0f,0x1a,0x34], [0x4a,0xc8,0xff]],
+           [[0x14,0x12,0x30], [0x7a,0x6c,0xff]], [[0x0e,0x22,0x30], [0x2d,0xf0,0xd0]]] },
   { id: 1, nom: 'GRAVEDAD CERO', bpm: 140, dif: 2, compases: 28,
-    modos: ['cubo', 'gravedad'], col: [0x1e, 0x12, 0x30], col2: [0xb0, 0x7a, 0xff] },
+    modos: ['cubo', 'gravedad'], col: [0x1e, 0x12, 0x30], col2: [0xb0, 0x7a, 0xff],
+    fondo: 'rocas', motas: 150,
+    pals: [[[0x1e,0x12,0x30], [0xb0,0x7a,0xff]], [[0x22,0x10,0x38], [0xff,0x7a,0xe0]],
+           [[0x16,0x14,0x3a], [0x7a,0x9c,0xff]]] },
   { id: 2, nom: 'ROTOR',         bpm: 150, dif: 3, compases: 30,
-    modos: ['cubo', 'gravedad', 'nave'], col: [0x2a, 0x10, 0x18], col2: [0xff, 0x7a, 0x4a] }
+    modos: ['cubo', 'gravedad', 'nave'], col: [0x2a, 0x10, 0x18], col2: [0xff, 0x7a, 0x4a],
+    fondo: 'cresta', motas: 60,
+    pals: [[[0x2a,0x10,0x18], [0xff,0x7a,0x4a]], [[0x30,0x14,0x10], [0xff,0xc2,0x4a]],
+           [[0x24,0x10,0x1e], [0xff,0x4a,0x6e]], [[0x1c,0x0e,0x22], [0xff,0x8e,0xc2]]] }
 ];
 /* ── LA DIFICULTAD SALE DE LA TABLA COMO TODO LO DEMAS ──
    Estaba como un array de tres cadenas en castellano, o sea texto escrito derecho

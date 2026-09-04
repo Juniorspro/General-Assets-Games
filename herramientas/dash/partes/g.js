@@ -309,7 +309,15 @@ function reintenta(nuevo){
 function muere(){
   if (!EST.corriendo) return;
   JUG.vivo = false; EST.corriendo = false; EST.muerto = 0.75;
-  chispas(JUG.x, JUG.y + 0.4, 22, COLES[ICONO.c1]);
+  /* ── LA MUERTE SE SIENTE, Y SON CUATRO COSAS A LA VEZ ──
+     Las esquirlas dicen que el cubo se rompio, el destello y el sacudon que fue
+     un golpe, el acercamiento que la partida se termino, y el `hit` FRENA EL
+     JUEGO cuatro cuadros: sin ese freno, el cuadro en que se choca y el cuadro
+     en que ya no hay cubo son el mismo y no se llega a ver que paso. */
+  chispas(JUG.x, JUG.y + 0.4, 34, COLES[ICONO.c1]);
+  chispas(JUG.x, JUG.y + 0.4, 14, COLES[ICONO.c2]);
+  destella('#ff5a4a', 1.0); sacude(1.2); acerca(0.08);
+  EFE.hit = 0.07;
   son('muere'); musPara();
 }
 
@@ -323,6 +331,8 @@ function gana(){
   for (let i = 0; i < MUNDO.monedas.length && i < 3; i++)
     if (MUNDO.monedas[i].tomada) P.mon[i] = true;
   guardaProg(); son('gana'); musPara();
+  destella('#8ef0c4', 1.0); acerca(-0.10);
+  chispas(JUG.x, JUG.y + 0.5, 30, COLES[ICONO.c1]);
 }
 
 /* ── UN PASO DE PARTIDA ──
@@ -345,10 +355,14 @@ function pasoJuego(dt, apretado){
   avanza(JUG, med, dt, ap, xf);
   for (const m of MUNDO.monedas)
     if (!m.tomada && Math.abs(m.x - JUG.x) < 0.7 && Math.abs(m.y - (JUG.y + 0.43)) < 0.8){
-      m.tomada = true; son('moneda'); chispas(m.x, m.y, 8, '#ffd447');
+      m.tomada = true; son('moneda');
+      chispas(m.x, m.y, 14, '#ffd447');
+      destella('#ffd447', 0.34); sacude(0.16);
     }
-  /* la estela del cubo: cuesta nada y es lo que hace que se lea que va rapido */
-  if (JUG.piso && Math.random() < 0.35) chispas(JUG.x - 0.4, JUG.y + 0.05, 1, COLES[ICONO.c2]);
+  /* la estela: en el piso son chispas del roce y en la nave es el chorro. Cuesta
+     nada y es lo que hace que se lea que va rapido. */
+  if (JUG.modo === 'nave') chispas(JUG.x - 0.55, JUG.y + 0.42, 1, '#ffd447');
+  else if (JUG.piso && Math.random() < 0.35) chispas(JUG.x - 0.4, JUG.y + 0.05, 1, COLES[ICONO.c2]);
   if (!JUG.vivo){ muere(); return; }
   EST.pct = Math.round(cl(JUG.x/MUNDO.largo, 0, 1)*100);
   if (!EST.practica && EST.pct > PROG.niv[EST.nivel].mejor){
