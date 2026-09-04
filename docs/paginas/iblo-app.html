@@ -1415,7 +1415,7 @@ function traerDeIg(){
       if (!total) total = mirados + (j.quedan || 0);
       if (j.historias) ultimo.historias = j.historias;
       if (j.posteos != null) ultimo.posteos = j.posteos;
-      candidatosIg = candidatosIg.concat(nuevos);
+      nuevos.forEach(sumarCandidato);
       if (nuevos.length) pintarCandidatos();
       avance();
       if ((j.quedan || 0) > 0 && ++vueltas < 12) return vuelta();
@@ -1427,9 +1427,18 @@ function traerDeIg(){
     else if (!candidatosIg.length){
       decir("avisoNuevo", nadaNuevo(ultimo, saltadas), ultimo.historias && ultimo.historias.error ? "mal" : "");
     } else {
-      decir("avisoNuevo", candidatosIg.length === 1
-        ? "Encontré una. Mirala y si va, subila."
-        : "Encontré " + candidatosIg.length + ". Mirá cada una y subí la que va.", "bien");
+      /* «subila» no corresponde cuando la fiesta ya está en la web y lo único
+         que hay que hacer es completarle un dato */
+      var completar = candidatosIg.filter(function(c){ return c.yaEsta; }).length;
+      decir("avisoNuevo",
+        candidatosIg.length === 1
+          ? (completar ? "Esa fiesta ya está en la web y le falta un dato. Completala y listo."
+                       : "Encontré una. Mirala y si va, subila.")
+          : "Encontré " + candidatosIg.length + ". Mirá cada una y subí la que va." +
+            (completar ? " " + (completar === 1 ? "Una ya está" : completar + " ya están") +
+                         " en la web: a ésa" + (completar === 1 ? "" : "s") + " sólo hay que completarla" +
+                         (completar === 1 ? "" : "s") + "." : ""),
+        "bien");
     }
     pintarCandidatos(Object.keys(saltadas).length);
     bt.disabled = false; bt.innerHTML = original;
@@ -1437,6 +1446,34 @@ function traerDeIg(){
 }
 
 /* Dibuja las tarjetas encontradas hasta ahora. */
+/* Una fiesta, una tarjeta.
+
+   El servidor ya junta las historias de la misma fiesta que le tocan en la misma
+   vuelta —el flyer en una y el precio en la otra—, pero cada vuelta es un pedido
+   aparte y no ve las anteriores. Así, tres historias de la misma noche repartidas
+   en dos vueltas salían como dos tarjetas y el dueño terminaba subiendo la misma
+   fiesta dos veces. Se junta acá también, con la misma regla: mismo nombre, o
+   fechas a menos de doce horas. Lo que le falta a la que ya está se lo completa
+   la nueva; lo que ya tiene no se pisa. */
+function sumarCandidato(n){
+  var igual = null;
+  for (var i = 0; i < candidatosIg.length; i++){
+    var c = candidatosIg[i];
+    if (c.titulo && n.titulo && c.titulo.toLowerCase() === n.titulo.toLowerCase()) { igual = c; break; }
+    if (c.cuando > 0 && n.cuando > 0 && Math.abs(c.cuando - n.cuando) < 43200000) { igual = c; break; }
+  }
+  if (!igual){ candidatosIg.push(n); return true; }
+
+  ["subtitulo","detalle","fecha","lugar","hora","precio"].forEach(function(campo){
+    if (!igual[campo] && n[campo]) igual[campo] = n[campo];
+  });
+  if (!igual.cuando && n.cuando) igual.cuando = n.cuando;
+  if (!igual.conFoto && n.conFoto){ igual.conFoto = true; igual.codigo = n.codigo; }
+  if (!igual.yaEsta && n.yaEsta) igual.yaEsta = n.yaEsta;
+  igual.juntadas = (igual.juntadas || 1) + 1;
+  return false;
+}
+
 /* «No hay nada nuevo» a secas deja al dueño sin saber si la app le miró las
    historias o ni las vio. Ahora dice qué miró y por qué no salió nada. */
 function nadaNuevo(ultimo, saltadas){
@@ -1462,10 +1499,15 @@ function pintarCandidatos(saltadas){
       .map(function(f){ return '<div class="fila"><b>' + f[0] + '</b><span>' + esc(f[1]) + '</span></div>'; })
       .join("");
 
+    /* Cuando es la misma fiesta que ya está en la web, la única acción es
+       completarla. Antes al lado había un «Subirla aparte» que invitaba
+       justamente a lo que no hay que hacer: la misma noche dos veces en la
+       página. Si de verdad son dos fiestas distintas el mismo día, está
+       «Cambiar algo», que la lleva al formulario y de ahí se sube como nueva. */
     var botones = p.yaEsta
       ? '<button class="bt p" type="button" data-hacer="act" data-i="' + i + '">Agregarle ' +
           esc(p.yaEsta.suma.join(" y ")) + '</button>' +
-        '<button class="bt s" type="button" data-hacer="pub" data-i="' + i + '">Subirla aparte</button>'
+        '<button class="bt s" type="button" data-hacer="edit" data-i="' + i + '">Cambiar algo</button>'
       : '<button class="bt p" type="button" data-hacer="pub" data-i="' + i + '">Subirla</button>' +
         '<button class="bt s" type="button" data-hacer="edit" data-i="' + i + '">Cambiar algo</button>';
 
@@ -1478,6 +1520,9 @@ function pintarCandidatos(saltadas){
       (p.yaEsta
         ? '<div class="yaEsta">Esta fiesta <b>ya está en la web</b>. Lo que le falta es ' +
           esc(p.yaEsta.suma.join(" y ")) + '.</div>'
+        : '') +
+      (p.juntadas > 1
+        ? '<div class="yaEsta">Junté ' + p.juntadas + ' avisos tuyos de la misma fiesta en esta sola.</div>'
         : '') +
       '<div class="dosBotones">' + botones + '</div></div>';
   }).join("");

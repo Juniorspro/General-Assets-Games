@@ -380,6 +380,21 @@ rehace con el día y el mes solos, que es lo único que dijo la fuente. Once mes
 porque IBLO no anuncia con un año de anticipación. Al dueño no lo afecta: lo que
 escribe a mano no pasa por ahí.
 
+### Una fiesta, una tarjeta
+
+El servidor junta las historias de la misma fiesta —el flyer en una, el precio en
+la otra— pero sólo las que le tocan en la **misma vuelta**, porque cada vuelta es
+un pedido aparte y no ve las anteriores. Tres historias de la misma noche
+repartidas en dos vueltas salían como dos tarjetas y el dueño terminaba subiendo
+la misma fiesta dos veces. Ahora la app junta con la misma regla —mismo nombre, o
+fechas a menos de doce horas—, completa lo que le falta a la que ya está sin
+pisar lo que tiene, y la tarjeta avisa de cuántos avisos salió.
+
+Y cuando la fiesta **ya está en la web**, la única acción es completarla: se sacó
+el botón «Subirla aparte» que había al lado, que invitaba justo a lo que no hay
+que hacer. Si de verdad son dos fiestas distintas la misma noche, queda «Cambiar
+algo», que la lleva al formulario y de ahí sale como nueva.
+
 ### Y que la app diga qué miró
 
 «No hay nada nuevo» a secas no deja distinguir «te miré las cinco historias y son
