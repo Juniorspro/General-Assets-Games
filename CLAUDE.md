@@ -269,6 +269,102 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima quinta vuelta (2026-09-03): **PUERTA BLANCA** — la araña se quedaba clavada en el corredor del baño
+
+Pedido: *"arregla los errores con la araña del nivel 6, haz que no se quede atrapada"*.
+
+#### NO ERA UNA COLISIÓN NI UN MUEBLE: ERA LA FRONTERA ENTRE DOS NODOS
+
+Medido con una sonda nueva, `__pb.aranaAtasco()`, que corre el mismo paso que el bucle y busca la
+racha más larga en la que el **desplazamiento neto** de una ventana de tres segundos no llega a 30 cm
+—o sea que gire, se anime o recorra metros no cuenta como andar—:
+
+| | ronda (180 s) | caza (120 s) | lo más cerca que llegó | destinos | telas |
+|---|---|---|---|---|---|
+| como estaba | **144,05 s clavada** | **117,05 s clavada** | **28,33 m** | 3 | 4 |
+| ahora | **0,15 s** | **0** | **0,07 m** | 13 | 7 |
+
+Los dos números están medidos **sobre el mismo binario**, con `?nodofijo`, que devuelve el
+comportamiento viejo: comparar contra el commit anterior mediría dos cosas a la vez y encima ese HTML
+no tiene la sonda. Y la fila de caza es la que importa de verdad: **la araña no llegaba nunca al
+jugador**, se quedaba a veintiocho metros dando vueltas.
+
+**LA CAUSA ES ARITMÉTICA Y ESTÁ EN UNA LÍNEA.** `araPaso` hacía
+`nodoA = stNodoDe(posición)` **en cada cuadro**, y `stNodoDe` devuelve el nodo más **cercano**. En el
+corredor del baño el nodo 15 está en x = 9,8 y el 21 en x = 11,95, así que la frontera cae en
+**x = 10,875**:
+
+- en x > 10,875 el más cercano es el **21**, y el primer salto del BFS hacia el salón es el **15**,
+  que está al **oeste**;
+- un centímetro más allá el más cercano es el **15**, y el primer salto es el **14**, que está al
+  **este**.
+
+O sea que cruzar esa línea **daba vuelta la marcha**. La araña iba y venía sobre un centímetro:
+**396 metros recorridos sin moverse de sitio**, en (10,9 · 13,2). Y no es un defecto de esa esquina:
+es de toda frontera de nodos donde el camino de un lado no coincide con el del otro.
+
+#### EL NODO SE RECUERDA, NO SE DEDUCE
+
+Un seguidor de camino tiene que **comprometerse** a un nodo hasta llegar. `ARA.nodo` es el nodo que
+ocupa de verdad y `ARA.sig` el que se comprometió a alcanzar; mientras hay un salto pendiente el rumbo
+no se recalcula, y **al llegar se ADOPTA ese nodo**, así que el salto siguiente se planea desde un
+sitio del grafo y no desde una posición intermedia. Con eso, cruzar una frontera no puede dar vuelta
+nada — la clase entera de defecto desaparece, no sólo la del baño.
+
+**EL RADIO DE LLEGADA SALE DE UNA CUENTA:** 0,6 m es menos de la mitad del arco más corto que hay
+(**1,166 m, entre el nodo 4 y el 5**, medidos sobre la propia tabla), así que no puede saltearse un
+nodo y quedarse dando vueltas alrededor del siguiente.
+
+**Y SI LA MUEVEN, EL CAMINO SE SUELTA DONDE LA MUEVEN.** Con el nodo viejo puesto, una araña
+teletransportada caminaría un arco que no le corresponde y cruzaría lo que haya en el medio. La
+primera versión lo cubría con un umbral de distancia y **eso no puede funcionar**: el arco más largo
+del local mide **21,01 m** (del 2 al 3, la cocina), así que cualquier umbral que no la moleste
+caminando tampoco atrapa un teletransporte corto. Los dos únicos sitios que la mueven de golpe son
+`resetStore` —el screamer la lleva a la cara del jugador— y la sonda, y los dos ponen `ARA.nodo = -1`.
+
+#### UN DEFECTO DE LA SONDA, Y DEL TIPO DE SIEMPRE
+
+La primera versión reportaba **109 segundos de atasco** en modo caza *después* del arreglo, y el
+número era falso: la araña había **llegado al jugador** y se quedaba encima —el banco llama a
+`araPaso` directo, sin el bucle que dispara el agarrón, y el jugador no se mueve—. Quedarse quieto a
+siete centímetros de la presa es lo contrario de estar clavada. La ventana ahora no cuenta los
+instantes a menos de 2,8 m, que es el radio del agarrón. Y `minAlJugador` es el número que separa las
+dos cosas de una: **28,33 m antes, 0,07 m ahora**.
+
+#### Y ESTO DESTAPÓ QUE EL TEJIDO TAMPOCO FUNCIONABA
+
+En la vuelta 86 quedó anotado que la araña pasaba el **91 % del tiempo de ronda parada dentro de una
+zona de exclusión** —los 3,4 m alrededor de las partes, la bandeja y la salida— con `tejeCd` en −265,
+y ahí escribí que no se arreglaba a propósito. **Estaba mal diagnosticado:** no era el reparto de las
+zonas, era que estaba clavada en el corredor del baño, que cae justo al lado de la TAPA. Medido ahora
+sobre cinco minutos de ronda: **36,5 s de 300 en sitio malo, o sea el 12 %**, y llega al **tope de
+siete telas** — antes se quedaba en cuatro.
+
+#### LA CAZA SE PROBÓ DESDE LOS CINCO BOLSILLOS, QUE ES DONDE MÁS COSTABA
+
+Con el jugador metido en cada rincón alcanzable y la araña arrancando del otro extremo del local:
+
+| el jugador en | atasco | lo más cerca que llegó |
+|---|---|---|
+| compartimiento oeste del baño (6 · 15) | **0** | 0,03 m |
+| primer pasillo del depósito (−18,6 · 16) | **0** | 0,02 m |
+| fondo del pasillo norte de la cámara (20 · 8,6) | **0** | 0,12 m |
+| compartimiento del medio del baño (9,8 · 15,7) | **0** | 0,03 m |
+| salón (0 · −13), araña desde el depósito | **0** | 0,05 m |
+
+#### MEDIDO AL CERRAR
+
+Auditoría del local intacta: **28.152 de 28.152 celdas alcanzables · 4 de 4 partes, ninguna tapada ·
+bandeja y salida alcanzables · 28 nodos, 27 arcos, 0 sucios, 0 aislados · 359 piezas en 15 mallas**.
+Partida completa por el camino del jugador: la bandeja **rechaza** la parte fuera de orden
+(`puestas 0`), las cuatro se juntan y se arman en orden (`puestas 4`, `hecho`), y la puerta de atrás
+lleva al cuarto blanco. Tela: `atrapado 2,18` y la araña pasa a **caza a 4,8 m/s** en el acto.
+Agarrón: el screamer corre y el reinicio devuelve las partes a `[false,false,false,false]` con la
+araña de vuelta en `ronda` a 24,9 m **y caminando** (vel 2,17). Patas: **4 pies apoyados en 0,04 y 4
+levantados en 0,86**, caja 4,36 × 3,12 × 5,48 con el piso en **0,00**, susto con `deFrente: true`. Los
+**seis niveles** cargan uno por uno. **32 de 32 sonidos decodificados, 0 fallados.** `window.__errs` y
+`window.__pbFallas` vacíos en las nueve corridas. El HTML pasó de 3,62 a **3,63 MB**.
+
 ### Nonagésima cuarta vuelta (2026-09-03): **PUERTA BLANCA** — el idioma llega a cada palabra, y un panel de pausa con tres barras
 
 Pedido: *"haz que cuando el juego se traduzca a algún idioma, se traduzca en su totalidad a ese idioma,

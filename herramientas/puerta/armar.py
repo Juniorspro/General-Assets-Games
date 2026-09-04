@@ -921,13 +921,58 @@ s = cambiar(s, """    flores: function () {""",
     },
     // pone al jugador donde haga falta para probar sin caminar veinte metros
     irA: function (x, z) { player.position.set(x, 0, z); return { x: x, z: z }; },
-    arana: function (x, z) { ARA.g.position.set(x, ARA_Y, z); return 'ok'; },
+    // MOVERLA A MANO SUELTA EL CAMINO: con el nodo viejo caminaria un arco que
+    // no le corresponde y cruzaria lo que haya en el medio.
+    arana: function (x, z) { ARA.g.position.set(x, ARA_Y, z); ARA.nodo = -1; ARA.sig = -1; return 'ok'; },
     // ADELANTA EL RELOJ DE LA ARAÑA, que es la unica forma de MEDIR el tope de
     // telas. El banco dibuja por software y corre a la quinta parte del reloj de
     // pared: llegar al tope tejiendo cada 18-26 s son diez minutos de espera, y
     // una prueba que no se puede correr no prueba nada. Esto llama al mismo paso
     // que el bucle, con el mismo delta topado, asi que mide el juego y no una
     // maqueta.
+    // LA SONDA DEL ATASCO. Corre el mismo paso que el bucle y busca la racha
+    // mas larga en la que la arana NO SE MUEVE DE SITIO: el desplazamiento neto
+    // de una ventana de 3 s. Un rumbo que gira o una pose que se anima no
+    // cuentan como andar, asi que el numero es el desplazamiento y no la
+    // velocidad. Devuelve tambien DONDE se atasco, que es lo unico que permite
+    // arreglarlo.
+    aranaAtasco: function (segundos, caza) {
+      const dt = 0.05, VEN = Math.round(3 / dt);
+      const n = Math.min(24000, Math.round((segundos || 120) / dt));
+      if (caza) { ARA.estado = 'caza'; ARA.cazaT = 1e9; }
+      const hx = [], hz = [];
+      let rec = 0, cur = 0, largo = 0, dondeX = 0, dondeZ = 0, wps = 0, mind = 1e9;
+      let ux = ARA.wp.x, uz = ARA.wp.z;
+      for (let i = 0; i < n; i++) {
+        const ax = ARA.g.position.x, az = ARA.g.position.z;
+        araPaso(dt, i * dt);
+        rec += Math.hypot(ARA.g.position.x - ax, ARA.g.position.z - az);
+        if (Math.abs(ARA.wp.x - ux) > 0.01 || Math.abs(ARA.wp.z - uz) > 0.01) {
+          wps++; ux = ARA.wp.x; uz = ARA.wp.z;
+        }
+        hx.push(ARA.g.position.x); hz.push(ARA.g.position.z);
+        if (hx.length > VEN) { hx.shift(); hz.shift(); }
+        const dj = Math.hypot(player.position.x - ARA.g.position.x,
+                              player.position.z - ARA.g.position.z);
+        if (dj < mind) mind = dj;
+        // ESTAR ENCIMA DEL JUGADOR NO ES UN ATASCO. En caza, con el jugador
+        // quieto y sin el bucle que dispara el agarron, la arana llega y se
+        // queda: la primera version contaba eso como 109 s clavada, que es
+        // exactamente lo contrario de lo que hay que medir.
+        if (hx.length === VEN && dj > 2.8) {
+          const neto = Math.hypot(hx[VEN - 1] - hx[0], hz[VEN - 1] - hz[0]);
+          if (neto < 0.3) {
+            cur += dt;
+            if (cur > largo) { largo = cur; dondeX = ARA.g.position.x; dondeZ = ARA.g.position.z; }
+          } else cur = 0;
+        }
+      }
+      return { recorrido: +rec.toFixed(1), atascoMax: +largo.toFixed(2),
+               minAlJugador: +mind.toFixed(2),
+               donde: [+dondeX.toFixed(1), +dondeZ.toFixed(1)],
+               nodo: stNodoDe(dondeX, dondeZ), destinos: wps,
+               estado: ARA.estado, x: +ARA.g.position.x.toFixed(1), z: +ARA.g.position.z.toFixed(1) };
+    },
     aranaAdelanta: function (segundos) {
       const dt = 0.05;
       const n = Math.min(20000, Math.round((segundos || 60) / dt));

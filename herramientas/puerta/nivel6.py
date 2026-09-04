@@ -621,7 +621,19 @@ JS += r"""
     vel: 0,
     fase: 0,
     wp: new THREE.Vector3(-16, 0, 8),
-    tejeCd: 16
+    tejeCd: 16,
+    // EL NODO SE RECUERDA, NO SE DEDUCE DE LA POSICION EN CADA CUADRO. Ese era
+    // el defecto que dejaba a la arana clavada: `stNodoDe` devuelve el nodo mas
+    // CERCANO, asi que caminando entre dos nodos cruza la frontera y el nodo de
+    // salida cambia — y con el cambia el primer salto del BFS. Medido en el
+    // corredor del bano: en x > 10,875 el mas cercano es el 21 y el salto hacia
+    // el salon es el 15, que esta al OESTE; un centimetro mas alla el mas
+    // cercano es el 15 y el salto es el 14, que esta al ESTE. La arana iba y
+    // venia sobre esa linea: 143 de 180 segundos en el mismo sitio, recorriendo
+    // 396 metros sin moverse de lugar. Y en caza, 117 de 120 — o sea que NO
+    // LLEGABA NUNCA al jugador.
+    nodo: -1,       // el nodo que ocupa de verdad
+    sig: -1         // el nodo al que se comprometio a llegar
   };
   {
     // EL NEGRO ABSOLUTO NO TIENE SOMBREADO QUE MOSTRAR. Con quitina en 0x14100f
@@ -1000,6 +1012,7 @@ JS += r"""
   // cada caja del local. De paso la camara gana sus dos pasillos, asi que la
   // arana llega hasta el queso por donde se camina y no por encima de un
   // estante.
+  const ST_NODO_FIJO = /(\?|&)nodofijo/.test(location.search);
   const ST_NODOS = [
     [0, -7],        //  0 salon
     [10, 3.05],     //  1 el paso del mostrador
@@ -1134,6 +1147,7 @@ JS += r"""
     // rondando a velocidad de caza, y con la luz roja en 1,5 que le dejo el
     // grito hasta el primer cuadro de araPaso.
     ARA.cazaT = 0; ARA.tejeCd = 16; ARA.vel = 0; ARA.fase = 0;
+    ARA.nodo = -1; ARA.sig = -1;   // el camino se replanea desde donde reaparece
     ARA.luz.intensity = 0.18;
     // CON 0 REAPARECIA HUNDIDA: se construye en ARA_Y —la caja envolvente da
     // negativo con el grupo en cero— y el reinicio lo pisaba, asi que la
@@ -1206,14 +1220,40 @@ JS += r"""
     }
 
     const objetivo = ARA.estado === 'caza' ? { x: px, z: pz } : { x: ARA.wp.x, z: ARA.wp.z };
-    const nodoA = stNodoDe(ARA.g.position.x, ARA.g.position.z);
     const nodoB = stNodoDe(objetivo.x, objetivo.z);
-    let metaX, metaZ;
-    if (nodoA === nodoB) { metaX = objetivo.x; metaZ = objetivo.z; }
-    else {
-      const n = stSiguienteNodo(nodoA, nodoB);
-      metaX = ST_NODOS[n][0]; metaZ = ST_NODOS[n][1];
+    if (ARA.nodo < 0) ARA.nodo = stNodoDe(ARA.g.position.x, ARA.g.position.z);
+    // Y SI LA MOVIERON, EL CAMINO SE SUELTA DONDE LA MOVIERON, no con un umbral
+    // de distancia: el arco mas largo del local mide 21 m —del 2 al 3, la
+    // cocina— asi que cualquier umbral que no la moleste caminando tampoco
+    // atrapa un teletransporte corto. Los dos unicos sitios que la mueven de
+    // golpe son `resetStore` y la sonda, y los dos ponen `ARA.nodo = -1`.
+    // EL CONTROL DE LA VUELTA: `?nodofijo` deduce el nodo de la posicion en
+    // cada cuadro, que es lo que se hacia antes. Sirve para comprobar que la
+    // sonda DETECTA el atasco y no solo aprueba el arreglo.
+    if (ST_NODO_FIJO) { ARA.nodo = stNodoDe(ARA.g.position.x, ARA.g.position.z); ARA.sig = -1; }
+    // SE COMPROMETE A UN NODO Y NO LO SUELTA HASTA LLEGAR. Mientras hay un
+    // salto pendiente el rumbo no se recalcula, asi que cruzar la frontera
+    // entre dos nodos no puede dar vuelta la marcha; y al llegar se ADOPTA ese
+    // nodo, o sea que el proximo salto se planea desde un sitio del grafo y no
+    // desde una posicion intermedia. El radio de llegada (0,6 m) es menos de la
+    // mitad del arco mas corto que hay (1,17 m entre el 4 y el 5), asi que no
+    // puede saltearse un nodo.
+    if (ARA.sig >= 0) {
+      const sx = ST_NODOS[ARA.sig][0], sz = ST_NODOS[ARA.sig][1];
+      if (Math.hypot(sx - ARA.g.position.x, sz - ARA.g.position.z) < 0.6) {
+        ARA.nodo = ARA.sig; ARA.sig = -1;
+      }
     }
+    // y un salto A SI MISMO seria un lazo de cero metros que no termina nunca:
+    // solo puede pasar con la tabla rota, y prefiero que la arana camine
+    // derecho un tramo antes que se quede clavada otra vez.
+    if (ARA.sig < 0 && ARA.nodo !== nodoB) {
+      const sg = stSiguienteNodo(ARA.nodo, nodoB);
+      if (sg >= 0 && sg !== ARA.nodo) ARA.sig = sg;
+    }
+    let metaX, metaZ;
+    if (ARA.sig < 0) { metaX = objetivo.x; metaZ = objetivo.z; }
+    else { metaX = ST_NODOS[ARA.sig][0]; metaZ = ST_NODOS[ARA.sig][1]; }
 
     const vx = metaX - ARA.g.position.x, vz = metaZ - ARA.g.position.z;
     const d = Math.hypot(vx, vz) || 1;
