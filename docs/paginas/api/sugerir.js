@@ -35,6 +35,8 @@ export async function onRequestPost({ request, env }) {
   if (!env.AI) return json({ error: "La IA no está disponible." }, 503);
   if (!env.DB) return json({ error: "sin base de datos" }, 503);
 
+  let cuerpo = {}; try { cuerpo = await request.json(); } catch {}
+
   /* Lo que ya se usó alguna vez, sea posteo o historia, y lo que ya se miró y no
      servía. Sin lo segundo, tocar «Buscar» de nuevo volvía a masticar los mismos
      y nunca avanzaba al resto. */
@@ -43,8 +45,25 @@ export async function onRequestPost({ request, env }) {
       "SELECT origen FROM publicaciones WHERE origen IS NOT NULL"
     ).all()).results || []).map((r) => r.origen)
   );
-  for (const r of ((await env.DB.prepare("SELECT clave FROM revisados").all()).results || [])) {
-    usados.add(r.clave);
+
+  /* Las huellas de imagen van aparte, con el dueño anotado en `motivo`.
+     Antes caían en la misma bolsa que lo descartado, y eso mataba historias
+     buenas: la vuelta 1 le sacaba la huella a una historia y la ofrecía, la
+     vuelta 2 —que la app encadena sola— la volvía a ver, encontraba su propia
+     huella ya guardada y la tachaba como «imagen repetida» para siempre. Cada
+     historia tenía una sola oportunidad y si el dueño no publicaba ahí mismo,
+     no la veía nunca más. Ahora la huella sólo descarta cuando el dueño es OTRA
+     historia, que es de lo que se trataba: el mismo flyer subido dos veces. */
+  const duenioDeHuella = new Map();
+  for (const r of ((await env.DB.prepare("SELECT clave, motivo FROM revisados").all()).results || [])) {
+    if (String(r.clave).startsWith("h:")) duenioDeHuella.set(r.clave, r.motivo);
+    else usados.add(r.clave);
+  }
+
+  /* Lo que la app ya tiene en pantalla de esta misma búsqueda. Va y viene en el
+     pedido, sin guardarse: son candidatos pendientes, no cosas descartadas. */
+  for (const c of (Array.isArray(cuerpo.yaVistos) ? cuerpo.yaVistos : []).slice(0, 300)) {
+    if (typeof c === "string") usados.add(c);
   }
 
   const descartadas = [];
@@ -71,7 +90,7 @@ export async function onRequestPost({ request, env }) {
   try { sync = await sincronizar(env); } catch (e) { sync = { error: String(e).slice(0, 120) }; }
 
   const r = await env.DB.prepare(
-    `SELECT codigo, texto, imagen FROM ig WHERE length(texto) >= ? ORDER BY publicado DESC LIMIT 12`
+    `SELECT codigo, texto, imagen, publicado FROM ig WHERE length(texto) >= ? ORDER BY publicado DESC LIMIT 12`
   ).bind(MINIMO).all();
 
   for (const post of r.results || []) {
@@ -81,12 +100,15 @@ export async function onRequestPost({ request, env }) {
       await anotar(post.codigo, "no anuncia nada");
       continue;
     }
-    cola.push({ de: "publicacion", clave: post.codigo, texto: post.texto, imagenYa: post.imagen || "" });
+    cola.push({ de: "publicacion", clave: post.codigo, texto: post.texto,
+                imagenYa: post.imagen || "", desde: post.publicado || 0 });
   }
 
+  const posteosVistos = (r.results || []).length;
+
   if (!cola.length) {
-    return json({ candidatos: [], descartadas, revisados: 0, sync,
-                  historias: hist.error ? { error: hist.error } : { total: (hist.historias || []).length },
+    return json({ candidatos: [], descartadas, revisados: 0, sync, posteos: posteosVistos,
+                  historias: hist.error ? { error: hist.error } : { total: (hist.historias || []).length, nuevas: 0 },
                   sinNovedad: true });
   }
 
@@ -111,13 +133,16 @@ export async function onRequestPost({ request, env }) {
          la misma. Con una huella de la imagen se saltean sin gastar nada. */
       const huella = "h:" + imagen.length + ":" +
         imagen.slice(200, 260) + imagen.slice(-40);
-      if (usados.has(huella)) {
-        descartadas.push({ codigo: it.clave, de: "historia", por: "es la misma imagen que otra" });
+      const duenio = duenioDeHuella.get(huella);
+      if (duenio && duenio !== it.clave) {
+        descartadas.push({ codigo: it.clave, de: "historia", por: "es la misma imagen que otra historia" });
         await anotar(it.clave, "imagen repetida");
         continue;
       }
-      usados.add(huella);
-      await anotar(huella, "huella de imagen");
+      if (!duenio) {
+        duenioDeHuella.set(huella, it.clave);
+        await anotar(huella, it.clave);      // el motivo guarda de quién es
+      }
 
       /* La guardamos igual que un posteo: así al publicar la app manda sólo el
          código y la foto no viaja de vuelta —son cientos de kilobytes— y de paso
@@ -128,7 +153,8 @@ export async function onRequestPost({ request, env }) {
     }
 
     let res;
-    try { res = await proponer(env, it.texto || "", imagen, { sinRedactar: true }); }
+    /* «06/06» en un posteo de mayo es junio de ese año, no del que viene */
+    try { res = await proponer(env, it.texto || "", imagen, { sinRedactar: true, desde: it.desde }); }
     catch { res = { error: "no la pude leer" }; }
     if (res.error) { descartadas.push({ codigo: it.clave, de: it.de, por: res.error }); continue; }
 
@@ -195,7 +221,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   return json({
-    candidatos, descartadas, revisados: mirar.length, quedan, sync,
+    candidatos, descartadas, revisados: mirar.length, quedan, sync, posteos: posteosVistos,
     historias: hist.error ? { error: hist.error } : { total: (hist.historias || []).length, nuevas: historiasNuevas },
   });
 }

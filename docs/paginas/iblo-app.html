@@ -1390,6 +1390,7 @@ function traerDeIg(){
   /* por código, no sumando: cada vuelta puede repetir alguno y el total daba
      más alto que la cantidad de cosas que hay */
   var saltadas = {}, mirados = 0, total = 0, vueltas = 0, huboError = "";
+  var ultimo = { historias: null, posteos: 0 };
 
   function avance(){
     bt.innerHTML = '<span class="giro"></span>' +
@@ -1402,11 +1403,18 @@ function traerDeIg(){
      programa. Como el servidor ahora se acuerda de lo que descartó, cada vuelta
      avanza de verdad. */
   function vuelta(){
-    return pedir("/sugerir", { metodo:"POST", cuerpo:{} }).then(function(j){
+    /* Lo que ya está en pantalla viaja en el pedido. Sin esto, la vuelta 2 volvía
+       a agarrar los candidatos de la vuelta 1 —todavía sin publicar— y el
+       servidor los tachaba por repetidos. */
+    var yaVistos = candidatosIg.map(function(c){ return c.codigo; })
+                     .concat(Object.keys(saltadas));
+    return pedir("/sugerir", { metodo:"POST", cuerpo:{ yaVistos: yaVistos } }).then(function(j){
       var nuevos = j.candidatos || [];
       mirados += (j.revisados || 0);
       (j.descartadas || []).forEach(function(x){ saltadas[x.codigo] = 1; });
       if (!total) total = mirados + (j.quedan || 0);
+      if (j.historias) ultimo.historias = j.historias;
+      if (j.posteos != null) ultimo.posteos = j.posteos;
       candidatosIg = candidatosIg.concat(nuevos);
       if (nuevos.length) pintarCandidatos();
       avance();
@@ -1417,7 +1425,7 @@ function traerDeIg(){
   vuelta().then(function(){
     if (huboError){ decir("avisoNuevo", huboError, "mal"); }
     else if (!candidatosIg.length){
-      decir("avisoNuevo", "Listo, miré todo y no hay nada nuevo para subir.", "");
+      decir("avisoNuevo", nadaNuevo(ultimo, saltadas), ultimo.historias && ultimo.historias.error ? "mal" : "");
     } else {
       decir("avisoNuevo", candidatosIg.length === 1
         ? "Encontré una. Mirala y si va, subila."
@@ -1429,6 +1437,24 @@ function traerDeIg(){
 }
 
 /* Dibuja las tarjetas encontradas hasta ahora. */
+/* «No hay nada nuevo» a secas deja al dueño sin saber si la app le miró las
+   historias o ni las vio. Ahora dice qué miró y por qué no salió nada. */
+function nadaNuevo(ultimo, saltadas){
+  var h = ultimo.historias || {};
+  if (h.error) return "No pude ver tus historias (" + h.error + "). De los posteos, nada nuevo.";
+
+  var partes = [];
+  if (h.total) partes.push(h.total === 1 ? "tu historia" : "tus " + h.total + " historias");
+  if (ultimo.posteos) partes.push(ultimo.posteos === 1 ? "1 posteo" : "los " + ultimo.posteos + " últimos posteos");
+
+  var mirado = partes.length ? "Miré " + partes.join(" y ") + ". " : "";
+  var cuantas = Object.keys(saltadas || {}).length;
+
+  if (!h.total && !ultimo.posteos) return "No encontré ni historias ni posteos para mirar.";
+  if (!cuantas) return mirado + "Ya está todo subido.";
+  return mirado + "Todo eso ya lo tenés publicado o no anuncia nada nuevo.";
+}
+
 function pintarCandidatos(saltadas){
   var html = candidatosIg.map(function(p, i){
     var filas = [["Fecha", p.fecha], ["Lugar", p.lugar], ["Hora", p.hora], ["Precio", p.precio]]

@@ -211,11 +211,21 @@ export async function proponer(env, texto, imagen, opc) {
   ].filter(Boolean).join("\n");
   if (!fuente) return { error: "No pude leer ni el texto ni la imagen. Escribime qué querés publicar.", codigo: 422 };
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  /* De cuándo es el aviso, no de cuándo lo estamos mirando.
+
+     Un posteo de Instagram de mayo que dice «06/06» habla del 6 de junio de ESE
+     año. Anclando en «hoy», en septiembre se leía como junio del año siguiente:
+     una fiesta que ya pasó volvía a aparecer como próxima, y encima no la
+     descartaba el filtro de fechas viejas porque la fecha había quedado en el
+     futuro. Se vio con el FIESTÓN wéstern del 06/06/26, que reaparecía como
+     06.06.27. Por eso el ancla es la fecha en que se publicó el aviso. */
+  const ancla = Number(opc.desde) > 0 ? Number(opc.desde) : Date.now();
+  const dia = new Date(ancla).toISOString().slice(0, 10);
   const sistema =
     "Extraés datos de avisos de fiestas de IBLO Eventos, una productora de Margarita Belén, Chaco. " +
     "Completás cada campo del esquema con lo que dice el texto. NO INVENTES: si un dato no está, dejá el campo vacío. " +
-    "Hoy es " + hoy + "; si dicen día y mes sin año, usá el próximo que todavía no pasó. " +
+    "Este aviso se publicó el " + dia + "; si dicen día y mes sin año, usá el primer año en que ese " +
+    "día y mes caen en esa fecha o después. Nunca un año más adelante que ése. " +
     "Si además te paso lo que dice un flyer y no coincide con lo que escribió el dueño, MANDA LO QUE ESCRIBIÓ EL DUEÑO: " +
     "el flyer sólo sirve para completar lo que él no dijo.";
 
@@ -266,7 +276,19 @@ export async function proponer(env, texto, imagen, opc) {
   };
 
   /* La fecha la entendemos nosotros: el modelo la escribe en cualquier formato. */
-  const fech = leerFecha(d.cuando, p.hora) || leerFecha(d.fecha, p.hora);
+  let fech = leerFecha(d.cuando, p.hora, ancla) || leerFecha(d.fecha, p.hora, ancla);
+
+  /* Al modelo hay que corregirle el año igual. Aunque el sistema le diga de
+     cuándo es el aviso, escribe el año que viene: «19/09» en una historia de
+     septiembre salió como 19.09.27. Acá no se le pide, se le arregla: si la
+     fecha cae a más de once meses del aviso, se rehace con el día y el mes
+     solos, que es lo único que dijo la fuente. Once meses porque IBLO no
+     anuncia una fiesta con un año de anticipación; el dueño sí puede escribir
+     a mano la fecha que se le antoje, y eso no pasa por acá. */
+  if (fech && fech.ms > ancla + 330 * 86400e3) {
+    const cerca = leerFecha(fech.texto.slice(0, 5), p.hora, ancla);
+    if (cerca) fech = cerca;
+  }
   if (fech) {
     p.fecha = fech.texto;
     p.cuando = new Date(fech.ms - 3 * 3600e3).toISOString().slice(0, 16);

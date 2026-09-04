@@ -328,6 +328,71 @@ En la tarjeta el adorno va **adentro** —la tarjeta recorta lo que se sale— y
 le hace lugar: se apoya sobre la foto si hay foto, y si no hay se le reserva una
 banda arriba con `padding`. Sin eso le tapaba el título.
 
+## Las historias: dos bichos que se comían fiestas buenas
+
+El dueño avisó que tenía historias y la app le contestaba «no hay nada nuevo».
+Las historias se leían bien —el visor devolvía las cinco y el parser las sacaba
+todas—; el problema estaba después.
+
+### La huella de imagen tachaba historias para siempre
+
+`/api/sugerir` le saca una huella a cada imagen para no gastar una lectura de IA
+en el mismo flyer subido tres veces seguidas. Esa huella se guardaba en
+`revisados`, la misma tabla que lo descartado. Y `revisados` se carga entera al
+empezar cada pedido.
+
+Entonces: vuelta 1, la historia se mira, se le guarda la huella y se ofrece como
+candidata. La app encadena la vuelta 2 sola —eso es lo que hace desde que dejó de
+pedirle al dueño que tocara «Buscar» de nuevo—, la historia todavía está sin
+publicar así que vuelve a entrar en la cola, se encuentra **su propia huella** ya
+guardada y se tacha como «imagen repetida». Para siempre: eso también se anota.
+Cada historia tenía una sola oportunidad, y si el dueño no publicaba en esos
+segundos, no la veía nunca más. Había 17 historias tachadas así.
+
+Dos arreglos:
+
+- La huella guarda **de quién es** (el id de la historia va en `motivo`). Sólo
+  descarta cuando el dueño de la huella es OTRA historia, que es de lo que se
+  trataba: el mismo flyer subido dos veces.
+- La app manda en cada vuelta los códigos que ya tiene en pantalla (`yaVistos`).
+  Son candidatos pendientes, no cosas descartadas, así que van en el pedido y no
+  se guardan en ninguna tabla.
+
+Se limpiaron las 36 filas que había dejado el bicho (17 tachadas + 19 huellas con
+el formato viejo, que sin dueño habrían tachado todo lo que tocaran).
+
+### El año que el modelo se inventaba
+
+Un posteo de mayo que dice «06/06» habla del 6 de junio de **ese** año. El sistema
+le decía al modelo «hoy es tal fecha, si no dicen año usá el próximo que no pasó»,
+así que en septiembre lo leía como junio del año siguiente: una fiesta de hace
+tres meses volvía como próxima, y encima el filtro de fechas viejas no la
+frenaba, porque la fecha había quedado en el futuro. Así reaparecía el FIESTÓN
+wéstern del 06.06.26 convertido en 06.06.27.
+
+Ahora el ancla es **cuándo se publicó el aviso**, no cuándo lo estamos mirando:
+`proponer` toma `opc.desde` y se lo pasa a `leerFecha` y al sistema.
+
+Y como el modelo se manda el año de más igual —«19/09» en una historia de
+septiembre salió 19.09.27 aunque el sistema le dijera la fecha—, hay una
+corrección que no le pide nada: si la fecha cae a más de once meses del aviso, se
+rehace con el día y el mes solos, que es lo único que dijo la fuente. Once meses
+porque IBLO no anuncia con un año de anticipación. Al dueño no lo afecta: lo que
+escribe a mano no pasa por ahí.
+
+### Y que la app diga qué miró
+
+«No hay nada nuevo» a secas no deja distinguir «te miré las cinco historias y son
+todas de la fiesta que ya subiste» de «no pude ver ni una». Ahora dice qué miró y
+por qué no salió nada, y si el visor falla lo dice con esas palabras.
+
+Probado contra Instagram de verdad, encadenando vueltas como la app: las cinco
+historias se miran todas, ninguna se tacha por su propia huella, cuatro salen
+reconocidas como la fiesta que ya está publicada y una por fecha vencida; el
+FIESTÓN ya no aparece como 2027. En el navegador, los cuatro mensajes —nada
+nuevo, visor caído, fiesta encontrada y cuenta vacía— y el `yaVistos` viajando
+entre vueltas.
+
 ## Cómo está atado
 
 - Base **D1** llamada `iblo` (`27c22f67-3b11-4c92-bb75-37f30f63b84d`), atada como `DB`.
