@@ -296,7 +296,7 @@ function reintenta(nuevo){
   EST.corriendo = true; EST.muerto = 0; EST.gano = false;
   if (!nuevo) EST.intentos++;
   PART.length = 0;
-  CAM.x = JUG.x - VISTA_ANCHO*0.30; CAM.y = 0;
+  CAM.x = JUG.x - VISTA_ANCHO*CAM_OFS;
   musArranca(EST.nivel, tiempoDeX(JUG.x));
 }
 

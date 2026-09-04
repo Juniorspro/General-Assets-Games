@@ -19,6 +19,12 @@ const MUNDO = {
   sierras: [],         /* solo para dibujar: su caja mortal ya esta en `mat` */
   techo: [],           /* tramos con techo, para gravedad y nave */
   nivel: 0, med: null,
+  /* ── LA REVISION ──
+     La sube `generaNivel` y el dibujo la mira para saber si tiene que rearmar
+     las mallas. Con una llamada explicita, el dia que se agregue un camino que
+     genere un nivel —el demo del menu, una sonda, la validacion— se olvida y se
+     dibuja el nivel anterior. */
+  rev: 0,
   /* los indices arrancan vacios: `cerca()` se puede llamar antes de generar */
   iSol: [], iMat: []
 };
@@ -180,6 +186,7 @@ function generaNivel(id, semilla){
   /* la pared del final: no se puede pasar de largo */
   M.sol.push(rect(M.largo + 2, -6, 4, 30, 'meta'));
   indexaMundo();
+  M.rev++;
   return M;
 }
 

@@ -154,9 +154,13 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
-- **`Dash.html` es "ROTOR"** (~101 KB, **sin un solo asset**: los tres temas electrónicos son
-  osciladores y todo el dibujo es código). El género de Geometry Dash, apaisado dentro de un teléfono
-  vertical y **sin pantalla de «gira el celular»**. **Tres niveles** —NEON DRIVE 128 BPM, GRAVEDAD
+- **`Dash.html` es "ROTOR"** (~109 KB, **sin un solo asset**: los tres temas electrónicos son
+  osciladores y las cuatro texturas son lienzos de cuatro píxeles). El género de Geometry Dash **en 3D
+  con three.js**, apaisado dentro de un teléfono vertical y **sin pantalla de «gira el celular»**.
+  La jugabilidad sigue siendo del plano XY —el género ES de dos ejes— y lo que es tridimensional es el
+  mundo: bloques extruidos, picos que son pirámides, el cubo tumbando de verdad, y **sombra de
+  contacto**, que es lo que lo apoya en el piso. **La cámara mira derecho por −Z**, así que x e y salen
+  exactamente lineales (medido: 1,00000) y se puede despegar en un bloque exacto. **Tres niveles** —NEON DRIVE 128 BPM, GRAVEDAD
   CERO 140, ROTOR 150— con cubo, gravedad invertida y nave. **La música ES el reloj**: la x del
   jugador sale de `AudioContext.currentTime` y no se integra, así que una tanda de cuadros perdidos
   no puede correr el nivel respecto del tema. Un tiempo son cuatro bloques y el salto dura un tiempo
@@ -174,6 +178,83 @@ horizontal no vertical, pero también que sea sin la pantalla de gira el celular
 
 `juegos-pc/Dash.html` (101 KB, **cero assets**). Vive partido en `herramientas/dash/partes/` y se arma
 con `python3 herramientas/dash/armar.py`.
+
+#### PRIMERO SALIÓ EN 2D Y EL PEDIDO ERA 3D, ASÍ QUE SE REEMPLAZÓ LA CAPA DE DIBUJO
+
+Reporte de una línea: *"en 3D te pedí"*. Lo que se conserva es **todo lo medido** —la derivación, el
+reloj de audio, el generador con su validación, la física, el auto-jugador, los menús, la práctica— y
+lo que se reemplazó es `f.js`, que era el pintor de lienzo 2D y pasó a ser un renderizador de three.js.
+Que el juego estuviera partido en partes es lo que hizo que fuera **un archivo** y no una reescritura.
+
+**LA JUGABILIDAD NO SE MUEVE DEL PLANO XY, Y ESO NO ES UNA CONCESIÓN.** El género es de dos ejes: se
+avanza y se salta. Meterlo en tres sería otro juego, no éste mejor dibujado.
+
+**Y LA CÁMARA MIRA DERECHO POR −Z.** Con la cámara inclinada la proyección deja de ser lineal y la x de
+un pico en pantalla depende de su altura: en un juego donde hay que despegar en un bloque exacto, eso
+es injugable. Mirando derecho, x e y son exactamente lineales sobre el plano de juego —medido,
+**1,00000** comparando dos tramos de cuatro bloques— y el volumen se lee igual, porque la cámara va a
+la altura del medio de la banda visible, o sea **por encima** de los bloques bajos: se les ve la cara de
+arriba. Es el encuadre de cualquier 2,5D.
+
+**Y TODO COMPARTE EL PLANO z = 0 POR DELANTE.** Los sólidos se extruyen hacia atrás y el jugador
+también. Si el cubo asomara hacia la cámara, la perspectiva lo agrandaría un 4,5 %, y con él a un 30 %
+del ancho eso lo correría **0,18 bloques** respecto de los picos: se vería desalineado justo donde hay
+que medir.
+
+**LA DISTANCIA DE LA CÁMARA SALE DE UNA CUENTA:** `D = (ancho/2) / (aspecto · tan(fov/2))`, o sea 9,905
+a 50 grados en un marco de teléfono. Escrita a mano, cambiar el campo o la proporción de pantalla
+cambiaría cuántos bloques de aviso hay.
+
+#### CINCO DEFECTOS DEL 3D, Y LOS CINCO SE MIDIERON
+
+1. **EL SUELO ERA UNA FRANJA Y ARRIBA DE ELLA HABÍA CIELO A LA ALTURA DEL PISO.** Con la cámara a 2,77
+   de alto, una superficie horizontal de 1,6 de fondo se ve como una banda de dos centímetros y el
+   horizonte queda roto. El piso y los techos se extruyen **46 bloques** y la niebla —densa a
+   propósito, 0,020— se come el borde lejano: eso es lo que hace que la escena se lea a profunda.
+2. **EL CANTO LUMINOSO ERA UNA TAPA Y NO UN LABIO.** Cubriendo el fondo entero, lo que se ve desde
+   arriba es una superficie encendida de bloque y medio: en la captura el suelo salía como **una losa de
+   menta** y el juego se leía a plataforma de otro color. Con un labio de 0,22 de fondo en el canto de
+   adelante, la cara de arriba queda oscura y el borde se lee a borde.
+3. **LA CARA DE ADELANTE DEL PISO SALÍA NEGRA, y son 85 píxeles de 412.** Medido, daba **(1, 3, 7)** —
+   el 21 % de la pantalla sin un solo dato. Con Lambert y una luz casi vertical no hay número que la
+   salve, así que va un **faldón sin luz** con degradado vertical: no depende del ángulo ni de la
+   sombra y no puede salir negro. Medido después: de **(31, 46, 75)** bajo el labio a (11, 19, 34) abajo.
+4. **LAS SOMBRAS ERAN MANCHONES SUELTOS.** El piso es una losa de 46 bloques de fondo: proyectando, el
+   techo del pasillo de la nave sombreaba el suelo **entero** y aparecían cuatro manchas con el borde
+   del mapa de sombra dibujado. El piso pasa a **recibir y no proyectar** —proyectan los bloques y el
+   jugador, que son lo que hay que poder apoyar— la luz sube a 63 grados de elevación (la sombra mide
+   medio alto del objeto y queda debajo de él) y la direccional baja de 2,1 a 1,45 con el ambiente a
+   0,95, así que una sombra **oscurece a la mitad en vez de borrar**.
+5. **Y EN GRAVEDAD INVERTIDA SE CAMINA SOBRE UNA CARA QUE NO RECIBE NADA.** La cara de abajo de un techo
+   no recibe una direccional de arriba: sin ambiente, la superficie que hay que pisar sale negra.
+
+#### Y DOS DEFECTOS DE LAS SONDAS, LOS DOS YA CONOCIDOS EN ESTE REPO
+
+- **`proy()` PROYECTABA CON LA MATRIZ DEL CUADRO ANTERIOR.** `matrixWorld` se recalcula al **dibujar**,
+  así que medir justo después de mover la cámara usa la matriz vieja: la sonda devolvía al jugador en
+  **−0,595 del ancho** con la cámara puesta donde corresponde. Es la cuarta vez que una medición sale
+  mal por esto —en PISTOLA y en RECREO costó una vuelta cada una— y se arregla poniendo la matriz al día
+  dentro de la propia sonda.
+- **Y `CONGELADO` NO CONGELABA EL CUADRO, SÓLO LA FÍSICA.** `ponCam` y las partículas quedaban afuera de
+  la guarda, así que la sonda plantaba un instante y el cuadro siguiente lo devolvía a su sitio: las
+  chispas de la muerte se vencían antes de la foto. En PISTOLA hizo falta un `CAM_FIJA` por esto mismo;
+  acá la salida correcta es que congelar signifique que **nada** avanza, y que quien fotografía coloque
+  la cámara él con `ponCam(1)` — que es **la misma cuenta** que usa el juego y no una copia (la primera
+  versión de la sonda tenía la fórmula del renderizador 2D y devolvía el piso al 42 % del alto donde el
+  juego lo pone al 80 %).
+
+**Y EL PRIMER CUADRO DE LA PARTIDA ENCUADRABA MAL.** `arranca` corre antes de `pantalla`, o sea con el
+corrimiento de cámara todavía en el 82 % del demo del menú: medido, el jugador proyectaba en −0,64 del
+ancho, fuera de pantalla. `ponCam(1)` al entrar hace que el suavizado llegue en un paso.
+
+**LO QUE SE FUE ES LA VISTA PREVIA DEL ICONO, y es una mejora.** El demo del menú corre detrás con el
+cubo de verdad, así que elegir un color se ve en el objeto que se va a jugar. Una vista previa aparte
+sería un **segundo dibujante** del icono, y dos dibujantes terminan diciendo cosas distintas.
+
+**MEDIDO EN 3D:** **14 llamadas de dibujo y 2.790 triángulos** (15 y 3.384 en el nivel 3 con nave), 13
+programas, 4 texturas —los cuatro lienzos de cuatro píxeles del cielo, la reja y el faldón—. Jugador al
+**30,0 % del ancho** y piso al **80,0 % del alto** en las dos orientaciones, cubo al 9,3 % del alto, y
+la linealidad en x en **1,00000**.
 
 #### TODO CUELGA DE UNA DERIVACIÓN, Y ESO ES EL JUEGO
 
@@ -322,14 +403,15 @@ Y el cubo del demo va al **82 % del ancho** y no al 30 %: la columna de botones 
 
 #### MEDIDO AL CERRAR
 
-**Los tres niveles al 100 %** con auto-jugador honesto, en 813 ms de auditoría, contra **14 · 12 · 8 %**
+**Los tres niveles al 100 %** con auto-jugador honesto, en 959 ms de auditoría, contra **14 · 12 · 8 %**
 del que aprieta al azar y **10 %** del que aprieta siempre. Y el bot **juega la partida de verdad** —su
 decisión entra por `APRETADO`, o sea por el mismo camino que el dedo— y termina los tres al 100 % en el
 primer intento, con 3/3 · 2/3 · 2/3 monedas y el progreso guardado; el tercero muestra la pantalla de
 «los tres temas» con SIGUIENTE apagado. Modo práctica: **7 puntos de control** puestos solos, sólo con
 piso y con nada mortal en los dos bloques que vienen. **Cero solapamientos** entre los seis elementos
 del HUD, en vertical girado y en apaisado. Las tres calidades en caliente (535×247 · 758×350 ·
-892×412) y los tres idiomas en vivo. `window.__errs` vacío en las nueve corridas.
+892×412) y los tres idiomas en vivo. **14-15 llamadas de dibujo y 2.790-3.384 triángulos.**
+`window.__errs` vacío en las quince corridas.
 
 **LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los tres temas está medido que suenan y a
 qué nivel, no si NEON DRIVE pega con NEON DRIVE. Y el bot juega con puntería de un paso de física: que

@@ -115,9 +115,14 @@ function fila(cont, items, sel, fn){
   });
 }
 function pintaFilas(){
-  fila($('iForma'), ['■', '◆', '●'], ICONO.forma, (i) => { ICONO.forma = i; guardaProg(); pintaFilas(); prevIcono(); });
-  fila($('iCol1'), COLES.map(() => '●'), ICONO.c1, (i) => { ICONO.c1 = i; guardaProg(); pintaFilas(); prevIcono(); });
-  fila($('iCol2'), COLES.map(() => '●'), ICONO.c2, (i) => { ICONO.c2 = i; guardaProg(); pintaFilas(); prevIcono(); });
+  /* ── NO HAY VISTA PREVIA, Y ES MEJOR ASI ──
+     El demo del menu corre detras con el cubo de verdad, asi que elegir un color
+     se ve en el objeto que se va a jugar. Una vista previa aparte seria un
+     SEGUNDO dibujante del icono, y dos dibujantes terminan diciendo cosas
+     distintas — es la razon por la que en 2D compartian una funcion. */
+  fila($('iForma'), ['■', '◆', '●'], ICONO.forma, (i) => { ICONO.forma = i; guardaProg(); pintaFilas(); ponIcono(); });
+  fila($('iCol1'), COLES.map(() => '●'), ICONO.c1, (i) => { ICONO.c1 = i; guardaProg(); pintaFilas(); ponIcono(); });
+  fila($('iCol2'), COLES.map(() => '●'), ICONO.c2, (i) => { ICONO.c2 = i; guardaProg(); pintaFilas(); ponIcono(); });
   [...$('iCol1').children].forEach((b, i) => { b.style.color = COLES[i]; });
   [...$('iCol2').children].forEach((b, i) => { b.style.color = COLES[i]; });
   const idis = ['es', 'en', 'pt'];
@@ -125,14 +130,6 @@ function pintaFilas(){
   const cals = ['baja', 'media', 'alta'];
   fila($('aCal'), [TX('baja'), TX('media'), TX('alta')], cals.indexOf(CALIDAD),
        (i) => { CALIDAD = cals[i]; guardaProg(); mide(); pintaFilas(); });
-}
-
-/* la vista previa usa `dibujaIcono`, o sea EL MISMO dibujante que el juego: con
-   dos, el icono que se elige no es el que se juega */
-function prevIcono(){
-  const c = $('iPrev'), g = c.getContext('2d');
-  g.clearRect(0, 0, 120, 120);
-  dibujaIcono(g, 60, 88, 56, 0, false, ICONO);
 }
 
 /* ══════════ EL HUD ══════════
@@ -162,6 +159,12 @@ function entra(n){
   EST.intentos = 0;
   arranca(n);
   pantalla('juego');
+  /* ── LA CAMARA SE COLOCA DE UNA AL ENTRAR ──
+     `arranca` corre ANTES de `pantalla`, o sea con `CAM_OFS` todavia en el 82 %
+     del demo, y `CAM.y` viene del menu: medido, el primer cuadro de la partida
+     proyectaba al jugador en −0,64 del ancho, fuera de pantalla por la izquierda.
+     Un `dt` grande hace que el suavizado llegue en un paso. */
+  ponCam(1);
   pintaHud(true);
 }
 function pausa(){
@@ -175,19 +178,19 @@ function sigue(){
      retomarlo obligaria a empalmar la musica en el instante exacto en que se
      paro, y un tema que retoma medio tiempo corrido se escucha peor que un
      reintento */
-  pantalla('juego'); reintenta(true); pintaHud(true);
+  pantalla('juego'); reintenta(true); ponCam(1); pintaHud(true);
 }
 function salir(){ EST.corriendo = false; musPara(); pantalla('pNiveles'); pintaLista(); }
 
 $('bJugar').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); };
-$('bIconos').onclick = () => { son('clic'); pantalla('pIconos'); prevIcono(); pintaFilas(); };
+$('bIconos').onclick = () => { son('clic'); pantalla('pIconos'); pintaFilas(); };
 $('bAjustes').onclick = () => { son('clic'); pantalla('pAjustes'); pintaFilas(); };
 $('nVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
 $('iVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
 $('aVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
 $('bPausa').onclick = () => { son('clic'); pausa(); };
 $('bSigo').onclick = () => { son('clic'); sigue(); };
-$('bReint').onclick = () => { son('clic'); CHK.lista.length = 0; pantalla('juego'); reintenta(true); pintaHud(true); };
+$('bReint').onclick = () => { son('clic'); CHK.lista.length = 0; pantalla('juego'); reintenta(true); ponCam(1); pintaHud(true); };
 $('bPract').onclick = () => {
   son('clic');
   EST.practica = !EST.practica;
@@ -246,15 +249,22 @@ function bucle(ts){
   const dt = tPrev ? Math.min(0.25, (ts - tPrev)/1000) : 0;
   tPrev = ts;
   musPaso();
+  /* ── CONGELAR CONGELA EL CUADRO ENTERO, NO SOLO LA FISICA ──
+     `ponCam` y las particulas quedaban afuera de la guarda, asi que la sonda
+     plantaba un instante y el cuadro siguiente lo devolvia a su sitio: las
+     chispas de la muerte se vencian antes de la foto y la camara volvia al
+     encuadre normal. Es la cuarta vez en este repo —en PISTOLA hizo falta un
+     `CAM_FIJA` por esto mismo— y la salida correcta es que congelar signifique
+     que NADA avanza. Quien fotografia coloca la camara el mismo (`ponCam(1)`). */
   if (!CONGELADO){
     acum += dt;
     let n = 0;
     while (acum >= DT && n < 8){ paso(DT); acum -= DT; n++; }
     if (acum > DT*8) acum = 0;
+    demoPaso(dt);
+    ponCam(dt);
+    pasoPart(dt);
   }
-  if (!CONGELADO) demoPaso(dt);
-  ponCam(dt);
-  pasoPart(dt);
   pinta();
   pintaHud(false);
 }
@@ -301,6 +311,7 @@ function arrancaTodo(){
     pon(88, s.every(x => x > 0) ? 'OK' : '!');
     generaNivel(0, SEMILLAS[0] || 1);
     jugPone(JUG, 0);
+    ponIcono();
     repinta();
     setTimeout(() => {
       pon(100);
@@ -338,6 +349,23 @@ window.__R = {
              jug: { x: +JUG.x.toFixed(3), y: +JUG.y.toFixed(3), vy: +JUG.vy.toFixed(3),
                     modo: JUG.modo, grav: JUG.grav, piso: JUG.piso, vivo: JUG.vivo },
              largo: MUNDO.largo, pasos: PASOS, errs: window.__errs.length };
+  },
+  /* ── EL ENCUADRE SE MIDE, NO SE ESTIMA ──
+     Devuelve donde cae un punto del mundo en fracciones de pantalla, y de paso
+     comprueba que la x sea LINEAL: si no lo fuera, la x de un pico dependeria de
+     su altura y no se podria apuntar. */
+  proy(x, y){ const p = proy(+x, +y); return [+p[0].toFixed(4), +p[1].toFixed(4)]; },
+  encuadre(){
+    const pj = proy(JUG.x, JUG.y);
+    const piso = proy(JUG.x, 0);
+    const a = proy(CAM.x + 2, 0), b = proy(CAM.x + 6, 0), c2 = proy(CAM.x + 14, 0);
+    const d1 = b[0] - a[0], d2 = (c2[0] - b[0])/2;
+    return { jug: [+pj[0].toFixed(3), +pj[1].toFixed(3)],
+             piso: +piso[1].toFixed(3),
+             cubo: +(proy(JUG.x, JUG.y)[1] - proy(JUG.x, JUG.y + JUG_LADO)[1]).toFixed(4),
+             /* dos tramos de cuatro bloques tienen que medir lo MISMO en pantalla */
+             lineal: +(d2/d1).toFixed(5),
+             camD: +CAM.d.toFixed(3), camY: +CAM.y.toFixed(3), altoVista: +CAM.alto.toFixed(3) };
   },
   medidas(i){ const m = medidasDe(NIVELES[i || 0].bpm);
     return { bpm: m.bpm, T: +m.T.toFixed(4), v: +m.v.toFixed(3), g: +m.g.toFixed(2),
@@ -389,8 +417,11 @@ window.__R = {
     JUG.x = +x; JUG.y = y == null ? 0 : +y;
     JUG.modo = modo || 'cubo'; JUG.grav = grav == null ? 1 : grav;
     JUG.vy = 0; JUG.piso = true; JUG.vivo = true; JUG.giro = 0;
-    CAM.x = JUG.x - VISTA_ANCHO*CAM_OFS;
-    CAM.y = JUG.modo === 'nave' ? cl(JUG.y - 3.4, -1, 6) : cl(JUG.y*0.22 - 1.6, -1.6, 5);
+    /* la camara la coloca `ponCam` con dt grande —el suavizado llega de una— y no
+       una copia de la formula: con dos cuentas, la foto encuadra otro juego. Ya
+       paso: la sonda tenia la formula del renderizador 2D y devolvia el piso al
+       42 % del alto donde el juego lo pone al 80 %. */
+    ponCam(1);
     pinta();
     return { x: JUG.x, y: JUG.y, camx: +CAM.x.toFixed(2), camy: +CAM.y.toFixed(2),
              modo: JUG.modo, grav: JUG.grav };
@@ -416,17 +447,9 @@ window.__R = {
              pico: +pico.toFixed(4), rms: +Math.sqrt(s/b.length).toFixed(4),
              mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2) };
   },
-  brillo(){
-    const g = document.createElement('canvas'); g.width = 64; g.height = 36;
-    const c = g.getContext('2d'); c.drawImage(cv, 0, 0, 64, 36);
-    const d = c.getImageData(0, 0, 64, 36).data;
-    let m = 0, mx = 0;
-    for (let i = 0; i < d.length; i += 4){
-      const l = 0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2];
-      m += l; if (l > mx) mx = l;
-    }
-    return { medio: +(m/(64*36)).toFixed(1), max: Math.round(mx) };
-  },
+  brillo(){ return brilloDe(); },
+  costo(){ return costoDe(); },
+  part(){ return partDe(); },
   /* que dos elementos del HUD no se pisen no se puede juzgar mirando: con el
      marco girado `getBoundingClientRect` devuelve la caja alineada a los ejes y
      miente, asi que se mide con offset, que son coordenadas del marco */
