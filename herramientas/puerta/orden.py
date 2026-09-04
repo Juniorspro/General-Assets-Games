@@ -65,6 +65,36 @@ JS = r"""
     else enterStore();
   }
 
+  // REINICIAR EL NIVEL QUE SE ESTA JUGANDO. No vuelve al primero de la lista ni
+  // resortea el orden: entra otra vez al MISMO nivel, que es lo que hace que el
+  // boton sirva para desatascarse —una parte inalcanzable, una tela en el peor
+  // sitio, un aviso que no se llego a leer— sin castigar con los cinco niveles
+  // anteriores.
+  //
+  // EL NUMERO SALE DE `pbPaso` Y NO DE `gameState`. gameState es una cadena
+  // ('store', 'school'...) y traducirla de vuelta a numero seria una segunda
+  // tabla que hay que mantener igual a `pbEntra`: el dia que se agregue un
+  // nivel, una de las dos se queda corta.
+  function pbNivelActual() {
+    if (!levelStarted) return -2;                 // no hay partida
+    if (pbPaso < 0) return 0;                     // el prologo
+    if (pbPaso >= PB_ORDEN.length) return -2;     // el cuarto blanco y el final
+    return PB_ORDEN[pbPaso];
+  }
+
+  function pbReinicia() {
+    const n = pbNivelActual();
+    if (n < 0) return 'sin nivel';
+    closeMenu();
+    // Y SE CANCELA EL SCREAMER. Reiniciando en medio de un susto, el velo y el
+    // grito se quedaban puestos encima del nivel nuevo — es la misma linea que
+    // `startLevel` ya tenia que hacer.
+    if (scream.active) { scream.active = false; screamerEl.style.display = 'none'; }
+    transitioning = true;
+    fadeTo(function () { pbEntra(n); });
+    return n;
+  }
+
   // LA UNICA PUERTA DE SALIDA DE CUALQUIER NIVEL.
   function pbSiguiente() {
     pbPaso++;

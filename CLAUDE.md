@@ -269,6 +269,59 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima séptima vuelta (2026-09-04): **PUERTA BLANCA** — REINICIAR NIVEL en el panel de pausa
+
+Pedido: *"agrega un botón en el menú de pausa que diga «reiniciar» y servirá para cambiar el nivel que
+esté jugando el jugador en ese momento"*.
+
+#### REINICIA EL MISMO NIVEL, NO LA PARTIDA — Y ESA ES TODA LA DECISIÓN
+
+Con el orden sorteado, volver al primero de la lista sería tirar hasta cinco niveles a la basura por
+una tela mal puesta o una parte que no se encontró. `pbReinicia()` entra otra vez al **mismo** nivel y
+no vuelve a sortear: medido en el local con la TAPA ya juntada, después de reiniciar sigue en `store`
+con las partes en `[false,false,false,false]`, las cargas en 0 y el orden intacto (`[2,3,6,5,1,4]`).
+
+**EL NÚMERO DEL NIVEL SALE DE `pbPaso` Y NO DE `gameState`.** `gameState` es una cadena —`'store'`,
+`'school'`— y traducirla de vuelta a número sería una **segunda tabla** que hay que mantener idéntica
+a `pbEntra`: el día que se agregue un nivel, una de las dos se queda corta y el botón lleva al sitio
+equivocado sin que nada falle. `PB_ORDEN[pbPaso]` ya es la respuesta.
+
+#### EL DEFECTO QUE HABRÍA TENIDO Y NO SE VE: EL EPÍLOGO
+
+En el cuarto blanco y en el final `pbPaso` **ya se pasó del array**, así que `PB_ORDEN[pbPaso]` es
+`undefined` y `pbEntra(undefined)` cae a su `else`, que es **`enterStore()`**. O sea que el botón
+habría llevado del epílogo al local, sin errores en la consola y sin que nada pareciera roto. Hay una
+sola función que decide, `pbNivelActual()`, y la usan el botón —para esconderse— y el reinicio —para
+negarse—. Medido en el cuarto blanco: `boton: none` y `pbReinicia()` devuelve `'sin nivel'`.
+
+#### TRES COSAS QUE HAY QUE HACER Y NO SE VEN
+
+- **El screamer se cancela.** Reiniciando en medio de un susto, el velo y el grito se quedaban puestos
+  encima del nivel nuevo. Es la misma línea que `startLevel` ya tenía que hacer.
+- **Va por `fadeTo` y con `transitioning` puesto**, igual que cualquier entrada de nivel: llamando a
+  `pbEntra` derecho, el velo negro del fundido se queda encima. Medido después: `pausado false ·
+  transitioning false` y el jugador camina.
+- **Es un botón secundario a propósito.** Con el mismo peso que CONTINUAR, el que descarta lo hecho en
+  el nivel se toca por error tanto como el que sigue jugando. Va debajo, con borde fino y sin relleno.
+
+#### Y EL PANEL SE APRETÓ, PORQUE EL OCTAVO ELEMENTO NO ENTRABA
+
+El menú es una columna centrada: agregar uno empuja a todos. Medido en **360×640**, el botón dejaba
+**6 px** de aire abajo, y en un marco más corto se recorta. Bajando el margen de las tres barras
+(1,5vh → 1,05) y del propio botón, queda en **33 · 39 · 16 px** arriba y abajo en 412×892, 412×732 y
+360×640, con **cero solapamientos** entre los seis elementos.
+
+#### MEDIDO AL CERRAR
+
+Sin partida el botón no existe (`none`); en el prólogo (`nivel 0`) reinicia y sigue en `room`; en la
+biblioteca (`nivel 4`, paso 5) reinicia y sigue en `library` con el menú cerrado; en el local
+(`nivel 6`, paso 2) reinicia y las cuatro partes y las cargas vuelven a cero. Los tres idiomas
+(Reiniciar nivel / Restart level / Reiniciar nivel) con `castellano: 0`. Regresión intacta: auditoría
+**28.152 de 28.152 celdas · 4 de 4 partes · 2 de 2 latas · 0 arcos sucios**, la araña sin clavarse
+(**0,15 s en 180**), partida completa 4/4 en orden y salida al cuarto blanco, los **seis niveles** uno
+por uno, **33 de 33 sonidos**. `window.__errs` y `window.__pbFallas` vacíos en las siete corridas. El
+HTML pasó de 3,65 a **3,66 MB**.
+
 ### Nonagésima sexta vuelta (2026-09-04): **PUERTA BLANCA** — un insecticida que hay que apuntar
 
 Pedido: *"agrega un insecticida para alejar a la araña"*. Dos latas en el local, cuatro cargas, y hay

@@ -1499,6 +1499,15 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
     // los VALORES EN CASTELLANO de las tablas: una cadena esta sin traducir si
     // coincide con la version castellana de una clave cuya traduccion al idioma
     // puesto es DISTINTA. Los patrones con {0} se comparan como expresion.
+    // EL BOTON DE REINICIAR: que nivel cree que se esta jugando y si se ve
+    pausa: function () {
+      const r = document.getElementById('menu-restart');
+      return { nivel: pbNivelActual(), paso: pbPaso, orden: PB_ORDEN.slice(),
+               gameState: gameState, empezado: levelStarted,
+               boton: r ? getComputedStyle(r).display : 'no existe',
+               rotulo: r ? r.textContent.trim() : '' };
+    },
+    reinicia: function () { return pbReinicia(); },
     // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos
     // buses. Sin leer la ganancia del nodo, mover la barra podria no llegar a
     // ningun lado y la sonda diria que si.

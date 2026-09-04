@@ -60,6 +60,7 @@ JS = r"""
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Lista &#183; sali por atras',
       insecticida: '&#129524; Insecticida {0}', rociar: 'ROCIAR',
+      reiniciar: 'Reiniciar nivel',
       pan: 'PAN', carne: 'CARNE', queso: 'QUESO', tapaHb: 'TAPA',
       atrapado: 'ATRAPADO',
       finTitulo: '🌟 ¡Encontraste la salida!',
@@ -84,6 +85,7 @@ JS = r"""
       partes: '&#127828; Parts {0}/4',
       partesLista: '&#127828; Ready &#183; out the back',
       insecticida: '&#129524; Bug spray {0}', rociar: 'SPRAY',
+      reiniciar: 'Restart level',
       pan: 'BUN', carne: 'PATTY', queso: 'CHEESE', tapaHb: 'TOP',
       atrapado: 'STUCK',
       finTitulo: '🌟 You found the way out!',
@@ -108,6 +110,7 @@ JS = r"""
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Pronto &#183; sai por tras',
       insecticida: '&#129524; Inseticida {0}', rociar: 'BORRIFAR',
+      reiniciar: 'Reiniciar nivel',
       pan: 'PÃO', carne: 'CARNE', queso: 'QUEIJO', tapaHb: 'TAMPA',
       atrapado: 'PRESO',
       finTitulo: '🌟 Você achou a saída!',
@@ -200,13 +203,23 @@ PANEL = """      <div class="pbaj">
         <label><span data-ui="efectos">EFECTOS</span><input id="sFx" type="range" min="0" max="100" value="90"><i id="vFx">90</i></label>
         <label><span data-ui="sensib">SENSIBILIDAD</span><input id="sSens" type="range" min="40" max="200" value="100"><i id="vSens">1.00</i></label>
       </div>
-      <button id="menu-resume">Continuar</button>"""
+      <button id="menu-resume">Continuar</button>
+      <button id="menu-restart" class="pbsec" data-ui="reiniciar">Reiniciar nivel</button>"""
 
 CSS = """
+  /* REINICIAR: secundario a proposito. Con el mismo peso que CONTINUAR, el
+     boton que descarta lo hecho en el nivel se toca por error tanto como el que
+     sigue jugando. */
+  #menu-restart {
+    display: none; margin-top: 0.8vh;
+    background: transparent; border: 1px solid rgba(196,206,222,.34);
+    color: rgba(210,218,232,.80);
+  }
+  #menu-restart:hover { border-color: rgba(255,150,150,.55); color: #ffd9d9; }
   /* las tres barras del panel de pausa */
-  .pbaj { width: min(86%, 340px); margin: 2.2vh auto 0.6vh; }
+  .pbaj { width: min(86%, 340px); margin: 1.4vh auto 0.4vh; }
   .pbaj label {
-    display: flex; align-items: center; gap: 10px; margin: 1.5vh 0;
+    display: flex; align-items: center; gap: 10px; margin: 1.05vh 0;
     font: 600 clamp(9px, 2.7vw, 11px)/1 inherit; letter-spacing: .14em;
     color: rgba(196,206,222,.72);
   }
@@ -226,6 +239,8 @@ CSS = """
 """
 
 WIRE = r"""
+  document.getElementById('menu-restart')
+    .addEventListener('click', function (e) { e.preventDefault(); pbReinicia(); });
   (function () {
     const sm = document.getElementById('sMus'), sf = document.getElementById('sFx'),
           ss = document.getElementById('sSens'),

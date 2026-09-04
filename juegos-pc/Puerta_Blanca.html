@@ -384,10 +384,19 @@
   body.pb-desp #tap-lock-hint { display: none !important; }
 
 
+  /* REINICIAR: secundario a proposito. Con el mismo peso que CONTINUAR, el
+     boton que descarta lo hecho en el nivel se toca por error tanto como el que
+     sigue jugando. */
+  #menu-restart {
+    display: none; margin-top: 0.8vh;
+    background: transparent; border: 1px solid rgba(196,206,222,.34);
+    color: rgba(210,218,232,.80);
+  }
+  #menu-restart:hover { border-color: rgba(255,150,150,.55); color: #ffd9d9; }
   /* las tres barras del panel de pausa */
-  .pbaj { width: min(86%, 340px); margin: 2.2vh auto 0.6vh; }
+  .pbaj { width: min(86%, 340px); margin: 1.4vh auto 0.4vh; }
   .pbaj label {
-    display: flex; align-items: center; gap: 10px; margin: 1.5vh 0;
+    display: flex; align-items: center; gap: 10px; margin: 1.05vh 0;
     font: 600 clamp(9px, 2.7vw, 11px)/1 inherit; letter-spacing: .14em;
     color: rgba(196,206,222,.72);
   }
@@ -519,6 +528,7 @@
         <label><span data-ui="sensib">SENSIBILIDAD</span><input id="sSens" type="range" min="40" max="200" value="100"><i id="vSens">1.00</i></label>
       </div>
       <button id="menu-resume">Continuar</button>
+      <button id="menu-restart" class="pbsec" data-ui="reiniciar">Reiniciar nivel</button>
     </div>
     <div id="school-hud">
       <div class="chip" data-ui="codigo">&#128274; C&oacute;digo de salida</div>
@@ -10029,6 +10039,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Lista &#183; sali por atras',
       insecticida: '&#129524; Insecticida {0}', rociar: 'ROCIAR',
+      reiniciar: 'Reiniciar nivel',
       pan: 'PAN', carne: 'CARNE', queso: 'QUESO', tapaHb: 'TAPA',
       atrapado: 'ATRAPADO',
       finTitulo: '🌟 ¡Encontraste la salida!',
@@ -10053,6 +10064,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Parts {0}/4',
       partesLista: '&#127828; Ready &#183; out the back',
       insecticida: '&#129524; Bug spray {0}', rociar: 'SPRAY',
+      reiniciar: 'Restart level',
       pan: 'BUN', carne: 'PATTY', queso: 'CHEESE', tapaHb: 'TOP',
       atrapado: 'STUCK',
       finTitulo: '🌟 You found the way out!',
@@ -10077,6 +10089,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Pronto &#183; sai por tras',
       insecticida: '&#129524; Inseticida {0}', rociar: 'BORRIFAR',
+      reiniciar: 'Reiniciar nivel',
       pan: 'PÃO', carne: 'CARNE', queso: 'QUEIJO', tapaHb: 'TAMPA',
       atrapado: 'PRESO',
       finTitulo: '🌟 Você achou a saída!',
@@ -10829,6 +10842,36 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
     else enterStore();
   }
 
+  // REINICIAR EL NIVEL QUE SE ESTA JUGANDO. No vuelve al primero de la lista ni
+  // resortea el orden: entra otra vez al MISMO nivel, que es lo que hace que el
+  // boton sirva para desatascarse —una parte inalcanzable, una tela en el peor
+  // sitio, un aviso que no se llego a leer— sin castigar con los cinco niveles
+  // anteriores.
+  //
+  // EL NUMERO SALE DE `pbPaso` Y NO DE `gameState`. gameState es una cadena
+  // ('store', 'school'...) y traducirla de vuelta a numero seria una segunda
+  // tabla que hay que mantener igual a `pbEntra`: el dia que se agregue un
+  // nivel, una de las dos se queda corta.
+  function pbNivelActual() {
+    if (!levelStarted) return -2;                 // no hay partida
+    if (pbPaso < 0) return 0;                     // el prologo
+    if (pbPaso >= PB_ORDEN.length) return -2;     // el cuarto blanco y el final
+    return PB_ORDEN[pbPaso];
+  }
+
+  function pbReinicia() {
+    const n = pbNivelActual();
+    if (n < 0) return 'sin nivel';
+    closeMenu();
+    // Y SE CANCELA EL SCREAMER. Reiniciando en medio de un susto, el velo y el
+    // grito se quedaban puestos encima del nivel nuevo — es la misma linea que
+    // `startLevel` ya tenia que hacer.
+    if (scream.active) { scream.active = false; screamerEl.style.display = 'none'; }
+    transitioning = true;
+    fadeTo(function () { pbEntra(n); });
+    return n;
+  }
+
   // LA UNICA PUERTA DE SALIDA DE CUALQUIER NIVEL.
   function pbSiguiente() {
     pbPaso++;
@@ -11030,6 +11073,14 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
     menuEl.style.display = 'flex';
     menuResume.style.display = levelStarted ? 'block' : 'none';
     try { document.getElementById('menu-play').style.display = levelStarted ? 'none' : 'block'; } catch (e) {}
+    // REINICIAR SOLO APARECE SI HAY UN NIVEL QUE REINICIAR. En el cuarto blanco
+    // y en el final `pbPaso` ya se paso del array, asi que `PB_ORDEN[pbPaso]`
+    // seria undefined y `pbEntra` caeria a su `else` — o sea que el boton
+    // llevaria al LOCAL desde el epilogo, sin que nada fallara.
+    try {
+      document.getElementById('menu-restart').style.display =
+        (pbNivelActual() >= 0) ? 'block' : 'none';
+    } catch (e) {}
     try { pbMarcaCalidad(); } catch (e) {}
     if (document.pointerLockElement) document.exitPointerLock();
   }
@@ -11082,6 +11133,8 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
   pbPintaIdioma();
   pbMarcaCalidad();
 
+  document.getElementById('menu-restart')
+    .addEventListener('click', function (e) { e.preventDefault(); pbReinicia(); });
   (function () {
     const sm = document.getElementById('sMus'), sf = document.getElementById('sFx'),
           ss = document.getElementById('sSens'),
@@ -14058,6 +14111,15 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     // los VALORES EN CASTELLANO de las tablas: una cadena esta sin traducir si
     // coincide con la version castellana de una clave cuya traduccion al idioma
     // puesto es DISTINTA. Los patrones con {0} se comparan como expresion.
+    // EL BOTON DE REINICIAR: que nivel cree que se esta jugando y si se ve
+    pausa: function () {
+      const r = document.getElementById('menu-restart');
+      return { nivel: pbNivelActual(), paso: pbPaso, orden: PB_ORDEN.slice(),
+               gameState: gameState, empezado: levelStarted,
+               boton: r ? getComputedStyle(r).display : 'no existe',
+               rotulo: r ? r.textContent.trim() : '' };
+    },
+    reinicia: function () { return pbReinicia(); },
     // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos
     // buses. Sin leer la ganancia del nodo, mover la barra podria no llegar a
     // ningun lado y la sonda diria que si.

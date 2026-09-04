@@ -88,6 +88,14 @@ NUEVO_OPEN = """  function openMenu() {
     menuEl.style.display = 'flex';
     menuResume.style.display = levelStarted ? 'block' : 'none';
     try { document.getElementById('menu-play').style.display = levelStarted ? 'none' : 'block'; } catch (e) {}
+    // REINICIAR SOLO APARECE SI HAY UN NIVEL QUE REINICIAR. En el cuarto blanco
+    // y en el final `pbPaso` ya se paso del array, asi que `PB_ORDEN[pbPaso]`
+    // seria undefined y `pbEntra` caeria a su `else` — o sea que el boton
+    // llevaria al LOCAL desde el epilogo, sin que nada fallara.
+    try {
+      document.getElementById('menu-restart').style.display =
+        (pbNivelActual() >= 0) ? 'block' : 'none';
+    } catch (e) {}
     try { pbMarcaCalidad(); } catch (e) {}"""
 
 # ══════════════════════════════════════════════════════════════════════════════
