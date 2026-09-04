@@ -154,6 +154,187 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+- **`Dash.html` es "ROTOR"** (~101 KB, **sin un solo asset**: los tres temas electrónicos son
+  osciladores y todo el dibujo es código). El género de Geometry Dash, apaisado dentro de un teléfono
+  vertical y **sin pantalla de «gira el celular»**. **Tres niveles** —NEON DRIVE 128 BPM, GRAVEDAD
+  CERO 140, ROTOR 150— con cubo, gravedad invertida y nave. **La música ES el reloj**: la x del
+  jugador sale de `AudioContext.currentTime` y no se integra, así que una tanda de cuadros perdidos
+  no puede correr el nivel respecto del tema. Un tiempo son cuatro bloques y el salto dura un tiempo
+  exacto, así que la gravedad y el impulso **salen de una cuenta** y el salto mide 4,00 bloques en
+  los tres tempos. Menú con demo jugándose detrás, lista de niveles con dificultad y monedas,
+  selector de icono, ajustes de música y efectos, **modo práctica con puntos de control** y
+  porcentaje guardado por nivel. Vive partido en `herramientas/dash/partes/` y se arma con
+  `python3 herramientas/dash/armar.py`.
+
+### Centésima vuelta (2026-09-04): **ROTOR**, un Geometry Dash de tres temas — la música es el reloj
+
+Pedido: *"haceme un geometry dash de 3 niveles con canciones electrónicas y que vayan un poco al ritmo,
+busca todo en Google sobre geometry dash, ya sea menú submenús etc, y hacelo completo, giraLo 90° osea
+horizontal no vertical, pero también que sea sin la pantalla de gira el celular"*.
+
+`juegos-pc/Dash.html` (101 KB, **cero assets**). Vive partido en `herramientas/dash/partes/` y se arma
+con `python3 herramientas/dash/armar.py`.
+
+#### TODO CUELGA DE UNA DERIVACIÓN, Y ESO ES EL JUEGO
+
+«Que vaya al ritmo» no se sincroniza a mano: se hace imposible de desincronizar. Dos decisiones:
+
+1. **UN TIEMPO SON CUATRO BLOQUES**, así que `v = 4·BPM/60`. Un obstáculo puesto en la corchea cae
+   siempre en un múltiplo de dos bloques — la grilla del compás **es** la grilla del nivel.
+2. **Y EL SALTO DURA EXACTAMENTE UN TIEMPO.** Fijado el aire en `T = 60/BPM` y el ápice en 2,4
+   bloques, la gravedad y el impulso salen de `g = 8h/T²` y `v = 4h/T`. Medido: **ápice 2,400 y largo
+   de salto 4,000 bloques a 128 y a 150 BPM**. Con la gravedad escrita a mano, el salto mediría
+   distinto en cada nivel y los patrones dejarían de servir.
+
+**Y LA X DEL JUGADOR NO SE INTEGRA: SALE DE `AudioContext.currentTime`.** Es el único reloj que no se
+atrasa cuando el navegador pierde cuadros; integrando la x, una tanda de cuadros perdidos correría el
+nivel respecto del tema, que es el único defecto que este género no se puede permitir. Lo que sí se
+integra es la Y, que es lo que el jugador controla. El respaldo —cuando no hay audio— integra la x, y
+es el mismo camino que usa el bot: **una sola física**.
+
+#### CINCO DEFECTOS DE DISEÑO, TODOS ENCONTRADOS POR EL AUTO-JUGADOR
+
+1. **NO HABÍA PLANO DE MUERTE, Y ESO HACÍA QUE EL JUEGO NO PIDIERA NADA.** Caer en un hueco no mataba
+   a nadie: medido, la y se iba a **−7753** y el jugador **seguía avanzando por debajo del nivel hasta
+   la meta**. El bot que aprieta al azar terminaba los tres temas al **100 %** — la firma exacta de un
+   juego en el que nada importa. Con el plano puesto, el hueco pasa a ser lo único que castiga apretar
+   sin parar (medido: apretando siempre, 10 %).
+2. **EL CUBO NUNCA SALTABA EN `avanza()`.** `intentaSalto` lo llamaba **sólo el manejador del dedo**,
+   así que el bot jugaba un juego sin salto: medido, el que apretaba en cada paso moría en el mismo
+   pico y en la misma x (39,8) que el que no apretaba nunca. Mantener apretado salta en cadena —que es
+   la regla del género— y ponerlo **dentro del paso de física** es lo que hace que el jugador y el bot
+   usen el mismo camino.
+3. **TRES PICOS SEGUIDOS NO SE PUEDEN PASAR, y es aritmética.** El salto deja la caja por encima de
+   los 0,82 de un pico durante **3,25 bloques** (`9,6·u(1−u) > 0,82` da u de 0,094 a 0,906, y el salto
+   mide 4). Tres picos pegados ocupan **3,50** contando el ancho de la caja: no hay despegue que
+   sirva. Dos sí (2,50). El patrón pasó a ser un muro del que hay que **saltar tarde**, porque bajarse
+   caminando aterriza justo encima de los dos picos que hay después.
+4. **EL PAD LANZABA CONTRA UN MURO QUE NO CLAREABA.** El pad da raíz de dos veces el impulso, o sea
+   ápice doble: 4,8 bloques. Con el muro en 4,6 había 0,2 de margen y **no pasaba**. En vueltas de
+   pad, `y = 4h·u(√2−u)`, así que la bajada cruza los 3,0 bloques en **u = 1,140, o sea 4,56 bloques
+   después del pad** — y ese número **no depende del tempo**, porque `v·T` son siempre 4 bloques. El
+   muro va ahí y la moneda en el ápice (u = 0,707), que es el único sitio del vuelo al que se llega.
+5. **Y LA PLATAFORMA ESTABA POR ENCIMA DEL ÁPICE.** Con su cara de arriba en 2,6 y un ápice de 2,4,
+   no se podía alcanzar: se pasaba por debajo saltando los dos picos y la moneda de arriba era
+   imposible. En 2,2 se aterriza con 0,2 de sobra.
+
+#### EL BOT: SALTAR EN EL ÚLTIMO MOMENTO NO ES LO MISMO QUE SALTAR CUANDO SE VE LA MUERTE
+
+Es el hallazgo de la vuelta. La primera política era reactiva —«si sin saltar me muero dentro de
+`mira` pasos, salto»— y eso **pierde los huecos**: ver el hueco y saltar da un despegue demasiado
+temprano y se cae del otro lado. Medido, los cuatro fallos de los niveles 2 y 3 eran exactamente eso:
+`plano: true` (caído al vacío) y uno golpeando el labio de enfrente **de costado a 0,11 bloques de
+haberlo pisado**.
+
+**LA VENTANA DE DESPEGUE DE UN HUECO SALE DE TRES COSAS Y DA POCO.** Para pararse en el labio la caja
+tiene que solaparlo (0,43), para aterrizar también, y encima el solape del aterrizaje tiene que ser
+**mayor que lo que la caja baja en un paso** (`imp/60`), porque con menos el eje de menor penetración
+resuelve como choque de costado, o sea muerte. Queda `4,86 − imp/60 − w`. Con un hueco de 3,5 eso es
+**un bloque, seis pasos**; con 4,0 son 0,52 bloques, o sea 3,7 pasos: injugable. De ahí salieron los
+anchos **2,7 · 3,0 · 3,3** por dificultad.
+
+La política nueva se escribe en dos rollouts cortos: **si esperando un paso y saltando en el siguiente
+todavía se vive, se espera.** Y el horizonte largo queda para lo que «tarde» no resuelve —subirse a una
+plataforma o pisar un pad piden saltar temprano—: si esperar sobrevive el horizonte, se espera; si no,
+se aprieta.
+
+**Y UNA VERSIÓN INTERMEDIA MÍA ESTABA MAL POR UNA RAZÓN QUE VALE ANOTAR:** ramificaba y desempataba
+con la reactiva, y con eso el bot **no saltaba nunca**. Las dos ramas sobrevivían justamente porque la
+reactiva las salvaba *adentro* del rollout, y esa política no corría en la línea de tiempo de verdad.
+Medido, moría en el primer pico de los tres niveles. Además el puntaje del rollout era el avance, y
+**el avance no informa nada acá**: la x sale del reloj y avanza igual se salte o no, así que las dos
+ramas devolvían el mismo número. Lo único que informa es vivo o muerto.
+
+#### EL PILOTO DE LA NAVE: DOS COSAS, LAS DOS DE UNA MUERTE MEDIDA
+
+- **`huecoLibre` buscaba «el hueco que contiene a la nave»**, y eso tiene dos defectos: la respuesta
+  depende de dónde esté la nave, y **si la nave ya está metida en una pared no contiene a ninguno** —
+  medido, con la nave a y 6,29 dentro de la pared de arriba devolvía el pasillo entero libre y el
+  piloto apuntaba al medio del pasillo, que era justo la pared. Se devuelve **el intervalo libre más
+  ancho**, que en un pasillo con dos paredes *es* el hueco.
+- **Y SE BARRE HACIA ADELANTE.** Con una sola muestra a tres bloques, una pared de 1,2 de ancho se ve
+  durante 0,12 s: la nave se enteraba pegada a ella. El barrido la encuentra a diez bloques. Y se
+  apunta con la **velocidad** y no con la posición, porque la nave acelera: una regla de «subo si
+  estoy abajo» se pasa de largo y oscila.
+
+#### CUATRO DEFECTOS QUE SÓLO SE VIERON MIRANDO
+
+1. **EL CUBO SE DIBUJABA 0,86 BLOQUES POR ENCIMA DEL PISO.** `dibujaIcono` apoya su caja en la Y que
+   recibe, y se le pasaba la tapa (`y + lado`): treinta píxeles flotando sobre la línea del piso.
+2. **EL COLOR DEL BLOQUE SE DERIVABA DEL FONDO.** Estaba en `c1 × 1,15` y el fondo arranca en
+   `c1 × 1,16`: en el nivel 3, que es casi negro, salían **exactamente del mismo color** y los muros
+   del pasillo de la nave se veían como rayas naranjas flotando. Va un oscuro propio con contorno del
+   color del tema, que da silueta en las tres paletas.
+3. **EL TECHO DEL PASILLO CAÍA POR ENCIMA DEL BORDE DE ARRIBA.** `py()` deja ver `ALTO/U − 0,9`
+   bloques, o sea 8,33 en un marco de teléfono: con el techo en 9,2 la nave volaba en un pasillo **sin
+   tapa visible**, y un límite que no se ve no es un límite, es una muerte sorpresa. Pasó a 7,6, y la
+   cámara de la nave **centra el pasillo** con una cuenta que se acomoda a cualquier proporción de
+   pantalla en vez de un número a mano.
+4. **Y EL CANTO LUMINOSO IBA DEL LADO EQUIVOCADO EN EL TECHO.** En una superficie en la que se apoya
+   por abajo —gravedad invertida— la línea va abajo: dibujada siempre arriba, el techo del tramo
+   invertido quedaba con su línea fuera del cuadro y el cubo se veía colgando de la nada.
+
+Más: los dos tercios de arriba del cuadro estaban vacíos —en cubo el nivel vive entre 0 y 2,4 bloques
+y la pantalla mide 9,2— así que entraron rombos y barras grandes de fondo a 0,35 de la cámara, con la
+forma sacada de la **posición** y no de un azar por cuadro (si no, parpadean). Y el encuadre pasó de
+26 a **20 bloques de ancho**: con 26 el cubo medía el 7 % del alto y se leía a punto; con 20 quedan 14
+bloques de aviso —tres saltos y medio— y el marco de teléfono deja 9,2 de alto.
+
+#### EL MARCO SE GIRA, Y NO HAY PANTALLA DE «GIRA EL CELULAR»
+
+Las dos salidas malas son encogerlo —en un 412×892 un 16:9 sin girar mide 412×232, el 11 % de la
+pantalla— y pedirle al jugador que gire el aparato, que es una pantalla que no hace nada. Se gira el
+**marco** 90 grados y adentro va todo: lienzo, HUD y menús, una sola transformación. En una pantalla
+apaisada no se gira nada (verificado en 900×460: `derecho`, 900×460 enteros). Y acá no hacen falta
+coordenadas del dedo, porque **un toque en cualquier lado salta**.
+
+#### LA MÚSICA ES PROCEDURAL, Y ACÁ ESO ES LO CORRECTO
+
+Con un tema grabado hay que medirle el tempo y confiar en que no se corra; con uno generado, el compás
+es un número que el juego ya tiene. Bombo en cada tiempo, clap en el 2 y el 4, charles en las corcheas,
+bajo con filtro que se abre, arpegio de dieciseisavos y una línea de lead de dos compases, sobre
+pentatónica menor en las tres pistas. El planificador **mira 180 ms adelante y cuelga del reloj de
+audio**, no del bucle de dibujo: un `requestAnimationFrame` se atrasa y se pausa en segundo plano. Y el
+arpegio usa un azar **determinista por paso**: con `Math.random` el tema cambiaría en cada intento.
+
+Medido en partida: **pico 0,367 y rms 0,144**; en el menú, con el demo corriendo, 0,109 y 0,049.
+
+#### EL MENÚ MUESTRA EL JUEGO CORRIENDO, Y LO JUEGA EL MISMO BOT
+
+Un panel encima de un lienzo quieto tira a la basura lo único que este juego tiene para mostrar. El
+velo es un **degradado** —cerrado arriba, donde va el título, y abierto en la franja de abajo, que es
+donde el nivel tiene el piso, el cubo y los picos— y detrás corre el nivel jugado por el **mismo bot
+que lo valida**, así que no hay una segunda animación que mantener. En la **pausa no corre**: ahí la
+escena tiene que quedarse quieta, que es lo que una pausa significa.
+Y el cubo del demo va al **82 % del ancho** y no al 30 %: la columna de botones vive centrada entre el
+26 % y el 74 %, así que con el encuadre de partida el demo pasaba justo **por detrás de los botones**.
+
+#### DOS DEFECTOS PROPIOS MÁS
+
+- **`muere()` TENÍA LA GUARDA AL REVÉS Y SE LLEVABA LA PARTIDA.** Decía `if (!JUG.vivo) return`, y se
+  la llama **justo** cuando `vivo` acaba de pasar a false: salía sin hacer nada y `corriendo` quedaba
+  en true. Medido con la sonda: el jugador seguía cayendo hasta y = −197 con el juego «corriendo», sin
+  morir, sin reintentar y sin contar el intento. Lo que hay que preguntar es si la partida sigue en
+  pie, no si el cuerpo está vivo.
+- **Y LA DIFICULTAD ESTABA ESCRITA DERECHO EN EL CÓDIGO.** `DIFS` era un array de tres cadenas en
+  castellano sin pasar por la tabla: medido en la captura, el juego en inglés decía LEVELS · PICK A
+  TRACK y abajo **FÁCIL · NORMAL · DIFÍCIL**.
+
+#### MEDIDO AL CERRAR
+
+**Los tres niveles al 100 %** con auto-jugador honesto, en 813 ms de auditoría, contra **14 · 12 · 8 %**
+del que aprieta al azar y **10 %** del que aprieta siempre. Y el bot **juega la partida de verdad** —su
+decisión entra por `APRETADO`, o sea por el mismo camino que el dedo— y termina los tres al 100 % en el
+primer intento, con 3/3 · 2/3 · 2/3 monedas y el progreso guardado; el tercero muestra la pantalla de
+«los tres temas» con SIGUIENTE apagado. Modo práctica: **7 puntos de control** puestos solos, sólo con
+piso y con nada mortal en los dos bloques que vienen. **Cero solapamientos** entre los seis elementos
+del HUD, en vertical girado y en apaisado. Las tres calidades en caliente (535×247 · 758×350 ·
+892×412) y los tres idiomas en vivo. `window.__errs` vacío en las nueve corridas.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los tres temas está medido que suenan y a
+qué nivel, no si NEON DRIVE pega con NEON DRIVE. Y el bot juega con puntería de un paso de física: que
+los tres se puedan pasar está probado, cuánto cuestan **con un dedo** no.
+
 ### Octogésima primera vuelta (2026-09-01): **PUERTA BLANCA**, el noveno juego — el cielo 360 y las flores gigantes del nivel 1
 
 Llegó un HTML de afuera —`bosque3d31verdugo.html`, 422 KB, three.js r128 desde cdnjs y **sin un solo

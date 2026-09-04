@@ -1,0 +1,201 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ROTOR</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#05060a;color:#eaf0fb;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+
+/* ══════════ EL MARCO SE GIRA, Y NO HAY PANTALLA DE «GIRA EL CELULAR» ══════════
+   Este juego es apaisado y el telefono se agarra vertical. Las dos salidas malas
+   son encogerlo —en un 412x892 un 16:9 sin girar mide 412x232, o sea el 11 % de
+   la pantalla— y pedirle al jugador que gire el aparato, que es una pantalla que
+   no hace nada y que la mitad de la gente no obedece.
+   Asi que se gira el MARCO 90 grados y adentro va TODO: el lienzo, el HUD y los
+   menus. Una sola transformacion, y nada puede quedar desalineado.
+   Y ACA NO HACEN FALTA COORDENADAS DEL DEDO: un toque en cualquier lado salta,
+   asi que el marco girado no complica nada. Los botones son DOM y de la rotacion
+   se ocupa el navegador. (Ojo si algun dia hace falta leer donde toco: con el
+   marco girado `getBoundingClientRect` devuelve la caja alineada a los ejes y
+   miente, y hay que medir con `offsetLeft`/`offsetTop`.) */
+#envase{position:fixed;inset:0;overflow:hidden}
+#marco{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
+#marco.girado{transform:translate(-50%,-50%) rotate(90deg)}
+#marco.derecho{transform:translate(-50%,-50%)}
+#cv{display:block;width:100%;height:100%;background:#0a0d16}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+body.jugando #hud{opacity:1}
+/* la barra de progreso arriba: es la ficha del genero. Dice cuanto falta, y el
+   numero al costado dice cuanto, porque una barra sola no se puede comparar
+   contra el intento anterior */
+#barra{position:absolute;left:6%;right:24%;top:10px;height:13px;border-radius:99px;
+  background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);overflow:hidden}
+#barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#2de2a8,#5ad9ff);transition:width .06s linear}
+/* el numero va AL LADO de la barra y no encima: adentro se pisa con ella, y una
+   barra sola no se puede comparar contra el intento anterior */
+#pct{position:absolute;right:6%;top:10px;
+  font:800 12px/13px system-ui,sans-serif;letter-spacing:.06em;color:#8ef0c4}
+#mejor{position:absolute;right:6%;top:30px;font:700 9.5px/1 ui-monospace,monospace;
+  letter-spacing:.14em;color:rgba(220,235,255,.50)}
+#intentos{position:absolute;left:50%;top:26%;transform:translateX(-50%);
+  font:800 clamp(15px,2.6vh,22px)/1 system-ui,sans-serif;letter-spacing:.16em;
+  color:rgba(255,255,255,.20)}
+#tema{position:absolute;left:6%;top:30px;font:700 9.5px/1 ui-monospace,monospace;
+  letter-spacing:.14em;color:rgba(220,235,255,.50)}
+#pract{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+  font:800 10px/1 system-ui,sans-serif;letter-spacing:.20em;color:#8ef0c4;
+  padding:5px 12px;border-radius:99px;background:rgba(20,90,60,.42);display:none}
+body.practicando #pract{display:block}
+#bPausa{position:absolute;right:8px;top:44px;width:34px;height:34px;border-radius:10px;
+  border:1px solid rgba(255,255,255,.16);background:rgba(10,14,22,.55);color:#eaf0fb;
+  font:700 13px/1 system-ui;pointer-events:auto;display:none}
+body.jugando #bPausa{display:block}
+
+/* ══════════ LAS PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;z-index:20;display:none;place-items:center;
+  padding:16px;overflow:hidden}
+.pan.on{display:grid}
+/* ── EL VELO ES UN DEGRADADO Y SE ABRE DONDE ESTA LA ACCION ──
+   Cerrado arriba, donde va el titulo, y abierto en la franja de abajo, que es
+   justo donde el nivel tiene el piso, el cubo y los picos. Con una opacidad
+   pareja el demo de atras no se veia: medido, quedaba al 28 % de brillo y el cubo
+   se leia a mancha. */
+.pan::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(5,6,10,.95),rgba(5,6,10,.88) 42%,
+    rgba(6,8,14,.66) 56%,rgba(6,8,14,.34) 76%,rgba(5,6,10,.88))}
+.caja{position:relative;text-align:center;width:min(430px,92%)}
+h1{font:800 clamp(26px,6.2vh,44px)/1 system-ui,sans-serif;letter-spacing:.20em;
+  text-indent:.20em;
+  background:linear-gradient(180deg,#eafcff 0%,#77e6ff 45%,#2b7fd6 64%,#b8f2d6 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 14px rgba(0,180,255,.35))}
+h1::after{content:'';display:block;width:84px;height:2px;margin:11px auto 0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,#2de2a8,transparent)}
+.sub{font:700 9.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  color:rgba(190,215,245,.46);text-transform:uppercase;margin:8px 0 16px}
+.tx{font-size:12.5px;line-height:1.6;color:rgba(220,235,255,.80);margin-bottom:14px;
+  text-shadow:0 1px 4px rgba(0,0,0,.85)}
+.bt{display:block;width:100%;margin-top:9px;padding:13px 16px;border-radius:12px;
+  border:1px solid rgba(90,217,255,.28);background:rgba(9,14,24,.72);color:#eaf0fb;
+  font:800 14px/1 system-ui,sans-serif;letter-spacing:.08em;transition:transform .1s}
+.bt:active{transform:scale(.97)}
+.bt.p{background:linear-gradient(135deg,#2de2a8,#5ad9ff);color:#04222c;border-color:transparent}
+.fila{display:flex;gap:7px;margin-top:9px}
+.fila .bt{margin-top:0}
+.bt.sel{background:linear-gradient(135deg,#2de2a8,#5ad9ff);color:#04222c;border-color:transparent}
+.pie{margin-top:13px;font-size:10.5px;line-height:1.6;color:rgba(200,222,250,.58);
+  text-shadow:0 1px 4px rgba(0,0,0,.9)}
+
+/* ── LA LISTA DE NIVELES: UNA FICHA POR NIVEL, COMO EN EL GENERO ──
+   Cada ficha dice el nombre, la dificultad, el tema, el mejor porcentaje y las
+   tres monedas. Todo eso junto es lo que hace que un nivel se pueda ELEGIR: con
+   el nombre solo, tres niveles son tres botones iguales. */
+.niv{display:block;width:100%;margin-top:10px;padding:12px 14px;border-radius:14px;
+  border:1px solid rgba(120,210,255,.22);background:rgba(10,16,28,.80);
+  color:#eaf0fb;text-align:left;position:relative;overflow:hidden}
+.niv:active{transform:scale(.985)}
+.niv .n{font:800 15px/1.2 system-ui,sans-serif;letter-spacing:.05em}
+.niv .d{font:700 9px/1 ui-monospace,monospace;letter-spacing:.16em;margin-top:5px;
+  color:rgba(200,225,250,.55)}
+.niv .pb{position:absolute;left:0;bottom:0;height:3px;
+  background:linear-gradient(90deg,#2de2a8,#5ad9ff)}
+.niv .mo{position:absolute;right:46px;top:15px;font:700 15px/1 system-ui;letter-spacing:.16em}
+.cara{position:absolute;right:12px;bottom:12px;width:26px;height:26px;border-radius:50%;
+  display:grid;place-items:center;font:800 11px/1 system-ui}
+.d1{background:#2de2a8;color:#04221a}
+.d2{background:#5ad9ff;color:#032430}
+.d3{background:#ff7a4a;color:#2a0d04}
+
+#carga{position:fixed;inset:0;z-index:60;display:grid;place-items:center;
+  background:#05060a;transition:opacity .3s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(240px,60%);height:4px;border-radius:99px;background:rgba(255,255,255,.10);
+  overflow:hidden;margin:16px auto 0}
+.barc i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2de2a8,#5ad9ff);
+  transition:width .3s}
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja">
+  <h1>ROTOR</h1><div class="sub" id="cSub">CARGANDO</div>
+  <div class="barc"><i id="cBarra"></i></div>
+</div></div>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="barra"><i id="barraI"></i></div>
+    <div id="pct">0%</div>
+    <div id="tema"></div>
+    <div id="mejor"></div>
+    <div id="intentos"></div>
+    <div id="pract"></div>
+    <button id="bPausa">॥</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>ROTOR</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <h1>ROTOR</h1><div class="sub" id="mSub"></div>
+    <p class="tx" id="mTx"></p>
+    <button class="bt p" id="bJugar"></button>
+    <button class="bt" id="bIconos"></button>
+    <button class="bt" id="bAjustes"></button>
+    <div class="pie" id="mPie"></div>
+  </div></div>
+
+  <div class="pan" id="pNiveles"><div class="caja">
+    <h1 id="nTit"></h1><div class="sub" id="nSub"></div>
+    <div id="lista"></div>
+    <button class="bt" id="nVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pIconos"><div class="caja">
+    <h1 id="iTit"></h1><div class="sub" id="iSub"></div>
+    <canvas id="iPrev" width="120" height="120" style="margin:0 auto 10px;display:block"></canvas>
+    <div class="fila" id="iForma"></div>
+    <div class="fila" id="iCol1"></div>
+    <div class="fila" id="iCol2"></div>
+    <button class="bt" id="iVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1><div class="sub" id="aSub"></div>
+    <div class="pie" id="aMusL"></div>
+    <input type="range" id="aMus" min="0" max="100" value="70" style="width:100%">
+    <div class="pie" id="aFxL"></div>
+    <input type="range" id="aFx" min="0" max="100" value="80" style="width:100%">
+    <div class="fila" id="aIdi"></div>
+    <div class="fila" id="aCal"></div>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bReint"></button>
+    <button class="bt" id="bPract"></button>
+    <button class="bt" id="bSalir"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <h1 id="fTit"></h1><div class="sub" id="fSub"></div>
+    <p class="tx" id="fTx"></p>
+    <button class="bt p" id="fSigue"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+</div></div>
+
+<script type="module">
