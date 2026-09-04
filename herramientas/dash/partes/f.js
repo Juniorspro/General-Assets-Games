@@ -108,6 +108,23 @@ const matPad  = new T.MeshBasicMaterial({ color: 0xffffff });
 const matOrbe = new T.MeshBasicMaterial({ color: 0xffffff });
 const matSierra = new T.MeshLambertMaterial({ color: 0xdfe7f2, emissive: 0x445064, emissiveIntensity: 0.4 });
 const matMoneda = new T.MeshLambertMaterial({ color: 0xffd447, emissive: 0x8a6a10, emissiveIntensity: 0.7 });
+const matPortalAro = new T.MeshBasicMaterial({ color: 0xffffff });
+const matPortalFondo = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.26,
+                                                 depthWrite: false, side: T.DoubleSide });
+/* el portal late con el compas: la matriz de cada uno se reescribe por cuadro,
+   que son ocho matrices y ninguna llamada de dibujo */
+function ponPortales(pulso){
+  if (!INST.portalAro) return;
+  const s = 1 + pulso*0.05;
+  MUNDO.portales.forEach((p, i) => {
+    _m4.compose(new T.Vector3(p.x, 5.2, -PROF/2 + 0.35), _q.identity(),
+                new T.Vector3(0.95*s, 5.4*s, 1));
+    INST.portalAro.setMatrixAt(i, _m4); INST.portalFondo.setMatrixAt(i, _m4);
+  });
+  INST.portalAro.instanceMatrix.needsUpdate = true;
+  INST.portalFondo.instanceMatrix.needsUpdate = true;
+  matPortalFondo.opacity = 0.20 + pulso*0.18;
+}
 /* ── EL FALDON DEL SUELO VA SIN LUZ, Y ESA ES LA RAZON DE QUE EXISTA ──
    La cara de adelante del piso, con Lambert y una luz casi vertical, medida en la
    captura daba (1, 3, 7): negra. Son ochenta y cinco pixeles de los 412 —el 21 %
@@ -143,7 +160,14 @@ const GEO = {
   esfera: new T.SphereGeometry(0.5, 14, 10),
   aro: new T.TorusGeometry(0.40, 0.09, 8, 18),
   sierra: new T.CylinderGeometry(0.5, 0.5, 0.28, 12),
-  part: new T.BoxGeometry(1, 1, 1)
+  part: new T.BoxGeometry(1, 1, 1),
+  /* el portal de Geometry Dash es un OVALO y no una columna: un anillo en el
+     plano XY que se estira en Y, con un relleno translucido */
+  aroPortal: new T.TorusGeometry(1, 0.075, 8, 40),
+  disco: new T.CircleGeometry(1, 40),
+  /* el anillo de la explosion y la cupula del ovni */
+  anillo: new T.TorusGeometry(1, 0.06, 6, 40),
+  cupula: new T.SphereGeometry(0.5, 16, 8, 0, Math.PI*2, 0, Math.PI/2)
 };
 
 /* ══════════ EL CIELO Y LA REJA ══════════
@@ -510,15 +534,26 @@ function mundo3D(){
     m.userData.moneda = c;
     esc3.add(m); SUELTOS.push(m);
   }
-  for (const p of MUNDO.portales){
-    const col = p.t === 'grav' ? 0xffd447 : p.t === 'norm' ? 0x5ad9ff
-              : p.t === 'nave' ? 0xff6ad5 : 0x2de2a8;
-    const mat = new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55 });
-    const m = new T.Mesh(GEO.caja, mat);
-    m.position.set(p.x, 5.2, -PROF/2);
-    m.scale.set(0.30, 11.5, PROF*1.1);
-    m.userData.portal = p;
-    esc3.add(m); SUELTOS.push(m);
+  /* ── LOS PORTALES SON OVALOS, COMO EN GD, Y VAN INSTANCIADOS ──
+     Eran ocho columnas translucidas, o sea ocho llamadas de dibujo para ocho
+     cajas. Un portal de Geometry Dash es un ovalo alto con borde y relleno del
+     color del modo al que lleva: el borde es un toro estirado en Y y el relleno
+     un disco, y los ocho van en DOS mallas instanciadas con el color por
+     instancia. Es alto —5,4 bloques de semieje— porque el disparador es solo la
+     x y hay que poder entrar a cualquier altura del pasillo. */
+  const np = MUNDO.portales.length;
+  const ma = nuevaInst('portalAro', GEO.aroPortal, matPortalAro, np, false);
+  const mfp = nuevaInst('portalFondo', GEO.disco, matPortalFondo, np, false);
+  if (ma){
+    ma.instanceColor = new T.InstancedBufferAttribute(new Float32Array(np*3), 3);
+    mfp.instanceColor = new T.InstancedBufferAttribute(new Float32Array(np*3), 3);
+    mfp.renderOrder = 1;
+    MUNDO.portales.forEach((p, i) => {
+      _c.set(MODO_COL[p.t] || '#2de2a8');
+      ma.setColorAt(i, _c); mfp.setColorAt(i, _c);
+    });
+    ma.instanceColor.needsUpdate = true; mfp.instanceColor.needsUpdate = true;
+    ponPortales(0);
   }
 
   armaDeco(N);
@@ -709,72 +744,24 @@ function sqPaso(dt){
 }
 const matJugA = new T.MeshLambertMaterial({ color: 0x2de2a8, emissive: 0x0e5a44, emissiveIntensity: 0.55 });
 const matJugB = new T.MeshBasicMaterial({ color: 0x5ad9ff });
+/* la cupula del ovni: vidrio, o sea el color secundario casi transparente */
+const matDomo = new T.MeshBasicMaterial({ color: 0x5ad9ff, transparent: true, opacity: 0.32,
+                                          depthWrite: false, side: T.DoubleSide });
 let jugCuerpo = null;
+/* las piezas que se animan por su cuenta: las piernas del robot, la helice del
+   columpio, las patas de la arana */
+const JUGP = { piernas: [], helice: null, patas: [] };
 
-function ponIcono(){
-  while (gJug.children.length) gJug.remove(gJug.children[0]);
-  matJugA.color.set(COLES[ICONO.c1]);
-  matJugA.emissive.set(COLES[ICONO.c1]).multiplyScalar(0.30);
-  matJugB.color.set(COLES[ICONO.c2]);
-  /* ── UNA SILUETA POR MODO, Y NO ES ADORNO ──
-     Con la misma forma en los ocho modos, el jugador no sabe con que reglas esta
-     jugando hasta que toca y ve lo que pasa. La silueta es lo que dice, sin
-     texto, que ahora se vuela o que ahora se da vuelta la gravedad. Cada una son
-     dos o tres piezas y ninguna cuesta una llamada de dibujo mas, porque todas
-     comparten los dos materiales del icono. */
-  const M = JUG.modo;
+/* ── EL CUBO ES EL PERSONAJE, Y LOS VEHICULOS LO LLEVAN ──
+   En Geometry Dash la nave, el ovni y el columpio no REEMPLAZAN al icono: lo
+   transportan. El cubo va sentado arriba de la nave, adentro de la cupula del
+   ovni y colgado del rotor del columpio. Con la primera version —un cono por
+   nave— el jugador perdia a su personaje en cada portal y lo recuperaba en el
+   siguiente. Asi que el cubo (o el rombo, o la bola que se eligio en el menu) es
+   UNA funcion y los vehiculos la llaman a escala. */
+function cuboIcono(esc){
   const g = new T.Group();
-  if (M === 'nave' || M === 'columpio'){
-    const cu = new T.Mesh(new T.ConeGeometry(0.44, 1.05, 12), matJugA);
-    cu.rotation.z = -Math.PI/2; cu.castShadow = true;
-    g.add(cu);
-    const ca = new T.Mesh(GEO.esfera, matJugB);
-    ca.scale.setScalar(0.42); ca.position.set(-0.08, 0, 0.30);
-    g.add(ca);
-    if (M === 'columpio'){
-      /* el columpio lleva helice: es lo que lo distingue de la nave de un vistazo */
-      const he = new T.Mesh(GEO.caja, matJugB);
-      he.scale.set(0.10, 0.86, 0.10); he.position.set(-0.30, 0, 0);
-      g.add(he);
-    }
-  } else if (M === 'bola'){
-    /* la bola es un disco: rueda, asi que su giro tiene que verse */
-    const cu = new T.Mesh(new T.CylinderGeometry(0.44, 0.44, 0.62, 16), matJugA);
-    cu.rotation.x = Math.PI/2; cu.castShadow = true; g.add(cu);
-    const ra = new T.Mesh(GEO.caja, matJugB);
-    ra.scale.set(0.72, 0.14, 0.66); ra.position.z = 0.02; g.add(ra);
-  } else if (M === 'ovni'){
-    const cu = new T.Mesh(new T.CylinderGeometry(0.52, 0.30, 0.22, 14), matJugA);
-    cu.castShadow = true; g.add(cu);
-    const cp = new T.Mesh(GEO.esfera, matJugB);
-    cp.scale.set(0.52, 0.44, 0.52); cp.position.y = 0.16; g.add(cp);
-  } else if (M === 'onda'){
-    /* un dardo: la onda va en diagonal y la punta dice para donde */
-    const cu = new T.Mesh(new T.ConeGeometry(0.34, 0.86, 4), matJugA);
-    cu.rotation.z = -Math.PI/2; cu.castShadow = true; g.add(cu);
-    const nu = new T.Mesh(GEO.caja, matJugB);
-    nu.scale.set(0.22, 0.22, 0.22); nu.position.x = 0.10; g.add(nu);
-  } else if (M === 'robot'){
-    const cu = new T.Mesh(GEO.caja, matJugA);
-    cu.scale.set(JUG_LADO, JUG_LADO*0.62, JUG_LADO); cu.position.y = 0.14;
-    cu.castShadow = true; g.add(cu);
-    for (const sx of [-0.22, 0.22]){
-      const pa = new T.Mesh(GEO.caja, matJugB);
-      pa.scale.set(0.20, 0.34, 0.34); pa.position.set(sx, -0.26, 0);
-      g.add(pa);
-    }
-  } else if (M === 'arana'){
-    const cu = new T.Mesh(GEO.caja, matJugA);
-    cu.scale.set(JUG_LADO*0.92, JUG_LADO*0.58, JUG_LADO*0.92); cu.castShadow = true;
-    g.add(cu);
-    /* cuatro patas: es lo unico que hace que se lea a arana y no a ladrillo */
-    for (const sx of [-0.42, 0.42]) for (const sz of [-0.26, 0.26]){
-      const pa = new T.Mesh(GEO.caja, matJugB);
-      pa.scale.set(0.34, 0.09, 0.09);
-      pa.position.set(sx, -0.02, sz); pa.rotation.z = sx < 0 ? 0.5 : -0.5;
-      g.add(pa);
-    }
-  } else if (FORMAS[ICONO.forma] === 'diamante'){
+  if (FORMAS[ICONO.forma] === 'diamante'){
     const cu = new T.Mesh(new T.OctahedronGeometry(0.62), matJugA);
     cu.castShadow = true; g.add(cu);
     const nu = new T.Mesh(new T.OctahedronGeometry(0.30), matJugB);
@@ -787,12 +774,190 @@ function ponIcono(){
   } else {
     const cu = new T.Mesh(GEO.caja, matJugA);
     cu.scale.setScalar(JUG_LADO); cu.castShadow = true; g.add(cu);
-    const nu = new T.Mesh(GEO.caja, matJugB);
-    nu.scale.set(JUG_LADO*0.44, JUG_LADO*0.44, JUG_LADO*0.44);
-    nu.position.z = JUG_LADO*0.36; g.add(nu);
+    /* la cara: dos ojos y no un cuadrado, que es lo que en GD hace que un cubo
+       sea alguien y no una caja */
+    for (const sx of [-0.19, 0.19]){
+      const oj = new T.Mesh(GEO.caja, matJugB);
+      oj.scale.set(JUG_LADO*0.22, JUG_LADO*0.30, JUG_LADO*0.10);
+      oj.position.set(sx, 0.06, JUG_LADO*0.47); g.add(oj);
+    }
+    const bo = new T.Mesh(GEO.caja, matJugB);
+    bo.scale.set(JUG_LADO*0.46, JUG_LADO*0.09, JUG_LADO*0.10);
+    bo.position.set(0, -0.22, JUG_LADO*0.47); g.add(bo);
+  }
+  g.scale.setScalar(esc || 1);
+  return g;
+}
+function cajita(mat, sx, sy, sz, x, y, z, rz){
+  const m = new T.Mesh(GEO.caja, mat);
+  m.scale.set(sx, sy, sz); m.position.set(x, y, z || 0);
+  if (rz) m.rotation.z = rz;
+  return m;
+}
+
+function ponIcono(){
+  while (gJug.children.length) gJug.remove(gJug.children[0]);
+  matJugA.color.set(COLES[ICONO.c1]);
+  matJugA.emissive.set(COLES[ICONO.c1]).multiplyScalar(0.30);
+  matJugB.color.set(COLES[ICONO.c2]);
+  matDomo.color.set(COLES[ICONO.c2]);
+  JUGP.piernas = []; JUGP.helice = null; JUGP.patas = [];
+  /* ── UNA SILUETA POR MODO, Y NO ES ADORNO ──
+     Con la misma forma en los ocho modos, el jugador no sabe con que reglas esta
+     jugando hasta que toca y ve lo que pasa. La silueta es lo que dice, sin
+     texto, que ahora se vuela o que ahora se da vuelta la gravedad. Y cada una
+     copia la de Geometry Dash, que es lo que se pidio: la nave con su aleta
+     trasera y el cubo montado, el ovni con la cupula, la onda que es una flecha,
+     el robot con dos piernas, la arana con sus patas, el columpio con el rotor. */
+  const M = JUG.modo;
+  const g = new T.Group();
+  if (M === 'nave'){
+    /* fuselaje chato, trompa, aleta dorsal inclinada hacia atras y quilla:
+       la silueta de la nave 1 de GD, vista de costado */
+    /* ── EL FUSELAJE TIENE QUE SER MAS GRANDE QUE EL CUBO ──
+       Con 0,26 de alto la nave se leia a una tabla debajo del cubo (medido en
+       la foto: el cubo montado ocupaba mas que la nave). En GD la nave es el
+       vehiculo y el cubo es el pasajero, asi que el fuselaje mide 0,42 de alto y
+       el cubo va medio HUNDIDO en el, como en una cabina abierta. */
+    const fu = cajita(matJugA, 1.02, 0.42, 0.52, -0.04, -0.14); fu.castShadow = true; g.add(fu);
+    g.add(cajita(matJugB, 1.06, 0.08, 0.56, -0.04, -0.06));              /* la franja */
+    const tr = new T.Mesh(new T.ConeGeometry(0.20, 0.42, 10), matJugB);
+    tr.rotation.z = -Math.PI/2; tr.position.set(0.68, -0.14, 0); g.add(tr);
+    g.add(cajita(matJugB, 0.34, 0.44, 0.08, -0.42, 0.18, 0, 0.62));     /* aleta */
+    g.add(cajita(matJugB, 0.26, 0.16, 0.08, -0.40, -0.40, 0, -0.35));   /* quilla */
+    const cu = cuboIcono(0.50); cu.position.set(0.06, 0.16, 0); g.add(cu);
+  } else if (M === 'columpio'){
+    /* el swing copter: el cubo colgado de un rotor. La helice gira en `ponJug` */
+    const cu = cuboIcono(0.70); cu.position.y = -0.08; g.add(cu);
+    g.add(cajita(matJugB, 0.07, 0.24, 0.07, 0, 0.36));
+    const he = cajita(matJugB, 0.96, 0.05, 0.14, 0, 0.50);
+    g.add(he); JUGP.helice = he;
+  } else if (M === 'bola'){
+    /* la bola rueda: el aro y el punto son lo que hace visible el giro */
+    const cu = new T.Mesh(GEO.esfera, matJugA);
+    cu.scale.setScalar(0.88); cu.castShadow = true; g.add(cu);
+    const ar = new T.Mesh(GEO.aro, matJugB);
+    ar.scale.setScalar(0.92); ar.position.z = 0.16; g.add(ar);
+    const pu = new T.Mesh(GEO.esfera, matJugB);
+    pu.scale.setScalar(0.16); pu.position.set(0, 0.24, 0.40); g.add(pu);
+  } else if (M === 'ovni'){
+    /* el plato con su borde, y el cubo ADENTRO de la cupula de vidrio */
+    const pl = new T.Mesh(new T.CylinderGeometry(0.34, 0.58, 0.20, 18), matJugA);
+    pl.position.y = -0.22; pl.castShadow = true; g.add(pl);
+    const bo = new T.Mesh(GEO.aro, matJugB);
+    bo.scale.set(1.36, 1.36, 0.7); bo.rotation.x = Math.PI/2; bo.position.y = -0.20; g.add(bo);
+    const cu = cuboIcono(0.44); cu.position.y = 0.06; g.add(cu);
+    const do_ = new T.Mesh(GEO.cupula, matDomo);
+    do_.scale.set(0.84, 0.72, 0.84); do_.position.y = -0.12; g.add(do_);
+  } else if (M === 'onda'){
+    /* la flecha: un dardo chato apuntando adelante, con su franja. En GD la onda
+       es una punta de flecha y nada mas, y la cinta que deja es el personaje */
+    const cu = new T.Mesh(new T.ConeGeometry(0.36, 0.96, 3), matJugA);
+    cu.rotation.z = -Math.PI/2; cu.rotation.y = Math.PI/6; cu.scale.z = 0.55;
+    cu.castShadow = true; g.add(cu);
+    g.add(cajita(matJugB, 0.34, 0.09, 0.30, -0.16, 0, 0.02));
+  } else if (M === 'robot'){
+    /* torso, cabeza y dos piernas con pie; las piernas se animan en `ponJug` */
+    const to = cajita(matJugA, 0.58, 0.50, 0.46, 0, 0.16); to.castShadow = true; g.add(to);
+    g.add(cajita(matJugB, 0.30, 0.18, 0.30, 0.06, 0.50));
+    g.add(cajita(matJugB, 0.10, 0.08, 0.10, 0.22, 0.52, 0.16));      /* el ojo */
+    for (const sx of [-0.17, 0.17]){
+      const pi = new T.Group(); pi.position.set(sx, -0.08, 0);
+      pi.add(cajita(matJugA, 0.16, 0.28, 0.20, 0, -0.14));
+      pi.add(cajita(matJugB, 0.28, 0.10, 0.26, 0.04, -0.32));
+      g.add(pi); JUGP.piernas.push(pi);
+    }
+  } else if (M === 'arana'){
+    const cu = cajita(matJugA, 0.74, 0.34, 0.54, -0.04, 0.02); cu.castShadow = true; g.add(cu);
+    const ca = new T.Mesh(GEO.esfera, matJugB);
+    ca.scale.setScalar(0.34); ca.position.set(0.40, 0.06, 0); g.add(ca);
+    /* ocho patas, cuatro por lado, con la rodilla por ENCIMA del lomo: es la
+       silueta de arana y no de ladrillo con palitos */
+    /* ── LAS PATAS VAN EN EL PLANO DE JUEGO, NO HACIA LA CAMARA ──
+       Giradas en X las rodillas se apilaban ENCIMA del lomo y la arana se leia a
+       un ladrillo con una mata de rayas arriba (medido en dos fotos). La silueta
+       de la arana de GD es de perfil: cuatro arcos que salen del cuerpo hacia
+       adelante y hacia atras, con la rodilla arriba y el pie en el piso. Asi que
+       cada pata es un arco en el plano XY —muslo hacia afuera y arriba, tibia
+       hacia abajo— y lo unico que va en z es un escalon chico para que las dos de
+       cada lado no se pisen. */
+    [[-0.34, -1], [-0.16, -1], [0.12, 1], [0.30, 1]].forEach(([px, lado], i) => {
+      const pa = new T.Group(); pa.position.set(px, 0.10, (i % 2 ? 0.14 : -0.14));
+      const mu = cajita(matJugB, 0.11, 0.40, 0.11, lado*0.12, 0.16, 0, -lado*0.75);
+      const ti = cajita(matJugB, 0.11, 0.46, 0.11, lado*0.30, -0.04, 0, lado*0.35);
+      pa.add(mu); pa.add(ti);
+      g.add(pa); JUGP.patas.push(pa);
+    });
+  } else {
+    g.add(cuboIcono(1));
   }
   jugCuerpo = g;
   gJug.add(g);
+}
+
+/* ══════════ LA ESTELA ══════════
+   ── LA ONDA DEJA UNA CINTA, Y LA CINTA ES EL PERSONAJE ──
+   En Geometry Dash la onda es una punta de flecha de medio bloque; lo que se ve
+   es la cinta gruesa del color primario que deja por donde paso, y que dibuja el
+   zigzag entero. Los otros modos dejan el rastro fino de la opcion «trail». Es
+   UNA malla: una tira de dos vertices por muestra que se reconstruye por cuadro,
+   con el ancho cayendo con la edad — asi la cola se afina en vez de cortarse. */
+const EST_N = 64;
+const ESTELA = { p: [], ancho: 0.10, vida: 0.32 };
+const geoEstela = new T.BufferGeometry();
+geoEstela.setAttribute('position', new T.BufferAttribute(new Float32Array(EST_N*2*3), 3));
+{
+  const idx = [];
+  for (let i = 0; i < EST_N - 1; i++){
+    const a = i*2, b = a + 1, c = a + 2, d = a + 3;
+    idx.push(a, b, c, b, d, c);
+  }
+  geoEstela.setIndex(idx);
+}
+const matEstela = new T.MeshBasicMaterial({ color: 0x2de2a8, transparent: true, opacity: 0.88,
+                                            depthWrite: false, side: T.DoubleSide });
+const mEstela = new T.Mesh(geoEstela, matEstela);
+mEstela.frustumCulled = false; mEstela.renderOrder = 2;
+esc3.add(mEstela);
+/* ── SE MUESTREA EN EL PASO DE FISICA, NO AL DIBUJAR ──
+   Las sondas adelantan cientos de pasos sin dibujar un cuadro: si la estela se
+   muestreara en `pinta`, la foto de una corrida del bot saldria con un solo
+   segmento. Va en `efePaso`, que es lo que las sondas ya adelantan. */
+function estelaPaso(dt){
+  const P = ESTELA.p;
+  for (let i = P.length - 1; i >= 0; i--){ P[i].a += dt; if (P[i].a > ESTELA.vida) P.splice(i, 1); }
+  if (!JUG.vivo || !EST.corriendo) return;
+  const onda = JUG.modo === 'onda';
+  ESTELA.ancho = onda ? 0.36 : 0.09;
+  ESTELA.vida = onda ? 0.62 : 0.30;
+  const cx = JUG.x - (onda ? 0.30 : 0.10), cy = JUG.y + JUG_LADO*0.5;
+  const u = P[P.length - 1];
+  /* un salto de mas de tres bloques es una reaparicion o un teletransporte: la
+     cinta no puede unir los dos sitios */
+  if (u && Math.hypot(cx - u.x, cy - u.y) > 3){ P.length = 0; return; }
+  if (!u || Math.hypot(cx - u.x, cy - u.y) > 0.08) P.push({ x: cx, y: cy, a: 0 });
+  while (P.length > EST_N) P.shift();
+}
+function armaEstela(){
+  const P = ESTELA.p, at = geoEstela.attributes.position, A = at.array;
+  const n = P.length;
+  if (n < 2){ mEstela.visible = false; return; }
+  mEstela.visible = true;
+  matEstela.color.set(COLES[ICONO.c1]);
+  const z = -JUG_LADO*0.5 - 0.02;
+  for (let i = 0; i < EST_N; i++){
+    const j = Math.min(i, n - 1), p = P[j];
+    const q = P[Math.min(j + 1, n - 1)], r = P[Math.max(j - 1, 0)];
+    let dx = q.x - r.x, dy = q.y - r.y;
+    const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    const k = 1 - p.a/ESTELA.vida;
+    const w = ESTELA.ancho*(0.25 + 0.75*k)*(j === n - 1 ? 1 : 1);
+    const nx = -dy*w, ny = dx*w;
+    A[i*6 + 0] = p.x + nx; A[i*6 + 1] = p.y + ny; A[i*6 + 2] = z;
+    A[i*6 + 3] = p.x - nx; A[i*6 + 4] = p.y - ny; A[i*6 + 5] = z;
+  }
+  at.needsUpdate = true;
+  geoEstela.setDrawRange(0, Math.max(0, (n - 1)*6));
 }
 
 /* ══════════ LAS PARTICULAS ══════════
@@ -806,20 +971,85 @@ mPart.frustumCulled = false;
 mPart.instanceColor = new T.InstancedBufferAttribute(new Float32Array(PART_TOPE*3), 3);
 esc3.add(mPart);
 
-function chispas(x, y, n, c){
+/* ── UN SOLO EMISOR, Y CADA EFECTO LE PASA SUS NUMEROS ──
+   `o` es opcional: `ang`/`esp` el cono de salida (radianes; sin `ang` es radial),
+   `v0`/`v1` la velocidad, `vx0`/`vy0` una velocidad base, `g` la gravedad (26 si
+   no se dice, 0 para un chorro), `t` la vida, `s0`/`s1` el tamano, `gira` si las
+   esquirlas rotan. Con un emisor por efecto, el dia que cambie el tope de calidad
+   hay que acordarse en cinco sitios. */
+function chispas(x, y, n, c, o){
+  o = o || {};
   const tope = Math.min(PART_TOPE, CALIDADES[CALIDAD].part);
+  const v0 = o.v0 == null ? 2 : o.v0, v1 = o.v1 == null ? 11 : o.v1;
+  const s0 = o.s0 == null ? 0.10 : o.s0, s1 = o.s1 == null ? 0.30 : o.s1;
+  const t = o.t == null ? 0.6 : o.t;
   for (let i = 0; i < n && PART.length < tope; i++){
-    const a = Math.random()*6.2832, v = 2 + Math.random()*9;
-    PART.push({ x, y, z: -PROF/2 + Math.random()*1.2, vx: Math.cos(a)*v, vy: Math.sin(a)*v,
-                t: 0.25 + Math.random()*0.35, t0: 0.6, s: 0.10 + Math.random()*0.20, c });
+    const a = o.ang == null ? Math.random()*6.2832 : o.ang + (Math.random() - 0.5)*(o.esp == null ? 0.6 : o.esp);
+    const v = v0 + Math.random()*(v1 - v0);
+    PART.push({ x: x + (o.dx || 0)*(Math.random() - 0.5), y: y + (o.dy || 0)*(Math.random() - 0.5),
+                z: -PROF/2 + Math.random()*1.2,
+                vx: (o.vx0 || 0) + Math.cos(a)*v, vy: (o.vy0 || 0) + Math.sin(a)*v,
+                t: t*(0.55 + Math.random()*0.45), t0: t, s: s0 + Math.random()*(s1 - s0), c,
+                g: o.g == null ? 26 : o.g,
+                r: Math.random()*6.2832, vr: o.gira ? (Math.random() - 0.5)*18 : 0 });
   }
 }
 function pasoPart(dt){
   for (let i = PART.length - 1; i >= 0; i--){
     const p = PART[i];
     p.t -= dt; if (p.t <= 0){ PART.splice(i, 1); continue; }
-    p.vy -= 26*dt; p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vy -= p.g*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.r += p.vr*dt;
   }
+  explPaso(dt);
+}
+
+/* ══════════ LA EXPLOSION ══════════
+   ── LA MUERTE DE GEOMETRY DASH SON TRES COSAS A LA VEZ ──
+   El icono desaparece, una nube de esquirlas de sus dos colores sale radial con
+   gravedad y girando, y un ANILLO blanco se abre desde el punto del golpe y se
+   apaga. El anillo es lo que le da escala al golpe: sin el, las esquirlas se leen
+   a confeti. Va como una malla que se escala y se desvanece, y su reloj corre en
+   `pasoPart`, que las sondas ya adelantan. */
+const EXPL = { t: 0, T: 0.46, x: 0, y: 0 };
+/* ── EL ANILLO VA SIN PRUEBA DE PROFUNDIDAD, PORQUE ES UN DIBUJO ENCIMA ──
+   Medido en tres cuadros de una muerte contra un pico: el anillo salia por la
+   MITAD, con la parte de abajo tapada por la losa del piso, porque el centro del
+   golpe esta a medio bloque del suelo. En GD la explosion es una capa 2D sobre
+   todo el nivel, asi que aca el anillo y el fogonazo no prueban profundidad. */
+const matAnillo = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0,
+                                            depthWrite: false, depthTest: false, side: T.DoubleSide });
+const mAnillo = new T.Mesh(GEO.anillo, matAnillo);
+mAnillo.visible = false; mAnillo.frustumCulled = false; mAnillo.renderOrder = 30;
+esc3.add(mAnillo);
+const matDisco = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0,
+                                           depthWrite: false, depthTest: false, side: T.DoubleSide });
+const mDisco = new T.Mesh(GEO.disco, matDisco);
+mDisco.visible = false; mDisco.frustumCulled = false; mDisco.renderOrder = 30;
+esc3.add(mDisco);
+function explota(x, y){
+  EXPL.t = EXPL.T; EXPL.x = x; EXPL.y = y;
+  const o = { v0: 3, v1: 12, s0: 0.12, s1: 0.30, t: 0.8, gira: true, g: 18 };
+  chispas(x, y, 26, COLES[ICONO.c1], o);
+  chispas(x, y, 14, COLES[ICONO.c2], o);
+  chispas(x, y, 10, '#ffffff', { v0: 4, v1: 10, s0: 0.08, s1: 0.16, t: 0.45, gira: true, g: 10 });
+  matAnillo.color.set(COLES[ICONO.c1]);
+}
+function explPaso(dt){
+  if (EXPL.t <= 0){ mAnillo.visible = false; mDisco.visible = false; return; }
+  EXPL.t = Math.max(0, EXPL.t - dt);
+  const k = 1 - EXPL.t/EXPL.T;             /* 0 al golpe, 1 al final */
+  const z = -JUG_LADO*0.5 + 0.05;
+  /* el anillo crece rapido y frena: raiz, no lineal */
+  const r = 0.35 + Math.sqrt(k)*3.2;
+  mAnillo.visible = true;
+  mAnillo.position.set(EXPL.x, EXPL.y, z); mAnillo.scale.set(r, r, 1);
+  matAnillo.opacity = 0.95*(1 - k)*(1 - k);
+  /* el disco es el fogonazo: dura la quinta parte */
+  const kd = cl(k*5, 0, 1);
+  mDisco.visible = kd < 1;
+  mDisco.position.set(EXPL.x, EXPL.y, z - 0.01);
+  const rd = 0.3 + kd*1.9; mDisco.scale.set(rd, rd, 1);
+  matDisco.opacity = 0.9*(1 - kd);
 }
 
 /* ══════════ EL TAMANO ══════════ */
@@ -875,6 +1105,7 @@ function sacude(f){ if (f > EFE.sac) EFE.sac = Math.min(1.4, f); }
 function acerca(f){ EFE.zoom = f; }
 
 function efePaso(dt){
+  estelaPaso(dt);
   EFE.sac = Math.max(0, EFE.sac - dt*3.4);
   EFE.zoom += (0 - EFE.zoom)*Math.min(1, dt*4.5);
   const a = EFE.sac*EFE.sac;                   /* al cuadrado: cae mas natural */
@@ -958,7 +1189,26 @@ function ponJug(){
     gSq.position.set(JUG.x, cy, -JUG_LADO*0.5);
     gSq.scale.set(1 + k*0.55, 1 - k, 1 + k*0.25);
     gJug.rotation.z = JUG.modo === 'nave' ? JUG.giro : -JUG.giro;
+    /* con la gravedad al reves el vehiculo va DADO VUELTA: el cubo cuelga de la
+       nave y la cupula del ovni mira al piso, que es lo que hace GD */
+    gJug.rotation.x = (JUG.grav < 0 && JUG.modo !== 'cubo' && JUG.modo !== 'bola') ? Math.PI : 0;
+    /* las piezas que se animan por su cuenta, con la x del jugador como fase:
+       asi el paso del robot avanza con el cuerpo y no con el reloj, que es lo
+       unico que evita que los pies patinen */
+    if (JUGP.helice) JUGP.helice.rotation.y = JUG.x*4.2;
+    if (JUGP.piernas.length){
+      const f = JUG.piso ? Math.sin(JUG.x*4.4)*0.62 : 0.35;
+      JUGP.piernas[0].rotation.z = JUG.piso ? f : f;
+      JUGP.piernas[1].rotation.z = JUG.piso ? -f : f;
+    }
+    if (JUGP.patas.length){
+      JUGP.patas.forEach((pa, i) => {
+        const f = Math.sin(JUG.x*5.0 + i*1.6)*0.28;
+        pa.rotation.z = f;
+      });
+    }
   }
+  armaEstela();
 }
 
 function pinta(){
@@ -1007,12 +1257,9 @@ function pinta(){
       m.visible = !u.moneda.tomada;
       m.rotation.y = (t || 0)*1.9;
       m.position.y = u.moneda.y + Math.sin((t || 0)*2.2)*0.14;
-    } else if (u.portal){
-      m.material.opacity = 0.42 + pulso*0.30;
-      /* el portal gira: es lo que dice que esta vivo y esperando */
-      m.rotation.y = (t || 0)*1.4;
     }
   }
+  ponPortales(pulso);
   if (INST.orbe){
     /* un orbe usado se apaga, y eso hay que poder verlo: es la diferencia entre
        «no llegue» y «ya lo gaste» */
@@ -1036,7 +1283,8 @@ function pinta(){
   for (let i = 0; i < PART_TOPE; i++){
     if (i < n){
       const p = PART[i], k = cl(p.t/p.t0, 0.15, 1), s = p.s*k;
-      _m4.compose(_v3.set(p.x, p.y, p.z), _q.identity(), new T.Vector3(s, s, s));
+      _e.set(0, 0, p.r);
+      _m4.compose(_v3.set(p.x, p.y, p.z), _q.setFromEuler(_e), new T.Vector3(s, s, s));
       mPart.setMatrixAt(i, _m4);
       _c.set(p.c); mPart.setColorAt(i, _c);
     } else {

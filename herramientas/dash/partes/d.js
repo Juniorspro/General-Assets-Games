@@ -158,8 +158,12 @@ const ARMA = {
   robot(P, x, w){
     P.bloque(x + 7, 0, 0.9, 1.2);
     P.bloque(x + 15, 0, 0.9, 2.2);
-    P.bloque(x + 24, 0, 0.9, 3.0);
-    P.moneda(x + 24.4, 4.2);
+    /* 2,2 y no 3,0: el robot llega a 3,51 a plena carga, pero 3,0 pide el 78 %
+       de la carga y el bot —que aprieta tarde— la perdia en una fase de doce; con
+       2,6 la perdia en una de veinticuatro. Con 2,2 sigue haciendo falta cargar
+       (el toque minimo da 1,54) y las veinticuatro fases pasan. */
+    P.bloque(x + 24, 0, 0.9, 2.2);
+    P.moneda(x + 24.4, 3.5);
   },
 
   /* ── LA ARANA: SE TELETRANSPORTA A LA CARA DE ENFRENTE ──
@@ -204,11 +208,15 @@ const ARMA = {
        cuatro bloques —que es lo que mide un salto— la cadena se engancha sola.
        Y todos amarillos: el rosa impulsa 0,72, o sea un arco de 2,88 bloques, y
        en el medio de una cadena de cuatro eso deja al jugador corto. */
+    /* ── Y VAN CADA 3,6 BLOQUES, NO CADA CUATRO ──
+       Cuatro es exactamente el largo del salto, o sea que el siguiente orbe cae
+       donde el arco vuelve a su altura: un filo. Con 3,6 el cuerpo llega todavia
+       bajando y entra por el medio de la ventana, no por el borde. */
     P.hueco(x + 4, x + 16);
     P.orbe(x + 6, 2.5, 'amar');
-    P.orbe(x + 10, 2.5, 'amar');
-    P.orbe(x + 14, 2.5, 'amar');
-    P.moneda(x + 10, 4.6);
+    P.orbe(x + 9.6, 2.5, 'amar');
+    P.orbe(x + 13.2, 2.5, 'amar');
+    P.moneda(x + 9.6, 4.6);
     P.pico(x + 20); P.pico(x + 24);
   }
 };
@@ -250,7 +258,22 @@ function generaNivel(id, semilla){
      portal queda donde estaba y el modo cambia a mitad de camino. */
   for (let i = 0; i < TRAMOS.length; i++){
     const T = TRAMOS[i], ant = i > 0 ? TRAMOS[i - 1] : null;
-    if (ant && ant.modo !== T.modo) M.portales.push({ x: T.x + 1.0, t: T.modo });
+    if (ant && ant.modo !== T.modo){
+      M.portales.push({ x: T.x + 1.0, t: T.modo });
+      /* ── DESPUES DE UN MODO QUE DA VUELTA LA GRAVEDAD VA UN PORTAL DE GRAVEDAD ──
+         La bola y la arana salen de su tramo con la gravedad que les quedo. Medido
+         con doce fases de entrada: en una, la bola termino invertida, el ovni
+         «cayo» hasta su techo de 8,2 y entro al tramo de la onda POR ENCIMA de su
+         techo de 5,6 — fuera del pasillo, sin nada que la frenara, hasta el plano
+         de muerte en y 20. Es lo que hace GD: el portal de modo va en pareja con el
+         de gravedad normal. */
+      /* Y VA DESPUES DEL DE MODO, NO ANTES. Puesto un bloque antes, entre los dos
+         portales el cuerpo sigue siendo bola y un toque contra el piso le da vuelta
+         la gravedad OTRA VEZ: medido, con el portal de gravedad adelante la fase 5
+         volvia a morir en x 157. Despues del cambio de modo ya no hay quien la
+         deshaga. Un bloque y pico de separacion, que es como van en pareja en GD. */
+      if (ant.modo === 'bola' || ant.modo === 'arana') M.portales.push({ x: T.x + 2.2, t: 'norm' });
+    }
     M.tramos.push({ x: T.x, w: T.w, modo: T.modo, pal: i });
     ARMA[T.arma](P, T.x, T.w);
   }

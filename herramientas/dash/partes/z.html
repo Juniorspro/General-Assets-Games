@@ -496,6 +496,33 @@ window.__R = {
     const e = this.estado(); e.pasosBot = i;
     return e;
   },
+  /* ── JUGAR HASTA UNA X (O HASTA MORIR) Y CONGELAR AHI ──
+     `foto()` planta un cuerpo quieto, y eso no muestra ni la cinta de la onda ni
+     el chorro de la nave ni la explosion: son cosas que existen solo porque el
+     cuerpo se MOVIO. Esta corre el bot honesto —o el del azar, para morir— hasta
+     que se cumple la condicion, adelanta `extra` pasos de efectos para que la
+     explosion este a medio abrir, y congela. `pasoDespues` deja el cuadro exacto. */
+  hasta(x, azar, extra, muerte){
+    SIN_RELOJ = true;
+    const med = MUNDO.med;
+    const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    let i = 0, llego = false;
+    for (; i < 24000 && EST.corriendo; i++){
+      if (x != null && JUG.x >= x) llego = true;
+      /* con `muerte`, al llegar a la x se suelta el boton y se sigue hasta morir:
+         asi la muerte cae contra el pico que viene y no en un vacio fuera de cuadro */
+      if (llego && !muerte) break;
+      APRETADO = llego ? false : azar ? (Math.random() < 0.10) : botElige(JUG, med, ph, mira);
+      paso(DT); efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT);
+      paletaPaso(NIVELES[EST.nivel]);
+    }
+    for (let k = 0; k < (extra || 0); k++){ efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT); }
+    APRETADO = false; SIN_RELOJ = false; CONGELADO = true;
+    ponCam(1); pinta();
+    return { x: +JUG.x.toFixed(2), y: +JUG.y.toFixed(2), vivo: JUG.vivo, modo: JUG.modo,
+             pasos: i, part: PART.length, estela: ESTELA.p.length,
+             anillo: mAnillo.visible ? +mAnillo.scale.x.toFixed(2) : null };
+  },
   /* ── PLANTAR AL JUGADOR Y DIBUJAR UN CUADRO ──
      `CONGELADO` frena la simulacion pero el bucle sigue dibujando y `ponCam`
      corre en cada vuelta: sin colocar la camara aca mismo, la foto sale del
@@ -524,6 +551,20 @@ window.__R = {
              niebla: '#' + NIEBLA.color.getHexString() };
   },
   audita(){ return audita(); },
+  /* ── EL NIVEL SE JUEGA DESDE VARIAS FASES, NO SOLO DESDE EL PASO CERO ──
+     Medido: el mismo bot honesto que termina el nivel al 100 % desde x = 0 murio
+     en la cadena de orbes del final arrancando unos pasos mas tarde (una corrida
+     partida en tres tandas empezo con otra fase y cayo en x 286,4). Un tramo que
+     depende de la fase de entrada es un tramo que se pasa por casualidad. */
+  fases(n){
+    generaNivel(0, 1);
+    const out = [], paso = MUNDO.med.v/60;
+    for (let k = 0; k < (n || 12); k++){
+      const r = juegaSolo({ x0: paso*k/(n || 12) });
+      out.push({ k, pct: r.pct, murio: r.murioEn });
+    }
+    return out;
+  },
   juegaSolo(o){ return juegaSolo(o || {}); },
   preparar(){ return preparaNiveles(); },
   nivelInfo(i){
@@ -621,11 +662,11 @@ window.__R = {
   /* ── QUE LO MATO, Y NO «MURIO EN LA X 42» ──
      Un numero de x no dice si fue un pico, una pared de costado o el plano de
      abajo, y esos tres se arreglan de maneras opuestas. */
-  porQue(id, s){
+  porQue(id, s, x0){
     generaNivel(id | 0, s || 1);
     const med = MUNDO.med;
     const pasos = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
-    const c = {}; jugPone(c, 0);
+    const c = {}; jugPone(c, x0 || 0);
     for (const o of MUNDO.orbes) o.usado = false;
     let i = 0, prev = copia(c);
     while (c.vivo && c.x < MUNDO.largo && i < 12000){

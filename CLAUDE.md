@@ -420,6 +420,111 @@ del HUD, en vertical girado y en apaisado. Las tres calidades en caliente (535×
 qué nivel, no si NEON DRIVE pega con NEON DRIVE. Y el bot juega con puntería de un paso de física: que
 los tres se puedan pasar está probado, cuánto cuestan **con un dedo** no.
 
+### Centésima tercera vuelta (2026-09-04): **ROTOR** — los iconos de GD, la cinta de la onda, la explosión y doce fases
+
+Pedido: *"puedes mejorar las naves y eso y agregarle rastros y una explosión al morir de partículas god
+etcétera busca todo sobre geometry dash para que todo quede igualito pero en 3D"*.
+
+**Las referencias no se pudieron traer:** fandom contesta 402, wiki.gg 404 y namu 403, así que las
+formas salen de lo que se sabe de GD y se juzgan **fotografiando el juego en movimiento**, que es lo
+único que se puede medir acá. Entró una sonda para eso, `hasta(x, azar, extra, muerte)`: juega con el
+bot hasta una x —o hasta morir contra el pico que viene— y congela, porque `foto()` planta un cuerpo
+quieto y ni la cinta, ni el chorro, ni la explosión existen sin movimiento.
+
+#### EL CUBO ES EL PERSONAJE Y LOS VEHÍCULOS LO LLEVAN
+
+En GD la nave, el ovni y el columpio no reemplazan al icono: lo **transportan**. Con un cono por nave
+el jugador perdía a su personaje en cada portal. Ahora el cubo —o el rombo o la bola del menú— es
+**una función** (`cuboIcono(esc)`, con cara de dos ojos) y los vehículos la llaman a escala: sentado
+arriba de la nave, **adentro de la cúpula de vidrio** del ovni, colgado del rotor del columpio. La
+onda es una flecha chata; la bola una esfera con aro y punto que rueda; el robot torso, cabeza y dos
+piernas que **caminan con la x como fase** (así los pies no patinan); la araña un cuerpo bajo con
+patas en arco. Y con la gravedad al revés el vehículo va **dado vuelta**.
+
+Tres correcciones que salieron de la foto y no del código:
+- **El fuselaje era una tabla debajo del cubo** (0,26 de alto contra 0,43 del cubo): la nave es el
+  vehículo y el cubo el pasajero, así que pasó a 0,42 con franja, trompa, aleta inclinada y quilla,
+  y el cubo va medio hundido como en una cabina abierta.
+- **Ocho patas finas giradas hacia la cámara se leían a una mata de rayas sobre un ladrillo**, dos
+  fotos seguidas. La silueta de la araña de GD es **de perfil**: cuatro arcos en el plano de juego,
+  muslo hacia afuera y arriba, tibia hacia abajo, y sólo un escalón chico en z.
+- **`function caja(mat, …)`**: ya había un `caja(c)` en `e.js` —la caja de choque— y en un módulo
+  dos declaraciones del mismo nombre tiran «already been declared» y se llevan el módulo. Es la
+  decimotercera vez. Y `mf` también estaba tomado (el faldón).
+
+#### LA CINTA DE LA ONDA ES EL PERSONAJE, Y SE MUESTREA EN LA FÍSICA
+
+La onda de GD es una punta de flecha; lo que se ve es la **cinta gruesa del color primario** que deja
+por donde pasó y que dibuja el zigzag entero. Los otros modos dejan el rastro fino de la opción
+«trail». Es **una malla**: dos vértices por muestra, 64 muestras, el ancho cayendo con la edad —así
+la cola se afina en vez de cortarse— y un salto de más de tres bloques (reaparición, teletransporte)
+la corta. **Se muestrea en `efePaso` y no en `pinta`**: las sondas adelantan cientos de pasos sin
+dibujar, y muestreada al dibujar la foto salía con un solo segmento.
+
+#### UN EMISOR Y CINCO EFECTOS
+
+`chispas(x, y, n, c, o)` aprendió cono de salida, velocidad base, gravedad propia, vida, tamaño y
+giro. De ahí salen el **chorro de la nave** (hacia atrás a media velocidad del nivel, sin gravedad,
+tres por paso y más grandes mientras se mantiene: es información, se ve si el dedo está abajo), la
+**ráfaga del ovni** por debajo del plato en cada toque, las **chispas del robot** bajo los pies
+mientras carga, el **rastro de la araña** (catorce esquirlas quietas repartidas entre donde estaba y
+donde apareció) y la **ráfaga del orbe** en su color.
+
+#### LA MUERTE SON TRES COSAS A LA VEZ
+
+El icono desaparece, **cincuenta esquirlas** de los dos colores más blancas salen radiales con
+gravedad y **girando** (`r`, `vr` por partícula), y un **anillo** del color primario se abre desde el
+golpe con la raíz del tiempo —crece rápido y frena— mientras un disco blanco hace de fogonazo la
+quinta parte del tiempo. **El anillo va sin prueba de profundidad**: medido en tres cuadros contra un
+pico, salía por la MITAD porque el centro del golpe está a medio bloque del suelo y la losa tapaba la
+parte de abajo. En GD la explosión es una capa 2D encima del nivel.
+
+#### LOS PORTALES SON ÓVALOS, Y VAN EN PAREJA
+
+Eran ocho columnas translúcidas, ocho llamadas de dibujo. Un portal de GD es un **óvalo alto** con
+borde y relleno del color del modo: un toro estirado en Y y un disco, los ocho en **dos mallas
+instanciadas** con color por instancia, latiendo con el compás.
+
+#### EL HALLAZGO DE LA VUELTA: EL NIVEL SE PASABA DESDE UNA SOLA FASE
+
+Una corrida partida en tres tandas arrancó unos pasos más tarde que la auditoría y **murió en la
+cadena de orbes** que la auditoría da por buena. Entró `fases(n)`: el mismo bot honesto desde `n`
+fases de entrada distintas. Medido: **5 de 12 terminaban**. Un tramo que depende de la fase de entrada
+es un tramo que se pasa por casualidad, y son tres defectos distintos:
+
+1. **La ventana del orbe era 0,95, y el error vertical se arrastra.** El orbe amarillo pone la `vy`
+   pero no la `y`: cada salto arranca desde donde el cuerpo estaba al apretar, así que el cuerpo
+   entraba por el borde de arriba de cada orbe y el siguiente lo agarraba justo en el filo. Ventana
+   a **1,2** —GD tiene una caja generosa y por eso las cadenas se juegan— y los orbes **cada 3,6 y
+   no cada cuatro**: cuatro es exactamente el largo del salto, o sea el siguiente orbe cae donde el
+   arco vuelve a su altura. Con 3,6 se llega bajando, por el medio.
+2. **La bola salía de su tramo con la gravedad que le quedó**, y en una fase el ovni «cayó» hasta su
+   techo de 8,2 y entró al tramo de la onda **por encima** de su techo de 5,6: fuera del pasillo,
+   hasta el plano de muerte en y 20. Es lo que hace GD: el portal de modo va en pareja con un
+   **portal de gravedad normal** después de la bola y de la araña. **Y va DESPUÉS del de modo, no
+   antes**: puesto un bloque antes, entre los dos el cuerpo sigue siendo bola y un toque contra el
+   piso le da vuelta la gravedad otra vez — medido, la fase 5 volvía a morir.
+3. **El muro del robot pedía el 78 % de la carga** (3,0 contra un ápice máximo de 3,51) y el bot, que
+   aprieta tarde, lo perdía en una fase de doce; con 2,6, en una de veinticuatro. Con **2,2** sigue
+   haciendo falta cargar —el toque mínimo da 1,54— y pasan las veinticuatro.
+
+Y `pad(x, t)` lleva dos argumentos: los pads del nivel están puestos con el tipo que dicen.
+
+#### MEDIDO AL CERRAR
+
+**24 de 24 fases al 100 %**, auditoría `ok: true` contra **6 %** del bot al azar, el nivel terminado
+jugando de verdad al 100 % en el primer intento en vertical y en apaisado (marco `derecho` 900×460),
+**7 puntos de control** en práctica, cero solapamientos de HUD (7 elementos), 8 portales de modo más
+2 de gravedad, 3 orbes, 2 pads, 3 monedas. **35-37 llamadas de dibujo y 12.300 triángulos** (eran
+29-30 y 5.000: la diferencia son los iconos de varias piezas, la cinta, el anillo y el fogonazo; los
+portales bajaron de 8 llamadas a 2). Momento de ganar pico 0,56 · rms 0,19. `window.__errs` vacío en
+las doce corridas. Nueve fotos en movimiento, una por modo, más tres cuadros de una muerte.
+
+**LO QUE NO SE PUDO COMPROBAR:** las formas están hechas de memoria de GD y juzgadas en fotos a la
+resolución del juego, no contra los sprites originales —las cuatro fuentes que las tienen no se
+pudieron traer—. Y el bot aprieta con puntería de un paso: que las 24 fases pasen dice que el nivel
+no depende de la fase de entrada, no cuánto cuesta con un dedo.
+
 ### Centésima segunda vuelta (2026-09-04): **ROTOR** — las ocho formas, los orbes, y la canción sale de un video
 
 Pedido: *"agrega orbes y deja el estilo neón atrás métele más color y decoración Sprites atrás que se

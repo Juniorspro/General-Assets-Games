@@ -175,6 +175,11 @@ function pasoCuerpo(c, med, dt, apretado){
     }
     c.vy -= med.g*dt*c.grav;
     c.giro = cl(c.vy/med.impOvni, -1, 1)*0.16;
+    /* la rafaga del ovni, que en GD sale por debajo del plato en cada toque */
+    if (flanco && c === JUG)
+      chispas(c.x, c.y + (c.grav > 0 ? 0.05 : JUG_LADO - 0.05), 9, COLES[ICONO.c2],
+              { ang: c.grav > 0 ? -Math.PI/2 : Math.PI/2, esp: 1.2, v0: 3, v1: 7, g: 0,
+                t: 0.28, s0: 0.08, s1: 0.20, dx: 0.6 });
 
   } else if (M === 'robot'){
     /* ── EL ROBOT CARGA EL SALTO MIENTRAS SE MANTIENE ──
@@ -204,9 +209,17 @@ function pasoCuerpo(c, med, dt, apretado){
     if (flanco){
       const d = caraDeEnfrente(c);
       if (d != null){
+        const y0 = c.y;
         c.y = d; c.grav = -c.grav; c.vy = 0; c.piso = true;
-        if (c === JUG){ son('portal'); golpeaSq(2.2); sacude(0.18);
-                        destella('#ff7ae0', 0.26); }
+        if (c === JUG){
+          son('portal'); golpeaSq(2.2); sacude(0.18); destella('#ff7ae0', 0.26);
+          /* el rastro: en GD la arana deja una raya entre donde estaba y donde
+             aparecio. Son esquirlas quietas repartidas por el trayecto. */
+          const n = 14;
+          for (let i = 0; i < n; i++)
+            chispas(c.x - 0.1, y0 + (d - y0)*(i/(n - 1)) + JUG_LADO*0.5, 1, COLES[ICONO.c1],
+                    { v0: 0, v1: 0.4, g: 0, t: 0.32, s0: 0.10, s1: 0.22, dx: 0.3 });
+        }
       }
     }
     c.vy -= med.g*dt*c.grav;
@@ -258,7 +271,14 @@ function pasoCuerpo(c, med, dt, apretado){
   for (let oi = 0; oi < MUNDO.orbes.length; oi++){
     const o = MUNDO.orbes[oi];
     if (!apretado || (c.uso && c.uso[oi])) continue;
-    if (Math.abs(o.x - c.x) > 0.95 || Math.abs(o.y - (c.y + 0.43)) > 0.95) continue;
+    /* ── LA VENTANA DEL ORBE ES 1,2 Y NO 0,95, Y ES UNA CUENTA ──
+       El orbe amarillo pone la vy pero no la y: cada salto de la cadena arranca
+       desde donde el cuerpo estaba al apretar, asi que el error vertical se
+       ARRASTRA de orbe en orbe. Con la ventana en 0,95 el cuerpo entraba por el
+       borde de arriba de cada orbe y el siguiente lo agarraba justo en el borde:
+       medido con doce fases de entrada, siete morian en la cadena del final. En
+       GD el orbe tiene una caja generosa y por eso las cadenas se pueden jugar. */
+    if (Math.abs(o.x - c.x) > 1.2 || Math.abs(o.y - (c.y + 0.43)) > 1.2) continue;
     const t = o.t || 'amar';
     if (t === 'azul'){ c.grav = -c.grav; c.vy = med.imp*0.62*c.grav; }
     else if (t === 'verde'){ c.grav = -c.grav; c.vy = med.imp*c.grav; }
@@ -276,6 +296,7 @@ function pasoCuerpo(c, med, dt, apretado){
       son(t === 'negro' ? 'pad' : 'salta');
       golpeaSq(t === 'negro' ? 3.4 : -3.7*(ORBE_K[t] || 1));
       destella(ORBE_COL[t] || '#ffd447', 0.30);
+      chispas(o.x, o.y, 12, ORBE_COL[t] || '#ffd447', { v0: 3, v1: 8, g: 8, t: 0.4, s0: 0.08, s1: 0.18 });
       if (t === 'azul' || t === 'verde' || t === 'arana') sacude(0.20);
     }
   }

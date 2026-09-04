@@ -259,7 +259,10 @@ function juegaSolo(opt){
   /* el vuelo dura un tiempo exacto, asi que `mira` tiene que pasar de 60 pasos
      por tiempo: con menos, el rollout corta antes de aterrizar y no ve el labio */
   const mira = Math.ceil(1.35*60/med.bpm*60);
-  const c = {}; jugPone(c, 0);
+  /* `x0` corre la fase de entrada: el nivel de verdad no se empieza en el paso
+     exacto en que el bot lo audita, y un tramo que solo se pasa desde una fase es
+     un tramo que se pasa por casualidad */
+  const c = {}; jugPone(c, o.x0 || 0);
   for (const ob of MUNDO.orbes) ob.usado = false;
   let i = 0, tope = Math.ceil((MUNDO.largo/med.v)*60) + 400;
   let mon = 0;
@@ -372,8 +375,7 @@ function muere(){
      un golpe, el acercamiento que la partida se termino, y el `hit` FRENA EL
      JUEGO cuatro cuadros: sin ese freno, el cuadro en que se choca y el cuadro
      en que ya no hay cubo son el mismo y no se llega a ver que paso. */
-  chispas(JUG.x, JUG.y + 0.4, 34, COLES[ICONO.c1]);
-  chispas(JUG.x, JUG.y + 0.4, 14, COLES[ICONO.c2]);
+  explota(JUG.x, JUG.y + JUG_LADO*0.5);
   destella('#ff5a4a', 1.0); sacude(1.2); acerca(0.08);
   EFE.hit = 0.07;
   son('muere'); musPara();
@@ -417,10 +419,27 @@ function pasoJuego(dt, apretado){
       chispas(m.x, m.y, 14, '#ffd447');
       destella('#ffd447', 0.34); sacude(0.16);
     }
-  /* la estela: en el piso son chispas del roce y en la nave es el chorro. Cuesta
-     nada y es lo que hace que se lea que va rapido. */
-  if (JUG.modo === 'nave') chispas(JUG.x - 0.55, JUG.y + 0.42, 1, '#ffd447');
-  else if (JUG.piso && Math.random() < 0.35) chispas(JUG.x - 0.4, JUG.y + 0.05, 1, COLES[ICONO.c2]);
+  /* ── EL CHORRO DE LA NAVE, COMO EN GD: MAS LARGO MIENTRAS SE MANTIENE ──
+     Sale de la cola y va hacia atras a la mitad de la velocidad del nivel, sin
+     gravedad; apretando salen tres por paso y mas grandes. Es lo que en GD dice
+     que la nave empuja, y es informacion: se ve si el dedo esta abajo. */
+  const m = JUG.modo;
+  if (m === 'nave' || m === 'columpio'){
+    const arriba = JUG.grav > 0 ? 1 : -1;
+    const cx = m === 'nave' ? JUG.x - 0.62 : JUG.x - 0.30;
+    const cy = JUG.y + JUG_LADO*0.5 - (m === 'nave' ? 0.12*arriba : 0);
+    chispas(cx, cy, ap ? 3 : 1, ap ? '#fff1a8' : COLES[ICONO.c2],
+            { ang: Math.PI, esp: 0.45, v0: 1.5, v1: 4.5, vx0: -med.v*0.45, g: 0,
+              t: ap ? 0.30 : 0.20, s0: 0.08, s1: ap ? 0.26 : 0.16, dy: 0.10 });
+  } else if (m === 'robot' && ap && JUG.vy*JUG.grav > 0){
+    /* el robot empuja con los pies mientras carga: chispas hacia abajo */
+    chispas(JUG.x, JUG.y + (JUG.grav > 0 ? 0 : JUG_LADO), 2, '#ffa14a',
+            { ang: JUG.grav > 0 ? -Math.PI/2 : Math.PI/2, esp: 0.9, v0: 2, v1: 5, g: 0,
+              t: 0.22, s0: 0.08, s1: 0.18, dx: 0.4 });
+  } else if (JUG.piso && Math.random() < 0.35){
+    chispas(JUG.x - 0.4, JUG.y + (JUG.grav > 0 ? 0.05 : JUG_LADO - 0.05), 1, COLES[ICONO.c2],
+            { v0: 1, v1: 4, t: 0.35, s0: 0.06, s1: 0.14 });
+  }
   if (!JUG.vivo){ muere(); return; }
   EST.pct = Math.round(cl(JUG.x/MUNDO.largo, 0, 1)*100);
   if (!EST.practica && EST.pct > PROG.niv[EST.nivel].mejor){
