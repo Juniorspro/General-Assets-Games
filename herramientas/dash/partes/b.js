@@ -27,6 +27,18 @@ const JUG_LADO = 0.86;           /* el cubo es un poco mas chico que su celda */
 const ALTO_PASILLO = 7.6;
 /* y el techo del tramo de gravedad invertida, por la misma razon */
 const ALTO_GRAV = 7.0;
+/* ── Y CADA MODO PIDE SU PROPIA ALTURA DE PASILLO ──
+   No es decoracion: la altura es lo que hace que el modo se pueda jugar. La bola
+   cruza de piso a techo en `sqrt(2·H/g)` segundos, o sea 3,2 bloques con H = 6:
+   con el pasillo mas alto el cruce tarda mas que el hueco entre picos y no hay
+   toque que salve. La onda va a 45 grados exactos, asi que su pasillo tiene que
+   medir menos que la distancia entre paredes o no llega a subir. Y la arana se
+   teletransporta, asi que la suya solo tiene que dejar pasar al cuerpo. */
+const ALTO_BOLA = 6.0;
+const ALTO_ONDA = 5.6;
+const ALTO_ARANA = 5.0;
+const ALTO_COL = 7.2;
+const ALTO_OVNI = 8.2;
 
 function medidasDe(bpm){
   const T = 60/bpm;                         /* un tiempo, en segundos */
@@ -40,9 +52,64 @@ function medidasDe(bpm){
     /* la nave: subir y bajar son aceleraciones, no velocidades, porque lo que se
        controla es la CURVA. Con velocidad directa la nave se lee a ascensor. */
     naveA: 8*SALTO_ALTO/(T*T)*0.62,
-    naveMax: 4*SALTO_ALTO/T*0.70
+    naveMax: 4*SALTO_ALTO/T*0.70,
+    /* ── Y LOS OTROS SEIS MODOS SALEN DE LA MISMA CUENTA ──
+       Todo lo que sube se escribe como una FRACCION del impulso del cubo, y de
+       ahi sale el apice: `apice = k²·2,4`. Asi los ocho modos comparten una sola
+       gravedad y un solo tiempo de aire, que es lo que hace que el nivel se pueda
+       cortar en tramos sin que la grilla del compas deje de valer.
+         · ovni  k 0,913 → apice 2,00 bloques (el salto corto de Geometry Dash)
+         · robot k 0,80 a 1,21 → de 1,54 a 3,51 segun cuanto se mantenga
+       La onda no lleva impulso: su velocidad vertical ES la horizontal. */
+    impOvni: 4*SALTO_ALTO/T*0.913,
+    robotMin: 4*SALTO_ALTO/T*0.80,
+    robotMax: 4*SALTO_ALTO/T*1.21,
+    robotT: 0.26,
+    /* el columpio: gravedad que se da vuelta, con tope para que un pasillo largo
+       no lo ponga a caer mas rapido de lo que el pasillo mide */
+    colA: 8*SALTO_ALTO/(T*T)*0.78,
+    colMax: 4*SALTO_ALTO/T*0.66
   };
 }
+
+/* ══════════ LOS OCHO MODOS DE GEOMETRY DASH ══════════
+   Los ocho oficiales, y cada uno con OTRO verbo: el cubo salta desde el piso, la
+   nave se sostiene, la bola da vuelta la gravedad, el ovni salta en el aire, la
+   onda va en diagonal, el robot carga el salto, la arana se teletransporta y el
+   columpio invierte su gravedad. Un modo que se juega igual que otro no es un
+   modo, es el mismo con otro dibujo. */
+const MODOS = { cubo:1, nave:1, bola:1, ovni:1, onda:1, robot:1, arana:1, columpio:1 };
+/* ── LOS TRES MODOS DE PASILLO Y LOS CINCO DE PISO ──
+   Es la division que importa para el auto-jugador: los de pasillo se pilotean
+   —hay que sostener una altura— y los de piso se resuelven por rollout —hay que
+   decidir un instante—. Con una sola politica para los ocho, el bot pilotearia
+   el cubo y saltaria con la onda. */
+const PILOTO = { nave: 1, onda: 1, columpio: 1 };
+/* la altura del pasillo de cada modo. Los que no tienen techo declaran la banda
+   visible, que es lo que el piloto usa como techo cuando no hay ninguno. */
+const ALTO_MODO = { nave: ALTO_PASILLO, onda: ALTO_ONDA, columpio: ALTO_COL,
+                    bola: ALTO_BOLA, arana: ALTO_ARANA, ovni: ALTO_OVNI,
+                    cubo: 9.2, robot: 9.2 };
+const MODO_NOM = {
+  cubo: 'CUBO', nave: 'NAVE', bola: 'BOLA', ovni: 'OVNI',
+  onda: 'ONDA', robot: 'ROBOT', arana: 'ARAÑA', columpio: 'COLUMPIO'
+};
+const MODO_COL = {
+  cubo: '#ffd166', nave: '#ff6ad5', bola: '#7ad9ff', ovni: '#c9a7ff',
+  onda: '#6ef2c8', robot: '#ffa14a', arana: '#ff7ae0', columpio: '#a0ff6a',
+  grav: '#ffd447', norm: '#5ad9ff'
+};
+/* ── LOS ORBES Y LOS PADS ──
+   `K` es el impulso en fracciones del salto del cubo, asi que el apice sale de
+   `k²·2,4`: rosa 1,24 · amarillo 2,40 · rojo 4,18 bloques. Los otros cuatro no
+   son un impulso —dan vuelta la gravedad, clavan hacia abajo o pegan a la cara de
+   enfrente— y por eso no estan en esta tabla. */
+const ORBE_K = { rosa: 0.72, amar: 1.00, rojo: 1.32, verde: 1.00 };
+const ORBE_COL = { rosa: '#ff8ec2', amar: '#ffd447', rojo: '#ff5a4a',
+                   azul: '#5ad9ff', verde: '#6ef2c8', negro: '#2a2a3a',
+                   arana: '#ff7ae0' };
+const PAD_K = { rosa: 0.68, amar: 1.00, rojo: 1.18 };
+const PAD_COL = { rosa: '#ff8ec2', amar: '#ffd447', rojo: '#ff5a4a', azul: '#5ad9ff' };
 
 /* ══════════ EL ENCUADRE ══════════
    Se ven 20 bloques de ancho, y el numero sale de dos cuentas y no del gusto:
@@ -62,26 +129,24 @@ const VISTA_ANCHO = 20;
    que hace que se sientan distintos no es el color sino la SILUETA del horizonte.
    `fondo` elige la forma de las tres capas de paralaje —torres de ciudad, rocas
    flotando, una cresta de picos— y `motas` cuantas particulas lejanas hay. */
+/* ══════════ EL NIVEL ══════════
+   Uno solo, y el tempo NO se elige: sale de la cancion que trajo el usuario
+   (`MUS_BPM`, medido en 158,0). De ahi sale la velocidad —4·158/60 = 10,53
+   bloques por segundo, que es exactamente la velocidad 1x de Geometry Dash— y de
+   ahi el largo, porque la cancion dura 79,18 tiempos.
+
+   Los diez tramos de color van pegados a los tramos de MODO y no a un modulo: en
+   este genero el color cambia en el portal, y eso es lo que hace que el cambio de
+   reglas se vea antes de que se sienta. */
 const NIVELES = [
-  { id: 0, nom: 'NEON DRIVE',   bpm: 128, dif: 1, compases: 26, modos: ['cubo'],
-    col: [0x10, 0x1c, 0x30], col2: [0x2d, 0xe2, 0xa8], fondo: 'ciudad', motas: 90,
-    /* ── LOS TRAMOS DE COLOR ──
-       Parejas de fondo-y-acento por tema, y la primera ES `col`/`col2` para que la
-       ficha del nivel y el icono sigan saliendo del mismo sitio. Van todas en la
-       misma FAMILIA a proposito: un tramo verde y el siguiente rojo se leen a dos
-       juegos, y lo que hay que leer es que el mismo tema doblo la esquina. */
-    pals: [[[0x10,0x1c,0x30], [0x2d,0xe2,0xa8]], [[0x0f,0x1a,0x34], [0x4a,0xc8,0xff]],
-           [[0x14,0x12,0x30], [0x7a,0x6c,0xff]], [[0x0e,0x22,0x30], [0x2d,0xf0,0xd0]]] },
-  { id: 1, nom: 'GRAVEDAD CERO', bpm: 140, dif: 2, compases: 28,
-    modos: ['cubo', 'gravedad'], col: [0x1e, 0x12, 0x30], col2: [0xb0, 0x7a, 0xff],
-    fondo: 'rocas', motas: 150,
-    pals: [[[0x1e,0x12,0x30], [0xb0,0x7a,0xff]], [[0x22,0x10,0x38], [0xff,0x7a,0xe0]],
-           [[0x16,0x14,0x3a], [0x7a,0x9c,0xff]]] },
-  { id: 2, nom: 'ROTOR',         bpm: 150, dif: 3, compases: 30,
-    modos: ['cubo', 'gravedad', 'nave'], col: [0x2a, 0x10, 0x18], col2: [0xff, 0x7a, 0x4a],
-    fondo: 'cresta', motas: 60,
-    pals: [[[0x2a,0x10,0x18], [0xff,0x7a,0x4a]], [[0x30,0x14,0x10], [0xff,0xc2,0x4a]],
-           [[0x24,0x10,0x1e], [0xff,0x4a,0x6e]], [[0x1c,0x0e,0x22], [0xff,0x8e,0xc2]]] }
+  { id: 0, nom: 'OCHO FORMAS', bpm: MUS_BPM, dif: 3, compases: 19,
+    modos: ['cubo', 'nave', 'bola', 'ovni', 'onda', 'robot', 'arana', 'columpio'],
+    col: [0x3a, 0x1c, 0x2e], col2: [0xff, 0xb3, 0x5c], fondo: 'foto', motas: 120,
+    pals: [[[0x3a,0x1c,0x2e], [0xff,0xb3,0x5c]], [[0x40,0x20,0x2a], [0xff,0x8f,0x6b]],
+           [[0x3b,0x1a,0x3a], [0xff,0x6a,0xd5]], [[0x24,0x24,0x3f], [0x7a,0xd9,0xff]],
+           [[0x2c,0x1f,0x45], [0xc9,0xa7,0xff]], [[0x12,0x3a,0x3a], [0x6e,0xf2,0xc8]],
+           [[0x42,0x23,0x18], [0xff,0xa1,0x4a]], [[0x3a,0x15,0x30], [0xff,0x7a,0xe0]],
+           [[0x24,0x36,0x1a], [0xa0,0xff,0x6a]], [[0x45,0x1e,0x26], [0xff,0xd1,0x66]]] }
 ];
 /* ── LA DIFICULTAD SALE DE LA TABLA COMO TODO LO DEMAS ──
    Estaba como un array de tres cadenas en castellano, o sea texto escrito derecho
@@ -105,42 +170,42 @@ const $ = (id) => document.getElementById(id);
 
 /* ══════════ LOS TRES IDIOMAS ══════════ */
 const TXT = {
-  es: { dif1:'FÁCIL', dif2:'NORMAL', dif3:'DIFÍCIL', sub:'UN CUBO, TRES TEMAS Y NINGUNA VIDA', jugar:'JUGAR', iconos:'ICONO',
-        ajustes:'AJUSTES', volver:'VOLVER', niveles:'NIVELES', elegi:'ELEGÍ UN TEMA',
+  es: { dif1:'FÁCIL', dif2:'NORMAL', dif3:'DIFÍCIL', sub:'OCHO FORMAS, UN TEMA Y NINGUNA VIDA', jugar:'JUGAR', iconos:'ICONO',
+        ajustes:'AJUSTES', volver:'VOLVER', niveles:'NIVELES', elegi:'EL TEMA',
         icono:'ICONO', forma:'FORMA', color:'COLOR', ajus:'AJUSTES',
         mus:'MÚSICA', fx:'EFECTOS', idioma:'IDIOMA', calidad:'GRÁFICOS',
         baja:'BAJA', media:'MEDIA', alta:'ALTA',
         pausa:'PAUSA', sigo:'SEGUIR', reint:'REINTENTAR', pract:'MODO PRÁCTICA',
         practOn:'PRÁCTICA', salir:'SALIR', intento:'INTENTO',
         mejor:'MEJOR', gano:'¡COMPLETO!', ganoS:'CIEN POR CIENTO',
-        fin:'LOS TRES TEMAS', finT:'No queda ninguno. Probá el modo práctica para las monedas.',
+        fin:'OCHO FORMAS', finT:'Lo pasaste entero. Probá el modo práctica para las monedas.',
         sigue:'SIGUIENTE', menu:'MENÚ',
-        texto:'Un toque salta. Mantené para saltar en cadena. No hay vidas: si chocás, volvés al principio del tema.',
-        pie:'Los obstáculos caen en el compás. La música y el nivel son lo mismo.' },
-  en: { dif1:'EASY', dif2:'NORMAL', dif3:'HARD', sub:'ONE CUBE, THREE TRACKS, NO LIVES', jugar:'PLAY', iconos:'ICON',
-        ajustes:'SETTINGS', volver:'BACK', niveles:'LEVELS', elegi:'PICK A TRACK',
+        texto:'Un toque hace lo que la forma haga: saltar, subir, volar. Los orbes se aprietan en el aire. No hay vidas: si chocás, volvés al principio.',
+        pie:'Ocho formas en un tema. Los obstáculos caen en el compás: la música y el nivel son lo mismo.' },
+  en: { dif1:'EASY', dif2:'NORMAL', dif3:'HARD', sub:'EIGHT FORMS, ONE TRACK, NO LIVES', jugar:'PLAY', iconos:'ICON',
+        ajustes:'SETTINGS', volver:'BACK', niveles:'LEVELS', elegi:'THE TRACK',
         icono:'ICON', forma:'SHAPE', color:'COLOUR', ajus:'SETTINGS',
         mus:'MUSIC', fx:'SFX', idioma:'LANGUAGE', calidad:'GRAPHICS',
         baja:'LOW', media:'MEDIUM', alta:'HIGH',
         pausa:'PAUSED', sigo:'RESUME', reint:'RETRY', pract:'PRACTICE MODE',
         practOn:'PRACTICE', salir:'QUIT', intento:'ATTEMPT',
         mejor:'BEST', gano:'COMPLETE!', ganoS:'ONE HUNDRED PERCENT',
-        fin:'ALL THREE TRACKS', finT:'Nothing left. Try practice mode for the coins.',
+        fin:'EIGHT FORMS', finT:'You cleared the whole thing. Try practice mode for the coins.',
         sigue:'NEXT', menu:'MENU',
-        texto:'Tap to jump. Hold to chain jumps. No lives: crash and you go back to the start of the track.',
-        pie:'Obstacles land on the beat. The music and the level are the same thing.' },
-  pt: { dif1:'FÁCIL', dif2:'NORMAL', dif3:'DIFÍCIL', sub:'UM CUBO, TRÊS FAIXAS, NENHUMA VIDA', jugar:'JOGAR', iconos:'ÍCONE',
-        ajustes:'AJUSTES', volver:'VOLTAR', niveles:'NÍVEIS', elegi:'ESCOLHA UMA FAIXA',
+        texto:'One tap does whatever the form does: jump, climb, fly. Orbs are pressed in mid-air. No lives: crash and you go back to the start.',
+        pie:'Eight forms in one track. Obstacles land on the beat: the music and the level are the same thing.' },
+  pt: { dif1:'FÁCIL', dif2:'NORMAL', dif3:'DIFÍCIL', sub:'OITO FORMAS, UMA FAIXA, NENHUMA VIDA', jugar:'JOGAR', iconos:'ÍCONE',
+        ajustes:'AJUSTES', volver:'VOLTAR', niveles:'NÍVEIS', elegi:'A FAIXA',
         icono:'ÍCONE', forma:'FORMA', color:'COR', ajus:'AJUSTES',
         mus:'MÚSICA', fx:'EFEITOS', idioma:'IDIOMA', calidad:'GRÁFICOS',
         baja:'BAIXA', media:'MÉDIA', alta:'ALTA',
         pausa:'PAUSA', sigo:'CONTINUAR', reint:'DE NOVO', pract:'MODO TREINO',
         practOn:'TREINO', salir:'SAIR', intento:'TENTATIVA',
         mejor:'MELHOR', gano:'COMPLETO!', ganoS:'CEM POR CENTO',
-        fin:'AS TRÊS FAIXAS', finT:'Não sobrou nenhuma. Tente o modo treino pelas moedas.',
+        fin:'OITO FORMAS', finT:'Você passou tudo. Tente o modo treino pelas moedas.',
         sigue:'PRÓXIMO', menu:'MENU',
-        texto:'Um toque salta. Segure para saltar em cadeia. Não há vidas: se bater, volta ao início da faixa.',
-        pie:'Os obstáculos caem no compasso. A música e o nível são a mesma coisa.' }
+        texto:'Um toque faz o que a forma faz: saltar, subir, voar. Os orbes se apertam no ar. Não há vidas: se bater, volta ao início.',
+        pie:'Oito formas numa faixa. Os obstáculos caem no compasso: a música e o nível são a mesma coisa.' }
 };
 let LANG = 'en';
 const TX = (k) => (TXT[LANG] && TXT[LANG][k]) || TXT.es[k] || k;

@@ -68,8 +68,8 @@ function avanza(c, med, dt, apretado, xForzada){
    El mas ancho no depende de nada: en un pasillo con dos paredes, el hueco de la
    pared ES el intervalo libre mas ancho. La banda va de 0 a 9,2 porque el pasillo
    se construye asi. */
-function huecoLibre(x){
-  const B0 = 0, B1 = ALTO_PASILLO;
+function huecoLibre(x, alto){
+  const B0 = 0, B1 = alto || ALTO_PASILLO;
   const iv = [];
   for (const r of cerca(MUNDO.iSol, x)){
     if (r.x > x || r.x + r.w < x) continue;
@@ -100,13 +100,23 @@ function huecoLibre(x){
    ramas y el bot elige a ciegas; con la reactiva, las cadenas se resuelven sin
    ramificar. */
 function copia(c){
+  /* ── LA COPIA LLEVA `carga` Y `apretado`, Y NO ES UN DETALLE ──
+     El robot carga el salto mientras el dedo siga abajo, asi que sin `carga` el
+     rollout prueba un salto que no existe; y cuatro de los ocho modos se manejan
+     con FLANCOS, o sea que sin `apretado` el flanco se dispara en el primer paso
+     de cada rama y la rama mide otro juego. */
   return { x: c.x, y: c.y, vy: c.vy, grav: c.grav, modo: c.modo,
-           piso: c.piso, vivo: c.vivo, giro: c.giro, apretado: c.apretado };
+           piso: c.piso, vivo: c.vivo, giro: c.giro, apretado: c.apretado,
+           carga: c.carga, mira: c.mira,
+           /* los orbes gastados son del INTENTO: la copia se los lleva para que
+              un rollout no le gaste un orbe al cuerpo de verdad */
+           uso: c.uso ? c.uso.slice() : null };
 }
 
 function botOrbeCerca(c){
-  for (const o of MUNDO.orbes){
-    if (o.usado) continue;
+  for (let i = 0; i < MUNDO.orbes.length; i++){
+    if (c.uso && c.uso[i]) continue;
+    const o = MUNDO.orbes[i];
     if (Math.abs(o.x - c.x) < 1.4 && Math.abs(o.y - (c.y + 0.43)) < 1.4) return true;
   }
   return false;
@@ -121,13 +131,35 @@ function botOrbeCerca(c){
      una regla de «subo si estoy abajo» se pasa de largo y oscila; pidiendole una
      velocidad proporcional al error, frena antes de llegar. */
 function botNave(c, med){
-  let obj = ALTO_PASILLO*0.5 - JUG_LADO*0.5;
-  for (let d = 0.4; d <= 10; d += 0.4){
-    const h = huecoLibre(c.x + d);
-    if (h[1] - h[0] < ALTO_PASILLO - 1.2){ obj = (h[0] + h[1])*0.5 - JUG_LADO*0.5; break; }
+  const alto = ALTO_MODO[c.modo] || ALTO_PASILLO;
+  let obj = alto*0.5 - JUG_LADO*0.5;
+  /* ── EL BARRIDO ARRANCA DETRAS Y NO DELANTE, Y ESO COSTO UNA MUERTE MEDIDA ──
+     Con el barrido desde +0,4, la pared que el cuerpo esta ATRAVESANDO deja de
+     verse en cuanto su borde de adelante queda atras del ojo del barrido: medido
+     en la onda, a x 150,9 el piloto ya apuntaba al hueco de la pared SIGUIENTE
+     —2,2 bloques mas arriba— y el cuerpo, que mide 0,86, choco el labio de la
+     pared en la que todavia estaba a x 151,43. Hay que mirar desde media caja
+     para atras: mientras el cuerpo siga adentro de la ranura, la ranura es el
+     destino. */
+  for (let d = -0.6; d <= 10; d += 0.4){
+    const h = huecoLibre(c.x + d, alto);
+    if (h[1] - h[0] < alto - 1.2){ obj = (h[0] + h[1])*0.5 - JUG_LADO*0.5; break; }
   }
-  const vObj = cl((obj - c.y)*6.0, -med.naveMax, med.naveMax);
-  return c.vy < vObj;
+  /* ── Y LA ONDA NO SE PILOTEA CON VELOCIDAD, PORQUE NO TIENE INERCIA ──
+     Su velocidad vertical es instantanea: pidiendole una velocidad proporcional
+     al error, el mando oscila en cada cuadro y la diagonal se rompe en dientes.
+     Lo que corresponde es una banda muerta: se sube si esta por debajo del
+     destino, se baja si esta por encima, y en el medio se queda con lo que
+     traia. */
+  if (c.modo === 'onda'){
+    const e = (obj - c.y)*c.grav;
+    if (e > 0.12) return c.grav > 0;
+    if (e < -0.12) return c.grav < 0;
+    return c.apretado;
+  }
+  const tope = c.modo === 'columpio' ? med.colMax : med.naveMax;
+  const vObj = cl((obj - c.y)*6.0, -tope, tope);
+  return (c.vy < vObj) === (c.grav > 0);
 }
 
 /* ── LA POLITICA: SALTAR EN EL ULTIMO MOMENTO POSIBLE ──
@@ -156,9 +188,31 @@ function botVive(c, med, n, apretaPrimero){
   }
   return true;
 }
+/* ── QUIEN PUEDE DECIDIR EN EL AIRE Y QUIEN NO ──
+   La guarda «en el aire el toque no hace nada» es del CUBO, y aplicada a los ocho
+   modos deja tres sin jugar: el ovni salta en el aire, la arana se teletransporta
+   en el aire, y el robot tiene que SEGUIR apretando mientras sube o no carga. Con
+   la guarda puesta para todos, el bot suelta el boton en el primer cuadro de cada
+   salto de robot y el modo entero deja de existir. */
+function botPuede(c){
+  const m = c.modo;
+  if (m === 'ovni' || m === 'arana') return true;
+  if (m === 'robot') return c.piso || c.vy*c.grav > 0;
+  return c.piso || botOrbeCerca(c);
+}
+
+/* ── UN ORBE NO SE ESPERA: SU VENTANA ES EL MOMENTO ──
+   La politica de «saltar en el ultimo momento» es la correcta para un hueco y es
+   la equivocada para una cadena de orbes. La ventana de un orbe mide 1,9 bloques
+   de ancho, y esperando hasta el final de la primera se llega al borde de la
+   segunda: medido, el bot cruzaba el vacio del final rozando cada ventana y
+   moria en la tercera. Lo que hace un jugador es MANTENER apretado en una cadena,
+   y eso es lo que hace esto — con el rollout comprobando igual, asi que no puede
+   aprobar un orbe que mate. */
 function botReactiva(c, med, mira){
-  if (c.modo === 'nave') return botNave(c, med);
-  if (!c.piso && !botOrbeCerca(c)) return false;
+  if (PILOTO[c.modo]) return botNave(c, med);
+  if (!botPuede(c)) return false;
+  if (!c.piso && botOrbeCerca(c)) return true;
   const d = copia(c); avanza(d, med, DT, false);
   if (!d.vivo) return true;                        /* un paso mas y se muere */
   if (botVive(d, med, mira, true)) return false;   /* saltando el que viene, vive */
@@ -182,12 +236,16 @@ function botRueda(c0, med, pasos, mira){
    sirve. La regla es la misma de siempre: si esperar sobrevive el horizonte
    largo, se espera; si no, se aprieta. */
 function botElige(c, med, pasos, mira){
-  if (c.modo === 'nave') return botNave(c, med);
-  if (!c.piso && !botOrbeCerca(c)) return false;
-  const A = copia(c); avanza(A, med, DT, false);
-  if (A.vivo && botRueda(A, med, pasos, mira)) return false;
-  const B = copia(c); avanza(B, med, DT, true);
-  return B.vivo && botRueda(B, med, pasos, mira);
+  if (PILOTO[c.modo]) return botNave(c, med);
+  if (!botPuede(c)) return false;
+  /* con un orbe en la ventana se prueba APRETAR primero, por lo de arriba; sin
+     orbe se prueba ESPERAR primero, que es lo que clava el despegue de un hueco */
+  const prim = !c.piso && botOrbeCerca(c);
+  const A = copia(c); avanza(A, med, DT, prim);
+  if (A.vivo && botRueda(A, med, pasos, mira)) return prim;
+  const B = copia(c); avanza(B, med, DT, !prim);
+  if (B.vivo && botRueda(B, med, pasos, mira)) return !prim;
+  return prim;
 }
 
 /* juega el nivel que ya esta en MUNDO y devuelve cuanto llego */

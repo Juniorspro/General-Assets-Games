@@ -33,141 +33,80 @@ function armaAudio(){
   RUI = AUD.createBuffer(1, n, AUD.sampleRate);
   const d = RUI.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
+  musCarga();
 }
 
-/* ══════════ LAS TRES PISTAS ══════════
-   Cada una es una escala, un bajo y un motivo. La escala es menor pentatonica en
-   las tres: en un tema que se repite treinta veces por partida, cualquier nota
-   suena bien con cualquier otra y eso es la diferencia entre musica y tortura.
-   Lo que cambia entre pistas es el tempo, la raiz y la densidad. */
-const ESCALA = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24];
-const PISTAS = [
-  { raiz: 55.00, arp: [0, 4, 2, 5], lead: [7, 5, 4, 2, 4, 5, 7, 8], densidad: 0.55 },
-  { raiz: 61.74, arp: [0, 3, 5, 3], lead: [5, 7, 8, 7, 5, 4, 2, 0], densidad: 0.72 },
-  { raiz: 49.00, arp: [0, 5, 3, 7], lead: [9, 7, 5, 7, 9, 10, 9, 7], densidad: 0.88 }
-];
-const nota = (raiz, g) => raiz*Math.pow(2, ESCALA[((g % ESCALA.length) + ESCALA.length) % ESCALA.length]/12);
+const MUS = { on: false, t0: 0, bpm: 158, pista: 0, ganancia: 1 };
 
-const MUS = { on: false, t0: 0, bpm: 128, pista: 0, prox: 0, paso: 0, ganancia: 1 };
+/* ══════════ LA CANCION ══════════
+   ── LA MUSICA PASO DE OSCILADORES A UNA MUESTRA, Y ESO CAMBIA EL RELOJ ──
+   Antes el tema se sintetizaba, asi que el reloj del juego salia de contar
+   dieciseisavos agendados. Ahora hay UN archivo —el que el usuario trajo— y el
+   reloj sale de `AudioContext.currentTime` contra el instante en que la muestra
+   arranco. Es el mismo reloj de siempre y por la misma razon: es el unico que no
+   se atrasa cuando el navegador pierde cuadros.
 
-/* ── EL PLANIFICADOR MIRA ADELANTE Y NO CUELGA DEL BUCLE DE DIBUJO ──
-   `requestAnimationFrame` se atrasa y se PAUSA en segundo plano; el reloj de
-   audio no. Se agenda todo lo que entre en los proximos 180 ms. */
-const MIRA = 0.18;
-/* ── ARRANCA DESDE UN TIEMPO, NO SIEMPRE DESDE CERO ──
-   Lo pide el modo practica: si el punto de control esta en el bloque 96, la
-   musica tiene que retomar en el compas que le corresponde. Y puede hacerlo sin
-   ninguna cuenta nueva justamente porque el nivel y el tema comparten la grilla:
-   el bloque 96 ES el tiempo 24. */
+   ── Y EL ARCHIVO YA EMPIEZA EN UN TIEMPO ──
+   `hornear_musica.py` le recorta la cabeza hasta el primer tiempo medido
+   (0,348 s), asi que el instante cero de la muestra ES el tiempo cero del nivel y
+   no hace falta ningun desfase en ejecucion. Un desfase acá seria un numero que
+   hay que mantener en dos sitios. */
+let MUS_BUF = null, MUS_SRC = null, MUS_LISTA = false;
+function musCarga(){
+  armaAudio(); if (!AUD || MUS_LISTA || typeof MUS_B64 === 'undefined') return;
+  MUS_LISTA = true;
+  /* el data URI se decodifica una sola vez y queda en memoria: un
+     `BufferSource` nuevo por intento cuesta nada y es lo que permite arrancar
+     desde un punto de control sin volver a decodificar 235 KB */
+  fetch(MUS_B64).then(r => r.arrayBuffer()).then(a => AUD.decodeAudioData(a))
+    .then(b => { MUS_BUF = b; })
+    .catch(() => { MUS_LISTA = false; });
+}
+
 function musArranca(nivel, desdeT){
   armaAudio(); if (!AUD) return;
   const N = NIVELES[nivel];
   const d = Math.max(0, desdeT || 0);
   MUS.on = true; MUS.bpm = N.bpm; MUS.pista = nivel;
-  const dur = 60/N.bpm/4;
-  MUS.t0 = AUD.currentTime + 0.12 - d*60/N.bpm;
-  MUS.paso = Math.floor(d*4);
-  MUS.prox = MUS.t0 + MUS.paso*dur;
+  const T = 60/N.bpm;
+  /* el tiempo 0 del JUEGO, que puede caer en el pasado si se retoma un punto de
+     control: asi `musTiempo()` devuelve el tiempo musical correcto sin restar
+     nada afuera */
+  MUS.t0 = AUD.currentTime + 0.10 - d*T;
   MUS.ganancia = 1;
+  musPara2();
+  if (MUS_BUF){
+    MUS_SRC = AUD.createBufferSource();
+    MUS_SRC.buffer = MUS_BUF;
+    MUS_SRC.connect(GMUS);
+    /* arranca en el segundo que le corresponde al punto de control: el nivel y el
+       tema comparten la grilla, asi que el bloque 96 ES el tiempo 24 */
+    MUS_SRC.start(AUD.currentTime + 0.10, Math.min(MUS_BUF.duration - 0.05, d*T));
+  }
 }
-function musPara(){ MUS.on = false; }
+function musPara2(){
+  if (MUS_SRC){ try { MUS_SRC.stop(); } catch(e){} MUS_SRC.disconnect(); MUS_SRC = null; }
+}
+function musPara(){ MUS.on = false; musPara2(); }
 /* el tiempo musical, en TIEMPOS de compas. Es el reloj del juego. */
 function musTiempo(){
   if (!AUD || !MUS.on) return null;
   return (AUD.currentTime - MUS.t0)*MUS.bpm/60;
 }
-
+/* ── Y LA AGACHADA SE APLICA POR GANANCIA, NO PARANDO LA MUESTRA ──
+   La usa el freno de la muerte: parar y rearrancar una muestra de treinta
+   segundos se escucha como un corte, y bajarla un instante no. */
 function musPaso(){
   if (!MUS.on || !AUD) return;
-  const dur = 60/MUS.bpm/4;                 /* un dieciseisavo */
-  const P = PISTAS[MUS.pista];
-  while (MUS.prox < AUD.currentTime + MIRA){
-    const t = MUS.prox, s = MUS.paso, s16 = s % 16;
-    const g = MUS.ganancia;
-    /* el bombo: en cada tiempo, y es lo que el jugador siente como el pulso */
-    if (s16 % 4 === 0) golpe(t, 0.42*g);
-    /* el clap en el 2 y el 4 */
-    if (s16 === 4 || s16 === 12) clap(t, 0.26*g);
-    /* el charles en las corcheas, y abierto en la contra */
-    if (s16 % 2 === 0) charles(t, s16 % 4 === 2 ? 0.14*g : 0.09*g, s16 % 8 === 6);
-    /* el bajo: la fundamental en cada tiempo, con un octavo que empuja */
-    if (s16 % 4 === 0 || s16 % 8 === 3)
-      bajo(t, nota(P.raiz, P.arp[(s16/4 | 0) % 4]), dur*(s16 % 4 === 0 ? 3.4 : 1.6), 0.30*g);
-    /* el arpegio de dieciseisavos, que es lo que da la sensacion de velocidad */
-    if (az2(s) < P.densidad)
-      arp(t, nota(P.raiz*4, P.arp[s16 % 4] + (s16 % 8 >= 4 ? 5 : 0)), dur*1.5, 0.075*g);
-    /* y el lead, una nota por tiempo sobre dos compases */
-    if (s16 % 4 === 0){
-      const i = (s/4 | 0) % 8;
-      lead(t, nota(P.raiz*2, P.lead[i]), 60/MUS.bpm*0.9, 0.10*g);
-    }
-    MUS.prox += dur; MUS.paso++;
-  }
-}
-/* un azar barato y DETERMINISTA por paso: con `Math.random` el arpegio cambiaria
-   en cada intento y el tema dejaria de ser el mismo tema */
-function az2(s){ let x = (s*2654435761) >>> 0; x ^= x >>> 15; return ((x*1274126177) >>> 0)/4294967296; }
-
-function golpe(t, v){
-  const o = AUD.createOscillator(), g = AUD.createGain();
-  o.frequency.setValueAtTime(150, t);
-  o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
-  g.gain.setValueAtTime(v, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
-  o.connect(g); g.connect(GMUS); o.start(t); o.stop(t + 0.19);
-}
-function clap(t, v){
-  const s = AUD.createBufferSource(); s.buffer = RUI;
-  const f = AUD.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 1.2;
-  const g = AUD.createGain();
-  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-  s.connect(f); f.connect(g); g.connect(GMUS); s.start(t); s.stop(t + 0.15);
-}
-function charles(t, v, abierto){
-  const s = AUD.createBufferSource(); s.buffer = RUI;
-  const f = AUD.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7200;
-  const g = AUD.createGain();
-  const d = abierto ? 0.09 : 0.035;
-  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-  s.connect(f); f.connect(g); g.connect(GMUS); s.start(t); s.stop(t + d + 0.02);
-}
-function bajo(t, f0, d, v){
-  const o = AUD.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f0;
-  const fl = AUD.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = 6;
-  /* el filtro que se abre y se cierra es TODO el sonido de un bajo electronico:
-     con el filtro fijo suena a organo */
-  fl.frequency.setValueAtTime(180, t);
-  fl.frequency.linearRampToValueAtTime(1100, t + d*0.35);
-  fl.frequency.linearRampToValueAtTime(220, t + d);
-  const g = AUD.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(v, t + 0.012);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-  o.connect(fl); fl.connect(g); g.connect(GMUS); o.start(t); o.stop(t + d + 0.02);
-}
-function arp(t, f0, d, v){
-  const o = AUD.createOscillator(); o.type = 'square'; o.frequency.value = f0;
-  const g = AUD.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(v, t + 0.006);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-  o.connect(g); g.connect(GMUS); o.start(t); o.stop(t + d + 0.02);
-}
-function lead(t, f0, d, v){
-  /* dos osciladores desafinados un pelo: dos senos identicos suenan a tono de
-     prueba, y dos que baten cada tanto suenan a instrumento */
-  for (const det of [1, 1.006]){
-    const o = AUD.createOscillator(); o.type = 'triangle'; o.frequency.value = f0*det;
-    const g = AUD.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(v, t + 0.02);
-    g.gain.setValueAtTime(v, t + d*0.6);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(g); g.connect(GMUS); o.start(t); o.stop(t + d + 0.02);
-  }
+  if (GMUS) GMUS.gain.value = VOL_MUS*MUS.ganancia;
 }
 
-/* ══════════ LOS EFECTOS ══════════ */
+/* ── LO QUE SE FUE: LOS SEIS INSTRUMENTOS ──
+   El tema se sintetizaba con bombo, clap, charles, bajo, arpegio y lead, y con
+   una cancion de verdad eso pasa a ser codigo vivo que nadie llama: el dia que
+   se toque va a estar roto sin que nada lo diga. Lo unico que quedo del
+   sintetizador son los efectos de `son()`, que siguen pesando cero. */
+
 function son(k){
   armaAudio(); if (!AUD) return;
   const t = AUD.currentTime, g = AUD.createGain(); g.connect(GFX);

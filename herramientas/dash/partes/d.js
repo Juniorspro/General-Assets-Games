@@ -19,6 +19,7 @@ const MUNDO = {
   sierras: [],         /* solo para dibujar: su caja mortal ya esta en `mat` */
   techo: [],           /* tramos con techo, para gravedad y nave */
   nivel: 0, med: null,
+  tramos: [],          /* los diez tramos de modo, con su paleta */
   /* ── LA REVISION ──
      La sube `generaNivel` y el dibujo la mira para saber si tiene que rearmar
      las mallas. Con una llamada explicita, el dia que se agregue un camino que
@@ -31,88 +32,186 @@ const MUNDO = {
 
 const rect = (x, y, w, h, t) => ({ x, y, w, h, t });
 
-/* ── LOS PATRONES ──
-   Cada uno declara lo que pone y NADA MAS: no declara la solucion. La solucion
-   la encuentra el auto-jugador, que es lo que garantiza que exista de verdad.
-   `d` es la dificultad minima de nivel en la que el patron puede salir. */
-const PATRONES = [
-  { n: 'vacio', d: 1, pon(){} },
-  { n: 'pico1', d: 1, pon(P, x){ P.pico(x + 8); } },
-  { n: 'pico2', d: 1, pon(P, x){ P.pico(x + 4); P.pico(x + 12); } },
-  { n: 'dobles', d: 1, pon(P, x){ P.pico(x + 7); P.pico(x + 8); } },
-  { n: 'pico3', d: 2, pon(P, x){ P.pico(x + 4); P.pico(x + 9); P.pico(x + 14); } },
-  /* ── TRES PICOS SEGUIDOS NO SE PUEDEN PASAR, Y ES ARITMETICA ──
-     El salto deja la caja por encima de los 0,82 de un pico durante 3,25 bloques
-     (`9,6·u(1−u) > 0,82` da u de 0,094 a 0,906, y el salto mide 4). Tres picos
-     pegados ocupan 3,50 contando el ancho de la caja: no hay despegue que sirva.
-     Dos si (2,50), y por eso `dobles` existe y este patron paso a ser otra cosa:
-     un muro del que hay que saltar TARDE, porque bajarse caminando aterriza justo
-     encima de los dos picos. Eso es una prueba de tiempo y no de reflejo. */
-  { n: 'trampa', d: 3, pon(P, x){
-      P.bloque(x + 6, 0, 1.2, 1.6); P.pico(x + 8); P.pico(x + 9);
-    } },
-  /* ── LA PLATAFORMA VA A 1,6 Y NO A 2,0, Y ES ARITMETICA ──
-     El apice del salto son 2,4 bloques, asi que una plataforma cuya cara de
-     arriba este en 2,6 NO SE PUEDE ALCANZAR: se podia pasar por debajo saltando
-     los dos picos, pero la moneda de arriba era imposible y la plataforma era
-     decoracion. Con la cara en 2,2 se aterriza encima con 0,2 de sobra. */
-  { n: 'plata', d: 1, pon(P, x){
-      P.bloque(x + 6, 1.6, 5, 0.6);
-      P.pico(x + 7); P.pico(x + 9);
-      P.moneda(x + 8.5, 3.4);
-    } },
-  /* ── EL HUECO SE MIDE CONTRA EL SALTO, NO SE ELIGE ──
-     El salto mide 4,00 bloques exactos. Para pararse en el labio la caja tiene
-     que solaparlo, y para aterrizar tambien: la ventana de despegue mide
-     `4,86 − ancho` bloques, y encima hay que restarle los 0,34 que la caja baja
-     en un paso, porque aterrizar con menos solape que eso se resuelve como
-     choque de costado, o sea muerte. Con 4,0 de hueco la ventana queda en 0,52
-     bloques = 3,7 pasos: injugable. De ahi salen 3,0 · 3,5 · 3,9. */
-  { n: 'hueco', d: 1, pon(P, x, dif){ const w = [0, 2.7, 3.0, 3.3][dif];
-      P.hueco(x + 6, x + 6 + w); } },
-  { n: 'escalera', d: 2, pon(P, x){
-      P.bloque(x + 5, 0, 2, 1); P.bloque(x + 8, 0, 2, 2); P.bloque(x + 11, 0, 2, 3);
-    } },
-  { n: 'sierra', d: 2, pon(P, x){ P.sierra(x + 8, 0.75, 0.85); } },
-  /* ── EL PAD Y SU MURO: EL SITIO DEL MURO SALE DEL VUELO, NO SE ELIGE ──
-     El pad lanza con raiz de dos veces el impulso, o sea que el apice es el
-     doble: 4,8 bloques. Con el muro a 4,6 de alto habia 0,2 de margen y el
-     lanzamiento NO LO CLAREABA — medido, el bot moria ahi en los dos niveles que
-     usan el patron. En vueltas de pad, `y = 4h·u(√2−u)`, asi que la bajada cruza
-     los 3,0 bloques en u = 1,140, o sea **4,56 bloques despues del pad** — y ese
-     numero no depende del tempo, porque `v·T` son siempre 4 bloques. El muro va
-     ahi. Y la moneda va en el apice (u = 0,707 → 2,83 bloques), que es el unico
-     sitio del vuelo al que se llega. */
-  { n: 'pad', d: 2, pon(P, x){
-      P.pad(x + 5); P.bloque(x + 9, 0, 1.4, 3.0); P.moneda(x + 7.8, 4.4);
-    } },
-  { n: 'orbe', d: 2, pon(P, x){ P.hueco(x + 5, x + 12); P.orbe(x + 8, 2.2); } },
-  { n: 'muro', d: 3, pon(P, x){ P.bloque(x + 7, 0, 1.2, 2); P.pico(x + 12); } },
-  { n: 'sierras2', d: 3, pon(P, x){ P.sierra(x + 5, 0.75, 0.8); P.sierra(x + 12, 0.75, 0.8); } }
-];
+/* ══════════ EL NIVEL, TRAMO POR TRAMO ══════════
+   ── ESTE NIVEL ESTA ESCRITO Y NO SORTEADO, Y ES A PROPOSITO ──
+   Los tres niveles anteriores se generaban con patrones al azar y semilla, y eso
+   servia para tres temas de un solo modo. Con OCHO modos en un nivel el azar no
+   sirve: cada modo pide su propia altura de pasillo, su propia distancia entre
+   paredes y su propio portal, y un sorteo que respete todo eso ya es una lista
+   escrita. Lo que NO cambia es la validacion: el auto-jugador de `g.js` lo tiene
+   que terminar al 100 %, y comparte la fisica con el juego.
 
-/* ── LOS TRAMOS DE NAVE ──
-   Un pasillo con techo y aperturas. La nave no se apoya en nada, asi que lo unico
-   que la mata es el techo, el piso y los bloques: sin techo, «volar» seria subir
-   sin limite y el modo no significaria nada. */
-function tramoNave(P, x, largo, dif){
-  P.techo.push(rect(x, ALTO_PASILLO, largo, 1.4, 'techo'));
-  P.sol.push(rect(x, ALTO_PASILLO, largo, 1.4, 'techo'));
-  /* ── LA PRIMERA PARED VA A OCHO BLOQUES Y NO A SEIS ──
-     La nave entra pegada al piso y tiene que trepar hasta el hueco: con la pared
-     a seis bloques son medio segundo para subir hasta cuatro, contando la
-     aceleracion, y eso no alcanza. */
-  const n = Math.floor((largo - 8)/8);
-  for (let i = 0; i < n; i++){
-    const bx = x + 8 + i*8;
-    /* una pared de arriba y una de abajo, dejando un hueco de tres bloques: con
-       menos de tres la nave no pasa ni con la trayectoria perfecta */
-    const hueco = 3.4 + (3 - dif)*0.5;
-    const abajo = azr(0.6, Math.max(0.9, ALTO_PASILLO - 0.4 - hueco));
-    P.bloque(bx, 0, 1.2, abajo);
-    P.bloque(bx, abajo + hueco, 1.2, ALTO_PASILLO - (abajo + hueco));
+   ── Y LOS TRAMOS CAEN EN COMPASES ENTEROS ──
+   Los tramos de modo miden dos compases —32 bloques, ocho tiempos, 3,04 s a
+   158 BPM— asi que los ocho portales caen en el primer tiempo de un compas. A
+   mitad de compas el cambio de modo se lee a error. */
+const TRAMOS = [
+  { x: 0,   w: 24, modo: 'cubo',     arma: 'entrada' },
+  { x: 24,  w: 24, modo: 'cubo',     arma: 'cubo' },
+  { x: 48,  w: 32, modo: 'nave',     arma: 'nave' },
+  { x: 80,  w: 32, modo: 'bola',     arma: 'bola' },
+  { x: 112, w: 32, modo: 'ovni',     arma: 'ovni' },
+  { x: 144, w: 32, modo: 'onda',     arma: 'onda' },
+  { x: 176, w: 32, modo: 'robot',    arma: 'robot' },
+  { x: 208, w: 32, modo: 'arana',    arma: 'arana' },
+  { x: 240, w: 32, modo: 'columpio', arma: 'columpio' },
+  { x: 272, w: 30, modo: 'cubo',     arma: 'orbes' }
+];
+const LARGO_NIVEL = 302;
+
+/* ── LOS CONSTRUCTORES DE TRAMO ──
+   Cada uno pone lo que su modo necesita y NADA MAS: no declara la solucion. La
+   solucion la encuentra el auto-jugador, que es lo que garantiza que exista. */
+const ARMA = {
+
+  /* la entrada: compas y medio casi vacio. Aparecer al lado de un pico no es
+     dificultad, es una emboscada — y ademas el primer compas es la entrada del
+     tema, o sea que el nivel arranca cuando arranca la cancion. */
+  /* ── Y LLEVA EL PAD AMARILLO, PORQUE UN PAD NO SE DECIDE ──
+     El pad lanza al pisarlo y el orbe hay que apretarlo: son las dos mitades del
+     genero y las dos tienen que ESTAR en el nivel, no solo en el codigo. Va en la
+     entrada porque es donde no hay nada que esquivar todavia. Su apice son
+     `2·2,4 = 4,8` bloques y cae en `u = 0,707`, o sea 2,83 bloques despues del
+     pad: ahi va la moneda, que es el unico sitio del vuelo al que se llega. El
+     vuelo mide `4·√2 = 5,66` bloques, asi que se aterriza en x+13,66 y quedan
+     4,3 hasta el primer pico — un salto entero. */
+  entrada(P, x, w){
+    P.pad(x + 8, 'amar'); P.moneda(x + 10.83, 5.2);
+    P.pico(x + 18); P.pico(x + 22);
+  },
+
+  cubo(P, x, w){
+    P.pico(x + 2); P.pico(x + 6);
+    P.pico(x + 10); P.pico(x + 11);          /* dobles: 2,50 de ancho, entra */
+    P.hueco(x + 14, x + 17.0);               /* 3,0 de hueco contra 4,0 de salto */
+    /* el pad rosa lanza 0,68 del cubo, o sea apice 1,11: es un salto corto y su
+       gracia es que no se puede elegir — pisarlo obliga */
+    P.pad(x + 19, 'rosa');
+    P.pico(x + 21);
+  },
+
+  /* ── LA NAVE: UN PASILLO CON PAREDES CADA OCHO BLOQUES ──
+     Lo unico que la mata es el techo, el piso y las paredes: sin techo, «volar»
+     seria subir sin limite y el modo no significaria nada. */
+  nave(P, x, w){
+    P.techo(x, w, ALTO_PASILLO);
+    /* la primera pared va a ocho bloques y no a seis: la nave entra pegada al
+       piso y tiene que trepar hasta el hueco, y con seis no alcanza contando la
+       aceleracion */
+    for (let i = 0; i*8 + 8 < w; i++){
+      const bx = x + 8 + i*8, hueco = 3.4;
+      const abajo = [1.0, 2.6, 0.8][i % 3];
+      P.bloque(bx, 0, 1.2, abajo);
+      P.bloque(bx, abajo + hueco, 1.2, ALTO_PASILLO - (abajo + hueco));
+    }
+    P.moneda(x + 12, 2.6);
+  },
+
+  /* ── LA BOLA: PICOS QUE ALTERNAN PISO Y TECHO ──
+     La bola no salta: da vuelta la gravedad. Asi que lo que hay que medir es el
+     CRUCE: con el pasillo en 6 bloques y la gravedad del cubo, ir de una cara a
+     la otra tarda `sqrt(2·6/g)` = 0,30 s, o sea 3,2 bloques. Los picos van cada
+     ocho, que deja mas de un cruce de aire para decidir. */
+  bola(P, x, w){
+    P.techo(x, w, ALTO_BOLA);
+    for (let i = 0; i < 4; i++){
+      const bx = x + 6 + i*8;
+      if (i % 2 === 0){ P.pico(bx); P.pico(bx + 1); }
+      else { P.picoInv(bx, ALTO_BOLA); P.picoInv(bx + 1, ALTO_BOLA); }
+    }
+  },
+
+  /* ── EL OVNI: PILARES QUE SE SALTAN EN EL AIRE ──
+     Su apice son 2,0 bloques desde donde este, y puede tocar cuantas veces
+     quiera: lo que lo acota es que cada toque sube poco. Los pilares miden 1,6 —
+     un solo toque los clarea— y el hueco del final pide DOS. */
+  ovni(P, x, w){
+    P.techo(x, w, ALTO_OVNI);
+    P.bloque(x + 6, 0, 1.2, 1.6);
+    P.bloque(x + 13, 0, 1.2, 1.6);
+    P.bloque(x + 20, 0, 1.2, 2.4);
+    P.hueco(x + 25, x + 29.0);
+    P.moneda(x + 27, 3.0);
+  },
+
+  /* ── LA ONDA: EL PASILLO EN ZIGZAG ──
+     Va a 45 grados exactos, asi que la geometria es la unica dificultad: para
+     pasar de un hueco al siguiente hay que subir `dy` en `dx` bloques, y a 45
+     grados eso pide `dy <= dx`. Con paredes cada seis y huecos que se corren 2,2,
+     sobra — y con el hueco en 1,9 no perdona un cuadro de mas. */
+  onda(P, x, w){
+    P.techo(x, w, ALTO_ONDA);
+    const alturas = [1.0, 3.2, 1.0, 3.2, 1.6];
+    for (let i = 0; i < alturas.length; i++){
+      const bx = x + 6 + i*6, abajo = alturas[i], hueco = 1.9;
+      if (bx + 1.0 > x + w) break;
+      P.bloque(bx, 0, 1.0, abajo);
+      P.bloque(bx, abajo + hueco, 1.0, ALTO_ONDA - (abajo + hueco));
+    }
+  },
+
+  /* ── EL ROBOT: TRES MUROS QUE PIDEN TRES CARGAS DISTINTAS ──
+     Su apice va de 1,54 a 3,51 bloques segun cuanto se mantenga el dedo, asi que
+     el modo se juega MIDIENDO el tiempo. Los muros van en 1,2 · 2,2 · 3,0: el
+     primero sale con un toque corto, el ultimo pide la carga entera y deja medio
+     bloque de sobra. */
+  robot(P, x, w){
+    P.bloque(x + 7, 0, 0.9, 1.2);
+    P.bloque(x + 15, 0, 0.9, 2.2);
+    P.bloque(x + 24, 0, 0.9, 3.0);
+    P.moneda(x + 24.4, 4.2);
+  },
+
+  /* ── LA ARANA: SE TELETRANSPORTA A LA CARA DE ENFRENTE ──
+     Necesita las dos caras a la vez, asi que su tramo lleva techo; y como el
+     cambio es instantaneo, lo que se prueba es el TIEMPO y no la trayectoria. */
+  arana(P, x, w){
+    P.techo(x, w, ALTO_ARANA);
+    P.pico(x + 7); P.pico(x + 8);
+    P.picoInv(x + 14, ALTO_ARANA); P.picoInv(x + 15, ALTO_ARANA);
+    P.pico(x + 21); P.pico(x + 22);
+    P.picoInv(x + 27, ALTO_ARANA);
+  },
+
+  /* ── EL COLUMPIO: PAREDES ANCHAS, PORQUE EL ARCO ES MAS GRANDE ──
+     Invierte su gravedad, asi que no tiene tope de subida como la nave: el arco
+     es simetrico y mas amplio. Con el hueco de la nave (3,4) se pasaba de largo,
+     asi que va en 4,4 y las paredes cada diez. */
+  columpio(P, x, w){
+    P.techo(x, w, ALTO_COL);
+    const abajos = [1.2, 2.4, 1.0];
+    for (let i = 0; i < abajos.length; i++){
+      const bx = x + 9 + i*10, hueco = 4.4, abajo = abajos[i];
+      if (bx + 1.1 > x + w) break;
+      P.bloque(bx, 0, 1.1, abajo);
+      P.bloque(bx, abajo + hueco, 1.1, ALTO_COL - (abajo + hueco));
+    }
+  },
+
+  /* ── EL FINAL: UNA CADENA DE ORBES SOBRE EL VACIO ──
+     Es el unico tramo donde el vacio dura mas que un salto, asi que los orbes
+     dejan de ser un adorno y pasan a ser el piso. Van cada cuatro bloques, que es
+     exactamente lo que mide un salto: el que mantiene apretado los engancha en
+     fila, y el que suelta se cae. */
+  orbes(P, x, w){
+    /* ── LA ALTURA DE LOS ORBES SALE DEL ARCO, NO SE ELIGE ──
+       El salto describe `y = 9,6·u(1−u)` con `u = dx/4`, asi que a dos bloques del
+       labio el cuerpo esta en 2,40 y el orbe se engancha si su y esta a menos de
+       0,95 de `y + 0,43`. La primera version los puso en 2,0 a CUATRO bloques del
+       labio, donde el arco ya bajo a 0,37: medido, la diferencia daba 1,20 y el
+       orbe NO se enganchaba — el bot no saltaba nunca porque las dos ramas morian,
+       y eso es exactamente la firma de un tramo imposible. A 2,5 de alto y cada
+       cuatro bloques —que es lo que mide un salto— la cadena se engancha sola.
+       Y todos amarillos: el rosa impulsa 0,72, o sea un arco de 2,88 bloques, y
+       en el medio de una cadena de cuatro eso deja al jugador corto. */
+    P.hueco(x + 4, x + 16);
+    P.orbe(x + 6, 2.5, 'amar');
+    P.orbe(x + 10, 2.5, 'amar');
+    P.orbe(x + 14, 2.5, 'amar');
+    P.moneda(x + 10, 4.6);
+    P.pico(x + 20); P.pico(x + 24);
   }
-}
+};
 
 function generaNivel(id, semilla){
   const N = NIVELES[id];
@@ -121,56 +220,39 @@ function generaNivel(id, semilla){
   M.nivel = id; M.med = medidasDe(N.bpm);
   M.sol.length = 0; M.mat.length = 0; M.pads.length = 0; M.orbes.length = 0;
   M.portales.length = 0; M.monedas.length = 0; M.sierras.length = 0; M.techo.length = 0;
-  M.largo = N.compases*16;
+  M.tramos = [];
+  M.largo = LARGO_NIVEL;
 
-  /* la caja de herramientas que los patrones usan. Va como metodos y no como
-     funciones sueltas para que un patron no pueda escribir en otra cosa. */
+  /* la caja de herramientas de los tramos. Va como metodos y no como funciones
+     sueltas para que un tramo no pueda escribir en otra cosa. */
   const huecos = [];
   const P = {
-    sol: M.sol, techo: M.techo,
     pico(x){ M.mat.push(rect(x + 0.18, 0, 0.64, 0.82, 'pico')); },
+    /* el pico invertido cuelga del techo, o sea que su punta mira abajo */
+    picoInv(x, alto){ M.mat.push(rect(x + 0.18, alto - 0.82, 0.64, 0.82, 'picoInv')); },
     bloque(x, y, w, h){ M.sol.push(rect(x, y, w, h, 'bloque')); },
     sierra(x, y, r){ M.sierras.push({ x, y, r });
                      M.mat.push(rect(x - r*0.66, y - r*0.66, r*1.32, r*1.32, 'sierra')); },
-    pad(x){ M.pads.push({ x, y: 0 }); },
-    orbe(x, y){ M.orbes.push({ x, y, usado: false }); },
+    pad(x, t){ M.pads.push({ x, y: 0, t: t || 'amar' }); },
+    orbe(x, y, t){ M.orbes.push({ x, y, t: t || 'amar', usado: false }); },
     moneda(x, y){ if (M.monedas.length < 3) M.monedas.push({ x, y, tomada: false }); },
-    hueco(a, b){ huecos.push([a, b]); }
+    hueco(a, b){ huecos.push([a, b]); },
+    /* el techo va a las DOS listas: `techo` es para dibujarlo y `sol` para que
+       choque. Con una sola, el techo se ve y no frena, o frena y no se ve. */
+    techo(x, w, alto){
+      M.techo.push(rect(x, alto, w, 1.4, 'techo'));
+      M.sol.push(rect(x, alto, w, 1.4, 'techo'));
+    }
   };
 
-  /* ── EL PRIMER COMPAS Y EL ULTIMO VAN VACIOS ──
-     Aparecer al lado de un pico no es dificultad, es una emboscada; y terminar
-     justo sobre un obstaculo convierte el 99 % en una loteria. */
-  const compases = N.compases;
-  const usables = PATRONES.filter(p => p.d <= N.dif);
-  const conNave = N.modos.indexOf('nave') >= 0;
-  const conGrav = N.modos.indexOf('gravedad') >= 0;
-  let c = 2;
-  while (c < compases - 2){
-    const x = c*16;
-    /* ── LOS TRAMOS ESPECIALES SE ANUNCIAN CON UN PORTAL Y OCUPAN COMPASES ENTEROS ──
-       A mitad de compas, el cambio de modo cae en contratiempo y se lee a error. */
-    if (conNave && c > 5 && c % 9 === 0 && c + 4 < compases - 2){
-      M.portales.push({ x: x + 1, t: 'nave' });
-      tramoNave(P, x, 64, N.dif);
-      M.portales.push({ x: x + 62, t: 'cubo' });
-      c += 4; continue;
-    }
-    if (conGrav && c > 3 && c % 7 === 0 && c + 3 < compases - 2){
-      M.portales.push({ x: x + 1, t: 'grav' });
-      M.techo.push(rect(x, ALTO_GRAV, 48, 1.2, 'techo'));
-      M.sol.push(rect(x, ALTO_GRAV, 48, 1.2, 'techo'));
-      /* los picos del tramo invertido cuelgan del techo */
-      for (let k = 0; k < 3; k++){
-        const bx = x + 6 + k*16;
-        M.mat.push(rect(bx + 0.18, ALTO_GRAV - 0.82, 0.64, 0.82, 'picoInv'));
-      }
-      M.portales.push({ x: x + 46, t: 'norm' });
-      c += 3; continue;
-    }
-    const pat = usables[azi(0, usables.length - 1)];
-    pat.pon(P, x, N.dif);
-    c++;
+  /* ── LOS PORTALES SE PONEN AL ARMAR EL TRAMO, NO EN UNA SEGUNDA LISTA ──
+     Con dos listas —los tramos y sus portales— el dia que se mueva un tramo el
+     portal queda donde estaba y el modo cambia a mitad de camino. */
+  for (let i = 0; i < TRAMOS.length; i++){
+    const T = TRAMOS[i], ant = i > 0 ? TRAMOS[i - 1] : null;
+    if (ant && ant.modo !== T.modo) M.portales.push({ x: T.x + 1.0, t: T.modo });
+    M.tramos.push({ x: T.x, w: T.w, modo: T.modo, pal: i });
+    ARMA[T.arma](P, T.x, T.w);
   }
 
   /* ── EL PISO SE ARMA AL FINAL, DESCONTANDO LOS HUECOS ──
@@ -188,6 +270,16 @@ function generaNivel(id, semilla){
   indexaMundo();
   M.rev++;
   return M;
+}
+
+/* ── EL TRAMO EN EL QUE ESTA UNA X ──
+   Lo usan la paleta y el rotulo del HUD. Con diez tramos una busqueda lineal
+   alcanza, y con un modulo el color cambiaria a mitad de tramo — que es justo lo
+   que los portales existen para evitar. */
+function tramoDe(x){
+  const L = MUNDO.tramos;
+  for (let i = L.length - 1; i >= 0; i--) if (x >= L[i].x) return L[i];
+  return L[0] || null;
 }
 
 /* ── EL SITIO EN BLOQUES DE UN TIEMPO DE COMPAS, Y AL REVES ──

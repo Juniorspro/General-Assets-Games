@@ -138,7 +138,7 @@ function pintaFilas(){
 /* ══════════ EL HUD ══════════
    Se escribe SOLO cuando cambia: escribir en el DOM sesenta veces por segundo
    obliga al navegador a recalcular el layout para poner el mismo texto. */
-const HUD = { pct: -1, int: -1, mej: -1, tema: '' };
+const HUD = { pct: -1, int: -1, mej: -1, tema: '', modo: '' };
 function pintaHud(forzar){
   if (forzar || HUD.pct !== EST.pct){
     HUD.pct = EST.pct;
@@ -155,6 +155,19 @@ function pintaHud(forzar){
   }
   const t = NIVELES[EST.nivel].nom + ' · ' + NIVELES[EST.nivel].bpm;
   if (forzar || HUD.tema !== t){ HUD.tema = t; $('tema').textContent = t; }
+  /* ── Y EL MODO SE DICE, PORQUE LAS REGLAS CAMBIAN OCHO VECES ──
+     En un nivel de un solo modo el rotulo seria ruido; con ocho, lo que el dedo
+     hace en la nave no es lo que hace en el robot y el jugador tiene que poder
+     saber en cual esta sin deducirlo del dibujo. Va del COLOR del modo, que es
+     el mismo con el que destella el portal: el rotulo y el destello dicen lo
+     mismo por construccion. */
+  const m = MODO_NOM[JUG.modo] || '';
+  if (forzar || HUD.modo !== m){
+    HUD.modo = m;
+    const e = $('modo');
+    e.textContent = m;
+    e.style.color = MODO_COL[JUG.modo] || '#e2f0ff';
+  }
 }
 
 /* ══════════ ENTRAR, PAUSAR Y SALIR ══════════ */
@@ -183,9 +196,14 @@ function sigue(){
      reintento */
   pantalla('juego'); reintenta(true); ponCam(1); pintaHud(true);
 }
-function salir(){ EST.corriendo = false; musPara(); pantalla('pNiveles'); pintaLista(); }
+function salir(){ EST.corriendo = false; musPara(); pantalla('pMenu'); pintaLista(); }
 
-$('bJugar').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); };
+/* ── CON UN SOLO NIVEL, JUGAR ENTRA DIRECTO ──
+   Una lista de un elemento no es una eleccion, es un peaje: dos toques para hacer
+   lo unico que se puede hacer. La pantalla de niveles se queda igual —muestra el
+   mejor porcentaje y las monedas— y se llega por el boton de al lado. */
+$('bJugar').onclick = () => { son('clic'); entra(0); };
+$('bNiv') && ($('bNiv').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); });
 $('bIconos').onclick = () => { son('clic'); pantalla('pIconos'); pintaFilas(); };
 $('bAjustes').onclick = () => { son('clic'); pantalla('pAjustes'); pintaFilas(); };
 $('nVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
@@ -201,12 +219,12 @@ $('bPract').onclick = () => {
   pintaPract();
 };
 $('bSalir').onclick = () => { son('clic'); salir(); };
-$('fMenu').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); };
+$('fMenu').onclick = () => { son('clic'); pantalla('pMenu'); pintaLista(); };
 $('fSigue').onclick = () => {
   son('clic');
   const n = EST.nivel + 1;
   if (n < NIVELES.length) entra(n);
-  else { pantalla('pNiveles'); pintaLista(); }
+  else { pantalla('pMenu'); pintaLista(); }
 };
 $('aMus').oninput = (e) => { VOL_MUS = e.target.value/100; ponVol(); guardaProg(); };
 $('aFx').oninput = (e) => { VOL_FX = e.target.value/100; ponVol(); guardaProg(); };
@@ -347,6 +365,9 @@ function arrancaTodo(){
   /* las fotos empiezan a decodificar aca y el juego NO las espera: son telones */
   telonCarga();
   ponMenuImg();
+  /* la cancion son 235 KB de MP3: decodifica en segundo plano y el juego no la
+     espera — sin ella el reloj cae al respaldo integrado y se juega igual */
+  musCarga();
   pon(12, 'ROTOR');
   /* los tres niveles se generan y SE JUEGAN acá: uno que no se pueda terminar
      tiene que morir en la pantalla de carga, no en las manos del jugador */
@@ -490,9 +511,17 @@ window.__R = {
        paso: la sonda tenia la formula del renderizador 2D y devolvia el piso al
        42 % del alto donde el juego lo pone al 80 %. */
     ponCam(1);
+    /* ── Y LA PALETA TAMBIEN SE COLOCA, PORQUE NO LA MUEVE `pinta` ──
+       `paletaPaso` la corre el bucle y no el dibujo, asi que plantando al jugador
+       en el tramo nueve la foto salia con los colores del tramo UNO: medido, la
+       niebla daba `#451e26` —el ciruela del primer tramo— con el telon de
+       atardecer puesto detras. Es la sexta vez en este repo que una sonda
+       fotografia un estado que ella misma no adelanto. */
+    ponPaleta(NIVELES[EST.nivel]);
     pinta();
     return { x: JUG.x, y: JUG.y, camx: +CAM.x.toFixed(2), camy: +CAM.y.toFixed(2),
-             modo: JUG.modo, grav: JUG.grav };
+             modo: JUG.modo, grav: JUG.grav,
+             niebla: '#' + NIEBLA.color.getHexString() };
   },
   audita(){ return audita(); },
   juegaSolo(o){ return juegaSolo(o || {}); },
@@ -515,6 +544,35 @@ window.__R = {
              pico: +pico.toFixed(4), rms: +Math.sqrt(s/b.length).toFixed(4),
              mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2) };
   },
+  /* ── APAGAR UNA PIEZA Y VOLVER A DIBUJAR ──
+     «Hay una cuna negra tapando el cielo» no se puede diagnosticar mirando: hay
+     media docena de mallas que podrian estar dibujandola y todas son oscuras. Se
+     apagan de a una y se fotografia — es el mismo material de diagnostico que en
+     RECREO encontro un tunel al que le faltaban las paredes en un cuadro, contra
+     cuarenta combinaciones de luz que no cambiaban el brillo ni un punto. */
+  mallas(){
+    const o = {};
+    for (const k in INST) if (INST[k]) o[k] = { n: INST[k].count, vis: INST[k].visible };
+    o.telon = { vis: telon.visible, opa: +matTelon.opacity.toFixed(2) };
+    o.deco = { n: DEC.length, listas: DEC.filter(D => D.listo).length };
+    o.ocultos = Object.keys(OCULTO).filter(k => OCULTO[k]);
+    o.niebla = { hex: '#' + NIEBLA.color.getHexString(), d: NIEBLA.density };
+    return o;
+  },
+  oculta(k, v){
+    if (INST[k]) INST[k].visible = !v;
+    else OCULTO[k] = !!v;
+    pinta();
+    return this.mallas();
+  },
+  /* ── EL MATERIAL DE DIAGNOSTICO ──
+     Apagar piezas de a una contesta «cual es»; pintar la escena con las NORMALES
+     contesta «que superficie es» en un solo cuadro, y eso es lo que hace falta
+     cuando la pieza sospechosa es una losa de ciento cuarenta bloques y hay seis
+     candidatas todas oscuras. En RECREO esto encontro un tunel al que le faltaban
+     tres de sus cuatro paredes contra cuarenta combinaciones de luz que no movian
+     el brillo ni un punto. */
+  normales(v){ esc3.overrideMaterial = v ? new T.MeshNormalMaterial() : null; pinta(); return !!v; },
   brillo(){ return brilloDe(); },
   costo(){ return costoDe(); },
   part(){ return partDe(); },
@@ -522,7 +580,7 @@ window.__R = {
      marco girado `getBoundingClientRect` devuelve la caja alineada a los ejes y
      miente, asi que se mide con offset, que son coordenadas del marco */
   solapes(){
-    const ids = ['barra', 'pct', 'tema', 'mejor', 'intentos', 'pract', 'bPausa'];
+    const ids = ['barra', 'pct', 'tema', 'modo', 'mejor', 'intentos', 'pract', 'bPausa'];
     const cajas = [];
     for (const id of ids){
       const e = $(id);
@@ -612,6 +670,28 @@ window.__R = {
      comprobar que la cara de apoyo se queda quieta es preguntarle al objeto
      donde quedaron sus bordes. */
   cubo(){ return cuboDe(); },
+  /* ── EL RASTRO DEL BOT DESDE UNA X, QUE ES LO QUE DICE POR QUE MURIO ──
+     `juegaSolo` devuelve DONDE murio y eso no alcanza para arreglar un tramo: hay
+     que ver la trayectoria. Planta un cuerpo en el modo del tramo y devuelve la y,
+     la velocidad y la decision paso a paso. */
+  botTrazo(x0, modo, n, cada){
+    const med = MUNDO.med;
+    const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    const c = {}; jugPone(c, x0);
+    if (modo) c.modo = modo;
+    const out = [];
+    const k = cada || 6;
+    for (let i = 0; i < (n || 300); i++){
+      const a = botElige(c, med, ph, mira);
+      avanza(c, med, DT, a);
+      if (i % k === 0 || !c.vivo)
+        out.push([+c.x.toFixed(2), +c.y.toFixed(2), +c.vy.toFixed(1), a ? 1 : 0,
+                  c.modo, c.grav, c.piso ? 1 : 0]);
+      if (!c.vivo) break;
+      if (c.x >= MUNDO.largo) break;
+    }
+    return { vivo: c.vivo, x: +c.x.toFixed(2), pasos: out.length, t: out };
+  },
   /* el estado de las imagenes: si una no decodifico, el juego se dibuja como se
      dibujaba antes y hay que poder distinguir las dos cosas */
   img(){

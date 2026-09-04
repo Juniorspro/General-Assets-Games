@@ -36,6 +36,17 @@ const PROF = 1.6;                            /* cuanto se extruyen los solidos *
    niebla se lleva el 96 % y el suelo se funde con el cielo en el horizonte, asi
    que cada torre corta donde le toca por su propia z. */
 const PROF_PISO = 140;
+/* ── EL TECHO DE UN PASILLO NO SE EXTRUYE COMO EL SUELO, Y ESO SE MIDIO ──
+   El suelo mide 140 de fondo porque tiene que llegar hasta donde la niebla lo
+   cierra: con densidad 0,013, un 95 % de niebla cae en 133 bloques, asi que el
+   numero esta derivado y no elegido. Un TECHO no: su cara de abajo no recibe sol
+   —solo ambiente y el rebote del hemisferico— asi que extruida 140 bloques es una
+   cuna casi negra de un tercio de pantalla, y su cara de +X, que la niebla lleva
+   al color del horizonte, aparece adentro del pasillo como dos triangulos beige
+   cruzando la banda de juego (medido en el tramo de la onda). Con 6,5 de fondo el
+   techo se lee a viga —el mismo lenguaje que los bloques, que miden 1,6— y las
+   dos caras problematicas se quedan en un canto. */
+const PROF_TECHO = 6.5;
 const FOV_Y = 50;
 
 const ren = new T.WebGLRenderer({ canvas: cv, antialias: false, powerPreference: 'high-performance' });
@@ -93,8 +104,8 @@ const matSol  = new T.MeshLambertMaterial({ color: 0x171e2d });
 const matPiso = new T.MeshLambertMaterial({ color: 0x2a3448 });
 const matCanto = new T.MeshBasicMaterial({ color: 0x2de2a8 });
 const matPico = new T.MeshLambertMaterial({ color: 0xeef4ff, emissive: 0x7f8fa6, emissiveIntensity: 0.35 });
-const matPad  = new T.MeshBasicMaterial({ color: 0xffd447 });
-const matOrbe = new T.MeshBasicMaterial({ color: 0xffd447 });
+const matPad  = new T.MeshBasicMaterial({ color: 0xffffff });
+const matOrbe = new T.MeshBasicMaterial({ color: 0xffffff });
 const matSierra = new T.MeshLambertMaterial({ color: 0xdfe7f2, emissive: 0x445064, emissiveIntensity: 0.4 });
 const matMoneda = new T.MeshLambertMaterial({ color: 0xffd447, emissive: 0x8a6a10, emissiveIntensity: 0.7 });
 /* ── EL FALDON DEL SUELO VA SIN LUZ, Y ESA ES LA RAZON DE QUE EXISTA ──
@@ -112,6 +123,18 @@ function lienzoFaldon(){
   const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
 }
 const matFaldon = new T.MeshBasicMaterial({ map: lienzoFaldon(), color: 0x3d4a63 });
+/* ── UN FALDON DE COSTADO SE PROBO, SE MIDIO Y SE DESCARTO ──
+   La cuna oscura de la esquina de arriba parecia ser el CORTE de la losa del
+   techo —140 bloques de fondo vistos desde cinco al costado— asi que se le puso
+   el mismo faldon sin luz que a la cara de adelante. Y no era: pintando la
+   escena con las NORMALES, la cuna resulto DOS superficies encimadas —una que
+   mira a +X, que era el faldon nuevo, y detras una que mira ABAJO, que es la cara
+   de abajo del techo—. O sea que el faldon tapaba con un plano claro un problema
+   que estaba detras. Y encima un plano sin luz no puede ganar en los dos sitios:
+   medido, con 0x2b344a se veia demasiado OSCURO contra el cielo de atardecer y
+   demasiado CLARO adentro del pasillo de la onda, donde salia como dos triangulos
+   beige cruzando la pantalla. Lo que si arreglo la cuna fue la niebla: llevada al
+   color del horizonte medido de la foto, el corte se disuelve solo. */
 
 const GEO = {
   caja: new T.BoxGeometry(1, 1, 1),
@@ -184,7 +207,7 @@ let telonProp = 2.36;
    solo cuadro en negro. */
 function telonCarga(){
   if (typeof IMG === 'undefined') return;
-  for (const k of ['f0', 'f1', 'f2']){
+  for (const k of ['p0']){
     const t = new T.TextureLoader().load(IMG[k], () => { TELON_TEX[k].listo = true; });
     t.wrapS = T.MirroredRepeatWrapping; t.wrapT = T.ClampToEdgeWrapping;
     t.colorSpace = T.SRGBColorSpace;
@@ -192,11 +215,19 @@ function telonCarga(){
     TELON_TEX[k] = { tex: t, listo: false,
                      prop: (IMG_TAM[k][0]/IMG_TAM[k][1]) };
   }
+  decoCarga();
 }
+/* ── QUE PIEZAS ESTAN APAGADAS A MANO ──
+   Lo consulta el dibujo, y no alcanza con poner `visible = false` desde afuera:
+   el telon y la decoracion se prenden solos en cada cuadro —dependen de si su
+   textura ya decodifico— asi que un apagado externo dura exactamente un cuadro y
+   la foto de diagnostico sale con la pieza puesta. Ya paso: cuatro capturas de
+   aislamiento salieron identicas y me llevaron a descartar dos piezas que en
+   realidad nunca se habian apagado. */
+const OCULTO = {};
 function ponTelon(){
-  const N = NIVELES[EST.nivel];
-  const e = TELON_TEX['f' + N.id];
-  if (!e || !e.listo){ telon.visible = false; return; }
+  const e = TELON_TEX.p0;
+  if (!e || !e.listo || OCULTO.telon){ telon.visible = false; return; }
   telon.visible = true;
   if (matTelon.map !== e.tex){ matTelon.map = e.tex; matTelon.needsUpdate = true;
                                telonProp = e.prop; }
@@ -230,47 +261,101 @@ reja.position.set(600, 70, -175);
 texReja.repeat.set(2600/4, 300/4);          /* una celda cada cuatro bloques: la grilla del compas */
 esc3.add(reja);
 
-/* ══════════ TRES CAPAS DE FONDO, Y LA SILUETA LA ELIGE EL NIVEL ══════════
+/* ══════════ LA DECORACION DE FONDO: SPRITES EN PARALAJE ══════════
    ── EL PARALAJE NO SE PROGRAMA: SALE DE LA PERSPECTIVA ──
-   Las capas van PLANTADAS en el mundo a tres profundidades y su velocidad
+   Los sprites van PLANTADOS en el mundo a tres profundidades y su velocidad
    relativa es la que la camara les da. En 2D esto eran tres factores que habia
    que mantener a mano; en 3D es geometria y no puede desincronizarse.
 
-   ── Y LO QUE SEPARA UN NIVEL DE OTRO ES LA SILUETA, NO EL TINTE ──
-   Tres fondos del mismo dibujo con otro color son tres veces el mismo nivel.
-   `ciudad` son torres con ventanas, `rocas` son bloques flotando y `cresta` es
-   una cordillera de picos: se reconoce cual es de una ojeada, sin leer nada.
+   ── Y LO QUE SE FUE SON LOS ROMBOS ──
+   Antes el fondo eran tres capas de rombos y torres dibujados por codigo, con un
+   estilo por nivel. Con UN nivel y una foto de horizonte detras, esas capas
+   dejaban de aportar silueta y solo ensuciaban: lo que aporta ahora son trece
+   objetos DIBUJADOS —cristales, arcos, nubes, engranajes, palmeras, faroles— que
+   es lo que el pedido llama sprites de fondo.
 
-   Cada forma sale de la POSICION y no de un azar por cuadro — si no, parpadean. */
-/* ── Y SE APOYAN EN EL PISO, NO FLOTAN DENTRO DE EL ──
-   La primera version puso la capa cercana a 19 bloques, o sea ADENTRO de la losa
-   del suelo, que llega a 70: el suelo le tapaba la base a una altura fija y las
-   torres salian como una fila de bloques sueltos sobre una repisa. Apoyadas en
-   y = 0 y detras del borde del suelo, la base se pierde en el horizonte y ahi si
-   se leen a ciudad. El horizonte cae al 50 % del alto, porque la camara mira
-   derecho: todo el fondo tiene que vivir en la mitad de arriba del cuadro. */
-/* ── Y CADA ESTILO PESA DISTINTO, PORQUE NO OCUPA LO MISMO ──
-   Una torre es angosta y deja ver el cielo entre una y otra; una cordillera es
-   una masa continua. Con la misma opacidad, la cresta salia como una banda
-   naranja de punta a punta y hasta se comia los rotulos del HUD. */
-/* Y con el telon de foto puesto las capas pesan MENOS: la foto ya trae las rocas
-   y la cordillera, asi que la geometria de encima suma poco y ensucia mucho. La
-   ciudad es la excepcion —sus torres se leen a torres MAS CERCA que las de la
-   foto— y ahi el paralaje se gana entero. */
-const FONDO_OPA = { ciudad: 1.00, rocas: 0.55, cresta: 0.52 };
-const CAPAS = [
-  { z: -38,  mat: null, n: 170, paso: 7.0,  brillo: 0.42, esc: 1.00 },   /* cerca */
-  { z: -72,  mat: null, n: 200, paso: 11.0, brillo: 0.30, esc: 1.90 },   /* medio */
-  { z: -125, mat: null, n: 220, paso: 17.0, brillo: 0.22, esc: 3.40 }    /* lejos */
-];
-for (const c of CAPAS){
-  c.mat = new T.MeshBasicMaterial({ color: 0x2de2a8, transparent: true,
-                                    opacity: c.brillo, depthWrite: false });
-  c.opa = c.brillo;
-  c.malla = new T.InstancedMesh(new T.PlaneGeometry(1, 1), c.mat, c.n);
-  c.malla.frustumCulled = false;
-  c.malla.renderOrder = -5;
-  esc3.add(c.malla);
+   ── UNA MALLA POR SPRITE, Y NO UN ATLAS CON UN SHADER ──
+   Un atlas con UV por instancia pide parchear el shader; trece mallas
+   instanciadas cuestan trece llamadas de dibujo y ninguna linea de GLSL. A
+   diecinueve llamadas de base, trece mas no mueven el cuadro, y cada sprite
+   conserva su propia transparencia y su propia proporcion. */
+/* ── LAS TRES CAPAS, Y CADA SPRITE VIVE EN UNA SOLA ──
+   La primera version ponia los TRECE sprites en las TRES capas con nueve copias
+   cada uno: 351 objetos sobre 332 bloques, o sea uno por bloque. Medido en la
+   foto, lo que aparecio no fue profundidad sino una CINTA continua de calcomanias
+   pegada a la altura del juego, con los mismos valores que el nivel — los orbes
+   amarillos del final se perdian contra un arbusto. Con un sprite por capa la
+   cinta se parte en tres, y cada capa estrena su propio vocabulario de formas,
+   que es lo que de verdad se lee a distancia. */
+/* ── EL TAMANO APARENTE SE CUENTA, Y ERA DE BLOQUE ──
+   Un objeto a `z` se ve `9,9/(9,9+|z|)` veces su tamano, porque el plano de juego
+   esta a 9,9 de la camara. Con la capa de cerca a −34 y 3,4 de alto, un sprite del
+   fondo aparecia midiendo **un bloque** — o sea exactamente lo que mide un
+   obstaculo, y en el pasillo de la onda una estrella del fondo se leia a moneda.
+   Las tres capas estan puestas para que NINGUNA pase de un bloque aparente: 0,36
+   a 0,81 · 0,39 a 0,86 · 0,48 a 1,07, y la ultima encima llega con un 76 % de
+   niebla. Y el fondo no se va mas lejos que eso porque la niebla lo cerraria: con
+   densidad 0,013, a 150 bloques no queda nada que mirar. */
+const DECO_Z = [-34, -60, -92];              /* cerca, medio, lejos */
+const DECO_ESC = [2.6, 4.4, 8.0];            /* alto en bloques por capa */
+/* ── Y LA PERSPECTIVA AEREA VA POR INSTANCIA, NO POR MATERIAL ──
+   Una malla tiene UN color y sus instancias viven en las tres capas, asi que el
+   tinte por capa tiene que ir en `instanceColor`. Sin el, la capa de 124 bloques
+   sale igual de viva que la de 34 y las tres se leen a la misma distancia: eso
+   es exactamente lo que hacia que el fondo se pegara encima del nivel. */
+/* ── Y LA CAPA DE CERCA TAMBIEN SE APAGA, PORQUE COMPITE ──
+   Medido en la foto del pasillo de la onda: con la capa de cerca al 0,92 una
+   estrella del fondo se ve del mismo tamano y del mismo valor que un bloque, y
+   en un pasillo donde hay que esquivar eso no es decoracion, es un obstaculo que
+   no existe. El fondo tiene que estar CLARAMENTE detras en valor, no solo en z. */
+const DECO_BRI = [0.86, 0.72, 0.58];         /* cuanto sobrevive de cada capa */
+const DECO_N = [4, 6, 8];                    /* copias: pocas y grandes cerca */
+const DEC = [];
+function decoCarga(){
+  if (typeof DECO === 'undefined' || !DECO.length) return;
+  for (let i = 0; i < DECO.length; i++){
+    const e = DECO[i];
+    const t = new T.TextureLoader().load(e.d, () => { DEC[i].listo = true; });
+    t.colorSpace = T.SRGBColorSpace;
+    const mat = new T.MeshBasicMaterial({ map: t, transparent: false, alphaTest: 0.45,
+                                          depthWrite: true, color: 0xffffff });
+    /* la capa la decide el indice del sprite: un sprite = una distancia */
+    const capa = i % DECO_Z.length;
+    const m = new T.InstancedMesh(new T.PlaneGeometry(1, 1), mat, DECO_N[capa]);
+    m.frustumCulled = false; m.renderOrder = -5; m.visible = false;
+    esc3.add(m);
+    DEC.push({ mat, malla: m, prop: e.p, listo: false, capa });
+  }
+}
+/* ── Y SE REPARTEN CON UN AZAR CON SEMILLA, NO CON `Math.random` ──
+   Si el sitio de cada objeto se sorteara por cuadro, el fondo parpadearia; y si
+   se sorteara al arrancar, el nivel se veria distinto en cada intento. Con la
+   posicion como semilla, el fondo ES parte del nivel. */
+function armaDeco(N){
+  if (!DEC.length) return;
+  for (let i = 0; i < DEC.length; i++){
+    const D = DEC[i], m = D.malla, capa = D.capa;
+    const n = DECO_N[capa];
+    const paso = (MUNDO.largo + 90)/n;
+    /* flotar o apoyarse no puede depender de la capa: si dependiera, todas las
+       nubes quedarian a la misma distancia y el cielo se leeria a una sola capa */
+    const flota = ((((i*2654435761) >>> 0) % 5) < 2);
+    for (let j = 0; j < n; j++){
+      const h = ((((i*2654435761 + j*40503 + capa*1013904223) >>> 0) ^ 0x9e3779b9) >>> 0)/4294967296;
+      const h2 = (((i*374761393 + j*668265263 + capa*2246822519) >>> 0))/4294967296;
+      const alto = DECO_ESC[capa]*(0.62 + 0.76*h2);
+      const ancho = alto*D.prop;
+      /* apoyado se hunde un poco en la losa —asi el borde de abajo no dibuja una
+         linea recta de punta a punta— y flotando sube con la capa */
+      const y = flota ? 5.0 + h*7.5 + capa*2.2 : alto*0.5 - alto*0.16;
+      const x = -30 + (j + h)*paso;
+      _m4.compose(_v.set(x, y, DECO_Z[capa] + h2*6),
+                  _q.identity(), _v2.set(ancho, alto, 1));
+      m.setMatrixAt(j, _m4);
+    }
+    m.count = n;
+    m.instanceMatrix.needsUpdate = true;
+  }
 }
 
 /* ── LAS MOTAS LEJANAS ──
@@ -331,7 +416,10 @@ function mundo3D(){
      el jugador, que son lo que hay que poder apoyar. */
   const mp = nuevaInst('piso', GEO.caja, matPiso, pisos.length, false);
   mp.receiveShadow = true;
-  pisos.forEach((r, i) => ponCaja(mp, i, r.x, r.y, r.w, r.h, -PROF_PISO/2, PROF_PISO));
+  pisos.forEach((r, i) => {
+    const d = r.t === 'techo' ? PROF_TECHO : PROF_PISO;
+    ponCaja(mp, i, r.x, r.y, r.w, r.h, -d/2, d);
+  });
   mp.instanceMatrix.needsUpdate = true;
 
   /* el faldon: un plano por delante de la cara de adelante de cada piso */
@@ -381,12 +469,25 @@ function mundo3D(){
   MUNDO.pads.forEach((p, i) => ponCaja(mpa, i, p.x, p.y + 0.02, 1, 0.20, -PROF/2, PROF*0.8));
   if (mpa) mpa.instanceMatrix.needsUpdate = true;
 
+  /* ── LOS ORBES VAN CADA UNO DE SU COLOR, Y ES INFORMACION ──
+     En este genero el color del orbe ES la regla: amarillo salta, rosa salta
+     poco, rojo salta mucho, azul da vuelta la gravedad. Con todos del mismo
+     color habria que aprenderse de memoria cual es cual, y eso no es dificultad.
+     Sale gratis: `setColorAt` sobre la misma malla instanciada. */
   const mo = nuevaInst('orbe', GEO.aro, matOrbe, MUNDO.orbes.length, false);
   MUNDO.orbes.forEach((o, i) => {
-    _m4.compose(new T.Vector3(o.x, o.y, -PROF/2 + 0.5), _q.identity(), new T.Vector3(1, 1, 1));
+    _m4.compose(new T.Vector3(o.x, o.y, -PROF/2 + 0.5), _q.identity(),
+                new T.Vector3(1, 1, 1));
     mo.setMatrixAt(i, _m4);
+    mo.setColorAt(i, _c.setStyle(ORBE_COL[o.t] || '#ffd447'));
   });
-  if (mo) mo.instanceMatrix.needsUpdate = true;
+  if (mo){ mo.instanceMatrix.needsUpdate = true;
+           if (mo.instanceColor) mo.instanceColor.needsUpdate = true; }
+  /* y los pads igual */
+  MUNDO.pads.forEach((p, i) => {
+    if (INST.pad) INST.pad.setColorAt(i, _c.setStyle(PAD_COL[p.t] || '#ffd447'));
+  });
+  if (INST.pad && INST.pad.instanceColor) INST.pad.instanceColor.needsUpdate = true;
 
   /* ── LAS SIERRAS, LAS MONEDAS Y LOS PORTALES VAN SUELTOS ──
      Son pocos —cinco, tres y ocho— y CADA UNO SE MUEVE POR SU CUENTA: girar una
@@ -420,54 +521,16 @@ function mundo3D(){
     esc3.add(m); SUELTOS.push(m);
   }
 
-  armaCapas(N);
+  armaDeco(N);
+  armaMotas(N);
 
   REV3D = MUNDO.rev;
 }
 
-/* ── LAS TRES CAPAS SE ARMAN CON LA FORMA QUE EL NIVEL PIDE ──
-   La `x` de cada pieza se separa `paso` bloques y la forma sale de dos hashes de
-   esa x: uno decide el tamano y el otro la variante. Deterministico, asi que la
-   silueta de un nivel es SIEMPRE la misma y se puede reconocer. */
-function armaCapas(N){
-  const est = N.fondo || 'ciudad';
-  CAPAS.forEach((c, ci) => {
-    let k = 0;
-    for (let bx = -30; bx < MUNDO.largo + 60 && k < c.n; bx += c.paso){
-      const h = ((((bx*2654435761) >>> 0) ^ (ci*0x9e3779b9)) >>> 0)/4294967296;
-      const h2 = ((((bx*40503) >>> 0) ^ (ci*0x85ebca6b)) >>> 0)/4294967296;
-      const E = c.esc;
-      let w, alt, y, gir = 0;
-      if (est === 'ciudad'){
-        /* torres: angostas, altas y apoyadas en el suelo */
-        w = (1.6 + h*2.6)*E; alt = (7 + h2*26)*E; y = alt*0.5;
-      } else if (est === 'rocas'){
-        /* rocas flotando: rombos sueltos repartidos en altura, y ninguno pegado
-           al suelo — si tocaran el piso dejarian de leerse a flotando */
-        w = (2.6 + h*4.6)*E; alt = w*(0.7 + h2*0.6);
-        y = 4 + h2*16 + E*1.5; gir = Math.PI/4 + h*0.5;
-      } else {
-        /* ── LA CRESTA SE PLANTA POR SU PUNTA, NO POR SU CENTRO ──
-           Rombos girados y metidos a medias en el suelo, o sea una cordillera; lo
-           que asoma es una fila de picos y es mas barato que una geometria propia.
-           Pero con `y = alt*0.18` la punta sube con el tamano: medido en la capa
-           lejana —donde la escala es 3,4— un rombo medía sesenta y ocho bloques y
-           su punta llegaba a doce, o sea que la «cordillera» era UNA pared naranja
-           tapando la banda por donde vuela la nave. Se elige la ALTURA DE LA PUNTA
-           y de ahi sale el centro: la media diagonal de un cuadrado girado
-           cuarenta y cinco grados vale 0,707 del lado. */
-        w = (5 + h*9)*E; alt = w; gir = Math.PI/4;
-        y = (2.4 + h2*3.2) - w*0.7071;
-      }
-      _e.set(0, 0, gir);
-      _m4.compose(new T.Vector3(bx + h*c.paso*0.7, y, c.z - h2*4),
-                  _q.setFromEuler(_e), new T.Vector3(w, alt, 1));
-      c.malla.setMatrixAt(k++, _m4);
-    }
-    c.malla.count = k;
-    c.malla.instanceMatrix.needsUpdate = true;
-  });
-
+/* ── LAS MOTAS SE REPARTEN POR EL NIVEL Y A TRES PROFUNDIDADES ──
+   Cuantas hay lo dice el nivel; donde cae cada una sale de su indice, asi que no
+   hay estado que guardar ni un array que recorrer en JavaScript. */
+function armaMotas(N){
   /* las motas: repartidas por el nivel y a tres profundidades */
   const nm = Math.min(MOTAS_TOPE, N.motas || 90);
   for (let i = 0; i < MOTAS_TOPE; i++){
@@ -488,6 +551,7 @@ function armaCapas(N){
    colores y no reconstruir nada. */
 const _c = new T.Color();
 const _p1 = new T.Color(), _p2 = new T.Color();
+const _pDeco = new T.Color(0xffffff);
 const _pa1 = new T.Color(), _pa2 = new T.Color();
 const _pb1 = new T.Color(), _pb2 = new T.Color();
 const palHex = (v) => (v[0] << 16) | (v[1] << 8) | v[2];
@@ -498,9 +562,10 @@ function ponColores(C1, C2){
   /* las capas van del color del tema, y la de CERCA mas apagada: si las tres
      tuvieran el mismo brillo, la profundidad se perderia — lo que da distancia
      no es el tamano sino que lo lejano tenga menos contraste */
-  CAPAS.forEach((c, i) => {
-    c.mat.color.copy(C2).lerp(C1, i === 0 ? 0.62 : i === 1 ? 0.35 : 0.10);
-  });
+  /* la decoracion se tinta A MEDIAS con el acento del tramo: los sprites traen
+     su propio color y multiplicarlos por un acento saturado los deja de barro.
+     A medias, el cambio de tramo se ve tambien en el fondo. */
+  _pDeco.copy(C2).lerp(_c.setHex(0xffffff), 0.68);
   matMotas.color.copy(C2).lerp(_c.setHex(0xffffff), 0.55);
   /* el telon se tinta con el acento del tramo, pero SOLO a medias: la foto ya
      trae su color y multiplicarla por un acento saturado la deja de barro. A
@@ -524,11 +589,39 @@ function ponColores(C1, C2){
   matSol.color.copy(C1).lerp(_c.setHex(0x2b3448), 0.55);
   matPiso.color.copy(C1).lerp(_c.setHex(0x3d4a66), 0.60);
   matFaldon.color.copy(C1).lerp(_c.setHex(0x3d4a63), 0.55);
-  hemi.color.copy(C2); hemi.groundColor.copy(C1);
+  /* ── Y EL SUELO DEL HEMISFERICO NO PUEDE SER EL COLOR DEL TEMA A SECAS ──
+     Un `HemisphereLight` reparte segun hacia donde mira la cara: toda cara que
+     mire al PISO recibe `groundColor`, y con el `C1` de este nivel —un ciruela
+     casi negro— la cara de abajo del techo de un pasillo sale negra. Son losas
+     de ciento cuarenta bloques de fondo, asi que eso no es un matiz: es una cuna
+     oscura que cruza un tercio de la pantalla. Lo que rebota desde abajo es el
+     suelo iluminado por el atardecer, asi que el color de rebote se mezcla hacia
+     el horizonte medido — es la misma cuenta que la niebla y por la misma razon. */
+  hemi.color.copy(C2);
+  if (typeof IMG_HOR !== 'undefined'){
+    hemi.groundColor.setRGB(C1.r*0.55 + IMG_HOR[0]*0.45,
+                            C1.g*0.55 + IMG_HOR[1]*0.45,
+                            C1.b*0.55 + IMG_HOR[2]*0.45);
+  } else hemi.groundColor.copy(C1);
   /* la niebla se crea UNA vez: pasar de sin-niebla a con-niebla obliga a
      recompilar todos los shaders, y hacerlo al cambiar de nivel seria un tiron
      justo en el primer cuadro de la partida */
-  NIEBLA.color.copy(C1);
+  /* ── Y LA NIEBLA VA AL COLOR DEL HORIZONTE DE LO QUE HAY DETRAS ──
+     Con el cielo en degradado la cuenta cerraba sola: el cielo es `C1 · 2,2` y
+     su horizonte es gris `1/2,2`, asi que la niebla es `C1` a secas y el borde
+     lejano del suelo se funde. Con el TELON DE FOTO puesto, el horizonte ya no
+     es ese gris: es el de la foto. Medido, `C1` de este nivel es un ciruela casi
+     negro contra un atardecer naranja, y eso se ve — todo lo que recede sale de
+     un color que no esta en ninguna parte del cuadro, y el corte del techo del
+     pasillo cruzaba media pantalla como una cuna negra. El color del horizonte
+     se mide al hornear (`IMG_HOR`, el promedio en lineal de las ultimas filas
+     del recorte, que es justo la fila que cae en y = 0) y se multiplica por el
+     tinte del telon, que es lo que el material le hace a la foto: asi la niebla
+     y el horizonte son el MISMO producto y no dos cuentas que se separan. */
+  if (typeof IMG_HOR !== 'undefined' && telon.visible){
+    const tc = matTelon.color;
+    NIEBLA.color.setRGB(IMG_HOR[0]*tc.r, IMG_HOR[1]*tc.g, IMG_HOR[2]*tc.b);
+  } else NIEBLA.color.copy(C1);
   sol.color.setHex(0xffffff);
 }
 
@@ -540,11 +633,17 @@ function ponColores(C1, C2){
    el reloj de la musica no existe, y como la x SALE del reloj, contar bloques es
    contar compases. El fundido tambien va por x, asi que no depende del `dt` y
    sale igual a 30 y a 144 cuadros. */
-const PAL_BLOQ = 128, PAL_FUNDE = 7;
+/* ── Y EL TRAMO SALE DE LA TABLA DEL NIVEL, NO DE UN MODULO ──
+   Con un modulo de 128 bloques el color cambiaba cada ocho compases, que servia
+   para un nivel de un solo modo. Aca los tramos SON los modos: el color cambia en
+   el portal, o sea en el mismo cuadro en que cambian las reglas, y eso es lo que
+   hace que el cambio se vea antes de que se sienta. */
+const PAL_FUNDE = 5;
 const PAL = { i: -1, x0: 0, listo: false };
 function paletaPaso(N){
   const P = (N.pals && N.pals.length) ? N.pals : [[N.col, N.col2]];
-  const sec = Math.floor(Math.max(0, JUG.x)/PAL_BLOQ) % P.length;
+  const T0 = tramoDe(JUG.x);
+  const sec = T0 ? (T0.pal % P.length) : 0;
   if (sec !== PAL.i){
     if (PAL.i < 0){ _pa1.setHex(palHex(P[sec][0])); _pa2.setHex(palHex(P[sec][1])); }
     else { _pa1.copy(_p1); _pa2.copy(_p2); }
@@ -555,7 +654,7 @@ function paletaPaso(N){
        lee a un cambio de tramo del tema. Va DESPUES de fijar el color de destino,
        porque el destello se pinta de ese color. */
     if (nuevo){ destella('#' + _pb2.getHexString(), 0.52); sacude(0.16); }
-    PAL.i = sec; PAL.x0 = JUG.x; PAL.listo = false;
+    PAL.i = sec; PAL.x0 = T0 ? T0.x : JUG.x; PAL.listo = false;
   }
   if (PAL.listo) return;
   const k = cl((JUG.x - PAL.x0)/PAL_FUNDE, 0, 1);
@@ -566,8 +665,6 @@ function paletaPaso(N){
   if (k >= 1) PAL.listo = true;
 }
 function ponPaleta(N){
-  const fo = FONDO_OPA[N.fondo] || 1;
-  CAPAS.forEach((c) => { c.opa = c.brillo*fo; });
   PAL.i = -1;
   paletaPaso(N);
 }
@@ -619,15 +716,64 @@ function ponIcono(){
   matJugA.color.set(COLES[ICONO.c1]);
   matJugA.emissive.set(COLES[ICONO.c1]).multiplyScalar(0.30);
   matJugB.color.set(COLES[ICONO.c2]);
-  const nave = JUG.modo === 'nave';
+  /* ── UNA SILUETA POR MODO, Y NO ES ADORNO ──
+     Con la misma forma en los ocho modos, el jugador no sabe con que reglas esta
+     jugando hasta que toca y ve lo que pasa. La silueta es lo que dice, sin
+     texto, que ahora se vuela o que ahora se da vuelta la gravedad. Cada una son
+     dos o tres piezas y ninguna cuesta una llamada de dibujo mas, porque todas
+     comparten los dos materiales del icono. */
+  const M = JUG.modo;
   const g = new T.Group();
-  if (nave){
+  if (M === 'nave' || M === 'columpio'){
     const cu = new T.Mesh(new T.ConeGeometry(0.44, 1.05, 12), matJugA);
     cu.rotation.z = -Math.PI/2; cu.castShadow = true;
     g.add(cu);
     const ca = new T.Mesh(GEO.esfera, matJugB);
     ca.scale.setScalar(0.42); ca.position.set(-0.08, 0, 0.30);
     g.add(ca);
+    if (M === 'columpio'){
+      /* el columpio lleva helice: es lo que lo distingue de la nave de un vistazo */
+      const he = new T.Mesh(GEO.caja, matJugB);
+      he.scale.set(0.10, 0.86, 0.10); he.position.set(-0.30, 0, 0);
+      g.add(he);
+    }
+  } else if (M === 'bola'){
+    /* la bola es un disco: rueda, asi que su giro tiene que verse */
+    const cu = new T.Mesh(new T.CylinderGeometry(0.44, 0.44, 0.62, 16), matJugA);
+    cu.rotation.x = Math.PI/2; cu.castShadow = true; g.add(cu);
+    const ra = new T.Mesh(GEO.caja, matJugB);
+    ra.scale.set(0.72, 0.14, 0.66); ra.position.z = 0.02; g.add(ra);
+  } else if (M === 'ovni'){
+    const cu = new T.Mesh(new T.CylinderGeometry(0.52, 0.30, 0.22, 14), matJugA);
+    cu.castShadow = true; g.add(cu);
+    const cp = new T.Mesh(GEO.esfera, matJugB);
+    cp.scale.set(0.52, 0.44, 0.52); cp.position.y = 0.16; g.add(cp);
+  } else if (M === 'onda'){
+    /* un dardo: la onda va en diagonal y la punta dice para donde */
+    const cu = new T.Mesh(new T.ConeGeometry(0.34, 0.86, 4), matJugA);
+    cu.rotation.z = -Math.PI/2; cu.castShadow = true; g.add(cu);
+    const nu = new T.Mesh(GEO.caja, matJugB);
+    nu.scale.set(0.22, 0.22, 0.22); nu.position.x = 0.10; g.add(nu);
+  } else if (M === 'robot'){
+    const cu = new T.Mesh(GEO.caja, matJugA);
+    cu.scale.set(JUG_LADO, JUG_LADO*0.62, JUG_LADO); cu.position.y = 0.14;
+    cu.castShadow = true; g.add(cu);
+    for (const sx of [-0.22, 0.22]){
+      const pa = new T.Mesh(GEO.caja, matJugB);
+      pa.scale.set(0.20, 0.34, 0.34); pa.position.set(sx, -0.26, 0);
+      g.add(pa);
+    }
+  } else if (M === 'arana'){
+    const cu = new T.Mesh(GEO.caja, matJugA);
+    cu.scale.set(JUG_LADO*0.92, JUG_LADO*0.58, JUG_LADO*0.92); cu.castShadow = true;
+    g.add(cu);
+    /* cuatro patas: es lo unico que hace que se lea a arana y no a ladrillo */
+    for (const sx of [-0.42, 0.42]) for (const sz of [-0.26, 0.26]){
+      const pa = new T.Mesh(GEO.caja, matJugB);
+      pa.scale.set(0.34, 0.09, 0.09);
+      pa.position.set(sx, -0.02, sz); pa.rotation.z = sx < 0 ? 0.5 : -0.5;
+      g.add(pa);
+    }
   } else if (FORMAS[ICONO.forma] === 'diamante'){
     const cu = new T.Mesh(new T.OctahedronGeometry(0.62), matJugA);
     cu.castShadow = true; g.add(cu);
@@ -834,9 +980,19 @@ function pinta(){
   matReja.opacity = 0.11 + pulso*0.10;
   /* el fondo late con el compas, y CADA CAPA CON SU FUERZA: latiendo todas
      igual, las tres se leen como una sola imagen y el paralaje deja de contar */
-  CAPAS[0].mat.opacity = CAPAS[0].opa + pulso*0.14;
-  CAPAS[1].mat.opacity = CAPAS[1].opa + pulso*0.07;
-  CAPAS[2].mat.opacity = CAPAS[2].opa + pulso*0.04;
+  /* la decoracion late con el compas: cada capa con su fuerza, porque latiendo
+     todas igual las tres se leen como una sola imagen y el paralaje deja de
+     contar. Va por el COLOR y no por la opacidad: los sprites usan `alphaTest`
+     —recorte duro, sin ordenar transparencias— y un material opaco no tiene
+     opacidad que mover. */
+  for (let i = 0; i < DEC.length; i++){
+    const D = DEC[i];
+    if (!D.listo || OCULTO.deco){ D.malla.visible = false; continue; }
+    D.malla.visible = true;
+    /* el tinte del tramo por cuanto sobrevive de su capa: es la perspectiva
+       aerea, y es lo unico que separa el fondo del nivel */
+    D.mat.color.copy(_pDeco).multiplyScalar(DECO_BRI[D.capa]*(1 + pulso*0.10));
+  }
   matMotas.opacity = 0.28 + pulso*0.42;
   ren.toneMappingExposure = 1.10 + pulso*0.12;
 
@@ -945,7 +1101,7 @@ function efeDe(){
            /* cuanto se corre la camara, en bloques, y cuanto cambia el encuadre */
            sacBloques: +Math.hypot(_sacX, _sacY).toFixed(3),
            camD: +cam.position.z.toFixed(3), camDBase: +CAM.d.toFixed(3),
-           opacidades: CAPAS.map(c => +c.mat.opacity.toFixed(3)),
+           deco: DEC.length, decoListos: DEC.filter(d => d.listo).length,
            motas: +matMotas.opacity.toFixed(3) };
 }
 

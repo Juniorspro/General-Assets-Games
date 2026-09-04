@@ -63,9 +63,24 @@ def telon(nom, dst):
     im = im.resize((ANCHO_TELON, max(1, round(im.size[1]*ANCHO_TELON/w))), Image.LANCZOS)
     im = ImageEnhance.Color(im).enhance(SAT_TELON)
     b = _io.BytesIO(); im.save(b, 'WEBP', quality=72, method=6)
-    print('  %-8s %sx%s  horizonte %.0f%%  %d KB' % (
-        nom, im.size[0], im.size[1], 100*hz/h, len(b.getvalue())//1024))
-    return b.getvalue(), im.size
+    # ── Y SE MIDE EL COLOR DE SU HORIZONTE ──
+    # El borde de abajo del recorte cae en la LINEA DEL PISO, asi que el promedio
+    # de las ultimas filas ES el color al que tiene que ir la niebla. Con la
+    # niebla de otro color aparece una banda a la altura del horizonte y todo lo
+    # que recede sale de un color que no esta en ninguna parte del cuadro —
+    # medido, una cuna casi negra cruzando un cielo de atardecer. El promedio se
+    # hace EN LINEAL, porque promediar sRGB oscurece.
+    px = im.crop((0, max(0, im.size[1] - max(4, im.size[1]//16)), im.size[0], im.size[1]))
+    d = px.load(); ac = [0.0, 0.0, 0.0]; n = 0
+    for y in range(px.size[1]):
+        for x in range(0, px.size[0], 3):
+            r, g, bl = d[x, y]
+            ac[0] += (r/255)**2.2; ac[1] += (g/255)**2.2; ac[2] += (bl/255)**2.2
+            n += 1
+    hor = [ac[i]/n for i in range(3)]
+    print('  %-8s %sx%s  horizonte %.0f%%  %d KB  color [%.3f %.3f %.3f]' % (
+        nom, im.size[0], im.size[1], 100*hz/h, len(b.getvalue())//1024, *hor))
+    return b.getvalue(), im.size, hor
 
 
 def sello(nom):
@@ -100,15 +115,96 @@ def sello(nom):
     return b.getvalue(), im.size
 
 
+def recorta_fondo(im, tol_a=42, tol_b=96):
+    """Devuelve la imagen con alfa, sacando el color plano de las esquinas.
+
+       El fondo NO se saca por umbral de brillo —el recorte se llevaria los
+       brillos del propio dibujo— sino por distancia al color de las cuatro
+       esquinas, que es lo unico que con certeza es fondo. Con rampa, porque un
+       corte duro deja el contorno dentado.
+    """
+    im = im.convert('RGB')
+    w, h = im.size
+    esq = [im.getpixel(q) for q in [(2, 2), (w-3, 2), (2, h-3), (w-3, h-3)]]
+    fondo = tuple(sum(c[i] for c in esq)//4 for i in range(3))
+    px = im.load()
+    a = Image.new('L', (w, h)); ap = a.load()
+    for y in range(h):
+        for x in range(w):
+            c = px[x, y]
+            d = ((c[0]-fondo[0])**2 + (c[1]-fondo[1])**2 + (c[2]-fondo[2])**2)**0.5
+            ap[x, y] = 0 if d < tol_a else (255 if d > tol_b else int((d-tol_a)*255/(tol_b-tol_a)))
+    out = im.copy(); out.putalpha(a.filter(ImageFilter.GaussianBlur(0.6)))
+    return out, fondo
+
+
+def sprites(nom, lado=224, minarea=0.004):
+    """Corta una hoja de sprites en piezas, MIDIENDO la reja en vez de suponerla.
+
+       ── LA REJA QUE SE PIDE ES UNA SUGERENCIA ──
+       Se pidieron seis objetos en una fila y volvieron en 3x2 en una hoja y en
+       3+4 en la otra: es la regla que ya costo una vuelta con los bloques de
+       TORRE y con los dados. Asi que no se corta por reja: se etiquetan las
+       COMPONENTES CONEXAS de lo que no es fondo y cada una es un sprite. El
+       etiquetado va sobre la mascara reducida a la cuarta parte —dos millones de
+       pixeles en Python puro son segundos— y las cajas se devuelven a la escala
+       original.
+    """
+    im = Image.open(os.path.join(CRUDO, nom + '.png'))
+    full, fondo = recorta_fondo(im)
+    w, h = full.size
+    K = 4
+    m = full.getchannel('A').resize((w//K, h//K), Image.BILINEAR).point(
+        lambda v: 255 if v > 90 else 0)
+    W, H = m.size
+    px = m.load()
+    visto = bytearray(W*H)
+    cajas = []
+    for y0 in range(H):
+        for x0 in range(W):
+            if visto[y0*W + x0] or not px[x0, y0]: continue
+            pila = [(x0, y0)]; visto[y0*W + x0] = 1
+            xa = xb = x0; ya = yb = y0; n = 0
+            while pila:
+                x, y = pila.pop(); n += 1
+                if x < xa: xa = x
+                if x > xb: xb = x
+                if y < ya: ya = y
+                if y > yb: yb = y
+                for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)):
+                    u, v = x+dx, y+dy
+                    if 0 <= u < W and 0 <= v < H and not visto[v*W+u] and px[u, v]:
+                        visto[v*W+u] = 1; pila.append((u, v))
+            if n >= minarea*W*H: cajas.append((xa*K, ya*K, (xb+1)*K, (yb+1)*K, n))
+    cajas.sort(key=lambda c: (c[1]//200, c[0]))
+    out = []
+    for i, (xa, ya, xb, yb, n) in enumerate(cajas):
+        pz = full.crop((xa, ya, xb, yb))
+        pw, ph = pz.size
+        e = lado/max(pw, ph)
+        pz = pz.resize((max(1, round(pw*e)), max(1, round(ph*e))), Image.LANCZOS)
+        b = _io.BytesIO(); pz.save(b, 'WEBP', quality=80, method=6)
+        out.append((b.getvalue(), pz.size))
+        print('    %s_%d  %sx%s  %d KB' % (nom, i, pz.size[0], pz.size[1],
+                                           len(b.getvalue())//1024))
+    print('  %-8s %d piezas (fondo %s)' % (nom, len(out), fondo))
+    return out
+
+
 def main():
     print('horneando:')
     partes = {}
     tam = {}
-    for n in ['f0', 'f1', 'f2', 'm_fondo']:
-        d, s = telon(n, n)
-        partes[n] = d; tam[n] = s
+    hor = {}
+    for n in ['p0', 'm_fondo']:
+        d, s, hh = telon(n, n)
+        partes[n] = d; tam[n] = s; hor[n] = hh
     d, s = sello('m_sello')
     partes['m_sello'] = d; tam['m_sello'] = s
+    dec = []
+    for n in ['p1', 'p2']:
+        for d, s in sprites(n):
+            dec.append((d, s))
 
     L = ['', '/* ══════════ LAS IMAGENES, HORNEADAS ══════════',
          '   Generadas con Higgsfield (z_image) y horneadas por',
@@ -121,11 +217,21 @@ def main():
          '   antes —cielo en degradado y las tres capas de rombos— y no hay un solo',
          '   cuadro en negro. */']
     L.append('const IMG_TAM = ' + repr({k: list(v) for k, v in tam.items()}).replace("'", '"') + ';')
-    for k in ['f0', 'f1', 'f2', 'm_fondo', 'm_sello']:
+    for k in ['p0', 'm_fondo', 'm_sello']:
         L.append("const IMG_%s = 'data:image/webp;base64,%s';"
                  % (k.upper(), base64.b64encode(partes[k]).decode()))
-    L.append('const IMG = { f0: IMG_F0, f1: IMG_F1, f2: IMG_F2,'
-             ' m_fondo: IMG_M_FONDO, m_sello: IMG_M_SELLO };')
+    L.append('const IMG = { p0: IMG_P0, m_fondo: IMG_M_FONDO, m_sello: IMG_M_SELLO };')
+    L.append('/* el color LINEAL del horizonte del telon: es a donde tiene que ir la')
+    L.append('   niebla, medido sobre las ultimas filas de la propia foto */')
+    L.append('const IMG_HOR = [%.4f, %.4f, %.4f];' % tuple(hor['p0']))
+    L.append('/* ── LOS SPRITES DE DECORACION ──')
+    L.append('   Cortados de dos hojas por componentes conexas, no por reja. Cada uno')
+    L.append('   trae su proporcion, que es lo que evita que el dibujo salga estirado. */')
+    L.append('const DECO = [')
+    for d, s in dec:
+        L.append("  { p: %.3f, d: 'data:image/webp;base64,%s' },"
+                 % (s[0]/s[1], base64.b64encode(d).decode()))
+    L.append('];')
     L.append('')
     with open(SALIDA, 'w', encoding='utf-8') as f:
         f.write('\n'.join(L))

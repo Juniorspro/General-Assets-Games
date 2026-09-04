@@ -154,19 +154,21 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
-- **`Dash.html` es "ROTOR"** (~231 KB, de los cuales 78 son las cinco imágenes generadas —tres
-  telones de fondo, el fondo del menú y el sello—; los tres temas electrónicos siguen siendo
-  osciladores y pesan cero). El género de Geometry Dash **en 3D
+- **`Dash.html` es "ROTOR"** (~733 KB, de los cuales 235 son la canción —extraída del video que
+  trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 las imágenes generadas: el
+  telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El género de Geometry Dash **en 3D
   con three.js**, apaisado dentro de un teléfono vertical y **sin pantalla de «gira el celular»**.
   La jugabilidad sigue siendo del plano XY —el género ES de dos ejes— y lo que es tridimensional es el
   mundo: bloques extruidos, picos que son pirámides, el cubo tumbando de verdad, y **sombra de
   contacto**, que es lo que lo apoya en el piso. **La cámara mira derecho por −Z**, así que x e y salen
-  exactamente lineales (medido: 1,00000) y se puede despegar en un bloque exacto. **Tres niveles** —NEON DRIVE 128 BPM, GRAVEDAD
-  CERO 140, ROTOR 150— con cubo, gravedad invertida y nave. **La música ES el reloj**: la x del
+  exactamente lineales (medido: 1,00000) y se puede despegar en un bloque exacto. **Un nivel**, `OCHO FORMAS`, a
+  158 BPM —que es exactamente la velocidad 1× de Geometry Dash— con **los ocho modos**: cubo, nave,
+  bola, ovni, onda, robot, araña y columpio, más los **ocho orbes** y los pads. Los ocho salen de una
+  sola gravedad (`ápice = k²·2,4`), que es lo que hace que la grilla del compás siga valiendo al
+  cambiar de modo. **La música ES el reloj**: la x del
   jugador sale de `AudioContext.currentTime` y no se integra, así que una tanda de cuadros perdidos
   no puede correr el nivel respecto del tema. Un tiempo son cuatro bloques y el salto dura un tiempo
-  exacto, así que la gravedad y el impulso **salen de una cuenta** y el salto mide 4,00 bloques en
-  los tres tempos. Menú con demo jugándose detrás, lista de niveles con dificultad y monedas,
+  exacto, así que la gravedad y el impulso **salen de una cuenta** y el salto mide 4,00 bloques. Menú con demo jugándose detrás, lista de niveles con dificultad y monedas,
   selector de icono, ajustes de música y efectos, **modo práctica con puntos de control** y
   porcentaje guardado por nivel. Vive partido en `herramientas/dash/partes/` y se arma con
   `python3 herramientas/dash/armar.py`.
@@ -417,6 +419,191 @@ del HUD, en vertical girado y en apaisado. Las tres calidades en caliente (535×
 **LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los tres temas está medido que suenan y a
 qué nivel, no si NEON DRIVE pega con NEON DRIVE. Y el bot juega con puntería de un paso de física: que
 los tres se puedan pasar está probado, cuánto cuestan **con un dedo** no.
+
+### Centésima segunda vuelta (2026-09-04): **ROTOR** — las ocho formas, los orbes, y la canción sale de un video
+
+Pedido: *"agrega orbes y deja el estilo neón atrás métele más color y decoración Sprites atrás que se
+mueven en parallax también elimina esa música y niveles crea uno a esta música, usar orbes y hace un
+gameplay complicado, busca todas las físicas de GD y como hacer mapas posibles, elimina el tun de
+tiktok al final y extrae el audio de este video para la canción del nivel, agrega todos los modos de
+juego de GD en este nivel, o sea naves y eso físicas buscarlas"*, con un MP4 adjunto.
+
+Se van los tres niveles y la música de osciladores. Queda **UNO**, `OCHO FORMAS`, de 302 bloques, con
+los **ocho modos de Geometry Dash**, los **ocho orbes**, **dos pads**, y la canción del video.
+
+#### LOS OCHO MODOS SALEN DE UNA SOLA GRAVEDAD, Y ESO ES LO QUE HACE QUE EL COMPÁS SIGA VALIENDO
+
+Todo lo que sube se escribe como una **fracción del impulso del cubo**, así que el ápice es
+`k²·2,4` y los ocho comparten la misma `g` y el mismo tiempo de aire. Con una gravedad por modo, cada
+tramo tendría su propia grilla y «los obstáculos caen en el compás» dejaría de ser cierto justo donde
+cambian las reglas.
+
+| modo | qué decide el dedo | número |
+|---|---|---|
+| **cubo** | saltar desde el piso, en cadena si se mantiene | ápice 2,40 |
+| **nave** | la CURVA: acelera arriba y abajo | `naveA` 0,62·g, tope 0,70·imp |
+| **bola** | da vuelta la gravedad **tocando el piso** | — |
+| **ovni** | salta **en el aire**, cuantas veces se toque | k 0,913 → ápice 2,00 |
+| **onda** | 45 grados exactos, sin inercia | `vy = ±v` |
+| **robot** | **cuánto** se sostiene: carga y suelta | k 0,80 a 1,21 → 1,54 a 3,51 |
+| **araña** | se **teletransporta** a la cara de enfrente | — |
+| **columpio** | la gravedad se da vuelta mientras se aprieta | 0,78·g, tope 0,66·imp |
+
+**Y EL BOT TUVO QUE APRENDER QUIÉN PUEDE DECIDIR EN EL AIRE.** La guarda «en el aire el toque no hace
+nada» es **del cubo**, y aplicada a los ocho deja tres sin jugar: el ovni salta en el aire, la araña se
+teletransporta en el aire, y el robot tiene que **seguir apretando mientras sube** o no carga. Con la
+guarda puesta para todos, el bot suelta el botón en el primer cuadro de cada salto de robot y el modo
+entero deja de existir.
+
+#### EL DEFECTO DE FONDO DE LA VUELTA: **LOS ROLLOUTS DEL BOT SE COMÍAN LOS ORBES DEL INTENTO DE VERDAD**
+
+Un orbe se gasta **por intento**, y estaba marcado en `MUNDO.orbes[i].usado`. El bot corre docenas de
+intentos imaginarios por cuadro, y cada uno que engancha un orbe lo deja gastado **para el cuerpo de
+verdad**: el jugador llegaba al segundo orbe de la cadena del final y ese orbe ya no existía para
+nadie. Medido, el bot moría en x 279-280 y yo estaba rediseñando la geometría —le cambié la altura de
+2,0 a 2,5, el ancho del hueco, la política de decisión— cuando la geometría no tenía nada.
+La marca pasa a vivir en el **cuerpo** (`c.uso`), `copia()` se la lleva, y el mundo sólo se entera de
+lo que gasta el jugador, que es lo que el dibujo necesita para apagar el orbe. Con eso: **100 %**.
+
+#### LA CANCIÓN SALE DEL VIDEO, Y LOS DOS RECORTES SE MIDEN
+
+`herramientas/dash/hornear_musica.py`.
+
+- **EL «TUN» DE TIKTOK SE ENCUENTRA SOLO.** No hay que buscarlo a oído: es una ráfaga **fuerte y
+  grave** después de un desvanecido. Medido cada 250 ms, el tema baja de rms 0,09 a 0,045 entre 29,5 y
+  30,4 y ahí entra una ráfaga de **rms 0,56 con el centroide en 113 Hz** —seis veces más fuerte que la
+  música y diez veces más grave—. La regla es esa: la primera ventana desde el final que **suba de rms
+  y baje de centroide a la vez**. Corte en 30,50.
+- **Y LA CABEZA SE RECORTA AL PRIMER TIEMPO.** El juego saca la x del reloj de audio, así que el
+  tiempo 0 del juego tiene que ser un **tiempo de la música**: si no, los obstáculos caen a
+  contratiempo y no hay ajuste que lo arregle. Tempo y fase salen del flujo espectral con
+  autocorrelación y después puntaje de tren de pulsos: **157,98 BPM con el primer tiempo en 0,3483 s**.
+  Recortados esos 348 ms, el archivo **empieza en un tiempo** y el juego no necesita un desfase —que
+  sería un número a mantener en dos sitios.
+- **Y 158 BPM ES EXACTAMENTE LA VELOCIDAD 1× DE GEOMETRY DASH.** Con un tiempo = cuatro bloques,
+  `v = 4·158/60 = 10,53` bloques por segundo, o sea **un bloque cada 0,095 s**, que es el número del
+  juego original. No se buscó: salió de medirle el tempo al video.
+- **El nivel mide 19,79 compases** y el tema 30,072 s: el largo del nivel sale de la canción.
+- **El nivel se mide sobre el MP3 ya escrito** y se corrige hasta tres veces, que es la regla de
+  PUERTA BLANCA. 235 KB, mono 32 kHz a 64 kbps.
+
+**Y LOS SEIS INSTRUMENTOS SINTETIZADOS SE BORRARON.** Con una canción de verdad, el bombo, el clap,
+los charles, el bajo, el arpegio y el lead pasan a ser código vivo que no llama nadie: el día que se
+toque va a estar roto sin que nada lo diga. Lo que quedó del sintetizador son los efectos, que siguen
+pesando cero.
+
+#### EL FONDO: TRES IMÁGENES NUEVAS Y TRECE SPRITES CORTADOS POR COMPONENTES CONEXAS
+
+Un telón de atardecer y **dos hojas de sprites** generadas con Higgsfield sobre fondo magenta. Las
+piezas **no se cortan por reja**: la reja que se pide es una sugerencia —ya costó una vuelta en los
+casuales— así que se etiquetan las **componentes conexas** de la máscara de alfa a un cuarto de escala
+y cada una se recorta a su caja. Trece piezas, cada una con su proporción, que es lo que evita que el
+dibujo salga estirado.
+
+**UNA MALLA INSTANCIADA POR SPRITE Y NO UN ATLAS.** Un atlas con UV por instancia pide parchear el
+shader; trece mallas cuestan trece llamadas de dibujo y ninguna línea de GLSL.
+
+#### Y LA PRIMERA VERSIÓN DEL FONDO ERA UNA CINTA DE CALCOMANÍAS, MEDIDA
+
+Los trece sprites en las tres capas con nueve copias cada uno son **351 objetos sobre 332 bloques**:
+uno por bloque. En la foto no apareció profundidad, apareció una **cinta continua a la altura del
+juego y con los mismos valores que el nivel** — los orbes amarillos del final se perdían contra un
+arbusto. Tres correcciones y las tres son cuentas:
+
+1. **UN SPRITE VIVE EN UNA SOLA CAPA.** La cinta se parte en tres y cada capa estrena su propio
+   vocabulario de formas, que es lo que de verdad se lee a distancia. De 351 objetos a **91**.
+2. **EL TAMAÑO APARENTE SE CUENTA.** Un objeto a `z` se ve `9,9/(9,9+|z|)` veces su tamaño, porque el
+   plano de juego está a 9,9 de la cámara. Con la capa de cerca a −34 y 3,4 de alto, un sprite del
+   fondo medía **un bloque** — o sea exactamente lo que mide un obstáculo, y en el pasillo de la onda
+   una estrella del fondo se leía a moneda. Las tres capas están puestas para que **ninguna** pase de
+   un bloque aparente: 0,36-0,81 · 0,39-0,86 · 0,48-1,07.
+3. **Y LA PERSPECTIVA AÉREA VA POR INSTANCIA.** Una malla tiene un color y sus instancias viven en
+   capas distintas, así que el tinte por capa tiene que ir en `instanceColor`.
+
+#### LA CUÑA NEGRA: TRES DIAGNÓSTICOS MÍOS EQUIVOCADOS Y UNO QUE CONTESTÓ EN UN CUADRO
+
+Una cuña oscura cruzaba un tercio de la pantalla desde la esquina de arriba. Apagué las mallas de a
+una y **cuatro capturas salieron idénticas**, así que descarté el telón y la decoración — y no se
+habían apagado: **las dos se prenden solas en cada cuadro** porque dependen de si su textura ya
+decodificó, así que un `visible = false` desde afuera dura exactamente un cuadro. Entró `OCULTO`, que
+el dibujo consulta.
+
+Después le puse un **faldón de costado** a las losas, convencido de que la cuña era el corte de la
+losa del techo. Lo que contestó de verdad fue el **material de diagnóstico**: pintando la escena con
+las NORMALES, la cuña resultó **dos superficies encimadas** —una que mira a +X, que era mi faldón
+nuevo, y detrás una que mira **abajo**, que es la cara de abajo del techo—. O sea que el faldón tapaba
+con un plano claro un problema que estaba detrás. Y un plano sin luz no puede ganar en los dos sitios:
+medido, se veía **demasiado oscuro** contra el cielo de atardecer y **demasiado claro** adentro del
+pasillo de la onda, donde salían dos triángulos beige cruzando la banda de juego. Se sacó entero.
+
+**LO QUE SÍ LA ARREGLÓ FUERON DOS COSAS Y NINGUNA ERA UNA PIEZA NUEVA:**
+
+- **LA NIEBLA IBA AL COLOR DEL TEMA Y NO AL DEL HORIZONTE.** Con el cielo en degradado la cuenta
+  cerraba sola —el cielo es `C1·2,2` y su horizonte es gris `1/2,2`, así que la niebla es `C1` a
+  secas— pero con el **telón de foto** puesto el horizonte ya no es ese gris. Medido, `C1` de este
+  nivel es un ciruela casi negro (`#451e26`) contra un atardecer naranja: **todo lo que recedía salía
+  de un color que no está en ninguna parte del cuadro**. El color del horizonte se mide al hornear
+  —`IMG_HOR`, el promedio **en lineal** de las últimas filas del recorte, que es justo la fila que cae
+  en y = 0: `[0,638 · 0,360 · 0,241]`— y se multiplica por el tinte del telón, que es lo que el
+  material le hace a la foto. Así la niebla y el horizonte son **el mismo producto**. Medido después:
+  `#d1896e`, y sigue tiñéndose por tramo. Es la misma lección que en PUERTA BLANCA costó una banda a
+  la altura del horizonte.
+- **Y EL TECHO DE UN PASILLO NO SE EXTRUYE COMO EL SUELO.** El suelo mide 140 de fondo porque tiene
+  que llegar hasta donde la niebla lo cierra: con densidad 0,013, un 95 % de niebla cae en **133
+  bloques**, así que el número está derivado. Un techo no: su cara de abajo no recibe sol, así que
+  extruida 140 es una cuña casi negra, y su cara de +X, que la niebla lleva al horizonte, aparece
+  adentro del pasillo como los triángulos beige. Con **6,5** de fondo el techo se lee a viga —el mismo
+  lenguaje que los bloques, que miden 1,6— y las dos caras problemáticas se quedan en un canto.
+
+Más: el suelo del hemisférico pasa a mezclarse hacia el horizonte medido. Un `HemisphereLight` reparte
+según hacia dónde mira la cara, así que con `groundColor = C1` toda cara que mire al piso recibe un
+ciruela casi negro; lo que rebota desde abajo es el suelo iluminado por el atardecer.
+
+#### DOS DEFECTOS MÁS DE LAS SONDAS, Y LOS DOS DEL MISMO TIPO
+
+- **`foto()` NO ADELANTABA LA PALETA.** `paletaPaso` la corre el bucle y no el dibujo, así que
+  plantando al jugador en el tramo nueve la foto salía con los colores del tramo **uno**: medido, la
+  niebla daba `#451e26` con el telón de atardecer puesto detrás. Es la sexta vez en este repo que una
+  sonda fotografía un estado que ella misma no adelantó.
+- **Y EL PILOTO BARRÍA HACIA ADELANTE DESDE +0,4.** La pared que el cuerpo está **atravesando** deja
+  de verse en cuanto su borde de adelante queda atrás del ojo del barrido: medido en la onda, a x 150,9
+  el piloto ya apuntaba al hueco de la pared **siguiente** —2,2 bloques más arriba— y el cuerpo chocó
+  el labio de la pared en la que todavía estaba, a x 151,43. Se barre desde **media caja para atrás**:
+  mientras el cuerpo siga adentro de la ranura, la ranura es el destino.
+
+#### LOS ORBES Y LOS PADS: LAS DOS MITADES DEL GÉNERO, Y LAS DOS TIENEN QUE ESTAR EN EL NIVEL
+
+`ORBE_K` en fracciones del salto del cubo: **rosa 0,72 → ápice 1,24 · amarillo 1,00 → 2,40 · rojo 1,32
+→ 4,18**; y los otros cuatro no son un impulso —**azul** da vuelta la gravedad, **verde** salta *y* la
+da vuelta, **negro** clava hacia abajo, **araña** pega a la cara de enfrente—. El pad lanza al pisarlo
+y el orbe hay que **apretarlo**: eso es lo que convierte un orbe en una prueba de tiempo y un pad en
+una consecuencia, y por eso el nivel lleva los dos.
+
+**Y `pad(x, t)` LLEVA DOS ARGUMENTOS, NO TRES.** Los llamé con `P.pad(x + 19, 0, 'rosa')` y el `t || 'amar'`
+se tragó el cero: **el pad rosa salía amarillo** y no fallaba nada. Un mecanismo que existe en el
+código y no en el nivel es código muerto; uno que existe con el tipo equivocado es peor, porque se ve
+como si estuviera puesto.
+
+#### MEDIDO AL CERRAR
+
+**Auditoría `ok: true` al 100 %** en 175 ms, contra **6 %** del bot que aprieta al azar. El
+auto-jugador termina el nivel **jugando de verdad** —su decisión entra por `APRETADO`— al 100 % en el
+**primer intento** con 2 de 3 monedas y el progreso guardado. Modo práctica: **8 puntos de control**
+puestos solos, y el nivel se termina también en práctica. El nivel: 302 bloques, 39 sólidos, 24
+mortales, **8 portales (uno por modo), 3 orbes, 2 pads, 3 monedas**. Las tres calidades en caliente
+(**535×247 · 758×350 · 892×412**), los tres idiomas en vivo, **cero solapamientos** entre los siete
+elementos del HUD —contando el rótulo de modo nuevo— en vertical girado y en apaisado, y el nivel
+terminado al 100 % en apaisado con el marco `derecho` en 900×460. **29-30 llamadas de dibujo y 5.026 a
+5.078 triángulos** (eran 18-19 y 3.330-3.964: la diferencia son los trece sprites de fondo). Audio en
+partida: música **rms 0,120**, y el momento de ganar **pico 0,844 · rms 0,265**, o sea 2,2 veces la
+música. `window.__errs` **vacío en las catorce corridas**. El HTML pasó de 231 a **733 KB**, y esos 500
+son la canción (235) y las tres imágenes nuevas.
+
+**LO QUE SE FUE, Y ES HONESTO DECIRLO:** los tres temas de dos minutos y sus tres niveles. El pedido
+era uno solo a esta canción, así que `NIVELES` tiene una entrada; los telones de los otros tres siguen
+en `assets/dash/tareas.json` con su `task_id` por si vuelven. Y el título del menú sigue siendo
+tipografía y no una imagen: eso pide un modelo que sepa deletrear y la cuenta de Higgsfield está en
+cero.
 
 ### Centésima primera vuelta (2026-09-04): **ROTOR** — fondos de foto, el color por tramos y un menú con imágenes
 
