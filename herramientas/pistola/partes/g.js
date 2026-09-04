@@ -156,13 +156,12 @@ function botElige(ciego){
     const ang = i*(6.283/N);
     const dx = Math.cos(ang), dy = Math.sin(ang);
     let p = 0;
-    const h = rayo(P.x + dx*M.largo*0.55, P.y + dy*M.largo*0.55, dx, dy, 26, false);
+    const h = rayo(P.x + dx*M.boca, P.y + dy*M.boca, dx, dy, 26, false);
     if (h && h.tipo === 'ladron') p += 1000 - h.t*4;
     else if (h && h.tipo === 'caja') p += 12;
     /* y despues, donde queda uno: el tiro que mata pero te deja clavado abajo
        cuesta el turno siguiente */
-    const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, vang: P.vang,
-                cd: 0, apoyada: false };
+    const c = { x: P.x, y: P.y, vx: P.vx, vy: P.vy, ang, cd: 0, apoyada: false };
     aplicaRetro(c, ang);
     for (let s = 0; s < 120; s++) pasoCuerpo(c, 1/120);
     if (bajo){
@@ -210,7 +209,7 @@ function juegaSolo(azar, tope, ciego){
         P.vang = 0;
         const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
         P.cd = M.cadencia;
-        BAL.push({ x: P.x + dx*M.largo*0.55, y: P.y + dy*M.largo*0.55,
+        BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca,
                    dx, dy, v: M.bala, t: 1.3, mia: true });
         aplicaRetro(P, P.ang);
         tiros++;

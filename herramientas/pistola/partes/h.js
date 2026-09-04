@@ -23,6 +23,16 @@ function texHalo(){
   x.fillStyle = g; x.fillRect(0, 0, 64, 64);
   const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
 }
+function texHaloArma(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,226,160,0.85)');
+  g.addColorStop(0.35, 'rgba(255,200,110,0.22)');
+  g.addColorStop(1, 'rgba(255,180,80,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
+}
 const MAT = {
   losa:  new T.MeshStandardMaterial({ color: 0xa8a294, roughness: 0.90, metalness: 0.05 }),
   pared: new T.MeshStandardMaterial({ color: 0x50596b, roughness: 0.95, metalness: 0.02 }),
@@ -51,6 +61,8 @@ const MAT = {
      medido en la captura, los tres halos de cada piso parecian tres puertas. Un
      radial no tiene borde en ningun lado, que es exactamente lo que le pasa a
      la luz. */
+  haloArma: new T.MeshBasicMaterial({ map: texHaloArma(), transparent: true, opacity: 0.72,
+                                     blending: T.AdditiveBlending, depthWrite: false }),
   halo:  new T.MeshBasicMaterial({ map: texHalo(), transparent: true, opacity: 0.55,
                                    blending: T.AdditiveBlending, depthWrite: false }),
   alfom: new T.MeshStandardMaterial({ color: 0x8a3140, roughness: 0.95, metalness: 0.0 }),
@@ -81,7 +93,27 @@ let ASSETS_LISTOS = 0, ASSETS_FALLADOS = 0;
 function cargaTexturas(){
   if (typeof AS_IMG === 'undefined') return;
   const cl = new T.TextureLoader();
+  /* ── EL MODELO CONSERVA SU TEXTURA, QUE ES DONDE ESTA EL DISEÑO ──
+     Horneada a color por vertice y decimada a 2.600 triangulos, la pistola daba
+     una media de 0,089 en lineal: un bulto negro. Sin decimar —5.612 triangulos
+     no son nada para el unico objeto que esta SIEMPRE en pantalla y se mira de
+     cerca— se conserva la foto, y ahi se ve que es una pistola. */
+  if (AS_IMG.p_pistola_tex)
+    cl.load('data:image/webp;base64,' + AS_IMG.p_pistola_tex, (t) => {
+      t.colorSpace = T.SRGBColorSpace; t.flipY = false;
+      /* ── METALNESS 0, Y NO ES UN GUSTO ──
+         Un material metalico SIN mapa de entorno no tiene nada que reflejar y
+         sale negro: con 0,35 el arma era una silueta. Y va con emisivo POR MAPA
+         —la misma foto— porque asi el levante conserva el dibujo en vez de
+         pintarle un gris encima, que es lo que hace un emisivo de color plano. */
+      MOD.mat = new T.MeshStandardMaterial({ map: t, roughness: 0.58, metalness: 0.0,
+                                             emissiveMap: t, emissive: 0xffffff,
+                                             emissiveIntensity: 0.34 });
+      ASSETS_LISTOS++;
+      if (MOD.geo.p_pistola) armaPistola();
+    }, undefined, () => { ASSETS_FALLADOS++; });
   for (const k in AS_IMG){
+    if (k.endsWith('_tex')) continue;
     cl.load('data:image/webp;base64,' + AS_IMG[k], (t) => {
       t.colorSpace = T.SRGBColorSpace;
       t.wrapS = t.wrapT = T.MirroredRepeatWrapping;
@@ -167,6 +199,10 @@ function leeGLB(b64){
     const nr = acc(pr.attributes.NORMAL);
     g.setAttribute('normal', new T.BufferAttribute(nr.d, 3, nr.norm));
   }
+  if (pr.attributes.TEXCOORD_0 != null){
+    const t = acc(pr.attributes.TEXCOORD_0);
+    g.setAttribute('uv', new T.BufferAttribute(t.d, 2, t.norm));
+  }
   if (pr.attributes.COLOR_0 != null){
     const c = acc(pr.attributes.COLOR_0);
     g.setAttribute('color', new T.BufferAttribute(c.d, c.n, c.norm));
@@ -188,17 +224,68 @@ function leeGLB(b64){
    vertices al decimar —sin UV el simplificador no tiene costuras que respetar y
    baja hasta donde uno quiera— asi que lo unico que el material aporta es como
    recibe la luz. */
-const MOD = { geo: {}, mat: new T.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
-};
+const MOD = { geo: {}, mat: null };
+
+/* ══════════ LA ORIENTACION DE UNA MALLA GENERADA SE MIDE, NO SE SUPONE ══════════
+   Y esto costo la vuelta. La pistola volvio con extension [0,192 · 0,677 · 1,000]:
+   su eje LARGO es Z y el mas corto es X — o sea el espesor. Escalandola por la X
+   contra `M.largo`, el arma salia CINCO VECES mas grande de lo que tenia que ser,
+   y como el juego la gira sobre Z el caño apuntaba a la camara: girarla no movia
+   la punteria ni un grado. Eso explica de una tres de las cuatro cosas que el
+   jugador vio — «el arma deberia ser mas chica», «los modelos estan crasheados» y
+   «la mira ni ahi que esta bien calibrada».
+
+   Se resuelve con dos mediciones y ninguna suposicion:
+     1. el eje MAS LARGO pasa a ser X, el del medio Y y el mas corto Z, que es la
+        proporcion de cualquier pistola (largo > alto > espesor);
+     2. y para saber para donde apunta se busca la EMPUÑADURA, que es la masa que
+        cuelga por debajo: el lado donde esta la empuñadura es el de atras. */
+function orientaArma(geo){
+  geo.computeBoundingBox();
+  const b = geo.boundingBox;
+  const ex = [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z];
+  const ord = [0, 1, 2].sort((p, q) => ex[q] - ex[p]);   /* largo, alto, espesor */
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  const cen = [(b.min.x + b.max.x)/2, (b.min.y + b.max.y)/2, (b.min.z + b.max.z)/2];
+  const gp = (a, i, e) => (e === 0 ? a.getX(i) : e === 1 ? a.getY(i) : a.getZ(i));
+  const P0 = new Float32Array(pos.count*3), N0 = new Float32Array(pos.count*3);
+  for (let i = 0; i < pos.count; i++)
+    for (let e = 0; e < 3; e++){
+      P0[i*3 + e] = gp(pos, i, ord[e]) - cen[ord[e]];
+      N0[i*3 + e] = nor ? gp(nor, i, ord[e]) : 0;
+    }
+  /* la empuñadura: el tercio de abajo. Su x media dice de que lado esta la culata */
+  let ymin = 1e9, ymax = -1e9;
+  for (let i = 0; i < pos.count; i++){ const y = P0[i*3+1]; if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
+  const corte = ymin + (ymax - ymin)*0.33;
+  let sx = 0, n = 0;
+  for (let i = 0; i < pos.count; i++) if (P0[i*3+1] < corte){ sx += P0[i*3]; n++; }
+  if (n > 0 && sx/n > 0)
+    for (let i = 0; i < pos.count; i++){
+      P0[i*3] = -P0[i*3]; P0[i*3+2] = -P0[i*3+2];
+      N0[i*3] = -N0[i*3]; N0[i*3+2] = -N0[i*3+2];
+    }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P0, 3));
+  g.setAttribute('normal', new T.BufferAttribute(N0, 3));
+  if (geo.attributes.uv) g.setAttribute('uv', geo.attributes.uv);
+  if (geo.index) g.setIndex(geo.index);
+  /* y se escala para que el LARGO mida `M.largo`: asi la boca cae en `M.boca`,
+     que es de donde sale la bala y donde empieza la linea de la mira */
+  const L = ex[ord[0]];
+  g.scale(M.largo/L, M.largo/L, M.largo/L);
+  g.computeBoundingBox();
+  return g;
+}
 function cargaModelos(){
   if (typeof AS_MOD === 'undefined') return;
   for (const k in AS_MOD){
     try {
       const g = leeGLB(AS_MOD[k]);
-      if (g){ MOD.geo[k] = g; ASSETS_LISTOS++; } else ASSETS_FALLADOS++;
+      if (g){ MOD.geo[k] = orientaArma(g); ASSETS_LISTOS++; } else ASSETS_FALLADOS++;
     } catch(e){ ASSETS_FALLADOS++; }
   }
-  if (MOD.geo.p_pistola) armaPistola();
+  if (MOD.geo.p_pistola && MOD.mat) armaPistola();
 }
 
 /* ── LA MALLA GENERADA VIENE EN UNA CAJA DE LADO 2 Y MIRANDO A CUALQUIER LADO ──
@@ -416,20 +503,32 @@ function armaLadron(l){
    Gira entera, se la mira de cerca y es lo unico que esta siempre en pantalla:
    tiene que tener volumen desde cualquier angulo. Siete cajas. */
 let gArma = null, gMira = null, gDest = null;
+/* ── UN HALO DETRAS DEL ARMA, PORQUE A VEINTE PIXELES NO SE ENCUENTRA ──
+   La camara encuadra 5,4 metros de ancho en 412 pixeles: son 76 px por metro, o
+   sea que una pistola de tamaño de verdad mide VEINTE PIXELES y ademas es gris
+   oscura sobre hormigon oscuro. Medido en la captura de partida, en el borde de
+   abajo no se distinguia del piso. Agrandarla arreglaria eso y rompe la escala
+   —al lado de un ladron de 1,5 m se leeria a escopeta—, asi que lo que se
+   agranda no es el arma: es lo que dice DONDE esta. Un radial aditivo detras no
+   tiene borde en ningun lado, o sea que no se lee a objeto. */
+function haloArma(){
+  const m = new T.Mesh(GEO.plano, MAT.haloArma);
+  m.scale.set(1.45, 1.45, 1);
+  m.position.z = -0.12;
+  m.userData.noSom = true;
+  return m;
+}
+
 function armaPistola(){
   if (gArma){ gCosas.remove(gArma); }
-  if (MOD.geo.p_pistola){
-    /* el largo del modelo es el largo de choque, asi que lo que se ve y lo que
-       golpea son la misma medida */
-    const b = MOD.geo.p_pistola.boundingBox;
+  if (MOD.geo.p_pistola && MOD.mat){
+    /* ya viene orientada, centrada y a escala: el largo del modelo ES `M.largo`,
+       asi que la boca cae exactamente en `M.boca` y la linea sale del caño */
     const g = new T.Group();
     const m = new T.Mesh(MOD.geo.p_pistola, MOD.mat);
-    const k = (M.largo*1.15)/Math.max(1e-4, b.max.x - b.min.x);
-    m.scale.setScalar(k);
-    m.position.set(-(b.min.x + b.max.x)/2*k, -(b.min.y + b.max.y)/2*k,
-                   -(b.min.z + b.max.z)/2*k);
     m.castShadow = CALIDADES[CALIDAD].sombras;
     g.add(m);
+    g.add(haloArma());
     gArma = g; gCosas.add(gArma); return;
   }
   gArma = new T.Group();
@@ -477,7 +576,7 @@ function ponMira(){
   gMira.visible = ver; gDest.visible = ver;
   if (!ver) return;
   const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
-  const x0 = P.x + dx*M.largo*0.55, y0 = P.y + dy*M.largo*0.55;
+  const x0 = P.x + dx*M.boca, y0 = P.y + dy*M.boca;
   const h = rayo(x0, y0, dx, dy, 26, false);
   const L = h ? h.t : 26;
   const a = gMira.geometry.attributes.position.array;

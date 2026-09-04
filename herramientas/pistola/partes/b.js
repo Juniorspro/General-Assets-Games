@@ -21,11 +21,21 @@ const M = {
      ladrones», se ve como un nivel vacio. Los dos numeros son el mismo numero. */
   ancho: 5.4,
   retro: 11.5,           /* el empujón de un disparo, en m/s */
-  retroGiro: 5.2,        /* y el tirón angular, en rad/s */
+  /* ── LA PISTOLA NO SE CAE DE COSTADO: EL ANGULO ES SOLO PUNTERIA ──
+     Estaba en 5,2 rad/s de tiron por disparo mas el giro que le metia cada
+     rebote, y eso hace dos cosas malas a la vez: el arma da vueltas de canto
+     —que es lo que se pidio sacar— y la mira deja de significar algo, porque
+     entre que uno apunta y suelta el caño ya se movio. Con el giro en cero,
+     `P.ang` es EXACTAMENTE lo que el dedo dice y la linea es una promesa. */
+  retroGiro: 0,          /* el tirón angular: cero, ver arriba */
   bala: 46,              /* velocidad de la bala */
   rebote: 0.42,          /* cuánto conserva la pistola al rebotar */
   roceAng: 0.55,         /* cuánto se frena el giro por segundo */
-  largo: 0.30,           /* el largo de la pistola: es el radio de choque */
+  largo: 0.29,           /* el largo de la pistola */
+  /* de donde sale la bala, medido desde el centro: es el MISMO numero que usan
+     el disparo, la linea de la mira y las chispas del fogonazo, asi que no
+     pueden apuntar a sitios distintos */
+  boca: 0.145,
   lento: 0.16,           /* el factor de la cámara lenta */
   entraLento: 0.10,      /* cuánto tarda en entrar y salir */
   cadencia: 0.22,        /* mínimo entre dos disparos */

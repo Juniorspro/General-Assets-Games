@@ -19,14 +19,13 @@ function mueve(x, y){
      esta apuntando — que en una pantalla de telefono es la mitad del blanco. Con
      el arrastre relativo la mano queda donde uno la apoyo. */
   P.ang = J.angBase + (x - J.dedo.x)*GIRO_DEDO - (y - J.dedo.y)*GIRO_DEDO*0.55;
-  P.vang *= 0.90;
 }
 function arriba(){
   if (!J.apretado) return;
   J.apretado = false; J.dedo = null;
   if (J.modo !== 'juega') return;
-  if (dispara()){ son('tiro'); sacude(0.22); chispas(P.x + Math.cos(P.ang)*0.35,
-                                                    P.y + Math.sin(P.ang)*0.35, 5, 0xffd76a); }
+  if (dispara()){ son('tiro'); sacude(0.22); chispas(P.x + Math.cos(P.ang)*M.boca,
+                                                    P.y + Math.sin(P.ang)*M.boca, 5, 0xffd76a); }
 }
 const cv = ren.domElement;
 cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); abajo(e.clientX, e.clientY); });
@@ -54,7 +53,7 @@ for (const ev of ['pointerdown', 'click', 'keydown'])
 
 /* ══════════════════════════ EL BUCLE ══════════════════════════ */
 const rel = new T.Clock();
-let CONGELADO = false, SIN_POST = false;
+let CONGELADO = false, SIN_POST = false, CAM_FIJA = false;
 function bucle(){
   requestAnimationFrame(bucle);
   let dt = Math.min(0.25, rel.getDelta());
@@ -62,7 +61,13 @@ function bucle(){
   pasoJuego(dt);
   pasoChispas(dt*lerp(1, M.lento, J.lento));
   if (SAC > 0) SAC = Math.max(0, SAC - dt*4.2);
-  ponArma(); ponLadrones(); ponBalas(); ponMira(); ponCamara(dt);
+  ponArma(); ponLadrones(); ponBalas(); ponMira();
+  /* ── CONGELAR LA SIMULACION NO ALCANZA PARA FOTOGRAFIAR ──
+     `ponCamara` corre en cada cuadro, asi que una sonda que planta el lente y
+     dibuja se pisa sola en el cuadro siguiente: la foto sale del encuadre normal
+     y parece que la sonda no hizo nada. Es la misma leccion que ya costo una
+     vuelta con la cinematica de BARRIO. */
+  if (!CAM_FIJA) ponCamara(dt);
   $('aviso').classList.toggle('on', J.msgT > 0);
   if (J.modo === 'juega') $('fLadrones').textContent = TX('ladrones') + ' ' + vivos();
   post.uniforms.uT.value = performance.now()*0.001;
@@ -113,7 +118,11 @@ function ponLadrones(){
 let camY = 3, camXs = 0;
 function ponCamara(dt){
   const k = Math.min(1, dt*4.6);
-  const objY = cl(P.y + 1.1, 4.2, Math.max(4.2, MUNDO.alto - 3.4));
+  /* ── EL PISO DEL ENCUADRE BAJA, PORQUE EL HEROE MIDE VEINTE PIXELES ──
+     Con el tope en 4,2 y la pistola en el suelo, el arma quedaba al 16 % del
+     alto del cuadro: en la captura era un punto en el borde de abajo, encima
+     del que va la linea de ayuda. */
+  const objY = cl(P.y + 1.1, 3.3, Math.max(3.3, MUNDO.alto - 3.4));
   camY += (objY - camY)*k;
   camXs += (cl(P.x*0.34, -1.1, 1.1) - camXs)*k;
   const s = SAC*0.09;
@@ -263,6 +272,30 @@ window.__P = {
   assets: () => JSON.stringify({ listos: ASSETS_LISTOS, fallados: ASSETS_FALLADOS,
                                  tex: Object.keys(TEX).length, mod: Object.keys(MOD.geo).length,
                                  son: Object.keys(SON).length }),
+  /* ── LA SONDA DEL ARMA: LO QUE SE VE Y LO QUE DISPARA ES EL MISMO NUMERO ──
+     Devuelve la caja de la malla YA orientada y donde cae la boca dibujada. Si
+     el largo no corre por X o la boca no cae en `M.boca`, la linea de la mira
+     miente y eso en una captura chica no se ve. */
+  arma: (zoom, ang) => {
+    if (ang != null) P.ang = ang;
+    const g = MOD.geo.p_pistola;
+    const b = g ? g.boundingBox : null;
+    if (zoom){
+      CONGELADO = true; CAM_FIJA = true;
+      cam.position.set(P.x + 0.10, P.y + 0.02, 1.15);
+      cam.lookAt(P.x, P.y, 0);
+      cam.updateMatrixWorld();
+      ponArma();
+      ren.setRenderTarget(RT); ren.clear(); ren.render(esc, cam);
+      ren.setRenderTarget(null); ren.render(escP, camP);
+    }
+    return JSON.stringify({
+      modelo: !!g, material: !!MOD.mat,
+      caja: b ? { x: +(b.max.x - b.min.x).toFixed(3), y: +(b.max.y - b.min.y).toFixed(3),
+                  z: +(b.max.z - b.min.z).toFixed(3) } : null,
+      largoM: M.largo, boca: M.boca, ang: +P.ang.toFixed(2), vang: +P.vang.toFixed(3) });
+  },
+  camLibre: () => { CAM_FIJA = false; CONGELADO = false; return 'ok'; },
   audita: () => audita(),
   /* ── LA PRUEBA DEL DAÑO, QUE EL AUTO-JUGADOR NO PUEDE DAR ──
      El honesto mata antes de que le tiren y el del azar casi nunca sube, asi que

@@ -108,48 +108,63 @@ def hornea_son(k):
     return io.open(ruta, 'rb').read(), r
 
 
-def hornea_mod(k, tri):
+def hornea_mod(k):
+    """La pistola NO se decima y NO se hornea a color por vertice.
+
+    ── Y ESA ES LA CORRECCION DE ESTA VUELTA ──
+    El horneado de vertices existe para poder decimar: sin UV el simplificador no
+    tiene costuras que respetar. Pero la pistola entra con 5.612 triangulos, que
+    no es nada para el unico objeto que esta SIEMPRE en pantalla y se mira de
+    cerca — decimarla al 55 % solo servia para tirarle el diseño. Medido, el
+    color por vertice devolvia una media de 0,089 en lineal: un bulto negro.
+    Sin decimar se puede conservar la textura, que es donde esta el diseño.
+
+    Lo unico que se hace es sacarle las TRES imagenes que trae Tripo —color,
+    metal-rugosidad y normales, 2,4 MB— y devolver la de color aparte, achicada.
+    """
     import hornear_props as HP
-    HP.DESAT = 0.20
-    vc = os.path.join(TMP, k + '_vc.glb')
-    HP.color_en_vertices(os.path.join(CRUDO, k + '.glb'), vc)
-    # ── EL MATERIAL SE LIMPIA ENTERO, NO SOLO EL MAPA DE COLOR ──
-    # Tripo devuelve TRES imagenes —color, metal-rugosidad y normales— y el
-    # horneado de vertices solo le saca la primera: quedan `normalTexture` y
-    # `metallicRoughnessTexture` apuntando a texturas que ya no existen, y
-    # gltfpack contesta «invalid GLTF» sin decir cual. Es la misma trampa que ya
-    # costo una vuelta con el personaje de BARRIO.
-    js, bn = HP.carga(vc)
+    js, bn = HP.carga(os.path.join(CRUDO, k + '.glb'))
+    img = js['images'][0]
+    bvi = js['bufferViews'][img['bufferView']]
+    o = bvi.get('byteOffset', 0)
+    tex = Image.open(io.BytesIO(bn[o:o+bvi['byteLength']])).convert('RGB')
+    tex = tex.resize((256, 256), Image.LANCZOS)
+    # ── Y SE LEVANTA, PORQUE EL ARMA ES EL HEROE DEL CUADRO ──
+    # La foto vuelve con luma media 0,275 —un gunmetal correcto— y este juego
+    # pasa a las tres de la mañana adentro de una torre en penumbra: medido en la
+    # captura de cerca, el arma salia casi negra. Se sube con gamma, que aclara
+    # las sombras sin quemar los brillos: 0,275 -> 0,42.
+    a = np.asarray(tex).astype(np.float32)/255.0
+    tex = Image.fromarray((np.clip(a, 0, 1)**0.62*255 + 0.5).astype(np.uint8))
+    luma = float((np.asarray(tex).astype(np.float32)/255.0
+                  * [0.299, 0.587, 0.114]).sum(2).mean())
+    bt = io.BytesIO(); tex.save(bt, 'WEBP', quality=88, method=5)
+
+    # el binario se reempaqueta sin las imagenes: sin esto, los 2,4 MB de PNG
+    # siguen adentro del GLB aunque ya no los mire nadie
+    quedan = [x for x in range(len(js['bufferViews'])) if x not in
+              set(im['bufferView'] for im in js['images'])]
+    nuevo, remap = bytearray(), {}
+    for x in quedan:
+        b0 = js['bufferViews'][x]
+        while len(nuevo) % 4: nuevo.append(0)
+        remap[x] = len(nuevo)
+        nuevo.extend(bn[b0.get('byteOffset', 0): b0.get('byteOffset', 0) + b0['byteLength']])
+    js['bufferViews'] = [dict(js['bufferViews'][x], byteOffset=remap[x], buffer=0) for x in quedan]
+    orden = {v: i for i, v in enumerate(quedan)}
+    for a in js['accessors']:
+        if a.get('bufferView') is not None: a['bufferView'] = orden[a['bufferView']]
+    for c in ('images', 'samplers', 'textures'): js.pop(c, None)
     for mt in js.get('materials', []):
-        for c in ('normalTexture', 'occlusionTexture', 'emissiveTexture'):
-            mt.pop(c, None)
+        for c in ('normalTexture', 'occlusionTexture', 'emissiveTexture'): mt.pop(c, None)
         pbr = mt.setdefault('pbrMetallicRoughness', {})
-        pbr.pop('metallicRoughnessTexture', None)
-        pbr.pop('baseColorTexture', None)
-        pbr['baseColorFactor'] = [1, 1, 1, 1]
-        pbr['metallicFactor'] = 0.0
-        pbr['roughnessFactor'] = 1.0
-        mt.pop('extensions', None)
-    js.pop('extensionsUsed', None); js.pop('extensionsRequired', None)
-    HP.guarda(vc, js, bn)
+        pbr.pop('metallicRoughnessTexture', None); pbr.pop('baseColorTexture', None)
+    js['buffers'] = [{'byteLength': len(nuevo)}]
     sal = os.path.join(TMP, k + '.glb')
-    # ── EL OBJETIVO ES UN NUMERO DE TRIANGULOS, PERO `-si` PIDE UN RATIO ──
-    # Un ratio no dice nada si no se sabe de cuanto se parte: `-si 0.06` sobre un
-    # millon devuelve sesenta mil y parece que el simplificador esta trabado. Se
-    # cuenta lo que ENTRA y de ahi sale el ratio.
-    js0, _ = HP.carga(vc)
-    ent = sum(js0['accessors'][p['indices']]['count']//3
-              for m in js0['meshes'] for p in m['primitives'])
-    r = max(0.005, min(1.0, tri/max(1, ent)))
-    q = subprocess.run(['npx', '--yes', 'gltfpack', '-si', '%.4f' % r, '-kn', '-noq',
-                        '-i', vc, '-o', sal], capture_output=True, text=True)
-    if q.returncode:
-        print(q.stdout[-500:], q.stderr[-500:])
-        raise SystemExit('gltfpack fallo con ' + k)
-    js, _ = HP.carga(sal)
-    n = sum(js['accessors'][p['indices']]['count']//3
-            for m in js['meshes'] for p in m['primitives'])
-    return io.open(sal, 'rb').read(), n
+    HP.guarda(sal, js, bytes(nuevo))
+    n = sum(js['accessors'][pr['indices']]['count']//3
+            for m in js['meshes'] for pr in m['primitives'])
+    return io.open(sal, 'rb').read(), bt.getvalue(), n, luma
 
 
 def main():
@@ -160,9 +175,10 @@ def main():
     for k in list(NIVEL):
         b, r = hornea_son(k); son[k] = b
         inf.append(('son ' + k, len(b), 'rms %.4f (obj %.3f)' % (r, NIVEL[k])))
-    for k, t in [('p_pistola', 2600)]:
-        b, n = hornea_mod(k, t); mod[k] = b
+    for k in MODELOS:
+        b, t, n, lu = hornea_mod(k); mod[k] = b; img[k + '_tex'] = t
         inf.append(('mod ' + k, len(b), '%d triangulos' % n))
+        inf.append(('tex ' + k, len(t), 'luma %.3f' % lu))
 
     def bloque(d, nom):
         return ('const %s = {\n' % nom +

@@ -409,6 +409,65 @@ qué nivel suenan, no si el tema pega con el juego. Y las tres vidas están prob
 no por los auto-jugadores: el honesto limpia un piso en poco más de un segundo desde que entra, así que
 nunca llega a comerse un tiro.
 
+#### Y DESPUÉS, EN LA MISMA VUELTA: **EL EJE LARGO DE LA MALLA NO ERA EL QUE YO SUPUSE**
+
+Reporte: *"el arma debería ser más chica y bien diseñada, está todo crasheado los modelos … la mira ni ahí
+que está bien calibrada y el arma debe solamente moverse rotando nunca caer de costado"*. Tres de las
+cuatro cosas eran **una sola causa**, y sale de dos números.
+
+**LA PISTOLA VOLVIÓ CON EXTENSIÓN `[0,192 · 0,677 · 1,000]`:** su eje largo es **Z** y el más corto es X,
+o sea el espesor. Yo la escalé dividiendo por la X contra `M.largo` — es decir, por el espesor — así que
+salía **cinco veces más grande** de lo que tenía que ser; y como el juego la gira sobre Z, el caño
+apuntaba **a la cámara** y girarla no movía la puntería ni un grado. Eso explica de una que se viera
+enorme, que se leyera a modelo roto y que la mira pareciera descalibrada.
+
+Se arregla midiendo y no suponiendo (`orientaArma`): el eje **más largo pasa a ser X**, el del medio Y y
+el más corto Z —que es la proporción de cualquier pistola—, y para saber hacia dónde apunta se busca la
+**empuñadura**, que es la masa del tercio de abajo: el lado donde está la empuñadura es el de atrás.
+Medido después: caja **0,290 × 0,196 × 0,056**, con el largo por X y el cañón sobre +X.
+
+**Y EL MODELO NO SE DECIMA NI SE HORNEA A COLOR POR VÉRTICE.** El horneado de vértices existe para *poder*
+decimar; la pistola entra con **5.612 triángulos**, que no es nada para el único objeto que está siempre
+en pantalla y se mira de cerca — decimarla al 55 % sólo servía para tirarle el diseño. Medido, el color
+por vértice devolvía una media de **0,089 en lineal**: un bulto negro. Sin decimar se conserva la textura,
+que es donde está el diseño, y lo único que hay que hacer es sacarle las **tres imágenes** que trae Tripo
+y devolver la de color aparte, a 256.
+
+**Y `metalness` EN 0,35 SIN MAPA DE ENTORNO ES NEGRO.** Un material metálico no tiene nada que reflejar si
+no hay entorno. Va en 0, con **emisivo POR MAPA** —la misma foto— porque así el levante conserva el dibujo
+en vez de pintarle un gris encima; más una corrección de gamma al hornear que sube la luma de la textura
+de **0,275 a 0,432**.
+
+#### EL ARMA SÓLO ROTA, Y ESO ADEMÁS ARREGLA LA MIRA
+
+El giro se va entero: `retroGiro` a 0, el rebote deja de convertir el roce en volteo y `P.ang += vang·dt`
+desaparece. **`P.ang` pasa a ser exactamente lo que el dedo dice**, así que la línea es una promesa y no
+una foto de dónde estaba el cañón hace tres cuadros. Un objeto largo que cae de canto voltea, sí — pero
+acá el ángulo *es* la puntería, y un rebote que lo mueve le está sacando la mira de las manos al jugador
+justo cuando acaba de chocar.
+
+**Y LA BOCA PASA A SER UN SOLO NÚMERO** (`M.boca`), que usan el disparo, la línea de la mira, el fogonazo
+y el auto-jugador. Estaba escrito cuatro veces como `M.largo*0.55`, y con el modelo puesto a otra escala
+eso son cuatro cosas apuntando a sitios distintos.
+
+#### UN HALO, PORQUE A VEINTE PÍXELES NO SE ENCUENTRA
+
+La cámara encuadra 5,4 m de ancho en 412 px: son **76 px por metro**, o sea que una pistola de tamaño real
+mide **veinte píxeles** y encima es gris oscura sobre hormigón oscuro. Agrandarla arreglaría eso y rompe la
+escala —al lado de un ladrón de 1,5 m se leería a escopeta— así que lo que se agranda no es el arma: es lo
+que dice **dónde** está. Un radial aditivo detrás, que no tiene borde en ningún lado. Y el piso del
+encuadre baja de 4,2 a 3,3, porque con la pistola en el suelo quedaba al 16 % del alto del cuadro, justo
+encima de la línea de ayuda.
+
+**Y LA SONDA NO PODÍA FOTOGRAFIAR EL ARMA.** `CONGELADO` frena la simulación pero `ponCamara` corre en
+cada cuadro: la sonda plantaba el lente, dibujaba, y el cuadro siguiente lo devolvía a su sitio — la foto
+salía del encuadre normal y parecía que la sonda no hacía nada. Es la tercera vez en este repo. Con
+`CAM_FIJA` se puede mirar la pistola de cerca, que es lo que hizo visible todo lo de arriba.
+
+Medido al cerrar: **16 de 16 assets, 0 fallados**; auditoría limpia en los diez niveles; daño **2 tiros,
+2 impactos**; honesto **10 de 10** con tasa 0,317 contra 0 de 10 y 0,003 del azar; `vang` en 0 en todas
+las corridas; cero solapamientos de HUD; `window.__errs` vacío.
+
 ### Nonagésima octava vuelta (2026-09-03): **NUEVE JUEGOS DE PUNTERÍA** — la familia Bowmasters, y cada verbo distinto
 
 Pedido: *"bue pero hace los nuevos 8 y quepa lo que hacés si ya tenés sesión en Rezona no pienso hacer

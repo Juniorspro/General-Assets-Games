@@ -8,14 +8,14 @@
    Cada tiro empuja al reves del caño y le mete un tiron al giro. Eso es todo el
    control que hay: el juego consiste en gastar tiros para moverse y en que cada
    tiro que se gasta para moverse es un tiro que no mata a nadie. */
-const P = { x: 0, y: 0.9, vx: 0, vy: 0, ang: 0, vang: 3.0,
+const P = { x: 0, y: 0.9, vx: 0, vy: 0, ang: 0, vang: 0,
             cd: 0, vivo: true, apoyada: false };
 const BAL = [];        /* las balas del jugador y las de los ladrones */
-const R_PIS = M.largo*0.42;
+const R_PIS = M.largo*0.46;
 
 function pistolaPone(x, y){
   P.x = x; P.y = y; P.vx = 0; P.vy = 0;
-  P.ang = 0.6; P.vang = 2.4; P.cd = 0; P.vivo = true; P.apoyada = false;
+  P.ang = 0.6; P.vang = 0; P.cd = 0; P.vivo = true; P.apoyada = false;
   BAL.length = 0;
 }
 
@@ -57,9 +57,10 @@ function chocaCuerpo(P){
          Una pistola que rebota sin girar se lee a pelota. La componente
          TANGENCIAL del golpe es la que la hace voltear, que es exactamente lo
          que pasa con un objeto largo que cae de canto. */
-      const tvx = P.vx - (P.vx*nx + P.vy*ny)*nx;
-      const tvy = P.vy - (P.vx*nx + P.vy*ny)*ny;
-      P.vang += (tvx*ny - tvy*nx)*0.9;
+      /* ── EL REBOTE YA NO LA HACE VOLTEAR ──
+         Un objeto largo que cae de canto voltea, si; pero aca el angulo ES la
+         punteria, asi que un rebote que lo mueve le esta sacando la mira de las
+         manos al jugador justo cuando acaba de chocar. */
       P.vx *= 0.82; P.vy *= 0.82;
     }
     if (ny > 0.55) P.apoyada = true;
@@ -69,13 +70,10 @@ function chocaCuerpo(P){
 function pasoCuerpo(P, dt){
   P.vy -= M.g*dt;
   P.x += P.vx*dt; P.y += P.vy*dt;
-  P.ang += P.vang*dt;
-  P.vang *= Math.exp(-M.roceAng*dt);
   chocaCuerpo(P);
   /* apoyada y quieta: se frena del todo, si no tiembla para siempre */
   if (P.apoyada && Math.abs(P.vy) < 0.5){
     P.vx *= Math.exp(-3.2*dt);
-    P.vang *= Math.exp(-4.0*dt);
   }
   if (P.cd > 0) P.cd = Math.max(0, P.cd - dt);
 }
@@ -86,14 +84,13 @@ function pasoPistola(dt){ pasoCuerpo(P, dt); }
 function aplicaRetro(c, ang){
   c.vx -= Math.cos(ang)*M.retro;
   c.vy -= Math.sin(ang)*M.retro;
-  c.vang += M.retroGiro;
 }
 
 function dispara(){
   if (P.cd > 0 || !P.vivo) return false;
   P.cd = M.cadencia;
   const dx = Math.cos(P.ang), dy = Math.sin(P.ang);
-  BAL.push({ x: P.x + dx*M.largo*0.55, y: P.y + dy*M.largo*0.55,
+  BAL.push({ x: P.x + dx*M.boca, y: P.y + dy*M.boca,
              dx, dy, v: M.bala, t: 1.3, mia: true });
   /* el empujon y el tiron: los dos deterministas, para que el jugador pueda
      aprenderlos y para que el auto-jugador pueda preverlos */
