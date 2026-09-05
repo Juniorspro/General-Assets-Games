@@ -154,6 +154,19 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
+- **`Despegue.html` es "DESPEGUE"** (~124 KB, **sin un solo asset**: el cohete, la torre, los obstáculos y
+  las veinticuatro pinturas se dibujan por código). El décimo juego. Un lanzador de cohetes **vertical
+  nativo en three.js**: se mantiene apretado para empujar, se arrastra para esquivar y hay **un** botón de
+  ráfaga. **Quince capas con alturas reales** —las copas de los árboles a 60 m, los aviones a 3 km, la línea
+  de Kármán a 100 km, la estación a 400, la Luna a 384.000 km, Marte a 78 millones— con su cielo y sus
+  cosas cada una; **siete mejoras** de diez niveles que mueven un número de la física (empuje, kilos de
+  combustible, casco, Isp, giro, escudo, imán), **siete ráfagas** de cinco niveles —empujón o multiplicador,
+  algunas sólo fuera del aire— y **24 estilos** que se desbloquean por capa o con monedas. La física es del
+  SI (masa = casco + combustible, `g(h)`, atmósfera exponencial) con **el reloj estirado con la altura**:
+  `mult = 1 + (h/10.000)^0,95`, que es lo que hace que la Luna y Marte se recorran de a una capa en vez de
+  saltarse en un lanzamiento. La economía **se midió en node antes de dibujar nada**: el primer
+  lanzamiento llega a 370 m y el bot codicioso pasa Marte en 47. Vive partido en
+  `herramientas/despegue/partes/` y se arma con `python3 herramientas/despegue/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
   generadas: el telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El
@@ -176,6 +189,80 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima quinta vuelta (2026-09-05): **DESPEGUE**, el décimo juego — un cohete, quince capas y una economía medida en node
+
+Pedido: *"puedes hacerme otro juego simple dónde hay que lanzar un cohete súper bien animado y hay más de
+10 capaz por metros después kilómetros y así que vas mejorando a tu cohete para llegar ahí, más de 20
+estilos y 7 ráfagas y mejoras etc hazlo bien completo al juego etc diseños todo completo"*.
+
+`juegos-pc/Despegue.html` (124 KB, **cero assets**). Vertical nativo: un cohete sube, así que el marco es el
+teléfono como se agarra; en una pantalla apaisada el juego ocupa **una columna de proporción de teléfono**
+centrada, y los tamaños de letra salen del ancho del marco (`--mw`) y no de `vw`, porque en apaisado `vw`
+es el ancho de toda la ventana y el título se salía de la columna.
+
+#### LA SIMULACIÓN CORRE EN NODE, Y ESO ES LO QUE PERMITIÓ AFINAR LA ECONOMÍA
+
+`d.js` no toca el DOM ni three: se concatena con `b.js` y se importa en node. Un juego de mejoras cuya
+progresión no se midió es uno que se termina en tres lanzamientos o que no se termina nunca, y la primera
+versión hacía **las dos cosas**: el primer lanzamiento llegaba a 2.756 m —las nubes— y con todo comprado el
+cohete pasaba de 64 M km a 6·10^11 en **un** lanzamiento. Cuatro correcciones, todas con número:
+
+1. **La base es un cohete chico de verdad**: 21 kN, 1.400 kg de casco, 130 kg de combustible, Isp 185. El
+   primer lanzamiento llega a **370 m**, o sea las copas de los árboles, que es lo que tiene que hacer.
+2. **El reloj se estira con la altura, y el exponente es 0,95 y no 1.** Ir a la Luna de verdad son tres
+   días. Abajo de los 100 km la física entera corre `mult` veces más rápido; arriba sólo la distancia se
+   multiplica y la gravedad, el combustible y la ráfaga van en tiempo real. Con `mult = h/K` la altura
+   crece como `exp(v·t/K)` y ahí estaba el acantilado: entre un lanzamiento a la Luna y el siguiente el
+   cohete se pasaba Marte entero. Con `(h/K)^0,95` crece como una potencia veinte de `v·t` y las cinco capas
+   del espacio se recorren de a una: 1.000 m/s dan los satélites, 3.000 la Luna, 5.000 Marte, 6.000 el
+   espacio profundo.
+3. **Las monedas crecen con el logaritmo arriba de los 100 km.** Con `h^0,62` un lanzamiento a la Luna
+   pagaba **276.000** monedas y se compraba el juego entero de una. Ahora la Luna paga 17.000 y Marte 26.000.
+4. **Y la costa tiene presupuesto:** en el espacio la velocidad casi no baja, así que sin un tope de 14 s
+   reales el vuelo no terminaba nunca.
+
+Medido con el bot codicioso (compra lo más barato entre lo que sube, lanza, repite): capa 2 al lanzamiento
+6, la 5 al 28, la 9 al 39, la Luna al 44 y **Marte al 47**, con las siete mejoras casi al tope. Y el bot
+honesto **no explota**: 2 de 40 en el cohete de base (pájaros, sin escudo) y 0 de 40 en los otros tres
+escalones, con vuelos de 20 s reales al empezar y 60 al final.
+
+#### LO QUE COSTÓ EN EL DIBUJO
+
+- **El suelo no se iba nunca.** Con `mpu = h/25` el suelo queda **siempre 25 unidades debajo del cohete** y un
+  disco de radio 70 a esa distancia asoma por perspectiva hasta los 70 km. El suelo está en metros de verdad
+  (5 por unidad al arrancar) y se **escala** con `5/mpu`, que es lo que hace la altura: a los 3 km es un
+  punto y se apaga.
+- **La Tierra a escala real no entra**: a 400 km mide 400 unidades de radio y el plano lejano la corta. El
+  radio visible se topa en 300 y el borde sube de −25 a −6 entre los 25 y los 400 km: primero horizonte
+  curvo, después una bola que se achica pasada la geoestacionaria.
+- **La cámara del menú terminó debajo del pasto.** Bajarla 10,5 unidades para que el cohete cayera en el
+  hueco del velo deja el lente bajo el suelo: medido con `readPixels`, los dos quintos de arriba del cuadro
+  en **negro** (la cara de abajo del disco, sin luz). Correr el mundo hacia arriba es lo mismo con otro
+  nombre y dio exactamente los mismos números. Lo que funciona es dejar la cámara sobre el suelo y
+  **mirar unos grados hacia abajo**: el cohete cae al 37 % del alto, en el hueco.
+- **La ficha de un estilo es un cohete, no una muestra de tela.** La textura sola en un cuadrado es un
+  pedazo de pared con una ventanilla; recortada con la silueta —cuerpo, nariz, aletas, llama— dice cómo va
+  a quedar el cohete.
+- El humo es **una** malla instanciada con el alfa por instancia en un atributo propio (`MeshBasic` no
+  tiene alfa por instancia y sin alfa una partícula que se apaga desaparece de golpe); cada clase de
+  obstáculo es una malla instanciada fundida con color por vértice. **39 llamadas de dibujo y 12.600
+  triángulos** con todo en pantalla; 19 en el menú.
+
+#### MEDIDO AL CERRAR
+
+Partida completa con el bot en el navegador (370 m, apogeo, resultado, estilo nuevo desbloqueado); un
+segundo lanzamiento con mejoras medias a 5.170 m en 44 s; la progresión simulada **dentro del juego** en
+112 ms con los mismos hitos que en node. Entrada de verdad con `PointerEvent`: apoyar empuja, correr el dedo
+90 px da `dir 1`, soltar suelta. Pausa: la altura no se mueve en 0,8 s y SEGUIR retoma. **Cero
+solapamientos** en el HUD, el menú, el taller, los estilos, los ajustes, la pausa y el resultado, en
+412×892 y en la columna de 259×460. Los tres idiomas en vivo, las tres calidades (247×535 · 350×758 ·
+412×892). Audio: motor 0,38 de nivel con el empuje puesto, cama encendida, pico 0,27 / rms 0,09 en vuelo.
+`window.__errs` vacío en las diez corridas.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que del motor está medido que sigue al empuje y al
+aire, no si suena a cohete. Y el bot juega con puntería de un paso: que el cielo se pueda sobrevivir está
+probado, cuánto cuesta con un dedo no.
 
 ### Centésima cuarta vuelta (2026-09-04): **ROTOR** — la canción entera, tres velocidades, tres estilos y se puede parar sobre un bloque
 

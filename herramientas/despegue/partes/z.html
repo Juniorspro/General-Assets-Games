@@ -1,0 +1,178 @@
+
+/* ══════════════════════ EL BUCLE, LA ENTRADA Y EL ARRANQUE ══════════════════════ */
+let APRETADO = false, DIR = 0, PAUSA = false, CONGELADO = false, BOT = false;
+let acum = 0, tAnt = 0, FIN_T = 0;
+const marco = document.getElementById('marco');
+/* ── EL DEDO: MANTENER ES EMPUJAR, ARRASTRAR ES ESQUIVAR ──
+   La direccion sale de cuanto se corrio el dedo desde donde apoyo, en pixeles,
+   y no de en que mitad de la pantalla esta: asi se puede apoyar en cualquier
+   lado y el empuje y el giro son el mismo dedo. */
+let PX0 = null, PID = null;
+function esBoton(e){ return e.target.closest && e.target.closest('button,.pan,input'); }
+marco.addEventListener('pointerdown', (e) => {
+  despiertaAudio();
+  if (esBoton(e) || PANTALLA !== '') return;
+  PID = e.pointerId; PX0 = e.clientX; APRETADO = true; DIR = 0;
+});
+marco.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== PID || PX0 == null) return;
+  DIR = cl((e.clientX - PX0)/70, -1, 1);
+});
+const suelta = (e) => { if (e.pointerId !== PID) return; PID = null; PX0 = null; APRETADO = false; DIR = 0; };
+addEventListener('pointerup', suelta); addEventListener('pointercancel', suelta);
+/* teclado, para la PC */
+const TEC = {};
+addEventListener('keydown', (e) => { despiertaAudio(); TEC[e.code] = true; if (e.code === 'KeyE' || e.code === 'ShiftLeft') disparaRafaga(); if (e.code === 'Escape' && PANTALLA === '') pausar(); });
+addEventListener('keyup', (e) => { TEC[e.code] = false; });
+function entradaTeclado(){
+  if (PID != null) return;
+  const izq = TEC.ArrowLeft || TEC.KeyA, der = TEC.ArrowRight || TEC.KeyD;
+  APRETADO = !!(TEC.Space || TEC.ArrowUp || TEC.KeyW); DIR = (der ? 1 : 0) - (izq ? 1 : 0);
+}
+function disparaRafaga(){
+  const r = rafaga();
+  if (r === 'ok'){ son('rafaga'); destello(RUN.raf.col, 0.5); }
+  else if (r === 'min' || r === 'no') son('no');
+  pintaRafBoton();
+}
+document.getElementById('bRaf').addEventListener('pointerdown', (e) => { e.stopPropagation(); despiertaAudio(); disparaRafaga(); });
+document.getElementById('bPausa').addEventListener('pointerdown', (e) => { e.stopPropagation(); pausar(); });
+function pausar(){ if (!RUN || RUN.fase === 'fin') return; PAUSA = true; pantalla('pPausa'); }
+
+/* ══════════ LANZAR Y TERMINAR ══════════ */
+function lanza(semilla){
+  armaCohete(); cohete.visible = true;
+  arrancaRun(semilla == null ? Math.floor(Math.random()*1e9) : semilla);
+  const g = document.getElementById('grande'); g.dataset.max = ''; g.dataset.i = ''; g.classList.remove('on');
+  document.getElementById('capa').classList.remove('on');
+  PAUSA = false; FIN_T = 0; APRETADO = false; DIR = 0;
+  pantalla(''); pintaHud(); son('toque');
+}
+function eventos(){
+  const R = RUN; if (!R) return;
+  while (R.eventos.length){
+    const e = R.eventos.shift();
+    if (e === 'ya'){ destello('#ffd9a8', 0.5); }
+    else if (e === 'capa'){ muestraCapa(R.capa); son('capa'); }
+    else if (e === 'golpe'){ son('golpe'); esquirlasGolpe(); destello('#ff3a1a', 0.55); }
+    else if (e === 'explota'){ son('explota'); explota(); destello('#ffb05c', 0.95); }
+    else if (e === 'moneda'){ son('moneda'); chispasMoneda(X_DIB, 0.3); }
+    else if (e === 'maximo'){ son('maximo'); }
+    else if (e === 'rafaga'){ /* ya sono al disparar */ }
+    else if (e === 'sinComb'){ son('planea'); }
+  }
+}
+function bucle(ts){
+  requestAnimationFrame(bucle);
+  const dtReal = Math.min(0.1, (ts - tAnt)/1000 || 0.016); tAnt = ts;
+  const R = RUN;
+  let frac = 1;
+  if (R && R.fase !== 'fin' && !PAUSA && !CONGELADO && PANTALLA === ''){
+    entradaTeclado();
+    acum = Math.min(acum + dtReal, DT*6);
+    while (acum >= DT){
+      acum -= DT;
+      const d = BOT ? (R.fase === 'vuelo' ? botDecide() : { apretado: true, dir: 0 }) : { apretado: APRETADO, dir: DIR };
+      paso(d.apretado, d.dir);
+      if (R.fase === 'fin') break;
+    }
+    frac = acum/DT;
+    eventos();
+    if (R.fase === 'fin'){ acum = 0; }
+  }
+  if (R && R.fase === 'fin' && FIN_T >= 0){
+    FIN_T += dtReal;
+    if (FIN_T > (R.fin === 'explota' ? 1.4 : 1.0)){ FIN_T = -1; pintaFin(); pantalla('pFin'); repinta(); son(R.nuevoRec ? 'record' : 'toque'); }
+  }
+  if (!CONGELADO || !R){
+    hudPaso(dtReal);
+    if (R && PANTALLA === '') pintaHud();
+    motorPaso(R && R.fase !== 'fin' ? R.empujeK*(R.comb > 0 || R.fase === 'cuenta' ? 1 : 0) : 0, R ? aireEn(R.h) : 1, dtReal);
+    pinta(dtReal, R && R.fase !== 'fin' ? frac : 1);
+  } else pinta(0, 1);
+}
+
+/* ══════════ LOS BOTONES ══════════ */
+const B = (id, f) => document.getElementById(id).addEventListener('click', (e) => { despiertaAudio(); son('toque'); f(e); });
+for (const b of document.querySelectorAll('#pIdioma .bt')) b.addEventListener('click', () => { despiertaAudio(); LANG = b.dataset.lang; guardaProg(); repinta(); pantalla('pMenu'); son('toque'); });
+B('bLanzar', () => lanza());
+B('bTaller', () => { TAB = 'mej'; repinta(); pantalla('pTaller'); });
+B('bEstilos', () => { repinta(); pantalla('pEstilos'); });
+B('bAjustes', () => { repinta(); pantalla('pAjustes'); });
+B('tabMej', () => { TAB = 'mej'; pintaTaller(); });
+B('tabRaf', () => { TAB = 'raf'; pintaTaller(); });
+B('tVolver', () => { armaCohete(); repinta(); pantalla(RUN && RUN.fase === 'fin' ? 'pFin' : 'pMenu'); });
+B('eVolver', () => { armaCohete(); repinta(); pantalla('pMenu'); });
+B('aVolver', () => { repinta(); pantalla('pMenu'); });
+B('aBorrar', () => { borraProg(); armaCohete(); repinta(); document.getElementById('aBorrar').textContent = TX('borrado'); });
+B('bSigo', () => { PAUSA = false; pantalla(''); });
+B('bAbandona', () => { if (RUN){ RUN.fin = 'abandona'; terminaRun(); } RUN = null; cohete.visible = true; pantalla('pMenu'); repinta(); });
+B('fOtra', () => lanza());
+B('fTaller', () => { TAB = 'mej'; repinta(); pantalla('pTaller'); });
+B('fMenu', () => { RUN = null; cohete.visible = true; pantalla('pMenu'); repinta(); });
+document.getElementById('aMus').addEventListener('input', (e) => { ponVol(e.target.value/100, VOL_FX); guardaProg(); });
+document.getElementById('aFx').addEventListener('input', (e) => { ponVol(VOL_MUS, e.target.value/100); guardaProg(); });
+
+/* ══════════ LAS SONDAS ══════════ */
+window.__errs = [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+window.__C = {
+  estado(){ const R = RUN; return { pantalla: PANTALLA, apretado: APRETADO, dir: +DIR.toFixed(2), bot: BOT, fase: R ? R.fase : null, h: R ? +R.h.toFixed(1) : null, v: R ? +R.v.toFixed(1) : null, x: R ? +R.x.toFixed(2) : null,
+    comb: R ? +R.comb.toFixed(1) : null, t: R ? +R.t.toFixed(2) : null, capa: R ? R.capa : null, golpes: R ? R.golpes : null, monedas: R ? R.monedas : null,
+    hmax: R ? Math.round(R.hmax) : null, fin: R ? R.fin : null, ganado: R ? R.ganado : null, obs: R ? R.obs.filter(o => o.vivo).length : 0,
+    prog: { monedas: PROG.monedas, niv: { ...PROG.niv }, raf: { ...PROG.raf }, rafEq: PROG.rafEq, estilo: PROG.estilo, estilos: PROG.estilos.length, record: Math.round(PROG.record), capaMax: PROG.capaMax, lanz: PROG.lanz },
+    lang: LANG, cal: CALIDAD, errs: window.__errs.length }; },
+  lanza(sem){ lanza(sem); return this.estado(); },
+  /* adelanta n pasos con la entrada dada o con el bot */
+  pasos(n, apretado, dir){ for (let i = 0; i < n && RUN && RUN.fase !== 'fin'; i++){ const d = BOT || apretado == null ? (RUN.fase === 'vuelo' ? botDecide() : { apretado: true, dir: 0 }) : { apretado, dir: dir || 0 }; paso(d.apretado, d.dir); } eventos(); return this.estado(); },
+  bot(v){ BOT = !!v; return BOT; },
+  congela(v){ CONGELADO = !!v; return CONGELADO; },
+  /* juega un lanzamiento entero sin dibujar y deja el resultado en pantalla */
+  juegaSolo(sem){ const r = juegaSolo(sem); pintaFin(); pantalla('pFin'); repinta(); return r; },
+  progreso(n){ return simulaProgreso(n || 120, false); },
+  progresoFilas(n){ return simulaProgreso(n || 120, true).filas; },
+  /* planta un instante a la altura h para fotografiarlo, con la siembra puesta */
+  foto(h, v, sem){ lanza(sem == null ? 7 : sem); const R = RUN; R.fase = 'vuelo'; R.h = h; R.hPrev = h; R.v = v == null ? 200 : v; R.t = 5; R.tc = 4; R.empujeK = 1; R.sig = h/mpu(h) - 12; R.obs = []; R.mon = []; siembra(); R.capa = capaDe(h); R.capaVista = R.capa; CONGELADO = true; pinta(0.016, 1); pintaHud(); return this.estado(); },
+  estilo(id){ eligeEstilo(id); PROG.estilos.includes(id) || PROG.estilos.push(id); PROG.estilo = id; armaCohete(); return PROG.estilo; },
+  niveles(o){ for (const k in o) PROG.niv[k] = o[k]; armaCohete(); return { ...PROG.niv }; },
+  monedas(n){ PROG.monedas = n; repinta(); return PROG.monedas; },
+  /* lee el bufer de verdad: sin `preserveDrawingBuffer` hay que dibujar y leer en la misma llamada */
+  brillo(){ pinta(0, 1); const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight; const px = new Uint8Array(w*h*4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const franjas = []; for (let f = 0; f < 5; f++){ let s = 0, n = 0; for (let y = Math.floor(h*(4 - f)/5); y < Math.floor(h*(5 - f)/5); y += 3) for (let x = 0; x < w; x += 3){ const i = (y*w + x)*4; s += (px[i] + px[i + 1] + px[i + 2])/3; n++; } franjas.push(+(s/n).toFixed(1)); }
+    return { franjas, w, h, camY: +EFE.camY.toFixed(2), miraY: +EFE.miraY.toFixed(2), cohete: cohete.visible, hijos: cohete.children.length }; },
+  costo(){ const i = render.info; return { llamadas: i.render.calls, tri: i.render.triangles, prog: i.programs.length, tex: i.memory.textures, geo: i.memory.geometries, part: PART.filter(p => p.vivo).length, obs: Object.values(COSAS_M).reduce((a, m) => a + m.count, 0), mon: monedasM.count }; },
+  audio(){ return { ...nivelAudio(), motor: +MOT.nivel.toFixed(3), cama: CAMA.on, ctx: AUD ? AUD.state : null }; },
+  /* solapamientos entre lo visible del HUD y de la pantalla abierta */
+  solapes(){
+    const ids = PANTALLA === '' ? ['alt', 'vel', 'tiempo', 'comb', 'combL', 'mon', 'capa', 'bRaf', 'ayuda', 'bPausa'] : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *')).map(e => e.id || e.className);
+    const els = PANTALLA === '' ? ids.map(i => document.getElementById(i)) : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *'));
+    const cajas = els.filter(e => e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && (e.offsetWidth > 0) && +getComputedStyle(e).opacity > 0.05)
+      .map(e => ({ id: e.id || e.className, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }));
+    const ch = [];
+    for (let i = 0; i < cajas.length; i++) for (let j = i + 1; j < cajas.length; j++){ const a = cajas[i], b = cajas[j]; if (a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1) ch.push(a.id + '/' + b.id); }
+    return { n: cajas.length, cajas, choques: ch, marco: [marco.clientWidth, marco.clientHeight] };
+  },
+  textos(){ return Array.from(document.querySelectorAll('.pan.on .caja *, #hud *')).filter(e => e.children.length === 0 && e.textContent.trim()).map(e => e.textContent.trim()).slice(0, 80); },
+  tablas(){ return { capas: CAPAS.length, mejoras: MEJORAS.length, rafagas: RAFAGAS.length, estilos: ESTILOS.length, idiomas: Object.keys(TXT) }; },
+  pantalla(n){ pantalla(n); repinta(); return PANTALLA; },
+  lang(l){ LANG = l; repinta(); return LANG; },
+  cal(c){ CALIDAD = c; medir(); return { cal: CALIDAD, px: [render.domElement.width, render.domElement.height] }; }
+};
+
+/* ══════════ EL ARRANQUE ══════════ */
+(function arranque(){
+  const hay = cargaProg();
+  medir();
+  armaCohete();
+  repinta();
+  document.getElementById('cBarra').style.width = '100%';
+  setTimeout(() => {
+    document.getElementById('carga').classList.add('ido');
+    pantalla(hay ? 'pMenu' : 'pIdioma');
+    requestAnimationFrame(bucle);
+  }, 250);
+})();
+</script>
+</body>
+</html>

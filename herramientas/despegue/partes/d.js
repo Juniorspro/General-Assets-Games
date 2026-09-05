@@ -165,6 +165,7 @@ function siembra(){
 function paso(apretado, dir){
   const R = RUN; if (!R || R.fase === 'fin') return;
   R.tk++; R.apretado = !!apretado; R.dir = cl(dir || 0, -1, 1);
+  R.hPrev = R.h; R.xPrev = R.x;   /* para que el dibujo interpole entre pasos */
   if (R.fase === 'cuenta'){
     R.tc += DT;
     /* el motor se enciende en el ultimo segundo: humo y temblor antes de soltar */
