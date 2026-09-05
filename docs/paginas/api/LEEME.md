@@ -494,6 +494,50 @@ haya forma de equivocarse sin darse cuenta.
 Las secciones las puede crear el dueño desde la app. Con una lista fija, la
 primera fiesta con una temática nueva volvía al montón único.
 
+### Las secciones
+
+Son **quince**: los tipos de evento —Recepciones, Cumpleaños de 15, Egresados,
+UPD, Primavera, Producción— y **las nueve estéticas de la casa**, con el mismo
+color que ya usa la web para cada una: Realeza dorado, Euphoria violeta, Wéstern
+naranja, Halloween rojo, Audio Car fucsia, Semáforo verde, Ice Party celeste,
+Noche Pirata dorado viejo y Zonal Party violeta. El dueño puede crear más desde
+la app.
+
+Ese color es lo que arregló cómo se veían las tarjetas: antes eran seis cajas
+iguales y grises. Ahora cada una lleva su color en un velo sobre la foto, en el
+borde y en una línea arriba del nombre, así una sección se reconoce de un vistazo
+aunque la foto de tapa sea oscura.
+
+### La foto de portada
+
+Antes la tapa era **lo último subido**, y si eso era un video quedaba un cuadro
+apagado —justo lo que se veía mal—. Ahora:
+
+1. la foto que el dueño eligió con **«Ponerla de portada»**;
+2. si no eligió ninguna, la última **foto** de la sección, nunca un video;
+3. y sólo si no hay ninguna foto, la tapa de un video.
+
+Si se borra la que estaba de portada, la sección vuelve sola a la automática. Y
+una foto de otra sección no puede ser portada de ésta: el servidor lo rechaza.
+
+### Los videos: link, no archivo
+
+El botón de la app dice **«Subir video»**, porque para el dueño es lo mismo, pero
+lo que hace es pedirle el link: sube a YouTube o a MediaFire —los dos botones
+están ahí— y pega la dirección. Dos razones: el depósito gratis es 1 GB y un
+puñado de videos de fiesta se lo come, y un video servido desde acá no tiene la
+reproducción progresiva que sí le da YouTube.
+
+De los de **YouTube** se saca la tapa sola, de `i.ytimg.com/vi/<id>/hqdefault.jpg`,
+sin ninguna clave, y se reproducen **adentro** de la página con el reproductor
+incrustado. Los de MediaFire, Drive o Streamable no se pueden incrustar con la
+dirección sola, así que el visor muestra la tapa —si el dueño subió una— y un
+botón «Ver el video» que lo abre donde está.
+
+Si alguien elige un video del rollo con el selector de fotos —hay teléfonos que lo
+permiten aunque el selector pida imágenes—, la app le avisa que use «Subir video»
+en vez de subir 40 MB en silencio.
+
 ### Dónde vive cada cosa
 
 - El archivo pesado —la foto original, el video— va a **KV** (`MEDIOS`), no a D1.
@@ -519,12 +563,18 @@ En la web, una sección **vacía no se muestra**: una sección con cero fotos es
 promesa incumplida. Si no hay nada en ninguna, la sección entera desaparece.
 
 Probado de punta a punta contra el servidor de verdad, con el navegador: se
-eligen dos fotos y un video, se preparan con su miniatura —la del video sacada
-del primer cuadro—, se suben las tres, los campos quedan limpios y aparecen en la
-sección. En la web, escritorio y celular: la grilla, el ▶ sobre el video, el
-visor con título, descripción y de qué sección es, la foto y el video cargando de
-verdad desde el depósito, y al cerrar el video se saca del DOM para que no siga
-sonando. Sin errores.
+eligen dos fotos, se preparan con su miniatura y se suben; el video se agrega
+pegando un link de YouTube y vuelve «con su tapa»; «Ponerla de portada» marca la
+foto y la lista la muestra como portada; y si se elige un video del rollo, la app
+avisa en vez de subirlo. En la web, escritorio y celular: las quince secciones
+con su color y su contador, la grilla, el ▶ sobre los videos, el visor con
+título, descripción y sección, la foto cargando desde el depósito y el video de
+YouTube reproduciéndose incrustado. Sin errores.
+
+De la portada se probó cada rama contra la base: elegir un video de portada,
+volver a la foto, que una foto de otra sección sea rechazada, y que al borrar la
+portada la sección vuelva a la automática. Después se limpió todo lo de prueba:
+cero medios y cero archivos en el depósito.
 
 ## Cómo está atado
 
