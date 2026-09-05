@@ -1,31 +1,44 @@
 /* ---------------------------------------------------------------------------
-   Todo lo que se mueve en la página: el visor 3D, las rejillas que se arman
-   solas, la lupa de los fondos y la barra de abajo.
+   Lo que se mueve: el visor 3D, las listas que se arman solas, el reflejo del
+   vidrio y la barra de arriba.
    --------------------------------------------------------------------------- */
 import * as THREE from "./vendor/three.module.min.js";
 import { cargarGlb, encuadrar } from "./visor.js";
 
 const $ = (id) => document.getElementById(id);
 
+/* =====================  el reflejo del vidrio  =====================
+   El ::after de cada pieza es un brillo radial centrado en --mx/--my. Se
+   escribe acá, en coordenadas de la pieza, no de la ventana: si no, el brillo
+   de una hoja de abajo aparece corrido. */
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  for (const p of document.querySelectorAll(".vidrio")) {
+    p.addEventListener("pointermove", ev => {
+      const c = p.getBoundingClientRect();
+      p.style.setProperty("--mx", (ev.clientX - c.left) + "px");
+      p.style.setProperty("--my", (ev.clientY - c.top) + "px");
+    });
+  }
+}
+
 /* =====================  los personajes  ===================== */
 
 const BICHOS = [
-  { a:"p-usuario", n:"El monigote",  c:"#4fc3f7",
-    d:"El de las cuentas de usuario. Sin cara, sin manos: sos vos, pero de plástico.",
-    giro:0 },
-  { a:"p-delfin",  n:"El delfín",    c:"#29b6f6",
+  { a:"p-usuario", n:"El monigote", c:"#4fc3f7",
+    d:"El de las cuentas de usuario. Sin cara, sin manos: sos vos, pero de plástico.", giro:0 },
+  { a:"p-delfin",  n:"El delfín",   c:"#29b6f6",
     d:"Saltando y mojado. Estuvo en salvapantallas, publicidades de agua y carpetas escolares.",
     giro:-0.55 },
-  { a:"p-pez",     n:"El pez",       c:"#ffd54f",
-    /* Es plano y de frente se ve de canto: hay que girarlo un cuarto de vuelta. */
+  { a:"p-pez",     n:"El pez",      c:"#ffd54f",
+    /* Es plano: de frente se ve de canto. El cuarto de vuelta es obligatorio. */
     d:"Amarillo con bandas negras. Toda pantalla submarina tenía uno adelante.", giro:Math.PI/2 },
-  { a:"p-robot3",  n:"El robot",     c:"#4fc3f7",
+  { a:"p-robot3",  n:"El robot",    c:"#4fc3f7",
     /* Salió mirando para atrás: sin este giro se lo ve de espaldas. */
     d:"Blanco brillante y celeste, con dos ojos y una sonrisa. La cara amable de la tecnología.",
     giro:4.7 },
-  { a:"p-pajaro",  n:"El pajarito",  c:"#42a5f5",
+  { a:"p-pajaro",  n:"El pajarito", c:"#42a5f5",
     d:"Redondo, celeste y con pico naranja. La forma en que se dibujaba «internet».", giro:0 },
-  { a:"p-medusa",  n:"La medusa",    c:"#e0f7fa",
+  { a:"p-medusa",  n:"La medusa",   c:"#e0f7fa",
     d:"Sale sin color a propósito: es la que mejor queda con el material de vidrio.", giro:0 },
 ];
 
@@ -36,9 +49,9 @@ motor.outputColorSpace = THREE.SRGBColorSpace;
 
 const escena = new THREE.Scene();
 const camara = new THREE.PerspectiveCamera(32, 900 / 620, .1, 100);
-escena.add(new THREE.HemisphereLight(0xdff6ff, 0x2e6b33, 2.1));
+escena.add(new THREE.HemisphereLight(0xcfe9ff, 0x123a6b, 2.0));
 const sol = new THREE.DirectionalLight(0xffffff, 2.3); sol.position.set(2.4, 3, 4);
-const relleno = new THREE.DirectionalLight(0xbfe8ff, .9); relleno.position.set(-3, 1, -2);
+const relleno = new THREE.DirectionalLight(0x9fd0ff, 1.0); relleno.position.set(-3, 1, -2);
 escena.add(sol, relleno);
 
 let actual = null, materialesOriginales = [], elegido = 0;
@@ -103,13 +116,18 @@ function tirar(obj){
 
 $("fichas").innerHTML = BICHOS.map((b, i) => `
   <button class="ficha" type="button" data-i="${i}" aria-pressed="${i === 0}">
-    <span class="bolo" style="background:radial-gradient(circle at 34% 28%, #fff, ${b.c} 38%, #0a4f86)"></span>
+    <span class="bolo" style="background:radial-gradient(circle at 34% 28%, #fff, ${b.c} 38%, #0a3a70)"></span>
     <span><b>${b.n}</b><small>${b.d}</small></span>
   </button>`).join("");
 $("fichas").addEventListener("click", ev => {
   const b = ev.target.closest("button[data-i]"); if (b) mostrar(+b.dataset.i);
 });
 
+function quieto(){
+  girando = false;
+  $("btGirar").setAttribute("aria-pressed", "false");
+  $("btGirar").textContent = "Quieto";
+}
 $("btGirar").addEventListener("click", () => {
   girando = !girando;
   $("btGirar").setAttribute("aria-pressed", String(girando));
@@ -124,13 +142,12 @@ $("btCentrar").addEventListener("click", () => {
   giroY = BICHOS[elegido].giro; giroX = 0; lejos = 3.7;
 });
 
-/* Arrastrar y rueda a mano: los OrbitControls viven en `examples/jsm`, que no
-   está publicado en ningún CDN junto al three de cdnjs. Son treinta líneas. */
+/* Arrastrar y rueda a mano: OrbitControls vive en `examples/jsm`, que no está
+   publicado en cdnjs junto al three que usa esta página. Son treinta líneas. */
 let arrastrando = false, deX = 0, deY = 0;
 lienzo.addEventListener("pointerdown", ev => {
   arrastrando = true; deX = ev.clientX; deY = ev.clientY;
-  lienzo.setPointerCapture(ev.pointerId); girando = false;
-  $("btGirar").setAttribute("aria-pressed", "false"); $("btGirar").textContent = "Quieto";
+  lienzo.setPointerCapture(ev.pointerId); quieto();
 });
 lienzo.addEventListener("pointermove", ev => {
   if (!arrastrando) return;
@@ -155,7 +172,33 @@ function cuadro(){
 }
 medirLienzo(); cuadro(); mostrar(0);
 
-/* =====================  dónde vivía  ===================== */
+/* =====================  las listas  ===================== */
+
+const KIT = [
+  ["La burbuja", "La pieza central. Brillo arriba a la izquierda, aro de luz en el borde y un reflejo chiquito abajo. Sin esos tres, es un círculo."],
+  ["El agua", "Vista desde abajo, con los rayos de sol entrando en abanico. Toda pantalla que se preciara tenía un pez."],
+  ["El orbe", "El botón «Web 2.0»: degradado vertical, brillo elíptico en la mitad de arriba y sombra abajo. Estuvo en absolutamente todo."],
+  ["La gota", "Agua quieta sobre una superficie. Es lo que hace que una hoja se vea recién lavada en vez de simplemente verde."],
+  ["El aluminio", "El contrapeso frío. Cepillado, siempre horizontal, para que el plástico brillante no quedara de juguete."],
+  ["El vidrio", "Ventanas que dejaban ver lo de atrás, borroso y teñido. Aero Glass le puso nombre y le puso precio: hacía falta placa de video."],
+];
+$("rejKit").innerHTML = KIT.map(([t, d], i) =>
+  `<article class="tarjeta"><span class="num">${i + 1}</span><h3>${t}</h3><p>${d}</p></article>`).join("");
+
+const LINEA = [
+  ["2000", "Mac OS X estrena «Aqua»: botones de gel, barras a rayas y reflejos. Apple inventa el idioma."],
+  ["2001", "Windows XP sale con Bliss de fondo: una loma verde y un cielo azul. Es la foto que más gente vio en la historia."],
+  ["2006", "Windows Vista trae Aero Glass. Ventanas translúcidas de verdad, con desenfoque. De acá sale la mitad del nombre."],
+  ["2006", "La Wii y el Canal Mii: blanco, redondo y con sonido de burbujas. Entra a casas que no tenían computadora."],
+  ["2007", "El primer iPhone. Iconos con lomo brillante y el estante de madera de los libros: skeuomorfismo puro."],
+  ["2010", "Empieza el cansancio. Windows Phone estrena Metro: tipografía grande, colores planos, nada de brillo."],
+  ["2012", "Windows 8 tira el vidrio a la basura. Cuadrados de color liso en pantalla completa."],
+  ["2013", "iOS 7. En una tarde, el teléfono más copiado del mundo borra todos los brillos. Se terminó."],
+  ["2017", "Alguien en internet le pone nombre: «Frutiger Aero», por la tipografía de Adrian Frutiger y el Aero de Vista. Cuatro años tarde."],
+  ["2025", "Apple presenta Liquid Glass. El vidrio vuelve, ahora sin burbujas y con los bordes doblando la luz."],
+];
+$("rejLinea").innerHTML = LINEA.map(([a, d]) =>
+  `<div class="hito"><b>${a}</b><p>${d}</p></div>`).join("");
 
 const LUGARES = [
   ["Windows Vista / 7", "Aero Glass: ventanas translúcidas con desenfoque real, el orbe de inicio y los gadgets de la barra lateral. Es de donde sale la mitad del nombre."],
@@ -163,48 +206,12 @@ const LUGARES = [
   ["Nintendo Wii", "Blanco, redondo y con sonido de burbujas. El Canal Mii y el pronóstico del tiempo eran interfaces de vidrio para toda la familia."],
   ["PlayStation 3 · XMB", "Una cruz de iconos sobre un fondo de ondas que cambiaba de color según el mes. Puro brillo, puro degradado."],
   ["Zune · iPod · Nokia", "Reproductores con carcasa de plástico brillante y menús con reflejo. El objeto era tan Aero como la pantalla."],
-  ["El iPhone antes de iOS 7", "Iconos con lomo brillante, la libreta con textura de cuero, el estante de madera de los libros. Skeuomorfismo puro, la última etapa."],
+  ["El iPhone antes de iOS 7", "Iconos con lomo brillante, la libreta con textura de cuero, el estante de madera. Skeuomorfismo puro, la última etapa."],
 ];
 $("rejDonde").innerHTML = LUGARES.map(([t, d]) =>
-  `<article class="pieza"><div class="txt"><h3>${t}</h3><p>${d}</p></div></article>`).join("");
+  `<article class="tarjeta"><h3>${t}</h3><p>${d}</p></article>`).join("");
 
-/* =====================  los fondos  ===================== */
-
-const FONDOS = [
-  ["galeria-1","Burbujas"],   ["galeria-2","Acuario"],  ["galeria-3","Mitad y mitad"],
-  ["galeria-4","El monitor"], ["galeria-5","El globo"], ["galeria-6","Medusas"],
-  ["galeria-7","Orbes"],      ["galeria-8","Vidrio"],
-];
-$("galeria").innerHTML = FONDOS.map(([a, t], i) =>
-  `<button type="button" data-i="${i}">
-     <img src="img/${a}.webp" alt="${t}" width="700" height="700" loading="lazy">
-     <span>${t}</span></button>`).join("");
-
-let viendo = 0;
-function verFondo(i){
-  viendo = (i + FONDOS.length) % FONDOS.length;
-  $("lupaImg").src = "img/" + FONDOS[viendo][0] + ".webp";
-  $("lupaImg").alt = FONDOS[viendo][1];
-  $("lupaPie").textContent = FONDOS[viendo][1] + "  ·  " + (viendo + 1) + " de " + FONDOS.length +
-    "  ·  flechas para pasar";
-  $("lupa").classList.add("ver");
-  document.body.style.overflow = "hidden";
-}
-function cerrarLupa(){ $("lupa").classList.remove("ver"); document.body.style.overflow = ""; }
-$("galeria").addEventListener("click", ev => {
-  const b = ev.target.closest("button[data-i]"); if (b) verFondo(+b.dataset.i);
-});
-$("lupa").addEventListener("click", ev => {
-  if (ev.target === $("lupa") || ev.target.id === "cerrarLupa") cerrarLupa();
-});
-addEventListener("keydown", ev => {
-  if (!$("lupa").classList.contains("ver")) return;
-  if (ev.key === "Escape") cerrarLupa();
-  if (ev.key === "ArrowRight") verFondo(viendo + 1);
-  if (ev.key === "ArrowLeft") verFondo(viendo - 1);
-});
-
-/* =====================  la barra de abajo  ===================== */
+/* =====================  la barra  ===================== */
 
 const enlaces = [...document.querySelectorAll("#nav a")];
 const mirador = new IntersectionObserver(entradas => {
@@ -213,16 +220,5 @@ const mirador = new IntersectionObserver(entradas => {
     for (const a of enlaces)
       a.setAttribute("aria-current", String(a.getAttribute("href") === "#" + e.target.id));
   }
-}, { rootMargin:"-40% 0px -55% 0px" });
+}, { rootMargin:"-45% 0px -50% 0px" });
 for (const s of document.querySelectorAll("section[id]")) mirador.observe(s);
-
-$("orbe").addEventListener("click", () => scrollTo({ top:0, behavior:"smooth" }));
-
-function reloj(){
-  const d = new Date();
-  const dias = ["dom","lun","mar","mié","jue","vie","sáb"];
-  $("reloj").innerHTML =
-    `<span>${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}</span>` +
-    `<small>${dias[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}</small>`;
-}
-reloj(); setInterval(reloj, 20000);
