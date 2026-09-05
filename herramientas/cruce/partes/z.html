@@ -149,7 +149,24 @@ window.__X = {
     pinta(0.016); pintaHud();
     return { ...this.estado(), tren: F && F.tren ? { estado: F.tren.estado, x: +F.tren.x.toFixed(2) } : null };
   },
-  piel(id){ if (!PROG.pieles.includes(id)) PROG.pieles.push(id); PROG.piel = id; armaCarpincho(); return PROG.piel; },
+  /* la caja del carpincho generado y como reparte su masa a lo largo de cada
+     eje: es lo unico que dice para donde mira la malla */
+  carpEjes(){ const m = GLB.carpincho; if (!m) return null;
+    const pos = m.geometry.attributes.position, bb = m.geometry.boundingBox;
+    const nx = [0,0,0,0], nz = [0,0,0,0];
+    for (let i = 0; i < pos.count; i++){
+      const x = pos.getX(i), z = pos.getZ(i);
+      const ux = (x - bb.min.x)/Math.max(1e-6, bb.max.x - bb.min.x);
+      const uz = (z - bb.min.z)/Math.max(1e-6, bb.max.z - bb.min.z);
+      nx[Math.min(3, Math.floor(ux*4))]++; nz[Math.min(3, Math.floor(uz*4))]++;
+    }
+    return { caja: [+(bb.max.x-bb.min.x).toFixed(3), +(bb.max.y-bb.min.y).toFixed(3), +(bb.max.z-bb.min.z).toFixed(3)],
+             porX: nx, porZ: nz, verts: pos.count }; },
+  /* una piel que no existe cae al carpincho pelado y la foto sale sin gorro sin
+     que nada falle: la sonda tiene que decir que no */
+  cabeza(){ return CARP.cab || null; },
+  piel(id){ if (!PIELES.some(p => p.id === id)) return 'no existe: ' + PIELES.map(p => p.id).join(',');
+    if (!PROG.pieles.includes(id)) PROG.pieles.push(id); PROG.piel = id; armaCarpincho(); return PROG.piel; },
   monedas(n){ PROG.monedas = n; repinta(); return PROG.monedas; },
   record(n){ PROG.record = n; repinta(); return PROG.record; },
   costo(){ const i = render.info; return { llamadas: i.render.calls, tri: i.render.triangles, prog: i.programs.length,

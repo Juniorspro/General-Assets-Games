@@ -250,6 +250,33 @@ function geoArbol(){
     { g: new T.SphereGeometry(0.30, 9, 7), c: '#4a9c44', p: [0.08, 1.12, -0.05] }
   ]);
 }
+/* ── LA DECORACION ES CHATA Y ANCHA, NO ALTA ──
+   Lo que se pisa no puede tapar lo que viene: una mata que llegue a la altura
+   del carpincho esconde un auto. Todas estas piezas miden menos de la mitad. */
+function geoMata(){
+  return fundir([
+    { g: new T.IcosahedronGeometry(0.26, 0), c: '#3f8a3a', p: [0, 0.13, 0], s: [1.25, 0.62, 1.1] },
+    { g: new T.IcosahedronGeometry(0.18, 0), c: '#4a9c44', p: [0.19, 0.10, 0.10], s: [1.1, 0.7, 1] },
+    { g: new T.IcosahedronGeometry(0.15, 0), c: '#357a32', p: [-0.20, 0.08, -0.08], s: [1.1, 0.7, 1] }
+  ]);
+}
+function geoCactus(){
+  return fundir([
+    { g: new T.CylinderGeometry(0.13, 0.16, 0.78, 7), c: '#3f7a44', p: [0, 0.39, 0] },
+    { g: new T.CylinderGeometry(0.08, 0.08, 0.30, 6), c: '#478a4c', p: [0.20, 0.50, 0], r: [0, 0, -1.1] },
+    { g: new T.CylinderGeometry(0.08, 0.08, 0.22, 6), c: '#478a4c', p: [0.26, 0.62, 0] },
+    { g: new T.CylinderGeometry(0.07, 0.07, 0.24, 6), c: '#3f7a44', p: [-0.18, 0.38, 0], r: [0, 0, 1.1] }
+  ]);
+}
+function geoJunco(){
+  const p = [];
+  for (let i = 0; i < 7; i++){
+    const a = i*0.9, r = 0.06 + (i % 3)*0.07, h = 0.55 + (i % 4)*0.16;
+    p.push({ g: new T.CylinderGeometry(0.022, 0.035, h, 4), c: i % 3 === 0 ? '#8aa84a' : '#5f9440',
+             p: [Math.cos(a)*r, h/2, Math.sin(a)*r], r: [Math.sin(a)*0.14, 0, Math.cos(a)*0.14] });
+  }
+  return fundir(p);
+}
 function geoPiedra(){
   return fundir([
     { g: new T.IcosahedronGeometry(0.34, 0), c: '#8f9099', p: [0, 0.24, 0], s: [1.15, 0.85, 1] },
@@ -284,6 +311,7 @@ function geoTren(){
 }
 const PROC = {
   arbol: geoArbol(), piedra: geoPiedra(), camalote: geoCamalote(), tren: geoTren(),
+  mata: geoMata(), cactus: geoCactus(), junco: geoJunco(),
   auto: geoAuto(VEHIS.auto, '#d8402e', '#b8331f'),
   camion: geoAuto(VEHIS.camion, '#e8eef2', '#7fbce0'),
   colectivo: geoAuto(VEHIS.colectivo, '#f2c422', '#2f9c5a')
@@ -294,7 +322,8 @@ const LARGO_MOD = { auto: VEHIS.auto.largo, camion: VEHIS.camion.largo, colectiv
 /* el largo sale del choque; el alto y el fondo, de que se lea a locomotora al
    lado de un carpincho de 0,68 */
 const CAJA_TREN = [TREN.largo, 1.85, 1.40];
-const N_INST = { arbol: 46, piedra: 22, auto: 38, camion: 18, colectivo: 16, camalote: 58, moneda: 16, tren: 4 };
+const N_INST = { arbol: 74, piedra: 46, auto: 38, camion: 18, colectivo: 16, camalote: 58, moneda: 16, tren: 4,
+                 mata: 96, cactus: 22, junco: 60 };
 const INST = {};
 for (const k in N_INST){
   let g = PROC[k];
@@ -332,12 +361,12 @@ let CARP = { piel: null, glb: false };
 function geoCarpincho(){
   return fundir([
     { g: new T.SphereGeometry(0.34, 10, 8), c: '#9a7448', p: [0, 0.34, 0], s: [0.86, 0.78, 1.15] },
-    { g: new T.SphereGeometry(0.22, 9, 7), c: '#a67d4e', p: [0, 0.44, 0.34], s: [1, 0.9, 1.05] },
-    { g: new T.BoxGeometry(0.16, 0.09, 0.09), c: '#8a6640', p: [0, 0.36, 0.52] },
-    { g: new T.SphereGeometry(0.06, 6, 5), c: '#6a4e30', p: [0.13, 0.58, 0.30] },
-    { g: new T.SphereGeometry(0.06, 6, 5), c: '#6a4e30', p: [-0.13, 0.58, 0.30] },
-    { g: new T.SphereGeometry(0.045, 6, 5), c: '#221a12', p: [0.11, 0.50, 0.47] },
-    { g: new T.SphereGeometry(0.045, 6, 5), c: '#221a12', p: [-0.11, 0.50, 0.47] },
+    { g: new T.SphereGeometry(0.22, 9, 7), c: '#a67d4e', p: [0, 0.44, -0.34], s: [1, 0.9, 1.05] },
+    { g: new T.BoxGeometry(0.16, 0.09, 0.09), c: '#8a6640', p: [0, 0.36, -0.52] },
+    { g: new T.SphereGeometry(0.06, 6, 5), c: '#6a4e30', p: [0.13, 0.58, -0.30] },
+    { g: new T.SphereGeometry(0.06, 6, 5), c: '#6a4e30', p: [-0.13, 0.58, -0.30] },
+    { g: new T.SphereGeometry(0.045, 6, 5), c: '#221a12', p: [0.11, 0.50, -0.47] },
+    { g: new T.SphereGeometry(0.045, 6, 5), c: '#221a12', p: [-0.11, 0.50, -0.47] },
     { g: new T.CylinderGeometry(0.07, 0.07, 0.16, 6), c: '#7d5c38', p: [0.17, 0.08, 0.22] },
     { g: new T.CylinderGeometry(0.07, 0.07, 0.16, 6), c: '#7d5c38', p: [-0.17, 0.08, 0.22] },
     { g: new T.CylinderGeometry(0.07, 0.07, 0.16, 6), c: '#7d5c38', p: [0.17, 0.08, -0.22] },
@@ -349,33 +378,66 @@ function geoCarpincho(){
    descargas para cambiar un sombrero. La piel multiplica el color y le cuelga
    una pieza de la cabeza, cuya altura sale de la caja del propio modelo: asi el
    gorro cae donde va tanto en el carpincho generado como en el de cajas. */
-function armaAccesorio(tipo, alto, frente){
+/* ── EL ACCESORIO SE COLOCA SOBRE LA CABEZA MEDIDA, NO SOBRE LA CAJA ──
+   Estaban puestos como fraccion del alto y del fondo de la caja envolvente, y
+   esta malla es un bollo casi tan alto como largo: `alto*0,97` cae por encima
+   del lomo y a media cabeza de distancia, asi que la gorrita salia flotando
+   arriba y atras. `cabezaDe` busca los vertices del tercio delantero y devuelve
+   el punto mas alto, su ancho y su profundidad — sobre eso si se puede apoyar
+   un sombrero. */
+function cabezaDe(m){
+  /* los vertices llegan ya con el giro de `gr` aplicado, o sea en el marco en
+     el que vive el accesorio. La punta de la cabeza es el extremo del eje Z con
+     MENOS vertices: el hocico es lo mas angosto del bicho y la grupa lo mas
+     ancho — medido, 511 contra 609 en los cuartos de las puntas. */
+  const pos = m.geometry.attributes.position, mm = m.matrixWorld, v = new T.Vector3();
+  let zMin = 1e9, zMax = -1e9;
+  for (let i = 0; i < pos.count; i++){ v.fromBufferAttribute(pos, i).applyMatrix4(mm);
+    if (v.z < zMin) zMin = v.z; if (v.z > zMax) zMax = v.z; }
+  const d = zMax - zMin, q = d*0.25;
+  let nA = 0, nB = 0;
+  for (let i = 0; i < pos.count; i++){ v.fromBufferAttribute(pos, i).applyMatrix4(mm);
+    if (v.z < zMin + q) nA++; else if (v.z > zMax - q) nB++; }
+  const haciaMin = nA <= nB;                     /* la cabeza esta en -Z si ese lado pesa menos */
+  const lim = haciaMin ? zMin + d*0.34 : zMax - d*0.34;
+  let yTop = -1e9, ancho = 0, zSum = 0, n = 0;
+  for (let i = 0; i < pos.count; i++){ v.fromBufferAttribute(pos, i).applyMatrix4(mm);
+    if (haciaMin ? v.z > lim : v.z < lim) continue;
+    if (v.y > yTop) yTop = v.y;
+    if (Math.abs(v.x) > ancho) ancho = Math.abs(v.x);
+    zSum += v.z; n++; }
+  return { y: yTop, z: n ? zSum/n : (haciaMin ? zMin : zMax), x: 0, r: Math.max(0.14, ancho*0.90),
+           zf: haciaMin ? zMin : zMax, ext: [+zMin.toFixed(3), +zMax.toFixed(3)], nA, nB };
+}
+function armaAccesorio(tipo, cab){
   const g = new T.Group(); if (!tipo) return g;
   const P = (piezas) => g.add(new T.Mesh(fundir(piezas), matVert));
+  const Y = cab.y, Z = cab.z, R = cab.r, ADE = Math.sign(Z || -1);   /* hacia el hocico */
+  const ZF = cab.zf != null ? cab.zf : Z*1.6;                        /* la punta del hocico */
   if (tipo === 'gorra') P([
-    { g: new T.SphereGeometry(0.20, 9, 6, 0, 6.28, 0, 1.5), c: '#d8402e', p: [0, alto*0.97, frente*0.55] },
-    { g: new T.BoxGeometry(0.30, 0.03, 0.20), c: '#b8331f', p: [0, alto*0.96, frente*0.55 + 0.20] }]);
+    { g: new T.SphereGeometry(R*0.92, 10, 6, 0, 6.28, 0, 1.5), c: '#d8402e', p: [0, Y - R*0.10, Z] },
+    { g: new T.BoxGeometry(R*1.5, 0.035, R*1.1), c: '#b8331f', p: [0, Y - R*0.12, Z + ADE*R*1.05] }]);
   else if (tipo === 'paja') P([
-    { g: new T.CylinderGeometry(0.36, 0.38, 0.03, 12), c: '#e0c274', p: [0, alto*0.99, frente*0.5] },
-    { g: new T.CylinderGeometry(0.17, 0.20, 0.16, 10), c: '#d8b45e', p: [0, alto*1.06, frente*0.5] }]);
+    { g: new T.CylinderGeometry(R*1.15, R*1.25, 0.035, 12), c: '#e0c274', p: [0, Y - R*0.06, Z] },
+    { g: new T.CylinderGeometry(R*0.62, R*0.72, R*0.62, 10), c: '#d8b45e', p: [0, Y + R*0.26, Z] }]);
   else if (tipo === 'bufanda') P([
-    { g: new T.TorusGeometry(0.20, 0.07, 6, 12), c: '#c8342a', p: [0, alto*0.62, frente*0.28], r: [1.5708, 0, 0] },
-    { g: new T.BoxGeometry(0.12, 0.28, 0.06), c: '#c8342a', p: [0.16, alto*0.48, frente*0.22] }]);
+    { g: new T.TorusGeometry(R*1.05, R*0.30, 6, 12), c: '#c8342a', p: [0, Y - R*1.5, Z - ADE*R*0.55], r: [1.5708, 0, 0] },
+    { g: new T.BoxGeometry(R*0.55, R*1.3, R*0.28), c: '#c8342a', p: [R*0.75, Y - R*2.1, Z - ADE*R*0.5] }]);
   else if (tipo === 'vincha') P([
-    { g: new T.TorusGeometry(0.21, 0.035, 6, 14), c: '#5aa8e0', p: [0, alto*0.90, frente*0.5], r: [1.4, 0, 0] }]);
+    { g: new T.TorusGeometry(R*0.98, R*0.16, 6, 14), c: '#5aa8e0', p: [0, Y - R*0.32, Z], r: [1.42, 0, 0] }]);
   else if (tipo === 'lentes') P([
-    { g: new T.BoxGeometry(0.34, 0.09, 0.04), c: '#1a1a22', p: [0, alto*0.78, frente*0.92] }]);
+    { g: new T.BoxGeometry(R*1.55, R*0.40, R*0.18), c: '#1a1a22', p: [0, Y - R*1.05, ZF*0.94] }]);
   else if (tipo === 'casco') P([
-    { g: new T.SphereGeometry(0.22, 9, 6, 0, 6.28, 0, 1.5), c: '#f2b21a', p: [0, alto*0.97, frente*0.5] },
-    { g: new T.CylinderGeometry(0.29, 0.29, 0.025, 12), c: '#e0a010', p: [0, alto*0.96, frente*0.5] }]);
+    { g: new T.SphereGeometry(R*0.98, 10, 6, 0, 6.28, 0, 1.5), c: '#f2b21a', p: [0, Y - R*0.10, Z] },
+    { g: new T.CylinderGeometry(R*1.35, R*1.35, 0.03, 12), c: '#e0a010', p: [0, Y - R*0.12, Z] }]);
   else if (tipo === 'corona') P([
-    { g: new T.CylinderGeometry(0.20, 0.20, 0.10, 8), c: '#f2c422', p: [0, alto*1.02, frente*0.5] },
-    { g: new T.ConeGeometry(0.05, 0.12, 5), c: '#f2c422', p: [0, alto*1.10, frente*0.5 + 0.16] },
-    { g: new T.ConeGeometry(0.05, 0.12, 5), c: '#f2c422', p: [0.16, alto*1.10, frente*0.5] },
-    { g: new T.ConeGeometry(0.05, 0.12, 5), c: '#f2c422', p: [-0.16, alto*1.10, frente*0.5] }]);
+    { g: new T.CylinderGeometry(R*0.92, R*0.92, R*0.42, 8), c: '#f2c422', p: [0, Y + R*0.12, Z] },
+    { g: new T.ConeGeometry(R*0.20, R*0.78, 5), c: '#f2c422', p: [0, Y + R*0.68, Z + ADE*R*0.62] },
+    { g: new T.ConeGeometry(R*0.20, R*0.78, 5), c: '#f2c422', p: [R*0.62, Y + R*0.68, Z] },
+    { g: new T.ConeGeometry(R*0.20, R*0.78, 5), c: '#f2c422', p: [-R*0.62, Y + R*0.68, Z] }]);
   else if (tipo === 'mate') P([
-    { g: new T.SphereGeometry(0.14, 9, 7), c: '#6a4526', p: [0.24, alto*0.62, -0.02] },
-    { g: new T.CylinderGeometry(0.02, 0.02, 0.28, 5), c: '#c8ced6', p: [0.30, alto*0.80, -0.02], r: [0, 0, -0.3] }]);
+    { g: new T.SphereGeometry(R*0.55, 9, 7), c: '#6a4526', p: [R*1.15, Y - R*1.9, Z*0.15] },
+    { g: new T.CylinderGeometry(R*0.08, R*0.08, R*1.2, 5), c: '#c8ced6', p: [R*1.32, Y - R*1.1, Z*0.15], r: [0, 0, -0.3] }]);
   return g;
 }
 function armaCarpincho(){
@@ -383,7 +445,7 @@ function armaCarpincho(){
   if (CARP.piel === P.id && CARP.glb === !!GLB.carpincho && cuerpoG.children.length) return;
   CARP = { piel: P.id, glb: !!GLB.carpincho };
   while (cuerpoG.children.length){ const c = cuerpoG.children.pop(); c.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
-  let alto = 0.68, frente = 0.5;
+  let alto = 0.68, cab = { y: 0.63, z: -0.38, zf: -0.56, x: 0, r: 0.21 };
   if (GLB.carpincho){
     const gr = ajusta(GLB.carpincho, 1.02, false);
     let m = null; gr.traverse(o => { if (o.isMesh && !m) m = o; });
@@ -392,15 +454,30 @@ function armaCarpincho(){
     if (P.fantasma){ mat.transparent = true; mat.opacity = 0.62; }
     m.material = mat; m.castShadow = true;
     gr.traverse(o => { if (o.isMesh) o.castShadow = true; });
-    cuerpoG.add(gr);
+    /* ── LA MALLA NO VIENE MIRANDO PARA DONDE SE CAMINA ──
+       Medido con `carpEjes()`: la caja es 0,999 x 0,967 x 0,809, o sea que el
+       eje largo es X, y el cuarto de +X es el que menos vertices tiene (511
+       contra 609 del otro extremo) — el hocico. Con la malla sin girar, el
+       carpincho avanzaba hacia -Z mirando de costado, que es exactamente lo
+       reportado. Un cuarto de vuelta lleva +X a -Z, que es adelante. */
+    gr.rotation.y = Math.PI/2;
+    /* ── SE MIDE ANTES DE COLGARLO, Y ESO NO ES UN DETALLE ──
+       `Box3.setFromObject` pone al dia la matriz de mundo, asi que medido con
+       `gr` ya dentro de `cuerpoG` lo que sale son coordenadas de MUNDO — con la
+       escala del menu (1,95) y el aplaste del salto adentro. Medido asi, la
+       cabeza daba y = 2,15 sobre un bicho que mide uno. Colgado despues, la
+       matriz que se lee es la del propio grupo. */
+    gr.updateMatrixWorld(true);
     const bb = new T.Box3().setFromObject(gr), t = new T.Vector3(); bb.getSize(t);
-    alto = t.y; frente = t.z/2;
+    alto = t.y; cab = cabezaDe(m);
+    cuerpoG.add(gr);
   } else {
     const m = new T.Mesh(geoCarpincho(), new T.MeshLambertMaterial({ vertexColors: true, color: P.tinte,
       transparent: !!P.fantasma, opacity: P.fantasma ? 0.62 : 1 }));
-    m.castShadow = true; cuerpoG.add(m); alto = 0.68; frente = 0.5;
+    m.castShadow = true; cuerpoG.add(m); alto = 0.68;
   }
-  cuerpoG.add(armaAccesorio(P.acc, alto, frente));
+  cuerpoG.add(armaAccesorio(P.acc, cab));
+  CARP.cab = cab;
   carp.alto = alto;
 }
 
@@ -461,7 +538,7 @@ function pinta(dt){
      en el menu el velo se abre en la franja de arriba y ahi es donde tiene que
      estar el personaje, asi que el punto al que mira la camara pasa a estar
      DETRAS de el. */
-  const adel = enMenu ? -(ANCHO_VISTA/(HUD_PX.w/HUD_PX.h))*0.14/Math.sin(EL) : ADEL;
+  const adel = enMenu ? -(ANCHO_VISTA/(HUD_PX.w/HUD_PX.h))*0.035/Math.sin(EL) : ADEL;
   EFE.adel = EFE.adel == null ? adel : EFE.adel + (adel - EFE.adel)*Math.min(1, dt*5);
   const mz = -(EFE.fCam + EFE.adel), mx = EFE.xCam;
   /* el agua corre: la textura se desplaza, no la geometria */
@@ -485,7 +562,13 @@ function pinta(dt){
   const kk = R && R.salta ? Math.min(1, R.ts/SALTO_T) : 1;
   const est = R && R.salta ? 1 + 0.22*Math.sin(kk*Math.PI) : 1;
   cuerpoG.scale.set(1/Math.sqrt(est), est, 1/Math.sqrt(est));
-  if (enMenu){ EFE.menuT += dt; carp.position.set(0, 0.21 + Math.abs(Math.sin(EFE.menuT*1.7))*0.2, -f); carp.rotation.y = Math.sin(EFE.menuT*0.6)*0.8; }
+  /* ── EN EL MENU SE DA VUELTA ──
+     Jugando mira hacia donde avanza, o sea de espaldas; en el menu lo que hay
+     que mostrar es la piel y el gorrito, asi que ahi se gira media vuelta. */
+  /* y en el menu se lo dibuja al doble: es donde se elige la piel y el gorrito,
+     asi que ahi tiene que verse el detalle que en partida es un pixel */
+  carp.scale.setScalar(enMenu ? 1.95 : 1);
+  if (enMenu){ EFE.menuT += dt; carp.position.set(0, 0.21 + Math.abs(Math.sin(EFE.menuT*1.7))*0.2, -f); carp.rotation.y = Math.PI + Math.sin(EFE.menuT*0.6)*0.7; }
 
   /* ══════ LAS FILAS ══════ */
   /* ── CUANTAS FILAS HAY QUE DIBUJAR SALE DE LA CAMARA, NO A OJO ──
@@ -552,6 +635,15 @@ function pinta(dt){
       if (cuenta[k] >= N_INST[k]) continue;
       _q.setFromEuler(new T.Euler(0, a.g, 0));
       _m4.compose(_p3.set(F.arboles[i], 0.21, -ff), _q, _s3.set(a.e, a.e, a.e));
+      INST[k].setMatrixAt(cuenta[k]++, _m4);
+    }
+    /* la decoracion: matas en el carril y banquinas a los costados */
+    if (F.deco) for (const dd of F.deco){
+      const k = dd.k;
+      if (cuenta[k] >= N_INST[k]) continue;
+      if (Math.abs(dd.x - EFE.xCam) > ANCHO_M/2) continue;
+      _q.setFromEuler(new T.Euler(0, dd.g, 0));
+      _m4.compose(_p3.set(dd.x, F.tipo === 'rio' ? 0.10 : 0.21, -ff + dd.z), _q, _s3.set(dd.e, dd.e, dd.e));
       INST[k].setMatrixAt(cuenta[k]++, _m4);
     }
     /* los moviles */

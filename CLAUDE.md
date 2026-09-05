@@ -327,6 +327,48 @@ puesta. `window.__errs` **vacío en las nueve corridas**.
 a qué nivel suenan, no si el bocinazo pega con el juego. Y el bot decide con puntería de un paso de
 física: que el mundo se pueda recorrer está probado, cuánto cuesta **con un dedo** no.
 
+#### Y DESPUÉS, EN LA MISMA VUELTA: **EL CARPINCHO MIRABA DE COSTADO Y LA GORRITA IBA EN LA GRUPA**
+
+Reporte: *"la gorrita está mal puesta también quiero más decoración y el personaje al avanzar mira de
+costado"*. Las tres cosas eran una sola: **nadie había medido hacia dónde mira la malla generada.**
+
+Medido con `carpEjes()`, que reparte los vértices en cuartos a lo largo de cada eje: la caja es
+**0,999 × 0,967 × 0,809** —o sea que el eje largo es X y no Z— y el cuarto de **+X tiene 511 vértices
+contra 609** del otro extremo, que es la firma del hocico: lo más angosto del bicho. Con la malla sin
+girar, el carpincho avanzaba hacia −Z mirando para el costado. Un cuarto de vuelta lleva +X a −Z, que
+es adelante. Y el carpincho **dibujado por código también miraba al revés** —su cabeza estaba en +Z, o
+sea hacia la cámara— así que se lo dio vuelta para que los dos miren para el mismo lado.
+
+**Y EL ACCESORIO SE COLOCABA CONTRA LA CAJA ENVOLVENTE, QUE ACÁ NO SIRVE.** Estaban en `alto*0,97` y
+`frente*0,55`, y esta malla es **un bollo casi tan alto como largo**: eso cae por encima del lomo y a
+media cabeza de distancia — la gorrita salía flotando arriba y atrás. Ahora `cabezaDe()` busca los
+vértices del tercio delantero y devuelve el punto más alto, su ancho y la punta del hocico; los ocho
+accesorios se escriben contra eso. Medido: cabeza en **y 0,960 · z −0,309 · r 0,285** sobre un cuerpo
+de 0,99 de alto.
+
+**Y HUBO QUE MEDIRLA ANTES DE COLGARLA.** `Box3.setFromObject` pone al día la matriz de mundo, así que
+midiendo con el grupo ya dentro de `cuerpoG` lo que sale son coordenadas de **mundo**, con la escala
+del menú y el aplaste del salto adentro: la cabeza daba **y = 2,15** sobre un bicho que mide uno.
+
+**Y EL MENÚ NO MOSTRABA NINGUNA PIEL.** El carpincho quedaba **detrás del logo**, a escala de partida,
+y encima de espaldas. Ahora en el menú se **da media vuelta** —ahí lo que hay que ver es la cara y el
+gorrito— se dibuja al doble (1,95) y el punto al que mira la cámara se corrió para que caiga en la
+franja abierta del velo, debajo del subtítulo.
+
+**LA DECORACIÓN NO ENTRA EN LA SIMULACIÓN, y por eso puede caer donde caiga.** `F.deco` es dibujo y
+nada más: no bloquea, no se junta y no lo mira `librasDe`. Va en dos bandas — las **matas** del carril,
+que son chatas y se pisan, y las **banquinas**, que están fuera de las nueve columnas, o sea donde el
+jugador no llega nunca. Tres piezas nuevas: mata, cactus y junco, más árboles y piedras en la banquina.
+Costo: de 19 a **28 llamadas de dibujo** y de 278 a 348 mil triángulos.
+
+**Y UNA SONDA QUE MENTÍA EN SILENCIO:** `piel(id)` aceptaba cualquier cadena, así que pedirle `gorrita`
+—que no es un id, el id es `gorra`— caía al carpincho pelado y la foto salía **sin gorro sin que nada
+fallara**. Ahora contesta con la lista de ids.
+
+Medido al cerrar: 7 de 7 modelos cargados, auditoría `ok` sobre 400 filas, el bot llega a la fila 97 en
+el navegador, **cero solapamientos**, `window.__errs` vacío. Auto-jugador en node con la decoración
+puesta: **mediana 129 filas** contra 7 del que salta al azar.
+
 ### Centésima quinta vuelta (2026-09-05): **DESPEGUE**, el décimo juego — un cohete, quince capas y una economía medida en node
 
 Pedido: *"puedes hacerme otro juego simple dónde hay que lanzar un cohete súper bien animado y hay más de

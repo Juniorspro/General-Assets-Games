@@ -128,8 +128,29 @@ function generaFila(f){
     /* el tren: espera, avisa 1,3 s y pasa. El ciclo se acorta con la dificultad */
     F.tren = { ciclo: azr(5.6, 8.2) - d*1.6, fase: azr(0, 5), estado: 'espera', x: 0 };
   }
+  sembraDeco(F, d);
   MUNDO.filas[f] = F;
   return F;
+}
+/* ── LA DECORACION NO ENTRA EN LA SIMULACION ──
+   Todo lo de `F.deco` es dibujo y nada mas: no bloquea, no se junta y no lo
+   mira `librasDe`. Por eso puede caer donde caiga sin que el nivel se cierre.
+   Y va en dos bandas: las MATAS del carril, que son chatas y se pisan, y las
+   BANQUINAS, que estan fuera de las nueve columnas —ahi el jugador no llega
+   nunca, asi que se puede poner lo que sea sin cambiar el juego. */
+function sembraDeco(F, d){
+  const D = [];
+  const banq = (k, n, e0, e1) => { for (let i = 0; i < n; i++){
+    const lado = az() < 0.5 ? -1 : 1;
+    D.push({ k, x: lado*azr(COLS + 0.55, COLS + 2.4), z: azr(-0.42, 0.42), e: azr(e0, e1), g: azr(0, 6.28) }); } };
+  const carril = (k, n, e0, e1) => { for (let i = 0; i < n; i++){
+    D.push({ k, x: azr(-COLS - 0.3, COLS + 0.3), z: azr(-0.40, 0.40), e: azr(e0, e1), g: azr(0, 6.28) }); } };
+  if (F.tipo === 'pasto'){ carril('mata', azi(1, 3), 0.55, 1.05); banq('arbol', azi(0, 2), 0.7, 1.15); banq('mata', azi(1, 2), 0.6, 1.1); }
+  else if (F.tipo === 'arena'){ carril('mata', azi(0, 2), 0.4, 0.7); banq('cactus', azi(0, 2), 0.7, 1.2); banq('piedra', azi(0, 2), 0.5, 0.9); }
+  else if (F.tipo === 'rio'){ banq('junco', azi(2, 4), 0.7, 1.25); }
+  else if (F.tipo === 'ruta'){ banq('mata', azi(0, 2), 0.5, 0.9); banq('piedra', azi(0, 1), 0.4, 0.7); }
+  else if (F.tipo === 'via'){ banq('piedra', azi(1, 3), 0.4, 0.8); banq('junco', azi(0, 2), 0.6, 1.0); }
+  F.deco = D;
 }
 /* ── LA VUELTA TIENE QUE CERRAR, Y ESE FUE EL DEFECTO MAS CARO ──
    Sembrar «hasta pasar CICLO» y despues envolver con OTRO periodo deja un hueco
