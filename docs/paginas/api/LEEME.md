@@ -20,6 +20,10 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `POST /api/clave` | Cambia la contraseña sabiendo la actual. Requiere sesión. |
 | `GET /api/instagram` | Archivo que se llena solo desde la cuenta de IG. Sin sesión. |
 | `POST /api/sugerir` | El botón «Nuevo» de la app: trae lo último de Instagram y devuelve los posteos que anuncian algo ya armados como publicación, más qué descartó y por qué. **No sube nada**: el dueño mira y toca publicar. Requiere sesión. |
+| `GET /api/archivo` | Las secciones del archivo. Con `?seccion=` trae la grilla de esa sección; con `?id=` devuelve el archivo original (foto o video). Sin sesión. |
+| `POST /api/archivo` | Sube una foto o un video a una sección, o crea una sección con `nuevaSeccion`. Requiere sesión. |
+| `PUT /api/archivo` | Le cambia el texto o lo pasa a otra sección, sin volver a subir el archivo. Requiere sesión. |
+| `DELETE /api/archivo?id=` | Lo saca, y borra el archivo del depósito. Con `?seccion=` borra la sección, sólo si está vacía. Requiere sesión. |
 | `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Si ese objeto ya está en la biblioteca lo devuelve ya recortado y no gasta IA; con `rehacer: true` genera uno nuevo igual. Requiere sesión. |
 | `PUT /api/prop` | La app deja acá el recorte terminado, para que el próximo que pida lo mismo salga gratis. Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
@@ -478,9 +482,56 @@ La primera versión del simulacro devolvía el destacado pelado en vez de
 `{destacado, colores}`, así que el guión se escondía solo y quedaban los chips de
 muestra. El error era de la prueba, no de la página.
 
+## El archivo de eventos
+
+El pedido del dueño de la fiesta fue textual: «que cada cosa vaya al lugar que
+corresponda, no subir y que quede ahí random. Si subo cosas de primavera que vaya
+al sector de Primavera». Así que la sección **no es un campo más del formulario**:
+va primera, es obligatoria, y el servidor rechaza lo que venga con una sección que
+no existe. El botón de subir dice a dónde va —«Subir a Recepciones»— para que no
+haya forma de equivocarse sin darse cuenta.
+
+Las secciones las puede crear el dueño desde la app. Con una lista fija, la
+primera fiesta con una temática nueva volvía al montón único.
+
+### Dónde vive cada cosa
+
+- El archivo pesado —la foto original, el video— va a **KV** (`MEDIOS`), no a D1.
+  Un video de celular son decenas de megas y en una fila de base no entra; y
+  aunque entrara, D1 corta el tamaño de la respuesta de una consulta, así que
+  pedir una grilla de treinta con los originales adentro fallaría.
+- En **D1** queda la ficha y la **miniatura**, que es lo único que necesita la
+  grilla. La miniatura la hace el teléfono antes de subir: unos 15 KB contra los
+  300 del original. La del video sale del primer cuadro, con un `<video>`
+  escondido y un canvas; sin eso, en la grilla sería un rectángulo negro.
+- Al tocar algo, el original se pide aparte, a `?id=`, y sale de KV con su tipo
+  de verdad: la foto se ve, el video se reproduce.
+
+Se sube de a uno, en fila. Todos juntos en paralelo le vuela la memoria al
+teléfono con archivos de 20 MB y, si algo falla, no se sabe qué entró.
+
+Tope por archivo: **24 MB** (KV no guarda valores de más de 25). El plan gratis de
+KV son 1 GB en total, así que entran miles de fotos y unas decenas de videos. Si
+algún día hace falta más, es R2 —10 GB gratis y sin cargo por bajada—, pero hay
+que habilitarlo desde el panel de Cloudflare, y hoy no lo está.
+
+En la web, una sección **vacía no se muestra**: una sección con cero fotos es una
+promesa incumplida. Si no hay nada en ninguna, la sección entera desaparece.
+
+Probado de punta a punta contra el servidor de verdad, con el navegador: se
+eligen dos fotos y un video, se preparan con su miniatura —la del video sacada
+del primer cuadro—, se suben las tres, los campos quedan limpios y aparecen en la
+sección. En la web, escritorio y celular: la grilla, el ▶ sobre el video, el
+visor con título, descripción y de qué sección es, la foto y el video cargando de
+verdad desde el depósito, y al cerrar el video se saca del DOM para que no siga
+sonando. Sin errores.
+
 ## Cómo está atado
 
 - Base **D1** llamada `iblo` (`27c22f67-3b11-4c92-bb75-37f30f63b84d`), atada como `DB`.
+- **KV** `iblo_medios` (`d067d54f03574a73b90805e6b98a213c`), atado como `MEDIOS`: las
+  fotos y los videos del archivo. Se ató por la API de Cloudflare, cuidando de no
+  pisar lo que ya había en el proyecto.
   Tablas propias de esto: `adornos` (`concepto`, `imagen`, `usos`, `creado`) y
   `cache_ia` (`huella`, `salida`, `creado`).
 - **Workers AI** atada como `AI`, modelo `@cf/meta/llama-3.3-70b-instruct-fp8-fast`.
