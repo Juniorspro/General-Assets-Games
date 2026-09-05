@@ -1,0 +1,271 @@
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Una afirmacion sin numero no vale, y todo lo que se afirma de este juego se
+   mide desde aca. */
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message || e.error)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + String(e.reason)));
+
+window.__C = {
+  estado(){
+    const m = mideObra();
+    return { pant: PANT, girado: GIRADO, cal: CAL, lang: LANG, reloj: RELOJ_EL,
+      llave: hayLlave(), modelo: MODELO,
+      ronda: RUN ? RUN.ronda + 1 : 0, rondas: RONDAS, fase: RUN ? RUN.fase : null,
+      tema: RUN ? temaActual()[1 + (IDX_L[LANG] || 0)] : null,
+      t: RUN ? +RUN.t.toFixed(2) : 0, resta: RUN ? +(RUN.reloj - RUN.t).toFixed(2) : 0,
+      puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0,
+      n: m.n || 0, clases: m.clases || 0, puntaje: m.puntaje || 0,
+      mano: MANO, manoNom: nombreBloque(MANO), cat: CATV,
+      jug: { x: +JUG.x.toFixed(2), y: +JUG.y.toFixed(2), z: +JUG.z.toFixed(2),
+             yaw: +JUG.yaw.toFixed(3), pitch: +JUG.pitch.toFixed(3) } };
+  },
+  /* el marco esta girado noventa grados EXACTOS, asi que la caja alineada a los
+     ejes que devuelve getBoundingClientRect sigue siendo la caja de verdad: un
+     rectangulo girado un cuarto de vuelta sigue siendo un rectangulo */
+  marco(){ const r = document.getElementById('marco').getBoundingClientRect();
+    const c = document.getElementById('cv');
+    return { w: Math.round(r.width), h: Math.round(r.height), clase: document.getElementById('marco').className,
+             cv: [c.clientWidth, c.clientHeight], rt: [RT.width, RT.height] }; },
+  solapes(ids){
+    const L = ids || ['tema','subronda','barra','reloj','mano','stick','bPon','bSac','bSube','bBaja','bPal','bPausa','cruz'];
+    const c = [];
+    for (const id of L){
+      const e = document.getElementById(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || +s.opacity < 0.05) continue;
+      c.push([id, r]);
+    }
+    const ch = [];
+    for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++){
+      const a = c[i][1], b = c[j][1];
+      if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)
+        ch.push(c[i][0] + '×' + c[j][0]);
+    }
+    return { n: c.length, choques: ch };
+  },
+  /* que TODO lo del panel entre en el cuadro, que es distinto de que no se
+     solapen: un boton que queda por debajo del borde no se toca nunca */
+  panel(id){
+    const p = document.getElementById(id), c = p.querySelector('.caja');
+    const m = document.getElementById('marco').getBoundingClientRect();
+    /* ── SE MIDE CON offsetTop, NO CON getBoundingClientRect ──
+       El marco esta girado noventa grados, asi que la caja de pantalla de un
+       hijo tiene los ejes cambiados: los trece hijos del panel de ajustes daban
+       todos el mismo 166..726, que es el ANCHO del marco. offsetTop y
+       offsetHeight son coordenadas de maquetacion y no las toca el transform. */
+    const h = [...c.children].map(e => [e.id || e.className, e.offsetTop, e.offsetTop + e.offsetHeight]);
+    const alto = c.scrollHeight, caja = c.clientHeight;
+    return { alto, caja, entra: alto <= caja + 1, marco: [Math.round(m.width), Math.round(m.height)], h };
+  },
+  /* el atlas entero encima de todo: auditar ciento diez texturas de a una es
+     inviable, y en una sola foto se ven las que salieron mal */
+  verAtlas(){
+    let d = document.getElementById('__atl');
+    if (d){ d.remove(); return false; }
+    d = document.createElement('div'); d.id = '__atl';
+    d.style.cssText = 'position:fixed;inset:0;z-index:999;background:#111;display:flex;align-items:center;justify-content:center';
+    const c = document.createElement('canvas'); c.width = c.height = ATLPX;
+    c.getContext('2d').drawImage(atlasCv, 0, 0);
+    c.style.cssText = 'width:min(100vw,100vh);height:min(100vw,100vh);image-rendering:pixelated';
+    d.appendChild(c); document.body.appendChild(d);
+    return { tiles: nTile, px: ATLPX };
+  },
+  costo(){
+    render.info.autoReset = false; render.info.reset();
+    pinta();
+    const i = render.info;
+    const r = { llamadas: i.render.calls, tri: i.render.triangles, prog: i.programs.length,
+                geo: i.memory.geometries, tex: i.memory.textures };
+    render.info.autoReset = true;
+    return r;
+  },
+  pinta(){ ponCam(); pinta(); return true; },
+  cal(c){ ponCalidad(c); return { cal: CAL, rt: [RT.width, RT.height], sombra: SOMBRA_OK,
+    mapa: LUZSOL.shadow.mapSize.width, cielo: cielo.visible }; },
+  lang(l){ ponLang(l); return { lang: LANG, tema: document.getElementById('tema').textContent,
+    mano: document.getElementById('manoNom').textContent,
+    tabs: [...document.getElementById('palTabs').children].map(b => b.textContent) }; },
+  mano(i){ MANO = i; pintaMano(); pintaPaleta(); return { mano: MANO, nom: nombreBloque(MANO) }; },
+  cat(c){ CATV = c; pintaPaleta(); return { cat: CATV,
+    vis: PIEZAS.filter(d => d.style.display !== 'none').length }; },
+  paleta(v){ if (v) abrePaleta(); else cierraPaleta();
+    return { on: document.getElementById('paleta').classList.contains('on'),
+             piezas: PIEZAS.length, tabs: document.getElementById('palTabs').children.length }; },
+  bloques(){ const c = {}; for (const k of CATS) c[k] = 0;
+    for (let i = 1; i < NBLOQ; i++) c[BLOQUES[i].cat]++;
+    return { total: NBLOQ - 1, cats: c, tiles: nTile, atlas: ATLPX,
+             sinNombre: [...Array(NBLOQ - 1).keys()].map(i => i + 1)
+               .filter(i => nombreBloque(i) === BLOQUES[i].id) }; },
+  temas(){ return { total: TEMAS.length, run: RUN ? RUN.temas : null }; },
+  /* que los cincuenta temas entren en el cartel, en los tres idiomas */
+  titulos(){
+    const n = document.getElementById('tNom'), g = RUN && RUN.temas.slice(), mal = [];
+    if (!RUN) return 'sin partida';
+    for (const l of ['es', 'en', 'pt']){
+      const i = IDX_L[l];
+      for (let k = 0; k < TEMAS.length; k++){
+        n.textContent = TEMAS[k][1 + i];
+        const px = entra(n, Math.min(52, Math.round(innerHeight*0.062)));
+        if (n.scrollWidth > n.clientWidth + 1) mal.push(l + ':' + TEMAS[k][0]);
+      }
+    }
+    pintaTema();
+    return { probados: TEMAS.length*3, cortados: mal.length, mal: mal.slice(0, 6) };
+  },
+
+  ir(x, y, z, yaw, pitch){ JUG.x = x; JUG.y = y; JUG.z = z;
+    if (yaw !== undefined) JUG.yaw = yaw; if (pitch !== undefined) JUG.pitch = pitch;
+    JUG.vx = JUG.vy = JUG.vz = 0; ponCam(); return this.estado().jug; },
+  anda(n, ade, lat, sub){
+    jADE = ade || 0; jLAT = lat || 0; bSUB = sub || 0;
+    const a = [JUG.x, JUG.y, JUG.z];
+    for (let i = 0; i < (n || 60); i++){ juntaEntrada(); pasoJug(1/60); }
+    jADE = jLAT = bSUB = 0; juntaEntrada(); ponCam();
+    return { de: a.map(v => +v.toFixed(2)), a: [JUG.x, JUG.y, JUG.z].map(v => +v.toFixed(2)),
+             rec: +Math.hypot(JUG.x - a[0], JUG.y - a[1], JUG.z - a[2]).toFixed(2) }; },
+  mira(dyaw, dpitch){ JUG.yaw += dyaw || 0; JUG.pitch = cl(JUG.pitch + (dpitch || 0), -1.52, 1.52);
+    ponCam(); return { yaw: +JUG.yaw.toFixed(3), pitch: +JUG.pitch.toFixed(3) }; },
+  apunta(){ const a = apunta(); return { rompe: a.rompe, pone: a.pone,
+    mira: gMira.visible, fantasma: gFantasma.visible }; },
+  pon(){ return pon(); },
+  sac(){ return sac(); },
+  construye(q){ construye(q); SUCIA = true; armaMalla(); ponCam(); return mideObra(); },
+  limpia(){ limpiaReja(); SUCIA = true; armaMalla(); return true; },
+  malla(){ const t = performance.now(); SUCIA = true; const r = armaMalla();
+    return { caras: r.caras, vidrio: r.vidrio, ms: +(performance.now() - t).toFixed(2) }; },
+  lleno(b){ for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++)
+      REJA[idx(x,y,z)] = (x + y + z) % 3 ? (b || 15) : 0;
+    SUCIA = true; armaMalla(); return mideObra(); },
+  medida(){ return mideObra(); },
+  auditaJuez(){
+    const g = {}, guarda = REJA.slice();
+    for (const q of ['nada', 'losa', 'cubo', 'torre', 'casa']){ construye(q); g[q] = mideObra(); }
+    REJA.set(guarda); SUCIA = true; armaMalla();
+    return { puntajes: Object.keys(g).map(k => k + ':' + (g[k].puntaje || 0)).join(' '),
+             orden: Object.keys(g).sort((a, b) => (g[b].puntaje || 0) - (g[a].puntaje || 0)),
+             det: g }; },
+
+  llave(k){ guardaLlave(k === undefined ? '' : k); pintaIdioma(); return hayLlave(); },
+  /* ── EL CAMINO DE LA IA SE PRUEBA SIN GASTAR UNA LLAVE ──
+     Se intercepta `fetch`, se guarda lo que el juego iba a mandar y se contesta
+     con una respuesta armada a mano. Asi se comprueba lo unico que puede estar
+     mal de este lado —la direccion, los encabezados, la forma del cuerpo y como
+     se lee lo que vuelve— sin depender de tener una llave ni de que haya red. */
+  async pruebaIA(mal){
+    const orig = window.fetch; let cap = null;
+    window.fetch = async (u, o) => {
+      cap = { url: u, met: o.method, cab: Object.keys(o.headers).sort(),
+              nav: o.headers['anthropic-dangerous-direct-browser-access'],
+              ver: o.headers['anthropic-version'], llave: (o.headers['x-api-key'] || '').slice(0, 6) };
+      const b = JSON.parse(o.body);
+      cap.modelo = b.model; cab: 0;
+      cap.tope = b.max_tokens;
+      cap.esfuerzo = b.output_config && b.output_config.effort;
+      cap.formato = b.output_config && b.output_config.format && b.output_config.format.type;
+      cap.esquema = Object.keys((b.output_config.format.schema || {}).properties || {});
+      cap.bloques = b.messages[0].content.map(c => c.type);
+      cap.medios = b.messages[0].content.filter(c => c.type === 'image').map(c => c.source.media_type);
+      cap.tema = (b.messages[0].content.find(c => c.type === 'text') || {}).text.slice(0, 80);
+      if (mal === 'http') return { ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }) };
+      if (mal === 'refusal') return { ok: true, status: 200, json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      return { ok: true, status: 200, json: async () => ({ model: 'claude-opus-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 900, output_tokens: 60 },
+        content: [{ type: 'text', text: JSON.stringify({ puntaje: 73, titulo: 'una casita',
+          bueno: 'el techo cierra bien', mejorar: 'le falta color' }) }] }) };
+    };
+    const g = LLAVE; guardaLlave('sk-ant-de-prueba');
+    let r;
+    try { r = await juzga('una casa', LANG); } finally { window.fetch = orig; guardaLlave(g); }
+    return { mando: cap, volvio: { puntaje: r.puntaje, juez: r.juez, titulo: r.titulo,
+      bueno: r.bueno, mejorar: r.mejorar, modelo: r.modelo || null, fallo: r.fallo || null } };
+  },
+  foto(lado){ const f = fotoObra(lado || 224, 0.7);
+    return { n: f.length, bytes: f.map(d => d.length), jpg: f[0].slice(0, 12) }; },
+  async juez(){ const t = temaActual();
+    const r = await juzga(t ? t[1 + (IDX_L[LANG] || 0)] : 'una casa', LANG);
+    return { puntaje: r.puntaje, juez: r.juez, fallo: r.fallo || null, vacio: !!r.vacio,
+             titulo: r.titulo || '', modelo: r.modelo || null }; },
+
+  /* ── LA ENTRADA SE PRUEBA POR EL CAMINO DE VERDAD ──
+     Estos ganchos despachan PointerEvent sobre los mismos escuchas que usa el
+     dedo, asi que pasan por el filtro de `closest` y por la conversion de ejes
+     del marco girado. Una prueba que llama a `pon()` directo se saltea justo
+     las dos cosas que se pueden romper. */
+  ev(tipo, x, y, id){
+    const e = new PointerEvent(tipo, { pointerId: id || 7, clientX: x, clientY: y,
+      bubbles: true, cancelable: true, pointerType: 'touch', isPrimary: true });
+    const el = document.elementFromPoint(x, y) || document.getElementById('marco');
+    el.dispatchEvent(e); return el.id || el.tagName;
+  },
+  async toca(x, y, ms){
+    const c = document.getElementById('marco').getBoundingClientRect();
+    const px = x === undefined ? c.left + c.width/2 : x, py = y === undefined ? c.top + c.height/2 : y;
+    this.ev('pointerdown', px, py);
+    await new Promise(r => setTimeout(r, ms || 60));
+    this.ev('pointerup', px, py);
+    return { n: mideObra().n || 0, puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0 };
+  },
+  async palanca(dx, dy, ms){
+    const r = document.getElementById('stick').getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    this.ev('pointerdown', cx, cy, 9);
+    this.ev('pointermove', cx + dx, cy + dy, 9);
+    const a = { jADE: +jADE.toFixed(3), jLAT: +jLAT.toFixed(3) };
+    await new Promise(res => setTimeout(res, ms || 300));
+    const b = { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2) };
+    this.ev('pointerup', cx + dx, cy + dy, 9);
+    return { pide: a, quedo: b, ADE: ADE, LAT: LAT };
+  },
+  entrada(){ return { ADE, LAT, SUB, jADE, jLAT, bSUB, tADE, tLAT, tSUB }; },
+  async arrastra(dx, dy, ms){
+    const c = document.getElementById('marco').getBoundingClientRect();
+    const x = c.left + c.width/2, y = c.top + c.height/2;
+    const a0 = [JUG.yaw, JUG.pitch];
+    this.ev('pointerdown', x, y, 11);
+    for (let i = 1; i <= 6; i++) this.ev('pointermove', x + dx*i/6, y + dy*i/6, 11);
+    await new Promise(r => setTimeout(r, ms || 80));
+    this.ev('pointerup', x + dx, y + dy, 11);
+    return { dyaw: +(JUG.yaw - a0[0]).toFixed(3), dpitch: +(JUG.pitch - a0[1]).toFixed(3),
+             puestos: RUN ? RUN.puestos : 0 };
+  },
+  async botonReal(id, ms){
+    const r = document.getElementById(id).getBoundingClientRect();
+    const x = r.left + r.width/2, y = r.top + r.height/2;
+    const y0 = +JUG.y.toFixed(2);
+    this.ev('pointerdown', x, y, 13);
+    await new Promise(res => setTimeout(res, ms || 400));
+    this.ev('pointerup', x, y, 13);
+    return { de: y0, a: +JUG.y.toFixed(2), n: mideObra().n || 0,
+             puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0 };
+  },
+  partida(){ partidaNueva(); return this.estado(); },
+  empieza(){ empiezaRonda(); return this.estado(); },
+  finRonda(){ if (RUN){ RUN.t = RUN.reloj; } return RUN ? RUN.fase : null; },
+  pantalla(p){ verPantalla(p); return PANT; },
+  reloj(r){ ponReloj(r); return { reloj: RELOJ_EL, seg: RELOJES[RELOJ_EL] }; },
+  audio(){ return { ctx: AC ? AC.state : null, cama: !!CAMA, on: SON_ON }; },
+  /* el nivel se mide colgando un analizador del maestro: «suena» no es «no tiro
+     excepcion», y una cama que tape un golpe de bloque es un defecto de mezcla */
+  async nivel(que, ms){
+    if (!AC) return null;
+    const an = AC.createAnalyser(); an.fftSize = 2048; MAE.connect(an);
+    const d = new Float32Array(an.fftSize);
+    let pico = 0, s2 = 0, n = 0;
+    if (que) son(que);
+    const t0 = performance.now();
+    while (performance.now() - t0 < (ms || 700)){
+      an.getFloatTimeDomainData(d);
+      for (let i = 0; i < d.length; i++){ const v = Math.abs(d[i]); if (v > pico) pico = v; s2 += d[i]*d[i]; n++; }
+      await new Promise(r => setTimeout(r, 16));
+    }
+    MAE.disconnect(an);
+    return { que: que || 'fondo', pico: +pico.toFixed(4), rms: +Math.sqrt(s2/n).toFixed(4) };
+  },
+  son(q){ return son(q); }
+};
+
+arranca();
+</script></body></html>

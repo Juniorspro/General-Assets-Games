@@ -1,0 +1,2623 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>CUBOS</title>
+<style>
+:root{
+  --tinta:#0d1117; --papel:#eef3f7; --sol:#ffd166; --pasto:#6fc04a; --cielo:#4b8fd6;
+  --mw:100vw;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#07090d;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--papel);
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+
+/* ══════════ EL MARCO SE GIRA ══════════
+   El juego es apaisado y el telefono se agarra vertical, asi que se gira el
+   MARCO noventa grados y adentro va todo —lienzo, HUD, menus— en una sola
+   transformacion: el HUD y el mundo quedan alineados por construccion. En una
+   pantalla ya apaisada no se gira nada. Las dos salidas malas son encogerlo
+   —en un 412x892 un 16:9 sin girar mide 412x232, el 11 % de la pantalla— y
+   pedirle al jugador que gire el aparato, que es una pantalla que no hace nada. */
+#marco{position:absolute;left:50%;top:50%;transform-origin:50% 50%;overflow:hidden;background:#07090d}
+#marco.girado{transform:translate(-50%,-50%) rotate(90deg)}
+#marco.derecho{transform:translate(-50%,-50%)}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ PANELES ══════════ */
+.pan{position:absolute;inset:0;display:none;z-index:20;align-items:center;justify-content:center}
+.pan.on{display:flex}
+/* ── EL VELO ES UN DEGRADADO Y NO UNA OPACIDAD PAREJA ──
+   Detras del menu esta el mundo dibujandose de verdad. Un panel opaco tira a la
+   basura lo unico que este juego tiene para mostrar; cerrado arriba —donde va
+   el titulo— y abierto abajo, se ve la parcela. */
+.pan::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(7,9,13,.52) 0%,rgba(7,9,13,.88) 25%,
+    rgba(7,9,13,.88) 60%,rgba(7,9,13,.16) 100%)}
+.caja{position:relative;width:min(80%,560px);max-height:94%;overflow:auto;text-align:center;
+  display:flex;flex-direction:column;gap:1.15vh;padding:1vh 0}
+.tit{font-size:clamp(30px,7.4vh,64px);font-weight:900;letter-spacing:.14em;margin:0;
+  background:linear-gradient(180deg,#fff 0%,#bcd6ef 55%,#7fa6cc 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+.sub{font-size:clamp(10px,1.9vh,14px);letter-spacing:.26em;opacity:.72;margin:0}
+.bt{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:800;letter-spacing:.14em;
+  padding:1.35vh 2vh;border-radius:12px;color:#0d1117;font-size:clamp(12px,2.1vh,17px);
+  background:linear-gradient(180deg,#f4f8fb 0%,#c3d6e8 100%);
+  box-shadow:0 4px 0 #6c8299,0 8px 14px rgba(0,0,0,.4);transition:transform .07s}
+.bt:active{transform:translateY(3px);box-shadow:0 1px 0 #6c8299}
+.bt.sec{background:linear-gradient(180deg,#31404f 0%,#1e2a35 100%);color:#dbe7f2;box-shadow:0 4px 0 #121a22}
+.fila{display:flex;gap:.9vh;justify-content:center;flex-wrap:wrap}
+.fila .bt{flex:1;min-width:0;padding:1.3vh .6vh;letter-spacing:.05em}
+.bt.sel{outline:3px solid var(--sol);outline-offset:-3px}
+.rot{font-size:clamp(9px,1.6vh,12px);letter-spacing:.2em;opacity:.66;margin:0}
+.pie{font-size:clamp(9px,1.5vh,12px);opacity:.5;margin:0;line-height:1.5}
+input[type=password],input[type=text]{width:100%;padding:1.3vh 1.4vh;border-radius:10px;border:0;
+  background:#101821;color:#dbe7f2;font:inherit;font-size:clamp(11px,1.8vh,15px);letter-spacing:.05em}
+.mini{font-size:clamp(9px,1.45vh,12px);opacity:.62;line-height:1.55;margin:0;text-align:left}
+
+/* ══════════ HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10}
+body.jugando #hud{opacity:1}
+#arriba{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;align-items:center;
+  gap:.5vh;padding:1vh 0}
+#tema{font-size:clamp(13px,2.6vh,22px);font-weight:900;letter-spacing:.1em;
+  text-shadow:0 2px 6px rgba(0,0,0,.8)}
+#subronda{font-size:clamp(8px,1.4vh,11px);letter-spacing:.22em;opacity:.7}
+#barra{width:52%;height:9px;border-radius:99px;background:rgba(255,255,255,.16);overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#relleno{height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#7fe07f,#ffd166)}
+#relleno.poco{background:linear-gradient(90deg,#ff9d5c,#ff5c5c)}
+#reloj{font-size:clamp(11px,2vh,16px);font-weight:800;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+/* la mira: dos rayas finas, que es lo unico que hace falta para apuntar a un cubo */
+#cruz{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;opacity:.85}
+#cruz::before,#cruz::after{content:'';position:absolute;background:#fff;
+  box-shadow:0 0 2px rgba(0,0,0,.9)}
+#cruz::before{left:50%;top:0;width:2px;height:100%;margin-left:-1px}
+#cruz::after{top:50%;left:0;height:2px;width:100%;margin-top:-1px}
+/* el joystick */
+#stick{position:absolute;left:3.2vh;bottom:3.2vh;width:16vh;height:16vh;border-radius:50%;
+  background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.20);pointer-events:auto}
+#pulgar{position:absolute;left:50%;top:50%;width:6.4vh;height:6.4vh;margin:-3.2vh 0 0 -3.2vh;
+  border-radius:50%;background:rgba(255,255,255,.42);box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.ac{position:absolute;pointer-events:auto;border-radius:14px;border:2px solid rgba(255,255,255,.22);
+  background:rgba(12,18,25,.55);display:flex;align-items:center;justify-content:center;
+  font-weight:900;letter-spacing:.06em;font-size:clamp(9px,1.5vh,12px);color:#dfe9f3;
+  backdrop-filter:blur(3px)}
+.ac:active{background:rgba(90,130,170,.6)}
+#bPon{right:3.2vh;bottom:3.2vh;width:10.5vh;height:10.5vh;border-radius:50%}
+#bSac{right:15.5vh;bottom:3.2vh;width:7.6vh;height:7.6vh;border-radius:50%}
+#bSube{right:3.6vh;bottom:15.2vh;width:7vh;height:6vh}
+#bBaja{right:11.6vh;bottom:15.2vh;width:7vh;height:6vh}
+#bPal{left:3.2vh;top:auto;bottom:20.5vh;width:10vh;height:6vh}
+#bPausa{right:1.6vh;top:1.6vh;width:5vh;height:5vh;border-radius:12px;font-size:2vh}
+/* el bloque que se tiene en la mano, arriba a la izquierda */
+#mano{position:absolute;left:3.2vh;top:1.6vh;display:flex;align-items:center;gap:1vh}
+#manoCv{width:6vh;height:6vh;border-radius:10px;border:2px solid rgba(255,255,255,.3);
+  image-rendering:pixelated;background:#0d1117}
+#manoNom{font-size:clamp(9px,1.5vh,12px);letter-spacing:.1em;opacity:.85;text-shadow:0 2px 4px #000}
+
+/* ══════════ LA PALETA ══════════ */
+#paleta{position:absolute;inset:0;display:none;z-index:22;align-items:flex-end;justify-content:center}
+#paleta.on{display:flex}
+#paleta::before{content:'';position:absolute;inset:0;background:rgba(7,9,13,.72)}
+#palCaja{position:relative;width:94%;max-height:86%;display:flex;flex-direction:column;gap:1vh;
+  padding:1.4vh 0 2vh}
+#palTabs{display:flex;gap:.6vh;justify-content:center;flex-wrap:wrap}
+#palTabs .bt{padding:.9vh 1.2vh;font-size:clamp(9px,1.5vh,12px);letter-spacing:.06em;flex:0 0 auto}
+#palReja{display:grid;grid-template-columns:repeat(auto-fill,minmax(7vh,1fr));gap:.8vh;
+  overflow:auto;max-height:52vh;padding:.4vh}
+.pieza{position:relative;aspect-ratio:1;border-radius:9px;border:2px solid rgba(255,255,255,.18);
+  background:#0d1117;overflow:hidden;cursor:pointer}
+.pieza canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+.pieza.sel{border-color:var(--sol);box-shadow:0 0 0 2px rgba(255,209,102,.5)}
+
+/* ══════════ PANTALLA DE PUNTAJE ══════════ */
+#pnum{font-size:clamp(34px,8.6vh,78px);font-weight:900;line-height:1;
+  background:linear-gradient(180deg,#fff 0%,var(--sol) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 rgba(0,0,0,.5))}
+#pjuez{font-size:clamp(9px,1.6vh,13px);letter-spacing:.2em;opacity:.8}
+.tarj{background:rgba(255,255,255,.07);border-radius:12px;padding:.85vh 1.2vh;text-align:left}
+.tarj h4{margin:0 0 .4vh;font-size:clamp(9px,1.4vh,11px);letter-spacing:.2em;opacity:.6}
+.tarj p{margin:0;font-size:clamp(11px,1.75vh,14px);line-height:1.35}
+/* la lista del final va en una linea por ronda: el tema a la izquierda y el
+   puntaje a la derecha. Apiladas, los dos botones quedaban por debajo del borde
+   del cuadro — y un boton que no se ve no se toca */
+.tarj.uno{display:flex;justify-content:space-between;align-items:baseline;gap:1vh}
+.tarj.uno h4{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tarj.uno p{flex:0 0 auto;font-size:clamp(10px,1.6vh,13px);opacity:.9}
+#pAjustes .caja{gap:.72vh}
+/* ── EL ROTULO Y SU FILA VAN EN LA MISMA LINEA ──
+   Apilados, el panel medía 461 contra los 387 que entran en el cuadro: la
+   mitad de los ajustes quedaba abajo del borde. Al costado sobra ancho —la caja
+   mide 713 en un teléfono— y no sobra alto. */
+/* el tema es una frase y no un logo: sin espaciado y con la caja marcada, para
+   poder medir si entra */
+#tNom{letter-spacing:.02em;line-height:1.1;width:100%}
+.opc{display:flex;align-items:center;gap:1.2vh}
+.opc>.rot{flex:0 0 26%;text-align:right;letter-spacing:.12em}
+.opc>.fila,.opc>input{flex:1;min-width:0}
+#cargando{display:none;flex-direction:column;gap:1.4vh;align-items:center}
+#cargando.on{display:flex}
+.punto{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--sol);
+  animation:lat 1s infinite}
+.punto:nth-child(2){animation-delay:.18s}.punto:nth-child(3){animation-delay:.36s}
+@keyframes lat{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
+#pIdioma{z-index:40;background:#07090d}
+</style></head><body>
+<div id="marco" class="girado">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="arriba">
+      <div id="tema">—</div>
+      <div id="subronda">RONDA 1 / 3</div>
+      <div id="barra"><div id="relleno"></div></div>
+      <div id="reloj">2:40</div>
+    </div>
+    <div id="cruz"></div>
+    <div id="mano"><canvas id="manoCv" width="32" height="32"></canvas><span id="manoNom">—</span></div>
+    <div id="stick"><div id="pulgar"></div></div>
+    <div class="ac" id="bPon">＋</div>
+    <div class="ac" id="bSac">−</div>
+    <div class="ac" id="bSube">▲</div>
+    <div class="ac" id="bBaja">▼</div>
+    <div class="ac" id="bPal">▦</div>
+    <div class="ac" id="bPausa">‖</div>
+  </div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <h1 class="tit">CUBOS</h1>
+    <p class="sub" id="mSub">TE DICEN QUÉ. VOS LO CONSTRUÍS.</p>
+    <button class="bt" id="bJugar">JUGAR</button>
+    <button class="bt sec" id="bAjustes">AJUSTES</button>
+    <p class="rot" id="mJuez">—</p>
+    <p class="pie" id="mPie">—</p>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h2 class="tit" style="font-size:clamp(17px,3.4vh,26px)" id="aTit">AJUSTES</h2>
+    <div class="opc"><p class="rot" id="aGrafL">GRÁFICOS</p><div class="fila" id="fGraf"></div></div>
+    <div class="opc"><p class="rot" id="aRelojL">RELOJ</p><div class="fila" id="fReloj"></div></div>
+    <div class="opc"><p class="rot" id="aIdiL">IDIOMA</p><div class="fila" id="fIdioma"></div></div>
+    <div class="opc"><p class="rot" id="aLlaveL">LLAVE DE CLAUDE</p>
+      <input type="password" id="inLlave" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></div>
+    <div class="fila"><button class="bt" id="bGuardar">GUARDAR</button><button class="bt sec" id="bQuitar">QUITAR</button></div>
+    <div class="fila" id="fModelo"></div>
+    <p class="mini" id="aAviso">—</p>
+    <button class="bt sec" id="bVolver">VOLVER</button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h2 class="tit" style="font-size:clamp(22px,5vh,38px)" id="puTit">PAUSA</h2>
+    <button class="bt" id="bSeguir">SEGUIR</button>
+    <button class="bt sec" id="bBorrar">BORRAR TODO</button>
+    <button class="bt sec" id="bMenu">MENÚ</button>
+  </div></div>
+
+  <div class="pan" id="pTema"><div class="caja">
+    <p class="sub" id="tRonda">RONDA 1 / 3</p>
+    <p class="rot" id="tCons">CONSTRUÍ</p>
+    <h2 class="tit" id="tNom">—</h2>
+    <button class="bt" id="bEmpieza">LISTO</button>
+  </div></div>
+
+  <div class="pan" id="pPunt"><div class="caja">
+    <div id="cargando"><p class="sub" id="cTexto">—</p>
+      <div><span class="punto"></span><span class="punto"></span><span class="punto"></span></div></div>
+    <div id="resu" style="display:flex;flex-direction:column;gap:1.4vh">
+      <p class="sub" id="rTema">—</p>
+      <div id="pnum">0</div>
+      <p id="pjuez">—</p>
+      <div class="tarj" id="tTitulo" style="display:none"><h4 id="hTitulo">—</h4><p id="xTitulo">—</p></div>
+      <div class="tarj" id="tBueno" style="display:none"><h4 id="hBueno">—</h4><p id="xBueno">—</p></div>
+      <div class="tarj" id="tMejor" style="display:none"><h4 id="hMejor">—</h4><p id="xMejor">—</p></div>
+      <p class="pie" id="rNota">—</p>
+      <button class="bt" id="bSig">SIGUIENTE</button>
+    </div>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <p class="sub" id="fTit">FIN DE LA PARTIDA</p>
+    <div id="pnum2" style="font-size:clamp(30px,7vh,64px);font-weight:900;line-height:1;
+      background:linear-gradient(180deg,#fff 0%,var(--sol) 100%);-webkit-background-clip:text;
+      background-clip:text;color:transparent">0</div>
+    <p class="rot" id="fTotal">TOTAL</p>
+    <div id="fLista" style="display:flex;flex-direction:column;gap:.55vh"></div>
+    <button class="bt" id="bOtra">OTRA VEZ</button>
+    <button class="bt sec" id="bMenu2">MENÚ</button>
+  </div></div>
+
+  <div class="pan on" id="pIdioma"><div class="caja">
+    <h1 class="tit">CUBOS</h1>
+    <div class="fila">
+      <button class="bt" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div></div>
+
+  <div id="paleta"><div id="palCaja">
+    <div id="palTabs"></div>
+    <div id="palReja"></div>
+    <button class="bt sec" id="bCierraPal">✕</button>
+  </div></div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+
+/* ══════════════════ b.js ══════════════════ */
+/* ══════════════════════ LAS TABLAS ══════════════════════
+   CUBOS es un build battle: te dicen QUE construir, tenes unos minutos y una
+   parcela de 16 x 16 x 16, y al final alguien puntua lo que hiciste.
+
+   Lo que hace que esto no sea «un editor de voxels» es la ultima parte: la
+   puntuacion. Y por eso hay DOS jueces —el de codigo, que mide la obra, y el de
+   verdad, que la MIRA— y la pantalla del final dice siempre cual de los dos
+   puntuo. Un puntaje sin autor no significa nada. */
+
+const N = 16;                    /* la parcela: 16 x 16 en planta */
+const ALTO = 16;                 /* y 16 de alto */
+const CELDAS = N*N*ALTO;
+
+/* ══════════ EL RELOJ ══════════
+   Dos minutos y medio es lo que tarda una idea simple en salir entera: menos y
+   solo entran cubos, mas y el jugador se aburre antes de que se acabe. */
+const RONDAS = 3;
+const RELOJES = { corto: 100, normal: 160, largo: 240 };
+
+/* ══════════ LOS BLOQUES ══════════
+   `tex` es el nombre del dibujo, y cuando son tres es [arriba, costado, abajo]:
+   el pasto es lo que hace que valga la pena que un bloque tenga tres caras.
+   `luz` es cuanto emite por si mismo (0 a 1) y `vidrio` dice que no tape la
+   cara del vecino — sin eso, dos vidrios pegados dibujan la cara del medio y se
+   ve una linea gris adentro del cristal.
+
+   ── LAS DIECISEIS LANAS Y LOS DIECISEIS HORMIGONES SALEN DE DOS FUNCIONES ──
+   Y ese es el motivo de que la paleta tenga setenta y pico de bloques sin que
+   el archivo pese: el dibujo es uno y lo que cambia es el tinte. En un build
+   battle la paleta de color ES la herramienta principal — sin dieciseis lanas
+   no se puede hacer una bandera, ni un logo, ni un cielo de atardecer. */
+const COLORES = [
+  ['blanco',   0xe9ecec, 'white',      'branco'],
+  ['naranja',  0xf07613, 'orange',     'laranja'],
+  ['magenta',  0xbd44b3, 'magenta',    'magenta'],
+  ['celeste',  0x3aafd9, 'light blue', 'azul claro'],
+  ['amarillo', 0xf8c627, 'yellow',     'amarelo'],
+  ['lima',     0x70b919, 'lime',       'lima'],
+  ['rosa',     0xed8dac, 'pink',       'rosa'],
+  ['gris',     0x3e4447, 'gray',       'cinza'],
+  ['plata',    0x8e8e86, 'light gray', 'cinza claro'],
+  ['cian',     0x158991, 'cyan',       'ciano'],
+  ['violeta',  0x792ab3, 'purple',     'roxo'],
+  ['azul',     0x35399d, 'blue',       'azul'],
+  ['marron',   0x724728, 'brown',      'marrom'],
+  ['verde',    0x546d1b, 'green',      'verde'],
+  ['rojo',     0xa12722, 'red',        'vermelho'],
+  ['negro',    0x141519, 'black',      'preto']
+];
+
+/* el 0 es aire y no esta en la tabla: `BLOQUES[0]` tiene que ser el aire para
+   que el indice del array sea el valor guardado en la grilla */
+const BLOQUES = [
+  { id: 'aire', cat: null },
+  /* ── natural ── */
+  { id: 'pasto',    cat: 'nat', tex: ['pastoT', 'pastoL', 'tierra'] },
+  { id: 'tierra',   cat: 'nat', tex: 'tierra' },
+  { id: 'camino',   cat: 'nat', tex: ['caminoT', 'tierra', 'tierra'] },
+  { id: 'arena',    cat: 'nat', tex: 'arena' },
+  { id: 'grava',    cat: 'nat', tex: 'grava' },
+  { id: 'nieve',    cat: 'nat', tex: 'nieve' },
+  { id: 'hielo',    cat: 'nat', tex: 'hielo' },
+  { id: 'hojas',    cat: 'nat', tex: 'hojas' },
+  { id: 'hojasO',   cat: 'nat', tex: 'hojasO' },
+  { id: 'cactus',   cat: 'nat', tex: ['cactusT', 'cactus', 'cactusT'] },
+  { id: 'calabaza', cat: 'nat', tex: ['calabazaT', 'calabaza', 'calabazaT'] },
+  { id: 'melon',    cat: 'nat', tex: ['melonT', 'melon', 'melonT'] },
+  { id: 'hongo',    cat: 'nat', tex: 'hongo' },
+  { id: 'musgo',    cat: 'nat', tex: 'musgo' },
+  /* ── piedra ── */
+  { id: 'piedra',   cat: 'pie', tex: 'piedra' },
+  { id: 'adoquin',  cat: 'pie', tex: 'adoquin' },
+  { id: 'ladriP',   cat: 'pie', tex: 'ladriP' },
+  { id: 'ladriPM',  cat: 'pie', tex: 'ladriPM' },
+  { id: 'ladrillo', cat: 'pie', tex: 'ladrillo' },
+  { id: 'arenisca', cat: 'pie', tex: ['areniscaT', 'arenisca', 'areniscaT'] },
+  { id: 'andesita', cat: 'pie', tex: 'andesita' },
+  { id: 'diorita',  cat: 'pie', tex: 'diorita' },
+  { id: 'granito',  cat: 'pie', tex: 'granito' },
+  { id: 'pizarra',  cat: 'pie', tex: 'pizarra' },
+  { id: 'obsidiana',cat: 'pie', tex: 'obsidiana' },
+  { id: 'basalto',  cat: 'pie', tex: ['basaltoT', 'basalto', 'basaltoT'] },
+  { id: 'cuarzo',   cat: 'pie', tex: 'cuarzo' },
+  { id: 'terracota',cat: 'pie', tex: 'terracota' },
+  { id: 'rojiza',   cat: 'pie', tex: 'rojiza' },
+  { id: 'prismarina',cat:'pie', tex: 'prismarina' },
+  /* ── madera ── */
+  { id: 'troncoR',  cat: 'mad', tex: ['troncoT', 'troncoR', 'troncoT'] },
+  { id: 'troncoO',  cat: 'mad', tex: ['troncoOT', 'troncoO', 'troncoOT'] },
+  { id: 'troncoA',  cat: 'mad', tex: ['troncoAT', 'troncoA', 'troncoAT'] },
+  { id: 'tablaR',   cat: 'mad', tex: 'tablaR' },
+  { id: 'tablaO',   cat: 'mad', tex: 'tablaO' },
+  { id: 'tablaA',   cat: 'mad', tex: 'tablaA' },
+  { id: 'tablaN',   cat: 'mad', tex: 'tablaN' },
+  { id: 'bambu',    cat: 'mad', tex: 'bambu' },
+  /* ── metal y mineral ── */
+  { id: 'hierro',   cat: 'met', tex: 'hierro' },
+  { id: 'oro',      cat: 'met', tex: 'oro' },
+  { id: 'diamante', cat: 'met', tex: 'diamante' },
+  { id: 'esmeralda',cat: 'met', tex: 'esmeralda' },
+  { id: 'lapis',    cat: 'met', tex: 'lapis' },
+  { id: 'cobre',    cat: 'met', tex: 'cobre' },
+  { id: 'carbon',   cat: 'met', tex: 'carbon' },
+  { id: 'redstone', cat: 'met', tex: 'redstone' },
+  /* ── luz y liquido ── */
+  { id: 'luminosa', cat: 'luz', tex: 'luminosa', luz: 1.00 },
+  { id: 'linterna', cat: 'luz', tex: 'linterna', luz: 0.85 },
+  { id: 'lava',     cat: 'luz', tex: 'lava',     luz: 0.95 },
+  { id: 'fuego',    cat: 'luz', tex: 'fuego',    luz: 0.90 },
+  { id: 'agua',     cat: 'luz', tex: 'agua',     vidrio: 1 },
+  { id: 'vidrio',   cat: 'luz', tex: 'vidrio',   vidrio: 1 },
+  { id: 'farol',    cat: 'luz', tex: 'farol',    luz: 0.75 }
+];
+/* las treinta y dos de color se agregan aca: una sola vez, para que el orden y
+   el nombre del bloque no puedan discrepar entre la paleta y la tabla */
+for (const [c] of COLORES) BLOQUES.push({ id: 'lana_' + c, cat: 'lana', tex: 'lana_' + c });
+for (const [c] of COLORES) BLOQUES.push({ id: 'horm_' + c, cat: 'horm', tex: 'horm_' + c });
+for (const [c] of COLORES) BLOQUES.push({ id: 'vid_' + c,  cat: 'vidr', tex: 'vid_' + c, vidrio: 1 });
+const NBLOQ = BLOQUES.length;
+
+const CATS = ['nat', 'pie', 'mad', 'met', 'luz', 'lana', 'horm', 'vidr'];
+
+/* ══════════ LOS TEMAS ══════════
+   Lo que se pide construir. Todos tienen que entrar en 16 x 16 x 16 y salir en
+   dos minutos y medio: «una ciudad» no es un tema, es una tarde. */
+const TEMAS = [
+  ['casa',      'Una casa',              'A house',            'Uma casa'],
+  ['arbol',     'Un árbol',              'A tree',             'Uma árvore'],
+  ['cohete',    'Un cohete',             'A rocket',           'Um foguete'],
+  ['castillo',  'Un castillo',           'A castle',           'Um castelo'],
+  ['faro',      'Un faro',               'A lighthouse',       'Um farol'],
+  ['barco',     'Un barco',              'A ship',             'Um navio'],
+  ['puente',    'Un puente',             'A bridge',           'Uma ponte'],
+  ['iglesia',   'Una iglesia',           'A church',           'Uma igreja'],
+  ['molino',    'Un molino',             'A windmill',         'Um moinho'],
+  ['fogata',    'Una fogata',            'A campfire',         'Uma fogueira'],
+  ['pileta',    'Una pileta',            'A swimming pool',    'Uma piscina'],
+  ['auto',      'Un auto',               'A car',              'Um carro'],
+  ['avion',     'Un avión',              'A plane',            'Um avião'],
+  ['tren',      'Un tren',               'A train',            'Um trem'],
+  ['robot',     'Un robot',              'A robot',            'Um robô'],
+  ['dragon',    'Un dragón',             'A dragon',           'Um dragão'],
+  ['pulpo',     'Un pulpo',              'An octopus',         'Um polvo'],
+  ['pinguino',  'Un pingüino',           'A penguin',          'Um pinguim'],
+  ['gato',      'Un gato',               'A cat',              'Um gato'],
+  ['abeja',     'Una abeja',             'A bee',              'Uma abelha'],
+  ['hongoG',    'Un hongo gigante',      'A giant mushroom',   'Um cogumelo gigante'],
+  ['volcan',    'Un volcán',             'A volcano',          'Um vulcão'],
+  ['isla',      'Una isla flotante',     'A floating island',  'Uma ilha flutuante'],
+  ['cascada',   'Una cascada',           'A waterfall',        'Uma cachoeira'],
+  ['desierto',  'Una duna con cactus',   'A dune with cacti',  'Uma duna com cactos'],
+  ['iglu',      'Un iglú',               'An igloo',           'Um iglu'],
+  ['torre',     'Una torre altísima',    'A very tall tower',  'Uma torre altíssima'],
+  ['portal',    'Un portal mágico',      'A magic portal',     'Um portal mágico'],
+  ['estatua',   'Una estatua',           'A statue',           'Uma estátua'],
+  ['reloj',     'Un reloj gigante',      'A giant clock',      'Um relógio gigante'],
+  ['piano',     'Un piano',              'A piano',            'Um piano'],
+  ['guitarra',  'Una guitarra',          'A guitar',           'Uma guitarra'],
+  ['helado',    'Un helado',             'An ice cream',       'Um sorvete'],
+  ['torta',     'Una torta de cumpleaños','A birthday cake',   'Um bolo de aniversário'],
+  ['hamburguesa','Una hamburguesa',      'A burger',           'Um hambúrguer'],
+  ['pizza',     'Una pizza',             'A pizza',            'Uma pizza'],
+  ['corazon',   'Un corazón',            'A heart',            'Um coração'],
+  ['calavera',  'Una calavera',          'A skull',            'Uma caveira'],
+  ['fantasma',  'Un fantasma',           'A ghost',            'Um fantasma'],
+  ['ovni',      'Un OVNI',               'A UFO',              'Um OVNI'],
+  ['ajedrez',   'Una pieza de ajedrez',  'A chess piece',      'Uma peça de xadrez'],
+  ['bandera',   'Una bandera',           'A flag',             'Uma bandeira'],
+  ['arcoiris',  'Un arcoíris',           'A rainbow',          'Um arco-íris'],
+  ['tienda',    'Una carpa de camping',  'A camping tent',     'Uma barraca'],
+  ['pozo',      'Un pozo de agua',       'A water well',       'Um poço'],
+  ['escalera',  'Una escalera al cielo', 'A stairway to the sky','Uma escada para o céu'],
+  ['laberinto', 'Un laberinto',          'A maze',             'Um labirinto'],
+  ['nave',      'Una nave espacial',     'A spaceship',        'Uma nave espacial'],
+  ['tortuga',   'Una tortuga',           'A turtle',           'Uma tartaruga'],
+  ['ballena',   'Una ballena',           'A whale',            'Uma baleia']
+];
+
+/* ══════════ CALIDADES ══════════
+   Lo unico que cambia es lo que cuesta: la parcela, los bloques y las reglas
+   son los mismos en las tres. */
+const CALIDADES = {
+  baja:  { esc: 0.55, sombra: 0,    niebla: 1.45, cielo: 0 },
+  media: { esc: 0.80, sombra: 1024, niebla: 1.00, cielo: 1 },
+  alta:  { esc: 1.00, sombra: 2048, niebla: 0.85, cielo: 1 }
+};
+
+/* ══════════ IDIOMAS ══════════ */
+const TXT = {
+  es: { sub: 'TE DICEN QUÉ. VOS LO CONSTRUÍS.', jugar: 'JUGAR', ajustes: 'AJUSTES',
+        volver: 'VOLVER', seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
+        musica: 'MÚSICA', efectos: 'EFECTOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
+        baja: 'BAJA', media: 'MEDIA', alta: 'ALTA', tiempo: 'TIEMPO', ronda: 'RONDA',
+        tema: 'TEMA', construi: 'CONSTRUÍ', listo: 'LISTO', puntaje: 'PUNTAJE',
+        total: 'TOTAL', juez: 'JUEZ', juezIA: 'CLAUDE MIRÓ TU OBRA', juezLocal: 'JUEZ DE LA CASA',
+        pensando: 'CLAUDE ESTÁ MIRANDO…', bloques: 'BLOQUES', clases: 'CLASES',
+        borrar: 'BORRAR TODO', llave: 'LLAVE DE CLAUDE', poner: 'PONER', sacar: 'SACAR',
+        volar: 'VOLAR', paleta: 'PALETA', reloj: 'RELOJ', corto: 'CORTO', largo: 'LARGO',
+        normal: 'NORMAL', pie: 'Un dedo mueve, el otro mira. Tocá para poner un bloque.',
+        siguiente: 'SIGUIENTE', final: 'FIN DE LA PARTIDA', bien: 'LO BUENO',
+        mejorar: 'PARA LA PRÓXIMA', sinLlave: 'sin llave: puntúa el juez de la casa',
+        conLlave: 'con llave: puntúa Claude de verdad', pegar: 'PEGÁ TU LLAVE ACÁ',
+        guardar: 'GUARDAR', quitar: 'QUITAR', modelo: 'MODELO', avisoLlave:
+        'La llave se guarda sólo en este teléfono y sólo se manda a api.anthropic.com. La pagás vos.',
+        error: 'NO SE PUDO PREGUNTAR', vacio: 'NO CONSTRUISTE NADA' },
+  en: { sub: 'THEY PICK IT. YOU BUILD IT.', jugar: 'PLAY', ajustes: 'SETTINGS',
+        volver: 'BACK', seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
+        musica: 'MUSIC', efectos: 'SOUND FX', idioma: 'LANGUAGE', graficos: 'GRAPHICS',
+        baja: 'LOW', media: 'MEDIUM', alta: 'HIGH', tiempo: 'TIME', ronda: 'ROUND',
+        tema: 'THEME', construi: 'BUILD', listo: 'DONE', puntaje: 'SCORE',
+        total: 'TOTAL', juez: 'JUDGE', juezIA: 'CLAUDE LOOKED AT YOUR BUILD', juezLocal: 'HOUSE JUDGE',
+        pensando: 'CLAUDE IS LOOKING…', bloques: 'BLOCKS', clases: 'KINDS',
+        borrar: 'CLEAR ALL', llave: 'CLAUDE KEY', poner: 'PLACE', sacar: 'BREAK',
+        volar: 'FLY', paleta: 'PALETTE', reloj: 'CLOCK', corto: 'SHORT', largo: 'LONG',
+        normal: 'NORMAL', pie: 'One thumb moves, the other looks. Tap to place a block.',
+        siguiente: 'NEXT', final: 'MATCH OVER', bien: 'WHAT WORKS',
+        mejorar: 'NEXT TIME', sinLlave: 'no key: the house judge scores',
+        conLlave: 'with a key: Claude really scores it', pegar: 'PASTE YOUR KEY HERE',
+        guardar: 'SAVE', quitar: 'REMOVE', modelo: 'MODEL', avisoLlave:
+        'The key is stored only on this phone and only sent to api.anthropic.com. You pay for it.',
+        error: 'COULD NOT ASK', vacio: 'YOU BUILT NOTHING' },
+  pt: { sub: 'ELES ESCOLHEM. VOCÊ CONSTRÓI.', jugar: 'JOGAR', ajustes: 'AJUSTES',
+        volver: 'VOLTAR', seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
+        musica: 'MÚSICA', efectos: 'EFEITOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
+        baja: 'BAIXA', media: 'MÉDIA', alta: 'ALTA', tiempo: 'TEMPO', ronda: 'RODADA',
+        tema: 'TEMA', construi: 'CONSTRUA', listo: 'PRONTO', puntaje: 'PONTUAÇÃO',
+        total: 'TOTAL', juez: 'JUIZ', juezIA: 'CLAUDE OLHOU SUA OBRA', juezLocal: 'JUIZ DA CASA',
+        pensando: 'CLAUDE ESTÁ OLHANDO…', bloques: 'BLOCOS', clases: 'TIPOS',
+        borrar: 'APAGAR TUDO', llave: 'CHAVE DO CLAUDE', poner: 'POR', sacar: 'TIRAR',
+        volar: 'VOAR', paleta: 'PALETA', reloj: 'RELÓGIO', corto: 'CURTO', largo: 'LONGO',
+        normal: 'NORMAL', pie: 'Um dedo anda, o outro olha. Toque para pôr um bloco.',
+        siguiente: 'PRÓXIMA', final: 'FIM DA PARTIDA', bien: 'O QUE FICOU BOM',
+        mejorar: 'PARA A PRÓXIMA', sinLlave: 'sem chave: pontua o juiz da casa',
+        conLlave: 'com chave: o Claude pontua de verdade', pegar: 'COLE SUA CHAVE AQUI',
+        guardar: 'SALVAR', quitar: 'TIRAR', modelo: 'MODELO', avisoLlave:
+        'A chave fica só neste telefone e só vai para api.anthropic.com. Você paga por ela.',
+        error: 'NÃO DEU PARA PERGUNTAR', vacio: 'VOCÊ NÃO CONSTRUIU NADA' }
+};
+
+/* ══════════ AZAR CON SEMILLA ══════════ */
+let SEM = 1;
+function sem(s){ SEM = (s >>> 0) || 1; }
+function az(){ SEM ^= SEM << 13; SEM ^= SEM >>> 17; SEM ^= SEM << 5; return ((SEM >>> 0) % 100000)/100000; }
+function azr(a, b){ return a + az()*(b - a); }
+function azi(a, b){ return Math.floor(a + az()*(b - a + 1)); }
+function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
+function lerp(a, b, k){ return a + (b - a)*k; }
+
+/* ══════════════════ c.js ══════════════════ */
+/* ══════════════════════ EL SONIDO ══════════════════════
+   Todo procedural y sin un solo byte de archivo, y acá eso no es una limitación
+   sino lo correcto: los dos sonidos que este juego dispara mil veces por
+   partida son poner y sacar un bloque, y los dos son un golpe corto. Un clip
+   grabado costaría kilobytes por algo que son cuatro osciladores, y encima
+   repetido mil veces se aprende: el sintetizado se puede desafinar un poco cada
+   vez y deja de sonar a la misma muestra.
+
+   ── EL CONTEXTO DESPIERTA CON EL PRIMER GESTO, NO AL CARGAR ──
+   Ningún navegador deja sonar nada antes de un gesto de verdad, y el primer
+   gesto de este juego es el botón de idioma, no JUGAR. Va colgado del
+   documento en captura: en cada botón habría que acordarse en los que hay y en
+   el próximo que se agregue. */
+let AC = null, MAE = null, CAMA = null, camaG = null, SON_ON = true;
+
+function audioDespierta(){
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return AC; }
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); }
+  catch (e){ AC = null; return null; }
+  MAE = AC.createGain(); MAE.gain.value = 0.9; MAE.connect(AC.destination);
+  return AC;
+}
+function ruidoBuf(seg){
+  const n = Math.max(1, Math.floor(AC.sampleRate*seg));
+  const b = AC.createBuffer(1, n, AC.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
+  return b;
+}
+let BUF_RUIDO = null;
+
+/* ── UN GOLPE DE BLOQUE SON DOS COSAS ──
+   El cuerpo (un oscilador grave que cae) y el grano (ruido filtrado corto). Con
+   sólo el oscilador suena a bip de arcade; con sólo el ruido, a estática. */
+function golpe(f0, f1, dur, vol, q, tipo){
+  if (!AC || !SON_ON) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(); o.type = tipo || 'triangle';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(MAE); o.start(t); o.stop(t + dur + 0.02);
+
+  if (!BUF_RUIDO) BUF_RUIDO = ruidoBuf(0.25);
+  const s = AC.createBufferSource(); s.buffer = BUF_RUIDO;
+  const bp = AC.createBiquadFilter(); bp.type = 'bandpass';
+  bp.frequency.value = f0*1.8; bp.Q.value = q || 1.1;
+  const g2 = AC.createGain();
+  g2.gain.setValueAtTime(vol*0.55, t);
+  g2.gain.exponentialRampToValueAtTime(0.0006, t + dur*0.6);
+  s.connect(bp); bp.connect(g2); g2.connect(MAE);
+  s.start(t); s.stop(t + dur);
+}
+
+/* la afinación se mueve un poco en cada golpe: mil golpes idénticos se
+   escuchan a mil copias del mismo archivo, que es justo lo que se quería evitar */
+function tono(k){ return 1 + (Math.random() - 0.5)*k; }
+
+function son(que){
+  if (!AC || !SON_ON) return false;
+  if (que === 'pon')    golpe(240*tono(0.14), 130, 0.09, 0.22, 1.4);
+  else if (que === 'sac') golpe(150*tono(0.16), 70,  0.13, 0.24, 0.8);
+  else if (que === 'nada') golpe(90, 70, 0.06, 0.07, 0.6, 'sine');
+  else if (que === 'ui')   golpe(520*tono(0.05), 480, 0.05, 0.13, 3.0, 'sine');
+  else if (que === 'pal')  golpe(700, 900, 0.07, 0.11, 4.0, 'sine');
+  else if (que === 'reloj') golpe(880, 880, 0.10, 0.16, 6.0, 'square');
+  else if (que === 'fin'){
+    /* la fanfarria es lo más fuerte del juego y tiene que serlo: es el único
+       momento en que el juego habla más fuerte que el jugador */
+    const t = AC.currentTime;
+    [0, 4, 7, 12].forEach((s, i) => {
+      const o = AC.createOscillator(); o.type = 'triangle';
+      o.frequency.value = 261.6*Math.pow(2, s/12);
+      const g = AC.createGain();
+      g.gain.setValueAtTime(0, t + i*0.10);
+      g.gain.linearRampToValueAtTime(0.20, t + i*0.10 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + i*0.10 + 0.55);
+      o.connect(g); g.connect(MAE); o.start(t + i*0.10); o.stop(t + i*0.10 + 0.6);
+    });
+  }
+  else return false;
+  return true;
+}
+
+/* ══════════ LA CAMA ══════════
+   Tres osciladores desafinados un pelo entre sí, con un pasabajos que se abre y
+   se cierra cada veintitrés segundos. El desajuste minúsculo es todo el truco:
+   dos senos idénticos suenan a tono de prueba y dos que baten cada pocos
+   segundos suenan a instrumento. Va MUY por debajo del golpe de un bloque —el
+   sonido que importa acá es el que dice que el bloque entró. */
+function camaOn(v){
+  if (!AC) return;
+  if (v && !CAMA){
+    CAMA = [];
+    camaG = AC.createGain(); camaG.gain.value = 0.0;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.value = 520; lp.Q.value = 0.7;
+    const lfo = AC.createOscillator(); lfo.frequency.value = 1/23;
+    const lg = AC.createGain(); lg.gain.value = 260;
+    lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
+    camaG.connect(lp); lp.connect(MAE);
+    for (const [f, d] of [[110, 0], [164.8, 0.0023], [220, -0.0019]]){
+      const o = AC.createOscillator(); o.type = 'sine';
+      o.frequency.value = f*(1 + d);
+      const g = AC.createGain(); g.gain.value = 0.33;
+      o.connect(g); g.connect(camaG); o.start();
+      CAMA.push(o);
+    }
+    CAMA.push(lfo);
+  }
+  if (camaG){
+    const t = AC.currentTime;
+    camaG.gain.cancelScheduledValues(t);
+    camaG.gain.setValueAtTime(camaG.gain.value, t);
+    /* ── LA CAMA VA BIEN POR DEBAJO DEL GOLPE DE UN BLOQUE ──
+       Medido con el analizador colgado del maestro, a 0.055 la cama daba rms
+       0.019 contra 0.023 de poner un bloque: en este juego se pone un bloque
+       trescientas veces por ronda y ese golpe es el acuse de recibo. */
+    camaG.gain.linearRampToValueAtTime(v && SON_ON ? 0.030 : 0.0, t + 1.1);
+  }
+}
+function sonidoOn(v){ SON_ON = !!v; if (MAE) MAE.gain.value = SON_ON ? 0.9 : 0; return SON_ON; }
+
+/* ══════════════════ d.js ══════════════════ */
+/* ══════════════════════ EL MUNDO Y EL JUEZ DE LA CASA ══════════════════════
+   Este archivo no toca el DOM ni three, y eso es a proposito: se puede
+   concatenar con b.js y correr en node, que es donde se auditan el juez y la
+   puntería antes de dibujar un solo pixel. */
+
+/* la grilla: un byte por celda, 0 = aire. El indice es el valor de BLOQUES. */
+const REJA = new Uint8Array(CELDAS);
+function idx(x, y, z){ return (y*N + z)*N + x; }
+function dentro(x, y, z){ return x >= 0 && x < N && y >= 0 && y < ALTO && z >= 0 && z < N; }
+function bloqueEn(x, y, z){ return dentro(x, y, z) ? REJA[idx(x, y, z)] : 0; }
+function ponBloque(x, y, z, b){
+  if (!dentro(x, y, z)) return false;
+  const i = idx(x, y, z); if (REJA[i] === b) return false;
+  REJA[i] = b; return true;
+}
+function limpiaReja(){ REJA.fill(0); }
+
+/* ── EL SUELO NO ES UN BLOQUE DE LA REJA ──
+   Si la base fuera parte de la parcela, romperla dejaria un agujero al vacio y
+   el jugador se caeria del mundo; y peor, el juez contaria esos 256 bloques
+   como obra. El piso se dibuja aparte y la reja arranca vacia: TODO lo que hay
+   adentro lo puso el jugador, que es lo que el puntaje tiene que medir. */
+
+/* ══════════ LA PUNTERIA ══════════
+   DDA de Amanatides y Woo: avanza celda por celda por el rayo y devuelve la
+   primera llena mas la CARA por la que entro, que es donde se apoya el bloque
+   nuevo. Sin la cara no se puede construir hacia arriba: el bloque nuevo
+   siempre caeria del lado del que uno viene. */
+function raya(ox, oy, oz, dx, dy, dz, alcance){
+  let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  /* ── UN EJE CON DIRECCION CERO TIENE QUE DAR INFINITO, NO UN NUMERO GRANDE ──
+     Con `(ox - x)*1e9` el caso degenerado —el origen justo sobre el borde de la
+     celda y la direccion en cero— da CERO, o sea el cruce mas cercano de los
+     tres: el rayo se sale de su propia columna en el primer paso y no vuelve.
+     Y no es un caso raro: el jugador aparece en x = N/2 exacto y mirando con
+     yaw 0, asi que le pasaba en el PRIMER bloque de cada ronda. */
+  const INF = Infinity;
+  const nx = Math.abs(dx) < 1e-9, ny = Math.abs(dy) < 1e-9, nz = Math.abs(dz) < 1e-9;
+  const ax = nx ? INF : 1/Math.abs(dx);
+  const ay = ny ? INF : 1/Math.abs(dy);
+  const az2 = nz ? INF : 1/Math.abs(dz);
+  let tx = nx ? INF : (dx > 0 ? (x + 1 - ox) : (ox - x))*ax;
+  let ty = ny ? INF : (dy > 0 ? (y + 1 - oy) : (oy - y))*ay;
+  let tz = nz ? INF : (dz > 0 ? (z + 1 - oz) : (oz - z))*az2;
+  let cara = [0, 0, 0], t = 0;
+  for (let p = 0; p < 160; p++){
+    if (t > alcance) break;
+    if (dentro(x, y, z) && REJA[idx(x, y, z)]) return { x, y, z, cara, t };
+    if (tx < ty && tx < tz){ t = tx; x += sx; tx += ax; cara = [-sx, 0, 0]; }
+    else if (ty < tz){ t = ty; y += sy; ty += ay; cara = [0, -sy, 0]; }
+    else { t = tz; z += sz; tz += az2; cara = [0, 0, -sz]; }
+  }
+  return null;
+}
+
+/* ══════════ EL JUEZ DE LA CASA ══════════
+   Lo que este juez PUEDE medir es la obra; lo que NO puede es si se parece al
+   tema, y por eso la pantalla del final dice siempre quien puntuo. Un numero
+   sin autor no significa nada, y decir «85» sobre una casa que es un cubo seria
+   mentirle al jugador.
+
+   Las seis medidas salen de preguntarse que distingue una construccion pensada
+   de un monton de cubos: */
+function mideObra(){
+  let n = 0;
+  const clases = new Set();
+  let x0 = N, x1 = -1, y1 = -1, z0 = N, z1 = -1;
+  const altura = new Int8Array(N*N).fill(-1);
+  for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++){
+    const b = REJA[idx(x, y, z)]; if (!b) continue;
+    n++; clases.add(b);
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (z < z0) z0 = z; if (z > z1) z1 = z;
+    if (y > y1) y1 = y;
+    const k = z*N + x; if (y > altura[k]) altura[k] = y;
+  }
+  if (!n) return { n: 0, clases: 0, vacio: true };
+  /* 1. VOLUMEN — una campana, no una rampa: cien bloques es poco y mil es un
+        bloque macizo. El pico esta en trescientos, que es lo que entra en dos
+        minutos y medio construyendo con intencion. */
+  const vol = Math.exp(-Math.pow(Math.log(n/300), 2)/1.6);
+  /* 2. VARIEDAD — con un solo bloque la obra se lee a maqueta de prueba; pasada
+        la docena, mas clases ya no agregan lectura. */
+  const varied = Math.min(1, Math.log(1 + clases.size)/Math.log(13));
+  /* 3. HUELLA — cuanto de la parcela usa, en planta y en alto. */
+  let pisadas = 0; for (let k = 0; k < N*N; k++) if (altura[k] >= 0) pisadas++;
+  const huella = Math.min(1, (pisadas/(N*N))/0.55)*0.6 + Math.min(1, (y1 + 1)/12)*0.4;
+  /* 4. SIMETRIA — la mejor de las dos, no el promedio: una casa suele ser
+        simetrica en UN eje y forzar los dos castiga lo que esta bien hecho.
+        ── Y SE ACOTA POR LA ALTURA, PORQUE SI NO ES REGALADA ──
+        Medido, una losa plana de 14 x 14 daba simetria 1,000 y se llevaba los
+        catorce puntos enteros sin haber construido nada: un rectangulo chato es
+        simetrico por definicion. La simetria solo dice algo cuando hay ALGO de
+        que ser simetrico, asi que se multiplica por lo que la obra levanta. */
+  const sim = Math.max(simetria(0), simetria(1))*Math.min(1, (y1 + 1)/4);
+  /* 5. SUPERFICIE — caras al aire dividido bloques. Un cubo macizo de 300 tiene
+        pocas caras por bloque; una forma hueca y con detalle tiene muchas. Seis
+        es el maximo (un bloque suelto) y no es lo que se busca: el objetivo
+        esta en tres y pico, que es una cascara de una capa. */
+  let caras = 0;
+  for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++){
+    if (!REJA[idx(x, y, z)]) continue;
+    if (!bloqueEn(x+1,y,z)) caras++; if (!bloqueEn(x-1,y,z)) caras++;
+    if (!bloqueEn(x,y+1,z)) caras++; if (!bloqueEn(x,y-1,z)) caras++;
+    if (!bloqueEn(x,y,z+1)) caras++; if (!bloqueEn(x,y,z-1)) caras++;
+  }
+  const sup = Math.exp(-Math.pow((caras/n) - 3.2, 2)/3.0);
+  /* 6. SILUETA — cuanto varia el mapa de alturas. Una losa plana da cero por
+        mas grande que sea, y una silueta es lo unico que se ve de lejos. */
+  let s = 0, s2 = 0, c = 0;
+  for (let k = 0; k < N*N; k++) if (altura[k] >= 0){ s += altura[k]; s2 += altura[k]*altura[k]; c++; }
+  const desv = c > 1 ? Math.sqrt(Math.max(0, s2/c - (s/c)*(s/c))) : 0;
+  const silueta = Math.min(1, desv/3.2);
+  /* ── Y LA SILUETA PESA MAS QUE NINGUNA, PORQUE ES LA QUE SEPARA ──
+     Medido sobre las cuatro obras de prueba, `sup` da 0,76 a una losa y 0,79 a
+     una casa: no distingue. Las dos que si distinguen son la VARIEDAD y la
+     SILUETA —0,27 contra 0,70 y 0,00 contra 0,33— asi que el peso va ahi. */
+  const p = vol*18 + varied*18 + huella*14 + sim*12 + sup*14 + silueta*24;
+  return { n, clases: clases.size, alto: y1 + 1, pisadas, caras,
+    partes: { vol: +vol.toFixed(3), varied: +varied.toFixed(3), huella: +huella.toFixed(3),
+              sim: +sim.toFixed(3), sup: +sup.toFixed(3), silueta: +silueta.toFixed(3) },
+    puntaje: Math.round(cl(p, 0, 100)) };
+}
+/* eje 0 = espeja en x, eje 1 = espeja en z */
+function simetria(eje){
+  let ig = 0, tot = 0;
+  for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++){
+    const a = REJA[idx(x, y, z)];
+    const b = eje ? REJA[idx(x, y, N - 1 - z)] : REJA[idx(N - 1 - x, y, z)];
+    if (a || b){ tot++; if (a === b) ig++; }
+  }
+  return tot ? ig/tot : 0;
+}
+
+/* ══════════ EL ESTADO DE LA PARTIDA ══════════ */
+let RUN = null;
+function arrancaRun(semilla, reloj){
+  sem(semilla || (Date.now() & 0xffff));
+  /* los temas se sortean SIN REPETIR: en una partida de tres rondas, que salga
+     «una casa» dos veces se lee a que el juego se rompio */
+  const bolsa = TEMAS.map((t, i) => i);
+  for (let i = bolsa.length - 1; i > 0; i--){ const j = azi(0, i), v = bolsa[i]; bolsa[i] = bolsa[j]; bolsa[j] = v; }
+  RUN = { fase: 'juega', ronda: 0, temas: bolsa.slice(0, RONDAS), t: 0,
+          reloj: reloj || RELOJES.normal, puntajes: [], jueces: [], detalles: [],
+          puestos: 0, sacados: 0, semilla };
+  limpiaReja();
+  return RUN;
+}
+function pasoRun(dt){
+  if (!RUN || RUN.fase !== 'juega') return;
+  RUN.t += dt;
+  if (RUN.t >= RUN.reloj){ RUN.t = RUN.reloj; RUN.fase = 'juzga'; }
+}
+function temaActual(){ return RUN ? TEMAS[RUN.temas[RUN.ronda]] : null; }
+function anotaRonda(puntaje, juez, det){
+  RUN.puntajes.push(puntaje); RUN.jueces.push(juez); RUN.detalles.push(det || null);
+  RUN.fase = RUN.ronda + 1 >= RONDAS ? 'final' : 'puntaje';
+}
+function rondaSiguiente(){
+  RUN.ronda++; RUN.t = 0; RUN.fase = 'juega'; RUN.puestos = 0; RUN.sacados = 0;
+  limpiaReja();
+}
+function totalRun(){ return RUN ? RUN.puntajes.reduce((a, b) => a + b, 0) : 0; }
+
+/* ══════════ EL AUTO-CONSTRUCTOR ══════════
+   No es un jugador: es lo que permite auditar el juez sin manos. Levanta cuatro
+   obras de forma conocida —nada, un cubo macizo, una losa plana y una casita
+   hueca con techo— y el juez tiene que ORDENARLAS bien. Un juez que le da lo
+   mismo a un cubo que a una casa no es un juez. */
+function construye(que){
+  limpiaReja();
+  const p = (x, y, z, b) => ponBloque(x, y, z, b);
+  if (que === 'nada') return;
+  if (que === 'cubo'){
+    for (let y = 0; y < 7; y++) for (let z = 4; z < 11; z++) for (let x = 4; x < 11; x++) p(x, y, z, 15);
+    return;
+  }
+  if (que === 'losa'){
+    for (let z = 1; z < 15; z++) for (let x = 1; x < 15; x++) p(x, 0, z, 15);
+    return;
+  }
+  if (que === 'torre'){
+    for (let y = 0; y < 15; y++){
+      const r = y > 11 ? 3 : 2;
+      for (let z = 8 - r; z <= 7 + r; z++) for (let x = 8 - r; x <= 7 + r; x++){
+        const borde = x === 8 - r || x === 7 + r || z === 8 - r || z === 7 + r;
+        if (borde) p(x, y, z, y % 4 === 3 ? 18 : 16);
+      }
+    }
+    for (const [x, z] of [[5,5],[10,5],[5,10],[10,10]]) p(x, 14, z, 47);
+    return;
+  }
+  if (que === 'casa'){
+    /* cascara de 9 x 9 x 5 con techo a dos aguas, puerta, ventanas y cimiento */
+    for (let z = 3; z < 12; z++) for (let x = 3; x < 12; x++) p(x, 0, z, 16);
+    for (let y = 1; y < 5; y++) for (let z = 3; z < 12; z++) for (let x = 3; x < 12; x++)
+      if (x === 3 || x === 11 || z === 3 || z === 11) p(x, y, z, 34);
+    for (let k = 0; k < 5; k++) for (let x = 3 + k; x <= 11 - k; x++)
+      { p(x, 5 + k, 3 + k, 19); p(x, 5 + k, 11 - k, 19); }
+    for (let k = 0; k < 5; k++) for (let z = 3 + k; z <= 11 - k; z++)
+      { p(3 + k, 5 + k, z, 19); p(11 - k, 5 + k, z, 19); }
+    p(7, 1, 3, 0); p(7, 2, 3, 0);
+    for (const [x, z] of [[5,3],[9,3],[3,7],[11,7]]) p(x, 3, z, 52);
+    for (const [x, z] of [[4,4],[10,4],[4,10],[10,10]]) for (let y = 1; y < 5; y++) p(x, y, z, 31);
+    return;
+  }
+}
+
+/* ══════════════════ e.js ══════════════════ */
+/* ══════════════════════ EL DIBUJO ══════════════════════ */
+import * as T from 'three';
+
+/* ══════════ EL ATLAS ══════════
+   Las cien y pico de texturas se dibujan por codigo en UN lienzo de 512 y se
+   suben una sola vez: cien imagenes serian cien descargas y cien subidas a la
+   GPU para dibujar pixel art de 32, que es justo lo que el codigo hace bien.
+
+   ── SIN MIPMAPS Y CON NEAREST EN LAS DOS PUNTAS ──
+   Un atlas con mipmaps mezcla la baldosa de al lado en cuanto la camara se
+   aleja: aparecen bordes de otro bloque adentro de cada cara. Y NEAREST es
+   ademas el aspecto que se busca. Lo que se paga es aliasing a distancia, y por
+   eso la UV se mete media texel para adentro. */
+const TL = 32, ATL = 16, ATLPX = TL*ATL;
+const TILES = {};           /* nombre -> indice de baldosa */
+let atlasCv = null, atlasTex = null, nTile = 0;
+
+function tileCtx(nom){
+  const i = nTile++;
+  TILES[nom] = i;
+  const c = atlasCv.getContext('2d');
+  c.save(); c.translate((i % ATL)*TL, Math.floor(i/ATL)*TL);
+  c.beginPath(); c.rect(0, 0, TL, TL); c.clip();
+  return c;
+}
+function hex(v){ return '#' + v.toString(16).padStart(6, '0'); }
+function mez(a, b, k){
+  const ar = (a>>16)&255, ag = (a>>8)&255, ab = a&255;
+  const br = (b>>16)&255, bg = (b>>8)&255, bb = b&255;
+  return (Math.round(ar+(br-ar)*k)<<16) | (Math.round(ag+(bg-ag)*k)<<8) | Math.round(ab+(bb-ab)*k);
+}
+/* un azar propio y con semilla: el atlas tiene que salir IGUAL en cada carga, y
+   `az()` es el del juego —gastarlo aca correria todos los sorteos de la partida */
+let SA = 12345;
+function ra(){ SA ^= SA << 13; SA ^= SA >>> 17; SA ^= SA << 5; return ((SA >>> 0) % 100000)/100000; }
+
+function pRuido(nom, c1, c2, dens, grano){
+  const c = tileCtx(nom); SA = 9001 + nTile*77;
+  c.fillStyle = hex(c1); c.fillRect(0, 0, TL, TL);
+  const g = grano || 2, n = Math.round((dens || 0.35)*TL*TL/(g*g));
+  for (let i = 0; i < n; i++){
+    c.fillStyle = hex(mez(c1, c2, 0.35 + ra()*0.65));
+    c.fillRect(Math.floor(ra()*TL/g)*g, Math.floor(ra()*TL/g)*g, g, g);
+  }
+  c.restore();
+}
+function pLadrillo(nom, c, junta, filas, corr){
+  const ctx = tileCtx(nom); SA = 3001 + nTile*31;
+  ctx.fillStyle = hex(junta); ctx.fillRect(0, 0, TL, TL);
+  const h = TL/filas, w = TL/2;
+  for (let f = 0; f < filas; f++){
+    const off = (corr === false ? 0 : (f % 2)*w/2);
+    for (let k = -1; k < 3; k++){
+      ctx.fillStyle = hex(mez(c, 0x000000, ra()*0.16));
+      ctx.fillRect(k*w + off + 1, f*h + 1, w - 2, h - 2);
+    }
+  }
+  ctx.restore();
+}
+function pTabla(nom, c1, c2, filas){
+  const ctx = tileCtx(nom); SA = 5001 + nTile*13;
+  const h = TL/(filas || 4);
+  for (let f = 0; f < (filas || 4); f++){
+    ctx.fillStyle = hex(mez(c1, c2, ra()*0.5));
+    ctx.fillRect(0, f*h, TL, h);
+    ctx.fillStyle = hex(mez(c1, 0x000000, 0.35));
+    ctx.fillRect(0, f*h + h - 1, TL, 1);
+    for (let i = 0; i < 5; i++){
+      ctx.fillStyle = hex(mez(c1, c2, 0.6 + ra()*0.4));
+      ctx.fillRect(Math.floor(ra()*TL), f*h + 1 + Math.floor(ra()*(h - 2)), 2 + Math.floor(ra()*6), 1);
+    }
+  }
+  ctx.restore();
+}
+function pTronco(nom, c1, c2){
+  const ctx = tileCtx(nom); SA = 7001 + nTile*17;
+  ctx.fillStyle = hex(c1); ctx.fillRect(0, 0, TL, TL);
+  for (let x = 0; x < TL; x += 2){
+    ctx.fillStyle = hex(mez(c1, c2, ra()));
+    ctx.fillRect(x, 0, 2, TL);
+  }
+  for (let i = 0; i < 14; i++){
+    ctx.fillStyle = hex(mez(c1, 0x000000, 0.3 + ra()*0.3));
+    ctx.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL), 2, 2 + Math.floor(ra()*5));
+  }
+  ctx.restore();
+}
+function pAnillos(nom, c1, c2){
+  const ctx = tileCtx(nom); SA = 8101 + nTile*19;
+  ctx.fillStyle = hex(c1); ctx.fillRect(0, 0, TL, TL);
+  for (let r = 14; r > 0; r -= 3){
+    ctx.strokeStyle = hex(mez(c1, c2, 0.3 + ra()*0.5)); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(16, 16, r, 0, 6.283); ctx.stroke();
+  }
+  ctx.restore();
+}
+function pHojas(nom, c1, c2){
+  const ctx = tileCtx(nom); SA = 6101 + nTile*23;
+  ctx.fillStyle = hex(c1); ctx.fillRect(0, 0, TL, TL);
+  for (let i = 0; i < 190; i++){
+    ctx.fillStyle = hex(mez(c1, c2, ra()));
+    ctx.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 2, 2);
+  }
+  for (let i = 0; i < 16; i++){
+    ctx.fillStyle = hex(mez(c1, 0x000000, 0.55));
+    ctx.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 2, 2);
+  }
+  ctx.restore();
+}
+function pLana(nom, c){
+  const ctx = tileCtx(nom); SA = 4101 + nTile*29;
+  ctx.fillStyle = hex(c); ctx.fillRect(0, 0, TL, TL);
+  for (let y = 0; y < TL; y += 4) for (let x = 0; x < TL; x += 4){
+    const k = ((x/4 + y/4) % 2) ? 0.10 : -0.10;
+    ctx.fillStyle = hex(k > 0 ? mez(c, 0xffffff, k) : mez(c, 0x000000, -k));
+    ctx.fillRect(x, y, 4, 4);
+  }
+  for (let i = 0; i < 60; i++){
+    ctx.fillStyle = hex(mez(c, ra() > 0.5 ? 0xffffff : 0x000000, 0.10 + ra()*0.10));
+    ctx.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 2, 1);
+  }
+  ctx.restore();
+}
+function pHorm(nom, c){
+  const ctx = tileCtx(nom); SA = 2101 + nTile*37;
+  ctx.fillStyle = hex(c); ctx.fillRect(0, 0, TL, TL);
+  for (let i = 0; i < 70; i++){
+    ctx.fillStyle = hex(mez(c, ra() > 0.5 ? 0xffffff : 0x000000, 0.04 + ra()*0.05));
+    ctx.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 2, 2);
+  }
+  ctx.restore();
+}
+/* ── EL VIDRIO SE DIBUJA CON ALFA DE VERDAD ──
+   Un vidrio pintado de celeste opaco no es vidrio: lo que lo hace vidrio es que
+   se vea lo que hay atras. El marco va opaco y el centro casi transparente. */
+function pVidrio(nom, c){
+  const ctx = tileCtx(nom);
+  ctx.clearRect(0, 0, TL, TL);
+  ctx.fillStyle = 'rgba(' + ((c>>16)&255) + ',' + ((c>>8)&255) + ',' + (c&255) + ',0.20)';
+  ctx.fillRect(0, 0, TL, TL);
+  ctx.fillStyle = hex(mez(c, 0xffffff, 0.45));
+  ctx.fillRect(0, 0, TL, 2); ctx.fillRect(0, TL - 2, TL, 2);
+  ctx.fillRect(0, 0, 2, TL); ctx.fillRect(TL - 2, 0, 2, TL);
+  ctx.globalAlpha = 0.55; ctx.fillRect(2, 2, 12, 2); ctx.fillRect(2, 4, 2, 8);
+  ctx.restore();
+}
+function pMineral(nom, base, gema){
+  const ctx = tileCtx(nom); SA = 1101 + nTile*41;
+  ctx.fillStyle = hex(base); ctx.fillRect(0, 0, TL, TL);
+  for (let i = 0; i < 90; i++){
+    ctx.fillStyle = hex(mez(base, 0x000000, ra()*0.3));
+    ctx.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 2, 2);
+  }
+  for (let g = 0; g < 5; g++){
+    const cx = 3 + Math.floor(ra()*24), cy = 3 + Math.floor(ra()*24), s = 4 + Math.floor(ra()*4);
+    for (let y = 0; y < s; y += 2) for (let x = 0; x < s; x += 2){
+      if (ra() < 0.3) continue;
+      ctx.fillStyle = hex(mez(gema, 0xffffff, ra()*0.4));
+      ctx.fillRect(cx + x, cy + y, 2, 2);
+    }
+  }
+  ctx.restore();
+}
+function pMetal(nom, c){
+  const ctx = tileCtx(nom); SA = 1901 + nTile*43;
+  ctx.fillStyle = hex(c); ctx.fillRect(0, 0, TL, TL);
+  for (let i = 0; i < 26; i++){
+    ctx.fillStyle = hex(mez(c, 0xffffff, 0.12 + ra()*0.3));
+    ctx.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 2 + Math.floor(ra()*8), 2);
+  }
+  ctx.strokeStyle = hex(mez(c, 0x000000, 0.35)); ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, TL - 2, TL - 2);
+  ctx.restore();
+}
+
+function armaAtlas(){
+  atlasCv = document.createElement('canvas');
+  atlasCv.width = atlasCv.height = ATLPX;
+  const c0 = atlasCv.getContext('2d');
+  c0.imageSmoothingEnabled = false;
+  c0.fillStyle = '#ff00ff'; c0.fillRect(0, 0, ATLPX, ATLPX);   /* magenta = baldosa sin pintar */
+
+  /* natural */
+  pRuido('pastoT', 0x5d9b3a, 0x7ec24f, 0.55, 2);
+  { const c = tileCtx('pastoL'); SA = 501;
+    c.fillStyle = hex(0x8a6a45); c.fillRect(0, 0, TL, TL);
+    for (let i = 0; i < 120; i++){ c.fillStyle = hex(mez(0x8a6a45, 0x6b4f31, ra())); c.fillRect(Math.floor(ra()*TL/2)*2, 6 + Math.floor(ra()*26/2)*2, 2, 2); }
+    for (let x = 0; x < TL; x += 2){ const h = 4 + Math.floor(ra()*6); c.fillStyle = hex(mez(0x5d9b3a, 0x7ec24f, ra())); c.fillRect(x, 0, 2, h); }
+    c.restore(); }
+  pRuido('tierra',   0x8a6a45, 0x6b4f31, 0.5, 2);
+  pRuido('caminoT',  0x9a8468, 0x7d6a53, 0.45, 2);
+  pRuido('arena',    0xdbd0a0, 0xc4b98a, 0.4, 2);
+  pRuido('grava',    0x8a8a8a, 0x5c5c5c, 0.6, 2);
+  pRuido('nieve',    0xf2f6f8, 0xdbe6ec, 0.3, 2);
+  { const c = tileCtx('hielo'); c.fillStyle = hex(0x8ab6e8); c.fillRect(0, 0, TL, TL); SA = 611;
+    for (let i = 0; i < 18; i++){ c.strokeStyle = hex(mez(0x8ab6e8, 0xffffff, 0.3 + ra()*0.5)); c.lineWidth = 2;
+      c.beginPath(); const x = ra()*TL, y = ra()*TL; c.moveTo(x, y); c.lineTo(x + (ra()-0.5)*20, y + (ra()-0.5)*20); c.stroke(); }
+    c.restore(); }
+  pHojas('hojas',  0x4c8a2e, 0x76b64a);
+  pHojas('hojasO', 0xb1541d, 0xd8912e);   /* otoño: el nombre del bloque dice otoño */
+  { const c = tileCtx('cactus'); c.fillStyle = hex(0x3f7a3a); c.fillRect(0, 0, TL, TL); SA = 711;
+    for (let x = 2; x < TL; x += 8){ c.fillStyle = hex(0x2e5c2b); c.fillRect(x, 0, 2, TL); }
+    for (let i = 0; i < 22; i++){ c.fillStyle = hex(0xd9e6c0); c.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 2, 2); }
+    c.restore(); }
+  pRuido('cactusT', 0x54a04a, 0x3f7a3a, 0.4, 2);
+  { const c = tileCtx('calabaza'); c.fillStyle = hex(0xd8801f); c.fillRect(0, 0, TL, TL);
+    for (let x = 3; x < TL; x += 7){ c.fillStyle = hex(0xb35f10); c.fillRect(x, 0, 2, TL); }
+    c.fillStyle = hex(0x2c1b08); c.fillRect(7, 9, 4, 6); c.fillRect(21, 9, 4, 6);
+    c.fillRect(9, 20, 14, 4); c.fillRect(13, 17, 6, 3); c.restore(); }
+  pRuido('calabazaT', 0xc4741c, 0x8f550f, 0.4, 2);
+  pRuido('melon',   0x4f7a25, 0x2f5416, 0.5, 4);
+  pRuido('melonT',  0x7ea23f, 0x5d7c2c, 0.4, 4);
+  { const c = tileCtx('hongo'); c.fillStyle = hex(0xc9433a); c.fillRect(0, 0, TL, TL); SA = 811;
+    for (let i = 0; i < 7; i++){ c.fillStyle = hex(0xf0ece2); const s = 4 + Math.floor(ra()*4)*2;
+      c.fillRect(Math.floor(ra()*(TL-s)), Math.floor(ra()*(TL-s)), s, s); }
+    c.restore(); }
+  pRuido('musgo',   0x54703a, 0x39512a, 0.55, 2);
+  /* piedra */
+  pRuido('piedra',   0x7d7d7d, 0x646464, 0.45, 2);
+  pRuido('adoquin',  0x7a7a7a, 0x4f4f4f, 0.7, 4);
+  pLadrillo('ladriP',  0x7b7b7b, 0x5c5c5c, 4);
+  pLadrillo('ladriPM', 0x6f7a6a, 0x4e564b, 4);
+  pLadrillo('ladrillo',0xa3584a, 0x8c8378, 4);
+  pRuido('arenisca',  0xd7cba0, 0xc2b58c, 0.25, 2);
+  { const c = tileCtx('areniscaT'); c.fillStyle = hex(0xdbd0a8); c.fillRect(0, 0, TL, TL);
+    c.fillStyle = hex(0xc2b58c); for (let y = 0; y < TL; y += 8) c.fillRect(0, y, TL, 2); c.restore(); }
+  pRuido('andesita', 0x8b8b8b, 0x767676, 0.5, 2);
+  pRuido('diorita',  0xdcdcdc, 0xb4b4b4, 0.5, 2);
+  pRuido('granito',  0xb0715c, 0x96604e, 0.5, 2);
+  pRuido('pizarra',  0x4c4c50, 0x3a3a3e, 0.5, 2);
+  { const c = tileCtx('obsidiana'); c.fillStyle = hex(0x120c1c); c.fillRect(0, 0, TL, TL); SA = 911;
+    for (let i = 0; i < 30; i++){ c.fillStyle = hex(mez(0x120c1c, 0x6a3fa0, 0.3 + ra()*0.5));
+      c.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 2, 2); } c.restore(); }
+  pRuido('basalto',  0x4a4a52, 0x35353c, 0.5, 2);
+  pRuido('basaltoT', 0x5a5a62, 0x3d3d44, 0.4, 2);
+  pRuido('cuarzo',   0xecebe4, 0xd9d7cb, 0.25, 2);
+  pRuido('terracota',0xa0563a, 0x8a4a32, 0.4, 2);
+  pRuido('rojiza',   0x8f4b2e, 0x6f3a24, 0.5, 2);
+  pRuido('prismarina',0x5fa39a, 0x3f7d78, 0.55, 4);
+  /* madera */
+  pTronco('troncoR', 0x6b5334, 0x8a6c46); pAnillos('troncoT',  0xb08a55, 0x8a6c46);
+  pTronco('troncoO', 0x3f3226, 0x584835); pAnillos('troncoOT', 0x8a7355, 0x5f4d38);
+  pTronco('troncoA', 0xd8d3cb, 0x8f8a80); pAnillos('troncoAT', 0xd9c9a0, 0xb0a077);
+  pTabla('tablaR', 0xa4813f, 0xbb9755, 4);
+  pTabla('tablaO', 0x4a3826, 0x5e4a33, 4);
+  pTabla('tablaA', 0xd6cfc0, 0xbdb5a4, 4);
+  pTabla('tablaN', 0x6d3a4d, 0x8a4c62, 4);
+  { const c = tileCtx('bambu'); c.fillStyle = hex(0xc6c144); c.fillRect(0, 0, TL, TL);
+    c.fillStyle = hex(0x8d8a2e); for (let y = 0; y < TL; y += 10) c.fillRect(0, y, TL, 2);
+    c.fillStyle = hex(0xdedb7a); c.fillRect(4, 0, 2, TL); c.fillRect(20, 0, 2, TL); c.restore(); }
+  /* metal y mineral */
+  pMetal('hierro',   0xd6d6d6); pMetal('oro', 0xf6d02f); pMetal('cobre', 0xc06b45);
+  pMetal('diamante', 0x54dbd2); pMetal('esmeralda', 0x2fbb4a);
+  pMineral('lapis',    0x7d7d7d, 0x2151a8);
+  pMineral('carbon',   0x7d7d7d, 0x1a1a1a);
+  pMineral('redstone', 0x7d7d7d, 0xd11a1a);
+  /* luz y liquido */
+  { const c = tileCtx('luminosa'); c.fillStyle = hex(0xb59355); c.fillRect(0, 0, TL, TL); SA = 1201;
+    for (let i = 0; i < 26; i++){ c.fillStyle = hex(mez(0xffe9a8, 0xffffff, ra()*0.6));
+      c.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 4, 4); } c.restore(); }
+  { const c = tileCtx('linterna'); c.fillStyle = hex(0x3a3026); c.fillRect(0, 0, TL, TL);
+    c.fillStyle = hex(0xffd479); c.fillRect(6, 6, 20, 20);
+    c.fillStyle = hex(0xfff3c4); c.fillRect(10, 10, 12, 12);
+    c.fillStyle = hex(0x2a231b); c.fillRect(14, 0, 4, 6); c.restore(); }
+  { const c = tileCtx('lava'); c.fillStyle = hex(0xd94a12); c.fillRect(0, 0, TL, TL); SA = 1301;
+    for (let i = 0; i < 40; i++){ c.fillStyle = hex(mez(0xd94a12, 0xffd23a, ra()));
+      c.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 4, 2); } c.restore(); }
+  { const c = tileCtx('fuego'); c.fillStyle = hex(0xe86a15); c.fillRect(0, 0, TL, TL); SA = 1401;
+    for (let i = 0; i < 34; i++){ c.fillStyle = hex(mez(0xffdc4a, 0xd12a0a, ra()));
+      c.fillRect(Math.floor(ra()*TL/2)*2, Math.floor(ra()*TL/2)*2, 2, 4 + Math.floor(ra()*6)); } c.restore(); }
+  { const c = tileCtx('agua');
+    c.fillStyle = 'rgba(50,110,200,0.62)'; c.fillRect(0, 0, TL, TL); SA = 1501;
+    for (let i = 0; i < 16; i++){ c.fillStyle = 'rgba(150,200,255,0.5)';
+      c.fillRect(Math.floor(ra()*TL), Math.floor(ra()*TL), 6, 2); } c.restore(); }
+  pVidrio('vidrio', 0xd8ecf4);
+  { const c = tileCtx('farol'); c.fillStyle = hex(0x4a3a24); c.fillRect(0, 0, TL, TL);
+    c.fillStyle = hex(0xffdf9a); c.fillRect(8, 4, 16, 22);
+    c.fillStyle = hex(0x2f2416); c.fillRect(8, 4, 16, 2); c.fillRect(8, 24, 16, 2);
+    c.fillRect(15, 4, 2, 22); c.restore(); }
+  /* los cuarenta y ocho de color */
+  for (const [c, v] of COLORES) pLana('lana_' + c, v);
+  for (const [c, v] of COLORES) pHorm('horm_' + c, v);
+  for (const [c, v] of COLORES) pVidrio('vid_' + c, mez(v, 0xffffff, 0.35));
+
+  atlasTex = new T.CanvasTexture(atlasCv);
+  atlasTex.magFilter = T.NearestFilter;
+  atlasTex.minFilter = T.NearestFilter;
+  atlasTex.generateMipmaps = false;
+  atlasTex.colorSpace = T.SRGBColorSpace;
+  return nTile;
+}
+/* nombre -> [u0,v0,u1,v1], metido media texel para adentro */
+function uvDe(nom){
+  const i = TILES[nom] != null ? TILES[nom] : 0;
+  const cx = i % ATL, cy = Math.floor(i/ATL), s = 1/ATL, e = 0.5/ATLPX;
+  return [cx*s + e, 1 - (cy + 1)*s + e, (cx + 1)*s - e, 1 - cy*s - e];
+}
+/* cache: bloque -> [uv de cada una de las seis caras] */
+let UVB = null;
+function armaUV(){
+  UVB = BLOQUES.map(B => {
+    if (!B.tex) return null;
+    const t = Array.isArray(B.tex) ? B.tex : [B.tex, B.tex, B.tex];
+    const [arr, lat, aba] = t;
+    /* orden de caras: +x, -x, +y, -y, +z, -z */
+    return [uvDe(lat), uvDe(lat), uvDe(arr), uvDe(aba), uvDe(lat), uvDe(lat)];
+  });
+}
+
+/* ══════════ LA MALLA ══════════
+   ── LA OCLUSION AMBIENTAL POR VERTICE ES LO QUE HACE QUE UN VOXEL SE VEA ──
+   Sin ella, un muro y un rincon se dibujan del mismo gris y la obra se lee a
+   maqueta de papel. Es la cuenta clasica: por cada esquina de cada cara se
+   miran sus TRES vecinos —los dos costados y la diagonal— y si los dos costados
+   estan llenos la esquina va al minimo, porque ahi no entra luz de ningun lado.
+   Cuesta tres consultas por esquina y se calcula al construir, no por cuadro. */
+const CARAS = [
+  { d: [ 1, 0, 0], v: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], sh: 0.80 },
+  { d: [-1, 0, 0], v: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]], sh: 0.80 },
+  { d: [ 0, 1, 0], v: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], sh: 1.00 },
+  { d: [ 0,-1, 0], v: [[0,0,1],[0,0,0],[1,0,0],[1,0,1]], sh: 0.52 },
+  { d: [ 0, 0, 1], v: [[1,0,1],[1,1,1],[0,1,1],[0,0,1]], sh: 0.64 },
+  { d: [ 0, 0,-1], v: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], sh: 0.64 }
+];
+/* los dos costados y la diagonal de cada esquina, por cara */
+const AOV = [
+  [[[0,-1,0],[0,0,-1],[0,-1,-1]],[[0,1,0],[0,0,-1],[0,1,-1]],[[0,1,0],[0,0,1],[0,1,1]],[[0,-1,0],[0,0,1],[0,-1,1]]],
+  [[[0,-1,0],[0,0,1],[0,-1,1]],[[0,1,0],[0,0,1],[0,1,1]],[[0,1,0],[0,0,-1],[0,1,-1]],[[0,-1,0],[0,0,-1],[0,-1,-1]]],
+  [[[-1,0,0],[0,0,-1],[-1,0,-1]],[[-1,0,0],[0,0,1],[-1,0,1]],[[1,0,0],[0,0,1],[1,0,1]],[[1,0,0],[0,0,-1],[1,0,-1]]],
+  [[[-1,0,0],[0,0,1],[-1,0,1]],[[-1,0,0],[0,0,-1],[-1,0,-1]],[[1,0,0],[0,0,-1],[1,0,-1]],[[1,0,0],[0,0,1],[1,0,1]]],
+  [[[1,0,0],[0,-1,0],[1,-1,0]],[[1,0,0],[0,1,0],[1,1,0]],[[-1,0,0],[0,1,0],[-1,1,0]],[[-1,0,0],[0,-1,0],[-1,-1,0]]],
+  [[[-1,0,0],[0,-1,0],[-1,-1,0]],[[-1,0,0],[0,1,0],[-1,1,0]],[[1,0,0],[0,1,0],[1,1,0]],[[1,0,0],[0,-1,0],[1,-1,0]]]
+];
+/* ── LOS CUATRO ESCALONES NO ARRANCAN EN CERO ──
+   La oclusion y el sombreado por cara se multiplican, asi que un rincon de una
+   cara que ya viene al 0.62 termina en 0.26: eso no es un rincon oscuro, es un
+   agujero. El piso se sube y el rango se achica; lo que se pierde en contraste
+   se gana en poder ver lo que uno construyo. */
+const AO_NIV = [0.52, 0.70, 0.86, 1.00];
+function tapa(b){ return b && !BLOQUES[b].vidrio; }
+
+let mallaS = null, mallaV = null, matS = null, matV = null;
+function armaMalla(){
+  const P = [[], []], Nm = [[], []], U = [[], []], C = [[], []], I = [[], []];
+  const nv = [0, 0];
+  for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++){
+    const b = REJA[idx(x, y, z)]; if (!b) continue;
+    const B = BLOQUES[b], k = B.vidrio ? 1 : 0, uvs = UVB[b];
+    const luz = B.luz || 0;
+    for (let f = 0; f < 6; f++){
+      const F = CARAS[f], vx = x + F.d[0], vy = y + F.d[1], vz = z + F.d[2];
+      const vb = bloqueEn(vx, vy, vz);
+      /* una cara se dibuja si el vecino no tapa; y entre dos vidrios del MISMO
+         bloque tampoco, o se ve una linea gris adentro del cristal */
+      if (vb === b || tapa(vb)) continue;
+      if (vy < 0 && !B.vidrio) { /* la cara de abajo del suelo no se ve nunca */ }
+      const uv = uvs[f];
+      for (let c = 0; c < 4; c++){
+        const o = F.v[c];
+        P[k].push(x + o[0], y + o[1], z + o[2]);
+        Nm[k].push(F.d[0], F.d[1], F.d[2]);
+        const a = AOV[f][c];
+        let s1 = 0, s2 = 0, co = 0;
+        s1 = tapa(bloqueEn(vx + a[0][0], vy + a[0][1], vz + a[0][2])) ? 1 : 0;
+        s2 = tapa(bloqueEn(vx + a[1][0], vy + a[1][1], vz + a[1][2])) ? 1 : 0;
+        co = tapa(bloqueEn(vx + a[2][0], vy + a[2][1], vz + a[2][2])) ? 1 : 0;
+        const ao = (s1 && s2) ? 0 : 3 - (s1 + s2 + co);
+        /* el bloque que emite luz no recibe ni sombra de cara ni oclusion: si la
+           recibiera, una piedra luminosa se veria mas oscura del lado de abajo,
+           que es justo lo contrario de lo que hace una lampara */
+        const g = luz ? lerp(F.sh*AO_NIV[ao], 1.35, luz) : F.sh*AO_NIV[ao];
+        C[k].push(g, g, g);
+        U[k].push(c === 0 || c === 3 ? uv[0] : uv[2], c < 2 ? uv[1] : uv[3]);
+      }
+      const o = nv[k];
+      I[k].push(o, o + 1, o + 2, o, o + 2, o + 3);
+      nv[k] += 4;
+    }
+  }
+  for (let k = 0; k < 2; k++){
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(P[k], 3));
+    g.setAttribute('normal',   new T.Float32BufferAttribute(Nm[k], 3));
+    g.setAttribute('uv',       new T.Float32BufferAttribute(U[k], 2));
+    g.setAttribute('color',    new T.Float32BufferAttribute(C[k], 3));
+    g.setIndex(I[k]);
+    g.computeBoundingSphere();
+    const m = k ? mallaV : mallaS;
+    if (m.geometry) m.geometry.dispose();
+    m.geometry = g;
+  }
+  return { caras: (I[0].length + I[1].length)/6, vidrio: I[1].length/6 };
+}
+
+/* ══════════ LA ESCENA ══════════ */
+let render, escena, cam, RT, postEsc, postCam, postMat, LUZSOL, SOMBRA_OK = true;
+let gSuelo, gMarco, gMira, gFantasma, cielo, CVLIENZO;
+let CAL = 'media', ESC = 1;
+
+function armaEscena(lienzo){
+  CVLIENZO = lienzo;
+  render = new T.WebGLRenderer({ canvas: lienzo, antialias: false, powerPreference: 'high-performance' });
+  render.setPixelRatio(1);
+  render.outputColorSpace = T.SRGBColorSpace;
+  /* ── SIN TONE MAPPING, Y NO ES UN DESCUIDO ──
+     ACES esta hecho para fotografia: comprime los medios tonos y baja el color,
+     que es exactamente lo contrario de lo que pide un mundo de bloques de color
+     plano. Medido, con ACES la pared de tabla de roble salia casi negra. */
+  render.toneMapping = T.NoToneMapping;
+  render.shadowMap.enabled = true;
+  render.shadowMap.type = T.PCFSoftShadowMap;
+  escena = new T.Scene();
+  escena.fog = new T.Fog(0xbfd8ef, 40, 150);
+  cam = new T.PerspectiveCamera(74, 1, 0.05, 400);
+
+  armaAtlas(); armaUV();
+  matS = new T.MeshLambertMaterial({ map: atlasTex, vertexColors: true });
+  matV = new T.MeshLambertMaterial({ map: atlasTex, vertexColors: true,
+    transparent: true, depthWrite: false, side: T.DoubleSide });
+  mallaS = new T.Mesh(new T.BufferGeometry(), matS);
+  mallaV = new T.Mesh(new T.BufferGeometry(), matV);
+  mallaS.castShadow = true; mallaS.receiveShadow = true;
+  escena.add(mallaS); escena.add(mallaV);
+
+  /* ── EL SUELO NO ES PARTE DE LA PARCELA ──
+     Se dibuja aparte, un poco mas grande, con un canto de piedra: eso es lo que
+     hace que la parcela se LEA como una parcela y no como un pedazo de campo. */
+  gSuelo = new T.Group(); escena.add(gSuelo);
+  /* ── EL SUELO SE ARMA BALDOSA POR BALDOSA, NO CON UNA CAJA ──
+     Con una `BoxGeometry` y las UV de una sola baldosa, los dieciseis metros de
+     pasto son UNA foto estirada: medido en la captura, cada pixel de la textura
+     media medio metro y el prado salia de cuadrados gigantes. Con el atlas no se
+     puede usar `repeat` —muestrearia las baldosas de al lado— asi que la
+     repeticion la pone la geometria: 256 cuadrados arriba mas los 64 del canto,
+     que siguen siendo UNA malla y UNA llamada de dibujo. */
+  const base = new T.Mesh(armaSuelo(), new T.MeshLambertMaterial({ map: atlasTex }));
+  base.receiveShadow = true; gSuelo.add(base);
+  const anillo = new T.Mesh(new T.BoxGeometry(N + 8, 1, N + 8),
+    new T.MeshLambertMaterial({ color: 0x6f7d55 }));
+  anillo.position.set(N/2, -1.5, N/2); anillo.receiveShadow = true; gSuelo.add(anillo);
+
+  /* el marco de la parcela: cuatro lineas al ras, para saber donde termina */
+  const pts = [];
+  for (const [a, b] of [[[0,0],[N,0]],[[N,0],[N,N]],[[N,N],[0,N]],[[0,N],[0,0]]])
+    pts.push(a[0], 0.02, a[1], b[0], 0.02, b[1]);
+  const gl = new T.BufferGeometry(); gl.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
+  gMarco = new T.LineSegments(gl, new T.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+  escena.add(gMarco);
+
+  /* la mira: el cubo que se va a romper, y el fantasma del que se va a poner */
+  gMira = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(1.004, 1.004, 1.004)),
+    new T.LineBasicMaterial({ color: 0x101010, transparent: true, opacity: 0.85 }));
+  gMira.visible = false; escena.add(gMira);
+  gFantasma = new T.Mesh(new T.BoxGeometry(0.92, 0.92, 0.92),
+    new T.MeshBasicMaterial({ color: 0x9fe0ff, transparent: true, opacity: 0.30, depthWrite: false }));
+  gFantasma.visible = false; escena.add(gFantasma);
+
+  /* ── LUZ ──
+     Un hemisferico con el cielo arriba y el pasto abajo mas un sol. El
+     hemisferico es lo que impide que la cara de abajo de un alero salga negra:
+     el sol solo llega de una direccion. */
+  /* ── EL PRESUPUESTO DE LUZ SALE DE UNA CUENTA, NO DE TANTEAR ──
+     Lambert en three divide por pi, asi que un hemisferico de intensidad i
+     aporta i/pi. Con la cara de arriba a 2.6/pi*0.87 + 0.79*1.5/pi = 1.09 y la
+     de un costado en sombra a 0.55, una tabla de roble (albedo 0.6) queda en
+     0.33 lineales por la cara y por la oclusion: 0.45 en pantalla, que es una
+     pared en sombra y no un agujero negro. */
+  escena.add(new T.HemisphereLight(0xd6e8fb, 0x8d9a72, 2.10));
+  LUZSOL = new T.DirectionalLight(0xfff4e2, 1.85);
+  LUZSOL.position.set(18, 28, 12);
+  LUZSOL.castShadow = true;
+  /* ── LA CAJA DE SOMBRA MIDE LO QUE MIDE LA PARCELA ──
+     Un mapa de sombra cubre un area fija: con una caja del tamaño del mundo, la
+     sombra de un bloque son cuatro pixeles temblando. Acotada a los 16 x 16 de
+     la parcela, un mapa de 1024 da 45 texeles por metro. */
+  const S = LUZSOL.shadow;
+  S.camera.left = -16; S.camera.right = 16; S.camera.top = 22; S.camera.bottom = -8;
+  S.camera.near = 1; S.camera.far = 90; S.bias = -0.0009; S.normalBias = 0.035;
+  LUZSOL.target.position.set(N/2, 4, N/2);
+  escena.add(LUZSOL); escena.add(LUZSOL.target);
+
+  armaCielo();
+
+  /* el post: se dibuja a un destino reducido y se estira. Lo que se gana es
+     relleno, que en un telefono es lo unico que siempre paga. */
+  RT = new T.WebGLRenderTarget(2, 2, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
+  postEsc = new T.Scene();
+  postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  postMat = new T.ShaderMaterial({
+    uniforms: { tDif: { value: RT.texture }, sat: { value: 1.12 }, vin: { value: 0.42 },
+                fog: { value: 0.0 }, tint: { value: new T.Color(0xffffff) } },
+    vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: [
+      'uniform sampler2D tDif; uniform float sat, vin, fog; uniform vec3 tint; varying vec2 vU;',
+      /* ── LA CONVERSION A sRGB HAY QUE HACERLA A MANO ──
+         three aplica `outputColorSpace` inyectando un include en SUS materiales;
+         un ShaderMaterial propio escribe lo que uno le ponga, y lo que sale del
+         destino de render esta en LINEAL. Sin esta linea todo el juego se
+         muestra con gamma cruda: medido, la pared de tabla de roble salia casi
+         negra y ninguna cantidad de luz la levantaba. */
+      'vec3 aSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c, vec3(0.0)), vec3(0.41666)) - 0.055, step(vec3(0.0031308), c)); }',
+      'void main(){',
+      '  vec3 c = texture2D(tDif, vU).rgb;',
+      '  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+      '  c = mix(vec3(l), c, sat);',
+      '  vec2 d = (vU - 0.5)*vec2(1.0, 1.0);',
+      '  float v = 1.0 - vin*dot(d, d)*1.9;',
+      '  c *= clamp(v, 0.0, 1.0);',
+      '  c = mix(c, tint, fog);',
+      '  gl_FragColor = vec4(aSRGB(c), 1.0);',
+      '}'
+    ].join('\n')
+  });
+  postEsc.add(new T.Mesh(new T.PlaneGeometry(2, 2), postMat));
+}
+
+/* una baldosa de un metro por celda, con su UV del atlas */
+function armaSuelo(){
+  const P = [], Nn = [], U = [];
+  const quad = (v0, v1, v2, v3, nor, uv) => {
+    for (const v of [v0, v1, v2, v0, v2, v3]) P.push(v[0], v[1], v[2]);
+    for (let i = 0; i < 6; i++) Nn.push(nor[0], nor[1], nor[2]);
+    const [a0, b0, a1, b1] = uv;
+    for (const [u, v] of [[a0,b1],[a1,b1],[a1,b0],[a0,b1],[a1,b0],[a0,b0]]) U.push(u, v);
+  };
+  const upa = uvDe('pastoT'), uti = uvDe('tierra');
+  for (let z = 0; z < N; z++) for (let x = 0; x < N; x++)
+    quad([x,0,z+1], [x+1,0,z+1], [x+1,0,z], [x,0,z], [0,1,0], upa);
+  for (let i = 0; i < N; i++){
+    quad([i,-1,N], [i+1,-1,N], [i+1,0,N], [i,0,N], [0,0,1], uti);
+    quad([i+1,-1,0], [i,-1,0], [i,0,0], [i+1,0,0], [0,0,-1], uti);
+    quad([N,-1,i+1], [N,-1,i], [N,0,i], [N,0,i+1], [1,0,0], uti);
+    quad([0,-1,i], [0,-1,i+1], [0,0,i+1], [0,0,i], [-1,0,0], uti);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new T.Float32BufferAttribute(Nn, 3));
+  g.setAttribute('uv', new T.Float32BufferAttribute(U, 2));
+  return g;
+}
+
+/* ── EL CIELO ──
+   Un domo con degradado mas nubes chatas. El degradado va en el shader y no en
+   una textura: son dos colores y una altura. */
+function armaCielo(){
+  const m = new T.ShaderMaterial({
+    side: T.BackSide, depthWrite: false,
+    uniforms: { arr: { value: new T.Color(0x4b8fd6) }, aba: { value: new T.Color(0xcfe3f5) },
+                sol: { value: new T.Vector3(0.5, 0.72, 0.34) } },
+    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }',
+    fragmentShader: [
+      'uniform vec3 arr, aba, sol; varying vec3 vP;',
+      'void main(){',
+      '  float h = clamp(vP.y*1.15 + 0.12, 0.0, 1.0);',
+      '  vec3 c = mix(aba, arr, pow(h, 0.72));',
+      '  float d = max(0.0, dot(normalize(vP), normalize(sol)));',
+      '  c += vec3(1.0, 0.92, 0.72)*pow(d, 220.0)*1.4;',        /* el sol */
+      '  c += vec3(1.0, 0.86, 0.66)*pow(d, 6.0)*0.16;',         /* y su halo */
+      '  gl_FragColor = vec4(c, 1.0);',
+      '}'
+    ].join('\n')
+  });
+  cielo = new T.Mesh(new T.SphereGeometry(220, 24, 16), m);
+  cielo.frustumCulled = false; escena.add(cielo);
+  /* nubes: seis planos altos, instanciados en una sola malla */
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const c2 = cv.getContext('2d'); SA = 4242;
+  c2.clearRect(0, 0, 64, 64);
+  c2.fillStyle = 'rgba(255,255,255,0.92)';
+  for (let i = 0; i < 26; i++){
+    const x = 6 + ra()*46, y = 18 + ra()*26, w = 8 + ra()*20, h = 6 + ra()*10;
+    c2.fillRect(Math.floor(x/4)*4, Math.floor(y/4)*4, Math.floor(w/4)*4, Math.floor(h/4)*4);
+  }
+  const tx = new T.CanvasTexture(cv); tx.magFilter = T.NearestFilter; tx.minFilter = T.NearestFilter;
+  tx.generateMipmaps = false;
+  const gm = new T.PlaneGeometry(1, 1);
+  const mm = new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, fog: false });
+  const inst = new T.InstancedMesh(gm, mm, 14);
+  const M4 = new T.Matrix4(), Q = new T.Quaternion().setFromEuler(new T.Euler(-Math.PI/2, 0, 0));
+  const V = new T.Vector3(), S3 = new T.Vector3();
+  for (let i = 0; i < 14; i++){
+    V.set(N/2 + (ra() - 0.5)*220, 58 + ra()*22, N/2 + (ra() - 0.5)*220);
+    const s = 30 + ra()*46; S3.set(s, s*0.7, 1);
+    inst.setMatrixAt(i, M4.compose(V, Q, S3));
+  }
+  inst.frustumCulled = false; escena.add(inst);
+}
+
+function calidad(c){
+  if (!CALIDADES[c]) return CAL;
+  CAL = c; const Q = CALIDADES[c];
+  ESC = Q.esc;
+  SOMBRA_OK = Q.sombra > 0;
+  LUZSOL.castShadow = SOMBRA_OK;
+  if (SOMBRA_OK && LUZSOL.shadow.mapSize.width !== Q.sombra){
+    LUZSOL.shadow.mapSize.set(Q.sombra, Q.sombra);
+    /* three no recrea la textura porque cambie mapSize: se queda con la de
+       antes y el cambio no hace nada */
+    if (LUZSOL.shadow.map){ LUZSOL.shadow.map.dispose(); LUZSOL.shadow.map = null; }
+  }
+  escena.fog.near = 40*Q.niebla; escena.fog.far = 150*Q.niebla;
+  if (cielo) cielo.visible = !!Q.cielo;
+  mide();
+  return CAL;
+}
+function mide(){
+  const w = Math.max(2, CVLIENZO.clientWidth), h = Math.max(2, CVLIENZO.clientHeight);
+  render.setSize(w, h, false);
+  const rw = Math.max(2, Math.round(w*ESC)), rh = Math.max(2, Math.round(h*ESC));
+  RT.setSize(rw, rh);
+  cam.aspect = w/h; cam.updateProjectionMatrix();
+  return [rw, rh];
+}
+function pinta(){
+  render.setRenderTarget(RT); render.clear(); render.render(escena, cam);
+  render.setRenderTarget(null); render.render(postEsc, postCam);
+}
+
+/* ══════════════════ g.js ══════════════════ */
+/* ══════════════════════ EL JUEZ DE VERDAD ══════════════════════
+   El pedido era «una IA de verdad que vea tu trabajo y te dé una puntuación», y
+   eso es literal: se fotografia la obra desde tres angulos, se mandan las tres
+   fotos a la API de Claude y vuelve un puntaje con lo que vio.
+
+   ── LA LLAVE ES DEL JUGADOR Y NO SALE DE SU TELEFONO ──
+   Este juego es UN ARCHIVO que se abre en un navegador: no hay servidor donde
+   esconder una llave, y meter una en el HTML seria repartirla. Asi que la pone
+   el jugador, se guarda solo en `localStorage` de su aparato, y lo unico que se
+   manda a `api.anthropic.com` son las tres fotos y el tema. Sin llave el juego
+   se juega igual: puntua el juez de la casa, y la pantalla del final dice
+   siempre CUAL de los dos puntuo.
+
+   ── Y SE LLAMA POR `fetch` A MANO Y NO CON EL SDK ──
+   El SDK oficial es un paquete de npm: acá no hay bundler ni node_modules, y
+   bajarlo de un CDN convertiria «un archivo que anda» en «un archivo que anda
+   si el CDN contesta». Lo unico que el SDK agrega sobre esta llamada es el
+   encabezado de abajo, que esta copiado de su propio codigo. */
+const API = 'https://api.anthropic.com/v1/messages';
+const MODELOS = ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'];
+let LLAVE = '', MODELO = MODELOS[0];
+
+function cargaLlave(){
+  try { LLAVE = localStorage.getItem('cubos_llave') || ''; MODELO = localStorage.getItem('cubos_modelo') || MODELOS[0]; }
+  catch (e) { LLAVE = ''; }
+  if (MODELOS.indexOf(MODELO) < 0) MODELO = MODELOS[0];
+}
+function guardaLlave(k){
+  LLAVE = (k || '').trim();
+  try { if (LLAVE) localStorage.setItem('cubos_llave', LLAVE); else localStorage.removeItem('cubos_llave'); } catch (e) {}
+  return !!LLAVE;
+}
+function ponModelo(m){ if (MODELOS.indexOf(m) >= 0){ MODELO = m; try { localStorage.setItem('cubos_modelo', m); } catch (e) {} } return MODELO; }
+function hayLlave(){ return !!LLAVE; }
+
+/* ══════════ LAS FOTOS ══════════
+   Tres angulos y no uno: de frente, una obra hueca se lee a pared, y desde
+   arriba una torre se lee a punto. Tres cuartos de un lado, tres cuartos del
+   otro y planta es lo que un jurado humano miraria.
+
+   ── SE LEEN DEL DESTINO DE RENDER Y NO DEL LIENZO ──
+   `canvas.toDataURL` sobre un contexto WebGL sin `preserveDrawingBuffer`
+   devuelve negro apenas el navegador da vuelta el buffer, y activarlo cuesta
+   una copia en CADA cuadro para sacar tres fotos por ronda. */
+const VISTAS = [[0.78, 0.42], [3.92, 0.42], [0.78, 1.30]];
+let rtFoto = null, cvFoto = null;
+function fotoObra(lado, calidad){
+  const L = lado || 448;
+  if (!rtFoto){ rtFoto = new T.WebGLRenderTarget(L, L, { minFilter: T.LinearFilter, magFilter: T.LinearFilter }); }
+  else if (rtFoto.width !== L) rtFoto.setSize(L, L);
+  if (!cvFoto){ cvFoto = document.createElement('canvas'); }
+  cvFoto.width = cvFoto.height = L;
+  const ctx = cvFoto.getContext('2d');
+  const c2 = new T.PerspectiveCamera(46, 1, 0.1, 400);
+  const centro = new T.Vector3(N/2, Math.min(9, Math.max(4, altoObra()*0.55)), N/2);
+  const guardaMira = gMira.visible, guardaFan = gFantasma.visible, guardaMarco = gMarco.visible;
+  gMira.visible = false; gFantasma.visible = false; gMarco.visible = false;
+  const fotos = [];
+  const px = new Uint8Array(L*L*4);
+  for (const [ang, alt] of VISTAS){
+    const d = 26;
+    c2.position.set(centro.x + Math.sin(ang)*d*Math.cos(alt), centro.y + Math.sin(alt)*d,
+                    centro.z + Math.cos(ang)*d*Math.cos(alt));
+    c2.lookAt(centro); c2.updateMatrixWorld(true);
+    render.setRenderTarget(rtFoto); render.clear(); render.render(escena, c2);
+    render.readRenderTargetPixels(rtFoto, 0, 0, L, L, px);
+    /* `readRenderTargetPixels` devuelve las filas de abajo hacia arriba */
+    const im = ctx.createImageData(L, L);
+    for (let y = 0; y < L; y++){
+      const s = (L - 1 - y)*L*4, d2 = y*L*4;
+      im.data.set(px.subarray(s, s + L*4), d2);
+    }
+    ctx.putImageData(im, 0, 0);
+    fotos.push(cvFoto.toDataURL('image/jpeg', calidad || 0.72).split(',')[1]);
+  }
+  render.setRenderTarget(null);
+  gMira.visible = guardaMira; gFantasma.visible = guardaFan; gMarco.visible = guardaMarco;
+  return fotos;
+}
+function altoObra(){
+  for (let y = ALTO - 1; y >= 0; y--) for (let k = 0; k < N*N; k++)
+    if (REJA[y*N*N + k]) return y + 1;
+  return 1;
+}
+
+/* ══════════ LA PREGUNTA ══════════ */
+const ESQUEMA = {
+  type: 'object',
+  properties: {
+    puntaje: { type: 'integer', minimum: 0, maximum: 100 },
+    titulo:  { type: 'string', description: 'Qué te parece que es, en 4 palabras o menos' },
+    bueno:   { type: 'string', description: 'Una frase corta con lo mejor que tiene' },
+    mejorar: { type: 'string', description: 'Una frase corta con lo que le falta' }
+  },
+  required: ['puntaje', 'titulo', 'bueno', 'mejorar'],
+  additionalProperties: false
+};
+const IDIOMA_JUEZ = { es: 'castellano rioplatense', en: 'English', pt: 'português' };
+
+async function juzgaIA(tema, lang){
+  const fotos = fotoObra();
+  const texto = [
+    'Sos el jurado de un build battle estilo Minecraft. El jugador tuvo unos minutos y una',
+    'parcela de 16 x 16 x 16 bloques, y el tema que le tocó fue: «' + tema + '».',
+    '',
+    'Te paso tres fotos de lo que construyó: tres cuartos de un lado, tres cuartos del otro,',
+    'y una vista desde arriba. Es siempre la misma obra.',
+    '',
+    'Puntuá de 0 a 100 mirando tres cosas: cuánto se parece al tema, cuánto trabajo tiene',
+    'encima (forma, detalle, uso del color) y si se lee bien de lejos. Sé honesto: una torre',
+    'de cubos apilados no es un 80. Pero acordate de que son bloques de un metro y de que tuvo',
+    'poquitos minutos, así que no le pidas realismo.',
+    '',
+    'Contestá en ' + (IDIOMA_JUEZ[lang] || IDIOMA_JUEZ.es) + ', corto, sin adornos.'
+  ].join('\n');
+  const cuerpo = {
+    model: MODELO,
+    max_tokens: 8000,
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: ESQUEMA } },
+    messages: [{ role: 'user', content:
+      fotos.map(d => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } }))
+        .concat([{ type: 'text', text: texto }]) }]
+  };
+  const ab = new AbortController();
+  const reloj = setTimeout(() => ab.abort(), 60000);
+  let r;
+  try {
+    r = await fetch(API, { method: 'POST', signal: ab.signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': LLAVE,
+        'anthropic-version': '2023-06-01',
+        /* el encabezado que el propio SDK manda cuando se le pide
+           `dangerouslyAllowBrowser`: sin el, la API no contesta a un navegador */
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(cuerpo) });
+  } catch (e){
+    clearTimeout(reloj);
+    throw new Error(e.name === 'AbortError' ? 'tardó demasiado' : 'no se pudo conectar');
+  }
+  clearTimeout(reloj);
+  if (!r.ok){
+    let det = '';
+    try { const j = await r.json(); det = (j.error && j.error.message) || ''; } catch (e) {}
+    if (r.status === 401) throw new Error('la llave no sirve (401)');
+    if (r.status === 429) throw new Error('demasiadas preguntas seguidas (429)');
+    throw new Error('la API contestó ' + r.status + (det ? ': ' + det.slice(0, 120) : ''));
+  }
+  const j = await r.json();
+  if (j.stop_reason === 'refusal') throw new Error('el modelo no quiso contestar');
+  const bloque = (j.content || []).find(b => b.type === 'text');
+  if (!bloque) throw new Error('vino sin texto');
+  let d;
+  try { d = JSON.parse(bloque.text); } catch (e){ throw new Error('no se entendió la respuesta'); }
+  return { puntaje: cl(Math.round(d.puntaje), 0, 100), titulo: d.titulo || '',
+           bueno: d.bueno || '', mejorar: d.mejorar || '', juez: 'ia', modelo: j.model || MODELO,
+           uso: j.usage || null };
+}
+
+/* ══════════ EL QUE DECIDE ══════════
+   Con llave pregunta; sin llave —o si la pregunta falla— puntua el de la casa,
+   y en los dos casos devuelve QUIEN puntuo. Un juego que se queda colgado
+   porque no hay internet no es un juego. */
+async function juzga(tema, lang){
+  const m = mideObra();
+  if (m.vacio) return { puntaje: 0, titulo: '', bueno: '', mejorar: '', juez: 'local', vacio: true, medida: m };
+  if (!hayLlave()) return { ...juezCasa(m), medida: m };
+  try {
+    const r = await juzgaIA(tema, lang);
+    return { ...r, medida: m };
+  } catch (e){
+    return { ...juezCasa(m), medida: m, fallo: e.message || 'error' };
+  }
+}
+/* el juez de la casa arma su frase con lo que MIDIO, que es lo unico que sabe:
+   decir «se parece poco al tema» seria mentir, porque no puede saberlo */
+function juezCasa(m){
+  const p = m.partes;
+  const flojo = Object.keys(p).sort((a, b) => p[a] - p[b])[0];
+  const fuerte = Object.keys(p).sort((a, b) => p[b] - p[a])[0];
+  return { puntaje: m.puntaje, titulo: '', juez: 'local', clave: { flojo, fuerte },
+           bueno: '', mejorar: '' };
+}
+
+/* ══════════════════ f.js ══════════════════ */
+/* ══════════════════════ EL JUEGO ══════════════════════
+   Las manos, el reloj, las pantallas y la paleta. Todo lo que hay debajo —la
+   reja, el atlas, el juez— ya existe; esto es lo que lo hace jugable. */
+
+/* ══════════ LOS NOMBRES ══════════
+   Cincuenta y siete bloques base en tres idiomas, y los cuarenta y ocho de
+   color DERIVADOS de `COLORES` mas una palabra: asi el nombre del bloque y su
+   entrada en la tabla de bloques no pueden discrepar, que es exactamente lo que
+   pasa cuando se escriben dos listas a mano. */
+const NOMBRES = {
+  pasto:['Pasto','Grass','Grama'], tierra:['Tierra','Dirt','Terra'],
+  camino:['Camino','Path','Caminho'], arena:['Arena','Sand','Areia'],
+  grava:['Grava','Gravel','Cascalho'], nieve:['Nieve','Snow','Neve'],
+  hielo:['Hielo','Ice','Gelo'], hojas:['Hojas','Leaves','Folhas'],
+  hojasO:['Hojas de otoño','Autumn leaves','Folhas de outono'],
+  cactus:['Cactus','Cactus','Cacto'], calabaza:['Calabaza','Pumpkin','Abóbora'],
+  melon:['Melón','Melon','Melancia'], hongo:['Hongo','Mushroom','Cogumelo'],
+  musgo:['Musgo','Moss','Musgo'],
+  piedra:['Piedra','Stone','Pedra'], adoquin:['Adoquín','Cobblestone','Pedregulho'],
+  ladriP:['Ladrillo de piedra','Stone bricks','Tijolo de pedra'],
+  ladriPM:['Piedra musgosa','Mossy bricks','Pedra com musgo'],
+  ladrillo:['Ladrillo','Bricks','Tijolo'], arenisca:['Arenisca','Sandstone','Arenito'],
+  andesita:['Andesita','Andesite','Andesito'], diorita:['Diorita','Diorite','Diorito'],
+  granito:['Granito','Granite','Granito'], pizarra:['Pizarra','Deepslate','Ardósia'],
+  obsidiana:['Obsidiana','Obsidian','Obsidiana'], basalto:['Basalto','Basalt','Basalto'],
+  cuarzo:['Cuarzo','Quartz','Quartzo'], terracota:['Terracota','Terracotta','Terracota'],
+  rojiza:['Piedra rojiza','Red rock','Pedra vermelha'],
+  prismarina:['Prismarina','Prismarine','Prismarinho'],
+  troncoR:['Tronco de roble','Oak log','Tronco de carvalho'],
+  troncoO:['Tronco oscuro','Dark log','Tronco escuro'],
+  troncoA:['Tronco de abedul','Birch log','Tronco de bétula'],
+  tablaR:['Tabla de roble','Oak planks','Tábua de carvalho'],
+  tablaO:['Tabla oscura','Dark planks','Tábua escura'],
+  tablaA:['Tabla de abedul','Birch planks','Tábua de bétula'],
+  tablaN:['Tabla negra','Black planks','Tábua preta'],
+  bambu:['Bambú','Bamboo','Bambu'],
+  hierro:['Hierro','Iron','Ferro'], oro:['Oro','Gold','Ouro'],
+  diamante:['Diamante','Diamond','Diamante'], esmeralda:['Esmeralda','Emerald','Esmeralda'],
+  lapis:['Lapislázuli','Lapis','Lápis-lazúli'], cobre:['Cobre','Copper','Cobre'],
+  carbon:['Carbón','Coal','Carvão'], redstone:['Redstone','Redstone','Redstone'],
+  luminosa:['Piedra luminosa','Glowstone','Pedra luminosa'],
+  linterna:['Linterna','Lantern','Lanterna'], lava:['Lava','Lava','Lava'],
+  fuego:['Fuego','Fire','Fogo'], agua:['Agua','Water','Água'],
+  vidrio:['Vidrio','Glass','Vidro'], farol:['Farol','Sea lantern','Lanterna do mar']
+};
+const MATCOL = { lana:['Lana','Wool','Lã'], horm:['Hormigón','Concrete','Concreto'],
+                 vid:['Vidrio','Glass','Vidro'] };
+const CATNOM = {
+  nat:  ['NATURAL','NATURE','NATUREZA'], pie: ['PIEDRA','STONE','PEDRA'],
+  mad:  ['MADERA','WOOD','MADEIRA'],     met: ['METAL','METAL','METAL'],
+  luz:  ['LUZ','LIGHT','LUZ'],           lana:['LANA','WOOL','LÃ'],
+  horm: ['HORMIGÓN','CONCRETE','CONCRETO'], vidr:['VIDRIO','GLASS','VIDRO']
+};
+const IDX_L = { es: 0, en: 1, pt: 2 };
+function nombreBloque(b){
+  const id = BLOQUES[b].id, i = IDX_L[LANG] || 0;
+  if (NOMBRES[id]) return NOMBRES[id][i];
+  const p = id.indexOf('_');
+  if (p > 0){
+    const mat = MATCOL[id.slice(0, p)], col = COLORES.find(c => c[0] === id.slice(p + 1));
+    if (mat && col) return mat[i] + ' ' + (i === 0 ? col[0] : i === 1 ? col[2] : col[3]);
+  }
+  return id;
+}
+
+/* ══════════ ESTADO ══════════ */
+let LANG = 'es', PANT = 'idioma', GIRADO = true, SUCIA = true;
+let MANO = 1, CATV = 'nat', RELOJ_EL = 'normal';
+/* ── DONDE APARECE EL JUGADOR SALE DE UNA CUENTA ──
+   Tiene que ver la parcela entera Y llegar al centro con el alcance de siete:
+   con pitch -0.55 el rayo toca el piso a 6.5 m, o sea justo en (8, 0, 8). Mas
+   lejos y el primer bloque no se puede poner; mas cerca y no se ve el terreno. */
+let JUG = { x: N/2, y: 3.4, z: N - 1.5, yaw: 0, pitch: -0.55, vx: 0, vy: 0, vz: 0 };
+/* ── LAS TRES FUENTES DE MOVIMIENTO VAN SEPARADAS ──
+   El joystick, los botones de subir y bajar y el teclado escriben cada uno lo
+   suyo y el bucle los suma. Con una sola variable, el teclado —que se lee TODOS
+   los cuadros— le pone cero al boton de subir en el cuadro siguiente al que se
+   apreto, y el boton deja de funcionar sin que nada falle. */
+let ADE = 0, LAT = 0, SUB = 0;          /* lo que resulta, de -1 a 1 */
+let jADE = 0, jLAT = 0;                 /* el joystick */
+let bSUB = 0;                           /* los botones de subir y bajar */
+let tADE = 0, tLAT = 0, tSUB = 0;       /* el teclado */
+let RES = null;                          /* lo que devolvio el juez */
+let ULT_AVISO = 999;
+const ALCANCE = 7.0;
+const VEL = 7.2, VELY = 5.4, ACEL = 26, ROCE = 12;
+
+/* ── LO QUE SE GUARDA PASA POR UNA SOLA PUERTA ──
+   Con el `localStorage.setItem` escrito adentro de cada manejador de boton, el
+   ajuste se guarda SOLO por ese camino: medido, cambiar la calidad o el idioma
+   desde cualquier otro lado y recargar volvia a los valores de fabrica. */
+function guarda(k, v){ try { localStorage.setItem(k, v); } catch (e) {} }
+function lee(k, d){ try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+function ponCalidad(c){ if (!CALIDADES[c]) return CAL; calidad(c); guarda('cubos_cal', c); return CAL; }
+function ponReloj(r){ if (RELOJES[r]) { RELOJ_EL = r; guarda('cubos_reloj', r); } return RELOJ_EL; }
+function ponLang(l){ if (!TXT[l]) return LANG; LANG = l; guarda('cubos_lang', l); pintaIdioma(); return LANG; }
+
+/* ══════════ EL MARCO ══════════ */
+function acomoda(){
+  const W = innerWidth, H = innerHeight, vert = H > W;
+  const m = document.getElementById('marco');
+  GIRADO = vert;
+  m.className = vert ? 'girado' : 'derecho';
+  m.style.width  = (vert ? H : W) + 'px';
+  m.style.height = (vert ? W : H) + 'px';
+  if (render) mide();
+}
+/* ── UN ARRASTRE DE PANTALLA NO ES UN ARRASTRE DEL CUADRO ──
+   Con el marco girado noventa grados, mover el dedo hacia la derecha de la
+   pantalla es moverlo hacia ABAJO adentro del juego. Sin esta conversion, el
+   joystick manda para el costado equivocado y mirar sale al reves — es el mismo
+   defecto que ya costo una medicion en PUERTA BLANCA. */
+function aCuadro(dx, dy){ return GIRADO ? [dy, -dx] : [dx, dy]; }
+
+/* ══════════ LA PUNTERIA ══════════ */
+function dirCam(){
+  const cp = Math.cos(JUG.pitch), sp = Math.sin(JUG.pitch);
+  return [-Math.sin(JUG.yaw)*cp, sp, -Math.cos(JUG.yaw)*cp];
+}
+/* ── EL SUELO TIENE QUE SER APOYO, SI NO EL JUEGO NO ARRANCA ──
+   La parcela empieza VACIA, asi que si el bloque nuevo necesitara una cara de
+   otro bloque no habria forma de poner el primero. El rayo, cuando no pega en
+   nada, se cruza con el plano del piso. */
+function apunta(){
+  const d = dirCam();
+  const h = raya(JUG.x, JUG.y, JUG.z, d[0], d[1], d[2], ALCANCE);
+  if (h) return { rompe: { x: h.x, y: h.y, z: h.z },
+                  pone: { x: h.x + h.cara[0], y: h.y + h.cara[1], z: h.z + h.cara[2] } };
+  if (d[1] < -1e-4){
+    const t = -JUG.y/d[1];
+    if (t > 0 && t <= ALCANCE){
+      const px = Math.floor(JUG.x + d[0]*t), pz = Math.floor(JUG.z + d[2]*t);
+      if (px >= 0 && px < N && pz >= 0 && pz < N) return { rompe: null, pone: { x: px, y: 0, z: pz } };
+    }
+  }
+  return { rompe: null, pone: null };
+}
+
+/* ══════════ EL CHOQUE ══════════
+   El jugador vuela —en un build battle de dos minutos y medio, la gravedad solo
+   sirve para caerse de la torre que uno acaba de hacer— pero NO atraviesa lo
+   que construyo: adentro de un bloque la camara ve negro y eso se lee a juego
+   roto, no a estar adentro de una casa. */
+function solido(b){ return b > 0 && BLOQUES[b].id !== 'agua'; }
+function choca(x, y, z){
+  const r = 0.30, ry = 0.62;
+  for (let ix = Math.floor(x - r); ix <= Math.floor(x + r); ix++)
+    for (let iy = Math.floor(y - ry); iy <= Math.floor(y + ry); iy++)
+      for (let iz = Math.floor(z - r); iz <= Math.floor(z + r); iz++)
+        if (solido(bloqueEn(ix, iy, iz))) return true;
+  return false;
+}
+function pasoJug(dt){
+  const cy = Math.cos(JUG.yaw), sy = Math.sin(JUG.yaw);
+  const dx = (-sy)*ADE + cy*LAT, dz = (-cy)*ADE + (-sy)*LAT;
+  const n = Math.hypot(dx, dz) || 1, k = Math.min(1, Math.hypot(ADE, LAT));
+  const ox = dx/n*VEL*k, oz = dz/n*VEL*k, oy = SUB*VELY;
+  const f = 1 - Math.exp(-(k || Math.abs(SUB) ? ACEL : ROCE)*dt);
+  JUG.vx += (ox - JUG.vx)*f; JUG.vz += (oz - JUG.vz)*f; JUG.vy += (oy - JUG.vy)*f;
+  const nx = JUG.x + JUG.vx*dt, ny = JUG.y + JUG.vy*dt, nz = JUG.z + JUG.vz*dt;
+  /* eje por eje: asi se desliza contra la pared en vez de clavarse en la esquina */
+  if (!choca(nx, JUG.y, JUG.z)) JUG.x = nx; else JUG.vx = 0;
+  if (!choca(JUG.x, ny, JUG.z)) JUG.y = ny; else JUG.vy = 0;
+  if (!choca(JUG.x, JUG.y, nz)) JUG.z = nz; else JUG.vz = 0;
+  JUG.x = cl(JUG.x, -9, N + 9); JUG.z = cl(JUG.z, -9, N + 9);
+  JUG.y = cl(JUG.y, 0.62, ALTO + 12);
+  JUG.pitch = cl(JUG.pitch, -1.52, 1.52);
+}
+
+/* ══════════ PONER Y SACAR ══════════ */
+function pon(){
+  const a = apunta();
+  if (!a.pone || !dentro(a.pone.x, a.pone.y, a.pone.z)) { son('nada'); return false; }
+  if (bloqueEn(a.pone.x, a.pone.y, a.pone.z)) { son('nada'); return false; }
+  /* no se puede poner un bloque adentro de uno mismo */
+  const g = REJA[idx(a.pone.x, a.pone.y, a.pone.z)];
+  REJA[idx(a.pone.x, a.pone.y, a.pone.z)] = MANO;
+  const mal = choca(JUG.x, JUG.y, JUG.z);
+  REJA[idx(a.pone.x, a.pone.y, a.pone.z)] = g;
+  if (mal){ son('nada'); return false; }
+  ponBloque(a.pone.x, a.pone.y, a.pone.z, MANO);
+  SUCIA = true; if (RUN) RUN.puestos++;
+  son('pon'); return true;
+}
+function sac(){
+  const a = apunta();
+  if (!a.rompe){ son('nada'); return false; }
+  ponBloque(a.rompe.x, a.rompe.y, a.rompe.z, 0);
+  SUCIA = true; if (RUN) RUN.sacados++;
+  son('sac'); return true;
+}
+
+/* ══════════ LA PALETA ══════════ */
+function texDe(b, cara){ const t = BLOQUES[b].tex; return Array.isArray(t) ? t[cara] : t; }
+function dibujaFicha(cv, b){
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height, hT = Math.round(H*0.38);
+  c.clearRect(0, 0, W, H);
+  /* ── UN FONDO GRIS DEBAJO, PORQUE HAY BLOQUES TRANSLUCIDOS ──
+     El vidrio se dibuja al 20 % de opacidad: sobre la ficha casi negra los
+     dieciseis vidrios de color salian todos del mismo negro y la pestaña entera
+     era ilegible. Los opacos lo tapan entero, asi que no cuesta nada. */
+  c.fillStyle = '#6f7b88'; c.fillRect(0, 0, W, H);
+  const pon2 = (nom, y0, y1) => {
+    const i = TILES[nom]; if (i === undefined) return;
+    c.drawImage(atlasCv, (i % ATL)*TL, Math.floor(i/ATL)*TL, TL, TL, 0, y0, W, y1 - y0);
+  };
+  pon2(texDe(b, 0), 0, hT); pon2(texDe(b, 1), hT, H);
+  /* la cara de arriba mas clara y la de al lado mas oscura: es lo unico que
+     hace que un cuadrado plano se lea a cubo */
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(0, 0, W, hT);
+  c.fillStyle = 'rgba(0,0,0,.16)';       c.fillRect(0, hT, W, H - hT);
+}
+let PIEZAS = [];
+function armaPaleta(){
+  const tabs = document.getElementById('palTabs'), reja = document.getElementById('palReja');
+  tabs.innerHTML = ''; reja.innerHTML = ''; PIEZAS = [];
+  for (const c of CATS){
+    const b = document.createElement('button');
+    b.className = 'bt sec'; b.dataset.cat = c;
+    b.textContent = CATNOM[c][IDX_L[LANG] || 0];
+    b.onclick = () => { CATV = c; son('ui'); pintaPaleta(); };
+    tabs.appendChild(b);
+  }
+  for (let i = 1; i < NBLOQ; i++){
+    const d = document.createElement('div');
+    d.className = 'pieza'; d.dataset.b = i; d.title = nombreBloque(i);
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    dibujaFicha(cv, i); d.appendChild(cv);
+    d.onclick = () => { MANO = i; son('pal'); pintaMano(); cierraPaleta(); };
+    reja.appendChild(d); PIEZAS.push(d);
+  }
+  pintaPaleta();
+}
+function pintaPaleta(){
+  for (const b of document.getElementById('palTabs').children)
+    b.classList.toggle('sel', b.dataset.cat === CATV);
+  for (const d of PIEZAS){
+    const b = +d.dataset.b;
+    d.style.display = BLOQUES[b].cat === CATV ? '' : 'none';
+    d.classList.toggle('sel', b === MANO);
+  }
+}
+function abrePaleta(){ document.getElementById('paleta').classList.add('on'); CATV = BLOQUES[MANO].cat || CATV; pintaPaleta(); }
+function cierraPaleta(){ document.getElementById('paleta').classList.remove('on'); }
+function pintaMano(){
+  dibujaFicha(document.getElementById('manoCv'), MANO);
+  document.getElementById('manoNom').textContent = nombreBloque(MANO);
+}
+
+/* ══════════ LA OBRA DEL MENU ══════════
+   Un menu con la parcela VACIA detras muestra exactamente lo que el juego no
+   es. Esta escena se levanta al arrancar y se borra al tocar JUGAR, asi que lo
+   primero que se ve es una obra terminada girando: el juego explicado sin una
+   sola palabra. */
+function demoMenu(){
+  limpiaReja();
+  const p = (x, y, z, b) => ponBloque(x, y, z, b);
+  /* la casa */
+  for (let z = 2; z <= 8; z++) for (let x = 2; x <= 8; x++) p(x, 0, z, 16);
+  for (let y = 1; y <= 3; y++) for (let z = 2; z <= 8; z++) for (let x = 2; x <= 8; x++)
+    if (x === 2 || x === 8 || z === 2 || z === 8) p(x, y, z, 34);
+  for (let y = 1; y <= 3; y++) for (const [x, z] of [[2,2],[8,2],[2,8],[8,8]]) p(x, y, z, 31);
+  for (const [x, z] of [[4,2],[6,2],[2,5],[8,5],[5,8]]) p(x, 2, z, 52);
+  p(5, 1, 2, 0); p(5, 2, 2, 0);                      /* la puerta */
+  for (let k = 0; k <= 3; k++) for (let z = 2 + k; z <= 8 - k; z++) for (let x = 2 + k; x <= 8 - k; x++){
+    const b2 = x === 2 + k || x === 8 - k || z === 2 + k || z === 8 - k;
+    if (b2 || k === 3) p(x, 4 + k, z, 19);
+  }
+  p(3, 8, 3, 31); p(3, 7, 3, 31);                    /* la chimenea */
+  /* el arbol */
+  for (let y = 1; y <= 4; y++) p(12, y, 11, 31);
+  for (let y = 4; y <= 6; y++) for (let z = -2; z <= 2; z++) for (let x = -2; x <= 2; x++){
+    const r = Math.abs(x) + Math.abs(z) + (y - 4)*2;
+    if (r <= 3 && !(x === 0 && z === 0 && y < 6)) p(12 + x, y + 1, 11 + z, 8);
+  }
+  /* el camino, el charco y el farol */
+  for (let z = 9; z <= 15; z++) p(5, 0, z, 3);
+  for (let x = 6; x <= 10; x++) p(x, 0, 12, 3);
+  for (let z = 2; z <= 4; z++) for (let x = 11; x <= 13; x++) p(x, 0, z, 51);
+  p(9, 1, 10, 31); p(9, 2, 10, 31); p(9, 3, 10, 47);
+  for (const [x, z] of [[3,11],[6,14],[14,8],[2,13]]) p(x, 0, z, 13);
+  SUCIA = true;
+}
+/* ── LA CAMARA DEL MENU ORBITA, Y ES LA MISMA ESCENA DEL JUEGO ──
+   No hay una segunda animacion que mantener: se mueve el mismo lente. */
+let ORB = 0.9;
+function camMenu(dt){
+  ORB += dt*0.075;
+  const r = 20.0;
+  /* ── SE APUNTA POR ENCIMA DE LA OBRA, NO A ELLA ──
+     La columna del menu vive centrada, asi que una obra en el medio del cuadro
+     queda justo detras de los botones: medido, la casa salia tapada por JUGAR.
+     Apuntando doce metros por encima, la obra cae en el tercio de abajo —donde
+     el velo esta abierto— y el titulo queda sobre el cielo. */
+  cam.position.set(N/2 + Math.sin(ORB)*r, 10.5 + Math.sin(ORB*0.63)*2.0, N/2 + Math.cos(ORB)*r);
+  cam.lookAt(N/2, 13.2, N/2);
+  cam.updateMatrixWorld(true);
+}
+
+/* ══════════ PANTALLAS ══════════ */
+const PANS = ['pMenu', 'pAjustes', 'pPausa', 'pTema', 'pPunt', 'pFin', 'pIdioma'];
+function verPantalla(p){
+  if (p === 'menu' && !RUN) demoMenu();
+  PANT = p;
+  for (const id of PANS) document.getElementById(id).classList.toggle('on', id === 'p' + p[0].toUpperCase() + p.slice(1));
+  document.body.classList.toggle('jugando', p === 'juega');
+  if (p !== 'juega') cierraPaleta();
+  /* la cama suena en todas las pantallas menos la del idioma, que es anterior
+     al primer gesto: medido, con la lista corta la pantalla del final quedaba
+     en silencio absoluto (pico 0,0007) justo despues de la fanfarria */
+  camaOn(p !== 'idioma');
+}
+function TX(k){ return (TXT[LANG] || TXT.es)[k]; }
+
+function pintaIdioma(){
+  const g = id => document.getElementById(id);
+  g('mSub').textContent = TX('sub');
+  g('bJugar').textContent = TX('jugar');  g('bAjustes').textContent = TX('ajustes');
+  g('mJuez').textContent = hayLlave() ? TX('conLlave') : TX('sinLlave');
+  g('mPie').textContent = TX('pie');
+  g('aTit').textContent = TX('ajustes'); g('aGrafL').textContent = TX('graficos');
+  g('aRelojL').textContent = TX('reloj'); g('aIdiL').textContent = TX('idioma');
+  g('aLlaveL').textContent = TX('llave'); g('inLlave').placeholder = TX('pegar');
+  g('bGuardar').textContent = TX('guardar'); g('bQuitar').textContent = TX('quitar');
+  g('aAviso').textContent = TX('avisoLlave'); g('bVolver').textContent = TX('volver');
+  g('puTit').textContent = TX('pausa'); g('bSeguir').textContent = TX('seguir');
+  g('bBorrar').textContent = TX('borrar'); g('bMenu').textContent = TX('menu');
+  g('bMenu2').textContent = TX('menu'); g('tCons').textContent = TX('construi');
+  g('bEmpieza').textContent = TX('listo'); g('bSig').textContent = TX('siguiente');
+  g('cTexto').textContent = TX('pensando'); g('fTit').textContent = TX('final');
+  g('fTotal').textContent = TX('total'); g('bOtra').textContent = TX('otra');
+  g('hBueno').textContent = TX('bien'); g('hMejor').textContent = TX('mejorar');
+  g('hTitulo').textContent = TX('tema');
+  filas();
+  if (PIEZAS.length) { armaPaleta(); pintaMano(); }
+  /* ── LO QUE YA SE ESCRIBIO UNA VEZ HAY QUE VOLVER A ESCRIBIRLO ──
+     El tema del HUD, el cartel de la ronda y la pantalla de puntaje los escribe
+     quien los muestra, una sola vez. Sin esto, cambiar de idioma en partida deja
+     el juego en ingles con el tema en castellano: medido, los tres idiomas
+     devolvian «Una cascada». Es el mismo defecto que costo 107 claves en Z Force. */
+  pintaTema(); pintaPunt(); pintaFin();
+}
+function pintaTema(){
+  if (!RUN || !temaActual()) return;
+  const t = temaActual(), i = IDX_L[LANG] || 0;
+  const r = TX('ronda') + ' ' + (RUN.ronda + 1) + ' / ' + RONDAS;
+  document.getElementById('tema').textContent = t[1 + i];
+  document.getElementById('subronda').textContent = r;
+  document.getElementById('tRonda').textContent = r;
+  const n = document.getElementById('tNom');
+  n.textContent = t[1 + i];
+  entra(n, Math.min(52, Math.round(innerHeight*0.062)));
+}
+/* ── EL TAMAÑO DEL TEMA SALE DE LO QUE MIDE, NO DE UN NUMERO ──
+   Los cincuenta temas van de «Un gato» a «Una torta de cumpleaños» y encima en
+   tres idiomas: con un tamaño fijo, medido, «Una hamburguesa» salia cortada por
+   el borde derecho. Se achica hasta que la palabra mas larga entra de verdad. */
+function entra(el, max){
+  let s2 = max;
+  el.style.fontSize = s2 + 'px';
+  for (let k = 0; k < 24 && el.scrollWidth > el.clientWidth + 1; k++){
+    s2 -= 2; el.style.fontSize = s2 + 'px';
+  }
+  return s2;
+}
+/* las tres filas de ajustes se dibujan de una lista: agregar una calidad o un
+   reloj no puede obligar a acordarse de un boton en otro sitio */
+function filas(){
+  const arma = (cont, ops, act, cb) => {
+    cont.innerHTML = '';
+    for (const [v, txt] of ops){
+      const b = document.createElement('button');
+      b.className = 'bt sec' + (v === act() ? ' sel' : '');
+      b.textContent = txt;
+      b.onclick = () => { son('ui'); cb(v); filas(); };
+      cont.appendChild(b);
+    }
+  };
+  arma(document.getElementById('fGraf'),
+       [['baja', TX('baja')], ['media', TX('media')], ['alta', TX('alta')]],
+       () => CAL, ponCalidad);
+  arma(document.getElementById('fReloj'),
+       [['corto', TX('corto')], ['normal', TX('normal')], ['largo', TX('largo')]],
+       () => RELOJ_EL, ponReloj);
+  arma(document.getElementById('fIdioma'),
+       [['es', 'ESPAÑOL'], ['en', 'ENGLISH'], ['pt', 'PORTUGUÊS']],
+       () => LANG, ponLang);
+  arma(document.getElementById('fModelo'),
+       MODELOS.map(m => [m, m.replace('claude-', '').replace(/-\d+$/, '').toUpperCase()]),
+       () => MODELO, v => ponModelo(v));
+  document.getElementById('inLlave').value = hayLlave() ? '••••••••••••••••' : '';
+  /* sin llave, elegir modelo no significa nada: la fila se va entera */
+  document.getElementById('fModelo').style.display = hayLlave() ? '' : 'none';
+}
+
+/* ══════════ LO QUE EL JUEZ DE LA CASA SI PUEDE DECIR ══════════
+   No puede decir si se parece al tema —no lo mira— pero SI puede decir que
+   midio, y eso es informacion de verdad: «de lejos es una mancha plana» sale de
+   que la desviacion del mapa de alturas dio cero. Un numero pelado no le enseña
+   nada a nadie; estas dos frases son lo unico que el jugador puede accionar. */
+const FRASE = {
+  vol:    [['el tamaño está bien elegido','the size is right','o tamanho está certo'],
+           ['apuntá a unos trescientos bloques','aim for about three hundred blocks','mire uns trezentos blocos']],
+  varied: [['usaste muchas clases de bloque','you used a lot of different blocks','você usou muitos tipos de bloco'],
+           ['meté más clases de bloque','mix in more kinds of block','misture mais tipos de bloco']],
+  huella: [['ocupa bien la parcela','it fills the plot well','ocupa bem o terreno'],
+           ['usá más parcela, a lo ancho y a lo alto','use more of the plot, wider and taller','use mais terreno, em largura e altura']],
+  sim:    [['cierra bien por su eje','it reads symmetrical','fecha bem no seu eixo'],
+           ['probá que cierre por algún eje','try making it symmetrical on one axis','tente fechar em algum eixo']],
+  sup:    [['tiene detalle en la superficie','the surface has detail','a superfície tem detalhe'],
+           ['vaciala por dentro y dale más detalle','hollow it out and add detail','esvazie por dentro e dê mais detalhe']],
+  silueta:[['la silueta se lee de lejos','the silhouette reads from far away','a silhueta se lê de longe'],
+           ['variá más la altura: es lo que más se lee de lejos','vary the height more: it is what reads from far away','varie mais a altura: é o que mais se lê de longe']]
+};
+function fraseCasa(k, mal){ const f = FRASE[k]; return f ? f[mal ? 1 : 0][IDX_L[LANG] || 0] : ''; }
+
+/* ══════════ LA RONDA ══════════ */
+function muestraTema(){ pintaTema(); verPantalla('tema'); }
+function empiezaRonda(){
+  ULT_AVISO = 999;
+  JUG = { x: N/2, y: 3.4, z: N - 1.5, yaw: 0, pitch: -0.55, vx: 0, vy: 0, vz: 0 };
+  jADE = jLAT = bSUB = tADE = tLAT = tSUB = ADE = LAT = SUB = 0; ponPulgar(0, 0);
+  pintaTema();
+  SUCIA = true;
+  verPantalla('juega');
+}
+async function terminaRonda(){
+  verPantalla('punt');
+  document.getElementById('cargando').classList.toggle('on', hayLlave());
+  document.getElementById('resu').style.display = hayLlave() ? 'none' : '';
+  const t = temaActual(), i = IDX_L[LANG] || 0;
+  const r = await juzga(t[1 + i], LANG);
+  RES = r;
+  anotaRonda(r.puntaje, r.juez, r);
+  document.getElementById('cargando').classList.remove('on');
+  document.getElementById('resu').style.display = '';
+  pintaPunt();
+  son('fin');
+}
+function pintaPunt(){
+  const r = RES; if (!r || !RUN) return;
+  const g = id => document.getElementById(id);
+  g('rTema').textContent = TEMAS[RUN.temas[Math.min(RUN.ronda, RONDAS - 1)]][1 + (IDX_L[LANG] || 0)];
+  g('pnum').textContent = r.puntaje;
+  g('pjuez').textContent = r.vacio ? TX('vacio') : (r.juez === 'ia' ? TX('juezIA') : TX('juezLocal'));
+  const tarj = (caja, txt, val) => {
+    const d = g(caja); d.style.display = val ? '' : 'none';
+    if (val) g(txt).textContent = val;
+  };
+  const cl2 = r.clave;
+  tarj('tTitulo', 'xTitulo', r.titulo);
+  tarj('tBueno', 'xBueno', r.bueno || (cl2 ? fraseCasa(cl2.fuerte, false) : ''));
+  tarj('tMejor', 'xMejor', r.mejorar || (cl2 ? fraseCasa(cl2.flojo, true) : ''));
+  const m = r.medida, pie = [];
+  if (m && !m.vacio) pie.push(m.n + ' ' + TX('bloques').toLowerCase() + ' · ' + m.clases + ' ' + TX('clases').toLowerCase());
+  if (r.fallo) pie.push(TX('error') + ': ' + r.fallo);
+  g('rNota').textContent = pie.join(' — ');
+  g('bSig').textContent = RUN.fase === 'final' ? TX('total') : TX('siguiente');
+}
+function pintaFin(){
+  if (!RUN || !RUN.puntajes.length) return;
+  const g = id => document.getElementById(id);
+  g('pnum2').textContent = totalRun();
+  const l = g('fLista'); l.innerHTML = '';
+  for (let k = 0; k < RUN.puntajes.length; k++){
+    const d = document.createElement('div');
+    d.className = 'tarj uno';
+    const h = document.createElement('h4'); h.textContent = TEMAS[RUN.temas[k]][1 + (IDX_L[LANG] || 0)];
+    const p2 = document.createElement('p');
+    p2.textContent = RUN.puntajes[k] + ' · ' + (RUN.jueces[k] === 'ia' ? TX('juezIA') : TX('juezLocal'));
+    d.appendChild(h); d.appendChild(p2); l.appendChild(d);
+  }
+}
+function sigue(){
+  if (RUN.fase === 'final'){ pintaFin(); verPantalla('fin'); }
+  else { RES = null; rondaSiguiente(); SUCIA = true; muestraTema(); }
+}
+function partidaNueva(){
+  arrancaRun(0, RELOJES[RELOJ_EL]);
+  SUCIA = true; muestraTema();
+}
+
+/* ══════════ ENTRADA ══════════ */
+const DEDOS = new Map();
+let DPAL = -1, DMIRA = -1, TOCO = null;
+let REP_PON = 0, REP_SAC = 0;
+const REP = 0.12;
+
+function stickCentro(){
+  const r = document.getElementById('stick').getBoundingClientRect();
+  return [r.left + r.width/2, r.top + r.height/2, r.width/2];
+}
+function ponPulgar(lx, ly){
+  document.getElementById('pulgar').style.transform = 'translate(' + lx + 'px,' + ly + 'px)';
+}
+function armaEntrada(){
+  const m = document.getElementById('marco'), st = document.getElementById('stick');
+
+  st.addEventListener('pointerdown', e => {
+    e.preventDefault(); DPAL = e.pointerId;
+    try { st.setPointerCapture(e.pointerId); } catch (x) {}
+    moviStick(e);
+  });
+  const moviStick = e => {
+    const [cx, cy, R] = stickCentro();
+    let [lx, ly] = aCuadro(e.clientX - cx, e.clientY - cy);
+    const d = Math.hypot(lx, ly);
+    if (d > R){ lx = lx/d*R; ly = ly/d*R; }
+    jADE = -ly/R; jLAT = lx/R;
+    ponPulgar(lx, ly);
+  };
+  /* ── EL SEGUIMIENTO DEL JOYSTICK CUELGA DE LA VENTANA, NO DEL JOYSTICK ──
+     `setPointerCapture` es lo que hace que un dedo que se sale del circulo siga
+     mandando eventos al elemento, y puede FALLAR —tira si el puntero no esta
+     activo, y en el banco falla siempre—. Colgado de la ventana el seguimiento
+     no depende de que la captura haya funcionado: medido, con el dedo a 72 px
+     del centro de un joystick de 71,5 de radio, el escucha del elemento no
+     recibia nada y la palanca se quedaba clavada en cero. */
+  addEventListener('pointermove', e => { if (e.pointerId === DPAL) moviStick(e); });
+  const suelta = e => {
+    if (e.pointerId !== DPAL) return;
+    DPAL = -1; jADE = jLAT = 0; ponPulgar(0, 0);
+  };
+  addEventListener('pointerup', suelta);
+  addEventListener('pointercancel', suelta);
+
+  /* ── MIRAR: ARRASTRAR SOBRE EL LIENZO ──
+     Y el mismo dedo hace las otras dos cosas, que es como funciona cualquier
+     Minecraft de telefono: un toque corto pone un bloque y uno sostenido lo
+     rompe. Si el dedo se movio, era mirar y no toco nada. */
+  m.addEventListener('pointerdown', e => {
+    if (PANT !== 'juega') return;
+    if (e.target.closest && e.target.closest('.ac, #stick, .pan, #paleta')) return;
+    DMIRA = e.pointerId;
+    TOCO = { x: e.clientX, y: e.clientY, t: performance.now(), movio: 0, hizo: false };
+  }, true);
+  m.addEventListener('pointermove', e => {
+    if (e.pointerId !== DMIRA || !TOCO) return;
+    const [dx, dy] = aCuadro(e.clientX - TOCO.x, e.clientY - TOCO.y);
+    TOCO.movio += Math.hypot(dx, dy);
+    JUG.yaw   -= dx*0.0042;
+    JUG.pitch -= dy*0.0042;
+    JUG.pitch = cl(JUG.pitch, -1.52, 1.52);
+    TOCO.x = e.clientX; TOCO.y = e.clientY;
+    if (!TOCO.hizo && TOCO.movio < 14 && performance.now() - TOCO.t > 380){ TOCO.hizo = true; sac(); }
+  }, true);
+  const fin = e => {
+    if (e.pointerId !== DMIRA) return;
+    if (TOCO && !TOCO.hizo){
+      const dur = performance.now() - TOCO.t;
+      if (TOCO.movio < 14){ if (dur > 380) sac(); else pon(); }
+    }
+    DMIRA = -1; TOCO = null;
+  };
+  m.addEventListener('pointerup', fin, true);
+  m.addEventListener('pointercancel', fin, true);
+
+  /* ── Y SOLTAR UN BOTON TAMBIEN ──
+     Si el dedo se corre del boton antes de levantarlo, el `pointerup` no llega
+     nunca al elemento y el estado queda puesto: el jugador sube para siempre o
+     el ponedor automatico no para mas. La lista dice que puntero tiene cada
+     boton y la ventana los suelta a todos. */
+  const SOLT = [];
+  const boton = (id, abajo, arriba) => {
+    const el = document.getElementById(id); el._pid = -1;
+    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (x) {}
+      el._pid = e.pointerId; abajo(); });
+    SOLT.push(pid => { if (pid === undefined || el._pid === pid){ el._pid = -1; if (arriba) arriba(); } });
+  };
+  boton('bPon', () => { pon(); REP_PON = REP*2; }, () => REP_PON = 0);
+  boton('bSac', () => { sac(); REP_SAC = REP*2; }, () => REP_SAC = 0);
+  boton('bSube', () => bSUB = 1,  () => bSUB = 0);
+  boton('bBaja', () => bSUB = -1, () => bSUB = 0);
+  boton('bPal',  () => { son('ui'); abrePaleta(); });
+  boton('bPausa',() => { son('ui'); verPantalla('pausa'); });
+
+  const suelto = e => { for (const f of SOLT) f(e.pointerId); };
+  addEventListener('pointerup', suelto);
+  addEventListener('pointercancel', suelto);
+  /* y si la pagina se va a segundo plano con un boton apretado, tambien: sin
+     argumento, cada boton se suelta sin fijarse de que puntero venia */
+  addEventListener('blur', () => { for (const f of SOLT) f(); bSUB = 0; REP_PON = REP_SAC = 0; });
+
+  document.getElementById('bCierraPal').onclick = () => { son('ui'); cierraPaleta(); };
+  document.getElementById('paleta').addEventListener('pointerdown', e => {
+    if (e.target.id === 'paleta') cierraPaleta();
+  });
+
+  /* teclado, que en una notebook es lo unico que hay */
+  const tec = {};
+  addEventListener('keydown', e => {
+    tec[e.code] = 1;
+    if (e.code === 'Escape' && PANT === 'juega'){ verPantalla('pausa'); }
+    else if (e.code === 'KeyE' && PANT === 'juega'){ abrePaleta(); }
+  });
+  addEventListener('keyup', e => { tec[e.code] = 0; });
+  addEventListener('blur', () => { for (const k in tec) tec[k] = 0; tADE = tLAT = tSUB = 0; bSUB = 0; });
+  TECLAS = tec;
+}
+let TECLAS = {};
+function juntaEntrada(){
+  tADE = (TECLAS.KeyW ? 1 : 0) - (TECLAS.KeyS ? 1 : 0);
+  tLAT = (TECLAS.KeyD ? 1 : 0) - (TECLAS.KeyA ? 1 : 0);
+  tSUB = (TECLAS.Space ? 1 : 0) - (TECLAS.ShiftLeft ? 1 : 0);
+  ADE = cl(jADE + tADE, -1, 1);
+  LAT = cl(jLAT + tLAT, -1, 1);
+  SUB = cl(bSUB + tSUB, -1, 1);
+}
+
+/* ══════════ EL BUCLE ══════════
+   Paso fijo de sesenta con interpolacion en el dibujo: un telefono a 30 y una
+   notebook a 144 tienen que jugar el mismo juego, si no la velocidad de vuelo
+   sale distinta y eso no es rendimiento, es otro juego. */
+const PASO = 1/60;
+let ACUM = 0, TPREV = 0;
+function bucle(ms){
+  requestAnimationFrame(bucle);
+  const t = ms/1000;
+  let dt = TPREV ? t - TPREV : PASO; TPREV = t;
+  if (dt > 0.25) dt = 0.25;
+  ACUM += dt;
+  let n = 0;
+  while (ACUM >= PASO && n++ < 8){
+    ACUM -= PASO;
+    if (PANT === 'juega'){
+      juntaEntrada();
+      pasoJug(PASO);
+      if (REP_PON > 0){ REP_PON -= PASO; if (REP_PON <= 0){ pon(); REP_PON = REP; } }
+      if (REP_SAC > 0){ REP_SAC -= PASO; if (REP_SAC <= 0){ sac(); REP_SAC = REP; } }
+      pasoRun(PASO);
+      if (RUN && RUN.fase === 'juzga'){ RUN.fase = 'esperando'; terminaRonda(); }
+    }
+  }
+  if (SUCIA && armaMalla) { armaMalla(); SUCIA = false; }
+  ponCam(dt);
+  if (PANT === 'juega') hud();
+  pinta();
+}
+function ponCam(dt){
+  if (PANT !== 'juega' && PANT !== 'pausa'){
+    camMenu(dt || 0); gMira.visible = false; gFantasma.visible = false; return;
+  }
+  cam.rotation.order = 'YXZ';
+  cam.position.set(JUG.x, JUG.y, JUG.z);
+  cam.rotation.y = JUG.yaw; cam.rotation.x = JUG.pitch; cam.rotation.z = 0;
+  cam.updateMatrixWorld(true);
+  const a = apunta();
+  gMira.visible = PANT === 'juega' && !!a.rompe;
+  if (a.rompe) gMira.position.set(a.rompe.x + 0.5, a.rompe.y + 0.5, a.rompe.z + 0.5);
+  const ok = PANT === 'juega' && a.pone && dentro(a.pone.x, a.pone.y, a.pone.z) && !bloqueEn(a.pone.x, a.pone.y, a.pone.z);
+  gFantasma.visible = !!ok;
+  if (ok) gFantasma.position.set(a.pone.x + 0.5, a.pone.y + 0.5, a.pone.z + 0.5);
+}
+function hud(){
+  if (!RUN) return;
+  const q = Math.max(0, RUN.reloj - RUN.t);
+  const mm = Math.floor(q/60), ss = Math.floor(q % 60);
+  document.getElementById('reloj').textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;
+  const rel = document.getElementById('relleno');
+  rel.style.width = (100*q/RUN.reloj).toFixed(1) + '%';
+  rel.classList.toggle('poco', q < 30);
+  const e = Math.ceil(q);
+  if (e !== ULT_AVISO && (e === 30 || e === 10 || (e <= 5 && e >= 1))){ ULT_AVISO = e; son('reloj'); }
+}
+
+/* ══════════ ARRANQUE ══════════ */
+function arranca(){
+  LANG = lee('cubos_lang', '');
+  RELOJ_EL = RELOJES[lee('cubos_reloj', 'normal')] ? lee('cubos_reloj', 'normal') : 'normal';
+  cargaLlave();
+  acomoda();
+  armaEscena(document.getElementById('cv'));
+  calidad(CALIDADES[lee('cubos_cal', 'media')] ? lee('cubos_cal', 'media') : 'media');
+  demoMenu(); armaMalla();
+  armaEntrada();
+  armaPaleta(); pintaMano();
+  addEventListener('resize', acomoda);
+  addEventListener('orientationchange', () => setTimeout(acomoda, 120));
+  /* el audio despierta con el PRIMER gesto de verdad, que es el boton de
+     idioma y no JUGAR: ningun navegador deja sonar nada antes de uno */
+  const desp = () => { audioDespierta(); };
+  document.addEventListener('pointerdown', desp, { capture: true });
+  document.addEventListener('keydown', desp, { capture: true });
+
+  for (const b of document.querySelectorAll('#pIdioma [data-lang]'))
+    b.onclick = () => { ponLang(b.dataset.lang); verPantalla('menu'); son('ui'); };
+  document.getElementById('bJugar').onclick   = () => { son('ui'); partidaNueva(); };
+  document.getElementById('bAjustes').onclick = () => { son('ui'); verPantalla('ajustes'); };
+  document.getElementById('bVolver').onclick  = () => { son('ui'); verPantalla(RUN && RUN.fase === 'juega' ? 'pausa' : 'menu'); };
+  document.getElementById('bEmpieza').onclick = () => { son('ui'); empiezaRonda(); };
+  document.getElementById('bSeguir').onclick  = () => { son('ui'); verPantalla('juega'); };
+  document.getElementById('bBorrar').onclick  = () => { son('sac'); limpiaReja(); SUCIA = true; verPantalla('juega'); };
+  document.getElementById('bMenu').onclick    = () => { son('ui'); RUN = null; verPantalla('menu'); };
+  document.getElementById('bMenu2').onclick   = () => { son('ui'); RUN = null; verPantalla('menu'); };
+  document.getElementById('bSig').onclick     = () => { son('ui'); sigue(); };
+  document.getElementById('bOtra').onclick    = () => { son('ui'); partidaNueva(); };
+  document.getElementById('bGuardar').onclick = () => {
+    const v = document.getElementById('inLlave').value.trim();
+    if (v && v.indexOf('•') < 0) guardaLlave(v);
+    son('ui'); pintaIdioma(); };
+  document.getElementById('bQuitar').onclick  = () => { guardaLlave(''); son('ui'); pintaIdioma(); };
+
+  if (LANG && TXT[LANG]){ pintaIdioma(); verPantalla('menu'); }
+  else { LANG = 'es'; pintaIdioma(); verPantalla('idioma'); }
+  requestAnimationFrame(bucle);
+}
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Una afirmacion sin numero no vale, y todo lo que se afirma de este juego se
+   mide desde aca. */
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message || e.error)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + String(e.reason)));
+
+window.__C = {
+  estado(){
+    const m = mideObra();
+    return { pant: PANT, girado: GIRADO, cal: CAL, lang: LANG, reloj: RELOJ_EL,
+      llave: hayLlave(), modelo: MODELO,
+      ronda: RUN ? RUN.ronda + 1 : 0, rondas: RONDAS, fase: RUN ? RUN.fase : null,
+      tema: RUN ? temaActual()[1 + (IDX_L[LANG] || 0)] : null,
+      t: RUN ? +RUN.t.toFixed(2) : 0, resta: RUN ? +(RUN.reloj - RUN.t).toFixed(2) : 0,
+      puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0,
+      n: m.n || 0, clases: m.clases || 0, puntaje: m.puntaje || 0,
+      mano: MANO, manoNom: nombreBloque(MANO), cat: CATV,
+      jug: { x: +JUG.x.toFixed(2), y: +JUG.y.toFixed(2), z: +JUG.z.toFixed(2),
+             yaw: +JUG.yaw.toFixed(3), pitch: +JUG.pitch.toFixed(3) } };
+  },
+  /* el marco esta girado noventa grados EXACTOS, asi que la caja alineada a los
+     ejes que devuelve getBoundingClientRect sigue siendo la caja de verdad: un
+     rectangulo girado un cuarto de vuelta sigue siendo un rectangulo */
+  marco(){ const r = document.getElementById('marco').getBoundingClientRect();
+    const c = document.getElementById('cv');
+    return { w: Math.round(r.width), h: Math.round(r.height), clase: document.getElementById('marco').className,
+             cv: [c.clientWidth, c.clientHeight], rt: [RT.width, RT.height] }; },
+  solapes(ids){
+    const L = ids || ['tema','subronda','barra','reloj','mano','stick','bPon','bSac','bSube','bBaja','bPal','bPausa','cruz'];
+    const c = [];
+    for (const id of L){
+      const e = document.getElementById(id); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || +s.opacity < 0.05) continue;
+      c.push([id, r]);
+    }
+    const ch = [];
+    for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++){
+      const a = c[i][1], b = c[j][1];
+      if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)
+        ch.push(c[i][0] + '×' + c[j][0]);
+    }
+    return { n: c.length, choques: ch };
+  },
+  /* que TODO lo del panel entre en el cuadro, que es distinto de que no se
+     solapen: un boton que queda por debajo del borde no se toca nunca */
+  panel(id){
+    const p = document.getElementById(id), c = p.querySelector('.caja');
+    const m = document.getElementById('marco').getBoundingClientRect();
+    /* ── SE MIDE CON offsetTop, NO CON getBoundingClientRect ──
+       El marco esta girado noventa grados, asi que la caja de pantalla de un
+       hijo tiene los ejes cambiados: los trece hijos del panel de ajustes daban
+       todos el mismo 166..726, que es el ANCHO del marco. offsetTop y
+       offsetHeight son coordenadas de maquetacion y no las toca el transform. */
+    const h = [...c.children].map(e => [e.id || e.className, e.offsetTop, e.offsetTop + e.offsetHeight]);
+    const alto = c.scrollHeight, caja = c.clientHeight;
+    return { alto, caja, entra: alto <= caja + 1, marco: [Math.round(m.width), Math.round(m.height)], h };
+  },
+  /* el atlas entero encima de todo: auditar ciento diez texturas de a una es
+     inviable, y en una sola foto se ven las que salieron mal */
+  verAtlas(){
+    let d = document.getElementById('__atl');
+    if (d){ d.remove(); return false; }
+    d = document.createElement('div'); d.id = '__atl';
+    d.style.cssText = 'position:fixed;inset:0;z-index:999;background:#111;display:flex;align-items:center;justify-content:center';
+    const c = document.createElement('canvas'); c.width = c.height = ATLPX;
+    c.getContext('2d').drawImage(atlasCv, 0, 0);
+    c.style.cssText = 'width:min(100vw,100vh);height:min(100vw,100vh);image-rendering:pixelated';
+    d.appendChild(c); document.body.appendChild(d);
+    return { tiles: nTile, px: ATLPX };
+  },
+  costo(){
+    render.info.autoReset = false; render.info.reset();
+    pinta();
+    const i = render.info;
+    const r = { llamadas: i.render.calls, tri: i.render.triangles, prog: i.programs.length,
+                geo: i.memory.geometries, tex: i.memory.textures };
+    render.info.autoReset = true;
+    return r;
+  },
+  pinta(){ ponCam(); pinta(); return true; },
+  cal(c){ ponCalidad(c); return { cal: CAL, rt: [RT.width, RT.height], sombra: SOMBRA_OK,
+    mapa: LUZSOL.shadow.mapSize.width, cielo: cielo.visible }; },
+  lang(l){ ponLang(l); return { lang: LANG, tema: document.getElementById('tema').textContent,
+    mano: document.getElementById('manoNom').textContent,
+    tabs: [...document.getElementById('palTabs').children].map(b => b.textContent) }; },
+  mano(i){ MANO = i; pintaMano(); pintaPaleta(); return { mano: MANO, nom: nombreBloque(MANO) }; },
+  cat(c){ CATV = c; pintaPaleta(); return { cat: CATV,
+    vis: PIEZAS.filter(d => d.style.display !== 'none').length }; },
+  paleta(v){ if (v) abrePaleta(); else cierraPaleta();
+    return { on: document.getElementById('paleta').classList.contains('on'),
+             piezas: PIEZAS.length, tabs: document.getElementById('palTabs').children.length }; },
+  bloques(){ const c = {}; for (const k of CATS) c[k] = 0;
+    for (let i = 1; i < NBLOQ; i++) c[BLOQUES[i].cat]++;
+    return { total: NBLOQ - 1, cats: c, tiles: nTile, atlas: ATLPX,
+             sinNombre: [...Array(NBLOQ - 1).keys()].map(i => i + 1)
+               .filter(i => nombreBloque(i) === BLOQUES[i].id) }; },
+  temas(){ return { total: TEMAS.length, run: RUN ? RUN.temas : null }; },
+  /* que los cincuenta temas entren en el cartel, en los tres idiomas */
+  titulos(){
+    const n = document.getElementById('tNom'), g = RUN && RUN.temas.slice(), mal = [];
+    if (!RUN) return 'sin partida';
+    for (const l of ['es', 'en', 'pt']){
+      const i = IDX_L[l];
+      for (let k = 0; k < TEMAS.length; k++){
+        n.textContent = TEMAS[k][1 + i];
+        const px = entra(n, Math.min(52, Math.round(innerHeight*0.062)));
+        if (n.scrollWidth > n.clientWidth + 1) mal.push(l + ':' + TEMAS[k][0]);
+      }
+    }
+    pintaTema();
+    return { probados: TEMAS.length*3, cortados: mal.length, mal: mal.slice(0, 6) };
+  },
+
+  ir(x, y, z, yaw, pitch){ JUG.x = x; JUG.y = y; JUG.z = z;
+    if (yaw !== undefined) JUG.yaw = yaw; if (pitch !== undefined) JUG.pitch = pitch;
+    JUG.vx = JUG.vy = JUG.vz = 0; ponCam(); return this.estado().jug; },
+  anda(n, ade, lat, sub){
+    jADE = ade || 0; jLAT = lat || 0; bSUB = sub || 0;
+    const a = [JUG.x, JUG.y, JUG.z];
+    for (let i = 0; i < (n || 60); i++){ juntaEntrada(); pasoJug(1/60); }
+    jADE = jLAT = bSUB = 0; juntaEntrada(); ponCam();
+    return { de: a.map(v => +v.toFixed(2)), a: [JUG.x, JUG.y, JUG.z].map(v => +v.toFixed(2)),
+             rec: +Math.hypot(JUG.x - a[0], JUG.y - a[1], JUG.z - a[2]).toFixed(2) }; },
+  mira(dyaw, dpitch){ JUG.yaw += dyaw || 0; JUG.pitch = cl(JUG.pitch + (dpitch || 0), -1.52, 1.52);
+    ponCam(); return { yaw: +JUG.yaw.toFixed(3), pitch: +JUG.pitch.toFixed(3) }; },
+  apunta(){ const a = apunta(); return { rompe: a.rompe, pone: a.pone,
+    mira: gMira.visible, fantasma: gFantasma.visible }; },
+  pon(){ return pon(); },
+  sac(){ return sac(); },
+  construye(q){ construye(q); SUCIA = true; armaMalla(); ponCam(); return mideObra(); },
+  limpia(){ limpiaReja(); SUCIA = true; armaMalla(); return true; },
+  malla(){ const t = performance.now(); SUCIA = true; const r = armaMalla();
+    return { caras: r.caras, vidrio: r.vidrio, ms: +(performance.now() - t).toFixed(2) }; },
+  lleno(b){ for (let y = 0; y < ALTO; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++)
+      REJA[idx(x,y,z)] = (x + y + z) % 3 ? (b || 15) : 0;
+    SUCIA = true; armaMalla(); return mideObra(); },
+  medida(){ return mideObra(); },
+  auditaJuez(){
+    const g = {}, guarda = REJA.slice();
+    for (const q of ['nada', 'losa', 'cubo', 'torre', 'casa']){ construye(q); g[q] = mideObra(); }
+    REJA.set(guarda); SUCIA = true; armaMalla();
+    return { puntajes: Object.keys(g).map(k => k + ':' + (g[k].puntaje || 0)).join(' '),
+             orden: Object.keys(g).sort((a, b) => (g[b].puntaje || 0) - (g[a].puntaje || 0)),
+             det: g }; },
+
+  llave(k){ guardaLlave(k === undefined ? '' : k); pintaIdioma(); return hayLlave(); },
+  /* ── EL CAMINO DE LA IA SE PRUEBA SIN GASTAR UNA LLAVE ──
+     Se intercepta `fetch`, se guarda lo que el juego iba a mandar y se contesta
+     con una respuesta armada a mano. Asi se comprueba lo unico que puede estar
+     mal de este lado —la direccion, los encabezados, la forma del cuerpo y como
+     se lee lo que vuelve— sin depender de tener una llave ni de que haya red. */
+  async pruebaIA(mal){
+    const orig = window.fetch; let cap = null;
+    window.fetch = async (u, o) => {
+      cap = { url: u, met: o.method, cab: Object.keys(o.headers).sort(),
+              nav: o.headers['anthropic-dangerous-direct-browser-access'],
+              ver: o.headers['anthropic-version'], llave: (o.headers['x-api-key'] || '').slice(0, 6) };
+      const b = JSON.parse(o.body);
+      cap.modelo = b.model; cab: 0;
+      cap.tope = b.max_tokens;
+      cap.esfuerzo = b.output_config && b.output_config.effort;
+      cap.formato = b.output_config && b.output_config.format && b.output_config.format.type;
+      cap.esquema = Object.keys((b.output_config.format.schema || {}).properties || {});
+      cap.bloques = b.messages[0].content.map(c => c.type);
+      cap.medios = b.messages[0].content.filter(c => c.type === 'image').map(c => c.source.media_type);
+      cap.tema = (b.messages[0].content.find(c => c.type === 'text') || {}).text.slice(0, 80);
+      if (mal === 'http') return { ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }) };
+      if (mal === 'refusal') return { ok: true, status: 200, json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      return { ok: true, status: 200, json: async () => ({ model: 'claude-opus-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 900, output_tokens: 60 },
+        content: [{ type: 'text', text: JSON.stringify({ puntaje: 73, titulo: 'una casita',
+          bueno: 'el techo cierra bien', mejorar: 'le falta color' }) }] }) };
+    };
+    const g = LLAVE; guardaLlave('sk-ant-de-prueba');
+    let r;
+    try { r = await juzga('una casa', LANG); } finally { window.fetch = orig; guardaLlave(g); }
+    return { mando: cap, volvio: { puntaje: r.puntaje, juez: r.juez, titulo: r.titulo,
+      bueno: r.bueno, mejorar: r.mejorar, modelo: r.modelo || null, fallo: r.fallo || null } };
+  },
+  foto(lado){ const f = fotoObra(lado || 224, 0.7);
+    return { n: f.length, bytes: f.map(d => d.length), jpg: f[0].slice(0, 12) }; },
+  async juez(){ const t = temaActual();
+    const r = await juzga(t ? t[1 + (IDX_L[LANG] || 0)] : 'una casa', LANG);
+    return { puntaje: r.puntaje, juez: r.juez, fallo: r.fallo || null, vacio: !!r.vacio,
+             titulo: r.titulo || '', modelo: r.modelo || null }; },
+
+  /* ── LA ENTRADA SE PRUEBA POR EL CAMINO DE VERDAD ──
+     Estos ganchos despachan PointerEvent sobre los mismos escuchas que usa el
+     dedo, asi que pasan por el filtro de `closest` y por la conversion de ejes
+     del marco girado. Una prueba que llama a `pon()` directo se saltea justo
+     las dos cosas que se pueden romper. */
+  ev(tipo, x, y, id){
+    const e = new PointerEvent(tipo, { pointerId: id || 7, clientX: x, clientY: y,
+      bubbles: true, cancelable: true, pointerType: 'touch', isPrimary: true });
+    const el = document.elementFromPoint(x, y) || document.getElementById('marco');
+    el.dispatchEvent(e); return el.id || el.tagName;
+  },
+  async toca(x, y, ms){
+    const c = document.getElementById('marco').getBoundingClientRect();
+    const px = x === undefined ? c.left + c.width/2 : x, py = y === undefined ? c.top + c.height/2 : y;
+    this.ev('pointerdown', px, py);
+    await new Promise(r => setTimeout(r, ms || 60));
+    this.ev('pointerup', px, py);
+    return { n: mideObra().n || 0, puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0 };
+  },
+  async palanca(dx, dy, ms){
+    const r = document.getElementById('stick').getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    this.ev('pointerdown', cx, cy, 9);
+    this.ev('pointermove', cx + dx, cy + dy, 9);
+    const a = { jADE: +jADE.toFixed(3), jLAT: +jLAT.toFixed(3) };
+    await new Promise(res => setTimeout(res, ms || 300));
+    const b = { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2) };
+    this.ev('pointerup', cx + dx, cy + dy, 9);
+    return { pide: a, quedo: b, ADE: ADE, LAT: LAT };
+  },
+  entrada(){ return { ADE, LAT, SUB, jADE, jLAT, bSUB, tADE, tLAT, tSUB }; },
+  async arrastra(dx, dy, ms){
+    const c = document.getElementById('marco').getBoundingClientRect();
+    const x = c.left + c.width/2, y = c.top + c.height/2;
+    const a0 = [JUG.yaw, JUG.pitch];
+    this.ev('pointerdown', x, y, 11);
+    for (let i = 1; i <= 6; i++) this.ev('pointermove', x + dx*i/6, y + dy*i/6, 11);
+    await new Promise(r => setTimeout(r, ms || 80));
+    this.ev('pointerup', x + dx, y + dy, 11);
+    return { dyaw: +(JUG.yaw - a0[0]).toFixed(3), dpitch: +(JUG.pitch - a0[1]).toFixed(3),
+             puestos: RUN ? RUN.puestos : 0 };
+  },
+  async botonReal(id, ms){
+    const r = document.getElementById(id).getBoundingClientRect();
+    const x = r.left + r.width/2, y = r.top + r.height/2;
+    const y0 = +JUG.y.toFixed(2);
+    this.ev('pointerdown', x, y, 13);
+    await new Promise(res => setTimeout(res, ms || 400));
+    this.ev('pointerup', x, y, 13);
+    return { de: y0, a: +JUG.y.toFixed(2), n: mideObra().n || 0,
+             puestos: RUN ? RUN.puestos : 0, sacados: RUN ? RUN.sacados : 0 };
+  },
+  partida(){ partidaNueva(); return this.estado(); },
+  empieza(){ empiezaRonda(); return this.estado(); },
+  finRonda(){ if (RUN){ RUN.t = RUN.reloj; } return RUN ? RUN.fase : null; },
+  pantalla(p){ verPantalla(p); return PANT; },
+  reloj(r){ ponReloj(r); return { reloj: RELOJ_EL, seg: RELOJES[RELOJ_EL] }; },
+  audio(){ return { ctx: AC ? AC.state : null, cama: !!CAMA, on: SON_ON }; },
+  /* el nivel se mide colgando un analizador del maestro: «suena» no es «no tiro
+     excepcion», y una cama que tape un golpe de bloque es un defecto de mezcla */
+  async nivel(que, ms){
+    if (!AC) return null;
+    const an = AC.createAnalyser(); an.fftSize = 2048; MAE.connect(an);
+    const d = new Float32Array(an.fftSize);
+    let pico = 0, s2 = 0, n = 0;
+    if (que) son(que);
+    const t0 = performance.now();
+    while (performance.now() - t0 < (ms || 700)){
+      an.getFloatTimeDomainData(d);
+      for (let i = 0; i < d.length; i++){ const v = Math.abs(d[i]); if (v > pico) pico = v; s2 += d[i]*d[i]; n++; }
+      await new Promise(r => setTimeout(r, 16));
+    }
+    MAE.disconnect(an);
+    return { que: que || 'fondo', pico: +pico.toFixed(4), rms: +Math.sqrt(s2/n).toFixed(4) };
+  },
+  son(q){ return son(q); }
+};
+
+arranca();
+</script></body></html>

@@ -1,0 +1,251 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>CUBOS</title>
+<style>
+:root{
+  --tinta:#0d1117; --papel:#eef3f7; --sol:#ffd166; --pasto:#6fc04a; --cielo:#4b8fd6;
+  --mw:100vw;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#07090d;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--papel);
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+
+/* ══════════ EL MARCO SE GIRA ══════════
+   El juego es apaisado y el telefono se agarra vertical, asi que se gira el
+   MARCO noventa grados y adentro va todo —lienzo, HUD, menus— en una sola
+   transformacion: el HUD y el mundo quedan alineados por construccion. En una
+   pantalla ya apaisada no se gira nada. Las dos salidas malas son encogerlo
+   —en un 412x892 un 16:9 sin girar mide 412x232, el 11 % de la pantalla— y
+   pedirle al jugador que gire el aparato, que es una pantalla que no hace nada. */
+#marco{position:absolute;left:50%;top:50%;transform-origin:50% 50%;overflow:hidden;background:#07090d}
+#marco.girado{transform:translate(-50%,-50%) rotate(90deg)}
+#marco.derecho{transform:translate(-50%,-50%)}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ PANELES ══════════ */
+.pan{position:absolute;inset:0;display:none;z-index:20;align-items:center;justify-content:center}
+.pan.on{display:flex}
+/* ── EL VELO ES UN DEGRADADO Y NO UNA OPACIDAD PAREJA ──
+   Detras del menu esta el mundo dibujandose de verdad. Un panel opaco tira a la
+   basura lo unico que este juego tiene para mostrar; cerrado arriba —donde va
+   el titulo— y abierto abajo, se ve la parcela. */
+.pan::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(7,9,13,.52) 0%,rgba(7,9,13,.88) 25%,
+    rgba(7,9,13,.88) 60%,rgba(7,9,13,.16) 100%)}
+.caja{position:relative;width:min(80%,560px);max-height:94%;overflow:auto;text-align:center;
+  display:flex;flex-direction:column;gap:1.15vh;padding:1vh 0}
+.tit{font-size:clamp(30px,7.4vh,64px);font-weight:900;letter-spacing:.14em;margin:0;
+  background:linear-gradient(180deg,#fff 0%,#bcd6ef 55%,#7fa6cc 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+.sub{font-size:clamp(10px,1.9vh,14px);letter-spacing:.26em;opacity:.72;margin:0}
+.bt{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:800;letter-spacing:.14em;
+  padding:1.35vh 2vh;border-radius:12px;color:#0d1117;font-size:clamp(12px,2.1vh,17px);
+  background:linear-gradient(180deg,#f4f8fb 0%,#c3d6e8 100%);
+  box-shadow:0 4px 0 #6c8299,0 8px 14px rgba(0,0,0,.4);transition:transform .07s}
+.bt:active{transform:translateY(3px);box-shadow:0 1px 0 #6c8299}
+.bt.sec{background:linear-gradient(180deg,#31404f 0%,#1e2a35 100%);color:#dbe7f2;box-shadow:0 4px 0 #121a22}
+.fila{display:flex;gap:.9vh;justify-content:center;flex-wrap:wrap}
+.fila .bt{flex:1;min-width:0;padding:1.3vh .6vh;letter-spacing:.05em}
+.bt.sel{outline:3px solid var(--sol);outline-offset:-3px}
+.rot{font-size:clamp(9px,1.6vh,12px);letter-spacing:.2em;opacity:.66;margin:0}
+.pie{font-size:clamp(9px,1.5vh,12px);opacity:.5;margin:0;line-height:1.5}
+input[type=password],input[type=text]{width:100%;padding:1.3vh 1.4vh;border-radius:10px;border:0;
+  background:#101821;color:#dbe7f2;font:inherit;font-size:clamp(11px,1.8vh,15px);letter-spacing:.05em}
+.mini{font-size:clamp(9px,1.45vh,12px);opacity:.62;line-height:1.55;margin:0;text-align:left}
+
+/* ══════════ HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10}
+body.jugando #hud{opacity:1}
+#arriba{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;align-items:center;
+  gap:.5vh;padding:1vh 0}
+#tema{font-size:clamp(13px,2.6vh,22px);font-weight:900;letter-spacing:.1em;
+  text-shadow:0 2px 6px rgba(0,0,0,.8)}
+#subronda{font-size:clamp(8px,1.4vh,11px);letter-spacing:.22em;opacity:.7}
+#barra{width:52%;height:9px;border-radius:99px;background:rgba(255,255,255,.16);overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#relleno{height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#7fe07f,#ffd166)}
+#relleno.poco{background:linear-gradient(90deg,#ff9d5c,#ff5c5c)}
+#reloj{font-size:clamp(11px,2vh,16px);font-weight:800;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+/* la mira: dos rayas finas, que es lo unico que hace falta para apuntar a un cubo */
+#cruz{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;opacity:.85}
+#cruz::before,#cruz::after{content:'';position:absolute;background:#fff;
+  box-shadow:0 0 2px rgba(0,0,0,.9)}
+#cruz::before{left:50%;top:0;width:2px;height:100%;margin-left:-1px}
+#cruz::after{top:50%;left:0;height:2px;width:100%;margin-top:-1px}
+/* el joystick */
+#stick{position:absolute;left:3.2vh;bottom:3.2vh;width:16vh;height:16vh;border-radius:50%;
+  background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.20);pointer-events:auto}
+#pulgar{position:absolute;left:50%;top:50%;width:6.4vh;height:6.4vh;margin:-3.2vh 0 0 -3.2vh;
+  border-radius:50%;background:rgba(255,255,255,.42);box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.ac{position:absolute;pointer-events:auto;border-radius:14px;border:2px solid rgba(255,255,255,.22);
+  background:rgba(12,18,25,.55);display:flex;align-items:center;justify-content:center;
+  font-weight:900;letter-spacing:.06em;font-size:clamp(9px,1.5vh,12px);color:#dfe9f3;
+  backdrop-filter:blur(3px)}
+.ac:active{background:rgba(90,130,170,.6)}
+#bPon{right:3.2vh;bottom:3.2vh;width:10.5vh;height:10.5vh;border-radius:50%}
+#bSac{right:15.5vh;bottom:3.2vh;width:7.6vh;height:7.6vh;border-radius:50%}
+#bSube{right:3.6vh;bottom:15.2vh;width:7vh;height:6vh}
+#bBaja{right:11.6vh;bottom:15.2vh;width:7vh;height:6vh}
+#bPal{left:3.2vh;top:auto;bottom:20.5vh;width:10vh;height:6vh}
+#bPausa{right:1.6vh;top:1.6vh;width:5vh;height:5vh;border-radius:12px;font-size:2vh}
+/* el bloque que se tiene en la mano, arriba a la izquierda */
+#mano{position:absolute;left:3.2vh;top:1.6vh;display:flex;align-items:center;gap:1vh}
+#manoCv{width:6vh;height:6vh;border-radius:10px;border:2px solid rgba(255,255,255,.3);
+  image-rendering:pixelated;background:#0d1117}
+#manoNom{font-size:clamp(9px,1.5vh,12px);letter-spacing:.1em;opacity:.85;text-shadow:0 2px 4px #000}
+
+/* ══════════ LA PALETA ══════════ */
+#paleta{position:absolute;inset:0;display:none;z-index:22;align-items:flex-end;justify-content:center}
+#paleta.on{display:flex}
+#paleta::before{content:'';position:absolute;inset:0;background:rgba(7,9,13,.72)}
+#palCaja{position:relative;width:94%;max-height:86%;display:flex;flex-direction:column;gap:1vh;
+  padding:1.4vh 0 2vh}
+#palTabs{display:flex;gap:.6vh;justify-content:center;flex-wrap:wrap}
+#palTabs .bt{padding:.9vh 1.2vh;font-size:clamp(9px,1.5vh,12px);letter-spacing:.06em;flex:0 0 auto}
+#palReja{display:grid;grid-template-columns:repeat(auto-fill,minmax(7vh,1fr));gap:.8vh;
+  overflow:auto;max-height:52vh;padding:.4vh}
+.pieza{position:relative;aspect-ratio:1;border-radius:9px;border:2px solid rgba(255,255,255,.18);
+  background:#0d1117;overflow:hidden;cursor:pointer}
+.pieza canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+.pieza.sel{border-color:var(--sol);box-shadow:0 0 0 2px rgba(255,209,102,.5)}
+
+/* ══════════ PANTALLA DE PUNTAJE ══════════ */
+#pnum{font-size:clamp(34px,8.6vh,78px);font-weight:900;line-height:1;
+  background:linear-gradient(180deg,#fff 0%,var(--sol) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 rgba(0,0,0,.5))}
+#pjuez{font-size:clamp(9px,1.6vh,13px);letter-spacing:.2em;opacity:.8}
+.tarj{background:rgba(255,255,255,.07);border-radius:12px;padding:.85vh 1.2vh;text-align:left}
+.tarj h4{margin:0 0 .4vh;font-size:clamp(9px,1.4vh,11px);letter-spacing:.2em;opacity:.6}
+.tarj p{margin:0;font-size:clamp(11px,1.75vh,14px);line-height:1.35}
+/* la lista del final va en una linea por ronda: el tema a la izquierda y el
+   puntaje a la derecha. Apiladas, los dos botones quedaban por debajo del borde
+   del cuadro — y un boton que no se ve no se toca */
+.tarj.uno{display:flex;justify-content:space-between;align-items:baseline;gap:1vh}
+.tarj.uno h4{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tarj.uno p{flex:0 0 auto;font-size:clamp(10px,1.6vh,13px);opacity:.9}
+#pAjustes .caja{gap:.72vh}
+/* ── EL ROTULO Y SU FILA VAN EN LA MISMA LINEA ──
+   Apilados, el panel medía 461 contra los 387 que entran en el cuadro: la
+   mitad de los ajustes quedaba abajo del borde. Al costado sobra ancho —la caja
+   mide 713 en un teléfono— y no sobra alto. */
+/* el tema es una frase y no un logo: sin espaciado y con la caja marcada, para
+   poder medir si entra */
+#tNom{letter-spacing:.02em;line-height:1.1;width:100%}
+.opc{display:flex;align-items:center;gap:1.2vh}
+.opc>.rot{flex:0 0 26%;text-align:right;letter-spacing:.12em}
+.opc>.fila,.opc>input{flex:1;min-width:0}
+#cargando{display:none;flex-direction:column;gap:1.4vh;align-items:center}
+#cargando.on{display:flex}
+.punto{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--sol);
+  animation:lat 1s infinite}
+.punto:nth-child(2){animation-delay:.18s}.punto:nth-child(3){animation-delay:.36s}
+@keyframes lat{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
+#pIdioma{z-index:40;background:#07090d}
+</style></head><body>
+<div id="marco" class="girado">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="arriba">
+      <div id="tema">—</div>
+      <div id="subronda">RONDA 1 / 3</div>
+      <div id="barra"><div id="relleno"></div></div>
+      <div id="reloj">2:40</div>
+    </div>
+    <div id="cruz"></div>
+    <div id="mano"><canvas id="manoCv" width="32" height="32"></canvas><span id="manoNom">—</span></div>
+    <div id="stick"><div id="pulgar"></div></div>
+    <div class="ac" id="bPon">＋</div>
+    <div class="ac" id="bSac">−</div>
+    <div class="ac" id="bSube">▲</div>
+    <div class="ac" id="bBaja">▼</div>
+    <div class="ac" id="bPal">▦</div>
+    <div class="ac" id="bPausa">‖</div>
+  </div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <h1 class="tit">CUBOS</h1>
+    <p class="sub" id="mSub">TE DICEN QUÉ. VOS LO CONSTRUÍS.</p>
+    <button class="bt" id="bJugar">JUGAR</button>
+    <button class="bt sec" id="bAjustes">AJUSTES</button>
+    <p class="rot" id="mJuez">—</p>
+    <p class="pie" id="mPie">—</p>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h2 class="tit" style="font-size:clamp(17px,3.4vh,26px)" id="aTit">AJUSTES</h2>
+    <div class="opc"><p class="rot" id="aGrafL">GRÁFICOS</p><div class="fila" id="fGraf"></div></div>
+    <div class="opc"><p class="rot" id="aRelojL">RELOJ</p><div class="fila" id="fReloj"></div></div>
+    <div class="opc"><p class="rot" id="aIdiL">IDIOMA</p><div class="fila" id="fIdioma"></div></div>
+    <div class="opc"><p class="rot" id="aLlaveL">LLAVE DE CLAUDE</p>
+      <input type="password" id="inLlave" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></div>
+    <div class="fila"><button class="bt" id="bGuardar">GUARDAR</button><button class="bt sec" id="bQuitar">QUITAR</button></div>
+    <div class="fila" id="fModelo"></div>
+    <p class="mini" id="aAviso">—</p>
+    <button class="bt sec" id="bVolver">VOLVER</button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h2 class="tit" style="font-size:clamp(22px,5vh,38px)" id="puTit">PAUSA</h2>
+    <button class="bt" id="bSeguir">SEGUIR</button>
+    <button class="bt sec" id="bBorrar">BORRAR TODO</button>
+    <button class="bt sec" id="bMenu">MENÚ</button>
+  </div></div>
+
+  <div class="pan" id="pTema"><div class="caja">
+    <p class="sub" id="tRonda">RONDA 1 / 3</p>
+    <p class="rot" id="tCons">CONSTRUÍ</p>
+    <h2 class="tit" id="tNom">—</h2>
+    <button class="bt" id="bEmpieza">LISTO</button>
+  </div></div>
+
+  <div class="pan" id="pPunt"><div class="caja">
+    <div id="cargando"><p class="sub" id="cTexto">—</p>
+      <div><span class="punto"></span><span class="punto"></span><span class="punto"></span></div></div>
+    <div id="resu" style="display:flex;flex-direction:column;gap:1.4vh">
+      <p class="sub" id="rTema">—</p>
+      <div id="pnum">0</div>
+      <p id="pjuez">—</p>
+      <div class="tarj" id="tTitulo" style="display:none"><h4 id="hTitulo">—</h4><p id="xTitulo">—</p></div>
+      <div class="tarj" id="tBueno" style="display:none"><h4 id="hBueno">—</h4><p id="xBueno">—</p></div>
+      <div class="tarj" id="tMejor" style="display:none"><h4 id="hMejor">—</h4><p id="xMejor">—</p></div>
+      <p class="pie" id="rNota">—</p>
+      <button class="bt" id="bSig">SIGUIENTE</button>
+    </div>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <p class="sub" id="fTit">FIN DE LA PARTIDA</p>
+    <div id="pnum2" style="font-size:clamp(30px,7vh,64px);font-weight:900;line-height:1;
+      background:linear-gradient(180deg,#fff 0%,var(--sol) 100%);-webkit-background-clip:text;
+      background-clip:text;color:transparent">0</div>
+    <p class="rot" id="fTotal">TOTAL</p>
+    <div id="fLista" style="display:flex;flex-direction:column;gap:.55vh"></div>
+    <button class="bt" id="bOtra">OTRA VEZ</button>
+    <button class="bt sec" id="bMenu2">MENÚ</button>
+  </div></div>
+
+  <div class="pan on" id="pIdioma"><div class="caja">
+    <h1 class="tit">CUBOS</h1>
+    <div class="fila">
+      <button class="bt" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div></div>
+
+  <div id="paleta"><div id="palCaja">
+    <div id="palTabs"></div>
+    <div id="palReja"></div>
+    <button class="bt sec" id="bCierraPal">✕</button>
+  </div></div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">

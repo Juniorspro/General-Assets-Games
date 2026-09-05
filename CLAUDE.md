@@ -231,6 +231,209 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+- **`Cubos.html` es "CUBOS"** (~136 KB, **sin un solo asset**: las ciento diez texturas se dibujan
+  por código en un atlas de 512 y el sonido es procedural). El decimotercer juego. Un **build
+  battle** de Minecraft: te dicen qué construir, tenés dos minutos y medio y una parcela de
+  **16 × 16 × 16**, y al final alguien puntúa lo que hiciste. **Ciento un bloques** en ocho
+  pestañas —catorce naturales, dieciséis de piedra, ocho de madera, ocho de metal, siete de luz y
+  las **cuarenta y ocho de color** (lana, hormigón y vidrio × dieciséis colores), que salen de dos
+  funciones y un tinte—, **cincuenta temas** sorteados sin repetir en **tres rondas**. Se vuela y se
+  construye con un pulgar en el joystick y el otro en la pantalla: **un toque pone un bloque y uno
+  sostenido lo rompe**, que es el gesto de cualquier Minecraft de teléfono. Y **hay DOS jueces**: el
+  de la casa, que mide la obra con seis medidas —volumen, variedad, huella, simetría, superficie y
+  silueta— y **el de verdad, que la MIRA**: se fotografía la obra desde tres ángulos y las tres
+  fotos van a `api.anthropic.com` con la llave **del jugador**, que vive sólo en su teléfono y nunca
+  entra al HTML. Sin llave se juega igual y **la pantalla del final dice siempre cuál de los dos
+  puntuó**. Apaisado adentro de un teléfono vertical, con el marco girado noventa grados. Vive
+  partido en `herramientas/cubos/partes/` y se arma con `python3 herramientas/cubos/armar.py`.
+
+### Centésima duodécima vuelta (2026-09-05): **CUBOS**, el decimotercer juego — un build battle donde el jurado es Claude de verdad
+
+Pedido: *"ahora haz otro juego de Minecraft dónde es buildbatle te dirán que construir y lo
+construyes con mucho mucho bloques y texturas y menú god y buenos gráficos y que una IA de verdad
+busca una API de IA que vea tu trabajo y té de una puntuación hazlo 90° girado"*.
+
+`juegos-pc/Cubos.html` (136 KB, **cero assets**). Vive partido en `herramientas/cubos/partes/` y se
+arma con `python3 herramientas/cubos/armar.py`.
+
+#### «UNA IA DE VERDAD QUE VEA TU TRABAJO»: LA LLAVE ES DEL JUGADOR Y NO SALE DE SU TELÉFONO
+
+Es la decisión de fondo del juego y de ella cuelga todo lo demás. Esto es **un archivo que se abre en
+un navegador**: no hay servidor donde esconder una llave, y meter una en el HTML sería repartirla a
+quien lo abra. Así que la pone el jugador, se guarda **sólo en el `localStorage` de su aparato**, y
+lo único que sale de ahí son **tres fotos y el tema**.
+
+De eso se siguen tres cosas, y las tres son obligatorias:
+- **Sin llave el juego se juega igual.** Un juego que no arranca sin una llave de API no es un juego,
+  es una demo. Puntúa el juez de la casa.
+- **La pantalla del final dice SIEMPRE cuál de los dos puntuó.** Un número sin autor no significa
+  nada, y decir «85» sobre una casa que es un cubo sería mentirle al jugador.
+- **Y si la pregunta falla, se cae al juez de la casa y se muestra por qué.** Medido: sin red,
+  `«no se pudo conectar»`; con la llave mal, `«la llave no sirve (401)»`; si el modelo se niega,
+  `«el modelo no quiso contestar»` — y en los tres casos la partida sigue con puntaje local.
+
+**SE LLAMA CON `fetch` A MANO Y NO CON EL SDK.** El SDK oficial es un paquete de npm: acá no hay
+bundler, y bajarlo de un CDN convertiría «un archivo que anda» en «un archivo que anda si el CDN
+contesta». Lo único que el SDK agrega sobre esta llamada es un encabezado —
+`anthropic-dangerous-direct-browser-access` — que está **copiado de su propio código**
+(`@anthropic-ai/sdk` `src/client.ts`), no de memoria. Sin él la API no le contesta a un navegador.
+
+**Y LA RESPUESTA VIENE CON ESQUEMA.** `output_config.format` de tipo `json_schema` con cuatro campos
+—puntaje entero de 0 a 100, título, lo bueno y lo que falta— así que no hay que parsear prosa; y se
+comprueba `stop_reason === 'refusal'`, que llega con HTTP 200 y no como error.
+
+**CÓMO SE PROBÓ SIN GASTAR UNA LLAVE.** No tengo ninguna y no se puede embarcar una, así que
+`__C.pruebaIA()` intercepta `fetch`, guarda **lo que el juego iba a mandar** y contesta con una
+respuesta armada a mano. Con eso está medido lo único que puede estar mal de este lado: la dirección,
+los cuatro encabezados, el modelo, el tope de salida, el esquema, que el cuerpo lleve **tres bloques
+de imagen JPEG más uno de texto**, y que la respuesta se lea en puntaje/título/bueno/mejorar. Lo que
+NO está probado es una llamada de verdad contra la API.
+
+**LAS FOTOS SE LEEN DEL DESTINO DE RENDER Y NO DEL LIENZO.** `canvas.toDataURL` sobre un contexto
+WebGL sin `preserveDrawingBuffer` devuelve negro apenas el navegador da vuelta el buffer, y activarlo
+cuesta una copia en **cada** cuadro para sacar tres fotos por ronda. Van por
+`readRenderTargetPixels`, dando vuelta las filas —vuelven de abajo hacia arriba— y a JPEG 0,72:
+**tres fotos de 7,6 a 9 KB**.
+
+#### EL JUEZ DE LA CASA MIDE LA OBRA, Y ESO SE AUDITA CON CUATRO OBRAS CONOCIDAS
+
+Seis medidas: volumen (una campana con el pico en trescientos bloques, que es lo que entra en dos
+minutos y medio construyendo con intención), variedad de clases, huella en planta y en alto,
+simetría, superficie —caras al aire sobre bloques, con el objetivo en 3,2, que es una cáscara de una
+capa— y **silueta**, la desviación del mapa de alturas.
+
+**Y LA SIMETRÍA ERA REGALADA.** Medido, una losa plana de 14 × 14 daba simetría **1,000** y se
+llevaba los catorce puntos enteros sin haber construido nada: un rectángulo chato es simétrico por
+definición. Se acota por lo que la obra levanta. Y el peso se movió a donde de verdad separa: `sup`
+da 0,757 a una losa y 0,791 a una casa —o sea que no distingue— mientras que la variedad y la
+silueta van de 0,27 a 0,70 y de 0,00 a 0,33.
+
+El auto-constructor levanta cuatro obras de forma conocida y el juez tiene que **ordenarlas**:
+
+| | nada | cubo macizo | losa plana | casa | torre |
+|---|---|---|---|---|---|
+| puntaje | **0** | 40 | 43 | **64** | **67** |
+
+Un juez que le da lo mismo a un cubo que a una casa no es un juez. Y la obra del menú —casa, árbol,
+charco, camino y farol, 226 bloques de diez clases— saca **75**, que es el techo razonable.
+
+**Y LAS DOS FRASES QUE DEVUELVE SON LO QUE MIDIÓ, NO LO QUE VIO.** No puede decir si se parece al
+tema —no lo mira— pero sí puede decir que la silueta le dio lo más bajo de las seis. Sin esas dos
+líneas, jugar sin llave es mirar un número pelado.
+
+#### EL DEFECTO DE FONDO: LA PASADA DE POST ESCRIBÍA EN LINEAL
+
+Todo salía oscuro —la pared de tabla de roble casi negra, el techo de ladrillo marrón— y **subir la
+luz no cambiaba nada**: bajé el tone mapping, subí el hemisférico, subí el piso de la oclusión, y el
+brillo medio se movió de 136,9 a **136,9**.
+
+three aplica `outputColorSpace` inyectando un include **en SUS materiales**; la pasada de post es un
+`ShaderMaterial` propio, y lo que sale del destino de render está en **lineal**. O sea que el juego
+entero se mostraba con gamma cruda. Una línea de conversión a sRGB en el shader: **136,9 → 186,9**.
+
+Es la misma trampa que ya había costado una vuelta en RECREO, y la firma es la de siempre: **un
+parámetro que no cambia lo que tiene que cambiar es un parámetro que no está en el camino.**
+
+#### Y EL RAYO SE SALÍA DE SU PROPIA COLUMNA, SIEMPRE, EN EL PRIMER BLOQUE DE CADA RONDA
+
+El DDA de Amanatides y Woo con un eje de dirección en cero: el código escribía
+`tx = (ox - x) * 1e9`, y con el origen **justo sobre el borde de la celda** eso da **CERO**, o sea el
+cruce más cercano de los tres. El rayo pega un paso lateral en la primera vuelta y ya no vuelve.
+
+Y no es un caso raro: el jugador aparece en `x = N/2` **exacto** y mirando con `yaw` 0, así que le
+pasaba en el primer bloque de cada ronda. Medido: el segundo toque no encadenaba —`n` se quedaba en
+1— y `apunta()` seguía devolviendo el mismo destino del suelo. Con `Infinity` en los ejes
+degenerados, poner un bloque sobre otro funciona.
+
+**Y EL SUELO TIENE QUE SER APOYO O EL JUEGO NO ARRANCA.** La parcela empieza vacía: si el bloque
+nuevo necesitara la cara de otro bloque, no habría forma de poner el primero. Cuando el rayo no pega
+en nada se lo cruza con el plano del piso.
+
+#### CIENTO UN BLOQUES QUE PESAN CERO
+
+Las ciento diez texturas se dibujan por código en **un** atlas de 512: cien imágenes serían cien
+descargas y cien subidas a la GPU para dibujar pixel art de 32 píxeles, que es justo lo que el código
+hace bien. **Sin mipmaps y con NEAREST en las dos puntas** —un atlas con mipmaps mezcla la baldosa de
+al lado en cuanto la cámara se aleja— y con la UV media texel para adentro.
+
+Y **las cuarenta y ocho de color salen de dos funciones y un tinte**, que es lo que permite que la
+paleta tenga cien bloques sin que el archivo pese. En un build battle la paleta de color **es** la
+herramienta principal: sin dieciséis lanas no se puede hacer una bandera, ni un logo, ni un
+atardecer.
+
+**LOS NOMBRES VAN EN LOS TRES IDIOMAS Y LOS DE COLOR SE DERIVAN.** Cincuenta y siete a mano y los
+cuarenta y ocho restantes de `COLORES` más una palabra, así el nombre del bloque y su entrada en la
+tabla no pueden discrepar. Medido: **cero bloques sin nombre** en castellano, inglés y portugués.
+
+#### TRES DEFECTOS QUE SÓLO SE VIERON MIRANDO
+
+1. **EL SUELO DE LA PARCELA ERA UNA SOLA FOTO ESTIRADA SOBRE DIECISÉIS METROS.** Con una
+   `BoxGeometry` y las UV de una baldosa, cada píxel de la textura medía medio metro y el prado salía
+   de cuadrados gigantes. Con el atlas no se puede usar `repeat` —muestrearía las baldosas vecinas—
+   así que la repetición la pone la geometría: 256 cuadrados arriba más 64 del canto, que siguen
+   siendo **una** malla y **una** llamada de dibujo.
+2. **LOS DIECISÉIS VIDRIOS DE COLOR ERAN DIECISÉIS CUADRADOS NEGROS.** Se dibujan al 20 % de
+   opacidad, y la ficha de la paleta tenía el fondo casi negro: la pestaña entera era ilegible. Va un
+   gris debajo, que los opacos tapan entero.
+3. **Y LAS HOJAS DE OTOÑO ERAN VERDE OSCURO**, o sea que el bloque se llamaba de una manera y se
+   dibujaba de otra.
+
+#### EL MENÚ MUESTRA UNA OBRA TERMINADA, Y APUNTA POR ENCIMA DE ELLA
+
+Un menú con la parcela vacía detrás muestra exactamente lo que el juego no es. La obra del menú se
+levanta al arrancar, se borra al tocar JUGAR y vuelve al salir. Y **la cámara apunta doce metros por
+encima**: la columna de botones vive centrada, así que una obra en el medio del cuadro queda justo
+detrás de JUGAR —medido, la casa salía tapada—; apuntando arriba, la obra cae en el tercio de abajo,
+donde el velo está abierto, y el título queda sobre el cielo.
+
+#### CINCO DEFECTOS DE ENTRADA Y DE MAQUETACIÓN, TODOS MEDIDOS
+
+- **EL JOYSTICK DEJABA DE SEGUIR AL DEDO A 72 PÍXELES DEL CENTRO.** `setPointerCapture` es lo que
+  hace que un dedo fuera del círculo siga mandando eventos al elemento, y **puede fallar** —tira si
+  el puntero no está activo—. Medido con un dedo a 72 px del centro de un joystick de 71,5 de radio:
+  el escucha del elemento no recibía nada y la palanca se quedaba en cero. El seguimiento pasa a
+  colgar de la **ventana**. Lo mismo el soltar de los botones: si el dedo se corre antes de
+  levantarlo, el `pointerup` no llega nunca y el jugador sube para siempre.
+- **AL CAMBIAR DE IDIOMA EN PARTIDA, EL TEMA SE QUEDABA EN EL ANTERIOR.** Medido, los tres idiomas
+  devolvían «Una cascada». Cada pantalla pasa a tener su función de pintado y cambiar de idioma las
+  repinta todas — es el mismo defecto que costó 107 claves en Z Force.
+- **Y LO QUE SE GUARDA PASABA POR TRES PUERTAS.** El `setItem` estaba escrito adentro de cada
+  manejador de botón, así que el ajuste se guardaba **sólo** por ese camino: medido, cambiando la
+  calidad o el idioma desde cualquier otro lado y recargando, volvía a los valores de fábrica.
+- **EL TEMA SE SALÍA DEL CARTEL.** «Una hamburguesa» a 64 px con espaciado de 0,14 em no entra en la
+  caja. El tamaño sale de medir el ancho renderizado y achicar hasta que entre: **150 títulos —los
+  cincuenta temas en los tres idiomas— entran, cero cortados**.
+- **Y LA PANTALLA DEL FINAL NO ENTRABA EN EL CUADRO**: 428 contra los 387 que hay, o sea que OTRA VEZ
+  y MENÚ quedaban por debajo del borde. Un botón que no se ve no se toca. Con la lista de rondas en
+  una línea por ronda queda en 358. El de ajustes pasó de 557 a **369** poniendo el rótulo al lado de
+  su fila: al costado sobra ancho —la caja mide 713 en un teléfono— y no sobra alto.
+
+#### Y UN NOMBRE DE UNA LETRA, POR NOVENA VEZ
+
+`function T(k)` para traducir, contra el `import * as T from 'three'` que vive en otro archivo del
+mismo módulo. `Identifier 'T' has already been declared` y se cae el juego entero.
+
+#### MEDIDO AL CERRAR
+
+**101 bloques** en 8 pestañas, **110 baldosas** en un atlas de 512, **50 temas** sorteados sin
+repetir. Auditoría del juez: **0 · 40 · 43 · 64 · 67** para nada, cubo, losa, casa y torre, ordenados
+bien. Partida completa de tres rondas jugada por el camino del jugador: **1.100 ms sosteniendo el
+botón de poner dan 9 bloques**, un toque en la pantalla pone y uno de 600 ms rompe, el joystick lleva
+al jugador de (8 · 14,5) a (6 · 12,6), y el reloj cierra la ronda solo. **Cero solapamientos** entre
+los trece elementos del HUD y los **cuatro paneles entran** en el cuadro, en **412×892 vertical
+(marco girado 892×412), 900×460 apaisado y 360×640**. Los tres idiomas y las tres calidades en
+caliente (**491×227 sin sombra ni cielo · 714×330 con mapa de 1024 · 892×412 con 2048**), y los
+cuatro ajustes sobreviven a una recarga. Costo: **10 a 12 llamadas de dibujo y 1,4 a 3,7 mil
+triángulos**; en el peor caso imaginable —2.730 bloques en damero— 11 llamadas y 35,5 mil, con el
+remallado en 34,4 ms contra **1,7 ms** de una obra de 304 bloques. Audio: cama rms **0,0111**, poner
+un bloque pico 0,179, romperlo 0,196 y la fanfarria **0,237**. El juez de la IA: URL, cuatro
+encabezados, esquema de cuatro campos, tres imágenes JPEG y un texto, respuesta leída; y las tres
+caídas —sin red, 401 y negativa— terminan en el juez de la casa con el motivo a la vista.
+`window.__errs` **vacío en las trece corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** no tengo una llave de la API y no se puede embarcar una, así que del
+juez de verdad está medido **qué manda y cómo lee lo que vuelve**, no una llamada real. Y no puedo
+escuchar: de los siete sonidos está medido que suenan y a qué nivel, no si pegan con el juego.
 
 ### Centésima undécima vuelta (2026-09-05): **VIGILIA** — el principio asusta igual que el final, cuatro monstruos nuevos, y la calavera se va
 
