@@ -451,6 +451,33 @@ errores. La etiqueta de verificación va en la portada, en las dos versiones.
 **Lo único que no se puede hacer desde acá** es dar de alta la propiedad en Search
 Console: pide la cuenta de Google del dueño.
 
+## El lugar abre el mapa
+
+En las publicaciones y en el cartel de la portada, el lugar es un link a Google
+Maps: `https://www.google.com/maps/search/?api=1&query=<lugar>`. Es la dirección
+universal de Maps —en la computadora abre el mapa en el navegador y en el celular
+abre la app si está instalada—, no pide ninguna clave ni ninguna API.
+
+Al lugar se le agrega «Chaco, Argentina» si no lo nombra ya, porque «Club
+Juventud» solo puede caer en cualquier parte del mundo. Lo que **no** se hace es
+forzarle «Margarita Belén»: si la fiesta es en Resistencia, mandaríamos a la
+gente al pueblo equivocado, y eso es peor que no poner el link. Cuando no hay
+lugar cargado queda el texto suelto, sin link a ninguna parte.
+
+No se usó Google Earth: no tiene una dirección de búsqueda por texto que se pueda
+armar así, y además no da cómo llegar, que es para lo que uno toca un lugar.
+
+Probado en el navegador en las cuatro pantallas —publicaciones y portada, en
+computadora y en celular—: el lugar sale como link con la consulta bien armada, la
+hora sigue sin ser link, la publicación sin lugar no muestra ninguno, y el link
+abre en otra pestaña con `rel="noopener"`.
+
+Detalle de la prueba, que casi me hizo buscar un bicho que no existía: la portada
+trae los chips escritos a mano en el HTML como muestra y los reemplaza la API.
+La primera versión del simulacro devolvía el destacado pelado en vez de
+`{destacado, colores}`, así que el guión se escondía solo y quedaban los chips de
+muestra. El error era de la prueba, no de la página.
+
 ## Cómo está atado
 
 - Base **D1** llamada `iblo` (`27c22f67-3b11-4c92-bb75-37f30f63b84d`), atada como `DB`.

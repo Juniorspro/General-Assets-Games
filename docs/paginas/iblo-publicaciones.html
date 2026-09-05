@@ -604,6 +604,13 @@ section[id]{scroll-margin-top:80px}
 .ent.pub[data-pos$="-arriba"]:not(.conFoto) .cuerpo{padding-top:104px}
 .ent.pub[data-pos$="-abajo"] .cuerpo{padding-bottom:96px}
 .entradas{padding-top:22px}
+
+/* el lugar es tocable: se nota sin gritar */
+.mapa{text-decoration:none; color:inherit; cursor:pointer;
+  transition:border-color .16s ease, background-color .16s ease}
+.mapa:hover,.mapa:focus-visible{border-color:var(--ac);
+  background:color-mix(in srgb,var(--ac) 12%, transparent); opacity:1}
+.mapa:focus-visible{outline:2px solid var(--ac); outline-offset:2px}
 </style>
 </head>
 <body data-pg="publicaciones" data-modo="e">
@@ -1139,6 +1146,23 @@ setTimeout(pintarFotos,0);
 
   var ICO_W = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2m0 1.8a8.2 8.2 0 1 1-4.2 15.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 0 1 12 3.8m-3.3 4c-.2 0-.5.1-.7.4-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.2.9 2.6.7 3.1.7.5 0 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.6-.3-1.5-.7c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.5.3-.5v-.5l-.7-1.7c-.2-.4-.4-.4-.5-.4z"/></svg>';
   var ICO_I = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>';
+
+/* ---------- el lugar abre el mapa ----------
+   `?api=1&query=` es la dirección universal de Google Maps: en la computadora
+   abre el mapa en el navegador y en el celular abre la app de Maps si está
+   instalada. No hace falta ninguna clave ni ninguna API.
+
+   Al lugar se le agrega la provincia y el país, si no los nombra ya, porque
+   «Club Juventud» solo puede caer en cualquier parte del mundo. NO se le
+   agrega «Margarita Belén» a la fuerza: si la fiesta es en Resistencia,
+   mandaríamos a la gente al pueblo equivocado, que es peor que no poner nada. */
+function linkMapa(lugar){
+  var t = String(lugar || "").trim();
+  if(!t) return "";
+  var consulta = /chaco|argentina/i.test(t) ? t : t + ", Chaco, Argentina";
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(consulta);
+}
+
   var ICO_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>';
   var ICO_H = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.4 2"/></svg>';
 
@@ -1186,7 +1210,13 @@ setTimeout(pintarFotos,0);
     var sello = id === "entradas" ? "Entradas" : p.cuando ? p.fecha || "Próximamente" : "Aviso";
     var arriba = p.cuando ? cuentaAtras(p.cuando) : subida(p.creado);
     var datos = "";
-    if(p.lugar) datos += '<span class="dato">'+ICO_L+esc(p.lugar)+'</span>';
+    if(p.lugar){
+      var mapa = linkMapa(p.lugar);
+      datos += mapa
+        ? '<a class="dato mapa" href="'+esc(mapa)+'" target="_blank" rel="noopener"'
+          + ' title="Ver en Google Maps">'+ICO_L+esc(p.lugar)+'</a>'
+        : '<span class="dato">'+ICO_L+esc(p.lugar)+'</span>';
+    }
     if(p.hora)  datos += '<span class="dato">'+ICO_H+esc(p.hora)+'</span>';
 
     /* el adorno: el recorte que generó la IA, pegado en la esquina que eligieron */
