@@ -58,6 +58,34 @@ Dos cosas que costaron:
   reintentar la descarga. Conviene comparar la lista pedida contra los archivos
   bajados en vez de contar respuestas.
 
+## Las estéticas y las pantallas de error
+
+Ocho láminas generadas en `sitio/img/est/` (grande + miniatura, 1 MB entre las
+dieciséis) y **cinco pantallas de error que no son imágenes**: están escritas
+con CSS, en `sitio/pantallas.js`.
+
+Un generador de imágenes devuelve letras deformadas, y una pantalla de error mal
+escrita no es una pantalla de error, es una mancha. En CSS el texto es texto, se
+lee igual en la miniatura que a pantalla completa, y las cinco pesan 3,8 KB.
+
+Cada pantalla se dibuja **una vez** a 960x600 y se escala con `transform`: la
+miniatura y la vista grande son el mismo nodo. Con dos copias, tarde o temprano
+una queda vieja.
+
+Dos trampas de HTML que costaron un rato, las dos silenciosas:
+
+- **Un `<button>` dentro de otro `<button>` no es válido**, y el parser cierra el
+  de afuera al encontrarlo. La ventana de Vista tenía un botón «Cancelar» de
+  verdad y eso partía en dos la tarjeta que la contiene. Ahora es un `<span>`
+  disfrazado.
+- **Un `<span>` es inline: no le aplican `width`, `height`, `transform` ni
+  `aspect-ratio`.** Las pantallas salían a 960 px reales adentro de una
+  miniatura de 300. Van todas en `display:block`.
+
+Las cinco pantallas nombran a la propia página («FRUTIGER_AERO_NOT_LESS_OR_EQUAL»,
+«Aero.exe ha dejado de funcionar»): son recreaciones de una estética y nadie tiene
+que confundirlas ni un segundo con un error de su propia máquina.
+
 ## Los personajes 3D
 
 Seis modelos en `sitio/modelos/`, generados con Rezona Lab (proyecto `ZFiGfVPq`,

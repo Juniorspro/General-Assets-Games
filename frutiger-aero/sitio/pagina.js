@@ -4,6 +4,7 @@
    --------------------------------------------------------------------------- */
 import * as THREE from "./vendor/three.module.min.js";
 import { cargarGlb, encuadrar } from "./visor.js";
+import { PANTALLAS } from "./pantallas.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -213,6 +214,95 @@ tarjetas("rejFinal", [
   ["i-bateria",  "Batería contada",  "El vidrio con desenfoque se la comía."],
   ["i-burbuja",  "Cambio de humor",  "Después de 2008 el brillo sonaba a mentira."],
 ]);
+
+/* =====================  las estéticas  ===================== */
+
+const ESTETICAS = [
+  ["e-aero",      "Frutiger Aero",     "2004 – 2012 · agua, vidrio y pasto"],
+  ["e-dreamcore", "Dreamcore",         "Un lugar conocido que está mal"],
+  ["e-weirdcore", "Weirdcore",         "Lo mismo, pero mareado y en baja resolución"],
+  ["e-liminal",   "Espacios liminales", "El pasillo sin nadie, a las cuatro de la mañana"],
+  ["e-vaporwave", "Vaporwave",         "El shopping de 1993 visto desde 2012"],
+  ["e-y2k",       "Y2K cromado",        "Mercurio, destellos y CD-ROM"],
+  ["e-metro",     "Frutiger Metro",    "El punto justo antes de tirar el brillo"],
+  ["e-cassette",  "Cassette futurism", "El futuro cuando todavía era beige"],
+];
+$("laminas").innerHTML = ESTETICAS.map(([a, t, d], i) => `
+  <button class="lamina" type="button" data-i="${i}">
+    <img src="img/est/${a}-min.webp" alt="${t}" width="520" height="330" loading="lazy">
+    <span class="txt"><b>${t}</b><small>${d}</small></span>
+  </button>`).join("");
+
+let mirandoEst = 0;
+function verEstetica(i){
+  mirandoEst = (i + ESTETICAS.length) % ESTETICAS.length;
+  const [a, t, d] = ESTETICAS[mirandoEst];
+  $("lupaImg").src = "img/est/" + a + ".webp";
+  $("lupaImg").alt = t;
+  $("lupaPie").textContent = t + "  ·  " + d + "  ·  flechas para pasar";
+  abrir($("lupa"));
+}
+$("laminas").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-i]"); if (b) verEstetica(+b.dataset.i);
+});
+
+/* =====================  las pantallas de error  ===================== */
+
+/* El nodo se dibuja a 960x600 y se escala al hueco que tenga. La miniatura y la
+   vista grande son el mismo HTML: dos copias se desincronizan tarde o temprano. */
+const ANCHO = 960, ALTO = 600;
+function escalar(marco){
+  const tele = marco.querySelector(".tele");
+  if (!tele) return;
+  const c = marco.getBoundingClientRect();
+  tele.style.transform = "scale(" + Math.min(c.width / ANCHO, c.height / ALTO) + ")";
+}
+
+$("pantallas").innerHTML = PANTALLAS.map((p, i) => `
+  <button class="pant" type="button" data-i="${i}">
+    <span class="marco"><span class="tele">${p.html}</span></span>
+    <span class="pie2">${p.nombre}<small>${p.pie}</small></span>
+  </button>`).join("");
+const marcos = [...document.querySelectorAll("#pantallas .marco")];
+marcos.forEach(escalar);
+addEventListener("resize", () => { marcos.forEach(escalar); ajustarTv(); });
+
+let mirandoTv = 0;
+function ajustarTv(){
+  const m = $("tvMarco");
+  if (!m.firstChild) return;
+  const k = Math.min((innerWidth - 40) / ANCHO, (innerHeight - 130) / ALTO);
+  m.style.width = ANCHO * k + "px"; m.style.height = ALTO * k + "px";
+  m.querySelector(".tele").style.transform = "scale(" + k + ")";
+}
+function verPantalla(i){
+  mirandoTv = (i + PANTALLAS.length) % PANTALLAS.length;
+  const p = PANTALLAS[mirandoTv];
+  $("tvMarco").innerHTML = `<span class="tele">${p.html}</span>`;
+  $("tvPie").textContent = p.nombre + "  ·  " + p.pie + "  ·  flechas para pasar";
+  abrir($("tv"));
+  ajustarTv();
+}
+$("pantallas").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-i]"); if (b) verPantalla(+b.dataset.i);
+});
+
+/* =====================  los dos visores  ===================== */
+
+function abrir(caja){ caja.classList.add("ver"); document.body.style.overflow = "hidden"; }
+function cerrar(caja){ caja.classList.remove("ver"); document.body.style.overflow = ""; }
+for (const [caja, boton] of [[$("lupa"), "cerrarLupa"], [$("tv"), "cerrarTv"]]) {
+  caja.addEventListener("click", ev => {
+    if (ev.target === caja || ev.target.id === boton) cerrar(caja);
+  });
+}
+addEventListener("keydown", ev => {
+  const est = $("lupa").classList.contains("ver"), tele = $("tv").classList.contains("ver");
+  if (!est && !tele) return;
+  if (ev.key === "Escape") cerrar(est ? $("lupa") : $("tv"));
+  if (ev.key === "ArrowRight") est ? verEstetica(mirandoEst + 1) : verPantalla(mirandoTv + 1);
+  if (ev.key === "ArrowLeft")  est ? verEstetica(mirandoEst - 1) : verPantalla(mirandoTv - 1);
+});
 
 /* =====================  la barra  ===================== */
 
