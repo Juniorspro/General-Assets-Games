@@ -408,6 +408,38 @@ FIESTÓN ya no aparece como 2027. En el navegador, los cuatro mensajes —nada
 nuevo, visor caído, fiesta encontrada y cuenta vacía— y el `yaVistos` viajando
 entre vueltas.
 
+## Que Google encuentre la página
+
+Lo que se dejó listo, todo en el sitio, sin depender de nadie:
+
+- **`robots.txt` y `sitemap.xml`.** El sitemap lleva sólo las seis direcciones
+  canónicas; las de `/m/` no van, porque apuntan a éstas y meterlas sería
+  pedirle a Google que elija entre duplicados.
+- **Canónicas y alternas.** La versión de escritorio es la canónica y declara
+  cuál es su gemela de celular; la de celular apunta a la de escritorio. Sin eso
+  son doce páginas con el mismo título compitiendo entre ellas.
+- **`noindex` donde corresponde**, por `X-Robots-Tag` en `_headers`: el panel del
+  dueño —es una pantalla de inicio de sesión— y las páginas de otros proyectos
+  que viven en el mismo repo y salen publicadas en el mismo dominio.
+  Ojo: el panel **no** se bloquea además en `robots.txt`. Bloquear y marcar
+  `noindex` a la vez se anula solo: para leer la marca, Google primero tiene que
+  poder entrar, y si no puede, la dirección aparece igual, pelada.
+- **Ficha del negocio** (`EntertainmentBusiness`) en la portada, con teléfono,
+  localidad e Instagram.
+- **Ficha de eventos** en publicaciones: se arma con lo que ya trajo la API, así
+  que no cuesta un pedido de más, y **sólo con las fechas que no pasaron**.
+  Anunciar una fiesta vencida en el buscador es peor que no anunciar nada.
+
+Probado en el navegador con la respuesta real de la API: la fiesta que viene sale
+como `Event` con lugar y precio en pesos, la que ya pasó no aparece, y no hay
+errores. En vivo: `robots.txt` y `sitemap.xml` con su tipo, las canónicas de las
+cuatro direcciones y el `noindex` sólo donde va.
+
+**Lo único que no se puede hacer desde acá** es dar de alta la propiedad en Search
+Console: pide la cuenta de Google del dueño. Cuando la crea, elige «prefijo de
+URL», Google le da una etiqueta `<meta name="google-site-verification" ...>` y esa
+etiqueta va en `iblo.html` y en `m/iblo.html`, arriba de todo.
+
 ## Cómo está atado
 
 - Base **D1** llamada `iblo` (`27c22f67-3b11-4c92-bb75-37f30f63b84d`), atada como `DB`.

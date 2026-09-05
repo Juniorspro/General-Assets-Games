@@ -3,6 +3,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%2308070c%22%2F%3E%3Ctext%20x%3D%2232%22%20y%3D%2245%22%20font-family%3D%22Impact%2CAnton%2Csans-serif%22%20font-size%3D%2234%22%20text-anchor%3D%22middle%22%20fill%3D%22%23ff1e8e%22%3EIB%3C%2Ftext%3E%3C%2Fsvg%3E">
 <title>Publicaciones · IBLO Eventos</title>
 <meta name="description" content="La próxima fecha, las entradas a la venta y los avisos de IBLO Eventos, en un solo lugar.">
+<link rel="canonical" href="https://iblo-eventos.pages.dev/iblo-publicaciones">
+<link rel="alternate" media="only screen and (max-width: 820px)" href="https://iblo-eventos.pages.dev/m/iblo-publicaciones">
 <meta property="og:title" content="IBLO Eventos">
 <meta property="og:description" content="Viví las mejores noches con nosotros. Productora de fiestas — Margarita Belén, Chaco.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1243,6 +1245,43 @@ setTimeout(pintarFotos,0);
   var pedido = (location.hash || "").replace("#","");
   if(SOLAPAS.some(function(s){ return s.id === pedido; })) actual = pedido;
 
+
+  /* ---------- la ficha para Google ----------
+     Google entiende las fiestas si se las damos en su formato: nombre, fecha,
+     lugar y precio. Con eso la fecha puede salir en el buscador como evento y
+     no como un renglón más. Se arma con lo que ya trajo la API, así que no
+     cuesta ni un pedido de más; Google ejecuta el guión de la página y la lee.
+     Sólo van las que todavía no pasaron: anunciar una fiesta vencida en el
+     buscador es peor que no anunciar nada. */
+  function fichaDeEventos(lista){
+    var eventos = lista.filter(function(p){ return p.cuando > Date.now(); })
+      .slice(0, 20).map(function(p){
+        var e = {
+          "@type": "Event", "name": p.titulo,
+          "startDate": new Date(p.cuando).toISOString(),
+          "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+          "eventStatus": "https://schema.org/EventScheduled",
+          "organizer": { "@type": "Organization", "name": "IBLO Eventos",
+                         "url": "https://iblo-eventos.pages.dev/" },
+          "location": { "@type": "Place",
+            "name": p.lugar || "Margarita Belén",
+            "address": { "@type": "PostalAddress", "addressLocality": "Margarita Belén",
+                         "addressRegion": "Chaco", "addressCountry": "AR" } }
+        };
+        if (p.detalle) e.description = p.detalle;
+        if (p.imagen) e.image = p.imagen;
+        if (p.precio) e.offers = { "@type": "Offer", "price": (p.precio.match(/\d[\d.]*/) || [""])[0].replace(/\./g, ""),
+                                   "priceCurrency": "ARS", "availability": "https://schema.org/InStock",
+                                   "url": location.origin + "/iblo-publicaciones" };
+        return e;
+      });
+    if (!eventos.length) return;
+    var n = document.createElement("script");
+    n.type = "application/ld+json";
+    n.textContent = JSON.stringify(eventos);
+    document.head.appendChild(n);
+  }
+
   caja.innerHTML = '<div class="cargandoEnt">Buscando…</div>';
   fetch("https://iblo-eventos.pages.dev/api/publicaciones")
     .then(function(r){ return r.json(); })
@@ -1254,7 +1293,7 @@ setTimeout(pintarFotos,0);
           if(todo.filter(function(p){ return entra(p, SOLAPAS[i].id); }).length){ actual = SOLAPAS[i].id; break; }
         }
       }
-      pintarSolapas(); pintar();
+      pintarSolapas(); pintar(); fichaDeEventos(todo);
     })
     .catch(function(){
       caja.innerHTML = '<div class="sinEnt"><b>No se pudieron cargar</b>' +
