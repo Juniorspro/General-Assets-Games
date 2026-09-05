@@ -33,12 +33,32 @@ ENT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/rez_vig'
 #  Los `_d` salen de `gltfpack -si 0.45 -noq -kn -ke`: la mitad de triangulos,
 #  el esqueleto y los tres clips intactos, y SIN cuantizar —KHR_mesh_quantization
 #  iria en extensionsRequired y un lector que no la tenga no muestra NADA—.
+#  `espinas` se fue del juego: fotografiada en su agarre es una bola rosada con
+#  pinches, o sea que el reporte «da risa en vez de miedo» era literal. La
+#  reemplaza `carne`, y entran ademas tres monstruos de terror analogico.
+#  ── LOS CUATRO NUEVOS SON DOS TAREAS DE RIG FUSIONADAS ──
+#  Pidiendo `["idle","walk","run"]` el servidor los IGNORA en silencio
+#  (`ignored_animations` los devuelve enteros) y manda los tres clips de regalo,
+#  que son walk, idle y jump: el vocabulario lleva prefijo, `preset:run`. O sea
+#  que la carga —el susto que el jugador reclamo por venir «solamente
+#  caminando»— se habria dibujado con un ciclo de caminata. Van dos tareas por
+#  bicho, la de regalo y la de `preset:run`, fusionadas con
+#  `herramientas/visor3d/fusionar.py`: mismo modelo, mismo rig, mismos 41
+#  huesos, asi que los canales del segundo apuntan a nodos que existen identicos
+#  en el primero y no hace falta ningun retarget.
 BICHOS = [('boisvert',  'boisvert_d.glb',   384, 80, 0.86),
           ('nina',      'nina_rig_d.glb',   416, 80, 0.74),
           ('agujas',    'agujas_rig_d.glb', 416, 80, 0.72),
           ('disco',     'disco_rig_d.glb',  352, 78, 0.80),
           ('oso',       'oso_rig_d.glb',    416, 80, 0.90),
-          ('espinas',   'espinas_d.glb',    384, 80, 0.78)]
+          ('traje',     'traje_d.glb',      384, 80, 0.72),
+          ('carne',     'carne_d.glb',      416, 80, 0.66),
+          ('sonrisa',   'sonrisa_d.glb',    384, 80, 0.74),
+          ('cuello',    'cuello_d.glb',     384, 80, 0.70)]
+#  `preset:jump` viene de regalo con el rig y no lo usa nadie: un clip vivo que
+#  nadie llama es peso y ademas es codigo que el dia que se toque va a estar
+#  roto sin que nada lo diga.
+CLIPS_FUERA = ('preset:jump',)
 
 CT = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
 NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
@@ -86,6 +106,9 @@ def hornea(nom, arch, lado, q, rug):
     js['textures'] = [{'source': 0, 'sampler': 0}]
     js['samplers'] = [{'magFilter': 9729, 'minFilter': 9987, 'wrapS': 10497, 'wrapT': 10497}]
     js['images'] = [{'mimeType': 'image/jpeg', 'bufferView': None}]
+
+    if js.get('animations'):
+        js['animations'] = [a for a in js['animations'] if a.get('name') not in CLIPS_FUERA]
 
     # ── las animaciones se re-escriben: 20 fps y rotaciones en short ──
     nuevos = {}          # indice de accesor viejo -> (datos crudos, plantilla)

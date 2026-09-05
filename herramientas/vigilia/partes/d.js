@@ -31,7 +31,15 @@ const DT = 1/60;
    O sea que 4,0 es el ultimo valor en el que sostener el telefono derecho gana
    SIEMPRE y sacudirlo sigue costando ocho partidas de cuarenta. Por debajo, el
    que lo sacude tambien gana y no queda juego. El susto pasa a ser lo que es:
-   una razon para que la mano se te mueva, no un castigo escrito. */
+   una razon para que la mano se te mueva, no un castigo escrito.
+
+   ── Y CON DIEZ SUSTOS MAS EL NUMERO NO SE MOVIO, QUE NO ERA LO ESPERABLE ──
+   Con 47 sustos apilados al final daba 40/40 y 0,33 de agua; con 57 repartidos
+   parejo da 40/40 y 0,332. Identico, y tiene una razon fisica: la frecuencia
+   del chapoteo SUBE cuando queda menos agua (`omegaChapoteo` depende de h), asi
+   que un empujon cuesta mas caro sobre un bol vacio. Amontonar los pesados al
+   final los cobraba justo donde mas duelen; repartidos, diez sustos mas salen
+   igual de caros que los cuarenta y siete anteriores. */
 const K_SUS = 4.0;
 const A_TAB = 6.0;              /* y el tiron que ademas se le ve al tablon */
 const R_CAZUELA = 2.6;          /* radio de curvatura del hueco donde apoya el bol */
@@ -76,22 +84,70 @@ function puntoEn(s){
 }
 
 /* ══════════ LA AGENDA DE SUSTOS ══════════
-   Los treinta y tres caen repartidos en los tres minutos, con el hueco
-   achicandose: al principio hay tiempo de acomodar el tablon, al final se
-   encadenan. Y se ORDENAN POR PESO: el ultimo es el mas fuerte y llega cuando
-   el bol ya viene medio vacio. */
+   ── EL PRIMER MINUTO TIENE QUE ASUSTAR IGUAL QUE EL ULTIMO ──
+   Reporte textual: *"al final nomas da miedo"*. Y no era una impresion, era
+   literal: esta funcion ORDENABA la agenda por peso, asi que el primer minuto
+   se llevaba los sustos mas flojos y TODOS los agarres caian en el ultimo.
+   Medido sobre la version anterior:
+
+       0- 60 s : 12 sustos · k medio 0,39 · maximo 0,55 · 0 que te vengan encima
+      60-120 s : 15 sustos · k medio 0,56 · maximo 0,70 · 0
+     120-180 s : 20 sustos · k medio 0,93 · maximo 1,15 · LOS SIETE agarres
+
+   O sea que la mitad del arsenal no existia hasta el minuto dos. Ahora se
+   reparte en TRES MAZOS por peso y cada bloque de tres saca uno de cada mazo:
+   desde el arranque hay un pesado cada tres sustos. El orden DENTRO del bloque
+   se baraja, porque un mazo tras otro en el mismo orden se escucha a
+   metronomo. Los DOS PRIMEROS salen igual del mazo flojo: son ocho segundos
+   para aprender el gesto, y sin eso el primer sacudon llega antes de que el
+   jugador sepa que el telefono se inclina. */
 function armaAgenda(semilla){
   sem(semilla);
-  const orden = SUSTOS.map((S, i) => ({ S, i, r: S.k + azr(-0.10, 0.10) }))
+  const orden0 = SUSTOS.map((S, i) => ({ S, i, r: S.k + azr(-0.10, 0.10) }))
     .sort((a, b) => a.r - b.r).map(o => o.S);
-  const fin = orden.findIndex(S => S.id === 'final');
-  if (fin >= 0){ orden.push(orden.splice(fin, 1)[0]); }
+  /* `final` sale del reparto: es el ultimo pase, siempre */
+  const iF = orden0.findIndex(S => S.id === 'final');
+  const cierre = iF >= 0 ? orden0.splice(iF, 1)[0] : null;
+  /* los dos de gracia, del mazo mas flojo */
+  const gracia = orden0.splice(0, 2);
+  /* ── Y EL TERCERO SIEMPRE ES UNO QUE SE TE PONE EN LA CARA ──
+     Repartiendo a ciegas, cual de los diez pesados sale primero es suerte de
+     semilla: medido, el primer cara a cara caia en el segundo 36, o sea a un
+     tercio del juego. Dos de gracia para aprender el gesto y al TERCERO ya se
+     sabe a que se esta jugando. */
+  const iC = orden0.findIndex(S => S.clase === 'bCarga' || S.clase === 'bEncima');
+  const primero = iC >= 0 ? orden0.splice(iC, 1)[0] : null;
+  const t3 = Math.ceil(orden0.length/3);
+  const mazo = [orden0.slice(0, t3), orden0.slice(t3, 2*t3), orden0.slice(2*t3)];
+  /* cada mazo se baraja: sin esto, dentro del mazo pesado los sustos salen de
+     menor a mayor y la escalera vuelve por la ventana */
+  for (const m of mazo) for (let i = m.length - 1; i > 0; i--){ const j = azi(0, i), x = m[i]; m[i] = m[j]; m[j] = x; }
+  const orden = gracia.slice();
+  if (primero) orden.push(primero);
+  while (mazo[0].length || mazo[1].length || mazo[2].length){
+    const b = [];
+    for (const m of mazo) if (m.length) b.push(m.shift());
+    for (let i = b.length - 1; i > 0; i--){ const j = azi(0, i), x = b[i]; b[i] = b[j]; b[j] = x; }
+    for (const S of b) orden.push(S);
+  }
+  if (cierre) orden.push(cierre);
   const n = orden.length, hue = [];
   for (let i = 0; i < n - 1; i++) hue.push(lerp(HUECO0, HUECO1, i/(n - 2)));
-  const suma = hue.reduce((a, b) => a + b, 0);
-  const T0 = 6.5, T1 = DUR - 6.0, k = (T1 - T0)/suma;
+  /* ── EL HUECO NO PUEDE SER MENOR QUE LO QUE DURA EL SUSTO QUE TERMINA ──
+     Con cincuenta y siete sustos en dos minutos y medio el hueco medio cae a
+     2,9 s, y hay sustos de 3,0: medido, tres se pisaban con el siguiente. Un
+     susto encima de otro no da el doble de miedo, da ruido. El reparto sigue
+     dando la FORMA —ancho al principio, apretado al final— y la duracion pone
+     el PISO; el factor se busca por biseccion para que la suma siga entrando en
+     los tres minutos. */
+  const T0 = 6.5, T1 = DUR - 6.0;
+  const piso = i => orden[i].dur + 0.35;
+  const suma = f => { let s = 0; for (let i = 0; i < n - 1; i++) s += Math.max(hue[i]*f, piso(i)); return s; };
+  let lo = 0, hi = (T1 - T0)/Math.max(1e-6, hue.reduce((a, b) => a + b, 0)), k = hi;
+  if (suma(hi) > T1 - T0){ for (let it = 0; it < 40; it++){ k = (lo + hi)/2; if (suma(k) > T1 - T0) hi = k; else lo = k; } k = lo; }
   const ag = []; let t = T0;
-  for (let i = 0; i < n; i++){ ag.push({ S: orden[i], t, dir: azr(0, 6.283) }); if (i < n - 1) t += hue[i]*k; }
+  for (let i = 0; i < n; i++){ ag.push({ S: orden[i], t, dir: azr(0, 6.283) });
+    if (i < n - 1) t += Math.max(hue[i]*k, piso(i)); }
   return ag;
 }
 

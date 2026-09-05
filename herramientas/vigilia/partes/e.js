@@ -597,8 +597,8 @@ armaActores();
    Vienen de las referencias que trajo el usuario, generados con Rezona a partir
    de ESAS imagenes —no de un prompt— que es la unica forma que hay de que
    salgan iguales al dibujo. Cuatro traen esqueleto de 41 huesos con quieto,
-   caminar y correr; boisvert es un busto y espinas no tiene extremidades, asi
-   que esos dos se mueven enteros.
+   caminar y correr; boisvert es un busto —sin extremidades que riggear— asi que
+   ese se mueve entero.
 
    ── LA ALTURA LA PONE EL JUEGO, NO EL MODELO ──
    Tripo devuelve la malla en una caja de lado dos y sin escala fisica. Lo que
@@ -606,7 +606,18 @@ armaActores();
    es una cuenta: a tres metros, con 68 grados de campo vertical, entran 4,1 m
    de alto, asi que uno de 3,2 —el de las agujas— llena tres cuartos de la
    pantalla y uno de 1,55 —la nena— llega a la altura del ojo. */
-const ALTO_BICHO = { boisvert: 0.62, nina: 1.55, agujas: 3.20, disco: 2.10, oso: 1.88, espinas: 2.55 };
+/* ── Y LA CALAVERA SE FUE DEL JUEGO ──
+   Reporte textual: *"la calavera da risa en vez de miedo"*. Y tenia razon, y no
+   era la luz: fotografiada en su agarre, `espinas` es una BOLA ROSADA CON
+   PINCHES —dos manchas oscuras por ojos sobre una superficie palida y lumpy—
+   que se lee a virus de dibujito o a erizo de mar, no a craneo. Y a media
+   distancia era lo contrario: un borron gris oscuro sin silueta. Fallaba en las
+   dos puntas, asi que no hay ajuste que la salve: el modelo esta mal y sale.
+   La reemplaza `carne`, que es lo mismo pedido de otra manera —craneo con carne
+   cruda a medio estirar encima, mandibula colgando— y que ademas SI se pudo
+   riggear. */
+const ALTO_BICHO = { boisvert: 0.62, nina: 1.55, agujas: 3.20, disco: 2.10, oso: 1.88,
+                     traje: 1.82, carne: 1.95, sonrisa: 2.15, cuello: 2.35 };
 /* ── Y EL TINTE SALE DE LO CLARO QUE ES CADA UNO ──
    La nena y el del disco vienen casi blancos del generador: con el mismo foco
    que modela a la criatura parda, se van al blanco puro y pierden la forma. */
@@ -616,14 +627,26 @@ const ALTO_BICHO = { boisvert: 0.62, nina: 1.55, agujas: 3.20, disco: 2.10, oso:
    era dejarlos oscuros. Y subir la INTENSIDAD no alcanza: el tono es ACES, o
    sea que de 8 a 13 el pixel casi no se movio (medido, 29,6 -> 29,2). Lo que
    si se mueve en el rango oscuro es el albedo. */
-const TINTE_BICHO = { boisvert: 1.00, nina: 0.78, agujas: 1.00, disco: 1.00, oso: 0.95, espinas: 1.00 };
+const TINTE_BICHO = { boisvert: 1.00, nina: 0.78, agujas: 1.00, disco: 1.00, oso: 0.95,
+                      traje: 1.00, carne: 0.95, sonrisa: 1.00, cuello: 0.85 };
 /* ── Y EL EMISIVO SE CALIBRA POR BICHO, PORQUE SUS FOTOS NO SE PARECEN ──
    Con un mismo 0,45 para los seis, la nina —que es una cara palida— salia a 159
    sobre 255 y llenaba el cuadro de una mancha crema, mientras que las agujas
    —que son negras— daban 18. Un emisivo por mapa vale lo que valga la foto, asi
    que el numero tiene que ser de cada uno. Los seis salen de medir el pixel del
    bicho contra el mismo cuadro sin el. */
-const EMIS_BICHO = { boisvert: 1.00, nina: 0.38, agujas: 1.00, disco: 0.95, oso: 0.70, espinas: 1.00 };
+/* ── EL DEL TRAJE ES EL CASO QUE JUSTIFICA QUE EL NUMERO SEA POR BICHO ──
+   Su foto es un traje gris oscuro con una cabeza de yeso encima, o sea que el
+   mismo emisivo por mapa deja el traje casi negro y le enciende SOLO la cara.
+   Eso no es un defecto: es exactamente lo que tiene que verse — una cara en
+   blanco flotando sobre un cuerpo que se pierde en el pasillo. */
+/* ── Y LOS DOS PALIDOS SE BAJARON MIDIENDO EL AGARRE ──
+   Con 0,85 la cabeza de yeso del traje salia a brillo 116 con pico 255, o sea
+   RECORTANDO: en la foto es un bulto blanco del que no se lee que sea una cara
+   sin rasgos, que es lo unico que ese bicho tiene. Es el mismo defecto que la
+   nena, que ya esta en 0,38 por lo mismo. */
+const EMIS_BICHO = { boisvert: 1.00, nina: 0.38, agujas: 1.00, disco: 0.95, oso: 0.70,
+                     traje: 0.42, carne: 0.55, sonrisa: 0.62, cuello: 0.45 };
 /* ── Y TRES DE LOS SEIS SON NEGROS, ASI QUE EL EMISIVO POR MAPA NO LOS LEVANTA ──
    Un emisivo por mapa MULTIPLICA la foto: sobre una figura encapuchada negra da
    negro por mucho que se suba el numero. Medido, con intensidad 1,30 las agujas
@@ -632,14 +655,15 @@ const EMIS_BICHO = { boisvert: 1.00, nina: 0.38, agujas: 1.00, disco: 0.95, oso:
    dibujo, que es justo lo que ya no tenian, y pasan a ser una silueta gris
    apenas por encima del negro del pasillo — que es como se ven en las
    referencias que trajo el usuario. La forma se la sigue dando la luz. */
-const EMIS_PLANO = { boisvert: 0x6b6b78, espinas: 0x676770, agujas: 0x71717e };
+const EMIS_PLANO = { boisvert: 0x6b6b78, agujas: 0x71717e };
 /* ── A QUE DISTANCIA TERMINA EL AGARRE, POR BICHO ──
    Con una sola distancia para los seis, los dos altos —2,55 y 3,20— llegan tan
    cerca que lo que llena el cuadro es un pedazo liso de cuerpo: medido, cubren
    el 89 % del centro con una desviacion de brillo de dos digitos bajos, o sea
    una pared de piel. Lo que hace un susto es una CARA, y a que distancia una
    cara llena el cuadro depende de lo que mida el bicho. */
-const AGARRE_D = { boisvert: 0.55, nina: 0.80, oso: 0.90, disco: 1.55, espinas: 1.45, agujas: 1.50 };
+const AGARRE_D = { boisvert: 0.55, nina: 0.80, oso: 0.90, disco: 1.55, agujas: 1.50,
+                   traje: 1.00, carne: 1.30, sonrisa: 1.45, cuello: 1.25 };
 const BICHO = {};      /* k -> { g, mix, acc:{idle,walk,run}, act } */
 const BICHOS_LISTOS = [], BICHOS_FALLAS = [];
 function cargaBichos(){
@@ -1058,6 +1082,62 @@ function animaSusto(S, u, R){
         B.g.position.y = cuerpo.position.y + 1.16 + Math.sin(u*2.1)*0.012;
         EFE.luzK = 0.25 + (Math.sin(u*38) > 0 ? 0.5 : 0);
         EFE.borroso = Math.max(0, 1.2 - u*3.0); }
+      break; }
+    /* ── SE ASOMA DESDE EL BORDE Y SE VUELVE A ESCONDER ──
+       Es el susto barato del principio, y barato es lo que hace falta ahi: no
+       tiene carrera, no tiene distancia que cerrar y dura segundo y medio. La
+       cosa esta pegada a la pared del costado, se INCLINA hacia el pasillo
+       —hombro primero, cabeza despues— se queda dos tercios de segundo
+       mirandote, y se vuelve. Lo que asusta no es que aparezca: es que estaba
+       ahi y decidio asomarse.
+
+       ── SE INCLINA, NO SE CORRE ──
+       La primera version lo sacaba de atras de la pared moviendolo de costado,
+       y eso depende de que la pared lo tape: en un cuarto ancho —la capilla
+       mide seis metros— no hay pared a esa distancia y lo que se ve es una
+       figura parada en el medio de la nada. Con el ALABEO la lectura es la
+       misma en los catorce cuartos, porque el gesto esta en el cuerpo. */
+    case 'bAsoma': {
+      EFE.luzK = 0.20;
+      const sg = P.lado || 1;
+      /* fuera rapido, se queda, y vuelve: sin el sostenido en el medio se lee a
+         un parpadeo y no a alguien mirandote */
+      const p = u < 0.30 ? (u/0.30) : u < 0.74 ? 1 : 1 - (u - 0.74)/0.26;
+      const sw = p*p*(3 - 2*p);       /* smoothstep: arranca y termina frenando */
+      /* ── CUANTO PUEDE CORRERSE DE COSTADO LO DECIDE EL CUADRO, NO EL CUARTO ──
+         Con 1,55 m de costado, medido, el bicho salia CASI ENTERO FUERA de la
+         pantalla: en un marco 9:16 el campo horizontal es de 17,3 grados de
+         semiangulo, asi que a 3,4 m la media anchura visible es 1,06 m. El
+         desplazamiento se calcula contra la camara —y no contra el ancho del
+         cuarto— y queda en el 62 % de esa media anchura: pegado al borde, que
+         es lo que hace un asomo, y adentro. */
+      const dA = P.d || 3.2;
+      const medio = Math.tan(cam.fov*Math.PI/360)*cam.aspect*dA;
+      const B = ponBicho(P.k, dA, sg*Math.min(medio*0.62, D.ancho*0.44), 0, 'idle');
+      if (B){ bichoMira(B);
+        B.g.rotation.z = -sg*sw*0.62;
+        bichoVida(B, EFE.t, 4.3, 0.5);
+        EFE.sacude = Math.max(EFE.sacude, sw*0.35); }
+      break; }
+    /* ── SE CORTA LA LUZ Y CUANDO VUELVE YA ESTA ENCIMA ──
+       Ni carrera ni acercamiento: negro, y en el cuadro siguiente la cosa llena
+       la pantalla, quieta, a un metro y medio. Es el unico susto del juego que
+       no tiene aviso ninguno, y por eso es el que se puede poner en el segundo
+       diez sin que el jugador sienta que lo estafaron: no hay nada que ver
+       venir. Se va como llego — la luz se corta y ya no esta. */
+    case 'bEncima': {
+      const B0 = BICHO[P.k];
+      const hAlto = B0 ? B0.alto : 1.8;
+      if (u < 0.16 || u > 0.80){ EFE.luzK = 0.02; break; }
+      EFE.luzK = 0.10;
+      const B = ponBicho(P.k, P.d || 1.5, 0, OJO - hAlto*0.92, 'idle');
+      if (B){ bichoMira(B);
+        /* casi no se mueve, y eso es la decision: una cosa a metro y medio que
+           tiembla se lee a bicho; una que NO se mueve se lee a que te esta
+           mirando */
+        bichoVida(B, EFE.t, 5.7, 0.22);
+        EFE.borroso = Math.max(0, 1 - (u - 0.16)/0.05)*1.1;
+        EFE.sacude = Math.max(EFE.sacude, Math.max(0, 1 - (u - 0.16)/0.10)*1.3); }
       break; }
     /* ── ESTA A LA ESPALDA Y LA CABEZA GIRA SOLA ── */
     case 'bAtras': {

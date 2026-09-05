@@ -140,15 +140,15 @@ const SUSTOS = [
   { id: 'agua',       clase: 'agua',    dur: 2.2, k: 0.55, son: 'burbujas', p: { modo: 'negra' } },
   { id: 'multitud',   clase: 'luz',     dur: 2.6, k: 0.65, son: 'susurro',  p: { modo: 'parpadeo', multitud: 1 } },
   { id: 'final',      clase: 'figura',  dur: 1.5, k: 1.10, son: 'gCara',    p: { modo: 'encima', d: 3.0, v: 12 } },
-  /* ── LOS NUEVE DE LOS SEIS MONSTRUOS ──
-     Las seis criaturas salieron de las referencias que trajo el usuario, asi
-     que cada una tiene su forma de aparecer y ninguna se repite: la calavera
-     con espinas CORRE, el oso corre tambien pero desde mas lejos y en la
-     oscuridad, la nena baja del techo cabeza abajo, la de agujas cruza el
+  /* ── LOS DE LOS MONSTRUOS ──
+     Cinco de las nueve criaturas salieron de las referencias que trajo el
+     usuario, asi que cada una tiene su forma de aparecer y ninguna se repite:
+     el craneo con carne CORRE, el oso corre tambien pero desde mas lejos y en
+     la oscuridad, la nena baja del techo cabeza abajo, la de agujas cruza el
      pasillo caminando sin mirarte, la del disco se acerca a los parpadeos, y
      boisvert —el negro— es la unica que no camina: es una cara pegada al
      lente que no se mueve. */
-  { id: 'cargaEsp',   clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'gChillido',p: { k: 'espinas', d: 8.5 } },
+  { id: 'cargaCarne', clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'gChillido',p: { k: 'carne', d: 8.5 } },
   { id: 'cargaOso',   clase: 'bCarga',  dur: 1.7, k: 0.95, son: 'gBestia',  p: { k: 'oso', d: 10.0 } },
   { id: 'cargaNina',  clase: 'bCarga',  dur: 1.4, k: 1.05, son: 'gNina',    p: { k: 'nina', d: 7.0 } },
   /* ── LOS QUE TE LLEGAN DE ATRAS ──
@@ -169,7 +169,30 @@ const SUSTOS = [
   { id: 'pasaDisco',  clase: 'bPasa',   dur: 2.4, k: 0.35, son: 'gPasos',   p: { k: 'disco', d: 4.2 } },
   { id: 'miraDisco',  clase: 'bMira',   dur: 3.0, k: 0.55, son: 'gCoro',    p: { k: 'disco' } },
   { id: 'boisvert',   clase: 'bCara',   dur: 2.6, k: 1.15, son: 'gCara',    p: { k: 'boisvert' } },
-  { id: 'atrasBois',  clase: 'bAtras',  dur: 2.4, k: 0.80, son: 'gOido',    p: { k: 'boisvert', alto: 1.12 } }
+  { id: 'atrasBois',  clase: 'bAtras',  dur: 2.4, k: 0.80, son: 'gOido',    p: { k: 'boisvert', alto: 1.12 } },
+  /* ── LOS DIEZ DE LOS CUATRO MONSTRUOS NUEVOS ──
+     Reporte textual: *"al final nomas da miedo"*. Y la mitad de la culpa era de
+     la agenda —que ordenaba por peso y guardaba todos los agarres para el
+     ultimo minuto— pero la otra mitad es de cantidad: con SIETE agarres sobre
+     cuarenta y siete sustos, repartirlos parejo deja poco mas de dos por
+     minuto. Con estos diez son DOCE momentos cara a cara sobre cincuenta y
+     siete, o sea uno cada catorce segundos, y ya no hay tercio del juego que
+     se pueda pasar sin que algo se te ponga encima.
+
+     Y no son diez agarres mas: tres son cargas, dos son de la clase nueva que
+     no tiene aviso —la luz se corta y ya esta ahi— y tres son la otra clase
+     nueva, que se asoma desde el borde y se vuelve. Diez copias del mismo
+     agarre no dan mas miedo: dan uno solo repetido diez veces. */
+  { id: 'cargaTraje', clase: 'bCarga',  dur: 1.6, k: 1.05, son: 'gPasos',   p: { k: 'traje', d: 9.0 } },
+  { id: 'cargaSonri', clase: 'bCarga',  dur: 1.5, k: 1.10, son: 'gRisa',    p: { k: 'sonrisa', d: 8.0 } },
+  { id: 'cargaCuello',clase: 'bCarga',  dur: 1.7, k: 1.05, son: 'gLamento', p: { k: 'cuello', d: 10.5, atras: 1 } },
+  { id: 'encimaTraje',clase: 'bEncima', dur: 1.9, k: 1.05, son: 'gOido',    p: { k: 'traje', d: 1.55 } },
+  { id: 'encimaCarne',clase: 'bEncima', dur: 1.8, k: 1.00, son: 'gCara',    p: { k: 'carne', d: 1.60 } },
+  { id: 'asomaTraje', clase: 'bAsoma',  dur: 1.7, k: 0.50, son: 'gJadeo',   p: { k: 'traje', d: 2.4, lado: 1 } },
+  { id: 'asomaSonri', clase: 'bAsoma',  dur: 1.6, k: 0.55, son: 'gCoro',    p: { k: 'sonrisa', d: 2.6, lado: -1 } },
+  { id: 'asomaNina',  clase: 'bAsoma',  dur: 1.5, k: 0.45, son: 'gNina',    p: { k: 'nina', d: 2.2, lado: 1 } },
+  { id: 'techoCarne', clase: 'bTecho',  dur: 2.2, k: 0.85, son: 'gTecho',   p: { k: 'carne', d: 2.9 } },
+  { id: 'pasaCuello', clase: 'bPasa',   dur: 2.5, k: 0.30, son: 'gPasos',   p: { k: 'cuello', d: 3.8 } }
 ];
 
 /* ══════════ CUANDO CAE CADA UNO ══════════
@@ -177,7 +200,12 @@ const SUSTOS = [
    los primeros dan tiempo a acomodar el tablon, los ultimos se encadenan. Y
    NUNCA dos en la misma habitacion seguidos si la anterior todavia esta
    temblando — un susto encima de otro no da el doble de miedo, da ruido. */
-const HUECO0 = 8.2, HUECO1 = 3.4;
+/* ── Y EL HUECO SE APLANA ──
+   Con 8,2 al principio y 3,4 al final, el primer minuto entraba doce sustos y
+   el ultimo veinte: el arranque no solo era mas flojo, ademas era mas VACIO.
+   Con 5,6 y 3,2 el reparto queda casi parejo y lo que sigue apretando al final
+   es la agenda, no un hueco del doble de largo. */
+const HUECO0 = 5.6, HUECO1 = 3.2;
 
 /* ══════════ IDIOMAS ══════════ */
 const TXT = {

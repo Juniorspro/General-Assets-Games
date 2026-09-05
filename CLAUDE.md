@@ -185,13 +185,14 @@ munecas.
   tiene un solo asset más). El duodécimo juego. **Terror en primera persona, vertical nativo y con
   giroscopio**: se lleva **un tablón con un bol de agua** por catorce habitaciones distintas, la
   caminata es **sobre rieles y dura tres minutos exactos**, y lo único que se maneja es **inclinar el
-  teléfono** para que el agua no se vuelque. **Cuarenta y siete sustos, todos distintos y ninguno es
+  teléfono** para que el agua no se vuelque. **Cincuenta y siete sustos, todos distintos y ninguno es
   una imagen que aparece**: son cosas que le pasan a la casa —un portazo, la luz que se corta, una
   mano que sale de la pared, el techo que baja, una cara en el agua del bol, el que gatea, el que te
-  copia, el que está atrás y te obliga a darte vuelta— más **seis monstruos liminales generados a
+  copia, el que está atrás y te obliga a darte vuelta— más **nueve monstruos liminales: cinco generados a
   partir de las imágenes de referencia del propio usuario** (no de un prompt: la referencia va como
-  `source_url`, por eso son idénticos), cuatro de ellos **riggeados con 41 huesos** y con quieto,
-  caminar y correr: **te vienen corriendo de frente**, **bajan del techo cabeza abajo para que veas la
+  `source_url`, por eso son idénticos) y cuatro de prompt, entre ellos **un hombre de traje con cabeza
+  de maniquí**, que es el único que no es una criatura. Ocho están **riggeados con 41 huesos** y con
+  quieto, caminar y correr: **te vienen corriendo de frente**, **bajan del techo cabeza abajo para que veas la
   cara**, cruzan el pasillo sin mirarte, o están al fondo y cada vez que vuelve la luz están más
   cerca. La física del agua es la de verdad: **el primer modo antisimétrico de un tanque cilíndrico**
   (`k = 1,841/R`, `ω² = g·k·tanh(k·h)`) da **1,69 Hz medidos contra 1,69 teóricos**, y el bol se
@@ -199,7 +200,10 @@ munecas.
   única luz de verdad es **una vela clavada en el tablón**. Y todo pasa por un **filtro de VHS de
   verdad** —el color con seis veces menos ancho de banda que la luz, el rebote del filtro de peine, la
   banda de seguimiento, el desgarro de conmutación de cabezas— con marco de cinta y código de tiempo,
-  que se puede apagar. **Siete de los sustos son cargas que terminan en un AGARRE** —el monstruo sale
+  que se puede apagar. **Trece de los sustos te ponen algo en la cara** —diez cargas que terminan en un AGARRE, más dos
+  en las que la luz se corta y cuando vuelve la cosa ya está encima, y una cara pegada al lente— **y
+  el reparto es parejo: cinco en el primer minuto, cinco en el segundo y tres en el tercero, con el
+  primero en el segundo 14.** Las cargas son las de siempre —el monstruo sale
   corriendo del fondo del pasillo, dos nacen a tu espalda, y el último quinto le sube la cara hasta la
   altura de tu vista y se queda ahí— y los gritos son **doce clips generados con Rezona**, no
   osciladores. **El susto no te tumba**: sostener el teléfono derecho gana siempre, y lo que sigue
@@ -227,6 +231,157 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima undécima vuelta (2026-09-05): **VIGILIA** — el principio asusta igual que el final, cuatro monstruos nuevos, y la calavera se va
+
+Reporte, tres cosas: *"agrega más screamers al principio y genera más monstruos de terror analógico y
+que al principio también te asusten así god como al final porque al final nomás da miedo y la calavera
+da risa en vez de miedo"*. Las tres ciertas y las tres medibles.
+
+#### «AL FINAL NOMÁS DA MIEDO» ERA LITERAL, Y ESTABA ESCRITO EN UNA LÍNEA
+
+`armaAgenda` **ordenaba los sustos por peso**. O sea que el primer minuto se llevaba los más flojos y
+los siete agarres caían todos en el último. Medido sobre la versión anterior:
+
+| | sustos | k medio | k máximo | monstruos | agarres |
+|---|---|---|---|---|---|
+| 0-60 s | 12 | **0,39** | 0,55 | 3 (ninguno te mira) | **0** |
+| 60-120 s | 15 | 0,56 | 0,70 | 2 | **0** |
+| 120-180 s | 20 | 0,93 | 1,15 | 10 | **los siete** |
+
+**La mitad del arsenal no existía hasta el minuto dos.** El primer agarre caía en el segundo 128.
+
+Ahora se reparte en **tres mazos por peso** y cada bloque de tres saca uno de cada mazo, con el orden
+del bloque barajado —un mazo tras otro en el mismo orden se escucha a metrónomo— y **cada mazo
+barajado por dentro**, porque si no la escalera vuelve por la ventana. Los dos primeros siguen
+saliendo del mazo flojo: son ocho segundos para aprender el gesto.
+
+**Y EL TERCERO ES SIEMPRE UNO QUE SE TE PONE EN LA CARA.** Con el reparto a ciegas, cuál de los diez
+pesados sale primero es suerte de semilla: medido, el primer cara a cara caía en el **segundo 36**, o
+sea a un tercio del juego. Pinchado, cae en el **14,0**.
+
+Y el hueco se aplana —8,2/3,4 a **5,6/3,2**—, porque el arranque no sólo era más flojo: además era más
+**vacío**.
+
+#### EL HUECO NO PUEDE SER MENOR QUE LO QUE DURA EL SUSTO QUE TERMINA
+
+Con cincuenta y siete sustos el hueco medio cae a 2,9 s y hay sustos de 3,0: medido, **tres se pisaban
+con el siguiente**. Un susto encima de otro no da el doble de miedo, da ruido. El reparto sigue dando
+la **forma** y la duración pone el **piso**, con el factor buscado por bisección para que la suma siga
+entrando en los tres minutos. Medido después: **0 solapados**, huecos de 2,16 a 3,77 s.
+
+#### LA CALAVERA SE FUE DEL JUEGO, Y LA FOTO NO DEJA LUGAR A DISCUSIÓN
+
+Fotografiada en su agarre, `espinas` es **una bola rosada con pinches** —dos manchas oscuras por ojos
+sobre una superficie pálida y con bultos— que se lee a virus de dibujito o a erizo de mar, no a cráneo.
+Y a media distancia era lo contrario: **un borrón gris oscuro sin silueta**. Fallaba en las dos puntas,
+así que no hay ajuste de luz que la salve: el modelo está mal y sale. No es la primera vez que un
+modelo generado se descarta acá —el ladrón 3D de PISTOLA se generó, se probó y se tiró— y es más
+barato que seguir iluminando algo que no se puede arreglar.
+
+La reemplaza **`carne`**, que es lo mismo pedido de otra manera: cráneo con carne cruda a medio estirar
+encima, mandíbula colgando, costillas. Medido en su agarre, **detalle 38,5 y brillo 86** contra los
+14,2 de la bola.
+
+#### CUATRO MONSTRUOS NUEVOS, Y UNO SE DESCARTÓ DESPUÉS DE PAGARLO
+
+`traje` —un hombre de traje con **cabeza de maniquí sin rasgos**—, `carne`, `sonrisa` y `cuello` (un
+esqueleto delgado y altísimo). De seis criaturas a **nueve**.
+
+**EL DEL TRAJE ES EL QUE MÁS APORTA, y no por el modelo sino por la silueta:** es el único de los nueve
+que no es una criatura, y contra ocho cosas demacradas eso se lee de una ojeada. Se pidió primero con
+cabeza de estática de televisión y volvió **`PROVIDER_CONTENT_POLICY_VIOLATION`**; rehecho con cabeza
+de maniquí salió a la primera.
+
+**Y `torcido` SE GENERÓ, SE RIGGEÓ Y NO SE USÓ.** Los cuatro prompts describían cuatro cosas distintas
+—sonrisa partida, cuello estirado, articulaciones al revés— y el generador devolvió **cuatro versiones
+del mismo humanoide demacrado**. Tres se distinguen entre sí por el color y por los huecos del
+esqueleto; el cuarto era `carne` otra vez. Cuatro copias del mismo monstruo no son cuatro monstruos.
+
+**Y ES HONESTO DECIR QUE ESTOS CUATRO SALIERON DE PROMPT.** Los cinco anteriores salieron de las
+imágenes de referencia del propio usuario —por eso son idénticos y no parecidos— y acá no había
+referencia nueva, así que se pidieron por texto y lo que vino es lo que el generador entendió.
+
+#### EL RIG: PEDIR `idle, walk, run` DEVUELVE UN CICLO DE CAMINATA
+
+`ignored_animations` volvió con los tres nombres enteros: el vocabulario del proveedor lleva prefijo
+—**`preset:run`**— y los desconocidos se ignoran **en silencio**, mandando los tres clips de regalo,
+que son walk, idle y jump. O sea que la carga —el susto que el jugador reclamó justamente por venir
+*"solamente caminando"*— se habría dibujado con un ciclo de caminata, y el reporte volvería igual.
+
+Se resuelve con **dos tareas de rig por bicho** —la de regalo y la de `preset:run`— fusionadas con
+`herramientas/visor3d/fusionar.py`: mismo modelo, mismo rig, **los mismos 41 huesos**, así que los
+canales del segundo apuntan a nodos que existen idénticos en el primero y no hace falta ningún
+retarget. Es la diferencia con Eco, donde copiar clips entre generaciones distintas costó una vuelta
+entera. Y `preset:jump` se tira al hornear: un clip vivo que no llama nadie es peso y es código que el
+día que se toque va a estar roto sin que nada lo diga.
+
+#### DIEZ SUSTOS NUEVOS, Y DOS CLASES QUE NO EXISTÍAN
+
+De 47 a **57**. Tres son cargas nuevas, y las otras siete son de dos clases nuevas — diez copias del
+mismo agarre no dan más miedo, dan uno solo repetido diez veces:
+
+- **`bEncima`**: la luz se corta y cuando vuelve **ya está encima**, a metro y medio, llenando el
+  cuadro y **quieto**. Es el único susto del juego sin aviso ninguno, y por eso es el que se puede
+  poner en el segundo diez sin que el jugador sienta que lo estafaron: no hay nada que ver venir. Una
+  cosa a metro y medio que tiembla se lee a bicho; una que **no** se mueve se lee a que te está
+  mirando.
+- **`bAsoma`**: está pegado a la pared del costado, **se inclina** hacia el pasillo —hombro primero,
+  cabeza después—, se queda dos tercios de segundo, y se vuelve. La primera versión lo sacaba de atrás
+  de la pared moviéndolo de costado, y eso depende de que haya pared: en la capilla, que mide seis
+  metros de ancho, lo que se veía era una figura parada en el medio de la nada. Con el **alabeo** la
+  lectura es la misma en los catorce cuartos, porque el gesto está en el cuerpo.
+
+Cara a cara por minuto: **5 · 5 · 3**, contra 0 · 0 · 8.
+
+#### CUÁNTO SE PUEDE CORRER DE COSTADO LO DECIDE EL CUADRO, NO EL CUARTO
+
+`bAsoma` empezó con el desplazamiento sacado del ancho de la habitación (1,55 m) y medido **el bicho
+salía casi entero fuera de la pantalla**: en un marco 9:16 el campo horizontal es de **17,3 grados de
+semiángulo**, así que a 3,4 m la media anchura visible es 1,06 m. El desplazamiento se calcula contra
+la cámara —`tan(fov/2)·aspect·d`— y queda en el 62 % de esa media anchura: pegado al borde, que es lo
+que hace un asomo, y adentro. Es la misma cuenta que en la vuelta 107 dejó la figura de la ventana
+entera fuera del cuadro.
+
+#### Y DOS BICHOS PÁLIDOS SE BAJARON MIRANDO LA FOTO
+
+Con emisivo 0,85 la cabeza de yeso del traje salía a **brillo 116 con pico 255**, o sea recortando: en
+la captura es un bulto blanco del que no se lee que sea una cara sin rasgos, que es lo único que ese
+bicho tiene. Va en 0,42. Y `sonrisa` fue al revés —bajado a 0,45 su agarre cayó a **detalle 19,4**, que
+es la firma de una pared de piel gris— así que volvió a 0,62 y su distancia de agarre pasó de 1,15 a
+1,45: **detalle 48,9 y cobertura 94,8 %**.
+
+#### Y CON DIEZ SUSTOS MÁS EL EQUILIBRIO NO SE MOVIÓ, QUE NO ERA LO ESPERABLE
+
+Con 47 sustos apilados al final, `K_SUS` 4,0 daba 40 de 40 al que sostiene el teléfono derecho, con
+0,33 de agua. Con **57 repartidos parejo da 40 de 40 y 0,332**. Idéntico, y tiene una razón física: la
+frecuencia del chapoteo **sube** cuando queda menos agua, así que un empujón cuesta más caro sobre un
+bol vacío. Amontonar los pesados al final los cobraba justo donde más duelen; repartidos, diez sustos
+más salen igual de caros que los cuarenta y siete anteriores. El barrido lo confirma: 4,6 ya le cuesta
+dos partidas al que va derecho, así que 4,0 sigue siendo el último valor en el que sostenerlo derecho
+gana siempre.
+
+#### MEDIDO AL CERRAR
+
+**9 de 9 monstruos** con `fallas: []` —los ocho riggeados con 41 huesos y los tres clips— **11 de 11
+assets** y **12 de 12 gritos** con `fallas: 0`. Auditoría: **57 de 57, 0 mudos y 0 fuera de cuadro**, y
+el más flojo pasa de 4,9 a **7,6**. Agenda: 57 únicos en los 14 cuartos, del segundo 6,5 al 174, huecos
+de **2,16 a 3,77 s y cero solapados**. Rumbo: **0,1° a 0,5°** en las cuatro cargas nuevas, **0,2°** en
+el asomo, **0,9°** en el de encima, **1,9°** en el que cuelga y **90°** en el que cruza sin mirarte,
+que es el control. Animación de cuerpo con A/B: **0 cm apagada, 55,7 encendida**. Física intacta:
+**1,69 Hz medidos contra 1,69** y resbale **22,1 grados contra 22,8**. Auto-jugadores sobre 40
+semillas: **40 · 40 · 32**. Partidas completas en el navegador: `gana` en el segundo 179,7 con los
+**57 sustos disparados** y 0,47 a 0,52 de agua, **tres semillas de tres**. **Cero solapamientos** en el
+menú, los ajustes y el HUD, en vertical y en apaisado. Tres idiomas y tres calidades en caliente
+(90×160 · 137×297 · 217×469). Giroscopio con el cero asentado: gamma ±20° → incX **+0,125 / −0,117**,
+beta ±25° → incZ **+0,159 / −0,149**. Pausa: el reloj no se mueve. Audio en partida rms 0,092.
+**29 llamadas de dibujo y 49.898 triángulos** (eran 29 y 44.094). `window.__errs` **vacío en las nueve
+corridas**. El HTML pasó de 4,25 a **5,36 MB**, y ese mega son los cuatro monstruos.
+
+**LO QUE NO PUEDO COMPROBAR:** que el principio dé el mismo miedo que el final está medido en sustos
+por minuto, en peso medio y en cuántas veces algo se te pone en la cara —0 en el primer minuto contra
+5— pero *miedo* no es una unidad. Y los cuatro monstruos nuevos salieron de prompt y no de una
+referencia: se parecen entre sí más de lo que se pidió, y eso se arregla con imágenes, no con texto.
 
 ### Centésima décima vuelta (2026-09-05): **VIGILIA** — el agarre, la calavera que no se puede riggear, y el susto deja de tumbarte solo
 
