@@ -372,6 +372,31 @@ window.__V = {
      proyecta la caja, y compara el brillo MEDIO DE ADENTRO contra el mismo
      rectangulo con el bicho apagado. Ese delta es lo unico que prueba que se ve. */
   sinBichos(v){ SIN_BICHOS = !!v; return v; },
+  vidaOff(v){ VIDA_OFF = !!v; return v; },
+  /* ── QUE UN BICHO SIN ESQUELETO SE MUEVA HAY QUE MEDIRLO ──
+     Dos de los seis no se pueden riggear —el generador los rechaza en el
+     pre-chequeo— asi que se los anima por cuerpo entero. Esto mide cuanto
+     recorre un punto de su malla a lo largo del susto: una malla quieta
+     deslizandose da cero y no se distingue en una foto. */
+  mueve(id, k){
+    const r = [];
+    for (let i = 0; i <= 16; i++){
+      this.susto(id, 0.20 + i*0.035);
+      escena.updateMatrixWorld(true);
+      const B = BICHO[k]; if (!B) return { id, k, ver: false };
+      const v = new T.Vector3(0.35, B.alto*0.85, 0.20).applyMatrix4(B.g.matrixWorld);
+      const c = cuerpo.position;
+      r.push([v.x - c.x, v.y - c.y, v.z - c.z]);
+    }
+    let d = 0, alt = 0;
+    for (let i = 1; i < r.length; i++){
+      /* se descuenta el avance del susto: lo que interesa es lo que el bicho
+         se mueve SOBRE si mismo, no que se este acercando */
+      alt += Math.abs(r[i][1] - r[i-1][1]);
+      d += Math.abs(r[i][0] - r[i-1][0]);
+    }
+    return { id, k, ladoCm: +(d*100).toFixed(1), altoCm: +(alt*100).toFixed(1) }; },
+  agarreD(v){ if (v != null) AGARRE_D_TEST = v; return AGARRE_D_TEST; },
   /* los gritos: que esten decodificados, y —lo unico que prueba que sonaron—
      cuanto movieron el analizador colgado del maestro */
   gritos(){ return { n: GRITO_N, fallas: GRITO_FALLAS,
@@ -513,6 +538,28 @@ window.__V = {
       dif: con && sin ? +(con.medio - sin.medio).toFixed(1) : null,
       pico: con ? con.max : null,
       /* cuantos pixeles del rectangulo cambio el bicho, y cuanto los cambio */
+      /* ── EN UN AGARRE LO QUE IMPORTA ES EL CENTRO DE LA PANTALLA ──
+         Un monstruo puede cubrir la mitad de su caja y no estar delante de la
+         cara. Esto mide el rectangulo central del cuadro entero, no la caja. */
+      centro: (() => { pinta(0.016);
+        const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+        const x0 = (w*0.30)|0, y0 = (h*0.30)|0, aw = (w*0.40)|0, ah = (h*0.40)|0;
+        const leer = () => { pinta(0.016); const p2 = new Uint8Array(aw*ah*4);
+          gl.readPixels(x0, y0, aw, ah, gl.RGBA, gl.UNSIGNED_BYTE, p2); return p2; };
+        const a2 = leer(); SIN_BICHOS = true; const b2 = leer(); SIN_BICHOS = false;
+        let n = 0, s3 = 0;
+        for (let i = 0; i < a2.length; i += 4){
+          const va = (a2[i] + a2[i+1] + a2[i+2])/3, vb = (b2[i] + b2[i+1] + b2[i+2])/3;
+          if (Math.abs(va - vb) > 6){ n++; s3 += va; } }
+        /* ── Y CUANTO CUBRE NO DISTINGUE UNA CARA DE UNA PARED ──
+           Pegado al lente, un monstruo cubre el 100 % del centro y lo que se ve
+           es un pedazo liso de cuerpo. Lo que separa una cara de una pared de
+           piel es el DETALLE: la desviacion del brillo dentro del rectangulo. */
+        let m2 = 0; for (let i = 0; i < a2.length; i += 4) m2 += (a2[i] + a2[i+1] + a2[i+2])/3;
+        m2 /= (a2.length/4);
+        let v2 = 0; for (let i = 0; i < a2.length; i += 4){ const d2 = (a2[i] + a2[i+1] + a2[i+2])/3 - m2; v2 += d2*d2; }
+        return { pct: +(100*n/(a2.length/4)).toFixed(1), brillo: n ? +(s3/n).toFixed(1) : 0,
+                 detalle: +Math.sqrt(v2/(a2.length/4)).toFixed(1) }; })(),
       cambio: (() => { if (!con || !sin || con.px.length !== sin.px.length) return null;
         let n = 0, s = 0; for (let i = 0; i < con.px.length; i += 4){
           const a = (con.px[i] + con.px[i+1] + con.px[i+2])/3;

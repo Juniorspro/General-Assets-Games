@@ -633,6 +633,13 @@ const EMIS_BICHO = { boisvert: 1.00, nina: 0.38, agujas: 1.00, disco: 0.95, oso:
    apenas por encima del negro del pasillo — que es como se ven en las
    referencias que trajo el usuario. La forma se la sigue dando la luz. */
 const EMIS_PLANO = { boisvert: 0x6b6b78, espinas: 0x676770, agujas: 0x71717e };
+/* ── A QUE DISTANCIA TERMINA EL AGARRE, POR BICHO ──
+   Con una sola distancia para los seis, los dos altos —2,55 y 3,20— llegan tan
+   cerca que lo que llena el cuadro es un pedazo liso de cuerpo: medido, cubren
+   el 89 % del centro con una desviacion de brillo de dos digitos bajos, o sea
+   una pared de piel. Lo que hace un susto es una CARA, y a que distancia una
+   cara llena el cuadro depende de lo que mida el bicho. */
+const AGARRE_D = { boisvert: 0.55, nina: 0.80, oso: 0.90, disco: 1.55, espinas: 1.45, agujas: 1.50 };
 const BICHO = {};      /* k -> { g, mix, acc:{idle,walk,run}, act } */
 const BICHOS_LISTOS = [], BICHOS_FALLAS = [];
 function cargaBichos(){
@@ -685,7 +692,7 @@ function cargaBichos(){
           }
           o.material.needsUpdate = true;
           o.material.color.multiplyScalar(TINTE_BICHO[k] || 0.8); } } });
-      const B = { g: cont, mix: null, acc: {}, act: null, alto: ALTO_BICHO[k] || 1.8 };
+      const B = { g: cont, mix: null, acc: {}, act: null, alto: ALTO_BICHO[k] || 1.8, esc0: 1 };
       if (g.animations && g.animations.length){
         B.mix = new T.AnimationMixer(raiz);
         for (const cl of g.animations){
@@ -723,8 +730,30 @@ let SIN_BICHOS = false;
    no, medir «con y sin bicho» mide tambien «con y sin luz» y lo que se compara
    son dos cuartos distintos, no dos veces el mismo cuarto */
 let ULT_BICHO = null;
+let AGARRE_D_TEST = 0;   /* solo para el barrido de la sonda */
+/* ── LOS QUE NO TIENEN ESQUELETO TIENEN QUE MOVERSE IGUAL ──
+   Dos de los seis volvieron sin rig —uno es un busto y el otro no tiene
+   extremidades que riggear— y una malla quieta deslizandose por el pasillo no
+   es un monstruo, es un cartel que avanza. Lo que se anima entonces es el
+   CUERPO ENTERO: cabecea, se ladea, tiembla y se estira hacia adelante. Para
+   una cosa que flota eso es mas correcto que un ciclo de caminata, y encima
+   los que SI tienen esqueleto tambien lo llevan encima del clip: un cuerpo que
+   sacude mientras corre se lee mucho mas violento que un ciclo limpio. */
+let VIDA_OFF = false;   /* para el A/B de la sonda */
+function bichoVida(B, t, k, fuerza){
+  if (!B || VIDA_OFF) return;
+  const f = fuerza == null ? 1 : fuerza;
+  const sin = B.mix ? 0.35 : 1.0;      /* sobre un clip alcanza con la mitad */
+  B.g.rotation.x += Math.sin(t*7.3 + k)*0.11*sin*f + Math.sin(t*23.1)*0.035*f;
+  B.g.rotation.z += Math.sin(t*5.1 + k*1.7)*0.13*sin*f + Math.sin(t*19.7)*0.04*f;
+  B.g.position.y += Math.sin(t*4.7 + k)*0.05*sin*f;
+  const e = 1 + Math.sin(t*9.3 + k)*0.05*sin*f;
+  B.g.scale.set(B.esc0, B.esc0*e, B.esc0);
+}
 function ponBicho(k, ade, lado, alto, clip){
   const B = BICHO[k]; if (!B) return null;
+  B.g.scale.setScalar(B.esc0 || 1);
+  B.g.rotation.set(0, 0, 0);
   const a = adelanteDe().clone(), l = costadoDe().clone();
   B.g.position.set(cuerpo.position.x + a.x*ade + l.x*lado, cuerpo.position.y + alto,
                    cuerpo.position.z + a.z*ade + l.z*lado);
@@ -912,15 +941,56 @@ function animaSusto(S, u, R){
          girar ya cerro la mitad de los metros. Mirar para otro lado no salva. */
       const sg = P.atras ? -1 : 1;
       if (P.atras) EFE.mirarA = Math.sin(Math.min(1, u*1.4)*Math.PI*0.5)*0.92;   /* 0,92 x 3,5 = pi: el bicho esta justo a la espalda */
-      const B = ponBicho(P.k, sg*lerp(P.d, 0.7, u*u), 0, P.alto || 0, 'run');
+      /* ── ACERCARSE NO ES UN SUSTO: EL SUSTO ES EL CONTACTO ──
+         Cortando a setenta centimetros lo que se ve es una cosa que se acerca y
+         despues no pasa nada — «solamente estan caminando», que es el reporte
+         textual. El ultimo quinto es un AGARRE: la cara llega a treinta y ocho
+         centimetros del ojo, o sea llenando el cuadro, se le sube la cabeza
+         hasta la altura de la vista, y se queda ahi. Lo que asusta es que NO se
+         vaya. */
+      const uAg = Math.max(0, (u - 0.80)/0.20);      /* 0 -> 1 en el ultimo quinto */
+      const Bref = BICHO[P.k];
+      const hAlto = Bref ? Bref.alto : 1.7;
+      /* la cabeza del bicho sube hasta la altura del ojo: un monstruo de tres
+         metros veinte apoyado en el piso tiene la cara a metro y medio POR
+         ENCIMA del cuadro, o sea que en el agarre no se le ve la cara */
+      const altoBase = P.alto || 0;
+      const altoAg = lerp(altoBase, OJO - hAlto*0.90, uAg);
+      const dAg = AGARRE_D_TEST || (AGARRE_D[P.k] != null ? AGARRE_D[P.k] : 0.75);
+      const B = ponBicho(P.k, sg*lerp(lerp(P.d, 0.9, u*u), dAg, uAg), 0, altoAg, 'run');
       if (B){ bichoMira(B);
-        EFE.sacude = Math.max(EFE.sacude, u*u*0.9);
+        /* el meneo del cuerpo se acota en el agarre: a cincuenta centimetros,
+           dieciocho grados de vaiven se llevan la cara fuera del cuadro. Lo que
+           sacude ahi es la CAMARA. */
+        bichoVida(B, EFE.t, P.d, 1 + uAg*0.35);
+        EFE.sacude = Math.max(EFE.sacude, u*u*0.9 + uAg*1.4);
+        /* el agarre pega en la pantalla: fogonazos a tirones y la cinta se
+           desgarra, que es lo que hace una cinta cuando la golpean */
+        /* ── Y EL FOGONAZO VA CHICO, PORQUE SI NO TAPA EL MONSTRUO ──
+           Con blanco 0,34 y rojo 0,42 —que ademas el velo multiplica por 1,4—
+           los siete agarres salian como un lavado rosa de punta a punta: el
+           efecto tapaba justo la cosa que el efecto viene a subrayar. */
+        if (uAg > 0){
+          EFE.blanco = Math.max(EFE.blanco, (Math.sin(uAg*47) > 0.45 ? 0.15 : 0)*uAg);
+          EFE.rojo = Math.max(EFE.rojo, uAg*0.18);
+          /* ── PERO AL DE ATRAS NO SE LE ENDEREZA LA CABEZA ──
+             Poniendo `mirarA` en cero durante el agarre, el que nace a la
+             espalda termina otra vez FUERA del cuadro: la cabeza se destuerce
+             justo cuando la cosa esta encima. Medido, su agarre salia con el
+             cuarto vacio. */
+          if (!P.atras) EFE.mirarA = 0; }
         /* ── EL DESENFOQUE ES EL GOLPE, NO LA CARRERA ──
            Con u² el cuadro entero se convierte en una mancha desde la mitad del
            susto: medido, el radio llega a seis texeles sobre un destino de 137
            de ancho y lo unico que se ve es niebla de color. Va solo en el ultimo
            quinto, que es cuando el bicho ya te tiene encima. */
-        EFE.borroso = Math.max(0, (u - 0.82)/0.18)*1.4;
+        /* ── Y EL DESENFOQUE ES UN PICO EN EL IMPACTO, NO UNA RAMPA ──
+           Con una rampa que crece hasta el final, el ultimo quinto —que es
+           justo el agarre— sale con la cara hecha una mancha: el efecto tapa lo
+           unico que hay que ver. Sube de golpe cuando la cosa llega y despeja
+           para el sostenido, que es la figura clasica del susto: golpe, y
+           despues la cara nitida encima. */
+        EFE.borroso = Math.max(0, 1 - Math.abs(u - 0.83)/0.065)*1.15;
         /* el ultimo tercio pega en la camara: mirar para otro lado no salva */
         if (u > 0.72 && !P.atras) EFE.mirarA = 0; }
       break; }
@@ -952,6 +1022,7 @@ function animaSusto(S, u, R){
          a la camara es pi/2 - rumboDelCuerpo y no el mismo mas pi/2. Medido con
          la sonda, colgaba mirando 178 grados: te mostraba la nuca. */
       if (B){ B.g.rotation.set(Math.PI, YAW_BICHO - cuerpo.rotation.y, Math.sin(u*9)*0.10);
+        bichoVida(B, EFE.t, 3.1, 0.9);
         EFE.techoY = -Math.sin(Math.min(1, u*1.5)*Math.PI)*0.25; }
       break; }
     /* ── CRUZA EL PASILLO CAMINANDO ──
@@ -960,7 +1031,7 @@ function animaSusto(S, u, R){
     case 'bPasa': {
       EFE.luzK = 0.22;
       const B = ponBicho(P.k, P.d, lerp(-D.ancho*0.40, D.ancho*0.40, u), 0, 'walk');
-      if (B) B.g.rotation.set(0, cuerpo.rotation.y + Math.PI/2 - YAW_BICHO, 0);
+      if (B){ B.g.rotation.set(0, cuerpo.rotation.y + Math.PI/2 - YAW_BICHO, 0); bichoVida(B, EFE.t, 1.7, 0.6); }
       break; }
     /* ── ESTA AL FONDO Y CADA VEZ QUE VUELVE LA LUZ ESTA MAS CERCA ──
        Tres parpadeos, tres distancias. El movimiento no se ve nunca: lo que se
@@ -969,7 +1040,7 @@ function animaSusto(S, u, R){
       const paso = Math.floor(u*3.999);
       EFE.luzK = (Math.sin(u*52) > -0.25) ? 1 : 0.05;
       const B = ponBicho(P.k, [11.0, 8.0, 5.5, 3.4][paso], 0, 0, 'idle');
-      if (B) bichoMira(B);
+      if (B){ bichoMira(B); bichoVida(B, EFE.t, 2.3, 0.7); }
       break; }
     /* ── LA CARA QUE LLENA LA PANTALLA ──
        Es lo que hace el video que trajo el usuario: la cosa deja de ser una
@@ -1057,8 +1128,16 @@ function pinta(dt){
        arriba del cielorraso: el foco se iba con el y la cara —que es lo unico
        que entra en el cuadro— quedaba a dos metros de la luz. Medido, su pixel
        mas claro daba 3,8 sobre 255. */
+    /* ── EL FOCO VA A LA ALTURA DE LA VISTA, NO AL CENTRO DEL CUERPO ──
+       Lo que la camara mira de un monstruo es la CARA, y el centro de la caja
+       de una figura de dos metros y medio cae un metro por debajo de ella:
+       medido en el agarre, la luz quedaba alumbrandole la panza y la cara —a
+       cincuenta centimetros del ojo— recibia un tercio. La regla correcta es
+       alumbrar lo que se esta viendo: la altura del ojo, acotada al cuerpo del
+       propio bicho para que en uno bajito no se vaya por encima. */
     const ojoY = cuerpo.position.y + OJO;
-    const lyz = Math.max(ojoY - 0.9, Math.min(ojoY + 0.9, _v2.y));
+    const lyz = Math.max(_cajaSus.min.y + 0.12,
+                Math.min(_cajaSus.max.y - 0.12, ojoY));
     /* ── ES UN FOCO DESDE LA CAMARA Y NO UNA BOMBITA AL LADO DEL BICHO ──
        Una luz puntual pegada al monstruo tambien alumbra el pasillo, y un
        pasillo mide dos metros de ancho: por mas que se le acote el alcance, las

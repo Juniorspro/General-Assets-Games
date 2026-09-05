@@ -14,19 +14,25 @@ const DT = 1/60;
     10  -> nadie llega, ni jugando bien.
    O sea que el numero no se eligio: es donde la diferencia entre hacer algo y
    no hacer nada es mas grande sin que el juego se vuelva una loteria. */
-/* ── EL IMPULSO SE VUELVE A MEDIR CADA VEZ QUE CAMBIA LA CANTIDAD ──
-   El presupuesto de agua no cambia y la agenda paso de 33 a 47 sacudones: con
-   el 7,0 de la primera version el bot ganaba 3 de 40, o sea que la partida se
-   perdia por cantidad y no por pulso. Barrido de once valores sobre 40
-   semillas, y el codo esta en 5,6:
+/* ── EL SUSTO NO TE TUMBA: LO QUE TE TUMBA ES TU MANO ──
+   Pedido textual del jugador: *"que no nos hagan tumbar a proposito por mas que
+   nos agarren, nosotros si mantenemos bien el giro todo bien"*. Y tenia razon:
+   con 5,6 el que sostenia el telefono DERECHO perdia 34 de 40 partidas, o sea
+   que el susto ganaba solo y hacer bien las cosas no alcanzaba.
 
-     7,4 -> bot  3 · quieto  0 · azar 0      5,75 -> bot 38 · quieto  5 · azar 1
-     6,4 -> bot 25 · quieto  0 · azar 0      5,60 -> bot 40 · quieto  6 · azar 2
-     5,9 -> bot 35 · quieto  3 · azar 1      5,40 -> bot 40 · quieto 12 · azar 3
+   Con 4,0 el barrido sobre 40 semillas da:
 
-   Por debajo de 5,6 quedarse quieto empieza a ganar; por encima, el juego no se
-   puede terminar. */
-const K_SUS = 5.6;
+     K_SUS   bot   derecho   sacudiendo      agua que queda (derecho)
+      5,6     40       6          2                 0,04
+      4,6     40      37         18                 0,18
+     *4,0*    40    * 40 *       32                 0,33
+      3,4     40      40         39                 0,53
+
+   O sea que 4,0 es el ultimo valor en el que sostener el telefono derecho gana
+   SIEMPRE y sacudirlo sigue costando ocho partidas de cuarenta. Por debajo, el
+   que lo sacude tambien gana y no queda juego. El susto pasa a ser lo que es:
+   una razon para que la mano se te mueva, no un castigo escrito. */
+const K_SUS = 4.0;
 const A_TAB = 6.0;              /* y el tiron que ademas se le ve al tablon */
 const R_CAZUELA = 2.6;          /* radio de curvatura del hueco donde apoya el bol */
 let PERTURBA = 1;               /* la sonda del modo libre apaga el cabeceo */

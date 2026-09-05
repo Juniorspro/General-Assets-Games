@@ -199,9 +199,11 @@ munecas.
   única luz de verdad es **una vela clavada en el tablón**. Y todo pasa por un **filtro de VHS de
   verdad** —el color con seis veces menos ancho de banda que la luz, el rebote del filtro de peine, la
   banda de seguimiento, el desgarro de conmutación de cabezas— con marco de cinta y código de tiempo,
-  que se puede apagar. **Siete de los sustos son cargas** —el monstruo sale corriendo del
-  fondo del pasillo y dos nacen a tu espalda— y los gritos son **doce clips generados con Rezona**, no
-  osciladores. Vive partido en `herramientas/vigilia/partes/` y se arma con
+  que se puede apagar. **Siete de los sustos son cargas que terminan en un AGARRE** —el monstruo sale
+  corriendo del fondo del pasillo, dos nacen a tu espalda, y el último quinto le sube la cara hasta la
+  altura de tu vista y se queda ahí— y los gritos son **doce clips generados con Rezona**, no
+  osciladores. **El susto no te tumba**: sostener el teléfono derecho gana siempre, y lo que sigue
+  costando partidas es sacudirlo. Vive partido en `herramientas/vigilia/partes/` y se arma con
   `python3 herramientas/vigilia/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
@@ -225,6 +227,108 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima décima vuelta (2026-09-05): **VIGILIA** — el agarre, la calavera que no se puede riggear, y el susto deja de tumbarte solo
+
+Reporte, tres cosas: *"la calavera esa ni está riggeada no hace nada · los screamer no son screamers
+solamente están caminando, hace sustos que nos agarren la cara · y además que no nos hagan tumbar a
+propósito por más que nos agarren, nosotros si mantenemos bien el giro todo bien"*. Las tres ciertas.
+
+#### «SOLAMENTE ESTÁN CAMINANDO»: ACERCARSE NO ES UN SUSTO, EL SUSTO ES EL CONTACTO
+
+`bCarga` cortaba a setenta centímetros y ahí terminaba. O sea que lo que se veía era una cosa que se
+acerca y después no pasa nada. El último quinto pasa a ser un **agarre**: la cara llega hasta llenar el
+cuadro, **se le sube la cabeza hasta la altura de la vista**, y se queda ahí. Lo que asusta es que no se
+vaya.
+
+**LA ALTURA SALE DE LO QUE MIDE EL BICHO.** Un monstruo de tres metros veinte apoyado en el piso tiene
+la cara metro y medio **por encima** del cuadro: en el agarre no se le vería la cara, que es justamente
+lo único que hay que ver. La malla se sube hasta que su cara cae en `OJO`.
+
+#### Y LA DISTANCIA DEL AGARRE ES DE CADA UNO, PORQUE PEGADO AL LENTE UNA CARA ES UNA PARED
+
+Con una sola distancia para los seis, los dos altos llegaban tan cerca que lo que llenaba la pantalla era
+un pedazo liso de cuerpo. **Y la métrica de cobertura no lo ve**: medido, `cargaEsp` cubría el **92 % del
+centro** con brillo 84 — todos los números decían «está ahí, iluminado y en tu cara» y la foto entera era
+un muro de piel.
+
+Lo que distingue una cara de una pared no es cuánto cubre sino el **detalle**: la desviación del brillo
+dentro del rectángulo central. Con eso, `cargaDisco` daba **3,9** contra 13 a 35 de los que sí se leen —
+la firma exacta de una superficie plana llenando el cuadro. Cada bicho tiene su distancia
+(`AGARRE_D`: 0,55 el busto · 0,80 la nena · 0,90 el oso · 1,45 la calavera · 1,50 el de agujas · 1,55 el
+del disco), y sale de que su **cara** llene el cuadro y no su torso.
+
+#### TRES DEFECTOS MÁS DEL AGARRE, LOS TRES DE PUESTA EN ESCENA
+
+- **EL FOGONAZO TAPABA AL MONSTRUO.** Con blanco 0,34 y rojo 0,42 —que además el velo multiplica por
+  1,4— los siete agarres salían como un lavado rosa de punta a punta: el efecto tapaba justo la cosa que
+  el efecto viene a subrayar. Van en 0,15 y 0,18.
+- **EL DESENFOQUE ES UN PICO EN EL IMPACTO, NO UNA RAMPA.** Creciendo hasta el final, el agarre entero
+  salía con la cara hecha una mancha. Sube de golpe cuando la cosa llega y despeja para el sostenido,
+  que es la figura clásica: golpe, y después la cara nítida encima.
+- **EL FOCO LE ALUMBRABA LA PANZA.** Iba al centro de la caja, y el centro de una figura de dos metros y
+  medio cae un metro por debajo de su cara: a cincuenta centímetros del ojo, la cara recibía un tercio.
+  Ahora va **a la altura de la vista**, acotada al cuerpo del propio bicho. Alumbrar lo que la cámara
+  está mirando.
+- **Y AL QUE VIENE DE ATRÁS SE LE ENDEREZABA LA CABEZA JUSTO EN EL AGARRE.** `EFE.mirarA = 0` valía para
+  los siete, así que el que nace a la espalda terminaba otra vez **fuera del cuadro**: medido, su agarre
+  salía con el cuarto vacío.
+
+#### LA CALAVERA NO SE PUEDE RIGGEAR, Y ESO ES TERMINAL
+
+Se reintentó y el generador la rechaza **en el pre-chequeo**: `RIG_SOURCE_NOT_RIGGABLE` — *"este modelo
+no se puede riggear, probá con un humanoide o un animal"*, con `retry_advice: terminal`. Lo mismo el
+busto. No es que no se intentó: es una propiedad de esos dos modelos.
+
+Así que se los anima **por cuerpo entero** (`bichoVida`): cabecean, se ladean, tiemblan y se estiran.
+Para una cosa que flota eso es más correcto que un ciclo de caminata, y los cuatro que sí tienen
+esqueleto lo llevan **encima del clip** — un cuerpo que sacude mientras corre se lee mucho más violento
+que un ciclo limpio.
+
+**Y SE MIDIÓ CON UN A/B, porque «se mueve» no es una afirmación:** apagando `bichoVida`, el recorrido
+vertical de los tres es **exactamente 0** —una malla deslizándose— y con ella da **283 · 81 · 87 cm**.
+(La sonda replanta el susto en cada muestra, así que el reloj del esqueleto vuelve a cero: ese cero mide
+la animación de cuerpo, no el clip.)
+
+**Y EL MENEO SE ACOTA EN EL AGARRE.** A cincuenta centímetros, dieciocho grados de vaivén se llevan la
+cara fuera del cuadro. Lo que sacude ahí es la **cámara**.
+
+#### EL SUSTO DEJA DE TUMBARTE SOLO
+
+Es el tercer reclamo y es un cambio de diseño, no un ajuste. Medido, con el impulso en 5,6 el que
+sostenía el teléfono **derecho** perdía **34 de 40 partidas**: el susto ganaba solo y hacer bien las
+cosas no alcanzaba. Barrido sobre 40 semillas:
+
+| K_SUS | bot | derecho | sacudiendo | agua que le queda al que va derecho |
+|---|---|---|---|---|
+| 5,6 | 40 | **6** | 2 | 0,04 |
+| 4,6 | 40 | 37 | 18 | 0,18 |
+| **4,0** | **40** | **40** | **32** | **0,33** |
+| 3,4 | 40 | 40 | 39 | 0,53 |
+
+Queda en **4,0**: es el último valor en el que sostener el teléfono derecho gana **siempre** y sacudirlo
+sigue costando ocho partidas de cuarenta. Por debajo, el que lo sacude también gana y no queda juego.
+El susto pasa a ser lo que es —una razón para que la mano se te mueva— y no un castigo escrito.
+
+#### MEDIDO AL CERRAR
+
+**6 de 6 monstruos**, `fallas: []`; **11 de 11 assets**; **12 de 12 gritos** con `fallas: 0`. Rumbo:
+**0,4° a 7,8°** en los doce que tienen que mirarte, **90° y 89,9°** en los dos que cruzan sin mirarte —
+que es el control—, y **2,0° / 2,4°** en los dos que cuelgan. Los siete agarres, medidos sobre el
+rectángulo central del cuadro entero: cubren del **35 % al 94 %** con brillo 46 a 84 y detalle 13 a 35.
+Animación de cuerpo con A/B: **0 cm apagada, 81 a 283 encendida**. Auditoría: **47 de 47, 0 mudos, 0
+fuera de cuadro**, el peor en 4,9. Agenda: 47 únicos en los 14 cuartos, huecos de 2,13 a 5,15 s. Física
+intacta: **1,69 Hz medidos contra 1,69**, resbale **22,1 grados contra 22,8**. Auto-jugadores sobre 40
+semillas: **40 · 40 · 32**. Partida completa en el navegador: `gana` en el segundo 179,7 con los 47
+sustos y **0,47 de agua**, tres semillas de tres. **Cero solapamientos** en el menú, los ajustes y el HUD,
+en vertical y en apaisado. Tres idiomas y tres calidades en caliente (90×160 · 137×297 · 217×469).
+Giroscopio: gamma ±20° → incX **±0,467**, beta ±25° → incZ **±0,593**. Pausa: el reloj no se mueve en
+1,2 s. Audio en partida rms 0,102 y un grito 0,194. **29 llamadas de dibujo y 44.094 triángulos.**
+`window.__errs` **vacío en las siete corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** que sostener el teléfono derecho siempre gane está medido con un
+simulador que no se asusta. Lo que el juego apuesta ahora es que **con la cara de esa cosa a medio metro,
+la mano se te mueve igual** — y eso sólo se comprueba jugándolo.
 
 ### Centésima novena vuelta (2026-09-05): **VIGILIA** — miraban de costado, y los gritos eran ondas de sierra
 
