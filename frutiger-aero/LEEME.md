@@ -36,6 +36,28 @@ Las dos son azul de arriba abajo con apenas una franja de pasto: **las versiones
 con nubes grandes no sirven**, porque a través del vidrio el blanco de las nubes
 lava el texto y la página entera se ve descolorida.
 
+## Los íconos
+
+Dieciocho, en `sitio/img/ic/`: 256x256 WebP con alfa, 121 KB entre todos. Los
+prompts están en `modelos.json`.
+
+`transparent: true` devuelve PNG con canal alfa de verdad, y el canvas de
+Playwright lo conserva al pasarlos a WebP. **Lo que los hace parecer un juego y
+no dieciocho dibujos sueltos es repetir literalmente la misma cola de estilo en
+los dieciocho prompts**, palabra por palabra.
+
+Dos cosas que costaron:
+
+- **Cuando el generador mete algo que no pediste, no sirve insistir.** Tres
+  veces seguidas le puso un monigote de usuario adentro de las placas de vidrio,
+  con «nothing drawn on them» y todo. Se arregló cambiando el sujeto por uno que
+  quiere el mismo resultado: en vez de «placas de vidrio vacías», «una ventana
+  de Aero».
+- **De 17 pedidos de un lote, 5 no llegaron a existir.** `fetch` devuelve
+  `FILE_NOT_FOUND`, que es terminal: hay que reenviar la generación, no
+  reintentar la descarga. Conviene comparar la lista pedida contra los archivos
+  bajados en vez de contar respuestas.
+
 ## Los personajes 3D
 
 Seis modelos en `sitio/modelos/`, generados con Rezona Lab (proyecto `ZFiGfVPq`,

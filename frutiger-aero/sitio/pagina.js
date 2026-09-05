@@ -24,22 +24,14 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
 /* =====================  los personajes  ===================== */
 
 const BICHOS = [
-  { a:"p-usuario", n:"El monigote", c:"#4fc3f7",
-    d:"El de las cuentas de usuario. Sin cara, sin manos: sos vos, pero de plástico.", giro:0 },
-  { a:"p-delfin",  n:"El delfín",   c:"#29b6f6",
-    d:"Saltando y mojado. Estuvo en salvapantallas, publicidades de agua y carpetas escolares.",
-    giro:-0.55 },
-  { a:"p-pez",     n:"El pez",      c:"#ffd54f",
-    /* Es plano: de frente se ve de canto. El cuarto de vuelta es obligatorio. */
-    d:"Amarillo con bandas negras. Toda pantalla submarina tenía uno adelante.", giro:Math.PI/2 },
-  { a:"p-robot3",  n:"El robot",    c:"#4fc3f7",
-    /* Salió mirando para atrás: sin este giro se lo ve de espaldas. */
-    d:"Blanco brillante y celeste, con dos ojos y una sonrisa. La cara amable de la tecnología.",
-    giro:4.7 },
-  { a:"p-pajaro",  n:"El pajarito", c:"#42a5f5",
-    d:"Redondo, celeste y con pico naranja. La forma en que se dibujaba «internet».", giro:0 },
-  { a:"p-medusa",  n:"La medusa",   c:"#e0f7fa",
-    d:"Sale sin color a propósito: es la que mejor queda con el material de vidrio.", giro:0 },
+  { a:"p-usuario", n:"El monigote", c:"#4fc3f7", d:"El de las cuentas de usuario.", giro:0 },
+  { a:"p-delfin",  n:"El delfín",   c:"#29b6f6", d:"El del salvapantallas.",       giro:-0.55 },
+  /* El pez es plano: de frente se ve de canto. El cuarto de vuelta es obligatorio. */
+  { a:"p-pez",     n:"El pez",      c:"#ffd54f", d:"El de toda pantalla submarina.", giro:Math.PI/2 },
+  /* El robot salió mirando para atrás: sin este giro se lo ve de espaldas. */
+  { a:"p-robot3",  n:"El robot",    c:"#4fc3f7", d:"La cara amable de la tecnología.", giro:4.7 },
+  { a:"p-pajaro",  n:"El pajarito", c:"#42a5f5", d:"Así se dibujaba «internet».",  giro:0 },
+  { a:"p-medusa",  n:"La medusa",   c:"#e0f7fa", d:"La que mejor queda de vidrio.", giro:0 },
 ];
 
 const lienzo = $("lienzo");
@@ -174,42 +166,53 @@ medirLienzo(); cuadro(); mostrar(0);
 
 /* =====================  las listas  ===================== */
 
-const KIT = [
-  ["La burbuja", "La pieza central. Brillo arriba a la izquierda, aro de luz en el borde y un reflejo chiquito abajo. Sin esos tres, es un círculo."],
-  ["El agua", "Vista desde abajo, con los rayos de sol entrando en abanico. Toda pantalla que se preciara tenía un pez."],
-  ["El orbe", "El botón «Web 2.0»: degradado vertical, brillo elíptico en la mitad de arriba y sombra abajo. Estuvo en absolutamente todo."],
-  ["La gota", "Agua quieta sobre una superficie. Es lo que hace que una hoja se vea recién lavada en vez de simplemente verde."],
-  ["El aluminio", "El contrapeso frío. Cepillado, siempre horizontal, para que el plástico brillante no quedara de juguete."],
-  ["El vidrio", "Ventanas que dejaban ver lo de atrás, borroso y teñido. Aero Glass le puso nombre y le puso precio: hacía falta placa de video."],
-];
-$("rejKit").innerHTML = KIT.map(([t, d], i) =>
-  `<article class="tarjeta"><span class="num">${i + 1}</span><h3>${t}</h3><p>${d}</p></article>`).join("");
+/* Cada lista es ícono + nombre + una línea. Antes eran párrafos y nadie los leía. */
+function tarjetas(donde, filas){
+  $(donde).innerHTML = filas.map(([ic, t, d]) => `
+    <article class="tarjeta">
+      <img src="img/ic/${ic}.webp" alt="" width="256" height="256" loading="lazy">
+      <div class="txt"><h3>${t}</h3><p>${d}</p></div>
+    </article>`).join("");
+}
+
+tarjetas("rejKit", [
+  ["i-burbuja",  "La burbuja",  "Brillo arriba, aro de luz, reflejo abajo."],
+  ["i-agua",     "El agua",     "Vista desde abajo, con rayos de sol."],
+  ["i-orbe2",    "El orbe",     "El botón «Web 2.0». Estuvo en todo."],
+  ["i-gota",     "La gota",     "Lo que hace que una hoja se vea recién lavada."],
+  ["i-aluminio", "El aluminio", "El contrapeso frío, siempre cepillado."],
+  ["i-ventana",  "El vidrio",   "Ventanas que dejaban ver lo de atrás."],
+]);
 
 const LINEA = [
-  ["2000", "Mac OS X estrena «Aqua»: botones de gel, barras a rayas y reflejos. Apple inventa el idioma."],
-  ["2001", "Windows XP sale con Bliss de fondo: una loma verde y un cielo azul. Es la foto que más gente vio en la historia."],
-  ["2006", "Windows Vista trae Aero Glass. Ventanas translúcidas de verdad, con desenfoque. De acá sale la mitad del nombre."],
-  ["2006", "La Wii y el Canal Mii: blanco, redondo y con sonido de burbujas. Entra a casas que no tenían computadora."],
-  ["2007", "El primer iPhone. Iconos con lomo brillante y el estante de madera de los libros: skeuomorfismo puro."],
-  ["2010", "Empieza el cansancio. Windows Phone estrena Metro: tipografía grande, colores planos, nada de brillo."],
-  ["2012", "Windows 8 tira el vidrio a la basura. Cuadrados de color liso en pantalla completa."],
-  ["2013", "iOS 7. En una tarde, el teléfono más copiado del mundo borra todos los brillos. Se terminó."],
-  ["2017", "Alguien en internet le pone nombre: «Frutiger Aero», por la tipografía de Adrian Frutiger y el Aero de Vista. Cuatro años tarde."],
-  ["2025", "Apple presenta Liquid Glass. El vidrio vuelve, ahora sin burbujas y con los bordes doblando la luz."],
+  ["2000", "Mac OS X estrena «Aqua». Apple inventa el idioma."],
+  ["2001", "Windows XP y su loma verde: la foto que más gente vio."],
+  ["2006", "Vista trae Aero Glass. Ventanas translúcidas de verdad."],
+  ["2006", "La Wii: blanco, redondo y con sonido de burbujas."],
+  ["2007", "El primer iPhone. Cuero falso y madera en la pantalla."],
+  ["2010", "Windows Phone estrena Metro. Nada de brillo."],
+  ["2012", "Windows 8 tira el vidrio a la basura."],
+  ["2013", "iOS 7 borra todos los brillos. Se terminó."],
+  ["2017", "Recién ahí alguien le pone nombre: «Frutiger Aero»."],
+  ["2025", "Apple presenta Liquid Glass. El vidrio vuelve."],
 ];
 $("rejLinea").innerHTML = LINEA.map(([a, d]) =>
   `<div class="hito"><b>${a}</b><p>${d}</p></div>`).join("");
 
-const LUGARES = [
-  ["Windows Vista / 7", "Aero Glass: ventanas translúcidas con desenfoque real, el orbe de inicio y los gadgets de la barra lateral. Es de donde sale la mitad del nombre."],
-  ["Mac OS X «Aqua»", "Llegó primero, en 2000: botones de gel, barras a rayas y el Dock con reflejo. Apple inventó el idioma y Microsoft lo hizo masivo."],
-  ["Nintendo Wii", "Blanco, redondo y con sonido de burbujas. El Canal Mii y el pronóstico del tiempo eran interfaces de vidrio para toda la familia."],
-  ["PlayStation 3 · XMB", "Una cruz de iconos sobre un fondo de ondas que cambiaba de color según el mes. Puro brillo, puro degradado."],
-  ["Zune · iPod · Nokia", "Reproductores con carcasa de plástico brillante y menús con reflejo. El objeto era tan Aero como la pantalla."],
-  ["El iPhone antes de iOS 7", "Iconos con lomo brillante, la libreta con textura de cuero, el estante de madera. Skeuomorfismo puro, la última etapa."],
-];
-$("rejDonde").innerHTML = LUGARES.map(([t, d]) =>
-  `<article class="tarjeta"><h3>${t}</h3><p>${d}</p></article>`).join("");
+tarjetas("rejDonde", [
+  ["i-vidrio",   "Windows Vista / 7",  "Aero Glass. De acá sale medio nombre."],
+  ["i-gel",      "Mac OS X «Aqua»",    "Llegó primero, en 2000."],
+  ["i-consola",  "Nintendo Wii",       "Blanco, redondo y con sonido de burbujas."],
+  ["i-cruz",     "PlayStation 3",      "La cruz sobre un fondo de ondas."],
+  ["i-musica",   "iPod · Zune",        "El objeto era tan Aero como la pantalla."],
+  ["i-telefono", "iPhone, hasta iOS 6", "Iconos con lomo brillante y cuero falso."],
+]);
+
+tarjetas("rejFinal", [
+  ["i-telefono", "Pantallas chicas", "Cuatro degradados no se leen a cinco centímetros."],
+  ["i-bateria",  "Batería contada",  "El vidrio con desenfoque se la comía."],
+  ["i-burbuja",  "Cambio de humor",  "Después de 2008 el brillo sonaba a mentira."],
+]);
 
 /* =====================  la barra  ===================== */
 
