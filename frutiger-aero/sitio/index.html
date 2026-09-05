@@ -176,6 +176,23 @@ p{margin:14px 0 0; max-width:68ch}
   font:600 12px/1.2 var(--tipo); color:#fff; text-align:left;
   background:linear-gradient(transparent, rgba(4,34,60,.85))}
 
+/* ---------- fotos de verdad ---------- */
+.filtros{display:flex; flex-wrap:wrap; gap:8px; margin-top:26px}
+.chip{border:1px solid var(--lineaOscura); border-radius:999px; padding:7px 15px; cursor:pointer;
+  font:600 13px var(--tipo); color:var(--tinta2); background:rgba(255,255,255,.7);
+  backdrop-filter:blur(6px); transition:background .18s, color .18s, transform .18s}
+.chip:hover{transform:translateY(-1px)}
+.chip[aria-pressed="true"]{color:#fff; border-color:transparent;
+  background:linear-gradient(#3fb9ec, #0a6fb0); box-shadow:0 8px 18px -10px rgba(6,60,110,.8)}
+.galeria.reales{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.galeria.reales button{aspect-ratio:4/3}
+.galeria.reales span{padding:26px 10px 9px; font-weight:500;
+  background:linear-gradient(transparent, rgba(4,34,60,.55) 32%, rgba(4,34,60,.92))}
+.galeria.reales span b{display:block; font-size:12.5px; font-weight:700}
+.galeria.reales span i{font-style:normal; opacity:.82; font-size:11px}
+.nota{margin-top:22px; font-size:13px; color:var(--tenue)}
+.visor .pie a{color:#9fe0ff}
+
 /* el visor */
 .visor{position:fixed; inset:0; z-index:90; display:none; place-items:center; padding:20px;
   background:rgba(4,30,54,.88); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
@@ -231,6 +248,7 @@ p{margin:14px 0 0; max-width:68ch}
     <li><a class="item" href="#linea">Línea de tiempo</a></li>
     <li><a class="item" href="#donde">Dónde vivía</a></li>
     <li><a class="item" href="#galeria">Galería</a></li>
+    <li><a class="item" href="#fotos">Fotos</a></li>
     <li><a class="item" href="#taller">Hacé el tuyo</a></li>
     <li><a class="item" href="#final">Por qué se fue</a></li>
   </ul>
@@ -444,10 +462,27 @@ p{margin:14px 0 0; max-width:68ch}
   <div class="caja">
     <span class="rot">Galería</span>
     <h2>Todas estas <b>se dibujan solas</b></h2>
-    <p class="baja">Ninguna imagen de este sitio viene de un banco de fotos. Están hechas con
+    <p class="baja">Ninguna de estas ocho viene de un banco de fotos. Están hechas con
       código: degradados, burbujas y rayos armados a mano, uno arriba del otro. Tocá cualquiera
       para verla grande.</p>
     <div class="galeria" id="rejGaleria"></div>
+  </div>
+</section>
+
+<!-- ============ fotos con licencia libre ============ -->
+<section id="fotos">
+  <div class="caja">
+    <span class="rot">Fotos</span>
+    <h2>Y estas son <b>de verdad</b></h2>
+    <p class="baja">Lo de arriba lo dibuja el navegador. Esto no: son fotos sacadas por gente,
+      elegidas una por una porque tienen la paleta del Frutiger Aero — agua, burbujas, pasto,
+      cielo, gotas y bichos abajo del agua. Todas son de dominio público o Creative Commons,
+      así que se pueden usar y cambiar. Abajo de cada una está quién la sacó y con qué licencia.</p>
+    <div class="filtros" id="filtrosFotos"></div>
+    <div class="galeria reales" id="rejFotos"></div>
+    <p class="nota">Buscadas en <a href="https://openverse.org" target="_blank" rel="noopener">Openverse</a>,
+      filtrando por licencias que permiten uso comercial y modificación. Tocá una foto para verla
+      grande y llegar al original.</p>
   </div>
 </section>
 
@@ -535,7 +570,8 @@ p{margin:14px 0 0; max-width:68ch}
   <div class="caja">
     <small>
       <b>Frutiger Aero</b> · una página sobre la estética de 2004 a 2012.<br>
-      Todas las ilustraciones se dibujan con código, no salen de ningún banco de imágenes.
+      Las ilustraciones se dibujan con código. Las fotos de la sección «Fotos» son de dominio
+      público o Creative Commons, con el autor y la licencia al lado de cada una.
     </small>
     <a class="btn" href="#arriba">Volver arriba</a>
   </div>
@@ -563,19 +599,30 @@ $("rejGaleria").innerHTML = FOTOS.map(function(f, i){
     '<span>' + f[1] + '</span></button>';
 }).join("");
 
-var viendo = 0;
+/* El visor sirve a las dos galerías: la dibujada y la de fotos. `mirando` dice
+   cuál está abierta, y cada una arma su propio pie. */
+var mirando = [], viendo = 0;
 function verFoto(i){
-  viendo = (i + FOTOS.length) % FOTOS.length;
-  $("visorImg").src = "img/" + FOTOS[viendo][0] + ".webp";
-  $("visorImg").alt = FOTOS[viendo][1];
-  $("visorPie").textContent = FOTOS[viendo][1] + "  ·  " + (viendo + 1) + " de " + FOTOS.length +
-    "  ·  flechas para pasar";
+  if (!mirando.length) return;
+  viendo = (i + mirando.length) % mirando.length;
+  var f = mirando[viendo];
+  $("visorImg").src = f.grande;
+  $("visorImg").alt = f.alt;
+  $("visorPie").innerHTML = f.pie + "  ·  " + (viendo + 1) + " de " + mirando.length;
   $("visor").classList.add("ver");
   document.body.style.overflow = "hidden";
 }
 function cerrarFoto(){ $("visor").classList.remove("ver"); document.body.style.overflow = ""; }
+
+function dibujadas(){
+  return FOTOS.map(function(f){
+    return { grande:"img/" + f[0] + ".webp", alt:f[1],
+             pie:f[1] + "  ·  dibujada con código  ·  flechas para pasar" };
+  });
+}
 $("rejGaleria").addEventListener("click", function(ev){
-  var b = ev.target.closest("button[data-i]"); if (b) verFoto(+b.dataset.i);
+  var b = ev.target.closest("button[data-i]");
+  if (b) { mirando = dibujadas(); verFoto(+b.dataset.i); }
 });
 $("visor").addEventListener("click", function(ev){
   if (ev.target === $("visor") || ev.target.id === "cerrarVisor") cerrarFoto();
@@ -586,6 +633,79 @@ addEventListener("keydown", function(ev){
   if (ev.key === "ArrowRight") verFoto(viendo + 1);
   if (ev.key === "ArrowLeft") verFoto(viendo - 1);
 });
+
+/* ---------- fotos con licencia libre ----------
+   Cada una guarda de dónde salió: la licencia CC BY obliga a nombrar al autor,
+   así que el crédito viaja con la foto y no en una lista aparte que se despega. */
+var REALES = [
+  {"a": "burbujas-sol", "t": "Burbujas al sol", "s": "Burbujas", "an": 1280, "al": 894, "au": "Steve Jurvetson", "aurl": "https://www.flickr.com/people/44124348109@N01", "lic": "CC BY 2.0", "licurl": "https://creativecommons.org/licenses/by/2.0/", "src": "https://commons.wikimedia.org/w/index.php?curid=666186"},
+  {"a": "burbuja-macro", "t": "Una burbuja de cerca", "s": "Burbujas", "an": 1280, "al": 854, "au": "Karl Gaff", "aurl": "https://commons.wikimedia.org/w/index.php?title=User:KarlGaff&action=edit&redlink=1", "lic": "CC BY 4.0", "licurl": "https://creativecommons.org/licenses/by/4.0/", "src": "https://commons.wikimedia.org/w/index.php?curid=143597247"},
+  {"a": "agua-rayas", "t": "Agua rayada", "s": "Agua", "an": 960, "al": 640, "au": "Free Nature Stock", "aurl": "https://freenaturestock.com", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/rippled-water-JWHINZKDNJ"},
+  {"a": "tiburon", "t": "Tiburón de arrecife", "s": "Bajo el agua", "an": 1280, "al": 848, "au": "shankar s.", "aurl": "https://www.flickr.com/people/77742560@N06", "lic": "CC BY 2.0", "licurl": "https://creativecommons.org/licenses/by/2.0/", "src": "https://commons.wikimedia.org/w/index.php?curid=80871339"},
+  {"a": "cardumen", "t": "Cardumen", "s": "Bajo el agua", "an": 1280, "al": 960, "au": "laxoch", "aurl": "https://www.inaturalist.org/people/laxoch", "lic": "CC BY 4.0", "licurl": "https://creativecommons.org/licenses/by/4.0/", "src": "https://commons.wikimedia.org/w/index.php?curid=118213229"},
+  {"a": "pez-payaso", "t": "Pez ballesta", "s": "Bajo el agua", "an": 1280, "al": 850, "au": "shankar s.", "aurl": "https://www.flickr.com/people/77742560@N06", "lic": "CC BY 2.0", "licurl": "https://creativecommons.org/licenses/by/2.0/", "src": "https://commons.wikimedia.org/w/index.php?curid=38495656"},
+  {"a": "colinas-verdes", "t": "Colinas", "s": "Verde", "an": 960, "al": 636, "au": "Ales Krivec", "aurl": "https://dreamypixel.com", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/landscape-green-077E8366B1"},
+  {"a": "campo-cielo", "t": "Campo y cielo", "s": "Verde", "an": 960, "al": 738, "au": "Sergei Gussev", "aurl": "https://www.flickr.com/sergeigussev", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/sky-landscape-MZ11AZ4J3Z"},
+  {"a": "cerro-verde", "t": "Cerro verde", "s": "Verde", "an": 960, "al": 720, "au": "Sergei Gussev", "aurl": "https://www.flickr.com/sergeigussev", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/landscape-sky-TKZMRNCCKH"},
+  {"a": "gotas-hoja", "t": "Gotas sobre la hoja", "s": "Gotas", "an": 960, "al": 768, "au": "Min An", "aurl": "https://www.facebook.com/Minan1398", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/rain-drops-YYLGRHEGST"},
+  {"a": "gota-hoja-otonio", "t": "La gota que cae", "s": "Gotas", "an": 960, "al": 720, "au": "Bob Richards", "aurl": "https://stocksnap.io/author/112960", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/water-drop-VLI4LYRHVL"},
+  {"a": "rocio", "t": "Rocío", "s": "Gotas", "an": 960, "al": 638, "au": "Matt Bango", "aurl": "https://mattbango.photo", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/dew-drops-LYH6TSUE7R"},
+  {"a": "medusa-rosa", "t": "Medusa", "s": "Bajo el agua", "an": 960, "al": 720, "au": "World Wildlife", "aurl": "https://mattbango.photo", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/jellyfish-water-KCUKTUPDC3"},
+  {"a": "medusas-azules", "t": "Medusas", "s": "Bajo el agua", "an": 960, "al": 640, "au": "Nathalie E. Julien", "aurl": "https://stocksnap.io", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/jellyfish-blue-L5GPTOUAN3"},
+  {"a": "nubes-blancas", "t": "Nubes", "s": "Cielo", "an": 1024, "al": 683, "au": "desconocido", "aurl": "", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://www.rawpixel.com/image/6039137/photo-image-background-cloud-public-domain"},
+  {"a": "nube-vector", "t": "Una nube dibujada", "s": "Cielo", "an": 1024, "al": 683, "au": "desconocido", "aurl": "", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://www.rawpixel.com/image/6330250/vector-background-cloud-sticker"},
+  {"a": "sol-nubes", "t": "Sol entre nubes", "s": "Cielo", "an": 1024, "al": 575, "au": "desconocido", "aurl": "", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://www.rawpixel.com/image/5938087/sun-and-some-clouds"},
+  {"a": "hoja-mojada", "t": "Hoja mojada", "s": "Verde", "an": 1024, "al": 656, "au": "desconocido", "aurl": "", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://www.rawpixel.com/image/6035529/photo-image-background-texture-public-domain"},
+  {"a": "hoja-lluvia", "t": "Después de la lluvia", "s": "Verde", "an": 960, "al": 640, "au": "Altered Reality", "aurl": "https://stocksnap.io/author/177206", "lic": "CC0", "licurl": "https://creativecommons.org/publicdomain/zero/1.0/", "src": "https://stocksnap.io/photo/leaf-rain-Q4TIQ25RBY"}
+];
+var ESCAPES = { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" };
+function limpio(t){ return String(t).replace(/[&<>"]/g, function(c){ return ESCAPES[c]; }); }
+function enlace(url, texto){
+  return url ? '<a href="' + limpio(url) + '" target="_blank" rel="noopener noreferrer">' +
+    limpio(texto) + "</a>" : limpio(texto);
+}
+
+var seccionesFoto = ["Todas"];
+REALES.forEach(function(f){ if (seccionesFoto.indexOf(f.s) < 0) seccionesFoto.push(f.s); });
+var filtro = "Todas";
+
+function pintarFiltros(){
+  $("filtrosFotos").innerHTML = seccionesFoto.map(function(s){
+    return '<button class="chip" type="button" data-s="' + limpio(s) + '" aria-pressed="' +
+      (s === filtro) + '">' + limpio(s) + "</button>";
+  }).join("");
+}
+function visibles(){
+  return REALES.filter(function(f){ return filtro === "Todas" || f.s === filtro; });
+}
+function pintarFotos(){
+  $("rejFotos").innerHTML = visibles().map(function(f, i){
+    return '<button type="button" data-i="' + i + '">' +
+      '<img src="fotos/' + f.a + '-min.webp" alt="' + limpio(f.t) + '" width="480" height="360"' +
+      ' loading="lazy" decoding="async">' +
+      "<span><b>" + limpio(f.t) + "</b><i>" + limpio(f.au) + " · " + limpio(f.lic) + "</i></span>" +
+      "</button>";
+  }).join("");
+}
+function paraElVisor(){
+  return visibles().map(function(f){
+    return {
+      grande: "fotos/" + f.a + ".webp",
+      alt: f.t,
+      pie: limpio(f.t) + "  ·  " + enlace(f.aurl, f.au) + "  ·  " + enlace(f.licurl, f.lic) +
+           "  ·  " + enlace(f.src, "original")
+    };
+  });
+}
+$("filtrosFotos").addEventListener("click", function(ev){
+  var b = ev.target.closest(".chip"); if (!b) return;
+  filtro = b.dataset.s; pintarFiltros(); pintarFotos();
+});
+$("rejFotos").addEventListener("click", function(ev){
+  var b = ev.target.closest("button[data-i]");
+  if (b) { mirando = paraElVisor(); verFoto(+b.dataset.i); }
+});
+pintarFiltros(); pintarFotos();
 
 /* ---------- el taller ----------
    Las mismas piezas que hicieron las ilustraciones de arriba. Están acá otra vez
@@ -776,7 +896,7 @@ var mirador = new IntersectionObserver(function(entradas){
     });
   });
 }, { rootMargin:"-45% 0px -50% 0px" });
-["que-es","kit","linea","donde","galeria","taller","final"].forEach(function(id){
+["que-es","kit","linea","donde","galeria","fotos","taller","final"].forEach(function(id){
   var s = $(id); if (s) mirador.observe(s);
 });
 </script>
