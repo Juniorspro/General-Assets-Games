@@ -20,8 +20,27 @@ const PAN = {
   esc: 0,                    /* índice en ESCALAS */
   tono: 0,                   /* 0..11, cuánto se corre la tónica */
   oct: OCTAVAS,              /* cuántas octavas abarca el panel */
+  libre: true,               /* el panel sin escalones: cualquier altura, cualquier nota */
   inst: INSTRS.length ? INSTRS[0].id : 'acoustic_grand_piano'
 };
+
+/* ── EL PANEL ES LIBRE, Y ESA ES LA REGLA DE FÁBRICA ──
+   Cayendo en una escala, dos dedos cualesquiera afinan y una melodía se puede
+   repetir; pero el dedo se queda pegado a once escalones y lo que se pidió es un
+   continuo. Así que la cuantización deja de ser del juego y pasa a ser DEL MODO:
+   TOCAR va libre, y REPETÍ —que tiene que poder comparar una nota con otra—
+   cuantiza siempre, con la escala como su única regla y su única dificultad. */
+function libreAct(){ return PAN.libre && !JU.on; }
+function midiDeAlt(a){ return instAct().base + PAN.tono + cl(a, 0, 1)*12*PAN.oct; }
+
+/* ── LAS GUÍAS DEL MODO LIBRE SON LOS DOCE SEMITONOS, NO LOS GRADOS ──
+   No son escalones: son las marcas de una regla. Por eso en libre se dibujan
+   cortas, desde los bordes, y sólo la octava cruza la pantalla entera. */
+function nGuias(){ return libreAct() ? 12*PAN.oct + 1 : nGrados(); }
+function altDeGuia(i){ const n = nGuias(); return n > 1 ? cl(i, 0, n - 1)/(n - 1) : 0.5; }
+function midiDeGuia(i){ return libreAct() ? midiDeAlt(altDeGuia(i)) : midiDeIdx(i); }
+function nombreDeGuia(i){ const m = Math.round(midiDeGuia(i)); return NOTA_NOM[((m % 12) + 12) % 12]; }
+function esOctava(i){ return libreAct() ? (i % 12) === 0 : (i % escAct().g.length) === 0; }
 
 function escAct(){ return ESCALAS[cl(PAN.esc, 0, ESCALAS.length - 1)]; }
 function instAct(){ return POR_ID[PAN.inst] || INSTRS[0] || { base: 48, sost: 0 }; }
@@ -62,17 +81,19 @@ function briDeX(x){ return 0.20 + 0.80*cl(x, 0, 1); }
 const DEDOS = {};              /* id de puntero -> dedo vivo */
 const ONDAS = [];              /* aros que se abren y se apagan */
 
-function onda(nx, na, idx, k){
-  ONDAS.push({ nx, na, idx, t: 0, vida: 0.90, k: k === undefined ? 1 : k });
+function onda(nx, na, k){
+  ONDAS.push({ nx, na, t: 0, vida: 0.90, k: k === undefined ? 1 : k });
   while (ONDAS.length > 48) ONDAS.shift();
 }
 
 function dedoAbajo(id, nx, na){
-  const i = idxDeAlt(na);
+  const lib = libreAct(), i = idxDeAlt(na);
+  const a = lib ? cl(na, 0, 1) : altDeIdx(i);
+  const midi = lib ? midiDeAlt(na) : midiDeIdx(i);
   const vol = volDeX(nx), bri = briDeX(nx);
-  const v = abre(PAN.inst, midiDeIdx(i), vol, bri);
-  DEDOS[id] = { nx, na, idx: i, v, vol, bri, t: 0, hist: [{ nx, na, t: 0 }] };
-  onda(nx, altDeIdx(i), i, 1);
+  const v = abre(PAN.inst, midi, vol, bri);
+  DEDOS[id] = { nx, na, a, midi, idx: i, v, vol, bri, t: 0, hist: [{ nx, na: a, t: 0 }] };
+  onda(nx, a, 1);
   juegoToque(i);
   return DEDOS[id];
 }
@@ -83,15 +104,22 @@ function dedoAbajo(id, nx, na){
    nota nueva en REPETÍ: si contara, corregir sería perder. */
 function dedoMueve(id, nx, na){
   const d = DEDOS[id]; if (!d) return;
+  const lib = libreAct(), i = idxDeAlt(na);
   d.nx = nx; d.na = na;
   d.vol = volDeX(nx); d.bri = briDeX(nx);
+  const a = lib ? cl(na, 0, 1) : altDeIdx(i);
+  d.midi = lib ? midiDeAlt(na) : midiDeIdx(i);
   /* el rastro es DÓNDE ESTUVO EL DEDO, o sea un hecho del panel y no del dibujo:
      por eso vive acá y se puede auditar sin abrir un navegador */
-  d.hist.push({ nx, na, t: 0 });
+  d.hist.push({ nx, na: a, t: 0 });
   while (d.hist.length > 26) d.hist.shift();
-  const i = idxDeAlt(na);
-  if (i !== d.idx){ d.idx = i; onda(nx, altDeIdx(i), i, 0.62); }
-  mueve(d.v, midiDeIdx(i), d.vol, d.bri);
+  /* ── EN LIBRE EL ARO SALE CADA TANTOS SEMITONOS, NO EN CADA CUADRO ──
+     Uno por muestra serían sesenta aros por segundo, o sea una mancha; uno cada
+     semitono deja el mismo rastro que en snap y dice cuánto se recorrió. */
+  if (lib){ if (Math.abs(d.midi - (d.ondaMidi === undefined ? d.midi - 9 : d.ondaMidi)) >= 1){ d.ondaMidi = d.midi; onda(nx, a, 0.62); } }
+  else if (i !== d.idx){ onda(nx, a, 0.62); }
+  d.idx = i; d.a = a;
+  mueve(d.v, d.midi, d.vol, d.bri);
 }
 
 function dedoArriba(id){
@@ -159,7 +187,7 @@ function juegoPaso(dt){
       JU.i++;
       const idx = JU.sec[JU.i];
       pico(PAN.inst, midiDeIdx(idx), JU_ON, 0.78);
-      onda(0.5, altDeIdx(idx), idx, 1);
+      onda(0.5, altDeIdx(idx), 1);
       JU.luz = idx; JU.luzT = JU_ON;
     }
     if (JU.i >= JU.sec.length - 1 && JU.t >= JU.sec.length*per){

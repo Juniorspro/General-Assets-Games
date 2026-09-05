@@ -253,8 +253,12 @@ munecas.
   octavas. Mientras el dedo sigue apoyado, mover la mano **empuja** la nota en vez de dispararla de
   nuevo, así que subir y bajar se oye como un glisado. El eje horizontal es la segunda dimensión:
   a la izquierda tapado y suave, a la derecha abierto y fuerte. Se pueden apoyar **varios dedos a la
-  vez** (doce voces). Las notas caen en una de **siete escalas** —pentatónica, mayor, menor, dórica,
-  blues, japonesa y cromática— transportables a los doce tonos, con alcance de una a tres octavas.
+  vez** (doce voces). **El panel es LIBRE**: no tiene escalones, cualquier altura del dedo es una
+  nota —medido, veinticuatro toques finos dan veinticuatro notas distintas con saltos de 9 cents— y
+  las guías son las marcas de una regla y no una reja. Apagando LIBRE, las notas caen en una de
+  **siete escalas** —pentatónica, mayor, menor, dórica, blues, japonesa y cromática— transportables a
+  los doce tonos, con alcance de una a tres octavas; **REPETÍ cuantiza siempre**, porque tiene que
+  poder comparar una nota con otra.
   Los **32 instrumentos de muestras de verdad** salen de **FluidR3_GM** (gleitz/midi-js-soundfonts,
   **CC-BY 3.0**, con el crédito en el menú), tres muestras cada uno y **bucle cosido** en los
   sostenidos, horneados a MP3 y metidos en el archivo: **el juego no baja nada y anda sin red**. Dos
@@ -406,6 +410,49 @@ paneles entran en el cuadro (menú 387, ajustes 409, instrumentos 841, final 313
 decodifican, que suenan, a qué nivel, que los sostenidos no se cortan y que el cruce de muestras
 ocurre — no si el glisado se siente bien. Y el dedo es un `PointerEvent` sintético: que la cadena
 entera funciona está probado, cuánto cuesta **con la mano** no.
+
+#### Y DESPUÉS, EN LA MISMA VUELTA: **«ME VEO LIMITADO POR LAS CUERDAS»** — EL PANEL PASA A SER LIBRE
+
+Reporte de una línea: *"me veo limitado por las cuerdas we, se supone que es un panel libre"*. Tenía
+razón, **y el error es mío y está escrito arriba**: la sección de más arriba justifica la
+cuantización con que REPETÍ no podría existir sin ella. El pedido original decía *"más agudo o grave
+y así"*, que es un continuo; yo lo cuanticé y usé el modo de juego como argumento.
+
+**LA CUANTIZACIÓN NO ES DEL JUEGO, ES DEL MODO.** TOCAR va libre —`midi = base + altura·12·octavas`,
+sin redondear— y REPETÍ cuantiza siempre, porque ahí sí hay que poder comparar una nota con otra. Una
+sola función lo decide (`libreAct() = PAN.libre && !JU.on`), así que no hay dos caminos que se puedan
+desincronizar: entrar a REPETÍ apaga el libre por construcción y salir lo devuelve.
+
+**Y SE MIDE, que es lo que el reclamo pedía.** Veinticuatro toques diminutos sobre el 9 % del panel:
+
+| | notas distintas | el salto más grande |
+|---|---|---|
+| con escala | **2** | **200 cents** (un tono entero de golpe) |
+| **libre** | **24** | **9 cents** |
+
+Dos notas en ochenta píxeles: eso es exactamente lo que se siente como cuerdas.
+
+**LAS GUÍAS DEJAN DE SER LÍNEAS Y PASAN A SER MARCAS.** Una línea que cruza la pantalla se lee a
+escalón y el dedo la va a buscar; en libre las doce del semitono se dibujan **cortas, desde los dos
+bordes**, y sólo la octava cruza entera con su nombre. Es la diferencia entre una reja y una regla, y
+no cuesta un solo triángulo.
+
+**Y LA CERCANÍA PASA A MEDIRSE EN ALTURA Y NO EN ÍNDICES**, así la misma cuenta enciende las guías
+cerca del dedo con once escalones de escala y con veinticinco marcas de regla.
+
+**EL CRUCE DE MUESTRAS AHORA VALE TAMBIÉN PARA LOS PERCUSIVOS, y hacía falta.** En libre se desliza
+mucho más, así que un piano estirado veintiún semitonos se volvió el caso normal y no el raro. Un
+percusivo no tiene bucle, o sea que entrar por el principio sería un golpe nuevo a mitad del glisado:
+entra **en el mismo punto de su decaimiento** que llevaba la vieja. Y ese punto no es el reloj de
+pared: `pos` se acumula en la línea de tiempo de la muestra (`pos += Δt · playbackRate`), porque un
+segundo de reloj son `playbackRate` segundos de muestra. Si esa nota ya se apagó, no se cambia.
+Medido, el mismo deslizamiento de dos octavas con piano: **3,8559 antes y 0,9128 ahora**.
+
+Medido al cerrar: **315 de 315** en el mapa de alturas y **25 de 25** marcas alineadas en libre
+(dentro de 12 cents) contra 11 de 11 en escala; entrar a REPETÍ pasa `libreAhora` a false y las guías
+de 25 a 11, y el auto-jugador sigue llegando a la ronda 6 con el récord guardado; los seis paneles
+entran en 412×892, 900×460 y 360×640 con cero solapamientos (el de ajustes creció a 497 sobre 892 con
+la fila nueva y su renglón de explicación); los tres idiomas; `window.__errs` vacío.
 
 ### Centésima duodécima vuelta (2026-09-05): **CUBOS**, el decimotercer juego — un build battle donde el jurado es Claude de verdad
 

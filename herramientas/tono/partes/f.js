@@ -46,6 +46,8 @@ function pintaIdioma(){
   $('#mCred').textContent = TT('credito');
   $('#aTit').textContent = TT('ajustes');
   $('#aSon').textContent = TT('sonido');
+  $('#aLib').textContent = TT('sinred');
+  $('#aNota').textContent = TT('notaEsc');
   $('#aEsc').textContent = TT('escala');
   $('#aTono').textContent = TT('tono');
   $('#aOct').textContent = TT('octavas');
@@ -73,6 +75,7 @@ function ponEsc(i){ PAN.esc = ((i % ESCALAS.length) + ESCALAS.length) % ESCALAS.
 function ponTono(i){ PAN.tono = ((i % 12) + 12) % 12; guarda('tono', PAN.tono); pintaAjustes(); }
 function ponOct(n){ PAN.oct = cl(n, 1, 3); guarda('oct', PAN.oct); pintaAjustes(); }
 function ponSon(v){ sonidoOn(v); guarda('son', v ? 1 : 0); pintaAjustes(); }
+function ponLibre(v){ dedosSoltar(); PAN.libre = !!v; guarda('libre', v ? 1 : 0); pintaAjustes(); }
 function ponInst(id){
   if (!POR_ID[id]) return;
   dedosSoltar();
@@ -99,12 +102,15 @@ function pintaAjustes(){
   const s = $('#oSon'); s.innerHTML = '';
   s.appendChild(chip('ON', SON_ON, () => ponSon(true)));
   s.appendChild(chip('OFF', !SON_ON, () => ponSon(false)));
+  const l = $('#oLib'); l.innerHTML = '';
+  l.appendChild(chip(TT('si'), PAN.libre, () => ponLibre(true)));
+  l.appendChild(chip(TT('no'), !PAN.libre, () => ponLibre(false)));
   paso($('#oEsc'), escAct().n[LI()], () => ponEsc(PAN.esc - 1), () => ponEsc(PAN.esc + 1));
   paso($('#oTono'), NOTA_NOM[PAN.tono], () => ponTono(PAN.tono - 1), () => ponTono(PAN.tono + 1));
   const o = $('#oOct'); o.innerHTML = '';
   for (const n of [1, 2, 3]) o.appendChild(chip(String(n), PAN.oct === n, () => ponOct(n)));
   const i = $('#oIdi'); i.innerHTML = '';
-  for (const l of ['es', 'en', 'pt']) i.appendChild(chip(l.toUpperCase(), LANG === l, () => ponIdioma(l)));
+  for (const q of ['es', 'en', 'pt']) i.appendChild(chip(q.toUpperCase(), LANG === q, () => ponIdioma(q)));
 }
 
 /* ══════════ EL SELECTOR DE INSTRUMENTO ══════════ */
@@ -269,6 +275,7 @@ function arranca(){
   PAN.esc  = cl(Math.round(leeN('esc', 0)), 0, ESCALAS.length - 1);
   PAN.tono = cl(Math.round(leeN('tono', 0)), 0, 11);
   PAN.oct  = cl(Math.round(leeN('oct', OCTAVAS)), 1, 3);
+  PAN.libre = leeN('libre', 1) !== 0;
   const gi = lee('inst', PAN.inst);
   if (POR_ID[gi]) PAN.inst = gi;
   SON_ON = leeN('son', 1) !== 0;

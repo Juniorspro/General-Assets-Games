@@ -51,7 +51,9 @@ const TXT = {
         pie: 'Abajo grave, arriba agudo. Mantené el dedo y movelo: la nota lo sigue.',
         pie2: 'Podés apoyar varios dedos a la vez.', credito:
         'Instrumentos: FluidR3_GM vía gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'EMPEZAR', ver: 'VER LOS INSTRUMENTOS', sinSon: 'TU APARATO NO DEJÓ SONAR NADA' },
+        empeza: 'EMPEZAR', ver: 'VER LOS INSTRUMENTOS', sinSon: 'TU APARATO NO DEJÓ SONAR NADA',
+        sinred: 'LIBRE', si: 'SÍ', no: 'NO',
+        notaEsc: 'Con LIBRE en SÍ el panel no tiene escalones. La escala manda siempre en REPETÍ.' },
   en: { sub: 'A BLACK PANEL. TOUCH IT.', libre: 'PLAY', juego: 'REPEAT', ajustes: 'SETTINGS',
         volver: 'BACK', salir: 'QUIT', otra: 'AGAIN', menu: 'MENU', seguir: 'RESUME',
         idioma: 'LANGUAGE', sonido: 'SOUND', escala: 'SCALE', tono: 'KEY', octavas: 'RANGE',
@@ -61,7 +63,9 @@ const TXT = {
         pie: 'Low at the bottom, high at the top. Hold and move: the note follows.',
         pie2: 'You can hold several fingers at once.', credito:
         'Instruments: FluidR3_GM via gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'START', ver: 'SEE THE INSTRUMENTS', sinSon: 'YOUR DEVICE BLOCKED THE SOUND' },
+        empeza: 'START', ver: 'SEE THE INSTRUMENTS', sinSon: 'YOUR DEVICE BLOCKED THE SOUND',
+        sinred: 'FREE', si: 'YES', no: 'NO',
+        notaEsc: 'With FREE on, the panel has no steps. The scale always rules REPEAT.' },
   pt: { sub: 'UM PAINEL PRETO. TOQUE.', libre: 'TOCAR', juego: 'REPITA', ajustes: 'AJUSTES',
         volver: 'VOLTAR', salir: 'SAIR', otra: 'DE NOVO', menu: 'MENU', seguir: 'CONTINUAR',
         idioma: 'IDIOMA', sonido: 'SOM', escala: 'ESCALA', tono: 'TOM', octavas: 'ALCANCE',
@@ -71,7 +75,9 @@ const TXT = {
         pie: 'Grave embaixo, agudo em cima. Segure e mova: a nota acompanha.',
         pie2: 'Você pode apoiar vários dedos ao mesmo tempo.', credito:
         'Instrumentos: FluidR3_GM via gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'COMEÇAR', ver: 'VER OS INSTRUMENTOS', sinSon: 'SEU APARELHO NÃO DEIXOU TOCAR' }
+        empeza: 'COMEÇAR', ver: 'VER OS INSTRUMENTOS', sinSon: 'SEU APARELHO NÃO DEIXOU TOCAR',
+        sinred: 'LIVRE', si: 'SIM', no: 'NÃO',
+        notaEsc: 'Com LIVRE em SIM o painel não tem degraus. A escala manda sempre em REPITA.' }
 };
 
 const NOTA_NOM = ['DO', 'DO#', 'RE', 'MI♭', 'MI', 'FA', 'FA#', 'SOL', 'SOL#', 'LA', 'SI♭', 'SI'];

@@ -115,7 +115,7 @@ function abre(id, midi, vol, brillo){
   g.gain.linearRampToValueAtTime(volDe(vol), t + 0.008);
   src.start(t);
   const v = { src, gs, g, f, id, midi, base: m.n, tipo, sost: !!I.sost || tipo === 'sinte',
-              t0: t, viva: true, viejas: [] };
+              t0: t, tUlt: t, pos: 0, viva: true };
   VOCES.push(v);
   /* con más de doce voces vivas el maestro recorta y todo suena a distorsión */
   while (VOCES.length > MAX_VOCES){ const vieja = VOCES.shift(); apaga(vieja, 0.05); }
@@ -143,21 +143,30 @@ function filtroDe(b){ return 420*Math.pow(38, cl(b === undefined ? 0.75 : b, 0, 
    nueva entra por el medio y no vuelve a atacar. Un piano estirado no se nota,
    porque para cuando el dedo llegó lejos su nota ya decayó. */
 function cambiaMuestra(v, midi){
-  const I = POR_ID[v.id]; if (!I || !I.sost) return false;
+  const I = POR_ID[v.id]; if (!I) return false;
   const m = muestraDe(I, midi);
   if (m.n === v.base || Math.abs(midi - v.base) <= 7) return false;
-  const b = BUF[v.id + '|' + m.n]; if (!b || !m.lp) return false;
+  const b = BUF[v.id + '|' + m.n]; if (!b) return false;
+  /* ── DÓNDE ENTRA LA MUESTRA NUEVA DEPENDE DE SI HAY BUCLE ──
+     El sostenido entra por `loopStart`, o sea por el medio del sonido, y no
+     vuelve a atacar. El percusivo no tiene bucle: entrar por el principio sería
+     un golpe nuevo a mitad del glisado, así que entra EN EL MISMO PUNTO DE SU
+     DECAIMIENTO que llevaba la vieja —`pos` se acumula en la línea de tiempo de
+     la muestra, no en la del reloj— y si esa nota ya se apagó no se cambia. */
+  let off;
+  if (m.lp) off = m.lp[0];
+  else { off = v.pos; if (!(off >= 0) || off > b.duration - 0.06) return false; }
   const t = AC.currentTime, X = 0.045;
   const src = fuente(b, m, midi);
   const gs = AC.createGain(); gs.gain.setValueAtTime(0, t);
   gs.gain.linearRampToValueAtTime(1, t + X);
   src.connect(gs); gs.connect(v.f);
-  try { src.start(t, m.lp[0]); } catch (e){ try { src.start(t); } catch (x){ return false; } }
+  try { src.start(t, off); } catch (e){ try { src.start(t); } catch (x){ return false; } }
   const vs = v.src, vg = v.gs;
   vg.gain.setValueAtTime(vg.gain.value, t);
   vg.gain.linearRampToValueAtTime(0, t + X);
   try { vs.stop(t + X + 0.03); } catch (e) {}
-  v.src = src; v.gs = gs; v.base = m.n;
+  v.src = src; v.gs = gs; v.base = m.n; v.tUlt = t;
   return true;
 }
 
@@ -165,7 +174,13 @@ function mueve(v, midi, vol, brillo){
   if (!v || !v.viva || !AC) return;
   const t = AC.currentTime;
   v.midi = midi;
-  if (v.tipo === 'muestra') cambiaMuestra(v, midi);
+  if (v.tipo === 'muestra'){
+    /* cuánto de la muestra ya se consumió, en SU propia línea de tiempo: el
+       reloj corre a segundos y la muestra a `playbackRate` segundos por segundo */
+    v.pos += Math.max(0, t - v.tUlt)*v.src.playbackRate.value;
+    v.tUlt = t;
+    cambiaMuestra(v, midi);
+  }
   const p = v.tipo === 'muestra' ? Math.pow(2, (midi - v.base)/12) : 0;
   if (v.tipo === 'muestra') v.src.playbackRate.setTargetAtTime(p, t, 0.022);
   else v.src.frequency.setTargetAtTime(440*Math.pow(2, (midi - 69)/12), t, 0.022);

@@ -34,30 +34,37 @@ function col(a, l, o){ return 'hsla(' + matizDe(a).toFixed(0) + ',92%,' + l + '%
    6 % se adivinan; cerca del dedo suben, así que la escala aparece justo cuando
    hace falta y desaparece cuando no. */
 function pintaGuias(){
-  const n = nGrados(), L = escAct().g.length;
+  const n = nGuias(), lib = libreAct(), pasoG = n > 1 ? 1/(n - 1) : 1;
   const fs = Math.max(9, Math.round(ALT*0.0145));
   CX.font = '600 ' + fs + 'px system-ui,sans-serif';
-  CX.textBaseline = 'middle';
   for (let i = 0; i < n; i++){
-    const a = altDeIdx(i), y = Math.round(yDeAlt(a)) + 0.5;
-    const oct = (i % L) === 0;
-    let k = oct ? 0.155 : 0.070;
-    for (const id in DEDOS){
-      const d = DEDOS[id];
-      k = Math.max(k, 0.60*Math.max(0, 1 - Math.abs(i - d.idx)/3.2));
-    }
-    if (JU.on && JU.luz === i) k = Math.max(k, 0.85*cl(JU.luzT/JU_ON, 0, 1));
-    if (JU.on && JU.fase === 'turno' && JU.paso < JU.sec.length) k = Math.max(k, oct ? 0.16 : 0.075);
+    const a = altDeGuia(i), y = Math.round(yDeAlt(a)) + 0.5;
+    const oct = esOctava(i);
+    let k = oct ? 0.155 : (lib ? 0.045 : 0.070);
+    /* ── LA CERCANÍA SE MIDE EN ALTURA Y NO EN ÍNDICES ──
+       Así la misma cuenta vale para once escalones de escala y para veinticinco
+       semitonos de la regla libre. */
+    for (const id in DEDOS) k = Math.max(k, 0.60*Math.max(0, 1 - Math.abs(a - DEDOS[id].a)/(3.2*pasoG)));
+    if (JU.on && JU.luz === i && !lib) k = Math.max(k, 0.85*cl(JU.luzT/JU_ON, 0, 1));
     CX.strokeStyle = col(a, oct ? 74 : 64, k);
     CX.lineWidth = oct ? 1.4 : 1;
-    CX.beginPath(); CX.moveTo(0, y); CX.lineTo(ANC, y); CX.stroke();
+    CX.beginPath();
+    /* ── EN LIBRE LAS MARCAS SON CORTAS, Y ESA ES TODA LA DIFERENCIA ──
+       Una línea que cruza la pantalla se lee a escalón: el dedo la busca. Una
+       marca en el borde se lee a la marca de una regla: informa y no encierra. */
+    if (lib && !oct){
+      const w = ANC*0.085;
+      CX.moveTo(0, y); CX.lineTo(w, y);
+      CX.moveTo(ANC - w, y); CX.lineTo(ANC, y);
+    } else { CX.moveTo(0, y); CX.lineTo(ANC, y); }
+    CX.stroke();
     if (oct){
-      /* ── LA PRIMERA Y LA ÚLTIMA LÍNEA CAEN EN EL BORDE ──
+      /* ── LA PRIMERA Y LA ÚLTIMA CAEN EN EL BORDE ──
          Con la línea de base centrada, la mitad del nombre queda fuera de la
          pantalla: la de arriba cuelga hacia abajo y la de abajo se apoya. */
       CX.textBaseline = i === n - 1 ? 'top' : i === 0 ? 'bottom' : 'middle';
       CX.fillStyle = col(a, 74, Math.min(0.92, k + 0.12));
-      CX.fillText(nombreDeIdx(i), 10, y + (i === n - 1 ? 3 : i === 0 ? -3 : 0));
+      CX.fillText(nombreDeGuia(i), 10, y + (i === n - 1 ? 3 : i === 0 ? -3 : 0));
     }
   }
 }
@@ -78,7 +85,7 @@ function pintaOndas(){
 }
 
 function pintaDedo(d){
-  const x = d.nx*ANC, y = yDeAlt(altDeIdx(d.idx)), a = altDeIdx(d.idx);
+  const x = d.nx*ANC, a = d.a, y = yDeAlt(a);
   CX.globalCompositeOperation = 'lighter';
 
   /* ── LA BARRA ES LO QUE HACE LEGIBLE LA ALTURA ──

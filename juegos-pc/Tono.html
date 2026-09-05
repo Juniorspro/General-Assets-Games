@@ -148,10 +148,12 @@ h1{font-size:calc(var(--mw)*.20);font-weight:800;letter-spacing:.20em;line-heigh
   <div class="pan" id="pAjustes">
     <div class="tit" id="aTit">—</div>
     <div class="fila"><div class="rot" id="aSon">—</div><div class="ops" id="oSon"></div></div>
+    <div class="fila"><div class="rot" id="aLib">—</div><div class="ops" id="oLib"></div></div>
     <div class="fila"><div class="rot" id="aEsc">—</div><div class="ops" id="oEsc"></div></div>
     <div class="fila"><div class="rot" id="aTono">—</div><div class="ops" id="oTono"></div></div>
     <div class="fila"><div class="rot" id="aOct">—</div><div class="ops" id="oOct"></div></div>
     <div class="fila"><div class="rot" id="aIdi">—</div><div class="ops" id="oIdi"></div></div>
+    <div class="cred" id="aNota">—</div>
     <button class="bt sec" id="bVerInstr">—</button>
     <button class="bt" id="bCerrarCfg">—</button>
   </div>
@@ -235,7 +237,9 @@ const TXT = {
         pie: 'Abajo grave, arriba agudo. Mantené el dedo y movelo: la nota lo sigue.',
         pie2: 'Podés apoyar varios dedos a la vez.', credito:
         'Instrumentos: FluidR3_GM vía gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'EMPEZAR', ver: 'VER LOS INSTRUMENTOS', sinSon: 'TU APARATO NO DEJÓ SONAR NADA' },
+        empeza: 'EMPEZAR', ver: 'VER LOS INSTRUMENTOS', sinSon: 'TU APARATO NO DEJÓ SONAR NADA',
+        sinred: 'LIBRE', si: 'SÍ', no: 'NO',
+        notaEsc: 'Con LIBRE en SÍ el panel no tiene escalones. La escala manda siempre en REPETÍ.' },
   en: { sub: 'A BLACK PANEL. TOUCH IT.', libre: 'PLAY', juego: 'REPEAT', ajustes: 'SETTINGS',
         volver: 'BACK', salir: 'QUIT', otra: 'AGAIN', menu: 'MENU', seguir: 'RESUME',
         idioma: 'LANGUAGE', sonido: 'SOUND', escala: 'SCALE', tono: 'KEY', octavas: 'RANGE',
@@ -245,7 +249,9 @@ const TXT = {
         pie: 'Low at the bottom, high at the top. Hold and move: the note follows.',
         pie2: 'You can hold several fingers at once.', credito:
         'Instruments: FluidR3_GM via gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'START', ver: 'SEE THE INSTRUMENTS', sinSon: 'YOUR DEVICE BLOCKED THE SOUND' },
+        empeza: 'START', ver: 'SEE THE INSTRUMENTS', sinSon: 'YOUR DEVICE BLOCKED THE SOUND',
+        sinred: 'FREE', si: 'YES', no: 'NO',
+        notaEsc: 'With FREE on, the panel has no steps. The scale always rules REPEAT.' },
   pt: { sub: 'UM PAINEL PRETO. TOQUE.', libre: 'TOCAR', juego: 'REPITA', ajustes: 'AJUSTES',
         volver: 'VOLTAR', salir: 'SAIR', otra: 'DE NOVO', menu: 'MENU', seguir: 'CONTINUAR',
         idioma: 'IDIOMA', sonido: 'SOM', escala: 'ESCALA', tono: 'TOM', octavas: 'ALCANCE',
@@ -255,7 +261,9 @@ const TXT = {
         pie: 'Grave embaixo, agudo em cima. Segure e mova: a nota acompanha.',
         pie2: 'Você pode apoiar vários dedos ao mesmo tempo.', credito:
         'Instrumentos: FluidR3_GM via gleitz/midi-js-soundfonts — CC-BY 3.0',
-        empeza: 'COMEÇAR', ver: 'VER OS INSTRUMENTOS', sinSon: 'SEU APARELHO NÃO DEIXOU TOCAR' }
+        empeza: 'COMEÇAR', ver: 'VER OS INSTRUMENTOS', sinSon: 'SEU APARELHO NÃO DEIXOU TOCAR',
+        sinred: 'LIVRE', si: 'SIM', no: 'NÃO',
+        notaEsc: 'Com LIVRE em SIM o painel não tem degraus. A escala manda sempre em REPITA.' }
 };
 
 const NOTA_NOM = ['DO', 'DO#', 'RE', 'MI♭', 'MI', 'FA', 'FA#', 'SOL', 'SOL#', 'LA', 'SI♭', 'SI'];
@@ -386,7 +394,7 @@ function abre(id, midi, vol, brillo){
   g.gain.linearRampToValueAtTime(volDe(vol), t + 0.008);
   src.start(t);
   const v = { src, gs, g, f, id, midi, base: m.n, tipo, sost: !!I.sost || tipo === 'sinte',
-              t0: t, viva: true, viejas: [] };
+              t0: t, tUlt: t, pos: 0, viva: true };
   VOCES.push(v);
   /* con más de doce voces vivas el maestro recorta y todo suena a distorsión */
   while (VOCES.length > MAX_VOCES){ const vieja = VOCES.shift(); apaga(vieja, 0.05); }
@@ -414,21 +422,30 @@ function filtroDe(b){ return 420*Math.pow(38, cl(b === undefined ? 0.75 : b, 0, 
    nueva entra por el medio y no vuelve a atacar. Un piano estirado no se nota,
    porque para cuando el dedo llegó lejos su nota ya decayó. */
 function cambiaMuestra(v, midi){
-  const I = POR_ID[v.id]; if (!I || !I.sost) return false;
+  const I = POR_ID[v.id]; if (!I) return false;
   const m = muestraDe(I, midi);
   if (m.n === v.base || Math.abs(midi - v.base) <= 7) return false;
-  const b = BUF[v.id + '|' + m.n]; if (!b || !m.lp) return false;
+  const b = BUF[v.id + '|' + m.n]; if (!b) return false;
+  /* ── DÓNDE ENTRA LA MUESTRA NUEVA DEPENDE DE SI HAY BUCLE ──
+     El sostenido entra por `loopStart`, o sea por el medio del sonido, y no
+     vuelve a atacar. El percusivo no tiene bucle: entrar por el principio sería
+     un golpe nuevo a mitad del glisado, así que entra EN EL MISMO PUNTO DE SU
+     DECAIMIENTO que llevaba la vieja —`pos` se acumula en la línea de tiempo de
+     la muestra, no en la del reloj— y si esa nota ya se apagó no se cambia. */
+  let off;
+  if (m.lp) off = m.lp[0];
+  else { off = v.pos; if (!(off >= 0) || off > b.duration - 0.06) return false; }
   const t = AC.currentTime, X = 0.045;
   const src = fuente(b, m, midi);
   const gs = AC.createGain(); gs.gain.setValueAtTime(0, t);
   gs.gain.linearRampToValueAtTime(1, t + X);
   src.connect(gs); gs.connect(v.f);
-  try { src.start(t, m.lp[0]); } catch (e){ try { src.start(t); } catch (x){ return false; } }
+  try { src.start(t, off); } catch (e){ try { src.start(t); } catch (x){ return false; } }
   const vs = v.src, vg = v.gs;
   vg.gain.setValueAtTime(vg.gain.value, t);
   vg.gain.linearRampToValueAtTime(0, t + X);
   try { vs.stop(t + X + 0.03); } catch (e) {}
-  v.src = src; v.gs = gs; v.base = m.n;
+  v.src = src; v.gs = gs; v.base = m.n; v.tUlt = t;
   return true;
 }
 
@@ -436,7 +453,13 @@ function mueve(v, midi, vol, brillo){
   if (!v || !v.viva || !AC) return;
   const t = AC.currentTime;
   v.midi = midi;
-  if (v.tipo === 'muestra') cambiaMuestra(v, midi);
+  if (v.tipo === 'muestra'){
+    /* cuánto de la muestra ya se consumió, en SU propia línea de tiempo: el
+       reloj corre a segundos y la muestra a `playbackRate` segundos por segundo */
+    v.pos += Math.max(0, t - v.tUlt)*v.src.playbackRate.value;
+    v.tUlt = t;
+    cambiaMuestra(v, midi);
+  }
   const p = v.tipo === 'muestra' ? Math.pow(2, (midi - v.base)/12) : 0;
   if (v.tipo === 'muestra') v.src.playbackRate.setTargetAtTime(p, t, 0.022);
   else v.src.frequency.setTargetAtTime(440*Math.pow(2, (midi - 69)/12), t, 0.022);
@@ -490,8 +513,27 @@ const PAN = {
   esc: 0,                    /* índice en ESCALAS */
   tono: 0,                   /* 0..11, cuánto se corre la tónica */
   oct: OCTAVAS,              /* cuántas octavas abarca el panel */
+  libre: true,               /* el panel sin escalones: cualquier altura, cualquier nota */
   inst: INSTRS.length ? INSTRS[0].id : 'acoustic_grand_piano'
 };
+
+/* ── EL PANEL ES LIBRE, Y ESA ES LA REGLA DE FÁBRICA ──
+   Cayendo en una escala, dos dedos cualesquiera afinan y una melodía se puede
+   repetir; pero el dedo se queda pegado a once escalones y lo que se pidió es un
+   continuo. Así que la cuantización deja de ser del juego y pasa a ser DEL MODO:
+   TOCAR va libre, y REPETÍ —que tiene que poder comparar una nota con otra—
+   cuantiza siempre, con la escala como su única regla y su única dificultad. */
+function libreAct(){ return PAN.libre && !JU.on; }
+function midiDeAlt(a){ return instAct().base + PAN.tono + cl(a, 0, 1)*12*PAN.oct; }
+
+/* ── LAS GUÍAS DEL MODO LIBRE SON LOS DOCE SEMITONOS, NO LOS GRADOS ──
+   No son escalones: son las marcas de una regla. Por eso en libre se dibujan
+   cortas, desde los bordes, y sólo la octava cruza la pantalla entera. */
+function nGuias(){ return libreAct() ? 12*PAN.oct + 1 : nGrados(); }
+function altDeGuia(i){ const n = nGuias(); return n > 1 ? cl(i, 0, n - 1)/(n - 1) : 0.5; }
+function midiDeGuia(i){ return libreAct() ? midiDeAlt(altDeGuia(i)) : midiDeIdx(i); }
+function nombreDeGuia(i){ const m = Math.round(midiDeGuia(i)); return NOTA_NOM[((m % 12) + 12) % 12]; }
+function esOctava(i){ return libreAct() ? (i % 12) === 0 : (i % escAct().g.length) === 0; }
 
 function escAct(){ return ESCALAS[cl(PAN.esc, 0, ESCALAS.length - 1)]; }
 function instAct(){ return POR_ID[PAN.inst] || INSTRS[0] || { base: 48, sost: 0 }; }
@@ -532,17 +574,19 @@ function briDeX(x){ return 0.20 + 0.80*cl(x, 0, 1); }
 const DEDOS = {};              /* id de puntero -> dedo vivo */
 const ONDAS = [];              /* aros que se abren y se apagan */
 
-function onda(nx, na, idx, k){
-  ONDAS.push({ nx, na, idx, t: 0, vida: 0.90, k: k === undefined ? 1 : k });
+function onda(nx, na, k){
+  ONDAS.push({ nx, na, t: 0, vida: 0.90, k: k === undefined ? 1 : k });
   while (ONDAS.length > 48) ONDAS.shift();
 }
 
 function dedoAbajo(id, nx, na){
-  const i = idxDeAlt(na);
+  const lib = libreAct(), i = idxDeAlt(na);
+  const a = lib ? cl(na, 0, 1) : altDeIdx(i);
+  const midi = lib ? midiDeAlt(na) : midiDeIdx(i);
   const vol = volDeX(nx), bri = briDeX(nx);
-  const v = abre(PAN.inst, midiDeIdx(i), vol, bri);
-  DEDOS[id] = { nx, na, idx: i, v, vol, bri, t: 0, hist: [{ nx, na, t: 0 }] };
-  onda(nx, altDeIdx(i), i, 1);
+  const v = abre(PAN.inst, midi, vol, bri);
+  DEDOS[id] = { nx, na, a, midi, idx: i, v, vol, bri, t: 0, hist: [{ nx, na: a, t: 0 }] };
+  onda(nx, a, 1);
   juegoToque(i);
   return DEDOS[id];
 }
@@ -553,15 +597,22 @@ function dedoAbajo(id, nx, na){
    nota nueva en REPETÍ: si contara, corregir sería perder. */
 function dedoMueve(id, nx, na){
   const d = DEDOS[id]; if (!d) return;
+  const lib = libreAct(), i = idxDeAlt(na);
   d.nx = nx; d.na = na;
   d.vol = volDeX(nx); d.bri = briDeX(nx);
+  const a = lib ? cl(na, 0, 1) : altDeIdx(i);
+  d.midi = lib ? midiDeAlt(na) : midiDeIdx(i);
   /* el rastro es DÓNDE ESTUVO EL DEDO, o sea un hecho del panel y no del dibujo:
      por eso vive acá y se puede auditar sin abrir un navegador */
-  d.hist.push({ nx, na, t: 0 });
+  d.hist.push({ nx, na: a, t: 0 });
   while (d.hist.length > 26) d.hist.shift();
-  const i = idxDeAlt(na);
-  if (i !== d.idx){ d.idx = i; onda(nx, altDeIdx(i), i, 0.62); }
-  mueve(d.v, midiDeIdx(i), d.vol, d.bri);
+  /* ── EN LIBRE EL ARO SALE CADA TANTOS SEMITONOS, NO EN CADA CUADRO ──
+     Uno por muestra serían sesenta aros por segundo, o sea una mancha; uno cada
+     semitono deja el mismo rastro que en snap y dice cuánto se recorrió. */
+  if (lib){ if (Math.abs(d.midi - (d.ondaMidi === undefined ? d.midi - 9 : d.ondaMidi)) >= 1){ d.ondaMidi = d.midi; onda(nx, a, 0.62); } }
+  else if (i !== d.idx){ onda(nx, a, 0.62); }
+  d.idx = i; d.a = a;
+  mueve(d.v, d.midi, d.vol, d.bri);
 }
 
 function dedoArriba(id){
@@ -629,7 +680,7 @@ function juegoPaso(dt){
       JU.i++;
       const idx = JU.sec[JU.i];
       pico(PAN.inst, midiDeIdx(idx), JU_ON, 0.78);
-      onda(0.5, altDeIdx(idx), idx, 1);
+      onda(0.5, altDeIdx(idx), 1);
       JU.luz = idx; JU.luzT = JU_ON;
     }
     if (JU.i >= JU.sec.length - 1 && JU.t >= JU.sec.length*per){
@@ -697,30 +748,37 @@ function col(a, l, o){ return 'hsla(' + matizDe(a).toFixed(0) + ',92%,' + l + '%
    6 % se adivinan; cerca del dedo suben, así que la escala aparece justo cuando
    hace falta y desaparece cuando no. */
 function pintaGuias(){
-  const n = nGrados(), L = escAct().g.length;
+  const n = nGuias(), lib = libreAct(), pasoG = n > 1 ? 1/(n - 1) : 1;
   const fs = Math.max(9, Math.round(ALT*0.0145));
   CX.font = '600 ' + fs + 'px system-ui,sans-serif';
-  CX.textBaseline = 'middle';
   for (let i = 0; i < n; i++){
-    const a = altDeIdx(i), y = Math.round(yDeAlt(a)) + 0.5;
-    const oct = (i % L) === 0;
-    let k = oct ? 0.155 : 0.070;
-    for (const id in DEDOS){
-      const d = DEDOS[id];
-      k = Math.max(k, 0.60*Math.max(0, 1 - Math.abs(i - d.idx)/3.2));
-    }
-    if (JU.on && JU.luz === i) k = Math.max(k, 0.85*cl(JU.luzT/JU_ON, 0, 1));
-    if (JU.on && JU.fase === 'turno' && JU.paso < JU.sec.length) k = Math.max(k, oct ? 0.16 : 0.075);
+    const a = altDeGuia(i), y = Math.round(yDeAlt(a)) + 0.5;
+    const oct = esOctava(i);
+    let k = oct ? 0.155 : (lib ? 0.045 : 0.070);
+    /* ── LA CERCANÍA SE MIDE EN ALTURA Y NO EN ÍNDICES ──
+       Así la misma cuenta vale para once escalones de escala y para veinticinco
+       semitonos de la regla libre. */
+    for (const id in DEDOS) k = Math.max(k, 0.60*Math.max(0, 1 - Math.abs(a - DEDOS[id].a)/(3.2*pasoG)));
+    if (JU.on && JU.luz === i && !lib) k = Math.max(k, 0.85*cl(JU.luzT/JU_ON, 0, 1));
     CX.strokeStyle = col(a, oct ? 74 : 64, k);
     CX.lineWidth = oct ? 1.4 : 1;
-    CX.beginPath(); CX.moveTo(0, y); CX.lineTo(ANC, y); CX.stroke();
+    CX.beginPath();
+    /* ── EN LIBRE LAS MARCAS SON CORTAS, Y ESA ES TODA LA DIFERENCIA ──
+       Una línea que cruza la pantalla se lee a escalón: el dedo la busca. Una
+       marca en el borde se lee a la marca de una regla: informa y no encierra. */
+    if (lib && !oct){
+      const w = ANC*0.085;
+      CX.moveTo(0, y); CX.lineTo(w, y);
+      CX.moveTo(ANC - w, y); CX.lineTo(ANC, y);
+    } else { CX.moveTo(0, y); CX.lineTo(ANC, y); }
+    CX.stroke();
     if (oct){
-      /* ── LA PRIMERA Y LA ÚLTIMA LÍNEA CAEN EN EL BORDE ──
+      /* ── LA PRIMERA Y LA ÚLTIMA CAEN EN EL BORDE ──
          Con la línea de base centrada, la mitad del nombre queda fuera de la
          pantalla: la de arriba cuelga hacia abajo y la de abajo se apoya. */
       CX.textBaseline = i === n - 1 ? 'top' : i === 0 ? 'bottom' : 'middle';
       CX.fillStyle = col(a, 74, Math.min(0.92, k + 0.12));
-      CX.fillText(nombreDeIdx(i), 10, y + (i === n - 1 ? 3 : i === 0 ? -3 : 0));
+      CX.fillText(nombreDeGuia(i), 10, y + (i === n - 1 ? 3 : i === 0 ? -3 : 0));
     }
   }
 }
@@ -741,7 +799,7 @@ function pintaOndas(){
 }
 
 function pintaDedo(d){
-  const x = d.nx*ANC, y = yDeAlt(altDeIdx(d.idx)), a = altDeIdx(d.idx);
+  const x = d.nx*ANC, a = d.a, y = yDeAlt(a);
   CX.globalCompositeOperation = 'lighter';
 
   /* ── LA BARRA ES LO QUE HACE LEGIBLE LA ALTURA ──
@@ -866,6 +924,8 @@ function pintaIdioma(){
   $('#mCred').textContent = TT('credito');
   $('#aTit').textContent = TT('ajustes');
   $('#aSon').textContent = TT('sonido');
+  $('#aLib').textContent = TT('sinred');
+  $('#aNota').textContent = TT('notaEsc');
   $('#aEsc').textContent = TT('escala');
   $('#aTono').textContent = TT('tono');
   $('#aOct').textContent = TT('octavas');
@@ -893,6 +953,7 @@ function ponEsc(i){ PAN.esc = ((i % ESCALAS.length) + ESCALAS.length) % ESCALAS.
 function ponTono(i){ PAN.tono = ((i % 12) + 12) % 12; guarda('tono', PAN.tono); pintaAjustes(); }
 function ponOct(n){ PAN.oct = cl(n, 1, 3); guarda('oct', PAN.oct); pintaAjustes(); }
 function ponSon(v){ sonidoOn(v); guarda('son', v ? 1 : 0); pintaAjustes(); }
+function ponLibre(v){ dedosSoltar(); PAN.libre = !!v; guarda('libre', v ? 1 : 0); pintaAjustes(); }
 function ponInst(id){
   if (!POR_ID[id]) return;
   dedosSoltar();
@@ -919,12 +980,15 @@ function pintaAjustes(){
   const s = $('#oSon'); s.innerHTML = '';
   s.appendChild(chip('ON', SON_ON, () => ponSon(true)));
   s.appendChild(chip('OFF', !SON_ON, () => ponSon(false)));
+  const l = $('#oLib'); l.innerHTML = '';
+  l.appendChild(chip(TT('si'), PAN.libre, () => ponLibre(true)));
+  l.appendChild(chip(TT('no'), !PAN.libre, () => ponLibre(false)));
   paso($('#oEsc'), escAct().n[LI()], () => ponEsc(PAN.esc - 1), () => ponEsc(PAN.esc + 1));
   paso($('#oTono'), NOTA_NOM[PAN.tono], () => ponTono(PAN.tono - 1), () => ponTono(PAN.tono + 1));
   const o = $('#oOct'); o.innerHTML = '';
   for (const n of [1, 2, 3]) o.appendChild(chip(String(n), PAN.oct === n, () => ponOct(n)));
   const i = $('#oIdi'); i.innerHTML = '';
-  for (const l of ['es', 'en', 'pt']) i.appendChild(chip(l.toUpperCase(), LANG === l, () => ponIdioma(l)));
+  for (const q of ['es', 'en', 'pt']) i.appendChild(chip(q.toUpperCase(), LANG === q, () => ponIdioma(q)));
 }
 
 /* ══════════ EL SELECTOR DE INSTRUMENTO ══════════ */
@@ -1089,6 +1153,7 @@ function arranca(){
   PAN.esc  = cl(Math.round(leeN('esc', 0)), 0, ESCALAS.length - 1);
   PAN.tono = cl(Math.round(leeN('tono', 0)), 0, 11);
   PAN.oct  = cl(Math.round(leeN('oct', OCTAVAS)), 1, 3);
+  PAN.libre = leeN('libre', 1) !== 0;
   const gi = lee('inst', PAN.inst);
   if (POR_ID[gi]) PAN.inst = gi;
   SON_ON = leeN('son', 1) !== 0;
@@ -1125,7 +1190,8 @@ function pev(tipo, id, nx, na){
 window.__T = {
   estado(){
     return { pant: PANT, lang: LANG, inst: PAN.inst, esc: escAct().id, tono: PAN.tono,
-             oct: PAN.oct, grados: nGrados(), son: SON_ON, dedos: nDedos(),
+             oct: PAN.oct, grados: nGrados(), libre: PAN.libre, libreAhora: libreAct(),
+             guias: nGuias(), son: SON_ON, dedos: nDedos(),
              ondas: ONDAS.length, voces: VOCES.length, cargando: CARGANDO,
              ju: { on: JU.on, fase: JU.fase, ronda: JU.ronda, sec: JU.sec.slice(),
                    paso: JU.paso, rec: JU.rec } };
@@ -1171,19 +1237,45 @@ window.__T = {
      Si la línea se pinta a una altura y el dedo dispara otra nota ahí, el
      jugador no puede confiar en lo que ve. */
   alinea(){
-    const n = nGrados(), r = LZE.getBoundingClientRect(), mal = [];
+    const n = nGuias(), r = LZE.getBoundingClientRect(), lib = libreAct(), mal = [];
     for (let i = 0; i < n; i++){
-      const y = yDeAlt(altDeIdx(i));                 /* donde se dibuja la línea */
+      const y = yDeAlt(altDeGuia(i));                /* donde se dibuja la marca */
       const na = 1 - y/Math.max(1, r.height);        /* la altura de un dedo puesto ahí */
-      if (idxDeAlt(na) !== i) mal.push([i, +y.toFixed(1), idxDeAlt(na)]);
+      /* en libre la marca no atrapa: lo que tiene que coincidir es la NOTA */
+      if (lib){ const c = 1200*Math.log2(midiDeAlt(na) === 0 ? 1 : Math.pow(2, (midiDeAlt(na) - midiDeGuia(i))/12));
+                if (Math.abs(c) > 12) mal.push([i, +y.toFixed(1), +c.toFixed(1)]); }
+      else if (idxDeAlt(na) !== i) mal.push([i, +y.toFixed(1), idxDeAlt(na)]);
     }
-    return { n, mal, ok: mal.length === 0 };
+    return { n, libre: lib, mal, ok: mal.length === 0 };
+  },
+  /* ── LA PRUEBA DEL RECLAMO: ¿EL PANEL TIENE ESCALONES? ──
+     Se mueve el dedo un pelo, muchas veces, sobre un tramo corto. Con escalones
+     salen dos o tres notas distintas; libre tiene que dar una por muestra, y el
+     salto entre una y la siguiente medido en cents dice cuán fino es. */
+  async fino(n, tramo, ms){
+    n = n || 24; tramo = tramo === undefined ? 0.09 : tramo; ms = ms || 240;
+    const a0 = 0.44;
+    pev('pointerdown', 11, 0.5, a0);
+    const mios = () => this.dedos().filter(d => d.id === '11')[0];
+    const v = [];
+    for (let i = 1; i <= n; i++){
+      await esp(ms/n);
+      pev('pointermove', 11, 0.5, a0 + tramo*i/n);
+      const d = mios(); if (d) v.push(d.midi);
+    }
+    pev('pointerup', 11, 0.5, a0 + tramo);
+    const uniq = v.filter((x, i) => i === 0 || x !== v[i-1]);
+    let mx = 0;
+    for (let i = 1; i < uniq.length; i++) mx = Math.max(mx, Math.abs(uniq[i] - uniq[i-1])*100);
+    return { muestras: v.length, distintas: uniq.length, saltoMax: +mx.toFixed(1),
+             desde: v[0], hasta: v[v.length-1], semitonos: +Math.abs(v[v.length-1] - v[0]).toFixed(3) };
   },
   ir(p){ verPantalla(p); return PANT; },
   lang(l){ ponIdioma(l); return LANG; },
   cfg(k, v){
     if (k === 'esc') ponEsc(v); else if (k === 'tono') ponTono(v);
     else if (k === 'oct') ponOct(v); else if (k === 'son') ponSon(!!v);
+    else if (k === 'libre') ponLibre(!!v);
     else if (k === 'inst') ponInst(v);
     return this.estado();
   },
@@ -1195,8 +1287,9 @@ window.__T = {
   dedos(){
     const a = [];
     for (const k in DEDOS){ const d = DEDOS[k];
-      a.push({ id: k, nx: +d.nx.toFixed(3), na: +d.na.toFixed(3), idx: d.idx,
-               midi: midiDeIdx(d.idx), nota: nombreDeIdx(d.idx), vol: +d.vol.toFixed(3),
+      a.push({ id: k, nx: +d.nx.toFixed(3), na: +d.na.toFixed(3), a: +d.a.toFixed(4),
+               idx: d.idx, midi: +d.midi.toFixed(3), nota: nombreDeIdx(idxDeAlt(d.na)),
+               vol: +d.vol.toFixed(3),
                bri: +d.bri.toFixed(3), tipo: d.v ? d.v.tipo : 'sin voz',
                rate: d.v && d.v.src && d.v.src.playbackRate ? +d.v.src.playbackRate.value.toFixed(4) : null,
                hist: d.hist.length });
@@ -1315,7 +1408,7 @@ window.__T = {
   textos(){
     const o = {};
     for (const i of ['iSub','mSub','bLibre','bJuego','bAjustes','mPie','mCred','aTit','aSon',
-                     'aEsc','aTono','aOct','aIdi','bVerInstr','bCerrarCfg','nTit','fTit',
+                     'aLib','aNota','aEsc','aTono','aOct','aIdi','bVerInstr','bCerrarCfg','nTit','fTit',
                      'bOtra','bAlMenu','tInst','jFase','jRonda']){
       const e = document.getElementById(i); if (e) o[i] = e.textContent;
     }
