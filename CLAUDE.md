@@ -168,6 +168,18 @@ munecas.
   saltarse en un lanzamiento. La economía **se midió en node antes de dibujar nada**: el primer
   lanzamiento llega a 370 m y el bot codicioso pasa Marte en 47. Vive partido en
   `herramientas/despegue/partes/` y se arma con `python3 herramientas/despegue/armar.py`.
+- **`Cruce.html` es "CRUCE"** (~1,53 MB, de los cuales 1,43 son los siete modelos 3D y la imagen del
+  título generados con Rezona; el mundo entero es procedural y no tiene un solo asset más). El
+  undécimo juego. Un carpincho cruza rutas, ríos y vías de tren **hacia adelante y sin fin**, en
+  three.js con **cámara ortográfica isométrica**, vertical nativo y un solo dedo: se toca y salta una
+  fila, se arrastra para ir a los costados o atrás. Las filas son de **cinco clases** —pasto, arena,
+  ruta, río y vía— y se siembran con semilla; **el que se queda quieto se lo lleva el carancho**,
+  porque la cámara empuja desde atrás. Los autos, los camiones y los colectivos van en un patrón
+  cíclico, los camalotes del río hay que pisarlos y arrastran, y el tren avisa 1,3 s antes con los
+  rieles en rojo. **Catorce pieles** que se desbloquean por récord o con monedas. Con **pixelación**
+  (destino de render reducido y NEAREST) y **saturación** en una pasada de post, más posterizado y
+  viñeta. Vive partido en `herramientas/cruce/partes/` y se arma con
+  `python3 herramientas/cruce/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
   generadas: el telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El
@@ -190,6 +202,130 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima sexta vuelta (2026-09-05): **CRUCE**, el undécimo juego — un carpincho, siete modelos de Rezona y una vía que medía medio píxel
+
+Pedido: *"ahora crea otro juego 3D que se te ocurra simple pero con modelos 3D buen menú etc, también
+generales un buen menú con una imagen del título recortado h agrégale pixelacion al juego y saturación
+para darle un buen estilo gráfico"*.
+
+`juegos-pc/Cruce.html` (1,53 MB). Un carpincho que cruza rutas, ríos y vías, **con un solo dedo**: se
+toca y salta, se arrastra para ir de costado. Lo que se juega es siempre lo mismo —¿paso ahora o
+espero?— y lo que cambia es **qué cuesta esperar**: en la ruta esperar es gratis, en el río el
+camalote te lleva, en la vía el tren avisa y en cualquier lado la cámara empuja desde atrás.
+
+#### LA ENTRADA SE DECIDE AL SOLTAR, NO AL APOYAR
+
+Es la decisión de la que cuelga todo lo demás. Con la decisión en el `pointerdown`, **cada arrastre
+empieza con un salto hacia adelante que nadie pidió**: el dedo apoya, el juego salta, y recién después
+uno se entera de que quería ir de costado. Al soltar, un desplazamiento de menos de 26 px es un toque
+—salto adelante— y más que eso es la dirección en la que se arrastró. Un solo gesto, cuatro
+direcciones y ningún botón.
+
+#### LA SEMBRADA DEL RÍO SE ENVOLVÍA SOBRE UN LARGO Y SE SORTEABA SOBRE OTRO
+
+El defecto más caro de la vuelta y no se ve en una foto. Los camalotes se sembraban sobre un ciclo de
+26 columnas y se envolvían sobre 38: quedaban **doce columnas vacías** dando vueltas, o sea esperas de
+once segundos con el río corriendo. Medido, el auto-jugador se plantaba en la **fila 15**. Con el
+ciclo y la envoltura sobre el mismo número (`siembraCiclo` + `xMovil`), pasó a 20.
+
+**Y ESCALAR LOS HUECOS PODÍA DEJARLOS POR DEBAJO DEL MÍNIMO.** Para que las piezas cierren el ciclo se
+estiran los huecos por un factor `k`; con `k` bajando hasta 0,45 un hueco de 2,9 columnas —que es el
+mínimo para que el salto entre— quedaba en 1,3, o sea una ventana de 0,67 s donde la cuenta promete
+1,5. Se **descarta la última pieza** antes de escalar, así `k` nunca baja de 1. De 20 a 28.
+
+#### LAS VEINTINUEVE MUERTES POR AUTO CAÍAN A 0,02 s DEL SALTO, EN EL AIRE
+
+La fila de destino se asigna **al empezar** el salto, así que el choque contra los autos corría
+durante el vuelo — y `seguroEn`, que es la cuenta con la que el bot decide, sólo mira **desde el
+aterrizaje en adelante**. O sea que el bot elegía un salto que su propia cuenta daba por bueno y se
+moría antes de tocar el piso. Con la guarda `!R.salta`, y moviendo el consumo del salto guardado **al
+final de `paso`** —para que encadenar dos saltos no se saltee una comprobación—, de 28 a **90**. Y
+después, enseñándole al bot a bajarse de un camalote que se lo lleva, las muertes por agua bajaron de
+**27 de 40 corridas a 11**.
+
+#### CUATRO DEFECTOS QUE SÓLO SE VIERON MIRANDO, Y TRES SON DE ESCALA
+
+1. **LA VÍA NO TENÍA RIELES, Y ERAN MEDIO PÍXEL.** Los rieles eran dos tiras de **0,054 de fondo**;
+   este juego dibuja en un destino de render de **158×343** y lo estira, así que 0,054 unidades son
+   0,6 px: la fila del tren salía como una banda marrón lisa y nada decía que por ahí pasa un tren, que
+   es la información más importante del juego. Ahora van **durmientes** —cortos y cruzados, así que su
+   lado largo cae sobre la profundidad y sobrevive al achique— más los rieles engordados a 0,13. Y el
+   presupuesto de la malla instanciada tuvo que subir de 7 a 12 por fila.
+2. **EL TREN MEDÍA OCHO UNIDADES DE ALTO.** El generador devolvió una locomotora de vapor de
+   proporción casi cúbica (9,00 × 8,15 × 4,98 medido con la sonda `mallas()`), y `ajusta` escala
+   **uniforme** para que el largo coincida con los nueve del choque: quedaba **doce veces el carpincho**
+   y tapaba media pantalla. Lo que tiene que coincidir con la simulación es la **caja**, no la
+   proporción de la malla: la locomotora se ajusta eje por eje a 9,00 × 1,85 × 1,40. Y el intercambio
+   de objetivos X/Z va **antes** de escalar: girar después de un escalado por eje lleva el largo al
+   fondo.
+3. **EL CAMALOTE SE DIBUJABA DE UNA COLUMNA MIDIENDO DOS.** `ajusta` normaliza **el eje más largo**;
+   la malla vino larga sobre Z, así que la X quedaba en 0,55 y el `ex` de la instancia —que escala la
+   X— la dejaba en 1,1 donde el choque usa 2 a 4. Se lo gira como a los vehículos.
+4. **Y EL AGUA ERA UN RECTÁNGULO AZUL.** Un `MeshLambertMaterial` de color liso no se lee a agua. Lo
+   que la hace agua son dos cosas y ninguna es el color: **crestas horizontales** y que **se muevan**.
+   Va una textura de 32 px con filtro NEAREST —a propósito: el juego entero se estira con NEAREST y una
+   textura suave sería lo único liso del cuadro— y la textura se desplaza, no la geometría.
+
+#### LA SOMBRA NO SE PUEDE PEDIR CON UNA LUZ APAGADA
+
+Empecé con una direccional de intensidad **cero** dedicada a proyectar la sombra, que es lo que uno
+escribiría para no tocar la iluminación que ya estaba calibrada. No funciona, y es de three.js: la
+sombra de una luz sólo puede oscurecer **su propia contribución**, así que una luz que no aporta nada
+no puede sacar nada. Proyecta el sol, con una caja de sombra **chica que sigue al jugador** —el mapa
+cubre un área fija, y una caja del tamaño del mundo deja la sombra de un carpincho en cuatro píxeles.
+
+#### LOS PRIMEROS METROS NO PUEDEN SER UNA EMBOSCADA
+
+Cuatro filas de pasto y después cualquier cosa dejaba **ríos en la fila 4**: medido sobre 300 semillas,
+el bot se ahogaba en la 4 antes de haber tocado la pantalla dos veces. La ruta se aprende sola —se toca
+y se espera—; el río pide entender que hay que subirse a algo que se mueve. Hasta la fila 8, ni río ni
+vía. Medido: las muertes antes de la fila 12 pasan de 4 a 2 sobre 300 semillas, y las dos que quedan
+son contra un auto en la 9, o sea un error y no una emboscada.
+
+#### EL HUD SE PISABA POR UNA CAJA QUE NO SE VE
+
+`#pts` con `left:0; right:0` tiene una caja de **ancho completo** aunque el texto vaya centrado, así
+que el marcador se solapaba con las monedas y con el botón de pausa aunque en pantalla no se tocaran.
+Con `left:62px; right:62px` la caja mide lo que el texto puede llegar a medir. Medido: **cero
+solapamientos** en el HUD —cinco elementos con el aviso del tren puesto— y en los cuatro paneles.
+
+**Y LOS PANELES HAY QUE MEDIRLOS DESPUÉS DE LA TRANSICIÓN.** La primera medición devolvió `n: 0` sobre
+la tienda de pieles y parecía que el panel no tenía nada: la sonda descarta lo que está a opacidad
+menor a 0,05 y el fundido de CSS todavía no había corrido. Con 700 ms de espera aparecen los ocho
+elementos, y ahí sí el `choques: []` significa algo.
+
+#### LOS ASSETS
+
+Ocho tareas en el proyecto descartable `uSEsgNYW`, los `task_id` en `assets/cruce/tareas.json`: el
+carpincho, el auto, el camión, el colectivo, la locomotora, el árbol, el camalote y la **imagen del
+título**. **Los ocho salieron a la primera** y la sonda `__X.assets()` los da cargados con
+`fallas: []`. Los siete GLB se hornean con la misma cadena de DESPEGUE —material reescrito de cero,
+buffer compactado, `face_limit` al generar— y pesan de 111 a 179 KB.
+
+**EL TÍTULO SE RECORTA CON UN RELLENO DESDE EL BORDE Y NO CON UN UMBRAL DE LUMINANCIA.** Las letras
+traen brillos casi blancos adentro: con un umbral, esos brillos se convierten en **agujeros** en el
+medio del logo. Rellenando desde el borde, lo que no se alcanza desde afuera es dibujo por
+construcción. 26 KB en WebP.
+
+#### MEDIDO AL CERRAR
+
+Auditoría del mapa **`ok: true` en 40 de 40 semillas** sobre 400 filas cada una (ninguna fila cerrada,
+las cinco clases presentes). Auto-jugador honesto en node: **mediana 123 filas sobre 300 semillas**,
+con p10 51, p90 178 y máximo 246. Y sobre las **mismas 40 semillas**, honesto **119** contra **5** del
+que salta al azar, o sea **veintitrés veces**; las cuatro muertes existen y se alcanzan (auto 25, agua
+11, tren 3, carancho 1). Y el bot
+**juega la partida de verdad en el navegador**: llega a la **fila 189**, muere contra un auto, cobra
+143 monedas y desbloquea **5 pieles**, con el récord guardado. Entrada con `PointerEvent` real: un
+toque pasa de la fila 0 a la 1 y un arrastre de 90 px mueve la x de 0 a 1. Las tres calidades en
+caliente (**121×262 sin sombra · 158×343 con mapa de 1024 · 206×446 con 2048**), los tres idiomas en
+vivo, apaisado con el marco en columna de teléfono (259×460, cero solapamientos), pausa y reanudar.
+**18-27 llamadas de dibujo y 144-297 mil triángulos.** Audio: pico 0,159 y rms 0,089 con la cama
+puesta. `window.__errs` **vacío en las nueve corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los sonidos está medido que decodifican y
+a qué nivel suenan, no si el bocinazo pega con el juego. Y el bot decide con puntería de un paso de
+física: que el mundo se pueda recorrer está probado, cuánto cuesta **con un dedo** no.
 
 ### Centésima quinta vuelta (2026-09-05): **DESPEGUE**, el décimo juego — un cohete, quince capas y una economía medida en node
 
