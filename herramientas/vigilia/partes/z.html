@@ -87,7 +87,7 @@ addEventListener('keydown', (e) => {
    a ciento cuarenta tienen que jugar el mismo juego. Con la fisica atada al
    cuadro, la frecuencia del chapoteo y el umbral de volcado saldrian distintos
    en cada aparato, y eso no es rendimiento: es otro juego. */
-let ACUM = 0, ULT = 0, PAUSA = false, CONGELADO = false, BOT = false, FIN_T = 0;
+let ACUM = 0, ULT = 0, PAUSA = false, CONGELADO = false, BOT = false, FIN_T = 0, TC_ULT = '';
 window.__errs = [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
 addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
@@ -150,6 +150,12 @@ function bucle(ms){
   pinta(CONGELADO ? 0 : dt);
   $('velo').style.opacity = String(EFE.blanco);
   $('rojo').style.opacity = String(postMat.uniforms.rojo.value*1.4);
+  /* el reloj de cinta va en CUADROS, que es lo que distingue un timecode de
+     un cronometro: hh:mm:ss:ff a 25 cuadros, como una cinta PAL */
+  if (RUN){ const T = RUN.t, h = 0, m = (T/60)|0, sg = (T%60)|0, fr = ((T*25)%25)|0;
+    const d2 = (n) => (n < 10 ? '0' : '') + n;
+    const tc = d2(h) + ':' + d2(m) + ':' + d2(sg) + ':' + d2(fr);
+    if (tc !== TC_ULT){ TC_ULT = tc; $('tc').textContent = tc; } }
 }
 
 /* ══════════════════════ LOS BOTONES ══════════════════════ */
@@ -158,6 +164,7 @@ B('bJugar', () => { pideGiro(); juega(); });
 B('bAjustes', () => pantalla('pAjustes'));
 B('aVolver', () => { guardaProg(); pantalla('pMenu'); });
 B('aBorrar', () => { PROG.mejor = 0; PROG.partidas = 0; guardaProg(); repinta(); });
+B('aVhs', () => { VHS = !VHS; guardaProg(); repinta(); });
 B('pSeguir', () => seguir());
 B('pMenuB', () => alMenu());
 B('fOtra', () => { pideGiro(); juega(); });
@@ -228,7 +235,23 @@ window.__V = {
      corre los treinta y tres, los mide en fracciones de pantalla y dice cuanto
      movio el brillo respecto del mismo instante sin susto. */
   auditaSustos(){
-    const base = (() => { this.foto(30, 7); const b = this.brillo().franjas; return b; })();
+    /* ── EL DELTA VA POR BALDOSAS Y NO POR FRANJAS ──
+       Una franja es un quinto de la pantalla: un susto local —el agua del bol
+       que se pone negra, una puerta al fondo del pasillo— mueve su promedio
+       menos de un punto y la auditoria lo daba por MUDO. Con una reja de 8x8 y
+       el maximo de las baldosas, un cambio chico y concentrado se ve. */
+    const tejas = () => { pinta(0.016);
+      const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      const px = new Uint8Array(w*h*4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const r = [];
+      for (let ty = 0; ty < 8; ty++) for (let tx = 0; tx < 8; tx++){
+        let s = 0, n = 0;
+        for (let y = (h*ty/8)|0; y < (h*(ty+1)/8)|0; y += 2)
+          for (let x = (w*tx/8)|0; x < (w*(tx+1)/8)|0; x += 2){
+            const i = (y*w + x)*4; s += (px[i] + px[i+1] + px[i+2])/3; n++; }
+        r.push(n ? s/n : 0); }
+      return r; };
+    const base = (() => { this.foto(30, 7); return tejas(); })();
     const caja = (o) => { escena.updateMatrixWorld(true); cam.updateMatrixWorld(true);
       const b = new T.Box3().setFromObject(o); if (b.isEmpty()) return null;
       let x0 = 9, x1 = -9, y0 = 9, y1 = -9, del = false;
@@ -243,20 +266,34 @@ window.__V = {
     const r = [];
     for (const S of SUSTOS){
       this.susto(S.id, 0.55);
-      const fr = this.brillo().franjas;
-      let dif = 0; for (let i = 0; i < 5; i++) dif = Math.max(dif, Math.abs(fr[i] - base[i]));
+      const fr = tejas();
+      let dif = 0; for (let i = 0; i < fr.length; i++) dif = Math.max(dif, Math.abs(fr[i] - base[i]));
       const act = [];
       if (figura.visible){ const c = caja(figura); if (c) act.push('figura' + JSON.stringify(c)); else act.push('figura:FUERA'); }
       if (manoG.visible){ const c = caja(manoG); if (c) act.push('mano' + JSON.stringify(c)); else act.push('mano:FUERA'); }
       if (bichosM.visible) act.push('bichos');
       if (caraM.visible){ const c = caja(caraM); act.push(c ? 'cara' + JSON.stringify(c) : 'cara:FUERA'); }
       if (sangreM.visible) act.push('sangre');
+      for (const k in BICHO) if (BICHO[k].g.visible){
+        const c = caja(BICHO[k].g); act.push(k + (c ? JSON.stringify(c) : ':FUERA')); }
       r.push({ id: S.id, clase: S.clase, act, dif: +dif.toFixed(1) });
     }
     CONGELADO = false; arrancaRun(1);
     return { mudos: r.filter(x => x.dif < 2 && !x.act.length).map(x => x.id),
       fuera: r.filter(x => x.act.some(a => a.indexOf('FUERA') >= 0)).map(x => x.id), r };
   },
+  /* los seis monstruos: si estan, con cuantos huesos y con que clips. «no se
+     ve» puede ser que no cargo, que no tenga esqueleto o que el clip no exista */
+  bichos(){ const r = {};
+    for (const k in BICHO){ const B = BICHO[k];
+      escena.updateMatrixWorld(true);
+      const bb = new T.Box3().setFromObject(B.g), t = new T.Vector3(); bb.getSize(t);
+      let tri = 0, hue = 0;
+      B.g.traverse(o => { if (o.isMesh && o.geometry){ tri += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count)/3;
+        if (o.isSkinnedMesh) hue = o.skeleton.bones.length; } });
+      r[k] = { alto: +t.y.toFixed(2), tri: Math.round(tri), huesos: hue, clips: Object.keys(B.acc) };
+    }
+    return { listos: BICHOS_LISTOS.slice(), fallas: BICHOS_FALLAS.slice(), r }; },
   agenda(s){ return auditaAgenda(s == null ? 1 : s); },
   fisica(){ const a = midePileta(), b = mideResbale(); arrancaRun(1); return { agua: a, resbale: b }; },
   juegaSolo(s, modo){ const r = juegaSolo(s, modo || 'bot'); arrancaRun(1); return r; },
@@ -324,7 +361,83 @@ window.__V = {
       expo: render.toneMappingExposure }; },
   /* apaga partes del post para saber DONDE se pierde la luz: sin esto, «esta
      oscuro» no distingue una lampara floja de una viñeta que se come el cuadro */
-  post(k, v){ if (postMat.uniforms[k]) postMat.uniforms[k].value = v; return Object.fromEntries(Object.entries(postMat.uniforms).map(([a,b]) => [a, typeof b.value === 'number' ? b.value : 'tex'])); },
+  /* ── UNA SONDA QUE ESCRIBE `undefined` NO MIDE, ROMPE ──
+     Estaba asignando siempre, asi que consultar `post('vhs')` sin valor dejaba
+     el uniforme en undefined y el shader se quedaba sin filtro. */
+  post(k, v){ if (v !== undefined && postMat.uniforms[k]) postMat.uniforms[k].value = v; return Object.fromEntries(Object.entries(postMat.uniforms).map(([a,b]) => [a, typeof b.value === 'number' ? b.value : 'tex'])); },
+  /* ── SI SE VE O NO SE VE NO LO DICE LA CAJA, LO DICE EL PIXEL ──
+     Un actor puede estar en cuadro, delante de la camara y ocupando media
+     pantalla, y salir del mismo valor que la pared que tiene detras: dos cosas
+     del mismo valor son una sola. Esto planta el susto en su instante fuerte,
+     proyecta la caja, y compara el brillo MEDIO DE ADENTRO contra el mismo
+     rectangulo con el bicho apagado. Ese delta es lo unico que prueba que se ve. */
+  sinBichos(v){ SIN_BICHOS = !!v; return v; },
+  /* que tan grande es el bicho DESPUES de que el esqueleto lo deforma: la caja
+     envolvente sale de la malla en pose de reposo, asi que un rig con la escala
+     equivocada no aparece ahi — aparece en pantalla */
+  huesosBicho(){ const r = {};
+    for (const k in BICHO){ const B = BICHO[k]; let hu = null;
+      B.g.traverse(o => { if (o.isSkinnedMesh && !hu) hu = o.skeleton; });
+      if (!hu){ r[k] = 'sin esqueleto'; continue; }
+      const v = new T.Vector3(); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,z0=1e9,z1=-1e9;
+      for (const b of hu.bones){ b.getWorldPosition(v);
+        x0=Math.min(x0,v.x); x1=Math.max(x1,v.x); y0=Math.min(y0,v.y); y1=Math.max(y1,v.y);
+        z0=Math.min(z0,v.z); z1=Math.max(z1,v.z); }
+      const cj = new T.Box3().setFromObject(B.g), t = new T.Vector3(); cj.getSize(t);
+      r[k] = { huesos: hu.bones.length, act: B.act ? 1 : 0,
+        spanHuesos: [+(x1-x0).toFixed(2), +(y1-y0).toFixed(2), +(z1-z0).toFixed(2)],
+        cajaMalla: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)] }; }
+    return r; },
+  matBicho(){ const r = {};
+    for (const k in BICHO){ BICHO[k].g.traverse(o => { if (o.isMesh && o.material && !r[k]){
+      const m = o.material;
+      r[k] = { tipo: m.type, col: '#' + m.color.getHexString(), map: !!m.map,
+        metal: m.metalness, rough: m.roughness,
+        emi: '#' + (m.emissive ? m.emissive.getHexString() : '?'),
+        emiI: m.emissiveIntensity, emiMap: !!m.emissiveMap, nrm: !!m.normalMap }; } }); }
+    return r; },
+  mideBicho(id, u){
+    this.susto(id, u == null ? 0.85 : u);
+    escena.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+    let k = null; for (const q in BICHO) if (BICHO[q].g.visible) k = q;
+    if (!k) return { id, ver: false, por: 'ningun bicho visible' };
+    const B = BICHO[k], b = new T.Box3().setFromObject(B.g);
+    let x0 = 9, x1 = -9, y0 = 9, y1 = -9, del = false;
+    for (let i = 0; i < 8; i++){
+      const v = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+      if (v.clone().applyMatrix4(cam.matrixWorldInverse).z < -0.001) del = true;
+      v.project(cam);
+      x0 = Math.min(x0, (v.x + 1)/2); x1 = Math.max(x1, (v.x + 1)/2);
+      y0 = Math.min(y0, (1 - v.y)/2); y1 = Math.max(y1, (1 - v.y)/2); }
+    const cp = cam.getWorldPosition(new T.Vector3()), wp = B.g.getWorldPosition(new T.Vector3());
+    const medir = () => { pinta(0.016);
+      const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      const cx0 = Math.max(0, Math.floor(x0*w)), cx1 = Math.min(w, Math.ceil(x1*w));
+      const cy0 = Math.max(0, Math.floor((1 - y1)*h)), cy1 = Math.min(h, Math.ceil((1 - y0)*h));
+      if (cx1 <= cx0 || cy1 <= cy0) return null;
+      const px = new Uint8Array((cx1 - cx0)*(cy1 - cy0)*4);
+      gl.readPixels(cx0, cy0, cx1 - cx0, cy1 - cy0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let s = 0, mx = 0; for (let i = 0; i < px.length; i += 4){
+        const v = (px[i] + px[i+1] + px[i+2])/3; s += v; if (v > mx) mx = v; }
+      return { medio: +(s/(px.length/4)).toFixed(1), max: +mx.toFixed(0), px }; };
+    const con = medir();
+    SIN_BICHOS = true; B.g.visible = false; const sin = medir(); SIN_BICHOS = false;
+    /* per-pixel: el rectangulo es mucho mas grande que la silueta, asi que un
+       promedio diluye al bicho entre el fondo. Lo que cuenta es CUANTOS pixeles
+       cambio y cuanto. */
+    return { id, k, caja: [+x0.toFixed(2), +x1.toFixed(2), +y0.toFixed(2), +y1.toFixed(2)],
+      delante: del, d: +cp.distanceTo(wp).toFixed(2), luzSus: +LUZ_SUS.intensity.toFixed(2),
+      luzK: +EFE.luzK.toFixed(2),
+      con: con ? con.medio : null, sin: sin ? sin.medio : null,
+      dif: con && sin ? +(con.medio - sin.medio).toFixed(1) : null,
+      pico: con ? con.max : null,
+      /* cuantos pixeles del rectangulo cambio el bicho, y cuanto los cambio */
+      cambio: (() => { if (!con || !sin || con.px.length !== sin.px.length) return null;
+        let n = 0, s = 0; for (let i = 0; i < con.px.length; i += 4){
+          const a = (con.px[i] + con.px[i+1] + con.px[i+2])/3;
+          const b = (sin.px[i] + sin.px[i+1] + sin.px[i+2])/3;
+          const d = Math.abs(a - b); if (d > 6){ n++; s += a; } }
+        return { pct: +(100*n/(con.px.length/4)).toFixed(1), brillo: n ? +(s/n).toFixed(1) : 0 }; })() }; },
   brillo(){ pinta(0.016); const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
     const px = new Uint8Array(w*h*4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const fr = []; for (let f = 0; f < 5; f++){ let s = 0, n = 0;
@@ -341,6 +454,7 @@ window.__V = {
   arrancaRun(1);
   armaCuartos();
   cargaAssets();
+  cargaBichos();
   repinta();
   $('cBarra').style.width = '100%';
   setTimeout(() => {

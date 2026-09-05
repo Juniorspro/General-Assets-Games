@@ -13,10 +13,11 @@ function cargaProg(){
     const d = JSON.parse(s); Object.assign(PROG, d.p || {});
     LANG = d.lang || LANG; CALIDAD = d.cal || CALIDAD;
     VOL_MUS = d.vm != null ? d.vm : VOL_MUS; VOL_FX = d.vf != null ? d.vf : VOL_FX;
+    if (d.vhs != null) VHS = !!d.vhs;
     return true; } catch(e){ return false; }
 }
 function guardaProg(){
-  try { localStorage.setItem(CLAVE, JSON.stringify({ p: PROG, lang: LANG, cal: CALIDAD, vm: VOL_MUS, vf: VOL_FX })); } catch(e){}
+  try { localStorage.setItem(CLAVE, JSON.stringify({ p: PROG, lang: LANG, cal: CALIDAD, vm: VOL_MUS, vf: VOL_FX, vhs: VHS })); } catch(e){}
 }
 function pantalla(n){
   PANTALLA = n;
@@ -32,6 +33,9 @@ function repinta(){
   $('aTit').textContent = TT('ajustes');
   $('aMusL').textContent = TT('musica'); $('aFxL').textContent = TT('efectos');
   $('aBorrar').textContent = TT('borrar'); $('aVolver').textContent = TT('volver');
+  $('aVhs').textContent = TT(VHS ? 'vhsOn' : 'vhsOff'); $('aVhs').classList.toggle('sel', VHS);
+  document.body.classList.toggle('sinvhs', !VHS);
+  if (typeof postMat !== 'undefined') postMat.uniforms.vhs.value = VHS ? 1 : 0;
   $('pTit').textContent = TT('pausa'); $('pSeguir').textContent = TT('seguir'); $('pMenuB').textContent = TT('menu');
   $('fOtra').textContent = TT('otra'); $('fMenu').textContent = TT('menu');
   for (const b of document.querySelectorAll('#pAjustes .bt[data-cal]')){

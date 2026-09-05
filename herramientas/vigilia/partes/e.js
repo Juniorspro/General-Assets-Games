@@ -30,21 +30,85 @@ const postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const postMat = new T.ShaderMaterial({
   uniforms: { tex: { value: null }, sat: { value: 0.62 }, bandas: { value: 30.0 },
               vin: { value: 1.15 }, grano: { value: 0.055 }, t: { value: 0 },
-              rojo: { value: 0 }, blanco: { value: 0 }, borroso: { value: 0 } },
+              rojo: { value: 0 }, blanco: { value: 0 }, borroso: { value: 0 },
+              vhs: { value: 1 }, res: { value: new T.Vector2(137, 297) } },
   vertexShader: 'varying vec2 v; void main(){ v = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: `
     precision highp float;
-    uniform sampler2D tex; uniform float sat, bandas, vin, grano, t, rojo, blanco, borroso;
+    uniform sampler2D tex; uniform float sat, bandas, vin, grano, t, rojo, blanco, borroso, vhs;
+    uniform vec2 res;
     varying vec2 v;
     float az(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
     void main(){
       vec2 uv = v;
+      /* ══════════ LA CINTA ══════════
+         Lo que hace que algo se lea a VHS no son las lineas de escaneo: es que
+         una cinta guarda el BRILLO con seis veces mas ancho de banda que el
+         COLOR. De ahi salen las tres cosas que de verdad la delatan, y ninguna
+         es un filtro de color:
+           · el color se corre a la derecha y se emborrona a lo ancho, porque su
+             portadora va retrasada y filtrada — un borde rojo sobre negro deja
+             una estela rosa de varios pixeles;
+           · la resolucion horizontal es mucho peor que la vertical, asi que la
+             imagen se ablanda SOLO en x;
+           · y la cabeza del cabezal cambia de pista al final del cuadro, lo que
+             rompe las ultimas lineas de abajo (head switching).
+         Mas el latigazo del seguimiento —lineas sueltas corridas— y los
+         dropouts, que son rayitas blancas de un cuadro. */
+      float lin = floor(uv.y*res.y);
+      if (vhs > 0.001){
+        /* el seguimiento: una banda de lineas se corre, y el corrimiento es el
+           mismo para toda la banda porque lo que falla es la pista, no el pixel */
+        float banda = floor(uv.y*14.0 + t*0.7);
+        float trk = (az(vec2(banda, floor(t*3.0))) - 0.5);
+        trk = trk*step(0.86, az(vec2(banda*3.1, floor(t*3.0) + 7.0)));
+        /* el latigazo de linea: ruido fino, siempre presente y chiquito */
+        float jit = (az(vec2(lin, floor(t*24.0))) - 0.5)*0.0016;
+        uv.x += (trk*0.035 + jit)*vhs;
+        /* head switching: las ultimas lineas del cuadro se rompen de verdad */
+        float hs = smoothstep(0.045, 0.0, uv.y);
+        uv.x += hs*hs*(az(vec2(lin, floor(t*30.0))) - 0.5)*0.22*vhs;
+      }
       /* el desenfoque del susto: cuatro muestras, y solo cuando hace falta */
       vec3 c = texture2D(tex, uv).rgb;
       if (borroso > 0.001){
         float r = borroso*0.012;
         c = (c + texture2D(tex, uv + vec2(r, 0.0)).rgb + texture2D(tex, uv - vec2(r, 0.0)).rgb
                + texture2D(tex, uv + vec2(0.0, r)).rgb + texture2D(tex, uv - vec2(0.0, r)).rgb)*0.2;
+      }
+      if (vhs > 0.001){
+        float px = 1.0/res.x;
+        /* LUMA: se ablanda un poco y SOLO en x */
+        vec3 l0 = texture2D(tex, uv - vec2(px, 0.0)).rgb;
+        vec3 l2 = texture2D(tex, uv + vec2(px, 0.0)).rgb;
+        vec3 luz = c*0.5 + l0*0.25 + l2*0.25;
+        /* CROMA: seis muestras hacia la IZQUIERDA, o sea que el color queda
+           atrasado respecto del brillo y se arrastra hacia la derecha */
+        vec3 cr = vec3(0.0);
+        for (int i = 0; i < 6; i++){
+          cr += texture2D(tex, uv - vec2(px*(float(i)*1.7 + 0.6), 0.0)).rgb;
+        }
+        cr /= 6.0;
+        float yl = dot(luz, vec3(0.2126, 0.7152, 0.0722));
+        float yc = dot(cr, vec3(0.2126, 0.7152, 0.0722));
+        /* se recompone: el brillo del canal nitido, el color del canal corrido */
+        vec3 mez = clamp(vec3(yl) + (cr - vec3(yc)), 0.0, 4.0);
+        /* el sobrepico del filtro peine: un halo claro justo despues de un borde
+           oscuro-a-claro. Es lo que hace que un contorno se vea CALCADO */
+        float bordeL = dot(c - l0, vec3(0.2126, 0.7152, 0.0722));
+        mez += vec3(max(0.0, bordeL))*0.55*vhs;
+        c = mix(c, mez, vhs);
+        /* ruido de croma: mota de color en las sombras, no en las luces */
+        float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        vec3 mota = vec3(az(uv*res + t*13.0), az(uv*res + t*13.0 + 5.0), az(uv*res + t*13.0 + 11.0)) - 0.5;
+        c += mota*0.055*vhs*(1.0 - smoothstep(0.02, 0.35, lum));
+        /* dropout: una rayita blanca de un cuadro, cada tanto */
+        float dp = az(vec2(lin*0.7, floor(t*20.0)));
+        if (dp > 0.9975){
+          float x0 = az(vec2(lin, floor(t*20.0) + 3.0));
+          float w = 0.02 + az(vec2(lin, floor(t*20.0) + 9.0))*0.09;
+          c = mix(c, vec3(0.82), step(x0, uv.x)*step(uv.x, x0 + w)*vhs);
+        }
       }
       /* ── LA SATURACION SE MIDE CONTRA LA LUMA, NO CONTRA EL PROMEDIO ──
          Con el promedio de los tres canales, desaturar CAMBIA EL BRILLO: un
@@ -77,6 +141,16 @@ const postMat = new T.ShaderMaterial({
       float d = dot(p, p);
       c *= 1.0 - vin*d*0.20;
       c += (az(uv*vec2(940.0, 1720.0) + t) - 0.5)*grano;
+      if (vhs > 0.001){
+        /* las lineas: van sobre la resolucion DEL DESTINO, no sobre la pantalla,
+           porque si no se ven mas finas en un telefono con mas pixeles y el
+           efecto cambia de aparato */
+        float sl = 0.86 + 0.14*cos(uv.y*res.y*6.2831);
+        /* y el parpadeo de campo: media linea de desfase entre campos, que es
+           lo que hace que una cinta nunca este del todo quieta */
+        sl *= 1.0 - 0.035*step(0.5, fract(uv.y*res.y*0.5 + floor(t*50.0)*0.5));
+        c *= mix(1.0, sl, vhs);
+      }
       c = mix(c, vec3(0.55, 0.03, 0.03), rojo*0.55);
       c = mix(c, vec3(1.0), blanco);
       gl_FragColor = vec4(max(c, 0.0), 1.0);
@@ -96,6 +170,7 @@ function medir(){
   RT = new T.WebGLRenderTarget(rw, rh, { minFilter: T.NearestFilter, magFilter: T.NearestFilter,
         depthBuffer: true, colorSpace: T.SRGBColorSpace });
   postMat.uniforms.tex.value = RT.texture;
+  postMat.uniforms.res.value.set(rw, rh);
   render.shadowMap.enabled = !!C.sombra;
   if (SOL){ SOL.castShadow = !!C.sombra; if (C.sombra) SOL.shadow.mapSize.set(C.sombra, C.sombra);
     if (SOL.shadow.map){ SOL.shadow.map.dispose(); SOL.shadow.map = null; } }
@@ -161,7 +236,24 @@ const LUZ_MANO = new T.PointLight(0xffb05a, 22, 9, 1.1);
    valor son una sola. Una luz propia, puesta entre la camara y el actor, es lo
    unico que lo separa del fondo; y de paso lo MODELA, que es lo que hace que un
    bulto se lea a cuerpo. Se enciende solo mientras hay un actor a la vista. */
-const LUZ_SUS = new T.PointLight(0xd8cfc2, 0, 9, 1.0); escena.add(LUZ_SUS);
+/* ── EL ALCANCE ES LO QUE HACE QUE ESTA LUZ SEA DEL BICHO Y NO DEL CUARTO ──
+   three.js no sabe alumbrar un solo objeto: una luz puntual la reciben todas
+   las superficies de la escena. Con alcance 9 y la casa apagada al 12 %, el
+   foco del susto pasaba a ser la lampara mas fuerte del cuarto y las fotos
+   salian con la habitacion entera lavada de crema y naranja — el monstruo
+   invisible adentro de su propia luz. Acotado a 2,8 m muere antes de llegar a
+   las paredes, que estan a dos metros y pico, y sigue cubriendo al bicho, que
+   esta a un metro y cuarto del foco. */
+const LUZ_SUS = new T.PointLight(0xd8cfc2, 0, 3.2, 1.0); escena.add(LUZ_SUS);
+const _cajaSus = new T.Box3();
+/* ── EL CONTRA, QUE ES LO QUE HACE EXISTIR A UN BICHO NEGRO ──
+   La mitad de estos monstruos son figuras negras: subirles el albedo no los
+   levanta —multiplicar cero por lo que sea da cero— y subir la intensidad
+   tampoco, porque el tono es ACES. Lo que separa una silueta oscura del fondo
+   es una luz DETRAS de ella: le enciende el canto y ahi aparece la forma, que
+   es lo unico que hay que leer. Frio a proposito, para que no se confunda con
+   la vela. */
+const LUZ_RIM = new T.PointLight(0x9fb6d4, 0, 2.2, 1.0); escena.add(LUZ_RIM);
 
 /* ══════════ FUNDIR PIEZAS ══════════ */
 /* ── LAS UV SALEN DE LA NORMAL DOMINANTE ──
@@ -501,6 +593,150 @@ function armaActores(){
   figura.add(m); figura.visible = false; actorG.add(figura);
 }
 armaActores();
+/* ══════════ LOS SEIS MONSTRUOS ══════════
+   Vienen de las referencias que trajo el usuario, generados con Rezona a partir
+   de ESAS imagenes —no de un prompt— que es la unica forma que hay de que
+   salgan iguales al dibujo. Cuatro traen esqueleto de 41 huesos con quieto,
+   caminar y correr; boisvert es un busto y espinas no tiene extremidades, asi
+   que esos dos se mueven enteros.
+
+   ── LA ALTURA LA PONE EL JUEGO, NO EL MODELO ──
+   Tripo devuelve la malla en una caja de lado dos y sin escala fisica. Lo que
+   decide cuanto mide un monstruo es cuanto tiene que ocupar en el cuadro, y eso
+   es una cuenta: a tres metros, con 68 grados de campo vertical, entran 4,1 m
+   de alto, asi que uno de 3,2 —el de las agujas— llena tres cuartos de la
+   pantalla y uno de 1,55 —la nena— llega a la altura del ojo. */
+const ALTO_BICHO = { boisvert: 0.62, nina: 1.55, agujas: 3.20, disco: 2.10, oso: 1.88, espinas: 2.55 };
+/* ── Y EL TINTE SALE DE LO CLARO QUE ES CADA UNO ──
+   La nena y el del disco vienen casi blancos del generador: con el mismo foco
+   que modela a la criatura parda, se van al blanco puro y pierden la forma. */
+/* ── EL TINTE SE SUBIO MIDIENDO, Y BAJARLO ERA EL QUE LOS APAGABA ──
+   Estos numeros se pusieron cuando el foco del susto estaba mal colocado y los
+   bichos se quemaban; con el foco en el centro de la caja, lo unico que hacian
+   era dejarlos oscuros. Y subir la INTENSIDAD no alcanza: el tono es ACES, o
+   sea que de 8 a 13 el pixel casi no se movio (medido, 29,6 -> 29,2). Lo que
+   si se mueve en el rango oscuro es el albedo. */
+const TINTE_BICHO = { boisvert: 1.00, nina: 0.78, agujas: 1.00, disco: 1.00, oso: 0.95, espinas: 1.00 };
+/* ── Y EL EMISIVO SE CALIBRA POR BICHO, PORQUE SUS FOTOS NO SE PARECEN ──
+   Con un mismo 0,45 para los seis, la nina —que es una cara palida— salia a 159
+   sobre 255 y llenaba el cuadro de una mancha crema, mientras que las agujas
+   —que son negras— daban 18. Un emisivo por mapa vale lo que valga la foto, asi
+   que el numero tiene que ser de cada uno. Los seis salen de medir el pixel del
+   bicho contra el mismo cuadro sin el. */
+const EMIS_BICHO = { boisvert: 1.00, nina: 0.38, agujas: 1.00, disco: 0.95, oso: 0.70, espinas: 1.00 };
+/* ── Y TRES DE LOS SEIS SON NEGROS, ASI QUE EL EMISIVO POR MAPA NO LOS LEVANTA ──
+   Un emisivo por mapa MULTIPLICA la foto: sobre una figura encapuchada negra da
+   negro por mucho que se suba el numero. Medido, con intensidad 1,30 las agujas
+   daban 18,9 sobre 255 mientras que la nina —que es una cara palida— daba 171
+   con 0,23. A esos tres se les da un piso PLANO, sin mapa: dejan de tener
+   dibujo, que es justo lo que ya no tenian, y pasan a ser una silueta gris
+   apenas por encima del negro del pasillo — que es como se ven en las
+   referencias que trajo el usuario. La forma se la sigue dando la luz. */
+const EMIS_PLANO = { boisvert: 0x6b6b78, espinas: 0x676770, agujas: 0x71717e };
+const BICHO = {};      /* k -> { g, mix, acc:{idle,walk,run}, act } */
+const BICHOS_LISTOS = [], BICHOS_FALLAS = [];
+function cargaBichos(){
+  if (typeof BICHOS_B64 === 'undefined') return;
+  for (const k in BICHOS_B64){
+    cargadorGLTF.load(BICHOS_B64[k], (g) => {
+      const raiz = g.scene;
+      /* la escala sale de la caja envolvente y no de un numero a mano */
+      const bb = new T.Box3().setFromObject(raiz), t = new T.Vector3(); bb.getSize(t);
+      const esc = (ALTO_BICHO[k] || 1.8)/Math.max(0.001, t.y);
+      const cont = new T.Group();
+      raiz.scale.setScalar(esc);
+      raiz.position.set(-(bb.min.x + bb.max.x)/2*esc, -bb.min.y*esc, -(bb.min.z + bb.max.z)/2*esc);
+      cont.add(raiz);
+      cont.visible = false;
+      /* mismo tratamiento que los props: el generador hornea la foto con luz de
+         estudio y estos cuartos devuelven el 9 % de lo que les llega */
+      raiz.traverse(o => { if (o.isMesh){
+        o.castShadow = true; o.frustumCulled = false;
+        if (o.material){ o.material = o.material.clone();
+          /* ── METALNESS 1 SIN MAPA DE ENTORNO ES NEGRO, Y ES LA TERCERA VEZ ──
+             Tripo no escribe `metallicFactor`, y el valor por omision de glTF
+             es UNO: un metal no tiene difuso y sin entorno no tiene nada que
+             reflejar, asi que la malla sale negra por mas luz que se le ponga.
+             Medido, los seis daban `dif` NEGATIVO contra el fondo: no se veian,
+             TAPABAN. Con metalness 0 el mapa de color vuelve a existir. */
+          o.material.metalness = 0;
+          o.material.roughness = 0.92;
+          /* el mapa de normales no aporta a cuarenta pixeles con una sola luz y
+             cuesta una textura de las mas grandes del archivo */
+          o.material.normalMap = null;
+          /* y un piso emisivo por MAPA —la misma foto— para que la criatura no
+             pueda caer a negro puro contra una pared negra: lo que levanta es el
+             dibujo y no un gris plano encima */
+          /* ── EL EMISIVO ES LO QUE HACE EXISTIR AL MONSTRUO ──
+             Este pasillo tiene una vela y nada mas, y cualquier luz que alcance
+             para levantar una criatura a tres metros alcanza tambien para lavar
+             las paredes que estan a uno. El emisivo no depende de ninguna luz:
+             la criatura brilla con su propia foto, asi que se recorta contra un
+             cuarto negro este donde este y con la casa apagada. Y va por MAPA,
+             no plano: lo que se levanta es el dibujo y no un gris encima. */
+          if (EMIS_PLANO[k] != null){
+            o.material.emissiveMap = null;
+            o.material.emissive = new T.Color(EMIS_PLANO[k]);
+            o.material.emissiveIntensity = 1;
+          } else {
+            o.material.emissiveMap = o.material.map;
+            o.material.emissive = new T.Color(0xffffff);
+            o.material.emissiveIntensity = EMIS_BICHO[k] != null ? EMIS_BICHO[k] : 0.6;
+          }
+          o.material.needsUpdate = true;
+          o.material.color.multiplyScalar(TINTE_BICHO[k] || 0.8); } } });
+      const B = { g: cont, mix: null, acc: {}, act: null, alto: ALTO_BICHO[k] || 1.8 };
+      if (g.animations && g.animations.length){
+        B.mix = new T.AnimationMixer(raiz);
+        for (const cl of g.animations){
+          /* ── SOLO LAS ROTACIONES: LA POSICION LA PONE EL JUEGO ──
+             Estos clips no son «in place», asi que su canal de traslacion mueve
+             al bicho por el mundo mientras `ponBicho` lo coloca donde el susto
+             lo necesita: dos cosas escribiendo el mismo numero. Una caminata
+             humanoide es toda rotacion. */
+          cl.tracks = cl.tracks.filter(t => /\.quaternion$/.test(t.name));
+          const nm = cl.name.replace('preset:', '');
+          B.acc[nm] = B.mix.clipAction(cl);
+        }
+      }
+      BICHO[k] = B; actorG.add(cont); BICHOS_LISTOS.push(k);
+    }, undefined, () => BICHOS_FALLAS.push(k));
+  }
+}
+/* ── UN SOLO CLIP A LA VEZ, Y EL CAMBIO ES UN CORTE ──
+   Un monstruo que aparece durante segundo y medio no tiene tiempo de fundir:
+   lo que hace falta es que la pose sea la correcta desde el primer cuadro. */
+function bichoClip(B, nom){
+  if (!B.mix) return;
+  const a = B.acc[nom] || B.acc.idle;
+  if (!a || B.act === a) return;
+  if (B.act) B.act.stop();
+  a.reset().play(); B.act = a;
+}
+/* la sonda necesita poder apagar al monstruo y volver a dibujar: poniendo
+   `visible=false` desde afuera no sirve, porque `ponBicho` corre en CADA cuadro
+   y lo vuelve a encender — medido, la medicion «sin bicho» lo tenia adentro y
+   por eso el delta daba cero. */
+let SIN_BICHOS = false;
+/* el ultimo bicho colocado en este cuadro: la luz del susto cuelga de EL y no
+   de `visible`, para que la sonda pueda apagar la malla sin apagar la luz — si
+   no, medir «con y sin bicho» mide tambien «con y sin luz» y lo que se compara
+   son dos cuartos distintos, no dos veces el mismo cuarto */
+let ULT_BICHO = null;
+function ponBicho(k, ade, lado, alto, clip){
+  const B = BICHO[k]; if (!B) return null;
+  const a = adelanteDe().clone(), l = costadoDe().clone();
+  B.g.position.set(cuerpo.position.x + a.x*ade + l.x*lado, cuerpo.position.y + alto,
+                   cuerpo.position.z + a.z*ade + l.z*lado);
+  B.g.visible = !SIN_BICHOS;
+  ULT_BICHO = B.g;
+  bichoClip(B, clip || 'idle');
+  return B;
+}
+function bichoMira(B){
+  const p = cam.getWorldPosition(_v);
+  B.g.rotation.set(0, Math.atan2(p.x - B.g.position.x, p.z - B.g.position.z), 0);
+}
 const manoG = new T.Group(); manoG.visible = false; actorG.add(manoG);
 {
   const g = fundir([
@@ -636,6 +872,101 @@ function animaSusto(S, u, R){
       figura.rotation.set(1.5, cuerpo.rotation.y, u*5); break; }
     case 'copia': { figura.visible = true; ponActor(figura, 2.2, 0, 0);
       figura.rotation.y = cuerpo.rotation.y + Math.PI + LOOK.yaw*1.4; break; }
+    /* ══════════ LOS MONSTRUOS ══════════
+       ── LA CASA SE APAGA Y QUEDA SOLO EL BICHO ──
+       Es la decision que hace que se vean, y sale de mirar las fotos: con la
+       lampara del cuarto encendida, una criatura a cinco metros queda del mismo
+       valor que la pared que tiene detras, y dos cosas del mismo valor son una
+       sola. Bajando la casa al 12 % durante el susto, lo unico que la luz del
+       susto ilumina es el monstruo: aparece un cuerpo recortado contra negro,
+       que es exactamente lo que hace un susto de verdad. La vela se queda —es
+       lo que uno lleva en la mano y no se apaga porque aparezca algo. */
+    /* ── VIENE CORRIENDO Y NO PARA ──
+       Es el susto que el jugador pidio con todas las letras. Sale del fondo del
+       pasillo, arranca el clip de correr y cierra los metros con u², o sea
+       acelerando: llega a setenta centimetros del ojo y ahi se corta. Con
+       velocidad constante se lee a que se acerca; acelerando se lee a que te
+       eligio. */
+    case 'bCarga': {
+      EFE.luzK = 0.12;
+      const B = ponBicho(P.k, lerp(P.d, 0.7, u*u), 0, 0, 'run');
+      if (B){ bichoMira(B);
+        EFE.sacude = Math.max(EFE.sacude, u*u*0.9);
+        /* ── EL DESENFOQUE ES EL GOLPE, NO LA CARRERA ──
+           Con u² el cuadro entero se convierte en una mancha desde la mitad del
+           susto: medido, el radio llega a seis texeles sobre un destino de 137
+           de ancho y lo unico que se ve es niebla de color. Va solo en el ultimo
+           quinto, que es cuando el bicho ya te tiene encima. */
+        EFE.borroso = Math.max(0, (u - 0.82)/0.18)*1.4;
+        /* el ultimo tercio pega en la camara: mirar para otro lado no salva */
+        if (u > 0.72) EFE.mirarA = 0; }
+      break; }
+    /* ── BAJA DEL TECHO Y TE MIRA ──
+       Cabeza abajo, descolgandose justo delante de la cara. Va boca abajo de
+       verdad —girada pi en x— porque una figura derecha bajando se lee a
+       ascensor; dada vuelta, lo primero que entra en el cuadro es la cara. */
+    case 'bTecho': {
+      EFE.luzK = 0.12;
+      /* ── DADO VUELTA, EL ORIGEN ES LA CABEZA MAS EL LARGO DEL BICHO ──
+         `ponBicho` apoya la malla EN el origen y la vuelta de pi la manda hacia
+         abajo, asi que el origen pasa a ser el techo y la cabeza queda a
+         `B.alto` por debajo. Puesto el origen en 1,15 la nina colgaba de 1,15 a
+         −0,40, o sea con media cabeza ENTERRADA en el piso: medido, su pixel
+         mas claro era 15 sobre 255. El origen sale de donde se quiere la cara. */
+      const Bt = BICHO[P.k];
+      /* ── Y LA CARA NO PUEDE BAJAR MAS DE LO QUE EL BICHO MIDE ──
+         Colgado cabeza abajo el cuerpo sube desde la cara, asi que con la cara
+         a 1,50 un bicho de 1,88 termina en 3,38 y el cielorraso mide 2,6: la
+         mitad queda ATRAVESANDO el techo y en el cuadro entra una punta.
+         El destino sale de lo que mide el bicho y de lo que mide el cuarto. */
+      const cara = lerp(D.alto + 0.9,
+                        Math.min(1.45, D.alto - (Bt ? Bt.alto : 1.8) + 0.20),
+                        Math.min(1, u*1.5));
+      const B = ponBicho(P.k, P.d || 2.1, 0.10, cara + (Bt ? Bt.alto : 1.8), 'idle');
+      if (B){ B.g.rotation.set(Math.PI, cuerpo.rotation.y, Math.sin(u*9)*0.10);
+        EFE.techoY = -Math.sin(Math.min(1, u*1.5)*Math.PI)*0.25; }
+      break; }
+    /* ── CRUZA EL PASILLO CAMINANDO ──
+       No te mira, no se apura: pasa. Es el unico de los seis que no reacciona a
+       que estes ahi, y por eso es el que mas dura en la cabeza. */
+    case 'bPasa': {
+      EFE.luzK = 0.22;
+      const B = ponBicho(P.k, P.d, lerp(-D.ancho*0.40, D.ancho*0.40, u), 0, 'walk');
+      if (B) B.g.rotation.set(0, cuerpo.rotation.y + Math.PI/2, 0);
+      break; }
+    /* ── ESTA AL FONDO Y CADA VEZ QUE VUELVE LA LUZ ESTA MAS CERCA ──
+       Tres parpadeos, tres distancias. El movimiento no se ve nunca: lo que se
+       ve es que cambio de sitio, que es como funciona en la cinta. */
+    case 'bMira': {
+      const paso = Math.floor(u*3.999);
+      EFE.luzK = (Math.sin(u*52) > -0.25) ? 1 : 0.05;
+      const B = ponBicho(P.k, [11.0, 8.0, 5.5, 3.4][paso], 0, 0, 'idle');
+      if (B) bichoMira(B);
+      break; }
+    /* ── LA CARA QUE LLENA LA PANTALLA ──
+       Es lo que hace el video que trajo el usuario: la cosa deja de ser una
+       figura en un pasillo y pasa a ser una cara pegada al lente, quieta,
+       mirando. No se mueve un milimetro a proposito — lo que asusta es que NO
+       se mueva. */
+    case 'bCara': {
+      /* ── LA DISTANCIA SALE DE MEDIRLA, NO DE ELEGIRLA ──
+         A treinta y cuatro centimetros el busto proyectaba de -3,18 a 5,16 del
+         ancho de la pantalla, o sea ocho veces el cuadro: eso no es una cara
+         pegada al lente, es una pared de piel. A 1,15 m ocupa poco mas que el
+         cuadro, que es lo que hace el video. */
+      const B = ponBicho(P.k, lerp(3.4, 1.15, Math.min(1, u*2.6)), 0, 1.16, 'idle');
+      if (B){ bichoMira(B);
+        B.g.position.y = cuerpo.position.y + 1.16 + Math.sin(u*2.1)*0.012;
+        EFE.luzK = 0.25 + (Math.sin(u*38) > 0 ? 0.5 : 0);
+        EFE.borroso = Math.max(0, 1.2 - u*3.0); }
+      break; }
+    /* ── ESTA A LA ESPALDA Y LA CABEZA GIRA SOLA ── */
+    case 'bAtras': {
+      EFE.mirarA = Math.sin(u*Math.PI)*0.95;
+      EFE.luzK = 0.12;
+      const B = ponBicho(P.k, -2.4, 0.30, P.alto != null ? P.alto : 0, 'idle');
+      if (B){ bichoMira(B); B.g.visible = !SIN_BICHOS && u > 0.42; }
+      break; }
     case 'tele': { const o = q.tele; EFE.luzK = 0.35 + (Math.sin(u*70) > 0 ? 0.5 : 0);
       if (o){ LUZ2.position.copy(o.getWorldPosition(new T.Vector3())); LUZ2.position.y += 0.4;
         LUZ2.intensity = 26*(Math.sin(u*70) > 0 ? 1 : 0.2); }
@@ -658,9 +989,11 @@ function pinta(dt){
   const R = RUN;
   EFE.t += dt;
   EFE.luzK = 1; EFE.blanco = 0; EFE.rojo = 0; EFE.borroso = 0; EFE.sacude = 0;
+  ULT_BICHO = null;
   EFE.mirarA = 0; EFE.techoY = 0; EFE.estira = 0;
   figura.visible = false; manoG.visible = false; bichosM.visible = false;
   caraM.visible = false; sangreM.visible = false;
+  for (const k in BICHO) BICHO[k].g.visible = false;
   manoG.scale.setScalar(1); LUZ2.intensity = 0;
   if (aguaM) aguaM.material.color.setHex(0x14303e);
 
@@ -671,24 +1004,68 @@ function pinta(dt){
 
   /* el susto que este corriendo */
   if (R && R.susto) animaSusto(R.susto, Math.min(1, R.sustoT/R.susto.dur), R);
+  /* los relojes de los esqueletos: solo el que se esta viendo, porque un mixer
+     que corre para nadie sigue evaluando cuarenta y un huesos por cuadro */
+  for (const k in BICHO){ const B = BICHO[k]; if (B.g.visible && B.mix) B.mix.update(dt); }
   /* la luz del susto va DELANTE del actor, hacia la camara: puesta detras lo
      deja en silueta contra una pared que ya esta oscura, o sea invisible */
-  const actor = figura && figura.visible ? figura : (manoG.visible ? manoG : null);
+  let actor = figura && figura.visible ? figura : (manoG.visible ? manoG : null);
+  if (ULT_BICHO) actor = ULT_BICHO;
   if (actor){
-    actor.getWorldPosition(_v2);
+    /* ── EL FOCO VA AL CENTRO DE LA CAJA, NO AL ORIGEN DEL GRUPO ──
+       El origen de un actor son sus PIES, y con un desplazamiento fijo de 1,35
+       eso alumbra bien a una figura de pie y mal a todo lo demas: al que baja
+       del techo —que va dado vuelta, o sea que su cuerpo cuelga HACIA ABAJO del
+       origen— el foco le quedaba metro y medio por encima de la cabeza, y a uno
+       de tres metros veinte le llegaba a la cintura. Medido, el pixel mas claro
+       de la nina del techo era 15 sobre 255: negro. La caja envolvente sabe
+       donde esta el cuerpo aunque este dado vuelta o colgado. */
+    _cajaSus.setFromObject(actor); _cajaSus.getCenter(_v2);
     const cp = cam.getWorldPosition(_v);
     const dx = cp.x - _v2.x, dz = cp.z - _v2.z, dd = Math.max(0.6, Math.hypot(dx, dz));
     const f = Math.min(1.25, dd*0.42)/dd;
-    LUZ_SUS.position.set(_v2.x + dx*f, _v2.y + 1.35, _v2.z + dz*f);
-    /* ── Y CRECE CON LA DISTANCIA, PORQUE SI NO QUEMA LO DE CERCA ──
-       El foco se planta a un metro y cuarto del actor pase lo que pase, asi que
-       con una intensidad fija una mano a un metro del ojo recibe lo mismo que
-       una figura a siete: medido, la mano salia como una mancha blanca sin
-       forma que ocupaba media pantalla. Lo que hay que igualar no es la
-       distancia al foco sino cuanto se ve del actor, o sea la distancia a la
-       CAMARA. */
-    LUZ_SUS.intensity = Math.min(17, 1.6 + 1.9*dd)*EFE.luzK;
-  } else LUZ_SUS.intensity = 0;
+    /* ── Y LA ALTURA SE ACOTA A LO QUE LA CAMARA VE ──
+       Un bicho de tres metros veinte colgado del techo tiene su centro de caja
+       arriba del cielorraso: el foco se iba con el y la cara —que es lo unico
+       que entra en el cuadro— quedaba a dos metros de la luz. Medido, su pixel
+       mas claro daba 3,8 sobre 255. */
+    const ojoY = cuerpo.position.y + OJO;
+    const lyz = Math.max(ojoY - 0.9, Math.min(ojoY + 0.9, _v2.y));
+    /* ── ES UN FOCO DESDE LA CAMARA Y NO UNA BOMBITA AL LADO DEL BICHO ──
+       Una luz puntual pegada al monstruo tambien alumbra el pasillo, y un
+       pasillo mide dos metros de ancho: por mas que se le acote el alcance, las
+       paredes estan mas cerca de esa luz que el propio bicho. Medido, las fotos
+       salian con el cuarto entero lavado de crema y el monstruo perdido adentro
+       de su propia luz. Un cono desde el ojo apuntado al bicho deja las paredes
+       de los costados FUERA por construccion, y es ademas el flash de una foto
+       de noche, que es la imagen que este juego quiere. */
+    LUZ_SUS.position.set(_v2.x + dx*f, lyz, _v2.z + dz*f);
+    /* el contra sigue siendo puntual y de alcance corto: lo unico que tiene que
+       tocar es el canto del bicho */
+    LUZ_RIM.position.set(_v2.x - dx*f*0.9, lyz + 0.45, _v2.z - dz*f*0.9);
+    /* ── LO QUE SE IGUALA ES LA IRRADIANCIA, NO LA INTENSIDAD ──
+       El foco se planta a `dLuz` del actor, y esa distancia es chica cuando el
+       actor esta encima y grande cuando esta lejos. Con una intensidad fija,
+       una figura que baja del techo a un metro recibia diecisiete veces mas luz
+       que la misma figura a siete metros: medido, salia BLANCA PURA llenando la
+       pantalla. Con `I = k·dLuz` la luz que le llega es la misma este donde
+       este —caida 1, o sea I/d— y lo unico que cambia es cuanto ocupa. */
+    const dLuz = Math.max(0.28, Math.min(1.25, dd*0.42));
+    /* y esta luz NO se apaga con la casa: es la que sostiene al monstruo.
+       El 13 sale de medir: con 8 los monstruos daban entre 30 y 58 sobre 255
+       —mas oscuros que el tablon y apenas por encima del cuarto—, y con la casa
+       al 12 % lo que hace falta es que la criatura sea lo unico claro del cuadro
+       sin quemarse. */
+    /* ── Y BAJA, PORQUE EL QUE TIENE QUE BRILLAR ES EL BICHO Y NO EL CUARTO ──
+       Con 13 esta luz pasaba a ser la lampara mas fuerte de la casa y lavaba el
+       pasillo entero; el monstruo quedaba adentro de su propia luz, del mismo
+       valor que la pared. Probado como foco desde el ojo y es peor: en un cono
+       el bicho y la pared que tiene detras estan casi a la misma distancia, o
+       sea que reciben lo mismo. Lo que de verdad separa al monstruo del cuarto
+       es su EMISIVO, que no depende de ninguna luz; esto queda como modelado. */
+    LUZ_SUS.intensity = 6.5*dLuz;
+    LUZ_RIM.intensity = 12.0*dLuz;
+  } else { LUZ_SUS.intensity = 0; LUZ_RIM.intensity = 0; }
 
   /* el cabeceo del paso mas el sacudon del susto */
   const sac = (R ? R.temblor*0.55 : 0) + EFE.sacude;

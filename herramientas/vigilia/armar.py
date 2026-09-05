@@ -17,11 +17,11 @@ modulo entero.
 import io, os
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'i_assets.js', 'e.js', 'f.js', 'z.html']
+ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'i_assets.js', 'i_bichos.js', 'e.js', 'f.js', 'z.html']
 s = ''
 for n in ORDEN:
     p = os.path.join(AQUI, 'partes', n)
-    if n == 'i_assets.js' and not os.path.exists(p):
+    if n in ('i_assets.js', 'i_bichos.js') and not os.path.exists(p):
         continue
     s += io.open(p, encoding='utf8').read()
 assert s.count('<script type="module">') == 1

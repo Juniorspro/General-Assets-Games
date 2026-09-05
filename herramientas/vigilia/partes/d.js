@@ -14,7 +14,12 @@ const DT = 1/60;
     10  -> nadie llega, ni jugando bien.
    O sea que el numero no se eligio: es donde la diferencia entre hacer algo y
    no hacer nada es mas grande sin que el juego se vuelva una loteria. */
-const K_SUS = 7.0;
+/* ── Y BAJA DE 7,0 A 6,4 PORQUE AHORA HAY DIEZ SUSTOS MAS ──
+   El presupuesto de agua es el mismo y la agenda paso de 33 sacudones a 43:
+   medido sobre 40 semillas, con 7,0 el bot ganaba 23 de 40 —o sea que la
+   partida se perdia por cantidad y no por pulso—. Barrido de seis valores, el
+   que mejor separa es 6,4: bot 40 de 40, quieto 4, al azar 1. */
+const K_SUS = 6.4;
 const A_TAB = 6.0;              /* y el tiron que ademas se le ve al tablon */
 const R_CAZUELA = 2.6;          /* radio de curvatura del hueco donde apoya el bol */
 let PERTURBA = 1;               /* la sonda del modo libre apaga el cabeceo */

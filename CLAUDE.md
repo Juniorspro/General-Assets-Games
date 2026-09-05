@@ -180,20 +180,27 @@ munecas.
   (destino de render reducido y NEAREST) y **saturación** en una pasada de post, más posterizado y
   viñeta. Vive partido en `herramientas/cruce/partes/` y se arma con
   `python3 herramientas/cruce/armar.py`.
-- **`Vigilia.html` es "VIGILIA"** (~2,37 MB, de los cuales 2,19 son los once modelos 3D y la
-  imagen del título generados con Rezona; la casa entera es geometría por código y no tiene un solo
-  asset más). El duodécimo juego. **Terror en primera persona, vertical nativo y con giroscopio**: se
-  lleva **un tablón con un bol de agua** por catorce habitaciones distintas, la caminata es **sobre
-  rieles y dura tres minutos exactos**, y lo único que se maneja es **inclinar el teléfono** para que
-  el agua no se vuelque. **Treinta y tres sustos, todos distintos y ninguno es una imagen que
-  aparece**: son cosas que le pasan a la casa —un portazo, la luz que se corta, una mano que sale de
-  la pared, el techo que baja, el piso que cruje, una cara en el agua del bol, el esqueleto que cruza
-  el pasillo, el que gatea, el que te copia, el que está atrás y te obliga a darte vuelta—. La física
-  del agua es la de verdad: **el primer modo antisimétrico de un tanque cilíndrico**
+- **`Vigilia.html` es "VIGILIA"** (~3,99 MB, de los cuales 2,19 son los once modelos 3D de la casa y
+  1,55 los seis monstruos, todos generados con Rezona; la casa entera es geometría por código y no
+  tiene un solo asset más). El duodécimo juego. **Terror en primera persona, vertical nativo y con
+  giroscopio**: se lleva **un tablón con un bol de agua** por catorce habitaciones distintas, la
+  caminata es **sobre rieles y dura tres minutos exactos**, y lo único que se maneja es **inclinar el
+  teléfono** para que el agua no se vuelque. **Cuarenta y tres sustos, todos distintos y ninguno es
+  una imagen que aparece**: son cosas que le pasan a la casa —un portazo, la luz que se corta, una
+  mano que sale de la pared, el techo que baja, una cara en el agua del bol, el que gatea, el que te
+  copia, el que está atrás y te obliga a darte vuelta— más **seis monstruos liminales generados a
+  partir de las imágenes de referencia del propio usuario** (no de un prompt: la referencia va como
+  `source_url`, por eso son idénticos), cuatro de ellos **riggeados con 41 huesos** y con quieto,
+  caminar y correr: **te vienen corriendo de frente**, **bajan del techo cabeza abajo para que veas la
+  cara**, cruzan el pasillo sin mirarte, o están al fondo y cada vez que vuelve la luz están más
+  cerca. La física del agua es la de verdad: **el primer modo antisimétrico de un tanque cilíndrico**
   (`k = 1,841/R`, `ω² = g·k·tanh(k·h)`) da **1,69 Hz medidos contra 1,69 teóricos**, y el bol se
   resbala del tablón con **rozamiento de Coulomb** a **22,1 grados medidos contra 22,8 teóricos**. La
-  única luz de verdad es **una vela clavada en el tablón**. Vive partido en
-  `herramientas/vigilia/partes/` y se arma con `python3 herramientas/vigilia/armar.py`.
+  única luz de verdad es **una vela clavada en el tablón**. Y todo pasa por un **filtro de VHS de
+  verdad** —el color con seis veces menos ancho de banda que la luz, el rebote del filtro de peine, la
+  banda de seguimiento, el desgarro de conmutación de cabezas— con marco de cinta y código de tiempo,
+  que se puede apagar. Vive partido en `herramientas/vigilia/partes/` y se arma con
+  `python3 herramientas/vigilia/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
   generadas: el telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El
@@ -216,6 +223,161 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima octava vuelta (2026-09-05): **VIGILIA** — seis monstruos liminales, VHS de verdad, y un cuaternión de norma dos
+
+Pedido: *"busca monstruos liminales o sea por ejemplo the boiled one etc y descargalos de Google o el de
+boizvert hacelo idéntico no generes otro … agrega animaciones y rig y que te lleguen de frente a veces
+por ejemplo la calavera venga corriendo a vos de la nada o que del techo baje y veas su cara … también
+agrega vhs súper realista"*, con un video de cómo se comporta Boisvert y cinco hojas de referencia.
+
+**LOS MODELOS NO SE PUDIERON DESCARGAR, Y LO QUE SE HIZO ES MEJOR.** No hay forma de bajar un GLB de
+Google o de Sketchfab desde acá, y aunque la hubiera, lo que se bajaría no sería el bicho del usuario.
+Lo que sí se puede es **generar cada uno DESDE SU PROPIA IMAGEN**: las seis referencias que mandó se
+suben con `media_upload` de Higgsfield —que devuelve una URL pública— y esa URL va como `source_url` de
+`submit_model3d_generation`. O sea que el modelo no sale de un prompt describiendo el bicho: sale del
+dibujo del bicho. Por eso son idénticos y no parecidos. **Los seis salieron a la primera.**
+
+Los sustos pasan de 33 a **43**, y los diez nuevos son los que se pidieron: **te vienen de frente**
+—`bCarga`, que sale del fondo del pasillo corriendo y cierra los metros con u², o sea acelerando—,
+**bajan del techo cabeza abajo** —`bTecho`, para que lo primero que entre en el cuadro sea la cara—,
+**cruzan sin mirarte** —`bPasa`—, **están al fondo y cada vez que vuelve la luz están más cerca**
+—`bMira`, tres parpadeos y tres distancias, el movimiento no se ve nunca—, **la cara que llena la
+pantalla** —`bCara`, que es literalmente el plano del video, quieta a proposito— y **el que está a la
+espalda** —`bAtras`.
+
+#### EL DEFECTO DE LA VUELTA: UN CUATERNIÓN DE NORMA DOS, Y NINGUNA CAJA LO PODÍA VER
+
+Los cuatro modelos riggeados salían **como una mancha crema que tapaba la pantalla entera**. Y todas
+las mediciones decían que estaban bien: `bichos()` daba `alto: 1.55`, la caja proyectada daba 33 % de
+ancho por 48 % de alto, `delante: true`. Tres números ciertos y la foto lavada de punta a punta.
+
+El diagnóstico llegó **partiendo la foto en dos**: la misma escena con la malla apagada sale limpia, y
+con la malla puesta el **98,4 % de los píxeles cambia**. O sea que el bicho ocupaba el cuadro entero
+mientras su caja decía un tercio. Y ahí está la clave: **`Box3.setFromObject` mide la malla en pose de
+reposo**, no lo que el esqueleto le hace en el shader. Una sonda de esqueleto —el rango que abarcan los
+huesos en el mundo— lo cantó de una: con el clip andando, la niña se abría
+**6.028 × 3.445 × 1.092 metros**.
+
+Y la causa no era el rig, era **mi propio horneado**. `lee()` sacaba los valores de un accesor como
+enteros crudos sin mirar la marca `normalized`, y el rig del proveedor **ya trae las rotaciones en short
+normalizado**: leídas crudas salen ±32767, el escritor las volvía a multiplicar por 32767 y las
+recortaba, así que los cuaterniones quedaban en **(1, −1, −1, 1)**. Eso es un cuaternión de **norma
+dos**, y `Matrix4.compose` con un cuaternión no unitario mete una escala de |q|² en la matriz de cada
+hueso — encadenada por cuarenta y un huesos, eso da miles. Medido después del arreglo: norma **1,0** y
+la niña abarcando 0,15 × 1,29 × 0,53.
+
+**Lo caro no fue el arreglo —doce líneas en el horneado— sino las tres horas de antes**, iluminando,
+tiñendo y moviendo distancias para hacer visible algo que estaba roto en otro sitio. La firma estaba a
+la vista desde el principio: **subir la intensidad de la luz de 8 a 13 movió el píxel de 29,6 a 29,2**,
+o sea nada, y un parámetro que no cambia lo que tiene que cambiar es un parámetro que no está en el
+camino.
+
+#### LA SONDA QUE MEDÍA «CON Y SIN BICHO» TENÍA EL BICHO ADENTRO DE LAS DOS
+
+Antes de eso hubo dos defectos de medición, y los dos daban resultados plausibles:
+
+- **`B.g.visible = false` no apaga nada**, porque `ponBicho` corre en **cada** cuadro y lo vuelve a
+  encender. La medición «sin bicho» lo tenía adentro y el delta daba cero. Va una bandera que
+  `ponBicho` respeta.
+- **Y apagar la malla apagaba también su luz**, porque el foco del susto se elegía por
+  `if (BICHO[k].g.visible)`. Entonces «con y sin bicho» comparaba dos cuartos distintos. La luz pasa a
+  colgar de `ULT_BICHO` —el último colocado en el cuadro— y no de `visible`.
+- **Y `post(k, v)` asignaba siempre**: consultar `post('vhs')` sin valor dejaba el uniforme en
+  `undefined` y **apagaba el filtro que la sonda venía a medir**.
+
+#### LA LUZ DEL SUSTO: TRES INTENTOS, Y EL QUE FUNCIONA ES EL EMISIVO
+
+Con la geometría arreglada quedó el problema de verdad: **este pasillo tiene una vela y nada más**, y
+cualquier luz que alcance para levantar una criatura a tres metros alcanza también para lavar las
+paredes que están a uno.
+
+1. **Una puntual pegada al bicho**: alumbra el pasillo. Un pasillo mide dos metros de ancho, así que
+   por más que se le acote el alcance las paredes están más cerca de esa luz que el propio bicho.
+2. **Un foco desde el ojo apuntado al bicho**: peor. En un cono, el monstruo y la pared que tiene
+   detrás están casi a la misma distancia, o sea que reciben lo mismo y no hay separación.
+3. **El emisivo.** No depende de ninguna luz: la criatura brilla con su propia foto y se recorta contra
+   un cuarto negro esté donde esté. La luz queda de **modelado** (6,5) más un **contra frío** (12) que
+   le enciende el canto — que es lo único que separa una silueta oscura del fondo.
+
+**Y EL EMISIVO POR MAPA NO LEVANTA A UN BICHO NEGRO, PORQUE MULTIPLICA.** Tres de los seis son figuras
+negras: con intensidad 1,30 las agujas daban **18,9** sobre 255 mientras que la niña —que es una cara
+pálida— daba **171** con 0,23. A esos tres se les da un piso **plano, sin mapa**: dejan de tener dibujo
+—que es justo lo que ya no tenían— y pasan a ser una silueta gris apenas por encima del negro del
+pasillo, que es como se ven en las referencias. La forma se la sigue dando la luz.
+
+#### CUATRO COSAS DE PUESTA EN ESCENA, TODAS DE ARITMÉTICA
+
+- **El que baja del techo va cabeza abajo, así que su origen es la cara MÁS lo que mide.** `ponBicho`
+  apoya la malla en el origen y la vuelta de π la manda hacia abajo: con el origen puesto en 1,15 la
+  niña colgaba de 1,15 a **−0,40**, o sea con media cabeza enterrada en el piso.
+- **Y la cara no puede bajar más de lo que el bicho mide.** Con la cara a 1,50 un bicho de 1,88 termina
+  en 3,38 y el cielorraso mide 2,6: la mitad atraviesa el techo. El destino sale de lo que mide el
+  bicho y de lo que mide el cuarto.
+- **El de las agujas mide 3,20 y no cabe colgado en ningún cuarto de esta casa** —medido, su píxel más
+  claro era 6,5 sobre 255—. Para colgar hace falta un bicho que entre; se cambió por el oso.
+- **El foco va al CENTRO DE LA CAJA y con la altura acotada a lo que la cámara ve.** El origen de un
+  actor son sus pies, y con un desplazamiento fijo de 1,35 eso alumbra bien a una figura de pie y mal a
+  todo lo demás.
+
+#### EL VHS ES LA CADENA DE UNA CINTA, NO UN GRANO ENCIMA
+
+Lo que hace que una imagen se lea a VHS no es el ruido: es que **el color tiene seis veces menos ancho
+de banda que la luz**. Van, en este orden: corrimiento del color hacia la izquierda con seis muestras,
+ablandado del luma **sólo en horizontal** —que es como se pierde una cinta—, el **rebote del filtro de
+peine** en los bordes, la banda de seguimiento que salta, el **desgarro de conmutación de cabezas** en
+los últimos píxeles de abajo, ruido de color en las sombras, caídas de señal y las líneas de barrido
+medidas **sobre la resolución del destino de render** y no sobre la pantalla. Más el marco de cinta con
+su reloj de código de tiempo en cuadros —hh:mm:ss:ff a 25, como una cinta PAL— y el punto de REC.
+**Se puede apagar** desde los ajustes y se guarda: medido, el uniforme va 1 → 0 → 1, el rótulo y el
+marco de cinta lo siguen, y la foto lado a lado muestra el corrimiento de color y las líneas.
+
+#### Y CON DIEZ SUSTOS MÁS EL JUEGO SE VOLVIÓ INJUGABLE, ASÍ QUE SE MIDIÓ
+
+El presupuesto de agua es el mismo y la agenda pasó de 33 sacudones a 43: medido sobre 40 semillas, el
+bot ganaba **23 de 40** — o sea que la partida se perdía por cantidad y no por pulso. Barrido de seis
+valores del impulso:
+
+| K_SUS | bot | quieto | al azar |
+|---|---|---|---|
+| 7,0 | 23 | 0 | 0 |
+| **6,4** | **40** | **4** | **1** |
+| 5,8 | 40 | 13 | 0 |
+| 5,4 | 40 | 22 | 8 |
+| 5,0 | 40 | 27 | 20 |
+
+Queda en **6,4**, que separa mejor que la vuelta anterior (era 39 · 9 · 2).
+
+#### LA AUDITORÍA DE SUSTOS PASA A MEDIR POR BALDOSAS
+
+Con el delta por franjas —un quinto de la pantalla— dos sustos locales salían **mudos**: el agua del bol
+que se pone negra y una puerta al fondo del pasillo mueven el promedio de su franja menos de un punto.
+Con una reja de 8×8 y el máximo de las baldosas, el peor de los cuarenta y tres pasa de 0,9 a **7,7**.
+
+#### MEDIDO AL CERRAR
+
+**6 de 6 monstruos cargados, `fallas: []`** —cuatro con 41 huesos y los tres clips (quieto, caminar,
+correr), 3.402 a 6.148 triángulos cada uno—. **11 de 11 assets** de la vuelta anterior intactos.
+Auditoría de sustos: **43 de 43, 0 mudos y 0 fuera de cuadro**. Agenda: 43 únicos en los 14 cuartos, del
+segundo 6,5 al 174, con huecos de 2,34 a 5,64 s. Los diez sustos nuevos medidos píxel por píxel contra
+el mismo cuadro sin el bicho: cubren del **31 % al 60 %** de su caja con brillo de 18 a 56 sobre 255.
+Física intacta: chapoteo **1,69 Hz medidos contra 1,69 teóricos**, resbale **22,1 grados contra 22,8**.
+Auto-jugadores sobre 40 semillas: **40 · 4 · 1**. Partida completa en el navegador: **`gana` en el
+segundo 179,7 con los 43 sustos disparados**, tres semillas de tres. **Cero solapamientos** en el HUD y
+en los paneles, en vertical (412×892) y en apaisado (columna de 232×412). Los tres idiomas y las tres
+calidades en caliente (**90×160 · 137×297 · 217×469**). Giroscopio por el camino de verdad: gamma ±20°
+→ incX ±0,467, beta ±25° → incZ ±0,594. Pausa: el reloj no se mueve en 1,2 s y SEGUIR retoma. Audio en
+partida: pico 0,112 y rms 0,074. **28 llamadas de dibujo y 42.763 triángulos** (eran 25 y 40.826).
+`window.__errs` **vacío en las nueve corridas**. El HTML pasó de 2,37 a **3,99 MB**, y ese mega y medio
+son los seis monstruos.
+
+**LO QUE NO SE PUDO HACER, Y ES HONESTO DECIRLO:** **Boisvert no se pudo riggear** — el generador
+contesta `RIG_SOURCE_NOT_RIGGABLE` porque de la referencia sale un **busto**, sin extremidades que
+riggear. No es una pérdida grande: en el video que trajo el usuario, Boisvert *es* una cara quieta
+llenando el cuadro, y así está puesto. Lo mismo el de las espinas. **Higgsfield está en cero créditos**,
+así que no hubo con qué generar nada por ese lado más allá de subir las imágenes. **El MCP de video no
+conectó** (`CONNECTION_CLOSED`), así que el video se leyó con PyAV en vez de con la herramienta. Y las
+**alucinaciones** que el usuario mandó después quedan para la vuelta que viene.
 
 ### Centésima séptima vuelta (2026-09-05): **VIGILIA**, el duodécimo juego — un bol de agua, tres minutos y treinta y tres sustos
 

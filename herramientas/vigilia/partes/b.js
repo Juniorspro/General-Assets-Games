@@ -139,7 +139,29 @@ const SUSTOS = [
   { id: 'toca',       clase: 'mano',    dur: 1.4, k: 0.75, son: 'golpe',    p: { desde: 'tablon' } },
   { id: 'agua',       clase: 'agua',    dur: 2.2, k: 0.55, son: 'burbujas', p: { modo: 'negra' } },
   { id: 'multitud',   clase: 'luz',     dur: 2.6, k: 0.65, son: 'susurro',  p: { modo: 'parpadeo', multitud: 1 } },
-  { id: 'final',      clase: 'figura',  dur: 1.5, k: 1.10, son: 'grito2',   p: { modo: 'encima', d: 3.0, v: 12 } }
+  { id: 'final',      clase: 'figura',  dur: 1.5, k: 1.10, son: 'grito2',   p: { modo: 'encima', d: 3.0, v: 12 } },
+  /* ── LOS NUEVE DE LOS SEIS MONSTRUOS ──
+     Las seis criaturas salieron de las referencias que trajo el usuario, asi
+     que cada una tiene su forma de aparecer y ninguna se repite: la calavera
+     con espinas CORRE, el oso corre tambien pero desde mas lejos y en la
+     oscuridad, la nena baja del techo cabeza abajo, la de agujas cruza el
+     pasillo caminando sin mirarte, la del disco se acerca a los parpadeos, y
+     boisvert —el negro— es la unica que no camina: es una cara pegada al
+     lente que no se mueve. */
+  { id: 'cargaEsp',   clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'grito1',   p: { k: 'espinas', d: 8.5 } },
+  { id: 'cargaOso',   clase: 'bCarga',  dur: 1.7, k: 0.95, son: 'ruedita',  p: { k: 'oso', d: 10.0 } },
+  { id: 'cargaNina',  clase: 'bCarga',  dur: 1.4, k: 1.05, son: 'grito2',   p: { k: 'nina', d: 7.0 } },
+  { id: 'techoNina',  clase: 'bTecho',  dur: 2.2, k: 0.85, son: 'soga',     p: { k: 'nina', d: 3.1 } },
+  /* el de las agujas mide 3,20 y un cielorraso mide 2,6: colgado cabeza abajo
+     la mitad del cuerpo atraviesa el techo y lo unico que entra en el cuadro es
+     una punta negra —medido, pixel mas claro 6,5 sobre 255—. Para colgar hace
+     falta un bicho que quepa. */
+  { id: 'techoOso',   clase: 'bTecho',  dur: 2.4, k: 0.70, son: 'crujido',  p: { k: 'oso', d: 2.6 } },
+  { id: 'pasaAgujas', clase: 'bPasa',   dur: 2.6, k: 0.30, son: 'pasos',    p: { k: 'agujas', d: 3.6 } },
+  { id: 'pasaDisco',  clase: 'bPasa',   dur: 2.4, k: 0.35, son: 'raspa',    p: { k: 'disco', d: 4.2 } },
+  { id: 'miraDisco',  clase: 'bMira',   dur: 3.0, k: 0.55, son: 'chasquido',p: { k: 'disco' } },
+  { id: 'boisvert',   clase: 'bCara',   dur: 2.6, k: 1.15, son: 'grito2',   p: { k: 'boisvert' } },
+  { id: 'atrasBois',  clase: 'bAtras',  dur: 2.4, k: 0.80, son: 'respira',  p: { k: 'boisvert', alto: 1.12 } }
 ];
 
 /* ══════════ CUANDO CAE CADA UNO ══════════
@@ -155,6 +177,7 @@ const TXT = {
         seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
         musica: 'MÚSICA', efectos: 'EFECTOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
         baja: 'BAJA', media: 'MEDIA', alta: 'ALTA', borrar: 'BORRAR EL PROGRESO',
+        vhsOn: 'CINTA VHS: SÍ', vhsOff: 'CINTA VHS: NO',
         pie: 'Inclina el teléfono. Tres minutos. El agua se vuelca sola.',
         permiso: 'TOCÁ PARA USAR EL SENSOR', sinGiro: 'sin giroscopio: arrastrá con el dedo',
         conGiro: 'inclinando el teléfono', agua: 'AGUA', tiempo: 'TIEMPO',
@@ -165,6 +188,7 @@ const TXT = {
         seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
         musica: 'MUSIC', efectos: 'SOUND FX', idioma: 'LANGUAGE', graficos: 'GRAPHICS',
         baja: 'LOW', media: 'MEDIUM', alta: 'HIGH', borrar: 'ERASE PROGRESS',
+        vhsOn: 'VHS TAPE: ON', vhsOff: 'VHS TAPE: OFF',
         pie: 'Tilt the phone. Three minutes. The water spills on its own.',
         permiso: 'TAP TO USE THE SENSOR', sinGiro: 'no gyroscope: drag with your finger',
         conGiro: 'tilting the phone', agua: 'WATER', tiempo: 'TIME',
@@ -175,6 +199,7 @@ const TXT = {
         seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
         musica: 'MÚSICA', efectos: 'EFEITOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
         baja: 'BAIXA', media: 'MÉDIA', alta: 'ALTA', borrar: 'APAGAR O PROGRESSO',
+        vhsOn: 'FITA VHS: SIM', vhsOff: 'FITA VHS: NÃO',
         pie: 'Incline o telefone. Três minutos. A água derrama sozinha.',
         permiso: 'TOQUE PARA USAR O SENSOR', sinGiro: 'sem giroscópio: arraste com o dedo',
         conGiro: 'inclinando o telefone', agua: 'ÁGUA', tiempo: 'TEMPO',
@@ -200,6 +225,7 @@ const NOM_CUARTO = {
 /* ══════════ CALIDADES ══════════
    Lo unico que cambia es lo que cuesta: los cuartos, los sustos y la fisica son
    los mismos en las tres. */
+let VHS = true;      /* la cinta: se guarda con el resto de los ajustes */
 const CALIDADES = {
   baja:  { esc: 0.55, pix: 3.2, sombra: 0,    niebla: 1.35 },
   media: { esc: 0.80, pix: 2.4, sombra: 1024, niebla: 1.0 },
