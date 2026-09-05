@@ -372,6 +372,30 @@ window.__V = {
      proyecta la caja, y compara el brillo MEDIO DE ADENTRO contra el mismo
      rectangulo con el bicho apagado. Ese delta es lo unico que prueba que se ve. */
   sinBichos(v){ SIN_BICHOS = !!v; return v; },
+  /* los gritos: que esten decodificados, y —lo unico que prueba que sonaron—
+     cuanto movieron el analizador colgado del maestro */
+  gritos(){ return { n: GRITO_N, fallas: GRITO_FALLAS,
+    listos: Object.keys(GRITO).filter(k => GRITO[k]),
+    faltan: Object.keys(GRITO).filter(k => !GRITO[k]),
+    dur: Object.fromEntries(Object.keys(GRITO).filter(k => GRITO[k])
+      .map(k => [k, +GRITO[k].duration.toFixed(2)])), ult: GRITO_ULT }; },
+  /* ── UNA SOLA LECTURA DEL ANALIZADOR NO MIDE UN GRITO ──
+     `getByteTimeDomainData` devuelve los ultimos 1024 samples, o sea veintitres
+     milisegundos: un grito tiene huecos, asi que una muestra sola cae donde
+     cae. Se barre el clip entero y se toma el pico y el rms mas altos. */
+  async grito(k){ despiertaAudio();
+    const ok = grita(k, 1);
+    const n = ANA.frequencyBinCount, d = new Uint8Array(n);
+    let pk = 0, rm = 0;
+    for (let i = 0; i < 24; i++){
+      await new Promise(r => setTimeout(r, 90));
+      ANA.getByteTimeDomainData(d);
+      let p2 = 0, s2 = 0;
+      for (let j = 0; j < n; j++){ const v = (d[j] - 128)/128; s2 += v*v; if (Math.abs(v) > p2) p2 = Math.abs(v); }
+      const r2 = Math.sqrt(s2/n);
+      if (p2 > pk) pk = p2; if (r2 > rm) rm = r2;
+    }
+    return { k, muestra: ok, pico: +pk.toFixed(3), rms: +rm.toFixed(4) }; },
   /* que tan grande es el bicho DESPUES de que el esqueleto lo deforma: la caja
      envolvente sale de la malla en pose de reposo, asi que un rig con la escala
      equivocada no aparece ahi — aparece en pantalla */
@@ -387,6 +411,63 @@ window.__V = {
       r[k] = { huesos: hu.bones.length, act: B.act ? 1 : 0,
         spanHuesos: [+(x1-x0).toFixed(2), +(y1-y0).toFixed(2), +(z1-z0).toFixed(2)],
         cajaMalla: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)] }; }
+    return r; },
+  /* ── HACIA DONDE MIRA CADA MALLA, MEDIDO Y NO SUPUESTO ──
+     `bichoMira` gira el grupo suponiendo que el frente del modelo es +Z, y eso
+     es una suposicion: el generador orienta cada bicho como se le canta. Se
+     miden dos cosas. La primera, la PROPORCION de la caja: un humanoide es mas
+     ancho de hombro que hondo, asi que el eje corto en horizontal es el que
+     mira. La segunda, el SIGNO, y para los riggeados sale del pie: el vector
+     del tobillo a la punta del pie ES la direccion en la que camina. */
+  /* ── LA PRUEBA DE QUE TE MIRA: EL FRENTE CONTRA LA LINEA A LA CAMARA ──
+     Se toma el +X local del grupo —que es el frente medido del modelo—, se lo
+     lleva al mundo y se compara con la direccion que va del bicho al ojo. Cero
+     grados es de frente; noventa es de perfil, que es como estaban. */
+  miraA(id, u){
+    this.susto(id, u == null ? 0.8 : u);
+    escena.updateMatrixWorld(true);
+    let k = null; for (const q in BICHO) if (BICHO[q].g.visible) k = q;
+    if (!k) return { id, ver: false };
+    const g = BICHO[k].g;
+    const fr = new T.Vector3(1, 0, 0).applyQuaternion(g.getWorldQuaternion(new T.Quaternion()));
+    fr.y = 0; fr.normalize();
+    const cp = cam.getWorldPosition(new T.Vector3()), wp = g.getWorldPosition(new T.Vector3());
+    const al = cp.clone().sub(wp); al.y = 0; al.normalize();
+    return { id, k, grados: +(Math.acos(Math.max(-1, Math.min(1, fr.dot(al))))*180/Math.PI).toFixed(1) }; },
+  ejeBicho(){ const r = {};
+    for (const k in BICHO){ const B = BICHO[k];
+      escena.updateMatrixWorld(true);
+      const cj = new T.Box3().setFromObject(B.g), t = new T.Vector3(); cj.getSize(t);
+      let hu = null; B.g.traverse(o => { if (o.isSkinnedMesh && !hu) hu = o.skeleton; });
+      let pie = null;
+      if (hu){ const f = {}; for (const b of hu.bones) f[b.name] = b;
+        const par = [['L_Foot','L_ToeBase'], ['R_Foot','R_ToeBase'], ['Foot_L','Toe_L']];
+        for (const [a2, b2] of par){ if (f[a2] && f[b2]){
+          const p1 = f[a2].getWorldPosition(new T.Vector3()), p2 = f[b2].getWorldPosition(new T.Vector3());
+          const d = p2.clone().sub(p1); d.y = 0;
+          if (d.length() > 1e-4){ pie = { x: +d.x.toFixed(3), z: +d.z.toFixed(3),
+            ang: +Math.atan2(d.x, d.z).toFixed(3) }; break; } } } }
+      /* y para los que no tienen esqueleto: la nariz. Se parte la mitad de
+         arriba del cuerpo en cuartos sobre cada eje horizontal y se mira que
+         cuarto tiene MENOS vertices — la cara es lo mas angosto de una cabeza */
+      let nariz = null;
+      if (!hu){ const pos = [];
+        B.g.traverse(o => { if (o.isMesh && o.geometry){ const a3 = o.geometry.attributes.position;
+          const m = o.matrixWorld;
+          for (let i = 0; i < a3.count; i += 3){ const v = new T.Vector3().fromBufferAttribute(a3, i).applyMatrix4(m); pos.push(v); } } });
+        if (pos.length){
+          const yc = cj.min.y + (cj.max.y - cj.min.y)*0.62;
+          const alto = pos.filter(v => v.y > yc);
+          if (alto.length > 20){
+            const cx = alto.reduce((s2, v) => s2 + v.x, 0)/alto.length;
+            const cz = alto.reduce((s2, v) => s2 + v.z, 0)/alto.length;
+            const q = [0, 0, 0, 0];
+            for (const v of alto){ const dx = v.x - cx, dz = v.z - cz;
+              if (Math.abs(dx) > Math.abs(dz)) q[dx > 0 ? 0 : 1]++; else q[dz > 0 ? 2 : 3]++; }
+            nariz = { xMas: q[0], xMenos: q[1], zMas: q[2], zMenos: q[3] }; } } }
+      r[k] = { caja: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)],
+        anchoSobreHondo: +(t.x/Math.max(0.001, t.z)).toFixed(2), yaw: +B.g.rotation.y.toFixed(3),
+        pie, nariz }; }
     return r; },
   matBicho(){ const r = {};
     for (const k in BICHO){ BICHO[k].g.traverse(o => { if (o.isMesh && o.material && !r[k]){

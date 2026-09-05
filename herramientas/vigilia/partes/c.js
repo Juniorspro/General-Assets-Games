@@ -25,7 +25,47 @@ function despiertaAudio(){
   RUIDO = AUD.createBuffer(1, AUD.sampleRate, AUD.sampleRate);
   const d = RUIDO.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  cargaGritos();
   return AUD;
+}
+/* ══════════ LOS GRITOS GRABADOS ══════════
+   Los sustos sintetizados son barridos de onda de sierra, y una onda de sierra
+   no asusta: se lee a efecto de arcade. Estos doce estan generados con Rezona y
+   son gritos de verdad. Se decodifican con el PRIMER GESTO y no al cargar: sin
+   un contexto de audio despierto `decodeAudioData` no hace nada, y ningun
+   navegador crea uno antes de un gesto de verdad.
+
+   ── Y LO SINTETIZADO NO SE BORRA ──
+   `son()` intenta la muestra y cae al oscilador si el MP3 no decodifico. Un
+   juego mudo por un decodificador es peor que un juego con bips.
+
+   ── UNA BOCA, O SEA UNA VOZ ──
+   Un grito nuevo corta al anterior. Dos alaridos encimados no son mas miedo:
+   son distorsion — medido en PUERTA BLANCA, disparando siete con 300 ms de
+   separacion el maestro se acumulaba hasta pico 1,66, o sea recortando. */
+const GRITO = {};
+let GRITO_N = 0, GRITO_FALLAS = 0, GRITO_VOZ = null, GRITO_ULT = '';
+function cargaGritos(){
+  if (!AUD || typeof GRITOS_B64 === 'undefined') return;
+  for (const k in GRITOS_B64){
+    if (GRITO[k] !== undefined) continue;
+    GRITO[k] = null;
+    fetch(GRITOS_B64[k]).then(r => r.arrayBuffer())
+      .then(b => AUD.decodeAudioData(b))
+      .then(buf => { GRITO[k] = buf; GRITO_N++; })
+      .catch(() => { GRITO_FALLAS++; });
+  }
+}
+function grita(k, v){
+  const b = GRITO[k];
+  if (!AUD || !b) return false;
+  if (GRITO_VOZ){ try { GRITO_VOZ.stop(); } catch(e){} }
+  const s = AUD.createBufferSource(); s.buffer = b;
+  const g = AUD.createGain(); g.gain.value = v == null ? 1 : v;
+  s.connect(g); g.connect(BUS_F); s.start();
+  GRITO_VOZ = s; GRITO_ULT = k;
+  s.onended = () => { if (GRITO_VOZ === s) GRITO_VOZ = null; };
+  return true;
 }
 function ponVol(m, f){ VOL_MUS = m; VOL_FX = f; if (BUS_M) BUS_M.gain.value = m; if (BUS_F) BUS_F.gain.value = f*CAMA.duck; }
 
@@ -115,8 +155,19 @@ function aguaPara(){ if (AGUA_N){ try { AGUA_N.s.stop(); } catch(e){} AGUA_N = n
    Cada susto trae el suyo. No son variaciones de uno: un portazo, unos pasos y
    un grito tienen que sonar a tres cosas distintas o los treinta y tres se
    leen como el mismo susto repetido. */
+/* que grito grabado le corresponde a cada nombre de sonido. Lo que no este
+   aca sigue saliendo del sintetizador, que es lo correcto para un portazo o
+   una gota: esos ya suenan bien y pesan cero. */
+const SON_A_GRITO = {
+  grito1: 'gCarga', grito2: 'gCara', gruñido: 'gBestia',
+  gCarga: 'gCarga', gBestia: 'gBestia', gNina: 'gNina', gTecho: 'gTecho',
+  gJadeo: 'gJadeo', gCoro: 'gCoro', gCara: 'gCara', gOido: 'gOido',
+  gChillido: 'gChillido', gLamento: 'gLamento', gRisa: 'gRisa', gPasos: 'gPasos'
+};
 function son(k, v){
   if (!AUD) return;
+  const gk = SON_A_GRITO[k];
+  if (gk && grita(gk, v == null ? 1 : v)) return;
   const t = AUD.currentTime, F = BUS_F, a = v == null ? 1 : v;
   switch (k){
     case 'paso':      ruido(F, t, 0.13, 0.10*a, 'lowpass', 420, 1.0); break;

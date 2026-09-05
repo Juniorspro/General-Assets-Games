@@ -733,9 +733,27 @@ function ponBicho(k, ade, lado, alto, clip){
   bichoClip(B, clip || 'idle');
   return B;
 }
+/* ── HACIA DONDE MIRA UNA MALLA GENERADA NO SE DEDUCE, SE MIDE ──
+   `bichoMira` giraba el grupo suponiendo que el frente del modelo es su +Z, que
+   es lo que uno escribiria, y el generador orienta cada bicho como se le canta:
+   los seis miran hacia +X. O sea que estaban exactamente NOVENTA GRADOS
+   girados y el jugador les veia el perfil siempre, en los diez sustos.
+
+   No se saco a ojo. Para los cuatro riggeados sale del PIE: el vector que va
+   del tobillo a la punta del pie ES la direccion en la que el personaje camina,
+   y medido da 1,665 · 1,760 · 1,403 · 1,521 radianes — los cuatro alrededor de
+   pi/2, y la dispersion es la apertura natural de los pies en reposo. Para los
+   dos sin esqueleto lo dice la nariz: repartiendo los vertices de la mitad de
+   arriba en cuartos, el cuarto de +X es el mas poblado. Y la proporcion de la
+   caja lo confirma: ancho/hondo de 0,44 a 0,72, o sea mas hondos que anchos,
+   que es lo que da un humanoide puesto de perfil. */
+const YAW_BICHO = Math.PI/2;
+/* el rumbo con el que hay que girar el grupo para que el frente del modelo
+   apunte a (dx, dz): con el frente en +X sale atan2(dx,dz) - pi/2 */
+function rumboBicho(dx, dz){ return Math.atan2(dx, dz) - YAW_BICHO; }
 function bichoMira(B){
   const p = cam.getWorldPosition(_v);
-  B.g.rotation.set(0, Math.atan2(p.x - B.g.position.x, p.z - B.g.position.z), 0);
+  B.g.rotation.set(0, rumboBicho(p.x - B.g.position.x, p.z - B.g.position.z), 0);
 }
 const manoG = new T.Group(); manoG.visible = false; actorG.add(manoG);
 {
@@ -889,7 +907,12 @@ function animaSusto(S, u, R){
        eligio. */
     case 'bCarga': {
       EFE.luzK = 0.12;
-      const B = ponBicho(P.k, lerp(P.d, 0.7, u*u), 0, 0, 'run');
+      /* ── EL QUE VIENE DE ATRAS TE OBLIGA A DARTE VUELTA ──
+         Nace a la espalda y la cabeza gira sola; para cuando terminaste de
+         girar ya cerro la mitad de los metros. Mirar para otro lado no salva. */
+      const sg = P.atras ? -1 : 1;
+      if (P.atras) EFE.mirarA = Math.sin(Math.min(1, u*1.4)*Math.PI*0.5)*0.92;   /* 0,92 x 3,5 = pi: el bicho esta justo a la espalda */
+      const B = ponBicho(P.k, sg*lerp(P.d, 0.7, u*u), 0, P.alto || 0, 'run');
       if (B){ bichoMira(B);
         EFE.sacude = Math.max(EFE.sacude, u*u*0.9);
         /* ── EL DESENFOQUE ES EL GOLPE, NO LA CARRERA ──
@@ -899,7 +922,7 @@ function animaSusto(S, u, R){
            quinto, que es cuando el bicho ya te tiene encima. */
         EFE.borroso = Math.max(0, (u - 0.82)/0.18)*1.4;
         /* el ultimo tercio pega en la camara: mirar para otro lado no salva */
-        if (u > 0.72) EFE.mirarA = 0; }
+        if (u > 0.72 && !P.atras) EFE.mirarA = 0; }
       break; }
     /* ── BAJA DEL TECHO Y TE MIRA ──
        Cabeza abajo, descolgandose justo delante de la cara. Va boca abajo de
@@ -923,7 +946,12 @@ function animaSusto(S, u, R){
                         Math.min(1.45, D.alto - (Bt ? Bt.alto : 1.8) + 0.20),
                         Math.min(1, u*1.5));
       const B = ponBicho(P.k, P.d || 2.1, 0.10, cara + (Bt ? Bt.alto : 1.8), 'idle');
-      if (B){ B.g.rotation.set(Math.PI, cuerpo.rotation.y, Math.sin(u*9)*0.10);
+      /* ── DADO VUELTA, EL GIRO EN Y SE INVIERTE ──
+         Con la vuelta de pi en X el +X local termina en (cos yaw, 0, +sin yaw)
+         en vez de (cos yaw, 0, -sin yaw), asi que el rumbo que lo pone de cara
+         a la camara es pi/2 - rumboDelCuerpo y no el mismo mas pi/2. Medido con
+         la sonda, colgaba mirando 178 grados: te mostraba la nuca. */
+      if (B){ B.g.rotation.set(Math.PI, YAW_BICHO - cuerpo.rotation.y, Math.sin(u*9)*0.10);
         EFE.techoY = -Math.sin(Math.min(1, u*1.5)*Math.PI)*0.25; }
       break; }
     /* ── CRUZA EL PASILLO CAMINANDO ──
@@ -932,7 +960,7 @@ function animaSusto(S, u, R){
     case 'bPasa': {
       EFE.luzK = 0.22;
       const B = ponBicho(P.k, P.d, lerp(-D.ancho*0.40, D.ancho*0.40, u), 0, 'walk');
-      if (B) B.g.rotation.set(0, cuerpo.rotation.y + Math.PI/2, 0);
+      if (B) B.g.rotation.set(0, cuerpo.rotation.y + Math.PI/2 - YAW_BICHO, 0);
       break; }
     /* ── ESTA AL FONDO Y CADA VEZ QUE VUELVE LA LUZ ESTA MAS CERCA ──
        Tres parpadeos, tres distancias. El movimiento no se ve nunca: lo que se

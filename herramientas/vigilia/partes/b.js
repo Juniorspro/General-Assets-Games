@@ -124,7 +124,7 @@ const SUSTOS = [
   { id: 'juguete',    clase: 'rueda',   dur: 2.2, k: 0.60, son: 'ruedita',  p: { d: 5 } },
   { id: 'techo',      clase: 'techo',   dur: 2.4, k: 0.45, son: 'gruñido',  p: { baja: 1.1 } },
   { id: 'aliento',    clase: 'aliento', dur: 1.8, k: 0.35, son: 'respira',  p: {} },
-  { id: 'cuadro',     clase: 'cuadro',  dur: 1.6, k: 0.75, son: 'grito1',   p: {} },
+  { id: 'cuadro',     clase: 'cuadro',  dur: 1.6, k: 0.75, son: 'gRisa',    p: {} },
   { id: 'sangre',     clase: 'sangre',  dur: 2.6, k: 0.30, son: 'goteo',    p: {} },
   { id: 'ventana',    clase: 'ventana', dur: 1.2, k: 0.90, son: 'vidrio',   p: {} },
   { id: 'timbre',     clase: 'mueble',  dur: 2.0, k: 0.70, son: 'timbre',   p: {} },
@@ -139,7 +139,7 @@ const SUSTOS = [
   { id: 'toca',       clase: 'mano',    dur: 1.4, k: 0.75, son: 'golpe',    p: { desde: 'tablon' } },
   { id: 'agua',       clase: 'agua',    dur: 2.2, k: 0.55, son: 'burbujas', p: { modo: 'negra' } },
   { id: 'multitud',   clase: 'luz',     dur: 2.6, k: 0.65, son: 'susurro',  p: { modo: 'parpadeo', multitud: 1 } },
-  { id: 'final',      clase: 'figura',  dur: 1.5, k: 1.10, son: 'grito2',   p: { modo: 'encima', d: 3.0, v: 12 } },
+  { id: 'final',      clase: 'figura',  dur: 1.5, k: 1.10, son: 'gCara',    p: { modo: 'encima', d: 3.0, v: 12 } },
   /* ── LOS NUEVE DE LOS SEIS MONSTRUOS ──
      Las seis criaturas salieron de las referencias que trajo el usuario, asi
      que cada una tiene su forma de aparecer y ninguna se repite: la calavera
@@ -148,20 +148,28 @@ const SUSTOS = [
      pasillo caminando sin mirarte, la del disco se acerca a los parpadeos, y
      boisvert —el negro— es la unica que no camina: es una cara pegada al
      lente que no se mueve. */
-  { id: 'cargaEsp',   clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'grito1',   p: { k: 'espinas', d: 8.5 } },
-  { id: 'cargaOso',   clase: 'bCarga',  dur: 1.7, k: 0.95, son: 'ruedita',  p: { k: 'oso', d: 10.0 } },
-  { id: 'cargaNina',  clase: 'bCarga',  dur: 1.4, k: 1.05, son: 'grito2',   p: { k: 'nina', d: 7.0 } },
-  { id: 'techoNina',  clase: 'bTecho',  dur: 2.2, k: 0.85, son: 'soga',     p: { k: 'nina', d: 3.1 } },
+  { id: 'cargaEsp',   clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'gChillido',p: { k: 'espinas', d: 8.5 } },
+  { id: 'cargaOso',   clase: 'bCarga',  dur: 1.7, k: 0.95, son: 'gBestia',  p: { k: 'oso', d: 10.0 } },
+  { id: 'cargaNina',  clase: 'bCarga',  dur: 1.4, k: 1.05, son: 'gNina',    p: { k: 'nina', d: 7.0 } },
+  /* ── LOS QUE TE LLEGAN DE ATRAS ──
+     Es el mismo camino que `bCarga` pero naciendo a la espalda: la cabeza se
+     gira sola —no es una opcion— y para cuando terminas de darte vuelta ya lo
+     tenes encima. Mirar para otro lado deja de salvar. */
+  { id: 'cargaAtras', clase: 'bCarga',  dur: 1.6, k: 1.10, son: 'gCarga',   p: { k: 'nina', d: 7.5, atras: 1 } },
+  { id: 'cargaDisco', clase: 'bCarga',  dur: 1.5, k: 1.00, son: 'gLamento', p: { k: 'disco', d: 9.0 } },
+  { id: 'cargaAgu',   clase: 'bCarga',  dur: 1.8, k: 1.05, son: 'gCoro',    p: { k: 'agujas', d: 11.0, atras: 1 } },
+  { id: 'cargaBois',  clase: 'bCarga',  dur: 1.3, k: 1.15, son: 'gCara',    p: { k: 'boisvert', d: 6.0, alto: 1.15 } },
+  { id: 'techoNina',  clase: 'bTecho',  dur: 2.2, k: 0.85, son: 'gTecho',   p: { k: 'nina', d: 3.1 } },
   /* el de las agujas mide 3,20 y un cielorraso mide 2,6: colgado cabeza abajo
      la mitad del cuerpo atraviesa el techo y lo unico que entra en el cuadro es
      una punta negra —medido, pixel mas claro 6,5 sobre 255—. Para colgar hace
      falta un bicho que quepa. */
-  { id: 'techoOso',   clase: 'bTecho',  dur: 2.4, k: 0.70, son: 'crujido',  p: { k: 'oso', d: 2.6 } },
-  { id: 'pasaAgujas', clase: 'bPasa',   dur: 2.6, k: 0.30, son: 'pasos',    p: { k: 'agujas', d: 3.6 } },
-  { id: 'pasaDisco',  clase: 'bPasa',   dur: 2.4, k: 0.35, son: 'raspa',    p: { k: 'disco', d: 4.2 } },
-  { id: 'miraDisco',  clase: 'bMira',   dur: 3.0, k: 0.55, son: 'chasquido',p: { k: 'disco' } },
-  { id: 'boisvert',   clase: 'bCara',   dur: 2.6, k: 1.15, son: 'grito2',   p: { k: 'boisvert' } },
-  { id: 'atrasBois',  clase: 'bAtras',  dur: 2.4, k: 0.80, son: 'respira',  p: { k: 'boisvert', alto: 1.12 } }
+  { id: 'techoOso',   clase: 'bTecho',  dur: 2.4, k: 0.70, son: 'gLamento', p: { k: 'oso', d: 2.6 } },
+  { id: 'pasaAgujas', clase: 'bPasa',   dur: 2.6, k: 0.30, son: 'gJadeo',   p: { k: 'agujas', d: 3.6 } },
+  { id: 'pasaDisco',  clase: 'bPasa',   dur: 2.4, k: 0.35, son: 'gPasos',   p: { k: 'disco', d: 4.2 } },
+  { id: 'miraDisco',  clase: 'bMira',   dur: 3.0, k: 0.55, son: 'gCoro',    p: { k: 'disco' } },
+  { id: 'boisvert',   clase: 'bCara',   dur: 2.6, k: 1.15, son: 'gCara',    p: { k: 'boisvert' } },
+  { id: 'atrasBois',  clase: 'bAtras',  dur: 2.4, k: 0.80, son: 'gOido',    p: { k: 'boisvert', alto: 1.12 } }
 ];
 
 /* ══════════ CUANDO CAE CADA UNO ══════════

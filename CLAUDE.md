@@ -185,7 +185,7 @@ munecas.
   tiene un solo asset más). El duodécimo juego. **Terror en primera persona, vertical nativo y con
   giroscopio**: se lleva **un tablón con un bol de agua** por catorce habitaciones distintas, la
   caminata es **sobre rieles y dura tres minutos exactos**, y lo único que se maneja es **inclinar el
-  teléfono** para que el agua no se vuelque. **Cuarenta y tres sustos, todos distintos y ninguno es
+  teléfono** para que el agua no se vuelque. **Cuarenta y siete sustos, todos distintos y ninguno es
   una imagen que aparece**: son cosas que le pasan a la casa —un portazo, la luz que se corta, una
   mano que sale de la pared, el techo que baja, una cara en el agua del bol, el que gatea, el que te
   copia, el que está atrás y te obliga a darte vuelta— más **seis monstruos liminales generados a
@@ -199,7 +199,9 @@ munecas.
   única luz de verdad es **una vela clavada en el tablón**. Y todo pasa por un **filtro de VHS de
   verdad** —el color con seis veces menos ancho de banda que la luz, el rebote del filtro de peine, la
   banda de seguimiento, el desgarro de conmutación de cabezas— con marco de cinta y código de tiempo,
-  que se puede apagar. Vive partido en `herramientas/vigilia/partes/` y se arma con
+  que se puede apagar. **Siete de los sustos son cargas** —el monstruo sale corriendo del
+  fondo del pasillo y dos nacen a tu espalda— y los gritos son **doce clips generados con Rezona**, no
+  osciladores. Vive partido en `herramientas/vigilia/partes/` y se arma con
   `python3 herramientas/vigilia/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
@@ -223,6 +225,128 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima novena vuelta (2026-09-05): **VIGILIA** — miraban de costado, y los gritos eran ondas de sierra
+
+Reporte: *"todos las entidades por alguna razón miran al costado en vez de a ti y encima ni dan miedo
+agrega screamers de verdad como que lleguen de la nada corriendo con gritos genera muchos gritos y
+audio"*. Las dos cosas ciertas y las dos medibles.
+
+#### MIRABAN DE COSTADO PORQUE NADIE MIDIÓ HACIA DÓNDE MIRA UNA MALLA GENERADA
+
+`bichoMira` giraba el grupo suponiendo que el frente del modelo es su **+Z**, que es lo que uno
+escribiría — y el generador orienta cada bicho como se le canta. Es exactamente el defecto que en CRUCE
+dejó al carpincho mirando de costado, con otro disfraz.
+
+Y no se sacó a ojo, porque hay **dos señales que no se pueden confundir**:
+
+1. **El pie.** El vector que va del tobillo a la punta del pie **es** la dirección en la que el
+   personaje camina. Medido en los cuatro riggeados: **1,665 · 1,760 · 1,403 · 1,521 radianes**, o sea
+   los cuatro alrededor de π/2 — y la dispersión es la apertura natural de los pies en reposo, no ruido.
+2. **La proporción de la caja.** Un humanoide es más ancho de hombro que hondo; estos daban
+   `ancho/hondo` de **0,44 a 0,72**, o sea más hondos que anchos, que es lo que da un cuerpo puesto de
+   perfil. Y para los dos sin esqueleto lo dice la nariz: repartiendo los vértices de la mitad de arriba
+   en cuartos, el de +X es el más poblado.
+
+O sea que estaban **exactamente noventa grados girados**, en los diez sustos. Con el rumbo corregido
+—`atan2(dx,dz) − π/2`— la sonda nueva `miraA()` da **0,1 a 2,6 grados** en los doce que tienen que
+mirarte.
+
+**Y LA SONDA SE PRUEBA CON UN CONTROL, si no aprueba cualquier cosa:** los dos que cruzan el pasillo sin
+mirarte siguen dando **90 grados**, que es lo que tienen que dar. Un medidor que devuelve cero siempre no
+mide nada.
+
+#### Y LOS DEL TECHO SEGUÍAN MOSTRANDO LA NUCA, POR UN SIGNO
+
+Colgados cabeza abajo la vuelta de π en X **invierte el giro en Y**: el +X local termina en
+`(cos yaw, 0, +sin yaw)` en vez de `(cos yaw, 0, −sin yaw)`, así que el rumbo que los pone de cara es
+`π/2 − rumboDelCuerpo` y no el mismo más π/2. Medido: **178 grados**, o sea la nuca, justo en el susto
+cuya gracia es que le veas la cara. Corregido: 1,8 y 2,1.
+
+#### LOS GRITOS ERAN ONDAS DE SIERRA, Y POR ESO NO ASUSTABAN
+
+`grito1` y `grito2` eran tres y cuatro osciladores barriendo hacia abajo. Eso se lee a efecto de arcade,
+no a alguien gritando. Entran **doce gritos generados con Rezona**: el alarido que corre hacia vos, el
+rugido de bestia, la nena distorsionada, el chillido que baja desde el techo, el jadeo, el coro de
+susurros, el alarido saturado a quemarropa, el aliento en la oreja, el chillido metálico, el lamento, la
+risa que se pudre y los pasos que se acercan corriendo. **175 KB de MP3.**
+
+**LOS PROMPTS PIDEN UN SONIDO FUERTE, CERCA Y SECO**, que es la lección de RezUno: pedirlo suave devuelve
+silencio. Y **siete de los doce volvieron `PROVIDER_UNAVAILABLE` marcado retryable** —la risa necesitó
+dos reintentos—, igual que los 25 de PUERTA BLANCA.
+
+#### EL HORNEADO: EL NIVEL SE MIDE SOBRE EL MP3, Y EL TECHO MANDA SOBRE EL RMS
+
+Tres cosas, y las tres se pagaron en esta misma vuelta:
+
+- **Se recorta la ráfaga de más ENERGÍA, no el pico más alto.** Un clip generado trae respiraciones y a
+  veces un chasquido al final que mide más que el grito.
+- **El lazo se cierra sobre el MP3 escrito.** A 40 kbps el codificador se lleva parte del brillo, así
+  que el número calculado sobre el float describe un archivo que no existe.
+- **Y CORRIGIENDO SÓLO POR RMS, CINCO DE LOS DOCE SALIERON CON PICO DE 1,0 A 1,62**, o sea recortando al
+  reproducir — y el pico del MP3 **no** es el del float, porque el codificador se pasa entre muestras.
+  El techo tiene que medirse después de escribir y mandar sobre el rms.
+
+**Y LA FUERZA DEL APLASTE SE ELIGE MIDIENDO, NO ANTES.** Un grito saturado tiene una cresta enorme:
+normalizado por pico su rms queda en la mitad de lo pedido, y subir la ganancia lo único que hace es
+recortar. Se prueban ocho fuerzas de `tanh` de suave a dura y se toma la primera que llega al objetivo
+**con el pico del MP3 por debajo del techo** — medido, `gCara` necesita ×6,5 y `gCarga` ninguna. Los doce
+quedan con pico **0,48 a 0,97** y rms 0,124 a 0,220.
+
+**Y LO SINTETIZADO NO SE BORRA:** `son()` intenta la muestra y cae al oscilador si el MP3 no decodificó.
+Un juego mudo por un decodificador es peor que uno con bips. Más: **el grito es una sola voz** y el nuevo
+corta al anterior — dos alaridos encimados no son más miedo, son distorsión.
+
+#### CUATRO CARGAS MÁS, Y DOS TE LLEGAN POR LA ESPALDA
+
+De 43 sustos a **47**. Las cargas pasan de 3 a **7**, que es lo que se pidió: la mitad de los monstruos
+ahora aparece **corriendo desde el fondo del pasillo**, cerrando los metros con u² —o sea acelerando— y
+con su grito encima. Y dos nacen **a la espalda**: la cabeza se gira sola —no es una opción— y para
+cuando terminaste de darte vuelta ya cerró la mitad del camino. El giro es de **0,92 × 3,5 = π exactos**,
+porque el bicho está justo detrás.
+
+#### Y EL IMPULSO SE VUELVE A MEDIR CADA VEZ QUE CAMBIA LA CANTIDAD
+
+Con 47 sacudones y el 6,4 de la vuelta anterior el bot ganaba **25 de 40**. Barrido de once valores sobre
+40 semillas:
+
+| K_SUS | bot | quieto | al azar |
+|---|---|---|---|
+| 7,4 | 3 | 0 | 0 |
+| 6,4 | 25 | 0 | 0 |
+| 5,9 | 35 | 3 | 1 |
+| **5,6** | **40** | **6** | **2** |
+| 5,4 | 40 | 12 | 3 |
+| 5,0 | 40 | 26 | 13 |
+
+Queda en **5,6**: por debajo, quedarse quieto empieza a ganar; por encima, el juego no se puede terminar.
+
+**Y EL BARRIDO ESTUVO ROTO UNA CORRIDA ENTERA, con la firma de siempre:** las seis filas salieron
+**idénticas**, porque reemplazaba el literal `const K_SUS = 7.0;` y ese texto ya no existía. Un parámetro
+que no cambia lo que tiene que cambiar es un parámetro que no está conectado.
+
+#### MEDIDO AL CERRAR
+
+**6 de 6 monstruos** con `fallas: []`, **11 de 11 assets**, **12 de 12 gritos decodificados** con
+`fallas: 0`. Los doce disparados y medidos con el analizador colgado del maestro, barriendo el clip
+entero —una sola lectura son veintitrés milisegundos y un grito tiene huecos—: pico **0,23 a 0,52** y rms
+**0,11 a 0,28**, los doce por el camino de la muestra. Contra el fondo de partida (rms 0,075) el grito
+queda **2,5 veces** por encima. Rumbo: **0,1° a 2,6°** en los doce que miran, **90°** en los dos que
+cruzan y **1,8° / 2,1°** en los dos que cuelgan. Auditoría: **47 de 47, 0 mudos, 0 fuera de cuadro**, el
+peor en 6,3. Agenda: 47 únicos en los 14 cuartos, del segundo 6,5 al 174, huecos de 2,13 a 5,15 s.
+Física intacta: **1,69 Hz medidos contra 1,69**, resbale **22,1 grados contra 22,8**. Auto-jugadores
+sobre 40 semillas: **40 · 6 · 2**. Partida completa en el navegador: **`gana` en el segundo 179,7 con los
+47 sustos**, tres semillas de tres. **Cero solapamientos** en el menú, en los ajustes y en el HUD, en
+vertical y en apaisado. Tres idiomas y tres calidades en caliente (**90×160 · 137×297 · 217×469**).
+Giroscopio con el cero puesto entre medida y medida: gamma ±20° → incX **±0,467**, beta ±25° → incZ
+**±0,593**. Pausa: el reloj no se mueve en 1,2 s. **29 llamadas de dibujo y 44.094 triángulos.**
+`window.__errs` **vacío en las ocho corridas**. El HTML pasó de 3,99 a **4,24 MB**, y esos 250 KB son los
+doce gritos.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los doce gritos está medido que decodifican,
+que suenan, a qué nivel y que ninguno recorta — no si dan miedo. Y el susto se juzga en fotos a la
+resolución del juego: que los monstruos te miran y que se ven está probado, cuánto asustan **con el
+teléfono en la mano** no.
 
 ### Centésima octava vuelta (2026-09-05): **VIGILIA** — seis monstruos liminales, VHS de verdad, y un cuaternión de norma dos
 
