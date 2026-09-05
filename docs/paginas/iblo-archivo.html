@@ -619,8 +619,8 @@ section[id]{scroll-margin-top:80px}
 .arSec .tapa{position:relative; display:block; aspect-ratio:16/10;
   background:#0d0b12 center/cover no-repeat}
 .arSec .tapa::after{content:""; position:absolute; inset:0;
-  background:linear-gradient(160deg, color-mix(in srgb, var(--tono) 34%, transparent), transparent 58%,
-             rgba(8,7,12,.72))}
+  background:linear-gradient(160deg, color-mix(in srgb, var(--tono) 30%, transparent), transparent 52%,
+             rgba(8,7,12,.86))}
 .arSec .txt{display:block; position:relative; padding:13px 14px 15px}
 .arSec .txt::before{content:""; position:absolute; left:14px; right:14px; top:0; height:2px;
   background:var(--tono); opacity:.85}
@@ -669,6 +669,13 @@ section[id]{scroll-margin-top:80px}
   .arVisor{padding:0} .arVisor .marco{max-width:100vw; max-height:100vh; border-radius:0; border:0}
   .arVisor .flecha{width:44px; height:44px}
 }
+
+.arSec .dib{position:absolute; z-index:1; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:44%; max-width:78px; height:auto; color:var(--tono); opacity:.92;
+  filter:drop-shadow(0 3px 12px rgba(0,0,0,.6))}
+.arSec.sinNada{opacity:.72}
+.arSec.sinNada:hover{opacity:1}
+.arSec .num.cero{color:var(--tenue); border-color:var(--linea)}
 </style>
 </head>
 <body data-pg="archivo" data-modo="e">
@@ -1320,6 +1327,23 @@ document.addEventListener("keydown", function(ev){
   var API = "https://iblo-eventos.pages.dev/api/archivo";
   var secs = [], actual = "", medios = [], pagina = 0, hayMas = false, visor = null, viendo = 0;
 
+
+  /* Dibujos para las secciones que todavía no tienen foto propia. Un dibujo es
+     mejor que una foto de otra fiesta: poner una recepción que en realidad es un
+     cumpleaños es justo lo que el dueño no quiere. */
+  var DIBUJOS = {
+    anillos:  '<circle cx="9" cy="14" r="6"/><circle cx="16" cy="14" r="6"/><path d="M12 3l2.5 3h-5z"/>',
+    corona15: '<path d="M4 18h16M4 18l-1.5-9 5 3.5L12 5l4.5 7.5 5-3.5L20 18"/>',
+    birrete:  '<path d="M12 4 2 9l10 5 10-5z"/><path d="M6 11.5V17c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/>',
+    mochila:  '<rect x="5" y="7" width="14" height="14" rx="4"/><path d="M9 7V5.5A3 3 0 0 1 15 5.5V7M5 13h14"/>',
+    parlante: '<rect x="5" y="2.5" width="14" height="19" rx="3"/><circle cx="12" cy="15" r="3.6"/><circle cx="12" cy="7" r="1.4"/>'
+  };
+  function dibujoDe(nombre){
+    var d = DIBUJOS[nombre]; if(!d) return "";
+    return '<svg class="dib" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  }
+
   function pedir(url){ return fetch(url).then(function(r){ return r.json(); }); }
 
   /* Sólo YouTube se puede meter adentro de la página con la dirección sola.
@@ -1331,14 +1355,21 @@ document.addEventListener("keydown", function(ev){
   }
 
   function pintarSecs(){
-    /* una sección vacía en la web es una promesa incumplida: no se muestra */
-    var conAlgo = secs.filter(function(s){ return s.cuantas > 0; });
-    if(!conAlgo.length){ document.getElementById("archivos").hidden = true; return; }
-    cajaSecs.innerHTML = conAlgo.map(function(s){
-      return '<button class="arSec' + (s.clave === actual ? " viva" : "") + '" type="button" data-s="' + esc(s.clave) +
+    /* Se muestran todas, con las que ya tienen fotos adelante. Antes se
+       escondían las vacías, y con el archivo recién estrenado la página quedaba
+       con una sola tarjeta suelta. Ahora cada una tiene su tapa —la foto de esa
+       misma estética, que ya vive en la portada del sitio— o su dibujo. */
+    var orden = secs.slice().sort(function(a,b){
+      return (b.cuantas > 0) - (a.cuantas > 0) || a.orden - b.orden;
+    });
+    cajaSecs.innerHTML = orden.map(function(s){
+      var conFoto = !!s.tapa;
+      return '<button class="arSec' + (s.clave === actual ? " viva" : "") +
+        (s.cuantas ? "" : " sinNada") + '" type="button" data-s="' + esc(s.clave) +
         '" style="--tono:' + esc(s.color || "#ff1e8e") + '">' +
-        '<span class="num">' + s.cuantas + '</span>' +
-        '<span class="tapa"' + (s.tapa ? ' style="background-image:url(' + esc(s.tapa) + ')"' : '') + '></span>' +
+        '<span class="num' + (s.cuantas ? "" : " cero") + '">' + (s.cuantas || "—") + '</span>' +
+        '<span class="tapa"' + (conFoto ? ' style="background-image:url(' + esc(s.tapa) + ')"' : '') + '>' +
+        (conFoto ? "" : dibujoDe(s.icono)) + '</span>' +
         '<span class="txt"><b>' + esc(s.nombre) + '</b>' +
         (s.bajada ? '<small>' + esc(s.bajada) + '</small>' : '') + '</span></button>';
     }).join("");
@@ -1346,7 +1377,12 @@ document.addEventListener("keydown", function(ev){
 
   function pintarRejilla(){
     if(!medios.length){
-      cuerpo.innerHTML = '<div class="arVacia">Todavía no subimos nada a esta sección.</div>';
+      /* que no sea un cartel muerto: el que llegó buscando fotos de su fiesta
+         tiene que poder pedirlas ahí mismo */
+      var wa = document.getElementById("waNav") || document.querySelector('a[href*="wa.me"]');
+      cuerpo.innerHTML = '<div class="arVacia">Todavía no subimos fotos de esta sección.' +
+        (wa ? '<br><a class="bt s" style="margin-top:14px; display:inline-flex" href="' + esc(wa.href) +
+              '" target="_blank" rel="noopener">Pedí las de tu fecha</a>' : '') + '</div>';
       return;
     }
     var h = '<div class="arRej">' + medios.map(function(m, i){
@@ -1445,14 +1481,18 @@ document.addEventListener("keydown", function(ev){
     if(ev.key === "ArrowRight") mover(1);
   });
 
-  /* arranque: las secciones, y la primera que tenga algo */
+  /* arranque: las secciones, y se abre la primera que tenga fotos */
   document.getElementById("archivos").hidden = true;
   pedir(API).then(function(j){
     secs = j.secciones || [];
-    var primera = secs.filter(function(s){ return s.cuantas > 0; })[0];
-    if(!primera) return;
+    if(!secs.length) return;
     document.getElementById("archivos").hidden = false;
-    abrirSeccion(primera.clave, false);
+    var primera = secs.filter(function(s){ return s.cuantas > 0; })[0];
+    if(primera) abrirSeccion(primera.clave, false);
+    else { pintarSecs(); cuerpo.innerHTML = ""; }
+    /* si vienen apuntando a una sección desde otra página, se abre ésa */
+    var pedida = (location.hash || "").replace("#seccion-", "");
+    if(pedida && secs.some(function(s){ return s.clave === pedida; })) abrirSeccion(pedida, false);
   }).catch(function(){});
 })();
 </script>

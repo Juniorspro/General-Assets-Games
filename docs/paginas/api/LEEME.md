@@ -508,6 +508,43 @@ iguales y grises. Ahora cada una lleva su color en un velo sobre la foto, en el
 borde y en una línea arriba del nombre, así una sección se reconoce de un vistazo
 aunque la foto de tapa sea oscura.
 
+### La tapa de fábrica: cada sección con una foto de verdad
+
+Las tarjetas se veían mal, y la razón era simple: el archivo estaba vacío, así
+que eran quince rectángulos de color con un nombre. Ahora **cada sección arranca
+con una foto**, sin que nadie suba nada:
+
+- Las nueve estéticas de la casa —Realeza, Euphoria, Wéstern, Halloween, Audio
+  Car, Semáforo, Ice Party, Noche Pirata y Zonal Party— llevan **la foto de esa
+  misma estética que ya vive en la portada del sitio**. Son las de IBLO, no
+  imágenes traídas de ningún lado.
+- **Primavera** lleva la de Zonal Party: es la misma fiesta, el baile zonal de la
+  Primavera y del Estudiante.
+- Recepciones, Cumpleaños de 15, Egresados, UPD y Producción no tienen una foto
+  propia todavía, así que llevan **un dibujo** —anillos, corona, birrete, mochila,
+  parlante— en el color de la sección. Un dibujo y no una foto de otra fiesta:
+  poner una «recepción» que en realidad es un cumpleaños es justo lo que el dueño
+  no quiere. En cuanto suba la primera foto de verdad, ésa manda.
+
+La tapa vive en `secciones.tapa_defecto` y el dibujo en `secciones.icono`.
+
+### El archivo entra por la portada
+
+Antes al archivo se llegaba por un botón de texto perdido entre otros dos. Ahora
+la portada —de escritorio y de celular— tiene su propia sección **«Archivos de
+eventos»** con hasta ocho tarjetas, y cada una lleva directo a su sección ya
+abierta (`iblo-archivo.html#seccion-<clave>`).
+
+En la portada entran las que mejor se ven: primero las que ya tienen fotos
+cargadas, después las que al menos tienen tapa, y al final las de dibujo. El
+conteo se muestra sólo cuando hay algo: ocho tarjetas diciendo «sin fotos» es un
+cartel de que la página está vacía.
+
+En la página del archivo se muestran **todas**, con las que tienen fotos adelante.
+Antes se escondían las vacías y, con el archivo recién estrenado, quedaba una sola
+tarjeta suelta. Y una sección sin fotos ya no es un cartel muerto: ofrece pedirlas
+por WhatsApp.
+
 ### La foto de portada
 
 Antes la tapa era **lo último subido**, y si eso era un video quedaba un cuadro

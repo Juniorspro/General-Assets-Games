@@ -92,7 +92,7 @@ export async function onRequestGet({ request, env }) {
      FOTO —nunca un video, porque su miniatura suele ser un cuadro apagado y era
      justo lo que se veía mal—. */
   const secs = ((await env.DB.prepare(
-    `SELECT s.clave, s.nombre, s.bajada, s.color, s.orden,
+    `SELECT s.clave, s.nombre, s.bajada, s.color, s.icono, s.orden,
             (SELECT COUNT(*) FROM archivo a WHERE a.seccion = s.clave AND a.estado = 'publicada') AS cuantas,
             COALESCE(
               (SELECT a.miniatura FROM archivo a
@@ -103,6 +103,9 @@ export async function onRequestGet({ request, env }) {
               (SELECT a.miniatura FROM archivo a
                  WHERE a.seccion = s.clave AND a.estado = 'publicada' AND a.miniatura <> ''
                  ORDER BY a.orden DESC, a.id DESC LIMIT 1),
+              /* y si la sección está vacía, la foto que le pusimos de fábrica:
+                 la de esa misma estética, que ya vive en la portada del sitio */
+              s.tapa_defecto,
               '') AS tapa,
             s.portada
        FROM secciones s ORDER BY s.orden, s.nombre`
