@@ -1,0 +1,354 @@
+
+/* ══════════════════════ LA ENTRADA ══════════════════════
+   El control es UNO: la inclinacion del telefono. El giroscopio da tres
+   angulos y el juego usa dos para el tablon y uno para mirar de costado.
+
+   ── EL CERO ES LA POSTURA EN LA QUE SE EMPEZO ──
+   Nadie sostiene el telefono perfectamente vertical, asi que la referencia no
+   puede ser un numero: es la primera lectura. Y hay zona muerta, porque una
+   mano nunca esta quieta y sin ella el bol tiembla todo el tiempo solo. */
+const GIRO = { ok: false, pedido: false, cero: null, beta: 0, gamma: 0, alpha: 0, n: 0 };
+const ZONA = 0.026;          /* 1,5 grados */
+const GANANCIA = 1.45;       /* 22 grados de telefono llegan al tope del tablon */
+let INC_X = 0, INC_Z = 0, DEDO = null, DEDO0 = null;
+
+function onOrient(e){
+  if (e.beta == null && e.gamma == null) return;
+  GIRO.n++;
+  const b = (e.beta || 0)*Math.PI/180, g = (e.gamma || 0)*Math.PI/180, a = (e.alpha || 0)*Math.PI/180;
+  if (!GIRO.cero){ GIRO.cero = { b, g, a }; }
+  if (GIRO.n > 3) GIRO.ok = true;
+  GIRO.beta = b; GIRO.gamma = g; GIRO.alpha = a;
+}
+function pideGiro(){
+  GIRO.pedido = true;
+  const D = window.DeviceOrientationEvent;
+  if (!D){ repinta(); return; }
+  if (typeof D.requestPermission === 'function'){
+    D.requestPermission().then(r => { if (r === 'granted') addEventListener('deviceorientation', onOrient); repinta(); })
+      .catch(() => repinta());
+  } else { addEventListener('deviceorientation', onOrient); }
+  setTimeout(repinta, 900);
+}
+/* ── LA VUELTA CORTA ──
+   El alpha cruza de 359 a 1 y sin normalizar la mirada pega media vuelta. */
+function corto(a){ while (a > Math.PI) a -= 2*Math.PI; while (a < -Math.PI) a += 2*Math.PI; return a; }
+function zona(v){ return Math.abs(v) < ZONA ? 0 : v - Math.sign(v)*ZONA; }
+function leeEntrada(dt){
+  let ox = 0, oz = 0, yaw = 0;
+  if (GIRO.ok && GIRO.cero){
+    ox = zona(GIRO.gamma - GIRO.cero.g)*GANANCIA;
+    oz = zona(GIRO.beta - GIRO.cero.b)*GANANCIA;
+    yaw = cl(corto(GIRO.alpha - GIRO.cero.a)*0.9, -1.15, 1.15);
+    /* el cero se corrige LENTISIMO y solo cuando la mano esta quieta: dejar el
+       telefono un poco inclinado no puede condenar la partida, pero corregir
+       siempre haria imposible sostener una inclinacion */
+    if (Math.abs(ox) < 0.06 && Math.abs(oz) < 0.06){
+      GIRO.cero.g += (GIRO.gamma - GIRO.cero.g)*dt*0.05;
+      GIRO.cero.b += (GIRO.beta - GIRO.cero.b)*dt*0.05;
+    }
+  } else if (DEDO){ ox = DEDO.x; oz = DEDO.y; yaw = cl(DEDO.yaw, -1.15, 1.15); }
+  INC_X += (ox - INC_X)*Math.min(1, dt*16);
+  INC_Z += (oz - INC_Z)*Math.min(1, dt*16);
+  LOOK.obj = yaw;
+  LOOK.yaw += (LOOK.obj - LOOK.yaw)*Math.min(1, dt*6);
+  pideTilt(INC_X, INC_Z);
+}
+/* respaldo con el dedo: sin el, un aparato sin giroscopio no tiene juego */
+marco.addEventListener('pointerdown', (e) => {
+  if (PANTALLA !== '') return;
+  DEDO0 = { x: e.clientX, y: e.clientY };
+  DEDO = DEDO || { x: 0, y: 0, yaw: 0 };
+  DEDO.bx = DEDO.x; DEDO.by = DEDO.y; DEDO.byaw = DEDO.yaw;
+  e.preventDefault();
+});
+addEventListener('pointermove', (e) => {
+  if (!DEDO0 || !DEDO) return;
+  const dx = (e.clientX - DEDO0.x)/Math.max(1, HUD_PX.w), dy = (e.clientY - DEDO0.y)/Math.max(1, HUD_PX.h);
+  DEDO.x = cl(DEDO.bx + dx*1.9, -0.55, 0.55);
+  DEDO.y = cl(DEDO.by + dy*1.9, -0.55, 0.55);
+  DEDO.yaw = cl(DEDO.byaw - dx*0.9, -1.15, 1.15);
+});
+addEventListener('pointerup', () => { DEDO0 = null; });
+addEventListener('keydown', (e) => {
+  if (!DEDO) DEDO = { x: 0, y: 0, yaw: 0 };
+  const k = 0.09;
+  if (e.code === 'ArrowLeft') DEDO.x = cl(DEDO.x - k, -0.55, 0.55);
+  if (e.code === 'ArrowRight') DEDO.x = cl(DEDO.x + k, -0.55, 0.55);
+  if (e.code === 'ArrowUp') DEDO.y = cl(DEDO.y - k, -0.55, 0.55);
+  if (e.code === 'ArrowDown') DEDO.y = cl(DEDO.y + k, -0.55, 0.55);
+  if (e.code === 'KeyQ') DEDO.yaw = cl(DEDO.yaw + 0.12, -1.15, 1.15);
+  if (e.code === 'KeyE') DEDO.yaw = cl(DEDO.yaw - 0.12, -1.15, 1.15);
+  if (e.code === 'Escape' && PANTALLA === '') pausar();
+});
+
+/* ══════════════════════ EL BUCLE ══════════════════════
+   Paso fijo de sesenta con interpolacion: un telefono a treinta y una notebook
+   a ciento cuarenta tienen que jugar el mismo juego. Con la fisica atada al
+   cuadro, la frecuencia del chapoteo y el umbral de volcado saldrian distintos
+   en cada aparato, y eso no es rendimiento: es otro juego. */
+let ACUM = 0, ULT = 0, PAUSA = false, CONGELADO = false, BOT = false, FIN_T = 0;
+window.__errs = [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+
+function juega(semilla){
+  arrancaRun(semilla == null ? (Date.now() & 0xffff) : semilla);
+  armaCuartos();
+  ULT_AGUA = ULT_T = ULT_CUARTO = -1;
+  ACUM = 0; PAUSA = false; FIN_T = 0; LOOK.yaw = 0; LOOK.obj = 0;
+  INC_X = INC_Z = 0; DEDO = null; GIRO.cero = null;
+  cuerpo.rotation.y = MUNDO.cuartos[0].gir;
+  pantalla('');
+  despiertaAudio(); camaArranca();
+  pintaHud();
+  aviso(TT('tuto'), 3.2);
+  return RUN;
+}
+function pausar(){ if (PANTALLA !== '') return; PAUSA = true; pantalla('pPausa'); }
+function seguir(){ PAUSA = false; pantalla(''); }
+function alMenu(){ PAUSA = false; camaPara(); aguaPara(); pantalla('pMenu'); }
+
+function eventos(){
+  const R = RUN; if (!R) return;
+  for (const e of R.eventos){
+    if (e.startsWith('susto:')){
+      const S = SUSTOS.find(s => s.id === e.slice(6));
+      if (S){ son(S.son, 1); ducking(0.30); setTimeout(() => ducking(1), 900); }
+    } else if (e === 'derrama') son('derrama', 0.5);
+    else if (e.startsWith('fin:')){
+      const por = e.slice(4);
+      if (por === 'gana'){ PROG.mejor = DUR; }
+      else PROG.mejor = Math.max(PROG.mejor, R.t);
+      PROG.partidas++; guardaProg();
+      son(por === 'gana' ? 'timbre' : 'grito2', 1);
+      FIN_T = 1.1;
+    }
+  }
+  R.eventos.length = 0;
+}
+let PASO_ULT = 0;
+function bucle(ms){
+  requestAnimationFrame(bucle);
+  const t = ms/1000, dt = Math.min(0.25, t - ULT || 0); ULT = t;
+  if (!CONGELADO && !PAUSA && RUN && RUN.fase === 'juega' && PANTALLA === ''){
+    leeEntrada(dt);
+    ACUM += dt;
+    let n = 0;
+    while (ACUM >= DT && n < 8){ paso(); ACUM -= DT; n++; }
+    eventos();
+    pintaHud();
+    /* el sonido del paso va atado a la FASE del andar, no a un temporizador:
+       asi la pisada y el cabeceo son el mismo numero y no se pueden separar */
+    const f = Math.floor(RUN.fase_paso/Math.PI);
+    if (f !== PASO_ULT){ PASO_ULT = f; son('paso', 0.8); }
+    camaPaso(dt, cl(RUN.temblor*0.8 + (1 - RUN.h/AGUA_H0)*0.5, 0, 1));
+    aguaPaso(Math.hypot(RUN.vax, RUN.vaz), cl(RUN.h/AGUA_H0, 0, 1));
+  }
+  if (FIN_T > 0){ FIN_T -= dt; if (FIN_T <= 0){ pintaFin(); pantalla('pFin'); camaPara(); aguaPara(); } }
+  if (!CONGELADO) avisoPaso(dt);
+  pinta(CONGELADO ? 0 : dt);
+  $('velo').style.opacity = String(EFE.blanco);
+  $('rojo').style.opacity = String(postMat.uniforms.rojo.value*1.4);
+}
+
+/* ══════════════════════ LOS BOTONES ══════════════════════ */
+const B = (id, f) => $(id).addEventListener('click', (e) => { despiertaAudio(); son('toque'); f(e); });
+B('bJugar', () => { pideGiro(); juega(); });
+B('bAjustes', () => pantalla('pAjustes'));
+B('aVolver', () => { guardaProg(); pantalla('pMenu'); });
+B('aBorrar', () => { PROG.mejor = 0; PROG.partidas = 0; guardaProg(); repinta(); });
+B('pSeguir', () => seguir());
+B('pMenuB', () => alMenu());
+B('fOtra', () => { pideGiro(); juega(); });
+B('fMenu', () => alMenu());
+$('bPausa').addEventListener('pointerdown', (e) => { e.stopPropagation(); pausar(); });
+for (const b of document.querySelectorAll('#pIdioma .bt')) b.addEventListener('click', () => {
+  despiertaAudio(); LANG = b.dataset.lang; guardaProg(); repinta(); pantalla('pMenu'); son('toque'); });
+for (const b of document.querySelectorAll('#pAjustes .bt[data-lang]')) b.addEventListener('click', () => {
+  LANG = b.dataset.lang; guardaProg(); repinta(); son('toque'); });
+for (const b of document.querySelectorAll('#pAjustes .bt[data-cal]')) b.addEventListener('click', () => {
+  CALIDAD = b.dataset.cal; medir(); guardaProg(); repinta(); son('toque'); });
+$('aMus').addEventListener('input', (e) => { ponVol(e.target.value/100, VOL_FX); guardaProg(); });
+$('aFx').addEventListener('input', (e) => { ponVol(VOL_MUS, e.target.value/100); guardaProg(); });
+
+/* ══════════════════════ LAS SONDAS ══════════════════════ */
+window.__V = {
+  estado(){ const R = RUN; return {
+    pantalla: PANTALLA, fase: R ? R.fase : null, t: R ? +R.t.toFixed(2) : null, s: R ? +R.s.toFixed(2) : null,
+    cuarto: R ? R.cuarto : null, cuartoId: R ? MUNDO.cuartos[R.cuarto].def.id : null,
+    agua: R ? +(R.h/AGUA_H0).toFixed(3) : null, tx: R ? +R.tx.toFixed(3) : null, tz: R ? +R.tz.toFixed(3) : null,
+    bx: R ? +R.bx.toFixed(3) : null, bz: R ? +R.bz.toFixed(3) : null,
+    ax: R ? +R.ax.toFixed(3) : null, az: R ? +R.az.toFixed(3) : null,
+    susto: R && R.susto ? R.susto.id : null, dados: R ? R.dados : null, fin: R ? R.fin : null,
+    lang: LANG, cal: CALIDAD, giro: GIRO.ok, errs: window.__errs.length }; },
+  juega(s){ juega(s); return this.estado(); },
+  congela(v){ CONGELADO = !!v; return CONGELADO; },
+  bot(v){ BOT = !!v; return BOT; },
+  /* adelanta n pasos, con el bot o con una inclinacion fija */
+  pasos(n, tx, tz){ for (let i = 0; i < n && RUN && RUN.fase === 'juega'; i++){
+      if (tx != null) pideTilt(tx, tz || 0);
+      else if (BOT){ const d = botTilt(0); pideTilt(d[0], d[1]); }
+      paso(); } eventos(); pintaHud(); return this.estado(); },
+  /* planta la caminata en un segundo dado para fotografiarlo */
+  foto(seg, s){ juega(s == null ? 7 : s);
+    const R = RUN; R.t = seg; R.s = VEL*seg; R.cuarto = cuartoEn(R.s);
+    R.prox = R.agenda.filter(a => a.t <= seg).length; R.dados = R.prox;
+    CONGELADO = true; pinta(1); pinta(0.016); pintaHud(); return this.estado(); },
+  /* dispara un susto por nombre y lo congela en un instante suyo */
+  susto(id, u, s){ juega(s == null ? 7 : s);
+    const R = RUN, S = SUSTOS.find(x => x.id === id); if (!S) return 'no existe: ' + SUSTOS.map(x => x.id).join(',');
+    R.t = 30; R.s = VEL*30; R.cuarto = cuartoEn(R.s);
+    R.susto = S; R.sustoT = (u == null ? 0.4 : u)*S.dur; R.sacx = 1; R.sacz = 0; R.temblor = S.k;
+    /* ── DOS PINTADAS, Y LA PRIMERA CON UN dt GRANDE ──
+       El rumbo del cuerpo se acomoda al del pasillo con un resorte
+       (`dt*7`), asi que UNA sola pintada de dieciseis milisegundos lo gira
+       apenas el 11 % de lo que falta: plantando la caminata en el segundo 30
+       la camara quedaba mirando 80 grados fuera del pasillo, o sea contra la
+       pared de al lado y a un metro. Toda la tanda de fotos de cuartos salio
+       asi —una pared cerca y nada mas— y me hizo perseguir un problema de luz
+       que era de la sonda. Con dt = 1 el resorte llega de una. */
+    CONGELADO = true; pinta(1); pinta(0.016);
+    return { id, u: u == null ? 0.4 : u, cuarto: MUNDO.cuartos[R.cuarto].def.id }; },
+  /* que hay dentro del actor y con que material: «la criatura no se ve» puede
+     ser que no este, que este vacia, o que este del mismo color que la pared, y
+     los tres se arreglan al reves */
+  actor(){ escena.updateMatrixWorld(true);
+    const o = []; figura.traverse(x => o.push({ t: x.type, vis: x.visible,
+      mat: x.material ? x.material.type : null, col: x.material && x.material.color ? '#' + x.material.color.getHexString() : null,
+      map: !!(x.material && x.material.map), tri: x.geometry ? (x.geometry.index ? x.geometry.index.count/3 : x.geometry.attributes.position.count/3) : 0 }));
+    const b = new T.Box3().setFromObject(figura), t = new T.Vector3(); b.getSize(t);
+    return { vis: figura.visible, hijos: figura.children.length, o,
+      caja: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)],
+      mundo: figura.getWorldPosition(new T.Vector3()).toArray().map(v => +v.toFixed(2)),
+      luzSus: +LUZ_SUS.intensity.toFixed(2) }; },
+  /* ── LA AUDITORIA DE LOS SUSTOS ──
+     Un susto puede estar cableado, correr, y no verse: o el actor cae fuera del
+     cuadro, o queda detras del tablon, o no cambia un solo pixel. Esto los
+     corre los treinta y tres, los mide en fracciones de pantalla y dice cuanto
+     movio el brillo respecto del mismo instante sin susto. */
+  auditaSustos(){
+    const base = (() => { this.foto(30, 7); const b = this.brillo().franjas; return b; })();
+    const caja = (o) => { escena.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+      const b = new T.Box3().setFromObject(o); if (b.isEmpty()) return null;
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, del = false;
+      for (let i = 0; i < 8; i++){
+        const v = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+        if (v.clone().applyMatrix4(cam.matrixWorldInverse).z < -0.001) del = true;
+        v.project(cam);
+        x0 = Math.min(x0, (v.x + 1)/2); x1 = Math.max(x1, (v.x + 1)/2);
+        y0 = Math.min(y0, (1 - v.y)/2); y1 = Math.max(y1, (1 - v.y)/2); }
+      return del && x1 > 0 && x0 < 1 && y1 > 0 && y0 < 1
+        ? [+x0.toFixed(2), +x1.toFixed(2), +y0.toFixed(2), +y1.toFixed(2)] : null; };
+    const r = [];
+    for (const S of SUSTOS){
+      this.susto(S.id, 0.55);
+      const fr = this.brillo().franjas;
+      let dif = 0; for (let i = 0; i < 5; i++) dif = Math.max(dif, Math.abs(fr[i] - base[i]));
+      const act = [];
+      if (figura.visible){ const c = caja(figura); if (c) act.push('figura' + JSON.stringify(c)); else act.push('figura:FUERA'); }
+      if (manoG.visible){ const c = caja(manoG); if (c) act.push('mano' + JSON.stringify(c)); else act.push('mano:FUERA'); }
+      if (bichosM.visible) act.push('bichos');
+      if (caraM.visible){ const c = caja(caraM); act.push(c ? 'cara' + JSON.stringify(c) : 'cara:FUERA'); }
+      if (sangreM.visible) act.push('sangre');
+      r.push({ id: S.id, clase: S.clase, act, dif: +dif.toFixed(1) });
+    }
+    CONGELADO = false; arrancaRun(1);
+    return { mudos: r.filter(x => x.dif < 2 && !x.act.length).map(x => x.id),
+      fuera: r.filter(x => x.act.some(a => a.indexOf('FUERA') >= 0)).map(x => x.id), r };
+  },
+  agenda(s){ return auditaAgenda(s == null ? 1 : s); },
+  fisica(){ const a = midePileta(), b = mideResbale(); arrancaRun(1); return { agua: a, resbale: b }; },
+  juegaSolo(s, modo){ const r = juegaSolo(s, modo || 'bot'); arrancaRun(1); return r; },
+  mundo(){ return { cuartos: MUNDO.cuartos.length, largo: +MUNDO.largo.toFixed(1),
+    segundos: +(MUNDO.largo/VEL).toFixed(1), ids: MUNDO.cuartos.map(q => q.def.id) }; },
+  costo(){ const i = render.info; return { llamadas: i.render.calls, tri: i.render.triangles, prog: i.programs.length,
+    tex: i.memory.textures, geo: i.memory.geometries, rt: [RT.width, RT.height], pix: PIX,
+    sombra: render.shadowMap.enabled, mapa: SOL.shadow.mapSize.x }; },
+  assets(){ return { listos: GLB.listos.slice(), fallas: GLB.fallas.slice(),
+    logo: $('logo').style.display === 'block' }; },
+  audio(){ return { ...nivelAudio(), cama: CAMA.on, ctx: AUD ? AUD.state : null }; },
+  /* la inclinacion que llega del sensor, para poder probar el camino de verdad */
+  giro(beta, gamma, alpha){ onOrient({ beta, gamma, alpha }); leeEntrada(1/60); return { incX: +INC_X.toFixed(3), incZ: +INC_Z.toFixed(3), yaw: +LOOK.obj.toFixed(3), ok: GIRO.ok }; },
+  solapes(){
+    const els = PANTALLA === '' ? ['bAgua', 'bTiempo', 'rot', 'aviso', 'bPausa'].map(i => $(i))
+                                : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *'));
+    const cajas = els.filter(e => e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'
+        && e.offsetWidth > 0 && +getComputedStyle(e).opacity > 0.05 && (e.textContent.trim() || e.tagName === 'IMG' || e.tagName === 'BUTTON' || e.children.length))
+      .map(e => ({ id: e.id || e.className, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }));
+    const ch = [];
+    for (let i = 0; i < cajas.length; i++) for (let j = i + 1; j < cajas.length; j++){
+      const a = cajas[i], b = cajas[j];
+      if (a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1) ch.push(a.id + '/' + b.id);
+    }
+    return { n: cajas.length, cajas, choques: ch, marco: [marco.clientWidth, marco.clientHeight] };
+  },
+  textos(){ return Array.from(document.querySelectorAll('.pan.on .caja *, #hud *')).filter(e => e.children.length === 0 && e.textContent.trim()).map(e => e.textContent.trim()).slice(0, 40); },
+  pantalla(n){ pantalla(n); repinta(); return PANTALLA; },
+  lang(l){ LANG = l; repinta(); return LANG; },
+  cal(c){ CALIDAD = c; medir(); return { cal: CALIDAD, rt: [RT.width, RT.height] }; },
+  /* proyecta un objeto a fracciones de pantalla: sin esto, «el bol se ve» es
+     una impresion. Y pone la matriz al dia, porque three la recalcula al
+     DIBUJAR y medir despues de mover la camara usa la del cuadro anterior. */
+  donde(que){
+    const o = que === 'bol' ? bolG : que === 'tablon' ? tablonG : que === 'figura' ? figura : null;
+    if (!o) return null;
+    escena.updateMatrixWorld(true); cam.updateMatrixWorld(true);
+    const b = new T.Box3().setFromObject(o); if (b.isEmpty()) return null;
+    let x0 = 9, x1 = -9, y0 = 9, y1 = -9, del = true;
+    for (let i = 0; i < 8; i++){
+      const v = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+      const vc = v.clone().applyMatrix4(cam.matrixWorldInverse); if (vc.z > -0.001) del = false;
+      v.project(cam);
+      x0 = Math.min(x0, (v.x + 1)/2); x1 = Math.max(x1, (v.x + 1)/2);
+      y0 = Math.min(y0, (1 - v.y)/2); y1 = Math.max(y1, (1 - v.y)/2);
+    }
+    return { visible: o.visible, delante: del, x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)] };
+  },
+  /* que hay de verdad en la escena y donde: sin esto «el cuarto sale negro» es
+     una impresion y no un numero */
+  dbg(){ escena.updateMatrixWorld(true);
+    const cj = (o) => { const b = new T.Box3().setFromObject(o); const t = new T.Vector3(); b.getSize(t);
+      return [+t.x.toFixed(3), +t.y.toFixed(3), +t.z.toFixed(3)]; };
+    return { bol: cj(bolM), tablon: cj(tablonM), agua: cj(aguaM),
+      cam: [+cam.getWorldPosition(new T.Vector3()).x.toFixed(2), +cam.getWorldPosition(new T.Vector3()).y.toFixed(2), +cam.getWorldPosition(new T.Vector3()).z.toFixed(2)],
+      luz: [+LUZ.position.x.toFixed(2), +LUZ.position.y.toFixed(2), +LUZ.position.z.toFixed(2), +LUZ.intensity.toFixed(2)],
+      dLuz: +LUZ.position.distanceTo(cam.getWorldPosition(new T.Vector3())).toFixed(2),
+      cuerpo: cuerpo.position.toArray().map(v => +v.toFixed(2)), yaw: +cuerpo.rotation.y.toFixed(3),
+      cabeza: cabeza.position.toArray().map(v => +v.toFixed(3)),
+      quarto: MUNDO.cuartos[RUN ? RUN.cuarto : 0] ? [MUNDO.cuartos[RUN.cuarto].def.id,
+        +MUNDO.cuartos[RUN.cuarto].x.toFixed(2), +MUNDO.cuartos[RUN.cuarto].z.toFixed(2),
+        +MUNDO.cuartos[RUN.cuarto].gir.toFixed(3), MUNDO.cuartos[RUN.cuarto].def.ancho] : null,
+      cuartosVis: cuartosG.filter(g => g.visible).length,
+      nieblaD: +escena.fog.density.toFixed(3), nieblaC: '#' + escena.fog.color.getHexString(),
+      expo: render.toneMappingExposure }; },
+  /* apaga partes del post para saber DONDE se pierde la luz: sin esto, «esta
+     oscuro» no distingue una lampara floja de una viñeta que se come el cuadro */
+  post(k, v){ if (postMat.uniforms[k]) postMat.uniforms[k].value = v; return Object.fromEntries(Object.entries(postMat.uniforms).map(([a,b]) => [a, typeof b.value === 'number' ? b.value : 'tex'])); },
+  brillo(){ pinta(0.016); const gl = render.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const px = new Uint8Array(w*h*4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const fr = []; for (let f = 0; f < 5; f++){ let s = 0, n = 0;
+      for (let y = Math.floor(h*(4 - f)/5); y < Math.floor(h*(5 - f)/5); y += 3) for (let x = 0; x < w; x += 3){ const i = (y*w + x)*4; s += (px[i] + px[i+1] + px[i+2])/3; n++; }
+      fr.push(+(s/n).toFixed(1)); }
+    return { franjas: fr, w, h }; }
+};
+
+/* ══════════════════════ EL ARRANQUE ══════════════════════ */
+(function arranque(){
+  const hay = cargaProg();
+  armaMundo();
+  medir();
+  arrancaRun(1);
+  armaCuartos();
+  cargaAssets();
+  repinta();
+  $('cBarra').style.width = '100%';
+  setTimeout(() => {
+    $('carga').classList.add('ido');
+    pantalla(hay ? 'pMenu' : 'pIdioma');
+    requestAnimationFrame(bucle);
+  }, 300);
+})();
+</script>
+</body>
+</html>

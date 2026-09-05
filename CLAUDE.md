@@ -180,6 +180,20 @@ munecas.
   (destino de render reducido y NEAREST) y **saturación** en una pasada de post, más posterizado y
   viñeta. Vive partido en `herramientas/cruce/partes/` y se arma con
   `python3 herramientas/cruce/armar.py`.
+- **`Vigilia.html` es "VIGILIA"** (~2,37 MB, de los cuales 2,19 son los once modelos 3D y la
+  imagen del título generados con Rezona; la casa entera es geometría por código y no tiene un solo
+  asset más). El duodécimo juego. **Terror en primera persona, vertical nativo y con giroscopio**: se
+  lleva **un tablón con un bol de agua** por catorce habitaciones distintas, la caminata es **sobre
+  rieles y dura tres minutos exactos**, y lo único que se maneja es **inclinar el teléfono** para que
+  el agua no se vuelque. **Treinta y tres sustos, todos distintos y ninguno es una imagen que
+  aparece**: son cosas que le pasan a la casa —un portazo, la luz que se corta, una mano que sale de
+  la pared, el techo que baja, el piso que cruje, una cara en el agua del bol, el esqueleto que cruza
+  el pasillo, el que gatea, el que te copia, el que está atrás y te obliga a darte vuelta—. La física
+  del agua es la de verdad: **el primer modo antisimétrico de un tanque cilíndrico**
+  (`k = 1,841/R`, `ω² = g·k·tanh(k·h)`) da **1,69 Hz medidos contra 1,69 teóricos**, y el bol se
+  resbala del tablón con **rozamiento de Coulomb** a **22,1 grados medidos contra 22,8 teóricos**. La
+  única luz de verdad es **una vela clavada en el tablón**. Vive partido en
+  `herramientas/vigilia/partes/` y se arma con `python3 herramientas/vigilia/armar.py`.
 - **`Dash.html` es "ROTOR"** (~2,8 MB, de los cuales 2,3 son las dos canciones —extraídas de los dos
   videos que trajo el usuario, con el «tun» de TikTok recortado por medición— y 231 KB las imágenes
   generadas: el telón de atardecer, dos hojas de sprites de fondo, el fondo del menú y el sello). El
@@ -202,6 +216,190 @@ munecas.
   lista de niveles, selector de icono, ajustes, **modo práctica con puntos de control** y porcentaje
   guardado por nivel. El nivel largo se **valida en el fondo por rebanadas** mientras el menú corre.
   Vive partido en `herramientas/dash/partes/` y se arma con `python3 herramientas/dash/armar.py`.
+
+### Centésima séptima vuelta (2026-09-05): **VIGILIA**, el duodécimo juego — un bol de agua, tres minutos y treinta y tres sustos
+
+Pedido: *"armate otro juego 3D con todos los requisitos que te di pero esta vez de terror … hacelo
+simple por ejemplo con modelos 3D si y screamers pero que hay que ir en vertical y con giroscopio, con
+un tablón y un boul de agua y necesito que sea súper realistas las físicas y que camine automáticamente
+por 3 minutos en el mundo debe ser habitaciones diferente con muchos screamers diferentes no
+apariciones de imágenes nomás, invéntate más de 30 y eso genera los modelos ya tenemos Rezona"*.
+
+`juegos-pc/Vigilia.html` (2,37 MB). Se camina solo por catorce habitaciones llevando un tablón con un
+bol de agua; lo único que uno hace es **inclinar el teléfono**. Ganar es llegar a los tres minutos con
+agua adentro.
+
+#### EL AGUA ES LA MECÁNICA, ASÍ QUE LA FÍSICA NO PUEDE SER UN SENO
+
+Un bol de agua «que se sacude» escrito con un seno se aprende en diez segundos y deja de importar. Acá
+el chapoteo es el **primer modo antisimétrico de un tanque cilíndrico**: `k = 1,841/R` y
+`ω² = g·k·tanh(k·h)`, integrado con amortiguamiento. Medido contra la teoría: **1,69 Hz contra 1,69**.
+Y el bol se resbala del tablón con **rozamiento de Coulomb** —el ángulo de deslizamiento es
+`atan(μ)`—: **22,1 grados medidos contra 22,8 teóricos**.
+
+De ahí sale la decisión que hace al juego: **la altura del agua entra en la frecuencia**. Con el bol
+lleno el chapoteo es lento y perdona; con el bol a medias sube de frecuencia y hay que corregir más
+seguido. O sea que perder agua **hace el juego más difícil**, sin una sola línea de dificultad escrita.
+
+**Y LA SIMULACIÓN CORRE EN NODE**, como en DESPEGUE: `d.js` no toca el DOM ni three, así que la
+economía del juego se afina antes de dibujar nada.
+
+#### DOS DEFECTOS DE FONDO QUE HACÍAN QUE EL JUEGO NO EXISTIERA
+
+1. **NO HACER NADA GANABA 12 DE 12 Y EL BOT PERDÍA 12 DE 12.** Dos causas encadenadas. La primera: el
+   susto entraba como un **par sobre el tablón**, y el resorte de la mano lo deshace en tres décimas —
+   o sea que el susto no llegaba al agua. Ahora entra como una **aceleración lateral sobre el bol**,
+   que es lo que hace un sacudón. La segunda: **el signo de la realimentación del bot estaba
+   invertido.** El equilibrio del agua no es `tx = 0` sino `s_eq = tx − lat/g`, así que la ley correcta
+   es `−KP·s − KD·ṡ`; con el signo al revés el bot empujaba el chapoteo en fase.
+2. **Y EL BARRIDO DE 49 COMBINACIONES DIJO QUE `KP = 0` ES LO MEJOR.** Es contraintuitivo y tiene una
+   razón: el agua es un resonador con ζ = 0,055, y una realimentación proporcional sobre un resonador
+   tan poco amortiguado lo hace **sonar**. Lo que sirve es la derivada sola, que es amortiguamiento
+   puro.
+
+Medido sobre **40 semillas**: **bot 39 de 40**, quieto **9 de 40**, al azar **2 de 40**; agua que queda
+al final, 0,268 contra 0,066. Ahí hay un juego adentro.
+
+Y una tercera: **el bol se iba caminando del tablón** aunque nadie lo empujara, porque un plano
+horizontal no tiene equilibrio. Va una **cazuela poco profunda** tallada en el tablón (`R_CAZUELA`), que
+es lo que tiene cualquier bandeja de verdad.
+
+#### LOS TREINTA Y TRES SUSTOS, Y LA AUDITORÍA QUE LOS ENCONTRÓ
+
+Veintitrés clases: puerta, figura, mano, luz, cae, desliza, espejo, agua, piso, pared, bichos, rueda,
+techo, aliento, cuadro, sangre, ventana, mueble, estira, detrás, cuerpo, copia y tele. **Ninguno es una
+imagen que aparece**: son cosas que le pasan a la habitación, y por eso todas cuelgan de los mismos
+actores y de los mismos uniformes del post.
+
+**Y LA AUDITORÍA ES LO QUE VALE LA VUELTA.** Un susto puede estar cableado, correr, y **no verse**:
+`__V.auditaSustos()` los dispara los treinta y tres, proyecta el actor a fracciones de pantalla y
+compara el brillo contra el mismo instante sin susto. Al primer pase: **cero mudos y SIETE con el actor
+fuera del cuadro** —mano, manosPared, ventana, timbre, detrás, rata y multitud—. Y las causas son
+aritmética, no gusto:
+
+- **La mano salía a −0,15 de alto, o sea BAJO EL PISO**, y encima el tablón la tapaba.
+- **La rata iba a 1,42 metros bajo el piso** y el juguete a 1,30.
+- **La ventana ponía la figura a 1,5 m y 0,84 de costado**, y a metro y medio el medio ancho visible es
+  **0,47**: quedaba entera afuera. El campo horizontal de un marco 9:16 con 68 grados verticales es
+  **17,3 grados de semiángulo**, y ese número decide dónde puede pararse un actor.
+- **El de atrás estaba justo a la espalda y la cabeza gira 122 grados**, así que el giro no llegaba a
+  mostrarlo nunca.
+- Y **el que cruza el pasillo cruzaba POR DENTRO de las paredes** (±0,62 del ancho en un pasillo de
+  dos metros).
+
+Al cerrar: **33 de 33, ninguno mudo y ninguno fuera de cuadro.**
+
+#### EL DEFECTO QUE ME HIZO PERSEGUIR UN PROBLEMA QUE NO EXISTÍA
+
+Es el más caro de la vuelta y es de la **sonda**, no del juego. `foto(t)` y `susto(id)` plantan la
+caminata en un segundo y dibujan **una vez**. Pero el rumbo del cuerpo se acomoda al del pasillo con un
+resorte (`dt*7`), así que una sola pintada de dieciséis milisegundos lo gira **el 11 % de lo que
+falta**: plantando la caminata en el segundo 30, la cámara quedaba mirando **ochenta grados fuera del
+pasillo**, o sea contra la pared de al lado y a un metro.
+
+Toda la primera tanda de fotos de habitaciones salió así —una pared cerca y nada más— y yo leí eso como
+«los cuartos están negros»: subí lámparas, bajé decaimientos, agregué una vela y reescribí la viñeta
+antes de mirar la sonda. Con `pinta(1)` antes de `pinta(0,016)` el resorte llega de una y los catorce
+cuartos se ven. **Es la enésima vez en este repo que la medición está mal antes que el juego, y la
+firma es siempre la misma: un resultado que no cambia cuando debería.**
+
+#### PERO DOS DE LOS TRES ARREGLOS DE LUZ ERAN CIERTOS, Y SE COMPROBARON CON LA CUENTA
+
+- **LA VIÑETA SE MEDÍA EN UV, O SEA TRATANDO EL CUADRO COMO UN CUADRADO.** `distance(uv, 0.5)` pone el
+  borde de arriba a la misma distancia del centro que el de costado, y este juego es 9:16: haciendo la
+  cuenta a mano, en el medio de arriba multiplicaba por **0,50** y en la esquina por **0,003 —negro
+  puro—**. O sea que la física daba más de cien sobre 255 en la pared y el post la borraba después.
+  Normalizando cada eje por su propio medio lado, el borde pierde un cuarto y la esquina la mitad.
+- **Y LA CAÍDA AL CUADRADO NO SIRVE ADENTRO DE UN CUARTO.** `1/d²` describe una bombita en el vacío; en
+  una habitación, la mayor parte de lo que se ve es el **segundo rebote**. Con el cuadrado, una lámpara
+  a dos metros y una pared a cinco quedan a razón de seis a uno y no hay intensidad que sirva para las
+  dos. Con 1,35 la razón cae a dos y pico. **Y la vela menos todavía**: está a veinte centímetros del
+  tablón y la pared a dos metros y medio, o sea **ciento cincuenta y seis a uno** con el cuadrado —en
+  la foto se veía exactamente así, el tablón quemado a blanco y el cuarto negro—. Va en 1,1.
+- **UNA LÁMPARA POR CUARTO NO ALCANZA EN ONCE METROS.** Medido, el zaguán —que tiene la lámpara más
+  fuerte de la casa— daba tres sobre 255 en el borde de arriba y el pasillo daba treinta y seis: lo que
+  decidía el brillo no era la potencia sino la **distancia**. Cada cuarto lleva dos o tres repartidas a
+  lo largo y la luz se muda a la más cercana.
+
+**Y EL MODELO GENERADO VIENE CON REFLECTANCIA DE ESTUDIO.** Tripo hornea la foto bien iluminada, así
+que la madera del tablón devuelve cerca del 45 % de lo que le llega y la pared de esta casa el 9 %: con
+la misma luz encima, cinco a uno. Se le baja el color —que en three.js multiplica al mapa— hasta
+ponerlo en el rango del cuarto.
+
+#### LA VELA ES LA LUZ DEL JUEGO, Y NO ES UN ADORNO
+
+Con las lámparas del techo solas, cuatro de los cinco cuartos fotografiados daban menos de siete sobre
+255. La salida honesta no es subir el ambiente —eso aplana todo— sino ponerle una **vela al tablón**:
+es la imagen clásica de una vigilia, justifica que se vea lo que uno lleva, y **cuelga del tablón**, así
+que inclinarse mueve también las sombras del cuarto.
+
+#### LA COSA NECESITA SU PROPIA LUZ, Y ESO TAMBIÉN SALIÓ DE UNA MEDICIÓN
+
+La sonda decía que la criatura estaba visible, delante de la cámara y ocupando el 14 % del ancho por el
+22 % del alto —o sea que **se estaba dibujando**, y las llamadas de dibujo lo confirmaron: 14 → 16— y en
+la foto **no se veía**. A siete metros no le llega ni la vela ni la lámpara, así que queda del mismo
+valor que la pared que tiene detrás, y dos cosas del mismo valor son una sola. Una luz propia entre la
+cámara y el actor la separa del fondo y de paso la **modela**. Y **crece con la distancia a la cámara**:
+con intensidad fija, una mano a un metro del ojo recibía lo mismo que una figura a siete y salía como
+una mancha blanca sin forma que ocupaba media pantalla.
+
+#### LA CRIATURA GENERADA NO LA USABA NADIE
+
+`armaActores()` corre al evaluar el módulo, o sea **antes** de que el GLB decodifique, y la criatura no
+es un prop, así que `ponModelo` no la alcanzaba: los treinta y tres sustos se dibujaban con un maniquí
+de capsulas de 992 triángulos mientras el modelo generado cargaba bien y figuraba en `listos`. Es el
+peor tipo de defecto —un asset pagado, cargado y sin usar, y nada falla—. Con el reenganche, el susto
+pasa a ser **un esqueleto**.
+
+#### LAS ESQUINAS NO SE PUDIERON HACER, Y ES HONESTO DECIRLO
+
+Las habitaciones doblaban noventa grados entre una y otra, y la geometría no aguanta la esquina: la
+caja de la que dobla lleva sus dos paredes laterales a medio ancho de su eje, y **una de esas dos cae
+atravesada en el pasillo anterior**, a medio ancho de la unión. Medido fotografiando la caminata cada
+doce segundos, **dos de los quince cuadros salían con media pantalla tapada por una pared a medio metro
+del ojo**. Una esquina bien hecha pide un nodo en L compartido por las dos habitaciones, con el vano en
+la pared **lateral** y no en la del fondo, y eso es otra vuelta. Mientras tanto la casa va derecha:
+cada cuarto conserva su ancho, su alto, su color, sus props y su luz —que es de donde sale que se
+distingan— y la caminata es sobre rieles, así que doblar no agregaba una sola decisión. Medido después:
+**15 de 15 cuadros limpios**.
+
+#### LOS ASSETS
+
+Doce tareas en el proyecto descartable `uSEsgNYW`, los `task_id` en `assets/vigilia/tareas.json`: el
+tablón, el bol, la criatura, la puerta, la silla, el ropero, la cama, el televisor, la muñeca, la
+lámpara, el cuadro y la **imagen del título**. **Los doce salieron a la primera** y la sonda
+`__V.assets()` los da cargados con `fallas: []`. Los once GLB se hornean con la misma cadena de CRUCE
+—material reescrito de cero, buffer compactado, `face_limit` al generar— y pesan de 90 a 259 KB, con
+2.698 a 5.660 triángulos cada uno.
+
+#### DOS DEFECTOS DE INTERFAZ QUE SÓLO SE VEN MIRANDO
+
+- **El botón de pausa se pisaba con las dos barras.** `#bAgua` y `#bTiempo` iban de borde a borde, así
+  que su caja le pasaba por debajo al botón aunque el relleno no llegara — y eso es un solape de
+  verdad: el dedo que va a la pausa toca la barra.
+- **Y el velo de los paneles estaba en 0,60 en la franja del medio**, que es justo donde van los
+  botones: el tablón —lo más claro del cuadro— se veía a través de ellos y los rótulos de los ajustes
+  quedaban ilegibles. Más los tres nombres de idioma, que con el espaciado del botón grande no entran
+  en una fila (PORTUGUÊS salía cortado).
+
+#### MEDIDO AL CERRAR
+
+Mundo: **14 cuartos, 130 m, 180,6 s**. Agenda: **33 sustos, 33 únicos, en los 14 cuartos**, del segundo
+6,5 al 174, con huecos de 3,07 a 7,4 s. Física: chapoteo **1,69 Hz medidos contra 1,69 teóricos**,
+resbale **22,1 grados contra 22,8**. Auto-jugadores sobre 40 semillas: **39 · 9 · 2**. Auditoría de
+sustos: **0 mudos, 0 fuera de cuadro**. **12 de 12 assets cargados, `fallas: []`.** Partida completa en
+el navegador con el bot: llega a **`gana` en el segundo 179,73 con los 33 sustos disparados** y agua
+0,256. **Cero solapamientos** en el HUD y en los cuatro paneles, en vertical y en apaisado (donde el
+marco queda en una columna de 232×412). Los tres idiomas en vivo y las tres calidades en caliente
+(**90×160 · 137×297 · 217×469**). Giroscopio probado por el camino de verdad —`deviceorientation`
+inyectado— con la respuesta simétrica (**gamma ±20° → incX ±0,468 · beta ±25° → incZ ±0,595**) y
+llegando a la física (`tx 0,467`, `tz 0,576`). Pausa: el reloj no se mueve en 1,1 s y SEGUIR retoma.
+Audio en tiempo real: pico 0,234 y rms 0,091 con la cama puesta. **25 llamadas de dibujo y 40.826
+triángulos** con un susto en pantalla. `window.__errs` **vacío en las quince corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que de los sustos está medido que suenan y a qué
+nivel, no si asustan. Y el giroscopio está probado con eventos inyectados: que la cadena
+sensor → inclinación → agua funciona está demostrado, cuánto cuesta **con el teléfono en la mano** no.
 
 ### Centésima sexta vuelta (2026-09-05): **CRUCE**, el undécimo juego — un carpincho, siete modelos de Rezona y una vía que medía medio píxel
 
