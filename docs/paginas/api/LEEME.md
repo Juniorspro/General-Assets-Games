@@ -508,6 +508,23 @@ iguales y grises. Ahora cada una lleva su color en un velo sobre la foto, en el
 borde y en una línea arriba del nombre, así una sección se reconoce de un vistazo
 aunque la foto de tapa sea oscura.
 
+### Es una galería, no una lista con todo apilado abajo
+
+Al principio, tocar una sección cargaba sus eventos **debajo** de la grilla de
+quince tarjetas: a más de dos mil píxeles de donde estaba el dedo. Funcionaba, y
+desde el teléfono parecía que el botón estaba roto —«tocás y no entra»—.
+
+Ahora es un ir y venir de tres pantallas, como cualquier galería:
+
+1. **el índice**: las quince secciones;
+2. **la sección**: la grilla de secciones se guarda y aparecen sus eventos, con un
+   «‹ Todas las secciones» arriba;
+3. **el evento**: sus fotos, con un «‹ Volver a Recepciones».
+
+Cada paso sube a donde arranca la sección, así lo nuevo queda siempre a la vista.
+En la prueba se mide justamente eso: que en cada paso lo que se cargó caiga
+dentro de la pantalla, en el celular y en la computadora.
+
 ### Adentro de una sección hay eventos, no un montón de fotos
 
 Entrás a Recepciones y ves **«Casamiento de Ana y Juan», «15 de Sofía»** —cada

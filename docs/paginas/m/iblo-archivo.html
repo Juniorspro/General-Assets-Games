@@ -1622,6 +1622,7 @@ $("mmosaico").addEventListener("click", function(ev){
     var orden = secs.slice().sort(function(a,b){
       return (b.cuantas > 0) - (a.cuantas > 0) || a.orden - b.orden;
     });
+    cajaSecs.hidden = false;
     cajaSecs.innerHTML = orden.map(function(s){
       var conFoto = !!s.tapa;
       return '<button class="arSec' + (s.clave === actual ? " viva" : "") +
@@ -1638,15 +1639,35 @@ $("mmosaico").addEventListener("click", function(ev){
   /* Adentro de una sección van los eventos, no las fotos sueltas: entrás a
      Recepciones y ves «Casamiento de Ana y Juan», «15 de Sofía», y recién
      adentro de uno están sus fotos. */
+  /* Sube a donde arranca la sección. Sin esto, tocar una tarjeta cargaba las
+     fotos DEBAJO de las quince tarjetas —a más de dos mil píxeles— y desde el
+     teléfono parecía que el botón no hacía nada. */
+  function irArriba(){
+    var s = document.getElementById("archivos");
+    if(!s) return;
+    var y = s.getBoundingClientRect().top + window.pageYOffset - 12;
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+  }
+
+  function cabecera(texto, aDonde){
+    return '<button class="arVolver" type="button" data-volver="' + aDonde + '">‹ ' + esc(texto) + '</button>';
+  }
+
   function pintarAlbumes(){
+    /* la grilla de secciones se guarda: ahora estamos ADENTRO de una */
+    cajaSecs.hidden = true;
+    var sec = secs.filter(function(x){ return x.clave === actual; })[0] || {};
+    var arriba = cabecera("Todas las secciones", "secciones") +
+      '<h3 class="arTitAlb">' + esc(sec.nombre || "") + '</h3>' +
+      (sec.bajada ? '<p>' + esc(sec.bajada) + '</p>' : '');
     if(!albumes.length){
       var wa = document.getElementById("waNav") || document.querySelector('a[href*="wa.me"]');
-      cuerpo.innerHTML = '<div class="arVacia">Todavía no subimos fotos de esta sección.' +
+      cuerpo.innerHTML = arriba + '<div class="arVacia">Todavía no subimos fotos de esta sección.' +
         (wa ? '<br><a class="bt s" style="margin-top:14px; display:inline-flex" href="' + esc(wa.href) +
               '" target="_blank" rel="noopener">Pedí las de tu fecha</a>' : '') + '</div>';
       return;
     }
-    cuerpo.innerHTML = '<div class="arAlbs">' + albumes.map(function(a){
+    cuerpo.innerHTML = arriba + '<div class="arAlbs">' + albumes.map(function(a){
       var cuenta = a.cuantas + (a.cuantas === 1 ? " foto" : " fotos");
       if(a.videos) cuenta = (a.cuantas - a.videos > 0 ? (a.cuantas - a.videos) + " fotos · " : "") +
                             a.videos + (a.videos === 1 ? " video" : " videos");
@@ -1669,8 +1690,8 @@ $("mmosaico").addEventListener("click", function(ev){
               '" target="_blank" rel="noopener">Pedí las de tu fecha</a>' : '') + '</div>';
       return;
     }
-    var h = '<button class="arVolver" type="button" id="arVolver">‹ Volver a ' +
-      esc((secs.filter(function(x){ return x.clave === actual; })[0] || {}).nombre || "la sección") + '</button>' +
+    cajaSecs.hidden = true;
+    var h = cabecera("Volver a " + ((secs.filter(function(x){ return x.clave === actual; })[0] || {}).nombre || "la sección"), "albumes") +
       '<h3 class="arTitAlb">' + esc(album && album.nombre || "") + '</h3>' +
       (album && album.descripcion ? '<p>' + esc(album.descripcion) + '</p>' : '') +
       '<div class="arRej">' + medios.map(function(m, i){
@@ -1688,14 +1709,22 @@ $("mmosaico").addEventListener("click", function(ev){
     cuerpo.innerHTML = '<div class="arVacia">No se pudo cargar. Probá de nuevo en un rato.</div>';
   }
 
+  function verSecciones(){
+    actual = ""; album = null; albumes = []; medios = [];
+    cuerpo.innerHTML = "";
+    pintarSecs();
+    irArriba();
+  }
+
   function abrirSeccion(clave){
     actual = clave; album = null; medios = []; pagina = 0;
+    cajaSecs.hidden = true;
     cuerpo.innerHTML = '<div class="arVacia">Buscando…</div>';
-    pintarSecs();
+    irArriba();
     pedir(API + "?seccion=" + encodeURIComponent(clave)).then(function(j){
       secs = j.secciones || secs;
       albumes = j.albumes || [];
-      pintarSecs(); pintarAlbumes();
+      pintarAlbumes();
     }).catch(falla);
   }
 
@@ -1708,16 +1737,21 @@ $("mmosaico").addEventListener("click", function(ev){
       medios = medios.concat(j.medios || []);
       hayMas = !!j.hayMas;
       pintarRejilla();
+      if(!sumar) irArriba();
     }).catch(falla);
   }
 
   cajaSecs.addEventListener("click", function(ev){
     var b = ev.target.closest("button[data-s]"); if(!b) return;
     abrirSeccion(b.dataset.s);
-    document.getElementById("archivos").scrollIntoView({ behavior:"smooth", block:"start" });
   });
   cuerpo.addEventListener("click", function(ev){
-    if(ev.target.closest("#arVolver")){ abrirSeccion(actual); return; }
+    var v = ev.target.closest("button[data-volver]");
+    if(v){
+      if(v.dataset.volver === "secciones") verSecciones();
+      else abrirSeccion(actual);
+      return;
+    }
     if(ev.target.closest("#arMas")){ abrirAlbum(album.clave, true); return; }
     var a = ev.target.closest("button[data-alb]");
     if(a){ abrirAlbum(a.dataset.alb, false); return; }
@@ -1793,10 +1827,9 @@ $("mmosaico").addEventListener("click", function(ev){
     secs = j.secciones || [];
     if(!secs.length) return;
     document.getElementById("archivos").hidden = false;
-    var primera = secs.filter(function(s){ return s.cuantas > 0; })[0];
-    if(primera) abrirSeccion(primera.clave);
-    else { pintarSecs(); cuerpo.innerHTML = ""; }
-    /* si vienen apuntando a una sección desde otra página, se abre ésa */
+    /* se abre en la grilla de secciones: es el índice, y desde ahí se entra */
+    pintarSecs(); cuerpo.innerHTML = "";
+    /* salvo que vengan apuntando a una desde la portada */
     var pedida = (location.hash || "").replace("#seccion-", "");
     if(pedida && secs.some(function(s){ return s.clave === pedida; })) abrirSeccion(pedida);
   }).catch(function(){});
