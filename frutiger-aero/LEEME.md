@@ -6,24 +6,37 @@ vivía y por qué desapareció de golpe en 2013.
 Vive aparte del sitio de IBLO, en su propio proyecto de Cloudflare Pages, porque
 no tiene nada que ver con esa marca.
 
-## Las ilustraciones se dibujan solas
+## Las ilustraciones están generadas
 
-Las diecinueve ilustraciones del sitio no salen de ningún banco de imágenes: se
-dibujan con canvas y se guardan como WebP. La receta está en
-`generar-imagenes.mjs`, con las piezas del lenguaje —cielo, rayos, nubes,
-burbuja, agua con caústicas, pasto, vidrio, orbe, gotas, peces, aluminio— y las
-escenas que las combinan.
+Las quince ilustraciones de `sitio/img/` están generadas con **Rezona Lab**,
+proyecto `ZFiGfVPq`, describiendo con palabras lo que hacía un fondo de escritorio
+de 2007. El prompt exacto de cada una, y en qué archivos del sitio terminó, está
+en `imagenes.json`: sirve para rehacer una sola sin tocar las otras catorce.
 
-Para rehacerlas (salen distintas cada vez, porque llevan azar):
+Lo que se aprendió generándolas:
 
-    node generar-imagenes.mjs
+- **El modelo por defecto sólo saca PNG.** Un `.jpg` en `output_path` devuelve
+  `GENERATION_OUTPUT_FORMAT_MISMATCH`, que es terminal: no hay que reintentar,
+  hay que cambiar la extensión.
+- **El servidor renombra lo que pedís.** `portada.png` volvió como
+  `portada-g1.png`. Hay que leer el `output_path` de *cada* respuesta, nunca
+  fiarse del que mandaste ni del orden en que vuelven.
+- **`size` respeta la relación, no el número.** Pidiendo `1536x672` devolvió
+  `1376x768`, que es el mismo 16:9. Sin `size` sale 1024x1024.
+- **Las respuestas vuelven desordenadas** cuando hay varias en vuelo. El cliente
+  (`herramientas/rezona/rz.py`) las empareja por el `id` del JSON-RPC; hacerlo por
+  posición cruza los resultados en silencio.
 
-Necesita Playwright, que es quien pone el navegador que sabe dibujar en canvas y
-exportar WebP. Las imágenes quedan versionadas en `sitio/img/`, así publicar no depende
-de correr esto.
+De PNG a WebP con recorte *cover*, con `recortar.mjs` y el plan de medidas de
+`plan-recorte.json`. Las quince quedan en 1,1 MB.
 
-El mismo dibujante, recortado a cuatro escenas, corre en la página: es el taller
-de «Hacé el tuyo», que genera un fondo y lo deja descargar como PNG.
+## El dibujante de canvas sigue vivo, pero de otra cosa
+
+`generar-imagenes.mjs` es el mismo código que corre en la página, en el taller de
+«Hacé el tuyo»: dibuja un fondo con canvas en vivo y lo deja bajar como PNG. Ya no
+hace las ilustraciones del sitio, y por eso ahora escribe en `pruebas-canvas/` en
+vez de en `sitio/img/`. Si siguiera apuntando ahí, correrlo una sola vez pisaría
+en silencio las quince imágenes buenas.
 
 ## Detalles que costaron
 

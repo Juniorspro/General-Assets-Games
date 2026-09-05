@@ -1,13 +1,16 @@
 /* ---------------------------------------------------------------------------
-   Las ilustraciones del sitio.
+   El dibujante de canvas.
 
-   No hay banco de imágenes ni fotos de nadie: se dibujan acá, con canvas, y se
-   guardan como WebP. El navegador de Playwright hace de taller —es el que tiene
-   canvas y sabe exportar WebP— y este archivo es la receta.
+   OJO: ya NO hace las ilustraciones del sitio. Esas están generadas con Rezona
+   (ver `imagenes.json`) y viven en `sitio/img/`. Este archivo escribe en
+   `pruebas-canvas/`, a propósito: si siguiera apuntando a `sitio/img/`, correrlo
+   una vez pisaría en silencio las quince ilustraciones buenas.
 
-   Se corre a mano cuando hace falta rehacerlas:
+   Sigue acá porque es el mismo código que corre en vivo dentro de la página, en
+   el taller de «Hacé el tuyo», y porque es la forma de probar una escena nueva
+   antes de meterla ahí.
+
        node generar-imagenes.mjs
-   Las imágenes quedan versionadas en sitio/img/, así publicar no depende de esto.
 
    El sitio que se publica es la carpeta `sitio/` y nada más. Este archivo y las
    notas quedan afuera a propósito: son del repo, no de la web.
@@ -17,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const AQUI = path.dirname(new URL(import.meta.url).pathname);
-const SALIDA = path.join(AQUI, "sitio", "img");
+const SALIDA = path.join(AQUI, "pruebas-canvas");
 fs.mkdirSync(SALIDA, { recursive: true });
 
 /* Las piezas del lenguaje Frutiger, para componer escenas con ellas. Todo esto
