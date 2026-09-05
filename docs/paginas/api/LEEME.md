@@ -508,6 +508,27 @@ iguales y grises. Ahora cada una lleva su color en un velo sobre la foto, en el
 borde y en una línea arriba del nombre, así una sección se reconoce de un vistazo
 aunque la foto de tapa sea oscura.
 
+### Adentro de una sección hay eventos, no un montón de fotos
+
+Entrás a Recepciones y ves **«Casamiento de Ana y Juan», «15 de Sofía»** —cada
+evento con su tapa, su cuenta y su descripción—, y recién adentro de uno están
+sus fotos, con un «Volver a Recepciones» arriba. Antes se abría una pila de
+doscientas fotos de recepciones distintas todas juntas.
+
+No hizo falta ni una tabla nueva ni un paso más al subir: **el álbum es el título
+que el dueño ya escribe**. Sube veinte fotos con el mismo nombre y quedan las
+veinte en el mismo evento, que es lo que hace sin que nadie se lo explique.
+
+Se agrupa por el título en minúsculas y sin espacios de más, así «Casamiento Che
+Roga» y «casamiento che roga  » no salen como dos eventos distintos; se muestra
+como se escribió la primera vez. Para que eso no dependa de la suerte, en la app
+el campo pasó a llamarse **«Nombre del evento»**, es obligatorio —sin nombre las
+fotos caían todas en un montón y se perdía el sentido de las secciones— y trae
+los eventos que ya existen en esa sección como sugerencia.
+
+En la app la lista de abajo también es por evento: se ven los álbumes con su
+cuenta, se entra a uno y ahí están sus cosas para sacar, mover o poner de portada.
+
 ### La tapa de fábrica: cada sección con una foto de verdad
 
 Las tarjetas se veían mal, y la razón era simple: el archivo estaba vacío, así

@@ -836,8 +836,11 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
       </div>
 
       <div class="campo">
-        <label for="arTitulo">Qué es (opcional)</label>
-        <input id="arTitulo" maxlength="90" placeholder="Casamiento en el Che Roga">
+        <label for="arTitulo">Nombre del evento <span style="color:var(--ac)">*</span></label>
+        <input id="arTitulo" maxlength="90" list="arEventos" placeholder="Casamiento de Ana y Juan">
+        <datalist id="arEventos"></datalist>
+        <span class="pista">Es el álbum: todo lo que subas con este mismo nombre queda junto.
+          Si el evento ya existe, elegilo de la lista para no armar dos.</span>
       </div>
       <div class="campo">
         <label for="arDesc">Una descripción, si querés</label>
@@ -1895,27 +1898,65 @@ function pintarSecs(){
    sección —todavía no sabemos cuál— y vuelve sólo con la lista de secciones; con
    la primera elegida se pide de nuevo, ya con sus fotos. Sin este freno, una
    respuesta rara dejaba el pedido dando vueltas para siempre. */
+var ALBUMES = [], albumAbierto = "";
+
 function cargarArchivo(otraVez){
   pedir("/archivo" + (secElegida ? "?seccion=" + encodeURIComponent(secElegida) : ""))
     .then(function(j){
       SECS = j.secciones || [];
       if (!secElegida && SECS.length) secElegida = SECS[0].clave;
       pintarSecs();
-      if (j.medios) pintarYaEsta(j.medios);
+      if (j.albumes){
+        ALBUMES = j.albumes;
+        /* los eventos que ya existen, para que el dueño reuse el nombre en vez
+           de escribirlo distinto y armar dos álbumes de la misma fiesta */
+        $("arEventos").innerHTML = ALBUMES.map(function(a){
+          return '<option value="' + esc(a.nombre) + '">';
+        }).join("");
+        if (albumAbierto) abrirAlbum(albumAbierto);
+        else pintarAlbumes();
+      }
       else if (secElegida && !otraVez) cargarArchivo(true);
       else $("arYa").innerHTML = '<span class="pista">Todavía no hay nada acá.</span>';
     })
     .catch(function(e){ decir("avisoArch", e.message, "mal"); });
 }
 
-function pintarYaEsta(medios){
+function pintarAlbumes(){
+  albumAbierto = "";
+  if (!ALBUMES.length){
+    $("arYa").innerHTML = '<span class="pista">Todavía no hay nada acá.</span>';
+    return;
+  }
+  $("arYa").innerHTML = ALBUMES.map(function(a){
+    var cuenta = a.cuantas + (a.cuantas === 1 ? " cosa" : " cosas") +
+      (a.videos ? " · " + a.videos + (a.videos === 1 ? " video" : " videos") : "");
+    return '<button class="fila" type="button" data-alb="' + esc(a.clave) + '" style="width:100%; text-align:left">' +
+      (a.tapa ? '<img alt="" src="' + esc(a.tapa) + '">' : '') +
+      '<div class="txt" style="flex:1"><span><b>' + esc(a.nombre) + '</b></span>' +
+      '<span class="pista">' + esc(cuenta) + '</span></div>' +
+      '<span class="pista" style="align-self:center">›</span></button>';
+  }).join("");
+}
+
+function abrirAlbum(clave){
+  albumAbierto = clave;
+  $("arYa").innerHTML = '<span class="pista">Abriendo…</span>';
+  pedir("/archivo?seccion=" + encodeURIComponent(secElegida) + "&album=" + encodeURIComponent(clave))
+    .then(function(j){ pintarYaEsta(j.medios || [], j.album); })
+    .catch(function(e){ decir("avisoArch", e.message, "mal"); });
+}
+
+function pintarYaEsta(medios, alb){
   if (!medios.length){
     $("arYa").innerHTML = '<span class="pista">Todavía no hay nada acá.</span>';
     return;
   }
   var opciones = SECS.map(function(s){ return '<option value="' + esc(s.clave) + '">' + esc(s.nombre) + '</option>'; }).join("");
   var sec = SECS.filter(function(x){ return x.clave === secElegida; })[0] || {};
-  $("arYa").innerHTML = medios.map(function(m){
+  var cabeza = '<button class="bt s" type="button" id="btVolverAlb" style="justify-self:start">‹ Todos los eventos</button>' +
+    (alb && alb.nombre ? '<span class="pista"><b>' + esc(alb.nombre) + '</b></span>' : '');
+  $("arYa").innerHTML = cabeza + medios.map(function(m){
     var esPortada = sec.portada === m.id;
     return '<div class="fila" data-id="' + m.id + '">' +
       (m.miniatura ? '<img alt="" src="' + esc(m.miniatura) + '">' : '') +
@@ -1992,7 +2033,13 @@ $("arLote").addEventListener("click", function(ev){
 $("btSubirArch").addEventListener("click", function(){
   if (!secElegida){ decir("avisoArch", "Elegí primero a qué sección va.", "mal"); return; }
   var buenos = lote.filter(function(x){ return !x.error && x.medio; });
-  if (!buenos.length){ decir("avisoArch", "Elegí al menos una foto o un video.", "mal"); return; }
+  if (!buenos.length){ decir("avisoArch", "Elegí al menos una foto.", "mal"); return; }
+  /* sin nombre, las fotos caen todas en un álbum «Sueltas» y se pierde el
+     sentido de tener secciones: cada tanda es un evento */
+  if (!$("arTitulo").value.trim()){
+    decir("avisoArch", "Ponele el nombre del evento: es el álbum donde van a quedar.", "mal");
+    $("arTitulo").focus(); return;
+  }
 
   var bt = $("btSubirArch"), original = bt.textContent;
   var titulo = $("arTitulo").value.trim(), desc = $("arDesc").value.trim();
@@ -2036,6 +2083,10 @@ $("btVideoListo").addEventListener("click", function(){
   if (!/^https:\/\//i.test(url)){
     decir("avisoArch", "Pegá la dirección completa, la que arranca con https://", "mal"); return;
   }
+  if (!$("arTitulo").value.trim()){
+    decir("avisoArch", "Ponele el nombre del evento arriba: es el álbum donde va a quedar.", "mal");
+    $("arTitulo").focus(); return;
+  }
   var bt = $("btVideoListo"), original = bt.innerHTML;
   cargando(bt, true, original);
   pedir("/archivo", { metodo:"POST", cuerpo:{
@@ -2054,6 +2105,9 @@ $("btVideoListo").addEventListener("click", function(){
 });
 
 $("arYa").addEventListener("click", function(ev){
+  if (ev.target.closest("#btVolverAlb")){ pintarAlbumes(); return; }
+  var alb = ev.target.closest("button[data-alb]");
+  if (alb){ abrirAlbum(alb.dataset.alb); return; }
   var p = ev.target.closest("button[data-portada]");
   if (p){
     p.disabled = true; p.textContent = "Poniéndola…";

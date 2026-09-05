@@ -83,6 +83,7 @@ export async function onRequestGet({ request, env }) {
   if (id) return await servirMedio(env, id, u.searchParams.get("descargar") === "1");
 
   const seccion = limpio(u.searchParams.get("seccion"), 40);
+  const album = u.searchParams.get("album");
   const pagina = Math.max(0, parseInt(u.searchParams.get("pagina") || "0", 10) || 0);
 
   /* Las secciones, con cuántas cosas tiene cada una. Las vacías no se muestran
@@ -113,18 +114,69 @@ export async function onRequestGet({ request, env }) {
 
   if (!seccion) return json({ secciones: secs });
 
+  const laSeccion = secs.find((s) => s.clave === seccion) || null;
+
+  /* ---- adentro de una sección hay ÁLBUMES, no un montón de fotos sueltas ----
+
+     Un álbum es un evento: «Casamiento de Ana y Juan», «15 de Sofía». No hace
+     falta una tabla nueva ni un paso más al subir: el álbum ES el título que el
+     dueño ya escribe. Sube veinte fotos con el mismo título y quedan las veinte
+     en el mismo álbum, que es lo que hace sin que nadie se lo explique.
+
+     Se agrupa por el título en minúsculas y sin espacios de más, así «Casamiento
+     Che Roga» y «casamiento che roga  » no salen como dos eventos distintos. Lo
+     que se muestra es como lo escribió la primera vez. */
+  if (album === null) {
+    const r = await env.DB.prepare(
+      `SELECT lower(trim(titulo)) AS clave,
+              MIN(titulo)         AS nombre,
+              COUNT(*)            AS cuantas,
+              MAX(descripcion)    AS descripcion,
+              MAX(creado)         AS ultimo,
+              SUM(CASE WHEN tipo = 'video' THEN 1 ELSE 0 END) AS videos
+         FROM archivo
+        WHERE seccion = ? AND estado = 'publicada'
+        GROUP BY lower(trim(titulo))
+        ORDER BY MAX(orden) DESC, MAX(id) DESC`
+    ).bind(seccion).all();
+
+    /* la tapa de cada álbum: su última foto, y si son todos videos, la del video */
+    const albumes = [];
+    for (const a of r.results || []) {
+      const t = await env.DB.prepare(
+        `SELECT miniatura FROM archivo
+          WHERE seccion = ? AND lower(trim(titulo)) = ? AND estado = 'publicada' AND miniatura <> ''
+          ORDER BY (tipo = 'foto') DESC, orden DESC, id DESC LIMIT 1`
+      ).bind(seccion, a.clave).first();
+      albumes.push({ ...a, nombre: a.nombre || "Sueltas", tapa: t ? t.miniatura : "" });
+    }
+    return json({ secciones: secs, seccion: laSeccion, albumes });
+  }
+
+  /* ---- adentro de un álbum, sus fotos ---- */
+  const clave = String(album).trim().toLowerCase().slice(0, 90);
   const r = await env.DB.prepare(
     `SELECT id, seccion, tipo, titulo, descripcion, miniatura, mime, enlace, ancho, alto, creado
-       FROM archivo WHERE seccion = ? AND estado = 'publicada'
+       FROM archivo WHERE seccion = ? AND lower(trim(titulo)) = ? AND estado = 'publicada'
       ORDER BY orden DESC, id DESC LIMIT ? OFFSET ?`
-  ).bind(seccion, POR_PAGINA + 1, pagina * POR_PAGINA).all();
+  ).bind(seccion, clave, POR_PAGINA + 1, pagina * POR_PAGINA).all();
 
   const filas = r.results || [];
   const hayMas = filas.length > POR_PAGINA;
 
+  /* el nombre del álbum es el mismo que se muestra en la lista —el primero que
+     se escribió—, no el de la fila que salga primero: si una tanda vino en
+     minúsculas, adentro se veía en minúsculas y afuera no */
+  const ficha = await env.DB.prepare(
+    `SELECT MIN(titulo) AS nombre, MAX(descripcion) AS descripcion FROM archivo
+      WHERE seccion = ? AND lower(trim(titulo)) = ? AND estado = 'publicada'`
+  ).bind(seccion, clave).first();
+
   return json({
     secciones: secs,
-    seccion: secs.find((s) => s.clave === seccion) || null,
+    seccion: laSeccion,
+    album: { clave, nombre: (ficha && ficha.nombre) || "Sueltas",
+             descripcion: (ficha && ficha.descripcion) || "" },
     medios: filas.slice(0, POR_PAGINA),
     pagina, hayMas,
   });
