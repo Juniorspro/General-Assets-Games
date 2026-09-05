@@ -1,0 +1,282 @@
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Una afirmación sin número no vale. Todo lo que se pueda comprobar entra por
+   acá, y por el MISMO camino que usa el dedo: los toques se despachan como
+   PointerEvent de verdad sobre el lienzo, no llamando a `dedoAbajo`. */
+window.__errs = [];
+window.addEventListener('error', e => window.__errs.push(String(e.message || e)));
+window.addEventListener('unhandledrejection', e => window.__errs.push('rej: ' + String(e.reason)));
+
+const esp = ms => new Promise(r => setTimeout(r, ms));
+function rectPx(nx, na){
+  const r = LZE.getBoundingClientRect();
+  return { x: r.left + nx*r.width, y: r.top + (1 - na)*r.height };
+}
+function pev(tipo, id, nx, na){
+  const p = rectPx(nx, na);
+  LZE.dispatchEvent(new PointerEvent(tipo, { pointerId: id, pointerType: 'touch',
+    isPrimary: true, clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
+  if (tipo !== 'pointerdown'){
+    window.dispatchEvent(new PointerEvent(tipo, { pointerId: id, pointerType: 'touch',
+      clientX: p.x, clientY: p.y, bubbles: true }));
+  }
+}
+
+window.__T = {
+  estado(){
+    return { pant: PANT, lang: LANG, inst: PAN.inst, esc: escAct().id, tono: PAN.tono,
+             oct: PAN.oct, grados: nGrados(), son: SON_ON, dedos: nDedos(),
+             ondas: ONDAS.length, voces: VOCES.length, cargando: CARGANDO,
+             ju: { on: JU.on, fase: JU.fase, ronda: JU.ronda, sec: JU.sec.slice(),
+                   paso: JU.paso, rec: JU.rec } };
+  },
+  marco(){
+    const m = document.getElementById('marco').getBoundingClientRect();
+    const l = LZE.getBoundingClientRect();
+    return { marco: [Math.round(m.width), Math.round(m.height)],
+             lienzo: [Math.round(l.width), Math.round(l.height)],
+             buffer: [LZ.width, LZ.height], pxr: PXR, ven: [innerWidth, innerHeight] };
+  },
+  /* ── EL MAPA DE ALTURAS, AUDITADO ──
+     Que ninguna nota se salga del panel y que subir el dedo suba SIEMPRE la
+     nota es una propiedad del mapa, no del dibujo: se comprueba sin navegador. */
+  audita(){
+    const g = PAN.esc, t = PAN.tono, o = PAN.oct, malos = [];
+    let tot = 0;
+    for (let e = 0; e < ESCALAS.length; e++){
+      for (let oc = 1; oc <= 3; oc++){
+        PAN.esc = e; PAN.oct = oc;
+        const n = nGrados(); let ant = -1e9;
+        for (let i = 0; i < n; i++){
+          const m = midiDeIdx(i); tot++;
+          if (!isFinite(m) || m < 12 || m > 108) malos.push([ESCALAS[e].id, oc, i, m, 'rango']);
+          else if (m <= ant) malos.push([ESCALAS[e].id, oc, i, m, 'no sube']);
+          ant = m;
+        }
+        /* el borde de arriba tiene que ser la octava exacta */
+        if (midiDeIdx(n - 1) - midiDeIdx(0) !== 12*oc) malos.push([ESCALAS[e].id, oc, 'alcance']);
+        /* y la altura del dedo tiene que devolver el mismo escalón */
+        for (let i = 0; i < n; i++) if (idxDeAlt(altDeIdx(i)) !== i) malos.push([ESCALAS[e].id, oc, i, 'ida y vuelta']);
+      }
+    }
+    PAN.esc = g; PAN.oct = o; PAN.tono = t;
+    return { probados: tot, malos: malos.slice(0, 12), n: malos.length };
+  },
+  mapa(){
+    const n = nGrados(), a = [];
+    for (let i = 0; i < n; i++) a.push([i, +altDeIdx(i).toFixed(4), midiDeIdx(i), nombreDeIdx(i)]);
+    return a;
+  },
+  /* ── EL DIBUJO Y EL TOQUE TIENEN QUE CAER EN EL MISMO SITIO ──
+     Si la línea se pinta a una altura y el dedo dispara otra nota ahí, el
+     jugador no puede confiar en lo que ve. */
+  alinea(){
+    const n = nGrados(), r = LZE.getBoundingClientRect(), mal = [];
+    for (let i = 0; i < n; i++){
+      const y = yDeAlt(altDeIdx(i));                 /* donde se dibuja la línea */
+      const na = 1 - y/Math.max(1, r.height);        /* la altura de un dedo puesto ahí */
+      if (idxDeAlt(na) !== i) mal.push([i, +y.toFixed(1), idxDeAlt(na)]);
+    }
+    return { n, mal, ok: mal.length === 0 };
+  },
+  ir(p){ verPantalla(p); return PANT; },
+  lang(l){ ponIdioma(l); return LANG; },
+  cfg(k, v){
+    if (k === 'esc') ponEsc(v); else if (k === 'tono') ponTono(v);
+    else if (k === 'oct') ponOct(v); else if (k === 'son') ponSon(!!v);
+    else if (k === 'inst') ponInst(v);
+    return this.estado();
+  },
+  entra(j){ entra(!!j); return PANT; },
+  /* ── EL DEDO DE VERDAD ── */
+  toca(nx, na, id){ pev('pointerdown', id || 1, nx, na); return this.dedos(); },
+  arrastra(nx, na, id){ pev('pointermove', id || 1, nx, na); return this.dedos(); },
+  suelta(id){ pev('pointerup', id || 1, 0.5, 0.5); return this.dedos(); },
+  dedos(){
+    const a = [];
+    for (const k in DEDOS){ const d = DEDOS[k];
+      a.push({ id: k, nx: +d.nx.toFixed(3), na: +d.na.toFixed(3), idx: d.idx,
+               midi: midiDeIdx(d.idx), nota: nombreDeIdx(d.idx), vol: +d.vol.toFixed(3),
+               bri: +d.bri.toFixed(3), tipo: d.v ? d.v.tipo : 'sin voz',
+               rate: d.v && d.v.src && d.v.src.playbackRate ? +d.v.src.playbackRate.value.toFixed(4) : null,
+               hist: d.hist.length });
+    }
+    return a;
+  },
+  /* un deslizamiento entero, y lo que importa es que NO abra voces nuevas */
+  async desliza(a, b, n, ms){
+    n = n || 12; ms = ms || 220;
+    /* ── EL PROBE TIENE QUE MIRAR SU PROPIO DEDO ──
+       Con otro dedo ya apoyado, `dedos()[0]` es el de ANTES: el deslizamiento
+       daba «un escalón» y parecía que la nota no seguía a la mano. */
+    const mio = () => this.dedos().filter(d => d.id === '9')[0];
+    pev('pointerdown', 9, 0.5, a);
+    const v0 = VOCES.length, ini = mio();
+    const vis = [];
+    for (let i = 1; i <= n; i++){
+      await esp(ms/n);
+      pev('pointermove', 9, 0.5, a + (b - a)*i/n);
+      const d = mio(); if (d) vis.push(d.idx);
+    }
+    const fin = mio(), vf = VOCES.length;
+    pev('pointerup', 9, 0.5, b);
+    return { desde: ini, hasta: fin, vocesAlEmpezar: v0, vocesAlLlegar: vf,
+             escalones: vis.filter((x, i) => i === 0 || x !== vis[i-1]).length };
+  },
+  /* ══════════ AUDIO ══════════ */
+  audio(){
+    return { ac: AC ? AC.state : 'no', sr: AC ? AC.sampleRate : 0, son: SON_ON,
+             voces: VOCES.length, mae: MAE ? +MAE.gain.value.toFixed(3) : null,
+             cargados: Object.keys(BUF).length };
+  },
+  async carga(id){
+    audioDespierta();
+    const t = performance.now();
+    const ok = await cargaInstr(id || PAN.inst);
+    const I = POR_ID[id || PAN.inst];
+    return { id: id || PAN.inst, ok, ms: Math.round(performance.now() - t),
+             muestras: I ? I.m.filter(m => !!BUF[I.id + '|' + m.n]).length : 0,
+             lp: I ? I.m.map(m => m.lp ? 1 : 0) : [] };
+  },
+  async cargaTodos(){
+    audioDespierta();
+    let ok = 0, mal = [];
+    for (const I of INSTRS){
+      const r = await cargaInstr(I.id);
+      const n = I.m.filter(m => !!BUF[I.id + '|' + m.n]).length;
+      if (r && n === I.m.length) ok++; else mal.push([I.id, n]);
+    }
+    return { instrumentos: INSTRS.length, ok, mal, buffers: Object.keys(BUF).length };
+  },
+  /* nivel medido en el maestro, que es lo único que prueba que sonó */
+  async nivel(ms){
+    if (!ANA) return null;
+    const n = ANA.fftSize, d = new Float32Array(n);
+    let pico = 0, s = 0, c = 0, t = performance.now();
+    while (performance.now() - t < (ms || 700)){
+      ANA.getFloatTimeDomainData(d);
+      for (let i = 0; i < n; i++){ const v = Math.abs(d[i]); if (v > pico) pico = v; s += d[i]*d[i]; c++; }
+      await esp(16);
+    }
+    return { pico: +pico.toFixed(4), rms: +Math.sqrt(s/Math.max(1, c)).toFixed(4) };
+  },
+  son(id, midi, dur){ audioDespierta(); const v = pico(id || PAN.inst, midi === undefined ? 60 : midi, dur || 0.5); return v ? v.tipo : 'nada'; },
+  /* ══════════ DIBUJO ══════════ */
+  pinta(){ pinta(); return true; },
+  brillo(){
+    pinta();
+    const d = CX.getImageData(0, 0, LZ.width, LZ.height).data;
+    const F = 5, fr = new Array(F).fill(0), fc = new Array(F).fill(0);
+    let s = 0, mx = 0, on = 0, n = 0;
+    for (let y = 0; y < LZ.height; y += 2) for (let x = 0; x < LZ.width; x += 2){
+      const i = (y*LZ.width + x)*4;
+      const l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      s += l; n++; if (l > mx) mx = l; if (l > 8) on++;
+      const f = Math.min(F - 1, Math.floor(y/LZ.height*F)); fr[f] += l; fc[f]++;
+    }
+    return { medio: +(s/n).toFixed(2), max: Math.round(mx), pctOn: +(100*on/n).toFixed(2),
+             franjas: fr.map((v, i) => +(v/Math.max(1, fc[i])).toFixed(2)) };
+  },
+  /* ══════════ EL HUD ══════════ */
+  solapes(){
+    const ids = ['bVolver', 'tInst', 'bCfg', 'jPuntos', 'jFase', 'jRonda', 'avPanel'];
+    const c = [];
+    const v = ids.map(i => document.getElementById(i)).filter(e => {
+      if (!e) return false;
+      const r = e.getBoundingClientRect();
+      const s = getComputedStyle(e);
+      return r.width > 1 && r.height > 1 && s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05;
+    });
+    for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++){
+      const a = v[i].getBoundingClientRect(), b = v[j].getBoundingClientRect();
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+        c.push(v[i].id + '×' + v[j].id);
+    }
+    return { n: v.length, choques: c };
+  },
+  panel(sel){
+    const p = document.querySelector(sel);
+    if (!p) return null;
+    const pr = p.getBoundingClientRect();
+    const hs = Array.prototype.slice.call(p.children).filter(e => {
+      const r = e.getBoundingClientRect(); return r.height > 1 && getComputedStyle(e).display !== 'none';
+    });
+    const cajas = hs.map(e => { const r = e.getBoundingClientRect(); return [e.id || e.className, Math.round(r.top), Math.round(r.bottom)]; });
+    const c = [];
+    for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++){
+      const a = hs[i].getBoundingClientRect(), b = hs[j].getBoundingClientRect();
+      if (a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) c.push(i + '×' + j);
+    }
+    const alto = hs.length ? hs[hs.length-1].getBoundingClientRect().bottom - hs[0].getBoundingClientRect().top : 0;
+    return { visible: getComputedStyle(p).display !== 'none', n: hs.length,
+             alto: Math.round(alto), marco: Math.round(pr.height),
+             entra: alto <= pr.height, choques: c, cajas };
+  },
+  textos(){
+    const o = {};
+    for (const i of ['iSub','mSub','bLibre','bJuego','bAjustes','mPie','mCred','aTit','aSon',
+                     'aEsc','aTono','aOct','aIdi','bVerInstr','bCerrarCfg','nTit','fTit',
+                     'bOtra','bAlMenu','tInst','jFase','jRonda']){
+      const e = document.getElementById(i); if (e) o[i] = e.textContent;
+    }
+    return o;
+  },
+  instrs(){ return INSTRS.map(I => [I.id, I.fam, I.base, I.sost, I.nom[LI()], I.m.map(m => m.n)]); },
+  /* ══════════ REPETÍ, JUGADO SOLO ══════════
+     Toca la secuencia bien, por el mismo camino que un dedo, y devuelve hasta
+     dónde llegó. Un modo de juego que nadie terminó de punta a punta es un modo
+     roto que todavía no se sabe. */
+  congela(v){ CONG = !!v; return CONG; },
+  /* ── UN INSTRUMENTO QUE SUENA LA MITAD QUE OTRO ES UN DEFECTO ──
+     Las noventa y seis muestras se hornearon a la misma energía media; esto
+     comprueba que eso llega al juego y no se pierde en el camino. */
+  async niveles(ids){
+    audioDespierta();
+    const r = [];
+    for (const id of (ids || INSTRS.map(I => I.id))){
+      await cargaInstr(id);
+      apagaTodo(); await esp(120);
+      const v = abre(id, POR_ID[id].base + 12, 0.8, 0.85);
+      const n = await this.nivel(520);
+      apaga(v, 0.05); await esp(160);
+      r.push([id, n.pico, n.rms, v ? v.tipo : 'nada']);
+    }
+    const rms = r.map(x => x[2]);
+    return { n: r.length, min: Math.min.apply(null, rms), max: Math.max.apply(null, rms),
+             media: +(rms.reduce((a, b) => a + b, 0)/rms.length).toFixed(4), filas: r };
+  },
+  /* espera a que la secuencia esté sonando una nota y CONGELA, para poder
+     fotografiar ese instante y no el de tres cuadros después */
+  async esperaLuz(ms){
+    const t = performance.now();
+    while (performance.now() - t < (ms || 4000)){
+      if (JU.on && JU.luz >= 0 && JU.luzT > 0.30){
+        CONG = true; pinta();
+        return { luz: JU.luz, luzT: +JU.luzT.toFixed(3), alt: +altDeIdx(JU.luz).toFixed(3),
+                 y: Math.round(yDeAlt(altDeIdx(JU.luz))), fase: JU.fase, congelado: CONG };
+      }
+      await esp(8);
+    }
+    return null;
+  },
+  async jugaSolo(rondas, malAdrede){
+    entra(true);
+    await esp(60);
+    let g = 0;
+    while (JU.on && JU.fase !== 'fin' && JU.ronda <= (rondas || 6) && g++ < 4000){
+      if (JU.fase === 'turno'){
+        const i = JU.sec[JU.paso];
+        const mal = malAdrede && JU.ronda === malAdrede;
+        const idx = mal ? (i + 1) % nGrados() : i;
+        pev('pointerdown', 20, 0.5, altDeIdx(idx));
+        await esp(45);
+        pev('pointerup', 20, 0.5, altDeIdx(idx));
+        await esp(55);
+      } else await esp(40);
+    }
+    return { ronda: JU.ronda, fase: JU.fase, sec: JU.sec.length, rec: JU.rec, vueltas: g };
+  }
+};
+</script>
+</body>
+</html>

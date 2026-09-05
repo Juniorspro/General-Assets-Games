@@ -247,6 +247,166 @@ munecas.
   puntuó**. Apaisado adentro de un teléfono vertical, con el marco girado noventa grados. Vive
   partido en `herramientas/cubos/partes/` y se arma con `python3 herramientas/cubos/armar.py`.
 
+- **`Tono.html` es "TONO"** (~972 KB, de los cuales 903 son los treinta y dos instrumentos: el
+  juego en sí no tiene una sola imagen). El decimocuarto juego. **Un panel negro**: se toca y suena
+  una nota, y la **altura del dedo es la altura del sonido** —abajo grave, arriba agudo— sobre dos
+  octavas. Mientras el dedo sigue apoyado, mover la mano **empuja** la nota en vez de dispararla de
+  nuevo, así que subir y bajar se oye como un glisado. El eje horizontal es la segunda dimensión:
+  a la izquierda tapado y suave, a la derecha abierto y fuerte. Se pueden apoyar **varios dedos a la
+  vez** (doce voces). Las notas caen en una de **siete escalas** —pentatónica, mayor, menor, dórica,
+  blues, japonesa y cromática— transportables a los doce tonos, con alcance de una a tres octavas.
+  Los **32 instrumentos de muestras de verdad** salen de **FluidR3_GM** (gleitz/midi-js-soundfonts,
+  **CC-BY 3.0**, con el crédito en el menú), tres muestras cada uno y **bucle cosido** en los
+  sostenidos, horneados a MP3 y metidos en el archivo: **el juego no baja nada y anda sin red**. Dos
+  modos: **TOCAR** y **REPETÍ**, que es un Simon con altura —suena una secuencia y hay que repetirla
+  tocando el panel a la misma altura, una nota más por ronda—. Vive partido en
+  `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
+  hornean con `python3 herramientas/tono/hornear_sonidos.py`.
+
+### Centésima decimotercera vuelta (2026-09-05): **TONO**, el decimocuarto juego — un panel negro y treinta y dos instrumentos de verdad
+
+Pedido: *"puedes crearme un juego donde tenemos un panel negro pero si tocas se reproduce una nota y
+espero que busques una API con más de 20 sonidos diferentes para usar y por ejemplo mientras más bajo
+hagas el click y mantengas o subas más agudo o grave y así"*.
+
+`juegos-pc/Tono.html` (972 KB). Vive partido en `herramientas/tono/partes/` y se arma con
+`python3 herramientas/tono/armar.py`.
+
+#### «UNA API CON MÁS DE 20 SONIDOS»: LA API EXISTE Y LO CORRECTO ERA HORNEARLA
+
+Hay una fuente pública y buena —**FluidR3_GM** servido por `gleitz/midi-js-soundfonts` en jsDelivr,
+128 instrumentos de General MIDI en MP3, nota por nota— y está bajo **CC-BY 3.0**, o sea que se puede
+redistribuir con crédito. Pero pedirla en ejecución convierte «un archivo que anda» en «un archivo que
+anda si el CDN contesta», que es la misma decisión que ya se tomó con el SDK de Anthropic en CUBOS y
+con three.js en los juegos que no lo necesitan. Se bajan **32 instrumentos × 3 muestras**, se
+hornean, y viajan adentro del HTML: **903 KB en base64 y cero descargas en ejecución**. El crédito va
+en el menú, en los tres idiomas.
+
+**TREINTA Y DOS Y NO CIENTO VEINTIOCHO, y el número sale de una cuenta.** Cada instrumento cuesta unos
+28 KB horneado; los 128 serían tres megas y medio para que el jugador use tres. Treinta y dos, ocho
+familias de cuatro, es lo que entra en un menú de una pantalla y lo que se puede recorrer probando.
+
+**Y TRES MUESTRAS CADA UNO, CADA DOCE SEMITONOS.** El tono sale de la velocidad de reproducción, así
+que una sola muestra estirada dos octavas es una ardilla. Con muestras cada doce, lo más que hay que
+estirar son seis semitonos, que es donde el estiramiento todavía no se escucha.
+
+#### EL DEFECTO DEL HORNEADO: LA AUTOCORRELACIÓN SE ENGANCHA EN EL SUBARMÓNICO
+
+Una muestra que se etiqueta con la nota equivocada desafina el instrumento entero y **no falla**: suena.
+Así que cada una de las noventa y seis se mide. Con la autocorrelación libre, **quince de noventa y
+seis** salieron con −1200, −1903 o −2399 cents, y una devolvió una **frecuencia negativa** — el
+período elegido era el doble o el triple del real. Acotando la búsqueda a **±4 semitonos** alrededor
+de lo esperado, la medición pasa a ser una *verificación* y no un descubrimiento: **91 de 96 dentro de
+35 cents, la peor en 28,5 y la media en 4,6**.
+
+**Y LAS CINCO QUE SEGUÍAN AVISANDO NO ESTABAN MAL.** Una segunda opinión —la energía **en** la
+frecuencia esperada contra la mediana local— las da entre **330 y 943 veces por encima del piso**, o
+sea que el parcial está exactamente donde tiene que estar. Son timbres inarmónicos (glockenspiel,
+órgano de cañones) donde el fundamental no es el pico más alto. **96 de 96 verificadas.**
+
+#### EL BUCLE SE COSE, Y ESO ES LO QUE HACE QUE UN ÓRGANO SEA UN ÓRGANO
+
+Un sostenido que se acaba a los dos segundos y medio no es un sostenido. El bucle se hace **cruzando
+la cola sobre la cabeza** dentro de la propia muestra (`x[a:a+C] = x[a:a+C]·w + x[b:b+C]·(1−w)`), así
+que la continuidad es **por construcción** y encima los puntos de bucle caen en el medio del buffer,
+lejos del relleno que el codificador de MP3 mete en los bordes.
+Y **lo que queda después de `loopEnd` no se escucha nunca**: recortarlo bajó las muestras sostenidas
+de 13,3 a 6,2 kB cada una y el total de **992 a 677 KB de MP3**.
+
+Medido en el juego, sosteniendo un DO de órgano de cañones: rms **0,0308 en el primer medio segundo,
+0,0421 a los dos segundos y 0,0411 a los cuatro y medio**. Y el piano, con el mismo gesto: 0,0343 al
+empezar y **0,0000 a los tres**, que es lo que hace un piano.
+
+#### EL HALLAZGO DE LA VUELTA: DESLIZAR DOS OCTAVAS SOBRE UNA MUESTRA SUENA A ARDILLA
+
+La mecánica que se pidió —mantener el dedo y subir— es lo que destapó el problema, y **no se ve, se
+mide**. `mueve()` empuja el `playbackRate` de la voz que ya está sonando; pero la muestra la eligió
+`abre()` al apoyar el dedo, así que arrastrando de abajo arriba la de DO3 terminaba estirada **21
+semitonos**: medido, `playbackRate` **3,4922**.
+
+El arreglo es un **cruce de muestras a mitad del glisado**: pasados siete semitonos del origen se abre
+la muestra vecina y las dos ganancias se cruzan en cuarenta y cinco milisegundos. Siete contra los
+seis que el vecino puede llegar a estirar es la histéresis que impide que el cambio parpadee en el
+borde. La muestra nueva entra **por `loopStart`**, o sea por el medio del sonido, así que no vuelve a
+atacar.
+
+**Y SÓLO EN LOS SOSTENIDOS, que es la parte que hay que razonar.** Un piano no tiene bucle: entrar por
+el medio sería un golpe nuevo, y encima para cuando el dedo llegó lejos su nota ya decayó. Medido, el
+mismo deslizamiento de dos octavas: **pad_2_warm termina en 0,9667 y el piano en 3,8559**, los dos con
+**una sola voz** y diez escalones cruzados.
+
+#### LAS NOTAS CAEN EN UNA ESCALA, Y ESO ES LO QUE HACE QUE EXISTA UN JUEGO
+
+Con la altura mapeada a frecuencia continua, dos dedos cualesquiera suenan desafinados y **no hay forma
+de repetir una melodía**: el modo REPETÍ no podría existir. Cayendo en una escala, cualquier nota suena
+bien con cualquier otra —que es lo que hace una pentatónica— y el glisado entre grados conserva la
+sensación de continuo. **La cromática es el modo sin red**: veinticinco escalones de treinta y cinco
+píxeles sobre los que el dedo barre los veinticuatro semitonos.
+
+**Y LA ESCALA ES LA DIFICULTAD DE REPETÍ, sin una perilla más.** Con la pentatónica el panel tiene once
+escalones de ochenta píxeles; con la cromática, veinticinco de treinta y cinco. La misma secuencia se
+vuelve mucho más difícil sin cambiar una regla.
+
+**EL MAPA SE AUDITA SIN NAVEGADOR.** `d.js` no toca ni el DOM ni el lienzo, así que `__T.audita()`
+recorre las siete escalas por las tres octavas comprobando cuatro propiedades: que ninguna nota se
+salga del rango audible, que subir el dedo **siempre** suba la nota, que el borde de arriba sea la
+octava exacta, y que `idxDeAlt(altDeIdx(i))` devuelva `i` —la ida y vuelta—. **315 comprobadas, 0
+malas.**
+
+#### CUATRO COSAS DE PUESTA EN ESCENA, TODAS MEDIDAS Y NINGUNA ADIVINADA
+
+1. **EL PANEL SE BORRA ENTERO EN CADA CUADRO, Y ES UNA DECISIÓN.** Lo bonito sería pintar negro al
+   30 % encima del cuadro anterior: el rastro sale gratis. Pero entonces lo que se ve depende de lo
+   que pasó antes y **una captura deja de ser una medición**. El rastro sale de la lista de aros y del
+   recorrido guardado del dedo, que son datos.
+2. **LA LÍNEA DIBUJADA Y LA NOTA QUE DISPARA TIENEN QUE CAER EN EL MISMO SITIO.** Si no, el jugador ve
+   una nota y toca otra, y a partir de ahí no puede confiar en la pantalla. `__T.alinea()` lleva cada
+   línea a su y de dibujo, la vuelve a leer como si fuera un dedo, y comprueba que devuelva el mismo
+   escalón: **11 de 11 y 37 de 37, 0 mal**.
+3. **LA FRANJA DE ARRIBA SE APARTA MIENTRAS SE TOCA.** El panel llega hasta el borde, así que la fila
+   de botones se superpone con las notas más agudas justo cuando se las está tocando.
+4. **Y EN REPETÍ, LA NOTA QUE SUENA TIENE QUE VERSE.** No hay dedo, así que sin un disco lo único que
+   queda del sonido es un aro que se abre y hay que adivinar a qué altura nació. Medido, la nota del
+   escalón 22 se dibuja en **y 74** y el rótulo del modo ocupa de 60 a 130: mientras suena una nota,
+   el HUD se agacha al 14 %.
+
+#### EL COLOR SALE DE LA ALTURA, Y NO ES UN ARCOÍRIS
+
+De cian a magenta pasando por azul y violeta. Un arcoíris entero sobre negro pasa por verdes que se
+ensucian; frío-a-caliente dentro de una sola familia es lo que un panel negro aguanta, y de paso la
+altura se lee **por el color** aunque el dedo esté fuera del cuadro.
+
+#### DOS DEFECTOS DE LAS SONDAS, LOS DOS DEL TIPO DE SIEMPRE
+
+- **`desliza()` MIRABA EL DEDO EQUIVOCADO.** Con otro dedo ya apoyado, `dedos()[0]` es el de antes: el
+  deslizamiento informaba **«un escalón»** y parecía que la nota no seguía a la mano. Filtrando por su
+  propio identificador, siete.
+- **Y LA FOTO NO ERA DEL INSTANTE QUE SE PEDÍA.** La luz de la nota dura cuatro décimas y el bucle
+  sigue corriendo entre la sonda y la captura: la primera foto del modo REPETÍ salió con el disco casi
+  apagado (**máximo 62 sobre 255**). Con `congela()` —nada avanza, se sigue dibujando— sale en su pico
+  (**255**). Es la cuarta vez en este repo.
+
+#### MEDIDO AL CERRAR
+
+**32 de 32 instrumentos cargados y 96 de 96 muestras decodificadas, 0 fallas**, y los treinta y dos
+disparados y medidos en el maestro: rms de **0,0175 a 0,0385 con media 0,0323**, o sea el horneado
+parejo llegando al juego. Mapa de alturas **315 de 315**; dibujo contra toque **11 de 11 y 37 de 37**.
+Acorde de tres dedos por el camino de un dedo de verdad —`PointerEvent` sobre el lienzo—: tres voces
+con notas, volúmenes y brillos distintos, pico **0,2157** y rms **0,0555**, contra **0,0006** de
+silencio al soltar. Quince dedos a la vez: **12 voces** (el tope) y **0 al soltar**. Glisado de dos
+octavas: **una sola voz**, diez escalones, `playbackRate` **0,9667** con cruce y **3,8559** sin él.
+Sostenido de órgano a los 4,2 s: rms **0,0395**. REPETÍ jugado solo por el camino del jugador: **6
+rondas correctas con el récord guardado**, y equivocándose a propósito en la 3 termina en la pantalla
+de final con el récord intacto. **Cero solapamientos** en el HUD (3 y 6 elementos) y los cuatro
+paneles entran en el cuadro (menú 387, ajustes 409, instrumentos 841, final 313 sobre 892), en
+**412×892, 900×460 y 360×640**. Los tres idiomas en vivo y los seis ajustes sobreviven a una recarga.
+`window.__errs` **vacío en las once corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo escuchar. De los treinta y dos instrumentos está medido que
+decodifican, que suenan, a qué nivel, que los sostenidos no se cortan y que el cruce de muestras
+ocurre — no si el glisado se siente bien. Y el dedo es un `PointerEvent` sintético: que la cadena
+entera funciona está probado, cuánto cuesta **con la mano** no.
+
 ### Centésima duodécima vuelta (2026-09-05): **CUBOS**, el decimotercer juego — un build battle donde el jurado es Claude de verdad
 
 Pedido: *"ahora haz otro juego de Minecraft dónde es buildbatle te dirán que construir y lo
