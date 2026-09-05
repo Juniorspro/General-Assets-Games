@@ -435,10 +435,21 @@ como `Event` con lugar y precio en pesos, la que ya pasó no aparece, y no hay
 errores. En vivo: `robots.txt` y `sitemap.xml` con su tipo, las canónicas de las
 cuatro direcciones y el `noindex` sólo donde va.
 
+**Las páginas no tenían `<head>` escrito.** Arrancaban directo con las etiquetas y
+el `<body>` aparecía recién en el medio del archivo. El navegador es tolerante y
+arma la cabecera solo —por eso al probarlo con Playwright daba bien, porque eso
+mira lo que el navegador *interpretó*—, pero Search Console lee el archivo crudo y
+rechazó la verificación con «la etiqueta meta no está en la sección `<head>`».
+
+Lección para la próxima: para algo que lee un archivo y no un navegador, hay que
+mirar el archivo. Las doce páginas quedaron con `<!DOCTYPE html>`, `<html
+lang="es">` —que además le dice a Google que el sitio está en castellano—, la
+cabecera abierta y cerrada, y el cuerpo después. Comprobado con un parser sobre
+las trece páginas y en el navegador que las doce siguen andando igual, sin
+errores. La etiqueta de verificación va en la portada, en las dos versiones.
+
 **Lo único que no se puede hacer desde acá** es dar de alta la propiedad en Search
-Console: pide la cuenta de Google del dueño. Cuando la crea, elige «prefijo de
-URL», Google le da una etiqueta `<meta name="google-site-verification" ...>` y esa
-etiqueta va en `iblo.html` y en `m/iblo.html`, arriba de todo.
+Console: pide la cuenta de Google del dueño.
 
 ## Cómo está atado
 
