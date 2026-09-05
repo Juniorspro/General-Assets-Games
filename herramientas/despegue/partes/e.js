@@ -78,22 +78,34 @@ const matVertBrillo = new T.MeshLambertMaterial({ vertexColors: true, emissive: 
    el de abajo de la capa, fundidos por la altura entre una capa y la siguiente—
    y estrellas que aparecen a partir de los 20 km. Sin niebla: arriba no hay
    aire y abajo el degradado ya hace el trabajo. */
+/* ── Y CON LAS FOTOS DE REZONA CUANDO LLEGAN ──
+   Cinco cielos generados —dia con cumulos, cirros de gran altura, la estratosfera
+   con el borde azul del aire, el espacio con la Via Lactea y el espacio profundo
+   con una nebulosa— se funden de a dos por altura (`uTexA`, `uTexB`, `uMix`) y se
+   mezclan con el degradado por `uHay`, que pasa a 1 cuando las cinco decodificaron.
+   La foto se recorta a «cover»: el marco es mas angosto que la imagen. */
 const cieloMat = new T.ShaderMaterial({
-  uniforms: { uArr: { value: new T.Color(0x3f8fd8) }, uAba: { value: new T.Color(0x9ed3ff) }, uEst: { value: 0 }, uT: { value: 0 } },
+  uniforms: { uArr: { value: new T.Color(0x3f8fd8) }, uAba: { value: new T.Color(0x9ed3ff) }, uEst: { value: 0 }, uT: { value: 0 },
+              uTexA: { value: null }, uTexB: { value: null }, uMix: { value: 0 }, uHay: { value: 0 }, uAsp: { value: 1 } },
   depthWrite: false, depthTest: false,
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.999, 1.0); }`,
   fragmentShader: `
-    uniform vec3 uArr, uAba; uniform float uEst, uT; varying vec2 vUv;
+    uniform vec3 uArr, uAba; uniform float uEst, uT, uMix, uHay, uAsp; uniform sampler2D uTexA, uTexB; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
     void main(){
       vec3 c = mix(uAba, uArr, smoothstep(0.0, 1.0, vUv.y));
+      if (uHay > 0.0){
+        vec2 cu = vec2(0.5 + (vUv.x - 0.5)*uAsp, vUv.y);
+        vec3 f = mix(texture2D(uTexA, cu).rgb, texture2D(uTexB, cu).rgb, uMix);
+        c = mix(c, f, uHay);
+      }
       /* estrellas: una reja de celdas, un punto por celda, con brillo al azar */
       vec2 g = vUv*vec2(60.0, 130.0);
       vec2 id = floor(g), f = fract(g) - 0.5;
       float h = hash(id);
       float d = length(f - (vec2(hash(id + 1.3), hash(id + 7.1)) - 0.5)*0.8);
       float est = smoothstep(0.08, 0.0, d)*step(0.82, h)*(0.6 + 0.4*sin(uT*2.0 + h*40.0));
-      c += vec3(est)*uEst;
+      c += vec3(est)*uEst*(1.0 - uHay);
       gl_FragColor = vec4(c, 1.0);
     }`
 });
@@ -107,9 +119,52 @@ function ponCielo(h){
   cieloMat.uniforms.uArr.value.set(C.arr).lerp(_cA.set(S.arr), k);
   cieloMat.uniforms.uAba.value.set(C.aba).lerp(_cB.set(S.aba), k);
   cieloMat.uniforms.uEst.value = cl((h - 15000)/60000, 0, 1);
+  /* las fotos: un par y su mezcla, por tramos de altura en escala logaritmica */
+  if (CIELOS.listo){
+    const T5 = CIELOS.tex;
+    /* [desde, hasta, foto de abajo, foto de arriba]: entre tramos la foto se queda */
+    const tramos = [[1500, 12000, 0, 1], [12000, 45000, 1, 2], [45000, 200000, 2, 3], [1e8, 1e10, 3, 4]];
+    let a = 0, b = 0, kk = 0;
+    for (const [h0, h1, i, j] of tramos){
+      if (h >= h1){ a = b = j; kk = 0; }
+      else if (h >= h0){ a = i; b = j; kk = Math.log(h/h0)/Math.log(h1/h0); break; }
+      else break;
+    }
+    cieloMat.uniforms.uTexA.value = T5[a]; cieloMat.uniforms.uTexB.value = T5[b]; cieloMat.uniforms.uMix.value = kk;
+    cieloMat.uniforms.uHay.value = 1; cieloMat.uniforms.uAsp.value = Math.min(1, (cam.aspect)/(512/917));
+  }
   /* la luz baja con el aire: en el espacio el sol es duro y el hemisferio se apaga */
   const aire = aireEn(h);
   luzHemi.intensity = 0.25 + 0.65*aire; luzSol.intensity = 2.2 + 0.8*(1 - aire);
+}
+
+/* ══════════ LOS ASSETS DE REZONA ══════════
+   ── NADA REEMPLAZA A LO DIBUJADO HASTA QUE LLEGA ──
+   El cohete, los tres arboles, los cinco cielos y los tres planetas viven en
+   `ASSETS_B64`. Se piden al arrancar; mientras decodifican se ve la version por
+   codigo, y cada uno pisa la suya cuando esta: un base64 roto cuesta una pieza. */
+const CIELOS = { tex: [], listo: false, pedidos: 0 };
+const GLB = { cohete: null, arboles: {}, fallas: [] };
+const cargadorGLTF = new GLTFLoader();
+const cargadorTex = new T.TextureLoader();
+function cargaAssets(){
+  if (typeof ASSETS_B64 === 'undefined') return;
+  const A = ASSETS_B64;
+  const nombres = ['cielo_dia', 'cielo_alto', 'cielo_estratosfera', 'cielo_espacio', 'cielo_profundo'];
+  let n = 0;
+  nombres.forEach((k, i) => {
+    if (!A[k]) return;
+    cargadorTex.load(A[k], (t) => { t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.ClampToEdgeWrapping; CIELOS.tex[i] = t; if (++n === 5) CIELOS.listo = true; }, undefined, () => GLB.fallas.push(k));
+  });
+  for (const [k, obj] of [['tierra', tierra], ['luna', luna], ['marte', marte]]){
+    if (!A[k]) continue;
+    cargadorTex.load(A[k], (t) => { t.colorSpace = T.SRGBColorSpace; obj.material.map.dispose(); obj.material.map = t; obj.material.needsUpdate = true; obj.foto = true; }, undefined, () => GLB.fallas.push(k));
+  }
+  if (A.cohete) cargadorGLTF.load(A.cohete, (g) => { let m = null; g.scene.traverse(o => { if (o.isMesh && !m) m = o; }); if (m){ GLB.cohete = m; COHETE.niv = ''; armaCohete(); } }, undefined, () => GLB.fallas.push('cohete'));
+  for (const k of ['pino', 'roble', 'cipres']){
+    if (!A[k]) continue;
+    cargadorGLTF.load(A[k], (g) => { let m = null; g.scene.traverse(o => { if (o.isMesh && !m) m = o; }); if (m){ GLB.arboles[k] = m; plantaArboles(); } }, undefined, () => GLB.fallas.push(k));
+  }
 }
 
 /* ══════════ LA PLATAFORMA Y LA TORRE ══════════ */
@@ -139,7 +194,14 @@ const suelo = new T.Group(); mundo.add(suelo);
     arb.push({ g: new T.ConeGeometry(0.6 + (i*0.17) % 0.5, hh, 7), c: i % 3 ? '#2e6b3a' : '#3a8a48', p: [x, -1.2 + hh/2, z] });
     arb.push({ g: new T.CylinderGeometry(0.1, 0.12, 0.5, 5), c: '#5a3a22', p: [x, -1.3, z] });
   }
-  suelo.add(new T.Mesh(fundir(arb), matVert));
+  suelo.conos = new T.Mesh(fundir(arb), matVert); suelo.add(suelo.conos);
+  /* los mismos sitios y alturas, para los arboles generados */
+  suelo.sitios = [];
+  for (let i = 0; i < 26; i++){
+    const x = (i % 2 ? 1 : -1)*(4.5 + (i*0.73) % 5.5), z = -3 - (i*1.31) % 7;
+    const hh = 1.4 + (i*0.37) % 1.8;
+    suelo.sitios.push({ x, z, h: hh*1.35, esp: ['pino', 'roble', 'cipres'][i % 3], giro: i*2.1 });
+  }
   /* los brazos que sueltan el cohete: dos, y se abren al encender */
   suelo.brazos = [];
   for (const s of [-1, 1]){
@@ -151,13 +213,38 @@ const suelo = new T.Group(); mundo.add(suelo);
   }
 }
 
+/* ── LOS ARBOLES DE REZONA: UNA MALLA INSTANCIADA POR ESPECIE ──
+   Tres modelos de Tripo con su textura de color; los conos se apagan recien
+   cuando las tres especies llegaron, asi nunca hay un sitio vacio. La altura de
+   cada arbol es la del cono que reemplaza: el modelo mide 1 de alto y se escala. */
+function plantaArboles(){
+  if (!GLB.arboles.pino || !GLB.arboles.roble || !GLB.arboles.cipres) return;
+  if (suelo.arboles) return;
+  suelo.arboles = [];
+  const _mm = new T.Matrix4(), _qq = new T.Quaternion(), _pp = new T.Vector3(), _ss = new T.Vector3();
+  for (const esp of ['pino', 'roble', 'cipres']){
+    const src = GLB.arboles[esp];
+    const g = src.geometry; g.computeBoundingBox();
+    const bb = g.boundingBox, alto = bb.max.y - bb.min.y;
+    const sitios = suelo.sitios.filter(s => s.esp === esp);
+    const im = new T.InstancedMesh(g, src.material, sitios.length);
+    sitios.forEach((s, i) => {
+      const k = s.h/alto;
+      _qq.setFromEuler(new T.Euler(0, s.giro, 0));
+      _mm.compose(_pp.set(s.x, -1.2 - bb.min.y*k, s.z), _qq, _ss.set(k, k, k)); im.setMatrixAt(i, _mm);
+    });
+    im.instanceMatrix.needsUpdate = true; suelo.add(im); suelo.arboles.push(im);
+  }
+  suelo.conos.visible = false;
+}
+
 /* ══════════ EL COHETE ══════════
    ── UN ESTILO ES UNA TEXTURA DIBUJADA POR CODIGO ──
    El fuselaje lleva un lienzo de 128×384: el color base, el patron encima y
    las bandas. Los veinticuatro estilos salen de la misma funcion con otros
    numeros. Y las mejoras SE VEN: el tanque alarga el cuerpo, las aletas crecen,
    el motor suma toberas, el escudo pone una burbuja, el iman dos aros. */
-function pintaEstilo(E, c2, w, h){
+function pintaEstilo(E, c2, w, h, sinVentana){
   c2.fillStyle = E.base; c2.fillRect(0, 0, w, h);
   const f = E.franja;
   c2.fillStyle = f;
@@ -181,13 +268,14 @@ function pintaEstilo(E, c2, w, h){
   if (patron === 'arcoiris'){ const cs = ['#ff3a3a', '#ff9a2a', '#ffd447', '#3ad35a', '#3a8fff', '#8a4aff']; cs.forEach((cc, i) => { c2.fillStyle = cc; c2.fillRect(0, h*0.3 + i*h*0.055, w, h*0.055); }); }
   /* la banda de la cintura y la ventanilla, en todos */
   c2.fillStyle = f; c2.fillRect(0, h*0.12, w, h*0.035);
+  if (sinVentana) return;
   c2.fillStyle = '#1a2230'; c2.beginPath(); c2.arc(w*0.5, h*0.28, w*0.11, 0, 6.29); c2.fill();
   c2.fillStyle = '#7ad9ff'; c2.beginPath(); c2.arc(w*0.5, h*0.28, w*0.08, 0, 6.29); c2.fill();
   c2.fillStyle = 'rgba(255,255,255,.35)'; c2.beginPath(); c2.arc(w*0.47, h*0.265, w*0.03, 0, 6.29); c2.fill();
 }
-function texturaEstilo(E){
+function texturaEstilo(E, sinVentana){
   const c = document.createElement('canvas'); c.width = 128; c.height = 384;
-  pintaEstilo(E, c.getContext('2d'), 128, 384);
+  pintaEstilo(E, c.getContext('2d'), 128, 384, sinVentana);
   const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 const cohete = new T.Group(); mundo.add(cohete);
@@ -195,7 +283,7 @@ let COHETE = { estilo: null, niv: '' };
 function armaCohete(){
   const E = ESTILOS.find(e => e.id === PROG.estilo) || ESTILOS[0];
   const niv = Object.values(PROG.niv).join(',');
-  if (COHETE.estilo === E.id && COHETE.niv === niv && cohete.children.length) return;
+  if (COHETE.estilo === E.id && COHETE.niv === niv && cohete.children.length && (!!cohete.glb === !!GLB.cohete)) return;
   COHETE = { estilo: E.id, niv };
   while (cohete.children.length) { const c = cohete.children.pop(); c.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material) o.material.dispose(); }); }
   const n = (k) => PROG.niv[k] | 0;
@@ -258,6 +346,32 @@ function armaCohete(){
   }
   cohete.position.y = 0;
   cohete.base = -largo/2 - 0.3;
+  /* ── EL COHETE DE REZONA, CON LA PINTURA PROYECTADA POR POSICION ──
+     El modelo de Tripo trae su textura —rivetes, paneles, la ventanilla— con un
+     atlas de islas: pintarle el patron del estilo en esas UV lo dejaria hecho
+     pedazos. La pintura se muestrea con una UV CILINDRICA calculada en el shader a
+     partir de la posicion local (angulo alrededor del eje, altura), y multiplica
+     al albedo de Tripo: los detalles quedan y el color y las bandas son del estilo.
+     Lo dibujado por codigo se apaga, la llama, el escudo y los aros se quedan. */
+  if (GLB.cohete){
+    const src = GLB.cohete, g = src.geometry; g.computeBoundingBox();
+    const bb = g.boundingBox, alto = bb.max.y - bb.min.y, k = (largo + hp + 0.3)/alto;
+    const pat = texturaEstilo(E, true);
+    const mat = new T.MeshStandardMaterial({ map: src.material.map, metalness: metal, roughness: metal ? 0.3 : 0.5, transparent: !!E.fantasma, opacity: fant });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uPatron = { value: pat }; sh.uniforms.uBB = { value: new T.Vector2(bb.min.y, bb.max.y) };
+      sh.vertexShader = 'varying vec3 vPosL;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPosL = position;');
+      sh.fragmentShader = 'uniform sampler2D uPatron; uniform vec2 uBB; varying vec3 vPosL;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+        '#include <map_fragment>\nvec2 cu = vec2(atan(vPosL.z, vPosL.x)/6.2832 + 0.5, (vPosL.y - uBB.x)/(uBB.y - uBB.x));\ndiffuseColor.rgb *= texture2D(uPatron, cu).rgb*1.25;');
+    };
+    const m = new T.Mesh(g, mat);
+    m.scale.setScalar(k); m.position.y = -(bb.min.y + bb.max.y)/2*k;
+    cohete.add(m); cohete.glb = m;
+    for (const c of cohete.children) if (c !== m && !cohete.llamas.some(L => L.g === c) && c !== cohete.escudo && !(cohete.aros || []).includes(c)) c.visible = false;
+    /* las llamas cuelgan de la base del modelo */
+    cohete.base = bb.min.y*k + m.position.y - 0.1;
+    cohete.llamas.forEach((L, i) => { const a = nt === 1 ? 0 : i*Math.PI*2/nt, d = nt === 1 ? 0 : 0.2; L.g.position.set(Math.cos(a)*d, cohete.base, Math.sin(a)*d); });
+  }
 }
 
 /* ══════════ EL HUMO Y LAS ESQUIRLAS ══════════
@@ -386,9 +500,9 @@ function texturaPlaneta(base, manchas, n, agua){
   if (agua){ x.fillStyle = 'rgba(255,255,255,.55)'; for (let i = 0; i < 30; i++){ x.beginPath(); x.ellipse(az()*256, az()*128, 10 + az()*30, 3 + az()*6, 0, 0, 6.29); x.fill(); } }
   const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
 }
-const tierra = new T.Mesh(new T.SphereGeometry(1, 48, 32), new T.MeshLambertMaterial({ map: texturaPlaneta('#2b5cd8', ['#3a8a48', '#6a8a3a', '#c8b88a'], 18, true) }));
+const tierra = new T.Mesh(new T.SphereGeometry(1, 96, 64), new T.MeshLambertMaterial({ map: texturaPlaneta('#2b5cd8', ['#3a8a48', '#6a8a3a', '#c8b88a'], 18, true) }));
 tierra.visible = false; escena.add(tierra);
-const atmos = new T.Mesh(new T.SphereGeometry(1.02, 48, 32), new T.MeshBasicMaterial({ color: 0x7ad9ff, transparent: true, opacity: 0.22, side: T.BackSide, depthWrite: false })); tierra.add(atmos);
+const atmos = new T.Mesh(new T.SphereGeometry(1.02, 96, 64), new T.MeshBasicMaterial({ color: 0x7ad9ff, transparent: true, opacity: 0.22, side: T.BackSide, depthWrite: false })); tierra.add(atmos);
 const luna = new T.Mesh(new T.SphereGeometry(3.6, 32, 24), new T.MeshLambertMaterial({ map: texturaPlaneta('#b8b8b0', ['#8a8a84', '#9a9a94', '#78786f'], 40) })); luna.visible = false; escena.add(luna);
 const marte = new T.Mesh(new T.SphereGeometry(4.2, 32, 24), new T.MeshLambertMaterial({ map: texturaPlaneta('#b0492a', ['#7a3018', '#d07a4a', '#e8a06a'], 30) })); marte.visible = false; escena.add(marte);
 const solLejos = new T.Mesh(new T.SphereGeometry(2.2, 24, 16), new T.MeshBasicMaterial({ color: 0xfff2a0 })); solLejos.visible = false; escena.add(solLejos);
@@ -498,12 +612,15 @@ function pinta(dt, frac){
   /* ── LA TIERRA: EL RADIO SE TOPA Y EL BORDE SUBE ──
      A escala real la esfera mide miles de unidades y el plano lejano la corta;
      ademas el suelo esta siempre a 25 unidades, asi que la Tierra no entraria
-     nunca en el cuadro. El radio visible se topa en 300 y el borde sube de −25 a
+     nunca en el cuadro. El radio visible se topa en 50 y el borde sube de −25 a
      −6 entre los 25 y los 400 km: primero es un horizonte curvo, despues una
      bola que se achica hasta ser un punto pasada la geoestacionaria. */
   tierra.visible = h > 25000;
   if (tierra.visible){
-    const rT = Math.min(300, R_T/m), arriba = -25 + 19*cl((h - 25000)/375000, 0, 1);
+    /* el tope del radio bajo de 300 a 80 midiendo: con 300 la parte visible de la
+       esfera es 1/125 de la vuelta y la foto de 1024 px cae en ocho pixeles, o sea una
+       mancha borrosa; con 50 se ve la curva y sesenta pixeles de textura */
+    const rT = Math.min(50, R_T/m), arriba = -25 + 19*cl((h - 25000)/375000, 0, 1);
     tierra.scale.setScalar(rT); tierra.position.set(0, arriba - rT, -rT*0.15 - 4); tierra.rotation.y = EFE.t*0.01;
   }
   /* la Luna y Marte, a su altura */

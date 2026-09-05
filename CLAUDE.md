@@ -154,8 +154,9 @@ munecas.
   y riggeado con **Rezona Lab** (proveedor Tripo), con **10 animaciones** de botón. Fuente y cadena
   de armado en `herramientas/visor3d/` (fusionar → gltfpack → hornear → armar).
 
-- **`Despegue.html` es "DESPEGUE"** (~124 KB, **sin un solo asset**: el cohete, la torre, los obstáculos y
-  las veinticuatro pinturas se dibujan por código). El décimo juego. Un lanzador de cohetes **vertical
+- **`Despegue.html` es "DESPEGUE"** (~1,8 MB: el cohete y tres árboles en 3D, cinco cielos y tres
+  planetas generados con Rezona; la torre, los obstáculos, las monedas y las veinticuatro pinturas se
+  dibujan por código, y todo lo generado tiene su versión por código de respaldo). El décimo juego. Un lanzador de cohetes **vertical
   nativo en three.js**: se mantiene apretado para empujar, se arrastra para esquivar y hay **un** botón de
   ráfaga. **Quince capas con alturas reales** —las copas de los árboles a 60 m, los aviones a 3 km, la línea
   de Kármán a 100 km, la estación a 400, la Luna a 384.000 km, Marte a 78 millones— con su cielo y sus
@@ -263,6 +264,42 @@ solapamientos** en el HUD, el menú, el taller, los estilos, los ajustes, la pau
 **LO QUE NO PUEDO COMPROBAR:** no puedo escuchar, así que del motor está medido que sigue al empuje y al
 aire, no si suena a cohete. Y el bot juega con puntería de un paso: que el cielo se pueda sobrevivir está
 probado, cuánto cuesta con un dedo no.
+
+#### Y DESPUÉS, EN LA MISMA VUELTA: **LOS ASSETS DE REZONA** — el cohete, los árboles, los cielos y los planetas
+
+Pedido: *"podés generar props realistas como árboles texturas de cielo de cohetes modelos 3D todo con
+Rezona plis?"*. Doce tareas en el proyecto descartable `uSEsgNYW`, los `task_id` en
+`assets/despegue/tareas.json`, el horneado en `herramientas/despegue/hornear.py` → `partes/i_assets.js`
+(1,63 MB de base64). **Los doce salieron a la primera** y la sonda `__C.assets()` los da cargados con
+`fallas: []`.
+
+- **El cohete de Tripo lleva la pintura PROYECTADA POR POSICIÓN.** El modelo trae su textura —remaches,
+  paneles, la ventanilla— en un atlas de islas: pintarle el patrón del estilo sobre esas UV lo dejaría hecho
+  pedazos. La pintura se muestrea con una **UV cilíndrica** calculada en el shader a partir de la posición
+  local (`onBeforeCompile`: ángulo alrededor del eje y altura normalizada por la caja) y **multiplica** al
+  albedo de Tripo. Así los 24 estilos siguen siendo lienzos por código y el modelo se pide una sola vez.
+  Lo dibujado por código se apaga cuando el GLB decodifica; la llama, el escudo y los aros se quedan.
+- **Los tres GLB se limpian enteros.** Tripo devuelve color, metal-rugosidad y normales (1,6-2,6 MB por
+  modelo) y a diez píxeles de alto un mapa de normales no cambia nada: queda el color a 512/384 en JPEG,
+  el material se reescribe de cero —regla de PISTOLA— y **el buffer se compacta** a las vistas que usa
+  algún accesor más la imagen. 160-230 KB cada uno, 2.500-5.700 triángulos con `face_limit`.
+- **Los árboles van instanciados por especie** (pino, roble, ciprés) en los mismos sitios y alturas que los
+  conos, y los conos se apagan recién cuando llegaron las **tres** especies: nunca hay un sitio vacío.
+- **Los cinco cielos se funden de a dos por altura** en escala logarítmica (día → cirros a 1,5-12 km →
+  estratósfera → espacio a 45-200 km → profundo de 10^8 a 10^10) y pisan al degradado por `uHay`; las
+  estrellas procedurales se apagan con la foto puesta. Recorte a «cover»: el marco es más angosto que la
+  imagen.
+- **La Tierra se ve borrosa de cerca, y el tope del radio bajó de 300 a 50 midiéndolo.** Con radio 300 la
+  parte visible de la esfera es 1/125 de la vuelta y la foto de 1024 px cae en **ocho píxeles** de
+  pantalla; con 50 se ven sesenta y la curva se lee a planeta. Es un compromiso escrito: a 600 km la Tierra
+  real es diez veces más grande de lo que se muestra.
+- **La Luna volvió como un disco de luna llena sobre cráteres**, no como un equirectangular riguroso.
+  Sobre una esfera de 3,6 unidades se lee a Luna igual y se dejó.
+
+**Y REZONA QUEDA PARA SIEMPRE:** el cliente lee la variable de entorno **`REZONA_PAT`** antes que
+`~/.rezona/credentials.json`, y el servidor MCP la hereda de Claude Code. El usuario la cargó en las
+variables de entorno de su entorno de Claude Code, así que **ninguna sesión nueva tiene que loguearse**.
+La llave no pasa por el chat ni por el repo.
 
 ### Centésima cuarta vuelta (2026-09-04): **ROTOR** — la canción entera, tres velocidades, tres estilos y se puede parar sobre un bloque
 
@@ -12161,6 +12198,9 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - Cuando pide "dame el HTML", quiere el archivo `juegos-pc/Campo_de_Tiro.html` adjunto.
 - El juego se sube al portal **Rezona**. Es un HTML autocontenido: todo va adentro del
   archivo, sin dependencias externas más allá del CDN de three.js.
+- **Rezona se autentica con la variable de entorno `REZONA_PAT`**, cargada en el entorno de Claude
+  Code (2026-09-05). Si una sesión dice «Not authenticated», es que la variable no está en ese
+  entorno: no pedirle al usuario un login nuevo sin antes comprobar `${REZONA_PAT:+definida}`.
 - Verificar con mediciones antes de afirmar que algo funciona. Historial: *"apenas hacés
   algo nuevo rompes otra cosa"*.
 

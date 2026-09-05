@@ -105,8 +105,10 @@ python3 herramientas/rezona/rz.py call submit_model3d_generation '{"project_id":
   cada cosa (`PwVerjWD` para BARRIO), qué assets ya existen con su `output_path`, y **con qué
   parámetros salieron bien**. Leerlo antes de generar nada. Se refresca con
   `python3 herramientas/rezona/estado.py`.
-- **La credencial vive en `~/.rezona/credentials.json`**, la escribe `npx rezona@latest login` con
-  un código de un solo uso. `.rezona/` está en `.gitignore`: **el cliente puede vivir en el repo, la
+- **La credencial llega por la variable de entorno `REZONA_PAT`** (el cliente la lee antes que el
+  archivo, y el servidor MCP la hereda de Claude Code): está cargada en el entorno de Claude Code
+  desde 2026-09-05, así que una sesión nueva ya arranca autenticada. Si no está, el respaldo es
+  `~/.rezona/credentials.json`, que escribe `npx rezona@latest login` con un código de un solo uso. `.rezona/` está en `.gitignore`: **el cliente puede vivir en el repo, la
   llave no.** Este repo es público.
 - `fetch_generated_asset` no escribe en una carpeta sin marca `.rezona/`: hacer `npx rezona@latest
   init` en una carpeta **fuera del repo** (p. ej. `/tmp/rez_x`).
