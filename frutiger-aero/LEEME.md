@@ -48,11 +48,16 @@ Son WebP de 760x760 **con canal alfa**, 44–54 KB cada una. `transparent: true`
 devuelve PNG con alfa de verdad, y el canvas de Playwright lo conserva al pasar
 a WebP.
 
-Lo que las hace parecer el mismo personaje en las ocho es repetir **la misma
-descripción física completa** —pelo celeste de píxeles, visor espejado,
-auriculares, buzo grande, pantalón blanco, zapatillas azules— en cada prompt, y
-cambiar sólo la pose. Con una descripción corta («el personaje de antes,
-saludando») salen ocho personajes distintos.
+**Salen de una imagen de referencia, no de una descripción.** La primera vuelta
+se hizo describiendo al personaje con palabras y salió un cubito de voxels: el
+cuerpo es **suave y redondeado** —mangas que caen, pantalón ancho, manos
+redondas sin dedos— y sólo el pelo y el visor tienen el escalonado de píxeles.
+Eso, en palabras, no se acierta.
+
+`submit_image_generation` acepta `source_urls`, que son **URLs y no archivos**.
+La referencia se publicó un rato en el propio sitio, bajo un nombre al azar, se
+generaron las ocho, y se sacó en el despliegue siguiente. Con la referencia
+salieron iguales a la primera.
 
 En la página va `m-saludando`, con un flote de cinco segundos y medio que se
 apaga con `prefers-reduced-motion`.
