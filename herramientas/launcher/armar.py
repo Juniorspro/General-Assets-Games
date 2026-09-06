@@ -7,8 +7,9 @@ UN módulo ES, así que el orden de ORDEN es el orden en el que las cosas hacen
 falta y NO el alfabético: un `let`/`const` leído antes de su línea no devuelve
 `undefined`, tira, y se lleva el módulo entero.
 
-  a.html  el marco, el CSS y el DOM (termina abriendo <script type="module">)
-  b.js    tablas, idioma, ayudas    ← todo lo demás las usa
+  a.html   el marco, el CSS y el DOM (termina abriendo <script type="module">)
+  i_img.js el fondo y la mascota en base64 (lo escribe hornear.py)
+  b.js     tablas, idioma, ayudas    ← todo lo demás las usa
   c.js    el fondo (Frutiger Aero)  ← usa $ y cl de b.js
   d.js    el vidrio líquido         ← independiente, pero va antes que quien lo llama
   e.js    el escritorio             ← usa b, c y d
@@ -17,7 +18,7 @@ falta y NO el alfabético: un `let`/`const` leído antes de su línea no devuelv
 import io, os, sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'z.html']
+ORDEN = ['a.html', 'i_img.js', 'b.js', 'c.js', 'd.js', 'e.js', 'z.html']
 SALIDA = os.path.join(AQUI, 'app', 'assets', 'ui.html')
 
 

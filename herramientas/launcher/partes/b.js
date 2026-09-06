@@ -13,7 +13,9 @@ function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
 const HAY_AND = typeof AND !== 'undefined' && AND && typeof AND.apps === 'function';
 
 const TXT = {
-  es: { busca: 'Buscar apps y en la web', todas: 'Todas las apps', fijar: 'Fijar en el inicio',
+  es: { s_madrugada: 'Buenas noches', s_manana: 'Buen día', s_tarde: 'Buenas tardes', s_noche: 'Buenas noches',
+        letras: 'Letras',
+        busca: 'Buscar apps y en la web', todas: 'Todas las apps', fijar: 'Fijar en el inicio',
         soltar: 'Quitar del inicio', info: 'Información de la app', borrar: 'Desinstalar',
         nada: 'Sin resultados', web: 'Buscar «{0}» en la web', fijado: 'Fijada',
         soltado: 'Quitada del inicio', ajustes: 'Ajustes', inicio: 'Elegir pantalla de inicio',
@@ -21,7 +23,9 @@ const TXT = {
         dias: ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
         meses: ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
                 'septiembre','octubre','noviembre','diciembre'] },
-  en: { busca: 'Search apps and the web', todas: 'All apps', fijar: 'Pin to home',
+  en: { s_madrugada: 'Good night', s_manana: 'Good morning', s_tarde: 'Good afternoon', s_noche: 'Good evening',
+        letras: 'Letters',
+        busca: 'Search apps and the web', todas: 'All apps', fijar: 'Pin to home',
         soltar: 'Remove from home', info: 'App info', borrar: 'Uninstall',
         nada: 'No results', web: 'Search the web for “{0}”', fijado: 'Pinned',
         soltado: 'Removed from home', ajustes: 'Settings', inicio: 'Choose home app',
@@ -29,7 +33,9 @@ const TXT = {
         dias: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
         meses: ['January','February','March','April','May','June','July','August',
                 'September','October','November','December'] },
-  pt: { busca: 'Buscar apps e na web', todas: 'Todos os apps', fijar: 'Fixar na tela inicial',
+  pt: { s_madrugada: 'Boa noite', s_manana: 'Bom dia', s_tarde: 'Boa tarde', s_noche: 'Boa noite',
+        letras: 'Letras',
+        busca: 'Buscar apps e na web', todas: 'Todos os apps', fijar: 'Fixar na tela inicial',
         soltar: 'Remover da tela inicial', info: 'Informações do app', borrar: 'Desinstalar',
         nada: 'Sem resultados', web: 'Buscar «{0}» na web', fijado: 'Fixado',
         soltado: 'Removido', ajustes: 'Configurações', inicio: 'Escolher tela inicial',

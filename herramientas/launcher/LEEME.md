@@ -42,7 +42,8 @@ siendo **un** módulo ES, así que el orden importa.
 |---|---|
 | `partes/a.html` | el marco, el CSS y el DOM |
 | `partes/b.js` | tablas, tres idiomas, ayudas |
-| `partes/c.js` | el fondo: ocho cielos, nubes, agua, burbujas, hojas |
+| `partes/i_img.js` | el fondo y la mascota en base64 (lo escribe `hornear.py`) |
+| `partes/c.js` | el fondo de foto: carga, deriva y profundidad |
 | `partes/d.js` | el vidrio líquido (`feDisplacementMap` sobre un SDF) |
 | `partes/e.js` | el escritorio: reja, páginas, dock, cajón, búsqueda, menú |
 | `partes/z.html` | el puente de mentira, las sondas y `arranca()` |
@@ -53,10 +54,11 @@ siendo **un** módulo ES, así que el orden importa.
 | `app/java/…/Puente.java` | lo que el WebView no puede hacer |
 | `app/java/…/ClienteIconos.java` | sirve los iconos como si fueran de la red |
 | `icono.py` | dibuja el icono de la app en las cinco densidades |
+| `hornear.py` | mete el fondo y la mascota en `partes/i_img.js` |
 
 ## Las sondas
 
-`window.__A`: `estado()` · `refr()` (cuántos filtros de refracción se armaron)
-· `cajas()` (solapamientos medidos) · `costo(n)` (ms por cuadro del fondo) ·
-`cielo(h)` y `hora(h)` (los ocho cielos sin esperar un día) · `cajon`, `pagina`,
-`menu`, `buscar`, `insets`.
+`window.__A`: `estado()` · `fondo()` (si la foto decodificó y que no quede un
+solo lienzo vivo) · `widget()` y `bateria(n,c)` · `refr()` · `cajas()`
+(solapamientos medidos) · `riel()` y `letra(L)` (el índice A-Z) · `masc()` ·
+`cajon`, `pagina`, `menu`, `buscar`, `insets`.

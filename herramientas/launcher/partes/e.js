@@ -72,20 +72,12 @@ function pintaInicio(){
   $$('.pag').forEach(p => { p.style.flexBasis = (100/NPAG) + '%'; });
   ponPagina(PAG, false);
 
-  const pts = $('#puntos'); pts.innerHTML = '';
-  for (let q = 0; q < NPAG; q++){
-    const t = document.createElement('div');
-    t.className = 'pt' + (q === PAG ? ' on' : '');
-    pts.appendChild(t);
-  }
-  pts.style.visibility = NPAG > 1 ? 'visible' : 'hidden';
 }
 function ponPagina(n, suave){
   PAG = cl(n, 0, NPAG - 1);
   const t = $('#tira');
   t.style.transition = suave === false ? 'none' : 'transform .30s cubic-bezier(.22,.9,.24,1)';
   t.style.transform = 'translateX(' + (-PAG*(100/NPAG)) + '%)';
-  $$('#puntos .pt').forEach((e, i) => e.classList.toggle('on', i === PAG));
 }
 
 function pintaDock(){
@@ -97,29 +89,141 @@ function pintaDock(){
   d.style.visibility = DOCK.length ? 'visible' : 'hidden';
 }
 
+/* ── LA LETRA DE UNA APP ──
+   Sale del nombre YA sin acentos, así que Ángela cae en la A y no en una
+   sección aparte; lo que no empieza con letra va a «#», que es donde lo pone
+   cualquier lista alfabética. */
+function letraIni(a){
+  const c = norm(a.n).charAt(0);
+  return (c >= 'a' && c <= 'z') ? c.toUpperCase() : '#';
+}
+
+let LETRAS = [];          /* las letras que de verdad tienen apps */
+let ANCLA = {};           /* letra → el nodo de su encabezado, para poder saltar */
+
 function pintaCajon(filtro){
   const l = $('#cajLista');
   const q = norm(filtro || '');
   /* ── EL NOMBRE MANDA Y EL PAQUETE ES LA RED ──
      Buscando por los dos a la vez, «mer» devolvía Cámara: `com.android.ca-MER-a2`
-     lo contiene. Eso no es tolerancia, es ruido justo arriba del resultado que
-     se estaba buscando. El paquete sólo entra cuando el nombre no encontró
-     nada, que es cuando de verdad sirve (buscar «whatsapp» sin acordarse de
-     cómo se llama el icono). */
+     lo contiene. El paquete sólo entra cuando el nombre no encontró nada, que
+     es cuando de verdad sirve (buscar «whatsapp» sin acordarse del icono). */
   let v = APPS;
   if (q){
     v = APPS.filter(a => norm(a.n).indexOf(q) >= 0);
     if (!v.length) v = APPS.filter(a => norm(a.p).indexOf(q) >= 0);
   }
+
   l.innerHTML = '';
-  for (const a of v) l.appendChild(nodoApp(a));
-  if (!v.length){
+  LETRAS = []; ANCLA = {}; PEDIDA = null;
+
+  /* ── LOS ENCABEZADOS SÓLO EXISTEN SIN FILTRO ──
+     Con dos resultados, partirlos en dos secciones de uno es ruido; y el riel
+     no tiene a dónde saltar, así que también se esconde. */
+  const porLetra = !q;
+  let ult = '';
+  for (const a of v){
+    if (porLetra){
+      const L = letraIni(a);
+      if (L !== ult){
+        ult = L;
+        const h = document.createElement('div');
+        h.className = 'let'; h.textContent = L; h.dataset.l = L;
+        l.appendChild(h);
+        LETRAS.push(L); ANCLA[L] = h;
+      }
+    }
+    l.appendChild(nodoApp(a));
+  }
+  if (!v.length && q){
     const e = document.createElement('div');
-    e.style.cssText = 'grid-column:1/-1;text-align:center;opacity:.7;padding:28px 12px;font-size:14px';
+    e.className = 'vacio';
     e.textContent = T('nada');
     l.appendChild(e);
   }
-  $('#cajTit').textContent = q ? (v.length + ' · ' + T('todas')) : T('todas');
+
+  /* ── BUSCAR EN LA WEB ES UNA FILA, NO UN ATAJO DE TECLADO ──
+     Estaba sólo en el Enter y sólo cuando no había ninguna app: o sea que en un
+     teléfono, donde no hay Enter a la vista, no existía. Va como una fila al
+     final de los resultados, visible desde la primera letra: así el cajón es
+     además un buscador, que es lo que se pidió. */
+  if (q){
+    const w = document.createElement('div');
+    w.className = 'web';
+    /* la misma lupa que el buscador: dos dibujos distintos para lo mismo se
+       leen a dos cosas distintas */
+    w.innerHTML = '<svg class="lupa" width="18" height="18" viewBox="0 0 24 24" fill="none" '
+                + 'stroke="#fff" stroke-width="2.4" stroke-linecap="round">'
+                + '<circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>';
+    const t = document.createElement('span');
+    t.textContent = T('web', filtro);
+    w.appendChild(t);
+    w.addEventListener('click', () => aLaWeb(filtro));
+    l.appendChild(w);
+  }
+  $('#cajTit').textContent = q ? (v.length + ' \u00b7 ' + T('todas')) : T('todas');
+  pintaRiel();
+}
+
+/* ══════════ EL RIEL A-Z ══════════ */
+function pintaRiel(){
+  const r = $('#riel');
+  r.innerHTML = '';
+  /* con menos de dos secciones el riel no lleva a ninguna parte */
+  r.style.display = LETRAS.length > 1 ? 'flex' : 'none';
+  for (const L of LETRAS){
+    const b = document.createElement('b');
+    b.textContent = L; b.dataset.l = L;
+    r.appendChild(b);
+  }
+}
+
+/* ── LA LETRA QUE SE ESTÁ MIRANDO SE MIDE, NO SE CUENTA ──
+   «Al ir bajando detecta las apps de esas letras»: la letra actual es la del
+   último encabezado que ya pasó por arriba del borde de la lista. Comparando
+   posiciones de verdad, funciona igual con dos apps que con trescientas y no
+   depende de cuántas filas entren. */
+/* ── ABAJO DE TODO, LA LETRA ES LA QUE SE PIDIÓ ──
+   Las últimas secciones no pueden subir al borde: `scrollTop` llega al tope
+   antes. Medido, tocar «S» dejaba «R» arriba y el riel marcando otra cosa que
+   la que se estaba mirando, y las tres últimas letras nunca coincidían.
+   Rellenar la lista con medio alto de pantalla las haría llegar —es lo que
+   hace iOS— pero deja un vacío enorme que hay que scrollear.
+   Con la lista en el tope, todas las secciones que faltan están a la vista, así
+   que la respuesta honesta a «qué letra estoy mirando» es la que se pidió. */
+let PEDIDA = null;
+function alFondo(){
+  const l = $('#cajLista');
+  return l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
+}
+function letraVisible(){
+  const l = $('#cajLista');
+  if (PEDIDA && alFondo() && LETRAS.indexOf(PEDIDA) >= 0) return PEDIDA;
+  const y = l.getBoundingClientRect().top + 8;
+  let act = LETRAS[0] || '';
+  for (const L of LETRAS){
+    if (ANCLA[L].getBoundingClientRect().top <= y) act = L; else break;
+  }
+  return act;
+}
+function marcaRiel(L){
+  $$('#riel b').forEach(b => b.classList.toggle('on', b.dataset.l === L));
+}
+function vaALetra(L){
+  const h = ANCLA[L];
+  if (!h) return;
+  const l = $('#cajLista');
+  PEDIDA = L;
+  l.scrollTop += h.getBoundingClientRect().top - l.getBoundingClientRect().top - 4;
+  marcaRiel(L);
+}
+
+function aLaWeb(q){
+  q = String(q || '').trim();
+  if (!q) return;
+  vibra(10);
+  if (HAY_AND && AND.buscarWeb) AND.buscarWeb(q);
+  else avisa(T('web', q));
 }
 
 /* ══════════ ABRIR, FIJAR, MENÚ ══════════ */
@@ -155,8 +259,20 @@ function cierraMenu(){
 function verCajon(v){
   CAJON = !!v;
   $('#cajon').classList.toggle('on', CAJON);
-  if (CAJON){ $('#busca2').value = ''; pintaCajon(''); }
-  else { $('#busca2').blur(); $('#busca').blur(); $('#cajLista').scrollTop = 0; }
+  /* el fondo se acerca: es lo que hace que la hoja esmerilada se lea a hoja
+     sobre algo y no a otra pantalla */
+  fondoProfundo(CAJON);
+  if (CAJON){
+    $('#busca2').value = '';
+    pintaCajon('');
+    $('#cajLista').scrollTop = 0;
+    marcaRiel(LETRAS[0] || '');
+  } else {
+    $('#busca2').blur(); $('#busca').blur();
+    $('#cajLista').scrollTop = 0;
+    mascotaBaila(false);
+    $('#burbuja').classList.remove('on');
+  }
 }
 
 /* ══════════ RELOJ Y BATERÍA ══════════ */
@@ -167,20 +283,38 @@ function pintaReloj(){
   const t = TXT[LANG] || TXT.es;
   $('#fecha').innerHTML = t.dias[d.getDay()] + '<br>' + d.getDate() + ' ' + t.meses[d.getMonth()];
   $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  /* ── EL SALUDO SALE DE LA HORA, NO DE UNA CONSTANTE ──
+     Es lo único del widget que cambia de tono a lo largo del día, y es lo que
+     hace que el escritorio se sienta puesto para este momento y no un reloj. */
+  const h = d.getHours();
+  const fr = h < 6 ? 'madrugada' : h < 13 ? 'manana' : h < 20 ? 'tarde' : 'noche';
+  $('#wSaludo').textContent = T('s_' + fr);
 }
 function pintaBateria(){
   if (!HAY_AND || !AND.bateria) return;
-  try {
-    const b = JSON.parse(AND.bateria());
-    const n = b.n < 0 ? 100 : b.n;
-    $('#batN').textContent = (b.c ? '⚡' : '') + n + '%';
-    const f = $('#batLlena');
-    f.style.width = n + '%';
-    /* el color es información: rojo por debajo de 15 dice algo que el número
-       solo no dice de una ojeada */
-    f.style.background = b.c ? '#8fe3ff' : n <= 15 ? '#ff8b93' : n <= 30 ? '#ffd36e' : '#b8f078';
-    f.style.boxShadow = '0 0 6px ' + f.style.background;
-  } catch (e) {}
+  try { ponBateria(JSON.parse(AND.bateria())); } catch (e) {}
+}
+
+/* ── EL ARO DE BATERÍA ──
+   El trazo de un círculo se recorta con `stroke-dashoffset`: la circunferencia
+   de r=25 es 2πr = 157,08, así que el offset es lo que FALTA. Va aparte de
+   `pintaBateria` para que la vista previa del navegador —que no tiene puente y
+   por lo tanto no tiene batería— pueda llenarlo igual y se pueda mirar. */
+const ARO_C = 2*Math.PI*25;
+function ponBateria(b){
+  const n = (b.n === undefined || b.n < 0) ? 100 : b.n;
+  $('#batN').textContent = (b.c ? '\u26a1' : '') + n + '%';
+  $('#wPct').textContent = n + '%';
+  const f = $('#batLlena');
+  f.style.width = n + '%';
+  /* el color es información: rojo por debajo de 15 dice de una ojeada algo que
+     el número solo no dice */
+  const col = b.c ? '#8fe3ff' : n <= 15 ? '#ff8b93' : n <= 30 ? '#ffd36e' : '#b8f078';
+  f.style.background = col;
+  f.style.boxShadow = '0 0 6px ' + col;
+  const arco = $('#wArco');
+  arco.style.stroke = col;
+  arco.style.strokeDashoffset = String(ARO_C*(1 - n/100));
 }
 
 /* ══════════ CARGA ══════════ */
@@ -189,29 +323,39 @@ function cargaApps(){
   if (HAY_AND){ try { bruto = AND.apps(); } catch (e){ bruto = '[]'; } }
   else bruto = JSON.stringify(APPS_DEMO);
   try { APPS = JSON.parse(bruto) || []; } catch (e){ APPS = []; }
+  /* ── EL ORDEN SE ORDENA ACÁ, AUNQUE EL PUENTE YA LO HAGA ──
+     `Puente.apps()` ordena alfabético sin acentos, y el índice de letras DEPENDE
+     de que la lista venga ordenada: si no, aparecen encabezados repetidos y
+     `ANCLA[letra]` se queda con el último, así que tocar una letra salta a otro
+     lado. Medido con la lista de la vista previa sin ordenar, el riel salió
+     `T M C W S I T Y G M P M S N D X T A C R L R U A D` — veinticinco secciones
+     para veintiocho apps. Un contrato repartido entre dos lenguajes se rompe el
+     día que alguien toca uno de los dos; ordenar de este lado cuesta una línea
+     y lo vuelve imposible. */
+  APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
 
   INICIO = (lee('inicio', null) || []).filter(p => POR_PKG[p]);
   DOCK = (lee('dock', null) || []).filter(p => POR_PKG[p]);
 
-  /* ── LA PRIMERA VEZ SE SIEMBRA, NO SE DEJA VACÍO ──
-     Un escritorio en blanco la primera vez que se instala un launcher se lee a
-     que no funcionó. Se ponen las que el sistema declara como preferidas —
-     teléfono, mensajes, cámara, navegador— y si no se encuentran, las primeras
-     que haya sin ser del sistema. */
-  if (!INICIO.length && !DOCK.length && APPS.length){
+  /* ── LA PRIMERA VEZ SE SIEMBRA SÓLO EL DOCK ──
+     El inicio va vacío a propósito: arriba está el widget, abajo el dock, y en
+     el medio se ve el fondo. Todo lo demás vive en el cajón, que se abre con un
+     gesto. Lo que sí se siembra son los cuatro del dock, porque un dock vacío
+     la primera vez sí se lee a que el launcher no funcionó — y se eligen por lo
+     que el sistema declara: teléfono, mensajes, cámara, navegador. */
+  if (!DOCK.length && APPS.length){
     const busca = pats => APPS.find(a => pats.some(q => a.p.indexOf(q) >= 0));
-    const dock = [
+    DOCK = [
       busca(['dialer', '.phone', 'contacts']),
       busca(['.mms', 'messaging', 'messages', 'whatsapp']),
       busca(['camera', 'gallery', 'photos']),
       busca(['chrome', 'browser', 'firefox'])
-    ].filter(Boolean).map(a => a.p);
-    DOCK = dock.slice(0, 4);
-    INICIO = APPS.filter(a => !a.s && DOCK.indexOf(a.p) < 0).slice(0, 16).map(a => a.p);
-    if (INICIO.length < 8) INICIO = APPS.filter(a => DOCK.indexOf(a.p) < 0).slice(0, 16).map(a => a.p);
-    guarda('inicio', INICIO); guarda('dock', DOCK);
+    ].filter(Boolean).map(a => a.p).slice(0, 4);
+    if (DOCK.length < 4) DOCK = DOCK.concat(
+      APPS.filter(a => DOCK.indexOf(a.p) < 0).slice(0, 4 - DOCK.length).map(a => a.p));
+    guarda('dock', DOCK);
   }
 }
 
@@ -272,12 +416,8 @@ function enganchaPaginas(){
   const fin = e => {
     if (!act) return; act = false;
     t.style.transition = '';
-    /* ── ARRASTRAR PARA ARRIBA EN EL ESCRITORIO TAMBIÉN ABRE EL CAJÓN ──
-       El tirador de abajo mide 120 px y comparte veinte con el dock, así que
-       cerca de los iconos el gesto se lo lleva el dock. Éste es el gesto que la
-       gente hace igual, funciona desde cualquier punto libre y no le saca nada
-       a las páginas: el eje ya está decidido antes de llegar acá. */
-    if (eje === 2 && y0 - e.clientY > 60){ ponPagina(PAG); verCajon(true); vibra(10); return; }
+    /* el gesto de subir lo maneja `enganchaSubir`, que también está sobre
+       `#hoja`: acá sólo hay que devolver la página a su sitio */
     if (eje !== 1){ ponPagina(PAG); return; }
     const dx = e.clientX - x0;
     if (dx < -w*.22) ponPagina(PAG + 1);
@@ -290,7 +430,7 @@ function enganchaPaginas(){
 
 /* ── SUBIR ABRE EL CAJÓN, DESDE LOS TRES SITIOS DE ABAJO ──
    Un solo tirador de 120 px es un blanco chico y encima se pisaba con el dock.
-   El gesto se registra en el escritorio, en la fila de puntos y en el dock; el
+   El gesto se registra en el escritorio y en el dock; el
    umbral de 55 px es lo que lo separa de un toque tembloroso, y el de 18 px en
    horizontal es lo que impide que un arrastre entre páginas lo dispare. */
 function enganchaSubir(el){
@@ -306,30 +446,141 @@ function enganchaSubir(el){
   el.addEventListener('pointercancel', f);
 }
 
-/* el cajón: se sube arrastrando desde abajo y se baja arrastrando hacia abajo */
+/* el cajón: se sube arrastrando desde abajo y se baja desde la manija */
 function enganchaCajon(){
   const caj = $('#cajon');
-  enganchaSubir($('#puntos'));
   enganchaSubir($('#dock'));
-  let cy = 0, cact = false, cmov = false;
-  caj.addEventListener('pointerdown', e => {
-    /* sólo arrastra si la lista está arriba de todo: si no, se roba el desplazamiento */
-    cy = e.clientY; cact = $('#cajLista').scrollTop <= 0; cmov = false;
+  enganchaSubir($('#hoja'));
+
+  /* ══════════ BAJAR ══════════
+     ── POR QUÉ NO BAJABA, Y SON TRES COSAS ──
+     1. El arrastre estaba sobre `#cajon`, pero el dedo cae sobre `#cajLista`,
+        que tiene `touch-action:pan-y`: el navegador se queda con el gesto
+        vertical y dispara `pointercancel` antes del umbral, así que el cierre
+        no llegaba a correr NUNCA en un teléfono.
+     2. Sólo arrastraba con la lista arriba de todo. Con veintiocho apps la
+        lista scrollea, así que la mayor parte del tiempo no se podía cerrar.
+     3. Y el arrastre escribía `style.transform` inline. `verCajon(false)` saca
+        la clase `.on`, cuya regla dice `translateY(100%)` — pero el inline le
+        gana por especificidad, así que el cajón se quedaba clavado donde estaba
+        el dedo.
+     El arreglo: el arrastre vive en la MANIJA, que lleva `touch-action:none`, y
+     la posición va por una variable de CSS que la regla base ignora cuando el
+     cajón está cerrado. */
+  const man = $('#cajManija');
+  let y0 = 0, tira = false;
+  const pone = d => caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
+  const suelta = () => { caj.classList.remove('tira'); caj.style.removeProperty('--caj-y'); };
+
+  man.addEventListener('pointerdown', e => {
+    y0 = e.clientY; tira = true;
+    caj.classList.add('tira');
+    try { man.setPointerCapture(e.pointerId); } catch (x) {}
   });
-  caj.addEventListener('pointermove', e => {
-    if (!cact) return;
-    const d = e.clientY - cy;
-    if (d > 12){ cmov = true; caj.style.transition = 'none';
-                 caj.style.transform = 'translateY(' + Math.min(d, innerHeight) + 'px)'; }
-  });
-  const cfin = e => {
-    if (!cact) { return; }
-    cact = false; caj.style.transition = '';
-    if (cmov && e.clientY - cy > 90) verCajon(false);
-    caj.style.transform = '';
+  man.addEventListener('pointermove', e => { if (tira) pone(e.clientY - y0); });
+  const fin = e => {
+    if (!tira) return;
+    tira = false;
+    const d = e.clientY - y0;
+    suelta();
+    /* 78 px o un tirón rápido: cerrar tiene que costar poco, porque el que
+       arrastró para abajo ya dijo lo que quería */
+    if (d > 78) verCajon(false);
   };
-  caj.addEventListener('pointerup', cfin);
-  caj.addEventListener('pointercancel', cfin);
+  man.addEventListener('pointerup', fin);
+  man.addEventListener('pointercancel', fin);
+
+  /* ── Y TAMBIÉN DESDE LA LISTA, CUANDO ESTÁ ARRIBA DE TODO ──
+     Acá hace falta `touchmove` con `passive:false` y `preventDefault()`: con
+     eventos de puntero el navegador ya reclamó el gesto y lo cancela. */
+  const l = $('#cajLista');
+  let ly = 0, larr = false;
+  l.addEventListener('touchstart', e => {
+    larr = l.scrollTop <= 0 && e.touches.length === 1;
+    ly = larr ? e.touches[0].clientY : 0;
+  }, { passive: true });
+  l.addEventListener('touchmove', e => {
+    if (!larr) return;
+    const d = e.touches[0].clientY - ly;
+    if (d <= 0){ larr = false; return; }
+    e.preventDefault();
+    caj.classList.add('tira'); pone(d);
+  }, { passive: false });
+  const lfin = e => {
+    if (!larr) return;
+    larr = false;
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    const d = t ? t.clientY - ly : 0;
+    suelta();
+    if (d > 78) verCajon(false);
+  };
+  l.addEventListener('touchend', lfin);
+  l.addEventListener('touchcancel', lfin);
+
+  /* la letra que se está mirando, mientras se baja por la lista */
+  let pend = false;
+  l.addEventListener('scroll', () => {
+    if (pend || !LETRAS.length) return;
+    pend = true;
+    /* una vez por cuadro y no una por evento: `scroll` dispara docenas de veces
+       por segundo y medir posiciones obliga al navegador a recalcular el layout */
+    requestAnimationFrame(() => {
+      pend = false;
+      /* despegándose del fondo, la letra pedida deja de mandar */
+      if (!alFondo()) PEDIDA = null;
+      marcaRiel(letraVisible());
+    });
+  }, { passive: true });
+
+  /* ══════════ EL RIEL ══════════ */
+  const r = $('#riel'), bur = $('#burbuja');
+  let rAct = false;
+  const rLetra = y => {
+    const c = r.getBoundingClientRect();
+    const bs = $$('#riel b');
+    if (!bs.length) return null;
+    /* por posición y no por índice: las letras están repartidas con
+       `space-around`, así que dividir el alto por la cantidad cae corrido */
+    let mejor = bs[0], dm = Infinity;
+    for (const b of bs){
+      const q = b.getBoundingClientRect();
+      const d = Math.abs((q.top + q.height/2) - y);
+      if (d < dm){ dm = d; mejor = b; }
+    }
+    return mejor.dataset.l;
+  };
+  const rVa = y => {
+    const L = rLetra(y);
+    if (!L) return;
+    if (bur.textContent !== L) vibra(8);
+    bur.textContent = L;
+    bur.style.top = Math.max(46, Math.min(innerHeight - 46, y)) + 'px';
+    bur.style.transform = 'translateY(-50%) scale(1)';
+    vaALetra(L);
+  };
+  r.addEventListener('pointerdown', e => {
+    rAct = true; bur.classList.add('on'); rVa(e.clientY);
+    try { r.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  r.addEventListener('pointermove', e => { if (rAct) rVa(e.clientY); });
+  const rFin = () => { rAct = false; bur.classList.remove('on'); };
+  r.addEventListener('pointerup', rFin);
+  r.addEventListener('pointercancel', rFin);
+}
+
+/* ══════════ LA MASCOTA ══════════
+   Baila mientras se escribe y se va sola a los dos segundos de silencio: una
+   animación que corre siempre deja de significar algo, y de paso no gasta. */
+let MASC_T = 0;
+function mascotaBaila(v){
+  const m = $('#mascota');
+  clearTimeout(MASC_T);
+  if (v){
+    m.classList.add('on');
+    MASC_T = setTimeout(() => m.classList.remove('on'), 2400);
+  } else {
+    m.classList.remove('on');
+  }
 }
 
 /* ══════════ GANCHOS DEL SISTEMA ══════════
@@ -355,8 +606,14 @@ function arranca(){
   $('#cajTit').textContent = T('todas');
 
   fondoInit();
-  requestAnimationFrame(fondoBucle);
   vidrioInit();
+
+  /* la tira de la mascota y su celda salen del horneado: escritas a mano acá,
+     regenerar la hoja con otro tamaño la deja estirada sin que nada avise */
+  const rz = document.documentElement.style;
+  rz.setProperty('--masc', 'url(' + IMG_MASCOTA + ')');
+  rz.setProperty('--mw-masc', MASC_W + 'px');
+  rz.setProperty('--mh-masc', MASC_H + 'px');
 
   cargaApps();
   pintaInicio(); pintaDock();
@@ -380,17 +637,20 @@ function arranca(){
   $('#buscaCaja').addEventListener('pointerdown', abreBusca);
   $('#busca').addEventListener('focus', abreBusca);
 
-  $('#busca2').addEventListener('input', e => { if (!CAJON) verCajon(true); pintaCajon(e.target.value); });
+  $('#busca2').addEventListener('input', e => {
+    if (!CAJON) verCajon(true);
+    pintaCajon(e.target.value);
+    mascotaBaila(e.target.value.length > 0);
+  });
   $('#busca2').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const q = e.target.value.trim(); if (!q) return;
     const v = APPS.filter(a => norm(a.n).indexOf(norm(q)) >= 0);
     /* Enter abre la primera coincidencia; sólo si no hay ninguna sale a la web,
        porque buscar «what» y terminar en Google en vez de en WhatsApp es lo
-       contrario de lo que uno quiso */
+       contrario de lo que uno quiso. Para ir a la web a propósito está la fila. */
     if (v.length) abre(v[0].p);
-    else if (HAY_AND) AND.buscarWeb(q);
-    else avisa(T('web', q));
+    else aLaWeb(q);
   });
 
   $('#velo').addEventListener('pointerdown', cierraMenu);
@@ -398,15 +658,18 @@ function arranca(){
   $('#mInfo').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.info(MENU_PKG); cierraMenu(); });
   $('#mBorrar').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.borrar(MENU_PKG); cierraMenu(); });
 
-  /* mantener el fondo abre los ajustes del escritorio: es el gesto de siempre y
-     es la única forma de volver a cambiar de launcher sin ir a buscarlo */
+  /* ── MANTENER EL FONDO ABRE LOS AJUSTES DEL ESCRITORIO ──
+     Es el gesto de siempre y la única forma de volver a cambiar de launcher sin
+     ir a buscar el ajuste a mano. Va sobre `#hoja` —el hueco entre el widget y
+     el dock— y no sobre el fondo: el fondo está en `z-index 0`, debajo de la
+     capa, así que nunca recibiría un dedo. */
   let fl = null;
-  $('#lienzo').addEventListener('pointerdown', () => {
+  $('#hoja').addEventListener('pointerdown', () => {
     fl = setTimeout(() => { vibra(20); if (HAY_AND) AND.elegirInicio(); else avisa(T('inicio')); }, 620);
   });
   const fc = () => { if (fl){ clearTimeout(fl); fl = null; } };
-  $('#lienzo').addEventListener('pointerup', fc);
-  $('#lienzo').addEventListener('pointermove', fc);
+  $('#hoja').addEventListener('pointerup', fc);
+  $('#hoja').addEventListener('pointermove', fc);
 
   document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; });
   addEventListener('resize', () => { calculaFilas(); pintaInicio(); });

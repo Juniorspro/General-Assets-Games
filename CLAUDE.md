@@ -281,6 +281,142 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima decimosexta vuelta (2026-09-06): **AERO** — la foto del usuario de fondo, el cajón que baja, riel A-Z y una mascota
+
+Reporte, seis cosas: *"cuando quiero bajar no baja · que no sea procedural · que sea optimizado · el
+launcher tenga de fondo esta imagen · widget y sin apps en el inicio · una búsqueda en el cajón
+mediante letras al costado al ir bajando · el buscador debe abrirte un buscador · y una mascotita
+frutiger aero ahí bien chill bailando mientras buscas"*, con la foto adjunta.
+
+#### «NO BAJA» ERAN TRES DEFECTOS ENCADENADOS, Y EL TERCERO ES EL QUE LO MATABA
+
+1. **El arrastre estaba sobre `#cajon`, pero el dedo cae sobre `#cajLista`**, que tiene
+   `touch-action:pan-y`: el navegador se queda con el gesto vertical y dispara **`pointercancel`**
+   antes de llegar al umbral. O sea que en un teléfono el cierre no corría **nunca** — en el banco,
+   con ratón, sí, y por eso había pasado.
+2. **Sólo arrastraba con la lista arriba de todo.** Con veintiocho apps la lista scrollea, así que la
+   mayor parte del tiempo la condición era falsa.
+3. **Y el arrastre escribía `style.transform` inline.** `verCajon(false)` saca la clase `.on`, cuya
+   regla dice `translateY(100%)` — pero **el inline le gana por especificidad**, así que aunque el
+   cierre corriera, el cajón se quedaba clavado donde estaba el dedo.
+
+El arreglo son dos caminos y ninguno pelea con el navegador: una **manija** con `touch-action:none`,
+donde el gesto es nuestro siempre; y `touchmove` con `{passive:false}` sobre la lista cuando está
+arriba de todo, que es el único modo de llamar a `preventDefault()` antes de que el navegador
+reclame el gesto. Y la posición va por **variable de CSS** que sólo lee la regla `.on`: sin `.on` no
+hay quien la mire, así que cerrar vale siempre.
+
+Medido: arrastrar 60 px deja `--caj-y: 60px` y soltar en 110 cierra con `translateY(892px)`; un
+tirón de 32 px **no** cierra; desde la lista arriba de todo cierra; y **con la lista scrolleada a 400
+no cierra** — scrollea, que es lo correcto.
+
+#### EL FONDO DEJA DE SER PROCEDURAL, Y ESA ES LA OPTIMIZACIÓN
+
+Era un lienzo con ocho cielos interpolados por hora, nubes, agua, rayos, burbujas y hojas,
+redibujado a 30 Hz sobre toda la pantalla — **0,205 ms de JavaScript por cuadro más el relleno de
+412×892**, y encima cada `backdrop-filter` del vidrio vuelve a leer esos píxeles. Ahora es una foto:
+el compositor la sube a la GPU una vez y no la vuelve a tocar. **Cero lienzos vivos**, medido.
+Lo único que se mueve es una deriva de 24 s hecha con `transform`, que resuelve el compositor.
+
+**LA FOTO NO ES LA QUE MANDÓ EL USUARIO, Y ES A PROPÓSITO.** La suya mide **495×619**; recortada a
+9:16 quedan **286 px de ancho para los 1236 que pide un teléfono a densidad 3**, o sea que sale
+borrosa haga lo que haga el horneado. Se generó con Rezona una versión 9:16 de **la misma escena**
+—mismo cielo partido, misma isla con el árbol, misma columna de burbujas, mismos peces— a 768×1376,
+y se hornea a 824 de ancho: la densidad 2 la cubre entera y pesa la mitad que a 1236. 113 KB.
+
+#### EL VIDRIO ESTABA CALIBRADO CONTRA UN FONDO QUE YA NO EXISTE
+
+Y esto sólo se ve midiendo. Con el lienzo procedural —más oscuro y menos saturado— un lavado blanco
+al 14 % con `brightness(1.12) saturate(190%)` quedaba bien. Sobre la foto:
+
+| debajo de | luminancia | contra blanco |
+|---|---|---|
+| la barra de búsqueda | **200 / 255** | **1,5:1** |
+| el widget | 182 | 1,4:1 |
+| el dock | 163, y en `rgb(117,179,138)` — **un slab verde lima** | |
+
+El verde es `saturate(190%)` amplificando lo que la foto ya trae saturado. Con el vidrio recalibrado
+—tinte azul oscuro en vez de lavado blanco, `saturate(142%) brightness(.88)`— la búsqueda bajó a
+159, que **sigue sin alcanzar** (1,6:1). Bajar más convierte el vidrio en un panel opaco y se pierde
+el vidrio.
+
+**LA SALIDA ES LA DE CUALQUIER SISTEMA: UN VELO DETRÁS DE LAS FRANJAS QUE LLEVAN TEXTO**, y nada en
+el medio, que es donde la foto tiene que verse. Medido después: barra de estado **70,8**, widget
+**111,9**, búsqueda **130,4**, dock **118,0** — y el medio se queda en **185,4**, o sea que el
+fondo se sigue viendo.
+
+#### EL INICIO SIN APPS CAMBIA QUÉ ES EL INICIO
+
+Se siembra sólo el dock —un dock vacío la primera vez sí se lee a que el launcher no funcionó— y el
+inicio queda para el widget. **La reja no se borra**: fijar una app sigue existiendo y ahí es donde
+aparece.
+
+El widget es el reloj de antes convertido en algo que vale la pantalla que ocupa: hora grande, día y
+fecha, **aro de batería** con su porcentaje y color (rojo por debajo de 15) y el saludo de la franja
+del día. Todo de datos que el launcher ya tiene: ni red, ni un permiso nuevo.
+
+#### EL RIEL A-Z, Y UN CONTRATO REPARTIDO ENTRE DOS LENGUAJES
+
+Encabezados de letra en el cajón y un riel al costado: se arrastra y salta, y bajando por la lista
+la letra se marca sola. **La letra actual se mide** —el último encabezado que pasó el borde— y no se
+cuenta por filas, así que vale igual con dos apps que con trescientas.
+
+**Y APARECIÓ UN DEFECTO DE CONTRATO.** `Puente.apps()` ordena alfabético sin acentos del lado de
+Java, y el índice **depende** de que la lista venga ordenada. Medido con la lista de la vista previa
+sin ordenar, el riel salió `T M C W S I T Y G M P M S N D X T A C R L R U A D` — **veinticinco
+secciones para veintiocho apps**, con `ANCLA[letra]` quedándose con la última, así que tocar una
+letra saltaba a otro lado. Un contrato repartido entre dos lenguajes se rompe el día que alguien
+toca uno de los dos: ahora se ordena **también** en JS.
+
+**Y EL RIEL SE APARTA DEL BORDE.** Medido, la letra llegaba a **x 405 de 412**, y el gesto de
+«atrás» de Android vive en los ~24 px de cada canto: un riel pegado al borde le regala la mitad de
+los arrastres al sistema. Con 34 px de ancho y 10 de margen la banda queda en **368-402**.
+
+**Y LAS ÚLTIMAS TRES LETRAS NO PODÍAN LLEGAR ARRIBA**, porque `scrollTop` topa antes. Medido, tocar
+«S» dejaba «R» arriba y el riel marcando otra cosa que la que se estaba mirando. Rellenar la lista
+con medio alto de pantalla las haría llegar —es lo que hace iOS— y deja un vacío que hay que
+scrollear. Con la lista en el tope **todas las secciones que faltan están a la vista**, así que la
+respuesta honesta a «qué letra estoy mirando» es la que se pidió: **16 de 16 letras**, sin vacío.
+
+#### EL BUSCADOR ERA UN ATAJO DE TECLADO QUE EN UN TELÉFONO NO EXISTE
+
+Buscar en la web estaba sólo en el Enter y sólo cuando ninguna app coincidía — o sea que en un
+teléfono, donde no hay Enter a la vista, no existía. Va como una **fila al final de los resultados**,
+visible desde la primera letra.
+
+#### LA MASCOTA: TRES CUADROS, Y LA CUENTA DE LOS PASOS
+
+Generada con Rezona: una gota de vidrio con una hoja en la cabeza, tres poses de baile con la misma
+escala y la misma línea de piso —escalando cada cuadro a su propia caja, el que levanta los brazos
+se agranda y la mascota **late** en vez de bailar—. 16 KB.
+
+Dos defectos, los dos de la captura:
+- **Se veían las tres mascotas.** La tira mide 300 % de la ventana y sin `overflow:hidden` el
+  contenedor no recorta nada.
+- **Y los pasos caían entre cuadros.** `translateX` en porcentaje es del propio elemento, y
+  `steps(3)` **nunca llega al valor final**: se detiene en 0, X/3 y 2X/3. Para que ésos caigan en 0,
+  una celda y dos celdas, el destino tiene que ser **−100 %** y no −66,67 %. Con −66,67 los pasos
+  caen en 0, −22,2 % y −44,4 %, y en la foto salían dos medias mascotas.
+
+Baila **sólo mientras se escribe** y se va a los 2,4 s de silencio: una animación que corre siempre
+deja de significar algo.
+
+#### MEDIDO AL CERRAR
+
+`window.__errs` **vacío en las diez corridas**. Fondo: foto puesta, **0 lienzos**. Widget con hora,
+fecha, saludo y el aro cambiando de color a los tres escalones de batería (12 % rojo, 76 % verde,
+cargando celeste). **4 de 4 filtros de refracción**. **Cero solapamientos** y cero fuera del cuadro,
+también con los insets cambiados en caliente. Riel: 16 letras ordenadas sin repetir, encabezados que
+coinciden, y **las 16 alcanzables**. Búsqueda: «mer» → Mercado Libre y Mercado Pago (no Cámara),
+«musically» → TikTok por el paquete, «zzz» → 0 y la fila de la web igual. Mascota: 3 cuadros, tira
+cargada, bailando al escribir y apagada al cerrar. Cerrar el cajón por los dos caminos, y **no**
+cerrar estando scrolleado. Subir sobre el dock abre. APK **260 KB** con firma v2+v3.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del APK está medido que compila,
+firma y lleva adentro lo que tiene que llevar — no que arranque en un teléfono. Y la foto de fondo
+es una versión generada de la escena que mandó el usuario, no su archivo: el suyo es de 495 px de
+ancho y en un teléfono se vería borroso.
+
 ### Centésima decimoquinta vuelta (2026-09-06): **AERO** — un launcher de Android de verdad, no una página
 
 Pedido: *"che me hacés un launcher para mi celu? super frutiger aero y líquid glass"*, y enseguida

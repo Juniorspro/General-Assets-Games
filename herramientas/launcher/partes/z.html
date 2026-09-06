@@ -94,27 +94,66 @@ window.__A = {
     return { n: r.length, cajas: r, choques,
              fuera: r.filter(z => z.y + z.h > innerHeight + 1 || z.y < -1).map(z => z.s) };
   },
-  /* cuánto cuesta un cuadro del fondo, promediado */
-  costo(n){
-    const N = n || 60, t0 = performance.now();
-    for (let i = 0; i < N; i++) fondoPinta(performance.now() + i*33);
-    return { ms: +((performance.now() - t0)/N).toFixed(3), cal: CAL,
-             pxr: +PXR.toFixed(2), w: LZ.width, h: LZ.height };
+  /* ── EL FONDO YA NO CUESTA UN CUADRO, Y ESO SE MIDE ──
+     Con el lienzo procedural había un `costo(n)` que promediaba milisegundos de
+     dibujo. Ahora no hay nada que dibujar: lo que se puede comprobar es que la
+     foto decodificó, que está puesta y que no quedó ni un lienzo vivo. */
+  fondo(){
+    const f = $('#fondo');
+    const bg = getComputedStyle(f).backgroundImage;
+    return { ok: FONDO_OK, puesta: f.classList.contains('ok'),
+             hondo: f.classList.contains('hondo'),
+             tieneFoto: bg.indexOf('data:image') >= 0,
+             lienzos: document.querySelectorAll('canvas').length,
+             bytes: IMG_FONDO.length, w: FONDO_W, h: FONDO_H };
   },
-  /* el cielo a una hora dada, sin esperar a que sea esa hora */
-  cielo(h){
-    const c = cieloDe(h);   /* HORAS, no fracción */
-    return { h, cols: c.c, sol: c.sol, luz: c.luz, est: c.est };
+  /* el widget entero, que es lo único que hay arriba */
+  widget(){
+    return { hora: $('#hora').textContent, fecha: $('#fecha').textContent,
+             pct: $('#wPct').textContent, saludo: $('#wSaludo').textContent,
+             arco: +getComputedStyle($('#wArco')).strokeDashoffset.replace('px', '').trim(),
+             color: getComputedStyle($('#wArco')).stroke };
   },
-  hora(h){ HORA_FIJA = h; fondoPinta(performance.now()); return this.cielo(h); },
+  bateria(n, c){ ponBateria({ n: n, c: !!c }); return this.widget(); },
+  /* el riel de letras */
+  riel(){
+    return { letras: LETRAS, enRiel: $$('#riel b').map(b => b.dataset.l),
+             visto: $('#riel').style.display !== 'none',
+             marcada: ($$('#riel b').find(b => b.classList.contains('on')) || {}).textContent || null,
+             mirando: LETRAS.length ? letraVisible() : null,
+             encabezados: $$('#cajLista .let').map(e => e.textContent) };
+  },
+  letra(L){ vaALetra(L); return { marcada: L, top: $('#cajLista').scrollTop,
+                                  mirando: letraVisible() }; },
+  /* la mascota */
+  masc(){
+    const m = $('#mascota'), i = m.querySelector('i');
+    const cs = getComputedStyle(i);
+    return { on: m.classList.contains('on'), cuadros: MASC_N,
+             celda: [MASC_W, MASC_H],
+             tira: cs.backgroundImage.indexOf('data:image') >= 0,
+             anim: cs.animationName, dur: cs.animationDuration };
+  },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
   cajon(v){ verCajon(v !== false); return CAJON; },
   pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
   menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
   cierra(){ cierraMenu(); return MENU_PKG; },
-  buscar(q){ verCajon(true); $('#busca2').value = q; pintaCajon(q);
-             return { n: $$('#cajLista .ap').length,
-                      nombres: $$('#cajLista .nom').map(e => e.textContent) }; },
+  /* ── LA SONDA ESCRIBE POR EL CAMINO DEL DEDO ──
+     Llamando a `pintaCajon` directo se saltea el escucha de `input`, que es
+     quien hace bailar a la mascota: medido, `masc().on` daba false después de
+     buscar y parecía que la mascota no andaba. Se despacha un `input` de
+     verdad, que es lo que dispara el teclado. */
+  buscar(q){
+    verCajon(true);
+    const i = $('#busca2');
+    i.value = q;
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    return { n: $$('#cajLista .ap').length,
+             nombres: $$('#cajLista .nom').map(e => e.textContent),
+             web: $$('#cajLista .web').length,
+             textoWeb: ($('#cajLista .web span:last-child') || {}).textContent || null };
+  },
   insets(t, b){ window.__insets(t, b); return { filas: FILAS }; }
 };
 
@@ -124,8 +163,7 @@ window.__A = {
    esconde justamente el elemento que hay que mirar. */
 if (!HAY_AND){
   addEventListener('DOMContentLoaded', () => {
-    $('#batN').textContent = '76%';
-    $('#batLlena').style.width = '76%';
+    ponBateria({ n: 76, c: false });
     setTimeout(() => avisa(T('sinPuente')), 900);
   });
 }

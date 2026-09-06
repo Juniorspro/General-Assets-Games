@@ -31,13 +31,45 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   --verde:#a8e85c;
   /* el vidrio no es un color plano: es blanco con muy poca opacidad y un borde
      que se lee más claro arriba que abajo, porque la luz viene de arriba */
-  --v-fondo:rgba(255,255,255,.14);
+  /* ── EL VIDRIO SE CALIBRÓ CONTRA UN FONDO QUE YA NO EXISTE ──
+     Con el lienzo procedural el fondo era más oscuro y menos saturado, así que
+     un lavado blanco al 14% con `brightness(1.12) saturate(190%)` quedaba bien.
+     Sobre la foto no: medido en la captura, debajo de la barra de búsqueda la
+     luminancia da **200 sobre 255** con saturación 0,55, y texto blanco sobre
+     200 no se lee (1,5:1 de contraste); y el dock, sobre el pasto, salía
+     `rgb(117,179,138)` — un slab verde lima, que es `saturate(190%)`
+     amplificando lo que la foto ya trae saturado.
+     El tinte pasa a ser azul oscuro: no aclara, pone un TECHO. */
+  --v-fondo:rgba(8,44,82,.26);
   --v-borde:rgba(255,255,255,.42);
   --v-borde-b:rgba(255,255,255,.10);
   --v-sombra:0 8px 28px rgba(4,26,52,.34);
 }
 
-#lienzo{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+/* ── EL FONDO ES UNA FOTO, CON UN DEGRADADO DEBAJO ──
+   El degradado no es decoración: es lo que se ve mientras la foto decodifica y
+   lo que queda si no decodifica nunca. Sin él, el primer cuadro del launcher es
+   un rectángulo vacío.
+   La deriva y el acercamiento son `transform` puro, o sea que los resuelve el
+   compositor y no cuestan un cuadro de JavaScript. El `scale(1.06)` de base
+   existe para que la deriva no descubra los bordes. */
+#fondo{position:fixed;inset:0;z-index:0;
+  background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
+  background-size:cover;background-position:center;
+  transform:scale(1.06);will-change:transform;
+  transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
+#fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
+#fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+#veloT,#veloB{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
+#veloT{top:0;height:44%;
+  background:linear-gradient(180deg,rgba(3,26,54,.60) 0%,rgba(3,26,54,.38) 46%,rgba(3,26,54,0) 100%)}
+#veloB{bottom:0;height:24%;
+  background:linear-gradient(0deg,rgba(3,26,54,.52) 0%,rgba(3,26,54,.22) 58%,rgba(3,26,54,0) 100%)}
+@keyframes deriva{
+  from{transform:scale(1.06) translate3d(-.9%,-.5%,0)}
+  to  {transform:scale(1.09) translate3d(.9%,.6%,0)}}
+/* quien pidió menos movimiento no ve ninguno */
+@media (prefers-reduced-motion:reduce){#fondo.ok{animation:none}}
 #svgdefs{position:fixed;width:0;height:0;pointer-events:none}
 
 #capa{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
@@ -51,8 +83,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
     inset 0 1px 0 rgba(255,255,255,.55),
     inset 0 -1px 0 rgba(255,255,255,.10),
     inset 0 0 22px rgba(255,255,255,.07);
-  backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
-  -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
+  backdrop-filter:blur(15px) saturate(142%) brightness(.88);
+  -webkit-backdrop-filter:blur(15px) saturate(142%) brightness(.88);
   overflow:hidden}
 /* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
    Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
@@ -91,8 +123,27 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   box-shadow:0 0 6px rgba(184,240,120,.8);transition:width .4s}
 
 /* ══════════ RELOJ ══════════ */
-#reloj{flex:0 0 auto;margin:14px 20px 0;padding:18px 22px 16px;
-  display:flex;align-items:flex-end;gap:14px}
+/* ── EL WIDGET ──
+   Con el inicio sin apps, esto es lo único que hay arriba del dock, así que
+   tiene que valer la pantalla que ocupa: hora grande, día y fecha, el aro de
+   batería con su porcentaje y el saludo de la franja del día. Todo sale de
+   datos que el launcher YA tiene — nada de red, nada de permisos nuevos. */
+#reloj{margin:0 20px 12px;padding:16px 18px;border-radius:26px;
+  display:flex;align-items:center;gap:14px}
+#wIzq{flex:1;min-width:0}
+#wDer{flex:0 0 auto;width:78px;position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:center}
+#wAro{width:60px;height:60px;transform:rotate(-90deg)}
+#wAro circle{fill:none;stroke-width:5;stroke-linecap:round}
+#wAro .wPista{stroke:rgba(255,255,255,.28)}
+/* 2πr con r=25 → 157,08: el trazo se recorta moviendo el offset */
+#wAro .wCarga{stroke:#b8f078;stroke-dasharray:157.08;stroke-dashoffset:47;
+  filter:drop-shadow(0 0 5px currentColor);transition:stroke-dashoffset .5s ease}
+#wPct{position:absolute;top:20px;font:800 15px/1 system-ui,sans-serif;
+  text-shadow:0 1px 2px rgba(0,32,64,.9)}
+#wSaludo{margin-top:4px;font-size:10px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;opacity:.9;text-align:center;line-height:1.15;
+  text-shadow:0 1px 2px rgba(0,32,64,.9)}
 /* ── LA SOMBRA SE CALIBRA CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA ──
    Todo el texto de este launcher es blanco y el fondo cambia solo a lo largo
    del día: a las 13 el cielo llega a rgb(218,237,239) y una nube encima de eso
@@ -114,7 +165,11 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #busca::placeholder{color:rgba(255,255,255,.62)}
 
 /* ══════════ PÁGINAS DE ICONOS ══════════ */
-#hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden;margin-top:6px}
+/* ── EL INICIO NO TIENE APPS ──
+   Se pidió así, y cambia lo que la hoja es: ya no es una reja que hay que
+   llenar sino el aire entre el widget y el dock. Sigue existiendo porque es
+   donde se registra el gesto de subir y donde vive el fondo que se ve. */
+#hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 #tira{display:flex;height:100%;will-change:transform}
 .pag{flex:0 0 100%;height:100%;display:grid;
   grid-template-columns:repeat(4,1fr);align-content:start;
@@ -133,8 +188,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   box-shadow:0 5px 14px rgba(4,26,52,.30),
     inset 0 1px 0 rgba(255,255,255,.60),
     inset 0 -6px 12px rgba(0,40,80,.10);
-  backdrop-filter:blur(8px) saturate(175%);
-  -webkit-backdrop-filter:blur(8px) saturate(175%);
+  backdrop-filter:blur(9px) saturate(138%) brightness(.9);
+  -webkit-backdrop-filter:blur(9px) saturate(138%) brightness(.9);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
@@ -147,7 +202,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   text-shadow:0 1px 2px rgba(0,30,62,.95),0 1px 6px rgba(0,36,72,.85),0 0 14px rgba(0,40,80,.6)}
 
 /* ══════════ PUNTOS DE PÁGINA ══════════ */
-#puntos{flex:0 0 auto;display:flex;justify-content:center;gap:7px;padding:8px 0 6px}
+
 .pt{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);
   transition:all .25s}
 .pt.on{background:#fff;width:18px;border-radius:3px;box-shadow:0 0 10px rgba(255,255,255,.8)}
@@ -166,10 +221,17 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #cajon{position:fixed;inset:0;z-index:3;transform:translateY(100%);
   transition:transform .34s cubic-bezier(.22,.9,.24,1);
   display:flex;flex-direction:column;padding:var(--ins-t) 0 var(--ins-b);
-  background:linear-gradient(180deg,rgba(10,58,104,.30) 0%,rgba(9,50,94,.42) 40%,rgba(7,38,74,.56) 100%);
-  backdrop-filter:blur(30px) saturate(185%) brightness(1.04);
-  -webkit-backdrop-filter:blur(30px) saturate(185%) brightness(1.04)}
-#cajon.on{transform:translateY(0)}
+  background:linear-gradient(180deg,rgba(9,52,96,.40) 0%,rgba(8,45,86,.50) 40%,rgba(6,34,68,.62) 100%);
+  backdrop-filter:blur(30px) saturate(150%) brightness(.82);
+  -webkit-backdrop-filter:blur(30px) saturate(150%) brightness(.82)}
+/* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
+   Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
+   le gana por especificidad y el cajón queda clavado donde estaba el dedo.
+   Con una variable que sólo lee la regla `.on`, cerrar vuelve a valer siempre:
+   sin `.on` no hay quien la mire. */
+#cajon{--caj-y:0px}
+#cajon.on{transform:translateY(var(--caj-y))}
+#cajon.tira{transition:none}
 #cajTit{flex:0 0 auto;padding:2px 22px 6px;font-size:12px;font-weight:700;
   letter-spacing:.16em;opacity:.72;text-transform:uppercase;
   text-shadow:0 1px 3px rgba(0,20,45,.6)}
@@ -183,11 +245,94 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   display:flex;align-items:center;gap:10px;border-radius:23px}
 #cajBusca input{flex:1;background:none;border:0;outline:none;color:#fff;
   font:600 15px/1 system-ui,sans-serif;min-width:0}
-#cajBusca input::placeholder{color:rgba(255,255,255,.62);font-weight:500}
+#cajBusca input::placeholder{color:rgba(255,255,255,.82);font-weight:500}
 #cajBusca input::-webkit-search-cancel-button{-webkit-appearance:none}
+/* ── LA MANIJA: SE VE Y SE AGARRA ──
+   `touch-action:none` es todo el arreglo de «no baja»: acá el gesto vertical es
+   nuestro y el navegador no lo cancela a mitad de camino. */
+#cajManija{flex:0 0 auto;height:26px;display:flex;align-items:center;
+  justify-content:center;touch-action:none;cursor:grab}
+#cajManija i{width:46px;height:5px;border-radius:3px;background:rgba(255,255,255,.62);
+  box-shadow:0 0 10px rgba(255,255,255,.4)}
+#cajon.tira #cajManija{cursor:grabbing}
+
+#cajCuerpo{flex:1 1 auto;min-height:0;display:flex}
 #cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);
-  align-content:start;gap:6px 0;padding:6px 8px 20px}
+  align-content:start;gap:2px 0;padding:4px 2px 26px 10px}
+/* la fila de buscar en la web y el «sin resultados» cruzan la reja entera */
+#cajLista .vacio{grid-column:1/-1;text-align:center;opacity:.72;padding:22px 12px 6px;
+  font-size:14px;text-shadow:0 1px 3px rgba(0,20,45,.7)}
+#cajLista .web{grid-column:1/-1;margin:10px 6px 0;padding:12px 14px;border-radius:18px;
+  display:flex;align-items:center;gap:11px;font-size:14px;font-weight:600;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4);cursor:pointer;
+  text-shadow:0 1px 3px rgba(0,20,45,.7)}
+#cajLista .web:active{background:rgba(255,255,255,.26)}
+#cajLista .web .lupa{flex:0 0 auto;opacity:.9}
+#cajLista .web span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* el encabezado de letra cruza la reja entera */
+#cajLista .let{grid-column:1/-1;padding:9px 6px 1px;font:800 12px/1 system-ui,sans-serif;
+  letter-spacing:.18em;opacity:.72;text-shadow:0 1px 3px rgba(0,20,45,.7)}
+
+/* ── EL RIEL DE LETRAS ──
+   Sólo lleva las letras que TIENEN apps: un riel con las 26 fijas manda a la
+   nada en la mitad de los toques, y eso se siente a que el riel está roto. */
+/* ── EL RIEL SE APARTA DEL BORDE, Y NO ES ESTÉTICA ──
+   Medido, la letra llegaba a x 405 de 412: pegada al canto. Y el gesto de
+   «atrás» de Android vive en los ~24 px de cada borde, así que un riel flush
+   contra el canto le regala la mitad de los arrastres al sistema. Con 34 px de
+   ancho y 10 de margen la banda del dedo queda en 368-402, o sea afuera de la
+   zona del sistema y con blanco suficiente para acertarle. */
+#riel{flex:0 0 auto;width:34px;margin-right:10px;padding:4px 0;touch-action:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-around;
+  user-select:none;-webkit-user-select:none}
+#riel b{font:800 10px/1 system-ui,sans-serif;opacity:.62;
+  text-shadow:0 1px 2px rgba(0,20,45,.8);transition:opacity .12s,transform .12s}
+#riel b.on{opacity:1;transform:scale(1.55);color:#d8f7ff}
+
+/* la burbuja con la letra grande, sólo mientras el dedo va por el riel */
+#burbuja{position:absolute;right:56px;top:50%;transform:translateY(-50%) scale(.7);
+  width:64px;height:64px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font:800 30px/1 system-ui,sans-serif;color:#062a44;
+  background:radial-gradient(circle at 34% 28%,#eafcff,#8fe0f7 62%,#4fc0e8);
+  box-shadow:0 8px 22px rgba(0,40,80,.45),inset 0 2px 0 rgba(255,255,255,.9);
+  opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;z-index:3}
+#burbuja.on{opacity:1;transform:translateY(-50%) scale(1)}
+
+/* ── LA MASCOTA BAILA MIENTRAS SE BUSCA ──
+   Tres cuadros en una tira con la MISMA celda, así que animar es correr la x
+   por pasos — `steps(3)` y nada más. Se apaga cuando no se está escribiendo:
+   una animación que corre siempre deja de significar algo (y de paso no gasta). */
+/* ── LA VENTANA RECORTA LA TIRA, Y SIN ESO SE VEN LAS TRES ──
+   `#mascota i` mide 300% de ancho porque lleva los tres cuadros en fila y la
+   animación corre la x. Sin `overflow:hidden` el contenedor no recorta nada:
+   medido en la captura, salían las tres mascotas seguidas y dos de ellas
+   fuera de la pantalla. La ventana es de UNA celda; la tira se mueve detrás. */
+#mascota{position:absolute;left:50%;bottom:16px;width:var(--mw-masc);
+  height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);overflow:hidden;
+  opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1);z-index:2;
+  filter:drop-shadow(0 6px 14px rgba(0,40,80,.5))}
+#mascota.on{opacity:1;transform:translateY(0) scale(1)}
+#mascota i{display:block;width:300%;height:100%;
+  background-image:var(--masc);background-size:100% 100%;
+  animation:bailar .66s steps(3) infinite}
+/* ── EL DESTINO ES -100%, NO -66,67% ──
+   `translateX` en porcentaje es del propio elemento, y la tira mide 300% de la
+   ventana, o sea tres celdas. `steps(3)` reparte el recorrido en tres y NUNCA
+   llega al valor final, así que se detiene en 0, X/3 y 2X/3. Para que esos tres
+   caigan justo en 0, una celda y dos celdas —o sea 0, -33,33% y -66,67% de la
+   TIRA— el destino tiene que ser -100%. Con -66,67% los pasos caen en 0,
+   -22,2% y -44,4%: entre cuadros, y en la captura se veían dos medias
+   mascotas. */
+@keyframes bailar{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+/* y el cabeceo va aparte: encima de los pasos, para que no sea un flipbook seco */
+#mascota.on{animation:chill 1.32s ease-in-out infinite alternate}
+@keyframes chill{from{transform:translateY(2px) rotate(-3deg)}
+                 to  {transform:translateY(-4px) rotate(3deg)}}
+@media (prefers-reduced-motion:reduce){
+  #mascota i{animation:none}#mascota.on{animation:none}}
 /* ── EL TIRADOR SE VE Y NO SE TOCA ──
    Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
    montaba encima 26 px justo sobre dos de los cuatro iconos —
@@ -241,7 +386,17 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 </style>
 </head>
 <body>
-<canvas id="lienzo"></canvas>
+<div id="fondo"></div>
+<!-- ── LOS VELOS SON LO QUE HACE LEGIBLE EL TEXTO BLANCO ──
+     Medido sobre la foto: debajo de la barra de búsqueda la luminancia daba 200
+     sobre 255 y el vidrio recalibrado la dejó en 159 — texto blanco sobre 159
+     es 1,6:1 de contraste, o sea que no se lee. Bajar más el vidrio lo
+     convierte en un panel opaco y se pierde el vidrio.
+     La salida es la de cualquier sistema: un degradado detrás de las franjas
+     que llevan texto, y nada en el medio, que es donde la foto tiene que
+     verse. Cuesta dos elementos sin repintado y no toca el vidrio. -->
+<div id="veloT"></div>
+<div id="veloB"></div>
 <svg id="svgdefs" aria-hidden="true"><defs>
   <!-- el mapa de desplazamiento lo dibuja d.js y lo mete acá: es una imagen
        cuyo canal rojo dice cuánto correr en x y el verde cuánto en y -->
@@ -259,8 +414,18 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   </div>
 
   <div class="vid refr" id="reloj">
-    <div id="hora">—</div>
-    <div id="fecha">—</div>
+    <div id="wIzq">
+      <div id="hora">—</div>
+      <div id="fecha">—</div>
+    </div>
+    <div id="wDer">
+      <svg id="wAro" viewBox="0 0 60 60" aria-hidden="true">
+        <circle class="wPista" cx="30" cy="30" r="25"/>
+        <circle class="wCarga" id="wArco" cx="30" cy="30" r="25"/>
+      </svg>
+      <div id="wPct">—</div>
+      <div id="wSaludo">—</div>
+    </div>
   </div>
 
   <div class="vid refr" id="buscaCaja">
@@ -271,13 +436,18 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   </div>
 
   <div id="hoja"><div id="tira"></div></div>
-  <div id="puntos"></div>
   <div class="vid refr" id="dock"></div>
 </div>
 
 <div id="tirador"><i></i></div>
 
 <div id="cajon">
+  <!-- ── LA MANIJA ES LA ÚNICA FORMA GARANTIZADA DE CERRAR ──
+       Arrastrar sobre la lista no alcanza: `#cajLista` tiene `touch-action:pan-y`,
+       así que el navegador se queda con el gesto vertical y dispara
+       `pointercancel` antes de que el arrastre llegue al umbral. Esta franja
+       lleva `touch-action:none`, o sea que el gesto es nuestro siempre. -->
+  <div id="cajManija"><i></i></div>
   <div class="vid" id="cajBusca">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
       stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
@@ -285,7 +455,14 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
       autocapitalize="none" spellcheck="false" placeholder="—">
   </div>
   <div id="cajTit">—</div>
-  <div id="cajLista"></div>
+  <div id="cajCuerpo">
+    <div id="cajLista"></div>
+    <!-- el riel A-Z; lo llena e.js con las letras que de verdad tienen apps -->
+    <div id="riel"></div>
+  </div>
+  <div id="burbuja">A</div>
+  <!-- la mascota baila sólo mientras se escribe -->
+  <div id="mascota"><i></i></div>
 </div>
 
 <div id="velo"></div>
