@@ -165,17 +165,28 @@ function pintaCajon(filtro){
   pintaRiel();
 }
 
-/* ══════════ EL RIEL A-Z ══════════ */
+/* ══════════ LA BARRA DEL ÍNDICE ══════════ */
 function pintaRiel(){
-  const r = $('#riel');
-  r.innerHTML = '';
-  /* con menos de dos secciones el riel no lleva a ninguna parte */
-  r.style.display = LETRAS.length > 1 ? 'flex' : 'none';
-  for (const L of LETRAS){
-    const b = document.createElement('b');
-    b.textContent = L; b.dataset.l = L;
-    r.appendChild(b);
-  }
+  /* con una sección sola no hay a dónde saltar */
+  $('#riel').style.display = LETRAS.length > 1 ? 'flex' : 'none';
+  ponPomo();
+}
+
+/* ── EL POMO MIDE LO QUE SE VE, NO UN ALTO FIJO ──
+   Un pomo de tamaño constante miente sobre cuánto falta. El alto es la fracción
+   de la lista que entra en la ventana, y su posición la fracción ya recorrida:
+   así la barra dice de una ojeada dónde está uno, que es todo lo que una barra
+   tiene que hacer. */
+function ponPomo(){
+  const l = $('#cajLista'), p = $('#rielPomo'), r = $('#riel');
+  if (!p || r.style.display === 'none') return;
+  const alto = r.clientHeight - 20;
+  const vis = l.clientHeight / Math.max(1, l.scrollHeight);
+  const h = Math.max(34, alto*vis);
+  const max = Math.max(1, l.scrollHeight - l.clientHeight);
+  const k = Math.min(1, l.scrollTop / max);
+  p.style.height = h + 'px';
+  p.style.top = (10 + k*(alto - h)) + 'px';
 }
 
 /* ── LA LETRA QUE SE ESTÁ MIRANDO SE MIDE, NO SE CUENTA ──
@@ -207,7 +218,10 @@ function letraVisible(){
   return act;
 }
 function marcaRiel(L){
-  $$('#riel b').forEach(b => b.classList.toggle('on', b.dataset.l === L));
+  /* la letra ya no vive en una columna: se muestra en la burbuja mientras se
+     arrastra, y lo único permanente es dónde quedó el pomo */
+  $('#burbuja').textContent = L || '';
+  ponPomo();
 }
 function vaALetra(L){
   const h = ANCLA[L];
@@ -532,54 +546,129 @@ function enganchaCajon(){
     });
   }, { passive: true });
 
-  /* ══════════ EL RIEL ══════════ */
+  /* ══════════ LA BARRA DEL ÍNDICE ══════════
+     ── LA POSICIÓN DEL DEDO ES UNA FRACCIÓN, NO UNA LETRA ──
+     Con una columna de letras el dedo caía sobre una y se saltaba ahí. Con una
+     barra lo que hay es una fracción del recorrido, así que se scrollea a esa
+     fracción y la letra que aparece en la burbuja es la que quedó arriba —
+     medida, no supuesta. Eso hace que arrastrar se sienta continuo en vez de
+     saltar entre secciones, que es como se comporta la barra de Xiaomi. */
   const r = $('#riel'), bur = $('#burbuja');
   let rAct = false;
-  const rLetra = y => {
-    const c = r.getBoundingClientRect();
-    const bs = $$('#riel b');
-    if (!bs.length) return null;
-    /* por posición y no por índice: las letras están repartidas con
-       `space-around`, así que dividir el alto por la cantidad cae corrido */
-    let mejor = bs[0], dm = Infinity;
-    for (const b of bs){
-      const q = b.getBoundingClientRect();
-      const d = Math.abs((q.top + q.height/2) - y);
-      if (d < dm){ dm = d; mejor = b; }
-    }
-    return mejor.dataset.l;
-  };
   const rVa = y => {
-    const L = rLetra(y);
-    if (!L) return;
-    if (bur.textContent !== L) vibra(8);
+    const c = r.getBoundingClientRect();
+    const k = cl((y - c.top - 10) / Math.max(1, c.height - 20), 0, 1);
+    const l = $('#cajLista');
+    l.scrollTop = k*Math.max(0, l.scrollHeight - l.clientHeight);
+    PEDIDA = null;
+    const L = letraVisible();
+    if (bur.textContent !== L) vibra(6);
     bur.textContent = L;
     bur.style.top = Math.max(46, Math.min(innerHeight - 46, y)) + 'px';
-    bur.style.transform = 'translateY(-50%) scale(1)';
-    vaALetra(L);
+    ponPomo();
   };
   r.addEventListener('pointerdown', e => {
-    rAct = true; bur.classList.add('on'); rVa(e.clientY);
+    if (!LETRAS.length) return;
+    rAct = true; r.classList.add('on'); bur.classList.add('on'); rVa(e.clientY);
     try { r.setPointerCapture(e.pointerId); } catch (x) {}
   });
   r.addEventListener('pointermove', e => { if (rAct) rVa(e.clientY); });
-  const rFin = () => { rAct = false; bur.classList.remove('on'); };
+  const rFin = () => { rAct = false; r.classList.remove('on'); bur.classList.remove('on'); };
   r.addEventListener('pointerup', rFin);
   r.addEventListener('pointercancel', rFin);
 }
 
 /* ══════════ LA MASCOTA ══════════
-   Baila mientras se escribe y se va sola a los dos segundos de silencio: una
-   animación que corre siempre deja de significar algo, y de paso no gasta. */
-let MASC_T = 0;
+   Baila mientras se escribe, se aburre y se duerme. Todas las animaciones salen
+   de UNA tira y de la tabla `MASC_ANIM` que escribe el horneado. */
+
+/* cuánto dura una vuelta de cada animación. Las de un solo cuadro no son una
+   animación sino una pose: se colocan con un transform y no gastan nada. */
+const MASC_SEG = { baila:.66, saluda:.78, duerme:2.8 };
+/* los aburridos, con `quieto` repetido porque tiene que salir más seguido: una
+   lista con pesos es más corta y más clara que una tabla de probabilidades */
+const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
+
+/* ── LOS `@keyframes` SE ARMAN, NO SE ESCRIBEN ──
+   Cada animación recorre celdas de la tira, y `steps(c)` nunca llega al valor
+   final: para que caiga en i, i+1 … i+c-1 el recorrido va de -i/N a -(i+c)/N del
+   ANCHO DE LA TIRA. Escritos a mano, agregar un cuadro obliga a recalcular cinco
+   porcentajes y el que se olvide muestra media mascota. */
+function mascCSS(){
+  const e = document.createElement('style');
+  document.head.appendChild(e);
+  const h = e.sheet;
+  for (const n in MASC_ANIM){
+    const a = MASC_ANIM[n];
+    if (a[1] < 2) continue;
+    h.insertRule('@keyframes m_' + n + '{from{transform:translateX(' +
+      (-a[0]*100/MASC_N).toFixed(4) + '%)}to{transform:translateX(' +
+      (-(a[0] + a[1])*100/MASC_N).toFixed(4) + '%)}}', h.cssRules.length);
+  }
+}
+
+let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0;
+
+function mascPone(n){
+  if (MASC_HOY === n || !MASC_ANIM[n]) return;
+  MASC_HOY = n;
+  const t = $('#mTira'), a = MASC_ANIM[n];
+  if (a[1] > 1){
+    t.style.transform = '';
+    t.style.animation = 'm_' + n + ' ' + MASC_SEG[n] + 's steps(' + a[1] + ') infinite';
+  } else {
+    t.style.animation = 'none';
+    t.style.transform = 'translateX(' + (-a[0]*100/MASC_N).toFixed(4) + '%)';
+  }
+  $('#mascota').classList.toggle('zzz', n === 'duerme');
+}
+
+/* ── SE ABURRE Y SE DUERME ──
+   No es un adorno: la mascota está para acompañar la búsqueda, y algo que hace
+   siempre lo mismo deja de acompañar a los diez segundos. Baila mientras se
+   teclea, a los 2,2 s de silencio pasa a un ocio sorteado, y a los 7 se duerme
+   con las zetas. */
+function mascOcio(){
+  clearTimeout(MASC_CICLO);
+  if (Date.now() - MASC_ULT > 7000){
+    mascPone('duerme');
+    MASC_CICLO = setTimeout(mascOcio, 5000);
+    return;
+  }
+  mascPone(MASC_OCIO[(Math.random()*MASC_OCIO.length)|0]);
+  MASC_CICLO = setTimeout(mascOcio, 3400 + Math.random()*3000);
+}
+
+/* ── Y NO SE MUESTRA SI NO HAY LUGAR ──
+   Vive pegada abajo del cajón; con una búsqueda que devuelve muchas apps la
+   lista llega hasta ahí y la mascota queda ENCIMA de los resultados, que es lo
+   único que en ese momento hay que poder leer. El hueco se mide, no se supone. */
+function mascCabe(){
+  const l = $('#cajLista');
+  if (!l) return false;
+  const n = l.children.length;
+  if (!n) return true;
+  /* ── SE MIDE EL ÚLTIMO HIJO, NO `scrollHeight` ──
+     `#cajLista` es `flex:1 1 auto` dentro de un cuerpo que también lo es, así
+     que SIEMPRE llena su caja: `scrollHeight` nunca baja de `clientHeight` y la
+     comparación daba falso con dos resultados en pantalla. Lo que dice cuánto
+     ocupa el contenido es dónde termina el último. */
+  const u = l.children[n - 1].getBoundingClientRect();
+  const c = l.getBoundingClientRect();
+  return u.bottom <= c.bottom - MASC_H - 30;
+}
+
 function mascotaBaila(v){
   const m = $('#mascota');
-  clearTimeout(MASC_T);
-  if (v){
+  clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
+  if (v && mascCabe()){
     m.classList.add('on');
-    MASC_T = setTimeout(() => m.classList.remove('on'), 2400);
+    MASC_ULT = Date.now();
+    mascPone('baila');
+    MASC_CICLO = setTimeout(mascOcio, 2200);
   } else {
-    m.classList.remove('on');
+    /* se despide en vez de desaparecer: un corte seco se lee a error */
+    MASC_T = setTimeout(() => { m.classList.remove('on'); }, v ? 0 : 2400);
   }
 }
 
@@ -593,6 +682,23 @@ window.__atras = function(){
   else if (CAJON) verCajon(false);
   else if (PAG > 0) ponPagina(0);
 };
+/* ── LOS INSETS HAY QUE PEDIRLOS, NO SÓLO ESPERARLOS ──
+   `setOnApplyWindowInsetsListener` dispara cuando la vista se adjunta, que es
+   ANTES de que `ui.html` termine de cargar: en ese momento `window.__insets` no
+   existe todavía, el `evaluateJavascript` no encuentra nada y el valor de
+   fábrica —24 px— se queda para siempre. Se vio en el teléfono del usuario: la
+   barra de búsqueda del cajón terminaba pisada por los iconos de la barra de
+   estado. El puente tiene el dato guardado desde el primer cuadro; lo único que
+   faltaba era pedirlo al arrancar. */
+function pideInsets(){
+  if (!HAY_AND || !AND.insets) return;
+  try {
+    const p = String(AND.insets()).split(',');
+    const t = parseInt(p[0], 10), b = parseInt(p[1], 10);
+    if (isFinite(t) && isFinite(b)) window.__insets(t, b);
+  } catch (e) {}
+}
+
 window.__insets = function(t, b){
   document.documentElement.style.setProperty('--ins-t', Math.max(t, 8) + 'px');
   document.documentElement.style.setProperty('--ins-b', Math.max(b, 8) + 'px');
@@ -614,7 +720,11 @@ function arranca(){
   rz.setProperty('--masc', 'url(' + IMG_MASCOTA + ')');
   rz.setProperty('--mw-masc', MASC_W + 'px');
   rz.setProperty('--mh-masc', MASC_H + 'px');
+  rz.setProperty('--masc-n', MASC_N);
+  mascCSS();
+  mascPone('quieto');
 
+  pideInsets();
   cargaApps();
   pintaInicio(); pintaDock();
   pintaReloj(); pintaBateria();

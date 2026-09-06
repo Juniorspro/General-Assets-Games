@@ -281,6 +281,178 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima decimoséptima vuelta (2026-09-06): **AERO** — el personaje voxel del usuario, vidrio de verdad y la barra de Xiaomi
+
+Pedido, con cinco capturas: *"aquí tienes el modelo 3D de la mascota que quiero que aparezca acá en el
+buscador con animaciones randoms como bailar, durmiendo con z saliendo de su cabeza, animaciones donde
+baila mientras buscas · que la UI no sea tan grande porque el buscador está muy arriba y la barra de
+notificaciones también · que sea personalizado todo líquid glass e imitando a Xiaomi o Apple · el
+buscador por letra lo quería así por la barra nomás"*.
+
+#### LA MASCOTA PASA A SER SU PERSONAJE, Y LAS TRES HOJAS SON EL MISMO MUÑECO
+
+La gota de vidrio se va. Entra el chibi voxel del render que mandó —pelo celeste, visor, auriculares,
+buzo con rayas— en **ocho poses**: tres de baile, quieto, con el joystick, saludando y dos durmiendo
+sentado.
+
+**LA PRIMERA HOJA SE DESCRIBIÓ CON PALABRAS Y LAS OTRAS DOS SALEN DE ELLA.** No se pudo subir su render
+como referencia —la URL prefirmada de Higgsfield se rompe al transcribirla, la cuenta está en cero
+créditos, y `upload_project` de Rezona rechaza `assets/` porque el servidor se la reserva—, así que el
+baile se pidió por texto y su `public_url` va como `source_urls` de las otras dos. Eso es lo que hace
+que sean **el mismo** muñeco y no tres parecidos.
+
+**Y PEDIR «ASLEEP» NO ALCANZA: LA PRIMERA HOJA DEL SUEÑO VOLVIÓ DE PIE.** Tres cuadros parados con los
+brazos colgando, o sea una pose de reposo. El generador tiene un prior fortísimo hacia el personaje de
+pie, que es lo que es una hoja de personaje. Lo que sí funciona es describir **el cuerpo parte por
+parte** —el culo apoyado en el piso, las rodillas abiertas, las canillas cruzadas, el mentón contra el
+pecho, la silueta como un triángulo bajo que ocupa la mitad de alto que uno parado— y **prohibir lo
+contrario** con todas las letras: nada de piernas verticales, nada de pies debajo del cuerpo. Salió a
+la primera.
+
+**LAS ZETAS NO ESTÁN EN LA HOJA, y es a propósito.** Se pidieron con todas las letras, y van dibujadas
+por código: pesan cero, **se mueven** —una zeta pintada en el cuadro se lee a calcomanía— y salen las
+tres desfasadas, porque en fase se leen a un solo gesto repetido. El recorte va en `#mVent` y no en
+`#mascota` justamente para que puedan salir por encima de la cabeza.
+
+#### EL HALLAZGO: LA CABEZA ES LO ÚNICO INVARIANTE, Y EL SENTADO VENÍA UN 22 % MÁS GRANDE
+
+Las tres hojas volvieron con los cuadros del **mismo alto** —583 a 588 px— y eso es una trampa: uno
+sentado ocupa mucha menos altura real que uno de pie, así que para llenar el cuadro el generador lo
+dibujó más grande. Escalando por el alto del cuadro, que es lo que uno escribiría, **la mascota CRECE
+al dormirse**.
+
+Lo que no cambia con la pose es la cabeza, que es un bloque rígido. Se la encuentra barriendo el ancho
+de la tinta fila por fila y cortando en el **cuello**, que es la primera vez que el ancho cae por
+debajo del 75 % de lo que venía midiendo. Medido: **248 y 251 de pie** —o sea que esas dos hojas
+comparten cámara— **y 303 sentado**. Con eso las escalas quedan 0,306 · 0,303 · 0,251.
+
+**Y LA CABEZA SE MIDE EN UN CUADRO CON LOS BRAZOS ABAJO.** Con los brazos levantados el barrido cuenta
+brazos+cabeza: medido, los dos cuadros del baile con los brazos arriba dan **349 en vez de 248**, y con
+ese número la hoja entera sale un 40 % chica. La cámara es de la HOJA, así que se mide un cuadro de
+referencia por hoja y su escala vale para los otros.
+
+#### LA TIRA SE REORDENA AL HORNEAR, PORQUE UNA ANIMACIÓN DE CSS SÓLO RECORRE CELDAS CONTIGUAS
+
+`masc_quieto` vino (quieto, mando, saluda) y **saludar es quieto ↔ saluda**, o sea dos celdas que en la
+hoja no son vecinas. El reorden va en `hornear.py` y no en tres tiras con tres imágenes: una sola tira
+es una sola decodificación y una sola celda.
+
+**Y LOS `@keyframes` SE ARMAN, NO SE ESCRIBEN.** `steps(c)` **nunca llega al valor final**: para que la
+animación que empieza en la celda `i` y dura `c` cuadros caiga justo en i, i+1 … i+c-1, el recorrido va
+de `-i/N` a `-(i+c)/N` del ancho de la tira. Eso es una cuenta y la hace el JS leyendo `MASC_ANIM`, que
+escribe el horneado. Escrita a mano, agregar un cuadro obliga a recalcular cinco porcentajes y el que
+se olvide muestra medias mascotas — que es exactamente lo que ya había pasado con `-66,67%`. Medido,
+las cinco animaciones caen en la celda **0 · 3 · 5 · 3 · 6**, enteras.
+
+Más ocho píxeles de aire por celda: medido, los dos cuadros del baile con los brazos abiertos llegaban
+**exacto** al borde, y el navegador estira la tira con `background-size:100% 100%` — medio píxel de
+redondeo deja asomando el cuadro de al lado.
+
+#### SE ABURRE Y SE DUERME
+
+Baila mientras se teclea —que es lo que se pidió—, a los 2,2 s de silencio pasa a un ocio sorteado
+(quieto, joystick o saludo, con quieto pesado para que salga más seguido) y a los 7 se duerme con las
+zetas. Algo que hace siempre lo mismo deja de acompañar a los diez segundos.
+
+**Y NO SE MUESTRA SI NO HAY LUGAR**, que era un defecto real: vive pegada al fondo del cajón, y con una
+búsqueda que devuelve muchas apps quedaba **encima de los resultados**. El hueco se mide.
+**Y LA PRIMERA VERSIÓN DE ESA MEDICIÓN NO PODÍA SER CIERTA NUNCA:** miraba `scrollHeight` de
+`#cajLista`, que es `flex:1 1 auto` dentro de un cuerpo que también lo es, o sea que **siempre llena su
+caja** — `scrollHeight` nunca baja de `clientHeight` y con dos resultados en pantalla la mascota no
+aparecía. Lo que dice cuánto ocupa el contenido es dónde termina el último hijo.
+
+#### EL VIDRIO: `.vid.refr` LE GANABA A `.vid`, Y POR ESO EL DOCK ERA VERDE
+
+La vuelta anterior recalibró el vidrio —de `saturate(190%) brightness(1.12)` a `saturate(142%)
+brightness(.88)`— y lo escribió en `.vid`. Pero **`.vid.refr` son dos clases y le ganan a una**, así que
+su `backdrop-filter` no es un agregado sino un **reemplazo**: las cuatro piezas grandes —widget,
+búsqueda, dock y menú, o sea todas las que importan— seguían con `saturate(200%) brightness(1.14)`, que
+es justo la calibración que la otra regla ya había descartado.
+
+Medido en la captura: debajo del widget la **saturación daba 0,80** contra 0,22 del fondo libre — el
+vidrio multiplicaba el color por 3,6 y lo que se veía no era la foto a través de algo sino un slab azul;
+y el dock, sobre el pasto, un slab verde.
+
+**UN VIDRIO NO TIÑE: DESENFOCA Y TIENE CANTO.** Ahora la saturación queda apenas por encima de 1 —el
+vidrio la conserva, no la inventa—, el brillo pone un techo para que el texto blanco se lea, y el
+trabajo de «esto es vidrio» lo hacen tres cosas que se pueden mirar: el **desenfoque** (24 px), la
+**refracción** del canto con `feDisplacementMap`, y el **espesor**, que son cinco sombras internas —el
+filo de arriba, el de abajo (que en un vidrio de verdad recoge la luz del fondo y por eso no es negro),
+el contorno, la luz que se acumula por dentro del canto de arriba y la sombra que le da fondo al de
+abajo—. Es como se lee en iOS y en HyperOS.
+
+**Y EL ESPECULAR PASA A SER UNA FRANJA FINA.** Era un degradado blanco sobre **la mitad de arriba** de
+la pieza, y eso no se lee a reflejo: se lee a vidrio sucio, y encima aclara justo donde va el texto. Un
+vidrio real concentra la luz en los primeros milímetros del canto.
+
+Medido, comparando el mismo encuadre con el vidrio puesto y con el vidrio apagado:
+
+| | fondo pelado | con vidrio | con vidrio y velo |
+|---|---|---|---|
+| dock (sobre el pasto) | sat **0,63** | sat **0,25** | sat 0,16 |
+| widget, sobre la nube | L 251,9 | L 219,2 | L 178,5 |
+| **medio libre** | **L 202,7** | **L 202,7** | **L 202,7** |
+
+O sea que ahora el vidrio **desatura 2,5 veces** en vez de saturar, y la fila de abajo es la prueba de
+que los velos dejaron de tocar el medio de la pantalla: el velo de arriba bajó del 44 % al 30 % y del
+60 % al 50 % de opacidad, porque con el anterior el cielo entero quedaba embarrado — y el cielo es lo
+único que este fondo tiene para mostrar.
+
+**LO QUE EL VIDRIO NO PUEDE ARREGLAR ES LA NUBE.** Sobre lo más claro de la foto la luminancia queda en
+178 y el contraste contra blanco en 1,42:1: ahí lo que sostiene la legibilidad es la sombra del texto, y
+`#wPct` y `#wSaludo` tenían **una sola** sombra pegada. Van dos —una dura, que da el filo, y una ancha y
+difusa, que baja el fondo alrededor de la letra— que es lo que la hora y la fecha ya tenían escrito al
+lado desde hace vueltas.
+
+#### EL RIEL A-Z PASA A SER LA BARRA DE XIAOMI
+
+*"Lo quería así por la barra nomás"*: se va la columna de dieciséis letras y queda una **pista fina con
+su pomo**, que se arrastra. El pomo mide lo que se ve de la lista y se coloca donde está el scroll, así
+que además informa cuánto falta — cosa que una columna de letras no hace. La burbuja con la letra sigue
+saliendo mientras se arrastra, y la letra **se mide** (el último encabezado que pasó el borde), no se
+cuenta por filas. Medido: arrastrar a 0,55 deja **L**, a 0,70 **M**, al fondo **R** —que es correcto,
+con la lista en el tope todas las secciones que faltan están a la vista— y `letra('W')` deja
+`mirando: W`.
+
+#### LA UI BAJA UN 15 % Y LOS INSETS POR FIN LLEGAN
+
+El defecto que el usuario marcó con un círculo: la barra de búsqueda del cajón pisada por los iconos del
+sistema. **`setOnApplyWindowInsetsListener` dispara al adjuntar la vista, o sea antes de que `ui.html`
+exista**: ese `evaluateJavascript` no encuentra `window.__insets` y se va al vacío, y el valor de fábrica
+—24 px— se queda para siempre. El dato ya vivía guardado en el puente, así que el arreglo es que la
+página lo **pida** al arrancar. Medido: con insets 78/52, la manija del cajón queda en y 86 y su búsqueda
+en 106; con 24/16, en 32 y 52.
+
+Y todo lo de arriba se achicó: la manija de 26 a 20 px, la búsqueda del cajón de 46 a 40, la hora de 60 a
+50, el aro de la batería de 60 a 52.
+
+#### DOS DEFECTOS DE LAS SONDAS, Y LOS DOS DEL TIPO DE SIEMPRE
+
+- **La celda de la tira se medía en pantalla y no en layout.** Apagada, la mascota lleva `scale(.86)`, y
+  `getBoundingClientRect` lo aplica: la celda salía de 101 px en vez de 118 y «qué cuadro se está
+  viendo» daba **3,49** donde el transform de verdad decía 3,00. `offsetWidth` no pasa por ninguna
+  transformación.
+- **Y la sonda de la mascota miraba `anim`, que no alcanza.** Una pose de un solo cuadro no tiene
+  animación —se coloca con un transform— así que con `animationName` sola las tres poses sueltas se
+  veían todas igual de «apagadas». Lo que hay que devolver es **dónde quedó la tira**.
+
+#### MEDIDO AL CERRAR
+
+**8 de 8 cuadros** en una tira de 1112×180 (65 KB) con celda 139×180, las **cinco animaciones cayendo en
+su celda exacta** y las tres zetas puestas. Fondo: foto en su sitio, **0 lienzos**. **4 de 4 filtros de
+refracción** con su `feImage` cargado. **Cero solapamientos** entre los cinco elementos del escritorio,
+también con los insets cambiados en caliente. Riel: 16 letras ordenadas, arrastre y salto por letra
+coincidiendo con la que se está mirando. Búsqueda: «mer» → Mercado Libre y Mercado Pago, «musically» →
+TikTok por el paquete, «zzz» → 0 con la fila de la web igual. Mascota: baila al teclear, ocio a los 2,2 s
+—medido, pasa a `mando`— y sueño con zetas. Aro de la batería en sus tres escalones (12 % rojo, 76 %
+verde, cargando celeste). `window.__errs` **vacío en las nueve corridas**. APK **312 KB** con firma
+v2+v3, `HOME`+`DEFAULT`+`LAUNCHER`, `singleTask` y `stateNotNeeded`.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del APK está medido que compila, firma y
+lleva adentro lo que tiene que llevar — no que arranque en un teléfono. Y el personaje salió de describir
+con palabras el render que mandó el usuario, no de su archivo: se parece mucho, pero no es el mismo
+modelo.
+
 ### Centésima decimosexta vuelta (2026-09-06): **AERO** — la foto del usuario de fondo, el cajón que baja, riel A-Z y una mascota
 
 Reporte, seis cosas: *"cuando quiero bajar no baja · que no sea procedural · que sea optimizado · el

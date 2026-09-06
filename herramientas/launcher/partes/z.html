@@ -117,23 +117,55 @@ window.__A = {
   bateria(n, c){ ponBateria({ n: n, c: !!c }); return this.widget(); },
   /* el riel de letras */
   riel(){
-    return { letras: LETRAS, enRiel: $$('#riel b').map(b => b.dataset.l),
+    const p = $('#rielPomo');
+    return { letras: LETRAS,
              visto: $('#riel').style.display !== 'none',
-             marcada: ($$('#riel b').find(b => b.classList.contains('on')) || {}).textContent || null,
+             pomo: [p.style.top, p.style.height],
+             burbuja: $('#burbuja').textContent,
              mirando: LETRAS.length ? letraVisible() : null,
              encabezados: $$('#cajLista .let').map(e => e.textContent) };
   },
+  /* arrastrar la barra por el camino del dedo, no llamando a vaALetra */
+  arrastraRiel(frac){
+    const r = $('#riel'), c = r.getBoundingClientRect();
+    const y = c.top + 10 + frac*(c.height - 20);
+    const o = { bubbles: true, pointerId: 31, isPrimary: true, clientX: c.left + 15, clientY: y };
+    r.dispatchEvent(new PointerEvent('pointerdown', o));
+    r.dispatchEvent(new PointerEvent('pointermove', o));
+    const q = this.riel();
+    r.dispatchEvent(new PointerEvent('pointerup', o));
+    return q;
+  },
   letra(L){ vaALetra(L); return { marcada: L, top: $('#cajLista').scrollTop,
                                   mirando: letraVisible() }; },
-  /* la mascota */
+  /* ── LA MASCOTA ──
+     `x` es dónde quedó la tira: es el ÚNICO número que dice qué cuadro se está
+     viendo. `anim` sola no alcanza — una pose de un cuadro no tiene animación y
+     se colocaría con un transform que nadie estaría midiendo. */
   masc(){
-    const m = $('#mascota'), i = m.querySelector('i');
-    const cs = getComputedStyle(i);
-    return { on: m.classList.contains('on'), cuadros: MASC_N,
-             celda: [MASC_W, MASC_H],
+    const m = $('#mascota'), t = $('#mTira');
+    const cs = getComputedStyle(t);
+    const mt = new DOMMatrixReadOnly(cs.transform);
+    /* ── LA CELDA SE MIDE EN LAYOUT, NO EN PANTALLA ──
+       Apagada, la mascota lleva `scale(.86)`, y `getBoundingClientRect` la
+       aplica: la celda salía de 101 px en vez de 118 y la celda actual daba
+       3,49 donde el transform de verdad decía 3,00. `offsetWidth` no pasa por
+       ninguna transformación. */
+    const cel = t.offsetWidth/MASC_N;
+    return { on: m.classList.contains('on'), zzz: m.classList.contains('zzz'),
+             hoy: MASC_HOY, cuadros: MASC_N, celda: [MASC_W, MASC_H],
              tira: cs.backgroundImage.indexOf('data:image') >= 0,
-             anim: cs.animationName, dur: cs.animationDuration };
+             anim: cs.animationName, dur: cs.animationDuration,
+             pasos: cs.animationTimingFunction,
+             celdaActual: cel ? +( -mt.m41/cel ).toFixed(2) : null,
+             cabe: mascCabe(),
+             zetas: $$('#mZ span').length };
   },
+  /* fuerza una animación y devuelve dónde quedó la tira */
+  mascVer(n){ mascPone(n); return this.masc(); },
+  /* el ocio: se le corre el reloj hacia atrás para no esperar siete segundos */
+  mascDormir(){ MASC_ULT = Date.now() - 9000; mascOcio(); return this.masc(); },
+  mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
   cajon(v){ verCajon(v !== false); return CAJON; },
   pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },

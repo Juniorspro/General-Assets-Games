@@ -88,6 +88,14 @@ public class Principal extends Activity {
       return ins;
     });
 
+    /* ── EL PRIMER ENVÍO DE INSETS SE PIERDE, Y LO ARREGLA LA PÁGINA ──
+       El listener de arriba dispara al adjuntar la vista, o sea antes de que
+       `ui.html` exista: ese `evaluateJavascript` no encuentra `window.__insets`
+       y se va al vacío, y el valor de fábrica se queda para siempre — en el
+       teléfono eso dejaba la barra de búsqueda del cajón pisada por los iconos
+       de la barra de estado. El dato ya vive guardado en el puente, así que el
+       arreglo es que la página lo PIDA al arrancar (`pideInsets`), que corre
+       cuando la página seguro existe. Acá no hace falta un segundo camino. */
     web.loadUrl("file:///android_asset/ui.html");
   }
 

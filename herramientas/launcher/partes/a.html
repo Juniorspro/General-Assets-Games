@@ -29,21 +29,20 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   --ins-t:24px; --ins-b:16px;
   --acento:#7fe3ff;
   --verde:#a8e85c;
-  /* el vidrio no es un color plano: es blanco con muy poca opacidad y un borde
-     que se lee más claro arriba que abajo, porque la luz viene de arriba */
-  /* ── EL VIDRIO SE CALIBRÓ CONTRA UN FONDO QUE YA NO EXISTE ──
-     Con el lienzo procedural el fondo era más oscuro y menos saturado, así que
-     un lavado blanco al 14% con `brightness(1.12) saturate(190%)` quedaba bien.
-     Sobre la foto no: medido en la captura, debajo de la barra de búsqueda la
-     luminancia da **200 sobre 255** con saturación 0,55, y texto blanco sobre
-     200 no se lee (1,5:1 de contraste); y el dock, sobre el pasto, salía
-     `rgb(117,179,138)` — un slab verde lima, que es `saturate(190%)`
-     amplificando lo que la foto ya trae saturado.
-     El tinte pasa a ser azul oscuro: no aclara, pone un TECHO. */
-  --v-fondo:rgba(8,44,82,.26);
-  --v-borde:rgba(255,255,255,.42);
-  --v-borde-b:rgba(255,255,255,.10);
-  --v-sombra:0 8px 28px rgba(4,26,52,.34);
+  /* ── UN VIDRIO NO TIÑE: DESENFOCA Y TIENE CANTO ──
+     Es la diferencia entre esto y un panel pintado, y se mide. Con
+     `saturate(200%)` la saturación debajo del widget daba **0,80** contra 0,22
+     del fondo libre: el vidrio multiplicaba el color por 3,6 y lo que se veía
+     era un slab azul, no la foto a través de algo. El dock, sobre el pasto,
+     salía verde lima por lo mismo.
+     Así que la saturación queda apenas por encima de 1 —el vidrio la conserva,
+     no la inventa—, el brillo pone un techo para que el texto blanco se lea, y
+     el trabajo de "esto es vidrio" lo hacen el DESENFOQUE, la REFRACCIÓN del
+     canto y el ESPECULAR del borde, que es como se lee en iOS y en HyperOS. */
+  --v-fondo:rgba(10,38,70,.15);
+  --v-borde:rgba(255,255,255,.55);
+  --v-borde-b:rgba(255,255,255,.12);
+  --v-sombra:0 10px 30px rgba(3,22,46,.30),0 2px 6px rgba(3,22,46,.18);
 }
 
 /* ── EL FONDO ES UNA FOTO, CON UN DEGRADADO DEBAJO ──
@@ -61,10 +60,14 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
 #fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
 #veloT,#veloB{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
-#veloT{top:0;height:44%;
-  background:linear-gradient(180deg,rgba(3,26,54,.60) 0%,rgba(3,26,54,.38) 46%,rgba(3,26,54,0) 100%)}
-#veloB{bottom:0;height:24%;
-  background:linear-gradient(0deg,rgba(3,26,54,.52) 0%,rgba(3,26,54,.22) 58%,rgba(3,26,54,0) 100%)}
+/* El velo se achicó al bajar el tinte del vidrio: con 44% al 60% el cielo
+   entero quedaba embarrado, y el cielo es lo único que este fondo tiene para
+   mostrar. Ahora cubre exactamente lo que lleva texto —barra de estado, widget
+   y búsqueda terminan en el 25% del alto— y suelta el medio. */
+#veloT{top:0;height:30%;
+  background:linear-gradient(180deg,rgba(3,26,54,.50) 0%,rgba(3,26,54,.30) 52%,rgba(3,26,54,0) 100%)}
+#veloB{bottom:0;height:21%;
+  background:linear-gradient(0deg,rgba(3,26,54,.46) 0%,rgba(3,26,54,.18) 60%,rgba(3,26,54,0) 100%)}
 @keyframes deriva{
   from{transform:scale(1.06) translate3d(-.9%,-.5%,0)}
   to  {transform:scale(1.09) translate3d(.9%,.6%,0)}}
@@ -79,12 +82,19 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 .vid{position:relative;background:var(--v-fondo);
   border:1px solid transparent;
   border-radius:26px;
+  /* las cinco sombras internas son el ESPESOR: sin ellas el vidrio es un
+     rectángulo translúcido y no una pieza con canto. De arriba abajo: el filo
+     de arriba, el filo de abajo —que en un vidrio de verdad recoge la luz del
+     fondo y por eso no es negro—, el contorno entero, la luz que se acumula
+     por dentro del canto de arriba, y la sombra que le da fondo al de abajo. */
   box-shadow:var(--v-sombra),
-    inset 0 1px 0 rgba(255,255,255,.55),
-    inset 0 -1px 0 rgba(255,255,255,.10),
-    inset 0 0 22px rgba(255,255,255,.07);
-  backdrop-filter:blur(15px) saturate(142%) brightness(.88);
-  -webkit-backdrop-filter:blur(15px) saturate(142%) brightness(.88);
+    inset 0 1px 0 rgba(255,255,255,.62),
+    inset 0 -1px 0 rgba(255,255,255,.20),
+    inset 0 0 0 1px rgba(255,255,255,.07),
+    inset 0 7px 18px -9px rgba(255,255,255,.38),
+    inset 0 -9px 20px -11px rgba(2,22,48,.42);
+  backdrop-filter:blur(24px) saturate(120%) brightness(.90);
+  -webkit-backdrop-filter:blur(24px) saturate(120%) brightness(.90);
   overflow:hidden}
 /* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
    Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
@@ -92,22 +102,37 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    superficie curva reflejando una luz. Va con `mask` de dos capas, que es la
    única forma de tener un degradado SOLO en el borde. */
 .vid::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
-  background:linear-gradient(145deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.30) 26%,
-    rgba(255,255,255,.06) 52%,rgba(255,255,255,.22) 100%);
+  background:linear-gradient(140deg,rgba(255,255,255,.95) 0%,rgba(255,255,255,.42) 20%,
+    rgba(255,255,255,.05) 48%,rgba(255,255,255,.14) 74%,rgba(255,255,255,.40) 100%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   mask-composite:exclude;pointer-events:none;z-index:2}
-/* el brillo especular: una banda clara arriba que se desvanece — es lo que hace
-   que una superficie se lea a mojada y no a papel translúcido */
-.vid::after{content:'';position:absolute;left:0;right:0;top:0;height:52%;
+/* ── EL ESPECULAR ES UNA FRANJA FINA, NO UN LAVADO ──
+   Un degradado blanco sobre la mitad de arriba de la pieza no se lee a reflejo:
+   se lee a que el vidrio está sucio, y encima aclara justo donde va el texto.
+   Un vidrio real concentra la luz en los primeros milímetros del canto. Por eso
+   son dos franjas cortas —una arriba y una abajo, la de abajo mucho más floja,
+   que es la que recoge el fondo— y el medio queda limpio. */
+.vid::after{content:'';position:absolute;inset:0;
   border-radius:inherit;pointer-events:none;z-index:1;
-  background:linear-gradient(180deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.10) 46%,
-    rgba(255,255,255,0) 100%)}
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.10) 9%,
+      rgba(255,255,255,0) 20%),
+    linear-gradient(0deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.04) 7%,
+      rgba(255,255,255,0) 16%)}
 .vid>*{position:relative;z-index:3}
 
-/* el refractado: además del desenfoque, el fondo se DESPLAZA cerca del canto */
-.vid.refr{backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14);
-  -webkit-backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14)}
+/* ── EL REFRACTADO ──
+   Además del desenfoque, el fondo se DESPLAZA cerca del canto: eso es lo que
+   hace que el borde se lea a lente y no a recorte.
+   OJO: `.vid.refr` son dos clases y le gana a `.vid`, así que su filtro no es
+   un agregado sino un REEMPLAZO. Escrito con otro `saturate`/`brightness`, las
+   cuatro piezas grandes —widget, búsqueda, dock y menú— quedaban con una
+   calibración que la de `.vid` ya había descartado, y el dock salía verde.
+   Lo único que puede diferir es el desenfoque, y por una razón: el
+   desplazamiento ya revuelve el fondo, así que hace falta menos. */
+.vid.refr{backdrop-filter:url(#refr) blur(19px) saturate(122%) brightness(.90);
+  -webkit-backdrop-filter:url(#refr) blur(19px) saturate(122%) brightness(.90)}
 
 /* ══════════ BARRA DE ARRIBA ══════════ */
 #barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
@@ -128,31 +153,31 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    tiene que valer la pantalla que ocupa: hora grande, día y fecha, el aro de
    batería con su porcentaje y el saludo de la franja del día. Todo sale de
    datos que el launcher YA tiene — nada de red, nada de permisos nuevos. */
-#reloj{margin:0 20px 12px;padding:16px 18px;border-radius:26px;
+#reloj{margin:0 18px 10px;padding:13px 16px;border-radius:24px;
   display:flex;align-items:center;gap:14px}
 #wIzq{flex:1;min-width:0}
-#wDer{flex:0 0 auto;width:78px;position:relative;
+#wDer{flex:0 0 auto;width:70px;position:relative;
   display:flex;flex-direction:column;align-items:center;justify-content:center}
-#wAro{width:60px;height:60px;transform:rotate(-90deg)}
+#wAro{width:52px;height:52px;transform:rotate(-90deg)}
 #wAro circle{fill:none;stroke-width:5;stroke-linecap:round}
 #wAro .wPista{stroke:rgba(255,255,255,.28)}
 /* 2πr con r=25 → 157,08: el trazo se recorta moviendo el offset */
 #wAro .wCarga{stroke:#b8f078;stroke-dasharray:157.08;stroke-dashoffset:47;
   filter:drop-shadow(0 0 5px currentColor);transition:stroke-dashoffset .5s ease}
-#wPct{position:absolute;top:20px;font:800 15px/1 system-ui,sans-serif;
-  text-shadow:0 1px 2px rgba(0,32,64,.9)}
-#wSaludo{margin-top:4px;font-size:10px;font-weight:700;letter-spacing:.07em;
-  text-transform:uppercase;opacity:.9;text-align:center;line-height:1.15;
-  text-shadow:0 1px 2px rgba(0,32,64,.9)}
+#wPct{position:absolute;top:17px;font:800 13px/1 system-ui,sans-serif;
+  text-shadow:0 1px 2px rgba(0,32,64,.95),0 0 9px rgba(0,38,76,.8)}
+#wSaludo{margin-top:3px;font-size:9px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;opacity:.94;text-align:center;line-height:1.15;
+  text-shadow:0 1px 2px rgba(0,32,64,.95),0 0 9px rgba(0,38,76,.85)}
 /* ── LA SOMBRA SE CALIBRA CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA ──
    Todo el texto de este launcher es blanco y el fondo cambia solo a lo largo
    del día: a las 13 el cielo llega a rgb(218,237,239) y una nube encima de eso
    es casi blanco puro. Medido, con la sombra floja la fecha desaparecía sobre
    la nube que cae a la derecha del reloj. Van dos: una dura y pegada, que da el
    filo, y una ancha y difusa, que baja el fondo alrededor de la letra. */
-#hora{font-size:60px;font-weight:200;line-height:.92;letter-spacing:-.03em;
+#hora{font-size:50px;font-weight:200;line-height:.92;letter-spacing:-.03em;
   text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
-#fecha{font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+#fecha{font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
   text-shadow:0 1px 2px rgba(0,34,68,.85),0 0 10px rgba(0,40,80,.65);
   opacity:.88;padding-bottom:9px;line-height:1.45}
 
@@ -161,8 +186,9 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   display:flex;align-items:center;gap:10px;border-radius:23px}
 #buscaCaja svg{flex:0 0 auto;opacity:.85}
 #busca{flex:1;background:transparent;border:0;outline:0;color:#fff;
-  font-size:15px;font-weight:500;font-family:inherit;min-width:0}
-#busca::placeholder{color:rgba(255,255,255,.62)}
+  font-size:15px;font-weight:500;font-family:inherit;min-width:0;
+  text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 10px rgba(0,38,76,.7)}
+#busca::placeholder{color:rgba(255,255,255,.74)}
 
 /* ══════════ PÁGINAS DE ICONOS ══════════ */
 /* ── EL INICIO NO TIENE APPS ──
@@ -188,8 +214,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   box-shadow:0 5px 14px rgba(4,26,52,.30),
     inset 0 1px 0 rgba(255,255,255,.60),
     inset 0 -6px 12px rgba(0,40,80,.10);
-  backdrop-filter:blur(9px) saturate(138%) brightness(.9);
-  -webkit-backdrop-filter:blur(9px) saturate(138%) brightness(.9);
+  backdrop-filter:blur(12px) saturate(120%) brightness(.92);
+  -webkit-backdrop-filter:blur(12px) saturate(120%) brightness(.92);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
@@ -220,10 +246,14 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    se lea sobre lo más claro que el cielo pueda ponerse al mediodía. */
 #cajon{position:fixed;inset:0;z-index:3;transform:translateY(100%);
   transition:transform .34s cubic-bezier(.22,.9,.24,1);
-  display:flex;flex-direction:column;padding:var(--ins-t) 0 var(--ins-b);
-  background:linear-gradient(180deg,rgba(9,52,96,.40) 0%,rgba(8,45,86,.50) 40%,rgba(6,34,68,.62) 100%);
-  backdrop-filter:blur(30px) saturate(150%) brightness(.82);
-  -webkit-backdrop-filter:blur(30px) saturate(150%) brightness(.82)}
+  /* ── EL CAJÓN NECESITA MÁS QUE EL INSET ──
+     El inset es donde TERMINA la barra de estado; pegar la búsqueda ahí deja el
+     borde del vidrio rozando los iconos del sistema, que es lo que se vio en el
+     teléfono. Ocho píxeles de aire lo separan sin comerse pantalla. */
+  display:flex;flex-direction:column;padding:calc(var(--ins-t) + 8px) 0 var(--ins-b);
+  background:linear-gradient(180deg,rgba(9,44,84,.34) 0%,rgba(8,38,74,.44) 40%,rgba(6,30,60,.56) 100%);
+  backdrop-filter:blur(34px) saturate(118%) brightness(.84);
+  -webkit-backdrop-filter:blur(34px) saturate(118%) brightness(.84)}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
@@ -232,7 +262,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #cajon{--caj-y:0px}
 #cajon.on{transform:translateY(var(--caj-y))}
 #cajon.tira{transition:none}
-#cajTit{flex:0 0 auto;padding:2px 22px 6px;font-size:12px;font-weight:700;
+#cajTit{flex:0 0 auto;padding:0 20px 4px;font-size:10px;font-weight:700;
   letter-spacing:.16em;opacity:.72;text-transform:uppercase;
   text-shadow:0 1px 3px rgba(0,20,45,.6)}
 /* ── LA BÚSQUEDA VIVE ADENTRO DEL CAJÓN ──
@@ -241,25 +271,25 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    la lista filtraba y el cuadro de texto no se veía por ningún lado. Hay un
    solo campo que recibe letras y está donde se está mirando; el del escritorio
    pasa a ser el botón que lo abre. */
-#cajBusca{flex:0 0 auto;margin:2px 14px 8px;padding:0 14px;height:46px;
-  display:flex;align-items:center;gap:10px;border-radius:23px}
+#cajBusca{flex:0 0 auto;margin:0 12px 6px;padding:0 13px;height:40px;
+  display:flex;align-items:center;gap:9px;border-radius:20px}
 #cajBusca input{flex:1;background:none;border:0;outline:none;color:#fff;
-  font:600 15px/1 system-ui,sans-serif;min-width:0}
+  font:600 14px/1 system-ui,sans-serif;min-width:0}
 #cajBusca input::placeholder{color:rgba(255,255,255,.82);font-weight:500}
 #cajBusca input::-webkit-search-cancel-button{-webkit-appearance:none}
 /* ── LA MANIJA: SE VE Y SE AGARRA ──
    `touch-action:none` es todo el arreglo de «no baja»: acá el gesto vertical es
    nuestro y el navegador no lo cancela a mitad de camino. */
-#cajManija{flex:0 0 auto;height:26px;display:flex;align-items:center;
+#cajManija{flex:0 0 auto;height:20px;display:flex;align-items:center;
   justify-content:center;touch-action:none;cursor:grab}
-#cajManija i{width:46px;height:5px;border-radius:3px;background:rgba(255,255,255,.62);
+#cajManija i{width:40px;height:4px;border-radius:3px;background:rgba(255,255,255,.62);
   box-shadow:0 0 10px rgba(255,255,255,.4)}
 #cajon.tira #cajManija{cursor:grabbing}
 
-#cajCuerpo{flex:1 1 auto;min-height:0;display:flex}
+#cajCuerpo{flex:1 1 auto;min-height:0;display:flex;position:relative}
 #cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);
-  align-content:start;gap:2px 0;padding:4px 2px 26px 10px}
+  align-content:start;gap:2px 0;padding:4px 26px 26px 10px}
 /* la fila de buscar en la web y el «sin resultados» cruzan la reja entera */
 #cajLista .vacio{grid-column:1/-1;text-align:center;opacity:.72;padding:22px 12px 6px;
   font-size:14px;text-shadow:0 1px 3px rgba(0,20,45,.7)}
@@ -272,27 +302,34 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #cajLista .web .lupa{flex:0 0 auto;opacity:.9}
 #cajLista .web span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* el encabezado de letra cruza la reja entera */
-#cajLista .let{grid-column:1/-1;padding:9px 6px 1px;font:800 12px/1 system-ui,sans-serif;
+#cajLista .let{grid-column:1/-1;padding:7px 6px 1px;font:800 10px/1 system-ui,sans-serif;
   letter-spacing:.18em;opacity:.72;text-shadow:0 1px 3px rgba(0,20,45,.7)}
 
 /* ── EL RIEL DE LETRAS ──
    Sólo lleva las letras que TIENEN apps: un riel con las 26 fijas manda a la
    nada en la mitad de los toques, y eso se siente a que el riel está roto. */
-/* ── EL RIEL SE APARTA DEL BORDE, Y NO ES ESTÉTICA ──
-   Medido, la letra llegaba a x 405 de 412: pegada al canto. Y el gesto de
-   «atrás» de Android vive en los ~24 px de cada borde, así que un riel flush
-   contra el canto le regala la mitad de los arrastres al sistema. Con 34 px de
-   ancho y 10 de margen la banda del dedo queda en 368-402, o sea afuera de la
-   zona del sistema y con blanco suficiente para acertarle. */
-#riel{flex:0 0 auto;width:34px;margin-right:10px;padding:4px 0;touch-action:none;
-  display:flex;flex-direction:column;align-items:center;justify-content:space-around;
+/* ── EL ÍNDICE ES UNA BARRA, NO UNA COLUMNA DE LETRAS ──
+   Pedido textual: «el buscador por letra lo quería así por la barra nomás».
+   Y es mejor: una columna con las 26 letras a 10 px es un blanco de diez
+   píxeles por letra, se lee a lista de tipos y ocupa ancho permanente. Una
+   barra fina —la de Xiaomi, la de iOS— no ocupa nada, se agarra donde uno la
+   ve, y la letra sale en una burbuja mientras el dedo va. El ancho de la zona
+   sensible NO es el de la barra: la barra mide 4 px y la zona 30, porque hay
+   que poder agarrarla sin apuntar. Y los 30 arrancan a 12 px del canto, que es
+   lo que deja afuera al gesto de «atrás» de Android. */
+#riel{position:absolute;top:0;bottom:0;right:0;width:30px;touch-action:none;
+  display:flex;align-items:center;justify-content:center;z-index:2;
   user-select:none;-webkit-user-select:none}
-#riel b{font:800 10px/1 system-ui,sans-serif;opacity:.62;
-  text-shadow:0 1px 2px rgba(0,20,45,.8);transition:opacity .12s,transform .12s}
-#riel b.on{opacity:1;transform:scale(1.55);color:#d8f7ff}
+#rielPista{position:absolute;top:10px;bottom:10px;right:13px;width:4px;
+  border-radius:2px;background:rgba(255,255,255,.16)}
+#rielPomo{position:absolute;right:12px;width:6px;border-radius:3px;
+  background:rgba(255,255,255,.62);box-shadow:0 0 8px rgba(255,255,255,.5);
+  transition:width .14s,background .14s,box-shadow .14s}
+#riel.on #rielPomo{width:8px;right:11px;background:#eafcff;
+  box-shadow:0 0 14px rgba(180,240,255,.9)}
 
 /* la burbuja con la letra grande, sólo mientras el dedo va por el riel */
-#burbuja{position:absolute;right:56px;top:50%;transform:translateY(-50%) scale(.7);
+#burbuja{position:absolute;right:44px;top:50%;transform:translateY(-50%) scale(.7);
   width:64px;height:64px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font:800 30px/1 system-ui,sans-serif;color:#062a44;
   background:radial-gradient(circle at 34% 28%,#eafcff,#8fe0f7 62%,#4fc0e8);
@@ -300,39 +337,64 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;z-index:3}
 #burbuja.on{opacity:1;transform:translateY(-50%) scale(1)}
 
-/* ── LA MASCOTA BAILA MIENTRAS SE BUSCA ──
-   Tres cuadros en una tira con la MISMA celda, así que animar es correr la x
-   por pasos — `steps(3)` y nada más. Se apaga cuando no se está escribiendo:
-   una animación que corre siempre deja de significar algo (y de paso no gasta). */
-/* ── LA VENTANA RECORTA LA TIRA, Y SIN ESO SE VEN LAS TRES ──
-   `#mascota i` mide 300% de ancho porque lleva los tres cuadros en fila y la
-   animación corre la x. Sin `overflow:hidden` el contenedor no recorta nada:
-   medido en la captura, salían las tres mascotas seguidas y dos de ellas
-   fuera de la pantalla. La ventana es de UNA celda; la tira se mueve detrás. */
+/* ── LA MASCOTA: OCHO CUADROS Y CINCO ANIMACIONES ──
+   Una sola tira con la MISMA celda para las ocho poses, así que animar es
+   correr la x por pasos. Qué celdas usa cada animación lo dice `MASC_ANIM`, que
+   sale del horneado, y los `@keyframes` los arma el JS a partir de esa tabla:
+   escritos a mano acá, agregar un cuadro obligaría a recalcular cinco
+   porcentajes y el que se olvide deja una animación mostrando medias mascotas.
+   Baila mientras se escribe —que es lo que se pidió—, se aburre a los dos
+   segundos y se duerme a los siete. */
+/* ── LA VENTANA RECORTA LA TIRA, Y SIN ESO SE VEN LAS OCHO ──
+   La tira mide `MASC_N` veces la ventana y la animación corre la x. Sin
+   `overflow:hidden` el contenedor no recorta nada: medido en la captura, salían
+   las mascotas seguidas y casi todas fuera de la pantalla. La ventana es de UNA
+   celda; la tira se mueve detrás.
+   El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
+   POR ENCIMA de la cabeza, o sea fuera de la celda: recortando arriba de todo,
+   la mitad del gesto se pierde. */
 #mascota{position:absolute;left:50%;bottom:16px;width:var(--mw-masc);
-  height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);overflow:hidden;
+  height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);
   opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
   transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1);z-index:2;
   filter:drop-shadow(0 6px 14px rgba(0,40,80,.5))}
 #mascota.on{opacity:1;transform:translateY(0) scale(1)}
-#mascota i{display:block;width:300%;height:100%;
-  background-image:var(--masc);background-size:100% 100%;
-  animation:bailar .66s steps(3) infinite}
-/* ── EL DESTINO ES -100%, NO -66,67% ──
-   `translateX` en porcentaje es del propio elemento, y la tira mide 300% de la
-   ventana, o sea tres celdas. `steps(3)` reparte el recorrido en tres y NUNCA
-   llega al valor final, así que se detiene en 0, X/3 y 2X/3. Para que esos tres
-   caigan justo en 0, una celda y dos celdas —o sea 0, -33,33% y -66,67% de la
-   TIRA— el destino tiene que ser -100%. Con -66,67% los pasos caen en 0,
-   -22,2% y -44,4%: entre cuadros, y en la captura se veían dos medias
-   mascotas. */
-@keyframes bailar{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+#mVent{width:100%;height:100%;overflow:hidden}
+#mTira{width:calc(var(--masc-n)*100%);height:100%;
+  background-image:var(--masc);background-size:100% 100%}
+/* ── EL DESTINO DE CADA ANIMACIÓN LO CALCULA EL JS ──
+   `translateX` en porcentaje es del propio elemento, y la tira mide N celdas, y
+   `steps(n)` NUNCA llega al valor final: se detiene en n escalones antes. Para
+   que la animación que empieza en la celda `i` y dura `c` cuadros caiga justo en
+   i, i+1 … i+c-1, el recorrido tiene que ir de -i/N a -(i+c)/N. Eso es una
+   cuenta, no un número: la hace `mascCSS()` a partir de `MASC_ANIM`. */
 /* y el cabeceo va aparte: encima de los pasos, para que no sea un flipbook seco */
 #mascota.on{animation:chill 1.32s ease-in-out infinite alternate}
 @keyframes chill{from{transform:translateY(2px) rotate(-3deg)}
                  to  {transform:translateY(-4px) rotate(3deg)}}
+/* ── LAS ZETAS VAN DIBUJADAS POR CÓDIGO ──
+   Pedidas con todas las letras: «durmiendo con z saliendo de su cabeza». No van
+   en la hoja generada por dos razones: pesan cero, y sobre todo se MUEVEN — una
+   zeta quieta pintada en el cuadro se lee a calcomanía. Salen de un costado de
+   la cabeza, suben y se apagan, las tres desfasadas: con las tres en fase se
+   leen a un solo gesto repetido. */
+/* el 18% del alto de la celda es donde arranca la cabeza en los cuadros del
+   sueño (medido: 28 px de 151), así que la zeta sale de la sien y no del aire */
+#mZ{position:absolute;left:60%;top:18%;width:0;height:0}
+#mZ span{position:absolute;font:800 13px/1 system-ui,sans-serif;color:#eafcff;
+  text-shadow:0 1px 3px rgba(0,36,72,.95),0 0 8px rgba(0,44,86,.7);opacity:0}
+#mZ span:nth-child(2){font-size:11px}
+#mZ span:nth-child(3){font-size:9px}
+#mascota.zzz #mZ span{animation:zeta 2.7s ease-out infinite}
+#mascota.zzz #mZ span:nth-child(2){animation-delay:.9s}
+#mascota.zzz #mZ span:nth-child(3){animation-delay:1.8s}
+@keyframes zeta{
+  0%  {opacity:0;transform:translate(0,6px) scale(.55) rotate(-10deg)}
+  16% {opacity:1}
+  100%{opacity:0;transform:translate(22px,-26px) scale(1.2) rotate(14deg)}}
 @media (prefers-reduced-motion:reduce){
-  #mascota i{animation:none}#mascota.on{animation:none}}
+  #mTira{animation:none!important}#mascota.on{animation:none}
+  #mascota.zzz #mZ span{animation:none;opacity:.85}}
 /* ── EL TIRADOR SE VE Y NO SE TOCA ──
    Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
    montaba encima 26 px justo sobre dos de los cuatro iconos —
@@ -457,12 +519,15 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   <div id="cajTit">—</div>
   <div id="cajCuerpo">
     <div id="cajLista"></div>
-    <!-- el riel A-Z; lo llena e.js con las letras que de verdad tienen apps -->
-    <div id="riel"></div>
+    <!-- la barra del índice: pista fija y pomo que sigue el scroll -->
+    <div id="riel"><div id="rielPista"></div><div id="rielPomo"></div></div>
   </div>
   <div id="burbuja">A</div>
-  <!-- la mascota baila sólo mientras se escribe -->
-  <div id="mascota"><i></i></div>
+  <!-- la mascota baila mientras se escribe, se aburre y se duerme -->
+  <div id="mascota">
+    <div id="mVent"><div id="mTira"></div></div>
+    <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
+  </div>
 </div>
 
 <div id="velo"></div>
