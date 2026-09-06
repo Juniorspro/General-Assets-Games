@@ -121,6 +121,13 @@ public class Principal extends Activity {
     if (web != null) web.evaluateJavascript("window.__alInicio && __alInicio()", null);
   }
 
+  /* la respuesta del diálogo del rol HOME: la página repinta el panel para que
+     el estado que muestra sea el de después y no el de antes */
+  @Override protected void onActivityResult(int pedido, int res, Intent datos) {
+    super.onActivityResult(pedido, res, datos);
+    if (web != null) web.evaluateJavascript("window.__alVolver && __alVolver()", null);
+  }
+
   @Override protected void onResume() {
     super.onResume();
     if (web != null) {

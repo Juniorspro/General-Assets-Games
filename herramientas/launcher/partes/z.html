@@ -168,6 +168,138 @@ window.__A = {
              sobreTeclado: Math.round(innerHeight - TECLADO - b),
              busca: Math.round(c.bottom), alto: innerHeight };
   },
+  /* ── EL AGUA ──
+     Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
+     FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
+     lo que decide si encenderlo se ve como un salto. */
+  agua(){
+    const c = AGUA.el;
+    return { listo: AGUA.listo, roto: AGUA.roto, on: AGUA.on,
+             ondas: AGUA.ondas.length,
+             clase: c ? c.className : null,
+             lienzo: c ? [c.width, c.height] : null,
+             fondo: { ok: FONDO_OK, w: FONDO_IMG ? FONDO_IMG.naturalWidth : 0,
+                      h: FONDO_IMG ? FONDO_IMG.naturalHeight : 0 },
+             deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
+  },
+  /* el toque va por el camino de verdad —un PointerEvent sobre lo que haya en
+     ese punto— y no llamando a `aguaToca`: lo que hay que probar es justamente
+     que el filtro de «espacio libre» deja pasar el fondo y no una app */
+  aguaTocar(x, y){
+    const t = document.elementFromPoint(x, y);
+    t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y,
+                                                      pointerId: 3, isPrimary: true }));
+    return { destino: t ? (t.id || t.className || t.tagName) : null,
+             libre: aguaLibre(t), agua: this.agua() };
+  },
+  aguaArrastra(x0, y0, x1, y1, n){
+    const t = document.elementFromPoint(x0, y0);
+    const ev = (tipo, x, y, el) => el.dispatchEvent(new PointerEvent(tipo,
+      { bubbles: true, clientX: x, clientY: y, pointerId: 3, isPrimary: true }));
+    ev('pointerdown', x0, y0, t);
+    for (let i = 1; i <= (n || 6); i++)
+      ev('pointermove', x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n, t);
+    ev('pointerup', x1, y1, t);
+    return this.agua().ondas;
+  },
+  aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
+  /* ── LA COPIA PELADA ──
+     Enciende el lienzo SIN una sola onda: lo que queda en pantalla tiene que
+     ser, píxel por píxel, la misma foto que dibujaba el CSS. Ésa es la única
+     forma de saber si encenderlo se ve como un salto, y no se puede medir con
+     una onda viva porque entonces todo lo que cambia se puede achacar a ella.
+     La deriva se congela: entre dos capturas la foto se mueve sola y esa
+     diferencia no es del agua. */
+  aguaCopia(v){
+    FONDO_EL.style.animationPlayState = 'paused';
+    if (!v){ AGUA.ondas = []; if (AGUA.el) AGUA.el.classList.remove('on'); AGUA.on = false; return 'off'; }
+    if (!aguaArma()) return 'roto';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    AGUA.gl.uniform1i(AGUA.u.n, 0);
+    AGUA.gl.uniform1f(AGUA.u.t, 0);
+    AGUA.gl.drawArrays(AGUA.gl.TRIANGLES, 0, 3);
+    return 'on';
+  },
+  /* ── UNA ONDA CONGELADA EN EL INSTANTE QUE SE PIDA ──
+     El bucle sigue corriendo entre la sonda y la captura, así que una foto
+     sacada «justo después de tocar» es de cualquier instante menos ése: medido,
+     con 120 ms de espera el frente ya había cruzado la pantalla y en la captura
+     no se veía una sola onda. Acá se dibuja a mano con la edad pedida y no se
+     agenda otro cuadro. */
+  aguaFoto(x, y, edad){
+    if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    const gl = AGUA.gl, b = new Float32Array(AGUA_MAX*4);
+    b[0] = x; b[1] = y; b[2] = 0; b[3] = 1;
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, 1);
+    gl.uniform1f(AGUA.u.t, edad);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return { x: x, y: y, edad: edad, frente: Math.round(edad*900) };
+  },
+  /* cuánto cuesta un cuadro de agua, medido dibujando de verdad con las ondas
+     que se le pidan: el lienzo rellena la pantalla entera, así que es el único
+     número que decide si esto se puede tener */
+  aguaCosto(n, cuadros){
+    if (!aguaArma()) return 'roto';
+    const gl = AGUA.gl;
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    const b = new Float32Array(AGUA_MAX*4);
+    for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    const c = cuadros || 60, t0 = performance.now();
+    for (let i = 0; i < c; i++){
+      gl.uniform1f(AGUA.u.t, 0.3 + i*0.001);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    /* `finish()` no sincroniza nada acá: con el render por software la cola se
+       traga las llamadas y el reloj devuelve cero. `readPixels` sí obliga a que
+       el cuadro esté terminado, porque hay que devolver el píxel. */
+    const px1 = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+    const ms = (performance.now() - t0)/c;
+    return { ondas: n, cuadros: c, ms: +ms.toFixed(3),
+             px: AGUA.el.width*AGUA.el.height };
+  },
+  /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
+     así que después de una foto congelada no limpiaba nada */
+  aguaApaga(){
+    AGUA.ondas = []; AGUA.on = false;
+    if (AGUA.el) AGUA.el.classList.remove('on');
+    FONDO_EL.style.animationPlayState = '';
+    return this.agua();
+  },
+
+  /* ── LA PANTALLA DE INICIO ──
+     Sin puente no hay rol que pedir: lo que se puede medir en el banco es que
+     la hoja se arma, dice lo que corresponde y ofrece los dos botones con el
+     apagado puesto donde va. */
+  ini(){
+    const e = iniEstado(), c = $('#iniCuerpo');
+    return { abierto: $('#ini').classList.contains('on'), estado: e,
+             pkg: INI_PKG, enLista: !!POR_PKG[INI_PKG],
+             tit: $('#iniTit').textContent,
+             lineas: [...c.querySelectorAll('.iEst,.iNota')].map(x => x.textContent),
+             botones: [...c.querySelectorAll('.iBtn')]
+                        .map(x => [x.textContent, x.classList.contains('no') ? 'off' : 'on']) };
+  },
+  iniAbrir(){ iniAbre(); return true; },
+  iniCerrar(){ iniCierra(); return true; },
+  iniToca(txt){
+    const b = [...$('#iniCuerpo').querySelectorAll('.iBtn')]
+                .find(x => x.textContent === txt);
+    if (!b) return 'no está: ' + txt;
+    b.click(); return this.ini();
+  },
   /* ── PARA DÓNDE MUEVE UN EJE ──
      Los ejes de un hueso no se adivinan: se gira uno y se mira dónde quedó la
      punta. Devuelve el desplazamiento de `mira` al girar `nom` un radián sobre

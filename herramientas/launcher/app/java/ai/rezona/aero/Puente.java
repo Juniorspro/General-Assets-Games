@@ -1,6 +1,7 @@
 package ai.rezona.aero;
 
 import android.app.Activity;
+import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -156,6 +157,100 @@ public class Puente {
       act.startActivity(new Intent(Settings.ACTION_HOME_SETTINGS)
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     } catch (Exception e) { ajustes(); }
+  }
+
+  /* ══════════ SER —O DEJAR DE SER— LA PANTALLA DE INICIO ══════════
+
+     ── EL PUESTO ES UN COMPONENTE, ASÍ QUE SE PUEDE APAGAR ──
+     `.Inicio` es un alias de `.Principal` que lleva la categoría HOME y nada
+     más (ver el manifiesto). Apagándolo con `setComponentEnabledSetting`,
+     Android deja de tener a Aero entre los candidatos y se va al que quede —
+     si queda uno solo, sin preguntar. No hace falta ningún permiso: es un
+     componente propio.
+
+     ── Y NO SE PUEDE DEJAR AL TELÉFONO SIN NINGUNO ──
+     Si Aero fuera el único, apagarlo dejaría el aparato sin pantalla de inicio
+     y apretar HOME no llevaría a ninguna parte. Se cuenta antes. */
+  private ComponentName aliasInicio() {
+    return new ComponentName(act, act.getPackageName() + ".Inicio");
+  }
+
+  private void alias(boolean on) {
+    act.getPackageManager().setComponentEnabledSetting(aliasInicio(),
+        on ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+           : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.DONT_KILL_APP);
+  }
+
+  /* cuántos OTROS paquetes se ofrecen como pantalla de inicio. Se cuentan
+     paquetes y no actividades —un launcher puede declarar varias— y se saltea
+     `android`, que es la pantalla de «elegí con cuál» del propio sistema y no
+     un launcher. */
+  private int otrosInicios() {
+    try {
+      PackageManager pm = act.getPackageManager();
+      Intent h = new Intent(Intent.ACTION_MAIN);
+      h.addCategory(Intent.CATEGORY_HOME);
+      List<String> v = new ArrayList<>();
+      for (ResolveInfo ri : pm.queryIntentActivities(h, 0)) {
+        String p = ri.activityInfo.applicationInfo.packageName;
+        if (act.getPackageName().equals(p) || "android".equals(p)) continue;
+        if (!v.contains(p)) v.add(p);
+      }
+      return v.size();
+    } catch (Exception e) { return 0; }
+  }
+
+  @JavascriptInterface public String inicio() {
+    boolean soy = false, ofrece = true;
+    int otros = 0;
+    try {
+      PackageManager pm = act.getPackageManager();
+      Intent h = new Intent(Intent.ACTION_MAIN);
+      h.addCategory(Intent.CATEGORY_HOME);
+      ResolveInfo r = pm.resolveActivity(h, PackageManager.MATCH_DEFAULT_ONLY);
+      soy = r != null && r.activityInfo != null
+            && act.getPackageName().equals(r.activityInfo.applicationInfo.packageName);
+      otros = otrosInicios();
+      ofrece = pm.getComponentEnabledSetting(aliasInicio())
+               != PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+    } catch (Exception e) {}
+    return "{\"soy\":" + soy + ",\"otros\":" + otros + ",\"ofrece\":" + ofrece + "}";
+  }
+
+  /* ── PONERLO ES UNA SOLA PREGUNTA DEL SISTEMA, NO UN PASEO POR AJUSTES ──
+     Desde Android 10 el rol HOME se pide con un diálogo de un toque. Antes de
+     eso —y en el aparato donde el rol no esté disponible— queda la pantalla de
+     ajustes, que es lo que había. Y primero se vuelve a encender el alias: sin
+     componente HOME no hay nada que elegir. */
+  @JavascriptInterface public boolean ponerInicio() {
+    try { alias(true); } catch (Exception e) {}
+    if (Build.VERSION.SDK_INT >= 29) {
+      try {
+        RoleManager rm = (RoleManager) act.getSystemService(Context.ROLE_SERVICE);
+        if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME)) {
+          Intent i = rm.createRequestRoleIntent(RoleManager.ROLE_HOME);
+          if (i.resolveActivity(act.getPackageManager()) != null) {
+            act.startActivityForResult(i, 7001);
+            return true;
+          }
+        }
+      } catch (Exception e) {}
+    }
+    elegirInicio();
+    return false;
+  }
+
+  @JavascriptInterface public boolean salirInicio() {
+    if (otrosInicios() < 1) return false;   /* dejaría el teléfono sin inicio */
+    try {
+      alias(false);
+      Intent h = new Intent(Intent.ACTION_MAIN);
+      h.addCategory(Intent.CATEGORY_HOME);
+      h.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      act.startActivity(h);
+      return true;
+    } catch (Exception e) { return false; }
   }
 
   @JavascriptInterface public void buscarWeb(String q) {

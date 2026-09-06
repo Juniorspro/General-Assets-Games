@@ -81,6 +81,15 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
 #fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
 #fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+/* ── EL LIENZO DEL AGUA VA ENTRE LA FOTO Y LOS VELOS ──
+   Encima del fondo, porque es una copia suya desplazada; debajo de `#oscuro` y
+   de las dos bandas, para que oscurecer el fondo y los degradados de los
+   textos sigan valiendo igual con el agua encendida. Y `pointer-events:none`,
+   porque el toque que la enciende tiene que seguir llegando a lo que haya
+   debajo — un lienzo que se come el gesto de subir mataría el cajón. */
+#agua{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
+#agua.on{display:block}
+
 /* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
    Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
    foto entera en cada cuadro de la transición. */
@@ -161,7 +170,14 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 .vid.refr{backdrop-filter:url(#refr) var(--v-filR);
   -webkit-backdrop-filter:url(#refr) var(--v-filR)}
 
-/* ══════════ BARRA DE ARRIBA ══════════ */
+/* ══════════ BARRA DE ARRIBA ══════════
+   ── EN EL TELÉFONO NO SE DIBUJA, PORQUE YA ESTÁ DIBUJADA ──
+   El launcher va de borde a borde, o sea que la barra de estado del SISTEMA
+   —con su hora y su batería— queda encima de la página. Con ésta puesta
+   debajo, el reporte fue exacto: «la batería, la hora y eso ya lo vemos». Se
+   queda sólo en la vista previa del navegador, donde no hay barra de sistema y
+   sin ella la maqueta no se parece a un teléfono. */
+body.and #barra{display:none}
 #barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
   padding:2px 20px 0;font-size:13px;font-weight:700;letter-spacing:.04em;
   color:#fff;text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 8px rgba(0,40,80,.6)}
@@ -523,6 +539,29 @@ body.pers #reloj,body.pers #buscaCaja{opacity:0;pointer-events:none;
 body.pers #mascota{z-index:5}
 #persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
+
+/* ══════════ PANTALLA DE INICIO ══════════
+   Hoja corta: dos botones y tres renglones de explicación. `max-height` y no
+   `height`, porque lo que mide es lo que dice — y lo que dice cambia según sea
+   o no el inicio. */
+#ini{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:70%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 14px)}
+#ini.on{transform:translateY(0)}
+#iniCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:2px 4px 6px;display:flex;flex-direction:column;gap:12px}
+#iniCuerpo .iEst{font:800 15px/1.35 inherit;text-shadow:0 1px 2px rgba(0,25,52,.6)}
+#iniCuerpo .iNota{font:600 12.5px/1.45 inherit;opacity:.78}
+/* el botón grande ocupa el ancho: es la acción de la pantalla, no una opción
+   entre varias */
+#iniCuerpo .iBtn{padding:14px 16px;border-radius:16px;font:800 14px/1 inherit;
+  cursor:pointer;text-align:center;background:rgba(255,255,255,.15);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34);text-shadow:0 1px 2px rgba(0,25,52,.6)}
+#iniCuerpo .iBtn.pri{background:color-mix(in srgb,var(--acento) 34%,rgba(255,255,255,.12));
+  box-shadow:inset 0 0 0 1.4px color-mix(in srgb,var(--acento) 62%,transparent),
+             inset 0 1px 0 rgba(255,255,255,.4)}
+#iniCuerpo .iBtn.no{opacity:.42;pointer-events:none}
 .pGrupo{display:flex;flex-direction:column;gap:8px}
 .pTit{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
   opacity:.7;padding-left:4px}
@@ -682,6 +721,19 @@ body.pers #mascota{z-index:5}
   <div id="persCuerpo"></div>
 </div>
 
+<!-- ── LA PANTALLA DE INICIO ES SU PROPIA APP ──
+     Personalizar es cómo se ve el launcher; esto es qué papel juega en el
+     teléfono. Meterlo ahí adentro lo dejaría como un renglón más entre el
+     color de acento y el idioma, y es lo único de todo el launcher que cambia
+     algo del sistema. -->
+<div class="vid refr" id="ini">
+  <div id="asCab">
+    <div id="iniTit">—</div>
+    <div class="asBtn" id="iniCerrar">✕</div>
+  </div>
+  <div id="iniCuerpo"></div>
+</div>
+
 <div class="vid refr" id="asis">
   <div id="asCab">
     <div id="asTit">—</div>
@@ -772,6 +824,14 @@ const TXT = {
         pDuerme: 'Durmiendo', pIconos: 'Tamaño de los iconos', pColumnas: 'Columnas',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
+        iNombre: 'Pantalla de inicio', iTit: 'Pantalla de inicio',
+        iSoy: 'Aero ES tu pantalla de inicio.',
+        iNoSoy: 'Aero NO es tu pantalla de inicio.',
+        iPoner: 'Ponerme como inicio', iSalir: 'Dejar de ser el inicio',
+        iComo: 'Al salir, el teléfono se va solo al otro launcher. Aero queda en el cajón de apps, así que se puede volver cuando quieras.',
+        iSolo: 'No hay otra pantalla de inicio instalada: salir dejaría el teléfono sin ninguna.',
+        iApagado: 'Ahora mismo Aero ni siquiera se ofrece como pantalla de inicio.',
+        iHecho: 'Listo', iNoPudo: 'No se pudo',
         dias: ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
         meses: ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
                 'septiembre','octubre','noviembre','diciembre'] },
@@ -803,6 +863,14 @@ const TXT = {
         pDuerme: 'Sleeping', pIconos: 'Icon size', pColumnas: 'Columns',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
         aNombreP: 'Personalize',
+        iNombre: 'Home screen', iTit: 'Home screen',
+        iSoy: 'Aero IS your home screen.',
+        iNoSoy: 'Aero is NOT your home screen.',
+        iPoner: 'Make me the home screen', iSalir: 'Stop being the home screen',
+        iComo: 'When you leave, the phone goes to the other launcher on its own. Aero stays in the app drawer, so you can come back whenever you want.',
+        iSolo: 'There is no other home screen installed: leaving would leave the phone without one.',
+        iApagado: 'Right now Aero is not even offering itself as a home screen.',
+        iHecho: 'Done', iNoPudo: 'Could not',
         dias: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
         meses: ['January','February','March','April','May','June','July','August',
                 'September','October','November','December'] },
@@ -834,6 +902,14 @@ const TXT = {
         pDuerme: 'Dormindo', pIconos: 'Tamanho dos ícones', pColumnas: 'Colunas',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
+        iNombre: 'Tela inicial', iTit: 'Tela inicial',
+        iSoy: 'O Aero É a sua tela inicial.',
+        iNoSoy: 'O Aero NÃO é a sua tela inicial.',
+        iPoner: 'Colocar como tela inicial', iSalir: 'Deixar de ser a tela inicial',
+        iComo: 'Ao sair, o telefone vai sozinho para o outro launcher. O Aero fica na gaveta de apps, então dá para voltar quando quiser.',
+        iSolo: 'Não há outra tela inicial instalada: sair deixaria o telefone sem nenhuma.',
+        iApagado: 'Agora mesmo o Aero nem se oferece como tela inicial.',
+        iHecho: 'Pronto', iNoPudo: 'Não deu',
         dias: ['domingo','segunda','terça','quarta','quinta','sexta','sábado'],
         meses: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto',
                 'setembro','outubro','novembro','dezembro'] }
@@ -911,6 +987,8 @@ function avisa(t){
 
 let FONDO_EL = null, FONDO_OK = false;
 
+let FONDO_IMG = null;   /* el mapa de bits del fondo, que también usa el agua */
+
 function fondoInit(){
   FONDO_EL = $('#fondo');
 
@@ -919,7 +997,12 @@ function fondoInit(){
      `background-image` de una, el primer cuadro es un rectángulo vacío. Se
      precarga en un `Image` y recién cuando decodificó se enciende, con el
      degradado de respaldo debajo mientras tanto. */
+  /* ── LA MISMA IMAGEN LA USA EL AGUA ──
+     El efecto de ondas dibuja la foto desplazada en un lienzo de WebGL, y la
+     textura sale de acá: pidiéndola de nuevo se decodificarían 113 KB dos
+     veces para tener el mismo mapa de bits. */
   const im = new Image();
+  FONDO_IMG = im;
   im.onload = () => {
     FONDO_EL.style.backgroundImage = 'url(' + IMG_FONDO + ')';
     FONDO_EL.classList.add('ok');
@@ -1537,6 +1620,10 @@ function nodoApp(a, conNombre){
     b.style.background = 'linear-gradient(160deg,#ffd166,#e0704f)';
     b.style.font = '600 26px system-ui';
     b.textContent = '⚙';
+  } else if (a.p === INI_PKG){
+    b.style.background = 'linear-gradient(160deg,#9ef0b8,#3f9e7a)';
+    b.style.font = '600 26px system-ui';
+    b.textContent = '⌂';
   } else if (a.p === ASIS_PKG){
     /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
@@ -1774,6 +1861,7 @@ function abre(pkg){
      «no existe» sobre un paquete que nunca se instaló */
   if (pkg === ASIS_PKG){ asisAbre(); return; }
   if (pkg === PERS_PKG){ persAbre(); return; }
+  if (pkg === INI_PKG){ iniAbre(); return; }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -1834,6 +1922,7 @@ function repintaIdioma(){
   $('#cajTit').textContent = T('todas');
   const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
   const q = POR_PKG[PERS_PKG]; if (q) q.n = T('aNombreP');
+  const w = POR_PKG[INI_PKG];  if (w) w.n = T('iNombre');
   if (MENU_PKG){
     $('#mFijar').lastElementChild.textContent = fijado(MENU_PKG) ? T('soltar') : T('fijar');
     $('#mInfo').lastElementChild.textContent = T('info');
@@ -1907,6 +1996,7 @@ function cargaApps(){
      aparte obligaría a inventarle un sitio en una pantalla que ya está llena. */
   APPS.push({ p: ASIS_PKG, n: T('aNombre') });
   APPS.push({ p: PERS_PKG, n: T('aNombreP') });
+  APPS.push({ p: INI_PKG,  n: T('iNombre') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -2318,6 +2408,10 @@ function mascToque(){
 window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
 window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
 window.__atras = function(){
+  /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
+     cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
+  if ($('#ini').classList.contains('on')){ iniCierra(); return true; }
+  if ($('#pers').classList.contains('on')){ persCierra(); return true; }
   if ($('#asis').classList.contains('on')){ asisCierra(); return true; }
   if (MENU_PKG) cierraMenu();
   else if (CAJON) verCajon(false);
@@ -2348,6 +2442,9 @@ window.__insets = function(t, b){
 
 /* ══════════ ARRANQUE ══════════ */
 function arranca(){
+  /* el CSS necesita saber si hay sistema detrás: la barra de estado propia
+     sólo tiene sentido en la vista previa */
+  document.body.classList.toggle('and', HAY_AND);
   $('#busca').placeholder = T('busca');
   $('#busca2').placeholder = T('busca');
   $('#cajTit').textContent = T('todas');
@@ -2403,6 +2500,8 @@ function arranca(){
 
   asisInit();
   persInit();
+  iniInit();
+  aguaInit();
 
   enganchaLista($('#tira'));
   enganchaLista($('#dock'));
@@ -3074,6 +3173,380 @@ function persInit(){
   $('#persCerrar').addEventListener('click', persCierra);
   persAplica();
 }
+/* ══════════════════════ LA PANTALLA DE INICIO ══════════════════════
+
+   ── SER EL INICIO ES UN COMPONENTE, NO UN AJUSTE ──
+   El manifiesto tiene DOS puertas y no una: `.Principal` con `LAUNCHER`, que es
+   el icono en el cajón del otro launcher y **no se apaga nunca**, y el alias
+   `.Inicio` con `HOME`, que es el puesto. Apagando el alias, Android se queda
+   sin Aero entre los candidatos y se va al que quede — si queda uno solo, sin
+   preguntar. Eso es lo que se pidió: ponerlo, y después sacarlo solo.
+
+   ── Y NO SE PUEDE DEJAR AL TELÉFONO SIN NINGUNO ──
+   Si Aero fuera el único inicio instalado, apagarlo dejaría el aparato con la
+   tecla HOME apuntando a la nada. El puente los cuenta y el botón se apaga con
+   el motivo escrito al lado, que es distinto de que no haga nada. */
+
+const INI_PKG = 'ai.rezona.aero.inicio';
+
+/* Sin puente —la vista previa del navegador— no hay rol que pedir ni componente
+   que apagar. Se contesta un estado plausible para poder ver la pantalla. */
+function iniEstado(){
+  if (!HAY_AND) return { soy: false, otros: 1, ofrece: true, real: false };
+  try {
+    const j = JSON.parse(AND.inicio());
+    return { soy: !!j.soy, otros: +j.otros || 0, ofrece: j.ofrece !== false, real: true };
+  } catch (e) { return { soy: false, otros: 0, ofrece: true, real: false }; }
+}
+
+function iniPinta(){
+  const e = iniEstado();
+  $('#iniTit').textContent = T('iTit');
+  const c = $('#iniCuerpo'); c.innerHTML = '';
+
+  const linea = (cls, txt) => {
+    const d = document.createElement('div'); d.className = cls; d.textContent = txt;
+    c.appendChild(d); return d;
+  };
+  const boton = (cls, txt, fn) => {
+    const d = document.createElement('div'); d.className = 'iBtn ' + cls; d.textContent = txt;
+    d.addEventListener('click', fn);
+    c.appendChild(d); return d;
+  };
+
+  linea('iEst', e.soy ? T('iSoy') : T('iNoSoy'));
+  if (!e.ofrece) linea('iNota', T('iApagado'));
+
+  /* ── LOS DOS BOTONES ESTÁN SIEMPRE, Y EL QUE NO CORRESPONDE SE APAGA ──
+     Escondiendo el que no aplica, la hoja cambia de forma entre una visita y la
+     siguiente y hay que volver a buscar dónde estaba cada cosa. */
+  boton(e.soy ? '' : 'pri', T('iPoner'), () => {
+    if (!HAY_AND){ avisa(T('sinPuente')); return; }
+    vibra(12);
+    try { AND.ponerInicio(); } catch (x) { avisa(T('iNoPudo')); }
+    /* el diálogo del rol vuelve por `onActivityResult`, que repinta */
+    setTimeout(iniPinta, 700);
+  }).classList.toggle('no', e.soy && e.ofrece);
+
+  const puede = e.otros >= 1 && e.ofrece;
+  boton(e.soy ? 'pri' : '', T('iSalir'), () => {
+    if (!HAY_AND){ avisa(T('sinPuente')); return; }
+    vibra(12);
+    let ok = false;
+    try { ok = AND.salirInicio(); } catch (x) {}
+    avisa(ok ? T('iHecho') : T('iNoPudo'));
+    iniPinta();
+  }).classList.toggle('no', !puede);
+
+  linea('iNota', e.otros >= 1 ? T('iComo') : T('iSolo'));
+}
+
+function iniAbre(){
+  cierraMenu(); asisCierra(); persCierra();
+  iniPinta();
+  $('#ini').classList.add('on');
+  $('#velo').classList.add('on');
+}
+function iniCierra(){
+  $('#ini').classList.remove('on');
+  if (!$('#asis').classList.contains('on') && !$('#pers').classList.contains('on'))
+    $('#velo').classList.remove('on');
+}
+
+function iniInit(){
+  $('#iniCerrar').addEventListener('click', iniCierra);
+  /* volver del diálogo del sistema tiene que actualizar lo que la hoja dice: si
+     no, uno acaba de ponerlo como inicio y la pantalla sigue diciendo que no */
+  const antes = window.__alVolver;
+  window.__alVolver = function(){
+    if (typeof antes === 'function') antes();
+    if ($('#ini').classList.contains('on')) iniPinta();
+  };
+}
+/* ══════════════════════ EL AGUA ══════════════════════
+
+   Pedido: «al tocar la pantalla en un espacio libre de no app tener efecto de
+   agua, algo así como Samsung tenía».
+
+   ── ANILLOS ANALÍTICOS Y NO UNA SIMULACIÓN DE CAMPO ──
+   Lo canónico sería un campo de alturas en dos texturas que se van pasando la
+   pelota con la ecuación de onda. Eso compra dos cosas —interferencia entre
+   ondas y rebote contra los bordes— y cuesta dos destinos de render, texturas
+   de coma flotante (que en WebGL1 son una extensión que puede no estar) y
+   precisión de ocho bits si no está. Sobre una FOTO de fondo, en un anillo que
+   vive segundo y medio, ninguna de las dos cosas se ve. Un puñado de ondas
+   sumadas —cada una un seno radial que se abre y se apaga— se lee igual, no
+   guarda estado, y no depende de una sola extensión.
+
+   ── Y SÓLO SE DIBUJA MIENTRAS HAY ONDA VIVA ──
+   Este launcher tiene el fondo como una foto estática justamente para que el
+   compositor la suba a la GPU una vez y no la vuelva a tocar (vuelta 116). Un
+   lienzo rellenando la pantalla entera a sesenta cuadros por segundo tiraría
+   eso a la basura. El lienzo se enciende con el primer toque y se apaga cuando
+   la última onda se murió. */
+
+const AGUA = {
+  el: null, gl: null, prog: null, tex: null, buf: null,
+  on: false, listo: false, roto: false,
+  ondas: [], t0: 0, ultimo: [0, 0], u: {}
+};
+
+/* ── LOS NÚMEROS, Y DE DÓNDE SALEN ──
+   El frente cruza un teléfono de 412 px de ancho en poco menos de medio
+   segundo, que es lo que hace que se lea a golpe en el agua y no a mancha que
+   crece. El largo de onda son 70 px: más corto se convierte en moaré contra el
+   pixelado de la foto, más largo deja de leerse a onda. */
+const AGUA_VEL = 900, AGUA_ANCHO = 58, AGUA_LARGO = 70;
+/* ── SEIS ONDAS Y NO OCHO ──
+   El lienzo rellena la pantalla entera y cada onda es una vuelta más del bucle
+   POR PÍXEL. Medido con render por software —o sea el peor caso imaginable, la
+   GPU de un teléfono no se parece a esto—: 6,7 ms con una, 10,2 con cuatro y
+   16,2 con ocho. Ocho sólo pasa arrastrando el dedo, y con seis la estela se
+   lee igual. */
+const AGUA_AMORT = 2.0, AGUA_AMP = 26, AGUA_VIDA = 1.7, AGUA_MAX = 6;
+/* cuánto se apaga con la distancia, y cuánta luz agarra la pendiente. Los dos
+   salieron de una cuenta y no de tantear: con 0,0055 y 0,085 el desplazamiento
+   en la cresta medía 1,3 px y el brillo 4 de 255 — o sea que el anillo se
+   estaba dibujando y en la captura no se veía. */
+const AGUA_LEJOS = 0.0022, AGUA_LUZ = 0.30;
+/* mientras se arrastra el dedo, una onda cada tantos píxeles: la estela */
+const AGUA_PASO = 44;
+
+const AGUA_VS = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
+
+/* El desplazamiento se calcula en PÍXELES de pantalla y recién después se lleva
+   a coordenadas de la foto: así el anillo mide lo mismo en cualquier aparato,
+   que es lo que no pasaría trabajando en UV. */
+const AGUA_FS = `precision mediump float;
+uniform sampler2D uTex;
+uniform vec2 uRes;          /* el lienzo, en PÍXELES DE APARATO */
+uniform float uEsc;         /* cuántos px de aparato mide uno de CSS */
+uniform vec2 uA, uB;        /* px de pantalla -> UV de la foto, con el cover y
+                               la deriva del fondo ya metidos adentro */
+uniform vec4 uOnda[${AGUA_MAX}];   /* x, y, cuándo empezó, fuerza */
+uniform float uT;
+uniform int uN;
+void main(){
+  /* ── TODO SE CUENTA EN PÍXELES DE CSS ──
+     gl_FragCoord viene en píxeles DE APARATO: en un teléfono de densidad 2 va
+     de 0 a 824 mientras el toque llegó en 0..412. Sin dividir, el anillo nace
+     en otro sitio y mide la mitad — y en el banco, con densidad 1, eso no se
+     ve nunca. */
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uEsc;
+  vec2 desp = vec2(0.);
+  float pend = 0.;
+  for (int i = 0; i < ${AGUA_MAX}; i++){
+    if (i >= uN) break;
+    vec4 o = uOnda[i];
+    float t = uT - o.z;
+    if (t < 0.0 || t > ${AGUA_VIDA.toFixed(2)}) continue;
+    vec2 d = p - o.xy;
+    float r = length(d) + 0.001;
+    float x = r - t * ${AGUA_VEL.toFixed(1)};
+    /* el sobre: una campana pegada al frente, que se apaga con el tiempo y con
+       la distancia — una onda que llega igual de fuerte al otro extremo de la
+       pantalla no se lee a agua */
+    float env = exp(-abs(x) / ${AGUA_ANCHO.toFixed(1)}) * exp(-t * ${AGUA_AMORT.toFixed(2)})
+              * (1.0 / (1.0 + r * ${AGUA_LEJOS})) * o.w;
+    float k = 6.2831853 / ${AGUA_LARGO.toFixed(1)};
+    desp += (d / r) * sin(x * k) * env;
+    pend += cos(x * k) * env;
+  }
+  vec2 q = p + desp * ${AGUA_AMP.toFixed(1)};
+  vec3 c = texture2D(uTex, q * uA + uB).rgb;
+  /* ── LA LUZ ES LO QUE HACE QUE SE LEA A RELIEVE ──
+     Sin ella el anillo es la foto corrida y se ve como un defecto de vidrio. La
+     pendiente de la onda enciende una cara y apaga la otra, que es exactamente
+     lo que hace una arruga en el agua bajo el sol. */
+  c += vec3(pend) * ${AGUA_LUZ.toFixed(2)};
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+function aguaCompila(gl, tipo, src){
+  const s = gl.createShader(tipo);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+/* ── SE ARMA CON EL PRIMER TOQUE, NO AL ARRANCAR ──
+   Un segundo contexto de WebGL, su programa y la subida de la foto son trabajo
+   que un launcher no tiene por qué pagar antes de que alguien toque el fondo. */
+function aguaArma(){
+  if (AGUA.listo || AGUA.roto) return AGUA.listo;
+  try {
+    const cv = document.createElement('canvas');
+    cv.id = 'agua';
+    FONDO_EL.parentNode.insertBefore(cv, FONDO_EL.nextSibling);
+    const gl = cv.getContext('webgl', { alpha: false, antialias: false,
+                                        depth: false, stencil: false,
+                                        preserveDrawingBuffer: false });
+    if (!gl) throw new Error('sin webgl');
+    const pr = gl.createProgram();
+    gl.attachShader(pr, aguaCompila(gl, gl.VERTEX_SHADER, AGUA_VS));
+    gl.attachShader(pr, aguaCompila(gl, gl.FRAGMENT_SHADER, AGUA_FS));
+    gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+    gl.useProgram(pr);
+
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(pr, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    const tx = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tx);
+    /* CLAMP y no REPEAT: el desplazamiento empuja la muestra fuera del borde y
+       con REPEAT ahí aparece el otro extremo de la foto */
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, FONDO_IMG);
+    gl.uniform1i(gl.getUniformLocation(pr, 'uTex'), 0);
+
+    AGUA.el = cv; AGUA.gl = gl; AGUA.prog = pr; AGUA.tex = tx; AGUA.buf = b;
+    AGUA.u = { res: gl.getUniformLocation(pr, 'uRes'),
+               a: gl.getUniformLocation(pr, 'uA'),
+               b: gl.getUniformLocation(pr, 'uB'),
+               onda: gl.getUniformLocation(pr, 'uOnda'),
+               esc: gl.getUniformLocation(pr, 'uEsc'),
+               t: gl.getUniformLocation(pr, 'uT'),
+               n: gl.getUniformLocation(pr, 'uN') };
+    AGUA.listo = true;
+    return true;
+  } catch (e) { AGUA.roto = true; return false; }
+}
+
+/* ── EL MAPA DE PANTALLA A FOTO SE MIDE, NO SE SUPONE ──
+   La foto entra con `background-size:cover` y encima el elemento lleva la
+   deriva —una escala y un corrimiento que la animación de CSS mueve durante
+   veinticuatro segundos—. Calculando el cover a mano y olvidándose de la
+   deriva, el lienzo dibuja la misma foto CORRIDA respecto de la de abajo y el
+   momento de encenderlo se ve como un salto. La matriz se lee del propio
+   elemento. */
+function aguaMapa(){
+  const W = innerWidth, H = innerHeight;
+  const iw = FONDO_IMG.naturalWidth, ih = FONDO_IMG.naturalHeight;
+  let s = 1, ex = 0, ey = 0;
+  try {
+    const m = new DOMMatrixReadOnly(getComputedStyle(FONDO_EL).transform);
+    if (m.a) { s = m.a; ex = m.e; ey = m.f; }
+  } catch (e) {}
+  const cx = W/2, cy = H/2;
+  /* cover, centrado */
+  const esc = Math.max(W/iw, H/ih), dw = iw*esc, dh = ih*esc;
+  const tlx = (W - dw)/2, tly = (H - dh)/2;
+  /* pantalla -> elemento -> uv, todo junto en una escala y un corrimiento */
+  /* pantalla = C + s*(elemento - C) + E  ⇒  elemento = (pantalla - C - E)/s + C,
+     y de ahí a UV con el cover. Queda una escala y un corrimiento por eje. */
+  const ax = 1/(s*dw), ay = 1/(s*dh);
+  const bx = (cx - (cx + ex)/s - tlx)/dw;
+  const by = (cy - (cy + ey)/s - tly)/dh;
+  AGUA.gl.uniform2f(AGUA.u.a, ax, ay);
+  AGUA.gl.uniform2f(AGUA.u.b, bx, by);
+  return { s: s, ex: ex, ey: ey, esc: esc, ax: ax, bx: bx, by: by };
+}
+
+function aguaMide(){
+  const cv = AGUA.el, W = innerWidth, H = innerHeight;
+  /* el lienzo va a resolución del aparato topada: lo que se dibuja acá es una
+     foto desenfocada por el propio desplazamiento, así que rellenar más píxeles
+     no compra un solo detalle */
+  const r = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(W*r), h = Math.round(H*r);
+  if (cv.width !== w || cv.height !== h){
+    cv.width = w; cv.height = h;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  }
+  AGUA.gl.viewport(0, 0, w, h);
+  AGUA.gl.uniform2f(AGUA.u.res, w, h);
+  AGUA.gl.uniform1f(AGUA.u.esc, r);
+  return r;
+}
+
+/* ── LO QUE ES «ESPACIO LIBRE» ──
+   Todo lo que no sea una app, el widget, la búsqueda, el dock o una hoja
+   abierta. Con el cajón abierto no hay fondo que ondular. */
+function aguaLibre(t){
+  if (CAJON || !t || !t.closest) return false;
+  if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador'))
+    return false;
+  return true;
+}
+
+function aguaToca(x, y, fuerza){
+  if (AGUA.roto) return false;
+  if (matchMedia('(prefers-reduced-motion:reduce)').matches) return false;
+  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  if (!aguaArma()) return false;
+  const ahora = performance.now()/1000;
+  if (!AGUA.on){
+    AGUA.t0 = ahora;
+    /* la deriva se congela mientras dura: el lienzo lleva la matriz de ESTE
+       instante metida adentro, y con la animación corriendo la foto de abajo se
+       iría separando de la de arriba. Veinticuatro segundos de vuelta, uno y
+       medio de pausa: no se ve. */
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.el.classList.add('on');
+    AGUA.on = true;
+    aguaMide();
+    aguaMapa();
+    requestAnimationFrame(aguaPaso);
+  }
+  AGUA.ondas.push({ x: x, y: y, t: ahora, f: fuerza == null ? 1 : fuerza });
+  if (AGUA.ondas.length > AGUA_MAX) AGUA.ondas.shift();
+  AGUA.ultimo = [x, y];
+  return true;
+}
+
+function aguaPaso(){
+  if (!AGUA.on) return;
+  const gl = AGUA.gl, ahora = performance.now()/1000;
+  const v = AGUA.ondas.filter(o => ahora - o.t <= AGUA_VIDA);
+  AGUA.ondas = v;
+  if (!v.length){
+    AGUA.on = false;
+    AGUA.el.classList.remove('on');
+    FONDO_EL.style.animationPlayState = '';
+    return;
+  }
+  const buf = new Float32Array(AGUA_MAX*4);
+  for (let i = 0; i < v.length; i++){
+    buf[i*4] = v[i].x; buf[i*4+1] = v[i].y; buf[i*4+2] = v[i].t; buf[i*4+3] = v[i].f;
+  }
+  gl.uniform4fv(AGUA.u.onda, buf);
+  gl.uniform1i(AGUA.u.n, v.length);
+  gl.uniform1f(AGUA.u.t, ahora);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(aguaPaso);
+}
+
+function aguaInit(){
+  let apretado = false, ux = 0, uy = 0;
+  addEventListener('pointerdown', e => {
+    if (!aguaLibre(e.target)) return;
+    apretado = true; ux = e.clientX; uy = e.clientY;
+    aguaToca(e.clientX, e.clientY, 1);
+  }, { capture: true, passive: true });
+  /* ── LA ESTELA ──
+     Samsung dejaba un rastro al arrastrar, y es lo que separa «un efecto que se
+     dispara» de «agua». Una onda cada 44 px y más flojita: con una por evento
+     de puntero serían sesenta por segundo y se empastan. */
+  addEventListener('pointermove', e => {
+    if (!apretado || !AGUA.on) return;
+    if (Math.hypot(e.clientX - ux, e.clientY - uy) < AGUA_PASO) return;
+    ux = e.clientX; uy = e.clientY;
+    aguaToca(e.clientX, e.clientY, 0.55);
+  }, { capture: true, passive: true });
+  const suelta = () => { apretado = false; };
+  addEventListener('pointerup', suelta, { capture: true, passive: true });
+  addEventListener('pointercancel', suelta, { capture: true, passive: true });
+  addEventListener('resize', () => { if (AGUA.on){ aguaMide(); aguaMapa(); } });
+}
 
 /* ══════════════════════ EL PUENTE DE MENTIRA Y LAS SONDAS ══════════════════════
    Esto es lo último del módulo. Dos cosas:
@@ -3243,6 +3716,138 @@ window.__A = {
              caja: [m.offsetLeft, m.offsetTop, m.offsetWidth, m.offsetHeight],
              sobreTeclado: Math.round(innerHeight - TECLADO - b),
              busca: Math.round(c.bottom), alto: innerHeight };
+  },
+  /* ── EL AGUA ──
+     Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
+     FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
+     lo que decide si encenderlo se ve como un salto. */
+  agua(){
+    const c = AGUA.el;
+    return { listo: AGUA.listo, roto: AGUA.roto, on: AGUA.on,
+             ondas: AGUA.ondas.length,
+             clase: c ? c.className : null,
+             lienzo: c ? [c.width, c.height] : null,
+             fondo: { ok: FONDO_OK, w: FONDO_IMG ? FONDO_IMG.naturalWidth : 0,
+                      h: FONDO_IMG ? FONDO_IMG.naturalHeight : 0 },
+             deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
+  },
+  /* el toque va por el camino de verdad —un PointerEvent sobre lo que haya en
+     ese punto— y no llamando a `aguaToca`: lo que hay que probar es justamente
+     que el filtro de «espacio libre» deja pasar el fondo y no una app */
+  aguaTocar(x, y){
+    const t = document.elementFromPoint(x, y);
+    t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y,
+                                                      pointerId: 3, isPrimary: true }));
+    return { destino: t ? (t.id || t.className || t.tagName) : null,
+             libre: aguaLibre(t), agua: this.agua() };
+  },
+  aguaArrastra(x0, y0, x1, y1, n){
+    const t = document.elementFromPoint(x0, y0);
+    const ev = (tipo, x, y, el) => el.dispatchEvent(new PointerEvent(tipo,
+      { bubbles: true, clientX: x, clientY: y, pointerId: 3, isPrimary: true }));
+    ev('pointerdown', x0, y0, t);
+    for (let i = 1; i <= (n || 6); i++)
+      ev('pointermove', x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n, t);
+    ev('pointerup', x1, y1, t);
+    return this.agua().ondas;
+  },
+  aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
+  /* ── LA COPIA PELADA ──
+     Enciende el lienzo SIN una sola onda: lo que queda en pantalla tiene que
+     ser, píxel por píxel, la misma foto que dibujaba el CSS. Ésa es la única
+     forma de saber si encenderlo se ve como un salto, y no se puede medir con
+     una onda viva porque entonces todo lo que cambia se puede achacar a ella.
+     La deriva se congela: entre dos capturas la foto se mueve sola y esa
+     diferencia no es del agua. */
+  aguaCopia(v){
+    FONDO_EL.style.animationPlayState = 'paused';
+    if (!v){ AGUA.ondas = []; if (AGUA.el) AGUA.el.classList.remove('on'); AGUA.on = false; return 'off'; }
+    if (!aguaArma()) return 'roto';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    AGUA.gl.uniform1i(AGUA.u.n, 0);
+    AGUA.gl.uniform1f(AGUA.u.t, 0);
+    AGUA.gl.drawArrays(AGUA.gl.TRIANGLES, 0, 3);
+    return 'on';
+  },
+  /* ── UNA ONDA CONGELADA EN EL INSTANTE QUE SE PIDA ──
+     El bucle sigue corriendo entre la sonda y la captura, así que una foto
+     sacada «justo después de tocar» es de cualquier instante menos ése: medido,
+     con 120 ms de espera el frente ya había cruzado la pantalla y en la captura
+     no se veía una sola onda. Acá se dibuja a mano con la edad pedida y no se
+     agenda otro cuadro. */
+  aguaFoto(x, y, edad){
+    if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    const gl = AGUA.gl, b = new Float32Array(AGUA_MAX*4);
+    b[0] = x; b[1] = y; b[2] = 0; b[3] = 1;
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, 1);
+    gl.uniform1f(AGUA.u.t, edad);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return { x: x, y: y, edad: edad, frente: Math.round(edad*900) };
+  },
+  /* cuánto cuesta un cuadro de agua, medido dibujando de verdad con las ondas
+     que se le pidan: el lienzo rellena la pantalla entera, así que es el único
+     número que decide si esto se puede tener */
+  aguaCosto(n, cuadros){
+    if (!aguaArma()) return 'roto';
+    const gl = AGUA.gl;
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    AGUA.el.classList.add('on');
+    aguaMide(); aguaMapa();
+    const b = new Float32Array(AGUA_MAX*4);
+    for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    const c = cuadros || 60, t0 = performance.now();
+    for (let i = 0; i < c; i++){
+      gl.uniform1f(AGUA.u.t, 0.3 + i*0.001);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    /* `finish()` no sincroniza nada acá: con el render por software la cola se
+       traga las llamadas y el reloj devuelve cero. `readPixels` sí obliga a que
+       el cuadro esté terminado, porque hay que devolver el píxel. */
+    const px1 = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+    const ms = (performance.now() - t0)/c;
+    return { ondas: n, cuadros: c, ms: +ms.toFixed(3),
+             px: AGUA.el.width*AGUA.el.height };
+  },
+  /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
+     así que después de una foto congelada no limpiaba nada */
+  aguaApaga(){
+    AGUA.ondas = []; AGUA.on = false;
+    if (AGUA.el) AGUA.el.classList.remove('on');
+    FONDO_EL.style.animationPlayState = '';
+    return this.agua();
+  },
+
+  /* ── LA PANTALLA DE INICIO ──
+     Sin puente no hay rol que pedir: lo que se puede medir en el banco es que
+     la hoja se arma, dice lo que corresponde y ofrece los dos botones con el
+     apagado puesto donde va. */
+  ini(){
+    const e = iniEstado(), c = $('#iniCuerpo');
+    return { abierto: $('#ini').classList.contains('on'), estado: e,
+             pkg: INI_PKG, enLista: !!POR_PKG[INI_PKG],
+             tit: $('#iniTit').textContent,
+             lineas: [...c.querySelectorAll('.iEst,.iNota')].map(x => x.textContent),
+             botones: [...c.querySelectorAll('.iBtn')]
+                        .map(x => [x.textContent, x.classList.contains('no') ? 'off' : 'on']) };
+  },
+  iniAbrir(){ iniAbre(); return true; },
+  iniCerrar(){ iniCierra(); return true; },
+  iniToca(txt){
+    const b = [...$('#iniCuerpo').querySelectorAll('.iBtn')]
+                .find(x => x.textContent === txt);
+    if (!b) return 'no está: ' + txt;
+    b.click(); return this.ini();
   },
   /* ── PARA DÓNDE MUEVE UN EJE ──
      Los ejes de un hueso no se adivinan: se gira uno y se mira dónde quedó la

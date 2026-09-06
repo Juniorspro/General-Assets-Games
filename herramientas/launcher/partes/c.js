@@ -18,6 +18,8 @@
 
 let FONDO_EL = null, FONDO_OK = false;
 
+let FONDO_IMG = null;   /* el mapa de bits del fondo, que también usa el agua */
+
 function fondoInit(){
   FONDO_EL = $('#fondo');
 
@@ -26,7 +28,12 @@ function fondoInit(){
      `background-image` de una, el primer cuadro es un rectángulo vacío. Se
      precarga en un `Image` y recién cuando decodificó se enciende, con el
      degradado de respaldo debajo mientras tanto. */
+  /* ── LA MISMA IMAGEN LA USA EL AGUA ──
+     El efecto de ondas dibuja la foto desplazada en un lienzo de WebGL, y la
+     textura sale de acá: pidiéndola de nuevo se decodificarían 113 KB dos
+     veces para tener el mismo mapa de bits. */
   const im = new Image();
+  FONDO_IMG = im;
   im.onload = () => {
     FONDO_EL.style.backgroundImage = 'url(' + IMG_FONDO + ')';
     FONDO_EL.classList.add('ok');

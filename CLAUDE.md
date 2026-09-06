@@ -281,6 +281,138 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimoprimera vuelta (2026-09-06): **AERO** — la barra de estado que sobraba, la app de pantalla de inicio, y el agua
+
+Reporte, con una captura: *"la batería hora y eso ya lo vemos, me gustaría que haya una app dónde
+puedas hacerle como el launcher predeterminado y después puedas sacarlo automáticamente, también me
+gustaría que al tocar la pantalla en un espacio libre de no app o eso tengo efecto de agua algo así
+como Samsung tenía"*.
+
+#### LA HORA ESTABA TRES VECES EN LA MISMA PANTALLA
+
+En la captura se ven **dos barras de estado idénticas, una encima de la otra**: la del sistema y una
+nuestra. El launcher va de borde a borde desde la vuelta 115, o sea que la del sistema queda dibujada
+sobre la página — y `#barra` la repetía justo debajo, con la misma hora y la misma batería. Se queda
+**sólo en la vista previa del navegador**, donde no hay barra de sistema y sin ella la maqueta no se
+parece a un teléfono; en el aparato la apaga `body.and`, que es la clase que dice si hay puente.
+
+El widget se queda: un reloj grande no es una barra de estado, es lo único que hay en esa franja.
+Medido: sin la barra propia el widget sube 17 px y arranca pegado a `--ins-t`, o sea justo debajo de
+la de verdad, con **cero solapamientos** entre los cuatro elementos que quedan.
+
+#### SER LA PANTALLA DE INICIO ES UN COMPONENTE, Y POR ESO SE PUEDE APAGAR
+
+Con `HOME` y `LAUNCHER` metidos en el **mismo** `intent-filter` no hay forma de renunciar al puesto
+sin desaparecer también del cajón de apps del otro launcher: son la misma puerta, y el que se va no
+tendría cómo volver. El manifiesto pasa a tener dos: `.Principal` con `LAUNCHER`, que **no se apaga
+nunca**, y un `activity-alias .Inicio` con `HOME`, que es el puesto.
+
+Apagando el alias con `setComponentEnabledSetting`, Android se queda sin Aero entre los candidatos y
+se va al que quede — **y si queda uno solo, va derecho sin preguntar**. Eso es «sacarlo
+automáticamente», y no cuesta un permiso: es un componente propio.
+
+**Y NO SE PUEDE DEJAR AL TELÉFONO SIN NINGUNO.** Si Aero fuera el único inicio instalado, apagarlo
+dejaría la tecla HOME apuntando a la nada. El puente cuenta cuántos hay —por paquete, no por
+actividad, y salteando `android`, que es la pantalla de «elegí con cuál» y no un launcher— y el
+botón se apaga **con el motivo escrito al lado**, que es distinto de un botón que no hace nada.
+
+Ponerlo va por el **rol HOME** (`createRequestRoleIntent`), que desde Android 10 es un diálogo del
+sistema de un toque; por debajo de eso queda la pantalla de ajustes, que es lo que había. Y primero
+se vuelve a encender el alias: sin componente HOME no hay nada que elegir.
+
+Dos decisiones de la hoja, las dos por lo mismo: **los dos botones están siempre y el que no
+corresponde se apaga** —escondiendo el que no aplica, la hoja cambia de forma entre una visita y la
+siguiente— y el estado se repinta al volver del diálogo (`onActivityResult`), porque si no uno acaba
+de ponerlo como inicio y la pantalla sigue diciendo que no.
+
+#### EL AGUA: ANILLOS ANALÍTICOS Y NO UNA SIMULACIÓN DE CAMPO
+
+Lo canónico sería un campo de alturas en dos texturas que se pasan la pelota con la ecuación de
+onda. Eso compra dos cosas —interferencia y rebote contra los bordes— y cuesta dos destinos de
+render, texturas de coma flotante (que en WebGL1 son una extensión que puede no estar) y ocho bits
+de precisión si no está. Sobre una **foto** de fondo, en un anillo que vive segundo y medio, ninguna
+de las dos se ve. Un puñado de ondas sumadas —cada una un seno radial que se abre y se apaga— se lee
+igual, no guarda estado y no depende de ninguna extensión.
+
+**Y SE ENCIENDE CON EL PRIMER TOQUE Y SE APAGA CUANDO LA ÚLTIMA ONDA SE MURIÓ.** Este launcher tiene
+el fondo como foto estática justamente para que el compositor la suba una vez y no la vuelva a tocar
+(vuelta 116); un lienzo rellenando la pantalla entera a sesenta cuadros por segundo tiraría eso a la
+basura.
+
+**LA LUZ ES LO QUE HACE QUE SE LEA A RELIEVE.** Con sólo el desplazamiento el anillo es la foto
+corrida y se ve como un defecto de vidrio; la pendiente de la onda enciende una cara y apaga la
+otra, que es lo que hace una arruga en el agua.
+
+#### TRES DEFECTOS DEL AGUA, Y LOS TRES SE VIERON MIDIENDO
+
+1. **EL ANILLO SE DIBUJABA Y NO SE VEÍA.** Con la amortiguación en 2,6, la caída con la distancia en
+   0,0055 y la luz en 0,085, la cuenta da **1,3 px de desplazamiento en la cresta y 4 de brillo sobre
+   255**: la captura salía idéntica al fondo. No era un error de conexión —el lienzo estaba
+   dibujando la foto— era que los tres multiplicadores se comían el efecto. Con 2,0 · 0,0022 · 0,30 y
+   amplitud 26 quedan **6 px y 22 sobre 255**, y en la foto congelada se ven las burbujas torcidas.
+2. **`gl_FragCoord` VIENE EN PÍXELES DE APARATO.** En un teléfono de densidad 2 va de 0 a 824
+   mientras el toque llega en 0..412: sin dividir por la densidad, el anillo nace en otro sitio y
+   mide la mitad. **En el banco, con densidad 1, eso no se ve nunca** — es exactamente la clase de
+   defecto que sólo aparece en el aparato del usuario.
+3. **Y UN COMENTARIO CON ACENTOS GRAVES ADENTRO DE LA PLANTILLA DEL SHADER.** El shader vive en un
+   template literal y el comentario decía `` `gl_FragCoord` ``: eso lo termina en el medio y el
+   módulo entero deja de parsear. `SyntaxError: Unexpected identifier` y la página en blanco.
+
+#### LA MEDICIÓN QUE DECIDE SI ESTO SE PUEDE TENER
+
+El lienzo dibuja **una copia de la foto**, así que encenderlo tiene que ser invisible. Se mide con la
+copia PELADA —el lienzo encendido sin una sola onda— contra el fondo de CSS:
+
+| | mediana | media | p99 | máximo |
+|---|---|---|---|---|
+| copia pelada contra el CSS | **0** | **0,16** | 1 | **2** de 255 |
+| con una onda puesta | — | 4,56 | 38 | 99 |
+
+**Y LA PRIMERA VERSIÓN DE ESA MEDICIÓN ESTABA MAL.** Comparé una captura sin onda contra otra con
+onda y la diferencia FUERA del anillo dio lo mismo que adentro (media 3,3, máximo 177), o sea que
+parecía que la copia era infiel. No lo era: entre las dos capturas pasan segundos y **el fondo tiene
+una deriva de veinticuatro segundos** que lo mueve solo. Congelando la deriva y comparando la copia
+pelada, la diferencia se va a cero. Por eso el efecto además **pausa la animación** mientras dura: el
+lienzo lleva la matriz de ese instante metida adentro y con la deriva corriendo las dos fotos se
+separarían.
+
+**Y LA FOTO DE UNA ONDA HAY QUE CONGELARLA.** El bucle sigue corriendo entre la sonda y la captura:
+con 120 ms de espera el frente ya había cruzado la pantalla y en la captura no había una sola onda.
+`aguaFoto(x, y, edad)` dibuja a mano con la edad pedida y no agenda otro cuadro. Es la quinta vez en
+este repo.
+
+#### EL COSTO, Y POR QUÉ SON SEIS ONDAS Y NO OCHO
+
+Cada onda es una vuelta más del bucle **por píxel** sobre la pantalla entera. Medido con render por
+software —el peor caso imaginable, la GPU de un teléfono no se parece a esto— y con `readPixels`
+para forzar el sincronismo, porque `finish()` acá devuelve cero:
+
+| ondas | 1 | 4 | 6 | 8 |
+|---|---|---|---|---|
+| ms por cuadro | 6,6 | 10,2 | **13,1** | 16,2 |
+
+Ocho sólo pasa arrastrando el dedo, y con seis la estela se lee igual.
+
+#### MEDIDO AL CERRAR
+
+Agua: el lienzo se arma con el primer toque (`listo:true`), tocar el widget o una app del dock
+devuelve **`libre:false`** y no agrega onda, arrastrar de punta a punta deja **6** —el tope—, apagar
+devuelve la deriva a `corriendo`, y la copia pelada es la misma foto con **mediana 0 y máximo 2**.
+Pantalla de inicio: la app está en el cajón y se busca por su nombre, la hoja dice el estado, ofrece
+los dos botones y explica qué pasa al salir, **cero solapamientos**. Barra: con puente `display:none`
+y el widget subiendo 17 px; sin puente se queda. Regresión completa: **31 apps**, riel de 17 letras,
+7 filtros de refracción, cero solapamientos, subir sobre el dock abre, el aro de la batería en sus
+tres escalones, la mascota `on:false` en el inicio y `on:true` con `sobreTeclado: 12` buscando,
+apartándose con dieciocho resultados, el asistente con sus 9 acciones, y Personalizar con sus 8
+grupos y las cinco poses. `window.__errs` **vacío en las nueve corridas**. APK **364 KB** con firma
+v2+v3, `HOME` en el alias, `LAUNCHER` en la actividad, `singleTask`, `stateNotNeeded` e `INTERNET`.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del rol HOME y del apagado del alias
+está medido que compilan y que el manifiesto declara las dos puertas por separado — **no** que el
+diálogo del sistema aparezca ni que el teléfono se vaya solo al otro launcher. Y el agua está medida
+con densidad 1: la división por la densidad está escrita y razonada, pero la única forma de
+comprobarla es un teléfono.
+
 ### Centésima vigésima vuelta (2026-09-06): **AERO** — la mascota se apoya en el teclado, y sólo mientras se busca
 
 Reporte, una línea: *"la mascotita molesta en el inicio debe solamente aparecer en la barra de

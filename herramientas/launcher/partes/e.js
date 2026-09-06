@@ -28,6 +28,10 @@ function nodoApp(a, conNombre){
     b.style.background = 'linear-gradient(160deg,#ffd166,#e0704f)';
     b.style.font = '600 26px system-ui';
     b.textContent = '⚙';
+  } else if (a.p === INI_PKG){
+    b.style.background = 'linear-gradient(160deg,#9ef0b8,#3f9e7a)';
+    b.style.font = '600 26px system-ui';
+    b.textContent = '⌂';
   } else if (a.p === ASIS_PKG){
     /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
@@ -265,6 +269,7 @@ function abre(pkg){
      «no existe» sobre un paquete que nunca se instaló */
   if (pkg === ASIS_PKG){ asisAbre(); return; }
   if (pkg === PERS_PKG){ persAbre(); return; }
+  if (pkg === INI_PKG){ iniAbre(); return; }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -325,6 +330,7 @@ function repintaIdioma(){
   $('#cajTit').textContent = T('todas');
   const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
   const q = POR_PKG[PERS_PKG]; if (q) q.n = T('aNombreP');
+  const w = POR_PKG[INI_PKG];  if (w) w.n = T('iNombre');
   if (MENU_PKG){
     $('#mFijar').lastElementChild.textContent = fijado(MENU_PKG) ? T('soltar') : T('fijar');
     $('#mInfo').lastElementChild.textContent = T('info');
@@ -398,6 +404,7 @@ function cargaApps(){
      aparte obligaría a inventarle un sitio en una pantalla que ya está llena. */
   APPS.push({ p: ASIS_PKG, n: T('aNombre') });
   APPS.push({ p: PERS_PKG, n: T('aNombreP') });
+  APPS.push({ p: INI_PKG,  n: T('iNombre') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -809,6 +816,10 @@ function mascToque(){
 window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
 window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
 window.__atras = function(){
+  /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
+     cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
+  if ($('#ini').classList.contains('on')){ iniCierra(); return true; }
+  if ($('#pers').classList.contains('on')){ persCierra(); return true; }
   if ($('#asis').classList.contains('on')){ asisCierra(); return true; }
   if (MENU_PKG) cierraMenu();
   else if (CAJON) verCajon(false);
@@ -839,6 +850,9 @@ window.__insets = function(t, b){
 
 /* ══════════ ARRANQUE ══════════ */
 function arranca(){
+  /* el CSS necesita saber si hay sistema detrás: la barra de estado propia
+     sólo tiene sentido en la vista previa */
+  document.body.classList.toggle('and', HAY_AND);
   $('#busca').placeholder = T('busca');
   $('#busca2').placeholder = T('busca');
   $('#cajTit').textContent = T('todas');
@@ -894,6 +908,8 @@ function arranca(){
 
   asisInit();
   persInit();
+  iniInit();
+  aguaInit();
 
   enganchaLista($('#tira'));
   enganchaLista($('#dock'));
