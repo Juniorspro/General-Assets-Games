@@ -66,15 +66,39 @@ Dos detalles que hay que respetar para que funcione:
 y se pierde la mitad del efecto— y `setSize(LADO, LADO, false)`: con `true`,
 three le escribe el CSS al lienzo y anula todo.
 
-## El encuadre se mide por los huesos
+## El encuadre se mide, no se elige
 
 `Box3.setFromObject` sobre una malla con skin devuelve la caja de la **pose de
 amarre**, que no es la que se ve: el muñeco quedaba chico y corrido hacia abajo.
-Los huesos, en cambio, ya están donde los puso la animación, así que la caja se
-arma con sus posiciones y se agranda un 16% para que no le corte la ropa.
+Y medir una sola pose tampoco alcanza: **el salto lo levanta medio cuerpo y se
+salía del cuadro**.
+
+Así que se recorren *las dos* animaciones —quince muestras de cada una—, se
+juntan las posiciones de todos los huesos en cada muestra, y de esa caja sale
+todo: el centro, la escala y la distancia de la cámara, calculada como la
+distancia a la que una esfera de ese radio entra justa en el campo de visión,
+más margen para el flote y la respiración. Antes la cámara era un `3.9` puesto a
+ojo, y por eso recortaba.
 
 La escala va en un envoltorio y no en el nodo del skin: tocarle la escala a un
 nodo con esqueleto desalinea los huesos de la malla.
+
+## Dos cosas que hacían que el toque no hiciera nada
+
+- **`getElapsedTime()` de three se come el delta.** Llama a `getDelta()` por
+  dentro, así que pedir primero el tiempo y después el delta devuelve casi cero
+  y *todo lo que depende del tiempo se queda clavado*: los resortes, la inercia
+  y la mezcla entre reposo y salto. El reloj propio se lleva a mano y el delta
+  se pide una sola vez.
+- **`crossFadeTo` fundía al revés.** El salto se quedaba en peso 0 y su reloj no
+  avanzaba nunca. La mezcla ahora es un número que se acerca solo en cada
+  cuadro, se aplica con `setEffectiveWeight` y se puede leer desde
+  `window.mascota.info()`. Un número que se puede comprobar vale más que el
+  atajo de la biblioteca.
+
+`window.mascota` es un asa chica y a propósito: `saltar()` dispara el salto e
+`info()` devuelve el encuadre y los pesos. Es lo que permite que una prueba
+demuestre que el salto salta, en vez de mirar una captura y creerle.
 
 ## GLTFLoader está copiado, no traído de un CDN
 
