@@ -1,7 +1,25 @@
 # Electro Silver — Presidencia Roca, Chaco
 
-Carpeta del sitio. Esto es lo que se arrastra a Netlify: **la carpeta `electro-silver`
-entera**, no los archivos sueltos.
+    https://electro-silver.pages.dev
+
+Publicada en Cloudflare Pages, **como demostración y con `noindex`**. Se sube la
+carpeta entera:
+
+    npx wrangler pages deploy electro-silver --project-name electro-silver --branch main
+
+## Por qué va con `noindex`
+
+La dirección, el teléfono y los precios son de ejemplo, y las tres reseñas están
+inventadas para la demostración —con nombre y pueblo—. La página lo dice en cada
+sección, pero un buscador no lee eso: indexarla sería dejar que alguien busque
+«Electro Silver» y encuentre un teléfono que no existe. El `noindex` va en la
+etiqueta Y en la cabecera `X-Robots-Tag`, y `robots.txt` deja crawlear a
+propósito: con `Disallow`, Google no puede leer el `noindex` y la página igual
+puede terminar en los resultados.
+
+Al publicar en serio: reemplazar los datos de la tabla de abajo, sacar el
+`noindex` de `index.html` y de `_headers`, y volver a poner el `sitemap.xml`
+apuntando al dominio real.
 
 ## Estado
 
@@ -25,7 +43,7 @@ Están marcados en el pie de la página y en comentarios del HTML:
 |---|---|
 | JSON-LD y sección «El local» | Av. San Martín 480 · (3725) 00-0000 |
 | JSON-LD `geo` | -26.1333, -59.6000 (centro del pueblo, no del local) |
-| `canonical`, `og:url`, `og:image`, sitemap, robots | electrosilver.com.ar |
+| `canonical`, `og:url`, `og:image` | electrosilver.com.ar |
 | Precios del catálogo | valores de ejemplo |
 | Tarifas de instalación y de envío | valores de ejemplo |
 | Las tres opiniones | inventadas para la demostración |
