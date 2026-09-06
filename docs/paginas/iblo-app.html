@@ -808,10 +808,12 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
       <div class="campo">
         <label>Fotos y videos</label>
         <div class="suelta" id="arSuelta">
-          <input type="file" accept="image/*" multiple aria-label="Elegir fotos">
+          <input type="file" accept="image/*,video/mp4,video/webm,video/quicktime,.mov"
+                 multiple aria-label="Elegir fotos o videos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M12 3v13M7 8l5-5 5 5"/></svg>
-          <b>Elegir fotos</b>
-          <small>Todas juntas si querés. Se achican solas.</small>
+          <b>Elegir fotos o videos</b>
+          <small>Todas juntas si querés. Las fotos se achican solas.<br>
+            Los videos entran hasta 24 MB; si es más largo, usá el botón de abajo.</small>
         </div>
         <div class="arLote" id="arLote"></div>
         <button class="bt s" id="btVideo" type="button" style="margin-top:11px">
@@ -819,12 +821,15 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
           Subir video</button>
         <div id="cajaVideo" hidden style="margin-top:12px">
           <p class="pista" style="margin:0 0 10px">
-            Los videos van a YouTube o MediaFire y acá se pega el link: pesan
-            mucho y así arrancan al toque, sin cargar.
+            Esto es para los videos largos. Uno corto, de hasta 24 MB, se sube
+            directo con «Elegir fotos o videos». Los que pesan más van a YouTube o
+            MediaFire y acá se pega el link: así arrancan al toque, sin cargar.
           </p>
           <div class="dosBotones" style="margin-bottom:10px">
-            <a class="bt s" href="https://studio.youtube.com/channel/UC/videos/upload" target="_blank" rel="noopener">Subir a YouTube</a>
-            <a class="bt s" href="https://www.mediafire.com/upload/" target="_blank" rel="noopener">Subir a MediaFire</a>
+            <!-- `mediafire.com/upload/` daba 404 (error 370) y `studio.youtube.com/channel/UC/…`
+                 lleva un id de canal de mentira. Estas dos son las que abren de verdad. -->
+            <a class="bt s" href="https://www.youtube.com/upload" target="_blank" rel="noopener">Subir a YouTube</a>
+            <a class="bt s" href="https://app.mediafire.com/myfiles" target="_blank" rel="noopener">Subir a MediaFire</a>
           </div>
           <input id="arEnlace" inputmode="url" placeholder="https://youtu.be/...">
           <span class="pista">Si es de YouTube, la tapa la saco sola.</span>
@@ -1818,7 +1823,9 @@ $("btSinAdorno").addEventListener("click", function(){
       Workers corta a los 10 ms de CPU. Y hace falta, porque la grilla de la web
       pide treinta miniaturas de una: con los originales sería inusable.
    2. La del video sale del primer cuadro, con un <video> escondido y un canvas.
-      Sin eso el video en la grilla sería un rectángulo negro.
+      Sin eso el video en la grilla sería un rectángulo negro. Hay que PEDIRLE un
+      tiempo concreto: con sólo cargar los metadatos, varios navegadores no
+      decodifican ningún cuadro y el canvas sale transparente.
    3. Se sube de a uno, en fila. Todos juntos en paralelo revienta la memoria del
       teléfono con archivos de 20 MB y, si algo falla, no se sabe qué entró. */
 
@@ -1838,6 +1845,37 @@ function miniDe(fuente, an, al, lado){
 }
 
 
+/* El tope es del depósito, no un capricho: un valor no puede pasar de 25 MB y
+   la API corta en 24. */
+var TOPE_VIDEO = 24 * 1024 * 1024;
+
+/* La tapa del video es su primer cuadro. Hay que pedirle un tiempo concreto:
+   varios navegadores no decodifican NINGÚN cuadro con sólo cargar los metadatos,
+   y el canvas saldría transparente. Si no se puede, se sigue sin tapa —el video
+   se sube igual, sólo se ve un rectángulo en la grilla. */
+function tapaDeVideo(archivo, listo){
+  var url = URL.createObjectURL(archivo);
+  var v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto";
+  var yaEsta = false;
+  function fin(mini){
+    if (yaEsta) return;
+    yaEsta = true;
+    URL.revokeObjectURL(url);
+    listo(mini, v.videoWidth || 0, v.videoHeight || 0);
+  }
+  function sacar(){
+    if (!v.videoWidth) return fin("");
+    try { fin(miniDe(v, v.videoWidth, v.videoHeight)); }
+    catch (e){ fin(""); }                 /* algún códec que el canvas no lee */
+  }
+  v.onloadeddata = function(){ if (v.currentTime < .05) { try { v.currentTime = .1; } catch(e){ sacar(); } } };
+  v.onseeked = sacar;
+  v.onerror = function(){ fin(""); };
+  setTimeout(function(){ sacar(); }, 9000);   /* un video raro no cuelga la subida */
+  v.src = url;
+}
+
 /* prepara un archivo suelto y lo mete en el lote */
 function prepararUno(archivo, listo){
   if (/^image\//.test(archivo.type)){
@@ -1854,12 +1892,25 @@ function prepararUno(archivo, listo){
     }, function(){ listo({ nombre: archivo.name, error: "no pude leer la foto" }); });
     return;
   }
-  /* Los videos ya no viajan como archivo: van por link, con el botón «Subir
-     video». Igual hay teléfonos que dejan elegir un video aunque el selector
-     pida fotos, así que hay que decírselo en vez de subir 40 MB en silencio. */
+  /* Un video corto viaja como archivo igual que una foto: la API lo acepta
+     hasta 24 MB, que es lo que entra en un valor del depósito. Más que eso no
+     hay forma, y ahí sí va por link. */
   if (/^video\//.test(archivo.type)){
-    listo({ nombre: archivo.name, tipo: "video", peso: archivo.size,
-            error: "los videos van con «Subir video»" });
+    if (archivo.size > TOPE_VIDEO){
+      listo({ nombre: archivo.name, tipo: "video", peso: archivo.size,
+              error: "pesa " + (archivo.size / 1048576).toFixed(0) +
+                     " MB: subilo con «Subir video»" });
+      return;
+    }
+    tapaDeVideo(archivo, function(mini, an, al){
+      var fr = new FileReader();
+      fr.onload = function(){
+        listo({ nombre: archivo.name, tipo: "video", medio: fr.result, mini: mini,
+                ancho: an, alto: al, peso: archivo.size });
+      };
+      fr.onerror = function(){ listo({ nombre: archivo.name, error: "no pude leer el video" }); };
+      fr.readAsDataURL(archivo);
+    });
     return;
   }
   listo({ nombre: archivo.name, error: "eso no es una foto ni un video" });
@@ -2033,7 +2084,7 @@ $("arLote").addEventListener("click", function(ev){
 $("btSubirArch").addEventListener("click", function(){
   if (!secElegida){ decir("avisoArch", "Elegí primero a qué sección va.", "mal"); return; }
   var buenos = lote.filter(function(x){ return !x.error && x.medio; });
-  if (!buenos.length){ decir("avisoArch", "Elegí al menos una foto.", "mal"); return; }
+  if (!buenos.length){ decir("avisoArch", "Elegí al menos una foto o un video.", "mal"); return; }
   /* sin nombre, las fotos caen todas en un álbum «Sueltas» y se pierde el
      sentido de tener secciones: cada tanda es un evento */
   if (!$("arTitulo").value.trim()){

@@ -21,10 +21,12 @@ export const onRequestOptions = preflight;
 
    Con eso la grilla es una consulta a D1 y ni toca KV.
 
-   **Los videos no se suben acá.** El dueño los sube a YouTube o a MediaFire y
-   pega el link; en la app el botón igual dice «Subir video», porque para él es lo
-   mismo. Las razones son dos: el depósito gratis son 1 GB y un puñado de videos
-   de fiesta se lo come, y un video servido desde acá no tiene la reproducción
+   **Los videos cortos sí se suben acá**, hasta 24 MB, que es lo que entra en un
+   valor de KV. Los largos van a YouTube o a MediaFire y se pega el link; en la
+   app el botón igual dice «Subir video», porque para el dueño es lo mismo. Las
+   razones para no subir los largos son dos: el depósito gratis es 1 GB y un
+   puñado de videos de fiesta se lo come, y un video servido desde acá no tiene
+   la reproducción
    progresiva que sí le da YouTube. De los de YouTube se saca la tapa sola, de la
    dirección de la miniatura, sin pedir ninguna clave.
    --------------------------------------------------------------------------- */
