@@ -64,3 +64,24 @@ hace que balancearse rinda en vez de amortiguarse hasta parar.
 5. **Arrancar parado en un techo era un encierro**: el edificio vecino tapaba
    media vista. Ahora se arranca cayendo 28 m arriba del techo más alto, que
    además obliga a lanzar el primer hilo enseguida.
+
+## Los tres formatos
+
+| | Qué es | Cómo se abre |
+|---|---|---|
+| `juego/` | La versión en carpeta: HTML, JS y assets sueltos. Es la que se edita. | `python3 -m http.server -d juego 8093` |
+| `telarana.html` | **Un archivo solo, 6,8 MB.** Todo adentro: three.js, el juego, la ciudad, el héroe y el cielo en base64. | Doble clic. Anda desde el disco. |
+| Artifact | La misma partida publicada, con un link para compartir. | El link |
+
+`armar-html.py` arma el archivo suelto a partir de `juego/`. Para que ande
+desde `file://` hay un detalle que no es obvio: **los navegadores no dejan
+correr módulos ES desde el disco** —`<script type="module">` con origen `null`
+queda bloqueado, y con él todos los `import`—. Así que el archivo suelto no
+usa módulos: three.js, sus complementos y el juego se empaquetan con esbuild
+en **un script clásico de 644 KB**, y los assets viajan en base64 en vez de
+pedirse con `fetch`, que desde `file://` también está prohibido.
+
+```sh
+npx esbuild main.js --bundle --format=iife --minify --outfile=paquete.js
+python3 armar-html.py
+```
