@@ -44,6 +44,19 @@ const PERS = [
     lee: () => MASC_HOY,
     pon: v => { asisMascota(v); } },
 
+  /* ── EL ESTILO DE ICONO SE APLICA A TODAS LAS APPS, NO A UNA LISTA ──
+     Lo que se pidió es «íconos personalizados de Play Store y más de 50 apps,
+     por ejemplo TikTok su logo aero y de fondo agua». Una lista de cincuenta
+     logos redibujados envejece con cada app que se instala y deja afuera a la
+     51.ª — y encima serían marcas ajenas metidas en el APK. Lo que sí vale para
+     TODAS es el TRATAMIENTO: el icono de verdad de cada app, que es su logo, con
+     el fondo Aero detrás. */
+  { tit: 'pIcono', tipo: 'ops',
+    ops: () => [['agua', T('pAgua')], ['pasto', T('pPasto')], ['nube', T('pNube')],
+                ['no', T('pNo')]],
+    lee: () => lee('icoTex', 'agua'),
+    pon: v => { guarda('icoTex', v); persIcono(); rejaRepinta(); } },
+
   { tit: 'pIconos', tipo: 'rango', min: 40, max: 92, paso: 4,
     lee: () => ICO, sufijo: ' px',
     pon: v => { ponReja(v, null); rejaRepinta(); } },
@@ -72,6 +85,22 @@ const PERS = [
 function persAplica(){
   persAcento();
   persOscuro();
+  persIcono();
+}
+/* ── LA TEXTURA DEL ICONO ES UNA VARIABLE Y UNA CLASE ──
+   La variable la lee `.baldosa` y también los estilos EN LÍNEA de las baldosas
+   con inicial, que la nombran con `var(--bTex, none)`. La clase enciende la
+   sombra fuerte del icono y el velo, que sólo hacen falta cuando hay textura. */
+function persIcono(){
+  const k = lee('icoTex', 'agua');
+  /* el velo va de primera capa: es lo que separa un logo claro de las cáusticas
+     sin taparlas */
+  const u = (typeof BALDOSAS !== 'undefined' && BALDOSAS[k])
+    ? 'radial-gradient(closest-side,rgba(2,20,42,.30),rgba(2,20,42,0) 76%), url('
+      + BALDOSAS[k] + ')'
+    : 'none';
+  document.documentElement.style.setProperty('--bTex', u);
+  document.body.classList.toggle('icoTex', u !== 'none');
 }
 function persAcento(){
   document.documentElement.style.setProperty('--acento', lee('acento', PERS_ACENTOS[0]));

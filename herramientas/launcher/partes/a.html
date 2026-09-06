@@ -196,7 +196,11 @@ body.and #barra{display:none}
    tiene que valer la pantalla que ocupa: hora grande, día y fecha, el aro de
    batería con su porcentaje y el saludo de la franja del día. Todo sale de
    datos que el launcher YA tiene — nada de red, nada de permisos nuevos. */
-#reloj{margin:0 18px 10px;padding:13px 16px;border-radius:24px;
+/* la franja: los widgets puestos, apilados, con el mismo margen del reloj */
+#wid{flex:0 0 auto;display:flex;flex-direction:column;gap:10px;margin:0 18px 10px}
+.wCard{padding:13px 16px;border-radius:24px;display:flex;align-items:center;gap:14px;
+  position:relative;overflow:hidden}
+#reloj{margin:0;padding:13px 16px;border-radius:24px;
   display:flex;align-items:center;gap:14px}
 #wIzq{flex:1;min-width:0}
 #wDer{flex:0 0 auto;width:70px;position:relative;
@@ -252,9 +256,16 @@ body.and #barra{display:none}
    Frutiger Aero es skeuomórfico: cada icono es un objeto con volumen, brillo y
    sombra propia. La baldosa da eso sin tocar el icono de la app, que llega como
    viene del sistema. */
+/* ── LA TEXTURA DEL ICONO ──
+   El agua, el pasto o las nubes DETRÁS del icono de cada app. Va en el CSS y no
+   en el nodo: así alcanza a todas las apps instaladas y no a una lista de
+   cincuenta que envejece con cada app que se instala. Lo que se ve encima es el
+   icono real del sistema, o sea el logo de verdad, con el fondo Aero. */
 .baldosa{width:var(--ico);height:var(--ico);border-radius:calc(var(--ico)*.283);
   position:relative;
-  background:rgba(255,255,255,.16);
+  background-color:rgba(255,255,255,.16);
+  background-image:var(--bTex, none);
+  background-size:cover;background-position:center;
   box-shadow:0 5px 14px rgba(4,26,52,.30),
     inset 0 1px 0 rgba(255,255,255,.60),
     inset 0 -6px 12px rgba(0,40,80,.10);
@@ -267,6 +278,17 @@ body.and #barra{display:none}
   pointer-events:none}
 .baldosa img{width:var(--icoImg);height:var(--icoImg);display:block;
   filter:drop-shadow(0 2px 3px rgba(0,30,60,.35))}
+/* ── SOBRE TEXTURA, EL ICONO NECESITA MÁS SOMBRA ──
+   El agua y el pasto tienen contraste propio: con la sombra floja, un logo claro
+   —que son la mitad— se pierde adentro de las cáusticas. Y un velo oscuro debajo
+   del icono, que es lo que separa la marca del fondo sin taparlo. */
+body.icoTex .baldosa img{filter:drop-shadow(0 2px 5px rgba(0,26,54,.62))
+  drop-shadow(0 0 12px rgba(0,30,62,.45))}
+/* el velo va DENTRO de `--bTex` y no en un `::before`: un pseudo posicionado
+   crea contexto de apilado y le queda ENCIMA a la inicial de la baldosa, que es
+   texto del propio elemento. Medido en la vista previa: las letras salían
+   apagadas justo con la textura puesta. */
+body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,62,.6)}
 .ap .nom{font-size:11px;font-weight:600;letter-spacing:.01em;max-width:74px;
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   text-shadow:0 1px 2px rgba(0,30,62,.95),0 1px 6px rgba(0,36,72,.85),0 0 14px rgba(0,40,80,.6)}
@@ -540,6 +562,220 @@ body.pers #mascota{z-index:5}
 #persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
 
+
+/* ══════════ ARRASTRAR, CARPETAS Y SALPICADURA ══════════ */
+/* el que se está llevando se queda como hueco: sin eso parecen dos */
+.ap.llevada{opacity:.18;pointer-events:none}
+/* ── EL FANTASMA VA EN EL BODY Y NO EN LA REJA ──
+   Adentro de `#tira` lo recortaría el `overflow` de la página y no podría cruzar
+   al dock ni salir del cajón. */
+.ap.fantasma{position:fixed;z-index:9;pointer-events:none;margin:0;
+  transform:scale(1.14);filter:drop-shadow(0 10px 22px rgba(0,30,60,.55));
+  transition:transform .12s ease}
+body.arrastrando{cursor:grabbing}
+/* el que recibiría la carpeta: un aro, no un color, porque el icono tiene que
+   seguir viéndose para saber con cuál se va a juntar */
+.ap.destino .baldosa{box-shadow:0 0 0 3px var(--acento),0 6px 18px rgba(0,30,60,.45);
+  transform:scale(.9)}
+
+.cBald{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  gap:calc(var(--ico)*.06);padding:calc(var(--ico)*.12);
+  /* .baldosa es flex con align-items:center, y en una reja eso deja a cada hijo
+     con la altura de su contenido — o sea CERO, porque son divs vacíos. Medido:
+     columnas de 21 px y filas de 21, con los hijos en 0. Hay que reponerlo. */
+  place-items:stretch;place-content:stretch;
+  background:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),inset 0 0 0 1px rgba(255,255,255,.14)}
+.cMini{border-radius:26%;overflow:hidden;background:rgba(255,255,255,.2)}
+.cMini img{width:100%;height:100%;display:block;object-fit:cover}
+
+/* ══════════ LOS VEINTE WIDGETS ══════════
+   Todo dibujado: no entra una imagen. Un widget muestra algo que cambia, y una
+   foto de un reloj miente a los sesenta segundos. */
+.wgHora{flex:1;font-size:46px;font-weight:200;letter-spacing:-.03em;line-height:1;
+  text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
+.wgSub{font-size:20px;font-weight:300;opacity:.7}
+.wgEsf{width:100px;height:100px;flex:0 0 auto}
+.wgEsfB{fill:rgba(255,255,255,.10);stroke:rgba(255,255,255,.30);stroke-width:1.6}
+.wgM{stroke:rgba(255,255,255,.55);stroke-width:1.4;stroke-linecap:round}
+.wgMg{stroke:#fff;stroke-width:2.6}
+.wgH{stroke:#fff;stroke-width:4;stroke-linecap:round}
+.wgMin{stroke:#fff;stroke-width:2.6;stroke-linecap:round}
+.wgS{stroke:var(--acento);stroke-width:1.4;stroke-linecap:round}
+.wgEje{fill:#fff}
+.wgLado{flex:1;text-align:right}
+.wgLadoH{font-size:28px;font-weight:300;letter-spacing:-.02em}
+.wgLadoF{font-size:10px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;opacity:.8}
+.wgDia{font-size:52px;font-weight:200;line-height:.9;letter-spacing:-.04em;
+  text-shadow:0 2px 18px rgba(0,44,84,.7)}
+.wgDias{font-size:44px;font-weight:200;line-height:.9;letter-spacing:-.04em}
+.wgFCol{flex:1;min-width:0}
+.wgFSem{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.wgFMes{font-size:11px;font-weight:600;opacity:.8;text-transform:capitalize}
+.wgFecha{background:rgba(255,255,255,.14);border:0;border-radius:9px;color:#fff;
+  font:600 11px/1 system-ui,sans-serif;padding:5px 7px;margin-top:5px;
+  color-scheme:dark;max-width:100%}
+.wgSem{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.wgSemD{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:5px 0;border-radius:11px}
+.wgSemD.hoy{background:var(--acento);box-shadow:0 0 12px rgba(255,255,255,.35)}
+.wgSemL{font-size:9px;font-weight:800;letter-spacing:.05em;opacity:.72}
+.wgSemN{font-size:14px;font-weight:700}
+.wCard[data-k=calendario],.wCard[data-k=progreso],.wCard[data-k=nota]{
+  flex-direction:column;align-items:stretch;gap:8px}
+.wgCalTit{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  text-align:center;opacity:.92}
+.wgCal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.wgCalC{font-size:11px;font-weight:600;text-align:center;padding:3px 0;border-radius:8px}
+.wgCalH{font-size:9px;font-weight:800;opacity:.6}
+.wgCalC.hoy{background:var(--acento);font-weight:800}
+.wgBatN{font-size:34px;font-weight:200;letter-spacing:-.03em}
+.wgBatCol{flex:1;min-width:0}
+.wgBatEt{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.wgBatBar{height:9px;border-radius:5px;background:rgba(255,255,255,.20);
+  overflow:hidden;margin-top:6px}
+.wgBatLl{height:100%;border-radius:5px;transition:width .4s}
+.wgCron{flex:1;font-size:34px;font-weight:200;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.wgCron.wgAlarma{color:#ffd36e;animation:alarma 1s infinite}
+@keyframes alarma{50%{opacity:.3}}
+.wgBtns{flex:0 0 auto;display:flex;gap:7px}
+.wgB{min-width:38px;height:38px;padding:0 9px;border-radius:12px;
+  background:rgba(255,255,255,.17);display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.wgB:active{background:rgba(255,255,255,.30)}
+.wgNota{flex:1;width:100%;background:transparent;border:0;color:#fff;resize:none;
+  font:500 13px/1.45 system-ui,sans-serif;outline:none}
+.wgNota::placeholder{color:rgba(255,255,255,.55)}
+.wgFrase{flex:1;font-size:14px;font-weight:500;line-height:1.4;font-style:italic;
+  text-shadow:0 1px 2px rgba(0,34,68,.85)}
+.wgLuna{width:88px;height:88px;flex:0 0 auto}
+.wgLunaB{fill:#16233c}
+.wgLunaL{fill:#eaf4ff}
+.wgNivel{width:100px;height:100px;flex:0 0 auto}
+.wgNivAro{fill:none;stroke:rgba(255,255,255,.34);stroke-width:1.6}
+.wgNivCruz{stroke:rgba(255,255,255,.18);stroke-width:1.2}
+.wgNivBur{fill:var(--acento);transition:cx .12s linear,cy .12s linear}
+.wgNivBur.plano{fill:#b8f078;filter:drop-shadow(0 0 7px #b8f078)}
+.wgAtajos{flex:1;display:grid;grid-template-columns:repeat(4,1fr);
+  justify-items:center;gap:6px}
+.wgTar{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+.wgTarF{display:flex;align-items:center;gap:9px}
+.wgTarB{flex:0 0 18px;height:18px;border-radius:6px;cursor:pointer;
+  background:rgba(255,255,255,.16);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.42)}
+.wgTarF.ok .wgTarB{background:var(--acento);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.6)}
+.wgTarT{flex:1;min-width:0;background:transparent;border:0;color:#fff;outline:none;
+  font:600 12px/1.2 system-ui,sans-serif}
+.wgTarT::placeholder{color:rgba(255,255,255,.5)}
+.wgTarF.ok .wgTarT{opacity:.55;text-decoration:line-through}
+.wgDado{width:82px;height:82px;flex:0 0 auto;cursor:pointer}
+.wgDadoC{fill:rgba(255,255,255,.90)}
+.wgDadoP{fill:#123;transition:opacity .12s}
+.wgDado:active{transform:scale(.92)}
+.wgDadoT{flex:1;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;opacity:.8;text-align:right}
+.wgMundo{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.wgMundoC{text-align:center}
+.wgMundoN{font-size:10px;font-weight:800;letter-spacing:.10em;opacity:.72}
+.wgMundoH{font-size:22px;font-weight:300;font-variant-numeric:tabular-nums}
+.wgProg{display:flex;flex-direction:column;gap:7px;width:100%}
+.wgProgF{display:flex;align-items:center;gap:9px}
+.wgProgE{flex:0 0 46px;font-size:10px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;opacity:.8}
+.wgProgB{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.20);overflow:hidden}
+.wgProgL{height:100%;border-radius:4px;background:var(--acento);transition:width .5s}
+.wgProgN{flex:0 0 34px;text-align:right;font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+
+/* ── LA GALERÍA TIENE DOS SOLAPAS ──
+   Un solo gesto —mantener el dedo en un hueco— y las dos cosas que se ponen en
+   el escritorio. Con dos gestos distintos habría que enseñarle uno más a alguien
+   que acaba de instalar el launcher. */
+.fgTabs{display:flex;gap:6px}
+.fgTab{padding:6px 12px;border-radius:13px;font-size:11px;font-weight:800;
+  letter-spacing:.06em;text-transform:uppercase;opacity:.6;cursor:pointer}
+.fgTab.on{opacity:1;background:rgba(255,255,255,.20);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#fgWid{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
+/* ── LA SOLAPA DE WIDGETS VA MÁS CERRADA QUE LA DE FONDOS ──
+   La galería es translúcida para poder VER el fondo que se está eligiendo; en
+   la de widgets no hay nada que mirar detrás —lo que se pone aparece ARRIBA de
+   la hoja— y con el mismo velo los veinte renglones quedaban ilegibles sobre el
+   agua. Medido mirando la captura: las apps del escritorio se leían a través de
+   la lista. */
+#fondos.wid{background:linear-gradient(180deg,rgba(4,26,52,0),rgba(4,26,52,.62) 10%,rgba(4,26,52,.80))}
+.fgW{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:16px;
+  background:rgba(6,28,54,.46);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.09);
+  cursor:pointer}
+.fgW.sel{background:rgba(12,52,96,.62);box-shadow:inset 0 0 0 2px var(--acento)}
+.fgWN{flex:1;font-size:13px;font-weight:700}
+.fgWT{font-size:11px;font-weight:800;opacity:.7}
+
+/* ══════════ LA GALERÍA DE FONDOS ══════════
+   Ocupa el 62 % de abajo y NO la pantalla entera: lo que se está eligiendo vive
+   arriba —el reloj, el widget, el vidrio— y taparlo mientras se elige es elegir
+   a ciegas. */
+#fondos{position:fixed;left:0;right:0;bottom:0;height:62%;z-index:6;
+  display:none;flex-direction:column;gap:10px;
+  padding:12px 12px calc(var(--ins-b) + 12px);
+  background:linear-gradient(180deg,rgba(4,26,52,0),rgba(4,26,52,.42) 14%,rgba(4,26,52,.62));
+  transform:translateY(12px);opacity:0;transition:opacity .22s,transform .22s}
+#fondos.on{display:flex;transform:none;opacity:1}
+#fgCab{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;
+  border-radius:18px}
+#fgTit{flex:1;font-size:14px;font-weight:700;letter-spacing:.02em}
+#fondos.wid #fgRejilla,#fondos.wid #fgMia{display:none}
+#fondos:not(.wid) #fgWid{display:none}
+#fgRejilla{flex:1;overflow-y:auto;display:grid;gap:10px;
+  grid-template-columns:repeat(3,1fr);align-content:start;padding:2px}
+.fgIt{display:flex;flex-direction:column;gap:5px;cursor:pointer}
+.fgMini{aspect-ratio:9/16;border-radius:14px;background-size:cover;
+  background-position:center;
+  box-shadow:0 4px 12px rgba(4,26,52,.34),inset 0 0 0 1px rgba(255,255,255,.22)}
+/* el elegido lleva un aro y no un tilde: un tilde tapa la miniatura justo en el
+   que uno quiere mirar */
+.fgIt.sel .fgMini{box-shadow:0 4px 12px rgba(4,26,52,.34),
+  0 0 0 3px var(--acento),inset 0 0 0 1px rgba(255,255,255,.5)}
+.fgNom{font-size:10px;font-weight:600;text-align:center;opacity:.9;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,30,62,.9)}
+#fgArch{display:none}
+
+/* ── LA SALPICADURA ES DOM Y NO EL LIENZO DEL AGUA ──
+   Es otro efecto y de otra cosa: el del fondo es el agua de la pantalla, éste es
+   la app cayendo en su sitio. Y así funciona aunque el lienzo de WebGL no exista
+   —un aparato viejo, el fondo que no cargó— porque son doce spans. */
+.salpi{position:fixed;z-index:8;pointer-events:none;width:0;height:0}
+.salpi i{position:absolute;display:block;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.95),rgba(150,225,255,.75) 55%,rgba(90,190,240,0) 100%)}
+.sGota{animation:gota .52s cubic-bezier(.2,.7,.3,1) forwards;animation-delay:var(--gd)}
+@keyframes gota{
+  from{transform:translate(0,0) scale(.5);opacity:.95}
+  to  {transform:translate(var(--gx),var(--gy)) scale(1);opacity:0}}
+.sAro{width:12px;height:12px;margin:-6px 0 0 -6px;background:none;
+  border:2.5px solid rgba(210,245,255,.9);animation:aro .5s ease-out forwards}
+@keyframes aro{
+  from{transform:scale(.3);opacity:.9}
+  to  {transform:scale(5.4);opacity:0;border-width:.5px}}
+@media (prefers-reduced-motion:reduce){.sGota,.sAro{animation:none;opacity:0}}
+
+/* ══════════ LA CARPETA ABIERTA ══════════ */
+#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.92);
+  border-radius:26px;padding:14px 14px 18px;opacity:0;pointer-events:none;
+  transition:opacity .2s ease,transform .24s cubic-bezier(.2,.9,.3,1);
+  max-height:70%;display:flex;flex-direction:column;gap:10px}
+#carp.on{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
+#carpCab{display:flex;align-items:center;gap:10px}
+/* el nombre es un campo y no un rótulo: renombrar tiene que ser tocar el nombre */
+#carpNom{flex:1;background:rgba(255,255,255,.14);border:0;outline:0;color:#fff;
+  border-radius:12px;padding:9px 12px;font:800 15px/1 inherit;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+#carpRejilla{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+  overflow-y:auto;min-height:0;padding:2px}
+#carpPie{font:600 11.5px/1.4 inherit;opacity:.72;text-align:center}
+
 /* ══════════ PANTALLA DE INICIO ══════════
    Hoja corta: dos botones y tres renglones de explicación. `max-height` y no
    `height`, porque lo que mide es lo que dice — y lo que dice cambia según sea
@@ -642,20 +878,12 @@ body.pers #mascota{z-index:5}
     <div id="bat"><span id="batN">—</span><div id="batCaja"><div id="batLlena" style="width:70%"></div></div></div>
   </div>
 
-  <div class="vid refr" id="reloj">
-    <div id="wIzq">
-      <div id="hora">—</div>
-      <div id="fecha">—</div>
-    </div>
-    <div id="wDer">
-      <svg id="wAro" viewBox="0 0 60 60" aria-hidden="true">
-        <circle class="wPista" cx="30" cy="30" r="25"/>
-        <circle class="wCarga" id="wArco" cx="30" cy="30" r="25"/>
-      </svg>
-      <div id="wPct">—</div>
-      <div id="wSaludo">—</div>
-    </div>
-  </div>
+  <!-- ── LA FRANJA DE LOS WIDGETS ──
+       El reloj de siempre pasa a ser UNO del catálogo y lo arma `w.js` con los
+       mismos ids, así que `pintaReloj` y `ponBateria` no cambian una línea.
+       `#hoja` es lo elástico de esta columna: agregar un widget le come filas a
+       la reja de apps sin una sola cuenta. -->
+  <div id="wid"></div>
 
   <div class="vid refr" id="buscaCaja">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
@@ -719,6 +947,35 @@ body.pers #mascota{z-index:5}
     <div class="asBtn" id="persCerrar">✕</div>
   </div>
   <div id="persCuerpo"></div>
+</div>
+
+<div class="vid refr" id="carp">
+  <div id="carpCab">
+    <input id="carpNom" maxlength="22" />
+    <div class="asBtn" id="carpCerrar">✕</div>
+  </div>
+  <div id="carpRejilla"></div>
+  <div id="carpPie">—</div>
+</div>
+
+<!-- ── LA GALERÍA DE FONDOS ──
+     Va de borde a borde y con la lista corrida hacia abajo a propósito: el
+     fondo se aplica al tocar, así que la mitad de arriba de la pantalla tiene
+     que seguir mostrando el fondo de verdad con el reloj y el widget encima.
+     Con una hoja centrada, lo que se elige queda tapado por lo que lo elige. -->
+<div id="fondos">
+  <div id="fgCab" class="vid refr">
+    <div class="fgTabs">
+      <div class="fgTab on" data-t="fondos">—</div>
+      <div class="fgTab" data-t="widgets">—</div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="asBtn" id="fgMia">＋</div>
+    <div class="asBtn" id="fgX">✕</div>
+  </div>
+  <div id="fgRejilla"></div>
+  <div id="fgWid"></div>
+  <input type="file" id="fgArch" accept="image/*" />
 </div>
 
 <!-- ── LA PANTALLA DE INICIO ES SU PROPIA APP ──

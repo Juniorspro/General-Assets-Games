@@ -27,11 +27,12 @@ const TXT = {
         aFijar: '{0} fijada en el inicio', aSoltar: '{0} fuera del inicio',
         aBuscar: 'Busco «{0}» en la web', aIdioma: 'Idioma: {0}',
         aMascota: 'La mascota: {0}', aCajon: 'Cajón: {0}',
-        aPorIA: 'contestó la IA', aPorLocal: 'contestó el launcher',
+        aPorIA: 'contestó la IA',
+        aFondo: 'Fondo: {0}', aIcoFondo: 'Fondo de los iconos: {0}', aWidget: 'Widget: {0}', aOscuro: 'Fondo oscurecido al {0} %', aQHora: 'Son las {0}', aQFecha: 'Hoy es {0}', aQBateria: 'Tenés {0} % de batería', aQApps: 'Tenés {0} apps instaladas', aQLuna: 'La luna está {0}, al {1} %', aPorLocal: 'contestó el launcher',
         aSinRed: 'no se pudo conectar', aLlaveMal: 'la llave no sirve ({0})',
-        aFalla: 'la API falló ({0})', aNiega: 'el modelo no quiso contestar',
+        aFalla: 'la API falló ({0})', aNiega: 'el modelo no quiso contestar', aOcupado: 'el servicio gratis está ocupado',
         aLlaveTit: 'Tu llave de {0}. Se guarda sólo en este teléfono y nunca sale de acá salvo para la consulta que vos escribís.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Guardar', aBorrar: 'Borrar', aGratis: 'gratis',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Guardar', aBorrar: 'Borrar', aGratis: 'gratis', aSinLlaveNom: 'Sin llave',
         aConLlave: 'Con llave: contesta {0}.', aSinLlave: 'Sin llave: contesta el launcher. Tocá ⚙ para poner la tuya — Gemini y Groq la dan gratis.',
         aLlaveOk: 'Llave guardada', aLlaveFuera: 'Llave borrada',
         aNombre: 'Asistente',
@@ -39,8 +40,31 @@ const TXT = {
         pSi: 'Sí', pNo: 'No', pChica: 'Chica', pMedia: 'Media', pGrande: 'Grande',
         pQuieto: 'Quieta', pBaila: 'Bailando', pSaluda: 'Saludando', pMando: 'Jugando',
         pDuerme: 'Durmiendo', pIconos: 'Tamaño de los iconos', pColumnas: 'Columnas',
+        pIcono: 'Fondo de los iconos', pAgua: 'Agua', pPasto: 'Pasto', pNube: 'Nubes',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
+        cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
+        fgTit: 'Fondo de pantalla', fgFab: 'De fábrica', fgPropio: 'La tuya',
+        fgWid: 'Widgets', wLleno: 'No entran más widgets: sacá uno',
+        wCargando: 'Cargando', wBateria: 'Batería', wNotaPh: 'Escribí algo…',
+        wPone: 'Poné una fecha', wHoy: 'Es hoy', wFaltan: 'Faltan', wPasaron: 'Pasaron',
+        wDia: 'Día', wMes: 'Mes', wAnio: 'Año', wDado: 'Tocá para tirar', wTareaPh: 'Anotá una tarea…',
+        wNivel: 'Nivel', wPlano: 'Nivelado', wSinSensor: 'Sin sensor',
+        wLunaNueva: 'Luna nueva', wLunaCre: 'Creciente', wLunaCuartoC: 'Cuarto creciente',
+        wLunaGibC: 'Gibosa creciente', wLunaLlena: 'Luna llena', wLunaGibM: 'Gibosa menguante',
+        wLunaCuartoM: 'Cuarto menguante', wLunaMen: 'Menguante',
+        w_reloj: 'Reloj', w_horaGrande: 'Hora grande', w_analogico: 'Reloj de agujas',
+        w_fecha: 'Fecha', w_semana: 'La semana', w_calendario: 'Calendario',
+        w_bateria: 'Batería', w_cronometro: 'Cronómetro', w_temporizador: 'Temporizador',
+        w_contador: 'Contador', w_nota: 'Nota', w_frase: 'Frase del día',
+        w_cuenta: 'Cuenta de días', w_luna: 'Fase de la luna', w_nivel: 'Nivel',
+        w_atajos: 'Atajos', w_tareas: 'Tareas', w_dado: 'Dado', w_mundo: 'Otras ciudades',
+        w_progreso: 'Cuánto va',
+        fgNoPudo: 'No pude leer esa imagen', fgGrande: 'Esa imagen no entra: probá con otra',
+        fg_isla: 'Isla', fg_pasto: 'Pasto', fg_nube: 'Nubes', fg_burbujas: 'Burbujas',
+        fg_arrecife: 'Arrecife', fg_atardecer: 'Atardecer', fg_lluvia: 'Lluvia', fg_hielo: 'Hielo',
+        cDockLleno: 'El dock está lleno: va al escritorio',
+        cPie: 'Mantené una app para sacarla de la carpeta',
         iNombre: 'Pantalla de inicio', iTit: 'Pantalla de inicio',
         iSoy: 'Aero ES tu pantalla de inicio.',
         iNoSoy: 'Aero NO es tu pantalla de inicio.',
@@ -66,11 +90,12 @@ const TXT = {
         aFijar: '{0} pinned to home', aSoltar: '{0} removed from home',
         aBuscar: 'Searching the web for “{0}”', aIdioma: 'Language: {0}',
         aMascota: 'Mascot: {0}', aCajon: 'Drawer: {0}',
-        aPorIA: 'answered by the AI', aPorLocal: 'answered by the launcher',
+        aPorIA: 'answered by the AI',
+        aFondo: 'Wallpaper: {0}', aIcoFondo: 'Icon backdrop: {0}', aWidget: 'Widget: {0}', aOscuro: 'Wallpaper dimmed to {0}%', aQHora: 'It is {0}', aQFecha: 'Today is {0}', aQBateria: 'You have {0}% battery', aQApps: 'You have {0} apps installed', aQLuna: 'The moon is {0}, {1}% lit', aPorLocal: 'answered by the launcher',
         aSinRed: 'could not connect', aLlaveMal: 'the key does not work ({0})',
-        aFalla: 'the API failed ({0})', aNiega: 'the model declined to answer',
+        aFalla: 'the API failed ({0})', aNiega: 'the model declined to answer', aOcupado: 'the free service is busy',
         aLlaveTit: 'Your {0} key. It is stored on this phone only and never leaves it except for the request you type.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Save', aBorrar: 'Delete', aGratis: 'free',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Save', aBorrar: 'Delete', aGratis: 'free', aSinLlaveNom: 'No key',
         aConLlave: 'With a key: {0} answers.', aSinLlave: 'No key: the launcher answers. Tap ⚙ to add yours — Gemini and Groq give one for free.',
         aLlaveOk: 'Key saved', aLlaveFuera: 'Key deleted',
         aNombre: 'Assistant',
@@ -78,8 +103,31 @@ const TXT = {
         pSi: 'On', pNo: 'Off', pChica: 'Small', pMedia: 'Medium', pGrande: 'Large',
         pQuieto: 'Idle', pBaila: 'Dancing', pSaluda: 'Waving', pMando: 'Playing',
         pDuerme: 'Sleeping', pIconos: 'Icon size', pColumnas: 'Columns',
+        pIcono: 'Icon backdrop', pAgua: 'Water', pPasto: 'Grass', pNube: 'Clouds',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
         aNombreP: 'Personalize',
+        cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
+        fgTit: 'Wallpaper', fgFab: 'Default', fgPropio: 'Yours',
+        fgWid: 'Widgets', wLleno: 'No room for more widgets: remove one',
+        wCargando: 'Charging', wBateria: 'Battery', wNotaPh: 'Write something…',
+        wPone: 'Pick a date', wHoy: 'Today', wFaltan: 'Days to go', wPasaron: 'Days since',
+        wDia: 'Day', wMes: 'Month', wAnio: 'Year', wDado: 'Tap to roll', wTareaPh: 'Add a task…',
+        wNivel: 'Level', wPlano: 'Level', wSinSensor: 'No sensor',
+        wLunaNueva: 'New moon', wLunaCre: 'Waxing crescent', wLunaCuartoC: 'First quarter',
+        wLunaGibC: 'Waxing gibbous', wLunaLlena: 'Full moon', wLunaGibM: 'Waning gibbous',
+        wLunaCuartoM: 'Last quarter', wLunaMen: 'Waning crescent',
+        w_reloj: 'Clock', w_horaGrande: 'Big clock', w_analogico: 'Analogue clock',
+        w_fecha: 'Date', w_semana: 'This week', w_calendario: 'Calendar',
+        w_bateria: 'Battery', w_cronometro: 'Stopwatch', w_temporizador: 'Timer',
+        w_contador: 'Counter', w_nota: 'Note', w_frase: 'Quote of the day',
+        w_cuenta: 'Day counter', w_luna: 'Moon phase', w_nivel: 'Spirit level',
+        w_atajos: 'Shortcuts', w_tareas: 'To-do', w_dado: 'Die', w_mundo: 'World clock',
+        w_progreso: 'Progress',
+        fgNoPudo: "Couldn't read that image", fgGrande: "That image doesn't fit: try another",
+        fg_isla: 'Island', fg_pasto: 'Grass', fg_nube: 'Clouds', fg_burbujas: 'Bubbles',
+        fg_arrecife: 'Reef', fg_atardecer: 'Sunset', fg_lluvia: 'Rain', fg_hielo: 'Ice',
+        cDockLleno: 'The dock is full: it goes to the desktop',
+        cPie: 'Hold an app to take it out of the folder',
         iNombre: 'Home screen', iTit: 'Home screen',
         iSoy: 'Aero IS your home screen.',
         iNoSoy: 'Aero is NOT your home screen.',
@@ -105,11 +153,12 @@ const TXT = {
         aFijar: '{0} fixado na tela inicial', aSoltar: '{0} removido da tela inicial',
         aBuscar: 'Buscando «{0}» na web', aIdioma: 'Idioma: {0}',
         aMascota: 'Mascote: {0}', aCajon: 'Gaveta: {0}',
-        aPorIA: 'respondeu a IA', aPorLocal: 'respondeu o launcher',
+        aPorIA: 'respondeu a IA',
+        aFondo: 'Papel de parede: {0}', aIcoFondo: 'Fundo dos ícones: {0}', aWidget: 'Widget: {0}', aOscuro: 'Fundo escurecido a {0} %', aQHora: 'São {0}', aQFecha: 'Hoje é {0}', aQBateria: 'Você tem {0} % de bateria', aQApps: 'Você tem {0} apps instalados', aQLuna: 'A lua está {0}, a {1} %', aPorLocal: 'respondeu o launcher',
         aSinRed: 'não deu para conectar', aLlaveMal: 'a chave não serve ({0})',
-        aFalla: 'a API falhou ({0})', aNiega: 'o modelo não quis responder',
+        aFalla: 'a API falhou ({0})', aNiega: 'o modelo não quis responder', aOcupado: 'o serviço grátis está ocupado',
         aLlaveTit: 'Sua chave de {0}. Fica guardada só neste telefone e nunca sai daqui, a não ser na consulta que você escreve.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Salvar', aBorrar: 'Apagar', aGratis: 'grátis',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Salvar', aBorrar: 'Apagar', aGratis: 'grátis', aSinLlaveNom: 'Sem chave',
         aConLlave: 'Com chave: responde {0}.', aSinLlave: 'Sem chave: responde o launcher. Toque ⚙ para pôr a sua — Gemini e Groq dão uma de graça.',
         aLlaveOk: 'Chave salva', aLlaveFuera: 'Chave apagada',
         aNombre: 'Assistente',
@@ -117,8 +166,31 @@ const TXT = {
         pSi: 'Sim', pNo: 'Não', pChica: 'Pequeno', pMedia: 'Médio', pGrande: 'Grande',
         pQuieto: 'Parado', pBaila: 'Dançando', pSaluda: 'Acenando', pMando: 'Jogando',
         pDuerme: 'Dormindo', pIconos: 'Tamanho dos ícones', pColumnas: 'Colunas',
+        pIcono: 'Fundo dos ícones', pAgua: 'Água', pPasto: 'Grama', pNube: 'Nuvens',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
+        cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
+        fgTit: 'Papel de parede', fgFab: 'De fábrica', fgPropio: 'Sua',
+        fgWid: 'Widgets', wLleno: 'Não cabem mais widgets: tire um',
+        wCargando: 'Carregando', wBateria: 'Bateria', wNotaPh: 'Escreva algo…',
+        wPone: 'Escolha uma data', wHoy: 'É hoje', wFaltan: 'Faltam', wPasaron: 'Passaram',
+        wDia: 'Dia', wMes: 'Mês', wAnio: 'Ano', wDado: 'Toque para rolar', wTareaPh: 'Anote uma tarefa…',
+        wNivel: 'Nível', wPlano: 'Nivelado', wSinSensor: 'Sem sensor',
+        wLunaNueva: 'Lua nova', wLunaCre: 'Crescente', wLunaCuartoC: 'Quarto crescente',
+        wLunaGibC: 'Gibosa crescente', wLunaLlena: 'Lua cheia', wLunaGibM: 'Gibosa minguante',
+        wLunaCuartoM: 'Quarto minguante', wLunaMen: 'Minguante',
+        w_reloj: 'Relógio', w_horaGrande: 'Hora grande', w_analogico: 'Relógio de ponteiros',
+        w_fecha: 'Data', w_semana: 'A semana', w_calendario: 'Calendário',
+        w_bateria: 'Bateria', w_cronometro: 'Cronômetro', w_temporizador: 'Temporizador',
+        w_contador: 'Contador', w_nota: 'Nota', w_frase: 'Frase do dia',
+        w_cuenta: 'Contagem de dias', w_luna: 'Fase da lua', w_nivel: 'Nível',
+        w_atajos: 'Atalhos', w_tareas: 'Tarefas', w_dado: 'Dado', w_mundo: 'Outras cidades',
+        w_progreso: 'Quanto já foi',
+        fgNoPudo: 'Não consegui ler essa imagem', fgGrande: 'Essa imagem não cabe: tente outra',
+        fg_isla: 'Ilha', fg_pasto: 'Grama', fg_nube: 'Nuvens', fg_burbujas: 'Bolhas',
+        fg_arrecife: 'Recife', fg_atardecer: 'Pôr do sol', fg_lluvia: 'Chuva', fg_hielo: 'Gelo',
+        cDockLleno: 'A dock está cheia: vai para a área de trabalho',
+        cPie: 'Segure um app para tirá-lo da pasta',
         iNombre: 'Tela inicial', iTit: 'Tela inicial',
         iSoy: 'O Aero É a sua tela inicial.',
         iNoSoy: 'O Aero NÃO é a sua tela inicial.',
@@ -141,7 +213,15 @@ let LANG = (function(){
   return (navigator.language || 'es').slice(0, 2);
 })();
 if (!TXT[LANG]) LANG = 'es';
-function T(k, a){ const s = (TXT[LANG] || TXT.es)[k] || k; return a === undefined ? s : String(s).replace('{0}', a); }
+/* ── SUSTITUYE {0}, {1}, … Y NO SÓLO {0} ──
+   Con un solo argumento, la frase de la luna salía «está menguante, al {1} %»:
+   el marcador crudo a la vista. */
+function T(k){
+  let s = String((TXT[LANG] || TXT.es)[k] || k);
+  for (let i = 1; i < arguments.length; i++)
+    s = s.split('{' + (i - 1) + '}').join(arguments[i]);
+  return s;
+}
 
 /* ── LA REJA ES DE CUATRO Y LAS FILAS SE CUENTAN ──
    Cuatro columnas es lo que entra cómodo en un teléfono con iconos de 60 px y
@@ -166,7 +246,15 @@ function ponReja(ico, cols){
   return { ico: ICO, cols: COLS, alto: ALTO_AP };
 }
 
-function guarda(k, v){ try { localStorage.setItem('aero_' + k, JSON.stringify(v)); } catch (e) {} }
+/* ── DEVUELVE SI PUDO, Y ESO HACE FALTA EN UN SOLO SITIO ──
+   Casi todo lo que se guarda acá son números y banderas: que un ajuste no se
+   escriba no cambia nada de lo que se ve. La imagen de fondo propia sí, y puede
+   no entrar en la cuota — ahí hay que poder decirlo en vez de dejar al usuario
+   mirando un fondo que no cambió sin ninguna explicación. */
+function guarda(k, v){
+  try { localStorage.setItem('aero_' + k, JSON.stringify(v)); return true; }
+  catch (e){ return false; }
+}
 function lee(k, d){
   try { const v = localStorage.getItem('aero_' + k); return v === null ? d : JSON.parse(v); }
   catch (e){ return d; }

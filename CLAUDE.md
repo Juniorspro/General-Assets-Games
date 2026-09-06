@@ -281,6 +281,245 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimosegunda vuelta (2026-09-06): **AERO** — arrastrar y agrupar, veinte widgets, ocho fondos y el asistente sin llave
+
+Siete pedidos en un mensaje: *"la IA no anda we, yo quiero que ya ande no que pongamos nuestra key,
+busca gratuitas · que al mantener en el cajón de aplicaciones se mueva automáticamente a la pantalla
+principal con transición · que al dejarlo en el lugar que queramos haga efecto de agua salpicando no
+la de la pantalla sino que un efecto aparte ya de la app colocándose · que en la pantalla de inicio
+podamos mover apps del cajonsito abajo y también de la pantalla principal y agrupar apps en carpetas
+· agrega íconos personalizados de play store y más de 50 apps donde por ejemplo tiktok su logo aero y
+de fondo agua · que al mantener la pantalla de inicio en un espacio vacío se abra la página dónde
+podemos elegir fondos de pantallas, incluso propios · agregar widgets que quiero unos 20 que
+generes"*.
+
+Tres archivos nuevos: `partes/s.js` (arrastrar, carpetas y la salpicadura), `partes/w.js` (los
+veinte widgets) y `partes/f.js` (la galería), más `hornear_fondos.py` y `ClienteArchivo.java`.
+
+#### LA IA SIN LLAVE: SE MIDIÓ, Y LA RESPUESTA HONESTA NO ES LA QUE UNO QUERRÍA
+
+La condición dura sigue siendo la de la vuelta 119: la interfaz se carga desde
+`file:///android_asset/`, o sea que el `fetch` sale con **`Origin: null`** y sin CORS permisivo el
+navegador **no deja leer la respuesta**. De los que pasan esa prueba, el único que contesta **sin
+llave** es Pollinations. Y ahí hay dos caminos, no uno:
+
+| | preflight | POST/GET de verdad | |
+|---|---|---|---|
+| `POST /openai` | 204 con `*` | **402 Payment Required** | ❌ es para cuentas |
+| **`GET /<pedido>`** | 204 con `*` | **200 con una respuesta de verdad** | ✅ |
+
+O sea que la forma que uno escribiría —el POST estilo OpenAI— es justamente la que no sirve
+anónima. Y el GET **está limitado por IP**: medido acá, la misma consulta contesta 200 una vez y
+**402 la siguiente**, con un 429 «Queue full for IP» en el medio. Un launcher que dependa de eso
+anda a veces.
+
+**ASÍ QUE LA RESPUESTA DE VERDAD ES QUE EL LAUNCHER SE CONTESTE A SÍ MISMO.** El intérprete de la
+casa —el que no usa red— pasa de nueve acciones a **trece** y de entender órdenes a **contestar
+preguntas**, que es la mitad de lo que uno le escribe a un asistente. Medido sobre un corpus de 41
+frases en tres idiomas: **39 de 41**, y las dos que fallan son las que tienen que fallar (un
+garabato y la cadena vacía).
+
+Cuatro cosas que ese corpus encontró y que a ojo no se ven:
+
+1. **`\w` EN JAVASCRIPT ES `[A-Za-z0-9_]` Y NO INCLUYE ACENTOS.** `busc\w*` sobre «buscá recetas»
+   corta en «busc», el `\s+` que sigue se topa con la «á» y no matchea: **buscar en la web no
+   andaba en castellano**. El verbo se busca ahora sobre el texto normalizado y el término se
+   recorta del original por posición, para no devolverlo sin acentos.
+2. **LOS NOMBRES SE BUSCABAN SÓLO EN EL IDIOMA PUESTO.** Con el launcher en inglés, «poné el fondo
+   de arrecife» no encontraba nada, porque `T('fg_arrecife')` devuelve «Reef». Uno le escribe al
+   asistente en SU idioma tenga el launcher el que tenga: se prueba contra la clave y contra las
+   tres tablas.
+3. **EL NOMBRE DE UN WIDGET ERA DEMASIADO ANCHO.** «¿cuánta batería tengo?» y «¿cómo está la luna?»
+   **ponían el widget** en vez de contestar, porque «batería» y «luna» son nombres de widget. Con un
+   verbo de poner o sacar exigido, una pregunta vuelve a ser una pregunta.
+4. **Y UNA FRASE DABA DOS ACCIONES.** «sacá el reloj» sacaba el widget de reloj **y además**
+   desfijaba la app Reloj del escritorio.
+
+Más: las raíces en vez de las palabras (`bail\w*` y `duerm\w*`, porque «baile» y «duerma» son la
+misma orden y una lista de conjugaciones no se termina nunca), un `\b` de más que hacía que
+«¿qué podés hacer?» no matcheara —el límite de palabra no cae después de «pod» si sigue una «e»— y
+**`T()` que sólo sustituía `{0}`**: la frase de la luna salía «está menguante, al **{1}** %».
+
+**Y LA LISTA DE ACCIONES QUE SE LE MANDA AL MODELO SALE DE LA TABLA.** Estaba escrita a mano al lado
+de `ASIS_ACC`: agregando una acción, el modelo seguía pidiendo sólo las nueve viejas — y eso **no
+falla**, contesta bien y no pasa nada.
+
+**UN TDZ MÁS, Y VA LA NOVENA.** `ASIS_ACC` leía `WID_ORDEN` al armar la tabla, y `w.js` se evalúa
+DESPUÉS de `h.js`: `Cannot access before initialization` y el módulo entero abajo. **Ni `typeof` lo
+salva: sobre una zona muerta, `typeof` también tira.** El dominio de una acción pasa a poder ser una
+función, que se lee cuando alguien la pide.
+
+#### ARRASTRAR: TRES ORÍGENES, UN SOLO SISTEMA
+
+Se va `enganchaLista`, que sólo sabía abrir y mostrar el menú. Ahora el escritorio, el dock y el
+cajón pasan por el mismo gesto: mantener 400 ms levanta, mover arrastra, soltar decide. Mantener y
+soltar sin mover sigue abriendo el menú, así que no se pierde nada.
+
+- **Del cajón al escritorio, con transición**: al levantar una app del cajón, el cajón **se cierra
+  solo** a los 90 ms y la app queda en la mano sobre el escritorio. Medido: `com.android.settings`
+  del cajón a la reja, con el cajón cerrado al soltar.
+- **El dock también**: medido, sacar el primero del dock lo deja en el escritorio y el dock pasa de
+  4 a 3.
+- **Soltar encima de otra app hace una carpeta.** El umbral es 0,42 de la celda, así que hay que
+  apuntar a la baldosa y no rozarla.
+- **Y el dock tiene tope de cuatro**: soltar el quinto lo manda al escritorio con el aviso, en vez
+  de partir el dock en dos filas —que es lo que ya pasó en la vuelta 118 y no es un dock.
+
+#### LA SALPICADURA ES OTRA COSA QUE EL AGUA DEL FONDO, Y ESO ESTABA EN EL PEDIDO
+
+*«no la de la pantalla sino que un efecto aparte ya de la app colocándose»*. Son **doce gotas de DOM
+más un anillo**, no una onda del lienzo de WebGL. Dos razones y las dos importan: es otro efecto
+—una cosa que cae en su sitio, no la superficie del agua— y **funciona aunque el lienzo de WebGL no
+exista**, que es el caso de un teléfono viejo o de un fondo que no cargó.
+
+#### LAS CARPETAS
+
+Hoja con el nombre editable en vivo, la reja de lo que hay adentro, y **mantener una app la saca**.
+La regla que la hace cerrar: **una carpeta de un solo elemento se disuelve** y esa app ocupa su
+lugar. Medido de punta a punta: se abre con 3, se renombra, se saca una —que cae al escritorio— y al
+sacar la segunda la carpeta desaparece y la última queda en su sitio.
+
+**Y LA BALDOSA DE LA CARPETA SALÍA VACÍA.** Los cuatro iconitos medían **21 px de ancho y 0 de
+alto**. La causa es una que se hereda sin querer: `.baldosa` es `display:flex` con
+**`align-items:center`**, y en una reja eso deja a cada hijo con la altura de su CONTENIDO — o sea
+cero, porque son divs vacíos. `place-items:stretch`.
+
+#### LOS OCHO FONDOS, Y SE ABREN MANTENIENDO EL DEDO EN UN HUECO
+
+Generados con Rezona: isla, pasto, nubes, burbujas, arrecife, atardecer, lluvia y hielo. **Volvieron
+CUADRADOS** —se pidieron 9:16 y el generador ignora la proporción— y se recortan al centro **al
+hornear y no en CSS**: recortando en el teléfono, el 44 % de los bytes viaja para no verse nunca. El
+sujeto viene centrado, así que el recorte no pierde nada; medido mirando los ocho.
+
+**LA GALERÍA OCUPA EL 62 % DE ABAJO Y NO LA PANTALLA ENTERA, Y ES LA DECISIÓN DEL DISEÑO.** El fondo
+se aplica **al tocar**, sin botón de aceptar, así que la mitad de arriba tiene que seguir mostrando
+el reloj, el widget y el vidrio sobre el fondo de verdad. Una miniatura de 120 px no dice cómo se ve
+detrás del dock.
+
+**Y LA IMAGEN PROPIA SE ACHICA ANTES DE GUARDARLA.** Una foto de teléfono son doce megapíxeles: como
+data URI son cuatro megas, y `localStorage` tiene entre cinco y diez para TODO el origen — guardarla
+cruda revienta la cuota y con ella se van las apps fijadas y los ajustes. Se recorta a 9:16 y se
+lleva a 824 de ancho, exactamente lo mismo que hace el horneado con las ocho. Y a **JPEG y no WebP**:
+un WebView viejo puede no saber CODIFICAR webp —decodificarlo sí— y `toDataURL` devuelve un PNG de
+tres megas sin avisar.
+
+**`guarda()` PASA A DEVOLVER SI PUDO.** Casi todo lo que se guarda son números y banderas; la imagen
+de fondo no. Sin eso, `fondoPone('propio')` no encontraba la imagen, caía al de fábrica, y desde
+afuera se veía como que tocar «la tuya» no hace nada. **Y el primer intento escribía la clave con el
+prefijo equivocado** (`aero.` en vez de `aero_`), que es exactamente el defecto que esto destapa.
+
+**CAMBIAR DE FONDO NO ES ESCRIBIR UNA URL:** hay tres cosas colgadas de esa imagen —el
+`background-image`, el mapa de bits que el agua sube a la GPU y el mapeo de «cover» del shader— y
+escribiendo sólo la primera, **el agua seguiría refractando la foto anterior**. Eso no falla: dibuja
+otra cosa.
+
+**Y `<input type=file>` NO HACE NADA EN UN WEBVIEW SIN `WebChromeClient`**: ignora el selector en
+silencio. Va en una clase propia y no anónima, porque **`d8` 8.2.2 revienta al dexear `Principal$1`**
+con el mismo NullPointerException de la vuelta 115 y no se puede cambiar de `d8` (maven.google.com no
+está en la lista blanca del proxy). Y **cancelar también es una respuesta**: sin llamar al callback,
+el WebView se queda esperando para siempre y el `<input>` queda muerto hasta reiniciar la app.
+
+#### LOS VEINTE WIDGETS SON CÓDIGO, Y ESO NO ES UNA CONCESIÓN
+
+Un widget muestra algo que cambia. Una imagen generada de un reloj es un dibujo de un reloj, y a los
+sesenta segundos miente. Los veinte: **reloj · hora grande · reloj de agujas · fecha · la semana ·
+calendario · batería · cronómetro · temporizador · contador · nota · frase del día · cuenta de días
+· fase de la luna · nivel · atajos · tareas · dado · otras ciudades · cuánto va**. Ninguno pide red
+ni un permiso nuevo: todo sale del reloj, de la batería y de la lista de apps que el launcher ya
+tiene.
+
+**VIVEN EN LA FRANJA DEL RELOJ, APILADOS, Y ESO SALE GRATIS.** `#capa` es una columna flex donde
+`#hoja` es lo elástico: agregar un widget le come filas a la reja **sin una sola cuenta**, porque
+`calculaFilas` ya mide `#hoja`. Medido: 1 widget → `hoja 558`, 6 filas; 4 widgets → `hoja 180`, 2
+filas. Con los widgets metidos adentro de la reja habría que reservarle celdas a cada uno y decidir
+qué pasa cuando no entra.
+
+**Y EL DE RELOJ CONSERVA LOS IDS DE SIEMPRE** —`#hora`, `#fecha`, `#wArco`, `#wPct`— así que
+`pintaReloj` y `ponBateria` no cambian una línea. Lo que sí hizo falta son las guardas: desde que el
+reloj se elige, `#hora` puede no existir, y el intervalo de un segundo tiraba `null.textContent`
+sesenta veces por minuto.
+
+**EL RITMO SALE DE LO QUE HAY PUESTO.** Sin ningún widget vivo no hay intervalo; con el cronómetro
+andando va a diez por segundo; con el segundero del analógico, a uno. Un intervalo abierto en la
+pantalla de inicio de un teléfono es batería regalada.
+
+Cuatro cosas del catálogo que salieron de mirar o de medir:
+
+- **LA FASE DE LA LUNA SE DIBUJA POR LA PARTE ILUMINADA, NO POR LA SOMBRA.** La sombra pide acertar
+  dos banderas de barrido de SVG que cambian de signo en los dos cuartos: cuatro casos y tres se ven
+  mal. La iluminada es una fórmula sola y el menguante sale de **espejarla** —un atributo—.
+  Verificado contra los ocho puntos canónicos del ciclo: 0 · 15 · 50 · 85 · 100 · 85 · 50 · 15 % de
+  iluminación, con el nombre correcto en los ocho. Y el número que se muestra es **cuánto se ve
+  encendido** y no en qué punto del ciclo va: «menguante 83 %» al lado de una uña se lee a error.
+- **EL DADO SE DIBUJA Y NO USA LOS GLIFOS ⚀-⚅**: una tipografía de sistema puede no tenerlos y
+  entonces salen seis cuadraditos con un signo de pregunta. Medido en el banco: el ⚀ salía como una
+  caja con un punto.
+- **EL WIDGET DE BUSCAR SE SACÓ MIRANDO LA CAPTURA.** El escritorio ya tiene una barra de búsqueda
+  diez píxeles más abajo: eran dos barras idénticas apiladas. Un widget que repite lo que está justo
+  debajo no es un widget, es una fila de más. En su lugar entró la lista de tareas.
+- **Y EL SEGUNDERO DEL RELOJ GRANDE LLEVA LOS DOS PUNTOS**: «28» solo al lado de «21:18» se lee a
+  temperatura.
+
+**Y HUBO UNA RECURSIÓN QUE HABÍA QUE VER ANTES DE ESCRIBIRLA:** `ponBateria` llamando a `widPinta`, y
+`widPinta` llamando a `pintaBateria` — dos funciones llamándose entre ellas sin fondo. La lectura
+nueva avisa una vez, desde donde la lectura es nueva.
+
+#### LOS ICONOS AERO: EL TRATAMIENTO ALCANZA A TODAS LAS APPS, NO A CINCUENTA
+
+Se pidió *«íconos personalizados de play store y más de 50 apps, por ejemplo tiktok su logo aero y de
+fondo agua»*. Una lista de cincuenta logos redibujados **envejece con cada app que se instala** y
+deja afuera a la 51.ª, y encima serían marcas ajenas metidas en el APK. Lo que sí vale para todas es
+el **tratamiento**: el icono de verdad de cada app —que es su logo— con el fondo Aero detrás. Cuatro
+estilos: **agua, pasto, nubes o nada**, elegibles en Personalizar.
+
+**Y LA TEXTURA VA EN EL CSS Y NO EN EL NODO**, así alcanza a las que estén instaladas hoy y a las de
+mañana. Dos cosas que hubo que arreglar para que eso fuera cierto:
+
+- **`b.style.background = color` es el ATAJO, y un atajo repone a su valor inicial todo lo que no
+  nombra** — incluida la imagen de fondo, que es donde vive la textura. Es literalmente el defecto
+  que en la vuelta 118 dejó la flecha del botón de saltar embaldosada.
+- **Y el color de la baldosa con inicial va como CAPA translúcida y no como `background-color`**: el
+  color de fondo se pinta DEBAJO de la imagen, así que con la textura puesta el color no se vería y
+  las treinta apps quedarían iguales.
+
+**LAS BALDOSAS NO HACÍAN FALTA SIN COSTURA, Y ESO LO RAZONÉ MAL LA PRIMERA VEZ.** Las hice espejadas
+en cuatro cuadrantes «porque se repiten», y **no se repiten**: cada baldosa mide 60 px y las muestra
+UNA vez con `background-size:cover`. Lo único que la simetría agregaba era un dibujo de Rorschach en
+cada icono.
+**Y EL VIDRIO GENERADO SE DESCARTÓ**: es un panel casi blanco, o sea exactamente lo que `.baldosa` ya
+dibuja con `backdrop-filter` — a 60 px comprimía a **cero KB** porque no tiene nada adentro. Un
+segundo estilo que no se distingue del primero no es una opción.
+Y el velo que separa un logo claro de las cáusticas va **dentro** de la textura y no en un `::before`:
+un pseudo posicionado crea contexto de apilado y le queda encima a la inicial de la baldosa.
+
+#### MEDIDO AL CERRAR
+
+Arrastre: del cajón al escritorio con el cajón cerrándose solo, del dock al escritorio, y soltar
+encima de otra app haciendo carpeta — **una salpicadura por cada soltada**. Carpetas: se abre con 3,
+se renombra en vivo, se saca una, y al quedar una sola **se disuelve** y la app ocupa su lugar.
+Fondos: **10 fichas** (los ocho, el de fábrica y la propia), aplicar cambia el `background-image`, el
+mapa de bits del agua y el marcado, y la imagen propia se guarda achicada a 9:16 (1200×900 → 506×900,
+6,8 KB). Widgets: **20 de 20 fotografiados uno por uno y los veinte con contenido**, con `hoja`
+bajando de 558 a 180 y las filas de 6 a 2, el ritmo pasando a 1000 ms con el analógico, y el tope de
+cuatro avisando. Luna verificada en los ocho puntos del ciclo. Iconos: los cuatro estilos aplicados y
+revertidos en caliente, con `capas 2` y `cover, cover` con textura y `capas 1` sin ella. Asistente:
+**39 de 41** frases en tres idiomas, una sola acción por frase, el proveedor sin llave contestando por
+GET (URL de 1.136 caracteres) y los tres modos de falla —402 «el servicio gratis está ocupado», sin
+red, y la llave mal— cayendo al intérprete con el motivo a la vista. Regresión completa: **31 apps**,
+riel de 17 letras, 8 filtros de refracción, **cero solapamientos**, subir sobre el dock abre, el aro
+de la batería en sus tres escalones, la mascota con 23 huesos y 5.541 triángulos apoyada sobre el
+teclado, el agua con su copia pelada, la app de pantalla de inicio con sus dos botones, y
+Personalizar con **9 grupos**. `window.__errs` **vacío en las doce corridas**. APK **1,1 MB** con
+firma v2+v3, `HOME` en el alias, `LAUNCHER` en la actividad, `singleTask`, `stateNotNeeded` e
+`INTERNET`.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del selector de archivos está medido
+que compila y que el `WebChromeClient` está enganchado — no que el diálogo del sistema aparezca. Del
+proveedor sin llave está medido el CORS contra el endpoint de verdad y la forma exacta de lo que
+manda, y **está medido que anónimo se limita por IP**: desde el teléfono del usuario, con otra IP,
+puede andar mejor o peor y no hay forma de saberlo desde acá. Por eso el intérprete de la casa es el
+que se amplió.
+
 ### Centésima vigesimoprimera vuelta (2026-09-06): **AERO** — la barra de estado que sobraba, la app de pantalla de inicio, y el agua
 
 Reporte, con una captura: *"la batería hora y eso ya lo vemos, me gustaría que haya una app dónde

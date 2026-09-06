@@ -20,6 +20,41 @@ let FONDO_EL = null, FONDO_OK = false;
 
 let FONDO_IMG = null;   /* el mapa de bits del fondo, que también usa el agua */
 
+/* ── CUÁL FONDO ESTÁ PUESTO ──
+   `fab` es el de fábrica —el de la foto que mandó el usuario—, `propio` es una
+   imagen suya guardada, y cualquier otra clave es una de las ocho de la galería.
+   Vive en una sola función porque lo leen el arranque, la galería y el agua. */
+function fondoURI(){
+  const k = lee('fondoSel', 'fab');
+  if (k === 'propio'){
+    const d = lee('fondoPropio', '');
+    if (d) return d;
+    return IMG_FONDO;            /* se borró: no se deja la pantalla vacía */
+  }
+  if (typeof FONDOS !== 'undefined' && FONDOS[k]) return FONDOS[k];
+  return IMG_FONDO;
+}
+
+/* ── CAMBIAR DE FONDO NO ES ESCRIBIR UNA URL ──
+   Hay tres cosas colgadas de esta imagen y las tres tienen que enterarse: el
+   `background-image` del elemento, el mapa de bits que el agua sube a la GPU, y
+   el mapeo de «cover» que el shader usa para muestrear. Escribiendo sólo la
+   primera, el agua seguiría refractando el fondo ANTERIOR — y eso no falla, se
+   ve como que la onda pinta otra foto. */
+function fondoPone(k){
+  guarda('fondoSel', k);
+  const im = new Image();
+  im.onload = () => {
+    FONDO_IMG = im;
+    FONDO_EL.style.backgroundImage = 'url(' + im.src + ')';
+    FONDO_EL.classList.add('ok');
+    FONDO_OK = true;
+    if (typeof aguaRefondo === 'function') aguaRefondo();
+  };
+  im.onerror = () => {};         /* queda el que estaba, que ya se ve */
+  im.src = fondoURI();
+}
+
 function fondoInit(){
   FONDO_EL = $('#fondo');
 
@@ -35,12 +70,12 @@ function fondoInit(){
   const im = new Image();
   FONDO_IMG = im;
   im.onload = () => {
-    FONDO_EL.style.backgroundImage = 'url(' + IMG_FONDO + ')';
+    FONDO_EL.style.backgroundImage = 'url(' + im.src + ')';
     FONDO_EL.classList.add('ok');
     FONDO_OK = true;
   };
   im.onerror = () => { FONDO_OK = false; };   /* queda el degradado, que ya se ve */
-  im.src = IMG_FONDO;
+  im.src = fondoURI();
 }
 
 /* ── EL FONDO SE ACERCA CUANDO SE ABRE EL CAJÓN ──

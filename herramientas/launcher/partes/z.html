@@ -168,6 +168,138 @@ window.__A = {
              sobreTeclado: Math.round(innerHeight - TECLADO - b),
              busca: Math.round(c.bottom), alto: innerHeight };
   },
+  /* ══════════ ARRASTRAR Y CARPETAS ══════════
+     El gesto va por el camino de verdad: `pointerdown`, la espera del mantener,
+     `pointermove` y `pointerup` sobre lo que haya en ese punto. Llamando a
+     `arrSuelta` directo se saltearía justamente el filtro que decide de dónde
+     salió el icono, que es lo único que puede estar mal. */
+  arr(){
+    return { llevando: !!ARR, desde: ARR && ARR.desde,
+             inicio: INICIO.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
+             dock: DOCK.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
+             fantasmas: document.querySelectorAll('.fantasma').length,
+             salpicaduras: document.querySelectorAll('.salpi').length,
+             pag: PAG, npag: NPAG, cols: COLS, filas: FILAS };
+  },
+  async arrastra(sel, x, y, ms){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x0 = Math.round(r.left + r.width/2), y0 = Math.round(r.top + r.height/2);
+    const ev = (t, xx, yy, el) => (el || n).dispatchEvent(new PointerEvent(t,
+      { bubbles: true, clientX: xx, clientY: yy, pointerId: 4, isPrimary: true }));
+    ev('pointerdown', x0, y0);
+    await new Promise(r2 => setTimeout(r2, ms == null ? 520 : ms));
+    if (!ARR){ ev('pointerup', x0, y0); return { levanto: false }; }
+    /* varios pasos: uno solo no ejerce ni el resaltado del destino ni el borde */
+    for (let i = 1; i <= 5; i++)
+      ev('pointermove', Math.round(x0 + (x - x0)*i/5), Math.round(y0 + (y - y0)*i/5), window);
+    await new Promise(r2 => setTimeout(r2, 60));
+    const destinos = document.querySelectorAll('.ap.destino').length;
+    ev('pointerup', x, y, window);
+    await new Promise(r2 => setTimeout(r2, 80));
+    return { levanto: true, destinos: destinos, arr: this.arr() };
+  },
+  async toca(sel){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    const ev = t => n.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y,
+                                                          pointerId: 5, isPrimary: true }));
+    ev('pointerdown');
+    await new Promise(r2 => setTimeout(r2, 90));
+    ev('pointerup');
+    await new Promise(r2 => setTimeout(r2, 120));
+    return { menu: MENU_PKG, carpeta: CARP_I, cajon: CAJON };
+  },
+  carpeta(){
+    const x = CARP_I >= 0 ? (CARP_DE === 'dock' ? DOCK : INICIO)[CARP_I] : null;
+    return { abierta: $('#carp').classList.contains('on'), i: CARP_I, de: CARP_DE,
+             nombre: $('#carpNom').value, apps: esCarpeta(x) ? x.c.slice() : [],
+             rejilla: $('#carpRejilla').children.length, pie: $('#carpPie').textContent };
+  },
+  carpAbrir(i, de){ carpAbre(i, de); return this.carpeta(); },
+  carpCerrar(){ carpCierra(); return true; },
+  carpNombre(n){ const e = $('#carpNom'); e.value = n;
+                 e.dispatchEvent(new Event('input', { bubbles: true })); return this.carpeta(); },
+  async carpSacar(k){
+    const n = $('#carpRejilla').children[k]; if (!n) return 'no está';
+    n.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 6, isPrimary: true }));
+    await new Promise(r => setTimeout(r, 560));
+    n.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 6, isPrimary: true }));
+    return { carpeta: this.carpeta(), arr: this.arr() };
+  },
+  wid(){
+    const cs = $$('#wid .wCard');
+    return { puestos: WID.slice(), n: cs.length, ritmo: WID_T,
+             altos: cs.map(c => Math.round(c.getBoundingClientRect().height)),
+             hoja: Math.round($('#hoja').getBoundingClientRect().height),
+             filas: FILAS, catalogo: WID_ORDEN.length,
+             texto: cs.map(c => (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 44)) };
+  },
+  widPone(l){ widPone(l); return this.wid(); },
+  luna(f){ LUNA_F = f == null ? -1 : f; widPinta();
+           return { f: LUNA_F, d: $('.wgLunaL') && $('.wgLunaL').getAttribute('d'),
+                    esp: $('.wgLunaG') && $('.wgLunaG').getAttribute('transform'),
+                    txt: $('.wgLuna') && $('#wid .wgFSem').textContent + ' ' + $('#wid .wgFMes').textContent }; },
+  widSolapa(t){ fgSolapa(t); return { wid: $('#fondos').classList.contains('wid'),
+                                      filas: $$('#fgWid .fgW').length,
+                                      sel: $$('#fgWid .fgW.sel').map(n => n.dataset.k),
+                                      nombres: $$('#fgWid .fgWN').map(n => n.textContent) }; },
+  async widToca(k){
+    const n = $('#fgWid .fgW[data-k="' + k + '"]');
+    if (!n) return 'no está: ' + k;
+    n.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 220));
+    return this.wid();
+  },
+  /* el catálogo entero, uno por uno, para poder mirarlos */
+  async widSolo(k){ widPone([k]); await new Promise(r => setTimeout(r, 240)); return this.wid(); },
+  fondos(){
+    const l = $$('#fgRejilla .fgIt').map(n => n.dataset.k);
+    return { abierta: $('#fondos').classList.contains('on'), n: l.length, claves: l,
+             sel: lee('fondoSel', 'fab'),
+             marcado: ($('#fgRejilla .fgIt.sel') || {}).dataset &&
+                      $('#fgRejilla .fgIt.sel').dataset.k,
+             propio: (lee('fondoPropio', '') || '').length,
+             uri: (FONDO_EL.style.backgroundImage || '').slice(0, 34),
+             img: FONDO_IMG ? [FONDO_IMG.naturalWidth, FONDO_IMG.naturalHeight] : null,
+             alto: Math.round($('#fondos').getBoundingClientRect().height) };
+  },
+  fgAbrir(){ fgAbre(); return this.fondos(); },
+  fgCerrar(){ fgCierra(); return true; },
+  async fgElegir(k){
+    const n = $('#fgRejilla .fgIt[data-k="' + k + '"]');
+    if (!n) return 'no está: ' + k;
+    n.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 260));
+    return this.fondos();
+  },
+  /* mantener el dedo en un hueco vacío del escritorio */
+  async fgLargo(x, y){
+    const t = $('#tira');
+    const e = n => t.dispatchEvent(new PointerEvent(n, { bubbles: true, clientX: x || 206,
+                                                         clientY: y || 620, pointerId: 7,
+                                                         isPrimary: true }));
+    e('pointerdown');
+    await new Promise(r => setTimeout(r, 520));
+    e('pointerup');
+    await new Promise(r => setTimeout(r, 260));
+    return this.fondos();
+  },
+  /* una imagen propia, sin File: se le pasa el data URI ya achicado */
+  async fgPropia(w, h){
+    const cv = document.createElement('canvas'); cv.width = w || 1200; cv.height = h || 900;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#c33'; c.fillRect(0, 0, cv.width, cv.height);
+    c.fillStyle = '#3c3'; c.fillRect(0, 0, cv.width/2, cv.height);
+    const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    await fgPropia(new File([b], 'x.jpg', { type: 'image/jpeg' }));
+    await new Promise(r => setTimeout(r, 300));
+    return this.fondos();
+  },
+  ponInicio(v){ INICIO = v.slice(); guarda('inicio', INICIO); pintaInicio(); return this.arr(); },
+  ponDock(v){ DOCK = v.slice(); guarda('dock', DOCK); pintaDock(); return this.arr(); },
+
   /* ── EL AGUA ──
      Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
      FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
@@ -467,6 +599,16 @@ window.__A = {
              mascH: c.getPropertyValue('--masc-h').trim(),
              visible: $('#mascota').classList.contains('on'), pose: MASC_HOY };
   },
+  icono(){
+    const b = $('#tira .baldosa') || $('#dock .baldosa');
+    const c = b ? getComputedStyle(b) : {};
+    return { tex: getComputedStyle(document.documentElement).getPropertyValue('--bTex').trim().slice(0, 30),
+             clase: document.body.classList.contains('icoTex'),
+             guardado: lee('icoTex', 'agua'),
+             bg: (c.backgroundImage || '').slice(0, 70),
+             capas: ((c.backgroundImage || '').match(/url\(|linear-gradient\(/g) || []).length,
+             tam: c.backgroundSize };
+  },
   persAbrir(){ persAbre(); return this.pers(); },
   persCerrar(){ persCierra(); return this.pers(); },
   /* se toca la opción por su texto, que es lo que hace el dedo */
@@ -500,6 +642,10 @@ window.__A = {
              msgs: $$('#asLista .asMsg').map(m => m.textContent.slice(0, 120)),
              firmas: $$('#asLista .asFirma').map(m => m.textContent) };
   },
+  /* el intérprete de la casa, sin tocar el DOM ni la red: es lo que contesta
+     cuando no hay llave, o sea la mayor parte de las veces */
+  asisLocal(t){ const r = asisLocal(t);
+                return { acc: r.acciones.map(a => a.hacer + ':' + a.valor), resp: r.respuesta }; },
   asisAbrir(){ asisAbre(); return this.asis(); },
   asisCerrar(){ asisCierra(); return this.asis(); },
   asisLlave(v){ guarda('llave_' + asisProv(), v || ''); asisIdioma(); return this.asis(); },
@@ -523,10 +669,18 @@ window.__A = {
     const org = window.fetch;
     window.__pedido = null;
     window.fetch = async (u, o) => {
-      window.__pedido = { url: String(u), metodo: o.metodo || o.method,
-                          cab: o.headers, cuerpo: JSON.parse(o.body) };
+      o = o || {};
+      window.__pedido = { url: String(u), metodo: o.method || 'GET', cab: o.headers,
+                          cuerpo: o.body ? JSON.parse(o.body) : null };
       if (caso === 'red') throw new TypeError('Failed to fetch');
       if (caso === '401') return { ok: false, status: 401 };
+      if (caso === '402') return { ok: false, status: 402 };
+      /* el proveedor sin llave contesta TEXTO pelado y no JSON */
+      if (asisProv() === 'libre'){
+        if (caso === 'niega') return { ok: true, status: 200, text: async () => 'no puedo' };
+        return { ok: true, status: 200, text: async () =>
+          'Claro: ' + JSON.stringify({ respuesta: 'listo', acciones: acciones || [] }) };
+      }
       if (caso === 'niega'){
         const id = asisProv();
         if (id === 'gemini') return { ok: true, status: 200,

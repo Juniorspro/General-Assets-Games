@@ -14,22 +14,45 @@ function letraDe(n){
   const c = norm(n).replace(/[^a-z0-9áéíóúñ]/g, '');
   return (c[0] || '?').toUpperCase();
 }
-function colorDe(p){
+function colorDe(p, al){
   let h = 0;
   for (let i = 0; i < p.length; i++) h = (h*31 + p.charCodeAt(i)) >>> 0;
-  return 'hsl(' + (h % 360) + ',72%,58%)';
+  return al == null ? 'hsl(' + (h % 360) + ',72%,58%)'
+                    : 'hsla(' + (h % 360) + ',72%,58%,' + al + ')';
 }
+/* ── LA BALDOSA DE LA INICIAL, CON LA TEXTURA DEBAJO ──
+   El color va como una CAPA translúcida por encima de la textura y no como
+   `background-color`: el color de fondo se pinta DEBAJO de la imagen, así que
+   con la textura puesta el color no se vería y las treinta apps quedarían
+   iguales. Con dos capas de `background-image` el orden es el que se escribe.
+   Y `var(--bTex)` adentro de un estilo en línea es legal: si el estilo de icono
+   está en «no», la variable vale `none` y queda sólo el color. */
+function letraBaldosa(b, a){
+  /* ── Y EL COLOR VA TRANSLÚCIDO ──
+     Opaco taparía la textura entera y la opción de estilo de icono no se vería
+     en ninguna app sin icono del sistema, que en la vista previa son todas. */
+  const c = colorDe(a.p, .58);
+  b.style.backgroundImage = 'linear-gradient(' + c + ',' + c + '), var(--bTex, none)';
+  b.style.font = '700 26px system-ui';
+  b.textContent = letraDe(a.n);
+}
+
 function nodoApp(a, conNombre){
   const d = document.createElement('div');
   d.className = 'ap'; d.dataset.p = a.p;
   const b = document.createElement('div');
   b.className = 'baldosa';
+  /* ── LOS TRES DEL LAUNCHER LLEVAN SU DEGRADADO Y NO LA TEXTURA ──
+     Van en `backgroundImage` y no en el atajo `background`: el atajo repone a su
+     valor inicial todo lo que no nombra, y ahí adentro está la textura de los
+     iconos, que la pone el CSS. Es el mismo defecto que en la vuelta 118 dejó la
+     flecha del botón de saltar embaldosada. */
   if (a.p === PERS_PKG){
-    b.style.background = 'linear-gradient(160deg,#ffd166,#e0704f)';
+    b.style.backgroundImage = 'linear-gradient(160deg,#ffd166,#e0704f)';
     b.style.font = '600 26px system-ui';
     b.textContent = '⚙';
   } else if (a.p === INI_PKG){
-    b.style.background = 'linear-gradient(160deg,#9ef0b8,#3f9e7a)';
+    b.style.backgroundImage = 'linear-gradient(160deg,#9ef0b8,#3f9e7a)';
     b.style.font = '600 26px system-ui';
     b.textContent = '⌂';
   } else if (a.p === ASIS_PKG){
@@ -37,20 +60,15 @@ function nodoApp(a, conNombre){
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
        las apps instaladas, y ésta no está instalada: devolvería 404 y caería a
        la baldosa con la inicial, o sea otra «A» igual a la de Aero. */
-    b.style.background = 'linear-gradient(160deg,#7fe3ff,#4f7fd8)';
+    b.style.backgroundImage = 'linear-gradient(160deg,#7fe3ff,#4f7fd8)';
     b.style.font = '600 30px system-ui';
     b.textContent = '✧';
   } else if (HAY_AND){
     const im = document.createElement('img');
     im.src = iconoUrl(a.p); im.alt = ''; im.draggable = false;
-    im.onerror = () => { b.innerHTML = ''; b.style.background = colorDe(a.p); b.textContent = letraDe(a.n);
-                         b.style.font = '700 26px system-ui'; };
+    im.onerror = () => { b.innerHTML = ''; letraBaldosa(b, a); };
     b.appendChild(im);
-  } else {
-    b.style.background = colorDe(a.p);
-    b.style.font = '700 26px system-ui';
-    b.textContent = letraDe(a.n);
-  }
+  } else letraBaldosa(b, a);
   d.appendChild(b);
   if (conNombre !== false){
     const n = document.createElement('div');
@@ -72,7 +90,9 @@ function calculaFilas(){
 function pintaInicio(){
   calculaFilas();
   const porPag = COLS*FILAS;
-  const lista = INICIO.map(p => POR_PKG[p]).filter(Boolean);
+  /* una carpeta no tiene paquete, así que lo que se filtra es la app que ya no
+     está instalada — no la carpeta */
+  const lista = INICIO.filter(x => esCarpeta(x) ? x.c.length : POR_PKG[x]);
   NPAG = Math.max(1, Math.ceil(lista.length/porPag));
   PAG = cl(PAG, 0, NPAG - 1);
 
@@ -81,7 +101,15 @@ function pintaInicio(){
   for (let q = 0; q < NPAG; q++){
     const pg = document.createElement('div');
     pg.className = 'pag';
-    for (const a of lista.slice(q*porPag, (q + 1)*porPag)) pg.appendChild(nodoApp(a));
+    for (let k = q*porPag; k < Math.min((q + 1)*porPag, lista.length); k++){
+      const x = lista[k];
+      /* ── EL ÍNDICE VIAJA EN EL NODO ──
+         Arrastrar tiene que poder decir DE DÓNDE salió, y el paquete no alcanza:
+         la misma app puede estar dos veces, y una carpeta no tiene paquete. */
+      const nd = esCarpeta(x) ? nodoCarpeta(x, k) : nodoApp(POR_PKG[x]);
+      nd.dataset.i = k;
+      pg.appendChild(nd);
+    }
     tira.appendChild(pg);
   }
   tira.style.width = (NPAG*100) + '%';
@@ -99,10 +127,13 @@ function ponPagina(n, suave){
 
 function pintaDock(){
   const d = $('#dock'); d.innerHTML = '';
-  for (const p of DOCK.slice(0, 4)){
-    const a = POR_PKG[p]; if (!a) continue;
-    d.appendChild(nodoApp(a, false));
-  }
+  DOCK.slice(0, 4).forEach((x, k) => {
+    const nd = esCarpeta(x) ? nodoCarpeta(x, k) : (POR_PKG[x] ? nodoApp(POR_PKG[x], false) : null);
+    if (!nd) return;
+    if (esCarpeta(x)) nd.querySelectorAll('.nom').forEach(e => e.remove());
+    nd.dataset.i = k;
+    d.appendChild(nd);
+  });
   /* ── EL DOCK NO SIGUE LAS COLUMNAS DEL ESCRITORIO ──
      Desde que se le pueden pedir tres columnas, el dock —que tiene cuatro
      apps— se partía en DOS FILAS: medido, pasaba de 74 px de alto a 232. Un
@@ -337,6 +368,10 @@ function repintaIdioma(){
     $('#mBorrar').lastElementChild.textContent = T('borrar');
   }
   pintaReloj(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
+  /* las dos hojas que escriben su texto al abrirse, si están abiertas: cambiar
+     de idioma con una a la vista la dejaría en el anterior hasta cerrarla */
+  if ($('#fondos').classList.contains('on')) fgPinta();
+  if ($('#carp').classList.contains('on')) carpPinta();
   if (typeof asisIdioma === 'function') asisIdioma();
 }
 
@@ -344,10 +379,16 @@ function repintaIdioma(){
 function dosD(n){ return n < 10 ? '0' + n : String(n); }
 function pintaReloj(){
   const d = new Date();
+  $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  /* ── EL WIDGET DE RELOJ PUEDE NO ESTAR PUESTO ──
+     Desde que los widgets se eligen, `#hora` existe sólo si el dueño dejó el de
+     reloj. Sin la guarda, el intervalo de un segundo tira `null.textContent`
+     sesenta veces por minuto y se lleva por delante la pintada de todo lo demás
+     que corre en la misma vuelta. */
+  if (!$('#hora')) return;
   $('#hora').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
   const t = TXT[LANG] || TXT.es;
   $('#fecha').innerHTML = t.dias[d.getDay()] + '<br>' + d.getDate() + ' ' + t.meses[d.getMonth()];
-  $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
   /* ── EL SALUDO SALE DE LA HORA, NO DE UNA CONSTANTE ──
      Es lo único del widget que cambia de tono a lo largo del día, y es lo que
      hace que el escritorio se sienta puesto para este momento y no un reloj. */
@@ -358,6 +399,11 @@ function pintaReloj(){
 function pintaBateria(){
   if (!HAY_AND || !AND.bateria) return;
   try { ponBateria(JSON.parse(AND.bateria())); } catch (e) {}
+  /* ── Y NO AL REVÉS ──
+     `ponBateria` NO llama a `widPinta`: `widPinta` termina pintando el reloj, y
+     si además pidiera la batería al puente serían dos funciones llamándose entre
+     ellas sin fondo. Acá, que es donde la lectura es nueva, se avisa una vez. */
+  if (typeof widPinta === 'function') widPinta();
 }
 
 /* ── EL ARO DE BATERÍA ──
@@ -366,9 +412,17 @@ function pintaBateria(){
    `pintaBateria` para que la vista previa del navegador —que no tiene puente y
    por lo tanto no tiene batería— pueda llenarlo igual y se pueda mirar. */
 const ARO_C = 2*Math.PI*25;
+/* ── LA ÚLTIMA LECTURA SE GUARDA ──
+   El widget de batería se pinta en su propio ritmo, y preguntarle al puente en
+   cada pintada sería cruzar el puente diez veces por segundo con el cronómetro
+   andando para leer un número que cambia cada varios minutos. */
+let BAT_ULT = { n: 100, c: false };
+function bateriaAhora(){ return { n: BAT_ULT.n, carga: !!BAT_ULT.c }; }
 function ponBateria(b){
   const n = (b.n === undefined || b.n < 0) ? 100 : b.n;
+  BAT_ULT = { n: n, c: !!b.c };
   $('#batN').textContent = (b.c ? '\u26a1' : '') + n + '%';
+  if (!$('#wPct')) return;      /* el widget de reloj puede no estar puesto */
   $('#wPct').textContent = n + '%';
   const f = $('#batLlena');
   f.style.width = n + '%';
@@ -437,30 +491,6 @@ function pkgDe(ev){
   const n = ev.target.closest ? ev.target.closest('.ap') : null;
   return n ? n.dataset.p : null;
 }
-function enganchaLista(el){
-  let t0 = 0, largo = null, px = 0, py = 0, movio = false;
-  el.addEventListener('pointerdown', e => {
-    const p = pkgDe(e); if (!p) return;
-    px = e.clientX; py = e.clientY; movio = false; t0 = performance.now();
-    /* ── MANTENER ES UN TEMPORIZADOR, NO UN «pointerup» LARGO ──
-       Esperando al soltar, el menú aparece recién cuando el dedo se levanta y se
-       siente que no respondió. A los 460 ms sale con el dedo todavía puesto, que
-       es lo que hace cualquier escritorio. */
-    largo = setTimeout(() => { largo = null; movio = true; abreMenu(p, e.clientY); }, 460);
-  });
-  el.addEventListener('pointermove', e => {
-    if (!largo) return;
-    if (Math.hypot(e.clientX - px, e.clientY - py) > 12){ clearTimeout(largo); largo = null; movio = true; }
-  });
-  el.addEventListener('pointerup', e => {
-    if (largo){ clearTimeout(largo); largo = null;
-      const p = pkgDe(e);
-      if (p && !movio && performance.now() - t0 < 460) abre(p);
-    }
-  });
-  el.addEventListener('pointercancel', () => { if (largo){ clearTimeout(largo); largo = null; } });
-}
-
 /* páginas: arrastre horizontal con umbral, y el vertical no lo roba */
 function enganchaPaginas(){
   const h = $('#hoja'), t = $('#tira');
@@ -818,6 +848,8 @@ window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
 window.__atras = function(){
   /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
      cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
+  if ($('#fondos').classList.contains('on')){ fgCierra(); return true; }
+  if ($('#carp').classList.contains('on')){ carpCierra(); return true; }
   if ($('#ini').classList.contains('on')){ iniCierra(); return true; }
   if ($('#pers').classList.contains('on')){ persCierra(); return true; }
   if ($('#asis').classList.contains('on')){ asisCierra(); return true; }
@@ -910,10 +942,15 @@ function arranca(){
   persInit();
   iniInit();
   aguaInit();
+  carpInit();
+  widInit();
+  fgInit();
 
-  enganchaLista($('#tira'));
-  enganchaLista($('#dock'));
-  enganchaLista($('#cajLista'));
+  /* ── UN SOLO SISTEMA DE GESTO PARA LOS TRES ──
+     Antes cada uno tenía su `enganchaLista`, que sólo sabía abrir y mostrar el
+     menú. Ahora los tres pasan por el arrastre, que además de eso sabe levantar
+     y soltar; mantener y soltar sin mover sigue abriendo el menú. */
+  arrInit();
   enganchaPaginas();
   enganchaCajon();
 

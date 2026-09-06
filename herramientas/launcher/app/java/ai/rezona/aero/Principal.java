@@ -29,6 +29,8 @@ public class Principal extends Activity {
   private WebView web;
   private Puente puente;
 
+  private ClienteArchivo archivo;
+
   @Override protected void onCreate(Bundle b) {
     super.onCreate(b);
 
@@ -67,6 +69,11 @@ public class Principal extends Activity {
     puente = new Puente(this, web);
     web.addJavascriptInterface(puente, "AND");
     web.setWebViewClient(new ClienteIconos(puente));
+
+    /* el selector de archivos de la galería de fondos: sin WebChromeClient,
+       `<input type=file>` no hace absolutamente nada y no avisa */
+    archivo = new ClienteArchivo(this);
+    web.setWebChromeClient(archivo);
 
     FrameLayout raiz = new FrameLayout(this);
     raiz.setBackgroundColor(0xff0a3d6b);
@@ -125,6 +132,15 @@ public class Principal extends Activity {
      el estado que muestra sea el de después y no el de antes */
   @Override protected void onActivityResult(int pedido, int res, Intent datos) {
     super.onActivityResult(pedido, res, datos);
+    /* ── EL SELECTOR DE ARCHIVOS SIEMPRE TIENE QUE CONTESTAR ──
+       Si se cancela y no se llama al callback, el WebView se queda esperando
+       para siempre y el `<input>` no vuelve a abrir NUNCA MÁS: la galería de
+       fondos queda con «la tuya» muerta hasta reiniciar la app. Por eso el
+       `null` del caso cancelado no es una omisión, es la respuesta. */
+    if (pedido == ClienteArchivo.PIDE) {
+      if (archivo != null) archivo.resultado(res, datos);
+      return;   /* no es una vuelta del rol HOME: la página no tiene que repintar */
+    }
     if (web != null) web.evaluateJavascript("window.__alVolver && __alVolver()", null);
   }
 

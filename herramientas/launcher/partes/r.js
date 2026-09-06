@@ -156,6 +156,23 @@ function aguaArma(){
   } catch (e) { AGUA.roto = true; return false; }
 }
 
+/* ── AL CAMBIAR DE FONDO HAY QUE VOLVER A SUBIR LA TEXTURA ──
+   La foto se sube a la GPU UNA vez, al armar el lienzo. Cambiando el fondo sin
+   esto, el agua seguiría refractando la foto vieja: no falla, dibuja otra cosa.
+   Y el mapeo de «cover» también cambia, porque la foto nueva puede tener otra
+   proporción — eso lo recalcula `aguaMapa` en cada toque, así que alcanza con
+   la textura. */
+function aguaRefondo(){
+  if (!AGUA.listo || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  const gl = AGUA.gl;
+  try {
+    gl.bindTexture(gl.TEXTURE_2D, AGUA.tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, FONDO_IMG);
+    return true;
+  } catch (e) { return false; }
+}
+
 /* ── EL MAPA DE PANTALLA A FOTO SE MIDE, NO SE SUPONE ──
    La foto entra con `background-size:cover` y encima el elemento lleva la
    deriva —una escala y un corrimiento que la animación de CSS mueve durante
