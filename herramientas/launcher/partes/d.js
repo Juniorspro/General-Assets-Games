@@ -88,6 +88,47 @@ function refrActualiza(el){
   if (dsp) dsp.setAttribute('scale', String(Math.min(REFR_ESC, Math.min(w, h)*0.42)));
 }
 
+/* ── UNA PIEZA SE REGISTRA SOLA ──
+   `vidrioInit` corre una vez al arrancar, y las tarjetas de widget se crean
+   DESPUÉS: sin esto se quedaban con el `url(#refr)` de respaldo, que
+   `vidrioInit` borra del documento en su última línea. Un `backdrop-filter`
+   que apunta a un filtro inexistente no degrada, se INVALIDA entero — o sea
+   que los widgets estaban sin vidrio y nada lo decía. */
+function vidrioPieza(el){
+  if (!REFR_SOP || el.__rid) return false;
+  const defs = document.querySelector('#svgdefs defs');
+  if (!defs){ el.classList.remove('refr'); return false; }
+  const id = 'rf' + (++REFR_N);
+  el.__rid = id;
+  const f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+  f.setAttribute('id', id);
+  f.setAttribute('x', '0%'); f.setAttribute('y', '0%');
+  f.setAttribute('width', '100%'); f.setAttribute('height', '100%');
+  f.setAttribute('color-interpolation-filters', 'sRGB');
+  const im = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
+  im.setAttribute('id', id + 'i');
+  im.setAttribute('result', 'm');
+  im.setAttribute('preserveAspectRatio', 'none');
+  const dm = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
+  dm.setAttribute('id', id + 'd');
+  dm.setAttribute('in', 'SourceGraphic'); dm.setAttribute('in2', 'm');
+  dm.setAttribute('scale', String(REFR_ESC));
+  dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
+  f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
+  /* ── EL MAPA VA COMO VARIABLE, NO COMO ESTILO EN LÍNEA ──
+     Un estilo en línea le gana a cualquier selector, así que escrito así el
+     filtro NO SE PUEDE apagar desde el CSS — y apagarlo es justo lo que hace
+     falta: cerrada, cada hoja seguía filtrando su pedazo de pantalla en cada
+     cuadro. Medido: 567 mil píxeles de filtro sobre una pantalla de 367 mil,
+     o sea vez y media la pantalla, siempre, para dibujar cosas que no se ven.
+     Con el id en una variable, `.vid.refr` lo arma y cualquier otra regla lo
+     puede apagar por especificidad normal. */
+  el.style.setProperty('--v-mapa', 'url(#' + id + ')');
+  refrActualiza(el);
+  if (REFR_OBS) REFR_OBS.observe(el);
+  return true;
+}
+
 function vidrioInit(){
   const defs = document.querySelector('#svgdefs defs');
   const piezas = $$('.refr');
@@ -97,36 +138,7 @@ function vidrioInit(){
     for (const el of piezas) el.classList.remove('refr');
     return false;
   }
-  for (const el of piezas){
-    const id = 'rf' + (++REFR_N);
-    el.__rid = id;
-    const f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
-    f.setAttribute('id', id);
-    f.setAttribute('x', '0%'); f.setAttribute('y', '0%');
-    f.setAttribute('width', '100%'); f.setAttribute('height', '100%');
-    f.setAttribute('color-interpolation-filters', 'sRGB');
-    const im = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
-    im.setAttribute('id', id + 'i');
-    im.setAttribute('result', 'm');
-    im.setAttribute('preserveAspectRatio', 'none');
-    const dm = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
-    dm.setAttribute('id', id + 'd');
-    dm.setAttribute('in', 'SourceGraphic'); dm.setAttribute('in2', 'm');
-    dm.setAttribute('scale', String(REFR_ESC));
-    dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
-    f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
-    /* ── LA CALIBRACIÓN SE LEE, NO SE ESCRIBE ACÁ ──
-       Estaba clavada en esta línea, y como es un estilo en línea le ganaba a la
-       regla `.vid.refr`: la recalibración de la vuelta anterior no llegó nunca
-       a las cuatro piezas grandes, que son justamente todas las que importan.
-       Sale de `--v-filR`, que es de donde la lee el CSS. */
-    const cal = getComputedStyle(document.documentElement)
-                  .getPropertyValue('--v-filR').trim() || 'blur(19px)';
-    const b = 'url(#' + id + ') ' + cal;
-    el.style.backdropFilter = b; el.style.webkitBackdropFilter = b;
-    refrActualiza(el);
-    if (REFR_OBS) REFR_OBS.observe(el);
-  }
+  for (const el of piezas) vidrioPieza(el);
   /* el filtro de plantilla del HTML ya no lo usa nadie */
   const viejo = document.getElementById('refr');
   if (viejo && viejo.parentNode) viejo.parentNode.removeChild(viejo);

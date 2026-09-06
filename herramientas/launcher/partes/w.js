@@ -382,7 +382,7 @@ const WIDGETS = {
       const a = esCarpeta(p) ? itemApps(p)[0] : POR_PKG[p];
       if (!a) continue;
       const d = nodoApp(a, false);
-      d.onclick = () => abre(a.p);
+      d.onclick = () => abreZoom(a.p, d);
       r.appendChild(d);
     }
   }},
@@ -543,12 +543,17 @@ function widArma(){
   WID = widLee();
   const c = $('#wid');
   c.textContent = '';
+  let n = 0;
   for (const k of WID){
     const W = WIDGETS[k];
     const d = document.createElement('div');
     d.className = 'vid refr wCard';
+    /* la tarjeta nace después de `vidrioInit`, así que se registra ella */
+    if (typeof vidrioPieza === 'function') vidrioPieza(d);
     d.dataset.k = k;
     d.style.minHeight = W.alto + 'px';
+    d.style.setProperty('--i', n++);
+    d.classList.add('entra');
     c.appendChild(d);
     W.arma(d);
   }

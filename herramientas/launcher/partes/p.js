@@ -51,6 +51,16 @@ const PERS = [
      51.ª — y encima serían marcas ajenas metidas en el APK. Lo que sí vale para
      TODAS es el TRATAMIENTO: el icono de verdad de cada app, que es su logo, con
      el fondo Aero detrás. */
+  /* ── EL PACK AERO ──
+     Se puede apagar, y no es una concesión: el pack redibuja el logo de las
+     apps conocidas, y hay quien prefiere ver el icono con el que la app se
+     reconoce en cualquier otro teléfono. Apagado, todo vuelve al icono del
+     sistema sobre la baldosa Aero, que es lo que había. */
+  { tit: 'pPack', tipo: 'ops',
+    ops: () => [[1, T('pSi')], [0, T('pNo')]],
+    lee: () => +lee('icoPack', 1),
+    pon: v => { guarda('icoPack', +v); ICO_CACHE_LIMPIA(); rejaRepinta(); } },
+
   { tit: 'pIcono', tipo: 'ops',
     ops: () => [['agua', T('pAgua')], ['pasto', T('pPasto')], ['nube', T('pNube')],
                 ['no', T('pNo')]],

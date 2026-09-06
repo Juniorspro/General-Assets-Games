@@ -281,6 +281,182 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimotercera vuelta (2026-09-06): **AERO** — ochenta iconos Aero, el filtrado que corría para siempre, y las carpetas con el índice corrido
+
+Cuatro pedidos en un mensaje, con una foto de referencia —una nota blanca de TikTok sobre un acuario
+Frutiger Aero—: *"en los íconos me refería a esto, que generes personalizadamente un pack de mas de
+50-70 iconos de apps conocidas etc como esta de tiktok · también se laguea mucho el toque de agua
+mejoralo mucho optimiza todo el launcher haz que vaya a 120fps · también al querer hacer carpetas se
+buguea · y necesito que se abra así como transición necesito animasciones, muchas"*.
+
+Dos archivos nuevos: `partes/k.js` (los ochenta glifos y el compositor) e `i_iconos.js` (los cuatro
+fondos horneados), más `hornear_iconos.py`.
+
+#### EL PACK: OCHENTA GLIFOS DIBUJADOS Y CUATRO FONDOS GENERADOS
+
+**Y ESTO CONTRADICE LO QUE ESCRIBÍ EN LA VUELTA ANTERIOR.** Ahí argumenté que una lista de logos
+redibujados «envejece con cada app que se instala y deja afuera a la 51.ª, y encima serían marcas
+ajenas metidas en el APK», y que lo correcto era el **tratamiento** —el icono de verdad con el fondo
+Aero detrás—. El usuario mandó la referencia y repitió el pedido: es su decisión y se hace.
+
+Lo que sí se conservó del argumento es el reparto: **el fondo se genera y el glifo se dibuja**. Los
+cuatro fondos —agua (el acuario de la referencia, con sus peces y sus burbujas), cielo, pasto y
+atardecer— son cuatro imágenes de Rezona; los ochenta logos son **código**, en blanco, sobre ese
+fondo. Un logo generado es un dibujo de un logo y a 320 píxeles se le ve; uno dibujado con
+`<path>` es exacto a cualquier tamaño y pesa lo que pesa una cadena de texto.
+
+**LOS FONDOS SE RECORTAN UN 9 % POR CANTO AL HORNEAR.** El generador dibuja **su propio** borde
+redondeado con brillo, así que puestos enteros habría **dos** radios —el suyo y el de `.baldosa`—
+uno adentro del otro. Recortando el marco, el único radio es el del launcher. 320 px en WebP,
+**38 KB los cuatro**.
+
+**Y EL GLIFO VA POR MÁSCARA DE SVG Y NO POR FIGURAS BLANCAS ENCIMA.** La primera versión dibujaba
+el cuerpo en blanco y los detalles **también en blanco**: la calculadora, el calendario, la cámara y
+Duolingo salían como manchas sin una sola línea adentro. Un logo monocromo no es «blanco más
+blanco», es **blanco con agujeros**: va un `<mask>` donde lo blanco conserva y lo negro corta, y las
+piezas de recorte se marcan con un `-` adelante. **75 de los 80 glifos tienen al menos una.**
+
+Reparto por familia: **agua 17 · cielo 22 · pasto 28 · atardecer 13**. Y fotografiado en el cajón,
+Spotify sale con sus tres ondas blancas sobre el cielo y Telegram con su avión sobre el acuario, que
+es exactamente la referencia.
+
+#### EL LAG NO ERA DEL AGUA, Y LA MEDICIÓN LO DIJO EN DOS PASOS
+
+Arranqué por donde uno arrancaría —el shader— y **el primer diagnóstico estuvo mal**. Lo que lo
+enderezó fue una comparación de tres líneas: el mismo toque con los vidrios puestos y con los
+vidrios apagados. **50,3 ms contra 16,7.** O sea que el costo no estaba en dibujar la onda: estaba
+en que **un lienzo que se repinta a pantalla completa obliga a cada `backdrop-filter` de la página a
+volver a filtrar en cada cuadro**.
+
+Y ahí entró la sonda que vale la vuelta, `vidrios()`, que enumera cada elemento con
+`backdrop-filter` y suma su área. Medido en el escritorio, antes de tocar nada: **567.681 píxeles de
+filtrado permanente sobre una pantalla de 367.504** — o sea que el launcher se estaba filtrando a sí
+mismo una vez y media, todo el tiempo, tocara o no tocara alguien el agua. Eso no es un defecto del
+agua: es del launcher entero, que es lo que el pedido decía.
+
+| | pasadas | píxeles filtrados |
+|---|---|---|
+| escritorio, antes | 40 | **567.681** |
+| **escritorio, ahora** | **4** | **106.149** |
+| cajón, sin el pack | 40 | 568.876 |
+| **cajón, con el pack** | **11** | **493.951** |
+
+Las 29 pasadas que el pack saca **son un efecto secundario y no se buscó**: una baldosa Aero es
+opaca, así que no tiene nada que filtrar y lleva `backdrop-filter:none`. Los iconos, que se pidieron
+por otra razón, resultaron ser la mitad de la optimización.
+
+**Y UNA HIPÓTESIS MÍA QUE LA MEDICIÓN DESMINTIÓ:** bajé el radio del desenfoque de 34 a 4 píxeles
+convencido de que el costo iba con el radio. Midió **peor** —61,4 contra 47,6 ms—. **El costo es la
+PASADA, no el radio**: leer la capa de atrás, filtrarla y componerla cuesta lo mismo desenfocando
+cuatro píxeles que treinta y cuatro. Por eso lo que se saca no es radio sino pasadas
+(`:not(.on)` sobre lo que está escondido, y `body.agua` apagando el filtrado mientras dura la
+ráfaga).
+
+**EL LIENZO DEL AGUA PASA A TENER ALFA, y eso es lo que permite el atajo.** Antes dibujaba **una
+copia del fondo** y por eso tenía que cubrir la pantalla entera; ahora sale con alfa premultiplicado
+y el shader corta con `if (a < 0.004) return`. Medido contando píxeles con alfa sobre los 132.145
+del destino:
+
+| edad de la onda | píxeles con alfa | % |
+|---|---|---|
+| **sin onda** | **0** | **0 %** |
+| 0,05 s | 86.298 | 65,3 % |
+| 0,30 s | 130.918 | 99,1 % |
+| 0,80 s | 6.054 | 4,6 % |
+| **1,50 s** | **0** | **0 %** |
+
+Con la onda apagada el lienzo aporta **cero píxeles**. Y eso deja obsoleta por construcción la
+medición de la vuelta 121 —«la copia pelada contra el CSS, mediana 0 y máximo 2 de 255»—: ya no hay
+copia que pueda ser infiel, porque fuera del anillo no se dibuja nada. La sonda `aguaCopia` se borró
+con ella: una sonda que mide una propiedad que ya no existe aprueba siempre.
+
+Más: la foto se **hornea** a la resolución del destino en un lienzo 2D antes de subirla —WebGL1 no
+sabe hacer mipmaps de una textura que no es potencia de dos, así que sin hornear cada muestreo
+lejano lee el texel crudo— y hay una **escalera de calidad** de cuatro escalones (0,60 · 0,60 · 0,46
+· 0,34) que se sube sola entre el tercer cuadro y el décimo si el cuadro no entra en presupuesto, y
+se guarda. Costo medido del agua: **4,1 a 6,4 ms** por sesenta cuadros a 0,60 de resolución.
+
+**LOS 120 CUADROS NO SE PUEDEN AFIRMAR DESDE ACÁ, y es honesto decirlo.** El banco dibuja por
+software: lo que está medido es cuánto trabajo se le sacó al compositor —pasadas de filtro, píxeles
+rellenados, milisegundos de dibujo— no cuántos cuadros da el teléfono del usuario.
+
+#### LAS CARPETAS: EL ÍNDICE SE CORRÍA AL SACAR EL ELEMENTO
+
+El defecto es de los que no fallan: se hacía una carpeta del tamaño correcto **con la app
+equivocada adentro**. `arrSuelta` buscaba sobre qué icono se estaba soltando, **después** sacaba el
+que se llevaba de `INICIO` con un `splice`, y recién entonces usaba el índice que había buscado
+antes — y ese `splice` corre todos los índices posteriores un lugar. Arrastrando Telegram (índice 1)
+sobre Spotify (índice 0) la carpeta salía con Telegram y **Discord**.
+
+Lo que lo hizo visible fue cambiar la sonda: `arr()` devolvía **cuántas** apps tenía cada carpeta, y
+con eso el defecto es invisible —dos son dos—. Ahora devuelve **cuáles**. Medido después del
+arreglo: `["com.spotify.music","org.telegram.messenger"]`, y **revirtiendo el arreglo vuelve
+`["org.telegram.messenger","com.spotify.music"]`**, o sea que la sonda detecta el defecto además de
+aprobar la corrección.
+
+Y `carpOrigen` mide con `offsetTop`/`offsetHeight` y no con `getBoundingClientRect`: la baldosa
+lleva un `scale` de aterrizaje, y una caja alineada a los ejes se lo traga — es literalmente el
+mismo defecto que en la vuelta 120 costó medir mal la mascota.
+
+#### LAS ANIMACIONES, Y LAS TRES ESTÁN MEDIDAS
+
+- **La entrada de la reja va escalonada por índice** (`--i`), 11 ms por baldosa en el cajón y 28 en
+  una carpeta. Fotografiada a los 110 ms de abrir el cajón, las tres primeras baldosas dan opacidad
+  **0,857 · 0,799 · 0,720** con escalas 0,974 · 0,964 · 0,950 y retardos 0,011 · 0,022 · 0,033: cada
+  una va un escalón más atrás que la anterior, que es lo que hace que se lea a repartida y no a que
+  la pantalla hizo zoom.
+- **Al abrir una app, el launcher entero se va HACIA el icono que se tocó.** El origen sale de dónde
+  está esa baldosa (`--zx`/`--zy`) y la baldosa crece y se apaga por su cuenta. Medido tocando la
+  primera del escritorio: **`--zx 13,96 %`, `--zy 31,43 %`** y `apSale` corriendo sobre esa baldosa
+  y sólo sobre ésa.
+- **La hoja de una carpeta crece desde su baldosa**, no desde el medio de la pantalla. Medido:
+  `#carp` va de escala **0,30 con opacidad 0** a escala **1 con opacidad 1**, con el punto de origen
+  puesto en el icono.
+- Más el latido de la carpeta recién hecha, el pulso del destino mientras se arrastra encima, la
+  entrada de las tarjetas de widget, y **todo apagado con `prefers-reduced-motion`** — que no es una
+  cortesía: hay gente a la que el movimiento le da náuseas y el sistema ya tiene la respuesta.
+
+**PARA MEDIR EL ZOOM HUBO QUE PARTIR `abreZoom` EN DOS.** Su primera línea sale por el atajo cuando
+no hay puente de Android, y en el banco no lo hay: la animación **no corría nunca** y la sonda no
+medía nada. Con la parte de adentro suelta (`zoomArranca`), la sonda ejerce el mismo código que el
+dedo en el teléfono.
+
+#### CUATRO DEFECTOS PROPIOS, Y TRES SON DE ESPECIFICIDAD DE CSS
+
+1. **`vidrioInit()` ESCRIBÍA EL FILTRO COMO ESTILO EN LÍNEA**, y un estilo en línea le gana a
+   cualquier selector: las reglas nuevas —`:not(.on)` sobre lo escondido y `body.agua` durante la
+   ráfaga— **no se aplicaban a ninguna de las piezas grandes**. Es exactamente el defecto de la
+   vuelta 118, que ahí costó que el vidrio nunca se recalibrara. El identificador del filtro pasa a
+   una variable de CSS (`--v-mapa`) que la regla lee, así que el estado vuelve a decidirlo el
+   selector.
+2. **LAS TARJETAS DE WIDGET NO TENÍAN VIDRIO DESDE LA VUELTA 122.** Se crean **después** de
+   `vidrioInit`, así que caían al `url(#refr)` del CSS —un filtro que `vidrioInit` ya había
+   borrado—, y **una referencia inválida invalida el `backdrop-filter` entero**: no degradaba, se
+   apagaba. `widArma` llama ahora a `vidrioPieza(d)` por tarjeta.
+3. **Un bloque `#aviso{}` más abajo pisaba la animación** que le había puesto más arriba, y
+   `transform` es **una** propiedad: el `translateX(-50%)` y la animación tenían que ir juntos o uno
+   borraba al otro.
+4. Y el fantasma perdió su `scale(1.14)` cuando le tomé el `transform` para moverlo con
+   `translate3d`: la escala se mudó al hijo.
+
+#### MEDIDO AL CERRAR
+
+Pack: **80 glifos** —75 con piezas de recorte— repartidos 17/22/28/13 en las cuatro familias, con
+los cuatro fondos cargados; fotografiados uno por uno en una hoja de contactos y en el cajón.
+Filtrado permanente **567.681 → 106.149 px** en el escritorio, y el pack sacando **29 pasadas** en el
+cajón. Agua: **cero píxeles** con la onda apagada, 99,1 % en el pico y cero otra vez a 1,5 s; costo
+4,1-6,4 ms. Carpetas: contenido correcto, **y la sonda detecta el defecto al revertir el arreglo**.
+Animaciones: escalonado medido a mitad de vuelo (0,857 · 0,799 · 0,720), zoom con su origen en la
+baldosa tocada, y la hoja creciendo de 0,30 a 1. Regresión completa: **doce planes con
+`window.__errs` vacío en los doce** — 31 apps, riel de 17 letras, 9 filtros de refracción, **cero
+solapamientos**, el aro de la batería en sus tres escalones, la mascota con 23 huesos y 5.541
+triángulos, las tres búsquedas, y el asistente. APK **1,15 MB** con firma v2+v3, `HOME` en el alias,
+`LAUNCHER` en la actividad e `INTERNET`.
+
+**LO QUE NO PUDE COMPROBAR:** los 120 cuadros. El banco dibuja por software, así que lo medido es el
+trabajo que se le sacó al compositor y no la tasa de cuadros de un teléfono. Y sigue sin haber
+emulador: del APK está medido que compila, firma y lleva adentro lo que tiene que llevar.
+
 ### Centésima vigesimosegunda vuelta (2026-09-06): **AERO** — arrastrar y agrupar, veinte widgets, ocho fondos y el asistente sin llave
 
 Siete pedidos en un mensaje: *"la IA no anda we, yo quiero que ya ande no que pongamos nuestra key,

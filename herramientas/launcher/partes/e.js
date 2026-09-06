@@ -37,6 +37,25 @@ function letraBaldosa(b, a){
   b.textContent = letraDe(a.n);
 }
 
+/* ── LA ENTRADA ESCALONADA ──
+   Marca a los hijos con su índice y con la clase que dispara la animación. El
+   escalón lo pone el CSS: acá sólo viaja el número, porque el índice es lo
+   único que el JS sabe y la duración es una decisión de diseño.
+   ── Y NO SE REANIMA LO QUE YA ESTABA ──
+   `pintaInicio` corre en cada soltada de un arrastre: escalonando siempre, la
+   reja entera volvería a entrar cada vez que se mueve un icono, que se lee a
+   parpadeo y no a animación. */
+function entraLista(cont){
+  if (!cont) return 0;
+  let i = 0;
+  for (const n of cont.children){
+    if (n.classList.contains('pag')){ i += entraLista(n); continue; }
+    n.style.setProperty('--i', i++);
+    n.classList.remove('entra'); void n.offsetWidth; n.classList.add('entra');
+  }
+  return i;
+}
+
 function nodoApp(a, conNombre){
   const d = document.createElement('div');
   d.className = 'ap'; d.dataset.p = a.p;
@@ -63,6 +82,11 @@ function nodoApp(a, conNombre){
     b.style.backgroundImage = 'linear-gradient(160deg,#7fe3ff,#4f7fd8)';
     b.style.font = '600 30px system-ui';
     b.textContent = '✧';
+  } else if (icoAero(b, a.p, a.n)){
+    /* el pack Aero: el logo en blanco sobre el fondo de su familia. Se prueba
+       ANTES que el icono del sistema porque es justo lo que el pedido dice —el
+       logo de TikTok en blanco sobre agua— y porque el que no está en el pack
+       cae solo al camino de siempre. */
   } else if (HAY_AND){
     const im = document.createElement('img');
     im.src = iconoUrl(a.p); im.alt = ''; im.draggable = false;
@@ -87,6 +111,7 @@ function calculaFilas(){
   return FILAS;
 }
 
+let INICIO_VISTO = false, DOCK_VISTO = false;
 function pintaInicio(){
   calculaFilas();
   const porPag = COLS*FILAS;
@@ -115,6 +140,7 @@ function pintaInicio(){
   tira.style.width = (NPAG*100) + '%';
   $$('.pag').forEach(p => { p.style.flexBasis = (100/NPAG) + '%'; });
   ponPagina(PAG, false);
+  if (!INICIO_VISTO){ INICIO_VISTO = true; entraLista(tira); }
 
 }
 function ponPagina(n, suave){
@@ -140,6 +166,7 @@ function pintaDock(){
      dock que se envuelve no es un dock. Sus columnas son cuántas apps tiene. */
   d.style.setProperty('--cols', Math.max(1, d.children.length));
   d.style.visibility = DOCK.length ? 'visible' : 'hidden';
+  if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
 }
 
 /* ── LA LETRA DE UNA APP ──
@@ -215,6 +242,9 @@ function pintaCajon(filtro){
     l.appendChild(w);
   }
   $('#cajTit').textContent = q ? (v.length + ' \u00b7 ' + T('todas')) : T('todas');
+  /* acá SÍ se escalona siempre: la lista se rehace al abrir el cajón y en cada
+     letra que se escribe, o sea que cada pintada es una lista nueva */
+  entraLista(l);
   pintaRiel();
 }
 
@@ -294,6 +324,43 @@ function aLaWeb(q){
 }
 
 /* ══════════ ABRIR, FIJAR, MENÚ ══════════ */
+/* ── ABRIR UNA APP ES UN MOVIMIENTO, NO UN CORTE ──
+   El icono crece hasta llenar la pantalla y el resto del launcher se va con él:
+   es lo que hace cualquier escritorio de Android y es lo que separa «se abrió
+   algo» de «la pantalla parpadeó». Son 170 ms — el sistema tarda más que eso
+   en dibujar el primer cuadro de la app, así que no se le pone freno a nadie.
+   Y se limpia SIEMPRE: al volver del sistema, por si el arranque falló, y con
+   un plazo de red, porque un launcher que se queda desvanecido está roto. */
+let ZOOM_T = null;
+function zoomLimpia(){
+  if (ZOOM_T){ clearTimeout(ZOOM_T); ZOOM_T = null; }
+  document.body.classList.remove('abriendo');
+  const v = $('.ap.saliendo'); if (v) v.classList.remove('saliendo');
+}
+function abreZoom(pkg, nodo){
+  if (pkg === ASIS_PKG || pkg === PERS_PKG || pkg === INI_PKG || !HAY_AND){
+    abre(pkg); return;
+  }
+  zoomArranca(pkg, nodo);
+}
+/* El plano del arranque, sin la guarda del puente. Va aparte por una razón de
+   medición y no de estilo: en el banco no hay Android, así que `abreZoom` sale
+   por el atajo y la animación no corre NUNCA. Con la parte de adentro suelta,
+   la sonda ejerce el mismo código que el dedo en el teléfono. */
+function zoomArranca(pkg, nodo){
+  zoomLimpia();
+  if (nodo){
+    const r = nodo.getBoundingClientRect();
+    /* de dónde crece: el centro del icono, en fracción de pantalla */
+    document.body.style.setProperty('--zx', ((r.left + r.width/2)/innerWidth*100).toFixed(2) + '%');
+    document.body.style.setProperty('--zy', ((r.top + r.height/2)/innerHeight*100).toFixed(2) + '%');
+    nodo.classList.add('saliendo');
+  }
+  document.body.classList.add('abriendo');
+  ZOOM_T = setTimeout(() => { ZOOM_T = null; abre(pkg); }, 170);
+  setTimeout(zoomLimpia, 1400);
+}
+
 function abre(pkg){
   vibra(10);
   /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
@@ -891,6 +958,11 @@ function arranca(){
 
   fondoInit();
   vidrioInit();
+  /* ── VOLVER DE UNA APP LIMPIA EL ZOOM ──
+     La animación de abrir deja el launcher escalado y transparente: si el
+     arranque falla o el sistema vuelve sin recargar la página, se queda así. */
+  addEventListener('visibilitychange', () => { if (!document.hidden) zoomLimpia(); });
+  addEventListener('pageshow', zoomLimpia);
   /* la reja se restituye antes de pintar nada: puesta después, el primer cuadro
      sale con los iconos de fábrica y salta de tamaño a la vista */
   ponReja(lee('ico', 60), lee('cols', 4));

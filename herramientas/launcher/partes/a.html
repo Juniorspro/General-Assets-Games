@@ -167,8 +167,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    calibración que la de `.vid` ya había descartado, y el dock salía verde.
    Lo único que puede diferir es el desenfoque, y por una razón: el
    desplazamiento ya revuelve el fondo, así que hace falta menos. */
-.vid.refr{backdrop-filter:url(#refr) var(--v-filR);
-  -webkit-backdrop-filter:url(#refr) var(--v-filR)}
+.vid.refr{backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR);
+  -webkit-backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR)}
 
 /* ══════════ BARRA DE ARRIBA ══════════
    ── EN EL TELÉFONO NO SE DIBUJA, PORQUE YA ESTÁ DIBUJADA ──
@@ -272,6 +272,72 @@ body.and #barra{display:none}
   backdrop-filter:blur(12px) saturate(120%) brightness(.92);
   -webkit-backdrop-filter:blur(12px) saturate(120%) brightness(.92);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
+/* ── LA BALDOSA DEL PACK AERO ──
+   Trae su propia foto de fondo, así que es OPACA: el `backdrop-filter` de
+   `.baldosa` sería un desenfoque de lo que hay detrás de algo que tapa lo que
+   hay detrás. Y no es un matiz de estilo: cada baldosa con filtro es una
+   pasada más que el compositor tiene que rehacer cada vez que algo de abajo se
+   mueve — o sea en cada cuadro del agua, treinta veces. */
+.baldosa.aero{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:transparent}
+.glf{width:64%;height:64%;fill:#fff;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.42)) drop-shadow(0 0 1px rgba(0,30,60,.30))}
+.baldosa.aero::after{height:40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0))}
+/* ── SÓLO PARA MEDIR ──
+   Apaga el vidrio de todo lo que lo tiene, que es la única forma de saber qué
+   parte del costo de un cuadro es del agua y qué parte es del compositor
+   rehaciendo treinta desenfoques. No la usa el juego. */
+body.sinVidrio *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinBald .baldosa{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinPanel .vid,body.sinPanel #cajon,body.sinPanel #menu,body.sinPanel .hoja{
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinRefr .vid.refr{backdrop-filter:var(--v-filR)!important;
+  -webkit-backdrop-filter:var(--v-filR)!important}
+body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
+  --v-filR:blur(4px) saturate(112%) brightness(.94)}
+
+/* ══════════ LO CERRADO NO FILTRA NADA ══════════
+   ── EL HALLAZGO MÁS GRANDE DE LA VUELTA, Y NO SE VE EN NINGUNA CAPTURA ──
+   `#cajon`, `#menu`, `#pers`, `#carp`, `#ini`, `#asis` y `#velo` viven SIEMPRE
+   en el documento: cerrados se corren fuera de pantalla con un `transform` o se
+   apagan con `opacity`. Pero un `backdrop-filter` no se apaga porque el
+   elemento esté corrido: el compositor lo sigue calculando. O sea que el
+   launcher estaba haciendo, en cada cuadro y para siempre, un desenfoque de 34
+   píxeles a pantalla completa (el cajón), cinco refractados con
+   `feDisplacementMap` (las cinco hojas) y un desenfoque más (el velo) para
+   dibujar cosas que NO SE VEN.
+   Un id más una clase le gana a dos clases, así que esto le gana a `.vid.refr`
+   sin un solo `!important`. */
+#cajon:not(.on),#velo:not(.on),#menu:not(.on),#pers:not(.on),#carp:not(.on),
+#ini:not(.on),#asis:not(.on),#fondos:not(.on),#aviso:not(.on),
+#cajon:not(.on) .vid,#cajon:not(.on) .baldosa,
+#asis:not(.on) .vid,#pers:not(.on) .vid,#fondos:not(.on) .vid{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE ══════════
+   ── DE DÓNDE SALE ESTE APARTADO ──
+   Medido: un cuadro de agua cuesta 47,6 ms con el vidrio puesto y 20,8 sin él.
+   O sea que el shader NO es el problema — el problema es que un lienzo que
+   repinta la pantalla entera obliga al compositor a REHACER el `backdrop-filter`
+   de cada pieza de vidrio en cada cuadro. Bajarle el radio al desenfoque no
+   sirve (medido: 61,4 ms, o sea peor): lo que cuesta es la pasada, no el radio.
+   Así que lo único que se puede hacer es SACAR pasadas mientras dura la ráfaga,
+   y en el orden que menos se ve. Fuera de la ráfaga el vidrio queda entero.
+     n1  el refractado (el `feDisplacementMap`, que en un WebView se cae del
+         camino de GPU y pasa a hacerse en el procesador): 7,2 ms de 47,6
+     n2  el desenfoque de las piezas grandes, con un tinte más fuerte que lo
+         reemplaza para que el salto se note lo menos posible
+     n3  el desenfoque de las baldosas */
+body.agua.aguaN1 .vid.refr{backdrop-filter:var(--v-filR);
+  -webkit-backdrop-filter:var(--v-filR)}
+body.agua.aguaN1 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:rgba(120,170,215,.30)}
+body.agua.aguaN2 .vid,body.agua.aguaN2 .vid.refr,body.agua.aguaN3 .vid,body.agua.aguaN3 .vid.refr{
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:linear-gradient(150deg,rgba(10,40,78,.50),rgba(6,28,58,.62))}
+body.agua.aguaN3 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:rgba(120,170,215,.36)}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
@@ -563,6 +629,65 @@ body.pers #mascota{z-index:5}
   padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
 
 
+/* ══════════════════════ LAS ANIMACIONES ══════════════════════
+   Pedido: «necesito animaciones, muchas».
+   ── LA REGLA QUE LAS HACE POSIBLES A TODAS ──
+   Sólo se animan `transform` y `opacity`. Son las dos únicas propiedades que el
+   compositor resuelve sin volver a maquetar ni a repintar, y por eso son las
+   únicas que pueden ir a 120 cuadros por segundo con treinta iconos en
+   pantalla. Animar `width`, `top`, `box-shadow` o `filter` sobre una lista es
+   pedirle al navegador que rehaga la página en cada cuadro. */
+
+/* ── LOS ICONOS ENTRAN ESCALONADOS ──
+   Todos a la vez es un bloque que aparece; escalonados de a 18 ms se lee a que
+   la reja se llena. `--i` lo escribe quien pinta, y es el índice del icono. */
+@keyframes apEntra{
+  from{opacity:0;transform:translateY(14px) scale(.82)}
+  to{opacity:1;transform:none}}
+.ap.entra{animation:apEntra .34s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*18ms)}
+/* el cajón trae muchos más, así que el escalón es más corto o la última fila
+   entraría medio segundo tarde */
+#cajLista .ap.entra{animation-duration:.28s;animation-delay:calc(var(--i,0)*11ms)}
+#carpRejilla .ap.entra{animation-delay:calc(var(--i,0)*28ms)}
+
+/* ── APRETAR UN ICONO SE SIENTE ──
+   Sin esto no hay forma de saber si el toque entró hasta que la app abre, que
+   en un teléfono lento es medio segundo de nada. */
+.ap{transition:transform .13s cubic-bezier(.3,1.4,.4,1)}
+.ap:active{transform:scale(.9)}
+body.arrastrando .ap{transition:none}
+
+/* ── ABRIR UNA APP: EL ICONO SE COME LA PANTALLA ──
+   El launcher entero se va hacia el icono que se tocó —de ahí `--zx`/`--zy`— y
+   el icono crece y se apaga. Es la animación que dice «esto se convirtió en
+   aquello» en vez de «la pantalla parpadeó». */
+body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{
+  transform-origin:var(--zx,50%) var(--zy,50%);
+  transition:transform .17s ease-in,opacity .17s ease-in;
+  transform:scale(1.14);opacity:0}
+.ap.saliendo{animation:apSale .17s ease-in forwards}
+@keyframes apSale{to{transform:scale(2.2);opacity:0}}
+
+/* ── LA HOJA DE UNA CARPETA CRECE DESDE SU BALDOSA ──
+   El punto de origen lo escribe `carpOrigen` midiendo dónde está el icono. */
+#carp{will-change:transform,opacity}
+
+/* ── EL WIDGET ENTRA ──
+   Una tarjeta que aparece de golpe empuja la reja de un cuadro al otro. */
+@keyframes wEntra{from{opacity:0;transform:translateY(-10px) scale(.96)}to{opacity:1;transform:none}}
+.wCard.entra{animation:wEntra .3s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*45ms)}
+
+/* ── Y NADA DE ESTO CORRE SI EL SISTEMA PIDE QUIETO ──
+   No es una cortesía: hay gente a la que el movimiento le da náuseas, y el
+   sistema ya tiene la respuesta. */
+@media (prefers-reduced-motion:reduce){
+  .ap.entra,.wCard.entra,.ap.saliendo,.ap.late .baldosa,.ap.destino .baldosa{animation:none}
+  .ap,.ap.fantasma>*,#aviso,#carp{transition-duration:.01s}
+  body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{transition-duration:.01s}
+}
+
 /* ══════════ ARRASTRAR, CARPETAS Y SALPICADURA ══════════ */
 /* el que se está llevando se queda como hueco: sin eso parecen dos */
 .ap.llevada{opacity:.18;pointer-events:none}
@@ -570,13 +695,25 @@ body.pers #mascota{z-index:5}
    Adentro de `#tira` lo recortaría el `overflow` de la página y no podría cruzar
    al dock ni salir del cajón. */
 .ap.fantasma{position:fixed;z-index:9;pointer-events:none;margin:0;
-  transform:scale(1.14);filter:drop-shadow(0 10px 22px rgba(0,30,60,.55));
-  transition:transform .12s ease}
+  left:0;top:0;will-change:transform;
+  filter:drop-shadow(0 10px 22px rgba(0,30,60,.55))}
+/* ── LA ESCALA VA EN EL HIJO ──
+   El `transform` del fantasma lo escribe el dedo cuadro a cuadro; metiendo la
+   escala ahí habría que reescribirla en cada movimiento y no habría transición
+   de la que agarrarse. */
+.ap.fantasma>*{transform:scale(1.04);
+  transition:transform .2s cubic-bezier(.2,1.6,.4,1)}
+.ap.fantasma.vivo>*{transform:scale(1.2)}
 body.arrastrando{cursor:grabbing}
 /* el que recibiría la carpeta: un aro, no un color, porque el icono tiene que
    seguir viéndose para saber con cuál se va a juntar */
 .ap.destino .baldosa{box-shadow:0 0 0 3px var(--acento),0 6px 18px rgba(0,30,60,.45);
-  transform:scale(.9)}
+  animation:recibe .9s ease-in-out infinite}
+@keyframes recibe{0%,100%{transform:scale(.88)}50%{transform:scale(.96)}}
+/* la carpeta recién hecha late una vez: dos iconos que se funden en uno se lee
+   a que uno de los dos se perdió si nada lo marca */
+.ap.late .baldosa{animation:late .6s cubic-bezier(.2,1.4,.35,1)}
+@keyframes late{0%{transform:scale(.72)}55%{transform:scale(1.12)}100%{transform:scale(1)}}
 
 .cBald{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
   gap:calc(var(--ico)*.06);padding:calc(var(--ico)*.12);
@@ -762,9 +899,9 @@ body.arrastrando{cursor:grabbing}
 @media (prefers-reduced-motion:reduce){.sGota,.sAro{animation:none;opacity:0}}
 
 /* ══════════ LA CARPETA ABIERTA ══════════ */
-#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.92);
+#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.30);
   border-radius:26px;padding:14px 14px 18px;opacity:0;pointer-events:none;
-  transition:opacity .2s ease,transform .24s cubic-bezier(.2,.9,.3,1);
+  transition:opacity .18s ease,transform .34s cubic-bezier(.18,1.12,.28,1);
   max-height:70%;display:flex;flex-direction:column;gap:10px}
 #carp.on{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
 #carpCab{display:flex;align-items:center;gap:10px}
@@ -832,9 +969,15 @@ body.arrastrando{cursor:grabbing}
 /* ══════════ AVISO ══════════ */
 #aviso{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
   bottom:calc(var(--ins-b) + 84px);padding:11px 20px;border-radius:22px;
-  font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;
+  /* ── ENTRA DESDE ABAJO ──
+     Apareciendo y desapareciendo en el sitio se lee a error del navegador y no
+     a un aviso. Y va con el `translateX(-50%)` adentro del mismo `transform`,
+     porque son la misma propiedad: escrito aparte, uno pisa al otro. */
+  transform:translate(-50%,14px) scale(.94);
+  transition:opacity .2s,transform .26s cubic-bezier(.2,1.3,.35,1);
   white-space:nowrap}
-#aviso.on{opacity:1}
+#aviso.on{opacity:1;transform:translate(-50%,0) scale(1)}
 
 /* ══════════ CARGANDO ══════════ */
 #carga{position:fixed;inset:0;z-index:7;display:flex;align-items:center;

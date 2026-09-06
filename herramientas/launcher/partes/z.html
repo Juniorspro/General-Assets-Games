@@ -175,6 +175,10 @@ window.__A = {
      salió el icono, que es lo único que puede estar mal. */
   arr(){
     return { llevando: !!ARR, desde: ARR && ARR.desde,
+             /* con qué APPS quedó cada carpeta, no sólo cuántas: el defecto de
+                los índices corridos hacía carpetas del tamaño correcto y con la
+                app equivocada adentro, o sea invisible contando */
+             contenido: INICIO.map(x => esCarpeta(x) ? x.c.slice() : x),
              inicio: INICIO.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
              dock: DOCK.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
              fantasmas: document.querySelectorAll('.fantasma').length,
@@ -300,6 +304,41 @@ window.__A = {
   ponInicio(v){ INICIO = v.slice(); guarda('inicio', INICIO); pintaInicio(); return this.arr(); },
   ponDock(v){ DOCK = v.slice(); guarda('dock', DOCK); pintaDock(); return this.arr(); },
 
+  /* ── LA HOJA DE CONTACTOS DE LOS ICONOS ──
+     Ochenta glifos no se pueden juzgar de a uno en el cajón: hay que verlos
+     juntos y al tamaño al que se ven. Arma una reja con todos, con su nombre
+     debajo, encima de un velo oscuro. Es una sonda: no la usa el launcher. */
+  glifosHoja(cols){
+    const c = cols || 8;
+    let d = document.getElementById('glfHoja');
+    if (d) d.remove();
+    d = document.createElement('div');
+    d.id = 'glfHoja';
+    d.style.cssText = 'position:fixed;inset:0;z-index:60;background:#0b2440;'
+      + 'display:grid;grid-template-columns:repeat(' + c + ',1fr);gap:6px;'
+      + 'padding:8px;overflow:auto;align-content:start';
+    const ns = Object.keys(GLIFOS);
+    for (const g of ns){
+      const w = document.createElement('div');
+      w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px';
+      const b = document.createElement('div');
+      b.className = 'baldosa';
+      b.style.cssText = '--ico:' + Math.floor(380/c) + 'px';
+      const fam = ICO_DE_FAM[g] || 'agua';
+      b.classList.add('aero');
+      b.style.backgroundImage = 'url(' + ICONOS[fam] + ')';
+      b.style.backgroundSize = 'cover';
+      const sv = glifoSvg(g); if (sv) b.appendChild(sv);
+      const t = document.createElement('div');
+      t.textContent = g;
+      t.style.cssText = 'color:#fff;font:500 7px system-ui;text-align:center';
+      w.appendChild(b); w.appendChild(t); d.appendChild(w);
+    }
+    document.body.appendChild(d);
+    return { n: ns.length, cols: c };
+  },
+  glifosCierra(){ const d = document.getElementById('glfHoja'); if (d) d.remove(); return true; },
+
   /* ── EL AGUA ──
      Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
      FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
@@ -308,7 +347,7 @@ window.__A = {
     const c = AGUA.el;
     return { listo: AGUA.listo, roto: AGUA.roto, on: AGUA.on,
              ondas: AGUA.ondas.length,
-             clase: c ? c.className : null,
+             clase: c ? c.className : null, niv: AGUA.niv,
              lienzo: c ? [c.width, c.height] : null,
              fondo: { ok: FONDO_OK, w: FONDO_IMG ? FONDO_IMG.naturalWidth : 0,
                       h: FONDO_IMG ? FONDO_IMG.naturalHeight : 0 },
@@ -335,48 +374,68 @@ window.__A = {
     return this.agua().ondas;
   },
   aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
-  /* ── LA COPIA PELADA ──
-     Enciende el lienzo SIN una sola onda: lo que queda en pantalla tiene que
-     ser, píxel por píxel, la misma foto que dibujaba el CSS. Ésa es la única
-     forma de saber si encenderlo se ve como un salto, y no se puede medir con
-     una onda viva porque entonces todo lo que cambia se puede achacar a ella.
-     La deriva se congela: entre dos capturas la foto se mueve sola y esa
-     diferencia no es del agua. */
-  aguaCopia(v){
-    FONDO_EL.style.animationPlayState = 'paused';
-    if (!v){ AGUA.ondas = []; if (AGUA.el) AGUA.el.classList.remove('on'); AGUA.on = false; return 'off'; }
+  aguaNivel(n){ if (n != null){ if (!aguaArma()) return 'roto'; aguaNivel(n); } return this.aguaRes(); },
+  aguaRes(){ return { niv: AGUA.niv, clases: document.body.className,
+                      res: AGUA.res, lienzo: AGUA.el ? [AGUA.el.width, AGUA.el.height] : null,
+                      px: AGUA.el ? AGUA.el.width*AGUA.el.height : 0,
+                      guardado: lee('aguaNiv', 0),
+                      bake: AGUA.bake ? [AGUA.bake.width, AGUA.bake.height] : null }; },
+  /* ── EL LIENZO ES TRANSPARENTE DONDE NO HAY ONDA ──
+     Antes esto era una copia de la foto entera y había que medir si era fiel.
+     Ahora el alfa es cero fuera de la franja, así que lo que hay que comprobar
+     es otra cosa y es exacta: cuántos píxeles del lienzo tienen alfa. Con el
+     lienzo encendido y sin una sola onda tiene que dar CERO — y ése es el
+     número que dice que encenderlo no puede verse. */
+  aguaAlfa(x, y, edad){
     if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    AGUA.gl.uniform1i(AGUA.u.n, 0);
-    AGUA.gl.uniform1f(AGUA.u.t, 0);
-    AGUA.gl.drawArrays(AGUA.gl.TRIANGLES, 0, 3);
-    return 'on';
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
+    const n = (x == null) ? 0 : 1;
+    if (n){ b[0] = x; b[1] = y; b[2] = 0; b[3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    gl.uniform1f(AGUA.u.t, edad || 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const w = AGUA.el.width, h = AGUA.el.height;
+    const px = new Uint8Array(w*h*4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let con = 0, opaco = 0, max = 0;
+    for (let i = 3; i < px.length; i += 4){
+      const a = px[i];
+      if (a > 2) con++;
+      if (a > 250) opaco++;
+      if (a > max) max = a;
+    }
+    return { total: w*h, conAlfa: con, opacos: opaco, alfaMax: max,
+             pct: +(100*con/(w*h)).toFixed(2) };
   },
   /* ── UNA ONDA CONGELADA EN EL INSTANTE QUE SE PIDA ──
      El bucle sigue corriendo entre la sonda y la captura, así que una foto
-     sacada «justo después de tocar» es de cualquier instante menos ése: medido,
-     con 120 ms de espera el frente ya había cruzado la pantalla y en la captura
-     no se veía una sola onda. Acá se dibuja a mano con la edad pedida y no se
-     agenda otro cuadro. */
+     sacada «justo después de tocar» es de cualquier instante menos ése. Acá se
+     dibuja a mano con la edad pedida y no se agenda otro cuadro. */
   aguaFoto(x, y, edad){
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    const gl = AGUA.gl, b = new Float32Array(AGUA_MAX*4);
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
     b[0] = x; b[1] = y; b[2] = 0; b[3] = 1;
     gl.uniform4fv(AGUA.u.onda, b);
     gl.uniform1i(AGUA.u.n, 1);
     gl.uniform1f(AGUA.u.t, edad);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    return { x: x, y: y, edad: edad, frente: Math.round(edad*900) };
+    return { x: x, y: y, edad: edad, frente: Math.round(edad*900),
+             res: AGUA.res, px: AGUA.el.width*AGUA.el.height };
   },
-  /* cuánto cuesta un cuadro de agua, medido dibujando de verdad con las ondas
-     que se le pidan: el lienzo rellena la pantalla entera, así que es el único
-     número que decide si esto se puede tener */
+  /* cuánto cuesta el dibujo del lienzo, con las ondas que se le pidan */
   aguaCosto(n, cuadros){
     if (!aguaArma()) return 'roto';
     const gl = AGUA.gl;
@@ -384,13 +443,14 @@ window.__A = {
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    const b = new Float32Array(AGUA_MAX*4);
+    const b = AGUA.onda; b.fill(0);
     for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
     gl.uniform4fv(AGUA.u.onda, b);
     gl.uniform1i(AGUA.u.n, n);
     const c = cuadros || 60, t0 = performance.now();
     for (let i = 0; i < c; i++){
       gl.uniform1f(AGUA.u.t, 0.3 + i*0.001);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     /* `finish()` no sincroniza nada acá: con el render por software la cola se
@@ -399,14 +459,84 @@ window.__A = {
     const px1 = new Uint8Array(4);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
     const ms = (performance.now() - t0)/c;
-    return { ondas: n, cuadros: c, ms: +ms.toFixed(3),
+    return { ondas: n, cuadros: c, ms: +ms.toFixed(3), res: AGUA.res,
              px: AGUA.el.width*AGUA.el.height };
+  },
+  /* ── CUÁNTO CUESTA UN CUADRO DE VERDAD ──
+     No el `drawArrays` solo: el cuadro ENTERO, con el compositor haciendo lo
+     suyo. `niv` fija el escalón de calidad y CONGELA el ajuste automático — sin
+     eso la propia medición baja el escalón a mitad de la corrida y las cuatro
+     filas terminan midiendo lo mismo. Con `niv` en −1 se apaga todo el vidrio,
+     que es el control: sin él, «el agua cuesta X» no dice de quién es el costo. */
+  /* ── QUIÉN ESTÁ FILTRANDO AHORA MISMO ──
+     Cada `backdrop-filter` vivo es una pasada que el compositor rehace cada vez
+     que algo de abajo se mueve. Enumerarlos es la única forma de saber cuáles
+     quedaron encendidos: leyendo el CSS no se ve, porque lo que manda es la
+     regla que ganó y el estado de las clases. */
+  /* prende y apaga el pack de iconos y repinta: es lo que decide cuántas
+     baldosas quedan filtrando, y ése es el número de la fluidez del cajón */
+  pack(v){
+    if (v != null){ guarda('icoPack', v ? 1 : 0); ICO_CACHE_LIMPIA(); rejaRepinta(); }
+    const b = $$('.baldosa'), a = $$('.baldosa.aero');
+    return { pack: +lee('icoPack', 1), baldosas: b.length, aero: a.length,
+             cajon: $$('#cajLista .baldosa').length,
+             cajonAero: $$('#cajLista .baldosa.aero').length };
+  },
+  vidrios(){
+    const v = [];
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      const f = c.backdropFilter || c.webkitBackdropFilter;
+      if (!f || f === 'none') continue;
+      const r = e.getBoundingClientRect();
+      v.push({ q: (e.id ? '#'+e.id : '') + (e.className && typeof e.className === 'string'
+                 ? '.'+e.className.trim().split(/\s+/).join('.') : ''),
+               px: Math.round(r.width*r.height), f: f.slice(0, 46) });
+    }
+    v.sort((a,b) => b.px - a.px);
+    return { n: v.length, px: v.reduce((a,b) => a+b.px, 0), top: v.slice(0, 8) };
+  },
+  aguaFps(ms, niv){
+    return new Promise(res => {
+      if (!aguaArma()){ res('roto'); return; }
+      document.body.classList.remove('sinVidrio');
+      AGUA.fijo = true;
+      if (niv === -1) document.body.classList.add('sinVidrio');
+      else aguaNivel(niv | 0);
+      const dur = ms || 900, t0 = performance.now();
+      const dts = []; let ult = t0;
+      /* una onda nueva cada 200 ms: es lo que pasa arrastrando el dedo */
+      const sem = setInterval(() => aguaToca(120 + Math.random()*160,
+                                             300 + Math.random()*260, 1), 200);
+      aguaToca(200, 440, 1);
+      const paso = () => {
+        const n = performance.now();
+        dts.push(n - ult); ult = n;
+        if (n - t0 < dur) requestAnimationFrame(paso);
+        else {
+          clearInterval(sem);
+          const v = dts.slice(2).sort((a,b) => a-b);
+          const med = v.length ? v[v.length>>1] : 0;
+          const prom = v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0;
+          const px = AGUA.el.width*AGUA.el.height, nv = AGUA.niv;
+          document.body.classList.remove('sinVidrio');
+          AGUA.fijo = false;
+          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length,
+                mediana: +med.toFixed(2), promedio: +prom.toFixed(2),
+                p90: +(v[Math.floor(v.length*0.9)] || 0).toFixed(2),
+                fps: +(1000/Math.max(med, 0.01)).toFixed(1),
+                res: AGUA.res, px: px });
+        }
+      };
+      requestAnimationFrame(paso);
+    });
   },
   /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
      así que después de una foto congelada no limpiaba nada */
   aguaApaga(){
     AGUA.ondas = []; AGUA.on = false;
     if (AGUA.el) AGUA.el.classList.remove('on');
+    document.body.classList.remove('agua', 'aguaN1', 'aguaN2', 'aguaN3');
     FONDO_EL.style.animationPlayState = '';
     return this.agua();
   },
@@ -556,6 +686,36 @@ window.__A = {
   mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
   cajon(v){ verCajon(v !== false); return CAJON; },
+  /* La animación de arranque, ejercida por el mismo camino que el dedo. Va por
+     `zoomArranca` y no por `abreZoom` porque en el banco no hay puente y esa
+     guarda saldría por el atajo — o sea que la sonda no mediría nada. */
+  zoom(pkg, i){
+    const n = $$('#tira .ap')[i || 0] || $$('#cajLista .ap')[i || 0];
+    if (!n) return { hay: false };
+    zoomArranca(pkg || n.dataset.p || 'x', n);
+    return this.anim();
+  },
+  /* El estado de las animaciones en este instante: cuántas corriendo, cuánto
+     llevan, y dónde está lo que se está moviendo. Una animación sin número no
+     se puede afirmar. */
+  anim(){
+    const cs = getComputedStyle(document.body);
+    const vivas = [];
+    for (const e of $$('.ap.entra,.wCard.entra,.ap.saliendo,.ap.late,#carp')){
+      const st = getComputedStyle(e);
+      const an = st.animationName, dur = st.animationDuration, dl = st.animationDelay;
+      const r = e.getBoundingClientRect();
+      if (an !== 'none' || e.id === 'carp')
+        vivas.push({ q: e.id || e.className.split(' ').slice(0,2).join('.'),
+                     an, dur, dl, op: +(+st.opacity).toFixed(3),
+                     tr: st.transform === 'none' ? 'none' : st.transform.slice(0,44),
+                     x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) });
+    }
+    return { abriendo: document.body.classList.contains('abriendo'),
+             zx: cs.getPropertyValue('--zx').trim(), zy: cs.getPropertyValue('--zy').trim(),
+             capa: +(+getComputedStyle($('#capa')).opacity).toFixed(3),
+             n: vivas.length, vivas: vivas.slice(0, 8) };
+  },
   pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
   menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
   cierra(){ cierraMenu(); return MENU_PKG; },

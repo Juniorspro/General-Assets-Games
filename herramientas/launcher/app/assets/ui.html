@@ -167,8 +167,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    calibración que la de `.vid` ya había descartado, y el dock salía verde.
    Lo único que puede diferir es el desenfoque, y por una razón: el
    desplazamiento ya revuelve el fondo, así que hace falta menos. */
-.vid.refr{backdrop-filter:url(#refr) var(--v-filR);
-  -webkit-backdrop-filter:url(#refr) var(--v-filR)}
+.vid.refr{backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR);
+  -webkit-backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR)}
 
 /* ══════════ BARRA DE ARRIBA ══════════
    ── EN EL TELÉFONO NO SE DIBUJA, PORQUE YA ESTÁ DIBUJADA ──
@@ -272,6 +272,72 @@ body.and #barra{display:none}
   backdrop-filter:blur(12px) saturate(120%) brightness(.92);
   -webkit-backdrop-filter:blur(12px) saturate(120%) brightness(.92);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
+/* ── LA BALDOSA DEL PACK AERO ──
+   Trae su propia foto de fondo, así que es OPACA: el `backdrop-filter` de
+   `.baldosa` sería un desenfoque de lo que hay detrás de algo que tapa lo que
+   hay detrás. Y no es un matiz de estilo: cada baldosa con filtro es una
+   pasada más que el compositor tiene que rehacer cada vez que algo de abajo se
+   mueve — o sea en cada cuadro del agua, treinta veces. */
+.baldosa.aero{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:transparent}
+.glf{width:64%;height:64%;fill:#fff;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.42)) drop-shadow(0 0 1px rgba(0,30,60,.30))}
+.baldosa.aero::after{height:40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0))}
+/* ── SÓLO PARA MEDIR ──
+   Apaga el vidrio de todo lo que lo tiene, que es la única forma de saber qué
+   parte del costo de un cuadro es del agua y qué parte es del compositor
+   rehaciendo treinta desenfoques. No la usa el juego. */
+body.sinVidrio *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinBald .baldosa{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinPanel .vid,body.sinPanel #cajon,body.sinPanel #menu,body.sinPanel .hoja{
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinRefr .vid.refr{backdrop-filter:var(--v-filR)!important;
+  -webkit-backdrop-filter:var(--v-filR)!important}
+body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
+  --v-filR:blur(4px) saturate(112%) brightness(.94)}
+
+/* ══════════ LO CERRADO NO FILTRA NADA ══════════
+   ── EL HALLAZGO MÁS GRANDE DE LA VUELTA, Y NO SE VE EN NINGUNA CAPTURA ──
+   `#cajon`, `#menu`, `#pers`, `#carp`, `#ini`, `#asis` y `#velo` viven SIEMPRE
+   en el documento: cerrados se corren fuera de pantalla con un `transform` o se
+   apagan con `opacity`. Pero un `backdrop-filter` no se apaga porque el
+   elemento esté corrido: el compositor lo sigue calculando. O sea que el
+   launcher estaba haciendo, en cada cuadro y para siempre, un desenfoque de 34
+   píxeles a pantalla completa (el cajón), cinco refractados con
+   `feDisplacementMap` (las cinco hojas) y un desenfoque más (el velo) para
+   dibujar cosas que NO SE VEN.
+   Un id más una clase le gana a dos clases, así que esto le gana a `.vid.refr`
+   sin un solo `!important`. */
+#cajon:not(.on),#velo:not(.on),#menu:not(.on),#pers:not(.on),#carp:not(.on),
+#ini:not(.on),#asis:not(.on),#fondos:not(.on),#aviso:not(.on),
+#cajon:not(.on) .vid,#cajon:not(.on) .baldosa,
+#asis:not(.on) .vid,#pers:not(.on) .vid,#fondos:not(.on) .vid{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE ══════════
+   ── DE DÓNDE SALE ESTE APARTADO ──
+   Medido: un cuadro de agua cuesta 47,6 ms con el vidrio puesto y 20,8 sin él.
+   O sea que el shader NO es el problema — el problema es que un lienzo que
+   repinta la pantalla entera obliga al compositor a REHACER el `backdrop-filter`
+   de cada pieza de vidrio en cada cuadro. Bajarle el radio al desenfoque no
+   sirve (medido: 61,4 ms, o sea peor): lo que cuesta es la pasada, no el radio.
+   Así que lo único que se puede hacer es SACAR pasadas mientras dura la ráfaga,
+   y en el orden que menos se ve. Fuera de la ráfaga el vidrio queda entero.
+     n1  el refractado (el `feDisplacementMap`, que en un WebView se cae del
+         camino de GPU y pasa a hacerse en el procesador): 7,2 ms de 47,6
+     n2  el desenfoque de las piezas grandes, con un tinte más fuerte que lo
+         reemplaza para que el salto se note lo menos posible
+     n3  el desenfoque de las baldosas */
+body.agua.aguaN1 .vid.refr{backdrop-filter:var(--v-filR);
+  -webkit-backdrop-filter:var(--v-filR)}
+body.agua.aguaN1 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:rgba(120,170,215,.30)}
+body.agua.aguaN2 .vid,body.agua.aguaN2 .vid.refr,body.agua.aguaN3 .vid,body.agua.aguaN3 .vid.refr{
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:linear-gradient(150deg,rgba(10,40,78,.50),rgba(6,28,58,.62))}
+body.agua.aguaN3 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:rgba(120,170,215,.36)}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
@@ -563,6 +629,65 @@ body.pers #mascota{z-index:5}
   padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
 
 
+/* ══════════════════════ LAS ANIMACIONES ══════════════════════
+   Pedido: «necesito animaciones, muchas».
+   ── LA REGLA QUE LAS HACE POSIBLES A TODAS ──
+   Sólo se animan `transform` y `opacity`. Son las dos únicas propiedades que el
+   compositor resuelve sin volver a maquetar ni a repintar, y por eso son las
+   únicas que pueden ir a 120 cuadros por segundo con treinta iconos en
+   pantalla. Animar `width`, `top`, `box-shadow` o `filter` sobre una lista es
+   pedirle al navegador que rehaga la página en cada cuadro. */
+
+/* ── LOS ICONOS ENTRAN ESCALONADOS ──
+   Todos a la vez es un bloque que aparece; escalonados de a 18 ms se lee a que
+   la reja se llena. `--i` lo escribe quien pinta, y es el índice del icono. */
+@keyframes apEntra{
+  from{opacity:0;transform:translateY(14px) scale(.82)}
+  to{opacity:1;transform:none}}
+.ap.entra{animation:apEntra .34s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*18ms)}
+/* el cajón trae muchos más, así que el escalón es más corto o la última fila
+   entraría medio segundo tarde */
+#cajLista .ap.entra{animation-duration:.28s;animation-delay:calc(var(--i,0)*11ms)}
+#carpRejilla .ap.entra{animation-delay:calc(var(--i,0)*28ms)}
+
+/* ── APRETAR UN ICONO SE SIENTE ──
+   Sin esto no hay forma de saber si el toque entró hasta que la app abre, que
+   en un teléfono lento es medio segundo de nada. */
+.ap{transition:transform .13s cubic-bezier(.3,1.4,.4,1)}
+.ap:active{transform:scale(.9)}
+body.arrastrando .ap{transition:none}
+
+/* ── ABRIR UNA APP: EL ICONO SE COME LA PANTALLA ──
+   El launcher entero se va hacia el icono que se tocó —de ahí `--zx`/`--zy`— y
+   el icono crece y se apaga. Es la animación que dice «esto se convirtió en
+   aquello» en vez de «la pantalla parpadeó». */
+body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{
+  transform-origin:var(--zx,50%) var(--zy,50%);
+  transition:transform .17s ease-in,opacity .17s ease-in;
+  transform:scale(1.14);opacity:0}
+.ap.saliendo{animation:apSale .17s ease-in forwards}
+@keyframes apSale{to{transform:scale(2.2);opacity:0}}
+
+/* ── LA HOJA DE UNA CARPETA CRECE DESDE SU BALDOSA ──
+   El punto de origen lo escribe `carpOrigen` midiendo dónde está el icono. */
+#carp{will-change:transform,opacity}
+
+/* ── EL WIDGET ENTRA ──
+   Una tarjeta que aparece de golpe empuja la reja de un cuadro al otro. */
+@keyframes wEntra{from{opacity:0;transform:translateY(-10px) scale(.96)}to{opacity:1;transform:none}}
+.wCard.entra{animation:wEntra .3s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*45ms)}
+
+/* ── Y NADA DE ESTO CORRE SI EL SISTEMA PIDE QUIETO ──
+   No es una cortesía: hay gente a la que el movimiento le da náuseas, y el
+   sistema ya tiene la respuesta. */
+@media (prefers-reduced-motion:reduce){
+  .ap.entra,.wCard.entra,.ap.saliendo,.ap.late .baldosa,.ap.destino .baldosa{animation:none}
+  .ap,.ap.fantasma>*,#aviso,#carp{transition-duration:.01s}
+  body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{transition-duration:.01s}
+}
+
 /* ══════════ ARRASTRAR, CARPETAS Y SALPICADURA ══════════ */
 /* el que se está llevando se queda como hueco: sin eso parecen dos */
 .ap.llevada{opacity:.18;pointer-events:none}
@@ -570,13 +695,25 @@ body.pers #mascota{z-index:5}
    Adentro de `#tira` lo recortaría el `overflow` de la página y no podría cruzar
    al dock ni salir del cajón. */
 .ap.fantasma{position:fixed;z-index:9;pointer-events:none;margin:0;
-  transform:scale(1.14);filter:drop-shadow(0 10px 22px rgba(0,30,60,.55));
-  transition:transform .12s ease}
+  left:0;top:0;will-change:transform;
+  filter:drop-shadow(0 10px 22px rgba(0,30,60,.55))}
+/* ── LA ESCALA VA EN EL HIJO ──
+   El `transform` del fantasma lo escribe el dedo cuadro a cuadro; metiendo la
+   escala ahí habría que reescribirla en cada movimiento y no habría transición
+   de la que agarrarse. */
+.ap.fantasma>*{transform:scale(1.04);
+  transition:transform .2s cubic-bezier(.2,1.6,.4,1)}
+.ap.fantasma.vivo>*{transform:scale(1.2)}
 body.arrastrando{cursor:grabbing}
 /* el que recibiría la carpeta: un aro, no un color, porque el icono tiene que
    seguir viéndose para saber con cuál se va a juntar */
 .ap.destino .baldosa{box-shadow:0 0 0 3px var(--acento),0 6px 18px rgba(0,30,60,.45);
-  transform:scale(.9)}
+  animation:recibe .9s ease-in-out infinite}
+@keyframes recibe{0%,100%{transform:scale(.88)}50%{transform:scale(.96)}}
+/* la carpeta recién hecha late una vez: dos iconos que se funden en uno se lee
+   a que uno de los dos se perdió si nada lo marca */
+.ap.late .baldosa{animation:late .6s cubic-bezier(.2,1.4,.35,1)}
+@keyframes late{0%{transform:scale(.72)}55%{transform:scale(1.12)}100%{transform:scale(1)}}
 
 .cBald{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
   gap:calc(var(--ico)*.06);padding:calc(var(--ico)*.12);
@@ -762,9 +899,9 @@ body.arrastrando{cursor:grabbing}
 @media (prefers-reduced-motion:reduce){.sGota,.sAro{animation:none;opacity:0}}
 
 /* ══════════ LA CARPETA ABIERTA ══════════ */
-#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.92);
+#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.30);
   border-radius:26px;padding:14px 14px 18px;opacity:0;pointer-events:none;
-  transition:opacity .2s ease,transform .24s cubic-bezier(.2,.9,.3,1);
+  transition:opacity .18s ease,transform .34s cubic-bezier(.18,1.12,.28,1);
   max-height:70%;display:flex;flex-direction:column;gap:10px}
 #carp.on{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
 #carpCab{display:flex;align-items:center;gap:10px}
@@ -832,9 +969,15 @@ body.arrastrando{cursor:grabbing}
 /* ══════════ AVISO ══════════ */
 #aviso{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
   bottom:calc(var(--ins-b) + 84px);padding:11px 20px;border-radius:22px;
-  font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;
+  /* ── ENTRA DESDE ABAJO ──
+     Apareciendo y desapareciendo en el sitio se lee a error del navegador y no
+     a un aviso. Y va con el `translateX(-50%)` adentro del mismo `transform`,
+     porque son la misma propiedad: escrito aparte, uno pisa al otro. */
+  transform:translate(-50%,14px) scale(.94);
+  transition:opacity .2s,transform .26s cubic-bezier(.2,1.3,.35,1);
   white-space:nowrap}
-#aviso.on{opacity:1}
+#aviso.on{opacity:1;transform:translate(-50%,0) scale(1)}
 
 /* ══════════ CARGANDO ══════════ */
 #carga{position:fixed;inset:0;z-index:7;display:flex;align-items:center;
@@ -1039,6 +1182,14 @@ const FONDOS_ORDEN = ["isla", "pasto", "nube", "burbujas", "arrecife", "atardece
    icono de cada app. Se hacen sin costura espejando un cuarto en los
    cuatro cuadrantes, porque CSS no tiene repeticion espejada. */
 const BALDOSAS = {"agua": "data:image/webp;base64,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", "pasto": "data:image/webp;base64,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", "nube": "data:image/webp;base64,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"};
+/* Los cuatro fondos del pack de iconos Aero, generados con Rezona.
+   Los escribe herramientas/launcher/hornear_iconos.py — no se editan a mano. */
+const ICONOS = {
+  agua: 'data:image/webp;base64,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',
+  cielo: 'data:image/webp;base64,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',
+  pasto: 'data:image/webp;base64,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',
+  atardecer: 'data:image/webp;base64,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',
+};
 /* ══════════════════ EL MUÑECO 3D ══════════════════
    Generado con Rezona a partir del render que mandó el usuario y
    horneado por `hornear_3d.py`. NO es un GLB: es lo que el
@@ -1093,7 +1244,7 @@ const TXT = {
         pSi: 'Sí', pNo: 'No', pChica: 'Chica', pMedia: 'Media', pGrande: 'Grande',
         pQuieto: 'Quieta', pBaila: 'Bailando', pSaluda: 'Saludando', pMando: 'Jugando',
         pDuerme: 'Durmiendo', pIconos: 'Tamaño de los iconos', pColumnas: 'Columnas',
-        pIcono: 'Fondo de los iconos', pAgua: 'Agua', pPasto: 'Pasto', pNube: 'Nubes',
+        pPack: 'Pack Aero de iconos', pIcono: 'Fondo de los iconos', pAgua: 'Agua', pPasto: 'Pasto', pNube: 'Nubes',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
         cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
@@ -1156,7 +1307,7 @@ const TXT = {
         pSi: 'On', pNo: 'Off', pChica: 'Small', pMedia: 'Medium', pGrande: 'Large',
         pQuieto: 'Idle', pBaila: 'Dancing', pSaluda: 'Waving', pMando: 'Playing',
         pDuerme: 'Sleeping', pIconos: 'Icon size', pColumnas: 'Columns',
-        pIcono: 'Icon backdrop', pAgua: 'Water', pPasto: 'Grass', pNube: 'Clouds',
+        pPack: 'Aero icon pack', pIcono: 'Icon backdrop', pAgua: 'Water', pPasto: 'Grass', pNube: 'Clouds',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
         aNombreP: 'Personalize',
         cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
@@ -1219,7 +1370,7 @@ const TXT = {
         pSi: 'Sim', pNo: 'Não', pChica: 'Pequeno', pMedia: 'Médio', pGrande: 'Grande',
         pQuieto: 'Parado', pBaila: 'Dançando', pSaluda: 'Acenando', pMando: 'Jogando',
         pDuerme: 'Dormindo', pIconos: 'Tamanho dos ícones', pColumnas: 'Colunas',
-        pIcono: 'Fundo dos ícones', pAgua: 'Água', pPasto: 'Grama', pNube: 'Nuvens',
+        pPack: 'Pacote de ícones Aero', pIcono: 'Fundo dos ícones', pAgua: 'Água', pPasto: 'Grama', pNube: 'Nuvens',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
         aNombreP: 'Personalizar',
         cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
@@ -1500,6 +1651,47 @@ function refrActualiza(el){
   if (dsp) dsp.setAttribute('scale', String(Math.min(REFR_ESC, Math.min(w, h)*0.42)));
 }
 
+/* ── UNA PIEZA SE REGISTRA SOLA ──
+   `vidrioInit` corre una vez al arrancar, y las tarjetas de widget se crean
+   DESPUÉS: sin esto se quedaban con el `url(#refr)` de respaldo, que
+   `vidrioInit` borra del documento en su última línea. Un `backdrop-filter`
+   que apunta a un filtro inexistente no degrada, se INVALIDA entero — o sea
+   que los widgets estaban sin vidrio y nada lo decía. */
+function vidrioPieza(el){
+  if (!REFR_SOP || el.__rid) return false;
+  const defs = document.querySelector('#svgdefs defs');
+  if (!defs){ el.classList.remove('refr'); return false; }
+  const id = 'rf' + (++REFR_N);
+  el.__rid = id;
+  const f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+  f.setAttribute('id', id);
+  f.setAttribute('x', '0%'); f.setAttribute('y', '0%');
+  f.setAttribute('width', '100%'); f.setAttribute('height', '100%');
+  f.setAttribute('color-interpolation-filters', 'sRGB');
+  const im = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
+  im.setAttribute('id', id + 'i');
+  im.setAttribute('result', 'm');
+  im.setAttribute('preserveAspectRatio', 'none');
+  const dm = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
+  dm.setAttribute('id', id + 'd');
+  dm.setAttribute('in', 'SourceGraphic'); dm.setAttribute('in2', 'm');
+  dm.setAttribute('scale', String(REFR_ESC));
+  dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
+  f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
+  /* ── EL MAPA VA COMO VARIABLE, NO COMO ESTILO EN LÍNEA ──
+     Un estilo en línea le gana a cualquier selector, así que escrito así el
+     filtro NO SE PUEDE apagar desde el CSS — y apagarlo es justo lo que hace
+     falta: cerrada, cada hoja seguía filtrando su pedazo de pantalla en cada
+     cuadro. Medido: 567 mil píxeles de filtro sobre una pantalla de 367 mil,
+     o sea vez y media la pantalla, siempre, para dibujar cosas que no se ven.
+     Con el id en una variable, `.vid.refr` lo arma y cualquier otra regla lo
+     puede apagar por especificidad normal. */
+  el.style.setProperty('--v-mapa', 'url(#' + id + ')');
+  refrActualiza(el);
+  if (REFR_OBS) REFR_OBS.observe(el);
+  return true;
+}
+
 function vidrioInit(){
   const defs = document.querySelector('#svgdefs defs');
   const piezas = $$('.refr');
@@ -1509,39 +1701,482 @@ function vidrioInit(){
     for (const el of piezas) el.classList.remove('refr');
     return false;
   }
-  for (const el of piezas){
-    const id = 'rf' + (++REFR_N);
-    el.__rid = id;
-    const f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
-    f.setAttribute('id', id);
-    f.setAttribute('x', '0%'); f.setAttribute('y', '0%');
-    f.setAttribute('width', '100%'); f.setAttribute('height', '100%');
-    f.setAttribute('color-interpolation-filters', 'sRGB');
-    const im = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
-    im.setAttribute('id', id + 'i');
-    im.setAttribute('result', 'm');
-    im.setAttribute('preserveAspectRatio', 'none');
-    const dm = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
-    dm.setAttribute('id', id + 'd');
-    dm.setAttribute('in', 'SourceGraphic'); dm.setAttribute('in2', 'm');
-    dm.setAttribute('scale', String(REFR_ESC));
-    dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
-    f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
-    /* ── LA CALIBRACIÓN SE LEE, NO SE ESCRIBE ACÁ ──
-       Estaba clavada en esta línea, y como es un estilo en línea le ganaba a la
-       regla `.vid.refr`: la recalibración de la vuelta anterior no llegó nunca
-       a las cuatro piezas grandes, que son justamente todas las que importan.
-       Sale de `--v-filR`, que es de donde la lee el CSS. */
-    const cal = getComputedStyle(document.documentElement)
-                  .getPropertyValue('--v-filR').trim() || 'blur(19px)';
-    const b = 'url(#' + id + ') ' + cal;
-    el.style.backdropFilter = b; el.style.webkitBackdropFilter = b;
-    refrActualiza(el);
-    if (REFR_OBS) REFR_OBS.observe(el);
-  }
+  for (const el of piezas) vidrioPieza(el);
   /* el filtro de plantilla del HTML ya no lo usa nadie */
   const viejo = document.getElementById('refr');
   if (viejo && viejo.parentNode) viejo.parentNode.removeChild(viejo);
+  return true;
+}
+/* ══════════════════════ LOS ICONOS AERO ══════════════════════
+
+   Pedido, con una imagen: el logo de TikTok en BLANCO sobre un fondo de agua
+   con peces y burbujas, y un pack de «más de 50-70 iconos de apps conocidas».
+
+   ── POR QUÉ ESTO ES UN GLIFO Y NO UNA IMAGEN POR APP ──
+   Setenta imágenes generadas serían setenta descargas y unos cuantos megas de
+   base64 para dibujar setenta siluetas planas de un solo color. Y hay algo
+   peor que el peso: una imagen generada NO deletrea ni acierta una marca —eso
+   ya costó un logo que decía «RECEO» en RECREO— así que el logo de cada app
+   saldría parecido y no igual.
+   Lo que sí es exacto es la GEOMETRÍA: cada marca es un puñado de círculos,
+   rectángulos y curvas, y eso se escribe. El pack pesa nueve kilobytes, es
+   nítido en cualquier densidad de pantalla, y se puede recolorear.
+
+   ── EL FONDO SÍ ES GENERADO, Y HAY CUATRO ──
+   Los cuatro salen de Rezona y son lo que la imagen del pedido muestra: agua
+   con peces, cielo con nubes, pasto con rocío y un atardecer. Y NO se reparten
+   al azar: cada uno es una FAMILIA —redes, medios, herramientas, dinero— así
+   que el fondo agrupa, que es información y no adorno.
+
+   ── Y LA APP QUE NO ESTÁ EN LA LISTA NO QUEDA FEA ──
+   Se queda con su icono de verdad sobre la baldosa Aero, que es lo que este
+   launcher ya hacía. O sea que el pack SUMA sobre lo que había: no hay una
+   app 71 que quede peor que antes. */
+
+/* ── EL VOCABULARIO ──
+   Cada glifo es una lista de piezas y cada pieza es una primitiva. Escritas
+   como `path` a mano serían sesenta cadenas ilegibles que nadie va a poder
+   corregir; así una marca son dos o tres renglones que se leen.
+     ['p', d]                 un camino
+     ['c', cx, cy, r]         un disco
+     ['o', cx, cy, r, w]      un aro
+     ['r', x, y, w, h, rx]    un rectángulo redondeado
+     ['l', x1,y1,x2,y2, w]    una línea con puntas redondas
+     ['t', texto, tamaño, y]  una letra
+   Todo en una caja de 0..100. */
+
+const GLIFOS = {
+  /* ── redes y mensajes ── */
+  tiktok:   [['o',42,66,25,17], ['r',62,12,17,54,2],
+             ['p','M79 12 C82 31 90 39 100 41 L100 59 C88 57 80 51 79 45 Z']],
+  whatsapp: [['p','M50 10 A40 40 0 1 0 17 73 L12 92 L32 87 A40 40 0 0 0 50 10 Z'],
+             ['-p','M38 30 C30 37 33 50 42 60 C52 70 65 73 71 66 C73 63 72 60 70 58 L64 52 C62 50 59 51 57 53 L54 57 C49 53 46 49 43 44 L47 40 C49 38 50 35 48 33 L43 28 C41 26 39 27 38 30 Z']],
+  instagram:[['r',14,14,72,72,22], ['-r',24,24,52,52,15],
+             ['o',50,50,15,7], ['c',72,29,5]],
+  facebook: [['c',50,50,42], ['-t','f',74,80]],
+  messenger:[['p','M50 12 C27 12 10 29 10 50 C10 61 15 70 23 77 L23 92 L37 84 C41 85 45 86 50 86 C73 86 90 69 90 50 C90 29 73 12 50 12 Z'],
+             ['-p','M26 58 L45 38 L56 50 L72 38 L54 60 L43 48 Z']],
+  telegram: [['p','M12 48 L88 18 L76 82 L52 64 L40 76 L38 58 Z'], ['-l',38,58,76,32,3]],
+  x:        [['l',20,20,80,80,15], ['l',80,20,20,80,15]],
+  snapchat: [['p','M50 10 C33 10 27 23 28 38 C28 42 27 44 24 44 C20 44 16 42 15 46 C14 51 22 53 25 55 C22 65 14 72 6 74 C5 78 14 80 19 81 C21 86 20 90 26 89 C33 88 39 89 43 92 C47 95 53 95 57 92 C61 89 67 88 74 89 C80 90 79 86 81 81 C86 80 95 78 94 74 C86 72 78 65 75 55 C78 53 86 51 85 46 C84 42 80 44 76 44 C73 44 72 42 72 38 C73 23 67 10 50 10 Z']],
+  discord:  [['p','M36 26 C25 28 16 33 12 40 C6 55 5 70 8 80 C15 86 24 90 32 90 L37 82 C33 81 29 79 26 77 C34 82 44 84 50 84 C56 84 66 82 74 77 C71 79 67 81 63 82 L68 90 C76 90 85 86 92 80 C95 70 94 55 88 40 C84 33 75 28 64 26 L61 33 C55 32 45 32 39 33 Z'],
+             ['-c',36,58,7], ['-c',64,58,7]],
+  reddit:   [['c',50,58,32], ['c',82,28,7], ['l',66,32,79,29,4],
+             ['-c',38,54,6], ['-c',62,54,6], ['-p','M36 70 C42 78 58 78 64 70',5]],
+  pinterest:[['c',50,50,42], ['-t','P',70,74]],
+  linkedin: [['r',12,12,76,76,16], ['-t','in',38,64]],
+  signal:   [['p','M50 8 A42 42 0 1 0 20 78 L10 92 L29 85 A42 42 0 0 0 50 8 Z'],
+             ['-p','M50 22 A28 28 0 1 0 30 70 L24 79 L36 75 A28 28 0 0 0 50 22 Z']],
+  threads:  [['c',50,50,42], ['-t','@',66,72]],
+  wechat:   [['o',38,42,24,8], ['o',66,62,20,8]],
+
+  /* ── medios ── */
+  youtube:  [['r',6,22,88,56,16], ['-p','M40 36 L70 50 L40 64 Z']],
+  spotify:  [['c',50,50,40], ['-p','M26 36 C42 30 62 32 76 40',7],
+             ['-p','M28 51 C42 46 60 48 72 54',6], ['-p','M31 65 C42 61 56 62 66 67',5]],
+  netflix:  [['p','M28 12 L44 12 L72 66 L72 12 L86 12 L86 88 L70 88 L42 34 L42 88 L28 88 Z']],
+  twitch:   [['p','M18 10 L88 10 L88 62 L70 80 L54 80 L40 92 L40 80 L18 80 Z'],
+             ['-r',48,28,7,26,3], ['-r',66,28,7,26,3]],
+  soundcloud:[['l',18,64,18,50,6],['l',30,66,30,42,6],['l',42,66,42,34,6],['l',54,66,54,40,6],
+              ['p','M62 66 L62 34 C78 30 92 42 92 52 C92 61 84 66 76 66 Z'], ['-l',58,30,58,70,4]],
+  vlc:      [['p','M50 12 L60 34 L40 34 Z'], ['p','M34 44 L66 44 L82 88 L18 88 Z']],
+  shazam:   [['o',50,50,36,8], ['p','M40 34 C56 38 60 48 56 60 M44 40 C56 43 58 50 56 58']],
+  deezer:   [['r',14,54,16,10,3],['r',14,70,16,10,3],['r',36,38,16,10,3],['r',36,54,16,10,3],
+             ['r',36,70,16,10,3],['r',58,22,16,10,3],['r',58,38,16,10,3],['r',58,54,16,10,3],
+             ['r',58,70,16,10,3],['r',80,54,16,10,3],['r',80,70,16,10,3]],
+
+  /* ── google y navegadores ── */
+  gmail:    [['p','M10 26 L90 26 L90 78 L10 78 Z'], ['-p','M10 28 L50 58 L90 28',7]],
+  chrome:   [['o',50,50,36,14], ['c',50,50,15]],
+  google:   [['p','M78 44 L50 44 L50 58 L68 58 C64 68 56 72 50 72 A22 22 0 1 1 66 34 L78 22 A38 38 0 1 0 50 88 C74 88 80 68 78 44 Z']],
+  maps:     [['p','M50 8 A28 28 0 0 0 22 36 C22 58 50 92 50 92 C50 92 78 58 78 36 A28 28 0 0 0 50 8 Z'],
+             ['-c',50,36,11]],
+  drive:    [['p','M38 10 L62 10 L92 62 L68 62 Z'], ['p','M34 16 L58 66 L44 90 L8 90 Z'],
+             ['p','M50 68 L92 68 L74 92 L34 92 Z'],
+             ['-l',36,12,64,62,4], ['-l',48,66,94,66,4]],
+  fotos:    [['p','M50 8 C58 8 64 20 64 34 L50 44 Z'], ['p','M92 50 C92 58 80 64 66 64 L56 50 Z'],
+             ['p','M50 92 C42 92 36 80 36 66 L50 56 Z'], ['p','M8 50 C8 42 20 36 34 36 L44 50 Z']],
+  play:     [['p','M16 8 L76 50 L16 92 Z'], ['-l',16,8,16,92,4]],
+  meet:     [['r',10,28,50,44,8], ['p','M68 44 L94 28 L94 72 L68 56 Z']],
+  keep:     [['p','M50 10 A24 24 0 0 0 34 52 L38 62 L62 62 L66 52 A24 24 0 0 0 50 10 Z'],
+             ['r',38,68,24,8,3], ['r',42,80,16,7,3]],
+  traduce:  [['t','A',52,52,26], ['l',56,58,94,58,6], ['l',75,50,75,58,6],
+             ['p','M62 90 C74 84 82 74 86 64 M74 64 C78 76 84 84 92 90']],
+
+  /* ── sistema ── */
+  camara:   [['r',8,26,84,60,12], ['p','M36 26 L42 15 L58 15 L64 26 Z'],
+             ['-c',50,56,19], ['c',50,56,11]],
+  galeria:  [['r',10,18,80,64,10], ['-r',18,26,64,48,4],
+             ['p','M22 70 L42 44 L57 61 L66 51 L79 70 Z'], ['c',68,36,6]],
+  telefono: [['p','M22 12 C14 20 12 32 20 48 C30 68 44 80 62 88 C74 92 84 88 90 78 L74 62 L60 68 C50 60 42 50 36 40 L44 28 Z']],
+  mensajes: [['p','M50 14 C26 14 8 30 8 48 C8 58 14 67 24 73 L20 90 L40 80 C43 81 47 82 50 82 C74 82 92 66 92 48 C92 30 74 14 50 14 Z'],
+             ['-c',32,48,6], ['-c',50,48,6], ['-c',68,48,6]],
+  contactos:[['c',50,32,18], ['p','M14 90 C14 66 30 56 50 56 C70 56 86 66 86 90 Z']],
+  reloj:    [['o',50,50,38,8], ['l',50,26,50,52,6], ['l',50,52,70,58,6]],
+  calc:     [['r',14,8,72,84,10], ['-r',24,18,52,18,4],
+             ['-l',32,52,42,52,6],['-l',58,52,68,52,6],['-l',63,47,63,57,6],
+             ['-l',32,72,42,72,6],['-l',58,68,68,68,5],['-l',58,77,68,77,5]],
+  ajustes:  [['p','M50 8 L58 8 L61 22 L70 26 L82 18 L88 24 L80 36 L84 45 L98 48 L98 56 L84 59 L80 68 L88 80 L82 86 L70 78 L61 82 L58 96 L50 96 L42 96 L39 82 L30 78 L18 86 L12 80 L20 68 L16 59 L2 56 L2 48 L16 45 L20 36 L12 24 L18 18 L30 26 L39 22 L42 8 Z'],
+             ['-c',50,52,15]],
+  archivos: [['p','M8 22 L38 22 L46 32 L92 32 L92 84 L8 84 Z'], ['-l',10,38,90,38,3]],
+  calendario:[['r',10,18,80,74,10], ['-r',18,44,64,40,3],
+              ['l',30,8,30,26,8], ['l',70,8,70,26,8],
+              ['r',24,50,11,11,2],['r',44,50,11,11,2],['r',64,50,11,11,2],
+              ['r',24,68,11,11,2],['r',44,68,11,11,2]],
+  notas:    [['r',16,10,68,80,8], ['-l',30,32,70,32,6],['-l',30,48,70,48,6],['-l',30,64,56,64,6]],
+  clima:    [['c',34,28,17], ['l',34,4,34,10,5],['l',12,17,17,20,5],['l',56,17,51,20,5],
+             ['-p','M34 88 C21 88 13 79 13 69 C13 58 22 51 31 53 C35 41 51 38 60 45 C66 50 69 56 69 62 C80 62 89 68 89 76 C89 84 82 88 74 88 Z'],
+             ['p','M34 86 C22 86 15 78 15 69 C15 59 23 53 31 55 C35 44 50 41 58 47 C64 51 67 57 67 63 C78 63 87 68 87 76 C87 83 80 86 73 86 Z']],
+  musica:   [['c',34,72,15], ['c',74,62,13], ['r',46,18,6,56,2], ['r',80,10,7,54,2],
+             ['p','M46 18 L87 10 L87 26 L46 34 Z']],
+  video:    [['r',8,22,64,56,10], ['-p','M32 38 L56 50 L32 62 Z'], ['p','M78 42 L94 28 L94 72 L78 58 Z']],
+  micro:    [['r',38,10,24,44,12], ['p','M24 46 C24 66 36 76 50 76 C64 76 76 66 76 46'],
+             ['l',50,76,50,90,7], ['l',34,90,66,90,7]],
+  linterna: [['p','M30 10 L70 10 L62 30 L38 30 Z'], ['p','M38 34 L62 34 L60 92 L40 92 Z'],
+             ['-l',50,44,50,58,7]],
+  brujula:  [['o',50,50,38,7], ['p','M68 32 L56 56 L32 68 L44 44 Z']],
+  descargas:[['l',50,12,50,56,9], ['p','M28 46 L50 72 L72 46'], ['l',16,84,84,84,9]],
+  tienda:   [['p','M14 40 L86 40 L91 90 L9 90 Z'],
+             ['p','M35 42 L35 28 A15 15 0 0 1 65 28 L65 42',7]],
+  banco:    [['p','M50 10 L94 34 L6 34 Z'], ['l',22,40,22,74,9],['l',40,40,40,74,9],
+             ['l',60,40,60,74,9],['l',78,40,78,74,9], ['r',8,80,84,10,3]],
+  billetera:[['r',8,24,84,60,10], ['-l',8,44,92,44,4], ['-c',72,64,9]],
+  correo:   [['r',8,24,84,54,8], ['-p','M12 28 L50 56 L88 28',6]],
+  navegador:[['o',50,50,38,7], ['l',13,50,87,50,6], ['p','M50 12 C34 26 34 74 50 88 M50 12 C66 26 66 74 50 88']],
+  juegos:   [['p','M28 30 L72 30 C86 30 94 44 94 58 C94 70 88 76 80 76 C72 76 68 70 62 66 L38 66 C32 70 28 76 20 76 C12 76 6 70 6 58 C6 44 14 30 28 30 Z'],
+             ['-l',22,46,34,46,6],['-l',28,40,28,52,6], ['-c',70,44,6],['-c',80,54,6]],
+  salud:    [['p','M50 88 C20 68 8 52 8 36 A20 20 0 0 1 50 26 A20 20 0 0 1 92 36 C92 52 80 68 50 88 Z']],
+  noticias: [['r',10,20,80,64,6], ['-r',18,28,64,48,3],
+             ['r',24,34,28,20,2], ['l',60,36,80,36,5],['l',60,46,80,46,5],
+             ['l',24,60,80,60,5],['l',24,70,58,70,5]],
+  podcast:  [['r',40,8,20,40,10], ['p','M26 42 C26 60 36 70 50 70 C64 70 74 60 74 42'],
+             ['l',50,70,50,84,6], ['o',50,50,44,5]],
+
+  /* ── plata, compras, transporte ── */
+  mercado:  [['p','M8 18 L22 18 L32 60 L80 60 L90 32 L28 32',7],
+             ['c',38,80,8], ['c',72,80,8]],
+  uber:     [['r',8,8,84,84,20], ['-t','U',52,68]],
+  paypal:   [['p','M40 18 L60 18 C78 18 84 30 79 44 C74 56 62 60 49 60 L42 60 L38 84 L22 84 Z'],
+             ['-p','M46 30 L58 30 C66 30 68 36 66 42 C64 48 57 50 50 50 L44 50 Z']],
+  binance:  [['p','M50 8 L64 22 L50 36 L36 22 Z'], ['p','M22 36 L36 50 L22 64 L8 50 Z'],
+             ['p','M78 36 L92 50 L78 64 L64 50 Z'], ['p','M50 64 L64 78 L50 92 L36 78 Z'],
+             ['p','M50 36 L64 50 L50 64 L36 50 Z']],
+  amazon:   [['t','a',64,58], ['p','M14 70 C34 84 66 86 88 74 M84 66 C91 64 95 66 92 75']],
+
+  /* ── trabajo y juegos ── */
+  steam:    [['o',50,50,40,7], ['c',64,36,13], ['-c',64,36,5], ['o',38,64,12,6], ['l',10,70,32,60,5]],
+  roblox:   [['p','M26 8 L92 24 L76 92 L10 76 Z'], ['-p','M42 38 L64 44 L58 66 L36 60 Z']],
+  minecraft:[['p','M8 30 L50 12 L92 30 L50 48 Z'], ['p','M8 30 L8 70 L50 88 L50 48 Z'],
+             ['p','M92 30 L92 70 L50 88 L50 48 Z'],
+             ['-l',50,48,50,88,3], ['-l',8,30,50,48,3], ['-l',92,30,50,48,3]],
+  dropbox:  [['p','M28 8 L50 23 L28 38 L6 23 Z'], ['p','M72 8 L94 23 L72 38 L50 23 Z'],
+             ['p','M28 44 L50 59 L28 74 L6 59 Z'], ['p','M72 44 L94 59 L72 74 L50 59 Z'],
+             ['p','M32 80 L50 68 L68 80 L50 92 Z']],
+  notion:   [['r',12,12,76,76,10], ['-p','M32 74 L32 30 L44 30 L64 60 L64 30 L74 30 L74 74 L62 74 L42 44 L42 74 Z']],
+  zoom:     [['r',6,26,60,48,14], ['p','M74 42 L94 28 L94 72 L74 58 Z']],
+  teams:    [['r',42,20,52,60,8], ['-t','T',44,64,68], ['c',24,26,15], ['p','M6 46 L42 46 L42 86 L6 86 Z']],
+  vscode:   [['p','M74 8 L94 18 L94 82 L74 92 L28 56 L12 68 L6 60 L22 46 L6 32 L12 24 L28 36 Z'],
+             ['-p','M74 30 L46 50 L74 70 Z']],
+  github:   [['p','M22 20 L36 32 L22 34 Z'], ['p','M78 20 L64 32 L78 34 Z'],
+             ['c',50,52,32], ['-c',38,46,6], ['-c',62,46,6],
+             ['-p','M40 66 C45 71 55 71 60 66',5]],
+  figma:    [['c',34,22,14], ['c',34,50,14], ['c',34,78,14], ['c',62,22,14], ['o',62,50,14,7]],
+  canva:    [['o',50,50,38,8], ['p','M64 38 C58 32 44 34 40 44 C36 54 42 66 52 66 C58 66 62 62 64 58']],
+  wikipedia:[['t','W',62,70], ['l',18,26,82,26,5]],
+
+  /* ── mensajería y varios ── */
+  waze:     [['p','M50 8 C26 8 10 26 10 46 C10 62 20 72 32 76 L26 92 L44 80 L50 80 C74 80 90 64 90 46 C90 26 74 8 50 8 Z'],
+             ['-c',38,42,6], ['-c',62,42,6], ['-p','M36 56 C42 66 58 66 64 56',5]],
+  skype:    [['c',50,50,40], ['-t','S',58,70]],
+  duolingo: [['c',50,52,34], ['-c',38,44,9], ['-c',62,44,9], ['c',38,44,4], ['c',62,44,4],
+             ['-p','M40 64 L50 74 L60 64 Z'], ['p','M22 24 L36 34 M78 24 L64 34']]
+};
+
+/* ── QUÉ APP ES CUÁL ──
+   Un paquete es lo único estable: el nombre cambia con el idioma y con la marca
+   del teléfono. Se prueba primero por paquete —exacto o por pedazo— y recién
+   después por nombre, porque «Cámara» y «Camera» son la misma app y su paquete
+   no lo es. */
+const ICO_PKG = {
+  tiktok:   ['zhiliaoapp.musically', 'ss.android.ugc.trill', 'tiktok'],
+  whatsapp: ['com.whatsapp'],
+  instagram:['com.instagram'],
+  facebook: ['com.facebook.katana', 'com.facebook.lite'],
+  messenger:['com.facebook.orca', 'com.facebook.mlite'],
+  telegram: ['org.telegram', 'org.thunderdog'],
+  x:        ['com.twitter.android'],
+  snapchat: ['com.snapchat'],
+  discord:  ['com.discord'],
+  reddit:   ['com.reddit'],
+  pinterest:['com.pinterest'],
+  linkedin: ['com.linkedin'],
+  signal:   ['org.thoughtcrime.securesms'],
+  threads:  ['com.instagram.barcelona'],
+  wechat:   ['com.tencent.mm'],
+  youtube:  ['com.google.android.youtube', 'com.google.android.apps.youtube'],
+  spotify:  ['com.spotify'],
+  netflix:  ['com.netflix'],
+  twitch:   ['tv.twitch'],
+  soundcloud:['com.soundcloud'],
+  vlc:      ['org.videolan'],
+  shazam:   ['com.shazam'],
+  deezer:   ['deezer.android'],
+  gmail:    ['com.google.android.gm'],
+  chrome:   ['com.android.chrome', 'com.chrome'],
+  google:   ['com.google.android.googlequicksearchbox'],
+  maps:     ['com.google.android.apps.maps'],
+  drive:    ['com.google.android.apps.docs'],
+  fotos:    ['com.google.android.apps.photos'],
+  play:     ['com.android.vending'],
+  meet:     ['com.google.android.apps.tachyon', 'com.google.android.apps.meetings'],
+  keep:     ['com.google.android.keep'],
+  traduce:  ['com.google.android.apps.translate'],
+  camara:   ['camera', 'camera2', 'gcam'],
+  galeria:  ['gallery', 'com.miui.gallery', 'com.sec.android.gallery'],
+  telefono: ['dialer', 'incallui', 'contacts.dialer'],
+  mensajes: ['messaging', 'com.google.android.apps.messaging', 'mms'],
+  contactos:['com.android.contacts', 'com.samsung.android.app.contacts'],
+  reloj:    ['deskclock', 'com.google.android.deskclock', 'clock'],
+  calc:     ['calculator'],
+  ajustes:  ['com.android.settings'],
+  archivos: ['documentsui', 'filemanager', 'com.google.android.apps.nbu.files'],
+  calendario:['calendar'],
+  notas:    ['notes', 'keepnotes', 'notepad'],
+  clima:    ['weather'],
+  musica:   ['music', 'com.google.android.apps.youtube.music'],
+  video:    ['videoplayer', 'com.miui.video', 'videos'],
+  micro:    ['soundrecorder', 'recorder'],
+  linterna: ['flashlight', 'torch'],
+  brujula:  ['compass'],
+  descargas:['downloads', 'providers.downloads'],
+  tienda:   ['store', 'shop'],
+  banco:    ['bank', 'banco', 'bbva', 'santander', 'galicia'],
+  billetera:['wallet', 'com.google.android.apps.walletnfcrel'],
+  correo:   ['com.android.email', 'com.microsoft.office.outlook', 'mail'],
+  navegador:['browser', 'org.mozilla', 'com.opera', 'com.brave'],
+  juegos:   ['games', 'com.google.android.play.games'],
+  salud:    ['health', 'fit', 'salud'],
+  noticias: ['news', 'noticias'],
+  podcast:  ['podcast'],
+  mercado:  ['com.mercadolibre', 'com.mercadopago'],
+  uber:     ['com.ubercab'],
+  paypal:   ['com.paypal'],
+  binance:  ['com.binance'],
+  amazon:   ['com.amazon'],
+  steam:    ['com.valvesoftware.android.steam'],
+  roblox:   ['com.roblox'],
+  minecraft:['com.mojang'],
+  dropbox:  ['com.dropbox'],
+  notion:   ['notion.id'],
+  zoom:     ['us.zoom'],
+  teams:    ['com.microsoft.teams'],
+  vscode:   ['com.termux', 'dev.vscode'],
+  github:   ['com.github'],
+  figma:    ['com.figma'],
+  canva:    ['com.canva'],
+  wikipedia:['org.wikipedia'],
+  waze:     ['com.waze'],
+  skype:    ['com.skype'],
+  duolingo: ['com.duolingo']
+};
+
+/* por nombre, para lo que no matchea por paquete (la app de cámara de cada
+   marca se llama distinto pero se llama «cámara») */
+const ICO_NOM = {
+  camara: ['camara', 'camera', 'appareil photo'],
+  galeria: ['galeria', 'gallery', 'fotos', 'photos', 'imagenes'],
+  telefono: ['telefono', 'phone', 'llamadas', 'dialer'],
+  mensajes: ['mensajes', 'messages', 'sms', 'mensagens'],
+  contactos: ['contactos', 'contacts', 'contatos', 'agenda'],
+  reloj: ['reloj', 'clock', 'relogio', 'alarma', 'alarm'],
+  calc: ['calculadora', 'calculator'],
+  ajustes: ['ajustes', 'settings', 'configuracion', 'configuracoes'],
+  archivos: ['archivos', 'files', 'arquivos', 'explorador'],
+  calendario: ['calendario', 'calendar', 'agenda'],
+  notas: ['notas', 'notes', 'bloc'],
+  clima: ['clima', 'weather', 'tiempo', 'tempo'],
+  musica: ['musica', 'music'],
+  video: ['video', 'videos', 'reproductor'],
+  micro: ['grabadora', 'recorder', 'gravador', 'voz'],
+  linterna: ['linterna', 'flashlight', 'lanterna'],
+  brujula: ['brujula', 'compass', 'bussola'],
+  descargas: ['descargas', 'downloads'],
+  correo: ['correo', 'email', 'mail', 'outlook'],
+  navegador: ['navegador', 'browser', 'internet', 'firefox', 'opera', 'brave', 'edge'],
+  juegos: ['juegos', 'games', 'jogos'],
+  salud: ['salud', 'health', 'saude'],
+  noticias: ['noticias', 'news'],
+  banco: ['banco', 'bank']
+};
+
+/* la familia decide el fondo: agrupar por color es información, repartirlo al
+   azar es sólo ruido de colores */
+const ICO_FAM = {
+  agua:      ['tiktok','whatsapp','telegram','messenger','signal','wechat','discord','x',
+              'linkedin','skype','zoom','teams','mensajes','telefono','contactos','correo','waze'],
+  cielo:     ['youtube','spotify','netflix','twitch','soundcloud','vlc','shazam','deezer','musica',
+              'video','podcast','micro','galeria','fotos','camara','instagram','snapchat','pinterest',
+              'threads','facebook','reddit','noticias'],
+  pasto:     ['chrome','google','maps','drive','keep','traduce','meet','gmail','archivos','ajustes',
+              'reloj','calc','calendario','notas','clima','linterna','brujula','descargas','navegador',
+              'salud','duolingo','wikipedia','notion','github','vscode','figma','canva','dropbox'],
+  atardecer: ['play','tienda','banco','billetera','mercado','uber','paypal','binance','amazon',
+              'steam','roblox','minecraft','juegos']
+};
+
+/* se da vuelta una vez: cincuenta búsquedas lineales por pintada del cajón son
+   cincuenta recorridas de cuatro listas para contestar algo que no cambia */
+const ICO_DE_FAM = (() => {
+  const m = {};
+  for (const f in ICO_FAM) for (const g of ICO_FAM[f]) m[g] = f;
+  return m;
+})();
+
+let ICO_CACHE = {};
+/* apagar el pack no puede dejar la caché puesta: `glifoDe` guarda por paquete y
+   la respuesta correcta cambia con el ajuste */
+function ICO_CACHE_LIMPIA(){ ICO_CACHE = {}; }
+
+function icoNorm(s){
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/* ── QUÉ GLIFO LE TOCA A ESTA APP ──
+   Devuelve la clave o null. Se guarda por paquete porque `pintaInicio` y
+   `pintaCajon` lo preguntan por cada app en cada pintada. */
+function glifoDe(pkg, nombre){
+  if (pkg in ICO_CACHE) return ICO_CACHE[pkg];
+  const p = String(pkg || '').toLowerCase();
+  let g = null;
+  for (const k in ICO_PKG){
+    for (const frag of ICO_PKG[k]){
+      if (p === frag || p.indexOf(frag) >= 0){ g = k; break; }
+    }
+    if (g) break;
+  }
+  if (!g && nombre){
+    const n = icoNorm(nombre);
+    for (const k in ICO_NOM){
+      if (ICO_NOM[k].some(x => n === icoNorm(x))){ g = k; break; }
+    }
+  }
+  ICO_CACHE[pkg] = g;
+  return g;
+}
+
+/* ── EL DIBUJO ──
+   Un SVG y no un lienzo: el mismo nodo sirve a cualquier densidad de pantalla y
+   no hay que redibujarlo al cambiar de tamaño de icono. Las piezas se pintan
+   en blanco con una sombra suave, que es lo único que hace que un glifo blanco
+   se lea también sobre la parte clara del fondo. */
+let GLF_N = 0;
+
+/* ── EL DETALLE ES UN HUECO, NO OTRO TRAZO BLANCO ──
+   Un logo así es UNA silueta blanca: la pantalla de la calculadora, el objetivo
+   de la cámara, los ojos de un bicho y las rayas de un calendario NO son piezas
+   blancas encima de una pieza blanca —eso es un cuadrado blanco y liso, que es
+   exactamente lo que salió en la primera captura— son AGUJEROS. Se arma una
+   máscara: lo que suma va en blanco y lo que resta en negro, en el orden en que
+   están escritos, y al final se pinta un rectángulo blanco con esa máscara
+   puesta. Un tipo de pieza con `-` adelante resta. */
+function glifoPieza(ns, pz, cut){
+  const t = pz[0];
+  const col = cut ? '#000' : '#fff';
+  let e = null;
+  if (t === 'p'){
+    e = document.createElementNS(ns, 'path');
+    e.setAttribute('d', pz[1]);
+    /* un camino que no cierra se dibuja como TRAZO y no como relleno: es lo que
+       permite escribir una ceja o una sonrisa con dos números */
+    if (!/z\s*$/i.test(pz[1])){
+      e.setAttribute('fill', 'none'); e.setAttribute('stroke', col);
+      e.setAttribute('stroke-width', pz[2] || 7); e.setAttribute('stroke-linecap', 'round');
+      e.setAttribute('stroke-linejoin', 'round');
+    } else e.setAttribute('fill', col);
+  } else if (t === 'c'){
+    e = document.createElementNS(ns, 'circle');
+    e.setAttribute('cx', pz[1]); e.setAttribute('cy', pz[2]); e.setAttribute('r', pz[3]);
+    e.setAttribute('fill', col);
+  } else if (t === 'o'){
+    e = document.createElementNS(ns, 'circle');
+    e.setAttribute('cx', pz[1]); e.setAttribute('cy', pz[2]); e.setAttribute('r', pz[3]);
+    e.setAttribute('fill', 'none'); e.setAttribute('stroke', col);
+    e.setAttribute('stroke-width', pz[4]);
+  } else if (t === 'r'){
+    e = document.createElementNS(ns, 'rect');
+    e.setAttribute('x', pz[1]); e.setAttribute('y', pz[2]);
+    e.setAttribute('width', pz[3]); e.setAttribute('height', pz[4]);
+    if (pz[5]){ e.setAttribute('rx', pz[5]); e.setAttribute('ry', pz[5]); }
+    e.setAttribute('fill', col);
+  } else if (t === 'l'){
+    e = document.createElementNS(ns, 'line');
+    e.setAttribute('x1', pz[1]); e.setAttribute('y1', pz[2]);
+    e.setAttribute('x2', pz[3]); e.setAttribute('y2', pz[4]);
+    e.setAttribute('stroke', col); e.setAttribute('stroke-width', pz[5]);
+    e.setAttribute('stroke-linecap', 'round');
+  } else if (t === 't'){
+    e = document.createElementNS(ns, 'text');
+    e.setAttribute('x', pz[4] == null ? 50 : pz[4]);
+    e.setAttribute('y', pz[3] == null ? 72 : pz[3]);
+    e.setAttribute('text-anchor', 'middle');
+    e.setAttribute('font-size', pz[2]);
+    e.setAttribute('font-family', 'Segoe UI,system-ui,sans-serif');
+    e.setAttribute('font-weight', '700');
+    e.setAttribute('fill', col);
+    e.textContent = pz[1];
+  }
+  return e;
+}
+
+function glifoSvg(g){
+  const gl = GLIFOS[g]; if (!gl) return null;
+  const ns = 'http://www.w3.org/2000/svg';
+  const s = document.createElementNS(ns, 'svg');
+  s.setAttribute('viewBox', '0 0 100 100');
+  s.setAttribute('class', 'glf');
+  const id = 'gm' + (++GLF_N);
+  const defs = document.createElementNS(ns, 'defs');
+  const mk = document.createElementNS(ns, 'mask');
+  mk.setAttribute('id', id);
+  /* en el sistema del viewBox: sin esto la máscara se recorta a la caja del
+     objeto y las piezas que rozan el borde se pierden */
+  mk.setAttribute('maskUnits', 'userSpaceOnUse');
+  mk.setAttribute('x', '-4'); mk.setAttribute('y', '-4');
+  mk.setAttribute('width', '108'); mk.setAttribute('height', '108');
+  for (const pz of gl){
+    const cut = String(pz[0]).charAt(0) === '-';
+    const e = glifoPieza(ns, cut ? [String(pz[0]).slice(1)].concat(pz.slice(1)) : pz, cut);
+    if (e) mk.appendChild(e);
+  }
+  defs.appendChild(mk); s.appendChild(defs);
+  const r = document.createElementNS(ns, 'rect');
+  r.setAttribute('x', '-4'); r.setAttribute('y', '-4');
+  r.setAttribute('width', '108'); r.setAttribute('height', '108');
+  r.setAttribute('fill', '#fff');
+  r.setAttribute('mask', 'url(#' + id + ')');
+  s.appendChild(r);
+  return s;
+}
+
+/* ── LA BALDOSA AERO DE UNA APP CONOCIDA ──
+   Devuelve true si la pintó. El fondo va como `background-image` del propio
+   nodo y el glifo va adentro: así el recorte redondeado, la sombra y el brillo
+   siguen siendo los de `.baldosa` y no hay una segunda familia de baldosas que
+   mantener. */
+function icoAero(b, pkg, nombre){
+  if (!lee('icoPack', 1)) return false;
+  const g = glifoDe(pkg, nombre); if (!g) return false;
+  const fam = ICO_DE_FAM[g] || 'agua';
+  const fondo = (typeof ICONOS !== 'undefined' && ICONOS[fam]) ? ICONOS[fam] : null;
+  if (!fondo) return false;
+  const sv = glifoSvg(g); if (!sv) return false;
+  b.classList.add('aero');
+  b.style.backgroundImage = 'url(' + fondo + ')';
+  b.style.backgroundSize = 'cover';
+  b.style.backgroundPosition = 'center';
+  b.appendChild(sv);
   return true;
 }
 /* ══════════════════════ EL MUÑECO 3D ══════════════════════
@@ -2022,6 +2657,25 @@ function letraBaldosa(b, a){
   b.textContent = letraDe(a.n);
 }
 
+/* ── LA ENTRADA ESCALONADA ──
+   Marca a los hijos con su índice y con la clase que dispara la animación. El
+   escalón lo pone el CSS: acá sólo viaja el número, porque el índice es lo
+   único que el JS sabe y la duración es una decisión de diseño.
+   ── Y NO SE REANIMA LO QUE YA ESTABA ──
+   `pintaInicio` corre en cada soltada de un arrastre: escalonando siempre, la
+   reja entera volvería a entrar cada vez que se mueve un icono, que se lee a
+   parpadeo y no a animación. */
+function entraLista(cont){
+  if (!cont) return 0;
+  let i = 0;
+  for (const n of cont.children){
+    if (n.classList.contains('pag')){ i += entraLista(n); continue; }
+    n.style.setProperty('--i', i++);
+    n.classList.remove('entra'); void n.offsetWidth; n.classList.add('entra');
+  }
+  return i;
+}
+
 function nodoApp(a, conNombre){
   const d = document.createElement('div');
   d.className = 'ap'; d.dataset.p = a.p;
@@ -2048,6 +2702,11 @@ function nodoApp(a, conNombre){
     b.style.backgroundImage = 'linear-gradient(160deg,#7fe3ff,#4f7fd8)';
     b.style.font = '600 30px system-ui';
     b.textContent = '✧';
+  } else if (icoAero(b, a.p, a.n)){
+    /* el pack Aero: el logo en blanco sobre el fondo de su familia. Se prueba
+       ANTES que el icono del sistema porque es justo lo que el pedido dice —el
+       logo de TikTok en blanco sobre agua— y porque el que no está en el pack
+       cae solo al camino de siempre. */
   } else if (HAY_AND){
     const im = document.createElement('img');
     im.src = iconoUrl(a.p); im.alt = ''; im.draggable = false;
@@ -2072,6 +2731,7 @@ function calculaFilas(){
   return FILAS;
 }
 
+let INICIO_VISTO = false, DOCK_VISTO = false;
 function pintaInicio(){
   calculaFilas();
   const porPag = COLS*FILAS;
@@ -2100,6 +2760,7 @@ function pintaInicio(){
   tira.style.width = (NPAG*100) + '%';
   $$('.pag').forEach(p => { p.style.flexBasis = (100/NPAG) + '%'; });
   ponPagina(PAG, false);
+  if (!INICIO_VISTO){ INICIO_VISTO = true; entraLista(tira); }
 
 }
 function ponPagina(n, suave){
@@ -2125,6 +2786,7 @@ function pintaDock(){
      dock que se envuelve no es un dock. Sus columnas son cuántas apps tiene. */
   d.style.setProperty('--cols', Math.max(1, d.children.length));
   d.style.visibility = DOCK.length ? 'visible' : 'hidden';
+  if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
 }
 
 /* ── LA LETRA DE UNA APP ──
@@ -2200,6 +2862,9 @@ function pintaCajon(filtro){
     l.appendChild(w);
   }
   $('#cajTit').textContent = q ? (v.length + ' \u00b7 ' + T('todas')) : T('todas');
+  /* acá SÍ se escalona siempre: la lista se rehace al abrir el cajón y en cada
+     letra que se escribe, o sea que cada pintada es una lista nueva */
+  entraLista(l);
   pintaRiel();
 }
 
@@ -2279,6 +2944,43 @@ function aLaWeb(q){
 }
 
 /* ══════════ ABRIR, FIJAR, MENÚ ══════════ */
+/* ── ABRIR UNA APP ES UN MOVIMIENTO, NO UN CORTE ──
+   El icono crece hasta llenar la pantalla y el resto del launcher se va con él:
+   es lo que hace cualquier escritorio de Android y es lo que separa «se abrió
+   algo» de «la pantalla parpadeó». Son 170 ms — el sistema tarda más que eso
+   en dibujar el primer cuadro de la app, así que no se le pone freno a nadie.
+   Y se limpia SIEMPRE: al volver del sistema, por si el arranque falló, y con
+   un plazo de red, porque un launcher que se queda desvanecido está roto. */
+let ZOOM_T = null;
+function zoomLimpia(){
+  if (ZOOM_T){ clearTimeout(ZOOM_T); ZOOM_T = null; }
+  document.body.classList.remove('abriendo');
+  const v = $('.ap.saliendo'); if (v) v.classList.remove('saliendo');
+}
+function abreZoom(pkg, nodo){
+  if (pkg === ASIS_PKG || pkg === PERS_PKG || pkg === INI_PKG || !HAY_AND){
+    abre(pkg); return;
+  }
+  zoomArranca(pkg, nodo);
+}
+/* El plano del arranque, sin la guarda del puente. Va aparte por una razón de
+   medición y no de estilo: en el banco no hay Android, así que `abreZoom` sale
+   por el atajo y la animación no corre NUNCA. Con la parte de adentro suelta,
+   la sonda ejerce el mismo código que el dedo en el teléfono. */
+function zoomArranca(pkg, nodo){
+  zoomLimpia();
+  if (nodo){
+    const r = nodo.getBoundingClientRect();
+    /* de dónde crece: el centro del icono, en fracción de pantalla */
+    document.body.style.setProperty('--zx', ((r.left + r.width/2)/innerWidth*100).toFixed(2) + '%');
+    document.body.style.setProperty('--zy', ((r.top + r.height/2)/innerHeight*100).toFixed(2) + '%');
+    nodo.classList.add('saliendo');
+  }
+  document.body.classList.add('abriendo');
+  ZOOM_T = setTimeout(() => { ZOOM_T = null; abre(pkg); }, 170);
+  setTimeout(zoomLimpia, 1400);
+}
+
 function abre(pkg){
   vibra(10);
   /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
@@ -2876,6 +3578,11 @@ function arranca(){
 
   fondoInit();
   vidrioInit();
+  /* ── VOLVER DE UNA APP LIMPIA EL ZOOM ──
+     La animación de abrir deja el launcher escalado y transparente: si el
+     arranque falla o el sistema vuelve sin recargar la página, se queda así. */
+  addEventListener('visibilitychange', () => { if (!document.hidden) zoomLimpia(); });
+  addEventListener('pageshow', zoomLimpia);
   /* la reja se restituye antes de pintar nada: puesta después, el primer cuadro
      sale con los iconos de fábrica y salta de tamaño a la vista */
   ponReja(lee('ico', 60), lee('cols', 4));
@@ -3762,6 +4469,16 @@ const PERS = [
      51.ª — y encima serían marcas ajenas metidas en el APK. Lo que sí vale para
      TODAS es el TRATAMIENTO: el icono de verdad de cada app, que es su logo, con
      el fondo Aero detrás. */
+  /* ── EL PACK AERO ──
+     Se puede apagar, y no es una concesión: el pack redibuja el logo de las
+     apps conocidas, y hay quien prefiere ver el icono con el que la app se
+     reconoce en cualquier otro teléfono. Apagado, todo vuelve al icono del
+     sistema sobre la baldosa Aero, que es lo que había. */
+  { tit: 'pPack', tipo: 'ops',
+    ops: () => [[1, T('pSi')], [0, T('pNo')]],
+    lee: () => +lee('icoPack', 1),
+    pon: v => { guarda('icoPack', +v); ICO_CACHE_LIMPIA(); rejaRepinta(); } },
+
   { tit: 'pIcono', tipo: 'ops',
     ops: () => [['agua', T('pAgua')], ['pasto', T('pPasto')], ['nube', T('pNube')],
                 ['no', T('pNo')]],
@@ -3984,76 +4701,95 @@ function iniInit(){
 }
 /* ══════════════════════ EL AGUA ══════════════════════
 
-   Pedido: «al tocar la pantalla en un espacio libre de no app tener efecto de
-   agua, algo así como Samsung tenía».
+   Pedido de la vuelta 121: «al tocar la pantalla en un espacio libre tener
+   efecto de agua, algo así como Samsung tenía». Reporte de esta vuelta: «se
+   laguea mucho el toque de agua, mejoralo mucho».
 
-   ── ANILLOS ANALÍTICOS Y NO UNA SIMULACIÓN DE CAMPO ──
-   Lo canónico sería un campo de alturas en dos texturas que se van pasando la
-   pelota con la ecuación de onda. Eso compra dos cosas —interferencia entre
-   ondas y rebote contra los bordes— y cuesta dos destinos de render, texturas
-   de coma flotante (que en WebGL1 son una extensión que puede no estar) y
-   precisión de ocho bits si no está. Sobre una FOTO de fondo, en un anillo que
-   vive segundo y medio, ninguna de las dos cosas se ve. Un puñado de ondas
-   sumadas —cada una un seno radial que se abre y se apaga— se lee igual, no
-   guarda estado, y no depende de una sola extensión.
+   ── DÓNDE ESTABA EL COSTO, MEDIDO ──
+   Con render por software y el lienzo a 367 mil píxeles: 13,4 ms por cuadro con
+   UNA onda y 23,5 con seis. Y ése es el número del banco, que corre a densidad
+   1; en un teléfono de densidad 3 el lienzo iba a `min(dpr,2)` = 824×1784, o
+   sea **cuatro veces** ese relleno. Un cuadro de 120 Hz dura 8,3 ms.
 
-   ── Y SÓLO SE DIBUJA MIENTRAS HAY ONDA VIVA ──
-   Este launcher tiene el fondo como una foto estática justamente para que el
-   compositor la suba a la GPU una vez y no la vuelva a tocar (vuelta 116). Un
-   lienzo rellenando la pantalla entera a sesenta cuadros por segundo tiraría
-   eso a la basura. El lienzo se enciende con el primer toque y se apaga cuando
-   la última onda se murió. */
+   Las tres cosas que lo arreglan, y ninguna se ve:
+
+   1. EL LIENZO DEJA DE SER OPACO. Antes dibujaba la foto ENTERA desplazada, así
+      que tenía que cubrir la pantalla a resolución de aparato o se notaba que
+      la foto se ablandaba al encenderlo. Ahora sale con alfa: donde no hay onda
+      el alfa es CERO y lo que se ve es el fondo de CSS de siempre, sin copia.
+      Eso hace exacta la parte de afuera POR CONSTRUCCIÓN —ya no hay nada que
+      medir— y, sobre todo, deja bajar la resolución sin pagar nada: lo único
+      que se dibuja a media resolución es una franja de foto que la propia onda
+      ya está desplazando y desenfocando.
+
+   2. LA FOTO SE ACHICA UNA VEZ, ANTES DE SUBIRLA. Muestreando una foto de 824
+      de ancho en un lienzo de 247 hay un factor 3,3 de reducción, y en WebGL1
+      una textura que no es potencia de dos NO PUEDE tener mipmaps: eso es
+      aliasing y moaré, o sea justo lo que un efecto de agua no puede tener. La
+      foto se dibuja una vez en un lienzo 2D del tamaño del de agua —con el
+      «cover» y la deriva ya metidos adentro— y lo que se sube es eso. De paso
+      la subida a la GPU pasa de 1,2 millones de texeles a 132 mil, que es lo
+      que hace que el PRIMER toque deje de tironear.
+
+   3. Y CADA ONDA SE SALTEA DONDE NO LLEGA. El sobre es `exp(-|x|/58)`: a 300
+      píxeles del frente vale 0,006, o sea nada. Un `if` antes de las dos
+      exponenciales, el seno y el coseno saltea el bucle entero para la enorme
+      mayoría de los píxeles, y con una ventana suave para que no quede un canto
+      dibujado en el radio del corte. */
 
 const AGUA = {
   el: null, gl: null, prog: null, tex: null, buf: null,
-  on: false, listo: false, roto: false,
-  ondas: [], t0: 0, ultimo: [0, 0], u: {}
+  bake: null, bctx: null, onda: null,
+  on: false, listo: false, roto: false, quieto: false,
+  res: 0, niv: 0, fijo: false, mide: 0, t0: 0, ondas: [], ultimo: [0, 0], u: {}
 };
 
-/* ── LOS NÚMEROS, Y DE DÓNDE SALEN ──
-   El frente cruza un teléfono de 412 px de ancho en poco menos de medio
-   segundo, que es lo que hace que se lea a golpe en el agua y no a mancha que
-   crece. El largo de onda son 70 px: más corto se convierte en moaré contra el
-   pixelado de la foto, más largo deja de leerse a onda. */
 const AGUA_VEL = 900, AGUA_ANCHO = 58, AGUA_LARGO = 70;
-/* ── SEIS ONDAS Y NO OCHO ──
-   El lienzo rellena la pantalla entera y cada onda es una vuelta más del bucle
-   POR PÍXEL. Medido con render por software —o sea el peor caso imaginable, la
-   GPU de un teléfono no se parece a esto—: 6,7 ms con una, 10,2 con cuatro y
-   16,2 con ocho. Ocho sólo pasa arrastrando el dedo, y con seis la estela se
-   lee igual. */
 const AGUA_AMORT = 2.0, AGUA_AMP = 26, AGUA_VIDA = 1.7, AGUA_MAX = 6;
-/* cuánto se apaga con la distancia, y cuánta luz agarra la pendiente. Los dos
-   salieron de una cuenta y no de tantear: con 0,0055 y 0,085 el desplazamiento
-   en la cresta medía 1,3 px y el brillo 4 de 255 — o sea que el anillo se
-   estaba dibujando y en la captura no se veía. */
 const AGUA_LEJOS = 0.0022, AGUA_LUZ = 0.30;
-/* mientras se arrastra el dedo, una onda cada tantos píxeles: la estela */
 const AGUA_PASO = 44;
+/* dónde se corta cada onda y dónde empieza a apagarse la ventana que evita el
+   canto. exp(-230/58) = 0,019 — o sea que lo que se recorta ya no se ve. */
+const AGUA_CORTE = 300, AGUA_SUAVE = 230;
+/* qué tan rápido el alfa llega a 1: en la cresta de una onda viva el sobre vale
+   ~0,2, así que multiplicando por 5 el centro de la franja queda opaco y el
+   borde se funde solo contra el fondo */
+const AGUA_ALFA = 5.0;
+
+/* ── LA ESCALERA DE RESOLUCIÓN ──
+   Fracción del píxel de CSS, no del de aparato. 0,60 en un teléfono de densidad
+   3 es la undécima parte del relleno que había. Se baja sola si un cuadro se
+   pasa del presupuesto y se guarda, así que el segundo toque ya arranca donde
+   corresponde a ESTE aparato. */
+const AGUA_ESC = [0.60, 0.60, 0.46, 0.34];
+/* 8,3 ms es un cuadro de 120 Hz; se deja un pelo de aire porque el compositor
+   también tiene que hacer lo suyo */
+const AGUA_PRESU = 7.0;
+/* ── LA ESCALERA DE CALIDAD, Y POR QUÉ NO ES SÓLO RESOLUCIÓN ──
+   Medido con el lienzo ya achicado once veces: 47,6 ms por cuadro con el vidrio
+   puesto y 20,8 sin él. El shader no era el problema. Lo que cuesta es que un
+   lienzo que repinta la pantalla entera obliga al compositor a rehacer el
+   `backdrop-filter` de cada pieza de vidrio en cada cuadro, y eso no baja
+   achicando el lienzo — baja sacando pasadas.
+   Cada escalón saca la que menos se ve, y sólo MIENTRAS la ráfaga dura. */
+const AGUA_NIV = ['', 'aguaN1', 'aguaN2', 'aguaN3'];
 
 const AGUA_VS = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
 
-/* El desplazamiento se calcula en PÍXELES de pantalla y recién después se lleva
-   a coordenadas de la foto: así el anillo mide lo mismo en cualquier aparato,
-   que es lo que no pasaría trabajando en UV. */
 const AGUA_FS = `precision mediump float;
 uniform sampler2D uTex;
-uniform vec2 uRes;          /* el lienzo, en PÍXELES DE APARATO */
-uniform float uEsc;         /* cuántos px de aparato mide uno de CSS */
-uniform vec2 uA, uB;        /* px de pantalla -> UV de la foto, con el cover y
-                               la deriva del fondo ya metidos adentro */
+uniform vec2 uRes;          /* el lienzo, en sus propios píxeles */
+uniform float uEsc;         /* cuántos px del lienzo mide uno de CSS */
 uniform vec4 uOnda[${AGUA_MAX}];   /* x, y, cuándo empezó, fuerza */
 uniform float uT;
 uniform int uN;
 void main(){
-  /* ── TODO SE CUENTA EN PÍXELES DE CSS ──
-     gl_FragCoord viene en píxeles DE APARATO: en un teléfono de densidad 2 va
-     de 0 a 824 mientras el toque llegó en 0..412. Sin dividir, el anillo nace
-     en otro sitio y mide la mitad — y en el banco, con densidad 1, eso no se
-     ve nunca. */
-  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uEsc;
+  /* el eje y del lienzo va para arriba y el de la pantalla para abajo */
+  vec2 pd = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 p = pd / uEsc;                 /* píxeles de CSS: la cuenta de la onda es
+                                         la misma en cualquier aparato */
   vec2 desp = vec2(0.);
-  float pend = 0.;
+  float pend = 0., amp = 0.;
   for (int i = 0; i < ${AGUA_MAX}; i++){
     if (i >= uN) break;
     vec4 o = uOnda[i];
@@ -4062,23 +4798,29 @@ void main(){
     vec2 d = p - o.xy;
     float r = length(d) + 0.001;
     float x = r - t * ${AGUA_VEL.toFixed(1)};
-    /* el sobre: una campana pegada al frente, que se apaga con el tiempo y con
-       la distancia — una onda que llega igual de fuerte al otro extremo de la
-       pantalla no se lee a agua */
-    float env = exp(-abs(x) / ${AGUA_ANCHO.toFixed(1)}) * exp(-t * ${AGUA_AMORT.toFixed(2)})
-              * (1.0 / (1.0 + r * ${AGUA_LEJOS})) * o.w;
+    float ax = abs(x);
+    /* ── EL SALTEO ──
+       Todo lo de abajo son dos exponenciales, un seno, un coseno y una
+       división. A más de 300 px del frente el sobre vale 0,006: se saltea. */
+    if (ax > ${AGUA_CORTE.toFixed(1)}) continue;
+    float env = exp(-ax / ${AGUA_ANCHO.toFixed(1)}) * exp(-t * ${AGUA_AMORT.toFixed(2)})
+              * (1.0 / (1.0 + r * ${AGUA_LEJOS})) * o.w
+              * smoothstep(${AGUA_CORTE.toFixed(1)}, ${AGUA_SUAVE.toFixed(1)}, ax);
     float k = 6.2831853 / ${AGUA_LARGO.toFixed(1)};
     desp += (d / r) * sin(x * k) * env;
     pend += cos(x * k) * env;
+    amp = max(amp, env);
   }
-  vec2 q = p + desp * ${AGUA_AMP.toFixed(1)};
-  vec3 c = texture2D(uTex, q * uA + uB).rgb;
-  /* ── LA LUZ ES LO QUE HACE QUE SE LEA A RELIEVE ──
-     Sin ella el anillo es la foto corrida y se ve como un defecto de vidrio. La
-     pendiente de la onda enciende una cara y apaga la otra, que es exactamente
-     lo que hace una arruga en el agua bajo el sol. */
+  /* ── DONDE NO HAY ONDA NO HAY LIENZO ──
+     Alfa cero: lo que se ve es el fondo de CSS, sin una copia de por medio. */
+  float a = clamp(amp * ${AGUA_ALFA.toFixed(1)}, 0.0, 1.0);
+  if (a < 0.004){ gl_FragColor = vec4(0.0); return; }
+  vec2 q = (pd + desp * ${AGUA_AMP.toFixed(1)} * uEsc) / uRes;
+  vec3 c = texture2D(uTex, q).rgb;
+  /* la pendiente de la onda enciende una cara y apaga la otra, que es lo que
+     hace una arruga en el agua bajo el sol */
   c += vec3(pend) * ${AGUA_LUZ.toFixed(2)};
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(c * a, a);   /* alfa premultiplicado */
 }`;
 
 function aguaCompila(gl, tipo, src){
@@ -4088,17 +4830,15 @@ function aguaCompila(gl, tipo, src){
   return s;
 }
 
-/* ── SE ARMA CON EL PRIMER TOQUE, NO AL ARRANCAR ──
-   Un segundo contexto de WebGL, su programa y la subida de la foto son trabajo
-   que un launcher no tiene por qué pagar antes de que alguien toque el fondo. */
 function aguaArma(){
   if (AGUA.listo || AGUA.roto) return AGUA.listo;
   try {
     const cv = document.createElement('canvas');
     cv.id = 'agua';
     FONDO_EL.parentNode.insertBefore(cv, FONDO_EL.nextSibling);
-    const gl = cv.getContext('webgl', { alpha: false, antialias: false,
+    const gl = cv.getContext('webgl', { alpha: true, antialias: false,
                                         depth: false, stencil: false,
+                                        premultipliedAlpha: true,
                                         preserveDrawingBuffer: false });
     if (!gl) throw new Error('sin webgl');
     const pr = gl.createProgram();
@@ -4124,13 +4864,19 @@ function aguaArma(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, FONDO_IMG);
     gl.uniform1i(gl.getUniformLocation(pr, 'uTex'), 0);
+    gl.clearColor(0, 0, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   /* premultiplicado */
 
     AGUA.el = cv; AGUA.gl = gl; AGUA.prog = pr; AGUA.tex = tx; AGUA.buf = b;
+    AGUA.onda = new Float32Array(AGUA_MAX*4);       /* se reusa: una tirada por
+                                                       cuadro es basura regalada */
+    AGUA.bake = document.createElement('canvas');
+    AGUA.bctx = AGUA.bake.getContext('2d');
+    AGUA.niv = Math.min(+lee('aguaNiv', 0) | 0, AGUA_NIV.length - 1);
+    AGUA.res = AGUA_ESC[AGUA.niv];
     AGUA.u = { res: gl.getUniformLocation(pr, 'uRes'),
-               a: gl.getUniformLocation(pr, 'uA'),
-               b: gl.getUniformLocation(pr, 'uB'),
                onda: gl.getUniformLocation(pr, 'uOnda'),
                esc: gl.getUniformLocation(pr, 'uEsc'),
                t: gl.getUniformLocation(pr, 'uT'),
@@ -4140,32 +4886,15 @@ function aguaArma(){
   } catch (e) { AGUA.roto = true; return false; }
 }
 
-/* ── AL CAMBIAR DE FONDO HAY QUE VOLVER A SUBIR LA TEXTURA ──
-   La foto se sube a la GPU UNA vez, al armar el lienzo. Cambiando el fondo sin
-   esto, el agua seguiría refractando la foto vieja: no falla, dibuja otra cosa.
-   Y el mapeo de «cover» también cambia, porque la foto nueva puede tener otra
-   proporción — eso lo recalcula `aguaMapa` en cada toque, así que alcanza con
-   la textura. */
-function aguaRefondo(){
-  if (!AGUA.listo || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
-  const gl = AGUA.gl;
-  try {
-    gl.bindTexture(gl.TEXTURE_2D, AGUA.tex);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, FONDO_IMG);
-    return true;
-  } catch (e) { return false; }
-}
-
-/* ── EL MAPA DE PANTALLA A FOTO SE MIDE, NO SE SUPONE ──
-   La foto entra con `background-size:cover` y encima el elemento lleva la
-   deriva —una escala y un corrimiento que la animación de CSS mueve durante
-   veinticuatro segundos—. Calculando el cover a mano y olvidándose de la
-   deriva, el lienzo dibuja la misma foto CORRIDA respecto de la de abajo y el
-   momento de encenderlo se ve como un salto. La matriz se lee del propio
-   elemento. */
+/* ── LA FOTO SE HORNEA AL TAMAÑO DEL LIENZO ──
+   Reproduce exactamente lo que el CSS está mostrando: el «cover» centrado más
+   la deriva —una escala y un corrimiento que la animación mueve durante
+   veinticuatro segundos— leída del propio elemento. Si esto no coincidiera, el
+   borde de la franja de onda mostraría un salto contra el fondo de abajo.
+   Devuelve lo medido para que se pueda comprobar desde afuera. */
 function aguaMapa(){
-  const W = innerWidth, H = innerHeight;
+  if (!AGUA.listo || !FONDO_IMG || !FONDO_IMG.naturalWidth) return null;
+  const W = innerWidth, H = innerHeight, r = AGUA.res;
   const iw = FONDO_IMG.naturalWidth, ih = FONDO_IMG.naturalHeight;
   let s = 1, ex = 0, ey = 0;
   try {
@@ -4173,64 +4902,76 @@ function aguaMapa(){
     if (m.a) { s = m.a; ex = m.e; ey = m.f; }
   } catch (e) {}
   const cx = W/2, cy = H/2;
-  /* cover, centrado */
   const esc = Math.max(W/iw, H/ih), dw = iw*esc, dh = ih*esc;
   const tlx = (W - dw)/2, tly = (H - dh)/2;
-  /* pantalla -> elemento -> uv, todo junto en una escala y un corrimiento */
-  /* pantalla = C + s*(elemento - C) + E  ⇒  elemento = (pantalla - C - E)/s + C,
-     y de ahí a UV con el cover. Queda una escala y un corrimiento por eje. */
-  const ax = 1/(s*dw), ay = 1/(s*dh);
-  const bx = (cx - (cx + ex)/s - tlx)/dw;
-  const by = (cy - (cy + ey)/s - tly)/dh;
-  AGUA.gl.uniform2f(AGUA.u.a, ax, ay);
-  AGUA.gl.uniform2f(AGUA.u.b, bx, by);
-  return { s: s, ex: ex, ey: ey, esc: esc, ax: ax, bx: bx, by: by };
+  const c = AGUA.bake, g = AGUA.bctx;
+  const bw = AGUA.el.width, bh = AGUA.el.height;
+  if (c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, bw, bh);
+  g.scale(r, r);                       /* de píxeles de CSS a los del lienzo */
+  g.translate(cx + ex, cy + ey); g.scale(s, s); g.translate(-cx, -cy);
+  g.drawImage(FONDO_IMG, tlx, tly, dw, dh);
+  const gl = AGUA.gl;
+  gl.bindTexture(gl.TEXTURE_2D, AGUA.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, c);
+  return { s: s, ex: ex, ey: ey, esc: esc, res: r, bake: [bw, bh] };
+}
+
+/* al cambiar de fondo se vuelve a hornear; el mapa lo recalcula `aguaMapa` en
+   cada encendido, así que alcanza con marcar que hay que rehacerlo */
+function aguaRefondo(){
+  if (!AGUA.listo) return false;
+  if (AGUA.on) aguaMapa();
+  return true;
 }
 
 function aguaMide(){
   const cv = AGUA.el, W = innerWidth, H = innerHeight;
-  /* el lienzo va a resolución del aparato topada: lo que se dibuja acá es una
-     foto desenfocada por el propio desplazamiento, así que rellenar más píxeles
-     no compra un solo detalle */
-  const r = Math.min(devicePixelRatio || 1, 2);
-  const w = Math.round(W*r), h = Math.round(H*r);
+  const w = Math.max(1, Math.round(W*AGUA.res)), h = Math.max(1, Math.round(H*AGUA.res));
   if (cv.width !== w || cv.height !== h){
     cv.width = w; cv.height = h;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
   }
   AGUA.gl.viewport(0, 0, w, h);
   AGUA.gl.uniform2f(AGUA.u.res, w, h);
-  AGUA.gl.uniform1f(AGUA.u.esc, r);
-  return r;
+  AGUA.gl.uniform1f(AGUA.u.esc, AGUA.res);
+  return AGUA.res;
 }
 
-/* ── LO QUE ES «ESPACIO LIBRE» ──
-   Todo lo que no sea una app, el widget, la búsqueda, el dock o una hoja
-   abierta. Con el cajón abierto no hay fondo que ondular. */
+/* ── LO QUE ES «ESPACIO LIBRE» ── */
 function aguaLibre(t){
   if (CAJON || !t || !t.closest) return false;
-  if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador'))
+  if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador,#wid,#fondos,#carp'))
     return false;
   return true;
 }
 
+/* `matchMedia` se pregunta UNA vez y no en cada toque: es una consulta de
+   estilo, y acá se dispara sesenta veces por segundo arrastrando el dedo */
+function aguaQuieto(){
+  if (AGUA.quieto === false || AGUA.quieto === true) return AGUA.quieto;
+  try { AGUA.quieto = matchMedia('(prefers-reduced-motion:reduce)').matches; }
+  catch (e) { AGUA.quieto = false; }
+  return AGUA.quieto;
+}
+
 function aguaToca(x, y, fuerza){
-  if (AGUA.roto) return false;
-  if (matchMedia('(prefers-reduced-motion:reduce)').matches) return false;
+  if (AGUA.roto || aguaQuieto()) return false;
   if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
   if (!aguaArma()) return false;
   const ahora = performance.now()/1000;
   if (!AGUA.on){
     AGUA.t0 = ahora;
-    /* la deriva se congela mientras dura: el lienzo lleva la matriz de ESTE
-       instante metida adentro, y con la animación corriendo la foto de abajo se
-       iría separando de la de arriba. Veinticuatro segundos de vuelta, uno y
-       medio de pausa: no se ve. */
+    /* la deriva se congela mientras dura: la foto horneada lleva la matriz de
+       ESTE instante metida adentro */
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.el.classList.add('on');
-    AGUA.on = true;
-    aguaMide();
-    aguaMapa();
+    document.body.classList.add('agua');
+    if (AGUA_NIV[AGUA.niv]) document.body.classList.add(AGUA_NIV[AGUA.niv]);
+    AGUA.on = true; AGUA.mide = 0; AGUA_ULT = 0;
+    aguaMide(); aguaMapa();
     requestAnimationFrame(aguaPaso);
   }
   AGUA.ondas.push({ x: x, y: y, t: ahora, f: fuerza == null ? 1 : fuerza });
@@ -4239,6 +4980,34 @@ function aguaToca(x, y, fuerza){
   return true;
 }
 
+/* ── LA RESOLUCIÓN SE AJUSTA A ESTE APARATO, MIDIENDO ──
+   Un número fijo no puede estar bien en los dos extremos. Se miran los primeros
+   cuadros de la ráfaga —los primeros dos se descartan, que ahí entran la
+   compilación del shader y la primera subida de textura— y si el promedio se
+   pasa del presupuesto se baja un escalón y se guarda. */
+function aguaNivel(n){
+  AGUA.niv = Math.max(0, Math.min(n, AGUA_NIV.length - 1));
+  const c = document.body.classList;
+  for (const k of AGUA_NIV) if (k) c.remove(k);
+  if (AGUA_NIV[AGUA.niv]) c.add(AGUA_NIV[AGUA.niv]);
+  const r = AGUA_ESC[AGUA.niv];
+  if (r !== AGUA.res){ AGUA.res = r; aguaMide(); aguaMapa(); }
+}
+
+function aguaAjusta(ms){
+  if (AGUA.fijo) return;
+  AGUA.mide++;
+  /* los dos primeros cuadros llevan la compilación del shader y la primera
+     subida de textura: medirlos es concluir que el aparato es lento cuando lo
+     único lento fue empezar */
+  if (AGUA.mide < 3 || AGUA.mide > 10) return;
+  if (ms <= AGUA_PRESU) return;
+  if (AGUA.niv >= AGUA_NIV.length - 1) return;
+  aguaNivel(AGUA.niv + 1);
+  guarda('aguaNiv', AGUA.niv);
+}
+
+let AGUA_ULT = 0;
 function aguaPaso(){
   if (!AGUA.on) return;
   const gl = AGUA.gl, ahora = performance.now()/1000;
@@ -4247,17 +5016,25 @@ function aguaPaso(){
   if (!v.length){
     AGUA.on = false;
     AGUA.el.classList.remove('on');
+    /* el vidrio vuelve entero: la escalera de calidad vale sólo mientras el
+       lienzo está repintando */
+    document.body.classList.remove('agua');
+    for (const k of AGUA_NIV) if (k) document.body.classList.remove(k);
     FONDO_EL.style.animationPlayState = '';
     return;
   }
-  const buf = new Float32Array(AGUA_MAX*4);
+  const t0 = performance.now();
+  const buf = AGUA.onda;
   for (let i = 0; i < v.length; i++){
     buf[i*4] = v[i].x; buf[i*4+1] = v[i].y; buf[i*4+2] = v[i].t; buf[i*4+3] = v[i].f;
   }
   gl.uniform4fv(AGUA.u.onda, buf);
   gl.uniform1i(AGUA.u.n, v.length);
   gl.uniform1f(AGUA.u.t, ahora);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (AGUA_ULT) aguaAjusta(t0 - AGUA_ULT);
+  AGUA_ULT = t0;
   requestAnimationFrame(aguaPaso);
 }
 
@@ -4269,9 +5046,8 @@ function aguaInit(){
     aguaToca(e.clientX, e.clientY, 1);
   }, { capture: true, passive: true });
   /* ── LA ESTELA ──
-     Samsung dejaba un rastro al arrastrar, y es lo que separa «un efecto que se
-     dispara» de «agua». Una onda cada 44 px y más flojita: con una por evento
-     de puntero serían sesenta por segundo y se empastan. */
+     Una onda cada 44 px y más flojita: con una por evento de puntero serían
+     sesenta por segundo y se empastan. */
   addEventListener('pointermove', e => {
     if (!apretado || !AGUA.on) return;
     if (Math.hypot(e.clientX - ux, e.clientY - uy) < AGUA_PASO) return;
@@ -4345,14 +5121,22 @@ function nodoCarpeta(x, i){
 
 /* ══════════ LEVANTAR ══════════ */
 
+/* ── EL FANTASMA SE MIDE UNA VEZ ──
+   `getBoundingClientRect` obliga al navegador a recalcular la maquetación antes
+   de contestar. Estaba dentro del `pointermove`, o sea que arrastrar el dedo
+   vaciaba la maquetación ciento veinte veces por segundo para averiguar un
+   ancho que no cambia. Se mide al levantar y se guarda. */
 function arrFantasma(el, x, y){
   const g = el.cloneNode(true);
   g.className = 'ap fantasma';
   const r = el.getBoundingClientRect();
   g.style.width = r.width + 'px';
-  g.style.left = (x - r.width/2) + 'px';
-  g.style.top = (y - r.height/2) + 'px';
+  g.__w = r.width; g.__h = r.height;
+  g.style.transform = 'translate3d(' + (x - r.width/2) + 'px,' + (y - r.height/2) + 'px,0)';
   document.body.appendChild(g);
+  /* un cuadro después entra la clase que lo agranda: puesta en el mismo, la
+     transición no tiene de dónde partir y el fantasma aparece ya crecido */
+  requestAnimationFrame(() => g.classList.add('vivo'));
   return g;
 }
 
@@ -4360,6 +5144,7 @@ function arrLevanta(orig, desde, i, x, y){
   if (ARR) return;
   vibra(20);
   const el = orig;
+  arrRejaMide();
   ARR = { desde: desde, i: i, el: el, x: x, y: y, sobre: null, movio: false,
           g: arrFantasma(el, x, y) };
   el.classList.add('llevada');
@@ -4375,10 +5160,21 @@ function arrLevanta(orig, desde, i, x, y){
 /* ══════════ DÓNDE CAERÍA ══════════ */
 
 /* la celda del escritorio bajo el dedo, o null si el dedo no está sobre la reja */
-function arrCelda(x, y){
+/* ── LA REJA SE MIDE AL LEVANTAR Y NO EN CADA MOVIMIENTO ──
+   Es el mismo motivo que el fantasma: la página no cambia de sitio mientras
+   dura el arrastre, así que preguntarle su rectángulo por cuadro es vaciar la
+   maquetación para recibir siempre lo mismo. */
+let ARR_REJA = null;
+function arrRejaMide(){
   const pg = $$('#tira .pag')[PAG];
-  if (!pg) return null;
-  const r = pg.getBoundingClientRect();
+  ARR_REJA = pg ? { r: pg.getBoundingClientRect(), pg: pg } : null;
+  return ARR_REJA;
+}
+
+function arrCelda(x, y){
+  const q = ARR_REJA || arrRejaMide();
+  if (!q) return null;
+  const pg = q.pg, r = q.r;
   if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
   const cw = r.width/COLS, ch = ALTO_AP;
   const c = cl(Math.floor((x - r.left)/cw), 0, COLS - 1);
@@ -4389,13 +5185,16 @@ function arrCelda(x, y){
 
 /* si el dedo está lo bastante encima de un icono que YA está ahí, soltarlo hace
    carpeta en vez de acomodar. El radio es una fracción de la celda y no un
-   número de píxeles: con iconos de 40 y de 92 tiene que sentirse igual. */
-function arrEncima(x, y){
+   número de píxeles: con iconos de 40 y de 92 tiene que sentirse igual.
+   ── `salvo` NO ES UN LUJO ──
+   Antes esto leía `ARR` para no hacer carpeta consigo mismo, y en `arrSuelta`
+   `ARR` ya vale null: la guarda no corría nunca. Va como parámetro, que además
+   es lo que permite preguntarlo ANTES de sacar el icono de la lista. */
+function arrEncima(x, y, salvo){
   const c = arrCelda(x, y);
   if (!c) return null;
-  const lista = INICIO;
-  if (c.i >= lista.length) return null;
-  if (ARR && ARR.desde === 'inicio' && c.i === ARR.i) return null;
+  if (c.i >= INICIO.length) return null;
+  if (salvo != null && c.i === salvo) return null;
   const d = Math.hypot(x - c.cx, y - c.cy);
   return d < Math.min(c.cw, c.ch)*ARR_CARPETA ? c.i : null;
 }
@@ -4413,7 +5212,7 @@ function arrEnDock(x, y){
 function arrSuelta(x, y){
   if (!ARR) return;
   const a = ARR;
-  ARR = null;
+  ARR = null; ARR_REJA = null;
   document.body.classList.remove('arrastrando');
   if (a.g) a.g.remove();
   a.el.classList.remove('llevada');
@@ -4421,32 +5220,46 @@ function arrSuelta(x, y){
 
   if (!a.movio){ arrCancela(a); return; }
 
-  /* lo que se saca de su sitio se saca ANTES de decidir a dónde va: si no, un
-     movimiento dentro del mismo escritorio se cuenta dos veces */
+  /* ── DÓNDE CAE SE DECIDE ANTES DE SACARLO, Y ÉSE ERA EL DEFECTO ──
+     Reporte: «al querer hacer carpetas se buguea». Estaba escrito al revés: se
+     sacaba el icono de `INICIO` y RECIÉN DESPUÉS se preguntaba sobre cuál se
+     había soltado. Sacar el elemento `i` corre un lugar a TODOS los de más
+     adelante, así que arrastrar el segundo icono encima del quinto hacía
+     carpeta con el que era el SEXTO, y soltarlo encima del último no hacía
+     carpeta ninguna —`c.i >= INICIO.length` con la lista ya un elemento más
+     corta—. Se mira primero y se saca después. */
+  const dk = arrEnDock(x, y);
+  const enc = dk >= 0 ? null
+            : arrEncima(x, y, a.desde === 'inicio' ? a.i : null);
+
   let item = null;
   if (a.desde === 'inicio') item = INICIO.splice(a.i, 1)[0];
   else if (a.desde === 'dock') item = DOCK.splice(a.i, 1)[0];
   else item = a.i;                                   /* del cajón: es un paquete */
   if (item == null) return;
+  /* y el destino se corrige por el hueco que acaba de dejar: sacar el 2 deja al
+     que era 5 en el lugar 4 */
+  const j = (enc == null) ? null
+          : (a.desde === 'inicio' && enc > a.i ? enc - 1 : enc);
 
-  const dk = arrEnDock(x, y);
   if (dk >= 0){
     /* el dock tiene cuatro sitios: el quinto sale al escritorio, que es mejor
        que perderlo sin decir nada */
     if (DOCK.length >= 4){ INICIO.push(item); avisa(T('cDockLleno')); }
     else DOCK.splice(Math.min(dk, DOCK.length), 0, item);
+  } else if (j != null && !esCarpeta(item)){
+    arrHaceCarpeta(j, item);
   } else {
-    const j = arrEncima(x, y);
-    if (j != null && !esCarpeta(item)) arrHaceCarpeta(j, item);
-    else {
-      const c = arrCelda(x, y);
-      const dest = c ? Math.min(c.i, INICIO.length) : INICIO.length;
-      INICIO.splice(dest, 0, item);
-    }
+    const c = arrCelda(x, y);
+    const dest = c ? Math.min(c.i, INICIO.length) : INICIO.length;
+    INICIO.splice(dest, 0, item);
   }
   guarda('inicio', INICIO); guarda('dock', DOCK);
   pintaInicio(); pintaDock();
   salpica(x, y);
+  /* la carpeta recién hecha late una vez: sin eso, dos iconos que se funden en
+     uno se lee a que uno de los dos se perdió */
+  if (j != null && !esCarpeta(item)) arrLate(j);
 }
 
 function arrCancela(a){
@@ -4454,12 +5267,24 @@ function arrCancela(a){
   const p = a.desde === 'cajon' ? a.i
           : itemPkg(a.desde === 'dock' ? DOCK[a.i] : INICIO[a.i]);
   if (p) abreMenu(p, a.y);
-  else if (a.desde === 'inicio' && esCarpeta(INICIO[a.i])) carpAbre(a.i);
+  else if (a.desde === 'inicio' && esCarpeta(INICIO[a.i])) carpAbre(a.i, 'inicio', a.el);
 }
 
 /* ── HACER UNA CARPETA ──
    Soltar una app encima de otra: las dos se van adentro de una carpeta nueva
    con el nombre de la que estaba. Soltarla encima de una carpeta la mete. */
+/* el icono `j` del escritorio, si está a la vista */
+function arrNodo(j){
+  const pg = $$('#tira .pag')[Math.floor(j/(COLS*FILAS))];
+  return pg ? pg.children[j - Math.floor(j/(COLS*FILAS))*COLS*FILAS] : null;
+}
+
+function arrLate(j){
+  const n = arrNodo(j); if (!n) return;
+  n.classList.remove('late'); void n.offsetWidth; n.classList.add('late');
+  setTimeout(() => n.classList.remove('late'), 620);
+}
+
 function arrHaceCarpeta(j, item){
   const y = INICIO[j];
   if (esCarpeta(y)){
@@ -4538,11 +5363,11 @@ function arrEngancha(el, desde){
     if (performance.now() - t0 < ARR_LARGO){
       const nodo = e.target.closest ? e.target.closest('.ap') : null;
       if (!nodo) return;   /* soltar en el vacío antes del plazo no hace nada */
-      if (desde === 'cajon'){ if (nodo.dataset.p) abre(nodo.dataset.p); return; }
+      if (desde === 'cajon'){ if (nodo.dataset.p) abreZoom(nodo.dataset.p, nodo); return; }
       const i = +nodo.dataset.i;
       const it = desde === 'dock' ? DOCK[i] : INICIO[i];
-      if (esCarpeta(it)) carpAbre(i, desde);
-      else if (it) abre(it);
+      if (esCarpeta(it)) carpAbre(i, desde, nodo);
+      else if (it) abreZoom(it, nodo);
     }
   });
   el.addEventListener('pointercancel', suelta);
@@ -4559,9 +5384,11 @@ function arrInit(){
     if (!ARR) return;
     if (!ARR.movio && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > ARR_MUEVE) ARR.movio = true;
     ARR.x = e.clientX; ARR.y = e.clientY;
-    const r = ARR.g.getBoundingClientRect();
-    ARR.g.style.left = (e.clientX - r.width/2) + 'px';
-    ARR.g.style.top = (e.clientY - r.height/2) + 'px';
+    /* `transform` y no `left`/`top`: lo resuelve el compositor y no obliga a
+       recalcular la maquetación de la página en cada movimiento del dedo */
+    const g = ARR.g;
+    g.style.transform = 'translate3d(' + (e.clientX - g.__w/2) + 'px,'
+                      + (e.clientY - g.__h/2) + 'px,0)';
     arrPinta(e.clientX, e.clientY);
     arrBorde(e.clientX);
   }, { passive: true });
@@ -4575,7 +5402,7 @@ function arrInit(){
    sorpresa y deshacerla cuesta dos gestos */
 function arrPinta(x, y){
   $$('.ap.destino').forEach(e => e.classList.remove('destino'));
-  const j = arrEncima(x, y);
+  const j = arrEncima(x, y, ARR && ARR.desde === 'inicio' ? ARR.i : null);
   if (j == null) return;
   const pg = $$('#tira .pag')[PAG];
   const n = pg && pg.children[j - PAG*COLS*FILAS];
@@ -4593,6 +5420,7 @@ function arrBorde(x){
   if (ahora - ARR_PAG < 620) return;
   ARR_PAG = ahora;
   ponPagina(PAG + (der ? 1 : -1));
+  arrRejaMide();                     /* cambió la página: la reja es otra */
 }
 
 /* ══════════════════════ LA CARPETA ABIERTA ══════════════════════
@@ -4606,11 +5434,30 @@ let CARP_I = -1, CARP_DE = 'inicio';
 function carpLista(){ return CARP_DE === 'dock' ? DOCK : INICIO; }
 function carpItem(){ const l = carpLista(); return CARP_I >= 0 ? l[CARP_I] : null; }
 
-function carpAbre(i, desde){
+/* ── LA CARPETA SE ABRE DESDE SU BALDOSA ──
+   Pedido: «necesito que se abra así como transición». Una hoja que aparece en
+   el medio de la pantalla no dice de dónde salió; creciendo desde el icono que
+   se tocó, la carpeta y su baldosa son la misma cosa.
+   El punto de origen se mide con `offsetHeight` y no con el rectángulo: un
+   `getBoundingClientRect` incluye el `scale(.92)` del estado cerrado, así que
+   devolvería el origen de la hoja encogida y la animación saldría corrida. */
+function carpOrigen(nodo){
+  const c = $('#carp');
+  if (!nodo || !c) return;
+  const r = nodo.getBoundingClientRect();
+  const h = c.offsetHeight, W = innerWidth, H = innerHeight;
+  const ox = (r.left + r.width/2) - 12;          /* la hoja va de 12 a W−12 */
+  const oy = (r.top + r.height/2) - (H/2 - h/2); /* y centrada en vertical */
+  c.style.transformOrigin = Math.round(cl(ox, 0, W - 24)) + 'px '
+                          + Math.round(cl(oy, 0, h)) + 'px';
+}
+
+function carpAbre(i, desde, nodo){
   CARP_I = i; CARP_DE = desde || 'inicio';
   if (!esCarpeta(carpItem())) return;
   cierraMenu(); asisCierra(); persCierra(); iniCierra();
   carpPinta();
+  carpOrigen(nodo || arrNodo(i));
   $('#carp').classList.add('on');
   $('#velo').classList.add('on');
 }
@@ -4629,7 +5476,7 @@ function carpPinta(){
   for (const p of x.c){
     const a = POR_PKG[p]; if (!a) continue;
     const nd = nodoApp(a);
-    nd.addEventListener('click', () => { carpCierra(); abre(p); });
+    nd.addEventListener('click', () => { carpCierra(); abreZoom(p, nd); });
     /* mantener adentro de la carpeta la saca: es la única forma de deshacer una
        carpeta sin arrastrar, que en una hoja no se puede */
     let t = null;
@@ -4640,6 +5487,7 @@ function carpPinta(){
     nd.addEventListener('pointercancel', q);
     c.appendChild(nd);
   }
+  entraLista(c);
 }
 
 function carpSaca(p){
@@ -5053,7 +5901,7 @@ const WIDGETS = {
       const a = esCarpeta(p) ? itemApps(p)[0] : POR_PKG[p];
       if (!a) continue;
       const d = nodoApp(a, false);
-      d.onclick = () => abre(a.p);
+      d.onclick = () => abreZoom(a.p, d);
       r.appendChild(d);
     }
   }},
@@ -5214,12 +6062,17 @@ function widArma(){
   WID = widLee();
   const c = $('#wid');
   c.textContent = '';
+  let n = 0;
   for (const k of WID){
     const W = WIDGETS[k];
     const d = document.createElement('div');
     d.className = 'vid refr wCard';
+    /* la tarjeta nace después de `vidrioInit`, así que se registra ella */
+    if (typeof vidrioPieza === 'function') vidrioPieza(d);
     d.dataset.k = k;
     d.style.minHeight = W.alto + 'px';
+    d.style.setProperty('--i', n++);
+    d.classList.add('entra');
     c.appendChild(d);
     W.arma(d);
   }
@@ -5608,6 +6461,10 @@ window.__A = {
      salió el icono, que es lo único que puede estar mal. */
   arr(){
     return { llevando: !!ARR, desde: ARR && ARR.desde,
+             /* con qué APPS quedó cada carpeta, no sólo cuántas: el defecto de
+                los índices corridos hacía carpetas del tamaño correcto y con la
+                app equivocada adentro, o sea invisible contando */
+             contenido: INICIO.map(x => esCarpeta(x) ? x.c.slice() : x),
              inicio: INICIO.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
              dock: DOCK.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
              fantasmas: document.querySelectorAll('.fantasma').length,
@@ -5733,6 +6590,41 @@ window.__A = {
   ponInicio(v){ INICIO = v.slice(); guarda('inicio', INICIO); pintaInicio(); return this.arr(); },
   ponDock(v){ DOCK = v.slice(); guarda('dock', DOCK); pintaDock(); return this.arr(); },
 
+  /* ── LA HOJA DE CONTACTOS DE LOS ICONOS ──
+     Ochenta glifos no se pueden juzgar de a uno en el cajón: hay que verlos
+     juntos y al tamaño al que se ven. Arma una reja con todos, con su nombre
+     debajo, encima de un velo oscuro. Es una sonda: no la usa el launcher. */
+  glifosHoja(cols){
+    const c = cols || 8;
+    let d = document.getElementById('glfHoja');
+    if (d) d.remove();
+    d = document.createElement('div');
+    d.id = 'glfHoja';
+    d.style.cssText = 'position:fixed;inset:0;z-index:60;background:#0b2440;'
+      + 'display:grid;grid-template-columns:repeat(' + c + ',1fr);gap:6px;'
+      + 'padding:8px;overflow:auto;align-content:start';
+    const ns = Object.keys(GLIFOS);
+    for (const g of ns){
+      const w = document.createElement('div');
+      w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px';
+      const b = document.createElement('div');
+      b.className = 'baldosa';
+      b.style.cssText = '--ico:' + Math.floor(380/c) + 'px';
+      const fam = ICO_DE_FAM[g] || 'agua';
+      b.classList.add('aero');
+      b.style.backgroundImage = 'url(' + ICONOS[fam] + ')';
+      b.style.backgroundSize = 'cover';
+      const sv = glifoSvg(g); if (sv) b.appendChild(sv);
+      const t = document.createElement('div');
+      t.textContent = g;
+      t.style.cssText = 'color:#fff;font:500 7px system-ui;text-align:center';
+      w.appendChild(b); w.appendChild(t); d.appendChild(w);
+    }
+    document.body.appendChild(d);
+    return { n: ns.length, cols: c };
+  },
+  glifosCierra(){ const d = document.getElementById('glfHoja'); if (d) d.remove(); return true; },
+
   /* ── EL AGUA ──
      Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
      FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
@@ -5741,7 +6633,7 @@ window.__A = {
     const c = AGUA.el;
     return { listo: AGUA.listo, roto: AGUA.roto, on: AGUA.on,
              ondas: AGUA.ondas.length,
-             clase: c ? c.className : null,
+             clase: c ? c.className : null, niv: AGUA.niv,
              lienzo: c ? [c.width, c.height] : null,
              fondo: { ok: FONDO_OK, w: FONDO_IMG ? FONDO_IMG.naturalWidth : 0,
                       h: FONDO_IMG ? FONDO_IMG.naturalHeight : 0 },
@@ -5768,48 +6660,68 @@ window.__A = {
     return this.agua().ondas;
   },
   aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
-  /* ── LA COPIA PELADA ──
-     Enciende el lienzo SIN una sola onda: lo que queda en pantalla tiene que
-     ser, píxel por píxel, la misma foto que dibujaba el CSS. Ésa es la única
-     forma de saber si encenderlo se ve como un salto, y no se puede medir con
-     una onda viva porque entonces todo lo que cambia se puede achacar a ella.
-     La deriva se congela: entre dos capturas la foto se mueve sola y esa
-     diferencia no es del agua. */
-  aguaCopia(v){
-    FONDO_EL.style.animationPlayState = 'paused';
-    if (!v){ AGUA.ondas = []; if (AGUA.el) AGUA.el.classList.remove('on'); AGUA.on = false; return 'off'; }
+  aguaNivel(n){ if (n != null){ if (!aguaArma()) return 'roto'; aguaNivel(n); } return this.aguaRes(); },
+  aguaRes(){ return { niv: AGUA.niv, clases: document.body.className,
+                      res: AGUA.res, lienzo: AGUA.el ? [AGUA.el.width, AGUA.el.height] : null,
+                      px: AGUA.el ? AGUA.el.width*AGUA.el.height : 0,
+                      guardado: lee('aguaNiv', 0),
+                      bake: AGUA.bake ? [AGUA.bake.width, AGUA.bake.height] : null }; },
+  /* ── EL LIENZO ES TRANSPARENTE DONDE NO HAY ONDA ──
+     Antes esto era una copia de la foto entera y había que medir si era fiel.
+     Ahora el alfa es cero fuera de la franja, así que lo que hay que comprobar
+     es otra cosa y es exacta: cuántos píxeles del lienzo tienen alfa. Con el
+     lienzo encendido y sin una sola onda tiene que dar CERO — y ése es el
+     número que dice que encenderlo no puede verse. */
+  aguaAlfa(x, y, edad){
     if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    AGUA.gl.uniform1i(AGUA.u.n, 0);
-    AGUA.gl.uniform1f(AGUA.u.t, 0);
-    AGUA.gl.drawArrays(AGUA.gl.TRIANGLES, 0, 3);
-    return 'on';
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
+    const n = (x == null) ? 0 : 1;
+    if (n){ b[0] = x; b[1] = y; b[2] = 0; b[3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    gl.uniform1f(AGUA.u.t, edad || 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const w = AGUA.el.width, h = AGUA.el.height;
+    const px = new Uint8Array(w*h*4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let con = 0, opaco = 0, max = 0;
+    for (let i = 3; i < px.length; i += 4){
+      const a = px[i];
+      if (a > 2) con++;
+      if (a > 250) opaco++;
+      if (a > max) max = a;
+    }
+    return { total: w*h, conAlfa: con, opacos: opaco, alfaMax: max,
+             pct: +(100*con/(w*h)).toFixed(2) };
   },
   /* ── UNA ONDA CONGELADA EN EL INSTANTE QUE SE PIDA ──
      El bucle sigue corriendo entre la sonda y la captura, así que una foto
-     sacada «justo después de tocar» es de cualquier instante menos ése: medido,
-     con 120 ms de espera el frente ya había cruzado la pantalla y en la captura
-     no se veía una sola onda. Acá se dibuja a mano con la edad pedida y no se
-     agenda otro cuadro. */
+     sacada «justo después de tocar» es de cualquier instante menos ése. Acá se
+     dibuja a mano con la edad pedida y no se agenda otro cuadro. */
   aguaFoto(x, y, edad){
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    const gl = AGUA.gl, b = new Float32Array(AGUA_MAX*4);
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
     b[0] = x; b[1] = y; b[2] = 0; b[3] = 1;
     gl.uniform4fv(AGUA.u.onda, b);
     gl.uniform1i(AGUA.u.n, 1);
     gl.uniform1f(AGUA.u.t, edad);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    return { x: x, y: y, edad: edad, frente: Math.round(edad*900) };
+    return { x: x, y: y, edad: edad, frente: Math.round(edad*900),
+             res: AGUA.res, px: AGUA.el.width*AGUA.el.height };
   },
-  /* cuánto cuesta un cuadro de agua, medido dibujando de verdad con las ondas
-     que se le pidan: el lienzo rellena la pantalla entera, así que es el único
-     número que decide si esto se puede tener */
+  /* cuánto cuesta el dibujo del lienzo, con las ondas que se le pidan */
   aguaCosto(n, cuadros){
     if (!aguaArma()) return 'roto';
     const gl = AGUA.gl;
@@ -5817,13 +6729,14 @@ window.__A = {
     AGUA.on = false; AGUA.ondas = [];
     AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
-    const b = new Float32Array(AGUA_MAX*4);
+    const b = AGUA.onda; b.fill(0);
     for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
     gl.uniform4fv(AGUA.u.onda, b);
     gl.uniform1i(AGUA.u.n, n);
     const c = cuadros || 60, t0 = performance.now();
     for (let i = 0; i < c; i++){
       gl.uniform1f(AGUA.u.t, 0.3 + i*0.001);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     /* `finish()` no sincroniza nada acá: con el render por software la cola se
@@ -5832,14 +6745,84 @@ window.__A = {
     const px1 = new Uint8Array(4);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
     const ms = (performance.now() - t0)/c;
-    return { ondas: n, cuadros: c, ms: +ms.toFixed(3),
+    return { ondas: n, cuadros: c, ms: +ms.toFixed(3), res: AGUA.res,
              px: AGUA.el.width*AGUA.el.height };
+  },
+  /* ── CUÁNTO CUESTA UN CUADRO DE VERDAD ──
+     No el `drawArrays` solo: el cuadro ENTERO, con el compositor haciendo lo
+     suyo. `niv` fija el escalón de calidad y CONGELA el ajuste automático — sin
+     eso la propia medición baja el escalón a mitad de la corrida y las cuatro
+     filas terminan midiendo lo mismo. Con `niv` en −1 se apaga todo el vidrio,
+     que es el control: sin él, «el agua cuesta X» no dice de quién es el costo. */
+  /* ── QUIÉN ESTÁ FILTRANDO AHORA MISMO ──
+     Cada `backdrop-filter` vivo es una pasada que el compositor rehace cada vez
+     que algo de abajo se mueve. Enumerarlos es la única forma de saber cuáles
+     quedaron encendidos: leyendo el CSS no se ve, porque lo que manda es la
+     regla que ganó y el estado de las clases. */
+  /* prende y apaga el pack de iconos y repinta: es lo que decide cuántas
+     baldosas quedan filtrando, y ése es el número de la fluidez del cajón */
+  pack(v){
+    if (v != null){ guarda('icoPack', v ? 1 : 0); ICO_CACHE_LIMPIA(); rejaRepinta(); }
+    const b = $$('.baldosa'), a = $$('.baldosa.aero');
+    return { pack: +lee('icoPack', 1), baldosas: b.length, aero: a.length,
+             cajon: $$('#cajLista .baldosa').length,
+             cajonAero: $$('#cajLista .baldosa.aero').length };
+  },
+  vidrios(){
+    const v = [];
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      const f = c.backdropFilter || c.webkitBackdropFilter;
+      if (!f || f === 'none') continue;
+      const r = e.getBoundingClientRect();
+      v.push({ q: (e.id ? '#'+e.id : '') + (e.className && typeof e.className === 'string'
+                 ? '.'+e.className.trim().split(/\s+/).join('.') : ''),
+               px: Math.round(r.width*r.height), f: f.slice(0, 46) });
+    }
+    v.sort((a,b) => b.px - a.px);
+    return { n: v.length, px: v.reduce((a,b) => a+b.px, 0), top: v.slice(0, 8) };
+  },
+  aguaFps(ms, niv){
+    return new Promise(res => {
+      if (!aguaArma()){ res('roto'); return; }
+      document.body.classList.remove('sinVidrio');
+      AGUA.fijo = true;
+      if (niv === -1) document.body.classList.add('sinVidrio');
+      else aguaNivel(niv | 0);
+      const dur = ms || 900, t0 = performance.now();
+      const dts = []; let ult = t0;
+      /* una onda nueva cada 200 ms: es lo que pasa arrastrando el dedo */
+      const sem = setInterval(() => aguaToca(120 + Math.random()*160,
+                                             300 + Math.random()*260, 1), 200);
+      aguaToca(200, 440, 1);
+      const paso = () => {
+        const n = performance.now();
+        dts.push(n - ult); ult = n;
+        if (n - t0 < dur) requestAnimationFrame(paso);
+        else {
+          clearInterval(sem);
+          const v = dts.slice(2).sort((a,b) => a-b);
+          const med = v.length ? v[v.length>>1] : 0;
+          const prom = v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0;
+          const px = AGUA.el.width*AGUA.el.height, nv = AGUA.niv;
+          document.body.classList.remove('sinVidrio');
+          AGUA.fijo = false;
+          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length,
+                mediana: +med.toFixed(2), promedio: +prom.toFixed(2),
+                p90: +(v[Math.floor(v.length*0.9)] || 0).toFixed(2),
+                fps: +(1000/Math.max(med, 0.01)).toFixed(1),
+                res: AGUA.res, px: px });
+        }
+      };
+      requestAnimationFrame(paso);
+    });
   },
   /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
      así que después de una foto congelada no limpiaba nada */
   aguaApaga(){
     AGUA.ondas = []; AGUA.on = false;
     if (AGUA.el) AGUA.el.classList.remove('on');
+    document.body.classList.remove('agua', 'aguaN1', 'aguaN2', 'aguaN3');
     FONDO_EL.style.animationPlayState = '';
     return this.agua();
   },
@@ -5989,6 +6972,36 @@ window.__A = {
   mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
   cajon(v){ verCajon(v !== false); return CAJON; },
+  /* La animación de arranque, ejercida por el mismo camino que el dedo. Va por
+     `zoomArranca` y no por `abreZoom` porque en el banco no hay puente y esa
+     guarda saldría por el atajo — o sea que la sonda no mediría nada. */
+  zoom(pkg, i){
+    const n = $$('#tira .ap')[i || 0] || $$('#cajLista .ap')[i || 0];
+    if (!n) return { hay: false };
+    zoomArranca(pkg || n.dataset.p || 'x', n);
+    return this.anim();
+  },
+  /* El estado de las animaciones en este instante: cuántas corriendo, cuánto
+     llevan, y dónde está lo que se está moviendo. Una animación sin número no
+     se puede afirmar. */
+  anim(){
+    const cs = getComputedStyle(document.body);
+    const vivas = [];
+    for (const e of $$('.ap.entra,.wCard.entra,.ap.saliendo,.ap.late,#carp')){
+      const st = getComputedStyle(e);
+      const an = st.animationName, dur = st.animationDuration, dl = st.animationDelay;
+      const r = e.getBoundingClientRect();
+      if (an !== 'none' || e.id === 'carp')
+        vivas.push({ q: e.id || e.className.split(' ').slice(0,2).join('.'),
+                     an, dur, dl, op: +(+st.opacity).toFixed(3),
+                     tr: st.transform === 'none' ? 'none' : st.transform.slice(0,44),
+                     x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) });
+    }
+    return { abriendo: document.body.classList.contains('abriendo'),
+             zx: cs.getPropertyValue('--zx').trim(), zy: cs.getPropertyValue('--zy').trim(),
+             capa: +(+getComputedStyle($('#capa')).opacity).toFixed(3),
+             n: vivas.length, vivas: vivas.slice(0, 8) };
+  },
   pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
   menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
   cierra(){ cierraMenu(); return MENU_PKG; },

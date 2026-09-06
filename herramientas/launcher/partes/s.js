@@ -60,14 +60,22 @@ function nodoCarpeta(x, i){
 
 /* ══════════ LEVANTAR ══════════ */
 
+/* ── EL FANTASMA SE MIDE UNA VEZ ──
+   `getBoundingClientRect` obliga al navegador a recalcular la maquetación antes
+   de contestar. Estaba dentro del `pointermove`, o sea que arrastrar el dedo
+   vaciaba la maquetación ciento veinte veces por segundo para averiguar un
+   ancho que no cambia. Se mide al levantar y se guarda. */
 function arrFantasma(el, x, y){
   const g = el.cloneNode(true);
   g.className = 'ap fantasma';
   const r = el.getBoundingClientRect();
   g.style.width = r.width + 'px';
-  g.style.left = (x - r.width/2) + 'px';
-  g.style.top = (y - r.height/2) + 'px';
+  g.__w = r.width; g.__h = r.height;
+  g.style.transform = 'translate3d(' + (x - r.width/2) + 'px,' + (y - r.height/2) + 'px,0)';
   document.body.appendChild(g);
+  /* un cuadro después entra la clase que lo agranda: puesta en el mismo, la
+     transición no tiene de dónde partir y el fantasma aparece ya crecido */
+  requestAnimationFrame(() => g.classList.add('vivo'));
   return g;
 }
 
@@ -75,6 +83,7 @@ function arrLevanta(orig, desde, i, x, y){
   if (ARR) return;
   vibra(20);
   const el = orig;
+  arrRejaMide();
   ARR = { desde: desde, i: i, el: el, x: x, y: y, sobre: null, movio: false,
           g: arrFantasma(el, x, y) };
   el.classList.add('llevada');
@@ -90,10 +99,21 @@ function arrLevanta(orig, desde, i, x, y){
 /* ══════════ DÓNDE CAERÍA ══════════ */
 
 /* la celda del escritorio bajo el dedo, o null si el dedo no está sobre la reja */
-function arrCelda(x, y){
+/* ── LA REJA SE MIDE AL LEVANTAR Y NO EN CADA MOVIMIENTO ──
+   Es el mismo motivo que el fantasma: la página no cambia de sitio mientras
+   dura el arrastre, así que preguntarle su rectángulo por cuadro es vaciar la
+   maquetación para recibir siempre lo mismo. */
+let ARR_REJA = null;
+function arrRejaMide(){
   const pg = $$('#tira .pag')[PAG];
-  if (!pg) return null;
-  const r = pg.getBoundingClientRect();
+  ARR_REJA = pg ? { r: pg.getBoundingClientRect(), pg: pg } : null;
+  return ARR_REJA;
+}
+
+function arrCelda(x, y){
+  const q = ARR_REJA || arrRejaMide();
+  if (!q) return null;
+  const pg = q.pg, r = q.r;
   if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
   const cw = r.width/COLS, ch = ALTO_AP;
   const c = cl(Math.floor((x - r.left)/cw), 0, COLS - 1);
@@ -104,13 +124,16 @@ function arrCelda(x, y){
 
 /* si el dedo está lo bastante encima de un icono que YA está ahí, soltarlo hace
    carpeta en vez de acomodar. El radio es una fracción de la celda y no un
-   número de píxeles: con iconos de 40 y de 92 tiene que sentirse igual. */
-function arrEncima(x, y){
+   número de píxeles: con iconos de 40 y de 92 tiene que sentirse igual.
+   ── `salvo` NO ES UN LUJO ──
+   Antes esto leía `ARR` para no hacer carpeta consigo mismo, y en `arrSuelta`
+   `ARR` ya vale null: la guarda no corría nunca. Va como parámetro, que además
+   es lo que permite preguntarlo ANTES de sacar el icono de la lista. */
+function arrEncima(x, y, salvo){
   const c = arrCelda(x, y);
   if (!c) return null;
-  const lista = INICIO;
-  if (c.i >= lista.length) return null;
-  if (ARR && ARR.desde === 'inicio' && c.i === ARR.i) return null;
+  if (c.i >= INICIO.length) return null;
+  if (salvo != null && c.i === salvo) return null;
   const d = Math.hypot(x - c.cx, y - c.cy);
   return d < Math.min(c.cw, c.ch)*ARR_CARPETA ? c.i : null;
 }
@@ -128,7 +151,7 @@ function arrEnDock(x, y){
 function arrSuelta(x, y){
   if (!ARR) return;
   const a = ARR;
-  ARR = null;
+  ARR = null; ARR_REJA = null;
   document.body.classList.remove('arrastrando');
   if (a.g) a.g.remove();
   a.el.classList.remove('llevada');
@@ -136,32 +159,46 @@ function arrSuelta(x, y){
 
   if (!a.movio){ arrCancela(a); return; }
 
-  /* lo que se saca de su sitio se saca ANTES de decidir a dónde va: si no, un
-     movimiento dentro del mismo escritorio se cuenta dos veces */
+  /* ── DÓNDE CAE SE DECIDE ANTES DE SACARLO, Y ÉSE ERA EL DEFECTO ──
+     Reporte: «al querer hacer carpetas se buguea». Estaba escrito al revés: se
+     sacaba el icono de `INICIO` y RECIÉN DESPUÉS se preguntaba sobre cuál se
+     había soltado. Sacar el elemento `i` corre un lugar a TODOS los de más
+     adelante, así que arrastrar el segundo icono encima del quinto hacía
+     carpeta con el que era el SEXTO, y soltarlo encima del último no hacía
+     carpeta ninguna —`c.i >= INICIO.length` con la lista ya un elemento más
+     corta—. Se mira primero y se saca después. */
+  const dk = arrEnDock(x, y);
+  const enc = dk >= 0 ? null
+            : arrEncima(x, y, a.desde === 'inicio' ? a.i : null);
+
   let item = null;
   if (a.desde === 'inicio') item = INICIO.splice(a.i, 1)[0];
   else if (a.desde === 'dock') item = DOCK.splice(a.i, 1)[0];
   else item = a.i;                                   /* del cajón: es un paquete */
   if (item == null) return;
+  /* y el destino se corrige por el hueco que acaba de dejar: sacar el 2 deja al
+     que era 5 en el lugar 4 */
+  const j = (enc == null) ? null
+          : (a.desde === 'inicio' && enc > a.i ? enc - 1 : enc);
 
-  const dk = arrEnDock(x, y);
   if (dk >= 0){
     /* el dock tiene cuatro sitios: el quinto sale al escritorio, que es mejor
        que perderlo sin decir nada */
     if (DOCK.length >= 4){ INICIO.push(item); avisa(T('cDockLleno')); }
     else DOCK.splice(Math.min(dk, DOCK.length), 0, item);
+  } else if (j != null && !esCarpeta(item)){
+    arrHaceCarpeta(j, item);
   } else {
-    const j = arrEncima(x, y);
-    if (j != null && !esCarpeta(item)) arrHaceCarpeta(j, item);
-    else {
-      const c = arrCelda(x, y);
-      const dest = c ? Math.min(c.i, INICIO.length) : INICIO.length;
-      INICIO.splice(dest, 0, item);
-    }
+    const c = arrCelda(x, y);
+    const dest = c ? Math.min(c.i, INICIO.length) : INICIO.length;
+    INICIO.splice(dest, 0, item);
   }
   guarda('inicio', INICIO); guarda('dock', DOCK);
   pintaInicio(); pintaDock();
   salpica(x, y);
+  /* la carpeta recién hecha late una vez: sin eso, dos iconos que se funden en
+     uno se lee a que uno de los dos se perdió */
+  if (j != null && !esCarpeta(item)) arrLate(j);
 }
 
 function arrCancela(a){
@@ -169,12 +206,24 @@ function arrCancela(a){
   const p = a.desde === 'cajon' ? a.i
           : itemPkg(a.desde === 'dock' ? DOCK[a.i] : INICIO[a.i]);
   if (p) abreMenu(p, a.y);
-  else if (a.desde === 'inicio' && esCarpeta(INICIO[a.i])) carpAbre(a.i);
+  else if (a.desde === 'inicio' && esCarpeta(INICIO[a.i])) carpAbre(a.i, 'inicio', a.el);
 }
 
 /* ── HACER UNA CARPETA ──
    Soltar una app encima de otra: las dos se van adentro de una carpeta nueva
    con el nombre de la que estaba. Soltarla encima de una carpeta la mete. */
+/* el icono `j` del escritorio, si está a la vista */
+function arrNodo(j){
+  const pg = $$('#tira .pag')[Math.floor(j/(COLS*FILAS))];
+  return pg ? pg.children[j - Math.floor(j/(COLS*FILAS))*COLS*FILAS] : null;
+}
+
+function arrLate(j){
+  const n = arrNodo(j); if (!n) return;
+  n.classList.remove('late'); void n.offsetWidth; n.classList.add('late');
+  setTimeout(() => n.classList.remove('late'), 620);
+}
+
 function arrHaceCarpeta(j, item){
   const y = INICIO[j];
   if (esCarpeta(y)){
@@ -253,11 +302,11 @@ function arrEngancha(el, desde){
     if (performance.now() - t0 < ARR_LARGO){
       const nodo = e.target.closest ? e.target.closest('.ap') : null;
       if (!nodo) return;   /* soltar en el vacío antes del plazo no hace nada */
-      if (desde === 'cajon'){ if (nodo.dataset.p) abre(nodo.dataset.p); return; }
+      if (desde === 'cajon'){ if (nodo.dataset.p) abreZoom(nodo.dataset.p, nodo); return; }
       const i = +nodo.dataset.i;
       const it = desde === 'dock' ? DOCK[i] : INICIO[i];
-      if (esCarpeta(it)) carpAbre(i, desde);
-      else if (it) abre(it);
+      if (esCarpeta(it)) carpAbre(i, desde, nodo);
+      else if (it) abreZoom(it, nodo);
     }
   });
   el.addEventListener('pointercancel', suelta);
@@ -274,9 +323,11 @@ function arrInit(){
     if (!ARR) return;
     if (!ARR.movio && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > ARR_MUEVE) ARR.movio = true;
     ARR.x = e.clientX; ARR.y = e.clientY;
-    const r = ARR.g.getBoundingClientRect();
-    ARR.g.style.left = (e.clientX - r.width/2) + 'px';
-    ARR.g.style.top = (e.clientY - r.height/2) + 'px';
+    /* `transform` y no `left`/`top`: lo resuelve el compositor y no obliga a
+       recalcular la maquetación de la página en cada movimiento del dedo */
+    const g = ARR.g;
+    g.style.transform = 'translate3d(' + (e.clientX - g.__w/2) + 'px,'
+                      + (e.clientY - g.__h/2) + 'px,0)';
     arrPinta(e.clientX, e.clientY);
     arrBorde(e.clientX);
   }, { passive: true });
@@ -290,7 +341,7 @@ function arrInit(){
    sorpresa y deshacerla cuesta dos gestos */
 function arrPinta(x, y){
   $$('.ap.destino').forEach(e => e.classList.remove('destino'));
-  const j = arrEncima(x, y);
+  const j = arrEncima(x, y, ARR && ARR.desde === 'inicio' ? ARR.i : null);
   if (j == null) return;
   const pg = $$('#tira .pag')[PAG];
   const n = pg && pg.children[j - PAG*COLS*FILAS];
@@ -308,6 +359,7 @@ function arrBorde(x){
   if (ahora - ARR_PAG < 620) return;
   ARR_PAG = ahora;
   ponPagina(PAG + (der ? 1 : -1));
+  arrRejaMide();                     /* cambió la página: la reja es otra */
 }
 
 /* ══════════════════════ LA CARPETA ABIERTA ══════════════════════
@@ -321,11 +373,30 @@ let CARP_I = -1, CARP_DE = 'inicio';
 function carpLista(){ return CARP_DE === 'dock' ? DOCK : INICIO; }
 function carpItem(){ const l = carpLista(); return CARP_I >= 0 ? l[CARP_I] : null; }
 
-function carpAbre(i, desde){
+/* ── LA CARPETA SE ABRE DESDE SU BALDOSA ──
+   Pedido: «necesito que se abra así como transición». Una hoja que aparece en
+   el medio de la pantalla no dice de dónde salió; creciendo desde el icono que
+   se tocó, la carpeta y su baldosa son la misma cosa.
+   El punto de origen se mide con `offsetHeight` y no con el rectángulo: un
+   `getBoundingClientRect` incluye el `scale(.92)` del estado cerrado, así que
+   devolvería el origen de la hoja encogida y la animación saldría corrida. */
+function carpOrigen(nodo){
+  const c = $('#carp');
+  if (!nodo || !c) return;
+  const r = nodo.getBoundingClientRect();
+  const h = c.offsetHeight, W = innerWidth, H = innerHeight;
+  const ox = (r.left + r.width/2) - 12;          /* la hoja va de 12 a W−12 */
+  const oy = (r.top + r.height/2) - (H/2 - h/2); /* y centrada en vertical */
+  c.style.transformOrigin = Math.round(cl(ox, 0, W - 24)) + 'px '
+                          + Math.round(cl(oy, 0, h)) + 'px';
+}
+
+function carpAbre(i, desde, nodo){
   CARP_I = i; CARP_DE = desde || 'inicio';
   if (!esCarpeta(carpItem())) return;
   cierraMenu(); asisCierra(); persCierra(); iniCierra();
   carpPinta();
+  carpOrigen(nodo || arrNodo(i));
   $('#carp').classList.add('on');
   $('#velo').classList.add('on');
 }
@@ -344,7 +415,7 @@ function carpPinta(){
   for (const p of x.c){
     const a = POR_PKG[p]; if (!a) continue;
     const nd = nodoApp(a);
-    nd.addEventListener('click', () => { carpCierra(); abre(p); });
+    nd.addEventListener('click', () => { carpCierra(); abreZoom(p, nd); });
     /* mantener adentro de la carpeta la saca: es la única forma de deshacer una
        carpeta sin arrastrar, que en una hoja no se puede */
     let t = null;
@@ -355,6 +426,7 @@ function carpPinta(){
     nd.addEventListener('pointercancel', q);
     c.appendChild(nd);
   }
+  entraLista(c);
 }
 
 function carpSaca(p){
