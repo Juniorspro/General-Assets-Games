@@ -1,0 +1,804 @@
+
+/* ══════════════════════ EL ARMADO, EL BUCLE Y LAS SONDAS ══════════════════════ */
+
+/* ── LAS PANTALLAS SON UNA SOLA FUNCION ──
+   Con un `classList` por boton desparramado, la proxima pantalla que se agregue
+   queda encendida encima de otra y nadie se entera hasta verlo. */
+const PANS = ['pIdioma', 'pMenu', 'pNiveles', 'pIconos', 'pAjustes', 'pPausa', 'pFin'];
+function pantalla(n){
+  EST.p = n;
+  for (const p of PANS) $(p).classList.toggle('on', p === n);
+  document.body.classList.toggle('jugando', n === 'juego');
+  document.body.classList.toggle('practicando', n === 'juego' && EST.practica);
+  /* ── EL MENU MUESTRA EL JUEGO CORRIENDO ──
+     Un panel encima de un lienzo quieto tira a la basura lo unico que este juego
+     tiene para mostrar; el velo ya esta abierto en el medio justamente para eso.
+     Y lo juega EL MISMO bot que valida los niveles, asi que no hay una segunda
+     animacion que mantener sincronizada con nada. En la PAUSA no corre: ahi la
+     escena tiene que quedarse quieta, que es lo que una pausa significa. */
+  destella('#ffffff', 0);
+  const q = n !== 'juego' && n !== 'pPausa';
+  if (q && !DEMO) demoArranca();
+  DEMO = q;
+  CAM_OFS = q ? 0.82 : 0.30;
+}
+
+let DEMO = false, DEMO_ACUM = 0;
+function demoArranca(){
+  const n = EST.nivel;
+  generaNivel(n, SEMILLAS[n] || 1);
+  for (const o of MUNDO.orbes) o.usado = false;
+  for (const m of MUNDO.monedas) m.tomada = false;
+  jugPone(JUG, 0);
+  DEMO_ACUM = 0;
+  musArranca(n, 0);
+}
+function demoPaso(dt){
+  if (!DEMO || !MUNDO.med) return;
+  const med = MUNDO.med;
+  const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+  DEMO_ACUM = Math.min(DEMO_ACUM + dt, DT*6);
+  while (DEMO_ACUM >= DT){
+    DEMO_ACUM -= DT;
+    avanza(JUG, med, DT, botElige(JUG, med, ph, mira));
+    if (!JUG.vivo || JUG.x >= MUNDO.largo){ demoArranca(); return; }
+  }
+}
+
+/* ══════════ EL IDIOMA LLEGA A CADA PALABRA ══════════
+   Un solo repintado que barre TODO: con llamadas repartidas, la etiqueta que se
+   agregue manana se queda en el idioma anterior. Es la leccion que en PUERTA
+   BLANCA costo una vuelta entera. */
+function repinta(){
+  $('mSub').textContent = TX('sub');
+  $('mTx').textContent = TX('texto');
+  $('mPie').textContent = TX('pie');
+  $('bJugar').textContent = TX('jugar');
+  $('bIconos').textContent = TX('iconos');
+  $('bAjustes').textContent = TX('ajustes');
+  $('nTit').textContent = TX('niveles');
+  $('nSub').textContent = TX('elegi');
+  $('nVolver').textContent = TX('volver');
+  $('iTit').textContent = TX('icono');
+  $('iSub').textContent = TX('forma') + ' · ' + TX('color');
+  $('iVolver').textContent = TX('volver');
+  $('aTit').textContent = TX('ajus');
+  $('aSub').textContent = TX('idioma') + ' · ' + TX('calidad');
+  $('aMusL').textContent = TX('mus');
+  $('aFxL').textContent = TX('fx');
+  $('aVolver').textContent = TX('volver');
+  $('pTit').textContent = TX('pausa');
+  $('bSigo').textContent = TX('sigo');
+  $('bReint').textContent = TX('reint');
+  $('bSalir').textContent = TX('salir');
+  $('fMenu').textContent = TX('menu');
+  $('fSigue').textContent = TX('sigue');
+  $('pract').textContent = TX('practOn');
+  pintaPract();
+  pintaLista();
+  pintaFilas();
+  pintaHud(true);
+}
+function pintaPract(){
+  $('bPract').textContent = TX('pract') + (EST.practica ? ' ·' : '');
+  $('bPract').classList.toggle('sel', EST.practica);
+  $('pSub').textContent = NIVELES[EST.nivel].nom + ' · ' + EST.pct + '%';
+}
+
+/* ── LA LISTA DE NIVELES ──
+   Cada ficha dice nombre, dificultad, tempo, mejor porcentaje y monedas: con el
+   nombre solo, tres niveles son tres botones iguales. */
+function pintaLista(){
+  const L = $('lista'); L.innerHTML = '';
+  NIVELES.forEach((N, i) => {
+    const P = PROG.niv[i];
+    const b = document.createElement('button');
+    b.className = 'niv';
+    const mon = P.mon.map(m => m ? '◆' : '◇').join('');
+    const cc = 'rgb(' + N.col2.join(',') + ')';
+    b.innerHTML = '<i class="cl" style="background:' + cc + '"></i>'
+      + '<div class="n">' + N.nom + '</div>'
+      + '<div class="d" style="color:' + cc + '99">' + difNom(N.dif) + ' · ' + N.bpm + ' BPM · ' + N.compases + '</div>'
+      + '<div class="mo" style="color:' + (P.mon.some(m => m) ? '#ffd447' : 'rgba(255,255,255,.22)') + '">' + mon + '</div>'
+      + '<div class="cara d' + N.dif + '">' + (P.hecho ? '✓' : (VALIDADO[i] && !VALIDADO[i].ok ? '!' : N.dif)) + '</div>'
+      + '<i class="pb" style="width:' + P.mejor + '%"></i>';
+    b.onclick = () => { son('clic'); entra(i); };
+    L.appendChild(b);
+  });
+}
+
+/* las filas de opciones: forma, los dos colores, idioma y calidad */
+function fila(cont, items, sel, fn){
+  cont.innerHTML = '';
+  items.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.className = 'bt' + (i === sel ? ' sel' : '');
+    b.textContent = t; b.onclick = () => { son('clic'); fn(i); };
+    cont.appendChild(b);
+  });
+}
+function pintaFilas(){
+  /* ── NO HAY VISTA PREVIA, Y ES MEJOR ASI ──
+     El demo del menu corre detras con el cubo de verdad, asi que elegir un color
+     se ve en el objeto que se va a jugar. Una vista previa aparte seria un
+     SEGUNDO dibujante del icono, y dos dibujantes terminan diciendo cosas
+     distintas — es la razon por la que en 2D compartian una funcion. */
+  fila($('iForma'), ['■', '◆', '●'], ICONO.forma, (i) => { ICONO.forma = i; guardaProg(); pintaFilas(); ponIcono(); });
+  fila($('iCol1'), COLES.map(() => '●'), ICONO.c1, (i) => { ICONO.c1 = i; guardaProg(); pintaFilas(); ponIcono(); });
+  fila($('iCol2'), COLES.map(() => '●'), ICONO.c2, (i) => { ICONO.c2 = i; guardaProg(); pintaFilas(); ponIcono(); });
+  [...$('iCol1').children].forEach((b, i) => { b.style.color = COLES[i]; });
+  [...$('iCol2').children].forEach((b, i) => { b.style.color = COLES[i]; });
+  const idis = ['es', 'en', 'pt'];
+  fila($('aIdi'), ['ES', 'EN', 'PT'], idis.indexOf(LANG), (i) => { LANG = idis[i]; guardaProg(); repinta(); });
+  const cals = ['baja', 'media', 'alta'];
+  fila($('aCal'), [TX('baja'), TX('media'), TX('alta')], cals.indexOf(CALIDAD),
+       (i) => { CALIDAD = cals[i]; guardaProg(); mide(); pintaFilas(); });
+}
+
+/* ══════════ EL HUD ══════════
+   Se escribe SOLO cuando cambia: escribir en el DOM sesenta veces por segundo
+   obliga al navegador a recalcular el layout para poner el mismo texto. */
+const HUD = { pct: -1, int: -1, mej: -1, tema: '', modo: '' };
+function pintaHud(forzar){
+  if (forzar || HUD.pct !== EST.pct){
+    HUD.pct = EST.pct;
+    $('barraI').style.width = EST.pct + '%';
+    $('pct').textContent = EST.pct + '%';
+  }
+  if (forzar || HUD.int !== EST.intentos){
+    HUD.int = EST.intentos;
+    $('intentos').textContent = TX('intento') + ' ' + (EST.intentos + 1);
+  }
+  if (forzar || HUD.mej !== EST.mejor){
+    HUD.mej = EST.mejor;
+    $('mejor').textContent = TX('mejor') + ' ' + EST.mejor + '%';
+  }
+  const vk = velEn(JUG.x);
+  const t = NIVELES[EST.nivel].nom + ' · ' + NIVELES[EST.nivel].bpm + (vk !== 1 ? ' · ' + vk + 'x' : '');
+  if (forzar || HUD.tema !== t){ HUD.tema = t; $('tema').textContent = t; }
+  /* ── Y EL MODO SE DICE, PORQUE LAS REGLAS CAMBIAN OCHO VECES ──
+     En un nivel de un solo modo el rotulo seria ruido; con ocho, lo que el dedo
+     hace en la nave no es lo que hace en el robot y el jugador tiene que poder
+     saber en cual esta sin deducirlo del dibujo. Va del COLOR del modo, que es
+     el mismo con el que destella el portal: el rotulo y el destello dicen lo
+     mismo por construccion. */
+  const m = MODO_NOM[JUG.modo] || '';
+  if (forzar || HUD.modo !== m){
+    HUD.modo = m;
+    const e = $('modo');
+    e.textContent = m;
+    e.style.color = MODO_COL[JUG.modo] || '#e2f0ff';
+  }
+}
+
+/* ══════════ ENTRAR, PAUSAR Y SALIR ══════════ */
+function entra(n){
+  EST.intentos = 0;
+  arranca(n);
+  pantalla('juego');
+  /* ── LA CAMARA SE COLOCA DE UNA AL ENTRAR ──
+     `arranca` corre ANTES de `pantalla`, o sea con `CAM_OFS` todavia en el 82 %
+     del demo, y `CAM.y` viene del menu: medido, el primer cuadro de la partida
+     proyectaba al jugador en −0,64 del ancho, fuera de pantalla por la izquierda.
+     Un `dt` grande hace que el suavizado llegue en un paso. */
+  ponCam(1);
+  pintaHud(true);
+}
+function pausa(){
+  if (EST.p !== 'juego') return;
+  EST.corriendo = false; musPara();
+  pintaPract();
+  pantalla('pPausa');
+}
+function sigue(){
+  /* volver de la pausa REARRANCA el intento y no lo retoma, y es a proposito:
+     retomarlo obligaria a empalmar la musica en el instante exacto en que se
+     paro, y un tema que retoma medio tiempo corrido se escucha peor que un
+     reintento */
+  pantalla('juego'); reintenta(true); ponCam(1); pintaHud(true);
+}
+function salir(){ EST.corriendo = false; musPara(); pantalla('pMenu'); pintaLista(); }
+
+/* ── CON DOS NIVELES, JUGAR ABRE LA LISTA ──
+   Con uno solo entraba directo, porque una lista de un elemento es un peaje. Con
+   dos temas la lista ES la eleccion: cada ficha dice el nombre, el tempo, la
+   dificultad, el mejor porcentaje y las monedas. */
+/* y abrir la lista ya pide la segunda cancion: asi para cuando se toca la ficha
+   la decodificacion lleva un segundo de ventaja */
+$('bJugar').onclick = () => { son('clic'); pintaLista(); pantalla('pNiveles'); musCarga(1); };
+$('bNiv') && ($('bNiv').onclick = () => { son('clic'); pantalla('pNiveles'); pintaLista(); });
+$('bIconos').onclick = () => { son('clic'); pantalla('pIconos'); pintaFilas(); };
+$('bAjustes').onclick = () => { son('clic'); pantalla('pAjustes'); pintaFilas(); };
+$('nVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
+$('iVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
+$('aVolver').onclick = () => { son('clic'); pantalla('pMenu'); };
+$('bPausa').onclick = () => { son('clic'); pausa(); };
+$('bSigo').onclick = () => { son('clic'); sigue(); };
+$('bReint').onclick = () => { son('clic'); CHK.lista.length = 0; pantalla('juego'); reintenta(true); ponCam(1); pintaHud(true); };
+$('bPract').onclick = () => {
+  son('clic');
+  EST.practica = !EST.practica;
+  if (!EST.practica) CHK.lista.length = 0;
+  pintaPract();
+};
+$('bSalir').onclick = () => { son('clic'); salir(); };
+$('fMenu').onclick = () => { son('clic'); pantalla('pMenu'); pintaLista(); };
+$('fSigue').onclick = () => {
+  son('clic');
+  const n = EST.nivel + 1;
+  if (n < NIVELES.length) entra(n);
+  else { pantalla('pMenu'); pintaLista(); }
+};
+$('aMus').oninput = (e) => { VOL_MUS = e.target.value/100; ponVol(); guardaProg(); };
+$('aFx').oninput = (e) => { VOL_FX = e.target.value/100; ponVol(); guardaProg(); };
+
+/* ══════════ LA ENTRADA ══════════
+   Un toque en cualquier lado salta, asi que NO hacen falta coordenadas y el
+   marco girado no complica nada: los botones son DOM y de la rotacion se ocupa
+   el navegador. Mantener apretado salta en cadena, que es la regla del genero. */
+let APRETADO = false;
+function abajo(e){
+  if (EST.p !== 'juego') return;
+  APRETADO = true; toca();
+  if (e && e.cancelable) e.preventDefault();
+}
+function arriba(){ APRETADO = false; }
+const env = $('envase');
+env.addEventListener('pointerdown', abajo);
+addEventListener('pointerup', arriba);
+addEventListener('pointercancel', arriba);
+addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (e.code === 'Escape'){ EST.p === 'pPausa' ? sigue() : pausa(); return; }
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW'){ abajo(e); }
+});
+addEventListener('keyup', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') arriba();
+});
+/* el audio no puede existir antes de un gesto de verdad, y el primer gesto de
+   verdad es el boton de idioma, no JUGAR */
+addEventListener('pointerdown', () => {
+  armaAudio();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  /* la primera vez, el tema del menu no pudo arrancar porque todavia no habia
+     contexto: se rearma con el primer gesto y no en un temporizador */
+  if (DEMO && !MUS.on) demoArranca();
+}, true);
+
+/* ══════════════════════ EL BUCLE ══════════════════════ */
+let CONGELADO = false;
+let acum = 0, tPrev = 0, PASOS = 0;
+function bucle(ts){
+  requestAnimationFrame(bucle);
+  const dt = tPrev ? Math.min(0.25, (ts - tPrev)/1000) : 0;
+  tPrev = ts;
+  musPaso();
+  /* ── CONGELAR CONGELA EL CUADRO ENTERO, NO SOLO LA FISICA ──
+     `ponCam` y las particulas quedaban afuera de la guarda, asi que la sonda
+     plantaba un instante y el cuadro siguiente lo devolvia a su sitio: las
+     chispas de la muerte se vencian antes de la foto y la camara volvia al
+     encuadre normal. Es la cuarta vez en este repo —en PISTOLA hizo falta un
+     `CAM_FIJA` por esto mismo— y la salida correcta es que congelar signifique
+     que NADA avanza. Quien fotografia coloca la camara el mismo (`ponCam(1)`). */
+  if (!CONGELADO){
+    /* ── EL FRENO DE LA MUERTE COME TIEMPO DE SIMULACION, NO DE DIBUJO ──
+       Se sigue dibujando —si no, la pantalla se congela y se lee a que el juego
+       se colgo— y lo que se detiene son los pasos de fisica. */
+    if (EFE.hit > 0){ EFE.hit -= dt; acum = 0; }
+    else {
+      acum += dt;
+      let n = 0;
+      while (acum >= DT && n < 8){ paso(DT); acum -= DT; n++; }
+      if (acum > DT*8) acum = 0;
+      demoPaso(dt);
+    }
+    efePaso(dt);
+    sqPaso(dt);
+    flaPaso(dt);
+    ponCam(dt);
+    pasoPart(dt);
+    /* ── EL LATIDO DEL MENU SE ESCRIBE SOLO CON UN PANEL ABIERTO ──
+       Escribir una variable de CSS sesenta veces por segundo durante la partida
+       obliga al navegador a recalcular el layout para no cambiar nada. En un
+       menu no hay nada que recalcular y el boton late con el tema. */
+    if (EST.p !== 'juego') ponPulsoMenu();
+  }
+  pinta();
+  pintaHud(false);
+}
+function paso(dt){
+  PASOS++;
+  if (EST.p !== 'juego') return;
+  if (EST.corriendo){ pasoJuego(dt, APRETADO); return; }
+  if (EST.gano){
+    /* se espera un momento antes del cartel: cortar en el mismo cuadro tira a la
+       basura lo unico que un cien por ciento tiene para mostrar */
+    EST.muerto += dt;
+    if (EST.muerto > 1.1){ EST.muerto = 0; pantalla('pFin'); pintaFin(); }
+    return;
+  }
+  if (EST.muerto > 0){
+    EST.muerto -= dt;
+    /* ── SE REINTENTA SOLO ──
+       Es la regla del genero: la muerte no abre un menu, vuelve a empezar. Un
+       cartel de derrota cada cuatro segundos convierte el juego en un tramite. */
+    if (EST.muerto <= 0) reintenta(false);
+  }
+}
+let _pulAnt = -1;
+function ponPulsoMenu(){
+  const t = musTiempo();
+  const p = t == null ? 0 : Math.pow(1 - (((t % 1) + 1) % 1), 3);
+  const v = +p.toFixed(2);
+  if (v !== _pulAnt){ _pulAnt = v; document.body.style.setProperty('--pulso', v); }
+}
+
+function pintaFin(){
+  const P = PROG.niv[EST.nivel];
+  const ultimo = PROG.niv.every(p => p.hecho);
+  $('fTit').textContent = ultimo ? TX('fin') : TX('gano');
+  $('fSub').textContent = NIVELES[EST.nivel].nom + ' · ' + TX('ganoS');
+  $('fTx').textContent = ultimo ? TX('finT')
+    : (TX('intento') + ' ' + (EST.intentos + 1) + ' · ' + P.mon.filter(m => m).length + '/3 ◆');
+  $('fSigue').style.display = (EST.nivel + 1 < NIVELES.length) ? 'block' : 'none';
+}
+
+/* ══════════════════════ EL ARRANQUE ══════════════════════ */
+function pon(p, txt){ $('cBarra').style.width = p + '%'; if (txt) $('cSub').textContent = txt; }
+/* ── EL MENU CON IMAGENES, Y DEGRADANDO ──
+   Las dos son adornos: si el base64 no decodifica, el menu se queda como estaba
+   —titulo con relleno de degradado y el demo detras— y no hay un hueco. Por eso
+   la clase `hay` la pone el `onload` de la propia imagen y no el codigo que la
+   pide: preguntar «llego?» es lo unico que distingue un menu con foto de un menu
+   con un rectangulo vacio. */
+function ponMenuImg(){
+  if (typeof IMG === 'undefined') return;
+  const f = $('mFondo'), se = $('mSello');
+  const pf = new Image();
+  pf.onload = () => { f.style.backgroundImage = 'url(' + IMG.m_fondo + ')';
+                      f.classList.add('hay'); };
+  pf.src = IMG.m_fondo;
+  se.onload = () => se.classList.add('hay');
+  se.onerror = () => se.classList.remove('hay');
+  se.src = IMG.m_sello;
+}
+function arrancaTodo(){
+  cargaProg();
+  mide();
+  /* las fotos empiezan a decodificar aca y el juego NO las espera: son telones */
+  telonCarga();
+  ponMenuImg();
+  /* la cancion son 235 KB de MP3: decodifica en segundo plano y el juego no la
+     espera — sin ella el reloj cae al respaldo integrado y se juega igual */
+  musCarga();
+  pon(12, 'ROTOR');
+  /* los tres niveles se generan y SE JUEGAN acá: uno que no se pueda terminar
+     tiene que morir en la pantalla de carga, no en las manos del jugador */
+  setTimeout(() => {
+    pon(35, NIVELES[0].nom);
+    const s = preparaNiveles();
+    pon(88, s.every(x => x > 0) ? 'OK' : '!');
+    generaNivel(0, SEMILLAS[0] || 1);
+    jugPone(JUG, 0);
+    ponIcono();
+    repinta();
+    setTimeout(() => {
+      pon(100);
+      $('carga').classList.add('ido');
+      /* si ya eligio idioma alguna vez, no se vuelve a preguntar */
+      let visto = false;
+      try { visto = !!localStorage.getItem('rotor_v1'); } catch(e){}
+      pantalla(visto ? 'pMenu' : 'pIdioma');
+      requestAnimationFrame(bucle);
+    }, 240);
+  }, 60);
+}
+[...document.querySelectorAll('#pIdioma .bt')].forEach(b => {
+  b.onclick = () => {
+    LANG = b.dataset.lang || 'en'; guardaProg(); repinta();
+    armaAudio(); son('clic'); pantalla('pMenu');
+  };
+});
+arrancaTodo();
+
+/* ══════════════════════ LAS SONDAS ══════════════════════
+   Una afirmacion sin numero no vale. `juegaSolo` y `audita` son las dos que
+   prueban que hay un juego adentro; el resto es para poder fotografiar un
+   instante sin esperarlo. */
+window.__errs = [];
+addEventListener('error', (e) => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => window.__errs.push('promesa: ' + e.reason));
+
+window.__R = {
+  estado(){
+    return { p: EST.p, nivel: EST.nivel, nom: NIVELES[EST.nivel].nom, pct: EST.pct,
+             mejor: EST.mejor, intentos: EST.intentos, practica: EST.practica,
+             corriendo: EST.corriendo, gano: EST.gano, chk: CHK.lista.length,
+             lang: LANG, cal: CALIDAD, semillas: SEMILLAS.slice(), validado: VALIDADO,
+             jug: { x: +JUG.x.toFixed(3), y: +JUG.y.toFixed(3), vy: +JUG.vy.toFixed(3),
+                    modo: JUG.modo, grav: JUG.grav, piso: JUG.piso, vivo: JUG.vivo },
+             largo: MUNDO.largo, pasos: PASOS, errs: window.__errs.length };
+  },
+  /* ── EL ENCUADRE SE MIDE, NO SE ESTIMA ──
+     Devuelve donde cae un punto del mundo en fracciones de pantalla, y de paso
+     comprueba que la x sea LINEAL: si no lo fuera, la x de un pico dependeria de
+     su altura y no se podria apuntar. */
+  proy(x, y){ const p = proy(+x, +y); return [+p[0].toFixed(4), +p[1].toFixed(4)]; },
+  encuadre(){
+    const pj = proy(JUG.x, JUG.y);
+    const piso = proy(JUG.x, 0);
+    const a = proy(CAM.x + 2, 0), b = proy(CAM.x + 6, 0), c2 = proy(CAM.x + 14, 0);
+    const d1 = b[0] - a[0], d2 = (c2[0] - b[0])/2;
+    return { jug: [+pj[0].toFixed(3), +pj[1].toFixed(3)],
+             piso: +piso[1].toFixed(3),
+             cubo: +(proy(JUG.x, JUG.y)[1] - proy(JUG.x, JUG.y + JUG_LADO)[1]).toFixed(4),
+             /* dos tramos de cuatro bloques tienen que medir lo MISMO en pantalla */
+             lineal: +(d2/d1).toFixed(5),
+             camD: +CAM.d.toFixed(3), camY: +CAM.y.toFixed(3), altoVista: +CAM.alto.toFixed(3) };
+  },
+  medidas(i){ const m = medidasDe(NIVELES[i || 0].bpm);
+    return { bpm: m.bpm, T: +m.T.toFixed(4), v: +m.v.toFixed(3), g: +m.g.toFixed(2),
+             imp: +m.imp.toFixed(3), apice: +((m.imp*m.imp)/(2*m.g)).toFixed(3),
+             aire: +(2*m.imp/m.g).toFixed(4), largoSalto: +(m.v*2*m.imp/m.g).toFixed(3) }; },
+  lang(l){ LANG = l; repinta(); return LANG; },
+  cal(c){ CALIDAD = c; mide(); pintaFilas(); return { cal: CALIDAD, ancho: ANCHO, alto: ALTO }; },
+  pantalla(n){ pantalla(n); return EST.p; },
+  jugar(n){ entra(n | 0); return this.estado(); },
+  practica(b){ EST.practica = !!b; pintaPract(); document.body.classList.toggle('practicando', EST.p === 'juego' && EST.practica); return EST.practica; },
+  toca(){ return toca(); },
+  apreta(){ APRETADO = true; return toca(); },
+  suelta(){ APRETADO = false; return true; },
+  /* adelanta la simulacion sin esperar: la x sale del reloj de la musica, asi que
+     con audio la sonda tiene que forzar la integracion para poder avanzar */
+  pasos(n){
+    SIN_RELOJ = true;
+    /* ── Y ADELANTA LOS EFECTOS CON LA FISICA, NO SOLO LA FISICA ──
+       El bucle de verdad corre un paso de fisica y un paso de efectos por cuadro,
+       los dos a 60. Adelantando solo la fisica con el cuadro congelado, los
+       resortes no se integran nunca: medido, el empujon del salto (−3,3) seguia
+       entero en la velocidad del resorte veintisiete pasos despues y el
+       aterrizaje (+3,25) lo CANCELABA — un aplaste de 0,05 donde el juego hace
+       14 %. La sonda estaba midiendo un juego que no existe. Las particulas van
+       por lo mismo: sin envejecerlas, ciento cincuenta pasos de chispas quedan
+       TODAS puestas y la foto sale con una alfombra de escombros de punta a
+       punta del piso. */
+    for (let i = 0; i < (n | 0); i++){
+      paso(DT); efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT);
+      paletaPaso(NIVELES[EST.nivel]);
+    }
+    SIN_RELOJ = false;
+    return this.estado();
+  },
+  congela(v){ CONGELADO = !!v; return CONGELADO; },
+  /* ── EL BOT JUGANDO LA PARTIDA DE VERDAD ──
+     `juegaSolo` prueba que el NIVEL se puede pasar; esto prueba que el JUEGO se
+     puede terminar: la misma decision del bot entra por `APRETADO`, o sea por el
+     mismo camino que el dedo, y de ahi salen las muertes, los reintentos, el
+     porcentaje guardado y la pantalla del final. */
+  autoJuega(tope){
+    SIN_RELOJ = true;
+    const med = MUNDO.med;
+    const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    let i = 0;
+    for (; i < (tope || 24000); i++){
+      APRETADO = EST.corriendo ? botElige(JUG, med, ph, mira) : false;
+      paso(DT);
+      /* los relojes de los efectos van con la fisica, por lo mismo que en
+         `pasos`: sin ellos, dos mil pasos de aterrizajes dejan el resorte
+         acumulado y las chispas TODAS puestas — la foto de una corrida del bot
+         sale con una alfombra de escombros y un cubo deformado al tope. Y LA
+         CAMARA VA EN LA MISMA LISTA: sin ella se queda donde arranco, asi que el
+         jugador termina proyectando en **17,9 veces el ancho de la pantalla** y
+         la foto sale con el nivel vacio y sin cubo — que es exactamente lo que
+         parecia un error de dibujo y era la sonda. */
+      efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT);
+      paletaPaso(NIVELES[EST.nivel]);
+      if (EST.p !== 'juego') break;
+    }
+    APRETADO = false; SIN_RELOJ = false;
+    const e = this.estado(); e.pasosBot = i;
+    return e;
+  },
+  /* ── JUGAR HASTA UNA X (O HASTA MORIR) Y CONGELAR AHI ──
+     `foto()` planta un cuerpo quieto, y eso no muestra ni la cinta de la onda ni
+     el chorro de la nave ni la explosion: son cosas que existen solo porque el
+     cuerpo se MOVIO. Esta corre el bot honesto —o el del azar, para morir— hasta
+     que se cumple la condicion, adelanta `extra` pasos de efectos para que la
+     explosion este a medio abrir, y congela. `pasoDespues` deja el cuadro exacto. */
+  hasta(x, azar, extra, muerte){
+    SIN_RELOJ = true;
+    const med = MUNDO.med;
+    const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    let i = 0, llego = false;
+    for (; i < 24000 && EST.corriendo; i++){
+      if (x != null && JUG.x >= x) llego = true;
+      /* con `muerte`, al llegar a la x se suelta el boton y se sigue hasta morir:
+         asi la muerte cae contra el pico que viene y no en un vacio fuera de cuadro */
+      if (llego && !muerte) break;
+      APRETADO = llego ? false : azar ? (Math.random() < 0.10) : botElige(JUG, med, ph, mira);
+      paso(DT); efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT);
+      paletaPaso(NIVELES[EST.nivel]);
+    }
+    for (let k = 0; k < (extra || 0); k++){ efePaso(DT); sqPaso(DT); flaPaso(DT); pasoPart(DT); ponCam(DT); }
+    APRETADO = false; SIN_RELOJ = false; CONGELADO = true;
+    ponCam(1); pinta();
+    return { x: +JUG.x.toFixed(2), y: +JUG.y.toFixed(2), vivo: JUG.vivo, modo: JUG.modo,
+             pasos: i, part: PART.length, estela: ESTELA.p.length,
+             anillo: mAnillo.visible ? +mAnillo.scale.x.toFixed(2) : null };
+  },
+  /* ── PLANTAR AL JUGADOR Y DIBUJAR UN CUADRO ──
+     `CONGELADO` frena la simulacion pero el bucle sigue dibujando y `ponCam`
+     corre en cada vuelta: sin colocar la camara aca mismo, la foto sale del
+     encuadre normal y parece que la sonda no hizo nada. Es la cuarta vez en este
+     repo. */
+  foto(nivel, x, y, modo, grav){
+    entra(nivel | 0); CONGELADO = true;
+    JUG.x = +x; JUG.y = y == null ? 0 : +y;
+    JUG.modo = modo || 'cubo'; JUG.grav = grav == null ? 1 : grav;
+    JUG.vy = 0; JUG.piso = true; JUG.vivo = true; JUG.giro = 0;
+    /* la camara la coloca `ponCam` con dt grande —el suavizado llega de una— y no
+       una copia de la formula: con dos cuentas, la foto encuadra otro juego. Ya
+       paso: la sonda tenia la formula del renderizador 2D y devolvia el piso al
+       42 % del alto donde el juego lo pone al 80 %. */
+    ponCam(1);
+    /* ── Y LA PALETA TAMBIEN SE COLOCA, PORQUE NO LA MUEVE `pinta` ──
+       `paletaPaso` la corre el bucle y no el dibujo, asi que plantando al jugador
+       en el tramo nueve la foto salia con los colores del tramo UNO: medido, la
+       niebla daba `#451e26` —el ciruela del primer tramo— con el telon de
+       atardecer puesto detras. Es la sexta vez en este repo que una sonda
+       fotografia un estado que ella misma no adelanto. */
+    ponPaleta(NIVELES[EST.nivel]);
+    pinta();
+    return { x: JUG.x, y: JUG.y, camx: +CAM.x.toFixed(2), camy: +CAM.y.toFixed(2),
+             modo: JUG.modo, grav: JUG.grav,
+             niebla: '#' + NIEBLA.color.getHexString() };
+  },
+  audita(){ return audita(); },
+  /* ── EL NIVEL SE JUEGA DESDE VARIAS FASES, NO SOLO DESDE EL PASO CERO ──
+     Medido: el mismo bot honesto que termina el nivel al 100 % desde x = 0 murio
+     en la cadena de orbes del final arrancando unos pasos mas tarde (una corrida
+     partida en tres tandas empezo con otra fase y cayo en x 286,4). Un tramo que
+     depende de la fase de entrada es un tramo que se pasa por casualidad. */
+  fases(n, nivel){
+    generaNivel(nivel | 0, 1);
+    const out = [], paso = MUNDO.med.v*velEn(0)/60;
+    for (let k = 0; k < (n || 12); k++){
+      const r = juegaSolo({ x0: paso*k/(n || 12) });
+      out.push({ k, pct: r.pct, murio: r.murioEn });
+    }
+    return out;
+  },
+  /* la capa de adelante, medida: donde caen sus instancias en pantalla y cuanto
+     miden, comparado contra un bloque del plano de juego */
+  frente(){
+    const out = [];
+    const _mm = new T.Matrix4(), _pp = new T.Vector3(), _ss = new T.Vector3(), _qq = new T.Quaternion();
+    cam.updateMatrixWorld(true);
+    for (const m of FRE){
+      for (let i = 0; i < m.count; i++){
+        m.getMatrixAt(i, _mm); _mm.decompose(_pp, _qq, _ss);
+        const a = _pp.clone().project(cam);
+        if (Math.abs(a.x) > 1.2 || Math.abs(a.y) > 1.2) continue;
+        const b = _pp.clone().add(new T.Vector3(0, _ss.y, 0)).project(cam);
+        out.push({ x: +((a.x + 1)/2).toFixed(3), y: +((1 - a.y)/2).toFixed(3),
+                   altoPant: +Math.abs((b.y - a.y)/2).toFixed(3), altoMundo: +_ss.y.toFixed(2), z: +_pp.z.toFixed(1) });
+      }
+    }
+    const bloque = Math.abs((proy(JUG.x, 1)[1] - proy(JUG.x, 0)[1]));
+    return { enCuadro: out.length, total: FRE.reduce((a, m) => a + m.count, 0), bloquePant: +bloque.toFixed(3), lista: out.slice(0, 6) };
+  },
+  /* la tabla de tramos tal como quedo generada: x, ancho, velocidad y tiempos */
+  tramos(nivel){
+    generaNivel(nivel | 0, 1);
+    return { largo: +MUNDO.largo.toFixed(2), tiempos: +tiempoDeX(MUNDO.largo).toFixed(2),
+             portales: MUNDO.portales.map(p => [+p.x.toFixed(1), p.t, p.k || '']),
+             adornos: MUNDO.adornos.length,
+             t: MUNDO.tramos.map(T => [+T.x.toFixed(1), +T.w.toFixed(1), T.vel, +T.t0.toFixed(2),
+                                       +T.dur.toFixed(2), T.modo, T.estilo, T.arma]) };
+  },
+  /* que le paso al bot en el nivel `id` a partir de una x: para arreglar un tramo */
+  porQueX(id, x0){ return this.porQue(id, 1, x0); },
+  juegaSolo(o){ return juegaSolo(o || {}); },
+  preparar(){ return preparaNiveles(); },
+  nivelInfo(i){
+    generaNivel(i | 0, SEMILLAS[i | 0] || 1);
+    const modos = {};
+    for (const p of MUNDO.portales) modos[p.t] = (modos[p.t] || 0) + 1;
+    return { largo: MUNDO.largo, sol: MUNDO.sol.length, mat: MUNDO.mat.length,
+             pads: MUNDO.pads.length, orbes: MUNDO.orbes.length,
+             monedas: MUNDO.monedas.length, sierras: MUNDO.sierras.length, portales: modos };
+  },
+  audio(){
+    if (!AUD || !ANAL) return { hay: false };
+    const b = new Uint8Array(ANAL.fftSize); ANAL.getByteTimeDomainData(b);
+    let pico = 0, s = 0;
+    for (let i = 0; i < b.length; i++){ const v = (b[i] - 128)/128; s += v*v; if (Math.abs(v) > pico) pico = Math.abs(v); }
+    return { hay: true, estado: AUD.state, on: MUS.on, bpm: MUS.bpm, lista: musLista(EST.nivel),
+             t: MUS.on ? +musTiempo().toFixed(3) : null,
+             pico: +pico.toFixed(4), rms: +Math.sqrt(s/b.length).toFixed(4),
+             mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2) };
+  },
+  /* ── APAGAR UNA PIEZA Y VOLVER A DIBUJAR ──
+     «Hay una cuna negra tapando el cielo» no se puede diagnosticar mirando: hay
+     media docena de mallas que podrian estar dibujandola y todas son oscuras. Se
+     apagan de a una y se fotografia — es el mismo material de diagnostico que en
+     RECREO encontro un tunel al que le faltaban las paredes en un cuadro, contra
+     cuarenta combinaciones de luz que no cambiaban el brillo ni un punto. */
+  mallas(){
+    const o = {};
+    for (const k in INST) if (INST[k]) o[k] = { n: INST[k].count, vis: INST[k].visible };
+    o.telon = { vis: telon.visible, opa: +matTelon.opacity.toFixed(2) };
+    o.deco = { n: DEC.length, listas: DEC.filter(D => D.listo).length };
+    o.ocultos = Object.keys(OCULTO).filter(k => OCULTO[k]);
+    o.niebla = { hex: '#' + NIEBLA.color.getHexString(), d: NIEBLA.density };
+    o.estilo = ESTILO_NOM;
+    o.frente = { mallas: FRE.length, vis: FRE.filter(m => m.visible).length,
+                 n: FRE.reduce((a, m) => a + m.count, 0) };
+    o.barrido = { on: mBarrido.visible, t: +BARRE.t.toFixed(3), opa: +matBarrido.opacity.toFixed(2) };
+    o.contorno = { ancho: ANCHO_CONTORNO, solBorde: !!INST.solBorde, picoBorde: !!INST.picoBorde,
+                   adornos: INST.adorno ? INST.adorno.count : 0 };
+    return o;
+  },
+  oculta(k, v){
+    if (INST[k]) INST[k].visible = !v;
+    else OCULTO[k] = !!v;
+    pinta();
+    return this.mallas();
+  },
+  /* ── EL MATERIAL DE DIAGNOSTICO ──
+     Apagar piezas de a una contesta «cual es»; pintar la escena con las NORMALES
+     contesta «que superficie es» en un solo cuadro, y eso es lo que hace falta
+     cuando la pieza sospechosa es una losa de ciento cuarenta bloques y hay seis
+     candidatas todas oscuras. En RECREO esto encontro un tunel al que le faltaban
+     tres de sus cuatro paredes contra cuarenta combinaciones de luz que no movian
+     el brillo ni un punto. */
+  normales(v){ esc3.overrideMaterial = v ? new T.MeshNormalMaterial() : null; pinta(); return !!v; },
+  brillo(){ return brilloDe(); },
+  costo(){ return costoDe(); },
+  part(){ return partDe(); },
+  /* que dos elementos del HUD no se pisen no se puede juzgar mirando: con el
+     marco girado `getBoundingClientRect` devuelve la caja alineada a los ejes y
+     miente, asi que se mide con offset, que son coordenadas del marco */
+  solapes(){
+    const ids = ['barra', 'pct', 'tema', 'modo', 'mejor', 'intentos', 'pract', 'bPausa'];
+    const cajas = [];
+    for (const id of ids){
+      const e = $(id);
+      if (!e.offsetWidth || getComputedStyle(e).display === 'none') continue;
+      cajas.push({ id, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight });
+    }
+    const ch = [];
+    for (let i = 0; i < cajas.length; i++) for (let j = i + 1; j < cajas.length; j++){
+      const a = cajas[i], b = cajas[j];
+      if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y)
+        ch.push(a.id + '/' + b.id);
+    }
+    return { cajas: cajas.length, choques: ch };
+  },
+  textos(){
+    const out = [];
+    const sel = EST.p === 'juego' ? '.pan.on, #hud' : '.pan.on';
+    document.querySelectorAll(sel).forEach(p => {
+      p.querySelectorAll('*').forEach(e => {
+        if (e.children.length) return;
+        const t = (e.textContent || '').trim();
+        if (t && getComputedStyle(e).display !== 'none') out.push(t);
+      });
+    });
+    return out;
+  },
+  /* ── LAS SONDAS DE DIAGNOSTICO ──
+     Sin ellas, «el nivel 1 no se puede pasar» es una frase; con ellas es una x. */
+  diag(id, n){
+    const o = [];
+    for (let s = 1; s <= (n || 8); s++){
+      generaNivel(id | 0, s);
+      const r = juegaSolo({});
+      o.push({ s, pct: r.pct, murio: r.murioEn, pasos: r.pasos });
+    }
+    return o;
+  },
+  /* ── QUE LO MATO, Y NO «MURIO EN LA X 42» ──
+     Un numero de x no dice si fue un pico, una pared de costado o el plano de
+     abajo, y esos tres se arreglan de maneras opuestas. */
+  porQue(id, s, x0){
+    generaNivel(id | 0, s || 1);
+    const T0 = tramoDe(x0 || 0);
+    const med = MUNDO.med;
+    const pasos = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    const c = {}; jugPone(c, x0 || 0);
+    for (const o of MUNDO.orbes) o.usado = false;
+    let i = 0, prev = copia(c);
+    while (c.vivo && c.x < MUNDO.largo && i < 12000){
+      prev = copia(c);
+      avanza(c, med, DT, botElige(c, med, pasos, mira));
+      i++;
+    }
+    if (c.vivo) return { ok: true, pasos: i };
+    const b = caja(c), tocaM = [], tocaS = [];
+    for (const r of cerca(MUNDO.iMat, c.x)) if (pisa(b, r)) tocaM.push([+r.x.toFixed(2), r.y, r.t]);
+    for (const r of cerca(MUNDO.iSol, c.x)) if (pisa(b, r)) tocaS.push([+r.x.toFixed(2), r.y, +r.w.toFixed(2), r.h, r.t]);
+    const cerc = [];
+    for (const r of cerca(MUNDO.iSol, c.x + 1)) cerc.push([+r.x.toFixed(2), r.y, +r.w.toFixed(2), r.h, r.t]);
+    const Tm = tramoDe(c.x);
+    return { ok: false, pasos: i, x: +c.x.toFixed(2), y: +c.y.toFixed(2),
+             tramo: Tm ? [Tm.arma, +Tm.x.toFixed(1), Tm.vel, +(c.x - Tm.x).toFixed(2)] : null,
+             prev: { x: +prev.x.toFixed(2), y: +prev.y.toFixed(2), vy: +prev.vy.toFixed(2),
+                     piso: prev.piso, modo: prev.modo, grav: prev.grav },
+             mat: tocaM, sol: tocaS, cercaSol: cerc,
+             plano: (c.y < -3 || c.y > 20) };
+  },
+  rects(id, s){
+    generaNivel(id | 0, s || 1);
+    return { sol: MUNDO.sol.map(r => [+r.x.toFixed(2), r.y, +r.w.toFixed(2), r.h, r.t]),
+             mat: MUNDO.mat.map(r => [+r.x.toFixed(2), r.y, r.t]), largo: MUNDO.largo };
+  },
+  /* el bot que aprieta al azar con probabilidad `p`: apretar sin parar es la
+     estrategia que hay que VENCER, porque si gana, el nivel no pide nada */
+  spam(id, s, p){
+    generaNivel(id | 0, s || 1);
+    const c = {}; jugPone(c, 0);
+    const q = p == null ? 0.10 : p;
+    let i = 0;
+    for (; i < 6000 && c.vivo && c.x < MUNDO.largo; i++) avanza(c, MUNDO.med, DT, Math.random() < q);
+    return { x: +c.x.toFixed(1), y: +c.y.toFixed(1), vivo: c.vivo, pasos: i,
+             pct: Math.round(cl(c.x/MUNDO.largo, 0, 1)*100), largo: MUNDO.largo };
+  },
+  /* ── LOS EFECTOS SE MIDEN, NO SE MIRAN ──
+     «tiembla» y «late» son frases; el sacudon en bloques y la variacion de la
+     distancia de camara en por ciento son numeros. */
+  efe(){ return efeDe(); },
+  /* ── LA CAJA DEL CUBO SE MIDE SOBRE LA MALLA, NO SE RECALCULA ──
+     El aplaste va en la escala de un grupo, asi que la unica forma honesta de
+     comprobar que la cara de apoyo se queda quieta es preguntarle al objeto
+     donde quedaron sus bordes. */
+  cubo(){ return cuboDe(); },
+  /* ── EL RASTRO DEL BOT DESDE UNA X, QUE ES LO QUE DICE POR QUE MURIO ──
+     `juegaSolo` devuelve DONDE murio y eso no alcanza para arreglar un tramo: hay
+     que ver la trayectoria. Planta un cuerpo en el modo del tramo y devuelve la y,
+     la velocidad y la decision paso a paso. */
+  botTrazo(x0, modo, n, cada){
+    const med = MUNDO.med;
+    const ph = Math.ceil(1.6*60/med.bpm*60), mira = Math.ceil(1.35*60/med.bpm*60);
+    const c = {}; jugPone(c, x0);
+    if (modo) c.modo = modo;
+    const out = [];
+    const k = cada || 6;
+    for (let i = 0; i < (n || 300); i++){
+      const a = botElige(c, med, ph, mira);
+      avanza(c, med, DT, a);
+      if (i % k === 0 || !c.vivo)
+        out.push([+c.x.toFixed(2), +c.y.toFixed(2), +c.vy.toFixed(1), a ? 1 : 0,
+                  c.modo, c.grav, c.piso ? 1 : 0]);
+      if (!c.vivo) break;
+      if (c.x >= MUNDO.largo) break;
+    }
+    return { vivo: c.vivo, x: +c.x.toFixed(2), pasos: out.length, t: out };
+  },
+  /* el estado de las imagenes: si una no decodifico, el juego se dibuja como se
+     dibujaba antes y hay que poder distinguir las dos cosas */
+  img(){
+    const t = TELON_TEX['f' + EST.nivel] || {};
+    return { telon: telon.visible, opa: +matTelon.opacity.toFixed(2),
+             listo: !!t.listo, prop: t.prop ? +t.prop.toFixed(2) : null,
+             esc: [telon.scale.x | 0, telon.scale.y | 0],
+             y: +telon.position.y.toFixed(1),
+             off: matTelon.map ? +matTelon.map.offset.x.toFixed(4) : null,
+             sello: $('mSello').classList.contains('hay'),
+             fondo: $('mFondo').classList.contains('hay'),
+             selloAlto: Math.round($('mSello').getBoundingClientRect().height) };
+  },
+  /* el tramo de paleta: cambia cada 128 bloques, o sea cada ocho compases */
+  pal(){
+    return { tramo: PAL.i, x0: +PAL.x0.toFixed(1), listo: PAL.listo,
+             c1: '#' + _p1.getHexString(), c2: '#' + _p2.getHexString() };
+  },
+  /* adelanta SOLO los relojes de los efectos: con el cuadro congelado, el resorte
+     y el sacudon no avanzan y no hay forma de medirlos paso a paso */
+  efePasos(n){ for (let i = 0; i < (n | 0); i++){ efePaso(DT); sqPaso(DT); flaPaso(DT); } return efeDe(); },
+  demo(){ return { on: DEMO, x: +JUG.x.toFixed(1), vivo: JUG.vivo, nivel: EST.nivel }; },
+  progreso(){ return PROG.niv.map(p => ({ mejor: p.mejor, mon: p.mon.slice(), hecho: p.hecho })); },
+  reset(){ try { localStorage.removeItem('rotor_v1'); } catch(e){} return true; }
+};
+</script>
+</body></html>

@@ -1,0 +1,159 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>PULSO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:#e8e4dc;user-select:none;-webkit-user-select:none;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+/* ══════════ EL CUADRO VA HORIZONTAL, Y SI EL TELÉFONO ESTÁ VERTICAL SE GIRA ══════════
+   Este juego se lleva como una bandeja: las dos manos a los costados y el
+   teléfono de costado. En vertical el campo horizontal es de 33° —medido— y a
+   ese ancho un susto que aparece «al costado» cae fuera del cuadro y la tabla
+   no entra entera.
+   Así que el juego es horizontal siempre. Si la ventana está vertical, TODO
+   —lienzo, HUD, velos y pantallas— se gira 90° adentro de `#caja` y el jugador
+   da vuelta el teléfono. Es una sola transformación, así que nada puede quedar
+   desalineado; y como un `transform` crea bloque contenedor, los `position:fixed`
+   de adentro se resuelven contra la caja y no contra la ventana.
+   Y OJO: girar el dibujo gira también los ejes que ve el jugador. `GIRO_VIS`
+   lleva ese ángulo y lo leen el giroscopio y el arrastre del dedo; sin eso el
+   juego quedaría bien dibujado y con los controles cruzados. */
+#caja{position:fixed;left:50%;top:50%;transform-origin:50% 50%;overflow:hidden}
+#capa{position:fixed;inset:0;pointer-events:none}
+
+/* ── EL VELO DEL SUSTO ──
+   Va en CSS y no en el post del render a propósito: tiene que poder encenderse
+   en el MISMO cuadro en que el screamer dispara, sin esperar a que el bucle de
+   dibujo llegue. Un fogonazo que llega un cuadro tarde no asusta. */
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
+#neg{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .4s}
+#neg.on{opacity:1}
+#vineta{position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 50%,transparent 34%,rgba(0,0,0,.82) 100%)}
+
+/* ── EL HUD ES CASI NADA ──
+   Las dos manos están ocupadas sosteniendo la tabla. Un HUD con botones sería
+   mentirle al jugador sobre lo que puede hacer. */
+#hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .5s}
+#hud.on{opacity:1}
+#dist{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:0;right:0;
+  text-align:center;font-size:13px;letter-spacing:.24em;opacity:.5}
+#nivel{position:absolute;top:calc(env(safe-area-inset-top,0px) + 34px);left:0;right:0;
+  text-align:center;font-size:10px;letter-spacing:.3em;opacity:.32}
+
+/* la barra de agua: lo único que se mira sin querer */
+#agua{position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
+  width:44%;height:5px;background:rgba(255,255,255,.10);border-radius:3px;overflow:hidden}
+#aguaB{height:100%;width:100%;background:#7fb4c9;transition:width .18s}
+#aguaB.poco{background:#c96b5a}
+
+#av{position:absolute;left:0;right:0;top:46%;text-align:center;font-size:15px;
+  letter-spacing:.2em;opacity:0;transition:opacity .3s;text-shadow:0 2px 14px #000}
+#av.on{opacity:.95}
+
+/* ── LAS PANTALLAS ── */
+.pan{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;padding:26px;background:#07070a;z-index:6}
+.pan.on{display:flex}
+.pan h1{font-size:clamp(34px,13vw,72px);letter-spacing:.3em;font-weight:800;
+  text-indent:.3em;color:#efe9dd}
+.pan p{font-size:13px;line-height:1.65;opacity:.62;text-align:center;max-width:30em}
+.bt{pointer-events:auto;cursor:pointer;border:1px solid rgba(232,228,220,.28);
+  background:rgba(255,255,255,.03);color:#e8e4dc;padding:13px 30px;border-radius:2px;
+  font-size:13px;letter-spacing:.22em;transition:background .2s,border-color .2s}
+.bt:active{background:rgba(255,255,255,.12)}
+.bt.p{border-color:rgba(232,228,220,.6)}
+.fila{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.chico{font-size:11px;opacity:.45;letter-spacing:.14em;text-align:center;line-height:1.7}
+
+/* el menú tiene el pasillo detrás, así que el panel es translúcido */
+#menu{background:rgba(5,5,8,.72);backdrop-filter:blur(2px)}
+#menu h1{text-shadow:0 0 40px rgba(180,200,220,.22)}
+
+#opc .op{display:flex;gap:8px;align-items:center;justify-content:space-between;
+  width:min(420px,86vw);font-size:12px;letter-spacing:.14em;opacity:.85}
+#opc .op .vals{display:flex;gap:6px}
+#opc .op .bt{padding:7px 13px;font-size:11px;letter-spacing:.1em}
+#opc .op .bt.on{background:rgba(232,228,220,.16);border-color:rgba(232,228,220,.55)}
+
+#cal{gap:22px}
+#calAro{width:132px;height:132px;border:2px solid rgba(232,228,220,.22);border-radius:50%;
+  position:relative;display:grid;place-items:center}
+#calPt{width:16px;height:16px;border-radius:50%;background:#7fb4c9;
+  box-shadow:0 0 18px #7fb4c9;transition:transform .06s linear}
+</style></head><body>
+<div id="caja">
+<canvas id="c"></canvas>
+<div id="capa">
+  <div id="vineta"></div>
+  <div id="hud">
+    <div id="dist">0 m</div>
+    <div id="nivel"></div>
+    <div id="agua"><div id="aguaB"></div></div>
+    <div id="av"></div>
+  </div>
+</div>
+<div id="flash"></div>
+<div id="neg"></div>
+
+<div class="pan on" id="idioma">
+  <h1>PULSO</h1>
+  <div class="fila">
+    <button class="bt p" data-lang="es">ESPAÑOL</button>
+    <button class="bt" data-lang="en">ENGLISH</button>
+    <button class="bt" data-lang="pt">PORTUGUÊS</button>
+  </div>
+</div>
+
+<div class="pan" id="menu">
+  <h1>PULSO</h1>
+  <p data-i18n="mSub"></p>
+  <div class="fila">
+    <button class="bt p" id="mJugar" data-i18n="mJugar"></button>
+    <button class="bt" id="mOpc" data-i18n="mOpc"></button>
+  </div>
+  <div class="chico" id="mRecord"></div>
+</div>
+
+<div class="pan" id="opc">
+  <h1 style="font-size:clamp(20px,7vw,34px)" data-i18n="oTit"></h1>
+  <div class="op"><span data-i18n="oCalidad"></span><span class="vals" id="oCal"></span></div>
+  <div class="op"><span data-i18n="oSens"></span><span class="vals" id="oSens"></span></div>
+  <div class="op"><span data-i18n="oSustos"></span><span class="vals" id="oSus"></span></div>
+  <div class="op"><span data-i18n="oIdioma"></span><span class="vals" id="oIdi"></span></div>
+  <button class="bt" id="oVolver" data-i18n="oVolver"></button>
+</div>
+
+<div class="pan" id="cal">
+  <h1 style="font-size:clamp(19px,6vw,30px)" data-i18n="cTit"></h1>
+  <p data-i18n="cSub"></p>
+  <div id="calAro"><div id="calPt"></div></div>
+  <button class="bt p" id="cListo" data-i18n="cListo"></button>
+  <div class="chico" id="cEstado"></div>
+</div>
+
+<div class="pan" id="fin">
+  <h1 id="finTit" style="font-size:clamp(24px,9vw,48px)"></h1>
+  <p id="finSub"></p>
+  <div class="fila">
+    <button class="bt p" id="fOtra" data-i18n="fOtra"></button>
+    <button class="bt" id="fMenu" data-i18n="fMenu"></button>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as T from 'three';
+/* el cargador de GLB va aparte del núcleo de three y por eso necesita su propia
+   entrada en el mapa de importaciones. Se usa para los sustos que son MODELO:
+   una cosa que aparece de la nada y que tiene volumen de verdad — un plano con
+   una foto se delata en cuanto la linterna se mueve, porque no proyecta ni
+   recibe nada. */
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

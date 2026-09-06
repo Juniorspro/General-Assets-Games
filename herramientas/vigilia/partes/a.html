@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>VIGILIA</title>
+<style>
+/* ══════════ EL MARCO ══════════
+   VIGILIA es vertical nativo: se juega con el telefono como se agarra, porque
+   lo que se inclina ES el telefono. En una pantalla apaisada el juego ocupa una
+   columna con proporcion de telefono, centrada, y los tamanos de letra salen
+   del ancho del marco (--mw) y no de vw. */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#050506;overflow:hidden;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#cfc9c0;
+  user-select:none;-webkit-user-select:none;touch-action:none}
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;margin:0 auto;
+  overflow:hidden;background:#050506;--mw:420px}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s}
+body.juega #hud{opacity:1}
+.barra{position:absolute;height:calc(var(--mw)*0.026);border-radius:99px;overflow:hidden;
+  background:rgba(10,10,12,.72);box-shadow:0 0 0 1px rgba(180,170,160,.18)}
+.barra i{display:block;height:100%;border-radius:99px;transition:width .09s linear}
+/* las dos barras arrancan DESPUES del boton de pausa: con left al 5,5 % la
+   caja de la barra le pasaba por debajo aunque el relleno no llegara, y eso
+   es un solape de verdad — el dedo que va a la pausa toca la barra */
+#bAgua{left:calc(var(--mw)*0.155);right:5.5%;top:calc(var(--mw)*0.052)}
+#bAgua i{background:linear-gradient(90deg,#2f6f9c,#69b8e0)}
+#bTiempo{left:calc(var(--mw)*0.155);right:5.5%;top:calc(var(--mw)*0.098);height:calc(var(--mw)*0.014)}
+#bTiempo i{background:linear-gradient(90deg,#6b2222,#b8443a)}
+#rot{position:absolute;left:0;right:0;top:calc(var(--mw)*0.132);text-align:center;
+  font-size:calc(var(--mw)*0.030);letter-spacing:.22em;color:#8d857c;text-transform:uppercase}
+#aviso{position:absolute;left:8%;right:8%;top:44%;text-align:center;
+  font-size:calc(var(--mw)*0.046);letter-spacing:.14em;color:#d8cfc4;text-shadow:0 2px 10px #000;
+  opacity:0;transition:opacity .4s}
+#bPausa{position:absolute;left:calc(var(--mw)*0.034);top:calc(var(--mw)*0.028);
+  width:calc(var(--mw)*0.092);height:calc(var(--mw)*0.092);border-radius:11px;pointer-events:auto;
+  background:rgba(12,12,14,.66);border:1px solid rgba(170,160,150,.22);color:#bdb5aa;
+  font-size:calc(var(--mw)*0.042);display:none;align-items:center;justify-content:center}
+body.juega #bPausa{display:flex}
+
+/* ══════════ EL VELO DEL SUSTO ══════════
+   No es una imagen que aparece: es lo que le pasa al ojo. Va DESPUES del
+   pixelado —es CSS, o sea encima del lienzo— asi que se lee a golpe en la
+   cara y no a otra cosa dibujada en la escena. */
+#velo{position:absolute;inset:0;pointer-events:none;background:#fff;opacity:0;mix-blend-mode:screen}
+/* ── LA CAPA DE CINTA VA POR ENCIMA DEL HUD, Y ES A PROPOSITO ──
+   El VHS del shader sólo alcanza a lo que se dibuja en el lienzo; los rótulos y
+   las barras viven en el DOM, así que sin esto quedan nítidos y modernos encima
+   de una imagen de cinta y delatan que el filtro es un filtro. Esta capa son
+   dos degradados repetidos y una viñeta: el compositor la guarda como una capa
+   y no cuesta un cuadro. */
+#cinta{position:absolute;inset:0;pointer-events:none;z-index:6;opacity:.55;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.30) 0px,rgba(0,0,0,.30) 1px,rgba(0,0,0,0) 1px,rgba(0,0,0,0) 3px),
+             repeating-linear-gradient(90deg,rgba(255,90,90,.055) 0px,rgba(90,255,160,.055) 1px,rgba(90,120,255,.055) 2px,rgba(0,0,0,0) 3px);
+  background-size:100% 3px,3px 100%}
+body.sinvhs #cinta,body.sinvhs #tc{display:none}
+/* el reloj de cinta: es lo que termina de decir «esto es una grabación» */
+#tc{position:absolute;left:calc(var(--mw)*0.035);bottom:calc(var(--mw)*0.030);z-index:7;
+  font-size:calc(var(--mw)*0.036);letter-spacing:.10em;color:#e8e2d6;pointer-events:none;
+  text-shadow:0 0 6px rgba(0,0,0,.95),0 2px 0 rgba(0,0,0,.9);opacity:.82;font-weight:700}
+#rec{position:absolute;right:calc(var(--mw)*0.035);bottom:calc(var(--mw)*0.030);z-index:7;
+  font-size:calc(var(--mw)*0.036);letter-spacing:.14em;color:#e8e2d6;pointer-events:none;
+  text-shadow:0 0 6px rgba(0,0,0,.95);opacity:.82;font-weight:700}
+#rec i{display:inline-block;width:calc(var(--mw)*0.028);height:calc(var(--mw)*0.028);border-radius:50%;
+  background:#d63b32;margin-right:.4em;vertical-align:-6%;animation:rp 1.6s steps(1,end) infinite}
+@keyframes rp{0%,50%{opacity:1}50.01%,100%{opacity:.15}}
+#rojo{position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0) 34%,rgba(120,10,10,.85) 100%)}
+
+/* ══════════ PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  padding:calc(var(--mw)*0.07);z-index:5;
+  /* ── EL VELO SE CIERRA DONDE VA EL TEXTO ──
+     Con 0,60 en la franja del medio, el tablon —que es lo mas claro del
+     cuadro— se veia a traves de los botones y los rotulos de los ajustes
+     quedaban ilegibles. Arriba y abajo sigue abierto para que se vea que
+     detras hay un juego. */
+  background:linear-gradient(180deg,rgba(4,4,6,.95) 0%,rgba(4,4,6,.80) 18%,rgba(4,4,6,.90) 40%,rgba(4,4,6,.90) 78%,rgba(4,4,6,.97) 100%)}
+.pan.on{display:flex;animation:ap .35s ease}
+@keyframes ap{from{opacity:0}to{opacity:1}}
+.caja{width:100%;max-width:calc(var(--mw)*0.88);text-align:center}
+#logo{display:block;width:82%;margin:0 auto calc(var(--mw)*0.02);filter:drop-shadow(0 6px 18px rgba(0,0,0,.9))}
+h1{font-size:calc(var(--mw)*0.115);letter-spacing:.16em;color:#ded5c8;font-weight:800;
+  text-shadow:0 3px 14px #000}
+.sub{font-size:calc(var(--mw)*0.031);letter-spacing:.3em;color:#8e857a;margin-top:calc(var(--mw)*0.012);
+  text-transform:uppercase}
+.hueco{height:calc(var(--mw)*0.055)}
+.hueco.chico{height:calc(var(--mw)*0.026)}
+.bt{display:block;width:100%;padding:calc(var(--mw)*0.036) 0;margin-bottom:calc(var(--mw)*0.022);
+  border-radius:12px;border:1px solid rgba(170,155,140,.26);background:rgba(20,18,18,.86);
+  color:#d5ccc0;font-size:calc(var(--mw)*0.042);letter-spacing:.14em;font-weight:700;
+  font-family:inherit;cursor:pointer;text-transform:uppercase}
+.bt.pri{background:linear-gradient(180deg,#6d2020,#3a1212);border-color:rgba(200,90,80,.42);color:#f0e2d8}
+.bt.sel{background:rgba(120,40,36,.8);border-color:rgba(220,110,96,.6);color:#f6e8e0}
+.fila{display:flex;gap:calc(var(--mw)*0.02)}
+/* tres nombres de idioma en una fila no entran con el espaciado del boton
+   grande: medido, PORTUGUÊS salia cortado. */
+.fila .bt{margin-bottom:calc(var(--mw)*0.016);font-size:calc(var(--mw)*0.030);
+  letter-spacing:.04em;padding:calc(var(--mw)*0.030) 0;overflow:hidden}
+.pie{font-size:calc(var(--mw)*0.028);color:#7a736a;margin-top:calc(var(--mw)*0.016);line-height:1.5}
+.grande{font-size:calc(var(--mw)*0.16);font-weight:800;color:#e6dccd;letter-spacing:.04em}
+input[type=range]{-webkit-appearance:none;width:100%;height:calc(var(--mw)*0.022);border-radius:99px;
+  background:rgba(90,84,78,.5);outline:none;margin:calc(var(--mw)*0.014) 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:calc(var(--mw)*0.05);
+  height:calc(var(--mw)*0.05);border-radius:50%;background:#b8483c;cursor:pointer}
+#carga{position:absolute;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;
+  background:#050506;transition:opacity .5s}
+#carga.ido{opacity:0;pointer-events:none}
+#cBarra{height:2px;background:#8e3a30;width:0%;transition:width .3s}
+</style>
+</head>
+<body>
+<div id="marco">
+  <canvas id="c"></canvas>
+  <div id="rojo"></div>
+  <div id="velo"></div>
+  <div id="cinta"></div>
+  <div id="tc">00:00:00:00</div>
+  <div id="rec"><i></i>REC</div>
+
+  <div id="hud">
+    <div class="barra" id="bAgua"><i style="width:100%"></i></div>
+    <div class="barra" id="bTiempo"><i style="width:0%"></i></div>
+    <div id="rot"></div>
+    <div id="aviso"></div>
+    <button id="bPausa">॥</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1 style="font-size:calc(var(--mw)*0.075)">VIGILIA</h1>
+    <div class="hueco"></div>
+    <button class="bt" data-lang="es">CASTELLANO</button>
+    <button class="bt" data-lang="en">ENGLISH</button>
+    <button class="bt" data-lang="pt">PORTUGUÊS</button>
+  </div></div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <img id="logo" alt="VIGILIA" style="display:none">
+    <h1 id="mTit">VIGILIA</h1>
+    <div class="sub" id="mSub"></div>
+    <div class="hueco"></div>
+    <div class="pie" id="mSensor"></div>
+    <div class="hueco chico"></div>
+    <button class="bt pri" id="bJugar"></button>
+    <button class="bt" id="bAjustes"></button>
+    <div class="pie" id="mPie"></div>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1>
+    <div class="hueco"></div>
+    <div class="pie" id="aMusL"></div><input type="range" id="aMus" min="0" max="100" value="60">
+    <div class="pie" id="aFxL"></div><input type="range" id="aFx" min="0" max="100" value="85">
+    <div class="hueco chico"></div>
+    <div class="fila"><button class="bt" data-lang="es">Castellano</button><button class="bt" data-lang="en">English</button><button class="bt" data-lang="pt">Português</button></div>
+    <div class="fila"><button class="bt" data-cal="baja"></button><button class="bt" data-cal="media"></button><button class="bt" data-cal="alta"></button></div>
+    <button class="bt" id="aVhs"></button>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1>
+    <div class="hueco"></div>
+    <button class="bt pri" id="pSeguir"></button>
+    <button class="bt" id="pMenuB"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <div class="sub" id="fPor"></div>
+    <div class="grande" id="fNum"></div>
+    <div class="sub" id="fDet"></div>
+    <div class="hueco"></div>
+    <div class="pie" id="fMejor"></div>
+    <div class="hueco chico"></div>
+    <button class="bt pri" id="fOtra"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+
+  <div id="carga"><div style="width:52%"><div style="text-align:center;letter-spacing:.42em;font-size:13px;color:#6d655c;margin-bottom:14px">VIGILIA</div><div style="height:2px;background:rgba(120,110,100,.2)"><div id="cBarra"></div></div></div></div>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

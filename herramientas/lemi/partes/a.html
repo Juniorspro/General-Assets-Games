@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#57b6ef">
+<title>LEMI · la isla del camello</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a1420;touch-action:none;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#eaf4ff;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+canvas{display:block}
+
+/* ── EL ESCENARIO ──
+   Todo el juego vive acá adentro. Con el teléfono en vertical se gira 90° y se
+   le intercambian el ancho y el alto, así se juega apaisado sin pedirle a nadie
+   que dé vuelta el aparato. La pantalla de carga queda AFUERA a propósito: se
+   muestra antes de girar nada y hay que poder leerla como venga el teléfono. */
+#escenario{position:fixed;left:0;top:0;width:100%;height:100%;
+  transform-origin:top left;overflow:hidden}
+body.girado #escenario{transform:rotate(90deg) translateY(-100%)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* EL LOGO SE DECLARA UNA SOLA VEZ. Aparece en tres pantallas —carga, idioma y
+   menú— y `armar.py` reemplaza TODAS las marcas que encuentre: con un
+   `<img src>` por pantalla, el mismo base64 quedaba pegado tres veces adentro
+   del HTML. Como variable se declara una vez y se usa como fondo. */
+:root{--logo:url(@@LOGO@@)}
+.lg{background:var(--logo) center/contain no-repeat;image-rendering:pixelated;
+  flex:0 0 auto;display:block}
+
+/* ── CARGA E IDIOMA: LA MISMA PIEL QUE EL MENÚ ──
+   Eran dos pantallas azules con degradado y letras finas: la portada de una
+   aplicación, no la de este juego. Y son lo PRIMERO que se ve, o sea que la
+   primera impresión del juego era de otro juego.
+   EL FONDO DE BASE YA ES SELVA, SIN DEPENDER DE NINGUNA IMAGEN. La pantalla de
+   carga se pinta antes de que el módulo se haya evaluado siquiera, así que si el
+   verde dependiera del follaje horneado habría un cuadro azul igual. El follaje
+   entra cuando puede, encima. */
+.selva{background:
+    radial-gradient(130% 95% at 50% 12%, #12301f 0%, #0a1c14 52%, #04100b 100%)}
+.follaje{position:absolute;inset:0;pointer-events:none;
+  background:var(--marcoV) center/100% 100% no-repeat;
+  image-rendering:pixelated;opacity:.85;filter:brightness(.48) saturate(.7);
+  -webkit-mask-image:radial-gradient(ellipse 60% 68% at 50% 50%, transparent 38%, #000 100%);
+  mask-image:radial-gradient(ellipse 60% 68% at 50% 50%, transparent 38%, #000 100%)}
+/* el cartel de madera con el nombre, igual que en el menú */
+.marca{display:flex;align-items:center;justify-content:center;
+  padding:20px 11% 24px;margin:0 auto 14px;width:min(300px,82%);
+  background:var(--cartel) center/100% 100% no-repeat;image-rendering:pixelated;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.7))}
+/* el logo LLEVA LA PALABRA DIBUJADA, así que ocupa el cartel entero y no hay
+   texto al lado: es una sola imagen y la proporción la fija el propio PNG */
+.marca .lg{width:100%;aspect-ratio:384/185;
+  filter:drop-shadow(0 3px 6px rgba(0,0,0,.8))}
+
+#carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  transition:opacity .6s ease}
+#carga.ido{opacity:0;pointer-events:none}
+#carga .caja{text-align:center;width:min(360px,84vw);position:relative;z-index:2}
+#carga p{margin-top:8px;font-size:12.5px;color:rgba(232,216,180,.72);min-height:1.4em;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
+/* LA BARRA ES UNA TABLA QUE SE LLENA, no una línea celeste. El degradado verde a
+   celeste era el mismo que tenían los botones del menú antes de las chapas, y
+   por la misma razón no va: no hay nada de ese color en la isla. */
+#carga .barra{margin:16px auto 0;width:78%;height:9px;
+  background:rgba(20,12,6,.72);border:2px solid rgba(58,38,20,.9);overflow:hidden}
+#carga .barra i{display:block;height:100%;width:0;
+  background:linear-gradient(180deg,#f0bd6a,#c07f2c);transition:width .25s}
+#carga .pista{margin-top:12px;font-size:11.5px;color:rgba(234,244,255,.50);
+  line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.95)}
+
+/* ── IDIOMA ──
+   VA ANTES DEL MENU Y NO ADENTRO. Elegir idioma dentro de un menu ya escrito en
+   un idioma que no entendes no sirve: para cuando lo encontras ya leiste todo
+   lo demas sin entenderlo. Los tres botones dicen el idioma EN SU PROPIO
+   IDIOMA, que es lo unico que se lee igual sin saber cual esta puesto. */
+/* VA AFUERA DE `#escenario` Y SIN GIRAR, igual que la pantalla de carga que
+   viene justo antes. Probé meterla adentro para que girara con el menú y no se
+   ve: `#escenario` lleva un `transform`, y un `transform` crea contexto de
+   apilado, así que el z-index 95 de adentro NO le gana al 90 de `#carga`, que
+   está afuera — la pantalla de idioma quedaba tapada por la barra de carga. Y
+   de paso queda coherente: las dos pantallas previas se leen con el teléfono
+   como uno lo agarra, y recién el menú pide darlo vuelta. */
+#idioma{position:fixed;inset:0;z-index:95;display:none;place-items:center}
+#idioma.on{display:grid}
+#idioma .caja{text-align:center;width:min(320px,80vw);position:relative;z-index:2}
+#idioma .sub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.22em;
+  color:rgba(232,216,180,.66);text-transform:uppercase;margin-bottom:20px;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
+/* los tres botones son las mismas tablas del menú: una sola familia de controles
+   en todo el juego, desde la primera pantalla */
+#idioma button{display:block;width:100%;margin-top:9px;padding:16px 18px;
+  border:none;background:var(--tabla) center/100% 100% no-repeat;
+  image-rendering:pixelated;color:#f2e6cf;
+  font:800 15px/1 system-ui,sans-serif;letter-spacing:.05em;cursor:pointer;
+  text-shadow:0 2px 0 rgba(0,0,0,.65), 0 0 12px rgba(0,0,0,.5);
+  filter:drop-shadow(0 5px 12px rgba(0,0,0,.5));
+  transition:transform .12s ease,filter .2s ease}
+#idioma button:active{transform:scale(.97) translateY(2px);filter:brightness(1.25)}
+#idioma button.sel{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.55)}
+
+/* ── LA VIÑETA ROJA ──
+   Se pinta con `box-shadow` hacia adentro y no con un degradado radial de
+   fondo: un `radial-gradient` a pantalla completa es una capa más que el
+   navegador compone en cada cuadro, y esto es una sombra que ya sabe dibujar.
+   Y VA PIXELADA: el juego entero se dibuja a un tercio de resolución, así que
+   una viñeta suave sería lo ÚNICO nítido del cuadro y se leería como que está
+   pegada encima. Los escalones salen de repetir la sombra en anillos. */
+/* la viñeta roja de estar roto vive en el shader del post (uniforme `rojo`), no
+   acá: hecha con box-shadow salía suave y continua encima de una imagen
+   escalonada, o sea pegada arriba del juego. Se pidió PIXELADA. */
+
+/* ── HUD ── */
+/* EL HUD SE OCULTA CON `visibility` ADEMAS DE CON `opacity`, y no es cinturón y
+   tirantes. Los botones de arriba a la derecha llevan `backdrop-filter`, y un
+   filtro de fondo se aplica contra lo que hay DETRÁS del elemento, no contra su
+   propio píxel: en un padre con `opacity:0` el navegador igual lo compone, así
+   que los dos botones seguían viéndose recortados sobre el menú. Medido en la
+   captura de la vuelta al menú: dos barras claras al costado del cartel.
+   `visibility:hidden` no se compone, y va con `transition-delay` para que el
+   fundido de salida se llegue a ver antes de desaparecer. */
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;
+  visibility:hidden;transition:opacity .8s, visibility 0s linear .8s}
+#hud.on{opacity:1;visibility:visible;transition:opacity .8s, visibility 0s}
+#fps{position:absolute;left:12px;top:calc(10px + env(safe-area-inset-top,0px));
+  font:600 10.5px/1.6 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.5);
+  text-shadow:0 1px 4px rgba(0,0,0,.8);letter-spacing:.04em}
+#teclas{position:absolute;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:10px 13px;border-radius:12px;background:rgba(8,18,28,.5);border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font:600 11px/1.85 ui-monospace,Menlo,monospace;color:rgba(234,244,255,.62);display:none}
+body.pc #teclas{display:block}
+#teclas b{color:#eaf4ff}
+/* ── arriba a la derecha, sólo lo que NO se usa jugando ── */
+#botones{position:absolute;right:max(10px,2.5vw);top:calc(10px + env(safe-area-inset-top,0px));
+  display:flex;gap:7px;pointer-events:auto}
+.bt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(8,18,28,.42);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);font:800 15px/1 system-ui,sans-serif;opacity:.8}
+.bt:active{transform:translateY(1px);filter:brightness(1.3)}
+
+/* ── ACCIONES, abajo a la derecha y debajo del pulgar ──
+   El botón de correr estaba arriba, del lado opuesto a la mano que juega: para
+   apretarlo había que soltar la palanca. Todo lo que se usa en movimiento baja
+   acá, en racimo, con el salto grande porque es el que más se aprieta. */
+#acciones{position:absolute;right:max(16px,4vw);bottom:max(18px,5vh);
+  display:grid;grid-template-columns:auto auto;gap:11px;align-items:end;
+  justify-items:center;pointer-events:auto}
+/* ── LOS BOTONES SON IMAGENES DE PIXEL ART ──
+   Eran circulos de CSS con un caracter adentro («»», «⌄», «⌃», «✋»): un borde
+   perfectamente redondo y un glifo del sistema —que ademas cambia de forma en
+   cada telefono— encima de un juego dibujado a un tercio de resolucion. La
+   chapa generada entra como `background-image` y `image-rendering: pixelated`
+   la agranda sin suavizarla, asi que sus pixeles miden lo mismo que los del
+   mundo. El rotulo de texto se queda: hay que poder traducirlo. */
+/* LA CHAPA ENTRA POR UNA VARIABLE Y LAS PROPIEDADES VAN SUELTAS, NO EN EL
+   ATAJO `background`. Estaban en el atajo, y `#acSalta` —que necesita su propio
+   color de fondo— lo volvía a escribir entero: un atajo REPONE a su valor
+   inicial todo lo que no nombra, así que le devolvía `background-size:auto` y
+   `background-repeat:repeat` al único botón que mide 88 px con una chapa de 56.
+   O sea que la flecha de SALTAR salía a tamaño natural y EMBALDOSADA —una
+   flecha y media, cortada— mientras los otros tres, que miden 58, disimulaban
+   el defecto.
+   Y el estado «tiene imagen» pasa a ser una clase en vez de
+   `[style*="background-image"]`: ese selector busca una subcadena dentro del
+   atributo `style`, o sea que depende de cómo el navegador serialice la línea
+   —y encima pierde contra un ID, que es justo lo que dejaba al botón de saltar
+   con su tinte verde por debajo de la chapa de madera. */
+.ac{border-radius:50%;display:grid;place-items:end center;color:#eaf4ff;
+  background-color:rgba(10,20,30,.42);
+  background-image:var(--spr,none);
+  background-position:center;background-size:contain;background-repeat:no-repeat;
+  image-rendering:pixelated;
+  border:1.6px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font:800 9.5px/1 system-ui,sans-serif;letter-spacing:.06em;padding-bottom:5px;
+  text-shadow:0 1px 4px rgba(0,0,0,.9);transition:transform .12s,filter .2s}
+.ac:active{transform:scale(.9);filter:brightness(1.35)}
+.ac.on{filter:brightness(1.5) saturate(1.4)}
+.ac .ico{font-size:20px;line-height:1;margin-bottom:1px}
+#acSalta{width:min(88px,19vw);aspect-ratio:1;grid-column:2;grid-row:1/3;
+  background-color:rgba(126,227,160,.20);border-color:rgba(126,227,160,.5)}
+#acSalta .ico{font-size:27px}
+#acCorre{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:1}
+#acAgacha{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:2}
+/* con la chapa puesta, el círculo, el vidrio y el glifo del sistema sobran. Va
+   DESPUÉS de `#acSalta` para ganarle sin `!important`: mismo peso —un ID y una
+   clase— y el que viene después manda. */
+.ac.conImg, #acSalta.conImg, #acUsar.conImg{background-color:transparent;border-color:transparent;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+.ac.conImg .ico{display:none}
+.ac.on:not(.conImg){background-color:rgba(126,227,160,.3);
+  border-color:rgba(126,227,160,.75);color:#eafff2}
+body.pc #acciones{display:none}
+
+/* ── MENÚ DE INICIO ──
+   El fondo NO es una imagen: es la isla de verdad, filmada con un campo de
+   visión de treinta grados. Con el teleobjetivo se aplasta la perspectiva, las
+   copas se apilan unas sobre otras y el movimiento lento de la cámara se lee
+   como una grúa de cine en vez de como un paseo. */
+#menu{position:absolute;inset:0;z-index:44;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(4,10,16,.34) 0%,rgba(4,10,16,.08) 38%,rgba(4,10,16,.78) 100%)}
+#menu.on{display:grid}
+/* ── EL MARCO DE HOJAS ──
+   Una capa encima del velo y debajo de los botones: los bordes del cuadro se
+   cierran con follaje oscuro y el centro queda limpio. No es decoración suelta —
+   el menú tiene detrás la isla girando en vivo, o sea una imagen que cambia todo
+   el tiempo, y sin algo que cierre los bordes el texto queda flotando sobre
+   cualquier cosa que la cámara esté mirando en ese momento. Va con
+   `pointer-events:none` porque tapa los botones. */
+#menu .mMarco{position:absolute;inset:0;pointer-events:none;
+  background:var(--marco) center/100% 100% no-repeat;
+  image-rendering:pixelated;opacity:.86;filter:brightness(.5) saturate(.7);
+  /* SE DESVANECE HACIA EL CENTRO. A opacidad pareja, el follaje de abajo le caía
+     encima al pie y a la línea de la historia —medido en la captura, el pie salía
+     partido por una hoja—. Con la máscara, el marco cierra los bordes y suelta
+     el medio, que es lo único que tiene que hacer. */
+  -webkit-mask-image:radial-gradient(ellipse 62% 74% at 50% 50%, transparent 42%, #000 100%);
+  mask-image:radial-gradient(ellipse 62% 74% at 50% 50%, transparent 42%, #000 100%)}
+#menu .mCaja{text-align:center;width:min(360px,84%)}
+/* EL CARTEL ES EL TÍTULO, Y EL LOGO VA ADENTRO. Con el cartel puesto quedaron
+   las dos cosas: el emblema generado arriba, chiquito, y debajo la palabra LEMI
+   escrita en la tabla — o sea el nombre del juego dos veces, que es exactamente
+   el defecto que este menú ya había arreglado una vez. Ahora hay UNA marca: la
+   tabla colgada con el logo clavado encima. Y el logo puede crecer, porque ya no
+   compite con nada. */
+#menu .mEmb{position:relative;display:flex;align-items:center;justify-content:center;
+  padding:calc(var(--eh,100vh) * 0.040) 11% calc(var(--eh,100vh) * 0.048);
+  margin-bottom:min(6px, calc(var(--eh,100vh) * 0.008));
+  background:var(--cartel) center/100% 100% no-repeat;
+  image-rendering:pixelated;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.7))}
+/* EL LOGO ES EL TÍTULO, no un emblema detrás de un título. Antes había una
+   imagen al 78 % de opacidad y encima, superpuesta, la palabra escrita con la
+   tipografía del sistema; eso significaba que el nombre del juego cambiaba de
+   forma según el aparato —Roboto en Android, San Francisco en iPhone, Segoe en
+   Windows— y que las dos cosas competían por el mismo espacio. Ahora el logo
+   viene con la palabra adentro, va OPACO y ocupa el ancho que le corresponde a
+   un título. Va en PNG con alfa: en JPG el fondo se ve como un cuadrado más
+   claro flotando sobre el bosque por más que se lo mezcle.
+   Y VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO (`max-height` en vh): el menú tiene
+   siete cosas apiladas y en un teléfono corto el título se come el aire de
+   todas las demás. */
+/* EL LOGO NUEVO DICE «LEMI», ASÍ QUE NO HAY TEXTO AL LADO. El anterior era un
+   sello circular —un dibujo, no la palabra—, y por eso hacía falta escribir el
+   nombre en la tabla: dos elementos peleándose el mismo cartel, y encima la
+   palabra escrita con la tipografía del sistema, que es distinta en cada
+   aparato. El logo nuevo son cuatro letras de tablones atados con soga y el
+   camello encima de la I: trae el nombre dibujado y con la forma que le
+   corresponde a ESTE juego. Una sola imagen, que además pesa 15 KB contra los
+   309 del anterior.
+   VA MEDIDO EN ALTO ADEMÁS DE EN ANCHO: el menú tiene siete cosas apiladas y en
+   un teléfono corto un título medido sólo en ancho se come el aire de todas las
+   demás. La proporción sale del propio PNG (`aspect-ratio`), así que cambiar el
+   logo no obliga a tocar el CSS. */
+#menu .mEmb .lg{width:100%;aspect-ratio:384/185;
+  max-height:calc(var(--eh,100vh) * 0.155);
+  filter:saturate(1.06) drop-shadow(0 3px 6px rgba(0,0,0,.85))}
+/* EL NOMBRE VA DEBAJO DEL EMBLEMA Y NO ENCIMA. Antes iba superpuesto en
+   absoluto sobre la imagen, y ahí las dos cosas se pelean el mismo espacio: la
+   palabra le cae encima al dibujo y el dibujo le ensucia la palabra. Apilados,
+   el solapamiento es imposible por construcción. */
+/* la palabra escrita se fue con el cartel: el logo ya la trae dibujada, y dos
+   veces el mismo nombre es la mitad del alto del menú gastada en repetirse */
+#menu .mSub{font:600 10.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  /* SE DESPEGA DEL CARTEL. Con 7 px de margen quedaba apoyado sobre la tabla de
+     abajo —gris oscuro sobre madera oscura, o sea ilegible— y encima parecía
+     parte del cartel en vez de un pie. Y sube de .62 a .80: sobre el follaje del
+     marco, cualquier cosa por debajo de eso se pierde. */
+  text-transform:uppercase;color:rgba(232,216,180,.80);
+  text-shadow:0 1px 6px rgba(0,0,0,.95);
+  margin-top:calc(var(--eh,100vh) * 0.040);
+  margin-bottom:min(18px, calc(var(--eh,100vh) * 0.022))}
+/* ── LOS BOTONES SON CHAPAS DE MADERA ──
+   Eran dos píldoras: una de vidrio esmerilado y otra con un degradado verde a
+   celeste. Las dos son de la biblioteca de widgets de cualquier aplicación, y
+   encima el degradado es lo único del menú que no aparece en ningún otro lado
+   del juego —la isla no tiene un solo píxel celeste que no sea el cielo—. Ahora
+   son dos tablas clavadas, generadas y horneadas a 192×60, estiradas con
+   `image-rendering: pixelated`: son madera, como el campamento.
+   EL RADIO Y EL VIDRIO SE VAN CON LA CHAPA. Un borde redondeado de CSS por
+   encima de una tabla con el contorno dibujado deja DOS bordes, uno nítido y
+   uno pixelado, y el nítido gana. */
+#menu .mBtn{display:block;width:100%;border:none;background:transparent;
+  padding:min(17px, calc(var(--eh,100vh) * 0.023)) 15px;
+  margin-top:min(9px, calc(var(--eh,100vh) * 0.012));
+  font-size:15px;font-weight:800;letter-spacing:.05em;
+  color:#f2e6cf;text-shadow:0 2px 0 rgba(0,0,0,.65), 0 0 12px rgba(0,0,0,.5);
+  background:var(--tabla) center/100% 100% no-repeat;
+  image-rendering:pixelated;transition:transform .16s,filter .16s;
+  filter:drop-shadow(0 5px 12px rgba(0,0,0,.5))}
+#menu .mBtn:active{transform:scale(.97) translateY(2px);filter:brightness(1.25)}
+#menu .mBtn.pri{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.55);
+  font-size:17px;filter:drop-shadow(0 6px 18px rgba(240,175,70,.30))}
+/* LAS MEDIDAS DEL MENÚ VAN TOPADAS EN vh ADEMÁS DE EN PÍXELES, y eso salió de
+   una captura: con el escenario girado, un teléfono en vertical deja un marco
+   de 412 píxeles de ALTO, y con las medidas fijas los siete elementos sumaban
+   450 — el texto de la historia y el pie quedaban cortados por el borde de
+   abajo. Con los topes, lo que se achica primero es el aire y no el texto. */
+/* ── LAS DOS FILAS DE AJUSTES ──
+   Idioma y gráficos, en el menú y no sólo en la pantalla previa: hasta ahora, el
+   idioma se elegía una vez antes de todo y cambiarlo obligaba a recargar la
+   página, y la calidad no se podía elegir en ningún lado. Van como FICHAS
+   CHICAS y no como botones grandes porque son ajustes, no acciones — el ojo
+   tiene que ir primero a JUGAR. */
+#menu .mFila{display:flex;align-items:center;justify-content:center;gap:5px;
+  margin-top:min(9px, calc(var(--eh,100vh) * 0.012))}
+#menu .mRot{font:700 8.5px/1 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(232,216,180,.5);text-shadow:0 1px 5px rgba(0,0,0,.95);
+  margin-right:4px;min-width:62px;text-align:right}
+#menu .chip{border:none;padding:7px 11px;
+  background:var(--tabla) center/100% 100% no-repeat;image-rendering:pixelated;
+  color:rgba(242,230,207,.72);font:800 10.5px/1 ui-monospace,monospace;
+  letter-spacing:.08em;cursor:pointer;
+  text-shadow:0 1px 0 rgba(0,0,0,.7);transition:transform .12s,filter .2s}
+#menu .chip:active{transform:scale(.94)}
+#menu .chip.sel{background:var(--tablaPri) center/100% 100% no-repeat;
+  color:#2a1607;text-shadow:0 1px 0 rgba(255,235,190,.5)}
+#menu .mHist{margin-top:min(18px, calc(var(--eh,100vh) * 0.022));
+  font-size:clamp(10.5px, calc(var(--eh,100vh) * 0.029), 12.5px);
+  line-height:1.5;color:rgba(234,244,255,.66);text-wrap:balance;
+  text-shadow:0 1px 6px rgba(0,0,0,.95)}
+#menu .mPie{margin-top:min(10px, calc(var(--eh,100vh) * 0.013));font-size:10.5px;
+  color:rgba(234,244,255,.40);line-height:1.4;text-shadow:0 1px 5px rgba(0,0,0,.95)}
+
+/* ── MENÚ DE PAUSA ── */
+#pausa{position:absolute;inset:0;z-index:45;display:none;place-items:center;
+  background:rgba(6,12,20,.72);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+#pausa.on{display:grid}
+#pausa .caja{width:min(300px,80%);text-align:center}
+#pausa h2{font-size:23px;font-weight:200;letter-spacing:.02em;margin-bottom:4px}
+#pausa .sub{font:600 9.5px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  text-transform:uppercase;color:rgba(234,244,255,.34);margin-bottom:20px}
+#pausa button{display:block;width:100%;padding:14px;border-radius:14px;margin-top:9px;
+  font-size:14.5px;font-weight:600;border:1px solid rgba(255,255,255,.15);
+  color:rgba(234,244,255,.9);background:rgba(255,255,255,.05)}
+#pausa button:active{transform:scale(.98)}
+#pausa button.pri{background:linear-gradient(135deg,#7ee3a0,#57b6ef);color:#04121a;border:none}
+/* ── LAS MISIONES DEL DÍA ──
+   El panel va ARRIBA A LA IZQUIERDA y no en el medio: es un renglón que hay que
+   poder mirar de reojo mientras se camina, no un cartel que se lee y se cierra.
+   Y el borde de color a la izquierda es lo que hace que se distinga del reloj y
+   de los fps, que viven en la misma esquina. */
+/* EL PANEL ES UNA HOJA DE PAPEL, y eso cambia el color del texto entero. Era
+   una pildora de vidrio oscuro con letras claras, o sea la ficha de estado de
+   cualquier aplicacion; ahora es un papel viejo con los bordes rotos —generado
+   y horneado a 160 px, estirado con `image-rendering: pixelated`— y encima va
+   tinta OSCURA, que es lo unico que se lee sobre papel. El borde de color se
+   fue con el vidrio: sobre una hoja rota no hace falta un borde para
+   distinguirla del reloj. */
+#obj{position:absolute;left:10px;top:calc(28px + env(safe-area-inset-top,0px));
+  max-width:min(290px,64%);min-width:180px;
+  padding:16px 22px 24px 19px;
+  background:var(--hoja) center/100% 100% no-repeat, rgba(228,214,182,.94);
+  image-rendering:pixelated;
+  color:#241d13;
+  opacity:0;transition:opacity .4s;pointer-events:none;
+  filter:drop-shadow(0 3px 7px rgba(0,0,0,.55))}
+#obj.on{opacity:1}
+#obj .n{font:700 9px/1.5 ui-monospace,monospace;letter-spacing:.20em;
+  color:rgba(60,42,20,.72);text-transform:uppercase}
+#obj .t{font-size:13.5px;font-weight:700;line-height:1.32;margin-top:1px;color:#1d160d}
+#obj .s{font-size:11px;line-height:1.4;color:rgba(52,38,20,.78);margin-top:2px}
+#obj.hecho .n{color:#7a5a12}
+#obj.hecho .t{text-decoration:line-through;opacity:.72}
+
+/* la pista de acción: aparece sola cuando hay algo cerca */
+#pista{position:absolute;left:50%;bottom:calc(18% + 10px);transform:translateX(-50%);
+  padding:8px 15px;border-radius:99px;background:rgba(8,18,28,.66);
+  border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(9px);
+  -webkit-backdrop-filter:blur(9px);font:600 12.5px system-ui,sans-serif;
+  letter-spacing:.03em;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#pista.on{opacity:1}
+#pista b{color:#7ee3a0}
+/* el botón de usar entra en el racimo de acciones, arriba del salto */
+/* MISMA REGLA QUE `#acSalta`: color de fondo y NADA MÁS. El atajo `background`
+   repone `background-size` y `background-repeat` a sus valores iniciales, o sea
+   que le devolvía `auto` y `repeat` a un botón que lleva una chapa. */
+#acUsar{width:min(58px,13vw);aspect-ratio:1;grid-column:1;grid-row:3;
+  background-color:rgba(240,200,105,.18);border-color:rgba(240,200,105,.55)}
+#acUsar.apagado{opacity:.28;pointer-events:none}
+
+/* ── EL MINIJUEGO DEL INFLADOR ──
+   Una barra, una línea que la recorre y un bloque verde. Va en DOM y no en el
+   lienzo 3D a propósito: es una interfaz, tiene que verse nítida a cualquier
+   densidad de pantalla y no le sirve de nada estar dentro del mundo. */
+#mini{position:absolute;inset:0;z-index:47;display:none;place-items:center;
+  background:rgba(6,12,20,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#mini.on{display:grid}
+#mini .caja{width:min(430px,86%);text-align:center;pointer-events:auto}
+#mini .tit{font-size:15px;font-weight:700;letter-spacing:.02em}
+#mini .cnt{font:700 11px/1.6 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(126,227,160,.9);margin-top:3px}
+#mini .barra{position:relative;height:52px;margin:16px 0 6px;border-radius:10px;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.17);overflow:hidden}
+#mini .cubo{position:absolute;top:6px;bottom:6px;border-radius:5px;
+  background:linear-gradient(180deg,#8ff0a8,#4cc472);box-shadow:0 0 14px rgba(126,227,160,.5)}
+#mini .linea{position:absolute;top:-1px;bottom:-1px;width:4px;border-radius:2px;
+  background:#fff;box-shadow:0 0 12px rgba(255,255,255,.9)}
+#mini .aviso{height:1.5em;font-size:12.5px;font-weight:600;
+  color:rgba(234,244,255,.75);margin-top:4px}
+#mini .btn{display:block;width:100%;margin-top:12px;padding:16px;border-radius:99px;
+  font-size:15px;font-weight:700;border:none;color:#04121a;
+  background:linear-gradient(135deg,#7ee3a0,#57b6ef)}
+#mini .btn:active{transform:scale(.97)}
+#mini .pie{margin-top:9px;font-size:11px;color:rgba(234,244,255,.42)}
+
+/* ── LA CINEMÁTICA DE APERTURA ──
+   Dos barras negras, un renglón de texto abajo y un botón de saltear. Las
+   barras no son un adorno: son lo que le dice al jugador «esto no se juega, se
+   mira», y sin ellas los primeros segundos se leen como que el juego se trabó.
+   Y CRECEN desde cero en medio segundo, porque apareciendo de golpe se leen a
+   error de dibujo. */
+#cine{position:absolute;inset:0;z-index:46;display:none;pointer-events:none}
+#cine.on{display:block}
+#cine .barra{position:absolute;left:0;right:0;height:0;background:#05080c;
+  transition:height .5s ease}
+#cine.abre .barra{height:11%}
+#cine .barra.ar{top:0} #cine .barra.ab{bottom:0}
+/* EL TEXTO VIVE DENTRO DE LA BARRA DE ABAJO y no encima de la imagen: sobre el
+   pasto saturado de este juego un renglón blanco se pierde, y ponerle una caja
+   propia sería una tercera franja. Adentro de la barra ya hay negro. */
+#cine .txt{position:absolute;left:6%;right:6%;bottom:0;height:11%;
+  display:grid;place-items:center;text-align:center;
+  font-size:clamp(13px,2.6vw,19px);line-height:1.45;font-weight:500;
+  color:#eaf4ff;text-shadow:0 2px 10px rgba(0,0,0,.9);
+  opacity:0;transition:opacity .45s}
+#cine .txt.ver{opacity:1}
+#cine .saltar{position:absolute;right:max(12px,3vw);
+  bottom:calc(11% + 12px);pointer-events:auto;
+  padding:9px 16px;border-radius:99px;font:600 12px/1 system-ui,sans-serif;
+  letter-spacing:.12em;color:rgba(234,244,255,.72);
+  background:rgba(8,18,28,.55);border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#cine .saltar:active{transform:scale(.95)}
+/* el fundido a negro entre escena y escena, y el de entrada al juego */
+#cine .velo{position:absolute;inset:0;background:#05080c;opacity:0;
+  transition:opacity .55s}
+#cine .velo.ver{opacity:1}
+
+/* ── LA CAPA DE LA MUERTE ──
+   Un rojo casi negro que tapa el cuadro. La opacidad la escribe el JS cuadro a
+   cuadro y por eso NO lleva transición: los tres destellos del screamer son
+   cortes de un cuadro y una transición de CSS los convertiría en un latido
+   suave, que es lo contrario de un golpe. La transición se enciende sólo para
+   soltarla al final, con la clase `sale`. */
+#muerte{position:absolute;inset:0;z-index:60;display:none;pointer-events:none;
+  background:radial-gradient(120% 100% at 50% 45%, #2a0705 0%, #060202 70%, #000 100%);
+  opacity:0}
+#muerte.on{display:block}
+#muerte.sale{transition:opacity .8s ease}
+
+#joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);width:min(148px,32vw);
+  aspect-ratio:1;pointer-events:auto;opacity:.9;display:none}
+body:not(.pc) #joy{display:block}
+#joy canvas{width:100%;height:100%;display:block}
+
+</style>
+</head>
+<body>
+
+<div id="carga" class="selva"><div class="follaje"></div><div class="caja">
+  <div class="marca"><i class="lg"></i></div>
+  <p id="cTxt" data-i18n="cargando">Seeding the island…</p>
+  <div class="barra"><i id="cBar"></i></div>
+  <div class="pista" id="cPista"></div>
+</div></div>
+
+<div id="idioma" class="selva"><div class="follaje"></div><div class="caja">
+  <div class="marca"><i class="lg"></i></div>
+  <div class="sub">language · idioma · idioma</div>
+  <button data-lang="en">English</button>
+  <button data-lang="es">Español</button>
+  <button data-lang="pt">Português</button>
+</div></div>
+
+<div id="escenario">
+<div id="hud">
+  <div id="fps"></div>
+  <div id="botones">
+    <button class="bt" id="bFull" title="Pantalla completa">⛶</button>
+    <button class="bt" id="bPanel" title="Pausa">☰</button>
+  </div>
+  <div id="acciones">
+    <button class="ac" id="acCorre"><span class="ico">»</span><i data-i18n="bCorrer">RUN</i></button>
+    <button class="ac" id="acAgacha"><span class="ico">⌄</span><i data-i18n="bAgachar">CROUCH</i></button>
+    <button class="ac" id="acSalta"><span class="ico">⌃</span><i data-i18n="bSaltar">JUMP</i></button>
+    <button class="ac apagado" id="acUsar"><span class="ico">✋</span><i data-i18n="bUsar">USE</i></button>
+  </div>
+  <div id="obj"><div class="n"></div><div class="t"></div><div class="s"></div></div>
+  <div id="pista"></div>
+  <div id="teclas">
+    <b>W A S D</b> moverse · <b>ratón</b> mirar<br>
+    <b>Shift</b> correr · <b>Ctrl</b> agacharse<br>
+    <b>Espacio</b> saltar · <b>E</b> usar · <b>Esc</b> pausa
+  </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+</div>
+
+<div id="muerte"></div>
+
+<div id="menu">
+  <div class="mMarco"></div>
+  <div class="mCaja">
+    <div class="mEmb"><i class="lg"></i></div>
+    <div class="mSub" data-i18n="mSub">the camel island</div>
+    <button class="mBtn pri" id="mJugar" data-i18n="mJugar">▶ Play</button>
+    <div class="mFila" id="mIdi">
+      <span class="mRot" data-i18n="mIdioma">LANGUAGE</span>
+      <button class="chip" data-lang="en">EN</button>
+      <button class="chip" data-lang="es">ES</button>
+      <button class="chip" data-lang="pt">PT</button>
+    </div>
+    <div class="mFila" id="mCal">
+      <span class="mRot" data-i18n="mGraf">GRAPHICS</span>
+      <button class="chip" data-cal="baja" data-i18n="gBaja">LOW</button>
+      <button class="chip" data-cal="media" data-i18n="gMedia">MED</button>
+      <button class="chip" data-cal="alta" data-i18n="gAlta">HIGH</button>
+    </div>
+    <div class="mHist" id="mHist"></div>
+    <div class="mPie" id="mPie"></div>
+  </div>
+</div>
+
+<div id="mini">
+  <div class="caja">
+    <div class="tit" data-i18n="miTit">INFLATING THE TYRE</div>
+    <div class="cnt" id="miCnt">0 / 7</div>
+    <div class="barra"><div class="cubo" id="miCubo"></div><div class="linea" id="miLinea"></div></div>
+    <div class="aviso" id="miAviso"></div>
+    <button class="btn" id="miBtn" data-i18n="miBtn">PUMP</button>
+    <div class="pie" id="miPie"></div>
+  </div>
+</div>
+
+<div id="cine">
+  <div class="velo" id="cVelo"></div>
+  <div class="barra ar"></div>
+  <div class="barra ab"></div>
+  <div class="txt" id="cTexto"></div>
+  <button class="saltar" id="cSaltar" data-i18n="cSaltar">SKIP ▸</button>
+</div>
+
+<div id="pausa">
+  <div class="caja">
+    <h2 data-i18n="pTit">Paused</h2>
+    <div class="sub" id="pSub"></div>
+    <button class="pri" id="pSeguir" data-i18n="pSeguir">Resume</button>
+    <button id="pReinicia" data-i18n="pReinicia">Restart</button>
+    <button id="pMenu" data-i18n="pMenu">Menu</button>
+  </div>
+</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as T from 'three';

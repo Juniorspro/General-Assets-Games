@@ -1,0 +1,251 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>DESPEGUE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#06070d;color:#eef2ff;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+/* ══════════ VERTICAL NATIVO ══════════
+   Un cohete sube, asi que el marco es el telefono tal como se agarra: no hay
+   marco girado ni pantalla de «gira el celular». En una pantalla apaisada el
+   juego ocupa una columna centrada de proporcion de telefono: el mundo es una
+   columna y a los costados no hay nada que mostrar. */
+#envase{position:fixed;inset:0;display:grid;place-items:center;background:#06070d}
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;overflow:hidden}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ EL DESTELLO Y LA VIÑETA ══════════ */
+#flash{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:8;
+  background:radial-gradient(ellipse at 50% 50%,transparent 30%,var(--fc,#fff) 110%)}
+#vin{position:absolute;inset:0;pointer-events:none;z-index:7;
+  background:radial-gradient(ellipse at 50% 50%,transparent 55%,rgba(2,4,10,.55) 120%)}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s}
+body.jugando #hud{opacity:1}
+#alt{position:absolute;left:14px;top:calc(12px + env(safe-area-inset-top));
+  font:800 clamp(22px,calc(var(--mw,412px)*0.075),40px)/1 system-ui,sans-serif;letter-spacing:.02em;
+  text-shadow:0 2px 10px rgba(0,0,0,.8)}
+#altU{font-size:.5em;opacity:.7;margin-left:4px}
+#vel{position:absolute;left:14px;top:calc(56px + env(safe-area-inset-top));
+  font:700 11px/1 ui-monospace,monospace;letter-spacing:.14em;color:rgba(220,232,255,.72);
+  text-shadow:0 1px 6px rgba(0,0,0,.8)}
+#tiempo{position:absolute;left:14px;top:calc(74px + env(safe-area-inset-top));
+  font:700 10px/1 ui-monospace,monospace;letter-spacing:.14em;color:#ffd447;
+  text-shadow:0 1px 6px rgba(0,0,0,.8);display:none}
+#tiempo.hay{display:block}
+/* el combustible: una barra vertical a la derecha, porque el combustible se
+   gasta hacia abajo y una barra horizontal no dice para donde */
+#comb{position:absolute;right:14px;top:calc(12px + env(safe-area-inset-top));width:14px;height:34vh;
+  border-radius:99px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);overflow:hidden}
+#combI{position:absolute;left:0;right:0;bottom:0;height:100%;border-radius:99px;
+  background:linear-gradient(180deg,#ffd447,#ff7a2a)}
+#combL{position:absolute;right:34px;top:calc(12px + env(safe-area-inset-top));
+  font:700 10px/1 ui-monospace,monospace;letter-spacing:.14em;color:rgba(220,232,255,.72);
+  writing-mode:vertical-rl;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+#mon{position:absolute;right:14px;top:calc(34vh + 22px + env(safe-area-inset-top));
+  font:800 13px/1 system-ui;color:#ffd447;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+/* el rotulo de la capa: aparece al entrar y se va */
+#capa{position:absolute;left:50%;top:24%;transform:translateX(-50%);text-align:center;width:90%;
+  font:800 clamp(14px,calc(var(--mw,412px)*0.05),24px)/1.2 system-ui,sans-serif;letter-spacing:.18em;
+  color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.85);opacity:0;transition:opacity .35s}
+#capa.on{opacity:1}
+#capa small{display:block;font:700 10px/1.6 ui-monospace,monospace;letter-spacing:.2em;opacity:.7}
+/* el aviso grande del centro: la cuenta regresiva y el «MAXIMO» */
+#grande{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+  font:900 clamp(48px,calc(var(--mw,412px)*0.2),110px)/1 system-ui,sans-serif;color:#fff;
+  text-shadow:0 4px 24px rgba(0,0,0,.8);opacity:0;transition:opacity .15s}
+#grande.on{opacity:1}
+/* la rafaga: el unico boton de la partida. Grande y abajo a la derecha, donde
+   esta el pulgar. */
+#bRaf{position:absolute;right:16px;bottom:calc(22px + env(safe-area-inset-bottom));
+  width:86px;height:86px;border-radius:50%;pointer-events:auto;
+  border:2px solid rgba(255,255,255,.28);background:radial-gradient(circle at 40% 35%,#ff9a4a,#c8331e 70%);
+  color:#fff;font:800 11px/1.1 system-ui;letter-spacing:.08em;box-shadow:0 8px 24px rgba(0,0,0,.5);
+  display:none}
+body.jugando #bRaf.hay{display:block}
+#bRaf.vacio{filter:grayscale(1) brightness(.6)}
+#bRaf b{display:block;font-size:20px;margin-top:3px}
+#ayuda{position:absolute;left:60px;right:106px;bottom:calc(30px + env(safe-area-inset-bottom));
+  font:700 clamp(8px,calc(var(--mw,412px)*0.026),10.5px)/1.5 system-ui;letter-spacing:.08em;color:rgba(255,255,255,.62);
+  text-shadow:0 1px 6px rgba(0,0,0,.8);text-align:center}
+#bPausa{position:absolute;left:14px;bottom:calc(22px + env(safe-area-inset-bottom));width:40px;height:40px;
+  border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(10,14,22,.55);color:#eef2ff;
+  font:700 14px/1 system-ui;pointer-events:auto;display:none}
+body.jugando #bPausa{display:block}
+
+/* ══════════ LAS PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:14px;overflow:hidden;
+  visibility:hidden;opacity:0;transition:opacity .2s ease,visibility .2s}
+.pan.on{visibility:visible;opacity:1}
+.pan::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(6,7,13,.92),rgba(6,7,13,.80) 14%,rgba(6,7,13,.30) 27%,rgba(6,7,13,.14) 34%,rgba(6,7,13,.14) 50%,rgba(6,7,13,.86) 60%,rgba(6,7,13,.96))}
+/* el menu deja ver el cohete girando en el medio: el velo se abre ahi */
+.caja{position:relative;text-align:center;width:min(440px,94%);max-height:100%;overflow:auto;padding:4px 2px}
+.caja::-webkit-scrollbar{display:none}
+/* el tamano sale del ANCHO DEL MARCO (`--mw`, en px, lo escribe `medir`) y no de
+   la ventana: en una pantalla apaisada el marco es una columna angosta y `vw`
+   es el ancho de toda la ventana */
+h1{font:900 clamp(22px,calc(var(--mw,412px)*0.112),54px)/1 system-ui,sans-serif;letter-spacing:.16em;text-indent:.16em;
+  background:linear-gradient(180deg,#fff6e6 0%,#ffb05c 48%,#ff5a2a 68%,#ffd9a8 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 16px rgba(255,120,40,.35))}
+h1::after{content:'';display:block;width:70px;height:2px;margin:10px auto 0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,#ffb05c,transparent)}
+.sub{font:700 9.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;color:rgba(255,220,190,.55);
+  text-transform:uppercase;margin:8px 0 12px}
+.tx{font-size:12.5px;line-height:1.6;color:rgba(235,240,255,.82);margin-bottom:12px;text-shadow:0 1px 4px rgba(0,0,0,.85)}
+.bt{display:block;width:100%;margin-top:8px;padding:13px 16px;border-radius:14px;
+  border:1px solid rgba(255,176,92,.26);background:rgba(12,14,24,.74);color:#eef2ff;
+  font:800 14px/1 system-ui,sans-serif;letter-spacing:.08em;transition:transform .1s}
+.bt:active{transform:scale(.97)}
+.bt.p{background:linear-gradient(135deg,#ffb05c,#ff5a2a);color:#2a1004;border-color:transparent}
+.bt.sel{background:linear-gradient(135deg,#ffb05c,#ff5a2a);color:#2a1004;border-color:transparent}
+.bt[disabled]{opacity:.4}
+.fila{display:flex;gap:6px;margin-top:8px}
+.fila .bt{margin-top:0;padding:11px 6px;font-size:12px}
+.pie{margin-top:12px;font-size:10.5px;line-height:1.6;color:rgba(225,232,250,.6);text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.saldo{font:800 15px/1 system-ui;color:#ffd447;margin:6px 0 4px;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+/* el espacio del medio del menu, donde se ve el cohete: no es un hueco, es el
+   sitio del personaje */
+.hueco{height:26vh}
+.hueco.chico{height:12vh}
+
+/* ── EL TALLER: UNA FICHA POR MEJORA ──
+   Nombre, que hace, el nivel en puntos y el boton con el precio. Todo eso junto
+   es lo que hace que una mejora se pueda ELEGIR. */
+.mej{display:flex;align-items:center;gap:10px;margin-top:7px;padding:10px 10px 10px 12px;border-radius:14px;
+  border:1px solid rgba(255,176,92,.18);background:rgba(12,16,28,.82);text-align:left}
+.mej .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:18px;
+  background:rgba(255,176,92,.12);flex:0 0 auto}
+.mej .cu{flex:1;min-width:0}
+.mej .n{font:800 13px/1.2 system-ui;letter-spacing:.04em}
+.mej .d{font:600 10px/1.4 system-ui;color:rgba(220,232,255,.62);margin-top:2px}
+.mej .pt{display:flex;gap:3px;margin-top:5px}
+.mej .pt i{width:12px;height:5px;border-radius:3px;background:rgba(255,255,255,.14)}
+.mej .pt i.on{background:linear-gradient(90deg,#ffb05c,#ff5a2a)}
+.mej .bt{width:auto;margin:0;padding:10px 12px;font-size:12px;min-width:84px;flex:0 0 auto}
+.mej .bt.eq{background:rgba(45,226,168,.16);border-color:rgba(45,226,168,.45);color:#8ef0c4}
+/* los estilos: una grilla de fichas con la muestra de la pintura */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}
+.est{position:relative;aspect-ratio:1;border-radius:12px;border:1px solid rgba(255,255,255,.14);overflow:hidden;
+  background:#111;display:grid;place-items:end center;padding:5px;font:700 8.5px/1.1 system-ui;letter-spacing:.04em;
+  text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.est canvas{position:absolute;inset:0;width:100%;height:100%}
+.est span{position:relative;z-index:1;background:rgba(0,0,0,.45);padding:2px 5px;border-radius:6px;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.est.sel{border:2px solid #ffb05c;box-shadow:0 0 14px rgba(255,176,92,.45)}
+.est.bloq canvas{filter:grayscale(1) brightness(.45)}
+.est .cand{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:1;font-size:18px}
+.tabs{display:flex;gap:6px;margin-top:6px}
+.tabs .bt{margin:0;padding:10px 6px;font-size:12px}
+
+/* la pantalla de resultado */
+.res{font:900 clamp(30px,calc(var(--mw,412px)*0.12),64px)/1 system-ui;color:#fff;text-shadow:0 4px 20px rgba(0,0,0,.8);margin:6px 0 2px}
+.res small{font-size:.45em;opacity:.7}
+.resL{font:700 10px/1.6 ui-monospace,monospace;letter-spacing:.2em;color:rgba(255,220,190,.6)}
+.nuevo{display:inline-block;margin:6px 4px 0;padding:6px 10px;border-radius:99px;font:800 10px/1 system-ui;letter-spacing:.1em;
+  background:rgba(45,226,168,.16);border:1px solid rgba(45,226,168,.45);color:#8ef0c4}
+
+#carga{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#06070d;transition:opacity .3s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(240px,60%);height:4px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden;margin:16px auto 0}
+.barc i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb05c,#ff5a2a);transition:width .3s}
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja"><h1>DESPEGUE</h1><div class="sub" id="cSub">CARGANDO</div>
+  <div class="barc"><i id="cBarra"></i></div></div></div>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+  <div id="vin"></div>
+  <div id="flash"></div>
+
+  <div id="hud">
+    <div id="alt">0<span id="altU">m</span></div>
+    <div id="vel"></div>
+    <div id="tiempo"></div>
+    <div id="comb"><i id="combI"></i></div>
+    <div id="combL"></div>
+    <div id="mon"></div>
+    <div id="capa"><span id="capaN"></span><small id="capaS"></small></div>
+    <div id="grande"></div>
+    <button id="bRaf"><span id="rafN"></span><b id="rafC"></b></button>
+    <div id="ayuda"></div>
+    <button id="bPausa">॥</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>DESPEGUE</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <h1>DESPEGUE</h1><div class="sub" id="mSub"></div>
+    <div class="hueco"></div>
+    <div class="saldo" id="mSaldo"></div>
+    <button class="bt p" id="bLanzar"></button>
+    <div class="fila"><button class="bt" id="bTaller"></button><button class="bt" id="bEstilos"></button></div>
+    <button class="bt" id="bAjustes"></button>
+    <div class="pie" id="mPie"></div>
+  </div></div>
+
+  <div class="pan" id="pTaller"><div class="caja">
+    <h1 id="tTit"></h1><div class="sub" id="tSub"></div>
+    <div class="saldo" id="tSaldo"></div>
+    <div class="tabs"><button class="bt" id="tabMej"></button><button class="bt" id="tabRaf"></button></div>
+    <div id="lMej"></div>
+    <button class="bt" id="tVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pEstilos"><div class="caja">
+    <h1 id="eTit"></h1><div class="sub" id="eSub"></div>
+    <div class="hueco chico"></div>
+    <div class="saldo" id="eSaldo"></div>
+    <div class="grid" id="gEst"></div>
+    <button class="bt" id="eVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1><div class="sub" id="aSub"></div>
+    <div class="pie" id="aMusL"></div>
+    <input type="range" id="aMus" min="0" max="100" value="60" style="width:100%">
+    <div class="pie" id="aFxL"></div>
+    <input type="range" id="aFx" min="0" max="100" value="80" style="width:100%">
+    <div class="fila" id="aIdi"></div>
+    <div class="fila" id="aCal"></div>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bAbandona"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <div class="resL" id="fL"></div>
+    <div class="res" id="fAlt"></div>
+    <div class="sub" id="fCapa"></div>
+    <div class="hueco chico"></div>
+    <div class="tx" id="fTx"></div>
+    <div id="fNuevo"></div>
+    <button class="bt p" id="fOtra"></button>
+    <button class="bt" id="fTaller"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

@@ -1,0 +1,189 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>CRUCE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a1410;color:#f2f7ef;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+/* ══════════ VERTICAL NATIVO ══════════
+   El mundo se cruza hacia adelante y la camara es una picada isometrica: el marco
+   es el telefono tal como se agarra. En una pantalla apaisada el juego ocupa una
+   columna de proporcion de telefono centrada, y los tamanos de letra salen del
+   ancho del marco (`--mw`) y no de `vw`, porque en apaisado `vw` es el ancho de
+   toda la ventana. */
+#envase{position:fixed;inset:0;display:grid;place-items:center;background:#070c0a}
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;overflow:hidden}
+#cv{display:block;width:100%;height:100%}
+
+#flash{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:8;background:var(--fc,#fff)}
+#vin{position:absolute;inset:0;pointer-events:none;z-index:7;
+  background:radial-gradient(ellipse at 50% 45%,transparent 58%,rgba(4,10,8,.5) 120%)}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s}
+body.jugando #hud{opacity:1}
+/* el puntaje va centrado pero SIN tocar los costados: con `left:0;right:0` su
+   caja ocupa el ancho entero y se solapa con la pausa y con las monedas aunque
+   el texto este en el medio */
+#pts{position:absolute;left:62px;right:62px;top:calc(14px + env(safe-area-inset-top));text-align:center;
+  font:900 clamp(34px,calc(var(--mw,412px)*0.115),56px)/1 system-ui,sans-serif;
+  text-shadow:0 3px 0 rgba(0,0,0,.35),0 4px 16px rgba(0,0,0,.55)}
+#rec{position:absolute;left:62px;right:62px;top:calc(60px + env(safe-area-inset-top));text-align:center;
+  font:700 10px/1 ui-monospace,monospace;letter-spacing:.18em;color:rgba(242,247,239,.62);
+  text-shadow:0 1px 5px rgba(0,0,0,.8)}
+#mon{position:absolute;right:14px;top:calc(14px + env(safe-area-inset-top));
+  font:800 15px/1 system-ui;color:#ffd447;text-shadow:0 2px 8px rgba(0,0,0,.8)}
+/* el aviso del tren: una franja que late, porque el tren no se puede esquivar
+   una vez que entro */
+#tren{position:absolute;left:0;right:0;top:38%;text-align:center;opacity:0;
+  font:900 clamp(15px,calc(var(--mw,412px)*0.052),26px)/1 system-ui;letter-spacing:.2em;color:#ff4a3a;
+  text-shadow:0 2px 12px rgba(0,0,0,.9)}
+#tren.on{opacity:1;animation:lat .45s infinite}
+@keyframes lat{0%,100%{opacity:.35}50%{opacity:1}}
+#ayuda{position:absolute;left:10%;right:10%;bottom:calc(28px + env(safe-area-inset-bottom));
+  font:700 clamp(9px,calc(var(--mw,412px)*0.028),12px)/1.6 system-ui;letter-spacing:.1em;
+  color:rgba(255,255,255,.68);text-shadow:0 1px 6px rgba(0,0,0,.85);text-align:center}
+#bPausa{position:absolute;left:14px;top:calc(12px + env(safe-area-inset-top));width:38px;height:38px;
+  border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(8,16,12,.5);color:#f2f7ef;
+  font:700 14px/1 system-ui;pointer-events:auto;display:none}
+body.jugando #bPausa{display:block}
+
+/* ══════════ LAS PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:14px;overflow:hidden;
+  visibility:hidden;opacity:0;transition:opacity .2s ease,visibility .2s}
+.pan.on{visibility:visible;opacity:1}
+/* el velo se abre en la franja del medio: ahi corre el mundo con el carpincho */
+.pan::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(7,14,10,.92),rgba(7,14,10,.72) 12%,rgba(7,14,10,.15) 26%,rgba(7,14,10,.15) 46%,rgba(7,14,10,.86) 58%,rgba(7,14,10,.96))}
+.caja{position:relative;text-align:center;width:min(430px,94%);max-height:100%;overflow:auto;padding:4px 2px}
+.caja::-webkit-scrollbar{display:none}
+/* el titulo es una imagen generada y recortada; el texto de respaldo se ve
+   solamente si la imagen no llega */
+#logo{width:min(86%,340px);margin:0 auto;display:block;filter:drop-shadow(0 6px 18px rgba(0,0,0,.55))}
+h1{font:900 clamp(24px,calc(var(--mw,412px)*0.115),52px)/1 system-ui,sans-serif;letter-spacing:.14em;text-indent:.14em;
+  background:linear-gradient(180deg,#fff6d8 0%,#ffc24a 50%,#ff8a2a 72%,#ffe6a8 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font:700 9.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;color:rgba(216,240,200,.6);
+  text-transform:uppercase;margin:8px 0 10px}
+.tx{font-size:12.5px;line-height:1.6;color:rgba(238,248,232,.84);margin-bottom:12px;text-shadow:0 1px 4px rgba(0,0,0,.85)}
+.bt{display:block;width:100%;margin-top:8px;padding:13px 16px;border-radius:14px;
+  border:1px solid rgba(120,200,120,.24);background:rgba(10,20,15,.76);color:#f2f7ef;
+  font:800 14px/1 system-ui,sans-serif;letter-spacing:.08em;transition:transform .1s}
+.bt:active{transform:scale(.97)}
+.bt.p{background:linear-gradient(135deg,#8ad84a,#2fa85a);color:#08210f;border-color:transparent}
+.bt.sel{background:linear-gradient(135deg,#ffc24a,#ff8a2a);color:#2a1204;border-color:transparent}
+.bt[disabled]{opacity:.4}
+.fila{display:flex;gap:6px;margin-top:8px}
+.fila .bt{margin-top:0;padding:11px 6px;font-size:12px}
+.pie{margin-top:12px;font-size:10.5px;line-height:1.6;color:rgba(226,240,220,.58);text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.saldo{font:800 15px/1 system-ui;color:#ffd447;margin:6px 0 4px;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.hueco{height:24vh}
+.hueco.chico{height:10vh}
+
+/* las pieles: una grilla de fichas con el carpincho pintado */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}
+.piel{position:relative;aspect-ratio:1;border-radius:12px;border:1px solid rgba(255,255,255,.14);overflow:hidden;
+  background:#12201a;display:grid;place-items:end center;padding:5px;font:700 8.5px/1.1 system-ui;letter-spacing:.03em;
+  text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.piel canvas{position:absolute;inset:0;width:100%;height:100%}
+.piel span{position:relative;z-index:1;background:rgba(0,0,0,.45);padding:2px 5px;border-radius:6px;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.piel.sel{border:2px solid #8ad84a;box-shadow:0 0 14px rgba(138,216,74,.4)}
+.piel.bloq canvas{filter:grayscale(1) brightness(.45)}
+.piel .cand{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);z-index:1;font-size:17px}
+
+/* el resultado */
+.res{font:900 clamp(40px,calc(var(--mw,412px)*0.15),74px)/1 system-ui;color:#fff;text-shadow:0 4px 20px rgba(0,0,0,.8);margin:4px 0 2px}
+.resL{font:700 10px/1.6 ui-monospace,monospace;letter-spacing:.2em;color:rgba(216,240,200,.6)}
+.nuevo{display:inline-block;margin:6px 4px 0;padding:6px 10px;border-radius:99px;font:800 10px/1 system-ui;letter-spacing:.1em;
+  background:rgba(138,216,74,.16);border:1px solid rgba(138,216,74,.45);color:#b8ef8a}
+
+#carga{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#0a1410;transition:opacity .3s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(240px,60%);height:4px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden;margin:16px auto 0}
+.barc i{display:block;height:100%;width:0;background:linear-gradient(90deg,#8ad84a,#2fa85a);transition:width .3s}
+</style>
+</head>
+<body>
+
+<div id="carga"><div class="caja"><h1>CRUCE</h1><div class="sub" id="cSub">CARGANDO</div>
+  <div class="barc"><i id="cBarra"></i></div></div></div>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+  <div id="vin"></div>
+  <div id="flash"></div>
+
+  <div id="hud">
+    <div id="pts">0</div>
+    <div id="rec"></div>
+    <div id="mon"></div>
+    <div id="tren"></div>
+    <div id="ayuda"></div>
+    <button id="bPausa">॥</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>CRUCE</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan" id="pMenu"><div class="caja">
+    <img id="logo" alt="CRUCE" style="display:none">
+    <h1 id="mTit">CRUCE</h1><div class="sub" id="mSub"></div>
+    <div class="hueco"></div>
+    <div class="saldo" id="mSaldo"></div>
+    <button class="bt p" id="bJugar"></button>
+    <div class="fila"><button class="bt" id="bPieles"></button><button class="bt" id="bAjustes"></button></div>
+    <div class="pie" id="mPie"></div>
+  </div></div>
+
+  <div class="pan" id="pPieles"><div class="caja">
+    <h1 id="kTit"></h1><div class="sub" id="kSub"></div>
+    <div class="hueco chico"></div>
+    <div class="saldo" id="kSaldo"></div>
+    <div class="grid" id="gPiel"></div>
+    <button class="bt" id="kVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1><div class="sub" id="aSub"></div>
+    <div class="pie" id="aMusL"></div>
+    <input type="range" id="aMus" min="0" max="100" value="55" style="width:100%">
+    <div class="pie" id="aFxL"></div>
+    <input type="range" id="aFx" min="0" max="100" value="80" style="width:100%">
+    <div class="fila" id="aIdi"></div>
+    <div class="fila" id="aCal"></div>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bAbandona"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <div class="resL" id="fL"></div>
+    <div class="res" id="fPts"></div>
+    <div class="sub" id="fComo"></div>
+    <div class="hueco chico"></div>
+    <div class="tx" id="fTx"></div>
+    <div id="fNuevo"></div>
+    <button class="bt p" id="fOtra"></button>
+    <button class="bt" id="fPieles"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

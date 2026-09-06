@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05070c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MANOS · NPU</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --fondo:#05070c; --panel:#0f1620; --borde:#22303f;
+    --texto:#e6f0fa; --tenue:#8ba0b8; --tenue2:#5d7086;
+    --npu:#7cf3c0; --acento:#5ce1ff; --alerta:#ffb45c; --malo:#ff6b61;
+  }
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none}
+
+  /* ---- LAS CAPAS, en este orden exacto ----------------------------------
+     1) el video de la cámara     2) la escena 3D transparente
+     3) los puntos de la mano     4) la interfaz                          */
+  #cam   {position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:#000}
+  #marcas{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
+  #ui    {position:fixed;inset:0;z-index:3;pointer-events:none}
+  #ui > *{pointer-events:auto}
+
+  /* ------------------------------------------------------------ portada */
+  #portada{position:fixed;inset:0;z-index:10;background:radial-gradient(120% 90% at 50% 0%,#0d1a24,#05070c 70%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:28px;
+    text-align:center;transition:opacity .5s}
+  #portada.ir{opacity:0;pointer-events:none}
+  #portada .sello{width:78px;height:78px;border-radius:24px;display:grid;place-items:center;font-size:38px;
+    background:linear-gradient(150deg,#9dfada,#2fae86);color:#04231a;
+    box-shadow:0 10px 40px rgba(124,243,192,.35)}
+  #portada h1{font-size:19px;letter-spacing:9px;font-weight:700}
+  #portada p{font-size:10.5px;line-height:2;letter-spacing:1.6px;color:var(--tenue);max-width:400px}
+  #portada b{color:var(--npu)}
+
+  /* ------------------------------------------------------------- botones */
+  .b{display:inline-flex;align-items:center;justify-content:center;gap:9px;
+    min-height:56px;padding:0 22px;border-radius:17px;cursor:pointer;
+    font:700 12px/1 ui-monospace,monospace;letter-spacing:2.4px;color:var(--texto);
+    border:1px solid var(--borde);background:linear-gradient(180deg,#1a2531,#111925);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 3px 0 rgba(0,0,0,.45);
+    transition:transform .08s,box-shadow .16s,border-color .16s,color .16s}
+  .b:active{transform:translateY(3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+  .b.pri{color:#04231a;border-color:transparent;background:linear-gradient(180deg,#a8ffe0,#31c096);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 0 #1a7a5c,0 10px 30px rgba(124,243,192,.32)}
+  .b.pri:active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 0 #1a7a5c}
+  .b.on{border-color:rgba(92,225,255,.6);color:var(--acento);
+    background:linear-gradient(180deg,rgba(92,225,255,.22),rgba(92,225,255,.05));
+    box-shadow:0 0 20px rgba(92,225,255,.2)}
+  .b.on.fuego{border-color:rgba(255,180,92,.7);color:var(--alerta);
+    background:linear-gradient(180deg,rgba(255,180,92,.25),rgba(255,180,92,.06));
+    box-shadow:0 0 24px rgba(255,180,92,.3)}
+  .b:disabled{opacity:.3;pointer-events:none;box-shadow:none}
+  .b.mini{min-height:46px;min-width:46px;padding:0 14px;border-radius:14px;font-size:10px;letter-spacing:1.6px}
+
+  /* -------------------------------------------------------------- la HUD */
+  #arriba{position:absolute;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));
+    display:flex;gap:9px;align-items:flex-start}
+  #chapa{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:14px;
+    border:1px solid var(--borde);background:rgba(8,12,18,.8);backdrop-filter:blur(14px);
+    font:700 9.5px/1 ui-monospace,monospace;letter-spacing:2px}
+  #chapa .luz{width:9px;height:9px;border-radius:50%;background:#3a4a5e;flex:0 0 auto}
+  #chapa.npu .luz{background:var(--npu);box-shadow:0 0 14px var(--npu)}
+  #chapa.npu{color:var(--npu);border-color:rgba(124,243,192,.4)}
+  #chapa.otro .luz{background:var(--alerta);box-shadow:0 0 12px var(--alerta)}
+  #chapa.otro{color:var(--alerta);border-color:rgba(255,180,92,.35)}
+  #chapa.err .luz{background:var(--malo)} #chapa.err{color:var(--malo)}
+  #arriba .der{margin-left:auto;display:flex;gap:8px}
+
+  #metricas{position:absolute;left:12px;top:calc(60px + env(safe-area-inset-top));
+    display:flex;flex-direction:column;gap:6px;pointer-events:none}
+  .m{display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:11px;
+    border:1px solid var(--borde);background:rgba(8,12,18,.72);backdrop-filter:blur(10px);min-width:126px}
+  .m .e{font-size:7.5px;letter-spacing:1.5px;color:var(--tenue2)}
+  .m .n{margin-left:auto;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+  .m .u{font-size:7.5px;color:var(--tenue2)}
+  .n.ok{color:var(--npu)} .n.med{color:var(--alerta)} .n.mal{color:var(--malo)} .n.fr{color:var(--acento)}
+
+  #abajo{position:absolute;left:0;right:0;bottom:calc(12px + env(safe-area-inset-bottom));
+    display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:0 12px}
+
+  /* -------------------------------------------------------------- hojas */
+  .hoja{position:fixed;inset:0;z-index:20;background:rgba(3,5,9,.86);backdrop-filter:blur(10px);
+    display:none;align-items:flex-end;justify-content:center}
+  .hoja.ver{display:flex}
+  .hoja>div{width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:18px 18px calc(24px + env(safe-area-inset-bottom));
+    border-radius:24px 24px 0 0;border:1px solid var(--borde);border-bottom:none;
+    background:linear-gradient(180deg,#111a25,#0a111a)}
+  @media(min-width:700px){.hoja{align-items:center}.hoja>div{border-radius:24px;border-bottom:1px solid var(--borde)}}
+  .hoja h3{font-size:11px;letter-spacing:3.4px;color:var(--acento);margin-bottom:16px;display:flex;align-items:center}
+  .hoja h3 .x{margin-left:auto}
+  .sonda{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;
+    border:1px solid var(--borde);margin-bottom:8px;background:rgba(255,255,255,.015)}
+  .sonda .l{width:9px;height:9px;border-radius:50%;background:#3a4a5e;flex:0 0 auto}
+  .sonda.si .l{background:var(--npu);box-shadow:0 0 12px var(--npu)}
+  .sonda.no .l{background:var(--malo)}
+  .sonda.medio .l{background:var(--alerta);box-shadow:0 0 12px var(--alerta)}
+  .sonda .n{font-size:9.5px;letter-spacing:1.5px;font-weight:700}
+.ctl{margin:12px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:9px;letter-spacing:1.6px;
+    font-weight:700;color:var(--tenue);margin-bottom:7px}
+  .ctl label span{color:var(--azul)}
+  .ctl input[type=range]{width:100%;height:26px;accent-color:#5ce1ff;background:transparent}
+  .ctl .pie{font-size:8px;letter-spacing:.7px;color:var(--tenue2);margin-top:4px;line-height:1.7}
+  .sonda .d{margin-left:auto;font-size:8.5px;color:var(--tenue2);text-align:right;max-width:58%;letter-spacing:.8px}
+  .txt{font:9px/1.85 ui-monospace,monospace;letter-spacing:1px;color:var(--tenue);white-space:pre-wrap}
+  .txt.mal{color:var(--malo)} .txt.ok{color:var(--npu)} .txt.av{color:var(--alerta)}
+  .sep{height:1px;background:var(--borde);margin:15px 0}
+  .fila{display:flex;gap:9px;flex-wrap:wrap}
+  .fila>*{flex:1 1 0;min-width:0}
+
+  #cartel{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(14px);
+    z-index:15;padding:12px 18px;border-radius:15px;border:1px solid var(--borde);
+    background:rgba(15,22,32,.95);backdrop-filter:blur(12px);max-width:min(92vw,470px);
+    font:9.5px/1.7 ui-monospace,monospace;letter-spacing:1.2px;text-align:center;white-space:pre-wrap;
+    opacity:0;visibility:hidden;transition:.25s;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+  #cartel.ver{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+  #cartel.mal{border-color:rgba(255,107,97,.5);color:#ffcfcb}
+  #cartel.ok{border-color:rgba(124,243,192,.5);color:var(--npu)}
+</style>
+</head>
+<body>
+
+<!-- ===================== 1 · VIDEO DE LA CÁMARA (fondo) ==================== -->
+<video id="cam" playsinline muted autoplay></video>
+<!-- ===================== 2 · PUNTOS Y ESQUELETO DE LA MANO ================ -->
+<canvas id="marcas"></canvas>
+<!-- ===================== 4 · INTERFAZ ===================================== -->
+<div id="ui">
+  <div id="arriba">
+    <div id="chapa"><span class="luz"></span><span id="chapaTxt">SIN INICIAR</span></div>
+    <div class="der">
+      <button class="b mini" id="bMotor">MOTOR</button>
+    </div>
+  </div>
+
+  <div id="metricas">
+    <div class="m"><span class="e">DIBUJO</span><span class="n fr" id="mFps">0</span><span class="u">fps</span></div>
+    <div class="m"><span class="e">INFERENCIA</span><span class="n" id="mInf">0</span><span class="u">fps</span></div>
+    <div class="m"><span class="e">LATENCIA</span><span class="n" id="mLat">0</span><span class="u">ms</span></div>
+    <div class="m"><span class="e">MODELO</span><span class="n" id="mPuntos">0</span><span class="u">ms</span></div>
+    <div class="m"><span class="e">PREPARAR</span><span class="n" id="mPrep">0</span><span class="u">ms</span></div>
+  </div>
+
+  <div id="abajo">
+    <button class="b" id="bFlash"><span>✦</span>FLASH</button>
+    <button class="b mini" id="bCambiar">↺</button>
+  </div>
+</div>
+
+<div id="cartel"></div>
+
+<!-- ============================ PORTADA / ARRANQUE ========================= -->
+<div id="portada">
+  <div class="sello">✋</div>
+  <h1>MANOS · NPU</h1>
+  <p>Detección de manos en 3D ejecutada en la <b>NPU</b> del equipo mediante
+     <b>WebNN</b>, con modelos <b>INT8</b>.<br><br>
+     Al entrar se pide permiso de <b>cámara</b>.<br>
+     Nada sale del dispositivo.</p>
+  <button class="b pri" id="bEntrar">ENTRAR</button>
+  <p style="font-size:9px;color:#4a5c70" id="portadaNota">requiere HTTPS</p>
+</div>
+
+<!-- ============================== HOJA DEL MOTOR ========================== -->
+<div class="hoja" id="hojaMotor"><div>
+  <h3>EL MOTOR <button class="b mini x" id="xMotor">CERRAR</button></h3>
+  <div id="listaSonda"></div>
+  <div class="sep"></div>
+  <div class="fila" style="margin-bottom:14px">
+    <button class="b mini" id="bNPU">FORZAR NPU</button>
+    <button class="b mini" id="bGPU">GPU · WEBNN</button>
+    <button class="b mini" id="bWGPU">WEBGPU</button>
+    <button class="b mini" id="bCPU">CPU</button>
+  </div>
+  <div class="sep"></div>
+  <div class="ctl">
+    <label>SUAVIZADO<span id="vSuave">1.00</span></label>
+    <input type="range" id="sSuave" min="0.15" max="3" step="0.05" value="1">
+    <div class="pie">Bajo: sigue cada temblor. Alto: más quieto, un pelo atrás.</div>
+  </div>
+  <div class="ctl">
+    <label>ADELANTO<span id="vAdel">1.00</span></label>
+    <input type="range" id="sAdel" min="0" max="2.5" step="0.05" value="1">
+    <div class="pie">Cuánto se adelanta el recorte a la velocidad de la mano.</div>
+  </div>
+  <div class="sep"></div>
+  <div class="txt" id="notaMotor"></div>
+</div></div>
+
+<script type="module">
+import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.all.bundle.min.mjs';
+
+/* ============================================================================
+   MANOS · NPU
+   Detección de manos en tiempo real ejecutada en la NPU vía WebNN. Sin fondo
+   3D, sin nada de adorno: todo el presupuesto de cada cuadro va al seguimiento.
+
+   EL PIPELINE ES EL DE MEDIAPIPE, EN DOS ETAPAS:
+
+     A · DETECTOR DE PALMA  ·  192×192  ·  2016 anclas  ·  caja + 7 puntos
+     B · REGRESOR DE PUNTOS ·  224×224  ·  21 puntos en pantalla y en el mundo
+
+   Los dos modelos son ONNX cuantizados a INT8, que es el formato que una NPU
+   procesa de forma nativa. Los pesos float32 quedan como respaldo por si algún
+   controlador rechaza el grafo cuantizado.
+
+   Y EL TRUCO QUE HACE QUE ESTO CORRA RÁPIDO: el detector de palma NO se ejecuta
+   todos los cuadros. Sólo cuando se pierde la mano. Mientras hay seguimiento,
+   la región de interés del cuadro siguiente sale de los propios puntos del
+   cuadro anterior, y se ejecuta únicamente la etapa B. Es la diferencia entre
+   dos inferencias por cuadro y una.
+============================================================================ */
+
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+
+/* ---------------------------------------------------------------- ORIGEN
+   Los modelos viven en el repositorio y los sirve jsDelivr anclados al commit:
+   una URL inmutable que el CDN cachea para siempre. El runtime viene del
+   paquete oficial en npm, también clavado a una versión. */
+const MODELOS='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2cf6ea7c5f/mundo/manos/';
+const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+const M={
+  palma_int8:  MODELOS+'palm_detection_mediapipe_2023feb_int8.onnx',
+  palma_f32:   MODELOS+'palm_detection_mediapipe_2023feb.onnx',
+  palma_fp16:  MODELOS+'palm_detection_mediapipe_2023feb_fp16.onnx',
+  puntos_int8: MODELOS+'handpose_estimation_mediapipe_2023feb_int8.onnx',
+  puntos_f32:  MODELOS+'handpose_estimation_mediapipe_2023feb.onnx',
+  puntos_fp16: MODELOS+'handpose_estimation_mediapipe_2023feb_fp16.onnx'
+};
+const PALMA_N=192, PUNTOS_N=224;
+const UMBRAL_PALMA=0.55, UMBRAL_NMS=0.3, UMBRAL_PUNTOS=0.55;
+
+/* los 21 puntos de la mano y cómo se unen */
+const UNIONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+               [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const COLOR_DEDO=['#ff6b61','#ffb45c','#7cf3c0','#5ce1ff','#b98cff'];
+const DEDO_DE=[0,0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4].map((_,i)=>
+  i===0?0:Math.floor((i-1)/4));
+
+function cartel(txt, clase, seg){
+  const e=$('cartel'); e.className='ver '+(clase||''); e.textContent=txt;
+  clearTimeout(cartel._t);
+  if(seg!==0) cartel._t=setTimeout(()=>e.classList.remove('ver'), (seg||4)*1000);
+}
+
+/* ============================================================================
+   1 · WEBNN · SESIONES EN LA NPU
+
+   ORT-Web acepta el proveedor `webnn` con `deviceType` y `powerPreference`, y
+   por dentro hace `navigator.ml.createContext({deviceType, powerPreference})`.
+   Pedir 'npu' NO es una sugerencia: si el equipo no tiene NPU o el grafo no le
+   entra, la creación de la sesión FALLA.
+
+   Esa falla NO deja el programa muerto. Se baja sola por la cadena
+   NPU → GPU(WebNN) → WEBGPU → CPU hasta que una ande, y el cartel dice dónde
+   terminó y por qué no fue la NPU. Forzar un proveedor con `?ep=` sigue siendo
+   posible y ahí sí manda la orden: si falla, falla y se informa, sin bajar.
+
+   (Antes esto avisaba y se quedaba quieto. En un Android sin WebNN eso era una
+   pantalla que dibujaba 60 fps y no detectaba una sola mano.)
+============================================================================ */
+/* La cadena son PARES dispositivo+precisión, no dispositivos sueltos, y la
+   razón es fina: un intento fallido de WebNN deja el estado de ORT tocado, así
+   que si en la misma carga se prueba INT8 y después float32 sobre la NPU, el
+   segundo intento NUNCA tuvo una chance justa — falla por el estado sucio que
+   dejó el primero, no porque la NPU no pueda con float32. Por eso cada par de
+   WebNN se prueba en su propia carga. En webgpu y cpu no hace falta: ahí las
+   dos precisiones se prueban seguidas sin ensuciar nada, y `null` quiere decir
+   exactamente eso. */
+const CADENA=[
+  ['npu','fp16'], ['npu','f32'],
+  ['gpu','fp16'], ['gpu','f32'],
+  ['webgpu','fp16'], ['webgpu','f32'],
+  ['cpu',null]
+];
+const DISPOS=['npu','gpu','webgpu','cpu'];
+const clave=(d,p)=>d+(p?':'+p:'');
+const EP={ actual:null, pedido:'npu', preciso:'fp16', sucio:false, forzado:false,
+           motivo:'', paso:0 };
+let sesPalma=null, sesPuntos=null;
+/* Dónde empieza esta carga. Viene por la dirección porque cambiar de proveedor
+   EN CALIENTE no es seguro: ver `cambiarProveedor` más abajo. `auto=1` marca
+   que llegamos acá por la cascada y no por elección de nadie. */
+const LL_MOTOR='manos:motor';           // el que ganó la última vez, en este equipo
+function recordarMotor(k){ try{ localStorage.setItem(LL_MOTOR,k); }catch(e){} }
+function motorRecordado(){ try{ return localStorage.getItem(LL_MOTOR); }catch(e){ return null; } }
+function olvidarMotor(){ try{ localStorage.removeItem(LL_MOTOR); }catch(e){} }
+
+{
+  const q=new URLSearchParams(location.search);
+  const pedido=(q.get('ep')||'').toLowerCase();
+  const prec=(q.get('pr')||'').toLowerCase();
+  const buscar=(d,p)=>CADENA.findIndex(([cd,cp])=> cd===d && (!p || cp===p || cp===null));
+  if(DISPOS.includes(pedido)){
+    EP.pedido=pedido;
+    EP.forzado = q.get('auto')!=='1';
+    const i=buscar(pedido, prec);
+    EP.paso = i<0 ? 0 : i;
+  }else{
+    /* Nadie pidió nada: si en este equipo ya se supo cuál anda, se arranca
+       DIRECTO ahí. La cascada (que puede costar varias recargas) se paga una
+       sola vez por teléfono, no en cada visita. FORZAR NPU la vuelve a probar
+       desde arriba. */
+    const rec=(motorRecordado()||'').split(':');
+    if(rec[0] && DISPOS.includes(rec[0])){
+      const i=buscar(rec[0], rec[1]);
+      if(i>=0){ EP.paso=i; EP.pedido=rec[0]; EP.recordado=true; }
+    }
+  }
+}
+
+function opcionesEP(dispositivo){
+  if(dispositivo==='npu' || dispositivo==='gpu'){
+    return {
+      executionProviders:[{
+        name:'webnn',
+        deviceType:dispositivo,                         // 'npu' | 'gpu'
+        powerPreference: dispositivo==='npu' ? 'low-power' : 'high-performance'
+      }],
+      /* WebNN arma el grafo una sola vez: conviene que la optimización sea
+         completa y que las formas sean fijas, y estos modelos ya lo son. */
+      graphOptimizationLevel:'all',
+      preferredOutputLocation:'cpu'
+    };
+  }
+  if(dispositivo==='webgpu'){
+    /* WebGPU es el proveedor propio de ORT, no pasa por WebNN. En Android es
+       el que hay cuando no existe navigator.ml, y va bastante más rápido que
+       el WASM. */
+    return { executionProviders:['webgpu'], graphOptimizationLevel:'all',
+             preferredOutputLocation:'cpu' };
+  }
+  return { executionProviders:['wasm'], graphOptimizationLevel:'all' };
+}
+
+/* Cambiar de proveedor RECARGA la página. No es pereza: cuando la creación de
+   una sesión WebNN falla, ORT-Web deja su contexto ML colgado en el estado del
+   módulo (`currentContext`) y la SIGUIENTE sesión —aunque sea de CPU— queda
+   registrada como si fuera de WebNN. Después, al enlazar la entrada, tira
+   "There's no data transfer registered for copying tensors" y no hay forma de
+   limpiarlo desde afuera. Recargar con el proveedor en la dirección arranca el
+   módulo desde cero y es la única salida confiable.
+
+   `auto` distingue las dos recargas: la que pidió el usuario con un botón
+   (manda, no baja más) y la que hace la cascada sola (sigue bajando si hace
+   falta). Como la cadena avanza siempre hacia adelante y CPU nunca ensucia el
+   estado, esto no puede quedar recargando en círculos. */
+function cambiarProveedor(dev, auto, prec){
+  const u=new URL(location.href);
+  u.searchParams.set('ep', dev);
+  if(prec) u.searchParams.set('pr', prec); else u.searchParams.delete('pr');
+  if(auto) u.searchParams.set('auto','1'); else u.searchParams.delete('auto');
+  location.replace(u.toString());
+}
+
+/* Memoria de la cascada entre recargas. Vive en sessionStorage y no en la
+   dirección para que el usuario no tenga que ver ni entender nada de esto:
+   la página se recarga sola, arranca sola, y sigue por donde iba. */
+const LL_SEGUIR='manos:seguir', LL_PROBADOS='manos:probados', LL_MOTIVO='manos:motivo';
+/* Envuelto en try SIEMPRE: Safari en privado y algunos iframes tiran excepción
+   con sólo tocar sessionStorage. Que la memoria de la cascada no ande es un
+   detalle; que se lleve puesto al detector, no. */
+function memLeer(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
+function memPoner(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} }
+function olvidarCascada(){
+  try{ sessionStorage.removeItem(LL_SEGUIR); sessionStorage.removeItem(LL_PROBADOS); }
+  catch(e){}
+}
+/* ¿esta carga es la continuación de una cascada, o alguien abrió la página? */
+const SIGUIENDO = memLeer(LL_SEGUIR)==='1';
+
+async function crearSesiones(dispositivo, soloPrec){
+  ponerChapa('cargando', 'ARMANDO '+dispositivo.toUpperCase()
+             +(soloPrec?' · '+soloPrec.toUpperCase():''));
+  /* Arranca limpio: `sucio` sólo se enciende cuando de verdad se tocó ORT con
+     un proveedor de WebNN. Mientras siga apagado, el que llama puede probar
+     otro dispositivo en la misma carga, sin recargar. */
+  EP.sucio=false;
+  /* Se pregunta ANTES de intentar: si el equipo no entrega contexto para ese
+     dispositivo, se corta acá y no se ensucia el estado de ORT. */
+  if(dispositivo==='npu' || dispositivo==='gpu'){
+    if(!navigator.ml)
+      throw new Error('Este navegador no expone WebNN (navigator.ml).\n'
+        +'En Chrome/Edge de escritorio: chrome://flags/#web-machine-learning-neural-network');
+    try{ await navigator.ml.createContext({deviceType:dispositivo}); }
+    catch(e){ throw new Error('El equipo no entrega un contexto WebNN de tipo "'
+        +dispositivo+'".\nNo hay '+dispositivo.toUpperCase()+' accesible desde el navegador.'); }
+  }
+  if(dispositivo==='webgpu'){
+    if(!navigator.gpu) throw new Error('Este navegador no expone WebGPU (navigator.gpu).');
+    /* pedir el adaptador es la única prueba real: la API puede estar y el
+       equipo no darte ninguno */
+    let ad=null;
+    try{ ad=await navigator.gpu.requestAdapter(); }catch(e){}
+    if(!ad) throw new Error('WebGPU no entrega adaptador en este equipo.');
+  }
+  /* el WASM del runtime sale del mismo CDN */
+  ort.env.wasm.wasmPaths=ORT_CDN;
+  /* hilos sólo si la página está aislada entre orígenes; si no, uno */
+  ort.env.wasm.numThreads = self.crossOriginIsolated
+    ? Math.min(4, navigator.hardwareConcurrency||4) : 1;
+  ort.env.wasm.simd=true;
+  ort.env.logLevel='error';
+
+  const op=opcionesEP(dispositivo);
+  /* Qué precisiones se prueban EN ESTA CARGA. Cuando el que llama pide una
+     concreta (`soloPrec`) se prueba nada más que ésa: es lo que hace la cadena
+     con los dispositivos de WebNN, para que cada intento arranque de un estado
+     limpio. Sin `soloPrec` se prueban las dos seguidas — en WebGPU el orden se
+     invierte y va float32 primero, porque los operadores de cuantización
+     todavía no están todos implementados ahí y el grafo INT8 termina cayendo a
+     CPU operador por operador, más caro que correr float32 derecho.
+
+     Y sobre el INT8 en WebNN: NO SE PUEDE, y no es opinión. Estos modelos
+     cuantizados usan QLinearConv, QLinearAdd, QGemm, QLinearSigmoid y
+     QLinearGlobalAveragePool, que son del dominio `com.microsoft` y no están
+     en el EP de WebNN —comprobado leyendo el bundle de ORT: esos nombres no
+     figuran—. Por eso la NPU va con FLOAT16, que es lo que de verdad digiere:
+     mitad de memoria que float32 y unidades nativas. Medido contra float32
+     sobre manos reales, los 21 puntos se corren 0,039 px de media. */
+  const FP16=['fp16', M.palma_fp16, M.puntos_fp16];
+  const F32 =['f32',  M.palma_f32,  M.puntos_f32 ];
+  const INT8=['int8', M.palma_int8, M.puntos_int8];
+  const TODAS = dispositivo==='cpu' ? [INT8, F32] : [FP16, F32];
+  const intentos = soloPrec ? TODAS.filter(t=>t[0]===soloPrec) : TODAS;
+  let ultimo=null;
+  for(const [prec, up, ul] of intentos){
+    try{
+      /* sólo WebNN deja el estado del módulo tocado; wasm y webgpu no */
+      EP.sucio=(dispositivo==='npu'||dispositivo==='gpu');
+      const a=await ort.InferenceSession.create(up, op);
+      const b=await ort.InferenceSession.create(ul, op);
+      if(sesPalma) try{ await sesPalma.release(); }catch(e){}
+      if(sesPuntos) try{ await sesPuntos.release(); }catch(e){}
+      sesPalma=a; sesPuntos=b;
+      EP.actual=dispositivo; EP.preciso=prec; EP.sucio=false;
+      ponerChapa(dispositivo, dispositivo.toUpperCase()+' · '+prec.toUpperCase());
+      cartel(dispositivo==='npu'
+        ? 'corriendo en la NPU · modelos '+prec.toUpperCase()
+        : 'corriendo en '+dispositivo.toUpperCase()+' · modelos '+prec.toUpperCase(),
+        dispositivo==='npu'?'ok':'', 3.5);
+      return true;
+    }catch(e){ ultimo=e; }
+  }
+  throw ultimo || new Error('no se pudo crear la sesión');
+}
+function ponerChapa(estado, txt){
+  const c=$('chapa');
+  c.className = estado==='npu' ? 'npu'
+    : (estado==='gpu'||estado==='webgpu'||estado==='cpu' ? 'otro'
+    : (estado==='err' ? 'err' : ''));
+  $('chapaTxt').textContent=txt;
+}
+
+/* ============================================================================
+   2 · DETECTOR DE PALMA · las anclas
+
+   El modelo devuelve 2016 predicciones y cada una está anclada a una posición
+   fija de la imagen. Esas anclas no vienen en el archivo: hay que generarlas
+   igual que las generó MediaPipe al entrenar, o todo aparece corrido.
+
+   Son dos capas, y la segunda es la que confunde: NO son tres capas de dos
+   anclas a paso 16, es UNA capa de SEIS anclas por celda.
+       paso  8 → rejilla 24×24 × 2 anclas = 1152
+       paso 16 → rejilla 12×12 × 6 anclas =  864                total 2016
+   Generadas así coinciden con la tabla de referencia con un error de 7e-9.
+============================================================================ */
+const ANCLAS=(()=>{
+  const a=new Float32Array(2016*2); let i=0;
+  for(const [paso, porCelda] of [[8,2],[16,6]]){
+    const g=PALMA_N/paso;
+    for(let y=0;y<g;y++) for(let x=0;x<g;x++) for(let k=0;k<porCelda;k++){
+      a[i++]=(x+0.5)/g; a[i++]=(y+0.5)/g;
+    }
+  }
+  return a;
+})();
+
+/* lienzos de trabajo, creados una sola vez */
+const cvPalma=document.createElement('canvas'); cvPalma.width=cvPalma.height=PALMA_N;
+const ctxPalma=cvPalma.getContext('2d',{willReadFrequently:true});
+const cvPuntos=document.createElement('canvas'); cvPuntos.width=cvPuntos.height=PUNTOS_N;
+const ctxPuntos=cvPuntos.getContext('2d',{willReadFrequently:true});
+/* El recorte de la mano se achica de ~300 px a 224. Con el filtrado bueno los
+   bordes de los dedos llegan limpios al modelo en vez de aliaseados, y los
+   puntos salen más finos. Cuesta nada: lo hace la GPU al dibujar. */
+ctxPalma.imageSmoothingEnabled=true;  ctxPalma.imageSmoothingQuality='high';
+ctxPuntos.imageSmoothingEnabled=true; ctxPuntos.imageSmoothingQuality='high';
+const bufPalma=new Float32Array(PALMA_N*PALMA_N*3);
+const bufPuntos=new Float32Array(PUNTOS_N*PUNTOS_N*3);
+/* El tensor se arma en CADA corrida. Parece un desperdicio y no lo es: el
+   constructor sólo envuelve el arreglo que ya existe, no copia nada. Y
+   reutilizar un mismo tensor entre sesiones de proveedores distintos —de WebNN
+   a WASM, por ejemplo— deja el enlace viejo adentro y ORT tira
+   "There's no data transfer registered for copying tensors". Costó encontrarlo. */
+const tenPalma =()=>new ort.Tensor('float32', bufPalma,  [1,PALMA_N,PALMA_N,3]);
+const tenPuntos=()=>new ort.Tensor('float32', bufPuntos, [1,PUNTOS_N,PUNTOS_N,3]);
+
+/* La imagen entra en un cuadrado con bandas: se conserva la proporción y se
+   rellena el resto. Sin esto la mano sale estirada y el modelo falla. */
+function prepararPalma(video){
+  const tp=performance.now();
+  const w=video.videoWidth, h=video.videoHeight;
+  const escala=PALMA_N/Math.max(w,h);
+  const aw=Math.round(w*escala), ah=Math.round(h*escala);
+  const dx=Math.floor((PALMA_N-aw)/2), dy=Math.floor((PALMA_N-ah)/2);
+  ctxPalma.fillStyle='#000'; ctxPalma.fillRect(0,0,PALMA_N,PALMA_N);
+  ctxPalma.drawImage(video, dx, dy, aw, ah);
+  const d=ctxPalma.getImageData(0,0,PALMA_N,PALMA_N).data;
+  for(let i=0,j=0;i<d.length;i+=4){
+    bufPalma[j++]=LUT[d[i]]; bufPalma[j++]=LUT[d[i+1]]; bufPalma[j++]=LUT[d[i+2]];
+  }
+  MET.msPrep=prom(MET.msPrep, performance.now()-tp);
+  /* para volver a píxeles del video: multiplicar por el lado mayor y restar el
+     margen, los dos en unidades del original */
+  return { escalaSalida: Math.max(w,h), sesgoX: dx/escala, sesgoY: dy/escala };
+}
+const sig=x=>1/(1+Math.exp(-x));
+/* Normalizar a [0,1] son 150.000 divisiones por cuadro entre los dos recortes.
+   Con 256 valores precalculados se vuelven 150.000 lecturas de un array chico
+   que entra entero en caché. Es de las pocas micro-optimizaciones que se miden
+   de verdad en un teléfono. */
+const LUT=new Float32Array(256);
+for(let i=0;i<256;i++) LUT[i]=i/255;
+/* La puntuación de la palma viene SIN sigmoide. Comparar contra el umbral ya
+   pasado a logit ahorra 2016 llamadas a Math.exp por detección: la sigmoide se
+   calcula sólo en las poquitas anclas que sobreviven. */
+const LOGIT_PALMA=Math.log(UMBRAL_PALMA/(1-UMBRAL_PALMA));
+
+async function detectarPalma(video){
+  const enc=prepararPalma(video);
+  const t0=performance.now();
+  const sal=await sesPalma.run({ [sesPalma.inputNames[0]]: tenPalma() });
+  MET.msPalma=prom(MET.msPalma, performance.now()-t0);
+  const nombres=sesPalma.outputNames;
+  /* la salida de 18 canales son 4 de caja y 14 de siete puntos; la de 1 canal
+     es la puntuación sin sigmoide */
+  let cajas=null, puntajes=null;
+  for(const n of nombres){
+    const t=sal[n];
+    if(t.dims[2]===18) cajas=t.data; else if(t.dims[2]===1) puntajes=t.data;
+  }
+  if(!cajas||!puntajes) return null;
+
+  const cand=[];
+  for(let i=0;i<2016;i++){
+    if(puntajes[i]<LOGIT_PALMA) continue;      // sin exp(): sólo una comparación
+    const s=sig(puntajes[i]);
+    const o=i*18, ax=ANCLAS[i*2], ay=ANCLAS[i*2+1];
+    const cx=cajas[o]/PALMA_N+ax, cy=cajas[o+1]/PALMA_N+ay;
+    const bw=cajas[o+2]/PALMA_N, bh=cajas[o+3]/PALMA_N;
+    const k=enc.escalaSalida;
+    const x1=(cx-bw/2)*k-enc.sesgoX, y1=(cy-bh/2)*k-enc.sesgoY;
+    const x2=(cx+bw/2)*k-enc.sesgoX, y2=(cy+bh/2)*k-enc.sesgoY;
+    const kp=new Float32Array(14);
+    for(let p=0;p<7;p++){
+      kp[p*2]  =(cajas[o+4+p*2]  /PALMA_N+ax)*k-enc.sesgoX;
+      kp[p*2+1]=(cajas[o+4+p*2+1]/PALMA_N+ay)*k-enc.sesgoY;
+    }
+    cand.push({s, x1, y1, x2, y2, kp});
+  }
+  if(!cand.length) return null;
+  cand.sort((a,b)=>b.s-a.s);
+  /* supresión de no-máximos: la misma palma dispara decenas de anclas vecinas */
+  const guardados=[];
+  for(const c of cand){
+    let tapado=false;
+    for(const g of guardados) if(iou(c,g)>UMBRAL_NMS){ tapado=true; break; }
+    if(!tapado) guardados.push(c);
+    if(guardados.length>=2) break;
+  }
+  return guardados[0];
+}
+function iou(a,b){
+  const x1=Math.max(a.x1,b.x1), y1=Math.max(a.y1,b.y1);
+  const x2=Math.min(a.x2,b.x2), y2=Math.min(a.y2,b.y2);
+  const inter=Math.max(0,x2-x1)*Math.max(0,y2-y1);
+  const ua=(a.x2-a.x1)*(a.y2-a.y1)+(b.x2-b.x1)*(b.y2-b.y1)-inter;
+  return ua>0? inter/ua : 0;
+}
+
+/* ============================================================================
+   3 · REGIÓN DE INTERÉS Y REGRESOR DE PUNTOS
+
+   La mano se recorta GIRADA: el modelo espera la mano vertical, con la muñeca
+   abajo. El ángulo sale de dos de los siete puntos de la palma —la base de la
+   palma y la base del dedo medio—. El recorte se hace con una transformación
+   del lienzo, que es una operación de GPU y no cuesta prácticamente nada.
+============================================================================ */
+const ROI_CORRE=-0.5, ROI_CRECE=2.7;
+function roiDePalma(p){
+  /* La región se calcula sobre los SIETE PUNTOS de la palma, no sobre la caja
+     del detector: la caja trae margen y deja la mano descentrada dentro del
+     recorte —medido, con la caja quedaba media mano contra el borde—.
+     Punto 0: base de la palma. Punto 2: base del dedo medio. Entre esos dos
+     está el eje de la mano, y de ahí sale el ángulo. */
+  const p1x=p.kp[0], p1y=p.kp[1], p2x=p.kp[4], p2y=p.kp[5];
+  const ang=Math.PI/2-Math.atan2(-(p2y-p1y), p2x-p1x);
+  let ox=0, oy=0;
+  for(let i=0;i<7;i++){ ox+=p.kp[i*2]; oy+=p.kp[i*2+1]; }
+  ox/=7; oy/=7;
+  /* se giran los siete puntos para medir la mano DERECHA, no inclinada */
+  const c=Math.cos(-ang), s=Math.sin(-ang);
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  for(let i=0;i<7;i++){
+    const dx=p.kp[i*2]-ox, dy=p.kp[i*2+1]-oy;
+    const rx=dx*c-dy*s, ry=dx*s+dy*c;
+    if(rx<x1)x1=rx; if(rx>x2)x2=rx; if(ry<y1)y1=ry; if(ry>y2)y2=ry;
+  }
+  const w=x2-x1, h=y2-y1;
+  const rcx=(x1+x2)/2, rcy=(y1+y2)/2 + ROI_CORRE*h;   // corrido hacia los dedos
+  const c2=Math.cos(ang), s2=Math.sin(ang);
+  return { cx: ox+rcx*c2-rcy*s2, cy: oy+rcx*s2+rcy*c2,
+           lado: Math.max(w,h)*ROI_CRECE, ang };
+}
+/* con la mano ya seguida, la región del cuadro siguiente sale de los propios
+   puntos: no hace falta volver a buscar la palma */
+const PRED={ hay:false, cx:0, cy:0, vx:0, vy:0, t:0 };
+function olvidarPrediccion(){ PRED.hay=false; PRED.vx=PRED.vy=0; }
+function roiDePuntos(pts, ahora){
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  for(let i=0;i<21;i++){
+    const x=pts[i*3], y=pts[i*3+1];
+    if(x<x1)x1=x; if(x>x2)x2=x; if(y<y1)y1=y; if(y>y2)y2=y;
+  }
+  const w=x2-x1, h=y2-y1;
+  const cx=(x1+x2)/2, cy=(y1+y2)/2 - 0.1*h;
+  /* muñeca (0) y base del dedo medio (9) dan el eje de la mano */
+  const ang=Math.PI/2-Math.atan2(-(pts[9*3+1]-pts[1]), pts[9*3]-pts[0]);
+
+  /* El recorte tiene que ir A DONDE VA A ESTAR la mano, no a donde estuvo:
+     entre que se saca el cuadro y sale el resultado pasan decenas de
+     milisegundos, y con la mano en movimiento eso alcanza para que los dedos
+     queden contra el borde del recorte —y ahí los puntos se ensucian—. Se mide
+     la velocidad del centro, se suaviza (si no, el adelanto tiembla) y se
+     adelanta. Además el recorte se ABRE con la velocidad: quieto va ajustado,
+     que es donde se gana resolución; rápido va holgado, que es donde se gana
+     no perder la mano. */
+  let vx=0, vy=0;
+  if(PRED.hay){
+    const dt=Math.min(0.2, Math.max(0.008,(ahora-PRED.t)/1000));
+    vx=PRED.vx*0.55+((cx-PRED.cx)/dt)*0.45;
+    vy=PRED.vy*0.55+((cy-PRED.cy)/dt)*0.45;
+  }
+  PRED.hay=true; PRED.cx=cx; PRED.cy=cy; PRED.vx=vx; PRED.vy=vy; PRED.t=ahora;
+  const vel=Math.sqrt(vx*vx+vy*vy);
+  const ad=ADELANTO*AJ.adelanto;
+  return { cx: cx+vx*ad, cy: cy+vy*ad, ang,
+           lado: Math.max(w,h)*(1.58+Math.min(0.92, vel*0.0016)) };
+}
+const ADELANTO=0.045;                 // segundos de adelanto a velocidad medida
+
+function prepararPuntos(video, roi){
+  const tp=performance.now();
+  const s=PUNTOS_N/roi.lado;
+  ctxPuntos.save();
+  ctxPuntos.fillStyle='#000'; ctxPuntos.fillRect(0,0,PUNTOS_N,PUNTOS_N);
+  ctxPuntos.translate(PUNTOS_N/2, PUNTOS_N/2);
+  ctxPuntos.rotate(-roi.ang);
+  ctxPuntos.scale(s,s);
+  ctxPuntos.translate(-roi.cx, -roi.cy);
+  ctxPuntos.drawImage(video, 0, 0);
+  ctxPuntos.restore();
+  const d=ctxPuntos.getImageData(0,0,PUNTOS_N,PUNTOS_N).data;
+  for(let i=0,j=0;i<d.length;i+=4){
+    bufPuntos[j++]=LUT[d[i]]; bufPuntos[j++]=LUT[d[i+1]]; bufPuntos[j++]=LUT[d[i+2]];
+  }
+  MET.msPrep=prom(MET.msPrep, performance.now()-tp);
+}
+async function detectarPuntos(video, roi){
+  prepararPuntos(video, roi);
+  const t0=performance.now();
+  const sal=await sesPuntos.run({ [sesPuntos.inputNames[0]]: tenPuntos() });
+  MET.msPuntos=prom(MET.msPuntos, performance.now()-t0);
+  /* cuatro salidas: puntos de pantalla (63), confianza (1), lateralidad (1) y
+     puntos del mundo (63). Se distinguen por su forma, no por su nombre, que
+     cambia según cómo se haya exportado el modelo. */
+  let pantalla=null, mundo=null, conf=null, lado=null;
+  const dev=[];
+  for(const n of sesPuntos.outputNames){
+    const t=sal[n];
+    if(t.data.length===63) dev.push(t.data);
+    else if(t.data.length===1){ if(conf===null) conf=t.data[0]; else lado=t.data[0]; }
+  }
+  if(dev.length<1) return null;
+  pantalla=dev[0]; mundo=dev[1]||dev[0];
+  if(conf===null) conf=1;
+  /* la confianza y la lateralidad pueden venir cambiadas de orden; la que está
+     entre cero y uno con sigmoide aplicada es la confianza */
+  if(conf<0||conf>1) conf=sig(conf);
+
+  const s=roi.lado/PUNTOS_N, c=Math.cos(roi.ang), sn=Math.sin(roi.ang);
+  const pts=new Float32Array(63), mun=new Float32Array(63);
+  for(let i=0;i<21;i++){
+    /* del cuadrado de 224 de vuelta al video: escalar, girar y trasladar */
+    const u=(pantalla[i*3]-PUNTOS_N/2)*s, v=(pantalla[i*3+1]-PUNTOS_N/2)*s;
+    pts[i*3]  =roi.cx + u*c - v*sn;
+    pts[i*3+1]=roi.cy + u*sn + v*c;
+    pts[i*3+2]=pantalla[i*3+2]*s;
+    /* los del mundo vienen en centímetros en el marco del recorte: se los
+       desgira para que el 3D no rote con la muñeca */
+    const a=mundo[i*3], b=mundo[i*3+1];
+    mun[i*3]  = a*c - b*sn;
+    mun[i*3+1]= a*sn + b*c;
+    mun[i*3+2]= mundo[i*3+2];
+  }
+  return { pts, mun, conf, lado };
+}
+
+/* ============================================================================
+   3b · EL FILTRO ONE-EURO
+
+   El problema de siempre: un pasabajos fijo o tiembla o arrastra, hay que
+   elegir. Éste no obliga a elegir porque el corte SUBE CON LA VELOCIDAD
+   MEDIDA: con la mano quieta filtra fuerte y los puntos quedan clavados; con
+   la mano moviéndose el corte se dispara y el filtro casi desaparece, así que
+   no queda atrás. Es exactamente lo que hace falta para que siga la mano al
+   pie de la letra en vez de ir flotando detrás.
+============================================================================ */
+function filtroEuro(n, minCorte, beta, dCorte){
+  const x=new Float32Array(n), dsuave=new Float32Array(n);
+  let listo=false, tPrev=0;
+  return {
+    par(mc, b){ minCorte=mc; beta=b; },
+    reiniciar(){ listo=false; dsuave.fill(0); },
+    aplicar(v, t){
+      if(!listo){ x.set(v); listo=true; tPrev=t; return x; }
+      const dt=Math.min(0.2, Math.max(0.001,(t-tPrev)/1000)); tPrev=t;
+      const rd=2*Math.PI*dCorte*dt, ad=rd/(rd+1);
+      const k=2*Math.PI*dt;
+      for(let i=0;i<n;i++){
+        const d=(v[i]-x[i])/dt;                 // velocidad instantánea
+        const ds=dsuave[i]=ad*d+(1-ad)*dsuave[i];
+        const c=minCorte+beta*(ds<0?-ds:ds);    // el corte sube con la velocidad
+        const r=k*c, a=r/(r+1);
+        x[i]=a*v[i]+(1-a)*x[i];
+      }
+      return x;
+    }
+  };
+}
+/* Los de pantalla van en píxeles del video (velocidades de cientos por segundo)
+   y los del mundo en unidades de la mano (centésimas): por eso beta cambia tres
+   órdenes de magnitud entre uno y otro. */
+const AJ={ suave:1, adelanto:1 };
+const FIL_PTS=filtroEuro(63, 1.7, 0.012, 1.2);
+const FIL_MUN=filtroEuro(63, 1.5, 6.0,  1.2);
+function ajustarFiltros(){
+  const k=Math.max(0.05, AJ.suave);
+  FIL_PTS.par(1.7/k, 0.012*k);
+  FIL_MUN.par(1.5/k, 6.0*k);
+}
+
+/* ============================================================================
+   4 · EL SEGUIMIENTO
+   Mientras la confianza aguanta, sólo se ejecuta la etapa B. Cuando cae, se
+   vuelve a buscar la palma. Es lo que baja de dos inferencias por cuadro a una.
+============================================================================ */
+const SEG={ roi:null, pts:null, mun:null, conf:0, t:0, buscando:true, enVuelo:false,
+            flojas:0, anclado:0 };
+/* Dos umbrales, no uno. UMBRAL_PUNTOS es "perdí la mano"; UMBRAL_FIRME es
+   "la sigo teniendo pero cada vez peor". Cuando la confianza pasa varios
+   cuadros seguidos por debajo del segundo, la región viene derivando y hay que
+   volver a anclarla con el detector de palma ANTES de perderla del todo: si se
+   espera al primer umbral, la mano ya se fue. */
+const UMBRAL_FIRME=0.82, FLOJAS_MAX=8, REANCLAR_MS=5000;
+function perderMano(){
+  SEG.buscando=true; SEG.roi=null; SEG.conf=0; SEG.flojas=0;
+  FIL_PTS.reiniciar(); FIL_MUN.reiniciar(); olvidarPrediccion();
+}
+/* Cuatro relojes distintos, porque "va lento" no es un diagnóstico:
+   msPuntos = lo que tarda EL MODELO. Esto es lo que la NPU acelera.
+   msPrep   = pasar el cuadro de video a tensor: recortar, leer los píxeles y
+              normalizar. Corre en el hilo principal y la NPU NO lo toca; en
+              cuanto el modelo baja a un par de milisegundos, esto pasa a ser
+              el techo de todo.
+   lat      = de cuadro disponible a puntos listos. Es la que se siente.
+   inf      = ciclos completos por segundo. */
+const MET={ fps:0, inf:0, msPalma:0, msPuntos:0, msPrep:0, lat:0, fpsT:[], infT:[] };
+const prom=(v,x)=>v*0.85+x*0.15;
+
+async function unCiclo(video, tCuadro){
+  if(SEG.enVuelo || !sesPalma || !sesPuntos) return;
+  if(video.readyState<2 || !video.videoWidth) return;
+  SEG.enVuelo=true;
+  /* cuándo estuvo disponible el cuadro: con requestVideoFrameCallback es el
+     dato real del navegador; si no, el ahora del disparo */
+  const tDisp = tCuadro || performance.now();
+  try{
+    let roi=SEG.roi;
+    const ahora0=performance.now();
+    /* re-anclaje periódico: aunque la confianza esté alta, la región seguida
+       deriva de a poco y sin esto la mano termina descentrada en el recorte */
+    if(!SEG.buscando && roi && ahora0-SEG.anclado>REANCLAR_MS) SEG.buscando=true;
+    if(SEG.buscando || !roi){
+      const palma=await detectarPalma(video);
+      if(!palma){ perderMano(); SEG.enVuelo=false; return; }
+      roi=roiDePalma(palma);
+      SEG.anclado=ahora0;
+      olvidarPrediccion();
+    }
+    const r=await detectarPuntos(video, roi);
+    if(!r || r.conf<UMBRAL_PUNTOS){
+      perderMano();
+    }else{
+      const t=performance.now();
+      /* La región del cuadro siguiente sale de los puntos CRUDOS: filtrarlos
+         antes metería el retraso del filtro dentro del lazo de seguimiento y
+         el recorte iría atrasado. Lo que se DIBUJA sí va filtrado. */
+      SEG.roi=roiDePuntos(r.pts, t);
+      SEG.pts=FIL_PTS.aplicar(r.pts, t);
+      SEG.mun=FIL_MUN.aplicar(r.mun, t);
+      SEG.conf=r.conf; SEG.t=t;
+      MET.lat=prom(MET.lat, t-tDisp);
+      SEG.flojas = r.conf<UMBRAL_FIRME ? SEG.flojas+1 : 0;
+      if(SEG.flojas>=FLOJAS_MAX){ SEG.buscando=true; SEG.flojas=0; }
+      else SEG.buscando=false;
+      const ah=performance.now();
+      MET.infT.push(ah);
+      while(MET.infT.length && ah-MET.infT[0]>1000) MET.infT.shift();
+      MET.inf=MET.infT.length;
+    }
+  }catch(e){
+    ponerChapa('err','ERROR');
+    cartel('inferencia: '+(e.message||e), 'mal', 6);
+    perderMano();
+  }
+  SEG.enVuelo=false;
+}
+
+/* ============================================================================
+   5 · CÁMARA Y LINTERNA
+============================================================================ */
+const CAM={ flujo:null, pista:null, tieneFlash:false, flash:false, atras:true };
+async function abrirCamara(atras){
+  cerrarCamara();
+  /* todo con `ideal`: `min` o un valor pelado es una restricción DURA y hace
+     que una cámara que no la cumple no abra nada */
+  const pedido={ video:{ facingMode:{ideal: atras?'environment':'user'},
+                         width:{ideal:1280}, height:{ideal:720},
+                         frameRate:{ideal:120} }, audio:false };
+  let flujo;
+  try{ flujo=await navigator.mediaDevices.getUserMedia(pedido); }
+  catch(e){ flujo=await navigator.mediaDevices.getUserMedia({video:true, audio:false}); }
+  const v=$('cam'); v.srcObject=flujo; await v.play().catch(()=>{});
+  CAM.flujo=flujo; CAM.pista=flujo.getVideoTracks()[0]; CAM.atras=atras;
+  /* la linterna sólo existe en algunas cámaras traseras: se pregunta antes de
+     tocarla, si no `applyConstraints` tira y rompe el flujo */
+  const cap=CAM.pista.getCapabilities? CAM.pista.getCapabilities() : {};
+  CAM.tieneFlash=!!cap.torch;
+  CAM.flash=false;
+  $('bFlash').disabled=!CAM.tieneFlash;
+  $('bFlash').classList.remove('on','fuego');
+  if(!CAM.tieneFlash) $('bFlash').title='esta cámara no tiene linterna';
+  RVFC=engancharCuadros(v);      // inferencia atada al cuadro nuevo, si se puede
+  perderMano();                  // cámara nueva: la mano anterior no vale nada
+  acomodar();
+  return CAM.pista.getSettings();
+}
+function cerrarCamara(){
+  if(CAM.flujo){ CAM.flujo.getTracks().forEach(t=>t.stop()); CAM.flujo=null; CAM.pista=null; }
+}
+async function alternarFlash(){
+  if(!CAM.pista || !CAM.tieneFlash){ cartel('esta cámara no tiene linterna','av',3); return; }
+  const nuevo=!CAM.flash;
+  try{
+    await CAM.pista.applyConstraints({ advanced:[{ torch:nuevo }] });
+    CAM.flash=nuevo;
+    $('bFlash').classList.toggle('on', nuevo);
+    $('bFlash').classList.toggle('fuego', nuevo);
+  }catch(e){
+    cartel('la linterna no respondió: '+(e.message||e),'mal',4);
+    CAM.tieneFlash=false; $('bFlash').disabled=true;
+  }
+}
+
+/* ============================================================================
+   7 · DIBUJO DE LOS PUNTOS
+   El video va con `object-fit:cover`, así que hay que rehacer esa misma cuenta
+   para que el esqueleto caiga encima de la mano y no corrido.
+============================================================================ */
+const cM=$('marcas'), ctxM=cM.getContext('2d');
+function acomodar(){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const w=innerWidth, h=innerHeight;
+  cM.width=Math.round(w*dpr); cM.height=Math.round(h*dpr);
+  cM.style.width=w+'px'; cM.style.height=h+'px';
+  ctxM.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', acomodar);
+addEventListener('orientationchange', ()=>setTimeout(acomodar,120));
+
+function mapaCover(){
+  const v=$('cam'), w=innerWidth, h=innerHeight;
+  const vw=v.videoWidth||1, vh=v.videoHeight||1;
+  const k=Math.max(w/vw, h/vh);
+  return { k, dx:(w-vw*k)/2, dy:(h-vh*k)/2, espejo: !CAM.atras };
+}
+function pintarMarcas(){
+  ctxM.clearRect(0,0,innerWidth,innerHeight);
+  if(!SEG.pts || performance.now()-SEG.t>500) return;
+  const m=mapaCover(), p=SEG.pts;
+  const X=i=> m.espejo ? innerWidth-(m.dx+p[i*3]*m.k) : m.dx+p[i*3]*m.k;
+  const Y=i=> m.dy+p[i*3+1]*m.k;
+  ctxM.lineCap='round'; ctxM.lineJoin='round';
+  /* primero un trazo grueso oscuro y encima el fino de color: se lee sobre
+     cualquier fondo, que es el problema de dibujar sobre video */
+  ctxM.strokeStyle='rgba(0,0,0,.55)'; ctxM.lineWidth=8;
+  ctxM.beginPath();
+  for(const [a,b] of UNIONES){ ctxM.moveTo(X(a),Y(a)); ctxM.lineTo(X(b),Y(b)); }
+  ctxM.stroke();
+  for(const [a,b] of UNIONES){
+    ctxM.strokeStyle=COLOR_DEDO[DEDO_DE[b]] || '#5ce1ff';
+    ctxM.lineWidth=4;
+    ctxM.beginPath(); ctxM.moveTo(X(a),Y(a)); ctxM.lineTo(X(b),Y(b)); ctxM.stroke();
+  }
+  for(let i=0;i<21;i++){
+    const r=(i%4===0&&i>0)||i===0 ? 7 : 5;
+    ctxM.fillStyle='rgba(5,7,12,.8)';
+    ctxM.beginPath(); ctxM.arc(X(i),Y(i),r+2.5,0,6.2832); ctxM.fill();
+    ctxM.fillStyle=i===0? '#ffffff' : (COLOR_DEDO[DEDO_DE[i]]||'#5ce1ff');
+    ctxM.beginPath(); ctxM.arc(X(i),Y(i),r,0,6.2832); ctxM.fill();
+  }
+  ctxM.fillStyle='rgba(230,240,250,.85)';
+  ctxM.font='700 11px ui-monospace,monospace';
+  ctxM.fillText((SEG.conf*100).toFixed(0)+'%', X(0)+16, Y(0)-14);
+}
+
+/* ============================================================================
+   8 · EL CICLO
+   Un solo requestAnimationFrame. El dibujo NO espera a la inferencia: se lanza
+   un ciclo de inferencia cuando el anterior terminó, y mientras tanto se sigue
+   pintando el último resultado. Ahí está la baja latencia.
+============================================================================ */
+let RVFC=false;
+/* requestVideoFrameCallback entrega el cuadro nuevo apenas está, con su marca
+   de tiempo. Es la diferencia entre inferir sobre cuadros frescos y volver a
+   inferir sobre uno ya procesado porque el dibujo va a 60 y la cámara a 30. */
+function engancharCuadros(v){
+  if(typeof v.requestVideoFrameCallback!=='function') return false;
+  const paso=(ahora)=>{ v.requestVideoFrameCallback(paso); if(CAM.pista) unCiclo(v, ahora); };
+  v.requestVideoFrameCallback(paso);
+  return true;
+}
+function ciclo(ahora){
+  requestAnimationFrame(ciclo);
+  MET.fpsT.push(ahora);
+  while(MET.fpsT.length && ahora-MET.fpsT[0]>1000) MET.fpsT.shift();
+  MET.fps=MET.fpsT.length;
+
+  /* Si el navegador avisa cuándo hay CUADRO NUEVO de cámara, la inferencia se
+     dispara desde ahí y no desde el dibujo: no se procesa dos veces el mismo
+     cuadro ni se desperdicia una inferencia entera. Sólo cuando no existe esa
+     API se cae a lanzarla desde acá. */
+  if(!RVFC && CAM.pista) unCiclo($('cam'));
+
+  pintarMarcas();
+  pintarMetricas();
+}
+function pintarMetricas(){
+  const c=v=>v>=100?'ok':(v>=45?'med':'mal');
+  const ms=(v,b,m)=>v<=b?'ok':(v<=m?'med':'mal');
+  const f=$('mFps'); f.textContent=Math.round(MET.fps); f.className='n fr';
+  const i=$('mInf'); i.textContent=Math.round(MET.inf); i.className='n '+c(MET.inf);
+  const l=$('mLat'); l.textContent=MET.lat.toFixed(1); l.className='n '+ms(MET.lat,12,25);
+  const q=$('mPuntos'); q.textContent=MET.msPuntos.toFixed(1);
+  q.className='n '+ms(MET.msPuntos,4,10);
+  const r=$('mPrep'); r.textContent=MET.msPrep.toFixed(1);
+  r.className='n '+ms(MET.msPrep,3,7);
+}
+
+/* ============================================================================
+   9 · LA SONDA DEL MOTOR
+============================================================================ */
+async function pintarSonda(){
+  const L=$('listaSonda'); L.innerHTML='';
+  const fila=(est,n,d)=>{
+    const e=document.createElement('div'); e.className='sonda '+est;
+    e.innerHTML='<span class="l"></span><span class="n"></span><span class="d"></span>';
+    e.querySelector('.n').textContent=n; e.querySelector('.d').textContent=d;
+    L.appendChild(e);
+  };
+  const hayML=typeof navigator.ml!=='undefined';
+  let ctxNPU='no', ctxGPU='no';
+  if(hayML){
+    try{ await navigator.ml.createContext({deviceType:'npu'}); ctxNPU='sí'; }catch(e){ ctxNPU='no'; }
+    try{ await navigator.ml.createContext({deviceType:'gpu'}); ctxGPU='sí'; }catch(e){ ctxGPU='no'; }
+  }
+  fila(hayML?'si':'no', 'WEBNN', hayML?'navigator.ml presente':'ausente · falta la bandera');
+  fila(ctxNPU==='sí'?'si':'no', 'CONTEXTO NPU', ctxNPU==='sí'?'el equipo lo entrega':'no disponible');
+  fila(ctxGPU==='sí'?'si':'medio', 'CONTEXTO GPU', ctxGPU);
+  fila(EP.actual==='npu'?'si':(EP.actual?'medio':'no'), 'EJECUTANDO EN',
+       EP.actual? EP.actual.toUpperCase()+' · '+EP.preciso.toUpperCase() : 'sin sesión');
+  /* el desglose: si MODELO está en 2 ms y PREPARAR en 12, el cuello no es la
+     NPU y no hay modelo que lo arregle */
+  fila(MET.msPuntos<=4?'si':(MET.msPuntos<=10?'medio':'no'), 'MODELO',
+       MET.msPuntos.toFixed(1)+' ms · palma '+MET.msPalma.toFixed(1)+' ms');
+  fila(MET.msPrep<=3?'si':(MET.msPrep<=7?'medio':'no'), 'PREPARAR CUADRO',
+       MET.msPrep.toFixed(1)+' ms · hilo principal, la NPU no lo toca');
+  fila(MET.lat<=12?'si':(MET.lat<=25?'medio':'no'), 'LATENCIA',
+       MET.lat.toFixed(1)+' ms de cuadro a puntos');
+  fila(typeof navigator.gpu!=='undefined'?'si':'medio','WEBGPU',
+       typeof navigator.gpu!=='undefined'?'presente':'ausente');
+  /* por qué no fue la NPU, con el error tal cual lo tiró el runtime */
+  if(EP.actual && EP.actual!=='npu')
+    fila('medio','POR QUÉ NO LA NPU',
+      (EP.motivo||'no hay contexto de NPU en este equipo').split('\n')[0]);
+  fila(CAM.tieneFlash?'si':'medio','LINTERNA', CAM.tieneFlash?'la cámara la soporta':'no soportada');
+  fila(isSecureContext?'si':'no','CONTEXTO SEGURO', isSecureContext?'HTTPS':'NO · sin cámara ni WebNN');
+
+  $('notaMotor').textContent=
+   'Se pide WebNN con deviceType "npu". Si el equipo no tiene NPU o el grafo no\n'
+  +'le entra, la sesión FALLA y acá se dice: no hay caída silenciosa a CPU.\n\n'
+  +'Los modelos son INT8, que es lo que una NPU procesa de forma nativa; si el\n'
+  +'controlador rechaza el grafo cuantizado se reintenta float32 en el MISMO\n'
+  +'dispositivo antes de bajar de dispositivo.\n\n'
+  +'Si "WEBNN" está en rojo: en Chrome o Edge de escritorio hay que habilitar\n'
+  +'chrome://flags/#web-machine-learning-neural-network y reiniciar. En Android\n'
+  +'todavía no está habilitado en canales estables.';
+}
+
+/* ============================================================================
+   10 · ARRANQUE
+   Todo detrás de un gesto del usuario: iOS exige el gesto para el giroscopio y
+   todos los navegadores lo exigen para la cámara.
+============================================================================ */
+function cablear(){
+  $('bMotor').addEventListener('click', ()=>{ $('hojaMotor').classList.add('ver'); pintarSonda(); });
+  $('xMotor').addEventListener('click', ()=>$('hojaMotor').classList.remove('ver'));
+  $('hojaMotor').addEventListener('click', e=>{
+    if(e.target===$('hojaMotor')) $('hojaMotor').classList.remove('ver'); });
+  $('bFlash').addEventListener('click', alternarFlash);
+  const desliz=(id, vid, fn)=>{
+    const e=$(id), t=$(vid);
+    const ap=()=>{ const x=parseFloat(e.value); t.textContent=x.toFixed(2); fn(x); };
+    e.addEventListener('input', ap); ap();
+  };
+  desliz('sSuave','vSuave', x=>{ AJ.suave=x; ajustarFiltros(); });
+  desliz('sAdel','vAdel',  x=>{ AJ.adelanto=x; });
+  $('bCambiar').addEventListener('click', async ()=>{
+    try{ const s=await abrirCamara(!CAM.atras);
+         cartel('cámara '+(CAM.atras?'trasera':'frontal')+' · '+s.width+'×'+s.height,'',2.5);
+         SEG.buscando=true; SEG.roi=null; }
+    catch(e){ cartel('no se pudo cambiar de cámara','mal',4); } });
+  for(const [id,dev] of [['bNPU','npu'],['bGPU','gpu'],['bWGPU','webgpu'],['bCPU','cpu']])
+    $(id).addEventListener('click', async ()=>{
+      /* Elegido a mano: se borra lo que estuviera anotado, así el equipo se
+         vuelve a medir desde este punto en vez de arrancar con la memoria
+         vieja. Si ya hubo un intento con WebNN el estado de ORT quedó tocado y
+         hay que recargar; si no, se puede cambiar en caliente. */
+      olvidarMotor();
+      if(EP.sucio || EP.actual!==null){ cambiarProveedor(dev, false); return; }
+      $('hojaMotor').classList.remove('ver');
+      try{ await crearSesiones(dev); }
+      catch(e){ ponerChapa('err','FALLÓ '+dev.toUpperCase());
+                cartel('no se pudo armar en '+dev.toUpperCase()+':\n'+(e.message||e),'mal',8);
+                EP.sucio=true; }
+      pintarSonda();
+    });
+  if(!isSecureContext)
+    $('portadaNota').textContent='ATENCIÓN: esto no es HTTPS · la cámara y WebNN no van a funcionar';
+  /* Si venimos de una recarga de la cascada, la portada lo explica en vez de
+     hacer creer que arrancamos de cero por gusto. */
+  else if(SIGUIENDO)
+    $('portadaNota').textContent='La NPU no pudo con el modelo · reintentando solo en '
+      +EP.pedido.toUpperCase()+'…';
+  else if(EP.forzado)
+    $('portadaNota').textContent='Empieza probando '+EP.pedido.toUpperCase()
+      +' · si no puede, sigue bajando';
+  else if(EP.recordado)
+    $('portadaNota').textContent='Ya se midió este equipo · entra directo en '
+      +EP.pedido.toUpperCase()+' · FORZAR NPU lo vuelve a probar';
+}
+
+async function entrar(){
+  $('bEntrar').disabled=true;
+  $('bEntrar').textContent='ARRANCANDO…';
+  /* 1 · cámara */
+  try{
+    const s=await abrirCamara(true);
+    cartel('cámara '+s.width+'×'+s.height+' @ '+(s.frameRate||'?')+' fps','',2.5);
+  }catch(e){
+    ponerChapa('err','SIN CÁMARA');
+    cartel('no se pudo abrir la cámara:\n'+(e.message||e),'mal',0);
+    $('bEntrar').disabled=false; $('bEntrar').textContent='REINTENTAR';
+    return;
+  }
+  $('portada').classList.add('ir');
+  setTimeout(()=>$('portada').remove(), 600);
+  /* 3 · el motor */
+  await arrancarMotor();
+}
+
+/* ----------------------------------------------------------------------------
+   LA CASCADA
+
+   Se empieza donde diga la dirección y se baja por CADENA hasta que una sesión
+   quede armada. Dos maneras de bajar, y la diferencia importa:
+
+   · el intento falló ANTES de tocar ORT (no hay navigator.ml, no hay adaptador
+     de WebGPU): el estado está limpio y se sigue con el próximo en la misma
+     carga, sin recargar y sin que se note;
+   · el intento falló creando la sesión de WebNN: ORT quedó con su contexto ML
+     colgado y la única salida es recargar con el próximo en la dirección.
+
+   Un `?ep=` puesto a mano (sin `auto=1`) manda: si falla, se informa y no se
+   baja. Para eso está el botón FORZAR NPU.
+---------------------------------------------------------------------------- */
+async function arrancarMotor(){
+  /* `?ep=` sólo dice POR DÓNDE EMPEZAR. Nunca apaga la cascada: si el forzado
+     falla, se sigue bajando igual. (Al revés era una trampa: entrar con
+     `?ep=npu` en un equipo cuyo WebNN da contexto pero no arma el grafo dejaba
+     el programa sin motor y sin salida.) */
+  const cola=CADENA.slice(EP.paso);
+  let ultimo=null;
+  /* los pares que ya se probaron en cargas anteriores de esta misma cascada */
+  const previos=(memLeer(LL_PROBADOS)||'').split(',').filter(Boolean);
+  const saltados=previos.slice();
+
+  for(const [dev, prec] of cola){
+    try{
+      await crearSesiones(dev, prec);
+      olvidarCascada();
+      /* queda anotado para la próxima visita: se entra derecho acá */
+      recordarMotor(clave(dev, EP.preciso));
+      /* Anduvo. Si no fue la NPU, se dice por qué, una sola vez y sin drama. */
+      if(dev!=='npu'){
+        EP.motivo=(ultimo&&(ultimo.message||String(ultimo)))
+                 ||memLeer(LL_MOTIVO)||'';
+        if(saltados.length) setTimeout(()=>cartel(
+           'La NPU no pudo con el modelo en este equipo.\n'
+          +'Corriendo en '+dev.toUpperCase()+' · modelos '+EP.preciso.toUpperCase()
+          +'\n\nAbrí MOTOR para ver por qué.','',7), 3600);
+      }
+      return true;
+    }catch(e){
+      ultimo=e; saltados.push(clave(dev,prec));
+      if(EP.sucio){
+        /* El estado de ORT quedó tocado por WebNN y ninguna sesión posterior
+           sirve en esta carga: hay que arrancar el módulo de cero. Se recuerda
+           lo andado para que después de recargar siga desde el próximo par y
+           sin pedirle otro toque a nadie. */
+        const i=CADENA.findIndex(([d,p])=> d===dev && p===prec);
+        const prox=CADENA[i+1];
+        if(prox){
+          memPoner(LL_PROBADOS, saltados.join(','));
+          memPoner(LL_MOTIVO, (ultimo&&(ultimo.message||String(ultimo)))||'');
+          memPoner(LL_SEGUIR, '1');
+          ponerChapa('cargando','REINTENTANDO EN '+clave(prox[0],prox[1]).toUpperCase());
+          cartel(clave(dev,prec).toUpperCase()+' no pudo armar la sesión.\n'
+                +'Reintentando solo en '+clave(prox[0],prox[1]).toUpperCase()+'…','',0);
+          cambiarProveedor(prox[0], true, prox[1]);
+          return false;                     // la página se está recargando
+        }
+        break;
+      }
+      /* limpio: se sigue con el próximo sin recargar y sin que se note */
+    }
+  }
+
+  olvidarCascada();
+  ponerChapa('err','SIN MOTOR');
+  cartel('No se pudo armar el detector en ninguno de: '+saltados.join(', ').toUpperCase()
+        +'\n\nÚltimo error:\n'+((ultimo&&(ultimo.message||ultimo))||'—'),'mal',0);
+  /* la hoja MOTOR se abre sola: ahí están los botones para probar a mano */
+  $('hojaMotor').classList.add('ver'); pintarSonda();
+  return false;
+}
+
+acomodar();
+cablear();
+requestAnimationFrame(ciclo);
+$('bEntrar').addEventListener('click', entrar, {once:false});
+/* Continuación de una cascada: no se le pide otro toque a nadie. El permiso de
+   cámara ya está dado para este origen, así que getUserMedia sale sin gesto; si
+   igual fallara, `entrar` deja el botón en REINTENTAR y no se pierde nada. */
+if(SIGUIENDO) entrar();
+
+/* para inspección desde la consola */
+window.__app={ EP, SEG, MET, CAM, ANCLAS, AJ, PRED, filtros:{FIL_PTS, FIL_MUN},
+  sesiones:()=>({palma:!!sesPalma, puntos:!!sesPuntos}),
+  probar:async d=>crearSesiones(d) };
+</script>
+</body>
+</html>
