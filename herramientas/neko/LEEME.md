@@ -124,3 +124,41 @@ El `.exe` se baja en el host (donde `curl` sale) y se copia con `docker cp`; el
 contenedor no necesita bajar nada. La imagen de Debian trixie viene solo amd64,
 así que una app de 32 bits pediría `dpkg --add-architecture i386` y
 `wine32:i386`; WinRAR x64 no lo necesita.
+
+## Números medidos
+
+Contenedor de la sesión: 4 vCPU (Xeon @ 2,80 GHz), 15 GiB de RAM, ~19 GiB de
+disco libre, sin GPU (`/dev/dri` no existe: todo el render es por software).
+El Neko no tiene límites propios, así que ve los mismos 4 vCPU y 15 GiB.
+Idle consume ~190 MiB de RAM y 0,15 % de CPU.
+
+| | |
+|---|---|
+| Pantalla por defecto | 1280x720 @ 30 |
+| Resoluciones ofrecidas | 30, hasta 3840x2160 (probado 1920x1080 y 2560x1440) |
+| Captura 1280x720 q90 | 161 ms · 33 KB |
+| Captura 1280x720 q50 | 49 ms · 24 KB |
+| Captura 1920x1080 q90 | 189 ms · 52 KB |
+| Captura 2560x1440 q90 | 280 ms · 78 KB |
+| Ciclo completo (login + ws + clic + captura) | ~1,4 s |
+| Tipear | ~12 caracteres por segundo |
+| Pegar por portapapeles | instantáneo, sin importar el largo |
+
+**El cierre del WebSocket costaba 5 s de cada corrida.** Neko no contesta el
+handshake de cierre, así que `websockets` quemaba el `close_timeout` entero al
+salir: el ciclo medía 6,1 s y solo 120 ms eran trabajo real. Con
+`close_timeout=.3` bajó a 1,4 s.
+
+## Lo que no hay
+
+- **Sin GPU**: nada de aceleración 3D. Wine con juegos o CAD no va.
+- **Sin navegador** en la imagen xfce (el globito de la barra es un lanzador
+  vacío); hay que `apt-get install firefox-esr`.
+- **La imagen es solo amd64**: una app de Windows de 32 bits pide
+  `dpkg --add-architecture i386` y `wine32:i386`.
+- **Nadie más puede ver este escritorio.** Escucha en `127.0.0.1:8080` adentro
+  del contenedor de la sesión, sin puerto publicado hacia afuera.
+- **Es efímero.** Si `dockerd` se cae, el contenedor se va con él y hay que
+  `docker start neko-prueba` (el disco del contenedor sobrevive: Wine y WinRAR
+  siguieron instalados, pero las ventanas abiertas se pierden). Y el contenedor
+  de la sesión entero se recicla al rato de quedar inactivo.

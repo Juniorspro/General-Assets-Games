@@ -225,9 +225,13 @@ async def correr(neko, acciones, verboso=True):
     if neko.cookie and not neko.token:
         cab["Cookie"] = neko.cookie
     ctx = contexto_ssl() if neko.url_ws().startswith("wss") else None
+    # close_timeout corto a proposito: Neko no contesta el handshake de cierre,
+    # asi que el timeout se quema entero al salir. Medido: con 5 s cada corrida
+    # tardaba 6,1 s de los cuales 5 eran esto; con 0,3 s baja a ~1,4 s. Antes
+    # de cerrar ya se espera 0,3 s, asi que no se pierde ningun evento.
     async with websockets.connect(neko.url_ws(), additional_headers=cab,
                                   origin=neko.base, ssl=ctx,
-                                  open_timeout=30, close_timeout=5) as ws:
+                                  open_timeout=30, close_timeout=.3) as ws:
         init = None
         fin = time.time() + 10
         while time.time() < fin:
