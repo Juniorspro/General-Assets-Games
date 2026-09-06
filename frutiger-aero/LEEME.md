@@ -5,9 +5,15 @@ Una foto de fondo, la barra de vidrio arriba y un cartel que dice
 
     https://frutiger-aero-86q.pages.dev
 
-La mascota es un **modelo 3D de verdad**, animado por código. Se puede
-arrastrar para girarla y tocarla para que salte. El sitio pesa 1,8 MB, de los
-cuales 1,2 MB son three.js y el modelo.
+La mascota es un **modelo 3D con rig**: 41 huesos, animación de reposo, salto
+al tocarla, y una capa de movimiento hecha por código encima. Se arrastra para
+girarla.
+
+El sitio pesa 3,1 MB, de los cuales 2,4 MB son el modelo, three.js y
+GLTFLoader. **Es mucho para una página que dice «próximamente»**, y se paga por
+tener un 3D de verdad. La imagen de la mascota carga primero y el 3D la
+reemplaza cuando termina de bajar, así que la página se ve completa desde el
+primer momento.
 
 ## Todo lo que se cachea lleva el hash de su contenido en el nombre
 
@@ -19,11 +25,19 @@ lleva ocho dígitos de su propio hash: si el archivo cambia, cambia la URL, y no
 hay caché que pueda quedarse con lo viejo. El mapa de nombres queda en
 `nombres.json` y `nombres-js.json`.
 
-## Las animaciones son por código, no grabadas
+## El modelo tiene rig, y encima una capa por código
 
-El modelo es **una malla sola, sin huesos** —eso es lo que devuelve una
-reconstrucción hecha a partir de una imagen—, así que no hay clips que
-reproducir. Todo se calcula en cada cuadro, en `sitio/js/mascota.js`:
+`submit_rig3d_generation` sobre el `task_id` del modelo devolvió **41 huesos y
+tres animaciones**: `preset:walk`, `preset:idle` y `preset:jump`. Se usan idle
+como base y jump al tocarla; walk se sacó del GLB a mano porque para una mascota
+parada eran ~260 KB que nunca se iban a reproducir.
+
+Encima del esqueleto va una capa hecha por código, y **las dos cosas conviven
+porque tocan lugares distintos**: el esqueleto mueve las partes por dentro y el
+código mueve, gira y escala al muñeco entero, desde un envoltorio. Si el código
+tocara los huesos, pisaría a la animación en cada cuadro.
+
+La capa por código, en `sitio/js/mascota.js`:
 
 - **flote** — un seno lento en Y, período 4 s;
 - **respiración** — escala no uniforme (sube y se angosta lo mismo, para no
@@ -36,7 +50,40 @@ reproducir. Todo se calcula en cada cuadro, en `sitio/js/mascota.js`:
 Los tres períodos son 4, 2 y 6 a propósito: si fueran iguales, el conjunto se
 repetiría cada cuatro segundos y el ojo engancharía el bucle.
 
-Con `prefers-reduced-motion` queda quieta, de frente.
+Con `prefers-reduced-motion` se apaga esa capa, pero **el esqueleto sigue**:
+quieto del todo sería un maniquí, no una mascota.
+
+## La pixelación es del renderizador, no un filtro
+
+El lienzo dibuja a **128 px de lado** y el CSS lo estira con
+`image-rendering: pixelated`. No hay segundo pase ni shader. Y de paso resuelve
+un problema real: la malla sale de reconstruir **una sola foto**, así que de
+cerca se le ven los bultos y la textura estirada. A 128 px eso desaparece y
+queda el mismo escalonado que el personaje ya tiene en el pelo y el visor.
+
+Dos detalles que hay que respetar para que funcione:
+`motor.setPixelRatio(1)` —si no, en una pantalla retina el buffer sale al doble
+y se pierde la mitad del efecto— y `setSize(LADO, LADO, false)`: con `true`,
+three le escribe el CSS al lienzo y anula todo.
+
+## El encuadre se mide por los huesos
+
+`Box3.setFromObject` sobre una malla con skin devuelve la caja de la **pose de
+amarre**, que no es la que se ve: el muñeco quedaba chico y corrido hacia abajo.
+Los huesos, en cambio, ya están donde los puso la animación, así que la caja se
+arma con sus posiciones y se agranda un 16% para que no le corte la ropa.
+
+La escala va en un envoltorio y no en el nodo del skin: tocarle la escala a un
+nodo con esqueleto desalinea los huesos de la malla.
+
+## GLTFLoader está copiado, no traído de un CDN
+
+El lector de GLB hecho a mano no sabe de esqueletos ni de animaciones, y
+escribirlo era medio día de trabajo para reinventar algo que ya existe.
+`GLTFLoader` no está en cdnjs, pero sí en jsDelivr como parte del paquete de
+three: se bajó junto con su dependencia `BufferGeometryUtils`, se les reescribió
+el `from 'three'` a la ruta local, y quedaron en `sitio/vendor/`. Cero
+dependencias de un CDN en tiempo de ejecución.
 
 Si no hay WebGL o el modelo no baja, el guión saca el `<canvas>` y queda la
 imagen que ya estaba en el HTML. Un cuadro vacío sería peor que una foto.
@@ -80,6 +127,20 @@ navegadores móviles y el fondo salta con la barra de direcciones.
 Las dos son azul de arriba abajo con apenas una franja de pasto: **las versiones
 con nubes grandes no sirven**, porque a través del vidrio el blanco de las nubes
 lava el texto y la página entera se ve descolorida.
+
+## El ícono de la barra
+
+Lo trajo el dueño: el monigote de vidrio con el globo terráqueo. Venía en PNG
+**sin canal alfa**, sobre fondo blanco.
+
+Sacarle el blanco por color —«todo lo que sea claro es fondo»— le comería los
+brillos blancos que tiene *encima* del cuerpo azul, que son justamente lo que lo
+hace parecer de vidrio. Así que el fondo se busca por **contigüidad**: se inunda
+desde los cuatro bordes y sólo se borra lo que se toca con el borde.
+
+El reflejo de abajo no caía por color —es gris azulado, no blanco—, así que
+aparte se busca la última fila con un pixel saturado (esa es la figura de
+verdad) y todo lo de abajo se declara fondo.
 
 ## La mascota
 
