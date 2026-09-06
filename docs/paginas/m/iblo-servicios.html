@@ -780,6 +780,11 @@ main{overflow-x:hidden}
 .acorde summary::after{content:"+"; margin-left:auto; color:var(--ac); font:400 22px/1 var(--texto)}
 .acorde details[open] summary::after{content:"–"}
 .acorde .cuerpo{padding:0 17px 17px; font-size:14.5px; color:var(--tenue)}
+/* El nombre con @ es un link: sin esto sale con el subrayado del navegador y
+   parece un enlace roto en medio de una lista de nombres. */
+.acorde .cuerpo a{color:var(--papel); text-decoration:none}
+.acorde .cuerpo a b{color:var(--ac); font-weight:600}
+.acorde .cuerpo a:active{opacity:.65}
 .acorde .cuerpo .prov{display:block; margin-top:8px; font:700 11px/1 var(--cond);
   letter-spacing:.14em; text-transform:uppercase; color:var(--ac)}
 
@@ -1047,6 +1052,23 @@ var SERVICIOS = [
  ["regalo","Sorteos","Nuestra forma de llenar el salón. Etiquetá, compartí y entrás al bombo: el último juntó más de 1.800 comentarios.","","Hola IBLO! Quiero hacer un sorteo para difundir mi evento."],
  ["hielo","Conservadora","En casi todas las fechas se entra con conservadora hasta determinada hora. Sin vidrio.","","Hola IBLO! Consulta sobre el ingreso con conservadora."]
 ];
+
+/* Cada uno es [nombre, destacado, usuario de Instagram]. El link se arma acá a
+   partir del usuario, así no puede apuntar a otro lado que al perfil. */
+function pintarEquipoM(lista){
+  var h="";
+  for(var i=0;i<lista.length;i++){ var e=lista[i], li="";
+    for(var j=0;j<e[2].length;j++){
+      var p=e[2][j], ig=p[2]||"";
+      li+=(j?" · ":"")+(ig
+        ? '<a href="https://instagram.com/'+encodeURIComponent(ig)+'" target="_blank" rel="noopener">'+
+          esc(p[0])+' <b>@'+esc(ig)+'</b></a>'
+        : esc(p[0]));
+    }
+    h+='<details'+(i===0?' open':'')+'><summary>'+esc(e[1])+'</summary><div class="cuerpo">'+li+'</div></details>';
+  }
+  $("acordeEquipo").innerHTML=h;
+}
 
 var EQUIPO = [
  ["Cabina","DJs",[["Agus Mendoza",1],["Alan Inamorato",1],["Matías Villalba",0],["Javier Ríos",0],["Rodri Ojeda",0],["Ailén Romero",0],["Apolo",0],["Braian Jara",0],["Yona Pérez",0]]],
@@ -1463,12 +1485,16 @@ setTimeout(pintarFotos,0);
     h+='<details><summary>'+esc(CICLO[i][0])+'</summary><div class="cuerpo">'+esc(CICLO[i][1])+'</div></details>';
   $("acordeCiclo").innerHTML=h;
 
-  h="";
-  for(var i=0;i<EQUIPO.length;i++){ var e=EQUIPO[i], li="";
-    for(var j=0;j<e[2].length;j++) li+=(j?" · ":"")+esc(e[2][j][0]);
-    h+='<details'+(i===0?' open':'')+'><summary>'+esc(e[1])+'</summary><div class="cuerpo">'+li+'</div></details>';
-  }
-  $("acordeEquipo").innerHTML=h;
+  /* El equipo vive en la base y se edita desde la app. La lista de abajo queda
+     como respaldo: si la API no contesta, se ve el último equipo conocido. */
+  pintarEquipoM(EQUIPO);
+  fetch("https://iblo-eventos.pages.dev/api/equipo").then(function(r){ return r.json(); })
+    .then(function(j){
+      if(j && j.grupos && j.grupos.length)
+        pintarEquipoM(j.grupos.map(function(g){
+          return [g.cargo, g.grupo, g.gente.map(function(p){ return [p.nombre, p.destacado, p.ig]; })];
+        }));
+    }).catch(function(){});
 
   h="";
   for(var i=0;i<PUEBLOS.length;i++)
