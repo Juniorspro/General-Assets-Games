@@ -17,6 +17,7 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -328,6 +329,46 @@ public class Puente {
       bm.recycle();
       return o.toByteArray();
     } catch (Exception e) { return null; }
+  }
+
+  /* ══════════════════ LA CÁMARA ══════════════════ */
+
+  /** ¿está el permiso del sistema puesto? La página lo pregunta ANTES de
+      llamar a `getUserMedia`: preguntar primero deja mostrar el cartel de
+      «tocá para permitir» en vez de una pantalla negra con un error. */
+  @JavascriptInterface public boolean camaraOk() {
+    return (act instanceof Principal) && ((Principal) act).tieneCamara();
+  }
+
+  @JavascriptInterface public void camaraPide() {
+    if (act instanceof Principal) ((Principal) act).pideCamara();
+  }
+
+  /**
+   * ── LA OTRA MITAD DEL SELECTOR ──
+   * El pedido fue que abrir la cámara NO abra la normal sino que deje elegir.
+   * La elección la muestra el launcher; este método es el otro botón, y va por
+   * el intent estándar de foto fija para que Android abra la cámara que el
+   * dueño tenga puesta —la del fabricante, GCam, la que sea— en vez de que el
+   * launcher adivine un paquete.
+   *
+   * `NEW_TASK` porque el launcher es `singleTask`: sin él la cámara se abriría
+   * DENTRO de nuestra tarea y apretar HOME la dejaría encima del escritorio.
+   */
+  @JavascriptInterface public boolean camaraSistema() {
+    try {
+      Intent i = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA);
+      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      act.startActivity(i);
+      return true;
+    } catch (Exception e) {
+      try {
+        Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        act.startActivity(i);
+        return true;
+      } catch (Exception e2) { return false; }
+    }
   }
 
   @JavascriptInterface public String version() {

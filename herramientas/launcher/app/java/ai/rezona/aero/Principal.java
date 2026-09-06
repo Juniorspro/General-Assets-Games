@@ -1,7 +1,9 @@
 package ai.rezona.aero;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -161,6 +163,49 @@ public class Principal extends Activity {
 
   /* En un launcher, «atrás» NO sale de la app: no hay a dónde salir. Lo que hace
      es cerrar lo que esté abierto encima, y eso lo decide la página. */
+  /** el número del pedido de permiso de cámara */
+  public static final int PIDE_CAM = 7401;
+
+  /**
+   * ── EL PERMISO SE PIDE CUANDO SE VA A USAR, NO AL ARRANCAR ──
+   * Un launcher que pide la cámara la primera vez que se abre pide algo que
+   * todavía no hace nada, y eso se contesta que no. Lo llama `ClienteArchivo`
+   * cuando la página pide `getUserMedia` sin el permiso puesto, y lo llama el
+   * puente cuando el jugador elige la cámara Aero en el selector.
+   */
+  public void pideCamara() {
+    if (Build.VERSION.SDK_INT < 23) return;
+    if (checkSelfPermission(Manifest.permission.CAMERA)
+        == PackageManager.PERMISSION_GRANTED) {
+      avisaCamara(true);
+      return;
+    }
+    requestPermissions(new String[]{ Manifest.permission.CAMERA }, PIDE_CAM);
+  }
+
+  public boolean tieneCamara() {
+    if (Build.VERSION.SDK_INT < 23) return true;
+    return checkSelfPermission(Manifest.permission.CAMERA)
+        == PackageManager.PERMISSION_GRANTED;
+  }
+
+  private void avisaCamara(boolean ok) {
+    if (web != null) web.evaluateJavascript("window.__camPermiso && __camPermiso(" + ok + ")", null);
+  }
+
+  /**
+   * ── LA PÁGINA TIENE QUE ENTERARSE DE LA RESPUESTA ──
+   * Sin esto el visor se queda en «pidiendo permiso» para siempre aunque el
+   * dueño haya tocado «permitir»: el `getUserMedia` que falló no se reintenta
+   * solo. Y el «no» también se avisa, porque una pantalla que no dice por qué
+   * está negra es lo mismo que una rota.
+   */
+  @Override public void onRequestPermissionsResult(int pedido, String[] permisos, int[] res) {
+    super.onRequestPermissionsResult(pedido, permisos, res);
+    if (pedido != PIDE_CAM) return;
+    avisaCamara(res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED);
+  }
+
   @Override public void onBackPressed() {
     if (web != null) web.evaluateJavascript("window.__atras && __atras()", null);
   }

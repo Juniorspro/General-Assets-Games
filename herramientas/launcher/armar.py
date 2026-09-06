@@ -18,7 +18,7 @@ falta y NO el alfabético: un `let`/`const` leído antes de su línea no devuelv
 import io, os, sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-ORDEN = ['a.html', 'i_img.js', 'i_fondos.js', 'i_iconos.js', 'i_lemi.js', 'b.js', 'c.js', 'd.js', 'k.js', 'g.js', 'e.js', 'h.js', 'p.js', 'q.js', 'r.js', 's.js', 'w.js', 'f.js', 'z.html']
+ORDEN = ['a.html', 'i_img.js', 'i_fondos.js', 'i_iconos.js', 'i_cam.js', 'i_lemi.js', 'b.js', 'c.js', 'd.js', 'k.js', 'g.js', 'e.js', 'h.js', 'p.js', 'q.js', 'r.js', 's.js', 'w.js', 'm.js', 'f.js', 'z.html']
 SALIDA = os.path.join(AQUI, 'app', 'assets', 'ui.html')
 
 

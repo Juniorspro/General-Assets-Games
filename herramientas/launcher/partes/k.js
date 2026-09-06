@@ -38,10 +38,17 @@
 
 const GLIFOS = {
   /* ── redes y mensajes ── */
-  tiktok:   [['o',42,66,25,17], ['r',62,12,17,54,2],
-             ['p','M79 12 C82 31 90 39 100 41 L100 59 C88 57 80 51 79 45 Z']],
-  whatsapp: [['p','M50 10 A40 40 0 1 0 17 73 L12 92 L32 87 A40 40 0 0 0 50 10 Z'],
-             ['-p','M38 30 C30 37 33 50 42 60 C52 70 65 73 71 66 C73 63 72 60 70 58 L64 52 C62 50 59 51 57 53 L54 57 C49 53 46 49 43 44 L47 40 C49 38 50 35 48 33 L43 28 C41 26 39 27 38 30 Z']],
+  /* La nota de TikTok: cabeza SÓLIDA abajo a la izquierda, tallo pegado a su
+     derecha y la bandera saliendo del tope. La versión anterior tenía la cabeza
+     como aro grueso —una dona— y la bandera se salía de la caja por x=100. */
+  tiktok:   [['c',36,66,24], ['r',50,10,17,58,3],
+             ['p','M67 10 C69 26 78 34 92 36 L92 53 C80 51 71 46 67 40 Z']],
+  /* La burbuja va como DISCO más COLA y no como un solo camino con dos arcos:
+     un arco grande con las banderas mal puestas cierra por donde no es, y eso
+     no falla —dibuja otra cosa—. Dos piezas que se solapan se unen solas en la
+     máscara. El auricular es el recorte. */
+  whatsapp: [['c',54,50,40], ['p','M30 72 L42 88 L6 96 Z'],
+             ['-p','M34 25 C29 30 28 38 32 47 C37 59 49 70 61 74 C69 77 76 75 79 70 C81 66 80 63 77 61 L69 55 C66 53 63 54 61 57 L58 61 C52 57 46 51 42 45 L46 41 C48 39 49 36 47 33 L40 25 C38 23 36 23 34 25 Z']],
   instagram:[['r',14,14,72,72,22], ['-r',24,24,52,52,15],
              ['o',50,50,15,7], ['c',72,29,5]],
   facebook: [['c',50,50,42], ['-t','f',74,80]],
@@ -62,7 +69,18 @@ const GLIFOS = {
   wechat:   [['o',38,42,24,8], ['o',66,62,20,8]],
 
   /* ── medios ── */
+  /* CUATRO MARCAS DISTINTAS Y NO UNA. YouTube es la pantalla con el triángulo;
+     Music es el triángulo dentro de un ARO; Studio es el triángulo dentro de un
+     marco cuadrado con la fila de faders de una mesa de mezcla; Kids es la
+     pantalla con el triángulo y una carita. Se distinguen de una ojeada, que es
+     lo único que un icono tiene que hacer. */
   youtube:  [['r',6,22,88,56,16], ['-p','M40 36 L70 50 L40 64 Z']],
+  ytmusic:  [['o',50,50,38,9], ['p','M40 34 L70 50 L40 66 Z']],
+  ytstudio: [['r',8,14,84,60,12], ['-r',16,22,68,44,7],
+             ['p','M42 32 L64 44 L42 56 Z'],
+             ['l',20,84,32,84,7],['l',44,84,56,84,7],['l',68,84,80,84,7]],
+  ytkids:   [['r',6,20,88,60,26], ['-c',36,44,7], ['-c',64,44,7],
+             ['-p','M36 60 C42 68 58 68 64 60',6]],
   spotify:  [['c',50,50,40], ['-p','M26 36 C42 30 62 32 76 40',7],
              ['-p','M28 51 C42 46 60 48 72 54',6], ['-p','M31 65 C42 61 56 62 66 67',5]],
   netflix:  [['p','M28 12 L44 12 L72 66 L72 12 L86 12 L86 88 L70 88 L42 34 L42 88 L28 88 Z']],
@@ -180,7 +198,236 @@ const GLIFOS = {
              ['-c',38,42,6], ['-c',62,42,6], ['-p','M36 56 C42 66 58 66 64 56',5]],
   skype:    [['c',50,50,40], ['-t','S',58,70]],
   duolingo: [['c',50,52,34], ['-c',38,44,9], ['-c',62,44,9], ['c',38,44,4], ['c',62,44,4],
-             ['-p','M40 64 L50 74 L60 64 Z'], ['p','M22 24 L36 34 M78 24 L64 34']]
+             ['-p','M40 64 L50 74 L60 64 Z'], ['p','M22 24 L36 34 M78 24 L64 34']],
+
+  /* ══ LOS QUE ENTRARON EN LA VUELTA 124 ══
+     El pedido fue «más de 150», y con ochenta el cajón de un teléfono normal
+     ya dejaba apps con la inicial pelada. Cada uno sigue siendo geometría: dos
+     o tres primitivas que se leen a sesenta píxeles. */
+
+  /* ── inteligencia artificial ── */
+  chatgpt:  [['p','M50 8 L86 29 L86 71 L50 92 L14 71 L14 29 Z'],
+             ['-p','M50 22 L74 36 L74 64 L50 78 L26 64 L26 36 Z'],
+             ['-r',46,4,8,26,4], ['-r',72,58,22,8,4]],
+  gemini:   [['p','M50 4 C55 30 70 45 96 50 C70 55 55 70 50 96 C45 70 30 55 4 50 C30 45 45 30 50 4 Z']],
+  claude:   [['l',50,50,50,10,9],['l',50,50,50,90,9],['l',50,50,12,50,9],['l',50,50,88,50,9],
+             ['l',50,50,23,23,8],['l',50,50,77,77,8],['l',50,50,77,23,8],['l',50,50,23,77,8]],
+  copilot:  [['p','M22 34 C36 26 54 30 60 44 C66 58 60 74 44 76 C28 78 16 66 16 54 C16 44 18 38 22 34 Z'],
+             ['p','M78 66 C64 74 46 70 40 56 C34 42 40 26 56 24 C72 22 84 34 84 46 C84 56 82 62 78 66 Z'],
+             ['-c',36,50,6], ['-c',64,50,6]],
+  perplex:  [['r',12,12,76,76,10], ['-l',50,20,50,80,7],
+             ['-p','M26 30 L50 46 L74 30',6], ['-p','M26 70 L50 54 L74 70',6]],
+  deepseek: [['p','M14 62 C26 48 40 44 54 48 C66 52 74 46 78 34 C86 44 84 60 72 68 C58 78 32 76 14 62 Z'],
+             ['-c',66,44,6]],
+  grok:     [['l',22,78,74,22,11], ['l',56,22,80,22,11], ['l',78,24,78,48,11]],
+
+  /* ── microsoft y trabajo ── */
+  outlook:  [['r',44,20,48,60,7], ['-l',52,36,84,36,5],['-l',52,50,84,50,5],['-l',52,64,72,64,5],
+             ['r',8,26,34,48,8], ['-t','O',30,60,25]],
+  word:     [['r',12,10,76,80,10], ['-t','W',40,66]],
+  excel:    [['r',12,10,76,80,10], ['-t','X',40,66]],
+  ppt:      [['r',12,10,76,80,10], ['-t','P',40,66]],
+  onenote:  [['r',12,10,76,80,10], ['-t','N',40,66]],
+  onedrive: [['p','M28 76 C16 76 8 68 8 58 C8 48 17 41 26 43 C30 30 46 26 56 33 C62 37 66 44 66 50 C80 50 92 57 92 66 C92 73 85 76 76 76 Z']],
+  slack:    [['r',10,42,34,16,8],['r',42,10,16,34,8],['r',56,42,34,16,8],['r',42,56,16,34,8]],
+  trello:   [['r',12,12,76,76,12], ['-r',24,24,22,50,4], ['-r',54,24,22,32,4]],
+  jira:     [['p','M50 6 L88 44 L69 44 L50 25 Z'], ['p','M50 44 L88 82 L50 94 L12 56 Z'],
+             ['-p','M50 56 L62 68 L50 80 L38 68 Z']],
+  asana:    [['c',50,30,17], ['c',26,70,17], ['c',74,70,17]],
+  zoho:     [['r',10,30,80,44,8], ['-t','Z',34,62]],
+
+  /* ── creativas ── */
+  photoshop:[['r',10,10,80,80,16], ['-t','Ps',36,64]],
+  lightroom:[['r',10,10,80,80,16], ['-t','Lr',36,64]],
+  illustr:  [['r',10,10,80,80,16], ['-t','Ai',36,64]],
+  premiere: [['r',10,10,80,80,16], ['-t','Pr',36,64]],
+  acrobat:  [['p','M18 8 L60 8 L84 32 L84 92 L18 92 Z'], ['-p','M60 8 L60 32 L84 32 Z'],
+             ['-t','A',30,72]],
+  capcut:   [['r',10,10,80,80,18], ['-l',26,26,74,74,8], ['-c',34,68,9], ['-c',68,34,9]],
+  picsart:  [['c',50,50,40], ['-p','M30 62 C36 44 46 34 58 34 C68 34 74 42 70 52 C66 62 54 66 42 62'],
+             ['-c',64,66,6]],
+  vsco:     [['o',50,50,40,8], ['c',50,50,17]],
+  snapseed: [['p','M50 6 C22 20 12 44 20 66 C27 84 46 94 50 94 C54 94 73 84 80 66 C88 44 78 20 50 6 Z'],
+             ['-l',50,22,50,80,6]],
+  inshot:   [['r',10,20,80,60,10], ['-r',20,30,60,40,5], ['p','M40 40 L62 50 L40 60 Z'],
+             ['r',4,26,8,10,3],['r',4,64,8,10,3],['r',88,26,8,10,3],['r',88,64,8,10,3]],
+
+  /* ── streaming ── */
+  prime:    [['r',6,22,88,56,12], ['-p','M38 36 L66 50 L38 64 Z'],
+             ['p','M14 84 C34 96 66 96 86 84',7]],
+  disney:   [['t','D',66,74,38], ['l',66,44,90,44,8], ['l',78,32,78,56,8]],
+  hbomax:   [['r',6,26,88,48,10], ['-t','M',34,62]],
+  appletv:  [['r',6,26,88,48,10], ['-t','tv',30,60]],
+  crunchy:  [['c',50,50,40], ['-c',50,50,26], ['-p','M50 10 C74 10 90 28 90 50',13]],
+  plex:     [['r',12,12,76,76,14], ['-p','M36 26 L60 50 L36 74 Z']],
+  tidal:    [['p','M28 22 L44 38 L28 54 L12 38 Z'], ['p','M72 22 L88 38 L72 54 L56 38 Z'],
+             ['p','M50 44 L66 60 L50 76 L34 60 Z']],
+  applemus: [['r',10,10,80,80,20], ['-c',36,68,10], ['-c',66,60,9],
+             ['-r',44,28,5,42,2], ['-r',72,22,6,40,2], ['-p','M44 28 L78 22 L78 34 L44 40 Z']],
+  audible:  [['t','a',62,70], ['p','M14 34 C22 22 34 16 50 16 C66 16 78 22 86 34',6]],
+  kindle:   [['p','M8 20 L46 26 L46 88 L8 82 Z'], ['p','M92 20 L54 26 L54 88 L92 82 Z'],
+             ['-l',50,26,50,88,4]],
+  pocketc:  [['c',50,50,40], ['-p','M42 34 L66 50 L42 66 Z']],
+
+  /* ── transporte y delivery ── */
+  rappi:    [['r',10,10,80,80,20], ['-t','R',44,68]],
+  pedidosya:[['c',50,50,40], ['-r',34,26,7,48,3], ['-p','M56 26 C66 26 70 34 70 44 C70 52 66 56 60 56 L60 74',6]],
+  glovo:    [['p','M22 34 L78 34 L86 88 L14 88 Z'], ['-p','M36 46 C42 56 58 56 64 46',6],
+             ['p','M36 34 L36 22 A14 14 0 0 1 64 22 L64 34',6]],
+  ubereats: [['p','M14 46 C14 66 30 80 50 80 C70 80 86 66 86 46 Z'],
+             ['-p','M26 56 L74 56',5], ['l',10,88,90,88,7]],
+  didi:     [['r',10,10,80,80,20], ['-t','D',44,68]],
+  cabify:   [['c',50,50,40], ['-p','M64 36 C56 30 40 34 38 48 C36 62 46 70 58 68 C62 67 65 65 67 62',9]],
+  lyft:     [['t','L',60,72,34], ['c',66,40,13], ['-c',66,40,5]],
+  bolt:     [['p','M58 6 L26 54 L46 54 L40 94 L74 44 L52 44 Z']],
+  moovit:   [['r',18,16,64,52,10], ['-r',26,26,48,22,4], ['-c',32,58,6], ['-c',68,58,6],
+             ['l',26,72,26,86,7], ['l',74,72,74,86,7]],
+  booking:  [['r',12,10,76,80,12], ['-p','M36 26 L52 26 C64 26 66 40 56 46 C68 50 66 66 52 66 L36 66 Z'],
+             ['r',42,34,12,10,3], ['r',42,50,14,10,3]],
+  airbnb:   [['p','M50 8 C58 8 62 16 68 30 C78 52 88 66 88 76 C88 86 80 92 72 92 C64 92 56 86 50 78 C44 86 36 92 28 92 C20 92 12 86 12 76 C12 66 22 52 32 30 C38 16 42 8 50 8 Z'],
+             ['-p','M50 30 C56 42 68 62 68 72 C68 78 62 80 58 78 C54 76 52 72 50 68 C48 72 46 76 42 78 C38 80 32 78 32 72 C32 62 44 42 50 30 Z']],
+  tripadv:  [['o',30,52,22,7], ['o',70,52,22,7], ['c',30,52,7], ['c',70,52,7],
+             ['p','M30 24 C40 18 60 18 70 24',6]],
+
+  /* ── compras ── */
+  aliexpr:  [['r',10,10,80,80,20], ['-t','A',44,66]],
+  shein:    [['r',10,10,80,80,20], ['-t','S',44,68]],
+  temu:     [['r',10,10,80,80,20], ['-t','T',44,68]],
+  ebay:     [['t','e',66,72,32], ['c',68,48,12], ['-c',68,48,5]],
+  etsy:     [['c',50,50,40], ['-t','E',44,66]],
+  olx:      [['c',26,50,17], ['-c',26,50,7], ['l',48,38,68,62,9],['l',68,38,48,62,9],
+             ['c',84,50,9]],
+
+  /* ── plata ── */
+  nubank:   [['r',10,10,80,80,20], ['-p','M32 68 L32 32 L44 32 L64 60 L64 32 L74 32 L74 68 L62 68 L42 40 L42 68 Z']],
+  revolut:  [['t','R',66,74,42], ['l',22,26,22,80,9]],
+  wise:     [['p','M10 26 L52 26 L36 46 L60 46 L18 90 L30 58 L8 58 Z'], ['l',56,26,90,26,7]],
+  cashapp:  [['r',10,10,80,80,22], ['-r',46,20,8,60,4], ['-t','$',40,66]],
+  coinbase: [['c',50,50,40], ['-r',34,34,32,32,5]],
+  metamask: [['p','M50 8 L88 26 L82 62 L50 92 L18 62 L12 26 Z'],
+             ['-p','M32 34 L46 44 L40 56 L28 50 Z'], ['-p','M68 34 L54 44 L60 56 L72 50 Z'],
+             ['-p','M38 68 L62 68 L56 80 L44 80 Z']],
+  pix:      [['p','M50 4 L70 24 L50 44 L30 24 Z'], ['p','M4 50 L24 30 L44 50 L24 70 Z'],
+             ['p','M96 50 L76 30 L56 50 L76 70 Z'], ['p','M50 96 L70 76 L50 56 L30 76 Z']],
+  stripe:   [['r',10,10,80,80,14], ['-t','S',42,66]],
+
+  /* ── juegos ── */
+  amongus:  [['p','M34 24 C34 14 44 8 54 8 C66 8 74 16 74 28 L74 76 C74 84 68 90 60 90 L38 90 C30 90 26 84 26 76 L26 42 C26 32 30 26 34 24 Z'],
+             ['p','M78 34 C88 34 92 42 92 50 C92 58 88 64 78 64 Z'],
+             ['-p','M40 26 C52 22 66 26 70 34 C72 40 70 46 62 46 C50 46 40 40 38 34 C37 30 38 27 40 26 Z']],
+  geodash:  [['r',12,12,76,76,10], ['-c',36,42,7], ['-c',64,42,7],
+             ['-r',34,60,32,8,4]],
+  freefire: [['p','M52 6 C46 24 34 32 30 46 C24 66 36 88 54 92 C48 80 52 70 60 64 C64 76 62 84 58 92 C76 86 84 66 78 50 C72 34 58 26 52 6 Z']],
+  clashroy: [['p','M12 76 L20 30 L36 48 L50 22 L64 48 L80 30 L88 76 Z'], ['r',12,80,76,12,4],
+             ['c',20,26,7],['c',50,18,7],['c',80,26,7]],
+  clashclans:[['p','M50 8 L88 22 L88 52 C88 74 70 88 50 94 C30 88 12 74 12 52 L12 22 Z'],
+             ['-t','C',44,66]],
+  brawl:    [['p','M50 6 L62 36 L94 38 L69 58 L78 90 L50 72 L22 90 L31 58 L6 38 L38 36 Z'],
+             ['-c',40,44,6], ['-c',60,44,6]],
+  playst:   [['p','M30 12 L40 30 L20 30 Z'], ['o',72,22,10,6],
+             ['l',18,58,34,74,7],['l',34,58,18,74,7], ['r',62,58,20,20,3]],
+  xbox:     [['o',50,50,40,8], ['p','M28 24 C40 38 60 62 72 76',9],
+             ['p','M72 24 C60 38 40 62 28 76',9]],
+  nintendo: [['r',10,20,26,60,12], ['r',64,20,26,60,12], ['r',40,20,20,60,3],
+             ['-c',23,38,6], ['-c',77,50,6]],
+  epicgames:[['p','M18 8 L82 8 L82 70 L50 92 L18 70 Z'],
+             ['-r',36,24,28,9,3], ['-r',36,42,20,9,3], ['-r',36,60,28,9,3]],
+  fortnite: [['r',10,10,80,80,14], ['-t','F',44,68]],
+
+  /* ── salud y estudio ── */
+  strava:   [['p','M42 8 L14 62 L30 62 L42 38 L54 62 L70 62 Z'],
+             ['p','M56 62 L44 86 L72 40 L88 40 L72 68 L56 92 Z']],
+  nike:     [['p','M8 62 C28 76 74 52 92 20 C82 44 52 82 26 82 C16 82 10 74 8 62 Z']],
+  adidas:   [['p','M18 88 L44 88 L26 54 L14 62 Z'], ['p','M44 88 L70 88 L42 40 L30 48 Z'],
+             ['p','M70 88 L96 88 L58 26 L46 34 Z']],
+  fit:      [['o',50,50,38,9], ['-p','M22 52 L38 52 L46 34 L58 68 L64 52 L78 52',7]],
+  headspace:[['c',50,50,40], ['-p','M30 58 C38 70 62 70 70 58',7], ['-c',36,42,6], ['-c',64,42,6]],
+  calm:     [['c',50,50,40], ['-p','M18 50 C28 40 38 60 50 50 C62 40 72 60 82 50',6]],
+  classroom:[['r',8,20,84,60,8], ['-r',16,28,68,44,4],
+             ['c',50,44,10], ['p','M32 68 C32 56 40 52 50 52 C60 52 68 56 68 68 Z']],
+  docs:     [['p','M20 6 L60 6 L82 28 L82 94 L20 94 Z'], ['-p','M60 6 L60 28 L82 28 Z'],
+             ['-l',32,46,70,46,5],['-l',32,60,70,60,5],['-l',32,74,56,74,5]],
+  sheets:   [['p','M20 6 L60 6 L82 28 L82 94 L20 94 Z'], ['-p','M60 6 L60 28 L82 28 Z'],
+             ['-r',30,42,40,38,2], ['r',30,42,40,4,1],['r',30,56,40,4,1],['r',30,70,40,4,1],
+             ['r',44,42,4,38,1]],
+  slides:   [['p','M20 6 L60 6 L82 28 L82 94 L20 94 Z'], ['-p','M60 6 L60 28 L82 28 Z'],
+             ['-r',30,46,40,30,3]],
+  lens:     [['p','M10 10 L34 10 L34 18 L18 18 L18 34 L10 34 Z'],
+             ['p','M90 10 L66 10 L66 18 L82 18 L82 34 L90 34 Z'],
+             ['p','M10 90 L34 90 L34 82 L18 82 L18 66 L10 66 Z'],
+             ['p','M90 90 L66 90 L66 82 L82 82 L82 66 L90 66 Z'], ['c',50,50,17]],
+  earth:    [['o',50,44,32,7], ['p','M18 44 L82 44',6],
+             ['p','M50 12 C36 24 36 64 50 76 M50 12 C64 24 64 64 50 76'],
+             ['p','M50 76 L50 94',6]],
+  home:     [['p','M50 10 L92 48 L80 48 L80 90 L20 90 L20 48 L8 48 Z'], ['-c',50,56,13]],
+  udemy:    [['p','M50 14 L92 34 L50 54 L8 34 Z'],
+             ['p','M24 46 L24 68 C24 80 38 86 50 86 C62 86 76 80 76 68 L76 46',7]],
+  khan:     [['p','M50 8 L88 26 L88 58 C88 78 70 90 50 94 C30 90 12 78 12 58 L12 26 Z'],
+             ['-p','M36 66 L36 34 L46 34 L46 48 L58 34 L70 34 L56 50 L72 66 L58 66 L46 52 L46 66 Z']],
+
+  /* ── dev y utilidades ── */
+  gitlab:   [['p','M50 92 L18 46 L28 12 L38 46 L62 46 L72 12 L82 46 Z'],
+             ['p','M18 46 L6 46 L50 92 Z'], ['p','M82 46 L94 46 L50 92 Z']],
+  stackov:  [['p','M22 62 L22 88 L78 88 L78 62 L88 62 L88 96 L12 96 L12 62 Z'],
+             ['r',32,68,42,8,3], ['p','M34 56 L74 48 L76 58 L36 66 Z'],
+             ['p','M38 36 L74 22 L78 32 L42 46 Z']],
+  docker:   [['r',18,48,14,12,2],['r',36,48,14,12,2],['r',54,48,14,12,2],
+             ['r',36,32,14,12,2],['r',54,32,14,12,2],['r',54,16,14,12,2],
+             ['p','M8 64 C20 78 46 84 66 78 C80 74 88 66 90 56 C94 60 96 62 96 62 C92 76 78 88 56 88 C30 88 12 78 8 64 Z']],
+  termux:   [['r',8,16,84,68,10], ['-p','M24 36 L42 50 L24 64',7], ['-l',50,64,74,64,7]],
+  python:   [['p','M50 6 C34 6 26 12 26 24 L26 36 L50 36 L50 42 L20 42 C10 42 6 52 6 62 C6 74 12 82 22 82 L30 82 L30 66 C30 56 36 50 46 50 L62 50 C72 50 76 44 76 36 L76 24 C76 12 66 6 50 6 Z'],
+             ['-c',40,20,5]],
+  gauge:    [['p','M12 72 A38 38 0 1 1 88 72',9], ['l',50,72,68,44,8], ['c',50,72,7]],
+  vpn:      [['p','M50 8 L88 24 L88 54 C88 76 70 90 50 94 C30 90 12 76 12 54 L12 24 Z'],
+             ['-c',50,46,10], ['-r',45,46,10,22,4]],
+  firefox:  [['c',50,52,38], ['-p','M50 22 C34 24 26 38 28 52 C30 66 42 76 56 74 C68 72 74 62 72 54 C70 46 62 42 54 44 C48 46 46 52 48 56'],
+             ['p','M78 12 C86 18 90 28 88 36',7]],
+  edge:     [['p','M84 62 C78 78 62 90 44 90 C24 90 10 76 10 58 C10 36 28 18 50 18 C72 18 88 32 88 50 L44 50 C36 50 32 56 34 62 C38 72 52 76 66 72 C74 70 80 66 84 62 Z']],
+  brave:    [['p','M50 6 L74 16 L88 12 L92 32 L84 44 L84 62 C84 78 68 90 50 94 C32 90 16 78 16 62 L16 44 L8 32 L12 12 L26 16 Z'],
+             ['-p','M50 34 L62 56 L50 66 L38 56 Z']],
+  authent:  [['p','M50 8 L88 24 L88 54 C88 76 70 90 50 94 C30 90 12 76 12 54 L12 24 Z'],
+             ['-c',50,42,11], ['-r',46,42,8,26,3], ['-r',54,54,10,6,2]],
+  winrar:   [['p','M14 26 L44 26 L52 36 L86 36 L86 84 L14 84 Z'],
+             ['-r',44,44,12,32,2], ['r',44,44,12,7,1],['r',44,58,12,7,1],['r',44,72,12,4,1]],
+  tasker:   [['p','M50 8 L58 8 L61 22 L70 26 L82 18 L88 24 L80 36 L84 45 L98 48 L98 56 L84 59 L80 68 L88 80 L82 86 L70 78 L61 82 L58 96 L50 96 L42 96 L39 82 L30 78 L18 86 L12 80 L20 68 L16 59 L2 56 L2 48 L16 45 L20 36 L12 24 L18 18 L30 26 L39 22 L42 8 Z'],
+             ['-p','M40 40 L64 52 L40 64 Z']],
+
+  /* ── mensajería que faltaba ── */
+  viber:    [['p','M50 8 C26 8 8 24 8 46 C8 62 18 74 32 80 L30 94 L46 84 C48 84 49 84 50 84 C74 84 92 68 92 46 C92 24 74 8 50 8 Z'],
+             ['-p','M36 28 C31 32 30 40 34 48 C40 60 52 70 62 72 C68 73 72 70 73 66 L66 60 C64 58 61 59 59 61 C55 58 51 53 48 48 L52 45 C54 43 54 40 52 38 L44 28 C42 26 38 26 36 28 Z']],
+  line:     [['r',8,12,84,64,20], ['p','M34 74 L50 76 L38 92 Z'],
+             ['-l',24,32,24,54,7],['-l',24,54,36,54,7],
+             ['-l',46,32,46,54,7], ['-l',60,32,60,54,7],['-l',60,32,74,32,7],
+             ['-l',60,43,72,43,7],['-l',60,54,74,54,7]],
+  kakao:    [['p','M50 12 C26 12 8 26 8 44 C8 56 16 66 28 72 L24 90 L44 78 C46 78 48 78 50 78 C74 78 92 62 92 44 C92 26 74 12 50 12 Z'],
+             ['-c',34,44,6], ['-c',66,44,6], ['-p','M38 58 C44 64 56 64 62 58',5]],
+  tumblr:   [['p','M40 8 L56 8 L56 30 L78 30 L78 48 L56 48 L56 68 C56 76 60 78 68 78 L80 78 L80 92 L62 92 C44 92 38 82 38 68 L38 48 L24 48 L24 32 C34 28 40 20 40 8 Z']],
+  mastodon: [['p','M50 8 C28 8 14 20 14 40 C14 62 18 76 26 82 C34 88 48 90 62 88 L62 76 C50 78 40 77 34 74 C46 80 66 78 74 70 C82 62 84 48 82 34 C80 16 68 8 50 8 Z'],
+             ['-p','M34 52 L34 38 C34 30 44 28 48 36 L50 40 L52 36 C56 28 66 30 66 38 L66 52',7]],
+  truecall: [['c',50,50,40], ['-p','M32 28 C26 34 26 44 32 54 C40 68 56 78 68 74 C72 72 74 68 72 64 L64 58 C61 56 58 58 56 60 C51 56 46 50 44 45 L48 42 C50 40 51 37 49 35 L42 27 C40 25 35 25 32 28 Z']],
+  imo:      [['r',10,14,80,58,16], ['p','M32 68 L52 70 L34 90 Z'],
+             ['-l',30,36,30,54,7], ['-c',50,44,8], ['-o',50,44,8,0],
+             ['-l',66,36,66,54,7],['-l',80,36,80,54,7],['-l',66,36,80,36,7]],
+
+  /* ── otras que faltaban ── */
+  ebook:    [['p','M50 22 C38 12 20 12 8 16 L8 84 C20 80 38 80 50 90 Z'],
+             ['p','M50 22 C62 12 80 12 92 16 L92 84 C80 80 62 80 50 90 Z'],
+             ['-l',50,22,50,90,4]],
+  escaner:  [['p','M8 30 L8 12 L26 12',7], ['p','M92 30 L92 12 L74 12',7],
+             ['p','M8 70 L8 88 L26 88',7], ['p','M92 70 L92 88 L74 88',7],
+             ['r',20,46,60,8,3]],
+  bateria:  [['r',12,30,68,40,8], ['r',84,42,8,16,3], ['-r',20,38,28,24,3]],
+  radio:    [['r',8,32,84,54,10], ['-o',30,58,14,6], ['-r',52,44,30,6,3],
+             ['-c',60,66,5],['-c',74,66,5], ['l',60,32,86,12,5]],
+  tv:       [['r',8,20,84,54,8], ['-r',16,28,68,38,4], ['l',30,86,70,86,7],
+             ['l',50,74,50,86,7]],
+  imprime:  [['r',26,10,48,22,3], ['r',8,32,84,36,6], ['-c',80,42,5],
+             ['r',26,58,48,32,3], ['-l',34,68,66,68,4],['-l',34,78,58,78,4]],
+  qr:       [['r',10,10,32,32,4], ['-r',20,20,12,12,2],
+             ['r',58,10,32,32,4], ['-r',68,20,12,12,2],
+             ['r',10,58,32,32,4], ['-r',20,68,12,12,2],
+             ['r',58,58,12,12,2], ['r',78,58,12,12,2], ['r',58,78,12,12,2], ['r',78,78,12,12,2]]
+
 };
 
 /* ── QUÉ APP ES CUÁL ──
@@ -204,7 +451,10 @@ const ICO_PKG = {
   signal:   ['org.thoughtcrime.securesms'],
   threads:  ['com.instagram.barcelona'],
   wechat:   ['com.tencent.mm'],
-  youtube:  ['com.google.android.youtube', 'com.google.android.apps.youtube'],
+  youtube:  ['com.google.android.youtube'],
+  ytmusic:  ['com.google.android.apps.youtube.music'],
+  ytstudio: ['com.google.android.apps.youtube.creator'],
+  ytkids:   ['com.google.android.apps.youtube.kids'],
   spotify:  ['com.spotify'],
   netflix:  ['com.netflix'],
   twitch:   ['tv.twitch'],
@@ -234,7 +484,7 @@ const ICO_PKG = {
   calendario:['calendar'],
   notas:    ['notes', 'keepnotes', 'notepad'],
   clima:    ['weather'],
-  musica:   ['music', 'com.google.android.apps.youtube.music'],
+  musica:   ['music'],
   video:    ['videoplayer', 'com.miui.video', 'videos'],
   micro:    ['soundrecorder', 'recorder'],
   linterna: ['flashlight', 'torch'],
@@ -243,7 +493,7 @@ const ICO_PKG = {
   tienda:   ['store', 'shop'],
   banco:    ['bank', 'banco', 'bbva', 'santander', 'galicia'],
   billetera:['wallet', 'com.google.android.apps.walletnfcrel'],
-  correo:   ['com.android.email', 'com.microsoft.office.outlook', 'mail'],
+  correo:   ['com.android.email', 'mail'],
   navegador:['browser', 'org.mozilla', 'com.opera', 'com.brave'],
   juegos:   ['games', 'com.google.android.play.games'],
   salud:    ['health', 'fit', 'salud'],
@@ -261,14 +511,133 @@ const ICO_PKG = {
   notion:   ['notion.id'],
   zoom:     ['us.zoom'],
   teams:    ['com.microsoft.teams'],
-  vscode:   ['com.termux', 'dev.vscode'],
+  vscode:   ['dev.vscode', 'com.foxdebug.acode'],
   github:   ['com.github'],
   figma:    ['com.figma'],
   canva:    ['com.canva'],
   wikipedia:['org.wikipedia'],
   waze:     ['com.waze'],
   skype:    ['com.skype'],
-  duolingo: ['com.duolingo']
+  duolingo: ['com.duolingo'],
+  /* ── los de la vuelta 124 ── */
+  chatgpt:  ['com.openai.chatgpt'],
+  gemini:   ['com.google.android.apps.bard', 'com.google.android.apps.gemini'],
+  claude:   ['com.anthropic.claude'],
+  copilot:  ['com.microsoft.copilot', 'com.microsoft.bing'],
+  perplex:  ['ai.perplexity'],
+  deepseek: ['com.deepseek'],
+  grok:     ['ai.x.grok', 'xai.grok'],
+  outlook:  ['com.microsoft.office.outlook'],
+  word:     ['com.microsoft.office.word'],
+  excel:    ['com.microsoft.office.excel'],
+  ppt:      ['com.microsoft.office.powerpoint'],
+  onenote:  ['com.microsoft.office.onenote'],
+  onedrive: ['com.microsoft.skydrive'],
+  slack:    ['com.slack'],
+  trello:   ['com.trello'],
+  jira:     ['com.atlassian.android.jira'],
+  asana:    ['com.asana.app'],
+  zoho:     ['com.zoho'],
+  photoshop:['com.adobe.psmobile', 'com.adobe.photoshop'],
+  lightroom:['com.adobe.lrmobile'],
+  illustr:  ['com.adobe.illustrator'],
+  premiere: ['com.adobe.premiere'],
+  acrobat:  ['com.adobe.reader', 'com.adobe.acrobat'],
+  capcut:   ['com.lemon.lvoverseas', 'com.bytedance.capcut'],
+  picsart:  ['com.picsart'],
+  vsco:     ['com.vsco'],
+  snapseed: ['com.niksoftware.snapseed'],
+  inshot:   ['com.camerasideas.instashot'],
+  prime:    ['com.amazon.avod'],
+  disney:   ['com.disney.disneyplus'],
+  hbomax:   ['com.wbd.stream', 'com.hbo.'],
+  appletv:  ['com.apple.atve', 'com.apple.tv'],
+  crunchy:  ['com.crunchyroll'],
+  plex:     ['com.plexapp'],
+  tidal:    ['com.aspiro.tidal'],
+  applemus: ['com.apple.android.music'],
+  audible:  ['com.audible'],
+  kindle:   ['com.amazon.kindle'],
+  pocketc:  ['au.com.shiftyjelly.pocketcasts'],
+  rappi:    ['com.rappi'],
+  pedidosya:['com.pedidosya'],
+  glovo:    ['com.glovo'],
+  ubereats: ['com.ubercab.eats'],
+  didi:     ['com.didiglobal', 'com.sdu.didi'],
+  cabify:   ['com.cabify'],
+  lyft:     ['me.lyft'],
+  bolt:     ['ee.mtakso.client'],
+  moovit:   ['com.tranzmate'],
+  booking:  ['com.booking'],
+  airbnb:   ['com.airbnb'],
+  tripadv:  ['com.tripadvisor'],
+  aliexpr:  ['com.alibaba.aliexpresshd'],
+  shein:    ['com.zzkko'],
+  temu:     ['com.einnovation.temu'],
+  ebay:     ['com.ebay'],
+  etsy:     ['com.etsy'],
+  olx:      ['com.olx', 'com.schibsted'],
+  nubank:   ['com.nu.production'],
+  revolut:  ['com.revolut'],
+  wise:     ['com.transferwise'],
+  cashapp:  ['com.squareup.cash'],
+  coinbase: ['com.coinbase'],
+  metamask: ['io.metamask'],
+  pix:      ['br.gov.bcb.pix'],
+  stripe:   ['com.stripe'],
+  amongus:  ['com.innersloth'],
+  geodash:  ['com.robtopx'],
+  freefire: ['com.dts.freefire'],
+  clashroy: ['com.supercell.clashroyale'],
+  clashclans:['com.supercell.clashofclans'],
+  brawl:    ['com.supercell.brawlstars'],
+  playst:   ['com.scee.psxandroid', 'com.playstation'],
+  xbox:     ['com.microsoft.xboxone', 'com.microsoft.xbox'],
+  nintendo: ['com.nintendo'],
+  epicgames:['com.epicgames'],
+  fortnite: ['com.epicgames.fortnite'],
+  strava:   ['com.strava'],
+  nike:     ['com.nike'],
+  adidas:   ['com.adidas'],
+  fit:      ['com.google.android.apps.fitness'],
+  headspace:['com.getsomeheadspace'],
+  calm:     ['com.calm.android'],
+  classroom:['com.google.android.apps.classroom'],
+  docs:     ['com.google.android.apps.docs.editors.docs'],
+  sheets:   ['com.google.android.apps.docs.editors.sheets'],
+  slides:   ['com.google.android.apps.docs.editors.slides'],
+  lens:     ['com.google.ar.lens'],
+  earth:    ['com.google.earth'],
+  home:     ['com.google.android.apps.chromecast'],
+  udemy:    ['com.udemy'],
+  khan:     ['org.khanacademy'],
+  gitlab:   ['com.gitlab'],
+  stackov:  ['com.stackexchange'],
+  docker:   ['com.docker'],
+  termux:   ['com.termux'],
+  python:   ['org.qpython', 'ru.iiec.pydroid'],
+  gauge:    ['org.zwanoo.android.speedtest', 'speedtest'],
+  vpn:      ['com.nordvpn', 'com.expressvpn', 'de.mobileconcepts.cyberghost', 'vpn'],
+  firefox:  ['org.mozilla.firefox'],
+  edge:     ['com.microsoft.emmx'],
+  brave:    ['com.brave.browser'],
+  authent:  ['com.google.android.apps.authenticator', 'com.azure.authenticator'],
+  winrar:   ['com.rarlab.rar', 'com.zipextractor'],
+  tasker:   ['net.dinglisch.android.taskerm'],
+  viber:    ['com.viber'],
+  line:     ['jp.naver.line'],
+  kakao:    ['com.kakao.talk'],
+  tumblr:   ['com.tumblr'],
+  mastodon: ['org.joinmastodon'],
+  truecall: ['com.truecaller'],
+  imo:      ['com.imo.android'],
+  ebook:    ['com.google.android.apps.books', 'ebook', 'reader'],
+  escaner:  ['scanner', 'camscanner', 'docscan'],
+  bateria:  ['battery', 'bateria', 'powersaving'],
+  radio:    ['radio', 'tunein', 'iheart'],
+  tv:       ['com.google.android.videos', 'androidtv', 'smarttv'],
+  imprime:  ['printservice', 'printer', 'com.hp.', 'com.epson'],
+  qr:       ['qrcode', 'barcode', 'scanqr']
 };
 
 /* por nombre, para lo que no matchea por paquete (la app de cámara de cada
@@ -304,15 +673,34 @@ const ICO_NOM = {
    azar es sólo ruido de colores */
 const ICO_FAM = {
   agua:      ['tiktok','whatsapp','telegram','messenger','signal','wechat','discord','x',
-              'linkedin','skype','zoom','teams','mensajes','telefono','contactos','correo','waze'],
+              'linkedin','skype','zoom','teams','mensajes','telefono','contactos','correo','waze',
+              /* vuelta 124 */
+              'chatgpt','gemini','claude','copilot','perplex','deepseek','grok','outlook',
+              'word','excel','ppt','onenote','onedrive','slack','trello','jira','asana','zoho',
+              'viber','line','kakao','tumblr','mastodon','truecall','imo'],
   cielo:     ['youtube','spotify','netflix','twitch','soundcloud','vlc','shazam','deezer','musica',
               'video','podcast','micro','galeria','fotos','camara','instagram','snapchat','pinterest',
-              'threads','facebook','reddit','noticias'],
+              'threads','facebook','reddit','noticias',
+              /* vuelta 124 */
+              'ytmusic','ytstudio','ytkids','prime','disney','hbomax','appletv','crunchy',
+              'plex','tidal','applemus','audible','kindle','pocketc','photoshop','lightroom',
+              'illustr','premiere','capcut','picsart','vsco','snapseed','inshot','radio','tv'],
   pasto:     ['chrome','google','maps','drive','keep','traduce','meet','gmail','archivos','ajustes',
               'reloj','calc','calendario','notas','clima','linterna','brujula','descargas','navegador',
-              'salud','duolingo','wikipedia','notion','github','vscode','figma','canva','dropbox'],
+              'salud','duolingo','wikipedia','notion','github','vscode','figma','canva','dropbox',
+              /* vuelta 124 */
+              'classroom','docs','sheets','slides','lens','earth','home','udemy','khan','fit',
+              'headspace','calm','strava','nike','adidas','gitlab','stackov','docker','termux',
+              'python','gauge','vpn','firefox','edge','brave','authent','winrar','tasker',
+              'acrobat','ebook','escaner','bateria','imprime','qr'],
   atardecer: ['play','tienda','banco','billetera','mercado','uber','paypal','binance','amazon',
-              'steam','roblox','minecraft','juegos']
+              'steam','roblox','minecraft','juegos',
+              /* vuelta 124 */
+              'rappi','pedidosya','glovo','ubereats','didi','cabify','lyft','bolt','moovit',
+              'booking','airbnb','tripadv','aliexpr','shein','temu','ebay','etsy','olx',
+              'nubank','revolut','wise','cashapp','coinbase','metamask','pix','stripe',
+              'amongus','geodash','freefire','clashroy','clashclans','brawl','playst','xbox',
+              'nintendo','epicgames','fortnite']
 };
 
 /* se da vuelta una vez: cincuenta búsquedas lineales por pintada del cajón son
@@ -340,12 +728,21 @@ function icoNorm(s){
 function glifoDe(pkg, nombre){
   if (pkg in ICO_CACHE) return ICO_CACHE[pkg];
   const p = String(pkg || '').toLowerCase();
-  let g = null;
+  let g = null, largo = -1;
+  /* ── GANA EL PEDAZO MÁS LARGO, NO EL PRIMERO DECLARADO ──
+     Con el primero que matchea, el orden de la tabla decide el icono: y como
+     los pedazos se comparan por subcadena, `com.google.android.apps.youtube`
+     se comía a `...youtube.music` y YT Music salía con el icono de YouTube.
+     Eso no se arregla agregando entradas —se arregla cambiando quién gana—, y
+     con ciento cincuenta glifos hace falta que agregar uno no le pueda robar
+     el icono a otro sin que nadie se entere. El pedazo más largo es el más
+     específico por construcción. */
   for (const k in ICO_PKG){
     for (const frag of ICO_PKG[k]){
-      if (p === frag || p.indexOf(frag) >= 0){ g = k; break; }
+      if (p === frag){ g = k; largo = 999; break; }
+      if (p.indexOf(frag) >= 0 && frag.length > largo){ g = k; largo = frag.length; }
     }
-    if (g) break;
+    if (largo === 999) break;
   }
   if (!g && nombre){
     const n = icoNorm(nombre);

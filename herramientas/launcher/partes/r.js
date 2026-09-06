@@ -241,7 +241,7 @@ function aguaMide(){
 
 /* ── LO QUE ES «ESPACIO LIBRE» ── */
 function aguaLibre(t){
-  if (CAJON || !t || !t.closest) return false;
+  if (CAJON || aguaTapada() || !t || !t.closest) return false;
   if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador,#wid,#fondos,#carp'))
     return false;
   return true;
@@ -306,9 +306,40 @@ function aguaAjusta(ms){
   guarda('aguaNiv', AGUA.niv);
 }
 
+/* ── QUÉ TAPA AL AGUA ──
+   Las hojas de pantalla completa. Con una encima, el anillo no se ve NI UN
+   PÍXEL — y sin embargo el lienzo sigue repintando a pantalla completa, que es
+   lo que obliga a cada `backdrop-filter` de la página a filtrar de nuevo en
+   cada cuadro. Y la hoja más cara es justamente el cajón: 367.504 px de
+   desenfoque, la pieza más grande del launcher. O sea que «abrir el cajón con
+   una gota corriendo detrás» es el peor caso que este launcher puede armar, y
+   es exactamente el que reportó el usuario. */
+const AGUA_TAPAN = '#cajon.on,#carp.on,#pers.on,#asis.on,#ini.on,#fondos.on,#cam.on,#velo.on';
+function aguaTapada(){ return !!document.querySelector(AGUA_TAPAN); }
+
+/* el corte duro: apaga la ráfaga, borra el lienzo y devuelve el vidrio y la
+   deriva. Lo llaman el bucle y el `visibilitychange`; no hay un tercer sitio
+   que se pueda olvidar de alguna de las cuatro cosas. */
+function aguaCorta(){
+  if (!AGUA.on) return false;
+  AGUA.ondas.length = 0;
+  AGUA.on = false;
+  AGUA.el.classList.remove('on');
+  document.body.classList.remove('agua');
+  for (const k of AGUA_NIV) if (k) document.body.classList.remove(k);
+  FONDO_EL.style.animationPlayState = '';
+  if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
+  return true;
+}
+
 let AGUA_ULT = 0;
 function aguaPaso(){
   if (!AGUA.on) return;
+  /* la comprobación va ACÁ y no en los seis sitios que abren una hoja: el que
+     tiene que enterarse es el bucle, y repartirlo garantiza que la próxima
+     hoja que se agregue quede sin apagar el agua. Cuesta un querySelector por
+     cuadro y sólo mientras hay ráfaga viva, o sea a lo sumo segundo y medio. */
+  if (!AGUA.sinCorte && (aguaTapada() || document.hidden)){ aguaCorta(); return; }
   const gl = AGUA.gl, ahora = performance.now()/1000;
   const v = AGUA.ondas.filter(o => ahora - o.t <= AGUA_VIDA);
   AGUA.ondas = v;
@@ -357,4 +388,7 @@ function aguaInit(){
   addEventListener('pointerup', suelta, { capture: true, passive: true });
   addEventListener('pointercancel', suelta, { capture: true, passive: true });
   addEventListener('resize', () => { if (AGUA.on){ aguaMide(); aguaMapa(); } });
+  /* una pestaña escondida no dibuja, pero el rAF se puede reanudar con la
+     ráfaga a medio morir y con el vidrio todavía apagado */
+  addEventListener('visibilitychange', () => { if (document.hidden) aguaCorta(); });
 }

@@ -31,6 +31,9 @@
    navegador. */
 
 const ASIS_PKG = 'ai.rezona.aero.asistente';
+/* qué cámara del sistema tocó el dueño: el botón «del sistema» del selector la
+   abre a ella y no una que el launcher haya adivinado */
+let CAM_SIS = '';
 const ASIS_MOD = 'claude-opus-5';
 
 /* ══════════ LO QUE EL ASISTENTE PUEDE HACER ══════════

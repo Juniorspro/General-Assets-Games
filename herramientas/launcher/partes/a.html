@@ -898,6 +898,237 @@ body.arrastrando{cursor:grabbing}
   to  {transform:scale(5.4);opacity:0;border-width:.5px}}
 @media (prefers-reduced-motion:reduce){.sGota,.sAro{animation:none;opacity:0}}
 
+/* ══════════════════ LA CÁMARA AERO ══════════════════
+   El visor es una TARJETA sobre el fondo Frutiger, no una imagen a sangre: eso
+   es literalmente el pedido —«de fondo una foto frutiger que solamente se verán
+   en las partes que no se vean la cámara»— y con el visor a pantalla completa
+   no queda una sola parte donde el fondo se vea. */
+#cam{position:fixed;inset:0;z-index:12;display:none;
+  flex-direction:column;align-items:center;
+  padding:calc(var(--ins-t,24px) + 6px) 0 calc(var(--ins-b,16px) + 6px)}
+#cam.on{display:flex}
+/* el fondo: la misma foto de la familia agua del pack, o sea la referencia que
+   mandó el usuario. Va con su propio degradado encima para que el vidrio de
+   arriba tenga contra qué contrastar. */
+#camFondo{position:absolute;inset:0;z-index:0;
+  background:linear-gradient(#0a3b6e,#0e6f9c 42%,#0b8fa8 70%,#0a5f86);
+  background-size:cover;background-position:center}
+#camFondo::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.30),transparent 62%),
+             linear-gradient(180deg,rgba(4,26,48,.42),transparent 26%,transparent 72%,rgba(4,26,48,.52))}
+
+/* ── EL VISOR ──
+   `--asp` la pone `camPinta` desde la relación elegida; con `lleno` la tarjeta
+   se estira y el marco se reduce a los cantos redondeados. */
+#camVisorC{position:relative;z-index:2;width:calc(100% - 26px);flex:1;
+  display:flex;align-items:center;justify-content:center;min-height:0}
+#camVisor{position:relative;border-radius:26px;overflow:hidden;
+  width:100%;aspect-ratio:var(--asp,0.75);max-height:100%;
+  background:#04121f;
+  box-shadow:0 18px 44px rgba(2,20,40,.55),
+             inset 0 1px 0 rgba(255,255,255,.55),
+             inset 0 0 0 1px rgba(255,255,255,.22)}
+#camVisorC.lleno #camVisor{aspect-ratio:auto;height:100%}
+#camVid{width:100%;height:100%;object-fit:cover;display:block;
+  transform-origin:center;transition:transform .22s ease}
+#camVid.espejo{scale:-1 1}
+/* el brillo de vidrio del canto: es lo que hace que la tarjeta se lea a pieza
+   Frutiger y no a un `<video>` con border-radius */
+#camVisor::after{content:'';position:absolute;inset:0;pointer-events:none;
+  border-radius:26px;
+  background:linear-gradient(180deg,rgba(255,255,255,.30),transparent 16%,transparent 88%,rgba(255,255,255,.10));
+  box-shadow:inset 0 2px 8px rgba(255,255,255,.28)}
+
+#camReja{position:absolute;inset:0;pointer-events:none}
+#camReja.r33,#camReja.r44{background-image:
+  linear-gradient(90deg,rgba(255,255,255,.34) 1px,transparent 1px),
+  linear-gradient(rgba(255,255,255,.34) 1px,transparent 1px)}
+#camReja.r33{background-size:33.33% 33.33%}
+#camReja.r44{background-size:25% 25%}
+
+#camHdr{position:absolute;right:6px;top:12px;color:#fff;font:800 12px/1 inherit;
+  letter-spacing:.06em;writing-mode:vertical-rl;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#camEstado{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:none;max-width:78%;text-align:center;color:#fff;font:700 13px/1.45 inherit;
+  background:rgba(6,28,50,.62);padding:12px 16px;border-radius:16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
+#camEstado.on{display:block}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#camFlash.on{animation:camFlash .28s ease-out}
+@keyframes camFlash{from{opacity:.92}to{opacity:0}}
+#camRec{position:absolute;left:12px;top:12px;display:none;align-items:center;gap:7px;
+  background:rgba(8,20,34,.55);border-radius:20px;padding:5px 11px;
+  color:#fff;font:800 12px/1 inherit}
+#camRec.on{display:flex}
+#camRec .pt{width:9px;height:9px;border-radius:50%;background:#ff4141;
+  animation:camPt 1s ease-in-out infinite}
+@keyframes camPt{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── LA FRANJA DE ARRIBA ── */
+#camTop{position:relative;z-index:3;width:calc(100% - 26px);
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;
+  padding:7px 12px;border-radius:20px;color:#fff;font:800 13px/1 inherit}
+#camTop .ctB{background:0;border:0;color:rgba(255,255,255,.8);font-size:16px;padding:4px 6px}
+#camTop .ctB.act{color:#ffd36b}
+#camTop .ctPil{margin-left:auto;margin-right:auto;background:rgba(255,255,255,.18);
+  border:0;color:#fff;border-radius:14px;padding:3px 16px;font-size:15px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camTop .ctT{opacity:.95;letter-spacing:.04em;font-size:13px}
+
+/* ── EL PANEL DEL CHEVRON ── */
+#camRapido{position:absolute;left:13px;right:13px;top:calc(var(--ins-t,24px) + 58px);
+  z-index:6;display:none;grid-template-columns:repeat(4,1fr);gap:2px;
+  border-radius:20px;padding:12px 6px;overflow:hidden}
+#camRapido.on{display:grid}
+#camRapido button{background:0;border:0;color:#fff;display:flex;flex-direction:column;
+  align-items:center;gap:6px;padding:9px 2px;font:600 10.5px/1.2 inherit;opacity:.92}
+#camRapido button b{font:800 15px/1 inherit;opacity:.95}
+#camRapido button.act{color:#bfe9ff}
+#camRapido .crCfg{grid-column:1}
+
+/* ── LOS FILTROS DE DOCUMENTOS: COLUMNA A LA DERECHA ──
+   Es donde los pone la cámara de verdad, y ahí no tapan el visor. */
+#camFiltros{position:absolute;right:18px;top:46%;z-index:5;display:none;
+  flex-direction:column;gap:4px;padding:6px;border-radius:22px}
+#camFiltros.on{display:flex}
+#camFiltros button{background:0;border:0;color:#fff;border-radius:16px;
+  padding:8px 12px;font:700 12px/1 inherit}
+#camFiltros button.act{background:#fff;color:#0b3a5c}
+
+/* ── EL ZOOM VA SOBRE EL VISOR ──
+   Es donde lo pone la cámara de verdad, y ahí no le come alto a la repisa. */
+#camZoom{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+  z-index:4;display:flex;gap:2px;padding:4px;border-radius:22px}
+#camZoom button{background:0;border:0;color:#fff;border-radius:18px;
+  width:40px;height:32px;font:800 12px/1 inherit;opacity:.85}
+#camZoom button.act{background:rgba(255,255,255,.22);color:#ffd36b;opacity:1;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+
+/* ── LA REPISA DE VIDRIO ──
+   Una sola pieza que sostiene los modos y el obturador. Sin ella, nueve
+   rótulos y tres botones quedan sueltos sobre un acuario. */
+#camPie{position:relative;z-index:3;width:calc(100% - 26px);margin-top:10px;
+  border-radius:26px;padding:8px 0 10px;overflow:hidden}
+/* ── EL BRILLO FRUTIGER ──
+   El vidrio del launcher es sobrio a propósito —un escritorio no puede tener
+   una pieza que grite— y una cámara Frutiger sí: lo que la separa de un panel
+   translúcido cualquiera es el filo encendido de arriba y el reflejo que baja
+   en la primera mitad. Va como `::after` sobre las piezas de la cámara y no
+   tocando `.vid`, que lo usa el launcher entero. */
+#camPie::after,#camTop::after,#camZoom::after,#camRapido::after,
+#camFiltros::after,#camElige::after{
+  content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.06) 46%,transparent 60%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.62),
+             inset 0 -1px 0 rgba(255,255,255,.14),
+             inset 0 0 0 1px rgba(255,255,255,.18)}
+#camPie>*,#camTop>*,#camZoom>*,#camRapido>*,#camFiltros>*,#camElige>*{position:relative;z-index:1}
+
+/* ── EL CARRUSEL DE MODOS ── */
+#camModos{position:relative;z-index:3;width:100%;display:flex;gap:22px;
+  overflow-x:auto;scrollbar-width:none;padding:4px 50%;
+  scroll-behavior:smooth}
+#camModos::-webkit-scrollbar{display:none}
+#camModos button{background:0;border:0;color:rgba(255,255,255,.82);
+  font:700 14px/1 inherit;white-space:nowrap;padding:6px 2px}
+#camModos button.act{color:#ffd36b;font-weight:800}
+
+/* ── LA BARRA DEL OBTURADOR ── */
+#camBarra{position:relative;z-index:3;width:100%;display:flex;align-items:center;
+  justify-content:space-around;padding:6px 22px 0}
+#camThumb{width:48px;height:48px;border-radius:12px;border:2px solid rgba(255,255,255,.85);
+  background-size:cover;background-position:center;background-color:rgba(255,255,255,.14)}
+#camThumb.vacia{opacity:.45}
+#camFlip{width:44px;height:44px;border-radius:50%;border:0;color:#fff;font-size:20px;
+  background:rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camDisp{width:74px;height:74px;border-radius:50%;border:0;padding:0;
+  background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 6px 18px rgba(2,20,40,.4)}
+#camDisp span{display:block;border-radius:50%;transition:all .18s cubic-bezier(.2,1.3,.3,1)}
+#camDisp.foto span{width:60px;height:60px;background:#fff;
+  box-shadow:0 0 0 3px rgba(11,58,92,.35) inset}
+#camDisp.grabar span,#camDisp.lapso span{width:56px;height:56px;background:#e83a30}
+#camDisp.lapso{border:3px dashed rgba(255,255,255,.85)}
+#camDisp.grabando span{width:30px;height:30px;border-radius:8px}
+
+/* ── EL SELECTOR ──
+   Es lo primero que aparece: «al abrirla te deje elegir entre la frutiger o la
+   normal con un botón». */
+#cam #camTop,#cam #camVisorC,#cam #camPie{
+  transition:opacity .22s,transform .22s}
+#cam.eligiendo #camTop,#cam.eligiendo #camPie{
+  opacity:0;pointer-events:none}
+#cam.eligiendo #camVisorC{opacity:.35;transform:scale(.94)}
+#camElige{position:absolute;left:22px;right:22px;top:50%;z-index:8;
+  transform:translateY(-50%) scale(.9);opacity:0;pointer-events:none;
+  border-radius:26px;padding:22px 18px 18px;color:#fff;text-align:center;
+  transition:opacity .24s,transform .3s cubic-bezier(.2,1.15,.3,1)}
+#cam.eligiendo #camElige{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
+#camElige .ceTit{font:800 20px/1.25 inherit;margin-bottom:6px}
+#camElige .ceSub{font:600 12.5px/1.5 inherit;opacity:.8;margin-bottom:16px}
+#camElige .ceBt{display:block;width:100%;margin:0 0 9px;border:0;border-radius:17px;
+  padding:14px;font:800 15px/1 inherit;color:#0b3a5c;
+  background:linear-gradient(180deg,#eafaff,#a9e2f7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 5px 14px rgba(2,26,50,.35)}
+#camElige .ceBt.sec{color:#fff;background:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#camElige .ceX{position:absolute;right:12px;top:10px;background:0;border:0;
+  color:#fff;opacity:.7;font-size:16px}
+
+/* ── LOS AJUSTES ── */
+/* ── LOS AJUSTES TAPAN DE VERDAD ──
+   Con la hoja translúcida a secas, el visor —que es lo más saturado de la
+   pantalla— se veía a través de las once filas y no se leía ninguna. Y encima
+   el `<video>` seguía componiéndose para no verse: se esconde, que es la misma
+   regla que apaga el agua debajo de una hoja. */
+#camAj{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;
+  color:#fff;padding:calc(var(--ins-t,24px) + 6px) 12px calc(var(--ins-b,16px) + 8px);
+  background:linear-gradient(180deg,rgba(6,32,58,.94),rgba(5,44,68,.96) 45%,rgba(4,30,54,.97))}
+#cam.conAjustes #camVisorC,#cam.conAjustes #camPie,#cam.conAjustes #camTop,
+#cam.conAjustes #camFiltros{visibility:hidden}
+#cam.conAjustes #camAj{display:flex}
+#camAj .cajTop{display:flex;align-items:center;gap:10px;padding:4px 4px 12px}
+#camAj .cajTop button{background:0;border:0;color:#fff;font:700 18px/1 inherit;width:32px}
+#camAj .cajTit{flex:1;text-align:center;font:800 19px/1 inherit}
+#camAj #cajI{border:1.5px solid rgba(255,255,255,.6);border-radius:50%;
+  width:24px;height:24px;font:700 12px/1 inherit}
+#camAj .cajTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 2px 12px}
+#camAj .cajTabs button{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);
+  color:rgba(255,255,255,.66);border-radius:16px;padding:11px 4px;font:700 14px/1 inherit}
+#camAj .cajTabs button.act{background:rgba(255,255,255,.2);color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camAj .cajCuerpo{flex:1;overflow-y:auto;min-height:0}
+#camAj .cajG{background:rgba(255,255,255,.08);border-radius:22px;padding:4px 16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+#camAj .cajF{display:flex;align-items:center;gap:12px;padding:15px 0;
+  border-bottom:1px solid rgba(255,255,255,.09)}
+#camAj .cajF:last-child{border-bottom:0}
+#camAj .cajL{flex:1;min-width:0}
+#camAj .cajN{font:600 15.5px/1.25 inherit}
+#camAj .cajS{font:500 12px/1.4 inherit;opacity:.6;margin-top:4px}
+#camAj .cajV{background:0;border:0;color:rgba(255,255,255,.62);font:600 13.5px/1 inherit;
+  white-space:nowrap}
+#camAj .cajSw{width:46px;height:27px;border:0;border-radius:14px;flex:0 0 auto;
+  background:rgba(255,255,255,.22);position:relative;transition:background .2s}
+#camAj .cajSw::after{content:'';position:absolute;left:3px;top:3px;width:21px;height:21px;
+  border-radius:50%;background:#fff;transition:transform .2s cubic-bezier(.2,1.3,.3,1)}
+#camAj .cajSw.on{background:#3d7dff}
+#camAj .cajSw.on::after{transform:translateX(19px)}
+
+/* la foto que se acaba de sacar */
+#camVer{position:fixed;inset:0;z-index:14;background:rgba(3,16,30,.9);
+  display:flex;align-items:center;justify-content:center}
+#camVer img{max-width:94%;max-height:82%;border-radius:18px;
+  box-shadow:0 18px 44px rgba(0,0,0,.6)}
+#camVer button{position:absolute;right:16px;top:calc(var(--ins-t,24px) + 8px);
+  background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:50%;
+  width:38px;height:38px;font-size:16px}
+
+@media (prefers-reduced-motion:reduce){
+  #camElige,#camVid,#camDisp span{transition-duration:.01s}
+  #camFlash.on{animation:none}
+}
+
 /* ══════════ LA CARPETA ABIERTA ══════════ */
 #carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.30);
   border-radius:26px;padding:14px 14px 18px;opacity:0;pointer-events:none;

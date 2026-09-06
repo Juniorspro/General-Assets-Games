@@ -74,6 +74,15 @@ function nodoApp(a, conNombre){
     b.style.backgroundImage = 'linear-gradient(160deg,#9ef0b8,#3f9e7a)';
     b.style.font = '600 26px system-ui';
     b.textContent = '⌂';
+  } else if (a.p === CAM_PKG){
+    /* su glifo sí está en el pack —es el de `camara`— pero el fondo tiene que
+       ser el de la familia agua a propósito: es el mismo acuario que se ve
+       detrás del visor, así que el icono anuncia lo que hay adentro. */
+    if (!icoAero(b, 'com.android.camera2', 'camara')){
+      b.style.backgroundImage = 'linear-gradient(160deg,#9fe8ff,#2f7fbe)';
+      b.style.font = '600 26px system-ui';
+      b.textContent = '◉';
+    }
   } else if (a.p === ASIS_PKG){
     /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
@@ -338,7 +347,7 @@ function zoomLimpia(){
   const v = $('.ap.saliendo'); if (v) v.classList.remove('saliendo');
 }
 function abreZoom(pkg, nodo){
-  if (pkg === ASIS_PKG || pkg === PERS_PKG || pkg === INI_PKG || !HAY_AND){
+  if (pkg === ASIS_PKG || pkg === PERS_PKG || pkg === INI_PKG || pkg === CAM_PKG || !HAY_AND){
     abre(pkg); return;
   }
   zoomArranca(pkg, nodo);
@@ -368,6 +377,17 @@ function abre(pkg){
   if (pkg === ASIS_PKG){ asisAbre(); return; }
   if (pkg === PERS_PKG){ persAbre(); return; }
   if (pkg === INI_PKG){ iniAbre(); return; }
+  if (pkg === CAM_PKG){ camAbre(); return; }
+  /* ── TOCAR *CUALQUIER* CÁMARA ABRE EL SELECTOR ──
+     Es literal lo que se pidió: «que no abra la cámara normal sino que al
+     abrirla te deje elegir». Va acá y no en el icono de la cámara Aero porque
+     lo que el dueño toca de verdad es la app de cámara que ya tenía en el dock.
+     Y se puede apagar: `camSelector` en 0 devuelve el atajo de siempre, porque
+     alguien que quiere su cámara y nada más no tiene por qué pagar un toque
+     más para siempre. */
+  if (lee('camSelector', 1) && glifoDe(pkg, POR_PKG[pkg] && POR_PKG[pkg].n) === 'camara'){
+    CAM_SIS = pkg; camAbre(); return;
+  }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -427,6 +447,7 @@ function repintaIdioma(){
   $('#busca2').placeholder = T('busca');
   $('#cajTit').textContent = T('todas');
   const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
+  const cm = POR_PKG[CAM_PKG]; if (cm) cm.n = T('caCam');
   const q = POR_PKG[PERS_PKG]; if (q) q.n = T('aNombreP');
   const w = POR_PKG[INI_PKG];  if (w) w.n = T('iNombre');
   if (MENU_PKG){
@@ -526,6 +547,7 @@ function cargaApps(){
   APPS.push({ p: ASIS_PKG, n: T('aNombre') });
   APPS.push({ p: PERS_PKG, n: T('aNombreP') });
   APPS.push({ p: INI_PKG,  n: T('iNombre') });
+  APPS.push({ p: CAM_PKG,  n: T('caCam') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -915,6 +937,16 @@ window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
 window.__atras = function(){
   /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
      cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
+  /* la cámara está por encima de todo, así que se cierra primero — y adentro
+     tiene DOS niveles: los ajustes tapan el visor, o sea que «atrás» tiene que
+     volver al visor y no salirse de la cámara de una */
+  const cm = $('#cam');
+  if (cm && cm.classList.contains('on')){
+    if (cm.classList.contains('conAjustes')){
+      CAM.ajustes = false; cm.classList.remove('conAjustes'); return true;
+    }
+    camCierra(); return true;
+  }
   if ($('#fondos').classList.contains('on')){ fgCierra(); return true; }
   if ($('#carp').classList.contains('on')){ carpCierra(); return true; }
   if ($('#ini').classList.contains('on')){ iniCierra(); return true; }

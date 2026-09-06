@@ -3,8 +3,13 @@ package ai.rezona.aero;
 import android.content.Intent;
 import android.net.Uri;
 import android.webkit.ValueCallback;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
+
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 
 /**
  * El selector de archivos de la galería de fondos.
@@ -45,6 +50,43 @@ public class ClienteArchivo extends WebChromeClient {
     } catch (Exception e) {
       cb = null;
       return false;
+    }
+  }
+
+  /**
+   * ── EL PERMISO DEL WEBVIEW ES OTRO QUE EL DE ANDROID ──
+   * Tener `CAMERA` concedido en el sistema NO alcanza: el WebView le pregunta a
+   * la app, por su cuenta, si la página puede usar la cámara, y una app que no
+   * contesta deja el `getUserMedia` en NotAllowedError. Desde afuera eso se ve
+   * como una cámara rota, no como un permiso que falta — que es exactamente el
+   * defecto más caro que tiene esta clase de integración.
+   *
+   * Y sólo se concede el video. `AUDIO_CAPTURE` no se pide: esta cámara no
+   * graba sonido, y conceder un permiso que no se usa es regalarlo.
+   */
+  @Override public void onPermissionRequest(final PermissionRequest req) {
+    final String[] q = req.getResources();
+    boolean quiereVideo = false;
+    for (String r : q) if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) quiereVideo = true;
+    if (!quiereVideo) { req.deny(); return; }
+    /* sin el permiso del sistema, conceder acá no sirve de nada: el
+       `getUserMedia` fallaría igual y encima sin pedirlo nunca */
+    if (Build.VERSION.SDK_INT >= 23
+        && act.checkSelfPermission(Manifest.permission.CAMERA)
+           != PackageManager.PERMISSION_GRANTED) {
+      req.deny();
+      act.pideCamara();
+      return;
+    }
+    act.runOnUiThread(new Concede(req));
+  }
+
+  /** Named class, no anónima: `d8` 8.2.2 revienta al dexear `ClienteArchivo$1`. */
+  private static final class Concede implements Runnable {
+    private final PermissionRequest r;
+    Concede(PermissionRequest req) { r = req; }
+    @Override public void run() {
+      r.grant(new String[]{ PermissionRequest.RESOURCE_VIDEO_CAPTURE });
     }
   }
 

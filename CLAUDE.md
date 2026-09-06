@@ -281,6 +281,149 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimocuarta vuelta (2026-09-06): **AERO** — doscientos un iconos, la cámara Frutiger, y el agua que no se apagaba con el cajón encima
+
+Cinco pedidos en un mensaje, con ocho capturas de la cámara del propio teléfono: *"optimiza aún más
+incluso con varias tareas a la vez como abrir el cajón de aplicaciones mientras atrás se haya tocado
+gota de agua · agrega que yt music YouTube studio y YouTube sean diferentes sus íconos incluyendo
+otras apps · el de tiktok y WhatsApp están mal · genera más de 150 ahora · crea una cámara
+personalizada o sea que no abra la cámara normal sino que al abrirla te deje elegir entre la frutiger
+o la normal con un botón, agrégale todo liquid glass y de fondo una foto frutiger que solamente se
+verán en las partes ue no se vean la cámara"*.
+
+Un archivo nuevo de verdad, `partes/m.js` (~510 líneas), más `i_cam.js` y `hornear_cam.py`.
+
+#### EL AGUA SEGUÍA REPINTANDO LA PANTALLA ENTERA DEBAJO DEL CAJÓN
+
+Es el pedido de las «varias tareas a la vez» y era literal. El lienzo del agua vive detrás de todo y
+se apaga solo cuando la última onda se muere —vuelta 123— pero **nadie miraba si encima había algo
+tapándolo**: tocar el agua y abrir el cajón dejaba el lienzo rellenando la pantalla entera durante el
+segundo y medio que dura la ráfaga, para dibujar debajo de una hoja opaca.
+
+Medido sobre **el mismo binario con una constante dada vuelta** (`AGUA.sinCorte`), que es la única
+forma de que la medición pruebe algo:
+
+| | el agua sigue | ondas | cuadros de más | píxeles rellenados de más |
+|---|---|---|---|---|
+| cajón encima, sin el corte | **sí** | 1 | **102** | **50.767.644** |
+| **cajón encima, con el corte** | **no** | **0** | **0** | **0** |
+| cámara encima, sin el corte | sí | 1 | 102 | 27.501.444 |
+| **cámara encima, con el corte** | **no** | **0** | **0** | **0** |
+
+**Y LA COMPROBACIÓN VA EN `aguaPaso` Y NO EN LAS SEIS FUNCIONES QUE ABREN UNA HOJA.** Repartida, la
+próxima hoja que se agregue se olvida de llamarla y nadie se entera: es exactamente lo que ya pasó
+con `resetStore` en PUERTA BLANCA. `AGUA_TAPAN` es **un selector** con las ocho piezas que tapan
+—cajón, carpeta, personalizar, asistente, pantalla de inicio, fondos, cámara y el velo— y el bucle
+del agua es el único que lo consulta.
+
+**Y `aguaLibre` COMPRUEBA LO MISMO ANTES DE ADMITIR UN TOQUE**, porque si no, tocar el hueco entre
+dos iconos de una hoja abierta encendería el lienzo debajo de ella. Más `visibilitychange`: con la
+pantalla apagada o la app en segundo plano, una ráfaga viva es batería regalada.
+
+#### `glifoDe` DEVOLVÍA EL PRIMERO QUE COINCIDÍA, Y ÉSA ERA LA CAUSA DE LO DE YOUTUBE
+
+El pedido decía que YouTube, YT Music y YouTube Studio tienen que tener iconos distintos, y la
+tentación es agregar tres entradas. **No habría alcanzado, y es lo que vale la vuelta:** el buscador
+recorría los fragmentos de paquete y se quedaba con **el primero que matcheara**, así que
+`com.google.android.apps.youtube.music` encontraba el fragmento `youtube` antes de llegar a
+`youtube.music` y se llevaba el icono equivocado. Con tres entradas nuevas el resultado habría sido
+el mismo y el defecto habría quedado escondido esperando a la próxima app.
+
+Ahora **gana el fragmento más largo** —con salida inmediata en la coincidencia exacta— así que un
+paquete siempre se lleva la entrada más específica que exista. Medido:
+`ytmusic · ytstudio · ytkids · youtube` para los cuatro paquetes de la familia.
+
+**Y HABÍA DOS FRAGMENTOS DUPLICADOS que sólo se veían con la regla nueva:**
+`com.microsoft.office.outlook` estaba en `correo` **y** en `outlook`, y `com.termux` en `vscode` **y**
+en `termux`. Con coincidencia exacta empatan, y ganaba el que estuviera declarado antes, o sea el
+genérico: las dos apps que acababan de estrenar glifo propio seguían mostrando el ajeno.
+
+#### TIKTOK Y WHATSAPP ESTABAN MAL, Y LOS DOS SE VIERON EN LA CAPTURA
+
+- **TikTok**: la cabeza de la nota era **un anillo** —o sea una rosquilla, no una corchea— y la
+  bandera se salía del cuadro (llegaba a x = 108 sobre una caja de 100), así que en la baldosa
+  aparecía cortada. Ahora es disco + palo + bandera, entera adentro de la caja.
+- **WhatsApp**: era una silueta que no se leía a auricular. Ahora es lo que es: un disco con su
+  colita y **el tubo como pieza de recorte**, o sea blanco con agujero, que es como se dibuja
+  cualquier logo monocromo — la lección de la vuelta anterior aplicada donde faltaba.
+
+#### DE 80 GLIFOS A **201**, Y LAS FAMILIAS SE MIDEN
+
+Se pidieron «más de 150». Medido al cerrar: **201 glifos, 134 con piezas de recorte**, repartidos
+**agua 42 · cielo 47 · pasto 62 · atardecer 50**, y —lo que importa— **cero glifos sin familia y cero
+sin paquete**: un glifo dibujado que ningún paquete alcanza es trabajo que no se ve nunca, y uno sin
+familia sale sobre el fondo de fábrica en vez del suyo.
+
+#### LA CÁMARA: LO QUE SE PIDIÓ ES UN BOTÓN, Y EL BOTÓN ES LA MITAD DEL DISEÑO
+
+*"Que no abra la cámara normal sino que al abrirla te deje elegir entre la frutiger o la normal con
+un botón"*. O sea que el launcher **intercepta** la app de cámara del sistema: cualquier paquete cuyo
+glifo sea `camara` abre el selector, y de ahí salen dos caminos —la Aero, que es esta, o la del
+sistema por `MediaStore`—. Se puede apagar desde Personalizar: interceptar una app siempre tiene que
+ser reversible.
+
+**EL FONDO SE VE SÓLO DONDE NO ESTÁ EL VISOR, y eso es geometría y no opacidad.** El pedido dice
+*"solamente se verán en las partes ue no se vean la cámara"*: el visor es una caja con
+`aspect-ratio` y el telón está detrás a pantalla completa, así que la franja que sobra **es** lo que
+el visor no ocupa. Medido con el telón puesto: **46,2 % del cuadro a 3:4 · 35,6 % a 9:16 · 59,5 % a
+1:1** — o sea que cambiar de relación cambia cuánto Frutiger se ve, que es exactamente lo que un
+telón detrás tiene que hacer.
+
+**DOS COSAS QUE SÓLO SE VIERON MIRANDO LA CAPTURA:**
+
+1. **Los modos y el disparador flotaban sobre el acuario y no se leían.** Un texto blanco encima de
+   una foto con peces, burbujas y sol tiene contraste distinto en cada píxel. Va una **repisa de
+   vidrio** (`#camPie`) con el desenfoque y el brillo Frutiger: el vidrio no es decoración, es lo que
+   hace legible la fila de modos. Y los chips de zoom se mudaron **adentro del visor**, que es
+   además donde los pone la cámara de referencia.
+2. **La hoja de ajustes era translúcida sobre la vista previa** y las filas quedaban ilegibles sobre
+   el verde. Va **opaca** y el visor se esconde detrás con `visibility:hidden`: un panel de ajustes
+   no tiene por qué mostrar la cámara, y mostrarla cuesta legibilidad en las veintiséis filas.
+
+**Y EL RECORTE DE LA FOTO SALE DE LO QUE EL VISOR PROMETIÓ.** La cámara entrega 1280×960 y el visor
+muestra 3:4: sacando el cuadro entero, la foto tiene cosas que el visor no mostraba. Medido, una toma
+a 3:4 sobre un flujo de 1280×960 devuelve **720×960**.
+
+**`facingMode` VA COMO `ideal` Y NO COMO `exact`.** Una notebook no tiene cámara trasera y `exact` la
+dejaría sin cámara por pedir algo que no existe — la lección de RECREO. Y el espejo se lee **del
+track**: sólo se espeja lo que no informa `environment`, porque un track que no dice para dónde mira
+es de los que apuntan a la cara.
+
+**EL PERMISO SON DOS COSAS EN ANDROID, Y CON UNA NO ALCANZA:** el permiso de ejecución `CAMERA` y
+`WebChromeClient.onPermissionRequest` concediendo `RESOURCE_VIDEO_CAPTURE`. Sin el segundo,
+`getUserMedia` falla en silencio adentro del WebView aunque el permiso del sistema esté dado. Y se
+comprueba **antes** de pedir el flujo, para poder mostrar «tocá para permitir» en vez de un
+rectángulo negro.
+
+**Y `onPermissionRequest` LLEVA UNA CLASE CON NOMBRE Y NO UNA ANÓNIMA**, por lo mismo de la vuelta
+115: `d8` 8.2.2 revienta al dexear `Principal$1`.
+
+#### UN DEFECTO DE LA SONDA, Y DEL TIPO QUE YA COSTÓ VUELTAS ACÁ
+
+`$('.cajN', x)` devolvía **la misma fila para las once**, porque `$` es
+`s => document.querySelector(s)` y **el segundo argumento lo ignora**. No falla: contesta. Es la
+misma familia que el `getBoundingClientRect` que mide cajas alineadas a los ejes — una herramienta
+que devuelve un número plausible y no mide lo que uno cree.
+
+#### MEDIDO AL CERRAR
+
+Iconos: **201 glifos, 134 con recorte**, 42/47/62/50 en las cuatro familias, **0 sin familia y 0 sin
+paquete**, con los cuatro YouTube resolviendo a glifos distintos y TikTok y WhatsApp fotografiados en
+la hoja de contactos. Agua: **102 cuadros de repintado a pantalla completa → 0** con el cajón encima
+y lo mismo con la cámara, en el mismo binario con una constante dada vuelta. Filtrado permanente del
+escritorio **4 pasadas / 105.014 px**. Cámara: `getUserMedia` con flujo real en el banco
+(1280×960), telón visible **46,2 % · 35,6 % · 59,5 %** en las tres relaciones, **cero solapamientos**
+entre los 8 elementos del visor, toma de **720×960** recortada de 1280×960, las tres pestañas de
+ajustes con **11 · 5 · 10** filas coincidiendo con las capturas, y `__atras` cerrando ajustes →
+visor → cámara con el flujo detenido. Regresión completa: **doce planes con `window.__errs` vacío en
+los doce**. APK **1,3 MB** con firma v2+v3, `HOME` en el alias, `LAUNCHER` en la actividad, e
+`INTERNET` + `CAMERA`.
+
+**LO QUE NO PUDE COMPROBAR:** el banco tiene una cámara de mentira, así que de la Aero está medido
+que pide el flujo, lo dibuja, recorta la foto al encuadre correcto y suelta el permiso — no cómo se
+ve una foto de verdad. Y del selector está medido que aparece y que los dos botones llaman a lo que
+tienen que llamar; que la cámara del sistema abra de verdad depende del `MediaStore` del teléfono.
+
 ### Centésima vigesimotercera vuelta (2026-09-06): **AERO** — ochenta iconos Aero, el filtrado que corría para siempre, y las carpetas con el índice corrido
 
 Cuatro pedidos en un mensaje, con una foto de referencia —una nota blanca de TikTok sobre un acuario

@@ -533,6 +533,32 @@ window.__A = {
   },
   /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
      así que después de una foto congelada no limpiaba nada */
+  /* ── EL PEOR CASO QUE ESTE LAUNCHER PUEDE ARMAR ──
+     Una gota corriendo y el cajón abriéndose encima. Devuelve si el agua
+     seguía repintando y cuántas pasadas de filtro había en ese instante. */
+  aguaConCajon(sinCorte){ return this.aguaCon('cajon', sinCorte); },
+  /* `quien` es la pieza que se abre encima: el cajón o la cámara. Son las dos
+     que tapan la pantalla entera, así que son las dos que tienen que cortar. */
+  aguaCon(quien, sinCorte){
+    AGUA.sinCorte = !!sinCorte;
+    aguaToca(206, 520, 1);
+    const antes = { on: AGUA.on, ondas: AGUA.ondas.length, vid: this.vidrios().n };
+    const abre = quien === 'cam' ? (v => v ? camAbre() : camCierra())
+                                 : (v => verCajon(v));
+    abre(true);
+    /* un cuadro de bucle: es lo que tarda `aguaPaso` en enterarse */
+    aguaPaso();
+    const dur = { on: AGUA.on, ondas: AGUA.ondas.length, tapada: aguaTapada(),
+                  clase: AGUA.el.className, agua: document.body.classList.contains('agua'),
+                  deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
+    const v = this.vidrios();
+    /* cuántos cuadros más habría repintado el lienzo a pantalla completa con
+       el cajón encima: la ráfaga vive AGUA_VIDA segundos */
+    const cuadros = dur.on ? Math.round(AGUA_VIDA * 60) : 0;
+    abre(false); AGUA.sinCorte = false; aguaCorta();
+    return { quien: quien, antes: antes, durante: dur, vidrios: v.n, px: v.px,
+             cuadrosDeMas: cuadros, pxDeMas: cuadros * v.px };
+  },
   aguaApaga(){
     AGUA.ondas = []; AGUA.on = false;
     if (AGUA.el) AGUA.el.classList.remove('on');
@@ -758,6 +784,86 @@ window.__A = {
              mascW: c.getPropertyValue('--masc-w').trim(),
              mascH: c.getPropertyValue('--masc-h').trim(),
              visible: $('#mascota').classList.contains('on'), pose: MASC_HOY };
+  },
+  /* qué glifo y qué familia le toca a un paquete. Con emparejamiento por
+     subcadena, agregar una app puede robarle el icono a otra sin que nada
+     falle: esto es lo único que lo detecta. */
+  /* ══════════ LA CÁMARA ══════════ */
+  cam(){
+    const d = document.getElementById('cam');
+    if (!d) return { armada: false };
+    const v = $('#camVid'), vi = $('#camVisor'), r = vi.getBoundingClientRect();
+    const m = camModo();
+    return { armada: true, on: CAM.on, eligiendo: CAM.panel,
+             ajustes: CAM.ajustes, tab: CAM.tab,
+             modo: m.id, modos: CAM_MODOS.length,
+             asp: CAM_ASPECTOS[CAM.asp].id, zoom: CAM.zoom, cara: CAM.cara,
+             flujo: !!CAM.flujo, err: CAM.err, permiso: CAM.permiso,
+             video: v ? [v.videoWidth, v.videoHeight, v.readyState] : null,
+             espejo: v ? v.classList.contains('espejo') : null,
+             /* cuánto del fondo Frutiger queda a la vista: es la mitad del
+                pedido y no se puede afirmar sin medirlo */
+             visor: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+             pantalla: [innerWidth, innerHeight],
+             fondoVisible: +(100 * (1 - (r.width*r.height)/(innerWidth*innerHeight))).toFixed(1),
+             tomas: CAM.tomas, hayFoto: !!CAM.ultima, grabando: CAM.grabando,
+             filtro: CAM.filtro, reja: $('#camReja').className || 'sin' };
+  },
+  camAbrir(){ camAbre(); return this.cam(); },
+  camCerrar(){ camCierra(); return true; },
+  async camAero(){ camPanel(false); await camArranca(); return this.cam(); },
+  camModo(i){ camPonModo(i); return this.cam(); },
+  camAsp(i){ CAM.asp = i % CAM_ASPECTOS.length; camPinta(); return this.cam(); },
+  camZoom(z){ CAM.zoom = z; camAplicaZoom(); camPinta(); return this.cam(); },
+  camFoto(){ const r = camDispara(); return { corte: r, cam: this.cam() }; },
+  camVuelta(){ camDaVuelta(); return this.cam(); },
+  camAjustes(t){
+    CAM.ajustes = true; if (t) CAM.tab = t;
+    $('#cam').classList.add('conAjustes'); camAjPinta();
+    const f = $$('#camAj .cajF');
+    /* ── `$` NO TOMA RAÍZ ──
+       Es `document.querySelector(s)` y nada más, así que `$('.cajN', x)`
+       ignora la fila y devuelve SIEMPRE la primera: las once filas salían con
+       el mismo rótulo y el mismo valor. Y eso no falla: contesta. */
+    return { tab: CAM.tab, filas: f.length,
+             textos: [].map.call(f, x => x.querySelector('.cajN').textContent),
+             valores: [].map.call(f, x => { const v = x.querySelector('.cajV');
+               const w = x.querySelector('.cajSw');
+               return w ? (w.classList.contains('on') ? 'ON' : 'off') : (v ? v.textContent : '—'); }) };
+  },
+  camOps(){ return Object.assign({}, CAM.ops); },
+  /* que ningún control se pise con otro: es la comprobación que este launcher
+     ya le hace al escritorio, y una cámara tiene más piezas que el escritorio */
+  camChoques(){
+    const q = ['#camTop','#camVisorC','#camZoom','#camModos','#camBarra','#camThumb','#camDisp','#camFlip'];
+    const c = [];
+    for (const sel of q){ const e = $(sel); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) c.push({ q: sel, x: r.left, y: r.top, w: r.width, h: r.height }); }
+    const ch = [];
+    for (let i = 0; i < c.length; i++) for (let j = i+1; j < c.length; j++){
+      const a = c[i], b = c[j];
+      if (a.q === '#camBarra' && ['#camThumb','#camDisp','#camFlip'].indexOf(b.q) >= 0) continue;
+      if (a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h) ch.push(a.q+'×'+b.q);
+    }
+    const fuera = c.filter(e => e.x < -1 || e.y < -1 || e.x+e.w > innerWidth+1 || e.y+e.h > innerHeight+1)
+                   .map(e => e.q);
+    return { n: c.length, choques: ch, fuera: fuera };
+  },
+  glifo(pkg, nombre){
+    const g = glifoDe(pkg, nombre);
+    return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
+  },
+  glifos(){
+    const fam = {}; let cut = 0;
+    for (const f in ICO_FAM) fam[f] = ICO_FAM[f].length;
+    for (const g in GLIFOS)
+      if (GLIFOS[g].some(pz => String(pz[0]).charAt(0) === '-')) cut++;
+    const sinFam = Object.keys(GLIFOS).filter(g => !ICO_DE_FAM[g]);
+    const sinPkg = Object.keys(GLIFOS).filter(g => !ICO_PKG[g]);
+    return { n: Object.keys(GLIFOS).length, conRecorte: cut, fam: fam,
+             sinFamilia: sinFam, sinPaquete: sinPkg,
+             fondos: (typeof ICONOS !== 'undefined') ? Object.keys(ICONOS).length : 0 };
   },
   icono(){
     const b = $('#tira .baldosa') || $('#dock .baldosa');
