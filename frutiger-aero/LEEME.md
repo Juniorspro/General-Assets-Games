@@ -5,12 +5,56 @@ Una foto de fondo, la barra de vidrio arriba y un cartel que dice
 
     https://frutiger-aero-86q.pages.dev
 
-**No carga ni un byte de JavaScript**: no hay nada que mover todavía. El sitio
-entero pesa 504 KB, y de eso 384 KB son las ocho poses de la mascota.
+La mascota es un **modelo 3D de verdad**, animado por código. Se puede
+arrastrar para girarla y tocarla para que salte. El sitio pesa 1,8 MB, de los
+cuales 1,2 MB son three.js y el modelo.
+
+## Todo lo que se cachea lleva el hash de su contenido en el nombre
+
+`immutable` es una promesa: *esta URL nunca cambia de contenido*. Se rompió una
+vez —se reemplazaron las imágenes de la mascota con el mismo nombre y el
+navegador del dueño siguió mostrando las viejas durante un año, porque se lo
+habíamos pedido—. Ahora cada archivo de `img/`, `js/`, `vendor/` y `modelos/`
+lleva ocho dígitos de su propio hash: si el archivo cambia, cambia la URL, y no
+hay caché que pueda quedarse con lo viejo. El mapa de nombres queda en
+`nombres.json` y `nombres-js.json`.
+
+## Las animaciones son por código, no grabadas
+
+El modelo es **una malla sola, sin huesos** —eso es lo que devuelve una
+reconstrucción hecha a partir de una imagen—, así que no hay clips que
+reproducir. Todo se calcula en cada cuadro, en `sitio/js/mascota.js`:
+
+- **flote** — un seno lento en Y, período 4 s;
+- **respiración** — escala no uniforme (sube y se angosta lo mismo, para no
+  cambiar de volumen), período 2 s;
+- **bamboleo** — una inclinación mínima en Z, período 6 s;
+- **te mira** — el cuerpo gira hacia el puntero con un resorte, no de golpe;
+- **arrastrar** — gira libre y sigue girando al soltar, con roce;
+- **tocarla** — un salto con aplastado antes y después.
+
+Los tres períodos son 4, 2 y 6 a propósito: si fueran iguales, el conjunto se
+repetiría cada cuatro segundos y el ojo engancharía el bucle.
+
+Con `prefers-reduced-motion` queda quieta, de frente.
+
+Si no hay WebGL o el modelo no baja, el guión saca el `<canvas>` y queda la
+imagen que ya estaba en el HTML. Un cuadro vacío sería peor que una foto.
 
 Lo que tuvo antes —siete secciones, seis personajes en 3D, dieciocho íconos,
 ocho láminas de estéticas y cinco pantallas de error escritas en CSS— se sacó a
 pedido y sigue en la historia de git (`git log -- frutiger-aero`).
+
+## Dos trampas que costaron un rato, las dos silenciosas
+
+- **`img{display:block}` le gana al `[hidden]` del navegador.** Es una regla de
+  autor contra una de la hoja del agente, así que esconder el respaldo no lo
+  escondía: se veían la foto y el modelo, uno arriba del otro. Hace falta
+  `[hidden]{display:none !important}`.
+- **Mover un módulo de carpeta rompe sus propios imports.** `visor.js` pasó a
+  `js/` y siguió pidiendo `./vendor/three…`, que desde ahí es
+  `/js/vendor/three…`. No hubo error visible: el módulo no cargó y la página se
+  quedó con la foto, que es exactamente lo que tenía que hacer al fallar.
 
 ## El vidrio
 
