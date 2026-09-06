@@ -115,7 +115,14 @@ function vidrioInit(){
     dm.setAttribute('scale', String(REFR_ESC));
     dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
     f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
-    const b = 'url(#' + id + ') blur(11px) saturate(200%) brightness(1.14)';
+    /* ── LA CALIBRACIÓN SE LEE, NO SE ESCRIBE ACÁ ──
+       Estaba clavada en esta línea, y como es un estilo en línea le ganaba a la
+       regla `.vid.refr`: la recalibración de la vuelta anterior no llegó nunca
+       a las cuatro piezas grandes, que son justamente todas las que importan.
+       Sale de `--v-filR`, que es de donde la lee el CSS. */
+    const cal = getComputedStyle(document.documentElement)
+                  .getPropertyValue('--v-filR').trim() || 'blur(19px)';
+    const b = 'url(#' + id + ') ' + cal;
     el.style.backdropFilter = b; el.style.webkitBackdropFilter = b;
     refrActualiza(el);
     if (REFR_OBS) REFR_OBS.observe(el);

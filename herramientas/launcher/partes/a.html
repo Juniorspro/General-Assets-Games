@@ -27,6 +27,24 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 
 :root{
   --ins-t:24px; --ins-b:16px;
+  /* ── EL TAMAÑO DEL ICONO Y CUÁNTAS COLUMNAS SON DATOS, NO CONSTANTES ──
+     Estaban escritos en cuatro sitios del CSS y en un `const COLS = 4`. Desde
+     que hay un asistente al que se le puede decir «agrandá las apps», tienen
+     que poder cambiar en caliente y desde un solo lugar; y las filas por página
+     ya se CALCULAN del alto libre, así que agrandar el icono mueve la cuenta
+     sola en vez de cortar la última fila. */
+  --ico:60px; --icoImg:46px; --cols:4;
+  /* ── LA CALIBRACIÓN DEL VIDRIO VIVE EN UNA VARIABLE, Y HACÍA FALTA ──
+     La vuelta pasada se recalibró la regla `.vid.refr` y **no llegó a ninguna
+     de las cuatro piezas grandes**: `vidrioInit()` escribe el filtro como
+     `style.backdropFilter`, o sea un estilo EN LÍNEA, que le gana a cualquier
+     regla. Medido ahora sobre el escritorio, el widget, el dock, el menú y la
+     hoja del asistente seguían en `saturate(2) brightness(1.14)` — justo el
+     número que se había descartado por dejar el dock verde lima.
+     Con la calibración en una variable la lee el CSS y la lee el JS, así que no
+     puede haber dos. */
+  --v-fil:blur(24px) saturate(120%) brightness(.90);
+  --v-filR:blur(19px) saturate(122%) brightness(.90);
   --acento:#7fe3ff;
   --verde:#a8e85c;
   /* ── UN VIDRIO NO TIÑE: DESENFOCA Y TIENE CANTO ──
@@ -93,8 +111,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
     inset 0 0 0 1px rgba(255,255,255,.07),
     inset 0 7px 18px -9px rgba(255,255,255,.38),
     inset 0 -9px 20px -11px rgba(2,22,48,.42);
-  backdrop-filter:blur(24px) saturate(120%) brightness(.90);
-  -webkit-backdrop-filter:blur(24px) saturate(120%) brightness(.90);
+  backdrop-filter:var(--v-fil);
+  -webkit-backdrop-filter:var(--v-fil);
   overflow:hidden}
 /* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
    Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
@@ -131,8 +149,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    calibración que la de `.vid` ya había descartado, y el dock salía verde.
    Lo único que puede diferir es el desenfoque, y por una razón: el
    desplazamiento ya revuelve el fondo, así que hace falta menos. */
-.vid.refr{backdrop-filter:url(#refr) blur(19px) saturate(122%) brightness(.90);
-  -webkit-backdrop-filter:url(#refr) blur(19px) saturate(122%) brightness(.90)}
+.vid.refr{backdrop-filter:url(#refr) var(--v-filR);
+  -webkit-backdrop-filter:url(#refr) var(--v-filR)}
 
 /* ══════════ BARRA DE ARRIBA ══════════ */
 #barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
@@ -198,7 +216,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 #tira{display:flex;height:100%;will-change:transform}
 .pag{flex:0 0 100%;height:100%;display:grid;
-  grid-template-columns:repeat(4,1fr);align-content:start;
+  grid-template-columns:repeat(var(--cols),1fr);align-content:start;
   gap:6px 0;padding:10px 8px}
 
 .ap{display:flex;flex-direction:column;align-items:center;gap:6px;
@@ -209,7 +227,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    Frutiger Aero es skeuomórfico: cada icono es un objeto con volumen, brillo y
    sombra propia. La baldosa da eso sin tocar el icono de la app, que llega como
    viene del sistema. */
-.baldosa{width:60px;height:60px;border-radius:17px;position:relative;
+.baldosa{width:var(--ico);height:var(--ico);border-radius:calc(var(--ico)*.283);
+  position:relative;
   background:rgba(255,255,255,.16);
   box-shadow:0 5px 14px rgba(4,26,52,.30),
     inset 0 1px 0 rgba(255,255,255,.60),
@@ -221,7 +240,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
   pointer-events:none}
-.baldosa img{width:46px;height:46px;display:block;
+.baldosa img{width:var(--icoImg);height:var(--icoImg);display:block;
   filter:drop-shadow(0 2px 3px rgba(0,30,60,.35))}
 .ap .nom{font-size:11px;font-weight:600;letter-spacing:.01em;max-width:74px;
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -235,7 +254,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 
 /* ══════════ DOCK ══════════ */
 #dock{flex:0 0 auto;margin:0 14px;padding:10px 6px 8px;border-radius:30px;
-  display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+  display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:0}
 
 /* ══════════ CAJÓN ══════════ */
 /* ── LA HOJA ESMERILADA DEJA VER EL FONDO, Y ESO NO ES ADORNO ──
@@ -288,7 +307,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 
 #cajCuerpo{flex:1 1 auto;min-height:0;display:flex;position:relative}
 #cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
-  touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);
+  touch-action:pan-y;display:grid;grid-template-columns:repeat(var(--cols),1fr);
   align-content:start;gap:2px 0;padding:4px 26px 26px 10px}
 /* la fila de buscar en la web y el «sin resultados» cruzan la reja entera */
 #cajLista .vacio{grid-column:1/-1;text-align:center;opacity:.72;padding:22px 12px 6px;
@@ -337,38 +356,31 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;z-index:3}
 #burbuja.on{opacity:1;transform:translateY(-50%) scale(1)}
 
-/* ── LA MASCOTA: OCHO CUADROS Y CINCO ANIMACIONES ──
-   Una sola tira con la MISMA celda para las ocho poses, así que animar es
-   correr la x por pasos. Qué celdas usa cada animación lo dice `MASC_ANIM`, que
-   sale del horneado, y los `@keyframes` los arma el JS a partir de esa tabla:
-   escritos a mano acá, agregar un cuadro obligaría a recalcular cinco
-   porcentajes y el que se olvide deja una animación mostrando medias mascotas.
-   Baila mientras se escribe —que es lo que se pidió—, se aburre a los dos
-   segundos y se duerme a los siete. */
-/* ── LA VENTANA RECORTA LA TIRA, Y SIN ESO SE VEN LAS OCHO ──
-   La tira mide `MASC_N` veces la ventana y la animación corre la x. Sin
-   `overflow:hidden` el contenedor no recorta nada: medido en la captura, salían
-   las mascotas seguidas y casi todas fuera de la pantalla. La ventana es de UNA
-   celda; la tira se mueve detrás.
-   El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
-   POR ENCIMA de la cabeza, o sea fuera de la celda: recortando arriba de todo,
-   la mitad del gesto se pierde. */
+/* ── LA MASCOTA ES EL MODELO 3D DEL USUARIO, RIGGEADO ──
+   Ya no son láminas: es la malla generada a partir de su propio render, con 23
+   huesos, y las cinco animaciones se escriben sobre esos huesos (ver `g.js`).
+   Eso es lo que permite que duerma SENTADA —una pose que ninguna biblioteca de
+   clips del proveedor tiene y que pedida como lámina volvió de pie— y que el
+   cabeceo se mezcle encima sin pelearse con la animación. */
+/* El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
+   POR ENCIMA de la cabeza: recortando arriba de todo, la mitad del gesto se
+   pierde. */
 #mascota{position:absolute;left:50%;bottom:16px;width:var(--mw-masc);
   height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);
   opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
   transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1);z-index:2;
   filter:drop-shadow(0 6px 14px rgba(0,40,80,.5))}
 #mascota.on{opacity:1;transform:translateY(0) scale(1)}
+/* ── EL LIENZO SE DIBUJA CHICO Y CSS LO ESTIRA ──
+   Y ahí el pixelado que se pidió y la optimización son LA MISMA COSA: se
+   rellenan 64×83 píxeles en vez de 139×180, o sea cinco veces menos, y el
+   escalón que deja `pixelated` pega con un muñeco que ya es de vóxeles. Un
+   filtro de pixelado encima habría costado los 139×180 igual. */
 #mVent{width:100%;height:100%;overflow:hidden}
-#mTira{width:calc(var(--masc-n)*100%);height:100%;
-  background-image:var(--masc);background-size:100% 100%}
-/* ── EL DESTINO DE CADA ANIMACIÓN LO CALCULA EL JS ──
-   `translateX` en porcentaje es del propio elemento, y la tira mide N celdas, y
-   `steps(n)` NUNCA llega al valor final: se detiene en n escalones antes. Para
-   que la animación que empieza en la celda `i` y dura `c` cuadros caiga justo en
-   i, i+1 … i+c-1, el recorrido tiene que ir de -i/N a -(i+c)/N. Eso es una
-   cuenta, no un número: la hace `mascCSS()` a partir de `MASC_ANIM`. */
-/* y el cabeceo va aparte: encima de los pasos, para que no sea un flipbook seco */
+#mLien{width:100%;height:100%;display:block;
+  image-rendering:pixelated;image-rendering:crisp-edges}
+/* el cabeceo va encima del esqueleto: es de la CÁMARA, no del muñeco, así que
+   no hay que gastarle huesos */
 #mascota.on{animation:chill 1.32s ease-in-out infinite alternate}
 @keyframes chill{from{transform:translateY(2px) rotate(-3deg)}
                  to  {transform:translateY(-4px) rotate(3deg)}}
@@ -393,7 +405,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   16% {opacity:1}
   100%{opacity:0;transform:translate(22px,-26px) scale(1.2) rotate(14deg)}}
 @media (prefers-reduced-motion:reduce){
-  #mTira{animation:none!important}#mascota.on{animation:none}
+  #mascota.on{animation:none}
   #mascota.zzz #mZ span{animation:none;opacity:.85}}
 /* ── EL TIRADOR SE VE Y NO SE TOCA ──
    Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
@@ -414,6 +426,56 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
   opacity:0;pointer-events:none;transition:opacity .2s}
 #velo.on{opacity:1;pointer-events:auto}
+/* ══════════ EL ASISTENTE ══════════
+   ── ES UNA HOJA Y NO UNA PANTALLA APARTE ──
+   Lo que se le pide cambia el launcher que está DETRÁS —el tamaño de los
+   iconos, las columnas, la mascota—, así que taparlo entero con un panel opaco
+   sería esconder justo lo que uno acaba de mandar a cambiar. Sube desde abajo,
+   ocupa el 72% del alto y el resto queda a la vista a través del velo. */
+#asis{position:fixed;z-index:6;left:0;right:0;bottom:0;height:72%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 10px)}
+#asis.on{transform:translateY(0)}
+#asCab{display:flex;align-items:center;gap:10px;padding:4px 4px 10px;flex:0 0 auto}
+#asTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
+.asBtn{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;font-size:16px;cursor:pointer;
+  background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.asBtn:active{background:rgba(255,255,255,.26)}
+#asLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px}
+.asMsg{max-width:86%;padding:9px 13px;border-radius:16px;font-size:14px;
+  line-height:1.35;white-space:pre-wrap;word-break:break-word;
+  text-shadow:0 1px 2px rgba(0,25,52,.6)}
+.as-yo{align-self:flex-end;background:rgba(127,227,255,.24);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35);border-bottom-right-radius:6px}
+.as-bot{align-self:flex-start;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3);border-bottom-left-radius:6px}
+.asFirma{margin-top:6px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  opacity:.62;font-weight:700}
+#asPie{flex:0 0 auto;display:flex;gap:8px;align-items:center;padding-top:6px}
+#asTxt,#asLlave{flex:1 1 auto;min-width:0;background:rgba(255,255,255,.14);
+  border:0;outline:0;color:#fff;font:600 14px/1 inherit;padding:12px 14px;
+  border-radius:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#asTxt::placeholder,#asLlave::placeholder{color:rgba(255,255,255,.6)}
+#asMandar{flex:0 0 auto;width:44px;height:42px;border-radius:16px;border:0;
+  background:rgba(127,227,255,.32);color:#fff;font-size:17px;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+#asAyuda{flex:0 0 auto;font-size:11px;opacity:.7;padding:0 4px 6px;font-weight:600}
+/* la llave se pide en un cajoncito que está cerrado por omisión: es lo que uno
+   toca una vez y no vuelve a mirar, y ocupa el sitio del teclado */
+#asLlaveCaja{flex:0 0 auto;display:none;flex-direction:column;gap:8px;
+  padding:10px;border-radius:18px;background:rgba(0,22,48,.30);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22);margin-bottom:8px}
+#asLlaveCaja.on{display:flex}
+#asLlaveTit{font-size:11px;opacity:.78;font-weight:700;line-height:1.4}
+#asLlaveFila{display:flex;gap:8px}
+#asGuardar,#asBorrar{flex:0 0 auto;border:0;border-radius:14px;padding:0 14px;
+  font:700 12px/1 inherit;color:#fff;cursor:pointer;
+  background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#asGuardar{background:rgba(168,232,92,.30)}
+
 #menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
   width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
   transition:opacity .18s,transform .18s cubic-bezier(.2,.9,.3,1.3)}
@@ -525,7 +587,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   <div id="burbuja">A</div>
   <!-- la mascota baila mientras se escribe, se aburre y se duerme -->
   <div id="mascota">
-    <div id="mVent"><div id="mTira"></div></div>
+    <div id="mVent"><canvas id="mLien"></canvas></div>
     <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
   </div>
 </div>
@@ -536,6 +598,28 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
   <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
   <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid refr" id="asis">
+  <div id="asCab">
+    <div id="asTit">—</div>
+    <div class="asBtn" id="asConf">⚙</div>
+    <div class="asBtn" id="asCerrar">✕</div>
+  </div>
+  <div id="asLista"></div>
+  <div id="asLlaveCaja">
+    <div id="asLlaveTit">—</div>
+    <div id="asLlaveFila">
+      <input id="asLlave" type="password" autocomplete="off" spellcheck="false" placeholder="—">
+      <button id="asGuardar">—</button>
+      <button id="asBorrar">—</button>
+    </div>
+  </div>
+  <div id="asAyuda">—</div>
+  <div id="asPie">
+    <input id="asTxt" type="text" autocomplete="off" spellcheck="false" placeholder="—">
+    <button id="asMandar">➤</button>
+  </div>
 </div>
 
 <div class="vid" id="aviso">—</div>

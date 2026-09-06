@@ -139,30 +139,139 @@ window.__A = {
   letra(L){ vaALetra(L); return { marcada: L, top: $('#cajLista').scrollTop,
                                   mirando: letraVisible() }; },
   /* ── LA MASCOTA ──
-     `x` es dónde quedó la tira: es el ÚNICO número que dice qué cuadro se está
-     viendo. `anim` sola no alcanza — una pose de un cuadro no tiene animación y
-     se colocaría con un transform que nadie estaría midiendo. */
+     Lo que prueba que una animación ANIMA no es su nombre: es cuánto se movió
+     un hueso. `mascHueso` devuelve la posición de mundo de uno, así que una
+     pose que no mueve nada se ve en el número y no en la pantalla. */
   masc(){
-    const m = $('#mascota'), t = $('#mTira');
-    const cs = getComputedStyle(t);
-    const mt = new DOMMatrixReadOnly(cs.transform);
-    /* ── LA CELDA SE MIDE EN LAYOUT, NO EN PANTALLA ──
-       Apagada, la mascota lleva `scale(.86)`, y `getBoundingClientRect` la
-       aplica: la celda salía de 101 px en vez de 118 y la celda actual daba
-       3,49 donde el transform de verdad decía 3,00. `offsetWidth` no pasa por
-       ninguna transformación. */
-    const cel = t.offsetWidth/MASC_N;
+    const m = $('#mascota'), cv = $('#mLien');
     return { on: m.classList.contains('on'), zzz: m.classList.contains('zzz'),
-             hoy: MASC_HOY, cuadros: MASC_N, celda: [MASC_W, MASC_H],
-             tira: cs.backgroundImage.indexOf('data:image') >= 0,
-             anim: cs.animationName, dur: cs.animationDuration,
-             pasos: cs.animationTimingFunction,
-             celdaActual: cel ? +( -mt.m41/cel ).toFixed(2) : null,
-             cabe: mascCabe(),
-             zetas: $$('#mZ span').length };
+             hoy: MASC_HOY, anim: L3.anim, corre: L3.on, listo: L3.listo,
+             huesos: L3.nH, tri: LEMI.nt, vert: LEMI.nv,
+             lienzo: cv ? [cv.width, cv.height] : null,
+             celda: [MASC_W, MASC_H],
+             pixelado: cv ? getComputedStyle(cv).imageRendering : null,
+             cabe: mascCabe(), zetas: $$('#mZ span').length };
   },
-  /* fuerza una animación y devuelve dónde quedó la tira */
   mascVer(n){ mascPone(n); return this.masc(); },
+  /* ── PARA DÓNDE MUEVE UN EJE ──
+     Los ejes de un hueso no se adivinan: se gira uno y se mira dónde quedó la
+     punta. Devuelve el desplazamiento de `mira` al girar `nom` un radián sobre
+     cada eje de MUNDO, en centímetros del muñeco. */
+  mascEje(nom, mira){
+    const E = { adelante: EJE_AD, arriba: EJE_AR, derecha: EJE_DE };
+    const i = L3.hueso[mira];
+    const base = (() => { l3Reposo(); l3Componer();
+      return [L3.mundo[i*16+12], L3.mundo[i*16+13], L3.mundo[i*16+14]]; })();
+    const out = { reposo: base.map(v => +v.toFixed(3)) };
+    for (const k in E){
+      for (const sg of [1, -1]){
+        l3Reposo(); l3Gira(nom, E[k], sg); l3Componer();
+        out[k + (sg > 0 ? '+' : '-')] = [
+          +(L3.mundo[i*16+12]-base[0]).toFixed(3),
+          +(L3.mundo[i*16+13]-base[1]).toFixed(3),
+          +(L3.mundo[i*16+14]-base[2]).toFixed(3)];
+      }
+    }
+    l3Reposo(); l3Componer();
+    return out;
+  },
+  /* la posición de mundo de un hueso en el instante `t` de una animación */
+  mascHueso(nom, an, t){
+    const i = L3.hueso[nom];
+    if (i === undefined) return { error: 'no existe ' + nom, hay: Object.keys(L3.hueso) };
+    L3.anim = an || L3.anim; L3.t = t === undefined ? L3.t : t;
+    l3Reposo(); (L3_ANIM[L3.anim] || L3_ANIM.quieto)(L3.t); l3Componer();
+    const M = L3.mundo, b = L3_BAJA[L3.anim] || 0;
+    return { x:+M[i*16+12].toFixed(4), y:+(M[i*16+13]+b).toFixed(4), z:+M[i*16+14].toFixed(4) };
+  },
+  /* cuánto recorre un hueso a lo largo de una animación: si da cero, esa
+     animación no anima, por más que tenga nombre */
+  mascRecorre(nom, an, n){
+    n = n || 40;
+    let mn = [1e9,1e9,1e9], mx = [-1e9,-1e9,-1e9];
+    for (let k = 0; k < n; k++){
+      const p = this.mascHueso(nom, an, k*(an === 'duerme' ? 6 : 1.4)/n);
+      const v = [p.x, p.y, p.z];
+      for (let a = 0; a < 3; a++){ mn[a] = Math.min(mn[a], v[a]); mx[a] = Math.max(mx[a], v[a]); }
+    }
+    return { rango: mx.map((v, a) => +(v - mn[a]).toFixed(4)),
+             total: +Math.hypot(mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]).toFixed(4) };
+  },
+  /* el cuadro del muñeco, leído del búfer: un lienzo WebGL sin
+     `preserveDrawingBuffer` sale en cero con `toDataURL`, así que se lee con
+     `readPixels` y se cuenta cuántos píxeles tienen algo */
+  mascPixeles(){
+    const gl = L3.gl; if (!gl) return null;
+    const w = gl.canvas.width, h = gl.canvas.height;
+    const px = new Uint8Array(w*h*4);
+    l3Pinta(0);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let n = 0, x0 = w, x1 = -1, y0 = h, y1 = -1, sr = 0, sg = 0, sb = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+      const i = (y*w + x)*4;
+      if (px[i+3] > 8){ n++; sr += px[i]; sg += px[i+1]; sb += px[i+2];
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    return { lienzo: [w, h], pintados: n, pct: +(100*n/(w*h)).toFixed(1),
+             caja: n ? [x0, y0, x1, y1] : null,
+             alto: n ? +((y1-y0+1)/h).toFixed(3) : 0,
+             ancho: n ? +((x1-x0+1)/w).toFixed(3) : 0,
+             medio: n ? [Math.round(sr/n), Math.round(sg/n), Math.round(sb/n)] : null };
+  },
+  /* ── LA HOJA DE CONTACTO ──
+     Cinco poses una al lado de la otra, en una sola imagen. La mascota se
+     dibuja en 64 px de ancho y en la pantalla mide 132: mirarla en la captura
+     del launcher no alcanza para juzgar si un brazo sube o baja. Se lee el
+     búfer con `readPixels` —un lienzo WebGL sin `preserveDrawingBuffer` sale en
+     cero con `toDataURL`—, se da vuelta en vertical (GL devuelve las filas de
+     abajo hacia arriba) y se estira con NEAREST, que es como se ve de verdad. */
+  mascHoja(esc){
+    const gl = L3.gl; if (!gl) return null;
+    esc = esc || 4;
+    const P = ['quieto','baila','saluda','mando','duerme'];
+    const w = gl.canvas.width, h = gl.canvas.height;
+    const cv = document.createElement('canvas');
+    cv.width = w*esc*P.length; cv.height = h*esc;
+    const cx = cv.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.fillStyle = '#20304a'; cx.fillRect(0, 0, cv.width, cv.height);
+    const uno = document.createElement('canvas');
+    uno.width = w; uno.height = h;
+    const ux = uno.getContext('2d');
+    const px = new Uint8Array(w*h*4);
+    const guardo = [L3.anim, L3.t];
+    P.forEach((n, k) => {
+      L3.anim = n; L3.t = n === 'duerme' ? 3.0 : 0.9;
+      l3Pinta(0);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const im = ux.createImageData(w, h);
+      for (let y = 0; y < h; y++)
+        im.data.set(px.subarray((h-1-y)*w*4, (h-y)*w*4), y*w*4);
+      ux.putImageData(im, 0, 0);
+      cx.drawImage(uno, k*w*esc, 0, w*esc, h*esc);
+      cx.fillStyle = '#fff'; cx.font = '16px system-ui';
+      cx.fillText(n, k*w*esc + 8, 20);
+    });
+    L3.anim = guardo[0]; L3.t = guardo[1];
+    return cv.toDataURL('image/png');
+  },
+  /* ── LO QUE CUESTA LA MASCOTA ──
+     Con el fondo procedural había un `costo(n)` que promediaba milisegundos de
+     lienzo por cuadro; el fondo pasó a foto y esa sonda se fue con él. Ahora lo
+     único que dibuja por cuadro es el muñeco, así que la pregunta vuelve: un
+     bucle de render en la pantalla de inicio de un teléfono es batería. */
+  mascCosto(n){
+    n = n || 60;
+    if (!L3.gl) return null;
+    l3Pinta(0.016); L3.gl.finish();
+    const t0 = performance.now();
+    for (let k = 0; k < n; k++) l3Pinta(0.016);
+    L3.gl.finish();
+    return { ms: +((performance.now()-t0)/n).toFixed(3), cuadros: n,
+             tri: LEMI.nt, px: L3.gl.canvas.width*L3.gl.canvas.height,
+             corre: L3.on };
+  },
   /* el ocio: se le corre el reloj hacia atrás para no esperar siete segundos */
   mascDormir(){ MASC_ULT = Date.now() - 9000; mascOcio(); return this.masc(); },
   mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
@@ -186,7 +295,80 @@ window.__A = {
              web: $$('#cajLista .web').length,
              textoWeb: ($('#cajLista .web span:last-child') || {}).textContent || null };
   },
-  insets(t, b){ window.__insets(t, b); return { filas: FILAS }; }
+  insets(t, b){ window.__insets(t, b); return { filas: FILAS }; },
+
+  /* ══════════ LA REJA ══════════ */
+  reja(){
+    const c = getComputedStyle(document.documentElement);
+    const b = $('#dock .baldosa') || $('#tira .baldosa') || $('#cajLista .baldosa');
+    return { ico: ICO, cols: COLS, alto: ALTO_AP, filas: FILAS,
+             cssIco: c.getPropertyValue('--ico').trim(),
+             cssCols: c.getPropertyValue('--cols').trim(),
+             baldosaPx: b ? Math.round(b.getBoundingClientRect().width) : null,
+             colsCajon: getComputedStyle($('#cajLista')).gridTemplateColumns.split(' ').length };
+  },
+
+  /* ══════════ EL ASISTENTE ══════════ */
+  asis(){
+    const e = $('#asis');
+    return { abierto: e.classList.contains('on'),
+             conLlave: !!lee('llave', ''),
+             pkg: ASIS_PKG, enLista: !!POR_PKG[ASIS_PKG],
+             acciones: Object.keys(ASIS_ACC),
+             msgs: $$('#asLista .asMsg').map(m => m.textContent.slice(0, 120)),
+             firmas: $$('#asLista .asFirma').map(m => m.textContent) };
+  },
+  asisAbrir(){ asisAbre(); return this.asis(); },
+  asisCerrar(){ asisCierra(); return this.asis(); },
+  asisLlave(v){ guarda('llave', v || ''); asisIdioma(); return this.asis(); },
+  /* el camino ENTERO, por donde entra el dedo: se escribe en el campo y se toca
+     el botón, así que si el enganche está roto la sonda no contesta */
+  async asisDecir(t){
+    $('#asTxt').value = t;
+    $('#asMandar').click();
+    for (let k = 0; k < 60 && ASIS_PENSANDO; k++)
+      await new Promise(r => setTimeout(r, 50));
+    return this.asis();
+  },
+  /* ── PROBAR LA IA SIN GASTAR UNA LLAVE ──
+     No tengo ninguna y no se puede embarcar una, así que se intercepta `fetch`,
+     se guarda LO QUE EL ASISTENTE IBA A MANDAR y se contesta con una respuesta
+     armada a mano. Con eso queda medido lo único que puede estar mal de este
+     lado: la dirección, los encabezados, el modelo, el esquema, y que la
+     respuesta se lea. Lo que NO queda probado es una llamada de verdad. */
+  asisFinge(caso, acciones){
+    const org = window.fetch;
+    window.__pedido = null;
+    window.fetch = async (u, o) => {
+      window.__pedido = { url: String(u), metodo: o.metodo || o.method,
+                          cab: o.headers, cuerpo: JSON.parse(o.body) };
+      if (caso === 'red') throw new TypeError('Failed to fetch');
+      if (caso === '401') return { ok: false, status: 401 };
+      if (caso === 'niega') return { ok: true, status: 200,
+        json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      return { ok: true, status: 200, json: async () => ({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: JSON.stringify({
+          respuesta: 'listo', acciones: acciones || [] }) }] }) };
+    };
+    return () => { window.fetch = org; };
+  },
+  /* qué salió por el cable en la última llamada fingida */
+  asisPedido(){
+    const p = window.__pedido; if (!p) return null;
+    const c = p.cuerpo;
+    return { url: p.url, cab: Object.keys(p.cab),
+             navegador: p.cab['anthropic-dangerous-direct-browser-access'],
+             version: p.cab['anthropic-version'],
+             llaveVa: !!p.cab['x-api-key'],
+             modelo: c.model, tope: c.max_tokens,
+             formato: c.output_config && c.output_config.format.type,
+             campos: Object.keys(c.output_config.format.schema.properties),
+             enum: c.output_config.format.schema.properties.acciones.items.properties.hacer.enum,
+             sistemaTiene: { apps: c.system.indexOf('APPS INSTALADAS') >= 0,
+                             estado: c.system.indexOf('iconos ' + ICO) >= 0 },
+             mensaje: c.messages[0].content };
+  }
 };
 
 /* ── EL PUENTE DE MENTIRA NO PONE BATERÍA, ASÍ QUE LA PONE LA VISTA PREVIA ──

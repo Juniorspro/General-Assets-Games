@@ -24,7 +24,15 @@ function nodoApp(a, conNombre){
   d.className = 'ap'; d.dataset.p = a.p;
   const b = document.createElement('div');
   b.className = 'baldosa';
-  if (HAY_AND){
+  if (a.p === ASIS_PKG){
+    /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
+       `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
+       las apps instaladas, y ésta no está instalada: devolvería 404 y caería a
+       la baldosa con la inicial, o sea otra «A» igual a la de Aero. */
+    b.style.background = 'linear-gradient(160deg,#7fe3ff,#4f7fd8)';
+    b.style.font = '600 30px system-ui';
+    b.textContent = '✧';
+  } else if (HAY_AND){
     const im = document.createElement('img');
     im.src = iconoUrl(a.p); im.alt = ''; im.draggable = false;
     im.onerror = () => { b.innerHTML = ''; b.style.background = colorDe(a.p); b.textContent = letraDe(a.n);
@@ -86,6 +94,11 @@ function pintaDock(){
     const a = POR_PKG[p]; if (!a) continue;
     d.appendChild(nodoApp(a, false));
   }
+  /* ── EL DOCK NO SIGUE LAS COLUMNAS DEL ESCRITORIO ──
+     Desde que se le pueden pedir tres columnas, el dock —que tiene cuatro
+     apps— se partía en DOS FILAS: medido, pasaba de 74 px de alto a 232. Un
+     dock que se envuelve no es un dock. Sus columnas son cuántas apps tiene. */
+  d.style.setProperty('--cols', Math.max(1, d.children.length));
   d.style.visibility = DOCK.length ? 'visible' : 'hidden';
 }
 
@@ -243,6 +256,9 @@ function aLaWeb(q){
 /* ══════════ ABRIR, FIJAR, MENÚ ══════════ */
 function abre(pkg){
   vibra(10);
+  /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
+     «no existe» sobre un paquete que nunca se instaló */
+  if (pkg === ASIS_PKG){ asisAbre(); return; }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -287,6 +303,25 @@ function verCajon(v){
     mascotaBaila(false);
     $('#burbuja').classList.remove('on');
   }
+}
+
+/* ── CAMBIAR DE IDIOMA REPINTA LO QUE YA ESTÁ ESCRITO ──
+   Los textos se escriben una vez al arrancar, así que sin esto el asistente
+   cambia `LANG` y la pantalla se queda en el idioma anterior hasta que algo la
+   vuelva a pintar por su cuenta. Es el mismo defecto que en Z Force costó 107
+   claves y en PISTOLA el cartel del tutorial. */
+function repintaIdioma(){
+  $('#busca').placeholder = T('busca');
+  $('#busca2').placeholder = T('busca');
+  $('#cajTit').textContent = T('todas');
+  const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
+  if (MENU_PKG){
+    $('#mFijar').lastElementChild.textContent = fijado(MENU_PKG) ? T('soltar') : T('fijar');
+    $('#mInfo').lastElementChild.textContent = T('info');
+    $('#mBorrar').lastElementChild.textContent = T('borrar');
+  }
+  pintaReloj(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
+  if (typeof asisIdioma === 'function') asisIdioma();
 }
 
 /* ══════════ RELOJ Y BATERÍA ══════════ */
@@ -346,6 +381,12 @@ function cargaApps(){
      para veintiocho apps. Un contrato repartido entre dos lenguajes se rompe el
      día que alguien toca uno de los dos; ordenar de este lado cuesta una línea
      y lo vuelve imposible. */
+  /* ── EL ASISTENTE ES UNA APP MÁS ──
+     No está instalado en el teléfono, así que el puente no lo devuelve nunca:
+     se inyecta acá, ANTES de ordenar, y con eso queda en el cajón por su letra,
+     se puede buscar y se puede fijar como cualquier otra. Ponerlo como un botón
+     aparte obligaría a inventarle un sitio en una pantalla que ya está llena. */
+  APPS.push({ p: ASIS_PKG, n: T('aNombre') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -582,44 +623,21 @@ function enganchaCajon(){
    Baila mientras se escribe, se aburre y se duerme. Todas las animaciones salen
    de UNA tira y de la tabla `MASC_ANIM` que escribe el horneado. */
 
-/* cuánto dura una vuelta de cada animación. Las de un solo cuadro no son una
-   animación sino una pose: se colocan con un transform y no gastan nada. */
-const MASC_SEG = { baila:.66, saluda:.78, duerme:2.8 };
 /* los aburridos, con `quieto` repetido porque tiene que salir más seguido: una
    lista con pesos es más corta y más clara que una tabla de probabilidades */
 const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
 
-/* ── LOS `@keyframes` SE ARMAN, NO SE ESCRIBEN ──
-   Cada animación recorre celdas de la tira, y `steps(c)` nunca llega al valor
-   final: para que caiga en i, i+1 … i+c-1 el recorrido va de -i/N a -(i+c)/N del
-   ANCHO DE LA TIRA. Escritos a mano, agregar un cuadro obliga a recalcular cinco
-   porcentajes y el que se olvide muestra media mascota. */
-function mascCSS(){
-  const e = document.createElement('style');
-  document.head.appendChild(e);
-  const h = e.sheet;
-  for (const n in MASC_ANIM){
-    const a = MASC_ANIM[n];
-    if (a[1] < 2) continue;
-    h.insertRule('@keyframes m_' + n + '{from{transform:translateX(' +
-      (-a[0]*100/MASC_N).toFixed(4) + '%)}to{transform:translateX(' +
-      (-(a[0] + a[1])*100/MASC_N).toFixed(4) + '%)}}', h.cssRules.length);
-  }
-}
-
 let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0;
 
+/* ── CAMBIAR DE ANIMACIÓN ES CAMBIAR UN NOMBRE ──
+   Las cinco son funciones del tiempo sobre los mismos 23 huesos, así que no hay
+   que cargar nada, ni cruzar clips, ni esperar. Lo único que hay que reponer es
+   el reloj: entrando a una pose a mitad de su ciclo, el primer cuadro salta. */
 function mascPone(n){
-  if (MASC_HOY === n || !MASC_ANIM[n]) return;
+  if (MASC_HOY === n || !L3_ANIM[n]) return;
   MASC_HOY = n;
-  const t = $('#mTira'), a = MASC_ANIM[n];
-  if (a[1] > 1){
-    t.style.transform = '';
-    t.style.animation = 'm_' + n + ' ' + MASC_SEG[n] + 's steps(' + a[1] + ') infinite';
-  } else {
-    t.style.animation = 'none';
-    t.style.transform = 'translateX(' + (-a[0]*100/MASC_N).toFixed(4) + '%)';
-  }
+  L3.anim = n;
+  L3.t = 0;
   $('#mascota').classList.toggle('zzz', n === 'duerme');
 }
 
@@ -663,12 +681,14 @@ function mascotaBaila(v){
   clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
   if (v && mascCabe()){
     m.classList.add('on');
+    l3Corre(true);
     MASC_ULT = Date.now();
     mascPone('baila');
     MASC_CICLO = setTimeout(mascOcio, 2200);
   } else {
-    /* se despide en vez de desaparecer: un corte seco se lee a error */
-    MASC_T = setTimeout(() => { m.classList.remove('on'); }, v ? 0 : 2400);
+    /* se despide en vez de desaparecer: un corte seco se lee a error, y el
+       bucle de render se apaga recién cuando terminó de irse */
+    MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, v ? 0 : 2400);
   }
 }
 
@@ -678,6 +698,7 @@ function mascotaBaila(v){
 window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
 window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
 window.__atras = function(){
+  if ($('#asis').classList.contains('on')){ asisCierra(); return true; }
   if (MENU_PKG) cierraMenu();
   else if (CAJON) verCajon(false);
   else if (PAG > 0) ponPagina(0);
@@ -713,15 +734,22 @@ function arranca(){
 
   fondoInit();
   vidrioInit();
+  /* la reja se restituye antes de pintar nada: puesta después, el primer cuadro
+     sale con los iconos de fábrica y salta de tamaño a la vista */
+  ponReja(lee('ico', 60), lee('cols', 4));
 
   /* la tira de la mascota y su celda salen del horneado: escritas a mano acá,
      regenerar la hoja con otro tamaño la deja estirada sin que nada avise */
   const rz = document.documentElement.style;
-  rz.setProperty('--masc', 'url(' + IMG_MASCOTA + ')');
   rz.setProperty('--mw-masc', MASC_W + 'px');
   rz.setProperty('--mh-masc', MASC_H + 'px');
-  rz.setProperty('--masc-n', MASC_N);
-  mascCSS();
+  /* ── EL LIENZO SE DIMENSIONA UNA VEZ Y NO POR CUADRO ──
+     El alto sale de la proporción de la caja, así que cambiar `MASC_W` no deja
+     al muñeco estirado. */
+  const cv = $('#mLien');
+  cv.width = L3_ANCHO;
+  cv.height = Math.round(L3_ANCHO*MASC_H/MASC_W);
+  try { if (l3Init()) l3Cam(); } catch (e) { window.__errs && window.__errs.push(String(e)); }
   mascPone('quieto');
 
   pideInsets();
@@ -730,6 +758,8 @@ function arranca(){
   pintaReloj(); pintaBateria();
   setInterval(pintaReloj, 1000);
   setInterval(pintaBateria, 30000);
+
+  asisInit();
 
   enganchaLista($('#tira'));
   enganchaLista($('#dock'));
@@ -743,6 +773,9 @@ function arranca(){
      es el único que recibe letras. Los 90 ms son lo que tarda la hoja en
      empezar a subir: enfocando en el mismo cuadro, Android abre el teclado
      contra un elemento que todavía está fuera de la pantalla y no lo enfoca. */
+  /* el velo lo comparten el menú de app y la hoja del asistente */
+  $('#velo').addEventListener('pointerdown', () => { asisCierra(); });
+
   const abreBusca = () => { verCajon(true); setTimeout(() => $('#busca2').focus(), 90); };
   $('#buscaCaja').addEventListener('pointerdown', abreBusca);
   $('#busca').addEventListener('focus', abreBusca);

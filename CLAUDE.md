@@ -281,6 +281,204 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima decimoctava vuelta (2026-09-06): **AERO** — la mascota pasa a ser un modelo 3D riggeado, y hay un asistente
+
+Pedido, con un render 2×2 del personaje: *"no puedo ver al modelo 3D esté, además yo quiero que sea
+este we, no otro modelo lo quiero identico a este y con pixelacion efecto así hacemos bien optimizado
+todo también que sea un modelo 3D riggeado con animaciones no imágenes también que haya una app dentro
+que sea de asistente y usa una API para usarla de IA para hacer cosas dentro del launcher como
+agrandar las apps etcétera"*.
+
+Las tres láminas de la vuelta anterior se van enteras. Entra **el modelo 3D de SU personaje**, con
+esqueleto, cinco animaciones escritas a mano y un renderizador de piel propio de 440 líneas; y entra
+**un asistente** que cambia el launcher hablándole.
+
+#### EL MODELO ES EL SUYO, Y ESO SE PUEDE AFIRMAR PORQUE SALE DE SU IMAGEN
+
+*"Lo quiero idéntico a este"* es literal, y la vuelta anterior no lo había logrado: el personaje se
+había **descrito con palabras** porque la URL prefirmada de Higgsfield se rompía al transcribirla. Se
+rompía por una razón boba y arreglable: la URL lleva `&`, `?` y `=`, y pasándola por una línea de
+comando el shell se la come. Escrita a un archivo con un heredoc entrecomillado sobrevive entera.
+
+Con eso, la cadena es la que corresponde: **`media_upload` sube su render y devuelve una URL pública
+permanente**, esa URL va como `source_url` de `submit_model3d_generation`, y el `task_id` del modelo
+va como `source_task_id` de `submit_rig3d_generation` —que **sólo acepta un modelo propio**, así que
+no hay forma de riggear algo bajado de otro lado—. El resultado no se parece: **es** el muñeco del
+render.
+
+#### EL HALLAZGO: EL ATLAS DE TRIPO ES UNA ISLA POR TRIÁNGULO Y NO SE PUEDE ACHICAR
+
+El primer intento salió con la textura **hecha pedazos y anaranjada**. Y lo primero fue **descartar
+que el modelo estuviera mal**: el mismo GLB decimado, dibujado con three.js en el banco, sale
+perfecto. O sea que el archivo estaba bien y el camino era mío.
+
+La causa es la de siempre en este repo, con otro disfraz: **el atlas que devuelve Tripo son miles de
+manchitas de nueve píxeles, una por triángulo**, y a 64 px de ancho el mipmap que el navegador elige
+mezcla la isla de al lado con la de enfrente. No hay filtro que lo arregle — es una propiedad del
+atlas, igual que en BARRIO y en LEMI.
+
+Así que la textura no se muestrea en ejecución: **se hornea en los vértices**, y el punto de muestreo
+es **el CENTROIDE UV del triángulo** y no el UV del vértice —el UV de un vértice cae en la ESQUINA de
+su isla, que es el peor sitio posible: agarra el borde, el relleno o el color de la isla vecina—.
+Después se promedia a los vértices **pesando por el área** del triángulo, porque un triángulo grande
+tiene que mandar más que una astilla. Con eso se va la textura entera: `i_lemi.js` pasa de **298 a
+163 KB** y `ui.html` de 554 a 418.
+
+#### LOS EJES DE UN HUESO NO SE ADIVINAN, Y LAS CINCO POSES LOS TENÍAN AL REVÉS
+
+Escritas las animaciones, las cinco salían casi iguales: los brazos no subían y las manos se juntaban
+en la panza. Entró `mascEje(hueso, mira)`, que gira un hueso ±1 radián sobre cada eje de **mundo** y
+devuelve dónde quedó la mano o el pie. Medido:
+
+| | +1 rad sobre ADELANTE | −1 rad |
+|---|---|---|
+| `R_Upperarm` → `R_Hand` | y **−0,037** (baja) | y **+0,231** (sube) |
+| `L_Upperarm` → `L_Hand` | y **+0,236** (sube) | y −0,032 |
+
+O sea que **levantar es POSITIVO a la izquierda y NEGATIVO a la derecha**, y las cinco poses lo
+tenían al revés. No es capricho ni asimetría del rig: el brazo cuelga, así que la mano está por debajo
+del hombro y a un lado —izquierda z −0,25, derecha z +0,23— y girando sobre el eje de adelante la
+derivada de la altura vale **−z**. Para el brazo que está en +z el signo se da vuelta, y punto.
+
+**Y EL ORDEN IMPORTA, PORQUE `l3Gira` PREMULTIPLICA:** el último giro se aplica por FUERA. Con el
+muslo ya flexionado hacia adelante, girarlo sobre el eje de adelante es girarlo sobre su **propio**
+eje —torsión, no apertura—; en la pose sentada eso no abría nada. Se abre la pierna **colgada**
+primero y se la lleva adelante después.
+
+**Y PROBÉ SENTARLO DE TRES CUARTOS Y LO SAQUÉ.** La idea era que los muslos dejaran de apuntar al
+lente, que de frente se escorzan hasta ser dos bultos blancos. Lo que salió fue un codo saliéndose por
+el costado y un cuerpo que no se lee. De frente, la silueta cerrada —cabeza, rodillas, pies— es lo que
+dice «dormido», y se dejó así.
+
+#### 41 HUESOS NO ENTRAN EN UN TELÉFONO VIEJO, Y ES ARITMÉTICA
+
+El rig vuelve con 41. WebGL1 **garantiza 128 vectores de uniform de vértice**, o sea 32 mat4: 41
+huesos son 164 vectores y el shader **no compila** — y eso no falla con un dibujo feo, falla con una
+pantalla vacía. Los huesos de torsión se colapsan a sus padres al hornear y quedan **23** (92
+vectores), con margen para las matrices de cámara.
+
+#### LA PIXELACIÓN Y LA OPTIMIZACIÓN SON LA MISMA COSA
+
+*"Con pixelacion efecto así hacemos bien optimizado todo"* — y tenía razón en que van juntas, aunque
+por un motivo más literal del que suena: **el lienzo mide 64 píxeles de ancho y el CSS lo estira** con
+`image-rendering:pixelated`. No hay filtro de pixelado: se rellenan 64×87 = **5.568 píxeles** en vez
+de 132×180, y el escalón sale gratis porque es el escalón de verdad.
+
+Medido con render por software: **0,072 a 0,095 ms por cuadro** con 5.541 triángulos y 23 huesos. Y
+**el bucle de render sólo corre cuando la mascota se ve**: verificado, cerrando el cajón y esperando
+la despedida, `corre` pasa a false. Un bucle abierto en la pantalla de inicio de un teléfono es
+batería regalada.
+
+#### UNA CORRECCIÓN A LA VUELTA ANTERIOR: EL VIDRIO NUNCA SE RECALIBRÓ
+
+La vuelta 117 dice que se arregló que `.vid.refr` le ganara a `.vid`. Se arregló **la regla de CSS y
+no llegó a ninguna de las cuatro piezas grandes**, porque `vidrioInit()` escribe el filtro como
+`style.backdropFilter` —un estilo EN LÍNEA, que le gana a cualquier regla— con la calibración clavada
+en la línea. Medido ahora: el widget, el dock, el menú y la hoja del asistente seguían en
+**`saturate(2) brightness(1.14)`**, que es justo el número que esa vuelta había descartado por dejar
+el dock verde lima.
+
+La calibración pasa a una variable (`--v-filR`) que leen el CSS **y** el JS, así que no puede haber
+dos. Medido sobre la misma captura, la franja del medio de la hoja contra el fondo libre:
+
+| | saturación bajo el vidrio | fondo libre | luminancia |
+|---|---|---|---|
+| antes | **0,437** | 0,517 | 144 contra 79 |
+| **ahora** | **0,206** | 0,504 | 121 contra 77 |
+
+O sea que recién ahora el vidrio **desatura 2,4 veces** en vez de casi no tocar el color y **aclarar**
+el fondo 1,8 veces.
+
+**Y UNA COSA QUE CREÍ VER Y NO ERA.** En la captura de la hoja aparecían manchas magenta y verdes, que
+son exactamente los colores extremos de un mapa de desplazamiento: di por sentado que el mapa estaba
+filtrándose a la imagen. Medido apagando la refracción sobre el mismo encuadre, los píxeles dan
+**(139,160,169) contra (136,159,168)** — idénticos. Es la foto del fondo desenfocada y nada más.
+
+#### EL ASISTENTE: LA LLAVE ES DEL DUEÑO Y SIN LLAVE FUNCIONA IGUAL
+
+Es la decisión de fondo y es la misma de CUBOS. Esto es una interfaz adentro de un WebView: no hay
+servidor donde esconder una llave, y meter una en el APK sería repartirla a quien lo descomprima. La
+pone el dueño, vive **sólo** en el `localStorage` de su teléfono, y lo único que sale de ahí es lo que
+él escribió más la lista de sus apps. De eso se siguen tres cosas y las tres son obligatorias:
+
+- **SIN LLAVE EL ASISTENTE CONTESTA IGUAL.** Un asistente que no arranca sin una llave no es una app,
+  es una pantalla de error. Contesta un intérprete de expresiones regulares que entiende las frases
+  que uno escribe de verdad en un launcher, en los tres idiomas.
+- **LA PANTALLA DICE SIEMPRE QUIÉN CONTESTÓ.** Sin eso, «no entendí» del intérprete y «no entendí»
+  del modelo se leen igual y el dueño no tiene forma de saber que le falta poner la llave.
+- **Y SI LA LLAMADA FALLA SE CAE AL INTÉRPRETE Y SE DICE POR QUÉ.** Medido en los tres casos: sin red
+  → *«no se pudo conectar»*, con la llave mal → *«la llave no sirve (401)»*, y si el modelo se niega
+  —que llega con **HTTP 200** y no como error— → *«el modelo no quiso contestar»*. En los tres, la
+  acción se hace igual por el camino local.
+
+**UNA SOLA TABLA, Y LA LEEN LOS TRES.** El esquema que se le manda al modelo, el intérprete y el
+ejecutor salen de `ASIS_ACC`. Con tres listas, el día que se agregue una acción el modelo va a pedir
+cosas que nadie sabe hacer — y eso **no falla**: contesta bien y no pasa nada.
+
+**Y LO QUE LLEGA SE COMPRUEBA, PORQUE EL MODELO PUEDE INVENTAR.** Medido pidiéndole a propósito
+`iconos 9999`, una acción que no existe y un paquete que no está instalado: el número se **recorta a
+92**, la acción inventada se ignora y el paquete se descarta. Sólo corrió la legítima.
+
+**SE LLAMA CON `fetch` A MANO Y NO CON EL SDK**, por lo mismo que en CUBOS: acá no hay bundler y
+bajarlo de un CDN convertiría la pantalla de inicio del teléfono en algo que anda si el CDN contesta.
+Lo único que el SDK agrega sobre esta llamada es el encabezado
+`anthropic-dangerous-direct-browser-access`, sin el cual la API no le contesta a un navegador.
+
+**CÓMO SE PROBÓ SIN GASTAR UNA LLAVE:** `asisFinge(caso)` intercepta `fetch`, guarda **lo que el
+asistente iba a mandar** y contesta con una respuesta armada a mano. Con eso queda medido lo único que
+puede estar mal de este lado — verificado: la dirección, los cuatro encabezados, el modelo, el tope de
+salida, el esquema `json_schema` con sus dos campos y el enum de las nueve acciones, que el sistema
+lleva la lista de apps y el estado actual, y que la respuesta se lee.
+
+#### «AGRANDAR LAS APPS» OBLIGÓ A QUE LA REJA FUERA UN DATO
+
+Era `const COLS = 4` y el tamaño del icono estaba escrito en cuatro sitios del CSS. Ahora salen de
+`ponReja(ico, cols)` y de dos variables de CSS. **Y son tres números y no uno**: el alto de una celda
+es el icono más el nombre y el aire, y `calculaFilas` divide por ese alto — agrandando sólo el icono,
+la última fila queda cortada por el dock.
+
+**Y EL DOCK NO SIGUE LAS COLUMNAS DEL ESCRITORIO.** Con tres columnas pedidas, el dock —que tiene
+cuatro apps— se partía en dos filas: medido, pasaba de 74 px de alto a **232**. Un dock que se envuelve
+no es un dock; sus columnas son cuántas apps tiene.
+
+**Y CAMBIAR DE IDIOMA REPINTA LO QUE YA ESTÁ ESCRITO.** Los textos se escriben una vez al arrancar,
+así que el asistente cambiaba `LANG` y la pantalla se quedaba en el idioma anterior. Es el mismo
+defecto que en Z Force costó 107 claves. De paso el idioma **se guarda**: salía sólo de
+`navigator.language`, o sea que elegirlo duraba hasta que Android matara el proceso.
+
+#### Y FALTABA EL PERMISO DE INTERNET, QUE ES EL DEFECTO MÁS SILENCIOSO DE LA VUELTA
+
+El manifiesto declaraba `VIBRATE` y `REQUEST_DELETE_PACKAGES` y nada más — los iconos los sirve el
+propio cliente del WebView desde el aparato, así que hasta ahora la app no había necesitado salir a la
+red nunca. Sin `INTERNET`, la llamada a la API falla con un error de red y el asistente **cae al
+intérprete y dice «no se pudo conectar»**: o sea que el defecto no se ve como un permiso que falta, se
+ve como una llave que no anda.
+
+#### MEDIDO AL CERRAR
+
+Modelo: **4.412 vértices · 5.541 triángulos · 23 huesos**, caja 0,367 × 1,000 × 0,589 con el piso en
+0,0000, **163 KB**. Las cinco poses fotografiadas una al lado de la otra y **las cinco distintas**, con
+el recorrido de la mano medido en cada una (bailar mueve la derecha 0,20 m, saludar 0,13, dormir mueve
+el pie 0,014 — que es lo correcto: es una pose con respiración). Encuadre: el muñeco ocupa **77 a 85 %
+del alto** del lienzo en las cuatro poses de pie y 65 % sentado, dentro del cuadro en todas. Costo
+**0,072-0,095 ms por cuadro** y el bucle apagado con el cajón cerrado. Vidrio: los cuatro paneles con
+la calibración de verdad, saturación **0,206 contra 0,504** del fondo libre. Reja: 92 px con 3
+columnas y 40 px con 6, **cero solapamientos** en los dos extremos y con los insets cambiados en
+caliente. Asistente: las nueve acciones ejercidas por el camino del dedo —se escribe en el campo y se
+toca el botón—, con llave y sin llave, los tres modos de falla, y la validación de lo inventado.
+Regresión completa intacta: 29 apps, riel de 16 letras, «assist» encuentra al Asistente, la búsqueda,
+el menú de app, subir sobre el dock, el aro de la batería en sus tres escalones, los tres idiomas en
+vivo y guardados. `window.__errs` **vacío en las once corridas**. APK **344 KB** con firma v2+v3,
+`HOME`+`DEFAULT`+`LAUNCHER`, `singleTask`, `stateNotNeeded` y ahora `INTERNET`.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del APK está medido que compila, firma
+y lleva adentro lo que tiene que llevar — no que arranque en un teléfono. Y **no tengo una llave de la
+API y no se puede embarcar una**: de la llamada de verdad está medido qué manda y cómo lee lo que
+vuelve, no una respuesta real. Hay además una cosa que sólo se puede saber en el aparato: la interfaz
+se carga desde `file:///android_asset/`, así que el `fetch` sale con `Origin: null`; si la API
+rechazara ese origen, el asistente lo diría —«no se pudo conectar»— y seguiría andando con el
+intérprete, pero habría que servir la interfaz desde un origen https propio.
+
 ### Centésima decimoséptima vuelta (2026-09-06): **AERO** — el personaje voxel del usuario, vidrio de verdad y la barra de Xiaomi
 
 Pedido, con cinco capturas: *"aquí tienes el modelo 3D de la mascota que quiero que aparezca acá en el

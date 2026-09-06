@@ -20,6 +20,21 @@ const TXT = {
         nada: 'Sin resultados', web: 'Buscar «{0}» en la web', fijado: 'Fijada',
         soltado: 'Quitada del inicio', ajustes: 'Ajustes', inicio: 'Elegir pantalla de inicio',
         sinPuente: 'Vista previa — sin conexión con el sistema',
+        aTit: 'Asistente', aPide: 'Pedile algo al launcher…',
+        aHola: 'Hola. Puedo agrandar los iconos, cambiar las columnas, abrir o fijar apps, buscar en la web y hacer bailar a la mascota. Probá: «agrandá las apps».',
+        aNoEntiendo: 'No entendí eso. Probá con: agrandá los iconos · 5 columnas · abrí Spotify · fijá WhatsApp · buscá recetas',
+        aIconos: 'Iconos en {0} px', aColumnas: '{0} columnas', aAbrir: 'Abro {0}',
+        aFijar: '{0} fijada en el inicio', aSoltar: '{0} fuera del inicio',
+        aBuscar: 'Busco «{0}» en la web', aIdioma: 'Idioma: {0}',
+        aMascota: 'La mascota: {0}', aCajon: 'Cajón: {0}',
+        aPorIA: 'contestó la IA', aPorLocal: 'contestó el launcher',
+        aSinRed: 'no se pudo conectar', aLlaveMal: 'la llave no sirve ({0})',
+        aFalla: 'la API falló ({0})', aNiega: 'el modelo no quiso contestar',
+        aLlaveTit: 'Tu llave de api.anthropic.com. Se guarda sólo en este teléfono y nunca sale de acá salvo para la consulta que vos escribís.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Guardar', aBorrar: 'Borrar',
+        aConLlave: 'Con llave: contesta la IA.', aSinLlave: 'Sin llave: contesta el launcher. Tocá ⚙ para poner la tuya.',
+        aLlaveOk: 'Llave guardada', aLlaveFuera: 'Llave borrada',
+        aNombre: 'Asistente',
         dias: ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
         meses: ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
                 'septiembre','octubre','noviembre','diciembre'] },
@@ -30,6 +45,21 @@ const TXT = {
         nada: 'No results', web: 'Search the web for “{0}”', fijado: 'Pinned',
         soltado: 'Removed from home', ajustes: 'Settings', inicio: 'Choose home app',
         sinPuente: 'Preview — no system bridge',
+        aTit: 'Assistant', aPide: 'Ask the launcher for something…',
+        aHola: 'Hi. I can make the icons bigger, change the columns, open or pin apps, search the web and make the mascot dance. Try: “make the apps bigger”.',
+        aNoEntiendo: 'I did not get that. Try: bigger icons · 5 columns · open Spotify · pin WhatsApp · search recipes',
+        aIconos: 'Icons at {0} px', aColumnas: '{0} columns', aAbrir: 'Opening {0}',
+        aFijar: '{0} pinned to home', aSoltar: '{0} removed from home',
+        aBuscar: 'Searching the web for “{0}”', aIdioma: 'Language: {0}',
+        aMascota: 'Mascot: {0}', aCajon: 'Drawer: {0}',
+        aPorIA: 'answered by the AI', aPorLocal: 'answered by the launcher',
+        aSinRed: 'could not connect', aLlaveMal: 'the key does not work ({0})',
+        aFalla: 'the API failed ({0})', aNiega: 'the model declined to answer',
+        aLlaveTit: 'Your api.anthropic.com key. It is stored on this phone only and never leaves it except for the request you type.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Save', aBorrar: 'Delete',
+        aConLlave: 'With a key: the AI answers.', aSinLlave: 'No key: the launcher answers. Tap ⚙ to add yours.',
+        aLlaveOk: 'Key saved', aLlaveFuera: 'Key deleted',
+        aNombre: 'Assistant',
         dias: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
         meses: ['January','February','March','April','May','June','July','August',
                 'September','October','November','December'] },
@@ -40,11 +70,34 @@ const TXT = {
         nada: 'Sem resultados', web: 'Buscar «{0}» na web', fijado: 'Fixado',
         soltado: 'Removido', ajustes: 'Configurações', inicio: 'Escolher tela inicial',
         sinPuente: 'Prévia — sem ponte com o sistema',
+        aTit: 'Assistente', aPide: 'Peça algo ao launcher…',
+        aHola: 'Olá. Posso aumentar os ícones, mudar as colunas, abrir ou fixar apps, buscar na web e fazer o mascote dançar. Tente: «aumente os apps».',
+        aNoEntiendo: 'Não entendi. Tente: ícones maiores · 5 colunas · abrir Spotify · fixar WhatsApp · buscar receitas',
+        aIconos: 'Ícones em {0} px', aColumnas: '{0} colunas', aAbrir: 'Abrindo {0}',
+        aFijar: '{0} fixado na tela inicial', aSoltar: '{0} removido da tela inicial',
+        aBuscar: 'Buscando «{0}» na web', aIdioma: 'Idioma: {0}',
+        aMascota: 'Mascote: {0}', aCajon: 'Gaveta: {0}',
+        aPorIA: 'respondeu a IA', aPorLocal: 'respondeu o launcher',
+        aSinRed: 'não deu para conectar', aLlaveMal: 'a chave não serve ({0})',
+        aFalla: 'a API falhou ({0})', aNiega: 'o modelo não quis responder',
+        aLlaveTit: 'Sua chave de api.anthropic.com. Fica guardada só neste telefone e nunca sai daqui, a não ser na consulta que você escreve.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Salvar', aBorrar: 'Apagar',
+        aConLlave: 'Com chave: responde a IA.', aSinLlave: 'Sem chave: responde o launcher. Toque ⚙ para pôr a sua.',
+        aLlaveOk: 'Chave salva', aLlaveFuera: 'Chave apagada',
+        aNombre: 'Assistente',
         dias: ['domingo','segunda','terça','quarta','quinta','sexta','sábado'],
         meses: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto',
                 'setembro','outubro','novembro','dezembro'] }
 };
-let LANG = (navigator.language || 'es').slice(0, 2);
+let LANG = (function(){
+  /* ── EL IDIOMA ELEGIDO SOBREVIVE A UNA RECARGA ──
+     Salía sólo de `navigator.language`, así que cambiarlo desde el asistente
+     duraba hasta que Android matara el proceso. Se guarda; lo del navegador
+     queda de valor de fábrica. */
+  try { const g = JSON.parse(localStorage.getItem('aero_lang') || 'null');
+        if (g && TXT[g]) return g; } catch (e){}
+  return (navigator.language || 'es').slice(0, 2);
+})();
 if (!TXT[LANG]) LANG = 'es';
 function T(k, a){ const s = (TXT[LANG] || TXT.es)[k] || k; return a === undefined ? s : String(s).replace('{0}', a); }
 
@@ -53,7 +106,23 @@ function T(k, a){ const s = (TXT[LANG] || TXT.es)[k] || k; return a === undefine
    nombre debajo. Las filas por página NO son un número escrito: salen de medir
    el alto que quedó libre después del reloj, la búsqueda y el dock, así que un
    teléfono corto muestra menos y uno largo más, en vez de cortar la última. */
-const COLS = 4, ALTO_AP = 92;
+let COLS = 4, ICO = 60, ALTO_AP = 92;
+
+/* ── AGRANDAR UN ICONO ES MOVER TRES NÚMEROS, NO UNO ──
+   El alto de una celda es el icono más el nombre y el aire; y `calculaFilas`
+   divide por ese alto, así que agrandando sólo el icono la última fila queda
+   cortada por el dock. Los tres salen de acá y de ningún otro sitio. */
+function ponReja(ico, cols){
+  ICO = cl(Math.round(ico || ICO), 40, 92);
+  COLS = cl(Math.round(cols || COLS), 3, 6);
+  ALTO_AP = ICO + 32;
+  const r = document.documentElement.style;
+  r.setProperty('--ico', ICO + 'px');
+  r.setProperty('--icoImg', Math.round(ICO*0.767) + 'px');
+  r.setProperty('--cols', COLS);
+  guarda('ico', ICO); guarda('cols', COLS);
+  return { ico: ICO, cols: COLS, alto: ALTO_AP };
+}
 
 function guarda(k, v){ try { localStorage.setItem('aero_' + k, JSON.stringify(v)); } catch (e) {} }
 function lee(k, d){
