@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#08070d">
+<title>LOOPA</title>
+<style>
+/* ── TODO SE MIDE CONTRA EL ANCHO DEL MARCO ──
+   En una pantalla apaisada el juego vive en una columna con proporción de
+   teléfono: ahí `vw` es el ancho de la VENTANA y el título se saldría. */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;background:#08070d;overflow:hidden;overscroll-behavior:none;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e9e6f2;
+  user-select:none;-webkit-user-select:none}
+#marco{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(100vw,calc(100vh * 9 / 16));height:100vh;max-height:100vh;
+  --mw:min(100vw,calc(100vh * 9 / 16));background:#08070d;overflow:hidden;
+  display:flex;flex-direction:column;padding:calc(var(--mw)*.028)}
+
+#hudTop{display:flex;align-items:center;gap:calc(var(--mw)*.02);flex:0 0 auto}
+.chip{font-size:calc(var(--mw)*.032);letter-spacing:.10em;font-weight:700;
+  padding:calc(var(--mw)*.020) calc(var(--mw)*.034);border-radius:999px;
+  border:1px solid rgba(200,190,235,.20);background:rgba(18,15,28,.7);color:#cfc7e6;cursor:pointer}
+#tTit{flex:1;text-align:center;border-color:transparent;background:transparent;
+  color:#9a92b4;letter-spacing:.16em;font-weight:800;overflow:hidden;white-space:nowrap}
+
+#estado{flex:0 0 auto;min-height:calc(var(--mw)*.115);display:flex;align-items:center;
+  justify-content:center;text-align:center;padding:calc(var(--mw)*.016) calc(var(--mw)*.02);
+  font-size:calc(var(--mw)*.029);line-height:1.35;color:#8f88a8;letter-spacing:.04em}
+#estado.act{color:#ffd36e;font-weight:700;letter-spacing:.12em}
+#estado.rec{color:#ff6b7f;font-weight:800;letter-spacing:.14em}
+
+#lz{flex:1 1 auto;width:100%;min-height:0;display:block;touch-action:none;
+  border-radius:calc(var(--mw)*.028)}
+
+.fila{flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  gap:calc(var(--mw)*.018);margin-top:calc(var(--mw)*.022)}
+.bt{font-size:calc(var(--mw)*.036);font-weight:800;letter-spacing:.10em;color:#efeaff;
+  padding:calc(var(--mw)*.034) calc(var(--mw)*.042);border-radius:calc(var(--mw)*.030);
+  cursor:pointer;border:1px solid rgba(180,150,255,.28);
+  background:linear-gradient(180deg,rgba(52,38,96,.55),rgba(20,15,36,.6));flex:1;text-align:center}
+.bt.chico{flex:0 0 auto;font-size:calc(var(--mw)*.034);padding:calc(var(--mw)*.030) calc(var(--mw)*.038)}
+.bt.rec{border-color:rgba(255,90,120,.45);background:linear-gradient(180deg,rgba(96,26,44,.6),rgba(30,12,20,.6));color:#ffc6cf}
+.bt.rec.on{border-color:#ff5a78;background:linear-gradient(180deg,rgba(190,40,70,.85),rgba(90,16,34,.85));color:#fff}
+.bt.play.on{border-color:#7ee08a;background:linear-gradient(180deg,rgba(30,110,60,.7),rgba(14,44,26,.7));color:#dfffe6}
+.bt.peli{border-color:rgba(255,120,120,.5);color:#ffb9b9}
+#compases{display:flex;gap:calc(var(--mw)*.016);justify-content:center}
+.cb{width:calc(var(--mw)*.088);height:calc(var(--mw)*.070);border-radius:calc(var(--mw)*.018);
+  font-size:calc(var(--mw)*.030);font-weight:800;cursor:pointer;color:#8f88a8;
+  border:1px solid rgba(200,190,235,.16);background:rgba(18,15,28,.7)}
+.cb.sel{color:#fff;border-color:rgba(180,150,255,.75);background:rgba(72,48,132,.7)}
+#tBpm{min-width:calc(var(--mw)*.15);text-align:center;font-size:calc(var(--mw)*.042);
+  font-weight:800;color:#efeaff;letter-spacing:.04em}
+
+/* ── LOS PANELES ── */
+.pan{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:calc(var(--mw)*.026);padding:calc(var(--mw)*.07);z-index:5;
+  text-align:center;background:radial-gradient(120% 80% at 50% 42%,rgba(26,19,48,.95) 0%,rgba(6,5,11,.98) 72%)}
+.pan.on{display:flex}
+/* ── EL MENÚ DEJA VER LA GRILLA ──
+   Un panel opaco encima del lienzo tira a la basura lo único que este juego
+   tiene para mostrar. El velo va en degradado: cerrado arriba, donde viven el
+   título y los botones, y abierto abajo, que es donde la grilla late. */
+#pMenu{justify-content:flex-start;padding-top:calc(var(--mw)*.13);gap:calc(var(--mw)*.022);
+  background:linear-gradient(180deg,rgba(7,6,13,.985) 0%,rgba(9,8,17,.955) 42%,
+    rgba(8,7,14,.70) 59%,rgba(8,7,14,.20) 71%,rgba(8,7,14,.18) 80%,
+    rgba(8,7,14,.86) 90%,rgba(8,7,14,.99) 100%)}
+#pMenu .pie,#pMenu .cred{text-shadow:0 1px 6px rgba(0,0,0,.9)}
+h1{font-size:calc(var(--mw)*.165);font-weight:800;letter-spacing:.16em;line-height:1;
+  color:#f2eeff;text-shadow:0 0 calc(var(--mw)*.09) rgba(150,110,255,.5)}
+.sub{font-size:calc(var(--mw)*.030);letter-spacing:.16em;color:#8d85a6}
+.tit{font-size:calc(var(--mw)*.058);font-weight:800;letter-spacing:.14em;color:#efeaff}
+.btp{width:100%;max-width:calc(var(--mw)*.78);padding:calc(var(--mw)*.040) calc(var(--mw)*.05);
+  font-size:calc(var(--mw)*.044);font-weight:800;letter-spacing:.14em;color:#efeaff;
+  border-radius:calc(var(--mw)*.032);cursor:pointer;border:1px solid rgba(180,150,255,.34);
+  background:linear-gradient(180deg,rgba(60,42,110,.55),rgba(22,16,40,.55))}
+.btp.sec{font-size:calc(var(--mw)*.034);padding:calc(var(--mw)*.030) calc(var(--mw)*.05);
+  border-color:rgba(200,190,235,.16);background:rgba(14,11,24,.6);color:#b8b0cf}
+.pie{font-size:calc(var(--mw)*.026);line-height:1.5;color:#6f6889;max-width:calc(var(--mw)*.86)}
+.cred{font-size:calc(var(--mw)*.021);color:#4e4a63;max-width:calc(var(--mw)*.88);line-height:1.5}
+.frow{width:100%;max-width:calc(var(--mw)*.88);display:flex;align-items:center;
+  gap:calc(var(--mw)*.026);margin:calc(var(--mw)*.004) 0}
+.rot{flex:0 0 calc(var(--mw)*.30);text-align:left;font-size:calc(var(--mw)*.029);
+  letter-spacing:.11em;color:#7f7899}
+.ops{flex:1;display:flex;gap:calc(var(--mw)*.012);flex-wrap:wrap;justify-content:flex-end}
+.op{padding:calc(var(--mw)*.018) calc(var(--mw)*.028);border-radius:calc(var(--mw)*.022);
+  font-size:calc(var(--mw)*.028);font-weight:700;cursor:pointer;
+  border:1px solid rgba(200,190,235,.16);background:rgba(14,11,24,.7);color:#9a93b4}
+.op.sel{border-color:rgba(180,150,255,.72);color:#f2eeff;background:rgba(72,48,132,.62)}
+#pInstr{justify-content:flex-start;padding-top:calc(var(--mw)*.07)}
+#lista{width:100%;max-width:calc(var(--mw)*.9);flex:1;overflow-y:auto;display:flex;
+  flex-direction:column;gap:calc(var(--mw)*.014);padding:calc(var(--mw)*.01) 0}
+.ins{width:100%;padding:calc(var(--mw)*.032) calc(var(--mw)*.042);text-align:left;
+  font-size:calc(var(--mw)*.038);font-weight:700;cursor:pointer;border-radius:calc(var(--mw)*.026);
+  border:1px solid rgba(200,190,235,.14);background:rgba(14,11,24,.7);color:#b8b0cf}
+.ins.sel{border-color:rgba(180,150,255,.72);color:#f2eeff;background:rgba(72,48,132,.55)}
+</style>
+</head>
+<body>
+<div id="marco">
+  <div id="hudTop">
+    <button class="chip" id="bVolver">‹</button>
+    <div class="chip" id="tTit">LOOPA</div>
+    <button class="chip" id="bCfg">···</button>
+  </div>
+
+  <div id="estado">—</div>
+  <canvas id="lz"></canvas>
+
+  <div class="fila" id="compases"></div>
+
+  <div class="fila">
+    <button class="bt play" id="bPlay">▶</button>
+    <button class="bt rec" id="bPercu">—</button>
+    <button class="bt rec" id="bMelo">—</button>
+  </div>
+
+  <div class="fila">
+    <button class="bt chico" id="bBpmM">−</button>
+    <div id="tBpm">96</div>
+    <button class="bt chico" id="bBpmP">+</button>
+    <button class="bt chico" id="bInst">—</button>
+    <button class="bt chico" id="bUndo">↺</button>
+    <button class="bt chico peli" id="bBorra">✕</button>
+  </div>
+
+  <div class="pan on" id="pIdioma">
+    <h1>LOOPA</h1>
+    <div class="sub" id="iSub">BEATBOX IT. HUM IT.</div>
+    <button class="btp" data-lang="es">CASTELLANO</button>
+    <button class="btp" data-lang="en">ENGLISH</button>
+    <button class="btp" data-lang="pt">PORTUGUÊS</button>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <h1>LOOPA</h1>
+    <div class="sub" id="mSub">—</div>
+    <button class="btp" id="bJugar">—</button>
+    <button class="btp sec" id="bAjustes">—</button>
+    <div class="pie" id="mPie">—</div>
+    <div class="cred" id="mCred">—</div>
+  </div>
+
+  <div class="pan" id="pAjustes">
+    <div class="tit" id="aTit">—</div>
+    <div class="frow"><div class="rot" id="aVol">—</div><div class="ops" id="oVol"></div></div>
+    <div class="frow"><div class="rot" id="aMetro">—</div><div class="ops" id="oMetro"></div></div>
+    <div class="frow"><div class="rot" id="aSens">—</div><div class="ops" id="oSens"></div></div>
+    <div class="frow"><div class="rot" id="aEsc">—</div><div class="ops" id="oEsc"></div></div>
+    <div class="frow"><div class="rot" id="aComp">—</div><div class="ops" id="oComp"></div></div>
+    <div class="frow"><div class="rot" id="aRet">—</div><div class="ops" id="oRet"></div></div>
+    <div class="frow"><div class="rot" id="aIdi">—</div><div class="ops" id="oIdi"></div></div>
+    <div class="cred" id="aNota">—</div>
+    <button class="btp" id="bCerrarCfg">—</button>
+  </div>
+
+  <div class="pan" id="pInstr">
+    <div class="tit" id="nTit">—</div>
+    <div id="lista"></div>
+    <button class="btp" id="bCerrarInstr">—</button>
+  </div>
+</div>
+<script type="module">

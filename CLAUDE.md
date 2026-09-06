@@ -247,6 +247,20 @@ munecas.
   puntuó**. Apaisado adentro de un teléfono vertical, con el marco girado noventa grados. Vive
   partido en `herramientas/cubos/partes/` y se arma con `python3 herramientas/cubos/armar.py`.
 
+- **`Loopa.html` es "LOOPA"** (~340 KB, de los cuales 245 son los ocho instrumentos: la batería
+  entera está sintetizada y no pesa un byte). El decimoquinto juego. **Un FL Studio de bolsillo que se
+  toca con la boca**: se beatboxea y salen bombo, caja y charles; se tararea y sale una melodía. Lo
+  que la voz produce no es audio grabado sino **notas en una grilla**, y por eso se puede corregir con
+  el dedo, cambiar de tempo, cambiar de instrumento y repetir sin fin — grabar la voz y devolverla
+  sería un grabador, no un secuenciador. Cuatro pistas × 16 pasos × hasta 4 compases, con el reloj
+  colgado de `AudioContext.currentTime` y planificación con 120 ms de anticipación. El oído son dos
+  cosas separadas: **flujo espectral con umbral que se mueve** para los golpes, con las tres bandas
+  decidiendo cuál es, y **YIN** para el tono, que es lo único que no se engancha en la octava. Todo
+  se cuantiza al dieciseisavo más cercano, que es lo que convierte un tarareo torcido en un patrón, y
+  la melodía se pega a una de cuatro escalas. Vive partido en `herramientas/loopa/partes/` y se arma
+  con `python3 herramientas/loopa/armar.py`; los sonidos se hornean con
+  `python3 herramientas/loopa/hornear_sonidos.py`.
+
 - **`Tono.html` es "TONO"** (~972 KB, de los cuales 903 son los treinta y dos instrumentos: el
   juego en sí no tiene una sola imagen). El decimocuarto juego. **Un panel negro**: se toca y suena
   una nota, y la **altura del dedo es la altura del sonido** —abajo grave, arriba agudo— sobre dos
@@ -266,6 +280,181 @@ munecas.
   tocando el panel a la misma altura, una nota más por ronda—. Vive partido en
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
+
+### Centésima decimocuarta vuelta (2026-09-06): **LOOPA**, el decimoquinto juego — un secuenciador que se toca con la boca
+
+Pedido: *"puedes hacer uno que sea súper fl estudio y que detecte beats y melodías con tu voz? y los
+marque y puedas reproducirlo como un beat o sonido?"*.
+
+`juegos-pc/Loopa.html` (340 KB). Vive partido en `herramientas/loopa/partes/` y se arma con
+`python3 herramientas/loopa/armar.py`.
+
+#### LO QUE SALE DE LA VOZ SON NOTAS, NO AUDIO — Y DE AHÍ CUELGA TODO LO DEMÁS
+
+Es la decisión de fondo. Grabar la voz y reproducirla sería un **grabador**: no se podría subir el
+tempo sin que suene a ardilla, ni corregir un golpe que salió corrido, ni cambiar el instrumento
+después. Detectando y cuantizando, lo que queda es un patrón — que es lo que hace cualquier programa
+de música y lo que se pidió con «que los marque».
+
+De eso se siguen tres cosas y las tres son obligatorias:
+- **La grilla es tocable.** La detección nunca sale perfecta, y sin poder corregir un golpe la
+  frustración es total.
+- **Grabar REEMPLAZA la pista**, con una vuelta atrás. Acumulando queda la basura de la toma anterior
+  encima; sin deshacer, una toma mala se lleva puesta la buena y no hay forma de recuperarla.
+- **Y se arranca con un ritmo puesto.** Una grilla vacía no enseña qué es una grilla. Con un patrón
+  sembrado, la primera pantalla ya muestra que las filas son pistas y las columnas tiempos.
+
+#### EL HALLAZGO DE LA VUELTA: LA MITAD DEL YIN ESTABA MUERTA
+
+`yin()` elige el período comparando la onda consigo misma corrida; el paso que lo distingue de la
+autocorrelación pelada es el **umbral absoluto**: quedarse con el PRIMER mínimo por debajo de un
+umbral y no con el más profundo, porque el más profundo suele ser un múltiplo del período. Escrito
+estaba, y **no se ejecutaba nunca**:
+
+    if (dp[tau] < umbral && dp[tau + 1] >= dp[tau]) { ... break; }
+
+`dp[tau+1]` en esa iteración **todavía no se calculó y vale cero**, así que `0 >= dp[tau]` es siempre
+falso. El corte no ocurría jamás y el algoritmo caía al mínimo global — o sea que se degradaba
+exactamente a lo que venía a reemplazar.
+
+**Y NO ES TEÓRICO, ES LO QUE PASABA.** Medido con un armónico de tres parciales, que es lo que trae
+una voz: un MI4 de 329,6 Hz salía en **164,8 (una octava abajo)**, un MI5 de 659,3 salía en **94,2
+(tres octavas y media)** y un LA5 en 440. La razón de fondo es de resolución: a 11 kHz un período de
+12,53 muestras no cae en un entero, pero su doble cae casi exacto en 25 — **el múltiplo que aterriza
+más cerca de un número entero gana**, y por eso el mínimo global es el equivocado.
+
+El arreglo es mirar hacia **atrás**: el primer mínimo local bajo el umbral se reconoce cuando la curva
+empieza a subir.
+
+| | notas bien | el peor error |
+|---|---|---|
+| mirando adelante, sin ruido | 10 de 13 | **3369 cents** |
+| mirando adelante, 15 % de ruido | 8 de 13 | 3369 |
+| **mirando atrás** | **13 de 13** | **2 cents** |
+| **mirando atrás, 15 % de ruido** | **13 de 13** | **2 cents** |
+
+En el juego, 18 notas de 82 a 880 Hz: **18 de 18 dentro de 4,2 cents**.
+
+**Y ANTES DE ESO PROBÉ DIEZMAR MENOS, QUE ES LO QUE UNO HARÍA.** A 22 kHz en vez de 11 el LA5 se
+arregla y **el MI5 empeora** (301 en vez de 67). O sea que la resolución no era la causa: era el corte.
+
+#### EL OÍDO DE LOS GOLPES: CINCO DEFECTOS, Y LOS CINCO SON DE UNIDADES
+
+La auditoría que los encontró es la que vale la vuelta: **al oído se le mete la batería del propio
+juego por la entrada**. Los tres golpes están dibujados por código, son limpios, repetibles y de
+espectro conocido; si el detector no los distingue, no va a distinguir los de una boca — y eso se
+puede afirmar sin micrófono y sin persona. Para eso `golpe()` y `nota()` recibieron un **destino
+opcional**: con la salida clavada en el maestro no hay forma de meterle los golpes sin que además le
+entre la claqueta, y la prueba mediría dos cosas a la vez.
+
+1. **LA HISTORIA DEL UMBRAL ESTABA EN CUADROS.** 48 cuadros son 0,8 s a 60 fps y **1,6 a 30**: el
+   umbral cambiaba con los cuadros por segundo. Y a 96 BPM un golpe cae cada 156 ms, así que en 1,6 s
+   entran diez — la mediana deja de medir el fondo y pasa a medir los propios golpes. Medido, entre el
+   primer bombo y la primera caja el umbral saltaba de **0,26 a 2,02** y ya no bajaba.
+2. **LA CALIBRACIÓN DEL PISO TAMBIÉN**, y ésta es peor: 42 cuadros son 0,7 s a 60 y **1,4 a 30**, o
+   sea que a 30 fps el primer golpe cae DENTRO de la calibración y **sube el piso que después lo tiene
+   que dejar pasar**. La traza cuadro por cuadro lo cantó: el umbral pasaba de 0,20 a **0,89** en el
+   mismo cuadro del ataque, y 0,69 de esos venían del término del piso. Las dos van ahora por
+   constante de tiempo, así que valen lo mismo a cualquier ritmo.
+3. **LA MEDIANA NO SIRVE EN UN RITMO DENSO.** Supone que menos de la mitad de los cuadros son ataque,
+   y a 30 fps un golpe de 300 ms ocupa nueve de los veintiuno que entran en la ventana. Va el
+   **percentil 20**, que aguanta que ocho de cada diez lo sean y no es el mínimo absoluto —que lo
+   movería un solo cuadro raro.
+4. **Y EL FONDO SE MEDÍA INCLUYENDO LOS GOLPES**, que arma un espiral: el golpe que no se detecta
+   tampoco se excluye, el umbral sube, se detecta menos, sube más. Ahora el golpe y su cola no entran
+   en la historia.
+5. **EL OÍDO COLGABA DEL BUCLE DE DIBUJO, Y ESE ES EL LÍMITE FÍSICO DEL ASUNTO.** La ventana del
+   analizador mide 23 ms; a 20 cuadros por segundo quedan 50 ms entre lecturas y **más de la mitad del
+   audio no se mira nunca** — un «tss» de treinta milisegundos cae en el hueco y no existe. Medido a
+   20 fps: **0 golpes de 24**. Con un intervalo propio de 16 ms la detección deja de depender de los
+   fps, que además es lo correcto: el oído no tiene nada que ver con el dibujo. Es la misma razón por
+   la que el secuenciador agenda desde su propio intervalo.
+
+Medido al cerrar, con la batería del juego entrando por el oído:
+
+| | aciertos | matriz |
+|---|---|---|
+| a 60 cuadros | **24 de 24** | bombo 8/8 · caja 8/8 · charles 8/8 |
+| a 30 cuadros | 22 de 24 | — |
+| a medio volumen | 19 de 24 | — |
+| **silencio** | **0 onsets en 283 cuadros** | — |
+
+#### DOS DEFECTOS DE LA SONDA, Y LOS DOS DABAN RESULTADOS PLAUSIBLES
+
+- **DOS CONSUMIDORES SE ROBAN EL TRANSITORIO.** El flujo es una DIFERENCIA contra la lectura anterior:
+  con el bucle y la sonda llamando los dos a `oidoCuadro`, el primero que pasa ve el ataque y el
+  segundo encuentra el espectro ya igualado. Medido: 4 aciertos de 15, con el charles pasando y el
+  bombo desapareciendo entero.
+- **Y LA SONDA MUESTREABA CADA 5 ms CON VENTANAS DE 23.** Dos ventanas separadas cinco milisegundos
+  comparten el 78 % de las muestras, así que el flujo entre ellas es chico **por construcción**. El
+  juego muestrea cada 16,7; con ese hueco el bombo pasó de 0 a 4 de 4 sin tocar una línea del detector.
+
+**Y UNA HIPÓTESIS MÍA QUE LA MEDICIÓN DESMINTIÓ.** Diagnostiqué que `maxDecibels = -10` recortaba cada
+bin y que por eso un bombo —que concentra su energía en dos o tres bins graves— tenía techo de flujo.
+El razonamiento cerraba y es falso: barrido de −10 a +6, el flujo se queda entre 0,32 y 0,48 y de
+hecho **empeora al subir el techo**. Los bins no estaban saturando.
+
+#### LA CUANTIZACIÓN ES LO QUE CONVIERTE UN TARAREO EN UN PATRÓN
+
+Nadie canta sobre la reja. Pegando cada golpe al dieciseisavo más cercano, un ritmo torcido suena a
+máquina — y de paso el jitter del detector deja de importar, porque un paso a 96 BPM dura 156 ms.
+Medido con desvíos de hasta ±45 ms: **160 de 160 golpes caen en el paso que les toca**.
+Y la melodía se pega a la escala: pedidas **60 · 62 · 64 · 67**, en menor salen **60 · 62 · 63 · 67**
+— el MI no existe en DO menor y el corrector lo lleva al MI♭.
+
+**Y CUÁNTAS LECTURAS PIDE UNA NOTA SE DERIVA DEL RITMO DEL OÍDO**, no de un 45 escrito al lado: con el
+número a mano, cambiar ese ritmo dejaría el filtro pidiendo una fracción distinta sin que nada avise.
+
+#### CUATRO COSAS DE PUESTA EN ESCENA, TODAS DE MIRAR LA CAPTURA
+
+1. **LOS RÓTULOS SE SALÍAN DE SU COLUMNA.** «CHARLES» a 28 px mide 180 y la columna tiene 84: el texto
+   cruzaba por encima de las casillas y «MELODÍA» tapaba media grilla. El tamaño se **mide** y se baja
+   hasta que entre, lo que de paso lo hace valer en los tres idiomas sin tocar nada.
+2. **Y EL NOMBRE DE LA NOTA, IGUAL** — pero ahí la regla es **o todos o ninguno**: decidido casilla por
+   casilla, «FA» entraba y «SOL#» no, y la fila salía con una rotulada y tres mudas, que se lee a error
+   y no a decisión.
+3. **EL MENÚ NO MOSTRABA EL JUEGO.** Un panel opaco encima del lienzo tira a la basura lo único que
+   este juego tiene para enseñar. El velo pasa a ser un degradado —cerrado arriba, donde viven el
+   título y los botones, abierto abajo— y detrás queda la grilla con el patrón puesto. Cuesta cero
+   assets y cero animaciones. Es lo mismo que ya se hizo en POMPOM y en PISTOLA.
+4. **EL AVISO SE QUEDABA EN EL IDIOMA EN QUE SE DISPARÓ.** Guardaba el texto ya resuelto, así que uno
+   lanzado en castellano seguía en castellano tres segundos después en inglés. Guardando la **función**
+   que lo arma, se retraduce sola en cada pintada. Es el mismo defecto que en Z Force costó 107 claves.
+
+#### LA BATERÍA ESTÁ SINTETIZADA, Y NO ES UNA CONCESIÓN
+
+Una caja de ritmos **es** síntesis: un bombo es un seno que cae, una caja es ruido más los dos tonos
+del bordón y un charles es ruido con pasaaltos. Dibujados por código pesan cero, se acortan al subir
+el tempo y —lo que importa acá— **son el patrón de prueba del propio detector**. La melodía sí sale de
+muestras de verdad: ocho instrumentos de FluidR3_GM, tres muestras cada uno, **245 KB** horneados
+adentro del archivo.
+
+**Y LAS TRES CORRECCIONES DEL MICRÓFONO VAN APAGADAS.** El control automático de ganancia iguala el
+volumen a lo largo del tiempo, o sea que aplana justamente el salto de energía que el detector busca;
+y la supresión de ruido está entrenada sobre voz hablada y se come los transitorios de un «tss». Con
+las tres puestas, un beatbox no se detecta.
+
+#### MEDIDO AL CERRAR
+
+**8 de 8 instrumentos y 24 de 24 muestras decodificadas**, con bucle en las nueve de los tres
+sostenidos. Oído: **24 de 24 a 60 cuadros y 22 de 24 a 30**, 19 de 24 con los golpes a medio volumen,
+y **0 onsets en 283 cuadros de silencio**. Tono: **18 de 18 notas dentro de 4,2 cents**. Reloj del
+secuenciador: paso teórico 156,25 ms, medio 156,25, **error máximo 0** y 0 saltos de paso.
+Cuantización **160 de 160** con desvíos de ±45 ms; escala **100 de 100**; la grilla dibujada contra la
+tocada **64 de 64** en los tres tamaños. Grabación jugada por el camino del botón: cuenta → grabando
+→ quieto, con la pista limpiada antes. Niveles: bombo 0,81 · caja 0,62 · charles 0,73 · nota 0,39 ·
+claqueta 0,17 y 0,35 — **la claqueta es lo más flojo y los golpes lo más fuerte**, que es lo que
+corresponde. Costo: **0,193 ms por cuadro** (dibujo 0,156 + oído 0,036) sobre 16,7 de presupuesto.
+**Cero solapamientos** entre los quince elementos del HUD y cero fuera del marco, y los cuatro paneles
+entran, en **412×892, 900×460 y 360×640**. Los tres idiomas en vivo, y el tempo, los compases, la
+escala, el instrumento y el patrón sobreviven a una recarga. `window.__errs` **vacío en las once
+corridas**.
+
+**LO QUE NO PUEDO COMPROBAR:** no puedo hablar ni cantar. Del oído está medido que distingue los tres
+golpes que el propio juego sabe dibujar, que no dispara con silencio y que el tono es exacto sobre
+armónicos sintéticos — **no cuánto acierta con una boca de verdad**, que tiene formantes, aire y ruido
+de habitación. Los tres umbrales de clasificación salen de la batería sintética y son una
+aproximación; la perilla de sensibilidad y la grilla tocable son la red que eso necesita.
 
 ### Centésima decimotercera vuelta (2026-09-05): **TONO**, el decimocuarto juego — un panel negro y treinta y dos instrumentos de verdad
 
