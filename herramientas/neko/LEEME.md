@@ -90,3 +90,37 @@ docker run -d --name neko-prueba --network host --shm-size=2g --cap-add SYS_ADMI
 ```
 
 La imagen pesa ~1,3 GB y el escritorio queda en `http://127.0.0.1:8080`.
+
+## Instalar cosas adentro (Wine + una app de Windows)
+
+Probado: Wine 10.0 de Debian trixie + WinRAR 7.23 en español, instalado y usado
+manejando el escritorio con `neko.py`.
+
+El contenedor comparte la red del host, así que sale por el proxy del agente —
+pero **el proxy solo hace CONNECT (HTTPS)**. Por HTTP plano devuelve
+`405 Method Not Allowed`, y ahí `apt-get update` falla con *"repository is not
+signed"*, que despista porque parece un problema de firmas y es de transporte.
+Hay que pasar las fuentes a `https://` y configurar **solo** el proxy https:
+
+```sh
+docker cp /root/.ccr/ca-bundle.crt neko-prueba:/usr/local/share/ca-certificates/agente-proxy.crt
+docker exec neko-prueba update-ca-certificates
+docker exec neko-prueba bash -lc "
+  sed -i 's|URIs: http://|URIs: https://|' /etc/apt/sources.list.d/debian.sources
+  printf 'Acquire::https::Proxy \"%s\";\n' '$HTTPS_PROXY' > /etc/apt/apt.conf.d/01proxy
+  apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wine"
+```
+
+Después, el prefijo de Wine se arma sin que salte el diálogo de Mono/Gecko:
+
+```sh
+docker exec -u neko -e DISPLAY=:99.0 -e WINEDLLOVERRIDES="mscoree,mshtml=" \
+  neko-prueba wineboot -u
+```
+
+Los `err:setupapi` y el `winebth` que falla son ruido, el prefijo queda bien.
+
+El `.exe` se baja en el host (donde `curl` sale) y se copia con `docker cp`; el
+contenedor no necesita bajar nada. La imagen de Debian trixie viene solo amd64,
+así que una app de 32 bits pediría `dpkg --add-architecture i386` y
+`wine32:i386`; WinRAR x64 no lo necesita.
