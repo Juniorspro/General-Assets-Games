@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no,maximum-scale=1">
+<meta name="theme-color" content="#0a3d6b">
+<title>Aero</title>
+<style>
+/* ══════════════════════ AERO ══════════════════════
+   Frutiger Aero + Liquid Glass. Dos estéticas de dos décadas distintas que
+   comparten una sola idea: el vidrio muestra lo que hay detrás.
+
+   ── LA JERARQUÍA DEL VIDRIO, Y ES UNA DECISIÓN DE COSTO ──
+   `backdrop-filter` con un mapa de desplazamiento refracta de verdad, y cuesta:
+   el navegador tiene que recortar lo de atrás, filtrarlo y desplazarlo por cada
+   pieza. Con treinta iconos en pantalla eso hunde un teléfono.
+   Así que hay dos vidrios: el REFRACTADO va en las piezas grandes y pocas —el
+   reloj, la búsqueda, el dock, los paneles— donde la distorsión del borde se ve;
+   y el LISO —desenfoque y saturación— va en los iconos, que son muchos y chicos
+   y donde una refracción de dos píxeles no se percibe. */
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
+  background:#0a3d6b;color:#fff;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none}
+
+:root{
+  --ins-t:24px; --ins-b:16px;
+  --acento:#7fe3ff;
+  --verde:#a8e85c;
+  /* el vidrio no es un color plano: es blanco con muy poca opacidad y un borde
+     que se lee más claro arriba que abajo, porque la luz viene de arriba */
+  --v-fondo:rgba(255,255,255,.14);
+  --v-borde:rgba(255,255,255,.42);
+  --v-borde-b:rgba(255,255,255,.10);
+  --v-sombra:0 8px 28px rgba(4,26,52,.34);
+}
+
+#lienzo{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+#svgdefs{position:fixed;width:0;height:0;pointer-events:none}
+
+#capa{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
+  padding:var(--ins-t) 0 var(--ins-b)}
+
+/* ══════════ EL VIDRIO ══════════ */
+.vid{position:relative;background:var(--v-fondo);
+  border:1px solid transparent;
+  border-radius:26px;
+  box-shadow:var(--v-sombra),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(255,255,255,.10),
+    inset 0 0 22px rgba(255,255,255,.07);
+  backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
+  -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
+  overflow:hidden}
+/* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
+   Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
+   brilla arriba a la izquierda y se apaga abajo a la derecha, porque es una
+   superficie curva reflejando una luz. Va con `mask` de dos capas, que es la
+   única forma de tener un degradado SOLO en el borde. */
+.vid::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
+  background:linear-gradient(145deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.30) 26%,
+    rgba(255,255,255,.06) 52%,rgba(255,255,255,.22) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;pointer-events:none;z-index:2}
+/* el brillo especular: una banda clara arriba que se desvanece — es lo que hace
+   que una superficie se lea a mojada y no a papel translúcido */
+.vid::after{content:'';position:absolute;left:0;right:0;top:0;height:52%;
+  border-radius:inherit;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.10) 46%,
+    rgba(255,255,255,0) 100%)}
+.vid>*{position:relative;z-index:3}
+
+/* el refractado: además del desenfoque, el fondo se DESPLAZA cerca del canto */
+.vid.refr{backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14);
+  -webkit-backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14)}
+
+/* ══════════ BARRA DE ARRIBA ══════════ */
+#barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  padding:2px 20px 0;font-size:13px;font-weight:700;letter-spacing:.04em;
+  color:#fff;text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 8px rgba(0,40,80,.6)}
+#bIzq{flex:1;opacity:.9}
+#bat{display:flex;align-items:center;gap:5px}
+#batCaja{width:26px;height:13px;border:1.6px solid rgba(255,255,255,.85);
+  border-radius:4px;position:relative;padding:1.6px}
+#batCaja::after{content:'';position:absolute;right:-4px;top:3px;width:2.4px;height:5px;
+  background:rgba(255,255,255,.85);border-radius:0 2px 2px 0}
+#batLlena{height:100%;border-radius:1.5px;background:#b8f078;
+  box-shadow:0 0 6px rgba(184,240,120,.8);transition:width .4s}
+
+/* ══════════ RELOJ ══════════ */
+#reloj{flex:0 0 auto;margin:14px 20px 0;padding:18px 22px 16px;
+  display:flex;align-items:flex-end;gap:14px}
+/* ── LA SOMBRA SE CALIBRA CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA ──
+   Todo el texto de este launcher es blanco y el fondo cambia solo a lo largo
+   del día: a las 13 el cielo llega a rgb(218,237,239) y una nube encima de eso
+   es casi blanco puro. Medido, con la sombra floja la fecha desaparecía sobre
+   la nube que cae a la derecha del reloj. Van dos: una dura y pegada, que da el
+   filo, y una ancha y difusa, que baja el fondo alrededor de la letra. */
+#hora{font-size:60px;font-weight:200;line-height:.92;letter-spacing:-.03em;
+  text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
+#fecha{font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  text-shadow:0 1px 2px rgba(0,34,68,.85),0 0 10px rgba(0,40,80,.65);
+  opacity:.88;padding-bottom:9px;line-height:1.45}
+
+/* ══════════ BÚSQUEDA ══════════ */
+#buscaCaja{flex:0 0 auto;margin:12px 20px 0;padding:0 16px;height:46px;
+  display:flex;align-items:center;gap:10px;border-radius:23px}
+#buscaCaja svg{flex:0 0 auto;opacity:.85}
+#busca{flex:1;background:transparent;border:0;outline:0;color:#fff;
+  font-size:15px;font-weight:500;font-family:inherit;min-width:0}
+#busca::placeholder{color:rgba(255,255,255,.62)}
+
+/* ══════════ PÁGINAS DE ICONOS ══════════ */
+#hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden;margin-top:6px}
+#tira{display:flex;height:100%;will-change:transform}
+.pag{flex:0 0 100%;height:100%;display:grid;
+  grid-template-columns:repeat(4,1fr);align-content:start;
+  gap:6px 0;padding:10px 8px}
+
+.ap{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:8px 2px 6px;border-radius:20px;cursor:pointer;position:relative}
+.ap:active{transform:scale(.92)}
+.ap{transition:transform .16s cubic-bezier(.2,.9,.3,1.4)}
+/* ── EL ICONO VIVE EN UNA BALDOSA DE VIDRIO ──
+   Frutiger Aero es skeuomórfico: cada icono es un objeto con volumen, brillo y
+   sombra propia. La baldosa da eso sin tocar el icono de la app, que llega como
+   viene del sistema. */
+.baldosa{width:60px;height:60px;border-radius:17px;position:relative;
+  background:rgba(255,255,255,.16);
+  box-shadow:0 5px 14px rgba(4,26,52,.30),
+    inset 0 1px 0 rgba(255,255,255,.60),
+    inset 0 -6px 12px rgba(0,40,80,.10);
+  backdrop-filter:blur(8px) saturate(175%);
+  -webkit-backdrop-filter:blur(8px) saturate(175%);
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
+  border-radius:0 0 60% 60%/0 0 34% 34%;
+  background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
+  pointer-events:none}
+.baldosa img{width:46px;height:46px;display:block;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.35))}
+.ap .nom{font-size:11px;font-weight:600;letter-spacing:.01em;max-width:74px;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,30,62,.95),0 1px 6px rgba(0,36,72,.85),0 0 14px rgba(0,40,80,.6)}
+
+/* ══════════ PUNTOS DE PÁGINA ══════════ */
+#puntos{flex:0 0 auto;display:flex;justify-content:center;gap:7px;padding:8px 0 6px}
+.pt{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);
+  transition:all .25s}
+.pt.on{background:#fff;width:18px;border-radius:3px;box-shadow:0 0 10px rgba(255,255,255,.8)}
+
+/* ══════════ DOCK ══════════ */
+#dock{flex:0 0 auto;margin:0 14px;padding:10px 6px 8px;border-radius:30px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+
+/* ══════════ CAJÓN ══════════ */
+/* ── LA HOJA ESMERILADA DEJA VER EL FONDO, Y ESO NO ES ADORNO ──
+   Con el tinte al 90% el cajón tapaba el cielo entero y la mitad de arriba del
+   teléfono se volvía un rectángulo azul plano: se perdía justo lo único que
+   este launcher tiene para mostrar. El desenfoque hace el trabajo de separar
+   los iconos del fondo; el tinte sólo tiene que garantizar que el texto blanco
+   se lea sobre lo más claro que el cielo pueda ponerse al mediodía. */
+#cajon{position:fixed;inset:0;z-index:3;transform:translateY(100%);
+  transition:transform .34s cubic-bezier(.22,.9,.24,1);
+  display:flex;flex-direction:column;padding:var(--ins-t) 0 var(--ins-b);
+  background:linear-gradient(180deg,rgba(10,58,104,.30) 0%,rgba(9,50,94,.42) 40%,rgba(7,38,74,.56) 100%);
+  backdrop-filter:blur(30px) saturate(185%) brightness(1.04);
+  -webkit-backdrop-filter:blur(30px) saturate(185%) brightness(1.04)}
+#cajon.on{transform:translateY(0)}
+#cajTit{flex:0 0 auto;padding:2px 22px 6px;font-size:12px;font-weight:700;
+  letter-spacing:.16em;opacity:.72;text-transform:uppercase;
+  text-shadow:0 1px 3px rgba(0,20,45,.6)}
+/* ── LA BÚSQUEDA VIVE ADENTRO DEL CAJÓN ──
+   Estaba en el escritorio, o sea DEBAJO del cajón: enfocarla abría el cajón y
+   el cajón la tapaba, así que se escribía a ciegas — medido, tecleando «mer»
+   la lista filtraba y el cuadro de texto no se veía por ningún lado. Hay un
+   solo campo que recibe letras y está donde se está mirando; el del escritorio
+   pasa a ser el botón que lo abre. */
+#cajBusca{flex:0 0 auto;margin:2px 14px 8px;padding:0 14px;height:46px;
+  display:flex;align-items:center;gap:10px;border-radius:23px}
+#cajBusca input{flex:1;background:none;border:0;outline:none;color:#fff;
+  font:600 15px/1 system-ui,sans-serif;min-width:0}
+#cajBusca input::placeholder{color:rgba(255,255,255,.62);font-weight:500}
+#cajBusca input::-webkit-search-cancel-button{-webkit-appearance:none}
+#cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);
+  align-content:start;gap:6px 0;padding:6px 8px 20px}
+/* ── EL TIRADOR SE VE Y NO SE TOCA ──
+   Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
+   montaba encima 26 px justo sobre dos de los cuatro iconos —
+   `elementFromPoint(206, 870)` devolvía `tirador`, o sea que el dedo que iba a
+   una app abría el cajón. El gesto de subir vive en el escritorio, en la fila
+   de puntos y en el dock (ver `enganchaSubir`); esto es sólo la marca que dice
+   que ese gesto existe. */
+#tirador{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--ins-b) + 2px);width:120px;height:26px;z-index:2;
+  pointer-events:none;
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:7px}
+#tirador i{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.55);
+  box-shadow:0 0 10px rgba(255,255,255,.45)}
+
+/* ══════════ MENÚ DE UNA APP ══════════ */
+#velo{position:fixed;inset:0;z-index:4;background:rgba(4,24,48,.42);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .2s}
+#velo.on{opacity:1;pointer-events:auto}
+#menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
+  width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s cubic-bezier(.2,.9,.3,1.3)}
+#menu.on{opacity:1;pointer-events:auto;transform:translate(-50%,0) scale(1)}
+#menuTit{padding:12px 16px 10px;font-size:15px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mop{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:16px;
+  font-size:15px;font-weight:600;cursor:pointer}
+.mop:active{background:rgba(255,255,255,.18)}
+.mop.peli{color:#ffb3b8}
+.mop .ic{width:20px;text-align:center;opacity:.85}
+
+/* ══════════ AVISO ══════════ */
+#aviso{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
+  bottom:calc(var(--ins-b) + 84px);padding:11px 20px;border-radius:22px;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;
+  white-space:nowrap}
+#aviso.on{opacity:1}
+
+/* ══════════ CARGANDO ══════════ */
+#carga{position:fixed;inset:0;z-index:7;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:16px;
+  background:linear-gradient(180deg,#1a6fb8,#4fb3e8 55%,#a8e2f7);
+  transition:opacity .5s}
+#carga.off{opacity:0;pointer-events:none}
+#cargaT{font-size:34px;font-weight:200;letter-spacing:.3em;
+  text-shadow:0 2px 20px rgba(0,60,110,.5)}
+#cargaB{width:120px;height:3px;border-radius:2px;background:rgba(255,255,255,.28);overflow:hidden}
+#cargaB i{display:block;height:100%;width:34%;border-radius:2px;background:#fff;
+  box-shadow:0 0 12px #fff;animation:vaiven 1.1s ease-in-out infinite}
+@keyframes vaiven{0%{margin-left:-34%}100%{margin-left:100%}}
+</style>
+</head>
+<body>
+<canvas id="lienzo"></canvas>
+<svg id="svgdefs" aria-hidden="true"><defs>
+  <!-- el mapa de desplazamiento lo dibuja d.js y lo mete acá: es una imagen
+       cuyo canal rojo dice cuánto correr en x y el verde cuánto en y -->
+  <filter id="refr" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage id="refrMapa" result="mapa" preserveAspectRatio="none"/>
+    <feDisplacementMap id="refrDesp" in="SourceGraphic" in2="mapa"
+      scale="42" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</defs></svg>
+
+<div id="capa">
+  <div id="barra">
+    <div id="bIzq">—</div>
+    <div id="bat"><span id="batN">—</span><div id="batCaja"><div id="batLlena" style="width:70%"></div></div></div>
+  </div>
+
+  <div class="vid refr" id="reloj">
+    <div id="hora">—</div>
+    <div id="fecha">—</div>
+  </div>
+
+  <div class="vid refr" id="buscaCaja">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca" type="search" autocomplete="off" autocorrect="off" readonly
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+
+  <div id="hoja"><div id="tira"></div></div>
+  <div id="puntos"></div>
+  <div class="vid refr" id="dock"></div>
+</div>
+
+<div id="tirador"><i></i></div>
+
+<div id="cajon">
+  <div class="vid" id="cajBusca">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca2" type="search" autocomplete="off" autocorrect="off"
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+  <div id="cajTit">—</div>
+  <div id="cajLista"></div>
+</div>
+
+<div id="velo"></div>
+<div class="vid refr" id="menu">
+  <div id="menuTit">—</div>
+  <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
+  <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
+  <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid" id="aviso">—</div>
+
+<div id="carga"><div id="cargaT">AERO</div><div id="cargaB"><i></i></div></div>
+
+<script type="module">

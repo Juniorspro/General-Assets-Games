@@ -1,0 +1,137 @@
+
+/* ══════════════════════ EL PUENTE DE MENTIRA Y LAS SONDAS ══════════════════════
+   Esto es lo último del módulo. Dos cosas:
+
+   1. `APPS_DEMO` — la lista que usa `cargaApps()` cuando no hay `AND`, o sea en
+      un navegador. Sin ella el escritorio abriría vacío y no habría forma de
+      mirar la reja, el cajón ni el vidrio sin compilar el APK y tener el
+      teléfono en la mano. Los nombres de paquete son los de verdad a propósito:
+      la siembra de la primera vez busca «dialer», «camera», «chrome», así que
+      con nombres inventados ese camino —que es el que ve alguien que acaba de
+      instalar— nunca se probaría.
+
+   2. `window.__A` — las sondas. Como en todos los juegos de este repo: nada de
+      «se ve bien», números. `cajas()` mide solapamientos de verdad, `refr()`
+      dice cuántos filtros de refracción se armaron y `estado()` devuelve el
+      escritorio entero para poder afirmar qué se está mirando. */
+
+const APPS_DEMO = [
+  { p: 'com.android.dialer',        n: 'Teléfono',    s: 1 },
+  { p: 'com.android.messaging',     n: 'Mensajes',    s: 1 },
+  { p: 'com.android.camera2',       n: 'Cámara',      s: 1 },
+  { p: 'com.android.chrome',        n: 'Chrome',      s: 0 },
+  { p: 'com.whatsapp',              n: 'WhatsApp',    s: 0 },
+  { p: 'com.spotify.music',         n: 'Spotify',     s: 0 },
+  { p: 'com.instagram.android',     n: 'Instagram',   s: 0 },
+  { p: 'com.zhiliaoapp.musically',  n: 'TikTok',      s: 0 },
+  { p: 'com.google.android.youtube',n: 'YouTube',     s: 0 },
+  { p: 'com.google.android.gm',     n: 'Gmail',       s: 0 },
+  { p: 'com.google.android.apps.maps', n: 'Maps',     s: 0 },
+  { p: 'com.android.vending',       n: 'Play Store',  s: 1 },
+  { p: 'com.mercadolibre',          n: 'Mercado Libre', s: 0 },
+  { p: 'com.mercadopago.wallet',    n: 'Mercado Pago',s: 0 },
+  { p: 'ar.com.santander.rio.mbanking', n: 'Santander', s: 0 },
+  { p: 'com.netflix.mediaclient',   n: 'Netflix',     s: 0 },
+  { p: 'com.discord',               n: 'Discord',     s: 0 },
+  { p: 'com.twitter.android',       n: 'X',           s: 0 },
+  { p: 'org.telegram.messenger',    n: 'Telegram',    s: 0 },
+  { p: 'com.android.settings',      n: 'Ajustes',     s: 1 },
+  { p: 'com.android.calculator2',   n: 'Calculadora', s: 1 },
+  { p: 'com.google.android.calendar', n: 'Calendario',s: 0 },
+  { p: 'com.google.android.deskclock', n: 'Reloj',    s: 1 },
+  { p: 'com.adobe.lrmobile',        n: 'Lightroom',   s: 0 },
+  { p: 'com.rappi.customer',        n: 'Rappi',       s: 0 },
+  { p: 'com.ubercab',               n: 'Uber',        s: 0 },
+  { p: 'ai.rezona.aero',            n: 'Aero',        s: 0 },
+  { p: 'com.duolingo',              n: 'Duolingo',    s: 0 }
+];
+
+window.__errs = [];
+addEventListener('error', e => { window.__errs.push(String(e.message)); });
+addEventListener('unhandledrejection', e => { window.__errs.push('rej:' + String(e.reason)); });
+
+window.__A = {
+  /* qué hay puesto ahora mismo */
+  estado(){
+    return { apps: APPS.length, inicio: INICIO.length, dock: DOCK.length,
+             pag: PAG, npag: NPAG, filas: FILAS, cols: COLS,
+             cajon: CAJON, menu: MENU_PKG, lang: LANG, puente: HAY_AND,
+             hora: $('#hora') ? $('#hora').textContent : null,
+             fecha: $('#fecha').textContent };
+  },
+  /* ── LOS FILTROS DE REFRACCIÓN SE CUENTAN ──
+     `backdrop-filter:url(#…)` que apunta a un filtro que no se armó no falla:
+     se ignora en silencio y el vidrio queda liso. La única forma de saber que
+     el líquido está puesto es contar los <filter> y sus <feImage> con datos. */
+  refr(){
+    const el = $$('.refr');
+    const f = Array.prototype.slice.call(document.querySelectorAll('#svgdefs filter'));
+    return { elems: el.length, filtros: f.length,
+             ids: f.map(x => x.id),
+             mapas: f.map(x => { const i = x.querySelector('feImage');
+                                 return i ? (i.getAttribute('href') || '').slice(0, 22) : null; }),
+             soporta: CSS.supports('backdrop-filter', 'url(#x)') ||
+                      CSS.supports('-webkit-backdrop-filter', 'url(#x)') };
+  },
+  /* solapamientos entre lo que está visible, medido con las cajas de verdad */
+  cajas(){
+    const sel = ['#reloj', '#buscaCaja', '#hoja', '#puntos', '#dock', '#bat'];
+    const r = [];
+    for (const s of sel){
+      const e = $(s); if (!e) continue;
+      const b = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      if (b.width < 2 || b.height < 2 || cs.display === 'none' || +cs.opacity < 0.05) continue;
+      r.push({ s, x: Math.round(b.left), y: Math.round(b.top),
+               w: Math.round(b.width), h: Math.round(b.height) });
+    }
+    const choques = [];
+    for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++){
+      const a = r[i], b = r[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+        choques.push(a.s + ' × ' + b.s);
+    }
+    return { n: r.length, cajas: r, choques,
+             fuera: r.filter(z => z.y + z.h > innerHeight + 1 || z.y < -1).map(z => z.s) };
+  },
+  /* cuánto cuesta un cuadro del fondo, promediado */
+  costo(n){
+    const N = n || 60, t0 = performance.now();
+    for (let i = 0; i < N; i++) fondoPinta(performance.now() + i*33);
+    return { ms: +((performance.now() - t0)/N).toFixed(3), cal: CAL,
+             pxr: +PXR.toFixed(2), w: LZ.width, h: LZ.height };
+  },
+  /* el cielo a una hora dada, sin esperar a que sea esa hora */
+  cielo(h){
+    const c = cieloDe(h);   /* HORAS, no fracción */
+    return { h, cols: c.c, sol: c.sol, luz: c.luz, est: c.est };
+  },
+  hora(h){ HORA_FIJA = h; fondoPinta(performance.now()); return this.cielo(h); },
+  /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
+  cajon(v){ verCajon(v !== false); return CAJON; },
+  pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
+  menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
+  cierra(){ cierraMenu(); return MENU_PKG; },
+  buscar(q){ verCajon(true); $('#busca2').value = q; pintaCajon(q);
+             return { n: $$('#cajLista .ap').length,
+                      nombres: $$('#cajLista .nom').map(e => e.textContent) }; },
+  insets(t, b){ window.__insets(t, b); return { filas: FILAS }; }
+};
+
+/* ── EL PUENTE DE MENTIRA NO PONE BATERÍA, ASÍ QUE LA PONE LA VISTA PREVIA ──
+   `pintaBateria()` se rinde sin `AND` a propósito: inventar un porcentaje en el
+   teléfono sería mentir. En el navegador, en cambio, dejar el pastillero en «—»
+   esconde justamente el elemento que hay que mirar. */
+if (!HAY_AND){
+  addEventListener('DOMContentLoaded', () => {
+    $('#batN').textContent = '76%';
+    $('#batLlena').style.width = '76%';
+    setTimeout(() => avisa(T('sinPuente')), 900);
+  });
+}
+
+arranca();
+
+</script>
+</body>
+</html>

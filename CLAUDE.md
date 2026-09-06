@@ -281,6 +281,132 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima decimoquinta vuelta (2026-09-06): **AERO** — un launcher de Android de verdad, no una página
+
+Pedido: *"che me hacés un launcher para mi celu? super frutiger aero y líquid glass"*, y enseguida
+*"no, realmente quiero que me des el apk"*. O sea que no alcanza con un HTML: tiene que ser una
+**app instalable que se ofrezca como pantalla de inicio**.
+
+`herramientas/launcher/` → `salida/Aero.apk` (**124 KB**), que se arma con
+`bash herramientas/launcher/compilar.sh`.
+
+#### ES UN WEBVIEW, Y ESO NO ES UN ATAJO: ES DE DÓNDE SALE EL VIDRIO
+
+Lo que se pidió es el vidrio líquido —refracción de lo que hay detrás, especular en el canto,
+saturación del fondo—. En Android nativo eso es `RenderEffect`, que existe **desde API 31** y deja
+afuera a media base instalada, más un shader AGSL por pieza. En un WebView es `backdrop-filter` con
+un `feDisplacementMap`, anda **desde Android 8**, y encima el fondo animado se dibuja en un lienzo,
+que es lo que este repo ya sabe medir.
+
+La frontera queda clara: **el WebView dibuja y el puente de Java hace lo que un WebView no puede** —
+enumerar apps, sus iconos, lanzarlas, la batería, el pulso, los intents de ajustes. Ocho clases en
+total y ninguna hace las dos cosas.
+
+**Y LOS ICONOS NO PASAN POR EL PUENTE.** Cien apps a un PNG de 144 px son millón y medio de bytes de
+base64 cruzando a JavaScript **en una sola llamada y en el hilo principal**, antes de poder dibujar
+el primer cuadro. Van por `shouldInterceptRequest`: la página pide
+`<img src="https://icono.aero/com.lo.que.sea">`, el cliente del WebView contesta con el PNG, y el
+decodificado lo hace el navegador —que es donde se hace bien— y le queda en su propia caché de
+imágenes, así que volver al escritorio no reconstruye nada.
+
+#### EL HALLAZGO DE LA VUELTA: **d8 8.2.2 REVIENTA CON CUALQUIER MÉTODO PUENTE**
+
+El APK no compilaba. `d8` tiraba
+`NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null`, sin decir en
+qué línea ni por qué, y el que fallaba era `ClienteIconos$Caja` — una caché LRU de tres líneas.
+
+Lo primero fue **acotar clase por clase** en vez de leer el código: siete de las ocho pasan y falla
+una. Después, reducirlo a un caso mínimo:
+
+| clase | dexea |
+|---|---|
+| `extends LruCache<String,String>` **sin** override | **sí** |
+| `extends LinkedHashMap<String,String>` con `removeEldestEntry` | **sí** |
+| `extends G<String,String>` (clase propia) con `sizeOf` sobrescrito | **no** |
+| **`class H implements Comparable<H>`** | **no** |
+
+Seis líneas. Lo que tienen en común las que fallan es que javac les genera un **método puente**
+—`compareTo(Object)` al lado de `compareTo(H)`— y `LinkedHashMap.removeEldestEntry` no lo necesita
+porque `Map.Entry<K,V>` borra a `Map.Entry`. O sea: **no es de este código, es la herramienta**, y es
+d8 8.2.2 corriendo sobre JDK 21. Barrido de `--release 8 · 11 · 17`: falla en los tres; con 21 el
+bytecode ya no lo acepta. Sin `--lib`, sin `--release`, con el classpath completo, con todas las
+clases juntas: falla igual.
+
+**Y NO SE PUEDE CAMBIAR DE d8**: `maven.google.com` no está en la lista blanca del proxy de salida
+(404 en el group-index y en cada jar), y el contenedor tiene un solo JDK.
+
+Así que la caché se escribe a mano: un `HashMap`, una lista con el orden de uso y un contador de
+bytes. Veinte líneas, cero herencia genérica, cero puentes, y compila. Es una vuelta al problema y no
+al síntoma: cualquier `implements Comparable` que se agregue mañana va a fallar igual, y el comentario
+lo dice.
+
+**MI PRIMERA HIPÓTESIS ERA OTRA Y LA MEDICIÓN LA DESMINTIÓ.** Diagnostiqué que el problema era el
+arreglo dentro de la firma genérica (`LruCache<String, byte[]>` deja
+`Landroid/util/LruCache<Ljava/lang/String;[B>;`), envolví los bytes en un objeto y **falló idéntico**.
+El arreglo en la firma es una coincidencia; el puente es la causa.
+
+#### DOS DEFECTOS DE INTERFAZ QUE SÓLO SE VIERON EN UNA CAPTURA
+
+1. **SE ESCRIBÍA A CIEGAS EN LA BÚSQUEDA.** El campo vivía en el escritorio, o sea **debajo** del
+   cajón: enfocarlo abría el cajón y el cajón lo tapaba. Medido tecleando «mer», la lista filtraba y
+   el cuadro de texto no se veía por ningún lado. Ahora hay **un solo campo que recibe letras** y está
+   adentro del cajón; el del escritorio es `readonly` y su único trabajo es abrirlo y pasarle el foco
+   —con 90 ms de espera, que es lo que tarda la hoja en empezar a subir: enfocando en el mismo cuadro,
+   Android abre el teclado contra un elemento que todavía está fuera de la pantalla.
+2. **EL CAJÓN TAPABA EL CIELO ENTERO.** Con el tinte al 90 % la mitad de arriba del teléfono era un
+   rectángulo azul plano y se perdía justo lo único que este launcher tiene para mostrar. El
+   desenfoque hace el trabajo de separar los iconos del fondo; el tinte sólo tiene que garantizar que
+   el texto blanco se lea sobre lo más claro que el cielo pueda ponerse.
+
+#### EL TIRADOR LE ROBABA LOS TOQUES AL DOCK
+
+La barrita de abajo medía 120 px y estaba en `z-index 2` sobre el dock: medido,
+`elementFromPoint(206, 870)` devolvía **`tirador`** —el dedo que iba a una app abría el cajón—, con
+26 px de solape sobre dos de los cuatro iconos. Pasa a `pointer-events:none`: se ve, no se toca. El
+gesto de subir se registra en el escritorio, en la fila de puntos y en el dock, con umbral de 55 px
+en vertical y descarte por encima de 18 en horizontal, que es lo que impide que un arrastre entre
+páginas lo dispare. Medido después: `elementFromPoint` devuelve `dock`, y un arrastre de 70 px hacia
+arriba sobre el dock abre el cajón.
+
+#### TRES DEFECTOS MÁS, Y UNO ERA DE LA SONDA
+
+- **«mer» devolvía Cámara**, porque el filtro miraba también el paquete y `com.android.ca-MER-a2` lo
+  contiene. Eso no es tolerancia, es ruido justo arriba del resultado que se busca. El nombre manda y
+  **el paquete entra sólo si el nombre no encontró nada**, que es cuando de verdad sirve. Medido:
+  «mer» → Mercado Libre y Mercado Pago; «musically» → TikTok; «zzz» → 0.
+- **EL FONDO FIJO SE DIBUJABA A PXR VECES SU TAMAÑO.** `fondoMide()` le ponía al lienzo del cielo el
+  mismo `setTransform(PXR…)` que al de adelante, y `pintaFondo()` trabaja en píxeles del búfer: el
+  cielo entraba sólo en la esquina de arriba a la izquierda. Dos lienzos, dos unidades.
+- **Y LA SONDA DEL CIELO ESTABA MAL ANTES QUE EL CIELO.** `cieloDe` recibe **horas** y el parámetro se
+  llamaba `hFrac`; la sonda le pasó `h/24`, así que el mediodía devolvía el cielo de las dos de la
+  mañana con las estrellas en 0,93. El juego estaba bien. Es la enésima vez en este repo.
+  De paso apareció uno de verdad: entre las 0 y las 5 la interpolación es lineal, así que **a las 2 de
+  la mañana el cielo ya iba al 40 % del amanecer** —medido, rgb(108,112,122), un gris de las seis y
+  media—. La madrugada es plana y el amanecer pasa en una hora: entró el punto de las 4 y ahora las 2
+  dan luz 0,19 y estrellas 0,98.
+
+#### LAS SOMBRAS SE CALIBRAN CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA
+
+Todo el texto es blanco y el fondo cambia solo a lo largo del día: a las 13 el cielo llega a
+rgb(218,237,239) y una nube encima de eso es casi blanco puro. En la captura del mediodía la fecha
+desaparecía sobre la nube que cae a la derecha del reloj. Van dos sombras por elemento: una dura y
+pegada, que da el filo, y una ancha y difusa, que baja el fondo alrededor de la letra.
+
+#### MEDIDO AL CERRAR
+
+**4 de 4 filtros de refracción armados** con su `feImage` cargado y `backdrop-filter:url()`
+soportado. **Cero solapamientos** entre los seis elementos del escritorio y **cero fuera del cuadro**
+en 412×892. Fondo: **0,205 ms por cuadro** a 30 Hz con las burbujas, las hojas, las nubes y los rayos
+puestos. Cielos fotografiados a las 2, las 13 y las 19:40, los tres distintos. Cajón, búsqueda y menú
+de app recorridos por el mismo camino que el dedo. `window.__errs` **vacío en las cinco corridas**.
+APK: firma v2+v3 verificada, `HOME` + `DEFAULT` + `LAUNCHER` en el manifiesto binario,
+`launchMode=singleTask`, `stateNotNeeded`, las siete clases en el dex y `assets/ui.html` adentro.
+
+**LO QUE NO PUDE COMPROBAR:** no hay emulador en este contenedor, así que del APK está medido que
+compila, que firma, que declara lo que tiene que declarar y que lleva adentro lo que tiene que
+llevar — **no que arranque en un teléfono**. Y el puente de Java está probado por lectura y no por
+ejecución: lo que sí corre de punta a punta es la interfaz, con el puente de mentira.
+
 ### Centésima decimocuarta vuelta (2026-09-06): **LOOPA**, el decimoquinto juego — un secuenciador que se toca con la boca
 
 Pedido: *"puedes hacer uno que sea súper fl estudio y que detecte beats y melodías con tu voz? y los

@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no,maximum-scale=1">
+<meta name="theme-color" content="#0a3d6b">
+<title>Aero</title>
+<style>
+/* ══════════════════════ AERO ══════════════════════
+   Frutiger Aero + Liquid Glass. Dos estéticas de dos décadas distintas que
+   comparten una sola idea: el vidrio muestra lo que hay detrás.
+
+   ── LA JERARQUÍA DEL VIDRIO, Y ES UNA DECISIÓN DE COSTO ──
+   `backdrop-filter` con un mapa de desplazamiento refracta de verdad, y cuesta:
+   el navegador tiene que recortar lo de atrás, filtrarlo y desplazarlo por cada
+   pieza. Con treinta iconos en pantalla eso hunde un teléfono.
+   Así que hay dos vidrios: el REFRACTADO va en las piezas grandes y pocas —el
+   reloj, la búsqueda, el dock, los paneles— donde la distorsión del borde se ve;
+   y el LISO —desenfoque y saturación— va en los iconos, que son muchos y chicos
+   y donde una refracción de dos píxeles no se percibe. */
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
+  background:#0a3d6b;color:#fff;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none}
+
+:root{
+  --ins-t:24px; --ins-b:16px;
+  --acento:#7fe3ff;
+  --verde:#a8e85c;
+  /* el vidrio no es un color plano: es blanco con muy poca opacidad y un borde
+     que se lee más claro arriba que abajo, porque la luz viene de arriba */
+  --v-fondo:rgba(255,255,255,.14);
+  --v-borde:rgba(255,255,255,.42);
+  --v-borde-b:rgba(255,255,255,.10);
+  --v-sombra:0 8px 28px rgba(4,26,52,.34);
+}
+
+#lienzo{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+#svgdefs{position:fixed;width:0;height:0;pointer-events:none}
+
+#capa{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
+  padding:var(--ins-t) 0 var(--ins-b)}
+
+/* ══════════ EL VIDRIO ══════════ */
+.vid{position:relative;background:var(--v-fondo);
+  border:1px solid transparent;
+  border-radius:26px;
+  box-shadow:var(--v-sombra),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(255,255,255,.10),
+    inset 0 0 22px rgba(255,255,255,.07);
+  backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
+  -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.12);
+  overflow:hidden}
+/* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
+   Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
+   brilla arriba a la izquierda y se apaga abajo a la derecha, porque es una
+   superficie curva reflejando una luz. Va con `mask` de dos capas, que es la
+   única forma de tener un degradado SOLO en el borde. */
+.vid::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
+  background:linear-gradient(145deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.30) 26%,
+    rgba(255,255,255,.06) 52%,rgba(255,255,255,.22) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;pointer-events:none;z-index:2}
+/* el brillo especular: una banda clara arriba que se desvanece — es lo que hace
+   que una superficie se lea a mojada y no a papel translúcido */
+.vid::after{content:'';position:absolute;left:0;right:0;top:0;height:52%;
+  border-radius:inherit;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.10) 46%,
+    rgba(255,255,255,0) 100%)}
+.vid>*{position:relative;z-index:3}
+
+/* el refractado: además del desenfoque, el fondo se DESPLAZA cerca del canto */
+.vid.refr{backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14);
+  -webkit-backdrop-filter:url(#refr) blur(11px) saturate(200%) brightness(1.14)}
+
+/* ══════════ BARRA DE ARRIBA ══════════ */
+#barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  padding:2px 20px 0;font-size:13px;font-weight:700;letter-spacing:.04em;
+  color:#fff;text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 8px rgba(0,40,80,.6)}
+#bIzq{flex:1;opacity:.9}
+#bat{display:flex;align-items:center;gap:5px}
+#batCaja{width:26px;height:13px;border:1.6px solid rgba(255,255,255,.85);
+  border-radius:4px;position:relative;padding:1.6px}
+#batCaja::after{content:'';position:absolute;right:-4px;top:3px;width:2.4px;height:5px;
+  background:rgba(255,255,255,.85);border-radius:0 2px 2px 0}
+#batLlena{height:100%;border-radius:1.5px;background:#b8f078;
+  box-shadow:0 0 6px rgba(184,240,120,.8);transition:width .4s}
+
+/* ══════════ RELOJ ══════════ */
+#reloj{flex:0 0 auto;margin:14px 20px 0;padding:18px 22px 16px;
+  display:flex;align-items:flex-end;gap:14px}
+/* ── LA SOMBRA SE CALIBRA CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA ──
+   Todo el texto de este launcher es blanco y el fondo cambia solo a lo largo
+   del día: a las 13 el cielo llega a rgb(218,237,239) y una nube encima de eso
+   es casi blanco puro. Medido, con la sombra floja la fecha desaparecía sobre
+   la nube que cae a la derecha del reloj. Van dos: una dura y pegada, que da el
+   filo, y una ancha y difusa, que baja el fondo alrededor de la letra. */
+#hora{font-size:60px;font-weight:200;line-height:.92;letter-spacing:-.03em;
+  text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
+#fecha{font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  text-shadow:0 1px 2px rgba(0,34,68,.85),0 0 10px rgba(0,40,80,.65);
+  opacity:.88;padding-bottom:9px;line-height:1.45}
+
+/* ══════════ BÚSQUEDA ══════════ */
+#buscaCaja{flex:0 0 auto;margin:12px 20px 0;padding:0 16px;height:46px;
+  display:flex;align-items:center;gap:10px;border-radius:23px}
+#buscaCaja svg{flex:0 0 auto;opacity:.85}
+#busca{flex:1;background:transparent;border:0;outline:0;color:#fff;
+  font-size:15px;font-weight:500;font-family:inherit;min-width:0}
+#busca::placeholder{color:rgba(255,255,255,.62)}
+
+/* ══════════ PÁGINAS DE ICONOS ══════════ */
+#hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden;margin-top:6px}
+#tira{display:flex;height:100%;will-change:transform}
+.pag{flex:0 0 100%;height:100%;display:grid;
+  grid-template-columns:repeat(4,1fr);align-content:start;
+  gap:6px 0;padding:10px 8px}
+
+.ap{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:8px 2px 6px;border-radius:20px;cursor:pointer;position:relative}
+.ap:active{transform:scale(.92)}
+.ap{transition:transform .16s cubic-bezier(.2,.9,.3,1.4)}
+/* ── EL ICONO VIVE EN UNA BALDOSA DE VIDRIO ──
+   Frutiger Aero es skeuomórfico: cada icono es un objeto con volumen, brillo y
+   sombra propia. La baldosa da eso sin tocar el icono de la app, que llega como
+   viene del sistema. */
+.baldosa{width:60px;height:60px;border-radius:17px;position:relative;
+  background:rgba(255,255,255,.16);
+  box-shadow:0 5px 14px rgba(4,26,52,.30),
+    inset 0 1px 0 rgba(255,255,255,.60),
+    inset 0 -6px 12px rgba(0,40,80,.10);
+  backdrop-filter:blur(8px) saturate(175%);
+  -webkit-backdrop-filter:blur(8px) saturate(175%);
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
+  border-radius:0 0 60% 60%/0 0 34% 34%;
+  background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
+  pointer-events:none}
+.baldosa img{width:46px;height:46px;display:block;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.35))}
+.ap .nom{font-size:11px;font-weight:600;letter-spacing:.01em;max-width:74px;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,30,62,.95),0 1px 6px rgba(0,36,72,.85),0 0 14px rgba(0,40,80,.6)}
+
+/* ══════════ PUNTOS DE PÁGINA ══════════ */
+#puntos{flex:0 0 auto;display:flex;justify-content:center;gap:7px;padding:8px 0 6px}
+.pt{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);
+  transition:all .25s}
+.pt.on{background:#fff;width:18px;border-radius:3px;box-shadow:0 0 10px rgba(255,255,255,.8)}
+
+/* ══════════ DOCK ══════════ */
+#dock{flex:0 0 auto;margin:0 14px;padding:10px 6px 8px;border-radius:30px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+
+/* ══════════ CAJÓN ══════════ */
+/* ── LA HOJA ESMERILADA DEJA VER EL FONDO, Y ESO NO ES ADORNO ──
+   Con el tinte al 90% el cajón tapaba el cielo entero y la mitad de arriba del
+   teléfono se volvía un rectángulo azul plano: se perdía justo lo único que
+   este launcher tiene para mostrar. El desenfoque hace el trabajo de separar
+   los iconos del fondo; el tinte sólo tiene que garantizar que el texto blanco
+   se lea sobre lo más claro que el cielo pueda ponerse al mediodía. */
+#cajon{position:fixed;inset:0;z-index:3;transform:translateY(100%);
+  transition:transform .34s cubic-bezier(.22,.9,.24,1);
+  display:flex;flex-direction:column;padding:var(--ins-t) 0 var(--ins-b);
+  background:linear-gradient(180deg,rgba(10,58,104,.30) 0%,rgba(9,50,94,.42) 40%,rgba(7,38,74,.56) 100%);
+  backdrop-filter:blur(30px) saturate(185%) brightness(1.04);
+  -webkit-backdrop-filter:blur(30px) saturate(185%) brightness(1.04)}
+#cajon.on{transform:translateY(0)}
+#cajTit{flex:0 0 auto;padding:2px 22px 6px;font-size:12px;font-weight:700;
+  letter-spacing:.16em;opacity:.72;text-transform:uppercase;
+  text-shadow:0 1px 3px rgba(0,20,45,.6)}
+/* ── LA BÚSQUEDA VIVE ADENTRO DEL CAJÓN ──
+   Estaba en el escritorio, o sea DEBAJO del cajón: enfocarla abría el cajón y
+   el cajón la tapaba, así que se escribía a ciegas — medido, tecleando «mer»
+   la lista filtraba y el cuadro de texto no se veía por ningún lado. Hay un
+   solo campo que recibe letras y está donde se está mirando; el del escritorio
+   pasa a ser el botón que lo abre. */
+#cajBusca{flex:0 0 auto;margin:2px 14px 8px;padding:0 14px;height:46px;
+  display:flex;align-items:center;gap:10px;border-radius:23px}
+#cajBusca input{flex:1;background:none;border:0;outline:none;color:#fff;
+  font:600 15px/1 system-ui,sans-serif;min-width:0}
+#cajBusca input::placeholder{color:rgba(255,255,255,.62);font-weight:500}
+#cajBusca input::-webkit-search-cancel-button{-webkit-appearance:none}
+#cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);
+  align-content:start;gap:6px 0;padding:6px 8px 20px}
+/* ── EL TIRADOR SE VE Y NO SE TOCA ──
+   Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
+   montaba encima 26 px justo sobre dos de los cuatro iconos —
+   `elementFromPoint(206, 870)` devolvía `tirador`, o sea que el dedo que iba a
+   una app abría el cajón. El gesto de subir vive en el escritorio, en la fila
+   de puntos y en el dock (ver `enganchaSubir`); esto es sólo la marca que dice
+   que ese gesto existe. */
+#tirador{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--ins-b) + 2px);width:120px;height:26px;z-index:2;
+  pointer-events:none;
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:7px}
+#tirador i{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.55);
+  box-shadow:0 0 10px rgba(255,255,255,.45)}
+
+/* ══════════ MENÚ DE UNA APP ══════════ */
+#velo{position:fixed;inset:0;z-index:4;background:rgba(4,24,48,.42);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .2s}
+#velo.on{opacity:1;pointer-events:auto}
+#menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
+  width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s cubic-bezier(.2,.9,.3,1.3)}
+#menu.on{opacity:1;pointer-events:auto;transform:translate(-50%,0) scale(1)}
+#menuTit{padding:12px 16px 10px;font-size:15px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mop{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:16px;
+  font-size:15px;font-weight:600;cursor:pointer}
+.mop:active{background:rgba(255,255,255,.18)}
+.mop.peli{color:#ffb3b8}
+.mop .ic{width:20px;text-align:center;opacity:.85}
+
+/* ══════════ AVISO ══════════ */
+#aviso{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
+  bottom:calc(var(--ins-b) + 84px);padding:11px 20px;border-radius:22px;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;
+  white-space:nowrap}
+#aviso.on{opacity:1}
+
+/* ══════════ CARGANDO ══════════ */
+#carga{position:fixed;inset:0;z-index:7;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:16px;
+  background:linear-gradient(180deg,#1a6fb8,#4fb3e8 55%,#a8e2f7);
+  transition:opacity .5s}
+#carga.off{opacity:0;pointer-events:none}
+#cargaT{font-size:34px;font-weight:200;letter-spacing:.3em;
+  text-shadow:0 2px 20px rgba(0,60,110,.5)}
+#cargaB{width:120px;height:3px;border-radius:2px;background:rgba(255,255,255,.28);overflow:hidden}
+#cargaB i{display:block;height:100%;width:34%;border-radius:2px;background:#fff;
+  box-shadow:0 0 12px #fff;animation:vaiven 1.1s ease-in-out infinite}
+@keyframes vaiven{0%{margin-left:-34%}100%{margin-left:100%}}
+</style>
+</head>
+<body>
+<canvas id="lienzo"></canvas>
+<svg id="svgdefs" aria-hidden="true"><defs>
+  <!-- el mapa de desplazamiento lo dibuja d.js y lo mete acá: es una imagen
+       cuyo canal rojo dice cuánto correr en x y el verde cuánto en y -->
+  <filter id="refr" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage id="refrMapa" result="mapa" preserveAspectRatio="none"/>
+    <feDisplacementMap id="refrDesp" in="SourceGraphic" in2="mapa"
+      scale="42" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</defs></svg>
+
+<div id="capa">
+  <div id="barra">
+    <div id="bIzq">—</div>
+    <div id="bat"><span id="batN">—</span><div id="batCaja"><div id="batLlena" style="width:70%"></div></div></div>
+  </div>
+
+  <div class="vid refr" id="reloj">
+    <div id="hora">—</div>
+    <div id="fecha">—</div>
+  </div>
+
+  <div class="vid refr" id="buscaCaja">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca" type="search" autocomplete="off" autocorrect="off" readonly
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+
+  <div id="hoja"><div id="tira"></div></div>
+  <div id="puntos"></div>
+  <div class="vid refr" id="dock"></div>
+</div>
+
+<div id="tirador"><i></i></div>
+
+<div id="cajon">
+  <div class="vid" id="cajBusca">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca2" type="search" autocomplete="off" autocorrect="off"
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+  <div id="cajTit">—</div>
+  <div id="cajLista"></div>
+</div>
+
+<div id="velo"></div>
+<div class="vid refr" id="menu">
+  <div id="menuTit">—</div>
+  <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
+  <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
+  <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid" id="aviso">—</div>
+
+<div id="carga"><div id="cargaT">AERO</div><div id="cargaB"><i></i></div></div>
+
+<script type="module">
+/* ══════════════════════ LAS TABLAS ══════════════════════ */
+
+const $ = s => document.querySelector(s);
+const $$ = s => Array.prototype.slice.call(document.querySelectorAll(s));
+function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
+
+/* ── EL PUENTE PUEDE NO ESTAR, Y ESO NO ES UN ERROR ──
+   Abierto en un navegador —para probarlo, o porque alguien lo miró en la
+   computadora— `AND` no existe. En vez de dejar la pantalla negra, se arma un
+   puente de mentira con apps de ejemplo: se ve el escritorio entero y lo único
+   que no pasa es que algo se abra. Es lo mismo que hacen los juegos de este repo
+   con los assets que todavía no decodificaron. */
+const HAY_AND = typeof AND !== 'undefined' && AND && typeof AND.apps === 'function';
+
+const TXT = {
+  es: { busca: 'Buscar apps y en la web', todas: 'Todas las apps', fijar: 'Fijar en el inicio',
+        soltar: 'Quitar del inicio', info: 'Información de la app', borrar: 'Desinstalar',
+        nada: 'Sin resultados', web: 'Buscar «{0}» en la web', fijado: 'Fijada',
+        soltado: 'Quitada del inicio', ajustes: 'Ajustes', inicio: 'Elegir pantalla de inicio',
+        sinPuente: 'Vista previa — sin conexión con el sistema',
+        dias: ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
+        meses: ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+                'septiembre','octubre','noviembre','diciembre'] },
+  en: { busca: 'Search apps and the web', todas: 'All apps', fijar: 'Pin to home',
+        soltar: 'Remove from home', info: 'App info', borrar: 'Uninstall',
+        nada: 'No results', web: 'Search the web for “{0}”', fijado: 'Pinned',
+        soltado: 'Removed from home', ajustes: 'Settings', inicio: 'Choose home app',
+        sinPuente: 'Preview — no system bridge',
+        dias: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+        meses: ['January','February','March','April','May','June','July','August',
+                'September','October','November','December'] },
+  pt: { busca: 'Buscar apps e na web', todas: 'Todos os apps', fijar: 'Fixar na tela inicial',
+        soltar: 'Remover da tela inicial', info: 'Informações do app', borrar: 'Desinstalar',
+        nada: 'Sem resultados', web: 'Buscar «{0}» na web', fijado: 'Fixado',
+        soltado: 'Removido', ajustes: 'Configurações', inicio: 'Escolher tela inicial',
+        sinPuente: 'Prévia — sem ponte com o sistema',
+        dias: ['domingo','segunda','terça','quarta','quinta','sexta','sábado'],
+        meses: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto',
+                'setembro','outubro','novembro','dezembro'] }
+};
+let LANG = (navigator.language || 'es').slice(0, 2);
+if (!TXT[LANG]) LANG = 'es';
+function T(k, a){ const s = (TXT[LANG] || TXT.es)[k] || k; return a === undefined ? s : String(s).replace('{0}', a); }
+
+/* ── LA REJA ES DE CUATRO Y LAS FILAS SE CUENTAN ──
+   Cuatro columnas es lo que entra cómodo en un teléfono con iconos de 60 px y
+   nombre debajo. Las filas por página NO son un número escrito: salen de medir
+   el alto que quedó libre después del reloj, la búsqueda y el dock, así que un
+   teléfono corto muestra menos y uno largo más, en vez de cortar la última. */
+const COLS = 4, ALTO_AP = 92;
+
+function guarda(k, v){ try { localStorage.setItem('aero_' + k, JSON.stringify(v)); } catch (e) {} }
+function lee(k, d){
+  try { const v = localStorage.getItem('aero_' + k); return v === null ? d : JSON.parse(v); }
+  catch (e){ return d; }
+}
+
+/* sin acentos y en minúscula: es como se busca con el dedo */
+function norm(s){
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function vibra(ms){ try { if (HAY_AND && AND.vibra) AND.vibra(ms || 12); } catch (e) {} }
+
+let AVISO_T = 0;
+function avisa(t){
+  const e = $('#aviso'); e.textContent = t; e.classList.add('on');
+  clearTimeout(AVISO_T); AVISO_T = setTimeout(() => e.classList.remove('on'), 1900);
+}
+/* ══════════════════════ EL FONDO ══════════════════════
+   Frutiger Aero: cielo saturado, luz volumétrica, burbujas con brillo, hojas y
+   agua. Todo dibujado por código — un fondo de pantalla es una foto que pesa
+   megas, se ve igual siempre y no puede cambiar con la hora.
+
+   ── LO QUE NO SE MUEVE SE DIBUJA UNA VEZ ──
+   El cielo, las nubes y el agua se pintan en un lienzo aparte y sólo se rehacen
+   cuando cambia el minuto o el tamaño de la pantalla. Por cuadro se COPIA, que
+   es una operación y no cuarenta degradados. Sin esto, cada cuadro son unos
+   treinta `createRadialGradient` a pantalla completa.
+
+   ── Y EL FONDO CORRE A 30 Y NO A 60, A PROPÓSITO ──
+   Cada pieza de vidrio tiene `backdrop-filter`: el compositor tiene que recortar
+   lo de atrás, desenfocarlo, saturarlo y —en las refractadas— desplazarlo, CADA
+   VEZ QUE EL FONDO CAMBIA. Con burbujas que suben cinco píxeles por segundo,
+   treinta cuadros no se distinguen de sesenta y el filtro se paga la mitad de
+   las veces. */
+
+let LZ, CX, ANC = 0, ALT = 0, PXR = 1;
+let FONDO = null, FCX = null, FONDO_MIN = -1;
+/* -1 = la hora de verdad. La sonda la fija para fotografiar los ocho cielos. */
+let HORA_FIJA = -1;
+let SPR_BUR = null, SPR_HOJA = null, SPR_DEST = null;
+const BUR = [], HOJ = [], DEST = [];
+let CAL = 1;                    /* 1 = todo · 0.6 = menos piezas · 0.35 = mínimo */
+let T0 = 0, TPREV = 0, ACUM = 0, CORRE = true;
+const FPS_FONDO = 30;
+
+/* ── EL CIELO CAMBIA CON LA HORA DE VERDAD ──
+   Es la mitad de lo que hace que un escritorio se sienta vivo, y sale gratis:
+   son cuatro paletas y una interpolación. */
+const CIELOS = [
+  { h: 0,  c: ['#050f2e','#0a1f4a','#123a6b','#1d5484'], sol: '#7fb0e8', luz: .18, est: 1 },
+  /* ── EL TRAMO DE MADRUGADA NECESITA UN PUNTO EN EL MEDIO ──
+     Con un solo salto de 0 a 5 la interpolación es lineal, así que a las 2 de
+     la mañana el cielo ya iba al 40% del amanecer: medido, el borde de abajo
+     daba rgb(108,112,122), un gris de las seis y media. La madrugada es plana
+     y el amanecer pasa en una hora, así que hace falta el punto de las 4. */
+  { h: 4,  c: ['#071335','#0d244f','#153f6f','#215a89'], sol: '#87b6ea', luz: .20, est: .96 },
+  { h: 5,  c: ['#182a52','#4a3a6b','#a55a72','#e39a6a'], sol: '#ffd9a0', luz: .42, est: .35 },
+  { h: 7,  c: ['#1d6fc0','#3f9fdc','#7fcbef','#c6ecfb'], sol: '#fff6d8', luz: .80, est: 0 },
+  { h: 12, c: ['#1466bd','#3aa3e0','#7ed3f2','#d5f2fd'], sol: '#ffffff', luz: 1.0, est: 0 },
+  { h: 17, c: ['#1b5fa8','#4f9ad2','#9ec9e8','#f0d9b8'], sol: '#fff0c8', luz: .82, est: 0 },
+  { h: 19, c: ['#26315e','#7a4a78','#d4746a','#f6b073'], sol: '#ffc48a', luz: .46, est: .25 },
+  { h: 21, c: ['#080f30','#101f48','#16345f','#1e4a75'], sol: '#8fb8e8', luz: .20, est: .9 },
+  { h: 24, c: ['#050f2e','#0a1f4a','#123a6b','#1d5484'], sol: '#7fb0e8', luz: .18, est: 1 }
+];
+function mezclaHex(a, b, k){
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa>>16)&255) + (((pb>>16)&255) - ((pa>>16)&255))*k);
+  const g = Math.round(((pa>>8)&255) + (((pb>>8)&255) - ((pa>>8)&255))*k);
+  const z = Math.round((pa&255) + ((pb&255) - (pa&255))*k);
+  return 'rgb(' + r + ',' + g + ',' + z + ')';
+}
+/* el argumento son HORAS, de 0 a 24 — no una fracción del día. Se llamaba
+   `hFrac` y eso ya costó una medición: la sonda le pasó `h/24` y el mediodía
+   devolvió el cielo de las dos de la mañana, con las estrellas en 0,93. */
+function cieloDe(hora){
+  let i = 0;
+  while (i < CIELOS.length - 2 && CIELOS[i+1].h <= hora) i++;
+  const a = CIELOS[i], b = CIELOS[i+1];
+  const k = cl((hora - a.h)/Math.max(.001, b.h - a.h), 0, 1);
+  return { c: a.c.map((x, j) => mezclaHex(x, b.c[j], k)),
+           sol: mezclaHex(a.sol, b.sol, k),
+           luz: a.luz + (b.luz - a.luz)*k,
+           est: a.est + (b.est - a.est)*k };
+}
+
+/* azar con semilla: el cielo tiene que ser EL MISMO al volver al escritorio, y
+   con Math.random las nubes se reparten distinto cada vez que se repinta */
+function rnd(s){ let x = s; return () => { x = (x*1664525 + 1013904223) >>> 0; return x/4294967296; }; }
+
+/* ══════════ LOS SPRITES ══════════
+   Una burbuja son tres degradados radiales. Con cuarenta en pantalla a sesenta
+   cuadros eso son siete mil degradados por segundo; dibujada UNA vez en un
+   lienzo de 128 px y copiada escalada, son cuarenta `drawImage`. */
+function spriteBurbuja(){
+  const n = 128, c = document.createElement('canvas');
+  c.width = c.height = n;
+  const x = c.getContext('2d'), r = n/2 - 2;
+  /* el cuerpo: casi transparente en el medio, porque una burbuja es una cáscara */
+  let g = x.createRadialGradient(n/2, n/2, r*0.22, n/2, n/2, r);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(.72, 'rgba(190,240,255,.07)');
+  g.addColorStop(.93, 'rgba(215,250,255,.30)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(n/2, n/2, r, 0, 7); x.fill();
+  /* el borde iridiscente: es lo que la separa de un círculo blanco */
+  x.globalCompositeOperation = 'lighter';
+  for (const [ang, col] of [[.7,'rgba(120,255,220,.55)'],[2.4,'rgba(255,170,240,.42)'],
+                            [4.1,'rgba(150,200,255,.50)'],[5.4,'rgba(255,240,160,.34)']]){
+    const gx = n/2 + Math.cos(ang)*r*.82, gy = n/2 + Math.sin(ang)*r*.82;
+    const q = x.createRadialGradient(gx, gy, 0, gx, gy, r*.55);
+    q.addColorStop(0, col); q.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = q; x.beginPath(); x.arc(n/2, n/2, r, 0, 7); x.fill();
+  }
+  /* el reflejo especular: el punto que dice de dónde viene la luz */
+  const sx = n*.36, sy = n*.30;
+  let s = x.createRadialGradient(sx, sy, 0, sx, sy, r*.34);
+  s.addColorStop(0, 'rgba(255,255,255,.95)'); s.addColorStop(.5, 'rgba(255,255,255,.28)');
+  s.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = s; x.beginPath(); x.arc(sx, sy, r*.34, 0, 7); x.fill();
+  /* y un contraluz abajo, chico: sin él la esfera se lee a disco */
+  s = x.createRadialGradient(n*.63, n*.74, 0, n*.63, n*.74, r*.22);
+  s.addColorStop(0, 'rgba(255,255,255,.42)'); s.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = s; x.beginPath(); x.arc(n*.63, n*.74, r*.22, 0, 7); x.fill();
+  return c;
+}
+function spriteHoja(){
+  const n = 96, c = document.createElement('canvas');
+  c.width = c.height = n;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(n*.2, n*.1, n*.8, n*.9);
+  g.addColorStop(0, 'rgba(190,245,120,.92)');
+  g.addColorStop(.5, 'rgba(126,211,33,.86)');
+  g.addColorStop(1, 'rgba(74,158,40,.80)');
+  x.fillStyle = g;
+  x.beginPath();
+  x.moveTo(n*.5, n*.06);
+  x.bezierCurveTo(n*.94, n*.30, n*.90, n*.74, n*.5, n*.96);
+  x.bezierCurveTo(n*.10, n*.74, n*.06, n*.30, n*.5, n*.06);
+  x.fill();
+  /* la nervadura y el brillo: una hoja plana de un color se lee a gota verde */
+  x.strokeStyle = 'rgba(255,255,255,.42)'; x.lineWidth = 1.6;
+  x.beginPath(); x.moveTo(n*.5, n*.10); x.lineTo(n*.5, n*.92); x.stroke();
+  x.strokeStyle = 'rgba(255,255,255,.22)'; x.lineWidth = 1.1;
+  for (let i = 1; i <= 5; i++){
+    const y = n*(.16 + i*.13);
+    x.beginPath(); x.moveTo(n*.5, y); x.lineTo(n*.5 + n*.24, y + n*.07); x.stroke();
+    x.beginPath(); x.moveTo(n*.5, y); x.lineTo(n*.5 - n*.24, y + n*.07); x.stroke();
+  }
+  const b = x.createLinearGradient(n*.3, n*.15, n*.55, n*.5);
+  b.addColorStop(0, 'rgba(255,255,255,.34)'); b.addColorStop(1, 'rgba(255,255,255,0)');
+  x.globalCompositeOperation = 'source-atop'; x.fillStyle = b; x.fillRect(0, 0, n, n);
+  return c;
+}
+function spriteDestello(){
+  const n = 64, c = document.createElement('canvas');
+  c.width = c.height = n;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(n/2, n/2, 0, n/2, n/2, n/2);
+  g.addColorStop(0, 'rgba(255,255,255,.95)');
+  g.addColorStop(.25, 'rgba(210,245,255,.42)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, n, n);
+  return c;
+}
+
+/* ══════════ EL LIENZO DEL FONDO ══════════ */
+function pintaFondo(){
+  if (!FONDO) return;
+  const W = FONDO.width, H = FONDO.height, x = FCX;
+  const d = new Date();
+  const hf = HORA_FIJA >= 0 ? HORA_FIJA : d.getHours() + d.getMinutes()/60;
+  const C = cieloDe(hf);
+  x.clearRect(0, 0, W, H);
+
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, C.c[0]); g.addColorStop(.34, C.c[1]);
+  g.addColorStop(.66, C.c[2]); g.addColorStop(1, C.c[3]);
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+
+  const R = rnd(20260906);
+
+  /* estrellas, sólo de noche */
+  if (C.est > 0.02){
+    x.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 90; i++){
+      const px = R()*W, py = R()*H*.62, r = .6 + R()*1.5;
+      x.globalAlpha = C.est*(.25 + R()*.6);
+      x.fillStyle = '#fff'; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+    }
+    x.globalAlpha = 1;
+  }
+
+  /* el sol o la luna, con su halo */
+  const solX = W*.74, solY = H*.13;
+  x.globalCompositeOperation = 'lighter';
+  let h = x.createRadialGradient(solX, solY, 0, solX, solY, W*.62);
+  h.addColorStop(0, 'rgba(255,255,255,' + (.42*C.luz + .10).toFixed(3) + ')');
+  h.addColorStop(.18, 'rgba(255,250,220,' + (.17*C.luz + .04).toFixed(3) + ')');
+  h.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = h; x.fillRect(0, 0, W, H);
+  h = x.createRadialGradient(solX, solY, 0, solX, solY, W*.085);
+  h.addColorStop(0, C.sol); h.addColorStop(.42, 'rgba(255,255,255,.30)');
+  h.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = h; x.fillRect(0, 0, W, H);
+  x.globalCompositeOperation = 'source-over';
+
+  /* ── LAS NUBES SON MANCHAS BLANDAS Y SIN BORDE ──
+     Una elipse blanca tiene contorno y se lee a mancha de pintura. Cada nube son
+     seis a nueve bolas con degradado radial que se superponen, que es lo que le
+     da el borde deshilachado. */
+  const nubes = Math.round(9*CAL) + 3;
+  for (let i = 0; i < nubes; i++){
+    const cx = R()*W*1.2 - W*.1, cy = H*(.05 + R()*.44);
+    const s = (.10 + R()*.16)*W, op = (.30 + R()*.42)*(.45 + C.luz*.55);
+    for (let k = 0; k < 7; k++){
+      const ox = cx + (R() - .5)*s*1.7, oy = cy + (R() - .5)*s*.42;
+      const rr = s*(.32 + R()*.42);
+      const q = x.createRadialGradient(ox, oy - rr*.2, 0, ox, oy, rr);
+      q.addColorStop(0, 'rgba(255,255,255,' + (op*.85).toFixed(3) + ')');
+      q.addColorStop(.55, 'rgba(248,253,255,' + (op*.42).toFixed(3) + ')');
+      q.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = q; x.beginPath(); x.arc(ox, oy, rr, 0, 7); x.fill();
+    }
+  }
+
+  /* ── EL AGUA CIERRA EL CUADRO POR ABAJO ──
+     Sin ella el degradado del cielo llega hasta el borde y se lee a papel
+     pintado. Con una banda de agua, las burbujas tienen de dónde salir. */
+  const aguaY = H*.80;
+  const ag = x.createLinearGradient(0, aguaY, 0, H);
+  ag.addColorStop(0, 'rgba(30,140,190,.30)');
+  ag.addColorStop(.35, 'rgba(20,110,175,.55)');
+  ag.addColorStop(1, 'rgba(8,58,110,.80)');
+  x.fillStyle = ag; x.fillRect(0, aguaY, W, H - aguaY);
+  /* las crestas: líneas horizontales que se acortan y se separan con la
+     distancia, que es lo que da la perspectiva de una superficie */
+  x.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++){
+    const t = i/26, y = aguaY + Math.pow(t, 1.7)*(H - aguaY);
+    const largo = W*(.10 + R()*.34), px = R()*W;
+    x.globalAlpha = (.05 + R()*.13)*(.4 + C.luz*.6);
+    x.fillStyle = '#dff6ff';
+    x.fillRect(px, y, largo, 1 + t*2.2);
+  }
+  x.globalAlpha = 1;
+  /* el reflejo del sol sobre el agua */
+  const rg = x.createLinearGradient(solX, aguaY, solX, H);
+  rg.addColorStop(0, 'rgba(255,250,220,' + (.30*C.luz).toFixed(3) + ')');
+  rg.addColorStop(1, 'rgba(255,250,220,0)');
+  x.fillStyle = rg;
+  x.beginPath(); x.moveTo(solX - W*.05, aguaY); x.lineTo(solX + W*.05, aguaY);
+  x.lineTo(solX + W*.20, H); x.lineTo(solX - W*.20, H); x.closePath(); x.fill();
+  x.globalCompositeOperation = 'source-over';
+
+  FONDO_MIN = HORA_FIJA >= 0 ? -2 - Math.round(HORA_FIJA*60) : d.getHours()*60 + d.getMinutes();
+}
+
+/* ══════════ LAS PIEZAS QUE SE MUEVEN ══════════ */
+function siembra(){
+  BUR.length = 0; HOJ.length = 0; DEST.length = 0;
+  const nb = Math.round(26*CAL), nh = Math.round(9*CAL), nd = Math.round(14*CAL);
+  for (let i = 0; i < nb; i++) BUR.push(nuevaBur(true));
+  for (let i = 0; i < nh; i++) HOJ.push(nuevaHoja(true));
+  for (let i = 0; i < nd; i++) DEST.push({ x: Math.random(), y: Math.random()*.7,
+    r: .004 + Math.random()*.012, f: .3 + Math.random()*1.1, p: Math.random()*7 });
+}
+function nuevaBur(inicial){
+  return { x: Math.random(), y: inicial ? Math.random()*1.15 : 1.06 + Math.random()*.2,
+           r: .012 + Math.random()*.055, v: .020 + Math.random()*.055,
+           d: (Math.random() - .5)*.05, f: .25 + Math.random()*.75, p: Math.random()*7,
+           o: .35 + Math.random()*.55 };
+}
+function nuevaHoja(inicial){
+  return { x: Math.random(), y: inicial ? Math.random() : -.15,
+           s: .022 + Math.random()*.032, v: .018 + Math.random()*.032,
+           d: (Math.random() - .5)*.06, a: Math.random()*7, va: (Math.random() - .5)*1.1,
+           f: .3 + Math.random()*.8, p: Math.random()*7, o: .30 + Math.random()*.34 };
+}
+
+function fondoMide(){
+  const c = $('#lienzo');
+  LZ = c; CX = c.getContext('2d', { alpha: false });
+  /* ── EL PIXEL RATIO SE TOPA, Y ACÁ MÁS QUE EN NINGÚN LADO ──
+     Un teléfono de 3x con pantalla completa son doce millones de píxeles por
+     cuadro, y encima cada `backdrop-filter` los vuelve a leer. Con 1,5 el
+     degradado del cielo se ve exactamente igual: no hay un solo borde nítido en
+     todo el fondo. */
+  PXR = Math.min(1.5, window.devicePixelRatio || 1);
+  ANC = Math.max(1, Math.round(innerWidth)); ALT = Math.max(1, Math.round(innerHeight));
+  c.width = Math.round(ANC*PXR); c.height = Math.round(ALT*PXR);
+  c.style.width = ANC + 'px'; c.style.height = ALT + 'px';
+  CX.setTransform(PXR, 0, 0, PXR, 0, 0);
+
+  /* ── EL FONDO FIJO TRABAJA EN PÍXELES DE VERDAD, SIN TRANSFORMACIÓN ──
+     `pintaFondo()` toma W y H de `FONDO.width/height`, o sea del tamaño del
+     búfer. Poniéndole encima el `setTransform(PXR…)` del lienzo de adelante, el
+     cielo se dibujaría a PXR veces su tamaño y sólo entraría la esquina de
+     arriba a la izquierda. Es la trampa de siempre: dos lienzos, dos unidades. */
+  FONDO = document.createElement('canvas');
+  FONDO.width = c.width; FONDO.height = c.height;
+  FCX = FONDO.getContext('2d');
+  FONDO_MIN = -1;
+  pintaFondo();
+}
+
+function fondoInit(){
+  SPR_BUR = spriteBurbuja(); SPR_HOJA = spriteHoja(); SPR_DEST = spriteDestello();
+  fondoMide();
+  siembra();
+  addEventListener('resize', () => { fondoMide(); siembra(); });
+}
+
+function fondoPaso(dt, t){
+  for (let i = 0; i < BUR.length; i++){
+    const b = BUR[i];
+    b.y -= b.v*dt; b.x += b.d*dt*.35;
+    if (b.y < -.12) BUR[i] = nuevaBur(false);
+  }
+  for (let i = 0; i < HOJ.length; i++){
+    const h = HOJ[i];
+    h.y += h.v*dt; h.x += h.d*dt*.5; h.a += h.va*dt;
+    if (h.y > 1.14) HOJ[i] = nuevaHoja(false);
+  }
+}
+
+function fondoPinta(t){
+  if (!CX || !FONDO) return;
+  /* el fondo fijo se rehace cuando cambia el minuto, no por cuadro */
+  const d = new Date();
+  const m = HORA_FIJA >= 0 ? -2 - Math.round(HORA_FIJA*60) : d.getHours()*60 + d.getMinutes();
+  if (m !== FONDO_MIN) pintaFondo();
+
+  CX.setTransform(1, 0, 0, 1, 0, 0);
+  CX.drawImage(FONDO, 0, 0);
+  CX.setTransform(PXR, 0, 0, PXR, 0, 0);
+
+  CX.globalCompositeOperation = 'lighter';
+
+  /* ── LOS RAYOS DE LUZ ──
+     Cuñas claras que salen del sol. Es lo más «Aero» que hay y cuesta cuatro
+     triángulos; se apagan en la calidad mínima porque son puro relleno. */
+  if (CAL > .5){
+    const solX = ANC*.74, solY = ALT*.13;
+    for (let i = 0; i < 5; i++){
+      const a = -1.15 + i*.30 + Math.sin(t*.00013 + i)*0.045;
+      const w = .045 + Math.sin(t*.00021 + i*2.1)*.022;
+      const L = ALT*1.5;
+      const g = CX.createLinearGradient(solX, solY, solX + Math.cos(a)*L, solY + Math.sin(a)*L);
+      g.addColorStop(0, 'rgba(255,252,225,.16)');
+      g.addColorStop(.45, 'rgba(220,245,255,.06)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      CX.fillStyle = g;
+      CX.beginPath(); CX.moveTo(solX, solY);
+      CX.lineTo(solX + Math.cos(a - w)*L, solY + Math.sin(a - w)*L);
+      CX.lineTo(solX + Math.cos(a + w)*L, solY + Math.sin(a + w)*L);
+      CX.closePath(); CX.fill();
+    }
+  }
+
+  /* destellos: puntos de luz que laten, la mota de polvo iluminada */
+  for (const q of DEST){
+    const s = ANC*q.r*(1.6 + Math.sin(t*.001*q.f + q.p)*.5);
+    CX.globalAlpha = .30 + Math.sin(t*.0012*q.f + q.p)*.24;
+    CX.drawImage(SPR_DEST, q.x*ANC - s, q.y*ALT - s, s*2, s*2);
+  }
+  CX.globalAlpha = 1;
+  CX.globalCompositeOperation = 'source-over';
+
+  /* las burbujas, con su bamboleo */
+  for (const b of BUR){
+    const s = ANC*b.r;
+    const px = (b.x + Math.sin(t*.0006*b.f + b.p)*.035)*ANC;
+    CX.globalAlpha = b.o;
+    CX.drawImage(SPR_BUR, px - s, b.y*ALT - s, s*2, s*2);
+  }
+  CX.globalAlpha = 1;
+
+  /* las hojas van GIRANDO, que es lo que las separa de una mancha que cae */
+  for (const h of HOJ){
+    const s = ANC*h.s;
+    const px = (h.x + Math.sin(t*.0005*h.f + h.p)*.05)*ANC;
+    CX.save();
+    CX.translate(px, h.y*ALT);
+    CX.rotate(h.a);
+    /* el aplaste simula que la hoja se da vuelta en el aire: sin esto giran como
+       una calcomanía y se ve plano */
+    CX.scale(1, .35 + Math.abs(Math.cos(h.a*.7))*.65);
+    CX.globalAlpha = h.o;
+    CX.drawImage(SPR_HOJA, -s, -s, s*2, s*2);
+    CX.restore();
+  }
+  CX.globalAlpha = 1;
+}
+
+/* ── EL VIGÍA: SI NO LLEGA, SE BAJA SOLO ──
+   Un escritorio que va a diez cuadros por segundo es peor que uno sin burbujas.
+   Se mide, y si el cuadro se pasa del presupuesto se sacan piezas y se apagan
+   los rayos. No hay ajuste que tocar porque nadie entra a los ajustes de su
+   escritorio a bajarle los gráficos. */
+let VIG_N = 0, VIG_S = 0, VIG_LISTO = 0;
+function vigia(ms, ahora){
+  if (ahora < VIG_LISTO) return;
+  VIG_S += ms; VIG_N++;
+  if (VIG_N < 60) return;
+  const med = VIG_S/VIG_N; VIG_S = 0; VIG_N = 0;
+  if (med > 26 && CAL > .36){ CAL = CAL > .7 ? .6 : .35; siembra(); VIG_LISTO = ahora + 3000; }
+}
+
+function fondoBucle(t){
+  requestAnimationFrame(fondoBucle);
+  if (!CORRE) return;
+  if (!T0) { T0 = t; TPREV = t; return; }
+  const dt = Math.min(.25, (t - TPREV)/1000); TPREV = t;
+  ACUM += dt;
+  const paso = 1/FPS_FONDO;
+  if (ACUM < paso) return;
+  ACUM = Math.min(ACUM - paso, paso);
+  const m0 = performance.now();
+  fondoPaso(paso, t);
+  fondoPinta(t);
+  vigia(performance.now() - m0, t);
+}
+/* ══════════════════════ EL VIDRIO ══════════════════════
+   ── QUÉ SEPARA «VIDRIO ESMERILADO» DE «LIQUID GLASS» ──
+   Un `backdrop-filter: blur()` da vidrio esmerilado: lo de atrás se ve borroso y
+   nada más. Lo que hace que se lea a vidrio GRUESO es que el canto REFRACTA — lo
+   que hay detrás se corre y se comprime cerca del borde, porque ahí la
+   superficie está curvada y el rayo se dobla.
+
+   Eso en la web se hace con un `feDisplacementMap`: una imagen cuyo canal rojo
+   dice cuánto correr cada píxel en x y el verde cuánto en y. El mapa se calcula
+   de la geometría de la propia pieza —la distancia con signo a un rectángulo
+   redondeado— así que la banda de refracción sigue la esquina redondeada exacta
+   en vez de ser un marco recto.
+
+   ── Y SE GENERA UNO POR PIEZA, NO UNO SOLO ──
+   `feImage` estira el mapa al tamaño del elemento. Con un mapa compartido, el
+   dock —ancho y bajo— tendría el canto de arriba con una banda tres veces más
+   gruesa que la de los lados. Cada pieza tiene el suyo, a su tamaño y con su
+   radio, y se rehace cuando cambia de tamaño. */
+
+const REFR_SOP = (function(){
+  try { return CSS.supports('backdrop-filter', 'url(#x)')
+             || CSS.supports('-webkit-backdrop-filter', 'url(#x)'); }
+  catch (e){ return false; }
+})();
+
+/* cuánto entra la refracción desde el canto, y cuánto se desvía */
+const REFR_BANDA = 17, REFR_ESC = 46, REFR_MAXLADO = 640;
+
+function mapaRefraccion(w, h, radio, banda){
+  /* el mapa se calcula a media resolución: es un campo suave sin un solo borde
+     nítido, y a la mitad de lado cuesta la cuarta parte */
+  const e = Math.min(1, REFR_MAXLADO/Math.max(w, h), .5);
+  const W = Math.max(8, Math.round(w*e)), H = Math.max(8, Math.round(h*e));
+  const r = radio*e, b = Math.max(2, banda*e);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const im = x.createImageData(W, H), D = im.data;
+  const bx = W/2, by = H/2;
+  for (let j = 0; j < H; j++){
+    for (let i = 0; i < W; i++){
+      /* distancia con signo a un rectángulo redondeado, y su gradiente, que es
+         la normal de la superficie en ese punto */
+      const px = i + .5 - bx, py = j + .5 - by;
+      const qx = Math.abs(px) - (bx - r), qy = Math.abs(py) - (by - r);
+      const mx = Math.max(qx, 0), my = Math.max(qy, 0);
+      const L = Math.hypot(mx, my);
+      const d = L + Math.min(Math.max(qx, qy), 0) - r;   /* < 0 adentro */
+      let nx = 0, ny = 0;
+      if (L > 1e-6){ nx = mx/L*Math.sign(px); ny = my/L*Math.sign(py); }
+      else if (qx > qy){ nx = Math.sign(px); }
+      else { ny = Math.sign(py); }
+      /* ── EL PERFIL SE CONCENTRA EN EL CANTO ──
+         Con una rampa lineal el vidrio se ve como si TODO estuviera curvado y la
+         imagen de atrás queda deformada de punta a punta. Elevado a 2,6, el
+         centro queda plano —que es como se ve un vidrio de verdad— y la
+         distorsión aparece sólo en el último milímetro. */
+      const t = cl(1 + d/b, 0, 1);
+      const k = Math.pow(t, 2.6);
+      const R = Math.round(cl(.5 + nx*k*.5, 0, 1)*255);
+      const G = Math.round(cl(.5 + ny*k*.5, 0, 1)*255);
+      const o = (j*W + i)*4;
+      D[o] = R; D[o+1] = G; D[o+2] = 128; D[o+3] = 255;
+    }
+  }
+  x.putImageData(im, 0, 0);
+  return c.toDataURL('image/png');
+}
+
+let REFR_N = 0;
+const REFR_OBS = typeof ResizeObserver !== 'undefined'
+  ? new ResizeObserver(es => { for (const q of es) refrActualiza(q.target); }) : null;
+
+function refrActualiza(el){
+  const r = el.getBoundingClientRect();
+  const w = Math.round(r.width), h = Math.round(r.height);
+  if (w < 8 || h < 8) return;
+  if (el.__rw === w && el.__rh === h) return;
+  el.__rw = w; el.__rh = h;
+  const radio = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
+  const src = mapaRefraccion(w, h, Math.min(radio, Math.min(w, h)/2 - 1), REFR_BANDA);
+  const img = document.getElementById(el.__rid + 'i');
+  const dsp = document.getElementById(el.__rid + 'd');
+  if (img) img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', src);
+  if (img) img.setAttribute('href', src);
+  /* el desvío se acota a lo que la pieza mide: en el dock, 23 px de
+     desplazamiento sobre 56 de alto darían un espejo y no un canto */
+  if (dsp) dsp.setAttribute('scale', String(Math.min(REFR_ESC, Math.min(w, h)*0.42)));
+}
+
+function vidrioInit(){
+  const defs = document.querySelector('#svgdefs defs');
+  const piezas = $$('.refr');
+  if (!REFR_SOP || !defs){
+    /* degradación honesta: sin refracción quedan el desenfoque, la saturación,
+       el borde en degradado y el especular, que ya es el 80 % del efecto */
+    for (const el of piezas) el.classList.remove('refr');
+    return false;
+  }
+  for (const el of piezas){
+    const id = 'rf' + (++REFR_N);
+    el.__rid = id;
+    const f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    f.setAttribute('id', id);
+    f.setAttribute('x', '0%'); f.setAttribute('y', '0%');
+    f.setAttribute('width', '100%'); f.setAttribute('height', '100%');
+    f.setAttribute('color-interpolation-filters', 'sRGB');
+    const im = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
+    im.setAttribute('id', id + 'i');
+    im.setAttribute('result', 'm');
+    im.setAttribute('preserveAspectRatio', 'none');
+    const dm = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
+    dm.setAttribute('id', id + 'd');
+    dm.setAttribute('in', 'SourceGraphic'); dm.setAttribute('in2', 'm');
+    dm.setAttribute('scale', String(REFR_ESC));
+    dm.setAttribute('xChannelSelector', 'R'); dm.setAttribute('yChannelSelector', 'G');
+    f.appendChild(im); f.appendChild(dm); defs.appendChild(f);
+    const b = 'url(#' + id + ') blur(11px) saturate(200%) brightness(1.14)';
+    el.style.backdropFilter = b; el.style.webkitBackdropFilter = b;
+    refrActualiza(el);
+    if (REFR_OBS) REFR_OBS.observe(el);
+  }
+  /* el filtro de plantilla del HTML ya no lo usa nadie */
+  const viejo = document.getElementById('refr');
+  if (viejo && viejo.parentNode) viejo.parentNode.removeChild(viejo);
+  return true;
+}
+/* ══════════════════════ EL ESCRITORIO ══════════════════════ */
+
+let APPS = [], POR_PKG = {};
+let INICIO = [], DOCK = [];
+let PAG = 0, NPAG = 1, FILAS = 4;
+let CAJON = false, MENU_PKG = null;
+
+/* ══════════ ICONOS ══════════
+   El PNG lo sirve el cliente del WebView desde `https://icono.aero/<paquete>`.
+   En un navegador sin puente esa dirección no existe: ahí se dibuja una baldosa
+   con la inicial, que es lo que hace cualquier launcher con una app sin icono. */
+function iconoUrl(p){ return 'https://icono.aero/' + encodeURIComponent(p) + '?l=144'; }
+function letraDe(n){
+  const c = norm(n).replace(/[^a-z0-9áéíóúñ]/g, '');
+  return (c[0] || '?').toUpperCase();
+}
+function colorDe(p){
+  let h = 0;
+  for (let i = 0; i < p.length; i++) h = (h*31 + p.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (h % 360) + ',72%,58%)';
+}
+function nodoApp(a, conNombre){
+  const d = document.createElement('div');
+  d.className = 'ap'; d.dataset.p = a.p;
+  const b = document.createElement('div');
+  b.className = 'baldosa';
+  if (HAY_AND){
+    const im = document.createElement('img');
+    im.src = iconoUrl(a.p); im.alt = ''; im.draggable = false;
+    im.onerror = () => { b.innerHTML = ''; b.style.background = colorDe(a.p); b.textContent = letraDe(a.n);
+                         b.style.font = '700 26px system-ui'; };
+    b.appendChild(im);
+  } else {
+    b.style.background = colorDe(a.p);
+    b.style.font = '700 26px system-ui';
+    b.textContent = letraDe(a.n);
+  }
+  d.appendChild(b);
+  if (conNombre !== false){
+    const n = document.createElement('div');
+    n.className = 'nom'; n.textContent = a.n;
+    d.appendChild(n);
+  }
+  return d;
+}
+
+/* ══════════ CUÁNTAS FILAS ENTRAN ══════════
+   Medido y no escrito: en un teléfono corto una fila de más queda cortada por el
+   dock, y en uno largo sobra medio escritorio vacío. */
+function calculaFilas(){
+  const h = $('#hoja').getBoundingClientRect().height;
+  FILAS = cl(Math.floor((h - 12)/ALTO_AP), 2, 6);
+  return FILAS;
+}
+
+function pintaInicio(){
+  calculaFilas();
+  const porPag = COLS*FILAS;
+  const lista = INICIO.map(p => POR_PKG[p]).filter(Boolean);
+  NPAG = Math.max(1, Math.ceil(lista.length/porPag));
+  PAG = cl(PAG, 0, NPAG - 1);
+
+  const tira = $('#tira');
+  tira.innerHTML = '';
+  for (let q = 0; q < NPAG; q++){
+    const pg = document.createElement('div');
+    pg.className = 'pag';
+    for (const a of lista.slice(q*porPag, (q + 1)*porPag)) pg.appendChild(nodoApp(a));
+    tira.appendChild(pg);
+  }
+  tira.style.width = (NPAG*100) + '%';
+  $$('.pag').forEach(p => { p.style.flexBasis = (100/NPAG) + '%'; });
+  ponPagina(PAG, false);
+
+  const pts = $('#puntos'); pts.innerHTML = '';
+  for (let q = 0; q < NPAG; q++){
+    const t = document.createElement('div');
+    t.className = 'pt' + (q === PAG ? ' on' : '');
+    pts.appendChild(t);
+  }
+  pts.style.visibility = NPAG > 1 ? 'visible' : 'hidden';
+}
+function ponPagina(n, suave){
+  PAG = cl(n, 0, NPAG - 1);
+  const t = $('#tira');
+  t.style.transition = suave === false ? 'none' : 'transform .30s cubic-bezier(.22,.9,.24,1)';
+  t.style.transform = 'translateX(' + (-PAG*(100/NPAG)) + '%)';
+  $$('#puntos .pt').forEach((e, i) => e.classList.toggle('on', i === PAG));
+}
+
+function pintaDock(){
+  const d = $('#dock'); d.innerHTML = '';
+  for (const p of DOCK.slice(0, 4)){
+    const a = POR_PKG[p]; if (!a) continue;
+    d.appendChild(nodoApp(a, false));
+  }
+  d.style.visibility = DOCK.length ? 'visible' : 'hidden';
+}
+
+function pintaCajon(filtro){
+  const l = $('#cajLista');
+  const q = norm(filtro || '');
+  /* ── EL NOMBRE MANDA Y EL PAQUETE ES LA RED ──
+     Buscando por los dos a la vez, «mer» devolvía Cámara: `com.android.ca-MER-a2`
+     lo contiene. Eso no es tolerancia, es ruido justo arriba del resultado que
+     se estaba buscando. El paquete sólo entra cuando el nombre no encontró
+     nada, que es cuando de verdad sirve (buscar «whatsapp» sin acordarse de
+     cómo se llama el icono). */
+  let v = APPS;
+  if (q){
+    v = APPS.filter(a => norm(a.n).indexOf(q) >= 0);
+    if (!v.length) v = APPS.filter(a => norm(a.p).indexOf(q) >= 0);
+  }
+  l.innerHTML = '';
+  for (const a of v) l.appendChild(nodoApp(a));
+  if (!v.length){
+    const e = document.createElement('div');
+    e.style.cssText = 'grid-column:1/-1;text-align:center;opacity:.7;padding:28px 12px;font-size:14px';
+    e.textContent = T('nada');
+    l.appendChild(e);
+  }
+  $('#cajTit').textContent = q ? (v.length + ' · ' + T('todas')) : T('todas');
+}
+
+/* ══════════ ABRIR, FIJAR, MENÚ ══════════ */
+function abre(pkg){
+  vibra(10);
+  if (!HAY_AND){ avisa(T('sinPuente')); return; }
+  if (!AND.abrir(pkg)) avisa('✕');
+}
+function fijado(p){ return INICIO.indexOf(p) >= 0 || DOCK.indexOf(p) >= 0; }
+function alterna(p){
+  const i = INICIO.indexOf(p);
+  if (i >= 0){ INICIO.splice(i, 1); avisa(T('soltado')); }
+  else { INICIO.push(p); avisa(T('fijado')); }
+  guarda('inicio', INICIO); pintaInicio();
+}
+function abreMenu(pkg, y){
+  MENU_PKG = pkg; vibra(18);
+  const a = POR_PKG[pkg];
+  $('#menuTit').textContent = a ? a.n : pkg;
+  $('#mFijar').lastElementChild.textContent = fijado(pkg) ? T('soltar') : T('fijar');
+  $('#mInfo').lastElementChild.textContent = T('info');
+  $('#mBorrar').lastElementChild.textContent = T('borrar');
+  const m = $('#menu');
+  m.style.top = cl(y - 40, 60, innerHeight - 260) + 'px';
+  m.classList.add('on'); $('#velo').classList.add('on');
+}
+function cierraMenu(){
+  MENU_PKG = null;
+  $('#menu').classList.remove('on'); $('#velo').classList.remove('on');
+}
+
+/* ══════════ EL CAJÓN ══════════ */
+function verCajon(v){
+  CAJON = !!v;
+  $('#cajon').classList.toggle('on', CAJON);
+  if (CAJON){ $('#busca2').value = ''; pintaCajon(''); }
+  else { $('#busca2').blur(); $('#busca').blur(); $('#cajLista').scrollTop = 0; }
+}
+
+/* ══════════ RELOJ Y BATERÍA ══════════ */
+function dosD(n){ return n < 10 ? '0' + n : String(n); }
+function pintaReloj(){
+  const d = new Date();
+  $('#hora').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  const t = TXT[LANG] || TXT.es;
+  $('#fecha').innerHTML = t.dias[d.getDay()] + '<br>' + d.getDate() + ' ' + t.meses[d.getMonth()];
+  $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+}
+function pintaBateria(){
+  if (!HAY_AND || !AND.bateria) return;
+  try {
+    const b = JSON.parse(AND.bateria());
+    const n = b.n < 0 ? 100 : b.n;
+    $('#batN').textContent = (b.c ? '⚡' : '') + n + '%';
+    const f = $('#batLlena');
+    f.style.width = n + '%';
+    /* el color es información: rojo por debajo de 15 dice algo que el número
+       solo no dice de una ojeada */
+    f.style.background = b.c ? '#8fe3ff' : n <= 15 ? '#ff8b93' : n <= 30 ? '#ffd36e' : '#b8f078';
+    f.style.boxShadow = '0 0 6px ' + f.style.background;
+  } catch (e) {}
+}
+
+/* ══════════ CARGA ══════════ */
+function cargaApps(){
+  let bruto = '[]';
+  if (HAY_AND){ try { bruto = AND.apps(); } catch (e){ bruto = '[]'; } }
+  else bruto = JSON.stringify(APPS_DEMO);
+  try { APPS = JSON.parse(bruto) || []; } catch (e){ APPS = []; }
+  POR_PKG = {};
+  for (const a of APPS) POR_PKG[a.p] = a;
+
+  INICIO = (lee('inicio', null) || []).filter(p => POR_PKG[p]);
+  DOCK = (lee('dock', null) || []).filter(p => POR_PKG[p]);
+
+  /* ── LA PRIMERA VEZ SE SIEMBRA, NO SE DEJA VACÍO ──
+     Un escritorio en blanco la primera vez que se instala un launcher se lee a
+     que no funcionó. Se ponen las que el sistema declara como preferidas —
+     teléfono, mensajes, cámara, navegador— y si no se encuentran, las primeras
+     que haya sin ser del sistema. */
+  if (!INICIO.length && !DOCK.length && APPS.length){
+    const busca = pats => APPS.find(a => pats.some(q => a.p.indexOf(q) >= 0));
+    const dock = [
+      busca(['dialer', '.phone', 'contacts']),
+      busca(['.mms', 'messaging', 'messages', 'whatsapp']),
+      busca(['camera', 'gallery', 'photos']),
+      busca(['chrome', 'browser', 'firefox'])
+    ].filter(Boolean).map(a => a.p);
+    DOCK = dock.slice(0, 4);
+    INICIO = APPS.filter(a => !a.s && DOCK.indexOf(a.p) < 0).slice(0, 16).map(a => a.p);
+    if (INICIO.length < 8) INICIO = APPS.filter(a => DOCK.indexOf(a.p) < 0).slice(0, 16).map(a => a.p);
+    guarda('inicio', INICIO); guarda('dock', DOCK);
+  }
+}
+
+/* ══════════ ENTRADA ══════════ */
+function pkgDe(ev){
+  const n = ev.target.closest ? ev.target.closest('.ap') : null;
+  return n ? n.dataset.p : null;
+}
+function enganchaLista(el){
+  let t0 = 0, largo = null, px = 0, py = 0, movio = false;
+  el.addEventListener('pointerdown', e => {
+    const p = pkgDe(e); if (!p) return;
+    px = e.clientX; py = e.clientY; movio = false; t0 = performance.now();
+    /* ── MANTENER ES UN TEMPORIZADOR, NO UN «pointerup» LARGO ──
+       Esperando al soltar, el menú aparece recién cuando el dedo se levanta y se
+       siente que no respondió. A los 460 ms sale con el dedo todavía puesto, que
+       es lo que hace cualquier escritorio. */
+    largo = setTimeout(() => { largo = null; movio = true; abreMenu(p, e.clientY); }, 460);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!largo) return;
+    if (Math.hypot(e.clientX - px, e.clientY - py) > 12){ clearTimeout(largo); largo = null; movio = true; }
+  });
+  el.addEventListener('pointerup', e => {
+    if (largo){ clearTimeout(largo); largo = null;
+      const p = pkgDe(e);
+      if (p && !movio && performance.now() - t0 < 460) abre(p);
+    }
+  });
+  el.addEventListener('pointercancel', () => { if (largo){ clearTimeout(largo); largo = null; } });
+}
+
+/* páginas: arrastre horizontal con umbral, y el vertical no lo roba */
+function enganchaPaginas(){
+  const h = $('#hoja'), t = $('#tira');
+  let x0 = 0, y0 = 0, act = false, eje = 0, w = 0;
+  h.addEventListener('pointerdown', e => {
+    x0 = e.clientX; y0 = e.clientY; act = true; eje = 0;
+    w = h.getBoundingClientRect().width;
+    t.style.transition = 'none';
+  });
+  h.addEventListener('pointermove', e => {
+    if (!act) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!eje){
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) eje = 1;
+      else if (Math.abs(dy) > 10) eje = 2;
+      else return;
+    }
+    if (eje !== 1) return;
+    const base = -PAG*(100/NPAG);
+    /* resistencia en los extremos: sin ella la primera página se arrastra libre
+       y parece que hay una más que no llega nunca */
+    let d = dx;
+    if ((PAG === 0 && dx > 0) || (PAG === NPAG - 1 && dx < 0)) d = dx*.32;
+    t.style.transform = 'translateX(calc(' + base + '% + ' + d + 'px))';
+  });
+  const fin = e => {
+    if (!act) return; act = false;
+    t.style.transition = '';
+    /* ── ARRASTRAR PARA ARRIBA EN EL ESCRITORIO TAMBIÉN ABRE EL CAJÓN ──
+       El tirador de abajo mide 120 px y comparte veinte con el dock, así que
+       cerca de los iconos el gesto se lo lleva el dock. Éste es el gesto que la
+       gente hace igual, funciona desde cualquier punto libre y no le saca nada
+       a las páginas: el eje ya está decidido antes de llegar acá. */
+    if (eje === 2 && y0 - e.clientY > 60){ ponPagina(PAG); verCajon(true); vibra(10); return; }
+    if (eje !== 1){ ponPagina(PAG); return; }
+    const dx = e.clientX - x0;
+    if (dx < -w*.22) ponPagina(PAG + 1);
+    else if (dx > w*.22) ponPagina(PAG - 1);
+    else ponPagina(PAG);
+  };
+  h.addEventListener('pointerup', fin);
+  h.addEventListener('pointercancel', fin);
+}
+
+/* ── SUBIR ABRE EL CAJÓN, DESDE LOS TRES SITIOS DE ABAJO ──
+   Un solo tirador de 120 px es un blanco chico y encima se pisaba con el dock.
+   El gesto se registra en el escritorio, en la fila de puntos y en el dock; el
+   umbral de 55 px es lo que lo separa de un toque tembloroso, y el de 18 px en
+   horizontal es lo que impide que un arrastre entre páginas lo dispare. */
+function enganchaSubir(el){
+  let y0 = 0, x0 = 0, act = false;
+  el.addEventListener('pointerdown', e => { y0 = e.clientY; x0 = e.clientX; act = true; });
+  el.addEventListener('pointermove', e => {
+    if (!act || CAJON) return;
+    if (Math.abs(e.clientX - x0) > 18){ act = false; return; }
+    if (y0 - e.clientY > 55){ act = false; verCajon(true); vibra(10); }
+  });
+  const f = () => { act = false; };
+  el.addEventListener('pointerup', f);
+  el.addEventListener('pointercancel', f);
+}
+
+/* el cajón: se sube arrastrando desde abajo y se baja arrastrando hacia abajo */
+function enganchaCajon(){
+  const caj = $('#cajon');
+  enganchaSubir($('#puntos'));
+  enganchaSubir($('#dock'));
+  let cy = 0, cact = false, cmov = false;
+  caj.addEventListener('pointerdown', e => {
+    /* sólo arrastra si la lista está arriba de todo: si no, se roba el desplazamiento */
+    cy = e.clientY; cact = $('#cajLista').scrollTop <= 0; cmov = false;
+  });
+  caj.addEventListener('pointermove', e => {
+    if (!cact) return;
+    const d = e.clientY - cy;
+    if (d > 12){ cmov = true; caj.style.transition = 'none';
+                 caj.style.transform = 'translateY(' + Math.min(d, innerHeight) + 'px)'; }
+  });
+  const cfin = e => {
+    if (!cact) { return; }
+    cact = false; caj.style.transition = '';
+    if (cmov && e.clientY - cy > 90) verCajon(false);
+    caj.style.transform = '';
+  };
+  caj.addEventListener('pointerup', cfin);
+  caj.addEventListener('pointercancel', cfin);
+}
+
+/* ══════════ GANCHOS DEL SISTEMA ══════════
+   Los llama la Activity. Sin ellos, volver al escritorio deja abierto lo que
+   estuviera abierto tres apps atrás, que no es «conservar el estado». */
+window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
+window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
+window.__atras = function(){
+  if (MENU_PKG) cierraMenu();
+  else if (CAJON) verCajon(false);
+  else if (PAG > 0) ponPagina(0);
+};
+window.__insets = function(t, b){
+  document.documentElement.style.setProperty('--ins-t', Math.max(t, 8) + 'px');
+  document.documentElement.style.setProperty('--ins-b', Math.max(b, 8) + 'px');
+  calculaFilas(); pintaInicio();
+};
+
+/* ══════════ ARRANQUE ══════════ */
+function arranca(){
+  $('#busca').placeholder = T('busca');
+  $('#busca2').placeholder = T('busca');
+  $('#cajTit').textContent = T('todas');
+
+  fondoInit();
+  requestAnimationFrame(fondoBucle);
+  vidrioInit();
+
+  cargaApps();
+  pintaInicio(); pintaDock();
+  pintaReloj(); pintaBateria();
+  setInterval(pintaReloj, 1000);
+  setInterval(pintaBateria, 30000);
+
+  enganchaLista($('#tira'));
+  enganchaLista($('#dock'));
+  enganchaLista($('#cajLista'));
+  enganchaPaginas();
+  enganchaCajon();
+
+  /* ── EL CAMPO DEL ESCRITORIO ES UN BOTÓN ──
+     Es `readonly`, así que en un teléfono no levanta el teclado sobre un cuadro
+     que el cajón va a tapar: abre el cajón y le pasa el foco al de adentro, que
+     es el único que recibe letras. Los 90 ms son lo que tarda la hoja en
+     empezar a subir: enfocando en el mismo cuadro, Android abre el teclado
+     contra un elemento que todavía está fuera de la pantalla y no lo enfoca. */
+  const abreBusca = () => { verCajon(true); setTimeout(() => $('#busca2').focus(), 90); };
+  $('#buscaCaja').addEventListener('pointerdown', abreBusca);
+  $('#busca').addEventListener('focus', abreBusca);
+
+  $('#busca2').addEventListener('input', e => { if (!CAJON) verCajon(true); pintaCajon(e.target.value); });
+  $('#busca2').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const q = e.target.value.trim(); if (!q) return;
+    const v = APPS.filter(a => norm(a.n).indexOf(norm(q)) >= 0);
+    /* Enter abre la primera coincidencia; sólo si no hay ninguna sale a la web,
+       porque buscar «what» y terminar en Google en vez de en WhatsApp es lo
+       contrario de lo que uno quiso */
+    if (v.length) abre(v[0].p);
+    else if (HAY_AND) AND.buscarWeb(q);
+    else avisa(T('web', q));
+  });
+
+  $('#velo').addEventListener('pointerdown', cierraMenu);
+  $('#mFijar').addEventListener('click', () => { if (MENU_PKG) alterna(MENU_PKG); cierraMenu(); });
+  $('#mInfo').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.info(MENU_PKG); cierraMenu(); });
+  $('#mBorrar').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.borrar(MENU_PKG); cierraMenu(); });
+
+  /* mantener el fondo abre los ajustes del escritorio: es el gesto de siempre y
+     es la única forma de volver a cambiar de launcher sin ir a buscarlo */
+  let fl = null;
+  $('#lienzo').addEventListener('pointerdown', () => {
+    fl = setTimeout(() => { vibra(20); if (HAY_AND) AND.elegirInicio(); else avisa(T('inicio')); }, 620);
+  });
+  const fc = () => { if (fl){ clearTimeout(fl); fl = null; } };
+  $('#lienzo').addEventListener('pointerup', fc);
+  $('#lienzo').addEventListener('pointermove', fc);
+
+  document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; });
+  addEventListener('resize', () => { calculaFilas(); pintaInicio(); });
+  addEventListener('contextmenu', e => e.preventDefault());
+
+  setTimeout(() => $('#carga').classList.add('off'), 260);
+  setTimeout(() => { const c = $('#carga'); if (c && c.parentNode) c.parentNode.removeChild(c); }, 900);
+}
+
+/* ══════════════════════ EL PUENTE DE MENTIRA Y LAS SONDAS ══════════════════════
+   Esto es lo último del módulo. Dos cosas:
+
+   1. `APPS_DEMO` — la lista que usa `cargaApps()` cuando no hay `AND`, o sea en
+      un navegador. Sin ella el escritorio abriría vacío y no habría forma de
+      mirar la reja, el cajón ni el vidrio sin compilar el APK y tener el
+      teléfono en la mano. Los nombres de paquete son los de verdad a propósito:
+      la siembra de la primera vez busca «dialer», «camera», «chrome», así que
+      con nombres inventados ese camino —que es el que ve alguien que acaba de
+      instalar— nunca se probaría.
+
+   2. `window.__A` — las sondas. Como en todos los juegos de este repo: nada de
+      «se ve bien», números. `cajas()` mide solapamientos de verdad, `refr()`
+      dice cuántos filtros de refracción se armaron y `estado()` devuelve el
+      escritorio entero para poder afirmar qué se está mirando. */
+
+const APPS_DEMO = [
+  { p: 'com.android.dialer',        n: 'Teléfono',    s: 1 },
+  { p: 'com.android.messaging',     n: 'Mensajes',    s: 1 },
+  { p: 'com.android.camera2',       n: 'Cámara',      s: 1 },
+  { p: 'com.android.chrome',        n: 'Chrome',      s: 0 },
+  { p: 'com.whatsapp',              n: 'WhatsApp',    s: 0 },
+  { p: 'com.spotify.music',         n: 'Spotify',     s: 0 },
+  { p: 'com.instagram.android',     n: 'Instagram',   s: 0 },
+  { p: 'com.zhiliaoapp.musically',  n: 'TikTok',      s: 0 },
+  { p: 'com.google.android.youtube',n: 'YouTube',     s: 0 },
+  { p: 'com.google.android.gm',     n: 'Gmail',       s: 0 },
+  { p: 'com.google.android.apps.maps', n: 'Maps',     s: 0 },
+  { p: 'com.android.vending',       n: 'Play Store',  s: 1 },
+  { p: 'com.mercadolibre',          n: 'Mercado Libre', s: 0 },
+  { p: 'com.mercadopago.wallet',    n: 'Mercado Pago',s: 0 },
+  { p: 'ar.com.santander.rio.mbanking', n: 'Santander', s: 0 },
+  { p: 'com.netflix.mediaclient',   n: 'Netflix',     s: 0 },
+  { p: 'com.discord',               n: 'Discord',     s: 0 },
+  { p: 'com.twitter.android',       n: 'X',           s: 0 },
+  { p: 'org.telegram.messenger',    n: 'Telegram',    s: 0 },
+  { p: 'com.android.settings',      n: 'Ajustes',     s: 1 },
+  { p: 'com.android.calculator2',   n: 'Calculadora', s: 1 },
+  { p: 'com.google.android.calendar', n: 'Calendario',s: 0 },
+  { p: 'com.google.android.deskclock', n: 'Reloj',    s: 1 },
+  { p: 'com.adobe.lrmobile',        n: 'Lightroom',   s: 0 },
+  { p: 'com.rappi.customer',        n: 'Rappi',       s: 0 },
+  { p: 'com.ubercab',               n: 'Uber',        s: 0 },
+  { p: 'ai.rezona.aero',            n: 'Aero',        s: 0 },
+  { p: 'com.duolingo',              n: 'Duolingo',    s: 0 }
+];
+
+window.__errs = [];
+addEventListener('error', e => { window.__errs.push(String(e.message)); });
+addEventListener('unhandledrejection', e => { window.__errs.push('rej:' + String(e.reason)); });
+
+window.__A = {
+  /* qué hay puesto ahora mismo */
+  estado(){
+    return { apps: APPS.length, inicio: INICIO.length, dock: DOCK.length,
+             pag: PAG, npag: NPAG, filas: FILAS, cols: COLS,
+             cajon: CAJON, menu: MENU_PKG, lang: LANG, puente: HAY_AND,
+             hora: $('#hora') ? $('#hora').textContent : null,
+             fecha: $('#fecha').textContent };
+  },
+  /* ── LOS FILTROS DE REFRACCIÓN SE CUENTAN ──
+     `backdrop-filter:url(#…)` que apunta a un filtro que no se armó no falla:
+     se ignora en silencio y el vidrio queda liso. La única forma de saber que
+     el líquido está puesto es contar los <filter> y sus <feImage> con datos. */
+  refr(){
+    const el = $$('.refr');
+    const f = Array.prototype.slice.call(document.querySelectorAll('#svgdefs filter'));
+    return { elems: el.length, filtros: f.length,
+             ids: f.map(x => x.id),
+             mapas: f.map(x => { const i = x.querySelector('feImage');
+                                 return i ? (i.getAttribute('href') || '').slice(0, 22) : null; }),
+             soporta: CSS.supports('backdrop-filter', 'url(#x)') ||
+                      CSS.supports('-webkit-backdrop-filter', 'url(#x)') };
+  },
+  /* solapamientos entre lo que está visible, medido con las cajas de verdad */
+  cajas(){
+    const sel = ['#reloj', '#buscaCaja', '#hoja', '#puntos', '#dock', '#bat'];
+    const r = [];
+    for (const s of sel){
+      const e = $(s); if (!e) continue;
+      const b = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      if (b.width < 2 || b.height < 2 || cs.display === 'none' || +cs.opacity < 0.05) continue;
+      r.push({ s, x: Math.round(b.left), y: Math.round(b.top),
+               w: Math.round(b.width), h: Math.round(b.height) });
+    }
+    const choques = [];
+    for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++){
+      const a = r[i], b = r[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+        choques.push(a.s + ' × ' + b.s);
+    }
+    return { n: r.length, cajas: r, choques,
+             fuera: r.filter(z => z.y + z.h > innerHeight + 1 || z.y < -1).map(z => z.s) };
+  },
+  /* cuánto cuesta un cuadro del fondo, promediado */
+  costo(n){
+    const N = n || 60, t0 = performance.now();
+    for (let i = 0; i < N; i++) fondoPinta(performance.now() + i*33);
+    return { ms: +((performance.now() - t0)/N).toFixed(3), cal: CAL,
+             pxr: +PXR.toFixed(2), w: LZ.width, h: LZ.height };
+  },
+  /* el cielo a una hora dada, sin esperar a que sea esa hora */
+  cielo(h){
+    const c = cieloDe(h);   /* HORAS, no fracción */
+    return { h, cols: c.c, sol: c.sol, luz: c.luz, est: c.est };
+  },
+  hora(h){ HORA_FIJA = h; fondoPinta(performance.now()); return this.cielo(h); },
+  /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
+  cajon(v){ verCajon(v !== false); return CAJON; },
+  pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
+  menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
+  cierra(){ cierraMenu(); return MENU_PKG; },
+  buscar(q){ verCajon(true); $('#busca2').value = q; pintaCajon(q);
+             return { n: $$('#cajLista .ap').length,
+                      nombres: $$('#cajLista .nom').map(e => e.textContent) }; },
+  insets(t, b){ window.__insets(t, b); return { filas: FILAS }; }
+};
+
+/* ── EL PUENTE DE MENTIRA NO PONE BATERÍA, ASÍ QUE LA PONE LA VISTA PREVIA ──
+   `pintaBateria()` se rinde sin `AND` a propósito: inventar un porcentaje en el
+   teléfono sería mentir. En el navegador, en cambio, dejar el pastillero en «—»
+   esconde justamente el elemento que hay que mirar. */
+if (!HAY_AND){
+  addEventListener('DOMContentLoaded', () => {
+    $('#batN').textContent = '76%';
+    $('#batLlena').style.width = '76%';
+    setTimeout(() => avisa(T('sinPuente')), 900);
+  });
+}
+
+arranca();
+
+</script>
+</body>
+</html>
