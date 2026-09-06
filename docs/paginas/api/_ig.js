@@ -70,8 +70,13 @@ export async function sincronizar(env) {
   await env.DB.prepare(
     "INSERT INTO estado_ig (id, ultima) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET ultima = excluded.ultima"
   ).bind(Date.now()).run();
+  /* La poda cuenta SÓLO posteos. Las historias entran con `publicado = ahora`,
+     así que si contaran acá serían siempre las más nuevas y echarían de la tabla
+     a los posteos de verdad, que es justo lo que hay que conservar. Ellas se van
+     solas a las 24 horas, en `instagram.js`. */
   await env.DB.prepare(
-    "DELETE FROM ig WHERE codigo NOT IN (SELECT codigo FROM ig ORDER BY publicado DESC LIMIT ?)"
+    `DELETE FROM ig WHERE tipo <> 'historia' AND codigo NOT IN (
+       SELECT codigo FROM ig WHERE tipo <> 'historia' ORDER BY publicado DESC LIMIT ?)`
   ).bind(TOPE).run();
   return { nuevas };
 }

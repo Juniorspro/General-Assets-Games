@@ -345,6 +345,27 @@ export async function onRequestDelete({ request, env }) {
   if (!env.DB) return json({ error: "sin base de datos" }, 503);
   const u = new URL(request.url);
 
+  /* borrar un evento entero. Va ANTES que el borrado de sección porque los dos
+     leen `seccion`: sin el corte, pedir «sacá este álbum» caía en «sacá la
+     sección», que rebota porque tiene cosas adentro. */
+  const album = u.searchParams.get("album");
+  if (album !== null) {
+    const sec0 = limpio(u.searchParams.get("seccion"), 40);
+    if (!sec0) return json({ error: "falta la sección" }, 400);
+    const clave = String(album).trim().toLowerCase().slice(0, 90);
+    const r = await env.DB.prepare(
+      "SELECT id, llave FROM archivo WHERE seccion = ? AND lower(trim(titulo)) = ?"
+    ).bind(sec0, clave).all();
+    const filas = r.results || [];
+    if (!filas.length) return json({ error: "Ese evento ya no está." }, 404);
+    for (const f of filas) {
+      if (f.llave && env.MEDIOS) await env.MEDIOS.delete(f.llave).catch(() => {});
+      await env.DB.prepare("DELETE FROM archivo WHERE id = ?").bind(f.id).run();
+      await env.DB.prepare("UPDATE secciones SET portada = 0 WHERE portada = ?").bind(f.id).run();
+    }
+    return json({ listo: true, sacadas: filas.length });
+  }
+
   /* borrar una sección: sólo si está vacía, para no dejar fotos huérfanas */
   const sec = u.searchParams.get("seccion");
   if (sec) {

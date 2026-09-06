@@ -84,6 +84,46 @@ export async function onRequestPost({ request, env }) {
 }
 
 /* Bajar una publicación. */
+/* Elegir cuál de las publicaciones es «la próxima fecha», la que ocupa el cartel
+   de la portada. Hace falta DESPUÉS de publicar: el dueño carga cinco cosas de la
+   misma fiesta y recién viéndolas juntas decide cuál va arriba. Sin esto, la
+   portada la elegía sola la que tuviera la fecha más cercana. */
+export async function onRequestPut({ request, env }) {
+  if (!env.DB) return json({ error: "sin base de datos" }, 503);
+  if (!(await exigirSesion(request, env))) return json({ error: "Volvé a iniciar sesión." }, 401);
+  let b; try { b = await request.json(); } catch { return json({ error: "cuerpo inválido" }, 400); }
+  const id = Number(b.id || 0);
+  if (!id) return json({ error: "falta el id" }, 400);
+
+  /* Volver a subir algo bajado. `DELETE` sólo marca `estado = 'baja'`, así que
+     la publicación sigue entera; sin esta vuelta había que cargarla de nuevo a
+     mano, con foto y todo, para un cambio de opinión. */
+  if (b.estado === "publicada") {
+    const r = await env.DB.prepare(
+      "UPDATE publicaciones SET estado = 'publicada', tocado = ? WHERE id = ?"
+    ).bind(Date.now(), id).run();
+    if (!r.meta?.changes) return json({ error: "Esa publicación ya no está." }, 404);
+    return json({ listo: true, estado: "publicada" });
+  }
+
+  if (b.destacado === false) {
+    await env.DB.prepare("UPDATE publicaciones SET destacado = 0, tocado = ? WHERE id = ?")
+      .bind(Date.now(), id).run();
+    return json({ listo: true, destacado: 0 });
+  }
+
+  const p = await env.DB.prepare(
+    "SELECT id, cuando FROM publicaciones WHERE id = ? AND estado = 'publicada'").bind(id).first();
+  if (!p) return json({ error: "Esa publicación ya no está." }, 404);
+  if (!p.cuando) return json({ error: "Para ir a la portada tiene que tener fecha." }, 400);
+
+  /* el cartel es uno solo: al poner esta, se le cae a la anterior */
+  await env.DB.prepare("UPDATE publicaciones SET destacado = 0 WHERE destacado = 1").run();
+  await env.DB.prepare("UPDATE publicaciones SET destacado = 1, tocado = ? WHERE id = ?")
+    .bind(Date.now(), id).run();
+  return json({ listo: true, destacado: 1 });
+}
+
 export async function onRequestDelete({ request, env }) {
   if (!env.DB) return json({ error: "sin base de datos" }, 503);
   if (!(await exigirSesion(request, env))) return json({ error: "Volvé a iniciar sesión." }, 401);

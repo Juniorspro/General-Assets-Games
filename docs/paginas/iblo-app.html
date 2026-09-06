@@ -251,6 +251,16 @@ textarea{resize:vertical; min-height:96px; line-height:1.5}
 .fila .txt .marca{display:inline-block; width:auto; margin-top:5px; padding:3px 9px; border-radius:999px;
   font:600 9.5px/1.5 var(--cond); letter-spacing:.13em; text-transform:uppercase}
 .fila .marca.pr{background:rgba(195,75,255,.16); color:#dcaaff}
+/* `#lista` es una grilla de dos columnas y un `.bt` mide 100% con 16 px de
+   relleno: metido acá adentro, su ancho mínimo pasaba la columna y la fila se
+   desbordaba fuera de la pantalla. Este es chico y se puede envolver. */
+.chip{display:inline-flex; align-items:center; gap:7px; margin-top:8px; padding:7px 13px;
+  border-radius:999px; cursor:pointer; border:1px solid var(--linea); background:var(--humo);
+  color:var(--papel); font:700 10.5px/1.25 var(--cond); letter-spacing:.11em;
+  text-transform:uppercase; text-align:left; white-space:normal}
+.chip:hover{border-color:var(--ac); color:var(--ac)}
+.chip[disabled]{opacity:.55; cursor:default}
+.fila{min-width:0}
 .fila .marca.en{background:rgba(255,30,142,.16); color:#ff8fc4}
 .fila .marca.av{background:rgba(255,255,255,.08); color:var(--tenue)}
 .fila .marca.baja{background:rgba(255,84,112,.14); color:#ffa8b6}
@@ -471,6 +481,21 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
 
   /* con mouse, que se note lo que se puede tocar */
   .acc:hover, .atajo:hover, .tipo:hover, .esquina:hover{border-color:var(--ac)}
+  /* la grilla de Instagram dentro del panel */
+  .igRej{display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:9px}
+  .igU{position:relative; border-radius:12px; overflow:hidden; aspect-ratio:1;
+    border:1px solid var(--linea); background:#12060f}
+  .igU img{width:100%; height:100%; object-fit:cover; display:block}
+  .igU .qué{position:absolute; left:6px; top:6px; padding:3px 8px; border-radius:999px;
+    font:700 9.5px/1 var(--cond); letter-spacing:.1em; text-transform:uppercase;
+    background:rgba(8,3,10,.82); color:#fff}
+  .igU .qué.hist{background:var(--ac); color:#12060f}
+  .igU .sacar{position:absolute; right:6px; bottom:6px; padding:6px 11px; border-radius:999px;
+    border:0; cursor:pointer; font:700 10px/1 var(--cond); letter-spacing:.09em;
+    text-transform:uppercase; background:rgba(8,3,10,.86); color:#fff}
+  .igU .sacar:hover{background:var(--ac); color:#12060f}
+  .igU .queda{position:absolute; left:6px; bottom:6px; padding:3px 8px; border-radius:999px;
+    font:700 9.5px/1 var(--cond); background:rgba(8,3,10,.82); color:#fff}
   .bt:hover{filter:brightness(1.08)}
   .tabs button:hover{color:var(--papel)}
 }
@@ -682,6 +707,16 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
         <input id="cuando" type="datetime-local">
       </div>
 
+      <!-- Va acá, pegado a la fecha, y no al final del formulario: el dueño
+           carga cinco cosas de la misma fiesta y tiene que decidir cuál va
+           arriba mientras piensa en la fecha, no diez campos después. -->
+      <label class="interruptor" data-solo="proximamente" style="margin:2px 0 4px">
+        <input type="checkbox" id="fijar">
+        <span>Es <b>la próxima fecha</b>: va en la portada<br>
+          <small style="color:var(--tenue)">De todas las de esta fiesta, sólo una.
+            Las demás quedan en Publicaciones.</small></span>
+      </label>
+
       <div class="campo" data-solo="proximamente entrada">
         <label for="lugar">Lugar</label>
         <input id="lugar" maxlength="120" placeholder="Club Juventud, Margarita Belén">
@@ -747,10 +782,6 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
           </div>
         </div>
       </div>
-      <label class="interruptor" data-solo="proximamente">
-        <input type="checkbox" id="fijar">
-        <span>Fijar en la portada</span>
-      </label>
       </div>
 
       <button class="bt p grande" id="btPublicar" type="button" style="margin-top:16px">Publicar en la web</button>
@@ -776,8 +807,16 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
     <section class="pant" id="pLista" hidden>
       <span class="rot">Lo que está arriba</span>
       <h2>Mis <em>publicaciones</em></h2>
-      <p class="baja">Tocá «bajar» y sale de la web.</p>
+      <p class="baja">Tocá «bajar» y sale de la web; lo bajado se puede volver a subir.
+        La que diga <b>En la portada</b> es la que se ve arriba de todo como próxima fecha.</p>
       <div id="lista" style="margin-top:20px"></div>
+
+      <h2 style="margin-top:38px">Lo de <em>Instagram</em></h2>
+      <p class="baja">Esto se copia solo de la cuenta y sale en la portada.
+        Las historias se borran solas a las 24 horas, como en Instagram; lo demás
+        se saca de acá.</p>
+      <div class="aviso" id="avisoIg" hidden></div>
+      <div id="rejIg" style="margin-top:18px"></div>
     </section>
 
     <!-- ---------- ajustes ---------- -->
@@ -1132,7 +1171,7 @@ function irA(p){
   PANTALLAS.forEach(function(x){ $(x).hidden = (x !== p); });
   [].forEach.call($("tabs").children, function(b){ b.classList.toggle("act", b.dataset.p === p); });
   if (p === "pInicio") refrescarTablero();
-  if (p === "pLista") cargarLista();
+  if (p === "pLista"){ cargarLista(); cargarIg(); }
   if (p === "pArchivo") cargarArchivo();
   scrollTo(0,0);
 }
@@ -2005,7 +2044,9 @@ function pintarYaEsta(medios, alb){
   }
   var opciones = SECS.map(function(s){ return '<option value="' + esc(s.clave) + '">' + esc(s.nombre) + '</option>'; }).join("");
   var sec = SECS.filter(function(x){ return x.clave === secElegida; })[0] || {};
-  var cabeza = '<button class="bt s" type="button" id="btVolverAlb" style="justify-self:start">‹ Todos los eventos</button>' +
+  var cabeza = '<div class="dosBotones" style="margin-bottom:4px">' +
+    '<button class="bt s" type="button" id="btVolverAlb">‹ Todos los eventos</button>' +
+    '<button class="bt s" type="button" id="btBajaAlbum">Sacar todo el evento</button></div>' +
     (alb && alb.nombre ? '<span class="pista"><b>' + esc(alb.nombre) + '</b></span>' : '');
   $("arYa").innerHTML = cabeza + medios.map(function(m){
     var esPortada = sec.portada === m.id;
@@ -2157,6 +2198,22 @@ $("btVideoListo").addEventListener("click", function(){
 
 $("arYa").addEventListener("click", function(ev){
   if (ev.target.closest("#btVolverAlb")){ pintarAlbumes(); return; }
+  var todo = ev.target.closest("#btBajaAlbum");
+  if (todo){
+    if (!confirm("¿Sacamos TODO este evento de la web? No se puede deshacer.")) return;
+    todo.disabled = true; todo.textContent = "Sacando…";
+    pedir("/archivo?seccion=" + encodeURIComponent(secElegida) +
+          "&album=" + encodeURIComponent(albumAbierto), { metodo:"DELETE" })
+      .then(function(j){
+        decir("avisoArch", "Sacado el evento entero (" + j.sacadas + ").", "");
+        albumAbierto = ""; cargarArchivo();
+      })
+      .catch(function(e){
+        decir("avisoArch", e.message, "mal");
+        todo.disabled = false; todo.textContent = "Sacar todo el evento";
+      });
+    return;
+  }
   var alb = ev.target.closest("button[data-alb]");
   if (alb){ abrirAlbum(alb.dataset.alb); return; }
   var p = ev.target.closest("button[data-portada]");
@@ -2386,6 +2443,13 @@ function cargarLista(){
         '<div class="txt"><b>' + esc(p.titulo) + '</b>' +
           '<span>' + esc(cuandoTexto(p)) + (p.precio ? " · " + esc(p.precio) : "") + '</span>' +
           '<span class="marca ' + (baja ? "baja" : m[0]) + '">' + (baja ? "Bajada" : m[1]) + '</span>' +
+          (!baja && p.destacado ? ' <span class="marca pr">En la portada</span>' : "") +
+          /* sólo tiene sentido en algo con fecha: el cartel de la portada es
+             «la próxima fecha», un aviso sin fecha no puede ocuparlo */
+          (!baja && p.tipo === "proximamente" && p.cuando && !p.destacado
+            ? '<button class="chip" type="button" data-portada="' + p.id + '">Ponerla en la portada</button>'
+            : "") +
+          (baja ? '<button class="chip" type="button" data-subir="' + p.id + '">Subirla de nuevo</button>' : "") +
         '</div>' +
         (baja ? "" : '<button class="bajar" type="button" data-id="' + p.id + '">Bajar</button>') +
         '</div>';
@@ -2394,12 +2458,64 @@ function cargarLista(){
     $("lista").innerHTML = '<div class="vacio"><b>No pude cargarlas</b>' + esc(e.message) + '</div>';
   });
 }
+/* La grilla de Instagram, para poder sacar algo que no se quiere ver arriba.
+   Las historias no llevan botón: se van solas a las 24 horas y ofrecer el botón
+   sería prometer un control que no hace falta. Igual se muestra cuánto les
+   queda, que es la pregunta que se hace el dueño. */
+function cargarIg(){
+  $("rejIg").innerHTML = '<span class="pista">Buscando…</span>';
+  pedir("/instagram").then(function(j){
+    var p = j.posts || [];
+    if (!p.length){ $("rejIg").innerHTML = '<span class="pista">No hay nada copiado todavía.</span>'; return; }
+    var ahora = Date.now();
+    $("rejIg").innerHTML = '<div class="igRej">' + p.map(function(x){
+      var hist = x.tipo === "historia";
+      var faltan = Math.max(0, Math.round((x.publicado + 864e5 - ahora) / 36e5));
+      return '<div class="igU">' +
+        (x.imagen ? '<img alt="" src="' + esc(x.imagen) + '">' : '') +
+        '<span class="qué' + (hist ? " hist" : "") + '">' + (hist ? "Historia" : esc(x.tipo)) + '</span>' +
+        (hist
+          ? '<span class="queda">' + (faltan > 0 ? faltan + " h" : "se va ya") + '</span>'
+          : '<button class="sacar" type="button" data-ig="' + esc(x.codigo) + '">Sacar</button>') +
+        '</div>';
+    }).join("") + '</div>';
+  }).catch(function(e){ $("rejIg").innerHTML = '<span class="pista">' + esc(e.message) + '</span>'; });
+}
+$("rejIg").addEventListener("click", function(ev){
+  var b = ev.target.closest("button[data-ig]"); if (!b) return;
+  if (!confirm("¿La sacamos de la web?")) return;
+  b.disabled = true; b.textContent = "…";
+  pedir("/instagram?codigo=" + encodeURIComponent(b.dataset.ig), { metodo:"DELETE" })
+    .then(function(){ decir("avisoIg", "Sacada de la portada.", "bien"); cargarIg(); })
+    .catch(function(e){ decir("avisoIg", e.message, "mal"); b.disabled = false; b.textContent = "Sacar"; });
+});
+
 function bajar(id, listo){
   pedir("/publicaciones?id=" + id, { metodo:"DELETE" }).then(listo).catch(function(e){
     alert(e.message);
   });
 }
 $("lista").addEventListener("click", function(ev){
+  var sub = ev.target.closest("button[data-subir]");
+  if (sub){
+    sub.disabled = true; sub.textContent = "Subiendo…";
+    pedir("/publicaciones", { metodo:"PUT", cuerpo:{ id:+sub.dataset.subir, estado:"publicada" } })
+      .then(function(){ cargarLista(); refrescarTablero(); })
+      .catch(function(e){
+        alert(e.message); sub.disabled = false; sub.textContent = "Subirla de nuevo";
+      });
+    return;
+  }
+  var pt = ev.target.closest("button[data-portada]");
+  if (pt){
+    pt.disabled = true; pt.textContent = "Poniéndola…";
+    pedir("/publicaciones", { metodo:"PUT", cuerpo:{ id:+pt.dataset.portada, destacado:true } })
+      .then(function(){ cargarLista(); refrescarTablero(); })
+      .catch(function(e){
+        alert(e.message); pt.disabled = false; pt.textContent = "Ponerla en la portada";
+      });
+    return;
+  }
   var b = ev.target.closest("button[data-id]"); if (!b) return;
   if (!confirm("¿La bajamos de la web?")) return;
   b.disabled = true; b.textContent = "…";
