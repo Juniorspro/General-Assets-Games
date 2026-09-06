@@ -281,6 +281,106 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigésima vuelta (2026-09-06): **AERO** — la mascota se apoya en el teclado, y sólo mientras se busca
+
+Reporte, una línea: *"la mascotita molesta en el inicio debe solamente aparecer en la barra de
+búsqueda al buscar encima del teclado"*.
+
+**Y ES UNA CORRECCIÓN A LA VUELTA ANTERIOR, QUE ES MÍA.** En la 119 la saqué del cajón y la puse en
+el medio del escritorio, con el argumento de que esa franja está vacía a propósito y que ahí por fin
+se veía el modelo. El argumento era bueno para el reporte de entonces —*«no sé dónde se
+encuentra»*— y equivocado para lo que la pantalla de inicio es: ahí lo que uno quiere ver es el
+fondo y sus apps, y un muñeco de doscientos píxeles bailando en el medio es exactamente lo que se
+pidió sacar. Ahora sale **sólo mientras se busca**, apoyada sobre el teclado.
+
+#### EL TECLADO NO SE PUEDE MEDIR DESDE LA PÁGINA, Y ES POR EL BORDE A BORDE
+
+La ventana va con `setDecorFitsSystemWindows(false)` desde la vuelta 115 —para que el cielo no se
+corte en dos franjas de color plano— y eso tiene una consecuencia que sólo aparece cuando hace
+falta: **`adjustResize` NO encoge el WebView**. El teclado llega como un inset, así que ni
+`innerHeight` ni `visualViewport` cambian un píxel y desde JavaScript el teclado **es invisible**.
+El único que lo sabe es el sistema.
+
+Va por el puente: `WindowInsets.Type.ime()` **menos** `navigationBars()`, porque el inset del IME ya
+incluye la barra de navegación y sin la resta la mascota quedaría una barra de más por encima del
+teclado. Y va **aparte de los otros dos insets**: cambia muchas veces por segundo mientras el
+teclado sube y los otros casi nunca, así que se descarta el valor repetido antes de cruzar el puente
+—si no, son sesenta `evaluateJavascript` por segundo durante la animación—. En el navegador, donde
+no hay puente, hay respaldo por `visualViewport`, que ahí sí sirve.
+
+#### LA REGLA ES UNA SOLA: SE APOYA EN LO QUE TAPE ABAJO
+
+Y esa generalización salió de un defecto que el arreglo mismo creó. En Personalizar hay **cinco
+botones de pose** cuyo único trabajo es que el modelo se vea a pedido; con la mascota clavada al
+borde de abajo, la hoja del panel —que ocupaba el 86 % de la pantalla— la tapaba **entera**: se
+tocaba «Saludar» y no pasaba nada visible. Así que `pisoAlto()` no pregunta por el teclado sino por
+lo que haya abajo: el teclado, o la hoja abierta. Un concepto y no dos.
+
+Con eso hubo que arreglar además el tamaño de la hoja, y es aritmética: 86 % de 892 son **632 px**,
+y arriba quedaban 104 libres entre el widget y su borde. Una mascota mide 202. **En 104 px no entra,
+así que ninguna pose se podía ver.** Con 64 % la hoja mide 571, quedan **321 px** de franja, y el
+cuerpo del panel —que ya scrollea— no pierde un solo control.
+
+Tres cosas más de esa misma franja, las tres de mirar la captura:
+- **El reloj y la barra de búsqueda se apagan** mientras el panel está abierto. No los cambia
+  ningún control de ahí, y son justo lo que se interpone entre el ojo y el muñeco. La reja se queda,
+  que es lo que sí mueven el tamaño de icono y las columnas.
+- **La mascota sube por encima del velo.** `#velo` desenfoca 3 px todo lo que queda debajo, y con la
+  mascota en la capa 3 el previo salía **borroso** — que en un botón cuyo trabajo es mostrar el
+  modelo es exactamente el defecto. Entre el velo (4) y la hoja (6) hay un escalón libre, y el menú
+  de app, que también vive en 5, lo cierra `persAbre` antes de abrir.
+- Y **los tres tamaños se achicaron** (214/292 → 148/202 el del medio): la mascota vive **encima de
+  los resultados**, así que con 214 px de ancho se comía la mitad de lo que uno acaba de pedir.
+
+#### MOSTRAR UNA POSE ES UNA PREVIA CON VENCIMIENTO, NO UN `.on` A MANO
+
+`asisMascota` le ponía la clase directo y **no la sacaba nadie**: cerrar el panel dejaba a la
+mascota plantada en el escritorio, o sea el reclamo de esta vuelta reintroducido por la puerta de
+atrás. Ahora se anota **hasta cuándo** se la pidió (`MASC_PREVIA`) y la decisión la sigue tomando
+`mascMira`, que es el único que sabe la regla; cada botón corre el vencimiento seis segundos y
+cerrar el panel lo borra. Vale igual para la acción `mascota` del asistente.
+
+#### IRSE Y APARTARSE NO SON LO MISMO, ASÍ QUE NO DURAN LO MISMO
+
+La despedida son 2,4 s a propósito: un corte seco se lee a error. Pero hay un segundo motivo para
+que se vaya —que la lista de resultados creció y le quedó **encima**— y ahí despedirse son dos
+segundos y medio tapando justo lo que uno acaba de pedir, que es el reclamo de esta vuelta en
+chiquito. Medido con dieciocho resultados: con la despedida única quedaba `on` a los 900 ms; con
+260 ms para apartarse, `on:false`. Y 260 alcanza para que no parpadee entre una tecla y la
+siguiente.
+
+#### DOS DEFECTOS DE LA MEDICIÓN, Y LOS DOS DEL TIPO DE SIEMPRE
+
+- **`mascCaja` medía en pantalla y no en layout.** `getBoundingClientRect` devuelve la caja
+  **alineada a los ejes**, así que le entra el `rotate(3deg)` del cabeceo: sobre un muñeco de
+  148×202 la infla a **158×209** y el borde de abajo baja seis píxeles que no existen. Es
+  literalmente el mismo defecto que en la vuelta 117 costó medir mal la celda de la tira.
+  `offsetTop`/`offsetHeight` no pasan por ninguna transformación.
+- **Y el plan medía antes de que la transición terminara.** Con 400 ms de espera el sitio daba
+  `sobreTeclado −10`; con 900, **+12** en los cuatro casos. La transición de `bottom` dura 260 ms y
+  encima la entrada tiene sobrepico (`cubic-bezier(.22,1.4,…)`), así que medir a los 400 es medir el
+  camino y no el destino. **Y esto contestó una pregunta antes de que me la hiciera:** con esa
+  medición corrida yo habría movido el número de `--masc-b`, que estaba bien.
+
+#### MEDIDO AL CERRAR
+
+Mascota: en el inicio **`on:false`**; con el cajón abierto y sin buscar, `false`; buscando «mer» con
+el teclado en 300, **`on:true` con `sobreTeclado: 12`**; con el teclado en 0 baja sola y sigue en
+12; con dieciocho resultados **se aparta** (`on:false`) y al volver a dos vuelve; con la búsqueda
+vacía se despide. Personalizar: la hoja mide 571 y la mascota queda **12 px por encima de su
+borde**, nítida y por encima del velo, con los tres tamaños (112 · 148 · 196) y las cinco poses
+puestas por su botón; al cerrar vuelve abajo. Regresión completa: **30 apps**, 6 filtros de
+refracción, riel de 16 letras, cero solapamientos, subir sobre el dock abre, el aro de la batería en
+sus tres escalones, el asistente con sus 9 acciones y `choques: []` con la hoja abierta, la mascota
+con 23 huesos y 5.541 triángulos a **0,075 ms por cuadro** y el bucle apagado en el escritorio, y
+las cinco poses fotografiadas y distintas. `window.__errs` **vacío en las seis corridas**. APK
+**356 KB** con firma v2+v3, `HOME`+`DEFAULT`+`LAUNCHER`, `singleTask`, `stateNotNeeded` e `INTERNET`.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador, así que del alto del teclado está medido el
+camino entero —el inset se resta, cruza el puente, mueve `--masc-b` y la mascota queda 12 px por
+encima— con el valor **inyectado**, no con un teclado de verdad. El respaldo por `visualViewport` es
+lo que corre en el banco y ése sí es real.
+
 ### Centésima decimonovena vuelta (2026-09-06): **AERO** — la mascota estaba escondida, y el asistente pasa a ser gratis
 
 Reporte, tres cosas: *"no hay ni mierda el modelo no se dónde se encuentra · también deberías hacer

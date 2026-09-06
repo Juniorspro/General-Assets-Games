@@ -310,7 +310,6 @@ function verCajon(v){
     $('#busca2').blur(); $('#busca').blur();
     $('#cajLista').scrollTop = 0;
     mascotaBaila(false);
-    mascOcio();
     $('#burbuja').classList.remove('on');
   }
 }
@@ -640,6 +639,7 @@ function enganchaCajon(){
 const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
 
 let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0, MASC_BUSCA = false;
+let MASC_PREVIA = 0;      /* hasta cuándo la pose pedida a mano manda sobre la regla */
 
 /* ── CAMBIAR DE ANIMACIÓN ES CAMBIAR UN NOMBRE ──
    Las cinco son funciones del tiempo sobre los mismos 23 huesos, así que no hay
@@ -677,15 +677,50 @@ function mascOcio(){
    Dos sitios, y los dos en variables: el CSS los lee y la sonda también, así
    que no hay dos números que puedan discrepar. En el escritorio es grande y va
    por encima del dock; en el cajón es chica y se apoya en el borde de abajo. */
-const MASC_CAJ = { w: 132, b: 16 };
+/* ── EL ALTO DEL TECLADO LO DICE ANDROID, NO LA PÁGINA ──
+   La ventana va de borde a borde (`setDecorFitsSystemWindows(false)`), así que
+   `adjustResize` no encoge el WebView: el teclado llega como un inset y desde
+   JavaScript ni `innerHeight` ni `visualViewport` se enteran. Lo manda el
+   puente. En el navegador, donde no hay puente ni teclado, vale cero — y ahí
+   `visualViewport` sí sirve de respaldo, que es lo que hace probable esto. */
+let TECLADO = 0;
+window.__teclado = function(h){
+  TECLADO = Math.max(0, +h || 0);
+  mascSitio();
+};
+function tecladoAlto(){
+  if (TECLADO) return TECLADO;
+  const v = window.visualViewport;
+  if (!v) return 0;
+  return Math.max(0, Math.round(innerHeight - v.height - v.offsetTop));
+}
+
+/* ── LA MASCOTA SE APOYA EN LO QUE TAPE ABAJO, SEA LO QUE SEA ──
+   Buscando eso es el teclado. Pero en Personalizar hay cinco botones de pose
+   cuyo único trabajo es que se VEA el muñeco, y esa hoja ocupa el 70 % de la
+   pantalla desde abajo: apoyada en el teclado (que ahí vale cero) la mascota
+   queda ENTERA por detrás de la hoja y los cinco botones no muestran nada.
+   Es una sola regla y no dos: se apoya sobre el borde de arriba de lo que haya
+   abajo. */
+function pisoAlto(){
+  let h = tecladoAlto();
+  const p = $('#pers');
+  if (p && p.classList.contains('on')) h = Math.max(h, p.offsetHeight);
+  return h;
+}
+
+/* ── DÓNDE VA Y CUÁNTO MIDE ──
+   Un solo sitio: **apoyada sobre el teclado, mientras se busca**. Estuvo en el
+   medio del escritorio una vuelta y el reporte fue que molestaba: es la
+   pantalla de inicio, ahí lo que uno quiere ver es el fondo y sus apps. */
 function mascSitio(){
   /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
      del ancho, cambiar uno deja al muñeco estirado y nada avisa */
-  const w = CAJON ? MASC_CAJ.w : (PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media);
+  const w = PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media;
   const r = document.documentElement.style;
   r.setProperty('--masc-w', w + 'px');
   r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
-  r.setProperty('--masc-b', (CAJON ? MASC_CAJ.b : 132) + 'px');
+  r.setProperty('--masc-b', (pisoAlto() + 12) + 'px');
   mascMira();
 }
 
@@ -698,35 +733,49 @@ function mascSitio(){
 function mascCabe(){
   const alto = parseFloat(getComputedStyle(document.documentElement)
                  .getPropertyValue('--masc-h')) || MASC_H;
-  const l = CAJON ? $('#cajLista') : $('#tira').children[PAG];
-  if (!l) return !CAJON;
+  const l = $('#cajLista');
+  if (!l) return false;
   const n = l.children.length;
   if (!n) return true;
   const u = l.children[n - 1].getBoundingClientRect();
-  const c = (CAJON ? l : $('#hoja')).getBoundingClientRect();
-  return u.bottom <= c.bottom - alto - (CAJON ? 30 : 8);
+  /* el techo de la mascota no es el borde de la lista sino donde empieza ella,
+     que con el teclado abierto está bastante más arriba */
+  const piso = innerHeight - pisoAlto() - 12;
+  return u.bottom <= piso - alto - 12;
 }
 
-/* ── EN EL ESCRITORIO SE VE SIEMPRE ──
-   Ése era el reporte: «no sé dónde se encuentra». Vivía adentro del cajón y
-   sólo aparecía TECLEANDO, o sea que había que abrir el cajón y escribir para
-   ver el modelo. En el escritorio se ve desde el primer cuadro y sin hacer
-   nada; en el cajón sigue apareciendo mientras se busca, que es donde tiene
-   algo que acompañar. */
+/* ── SÓLO MIENTRAS SE BUSCA ──
+   Estuvo en el escritorio una vuelta —para que el modelo se pudiera ver, que
+   era el reporte anterior— y el de ahora es que ahí molesta. Tiene razón: la
+   pantalla de inicio es para el fondo y las apps. Acompaña la búsqueda, que es
+   la única pantalla del launcher donde uno está esperando algo, y para poder
+   VER el modelo a pedido están los cinco botones de pose en Personalizar. */
 function mascMira(){
   const m = $('#mascota');
-  const ver = lee('mascOn', 1) && mascCabe() &&
-              (CAJON ? MASC_BUSCA : true) && !document.hidden;
+  const busca = lee('mascOn', 1) && CAJON && MASC_BUSCA && !document.hidden;
+  /* ── Y HAY UN SEGUNDO MOTIVO PARA QUE SE VEA: QUE SE LA PIDA ──
+     Los cinco botones de pose de Personalizar y la acción `mascota` del
+     asistente la muestran A PEDIDO. Sin esto, `mascMira` —que corre en cada
+     repintado del panel— la apagaría en el cuadro siguiente al de tocar el
+     botón. La previa vence sola y ahí manda otra vez la regla. */
+  const previa = lee('mascOn', 1) && !document.hidden && Date.now() < MASC_PREVIA;
+  const cabe = previa || (busca && mascCabe());
   clearTimeout(MASC_T);
-  if (ver){
+  if (cabe){
     m.classList.add('on');
     l3Corre(true);
     if (!MASC_HOY) mascPone('quieto');
     return;
   }
-  /* se despide en vez de desaparecer: un corte seco se lee a error, y el bucle
-     de render se apaga recién cuando terminó de irse */
-  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, 2400);
+  /* ── IRSE Y APARTARSE NO SON LA MISMA COSA, ASÍ QUE NO DURAN LO MISMO ──
+     Dejar de buscar es una despedida: 2,4 s, porque un corte seco se lee a
+     error. Pero cuando lo que pasa es que la lista creció y la mascota le
+     quedó ENCIMA, despedirse son dos segundos y medio tapando justo lo que uno
+     acaba de pedir — que es el reclamo que trajo esta vuelta, en chiquito. Se
+     aparta en un cuarto de segundo, que igual alcanza para que no parpadee
+     entre una tecla y la siguiente. */
+  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); },
+                      busca ? 260 : 2400);
 }
 
 function mascotaBaila(v){
@@ -736,9 +785,6 @@ function mascotaBaila(v){
     MASC_ULT = Date.now();
     mascPone('baila');
     MASC_CICLO = setTimeout(mascOcio, 2200);
-  } else if (!CAJON){
-    /* en el escritorio no se va: pasa al ocio */
-    MASC_CICLO = setTimeout(mascOcio, 600);
   }
   mascMira();
 }
@@ -831,9 +877,15 @@ function arranca(){
      y seis años y el primer cuadro del launcher salía con la mascota sentada
      durmiendo. Lo primero que uno ve del muñeco tiene que ser el muñeco de pie. */
   MASC_ULT = Date.now();
-  mascOcio();
 
   pideInsets();
+  try { if (HAY_AND && AND.teclado) TECLADO = +AND.teclado() || 0; } catch (e) {}
+  /* en el navegador no hay puente: el respaldo es `visualViewport`, que sí
+     cambia cuando la ventana se achica */
+  if (window.visualViewport){
+    visualViewport.addEventListener('resize', mascSitio);
+    visualViewport.addEventListener('scroll', mascSitio);
+  }
   cargaApps();
   pintaInicio(); pintaDock();
   pintaReloj(); pintaBateria();

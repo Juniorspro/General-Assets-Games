@@ -85,6 +85,18 @@ public class Principal extends Activity {
       }
       final float d = getResources().getDisplayMetrics().density;
       puente.insets(Math.round(arriba/d), Math.round(abajo/d));
+      /* ── Y EL TECLADO, QUE ES OTRO INSET ──
+         Se le resta lo que ya ocupa la barra de navegación: el inset del IME la
+         incluye, así que sin la resta la mascota quedaría una barra de más por
+         encima del teclado. Por debajo de API 30 no hay forma de preguntarlo y
+         se informa cero, que es lo mismo que había hasta ahora. */
+      int tecl = 0;
+      if (Build.VERSION.SDK_INT >= 30) {
+        int ime = ins.getInsets(WindowInsets.Type.ime()).bottom;
+        int nav = ins.getInsets(WindowInsets.Type.navigationBars()).bottom;
+        tecl = Math.max(0, ime - nav);
+      }
+      puente.teclado(Math.round(tecl/d));
       return ins;
     });
 

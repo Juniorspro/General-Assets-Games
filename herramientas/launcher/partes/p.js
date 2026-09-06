@@ -18,7 +18,11 @@ const PERS_ACENTOS = ['#7fe3ff', '#a8e85c', '#ffd166', '#ff8fab',
 
 /* los tres tamaños de la mascota en el escritorio, con su alto derivado de la
    proporción del lienzo: escritos a mano, el muñeco sale estirado */
-const PERS_MASC = { chica: 148, media: 214, grande: 282 };
+/* ── Y SON CHICOS A PROPÓSITO ──
+   La mascota vive apoyada sobre el teclado, o sea ENCIMA de los resultados de
+   la búsqueda. Con 214 px de ancho se comía la mitad de lo que uno acaba de
+   pedir; a 148 ocupa una fila y media y el muñeco se sigue leyendo. */
+const PERS_MASC = { chica: 112, media: 148, grande: 196 };
 
 const PERS = [
   { tit: 'pMascota', tipo: 'ops', clave: 'mascOn',
@@ -80,15 +84,24 @@ function persOscuro(){
   $('#oscuro').style.opacity = String(v);
 }
 
+/* ── LA HOJA MUEVE A LA MASCOTA, PORQUE ES LO QUE TAPA ABAJO ──
+   `mascSitio` se llama DESPUÉS de pintar y de encender la hoja: su alto sale de
+   `offsetHeight`, y una hoja que todavía no tiene contenido ni clase mide otra
+   cosa. Al cerrar, la misma llamada la devuelve a donde manda la regla. */
 function persAbre(){
   cierraMenu(); asisCierra();
   persPinta();
   $('#pers').classList.add('on');
   $('#velo').classList.add('on');
+  document.body.classList.add('pers');
+  mascSitio();
 }
 function persCierra(){
   $('#pers').classList.remove('on');
   $('#velo').classList.remove('on');
+  document.body.classList.remove('pers');
+  MASC_PREVIA = 0;          /* cerrar el panel termina la previa: no hay qué mirar */
+  mascSitio();
 }
 
 function persPinta(){

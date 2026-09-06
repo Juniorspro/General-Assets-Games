@@ -69,14 +69,21 @@ function asisNom(p){ const a = POR_PKG[p]; return a ? a.n : p; }
    la podría llamar desde el arranque, antes de que haya apps. */
 function rejaRepinta(){ calculaFilas(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value); }
 
-/* la mascota se fuerza por el mismo camino que usa el ocio, y se le corre el
-   reloj para que el ocio no la pise al cuadro siguiente */
+/* ── MOSTRAR UNA POSE ES UNA PREVIA CON VENCIMIENTO ──
+   Poniéndole `.on` a mano y nada más, la mascota se queda encendida para
+   siempre —cerrar el panel la dejaba plantada en el escritorio, que es
+   exactamente lo que esta vuelta vino a sacar—. Se anota HASTA CUÁNDO se la
+   pidió y la decisión la sigue tomando `mascMira`, que es el único que sabe la
+   regla; cada botón que se toca corre el vencimiento. */
+const ASIS_PREVIA = 6000;
+let ASIS_PT = 0;
 function asisMascota(n){
-  const m = $('#mascota');
-  clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
-  m.classList.add('on'); l3Corre(true);
+  clearTimeout(MASC_CICLO); clearTimeout(ASIS_PT);
+  MASC_PREVIA = Date.now() + ASIS_PREVIA;
   MASC_ULT = Date.now(); mascPone(n);
-  MASC_CICLO = setTimeout(mascOcio, 6000);
+  mascMira();
+  MASC_CICLO = setTimeout(mascOcio, ASIS_PREVIA);
+  ASIS_PT = setTimeout(mascMira, ASIS_PREVIA + 40);
 }
 
 /* ══════════ QUIÉN CONTESTA ══════════

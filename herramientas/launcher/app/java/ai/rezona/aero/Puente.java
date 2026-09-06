@@ -40,6 +40,9 @@ public class Puente {
   private final Activity act;
   private final WebView web;
   private String insetArriba = "0", insetAbajo = "0";
+  /* el alto del teclado, en dp. Va aparte de los insets porque cambia muchas
+     veces por segundo mientras el teclado sube y los otros dos casi nunca. */
+  private String altoTeclado = "0";
 
   public Puente(Activity a, WebView w) { this.act = a; this.web = w; }
 
@@ -51,6 +54,20 @@ public class Puente {
   }
 
   @JavascriptInterface public String insets() { return insetArriba + "," + insetAbajo; }
+
+  /* ── EL TECLADO NO SE PUEDE MEDIR DESDE LA PÁGINA ──
+     La ventana está en modo `setDecorFitsSystemWindows(false)`, o sea de borde a
+     borde: con eso `adjustResize` NO encoge el WebView —el teclado llega como un
+     inset— así que ni `innerHeight` ni `visualViewport` cambian y desde
+     JavaScript el teclado es invisible. El único que lo sabe es el sistema. */
+  void teclado(int alto) {
+    String n = String.valueOf(alto);
+    if (n.equals(altoTeclado)) return;   /* dispara en cada cuadro de la animación */
+    altoTeclado = n;
+    web.post(() -> web.evaluateJavascript("window.__teclado && __teclado(" + n + ")", null));
+  }
+
+  @JavascriptInterface public String teclado() { return altoTeclado; }
 
   /* ══════════ LA LISTA DE APPS ══════════ */
   @JavascriptInterface public String apps() {

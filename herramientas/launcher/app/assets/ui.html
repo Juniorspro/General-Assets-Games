@@ -498,11 +498,29 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 /* ══════════ PERSONALIZACIÓN ══════════
    Misma familia que la hoja del asistente: sube desde abajo y deja ver el
    launcher detrás, porque TODO lo que se toca acá cambia lo que está atrás. */
-#pers{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:86%;
+/* ── LA HOJA MIDE MENOS QUE LA DEL ASISTENTE, Y ES POR EL PREVIO ──
+   Con 86 % la hoja llegaba a 632 px de 892 y arriba quedaban 104 px libres
+   entre el widget y su borde: ahí no entra una mascota de 202, así que los
+   cinco botones de pose no mostraban nada. Con 64 % quedan 320 px de franja
+   —lo único que este panel tiene para enseñar— y el cuerpo, que ya scrollea,
+   no pierde un solo control. */
+#pers{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:64%;
   border-radius:28px 28px 0 0;display:flex;flex-direction:column;
   transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
   padding:10px 12px calc(var(--ins-b) + 12px)}
 #pers.on{transform:translateY(0)}
+/* ── Y LA FRANJA SE DESPEJA ──
+   El reloj y la barra de búsqueda no los cambia ningún control del panel, y
+   son justo lo que se interpone entre el ojo y la mascota. Lo que sí queda
+   es la reja, que es lo que mueven el tamaño de icono y las columnas. */
+body.pers #reloj,body.pers #buscaCaja{opacity:0;pointer-events:none;
+  transition:opacity .22s ease}
+/* ── Y LA MASCOTA SUBE POR ENCIMA DEL VELO ──
+   El velo desenfoca 3 px todo lo que queda debajo, y lo que este panel tiene
+   que dejar ver nítido es justamente el muñeco. Entre el velo (4) y la hoja (6)
+   hay un escalón libre; el menú de app, que también vive en 5, lo cierra
+   `persAbre` antes de abrir. */
+body.pers #mascota{z-index:5}
 #persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
 .pGrupo{display:flex;flex-direction:column;gap:8px}
@@ -1801,7 +1819,6 @@ function verCajon(v){
     $('#busca2').blur(); $('#busca').blur();
     $('#cajLista').scrollTop = 0;
     mascotaBaila(false);
-    mascOcio();
     $('#burbuja').classList.remove('on');
   }
 }
@@ -2131,6 +2148,7 @@ function enganchaCajon(){
 const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
 
 let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0, MASC_BUSCA = false;
+let MASC_PREVIA = 0;      /* hasta cuándo la pose pedida a mano manda sobre la regla */
 
 /* ── CAMBIAR DE ANIMACIÓN ES CAMBIAR UN NOMBRE ──
    Las cinco son funciones del tiempo sobre los mismos 23 huesos, así que no hay
@@ -2168,15 +2186,50 @@ function mascOcio(){
    Dos sitios, y los dos en variables: el CSS los lee y la sonda también, así
    que no hay dos números que puedan discrepar. En el escritorio es grande y va
    por encima del dock; en el cajón es chica y se apoya en el borde de abajo. */
-const MASC_CAJ = { w: 132, b: 16 };
+/* ── EL ALTO DEL TECLADO LO DICE ANDROID, NO LA PÁGINA ──
+   La ventana va de borde a borde (`setDecorFitsSystemWindows(false)`), así que
+   `adjustResize` no encoge el WebView: el teclado llega como un inset y desde
+   JavaScript ni `innerHeight` ni `visualViewport` se enteran. Lo manda el
+   puente. En el navegador, donde no hay puente ni teclado, vale cero — y ahí
+   `visualViewport` sí sirve de respaldo, que es lo que hace probable esto. */
+let TECLADO = 0;
+window.__teclado = function(h){
+  TECLADO = Math.max(0, +h || 0);
+  mascSitio();
+};
+function tecladoAlto(){
+  if (TECLADO) return TECLADO;
+  const v = window.visualViewport;
+  if (!v) return 0;
+  return Math.max(0, Math.round(innerHeight - v.height - v.offsetTop));
+}
+
+/* ── LA MASCOTA SE APOYA EN LO QUE TAPE ABAJO, SEA LO QUE SEA ──
+   Buscando eso es el teclado. Pero en Personalizar hay cinco botones de pose
+   cuyo único trabajo es que se VEA el muñeco, y esa hoja ocupa el 70 % de la
+   pantalla desde abajo: apoyada en el teclado (que ahí vale cero) la mascota
+   queda ENTERA por detrás de la hoja y los cinco botones no muestran nada.
+   Es una sola regla y no dos: se apoya sobre el borde de arriba de lo que haya
+   abajo. */
+function pisoAlto(){
+  let h = tecladoAlto();
+  const p = $('#pers');
+  if (p && p.classList.contains('on')) h = Math.max(h, p.offsetHeight);
+  return h;
+}
+
+/* ── DÓNDE VA Y CUÁNTO MIDE ──
+   Un solo sitio: **apoyada sobre el teclado, mientras se busca**. Estuvo en el
+   medio del escritorio una vuelta y el reporte fue que molestaba: es la
+   pantalla de inicio, ahí lo que uno quiere ver es el fondo y sus apps. */
 function mascSitio(){
   /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
      del ancho, cambiar uno deja al muñeco estirado y nada avisa */
-  const w = CAJON ? MASC_CAJ.w : (PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media);
+  const w = PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media;
   const r = document.documentElement.style;
   r.setProperty('--masc-w', w + 'px');
   r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
-  r.setProperty('--masc-b', (CAJON ? MASC_CAJ.b : 132) + 'px');
+  r.setProperty('--masc-b', (pisoAlto() + 12) + 'px');
   mascMira();
 }
 
@@ -2189,35 +2242,49 @@ function mascSitio(){
 function mascCabe(){
   const alto = parseFloat(getComputedStyle(document.documentElement)
                  .getPropertyValue('--masc-h')) || MASC_H;
-  const l = CAJON ? $('#cajLista') : $('#tira').children[PAG];
-  if (!l) return !CAJON;
+  const l = $('#cajLista');
+  if (!l) return false;
   const n = l.children.length;
   if (!n) return true;
   const u = l.children[n - 1].getBoundingClientRect();
-  const c = (CAJON ? l : $('#hoja')).getBoundingClientRect();
-  return u.bottom <= c.bottom - alto - (CAJON ? 30 : 8);
+  /* el techo de la mascota no es el borde de la lista sino donde empieza ella,
+     que con el teclado abierto está bastante más arriba */
+  const piso = innerHeight - pisoAlto() - 12;
+  return u.bottom <= piso - alto - 12;
 }
 
-/* ── EN EL ESCRITORIO SE VE SIEMPRE ──
-   Ése era el reporte: «no sé dónde se encuentra». Vivía adentro del cajón y
-   sólo aparecía TECLEANDO, o sea que había que abrir el cajón y escribir para
-   ver el modelo. En el escritorio se ve desde el primer cuadro y sin hacer
-   nada; en el cajón sigue apareciendo mientras se busca, que es donde tiene
-   algo que acompañar. */
+/* ── SÓLO MIENTRAS SE BUSCA ──
+   Estuvo en el escritorio una vuelta —para que el modelo se pudiera ver, que
+   era el reporte anterior— y el de ahora es que ahí molesta. Tiene razón: la
+   pantalla de inicio es para el fondo y las apps. Acompaña la búsqueda, que es
+   la única pantalla del launcher donde uno está esperando algo, y para poder
+   VER el modelo a pedido están los cinco botones de pose en Personalizar. */
 function mascMira(){
   const m = $('#mascota');
-  const ver = lee('mascOn', 1) && mascCabe() &&
-              (CAJON ? MASC_BUSCA : true) && !document.hidden;
+  const busca = lee('mascOn', 1) && CAJON && MASC_BUSCA && !document.hidden;
+  /* ── Y HAY UN SEGUNDO MOTIVO PARA QUE SE VEA: QUE SE LA PIDA ──
+     Los cinco botones de pose de Personalizar y la acción `mascota` del
+     asistente la muestran A PEDIDO. Sin esto, `mascMira` —que corre en cada
+     repintado del panel— la apagaría en el cuadro siguiente al de tocar el
+     botón. La previa vence sola y ahí manda otra vez la regla. */
+  const previa = lee('mascOn', 1) && !document.hidden && Date.now() < MASC_PREVIA;
+  const cabe = previa || (busca && mascCabe());
   clearTimeout(MASC_T);
-  if (ver){
+  if (cabe){
     m.classList.add('on');
     l3Corre(true);
     if (!MASC_HOY) mascPone('quieto');
     return;
   }
-  /* se despide en vez de desaparecer: un corte seco se lee a error, y el bucle
-     de render se apaga recién cuando terminó de irse */
-  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, 2400);
+  /* ── IRSE Y APARTARSE NO SON LA MISMA COSA, ASÍ QUE NO DURAN LO MISMO ──
+     Dejar de buscar es una despedida: 2,4 s, porque un corte seco se lee a
+     error. Pero cuando lo que pasa es que la lista creció y la mascota le
+     quedó ENCIMA, despedirse son dos segundos y medio tapando justo lo que uno
+     acaba de pedir — que es el reclamo que trajo esta vuelta, en chiquito. Se
+     aparta en un cuarto de segundo, que igual alcanza para que no parpadee
+     entre una tecla y la siguiente. */
+  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); },
+                      busca ? 260 : 2400);
 }
 
 function mascotaBaila(v){
@@ -2227,9 +2294,6 @@ function mascotaBaila(v){
     MASC_ULT = Date.now();
     mascPone('baila');
     MASC_CICLO = setTimeout(mascOcio, 2200);
-  } else if (!CAJON){
-    /* en el escritorio no se va: pasa al ocio */
-    MASC_CICLO = setTimeout(mascOcio, 600);
   }
   mascMira();
 }
@@ -2322,9 +2386,15 @@ function arranca(){
      y seis años y el primer cuadro del launcher salía con la mascota sentada
      durmiendo. Lo primero que uno ve del muñeco tiene que ser el muñeco de pie. */
   MASC_ULT = Date.now();
-  mascOcio();
 
   pideInsets();
+  try { if (HAY_AND && AND.teclado) TECLADO = +AND.teclado() || 0; } catch (e) {}
+  /* en el navegador no hay puente: el respaldo es `visualViewport`, que sí
+     cambia cuando la ventana se achica */
+  if (window.visualViewport){
+    visualViewport.addEventListener('resize', mascSitio);
+    visualViewport.addEventListener('scroll', mascSitio);
+  }
   cargaApps();
   pintaInicio(); pintaDock();
   pintaReloj(); pintaBateria();
@@ -2465,14 +2535,21 @@ function asisNom(p){ const a = POR_PKG[p]; return a ? a.n : p; }
    la podría llamar desde el arranque, antes de que haya apps. */
 function rejaRepinta(){ calculaFilas(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value); }
 
-/* la mascota se fuerza por el mismo camino que usa el ocio, y se le corre el
-   reloj para que el ocio no la pise al cuadro siguiente */
+/* ── MOSTRAR UNA POSE ES UNA PREVIA CON VENCIMIENTO ──
+   Poniéndole `.on` a mano y nada más, la mascota se queda encendida para
+   siempre —cerrar el panel la dejaba plantada en el escritorio, que es
+   exactamente lo que esta vuelta vino a sacar—. Se anota HASTA CUÁNDO se la
+   pidió y la decisión la sigue tomando `mascMira`, que es el único que sabe la
+   regla; cada botón que se toca corre el vencimiento. */
+const ASIS_PREVIA = 6000;
+let ASIS_PT = 0;
 function asisMascota(n){
-  const m = $('#mascota');
-  clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
-  m.classList.add('on'); l3Corre(true);
+  clearTimeout(MASC_CICLO); clearTimeout(ASIS_PT);
+  MASC_PREVIA = Date.now() + ASIS_PREVIA;
   MASC_ULT = Date.now(); mascPone(n);
-  MASC_CICLO = setTimeout(mascOcio, 6000);
+  mascMira();
+  MASC_CICLO = setTimeout(mascOcio, ASIS_PREVIA);
+  ASIS_PT = setTimeout(mascMira, ASIS_PREVIA + 40);
 }
 
 /* ══════════ QUIÉN CONTESTA ══════════
@@ -2863,7 +2940,11 @@ const PERS_ACENTOS = ['#7fe3ff', '#a8e85c', '#ffd166', '#ff8fab',
 
 /* los tres tamaños de la mascota en el escritorio, con su alto derivado de la
    proporción del lienzo: escritos a mano, el muñeco sale estirado */
-const PERS_MASC = { chica: 148, media: 214, grande: 282 };
+/* ── Y SON CHICOS A PROPÓSITO ──
+   La mascota vive apoyada sobre el teclado, o sea ENCIMA de los resultados de
+   la búsqueda. Con 214 px de ancho se comía la mitad de lo que uno acaba de
+   pedir; a 148 ocupa una fila y media y el muñeco se sigue leyendo. */
+const PERS_MASC = { chica: 112, media: 148, grande: 196 };
 
 const PERS = [
   { tit: 'pMascota', tipo: 'ops', clave: 'mascOn',
@@ -2925,15 +3006,24 @@ function persOscuro(){
   $('#oscuro').style.opacity = String(v);
 }
 
+/* ── LA HOJA MUEVE A LA MASCOTA, PORQUE ES LO QUE TAPA ABAJO ──
+   `mascSitio` se llama DESPUÉS de pintar y de encender la hoja: su alto sale de
+   `offsetHeight`, y una hoja que todavía no tiene contenido ni clase mide otra
+   cosa. Al cerrar, la misma llamada la devuelve a donde manda la regla. */
 function persAbre(){
   cierraMenu(); asisCierra();
   persPinta();
   $('#pers').classList.add('on');
   $('#velo').classList.add('on');
+  document.body.classList.add('pers');
+  mascSitio();
 }
 function persCierra(){
   $('#pers').classList.remove('on');
   $('#velo').classList.remove('on');
+  document.body.classList.remove('pers');
+  MASC_PREVIA = 0;          /* cerrar el panel termina la previa: no hay qué mirar */
+  mascSitio();
 }
 
 function persPinta(){
@@ -3139,6 +3229,21 @@ window.__A = {
              cabe: mascCabe(), zetas: $$('#mZ span').length };
   },
   mascVer(n){ mascPone(n); return this.masc(); },
+  /* el teclado por el mismo camino que usa el puente de Android */
+  teclado(h){ window.__teclado(h); return this.mascCaja(); },
+  /* ── SE MIDE EN LAYOUT Y NO EN PANTALLA ──
+     `getBoundingClientRect` devuelve la caja ALINEADA A LOS EJES, o sea que le
+     entra el `rotate(3deg)` del cabeceo: sobre un muñeco de 148x202 eso infla
+     la caja a 158x209 y el borde de abajo baja seis pixeles que no existen.
+     `offsetTop`/`offsetHeight` no pasan por ninguna transformacion. */
+  mascCaja(){
+    const m = $('#mascota'), c = $('#cajBusca').getBoundingClientRect();
+    const b = m.offsetTop + m.offsetHeight;
+    return { on: m.classList.contains('on'), teclado: TECLADO,
+             caja: [m.offsetLeft, m.offsetTop, m.offsetWidth, m.offsetHeight],
+             sobreTeclado: Math.round(innerHeight - TECLADO - b),
+             busca: Math.round(c.bottom), alto: innerHeight };
+  },
   /* ── PARA DÓNDE MUEVE UN EJE ──
      Los ejes de un hueso no se adivinan: se gira uno y se mira dónde quedó la
      punta. Devuelve el desplazamiento de `mira` al girar `nom` un radián sobre
