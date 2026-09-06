@@ -162,3 +162,65 @@ salir: el ciclo medía 6,1 s y solo 120 ms eran trabajo real. Con
   `docker start neko-prueba` (el disco del contenedor sobrevive: Wine y WinRAR
   siguieron instalados, pero las ventanas abiertas se pierden). Y el contenedor
   de la sesión entero se recicla al rato de quedar inactivo.
+
+## 3D: sí, y hasta dónde
+
+Sin GPU, pero Mesa trae **llvmpipe**, que es un rasterizador por software sobre
+los 4 núcleos. No es "3D de mentira": es OpenGL 4.5 core con shaders completos.
+
+```sh
+docker exec neko-prueba apt-get install -y --no-install-recommends \
+  mesa-utils libgl1-mesa-dri glmark2 firefox-esr
+docker exec -u neko -e DISPLAY=:99.0 -e LP_NUM_THREADS=4 neko-prueba \
+  glmark2 --off-screen --size 800x600
+```
+
+| | |
+|---|---|
+| Renderer | llvmpipe (LLVM 19.1.7, 256 bits), Mesa 25.0.7 |
+| OpenGL | 4.5 core / 4.5 compat / ES 3.2, GLSL 4.50 |
+| **glmark2 (800x600, 4 hilos)** | **546** |
+| jellyfish (texturas + translúcido) | 172 FPS |
+| shadow | 254 FPS |
+| refract | 25 FPS |
+| terrain (el que llena pantalla) | 10 FPS |
+
+O sea: la geometría y los shaders vuelan, lo que duele es el **relleno de
+píxeles**. Escenas que pintan toda la pantalla varias veces se arrastran;
+todo lo demás anda bien.
+
+### WebGL en Firefox
+
+Anda, WebGL 2.0, renderer `llvmpipe, or similar`, `MAX_TEXTURE_SIZE 16384`.
+Medido sobre la página Frutiger Aero real (modelo riggeado, animaciones,
+Liquid Glass):
+
+| | |
+|---|---|
+| 1280x720 | **58,4 FPS** |
+| 1920x1080 | **40,4 FPS** |
+
+### Las tres trampas de Firefox acá
+
+1. **No lee `/etc/firefox/policies/`**: el paquete `firefox-esr` de Debian
+   quiere `/etc/firefox-esr/policies/policies.json` o
+   `/usr/lib/firefox-esr/distribution/policies.json`. Copiarlo a los tres.
+2. **No confía en el CA del proxy** aunque esté en el almacén del sistema:
+   usa NSS. Se agrega con
+   `certutil -A -n agente-proxy -t 'C,,' -i <crt> -d sql:<perfil>`
+   (paquete `libnss3-tools`).
+3. **Y aun así no sale a internet.** El proxy recibe el CONNECT y abre el
+   túnel, pero se corta a los 6 s: *"663 B sent, 39 B received"*, con
+   cualquier host. `curl` por el mismo proxy contesta 200 en 0,33 s. Probé
+   apagar ECH, DoH, HTTP/3 y 0-RTT y no cambió. Sin resolver: **para probar
+   una página, servirla local** (`python3 -m http.server`, que el contenedor
+   ve por `127.0.0.1` gracias a `--network host`) y sacar `127.0.0.1` del
+   proxy con `network.proxy.no_proxies_on`.
+
+### Detalles
+
+- Firefox loguea `[GFX1-]: glxtest: libpci missing` — es ruido, no rompe nada.
+- `glmark2 --off-screen` no necesita ventana; con ventana los números dan
+  igual (terrain 10 FPS, jellyfish 172 a 900x600).
+- Para pegar en la consola de Firefox hace falta escribir "allow pasting" la
+  primera vez; tipear el snippet con `escribir` lo evita.
