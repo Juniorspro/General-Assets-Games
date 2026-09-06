@@ -43,6 +43,10 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
      número que se había descartado por dejar el dock verde lima.
      Con la calibración en una variable la lee el CSS y la lee el JS, así que no
      puede haber dos. */
+  /* dónde y cuánto mide la mascota. Las escribe `mascSitio()` según esté el
+     escritorio o el cajón: acá van los valores del escritorio, que es lo que se
+     ve en el primer cuadro. */
+  --masc-w:214px; --masc-h:292px; --masc-b:132px;
   --v-fil:blur(24px) saturate(120%) brightness(.90);
   --v-filR:blur(19px) saturate(122%) brightness(.90);
   --acento:#7fe3ff;
@@ -77,6 +81,11 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
 #fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
 #fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+/* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
+   Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
+   foto entera en cada cuadro de la transición. */
+#oscuro{position:fixed;inset:0;z-index:0;pointer-events:none;background:#02121f;
+  opacity:0;transition:opacity .2s}
 #veloT,#veloB{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
 /* El velo se achicó al bajar el tinte del vidrio: con 44% al 60% el cielo
    entero quedaba embarrado, y el cielo es lo único que este fondo tiene para
@@ -322,7 +331,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #cajLista .web span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* el encabezado de letra cruza la reja entera */
 #cajLista .let{grid-column:1/-1;padding:7px 6px 1px;font:800 10px/1 system-ui,sans-serif;
-  letter-spacing:.18em;opacity:.72;text-shadow:0 1px 3px rgba(0,20,45,.7)}
+  letter-spacing:.18em;opacity:.9;color:var(--acento);
+  text-shadow:0 1px 3px rgba(0,20,45,.7)}
 
 /* ── EL RIEL DE LETRAS ──
    Sólo lleva las letras que TIENEN apps: un riel con las 26 fijas manda a la
@@ -344,8 +354,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #rielPomo{position:absolute;right:12px;width:6px;border-radius:3px;
   background:rgba(255,255,255,.62);box-shadow:0 0 8px rgba(255,255,255,.5);
   transition:width .14s,background .14s,box-shadow .14s}
-#riel.on #rielPomo{width:8px;right:11px;background:#eafcff;
-  box-shadow:0 0 14px rgba(180,240,255,.9)}
+#riel.on #rielPomo{width:8px;right:11px;background:var(--acento);
+  box-shadow:0 0 14px color-mix(in srgb,var(--acento) 80%,transparent)}
 
 /* la burbuja con la letra grande, sólo mientras el dedo va por el riel */
 #burbuja{position:absolute;right:44px;top:50%;transform:translateY(-50%) scale(.7);
@@ -365,12 +375,21 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 /* El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
    POR ENCIMA de la cabeza: recortando arriba de todo, la mitad del gesto se
    pierde. */
-#mascota{position:absolute;left:50%;bottom:16px;width:var(--mw-masc);
-  height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);
+/* ── DOS SITIOS Y UN SOLO ELEMENTO ──
+   Reparentar el lienzo movería el contexto de WebGL de un lado al otro en cada
+   apertura del cajón; con `position:fixed` y dos reglas, lo único que cambia es
+   dónde y cuánto mide. En el escritorio es GRANDE —es lo único que hay en esa
+   franja, que está vacía a propósito— y en el cajón es chica, porque ahí lo que
+   importa es la lista. */
+#mascota{position:fixed;left:50%;z-index:3;
+  bottom:var(--masc-b);width:var(--masc-w);height:var(--masc-h);
+  margin-left:calc(var(--masc-w)/-2);
   opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
-  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1);z-index:2;
-  filter:drop-shadow(0 6px 14px rgba(0,40,80,.5))}
-#mascota.on{opacity:1;transform:translateY(0) scale(1)}
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1),
+             width .26s ease,height .26s ease,bottom .26s ease;
+  filter:drop-shadow(0 8px 18px rgba(0,40,80,.55))}
+#mascota.on{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;cursor:pointer}
+#mascota:active{filter:drop-shadow(0 4px 10px rgba(0,40,80,.6)) brightness(1.12)}
 /* ── EL LIENZO SE DIBUJA CHICO Y CSS LO ESTIRA ──
    Y ahí el pixelado que se pidió y la optimización son LA MISMA COSA: se
    rellenan 64×83 píxeles en vez de 139×180, o sea cinco veces menos, y el
@@ -438,7 +457,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   padding:10px 12px calc(var(--ins-b) + 10px)}
 #asis.on{transform:translateY(0)}
 #asCab{display:flex;align-items:center;gap:10px;padding:4px 4px 10px;flex:0 0 auto}
-#asTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
+#asTit,#persTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
 .asBtn{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;
   justify-content:center;font-size:16px;cursor:pointer;
   background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
@@ -448,7 +467,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 .asMsg{max-width:86%;padding:9px 13px;border-radius:16px;font-size:14px;
   line-height:1.35;white-space:pre-wrap;word-break:break-word;
   text-shadow:0 1px 2px rgba(0,25,52,.6)}
-.as-yo{align-self:flex-end;background:rgba(127,227,255,.24);
+.as-yo{align-self:flex-end;background:color-mix(in srgb,var(--acento) 26%,transparent);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35);border-bottom-right-radius:6px}
 .as-bot{align-self:flex-start;background:rgba(255,255,255,.13);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.3);border-bottom-left-radius:6px}
@@ -460,7 +479,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   border-radius:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
 #asTxt::placeholder,#asLlave::placeholder{color:rgba(255,255,255,.6)}
 #asMandar{flex:0 0 auto;width:44px;height:42px;border-radius:16px;border:0;
-  background:rgba(127,227,255,.32);color:#fff;font-size:17px;cursor:pointer;
+  background:color-mix(in srgb,var(--acento) 34%,transparent);color:#fff;font-size:17px;cursor:pointer;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
 #asAyuda{flex:0 0 auto;font-size:11px;opacity:.7;padding:0 4px 6px;font-weight:600}
 /* la llave se pide en un cajoncito que está cerrado por omisión: es lo que uno
@@ -475,6 +494,35 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   font:700 12px/1 inherit;color:#fff;cursor:pointer;
   background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
 #asGuardar{background:rgba(168,232,92,.30)}
+
+/* ══════════ PERSONALIZACIÓN ══════════
+   Misma familia que la hoja del asistente: sube desde abajo y deja ver el
+   launcher detrás, porque TODO lo que se toca acá cambia lo que está atrás. */
+#pers{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:86%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 12px)}
+#pers.on{transform:translateY(0)}
+#persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
+.pGrupo{display:flex;flex-direction:column;gap:8px}
+.pTit{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  opacity:.7;padding-left:4px}
+.pFila{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pOp{flex:0 0 auto;padding:9px 14px;border-radius:14px;font:700 13px/1 inherit;
+  cursor:pointer;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32);text-shadow:0 1px 2px rgba(0,25,52,.6)}
+.pOp:active{background:rgba(255,255,255,.26)}
+.pOp.sel{background:color-mix(in srgb,var(--acento) 34%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 0 0 1px color-mix(in srgb,var(--acento) 60%,transparent)}
+.pCol{width:34px;height:34px;border-radius:12px;flex:0 0 auto;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 8px rgba(0,25,52,.35)}
+.pCol.sel{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 0 0 3px #fff,0 3px 10px rgba(0,25,52,.4)}
+.pRango{flex:1 1 120px;min-width:110px;-webkit-appearance:none;appearance:none;
+  height:6px;border-radius:3px;background:rgba(255,255,255,.22);outline:0}
+.pRango::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--acento);box-shadow:0 2px 6px rgba(0,25,52,.5)}
+.pVal{flex:0 0 auto;min-width:44px;text-align:right;font:800 13px/1 inherit;opacity:.9}
 
 #menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
   width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
@@ -585,19 +633,35 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
     <div id="riel"><div id="rielPista"></div><div id="rielPomo"></div></div>
   </div>
   <div id="burbuja">A</div>
-  <!-- la mascota baila mientras se escribe, se aburre y se duerme -->
-  <div id="mascota">
-    <div id="mVent"><canvas id="mLien"></canvas></div>
-    <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
-  </div>
 </div>
 
+<!-- ── LA MASCOTA VIVE EN EL ESCRITORIO, NO ADENTRO DEL CAJÓN ──
+     Estaba dentro de `#cajon` y sólo aparecía **escribiendo en la búsqueda**:
+     o sea que había que abrir el cajón y teclear para verla. El reporte fue
+     literal —«no sé dónde se encuentra»— y tenía razón: un modelo 3D que hay
+     que descubrir no existe. Ahora es hermana del cajón y la coloca el CSS
+     según dónde esté uno: en el medio del escritorio, grande, desde el primer
+     cuadro; y chica al pie del cajón cuando el cajón está abierto. -->
+<div id="mascota">
+  <div id="mVent"><canvas id="mLien"></canvas></div>
+  <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
+</div>
+
+<div id="oscuro"></div>
 <div id="velo"></div>
 <div class="vid refr" id="menu">
   <div id="menuTit">—</div>
   <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
   <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
   <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid refr" id="pers">
+  <div id="asCab">
+    <div id="persTit">—</div>
+    <div class="asBtn" id="persCerrar">✕</div>
+  </div>
+  <div id="persCuerpo"></div>
 </div>
 
 <div class="vid refr" id="asis">
@@ -609,6 +673,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   <div id="asLista"></div>
   <div id="asLlaveCaja">
     <div id="asLlaveTit">—</div>
+    <div id="asProvs" class="pFila"></div>
     <div id="asLlaveFila">
       <input id="asLlave" type="password" autocomplete="off" spellcheck="false" placeholder="—">
       <button id="asGuardar">—</button>
@@ -678,11 +743,17 @@ const TXT = {
         aPorIA: 'contestó la IA', aPorLocal: 'contestó el launcher',
         aSinRed: 'no se pudo conectar', aLlaveMal: 'la llave no sirve ({0})',
         aFalla: 'la API falló ({0})', aNiega: 'el modelo no quiso contestar',
-        aLlaveTit: 'Tu llave de api.anthropic.com. Se guarda sólo en este teléfono y nunca sale de acá salvo para la consulta que vos escribís.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Guardar', aBorrar: 'Borrar',
-        aConLlave: 'Con llave: contesta la IA.', aSinLlave: 'Sin llave: contesta el launcher. Tocá ⚙ para poner la tuya.',
+        aLlaveTit: 'Tu llave de {0}. Se guarda sólo en este teléfono y nunca sale de acá salvo para la consulta que vos escribís.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Guardar', aBorrar: 'Borrar', aGratis: 'gratis',
+        aConLlave: 'Con llave: contesta {0}.', aSinLlave: 'Sin llave: contesta el launcher. Tocá ⚙ para poner la tuya — Gemini y Groq la dan gratis.',
         aLlaveOk: 'Llave guardada', aLlaveFuera: 'Llave borrada',
         aNombre: 'Asistente',
+        pTit: 'Personalizar', pMascota: 'Mascota', pTamano: 'Tamaño', pPose: 'Pose',
+        pSi: 'Sí', pNo: 'No', pChica: 'Chica', pMedia: 'Media', pGrande: 'Grande',
+        pQuieto: 'Quieta', pBaila: 'Bailando', pSaluda: 'Saludando', pMando: 'Jugando',
+        pDuerme: 'Durmiendo', pIconos: 'Tamaño de los iconos', pColumnas: 'Columnas',
+        pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
+        aNombreP: 'Personalizar',
         dias: ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
         meses: ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
                 'septiembre','octubre','noviembre','diciembre'] },
@@ -703,11 +774,17 @@ const TXT = {
         aPorIA: 'answered by the AI', aPorLocal: 'answered by the launcher',
         aSinRed: 'could not connect', aLlaveMal: 'the key does not work ({0})',
         aFalla: 'the API failed ({0})', aNiega: 'the model declined to answer',
-        aLlaveTit: 'Your api.anthropic.com key. It is stored on this phone only and never leaves it except for the request you type.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Save', aBorrar: 'Delete',
-        aConLlave: 'With a key: the AI answers.', aSinLlave: 'No key: the launcher answers. Tap ⚙ to add yours.',
+        aLlaveTit: 'Your {0} key. It is stored on this phone only and never leaves it except for the request you type.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Save', aBorrar: 'Delete', aGratis: 'free',
+        aConLlave: 'With a key: {0} answers.', aSinLlave: 'No key: the launcher answers. Tap ⚙ to add yours — Gemini and Groq give one for free.',
         aLlaveOk: 'Key saved', aLlaveFuera: 'Key deleted',
         aNombre: 'Assistant',
+        pTit: 'Personalize', pMascota: 'Mascot', pTamano: 'Size', pPose: 'Pose',
+        pSi: 'On', pNo: 'Off', pChica: 'Small', pMedia: 'Medium', pGrande: 'Large',
+        pQuieto: 'Idle', pBaila: 'Dancing', pSaluda: 'Waving', pMando: 'Playing',
+        pDuerme: 'Sleeping', pIconos: 'Icon size', pColumnas: 'Columns',
+        pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
+        aNombreP: 'Personalize',
         dias: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
         meses: ['January','February','March','April','May','June','July','August',
                 'September','October','November','December'] },
@@ -728,11 +805,17 @@ const TXT = {
         aPorIA: 'respondeu a IA', aPorLocal: 'respondeu o launcher',
         aSinRed: 'não deu para conectar', aLlaveMal: 'a chave não serve ({0})',
         aFalla: 'a API falhou ({0})', aNiega: 'o modelo não quis responder',
-        aLlaveTit: 'Sua chave de api.anthropic.com. Fica guardada só neste telefone e nunca sai daqui, a não ser na consulta que você escreve.',
-        aLlavePh: 'sk-ant-…', aGuardar: 'Salvar', aBorrar: 'Apagar',
-        aConLlave: 'Com chave: responde a IA.', aSinLlave: 'Sem chave: responde o launcher. Toque ⚙ para pôr a sua.',
+        aLlaveTit: 'Sua chave de {0}. Fica guardada só neste telefone e nunca sai daqui, a não ser na consulta que você escreve.',
+        aLlavePh: 'sk-ant-…', aGuardar: 'Salvar', aBorrar: 'Apagar', aGratis: 'grátis',
+        aConLlave: 'Com chave: responde {0}.', aSinLlave: 'Sem chave: responde o launcher. Toque ⚙ para pôr a sua — Gemini e Groq dão uma de graça.',
         aLlaveOk: 'Chave salva', aLlaveFuera: 'Chave apagada',
         aNombre: 'Assistente',
+        pTit: 'Personalizar', pMascota: 'Mascote', pTamano: 'Tamanho', pPose: 'Pose',
+        pSi: 'Sim', pNo: 'Não', pChica: 'Pequeno', pMedia: 'Médio', pGrande: 'Grande',
+        pQuieto: 'Parado', pBaila: 'Dançando', pSaluda: 'Acenando', pMando: 'Jogando',
+        pDuerme: 'Dormindo', pIconos: 'Tamanho dos ícones', pColumnas: 'Colunas',
+        pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
+        aNombreP: 'Personalizar',
         dias: ['domingo','segunda','terça','quarta','quinta','sexta','sábado'],
         meses: ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto',
                 'setembro','outubro','novembro','dezembro'] }
@@ -1432,7 +1515,11 @@ function nodoApp(a, conNombre){
   d.className = 'ap'; d.dataset.p = a.p;
   const b = document.createElement('div');
   b.className = 'baldosa';
-  if (a.p === ASIS_PKG){
+  if (a.p === PERS_PKG){
+    b.style.background = 'linear-gradient(160deg,#ffd166,#e0704f)';
+    b.style.font = '600 26px system-ui';
+    b.textContent = '⚙';
+  } else if (a.p === ASIS_PKG){
     /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
        las apps instaladas, y ésta no está instalada: devolvería 404 y caería a
@@ -1491,6 +1578,7 @@ function pintaInicio(){
 }
 function ponPagina(n, suave){
   PAG = cl(n, 0, NPAG - 1);
+  if (typeof mascMira === 'function') mascMira();
   const t = $('#tira');
   t.style.transition = suave === false ? 'none' : 'transform .30s cubic-bezier(.22,.9,.24,1)';
   t.style.transform = 'translateX(' + (-PAG*(100/NPAG)) + '%)';
@@ -1667,6 +1755,7 @@ function abre(pkg){
   /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
      «no existe» sobre un paquete que nunca se instaló */
   if (pkg === ASIS_PKG){ asisAbre(); return; }
+  if (pkg === PERS_PKG){ persAbre(); return; }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -1697,6 +1786,9 @@ function cierraMenu(){
 function verCajon(v){
   CAJON = !!v;
   $('#cajon').classList.toggle('on', CAJON);
+  /* el CSS de la mascota decide su sitio con esto */
+  document.body.classList.toggle('caj', CAJON);
+  mascSitio();
   /* el fondo se acerca: es lo que hace que la hoja esmerilada se lea a hoja
      sobre algo y no a otra pantalla */
   fondoProfundo(CAJON);
@@ -1709,6 +1801,7 @@ function verCajon(v){
     $('#busca2').blur(); $('#busca').blur();
     $('#cajLista').scrollTop = 0;
     mascotaBaila(false);
+    mascOcio();
     $('#burbuja').classList.remove('on');
   }
 }
@@ -1723,6 +1816,7 @@ function repintaIdioma(){
   $('#busca2').placeholder = T('busca');
   $('#cajTit').textContent = T('todas');
   const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
+  const q = POR_PKG[PERS_PKG]; if (q) q.n = T('aNombreP');
   if (MENU_PKG){
     $('#mFijar').lastElementChild.textContent = fijado(MENU_PKG) ? T('soltar') : T('fijar');
     $('#mInfo').lastElementChild.textContent = T('info');
@@ -1795,6 +1889,7 @@ function cargaApps(){
      se puede buscar y se puede fijar como cualquier otra. Ponerlo como un botón
      aparte obligaría a inventarle un sitio en una pantalla que ya está llena. */
   APPS.push({ p: ASIS_PKG, n: T('aNombre') });
+  APPS.push({ p: PERS_PKG, n: T('aNombreP') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -2035,7 +2130,7 @@ function enganchaCajon(){
    lista con pesos es más corta y más clara que una tabla de probabilidades */
 const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
 
-let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0;
+let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0, MASC_BUSCA = false;
 
 /* ── CAMBIAR DE ANIMACIÓN ES CAMBIAR UN NOMBRE ──
    Las cinco son funciones del tiempo sobre los mismos 23 huesos, así que no hay
@@ -2069,35 +2164,88 @@ function mascOcio(){
    Vive pegada abajo del cajón; con una búsqueda que devuelve muchas apps la
    lista llega hasta ahí y la mascota queda ENCIMA de los resultados, que es lo
    único que en ese momento hay que poder leer. El hueco se mide, no se supone. */
+/* ── DÓNDE VA Y CUÁNTO MIDE ──
+   Dos sitios, y los dos en variables: el CSS los lee y la sonda también, así
+   que no hay dos números que puedan discrepar. En el escritorio es grande y va
+   por encima del dock; en el cajón es chica y se apoya en el borde de abajo. */
+const MASC_CAJ = { w: 132, b: 16 };
+function mascSitio(){
+  /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
+     del ancho, cambiar uno deja al muñeco estirado y nada avisa */
+  const w = CAJON ? MASC_CAJ.w : (PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media);
+  const r = document.documentElement.style;
+  r.setProperty('--masc-w', w + 'px');
+  r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
+  r.setProperty('--masc-b', (CAJON ? MASC_CAJ.b : 132) + 'px');
+  mascMira();
+}
+
+/* ── ¿HAY LUGAR? ──
+   Vale para los dos sitios y mide lo mismo: dónde termina lo último que se
+   dibujó contra dónde empieza la mascota. `scrollHeight` no sirve —los dos
+   contenedores son `flex:1 1 auto`, así que SIEMPRE llenan su caja y nunca
+   bajan de `clientHeight`—, y con eso la comparación daba falso con dos
+   resultados en pantalla. */
 function mascCabe(){
-  const l = $('#cajLista');
-  if (!l) return false;
+  const alto = parseFloat(getComputedStyle(document.documentElement)
+                 .getPropertyValue('--masc-h')) || MASC_H;
+  const l = CAJON ? $('#cajLista') : $('#tira').children[PAG];
+  if (!l) return !CAJON;
   const n = l.children.length;
   if (!n) return true;
-  /* ── SE MIDE EL ÚLTIMO HIJO, NO `scrollHeight` ──
-     `#cajLista` es `flex:1 1 auto` dentro de un cuerpo que también lo es, así
-     que SIEMPRE llena su caja: `scrollHeight` nunca baja de `clientHeight` y la
-     comparación daba falso con dos resultados en pantalla. Lo que dice cuánto
-     ocupa el contenido es dónde termina el último. */
   const u = l.children[n - 1].getBoundingClientRect();
-  const c = l.getBoundingClientRect();
-  return u.bottom <= c.bottom - MASC_H - 30;
+  const c = (CAJON ? l : $('#hoja')).getBoundingClientRect();
+  return u.bottom <= c.bottom - alto - (CAJON ? 30 : 8);
+}
+
+/* ── EN EL ESCRITORIO SE VE SIEMPRE ──
+   Ése era el reporte: «no sé dónde se encuentra». Vivía adentro del cajón y
+   sólo aparecía TECLEANDO, o sea que había que abrir el cajón y escribir para
+   ver el modelo. En el escritorio se ve desde el primer cuadro y sin hacer
+   nada; en el cajón sigue apareciendo mientras se busca, que es donde tiene
+   algo que acompañar. */
+function mascMira(){
+  const m = $('#mascota');
+  const ver = lee('mascOn', 1) && mascCabe() &&
+              (CAJON ? MASC_BUSCA : true) && !document.hidden;
+  clearTimeout(MASC_T);
+  if (ver){
+    m.classList.add('on');
+    l3Corre(true);
+    if (!MASC_HOY) mascPone('quieto');
+    return;
+  }
+  /* se despide en vez de desaparecer: un corte seco se lee a error, y el bucle
+     de render se apaga recién cuando terminó de irse */
+  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, 2400);
 }
 
 function mascotaBaila(v){
-  const m = $('#mascota');
-  clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
-  if (v && mascCabe()){
-    m.classList.add('on');
-    l3Corre(true);
+  MASC_BUSCA = !!v;
+  clearTimeout(MASC_CICLO);
+  if (v){
     MASC_ULT = Date.now();
     mascPone('baila');
     MASC_CICLO = setTimeout(mascOcio, 2200);
-  } else {
-    /* se despide en vez de desaparecer: un corte seco se lee a error, y el
-       bucle de render se apaga recién cuando terminó de irse */
-    MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, v ? 0 : 2400);
+  } else if (!CAJON){
+    /* en el escritorio no se va: pasa al ocio */
+    MASC_CICLO = setTimeout(mascOcio, 600);
   }
+  mascMira();
+}
+
+/* ── SE LA PUEDE TOCAR, Y ESO ES LA MITAD DE QUE SEA UNA MASCOTA ──
+   Un muñeco que no contesta es un adorno. Un toque le saca una pose distinta de
+   la que tenía —sorteada entre las que no está haciendo, porque repetir la
+   misma se lee a que el toque no hizo nada— y reinicia el reloj del ocio. */
+const MASC_TOQUE = ['saluda', 'baila', 'mando', 'quieto'];
+function mascToque(){
+  vibra(12);
+  const otras = MASC_TOQUE.filter(n => n !== MASC_HOY);
+  clearTimeout(MASC_CICLO);
+  MASC_ULT = Date.now();
+  mascPone(otras[(Math.random()*otras.length)|0]);
+  MASC_CICLO = setTimeout(mascOcio, 2600);
 }
 
 /* ══════════ GANCHOS DEL SISTEMA ══════════
@@ -2146,11 +2294,6 @@ function arranca(){
      sale con los iconos de fábrica y salta de tamaño a la vista */
   ponReja(lee('ico', 60), lee('cols', 4));
 
-  /* la tira de la mascota y su celda salen del horneado: escritas a mano acá,
-     regenerar la hoja con otro tamaño la deja estirada sin que nada avise */
-  const rz = document.documentElement.style;
-  rz.setProperty('--mw-masc', MASC_W + 'px');
-  rz.setProperty('--mh-masc', MASC_H + 'px');
   /* ── EL LIENZO SE DIMENSIONA UNA VEZ Y NO POR CUADRO ──
      El alto sale de la proporción de la caja, así que cambiar `MASC_W` no deja
      al muñeco estirado. */
@@ -2159,6 +2302,27 @@ function arranca(){
   cv.height = Math.round(L3_ANCHO*MASC_H/MASC_W);
   try { if (l3Init()) l3Cam(); } catch (e) { window.__errs && window.__errs.push(String(e)); }
   mascPone('quieto');
+  mascSitio();
+  /* ── UN TOQUE LA HACE CONTESTAR, UNO LARGO ABRE LA PERSONALIZACIÓN ──
+     Es el gesto de cualquier launcher —mantener sobre algo abre sus opciones—
+     y hace que el panel sea descubrible sin un botón más en la pantalla. */
+  const M = $('#mascota');
+  let mfl = null, mlarga = false;
+  M.addEventListener('pointerdown', () => {
+    mlarga = false;
+    mfl = setTimeout(() => { mlarga = true; vibra(20); persAbre(); }, 560);
+  });
+  const mfin = () => { if (mfl){ clearTimeout(mfl); mfl = null; } };
+  M.addEventListener('pointerup', mfin);
+  M.addEventListener('pointermove', mfin);
+  M.addEventListener('pointercancel', mfin);
+  M.addEventListener('click', () => { if (!mlarga) mascToque(); });
+  /* ── NO ARRANCA DORMIDA ──
+     `mascOcio` compara contra `MASC_ULT`, que valía 0: la resta daba cuarenta
+     y seis años y el primer cuadro del launcher salía con la mascota sentada
+     durmiendo. Lo primero que uno ve del muñeco tiene que ser el muñeco de pie. */
+  MASC_ULT = Date.now();
+  mascOcio();
 
   pideInsets();
   cargaApps();
@@ -2168,6 +2332,7 @@ function arranca(){
   setInterval(pintaBateria, 30000);
 
   asisInit();
+  persInit();
 
   enganchaLista($('#tira'));
   enganchaLista($('#dock'));
@@ -2222,8 +2387,8 @@ function arranca(){
   $('#hoja').addEventListener('pointerup', fc);
   $('#hoja').addEventListener('pointermove', fc);
 
-  document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; });
-  addEventListener('resize', () => { calculaFilas(); pintaInicio(); });
+  document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
+  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira(); });
   addEventListener('contextmenu', e => e.preventDefault());
 
   setTimeout(() => $('#carga').classList.add('off'), 260);
@@ -2310,37 +2475,120 @@ function asisMascota(n){
   MASC_CICLO = setTimeout(mascOcio, 6000);
 }
 
-/* ══════════ EL ESQUEMA ══════════
-   Se arma DE LA TABLA. Escrito a mano al lado, se separa de ella el día que se
-   toque cualquiera de los dos. */
-function asisEsquema(){
-  return {
-    type: 'object',
-    properties: {
-      respuesta: { type: 'string', description: 'Una frase corta para el usuario, en su idioma.' },
-      acciones: {
-        type: 'array',
-        items: {
-          type: 'object',
+/* ══════════ QUIÉN CONTESTA ══════════
+
+   ── TRES PROVEEDORES, Y DOS SON GRATIS ──
+   Pedirle al dueño una tarjeta de crédito para que su launcher entienda «agrandá
+   las apps» no tiene sentido, así que el que viene puesto es **Gemini**, que da
+   una llave sin tarjeta en aistudio.google.com. Anthropic queda para el que ya
+   tiene llave y Groq para el que quiera velocidad.
+
+   ── Y LOS TRES TIENEN QUE PODER LLAMARSE DESDE UN NAVEGADOR ──
+   Ésta es la condición dura y no se cumple sola: la interfaz se carga desde
+   `file:///android_asset/`, así que el `fetch` sale con `Origin: null` y el
+   servidor tiene que contestar con CORS permisivo o el navegador no deja LEER
+   la respuesta. Medido contra los tres endpoints con ese origen exacto:
+   Anthropic devuelve `Access-Control-Allow-Origin: *` —pero sólo si el
+   encabezado `anthropic-dangerous-direct-browser-access` va en el preflight—,
+   Groq devuelve `*`, y Google **repite el origen que le mandes**, `null`
+   incluido, que según la especificación es justo lo que hace falta.
+   **Cerebras quedó afuera**: pasa el preflight y después contesta los errores
+   SIN un solo encabezado de CORS, o sea que un 401 sería ilegible.
+
+   Cada proveedor sabe tres cosas y nada más: cómo se autentica, qué cuerpo
+   arma y cómo se lee lo que vuelve. Todo lo demás —la tabla de acciones, la
+   validación, el intérprete de respaldo, los tres modos de falla— es el mismo
+   para los tres. */
+const ASIS_PROV = {
+  gemini: {
+    nombre: 'Google Gemini', gratis: true, ph: 'AIza…',
+    donde: 'aistudio.google.com',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    cab: k => ({ 'content-type': 'application/json', 'x-goog-api-key': k }),
+    cuerpo: (sis, txt) => ({
+      systemInstruction: { parts: [{ text: sis }] },
+      contents: [{ role: 'user', parts: [{ text: txt }] }],
+      generationConfig: {
+        temperature: 0, maxOutputTokens: 700,
+        responseMimeType: 'application/json',
+        /* el esquema de Google lleva los tipos en MAYÚSCULA y no acepta
+           `additionalProperties`: es otro dialecto, no el mismo con otro nombre */
+        responseSchema: {
+          type: 'OBJECT',
           properties: {
-            hacer: { type: 'string', enum: Object.keys(ASIS_ACC) },
-            valor: { type: 'string', description: 'El argumento: un número, un nombre de paquete, un texto o una de las opciones.' }
+            respuesta: { type: 'STRING' },
+            acciones: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+              hacer: { type: 'STRING', enum: Object.keys(ASIS_ACC) },
+              valor: { type: 'STRING' } }, required: ['hacer', 'valor'] } }
           },
-          required: ['hacer', 'valor'],
-          additionalProperties: false
+          required: ['respuesta', 'acciones']
         }
       }
-    },
-    required: ['respuesta', 'acciones'],
-    additionalProperties: false
-  };
-}
+    }),
+    lee: j => {
+      const c = (j.candidates || [])[0];
+      if (!c) return null;
+      /* `SAFETY` y `MAX_TOKENS` cortan el JSON a la mitad: sin esta guarda el
+         `JSON.parse` tira y se lee como si la API hubiera fallado */
+      if (c.finishReason && c.finishReason !== 'STOP') return { corte: c.finishReason };
+      const t = (c.content && c.content.parts || []).map(x => x.text).join('');
+      return t ? { txt: t } : null;
+    }
+  },
+  groq: {
+    nombre: 'Groq', gratis: true, ph: 'gsk_…', donde: 'console.groq.com',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    cab: k => ({ 'content-type': 'application/json', 'authorization': 'Bearer ' + k }),
+    cuerpo: (sis, txt) => ({
+      model: 'llama-3.3-70b-versatile', temperature: 0, max_tokens: 700,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: sis }, { role: 'user', content: txt }]
+    }),
+    lee: j => {
+      const c = (j.choices || [])[0];
+      if (!c) return null;
+      return c.message && c.message.content ? { txt: c.message.content } : null;
+    }
+  },
+  anthropic: {
+    nombre: 'Anthropic', gratis: false, ph: 'sk-ant-…', donde: 'console.anthropic.com',
+    url: 'https://api.anthropic.com/v1/messages',
+    cab: k => ({ 'content-type': 'application/json', 'x-api-key': k,
+                 'anthropic-version': '2023-06-01',
+                 /* sin este encabezado la API no le contesta a un navegador, y
+                    encima es lo que hace que el preflight devuelva CORS */
+                 'anthropic-dangerous-direct-browser-access': 'true' }),
+    cuerpo: (sis, txt) => ({
+      model: 'claude-opus-5', max_tokens: 700, system: sis,
+      messages: [{ role: 'user', content: txt }],
+      output_config: { format: { type: 'json_schema', schema: {
+        type: 'object',
+        properties: {
+          respuesta: { type: 'string' },
+          acciones: { type: 'array', items: { type: 'object', properties: {
+            hacer: { type: 'string', enum: Object.keys(ASIS_ACC) },
+            valor: { type: 'string' } },
+            required: ['hacer', 'valor'], additionalProperties: false } }
+        },
+        required: ['respuesta', 'acciones'], additionalProperties: false } } }
+    }),
+    lee: j => {
+      /* la negativa llega con HTTP 200 y no como error */
+      if (j.stop_reason === 'refusal') return { corte: 'refusal' };
+      const b = (j.content || []).find(c => c.type === 'text');
+      return b ? { txt: b.text } : null;
+    }
+  }
+};
+
+function asisProv(){ const p = lee('prov', 'gemini'); return ASIS_PROV[p] ? p : 'gemini'; }
+function asisLlave(p){ return lee('llave_' + (p || asisProv()), ''); }
 
 function asisSistema(){
   const L = APPS.filter(a => a.p !== ASIS_PKG)
                 .map(a => a.n + ' = ' + a.p).join('\n');
   return 'Sos el asistente de Aero, un launcher de Android. El usuario te pide cosas ' +
-    'sobre su pantalla de inicio y vos devolvés acciones que el launcher sabe hacer.\n\n' +
+    'sobre su pantalla de inicio y vos devolvés JSON con las acciones que el launcher sabe hacer.\n\n' +
     'ACCIONES:\n' +
     '· iconos <40..92>      el lado del icono en píxeles (agrandar/achicar las apps)\n' +
     '· columnas <3..6>      cuántas apps por fila\n' +
@@ -2353,46 +2601,36 @@ function asisSistema(){
     '· cajon <abrir|cerrar> el cajón de todas las apps\n\n' +
     'El estado ahora: iconos ' + ICO + ', columnas ' + COLS + ', idioma ' + LANG + '.\n\n' +
     'APPS INSTALADAS (nombre = paquete; usá el paquete):\n' + L + '\n\n' +
-    'Contestá con una frase corta en el idioma del usuario y la lista de acciones. ' +
-    'Si te piden algo que no está en la lista, devolvé acciones vacías y decilo.';
+    'Contestá SÓLO con JSON: {"respuesta": "una frase corta en el idioma del usuario", ' +
+    '"acciones": [{"hacer": "...", "valor": "..."}]}. ' +
+    'Si te piden algo que no está en la lista, devolvé acciones vacías y decilo en la respuesta.';
 }
 
-/* ══════════ LA LLAMADA ══════════ */
+/* ══════════ LA LLAMADA ══════════
+   Una sola, para los tres: lo que cambia es el proveedor, no el camino. */
 async function asisIA(txt){
-  const k = lee('llave', '');
+  const id = asisProv(), P = ASIS_PROV[id], k = asisLlave(id);
   if (!k) return { modo: 'local' };
   let r;
   try {
-    r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': k,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: ASIS_MOD,
-        max_tokens: 700,
-        system: asisSistema(),
-        messages: [{ role: 'user', content: txt }],
-        output_config: { format: { type: 'json_schema', schema: asisEsquema() } }
-      })
-    });
+    r = await fetch(P.url, { method: 'POST', headers: P.cab(k),
+                             body: JSON.stringify(P.cuerpo(asisSistema(), txt)) });
   } catch (e){ return { modo: 'local', porque: T('aSinRed') }; }
   if (r.status === 401 || r.status === 403) return { modo: 'local', porque: T('aLlaveMal', r.status) };
+  /* Google contesta 400 con API_KEY_INVALID en vez de 401: un 400 en la primera
+     llamada es casi siempre la llave, y decir «la API falló (400)» manda al
+     dueño a buscar el problema donde no está */
+  if (r.status === 400 && id === 'gemini') return { modo: 'local', porque: T('aLlaveMal', 400) };
   if (!r.ok) return { modo: 'local', porque: T('aFalla', r.status) };
   let j;
   try { j = await r.json(); } catch (e){ return { modo: 'local', porque: T('aFalla', '?') }; }
-  /* la negativa llega con HTTP 200 y no como error: sin esto se lee como una
-     respuesta vacía y el asistente parece roto */
-  if (j.stop_reason === 'refusal') return { modo: 'local', porque: T('aNiega') };
-  const b = (j.content || []).find(c => c.type === 'text');
-  if (!b) return { modo: 'local', porque: T('aFalla', '0') };
+  const o = P.lee(j);
+  if (!o) return { modo: 'local', porque: T('aFalla', '0') };
+  if (o.corte) return { modo: 'local', porque: T('aNiega') };
   try {
-    const o = JSON.parse(b.text);
-    return { modo: 'ia', respuesta: String(o.respuesta || ''),
-             acciones: Array.isArray(o.acciones) ? o.acciones : [] };
+    const d = JSON.parse(o.txt);
+    return { modo: 'ia', prov: P.nombre, respuesta: String(d.respuesta || ''),
+             acciones: Array.isArray(d.acciones) ? d.acciones : [] };
   } catch (e){ return { modo: 'local', porque: T('aFalla', '·') }; }
 }
 
@@ -2541,22 +2779,46 @@ async function asisManda(){
      igual, y el dueño no tiene forma de saber si le falta poner la llave. */
   const f = document.createElement('div');
   f.className = 'asFirma';
-  f.textContent = (r.modo === 'ia' ? T('aPorIA') : T('aPorLocal')) +
+  f.textContent = (r.modo === 'ia' ? T('aPorIA') + ' · ' + r.prov : T('aPorLocal')) +
                   (r.porque ? ' · ' + r.porque : '');
   d.appendChild(f);
   $('#asLista').scrollTop = $('#asLista').scrollHeight;
   ASIS_PENSANDO = false;
 }
 
+/* ══════════ LA FILA DE PROVEEDORES ══════════
+   Se pinta de la tabla, así que agregar uno es agregar una entrada y nada más.
+   Y **la llave es por proveedor**: con una sola, cambiar de Gemini a Groq
+   mandaría la llave de Google a Groq y el dueño vería un 401 sin entender por
+   qué, después de haber pegado una llave que funciona. */
+function asisProvPinta(){
+  const f = $('#asProvs'); f.innerHTML = '';
+  const act = asisProv();
+  for (const id in ASIS_PROV){
+    const P = ASIS_PROV[id];
+    const b = document.createElement('div');
+    b.className = 'pOp' + (id === act ? ' sel' : '');
+    b.textContent = P.nombre + (P.gratis ? ' · ' + T('aGratis') : '');
+    b.addEventListener('click', () => {
+      guarda('prov', id); vibra(10);
+      $('#asLlave').value = asisLlave(id);
+      asisIdioma();
+    });
+    f.appendChild(b);
+  }
+}
+
 /* ══════════ IDIOMA ══════════ */
 function asisIdioma(){
+  const P = ASIS_PROV[asisProv()];
   $('#asTit').textContent = T('aTit');
   $('#asTxt').placeholder = T('aPide');
-  $('#asLlave').placeholder = T('aLlavePh');
-  $('#asAyuda').textContent = lee('llave', '') ? T('aConLlave') : T('aSinLlave');
-  $('#asLlaveTit').textContent = T('aLlaveTit');
+  $('#asLlave').placeholder = P.ph;
+  $('#asAyuda').textContent = asisLlave() ? T('aConLlave', P.nombre) : T('aSinLlave');
+  $('#asLlaveTit').textContent = T('aLlaveTit', P.donde);
   $('#asGuardar').textContent = T('aGuardar');
   $('#asBorrar').textContent = T('aBorrar');
+  asisProvPinta();
 }
 
 function asisInit(){
@@ -2566,20 +2828,161 @@ function asisInit(){
   $('#asConf').addEventListener('click', () => {
     const c = $('#asLlaveCaja');
     c.classList.toggle('on');
-    if (c.classList.contains('on')) $('#asLlave').value = lee('llave', '');
+    if (c.classList.contains('on')) $('#asLlave').value = asisLlave();
   });
   $('#asGuardar').addEventListener('click', () => {
     const v = $('#asLlave').value.trim();
-    guarda('llave', v); $('#asLlave').value = '';
+    guarda('llave_' + asisProv(), v); $('#asLlave').value = '';
     $('#asLlaveCaja').classList.remove('on');
     asisIdioma(); avisa(v ? T('aLlaveOk') : T('aLlaveFuera'));
   });
   $('#asBorrar').addEventListener('click', () => {
-    guarda('llave', ''); $('#asLlave').value = '';
+    guarda('llave_' + asisProv(), ''); $('#asLlave').value = '';
     asisIdioma(); avisa(T('aLlaveFuera'));
   });
   asisIdioma();
   asisDi('bot', T('aHola'));
+}
+/* ══════════════════════ PERSONALIZACIÓN ══════════════════════
+
+   ── LO QUE SE TOCA ACÁ CAMBIA LO QUE ESTÁ DETRÁS, ASÍ QUE SE VE ──
+   Es una hoja translúcida y no una pantalla aparte: mover el tamaño del icono
+   contra un panel opaco es mover un número a ciegas. Todo se aplica en el acto
+   y se guarda; no hay botón de aceptar, porque no hay nada que confirmar.
+
+   ── Y SE ARMA DE UNA TABLA ──
+   Cada control declara cómo se lee su valor, qué hace al cambiarlo y qué
+   opciones tiene. Escrito control por control, el día que se agregue uno hay
+   que acordarse del pintado, del guardado y del repintado; así es una entrada
+   más en `PERS`. */
+
+const PERS_PKG = 'ai.rezona.aero.personalizar';
+
+const PERS_ACENTOS = ['#7fe3ff', '#a8e85c', '#ffd166', '#ff8fab',
+                      '#c9a2ff', '#7dffd4', '#ff9f6e', '#ffffff'];
+
+/* los tres tamaños de la mascota en el escritorio, con su alto derivado de la
+   proporción del lienzo: escritos a mano, el muñeco sale estirado */
+const PERS_MASC = { chica: 148, media: 214, grande: 282 };
+
+const PERS = [
+  { tit: 'pMascota', tipo: 'ops', clave: 'mascOn',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => lee('mascOn', 1) ? '1' : '0',
+    pon: v => { guarda('mascOn', v === '1' ? 1 : 0); mascMira(); } },
+
+  { tit: 'pTamano', tipo: 'ops', ver: () => !!lee('mascOn', 1),
+    ops: () => [['chica', T('pChica')], ['media', T('pMedia')], ['grande', T('pGrande')]],
+    lee: () => lee('mascTam', 'media'),
+    pon: v => { guarda('mascTam', v); mascSitio(); } },
+
+  /* ── LAS CINCO POSES SON BOTONES, Y ESA ES LA RESPUESTA A «NO SÉ DÓNDE ESTÁ» ──
+     El modelo tiene cinco animaciones y hasta ahora salían solas: no había forma
+     de VERLAS a pedido. Acá se tocan y el muñeco de atrás las hace. */
+  { tit: 'pPose', tipo: 'ops', ver: () => !!lee('mascOn', 1),
+    ops: () => [['quieto', T('pQuieto')], ['baila', T('pBaila')], ['saluda', T('pSaluda')],
+                ['mando', T('pMando')], ['duerme', T('pDuerme')]],
+    lee: () => MASC_HOY,
+    pon: v => { asisMascota(v); } },
+
+  { tit: 'pIconos', tipo: 'rango', min: 40, max: 92, paso: 4,
+    lee: () => ICO, sufijo: ' px',
+    pon: v => { ponReja(v, null); rejaRepinta(); } },
+
+  { tit: 'pColumnas', tipo: 'rango', min: 3, max: 6, paso: 1,
+    lee: () => COLS, sufijo: '',
+    pon: v => { ponReja(null, v); rejaRepinta(); } },
+
+  { tit: 'pAcento', tipo: 'colores',
+    lee: () => lee('acento', PERS_ACENTOS[0]),
+    pon: v => { guarda('acento', v); persAcento(); } },
+
+  { tit: 'pOscuro', tipo: 'rango', min: 0, max: 70, paso: 5,
+    lee: () => lee('oscuro', 0), sufijo: ' %',
+    pon: v => { guarda('oscuro', v); persOscuro(); } },
+
+  { tit: 'pIdioma', tipo: 'ops',
+    ops: () => [['es', 'Castellano'], ['en', 'English'], ['pt', 'Português']],
+    lee: () => LANG,
+    pon: v => { LANG = v; guarda('lang', v); repintaIdioma(); persPinta(); } }
+];
+
+/* ── LO QUE SE GUARDA SE APLICA AL ARRANCAR, Y DESDE UN SOLO SITIO ──
+   Repartido por el arranque, el día que se agregue un ajuste queda uno que se
+   guarda y no se restituye — y eso se ve como «no me guardó nada». */
+function persAplica(){
+  persAcento();
+  persOscuro();
+}
+function persAcento(){
+  document.documentElement.style.setProperty('--acento', lee('acento', PERS_ACENTOS[0]));
+}
+/* ── OSCURECER ES UN VELO, NO UN `brightness` SOBRE EL FONDO ──
+   Un filtro sobre `#fondo` obliga al compositor a repintar la foto entera; un
+   velo con `background` es una capa más que ya está ahí. */
+function persOscuro(){
+  const v = cl(+lee('oscuro', 0), 0, 70)/100;
+  $('#oscuro').style.opacity = String(v);
+}
+
+function persAbre(){
+  cierraMenu(); asisCierra();
+  persPinta();
+  $('#pers').classList.add('on');
+  $('#velo').classList.add('on');
+}
+function persCierra(){
+  $('#pers').classList.remove('on');
+  $('#velo').classList.remove('on');
+}
+
+function persPinta(){
+  $('#persTit').textContent = T('pTit');
+  const c = $('#persCuerpo'); c.innerHTML = '';
+  for (const g of PERS){
+    if (g.ver && !g.ver()) continue;
+    const caja = document.createElement('div'); caja.className = 'pGrupo';
+    const t = document.createElement('div'); t.className = 'pTit'; t.textContent = T(g.tit);
+    caja.appendChild(t);
+    const f = document.createElement('div'); f.className = 'pFila';
+    if (g.tipo === 'ops'){
+      const val = String(g.lee());
+      for (const [v, txt] of g.ops()){
+        const b = document.createElement('div');
+        b.className = 'pOp' + (v === val ? ' sel' : '');
+        b.textContent = txt;
+        b.addEventListener('click', () => { g.pon(v); vibra(10); persPinta(); });
+        f.appendChild(b);
+      }
+    } else if (g.tipo === 'colores'){
+      const val = g.lee();
+      for (const col of PERS_ACENTOS){
+        const b = document.createElement('div');
+        b.className = 'pCol' + (col === val ? ' sel' : '');
+        b.style.background = col;
+        b.addEventListener('click', () => { g.pon(col); vibra(10); persPinta(); });
+        f.appendChild(b);
+      }
+    } else {
+      const r = document.createElement('input');
+      r.type = 'range'; r.className = 'pRango';
+      r.min = g.min; r.max = g.max; r.step = g.paso; r.value = g.lee();
+      const n = document.createElement('div'); n.className = 'pVal';
+      n.textContent = r.value + g.sufijo;
+      /* ── SE APLICA MIENTRAS SE ARRASTRA ──
+         Con `change` el cambio se ve recién al soltar, o sea que el dedo mueve
+         un número y la pantalla no contesta hasta el final. El repintado de la
+         reja es un `innerHTML` de la página visible, que es barato. */
+      r.addEventListener('input', () => { n.textContent = r.value + g.sufijo; g.pon(+r.value); });
+      f.appendChild(r); f.appendChild(n);
+    }
+    caja.appendChild(f); c.appendChild(caja);
+  }
+}
+
+function persInit(){
+  $('#persCerrar').addEventListener('click', persCierra);
+  persAplica();
 }
 
 /* ══════════════════════ EL PUENTE DE MENTIRA Y LAS SONDAS ══════════════════════
@@ -2891,11 +3294,46 @@ window.__A = {
              colsCajon: getComputedStyle($('#cajLista')).gridTemplateColumns.split(' ').length };
   },
 
+  /* ══════════ PERSONALIZACIÓN ══════════ */
+  pers(){
+    const c = getComputedStyle(document.documentElement);
+    return { abierto: $('#pers').classList.contains('on'),
+             grupos: $$('#persCuerpo .pTit').map(t => t.textContent),
+             acento: c.getPropertyValue('--acento').trim(),
+             oscuro: +getComputedStyle($('#oscuro')).opacity,
+             mascOn: !!lee('mascOn', 1), mascTam: lee('mascTam', 'media'),
+             mascW: c.getPropertyValue('--masc-w').trim(),
+             mascH: c.getPropertyValue('--masc-h').trim(),
+             visible: $('#mascota').classList.contains('on'), pose: MASC_HOY };
+  },
+  persAbrir(){ persAbre(); return this.pers(); },
+  persCerrar(){ persCierra(); return this.pers(); },
+  /* se toca la opción por su texto, que es lo que hace el dedo */
+  persToca(grupo, txt){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo, hay: $$('#persCuerpo .pTit').map(t => t.textContent) };
+    const b = $$('.pOp,.pCol', ) .filter(e => g.contains(e))
+                .find(e => e.textContent === txt || e.style.background === txt);
+    if (!b) return { error: 'no está la opción ' + txt,
+                     hay: Array.prototype.slice.call(g.querySelectorAll('.pOp')).map(e => e.textContent) };
+    b.click();
+    return this.pers();
+  },
+  /* el rango se mueve por el mismo `input` que dispara el dedo */
+  persRango(grupo, v){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo };
+    const r = g.querySelector('.pRango');
+    r.value = v; r.dispatchEvent(new Event('input', { bubbles: true }));
+    return Object.assign(this.pers(), { reja: this.reja() });
+  },
+
   /* ══════════ EL ASISTENTE ══════════ */
   asis(){
     const e = $('#asis');
     return { abierto: e.classList.contains('on'),
-             conLlave: !!lee('llave', ''),
+             prov: asisProv(), provs: Object.keys(ASIS_PROV),
+             conLlave: !!asisLlave(),
              pkg: ASIS_PKG, enLista: !!POR_PKG[ASIS_PKG],
              acciones: Object.keys(ASIS_ACC),
              msgs: $$('#asLista .asMsg').map(m => m.textContent.slice(0, 120)),
@@ -2903,7 +3341,8 @@ window.__A = {
   },
   asisAbrir(){ asisAbre(); return this.asis(); },
   asisCerrar(){ asisCierra(); return this.asis(); },
-  asisLlave(v){ guarda('llave', v || ''); asisIdioma(); return this.asis(); },
+  asisLlave(v){ guarda('llave_' + asisProv(), v || ''); asisIdioma(); return this.asis(); },
+  asisProv(p){ guarda('prov', p); asisIdioma(); return this.asis(); },
   /* el camino ENTERO, por donde entra el dedo: se escribe en el campo y se toca
      el botón, así que si el enganche está roto la sonda no contesta */
   async asisDecir(t){
@@ -2927,12 +3366,21 @@ window.__A = {
                           cab: o.headers, cuerpo: JSON.parse(o.body) };
       if (caso === 'red') throw new TypeError('Failed to fetch');
       if (caso === '401') return { ok: false, status: 401 };
-      if (caso === 'niega') return { ok: true, status: 200,
-        json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      if (caso === 'niega'){
+        const id = asisProv();
+        if (id === 'gemini') return { ok: true, status: 200,
+          json: async () => ({ candidates: [{ finishReason: 'SAFETY', content: { parts: [] } }] }) };
+        if (id === 'groq') return { ok: true, status: 200, json: async () => ({ choices: [] }) };
+        return { ok: true, status: 200, json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      }
+      const t = JSON.stringify({ respuesta: 'listo', acciones: acciones || [] });
+      const id = asisProv();
+      if (id === 'gemini') return { ok: true, status: 200, json: async () => ({
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text: t }] } }] }) };
+      if (id === 'groq') return { ok: true, status: 200, json: async () => ({
+        choices: [{ message: { role: 'assistant', content: t } }] }) };
       return { ok: true, status: 200, json: async () => ({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: JSON.stringify({
-          respuesta: 'listo', acciones: acciones || [] }) }] }) };
+        stop_reason: 'end_turn', content: [{ type: 'text', text: t }] }) };
     };
     return () => { window.fetch = org; };
   },
@@ -2940,17 +3388,26 @@ window.__A = {
   asisPedido(){
     const p = window.__pedido; if (!p) return null;
     const c = p.cuerpo;
+    /* el sistema y el enum viven en sitios distintos según el proveedor: lo que
+       la sonda tiene que decir es que los TRES los mandan, no cómo se llaman */
+    const sis = c.system || (c.systemInstruction && c.systemInstruction.parts[0].text) ||
+                (c.messages && (c.messages.find(m => m.role === 'system') || {}).content) || '';
+    const esq = (c.output_config && c.output_config.format.schema) ||
+                (c.generationConfig && c.generationConfig.responseSchema) || null;
     return { url: p.url, cab: Object.keys(p.cab),
-             navegador: p.cab['anthropic-dangerous-direct-browser-access'],
-             version: p.cab['anthropic-version'],
-             llaveVa: !!p.cab['x-api-key'],
-             modelo: c.model, tope: c.max_tokens,
-             formato: c.output_config && c.output_config.format.type,
-             campos: Object.keys(c.output_config.format.schema.properties),
-             enum: c.output_config.format.schema.properties.acciones.items.properties.hacer.enum,
-             sistemaTiene: { apps: c.system.indexOf('APPS INSTALADAS') >= 0,
-                             estado: c.system.indexOf('iconos ' + ICO) >= 0 },
-             mensaje: c.messages[0].content };
+             llaveVa: !!(p.cab['x-api-key'] || p.cab['x-goog-api-key'] || p.cab['authorization']),
+             navegador: p.cab['anthropic-dangerous-direct-browser-access'] || null,
+             modelo: c.model || 'gemini-2.5-flash',
+             tope: c.max_tokens || (c.generationConfig && c.generationConfig.maxOutputTokens),
+             formato: (c.output_config && c.output_config.format.type) ||
+                      (c.generationConfig && c.generationConfig.responseMimeType) ||
+                      (c.response_format && c.response_format.type),
+             campos: esq ? Object.keys(esq.properties) : null,
+             enum: esq ? esq.properties.acciones.items.properties.hacer.enum : null,
+             sistemaTiene: { apps: sis.indexOf('APPS INSTALADAS') >= 0,
+                             estado: sis.indexOf('iconos ' + ICO) >= 0 },
+             mensaje: (c.messages ? c.messages[c.messages.length-1].content
+                                  : c.contents[0].parts[0].text) };
   }
 };
 

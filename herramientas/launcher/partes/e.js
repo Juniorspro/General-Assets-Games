@@ -24,7 +24,11 @@ function nodoApp(a, conNombre){
   d.className = 'ap'; d.dataset.p = a.p;
   const b = document.createElement('div');
   b.className = 'baldosa';
-  if (a.p === ASIS_PKG){
+  if (a.p === PERS_PKG){
+    b.style.background = 'linear-gradient(160deg,#ffd166,#e0704f)';
+    b.style.font = '600 26px system-ui';
+    b.textContent = '⚙';
+  } else if (a.p === ASIS_PKG){
     /* ── SU ICONO NO SE PIDE, SE DIBUJA ──
        `https://icono.aero/<paquete>` lo contesta el cliente del WebView leyendo
        las apps instaladas, y ésta no está instalada: devolvería 404 y caería a
@@ -83,6 +87,7 @@ function pintaInicio(){
 }
 function ponPagina(n, suave){
   PAG = cl(n, 0, NPAG - 1);
+  if (typeof mascMira === 'function') mascMira();
   const t = $('#tira');
   t.style.transition = suave === false ? 'none' : 'transform .30s cubic-bezier(.22,.9,.24,1)';
   t.style.transform = 'translateX(' + (-PAG*(100/NPAG)) + '%)';
@@ -259,6 +264,7 @@ function abre(pkg){
   /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
      «no existe» sobre un paquete que nunca se instaló */
   if (pkg === ASIS_PKG){ asisAbre(); return; }
+  if (pkg === PERS_PKG){ persAbre(); return; }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
   if (!AND.abrir(pkg)) avisa('✕');
 }
@@ -289,6 +295,9 @@ function cierraMenu(){
 function verCajon(v){
   CAJON = !!v;
   $('#cajon').classList.toggle('on', CAJON);
+  /* el CSS de la mascota decide su sitio con esto */
+  document.body.classList.toggle('caj', CAJON);
+  mascSitio();
   /* el fondo se acerca: es lo que hace que la hoja esmerilada se lea a hoja
      sobre algo y no a otra pantalla */
   fondoProfundo(CAJON);
@@ -301,6 +310,7 @@ function verCajon(v){
     $('#busca2').blur(); $('#busca').blur();
     $('#cajLista').scrollTop = 0;
     mascotaBaila(false);
+    mascOcio();
     $('#burbuja').classList.remove('on');
   }
 }
@@ -315,6 +325,7 @@ function repintaIdioma(){
   $('#busca2').placeholder = T('busca');
   $('#cajTit').textContent = T('todas');
   const a = POR_PKG[ASIS_PKG]; if (a) a.n = T('aNombre');
+  const q = POR_PKG[PERS_PKG]; if (q) q.n = T('aNombreP');
   if (MENU_PKG){
     $('#mFijar').lastElementChild.textContent = fijado(MENU_PKG) ? T('soltar') : T('fijar');
     $('#mInfo').lastElementChild.textContent = T('info');
@@ -387,6 +398,7 @@ function cargaApps(){
      se puede buscar y se puede fijar como cualquier otra. Ponerlo como un botón
      aparte obligaría a inventarle un sitio en una pantalla que ya está llena. */
   APPS.push({ p: ASIS_PKG, n: T('aNombre') });
+  APPS.push({ p: PERS_PKG, n: T('aNombreP') });
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
@@ -627,7 +639,7 @@ function enganchaCajon(){
    lista con pesos es más corta y más clara que una tabla de probabilidades */
 const MASC_OCIO = ['quieto', 'mando', 'quieto', 'saluda', 'quieto'];
 
-let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0;
+let MASC_T = 0, MASC_CICLO = 0, MASC_HOY = '', MASC_ULT = 0, MASC_BUSCA = false;
 
 /* ── CAMBIAR DE ANIMACIÓN ES CAMBIAR UN NOMBRE ──
    Las cinco son funciones del tiempo sobre los mismos 23 huesos, así que no hay
@@ -661,35 +673,88 @@ function mascOcio(){
    Vive pegada abajo del cajón; con una búsqueda que devuelve muchas apps la
    lista llega hasta ahí y la mascota queda ENCIMA de los resultados, que es lo
    único que en ese momento hay que poder leer. El hueco se mide, no se supone. */
+/* ── DÓNDE VA Y CUÁNTO MIDE ──
+   Dos sitios, y los dos en variables: el CSS los lee y la sonda también, así
+   que no hay dos números que puedan discrepar. En el escritorio es grande y va
+   por encima del dock; en el cajón es chica y se apoya en el borde de abajo. */
+const MASC_CAJ = { w: 132, b: 16 };
+function mascSitio(){
+  /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
+     del ancho, cambiar uno deja al muñeco estirado y nada avisa */
+  const w = CAJON ? MASC_CAJ.w : (PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media);
+  const r = document.documentElement.style;
+  r.setProperty('--masc-w', w + 'px');
+  r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
+  r.setProperty('--masc-b', (CAJON ? MASC_CAJ.b : 132) + 'px');
+  mascMira();
+}
+
+/* ── ¿HAY LUGAR? ──
+   Vale para los dos sitios y mide lo mismo: dónde termina lo último que se
+   dibujó contra dónde empieza la mascota. `scrollHeight` no sirve —los dos
+   contenedores son `flex:1 1 auto`, así que SIEMPRE llenan su caja y nunca
+   bajan de `clientHeight`—, y con eso la comparación daba falso con dos
+   resultados en pantalla. */
 function mascCabe(){
-  const l = $('#cajLista');
-  if (!l) return false;
+  const alto = parseFloat(getComputedStyle(document.documentElement)
+                 .getPropertyValue('--masc-h')) || MASC_H;
+  const l = CAJON ? $('#cajLista') : $('#tira').children[PAG];
+  if (!l) return !CAJON;
   const n = l.children.length;
   if (!n) return true;
-  /* ── SE MIDE EL ÚLTIMO HIJO, NO `scrollHeight` ──
-     `#cajLista` es `flex:1 1 auto` dentro de un cuerpo que también lo es, así
-     que SIEMPRE llena su caja: `scrollHeight` nunca baja de `clientHeight` y la
-     comparación daba falso con dos resultados en pantalla. Lo que dice cuánto
-     ocupa el contenido es dónde termina el último. */
   const u = l.children[n - 1].getBoundingClientRect();
-  const c = l.getBoundingClientRect();
-  return u.bottom <= c.bottom - MASC_H - 30;
+  const c = (CAJON ? l : $('#hoja')).getBoundingClientRect();
+  return u.bottom <= c.bottom - alto - (CAJON ? 30 : 8);
+}
+
+/* ── EN EL ESCRITORIO SE VE SIEMPRE ──
+   Ése era el reporte: «no sé dónde se encuentra». Vivía adentro del cajón y
+   sólo aparecía TECLEANDO, o sea que había que abrir el cajón y escribir para
+   ver el modelo. En el escritorio se ve desde el primer cuadro y sin hacer
+   nada; en el cajón sigue apareciendo mientras se busca, que es donde tiene
+   algo que acompañar. */
+function mascMira(){
+  const m = $('#mascota');
+  const ver = lee('mascOn', 1) && mascCabe() &&
+              (CAJON ? MASC_BUSCA : true) && !document.hidden;
+  clearTimeout(MASC_T);
+  if (ver){
+    m.classList.add('on');
+    l3Corre(true);
+    if (!MASC_HOY) mascPone('quieto');
+    return;
+  }
+  /* se despide en vez de desaparecer: un corte seco se lee a error, y el bucle
+     de render se apaga recién cuando terminó de irse */
+  MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, 2400);
 }
 
 function mascotaBaila(v){
-  const m = $('#mascota');
-  clearTimeout(MASC_T); clearTimeout(MASC_CICLO);
-  if (v && mascCabe()){
-    m.classList.add('on');
-    l3Corre(true);
+  MASC_BUSCA = !!v;
+  clearTimeout(MASC_CICLO);
+  if (v){
     MASC_ULT = Date.now();
     mascPone('baila');
     MASC_CICLO = setTimeout(mascOcio, 2200);
-  } else {
-    /* se despide en vez de desaparecer: un corte seco se lee a error, y el
-       bucle de render se apaga recién cuando terminó de irse */
-    MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); }, v ? 0 : 2400);
+  } else if (!CAJON){
+    /* en el escritorio no se va: pasa al ocio */
+    MASC_CICLO = setTimeout(mascOcio, 600);
   }
+  mascMira();
+}
+
+/* ── SE LA PUEDE TOCAR, Y ESO ES LA MITAD DE QUE SEA UNA MASCOTA ──
+   Un muñeco que no contesta es un adorno. Un toque le saca una pose distinta de
+   la que tenía —sorteada entre las que no está haciendo, porque repetir la
+   misma se lee a que el toque no hizo nada— y reinicia el reloj del ocio. */
+const MASC_TOQUE = ['saluda', 'baila', 'mando', 'quieto'];
+function mascToque(){
+  vibra(12);
+  const otras = MASC_TOQUE.filter(n => n !== MASC_HOY);
+  clearTimeout(MASC_CICLO);
+  MASC_ULT = Date.now();
+  mascPone(otras[(Math.random()*otras.length)|0]);
+  MASC_CICLO = setTimeout(mascOcio, 2600);
 }
 
 /* ══════════ GANCHOS DEL SISTEMA ══════════
@@ -738,11 +803,6 @@ function arranca(){
      sale con los iconos de fábrica y salta de tamaño a la vista */
   ponReja(lee('ico', 60), lee('cols', 4));
 
-  /* la tira de la mascota y su celda salen del horneado: escritas a mano acá,
-     regenerar la hoja con otro tamaño la deja estirada sin que nada avise */
-  const rz = document.documentElement.style;
-  rz.setProperty('--mw-masc', MASC_W + 'px');
-  rz.setProperty('--mh-masc', MASC_H + 'px');
   /* ── EL LIENZO SE DIMENSIONA UNA VEZ Y NO POR CUADRO ──
      El alto sale de la proporción de la caja, así que cambiar `MASC_W` no deja
      al muñeco estirado. */
@@ -751,6 +811,27 @@ function arranca(){
   cv.height = Math.round(L3_ANCHO*MASC_H/MASC_W);
   try { if (l3Init()) l3Cam(); } catch (e) { window.__errs && window.__errs.push(String(e)); }
   mascPone('quieto');
+  mascSitio();
+  /* ── UN TOQUE LA HACE CONTESTAR, UNO LARGO ABRE LA PERSONALIZACIÓN ──
+     Es el gesto de cualquier launcher —mantener sobre algo abre sus opciones—
+     y hace que el panel sea descubrible sin un botón más en la pantalla. */
+  const M = $('#mascota');
+  let mfl = null, mlarga = false;
+  M.addEventListener('pointerdown', () => {
+    mlarga = false;
+    mfl = setTimeout(() => { mlarga = true; vibra(20); persAbre(); }, 560);
+  });
+  const mfin = () => { if (mfl){ clearTimeout(mfl); mfl = null; } };
+  M.addEventListener('pointerup', mfin);
+  M.addEventListener('pointermove', mfin);
+  M.addEventListener('pointercancel', mfin);
+  M.addEventListener('click', () => { if (!mlarga) mascToque(); });
+  /* ── NO ARRANCA DORMIDA ──
+     `mascOcio` compara contra `MASC_ULT`, que valía 0: la resta daba cuarenta
+     y seis años y el primer cuadro del launcher salía con la mascota sentada
+     durmiendo. Lo primero que uno ve del muñeco tiene que ser el muñeco de pie. */
+  MASC_ULT = Date.now();
+  mascOcio();
 
   pideInsets();
   cargaApps();
@@ -760,6 +841,7 @@ function arranca(){
   setInterval(pintaBateria, 30000);
 
   asisInit();
+  persInit();
 
   enganchaLista($('#tira'));
   enganchaLista($('#dock'));
@@ -814,8 +896,8 @@ function arranca(){
   $('#hoja').addEventListener('pointerup', fc);
   $('#hoja').addEventListener('pointermove', fc);
 
-  document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; });
-  addEventListener('resize', () => { calculaFilas(); pintaInicio(); });
+  document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
+  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira(); });
   addEventListener('contextmenu', e => e.preventDefault());
 
   setTimeout(() => $('#carga').classList.add('off'), 260);

@@ -79,37 +79,120 @@ function asisMascota(n){
   MASC_CICLO = setTimeout(mascOcio, 6000);
 }
 
-/* ══════════ EL ESQUEMA ══════════
-   Se arma DE LA TABLA. Escrito a mano al lado, se separa de ella el día que se
-   toque cualquiera de los dos. */
-function asisEsquema(){
-  return {
-    type: 'object',
-    properties: {
-      respuesta: { type: 'string', description: 'Una frase corta para el usuario, en su idioma.' },
-      acciones: {
-        type: 'array',
-        items: {
-          type: 'object',
+/* ══════════ QUIÉN CONTESTA ══════════
+
+   ── TRES PROVEEDORES, Y DOS SON GRATIS ──
+   Pedirle al dueño una tarjeta de crédito para que su launcher entienda «agrandá
+   las apps» no tiene sentido, así que el que viene puesto es **Gemini**, que da
+   una llave sin tarjeta en aistudio.google.com. Anthropic queda para el que ya
+   tiene llave y Groq para el que quiera velocidad.
+
+   ── Y LOS TRES TIENEN QUE PODER LLAMARSE DESDE UN NAVEGADOR ──
+   Ésta es la condición dura y no se cumple sola: la interfaz se carga desde
+   `file:///android_asset/`, así que el `fetch` sale con `Origin: null` y el
+   servidor tiene que contestar con CORS permisivo o el navegador no deja LEER
+   la respuesta. Medido contra los tres endpoints con ese origen exacto:
+   Anthropic devuelve `Access-Control-Allow-Origin: *` —pero sólo si el
+   encabezado `anthropic-dangerous-direct-browser-access` va en el preflight—,
+   Groq devuelve `*`, y Google **repite el origen que le mandes**, `null`
+   incluido, que según la especificación es justo lo que hace falta.
+   **Cerebras quedó afuera**: pasa el preflight y después contesta los errores
+   SIN un solo encabezado de CORS, o sea que un 401 sería ilegible.
+
+   Cada proveedor sabe tres cosas y nada más: cómo se autentica, qué cuerpo
+   arma y cómo se lee lo que vuelve. Todo lo demás —la tabla de acciones, la
+   validación, el intérprete de respaldo, los tres modos de falla— es el mismo
+   para los tres. */
+const ASIS_PROV = {
+  gemini: {
+    nombre: 'Google Gemini', gratis: true, ph: 'AIza…',
+    donde: 'aistudio.google.com',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    cab: k => ({ 'content-type': 'application/json', 'x-goog-api-key': k }),
+    cuerpo: (sis, txt) => ({
+      systemInstruction: { parts: [{ text: sis }] },
+      contents: [{ role: 'user', parts: [{ text: txt }] }],
+      generationConfig: {
+        temperature: 0, maxOutputTokens: 700,
+        responseMimeType: 'application/json',
+        /* el esquema de Google lleva los tipos en MAYÚSCULA y no acepta
+           `additionalProperties`: es otro dialecto, no el mismo con otro nombre */
+        responseSchema: {
+          type: 'OBJECT',
           properties: {
-            hacer: { type: 'string', enum: Object.keys(ASIS_ACC) },
-            valor: { type: 'string', description: 'El argumento: un número, un nombre de paquete, un texto o una de las opciones.' }
+            respuesta: { type: 'STRING' },
+            acciones: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+              hacer: { type: 'STRING', enum: Object.keys(ASIS_ACC) },
+              valor: { type: 'STRING' } }, required: ['hacer', 'valor'] } }
           },
-          required: ['hacer', 'valor'],
-          additionalProperties: false
+          required: ['respuesta', 'acciones']
         }
       }
-    },
-    required: ['respuesta', 'acciones'],
-    additionalProperties: false
-  };
-}
+    }),
+    lee: j => {
+      const c = (j.candidates || [])[0];
+      if (!c) return null;
+      /* `SAFETY` y `MAX_TOKENS` cortan el JSON a la mitad: sin esta guarda el
+         `JSON.parse` tira y se lee como si la API hubiera fallado */
+      if (c.finishReason && c.finishReason !== 'STOP') return { corte: c.finishReason };
+      const t = (c.content && c.content.parts || []).map(x => x.text).join('');
+      return t ? { txt: t } : null;
+    }
+  },
+  groq: {
+    nombre: 'Groq', gratis: true, ph: 'gsk_…', donde: 'console.groq.com',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    cab: k => ({ 'content-type': 'application/json', 'authorization': 'Bearer ' + k }),
+    cuerpo: (sis, txt) => ({
+      model: 'llama-3.3-70b-versatile', temperature: 0, max_tokens: 700,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: sis }, { role: 'user', content: txt }]
+    }),
+    lee: j => {
+      const c = (j.choices || [])[0];
+      if (!c) return null;
+      return c.message && c.message.content ? { txt: c.message.content } : null;
+    }
+  },
+  anthropic: {
+    nombre: 'Anthropic', gratis: false, ph: 'sk-ant-…', donde: 'console.anthropic.com',
+    url: 'https://api.anthropic.com/v1/messages',
+    cab: k => ({ 'content-type': 'application/json', 'x-api-key': k,
+                 'anthropic-version': '2023-06-01',
+                 /* sin este encabezado la API no le contesta a un navegador, y
+                    encima es lo que hace que el preflight devuelva CORS */
+                 'anthropic-dangerous-direct-browser-access': 'true' }),
+    cuerpo: (sis, txt) => ({
+      model: 'claude-opus-5', max_tokens: 700, system: sis,
+      messages: [{ role: 'user', content: txt }],
+      output_config: { format: { type: 'json_schema', schema: {
+        type: 'object',
+        properties: {
+          respuesta: { type: 'string' },
+          acciones: { type: 'array', items: { type: 'object', properties: {
+            hacer: { type: 'string', enum: Object.keys(ASIS_ACC) },
+            valor: { type: 'string' } },
+            required: ['hacer', 'valor'], additionalProperties: false } }
+        },
+        required: ['respuesta', 'acciones'], additionalProperties: false } } }
+    }),
+    lee: j => {
+      /* la negativa llega con HTTP 200 y no como error */
+      if (j.stop_reason === 'refusal') return { corte: 'refusal' };
+      const b = (j.content || []).find(c => c.type === 'text');
+      return b ? { txt: b.text } : null;
+    }
+  }
+};
+
+function asisProv(){ const p = lee('prov', 'gemini'); return ASIS_PROV[p] ? p : 'gemini'; }
+function asisLlave(p){ return lee('llave_' + (p || asisProv()), ''); }
 
 function asisSistema(){
   const L = APPS.filter(a => a.p !== ASIS_PKG)
                 .map(a => a.n + ' = ' + a.p).join('\n');
   return 'Sos el asistente de Aero, un launcher de Android. El usuario te pide cosas ' +
-    'sobre su pantalla de inicio y vos devolvés acciones que el launcher sabe hacer.\n\n' +
+    'sobre su pantalla de inicio y vos devolvés JSON con las acciones que el launcher sabe hacer.\n\n' +
     'ACCIONES:\n' +
     '· iconos <40..92>      el lado del icono en píxeles (agrandar/achicar las apps)\n' +
     '· columnas <3..6>      cuántas apps por fila\n' +
@@ -122,46 +205,36 @@ function asisSistema(){
     '· cajon <abrir|cerrar> el cajón de todas las apps\n\n' +
     'El estado ahora: iconos ' + ICO + ', columnas ' + COLS + ', idioma ' + LANG + '.\n\n' +
     'APPS INSTALADAS (nombre = paquete; usá el paquete):\n' + L + '\n\n' +
-    'Contestá con una frase corta en el idioma del usuario y la lista de acciones. ' +
-    'Si te piden algo que no está en la lista, devolvé acciones vacías y decilo.';
+    'Contestá SÓLO con JSON: {"respuesta": "una frase corta en el idioma del usuario", ' +
+    '"acciones": [{"hacer": "...", "valor": "..."}]}. ' +
+    'Si te piden algo que no está en la lista, devolvé acciones vacías y decilo en la respuesta.';
 }
 
-/* ══════════ LA LLAMADA ══════════ */
+/* ══════════ LA LLAMADA ══════════
+   Una sola, para los tres: lo que cambia es el proveedor, no el camino. */
 async function asisIA(txt){
-  const k = lee('llave', '');
+  const id = asisProv(), P = ASIS_PROV[id], k = asisLlave(id);
   if (!k) return { modo: 'local' };
   let r;
   try {
-    r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': k,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: ASIS_MOD,
-        max_tokens: 700,
-        system: asisSistema(),
-        messages: [{ role: 'user', content: txt }],
-        output_config: { format: { type: 'json_schema', schema: asisEsquema() } }
-      })
-    });
+    r = await fetch(P.url, { method: 'POST', headers: P.cab(k),
+                             body: JSON.stringify(P.cuerpo(asisSistema(), txt)) });
   } catch (e){ return { modo: 'local', porque: T('aSinRed') }; }
   if (r.status === 401 || r.status === 403) return { modo: 'local', porque: T('aLlaveMal', r.status) };
+  /* Google contesta 400 con API_KEY_INVALID en vez de 401: un 400 en la primera
+     llamada es casi siempre la llave, y decir «la API falló (400)» manda al
+     dueño a buscar el problema donde no está */
+  if (r.status === 400 && id === 'gemini') return { modo: 'local', porque: T('aLlaveMal', 400) };
   if (!r.ok) return { modo: 'local', porque: T('aFalla', r.status) };
   let j;
   try { j = await r.json(); } catch (e){ return { modo: 'local', porque: T('aFalla', '?') }; }
-  /* la negativa llega con HTTP 200 y no como error: sin esto se lee como una
-     respuesta vacía y el asistente parece roto */
-  if (j.stop_reason === 'refusal') return { modo: 'local', porque: T('aNiega') };
-  const b = (j.content || []).find(c => c.type === 'text');
-  if (!b) return { modo: 'local', porque: T('aFalla', '0') };
+  const o = P.lee(j);
+  if (!o) return { modo: 'local', porque: T('aFalla', '0') };
+  if (o.corte) return { modo: 'local', porque: T('aNiega') };
   try {
-    const o = JSON.parse(b.text);
-    return { modo: 'ia', respuesta: String(o.respuesta || ''),
-             acciones: Array.isArray(o.acciones) ? o.acciones : [] };
+    const d = JSON.parse(o.txt);
+    return { modo: 'ia', prov: P.nombre, respuesta: String(d.respuesta || ''),
+             acciones: Array.isArray(d.acciones) ? d.acciones : [] };
   } catch (e){ return { modo: 'local', porque: T('aFalla', '·') }; }
 }
 
@@ -310,22 +383,46 @@ async function asisManda(){
      igual, y el dueño no tiene forma de saber si le falta poner la llave. */
   const f = document.createElement('div');
   f.className = 'asFirma';
-  f.textContent = (r.modo === 'ia' ? T('aPorIA') : T('aPorLocal')) +
+  f.textContent = (r.modo === 'ia' ? T('aPorIA') + ' · ' + r.prov : T('aPorLocal')) +
                   (r.porque ? ' · ' + r.porque : '');
   d.appendChild(f);
   $('#asLista').scrollTop = $('#asLista').scrollHeight;
   ASIS_PENSANDO = false;
 }
 
+/* ══════════ LA FILA DE PROVEEDORES ══════════
+   Se pinta de la tabla, así que agregar uno es agregar una entrada y nada más.
+   Y **la llave es por proveedor**: con una sola, cambiar de Gemini a Groq
+   mandaría la llave de Google a Groq y el dueño vería un 401 sin entender por
+   qué, después de haber pegado una llave que funciona. */
+function asisProvPinta(){
+  const f = $('#asProvs'); f.innerHTML = '';
+  const act = asisProv();
+  for (const id in ASIS_PROV){
+    const P = ASIS_PROV[id];
+    const b = document.createElement('div');
+    b.className = 'pOp' + (id === act ? ' sel' : '');
+    b.textContent = P.nombre + (P.gratis ? ' · ' + T('aGratis') : '');
+    b.addEventListener('click', () => {
+      guarda('prov', id); vibra(10);
+      $('#asLlave').value = asisLlave(id);
+      asisIdioma();
+    });
+    f.appendChild(b);
+  }
+}
+
 /* ══════════ IDIOMA ══════════ */
 function asisIdioma(){
+  const P = ASIS_PROV[asisProv()];
   $('#asTit').textContent = T('aTit');
   $('#asTxt').placeholder = T('aPide');
-  $('#asLlave').placeholder = T('aLlavePh');
-  $('#asAyuda').textContent = lee('llave', '') ? T('aConLlave') : T('aSinLlave');
-  $('#asLlaveTit').textContent = T('aLlaveTit');
+  $('#asLlave').placeholder = P.ph;
+  $('#asAyuda').textContent = asisLlave() ? T('aConLlave', P.nombre) : T('aSinLlave');
+  $('#asLlaveTit').textContent = T('aLlaveTit', P.donde);
   $('#asGuardar').textContent = T('aGuardar');
   $('#asBorrar').textContent = T('aBorrar');
+  asisProvPinta();
 }
 
 function asisInit(){
@@ -335,16 +432,16 @@ function asisInit(){
   $('#asConf').addEventListener('click', () => {
     const c = $('#asLlaveCaja');
     c.classList.toggle('on');
-    if (c.classList.contains('on')) $('#asLlave').value = lee('llave', '');
+    if (c.classList.contains('on')) $('#asLlave').value = asisLlave();
   });
   $('#asGuardar').addEventListener('click', () => {
     const v = $('#asLlave').value.trim();
-    guarda('llave', v); $('#asLlave').value = '';
+    guarda('llave_' + asisProv(), v); $('#asLlave').value = '';
     $('#asLlaveCaja').classList.remove('on');
     asisIdioma(); avisa(v ? T('aLlaveOk') : T('aLlaveFuera'));
   });
   $('#asBorrar').addEventListener('click', () => {
-    guarda('llave', ''); $('#asLlave').value = '';
+    guarda('llave_' + asisProv(), ''); $('#asLlave').value = '';
     asisIdioma(); avisa(T('aLlaveFuera'));
   });
   asisIdioma();

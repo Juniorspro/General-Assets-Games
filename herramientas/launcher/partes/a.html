@@ -43,6 +43,10 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
      número que se había descartado por dejar el dock verde lima.
      Con la calibración en una variable la lee el CSS y la lee el JS, así que no
      puede haber dos. */
+  /* dónde y cuánto mide la mascota. Las escribe `mascSitio()` según esté el
+     escritorio o el cajón: acá van los valores del escritorio, que es lo que se
+     ve en el primer cuadro. */
+  --masc-w:214px; --masc-h:292px; --masc-b:132px;
   --v-fil:blur(24px) saturate(120%) brightness(.90);
   --v-filR:blur(19px) saturate(122%) brightness(.90);
   --acento:#7fe3ff;
@@ -77,6 +81,11 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
 #fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
 #fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+/* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
+   Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
+   foto entera en cada cuadro de la transición. */
+#oscuro{position:fixed;inset:0;z-index:0;pointer-events:none;background:#02121f;
+  opacity:0;transition:opacity .2s}
 #veloT,#veloB{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
 /* El velo se achicó al bajar el tinte del vidrio: con 44% al 60% el cielo
    entero quedaba embarrado, y el cielo es lo único que este fondo tiene para
@@ -322,7 +331,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #cajLista .web span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* el encabezado de letra cruza la reja entera */
 #cajLista .let{grid-column:1/-1;padding:7px 6px 1px;font:800 10px/1 system-ui,sans-serif;
-  letter-spacing:.18em;opacity:.72;text-shadow:0 1px 3px rgba(0,20,45,.7)}
+  letter-spacing:.18em;opacity:.9;color:var(--acento);
+  text-shadow:0 1px 3px rgba(0,20,45,.7)}
 
 /* ── EL RIEL DE LETRAS ──
    Sólo lleva las letras que TIENEN apps: un riel con las 26 fijas manda a la
@@ -344,8 +354,8 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #rielPomo{position:absolute;right:12px;width:6px;border-radius:3px;
   background:rgba(255,255,255,.62);box-shadow:0 0 8px rgba(255,255,255,.5);
   transition:width .14s,background .14s,box-shadow .14s}
-#riel.on #rielPomo{width:8px;right:11px;background:#eafcff;
-  box-shadow:0 0 14px rgba(180,240,255,.9)}
+#riel.on #rielPomo{width:8px;right:11px;background:var(--acento);
+  box-shadow:0 0 14px color-mix(in srgb,var(--acento) 80%,transparent)}
 
 /* la burbuja con la letra grande, sólo mientras el dedo va por el riel */
 #burbuja{position:absolute;right:44px;top:50%;transform:translateY(-50%) scale(.7);
@@ -365,12 +375,21 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 /* El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
    POR ENCIMA de la cabeza: recortando arriba de todo, la mitad del gesto se
    pierde. */
-#mascota{position:absolute;left:50%;bottom:16px;width:var(--mw-masc);
-  height:var(--mh-masc);margin-left:calc(var(--mw-masc)/-2);
+/* ── DOS SITIOS Y UN SOLO ELEMENTO ──
+   Reparentar el lienzo movería el contexto de WebGL de un lado al otro en cada
+   apertura del cajón; con `position:fixed` y dos reglas, lo único que cambia es
+   dónde y cuánto mide. En el escritorio es GRANDE —es lo único que hay en esa
+   franja, que está vacía a propósito— y en el cajón es chica, porque ahí lo que
+   importa es la lista. */
+#mascota{position:fixed;left:50%;z-index:3;
+  bottom:var(--masc-b);width:var(--masc-w);height:var(--masc-h);
+  margin-left:calc(var(--masc-w)/-2);
   opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
-  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1);z-index:2;
-  filter:drop-shadow(0 6px 14px rgba(0,40,80,.5))}
-#mascota.on{opacity:1;transform:translateY(0) scale(1)}
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1),
+             width .26s ease,height .26s ease,bottom .26s ease;
+  filter:drop-shadow(0 8px 18px rgba(0,40,80,.55))}
+#mascota.on{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;cursor:pointer}
+#mascota:active{filter:drop-shadow(0 4px 10px rgba(0,40,80,.6)) brightness(1.12)}
 /* ── EL LIENZO SE DIBUJA CHICO Y CSS LO ESTIRA ──
    Y ahí el pixelado que se pidió y la optimización son LA MISMA COSA: se
    rellenan 64×83 píxeles en vez de 139×180, o sea cinco veces menos, y el
@@ -438,7 +457,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   padding:10px 12px calc(var(--ins-b) + 10px)}
 #asis.on{transform:translateY(0)}
 #asCab{display:flex;align-items:center;gap:10px;padding:4px 4px 10px;flex:0 0 auto}
-#asTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
+#asTit,#persTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
 .asBtn{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;
   justify-content:center;font-size:16px;cursor:pointer;
   background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
@@ -448,7 +467,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 .asMsg{max-width:86%;padding:9px 13px;border-radius:16px;font-size:14px;
   line-height:1.35;white-space:pre-wrap;word-break:break-word;
   text-shadow:0 1px 2px rgba(0,25,52,.6)}
-.as-yo{align-self:flex-end;background:rgba(127,227,255,.24);
+.as-yo{align-self:flex-end;background:color-mix(in srgb,var(--acento) 26%,transparent);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35);border-bottom-right-radius:6px}
 .as-bot{align-self:flex-start;background:rgba(255,255,255,.13);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.3);border-bottom-left-radius:6px}
@@ -460,7 +479,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   border-radius:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
 #asTxt::placeholder,#asLlave::placeholder{color:rgba(255,255,255,.6)}
 #asMandar{flex:0 0 auto;width:44px;height:42px;border-radius:16px;border:0;
-  background:rgba(127,227,255,.32);color:#fff;font-size:17px;cursor:pointer;
+  background:color-mix(in srgb,var(--acento) 34%,transparent);color:#fff;font-size:17px;cursor:pointer;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
 #asAyuda{flex:0 0 auto;font-size:11px;opacity:.7;padding:0 4px 6px;font-weight:600}
 /* la llave se pide en un cajoncito que está cerrado por omisión: es lo que uno
@@ -475,6 +494,35 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   font:700 12px/1 inherit;color:#fff;cursor:pointer;
   background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
 #asGuardar{background:rgba(168,232,92,.30)}
+
+/* ══════════ PERSONALIZACIÓN ══════════
+   Misma familia que la hoja del asistente: sube desde abajo y deja ver el
+   launcher detrás, porque TODO lo que se toca acá cambia lo que está atrás. */
+#pers{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:86%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 12px)}
+#pers.on{transform:translateY(0)}
+#persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
+.pGrupo{display:flex;flex-direction:column;gap:8px}
+.pTit{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  opacity:.7;padding-left:4px}
+.pFila{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pOp{flex:0 0 auto;padding:9px 14px;border-radius:14px;font:700 13px/1 inherit;
+  cursor:pointer;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32);text-shadow:0 1px 2px rgba(0,25,52,.6)}
+.pOp:active{background:rgba(255,255,255,.26)}
+.pOp.sel{background:color-mix(in srgb,var(--acento) 34%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 0 0 1px color-mix(in srgb,var(--acento) 60%,transparent)}
+.pCol{width:34px;height:34px;border-radius:12px;flex:0 0 auto;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 8px rgba(0,25,52,.35)}
+.pCol.sel{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 0 0 3px #fff,0 3px 10px rgba(0,25,52,.4)}
+.pRango{flex:1 1 120px;min-width:110px;-webkit-appearance:none;appearance:none;
+  height:6px;border-radius:3px;background:rgba(255,255,255,.22);outline:0}
+.pRango::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--acento);box-shadow:0 2px 6px rgba(0,25,52,.5)}
+.pVal{flex:0 0 auto;min-width:44px;text-align:right;font:800 13px/1 inherit;opacity:.9}
 
 #menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
   width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
@@ -585,19 +633,35 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
     <div id="riel"><div id="rielPista"></div><div id="rielPomo"></div></div>
   </div>
   <div id="burbuja">A</div>
-  <!-- la mascota baila mientras se escribe, se aburre y se duerme -->
-  <div id="mascota">
-    <div id="mVent"><canvas id="mLien"></canvas></div>
-    <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
-  </div>
 </div>
 
+<!-- ── LA MASCOTA VIVE EN EL ESCRITORIO, NO ADENTRO DEL CAJÓN ──
+     Estaba dentro de `#cajon` y sólo aparecía **escribiendo en la búsqueda**:
+     o sea que había que abrir el cajón y teclear para verla. El reporte fue
+     literal —«no sé dónde se encuentra»— y tenía razón: un modelo 3D que hay
+     que descubrir no existe. Ahora es hermana del cajón y la coloca el CSS
+     según dónde esté uno: en el medio del escritorio, grande, desde el primer
+     cuadro; y chica al pie del cajón cuando el cajón está abierto. -->
+<div id="mascota">
+  <div id="mVent"><canvas id="mLien"></canvas></div>
+  <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
+</div>
+
+<div id="oscuro"></div>
 <div id="velo"></div>
 <div class="vid refr" id="menu">
   <div id="menuTit">—</div>
   <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
   <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
   <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid refr" id="pers">
+  <div id="asCab">
+    <div id="persTit">—</div>
+    <div class="asBtn" id="persCerrar">✕</div>
+  </div>
+  <div id="persCuerpo"></div>
 </div>
 
 <div class="vid refr" id="asis">
@@ -609,6 +673,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   <div id="asLista"></div>
   <div id="asLlaveCaja">
     <div id="asLlaveTit">—</div>
+    <div id="asProvs" class="pFila"></div>
     <div id="asLlaveFila">
       <input id="asLlave" type="password" autocomplete="off" spellcheck="false" placeholder="—">
       <button id="asGuardar">—</button>

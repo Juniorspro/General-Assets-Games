@@ -308,11 +308,46 @@ window.__A = {
              colsCajon: getComputedStyle($('#cajLista')).gridTemplateColumns.split(' ').length };
   },
 
+  /* ══════════ PERSONALIZACIÓN ══════════ */
+  pers(){
+    const c = getComputedStyle(document.documentElement);
+    return { abierto: $('#pers').classList.contains('on'),
+             grupos: $$('#persCuerpo .pTit').map(t => t.textContent),
+             acento: c.getPropertyValue('--acento').trim(),
+             oscuro: +getComputedStyle($('#oscuro')).opacity,
+             mascOn: !!lee('mascOn', 1), mascTam: lee('mascTam', 'media'),
+             mascW: c.getPropertyValue('--masc-w').trim(),
+             mascH: c.getPropertyValue('--masc-h').trim(),
+             visible: $('#mascota').classList.contains('on'), pose: MASC_HOY };
+  },
+  persAbrir(){ persAbre(); return this.pers(); },
+  persCerrar(){ persCierra(); return this.pers(); },
+  /* se toca la opción por su texto, que es lo que hace el dedo */
+  persToca(grupo, txt){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo, hay: $$('#persCuerpo .pTit').map(t => t.textContent) };
+    const b = $$('.pOp,.pCol', ) .filter(e => g.contains(e))
+                .find(e => e.textContent === txt || e.style.background === txt);
+    if (!b) return { error: 'no está la opción ' + txt,
+                     hay: Array.prototype.slice.call(g.querySelectorAll('.pOp')).map(e => e.textContent) };
+    b.click();
+    return this.pers();
+  },
+  /* el rango se mueve por el mismo `input` que dispara el dedo */
+  persRango(grupo, v){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo };
+    const r = g.querySelector('.pRango');
+    r.value = v; r.dispatchEvent(new Event('input', { bubbles: true }));
+    return Object.assign(this.pers(), { reja: this.reja() });
+  },
+
   /* ══════════ EL ASISTENTE ══════════ */
   asis(){
     const e = $('#asis');
     return { abierto: e.classList.contains('on'),
-             conLlave: !!lee('llave', ''),
+             prov: asisProv(), provs: Object.keys(ASIS_PROV),
+             conLlave: !!asisLlave(),
              pkg: ASIS_PKG, enLista: !!POR_PKG[ASIS_PKG],
              acciones: Object.keys(ASIS_ACC),
              msgs: $$('#asLista .asMsg').map(m => m.textContent.slice(0, 120)),
@@ -320,7 +355,8 @@ window.__A = {
   },
   asisAbrir(){ asisAbre(); return this.asis(); },
   asisCerrar(){ asisCierra(); return this.asis(); },
-  asisLlave(v){ guarda('llave', v || ''); asisIdioma(); return this.asis(); },
+  asisLlave(v){ guarda('llave_' + asisProv(), v || ''); asisIdioma(); return this.asis(); },
+  asisProv(p){ guarda('prov', p); asisIdioma(); return this.asis(); },
   /* el camino ENTERO, por donde entra el dedo: se escribe en el campo y se toca
      el botón, así que si el enganche está roto la sonda no contesta */
   async asisDecir(t){
@@ -344,12 +380,21 @@ window.__A = {
                           cab: o.headers, cuerpo: JSON.parse(o.body) };
       if (caso === 'red') throw new TypeError('Failed to fetch');
       if (caso === '401') return { ok: false, status: 401 };
-      if (caso === 'niega') return { ok: true, status: 200,
-        json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      if (caso === 'niega'){
+        const id = asisProv();
+        if (id === 'gemini') return { ok: true, status: 200,
+          json: async () => ({ candidates: [{ finishReason: 'SAFETY', content: { parts: [] } }] }) };
+        if (id === 'groq') return { ok: true, status: 200, json: async () => ({ choices: [] }) };
+        return { ok: true, status: 200, json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      }
+      const t = JSON.stringify({ respuesta: 'listo', acciones: acciones || [] });
+      const id = asisProv();
+      if (id === 'gemini') return { ok: true, status: 200, json: async () => ({
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text: t }] } }] }) };
+      if (id === 'groq') return { ok: true, status: 200, json: async () => ({
+        choices: [{ message: { role: 'assistant', content: t } }] }) };
       return { ok: true, status: 200, json: async () => ({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: JSON.stringify({
-          respuesta: 'listo', acciones: acciones || [] }) }] }) };
+        stop_reason: 'end_turn', content: [{ type: 'text', text: t }] }) };
     };
     return () => { window.fetch = org; };
   },
@@ -357,17 +402,26 @@ window.__A = {
   asisPedido(){
     const p = window.__pedido; if (!p) return null;
     const c = p.cuerpo;
+    /* el sistema y el enum viven en sitios distintos según el proveedor: lo que
+       la sonda tiene que decir es que los TRES los mandan, no cómo se llaman */
+    const sis = c.system || (c.systemInstruction && c.systemInstruction.parts[0].text) ||
+                (c.messages && (c.messages.find(m => m.role === 'system') || {}).content) || '';
+    const esq = (c.output_config && c.output_config.format.schema) ||
+                (c.generationConfig && c.generationConfig.responseSchema) || null;
     return { url: p.url, cab: Object.keys(p.cab),
-             navegador: p.cab['anthropic-dangerous-direct-browser-access'],
-             version: p.cab['anthropic-version'],
-             llaveVa: !!p.cab['x-api-key'],
-             modelo: c.model, tope: c.max_tokens,
-             formato: c.output_config && c.output_config.format.type,
-             campos: Object.keys(c.output_config.format.schema.properties),
-             enum: c.output_config.format.schema.properties.acciones.items.properties.hacer.enum,
-             sistemaTiene: { apps: c.system.indexOf('APPS INSTALADAS') >= 0,
-                             estado: c.system.indexOf('iconos ' + ICO) >= 0 },
-             mensaje: c.messages[0].content };
+             llaveVa: !!(p.cab['x-api-key'] || p.cab['x-goog-api-key'] || p.cab['authorization']),
+             navegador: p.cab['anthropic-dangerous-direct-browser-access'] || null,
+             modelo: c.model || 'gemini-2.5-flash',
+             tope: c.max_tokens || (c.generationConfig && c.generationConfig.maxOutputTokens),
+             formato: (c.output_config && c.output_config.format.type) ||
+                      (c.generationConfig && c.generationConfig.responseMimeType) ||
+                      (c.response_format && c.response_format.type),
+             campos: esq ? Object.keys(esq.properties) : null,
+             enum: esq ? esq.properties.acciones.items.properties.hacer.enum : null,
+             sistemaTiene: { apps: sis.indexOf('APPS INSTALADAS') >= 0,
+                             estado: sis.indexOf('iconos ' + ICO) >= 0 },
+             mensaje: (c.messages ? c.messages[c.messages.length-1].content
+                                  : c.contents[0].parts[0].text) };
   }
 };
 

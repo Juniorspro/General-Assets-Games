@@ -281,6 +281,127 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima decimonovena vuelta (2026-09-06): **AERO** — la mascota estaba escondida, y el asistente pasa a ser gratis
+
+Reporte, tres cosas: *"no hay ni mierda el modelo no se dónde se encuentra · también deberías hacer
+más interfaces y personalización · y usar apis gratis de IA por ahí en github busca"*, más un enlace
+a `HKUDS/CLI-Anything` para que lo probara.
+
+#### EL MODELO NO SE VEÍA PORQUE ESTABA ADENTRO DEL CAJÓN Y SÓLO APARECÍA TECLEANDO
+
+Y es mío. `#mascota` era hijo de `#cajon` y `mascotaBaila(v)` la encendía **sólo con `v` verdadero**,
+o sea escribiendo en la búsqueda. Para ver el modelo había que: abrir el cajón, tocar el campo, y
+escribir una letra. Eso no es una mascota, es un huevo de pascua — y el reporte fue exacto.
+
+Ahora es **hermana del cajón, con `position:fixed`, y la coloca el CSS según dónde esté uno**: en el
+medio del escritorio —esa franja está vacía a propósito desde la vuelta 116— desde el primer cuadro y
+sin hacer nada, y chica al pie del cajón cuando se busca. **Un solo elemento y dos reglas**:
+reparentar el lienzo movería el contexto de WebGL de un contenedor al otro en cada apertura.
+
+**Y NO ARRANCA DORMIDA.** `mascOcio` compara contra `MASC_ULT`, que valía 0: la resta daba cuarenta y
+seis años y el primer cuadro del launcher salía con el muñeco sentado durmiendo — o sea que lo primero
+que se veía del modelo era su pose más ambigua. Medido en la captura antes y después.
+
+**SE LA PUEDE TOCAR, y eso es la mitad de que sea una mascota.** Un toque le saca una pose distinta de
+la que tenía —sorteada entre las que **no** está haciendo, porque repetir la misma se lee a que el
+toque no hizo nada— y uno largo abre la personalización, que es el gesto de cualquier launcher.
+
+Medido: la mascota queda en **(96 · 466) de 220×296** con el dock arriba en 782, o sea que no lo tapa.
+
+#### LA PERSONALIZACIÓN: OCHO GRUPOS, Y LAS CINCO POSES SON BOTONES
+
+Hoja translúcida como la del asistente, **a propósito**: todo lo que se toca acá cambia lo que está
+detrás, y mover el tamaño del icono contra un panel opaco es mover un número a ciegas. Se aplica en el
+acto y se guarda; no hay botón de aceptar porque no hay nada que confirmar.
+
+Mascota sí/no · tamaño · **las cinco poses como botones** · tamaño de icono · columnas · color de
+acento · oscurecer el fondo · idioma. Lo de las poses es la otra mitad de la respuesta a «no sé dónde
+está»: el modelo tiene cinco animaciones y hasta ahora salían solas, sin forma de verlas a pedido.
+
+**SE ARMA DE UNA TABLA**, igual que las acciones del asistente: cada control declara cómo se lee su
+valor, qué hace al cambiarlo y qué opciones tiene. Escrito control por control hay que acordarse del
+pintado, del guardado y del repintado en tres sitios.
+
+Tres cosas que salieron de hacerlo:
+- **El alto de la mascota se DERIVA del ancho** (`w·180/132`). Escrito al lado, cambiar el tamaño la
+  deja estirada y nada avisa. Medido: 214→282 de ancho da 292→385 de alto.
+- **`--acento` era una variable que no leía nadie.** Estaba declarada desde la primera vuelta y no
+  aparecía en una sola regla. Ahora la usan las burbujas del asistente, el botón de mandar, los
+  encabezados de letra del cajón y el pomo del riel, así que el color elegido se ve de verdad.
+- **Oscurecer es un velo y no un `brightness` sobre el fondo.** Un filtro sobre `#fondo` obliga al
+  compositor a repintar la foto entera en cada cuadro de la transición; un velo es una capa más.
+
+#### LAS APIS GRATIS: SE MIDIÓ EL CORS, QUE ES LO ÚNICO QUE DECIDE
+
+La condición dura no es el precio: la interfaz se carga desde `file:///android_asset/`, así que el
+`fetch` sale con **`Origin: null`** y el servidor tiene que contestar con CORS permisivo o el
+navegador **no deja leer la respuesta**. Ninguna de las listas de «APIs de IA gratis» de GitHub anota
+eso —están escritas para uso desde un servidor— así que se midió endpoint por endpoint, con preflight
+**y con POST de verdad**, que es donde varios se caen:
+
+| | preflight | POST de verdad | |
+|---|---|---|---|
+| `generativelanguage.googleapis.com` | repite el origen | **repite `null`** | ✅ |
+| `api.groq.com/openai/v1` | `*` | **`*`** | ✅ |
+| `openrouter.ai/api/v1` | `*` | `*` | ✅ |
+| `api.anthropic.com` | `*` † | — | ✅ |
+| **`api.cerebras.ai`** | `*` | **ninguno** | ❌ |
+| Cloudflare Workers AI · GitHub Models · NVIDIA | — | — | ❌ |
+
+† Anthropic devuelve CORS **sólo si** `anthropic-dangerous-direct-browser-access` va en el preflight.
+**Y eso contesta la pregunta que la vuelta 118 dejó abierta**: `Origin: null` no lo rechaza.
+
+Cerebras es el caso que vale anotar: pasa el preflight y después contesta los **errores** sin un solo
+encabezado de CORS, o sea que un 401 sería ilegible desde el navegador. Un proveedor cuyo fallo no se
+puede leer no sirve, por rápido que sea.
+
+Quedan **tres proveedores y dos son gratis**: **Gemini** de fábrica (llave sin tarjeta en
+aistudio.google.com, ~1.500 pedidos por día), **Groq** (14.400 por día) y **Anthropic** para el que ya
+tenga llave. Cada uno sabe tres cosas y nada más —cómo se autentica, qué cuerpo arma y cómo se lee lo
+que vuelve—; **la tabla de acciones, la validación de lo que llega, el intérprete de respaldo y los
+tres modos de falla son los mismos para los tres**.
+
+Dos cosas que no son «lo mismo con otro nombre»:
+- **El esquema de Google es otro dialecto**: los tipos van en MAYÚSCULA y no acepta
+  `additionalProperties`.
+- **`finishReason` distinto de `STOP` corta el JSON a la mitad.** `SAFETY` y `MAX_TOKENS` devuelven
+  HTTP 200 con el texto truncado: sin esa guarda, `JSON.parse` tira y se lee como si la API hubiera
+  fallado. Es la misma familia que el `stop_reason: 'refusal'` de Anthropic.
+- **Y Google contesta 400 con `API_KEY_INVALID` en vez de 401.** Decir «la API falló (400)» manda al
+  dueño a buscar el problema donde no está, así que en Gemini un 400 se informa como llave mala.
+
+**LA LLAVE ES POR PROVEEDOR.** Con una sola, cambiar de Gemini a Groq mandaría la llave de Google a
+Groq y el dueño vería un 401 sin entender por qué, después de haber pegado una llave que funciona.
+
+#### CLI-ANYTHING SE MIRÓ Y NO SIRVE ACÁ, Y ES HONESTO DECIRLO
+
+Es un generador de interfaces de línea de comandos para software de escritorio: le apuntás a GIMP o a
+Blender y te escribe un CLI de Python con `click`, sus pruebas y su paquete. Necesita Python 3.10, un
+sistema de archivos, subprocesos y la aplicación instalada — **nada de eso existe en un WebView de
+Android**, y no hay una línea suya que se pueda llamar desde JavaScript. Licencia Apache 2.0.
+Lo único aprovechable es su postura de diseño, y ya la teníamos: exponer las capacidades como una
+lista **plana, enumerable y tipada** de comandos y darle al modelo el esquema de lo que es legal en vez
+de prosa. Eso es exactamente `ASIS_ACC`.
+
+#### MEDIDO AL CERRAR
+
+Mascota en el escritorio desde el primer cuadro, **de pie** (`quieto`, no `duerme`), en (96 · 466) de
+220×296 sin tapar el dock; el toque le cambia la pose y el toque largo abre la personalización.
+Panel: **8 grupos**, las cinco poses puestas por su botón, tamaño 214→282 con el alto derivado
+292→385, acento aplicado a `--acento`, oscurecido 0→0,4, iconos 80 px y columnas por deslizador, y
+apagando la mascota **desaparecen los grupos de tamaño y pose** y el muñeco se va. Los tres
+proveedores ejercidos por el camino del dedo con `fetch` interceptado: URL, encabezados, modelo, tope
+y esquema correctos en los tres, la firma nombra cuál contestó (*«contestó la IA · Google Gemini»*), y
+el `SAFETY` de Gemini cae al intérprete con el motivo a la vista. Regresión completa: **30 apps**
+—28 más el Asistente y Personalizar, las dos con su baldosa dibujada y buscables—, 6 filtros de
+refracción, riel de 16 letras, cero solapamientos, subir sobre el dock, el aro de la batería en sus
+tres escalones, los tres idiomas en vivo. `window.__errs` **vacío en las nueve corridas**. APK
+**352 KB**.
+
+**LO QUE NO PUDE COMPROBAR:** sigue sin haber emulador y sigo sin llaves de ninguno de los tres
+proveedores, así que de las llamadas está medido **qué mandan y cómo leen lo que vuelve**, no una
+respuesta real. El CORS sí está medido de verdad contra los endpoints, con `Origin: null`.
+
 ### Centésima decimoctava vuelta (2026-09-06): **AERO** — la mascota pasa a ser un modelo 3D riggeado, y hay un asistente
 
 Pedido, con un render 2×2 del personaje: *"no puedo ver al modelo 3D esté, además yo quiero que sea
