@@ -14,7 +14,7 @@
 import { W, H, CELL, paredV, paredH, NADA, PUERTA, GATERA } from './map.js';
 import { estaGirado } from './pantalla.js';
 
-const LADO = 3;                      // pixeles por celda
+const LADO = 2;                      // pixeles por celda
 const ANCHO = W * LADO, ALTO = H * LADO;
 
 let fondo = null;                    // el lienzo con las paredes, ya dibujado
@@ -99,7 +99,7 @@ export function pintarMinimapa(g, jug, cubos, baldosas) {
         g.strokeStyle = hex(b.hex);
         g.lineWidth = 1.4;
         g.beginPath();
-        g.arc(c * LADO + LADO / 2, r * LADO + LADO / 2, 2.6, 0, 7);
+        g.arc(c * LADO + LADO / 2, r * LADO + LADO / 2, 2.2, 0, 7);
         g.stroke();
     }
 
@@ -111,10 +111,10 @@ export function pintarMinimapa(g, jug, cubos, baldosas) {
            faltan de un vistazo sin tener que contar los que brillan. */
         g.globalAlpha = cu.puesto ? 0.35 : 1;
         g.fillStyle = hex(cu.hex);
-        g.beginPath(); g.arc(x, y, 3.1, 0, 7); g.fill();
+        g.beginPath(); g.arc(x, y, 2.7, 0, 7); g.fill();
         if (!cu.puesto) {
             g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineWidth = 1;
-            g.beginPath(); g.arc(x, y, 3.1, 0, 7); g.stroke();
+            g.beginPath(); g.arc(x, y, 2.7, 0, 7); g.stroke();
         }
         g.globalAlpha = 1;
     }
@@ -130,7 +130,7 @@ export function pintarMinimapa(g, jug, cubos, baldosas) {
         g.translate(x, y); g.rotate(-a);
         g.fillStyle = '#fff';
         g.beginPath();
-        g.moveTo(5, 0); g.lineTo(-3, 3.2); g.lineTo(-1.4, 0); g.lineTo(-3, -3.2);
+        g.moveTo(4.2, 0); g.lineTo(-2.6, 2.8); g.lineTo(-1.2, 0); g.lineTo(-2.6, -2.8);
         g.closePath(); g.fill();
         g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 1; g.stroke();
         g.restore();
