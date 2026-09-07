@@ -41,6 +41,9 @@ CAJA    = float(sys.argv[sys.argv.index("--caja")+1]) if "--caja" in sys.argv el
 # aparece sólo donde alguna cámara aérea la vio.
 SUELO = {"hormigon_oscuro", "calle", "vereda", "raya", "hormigon"}
 APRON = float(sys.argv[sys.argv.index("--apron")+1]) if "--apron" in sys.argv else 372.0
+# el recorte puede no estar en el origen: centrado en un cruce se ven las
+# cuatro ochavas, centrado en una manzana se ve una manzana y cuatro medias
+CENTRO = [float(v) for v in sys.argv[sys.argv.index("--centro")+1].split(",")] if "--centro" in sys.argv else [0.0, 0.0]
 EXPO    = float(sys.argv[sys.argv.index("--expo")+1]) if "--expo" in sys.argv else 0.95
 
 # materiales que no entran: el telón de fondo de 3000 m
@@ -107,7 +110,7 @@ for ob in bpy.data.objects:
         vivas &= np.abs(nor[:,2]) < 0.72           # en Blender el alto es Z
     ctr = P.mean(1)
     lim = max(CAJA, APRON) if nombre in SUELO else CAJA
-    vivas &= (np.abs(ctr[:,0]) <= lim+18) & (np.abs(ctr[:,1]) <= lim+18)
+    vivas &= (np.abs(ctr[:,0]-CENTRO[0]) <= lim+18) & (np.abs(ctr[:,1]-CENTRO[1]) <= lim+18)
     if not vivas.any(): continue
     tri.append(P[vivas])
     pesos.append(np.full(int(vivas.sum()), PESO.get(nombre, 1.0)))
@@ -139,10 +142,19 @@ fila = np.arange(len(P))
 elong = E[fila, imax] / np.maximum(1e-12, LE[fila, imax])[:, None]
 alt = 2*A / np.maximum(1e-9, LE[fila, imax])            # altura mínima
 
+# Las caras finas necesitan más densidad de la que les da el área. Un parteluz
+# de 15 cm por 130 m tiene 19 m2: con densidad de superficie le caen 47
+# muestras, o sea una cada 2,8 m, y para tapar el hueco la gaussiana sale de
+# 0,17 x 1,4 m, que en pantalla es un chorreado vertical de 5 m. Lo que hay que
+# igualar en una cara fina es el paso A LO LARGO, no el área, así que se le
+# sube la densidad por pas/alto. Una iteración alcanza.
+s0 = math.sqrt(float((A*W).sum()) / TOTAL)
+refuerzo = np.clip((s0/np.sqrt(W)) / np.maximum(0.06, alt), 1.0, 2.5)
+W = W * refuerzo
 s0 = math.sqrt(float((A*W).sum()) / TOTAL)
 paso = s0 / np.sqrt(W)                                   # paso de muestreo
-print("SPLAT: paso base %.2f m (de %.2f a %.2f según material)" % (
-      s0, paso.min(), paso.max()), flush=True)
+print("SPLAT: paso base %.2f m (de %.2f a %.2f según material) · refuerzo hasta x%.1f" % (
+      s0, paso.min(), paso.max(), refuerzo.max()), flush=True)
 
 # ---------------------------------------------------- muestreo
 rng = np.random.default_rng(20260908)
@@ -155,7 +167,7 @@ r1, r2 = rng.random(NM), rng.random(NM)
 s = np.sqrt(r1)
 pos = (1-s)[:,None]*a + (s*(1-r2))[:,None]*b + (s*r2)[:,None]*c
 lc = LIM[cara]
-dentro_caja = (np.abs(pos[:,0]) <= lc) & (np.abs(pos[:,1]) <= lc)
+dentro_caja = (np.abs(pos[:,0]-CENTRO[0]) <= lc) & (np.abs(pos[:,1]-CENTRO[1]) <= lc)
 pos, cara = pos[dentro_caja], cara[dentro_caja]
 nor, pas = NOR[cara], paso[cara]
 NM = len(pos)
@@ -264,7 +276,7 @@ ey /= np.maximum(1e-9, np.linalg.norm(ey, axis=1))[:, None]
 # ninguna gaussiana más ancha que la altura de su cara ni más larga que su
 # lado mayor: sin el segundo tope, el farol de 2 m salía como una raya de 4,6
 fino = np.minimum(pas, np.maximum(0.045, alt[cara]*1.15))
-largo = np.minimum(np.minimum(pas*pas/np.maximum(0.045, fino), fino*8.0),
+largo = np.minimum(np.minimum(pas*pas/np.maximum(0.045, fino), fino*3.2),
                    LE[fila, imax][cara]*0.55)
 largo = np.maximum(largo, fino)
 esf = FO[cara]
@@ -306,7 +318,10 @@ q /= np.maximum(1e-9, np.linalg.norm(q, axis=1))[:,None]
 def escribir(ruta, sel, k=1.0):
     m = int(sel.sum()) if sel.dtype == bool else len(sel)
     f = np.zeros((m,8), np.float32)
-    f[:,0:3] = posY[sel]; f[:,3:6] = esc[sel]*k
+    f[:,0:3] = posY[sel]
+    # k sólo a los dos ejes del plano: el tercero es el grosor contra la
+    # normal, y engordarlo levanta la gaussiana de la superficie
+    f[:,3:6] = esc[sel] * np.array([k, k, 1.0])
     by = np.zeros((m,8), np.uint8)
     by[:,0:3] = np.round(rgb[sel]*255); by[:,3] = np.round(alfa[sel]*255)
     by[:,4:8] = np.clip(np.round(q[sel]*128+128), 0, 255)

@@ -77,21 +77,43 @@ const cam = { blanco:[0,26,0], dist:420, yaw:0.7, pit:0.13, fov:52 };
 /* Cuatro encuadres, porque la nube se lee distinto en cada escala: de lejos es
    una maqueta, a la altura del cordón se nota que el color es radiancia. */
 const ENCUADRES = [
-  { blanco:[0, 48, 0],    dist:365, yaw:0.92,  pit:0.145, fov:50 },   // aérea
-  { blanco:[0, 62, 0],    dist:300, yaw:2.34,  pit:0.045, fov:54 },   // perfil
-  { blanco:[-46, 13, -52], dist:118, yaw:1.571, pit:0.075, fov:58 },  // avenida
-  { blanco:[6, 5, -52],   dist:36,  yaw:1.571, pit:0.055, fov:64 },   // peatón
+  { blanco:[0, 48, 0],    dist:365, yaw:0.92,  pit:0.22,  fov:51 },   // aérea
+  { blanco:[0, 62, 0],    dist:300, yaw:2.34,  pit:0.05,  fov:54 },   // perfil
+  { blanco:[-120, 22, -52], dist:210, yaw:1.571, pit:0.09, fov:54 }, // avenida
+  { blanco:[0, 26, -52],  dist:130, yaw:1.571, pit:0.13,  fov:52 },  // manzana
 ];
+/* La caja de lo CONSTRUIDO, que no es la de la nube: el piso llega bastante más
+   lejos que la ciudad —si el plano termina donde termina la ciudad, la nube
+   flota como una maqueta— y encuadrando por la caja entera los edificios
+   quedaban en una franja del medio. Se mira una de cada tres gaussianas y sólo
+   las de más de 8 m de altura. */
+function cajaConstruida(buf, n){
+  const f = new Float32Array(buf);
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y1 = -Infinity, k = 0;
+  for (let i = 0; i < n; i += 3) {
+    const y = f[8*i+1];
+    if (y < 8) continue;
+    const x = f[8*i], z = f[8*i+2];
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (z < z0) z0 = z; if (z > z1) z1 = z;
+    if (y > y1) y1 = y;
+    k++;
+  }
+  return k > 500 ? [x0, 0, z0, x1, y1, z1] : null;
+}
+
 /* Los dos encuadres de lejos se calculan de la caja de la nube: el mismo
    visor sirve para el distrito entero y para el recorte de una esquina, y a
    ojo no hay un número que sirva para los dos. Los dos de cerca van en metros
    porque las calles están donde están. */
 function ajustarEncuadres(caja){
   const lado = Math.max(caja[3]-caja[0], caja[5]-caja[2]);
-  const alto = caja[4] - Math.min(0, caja[1]);
   const cx = (caja[0]+caja[3])/2, cz = (caja[2]+caja[5])/2;
-  ENCUADRES[0].blanco = [cx, alto*0.36, cz];  ENCUADRES[0].dist = lado*0.64;
-  ENCUADRES[1].blanco = [cx, alto*0.47, cz];  ENCUADRES[1].dist = lado*0.53;
+  // Todo sale del lado de la huella, no del alto. Encuadrar por el alto para
+  // que entren las torres enteras deja la nube como una maqueta flotando en
+  // una losa; que las torres se vayan de cuadro es lo que hace una foto.
+  ENCUADRES[0].blanco = [cx, lado*0.10, cz];  ENCUADRES[0].dist = lado*0.62;
+  ENCUADRES[1].blanco = [cx, lado*0.11, cz];  ENCUADRES[1].dist = lado*0.52;
 }
 let girando = true, nube = false, brillo = 1.0, modo = 0;
 
@@ -189,7 +211,7 @@ function arrancar(buf){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.uniform1i(uTex, 0);
 
-  ajustarEncuadres(p.caja);
+  ajustarEncuadres(cajaConstruida(buf, N) || p.caja);
   ir(0, false);
   girando = true; $("#btGira").setAttribute("aria-pressed", "true");
 

@@ -2,17 +2,18 @@
    WebGL por software: en esta máquina no hay GPU y el navegador de la máquina
    virtual se come los cuatro núcleos que hacen falta para Cycles.
 
-     node foto-visor.mjs http://127.0.0.1:8099/index.html salida.png [ms] [vista]
+     node foto-visor.mjs http://127.0.0.1:8099/index.html salida.png [ms] [vista] [ancho] [alto]
 
    La ruta de playwright es absoluta a propósito: acá está instalado global.
    Si lo tenés en el proyecto, alcanza con import { chromium } from "playwright". */
 import { chromium } from "/opt/node22/lib/node_modules/playwright/index.mjs";
-const [url, salida, ms = "9000", vista = ""] = process.argv.slice(2);
+const [url, salida, ms = "9000", vista = "", an = "960", al = "600", cam = ""] = process.argv.slice(2);
+// cam es un JSON con campos de la cámara: {"dist":430,"pit":0.4,"blanco":[0,45,0]}
 const nav = await chromium.launch({
   args: ["--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
          "--ignore-gpu-blocklist", "--no-sandbox", "--js-flags=--max-old-space-size=4096"],
 });
-const pag = await nav.newPage({ viewport: { width: 960, height: 600 }, deviceScaleFactor: 1 });
+const pag = await nav.newPage({ viewport: { width: +an, height: +al }, deviceScaleFactor: 1 });
 const registro = [];
 pag.on("console", (m) => registro.push(m.type() + ": " + m.text()));
 pag.on("pageerror", (e) => registro.push("pageerror: " + e.message));
@@ -24,6 +25,17 @@ await pag.evaluate(() => { const b = document.querySelector("#btGira");
   if (b && b.getAttribute("aria-pressed") === "true") b.click(); });
 await pag.waitForTimeout(3000);
 if (vista) { await pag.click(`#encuadres button[data-v="${vista}"]`); await pag.waitForTimeout(2500); }
+if (cam) {
+  await pag.evaluate((c) => {
+    const o = JSON.parse(c);
+    if ("modo" in o) { window.visor.modo = o.modo; delete o.modo; }
+    if ("tam" in o) { const t = document.querySelector("#tam"); t.value = o.tam; delete o.tam; }
+    Object.assign(window.visor.cam, o);
+  }, cam);
+  // SwiftShader puede tardar varios segundos por cuadro con medio millón de
+  // gaussianas: si no se espera, la captura sale del cuadro anterior
+  await pag.waitForTimeout(60000);
+}
 const info = await pag.evaluate(() => {
   const t = (s) => (document.querySelector(s) || {}).textContent;
   return { n: t("#dN"), caja: t("#dCaja"), grano: t("#dSep"), tomas: t("#dTomas"),

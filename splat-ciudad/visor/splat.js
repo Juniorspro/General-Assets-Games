@@ -143,7 +143,7 @@ void main(){
   // perspectiva aérea: Cycles no tiene bruma acá, así que la distancia se
   // paga en el shader. Sin esto la torre del fondo está tan nítida como la de
   // adelante, y eso es lo que hace que una nube no parezca una foto.
-  vNiebla = 1.0 - exp(-length(camara.xyz) * 0.0008);
+  vNiebla = 1.0 - exp(-length(camara.xyz) * 0.00050);
   vPos = posicion;
   vec2 centro = vec2(p) / p.w;
   if (modo == 1) {
@@ -166,7 +166,7 @@ out vec4 salida;
 const vec3 NIEBLA = vec3(0.585, 0.652, 0.719);
 void main(){
   float A = -dot(vPos, vPos);
-  vec3 c = mix(vColor.rgb, NIEBLA * vColor.a, clamp(vNiebla * niebla, 0.0, 0.85));
+  vec3 c = mix(vColor.rgb, NIEBLA * vColor.a, clamp(vNiebla * niebla, 0.0, 0.75));
   if (modo == 1) { salida = vec4(c * brillo, 1.0); return; }
   if (A < -4.0) discard;             // más allá de 2σ no aporta nada
   float B = exp(A) * vColor.a;
@@ -215,11 +215,15 @@ onmessage = (e) => {
   if (e.data.datos) { datos = new Float32Array(e.data.datos); n = e.data.n; return; }
   if (!datos) return;
   const v = e.data.vista;               // fila 3 de la matriz de vista
-  // profundidad de cada gaussiana, cuantizada a 16 bits
+  /* La clave es +z·p, SIN negar. z apunta del blanco al ojo, así que z·p baja
+     cuando la gaussiana se aleja: en orden ascendente salen primero las
+     lejanas, que es lo que hace falta para componer alfa "sobre". Con el signo
+     al revés se dibuja de cerca a lejos y el piso del fondo termina pintado
+     encima de la ciudad. */
   const prof = new Int32Array(n);
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < n; i++) {
-    const d = -(v[0]*datos[8*i] + v[1]*datos[8*i+1] + v[2]*datos[8*i+2]);
+    const d = v[0]*datos[8*i] + v[1]*datos[8*i+1] + v[2]*datos[8*i+2];
     prof[i] = d * 4096 | 0;
     if (prof[i] < lo) lo = prof[i];
     if (prof[i] > hi) hi = prof[i];
@@ -233,8 +237,6 @@ onmessage = (e) => {
   // acumulado: así cada gaussiana sabe su casillero final
   for (let i = 1; i < 65536; i++) cubos[i] += cubos[i-1];
   const orden = new Uint32Array(n);
-  // de la más lejana a la más cercana: la profundidad va negada arriba,
-  // así que el conteo ascendente ya deja los lejanos primero
   for (let i = n - 1; i >= 0; i--) orden[--cubos[prof[i]]] = i;
   postMessage({ orden }, [orden.buffer]);
 };
