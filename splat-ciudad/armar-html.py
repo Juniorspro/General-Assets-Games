@@ -11,6 +11,7 @@ mismo presupuesto de bytes entran un 28 % más de gaussianas.
 
     python3 armar-html.py visor visor/ciudad.splat distrito.html
     python3 armar-html.py visor - visor.html          # sin nube: arrastrar y soltar
+    python3 armar-html.py visor paseo.splat paseo.html --pie   # arranca caminando
     python3 armar-html.py visor visor/ciudad.splat a.html artifact --titulo "Otro"
 
 Con `-` en lugar del .splat sale el visor vacío, que pide el archivo. Es la
@@ -22,6 +23,8 @@ V   = sys.argv[1]
 SPL = sys.argv[2]
 SAL = sys.argv[3]
 ARTIFACT = "artifact" in sys.argv[4:]
+PIE = "--pie" in sys.argv          # arranca en primera persona
+BRILLO = sys.argv[sys.argv.index("--brillo")+1] if "--brillo" in sys.argv else ""
 TITULO = sys.argv[sys.argv.index("--titulo")+1] if "--titulo" in sys.argv else ""
 BAJADA = sys.argv[sys.argv.index("--bajada")+1] if "--bajada" in sys.argv else ""
 
@@ -61,7 +64,9 @@ if SPL == "-":
 else:
     crudo = open(SPL, "rb").read()
     gz = gzip.compress(crudo, 6)
-    cabeza = ('window.__GZ = true;\nwindow.__SPLAT = "'
+    cabeza = (("window.__PIE = true;\n" if PIE else "")
+              + (("window.__BRILLO = %s;\n" % BRILLO) if BRILLO else "")
+              + 'window.__GZ = true;\nwindow.__SPLAT = "'
               + base64.b64encode(gz).decode("ascii") + '";')
     dicho = "gaussianas %.2f -> %.2f MB con gzip" % (len(crudo)/1048576, len(gz)/1048576)
 

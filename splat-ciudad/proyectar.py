@@ -40,11 +40,18 @@ CAJA    = float(sys.argv[sys.argv.index("--caja")+1]) if "--caja" in sys.argv el
 # la ciudad, la nube flota como una maqueta en el aire. La franja de más
 # aparece sólo donde alguna cámara aérea la vio.
 SUELO = {"hormigon_oscuro", "calle", "vereda", "raya", "hormigon"}
+PISO_PLANO = {"hormigon_oscuro", "calle", "vereda", "raya"}   # lo que se pisa
 APRON = float(sys.argv[sys.argv.index("--apron")+1]) if "--apron" in sys.argv else 372.0
 # el recorte puede no estar en el origen: centrado en un cruce se ven las
 # cuatro ochavas, centrado en una manzana se ve una manzana y cuatro medias
 CENTRO = [float(v) for v in sys.argv[sys.argv.index("--centro")+1].split(",")] if "--centro" in sys.argv else [0.0, 0.0]
 EXPO    = float(sys.argv[sys.argv.index("--expo")+1]) if "--expo" in sys.argv else 0.95
+# Para caminar por adentro, el piso es lo que más se mira y lo que peor sale:
+# un disco apoyado en el asfalto, visto de canto desde 1,68 m, colapsa a una
+# raya y entre disco y disco queda hueco. --pisos le sube la densidad y
+# --grosor los engorda contra la normal para que no colapsen.
+PISOS   = float(sys.argv[sys.argv.index("--pisos")+1]) if "--pisos" in sys.argv else 1.0
+GROSOR  = float(sys.argv[sys.argv.index("--grosor")+1]) if "--grosor" in sys.argv else 0.085
 
 # materiales que no entran: el telón de fondo de 3000 m
 EXCLUIR = {"lejos", "fondo"}   # telón y silueta lejana
@@ -120,7 +127,8 @@ for ob in bpy.data.objects:
     vivas &= (np.abs(ctr[:,0]-CENTRO[0]) <= lim+18) & (np.abs(ctr[:,1]-CENTRO[1]) <= lim+18)
     if not vivas.any(): continue
     tri.append(P[vivas])
-    pesos.append(np.full(int(vivas.sum()), PESO.get(nombre, 1.0)))
+    pesos.append(np.full(int(vivas.sum()),
+                         PESO.get(nombre, 1.0) * (PISOS if nombre in PISO_PLANO else 1.0)))
     foll.append(np.full(int(vivas.sum()), nombre in FOLLAJE))
     aten.append(np.full(int(vivas.sum()), ATENUAR.get(nombre, 1.0)))
     lims.append(np.full(int(vivas.sum()), lim))
@@ -305,7 +313,7 @@ largo = np.maximum(largo, fino)
 esf = FO[cara]
 corto = 0.62*fino * rng.uniform(0.88, 1.14, n).astype(np.float32)
 lrg   = 0.62*largo * rng.uniform(0.88, 1.14, n).astype(np.float32)
-grueso = np.where(esf, 0.42*pas, np.maximum(0.014, 0.085*pas))
+grueso = np.where(esf, 0.42*pas, np.maximum(0.014, GROSOR*pas))
 esc = np.stack([corto, lrg, grueso], 1).astype(np.float32)
 alfa = np.where(esf, 0.72, 0.95).astype(np.float32)
 

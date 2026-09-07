@@ -26,7 +26,8 @@ def png(ruta, img):
         + trozo(b"IDAT", zlib.compress(crudo, 6))
         + trozo(b"IEND", b""))
 
-def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0, fondo=(11,12,16)):
+def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0,
+          fondo=(11,12,16), rmax=7.0):
     pos, esc, rgba, n = leer(splat)
     ojo = np.array(ojo, float); blanco = np.array(blanco, float)
     z = ojo - blanco; z /= np.linalg.norm(z)
@@ -39,7 +40,10 @@ def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0, fondo
     vis = d > 0.6
     px = np.where(vis, pc[:,0]/np.maximum(1e-6,d)*f + W/2, -1e6)
     py = np.where(vis, H/2 - pc[:,1]/np.maximum(1e-6,d)*f, -1e6)
-    rad = np.clip(np.max(esc, axis=1)/np.maximum(1e-6,d)*f*1.15, 0.5, 7.0)
+    # el tope importa: en una vista de adentro una gaussiana del piso a tres
+    # metros ocupa cuarenta píxeles, y con el tope en siete el suelo aparece
+    # como puntitos sueltos sobre negro y parece que faltaran gaussianas
+    rad = np.clip(np.max(esc, axis=1)/np.maximum(1e-6,d)*f*1.15, 0.5, rmax)
     vis &= (px > -8) & (px < W+8) & (py > -8) & (py < H+8)
     idx = np.flatnonzero(vis)
     ix = px[idx].astype(np.int32); iy = py[idx].astype(np.int32)
@@ -47,7 +51,7 @@ def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0, fondo
     llave = (q << 25) | np.arange(len(idx), dtype=np.int64)
     buf = np.full(W*H, np.iinfo(np.int64).max, np.int64)
     ri = np.round(rad[idx]).astype(np.int32)
-    for r in range(0, 8):
+    for r in range(0, int(rmax)+1):
         m = ri == r
         if not m.any(): continue
         for dy in range(-r, r+1):
@@ -74,4 +78,4 @@ if __name__ == "__main__":
         return [float(v) for v in a[a.index(k)+1].split(",")] if k in a else d
     tomar(a[0], a[1], vec("--ojo", [200,120,260]), vec("--blanco", [0,40,0]),
           fov=num("--fov", 52), W=int(num("--w", 1100)), H=int(num("--h", 680)),
-          brillo=num("--brillo", 1.0))
+          brillo=num("--brillo", 1.0), rmax=num("--rmax", 7))

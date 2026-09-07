@@ -21,7 +21,9 @@ Las mismas fotos dan la nube a cualquier densidad; lo único que cambia es el
 
 | Nube | Gaussianas | Archivo | Grano | Dónde |
 |---|---|---|---|---|
-| completa | 8.931.298 | 272,6 MB | **0,52 m** | `.splat` suelto, se arrastra al visor |
+| **núcleo 4×** | **14.790.347** | **451,4 MB** | **0,26 m** | 300 × 300 m, `.splat` suelto |
+| paseo | 949.931 | 29,0 MB | 0,47 m | `caminar.html`, 100 × 100 m |
+| completa | 8.931.298 | 272,6 MB | 0,52 m | `.splat` suelto, se arrastra al visor |
 | media | 3.000.000 | 91,6 MB | 0,90 m | `.splat` suelto |
 | grande en html | 900.000 | 27,5 MB | 1,64 m | un archivo, doble clic |
 | web | 450.000 | 13,7 MB | 2,32 m | `distrito.html`, entra en 15 MB |
@@ -54,6 +56,14 @@ fachada, ocupa cien píxeles y se ve lo que es: una nube de elipses. Para que la
 calle se viera igual hacían falta unos nueve millones de gaussianas, y ahí
 están: con grano de **0,52 m** las ventanas de la fachada de enfrente se
 cuentan una por una.
+
+**El núcleo 4×** es la misma escena y las mismas fotos, proyectadas a 20
+millones de muestras sobre los 300 × 300 m del centro: paso de muestreo de
+**0,22 m**, la mitad exacta del anterior, o sea cuatro veces la densidad. Sobre
+el distrito entero serían 28 millones de gaussianas y 900 MB, y ahí no es la
+paciencia lo que se acaba: el empaquetado del visor mete 1.024 gaussianas por
+fila de textura, con lo que el techo son 16,7 millones, y ninguna placa de
+consumo tiene 900 MB de textura para esto.
 
 **Y el límite de verdad no era ése.** Un splat no puede ser más realista que
 las fotos con las que se pinta. Después de subir a nueve millones seguía sin
@@ -113,6 +123,33 @@ escena) y **perspectiva aérea** por distancia. Sin ellas la torre del fondo
 está tan nítida como la de adelante, y eso es lo que hace que una nube no
 parezca una foto.
 
+## Caminar por adentro
+
+El visor tiene primera persona: **WASD**, mouse para mirar, **Shift** corre,
+**V** atraviesa paredes, **Esc** sale. En el celular, la mitad izquierda de la
+pantalla es la palanca y la derecha la mirada. `caminar.html` arranca ya
+caminando; en los demás está el botón *Caminar por adentro*, o la tecla **F**.
+
+El choque no sabe nada de la escena: al cargar se arma una **rejilla de
+ocupación** de 1,5 m contando las gaussianas que caen entre 0,7 y 3,2 m de
+altura. Una pared llena la celda, la vereda no aporta ninguna porque queda
+abajo de la franja, y el umbral sale del grano de la nube. Así el mismo visor
+camina cualquier `.splat` que se le suelte, venga de donde venga.
+
+Dos cosas que costaron y son propias de mirar desde 1,68 m:
+
+- **El piso se abre en huecos.** Un disco apoyado en el asfalto, visto de canto,
+  colapsa a una raya y entre disco y disco se ve el fondo. Por eso el proyector
+  tiene `--pisos`, que le sube la densidad al piso, y `--grosor`, que engorda
+  las gaussianas contra la normal para que no colapsen. La calzada arranca con
+  peso 0,30 porque desde el aire ocupa muchísima área y poco detalle; caminando
+  es justo al revés.
+- **Un recorrido no entra en un HTML si es uniforme.** El envío tiene tope de
+  30 MiB, o sea un millón de gaussianas. Con `ralear.py --centro --r0 --pmin` el
+  raleo es radial: densidad entera donde arrancás y cada vez más rala hacia el
+  borde, con las gaussianas agrandadas por la raíz de lo que se ralea para que
+  no queden agujeros.
+
 ## Uso
 
 ```sh
@@ -129,6 +166,16 @@ blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
         --salida ciudad-11M.splat --total 11000000 --caja 285 --apron 372 \
         --chico ciudad-3M.splat --nchico 3000000
 python3 ralear.py ciudad-11M.splat visor/ciudad.splat 450000
+
+# el núcleo a cuatro veces la densidad, y de ahí el recorrido a pie
+blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
+        --salida nucleo-4x.splat --total 20000000 --caja 150 --apron 190
+blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
+        --salida paseo.splat --total 1500000 --caja 50 --apron 74 \
+        --centro 52,52 --pisos 5 --grosor 0.30
+python3 recortar.py nucleo-4x.splat corte.splat 52 -52 60     # x, z, radio
+python3 ralear.py paseo.splat paseo-final.splat 950000 --centro 52,-52 --r0 26 --pmin 0.55
+python3 armar-html.py visor paseo-final.splat caminar.html --pie --brillo 1.35
 
 # un recorte: --caja es el radio y --centro lo corre a un cruce
 blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
@@ -174,20 +221,26 @@ cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
 
 ## Lo que costó, medido
 
-1. **Estuve puliendo el lado equivocado.** Tres vueltas de densidad,
+1. **Playwright no puede sacarle una foto a esto.** Con SwiftShader y un millón
+   de gaussianas cada cuadro tarda decenas de segundos, y `page.screenshot`
+   espera a que la página quede quieta: se queda esperando para siempre. Las
+   vistas de este archivo se revisaron con `mirar.py`, que es un z-buffer de
+   puntos en numpy — pero ojo, dibuja discos duros sin mezcla y **exagera los
+   grumos de cerca**: el visor de verdad los funde.
+2. **Estuve puliendo el lado equivocado.** Tres vueltas de densidad,
    rasterizador y orden de dibujo cuando lo que delataba la nube estaba en la
    escena. El fotograma de referencia debió ser lo primero, no lo último.
-2. **El follaje eran icoesferas macizas de 80 caras en verde plano.** Las
+3. **El follaje eran icoesferas macizas de 80 caras en verde plano.** Las
    facetas se marcaban y era el delator número uno. La solución que usa todo el
    mundo son cartas cruzadas con una textura de hojas recortada por alfa, y esa
    textura se puede dibujar con numpy sin bajar nada.
-3. **Los tres tramos del tronco no se apilaban.** El de arriba terminaba en
+4. **Los tres tramos del tronco no se apilaban.** El de arriba terminaba en
    `h*0,40` y la copa empezaba en `h*0,86` menos el radio: dos metros y medio
    de aire y las copas flotando.
-4. **Abajo del horizonte el HDRI es negro.** A 175 m de altura los rayos casi
+5. **Abajo del horizonte el HDRI es negro.** A 175 m de altura los rayos casi
    horizontales pasan de largo el telón y traen ese negro: en la toma aérea
    quedaba una banda negra sobre la silueta. Va mezclado con bruma.
-5. **A nueve millones de muestras el proyector no entraba en memoria.** Las
+6. **A nueve millones de muestras el proyector no entraba en memoria.** Las
    homogéneas se armaban adentro del lazo (374 MB por toma), el vector a la
    cámara se normalizaba entero (280 MB) y la etapa de forma iba en doble
    precisión (medio giga sólo para las matrices de rotación). Con las
@@ -195,37 +248,37 @@ cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
    adelante, el pico baja a algo que la máquina aguanta. Para proyectar sobran
    seis dígitos: a 400 m del centro el error de float32 es de cuatro
    centésimas de milímetro.
-6. **El orden de dibujo estaba invertido.** La clave de profundidad iba negada,
+7. **El orden de dibujo estaba invertido.** La clave de profundidad iba negada,
    así que el conteo ascendente dibujaba de cerca a lejos y, con alfa "sobre",
    el piso del fondo terminaba pintado **encima de la ciudad**: se veía una
    explanada con los edificios apenas asomando en el horizonte. Un signo.
-7. **Firefox se comía 2,6 de los 4 núcleos** girando el visor viejo, y el
+8. **Firefox se comía 2,6 de los 4 núcleos** girando el visor viejo, y el
    render tardaba 138 s por toma. Cerrándolo bajó a 38 s.
-8. **SwiftShader tarda segundos por cuadro** con medio millón de gaussianas, así
+9. **SwiftShader tarda segundos por cuadro** con medio millón de gaussianas, así
    que una captura tomada justo después de mover la cámara sale del cuadro
    anterior. Media hora perdida persiguiendo un bug que no existía. Para juzgar
    geometría conviene `mirar.py`, que es un z-buffer de puntos en numpy y no
    necesita navegador.
-9. **`file_slots.new()` devuelve el socket, no la ranura.** Para que el color
-   salga en medias y la profundidad en float hay que tocar
-   `sal.file_slots[0].format`, no lo que devolvió `new()`.
-10. **El piso del distrito son dos triángulos de 288.000 m²** y un recorte por
+10. **`file_slots.new()` devuelve el socket, no la ranura.** Para que el color
+    salga en medias y la profundidad en float hay que tocar
+    `sal.file_slots[0].format`, no lo que devolvió `new()`.
+11. **El piso del distrito son dos triángulos de 288.000 m²** y un recorte por
     centroide no los puede tratar: o entra entero o no entra. Hay que
     subdividirlos —cuatro hijos por vuelta hasta 12 m de lado— antes de recortar.
-11. **La cara de abajo de la losa, del cordón y de las rayas no la ve nadie**, y
+12. **La cara de abajo de la losa, del cordón y de las rayas no la ve nadie**, y
     se llevaba el 9 % de las muestras. Tirando lo que mira para abajo a ras del
     piso, la cobertura sube de 62,8 % a 76,2 %.
-12. **Los emisores están calibrados para la noche.** De día, en toma lineal, cada
+13. **Los emisores están calibrados para la noche.** De día, en toma lineal, cada
     farol quedaba muy arriba de 1 y salía como una bola blanca flotando en la
     calle. Van atenuados por material antes de la curva.
-13. **Si el plano del suelo termina donde termina la ciudad, la nube flota como
+14. **Si el plano del suelo termina donde termina la ciudad, la nube flota como
     una maqueta.** Hay que dejar una franja de piso más allá del recorte y
     quedarse con lo que alguna cámara aérea vio. Y entonces hay que encuadrar por
     la caja de lo **construido**, no por la de la nube, o los edificios quedan en
     una franja del medio.
-14. **Los uniforms compartidos necesitan la misma precisión en los dos
+15. **Los uniforms compartidos necesitan la misma precisión en los dos
     shaders.** El vértice declaraba `precision highp int` y el fragmento sólo
     la de `float`, así que un `uniform int` común no linkeaba: *"Uniform `modo`
     is not linkable between attached shaders"*.
-15. **Con dos programas hay que usar VAO.** El estado de atributos es global; el
+16. **Con dos programas hay que usar VAO.** El estado de atributos es global; el
     cielo y las gaussianas se pisaban el `vertexAttribPointer`.

@@ -7,7 +7,7 @@
    La ruta de playwright es absoluta a propósito: acá está instalado global.
    Si lo tenés en el proyecto, alcanza con import { chromium } from "playwright". */
 import { chromium } from "/opt/node22/lib/node_modules/playwright/index.mjs";
-const [url, salida, ms = "9000", vista = "", an = "960", al = "600", cam = "", suelto = ""] = process.argv.slice(2);
+const [url, salida, ms = "9000", vista = "", an = "960", al = "600", cam = "", suelto = "", pie = ""] = process.argv.slice(2);
 // cam es un JSON con campos de la cámara: {"dist":430,"pit":0.4,"blanco":[0,45,0]}
 const nav = await chromium.launch({
   args: ["--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
@@ -38,12 +38,31 @@ if (cam) {
   // gaussianas: si no se espera, la captura sale del cuadro anterior
   await pag.waitForTimeout(60000);
 }
+if (pie) {
+  // primera persona: el click es gesto de usuario, así que el pointer lock sale
+  // force: con SwiftShader a dos cuadros por segundo, el chequeo de
+  // estabilidad de Playwright se queda esperando
+  await pag.click("#btPie", { force: true, timeout: 20000 });
+  await pag.waitForTimeout(1500);
+  const pasos = pie.split(",");            // p.ej. "w:2500,a:600"
+  for (const p of pasos) {
+    const [k, ms2] = p.split(":");
+    if (k === "look") { await pag.mouse.move(+ms2, 0); continue; }
+    await pag.keyboard.down(k);
+    await pag.waitForTimeout(+ms2 || 500);
+    await pag.keyboard.up(k);
+  }
+  await pag.waitForTimeout(25000);
+}
 const info = await pag.evaluate(() => {
   const t = (s) => (document.querySelector(s) || {}).textContent;
   return { n: t("#dN"), caja: t("#dCaja"), grano: t("#dSep"), tomas: t("#dTomas"),
            peso: t("#dPeso"), fps: t("#fps"), orden: t("#ord"),
            falla: getComputedStyle(document.querySelector("#falla")).display,
-           info: window.visor ? window.visor.info() : null };
+           info: window.visor ? window.visor.info() : null,
+           rejilla: window.visor ? window.visor.rejilla : null,
+           fp: window.visor ? { on: window.visor.fp.on,
+                pos: window.visor.fp.pos.map((v) => Math.round(v*10)/10) } : null };
 });
 console.log(JSON.stringify(info, null, 1));
 if (registro.length) console.log("consola:\n" + registro.slice(0, 14).join("\n"));

@@ -86,6 +86,17 @@ const ENCUADRES = [
    flota como una maqueta— y encuadrando por la caja entera los edificios
    quedaban en una franja del medio. Se mira una de cada tres gaussianas y sólo
    las de más de 8 m de altura. */
+/* grano: la mediana del lado mayor de la gaussiana, sobre una muestra */
+function lado3d(buf, n){
+  const fs = new Float32Array(buf), m = Math.min(n, 24000), lados = new Float64Array(m);
+  for (let i = 0; i < m; i++) {
+    const j = ((i * 7919) % n) | 0;
+    lados[i] = 2 * Math.max(fs[8*j+3], fs[8*j+4]);
+  }
+  lados.sort();
+  return lados[m >> 1];
+}
+
 function cajaConstruida(buf, n){
   const f = new Float32Array(buf);
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y1 = -Infinity, k = 0;
@@ -114,7 +125,107 @@ function ajustarEncuadres(caja){
   ENCUADRES[0].blanco = [cx, lado*0.085, cz];  ENCUADRES[0].dist = lado*0.62;
   ENCUADRES[1].blanco = [cx, lado*0.110, cz];  ENCUADRES[1].dist = lado*0.52;
 }
-let girando = true, nube = false, brillo = 1.0, modo = 0;
+// caminando por la calle se mira mucho a la sombra entre edificios, así que
+// el archivo puede pedir un brillo de arranque más alto
+let girando = true, nube = false, brillo = +window.__BRILLO || 1.0, modo = 0;
+
+/* ------------------------------------------------------ primera persona
+   Caminar por adentro de la nube. El choque no necesita saber nada de la
+   escena: se arma una rejilla de ocupación con las propias gaussianas, contando
+   las que caen entre 0,7 y 3,2 m de altura. Una pared llena la celda, la
+   vereda no aporta ninguna porque queda abajo de la franja, y así el mismo
+   visor camina cualquier .splat que le tiren. */
+const fp = { on:false, pos:[0, 1.68, 0], yaw:0.9, pit:0.02, choque:true, t:0 };
+const tecla = Object.create(null);
+let rej = null;                       // {c, nx, nz, x0, z0, paso, umbral}
+
+function armarRejilla(buf, n, caja, paso3d){
+  const f = new Float32Array(buf), paso = 1.5;
+  const x0 = caja[0] - 2, z0 = caja[2] - 2;
+  const nx = Math.ceil((caja[3] - x0 + 2)/paso), nz = Math.ceil((caja[5] - z0 + 2)/paso);
+  if (nx*nz > 6e6 || nx <= 0 || nz <= 0) return null;
+  const c = new Uint16Array(nx*nz);
+  for (let i = 0; i < n; i++) {
+    const y = f[8*i+1];
+    if (y < 0.7 || y > 3.2) continue;
+    const ix = ((f[8*i] - x0)/paso) | 0, iz = ((f[8*i+2] - z0)/paso) | 0;
+    if (ix < 0 || ix >= nx || iz < 0 || iz >= nz) continue;
+    if (c[iz*nx + ix] < 65535) c[iz*nx + ix]++;
+  }
+  // cuántas gaussianas esperaría una pared que llena la celda, por un tercio
+  const esper = (paso * 2.5) / Math.max(0.04, paso3d*paso3d);
+  const umbral = Math.max(4, Math.round(esper * 0.33));
+  return { c, nx, nz, x0, z0, paso, umbral };
+}
+
+function solido(x, z){
+  if (!rej) return false;
+  const ix = ((x - rej.x0)/rej.paso) | 0, iz = ((z - rej.z0)/rej.paso) | 0;
+  if (ix < 0 || ix >= rej.nx || iz < 0 || iz >= rej.nz) return false;
+  return rej.c[iz*rej.nx + ix] >= rej.umbral;
+}
+const RADIO = 0.45;
+function chocaEn(x, z){
+  return solido(x, z) || solido(x+RADIO, z) || solido(x-RADIO, z)
+                      || solido(x, z+RADIO) || solido(x, z-RADIO);
+}
+
+function buscarHueco(x, z){
+  for (let r = 0; r < 90; r++) {
+    for (let a = 0; a < 16; a++) {
+      const t = a/16*Math.PI*2;
+      const px = x + Math.cos(t)*r*1.5, pz = z + Math.sin(t)*r*1.5;
+      if (!chocaEn(px, pz)) return [px, pz];
+    }
+    if (r === 0 && !chocaEn(x, z)) return [x, z];
+  }
+  return [x, z];
+}
+
+function entrarFP(){
+  if (fp.on) return;
+  fp.on = true; girando = false; viaje = null;
+  $("#btGira").setAttribute("aria-pressed", "false");
+  $("#btPie").setAttribute("aria-pressed", "true");
+  $("#mira").hidden = false;
+  $("#pista").textContent = "WASD para caminar · mouse para mirar · Shift corre · V atraviesa · Esc sale";
+  $("#pista").style.opacity = 1;
+  if (!document.pointerLockElement)
+    $("#pista").textContent = "Hacé clic para tomar el mouse · WASD para caminar · Shift corre · V atraviesa · Esc sale";
+  const h = buscarHueco(fp.pos[0], fp.pos[2]);
+  fp.pos[0] = h[0]; fp.pos[2] = h[1]; fp.pos[1] = 1.68;
+  if (lienzo.requestPointerLock) lienzo.requestPointerLock();
+}
+function salirFP(){
+  if (!fp.on) return;
+  fp.on = false;
+  $("#btPie").setAttribute("aria-pressed", "false");
+  $("#mira").hidden = true;
+  $("#pista").textContent = "Arrastrá para girar · rueda para acercar · botón derecho para desplazar";
+  if (document.exitPointerLock && document.pointerLockElement) document.exitPointerLock();
+  ir(0);
+}
+document.addEventListener("pointerlockchange", () => {
+  if (fp.on && !document.pointerLockElement) salirFP();
+});
+
+function caminar(dt){
+  const v = tecla.shift ? 9.0 : 3.3;
+  let ax = 0, az = 0;
+  if (tecla.w || tecla.arrowup) az += 1;
+  if (tecla.s || tecla.arrowdown) az -= 1;
+  if (tecla.d || tecla.arrowright) ax += 1;
+  if (tecla.a || tecla.arrowleft) ax -= 1;
+  if (palanca.act) { ax += palanca.x; az += palanca.z; }
+  const m = Math.hypot(ax, az);
+  if (m < 0.01) return;
+  const sy = Math.sin(fp.yaw), cy = Math.cos(fp.yaw);
+  const dx = ((-sy)*az/m + cy*ax/m) * v * dt;
+  const dz = ((-cy)*az/m + (-sy)*ax/m) * v * dt;
+  // de a un eje, para deslizar contra la pared en vez de frenar en seco
+  if (!fp.choque || !chocaEn(fp.pos[0] + dx, fp.pos[2])) fp.pos[0] += dx;
+  if (!fp.choque || !chocaEn(fp.pos[0], fp.pos[2] + dz)) fp.pos[2] += dz;
+}
 
 function ir(i, animar = true){
   const e = ENCUADRES[i];
@@ -144,15 +255,18 @@ function avanzarViaje(){
 }
 
 function matVista(){
-  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-  const cp = Math.cos(cam.pit), sp = Math.sin(cam.pit);
-  const ojo = [
-    cam.blanco[0] + cam.dist * cp * sy,
-    cam.blanco[1] + cam.dist * sp,
-    cam.blanco[2] + cam.dist * cp * cy,
+  // órbita y primera persona comparten todo menos de dónde salen el ojo y el
+  // eje z; el yaw y el pitch significan lo mismo en las dos
+  const yaw = fp.on ? fp.yaw : cam.yaw, pit = fp.on ? fp.pit : cam.pit;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cp = Math.cos(pit), sp = Math.sin(pit);
+  let z = [cp*sy, sp, cp*cy];
+  const ojo = fp.on ? fp.pos : [
+    cam.blanco[0] + cam.dist * z[0],
+    cam.blanco[1] + cam.dist * z[1],
+    cam.blanco[2] + cam.dist * z[2],
   ];
-  let z = [ojo[0]-cam.blanco[0], ojo[1]-cam.blanco[1], ojo[2]-cam.blanco[2]];
-  let l = Math.hypot(...z); z = z.map((v) => v/l);
+  let l = Math.hypot(...z) || 1; z = z.map((v) => v/l);
   // derecha = cruz(arriba, z) con arriba = +Y, que se simplifica a esto
   let x = [z[2], 0, -z[0]]; l = Math.hypot(...x) || 1; x = x.map((v) => v/l);
   const y = [ z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0] ];
@@ -167,9 +281,9 @@ function matVista(){
   ];
 }
 function matProy(){
-  const f = 1 / Math.tan(cam.fov * Math.PI / 360);
+  const f = 1 / Math.tan((fp.on ? 72 : cam.fov) * Math.PI / 360);
   const a = lienzo.width / lienzo.height;
-  const near = 1.0, far = 4000;
+  const near = fp.on ? 0.22 : 1.0, far = 4000;   // caminando se pasa cerca de todo
   return [ f/a,0,0,0, 0,f,0,0, 0,0,(far+near)/(near-far),-1, 0,0,2*far*near/(near-far),0 ];
 }
 
@@ -283,7 +397,10 @@ function arrancar(buf, nombre){
     return;
   }
 
-  ajustarEncuadres(cajaConstruida(buf, N) || p.caja);
+  const cc = cajaConstruida(buf, N) || p.caja;
+  ajustarEncuadres(cc);
+  rej = armarRejilla(buf, N, p.caja, lado3d(buf, N));
+  fp.pos = [(p.caja[0]+p.caja[3])/2, 1.68, (p.caja[2]+p.caja[5])/2];
   ir(0, false);
   girando = true; $("#btGira").setAttribute("aria-pressed", "true");
 
@@ -300,14 +417,7 @@ function arrancar(buf, nombre){
   $("#dN").textContent = N.toLocaleString("es-AR");
   $("#dCaja").textContent = Math.round(p.caja[3]-p.caja[0]) + " × " + Math.round(p.caja[5]-p.caja[2]) + " m";
   $("#dPeso").textContent = coma(pesoArchivo/1048576, 1) + " MB";
-  // grano: la mediana del lado mayor de la gaussiana, sobre una muestra
-  const fs = new Float32Array(buf), m = Math.min(N, 24000), lados = new Float64Array(m);
-  for (let i = 0; i < m; i++) {
-    const j = ((i * 7919) % N) | 0;
-    lados[i] = 2 * Math.max(fs[8*j+3], fs[8*j+4]);
-  }
-  lados.sort();
-  $("#dSep").textContent = coma(lados[m >> 1], 2) + " m";
+  $("#dSep").textContent = coma(lado3d(buf, N), 2) + " m";
   $("#dTomas").textContent = nombre === ARCHIVO ? TOMAS : "—";
   $("#panel header p").textContent = nombre === ARCHIVO
     ? "Un distrito en gaussianas 3D · color trazado con Cycles" : nombre;
@@ -316,18 +426,28 @@ function arrancar(buf, nombre){
   setTimeout(() => { $("#pista").style.opacity = 0; }, 6500);
   redimensionar();
   if (!lazoVivo) { lazoVivo = true; lazo(); }
+  // el archivo puede pedir que arranque caminando; el pointer lock necesita un
+  // gesto, así que se toma el mouse con el primer clic
+  if (window.__PIE) setTimeout(entrarFP, 60);
 }
 
 /* --------------------------------------------------------------- mandos */
 lienzo.addEventListener("contextmenu", (e) => e.preventDefault());
 let arrastra = 0, ux = 0, uy = 0;
 lienzo.addEventListener("pointerdown", (e) => {
+  if (fp.on) { if (!document.pointerLockElement && lienzo.requestPointerLock) lienzo.requestPointerLock(); return; }
   arrastra = e.button === 2 ? 2 : 1; ux = e.clientX; uy = e.clientY;
   girando = false; viaje = null; $("#btGira").setAttribute("aria-pressed", "false");
   lienzo.setPointerCapture(e.pointerId);
 });
 lienzo.addEventListener("pointerup", () => { arrastra = 0; });
+addEventListener("mousemove", (e) => {
+  if (!fp.on || !document.pointerLockElement) return;
+  fp.yaw -= e.movementX * 0.0022;
+  fp.pit = Math.max(-1.35, Math.min(1.35, fp.pit - e.movementY * 0.0022));
+});
 lienzo.addEventListener("pointermove", (e) => {
+  if (fp.on) return;
   if (!arrastra) return;
   const dx = e.clientX - ux, dy = e.clientY - uy; ux = e.clientX; uy = e.clientY;
   if (arrastra === 1) {
@@ -342,10 +462,12 @@ lienzo.addEventListener("pointermove", (e) => {
 });
 lienzo.addEventListener("wheel", (e) => {
   e.preventDefault();
+  if (fp.on) return;
   cam.dist = Math.max(18, Math.min(2200, cam.dist * Math.exp(e.deltaY * 0.0011)));
 }, { passive:false });
 
 $("#tam").addEventListener("input", (e) => $("#tamV").textContent = coma(+e.target.value));
+if (window.__BRILLO) { $("#exp").value = brillo; $("#expV").textContent = coma(brillo); }
 $("#exp").addEventListener("input", (e) => { brillo = +e.target.value; $("#expV").textContent = coma(brillo); });
 $("#btGira").addEventListener("click", (e) => {
   girando = !girando; e.currentTarget.setAttribute("aria-pressed", String(girando));
@@ -354,9 +476,57 @@ $("#btGira").addEventListener("click", (e) => {
 for (const b of document.querySelectorAll("#encuadres button"))
   b.addEventListener("click", () => ir(+b.dataset.v));
 addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (fp.on) {
+    tecla[k] = true; tecla.shift = e.shiftKey;
+    if (k === "v") fp.choque = !fp.choque;
+    if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].indexOf(k) >= 0) e.preventDefault();
+    return;
+  }
   if (e.key >= "1" && e.key <= "4") ir(+e.key - 1);
+  if (k === "f") entrarFP();
   if (e.key === " ") { e.preventDefault(); $("#btGira").click(); }
 });
+addEventListener("keyup", (e) => { tecla[e.key.toLowerCase()] = false; tecla.shift = e.shiftKey; });
+addEventListener("blur", () => { for (const k in tecla) tecla[k] = false; });
+$("#btPie").addEventListener("click", () => { fp.on ? salirFP() : entrarFP(); });
+
+/* palanca táctil: la mitad izquierda mueve, la derecha mira */
+const palanca = { act:false, x:0, z:0, id:-1, ox:0, oy:0 };
+const mirada = { id:-1, x:0, y:0 };
+lienzo.addEventListener("touchstart", (e) => {
+  if (!fp.on) return;
+  for (const t of e.changedTouches) {
+    if (t.clientX < innerWidth*0.45 && !palanca.act) {
+      palanca.act = true; palanca.id = t.identifier; palanca.ox = t.clientX; palanca.oy = t.clientY;
+    } else if (mirada.id < 0) {
+      mirada.id = t.identifier; mirada.x = t.clientX; mirada.y = t.clientY;
+    }
+  }
+  e.preventDefault();
+}, { passive:false });
+lienzo.addEventListener("touchmove", (e) => {
+  if (!fp.on) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === palanca.id) {
+      palanca.x = Math.max(-1, Math.min(1, (t.clientX - palanca.ox)/70));
+      palanca.z = Math.max(-1, Math.min(1, (palanca.oy - t.clientY)/70));
+    } else if (t.identifier === mirada.id) {
+      fp.yaw -= (t.clientX - mirada.x) * 0.005;
+      fp.pit = Math.max(-1.35, Math.min(1.35, fp.pit - (t.clientY - mirada.y) * 0.005));
+      mirada.x = t.clientX; mirada.y = t.clientY;
+    }
+  }
+  e.preventDefault();
+}, { passive:false });
+function soltarTacto(e){
+  for (const t of e.changedTouches) {
+    if (t.identifier === palanca.id) { palanca.act = false; palanca.id = -1; palanca.x = palanca.z = 0; }
+    if (t.identifier === mirada.id) mirada.id = -1;
+  }
+}
+lienzo.addEventListener("touchend", soltarTacto);
+lienzo.addEventListener("touchcancel", soltarTacto);
 $("#btCaja").addEventListener("click", (e) => {
   /* "Nube": achica las gaussianas hasta que se ven como puntos sueltos, que es
      lo que hay abajo de la superficie continua */
@@ -379,8 +549,11 @@ addEventListener("resize", redimensionar);
 let esperando = false, t0Orden = 0, ultimaVista = null, cuadros = 0, desde = performance.now();
 function lazo(){
   requestAnimationFrame(lazo);
+  const ahora = performance.now();
+  const dt = Math.min(0.1, (ahora - (fp.t || ahora))/1000); fp.t = ahora;
   avanzarViaje();
-  if (girando) cam.yaw += 0.0016;
+  if (fp.on) caminar(dt);
+  else if (girando) cam.yaw += 0.0016;
 
   const V = matVista(), P = matProy();
 
@@ -432,7 +605,9 @@ function lazo(){
   }
 }
 
-window.visor = { cam, gl,
+window.visor = { cam, gl, fp, tecla, entrarFP, salirFP,
+  get rejilla(){ return rej && { nx:rej.nx, nz:rej.nz, umbral:rej.umbral,
+    llenas: rej.c.reduce((a, v) => a + (v >= rej.umbral ? 1 : 0), 0) }; },
   set modo(v){ modo = v|0; },
   get modo(){ return modo; },
   info: () => ({ N, dist: Math.round(cam.dist), msOrden: +msOrden.toFixed(1),
