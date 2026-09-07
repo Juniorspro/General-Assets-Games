@@ -1507,12 +1507,21 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
     // EL BOTON DE REINICIAR: que nivel cree que se esta jugando y si se ve
     pausa: function () {
       const r = document.getElementById('menu-restart');
+      const z = document.getElementById('menu-random');
       return { nivel: pbNivelActual(), paso: pbPaso, orden: PB_ORDEN.slice(),
+               quedan: pbCuantosQuedan(),
                gameState: gameState, empezado: levelStarted,
-               boton: r ? getComputedStyle(r).display : 'no existe',
-               rotulo: r ? r.textContent.trim() : '' };
+               // SE MIDE SI SE VE DE VERDAD Y NO SU `display`: el de un hijo
+               // de un contenedor escondido devuelve su propio valor, asi que
+               // en el epilogo el boton decia 'inline-block' con la fila en
+               // none. `offsetParent` es null cuando no se dibuja.
+               boton: r ? (r.offsetParent ? 'se ve' : 'no se ve') : 'no existe',
+               botonAzar: z ? (z.offsetParent ? 'se ve' : 'no se ve') : 'no existe',
+               rotulo: r ? r.textContent.trim() : '',
+               rotuloAzar: z ? z.textContent.trim() : '' };
     },
     reinicia: function () { return pbReinicia(); },
+    alAzar: function () { return pbAlAzar(); },
 
 """ + red2.SONDA.rstrip() + """
     // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos

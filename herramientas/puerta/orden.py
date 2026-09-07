@@ -82,17 +82,46 @@ JS = r"""
     return PB_ORDEN[pbPaso];
   }
 
-  function pbReinicia() {
-    const n = pbNivelActual();
-    if (n < 0) return 'sin nivel';
+  // ENTRAR A UN NIVEL DESDE EL MENU DE PAUSA. Los dos botones —reiniciar y
+  // nivel al azar— pasan por aca: escrito dos veces, el dia que haga falta
+  // apagar algo mas al salir de un nivel uno de los dos se queda sin apagarlo.
+  function pbVaA(n) {
     closeMenu();
-    // Y SE CANCELA EL SCREAMER. Reiniciando en medio de un susto, el velo y el
+    // Y SE CANCELA EL SCREAMER. Saliendo en medio de un susto, el velo y el
     // grito se quedaban puestos encima del nivel nuevo — es la misma linea que
     // `startLevel` ya tenia que hacer.
     if (scream.active) { scream.active = false; screamerEl.style.display = 'none'; }
     transitioning = true;
     fadeTo(function () { pbEntra(n); });
     return n;
+  }
+
+  function pbReinicia() {
+    const n = pbNivelActual();
+    if (n < 0) return 'sin nivel';
+    return pbVaA(n);
+  }
+
+  // CUANTOS NIVELES QUEDAN SIN JUGAR. El prologo no cuenta —no esta en el
+  // array— y en el ultimo nivel la respuesta es cero, que es lo que esconde el
+  // boton en vez de dejarlo tocar y no hacer nada.
+  function pbCuantosQuedan() {
+    if (pbPaso < 0 || pbPaso >= PB_ORDEN.length) return 0;
+    return PB_ORDEN.length - 1 - pbPaso;
+  }
+
+  // NIVEL AL AZAR: SE INTERCAMBIA, NO SE SALTEA. Saltando adelante, el nivel
+  // que se deja se perderia y el juego dejaria de ser seis puertas; poniendo el
+  // actual en el hueco del que se trae, los seis se siguen jugando y lo unico
+  // que cambia es el orden. El sorteo sale de los que QUEDAN, asi que nunca
+  // devuelve uno ya jugado ni el que se esta jugando.
+  function pbAlAzar() {
+    if (pbNivelActual() < 0) return 'sin nivel';
+    const quedan = pbCuantosQuedan();
+    if (quedan <= 0) return 'no quedan';
+    const j = pbPaso + 1 + Math.floor(Math.random() * quedan);
+    const t = PB_ORDEN[pbPaso]; PB_ORDEN[pbPaso] = PB_ORDEN[j]; PB_ORDEN[j] = t;
+    return pbVaA(PB_ORDEN[pbPaso]);
   }
 
   // LA UNICA PUERTA DE SALIDA DE CUALQUIER NIVEL.

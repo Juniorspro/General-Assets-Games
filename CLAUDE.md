@@ -269,6 +269,72 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima novena vuelta (2026-09-04): **PUERTA BLANCA** — NIVEL AL AZAR en el panel de pausa
+
+Pedido: *"agrega un botón en el menú de pausa que diga «nivel al azar» que servirá para cambiar el
+nivel en el que esté el jugador por uno al azar de los niveles restantes que queden"*.
+
+#### CAMBIA EL NIVEL, NO LO SALTEA — Y ÉSA ES TODA LA DECISIÓN
+
+Lo obvio sería avanzar `pbPaso` a un sitio al azar de lo que queda, y eso **tira niveles a la
+basura**: el que apretara el botón dos veces terminaría el juego con tres niveles sin jugar y sin
+que nada avisara —igual que el defecto que la vuelta 89 tuvo que arreglar cuando el final estaba
+clavado en la puerta del local—. El botón **intercambia**: el nivel de este paso se cambia por uno
+sorteado de los que faltan, y el que estaba acá se va a ocupar el sitio del otro. El paso no se
+mueve. Con eso el juego sigue siendo **seis puertas** por construcción, no por cuidado.
+
+**Y ES EL MISMO SORTEO QUE YA HABÍA**, un intercambio de Fisher-Yates sobre `PB_ORDEN` — la misma
+operación con la que la vuelta 89 mezcla la lista al empezar. Un sorteo propio sería una segunda
+manera de tocar el orden, y el día que se agregue un nivel una de las dos se queda corta.
+
+Medido, cuarenta apretadas seguidas: los cuarenta destinos salen de los cinco que quedaban, ninguno
+repite el nivel en el que estaba, y al terminar el orden sigue siendo `[1,2,3,5,6,4]`, o sea los
+seis sin faltar ni repetir. Y antes, con la fuerza bruta: **2.000 sorteos sobre 400 mezclas, 0
+problemas** —el orden se mantiene permutación de 1 a 6, los niveles ya jugados no se tocan nunca, y
+el nivel actual siempre cambia—.
+
+#### EL BOTÓN SE ESCONDE CUANDO NO QUEDA NADA, Y NO ES COSMÉTICO
+
+En el último nivel `pbCuantosQuedan()` da 0: un botón que dice «nivel al azar» y no puede hacer nada
+se lee a juego roto. Se esconde solo él, no la fila: **REINICIAR sigue teniendo sentido ahí**, que es
+justamente el caso en que más sirve. Medido en el local siendo el paso 5: `boton: se ve · botonAzar:
+no se ve · quedan: 0`. Y con uno solo restante, `pbAlAzar()` devuelve ese uno.
+
+**Y LOS DOS BOTONES COMPARTEN LA MISMA FUNCIÓN DE SALIDA.** `pbVaA(n)` cierra el menú, **cancela el
+screamer** —sin eso, cambiando de nivel en medio de un susto el velo y el grito se quedan encima del
+nivel nuevo—, pone `transitioning` y entra por `fadeTo`. Escrito dos veces, el día que se corrija
+uno el otro se queda con el defecto: es literalmente lo que pasó con las seis condiciones de choque
+que la vuelta 89 tuvo que juntar en `pbSiguiente()`.
+
+#### Y LA MISMA GUARDA DEL EPÍLOGO, QUE YA ESTABA RESUELTA
+
+`pbNivelActual()` es la única función que decide, y la usan el botón —para esconderse—, el reinicio
+—para negarse— y el sorteo. En el cuarto blanco y en el final `pbPaso` ya se pasó del array, así que
+sin ella `PB_ORDEN[pbPaso]` sería `undefined` y `pbEntra(undefined)` caería a su `else`, que es
+`enterStore()`: el botón llevaría del epílogo al local sin errores en la consola. Medido en `white`:
+la fila entera en `none`.
+
+#### LOS DOS VAN EN UNA FILA Y NO APILADOS
+
+El panel es una columna centrada y con el noveno elemento no entra: medido en **360×640** —el marco
+más corto— apilarlos dejaba el último pegado al borde. En fila comparten el alto de uno, y como los
+dos son secundarios —borde fino, sin relleno— la jerarquía no cambia: CONTINUAR sigue siendo el
+único con peso. Medido en 412×892, 412×732 y 360×640: **cero solapamientos** entre los nueve
+elementos y los dos botones dibujados en las tres.
+
+#### MEDIDO AL CERRAR
+
+Sin partida la fila no existe; en el prólogo (`quedan 0`) el de azar no se ve; en el primer nivel
+(paso 0, orden `[1,2,3,5,4,6]`) apretarlo lleva de `field` a `school` y deja el orden en
+`[3,2,1,5,4,6]`. REINICIAR intacto: en el local con el pan juntado, reinicia y las partes vuelven a
+`[false,false,false,false]` con el paso y el orden sin moverse. Los tres idiomas (Nivel al azar /
+Random level / Nivel aleatorio) con `castellano: 0`. Regresión completa: auditoría **28.152 de
+28.152 celdas · 4 de 4 partes · 2 de 2 latas · 28 nodos, 0 arcos sucios, 0 aislados · 359 piezas en
+15 mallas**, la araña sin clavarse (**0,15 s en 180** y 0 en caza, llegando a 0,07 m del jugador),
+partida completa 4/4 en orden y salida al cuarto blanco, los **siete estados** uno por uno con el
+cielo y las 4 especies de flor intactas, **33 de 33 sonidos decodificados**. `window.__errs` y
+`window.__pbFallas` vacíos en las seis corridas. El HTML pasó de 3,67 a **3,67 MB**.
+
 ### Nonagésima octava vuelta (2026-09-04): **PUERTA BLANCA** — las dos puertas que quedaban abiertas y los tres soft-locks
 
 Pedido: *"puedes arreglar todos los posibles crasheos porfavor"*. Vive en

@@ -387,12 +387,17 @@
   /* REINICIAR: secundario a proposito. Con el mismo peso que CONTINUAR, el
      boton que descarta lo hecho en el nivel se toca por error tanto como el que
      sigue jugando. */
-  #menu-restart {
-    display: none; margin-top: 0.8vh;
+  /* LOS DOS SECUNDARIOS VAN EN FILA Y NO APILADOS. El menu es una columna
+     centrada, y apilados el noveno elemento se come el aire de abajo: medido,
+     con ocho ya quedaban 16 px en 360x640. En fila cuestan una sola altura, y
+     encima se leen a lo que son: dos salidas del mismo peso. */
+  .pbsecs { display: none; gap: 10px; justify-content: center; margin-top: 0.8vh; }
+  .pbsecs button {
     background: transparent; border: 1px solid rgba(196,206,222,.34);
     color: rgba(210,218,232,.80);
   }
   #menu-restart:hover { border-color: rgba(255,150,150,.55); color: #ffd9d9; }
+  #menu-random:hover { border-color: rgba(150,200,255,.55); color: #d9ecff; }
   /* las tres barras del panel de pausa */
   .pbaj { width: min(86%, 340px); margin: 1.4vh auto 0.4vh; }
   .pbaj label {
@@ -528,7 +533,10 @@
         <label><span data-ui="sensib">SENSIBILIDAD</span><input id="sSens" type="range" min="40" max="200" value="100"><i id="vSens">1.00</i></label>
       </div>
       <button id="menu-resume">Continuar</button>
-      <button id="menu-restart" class="pbsec" data-ui="reiniciar">Reiniciar nivel</button>
+      <div class="pbsecs">
+        <button id="menu-restart" data-ui="reiniciar">Reiniciar nivel</button>
+        <button id="menu-random" data-ui="alAzar">Nivel al azar</button>
+      </div>
     </div>
     <div id="school-hud">
       <div class="chip" data-ui="codigo">&#128274; C&oacute;digo de salida</div>
@@ -10165,7 +10173,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Lista &#183; sali por atras',
       insecticida: '&#129524; Insecticida {0}', rociar: 'ROCIAR',
-      reiniciar: 'Reiniciar nivel',
+      reiniciar: 'Reiniciar nivel', alAzar: 'Nivel al azar',
       pan: 'PAN', carne: 'CARNE', queso: 'QUESO', tapaHb: 'TAPA',
       atrapado: 'ATRAPADO',
       finTitulo: '🌟 ¡Encontraste la salida!',
@@ -10190,7 +10198,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Parts {0}/4',
       partesLista: '&#127828; Ready &#183; out the back',
       insecticida: '&#129524; Bug spray {0}', rociar: 'SPRAY',
-      reiniciar: 'Restart level',
+      reiniciar: 'Restart level', alAzar: 'Random level',
       pan: 'BUN', carne: 'PATTY', queso: 'CHEESE', tapaHb: 'TOP',
       atrapado: 'STUCK',
       finTitulo: '🌟 You found the way out!',
@@ -10215,7 +10223,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       partes: '&#127828; Partes {0}/4',
       partesLista: '&#127828; Pronto &#183; sai por tras',
       insecticida: '&#129524; Inseticida {0}', rociar: 'BORRIFAR',
-      reiniciar: 'Reiniciar nivel',
+      reiniciar: 'Reiniciar nivel', alAzar: 'Nivel aleatorio',
       pan: 'PÃO', carne: 'CARNE', queso: 'QUEIJO', tapaHb: 'TAMPA',
       atrapado: 'PRESO',
       finTitulo: '🌟 Você achou a saída!',
@@ -10986,17 +10994,46 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
     return PB_ORDEN[pbPaso];
   }
 
-  function pbReinicia() {
-    const n = pbNivelActual();
-    if (n < 0) return 'sin nivel';
+  // ENTRAR A UN NIVEL DESDE EL MENU DE PAUSA. Los dos botones —reiniciar y
+  // nivel al azar— pasan por aca: escrito dos veces, el dia que haga falta
+  // apagar algo mas al salir de un nivel uno de los dos se queda sin apagarlo.
+  function pbVaA(n) {
     closeMenu();
-    // Y SE CANCELA EL SCREAMER. Reiniciando en medio de un susto, el velo y el
+    // Y SE CANCELA EL SCREAMER. Saliendo en medio de un susto, el velo y el
     // grito se quedaban puestos encima del nivel nuevo — es la misma linea que
     // `startLevel` ya tenia que hacer.
     if (scream.active) { scream.active = false; screamerEl.style.display = 'none'; }
     transitioning = true;
     fadeTo(function () { pbEntra(n); });
     return n;
+  }
+
+  function pbReinicia() {
+    const n = pbNivelActual();
+    if (n < 0) return 'sin nivel';
+    return pbVaA(n);
+  }
+
+  // CUANTOS NIVELES QUEDAN SIN JUGAR. El prologo no cuenta —no esta en el
+  // array— y en el ultimo nivel la respuesta es cero, que es lo que esconde el
+  // boton en vez de dejarlo tocar y no hacer nada.
+  function pbCuantosQuedan() {
+    if (pbPaso < 0 || pbPaso >= PB_ORDEN.length) return 0;
+    return PB_ORDEN.length - 1 - pbPaso;
+  }
+
+  // NIVEL AL AZAR: SE INTERCAMBIA, NO SE SALTEA. Saltando adelante, el nivel
+  // que se deja se perderia y el juego dejaria de ser seis puertas; poniendo el
+  // actual en el hueco del que se trae, los seis se siguen jugando y lo unico
+  // que cambia es el orden. El sorteo sale de los que QUEDAN, asi que nunca
+  // devuelve uno ya jugado ni el que se esta jugando.
+  function pbAlAzar() {
+    if (pbNivelActual() < 0) return 'sin nivel';
+    const quedan = pbCuantosQuedan();
+    if (quedan <= 0) return 'no quedan';
+    const j = pbPaso + 1 + Math.floor(Math.random() * quedan);
+    const t = PB_ORDEN[pbPaso]; PB_ORDEN[pbPaso] = PB_ORDEN[j]; PB_ORDEN[j] = t;
+    return pbVaA(PB_ORDEN[pbPaso]);
   }
 
   // LA UNICA PUERTA DE SALIDA DE CUALQUIER NIVEL.
@@ -11204,9 +11241,15 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
     // y en el final `pbPaso` ya se paso del array, asi que `PB_ORDEN[pbPaso]`
     // seria undefined y `pbEntra` caeria a su `else` — o sea que el boton
     // llevaria al LOCAL desde el epilogo, sin que nada fallara.
+    // LOS DOS SECUNDARIOS. La fila aparece si hay un nivel que reiniciar, y el
+    // de azar ADEMAS necesita que quede alguno sin jugar: en el ultimo no hay
+    // de donde sortear, y un boton que se puede tocar y no hace nada es peor
+    // que uno que no esta.
     try {
-      document.getElementById('menu-restart').style.display =
-        (pbNivelActual() >= 0) ? 'block' : 'none';
+      const hay = pbNivelActual() >= 0;
+      document.querySelector('.pbsecs').style.display = hay ? 'flex' : 'none';
+      document.getElementById('menu-random').style.display =
+        (hay && pbCuantosQuedan() > 0) ? 'block' : 'none';
     } catch (e) {}
     try { pbMarcaCalidad(); } catch (e) {}
     if (document.pointerLockElement) document.exitPointerLock();
@@ -11262,6 +11305,8 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
 
   document.getElementById('menu-restart')
     .addEventListener('click', function (e) { e.preventDefault(); pbReinicia(); });
+  document.getElementById('menu-random')
+    .addEventListener('click', function (e) { e.preventDefault(); pbAlAzar(); });
   (function () {
     const sm = document.getElementById('sMus'), sf = document.getElementById('sFx'),
           ss = document.getElementById('sSens'),
@@ -14241,12 +14286,21 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     // EL BOTON DE REINICIAR: que nivel cree que se esta jugando y si se ve
     pausa: function () {
       const r = document.getElementById('menu-restart');
+      const z = document.getElementById('menu-random');
       return { nivel: pbNivelActual(), paso: pbPaso, orden: PB_ORDEN.slice(),
+               quedan: pbCuantosQuedan(),
                gameState: gameState, empezado: levelStarted,
-               boton: r ? getComputedStyle(r).display : 'no existe',
-               rotulo: r ? r.textContent.trim() : '' };
+               // SE MIDE SI SE VE DE VERDAD Y NO SU `display`: el de un hijo
+               // de un contenedor escondido devuelve su propio valor, asi que
+               // en el epilogo el boton decia 'inline-block' con la fila en
+               // none. `offsetParent` es null cuando no se dibuja.
+               boton: r ? (r.offsetParent ? 'se ve' : 'no se ve') : 'no existe',
+               botonAzar: z ? (z.offsetParent ? 'se ve' : 'no se ve') : 'no existe',
+               rotulo: r ? r.textContent.trim() : '',
+               rotuloAzar: z ? z.textContent.trim() : '' };
     },
     reinicia: function () { return pbReinicia(); },
+    alAzar: function () { return pbAlAzar(); },
 
 
     // LO QUE MIDEN LOS TRES VIGIAS: el maximo visto de cada bandera y cuantas

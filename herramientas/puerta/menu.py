@@ -92,9 +92,15 @@ NUEVO_OPEN = """  function openMenu() {
     // y en el final `pbPaso` ya se paso del array, asi que `PB_ORDEN[pbPaso]`
     // seria undefined y `pbEntra` caeria a su `else` — o sea que el boton
     // llevaria al LOCAL desde el epilogo, sin que nada fallara.
+    // LOS DOS SECUNDARIOS. La fila aparece si hay un nivel que reiniciar, y el
+    // de azar ADEMAS necesita que quede alguno sin jugar: en el ultimo no hay
+    // de donde sortear, y un boton que se puede tocar y no hace nada es peor
+    // que uno que no esta.
     try {
-      document.getElementById('menu-restart').style.display =
-        (pbNivelActual() >= 0) ? 'block' : 'none';
+      const hay = pbNivelActual() >= 0;
+      document.querySelector('.pbsecs').style.display = hay ? 'flex' : 'none';
+      document.getElementById('menu-random').style.display =
+        (hay && pbCuantosQuedan() > 0) ? 'block' : 'none';
     } catch (e) {}
     try { pbMarcaCalidad(); } catch (e) {}"""
 
