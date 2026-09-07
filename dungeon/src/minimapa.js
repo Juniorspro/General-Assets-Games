@@ -78,7 +78,40 @@ export function armarMinimapa(cv) {
     cv.style.width = cv.width + 'px';
     cv.style.height = cv.height + 'px';
     if (!fondo) dibujarFondo();
+    acomodar(cv);
+    addEventListener('resize', () => acomodar(cv));
+    addEventListener('orientationchange', () => setTimeout(() => acomodar(cv), 60));
     return cv.getContext('2d');
+}
+
+/* DONDE VA EL MINIMAPA: arriba a la izquierda DE LA PANTALLA.
+
+   Deducirlo del giro no alcanzo. El marco se rota 90° y cada esquina termina en
+   otra, asi que la esquina del marco que hay que usar depende del giro — y ahi
+   me equivoque una vez: en el banco daba arriba a la izquierda y en el telefono
+   salia abajo. Cuando la cuenta y el aparato no coinciden, gana el aparato.
+
+   Asi que no se calcula: se PRUEBA. Se pega el lienzo a cada una de las cuatro
+   esquinas del marco, se mide donde cae de verdad en pantalla con
+   `getBoundingClientRect` —que ya viene con la rotacion aplicada— y se queda la
+   que quede mas cerca del cero. Son cuatro medidas, una vez, y despues solo si
+   la pantalla cambia de tamano. */
+function acomodar(cv) {
+    const ESQUINAS = [
+        { top: '14px', left: '14px', right: 'auto', bottom: 'auto' },
+        { top: '14px', right: '14px', left: 'auto', bottom: 'auto' },
+        { bottom: '14px', left: '14px', top: 'auto', right: 'auto' },
+        { bottom: '14px', right: '14px', top: 'auto', left: 'auto' },
+    ];
+    let mejor = null, mejorD = Infinity;
+    for (const e of ESQUINAS) {
+        Object.assign(cv.style, e);
+        const r = cv.getBoundingClientRect();
+        if (!r.width) return;               // todavia no se ve: se deja como esta
+        const d = Math.hypot(r.left, r.top);
+        if (d < mejorD) { mejorD = d; mejor = e }
+    }
+    if (mejor) Object.assign(cv.style, mejor);
 }
 
 /* Un cuadro. `cubos` son los de la mision: cada uno con su `hex`, su `obj`
