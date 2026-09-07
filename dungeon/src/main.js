@@ -8,7 +8,7 @@ import {
     toWorld, toCell, bordeX, bordeZ, isOpen, surfaceAt, levelAt, collide, spawnOn,
     medirParedes, rescatar, SALAS, salaEn, salaPorId, centroSala,
 } from './map.js';
-import { texAlfombra, texYeso, texHormigon, texBaldosa, texTabla, texFrase, FRASES, pilaDeCajones, tablon, crucifijo } from './deco.js';
+import { texAlfombra, texYeso, texHormigon, texBaldosa, texTabla, texFrase, pilaDeCajones, tablon, crucifijo } from './deco.js';
 import { iniciarPantalla, vistaAncho, vistaAlto, aMarco, deltaMarco } from './pantalla.js';
 import { R15 } from './r15.js';
 import { cargarMuebles, poblar, chocarMuebles } from './muebles.js';
@@ -21,7 +21,8 @@ import { precargar } from './carga.js';
 import { cargarMuestras } from './muestras.js';
 import { puente } from './sonido.js';
 import * as MU from './muestras.js';
-import { t, aplicarHTML, setIdioma, idiomaActual, IDIOMAS, alCambiarIdioma } from './idioma.js';
+import { t, frases as FRASES, aplicarHTML, setIdioma, idiomaActual, IDIOMAS, alCambiarIdioma } from './idioma.js';
+import { armarMinimapa, pintarMinimapa } from './minimapa.js';
 
 const A = window.DUNGEON_ASSETS || {};
 
@@ -597,12 +598,12 @@ class Dungeon {
                 sitios.push([c, r, d[0]]);
             }
         }
-        for (let i = 0; i < Math.min(FRASES.length, sitios.length); i++) {
+        for (let i = 0; i < Math.min(FRASES().length, sitios.length); i++) {
             const [c, r, [dc, dr]] = sitios[rng.int(0, sitios.length - 1)];
             const [x, z] = toWorld(c, r);
             const m = new THREE.Mesh(
                 new THREE.PlaneGeometry(2.05, 1.03),
-                new THREE.MeshBasicMaterial({ map: texFrase(FRASES[i]), transparent: true, depthWrite: false }));
+                new THREE.MeshBasicMaterial({ map: texFrase(FRASES()[i]), transparent: true, depthWrite: false }));
             m.position.set(x + dc * (CELL / 2 - .06), 1.80, z + dr * (CELL / 2 - .06));
             m.rotation.y = dc ? -dc * Math.PI / 2 : (dr > 0 ? Math.PI : 0);
             grupo.add(m);
@@ -1205,6 +1206,22 @@ class Dungeon {
         this.updateHud();
         this.calidad.tic(dt);
         this.renderer.render(this.scene, this.camera);
+        this.pintarMapa();
+    }
+
+    /* El minimapa se pinta cada DOS cuadros: son mil cuatrocientos bordes ya
+       dibujados mas cuatro circulos, pero copiar el lienzo igual cuesta, y a
+       treinta veces por segundo un punto no se mueve de forma visible. */
+    pintarMapa() {
+        if (!this.mmCtx) {
+            this.mmCtx = armarMinimapa(document.getElementById('minimapa'));
+            if (!this.mmCtx) return;
+        }
+        if ((this._mmN = (this._mmN || 0) + 1) % 2) return;
+        const M = this.mision;
+        pintarMinimapa(this.mmCtx,
+            { x: this.pos.x, z: this.pos.z, yaw: this.yaw },
+            M && M.cubos, M && M.baldosas);
     }
 
     updateHud() {

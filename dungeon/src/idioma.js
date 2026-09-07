@@ -28,6 +28,8 @@ const EN = {
     slowNet: 'SLOW CONNECTION — GOING IN ANYWAY',
     missing: n => n + ' FILES FAILED — PLAYING ANYWAY',
     close: 'CLOSE',
+    graphicsSub: 'if it runs slow, turn it down — it is remembered',
+    wonAlt: 'YOU WIN',
     resolution: p => 'resolution ×' + p,
     hint: 'three cubes on their tile · the cutters on the rope · the key in a ' +
           'cabinet · <b>HE</b> carries the card · the door<br>' +
@@ -83,6 +85,15 @@ const EN = {
     sayCard: 'the card!',
     sayCaught: 'he got you',
 
+    frases: [
+        'KEEP A LOW PROFILE\nFOR HE SHALL COME',
+        'HE KEEPS THE\nKEYCARD ON HIM',
+        'THE CUBES\nOPEN THE WAY',
+        'SEARCH EVERY\nCABINET',
+        'DO NOT RUN\nHE HEARS',
+        'THE HOUSE\nIS HIS BODY',
+    ],
+
     // ---- nombres ----
     rojo: 'red', amarillo: 'yellow', azul: 'blue',
     armario: 'wardrobe', comoda: 'dresser',
@@ -100,6 +111,8 @@ const ES = {
     slowNet: 'LA RED VA LENTA — SE ENTRA IGUAL',
     missing: n => 'FALTARON ' + n + ' ARCHIVOS — SE JUEGA IGUAL',
     close: 'CERRAR',
+    graphicsSub: 'si va lento, bajalo — se guarda solo',
+    wonAlt: 'GANASTE',
     resolution: p => 'resolución ×' + p,
     hint: 'tres cubos a su baldosa · la pinza de la soga · la llave en un ' +
           'mueble · la tarjeta la lleva <b>ÉL</b> · la puerta<br>' +
@@ -149,6 +162,15 @@ const ES = {
     sayCard: '¡la tarjeta!',
     sayCaught: 'te agarró',
 
+    frases: [
+        'PERFIL BAJO\nPORQUE ÉL VIENE',
+        'LA TARJETA\nLA LLEVA ÉL',
+        'LOS CUBOS\nABREN EL PASO',
+        'REVISÁ CADA\nMUEBLE',
+        'NO CORRAS\nTE OYE',
+        'LA CASA\nES SU CUERPO',
+    ],
+
     rojo: 'rojo', amarillo: 'amarillo', azul: 'azul',
     armario: 'armario', comoda: 'cómoda',
     estanteria: 'estantería', vitrina: 'vitrina',
@@ -165,6 +187,8 @@ const PT = {
     slowNet: 'CONEXÃO LENTA — ENTRANDO MESMO ASSIM',
     missing: n => 'FALTARAM ' + n + ' ARQUIVOS — DÁ PRA JOGAR',
     close: 'FECHAR',
+    graphicsSub: 'se estiver lento, abaixe — fica salvo',
+    wonAlt: 'VOCÊ VENCEU',
     resolution: p => 'resolução ×' + p,
     hint: 'três cubos no seu ladrilho · o alicate na corda · a chave num ' +
           'móvel · <b>ELE</b> carrega o cartão · a porta<br>' +
@@ -214,10 +238,24 @@ const PT = {
     sayCard: 'o cartão!',
     sayCaught: 'ele te pegou',
 
+    frases: [
+        'FIQUE ABAIXADO\nPORQUE ELE VEM',
+        'O CARTÃO\nESTÁ COM ELE',
+        'OS CUBOS\nABREM O CAMINHO',
+        'REVISE CADA\nMÓVEL',
+        'NÃO CORRA\nELE OUVE',
+        'A CASA\nÉ O CORPO DELE',
+    ],
+
     rojo: 'vermelho', amarillo: 'amarelo', azul: 'azul',
     armario: 'guarda-roupa', comoda: 'cômoda',
     estanteria: 'estante', vitrina: 'cristaleira',
 };
+
+/* Las frases pintadas en las paredes. Van acá y no en deco.js porque son texto
+   que el jugador lee, no una textura. Se arman cuando se construye la casa —o
+   sea después del menú—, así que el idioma ya está elegido. */
+export const frases = () => t('frases');
 
 export const IDIOMAS = [
     { id: 'en', nombre: 'English', dic: EN },
@@ -271,4 +309,10 @@ export function aplicarHTML(raiz = document) {
         el.textContent = t(el.getAttribute('data-i18n'));
     for (const el of raiz.querySelectorAll('[data-i18n-html]'))
         el.innerHTML = t(el.getAttribute('data-i18n-html'));
+    /* `alt` y `aria-label` son texto igual que el resto: el que navega con
+       lector de pantalla también eligió un idioma. */
+    for (const el of raiz.querySelectorAll('[data-i18n-alt]'))
+        el.alt = t(el.getAttribute('data-i18n-alt'));
+    for (const el of raiz.querySelectorAll('[data-i18n-aria]'))
+        el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
 }
