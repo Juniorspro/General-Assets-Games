@@ -40,7 +40,8 @@ CAJA    = float(sys.argv[sys.argv.index("--caja")+1]) if "--caja" in sys.argv el
 # la ciudad, la nube flota como una maqueta en el aire. La franja de más
 # aparece sólo donde alguna cámara aérea la vio.
 SUELO = {"hormigon_oscuro", "calle", "vereda", "raya", "hormigon"}
-PISO_PLANO = {"hormigon_oscuro", "calle", "vereda", "raya"}   # lo que se pisa
+PISO_PLANO = {"hormigon_oscuro", "calle", "vereda", "raya",
+              "agua", "arena", "madera"}   # lo que se pisa
 APRON = float(sys.argv[sys.argv.index("--apron")+1]) if "--apron" in sys.argv else 372.0
 # el recorte puede no estar en el origen: centrado en un cruce se ven las
 # cuatro ochavas, centrado en una manzana se ve una manzana y cuatro medias
@@ -57,11 +58,12 @@ GROSOR  = float(sys.argv[sys.argv.index("--grosor")+1]) if "--grosor" in sys.arg
 EXCLUIR = {"lejos", "fondo"}   # telón y silueta lejana
 # caras cuyas tapas horizontales están tapadas por la caja de al lado
 SIN_TAPAS = {"antepecho", "interior", "vidrio", "aluminio", "panel", "aluminio_oscuro"}
-FOLLAJE = {"hoja", "hoja_clara", "hoja_oscura"}
+FOLLAJE = {"hoja", "hoja_clara", "hoja_oscura", "hoja_trop", "pasto_carta"}
 # Las cartas de follaje son de una sola cara y la normal apunta para un lado
 # nomás: con el coseno con signo se perdía la mitad de las hojas. Acá se usa el
 # valor absoluto, que para una carta es lo correcto.
-DOSCARAS = {"hoja", "hoja_clara", "hoja_oscura", "persiana", "raya"}
+DOSCARAS = {"hoja", "hoja_clara", "hoja_oscura", "persiana", "raya",
+            "hoja_trop", "pasto_carta", "vidrio_aero"}
 # Los emisores están calibrados para que se vean de noche, y de día la toma
 # lineal los manda muy arriba de 1: sin esto, cada farol es una bola blanca.
 ATENUAR = {"luz":0.10, "sem_rojo":0.26, "sem_verde":0.26,
@@ -69,6 +71,12 @@ ATENUAR = {"luz":0.10, "sem_rojo":0.26, "sem_verde":0.26,
 # multiplicador de densidad: cuántas gaussianas por metro cuadrado se lleva
 # cada material respecto del promedio. El paso de muestreo va con 1/raíz.
 PESO = {
+    # el mundo Frutiger Aero
+    "agua":0.45, "arena":0.30, "pasto":1.10, "roca":1.10, "madera":1.30,
+    "burbuja":1.50, "cromo":1.40, "vidrio_aero":1.20, "blanco":1.20,
+    "flor":1.90, "nenufar":1.50, "tronco_p":1.30,
+    "hoja_trop":2.30, "pasto_carta":2.20,
+    # la ciudad
     "gris":1.30, "persiana":1.10, "piel":1.30, "fondo":0.0,
     "interior_b":0.70, "interior_c":0.70, "interior_d":0.70, "interior_e":0.70,
     "ropa_a":1.30, "ropa_b":1.30, "ropa_c":1.30, "ropa_d":1.30, "ropa_e":1.30,
