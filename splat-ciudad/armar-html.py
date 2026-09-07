@@ -30,6 +30,8 @@ BAJADA = sys.argv[sys.argv.index("--bajada")+1] if "--bajada" in sys.argv else "
 NIEBLA = sys.argv[sys.argv.index("--niebla")+1] if "--niebla" in sys.argv else ""
 CORREA = sys.argv[sys.argv.index("--correa")+1] if "--correa" in sys.argv else ""
 ENCUAD = sys.argv[sys.argv.index("--encuadres")+1] if "--encuadres" in sys.argv else ""
+TOMAS  = sys.argv[sys.argv.index("--tomas")+1] if "--tomas" in sys.argv else ""
+TAM    = sys.argv[sys.argv.index("--tam")+1] if "--tam" in sys.argv else ""
 
 tmp = tempfile.mkdtemp(prefix="paq")
 shutil.copy(V + "/splat.js", tmp + "/splat.js")
@@ -72,6 +74,8 @@ else:
               + (("window.__NIEBLA = %s;\n" % NIEBLA) if NIEBLA else "")
               + (("window.__CORREA = %s;\n" % CORREA) if CORREA else "")
               + (("window.__ENCUADRES = %s;\n" % ENCUAD) if ENCUAD else "")
+              + (("window.__TOMAS = %r;\n" % TOMAS) if TOMAS else "")
+              + (("window.__TAM = %s;\n" % TAM) if TAM else "")
               + 'window.__GZ = true;\nwindow.__SPLAT = "'
               + base64.b64encode(gz).decode("ascii") + '";')
     dicho = "gaussianas %.2f -> %.2f MB con gzip" % (len(crudo)/1048576, len(gz)/1048576)

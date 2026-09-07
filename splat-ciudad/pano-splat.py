@@ -37,6 +37,8 @@ TOPE  = opc("--tope", 60.0)           # tope del estirón radial, en metros
 RSUELO= opc("--rsuelo", 180.0)        # hasta dónde el agua es agua y no fondo
 GRANO = opc("--grano", 0.055)         # tamaño al que se ralea el agua de cerca
 ANG   = opc("--ang", 0.006)           # y nunca más grueso que esto en radianes
+SIG   = opc("--sigma", 0.88)          # sigma como fracción del paso entre vecinas
+ALFA  = int(opc("--alfa", 245))       # opacidad: bajarla funde la trama
 
 # ------------------------------------------------------------------ leer PNG
 def leer_png(ruta):
@@ -169,13 +171,18 @@ obj = np.where(suelof, np.minimum(GRANO, ANG*tf), fpr)
 sv = np.clip((obj/np.maximum(1e-9, fpr)).astype(np.int64), 1, 512)
 sh = np.clip((obj/np.maximum(1e-9, fpa)).astype(np.int64), 1, 4096)
 
+# el salteo azimutal NO puede ser un paso fijo: el ancho de la fila casi nunca
+# es múltiplo del paso, y lo que sobra queda como una RENDIJA en la costura del
+# panorama —una franja de rayas verticales al dar la vuelta—. Se reparte una
+# cantidad de columnas por fila y se colocan parejas, que cierra el círculo.
+mcol = np.maximum(1, np.rint(WS/np.maximum(1.0, sh)).astype(np.int64))
 fila = np.arange(HS)
 viva = (fila % sv) == 0
-cuenta = np.where(viva, (WS + sh - 1)//sh, 0)
+cuenta = np.where(viva, mcol, 0)
 n = int(cuenta.sum())
 jr = np.repeat(fila, cuenta)
 base = np.concatenate(([0], np.cumsum(cuenta)[:-1]))
-ir = (np.arange(n) - np.repeat(base, cuenta))*np.repeat(sh, cuenta)
+ir = ((np.arange(n) - np.repeat(base, cuenta))*WS)//np.repeat(mcol, cuenta)
 del fila, viva, base
 
 sph = sphf[jr].astype(np.float32); cph = cphf[jr].astype(np.float32)
@@ -195,7 +202,7 @@ pos[:, 0] = dx*t
 pos[:, 1] = OJO + dy*t
 pos[:, 2] = dz*t
 
-anch = fpa[jr]*sh[jr]
+anch = fpa[jr]*(WS/mcol[jr])
 larg = np.where(sl, np.minimum(TOPE, fpr[jr]*sv[jr]), fpr[jr])
 del jr
 
@@ -212,12 +219,20 @@ arr = np.zeros_like(d3); arr[:, 1] = 1.0
 exc = np.cross(arr, d3); exc /= np.maximum(1e-9, np.linalg.norm(exc, axis=1))[:, None]
 eyc = np.cross(d3, exc)
 cu = ~sl
-ex[cu] = exc[cu]; ey[cu] = eyc[cu]; nor[cu] = -d3[cu]
+ex[cu] = exc[cu]; ey[cu] = eyc[cu]
+# EL TERCER EJE SALE DEL PRODUCTO VECTORIAL, NO A OJO. Los dos marcos que
+# parecían obvios —(azimutal, radial, arriba) en el agua y (tangente,
+# tangente, -rayo) en la cúpula— son ZURDOS: determinante -1. De una matriz
+# zurda la extracción del cuaternión saca cualquier cosa, y en el visor el
+# resultado no es un error, es peor: las gaussianas salen orientadas mal y las
+# lomas del horizonte se abren en un abanico de rayas verdes. mirar.py no lo
+# ve porque dibuja discos y no mira la orientación.
+nor = np.cross(ex, ey)
 del exc, eyc, arr, d3, dx, dy, dz, cth_, sth_, cu
 
 esc = np.empty((n, 3), np.float32)
-esc[:, 0] = 0.62*anch
-esc[:, 1] = 0.62*larg
+esc[:, 0] = SIG*anch
+esc[:, 1] = SIG*larg
 esc[:, 2] = np.maximum(0.008, 0.10*np.minimum(esc[:, 0], esc[:, 1]))
 
 M = np.stack([ex, ey, nor], axis=2)
@@ -254,7 +269,7 @@ f = np.zeros((n, 8), np.float32)
 f[:, 0:3] = pos; f[:, 3:6] = esc
 by = np.zeros((n, 8), np.uint8)
 by[:, 0:3] = np.clip(np.round(col), 0, 255).astype(np.uint8)
-by[:, 3] = 250
+by[:, 3] = ALFA
 by[:, 4:8] = np.clip(np.round(q*128+128), 0, 255)
 crudo = np.empty((n, 32), np.uint8)
 crudo[:, 0:24] = f[:, 0:6].copy().view(np.uint8).reshape(n, 24)

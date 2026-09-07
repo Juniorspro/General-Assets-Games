@@ -121,8 +121,15 @@ void main(){
   uvec4 cen = texelFetch(u_textura, ivec2((uint(indice) & mascara) << 1, uint(indice) >> corr), 0);
   vec4 camara = vista * vec4(uintBitsToFloat(cen.xyz), 1.0);
   vec4 p = proyeccion * camara;
-  float corte = 1.2 * p.w;
-  if (p.z < -corte || p.x < -corte || p.x > corte || p.y < -corte || p.y > corte) {
+  // El descarte temprano se hace por el CENTRO, así que el margen tiene que
+  // aguantar el radio de la gaussiana más grande que puede asomar desde
+  // afuera. Con 1,2 alcanzaba para la ciudad, donde ninguna pasa del metro;
+  // con las lonjas de agua de un panorama —cinco metros de largo a tres del
+  // ojo— quedaba una FRANJA RAYADA en el borde del cuadro: se caían las
+  // grandes y sobrevivían las chicas. Al lado no le cuesta casi nada: el
+  // cuadrado que emiten estas cae fuera del recorte igual.
+  float corte = 1.2 * p.w, lado = 2.8 * p.w;
+  if (p.z < -corte || p.x < -lado || p.x > lado || p.y < -lado || p.y > lado) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return;
   }
 

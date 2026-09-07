@@ -374,3 +374,21 @@ honesto es decirlo: la nube es tan nítida como la imagen que entró.
     tope.
 19. **`--super` sin interpolar no hace nada.** Repetía el píxel vecino: cuatro
     veces las gaussianas, la misma imagen escalonada y el archivo por las nubes.
+20. **Los dos marcos que parecían obvios eran ZURDOS.** (azimutal, radial,
+    arriba) en el agua y (tangente, tangente, -rayo) en la cúpula: los dos con
+    determinante -1. De una matriz zurda la extracción del cuaternión saca
+    cualquier cosa, y el resultado en el visor no fue un error sino algo peor
+    —las lomas del horizonte abiertas en un abanico de rayas verdes—. El tercer
+    eje sale del producto vectorial de los otros dos, nunca a ojo. `mirar.py`
+    no lo ve: dibuja discos y no mira la orientación. **Ese preview no sirve
+    para validar orientaciones, sólo color y cobertura.**
+21. **El salteo azimutal con paso fijo abre la costura.** El ancho de la fila
+    casi nunca es múltiplo del paso y lo que sobra queda como una rendija al
+    dar la vuelta. Se reparte una cantidad de columnas por fila y se colocan
+    parejas.
+22. **La trama se ve en el BORDE del cuadro, no en el medio.** El paso entre
+    gaussianas de la cúpula da un píxel en el centro y ahí se promedia solo;
+    contra el borde la perspectiva estira lo horizontal y los valles entre
+    campanas dejan pasar el cielo procedural, que es de otro color. Se cierra
+    con más solape (`--sigma`), más opacidad (`--alfa`) y engordando la elipse
+    en pantalla (`--tam`), no con más gaussianas.

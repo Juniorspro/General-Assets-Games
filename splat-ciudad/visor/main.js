@@ -485,9 +485,11 @@ function arrancar(buf, nombre){
   $("#dCaja").textContent = Math.round(p.caja[3]-p.caja[0]) + " × " + Math.round(p.caja[5]-p.caja[2]) + " m";
   $("#dPeso").textContent = coma(pesoArchivo/1048576, 1) + " MB";
   $("#dSep").textContent = coma(lado3d(buf, N), 2) + " m";
-  $("#dTomas").textContent = nombre === ARCHIVO ? TOMAS : "—";
-  $("#panel header p").textContent = nombre === ARCHIVO
-    ? "Un distrito en gaussianas 3D · color trazado con Cycles" : nombre;
+  // el archivo puede decir de dónde salió el color, y la bajada la pone el
+  // empaquetador: pisarla acá dejaba a toda nube contando que era un distrito
+  $("#dTomas").textContent = window.__TOMAS !== undefined ? window.__TOMAS
+    : (nombre === ARCHIVO ? TOMAS : "—");
+  if (nombre !== ARCHIVO) $("#panel header p").textContent = nombre;
   $("#panel").hidden = $("#datos").hidden = false;
   $("#carga").classList.add("ido");
   setTimeout(() => { $("#pista").style.opacity = 0; }, 6500);
@@ -535,6 +537,9 @@ lienzo.addEventListener("wheel", (e) => {
 
 $("#tam").addEventListener("input", (e) => $("#tamV").textContent = coma(+e.target.value));
 if (window.__BRILLO) { $("#exp").value = brillo; $("#expV").textContent = coma(brillo); }
+// engordar la elipse en pantalla cierra la trama del borde del cuadro, donde
+// la perspectiva estira lo horizontal y los huecos entre gaussianas se ven
+if (window.__TAM) { $("#tam").value = window.__TAM; $("#tamV").textContent = coma(+window.__TAM); }
 $("#exp").addEventListener("input", (e) => { brillo = +e.target.value; $("#expV").textContent = coma(brillo); });
 $("#btGira").addEventListener("click", (e) => {
   girando = !girando; e.currentTarget.setAttribute("aria-pressed", String(girando));
