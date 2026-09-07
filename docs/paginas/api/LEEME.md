@@ -26,7 +26,55 @@ del proyecto `iblo-eventos`; acá se guardan para tenerlas versionadas.
 | `DELETE /api/archivo?id=` | Lo saca, y borra el archivo del depósito. Con `?seccion=` borra la sección, sólo si está vacía. Requiere sesión. |
 | `POST /api/prop` | Genera el adorno de una publicación: el objeto de la temática sobre pantalla verde. El recorte lo hace la app. Si ese objeto ya está en la biblioteca lo devuelve ya recortado y no gasta IA; con `rehacer: true` genera uno nuevo igual. Requiere sesión. |
 | `PUT /api/prop` | La app deja acá el recorte terminado, para que el próximo que pida lo mismo salga gratis. Requiere sesión. |
+| `GET /api/sitio` | Lo que el dueño cambió de la página: estéticas, colores y secciones. Sin sesión. |
+| `PUT /api/sitio` | Guarda un área (`esteticas`, `secciones`, `marca`) y deja la anterior en el historial. Requiere sesión. |
+| `POST /api/sitio` | Deshace: vuelve a la versión anterior, o a una del historial con `id`. Requiere sesión. |
+| `POST /api/estilo` | Le pasás una frase («una fiesta Y2K celeste y plateado») y devuelve la estética entera: nombre, bajada, descripción, fichas y los ocho colores. **No guarda nada.** Requiere sesión. |
 | `POST /api/asistente` | Le pasás una frase suelta ("el 25 de octubre hacemos halloween en el club juventud, entradas a 10 mil") y/o el flyer en `imagen`, y devuelve la propuesta ya cargada: tipo, título, fecha, lugar, hora, precio, color y detalle. Con `publicar: true` la sube él mismo, pero la app no lo usa así: muestra la propuesta y publica cuando el dueño toca. Requiere sesión. |
+
+
+## La página se edita desde el panel
+
+Hasta acá las nueve estéticas y sus nueve temas de color estaban **escritos
+adentro del HTML, repetidos en cinco archivos** de hasta dos megas. Agregar una
+fiesta era editar los cinco a mano y volver a desplegar. Por eso la web
+«quedaba siempre así».
+
+Ahora ese contenido vive en la tabla `sitio` y la página lo pide al cargar. Tres
+áreas, cada una un documento JSON: `esteticas`, `secciones` y `marca`.
+
+**El HTML conserva su copia como respaldo.** Si la API no contesta, o si la base
+todavía está vacía, se ve exactamente lo mismo que hoy. La página nunca queda en
+blanco por esto, que es la condición para poder dárselo al dueño.
+
+Cómo se aplica cada cosa, que no es igual:
+
+- **Colores**: son variables CSS. Se reemplaza una hoja de estilos y la página
+  se retiñe sola, sin volver a dibujar nada. Instantáneo y sin riesgo.
+- **Textos y esconder secciones**: se tocan los nodos que ya están. También en
+  caliente.
+- **Agregar o sacar una estética**: hay que redibujar la baraja, los
+  observadores de scroll, los videos y las piezas 3D. Volver a correr todo eso
+  a mano en una página de dos megas es donde se rompen las cosas, así que se
+  recarga **una vez**: sólo la primera visita después del cambio, porque
+  enseguida queda en la copia local del navegador y se dibuja de entrada.
+
+Las tablas se crean solas la primera vez que se llama a la ruta
+(`CREATE TABLE IF NOT EXISTS`), así que no hay migración que correr a mano.
+
+### Las herramientas que lo sostienen
+
+Están en `herramientas/iblo/` y todas son idempotentes: se corren las veces que
+haga falta y no duplican nada, porque lo que insertan va entre marcas.
+
+    python3 herramientas/iblo/extraer-contenido.py docs/paginas/iblo-esteticas.html \
+        > herramientas/iblo/contenido-inicial.json   # lo de hoy, tal cual, en JSON
+    python3 herramientas/iblo/enchufar.py            # enchufa el cargador en las 5 páginas
+    python3 herramientas/iblo/enchufar-panel.py      # mete la pantalla en el panel
+
+El JSON inicial son 10 KB: **todo el contenido editable de una página de dos
+megas**. Se carga una vez con `PUT /api/sitio` por cada área y de ahí en más lo
+maneja el dueño.
 
 ## El cartel de la portada rota solo
 
