@@ -162,10 +162,14 @@ pond = A*W
 prob = np.cumsum(pond); prob /= prob[-1]
 NM = int(TOTAL*1.30)
 cara = np.searchsorted(prob, rng.random(NM))
-a, b, c = P[cara,0], P[cara,1], P[cara,2]
 r1, r2 = rng.random(NM), rng.random(NM)
 s = np.sqrt(r1)
-pos = (1-s)[:,None]*a + (s*(1-r2))[:,None]*b + (s*r2)[:,None]*c
+# de a un vértice: con los tres a la vez son tres arreglos de (NM,3) vivos al
+# mismo tiempo, y a nueve millones de muestras eso es casi un giga de más
+pos = P[cara,0] * (1-s)[:,None]
+pos += P[cara,1] * (s*(1-r2))[:,None]
+pos += P[cara,2] * (s*r2)[:,None]
+del r1, r2, s
 lc = LIM[cara]
 dentro_caja = (np.abs(pos[:,0]-CENTRO[0]) <= lc) & (np.abs(pos[:,1]-CENTRO[1]) <= lc)
 pos, cara = pos[dentro_caja], cara[dentro_caja]
@@ -190,8 +194,14 @@ def leer(ruta, canales):
 suma = np.zeros((NM, 3), np.float32)
 peso = np.zeros(NM, np.float32)
 ncam = np.zeros(NM, np.int32)
-uno = np.ones((NM, 1))
 usadas = 0
+# Las homogéneas se arman una vez y en float32: adentro del lazo eran 374 MB
+# por toma, y para proyectar sobran seis dígitos (a 400 m del centro el error
+# es de 4 centésimas de milímetro).
+POSH = np.empty((NM, 4), np.float32)
+POSH[:, :3] = pos; POSH[:, 3] = 1.0
+POS32 = POSH[:, :3]
+NOR32 = nor.astype(np.float32)
 
 for k, v in enumerate(vistas):
     fc = "%s/color%04d.exr" % (CARPETA, v["i"])
@@ -202,8 +212,8 @@ for k, v in enumerate(vistas):
     usadas += 1
 
     M = np.array(v["M"], dtype=np.float64)
-    inv = np.linalg.inv(M)
-    pc = (inv @ np.c_[pos, uno].T).T[:, :3]          # a coordenadas de cámara
+    inv = np.linalg.inv(M)[:3].astype(np.float32)    # sólo las tres filas útiles
+    pc = POSH @ inv.T                                # a coordenadas de cámara
     z = -pc[:, 2]
     delante = z > 0.4
     xp = np.where(delante, pc[:,0]/np.maximum(1e-6, z)*f_px + PX/2, -1)
@@ -212,11 +222,11 @@ for k, v in enumerate(vistas):
     est = delante & (xp >= 1) & (xp < PX-1) & (yp >= 1) & (yp < PX-1)
     if not est.any(): continue
 
-    # coseno de incidencia: de canto no se cree nada
-    ojo = M[:3, 3]
-    dv = ojo[None, :] - pos
-    dv /= np.maximum(1e-9, np.linalg.norm(dv, axis=1))[:, None]
-    cosi = np.einsum("ij,ij->i", nor, dv)
+    # Coseno de incidencia: de canto no se cree nada. Por contracción y no
+    # normalizando el vector a la cámara, que a nueve millones son 280 MB.
+    ojo = M[:3, 3].astype(np.float32)
+    cosi = (NOR32 @ ojo) - np.einsum("ij,ij->i", NOR32, POS32)
+    cosi /= np.maximum(1e-6, np.sqrt(np.einsum("ij,ij->i", pc, pc)))
     est &= cosi > 0.09
     if not est.any(): continue
 
@@ -251,14 +261,16 @@ ok = ((ncam >= 2) & (peso > 0.10)) | ((ncam == 1) & (peso > 0.55))
 print("SPLAT: %d tomas leídas · %d de %d muestras con color (%.1f%%) · %.2f cámaras de media" % (
       usadas, ok.sum(), NM, 100*ok.mean(), ncam[ok].mean()), flush=True)
 
-pos, nor, cara, pas = pos[ok], nor[ok], cara[ok], pas[ok]
+del POSH, POS32, NOR32
+pos = pos[ok].astype(np.float32); nor = nor[ok].astype(np.float32)
+cara, pas = cara[ok], pas[ok].astype(np.float32)
 rgb_lin = suma[ok] / peso[ok][:, None]
 n = len(pos)
 
 # ---------------------------------------------------- color
 # curva filmica y después sRGB. La toma es lineal: sin curva, el hormigón al
 # sol recorta en 1,0 y todo el frente sale blanco lavado.
-x = np.maximum(0.0, rgb_lin.astype(np.float64) * EXPO * AT[cara][:, None])
+x = np.maximum(0.0, rgb_lin * np.float32(EXPO) * AT[cara].astype(np.float32)[:, None])
 x = (x*(2.51*x + 0.03)) / (x*(2.43*x + 0.59) + 0.14)
 x = np.clip(x, 0, 1)
 rgb = np.where(x <= 0.0031308, x*12.92, 1.055*np.power(np.maximum(x, 1e-8), 1/2.4) - 0.055)
@@ -267,7 +279,7 @@ rgb = np.clip(rgb, 0, 1)
 # ---------------------------------------------------- forma
 # ex hacia lo fino de la cara, ey a lo largo: así una pieza fina se representa
 # con una elipse fina y larga en vez de un disco que la desborda
-el = elong[cara]
+el = elong[cara].astype(np.float32)
 ex = np.cross(nor, el)
 ex /= np.maximum(1e-9, np.linalg.norm(ex, axis=1))[:, None]
 ey = np.cross(nor, ex)
@@ -275,24 +287,24 @@ ey /= np.maximum(1e-9, np.linalg.norm(ey, axis=1))[:, None]
 
 # ninguna gaussiana más ancha que la altura de su cara ni más larga que su
 # lado mayor: sin el segundo tope, el farol de 2 m salía como una raya de 4,6
-fino = np.minimum(pas, np.maximum(0.045, alt[cara]*1.15))
+fino = np.minimum(pas, np.maximum(0.045, alt[cara].astype(np.float32)*1.15))
 largo = np.minimum(np.minimum(pas*pas/np.maximum(0.045, fino), fino*3.2),
-                   LE[fila, imax][cara]*0.55)
+                   LE[fila, imax][cara].astype(np.float32)*0.55)
 largo = np.maximum(largo, fino)
 esf = FO[cara]
-corto = 0.62*fino * rng.uniform(0.88, 1.14, n)
-lrg   = 0.62*largo * rng.uniform(0.88, 1.14, n)
+corto = 0.62*fino * rng.uniform(0.88, 1.14, n).astype(np.float32)
+lrg   = 0.62*largo * rng.uniform(0.88, 1.14, n).astype(np.float32)
 grueso = np.where(esf, 0.42*pas, np.maximum(0.014, 0.085*pas))
-esc = np.stack([corto, lrg, grueso], 1)
-alfa = np.where(esf, 0.72, 0.95)
+esc = np.stack([corto, lrg, grueso], 1).astype(np.float32)
+alfa = np.where(esf, 0.72, 0.95).astype(np.float32)
 
 # a ejes del visor: Y arriba, y Z invertido respecto de Blender
 def aY(v): return np.stack([v[:,0], v[:,2], -v[:,1]], 1)
 posY, exY, eyY, norY = aY(pos), aY(ex), aY(ey), aY(nor)
 
-Mrot = np.stack([exY, eyY, norY], axis=2)
+Mrot = np.stack([exY, eyY, norY], axis=2).astype(np.float32)
 tr = Mrot[:,0,0] + Mrot[:,1,1] + Mrot[:,2,2]
-q = np.empty((n,4))
+q = np.empty((n,4), np.float32)     # se cuantiza a un byte, no hace falta más
 k0 = tr > 0
 S = np.sqrt(np.maximum(1e-12, tr[k0]+1.0))*2
 q[k0,0] = 0.25*S
@@ -301,7 +313,7 @@ q[k0,2] = (Mrot[k0,0,2]-Mrot[k0,2,0])/S
 q[k0,3] = (Mrot[k0,1,0]-Mrot[k0,0,1])/S
 resto = ~k0
 if resto.any():
-    Mr = Mrot[resto]; nr = Mr.shape[0]; qq = np.empty((nr,4))
+    Mr = Mrot[resto]; nr = Mr.shape[0]; qq = np.empty((nr,4), np.float32)
     d0,d1,d2 = Mr[:,0,0], Mr[:,1,1], Mr[:,2,2]
     c1 = (d0>d1)&(d0>d2); c2 = (~c1)&(d1>d2); c3 = ~(c1|c2)
     for sel,(i,j,kk) in ((c1,(0,1,2)),(c2,(1,2,0)),(c3,(2,0,1))):

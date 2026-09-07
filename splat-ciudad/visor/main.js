@@ -1,7 +1,6 @@
 import { empaquetar, VERT, FRAG, VERT_CIELO, FRAG_CIELO, WORKER, CUANTOS } from "./splat.js";
 
 const $ = (s) => document.querySelector(s);
-const ARCHIVO = "./ciudad.splat";
 const TOMAS = 184;      // cuántas fotos de Cycles le dieron color
 const coma = (v, d = 2) => v.toFixed(d).replace(".", ",");
 
@@ -174,9 +173,20 @@ function matProy(){
   return [ f/a,0,0,0, 0,f,0,0, 0,0,(far+near)/(near-far),-1, 0,0,2*far*near/(near-far),0 ];
 }
 
-/* --------------------------------------------------------------- carga */
-$("#riel i").style.width = "6%";
-fetch(ARCHIVO).then(async (r) => {
+/* --------------------------------------------------- de dónde sale la nube
+   Tres orígenes, y el mismo visor sirve para los tres: el .splat al lado del
+   html, el .splat metido adentro del html en base64, o uno que se arrastre a
+   la ventana. El tercero es el que importa cuando la nube pesa 234 MB y no hay
+   forma de meterla en una página. */
+const ARCHIVO = "./ciudad.splat";
+
+function progreso(v){
+  $("#riel i").style.width = (v*100).toFixed(0) + "%";
+  $("#pct").textContent = Math.round(v*100) + " %";
+}
+
+async function delServidor(){
+  const r = await fetch(ARCHIVO);
   if (!r.ok) throw new Error("HTTP " + r.status);
   const total = +r.headers.get("content-length") || 0;
   const trozos = []; let leido = 0;
@@ -185,38 +195,100 @@ fetch(ARCHIVO).then(async (r) => {
     const { done, value } = await lector.read();
     if (done) break;
     trozos.push(value); leido += value.length;
-    if (total) {
-      const v = 0.06 + 0.84 * leido / total;
-      $("#riel i").style.width = (v*100).toFixed(0) + "%";
-      $("#pct").textContent = Math.round(v*100) + " %";
-    }
+    if (total) progreso(0.06 + 0.84 * leido / total);
   }
   const buf = new Uint8Array(leido); let o = 0;
   for (const t of trozos) { buf.set(t, o); o += t.length; }
   return buf.buffer;
-}).then(arrancar).catch((e) => morir("No se pudo leer el archivo de gaussianas: " + (e.message || e)));
+}
+
+/* Adentro de la página va en base64 y con gzip, porque base64 infla un tercio.
+   Lo descomprime DecompressionStream, que no es una API de red y por eso anda
+   igual en file:// y en el sandbox de un artifact. */
+async function deLaPagina(){
+  const b64 = window.__SPLAT;
+  const c = atob(b64), u = new Uint8Array(c.length);
+  for (let i = 0; i < c.length; i++) u[i] = c.charCodeAt(i);
+  window.__SPLAT = null;
+  progreso(0.55);
+  if (!window.__GZ) return u.buffer;
+  if (!self.DecompressionStream) throw new Error("este navegador no trae DecompressionStream");
+  return await new Response(new Blob([u]).stream()
+             .pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+}
+
+function pedirArchivo(aviso){
+  $("#riel").hidden = $("#pct").hidden = true;
+  $("#suelta").hidden = false;
+  $("#avisoSuelta").textContent = aviso || "";
+  $("#carga").classList.remove("ido");
+}
+
+async function abrir(fuente, nombre){
+  try {
+    $("#suelta").hidden = true;
+    $("#riel").hidden = $("#pct").hidden = false;
+    $("#carga").classList.remove("ido");
+    progreso(0.06);
+    arrancar(await fuente, nombre);
+  } catch (e) {
+    morir("No se pudieron leer las gaussianas: " + (e.message || e));
+  }
+}
+
+for (const ev of ["dragover", "dragenter"]) addEventListener(ev, (e) => e.preventDefault());
+addEventListener("drop", (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) abrir(f.arrayBuffer(), f.name);
+});
+$("#elegir").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (f) abrir(f.arrayBuffer(), f.name);
+});
+
+if (window.__SPLAT) abrir(deLaPagina(), ARCHIVO);
+else if (window.__SIN_ARCHIVO) pedirArchivo();
+else delServidor().then((b) => arrancar(b, ARCHIVO))
+      .catch(() => pedirArchivo("No se encontró ciudad.splat al lado de esta página."));
 
 let N = 0, orden = null, worker = null, msOrden = 0, pesoArchivo = 0;
+let tex = null, lazoVivo = false;
 
-function arrancar(buf){
+function arrancar(buf, nombre){
+  // se puede llamar más de una vez: al soltar otro .splat hay que soltar el
+  // worker y la textura de la nube anterior, que a siete millones son 234 MB
+  if (worker) { worker.terminate(); worker = null; }
+  if (tex) { gl.deleteTexture(tex); tex = null; }
+  orden = null; esperando = false; ultimaVista = null;
+
   pesoArchivo = buf.byteLength;
   const p = empaquetar(buf);
   N = p.n;
 
-  const tex = gl.createTexture();
+  tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, p.ancho, p.alto, 0,
                 gl.RGBA_INTEGER, gl.UNSIGNED_INT, p.datos);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.uniform1i(uTex, 0);
+  // a siete millones de gaussianas la textura son 234 MB de video: en una
+  // placa integrada puede no haber, y conviene decirlo en vez de dibujar negro
+  const err = gl.getError();
+  if (err === gl.OUT_OF_MEMORY) {
+    morir("No entró en memoria de video: son " + N.toLocaleString("es-AR") +
+          " gaussianas, " + Math.round(p.ancho*p.alto*16/1048576) +
+          " MB de textura. Probá una nube más chica.");
+    return;
+  }
 
   ajustarEncuadres(cajaConstruida(buf, N) || p.caja);
   ir(0, false);
   girando = true; $("#btGira").setAttribute("aria-pressed", "true");
 
   worker = new Worker(URL.createObjectURL(new Blob([WORKER], { type:"text/javascript" })));
-  worker.postMessage({ datos: p.datos.buffer.slice(0), n: N });
+  worker.postMessage({ pos: p.pos.buffer, n: N }, [p.pos.buffer]);
   worker.onmessage = (e) => {
     orden = e.data.orden;
     gl.bindBuffer(gl.ARRAY_BUFFER, vboIdx);
@@ -236,12 +308,14 @@ function arrancar(buf){
   }
   lados.sort();
   $("#dSep").textContent = coma(lados[m >> 1], 2) + " m";
-  $("#dTomas").textContent = TOMAS;
+  $("#dTomas").textContent = nombre === ARCHIVO ? TOMAS : "—";
+  $("#panel header p").textContent = nombre === ARCHIVO
+    ? "Un distrito en gaussianas 3D · color trazado con Cycles" : nombre;
   $("#panel").hidden = $("#datos").hidden = false;
   $("#carga").classList.add("ido");
   setTimeout(() => { $("#pista").style.opacity = 0; }, 6500);
   redimensionar();
-  lazo();
+  if (!lazoVivo) { lazoVivo = true; lazo(); }
 }
 
 /* --------------------------------------------------------------- mandos */

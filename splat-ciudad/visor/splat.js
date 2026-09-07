@@ -27,10 +27,14 @@ export function empaquetar(buf){
 
   const centro = [0, 0, 0];
   const caja = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  // el worker sólo necesita las posiciones: mandarle los 32 bytes de cada
+  // gaussiana son 234 MB a siete millones, y la clave de orden usa 12
+  const pos = new Float32Array(3 * n);
 
   for (let i = 0; i < n; i++) {
     const x = f[8*i+0], y = f[8*i+1], z = f[8*i+2];
     datosF[8*i+0] = x; datosF[8*i+1] = y; datosF[8*i+2] = z;
+    pos[3*i] = x; pos[3*i+1] = y; pos[3*i+2] = z;
     centro[0] += x; centro[1] += y; centro[2] += z;
     if (x < caja[0]) caja[0] = x; if (y < caja[1]) caja[1] = y; if (z < caja[2]) caja[2] = z;
     if (x > caja[3]) caja[3] = x; if (y > caja[4]) caja[4] = y; if (z > caja[5]) caja[5] = z;
@@ -68,7 +72,7 @@ export function empaquetar(buf){
     datos[8*i+5] = medio2(4*s[2], 4*s[3]);
     datos[8*i+6] = medio2(4*s[4], 4*s[5]);
   }
-  return { n, datos, ancho, alto,
+  return { n, datos, pos, ancho, alto,
            centro: centro.map((v) => v / n), caja };
 }
 
@@ -210,29 +214,34 @@ void main(){
 
 /* --------------------------------------------------- orden por conteo */
 export const WORKER = `
-let datos = null, n = 0, ultimo = null;
+let pos = null, n = 0, prof = null;
+const cubos = new Uint32Array(65537);
 onmessage = (e) => {
-  if (e.data.datos) { datos = new Float32Array(e.data.datos); n = e.data.n; return; }
-  if (!datos) return;
+  if (e.data.pos) {
+    pos = new Float32Array(e.data.pos); n = e.data.n;
+    prof = new Int32Array(n);           // se reusa: a siete millones son 28 MB
+    return;
+  }
+  if (!pos) return;
   const v = e.data.vista;               // fila 3 de la matriz de vista
   /* La clave es +z·p, SIN negar. z apunta del blanco al ojo, así que z·p baja
      cuando la gaussiana se aleja: en orden ascendente salen primero las
      lejanas, que es lo que hace falta para componer alfa "sobre". Con el signo
      al revés se dibuja de cerca a lejos y el piso del fondo termina pintado
      encima de la ciudad. */
-  const prof = new Int32Array(n);
-  let lo = Infinity, hi = -Infinity;
+  let lo = 2147483647, hi = -2147483648;
   for (let i = 0; i < n; i++) {
-    const d = v[0]*datos[8*i] + v[1]*datos[8*i+1] + v[2]*datos[8*i+2];
-    prof[i] = d * 4096 | 0;
-    if (prof[i] < lo) lo = prof[i];
-    if (prof[i] > hi) hi = prof[i];
+    const d = (v[0]*pos[3*i] + v[1]*pos[3*i+1] + v[2]*pos[3*i+2]) * 4096 | 0;
+    prof[i] = d;
+    if (d < lo) lo = d;
+    if (d > hi) hi = d;
   }
-  const cubos = new Uint32Array(65536 + 1);
+  cubos.fill(0);
   const k = hi === lo ? 0 : 65535 / (hi - lo);
   for (let i = 0; i < n; i++) {
-    prof[i] = ((prof[i] - lo) * k) | 0;
-    cubos[prof[i]]++;
+    const b = ((prof[i] - lo) * k) | 0;
+    prof[i] = b;
+    cubos[b]++;
   }
   // acumulado: así cada gaussiana sabe su casillero final
   for (let i = 1; i < 65536; i++) cubos[i] += cubos[i-1];

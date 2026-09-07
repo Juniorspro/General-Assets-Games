@@ -7,7 +7,7 @@
    La ruta de playwright es absoluta a propósito: acá está instalado global.
    Si lo tenés en el proyecto, alcanza con import { chromium } from "playwright". */
 import { chromium } from "/opt/node22/lib/node_modules/playwright/index.mjs";
-const [url, salida, ms = "9000", vista = "", an = "960", al = "600", cam = ""] = process.argv.slice(2);
+const [url, salida, ms = "9000", vista = "", an = "960", al = "600", cam = "", suelto = ""] = process.argv.slice(2);
 // cam es un JSON con campos de la cámara: {"dist":430,"pit":0.4,"blanco":[0,45,0]}
 const nav = await chromium.launch({
   args: ["--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
@@ -18,6 +18,8 @@ const registro = [];
 pag.on("console", (m) => registro.push(m.type() + ": " + m.text()));
 pag.on("pageerror", (e) => registro.push("pageerror: " + e.message));
 await pag.goto(url, { waitUntil: "load", timeout: 120000 });
+// un .splat suelto: es como se prueba el visor vacío, el que pide el archivo
+if (suelto) { await pag.setInputFiles("#elegir", suelto); }
 await pag.waitForTimeout(+ms);
 // SwiftShader dibuja a un par de cuadros por segundo: sin frenar el giro, la
 // captura nunca ve la página quieta y se queda esperando
