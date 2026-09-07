@@ -625,11 +625,22 @@ function enganchaPaginas(){
    El gesto se registra en el escritorio y en el dock; el
    umbral de 55 px es lo que lo separa de un toque tembloroso, y el de 18 px en
    horizontal es lo que impide que un arrastre entre páginas lo dispare. */
+/* la única forma de que la medición pruebe algo es correr el MISMO binario con
+   la guarda dada vuelta: con dos versiones distintas se estarían comparando dos
+   programas. Lo usa el banco y nadie más. */
+let SUBIR_SIN_GUARDA = false;
 function enganchaSubir(el){
   let y0 = 0, x0 = 0, act = false;
   el.addEventListener('pointerdown', e => { y0 = e.clientY; x0 = e.clientX; act = true; });
   el.addEventListener('pointermove', e => {
-    if (!act || CAJON) return;
+    /* ── LLEVANDO UNA APP, SUBIR NO ABRE EL CAJÓN ──
+       Reporte: «al mover hacia arriba en la pantalla de inicio una app no se
+       debe abrir el cajón». Es el mismo dedo y el mismo movimiento hacia
+       arriba, así que los dos gestos se cumplían a la vez: se levantaba un
+       icono, se lo llevaba a la fila de arriba, y a los 55 px el cajón se abría
+       encima. Mientras haya algo en la mano, este gesto no existe — lo que el
+       dedo está haciendo ya se decidió. */
+    if (!act || CAJON || (ARR && !SUBIR_SIN_GUARDA)) return;
     if (Math.abs(e.clientX - x0) > 18){ act = false; return; }
     if (y0 - e.clientY > 55){ act = false; verCajon(true); vibra(10); }
   });

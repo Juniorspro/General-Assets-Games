@@ -838,15 +838,61 @@ function glifoSvg(g){
     const e = glifoPieza(ns, cut ? [String(pz[0]).slice(1)].concat(pz.slice(1)) : pz, cut);
     if (e) mk.appendChild(e);
   }
-  defs.appendChild(mk); s.appendChild(defs);
-  const r = document.createElementNS(ns, 'rect');
-  r.setAttribute('x', '-4'); r.setAttribute('y', '-4');
-  r.setAttribute('width', '108'); r.setAttribute('height', '108');
-  r.setAttribute('fill', '#fff');
-  r.setAttribute('mask', 'url(#' + id + ')');
-  s.appendChild(r);
+  defs.appendChild(mk);
+
+  /* ── EL GLIFO TIENE VOLUMEN, Y ESO SON TRES RECTÁNGULOS Y NINGÚN FILTRO ──
+     Reporte: «los íconos salen to feos». Y era cierto: una silueta blanca lisa
+     pegada sobre una foto se lee a calcomanía, no a icono. Lo que le falta a
+     esa silueta es exactamente lo que tiene un icono Aero de verdad —el que
+     Rezona devuelve cuando se le pide uno—: un canto de arriba encendido, un
+     cuerpo que se apaga hacia abajo, y una sombra dura pegada abajo que lo
+     despega del fondo.
+     Las tres cosas salen de dibujar la MISMA máscara tres veces corrida, que a
+     46 px es lo único que se lee. Con `feSpecularLighting` saldría más exacto y
+     costaría un filtro de SVG por icono, o sea treinta filtros en el cajón —
+     este launcher lleva dos vueltas sacando pasadas de filtro, no es el momento
+     de meter treinta.
+     El corrimiento va en un `<g>` y no en el rectángulo: el rectángulo mide
+     108×108 y cubre todo, así que moverlo no cambia un píxel; lo que hay que
+     mover es el resultado ya enmascarado. */
+  const gr = document.createElementNS(ns, 'linearGradient');
+  const gid = 'gg' + GLF_N;
+  gr.setAttribute('id', gid);
+  gr.setAttribute('x1', '0'); gr.setAttribute('y1', '0');
+  gr.setAttribute('x2', '0'); gr.setAttribute('y2', '1');
+  for (const [o, c] of [['0', '#ffffff'], ['0.55', '#f2fbff'], ['1', '#cfe6f2']]){
+    const st = document.createElementNS(ns, 'stop');
+    st.setAttribute('offset', o); st.setAttribute('stop-color', c);
+    gr.appendChild(st);
+  }
+  defs.appendChild(gr);
+  s.appendChild(defs);
+
+  const capa = (fill, dy, op) => {
+    const g2 = document.createElementNS(ns, 'g');
+    if (dy) g2.setAttribute('transform', 'translate(0,' + dy + ')');
+    if (op != null) g2.setAttribute('opacity', op);
+    const r = document.createElementNS(ns, 'rect');
+    r.setAttribute('x', '-4'); r.setAttribute('y', '-4');
+    r.setAttribute('width', '108'); r.setAttribute('height', '108');
+    r.setAttribute('fill', fill);
+    r.setAttribute('mask', 'url(#' + id + ')');
+    g2.appendChild(r); s.appendChild(g2);
+    return g2;
+  };
+  if (GLF_RELIEVE){
+    capa('#04283c', 2.6, 0.5);      /* la sombra dura, asomando abajo */
+    capa('#ffffff', -1.4, 1);       /* el canto de arriba, asomando arriba */
+    capa('url(#' + gid + ')', 0, 1);/* el cuerpo */
+  } else {
+    capa('#fff', 0, 1);
+  }
   return s;
 }
+
+/* sólo para poder fotografiar el antes y el después con el MISMO binario: con
+   dos versiones distintas se estarían comparando dos programas */
+let GLF_RELIEVE = true;
 
 /* ── LA BALDOSA AERO DE UNA APP CONOCIDA ──
    Devuelve true si la pintó. El fondo va como `background-image` del propio

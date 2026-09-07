@@ -559,6 +559,103 @@ window.__A = {
     return { quien: quien, antes: antes, durante: dur, vidrios: v.n, px: v.px,
              cuadrosDeMas: cuadros, pxDeMas: cuadros * v.px };
   },
+  /* ── LA CUADRÍCULA ──
+     Devuelve las celdas que se dibujaron y, al lado, dónde dice `arrCelda` que
+     caería un punto: las dos tienen que coincidir o la cuadrícula miente. */
+  cuadricula(){
+    const d = $('#reja');
+    if (!d) return { hay: false };
+    const h = $('#hoja').getBoundingClientRect();
+    const ce = [...d.children].map(x => ({
+      i: +x.dataset.i,
+      caja: [Math.round(x.offsetLeft + h.left), Math.round(x.offsetTop + h.top),
+             Math.round(x.offsetWidth), Math.round(x.offsetHeight)],
+      aqui: x.classList.contains('aqui') }));
+    return { hay: true, on: d.classList.contains('on'), n: ce.length,
+             cols: COLS, filas: FILAS, celdas: ce,
+             marcada: (ce.find(c => c.aqui) || {}).i };
+  },
+  /* la prueba de que la cuadrícula NO miente: por cada casilla dibujada se
+     pregunta en su centro dónde caería el icono. Tienen que dar el mismo índice
+     las veinte. */
+  cuadriculaHonesta(){
+    const r = this.cuadricula();
+    if (!r.hay) return { hay: false };
+    const mal = [];
+    for (const c of r.celdas){
+      const q = arrCelda(c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2);
+      if (!q || q.i !== c.i) mal.push([c.i, q ? q.i : null]);
+    }
+    return { n: r.celdas.length, mal: mal, ok: mal.length === 0 };
+  },
+  /* levanta de verdad por el camino del dedo: `pointerdown`, el plazo, y el
+     movimiento. Sin el plazo no hay arrastre y la cuadrícula no se arma. */
+  async levanta(sel, x, y){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const px = x == null ? r.left + r.width/2 : x;
+    const py = y == null ? r.top + r.height/2 : y;
+    n.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: px, clientY: py, pointerId: 1 }));
+    await new Promise(r2 => setTimeout(r2, ARR_LARGO + 90));
+    return { llevando: !!ARR, reja: this.cuadricula().n };
+  },
+  /* el movimiento se despacha sobre lo que hay DEBAJO del dedo y no sobre la
+     ventana: un evento disparado en `window` no baja a sus descendientes, así
+     que los gestos que escuchan en `#hoja` o en `#dock` —el de subir, por
+     ejemplo— no se enterarían nunca y la prueba aprobaría siempre. */
+  arrastraA(x, y){
+    const t = document.elementFromPoint(x, y) || $('#hoja') || document.body;
+    t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+    return { llevando: !!ARR, marcada: this.cuadricula().marcada, cajon: CAJON };
+  },
+  subirSinGuarda(v){ SUBIR_SIN_GUARDA = !!v; return SUBIR_SIN_GUARDA; },
+  sueltaEn(x, y){
+    const t = document.elementFromPoint(x, y) || document.body;
+    t.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+    return { llevando: !!ARR, reja: this.cuadricula().hay,
+             inicio: INICIO.map(i => esCarpeta(i) ? '[' + i.c.join('+') + ']' : i) };
+  },
+  /* ── CUÁNTO CUESTA EL PRIMER TOQUE ──
+     Es el número del reporte: «al cambiar de fondo se laguea el click del
+     agua». Se mide el manejador entero, que es lo que el dedo espera. */
+  aguaCosto(){
+    const t = performance.now();
+    aguaToca(206, 520, 1);
+    const ms = performance.now() - t;
+    aguaCorta();
+    return { ms: +ms.toFixed(2), tibia: AGUA_TIBIA, listo: AGUA.listo };
+  },
+  aguaFria(){ AGUA_TIBIA = false; AGUA.listo = false; AGUA.el = null; return true; },
+  aguaTibia(){ return AGUA_TIBIA; },
+  aguaVigilando(){ return !!AGUA_OBS; },
+  /* el control negativo del tirón: el mismo binario con el observador apagado.
+     Con él, `body.agua` se va en la MICROTAREA que sigue al cambio de clase, o
+     sea antes de que el navegador calcule estilo; sin él hay que esperar al
+     rAF, y para entonces la hoja ya empezó a animarse. */
+  aguaVigilar(v){ aguaVigila(!!v); return !!AGUA_OBS; },
+  /* ── EL TIRÓN AL ABRIR EL CAJÓN, MEDIDO ──
+     `body.agua` apaga los once `backdrop-filter` del launcher mientras dura la
+     ráfaga. Lo que se mide es CUÁNDO vuelven: en la microtarea que sigue al
+     cambio de clase (o sea antes de que el navegador calcule estilo, o sea en
+     el mismo cuadro que la hoja empieza a abrirse) o recién en el rAF
+     siguiente, que es en el medio de la animación. */
+  async aguaTiron(vigilar){
+    aguaCorta();
+    aguaToca(206, 520, 1);
+    aguaVigila(!!vigilar);
+    const on0 = AGUA.on;
+    verCajon(true);
+    const antes = document.body.classList.contains('agua');
+    await Promise.resolve(); await Promise.resolve();
+    const micro = document.body.classList.contains('agua');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const raf = document.body.classList.contains('agua');
+    verCajon(false); aguaCorta(); aguaVigila(false);
+    return { vigilando: !!vigilar, aguaEncendida: on0,
+             enElCambio: antes, trasLaMicrotarea: micro, trasElRaf: raf,
+             filtrosVuelvenEn: micro ? 'el rAF (en medio de la animación)'
+                                     : 'la microtarea (mismo cuadro)' };
+  },
   aguaApaga(){
     AGUA.ondas = []; AGUA.on = false;
     if (AGUA.el) AGUA.el.classList.remove('on');
@@ -854,6 +951,7 @@ window.__A = {
     const g = glifoDe(pkg, nombre);
     return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
   },
+  relieve(v){ GLF_RELIEVE = v !== false; ICO_CACHE_LIMPIA(); rejaRepinta(); return GLF_RELIEVE; },
   glifos(){
     const fam = {}; let cut = 0;
     for (const f in ICO_FAM) fam[f] = ICO_FAM[f].length;

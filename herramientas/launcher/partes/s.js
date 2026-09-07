@@ -88,6 +88,7 @@ function arrLevanta(orig, desde, i, x, y){
           g: arrFantasma(el, x, y) };
   el.classList.add('llevada');
   document.body.classList.add('arrastrando');
+  rejaArma();
   /* ── DEL CAJÓN SE SALE SOLO, Y CON TRANSICIÓN ──
      Pedido textual: «al mantener en el cajón de aplicaciones se mueva
      automáticamente a la pantalla principal con transición». El cajón se cierra
@@ -104,22 +105,104 @@ function arrLevanta(orig, desde, i, x, y){
    dura el arrastre, así que preguntarle su rectángulo por cuadro es vaciar la
    maquetación para recibir siempre lo mismo. */
 let ARR_REJA = null;
+/* ── LA CELDA SE MIDE, NO SE DEDUCE DE LAS CONSTANTES ──
+   Estaba escrita como `r.width/COLS` y `ALTO_AP`, y las dos cosas están mal por
+   la misma razón: `r` es el rectángulo de la página CON su relleno (10 px
+   arriba y 8 a los costados) y las filas llevan además 6 px de hueco, así que
+   la fila de verdad mide `ALTO_AP + 6` y no `ALTO_AP`. Con cuatro filas eso son
+   veinticuatro píxeles de error acumulado: soltar en la última fila caía en la
+   anteponúltima.
+   No se notaba porque no había nada dibujado que dijera dónde iba a caer. Con
+   la cuadrícula puesta se ve de una — y ése es justamente el argumento para que
+   la cuadrícula y el destino salgan de ESTA función y de ninguna otra: si
+   fueran dos cuentas, la cuadrícula prometería un sitio y el icono caería en
+   otro, que es peor que no dibujar nada. */
 function arrRejaMide(){
   const pg = $$('#tira .pag')[PAG];
-  ARR_REJA = pg ? { r: pg.getBoundingClientRect(), pg: pg } : null;
+  if (!pg){ ARR_REJA = null; return null; }
+  const r = pg.getBoundingClientRect();
+  const cs = getComputedStyle(pg);
+  const pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const gy = parseFloat(cs.rowGap) || 0;
+  /* y si hay dos filas a la vista, el paso real lo dicen ellas: el alto de una
+     `.ap` sale de su contenido —icono, hueco y nombre— y no de una constante */
+  let ch = ALTO_AP + gy;
+  const hijos = pg.children;
+  if (hijos.length > COLS){
+    const d = hijos[COLS].offsetTop - hijos[0].offsetTop;
+    if (d > 8) ch = d;
+  } else if (hijos.length){
+    const h = hijos[0].offsetHeight;
+    if (h > 8) ch = h + gy;
+  }
+  ARR_REJA = { pg: pg, x0: r.left + pl, y0: r.top + pt,
+               cw: (r.width - pl - pr)/COLS, ch: ch,
+               ancho: r.width - pl - pr, alto: ch*FILAS,
+               r: r };
   return ARR_REJA;
 }
 
 function arrCelda(x, y){
   const q = ARR_REJA || arrRejaMide();
   if (!q) return null;
-  const pg = q.pg, r = q.r;
+  const r = q.r;
   if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
-  const cw = r.width/COLS, ch = ALTO_AP;
-  const c = cl(Math.floor((x - r.left)/cw), 0, COLS - 1);
-  const f = cl(Math.floor((y - r.top)/ch), 0, FILAS - 1);
+  const c = cl(Math.floor((x - q.x0)/q.cw), 0, COLS - 1);
+  const f = cl(Math.floor((y - q.y0)/q.ch), 0, FILAS - 1);
   return { col: c, fila: f, i: PAG*COLS*FILAS + f*COLS + c,
-           cx: r.left + (c + 0.5)*cw, cy: r.top + (f + 0.5)*ch, cw: cw, ch: ch };
+           cx: q.x0 + (c + 0.5)*q.cw, cy: q.y0 + (f + 0.5)*q.ch,
+           cw: q.cw, ch: q.ch,
+           x: q.x0 + c*q.cw, y: q.y0 + f*q.ch };
+}
+
+/* ══════════ LA CUADRÍCULA ══════════
+   Pedido: «cuando muevo una app deben aparecer las cuadrículas para ubicarlas».
+   Una casilla por celda, armadas UNA vez al levantar y borradas al soltar —no
+   por cuadro—, con las medidas que devuelve `arrRejaMide`. La que queda debajo
+   del dedo se enciende: sin eso la cuadrícula dice dónde ESTÁN las celdas pero
+   no en cuál va a caer, que es la mitad de la pregunta. */
+let REJA_EL = null, REJA_AQUI = -1;
+
+function rejaArma(){
+  rejaBorra();
+  const q = ARR_REJA || arrRejaMide();
+  const hoja = $('#hoja');
+  if (!q || !hoja) return;
+  const hr = hoja.getBoundingClientRect();
+  const d = document.createElement('div');
+  d.id = 'reja';
+  for (let f = 0; f < FILAS; f++){
+    for (let c = 0; c < COLS; c++){
+      const i = document.createElement('i');
+      /* posicionadas contra `#hoja`, que es el padre con `position:relative`;
+         `arrCelda` devuelve coordenadas de ventana, así que hay que restarle */
+      i.style.left   = (q.x0 + c*q.cw - hr.left + 3) + 'px';
+      i.style.top    = (q.y0 + f*q.ch - hr.top  + 2) + 'px';
+      i.style.width  = (q.cw - 6) + 'px';
+      i.style.height = (q.ch - 4) + 'px';
+      i.dataset.i = PAG*COLS*FILAS + f*COLS + c;
+      d.appendChild(i);
+    }
+  }
+  hoja.appendChild(d);
+  REJA_EL = d; REJA_AQUI = -1;
+  /* un cuadro después entra la clase que la funde: puesta en el mismo, la
+     transición no tiene de dónde partir y la cuadrícula aparece de golpe */
+  requestAnimationFrame(() => { if (REJA_EL) REJA_EL.classList.add('on'); });
+}
+
+function rejaMarca(i){
+  if (!REJA_EL || i === REJA_AQUI) return;
+  REJA_AQUI = i;
+  const k = i - PAG*COLS*FILAS;
+  for (let n = 0; n < REJA_EL.children.length; n++)
+    REJA_EL.children[n].classList.toggle('aqui', n === k);
+}
+
+function rejaBorra(){
+  if (REJA_EL){ REJA_EL.remove(); REJA_EL = null; }
+  REJA_AQUI = -1;
 }
 
 /* si el dedo está lo bastante encima de un icono que YA está ahí, soltarlo hace
@@ -151,7 +234,8 @@ function arrEnDock(x, y){
 function arrSuelta(x, y){
   if (!ARR) return;
   const a = ARR;
-  ARR = null; ARR_REJA = null;
+  ARR = null;
+  rejaBorra(); ARR_REJA = null;
   document.body.classList.remove('arrastrando');
   if (a.g) a.g.remove();
   a.el.classList.remove('llevada');
@@ -341,6 +425,8 @@ function arrInit(){
    sorpresa y deshacerla cuesta dos gestos */
 function arrPinta(x, y){
   $$('.ap.destino').forEach(e => e.classList.remove('destino'));
+  const c = arrCelda(x, y);
+  rejaMarca(c ? c.i : -1);
   const j = arrEncima(x, y, ARR && ARR.desde === 'inicio' ? ARR.i : null);
   if (j == null) return;
   const pg = $$('#tira .pag')[PAG];
@@ -360,6 +446,7 @@ function arrBorde(x){
   ARR_PAG = ahora;
   ponPagina(PAG + (der ? 1 : -1));
   arrRejaMide();                     /* cambió la página: la reja es otra */
+  rejaArma();
 }
 
 /* ══════════════════════ LA CARPETA ABIERTA ══════════════════════

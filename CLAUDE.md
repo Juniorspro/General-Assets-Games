@@ -281,6 +281,138 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimoquinta vuelta (2026-09-07): **AERO** — la cuadrícula, el primer toque del agua, y los iconos pasan a vidrio generado
+
+Cinco cosas en un mensaje: *"cuando muevo una app deben aparecer las cuadrículas para ubicarlas ·
+también al mover hacia arriba en la pantalla de inicio una app no se debe abrir el cajón · al cambiar
+de fondo de pantalla se laguea el click del agua · cuando abro el cajón da tirones por el coso del
+agua · también quería que los íconos los hagas con Rezona no con canva que sale to feo"*.
+
+#### EL PRIMER TOQUE DEL AGUA PAGABA 695 ms ADENTRO DEL MANEJADOR DEL DEDO
+
+Y son dos costos, los dos escondidos en el mismo sitio:
+
+1. **`aguaArma()` COMPILA el shader la primera vez.** Eso no es un matiz: en el banco son 395 ms.
+2. **`img.onload` no quiere decir «decodificada».** El navegador decodifica **perezosamente, al
+   dibujar**, así que el primer `drawImage` de la foto nueva pagaba la decodificación entera — y por
+   eso el tirón aparecía **justo después de cambiar de fondo** y no antes, que es exactamente lo que
+   el usuario dijo.
+
+Las dos se pagan en el ocio: `decode()` fuerza la decodificación fuera del camino del dedo y una
+pasada de horneado deja el shader compilado y la textura subida, con el lienzo todavía en
+`display:none` — o sea que precalentar no dibuja un solo píxel.
+
+| | ms adentro del manejador del dedo |
+|---|---|
+| ya precalentada | **2,6** |
+| fría, shader sin compilar | 395,7 |
+| **fondo nuevo, sin precalentar** | **695,4** |
+| **fondo nuevo, precalentado** | **2,4** |
+
+**Doscientas noventa veces menos**, y el número más alto es exactamente el caso que se reportó.
+
+#### EL TIRÓN DEL CAJÓN NO ERA DEL AGUA: ERAN ONCE DESENFOQUES REAPARECIENDO A DESTIEMPO
+
+`body.agua` apaga los once `backdrop-filter` del launcher mientras dura la ráfaga. La vuelta anterior
+puso el corte adentro de `aguaPaso`, y ahí llegaba **un cuadro tarde**: la hoja arrancaba su
+transición y recién al cuadro siguiente se sacaba `body.agua`, o sea que los once filtros se volvían
+a armar **en el medio de la animación de apertura**. Eso es el tirón, y no lo produce el agua sino el
+compositor rehaciendo once desenfoques mientras algo se desliza.
+
+Un **`MutationObserver`** corre como **microtarea** —después del código que agregó la clase y **antes**
+de que el navegador calcule estilo y pinte— así que el corte y la apertura caen en el mismo cuadro.
+Medido sobre el mismo binario con el observador apagado y prendido:
+
+| | tras la microtarea | los filtros vuelven en |
+|---|---|---|
+| sin observador | `body.agua` **todavía puesto** | el rAF (en medio de la animación) |
+| **con observador** | **ya sacado** | **la microtarea (mismo cuadro)** |
+
+**Y SIGUE HABIENDO UN SOLO SITIO QUE SABE QUÉ TAPA.** El observador lee el mismo `AGUA_TAPAN` y se
+prende y se apaga **con la ráfaga**, así que fuera de ese segundo y medio no cuesta nada y una hoja
+nueva queda cubierta sin tocar una línea.
+
+#### LA CUADRÍCULA, Y EL DEFECTO QUE DESTAPÓ
+
+`arrCelda` calculaba la celda como `r.width/COLS` y `ALTO_AP`, y las dos cosas estaban mal por la
+misma razón: `r` es el rectángulo de la página **con su relleno** (10 px arriba, 8 a los costados) y
+las filas llevan además 6 px de hueco, así que la fila de verdad mide `ALTO_AP + 6`. Con cuatro filas
+eso son **veinticuatro píxeles de error acumulado**: soltar en la última fila caía en la anterior.
+
+No se notaba porque **no había nada dibujado que dijera dónde iba a caer**. Y ése es justamente el
+argumento para que la cuadrícula y el destino salgan de la misma función: si fueran dos cuentas, la
+cuadrícula prometería un sitio y el icono caería en otro, que es peor que no dibujar nada. Ahora el
+paso de fila lo dicen **las dos primeras filas de iconos** (`offsetTop`), o sea el contenido, no una
+constante.
+
+La prueba es `cuadriculaHonesta()`: por cada casilla dibujada pregunta en su centro dónde caería el
+icono. **20 de 20 coinciden.** Veinte casillas armadas una vez al levantar y borradas al soltar —no
+por cuadro— y la que está bajo el dedo se enciende: con las veinte iguales, la cuadrícula dice dónde
+están las celdas pero no en cuál va a caer, que es la mitad de la pregunta.
+
+#### SUBIR CON UNA APP EN LA MANO YA NO ABRE EL CAJÓN
+
+Es el mismo dedo y el mismo movimiento hacia arriba, así que los dos gestos se cumplían a la vez: se
+levantaba un icono, se lo llevaba a la fila de arriba, y a los 55 px el cajón se abría encima.
+Medido con el **mismo binario y la guarda dada vuelta** (`SUBIR_SIN_GUARDA`), levantando un icono y
+arrastrándolo 100 px hacia arriba: **sin la guarda el cajón se abre, con la guarda no.**
+
+#### LOS ICONOS: LA BALDOSA PASA A SER REZONA Y LA MARCA SE QUEDA EN GEOMETRÍA
+
+*"Que sale to feo"* era cierto, y la causa se puede nombrar: una **silueta blanca lisa pegada sobre
+una foto** se lee a calcomanía. Lo que le falta es lo que tiene un icono Aero de verdad: un canto de
+arriba encendido, un cuerpo que se apaga hacia abajo, y una sombra dura que lo despega del fondo.
+
+Dos cambios, y uno es generado:
+
+1. **Las cuatro baldosas ahora son vidrio Aero de Rezona** —aqua, celeste con nube, verde con
+   briznas y ámbar de atardecer— con su barrida especular, sus gotas y sus cáusticas, en vez de las
+   cuatro fotos de acuario y pasto. Se recortan un 9 % por lado porque traen su propio canto
+   redondeado, que es la regla de la vuelta 123. **44 KB las cuatro.** Y el brillo que `.baldosa` le
+   ponía encima baja del 30 % al 13 %: con el generado puesto quedaban **dos** brillos y el de arriba
+   lavaba justo la mitad donde el otro tiene su gracia.
+2. **El glifo tiene relieve, y son tres rectángulos y ningún filtro.** La misma máscara dibujada tres
+   veces corrida —sombra dura abajo, canto blanco arriba, cuerpo con degradado— que a 46 px es lo
+   único que se lee. Con `feSpecularLighting` saldría más exacto y costaría **un filtro de SVG por
+   icono**, o sea treinta filtros en el cajón: este launcher lleva dos vueltas sacando pasadas de
+   filtro y no es el momento de meter treinta. El corrimiento va en un `<g>` y no en el rectángulo,
+   porque el rectángulo mide 108×108 y cubre todo: moverlo no cambia un píxel.
+
+**Y LA MARCA NO SE GENERA, CON UNA FOTO EN VEZ DE UN ARGUMENTO.** Se pidió a Rezona una hoja con las
+nueve marcas de verdad y volvió **linda y equivocada**: las nueve baldosas salieron **magenta**
+—el generador se comió el color del fondo de recorte—, Instagram apareció como una cámara de los
+noventa, Spotify con los arcos al revés, Gmail como una **M** y Uber **deletreado**. Es lo mismo que
+en RECREO devolvió un logo que decía «RECEO». La prueba de control es la otra hoja, la de nueve
+símbolos **genéricos** —nota, avión, diafragma, globo, carrito, engranaje, lupa, sobre, corazón—: ésa
+salió **perfecta y en el orden pedido**. O sea que el generador acierta una **forma** y no una
+**marca**, y las 201 entradas del pack son marcas.
+
+Las dos hojas quedan en `tareas.json` marcadas `usado: false`: son la evidencia, no el pack.
+
+#### UN DEFECTO DE LA SONDA, Y ES DE LOS QUE NO FALLAN
+
+La sonda nueva de la cuadrícula se llamaba `reja()` y **ya había una `reja()`** —la que mide el tamaño
+del icono y las columnas—, doscientas líneas más abajo. En un objeto literal gana la última, así que
+la sonda nueva no existía: contestaba la vieja, con campos que no eran los que se le pedían, y el
+resultado se leía como que la cuadrícula no se estaba dibujando. Se llama `cuadricula()`.
+
+#### MEDIDO AL CERRAR
+
+Cuadrícula **20 de 20 celdas coincidiendo con `arrCelda`**, armada al levantar y borrada al soltar.
+Subir con una app en la mano: cajón **abierto sin la guarda, cerrado con ella**, mismo binario.
+Agua: primer toque **695,4 → 2,4 ms** tras cambiar de fondo, y **395,7 → 2,6** en frío; los filtros
+vuelven en la microtarea y no en el rAF. Iconos: **201 glifos, 134 con recorte**, 42/47/62/50 en las
+cuatro familias nuevas de vidrio, cero sin familia y cero sin paquete. Filtrado permanente del
+escritorio **4 pasadas / 105.014 px**, sin cambio. Regresión completa: **doce planes con
+`window.__errs` vacío en los doce**. APK **1,3 MB** con firma v2+v3, `HOME` en el alias, `LAUNCHER`
+en la actividad, e `INTERNET` + `CAMERA`.
+
+**LO QUE NO PUDE COMPROBAR:** los 695 ms son del banco, que dibuja por software — en un teléfono el
+número absoluto es otro, pero lo que cambia es que ese trabajo ya no está en el camino del dedo, y
+eso no depende del aparato. Y el pack sigue siendo geometría: si el usuario prefiere las marcas
+generadas aun sabiendo que salen parecidas y no iguales, es una tanda de veintitrés hojas y está
+medido cuánto pesa (**536 KB binarios, 718 en base64**).
+
 ### Centésima vigesimocuarta vuelta (2026-09-06): **AERO** — doscientos un iconos, la cámara Frutiger, y el agua que no se apagaba con el cajón encima
 
 Cinco pedidos en un mensaje, con ocho capturas de la cámara del propio teléfono: *"optimiza aún más

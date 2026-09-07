@@ -50,6 +50,10 @@ function fondoPone(k){
     FONDO_EL.classList.add('ok');
     FONDO_OK = true;
     if (typeof aguaRefondo === 'function') aguaRefondo();
+    /* ── UN FONDO NUEVO ES UNA DECODIFICACIÓN NUEVA ──
+       Y se paga la primera vez que alguien la DIBUJA, que sin esto era adentro
+       del manejador del dedo del agua. Se paga acá, en el ocio. */
+    if (typeof aguaRecalienta === 'function') aguaRecalienta();
   };
   im.onerror = () => {};         /* queda el que estaba, que ya se ve */
   im.src = fondoURI();
@@ -73,6 +77,7 @@ function fondoInit(){
     FONDO_EL.style.backgroundImage = 'url(' + im.src + ')';
     FONDO_EL.classList.add('ok');
     FONDO_OK = true;
+    if (typeof aguaRecalienta === 'function') aguaRecalienta();
   };
   im.onerror = () => { FONDO_OK = false; };   /* queda el degradado, que ya se ve */
   im.src = fondoURI();

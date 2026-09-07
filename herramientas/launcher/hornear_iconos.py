@@ -25,6 +25,15 @@ TOPE = 26 * 1024      # por imagen
 
 FONDOS = ['agua', 'cielo', 'pasto', 'atardecer']
 
+# ── DOS TANDAS, Y GANA LA SEGUNDA ──
+# `ico_*` son las cuatro FOTOS de la vuelta 123: acuario, cielo, pasto y
+# atardecer. `bad_*` son las cuatro BALDOSAS de vidrio de la 125, que es lo que
+# el usuario pidió al decir que los iconos salían feos: una foto detrás de una
+# silueta blanca se lee a calcomanía, y un vidrio Aero con su brillo y sus gotas
+# se lee a icono. Se prueban en ese orden y se usa la última que exista, así que
+# borrar las `bad_` devuelve exactamente el pack anterior.
+PREFIJOS = ['ico_', 'bad_']
+
 
 def hornea(p):
     im = Image.open(p).convert('RGB')
@@ -48,9 +57,12 @@ def main():
            "const ICONOS = {"]
     tot = 0
     for n in FONDOS:
-        p = os.path.join(CRUDO, 'ico_%s-g1.png' % n)
-        if not os.path.exists(p):
-            print('  falta', p); continue
+        p = None
+        for pre in PREFIJOS:
+            q2 = os.path.join(CRUDO, '%s%s-g1.png' % (pre, n))
+            if os.path.exists(q2): p = q2
+        if not p:
+            print('  falta', n); continue
         b, q = hornea(p)
         tot += len(b)
         print('  %-10s %5d B  q%d' % (n, len(b), q))

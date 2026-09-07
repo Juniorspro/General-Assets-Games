@@ -239,6 +239,45 @@ function aguaMide(){
   return AGUA.res;
 }
 
+/* ── EL PRIMER TOQUE NO PUEDE PAGAR EL ARRANQUE ──
+   Reporte: «al cambiar de fondo se laguea el click del agua». Era literal, y
+   son dos costos que estaban los dos ADENTRO del manejador del dedo:
+
+   1. `aguaArma()` COMPILA el shader la primera vez. En un teléfono eso son
+      decenas de milisegundos, y caen justo en el cuadro del toque.
+   2. `aguaMapa()` hace el primer `drawImage` de la foto — y `img.onload` NO
+      quiere decir «decodificada»: el navegador decodifica perezosamente, al
+      dibujarla. O sea que cambiar de fondo y tocar el agua pagaba la
+      decodificación entera de la foto nueva en el cuadro del toque. Por eso el
+      tirón aparecía JUSTO después de cambiar de fondo y no antes.
+
+   Las dos cosas se pagan en el ocio. `decode()` fuerza la decodificación fuera
+   del camino del dedo, y una pasada de horneado deja el shader compilado y la
+   textura subida. El lienzo sigue en `display:none`, así que precalentar no
+   dibuja un solo píxel. */
+let AGUA_TIBIA = false;
+function aguaOcio(fn){
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2500 });
+  else setTimeout(fn, 700);
+}
+function aguaPrecalienta(){
+  if (AGUA.roto || aguaQuieto()) return false;
+  if (!FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  const hacer = () => {
+    if (!aguaArma()) return;
+    aguaMide(); aguaMapa();
+    AGUA_TIBIA = true;
+  };
+  /* la decodificación primero: `drawImage` sobre una imagen sin decodificar la
+     decodifica ahí mismo, que es exactamente lo que se está sacando del medio */
+  if (FONDO_IMG.decode) FONDO_IMG.decode().then(hacer, hacer);
+  else hacer();
+  return true;
+}
+/* lo llama `fondoInit` y `fondoPone`: el fondo nuevo es una foto nueva, o sea
+   una decodificación nueva que hay que pagar antes de que alguien toque */
+function aguaRecalienta(){ AGUA_TIBIA = false; aguaOcio(aguaPrecalienta); }
+
 /* ── LO QUE ES «ESPACIO LIBRE» ── */
 function aguaLibre(t){
   if (CAJON || aguaTapada() || !t || !t.closest) return false;
@@ -271,6 +310,7 @@ function aguaToca(x, y, fuerza){
     if (AGUA_NIV[AGUA.niv]) document.body.classList.add(AGUA_NIV[AGUA.niv]);
     AGUA.on = true; AGUA.mide = 0; AGUA_ULT = 0;
     aguaMide(); aguaMapa();
+    aguaVigila(true);
     requestAnimationFrame(aguaPaso);
   }
   AGUA.ondas.push({ x: x, y: y, t: ahora, f: fuerza == null ? 1 : fuerza });
@@ -322,6 +362,7 @@ function aguaTapada(){ return !!document.querySelector(AGUA_TAPAN); }
    que se pueda olvidar de alguna de las cuatro cosas. */
 function aguaCorta(){
   if (!AGUA.on) return false;
+  aguaVigila(false);
   AGUA.ondas.length = 0;
   AGUA.on = false;
   AGUA.el.classList.remove('on');
@@ -330,6 +371,30 @@ function aguaCorta(){
   FONDO_EL.style.animationPlayState = '';
   if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
   return true;
+}
+
+/* ── EL CORTE TIENE QUE CAER EN EL MISMO CUADRO QUE LA HOJA SE ABRE ──
+   Reporte: «cuando abro el cajón da tirones por el coso del agua». Con la
+   comprobación SÓLO adentro de `aguaPaso`, el corte llegaba un cuadro tarde: la
+   hoja arrancaba su transición y recién al cuadro siguiente se sacaba
+   `body.agua`, o sea que los once `backdrop-filter` del launcher se volvían a
+   armar EN EL MEDIO de la animación de apertura. Ese es el tirón, y no es del
+   agua: es de once desenfoques reapareciendo mientras algo se desliza.
+
+   Un `MutationObserver` corre como MICROTAREA —después del código que agregó la
+   clase y ANTES de que el navegador calcule estilo y pinte— así que el corte y
+   la apertura caen en el mismo cuadro. Y sigue habiendo UN solo sitio que sabe
+   qué tapa: el observador se prende con la ráfaga y se apaga con ella, así que
+   fuera de esos segundo y medio no cuesta absolutamente nada. */
+let AGUA_OBS = null;
+function aguaVigila(v){
+  if (v){
+    if (AGUA_OBS || typeof MutationObserver !== 'function') return;
+    AGUA_OBS = new MutationObserver(() => {
+      if (AGUA.on && !AGUA.sinCorte && aguaTapada()) aguaCorta();
+    });
+    AGUA_OBS.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true });
+  } else if (AGUA_OBS){ AGUA_OBS.disconnect(); AGUA_OBS = null; }
 }
 
 let AGUA_ULT = 0;
@@ -345,6 +410,7 @@ function aguaPaso(){
   AGUA.ondas = v;
   if (!v.length){
     AGUA.on = false;
+    aguaVigila(false);
     AGUA.el.classList.remove('on');
     /* el vidrio vuelve entero: la escalera de calidad vale sólo mientras el
        lienzo está repintando */
