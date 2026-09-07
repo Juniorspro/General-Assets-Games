@@ -137,10 +137,17 @@ gaussianas. `visor-suelto.html` es el visor vacío, 25 KB,
 que pide el archivo y después lee lo que le sueltes —incluida una captura de
 verdad de Luma, Polycam o SuperSplat—.
 
-A nueve millones el visor mueve 284 MB de datos y 298 MB de textura, así que:
+A nueve millones el visor mueve 284 MB de datos y 284 MB de textura, así que:
 manda las posiciones solas al worker del orden (12 bytes por gaussiana en vez
 de 32), suelta la nube anterior si le sueltan otra, y si la textura no entra en
 la placa lo dice en vez de dibujar negro.
+
+Medido fuera del navegador, con los 9.313.478: el empaquetado tarda **3,9 s**,
+la textura sale de 2048 × 9096 —284 MB, y el índice de fila llega a 9.095, bien
+abajo del máximo de 16.384— y el orden por conteo tarda **182 ms** (48,8 ms con
+tres millones). En Chromium sin cabeza con SwiftShader la nube completa no
+llegó a dibujar un cuadro: **hace falta una placa de verdad**. Verificado en el
+navegador hasta 3.000.000.
 
 `hacer-splat.py` es la versión anterior, la que sacaba el color de la textura y
 cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
