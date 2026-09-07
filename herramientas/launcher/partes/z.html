@@ -203,6 +203,48 @@ window.__A = {
     await new Promise(r2 => setTimeout(r2, 80));
     return { levanto: true, destinos: destinos, arr: this.arr() };
   },
+  /* Deja un arrastre EN VUELO y no lo suelta: es lo que `arrCosto` necesita
+     para medir el camino de verdad. Suelta con `arrSuelto`. */
+  async arrLevanta(sel){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    n.dispatchEvent(new PointerEvent('pointerdown',
+      { bubbles: true, clientX: x, clientY: y, pointerId: 7, isPrimary: true }));
+    await new Promise(r2 => setTimeout(r2, 560));
+    return { levanto: !!ARR, desde: ARR && ARR.desde };
+  },
+  /* ── LA FLUIDEZ NO ES COSTO, ES CUÁNTAS VECES SE PINTA ──
+     El pedido era «que puedas moverlo de lugar pero más fluido». Antes cada
+     `pointermove` pintaba: un teléfono manda entre 60 y 240 por segundo, así
+     que se repintaba la cuadrícula varias veces **dentro del mismo cuadro** —
+     trabajo que nadie llega a ver. Esto dispara N eventos de verdad en la misma
+     tarea y cuenta cuántas pintadas salieron: con la coalescencia, una. */
+  async arrFluido(n){
+    if (!ARR) return { error: 'no hay arrastre en vuelo' };
+    const cu = this.cuadricula();
+    if (!cu.hay || !cu.n) return { error: 'sin cuadrícula' };
+    const cen = cu.celdas.map(c => [c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2]);
+    const ev = (x, y) => window.dispatchEvent(new PointerEvent('pointermove',
+      { bubbles: true, clientX: x, clientY: y, pointerId: 7, isPrimary: true }));
+    const cuantos = n || 30;
+    ARR_PINTAS = 0;
+    for (let i = 0; i < cuantos; i++){
+      const [x, y] = cen[i % cen.length];
+      ev(Math.round(x), Math.round(y));
+    }
+    const enLaTarea = ARR_PINTAS;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { eventos: cuantos, pintadasEnLaTarea: enLaTarea,
+             pintadasTrasElCuadro: ARR_PINTAS };
+  },
+  async arrSuelto(){
+    if (!ARR) return 'no había arrastre';
+    window.dispatchEvent(new PointerEvent('pointerup',
+      { bubbles: true, clientX: ARR.x, clientY: ARR.y, pointerId: 7, isPrimary: true }));
+    await new Promise(r2 => setTimeout(r2, 120));
+    return this.arr();
+  },
   async toca(sel){
     const n = $(sel); if (!n) return 'no está: ' + sel;
     const r = n.getBoundingClientRect();
@@ -515,10 +557,17 @@ window.__A = {
      Ésta cuenta cuántas baldosas quedan filtrando, que es el número de la
      fluidez del cajón; la de abajo mira UNA baldosa y dice qué pack se aplicó.
      Son dos preguntas distintas y hacen falta las dos. */
+  /* ── EL PACK ES UN ID Y NO UNA BANDERA, Y LA SONDA LO DECÍA MAL ──
+     Esto arrancó como `icoPack` 0/1 —«tratamiento Aero sí o no»— y desde que
+     hay siete packs es una cadena. El `+lee(...)` devolvía **NaN**, que
+     `JSON.stringify` escribe como `null`: la sonda contestaba que no había
+     pack puesto con el pack puesto. Es la misma familia que las dos claves
+     repetidas de este mismo objeto — no falla, contesta. */
   packBaldosas(v){
-    if (v != null){ guarda('icoPack', v ? 1 : 0); ICO_CACHE_LIMPIA(); rejaRepinta(); }
+    if (v != null){ guarda('icoPack', v); ICO_CACHE_LIMPIA(); rejaRepinta(); }
     const b = $$('.baldosa'), a = $$('.baldosa.aero');
-    return { pack: +lee('icoPack', 1), baldosas: b.length, aero: a.length,
+    return { pack: packHoy().id, baldosas: b.length, aero: a.length,
+             gen: $$('.baldosa.gen').length,
              cajon: $$('#cajLista .baldosa').length,
              cajonAero: $$('#cajLista .baldosa.aero').length };
   },
@@ -647,27 +696,47 @@ window.__A = {
      El número del reporte «al mantener una app puedas moverlo de lugar pero más
      fluido» no es una sensación: es cuántas veces se recalcula estilo por cada
      movimiento del dedo. Se cuenta arrastrando de punta a punta. */
-  arrCosto(n, sinCache){
+  /* ── LA MEDICIÓN BARRE LAS CELDAS DE LA CUADRÍCULA, NO UNA DIAGONAL ──
+     Dos versiones anteriores midieron mal y las dos daban un número plausible:
+     · la primera iba de esquina a esquina en línea recta, y una diagonal sobre
+       una reja de cuatro columnas pasa casi siempre **entre** dos celdas:
+       medido, 60 pasos daban **un solo** cambio de destino, o sea que las dos
+       ramas no hacían nada y la sin caché salía **más rápida** que la con
+       caché —imposible si el atajo sirve—;
+     · la segunda barría los iconos del escritorio, y desde la vuelta 122 el
+       escritorio arranca **vacío**: cero celdas y cero medición.
+     Lo que hay que ejercer es lo que de verdad cuesta: `rejaMarca`, que apaga y
+     prende las veinte casillas de la cuadrícula. Así que se barren los centros
+     de las CELDAS —que existen siempre— y el resaltado cambia en cada paso.
+     Y exige un arrastre en vuelo: sin `ARR` se estaría midiendo `arrPinta` por
+     un camino que el dedo no recorre. */
+  /* `porCelda` es cuántos cuadros pasa el dedo dentro de la misma celda, y de
+     eso depende TODO el resultado. Una celda mide 93 px; un dedo que cruza la
+     pantalla en un segundo hace 890 px en 60 cuadros, o sea **seis cuadros por
+     celda** — ése es el régimen de verdad y es el de por omisión. Con 1 se mide
+     el peor caso imaginable, donde el atajo casi no puede acertar. Un solo
+     número sin decir en qué régimen se tomó no dice nada. */
+  arrCosto(n, sinCache, porCelda){
+    if (!ARR) return { error: 'no hay arrastre en vuelo; llamá arrLevanta primero' };
+    const cu = this.cuadricula();
+    if (!cu.hay || !cu.n) return { error: 'sin cuadrícula' };
+    const cen = cu.celdas.map(c => [c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2]);
+    const pasos = n || 40, pc = Math.max(1, porCelda || 6);
+    let cambios = 0, ultDest = null, ultCel = -2;
     ARR_SIN_CACHE = !!sinCache;
-    const pasos = n || 40;
-    const r = $('#hoja').getBoundingClientRect();
-    let pintas = 0, cambios = 0;
-    const pinta = arrPinta;
-    let ultDest = null, ultCel = -2;
-    window.__arrPintaEspia = () => { pintas++; };
     const t0 = performance.now();
-    for (let i = 0; i <= pasos; i++){
-      const x = r.left + 20 + (r.width - 40)*(i/pasos);
-      const y = r.top + 40 + (r.height - 120)*(i/pasos);
-      ARR ? (ARR.x = x, ARR.y = y) : 0;
+    for (let i = 0; i < pasos; i++){
+      const [x, y] = cen[Math.floor(i/pc) % cen.length];
+      ARR.x = x; ARR.y = y;
       arrPinta(x, y);
       const d = $('.ap.destino'), c = REJA_AQUI;
       if (d !== ultDest || c !== ultCel){ cambios++; ultDest = d; ultCel = c; }
     }
+    const ms = performance.now() - t0;
     ARR_SIN_CACHE = false;
-    return { pasos: pasos, sinCache: !!sinCache, cambiosDeDestino: cambios,
-             ms: +(performance.now() - t0).toFixed(2),
-             porPaso: +((performance.now() - t0)/pasos).toFixed(3) };
+    return { pasos: pasos, celdas: cen.length, porCelda: pc, sinCache: !!sinCache,
+             cambiosDeDestino: cambios, ms: +ms.toFixed(2),
+             porPaso: +(ms/pasos).toFixed(3) };
   },
   arrastraA(x, y){
     const t = document.elementFromPoint(x, y) || $('#hoja') || document.body;

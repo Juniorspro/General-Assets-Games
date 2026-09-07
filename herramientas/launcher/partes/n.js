@@ -86,7 +86,12 @@ function ccArma(){
   const r = $('#ccReja');
   for (const b of CC_BOT){
     const e = document.createElement('div');
-    e.className = 'ccB' + (b.llave ? ' llave' : ' atajo');
+    /* ── LA MARCA ↗ DICE «ESTO ABRE EL PANEL DEL SISTEMA» Y NADA MÁS ──
+       Estaba puesta en todo lo que no fuera llave, así que la cámara —que abre
+       la cámara de la casa, adentro del launcher— salía con la flecha: la marca
+       prometía un salto al sistema que no pasa. La lleva sólo lo que tiene
+       `sis`. */
+    e.className = 'ccB' + (b.llave ? ' llave' : (b.sis ? ' atajo' : ''));
     e.dataset.id = b.id;
     const sv = ccIco(b.ico);
     if (sv) e.appendChild(sv);

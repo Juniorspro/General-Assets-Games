@@ -281,6 +281,278 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimosexta vuelta (2026-09-07): **AERO** — los iconos se recortan tal cual salieron, un centro de control propio, y la bienvenida
+
+Nueve pedidos en un mensaje, con nueve capturas de HyperOS: *"se laguea al abrir la barra de aplicaciones
+porque toca el agua y se da un tirón · que solamente los íconos sean en blanco y el fondo puro líquid
+glass · literalmente podías simplemente recortar cada ícono generado con Rezona y ponerlos como íconos
+en vez de reconstruirlo a mano · que los fondos de pantalla sean generados siempre con el prompt · que
+lo optimices a 120fps · que la cámara siempre sea la predeterminada · al mantener una app puedas moverlo
+de lugar pero más fluido y que puedas hacer hacia abajo · en vez del predeterminado hagas una barra de
+notificaciones súper líquid glass · que tengamos las opciones para personalizar al entrar a la app por
+primera vez"*. Después, con la comparación de la vuelta anterior a la vista: *"mira las que están en
+morado, viste así las generaste bueno las recortas, no las reconstruis"*.
+
+Tres archivos nuevos: `partes/n.js` (el centro de control y las notificaciones), `partes/x.js` (la
+bienvenida) y `partes/i_icogen.js` (los 201 iconos), más `Escucha.java`.
+
+#### LOS ICONOS: SE RECORTAN, Y ESTO CONTRADICE LO QUE ARGUMENTÉ EN LA VUELTA 125
+
+Ahí escribí que el generador *"acierta una FORMA y no una MARCA"* y que por eso el pack tenía que ser
+geometría. El usuario mandó la comparación y señaló las magenta: **ésas son las que salieron bien**, y
+eran justamente las que se le habían pedido como **símbolos** en vez de como nombres de marca. O sea que
+la medición de la vuelta 125 ya tenía la respuesta adentro y yo saqué la conclusión de más:
+
+| cómo se pidió | resultado |
+|---|---|
+| «las nueve marcas: Instagram, Spotify, Gmail…» | **Instagram sale cámara de los noventa, Gmail sale una M, Uber deletreado** |
+| «nueve símbolos: una nota, un avión, un diafragma…» | **los nueve perfectos y en el orden pedido** |
+
+Así que las 201 celdas se describen **por su geometría, que es lo que un logo ES**: «una nota musical con
+la cabeza doblada», «tres arcos concéntricos crecientes», «un sobre visto de frente con el pliegue en V».
+23 hojas de 3×3, 201 celdas, **cero reconstruidas a mano**.
+
+**Y EL RECORTE VA POR REJA DECLARADA Y NO POR COLOR.** El intento anterior recortaba por fondo magenta y
+salió mal por una razón que se ve en la hoja: **el generador pinta las baldosas, no sólo el fondo**, así
+que la clave de color se comía media baldosa. Ahora se corta en tercios exactos y dentro de cada celda se
+busca la caja de lo que no es negro, se cuadra, se centra y se le pone la máscara de esquina redondeada a
+4× con LANCZOS —hecha a tamaño final queda dentada—. 112 px, WebP 82, **659 KB en base64**.
+
+**LO QUE PRUEBA QUE EL PACK SIRVE NO ES CUÁNTAS CELDAS TIENE.** Un pack que cubre la mitad de las apps se
+lee a dos packs mezclados. `__A.gen()` cuenta **cuántas celdas ALCANZAN a una app instalada**: medido,
+**201 celdas · 32 apps · 27 con celda · 5 sin**, y las cinco sin son las apps del propio launcher (Aero,
+Aero Camera, Assistant, Home screen, Personalize), que se dibujan con su glifo propio y **no pasan por el
+pack**. O sea: **todas las apps instaladas de verdad tienen su icono generado.**
+
+**Y SIN CELDA NO CAE AL ICONO DEL SISTEMA: CAE AL TRATAMIENTO AERO.** Con el icono real del sistema, una
+app sin celda rompería la familia entera; con el Aero por detrás sigue siendo una baldosa de vidrio.
+
+#### DOS PACKS NUEVOS DE VIDRIO PURO, Y CUATRO ROWS QUE SALÍAN IGUALES
+
+Pedido: *"que solamente los íconos sean en blanco y el fondo puro líquid glass"*. Entran `vidrio` (baldosa
+cuadrada de vidrio, glifo blanco) y `burbuja` (redonda, con velo oscuro para que el blanco se lea sobre
+un fondo claro). Son **siete packs** contando el generado.
+
+**Y LA BIENVENIDA LO DELATÓ AL PRIMER MIRADO:** de las siete filas, **cuatro se veían idénticas** —
+`vidrio`, `bliss`, `tinta` y `neon`—, porque los tres últimos piden una imagen de fondo que todavía no
+estaba horneada y caían al vidrio puro. Un pack que no se distingue de otro no es un pack: es la lista
+mintiendo sobre cuántas opciones hay. Por eso `bv()` devuelve **`firmas`**, la clase y los primeros bytes
+del fondo de cada baldosa de cada fila — si dos filas dan la misma cadena, están dibujando el mismo pack,
+y eso desde afuera se ve como un diseño y no como un error.
+
+#### EL TIRÓN DEL CAJÓN, TERCERA Y ÚLTIMA CAPA: EL AGUA PASA A SER UN TOQUE
+
+Las vueltas 124 y 125 sacaron el repintado a pantalla completa debajo de una hoja opaca y el `body.agua`
+que llegaba un cuadro tarde. Lo que quedaba es lo que el usuario nombró: **el gesto de abrir encendía el
+agua**. Y con el centro de control colgado del deslizamiento hacia abajo eso pasó de molestia a choque
+directo: el mismo dedo hace las dos cosas.
+
+La regla nueva es de una línea y no admite excepciones: **el agua es un TOQUE.** Ya encendida, un arrastre
+agrega estela —que es lo que uno espera si el agua ya está—; apagada, cualquier movimiento de más de
+`AGUA_GESTO` cancela. Medido con el gesto de verdad (`gestoY`, ocho `pointermove` de a 90 px):
+
+| gesto | qué abre | ondas de agua |
+|---|---|---|
+| hacia abajo en el escritorio | **centro de control** | **0** |
+| hacia arriba en el escritorio | cajón | **0** |
+
+Y `#cc` y `#bienv` entraron en `AGUA_TAPAN` y en la lista de `aguaLibre`: sin eso, tocar el hueco entre dos
+baldosas con el centro abierto encendía el lienzo por debajo — medido, daba **4 ondas**.
+
+#### ARRASTRAR MÁS FLUIDO: LO QUE IMPORTA NO ES EL COSTO, ES CUÁNTAS VECES SE PINTA
+
+Un teléfono manda entre 60 y 240 `pointermove` por segundo y cada uno repintaba la cuadrícula: trabajo
+que nadie llega a ver, porque el navegador dibuja **una vez por cuadro**. Ahora `pointermove` sólo escribe
+el `translate3d` del fantasma y agenda un `requestAnimationFrame`. Medido disparando eventos de verdad en
+la misma tarea:
+
+| eventos en una tarea | pintadas dentro de la tarea | pintadas tras el cuadro |
+|---|---|---|
+| 30 | **0** | **1** |
+| 90 | **0** | **1** |
+
+**Noventa movimientos cuestan una pintada.** Eso es la fluidez, y es lo que ningún «costo por paso» iba a
+mostrar.
+
+**Y LA MEDICIÓN DEL COSTO ESTUVO MAL DOS VECES, LAS DOS CON UN NÚMERO PLAUSIBLE.** Vale anotar las dos
+porque son la misma familia:
+
+1. **La primera versión barría una diagonal de esquina a esquina.** Sobre una reja de cuatro columnas una
+   diagonal pasa casi siempre **entre** dos celdas: medido, 60 pasos daban **un solo** cambio de destino,
+   o sea que las dos ramas no hacían nada — y la rama **sin** caché salía **más rápida** que la con caché,
+   que es imposible si el atajo sirve.
+2. **La segunda barría los iconos del escritorio, y desde la vuelta 122 el escritorio arranca VACÍO.** El
+   `#tira .pag` tiene **cero hijos**: la sonda no medía nada y no fallaba.
+
+Con las celdas de la cuadrícula —que existen siempre— y un `porCelda` que dice cuántos cuadros pasa el
+dedo dentro de la misma celda (seis es el régimen de verdad: un dedo que cruza la pantalla en un segundo
+hace 890 px en 60 cuadros y una celda mide 93), el resultado es **1,1 ms con caché contra 1,6 sin** sobre
+120 pasos — **y el mismo número con 20 cambios de destino que con 120**. Eso dice qué es el ahorro: no es
+la churn de `rejaMarca`, es el `querySelectorAll` a nivel de documento que corría en cada pintada.
+**Y con la coalescencia puesta ese ahorro pasa a ser chico**, porque ya hay una sola pintada por cuadro.
+Lo honesto es decir que la fluidez la da el rAF y no el caché.
+
+#### EL CENTRO DE CONTROL, Y LA HONESTIDAD ES UNA RESTRICCIÓN DE DISEÑO
+
+Hoja de vidrio con el reloj, la fecha, la batería, dos deslizadores y doce baldosas. Pero **desde Android
+10 una app normal no puede prender el wifi, los datos ni el Bluetooth**, así que doce interruptores serían
+once mintiendo. Cada baldosa es una de dos cosas:
+
+- **llave**: hace lo que dice. `CameraManager.setTorchMode` (API 23+) para la linterna,
+  `AudioManager.setStreamVolume` para el volumen y el brillo de la ventana.
+- **atajo**: lleva la marca **↗**, cierra el centro y abre el panel del sistema.
+
+Medido: **12 botones · 1 llave · 10 atajos**. Y los diez y no once, porque **la marca ↗ dice «esto abre el
+panel del sistema» y la cámara no lo abre** —abre la cámara de la casa, adentro del launcher—: la llevaba
+de puro descarte y prometía un salto que no pasa. Más el pie que explica por qué, en los tres idiomas.
+
+**Y EL RÓTULO PASA A DOS LÍNEAS CON ALTO FIJO.** Con una sola línea y puntos suspensivos, en inglés tres
+de los doce salían ilegibles —«Mobile ...», «Bluetoo...», «Do not ...»— o sea que el rótulo dejaba de
+decir qué hace el botón, que es todo su trabajo. Acortar las cadenas arregla el inglés y rompe con el
+próximo idioma; medir el ancho son doce medidas por tres idiomas para algo que el navegador ya sabe hacer.
+El alto fijo es la parte que importa: sin él la fila de tres palabras mide más que la de una y la reja da
+un salto. Medido: **los doce botones miden 75 px de alto, uno solo distinto no hay**.
+
+#### LAS NOTIFICACIONES SON DE VERDAD, Y SON LO ÚNICO QUE NO SE PUEDE PRENDER DESDE ADENTRO
+
+Un launcher **no puede leerlas desde su actividad**: Android sólo se las cuenta a un
+`NotificationListenerService`, y el dueño tiene que habilitarlo a mano en una pantalla del sistema.
+`Escucha.java` lo declara con `android:permission="BIND_NOTIFICATION_LISTENER_SERVICE"` —lo que eso declara
+es que **sólo el sistema** puede enlazarse, que es lo que impide que otra app se cuelgue del servicio— y
+**no guarda copia**: siempre `getActiveNotifications()`, porque una copia se desincroniza en el momento en
+que el dueño limpia una desde otro sitio.
+
+**Y HAY CUATRO ESTADOS, NO DOS.** Una lista vacía se lee a «no tenés notificaciones», que es falso y no da
+un paso siguiente:
+
+| estado | qué se muestra |
+|---|---|
+| `sinPuente` | *«vista previa: sin conexión con el sistema no hay notificaciones que leer»* |
+| `sinPermiso` | el pedido con su botón, y por qué es lo único que no se prende desde adentro |
+| `esperando` | *«habilitado, esperando a que Android conecte el servicio»* |
+| `ok` | las filas |
+
+Medido: sin puente da `sinPuente` con su aviso; con el puente fingido, **`ok` con 2 filas**.
+
+**Y `HAY_AND` NO SERVÍA PARA ESTO.** Es un `const` congelado al evaluar el módulo, así que un `window.AND`
+inyectado después **no lo cambia nunca**: la sonda informaba `sinPuente` en los cuatro casos. Va una
+comprobación viva por método (`andQ(m)`), que además es más correcta: lo que hay que preguntar no es si hay
+puente sino si el puente sabe hacer **esto**.
+
+#### LA BIENVENIDA: LO QUE SE ELIGE SE VE MIENTRAS SE ELIGE
+
+Cinco pasos: pack de iconos · tamaño de la reja · cajón por letras o todo junto · qué cámara abre una
+cámara · centro de control propio. **Cada opción dibuja SUS baldosas de verdad**, con `icoAero` y `ponReja`
+—las mismas funciones del escritorio— probando la opción sin dejarla puesta. Un pack elegido de una lista
+de nombres es una elección a ciegas: «Burbuja» no dice nada hasta que se ve.
+
+**SALE UNA VEZ Y TODO VIVE TAMBIÉN EN PERSONALIZAR.** Una pantalla de bienvenida que es el único sitio
+donde se puede elegir algo es una decisión que se toma cansado y no se puede corregir. Y `bienvVisto` se
+escribe **al cerrar y no al abrir**: cerrando la app a la mitad, la próxima vez vuelve a preguntar.
+
+**Y EL TAMAÑO SE ELIGE POR COLUMNAS Y NO POR PÍXELES.** La primera versión guardaba «columnas|píxeles» y
+**ninguna** opción quedaba marcada, porque el tamaño de fábrica no cae justo en ninguno de los cuatro
+pares. Lo que el dueño elige es cuántas apps entran en una fila; el tamaño del icono sale de eso.
+
+Un defecto de especificidad: **la muestra de la burbuja salía cuadrada**, porque `.bvM .baldosa` y
+`.baldosa.redon` tienen la misma especificidad y ganaba el orden del archivo.
+
+#### EL CAJÓN TODO JUNTO, Y EL RIEL SIGUE SIRVIENDO
+
+Pedido textual: *"(que también debería servir el buscador lateral por letras solamente que está todo
+juntos y se resalta los que tienen esa letra)"*. Todo junto **no es «sin riel»**: el ancla deja de ser el
+encabezado y pasa a ser **la primera app de cada letra**, así que arrastrar el riel lleva al mismo sitio —
+y encima **enciende las de esa letra**, que es lo único que un cajón sin encabezados puede mostrar. Se
+apaga solo a los 1,6 s: un resaltado permanente deja de significar «acabás de pedir esta letra».
+
+Medido en modo junto: **32 apps, 0 encabezados, 17 anclas, 17 letras**, y pidiendo la S se encienden
+**2 de 32** (Santander y Spotify) con las otras treinta apagadas.
+
+**Y LA PRIMERA MEDICIÓN DIJO QUE NO ANDABA.** El plan leía el estado **después de una captura de
+pantalla**, y una captura tarda más que los 1,6 s del apagado automático: la sonda devolvía `res: 0` sobre
+un resaltado que había funcionado. Es la enésima vez en este repo que la medición mide otro instante.
+
+#### LOS FONDOS GENERADOS, Y LA «IMAGEN PREDETERMINADA» SE REPLANTEÓ EN VOZ ALTA
+
+Pedido: *"que los fondos de pantalla sean generados siempre con el prompt y una imagen predeterminada que
+te pasaré las cuales servirán para que la IA gratuita debes buscar, se guíe"*. La IA gratuita y **sin
+llave** es Pollinations, comprobado con curl: **200, `image/jpeg`, 45.118 bytes**, una imagen Frutiger de
+verdad.
+
+**PERO UNA IMAGEN DE REFERENCIA SÓLO SIRVE SI SE LE PUEDE MANDAR, Y UNA FOTO DEL TELÉFONO NO TIENE URL.**
+Lo que una referencia hace —que la familia entera se vea coherente— lo da `FG_RECETA`, un prefijo de estilo
+fijo que va en todos los pedidos. Cuando lleguen sus imágenes se pueden usar como `source_url` de Rezona y
+hornear el resultado como presets de la galería. Está dicho así y no disfrazado.
+
+**Y BAJA POR EL PUENTE Y NO POR `fetch`.** La interfaz se carga desde `file:///android_asset/`, así que
+todo sale con `Origin: null` y **no se puede LEER** sin CORS permisivo; del lado de Java no hay CORS.
+`AND.baja(url)` valida el esquema, exige `Content-Type: image/*`, corta a 4 MB y devuelve un data URI.
+
+Y lo bajado pasa por **el mismo achicado que la foto propia** —recorte 9:16 al centro, 824 px de ancho,
+JPEG 0,82— porque `localStorage` tiene entre cinco y diez megas para todo el origen. Medido con tres
+formas de entrada:
+
+| pedido | salió | proporción |
+|---|---|---|
+| 900×1600 | 824×1465 | **0,5625** |
+| 1600×900 | 506×900 | **0,5622** |
+| 768×1376 (lo que devuelve de verdad) | 768×1365 | **0,5626** |
+
+9:16 es 0,5625. Y el tercero no se agranda: ya está por debajo del tope.
+
+#### LA CÁMARA POR OMISIÓN, Y LOS 120 CUADROS
+
+`camModoApp()` arranca en `'aero'`: tocar una cámara abre la de la casa, sin preguntar. Quedan las otras
+dos (preguntar, o la del sistema) en la bienvenida y en Personalizar — interceptar una app siempre tiene
+que ser reversible.
+
+De los 120 cuadros: en este repo lo que se puede medir sin el teléfono es **el trabajo que se le saca al
+compositor**, no la tasa de cuadros de un aparato ajeno. Medido:
+
+| | |
+|---|---|
+| filtrado permanente del escritorio | **3 pasadas / 96.401 px** |
+| el centro de control cerrado | **0** |
+| la bienvenida cerrada | **0** |
+| el agua, 60 cuadros a 0,6 de resolución | **3,135 ms**, o sea 0,052 por cuadro sobre 132.145 px |
+
+Un cuadro de 120 Hz son 8,3 ms: el agua se lleva el 0,6 %. Y los ceros de las dos hojas nuevas no son
+gratis por casualidad — `#cc:not(.on){visibility:hidden}` es lo que de verdad **saca la pasada del
+compositor**; un `transform` fuera de pantalla la sigue pagando.
+
+**Y EL NÚMERO QUE VENÍA CITANDO DESDE LA VUELTA 124 TENÍA UN AVISO ADENTRO.** Las «4 pasadas / 105.014 px»
+incluían **el cartelito de aviso**, que es transitorio: medido en la misma corrida, con el aviso puesto son
+4 / 106.149 y sin él **3 / 96.401**. El permanente es el segundo.
+
+#### DOS SONDAS QUE SE PISABAN, Y UNA QUE CONTESTABA `null`
+
+- **`pack` y `aguaCosto` estaban declaradas DOS VECES** en el objeto de sondas. En un literal gana la
+  última, así que la primera de cada par **no existía** y la que quedaba contestaba con campos que nadie le
+  había pedido. Es exactamente lo que ya había pasado con `reja()` en la vuelta 125. Pasaron a
+  `packBaldosas` y `aguaCuadro`.
+- **Y `packBaldosas` devolvía `pack: null`.** Esto arrancó como `icoPack` 0/1 —«tratamiento Aero sí o
+  no»— y desde que hay siete packs es una cadena: el `+lee(...)` daba **NaN**, que `JSON.stringify` escribe
+  como `null`. La sonda contestaba que no había pack puesto **con el pack puesto**. No falla: contesta.
+
+#### MEDIDO AL CERRAR
+
+Pack generado: **201 celdas, 27 de 27 apps instaladas con su icono**, las 23 hojas mirando una por una y
+las 201 baldosas fotografiadas en una hoja de contactos. Bienvenida: 5 pasos, 7 filas de pack con su
+muestra dibujada, la burbuja redonda. Centro de control: **12 botones · 1 llave · 10 atajos**, los doce a
+75 px de alto, los cuatro estados de la lista de notificaciones. Gesto: abajo abre el centro y arriba el
+cajón, **0 ondas de agua en los dos**. Arrastre: **90 eventos → 1 pintada**. Cajón todo junto: 32 apps, 0
+encabezados, la S encendiendo 2. Fondos: URL de 384 caracteres con la receta, sin logo y vertical, y el
+recorte en 0,5625 · 0,5622 · 0,5626. Filtrado permanente **3 pasadas / 96.401 px** y **cero** con las dos
+hojas nuevas cerradas. `window.__errs` **vacío en las nueve corridas**. APK **1,5 MB** con firma v2+v3,
+`HOME` en el alias, `LAUNCHER` en la actividad, el `NotificationListenerService` declarado, e `INTERNET` +
+`CAMERA`.
+
+**LO QUE NO PUDE COMPROBAR:** el navegador del banco no tiene salida a internet, así que del generador de
+fondos está medido **qué URL arma y qué hace con lo que baja**, y que Pollinations contesta está medido con
+curl y no desde el juego. Del servicio de notificaciones está medido que compila, que el manifiesto lo
+declara con su permiso y que la interfaz recorre los cuatro estados — **no** que Android lo enlace en un
+teléfono. Y los 120 cuadros siguen siendo trabajo sacado al compositor y no una tasa medida en un aparato.
+
 ### Centésima vigesimoquinta vuelta (2026-09-07): **AERO** — la cuadrícula, el primer toque del agua, y los iconos pasan a vidrio generado
 
 Cinco cosas en un mensaje: *"cuando muevo una app deben aparecer las cuadrículas para ubicarlas ·

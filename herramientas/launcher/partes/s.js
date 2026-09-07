@@ -436,6 +436,10 @@ function arrInit(){
    y recalcula estilo igual. Arrastrando de punta a punta eran cientos de
    recálculos para dejar la pantalla como estaba. */
 let ARR_RAF = 0, ARR_DEST = null, ARR_CEL = -2;
+/* cuántas veces se pintó de verdad: es lo único que prueba que los
+   `pointermove` se juntan en un cuadro en vez de pintar uno por evento.
+   Un entero que sube una vez por cuadro no cuesta nada. */
+let ARR_PINTAS = 0;
 /* la única forma de que la medición pruebe algo es correr el MISMO binario con
    la comparación dada vuelta: con dos versiones se compararían dos programas */
 let ARR_SIN_CACHE = false;
@@ -449,6 +453,7 @@ function arrAgenda(){
   });
 }
 function arrPinta(x, y){
+  ARR_PINTAS++;
   const c = arrCelda(x, y);
   const ci = c ? c.i : -1;
   if (ci !== ARR_CEL || ARR_SIN_CACHE){ rejaMarca(ci); ARR_CEL = ci; }
