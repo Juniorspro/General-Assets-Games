@@ -1,4 +1,4 @@
-import { empaquetar, VERT, FRAG, VERT_CIELO, FRAG_CIELO, WORKER, CUANTOS } from "./splat.js";
+import { empaquetar, esSplz, desplz, VERT, FRAG, VERT_CIELO, FRAG_CIELO, WORKER, CUANTOS } from "./splat.js";
 
 const $ = (s) => document.querySelector(s);
 const TOMAS = 184;      // cuántas fotos de Cycles le dieron color
@@ -140,6 +140,11 @@ if (Array.isArray(window.__ENCUADRES) && window.__ENCUADRES.length) {
    panorama el paralaje es honesto sólo cerca del punto de vista —el color de
    cada gaussiana se midió UNA vez, desde ahí—, así que alejarse mucho no
    muestra más mundo, muestra el truco. */
+/* Un teléfono se detecta por el TIPO DE PUNTERO, no por el ancho de la
+   ventana ni por el user agent: una notebook con pantalla táctil no es un
+   teléfono y una ventana angosta en el escritorio tampoco. */
+const TACTO = matchMedia("(pointer:coarse)").matches && navigator.maxTouchPoints > 0;
+if (TACTO) document.body.classList.add("tacto");
 const CORREA = +window.__CORREA || 0;
 const NIEBLA_K = window.__NIEBLA === undefined ? 1.0 : +window.__NIEBLA;
 // caminando por la calle se mira mucho a la sombra entre edificios, así que
@@ -152,7 +157,7 @@ let girando = true, nube = false, brillo = +window.__BRILLO || 1.0, modo = 0;
    las que caen entre 0,7 y 3,2 m de altura. Una pared llena la celda, la
    vereda no aporta ninguna porque queda abajo de la franja, y así el mismo
    visor camina cualquier .splat que le tiren. */
-const fp = { on:false, pos:[0, 1.68, 0], yaw:0.9, pit:0.02, choque:true, t:0 };
+const fp = { on:false, pos:[0, 1.68, 0], yaw:0.9, pit:0.02, choque:true, t:0, fov:72 };
 const tecla = Object.create(null);
 let rej = null;                       // {c, nx, nz, x0, z0, paso, umbral}
 
@@ -232,19 +237,32 @@ function entrarFP(){
   $("#mira").hidden = false;
   $("#pista").textContent = "WASD para caminar · mouse para mirar · Shift corre · V atraviesa · Esc sale";
   $("#pista").style.opacity = 1;
-  if (!document.pointerLockElement)
+  if (TACTO) {
+    avisar("Palanca para caminar · deslizá la pantalla para mirar", 5200);
+  } else if (!document.pointerLockElement) {
     $("#pista").textContent = "Hacé clic para tomar el mouse · WASD para caminar · Shift corre · V atraviesa · Esc sale";
+  }
   if (CORREA) { fp.pos[0] = 0; fp.pos[2] = 0; }
   const h = CORREA ? [fp.pos[0], fp.pos[2]] : buscarHueco(fp.pos[0], fp.pos[2]);
   fp.pos[0] = h[0]; fp.pos[2] = h[1];
   fp.pos[1] = sueloEn(h[0], h[1]) + 1.68;
-  if (lienzo.requestPointerLock) lienzo.requestPointerLock();
+  if (!TACTO && lienzo.requestPointerLock) lienzo.requestPointerLock();
+  if (TACTO) { $("#mando").hidden = false; $("#panel").hidden = true; }
 }
+let avisoT = 0;
+function avisar(txt, ms){
+  const e = $("#ayuda");
+  e.textContent = txt; e.hidden = false; e.style.opacity = 1;
+  clearTimeout(avisoT);
+  avisoT = setTimeout(() => { e.style.opacity = 0; }, ms || 3000);
+}
+
 function salirFP(){
   if (!fp.on) return;
   fp.on = false;
   $("#btPie").setAttribute("aria-pressed", "false");
   $("#mira").hidden = true;
+  $("#mando").hidden = true;
   $("#pista").textContent = "Arrastrá para girar · rueda para acercar · botón derecho para desplazar";
   if (document.exitPointerLock && document.pointerLockElement) document.exitPointerLock();
   ir(0);
@@ -254,7 +272,7 @@ document.addEventListener("pointerlockchange", () => {
 });
 
 function caminar(dt){
-  const v = tecla.shift ? 9.0 : 3.3;
+  const v = (tecla.shift || corriendo) ? 9.0 : 3.3;
   let ax = 0, az = 0;
   if (tecla.w || tecla.arrowup) az += 1;
   if (tecla.s || tecla.arrowdown) az -= 1;
@@ -338,7 +356,7 @@ function matVista(){
   ];
 }
 function matProy(){
-  const f = 1 / Math.tan((fp.on ? 72 : cam.fov) * Math.PI / 360);
+  const f = 1 / Math.tan((fp.on ? fp.fov : cam.fov) * Math.PI / 360);
   const a = lienzo.width / lienzo.height;
   const near = fp.on ? 0.22 : 1.0, far = 4000;   // caminando se pasa cerca de todo
   return [ f/a,0,0,0, 0,f,0,0, 0,0,(far+near)/(near-far),-1, 0,0,2*far*near/(near-far),0 ];
@@ -434,6 +452,9 @@ function arrancar(buf, nombre){
   orden = null; esperando = false; ultimaVista = null;
 
   pesoArchivo = buf.byteLength;
+  // un .splz viene cuantizado y en columnas: se desarma acá y de la textura
+  // para adentro es exactamente el mismo .splat de siempre
+  if (esSplz(buf)) buf = desplz(buf);
   const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   const p = empaquetar(buf, maxTex);
   N = p.n;
@@ -497,14 +518,44 @@ function arrancar(buf, nombre){
   if (!lazoVivo) { lazoVivo = true; lazo(); }
   // el archivo puede pedir que arranque caminando; el pointer lock necesita un
   // gesto, así que se toma el mouse con el primer clic
-  if (window.__PIE) setTimeout(entrarFP, 60);
+  $("#palanca").addEventListener("touchstart", (e) => e.preventDefault(), { passive:false });
+$("#btCorre").addEventListener("click", () => {
+  corriendo = !corriendo;
+  $("#btCorre").style.background = corriendo ? "rgba(185,140,255,.55)" : "";
+});
+$("#btSubir").addEventListener("click", () => {
+  fp.pit = Math.abs(fp.pit) > 0.5 ? 0.02 : 0.62;
+});
+$("#btPleno").addEventListener("click", () => {
+  const d = document.documentElement;
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
+});
+$("#btPanel").addEventListener("click", () => {
+  $("#panel").hidden = !$("#panel").hidden;
+});
+// dos dedos separándose cambian el campo visual, que en un teléfono es la
+// única forma de "acercar" sin caminar
+let pellizco = 0;
+lienzo.addEventListener("touchmove", (e) => {
+  if (e.touches.length !== 2) { pellizco = 0; return; }
+  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                       e.touches[0].clientY - e.touches[1].clientY);
+  if (pellizco) {
+    const o = fp.on ? fp : cam;
+    o.fov = Math.max(28, Math.min(96, (o.fov || 62)*(pellizco/d)));
+  }
+  pellizco = d;
+}, { passive:true });
+
+if (window.__PIE || TACTO) setTimeout(entrarFP, 60);
 }
 
 /* --------------------------------------------------------------- mandos */
 lienzo.addEventListener("contextmenu", (e) => e.preventDefault());
 let arrastra = 0, ux = 0, uy = 0;
 lienzo.addEventListener("pointerdown", (e) => {
-  if (fp.on) { if (!document.pointerLockElement && lienzo.requestPointerLock) lienzo.requestPointerLock(); return; }
+  if (fp.on) { if (!TACTO && !document.pointerLockElement && lienzo.requestPointerLock) lienzo.requestPointerLock(); return; }
   arrastra = e.button === 2 ? 2 : 1; ux = e.clientX; uy = e.clientY;
   girando = false; viaje = null; $("#btGira").setAttribute("aria-pressed", "false");
   lienzo.setPointerCapture(e.pointerId);
@@ -563,14 +614,34 @@ addEventListener("keyup", (e) => { tecla[e.key.toLowerCase()] = false; tecla.shi
 addEventListener("blur", () => { for (const k in tecla) tecla[k] = false; });
 $("#btPie").addEventListener("click", () => { fp.on ? salirFP() : entrarFP(); });
 
-/* palanca táctil: la mitad izquierda mueve, la derecha mira */
+/* Palanca táctil CON DIBUJO: el dedo que empieza adentro del círculo camina,
+   cualquier otro mira. Antes era "la mitad izquierda mueve" y no se veía por
+   ningún lado: en un teléfono el mando tiene que estar en pantalla o no
+   existe. */
 const palanca = { act:false, x:0, z:0, id:-1, ox:0, oy:0 };
 const mirada = { id:-1, x:0, y:0 };
+let corriendo = false;
+
+function enPalanca(t){
+  const r = $("#palanca").getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  return Math.hypot(t.clientX - cx, t.clientY - cy) < r.width*0.95;
+}
+function pintarPalanca(){
+  const p = $("#palanca");
+  p.classList.toggle("viva", palanca.act);
+  const R = p.getBoundingClientRect().width*0.26;
+  p.firstElementChild.style.transform =
+    "translate(" + (palanca.x*R).toFixed(1) + "px," + (-palanca.z*R).toFixed(1) + "px)";
+}
 lienzo.addEventListener("touchstart", (e) => {
   if (!fp.on) return;
   for (const t of e.changedTouches) {
-    if (t.clientX < innerWidth*0.45 && !palanca.act) {
-      palanca.act = true; palanca.id = t.identifier; palanca.ox = t.clientX; palanca.oy = t.clientY;
+    if (!palanca.act && enPalanca(t)) {
+      const r = $("#palanca").getBoundingClientRect();
+      palanca.act = true; palanca.id = t.identifier;
+      palanca.ox = r.left + r.width/2; palanca.oy = r.top + r.height/2;
+      pintarPalanca();
     } else if (mirada.id < 0) {
       mirada.id = t.identifier; mirada.x = t.clientX; mirada.y = t.clientY;
     }
@@ -581,8 +652,10 @@ lienzo.addEventListener("touchmove", (e) => {
   if (!fp.on) return;
   for (const t of e.changedTouches) {
     if (t.identifier === palanca.id) {
-      palanca.x = Math.max(-1, Math.min(1, (t.clientX - palanca.ox)/70));
-      palanca.z = Math.max(-1, Math.min(1, (palanca.oy - t.clientY)/70));
+      const R = $("#palanca").getBoundingClientRect().width*0.44;
+      palanca.x = Math.max(-1, Math.min(1, (t.clientX - palanca.ox)/R));
+      palanca.z = Math.max(-1, Math.min(1, (palanca.oy - t.clientY)/R));
+      pintarPalanca();
     } else if (t.identifier === mirada.id) {
       fp.yaw -= (t.clientX - mirada.x) * 0.005;
       fp.pit = Math.max(-1.35, Math.min(1.35, fp.pit - (t.clientY - mirada.y) * 0.005));
@@ -593,7 +666,9 @@ lienzo.addEventListener("touchmove", (e) => {
 }, { passive:false });
 function soltarTacto(e){
   for (const t of e.changedTouches) {
-    if (t.identifier === palanca.id) { palanca.act = false; palanca.id = -1; palanca.x = palanca.z = 0; }
+    if (t.identifier === palanca.id) {
+      palanca.act = false; palanca.id = -1; palanca.x = palanca.z = 0; pintarPalanca();
+    }
     if (t.identifier === mirada.id) mirada.id = -1;
   }
 }
@@ -608,7 +683,11 @@ $("#btCaja").addEventListener("click", (e) => {
 });
 
 function redimensionar(){
-  const r = Math.min(devicePixelRatio, 1.75);
+  // En un teléfono la pantalla tiene tres píxeles físicos por punto y la GPU
+  // no da abasto: se rasteriza a menos y el navegador lo estira. Es la
+  // diferencia entre veinte cuadros y seis.
+  const tope = +window.__ESCALA || (TACTO ? 1.05 : 1.75);
+  const r = Math.min(devicePixelRatio, tope);
   lienzo.width = Math.floor(innerWidth * r);
   lienzo.height = Math.floor(innerHeight * r);
   lienzo.style.width = innerWidth + "px";

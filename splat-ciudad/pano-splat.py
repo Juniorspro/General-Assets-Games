@@ -37,7 +37,7 @@ TOPE  = opc("--tope", 60.0)           # tope del estirón radial, en metros
 RSUELO= opc("--rsuelo", 180.0)        # hasta dónde el agua es agua y no fondo
 GRANO = opc("--grano", 0.055)         # tamaño al que se ralea el agua de cerca
 ANG   = opc("--ang", 0.006)           # y nunca más grueso que esto en radianes
-SIG   = opc("--sigma", 0.88)          # sigma como fracción del paso entre vecinas
+SIG   = opc("--sigma", 0.62)          # sigma como fracción del paso entre vecinas
 ALFA  = int(opc("--alfa", 245))       # opacidad: bajarla funde la trama
 
 # ------------------------------------------------------------------ leer PNG

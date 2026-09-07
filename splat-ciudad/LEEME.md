@@ -298,6 +298,81 @@ Tres banderas nuevas del visor, todas para este caso:
 hasta 4128x2064 y de ahí para arriba no hay más información que sacar. Lo
 honesto es decirlo: la nube es tan nítida como la imagen que entró.
 
+## Un mundo con relieve y objetos, sin escena que renderizar
+
+`pano-splat.py` da un plano de agua y una cúpula: hermoso y plano. `mundo-splat.py`
+es lo otro —relieve real, islas, palmeras, pasto, burbujas, cromados y vidrios
+en 3D— **sin Blender y sin trazar una sola toma**. La geometría se construye en
+numpy y el color sale del panorama, que es la fotografía de ese mundo.
+
+**Cómo se ilumina**, que es de lo que depende que parezca real y no un dibujo:
+
+* La ambiente es el panorama entero integrado contra el coseno, resuelto con
+  nueve armónicos esféricos (`pano.Entorno.irradiancia`). Una cara que mira al
+  cielo recibe azul; una que mira al agua, turquesa. Eso solo ya separa las
+  formas sin ninguna sombra.
+* El sol se busca en el panorama: dirección y color del percentil 99,85 de
+  luminancia sobre el horizonte. Su **intensidad no se puede leer de la
+  imagen** —el disco viene recortado en blanco en 8 bits— así que se calibra
+  contra el cielo: en exterior la directa es unas cuatro veces y media la
+  irradiancia del cielo.
+* La sombra sale de un barrido de horizonte sobre la grilla de alturas, no de
+  trazar rayos: con el sol a 57° ninguna sombra pasa de veintiún metros, así
+  que veinticuatro pasos de un metro alcanzan.
+* Los albedos son albedos de verdad: arena 0,40, pasto 0,10, roca 0,21. Con los
+  colores que uno pondría a ojo (una arena "beige" 0,80) el sol los manda
+  arriba de 1 y la curva filmica los devuelve **blancos**: la playa salía nieve.
+* El agua son dos capas. El fondo de arena con la absorción del agua encima
+  —por eso el turquesa es turquesa: es arena vista a través de dos metros de
+  agua— y la superficie semitransparente con Fresnel, que refleja el panorama
+  y le suma el lóbulo del sol que el panorama no puede traer.
+
+```sh
+# el mundo grande: 2,3 M de gaussianas
+python3 mundo-splat.py cielo360-rezona.png mundo.splat --grano 0.037 --crece 0.003 --dens 1.5
+# el de teléfono: 791 mil
+python3 mundo-splat.py cielo360-rezona.png cel.splat --grano 0.085 --crece 0.006 --dens 0.8 --cielo 2
+```
+
+## Comprimir: el formato .splz
+
+Un `.splat` son 32 bytes por gaussiana en float32 e **intercalados**, que es lo
+peor para comprimir. `splz.py` los deja en 17 antes de gzip y en unos 10
+después. Tres cosas, en este orden de importancia:
+
+1. **Orden de Morton.** Se ordenan por posición entrelazada bit a bit: las
+   vecinas en el archivo son vecinas en el espacio. Sin esto nada de lo demás
+   sirve.
+2. **Columnas.** Todas las x juntas, después las y, después los colores. Cada
+   columna se parece a sí misma.
+3. **Cuantización por bloque.** Cada 8192 gaussianas lleva su propia caja y las
+   posiciones van en 16 bits DENTRO de esa caja, guardadas como diferencia con
+   la anterior en aritmética de 16 bits —da la vuelta y se reconstruye exacto
+   con una suma acumulada—, con el byte alto separado del bajo. Cuantizar
+   contra la caja global sería inservible: diez centímetros por paso.
+
+Medido sobre el mundo grande: 71,1 MB de `.splat` → 37,9 MB de `.splz` → **21,9
+MB con gzip, el 57 % de lo que pesaba el `.splat.gz`**. El corrimiento en el
+percentil 99,9 es 0,58 del tamaño de la propia gaussiana, o sea invisible. El
+visor lo desarma en `desplz()` y sube a la GPU exactamente lo mismo: esto es
+tamaño de archivo, no de memoria de video.
+
+## Teléfono
+
+* **Detección por tipo de puntero**, no por ancho de ventana ni user agent: una
+  notebook con pantalla táctil no es un teléfono y una ventana angosta tampoco.
+* **Palanca en pantalla.** Antes el código ya caminaba con el tacto —"la mitad
+  izquierda mueve"— pero no se veía por ningún lado, y un mando invisible no
+  existe. Ahora hay círculo, perilla que sigue el dedo, y botones de correr,
+  mirar arriba, pantalla completa y datos.
+* **Resolución propia.** En un teléfono hay tres píxeles físicos por punto y la
+  GPU no da abasto: se rasteriza a 1,05 y el navegador estira. Es la diferencia
+  entre veinte cuadros y seis.
+* **Pellizco** para el campo visual, que es la única forma de acercar sin
+  caminar.
+* Nada de *pointer lock*, que en un teléfono no existe.
+* Y la nube aparte: 791 mil gaussianas en un html de 10,3 MB.
+
 ## Lo que costó, medido
 
 1. **Playwright no puede sacarle una foto a esto.** Con SwiftShader y un millón
@@ -392,3 +467,29 @@ honesto es decirlo: la nube es tan nítida como la imagen que entró.
     campanas dejan pasar el cielo procedural, que es de otro color. Se cierra
     con más solape (`--sigma`), más opacidad (`--alfa`) y engordando la elipse
     en pantalla (`--tam`), no con más gaussianas.
+23. **El rasterizador dibujaba TODAS las gaussianas de la mitad de su tamaño.**
+    El atajo clásico —`mayor = sqrt(2·λ)` con el cuadrado de -2 a 2 y
+    `exp(-|p|²)` en el fragmento— hace que el borde del cuadrado caiga a 1,41
+    sigma y que la campana baje cuatro veces más rápido de lo que debería. En
+    una nube densa no se nota, porque se tapa sola. En una superficie
+    muestreada justo —una cúpula de cielo, un plano de agua— se abre una
+    **rejilla por la que pasa el fondo**, y se ve como un abanico gris en el
+    cielo. Costó cinco capturas y una prueba con el fondo en magenta darse
+    cuenta de que el hueco era de verdad y no un problema de cobertura: la
+    separación angular entre gaussianas de la cúpula era perfectamente uniforme
+    (9,12 mrad, percentil 50 igual al 100) y el sigma era 11,87. El eje ahora
+    mide 3 sigma y el fragmento usa `exp(-1,125·|p|²)`, que es la campana que
+    corresponde.
+24. **La prueba del fondo magenta.** Cuando algo del cielo "se ve rayado" hay
+    dos hipótesis: faltan gaussianas o falta opacidad. Pintar el cielo
+    procedural de magenta y volver a mirar las separa en una sola captura. Si
+    las rayas salen magenta, es el fondo pasando: opacidad. Media hora de
+    hipótesis contra treinta segundos de edición.
+25. **El teselado de un objeto no puede depender de su distancia al ORIGEN**
+    en un mundo que se camina. Las burbujas se teselaban según lo lejos que
+    estuvieran del centro del mundo, y una burbuja lejos del centro puede
+    quedar a un metro de la cara: sesenta gaussianas transparentes ahí se leen
+    como una malla mosquitera. Sale del radio de la burbuja y nada más.
+26. **Un anillo de lomas de 360° no deja mar abierto en ningún rumbo.** El
+    relieve tiene que abrirse y cerrarse con el azimut, y volver a hundirse
+    antes del borde del mundo, o donde termina la grilla queda un escalón.

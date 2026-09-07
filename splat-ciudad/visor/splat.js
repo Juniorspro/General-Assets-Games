@@ -101,6 +101,66 @@ function medio(v){
 }
 const medio2 = (a, b) => (medio(b) << 16) | medio(a);
 
+
+/* ------------------------------------------------------------------ .splz
+   El mismo contenido que un .splat pero cuantizado y en columnas: posiciones
+   en 16 bits dentro de la caja de su bloque y guardadas como diferencia con la
+   anterior, escalas en logaritmo de 8 bits, y todo separado por columna en vez
+   de intercalado. Pesa un 40 % menos comprimido. Acá se vuelve a armar el
+   .splat de 32 bytes, así que de la textura para adentro no cambia nada.
+   El formato lo escribe splz.py. */
+export function esSplz(buf){
+  if (buf.byteLength < 24) return false;
+  const u = new Uint8Array(buf, 0, 5);
+  return u[0] === 83 && u[1] === 80 && u[2] === 76 && u[3] === 90 && u[4] === 50;
+}
+
+export function desplz(buf){
+  const dv = new DataView(buf);
+  const n = dv.getUint32(8, true), blo = dv.getUint32(12, true);
+  const l0 = dv.getFloat32(16, true), l1 = dv.getFloat32(20, true);
+  const nb = Math.ceil(n/blo), N = nb*blo;
+  let o = 24;
+  const lo = new Float32Array(buf.slice(o, o + nb*12)); o += nb*12;
+  const ext = new Float32Array(buf.slice(o, o + nb*12)); o += nb*12;
+  const u8 = new Uint8Array(buf);
+  const alto = [o, o + N, o + 2*N], bajo = [o + 3*N, o + 4*N, o + 5*N];
+  o += 6*N;
+  const esc = [o, o + N, o + 2*N]; o += 3*N;
+  const res = [o, o + N, o + 2*N, o + 3*N, o + 4*N, o + 5*N, o + 6*N, o + 7*N];
+
+  // la escala son 256 valores posibles: se calculan una vez y no 3n veces
+  const tabla = new Float32Array(256);
+  for (let i = 0; i < 256; i++) tabla[i] = Math.pow(2, l0 + i*(l1 - l0)/255);
+
+  const out = new ArrayBuffer(n*32);
+  const f = new Float32Array(out), b = new Uint8Array(out);
+  for (let blk = 0; blk < nb; blk++){
+    const base = blk*blo, tope = Math.min(blo, n - base);
+    for (let k = 0; k < 3; k++){
+      const l = lo[blk*3 + k], s = ext[blk*3 + k]/65535;
+      const ha = alto[k], ba = bajo[k];
+      let acc = 0;
+      for (let j = 0; j < blo; j++){
+        const i = base + j;
+        acc = (acc + ((u8[ha + i] << 8) | u8[ba + i])) & 0xffff;
+        if (j < tope) f[i*8 + k] = l + acc*s;
+      }
+    }
+  }
+  for (let i = 0; i < n; i++){
+    f[i*8 + 3] = tabla[u8[esc[0] + i]];
+    f[i*8 + 4] = tabla[u8[esc[1] + i]];
+    f[i*8 + 5] = tabla[u8[esc[2] + i]];
+    const d = i*32 + 24;
+    b[d]     = u8[res[0] + i]; b[d + 1] = u8[res[1] + i];
+    b[d + 2] = u8[res[2] + i]; b[d + 3] = u8[res[3] + i];
+    b[d + 4] = u8[res[4] + i]; b[d + 5] = u8[res[5] + i];
+    b[d + 6] = u8[res[6] + i]; b[d + 7] = u8[res[7] + i];
+  }
+  return out;
+}
+
 /* --------------------------------------------------------------- shaders */
 export const VERT = `#version 300 es
 precision highp float;
@@ -147,14 +207,32 @@ void main(){
   mat3 T = transpose(mat3(vista)) * J;
   mat3 cov2d = transpose(T) * Sigma * T;
 
+  // DILATACIÓN DE UN TERCIO DE PÍXEL. Sin esto, una gaussiana muy chata —un
+  // disco apoyado, una carta del cielo— proyecta una elipse cuyo eje menor da
+  // menos de un píxel, y ahí pasan dos cosas malas: el error de coma flotante
+  // puede dar un autovalor NEGATIVO y la gaussiana se descarta entera, y las
+  // que sobreviven salen como astillas con hueco entre una y otra. Se veía
+  // como una rejilla en el cielo por donde pasaba el fondo. Sumarle un tercio
+  // de píxel a la diagonal es lo que hace todo rasterizador de gaussianas: le
+  // pone un piso al tamaño en pantalla y de paso hace de antialias.
+  cov2d[0][0] += 0.33;
+  cov2d[1][1] += 0.33;
+
   // ejes de la elipse: autovectores de la 2x2 de arriba a la izquierda
   float medio = (cov2d[0][0] + cov2d[1][1]) / 2.0;
   float radio = length(vec2((cov2d[0][0] - cov2d[1][1]) / 2.0, cov2d[0][1]));
   float l1 = medio + radio, l2 = medio - radio;
   if (l2 < 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  /* EL CUADRADO LLEGA A TRES SIGMAS, no a uno y medio. Con el factor raiz de
+     dos que trae el rasterizador clásico, el cuadrado tapa hasta 1,41 sigma y
+     la campana del fragmento cae cuatro veces más rápido de lo que debería:
+     cada gaussiana se dibuja de la mitad del tamaño que dice el archivo. No se
+     nota en una nube densa —se tapa sola— pero en una superficie muestreada
+     justo se abre una rejilla por la que pasa el fondo. Acá el eje mide 3
+     sigma y el fragmento usa el exponente que corresponde. */
   vec2 dir = normalize(vec2(cov2d[0][1], l1 - cov2d[0][0]));
-  vec2 mayor = min(sqrt(2.0 * l1), 1024.0) * dir * tam;
-  vec2 menor = min(sqrt(2.0 * l2), 1024.0) * vec2(dir.y, -dir.x) * tam;
+  vec2 mayor = min(3.0 * sqrt(l1), 2048.0) * dir * tam;
+  vec2 menor = min(3.0 * sqrt(l2), 2048.0) * vec2(dir.y, -dir.x) * tam;
 
   // el color y la opacidad viven empaquetados en el cuarto uint32 del texel
   vColor = clamp(p.z / p.w + 1.0, 0.0, 1.0) *
@@ -185,10 +263,12 @@ in float vNiebla;
 out vec4 salida;
 const vec3 NIEBLA = vec3(0.585, 0.652, 0.719);
 void main(){
-  float A = -dot(vPos, vPos);
+  /* El cuadrado va de -2 a 2 y su borde está a 3 sigma, así que el radio en
+     sigmas es 1,5·|vPos| y la campana es exp(-0,5·(1,5·|vPos|)²). */
+  float A = -1.125 * dot(vPos, vPos);
   vec3 c = mix(vColor.rgb, NIEBLA * vColor.a, clamp(vNiebla * niebla, 0.0, 0.75));
   if (modo == 1) { salida = vec4(c * brillo, 1.0); return; }
-  if (A < -4.0) discard;             // más allá de 2σ no aporta nada
+  if (A < -4.5) discard;             // más allá de 3σ no aporta nada
   float B = exp(A) * vColor.a;
   salida = vec4(B * c * brillo, B);  // alfa premultiplicado
 }`;
