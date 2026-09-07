@@ -1405,11 +1405,11 @@ function alTocar(el, fn) {
 
 function sonarBotones() {
     const suena = e => {
-        const t = e.target.closest('.tbtn, .niv, #mjugar, #btn-graficos, #graficos-cerrar');
+        const t = e.target.closest('.tbtn, .niv, #mjugar, #btn-graficos, #graficos-cerrar, #graficos-menu');
         if (!t) return;
         despertarAudio();
         if (t.id === 'mjugar') S.confirmar();
-        else if (t.id === 'graficos-cerrar') S.cancelar();
+        else if (t.id === 'graficos-cerrar' || t.id === 'graficos-menu') S.cancelar();
         else S.boton(t.classList.contains('tbtn') ? 0.75 : 1);
     };
     for (const ev of ['touchstart', 'mousedown'])

@@ -125,6 +125,20 @@ export class Calidad {
         this.btn.addEventListener('mousedown', abrir);
         this.cerrar.addEventListener('touchstart', abrir, { passive: false });
         this.cerrar.addEventListener('mousedown', abrir);
+        /* MENÚ vuelve al inicio recargando la pagina. Se puede desarmar la
+           partida a mano —mision, bicho, intro, posicion, sonidos— pero son
+           seis estados y basta olvidarse de uno para volver al menu con el
+           bicho todavia cazandote. La recarga no puede quedar a medias, y los
+           assets ya estan en el cache del navegador. */
+        const alMenu = e => {
+            e.preventDefault(); e.stopPropagation();
+            location.reload();
+        };
+        const bm = document.getElementById('graficos-menu');
+        if (bm) {
+            bm.addEventListener('touchstart', alMenu, { passive: false });
+            bm.addEventListener('mousedown', alMenu);
+        }
         for (const k of ORDEN) {
             const el = document.getElementById('cal-' + k);
             if (!el) continue;
