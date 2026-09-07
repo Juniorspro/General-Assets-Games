@@ -27,7 +27,7 @@ def png(ruta, img):
         + trozo(b"IEND", b""))
 
 def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0,
-          fondo=(11,12,16), rmax=7.0):
+          fondo=(11,12,16), rmax=7.0, sigma=1.0):
     pos, esc, rgba, n = leer(splat)
     ojo = np.array(ojo, float); blanco = np.array(blanco, float)
     z = ojo - blanco; z /= np.linalg.norm(z)
@@ -43,7 +43,7 @@ def tomar(splat, salida, ojo, blanco, fov=52.0, W=1100, H=680, brillo=1.0,
     # el tope importa: en una vista de adentro una gaussiana del piso a tres
     # metros ocupa cuarenta píxeles, y con el tope en siete el suelo aparece
     # como puntitos sueltos sobre negro y parece que faltaran gaussianas
-    rad = np.clip(np.max(esc, axis=1)/np.maximum(1e-6,d)*f*1.15, 0.5, rmax)
+    rad = np.clip(np.max(esc, axis=1)*sigma/np.maximum(1e-6,d)*f*1.15, 0.5, rmax)
     vis &= (px > -8) & (px < W+8) & (py > -8) & (py < H+8)
     idx = np.flatnonzero(vis)
     ix = px[idx].astype(np.int32); iy = py[idx].astype(np.int32)
@@ -78,4 +78,5 @@ if __name__ == "__main__":
         return [float(v) for v in a[a.index(k)+1].split(",")] if k in a else d
     tomar(a[0], a[1], vec("--ojo", [200,120,260]), vec("--blanco", [0,40,0]),
           fov=num("--fov", 52), W=int(num("--w", 1100)), H=int(num("--h", 680)),
-          brillo=num("--brillo", 1.0), rmax=num("--rmax", 7))
+          brillo=num("--brillo", 1.0), rmax=num("--rmax", 7),
+          sigma=num("--sigma", 1.0))

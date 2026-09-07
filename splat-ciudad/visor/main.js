@@ -118,6 +118,7 @@ function cajaConstruida(buf, n){
    ojo no hay un número que sirva para los dos. Los dos de cerca van en metros
    porque las calles están donde están. */
 function ajustarEncuadres(caja){
+  if (Array.isArray(window.__ENCUADRES) && window.__ENCUADRES.length) return;
   const lado = Math.max(caja[3]-caja[0], caja[5]-caja[2]);
   const cx = (caja[0]+caja[3])/2, cz = (caja[2]+caja[5])/2;
   // Todo sale del lado de la huella, no del alto. Encuadrar por el alto para
@@ -126,6 +127,21 @@ function ajustarEncuadres(caja){
   ENCUADRES[0].blanco = [cx, lado*0.085, cz];  ENCUADRES[0].dist = lado*0.62;
   ENCUADRES[1].blanco = [cx, lado*0.110, cz];  ENCUADRES[1].dist = lado*0.52;
 }
+/* Una nube sacada de un panorama no tiene "afuera": está toda alrededor de un
+   punto, y los encuadres de maqueta no significan nada. El archivo puede traer
+   los suyos. */
+if (Array.isArray(window.__ENCUADRES) && window.__ENCUADRES.length) {
+  ENCUADRES.length = 0;
+  for (const e of window.__ENCUADRES) ENCUADRES.push(e);
+  Object.assign(cam, { blanco:ENCUADRES[0].blanco.slice(), dist:ENCUADRES[0].dist,
+                       yaw:ENCUADRES[0].yaw, pit:ENCUADRES[0].pit, fov:ENCUADRES[0].fov });
+}
+/* La correa: hasta dónde se puede caminar desde el origen. En una nube de
+   panorama el paralaje es honesto sólo cerca del punto de vista —el color de
+   cada gaussiana se midió UNA vez, desde ahí—, así que alejarse mucho no
+   muestra más mundo, muestra el truco. */
+const CORREA = +window.__CORREA || 0;
+const NIEBLA_K = window.__NIEBLA === undefined ? 1.0 : +window.__NIEBLA;
 // caminando por la calle se mira mucho a la sombra entre edificios, así que
 // el archivo puede pedir un brillo de arranque más alto
 let girando = true, nube = false, brillo = +window.__BRILLO || 1.0, modo = 0;
@@ -145,18 +161,43 @@ function armarRejilla(buf, n, caja, paso3d){
   const x0 = caja[0] - 2, z0 = caja[2] - 2;
   const nx = Math.ceil((caja[3] - x0 + 2)/paso), nz = Math.ceil((caja[5] - z0 + 2)/paso);
   if (nx*nz > 6e6 || nx <= 0 || nz <= 0) return null;
-  const c = new Uint16Array(nx*nz);
+
+  /* Dos pasadas. La primera saca la ALTURA DEL PISO de cada celda: la
+     gaussiana más baja por encima de -1, que en el agua es la superficie (no
+     la arena del fondo) y en una loma es el pasto. Sin esto el modo a pie
+     asume piso plano, que servía para una ciudad y no para un mundo con
+     lomas: se camina por adentro del cerro. La segunda cuenta lo que hay
+     entre 0,7 y 3,2 m POR ENCIMA de ese piso, que es lo que choca. */
+  const suelo = new Float32Array(nx*nz).fill(NaN);
   for (let i = 0; i < n; i++) {
     const y = f[8*i+1];
-    if (y < 0.7 || y > 3.2) continue;
+    if (y < -1.0) continue;
     const ix = ((f[8*i] - x0)/paso) | 0, iz = ((f[8*i+2] - z0)/paso) | 0;
     if (ix < 0 || ix >= nx || iz < 0 || iz >= nz) continue;
-    if (c[iz*nx + ix] < 65535) c[iz*nx + ix]++;
+    const k = iz*nx + ix;
+    if (!(suelo[k] <= y)) suelo[k] = y;      // NaN <= y es false: primera gana
   }
-  // cuántas gaussianas esperaría una pared que llena la celda, por un tercio
+  const c = new Uint16Array(nx*nz);
+  for (let i = 0; i < n; i++) {
+    const ix = ((f[8*i] - x0)/paso) | 0, iz = ((f[8*i+2] - z0)/paso) | 0;
+    if (ix < 0 || ix >= nx || iz < 0 || iz >= nz) continue;
+    const k = iz*nx + ix, s = suelo[k];
+    if (!(s === s)) continue;
+    const d = f[8*i+1] - s;
+    if (d < 0.7 || d > 3.2) continue;
+    if (c[k] < 65535) c[k]++;
+  }
   const esper = (paso * 2.5) / Math.max(0.04, paso3d*paso3d);
   const umbral = Math.max(4, Math.round(esper * 0.33));
-  return { c, nx, nz, x0, z0, paso, umbral };
+  return { c, suelo, nx, nz, x0, z0, paso, umbral };
+}
+
+function sueloEn(x, z){
+  if (!rej) return 0;
+  const ix = ((x - rej.x0)/rej.paso) | 0, iz = ((z - rej.z0)/rej.paso) | 0;
+  if (ix < 0 || ix >= rej.nx || iz < 0 || iz >= rej.nz) return 0;
+  const s = rej.suelo[iz*rej.nx + ix];
+  return s === s ? s : 0;
 }
 
 function solido(x, z){
@@ -193,8 +234,10 @@ function entrarFP(){
   $("#pista").style.opacity = 1;
   if (!document.pointerLockElement)
     $("#pista").textContent = "Hacé clic para tomar el mouse · WASD para caminar · Shift corre · V atraviesa · Esc sale";
-  const h = buscarHueco(fp.pos[0], fp.pos[2]);
-  fp.pos[0] = h[0]; fp.pos[2] = h[1]; fp.pos[1] = 1.68;
+  if (CORREA) { fp.pos[0] = 0; fp.pos[2] = 0; }
+  const h = CORREA ? [fp.pos[0], fp.pos[2]] : buscarHueco(fp.pos[0], fp.pos[2]);
+  fp.pos[0] = h[0]; fp.pos[2] = h[1];
+  fp.pos[1] = sueloEn(h[0], h[1]) + 1.68;
   if (lienzo.requestPointerLock) lienzo.requestPointerLock();
 }
 function salirFP(){
@@ -226,6 +269,19 @@ function caminar(dt){
   // de a un eje, para deslizar contra la pared en vez de frenar en seco
   if (!fp.choque || !chocaEn(fp.pos[0] + dx, fp.pos[2])) fp.pos[0] += dx;
   if (!fp.choque || !chocaEn(fp.pos[0], fp.pos[2] + dz)) fp.pos[2] += dz;
+  if (CORREA) {
+    const r = Math.hypot(fp.pos[0], fp.pos[2]);
+    if (r > CORREA) { fp.pos[0] *= CORREA/r; fp.pos[2] *= CORREA/r; }
+  }
+  seguirSuelo(dt);
+}
+
+/* la vista sigue el terreno, con un poco de inercia para que la rejilla de
+   1,5 m no se note como escalones */
+function seguirSuelo(dt){
+  const meta = sueloEn(fp.pos[0], fp.pos[2]) + 1.68;
+  const k = 1 - Math.exp(-dt*7.0);
+  fp.pos[1] += (meta - fp.pos[1]) * k;
 }
 
 function ir(i, animar = true){
@@ -474,7 +530,7 @@ lienzo.addEventListener("pointermove", (e) => {
 lienzo.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (fp.on) return;
-  cam.dist = Math.max(18, Math.min(2200, cam.dist * Math.exp(e.deltaY * 0.0011)));
+  cam.dist = Math.max(CORREA ? 1.5 : 18, Math.min(CORREA ? 240 : 2200, cam.dist * Math.exp(e.deltaY * 0.0011)));
 }, { passive:false });
 
 $("#tam").addEventListener("input", (e) => $("#tamV").textContent = coma(+e.target.value));
@@ -602,7 +658,7 @@ function lazo(){
       gl.uniform1f(uTam, +$("#tam").value);
     gl.uniform1f(uBrillo, brillo);
     gl.uniform1i(uModo, modo);
-    gl.uniform1f(uNiebla, 1.0);
+    gl.uniform1f(uNiebla, NIEBLA_K);
     gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, N);
   }
 

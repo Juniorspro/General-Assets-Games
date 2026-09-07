@@ -230,6 +230,74 @@ navegador hasta 3.000.000.
 `hacer-splat.py` es la versión anterior, la que sacaba el color de la textura y
 cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
 
+## Un panorama convertido en pura pintura
+
+`pano-splat.py` es el otro camino a un splat, y el más corto: **no hay escena
+que renderizar**. Entra una equirectangular y sale una nube donde cada
+gaussiana es UN PÍXEL del panorama puesto en el lugar del espacio de donde vino
+ese píxel. Sin malla, sin texturas, sin assets, sin entrenamiento: color y
+posición, que es lo que un splat es.
+
+El panorama es `cielo360-rezona.png`, generado con Rezona: laguna turquesa,
+cúmulos, lomas verdes, burbujas de jabón y peces tropicales. Frutiger Aero.
+
+**De dónde sale la distancia.** Un panorama trae la dirección de cada píxel
+pero no su distancia. En un mundo de laguna la geometría la regala:
+
+* Mirando para abajo el rayo pega en el plano del agua, y eso es exacto:
+  `t = altura_del_ojo / -sen(elevación)`. El agua queda con perspectiva **de
+  verdad** y aguanta que uno se mueva.
+* Mirando al horizonte o para arriba —cielo, nubes, las lomas del fondo— no hay
+  dónde pegar: va a una cúpula de 520 m, donde el paralaje ya no se nota.
+* Más allá de `--rsuelo` (180 m por omisión) el agua también se va a la cúpula.
+  Si no, los anillos del agua lejana se separan —el estirón radial crece con el
+  cuadrado de la distancia— y desde un ojo corrido se ven las rendijas negras
+  entre anillo y anillo.
+
+**El tamaño de cada gaussiana** es lo que subtiende su píxel a esa distancia:
+las del agua van apoyadas en el plano (normal para arriba) y estiradas a lo
+largo del rayo, porque un píxel visto de canto cubre un rectángulo largo; las
+de la cúpula van de cara al ojo. Por eso la nube no tiene huecos ni de cerca ni
+de lejos.
+
+**El raleo del agua de cerca.** Bajo los pies un píxel del panorama tapa tres
+centímetros de agua: la mitad de las gaussianas se amontonaban en un círculo de
+dos metros donde ya no se distingue ninguna. Se saltean filas y columnas hasta
+que cada gaussiana mida `--grano` **o** lo que `--ang` subtiende a esa distancia
+—el menor de los dos, porque cinco centímetros a un metro de los pies son dos
+grados de vista y se ven los pegotes—, y las que sobreviven se agrandan por el
+mismo factor. Lo que se libera se gasta en `--super`, que es donde sí se ve.
+
+**El muestreo es Catmull-Rom**, no el píxel vecino. Sin interpolar, subir
+`--super` multiplica gaussianas sin agregar nada y el cielo sale escalonado;
+bilineal arregla eso pero deja todo blando. Bicúbico mantiene el filo del
+horizonte y del borde de las nubes.
+
+```sh
+# la nube grande: 5,0 M de gaussianas, 153 MB
+python3 pano-splat.py cielo360-rezona.png pano.splat --super 3
+
+# el html de un solo archivo, que arranca parado en el agua
+python3 armar-html.py visor pano.splat laguna-aero.html --pie --niebla 0 \
+  --correa 9 --encuadres '[{"blanco":[0,1.5,0],"dist":7,"yaw":0,"pit":0.05,"fov":62}]' \
+  --titulo "Laguna Aero 360"
+```
+
+Tres banderas nuevas del visor, todas para este caso:
+
+* `--niebla 0` apaga la perspectiva aérea del shader. Está para que la torre del
+  fondo no salga tan nítida como la de adelante, pero acá el panorama **ya trae
+  su bruma pintada** y a 520 m la del shader se comía el 23 % del cielo.
+* `--correa 9` limita a nueve metros lo que se puede caminar desde el origen. El
+  color de cada gaussiana se midió UNA sola vez, desde ese punto: alejarse no
+  muestra más mundo, muestra el truco.
+* `--encuadres` reemplaza los cuatro encuadres de maqueta, que en una nube de
+  panorama no significan nada porque no hay un "afuera" desde donde mirarla.
+
+**El techo de esto es el panorama.** 1376x688 píxeles: `--super 3` interpola
+hasta 4128x2064 y de ahí para arriba no hay más información que sacar. Lo
+honesto es decirlo: la nube es tan nítida como la imagen que entró.
+
 ## Lo que costó, medido
 
 1. **Playwright no puede sacarle una foto a esto.** Con SwiftShader y un millón
@@ -293,3 +361,16 @@ cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
     is not linkable between attached shaders"*.
 16. **Con dos programas hay que usar VAO.** El estado de atributos es global; el
     cielo y las gaussianas se pisaban el `vertexAttribPointer`.
+17. **Con un panorama, la mitad de las gaussianas caen bajo los pies.** El
+    reparto de píxeles de una equirectangular es uniforme en ángulo, y el
+    hemisferio de abajo es la mitad: 1,89 de 3,79 millones se amontonaban en un
+    círculo de dos metros. Raleadas por tamaño quedan 700 mil y la nube se ve
+    igual de cerca y mejor de lejos.
+18. **El estirón radial del agua lejana abre rendijas.** El paso entre anillos
+    crece con el cuadrado de la distancia y el largo de la gaussiana estaba
+    topeado: pasados los 211 m quedaban franjas negras entre anillo y anillo.
+    Desde el origen no se ven —se miran de canto—, desde veinte metros al
+    costado sí. Se arregla mandando el agua lejana a la cúpula, no subiendo el
+    tope.
+19. **`--super` sin interpolar no hace nada.** Repetía el píxel vecino: cuatro
+    veces las gaussianas, la misma imagen escalonada y el archivo por las nubes.
