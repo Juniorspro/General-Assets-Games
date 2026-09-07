@@ -102,6 +102,7 @@ in vec2 posicion;      // esquina del cuadrado, en [-2,2]
 in uint indice;
 out vec4 vColor;
 out vec2 vPos;
+out float vNiebla;
 
 void main(){
   uvec4 cen = texelFetch(u_textura, ivec2((uint(indice) & 0x3ffu) << 1, uint(indice) >> 10), 0);
@@ -139,6 +140,10 @@ void main(){
   vColor = clamp(p.z / p.w + 1.0, 0.0, 1.0) *
            vec4(uvec4(cov.w & 0xffu, (cov.w >> 8) & 0xffu,
                       (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu)) / 255.0;
+  // perspectiva aérea: Cycles no tiene bruma acá, así que la distancia se
+  // paga en el shader. Sin esto la torre del fondo está tan nítida como la de
+  // adelante, y eso es lo que hace que una nube no parezca una foto.
+  vNiebla = 1.0 - exp(-length(camara.xyz) * 0.0008);
   vPos = posicion;
   vec2 centro = vec2(p) / p.w;
   if (modo == 1) {
@@ -153,15 +158,54 @@ precision highp float;
 precision highp int;
 uniform float brillo;
 uniform int modo;
+uniform float niebla;
 in vec4 vColor;
 in vec2 vPos;
+in float vNiebla;
 out vec4 salida;
+const vec3 NIEBLA = vec3(0.585, 0.652, 0.719);
 void main(){
   float A = -dot(vPos, vPos);
-  if (modo == 1) { salida = vec4(vColor.rgb * brillo, 1.0); return; }
+  vec3 c = mix(vColor.rgb, NIEBLA * vColor.a, clamp(vNiebla * niebla, 0.0, 0.85));
+  if (modo == 1) { salida = vec4(c * brillo, 1.0); return; }
   if (A < -4.0) discard;             // más allá de 2σ no aporta nada
   float B = exp(A) * vColor.a;
-  salida = vec4(B * vColor.rgb * brillo, B);  // alfa premultiplicado
+  salida = vec4(B * c * brillo, B);  // alfa premultiplicado
+}`;
+
+/* --------------------------------------------------------------- cielo */
+/* El fondo negro es lo que más delata que la nube es una maqueta. Esto no es
+   una textura: para cada píxel se reconstruye la dirección del rayo, y de ahí
+   sale el degradé de cenit a horizonte, la bruma de abajo y el sol. La
+   dirección del sol es la misma que tenía la escena en Blender —(52°, 2°, 34°)
+   de rotación— pasada a los ejes del visor. */
+export const VERT_CIELO = `#version 300 es
+precision highp float;
+in vec2 posicion;
+out vec2 uv;
+void main(){ uv = posicion; gl_Position = vec4(posicion, 0.999, 1.0); }`;
+
+export const FRAG_CIELO = `#version 300 es
+precision highp float;
+uniform mat4 vista;
+uniform vec2 escala;
+uniform float brillo;
+in vec2 uv;
+out vec4 salida;
+const vec3 SOL = vec3(0.4584, 0.6153, 0.6414);
+void main(){
+  vec3 dc = normalize(vec3(uv.x * escala.x, uv.y * escala.y, -1.0));
+  vec3 d = transpose(mat3(vista)) * dc;
+  float t = clamp(d.y, -1.0, 1.0);
+  vec3 cenit    = vec3(0.098, 0.196, 0.365);
+  vec3 horizonte= vec3(0.616, 0.686, 0.757);
+  vec3 bruma    = vec3(0.255, 0.271, 0.294);
+  vec3 c = mix(horizonte, cenit, pow(clamp(t, 0.0, 1.0), 0.62));
+  c = mix(c, bruma, smoothstep(0.005, -0.26, t));   // bruma, no vacío
+  float s = max(0.0, dot(d, SOL));
+  c += vec3(1.0, 0.88, 0.70) * pow(s, 900.0) * 2.6;      // el disco
+  c += vec3(1.0, 0.90, 0.76) * pow(s, 9.0) * 0.13;       // el halo
+  salida = vec4(c * brillo, 1.0);
 }`;
 
 /* --------------------------------------------------- orden por conteo */

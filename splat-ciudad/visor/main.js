@@ -1,7 +1,8 @@
-import { empaquetar, VERT, FRAG, WORKER, CUANTOS } from "./splat.js";
+import { empaquetar, VERT, FRAG, VERT_CIELO, FRAG_CIELO, WORKER, CUANTOS } from "./splat.js";
 
 const $ = (s) => document.querySelector(s);
 const ARCHIVO = "./ciudad.splat";
+const TOMAS = 184;      // cuántas fotos de Cycles le dieron color
 const coma = (v, d = 2) => v.toFixed(d).replace(".", ",");
 
 function morir(t){ $("#fallaTexto").textContent = t; $("#falla").style.display = "grid"; $("#carga").classList.add("ido"); }
@@ -18,11 +19,16 @@ function compilar(tipo, fuente){
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
   return s;
 }
-const prog = gl.createProgram();
-gl.attachShader(prog, compilar(gl.VERTEX_SHADER, VERT));
-gl.attachShader(prog, compilar(gl.FRAGMENT_SHADER, FRAG));
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { morir("Shader: " + gl.getProgramInfoLog(prog)); throw new Error("link"); }
+function armar(v, f){
+  const p = gl.createProgram();
+  gl.attachShader(p, compilar(gl.VERTEX_SHADER, v));
+  gl.attachShader(p, compilar(gl.FRAGMENT_SHADER, f));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { morir("Shader: " + gl.getProgramInfoLog(p)); throw new Error("link"); }
+  return p;
+}
+const prog = armar(VERT, FRAG);
+const progCielo = armar(VERT_CIELO, FRAG_CIELO);
 gl.useProgram(prog);
 
 gl.disable(gl.DEPTH_TEST);
@@ -33,8 +39,10 @@ gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_AL
 const U = (n) => gl.getUniformLocation(prog, n);
 const uProy = U("proyeccion"), uVista = U("vista"), uFocal = U("focal"),
       uPant = U("pantalla"), uTam = U("tam"), uTex = U("u_textura"),
-      uBrillo = U("brillo"), uModo = U("modo");
+      uBrillo = U("brillo"), uModo = U("modo"), uNiebla = U("niebla");
 
+const vaoSplat = gl.createVertexArray();
+gl.bindVertexArray(vaoSplat);
 // el cuadrado que cubre la elipse, en [-2,2]
 const vboQuad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
@@ -50,9 +58,69 @@ gl.bindBuffer(gl.ARRAY_BUFFER, vboIdx);
 gl.vertexAttribIPointer(aIdx, 1, gl.UNSIGNED_INT, 0, 0);
 gl.vertexAttribDivisor(aIdx, 1);
 
+const vaoCielo = gl.createVertexArray();
+gl.bindVertexArray(vaoCielo);
+const vboCielo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboCielo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, 1,1, -1,1]), gl.STATIC_DRAW);
+const aPosC = gl.getAttribLocation(progCielo, "posicion");
+gl.enableVertexAttribArray(aPosC);
+gl.vertexAttribPointer(aPosC, 2, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+const uCVista = gl.getUniformLocation(progCielo, "vista");
+const uCEsc = gl.getUniformLocation(progCielo, "escala");
+const uCBrillo = gl.getUniformLocation(progCielo, "brillo");
+
 /* --------------------------------------------------------------- cámara */
 const cam = { blanco:[0,26,0], dist:420, yaw:0.7, pit:0.13, fov:52 };
-let girando = true, nube = false, brillo = 1.55, modo = 0;
+/* Cuatro encuadres, porque la nube se lee distinto en cada escala: de lejos es
+   una maqueta, a la altura del cordón se nota que el color es radiancia. */
+const ENCUADRES = [
+  { blanco:[0, 48, 0],    dist:365, yaw:0.92,  pit:0.145, fov:50 },   // aérea
+  { blanco:[0, 62, 0],    dist:300, yaw:2.34,  pit:0.045, fov:54 },   // perfil
+  { blanco:[-46, 13, -52], dist:118, yaw:1.571, pit:0.075, fov:58 },  // avenida
+  { blanco:[6, 5, -52],   dist:36,  yaw:1.571, pit:0.055, fov:64 },   // peatón
+];
+/* Los dos encuadres de lejos se calculan de la caja de la nube: el mismo
+   visor sirve para el distrito entero y para el recorte de una esquina, y a
+   ojo no hay un número que sirva para los dos. Los dos de cerca van en metros
+   porque las calles están donde están. */
+function ajustarEncuadres(caja){
+  const lado = Math.max(caja[3]-caja[0], caja[5]-caja[2]);
+  const alto = caja[4] - Math.min(0, caja[1]);
+  const cx = (caja[0]+caja[3])/2, cz = (caja[2]+caja[5])/2;
+  ENCUADRES[0].blanco = [cx, alto*0.36, cz];  ENCUADRES[0].dist = lado*0.64;
+  ENCUADRES[1].blanco = [cx, alto*0.47, cz];  ENCUADRES[1].dist = lado*0.53;
+}
+let girando = true, nube = false, brillo = 1.0, modo = 0;
+
+function ir(i, animar = true){
+  const e = ENCUADRES[i];
+  if (!e) return;
+  girando = false; $("#btGira").setAttribute("aria-pressed", "false");
+  for (const b of document.querySelectorAll("#encuadres button"))
+    b.setAttribute("aria-pressed", String(+b.dataset.v === i));
+  if (!animar || matchMedia("(prefers-reduced-motion:reduce)").matches) {
+    Object.assign(cam, { blanco:e.blanco.slice(), dist:e.dist, yaw:e.yaw, pit:e.pit, fov:e.fov });
+    return;
+  }
+  viaje = { desde:{ blanco:cam.blanco.slice(), dist:cam.dist, yaw:cam.yaw, pit:cam.pit, fov:cam.fov },
+            hasta:e, t0:performance.now(), ms:900 };
+}
+let viaje = null;
+function avanzarViaje(){
+  if (!viaje) return;
+  const u = Math.min(1, (performance.now() - viaje.t0) / viaje.ms);
+  const k = u < 0.5 ? 4*u*u*u : 1 - Math.pow(-2*u + 2, 3)/2;   // suave a los dos lados
+  const a = viaje.desde, b = viaje.hasta;
+  for (let i = 0; i < 3; i++) cam.blanco[i] = a.blanco[i] + (b.blanco[i]-a.blanco[i])*k;
+  cam.dist = a.dist + (b.dist-a.dist)*k;
+  cam.yaw  = a.yaw  + (b.yaw -a.yaw )*k;
+  cam.pit  = a.pit  + (b.pit -a.pit )*k;
+  cam.fov  = a.fov  + (b.fov -a.fov )*k;
+  if (u >= 1) viaje = null;
+}
 
 function matVista(){
   const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
@@ -121,9 +189,9 @@ function arrancar(buf){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.uniform1i(uTex, 0);
 
-  cam.blanco = [p.centro[0], (p.caja[1] + p.caja[4]) * 0.22, p.centro[2]];
-  const lado = Math.max(p.caja[3]-p.caja[0], p.caja[5]-p.caja[2]);
-  cam.dist = lado * 0.78;
+  ajustarEncuadres(p.caja);
+  ir(0, false);
+  girando = true; $("#btGira").setAttribute("aria-pressed", "true");
 
   worker = new Worker(URL.createObjectURL(new Blob([WORKER], { type:"text/javascript" })));
   worker.postMessage({ datos: p.datos.buffer.slice(0), n: N });
@@ -138,9 +206,15 @@ function arrancar(buf){
   $("#dN").textContent = N.toLocaleString("es-AR");
   $("#dCaja").textContent = Math.round(p.caja[3]-p.caja[0]) + " × " + Math.round(p.caja[5]-p.caja[2]) + " m";
   $("#dPeso").textContent = coma(pesoArchivo/1048576, 1) + " MB";
-  // separación media: raíz de (área de la huella / cantidad), a ojo de buen cubero
-  const areaHuella = (p.caja[3]-p.caja[0]) * (p.caja[5]-p.caja[2]);
-  $("#dSep").textContent = coma(Math.sqrt(areaHuella / N) * 1.9, 1) + " m";
+  // grano: la mediana del lado mayor de la gaussiana, sobre una muestra
+  const fs = new Float32Array(buf), m = Math.min(N, 24000), lados = new Float64Array(m);
+  for (let i = 0; i < m; i++) {
+    const j = ((i * 7919) % N) | 0;
+    lados[i] = 2 * Math.max(fs[8*j+3], fs[8*j+4]);
+  }
+  lados.sort();
+  $("#dSep").textContent = coma(lados[m >> 1], 2) + " m";
+  $("#dTomas").textContent = TOMAS;
   $("#panel").hidden = $("#datos").hidden = false;
   $("#carga").classList.add("ido");
   setTimeout(() => { $("#pista").style.opacity = 0; }, 6500);
@@ -153,7 +227,7 @@ lienzo.addEventListener("contextmenu", (e) => e.preventDefault());
 let arrastra = 0, ux = 0, uy = 0;
 lienzo.addEventListener("pointerdown", (e) => {
   arrastra = e.button === 2 ? 2 : 1; ux = e.clientX; uy = e.clientY;
-  girando = false; $("#btGira").setAttribute("aria-pressed", "false");
+  girando = false; viaje = null; $("#btGira").setAttribute("aria-pressed", "false");
   lienzo.setPointerCapture(e.pointerId);
 });
 lienzo.addEventListener("pointerup", () => { arrastra = 0; });
@@ -179,6 +253,13 @@ $("#tam").addEventListener("input", (e) => $("#tamV").textContent = coma(+e.targ
 $("#exp").addEventListener("input", (e) => { brillo = +e.target.value; $("#expV").textContent = coma(brillo); });
 $("#btGira").addEventListener("click", (e) => {
   girando = !girando; e.currentTarget.setAttribute("aria-pressed", String(girando));
+  if (girando) viaje = null;
+});
+for (const b of document.querySelectorAll("#encuadres button"))
+  b.addEventListener("click", () => ir(+b.dataset.v));
+addEventListener("keydown", (e) => {
+  if (e.key >= "1" && e.key <= "4") ir(+e.key - 1);
+  if (e.key === " ") { e.preventDefault(); $("#btGira").click(); }
 });
 $("#btCaja").addEventListener("click", (e) => {
   /* "Nube": achica las gaussianas hasta que se ven como puntos sueltos, que es
@@ -202,6 +283,7 @@ addEventListener("resize", redimensionar);
 let esperando = false, t0Orden = 0, ultimaVista = null, cuadros = 0, desde = performance.now();
 function lazo(){
   requestAnimationFrame(lazo);
+  avanzarViaje();
   if (girando) cam.yaw += 0.0016;
 
   const V = matVista(), P = matProy();
@@ -218,6 +300,20 @@ function lazo(){
 
   gl.clearColor(0.043, 0.047, 0.063, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
+
+  // el cielo primero y opaco, que las gaussianas se compongan encima
+  gl.disable(gl.BLEND);
+  gl.useProgram(progCielo);
+  gl.bindVertexArray(vaoCielo);
+  const tf = Math.tan(cam.fov * Math.PI / 360);
+  gl.uniformMatrix4fv(uCVista, false, V);
+  gl.uniform2fv(uCEsc, [tf * lienzo.width / lienzo.height, tf]);
+  gl.uniform1f(uCBrillo, Math.min(1.35, 0.55 + 0.45 * brillo));
+  gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+  gl.enable(gl.BLEND);
+  gl.useProgram(prog);
+  gl.bindVertexArray(vaoSplat);
+
   if (orden) {
     gl.uniformMatrix4fv(uProy, false, P);
     gl.uniformMatrix4fv(uVista, false, V);
@@ -226,6 +322,7 @@ function lazo(){
       gl.uniform1f(uTam, +$("#tam").value);
     gl.uniform1f(uBrillo, brillo);
     gl.uniform1i(uModo, modo);
+    gl.uniform1f(uNiebla, 1.0);
     gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, N);
   }
 
