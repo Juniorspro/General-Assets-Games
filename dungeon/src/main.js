@@ -1532,3 +1532,4 @@ window.__toWorld = toWorld;
 import * as MAP from './map.js';
 window.__MAP = MAP;
 window.__SONIDO = S;   // el banco mide los sonidos desde afuera
+window.__I = { setIdioma, t, idiomaActual };   // y cambia el idioma desde afuera

@@ -166,9 +166,8 @@ export class Calidad {
         if (!d) return;
         const N = NIVELES[this.nivel];
         const pr = Math.min(N.pix, devicePixelRatio || 1);
-        d.textContent = t('resolution', pr.toFixed(2))
-            + ' · sombras ' + (N.sombras ? N.mapa : 'no')
-            + ' · faroles que proyectan ' + N.faroles;
+        d.textContent = t('qualityDetail',
+            pr.toFixed(2), N.sombras ? N.mapa : null, N.faroles);
     }
 
     /* El contador. Promedia medio segundo: cuadro a cuadro el numero salta

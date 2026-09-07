@@ -32,6 +32,10 @@ const EN = {
     graphicsSub: 'if it runs slow, turn it down — it is remembered',
     wonAlt: 'YOU WIN',
     resolution: p => 'resolution ×' + p,
+    /* `mapa` es el tamaño del mapa de sombras, o null si el nivel no las tiene. */
+    qualityDetail: (res, mapa, faroles) => 'resolution ×' + res
+        + ' · shadows ' + (mapa === null ? 'off' : mapa)
+        + ' · lamps casting ' + faroles,
     hint: 'three cubes on their tile · the cutters on the rope · the key in a ' +
           'cabinet · <b>HE</b> carries the card · the door<br>' +
           '<b>keep low, or he comes</b>',
@@ -116,6 +120,9 @@ const ES = {
     graphicsSub: 'si va lento, bajalo — se guarda solo',
     wonAlt: 'GANASTE',
     resolution: p => 'resolución ×' + p,
+    qualityDetail: (res, mapa, faroles) => 'resolución ×' + res
+        + ' · sombras ' + (mapa === null ? 'no' : mapa)
+        + ' · faroles que proyectan ' + faroles,
     hint: 'tres cubos a su baldosa · la pinza de la soga · la llave en un ' +
           'mueble · la tarjeta la lleva <b>ÉL</b> · la puerta<br>' +
           '<b>perfil bajo, o él viene</b>',
@@ -193,6 +200,9 @@ const PT = {
     graphicsSub: 'se estiver lento, abaixe — fica salvo',
     wonAlt: 'VOCÊ VENCEU',
     resolution: p => 'resolução ×' + p,
+    qualityDetail: (res, mapa, faroles) => 'resolução ×' + res
+        + ' · sombras ' + (mapa === null ? 'não' : mapa)
+        + ' · lampiões que projetam ' + faroles,
     hint: 'três cubos no seu ladrilho · o alicate na corda · a chave num ' +
           'móvel · <b>ELE</b> carrega o cartão · a porta<br>' +
           '<b>fique abaixado, ou ele vem</b>',
