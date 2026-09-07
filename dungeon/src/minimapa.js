@@ -12,7 +12,6 @@
    copia esa imagen y encima van los puntos. Redibujar 1.400 bordes sesenta
    veces por segundo para que no se muevan nunca es tirar el cuadro a la basura. */
 import { W, H, CELL, paredV, paredH, NADA, PUERTA, GATERA } from './map.js';
-import { estaGirado } from './pantalla.js';
 
 const LADO = 2;                      // pixeles por celda
 const ANCHO = W * LADO, ALTO = H * LADO;
@@ -63,64 +62,23 @@ function dibujarFondo() {
     fondo = cv;
 }
 
-/* Se llama una vez, cuando ya existe el lienzo del HUD.
-
-   EN VERTICAL EL CUADRO ENTERO VA ROTADO 90°, asi que un minimapa dibujado
-   derecho se ve de costado y el norte apunta a la derecha de la pantalla. Se
-   arregla rotando el DIBUJO adentro del lienzo, no con un `transform` en el
-   CSS: girar el elemento obliga a pelearse con el `transform-origin` para que
-   no se vaya de la esquina, y esto es una linea. */
+/* Se llama una vez, cuando ya existe el lienzo del HUD. El lienzo esta FUERA
+   del marco que se rota, asi que se dibuja derecho y se ubica con CSS: no hay
+   giro que compensar ni esquina que adivinar. */
 export function armarMinimapa(cv) {
     if (!cv) return null;
-    const g90 = estaGirado();
-    cv.width = g90 ? ALTO : ANCHO;
-    cv.height = g90 ? ANCHO : ALTO;
-    cv.style.width = cv.width + 'px';
-    cv.style.height = cv.height + 'px';
+    cv.width = ANCHO; cv.height = ALTO;
+    cv.style.width = ANCHO + 'px';
+    cv.style.height = ALTO + 'px';
     if (!fondo) dibujarFondo();
-    acomodar(cv);
-    addEventListener('resize', () => acomodar(cv));
-    addEventListener('orientationchange', () => setTimeout(() => acomodar(cv), 60));
     return cv.getContext('2d');
-}
-
-/* DONDE VA EL MINIMAPA: arriba a la izquierda DE LA PANTALLA.
-
-   Deducirlo del giro no alcanzo. El marco se rota 90° y cada esquina termina en
-   otra, asi que la esquina del marco que hay que usar depende del giro — y ahi
-   me equivoque una vez: en el banco daba arriba a la izquierda y en el telefono
-   salia abajo. Cuando la cuenta y el aparato no coinciden, gana el aparato.
-
-   Asi que no se calcula: se PRUEBA. Se pega el lienzo a cada una de las cuatro
-   esquinas del marco, se mide donde cae de verdad en pantalla con
-   `getBoundingClientRect` —que ya viene con la rotacion aplicada— y se queda la
-   que quede mas cerca del cero. Son cuatro medidas, una vez, y despues solo si
-   la pantalla cambia de tamano. */
-function acomodar(cv) {
-    const ESQUINAS = [
-        { top: '14px', left: '14px', right: 'auto', bottom: 'auto' },
-        { top: '14px', right: '14px', left: 'auto', bottom: 'auto' },
-        { bottom: '14px', left: '14px', top: 'auto', right: 'auto' },
-        { bottom: '14px', right: '14px', top: 'auto', left: 'auto' },
-    ];
-    let mejor = null, mejorD = Infinity;
-    for (const e of ESQUINAS) {
-        Object.assign(cv.style, e);
-        const r = cv.getBoundingClientRect();
-        if (!r.width) return;               // todavia no se ve: se deja como esta
-        const d = Math.hypot(r.left, r.top);
-        if (d < mejorD) { mejorD = d; mejor = e }
-    }
-    if (mejor) Object.assign(cv.style, mejor);
 }
 
 /* Un cuadro. `cubos` son los de la mision: cada uno con su `hex`, su `obj`
    —de donde sale la posicion— y `puesto`. */
 export function pintarMinimapa(g, jug, cubos, baldosas) {
     if (!g || !fondo) return;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, g.canvas.width, g.canvas.height);
-    if (estaGirado()) { g.translate(0, ANCHO); g.rotate(-Math.PI / 2) }
+    g.clearRect(0, 0, ANCHO, ALTO);
     g.drawImage(fondo, 0, 0);
 
     const hex = n => '#' + n.toString(16).padStart(6, '0');

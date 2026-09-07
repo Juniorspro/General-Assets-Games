@@ -1213,6 +1213,14 @@ class Dungeon {
        dibujados mas cuatro circulos, pero copiar el lienzo igual cuesta, y a
        treinta veces por segundo un punto no se mueve de forma visible. */
     pintarMapa() {
+        /* En el menu no va: el mapa taparia el logo y ademas no hay nada que
+           guiar todavia. */
+        const jugando = !this.enMenu;
+        if (this._jugando !== jugando) {
+            this._jugando = jugando;
+            document.body.classList.toggle('jugando', jugando);
+        }
+        if (!jugando) return;
         if (!this.mmCtx) {
             this.mmCtx = armarMinimapa(document.getElementById('minimapa'));
             if (!this.mmCtx) return;
