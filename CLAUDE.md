@@ -281,7 +281,7 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
-### Centésima vigesimosexta vuelta (2026-09-07): **AERO** — los iconos se recortan tal cual salieron, un centro de control propio, y la bienvenida
+### Centésima vigesimosexta vuelta (2026-09-07): **AERO** — los iconos se recortan tal cual salieron, un centro de control propio, la bienvenida, y 49 reglas de CSS que no aplicaban
 
 Nueve pedidos en un mensaje, con nueve capturas de HyperOS: *"se laguea al abrir la barra de aplicaciones
 porque toca el agua y se da un tirón · que solamente los íconos sean en blanco y el fondo puro líquid
@@ -524,6 +524,36 @@ compositor**; un `transform` fuera de pantalla la sigue pagando.
 incluían **el cartelito de aviso**, que es transitorio: medido en la misma corrida, con el aviso puesto son
 4 / 106.149 y sin él **3 / 96.401**. El permanente es el segundo.
 
+#### EL HALLAZGO DE LA VUELTA: **49 REGLAS DE CSS QUE DECLARABAN TIPOGRAFÍA Y NO APLICABAN NINGUNA**
+
+Salió persiguiendo los tres rótulos ilegibles del centro de control, y resultó ser mucho más grande que
+eso. `font: 700 13px/1.2 inherit` **es una declaración inválida**: el atajo `font` no acepta `inherit`
+como familia, así que el navegador **descarta la declaración entera** — peso, tamaño e interlineado
+incluidos. Y no falla ni avisa: el texto sale con lo que herede.
+
+Había **cuarenta y nueve** en el archivo, y llevaban ahí vueltas enteras. Medido antes de tocar nada:
+
+| la regla pedía | computaba |
+|---|---|
+| `.ccT` → `600 10px/1.2` | **16px / normal / 400** |
+| `.pOp` → `700 13px/1` | **16px / normal / 400** |
+| `.pVal` → `800 13px/1` | **16px / normal / 400** |
+
+O sea que **todo el texto de todos los paneles venía saliendo un 60 % más grande y sin peso**, y de ahí
+salían los recortes con puntos suspensivos que yo venía parcheando con `max-width` vuelta tras vuelta.
+El defecto de los tres rótulos nunca fue el largo de las cadenas: era que el cuerpo de letra no se estaba
+aplicando. Acortar «Mobile data» habría tapado el síntoma y dejado las otras cuarenta y ocho.
+
+Reemplazadas por las tres propiedades sueltas —la familia se hereda sola, que es lo que el `inherit`
+quería decir— medido después: **10px / 12px / 600**, los doce rótulos completos, **cero cortados**, el
+rótulo en **24 px justos** (dos cajas de línea contadas en `em`, así no hay número que recalcular si
+mañana cambia el cuerpo) y los doce botones a **76 px**, uno solo distinto no hay.
+
+**Y ESTO ES EXACTAMENTE LA FAMILIA DEL ATAJO DE `background` DE LA VUELTA 124**, donde `b.style.background
+= color` reponía la imagen de fondo a su valor inicial y dejaba la flecha del botón de saltar embaldosada.
+Un atajo de CSS repone lo que no nombra; uno inválido **no repone nada, se tira entero**. Las dos veces el
+síntoma apareció a doscientas líneas del defecto.
+
 #### DOS SONDAS QUE SE PISABAN, Y UNA QUE CONTESTABA `null`
 
 - **`pack` y `aguaCosto` estaban declaradas DOS VECES** en el objeto de sondas. En un literal gana la
@@ -543,7 +573,8 @@ muestra dibujada, la burbuja redonda. Centro de control: **12 botones · 1 llave
 cajón, **0 ondas de agua en los dos**. Arrastre: **90 eventos → 1 pintada**. Cajón todo junto: 32 apps, 0
 encabezados, la S encendiendo 2. Fondos: URL de 384 caracteres con la receta, sin logo y vertical, y el
 recorte en 0,5625 · 0,5622 · 0,5626. Filtrado permanente **3 pasadas / 96.401 px** y **cero** con las dos
-hojas nuevas cerradas. `window.__errs` **vacío en las nueve corridas**. APK **1,5 MB** con firma v2+v3,
+hojas nuevas cerradas. Tipografía: **49 reglas inválidas reemplazadas**, `.ccT` de 16px/normal/400 a
+10px/12px/600 y **cero rótulos cortados** en los doce botones. `window.__errs` **vacío en las nueve corridas**. APK **1,5 MB** con firma v2+v3,
 `HOME` en el alias, `LAUNCHER` en la actividad, el `NotificationListenerService` declarado, e `INTERNET` +
 `CAMERA`.
 
