@@ -417,6 +417,27 @@ const GLIFOS = {
              ['p','M8 70 L8 88 L26 88',7], ['p','M92 70 L92 88 L74 88',7],
              ['r',20,46,60,8,3]],
   bateria:  [['r',12,30,68,40,8], ['r',84,42,8,16,3], ['-r',20,38,28,24,3]],
+
+  /* ── LOS OCHO DEL CENTRO DE CONTROL ──
+     No son marcas: son los símbolos que cualquiera reconoce en una barra de
+     estado, y por eso se dibujan acá y no se generan. Van en el mismo
+     vocabulario que los otros doscientos, así que el centro de control se lee
+     de la misma familia que el cajón — dos juegos de dibujos para lo mismo,
+     puestos uno al lado del otro, se leen a dos cosas distintas. */
+  wifi:     [['p','M50 22 C69 22 86 29 98 41 L88 52 C79 43 65 37 50 37 C35 37 21 43 12 52 L2 41 C14 29 31 22 50 22 Z'],
+             ['p','M50 46 C61 46 71 50 79 57 L69 68 C64 63 57 60 50 60 C43 60 36 63 31 68 L21 57 C29 50 39 46 50 46 Z'],
+             ['c',50,80,10]],
+  datos:    [['r',10,74,12,18,3], ['r',30,60,12,32,3], ['r',50,42,12,50,3],
+             ['r',70,20,12,72,3]],
+  bt:       [['p','M42 8 L74 34 L50 50 L74 66 L42 92 L42 8 Z M52 28 L52 40 L60 34 Z M52 60 L52 72 L60 66 Z']],
+  avion:    [['p','M50 6 C55 6 58 12 58 22 L58 38 L94 62 L94 72 L58 62 L58 78 L72 88 L72 95 L50 89 L28 95 L28 88 L42 78 L42 62 L6 72 L6 62 L42 38 L42 22 C42 12 45 6 50 6 Z']],
+  rotar:    [['p','M50 12 A38 38 0 1 1 16 32 L28 39 A24 24 0 1 0 50 26 Z'],
+             ['p','M42 4 L62 14 L42 26 Z']],
+  dnd:      [['o',50,50,38,9], ['r',26,44,48,12,4]],
+  ubicacion:[['p','M50 8 A28 28 0 0 0 22 36 C22 58 50 92 50 92 C50 92 78 58 78 36 A28 28 0 0 0 50 8 Z'],
+             ['-c',50,36,11]],
+  nfc:      [['o',50,50,40,7],
+             ['p','M34 30 L34 70 L42 70 L42 46 L60 70 L68 70 L68 30 L60 30 L60 54 L42 30 Z']],
   radio:    [['r',8,32,84,54,10], ['-o',30,58,14,6], ['-r',52,44,30,6,3],
              ['-c',60,66,5],['-c',74,66,5], ['l',60,32,86,12,5]],
   tv:       [['r',8,20,84,54,8], ['-r',16,28,68,38,4], ['l',30,86,70,86,7],
@@ -818,8 +839,9 @@ function glifoPieza(ns, pz, cut){
   return e;
 }
 
-function glifoSvg(g){
+function glifoSvg(g, P){
   const gl = GLIFOS[g]; if (!gl) return null;
+  P = P || { relieve: true };
   const ns = 'http://www.w3.org/2000/svg';
   const s = document.createElementNS(ns, 'svg');
   s.setAttribute('viewBox', '0 0 100 100');
@@ -880,12 +902,20 @@ function glifoSvg(g){
     g2.appendChild(r); s.appendChild(g2);
     return g2;
   };
-  if (GLF_RELIEVE){
+  /* ── EL RELIEVE ES DEL PACK ──
+     Sobre una foto hace falta —una silueta plana ahi se lee a calcomania— y
+     sobre vidrio puro NO: ahi el glifo tiene que ser una marca limpia y llena,
+     que es exactamente lo que se pidio con «que solamente los iconos sean en
+     blanco». Lo que sostiene el contraste en ese caso es la sombra de `.glf`. */
+  const col = P.glifo === 'acento'
+            ? (getComputedStyle(document.documentElement).getPropertyValue('--acento').trim() || '#fff')
+            : (P.glifo || '#fff');
+  if (GLF_RELIEVE && P.relieve !== false){
     capa('#04283c', 2.6, 0.5);      /* la sombra dura, asomando abajo */
     capa('#ffffff', -1.4, 1);       /* el canto de arriba, asomando arriba */
     capa('url(#' + gid + ')', 0, 1);/* el cuerpo */
   } else {
-    capa('#fff', 0, 1);
+    capa(col, 0, 1);
   }
   return s;
 }
@@ -899,17 +929,111 @@ let GLF_RELIEVE = true;
    nodo y el glifo va adentro: así el recorte redondeado, la sombra y el brillo
    siguen siendo los de `.baldosa` y no hay una segunda familia de baldosas que
    mantener. */
+/* ══════════════════════ LOS PACKS ══════════════════════
+
+   Pedido: *«que solamente los íconos sean en blanco y el fondo puro líquid
+   glass»*, y *«packs de íconos que debes hacer vos, más de 5»*.
+
+   ── UN PACK ES UN DATO, NO UN `if` ──
+   Lo que cambia entre un pack y otro son cuatro cosas y ninguna es lógica: qué
+   se ve detrás del glifo, si la baldosa deja pasar el fondo de pantalla, de qué
+   color va el glifo, y qué forma tiene la baldosa. Escrito como ramas, el sexto
+   pack obliga a tocar `icoAero`, el CSS, la personalización, el arranque y la
+   sonda — y el que se olvide de uno deja un pack que se elige y no se ve.
+   Acá un pack es una fila de una tabla y el resto lo derivan todos.
+
+   `fondo`: 'fam' usa la baldosa generada de la familia · 'img' una sola imagen
+   para todas · null es VIDRIO PURO, o sea que la baldosa deja su
+   `backdrop-filter` puesto y lo que se ve detrás del glifo es el fondo de
+   pantalla desenfocado. Ese es el que se pidió con todas las letras. */
+const PACKS = [
+  { id: 'aero',    fondo: 'fam',                 relieve: true,  forma: 'cuad',
+    tinte: null,   glifo: null },
+  { id: 'vidrio',  fondo: null,                  relieve: false, forma: 'cuad',
+    tinte: null,   glifo: '#fff' },
+  { id: 'burbuja', fondo: null,                  relieve: false, forma: 'redon',
+    tinte: 'oscuro', glifo: '#fff' },
+  { id: 'bliss',   fondo: 'img', img: 'bliss',   relieve: true,  forma: 'cuad',
+    tinte: null,   glifo: null },
+  { id: 'tinta',   fondo: 'img', img: 'tinta',   relieve: false, forma: 'cuad',
+    tinte: null,   glifo: '#fff' },
+  { id: 'neon',    fondo: 'img', img: 'neon',    relieve: true,  forma: 'cuad',
+    tinte: null,   glifo: 'acento' },
+  /* ── EL PACK GENERADO: LA CELDA TAL CUAL SALIÓ ──
+     Pedido textual: «literalmente podías simplemente recortar cada ícono
+     generado con Rezona y ponerlos como íconos en vez de reconstruirlo a mano».
+     Acá no hay glifo ni baldosa: la imagen ES el icono entero, con su vidrio,
+     su barrida especular y sus gotas dibujados por el generador. Por eso lleva
+     `gen` y sale antes de armar el SVG.
+     ── Y LO QUE SE LE PIDIÓ AL GENERADOR ES UNA FORMA, NO UNA MARCA ──
+     Las dos hojas de la vuelta 125 ya lo habían medido: pedidas por nombre, las
+     nueve marcas volvieron mal; pedidos como símbolos genéricos, los nueve
+     salieron bien y en orden. Cada celda se describe por su geometría —«una
+     nota musical blanca», «un avión de papel»— que es además lo que el logo ES. */
+  { id: 'generado', gen: true },
+  { id: 'nativo',  nativo: true }
+];
+const PACK_POR_ID = (() => { const m = {}; for (const p of PACKS) m[p.id] = p; return m; })();
+
+function packHoy(){
+  /* `icoPack` era un 0/1 de cuando habia un solo pack: un 1 guardado sigue
+     queriendo decir «el pack Aero» y un 0 «el icono del sistema». */
+  const v = lee('icoPack', 1);
+  if (v === 0 || v === '0') return PACK_POR_ID.nativo;
+  if (typeof v === 'string' && PACK_POR_ID[v]) return PACK_POR_ID[v];
+  return PACK_POR_ID.aero;
+}
+
 function icoAero(b, pkg, nombre){
-  if (!lee('icoPack', 1)) return false;
+  let P = packHoy();
+  if (P.nativo) return false;
   const g = glifoDe(pkg, nombre); if (!g) return false;
-  const fam = ICO_DE_FAM[g] || 'agua';
-  const fondo = (typeof ICONOS !== 'undefined' && ICONOS[fam]) ? ICONOS[fam] : null;
-  if (!fondo) return false;
-  const sv = glifoSvg(g); if (!sv) return false;
-  b.classList.add('aero');
-  b.style.backgroundImage = 'url(' + fondo + ')';
-  b.style.backgroundSize = 'cover';
-  b.style.backgroundPosition = 'center';
+
+  /* ── EL PACK GENERADO NO ARMA NADA: PONE LA CELDA ──
+     Sale acá arriba a propósito. La imagen ya trae la baldosa, el canto y el
+     brillo, así que todo lo de abajo —el fondo de familia, el vidrio, el relieve
+     del glifo— sería una segunda baldosa dibujada encima de la primera. */
+  if (P.gen){
+    const im = (typeof ICOGEN !== 'undefined') ? ICOGEN[g] : null;
+    if (im){
+      b.classList.add('aero', 'gen');
+      b.style.backgroundImage = 'url(' + im + ')';
+      b.style.backgroundSize = 'cover';
+      b.style.backgroundPosition = 'center';
+      return true;
+    }
+    /* ── SIN CELDA, EL TRATAMIENTO AERO; NO EL ICONO DEL SISTEMA ──
+       Una app sin celda generada al lado de veinte que sí la tienen se ve como
+       un pack a medio poner. Cayendo al Aero sigue siendo una baldosa de vidrio
+       con su símbolo blanco, o sea la misma familia. */
+    P = PACK_POR_ID.aero;
+  }
+
+  const sv = glifoSvg(g, P); if (!sv) return false;
+
+  let fondo = null;
+  if (P.fondo === 'fam'){
+    const fam = ICO_DE_FAM[g] || 'agua';
+    fondo = (typeof ICONOS !== 'undefined' && ICONOS[fam]) ? ICONOS[fam] : null;
+    if (!fondo) return false;          /* sin la foto no hay pack: mejor el icono real */
+  } else if (P.fondo === 'img'){
+    fondo = (typeof ICONOS !== 'undefined' && ICONOS[P.img]) ? ICONOS[P.img] : null;
+    /* ── UNA IMAGEN QUE NO LLEGO NO DEJA UNA BALDOSA VACIA ──
+       Cae al vidrio puro, que no depende de ningun byte. */
+  }
+  /* la clase `aero` es «esta baldosa es opaca»: apaga el `backdrop-filter`
+     porque hay una foto tapando lo de atras. Sin foto NO va, y ahi el vidrio de
+     `.baldosa` es justamente lo que se quiere ver. */
+  if (fondo){
+    b.classList.add('aero');
+    b.style.backgroundImage = 'url(' + fondo + ')';
+    b.style.backgroundSize = 'cover';
+    b.style.backgroundPosition = 'center';
+  } else {
+    b.classList.add('vidrioPuro');
+  }
+  if (P.forma === 'redon') b.classList.add('redon');
+  if (P.tinte === 'oscuro') b.classList.add('tOscuro');
   b.appendChild(sv);
   return true;
 }

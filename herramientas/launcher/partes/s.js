@@ -239,7 +239,7 @@ function arrSuelta(x, y){
   document.body.classList.remove('arrastrando');
   if (a.g) a.g.remove();
   a.el.classList.remove('llevada');
-  $$('.ap.destino').forEach(e => e.classList.remove('destino'));
+  arrPintaCero();
 
   if (!a.movio){ arrCancela(a); return; }
 
@@ -403,17 +403,24 @@ function arrInit(){
   arrEngancha($('#dock'), 'dock');
   arrEngancha($('#cajLista'), 'cajon');
 
+  /* ── EL FANTASMA VA EN EL DEDO; LO DEMÁS, UNA VEZ POR CUADRO ──
+     Pedido textual: «al mantener una app puedas moverlo de lugar pero más
+     fluido». El fantasma se mueve con `transform`, que resuelve el compositor,
+     así que ése SÍ tiene que ir en el manejador del dedo: cualquier retraso ahí
+     se ve como que el icono va atrás de la mano.
+     Lo que no puede ir ahí es el resaltado del destino. `arrPinta` hace dos
+     búsquedas sobre el documento entero y escribe clases, y `pointermove` llega
+     a ciento veinte veces por segundo en un teléfono: eso es recalcular estilo
+     el doble de veces de las que se dibuja, para pintar dos veces lo mismo. Se
+     agenda en el cuadro, que es cuando se va a ver. */
   addEventListener('pointermove', e => {
     if (!ARR) return;
     if (!ARR.movio && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > ARR_MUEVE) ARR.movio = true;
     ARR.x = e.clientX; ARR.y = e.clientY;
-    /* `transform` y no `left`/`top`: lo resuelve el compositor y no obliga a
-       recalcular la maquetación de la página en cada movimiento del dedo */
     const g = ARR.g;
     g.style.transform = 'translate3d(' + (e.clientX - g.__w/2) + 'px,'
                       + (e.clientY - g.__h/2) + 'px,0)';
-    arrPinta(e.clientX, e.clientY);
-    arrBorde(e.clientX);
+    arrAgenda();
   }, { passive: true });
 
   const fin = e => { if (ARR) arrSuelta(e.clientX, e.clientY); };
@@ -423,15 +430,41 @@ function arrInit(){
 
 /* marca el icono sobre el que caería una carpeta: sin eso, hacer carpeta es una
    sorpresa y deshacerla cuesta dos gestos */
+/* ── Y SÓLO SE REPINTA SI CAMBIÓ ──
+   Sin esta comparación, cada movimiento del dedo saca y vuelve a poner la misma
+   clase sobre el mismo nodo: el navegador no sabe que el resultado es idéntico
+   y recalcula estilo igual. Arrastrando de punta a punta eran cientos de
+   recálculos para dejar la pantalla como estaba. */
+let ARR_RAF = 0, ARR_DEST = null, ARR_CEL = -2;
+/* la única forma de que la medición pruebe algo es correr el MISMO binario con
+   la comparación dada vuelta: con dos versiones se compararían dos programas */
+let ARR_SIN_CACHE = false;
+function arrAgenda(){
+  if (ARR_RAF) return;
+  ARR_RAF = requestAnimationFrame(() => {
+    ARR_RAF = 0;
+    if (!ARR) return;
+    arrPinta(ARR.x, ARR.y);
+    arrBorde(ARR.x);
+  });
+}
 function arrPinta(x, y){
-  $$('.ap.destino').forEach(e => e.classList.remove('destino'));
   const c = arrCelda(x, y);
-  rejaMarca(c ? c.i : -1);
+  const ci = c ? c.i : -1;
+  if (ci !== ARR_CEL || ARR_SIN_CACHE){ rejaMarca(ci); ARR_CEL = ci; }
   const j = arrEncima(x, y, ARR && ARR.desde === 'inicio' ? ARR.i : null);
-  if (j == null) return;
   const pg = $$('#tira .pag')[PAG];
-  const n = pg && pg.children[j - PAG*COLS*FILAS];
+  const n = (j == null) ? null : (pg && pg.children[j - PAG*COLS*FILAS]) || null;
+  if (n === ARR_DEST && !ARR_SIN_CACHE) return;
+  if (ARR_SIN_CACHE) $$('.ap.destino').forEach(e => e.classList.remove('destino'));
+  else if (ARR_DEST) ARR_DEST.classList.remove('destino');
+  ARR_DEST = n;
   if (n) n.classList.add('destino');
+}
+function arrPintaCero(){
+  if (ARR_RAF){ cancelAnimationFrame(ARR_RAF); ARR_RAF = 0; }
+  if (ARR_DEST){ ARR_DEST.classList.remove('destino'); ARR_DEST = null; }
+  ARR_CEL = -2;
 }
 
 /* ── EL BORDE CAMBIA DE PÁGINA ──

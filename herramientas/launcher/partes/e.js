@@ -209,21 +209,37 @@ function pintaCajon(filtro){
   /* ── LOS ENCABEZADOS SÓLO EXISTEN SIN FILTRO ──
      Con dos resultados, partirlos en dos secciones de uno es ruido; y el riel
      no tiene a dónde saltar, así que también se esconde. */
-  const porLetra = !q;
+  /* ── DOS FORMAS DE CAJÓN, Y EL RIEL SIRVE EN LAS DOS ──
+     Pedido textual: «si querés que el cajón de apps sea todo así por letras o
+     todo junto (que también debería servir el buscador lateral por letras
+     solamente que está todo juntos y se resalta los que tienen esa letra)».
+     Todo junto NO es «sin riel»: el ancla deja de ser el encabezado y pasa a
+     ser la PRIMERA APP de cada letra, así que arrastrar el riel sigue llevando
+     al mismo sitio — y encima enciende las de esa letra, que es lo único que
+     un cajón sin encabezados puede mostrar. */
+  const porLetra = !q && !!lee('cajLetras', 1);
   let ult = '';
   for (const a of v){
-    if (porLetra){
-      const L = letraIni(a);
-      if (L !== ult){
-        ult = L;
+    const L = letraIni(a);
+    if (!q && L !== ult){
+      ult = L;
+      if (porLetra){
         const h = document.createElement('div');
         h.className = 'let'; h.textContent = L; h.dataset.l = L;
         l.appendChild(h);
         LETRAS.push(L); ANCLA[L] = h;
+      } else {
+        LETRAS.push(L); ANCLA[L] = null;   /* se completa con su primera app */
       }
     }
-    l.appendChild(nodoApp(a));
+    const nd = nodoApp(a);
+    if (!q){
+      nd.dataset.l = L;
+      if (!porLetra && !ANCLA[L]) ANCLA[L] = nd;
+    }
+    l.appendChild(nd);
   }
+  l.classList.toggle('junto', !q && !porLetra);
   if (!v.length && q){
     const e = document.createElement('div');
     e.className = 'vacio';
@@ -309,10 +325,32 @@ function letraVisible(){
   }
   return act;
 }
+/* ── EN «TODO JUNTO», LA LETRA SE RESALTA ──
+   Sin encabezados no hay nada que diga dónde empieza una letra, así que el riel
+   tiene que poder decirlo de la única forma que queda: encendiendo las apps que
+   son de ésa. Se apaga solo, porque un resaltado permanente deja de significar
+   «acabás de pedir esta letra» y pasa a ser parte del dibujo. */
+let RES_T = 0;
+function resaltaLetra(L){
+  const l = $('#cajLista');
+  if (!l.classList.contains('junto')) return;
+  $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
+  l.classList.remove('hayRes');
+  if (!L) return;
+  const hay = $$('#cajLista .ap[data-l="' + L + '"]');
+  hay.forEach(n => n.classList.add('res'));
+  if (hay.length) l.classList.add('hayRes');
+  clearTimeout(RES_T);
+  RES_T = setTimeout(() => {
+    $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
+    l.classList.remove('hayRes');
+  }, 1600);
+}
 function marcaRiel(L){
   /* la letra ya no vive en una columna: se muestra en la burbuja mientras se
      arrastra, y lo único permanente es dónde quedó el pomo */
   $('#burbuja').textContent = L || '';
+  resaltaLetra(L);
   ponPomo();
 }
 function vaALetra(L){
@@ -382,10 +420,11 @@ function abre(pkg){
      Es literal lo que se pidió: «que no abra la cámara normal sino que al
      abrirla te deje elegir». Va acá y no en el icono de la cámara Aero porque
      lo que el dueño toca de verdad es la app de cámara que ya tenía en el dock.
-     Y se puede apagar: `camSelector` en 0 devuelve el atajo de siempre, porque
-     alguien que quiere su cámara y nada más no tiene por qué pagar un toque
-     más para siempre. */
-  if (lee('camSelector', 1) && glifoDe(pkg, POR_PKG[pkg] && POR_PKG[pkg].n) === 'camara'){
+     ── Y YA NO PREGUNTA ──
+     De fábrica abre la Aero directamente: `camApp` decide, y sólo `sis` deja
+     pasar el toque a la app de siempre. Interceptar una app tiene que seguir
+     siendo reversible, y ése es el valor que lo revierte. */
+  if (camModoApp() !== 'sis' && glifoDe(pkg, POR_PKG[pkg] && POR_PKG[pkg].n) === 'camara'){
     CAM_SIS = pkg; camAbre(); return;
   }
   if (!HAY_AND){ avisa(T('sinPuente')); return; }
@@ -642,7 +681,15 @@ function enganchaSubir(el){
        dedo está haciendo ya se decidió. */
     if (!act || CAJON || (ARR && !SUBIR_SIN_GUARDA)) return;
     if (Math.abs(e.clientX - x0) > 18){ act = false; return; }
-    if (y0 - e.clientY > 55){ act = false; verCajon(true); vibra(10); }
+    if (y0 - e.clientY > 55){ act = false; verCajon(true); vibra(10); return; }
+    /* ── Y BAJAR ABRE EL CENTRO DE CONTROL ──
+       Pedido textual: «que puedas hacer hacia abajo usando el launcher». Va en
+       el MISMO gesto que subir y no en un escucha aparte: son el mismo dedo y
+       las mismas guardas —nada en la mano, nada de cruzarse en horizontal— y
+       repartidas en dos sitios se desincronizan el día que se toque una. */
+    if (e.clientY - y0 > 55 && lee('ccOn', 1) && typeof ccAbre === 'function'){
+      act = false; ccAbre(); vibra(10);
+    }
   });
   const f = () => { act = false; };
   el.addEventListener('pointerup', f);
@@ -1066,6 +1113,12 @@ function arranca(){
      menú. Ahora los tres pasan por el arrastre, que además de eso sabe levantar
      y soltar; mantener y soltar sin mover sigue abriendo el menú. */
   arrInit();
+
+  /* ── LA BIENVENIDA VA ÚLTIMA ──
+     Dibuja baldosas de verdad con `icoAero` y prueba cada pack sobre la reja
+     que ya existe, así que necesita que el escritorio esté armado. Puesta
+     antes, la muestra saldría vacía y nadie se enteraría. */
+  bvInit();
   enganchaPaginas();
   enganchaCajon();
 

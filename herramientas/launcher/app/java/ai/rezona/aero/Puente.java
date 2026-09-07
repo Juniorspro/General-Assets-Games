@@ -12,6 +12,9 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -369,6 +372,131 @@ public class Puente {
         return true;
       } catch (Exception e2) { return false; }
     }
+  }
+
+  /* ══════════════════════ EL CENTRO DE CONTROL ══════════════════════
+   *
+   * ── UN INTERRUPTOR O HACE LA COSA O ABRE DONDE SE HACE, Y SE VE DISTINTO ──
+   * Desde Android 10 una app normal NO puede prender el wifi, los datos ni el
+   * bluetooth: `setWifiEnabled` devuelve false y no falla. Un interruptor que
+   * finge que prendió algo y no prendió nada es peor que no tenerlo, así que
+   * los que no se pueden hacer ABREN el panel del sistema donde sí se hacen, y
+   * el launcher los dibuja como atajos y no como llaves.
+   *
+   * Lo que sí se hace de verdad desde acá: la linterna (`setTorchMode`, sin
+   * ningún permiso desde API 23), el volumen (`AudioManager`) y el brillo.
+   */
+  @JavascriptInterface public String estadoSis() {
+    StringBuilder b = new StringBuilder("{");
+    try {
+      AudioManager am = (AudioManager) act.getSystemService(Context.AUDIO_SERVICE);
+      int mx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+      int v = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+      b.append("\"vol\":").append(mx > 0 ? (float) v / mx : 0f).append(',');
+    } catch (Exception e) { b.append("\"vol\":0.5,"); }
+    try {
+      /* 0..255 en Settings.System: se normaliza acá para que el launcher no
+         tenga que saber la escala de Android */
+      int br = Settings.System.getInt(act.getContentResolver(),
+                                      Settings.System.SCREEN_BRIGHTNESS, 128);
+      b.append("\"brillo\":").append(br / 255f).append(',');
+    } catch (Exception e) { b.append("\"brillo\":0.5,"); }
+    b.append("\"linterna\":").append(torch).append(',');
+    try {
+      b.append("\"avion\":").append(Settings.Global.getInt(act.getContentResolver(),
+          Settings.Global.AIRPLANE_MODE_ON, 0) == 1).append(',');
+    } catch (Exception e) { b.append("\"avion\":false,"); }
+    try {
+      b.append("\"rotar\":").append(Settings.System.getInt(act.getContentResolver(),
+          Settings.System.ACCELEROMETER_ROTATION, 0) == 1);
+    } catch (Exception e) { b.append("\"rotar\":false"); }
+    return b.append('}').toString();
+  }
+
+  private boolean torch = false;
+
+  @JavascriptInterface public boolean linterna(boolean on) {
+    try {
+      CameraManager cm = (CameraManager) act.getSystemService(Context.CAMERA_SERVICE);
+      String[] ids = cm.getCameraIdList();
+      for (int i = 0; i < ids.length; i++) {
+        Boolean tiene = cm.getCameraCharacteristics(ids[i])
+                          .get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+        if (tiene != null && tiene) {
+          cm.setTorchMode(ids[i], on);
+          torch = on;
+          return true;
+        }
+      }
+    } catch (Exception e) { }
+    return false;
+  }
+
+  @JavascriptInterface public boolean volumen(double k) {
+    try {
+      AudioManager am = (AudioManager) act.getSystemService(Context.AUDIO_SERVICE);
+      int mx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+      int v = (int) Math.round(Math.max(0, Math.min(1, k)) * mx);
+      am.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0);
+      return true;
+    } catch (Exception e) { return false; }
+  }
+
+  /* ── EL BRILLO DE LA VENTANA SIEMPRE SE PUEDE; EL DEL SISTEMA NO ──
+   * Cambiar el brillo del sistema pide `WRITE_SETTINGS`, que es un permiso que
+   * concede el dueño en una pantalla aparte. Sin él, lo que sí se puede es el
+   * brillo de NUESTRA ventana, que es lo que el dedo ve moverse mientras el
+   * centro de control está abierto. Devuelve cuál de los dos hizo, para que el
+   * launcher no diga que cambió el brillo del teléfono cuando cambió el suyo. */
+  @JavascriptInterface public String brillo(double k) {
+    float v = (float) Math.max(0.01, Math.min(1, k));
+    boolean sis = false;
+    try {
+      if (Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(act)) {
+        Settings.System.putInt(act.getContentResolver(),
+            Settings.System.SCREEN_BRIGHTNESS_MODE,
+            Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
+        Settings.System.putInt(act.getContentResolver(),
+            Settings.System.SCREEN_BRIGHTNESS, Math.round(v * 255));
+        sis = true;
+      }
+    } catch (Exception e) { }
+    try {
+      android.view.WindowManager.LayoutParams lp = act.getWindow().getAttributes();
+      lp.screenBrightness = v;
+      act.getWindow().setAttributes(lp);
+    } catch (Exception e) { }
+    return "{\"sistema\":" + sis + "}";
+  }
+
+  /* abre el panel del sistema que corresponde. Un nombre y no un intent crudo:
+     así el launcher pide «wifi» y este lado sabe que en API 29+ eso es un panel
+     deslizante y antes era una pantalla entera. */
+  @JavascriptInterface public boolean panel(String que) {
+    String a = null;
+    if ("wifi".equals(que)) a = Build.VERSION.SDK_INT >= 29
+        ? Settings.Panel.ACTION_WIFI : Settings.ACTION_WIFI_SETTINGS;
+    else if ("datos".equals(que)) a = Build.VERSION.SDK_INT >= 29
+        ? Settings.Panel.ACTION_INTERNET_CONNECTIVITY : Settings.ACTION_DATA_ROAMING_SETTINGS;
+    else if ("volumen".equals(que)) a = Build.VERSION.SDK_INT >= 29
+        ? Settings.Panel.ACTION_VOLUME : Settings.ACTION_SOUND_SETTINGS;
+    else if ("bt".equals(que)) a = Settings.ACTION_BLUETOOTH_SETTINGS;
+    else if ("avion".equals(que)) a = Settings.ACTION_AIRPLANE_MODE_SETTINGS;
+    else if ("rotar".equals(que)) a = Settings.ACTION_DISPLAY_SETTINGS;
+    else if ("nfc".equals(que)) a = Settings.ACTION_NFC_SETTINGS;
+    else if ("dnd".equals(que)) a = Settings.ACTION_SOUND_SETTINGS;
+    else if ("bateria".equals(que)) a = Settings.ACTION_BATTERY_SAVER_SETTINGS;
+    else if ("ubicacion".equals(que)) a = Settings.ACTION_LOCATION_SOURCE_SETTINGS;
+    else if ("brillo".equals(que)) a = Settings.ACTION_DISPLAY_SETTINGS;
+    else if ("permBrillo".equals(que)) a = Settings.ACTION_MANAGE_WRITE_SETTINGS;
+    else a = Settings.ACTION_SETTINGS;
+    try {
+      Intent i = new Intent(a);
+      if ("permBrillo".equals(que)) i.setData(Uri.parse("package:" + act.getPackageName()));
+      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      act.startActivity(i);
+      return true;
+    } catch (Exception e) { return false; }
   }
 
   @JavascriptInterface public String version() {

@@ -435,8 +435,13 @@ window.__A = {
     return { x: x, y: y, edad: edad, frente: Math.round(edad*900),
              res: AGUA.res, px: AGUA.el.width*AGUA.el.height };
   },
-  /* cuánto cuesta el dibujo del lienzo, con las ondas que se le pidan */
-  aguaCosto(n, cuadros){
+  /* cuánto cuesta el DIBUJO del lienzo, con las ondas que se le pidan.
+     ── NO SE LLAMA `aguaCosto` Y ÉSA ES LA CORRECCIÓN ──
+     Se llamaba así, y doscientas líneas más abajo hay otra `aguaCosto` que mide
+     el manejador del dedo. En un objeto literal gana la última: ésta no existía
+     y la otra contestaba con campos que no eran los que se le pedían. Es el
+     mismo defecto que ya costó la sonda de la cuadrícula. */
+  aguaCuadro(n, cuadros){
     if (!aguaArma()) return 'roto';
     const gl = AGUA.gl;
     FONDO_EL.style.animationPlayState = 'paused';
@@ -475,7 +480,11 @@ window.__A = {
      regla que ganó y el estado de las clases. */
   /* prende y apaga el pack de iconos y repinta: es lo que decide cuántas
      baldosas quedan filtrando, y ése es el número de la fluidez del cajón */
-  pack(v){
+  /* ── TAMPOCO SE LLAMA `pack`: LA OTRA GANA ──
+     Ésta cuenta cuántas baldosas quedan filtrando, que es el número de la
+     fluidez del cajón; la de abajo mira UNA baldosa y dice qué pack se aplicó.
+     Son dos preguntas distintas y hacen falta las dos. */
+  packBaldosas(v){
     if (v != null){ guarda('icoPack', v ? 1 : 0); ICO_CACHE_LIMPIA(); rejaRepinta(); }
     const b = $$('.baldosa'), a = $$('.baldosa.aero');
     return { pack: +lee('icoPack', 1), baldosas: b.length, aero: a.length,
@@ -603,6 +612,32 @@ window.__A = {
      ventana: un evento disparado en `window` no baja a sus descendientes, así
      que los gestos que escuchan en `#hoja` o en `#dock` —el de subir, por
      ejemplo— no se enterarían nunca y la prueba aprobaría siempre. */
+  /* ── CUÁNTO TRABAJO CUESTA ARRASTRAR ──
+     El número del reporte «al mantener una app puedas moverlo de lugar pero más
+     fluido» no es una sensación: es cuántas veces se recalcula estilo por cada
+     movimiento del dedo. Se cuenta arrastrando de punta a punta. */
+  arrCosto(n, sinCache){
+    ARR_SIN_CACHE = !!sinCache;
+    const pasos = n || 40;
+    const r = $('#hoja').getBoundingClientRect();
+    let pintas = 0, cambios = 0;
+    const pinta = arrPinta;
+    let ultDest = null, ultCel = -2;
+    window.__arrPintaEspia = () => { pintas++; };
+    const t0 = performance.now();
+    for (let i = 0; i <= pasos; i++){
+      const x = r.left + 20 + (r.width - 40)*(i/pasos);
+      const y = r.top + 40 + (r.height - 120)*(i/pasos);
+      ARR ? (ARR.x = x, ARR.y = y) : 0;
+      arrPinta(x, y);
+      const d = $('.ap.destino'), c = REJA_AQUI;
+      if (d !== ultDest || c !== ultCel){ cambios++; ultDest = d; ultCel = c; }
+    }
+    ARR_SIN_CACHE = false;
+    return { pasos: pasos, sinCache: !!sinCache, cambiosDeDestino: cambios,
+             ms: +(performance.now() - t0).toFixed(2),
+             porPaso: +((performance.now() - t0)/pasos).toFixed(3) };
+  },
   arrastraA(x, y){
     const t = document.elementFromPoint(x, y) || $('#hoja') || document.body;
     t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
@@ -633,6 +668,35 @@ window.__A = {
      sea antes de que el navegador calcule estilo; sin él hay que esperar al
      rAF, y para entonces la hoja ya empezó a animarse. */
   aguaVigilar(v){ aguaVigila(!!v); return !!AGUA_OBS; },
+  /* ── EL GESTO DE SUBIR NO PUEDE TOCAR EL AGUA ──
+     Recorre el gesto por el camino de verdad —`pointerdown` sobre lo que hay
+     debajo del dedo, unos cuantos `pointermove` y el `pointerup`— y devuelve si
+     el agua se encendió en algún momento. Ésa es la pregunta del reporte: no
+     «cuánto tarda» sino «se encendió o no». */
+  async gesto(x0, y0, x1, y1, pasos){
+    aguaCorta(); verCajon(false);
+    await new Promise(r => setTimeout(r, 60));
+    const n = pasos || 8;
+    let encendio = false, ondas = 0;
+    const t0 = document.elementFromPoint(x0, y0) || document.body;
+    t0.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, pointerId: 3 }));
+    if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+    for (let i = 1; i <= n; i++){
+      const x = x0 + (x1 - x0)*i/n, y = y0 + (y1 - y0)*i/n;
+      const t = document.elementFromPoint(x, y) || document.body;
+      t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 3 }));
+      if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    const tf = document.elementFromPoint(x1, y1) || document.body;
+    tf.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x1, clientY: y1, pointerId: 3 }));
+    await new Promise(r => requestAnimationFrame(r));
+    if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON,
+                 agua: document.body.classList.contains('agua') };
+    aguaCorta(); verCajon(false);
+    return r2;
+  },
   /* ── EL TIRÓN AL ABRIR EL CAJÓN, MEDIDO ──
      `body.agua` apaga los once `backdrop-filter` del launcher mientras dura la
      ráfaga. Lo que se mide es CUÁNDO vuelven: en la microtarea que sigue al
@@ -950,6 +1014,123 @@ window.__A = {
   glifo(pkg, nombre){
     const g = glifoDe(pkg, nombre);
     return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
+  },
+  /* ── LAS DOS FORMAS DEL CAJÓN ──
+     Devuelve lo único que las distingue: si hay encabezados, cuántas anclas
+     tiene el riel y cuántas apps quedaron resaltadas. Un cajón «todo junto» sin
+     anclas sería un riel muerto, y eso no se ve en una foto. */
+  cajModo(v){
+    if (v != null){ guarda('cajLetras', v ? 1 : 0); pintaCajon($('#busca2').value); }
+    const l = $('#cajLista');
+    return { porLetras: !!lee('cajLetras', 1), junto: l.classList.contains('junto'),
+             encabezados: $$('#cajLista .let').length, apps: $$('#cajLista .ap').length,
+             anclas: Object.keys(ANCLA).length, letras: LETRAS.length,
+             res: $$('#cajLista .ap.res').length, hayRes: l.classList.contains('hayRes') };
+  },
+  /* ── EL CENTRO DE CONTROL ──
+     Lo que importa medir no es que se vea: es cuántos interruptores son LLAVES
+     y cuántos son ATAJOS, porque un atajo dibujado como llave miente. */
+  cc(){
+    const h = $('#ccHoja');
+    return { on: CC.on,
+             botones: $$('#cc .ccB').length,
+             llaves: $$('#cc .ccB.llave').length,
+             atajos: $$('#cc .ccB.atajo').length,
+             encendidos: $$('#cc .ccB.on').length,
+             brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
+             alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
+             visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
+  },
+  ccAbrir(){ ccAbre(); return true; },
+  ccCerrar(){ ccCierra(); return true; },
+  ccToca(id){ const b = CC_BOT.filter(x => x.id === id)[0]; if (!b) return null; ccToca(b); return true; },
+  ccSl(k, v){
+    const el = $('#cc .ccSl[data-k="' + k + '"]'); if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width*cl(v, 0, 1), y = r.top + r.height/2;
+    for (const t of ['pointerdown', 'pointermove', 'pointerup'])
+      el.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 7 }));
+    return { k: k, valor: +CC[k].toFixed(3), relleno: el.querySelector('.ccSlF').style.width };
+  },
+  /* ── EL GESTO DE VERDAD, NO LA FUNCIÓN ──
+     Abrir el centro llamando a `ccAbre()` prueba que el panel existe; lo que
+     hay que probar es que BAJAR lo abre, que es lo que se pidió. */
+  gestoY(sel, dy, pasos){
+    const el = $(sel) || $('#hoja');
+    const r = el.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y0 = Math.round(r.top + r.height*0.35);
+    const n = pasos || 8;
+    const dis = t => { const d = document.elementFromPoint(x, Math.round(y0 + dy*t)) || el;
+      d.dispatchEvent(new PointerEvent(t === 0 ? 'pointerdown' : 'pointermove',
+        { clientX: x, clientY: Math.round(y0 + dy*t), bubbles: true, pointerId: 9 })); };
+    dis(0);
+    for (let i = 1; i <= n; i++) dis(i/n);
+    const d = document.elementFromPoint(x, Math.round(y0 + dy)) || el;
+    d.dispatchEvent(new PointerEvent('pointerup',
+      { clientX: x, clientY: Math.round(y0 + dy), bubbles: true, pointerId: 9 }));
+    return { cc: CC.on, cajon: CAJON, ondas: AGUA.ondas.length };
+  },
+  /* ── LA BIENVENIDA ──
+     Lo que hay que medir no es que aparezca: es que cada opción dibuje SU
+     muestra. Con una sola función de dibujo mal llamada, las cuatro filas
+     salen iguales y desde afuera eso se ve como un diseño, no como un error. */
+  bv(){
+    const c = $('#bienv');
+    if (!c) return { on: false };
+    const ops = $$('#bvOps .bvOp');
+    return { on: c.classList.contains('on'), paso: BV_PASO, pasos: BIENV.length,
+             tit: $('#bvTit').textContent, ops: ops.length,
+             sel: ops.map(o => o.classList.contains('sel')).indexOf(true),
+             muestras: ops.map(o => o.querySelectorAll('.baldosa').length),
+             /* la firma de cada muestra: si dos filas dan lo mismo, están
+                dibujando el mismo pack */
+             firmas: ops.map(o => Array.prototype.slice.call(o.querySelectorAll('.baldosa'))
+               .map(b => b.className + '|' + (b.style.backgroundImage || '').slice(22, 34)).join('/')),
+             sig: $('#bvSig').textContent };
+  },
+  bvAbrir(){ guarda('bienvVisto', 0); bvAbre(); return true; },
+  bvOp(i){ const o = $$('#bvOps .bvOp')[i]; if (!o) return null; o.click(); return true; },
+  bvSig(){ $('#bvSig').click(); return BV_PASO; },
+  bvCerrar(){ bvCierra(); return true; },
+  packs(){ return { hoy: packHoy().id, todos: PACKS.map(p => p.id) }; },
+  /* ── CUÁNTAS APPS TIENEN CELDA GENERADA, Y CUÁLES NO ──
+     Un pack generado que le cae a la mitad de las apps se ve como dos packs
+     mezclados, así que el número que importa no es cuántas celdas se hornearon
+     sino cuántas ALCANZAN a una app instalada. */
+  gen(){
+    const hay = typeof ICOGEN !== 'undefined' ? ICOGEN : {};
+    const con = [], sin = [];
+    for (const a of APPS){
+      const g = glifoDe(a.p, a.n);
+      (g && hay[g] ? con : sin).push(a.n);
+    }
+    return { celdas: Object.keys(hay).length, apps: APPS.length,
+             con: con.length, sin: sin.slice(0, 12) };
+  },
+  pack(id){
+    guarda('icoPack', id); ICO_CACHE_LIMPIA(); rejaRepinta();
+    const b = $('#dock .baldosa') || $('#tira .baldosa');
+    const cs = b ? getComputedStyle(b) : null;
+    return { hoy: packHoy().id,
+             clases: b ? b.className : null,
+             fondo: b ? (b.style.backgroundImage || '').slice(0, 26) : null,
+             vidrio: cs ? cs.backdropFilter : null,
+             radio: cs ? cs.borderRadius : null,
+             glifos: $$('.baldosa .glf').length };
+  },
+  /* ── EL CONTRASTE DEL GLIFO, MEDIDO DONDE ESTÁ LA BALDOSA ──
+     Y la caja sale del DOM y no de un rectángulo escrito a mano: la primera
+     versión de esta medición muestreaba coordenadas puestas a ojo y por eso
+     devolvía el MISMO número para tres packs distintos — estaba midiendo fondo
+     de pantalla, no baldosa. Devuelve la caja para que quien saque la foto
+     recorte exactamente ahí. */
+  baldosaCaja(i){
+    const l = $$('#tira .baldosa');
+    const b = l[i || 0]; if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top),
+             w: Math.round(r.width), h: Math.round(r.height), n: l.length,
+             clases: b.className };
   },
   relieve(v){ GLF_RELIEVE = v !== false; ICO_CACHE_LIMPIA(); rejaRepinta(); return GLF_RELIEVE; },
   glifos(){

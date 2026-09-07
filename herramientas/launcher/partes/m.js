@@ -108,15 +108,33 @@ function camModo(){ return CAM_MODOS[CAM.modo]; }
 /* ── ABRIR: PRIMERO EL SELECTOR ──
    Y sólo si hay más de una opción. En un aparato sin cámara del sistema el
    selector tendría un botón, que no es un selector: es un peaje. */
-function camAbre(){
-  camArma();
-  /* el selector arranca con el foco puesto en Aero pero sin cerrarle la puerta
-     a la del sistema: el que quiere la de siempre la tiene a un toque */
+/* ── LA CÁMARA AERO ES LA PREDETERMINADA ──
+   Pedido textual: «que la cámara siempre sea la predeterminada». O sea que el
+   selector deja de aparecer en cada toque: tocar una cámara abre ésta y ya.
+   Un cartel que pregunta lo mismo todos los días no es una elección, es un
+   peaje — la elección se hace UNA vez y vive en `camApp`, que se puede mover
+   desde Personalizar y desde la pantalla de bienvenida.
+     · `aero`  abre la de este launcher (de fábrica)
+     · `preg`  vuelve el selector de la vuelta 124
+     · `sis`   ni siquiera intercepta: abre la que el teléfono tenga puesta */
+function camModoApp(){ return lee('camApp', 'aero'); }
 
+function camAbre(){
+  const modo = camModoApp();
+  if (modo === 'sis'){ camSistema(); return; }
+  camArma();
   CAM.on = true;
   $('#cam').classList.add('on');
-  camPanel(true);
+  if (modo === 'preg') camPanel(true);
+  else { camPanel(false); camArranca(); }
   camPinta();
+}
+
+/* la del sistema, por el mismo camino que el botón del selector */
+function camSistema(){
+  if (HAY_AND && CAM_SIS && AND.abrir(CAM_SIS)) return;
+  if (HAY_AND && AND.camara) { AND.camara(); return; }
+  avisa(T('caSinSis'));
 }
 
 function camCierra(){

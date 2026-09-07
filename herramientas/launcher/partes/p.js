@@ -56,16 +56,45 @@ const PERS = [
      apps conocidas, y hay quien prefiere ver el icono con el que la app se
      reconoce en cualquier otro teléfono. Apagado, todo vuelve al icono del
      sistema sobre la baldosa Aero, que es lo que había. */
+  /* ── SEIS PACKS Y EL ICONO DEL SISTEMA ──
+     Las opciones salen de `PACKS`, así que agregar un pack es agregar una fila
+     de esa tabla y nada más: acá no hay una segunda lista que se pueda quedar
+     corta. Y sigue habiendo `nativo`, que no es una concesión — el pack
+     redibuja el logo de las apps conocidas, y hay quien prefiere ver el icono
+     con el que la app se reconoce en cualquier otro teléfono. */
   { tit: 'pPack', tipo: 'ops',
-    ops: () => [[1, T('pSi')], [0, T('pNo')]],
-    lee: () => +lee('icoPack', 1),
-    pon: v => { guarda('icoPack', +v); ICO_CACHE_LIMPIA(); rejaRepinta(); } },
+    ops: () => PACKS.map(p => [p.id, T('pk_' + p.id)]),
+    lee: () => packHoy().id,
+    pon: v => { guarda('icoPack', v); ICO_CACHE_LIMPIA(); rejaRepinta(); } },
+
+  /* ── QUÉ CÁMARA ABRE UNA CÁMARA ──
+     De fábrica la Aero, sin preguntar. `preg` devuelve el selector y `sis` deja
+     de interceptar: interceptar una app siempre tiene que ser reversible. */
+  { tit: 'pCam', tipo: 'ops',
+    ops: () => [['aero', T('caAero')], ['preg', T('pPreg')], ['sis', T('caSistema')]],
+    lee: () => camModoApp(),
+    pon: v => { guarda('camApp', v); } },
 
   { tit: 'pIcono', tipo: 'ops',
     ops: () => [['agua', T('pAgua')], ['pasto', T('pPasto')], ['nube', T('pNube')],
                 ['no', T('pNo')]],
     lee: () => lee('icoTex', 'agua'),
     pon: v => { guarda('icoTex', v); persIcono(); rejaRepinta(); } },
+
+  /* ── EL CAJÓN: POR LETRAS O TODO JUNTO ──
+     No es sólo estética: por letras el riel salta a un encabezado y todo junto
+     el riel resalta. La opción existe porque las dos formas tienen razón —
+     con treinta apps los encabezados son ruido y con trescientas son la única
+     forma de encontrar algo. */
+  { tit: 'pCC', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => lee('ccOn', 1) ? '1' : '0',
+    pon: v => { guarda('ccOn', v === '1' ? 1 : 0); } },
+
+  { tit: 'pCajon', tipo: 'ops',
+    ops: () => [['1', T('pPorLetras')], ['0', T('pJunto')]],
+    lee: () => lee('cajLetras', 1) ? '1' : '0',
+    pon: v => { guarda('cajLetras', v === '1' ? 1 : 0); pintaCajon($('#busca2').value); } },
 
   { tit: 'pIconos', tipo: 'rango', min: 40, max: 92, paso: 4,
     lee: () => ICO, sufijo: ' px',

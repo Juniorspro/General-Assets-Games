@@ -281,7 +281,7 @@ function aguaRecalienta(){ AGUA_TIBIA = false; aguaOcio(aguaPrecalienta); }
 /* ── LO QUE ES «ESPACIO LIBRE» ── */
 function aguaLibre(t){
   if (CAJON || aguaTapada() || !t || !t.closest) return false;
-  if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador,#wid,#fondos,#carp'))
+  if (t.closest('.ap,#reloj,#buscaCaja,#dock,#puntos,#menu,#asis,#pers,#ini,#velo,#mascota,#carga,#tirador,#wid,#fondos,#carp,#cc,#bienv'))
     return false;
   return true;
 }
@@ -354,7 +354,7 @@ function aguaAjusta(ms){
    desenfoque, la pieza más grande del launcher. O sea que «abrir el cajón con
    una gota corriendo detrás» es el peor caso que este launcher puede armar, y
    es exactamente el que reportó el usuario. */
-const AGUA_TAPAN = '#cajon.on,#carp.on,#pers.on,#asis.on,#ini.on,#fondos.on,#cam.on,#velo.on';
+const AGUA_TAPAN = '#cajon.on,#carp.on,#pers.on,#asis.on,#ini.on,#fondos.on,#cam.on,#velo.on,#cc.on,#bienv.on';
 function aguaTapada(){ return !!document.querySelector(AGUA_TAPAN); }
 
 /* el corte duro: apaga la ráfaga, borra el lienzo y devuelve el vidrio y la
@@ -434,25 +434,70 @@ function aguaPaso(){
   requestAnimationFrame(aguaPaso);
 }
 
+/* ══════════ EL AGUA ES UN TOQUE, NO UN APRETÓN ══════════
+   Reporte: «se laguea al abrir la barra de aplicaciones porque toca el agua y
+   se da un tirón». Y era literal: la ráfaga arrancaba en el `pointerdown`, o
+   sea que **subir para abrir el cajón empieza SIEMPRE tocando el agua**. Los
+   cien milisegundos que el dedo tarda en recorrer los 55 px del gesto son cien
+   milisegundos de lienzo a pantalla completa con los once desenfoques apagados,
+   y después el cajón se abre encima. La vuelta anterior arregló el INSTANTE en
+   que el vidrio vuelve; esto saca el conflicto de raíz.
+
+   Con la ráfaga en el `pointerup` el gesto se puede DESAMBIGUAR primero:
+   · si el dedo sube (el cajón) o cruza (la página), la ráfaga no existe;
+   · si el dedo se levanta donde se apoyó, es un toque y ahí sí hay onda.
+
+   Y no se pierde nada perceptible: una onda que nace donde uno TOCÓ se ve igual
+   naciendo al levantar el dedo, porque lo que se mira es el anillo abriéndose y
+   ese anillo dura segundo y medio. La estela sí espera a que el gesto quede
+   descartado como gesto, que es lo único honesto que se puede hacer con un dedo
+   que todavía no decidió qué está haciendo. */
+const AGUA_GESTO = 16;   /* más que esto y hay que esperar a ver qué gesto es */
+const AGUA_TOQUE = 12;   /* menos que esto al levantar y fue un toque */
+
 function aguaInit(){
-  let apretado = false, ux = 0, uy = 0;
+  let vivo = false, cancel = false, x0 = 0, y0 = 0, ux = 0, uy = 0;
   addEventListener('pointerdown', e => {
-    if (!aguaLibre(e.target)) return;
-    apretado = true; ux = e.clientX; uy = e.clientY;
-    aguaToca(e.clientX, e.clientY, 1);
+    vivo = aguaLibre(e.target); cancel = false;
+    x0 = ux = e.clientX; y0 = uy = e.clientY;
   }, { capture: true, passive: true });
-  /* ── LA ESTELA ──
-     Una onda cada 44 px y más flojita: con una por evento de puntero serían
-     sesenta por segundo y se empastan. */
+
   addEventListener('pointermove', e => {
-    if (!apretado || !AGUA.on) return;
+    if (!vivo || cancel) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    /* ── LOS DOS GESTOS QUE SE LLEVAN EL DEDO ──
+       Subir abre el cajón y cruzar cambia de página: los dos empiezan igual que
+       un toque, así que en cuanto el dedo se va para alguno de esos dos lados
+       el agua se retira sin haber dibujado un solo píxel. */
+    /* ── Y BAJAR TAMBIÉN ES UN GESTO ──
+       Desde que bajar abre el centro de control, arrancar el agua con el
+       arrastre hacia abajo la ponía justo encima de ese gesto: el mismo tirón
+       del reporte, por el otro lado. El agua es un TOQUE, y punto; ya
+       encendida, el arrastre le agrega estela. */
+    /* ── YA ENCENDIDA, UN ARRASTRE ES ESTELA; APAGADA, ES OTRO GESTO ──
+       La ambigüedad es sólo del ARRANQUE: subir abre el cajón, bajar abre el
+       centro de control y cruzar cambia de página, y los tres empiezan igual
+       que un toque. Con el agua ya prendida no hay nada que desambiguar —el
+       dedo ya tocó— así que ahí sí se dibuja. */
+    if (!AGUA.on){
+      if (Math.abs(dy) > AGUA_GESTO || Math.abs(dx) > AGUA_GESTO) cancel = true;
+      return;
+    }
     if (Math.hypot(e.clientX - ux, e.clientY - uy) < AGUA_PASO) return;
     ux = e.clientX; uy = e.clientY;
     aguaToca(e.clientX, e.clientY, 0.55);
   }, { capture: true, passive: true });
-  const suelta = () => { apretado = false; };
-  addEventListener('pointerup', suelta, { capture: true, passive: true });
-  addEventListener('pointercancel', suelta, { capture: true, passive: true });
+
+  addEventListener('pointerup', e => {
+    const t = vivo && !cancel;
+    vivo = false;
+    if (!t) return;
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) > AGUA_TOQUE) return;
+    aguaToca(e.clientX, e.clientY, 1);
+  }, { capture: true, passive: true });
+
+  addEventListener('pointercancel', () => { vivo = false; }, { capture: true, passive: true });
+
   addEventListener('resize', () => { if (AGUA.on){ aguaMide(); aguaMapa(); } });
   /* una pestaña escondida no dibuja, pero el rAF se puede reanudar con la
      ráfaga a medio morir y con el vidrio todavía apagado */
