@@ -20,6 +20,16 @@
 
 const CC = { on: false, brillo: 0.5, vol: 0.5, linterna: false, arr: null };
 
+/* ── SE PREGUNTA POR EL MÉTODO, NO POR `HAY_AND` ──
+   `HAY_AND` es un `const` que se calcula al evaluar el módulo y responde «hay
+   un puente con `apps()`». Acá la pregunta es otra: si ESTE puente tiene la
+   puerta de las notificaciones. Un APK viejo puede tener puente y no tenerla, y
+   preguntando por `HAY_AND` el centro diría «no hay puente» cuando lo que falta
+   es un método — que se arregla actualizando la app, no habilitando nada. */
+function andQ(m){
+  return (typeof AND !== 'undefined' && AND && typeof AND[m] === 'function') ? AND : null;
+}
+
 /* `llave` es lo que se puede hacer de verdad desde acá; el resto son atajos.
    `sis` es el nombre que entiende `Puente.panel`. */
 const CC_BOT = [
@@ -60,6 +70,7 @@ function ccArma(){
         '<div class="ccSl" data-k="vol"><i class="ccSlF"></i><span class="ccSlI"></span></div>' +
       '</div>' +
       '<div id="ccReja"></div>' +
+      '<div id="ccNotis"></div>' +
       '<div id="ccPie"></div>' +
       '<div id="ccManija"><i></i></div>' +
     '</div>';
@@ -99,8 +110,8 @@ function ccEnganchaSl(el){
     const r = el.getBoundingClientRect();
     const v = cl((e.clientX - r.left) / Math.max(1, r.width), 0, 1);
     CC[k] = v; ccPintaSl();
-    if (k === 'vol' && HAY_AND && AND.volumen) AND.volumen(v);
-    if (k === 'brillo' && HAY_AND && AND.brillo) AND.brillo(v);
+    if (k === 'vol' && andQ('volumen')) AND.volumen(v);
+    if (k === 'brillo' && andQ('brillo')) AND.brillo(v);
   };
   el.addEventListener('pointerdown', e => { act = true; el.setPointerCapture && el.setPointerCapture(e.pointerId); pon(e); });
   el.addEventListener('pointermove', e => { if (act) pon(e); });
@@ -130,7 +141,7 @@ function ccToca(b){
   if (b.llave){
     if (b.id === 'linterna'){
       CC.linterna = !CC.linterna;
-      if (HAY_AND && AND.linterna && !AND.linterna(CC.linterna)) CC.linterna = false;
+      if (andQ('linterna') && !AND.linterna(CC.linterna)) CC.linterna = false;
       ccPinta();
     }
     return;
@@ -138,12 +149,111 @@ function ccToca(b){
   /* un atajo CIERRA el centro: deja al dueño mirando el panel del sistema, no
      el panel del sistema debajo de nuestra hoja */
   ccCierra();
-  if (HAY_AND && AND.panel) AND.panel(b.sis || 'ajustes');
+  if (andQ('panel')) AND.panel(b.sis || 'ajustes');
   else avisa(T('ccAtajo', T('cc_' + b.id)));
 }
 
+/* ══════════ LAS NOTIFICACIONES ══════════
+
+   ── UNA LISTA VACÍA Y «FALTÁS HABILITARME» NO SON LO MISMO ──
+   Android no le cuenta las notificaciones a nadie que el dueño no haya
+   habilitado a mano en una pantalla del sistema, así que sin ese permiso la
+   lista siempre está vacía. Mostrándola vacía se lee a «no tenés
+   notificaciones», que es falso y encima no dice qué hacer. Son tres estados y
+   se distinguen: sin puente, sin permiso, y con permiso y nada que mostrar.
+
+   ── Y NO SE GUARDA UNA COPIA ──
+   Se le pregunta al servicio cada vez que el centro se abre. Una lista propia
+   se desincroniza en cuanto el dueño descarta algo desde otra parte, y una
+   lista desincronizada muestra mensajes que ya no existen. */
+function ccNotisEstado(){
+  if (!andQ('notis')) return 'sinPuente';
+  if (andQ('notiHabilitado') && !AND.notiHabilitado()) return 'sinPermiso';
+  if (andQ('notiOk') && !AND.notiOk()) return 'esperando';
+  return 'ok';
+}
+
+function ccHace(ms){
+  const m = Math.max(0, Math.round((Date.now() - ms)/60000));
+  if (m < 1) return T('nAhora');
+  if (m < 60) return T('nMin', m);
+  return T('nHora', Math.round(m/60));
+}
+
+function ccNotis(){
+  const c = $('#ccNotis'); if (!c) return;
+  c.innerHTML = '';
+  const est = ccNotisEstado();
+  if (est !== 'ok'){
+    const f = document.createElement('div');
+    f.className = 'ccAviso';
+    const t = document.createElement('span');
+    t.textContent = T(est === 'sinPermiso' ? 'nPide' : est === 'esperando' ? 'nEspera' : 'nSinPuente');
+    f.appendChild(t);
+    if (est === 'sinPermiso'){
+      const b = document.createElement('button');
+      b.className = 'ccBt'; b.textContent = T('nPermitir');
+      b.addEventListener('click', () => { ccCierra(); if (andQ('notiPedir')) AND.notiPedir(); });
+      f.appendChild(b);
+    }
+    c.appendChild(f);
+    return;
+  }
+  let lista = [];
+  try { lista = JSON.parse(AND.notis()) || []; } catch (e) { lista = []; }
+  if (!lista.length){
+    const v = document.createElement('div');
+    v.className = 'ccVacio'; v.textContent = T('nVacio');
+    c.appendChild(v);
+    return;
+  }
+  const cab = document.createElement('div');
+  cab.className = 'ccNCab';
+  const ct = document.createElement('span'); ct.textContent = T('nTit');
+  cab.appendChild(ct);
+  const lb = document.createElement('button');
+  lb.className = 'ccNLimpia'; lb.textContent = T('nLimpiar');
+  lb.addEventListener('click', () => { if (andQ('notiLimpiar')) AND.notiLimpiar(); ccNotis(); });
+  cab.appendChild(lb);
+  c.appendChild(cab);
+
+  for (const n of lista){
+    const f = document.createElement('div');
+    f.className = 'ccN';
+    /* el icono de la app va por el MISMO camino que el del cajón —
+       `shouldInterceptRequest`— así que no cruza el puente en base64 */
+    const im = document.createElement('img');
+    im.className = 'ccNIco'; im.src = iconoUrl(n.p); im.alt = '';
+    im.onerror = () => { im.style.visibility = 'hidden'; };
+    f.appendChild(im);
+    const cuerpo = document.createElement('div'); cuerpo.className = 'ccNTxt';
+    const t1 = document.createElement('div'); t1.className = 'ccNT';
+    const app = POR_PKG[n.p] ? POR_PKG[n.p].n : n.p;
+    t1.textContent = (n.t || app) + ' · ' + ccHace(n.ms);
+    const t2 = document.createElement('div'); t2.className = 'ccNX';
+    t2.textContent = n.x || app;
+    cuerpo.appendChild(t1); cuerpo.appendChild(t2);
+    f.appendChild(cuerpo);
+    f.addEventListener('click', () => {
+      ccCierra();
+      if (!(andQ('notiAbrir') && AND.notiAbrir(n.k)) && andQ('abrir')) AND.abrir(n.p);
+    });
+    if (n.quita){
+      const x = document.createElement('button');
+      x.className = 'ccNX2'; x.textContent = '×';
+      x.addEventListener('click', e => {
+        e.stopPropagation();
+        if (andQ('notiQuitar')) AND.notiQuitar(n.k);
+        ccNotis();
+      });
+      f.appendChild(x);
+    }
+    c.appendChild(f);
+  }
+}
+
 function ccLee(){
-  if (!(HAY_AND && AND.estadoSis)) return;
+  if (!andQ('estadoSis')) return;
   try {
     const e = JSON.parse(AND.estadoSis());
     if (typeof e.vol === 'number') CC.vol = e.vol;
@@ -172,6 +282,7 @@ function ccPinta(){
   $('#ccBat').textContent = (typeof BAT_ULT !== 'undefined' && BAT_ULT)
     ? ((BAT_ULT.c ? '\u26a1' : '') + BAT_ULT.n + ' %') : '';
   ccPintaSl();
+  ccNotis();
   for (const b of CC_BOT){
     const e = $('#cc .ccB[data-id="' + b.id + '"]'); if (!e) continue;
     e.querySelector('.ccT').textContent = T('cc_' + b.id);

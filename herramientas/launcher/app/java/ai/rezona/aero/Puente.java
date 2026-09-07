@@ -499,6 +499,43 @@ public class Puente {
     } catch (Exception e) { return false; }
   }
 
+  /* ══════════ LAS NOTIFICACIONES ══════════
+   * El servicio es `Escucha`; acá está sólo la puerta. Y `notiOk` se pregunta
+   * de DOS formas y no de una: `Escucha.conectada()` dice si el servicio está
+   * vivo AHORA, y la lista del sistema dice si el dueño nos habilitó — un
+   * servicio habilitado pero todavía no enlazado devuelve false en la primera y
+   * true en la segunda, y en ese caso lo que corresponde es esperar, no pedirle
+   * el permiso otra vez a alguien que ya lo dio. */
+  @JavascriptInterface public boolean notiOk() { return Escucha.conectada(); }
+
+  @JavascriptInterface public boolean notiHabilitado() {
+    try {
+      String v = Settings.Secure.getString(act.getContentResolver(),
+                                           "enabled_notification_listeners");
+      return v != null && v.contains(act.getPackageName());
+    } catch (Exception e) { return false; }
+  }
+
+  @JavascriptInterface public String notis() {
+    String j = Escucha.json();
+    return j == null ? "null" : j;
+  }
+
+  @JavascriptInterface public boolean notiAbrir(String key) { return Escucha.abre(key); }
+  @JavascriptInterface public boolean notiQuitar(String key) { return Escucha.quita(key); }
+  @JavascriptInterface public boolean notiLimpiar() { return Escucha.quitaTodo(); }
+
+  @JavascriptInterface public boolean notiPedir() {
+    try {
+      Intent i = new Intent(Build.VERSION.SDK_INT >= 22
+          ? Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+          : "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      act.startActivity(i);
+      return true;
+    } catch (Exception e) { return false; }
+  }
+
   @JavascriptInterface public String version() {
     return "{\"sdk\":" + Build.VERSION.SDK_INT + ",\"modelo\":\"" + esc(Build.MODEL) + "\"}";
   }

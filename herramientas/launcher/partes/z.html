@@ -1042,6 +1042,44 @@ window.__A = {
              visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
   },
   ccAbrir(){ ccAbre(); return true; },
+  /* ── LAS NOTIFICACIONES, CON UN PUENTE DE MENTIRA ──
+     El banco no tiene servicio de escucha, así que lo único que se puede medir
+     de verdad es que los TRES estados se distingan y que una lista inyectada se
+     dibuje fila por fila. Sin esto, «no hay notificaciones» y «falta el
+     permiso» se verían iguales en la prueba, que es justo el defecto que este
+     código existe para no tener. */
+  notis(){
+    return { estado: ccNotisEstado(),
+             filas: $$('#ccNotis .ccN').length,
+             aviso: $$('#ccNotis .ccAviso').length ? $('#ccNotis .ccAviso span').textContent.slice(0, 60) : null,
+             vacio: $$('#ccNotis .ccVacio').length,
+             boton: $$('#ccNotis .ccAviso .ccBt').length,
+             textos: $$('#ccNotis .ccN').map(f => f.querySelector('.ccNT').textContent) };
+  },
+  notiFinge(lista){
+    if (lista === null){ if (window.AND && AND.__f) delete window.AND; ccNotis(); return ccNotisEstado(); }
+    window.AND = window.AND || {};
+    AND.__f = true;
+    AND.notis = () => JSON.stringify(lista || []);
+    AND.notiHabilitado = () => true;
+    AND.notiOk = () => true;
+    AND.notiQuitar = k => { lista = lista.filter(n => n.k !== k); AND.notis = () => JSON.stringify(lista); return true; };
+    AND.notiLimpiar = () => { lista = []; AND.notis = () => JSON.stringify(lista); return true; };
+    AND.notiAbrir = () => true;
+    AND.abrir = () => true;
+    ccNotis();
+    return { estado: ccNotisEstado(), filas: $$('#ccNotis .ccN').length };
+  },
+  notiSinPermiso(){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.notis = () => '[]';
+    AND.notiHabilitado = () => false;
+    AND.notiOk = () => false;
+    AND.notiPedir = () => true;
+    ccNotis();
+    return { estado: ccNotisEstado(), aviso: $$('#ccNotis .ccAviso').length,
+             boton: $$('#ccNotis .ccAviso .ccBt').length };
+  },
   ccCerrar(){ ccCierra(); return true; },
   ccToca(id){ const b = CC_BOT.filter(x => x.id === id)[0]; if (!b) return null; ccToca(b); return true; },
   ccSl(k, v){
