@@ -539,6 +539,7 @@ import blanco
 import ajustes
 import nivel6
 import red
+import red2
 
 # la ficha del menu, despues del nivel 5
 # LA FICHA DEL NIVEL 6 EN EL MENU YA NO VA: el selector de niveles se fue entero.
@@ -1389,7 +1390,7 @@ s = s if SOLO else cambiar(s, """    flowers: LOW ? 170 : 240,
 # el VALOR de la referencia al registrarse, asi que envolverlas antes de los
 # veinticinco registros las cubre todas — incluido el proximo que se agregue.
 s = s if SOLO else cambiar(s, """  const player = new THREE.Object3D();""",
-    red.AYUDANTE + """
+    red.AYUDANTE + red2.JS + """
   const player = new THREE.Object3D();""", 'el ayudante de las redes')
 
 # EL CUADRO BAJO RED, EN CUATRO PARCHES CHICOS
@@ -1402,6 +1403,10 @@ s = s if SOLO else cambiar(s, red.FADE_VIEJO, red.FADE, 'el fundido de las trans
 # LA PERDIDA DE CONTEXTO SIN LAZO DE RECARGAS. Ancla literal y no un corte: las
 # sondas viven ENTRE este listener y `function animate`, asi que cortar de uno a
 # otro se las lleva puestas.
+s = s if SOLO else cambiar(s, red2.CDN_VIEJO, red2.CDN_NUEVO, 'el segundo cdn y el aviso sin motor')
+s = s if SOLO else cambiar(s, red2.VIEJO_BUCLE, red2.NUEVO_BUCLE, 'el vigia de estado en el bucle')
+s = s if SOLO else cambiar(s, red2.VIEJO_FADE, red2.NUEVO_FADE, 'el fundido suelta transitioning')
+
 s = s if SOLO else cambiar(s, red.CTX_VIEJO, red.CONTEXTO.strip(), 'la perdida de contexto')
 
 # `?bajo` ARRANCA EN CALIDAD BAJA. Es a donde recarga la perdida de contexto, y
@@ -1508,6 +1513,8 @@ s = s if SOLO else cambiar(s, """  window.__pb = {""",
                rotulo: r ? r.textContent.trim() : '' };
     },
     reinicia: function () { return pbReinicia(); },
+
+""" + red2.SONDA.rstrip() + """
     // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos
     // buses. Sin leer la ganancia del nodo, mover la barra podria no llegar a
     // ningun lado y la sonda diria que si.

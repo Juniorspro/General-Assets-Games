@@ -269,6 +269,104 @@ algunas muestran el dorso de la cabeza — un girasol de verdad mira al sol. Se 
 hacia dónde mira la cabeza de cada modelo y orientando las instancias, pero es otra vuelta.
 
 
+### Nonagésima octava vuelta (2026-09-04): **PUERTA BLANCA** — las dos puertas que quedaban abiertas y los tres soft-locks
+
+Pedido: *"puedes arreglar todos los posibles crasheos porfavor"*. Vive en
+`herramientas/puerta/red2.py`.
+
+#### LA VUELTA 87 CUBRIÓ EL CUADRO. LO QUE QUEDABA AFUERA ES POR DÓNDE ENTRA EL JUEGO
+
+El bucle, la física, los dos render, el vigía de NaN, la pérdida de contexto y la memoria de video ya
+estaban bajo red. Auditado el archivo armado, lo que **no** estaba son las dos puertas por las que el
+juego entra desde afuera del bucle: **37 `addEventListener` y 10 `setTimeout`**. Una excepción ahí sale
+como *Uncaught* y el botón que la disparó no hace absolutamente nada — el jugador toca REINICIAR o
+ROCIAR y no pasa nada, sin un mensaje.
+
+**Y LA LISTA A MANO YA ESTABA VIEJA.** La vuelta 87 envolvía **once funciones nombradas una por una**, y
+desde entonces entraron ocho listeners nuevos: el menú, los tres idiomas, las tres calidades, las tres
+barras, el spray, el reinicio y el salteo del despertar. Enumerarlos garantiza olvidarse del próximo.
+Se envuelve **el prototipo, una sola vez**, antes del primer registro.
+
+**Y EL WeakMap NO ES OPCIONAL.** `removeEventListener` recibe la función **original**, así que sin la
+tabla el único `removeEventListener` del juego —el `firstClick` que arranca el audio— dejaría de sacar
+nada y el listener quedaría vivo para siempre. Medido: con el listener puesto la cuenta sube a 1, y
+después de quitarlo se queda en 1. Y una excepción en un listener **no corta el siguiente**: medido con
+dos listeners sobre el mismo evento, el segundo corre igual.
+
+#### LOS TRES SOFT-LOCKS, QUE ES LA PARTE QUE DE VERDAD IMPORTA
+
+`transitioning`, `scream.active` y `paused` son banderas que **toman el control**, y si una se queda
+puesta el juego **no falla: se queda**. Con `transitioning` trabado se camina igual, así que no se ve un
+error: se ve un nivel del que **no se puede salir y en el que nada te puede agarrar** —gatea las
+dieciocho condiciones de salida y de agarrón del juego—. Con el screamer trabado el velo queda puesto y
+los controles tomados. Y `paused` con el menú escondido es una pantalla viva que no responde.
+
+**LOS UMBRALES SALEN DE MEDIR, NO DE ELEGIR.** Un umbral que corte una transición legítima es peor que
+el defecto que arregla, así que `__pb.red2()` devuelve el **máximo visto** de cada bandera. Jugada la
+cadena completa —los seis niveles, el cuarto blanco y un susto de la araña de verdad— el máximo
+legítimo es **`transitioning` 1,67 s y screamer 1,42 s**, contra umbrales de **6 y 8**, con
+`destrabes: 0`. O sea que las redes no cortan nada de lo que el juego hace normalmente.
+
+Y se comprueba contra un control **en el mismo binario**, `?sinred2`, que apaga los tres vigías:
+
+| | con red | con `?sinred2` |
+|---|---|---|
+| `transitioning` inyectado | se suelta a los **6,01 s** | **54 s y seguía** |
+| screamer inyectado | se suelta a los **8,01 s** | **26,7 s y seguía** |
+| `paused` sin menú | se suelta **en el acto** | quedó trabado |
+| destrabes | 3 | **0** |
+
+**Y `fadeTo` TENÍA QUE SOLTAR LA BANDERA.** Su `catch` ya levantaba el velo y abría el menú, pero dejaba
+`transitioning` puesto: o sea que después de una transición fallida el jugador volvía a un juego del que
+no se puede salir de ningún nivel. Medido inyectando una falla en la construcción de un nivel: ahora
+aterriza en la escuela con `transitioning false` y el menú abierto.
+
+#### LO QUE NO SE VEÍA: LAS PROMESAS
+
+El juego **no tenía ningún canal** para lo que se escapa. Y las promesas son el caso grave, porque una
+rechazada sin `catch` **no dispara el evento `error` de la ventana**: no aparece en `window.__errs`, que
+es justo lo que mira el banco — así que mis propias pruebas podían estar aprobando un juego con una
+promesa rota. Dos listeners globales (`error` y `unhandledrejection`) no arreglan la falla: la hacen
+**visible**, que es el paso que faltaba. Medido: las dos inyecciones aparecen en `__pbFallas` y el juego
+sigue dibujando.
+
+#### Y EL CRASHEO PEOR DE TODOS, QUE ERA EL MÁS FÁCIL: LA PÁGINA EN BLANCO
+
+El juego bajaba three.js de **un** CDN y de ninguno más. Si ese tercero no contesta —una red que lo
+bloquea, un proxy de oficina, un mal día— `THREE` queda `undefined`, la primera línea tira, y el jugador
+se queda con **una página negra y vacía**: ni un mensaje, nada que leer, nada que hacer. Es la única
+clase de crasheo en la que el jugador no puede ni enterarse de qué pasó. Y lo mismo si el aparato no
+tiene WebGL.
+
+Van tres cosas y las tres son chicas: un **segundo CDN** con `document.write` —que durante el parseo es
+sincrónico y bloquea, que es exactamente lo que hace falta acá, y es la misma decisión que en RezUno con
+el cliente de MQTT—, una **prueba de WebGL** con un lienzo de descarte, y un **cartel legible en los tres
+idiomas** con un botón de recargar. Los tres idiomas juntos y no el elegido, porque el selector todavía
+no existe cuando esto corre.
+
+Medido en una página de prueba que tiene **sólo la guarda y ningún three.js**: `__pbSinMotor: true`, el
+cartel aparece con las tres líneas y el botón. Y en el juego normal, `__pbSinMotor: false` y ningún
+cartel.
+
+#### UN ERROR MÍO DE MÉTODO, Y VALE ANOTARLO
+
+Metí la sonda nueva **horneada dentro de `armar.py`** en vez de referenciar `red2.SONDA`, así que al
+editar `red2.py` el build seguía usando la copia vieja y las ramas nuevas de `romper2` no aparecían
+—devolvía `no se que es promesa`—. Es la trampa de siempre: **dos copias del mismo texto y una que nadie
+mantiene**. Ahora `armar.py` concatena `red2.SONDA` y hay una sola fuente.
+
+#### MEDIDO AL CERRAR
+
+Ocho fallas inyectadas y el juego sigue jugable en las ocho: listener, temporizador, promesa, error
+suelto, falla por cuadro, NaN, construcción de nivel y las tres banderas. `removeEventListener` sigue
+sacando el listener, y una excepción en uno no corta el siguiente. Máximo legítimo de las banderas
+**1,67 y 1,42 s** contra 6 y 8, con **0 destrabes** en la partida completa. Regresión intacta: auditoría
+**28.152 de 28.152 celdas · 4 de 4 partes · 2 de 2 latas · 0 arcos sucios · 0 aislados**, la araña sin
+clavarse (**0,15 s en 120**), partida completa 4/4 en orden y salida al cuarto blanco, REINICIAR NIVEL
+en el local, los **seis niveles** uno por uno, **33 de 33 sonidos**, `castellano: 0` en inglés y
+portugués, 18 llamadas de dibujo y 7.544 triángulos al entrar. `window.__errs` vacío en las nueve
+corridas que no inyectan nada. El HTML pasó de 3,66 a **3,67 MB**.
+
 ### Nonagésima séptima vuelta (2026-09-04): **PUERTA BLANCA** — REINICIAR NIVEL en el panel de pausa
 
 Pedido: *"agrega un botón en el menú de pausa que diga «reiniciar» y servirá para cambiar el nivel que

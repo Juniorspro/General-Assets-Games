@@ -584,6 +584,38 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE || document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/scr' + 'ipt>');</script>
+<script>
+(function () {
+  var falta = !window.THREE;
+  if (!falta) {
+    try {
+      var c = document.createElement('canvas');
+      if (!(c.getContext('webgl') || c.getContext('experimental-webgl'))) falta = 'webgl';
+    } catch (e) { falta = 'webgl'; }
+  }
+  window.__pbSinMotor = falta;
+  if (!falta) return;
+  var m = document.createElement('div');
+  m.id = 'pb-sinmotor';
+  m.style.cssText = 'position:fixed;inset:0;z-index:999;display:flex;flex-direction:column;' +
+    'align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;' +
+    'background:#07080b;color:#c9d2e2;font:600 14px/1.5 system-ui,sans-serif';
+  var t = (falta === 'webgl')
+    ? ['Este aparato no tiene WebGL, asi que el juego no puede dibujar.',
+       'This device has no WebGL, so the game cannot render.',
+       'Este aparelho nao tem WebGL, entao o jogo nao pode desenhar.']
+    : ['No se pudo bajar three.js. Revisa la conexion y volve a cargar.',
+       'three.js could not be downloaded. Check the connection and reload.',
+       'Nao foi possivel baixar o three.js. Verifique a conexao e recarregue.'];
+  m.innerHTML = '<div style="font:700 17px/1.3 system-ui,sans-serif;color:#eef2f8">PUERTA BLANCA</div>' +
+    t.map(function (x, i) { return '<div style="opacity:' + (i ? 0.62 : 0.95) + '">' + x + '</div>'; }).join('') +
+    '<button onclick="location.reload()" style="margin-top:8px;padding:10px 22px;border-radius:22px;' +
+    'border:1px solid rgba(196,206,222,.4);background:transparent;color:#dfe6f2;font:600 13px system-ui">' +
+    'Recargar &middot; Reload</button>';
+  document.body.appendChild(m);
+})();
+</script>
 <script>
 /* ═════════════════ LOS ASSETS DEL NIVEL 1, GENERADOS ═════════════════
    Cielo equirectangular, pasto y cuatro flores reales, todo de Rezona Lab y
@@ -783,6 +815,100 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
   onTouchStart = pbSeguro(onTouchStart, 'onTouchStart');
   onTouchMove = pbSeguro(onTouchMove, 'onTouchMove');
   onTouchEnd = pbSeguro(onTouchEnd, 'onTouchEnd');
+
+  const PB_SIN_RED2 = /(\?|&)sinred2/.test(location.search);
+  if (!PB_SIN_RED2) (function () {
+    const laTabla = new WeakMap();
+    const addOrig = EventTarget.prototype.addEventListener;
+    const quiOrig = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.addEventListener = function (tipo, fn, op) {
+      if (typeof fn !== 'function') return addOrig.call(this, tipo, fn, op);
+      let env = laTabla.get(fn);
+      if (!env) {
+        env = function (ev) {
+          try { return fn.call(this, ev); }
+          catch (err) { pbFalla('evento:' + tipo, err); }
+        };
+        laTabla.set(fn, env);
+      }
+      return addOrig.call(this, tipo, env, op);
+    };
+    EventTarget.prototype.removeEventListener = function (tipo, fn, op) {
+      const env = (typeof fn === 'function') ? laTabla.get(fn) : null;
+      return quiOrig.call(this, tipo, env || fn, op);
+    };
+    // el id que devuelve sigue siendo el de verdad, asi que `clearTimeout` no
+    // se entera de nada
+    const tOrig = window.setTimeout;
+    window.setTimeout = function (fn, ms) {
+      if (typeof fn !== 'function') return tOrig.apply(window, arguments);
+      const resto = Array.prototype.slice.call(arguments, 2);
+      return tOrig.call(window, function () {
+        try { fn.apply(null, resto); }
+        catch (err) { pbFalla('temporizador', err); }
+      }, ms);
+    };
+  })();
+
+  // ── LO QUE HOY NO SE VE: LAS EXCEPCIONES SUELTAS Y LAS PROMESAS ────────────
+  // El juego no tenia NINGUN canal para lo que se escapa. Y las promesas son el
+  // caso grave, porque una rechazada sin `catch` NO dispara el evento `error` de
+  // la ventana: no aparece en `window.__errs`, que es lo que mira el banco, asi
+  // que mis propias pruebas podian estar aprobando un juego con una promesa
+  // rota. Esto no arregla la falla: la hace visible, que es el paso que faltaba.
+  window.addEventListener('error', function (ev) {
+    pbFalla('suelto', (ev && ev.error) || new Error((ev && ev.message) || 'error suelto'));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    pbFalla('promesa', (ev && ev.reason) || new Error('promesa rechazada'));
+  });
+
+  // ── LOS TRES VIGIAS DE ESTADO ───────────────────────────────────────────────
+  // Los umbrales salen de MEDIR cuanto duran de verdad: `__pb.red2()` devuelve
+  // el maximo visto, y jugando la cadena completa el mas largo es la cinematica
+  // del screamer mas su fundido. Un umbral por debajo de eso cortaria una
+  // transicion legitima, que es peor que el defecto que arregla.
+  const PB_TOPE_TRANS = 6.0;   // el fundido dura 0,48 s y el susto 1,45 + fundido
+  const PB_TOPE_GRITO = 8.0;
+  let pbTrT = 0, pbGrT = 0, pbTrMax = 0, pbGrMax = 0, pbDestrabes = 0;
+  function pbVigiaEstado(delta) {
+    if (!Number.isFinite(delta) || delta <= 0) delta = 0.016;
+    // 1 · TRANSITIONING TRABADO. Con esto puesto se camina igual, asi que el
+    //     jugador no ve un error: ve un nivel del que no se puede salir.
+    if (transitioning) {
+      pbTrT += delta;
+      if (pbTrT > pbTrMax) pbTrMax = pbTrT;
+      if (!PB_SIN_RED2 && pbTrT > PB_TOPE_TRANS) {
+        pbTrT = 0; pbDestrabes++;
+        transitioning = false;
+        try { fadeOverlay.style.opacity = '0'; } catch (e) {}
+        pbFalla('transicion trabada', new Error(PB_TOPE_TRANS + ' s con transitioning puesto'));
+      }
+    } else pbTrT = 0;
+    // 2 · EL SCREAMER TRABADO deja el velo puesto y los controles tomados
+    if (scream.active) {
+      pbGrT += delta;
+      if (pbGrT > pbGrMax) pbGrMax = pbGrT;
+      if (!PB_SIN_RED2 && pbGrT > PB_TOPE_GRITO) {
+        pbGrT = 0; pbDestrabes++;
+        scream.active = false;
+        transitioning = false;
+        try { screamerEl.style.display = 'none'; } catch (e) {}
+        try { vignetteEl.style.opacity = '0'; } catch (e) {}
+        pbFalla('susto trabado', new Error(PB_TOPE_GRITO + ' s de screamer'));
+      }
+    } else pbGrT = 0;
+    // 3 · PAUSADO CON EL MENU CERRADO. No hay espera legitima: o el menu esta
+    //     abierto o el juego corre. Se destraba en el acto y sin umbral.
+    if (paused && !PB_SIN_RED2) {
+      let ver = true;
+      try { ver = getComputedStyle(menuEl).display !== 'none'; } catch (e) {}
+      if (!ver) {
+        paused = false; pbDestrabes++;
+        pbFalla('pausa sin menu', new Error('paused con el menu escondido'));
+      }
+    }
+  }
 
   const player = new THREE.Object3D();
   const EYE_HEIGHT = 1.7;
@@ -10189,6 +10315,7 @@ window.__PB_GRITO_ALIAS = {"axe":"exec"};
       try { callback(); }
       catch (err) {
         pbFalla('transicion', err);
+        transitioning = false;
         try { paused = true; openMenu(); } catch (e) {}
       }
       setTimeout(() => { fadeOverlay.style.opacity = '0'; }, 60);
@@ -14120,6 +14247,38 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
                rotulo: r ? r.textContent.trim() : '' };
     },
     reinicia: function () { return pbReinicia(); },
+
+
+    // LO QUE MIDEN LOS TRES VIGIAS: el maximo visto de cada bandera y cuantas
+    // veces hubo que destrabar. Los maximos son lo que justifica los umbrales.
+    red2: function () {
+      return { transMax: +pbTrMax.toFixed(2), gritoMax: +pbGrMax.toFixed(2),
+               transAhora: +pbTrT.toFixed(2), gritoAhora: +pbGrT.toFixed(2),
+               destrabes: pbDestrabes, sinRed: PB_SIN_RED2,
+               transitioning: transitioning, screamActivo: scream.active,
+               pausado: paused,
+               menu: (function () { try { return getComputedStyle(menuEl).display; }
+                                    catch (e) { return '?'; } })() };
+    },
+    // y las cuatro fallas nuevas que se pueden inyectar: las tres banderas
+    // trabadas y una excepcion en un listener de verdad
+    romper2: function (que) {
+      if (que === 'trans') { transitioning = true; return 'transitioning puesto'; }
+      if (que === 'grito') { scream.active = true; scream.t = -1e6; return 'screamer puesto'; }
+      if (que === 'pausa') { paused = true; return 'pausado con el menu cerrado'; }
+      if (que === 'boton') {
+        const b = document.getElementById('menu-restart');
+        b.addEventListener('click', function () { throw new Error('falla inyectada en el boton'); });
+        return 'el boton de reiniciar tira';
+      }
+      if (que === 'promesa') { Promise.reject(new Error('promesa inyectada')); return 'promesa rechazada'; }
+      if (que === 'suelto') { setTimeout(function () { window.dispatchEvent(new ErrorEvent('error', { message: 'error suelto inyectado' })); }, 10); return 'error suelto'; }
+      if (que === 'timer') {
+        setTimeout(function () { throw new Error('falla inyectada en un temporizador'); }, 30);
+        return 'temporizador que tira';
+      }
+      return 'no se que es ' + que;
+    },
     // LAS TRES BARRAS: lo que quedo guardado y lo que de verdad tienen los dos
     // buses. Sin leer la ganancia del nodo, mover la barra podria no llegar a
     // ningun lado y la sonda diria que si.
@@ -14917,6 +15076,7 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
     }
     pbVigiaNaN();
 
+    try { pbVigiaEstado(delta); } catch (err) { pbFalla('vigia', err); }
     try {
       camera.getWorldPosition(uCamPos.value);
       skyDome.position.set(uCamPos.value.x, 0, uCamPos.value.z);
