@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Distrito en gaussianas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --fondo:#0b0c10; --panel:rgba(13,15,20,.74); --linea:rgba(190,205,225,.16);
+  --tiza:#e9edf3; --tenue:#8794a6; --lila:#b98cff;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--fondo); color:var(--tiza); overflow:hidden;
+  font:500 14px/1.5 Archivo,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+}
+canvas{display:block; touch-action:none}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+.rot{font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--tenue)}
+
+#carga{
+  position:fixed; inset:0; z-index:30; display:grid; place-content:center; gap:18px;
+  background:radial-gradient(120% 90% at 50% 20%,#181a24,#0a0b0f 70%); text-align:center;
+  transition:opacity .6s;
+}
+#carga.ido{opacity:0; pointer-events:none}
+#carga h1{margin:0; font-size:17px; font-weight:700; letter-spacing:.2em; text-transform:uppercase}
+#riel{width:min(72vw,300px); height:2px; background:rgba(233,237,243,.14); margin:0 auto}
+#riel i{display:block; height:100%; width:0; background:var(--lila); transition:width .3s}
+#pct{color:var(--tenue); font-size:12px; letter-spacing:.1em}
+
+#panel{
+  position:fixed; left:14px; bottom:14px; z-index:20; width:246px;
+  background:var(--panel); border:1px solid var(--linea);
+  backdrop-filter:blur(15px) saturate(1.2); -webkit-backdrop-filter:blur(15px) saturate(1.2);
+}
+#panel > *{padding:0 15px}
+#panel header{padding-top:13px; padding-bottom:11px; border-bottom:1px solid var(--linea)}
+#panel h2{margin:0; font-size:14px; font-weight:700; letter-spacing:.1em; text-transform:uppercase}
+#panel header p{margin:3px 0 0; font-size:11.5px; color:var(--tenue)}
+dl{display:grid; grid-template-columns:1fr auto; gap:4px 10px; margin:11px 0 12px}
+dt{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--tenue)}
+dd{margin:0; text-align:right; font-family:"IBM Plex Mono",monospace; font-size:12px; font-variant-numeric:tabular-nums}
+.mandos{padding-top:11px; padding-bottom:13px; border-top:1px solid var(--linea)}
+.fila{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px}
+.fila label{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--tenue)}
+.fila output{font-family:"IBM Plex Mono",monospace; font-size:11px; min-width:3em; text-align:right}
+input[type=range]{-webkit-appearance:none; appearance:none; width:100px; height:16px; background:none; cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px; background:rgba(233,237,243,.2)}
+input[type=range]::-moz-range-track{height:2px; background:rgba(233,237,243,.2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:11px; height:11px; margin-top:-4.5px; border-radius:50%; background:var(--lila)}
+input[type=range]::-moz-range-thumb{width:11px; height:11px; border:0; border-radius:50%; background:var(--lila)}
+input[type=range]:focus-visible{outline:2px solid var(--lila); outline-offset:3px}
+.grupo{display:flex; gap:1px; margin-top:9px; background:var(--linea)}
+.grupo button{
+  flex:1; padding:6px 4px; font:600 10px/1.3 Archivo,sans-serif; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--tenue); background:#0e1016; border:0; cursor:pointer;
+}
+.grupo button[aria-pressed=true]{color:#150c22; background:var(--lila)}
+.grupo button:focus-visible{outline:2px solid var(--lila); outline-offset:-2px}
+
+#datos{
+  position:fixed; right:14px; top:14px; z-index:20; padding:9px 13px; text-align:right;
+  display:grid; grid-template-columns:auto auto; gap:2px 12px; align-items:baseline;
+  background:var(--panel); border:1px solid var(--linea);
+  backdrop-filter:blur(15px); -webkit-backdrop-filter:blur(15px);
+}
+#datos b{font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:12.5px; font-variant-numeric:tabular-nums; text-align:right}
+#pista{
+  position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:19; margin:0;
+  font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--tenue);
+  text-shadow:0 1px 10px #000; pointer-events:none; transition:opacity .8s;
+}
+#falla{position:fixed; inset:0; z-index:40; display:none; place-content:center; padding:26px; text-align:center; background:var(--fondo)}
+#falla p{max-width:38ch; margin:10px auto 0; color:var(--tenue); font-size:13px}
+@media (max-width:680px){ #panel{left:8px; right:8px; bottom:8px; width:auto} #pista{display:none} }
+@media (prefers-reduced-motion:reduce){ *{transition-duration:.01ms !important} }
+</style>
+
+<div id="carga">
+  <h1>Distrito en gaussianas</h1>
+  <div id="riel"><i></i></div>
+  <div id="pct" class="mono">0 %</div>
+</div>
+
+<div id="falla">
+  <div><h2>No se pudo abrir</h2><p id="fallaTexto">Hace falta WebGL 2.</p></div>
+</div>
+
+<aside id="panel" hidden>
+  <header>
+    <h2>Distrito</h2>
+    <p>Nube de gaussianas 3D · rasterizada a mano</p>
+  </header>
+  <dl>
+    <dt>Gaussianas</dt><dd id="dN">—</dd>
+    <dt>Extensión</dt><dd id="dCaja">—</dd>
+    <dt>Separación</dt><dd id="dSep">—</dd>
+    <dt>Archivo</dt><dd id="dPeso">—</dd>
+  </dl>
+  <div class="mandos">
+    <div class="fila">
+      <label for="tam">Tamaño</label>
+      <input id="tam" type="range" min="0.5" max="2" step="0.02" value="1">
+      <output id="tamV" class="mono">1,00</output>
+    </div>
+    <div class="fila">
+      <label for="exp">Brillo</label>
+      <input id="exp" type="range" min="0.4" max="3" step="0.02" value="1.55">
+      <output id="expV" class="mono">1,55</output>
+    </div>
+    <div class="grupo">
+      <button id="btGira" aria-pressed="true">Girar</button>
+      <button id="btCaja" aria-pressed="false">Nube</button>
+    </div>
+  </div>
+</aside>
+
+<div id="datos" hidden>
+  <b id="fps">—</b><span class="rot">fps</span>
+  <b id="dibu">—</b><span class="rot">dibujadas</span>
+  <b id="ord">—</b><span class="rot">orden ms</span>
+</div>
+
+<p id="pista">Arrastrá para girar · rueda para acercar · botón derecho para desplazar</p>
+
+<script type="module" src="./main.js"></script>
