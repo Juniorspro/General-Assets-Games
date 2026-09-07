@@ -334,11 +334,23 @@ cuadrada de vidrio, glifo blanco) y `burbuja` (redonda, con velo oscuro para que
 un fondo claro). Son **siete packs** contando el generado.
 
 **Y LA BIENVENIDA LO DELATÓ AL PRIMER MIRADO:** de las siete filas, **cuatro se veían idénticas** —
-`vidrio`, `bliss`, `tinta` y `neon`—, porque los tres últimos piden una imagen de fondo que todavía no
-estaba horneada y caían al vidrio puro. Un pack que no se distingue de otro no es un pack: es la lista
-mintiendo sobre cuántas opciones hay. Por eso `bv()` devuelve **`firmas`**, la clase y los primeros bytes
-del fondo de cada baldosa de cada fila — si dos filas dan la misma cadena, están dibujando el mismo pack,
-y eso desde afuera se ve como un diseño y no como un error.
+`vidrio`, `bliss`, `tinta` y `neon`—, porque los tres últimos piden una imagen de fondo y caían al vidrio
+puro. Un pack que no se distingue de otro no es un pack: es la lista mintiendo sobre cuántas opciones hay.
+Por eso `bv()` devuelve **`firmas`**, la clase y los primeros bytes del fondo de cada baldosa de cada fila
+— si dos filas dan la misma cadena, están dibujando el mismo pack, y eso desde afuera se ve como un diseño
+y no como un error. Medido: **4 firmas distintas de 7**.
+
+**EL ARREGLO ES LA REGLA DE SIEMPRE ACÁ: LO GENERADO NO REEMPLAZA NADA HASTA QUE LLEGA.** La tabla gana
+una columna `css` y cada uno de los tres tiene su cara **dibujada** desde el primer cuadro; la foto la pisa
+cuando decodifique. Bliss es la loma clara —verde abajo, cielo arriba—, tinta una losa oscura mate, y neon
+casi negro con el canto encendido del color de acento. Y las tres tienen que separarse **a 60 px**, que es
+lo que mide un icono en el cajón: la primera versión del neón tenía el borde discreto y al lado de la losa
+de tinta se distinguía a tamaño completo y no en el cajón — va con contorno de dos píxeles y halo hacia
+afuera. Medido: **7 firmas distintas de 7**, y las tres caras fotografiadas una al lado de la otra.
+
+(Las tres fotos generadas siguen sin bajar: el MCP de Rezona no conecta en esta sesión y el cliente por
+stdio se vence a los 300 s. Cuando bajen entran sin tocar una línea de lógica, porque `fondo:'img'` ya
+prefiere la imagen.)
 
 #### EL TIRÓN DEL CAJÓN, TERCERA Y ÚLTIMA CAPA: EL AGUA PASA A SER UN TOQUE
 
@@ -571,8 +583,8 @@ las 201 baldosas fotografiadas en una hoja de contactos. Bienvenida: 5 pasos, 7 
 muestra dibujada, la burbuja redonda. Centro de control: **12 botones · 1 llave · 10 atajos**, los doce a
 75 px de alto, los cuatro estados de la lista de notificaciones. Gesto: abajo abre el centro y arriba el
 cajón, **0 ondas de agua en los dos**. Arrastre: **90 eventos → 1 pintada**. Cajón todo junto: 32 apps, 0
-encabezados, la S encendiendo 2. Fondos: URL de 384 caracteres con la receta, sin logo y vertical, y el
-recorte en 0,5625 · 0,5622 · 0,5626. Filtrado permanente **3 pasadas / 96.401 px** y **cero** con las dos
+encabezados, la S encendiendo 2. Packs: **7 firmas distintas de 7**. Fondos: URL de 384 caracteres con la
+receta, sin logo y vertical, y el recorte en 0,5625 · 0,5622 · 0,5626. Filtrado permanente **3 pasadas / 96.401 px** y **cero** con las dos
 hojas nuevas cerradas. Tipografía: **49 reglas inválidas reemplazadas**, `.ccT` de 16px/normal/400 a
 10px/12px/600 y **cero rótulos cortados** en los doce botones. `window.__errs` **vacío en las nueve corridas**. APK **1,5 MB** con firma v2+v3,
 `HOME` en el alias, `LAUNCHER` en la actividad, el `NotificationListenerService` declarado, e `INTERNET` +

@@ -324,6 +324,44 @@ body.and #barra{display:none}
     inset 0 -8px 14px rgba(0,40,80,.14)}
 .baldosa.vidrioPuro::after{height:44%;
   background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.04) 70%,rgba(255,255,255,0))}
+/* ── LAS TRES CARAS DIBUJADAS, PARA QUE SIETE PACKS SEAN SIETE ──
+   Son el respaldo de `bliss`, `tinta` y `neon` mientras su foto no esté. Van
+   con `aero`, o sea opacas y con el `backdrop-filter` apagado: la baldosa ya no
+   deja pasar el fondo, así que no cuesta una pasada de filtro por icono.
+   Y las tres tienen que separarse **de una ojeada y a 60 px**, que es todo lo
+   que mide un icono en el cajón: no alcanza con cambiar el tono, hay que
+   cambiar de familia. Bliss es la loma clara —verde abajo, cielo arriba—,
+   tinta es una losa oscura mate, y neon es casi negro con el canto encendido
+   del color de acento. */
+.baldosa.pkBliss{
+  background-image:linear-gradient(178deg,#7ec6f2 0%,#a8dcf6 38%,#79bf5a 62%,#4e9a3c 100%);
+  box-shadow:0 6px 16px rgba(4,26,52,.34),
+    inset 0 1.5px 0 rgba(255,255,255,.72),
+    inset 0 0 0 1px rgba(255,255,255,.18)}
+.baldosa.pkTinta{
+  background-image:linear-gradient(180deg,#2b3a4d 0%,#1b2635 62%,#141c27 100%);
+  box-shadow:0 6px 16px rgba(0,10,22,.42),
+    inset 0 1.5px 0 rgba(255,255,255,.28),
+    inset 0 0 0 1px rgba(255,255,255,.10)}
+/* el canto va FUERTE a propósito: al lado de la losa de tinta, un neón con el
+   borde discreto se distingue a tamaño completo y **no a 60 px**, que es lo que
+   mide un icono en el cajón. El contorno de dos píxeles y el halo hacia afuera
+   son lo que lo separa de una ojeada. */
+.baldosa.pkNeon{
+  background-image:radial-gradient(120% 100% at 50% 0%,
+    color-mix(in srgb, var(--acento) 20%, #0a0d12) 0%, #07090d 72%);
+  box-shadow:0 6px 16px rgba(0,0,0,.5),
+    inset 0 0 0 2px var(--acento),
+    inset 0 2px 0 rgba(255,255,255,.5),
+    inset 0 -12px 20px -8px color-mix(in srgb, var(--acento) 40%, transparent),
+    0 0 14px -1px color-mix(in srgb, var(--acento) 55%, transparent)}
+/* el brillo de arriba es la barrida especular del vidrio Aero; en la losa mate
+   de tinta no va, porque una losa mate no tiene barrida */
+.baldosa.pkBliss::after{height:46%;
+  background:linear-gradient(180deg,rgba(255,255,255,.40),rgba(255,255,255,.06) 72%,rgba(255,255,255,0))}
+.baldosa.pkTinta::after{display:none}
+.baldosa.pkNeon::after{height:38%;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0))}
 /* la burbuja es la misma pieza redonda: es la forma de las capturas del centro
    de control, y a 60 px un círculo se lee más limpio que un cuadrado */
 .baldosa.redon{border-radius:50%}
@@ -3467,12 +3505,19 @@ const PACKS = [
     tinte: null,   glifo: '#fff' },
   { id: 'burbuja', fondo: null,                  relieve: false, forma: 'redon',
     tinte: 'oscuro', glifo: '#fff' },
+  /* ── `css` ES EL RESPALDO DIBUJADO, Y HACÍA FALTA ──
+     Estos tres piden una imagen de fondo. Sin ella caían al vidrio puro, o sea
+     que en la bienvenida **cuatro filas de siete salían idénticas** —vidrio,
+     bliss, tinta y neon— y un pack que no se distingue de otro no es un pack:
+     es la lista mintiendo sobre cuántas opciones hay. Con la clase, cada uno
+     tiene su cara desde el primer cuadro y la foto lo pisa cuando llegue, que
+     es la regla de siempre acá: lo generado no reemplaza nada hasta que llega. */
   { id: 'bliss',   fondo: 'img', img: 'bliss',   relieve: true,  forma: 'cuad',
-    tinte: null,   glifo: null },
+    tinte: null,   glifo: '#fff',   css: 'pkBliss' },
   { id: 'tinta',   fondo: 'img', img: 'tinta',   relieve: false, forma: 'cuad',
-    tinte: null,   glifo: '#fff' },
+    tinte: null,   glifo: '#fff',   css: 'pkTinta' },
   { id: 'neon',    fondo: 'img', img: 'neon',    relieve: true,  forma: 'cuad',
-    tinte: null,   glifo: 'acento' },
+    tinte: null,   glifo: 'acento', css: 'pkNeon' },
   /* ── EL PACK GENERADO: LA CELDA TAL CUAL SALIÓ ──
      Pedido textual: «literalmente podías simplemente recortar cada ícono
      generado con Rezona y ponerlos como íconos en vez de reconstruirlo a mano».
@@ -3543,6 +3588,10 @@ function icoAero(b, pkg, nombre){
     b.style.backgroundImage = 'url(' + fondo + ')';
     b.style.backgroundSize = 'cover';
     b.style.backgroundPosition = 'center';
+  } else if (P.css){
+    /* con su cara propia dibujada: `aero` porque es opaca, así que el
+       `backdrop-filter` se apaga igual que con una foto */
+    b.classList.add('aero', P.css);
   } else {
     b.classList.add('vidrioPuro');
   }

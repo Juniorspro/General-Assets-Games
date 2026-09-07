@@ -953,12 +953,19 @@ const PACKS = [
     tinte: null,   glifo: '#fff' },
   { id: 'burbuja', fondo: null,                  relieve: false, forma: 'redon',
     tinte: 'oscuro', glifo: '#fff' },
+  /* ── `css` ES EL RESPALDO DIBUJADO, Y HACÍA FALTA ──
+     Estos tres piden una imagen de fondo. Sin ella caían al vidrio puro, o sea
+     que en la bienvenida **cuatro filas de siete salían idénticas** —vidrio,
+     bliss, tinta y neon— y un pack que no se distingue de otro no es un pack:
+     es la lista mintiendo sobre cuántas opciones hay. Con la clase, cada uno
+     tiene su cara desde el primer cuadro y la foto lo pisa cuando llegue, que
+     es la regla de siempre acá: lo generado no reemplaza nada hasta que llega. */
   { id: 'bliss',   fondo: 'img', img: 'bliss',   relieve: true,  forma: 'cuad',
-    tinte: null,   glifo: null },
+    tinte: null,   glifo: '#fff',   css: 'pkBliss' },
   { id: 'tinta',   fondo: 'img', img: 'tinta',   relieve: false, forma: 'cuad',
-    tinte: null,   glifo: '#fff' },
+    tinte: null,   glifo: '#fff',   css: 'pkTinta' },
   { id: 'neon',    fondo: 'img', img: 'neon',    relieve: true,  forma: 'cuad',
-    tinte: null,   glifo: 'acento' },
+    tinte: null,   glifo: 'acento', css: 'pkNeon' },
   /* ── EL PACK GENERADO: LA CELDA TAL CUAL SALIÓ ──
      Pedido textual: «literalmente podías simplemente recortar cada ícono
      generado con Rezona y ponerlos como íconos en vez de reconstruirlo a mano».
@@ -1029,6 +1036,10 @@ function icoAero(b, pkg, nombre){
     b.style.backgroundImage = 'url(' + fondo + ')';
     b.style.backgroundSize = 'cover';
     b.style.backgroundPosition = 'center';
+  } else if (P.css){
+    /* con su cara propia dibujada: `aero` porque es opaca, así que el
+       `backdrop-filter` se apaga igual que con una foto */
+    b.classList.add('aero', P.css);
   } else {
     b.classList.add('vidrioPuro');
   }
