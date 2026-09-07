@@ -1,6 +1,6 @@
 # Un distrito en gaussianas 3D, con el color trazado por Cycles
 
-**9.313.478 gaussianas anisótropas** sobre 744 × 744 m de piso y 570 × 570 m de
+**8.931.298 gaussianas anisótropas** sobre 744 × 744 m de piso y 570 × 570 m de
 ciudad, dibujadas por un rasterizador escrito a mano en WebGL 2. Sin librerías.
 El color de cada gaussiana **no** sale de una textura: sale de mirar en qué
 píxel cayó esa gaussiana en cada una de **184 fotos trazadas con Cycles** y
@@ -12,19 +12,19 @@ splat entrenado.
 | Escena | 49 edificios de 15 a 132 m · 155.166 caras · 31 mallas |
 | Fotos | 184 tomas de 640 px · lente de 20 mm · 96 muestras · color y profundidad en EXR |
 | Render | 2 h 16 min de Cycles en CPU, 4 núcleos, sin GPU |
-| Superficie | 208.276 triángulos · 1.797.613 m² · paso de muestreo 0,40 m |
-| Cobertura | 80,2 % de las muestras vio dos cámaras o más · **6,92 cámaras de media** |
+| Escena | 54 edificios de 19 a 117 m · 191.865 caras · follaje de cartas con alfa |
+| Superficie | 360.050 triángulos · 2.568.912 m² · paso de muestreo 0,44 m |
+| Cobertura | 62,8 % de las muestras quedó con color · **6,90 cámaras de media** |
 
 Las mismas fotos dan la nube a cualquier densidad; lo único que cambia es el
 `--total` del proyector. Cinco escalones, todos del mismo distrito:
 
 | Nube | Gaussianas | Archivo | Grano | Dónde |
 |---|---|---|---|---|
-| completa | 9.313.478 | 284,2 MB | **0,48 m** | `.splat` suelto, se arrastra al visor |
-| media | 3.000.000 | 91,6 MB | 0,84 m | `.splat` suelto |
-| chica | 1.680.402 | 51,3 MB | 1,16 m | `.splat` suelto |
-| grande en html | 900.000 | 27,5 MB | 1,59 m | un archivo, doble clic |
-| web | 450.000 | 13,7 MB | 2,24 m | `distrito.html`, entra en 15 MB |
+| completa | 8.931.298 | 272,6 MB | **0,52 m** | `.splat` suelto, se arrastra al visor |
+| media | 3.000.000 | 91,6 MB | 0,90 m | `.splat` suelto |
+| grande en html | 900.000 | 27,5 MB | 1,64 m | un archivo, doble clic |
+| web | 450.000 | 13,7 MB | 2,32 m | `distrito.html`, entra en 15 MB |
 
 ## Lo que esto es y lo que no
 
@@ -41,14 +41,29 @@ resultado hereda todo lo que calculó el trazador de caminos: sombras suaves,
 oclusión en los patios, rebote del asfalto en los zócalos, cielo azul en las
 fachadas que no ven el sol.
 
+La cobertura bajó de 80 % a 63 % y está bien: el follaje son cartas con alfa,
+así que la mayor parte de la carta es transparente y la prueba de profundidad
+descarta esas muestras. Lo que queda son gaussianas sobre hoja visible, que es
+exactamente lo que se busca.
+
 **Y a qué distancia se lee como una foto.** El detalle de un splat no lo pone
 la cantidad de gaussianas sino su **grano**: cuántos metros mide cada una. Con
 grano de un metro, a 300 m o más cada gaussiana ocupa un par de píxeles y la
 nube se lee como una toma aérea, pero en la vereda, con la cámara a 20 m de la
 fachada, ocupa cien píxeles y se ve lo que es: una nube de elipses. Para que la
 calle se viera igual hacían falta unos nueve millones de gaussianas, y ahí
-están: con grano de **0,48 m** las ventanas de la fachada de enfrente se
+están: con grano de **0,52 m** las ventanas de la fachada de enfrente se
 cuentan una por una.
+
+**Y el límite de verdad no era ése.** Un splat no puede ser más realista que
+las fotos con las que se pinta. Después de subir a nueve millones seguía sin
+parecer una foto, y el problema estaba antes: la escena. Renderizando **un
+fotograma** a 1280 px con curva de cámara —`mirar-foto.py`, tres minutos— se ve
+de una qué falla, y sobre eso se itera. Ahí aparecieron el follaje facetado,
+los faroles como losas, los semáforos como andamios, el mosaico repetido en las
+49 fachadas y las copas flotando por un bug de apilado del tronco. Esa lista
+está abajo. El techo que queda ya no es el splat: es que los autos son cajas y
+la gente son tres cajas.
 
 Lo que la nube completa deja al descubierto es el límite siguiente, que ya no
 son las gaussianas: las fotos son de 640 px. Una gaussiana de 0,48 m vista
@@ -102,16 +117,21 @@ parezca una foto.
 
 ```sh
 # la escena y las 184 fotos (2 h 16 min en CPU). Deja ciudad3.blend y ~/foto3
+python3 hacer-hojas.py hojas.png 512    # la textura de follaje, con alfa
 blender -b -P ciudad.py -- --vistas 184 --muestras 96 --px 640
 
+# un fotograma solo, para mirar la escena como foto antes de gastar dos horas
+blender -b ciudad4.blend -P mirar-foto.py -- --px 1280 --muestras 200 \
+        --lente 35 --ojo 92,-46.5,1.75 --blanco -200,-49,26 --salida ref.png
+
 # la nube completa, y de la misma corrida una versión rala (unos 50 min)
-blender -b ciudad3.blend -P proyectar.py -- --fotos ~/foto3 \
-        --salida distrito-9M.splat --total 9000000 --caja 285 --apron 372 \
-        --chico distrito-3M.splat --nchico 3000000
-python3 ralear.py distrito-9M.splat visor/ciudad.splat 450000
+blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
+        --salida ciudad-11M.splat --total 11000000 --caja 285 --apron 372 \
+        --chico ciudad-3M.splat --nchico 3000000
+python3 ralear.py ciudad-11M.splat visor/ciudad.splat 450000
 
 # un recorte: --caja es el radio y --centro lo corre a un cruce
-blender -b ciudad3.blend -P proyectar.py -- --fotos ~/foto3 \
+blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
         --salida esquina.splat --total 520000 --caja 78 --apron 118 --centro 52,52
 
 python3 -m http.server -d visor 8091     # el visor leyendo visor/ciudad.splat
@@ -154,7 +174,20 @@ cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
 
 ## Lo que costó, medido
 
-1. **A nueve millones de muestras el proyector no entraba en memoria.** Las
+1. **Estuve puliendo el lado equivocado.** Tres vueltas de densidad,
+   rasterizador y orden de dibujo cuando lo que delataba la nube estaba en la
+   escena. El fotograma de referencia debió ser lo primero, no lo último.
+2. **El follaje eran icoesferas macizas de 80 caras en verde plano.** Las
+   facetas se marcaban y era el delator número uno. La solución que usa todo el
+   mundo son cartas cruzadas con una textura de hojas recortada por alfa, y esa
+   textura se puede dibujar con numpy sin bajar nada.
+3. **Los tres tramos del tronco no se apilaban.** El de arriba terminaba en
+   `h*0,40` y la copa empezaba en `h*0,86` menos el radio: dos metros y medio
+   de aire y las copas flotando.
+4. **Abajo del horizonte el HDRI es negro.** A 175 m de altura los rayos casi
+   horizontales pasan de largo el telón y traen ese negro: en la toma aérea
+   quedaba una banda negra sobre la silueta. Va mezclado con bruma.
+5. **A nueve millones de muestras el proyector no entraba en memoria.** Las
    homogéneas se armaban adentro del lazo (374 MB por toma), el vector a la
    cámara se normalizaba entero (280 MB) y la etapa de forma iba en doble
    precisión (medio giga sólo para las matrices de rotación). Con las
@@ -162,37 +195,37 @@ cocinaba la luz a mano. Queda porque es la mitad del camino y se compara bien.
    adelante, el pico baja a algo que la máquina aguanta. Para proyectar sobran
    seis dígitos: a 400 m del centro el error de float32 es de cuatro
    centésimas de milímetro.
-2. **El orden de dibujo estaba invertido.** La clave de profundidad iba negada,
+6. **El orden de dibujo estaba invertido.** La clave de profundidad iba negada,
    así que el conteo ascendente dibujaba de cerca a lejos y, con alfa "sobre",
    el piso del fondo terminaba pintado **encima de la ciudad**: se veía una
    explanada con los edificios apenas asomando en el horizonte. Un signo.
-3. **Firefox se comía 2,6 de los 4 núcleos** girando el visor viejo, y el
+7. **Firefox se comía 2,6 de los 4 núcleos** girando el visor viejo, y el
    render tardaba 138 s por toma. Cerrándolo bajó a 38 s.
-4. **SwiftShader tarda segundos por cuadro** con medio millón de gaussianas, así
+8. **SwiftShader tarda segundos por cuadro** con medio millón de gaussianas, así
    que una captura tomada justo después de mover la cámara sale del cuadro
    anterior. Media hora perdida persiguiendo un bug que no existía. Para juzgar
    geometría conviene `mirar.py`, que es un z-buffer de puntos en numpy y no
    necesita navegador.
-5. **`file_slots.new()` devuelve el socket, no la ranura.** Para que el color
+9. **`file_slots.new()` devuelve el socket, no la ranura.** Para que el color
    salga en medias y la profundidad en float hay que tocar
    `sal.file_slots[0].format`, no lo que devolvió `new()`.
-6. **El piso del distrito son dos triángulos de 288.000 m²** y un recorte por
-   centroide no los puede tratar: o entra entero o no entra. Hay que
-   subdividirlos —cuatro hijos por vuelta hasta 12 m de lado— antes de recortar.
-7. **La cara de abajo de la losa, del cordón y de las rayas no la ve nadie**, y
-   se llevaba el 9 % de las muestras. Tirando lo que mira para abajo a ras del
-   piso, la cobertura sube de 62,8 % a 76,2 %.
-8. **Los emisores están calibrados para la noche.** De día, en toma lineal, cada
-   farol quedaba muy arriba de 1 y salía como una bola blanca flotando en la
-   calle. Van atenuados por material antes de la curva.
-9. **Si el plano del suelo termina donde termina la ciudad, la nube flota como
-   una maqueta.** Hay que dejar una franja de piso más allá del recorte y
-   quedarse con lo que alguna cámara aérea vio. Y entonces hay que encuadrar por
-   la caja de lo **construido**, no por la de la nube, o los edificios quedan en
-   una franja del medio.
-10. **Los uniforms compartidos necesitan la misma precisión en los dos
+10. **El piso del distrito son dos triángulos de 288.000 m²** y un recorte por
+    centroide no los puede tratar: o entra entero o no entra. Hay que
+    subdividirlos —cuatro hijos por vuelta hasta 12 m de lado— antes de recortar.
+11. **La cara de abajo de la losa, del cordón y de las rayas no la ve nadie**, y
+    se llevaba el 9 % de las muestras. Tirando lo que mira para abajo a ras del
+    piso, la cobertura sube de 62,8 % a 76,2 %.
+12. **Los emisores están calibrados para la noche.** De día, en toma lineal, cada
+    farol quedaba muy arriba de 1 y salía como una bola blanca flotando en la
+    calle. Van atenuados por material antes de la curva.
+13. **Si el plano del suelo termina donde termina la ciudad, la nube flota como
+    una maqueta.** Hay que dejar una franja de piso más allá del recorte y
+    quedarse con lo que alguna cámara aérea vio. Y entonces hay que encuadrar por
+    la caja de lo **construido**, no por la de la nube, o los edificios quedan en
+    una franja del medio.
+14. **Los uniforms compartidos necesitan la misma precisión en los dos
     shaders.** El vértice declaraba `precision highp int` y el fragmento sólo
     la de `float`, así que un `uniform int` común no linkeaba: *"Uniform `modo`
     is not linkable between attached shaders"*.
-11. **Con dos programas hay que usar VAO.** El estado de atributos es global; el
+15. **Con dos programas hay que usar VAO.** El estado de atributos es global; el
     cielo y las gaussianas se pisaban el `vertexAttribPointer`.

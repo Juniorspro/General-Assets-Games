@@ -76,7 +76,7 @@ const cam = { blanco:[0,26,0], dist:420, yaw:0.7, pit:0.13, fov:52 };
 /* Cuatro encuadres, porque la nube se lee distinto en cada escala: de lejos es
    una maqueta, a la altura del cordón se nota que el color es radiancia. */
 const ENCUADRES = [
-  { blanco:[0, 48, 0],    dist:365, yaw:0.92,  pit:0.22,  fov:51 },   // aérea
+  { blanco:[0, 48, 0],    dist:365, yaw:0.92,  pit:0.32,  fov:51 },   // aérea
   { blanco:[0, 62, 0],    dist:300, yaw:2.34,  pit:0.05,  fov:54 },   // perfil
   { blanco:[-120, 22, -52], dist:210, yaw:1.571, pit:0.09, fov:54 }, // avenida
   { blanco:[0, 26, -52],  dist:130, yaw:1.571, pit:0.13,  fov:52 },  // manzana
@@ -111,8 +111,8 @@ function ajustarEncuadres(caja){
   // Todo sale del lado de la huella, no del alto. Encuadrar por el alto para
   // que entren las torres enteras deja la nube como una maqueta flotando en
   // una losa; que las torres se vayan de cuadro es lo que hace una foto.
-  ENCUADRES[0].blanco = [cx, lado*0.10, cz];  ENCUADRES[0].dist = lado*0.62;
-  ENCUADRES[1].blanco = [cx, lado*0.11, cz];  ENCUADRES[1].dist = lado*0.52;
+  ENCUADRES[0].blanco = [cx, lado*0.085, cz];  ENCUADRES[0].dist = lado*0.62;
+  ENCUADRES[1].blanco = [cx, lado*0.110, cz];  ENCUADRES[1].dist = lado*0.52;
 }
 let girando = true, nube = false, brillo = 1.0, modo = 0;
 
