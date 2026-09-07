@@ -21,7 +21,8 @@ Las mismas fotos dan la nube a cualquier densidad; lo único que cambia es el
 
 | Nube | Gaussianas | Archivo | Grano | Dónde |
 |---|---|---|---|---|
-| **núcleo 4×** | **14.790.347** | **451,4 MB** | **0,26 m** | 300 × 300 m, `.splat` suelto |
+| **distrito 4×** | **35.027.775** | **1.069 MB** | **0,25 m** | todo el distrito, `.splat` suelto |
+| núcleo 4× | 14.790.347 | 451,4 MB | 0,26 m | 300 × 300 m, `.splat` suelto |
 | paseo | 949.931 | 29,0 MB | 0,47 m | `caminar.html`, 100 × 100 m |
 | completa | 8.931.298 | 272,6 MB | 0,52 m | `.splat` suelto, se arrastra al visor |
 | media | 3.000.000 | 91,6 MB | 0,90 m | `.splat` suelto |
@@ -57,13 +58,19 @@ calle se viera igual hacían falta unos nueve millones de gaussianas, y ahí
 están: con grano de **0,52 m** las ventanas de la fachada de enfrente se
 cuentan una por una.
 
-**El núcleo 4×** es la misma escena y las mismas fotos, proyectadas a 20
-millones de muestras sobre los 300 × 300 m del centro: paso de muestreo de
-**0,22 m**, la mitad exacta del anterior, o sea cuatro veces la densidad. Sobre
-el distrito entero serían 28 millones de gaussianas y 900 MB, y ahí no es la
-paciencia lo que se acaba: el empaquetado del visor mete 1.024 gaussianas por
-fila de textura, con lo que el techo son 16,7 millones, y ninguna placa de
-consumo tiene 900 MB de textura para esto.
+**El 4× sobre el distrito entero** son 44 millones de muestras: paso de
+muestreo **0,21 m**, la mitad exacta del anterior, o sea cuatro veces la
+densidad. Para que entrara hubo que dar vuelta el proyector —las 184 fotos van
+a RAM (719 MB en medias) y las muestras se procesan por bloques, cada bloque
+contra las 184 tomas— porque guardar un acumulador por muestra para 57 millones
+de muestras eran seis gigas y no entraban. De paso cada EXR se lee una vez y no
+una por bloque.
+
+Y hubo que subir el techo del visor: el empaquetado metía 1.024 gaussianas por
+fila de textura, con lo que no pasaba de 16,7 millones. Ahora el ancho se
+elige tan chico como se pueda y se duplica hasta que la nube entre en el alto
+que admite la placa, y el shader recibe la máscara y el corrimiento en vez de
+tenerlos cableados.
 
 **Y el límite de verdad no era ése.** Un splat no puede ser más realista que
 las fotos con las que se pinta. Después de subir a nueve millones seguía sin
@@ -173,6 +180,10 @@ blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
 blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
         --salida paseo.splat --total 1500000 --caja 50 --apron 74 \
         --centro 52,52 --pisos 5 --grosor 0.30
+# el distrito entero a cuatro veces la densidad: 57 millones de muestras
+blender -b ciudad4.blend -P proyectar.py -- --fotos ~/foto4 \
+        --salida distrito-4x.splat --total 44000000 --caja 285 --apron 372 \
+        --bloque 5500000
 python3 recortar.py nucleo-4x.splat corte.splat 52 -52 60     # x, z, radio
 python3 ralear.py paseo.splat paseo-final.splat 950000 --centro 52,-52 --r0 26 --pmin 0.55
 python3 armar-html.py visor paseo-final.splat caminar.html --pie --brillo 1.35

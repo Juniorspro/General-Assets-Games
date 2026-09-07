@@ -15,12 +15,20 @@ export const CUANTOS = (bytes) => Math.floor(bytes / 32);
 /* --- el formato .splat: 32 bytes por gaussiana ---
    3 float32 posición · 3 float32 escala lineal · 4 bytes RGBA ·
    4 bytes cuaternión (w,x,y,z) mapeado de [-1,1] a [0,255]           */
-export function empaquetar(buf){
+export function empaquetar(buf, maxTex = 16384){
   const n = CUANTOS(buf.byteLength);
   const f = new Float32Array(buf), b = new Uint8Array(buf);
 
-  // 2 texeles RGBA32UI por gaussiana; 2048 de ancho para no pasarse del máximo
-  const ancho = 2048, alto = Math.ceil((2 * n) / ancho);
+  // Dos texeles RGBA32UI por gaussiana. El ancho se elige tan chico como se
+  // pueda y se duplica hasta que la nube entre en el alto que admite la placa:
+  // con 2.048 de ancho el techo eran 16,7 millones de gaussianas y una nube de
+  // treinta y pico no entraba. El shader recibe la máscara y el corrimiento,
+  // así que no hay nada cableado.
+  let ancho = 2048;
+  while (Math.ceil((2 * n) / ancho) > maxTex && ancho < maxTex) ancho *= 2;
+  const alto = Math.ceil((2 * n) / ancho);
+  const porFila = ancho >> 1;
+  const mascara = porFila - 1, corr = Math.round(Math.log2(porFila));
   const datos = new Uint32Array(ancho * alto * 4);
   const datosF = new Float32Array(datos.buffer);
   const datosB = new Uint8Array(datos.buffer);
@@ -72,7 +80,7 @@ export function empaquetar(buf){
     datos[8*i+5] = medio2(4*s[2], 4*s[3]);
     datos[8*i+6] = medio2(4*s[4], 4*s[5]);
   }
-  return { n, datos, pos, ancho, alto,
+  return { n, datos, pos, ancho, alto, mascara, corr,
            centro: centro.map((v) => v / n), caja };
 }
 
@@ -102,6 +110,7 @@ uniform mat4 proyeccion, vista;
 uniform vec2 focal, pantalla;
 uniform float tam;
 uniform int modo;
+uniform uint mascara, corr;   // cómo entra el índice en la textura
 in vec2 posicion;      // esquina del cuadrado, en [-2,2]
 in uint indice;
 out vec4 vColor;
@@ -109,7 +118,7 @@ out vec2 vPos;
 out float vNiebla;
 
 void main(){
-  uvec4 cen = texelFetch(u_textura, ivec2((uint(indice) & 0x3ffu) << 1, uint(indice) >> 10), 0);
+  uvec4 cen = texelFetch(u_textura, ivec2((uint(indice) & mascara) << 1, uint(indice) >> corr), 0);
   vec4 camara = vista * vec4(uintBitsToFloat(cen.xyz), 1.0);
   vec4 p = proyeccion * camara;
   float corte = 1.2 * p.w;
@@ -117,7 +126,7 @@ void main(){
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return;
   }
 
-  uvec4 cov = texelFetch(u_textura, ivec2(((uint(indice) & 0x3ffu) << 1) | 1u, uint(indice) >> 10), 0);
+  uvec4 cov = texelFetch(u_textura, ivec2(((uint(indice) & mascara) << 1) | 1u, uint(indice) >> corr), 0);
   vec2 u1 = unpackHalf2x16(cov.x), u2 = unpackHalf2x16(cov.y), u3 = unpackHalf2x16(cov.z);
   mat3 Sigma = mat3(u1.x, u1.y, u2.x,
                     u1.y, u2.y, u3.x,

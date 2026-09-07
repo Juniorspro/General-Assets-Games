@@ -173,32 +173,67 @@ paso = s0 / np.sqrt(W)                                   # paso de muestreo
 print("SPLAT: paso base %.2f m (de %.2f a %.2f según material) · refuerzo hasta x%.1f" % (
       s0, paso.min(), paso.max(), refuerzo.max()), flush=True)
 
-# ---------------------------------------------------- muestreo
-rng = np.random.default_rng(20260908)
-pond = A*W
-prob = np.cumsum(pond); prob /= prob[-1]
-NM = int(TOTAL*1.30)
-cara = np.searchsorted(prob, rng.random(NM))
-r1, r2 = rng.random(NM), rng.random(NM)
-s = np.sqrt(r1)
-# de a un vértice: con los tres a la vez son tres arreglos de (NM,3) vivos al
-# mismo tiempo, y a nueve millones de muestras eso es casi un giga de más
-pos = P[cara,0] * (1-s)[:,None]
-pos += P[cara,1] * (s*(1-r2))[:,None]
-pos += P[cara,2] * (s*r2)[:,None]
-del r1, r2, s
-lc = LIM[cara]
-dentro_caja = (np.abs(pos[:,0]-CENTRO[0]) <= lc) & (np.abs(pos[:,1]-CENTRO[1]) <= lc)
-pos, cara = pos[dentro_caja], cara[dentro_caja]
-nor, pas, dos = NOR[cara], paso[cara], DOS[cara]
-NM = len(pos)
-print("SPLAT: %d muestras" % NM, flush=True)
+# ---------------------------------------------------- helpers de empaquetado
+def cuaternion(Mrot):
+    """Cuaternión desde una matriz de rotación, por lotes. Se cuantiza a un
+    byte por componente, así que float32 sobra."""
+    n = Mrot.shape[0]
+    tr = Mrot[:,0,0] + Mrot[:,1,1] + Mrot[:,2,2]
+    q = np.empty((n,4), np.float32)
+    k0 = tr > 0
+    if k0.any():
+        S = np.sqrt(np.maximum(1e-12, tr[k0]+1.0))*2
+        q[k0,0] = 0.25*S
+        q[k0,1] = (Mrot[k0,2,1]-Mrot[k0,1,2])/S
+        q[k0,2] = (Mrot[k0,0,2]-Mrot[k0,2,0])/S
+        q[k0,3] = (Mrot[k0,1,0]-Mrot[k0,0,1])/S
+    resto = ~k0
+    if resto.any():
+        Mr = Mrot[resto]; nr = Mr.shape[0]; qq = np.empty((nr,4), np.float32)
+        d0,d1,d2 = Mr[:,0,0], Mr[:,1,1], Mr[:,2,2]
+        c1 = (d0>d1)&(d0>d2); c2 = (~c1)&(d1>d2); c3 = ~(c1|c2)
+        for sel,(i,j,kk) in ((c1,(0,1,2)),(c2,(1,2,0)),(c3,(2,0,1))):
+            if not sel.any(): continue
+            Ms = Mr[sel]
+            S = np.sqrt(np.maximum(1e-12, 1.0+Ms[:,i,i]-Ms[:,j,j]-Ms[:,kk,kk]))*2
+            qq[sel,0] = (Ms[:,kk,j]-Ms[:,j,kk])/S
+            qq[sel,1+i] = 0.25*S
+            qq[sel,1+j] = (Ms[:,j,i]+Ms[:,i,j])/S
+            qq[sel,1+kk] = (Ms[:,kk,i]+Ms[:,i,kk])/S
+        q[resto] = qq
+    q /= np.maximum(1e-9, np.linalg.norm(q, axis=1))[:,None]
+    return q
 
-# ---------------------------------------------------- fotos
+def empaquetar(f, posY, esc, rgb, alfa, q, sel, k):
+    """Escribe los 32 bytes por gaussiana del formato .splat.
+
+    k escala sólo los dos ejes del plano: el tercero es el grosor contra la
+    normal, y engordarlo levanta la gaussiana de la superficie.
+    """
+    m = int(sel.sum())
+    if m == 0: return 0
+    fl = np.zeros((m,8), np.float32)
+    fl[:,0:3] = posY[sel]
+    fl[:,3:6] = esc[sel] * np.array([k, k, 1.0], np.float32)
+    by = np.zeros((m,8), np.uint8)
+    by[:,0:3] = np.round(rgb[sel]*255)
+    by[:,3] = np.round(alfa[sel]*255)
+    by[:,4:8] = np.clip(np.round(q[sel]*128+128), 0, 255)
+    crudo = np.empty((m,32), np.uint8)
+    crudo[:,0:24] = fl[:,0:6].copy().view(np.uint8).reshape(m,24)
+    crudo[:,24:32] = by[:,0:8]
+    f.write(crudo.tobytes())
+    return m
+
+# ---------------------------------------------------- fotos, todas en RAM
+# A 44 millones de muestras no entra nada si se guarda un arreglo por muestra
+# para las 184 tomas. Se da vuelta el problema: las fotos entran en RAM (184
+# tomas de 640 px en medias son 736 MB) y las muestras se procesan por bloques,
+# cada bloque contra las 184. De paso cada EXR se lee una sola vez y no una por
+# corrida de bloque.
 datos = json.load(open(CARPETA + "/camaras.json"))
 PX = datos["px"]; f_px = datos["lente"] / datos["sensor"] * PX
 vistas = datos["vistas"]
-print("SPLAT: %d tomas de %dpx, focal %.1f px" % (len(vistas), PX, f_px), flush=True)
 
 def leer(ruta, canales):
     im = bpy.data.images.load(ruta, check_existing=False)
@@ -208,164 +243,158 @@ def leer(ruta, canales):
     bpy.data.images.remove(im)
     return px.reshape(h, w, 4)[::-1, :, :canales]   # Blender entrega de abajo a arriba
 
-suma = np.zeros((NM, 3), np.float32)
-peso = np.zeros(NM, np.float32)
-ncam = np.zeros(NM, np.int32)
-usadas = 0
-# Las homogéneas se arman una vez y en float32: adentro del lazo eran 374 MB
-# por toma, y para proyectar sobran seis dígitos (a 400 m del centro el error
-# es de 4 centésimas de milímetro).
-POSH = np.empty((NM, 4), np.float32)
-POSH[:, :3] = pos; POSH[:, 3] = 1.0
-POS32 = POSH[:, :3]
-NOR32 = nor.astype(np.float32)
-DOS32 = dos
-
-for k, v in enumerate(vistas):
+fotos = []
+for v in vistas:
     fc = "%s/color%04d.exr" % (CARPETA, v["i"])
     fz = "%s/z%04d.exr" % (CARPETA, v["i"])
     if not (os.path.exists(fc) and os.path.exists(fz)): continue
-    col = leer(fc, 3)
-    prof = leer(fz, 1)[:, :, 0]
-    usadas += 1
-
     M = np.array(v["M"], dtype=np.float64)
-    inv = np.linalg.inv(M)[:3].astype(np.float32)    # sólo las tres filas útiles
-    pc = POSH @ inv.T                                # a coordenadas de cámara
-    z = -pc[:, 2]
-    delante = z > 0.4
-    xp = np.where(delante, pc[:,0]/np.maximum(1e-6, z)*f_px + PX/2, -1)
-    yp = np.where(delante, PX/2 - pc[:,1]/np.maximum(1e-6, z)*f_px, -1)
-    # un píxel de margen, que el vecindario de 3x3 no se salga del cuadro
-    est = delante & (xp >= 1) & (xp < PX-1) & (yp >= 1) & (yp < PX-1)
-    if not est.any(): continue
+    fotos.append((np.linalg.inv(M)[:3].astype(np.float32),   # mundo -> cámara
+                  M[:3, 3].astype(np.float32),               # el ojo
+                  leer(fc, 3).astype(np.float16),            # color
+                  leer(fz, 1)[:, :, 0]))                     # profundidad
+mem = sum(c.nbytes + p.nbytes for _, _, c, p in fotos)
+print("SPLAT: %d tomas de %dpx en RAM (%.0f MB), focal %.1f px" % (
+      len(fotos), PX, mem/1048576, f_px), flush=True)
 
-    # Coseno de incidencia: de canto no se cree nada. Por contracción y no
-    # normalizando el vector a la cámara, que a nueve millones son 280 MB.
-    ojo = M[:3, 3].astype(np.float32)
-    cosi = (NOR32 @ ojo) - np.einsum("ij,ij->i", NOR32, POS32)
-    cosi /= np.maximum(1e-6, np.sqrt(np.einsum("ij,ij->i", pc, pc)))
-    np.abs(cosi, out=cosi, where=DOS32)      # las cartas valen de los dos lados
-    est &= cosi > 0.09
-    if not est.any(): continue
+# ---------------------------------------------------- muestreo y proyección
+rng = np.random.default_rng(20260908)
+pond = A*W
+prob = np.cumsum(pond); prob /= prob[-1]
+NM = int(TOTAL*1.30)
+BLOQUE = int(sys.argv[sys.argv.index("--bloque")+1]) if "--bloque" in sys.argv else 6000000
 
-    idx0 = np.flatnonzero(est)
-    ix = xp[est].astype(np.int32); iy = yp[est].astype(np.int32)
-    zt = z[est]
-    # El pase Z de Cycles es la distancia AL PLANO de la cámara, no radial:
-    # medido, la mediana del residuo daba 4,3 contra 40,4.
-    tol = np.maximum(0.30, zt*0.010) + pas[est]*0.60
-    acum = np.zeros((len(idx0), 3), np.float32)
-    tap = np.zeros(len(idx0), np.float32)
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
-            jx = ix + dx; jy = iy + dy
-            de_acuerdo = np.abs(zt - prof[jy, jx]) < tol
-            acum[de_acuerdo] += col[jy[de_acuerdo], jx[de_acuerdo]]
-            tap[de_acuerdo] += 1
-    visto = tap >= 3.0                  # al menos tres de nueve: filtra el canto
-    if not visto.any(): continue
-    j = idx0[visto]
-    w = (cosi[j] * (tap[visto]/9.0)).astype(np.float32)
-    suma[j] += acum[visto] / tap[visto][:, None] * w[:, None]
-    peso[j] += w
-    ncam[j] += 1
-    if (k+1) % 20 == 0:
-        print("SPLAT: %d/%d tomas · con color %d%%" % (
-              k+1, len(vistas), 100*np.count_nonzero(peso)//NM), flush=True)
+sal = open(SALIDA, "wb")
+sal_chico = open(CHICO, "wb") if CHICO else None
+p_chico = min(1.0, NCHICO / max(1.0, 0.62*TOTAL)) if CHICO else 0.0
+k_chico = math.sqrt(1.0/p_chico) if p_chico > 0 else 1.0
 
-# dos cámaras o más, o una sola pero bien de frente: cortando en dos quedaban
-# huecos en los rincones que sólo ve una cámara
-ok = ((ncam >= 2) & (peso > 0.10)) | ((ncam == 1) & (peso > 0.55))
-print("SPLAT: %d tomas leídas · %d de %d muestras con color (%.1f%%) · %.2f cámaras de media" % (
-      usadas, ok.sum(), NM, 100*ok.mean(), ncam[ok].mean()), flush=True)
+tot_n = tot_ok = tot_m = 0
+tot_cam = 0.0
+nb = (NM + BLOQUE - 1)//BLOQUE
+for bl in range(nb):
+    m = min(BLOQUE, NM - bl*BLOQUE)
+    cara = np.searchsorted(prob, rng.random(m))
+    r1, r2 = rng.random(m), rng.random(m)
+    s = np.sqrt(r1)
+    pos = P[cara,0] * (1-s)[:,None]
+    pos += P[cara,1] * (s*(1-r2))[:,None]
+    pos += P[cara,2] * (s*r2)[:,None]
+    del r1, r2, s
+    lc = LIM[cara]
+    dentro = (np.abs(pos[:,0]-CENTRO[0]) <= lc) & (np.abs(pos[:,1]-CENTRO[1]) <= lc)
+    pos = pos[dentro].astype(np.float32); cara = cara[dentro]
+    mm = len(pos)
+    tot_m += mm
+    if mm == 0: continue
+    nor = NOR[cara].astype(np.float32)
+    pas = paso[cara].astype(np.float32)
+    dos = DOS[cara]
 
-del POSH, POS32, NOR32
-pos = pos[ok].astype(np.float32); nor = nor[ok].astype(np.float32)
-cara, pas = cara[ok], pas[ok].astype(np.float32)
-rgb_lin = suma[ok] / peso[ok][:, None]
-n = len(pos)
+    POSH = np.empty((mm, 4), np.float32)
+    POSH[:, :3] = pos; POSH[:, 3] = 1.0
+    suma = np.zeros((mm, 3), np.float32)
+    peso = np.zeros(mm, np.float32)
+    ncam = np.zeros(mm, np.int32)
+    nor_ojo = None
 
-# ---------------------------------------------------- color
-# curva filmica y después sRGB. La toma es lineal: sin curva, el hormigón al
-# sol recorta en 1,0 y todo el frente sale blanco lavado.
-x = np.maximum(0.0, rgb_lin * np.float32(EXPO) * AT[cara].astype(np.float32)[:, None])
-x = (x*(2.51*x + 0.03)) / (x*(2.43*x + 0.59) + 0.14)
-x = np.clip(x, 0, 1)
-rgb = np.where(x <= 0.0031308, x*12.92, 1.055*np.power(np.maximum(x, 1e-8), 1/2.4) - 0.055)
-rgb = np.clip(rgb, 0, 1)
+    for (inv, ojo, col, prof) in fotos:
+        pc = POSH @ inv.T                                # a coordenadas de cámara
+        z = -pc[:, 2]
+        delante = z > 0.4
+        xp = np.where(delante, pc[:,0]/np.maximum(1e-6, z)*f_px + PX/2, -1)
+        yp = np.where(delante, PX/2 - pc[:,1]/np.maximum(1e-6, z)*f_px, -1)
+        # un píxel de margen, que el vecindario de 3x3 no se salga del cuadro
+        est = delante & (xp >= 1) & (xp < PX-1) & (yp >= 1) & (yp < PX-1)
+        if not est.any(): continue
+        # Coseno de incidencia: de canto no se cree nada. Por contracción y sin
+        # normalizar el vector a la cámara, que a estos tamaños son cientos de MB.
+        cosi = (nor @ ojo) - np.einsum("ij,ij->i", nor, pos)
+        cosi /= np.maximum(1e-6, np.sqrt(np.einsum("ij,ij->i", pc, pc)))
+        np.abs(cosi, out=cosi, where=dos)    # las cartas valen de los dos lados
+        est &= cosi > 0.09
+        if not est.any(): continue
 
-# ---------------------------------------------------- forma
-# ex hacia lo fino de la cara, ey a lo largo: así una pieza fina se representa
-# con una elipse fina y larga en vez de un disco que la desborda
-el = elong[cara].astype(np.float32)
-ex = np.cross(nor, el)
-ex /= np.maximum(1e-9, np.linalg.norm(ex, axis=1))[:, None]
-ey = np.cross(nor, ex)
-ey /= np.maximum(1e-9, np.linalg.norm(ey, axis=1))[:, None]
+        idx0 = np.flatnonzero(est)
+        ix = xp[est].astype(np.int32); iy = yp[est].astype(np.int32)
+        zt = z[est]
+        # El pase Z de Cycles es la distancia AL PLANO de la cámara, no radial:
+        # medido, la mediana del residuo daba 4,3 contra 40,4.
+        tol = np.maximum(0.30, zt*0.010) + pas[est]*0.60
+        acum = np.zeros((len(idx0), 3), np.float32)
+        tap = np.zeros(len(idx0), np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                jx = ix + dx; jy = iy + dy
+                de_acuerdo = np.abs(zt - prof[jy, jx]) < tol
+                acum[de_acuerdo] += col[jy[de_acuerdo], jx[de_acuerdo]].astype(np.float32)
+                tap[de_acuerdo] += 1
+        visto = tap >= 3.0              # al menos tres de nueve: filtra el canto
+        if not visto.any(): continue
+        j = idx0[visto]
+        w = (cosi[j] * (tap[visto]/9.0)).astype(np.float32)
+        suma[j] += acum[visto] / tap[visto][:, None] * w[:, None]
+        peso[j] += w
+        ncam[j] += 1
+    del POSH
 
-# ninguna gaussiana más ancha que la altura de su cara ni más larga que su
-# lado mayor: sin el segundo tope, el farol de 2 m salía como una raya de 4,6
-fino = np.minimum(pas, np.maximum(0.045, alt[cara].astype(np.float32)*1.15))
-largo = np.minimum(np.minimum(pas*pas/np.maximum(0.045, fino), fino*3.2),
-                   LE[fila, imax][cara].astype(np.float32)*0.55)
-largo = np.maximum(largo, fino)
-esf = FO[cara]
-corto = 0.62*fino * rng.uniform(0.88, 1.14, n).astype(np.float32)
-lrg   = 0.62*largo * rng.uniform(0.88, 1.14, n).astype(np.float32)
-grueso = np.where(esf, 0.42*pas, np.maximum(0.014, GROSOR*pas))
-esc = np.stack([corto, lrg, grueso], 1).astype(np.float32)
-alfa = np.where(esf, 0.72, 0.95).astype(np.float32)
+    # dos cámaras o más, o una sola pero bien de frente: cortando en dos
+    # quedaban huecos en los rincones que sólo ve una cámara
+    ok = ((ncam >= 2) & (peso > 0.10)) | ((ncam == 1) & (peso > 0.55))
+    nok = int(ok.sum())
+    tot_ok += nok
+    if nok:
+        tot_cam += float(ncam[ok].sum())
+        pos = pos[ok]; nor = nor[ok]; cara = cara[ok]; pas = pas[ok]
+        rgb_lin = suma[ok] / peso[ok][:, None]
+        n = nok
 
-# a ejes del visor: Y arriba, y Z invertido respecto de Blender
-def aY(v): return np.stack([v[:,0], v[:,2], -v[:,1]], 1)
-posY, exY, eyY, norY = aY(pos), aY(ex), aY(ey), aY(nor)
+        # ---- color: curva fílmica y después sRGB. La toma es lineal: sin
+        # curva, el hormigón al sol recorta en 1,0 y sale blanco lavado.
+        x = np.maximum(0.0, rgb_lin * np.float32(EXPO) * AT[cara].astype(np.float32)[:, None])
+        x = (x*(2.51*x + 0.03)) / (x*(2.43*x + 0.59) + 0.14)
+        x = np.clip(x, 0, 1)
+        rgb = np.where(x <= 0.0031308, x*12.92,
+                       1.055*np.power(np.maximum(x, 1e-8), 1/2.4) - 0.055)
+        rgb = np.clip(rgb, 0, 1)
 
-Mrot = np.stack([exY, eyY, norY], axis=2).astype(np.float32)
-tr = Mrot[:,0,0] + Mrot[:,1,1] + Mrot[:,2,2]
-q = np.empty((n,4), np.float32)     # se cuantiza a un byte, no hace falta más
-k0 = tr > 0
-S = np.sqrt(np.maximum(1e-12, tr[k0]+1.0))*2
-q[k0,0] = 0.25*S
-q[k0,1] = (Mrot[k0,2,1]-Mrot[k0,1,2])/S
-q[k0,2] = (Mrot[k0,0,2]-Mrot[k0,2,0])/S
-q[k0,3] = (Mrot[k0,1,0]-Mrot[k0,0,1])/S
-resto = ~k0
-if resto.any():
-    Mr = Mrot[resto]; nr = Mr.shape[0]; qq = np.empty((nr,4), np.float32)
-    d0,d1,d2 = Mr[:,0,0], Mr[:,1,1], Mr[:,2,2]
-    c1 = (d0>d1)&(d0>d2); c2 = (~c1)&(d1>d2); c3 = ~(c1|c2)
-    for sel,(i,j,kk) in ((c1,(0,1,2)),(c2,(1,2,0)),(c3,(2,0,1))):
-        if not sel.any(): continue
-        Ms = Mr[sel]
-        S = np.sqrt(np.maximum(1e-12, 1.0+Ms[:,i,i]-Ms[:,j,j]-Ms[:,kk,kk]))*2
-        qq[sel,0] = (Ms[:,kk,j]-Ms[:,j,kk])/S
-        qq[sel,1+i] = 0.25*S
-        qq[sel,1+j] = (Ms[:,j,i]+Ms[:,i,j])/S
-        qq[sel,1+kk] = (Ms[:,kk,i]+Ms[:,i,kk])/S
-    q[resto] = qq
-q /= np.maximum(1e-9, np.linalg.norm(q, axis=1))[:,None]
+        # ---- forma: ex hacia lo fino de la cara, ey a lo largo
+        el = elong[cara].astype(np.float32)
+        ex = np.cross(nor, el)
+        ex /= np.maximum(1e-9, np.linalg.norm(ex, axis=1))[:, None]
+        ey = np.cross(nor, ex)
+        ey /= np.maximum(1e-9, np.linalg.norm(ey, axis=1))[:, None]
+        fino = np.minimum(pas, np.maximum(0.045, alt[cara].astype(np.float32)*1.15))
+        largo = np.minimum(np.minimum(pas*pas/np.maximum(0.045, fino), fino*3.2),
+                           LE[fila, imax][cara].astype(np.float32)*0.55)
+        largo = np.maximum(largo, fino)
+        esf = FO[cara]
+        corto = 0.62*fino * rng.uniform(0.88, 1.14, n).astype(np.float32)
+        lrg   = 0.62*largo * rng.uniform(0.88, 1.14, n).astype(np.float32)
+        grueso = np.where(esf, 0.42*pas, np.maximum(0.014, GROSOR*pas))
+        esc = np.stack([corto, lrg, grueso], 1).astype(np.float32)
+        alfa = np.where(esf, 0.72, 0.95).astype(np.float32)
 
-def escribir(ruta, sel, k=1.0):
-    m = int(sel.sum()) if sel.dtype == bool else len(sel)
-    f = np.zeros((m,8), np.float32)
-    f[:,0:3] = posY[sel]
-    # k sólo a los dos ejes del plano: el tercero es el grosor contra la
-    # normal, y engordarlo levanta la gaussiana de la superficie
-    f[:,3:6] = esc[sel] * np.array([k, k, 1.0])
-    by = np.zeros((m,8), np.uint8)
-    by[:,0:3] = np.round(rgb[sel]*255); by[:,3] = np.round(alfa[sel]*255)
-    by[:,4:8] = np.clip(np.round(q[sel]*128+128), 0, 255)
-    crudo = np.empty((m,32), np.uint8)
-    crudo[:,0:24] = f[:,0:6].copy().view(np.uint8).reshape(m,24)
-    crudo[:,24:32] = by[:,0:8]
-    open(ruta, "wb").write(crudo.tobytes())
+        # a ejes del visor: Y arriba, y Z invertido respecto de Blender
+        def aY(v): return np.stack([v[:,0], v[:,2], -v[:,1]], 1)
+        posY, exY, eyY, norY = aY(pos), aY(ex), aY(ey), aY(nor)
+        q = cuaternion(np.stack([exY, eyY, norY], axis=2).astype(np.float32))
+
+        empaquetar(sal, posY, esc, rgb, alfa, q, np.ones(n, bool), 1.0)
+        if sal_chico is not None:
+            sub = rng.random(n) < p_chico
+            if sub.any():
+                empaquetar(sal_chico, posY, esc, rgb, alfa, q, sub, k_chico)
+    print("SPLAT: bloque %d/%d · %d de %d con color (%.1f%%)" % (
+          bl+1, nb, nok, mm, 100.0*nok/max(1, mm)), flush=True)
+
+sal.close()
+if sal_chico is not None: sal_chico.close()
+print("SPLAT: %d tomas · %d de %d muestras con color (%.1f%%) · %.2f cámaras de media" % (
+      len(fotos), tot_ok, tot_m, 100.0*tot_ok/max(1, tot_m), tot_cam/max(1, tot_ok)), flush=True)
+print("SPLAT: %s · %d gaussianas · %.2f MB · paso base %.2f m" % (
+      SALIDA, tot_ok, os.path.getsize(SALIDA)/1048576, s0), flush=True)
+if sal_chico is not None:
+    nch = os.path.getsize(CHICO)//32
     print("SPLAT: %s · %d gaussianas · %.2f MB · paso x%.2f" % (
-          ruta, m, os.path.getsize(ruta)/1048576, k), flush=True)
-
-escribir(SALIDA, np.ones(n, bool))
-if CHICO and NCHICO < n:
-    # el mismo nube, más rala: al sacar gaussianas hay que agrandarlas para
-    # que no queden agujeros, y el factor es la raíz de la razón
-    sub = rng.choice(n, NCHICO, replace=False)
-    escribir(CHICO, sub, k=math.sqrt(n/NCHICO))
+          CHICO, nch, os.path.getsize(CHICO)/1048576, k_chico), flush=True)

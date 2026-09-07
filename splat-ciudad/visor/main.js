@@ -38,7 +38,8 @@ gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_AL
 const U = (n) => gl.getUniformLocation(prog, n);
 const uProy = U("proyeccion"), uVista = U("vista"), uFocal = U("focal"),
       uPant = U("pantalla"), uTam = U("tam"), uTex = U("u_textura"),
-      uBrillo = U("brillo"), uModo = U("modo"), uNiebla = U("niebla");
+      uBrillo = U("brillo"), uModo = U("modo"), uNiebla = U("niebla"),
+      uMasc = U("mascara"), uCorr = U("corr");
 
 const vaoSplat = gl.createVertexArray();
 gl.bindVertexArray(vaoSplat);
@@ -377,9 +378,17 @@ function arrancar(buf, nombre){
   orden = null; esperando = false; ultimaVista = null;
 
   pesoArchivo = buf.byteLength;
-  const p = empaquetar(buf);
+  const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  const p = empaquetar(buf, maxTex);
   N = p.n;
 
+  if (p.alto > maxTex) {
+    morir("La nube no entra en una textura: hacen falta " + p.alto +
+          " filas de " + p.ancho + " y esta placa admite " + maxTex +
+          ". El techo son " + ((maxTex >> 1) * maxTex).toLocaleString("es-AR") +
+          " gaussianas.");
+    return;
+  }
   tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, p.ancho, p.alto, 0,
@@ -387,6 +396,8 @@ function arrancar(buf, nombre){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.uniform1i(uTex, 0);
+  gl.uniform1ui(uMasc, p.mascara);
+  gl.uniform1ui(uCorr, p.corr);
   // a siete millones de gaussianas la textura son 234 MB de video: en una
   // placa integrada puede no haber, y conviene decirlo en vez de dibujar negro
   const err = gl.getError();
