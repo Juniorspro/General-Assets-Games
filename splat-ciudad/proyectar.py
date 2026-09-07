@@ -47,10 +47,14 @@ CENTRO = [float(v) for v in sys.argv[sys.argv.index("--centro")+1].split(",")] i
 EXPO    = float(sys.argv[sys.argv.index("--expo")+1]) if "--expo" in sys.argv else 0.95
 
 # materiales que no entran: el telón de fondo de 3000 m
-EXCLUIR = {"lejos"}
+EXCLUIR = {"lejos", "fondo"}   # telón y silueta lejana
 # caras cuyas tapas horizontales están tapadas por la caja de al lado
 SIN_TAPAS = {"antepecho", "interior", "vidrio", "aluminio", "panel", "aluminio_oscuro"}
 FOLLAJE = {"hoja", "hoja_clara", "hoja_oscura"}
+# Las cartas de follaje son de una sola cara y la normal apunta para un lado
+# nomás: con el coseno con signo se perdía la mitad de las hojas. Acá se usa el
+# valor absoluto, que para una carta es lo correcto.
+DOSCARAS = {"hoja", "hoja_clara", "hoja_oscura", "persiana", "raya"}
 # Los emisores están calibrados para que se vean de noche, y de día la toma
 # lineal los manda muy arriba de 1: sin esto, cada farol es una bola blanca.
 ATENUAR = {"luz":0.10, "sem_rojo":0.26, "sem_verde":0.26,
@@ -58,6 +62,9 @@ ATENUAR = {"luz":0.10, "sem_rojo":0.26, "sem_verde":0.26,
 # multiplicador de densidad: cuántas gaussianas por metro cuadrado se lleva
 # cada material respecto del promedio. El paso de muestreo va con 1/raíz.
 PESO = {
+    "gris":1.30, "persiana":1.10, "piel":1.30, "fondo":0.0,
+    "interior_b":0.70, "interior_c":0.70, "interior_d":0.70, "interior_e":0.70,
+    "ropa_a":1.30, "ropa_b":1.30, "ropa_c":1.30, "ropa_d":1.30, "ropa_e":1.30,
     "hormigon":1.05, "hormigon_oscuro":0.32, "aluminio":1.35, "aluminio_oscuro":1.25,
     "antepecho":1.45, "panel":1.05, "ladrillo":1.15, "ladrillo_oscuro":1.15,
     "vidrio":1.30, "interior":0.70, "calle":0.30, "vereda":0.42, "raya":1.30,
@@ -69,7 +76,7 @@ PESO = {
 }
 
 # ---------------------------------------------------- triángulos de la escena
-tri, pesos, foll, aten, lims = [], [], [], [], []
+tri, pesos, foll, aten, lims, dobles = [], [], [], [], [], []
 areas_mat = {}
 for ob in bpy.data.objects:
     if ob.type != "MESH": continue
@@ -117,6 +124,7 @@ for ob in bpy.data.objects:
     foll.append(np.full(int(vivas.sum()), nombre in FOLLAJE))
     aten.append(np.full(int(vivas.sum()), ATENUAR.get(nombre, 1.0)))
     lims.append(np.full(int(vivas.sum()), lim))
+    dobles.append(np.full(int(vivas.sum()), nombre in DOSCARAS))
     areas_mat[nombre] = areas_mat.get(nombre, 0.0) + float(area[vivas].sum())
 
 P = np.concatenate(tri)
@@ -124,6 +132,7 @@ W = np.concatenate(pesos)
 FO = np.concatenate(foll)
 AT = np.concatenate(aten)
 LIM = np.concatenate(lims)
+DOS = np.concatenate(dobles)
 cruz = np.cross(P[:,1]-P[:,0], P[:,2]-P[:,0])
 lar = np.linalg.norm(cruz, axis=1)
 A = 0.5*lar
@@ -173,7 +182,7 @@ del r1, r2, s
 lc = LIM[cara]
 dentro_caja = (np.abs(pos[:,0]-CENTRO[0]) <= lc) & (np.abs(pos[:,1]-CENTRO[1]) <= lc)
 pos, cara = pos[dentro_caja], cara[dentro_caja]
-nor, pas = NOR[cara], paso[cara]
+nor, pas, dos = NOR[cara], paso[cara], DOS[cara]
 NM = len(pos)
 print("SPLAT: %d muestras" % NM, flush=True)
 
@@ -202,6 +211,7 @@ POSH = np.empty((NM, 4), np.float32)
 POSH[:, :3] = pos; POSH[:, 3] = 1.0
 POS32 = POSH[:, :3]
 NOR32 = nor.astype(np.float32)
+DOS32 = dos
 
 for k, v in enumerate(vistas):
     fc = "%s/color%04d.exr" % (CARPETA, v["i"])
@@ -227,6 +237,7 @@ for k, v in enumerate(vistas):
     ojo = M[:3, 3].astype(np.float32)
     cosi = (NOR32 @ ojo) - np.einsum("ij,ij->i", NOR32, POS32)
     cosi /= np.maximum(1e-6, np.sqrt(np.einsum("ij,ij->i", pc, pc)))
+    np.abs(cosi, out=cosi, where=DOS32)      # las cartas valen de los dos lados
     est &= cosi > 0.09
     if not est.any(): continue
 
