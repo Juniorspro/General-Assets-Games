@@ -12,6 +12,12 @@ ocupa pocos píxeles, va grueso.
 
     python3 ralear.py ent.splat sal.splat 950000
     python3 ralear.py ent.splat sal.splat 950000 --centro 52,-52 --r0 35 --pmin 0.14
+    python3 ralear.py ent.splat sal.splat 950000 --piso 1.2 --engrosar 0.34
+
+Con --piso y --engrosar, a las gaussianas de abajo de esa altura se les sube el
+grosor contra la normal hasta esa fracción del lado mayor. Es para caminar: un
+disco apoyado en el asfalto, visto de canto desde 1,68 m, colapsa a una raya y
+entre disco y disco se ve el fondo. Engordado no colapsa.
 """
 import math, os, sys
 import numpy as np
@@ -23,6 +29,8 @@ def opc(k, d=None):
 CEN = [float(v) for v in opc("--centro", "0,0").split(",")]
 R0 = float(opc("--r0", "0"))
 PMIN = float(opc("--pmin", "0.15"))
+PISO = float(opc("--piso", "0"))
+ENGR = float(opc("--engrosar", "0"))
 
 b = np.fromfile(ENT, np.uint8)
 n = len(b)//32
@@ -56,6 +64,10 @@ m = len(c)
 g = c[:, :24].view(np.float32).reshape(m, 6)
 fac = (1.0/np.sqrt(pk[sel])).astype(np.float32)
 g[:, 3] *= fac; g[:, 4] *= fac
+if PISO > 0 and ENGR > 0:
+    bajo = g[:, 1] < PISO
+    g[bajo, 5] = np.maximum(g[bajo, 5], ENGR*np.maximum(g[bajo, 3], g[bajo, 4]))
+    print("SPLAT: %d gaussianas de piso engrosadas a %.2f del lado" % (int(bajo.sum()), ENGR))
 c.tofile(SAL)
 print("SPLAT: %s · %d de %d gaussianas · %.1f MB · tamaño x%.2f a x%.2f" % (
       SAL, m, n, os.path.getsize(SAL)/1048576, fac.min(), fac.max()))
