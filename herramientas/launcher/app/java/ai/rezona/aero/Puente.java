@@ -536,6 +536,55 @@ public class Puente {
     } catch (Exception e) { return false; }
   }
 
+  /* ══════════ BAJAR UNA IMAGEN ══════════
+   *
+   * ── POR QUÉ NO LO PUEDE HACER EL WEBVIEW ──
+   * La interfaz se carga desde `file:///android_asset/`, así que cualquier
+   * `fetch` sale con `Origin: null` y el navegador no deja LEER la respuesta sin
+   * CORS permisivo. Un `<img src>` sí se puede mostrar, pero no se puede
+   * guardar: leer sus píxeles con un lienzo lo tiñe y `toDataURL` tira. De este
+   * lado no hay CORS, así que el fondo generado se puede bajar Y guardar.
+   *
+   * Corre en el hilo del puente, que no es el de la interfaz: un
+   * `@JavascriptInterface` se despacha en un hilo propio del WebView, así que
+   * esperar la red acá no congela la pantalla.
+   *
+   * Tope de cuatro megas: es un fondo de pantalla, y sin tope una URL
+   * equivocada se traga la memoria del launcher.
+   */
+  @JavascriptInterface public String baja(String url) {
+    if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) return "";
+    java.net.HttpURLConnection c = null;
+    try {
+      c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+      c.setConnectTimeout(15000);
+      c.setReadTimeout(90000);
+      c.setInstanceFollowRedirects(true);
+      c.setRequestProperty("User-Agent", "AeroLauncher/1.0");
+      if (c.getResponseCode() / 100 != 2) return "";
+      String tipo = c.getContentType();
+      if (tipo == null || !tipo.startsWith("image/")) return "";
+      java.io.InputStream in = c.getInputStream();
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      byte[] buf = new byte[16384];
+      int n, total = 0;
+      while ((n = in.read(buf)) > 0) {
+        total += n;
+        if (total > 4 * 1024 * 1024) return "";
+        out.write(buf, 0, n);
+      }
+      in.close();
+      int cp = tipo.indexOf(';');
+      if (cp > 0) tipo = tipo.substring(0, cp);
+      return "data:" + tipo + ";base64,"
+           + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP);
+    } catch (Exception e) {
+      return "";
+    } finally {
+      if (c != null) try { c.disconnect(); } catch (Exception e) { }
+    }
+  }
+
   @JavascriptInterface public String version() {
     return "{\"sdk\":" + Build.VERSION.SDK_INT + ",\"modelo\":\"" + esc(Build.MODEL) + "\"}";
   }

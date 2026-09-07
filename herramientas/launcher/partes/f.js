@@ -120,6 +120,91 @@ function fgAchica(archivo){
   });
 }
 
+/* ══════════ FONDOS GENERADOS, GRATIS Y SIN LLAVE ══════════
+
+   Pedido textual: «que los fondos de pantalla sean generales siempre con el
+   prompt y una imagen predeterminada que te pasaré las cuales servirán para que
+   la IA gratuita debes buscar, se guíe».
+
+   ── LA IA GRATUITA, Y POR QUÉ ESTA ──
+   La condición dura es la misma que ya se midió con el asistente en la vuelta
+   122: la interfaz se carga desde `file:///android_asset/`, así que todo sale
+   con `Origin: null`. Pero acá no hace falta CORS: la imagen se baja del lado
+   de Java, que no tiene navegador que le ponga reglas. Lo único que hace falta
+   es un endpoint que devuelva una imagen con un GET y sin llave, y de los que
+   se probaron el que cumple es Pollinations — medido: 200, `image/jpeg`,
+   45.118 bytes, con el logo apagado.
+
+   ── Y LA «IMAGEN PREDETERMINADA» ES UNA RECETA, NO UN ARCHIVO ──
+   Para que un generador se guíe por una imagen hay que poder mandársela, y
+   mandarla implica subirla a algún sitio: una foto del teléfono no tiene URL.
+   Lo que una imagen de referencia sirve para conseguir —que los ocho fondos se
+   vean de la misma familia— se consigue igual con un PREFIJO de estilo fijo,
+   que es lo que `FG_RECETA` es. El texto del dueño se agrega detrás. */
+const FG_URL = 'https://image.pollinations.ai/prompt/';
+const FG_RECETA = 'Frutiger Aero wallpaper, glossy translucent surfaces, water '
+  + 'droplets, lens flare, saturated blues and greens, clean bright sky, '
+  + 'photorealistic, vertical phone wallpaper, no text, no watermark, no logo';
+const FG_IDEAS = ['fg_i1', 'fg_i2', 'fg_i3', 'fg_i4', 'fg_i5', 'fg_i6'];
+
+let FG_GEN = false;
+
+/* la imagen que baja el puente pasa por EL MISMO achicado que la foto propia:
+   se recorta a 9:16 y se lleva a 824 de ancho. Un fondo generado que no pase
+   por ahí revienta la cuota igual que una foto de doce megapíxeles. */
+function fgDeDataURI(d){
+  return new Promise(res => {
+    const im = new Image();
+    im.onerror = () => res(null);
+    im.onload = () => {
+      try {
+        let w = im.naturalWidth, h = im.naturalHeight;
+        let cx = 0, cy = 0, cw = w, ch = h;
+        if (w/h > 9/16){ cw = Math.round(h*9/16); cx = Math.round((w - cw)/2); }
+        else { ch = Math.round(w*16/9); cy = Math.round((h - ch)/2); }
+        const dw = Math.min(FG_ANCHO, cw), dh = Math.round(dw*ch/cw);
+        const cv = document.createElement('canvas');
+        cv.width = dw; cv.height = dh;
+        cv.getContext('2d').drawImage(im, cx, cy, cw, ch, 0, 0, dw, dh);
+        res(cv.toDataURL('image/jpeg', FG_CAL));
+      } catch (e) { res(null); }
+    };
+    im.src = d;
+  });
+}
+
+function fgUrl(texto){
+  const p = FG_RECETA + (texto ? ', ' + texto : '');
+  return FG_URL + encodeURIComponent(p)
+       + '?width=768&height=1376&nologo=true&seed=' + Math.floor(Math.random()*1e6);
+}
+
+async function fgGenera(texto){
+  if (FG_GEN) return;
+  const and = (typeof AND !== 'undefined' && AND && typeof AND.baja === 'function') ? AND : null;
+  if (!and){ avisa(T('fgSinRed')); return; }
+  FG_GEN = true;
+  fgGenPinta();
+  let d = '';
+  try { d = and.baja(fgUrl(texto)); } catch (e) { d = ''; }
+  FG_GEN = false;
+  fgGenPinta();
+  if (!d){ avisa(T('fgNoGen')); return; }
+  const chico = await fgDeDataURI(d);
+  if (!chico){ avisa(T('fgNoPudo')); return; }
+  if (!guarda('fondoPropio', chico)){ avisa(T('fgGrande')); return; }
+  fondoPone('propio');
+  fgPinta();
+  avisa(T('fgGenOk'));
+}
+
+function fgGenPinta(){
+  const b = $('#fgGenB'); if (!b) return;
+  b.textContent = FG_GEN ? T('fgGenando') : T('fgGenar');
+  b.disabled = FG_GEN;
+  const i = $('#fgGenT'); if (i) i.disabled = FG_GEN;
+}
+
 async function fgPropia(archivo){
   if (!archivo) return;
   const d = await fgAchica(archivo);
@@ -133,8 +218,25 @@ async function fgPropia(archivo){
   fgPinta();
 }
 
+function fgIdeasPinta(){
+  const c = $('#fgIdeas'); if (!c) return;
+  c.textContent = '';
+  for (const k of FG_IDEAS){
+    const d = document.createElement('div');
+    d.className = 'fgId'; d.textContent = T(k);
+    d.addEventListener('click', () => { $('#fgGenT').value = T(k); fgGenera(T(k)); });
+    c.appendChild(d);
+  }
+}
+
 function fgInit(){
   $('#fgX').addEventListener('click', fgCierra);
+  $('#fgGenT').placeholder = T('fgGenPh');
+  $('#fgGenB').addEventListener('click', () => fgGenera($('#fgGenT').value.trim()));
+  $('#fgGenT').addEventListener('keydown', e => {
+    if (e.key === 'Enter') fgGenera($('#fgGenT').value.trim());
+  });
+  fgGenPinta(); fgIdeasPinta();
   $('#fgRejilla').addEventListener('click', e => {
     const it = e.target.closest('.fgIt');
     if (!it) return;

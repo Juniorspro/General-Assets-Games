@@ -269,6 +269,37 @@ window.__A = {
              img: FONDO_IMG ? [FONDO_IMG.naturalWidth, FONDO_IMG.naturalHeight] : null,
              alto: Math.round($('#fondos').getBoundingClientRect().height) };
   },
+  /* ── EL GENERADOR DE FONDOS ──
+     Lo único que se puede medir sin red es lo que de verdad puede estar mal de
+     este lado: la URL que se arma y que lo bajado pase por el mismo achicado a
+     9:16 que la foto propia. Que Pollinations conteste está medido con curl
+     (200, image/jpeg, 45.118 bytes) y no se puede volver a medir desde el
+     navegador del banco, que no tiene salida. */
+  fgGenUrl(txt){
+    const u = fgUrl(txt || '');
+    return { url: u, largo: u.length,
+             tieneReceta: u.indexOf('Frutiger%20Aero') > 0,
+             tieneTexto: !txt || u.indexOf(encodeURIComponent(txt)) > 0,
+             sinLogo: u.indexOf('nologo=true') > 0,
+             vertical: u.indexOf('width=768&height=1376') > 0 };
+  },
+  async fgGenFinge(w, h){
+    /* una imagen de mentira del tamaño que se pida, por el MISMO camino que la
+       que baja el puente: así se prueba el recorte a 9:16 y el achicado */
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#0af'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, 8);
+    const d = await fgDeDataURI(cv.toDataURL('image/png'));
+    if (!d) return null;
+    const im = new Image();
+    await new Promise(r => { im.onload = r; im.onerror = r; im.src = d; });
+    return { pedido: [w, h], salio: [im.naturalWidth, im.naturalHeight],
+             prop: +(im.naturalWidth/im.naturalHeight).toFixed(4),
+             kb: Math.round(d.length/1024), jpeg: d.indexOf('image/jpeg') > 0 };
+  },
+  fgIdeas(){ return $$('#fgIdeas .fgId').map(d => d.textContent); },
   fgAbrir(){ fgAbre(); return this.fondos(); },
   fgCerrar(){ fgCierra(); return true; },
   async fgElegir(k){
