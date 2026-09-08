@@ -347,6 +347,12 @@ clases internas anónimas con un NullPointerException que no dice la línea. Ya 
 115 y otra en la 124. Comprobado sobre el dex compilado: `bajaAsinc`, `bajaUna` y los dos
 `lambda$bajaAsinc$` están adentro.
 
+**Y HAY UN TECHO QUE NO ES NUESTRO Y CONVIENE DEJARLO ANOTADO:** el generador anónimo devuelve
+**573×1027** por más que se le pidan 768×1376 —probado también con 1024×1820 y con `quality=high`, que
+dan 576×1023—. La proporción sí la respeta (0,558 contra 0,5625), así que el recorte no pierde nada;
+lo que no hay es resolución, y en un teléfono a densidad 3 eso se ve blando. Es la misma pared que la
+vuelta 116 midió con la foto propia del usuario.
+
 #### LOS PACKS: SIETE OPCIONES Y DOS FAMILIAS
 
 *«El único diferente es el personalizados»* — y es literal. De los siete packs, **uno** era un juego
@@ -376,9 +382,22 @@ son celdas y nada más declaran a quién caer, y **no puede ser el mismo**: el g
 —turquesa, con gotas— y el de cristal al **vidrio puro**, que es su mismo vidrio sin color hecho por
 CSS.
 
-Medido en la bienvenida, que es donde la vuelta 126 puso la prueba: **8 firmas distintas de 8**. Y las
-ocho filas fotografiadas una al lado de la otra, más el cajón entero con `cristal` y con `generado`
-para comparar las dos familias.
+**Y LA CARA DEL RESPALDO TIENE QUE SER DEL MISMO VALOR QUE LA CELDA, que es un defecto que sólo se vio
+fotografiando.** `cristal` empezó cayendo a `vidrio` —«el mismo vidrio sin color», que suena bien
+escrito— y en el cajón quedaban baldosas casi negras al lado de baldosas del color del fondo de
+pantalla: dos packs mezclados otra vez. La celda generada es vidrio **oscuro** —mediana **(56,60,65)**
+medida sobre la hoja, con el bisel en (207,211,216)— así que su respaldo es `pkCristal`, el mismo
+vidrio oscuro con el canto encendido, y lo único que le falta a una app sin celda es el tallado.
+
+Medido al cerrar: **8 firmas distintas de 8** en la bienvenida, que es donde la vuelta 126 puso la
+prueba. `cristal` con **117 celdas y 26 de 32 apps** contra las 27 de `generado` —y las seis sin celda
+son las cinco apps del propio launcher, que se dibujan con su glifo y no pasan por ningún pack, más
+Rappi—. Los nueve packs aplicados y revertidos uno por uno, la bienvenida recorrida entera eligiendo
+Crystal y quedando puesta, **cero solapamientos** en el escritorio y en el visor de la cámara, y
+`window.__errs` **vacío en las trece corridas**. APK **2,0 MB** con firma v2+v3.
+
+Y las trece hojas están fotografiadas, más el cajón entero con `cristal` y con `generado` uno al lado
+del otro para ver las dos familias.
 
 #### DOS DEFECTOS DE MEDICIÓN, Y UNO ERA MÍO DE ESTA MISMA VUELTA
 
@@ -400,7 +419,9 @@ es cuando el riel se esconde a propósito — borrando el filtro vuelve a 17 let
 #### LO QUE QUEDÓ AFUERA, Y HAY QUE DECIRLO
 
 **El crédito se acabó a mitad del pack.** De las 23 hojas de `cristal` salieron **13**; las otras diez
-devolvieron `CREDIT_INSUFFICIENT`, que es terminal. Higgsfield también está en **0 créditos**. Así que
+devolvieron `CREDIT_INSUFFICIENT`, que es terminal. Por suerte **lo que falta es la cola larga** —VSCO,
+Disney+, Cabify, Shein, Temu, Brawl Stars, Strava, GitLab, Kakao— y lo que entró es lo que una persona
+tiene de verdad en la pantalla: por eso la cobertura da 26 de 32 y no la mitad. Higgsfield también está en **0 créditos**. Así que
 `tinta` y `neon` quedan con las recetas escritas y la cañería lista —son un comando cada uno— y
 `cristal` sale con las celdas que hay y el resto cayendo a vidrio puro, que es su misma familia.
 

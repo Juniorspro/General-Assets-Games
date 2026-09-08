@@ -993,12 +993,18 @@ const PACKS = [
      tratamientos de CSS sobre un glifo dibujado — o sea que la lista ofrecía
      siete opciones y tenía dos familias.
      Éste es celdas de verdad: vidrio óptico incoloro con el canto biselado y el
-     símbolo TALLADO adentro. Y cae a `vidrio` y no a `aero`, que es la parte
-     que importa: una celda que todavía no llegó tiene que salir con la cara de
-     SU familia, y `vidrio` es el mismo vidrio sin color hecho por CSS. Cayendo
-     al Aero —que es turquesa y con gotas— una app sin celda se vería como un
-     pack a medio poner, que es justo lo que se vino a arreglar. */
-  { id: 'cristal', gen: 'cristal', cae: 'vidrio' },
+     símbolo TALLADO adentro.
+     ── Y SU RESPALDO TIENE QUE SER DEL MISMO VALOR QUE LA CELDA ──
+     Empezó cayendo a `vidrio`, que es «el mismo vidrio sin color» y suena bien
+     escrito. Fotografiado, no: la celda generada es vidrio OSCURO —mediana
+     (56,60,65) medida sobre la hoja— y `vidrio` deja pasar el fondo de
+     pantalla, así que en el cajón quedaban baldosas casi negras al lado de
+     baldosas del color del fondo. Eso se lee a dos packs mezclados, que es
+     exactamente lo que esta vuelta vino a arreglar. Con `pkCristal` la app sin
+     celda sale con SU vidrio oscuro y su canto encendido, y lo único que le
+     falta es el tallado. */
+  { id: 'cristal', gen: 'cristal', fondo: null, relieve: true, forma: 'cuad',
+    tinte: null,   glifo: '#fff',  css: 'pkCristal' },
   { id: 'nativo',  nativo: true }
 ];
 const PACK_POR_ID = (() => { const m = {}; for (const p of PACKS) m[p.id] = p; return m; })();
@@ -1034,11 +1040,9 @@ function icoAero(b, pkg, nombre){
     /* ── SIN CELDA, LA CARA DE SU PROPIA FAMILIA; NO EL ICONO DEL SISTEMA ──
        Una app sin celda generada al lado de veinte que sí la tienen se ve como
        un pack a medio poner. Un pack que YA tiene cara dibujada (`css` o una
-       imagen de fondo) se queda con la suya y sigue por el camino de abajo; los
-       dos que no tienen ninguna —`generado` y `cristal`, que son celdas y nada
-       más— declaran a quién caer, y no puede ser el mismo para los dos: el
-       generado cae al Aero, que es turquesa y con gotas, y el de cristal al
-       vidrio puro, que es su mismo vidrio sin color hecho por CSS. */
+       imagen de fondo) se queda con la suya y sigue por el camino de abajo; el
+       único que no tiene ninguna es `generado`, que es celdas y nada más, y por
+       eso declara a quién caer. */
     if (P.cae) P = PACK_POR_ID[P.cae] || PACK_POR_ID.aero;
   }
 
