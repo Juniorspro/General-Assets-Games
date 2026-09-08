@@ -219,7 +219,8 @@ const TXT = {
         conGiro: 'inclinando el teléfono', agua: 'AGUA', tiempo: 'TIEMPO',
         ganaste: 'SALISTE', perdiste: 'SE TE ACABÓ EL AGUA', cayo: 'SE TE CAYÓ EL BOL',
         mejor: 'MEJOR', llegaste: 'LLEGASTE A', de: 'DE', sustos: 'SUSTOS',
-        cuarto: 'ESTABAS EN', tuto: 'MANTENÉ EL BOL DERECHO' },
+        cuarto: 'ESTABAS EN', tuto: 'INCLINÁ HACIA DONDE SE VA EL AGUA',
+        tuto2: 'EN CADA PUERTA FRENA: INCLINATE ANTES' },
   en: { sub: 'DO NOT SPILL THE WATER', jugar: 'START', ajustes: 'SETTINGS', volver: 'BACK',
         seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
         musica: 'MUSIC', efectos: 'SOUND FX', idioma: 'LANGUAGE', graficos: 'GRAPHICS',
@@ -230,7 +231,8 @@ const TXT = {
         conGiro: 'tilting the phone', agua: 'WATER', tiempo: 'TIME',
         ganaste: 'YOU MADE IT OUT', perdiste: 'THE BOWL RAN DRY', cayo: 'YOU DROPPED THE BOWL',
         mejor: 'BEST', llegaste: 'YOU REACHED', de: 'OF', sustos: 'SCARES',
-        cuarto: 'YOU WERE IN', tuto: 'KEEP THE BOWL LEVEL' },
+        cuarto: 'YOU WERE IN', tuto: 'LEAN TOWARDS WHERE THE WATER GOES',
+        tuto2: 'HE SLOWS AT EVERY DOOR: LEAN BEFORE IT' },
   pt: { sub: 'NÃO DERRAME A ÁGUA', jugar: 'COMEÇAR', ajustes: 'AJUSTES', volver: 'VOLTAR',
         seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
         musica: 'MÚSICA', efectos: 'EFEITOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
@@ -241,7 +243,8 @@ const TXT = {
         conGiro: 'inclinando o telefone', agua: 'ÁGUA', tiempo: 'TEMPO',
         ganaste: 'VOCÊ SAIU', perdiste: 'A ÁGUA ACABOU', cayo: 'VOCÊ DERRUBOU A TIGELA',
         mejor: 'MELHOR', llegaste: 'VOCÊ CHEGOU A', de: 'DE', sustos: 'SUSTOS',
-        cuarto: 'VOCÊ ESTAVA EM', tuto: 'MANTENHA A TIGELA NIVELADA' }
+        cuarto: 'VOCÊ ESTAVA EM', tuto: 'INCLINE PARA ONDE A ÁGUA VAI',
+        tuto2: 'EM CADA PORTA ELE FREIA: INCLINE ANTES' }
 };
 const NOM_CUARTO = {
   es: { entrada: 'el zaguán', sala: 'la sala', pasillo1: 'el pasillo', dormitorio: 'el dormitorio',

@@ -410,7 +410,8 @@ const TXT = {
         conGiro: 'inclinando el teléfono', agua: 'AGUA', tiempo: 'TIEMPO',
         ganaste: 'SALISTE', perdiste: 'SE TE ACABÓ EL AGUA', cayo: 'SE TE CAYÓ EL BOL',
         mejor: 'MEJOR', llegaste: 'LLEGASTE A', de: 'DE', sustos: 'SUSTOS',
-        cuarto: 'ESTABAS EN', tuto: 'MANTENÉ EL BOL DERECHO' },
+        cuarto: 'ESTABAS EN', tuto: 'INCLINÁ HACIA DONDE SE VA EL AGUA',
+        tuto2: 'EN CADA PUERTA FRENA: INCLINATE ANTES' },
   en: { sub: 'DO NOT SPILL THE WATER', jugar: 'START', ajustes: 'SETTINGS', volver: 'BACK',
         seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
         musica: 'MUSIC', efectos: 'SOUND FX', idioma: 'LANGUAGE', graficos: 'GRAPHICS',
@@ -421,7 +422,8 @@ const TXT = {
         conGiro: 'tilting the phone', agua: 'WATER', tiempo: 'TIME',
         ganaste: 'YOU MADE IT OUT', perdiste: 'THE BOWL RAN DRY', cayo: 'YOU DROPPED THE BOWL',
         mejor: 'BEST', llegaste: 'YOU REACHED', de: 'OF', sustos: 'SCARES',
-        cuarto: 'YOU WERE IN', tuto: 'KEEP THE BOWL LEVEL' },
+        cuarto: 'YOU WERE IN', tuto: 'LEAN TOWARDS WHERE THE WATER GOES',
+        tuto2: 'HE SLOWS AT EVERY DOOR: LEAN BEFORE IT' },
   pt: { sub: 'NÃO DERRAME A ÁGUA', jugar: 'COMEÇAR', ajustes: 'AJUSTES', volver: 'VOLTAR',
         seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
         musica: 'MÚSICA', efectos: 'EFEITOS', idioma: 'IDIOMA', graficos: 'GRÁFICOS',
@@ -432,7 +434,8 @@ const TXT = {
         conGiro: 'inclinando o telefone', agua: 'ÁGUA', tiempo: 'TEMPO',
         ganaste: 'VOCÊ SAIU', perdiste: 'A ÁGUA ACABOU', cayo: 'VOCÊ DERRUBOU A TIGELA',
         mejor: 'MELHOR', llegaste: 'VOCÊ CHEGOU A', de: 'DE', sustos: 'SUSTOS',
-        cuarto: 'VOCÊ ESTAVA EM', tuto: 'MANTENHA A TIGELA NIVELADA' }
+        cuarto: 'VOCÊ ESTAVA EM', tuto: 'INCLINE PARA ONDE A ÁGUA VAI',
+        tuto2: 'EM CADA PORTA ELE FREIA: INCLINE ANTES' }
 };
 const NOM_CUARTO = {
   es: { entrada: 'el zaguán', sala: 'la sala', pasillo1: 'el pasillo', dormitorio: 'el dormitorio',
@@ -733,6 +736,13 @@ const DT = 1/60;
    final los cobraba justo donde mas duelen; repartidos, diez sustos mas salen
    igual de caros que los cuarenta y siete anteriores. */
 const K_SUS = 4.0;
+/* CUANTO EMPUJA EL TIRON DE ANDAR, y no es un factor de absorcion: es una
+   GANANCIA, y hay que decirlo. Una persona que cruza una puerta con un bol
+   lleno no frena como un seno de 0,72 m/s: frena y arranca mucho mas seco. Ese
+   perfil real romperia la media armonica de abajo —y la animacion de la
+   caminata— asi que se conserva la FORMA del seno y se escala su amplitud.
+   El numero sale del barrido de abajo. */
+const K_AND = 13;
 const A_TAB = 6.0;              /* y el tiron que ademas se le ve al tablon */
 const R_CAZUELA = 2.6;          /* radio de curvatura del hueco donde apoya el bol */
 let PERTURBA = 1;               /* la sonda del modo libre apaga el cabeceo */
@@ -762,6 +772,102 @@ function armaMundo(){
   }
   MUNDO.largo = s0;
   return MUNDO;
+}
+/* ══════════ EL PASO NO VA A VELOCIDAD CONSTANTE, Y ESO ES EL JUEGO ══════════
+   Reporte del jefe: *"i can let my phone stay still and nothing stops me from
+   losing"*. Medido antes de tocar nada, sobre 40 semillas: el bot que deja el
+   telefono QUIETO gana **40 de 40 con el 33,6 % del agua todavia en el bol**, y
+   hasta el bot torpe —350 ms de retardo— gana 40 de 40 con el 53,8 %. O sea que
+   se puede apoyar el telefono en la mesa y ganar siempre.
+
+   ── Y NO SE ARREGLA HACIENDO QUE EL SUSTO TUMBE ──
+   Eso es exactamente lo que el jugador pidio que NO pasara en la vuelta 110:
+   *"que no nos hagan tumbar a proposito por mas que nos agarren, nosotros si
+   mantenemos bien el giro todo bien"*. Las dos cosas no se contradicen: el
+   pidio que la HABILIDAD alcance, y el jefe dice que **no hacer nada no puede
+   ser una habilidad**. El defecto no es que sostener derecho gane: es que
+   sostener derecho no cuesta nada.
+
+   ── LA CAUSA: LA CASA ES UNA RECTA A VELOCIDAD CONSTANTE ──
+   Las catorce habitaciones tienen `giro: 0` —la vuelta 107 dejo las esquinas
+   pendientes— y `R.s += VEL*DT`. Con eso, lo unico que mueve el agua es el
+   cabeceo del paso, que es **un seno de amplitud y frecuencia fijas**: acotado,
+   de media cero y perfectamente predecible. Un seno no pide nada; el agua
+   oscila y nunca se acumula.
+
+   Lo que de verdad cuesta llevando un plato lleno no es caminar: es **frenar y
+   arrancar**. Asi que el caminante afloja al cruzar cada puerta y se apura en el
+   medio del cuarto, y esa aceleracion longitudinal empuja el agua hacia adelante
+   y hacia atras — un eje que hasta ahora SOLO tocaban los sustos. Es gratis para
+   la geometria: `s` sigue avanzando por la misma recta, nada mas que no lineal.
+   Y se ve venir, que es lo que lo hace una habilidad y no una loteria: la puerta
+   esta ahi.
+
+   ── LA MEDIA TIENE QUE SEGUIR SIENDO `VEL`, Y NO ES LA MEDIA ARITMETICA ──
+   El recorrido tiene que durar los mismos tres minutos y medir los mismos 130 m,
+   porque de eso cuelgan la agenda de sustos y las catorce habitaciones. Pero el
+   tiempo es `∫ds/v`, o sea que lo que hay que igualar es la media ARMONICA. Para
+   `v = VEL·k·(1 − A·cos 2πu)` la integral cierra:
+       ∫₀^L ds/(1 − A cos 2πs/L) = L/√(1−A²)
+   asi que **k = 1/√(1−A²)** — exacto, sin integrar a mano. Con A = 0,38 da
+   1,0811. Usando la media aritmetica (k = 1) el recorrido saldria un 8 % mas
+   largo y las catorce habitaciones ya no entrarian en los tres minutos.
+
+   ── LOS DOS NUMEROS SALEN DE UN BARRIDO, Y HUBO QUE INVENTAR DOS BOTS ──
+   El primer intento subio K_AND a secas y **le pego igual a todos los bots**
+   (con 8 y A 0,62: bot 0, quieto 3). La razon vale anotarla: el tiron de andar
+   es un SESGO SOSTENIDO, y `botTilt` es realimentacion puramente derivativa
+   —amortiguamiento— que por construccion no puede sostener una inclinacion. O
+   sea que con los bots que habia, la mecanica nueva era indistinguible de subir
+   la dificultad para todos. Entraron `experto` —que se anticipa con el termino
+   directo `v·dv/ds·K_AND/g`, que es exactamente el equilibrio del agua— y
+   `humano`, que es el mismo con el 60 % de la ganancia y 160 ms de retardo.
+
+   Barrido de 40 semillas por casilla, seis bots (partidas ganadas de 40):
+
+       K_AND  A_VEL │ exp  hum  bot  torp quie azar │ agua hum/quieto
+           9   0,34 │  40   40   40   40   40   22  │ 0,489 / 0,256
+          13   0,34 │  40   40   39   37   37   14  │ 0,482 / 0,242
+          16   0,34 │  40   40   36   37   30    6  │ 0,476 / 0,242
+           9   0,42 │  40   40   40   40   38   20  │ 0,424 / 0,255
+          11   0,42 │  40   40   36   36   33    9  │ 0,418 / 0,238
+       ►  13   0,42 │  40   40   28   35   26    1  │ 0,409 / 0,226
+          16   0,42 │  40   40    1    9    7    0  │ 0,406 / 0,242
+           9   0,48 │  40   40   21   38   34   12  │ 0,336 / 0,260
+          11   0,48 │  40   40    4   29   22    0  │ 0,332 / 0,244
+          13   0,48 │  40   36    1    4    7    0  │ 0,336 / 0,243
+          16   0,48 │  40   25    0    0    0    0  │ 0,337 / 0,420
+
+   La fila elegida es la ultima en la que se cumplen las TRES condiciones a la
+   vez: el que se anticipa gana **siempre** (la promesa de la vuelta 110 sigue
+   en pie), el que deja el telefono quieto ya **no** —26 de 40, o sea que pierde
+   una de cada tres—, y el que reacciona sin anticiparse todavia llega la mayoria
+   de las veces (28 de 40) en vez de quedar en cero. A partir de A 0,48 el humano
+   empieza a perder, y eso es romper lo que el jugador pidio. */
+const A_VEL = 0.42;                       /* cuanto afloja y cuanto se apura */
+const VEL_K = 1/Math.sqrt(1 - A_VEL*A_VEL);
+/* la velocidad y su derivada respecto del camino, en el metro `s` */
+function velEn(s){
+  const q = MUNDO.cuartos[cuartoEn(cl(s, 0, MUNDO.largo - 0.01))];
+  const u = (s - q.s0)/q.def.largo;
+  return VEL*VEL_K*(1 - A_VEL*Math.cos(2*Math.PI*u));
+}
+function dvdsEn(s){
+  const q = MUNDO.cuartos[cuartoEn(cl(s, 0, MUNDO.largo - 0.01))];
+  const u = (s - q.s0)/q.def.largo;
+  return VEL*VEL_K*A_VEL*(2*Math.PI/q.def.largo)*Math.sin(2*Math.PI*u);
+}
+/* ── EN QUE METRO ESTA EL CAMINANTE EN EL SEGUNDO `t` ──
+   Desde que la velocidad no es constante, `VEL*t` ya no es la posicion: la
+   media armonica garantiza que coincidan en los BORDES de cada cuarto y en el
+   total, pero adentro de un cuarto se separan — medido, hasta 85 cm, que en un
+   pasillo de dos metros de ancho alcanza para fotografiar un susto en el sitio
+   equivocado. Se integra con el mismo paso que el juego, asi que la sonda y la
+   partida recorren exactamente el mismo camino. */
+function sDeT(t){
+  let s = 0;
+  for (let i = 0, n = Math.round(t/DT); i < n; i++) s += velEn(s)*DT;
+  return s;
 }
 function cuartoEn(s){
   const L = MUNDO.cuartos;
@@ -873,15 +979,27 @@ function pideTilt(tx, tz){
 function paso(){
   const R = RUN; if (!R || R.fase !== 'juega') return;
   R.t += DT;
-  R.s += VEL*DT;
+  /* la velocidad de ESTE metro, y la aceleracion longitudinal que sale de ella */
+  const vAnd = velEn(R.s);
+  const accAnd = vAnd*dvdsEn(R.s);
+  R.vAnd = vAnd;
+  R.s += vAnd*DT;
+  const cuartoAntes = R.cuarto;
   R.cuarto = cuartoEn(R.s);
+  /* la primera puerta es el momento de ensenar el gesto: recien ahi el agua
+     empujo de verdad, asi que el cartel llega con la sensacion todavia puesta */
+  if (R.cuarto !== cuartoAntes && cuartoAntes === 0) R.eventos.push('puerta1');
 
   /* ── EL CABECEO DEL PASO ES LA PERTURBACION DE FONDO ──
      Sin el, con el telefono quieto el agua se queda quieta y el juego no pide
      nada hasta el primer susto. Caminar YA mueve el bol. Pero va CHICO: con
      una amplitud grande, caminar solo llegaba a 0,18 rad de superficie contra
      0,227 de volcar, o sea que el susto casi no cambiaba nada. */
-  const wPaso = 2*Math.PI*VEL/ZANCADA;
+  /* ── LA CADENCIA SALE DE LA VELOCIDAD, NO DE UNA CONSTANTE ──
+     Con `VEL` escrito acá, aflojar el paso dejaba los pies yendo al mismo ritmo
+     que corriendo: es el patinaje de siempre. La zancada la pone `ZANCADA` y de
+     ahi sale el ritmo, asi que frenar se OYE y se VE. */
+  const wPaso = 2*Math.PI*vAnd/ZANCADA;
   R.fase_paso += wPaso*DT;
   const bobY = Math.sin(R.fase_paso*2)*0.020;
   const bobX = Math.sin(R.fase_paso)*0.026;
@@ -922,7 +1040,18 @@ function paso(){
      bol HACIA donde se va el agua, que es lo que hace cualquiera que lleva un
      plato de sopa. */
   R.latx = env*K_SUS*R.sacx + accPasoX;
-  R.latz = env*K_SUS*R.sacz;
+  /* ── Y LA ACELERACION DE ANDAR EMPUJA EL AGUA HACIA ADELANTE Y HACIA ATRAS ──
+     El mismo camino que el susto: es una aceleracion del tablon, no un torque.
+     Contrarrestarla es inclinar hacia donde se va el agua, o sea la misma regla
+     que el jugador ya aprendio con los sustos — no hay un gesto nuevo, hay un
+     motivo nuevo para usarlo, y este llega solo y se ve venir. */
+  /* `PERTURBA` apaga TAMBIEN el tiron de andar, y no es un detalle: las dos
+     sondas de fisica —el chapoteo libre y el angulo de resbale— miden
+     propiedades del BOL, no del caminante. Sin la guarda, el empujon de la
+     puerta entraba en `fmod` y el resbale daba 21,5 grados contra los 22,8 que
+     vale atan(mu): la sonda dejaba de medir el roce y pasaba a medir el roce
+     mas una caminata. */
+  R.latz = env*K_SUS*R.sacz + accAnd*K_AND*PERTURBA;
 
   /* ── EL TABLON ──
      Un resorte de segundo orden entre lo que pide el telefono y donde esta la
@@ -1030,12 +1159,35 @@ function botTilt(retardo){
   return [cl(-BOT_KP*R.ax - BOT_KD*R.vax, -0.5, 0.5)*(1 - r),
           cl(-BOT_KP*R.az - BOT_KD*R.vaz, -0.5, 0.5)*(1 - r)];
 }
+/* ── EL BOT QUE SE ANTICIPA, QUE ES EL QUE MIDE SI HAY HABILIDAD ──
+   `botTilt` es puro amortiguamiento: reacciona a la velocidad de la superficie.
+   Eso alcanza contra un susto, que es impredecible, y NO alcanza contra el
+   frenado de la puerta, que es un empujon sostenido: para anularlo hay que
+   sostener una inclinacion estatica de `a/g`, y un lazo derivativo no sostiene
+   nada. Con este bot y no con el otro se puede preguntar lo unico que importa
+   de una mecanica nueva: **¿se puede contrarrestar sabiendola?** Si el que se
+   anticipa no le gana al que se queda quieto, la mecanica no es una habilidad,
+   es un impuesto — y el barrido que la descarte esta en el comentario de arriba. */
+function botExperto(gan, retr){
+  const R = RUN;
+  const g = gan == null ? 1 : gan;
+  /* con `retr` metros de retraso se modela al que se anticipa TARDE: mira la
+     puerta que ya paso. Un jugador de verdad no acierta el `a/g` exacto ni lo
+     acierta a tiempo, y una mecanica que solo perdona al que lo clava no es una
+     habilidad: es un examen. */
+  const sr = cl(R.s - (retr || 0), 0, MUNDO.largo - 0.01);
+  const ff = velEn(sr)*dvdsEn(sr)*K_AND/G*g;      /* lo que la puerta va a empujar */
+  return [cl(-BOT_KD*R.vax, -0.5, 0.5),
+          cl(ff - BOT_KD*R.vaz, -0.5, 0.5)];
+}
 function juegaSolo(semilla, modo){
   arrancaRun(semilla);
   const R = RUN; let n = 0;
   while (R.fase === 'juega' && n < 60*DUR + 600){
     if (modo === 'quieto') pideTilt(0, 0);
     else if (modo === 'azar') pideTilt(azr(-0.4, 0.4), azr(-0.4, 0.4));
+    else if (modo === 'experto'){ const d = botExperto(); pideTilt(d[0], d[1]); }
+    else if (modo === 'humano'){ const d = botExperto(0.6, 0.16); pideTilt(d[0], d[1]); }
     else { const d = botTilt(modo === 'torpe' ? 0.35 : 0); pideTilt(d[0], d[1]); }
     paso(); n++;
   }
@@ -1050,7 +1202,7 @@ function auditaAgenda(semilla){
   let minHue = 1e9, maxHue = 0;
   for (let i = 1; i < ag.length; i++){ const d = ag[i].t - ag[i-1].t; if (d < minHue) minHue = d; if (d > maxHue) maxHue = d; }
   const porCuarto = {};
-  for (const a of ag){ const s = VEL*a.t, i = cuartoEn(s); porCuarto[i] = (porCuarto[i]||0) + 1; }
+  for (const a of ag){ const i = cuartoEn(sDeT(a.t)); porCuarto[i] = (porCuarto[i]||0) + 1; }
   return { n: ag.length, unicos: ids.size, t0: +ag[0].t.toFixed(1), t1: +ag[ag.length-1].t.toFixed(1),
            hueco: [+minHue.toFixed(2), +maxHue.toFixed(2)], ultimo: ag[ag.length-1].S.id,
            cuartosConSusto: Object.keys(porCuarto).length, porCuarto };
@@ -2635,7 +2787,8 @@ function eventos(){
     if (e.startsWith('susto:')){
       const S = SUSTOS.find(s => s.id === e.slice(6));
       if (S){ son(S.son, 1); ducking(0.30); setTimeout(() => ducking(1), 900); }
-    } else if (e === 'derrama') son('derrama', 0.5);
+    } else if (e === 'puerta1') aviso(TT('tuto2'), 3.0);
+    else if (e === 'derrama') son('derrama', 0.5);
     else if (e.startsWith('fin:')){
       const por = e.slice(4);
       if (por === 'gana'){ PROG.mejor = DUR; }
@@ -2719,13 +2872,13 @@ window.__V = {
       paso(); } eventos(); pintaHud(); return this.estado(); },
   /* planta la caminata en un segundo dado para fotografiarlo */
   foto(seg, s){ juega(s == null ? 7 : s);
-    const R = RUN; R.t = seg; R.s = VEL*seg; R.cuarto = cuartoEn(R.s);
+    const R = RUN; R.t = seg; R.s = sDeT(seg); R.cuarto = cuartoEn(R.s);
     R.prox = R.agenda.filter(a => a.t <= seg).length; R.dados = R.prox;
     CONGELADO = true; pinta(1); pinta(0.016); pintaHud(); return this.estado(); },
   /* dispara un susto por nombre y lo congela en un instante suyo */
   susto(id, u, s){ juega(s == null ? 7 : s);
     const R = RUN, S = SUSTOS.find(x => x.id === id); if (!S) return 'no existe: ' + SUSTOS.map(x => x.id).join(',');
-    R.t = 30; R.s = VEL*30; R.cuarto = cuartoEn(R.s);
+    R.t = 30; R.s = sDeT(30); R.cuarto = cuartoEn(R.s);
     R.susto = S; R.sustoT = (u == null ? 0.4 : u)*S.dur; R.sacx = 1; R.sacz = 0; R.temblor = S.k;
     /* ── DOS PINTADAS, Y LA PRIMERA CON UN dt GRANDE ──
        El rumbo del cuerpo se acomoda al del pasillo con un resorte
