@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>LIMINAL — Registro en Cinta</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#dfe6ea;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
+
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#8e2b20;color:#fff;
+    font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
+
+  /* ---------- Panel de control (DOM: NUNCA sale en la grabación) ---------- */
+  #ui{position:fixed;inset:0;z-index:20;pointer-events:none}
+  #ui.hidden{display:none}
+
+  #joy{position:fixed;left:22px;bottom:26px;width:126px;height:126px;border-radius:50%;
+    background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.22);pointer-events:auto;touch-action:none}
+  #joyStick{position:absolute;left:50%;top:50%;width:54px;height:54px;transform:translate(-50%,-50%);
+    border-radius:50%;background:rgba(255,255,255,.28);border:1.5px solid rgba(255,255,255,.5)}
+  #look{position:fixed;top:0;bottom:0;right:0;left:42%;pointer-events:auto;touch-action:none}
+
+  #btns{position:fixed;right:18px;bottom:26px;display:flex;flex-direction:column-reverse;gap:12px;align-items:center}
+  .tbtn{pointer-events:auto;width:62px;height:62px;border-radius:50%;border:1.5px solid rgba(200,210,220,.45);
+    background:rgba(18,22,26,.55);color:#e6edf2;font:700 12px/1 ui-monospace,monospace;backdrop-filter:blur(4px)}
+  .tbtn:active{transform:scale(.93)}
+  .tbtn small{display:block;font-weight:500;font-size:8px;letter-spacing:1px;color:#93a2ad;margin-top:3px}
+  .tbtn.on{border-color:#e5484d;background:rgba(120,25,28,.6);color:#fff}
+
+  /* Barra superior de control de cinta */
+  #bar{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;justify-content:center;
+    padding:10px 12px;pointer-events:none;flex-wrap:wrap}
+  .chip{pointer-events:auto;background:rgba(14,17,20,.62);border:1px solid rgba(190,200,210,.28);color:#cfd8de;
+    border-radius:999px;padding:8px 14px;font:600 11px/1 ui-monospace,monospace;letter-spacing:1px;backdrop-filter:blur(6px)}
+  .chip:active{transform:scale(.96)}
+  .chip.rec{border-color:#e5484d;color:#ff8f92}
+  .chip.recording{background:#8e1f22;border-color:#ff6b6e;color:#fff}
+  #recTime{display:none;font-variant-numeric:tabular-nums}
+  #recTime.on{display:inline-block}
+
+  /* ---------- Menú ---------- */
+  #menu{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;padding:28px;background:radial-gradient(70% 70% at 50% 45%,rgba(20,20,16,.62),rgba(0,0,0,.93))}
+  #menu.hide{display:none}
+  #menu .eyebrow{font-size:10px;letter-spacing:9px;color:#c9b26a}
+  #menu h1{font-size:clamp(26px,7vw,54px);font-weight:800;letter-spacing:6px;color:#efe7cf;
+    text-shadow:2px 0 0 rgba(255,60,60,.5),-2px 0 0 rgba(60,180,255,.4)}
+  #menu p{color:#8e968f;max-width:520px;font-size:12.5px;line-height:1.8;letter-spacing:.4px}
+  #menu p b{color:#cfd8c9}
+  #menu .play{margin-top:8px;pointer-events:auto;cursor:pointer;font:800 14px/1 ui-monospace,monospace;letter-spacing:5px;
+    padding:17px 42px;border-radius:4px;border:1px solid rgba(210,190,120,.55);color:#f2ead2;background:rgba(40,36,24,.75)}
+  #menu .play:active{transform:scale(.97)}
+  #menu .note{font-size:10.5px;color:#6d7570;letter-spacing:.5px;max-width:480px;line-height:1.7}
+
+  /* ---------- Panel de cinta grabada ---------- */
+  #tape{position:fixed;inset:0;z-index:120;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;padding:24px;background:rgba(0,0,0,.92)}
+  #tape.show{display:flex}
+  #tape h2{font-size:13px;letter-spacing:5px;color:#c9b26a;font-weight:700}
+  #tape video{max-width:min(92vw,760px);max-height:52vh;background:#000;border:1px solid #2a2f33;border-radius:3px}
+  #tape .acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  #tape a,#tape button{pointer-events:auto;cursor:pointer;text-decoration:none;font:700 11px/1 ui-monospace,monospace;
+    letter-spacing:2px;padding:13px 20px;border-radius:4px;border:1px solid rgba(190,200,210,.35);
+    color:#e6edf2;background:rgba(22,26,30,.9)}
+  #tape .meta{font-size:10px;color:#6d7570;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div id="err"></div>
+
+<script>
+ window.addEventListener('error',e=>{const b=document.getElementById('err');b.style.display='block';
+   b.textContent+=`[${(e.filename||'').split('/').pop()}:${e.lineno}] ${e.message}\n`;});
+ window.addEventListener('unhandledrejection',e=>{const b=document.getElementById('err');b.style.display='block';
+   b.textContent+='PROMISE: '+((e.reason&&e.reason.message)||e.reason)+'\n';});
+</script>
+
+<!-- TODO ESTO ES DOM: queda POR ENCIMA del canvas y por eso NO aparece en la grabación -->
+<div id="ui" class="hidden">
+  <div id="bar">
+    <button class="chip rec" id="btnRec">● GRABAR</button>
+    <span class="chip" id="recTime">00:00</span>
+    <button class="chip" id="btnCam">CINTA: VHS-C</button>
+    <button class="chip" id="btnExit">SALIR</button>
+  </div>
+  <div id="joy"><div id="joyStick"></div></div>
+  <div id="look"></div>
+  <div id="btns">
+    <button id="btnRun" class="tbtn">▶▶<small>CORRER</small></button>
+  </div>
+</div>
+
+<div id="menu">
+  <div class="eyebrow">REZONA · REGISTRO</div>
+  <h1>LIMINAL</h1>
+  <p>No hay salida documentada. Camina. La cinta corre a 30 cuadros por segundo y <b>no siempre graba lo que ves</b>.</p>
+  <button class="play" id="playBtn">INSERTAR CINTA</button>
+  <div class="note">La grabación captura únicamente la imagen de la cámara.<br>Los controles en pantalla no quedan registrados en el video.</div>
+</div>
+
+<div id="tape">
+  <h2>CINTA RECUPERADA</h2>
+  <video id="tapeVid" controls playsinline></video>
+  <div class="meta" id="tapeMeta"></div>
+  <div class="acts">
+    <a id="tapeDl" download>DESCARGAR</a>
+    <button id="tapeShare" style="display:none">COMPARTIR</button>
+    <button id="tapeClose">VOLVER</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================================
+   0 · PLATAFORMA
+============================================================================ */
+const IS_MOBILE = (navigator.maxTouchPoints > 0) &&
+  (window.matchMedia ? matchMedia('(pointer: coarse)').matches : true);
+
+/* ============================================================================
+   1 · RENDERER
+   preserveDrawingBuffer:true es necesario para que captureStream() no capture
+   cuadros negros en algunos navegadores.
+============================================================================ */
+const renderer = new THREE.WebGLRenderer({ antialias:false, preserveDrawingBuffer:true, alpha:false });
+// El look sucio lo da el render a 240p, no el DPR: aquí subimos para que el video salga grande.
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.autoClear = true;
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+// La bruma NO es negra: los espacios liminales agobian por estar sobreiluminados.
+const FOG_COL = new THREE.Color(0x6d5f2c);
+scene.fog = new THREE.FogExp2(FOG_COL, 0.020);
+scene.background = FOG_COL;
+
+// FOV alto: el remapeo de ojo de pez magnifica el centro, así que lo compensamos aquí.
+const camera = new THREE.PerspectiveCamera(98, innerWidth/innerHeight, 0.05, 260);
+
+/* ============================================================================
+   2 · TEXTURAS PROCEDURALES (canvas)
+============================================================================ */
+function cvs(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function tex(c,rx=1,ry=1){
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry);
+  t.anisotropy=4; return t;
+}
+function grain(x,w,h,n,a){
+  for(let i=0;i<n;i++){
+    const v=(Math.random()*2-1)*a|0;
+    x.fillStyle=`rgba(${128+v},${128+v},${120+v},${Math.random()*0.09})`;
+    x.fillRect(Math.random()*w, Math.random()*h, 1+Math.random()*3, 1+Math.random()*3);
+  }
+}
+// Papel tapiz mostaza con rayas verticales y manchas de humedad
+function wallTex(){
+  const c=cvs(256,256), x=c.getContext('2d');
+  x.fillStyle='#c3aa52'; x.fillRect(0,0,256,256);
+  for(let i=0;i<256;i+=8){ x.fillStyle=i%16?'rgba(0,0,0,.045)':'rgba(255,255,255,.035)'; x.fillRect(i,0,4,256); }
+  for(let i=0;i<26;i++){ // manchas
+    const cx=Math.random()*256, cy=Math.random()*256, r=8+Math.random()*34;
+    const g=x.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,'rgba(88,68,26,.20)'); g.addColorStop(1,'rgba(88,68,26,0)');
+    x.fillStyle=g; x.beginPath(); x.arc(cx,cy,r,0,7); x.fill();
+  }
+  const g2=x.createLinearGradient(0,180,0,256);          // mugre en el zócalo
+  g2.addColorStop(0,'rgba(50,38,14,0)'); g2.addColorStop(1,'rgba(40,30,10,.42)');
+  x.fillStyle=g2; x.fillRect(0,180,256,76);
+  grain(x,256,256,2600,60);
+  return tex(c,1,1);
+}
+// Alfombra húmeda
+function floorTex(){
+  const c=cvs(256,256), x=c.getContext('2d');
+  x.fillStyle='#83702f'; x.fillRect(0,0,256,256);
+  for(let i=0;i<9000;i++){
+    const v=Math.random()*46-23;
+    x.fillStyle=`rgba(${133+v},${112+v},${50+v},.5)`;
+    x.fillRect(Math.random()*256, Math.random()*256, 2, 2);
+  }
+  for(let i=0;i<14;i++){
+    const cx=Math.random()*256, cy=Math.random()*256, r=14+Math.random()*40;
+    const g=x.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,'rgba(44,34,12,.30)'); g.addColorStop(1,'rgba(44,34,12,0)');
+    x.fillStyle=g; x.beginPath(); x.arc(cx,cy,r,0,7); x.fill();
+  }
+  return tex(c,1,1);
+}
+// Plafón de techo (placas acústicas)
+function ceilTex(){
+  const c=cvs(256,256), x=c.getContext('2d');
+  x.fillStyle='#ddd7c0'; x.fillRect(0,0,256,256);
+  x.strokeStyle='rgba(90,86,72,.55)'; x.lineWidth=2;
+  x.strokeRect(1,1,254,254); x.beginPath(); x.moveTo(128,0); x.lineTo(128,256); x.moveTo(0,128); x.lineTo(256,128); x.stroke();
+  for(let i=0;i<2400;i++){ x.fillStyle='rgba(80,76,64,.13)'; x.fillRect(Math.random()*256, Math.random()*256, 2,2); }
+  grain(x,256,256,900,40);
+  return tex(c,1,1);
+}
+const TEX_WALL=wallTex(), TEX_FLOOR=floorTex(), TEX_CEIL=ceilTex();
+
+/* ============================================================================
+   3 · MUNDO INFINITO POR CELDAS
+   Rejilla de 6 m. Cada arista puede tener muro (hash determinista).
+   Se reconstruyen los InstancedMesh cuando el jugador cambia de celda.
+============================================================================ */
+const S = 6.0, WALL_H = 3.2, WALL_T = 0.18, VIEW_R = 9;
+let WORLD_SEED = (Math.random()*1e6)|0;
+
+function h2(i,j,s){
+  let n = Math.imul(i|0, 374761393) ^ Math.imul(j|0, 668265263) ^ Math.imul((s+WORLD_SEED)|0, 1274126177);
+  n = Math.imul(n ^ (n>>>13), 1274126177); n ^= n>>>16;
+  return (n>>>0)/4294967296;
+}
+const DENSITY = 0.34;
+const nearSpawn = (i,j)=> (i>=-1&&i<=1&&j>=-1&&j<=1);
+// Muro alineado en X (bloquea el eje Z), en la arista norte de la celda (i,j)
+const wallX = (i,j)=> !nearSpawn(i,j) && h2(i,j,1) < DENSITY;
+// Muro alineado en Z (bloquea el eje X), en la arista este de la celda (i,j)
+const wallZ = (i,j)=> !nearSpawn(i,j) && h2(i,j,2) < DENSITY;
+const hasLamp = (i,j)=> h2(i,j,7) < 0.52;
+
+const matWall  = new THREE.MeshLambertMaterial({ map:TEX_WALL });
+const matLamp  = new THREE.MeshBasicMaterial({ color:0xfff4d6, fog:true });
+const MAXI = 620;
+const wallsX = new THREE.InstancedMesh(new THREE.BoxGeometry(S, WALL_H, WALL_T), matWall, MAXI);
+const wallsZ = new THREE.InstancedMesh(new THREE.BoxGeometry(WALL_T, WALL_H, S), matWall, MAXI);
+const lamps  = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.6, 1.25), matLamp, 420);
+[wallsX,wallsZ,lamps].forEach(m=>{ m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled=false; scene.add(m); });
+
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1,1,1);
+const _qFlat = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2,0,0)); // plano mirando abajo
+let lastCell = null;
+
+function rebuildWorld(ci,cj){
+  let nx=0, nz=0, nl=0;
+  for(let i=ci-VIEW_R;i<=ci+VIEW_R;i++){
+    for(let j=cj-VIEW_R;j<=cj+VIEW_R;j++){
+      if(nx<MAXI && wallX(i,j)){
+        _m.compose(new THREE.Vector3((i+0.5)*S, WALL_H/2, (j+1)*S), _q, _s);
+        wallsX.setMatrixAt(nx++, _m);
+      }
+      if(nz<MAXI && wallZ(i,j)){
+        _m.compose(new THREE.Vector3((i+1)*S, WALL_H/2, (j+0.5)*S), _q, _s);
+        wallsZ.setMatrixAt(nz++, _m);
+      }
+      if(nl<420 && hasLamp(i,j)){
+        _m.compose(new THREE.Vector3((i+0.5)*S, WALL_H-0.06, (j+0.5)*S), _qFlat, _s);
+        lamps.setMatrixAt(nl++, _m);
+      }
+    }
+  }
+  wallsX.count=nx; wallsZ.count=nz; lamps.count=nl;
+  wallsX.instanceMatrix.needsUpdate=true;
+  wallsZ.instanceMatrix.needsUpdate=true;
+  lamps.instanceMatrix.needsUpdate=true;
+}
+
+// Suelo y techo: planos grandes que siguen al jugador (sensación de infinito)
+const PLANE=190, TILE=PLANE/2;
+TEX_FLOOR.repeat.set(TILE,TILE); TEX_CEIL.repeat.set(TILE,TILE);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(PLANE,PLANE), new THREE.MeshLambertMaterial({map:TEX_FLOOR}));
+floor.rotation.x=-Math.PI/2; scene.add(floor);
+const ceil = new THREE.Mesh(new THREE.PlaneGeometry(PLANE,PLANE), new THREE.MeshLambertMaterial({map:TEX_CEIL}));
+ceil.rotation.x=Math.PI/2; ceil.position.y=WALL_H; scene.add(ceil);
+
+// Luz plana y sin sombras: así se ven los espacios liminales reales
+const hemi = new THREE.HemisphereLight(0xfff4d8, 0x8a7233, 2.30); scene.add(hemi);
+const amb  = new THREE.AmbientLight(0xffeec4, 0.95); scene.add(amb);
+
+/* ============================================================================
+   4 · LA FIGURA (aparece lejos, desaparece si te acercas o dejas de mirarla)
+============================================================================ */
+function figureTex(){
+  const c=cvs(64,128), x=c.getContext('2d');
+  x.clearRect(0,0,64,128);
+  try{ x.filter='blur(1.5px)'; }catch(e){}   // silueta difusa, nunca enfocada
+  x.fillStyle='rgba(6,6,8,.93)';
+  x.beginPath(); x.ellipse(32,22,11,13,0,0,7); x.fill();            // cabeza
+  x.beginPath(); x.moveTo(32,32); x.lineTo(50,66); x.lineTo(47,120);
+  x.lineTo(17,120); x.lineTo(14,66); x.closePath(); x.fill();        // torso
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const figure = new THREE.Mesh(new THREE.PlaneGeometry(1.1,2.2),
+  new THREE.MeshBasicMaterial({ map:figureTex(), transparent:true, depthWrite:false, fog:true }));
+figure.visible=false; scene.add(figure);
+let figTimer = 25 + Math.random()*35, figLife = 0;
+
+/* ============================================================================
+   5 · POST-PROCESO — LA CADENA DE SEÑAL
+   Render a 240p -> shader VHS (ojo de pez, YIQ, jitter, head-switch, ghost) -> pantalla
+============================================================================ */
+let LOW_H = 240, lw=1, lh=1;
+let rtScene, rtA, rtB;
+let readRT=null, writeRT=null;   // ping-pong para el eco de cuadro anterior
+function makeRT(w,h){
+  return new THREE.WebGLRenderTarget(w,h,{
+    minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+    format:THREE.RGBAFormat, type:THREE.UnsignedByteType, depthBuffer:true
+  });
+}
+const quadCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const quadScene = new THREE.Scene();
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2,2)); quadScene.add(quad);
+
+const VERT = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
+
+const VHS_FRAG = `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D tScene, tPrev, tOsd;
+uniform vec2  uRes;
+uniform float uTime, uAspect;
+uniform float uFish;    // curvatura de lente
+uniform float uChroma;  // arrastre de croma (px)
+uniform float uJitter;  // error de base de tiempo
+uniform float uNoise;   // grano de cinta
+uniform float uGhost;   // eco del cuadro anterior
+uniform float uScan;    // scanlines
+uniform float uGlitch;  // ráfaga de fallo 0..1
+
+float hash11(float p){ p=fract(p*0.1031); p*=p+33.33; p*=p+p; return fract(p); }
+float hash21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+
+vec3 rgb2yiq(vec3 c){
+  return vec3(dot(c,vec3(0.299,0.587,0.114)),
+              dot(c,vec3(0.5959,-0.2746,-0.3213)),
+              dot(c,vec3(0.2115,-0.5227,0.3112)));
+}
+vec3 yiq2rgb(vec3 c){
+  return vec3(dot(c,vec3(1.0, 0.956, 0.619)),
+              dot(c,vec3(1.0,-0.272,-0.647)),
+              dot(c,vec3(1.0,-1.106,1.703)));
+}
+
+// Ojo de pez: radio normalizado a la esquina => el centro se magnifica,
+// los bordes se comprimen y las rectas se curvan, sin salirse del cuadro.
+vec2 lens(vec2 uv){
+  vec2 c = uv - 0.5;
+  c.x *= uAspect;
+  float rc = 0.25*(uAspect*uAspect + 1.0);
+  float t  = dot(c,c)/rc;
+  float f  = (1.0 + uFish*t + uFish*0.35*t*t) / (1.0 + uFish*1.35);
+  c *= f; c.x /= uAspect;
+  return c + 0.5;
+}
+// El sensor entrega señal con gamma: sqrt() aproxima 1/2.2 y es barato.
+vec3 grab(vec2 suv){ return sqrt(max(texture2D(tScene, clamp(lens(suv),0.0,1.0)).rgb, 0.0)); }
+
+void main(){
+  vec2 suv = vUv;
+  float line = floor(suv.y * uRes.y);
+
+  /* --- error de base de tiempo: cada línea se desplaza un poco --- */
+  float jt = (hash21(vec2(line, floor(uTime*25.0)))-0.5) * uJitter;
+  jt += sin(suv.y*38.0 + uTime*2.1) * uJitter * 0.28;
+
+  /* --- head switching: la banda rota de los últimos renglones --- */
+  float hsw = smoothstep(0.030, 0.0, suv.y);
+  jt += hsw * (hash11(floor(uTime*20.0))-0.5) * 0.10;
+
+  /* --- ráfaga de fallo: bloques desplazados --- */
+  if(uGlitch > 0.001){
+    float band = floor(suv.y*14.0);
+    float g = hash21(vec2(band, floor(uTime*13.0)));
+    if(g < uGlitch*0.55) jt += (hash21(vec2(band,7.0))-0.5)*0.16*uGlitch;
+  }
+  suv.x += jt;
+
+  /* --- croma bajo: Y con ancho de banda alto, I/Q arrastrados hacia la derecha --- */
+  float bl = uChroma / uRes.x;
+  vec3 s0=rgb2yiq(grab(suv));
+  vec3 s1=rgb2yiq(grab(suv-vec2(bl,0.0)));
+  vec3 s2=rgb2yiq(grab(suv-vec2(bl*2.0,0.0)));
+  vec3 s3=rgb2yiq(grab(suv-vec2(bl*3.0,0.0)));
+  vec3 s4=rgb2yiq(grab(suv-vec2(bl*4.0,0.0)));
+  vec3 sr=rgb2yiq(grab(suv+vec2(bl*0.6,0.0)));
+
+  float Y = s0.x*0.62 + s1.x*0.20 + sr.x*0.18;                       // luma casi nítida
+  vec2 C  = (s0.yz*0.30 + s1.yz*0.26 + s2.yz*0.20 + s3.yz*0.14 + s4.yz*0.10); // croma arrastrada
+  C *= 0.92;
+
+  /* --- ráfaga: separación RGB por desajuste de croma --- */
+  if(uGlitch > 0.001) C += (rgb2yiq(grab(suv-vec2(bl*9.0*uGlitch,0.0))).yz)*uGlitch*0.5;
+
+  vec3 col = yiq2rgb(vec3(Y, C));
+
+  /* --- dropouts: rayas blancas cortas de pérdida de señal --- */
+  float dl = hash21(vec2(line*1.7, floor(uTime*9.0)));
+  if(dl > 0.9992){
+    float seg = step(hash21(vec2(floor(suv.x*34.0), line)), 0.22);
+    col = mix(col, vec3(0.94,0.94,0.90), seg*0.85);
+  }
+
+  /* --- OSD de cámara: se quema en la cinta DESPUÉS de la lente --- */
+  vec4 osd = texture2D(tOsd, vUv);
+  col = mix(col, osd.rgb, osd.a);
+
+  /* --- eco del cuadro anterior (arrastre de cabezal) --- */
+  vec3 prev = texture2D(tPrev, vUv + vec2(0.0016, 0.0)).rgb;
+  col = mix(col, max(col, prev*0.96), uGhost);
+
+  /* --- grano de cinta + scanlines + entrelazado --- */
+  float n = hash21(vUv*uRes + fract(uTime)*137.0) - 0.5;
+  col += n * uNoise;
+  col *= 1.0 - uScan*0.5*(0.5 + 0.5*sin(vUv.y*uRes.y*3.14159));
+  col *= 1.0 - 0.030*step(0.5, fract(vUv.y*uRes.y*0.5 + uTime*29.97));
+
+  /* --- viñeta y sombra de lente en las esquinas --- */
+  vec2 vc = vUv-0.5; vc.x *= uAspect;
+  float vig = smoothstep(1.24, 0.42, length(vc)/sqrt(0.25*(uAspect*uAspect+1.0)));
+  col *= mix(0.62, 1.0, vig);
+
+  /* --- cinta vieja: negros levantados, saturación baja, tinte cálido --- */
+  col = mix(vec3(dot(col,vec3(0.33))), col, 0.82);
+  col = col*1.16 + vec3(0.038,0.032,0.022);
+  col *= vec3(1.03, 0.995, 0.94);
+
+  gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
+}`;
+
+const COPY_FRAG = `
+precision mediump float; varying vec2 vUv; uniform sampler2D tCur;
+void main(){ gl_FragColor = vec4(texture2D(tCur, vUv).rgb, 1.0); }`;
+
+const vhsMat = new THREE.ShaderMaterial({
+  vertexShader:VERT, fragmentShader:VHS_FRAG, depthTest:false, depthWrite:false,
+  uniforms:{
+    tScene:{value:null}, tPrev:{value:null}, tOsd:{value:null},
+    uRes:{value:new THREE.Vector2(1,1)}, uTime:{value:0}, uAspect:{value:1},
+    uFish:{value:0.30}, uChroma:{value:3.1}, uJitter:{value:0.0016},
+    uNoise:{value:0.085}, uGhost:{value:0.30}, uScan:{value:0.13}, uGlitch:{value:0}
+  }
+});
+const copyMat = new THREE.ShaderMaterial({
+  vertexShader:VERT, fragmentShader:COPY_FRAG, depthTest:false, depthWrite:false,
+  uniforms:{ tCur:{value:null} }
+});
+
+/* --- OSD de cámara dibujado DENTRO del canvas (por eso sí queda grabado) --- */
+let osdCanvas, osdCtx, osdTex;
+function buildOSD(w,h){
+  osdCanvas=cvs(w,h); osdCtx=osdCanvas.getContext('2d');
+  osdTex=new THREE.CanvasTexture(osdCanvas);
+  osdTex.colorSpace=THREE.SRGBColorSpace;
+  osdTex.minFilter=osdTex.magFilter=THREE.LinearFilter;
+  vhsMat.uniforms.tOsd.value=osdTex;
+}
+const MES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+const p2=n=>String(n).padStart(2,'0');
+let osdAcc=0, tapeSec=0, dateGlitch=0;
+function drawOSD(){
+  const w=osdCanvas.width, h=osdCanvas.height, x=osdCtx;
+  x.clearRect(0,0,w,h);
+  const fs=Math.max(10, Math.round(h*0.052));
+  x.font=`700 ${fs}px ui-monospace, Menlo, monospace`;
+  x.textBaseline='top';
+  x.shadowColor='rgba(0,0,0,.85)'; x.shadowBlur=0; x.shadowOffsetX=1; x.shadowOffsetY=1;
+  const pad=Math.round(h*0.055);
+
+  // Estado de cinta (arriba-izquierda)
+  if(recording){
+    if(Math.floor(performance.now()/560)%2===0){
+      x.fillStyle='#ff4a4a'; x.beginPath();
+      x.arc(pad+fs*0.42, pad+fs*0.55, fs*0.42, 0, 7); x.fill();
+      x.fillStyle='#fff'; x.fillText('REC', pad+fs*1.1, pad);
+    }
+  }else{
+    x.fillStyle='#e8e8e8'; x.fillText('▶ PLAY', pad, pad);
+  }
+
+  // Contador de cinta (arriba-derecha)
+  const tc=`SP  ${p2((tapeSec/3600)|0)}:${p2(((tapeSec/60)|0)%60)}:${p2((tapeSec|0)%60)}`;
+  x.fillStyle='#e8e8e8'; x.textAlign='right'; x.fillText(tc, w-pad, pad);
+  x.textAlign='left';
+
+  // Fecha y hora (abajo). A veces el año se corrompe: la cinta recuerda mal.
+  const d=new Date();
+  let yr=d.getFullYear();
+  if(dateGlitch>0) yr = 1996 + ((Math.random()*7)|0);
+  x.fillStyle='#e8e8e8';
+  x.fillText(`${MES[d.getMonth()]} ${p2(d.getDate())} ${yr}`, pad, h-pad-fs);
+  x.textAlign='right';
+  x.fillText(`${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`, w-pad, h-pad-fs);
+  x.textAlign='left'; x.shadowOffsetX=0; x.shadowOffsetY=0;
+  osdTex.needsUpdate=true;
+}
+
+function resize(){
+  const W=innerWidth, H=innerHeight;
+  renderer.setSize(W,H,false);
+  camera.aspect=W/H; camera.updateProjectionMatrix();
+  lh = LOW_H; lw = Math.max(2, Math.round(LOW_H*(W/H)));
+  [rtScene,rtA,rtB].forEach(rt=>rt&&rt.dispose());
+  rtScene=makeRT(lw,lh); rtA=makeRT(lw,lh); rtB=makeRT(lw,lh);
+  readRT=null; writeRT=null;     // los anteriores quedaron liberados
+  vhsMat.uniforms.uRes.value.set(lw,lh);
+  vhsMat.uniforms.uAspect.value=W/H;
+  buildOSD(lw,lh);
+}
+addEventListener('resize', resize);
+resize();
+
+/* --- Presets de cinta --- */
+const CAMS=[
+  {name:'VHS-C',    fish:0.38, chroma:3.1, jitter:0.0016, noise:0.085, ghost:0.30, scan:0.13, fov:98,  res:240},
+  {name:'HANDYCAM', fish:0.46, chroma:1.9, jitter:0.0008, noise:0.050, ghost:0.20, scan:0.08, fov:106, res:288},
+  {name:'CORRUPTO', fish:0.24, chroma:5.0, jitter:0.0042, noise:0.150, ghost:0.46, scan:0.20, fov:96,  res:192},
+];
+let camIdx=0;
+function applyCam(){
+  const c=CAMS[camIdx], u=vhsMat.uniforms;
+  u.uFish.value=c.fish; u.uChroma.value=c.chroma; u.uJitter.value=c.jitter;
+  u.uNoise.value=c.noise; u.uGhost.value=c.ghost; u.uScan.value=c.scan;
+  camera.fov=c.fov; camera.updateProjectionMatrix();
+  if(c.res!==LOW_H){ LOW_H=c.res; resize(); }
+  document.getElementById('btnCam').textContent='CINTA: '+c.name;
+}
+applyCam();
+
+/* ============================================================================
+   6 · AUDIO (zumbido de fluorescente, tono de sala, siseo de cinta, pasos)
+   Se enruta a la salida Y a un MediaStreamDestination para que quede grabado.
+============================================================================ */
+let AC=null, master=null, streamDest=null, hum=null;
+function noiseBuf(ctx,sec,brown){
+  const n=ctx.sampleRate*sec, b=ctx.createBuffer(1,n,ctx.sampleRate), d=b.getChannelData(0);
+  let last=0;
+  for(let i=0;i<n;i++){
+    const w=Math.random()*2-1;
+    if(brown){ last=(last+0.02*w)/1.02; d[i]=last*3.2; } else d[i]=w;
+  }
+  return b;
+}
+function initAudio(){
+  if(AC) return;
+  AC = new (window.AudioContext||window.webkitAudioContext)();
+  master = AC.createGain(); master.gain.value=0.9; master.connect(AC.destination);
+  streamDest = AC.createMediaStreamDestination(); master.connect(streamDest);
+
+  // Zumbido eléctrico 60/120 Hz
+  const g=AC.createGain(); g.gain.value=0.028;
+  const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=420;
+  [60,120,180].forEach((f,i)=>{ const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+    const og=AC.createGain(); og.gain.value=[1,0.55,0.22][i]; o.connect(og).connect(lp); o.start(); });
+  lp.connect(g).connect(master); hum=g;
+
+  // Tono de sala (ruido marrón filtrado)
+  const rs=AC.createBufferSource(); rs.buffer=noiseBuf(AC,4,true); rs.loop=true;
+  const rf=AC.createBiquadFilter(); rf.type='lowpass'; rf.frequency.value=300;
+  const rg=AC.createGain(); rg.gain.value=0.10;
+  rs.connect(rf).connect(rg).connect(master); rs.start();
+
+  // Siseo de cinta
+  const hs=AC.createBufferSource(); hs.buffer=noiseBuf(AC,3,false); hs.loop=true;
+  const hf=AC.createBiquadFilter(); hf.type='highpass'; hf.frequency.value=3600;
+  const hg=AC.createGain(); hg.gain.value=0.020;
+  hs.connect(hf).connect(hg).connect(master); hs.start();
+}
+function step(){
+  if(!AC) return;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(AC,0.12,false);
+  const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=280+Math.random()*160; f.Q.value=1.2;
+  const g=AC.createGain(); const t=AC.currentTime;
+  g.gain.setValueAtTime(0.10,t); g.gain.exponentialRampToValueAtTime(0.0005,t+0.11);
+  s.connect(f).connect(g).connect(master); s.start(t); s.stop(t+0.13);
+}
+function sting(){
+  if(!AC) return;
+  const t=AC.currentTime;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(AC,0.5,false);
+  const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.setValueAtTime(2200,t);
+  f.frequency.exponentialRampToValueAtTime(160,t+0.42);
+  const g=AC.createGain(); g.gain.setValueAtTime(0.16,t); g.gain.exponentialRampToValueAtTime(0.0005,t+0.45);
+  s.connect(f).connect(g).connect(master); s.start(t); s.stop(t+0.5);
+}
+
+/* ============================================================================
+   7 · JUGADOR + COLISIÓN
+============================================================================ */
+const EYE=1.56, RAD=0.34, WALK=2.45, RUN=4.3;
+const pos = new THREE.Vector3(0, EYE, 0);
+let yaw=0, pitch=0, running=false, bob=0, walkPhase=0, stepAcc=0;
+let tMoveX=0, tMoveY=0;
+const keys={};
+
+function circleBox(px,pz,cx,cz,hx,hz){
+  const qx=Math.max(cx-hx, Math.min(px, cx+hx));
+  const qz=Math.max(cz-hz, Math.min(pz, cz+hz));
+  const dx=px-qx, dz=pz-qz;
+  return dx*dx+dz*dz < RAD*RAD;
+}
+function blocked(px,pz){
+  const ci=Math.floor(px/S), cj=Math.floor(pz/S);
+  for(let i=ci-1;i<=ci+1;i++) for(let j=cj-1;j<=cj+1;j++){
+    if(wallX(i,j) && circleBox(px,pz,(i+0.5)*S,(j+1)*S, S/2, WALL_T/2)) return true;
+    if(wallZ(i,j) && circleBox(px,pz,(i+1)*S,(j+0.5)*S, WALL_T/2, S/2)) return true;
+  }
+  return false;
+}
+function movePlayer(dt){
+  const f=THREE.MathUtils.clamp((keys['KeyW']?1:0)-(keys['KeyS']?1:0)+tMoveY,-1,1);
+  const r=THREE.MathUtils.clamp((keys['KeyD']?1:0)-(keys['KeyA']?1:0)+tMoveX,-1,1);
+  let dx=0, dz=0;
+  if(f||r){
+    const sn=Math.sin(yaw), cs=Math.cos(yaw);
+    dx = (-sn*f + cs*r);
+    dz = (-cs*f - sn*r);
+    const L=Math.hypot(dx,dz); dx/=L; dz/=L;
+  }
+  const spd=(running||keys['ShiftLeft'])?RUN:WALK;
+  const nx=pos.x+dx*spd*dt, nz=pos.z+dz*spd*dt;
+  if(!blocked(nx,pos.z)) pos.x=nx;
+  if(!blocked(pos.x,nz)) pos.z=nz;
+
+  const moving=(dx||dz)?1:0;
+  walkPhase += moving*spd*dt*2.6;
+  bob += ((moving? Math.sin(walkPhase)*0.035*(spd/WALK) : 0) - bob)*Math.min(1,dt*9);
+  if(moving){ stepAcc+=spd*dt; if(stepAcc>1.75){ stepAcc=0; step(); } }
+}
+
+/* ============================================================================
+   8 · CONTROLES (PC: pointer lock · Móvil: joystick + arrastre)
+============================================================================ */
+const uiEl=document.getElementById('ui'), menuEl=document.getElementById('menu');
+let started=false;
+const SENS_PC=0.0022, SENS_TOUCH=0.0040;
+
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(!started) return;
+  if(e.code==='KeyR'){ toggleRec(); e.preventDefault(); }
+  if(e.code==='KeyC'){ camIdx=(camIdx+1)%CAMS.length; applyCam(); }
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+
+addEventListener('mousemove',e=>{
+  if(!started || document.pointerLockElement!==renderer.domElement) return;
+  yaw   -= e.movementX*SENS_PC;
+  pitch  = THREE.MathUtils.clamp(pitch - e.movementY*SENS_PC, -1.35, 1.35);
+});
+document.addEventListener('pointerlockchange',()=>{
+  if(!IS_MOBILE && started && document.pointerLockElement!==renderer.domElement) stopGame();
+});
+
+function enterFullscreenLandscape(){
+  const el=document.documentElement;
+  const rq=el.requestFullscreen||el.webkitRequestFullscreen;
+  try{ const p=rq&&rq.call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+  try{ const p=screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape');
+       if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+}
+function startGame(){
+  started=true; menuEl.classList.add('hide'); uiEl.classList.remove('hidden');
+  initAudio(); if(AC && AC.state==='suspended') AC.resume().catch(()=>{});
+  rebuildWorld(Math.floor(pos.x/S), Math.floor(pos.z/S));
+}
+function stopGame(){
+  started=false; menuEl.classList.remove('hide'); uiEl.classList.add('hidden');
+  tMoveX=tMoveY=0; running=false;
+  document.getElementById('btnRun').classList.remove('on');
+}
+document.getElementById('playBtn').addEventListener('click',()=>{
+  if(IS_MOBILE){ enterFullscreenLandscape(); startGame(); }
+  else {
+    startGame();
+    const p=renderer.domElement.requestPointerLock&&renderer.domElement.requestPointerLock();
+    if(p&&p.catch) p.catch(()=>{});
+  }
+});
+document.getElementById('btnExit').addEventListener('click',()=>{
+  if(!IS_MOBILE && document.pointerLockElement) document.exitPointerLock();
+  else stopGame();
+});
+document.getElementById('btnCam').addEventListener('click',()=>{ camIdx=(camIdx+1)%CAMS.length; applyCam(); });
+
+// Joystick + mirar (móvil)
+if(IS_MOBILE){
+  const joy=document.getElementById('joy'), stick=document.getElementById('joyStick');
+  const R=50; let jid=null, cx=0, cy=0;
+  const setJ=t=>{ let dx=t.clientX-cx, dy=t.clientY-cy; const d=Math.hypot(dx,dy);
+    if(d>R){ dx*=R/d; dy*=R/d; }
+    stick.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    tMoveX=dx/R; tMoveY=-dy/R; };
+  joy.addEventListener('touchstart',e=>{ e.preventDefault(); const t=e.changedTouches[0]; jid=t.identifier;
+    const r=joy.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2; setJ(t); },{passive:false});
+  joy.addEventListener('touchmove',e=>{ e.preventDefault();
+    for(const t of e.changedTouches) if(t.identifier===jid) setJ(t); },{passive:false});
+  const jend=e=>{ for(const t of e.changedTouches) if(t.identifier===jid){
+    jid=null; tMoveX=tMoveY=0; stick.style.transform='translate(-50%,-50%)'; } };
+  joy.addEventListener('touchend',jend); joy.addEventListener('touchcancel',jend);
+
+  const pad=document.getElementById('look'); let lid=null, lx=0, ly=0;
+  pad.addEventListener('touchstart',e=>{ e.preventDefault(); const t=e.changedTouches[0];
+    lid=t.identifier; lx=t.clientX; ly=t.clientY; },{passive:false});
+  pad.addEventListener('touchmove',e=>{ e.preventDefault();
+    for(const t of e.changedTouches) if(t.identifier===lid){
+      yaw   -= (t.clientX-lx)*SENS_TOUCH;
+      pitch  = THREE.MathUtils.clamp(pitch - (t.clientY-ly)*SENS_TOUCH, -1.35, 1.35);
+      lx=t.clientX; ly=t.clientY;
+    }},{passive:false});
+  const lend=e=>{ for(const t of e.changedTouches) if(t.identifier===lid) lid=null; };
+  pad.addEventListener('touchend',lend); pad.addEventListener('touchcancel',lend);
+
+  const rb=document.getElementById('btnRun');
+  rb.addEventListener('touchstart',e=>{ e.preventDefault(); running=!running; rb.classList.toggle('on',running); },{passive:false});
+}else{
+  // En PC no hay joystick, ni zona de arrastre, ni botón de correr.
+  ['btnRun','joy','look'].forEach(id=>document.getElementById(id).style.display='none');
+}
+
+/* ============================================================================
+   9 · GRABACIÓN
+   captureStream() captura SOLO el canvas. El joystick y los botones son DOM,
+   viven por encima del canvas y por eso jamás entran en el video.
+============================================================================ */
+let recorder=null, chunks=[], recording=false, recT0=0, lastUrl=null;
+const btnRec=document.getElementById('btnRec'), recTime=document.getElementById('recTime');
+const tapeEl=document.getElementById('tape'), tapeVid=document.getElementById('tapeVid');
+const tapeDl=document.getElementById('tapeDl'), tapeShare=document.getElementById('tapeShare');
+const tapeMeta=document.getElementById('tapeMeta');
+
+function pickMime(){
+  const opts=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+  for(const m of opts) if(window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return '';
+}
+function toggleRec(){ recording ? stopRec() : startRec(); }
+
+function startRec(){
+  if(recording) return;
+  if(!window.MediaRecorder || !renderer.domElement.captureStream){
+    alert('Este navegador no permite grabar el lienzo.'); return;
+  }
+  try{
+    const stream = renderer.domElement.captureStream(30);       // <- SOLO el canvas
+    if(streamDest) streamDest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+    const mime = pickMime();
+    recorder = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:6000000} : undefined);
+    chunks=[];
+    recorder.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop=finishRec;
+    recorder.start(250);
+    recording=true; recT0=performance.now();
+    btnRec.textContent='■ DETENER'; btnRec.classList.add('recording');
+    recTime.classList.add('on');
+  }catch(err){
+    const b=document.getElementById('err'); b.style.display='block';
+    b.textContent+='REC: '+err.message+'\n';
+  }
+}
+function stopRec(){
+  if(!recording || !recorder) return;
+  recording=false;
+  btnRec.textContent='● GRABAR'; btnRec.classList.remove('recording');
+  recTime.classList.remove('on');
+  try{ recorder.stop(); }catch(e){}
+}
+function finishRec(){
+  if(!chunks.length) return;
+  const type=(recorder && recorder.mimeType) || 'video/webm';
+  const blob=new Blob(chunks, {type});
+  if(lastUrl) URL.revokeObjectURL(lastUrl);
+  lastUrl=URL.createObjectURL(blob);
+  const ext = type.indexOf('mp4')>=0 ? 'mp4' : 'webm';
+  const name = `liminal_${Date.now()}.${ext}`;
+  tapeVid.src=lastUrl; tapeDl.href=lastUrl; tapeDl.download=name;
+  tapeMeta.textContent=`${(blob.size/1048576).toFixed(1)} MB · ${ext.toUpperCase()} · sin controles en pantalla`;
+  tapeEl.classList.add('show');
+
+  tapeShare.style.display='none';
+  try{
+    const file=new File([blob], name, {type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      tapeShare.style.display='inline-block';
+      tapeShare.onclick=()=>navigator.share({files:[file], title:'LIMINAL'}).catch(()=>{});
+    }
+  }catch(e){}
+}
+btnRec.addEventListener('click', toggleRec);
+document.getElementById('tapeClose').addEventListener('click',()=>{
+  tapeEl.classList.remove('show'); tapeVid.pause();
+});
+
+/* ============================================================================
+   10 · BUCLE
+============================================================================ */
+const clock=new THREE.Clock();
+let glitch=0, glitchTimer=6+Math.random()*10, flick=0, flickTimer=4+Math.random()*8;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(), 0.05);
+  const t=clock.elapsedTime;
+
+  if(started){
+    movePlayer(dt);
+    tapeSec+=dt;
+
+    // celda actual -> reconstruir mundo y arrastrar suelo/techo
+    const ci=Math.floor(pos.x/S), cj=Math.floor(pos.z/S);
+    if(!lastCell || lastCell[0]!==ci || lastCell[1]!==cj){
+      lastCell=[ci,cj]; rebuildWorld(ci,cj);
+      // A veces la planta cambia detrás de ti. La cinta no lo registra igual.
+      if(Math.random()<0.035){ WORLD_SEED=(WORLD_SEED+9176)|0; rebuildWorld(ci,cj); glitch=1.0; sting(); }
+    }
+    const sx=Math.round(pos.x/S)*S, sz=Math.round(pos.z/S)*S;
+    floor.position.set(sx,0,sz); ceil.position.set(sx,WALL_H,sz);
+    TEX_FLOOR.offset.set(sx/2, -sz/2); TEX_CEIL.offset.set(sx/2, sz/2);
+
+    // ráfagas de fallo
+    glitchTimer-=dt;
+    if(glitchTimer<=0){ glitchTimer=7+Math.random()*16; glitch=Math.max(glitch,0.55+Math.random()*0.45); }
+    // parpadeo de fluorescentes
+    flickTimer-=dt;
+    if(flickTimer<=0){ flickTimer=5+Math.random()*11; flick=0.55; }
+
+    // la figura
+    figTimer-=dt;
+    if(figTimer<=0 && !figure.visible){
+      figTimer=30+Math.random()*45;
+      const a=yaw+(Math.random()-0.5)*0.7, d=17+Math.random()*8;
+      figure.position.set(pos.x - Math.sin(a)*d, 1.1, pos.z - Math.cos(a)*d);
+      if(!blocked(figure.position.x, figure.position.z)){ figure.visible=true; figLife=7; glitch=Math.max(glitch,0.5); }
+    }
+    if(figure.visible){
+      figLife-=dt;
+      figure.lookAt(pos.x, 1.1, pos.z);
+      const dd=Math.hypot(figure.position.x-pos.x, figure.position.z-pos.z);
+      const dot=Math.cos(yaw)*(-(figure.position.z-pos.z)) + Math.sin(yaw)*(-(figure.position.x-pos.x));
+      if(figLife<=0 || dd<8.5 || dot<0){ figure.visible=false; glitch=Math.max(glitch,0.85); sting(); dateGlitch=1.2; }
+    }
+  }
+
+  glitch = Math.max(0, glitch - dt*1.45);
+  flick  = Math.max(0, flick  - dt*2.2);
+  dateGlitch = Math.max(0, dateGlitch - dt);
+
+  // luz: parpadeo sutil + zumbido acompañando
+  const fl = 1 - flick*(0.35 + 0.4*Math.abs(Math.sin(t*47.0)));
+  hemi.intensity = 1.55*fl; amb.intensity = 0.55*fl;
+  matLamp.color.setScalar(fl);
+  if(hum) hum.gain.value = 0.028*(0.5+0.9*fl);
+
+  // cámara: bamboleo de paso + micro-temblor de mano (clave del found footage)
+  const sway = new THREE.Euler(
+    pitch + Math.sin(t*1.7)*0.006 + Math.sin(walkPhase*2)*0.010,
+    yaw   + Math.sin(t*1.1)*0.008 + Math.cos(walkPhase)*0.012,
+    Math.sin(t*0.9)*0.010 + Math.sin(walkPhase)*0.016,
+    'YXZ'
+  );
+  camera.rotation.copy(sway);
+  camera.position.set(pos.x, pos.y+bob, pos.z);
+
+  // ---- cadena de render ----
+  if(!readRT) readRT=rtA;
+  writeRT = (readRT===rtA)?rtB:rtA;
+
+  renderer.setRenderTarget(rtScene);
+  renderer.render(scene, camera);
+
+  osdAcc+=dt; if(osdAcc>0.2){ osdAcc=0; drawOSD(); }
+
+  vhsMat.uniforms.tScene.value = rtScene.texture;
+  vhsMat.uniforms.tPrev.value  = readRT.texture;
+  vhsMat.uniforms.uTime.value  = t;
+  vhsMat.uniforms.uGlitch.value= glitch;
+  quad.material = vhsMat;
+  renderer.setRenderTarget(writeRT);
+  renderer.render(quadScene, quadCam);
+
+  copyMat.uniforms.tCur.value = writeRT.texture;
+  quad.material = copyMat;
+  renderer.setRenderTarget(null);
+  renderer.render(quadScene, quadCam);
+
+  readRT = writeRT;
+
+  if(recording){
+    const s=(performance.now()-recT0)/1000;
+    recTime.textContent=`${p2((s/60)|0)}:${p2((s|0)%60)}`;
+  }
+}
+drawOSD();
+animate();
+</script>
+</body>
+</html>

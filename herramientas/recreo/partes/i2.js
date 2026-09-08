@@ -1,0 +1,1907 @@
+
+/* =========================================================================================
+   EL GUION CORRIENDO, Y EL BUCLE
+   ========================================================================================= */
+/* =========================================================================================
+   LAS RUTAS SE CALCULAN, NO SE ESCRIBEN
+
+   Antes habia dos constantes —RUTA_CAM y RUTA_DENTRO— con las celdas del unico viaje que existia.
+   Con ocho aulas eso serian quince rutas escritas a mano, y una celda mal puesta manda la camara a
+   atravesar una pared en el aula 7 sin que nadie se entere hasta llegar ahi. Asi que el camino de
+   pasillo entre dos puntos sale de un BFS sobre el mapa, que es la misma estructura que ya decide
+   donde va la puerta de cada aula: se declara la geometria y el resto se deduce.
+   ========================================================================================= */
+const ARR_I=1;                   // la celda de pasillo donde arranca todo, pegada a la salida oeste
+/* LA BOCA DEL AULA, QUE YA NO ES UNA PUERTA. Antes habia que buscar la hoja en PUERTAS y despues
+   pedir la celda de pasillo de delante; ahora la boca ES la celda de pasillo, porque el salon abre
+   directo sobre el. Un nombre menos y un paso menos. */
+function frenteDe(n){ return AULA_SITIO[n].boca; }
+
+function rutaCeldas(a, b){
+  const K=(i,j)=>j*GW+i;
+  const paso=(i,j)=> i>=0 && j>=0 && i<GW && j<GH &&
+        (MAPA[j][i]===1 || (i===a[0]&&j===a[1]) || (i===b[0]&&j===b[1]));
+  const de=new Map(); de.set(K(a[0],a[1]), null);
+  const q=[[a[0],a[1]]];
+  let hallado=false;
+  while(q.length){
+    const [i,j]=q.shift();
+    if(i===b[0] && j===b[1]){ hallado=true; break; }
+    for(const [di,dj] of [[0,-1],[0,1],[-1,0],[1,0]]){
+      const x=i+di, y=j+dj;
+      if(!paso(x,y) || de.has(K(x,y))) continue;
+      de.set(K(x,y), [i,j]); q.push([x,y]);
+    }
+  }
+  if(!hallado) return null;
+  const R=[]; let c=[b[0],b[1]];
+  while(c){ R.push(c); c=de.get(K(c[0],c[1])); }
+  return R.reverse();
+}
+/* Y SE SIMPLIFICA A LAS ESQUINAS. Un riel con veinte puntos en linea recta no camina distinto que
+   uno con dos, pero cada punto es una parada de 10 cm donde el resorte del giro vuelve a arrancar:
+   en pantalla eso se ve como una camara que tiembla al avanzar. */
+function esquinas(r){
+  if(!r || r.length<3) return r||[];
+  const R=[r[0]];
+  for(let k=1;k<r.length-1;k++){
+    const a=r[k-1], b=r[k], c=r[k+1];
+    if((a[0]===b[0]) !== (b[0]===c[0])) R.push(b);
+  }
+  R.push(r[r.length-1]);
+  return R;
+}
+/* SI EL PRIMER PUNTO YA LE QUEDA ENCIMA, SE TIRA. El profesor no arranca sobre la ruta: en el
+   tutorial esta 2,73 m delante de la camara y el primer punto de la ruta es la celda de la camara,
+   asi que lo primero que hacia era caminar hacia atras y cruzarse con ella — en la captura del
+   pasillo no habia nadie y el "vení conmigo" lo decia una voz sin cuerpo. Si ya esta dentro de la
+   celda del primer punto, ese punto no tiene nada que decirle. */
+function rutaDesde(pts, x, z){
+  const R=pts.slice();
+  /* SE DESCARTA COMO MAXIMO EL PRIMERO. El `while` descartaba TODOS los puntos que estuvieran a
+     menos de una celda, y en un pasillo con esquina eso se come el punto de la esquina: la ruta
+     [entrada, esquina, destino] queda en [destino] y el profesor camina en DIAGONAL, atravesando la
+     pared — que es exactamente el "se desvia a veces" que reporto el usuario. Nunca fue un problema
+     de rumbo: era una ruta a la que le faltaba la esquina.
+     Y ni el primero se descarta si el segundo no queda MAS ADELANTE: se compara la distancia al
+     punto 1 desde el profesor contra la distancia desde el punto 0, y si desde el profesor no esta
+     mas cerca, el punto 0 todavia tiene algo que decirle. */
+  /* R.length>1 Y NO >2. Con el mapa viejo toda ruta tenia tres puntos o mas y la guarda nunca se
+     notaba; con un pasillo unico y los salones pegados las rutas de pasillo son de DOS puntos, y
+     entonces el descarte no corria nunca — al profesor se le daba como primer punto la celda de la
+     CAMARA, que le queda detras, asi que arrancaba caminando para atras. Medido cuando se encontro:
+     en el saludo pasaba a 3 cm de la camara.
+     HONESTAMENTE: hoy esto ya no cambia ningun numero, y se comprobo volviendolo a >2 — sale igual.
+     La razon es que al profesor SIEMPRE se le agrega el punto de adelanto, asi que su ruta nunca
+     tiene menos de tres puntos. Se queda porque la guarda seguia estando mal escrita y la proxima
+     ruta corta que alguien arme sin adelanto se lleva el defecto puesto. Lo que protege las esquinas
+     no es este numero sino la comparacion de abajo, y esa sigue igual. */
+  if(R.length>1 && Math.hypot(R[0][0]-x, R[0][1]-z) < CEL*0.75){
+    const dProf=Math.hypot(R[1][0]-x, R[1][1]-z);
+    const dCero=Math.hypot(R[1][0]-R[0][0], R[1][1]-R[0][1]);
+    if(dProf<=dCero) R.shift();
+  }
+  return R;
+}
+/* entrar al aula: la boca, la primera fila del aula, el medio, y el sitio de la camara.
+   jPrim es la fila del aula que da al pasillo, que depende de por que lado se entra. */
+function rutaEntrar(n){
+  const S=AULA_SITIO[n];
+  return [S.boca,[S.i,S.jPrim],[S.i,S.jm],[S.i,S.jCam]];
+}
+/* salir del aula: al reves, hasta el pasillo */
+function rutaSalir(n){
+  const S=AULA_SITIO[n];
+  return [[S.i,S.jm],[S.i,S.jPrim],S.boca];
+}
+
+/* SIN PUNTOS REPETIDOS. Una ruta se arma pegando la salida del aula con el camino de pasillo, y la
+   ultima celda de la primera y la primera de la segunda son LA MISMA: la boca. Ese punto duplicado
+   parecia inofensivo y no lo era, por dos motivos.
+     · Para la camara, cada punto es una parada de 10 cm donde el resorte del giro vuelve a arrancar
+       — que es exactamente lo que esquinas() existe para evitar.
+     · Y rompia el adelanto del profesor: la direccion en la que tiene que seguir se calcula restando
+       dos puntos consecutivos, y restar un punto de si mismo da cero. Medido: se quedaba parado en
+       la boca, en el mismo sitio que la camara, a 8 cm de ella durante toda la actividad.
+   Se descartan las repeticiones al armarla, que es donde nacen. */
+function sinRepes(pts){
+  const R=[];
+  for(const p of pts){ const u=R[R.length-1];
+    if(!u || u[0]!==p[0] || u[1]!==p[1]) R.push(p); }
+  return R;
+}
+/* ================= EL PROFESOR CAMINA POR EL COSTADO =================
+   Queda un cruce que NO se arregla con rutas y es pura geometria: dentro del aula el se para 2,35 m
+   MAS LEJOS de la salida que la camara, y en el pasillo tiene que terminar 2,8 m MAS CERCA de donde
+   siguen. O sea que en algun momento tiene que pasar por donde esta el jugador, si o si — y con las
+   dos rutas sobre la misma linea, "pasar por donde esta" es atravesarlo. Medido: 8 cm.
+
+   La solucion no es cambiarle el camino sino CORRERLO de costado, que es lo que hacen dos personas
+   en un pasillo. Cada punto se desplaza 1,15 m perpendicular a la direccion en la que va: el pasillo
+   mide 4,2 m y el aula 12,6 de ancho, asi que sigue caminando bien adentro. La perpendicular sale de
+   la direccion ENTRE el punto anterior y el siguiente y no de un solo segmento, para que en una
+   esquina el desvio gire con el camino en vez de dar un salto. */
+/* 0,85 Y NO 1,15, Y EL NUMERO SALE DEL ENCUADRE. Parado 2,8 m adelante, 1,15 m de costado lo dejan a
+   22,3 grados del centro contra 29,4 de medio campo horizontal: o sea al 76% del borde, cortado por
+   el canto del cuadro en la captura. A 0,85 son 16,9 grados —el 57%— y sigue habiendo 85 cm de aire
+   entre el y la camara, que con un cuerpo de 45 cm de ancho es de sobra. */
+const PROFE_COSTADO=0.85;
+function costado(pts, d){
+  const R=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)];
+    let dx=b[0]-a[0], dz=b[1]-a[1];
+    const L=Math.hypot(dx,dz);
+    if(L<1e-6){ R.push([pts[i][0], pts[i][1]]); continue; }
+    dx/=L; dz/=L;
+    R.push([pts[i][0]+dz*d, pts[i][1]-dx*d]);
+  }
+  return R;
+}
+function cel2(p){ return [XC(p[0]), ZC(p[1])]; }
+let restoRuta=null;          // la segunda mitad del viaje, la que se camina despues de los bichos
+/* 2,8 Y NO 3,2, Y EL NUMERO NO ES DE GUSTO: TIENE QUE SER MENOR QUE EL UMBRAL DE rutaDesde().
+   Al retomar el camino, el primer punto de la ruta nueva es justamente el punto del que ya se corrio
+   estos metros. rutaDesde() lo descarta si le queda a menos de 0,75 celdas —3,15 m—; con 3,2 quedaba
+   fuera por cinco centimetros y el profesor volvia a caminar hacia atras. Con 2,8 lo descarta la
+   misma regla que ya protege las esquinas, y no hace falta una segunda bandera que se acuerde. */
+const PROFE_ADELANTE=2.8;    // cuanto se adelanta a la camara, en metros
+let bichosCerrado=false;     // la tanda de bichos de la escena actual ya se cerro
+let aulaPrev=0;              // de que aula venimos, para saber si hay que salir de ella
+
+/* ---------- LAS ESPERAS VAN EN EL PASO FIJO, NO EN setTimeout ----------
+   Estaban con setTimeout y el propio auto-jugador lo destapo: corre el guion entero de forma
+   sincronica, asi que los setTimeout NUNCA disparan y el juego se quedaba clavado despues del primer
+   libro con `bloqueo` en true para siempre (6.001 vueltas y seguia en la cuenta 1).
+   Pero el defecto no es del test: una pausa de 1,1 s medida con setTimeout es una pausa que depende
+   del reloj de la pestaña y no del reloj del juego, o sea la unica parte del juego que NO respeta el
+   paso fijo. Metida en el paso fijo, dura lo mismo a 30 y a 144 cuadros. */
+const espDespues=[];
+function luegoDe(seg, fn){ espDespues.push({ t:seg, fn }); }
+function esperasTick(dt){
+  for(let k=espDespues.length-1;k>=0;k--){
+    const e=espDespues[k];
+    e.t-=dt;
+    if(e.t<=0){ espDespues.splice(k,1); try{ e.fn(); }catch(err){} }
+  }
+}
+
+function empezar(){
+  terminado=0; libros=0; aciertos=0; cuenta=null; bloqueo=false;
+  aulaN=TOUR[0]; aulaIdx=0; aulaK=0; muertes=0; aulaPrev=0; restoRuta=null; gritoT=0;
+  bichosApagar();
+  CUENTAS=armarCuentas();
+  for(const l of LIBROS){ l.hecho=false; l.g.visible=false; }
+  /* ARRANCA EN LA PUNTA OESTE DEL PASILLO, MIRANDO HACIA DONDE VA A CAMINAR. Es la misma puerta por
+     la que se sale al final: se entra al colegio por ahi y se sale por ahi. Y es un tramo recto —el
+     pasillo unico no tiene esquinas—, que es lo que importa: el saludo no puede pasar en una esquina
+     o el profesor corta camino en diagonal y atraviesa la pared (medido en su momento: 113 pasos
+     dentro de la celda [10,8]). */
+  cam.x=XC(ARR_I); cam.z=ZC(PAS_F[0]); cam.giro=Math.PI/2; cam.pitch=0.02; cam.ojo=OJO;
+  cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro; cam.apitch=cam.pitch; cam.aojo=cam.ojo;
+  /* A DOS METROS SETENTA Y NO A SEIS. El primer plano del juego es el saludando, y a 5,88 m en un
+     pasillo de 3,6 de techo el personaje ocupaba 90 px de los 732 del marco: un muneco al fondo.
+     A 2,73 ocupa el 40% de la altura, que es la distancia a la que alguien te saluda. */
+  PROFE.x=XC(ARR_I)+2.73; PROFE.z=ZC(PAS_F[0]); PROFE.giro=-Math.PI/2;
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
+  PROFE.anim='saludar'; PROFE.animOtro=null; PROFE.mezcla=0; PROFE.at=0;
+  riel=null; profeRiel=null; 
+  escena_i=-1; escenaT=0; esperaT=0; espDespues.length=0;
+  MANO.cand=-1; MANO.votos=0; MANO.dedos=0; padPedido=-1;
+  document.body.classList.remove('clase');
+  pintarLibros(); verPantalla('juego');
+  musicaNivel(0); musicaEmpezar();
+  siguienteEscena();
+}
+function siguienteEscena(){
+  escena_i++; escenaT=0; esperaT=0; padPedido=-1;
+  MANO.cand=-1; MANO.votos=0;
+  const E=GUION[escena_i];
+  if(!E){ ganar(); return; }
+  profeAnim(E.anim);
+  /* EL NUMERO QUE SE DICE ES EL DEL RECORRIDO Y NO EL DEL MAPA. El aula 5 es la octava que se
+     visita, asi que decir "Aula 5" con el cartel de arriba en "AULA 8/8" son dos numeros distintos
+     para la misma cosa. Al jugador no le importa como se llaman las aulas en el plano: le importa
+     cuantas le faltan. */
+  dice(E.txt, {a:(E.aula? TOUR.indexOf(E.aula)+1 : 1), t:TOUR.length});
+  document.body.classList.toggle('esperando', !!E.espera);
+  if(E.espera) pintarAro(0, null, '');
+  if(E.viaje!=null){
+    /* EL VA ADELANTE Y LA CAMARA LO SIGUE. Se lanzan los dos rieles a la vez con el de el mas
+       rapido: asi le saca ventaja, y lo que el jugador ve es una espalda que se aleja y una camara
+       que la persigue — que es como se lee "vení conmigo" sin decirlo. Y su ruta NO empieza en el
+       primer punto de la de la camara: el arranca delante, asi que empezar ahi lo hacia caminar
+       hacia atras y cruzarse con ella. */
+    const n=E.viaje;
+    let ruta;
+    if(E.resto && restoRuta){ ruta=restoRuta; restoRuta=null; }
+    else {
+      /* de donde salimos: si venimos de un aula, primero hay que salir de ella */
+      let pre=[];
+      let desde;
+      if(aulaPrev && aulaPrev!==n){
+        pre=rutaSalir(aulaPrev);
+        desde=AULA_SITIO[aulaPrev].boca;
+      } else {
+        desde=celda(cam.x, cam.z);
+      }
+      const medio=rutaCeldas(desde, frenteDe(n));
+      ruta=sinRepes([...pre, ...esquinas(medio||[frenteDe(n)])]);
+      /* SE CORTA AL MEDIO SI DESPUES VIENEN BICHOS. El tramo mas largo son catorce celdas y los
+         bichos al final de la caminata dejarian veinte segundos seguidos de pasillo antes. Cortado
+         a la mitad, la actividad cae EN el camino, que es lo que se pidio. */
+      if(E.mitad && ruta.length>2){
+        const k=Math.max(1, Math.floor(ruta.length/2));
+        restoRuta=ruta.slice(k);
+        ruta=ruta.slice(0,k+1);
+      }
+    }
+    rielIr(ruta.map(cel2), VEL_CAM, ()=>{});
+    /* =====================================================================================
+       EL PROFESOR CAMINA SU MITAD Y SE QUEDA CON VOS, NO SE VA AL FONDO A ESPERAR
+
+       Antes su ruta era `[...ruta, ...restoRuta]`, o sea el viaje ENTERO de una: se iba al fondo del
+       pasillo mientras el jugador hacia la actividad. Eso tenia dos problemas y el segundo era feo
+       de verdad.
+
+       1. El jugador lo pidio con todas las letras: no tiene que dejarte solo.
+       2. Y ATRAVESABA AL JUGADOR AL VOLVER. Al terminar la actividad arranca la escena 'sigue', que
+          hace `ruta = restoRuta` — y ahi se le volvia a dar ESA ruta a alguien que ya estaba parado
+          en su ultimo punto. rutaDesde() solo descarta el primer punto si le queda encima, asi que
+          el resto de los puntos quedaban TODOS detras de el: caminaba para atras hasta el principio
+          del tramo —cruzandose con la camara— y recien despues volvia a avanzar. Es exactamente lo
+          que se reporto: "se viene devuelta para ti y te atraviesa y despues tarda en volver".
+
+       Ahora camina lo mismo que la camara. Y NO SE PARA EN EL MISMO PUNTO: si su destino fuera el
+       de la camara quedaria adentro del ojo los diez segundos que dura la actividad. Se le agrega un
+       punto PROFE_ADELANTE metros mas alla, en la direccion en la que va a seguir el camino, asi
+       queda unos pasos adelante y de espaldas — que es donde uno espera ver a alguien que te esta
+       llevando a algun lado. */
+    let suya = ruta.map(cel2);
+    /* SE PARA UNOS PASOS MAS ADELANTE QUE LA CAMARA, SIEMPRE. Si su destino fuera el mismo punto que
+       el de ella, la camara le termina adentro — y eso ya pasaba desde antes en cada viaje sin
+       actividad: los dos apuntaban a la boca del aula, el llegaba primero, se paraba ahi, y la
+       camara le entraba en el cuerpo por el segundo y medio que tarda la escena de entrar. Medido
+       con la auditoria nueva: 0,00 m de distancia entre los dos.
+       Adonde se adelanta sale de por donde va a SEGUIR el camino, que no es lo mismo que por donde
+       venia: si despues hay actividad, hacia el resto del pasillo; si no, hacia adentro del aula. */
+    if(suya.length){
+      const u=suya[suya.length-1];
+      /* el primer punto de lo que sigue que NO sea el punto donde para la camara: aunque las rutas
+         ya vienen sin repetidos, el que sigue puede caer encima por redondeo de celda */
+      const cola = (restoRuta && restoRuta.length)? restoRuta : (E.viaje!=null? rutaEntrar(E.viaje) : []);
+      let sig=null;
+      for(const q of cola){ const w=cel2(q);
+        if(Math.hypot(w[0]-u[0], w[1]-u[1])>0.05){ sig=w; break; } }
+      if(sig){
+        const dx=sig[0]-u[0], dz=sig[1]-u[1], d=Math.hypot(dx,dz);
+        suya=[...suya, [u[0]+dx/d*PROFE_ADELANTE, u[1]+dz/d*PROFE_ADELANTE]];
+      }
+    }
+    profeIr(rutaDesde(costado(suya, PROFE_COSTADO), PROFE.x, PROFE.z), VEL_PROFE);
+    aulaPrev=0;
+  }
+  bichosCerrado=false;
+  manoAjustarPedido();
+  /* el tema que toca sale del estado del juego, y se revisa en cada borde de escena: es donde cambia
+     de aula a pasillo y de pasillo a aula */
+  musGAlDia();
+  /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
+     que nadie puede pinzar y una escena que no termina nunca */
+  if(!E.act && bichosVivos>0) bichosApagar();
+  if(!E.act) bichosMira=null;
+  if(E.act){
+    const fin = (restoRuta && restoRuta.length)? cel2(restoRuta[restoRuta.length-1]) : null;
+    bichosMira = fin;
+    const rumbo = fin? Math.atan2(fin[0]-cam.x, fin[1]-cam.z) : cam.giro;
+    actSoltar(E.tipo, E.act, rumbo, E);
+  }
+  if(E.clase!=null){
+    const n=E.clase, S=AULA_SITIO[n];
+    aulaN=n; aulaIdx=TOUR.indexOf(n); aulaK=0; aulaPrev=n;
+    /* CUATRO ESCALONES EN OCHO AULAS: el bajo solo, despues el acorde, despues la melodia y al final
+       el charles. Es el mismo tema todo el juego —cambiarlo por otro cada aula seria empezar de cero
+       ocho veces— pero se va poblando, y eso se siente como que la escuela aprieta. */
+    musicaNivel(Math.floor(aulaIdx/2));
+    musicaAula(aulaIdx);              // progresion, tempo y el giro que marca el cambio de aula
+    cuenta=null; bloqueo=false;              // por si se entro de una prueba con una cuenta abierta
+    LIBROS[0].g.visible=false;
+    document.body.classList.add('clase');
+    /* LA CAMARA SE ACOMODA SI QUEDO LEJOS. En la partida normal llega por los rieles, pero si algo
+       interrumpio el viaje —o si se entra a la escena de clase directamente desde una prueba— la
+       escena tiene que componerse igual: un aula perfectamente armada vista desde otro pasillo no es
+       una escena. */
+    if(Math.hypot(cam.x-S.x, cam.z-S.zCam)>1.2){
+      cam.x=S.x; cam.z=S.zCam; cam.giro=S.giroCam;
+      cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro;
+      riel=null;
+    }
+    /* el se pone DEL OTRO LADO del escritorio, entre la mesa y el pizarron */
+    PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=S.giroProfe;
+    PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
+    profeRiel=null;
+    pintarLibros();
+  } else if(!E.act){
+    document.body.classList.remove('clase');
+  }
+}
+function ponerCuenta(){
+  if(aulaK>=CUENTAS_AULA){ terminarClase(); return; }
+  cuenta=CUENTAS[aulaIdx*CUENTAS_AULA + aulaK];
+  cuentaTxt=cuenta.txt;
+  /* recien aca se sabe si la respuesta pasa de cinco, o sea si hacen falta las dos manos */
+  manoAjustarPedido();
+  const S=AULA_SITIO[aulaN];
+  const l=LIBROS[0];
+  l.g.visible=true;
+  l.cara.material.map=texCuenta(cuenta.txt);
+  l.cara.material.needsUpdate=true;
+  /* EL LIBRO FLOTA A UN COSTADO Y NO DELANTE, porque delante taparia justo al personaje, que es lo
+     que hay que mirar. Y girado media vuelta: la cara con la cuenta esta en el +Z local del libro y
+     la camara mira hacia +Z, asi que sin el giro se ve el lomo azul.
+     LOS NUMEROS SALEN DEL SITIO DEL AULA y no estan escritos: 0,55 al costado y 0,60 delante de el.
+     Escritos —estaban en x=CLASE_X+0,55, z=24,6— servian para un aula y ponian el libro dentro de la
+     pared en las otras siete. Y el 0,55: con la camara a 2,35 m el medio ancho visible donde flota es
+     0,98 m, asi que a 0,95 quedaba mitad afuera y a 0,70 se salia 28 px medidos con caja(). */
+  l.g.position.set(S.x+0.55, 1.45, S.zProfe-0.60);
+  l.g.rotation.y=Math.PI;
+  l.g.scale.setScalar(1.02);
+  son('libro');
+  MANO.cand=-1; MANO.votos=0; padPedido=-1; esperaT=0;
+  document.body.classList.add('esperando');
+  pintarAro(0, null, '');
+  pintarLibros();
+}
+function contestar(n){
+  if(bloqueo || !cuenta) return;
+  bloqueo=true;
+  manoAjustarPedido();          // contestada la cuenta, se deja de pagar por la segunda mano
+  if(n===cuenta.res){
+    aciertos++; libros++; aulaK++;
+    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
+    dice('dBien');
+    pintarLibros();
+    const l=LIBROS[0];
+    luegoDe(0.7, ()=>{ l.g.visible=false; cuenta=null; bloqueo=false;
+                       if(aulaK>=CUENTAS_AULA) terminarClase(); else ponerCuenta(); });
+  } else {
+    /* UNA CUENTA MAL Y TE MATA. No hay segundo intento y no es una decision de dificultad: es la
+       unica forma de que contestar tenga peso. Con reintento libre el jugador tira numeros hasta que
+       uno pegue —diez opciones, tres segundos— y las veinticuatro cuentas dejan de ser cuentas.
+       Lo que si es una decision es DONDE vuelve: al principio de ESTA aula y no al principio de la
+       escuela. Perder veinte minutos por una resta es la forma mas rapida de que alguien cierre el
+       juego, y el susto ya lo dio el grito. */
+    morir();
+  }
+}
+
+/* =========================================================================================
+   EL GRITO: UN MOMENTO, NO UN SONIDO
+   El agarron podria ser una linea —pantalla de muerte y listo— y seria tirar a la basura el unico
+   momento del juego que da miedo. Son 1,55 segundos en los que el se planta a noventa centimetros de
+   la camara, la camara se va sola hacia el, grita, y la pantalla se enciende a tirones.
+   Es lo unico del juego que le saca el control al jugador, y es a proposito.
+   ========================================================================================= */
+const GRITO_DUR=1.55, GRITO_SALTO=0.55;
+let gritoT=0, gritoDe=null;
+function morir(){
+  muertes++;
+  cuenta=null; bloqueo=true;
+  document.body.classList.remove('esperando');
+  LIBROS[0].g.visible=false;
+  riel=null; profeRiel=null;
+  gritoDe=[PROFE.x, PROFE.z];
+  gritoT=GRITO_DUR;
+  /* EL GRITO CORTA, NO SE FUNDE. profeAnim() deja mezcla en 1 —o sea 100% la animacion vieja— y la
+     baja profeTick(); pero durante el grito profeTick NO CORRE, asi que la mezcla se quedaba clavada
+     y en pantalla el pobre gritaba con los brazos colgando en pose de 'quieto'. Y ademas un
+     crossfade de 0,4 s es lo contrario de un susto: un susto es un corte. */
+  profeAnim('grito'); PROFE.mezcla=0; PROFE.animOtro=null; PROFE.at=0;
+  /* EL CARTEL VA AL MEDIO Y NO EN EL GLOBO DE DIALOGO. El globo vive en el tercio de abajo, que es
+     exactamente donde queda el pecho de el cuando se planta a noventa centimetros: tapaba el susto
+     con una caja gris. */
+  decir('');
+  avisar(TX('dGrito'), 1.5, '#f2efe6');
+  son('grito');
+  document.body.classList.add('grito');
+}
+function gritoTick(dt){
+  gritoT-=dt;
+  const f=Math.min(1, (GRITO_DUR-gritoT)/GRITO_SALTO);
+  /* se planta A NOVENTA CENTIMETROS de la camara: mas cerca y la cabeza no entra en el cuadro, mas
+     lejos y no es un screamer, es alguien que se acerco */
+  const dx=Math.sin(cam.giro), dz=Math.cos(cam.giro);
+  const tx=cam.x+dx*0.90, tz=cam.z+dz*0.90;
+  PROFE.x=gritoDe[0]+(tx-gritoDe[0])*f;
+  PROFE.z=gritoDe[1]+(tz-gritoDe[1])*f;
+  profeMirarCam(dt, 12.0);
+  mirarA(PROFE.x, PROFE.z, dt, 9.0);
+  PROFE.at+=dt;
+  if(gritoT<=0){
+    gritoT=0;
+    /* la risa cae DESPUES del grito, ya sobre la pantalla de muerte: el grito es el susto y la risa
+       es la burla, y encimadas se pisan */
+    hablar('risa', 0.95);
+    document.body.classList.remove('grito');
+    document.getElementById('muereT').textContent=TX('muereT');
+    document.getElementById('muereS').textContent=TX('muereS',{a:aulaIdx+1});
+    document.getElementById('bReint').textContent=TX('reint');
+    terminado=2; jugando=false;
+    verPantalla('muere');
+  }
+}
+/* volver a entrar al aula donde te agarro: se rearma la escena de clase, no se reinicia la escuela */
+function reintentar(){
+  terminado=0; bloqueo=false; cuenta=null; esperaT=0;
+  aulaK=0; gritoT=0; espDespues.length=0;
+  bichosApagar();
+  const k=GUION.findIndex(e=>e.clase===aulaN);
+  escena_i=(k>=0? k : 0)-1;
+  const S=AULA_SITIO[aulaN];
+  cam.x=S.x; cam.z=S.zCam; cam.giro=S.giroCam; cam.pitch=0.02; cam.ojo=OJO;
+  PROFE.x=S.x; PROFE.z=S.zProfe; PROFE.giro=S.giroProfe;
+  guardarAnterior();
+  riel=null; profeRiel=null; restoRuta=null; aulaPrev=0;
+  verPantalla('juego');
+  siguienteEscena();
+}
+function terminarClase(){
+  cuenta=null;
+  document.body.classList.remove('esperando');
+  document.body.classList.remove('clase');
+  const ultima=(aulaIdx>=TOUR.length-1);
+  dice(ultima? 'dFin' : 'dSale'); son('listo');
+  luegoDe(ultima? 1.9 : 0.85, ()=>{ if(ultima) ganar(); else siguienteEscena(); });
+}
+/* =========================================================================================
+   EL FINAL: SALIR DEL COLEGIO, EL AUTOBUS, Y SALUDAR A BALDI
+
+   Todo el juego pasa adentro de un edificio sin ventanas. Salir es el unico cambio de lugar que tiene,
+   asi que el final no es una pantalla que dice "ganaste": es la primera vez que se ve el cielo.
+
+   EL DESLUMBRE ES LO QUE HACE QUE SE SIENTA UN AFUERA. Saliendo de un interior a plena luz, el ojo
+   tarda un momento en acomodarse: primero se blanquea todo y despues vuelve. Sin eso, cruzar la puerta
+   es cambiar de decorado; con eso, es SALIR. Va en tres tramos —crece acercandose a la puerta, se
+   satura al cruzarla, y baja despacio— y el que baja dura mas que el que sube, porque asi es el ojo:
+   se ciega rapido y se acomoda lento.
+
+   Y EL SALUDO ES LO UNICO QUE EL JUGADOR TIENE QUE HACER. Lo pidio asi: "en la puerta de salida te
+   esta saludando Baldi y debes saludarlo". Se pide la mano abierta, que es el gesto que el juego ya
+   enseño en el tutorial y el unico que significa "hola" sin explicarlo.
+   ========================================================================================= */
+const FIN={ on:false, fase:0, t:0, brillo:0, saludado:false };
+/* TODO EL PATIO SALE DE LA SALIDA, Y NO DE NUMEROS ESCRITOS A MANO. Estos cinco puntos estaban
+   clavados en metros —[-46,2 · 0], [-48,5 · -0,4], [-52 · -1,6]…— porque la reja media 23x19 y la
+   salida caia en [0,9]. Con el mapa nuevo, de 17x9 y con la salida en [0,4], los cinco quedaban
+   dentro del colegio o a cuarenta metros de donde tenian que estar. Ahora salen de la cara oeste del
+   edificio (XO) y de la fila de la salida, asi que el mapa puede volver a cambiar sin que esto se
+   rompa. Las distancias RELATIVAS son las que se midieron y se quedan: la camara para 3,7 m pasada
+   la fachada y el autobus esta a 17,7, que es lo que da 64,6% del ancho del cuadro. */
+const SAL_O=SALIDAS.find(q=>q.i===0) || SALIDAS[0];
+const XO_FACH=XC(0)-CEL/2;                  // la cara exterior de la pared oeste
+const Z_SAL=ZC(SAL_O.j);
+const FIN_PUERTA=[XC(SAL_O.i), Z_SAL];      // la celda de la salida oeste, en metros
+/* LOS DOS TRAMOS DE AFUERA VAN SIEMPRE HACIA EL MISMO LADO. El primero llegaba a un punto y el
+   segundo VOLVIA hacia atras: como el riel gira la camara hacia donde camina —con un resorte mas
+   fuerte que el de mirarA—, la camara terminaba mirando 39,6 grados fuera del autobus, con medio
+   campo de 29. O sea el autobus literalmente fuera del cuadro. */
+const FIN_AFUERA=[XO_FACH-0.2, Z_SAL-0.4];
+/* MEDIDO PROYECTANDO SU CAJA A PIXELES: a 8,6 m el autobus ocupaba el 101,6% del ancho, o sea
+   cortado por los dos lados. A 12,5 ocupa 64,6% y entra entero. */
+const FIN_BUS=[XO_FACH-3.7, Z_SAL-1.6];
+const FIN_PROFE=[XO_FACH+0.3, Z_SAL+0.9];   // en la vereda, al lado de la puerta
+const FIN_MIRA_BUS=1.4;         // lo que se queda mirando el autobus antes de darse vuelta
+const FIN_ESPERA_CHAU=9.0;      // y si nadie saluda, el autobus se va igual
+function finEmpezar(){
+  FIN.on=true; FIN.fase=0; FIN.t=0; FIN.brillo=0; FIN.saludado=false;
+  terminado=0; jugando=true;
+  bichosApagar();
+  /* la tapa de afuera se saca: hasta ahora estaba puesta justamente para que no se viera el vacio, y
+     recien ahora hay algo que ver */
+  afueraVer(true);
+  dice('dSalir');
+  /* la camara sale del aula hacia la puerta: se usa la misma ruta que usa todo el juego */
+  const desde=celda(cam.x, cam.z);
+  const r=rutaCeldas(desde, [1,9]) || [[1,9]];
+  rielIr(esquinas(r).map(cel2).concat([FIN_PUERTA]), VEL_CAM, ()=>{ FIN.fase=1; FIN.t=0; });
+  /* EL PROFESOR SALE A LA VEREDA, NO SE QUEDA ADENTRO. En la celda [1,9] queda a nueve metros y
+     metido en el pasillo: medido en la captura, un muñeco de veinte pixeles al fondo de un tunel
+     beige, que no se lee a nadie despidiendote. Un metro y medio afuera de la puerta queda a 4,7 m
+     de donde para la camara —el 26% del alto del cuadro— y con el cielo detras. */
+  PROFE.x=FIN_PROFE[0]; PROFE.z=FIN_PROFE[1];
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z;
+  PROFE.giro=Math.atan2(FIN_BUS[0]-PROFE.x, FIN_BUS[1]-PROFE.z);
+  profeIr([], 0);          // ruta vacia = se queda donde esta; con null, profeTick indexa null y tira
+  PROFE.anim='saludar';
+}
+function finTick(dt){
+  FIN.t+=dt;
+  const d=Math.hypot(cam.x-FIN_PUERTA[0], cam.z-FIN_PUERTA[1]);
+  if(FIN.fase===0){
+    /* crece acercandose: a seis metros todavia no deslumbra, pegado a la puerta si */
+    FIN.brillo=Math.max(FIN.brillo, Math.max(0, 1-d/9)*0.85);
+  } else if(FIN.fase===1){
+    /* cruzo la puerta: se satura y arranca la caminata hacia afuera */
+    FIN.brillo=Math.min(1, FIN.brillo+dt*2.6);
+    if(FIN.t>0.55){ FIN.fase=2; FIN.t=0;
+      rielIr([FIN_AFUERA, FIN_BUS], VEL_CAM*0.62, ()=>{ FIN.fase=3; FIN.t=0; }); }
+  } else if(FIN.fase===2){
+    /* el ojo se acomoda: baja MAS LENTO de lo que subio */
+    FIN.brillo=Math.max(0, FIN.brillo-dt*0.42);
+    /* y se mira el autobus mientras se camina hacia el: sin esto la camara conserva el rumbo del
+       pasillo y el autobus queda de costado justo en el cuadro en que se lo nombra */
+    /* y con resorte MAS FUERTE que el del riel (3,0), porque los dos escriben cam.giro en el mismo
+       cuadro y gana el que tira mas: con 1,8 contra 3,0 el rumbo se quedaba a mitad de camino */
+    mirarA(BUS_X, BUS_Z, dt, 6.0);
+    if(FIN.t>1.2 && FIN.t-dt<=1.2) dice('dBus');
+  } else if(FIN.fase===3){
+    FIN.brillo=Math.max(0, FIN.brillo-dt*0.42);
+    /* PRIMERO SE QUEDA MIRANDO EL AUTOBUS. Sin esta espera, el cuadro en que la camara termina de
+       caminar es el mismo en que empieza a darse vuelta: el autobus entra encuadrado y se va por el
+       borde derecho antes de que nadie lo vea. Segundo y pico de nada, y recien despues el giro. */
+    if(FIN.t<FIN_MIRA_BUS){ mirarA(BUS_X, BUS_Z, dt, 3.0); }
+    else {
+      /* girarse a mirar al profesor, que es donde quedo el */
+      mirarA(FIN_PROFE[0], FIN_PROFE[1], dt, 2.4);
+      profeMirarCam(dt, 2.0);
+      if(FIN.t-dt<=FIN_MIRA_BUS) dice('dChau');
+    }
+    /* y el saludo: la mano abierta. Sin camara, el teclado de numeros sirve igual. */
+    /* EL SALUDO NO PUEDE SER OBLIGATORIO, y esto era un final que no terminaba. La fase 3 esperaba
+       cinco dedos para seguir: quien juega sin camara —o quien simplemente no adivina que hay que
+       saludar— se quedaba parado en la vereda mirando el autobus PARA SIEMPRE, con el juego ya
+       ganado y sin forma de llegar al menu. Saludar sigue estando y sigue estando bien; a los nueve
+       segundos el autobus se va igual, que es lo que hace un autobus. */
+    if(!FIN.saludado && FIN.t>FIN_MIRA_BUS && (MANO.dedos>=5 || padPedido>=5)){
+      FIN.saludado=true; padPedido=-1;
+      dice('dChau2'); son('listo');
+      luegoDe(2.0, ()=>{ FIN.fase=4; FIN.t=0; });
+    }
+    if(!FIN.saludado && FIN.t>FIN_ESPERA_CHAU){
+      FIN.saludado=true;
+      luegoDe(1.2, ()=>{ FIN.fase=4; FIN.t=0; });
+    }
+  } else if(FIN.fase===4){
+    /* se desvanece a negro y al menu */
+    FIN.brillo=Math.min(1, FIN.brillo+dt*0.9);
+    if(FIN.t>1.5){ FIN.on=false; afueraVer(false); ganarPantalla(); }
+  }
+  const el=document.getElementById('brillo');
+  if(el){ const v=FIN.brillo.toFixed(3); if(el._o!==v){ el.style.opacity=v; el._o=v; } }
+}
+function ganar(){
+  /* el final ya no es una pantalla: es salir. La pantalla viene despues del autobus. */
+  if(!FIN.on){ finEmpezar(); return; }
+  ganarPantalla();
+}
+function ganarPantalla(){
+  const el=document.getElementById('brillo');
+  if(el){ el.style.opacity=0; el._o='0'; }
+  terminado=1; jugando=false;
+  musicaParar(1.4);
+  document.getElementById('finT').textContent=TX('finT');
+  document.getElementById('finS').textContent=TX('finS',{n:aciertos,t:TOTAL_CUENTAS});
+  verPantalla('fin');
+  /* Y AL MENU SOLO. El pedido es que ganar te lleve al menu despues del autobus; el cartel con el
+     resultado se queda ocho segundos —lo que se tarda en leer "24 de 24"— y despues vuelve. El boton
+     sigue estando para el que no quiera esperar, y si el jugador toca cualquier otra cosa antes, el
+     temporizador se descarta: solo vuelve si al vencer se sigue en la pantalla de final. */
+  if(FIN._alMenu) clearTimeout(FIN._alMenu);
+  FIN._alMenu=setTimeout(()=>{ if(pant==='fin') verPantalla('menu'); }, 8000);
+}
+
+/* ---------- QUE NUMERO ESTA PIDIENDO EL JUGADOR ----------
+   Sale de las manos o del teclado, y el que llega primero gana. No hay modo: si hay camara se
+   cuentan dedos, y si alguien toca un numero tambien vale. Obligar a elegir uno de los dos seria
+   pedirle al jugador que decida algo que al juego no le importa. */
+function numeroPedido(){
+  if(padPedido>0) return { n:padPedido, fuente:'pad', listo:true };
+  if(MANO.on && MANO.hay && MANO.dedos>0) return { n:MANO.dedos, fuente:'mano', listo:false };
+  return null;
+}
+
+/* =========================================================================================
+   LOS BICHOS DEL PASILLO: LA ACTIVIDAD DE EN MEDIO
+
+   La regla es una sola: un bicho se revienta poniendole la PINZA encima. Todo el problema esta en
+   ese "encima", porque la mano vive en la camara web —dos dimensiones, normalizadas, y espejadas— y
+   el bicho vive en el mundo 3D. El puente es proyectar el bicho a la pantalla y comparar ahi mismo,
+   en fracciones del marco: en pixeles habria que rehacer el numero en cada tamano de pantalla.
+
+   EL RADIO DEL BLANCO ES DEL 10,5% DEL ANCHO, y es grande a proposito. Una punta de dedo detectada
+   por MediaPipe tiembla unos puntos por cuadro y el jugador no ve su propia mano sino un aro dibujado
+   con retardo: un blanco chico convierte la actividad en una pelea contra el detector. Lo que tiene
+   que costar es LLEGAR con la mano, no acertar el pixel.
+
+   Y HAY DOS ENTRADAS, la pinza y el toque, por la misma razon que el teclado de numeros existe: un
+   juego que solo se puede jugar con webcam es un juego que la mayoria no puede jugar.
+   ========================================================================================= */
+const BICHOS=[], ESQ=[];
+const BICHO_R=0.105;          // radio del blanco, en fraccion del ancho del marco
+const BICHO_CERCA=0.95;       // a esta distancia te muerde
+const _bm=new THREE.Matrix4(), _bv=new THREE.Vector3(), _bq=new THREE.Quaternion();
+const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1), _bc=new THREE.Color();
+/* LA CAMARA SE SINCRONIZA ANTES DE PROYECTAR. `camara` solo se acomoda al dibujar, asi que dentro
+   del paso fijo tiene la posicion del cuadro anterior — y el auto-jugador, que corre sin dibujar ni
+   un cuadro, la tenia con la posicion del MENU: los bichos se proyectaban a cualquier lado y no se
+   podia acertar ninguno (medido: 56.400 pasos en un pasillo con dos bichos que no morian nunca).
+   Con la camara puesta, apuntar en el paso fijo mide lo mismo que apuntar mirando la pantalla. */
+/* =========================================================================================
+   NI aPantalla NI deSPantalla ALOJAN NADA, Y ESO ES LO QUE SACA LOS TIRONES
+
+   Las dos devolvian un objeto o un arreglo NUEVO en cada llamada, y se llaman muchas veces por cuadro:
+   golpeEnLista las llama una vez por blanco, miraBlanco otra vez por blanco, y la tableta unas ciento
+   veinte veces por cuadro para poner sus discos. Medido con el crecimiento del monton:
+   1.647 bytes por cuadro, o sea unos 99 KB por segundo de basura — y eso no se paga cuando se aloja,
+   se paga TODO JUNTO cuando el recolector entra, que es exactamente lo que se siente como "de la nada
+   se puso lento".
+
+   Van con un anillo de buffers y no con uno solo a proposito: hay sitios que piden dos posiciones y
+   usan la segunda mientras todavia tienen la primera en la mano. Con un solo buffer eso seria un
+   defecto silencioso —la primera cambiaria bajo los pies del que la tiene—; con un anillo de ocho, un
+   cuadro tendria que pedir nueve seguidas antes de pisarse, y ninguno pide mas de tres. */
+const _apA=[]; for(let i=0;i<8;i++) _apA.push({x:0,y:0,delante:false});
+let _apI=0;
+function aPantalla(x,y,z){
+  ponerCamara(1);
+  _bv.set(x,y,z).project(camara);
+  const r=_apA[_apI=(_apI+1)&7];
+  r.x=_bv.x*0.5+0.5; r.y=-_bv.y*0.5+0.5; r.delante=_bv.z<1;
+  return r;
+}
+/* HACIA DONDE MIRA EL JUGADOR CUANDO SUELTAN LOS BICHOS.
+   No es "hacia donde miraba": al salir de un aula el ultimo tramo de la ruta va de la puerta al
+   pasillo, o sea que la camara queda mirando la PARED de enfrente del pasillo. Medido en la celda
+   (4,1): giro -3,14 contra un muro de lockers a dos metros, y los bichos aparecian aplastados contra
+   el. Se apunta al final del tramo que queda por caminar —que es donde el profesor esta esperando— y
+   los bichos salen en ESA direccion, no en la que la camara traia. La camara despues gira sola en
+   medio segundo, que se lee como "escuchaste algo y mirás". */
+let bichosMira=null;
+function bichosSoltar(n, rumbo){
+  BICHOS.length=0; ESQ.length=0;
+  const g = (rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g);                 // hacia donde mira
+  const px=-dz, pz=dx;                                  // el costado
+  for(let k=0;k<n;k++){
+    /* repartidos en abanico y a distintas alturas: si salieran todos del mismo punto se taparian
+       entre ellos y no habria a quien apuntar */
+    const d=2.5+((k*0.7)%2.0)+Math.random()*0.5;
+    const lat=(((k%2)?1:-1)*(0.35+((k*0.31)%0.85)));
+    /* NUNCA POR DEBAJO DE UN METRO: el globo de dialogo ocupa el tercio de abajo del marco, y un
+       bicho a 0,85 m de alto a dos metros y medio se proyecta justo detras de el */
+    BICHOS.push({ x:cam.x+dx*d+px*lat, y:1.05+((k*0.43)%1.10), z:cam.z+dz*d+pz*lat,
+                  fase:k*1.7, vel:0.42+((k*0.17)%0.22), viva:true, giro:k*0.9 });
+  }
+  bichosVivos=n;
+  son('bicho');
+  document.body.classList.add('bichos');
+  pintarLibros();
+}
+function bichosApagar(){
+  BICHOS.length=0; ESQ.length=0; TIZAS.length=0; CASILL.length=0;
+  ROMPE.length=0; GLOBOS.length=0; rompeSel=-1;
+  tabApagar();
+  bichosVivos=0; casillBueno=-1;
+  bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
+  tizaMalla.visible=false; casillMalla.visible=false;
+  rompeMalla.visible=false; huecoMalla.visible=false;
+  globoMalla.visible=false;
+  document.body.classList.remove('bichos');
+  pintarLibros();
+}
+/* UNA SOLA PUERTA PARA LAS TRES. El guion dice el tipo y aca se reparte; asi el resto del codigo
+   —soltar, terminar, apagar, contar— no sabe cuantas actividades hay ni le importa, y agregar una
+   cuarta es una linea en esta tabla y otra en TRAMOS. */
+function actSoltar(tipo, n, rumbo, E){
+  /* SIEMPRE SE APAGA LO ANTERIOR PRIMERO. En la partida normal la tanda anterior ya se apago al
+     terminar, pero apoyarse en eso deja un blanco vivo de la actividad anterior en cuanto algo
+     entra a una escena de actividad por otro camino —una prueba, un reintento—: se vieron dos
+     bichos y tres tizas contando para el mismo contador, o sea una escena que pedia cinco. */
+  bichosApagar();
+  if(tipo==='tizas') tizasSoltar(n, rumbo);
+  else if(tipo==='casilleros') casillSoltar(n, rumbo);
+  else if(tipo==='rompe') rompeSoltar(n);
+  else if(tipo==='globos') globosSoltar(n, rumbo);
+  else if(tipo==='tableta') tabSoltar(n, E&&E.formas);
+  else bichosSoltar(n, rumbo);
+}
+function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); rompeTick(dt);
+                      globosTick(dt); tabTick(dt); }
+function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); rompeDibujar();
+                       globosDibujar(); tabDibujar(); }
+/* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
+   Con las esquirlas solas se ve un bicho que sigue ahi con basura alrededor. */
+/* las esquirlas las usan las tres actividades: un bicho que revienta, una tiza que se agarra y un
+   casillero que se abre tiran lo mismo */
+function esquirlasSoltar(x,y,z,n){
+  for(let k=0;k<(n||9) && ESQ.length<ESQ_MAX;k++){
+    const a=Math.random()*6.283, e=Math.random()*1.4-0.5;
+    const v=1.6+Math.random()*1.5;
+    ESQ.push({ x, y, z, t:0.55,
+               vx:Math.cos(a)*Math.cos(e)*v, vy:Math.sin(e)*v+1.4, vz:Math.sin(a)*Math.cos(e)*v,
+               gx:Math.random()*6.28, gy:Math.random()*6.28 });
+  }
+}
+function bichoReventar(b){
+  b.viva=false;
+  bichosVivos=Math.max(0, bichosVivos-1);
+  esquirlasSoltar(b.x, b.y, b.z);
+  son('revienta');
+  pintarLibros();
+}
+function bichosTick(dt){
+  /* las esquirlas: balistica y nada mas. Son medio segundo de vida, no hace falta que reboten. */
+  for(let k=ESQ.length-1;k>=0;k--){
+    const e=ESQ[k]; e.t-=dt;
+    if(e.t<=0){ ESQ.splice(k,1); continue; }
+    e.vy-=9.8*dt;
+    e.x+=e.vx*dt; e.y+=e.vy*dt; e.z+=e.vz*dt;
+    e.gx+=dt*9; e.gy+=dt*7;
+  }
+  if(!BICHOS.length) return;
+  /* ---- se acercan, y por eso hay apuro ---- */
+  for(const b of BICHOS){
+    if(!b.viva) continue;
+    b.fase+=dt*3.4; b.giro+=dt*1.2;
+    const dx=cam.x-b.x, dz=cam.z-b.z;
+    const d=Math.max(0.001, Math.hypot(dx,dz));
+    /* SE ACERCAN EN ZIGZAG Y NO EN LINEA RECTA. Apuntando exacto a la camara, todos convergen a la
+       MISMA linea y terminan uno detras del otro: medido despues de un rato largo, cinco bichos en
+       x=-29,40 los cinco, o sea un solo blanco apilado. El termino perpendicular los mantiene
+       separados y ademas hace que haya que seguirlos con la mano, que es de lo que se trata. */
+    const lx=-dz/d, lz=dx/d, zig=Math.sin(b.fase*0.7)*0.75;
+    b.x+=(dx/d*b.vel + lx*zig)*dt; b.z+=(dz/d*b.vel + lz*zig)*dt;
+    b.y+=Math.sin(b.fase)*0.35*dt;
+    b.y=Math.min(2.40, Math.max(0.95, b.y));
+    /* TE MUERDE Y NO TE MATA. Matar aca seria una segunda causa de muerte, y la muerte de este juego
+       es una sola cosa: una cuenta mal. Un bicho que llega te empuja, suena y vuelve al fondo del
+       pasillo, o sea que cuesta tiempo — que es justo lo que hay. */
+    if(d<BICHO_CERCA){
+      son('muerde'); avisar(TX('mal'), 0.5, '#c0392b');
+      /* vuelve al fondo del pasillo Y A UN COSTADO: puesto exactamente adelante, el que vuelve
+         aparece siempre en el mismo pixel del medio */
+      const ax=Math.sin(cam.giro), az=Math.cos(cam.giro);
+      const lat=(Math.random()*2-1)*1.10;
+      b.x=cam.x+ax*4.3-az*lat; b.z=cam.z+az*4.3+ax*lat; b.y=1.05+Math.random()*1.10;
+    }
+  }
+  /* ---- lo que mata a un bicho: una pinza nueva, o un toque ---- */
+  const golpes=golpesJuntar();
+  if(!golpes.length) return;
+  for(const g of golpes){
+    /* UNA PINZA MATA UN BICHO Y NO TODOS LOS QUE TOQUE: se elige el mas cercano al dedo. Con "todos
+       los que esten dentro del radio" una pinza en el medio de un grupo limpiaba tres de una. */
+    const k=golpeEnLista(g, BICHOS, b=>b.viva, b=>[b.x, b.y, b.z]);
+    if(k>=0) bichoReventar(BICHOS[k]);
+  }
+}
+function bichosDibujar(){
+  const hay=BICHOS.some(b=>b.viva);
+  bichoMalla.visible=hay; bichoOjos.visible=hay;
+  if(hay){
+    let k=0;
+    for(const b of BICHOS){
+      if(!b.viva || k>=BICHOS_MAX) continue;
+      /* MIRA A LA CAMARA. Un bicho de perfil no muestra los ojos, y los ojos son lo unico que dice
+         que eso esta vivo y que viene hacia vos. */
+      const g=Math.atan2(cam.x-b.x, cam.z-b.z);
+      _be.set(Math.sin(b.fase)*0.22, g, Math.sin(b.fase*1.7)*0.18);
+      _bq.setFromEuler(_be);
+      const e=1+Math.sin(b.fase*2.1)*0.06;
+      _bs.set(e, 2-e, e);
+      _bm.compose(_bv.set(b.x,b.y,b.z), _bq, _bs);
+      bichoMalla.setMatrixAt(k, _bm); bichoOjos.setMatrixAt(k, _bm);
+      k++;
+    }
+    for(let q=k;q<BICHOS_MAX;q++){
+      _bm.compose(_bv.set(0,-90,0), _bq.identity(), _bs.set(0.0001,0.0001,0.0001));
+      bichoMalla.setMatrixAt(q, _bm); bichoOjos.setMatrixAt(q, _bm);
+    }
+    bichoMalla.instanceMatrix.needsUpdate=true;
+    bichoOjos.instanceMatrix.needsUpdate=true;
+  }
+  esqMalla.visible=ESQ.length>0;
+  if(ESQ.length){
+    let k=0;
+    for(const e of ESQ){
+      if(k>=ESQ_MAX) break;
+      _be.set(e.gx, e.gy, 0); _bq.setFromEuler(_be);
+      const v=Math.max(0.06, e.t/0.55);
+      _bm.compose(_bv.set(e.x,e.y,e.z), _bq, _bs.set(v,v,v));
+      esqMalla.setMatrixAt(k++, _bm);
+    }
+    for(let q=k;q<ESQ_MAX;q++){
+      _bm.compose(_bv.set(0,-90,0), _bq.identity(), _bs.set(0.0001,0.0001,0.0001));
+      esqMalla.setMatrixAt(q, _bm);
+    }
+    esqMalla.instanceMatrix.needsUpdate=true;
+  }
+}
+
+/* =========================================================================================
+   TIZAS Y CASILLEROS
+   Las dos comparten con los bichos el mismo golpe —una pinza nueva o un toque, convertidos a
+   fraccion del marco— asi que lo unico propio de cada una es como se mueve el blanco y como se
+   pierde. Reusar `golpesJuntar()` no es ahorro de lineas: es lo que garantiza que apuntar se sienta
+   igual en las tres, que es lo que el jugador aprendio en la primera.
+   ========================================================================================= */
+const TIZAS=[], CASILL=[];
+let casillBueno=-1, casillT=0;
+/* los golpes de este cuadro, en fraccion del marco: pinzas nuevas de cualquier mano, y toques */
+/* el mismo arreglo siempre: se vacia y se vuelve a llenar. Devolver uno nuevo por cuadro es un
+   arreglo por cuadro tirado a la basura para, casi siempre, no contener nada. */
+const _golpes=[];
+function golpesJuntar(){
+  _golpes.length=0;
+  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) _golpes.push(p); }
+  while(TOQUES.length) _golpes.push(TOQUES.shift());
+  return _golpes;
+}
+/* el blanco mas cercano al dedo, dentro del radio. Devuelve el indice o -1. */
+function golpeEnLista(g, lista, vivo, pos){
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  let mejor=-1, mejorD=BICHO_R*W;
+  for(let k=0;k<lista.length;k++){
+    if(!vivo(lista[k])) continue;
+    const p=pos(lista[k]);
+    const s=aPantalla(p[0], p[1], p[2]);
+    if(!s.delante) continue;
+    const d=Math.hypot((s.x-g.x)*W, (s.y-g.y)*H);
+    if(d<mejorD){ mejorD=d; mejor=k; }
+  }
+  return mejor;
+}
+
+/* ---------- TIZAS: caen y hay que agarrarlas antes de que toquen el piso ---------- */
+function tizasSoltar(n, rumbo){
+  TIZAS.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  for(let k=0;k<n && k<TIZAS_MAX;k++){
+    const d=2.1+((k*0.53)%1.5);
+    const lat=(((k%2)?1:-1)*(0.28+((k*0.37)%0.95)));
+    TIZAS.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat,
+                 /* SALEN ESCALONADAS EN EL TIEMPO Y NO TODAS JUNTAS: siete tizas cayendo a la vez
+                    son una pared de tizas, y no hay dos manos que alcancen. El retardo las convierte
+                    en una fila, que es lo que se puede atender. */
+                 espera:k*0.55, y:2.9, vy:0, viva:true, giro:k*1.3 });
+  }
+  bichosVivos=n; document.body.classList.add('bichos'); son('bicho'); pintarLibros();
+}
+function tizasTick(dt){
+  if(!TIZAS.length) return;
+  for(const z of TIZAS){
+    if(!z.viva) continue;
+    if(z.espera>0){ z.espera-=dt; continue; }
+    /* 3,4 Y NO 9,8 NI 6,2. Con 6,2 la tiza tarda 0,96 s en caer los 2,84 m, y ese es TODO el tiempo
+       que hay para llevar la mano y cerrar la pinza — con el retardo de la deteccion no alcanza. Con
+       3,4 son 1,29 s. No es gravedad de verdad y no importa: importa que se pueda agarrar. */
+    z.vy-=3.4*dt; z.y+=z.vy*dt; z.giro+=dt*3.1;
+    if(z.y<=0.06){
+      /* SE ROMPE Y VUELVE A SALIR, no te mata. La muerte de este juego es una cuenta mal. */
+      z.y=0.06; son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      z.y=2.9; z.vy=0; z.espera=0.5+Math.random()*0.6;
+    }
+  }
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, TIZAS, z=>z.viva && z.espera<=0, z=>[z.x, z.y, z.z]);
+    if(k>=0){ TIZAS[k].viva=false; bichosVivos=Math.max(0,bichosVivos-1);
+              esquirlasSoltar(TIZAS[k].x, TIZAS[k].y, TIZAS[k].z); son('revienta'); pintarLibros(); }
+  }
+}
+function tizasDibujar(){
+  const hay=TIZAS.some(z=>z.viva);
+  tizaMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const z of TIZAS){
+    if(!z.viva || k>=TIZAS_MAX) continue;
+    if(z.espera>0){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                    tizaMalla.setMatrixAt(k++, _bm); continue; }
+    _be.set(z.giro*0.7, z.giro, z.giro*0.4); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(z.x, z.y, z.z), _bq, _bs.set(1,1,1));
+    tizaMalla.setMatrixAt(k++, _bm);
+  }
+  for(let q=k;q<TIZAS_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    tizaMalla.setMatrixAt(q, _bm);
+  }
+  tizaMalla.instanceMatrix.needsUpdate=true;
+}
+
+/* ---------- CASILLEROS: tiembla uno y hay que abrir ESE ---------- */
+function casillSoltar(n, rumbo){
+  CASILL.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  /* en abanico y todos a la misma distancia: la gracia es ELEGIR, no alcanzar */
+  for(let k=0;k<CASILL_N;k++){
+    const lat=(k-(CASILL_N-1)/2)*0.76;
+    const d=4.4+Math.abs(lat)*0.22;
+    CASILL.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat, y:0.80, abierto:false, sac:0 });
+  }
+  bichosVivos=n; casillT=0; casillBueno=-1;
+  document.body.classList.add('bichos'); pintarLibros();
+}
+function casillElegir(){
+  const libres=[];
+  for(let k=0;k<CASILL.length;k++) if(!CASILL[k].abierto) libres.push(k);
+  casillBueno = libres.length? libres[Math.floor(Math.random()*libres.length)] : -1;
+  casillT=0;
+  if(casillBueno>=0) son('bicho');
+}
+function casillTick(dt){
+  if(!CASILL.length) return;
+  if(casillBueno<0) casillElegir();
+  casillT+=dt;
+  for(const c of CASILL) c.sac=Math.max(0, c.sac-dt*4);
+  if(casillBueno>=0) CASILL[casillBueno].sac=1;
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, CASILL, c=>!c.abierto, c=>[c.x, c.y+0.35, c.z]);
+    if(k<0) continue;
+    if(k===casillBueno){
+      CASILL[k].abierto=true;
+      bichosVivos=Math.max(0, bichosVivos-1);
+      esquirlasSoltar(CASILL[k].x, CASILL[k].y+0.5, CASILL[k].z);
+      son('revienta'); pintarLibros();
+      casillElegir();
+    } else {
+      /* EL CASILLERO EQUIVOCADO CUESTA TIEMPO, no una vida: se cambia el que tiembla, asi que hay
+         que volver a mirar. Castigar con la muerte una eleccion de ocho seria injusto. */
+      son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      casillElegir();
+    }
+  }
+}
+function casillDibujar(){
+  const hay=CASILL.length>0 && CASILL.some(c=>!c.abierto);
+  casillMalla.visible=hay;
+  if(!hay) return;
+  for(let k=0;k<CASILL_N;k++){
+    const c=CASILL[k];
+    if(!c || c.abierto){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                         casillMalla.setMatrixAt(k, _bm); continue; }
+    /* EL QUE TIEMBLA SE VE PORQUE TIEMBLA, no porque este pintado de otro color: un casillero
+       marcado con color se elige sin mirar la escena, y lo que hay que entrenar es mirar. */
+    /* el que tiembla se INCLINA y SALTA un poco: solo inclinado, a cuatro metros y con el filtro de
+       baja calidad puesto, 0,045 rad son tres pixeles y no se ve cual es */
+    const s=c.sac>0? Math.sin(casillT*34)*0.055*c.sac : 0;
+    const salto=c.sac>0? Math.abs(Math.sin(casillT*17))*0.045*c.sac : 0;
+    _be.set(0, Math.atan2(cam.x-c.x, cam.z-c.z), s); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(c.x+s*0.5, c.y+salto, c.z), _bq, _bs.set(1,1,1));
+    casillMalla.setMatrixAt(k, _bm);
+    _bc.setRGB(0.70+ (c.sac>0? 0.22*c.sac : 0), 0.22, 0.17);
+    casillMalla.setColorAt(k, _bc);
+  }
+  casillMalla.instanceMatrix.needsUpdate=true;
+  if(casillMalla.instanceColor) casillMalla.instanceColor.needsUpdate=true;
+}
+
+
+/* =========================================================================================
+   LAS CUATRO ACTIVIDADES NUEVAS, Y LA REGLA QUE COMPARTEN
+
+   El jugador la puso en una linea: "la mano no puede ir mas lejos ... hay que hacer pinch con dos
+   dedos por encima de ellos EN PANTALLA, NO EN PROFUNDIDAD". O sea que la profundidad no decide nada
+   en ninguna de las cuatro. Todo blanco se proyecta a la pantalla con aPantalla() y se compara ahi,
+   en fracciones del marco, con el mismo radio de siempre. Que las cosas sean objetos 3D es para que
+   tengan perspectiva; el juicio de "le diste" es de dos dimensiones, siempre.
+
+   Y ESTA ES LA PUERTA DE IDA: de pantalla al mundo. Hace falta porque estas actividades se disponen
+   AL REVES que los bichos —primero se decide donde van EN LA PANTALLA (una pieza en cada esquina,
+   una fila de bloques) y despues donde queda eso en el mundo—. Sin esto habria que elegir posiciones
+   3D a ojo y despues rezar para que caigan dentro del marco en un telefono 9:16, que es exactamente
+   como los casilleros terminaron siendo una pared roja de lado a lado.
+   ========================================================================================= */
+const _ev=new THREE.Vector3(), _ef=new THREE.Vector3();
+const _dsA=[]; for(let i=0;i<8;i++) _dsA.push([0,0,0]);
+let _dsI=0;
+function deSPantalla(sx, sy, dist){
+  ponerCamara(1);
+  _ev.set(sx*2-1, 1-sy*2, 0.5).unproject(camara).sub(camara.position).normalize();
+  _ef.set(0,0,-1).applyQuaternion(camara.quaternion);
+  const t=dist/Math.max(0.05, _ev.dot(_ef));
+  const r=_dsA[_dsI=(_dsI+1)&7];
+  r[0]=camara.position.x+_ev.x*t; r[1]=camara.position.y+_ev.y*t; r[2]=camara.position.z+_ev.z*t;
+  return r;
+}
+/* la distancia de un punto a un SEGMENTO, en pixeles. Es lo que hace que cortar sea cortar: con la
+   mano a 21 ms de retardo y a 60 cuadros, una mano rapida se mueve 30 o 40 pixeles ENTRE UN CUADRO Y
+   EL SIGUIENTE. Comparando solo la posicion de este cuadro, el bloque queda entre dos posiciones y el
+   corte no existe — se barre la mano por encima y no pasa nada. Se compara contra el segmento que
+   unio las dos, o sea contra el camino que hizo la mano. */
+function distSeg(px,py, ax,ay, bx,by){
+  const dx=bx-ax, dy=by-ay, L=dx*dx+dy*dy;
+  if(L<1e-9) return Math.hypot(px-ax, py-ay);
+  let t=((px-ax)*dx+(py-ay)*dy)/L;
+  t=Math.max(0, Math.min(1, t));
+  return Math.hypot(px-(ax+dx*t), py-(ay+dy*t));
+}
+
+/* =========================================================================================
+   PASILLO 2 — EL ROMPECABEZAS: lo que se entrena es ARRASTRAR
+
+   Todas las demas actividades se juegan con el FLANCO de la pinza: el cuadro en el que la pinza
+   aparece. Esta es la unica que se juega con la pinza SOSTENIDA, y por eso agrega algo: hasta ahora
+   la mano solo sabia decir "aca", y aca tiene que decir "esto, y llevalo alla".
+
+   DOS FORMAS DE JUGARLO Y NO UNA, por la misma razon por la que existe el teclado de numeros: con la
+   mano es agarrar y arrastrar; con el dedo —o sin camara— es tocar la pieza y despues tocar el hueco.
+   Las dos terminan en el mismo sitio, asi que el que no tiene camara juega el mismo juego.
+   ========================================================================================= */
+const ROMPE=[];
+const ROMPE_D=2.6;            // a que distancia flota el tablero
+const ROMPE_ESC=0.62;         // lado de una pieza, en metros a esa distancia
+const ROMPE_PEGA=0.085;       // que tan cerca del hueco hay que soltarla, en fraccion del ancho
+let rompeSel=-1;              // la pieza elegida a dedo (el camino sin camara)
+/* cuatro cuartos de una hoja arrancada: el mismo beige de papel, cada uno con su mancha */
+const ROMPE_COL=[[0.92,0.88,0.78],[0.86,0.82,0.70],[0.90,0.85,0.74],[0.83,0.79,0.68]];
+function rompeSoltar(n){
+  ROMPE.length=0; rompeSel=-1;
+  const N=Math.max(1, Math.min(4, n||4));
+  /* los huecos: un cuadrado de 2x2 arriba del centro. Arriba y no en el centro porque el globo de
+     dialogo vive en el tercio de abajo y una pieza puesta ahi queda debajo del cartel. */
+  for(let k=0;k<N;k++){
+    /* LOS HUECOS VAN SEPARADOS Y NO PEGADOS. Con los centros a 0,23 del ancho y la pieza midiendo
+       0,21, los cuatro se tocaban: en pantalla no eran cuatro huecos, era UN rectangulo gris — el
+       mismo defecto que ya habia convertido cinco casilleros en una pared roja. Con los centros a
+       0,34 queda aire entre los cuatro y se leen de a uno, que es lo unico que permite apuntarles. */
+    const cx=(k%2)? 0.67 : 0.33, cy=(k<2)? 0.30 : 0.47;
+    /* y las piezas arrancan repartidas por los costados, lejos de su hueco: si arrancaran cerca,
+       soltar en cualquier lado ya acertaria.
+       NINGUNA POR DEBAJO DE 0,71: el globo de dialogo arranca en el 0,78 del alto, y las dos piezas
+       de abajo estaban en 0,78 — o sea tapadas por el cartel justo mientras el cartel explica que
+       hay que agarrarlas. */
+    const ax=(k%2)? 0.87 : 0.13, ay=(k<2)? 0.58 : 0.71;
+    ROMPE.push({ sx:cx, sy:cy, cx:ax, cy:ay, col:ROMPE_COL[k], puesta:false, tomada:-1 });
+  }
+  bichosVivos=N;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+}
+function rompeTick(dt){
+  if(!ROMPE.length) return;
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  const R=BICHO_R;
+  /* ---- el camino con la mano: pinza SOSTENIDA ---- */
+  if(MANO.on && MANO.pinzas){
+    /* primero se sueltan las que dejaron de estar pinzadas */
+    for(const p of ROMPE){
+      if(p.tomada<0 || p.puesta) continue;
+      const m=MANO.pinzas.find(q=>q.k===p.tomada);
+      if(!m || !m.pinza){ p.tomada=-1; rompeProbar(p); }
+    }
+    for(const m of MANO.pinzas){
+      if(!m.pinza) continue;
+      const yaTiene=ROMPE.some(p=>p.tomada===m.k);
+      if(!yaTiene){
+        /* agarra la pieza mas cercana dentro del radio, y UNA sola: con "todas las que esten dentro"
+           una pinza en el medio del tablero se llevaria dos piezas pegadas */
+        let mejor=-1, mejorD=R;
+        for(let k=0;k<ROMPE.length;k++){
+          const p=ROMPE[k];
+          if(p.puesta || p.tomada>=0) continue;
+          const d=Math.hypot(p.cx-m.x, p.cy-m.y);
+          if(d<mejorD){ mejorD=d; mejor=k; }
+        }
+        if(mejor>=0){ ROMPE[mejor].tomada=m.k; son('libro'); }
+      }
+      const p=ROMPE.find(q=>q.tomada===m.k);
+      if(p){ p.cx=m.x; p.cy=m.y; }
+    }
+  } else {
+    for(const p of ROMPE) if(p.tomada>=0){ p.tomada=-1; rompeProbar(p); }
+  }
+  /* ---- el camino a dedo: tocar la pieza, tocar el hueco ---- */
+  while(TOQUES.length){
+    const g=TOQUES.shift();
+    if(rompeSel>=0 && ROMPE[rompeSel] && !ROMPE[rompeSel].puesta){
+      const p=ROMPE[rompeSel];
+      p.cx=g.x; p.cy=g.y; rompeSel=-1; rompeProbar(p);
+    } else {
+      let mejor=-1, mejorD=R;
+      for(let k=0;k<ROMPE.length;k++){
+        const p=ROMPE[k];
+        if(p.puesta) continue;
+        const d=Math.hypot(p.cx-g.x, p.cy-g.y);
+        if(d<mejorD){ mejorD=d; mejor=k; }
+      }
+      if(mejor>=0){ rompeSel=mejor; son('libro'); }
+    }
+  }
+}
+function rompeProbar(p){
+  if(p.puesta) return;
+  if(Math.hypot(p.cx-p.sx, p.cy-p.sy) <= ROMPE_PEGA){
+    p.puesta=true; p.cx=p.sx; p.cy=p.sy;
+    bichosVivos=Math.max(0, bichosVivos-1);
+    const w=deSPantalla(p.sx, p.sy, ROMPE_D);
+    esquirlasSoltar(w[0], w[1], w[2], 6);
+    son('revienta'); pintarLibros();
+  }
+}
+function rompeDibujar(){
+  const hay=ROMPE.length>0;
+  rompeMalla.visible=hay; huecoMalla.visible=hay;
+  if(!hay) return;
+  for(let k=0;k<ROMPE_MAX;k++){
+    const p=ROMPE[k];
+    if(!p){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+            rompeMalla.setMatrixAt(k,_bm); huecoMalla.setMatrixAt(k,_bm); continue; }
+    /* las piezas y los huecos MIRAN A LA CAMARA. Son objetos planos puestos en un pasillo: sin
+       encararlos, en cuanto la camara gira un poco se ven de canto, o sea que desaparecen. */
+    _bq.copy(camara.quaternion);
+    /* EL HUECO ES MAS GRANDE QUE LA PIEZA, y ese sobrante es todo el dibujo: deja un marco oscuro
+       alrededor del sitio vacio —que es lo que hace que se lea como un HUECO y no como una mancha— y
+       cuando la pieza cae adentro, ese mismo marco queda enmarcandola. */
+    const wh=deSPantalla(p.sx, p.sy, ROMPE_D+0.05);
+    const eh=ROMPE_ESC*1.18;
+    _bm.compose(_bv.set(wh[0],wh[1],wh[2]), _bq, _bs.set(eh,eh,1));
+    huecoMalla.setMatrixAt(k, _bm);
+    const w=deSPantalla(p.cx, p.cy, ROMPE_D);
+    /* la que esta agarrada va un poco mas grande: es la unica forma de ver CUAL agarraste sin
+       pintarla de otro color, que arruinaria el dibujo que se esta armando */
+    const e=ROMPE_ESC*(p.tomada>=0? 1.14 : 1);
+    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(e,e,1));
+    rompeMalla.setMatrixAt(k, _bm);
+    const c=p.col, f=p.puesta? 1 : (p.tomada>=0? 1.12 : 0.86);
+    _bc.setRGB(Math.min(1,c[0]*f), Math.min(1,c[1]*f), Math.min(1,c[2]*f));
+    rompeMalla.setColorAt(k, _bc);
+  }
+  rompeMalla.instanceMatrix.needsUpdate=true;
+  huecoMalla.instanceMatrix.needsUpdate=true;
+  if(rompeMalla.instanceColor) rompeMalla.instanceColor.needsUpdate=true;
+}
+
+/* EL DEDO QUE ARRASTRA, PARA QUIEN NO TIENE CAMARA. `TOQUES` guarda toques sueltos y con eso alcanza
+   para pinzar un bicho, pero no para dibujar: un dibujo es un camino, no un punto. Se sigue el puntero
+   mientras esta apoyado. Va aca y no en g2.js porque solo la tableta lo usa. */
+const DEDO={ activo:false, x:0, y:0 };
+(function(){
+  const m=document.getElementById('marco'); if(!m) return;
+  const pos=(e)=>{ const r=m.getBoundingClientRect();
+    if(!r.width||!r.height) return null;
+    return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height }; };
+  m.addEventListener('pointerdown', e=>{ const q=pos(e); if(!q) return;
+    DEDO.activo=true; DEDO.x=q.x; DEDO.y=q.y; }, {passive:true});
+  m.addEventListener('pointermove', e=>{ if(!DEDO.activo) return; const q=pos(e); if(!q) return;
+    DEDO.x=q.x; DEDO.y=q.y; }, {passive:true});
+  for(const ev of ['pointerup','pointercancel','pointerleave'])
+    m.addEventListener(ev, ()=>{ DEDO.activo=false; }, {passive:true});
+})();
+
+/* =========================================================================================
+   PASILLOS 3 Y 7 — LA TABLETA CON OJOS: lo que se entrena es DIBUJAR
+
+   Reemplaza a la espada y a los bloques del mundo neon, que el jugador saco de una: "el de los
+   laseres con la espada saca nomas, no me gusta; agrega otros mas simple, como una tableta con ojos
+   donde debes escribir o dibujar algo que te pida, como un circulo, y eso con el pinch".
+
+   ES LA SEGUNDA ACTIVIDAD QUE USA LA PINZA SOSTENIDA, y la unica que mira el CAMINO que hizo la mano
+   en vez de donde termino. El rompecabezas usa el arrastre para llevar algo de un lado a otro y solo
+   le importan el punto donde agarraste y el punto donde soltaste; aca lo unico que importa es el
+   dibujo que quedo en el medio. Bajar la pinza es apoyar el lapiz, subirla es levantarlo.
+
+   Y SE CORRIGE SOLA, SIN JURADO. Las tres formas se puntuan con geometria de tres lineas y no con
+   nada que haya que entrenar:
+     circulo → los puntos tienen que estar a una distancia PAREJA de su propio centro, y hay que dar
+               casi la vuelta entera. Las dos cosas juntas: parejo sin dar la vuelta es un arco, y dar
+               la vuelta sin ser parejo es un garabato.
+     raya    → ningun punto se aleja mucho de la recta que une la punta con la punta.
+     zigzag  → la mano tiene que cambiar de sentido vertical al menos dos veces mientras avanza.
+   ========================================================================================= */
+const TABLETA={ on:false, formas:[], k:0, trazo:[], dibujando:false, sacud:0, ok:0, t:0 };
+/* 1,7 M Y NO 2,7, y el motivo se vio en una captura: a 2,7 EL PROFESOR QUEDABA DELANTE DE LA HOJA.
+   El camina la ruta entera y espera al final del pasillo, o sea que durante la actividad esta parado
+   en algun lado del tramo — y a dos metros y medio su cuerpo tapa justo el centro del area de dibujo.
+   A 1,7 la tableta esta mas cerca que cualquier cosa del pasillo salvo tus propias manos, que se
+   dibujan a 40 cm y por eso siguen viendose por delante como corresponde.
+   Los tamaños no hay que recalcularlos: estan en fracciones del marco y tamPant() los pasa a metros a
+   la distancia que sea, asi que la tableta ocupa exactamente lo mismo en pantalla que antes. */
+const TAB_D=1.7;                       // a que distancia flota la tableta
+/* todo en FRACCIONES DEL MARCO, y de ahi a metros: asi la tableta ocupa lo mismo en cualquier
+   telefono, que es el defecto que ya habia costado la fila de casilleros y los huecos del
+   rompecabezas */
+const TAB_ANCHO=0.72, TAB_ALTO=0.50, TAB_CX=0.5, TAB_CY=0.40;
+const HOJA_X0=0.22, HOJA_X1=0.78, HOJA_Y0=0.30, HOJA_Y1=0.58;   // donde se puede dibujar
+const TRAZO_MAX=80, GUIA_MAX=40;
+const TRAZO_SEP=0.012;                 // no se guarda un punto si no se movio al menos esto
+function tamPant(frac, dist){ return frac*2*dist*Math.tan(camara.fov*Math.PI/360); }
+/* las tres formas, como lista de puntos en fracciones del marco */
+function formaPuntos(tipo){
+  const cx=(HOJA_X0+HOJA_X1)/2, cy=(HOJA_Y0+HOJA_Y1)/2;
+  const rx=(HOJA_X1-HOJA_X0)*0.34, ry=(HOJA_Y1-HOJA_Y0)*0.40;
+  const P=[];
+  if(tipo==='circulo'){ for(let k=0;k<24;k++){ const a=k/24*6.2832;
+                          P.push([cx+Math.cos(a)*rx, cy+Math.sin(a)*ry]); } }
+  else if(tipo==='raya'){ for(let k=0;k<16;k++) P.push([HOJA_X0+0.06+(k/15)*(HOJA_X1-HOJA_X0-0.12), cy]); }
+  else { for(let k=0;k<25;k++){ const t=k/24;
+           P.push([HOJA_X0+0.06+t*(HOJA_X1-HOJA_X0-0.12), cy+Math.sin(t*9.42)*ry*0.9]); } }
+  return P;
+}
+function tabSoltar(n, formas){
+  TABLETA.on=true; TABLETA.k=0; TABLETA.trazo.length=0; TABLETA.dibujando=false;
+  TABLETA.sacud=0; TABLETA.ok=0; TABLETA.t=0;
+  TABLETA.formas=(formas||['circulo','raya','zigzag']).slice(0, Math.max(1,n||2));
+  bichosVivos=TABLETA.formas.length;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+  dice('dTabPide', {f:TX('f_'+TABLETA.formas[0])});
+}
+function tabApagar(){
+  TABLETA.on=false; TABLETA.formas.length=0; TABLETA.trazo.length=0; TABLETA.dibujando=false;
+  tabMalla.visible=false; discoMalla.visible=false;
+}
+/* la punta con la que se dibuja: la pinza de la primera mano, o el dedo de quien no tiene camara */
+function tabPunta(){
+  if(MANO.on && MANO.pinzas && MANO.pinzas.length){
+    const m=MANO.pinzas[0];
+    return { x:m.x, y:m.y, apoya:m.pinza };
+  }
+  if(DEDO.activo) return { x:DEDO.x, y:DEDO.y, apoya:true };
+  return null;
+}
+function tabTick(dt){
+  if(!TABLETA.on) return;
+  TABLETA.t+=dt;
+  if(TABLETA.sacud>0) TABLETA.sacud=Math.max(0, TABLETA.sacud-dt*3);
+  /* los toques sueltos no sirven para dibujar: se descartan para que no se acumulen y para que no los
+     agarre otra actividad despues */
+  TOQUES.length=0;
+  const p=tabPunta();
+  if(!p){ if(TABLETA.dibujando) tabCerrar(); return; }
+  if(p.apoya){
+    /* solo se dibuja DENTRO de la hoja: si se aceptaran puntos de todo el marco, mover la mano para
+       acomodarse antes de empezar ya contaria como parte del dibujo */
+    const dentro = p.x>HOJA_X0-0.04 && p.x<HOJA_X1+0.04 && p.y>HOJA_Y0-0.04 && p.y<HOJA_Y1+0.04;
+    if(!dentro){ if(TABLETA.dibujando) tabCerrar(); return; }
+    if(!TABLETA.dibujando){ TABLETA.dibujando=true; TABLETA.trazo.length=0; son('libro'); }
+    const u=TABLETA.trazo[TABLETA.trazo.length-1];
+    if(!u || Math.hypot(p.x-u[0], p.y-u[1])>TRAZO_SEP){
+      if(TABLETA.trazo.length<TRAZO_MAX) TABLETA.trazo.push([p.x, p.y]);
+    }
+  } else if(TABLETA.dibujando) tabCerrar();
+}
+/* se levanto el lapiz: se puntua */
+function tabCerrar(){
+  TABLETA.dibujando=false;
+  const T=TABLETA.trazo;
+  if(T.length<6){ TABLETA.trazo.length=0; return; }   // un toque no es un dibujo
+  if(tabPuntuar(TABLETA.formas[TABLETA.k], T)){
+    TABLETA.ok++; bichosVivos=Math.max(0, bichosVivos-1);
+    son('revienta'); son('bien');
+    const w=deSPantalla(TAB_CX, TAB_CY, TAB_D);
+    esquirlasSoltar(w[0], w[1], w[2], 8);
+    TABLETA.k++; TABLETA.trazo.length=0;
+    pintarLibros();
+    if(TABLETA.k<TABLETA.formas.length) dice('dTabPide', {f:TX('f_'+TABLETA.formas[TABLETA.k])});
+  } else {
+    /* NO SE PIERDE NADA AL ERRAR. Un dibujo a mano alzada con una camara no es una respuesta con
+       una sola forma correcta: castigarlo seria castigar al detector. Se sacude y se borra. */
+    TABLETA.sacud=1; son('mal'); dice('dTabNo');
+    TABLETA.trazo.length=0;
+  }
+}
+/* =========================================================================================
+   LA PUNTUACION. Tres formas, tres reglas, y todas en fracciones del marco.
+   ========================================================================================= */
+/* CUANTAS VECES LA MANO CAMBIO DE SENTIDO VERTICAL. Lo usan las dos: el zigzag pide al menos dos y la
+   raya pide como mucho uno. Escrito una vez, porque son la MISMA pregunta con el signo cambiado —y si
+   fueran dos cuentas distintas podrian contestar cosas incompatibles sobre el mismo trazo.
+   El umbral de 0,02 es lo que separa un cambio de sentido del pulso: sin el, un trazo recto cuenta
+   veinte cambios porque una mano nunca esta perfectamente quieta. */
+const TAB_HIST=0.045;
+function tabCambios(T){
+  /* CON HISTERESIS Y CONTRA EL EXTREMO, NO CONTRA EL PUNTO ANTERIOR. La primera version comparaba
+     cada punto con el anterior y descartaba los saltos menores a 0,02; medido, eso le daba a una RAYA
+     temblorosa CINCO cambios de sentido y a un zigzag de verdad solo TRES — o sea que contaba al
+     reves de lo que hace falta, porque el ruido cambia de signo todo el tiempo mientras que un zigzag
+     cambia pocas veces y en grande.
+     Contando contra el ultimo EXTREMO y exigiendo que la mano vuelva 0,045 hacia atras para que
+     cuente, el ruido no puede acumular: por chico que sea el paso, si el recorrido total en contra no
+     llega a la histeresis no hay cambio. Es deteccion de picos de toda la vida, y es inmune al pulso
+     por construccion en vez de por umbral elegido a ojo. */
+  let cambios=0, sig=0, ext=T[0][1];
+  for(let k=1;k<T.length;k++){
+    const y=T[k][1];
+    if(sig===0){ if(Math.abs(y-ext)>TAB_HIST){ sig=(y>ext)?1:-1; ext=y; } continue; }
+    if(sig>0){ if(y>ext) ext=y; else if(ext-y>TAB_HIST){ cambios++; sig=-1; ext=y; } }
+    else     { if(y<ext) ext=y; else if(y-ext>TAB_HIST){ cambios++; sig=1;  ext=y; } }
+  }
+  return cambios;
+}
+/* los numeros con los que se decide, expuestos para poder elegir los umbrales midiendo */
+function tabMedir(tipo, T){
+  const n=T.length;
+  let cx=0, cy=0;
+  for(const q of T){ cx+=q[0]; cy+=q[1]; }
+  cx/=n; cy/=n;
+  let rm=0; const rs=[];
+  for(const q of T){ const r=Math.hypot(q[0]-cx, q[1]-cy); rs.push(r); rm+=r; }
+  rm/=n;
+  let v=0; for(const r of rs) v+=(r-rm)*(r-rm);
+  let giro=0, a0=Math.atan2(T[0][1]-cy, T[0][0]-cx);
+  for(let k=1;k<n;k++){
+    const a=Math.atan2(T[k][1]-cy, T[k][0]-cx);
+    let d=a-a0; while(d>Math.PI) d-=6.2832; while(d<-Math.PI) d+=6.2832;
+    giro+=d; a0=a;
+  }
+  const A=T[0], B=T[n-1];
+  const L=Math.hypot(B[0]-A[0], B[1]-A[1]);
+  let peor=0;
+  for(const q of T) peor=Math.max(peor, distSeg(q[0],q[1], A[0],A[1], B[0],B[1]));
+  let minX=T[0][0], maxX=T[0][0];
+  for(const q of T){ minX=Math.min(minX,q[0]); maxX=Math.max(maxX,q[0]); }
+  return { puntos:n, radioMedio:+rm.toFixed(4), dispersion:+(Math.sqrt(v/n)/Math.max(1e-9,rm)).toFixed(3),
+           giro:+giro.toFixed(2), largo:+L.toFixed(3), desvio:+(peor/Math.max(1e-9,L)).toFixed(3),
+           cambios:tabCambios(T), extension:+(maxX-minX).toFixed(3) };
+}
+function tabPuntuar(tipo, T){
+  const n=T.length;
+  if(tipo==='circulo'){
+    let cx=0, cy=0;
+    for(const q of T){ cx+=q[0]; cy+=q[1]; }
+    cx/=n; cy/=n;
+    let rm=0; const rs=[];
+    for(const q of T){ const r=Math.hypot(q[0]-cx, q[1]-cy); rs.push(r); rm+=r; }
+    rm/=n;
+    if(rm<0.045) return false;                         // demasiado chico para ser un circulo
+    let v=0; for(const r of rs) v+=(r-rm)*(r-rm);
+    const disp=Math.sqrt(v/n)/rm;                      // que tan parejo es el radio
+    /* LA VUELTA SE MIDE SUMANDO LOS SALTOS DE ANGULO CON SIGNO, no el angulo total recorrido: un
+       garabato de ida y vuelta recorre mucho angulo pero no da la vuelta, y sumando con signo se
+       cancela solo. */
+    let giro=0, a0=Math.atan2(T[0][1]-cy, T[0][0]-cx);
+    for(let k=1;k<n;k++){
+      const a=Math.atan2(T[k][1]-cy, T[k][0]-cx);
+      let d=a-a0; while(d>Math.PI) d-=6.2832; while(d<-Math.PI) d+=6.2832;
+      giro+=d; a0=a;
+    }
+    return disp<0.30 && Math.abs(giro)>4.7;            // 4,7 rad = 270 grados
+  }
+  if(tipo==='raya'){
+    const a=T[0], b=T[n-1];
+    const L=Math.hypot(b[0]-a[0], b[1]-a[1]);
+    if(L<0.22) return false;                           // una raya tiene que medir algo
+    let peor=0;
+    for(const q of T) peor=Math.max(peor, distSeg(q[0],q[1], a[0],a[1], b[0],b[1]));
+    /* DOS CONDICIONES Y NO UNA, y la segunda salio de una prueba que fallo: con el desvio solo en
+       0,16, UN ZIGZAG PASABA COMO RAYA. Medido, el desvio de un zigzag respecto de su propia cuerda
+       es 0,104 —los picos se cancelan porque la cuerda va por el medio— contra 0,075 de una raya
+       temblorosa: el hueco entre los dos es de tres centesimas y no alcanza para un umbral.
+       Lo que los separa de verdad no es cuanto se desvia sino CUANTAS VECES cambia de sentido: una
+       raya cambia una vez o ninguna, un zigzag cambia varias. Con las dos condiciones el hueco pasa a
+       ser categorico y el umbral de desvio puede quedar flojo, que es lo que conviene para una mano. */
+    return peor/L < 0.16 && tabCambios(T) <= 1;
+  }
+  /* zigzag: la mano tiene que cambiar de sentido vertical al menos dos veces mientras avanzaba */
+  let minX=T[0][0], maxX=T[0][0];
+  for(const q of T){ minX=Math.min(minX,q[0]); maxX=Math.max(maxX,q[0]); }
+  return tabCambios(T)>=2 && (maxX-minX)>0.24;
+}
+function tabDibujar(){
+  if(!TABLETA.on){ tabMalla.visible=false; discoMalla.visible=false; return; }
+  tabMalla.visible=true; discoMalla.visible=true;
+  _bq.copy(camara.quaternion);
+  const sac=TABLETA.sacud>0? Math.sin(TABLETA.t*40)*0.018*TABLETA.sacud : 0;
+  /* el cuerpo y la pantalla */
+  const cuerpo=deSPantalla(TAB_CX+sac, TAB_CY, TAB_D+0.06);
+  _bm.compose(_bv.set(cuerpo[0],cuerpo[1],cuerpo[2]), _bq,
+              _bs.set(tamPant(TAB_ANCHO,TAB_D)*camara.aspect, tamPant(TAB_ALTO,TAB_D), 1));
+  tabMalla.setMatrixAt(0, _bm);
+  _bc.setRGB(0.06,0.07,0.075); tabMalla.setColorAt(0, _bc);
+  const hoja=deSPantalla((HOJA_X0+HOJA_X1)/2+sac, (HOJA_Y0+HOJA_Y1)/2, TAB_D+0.03);
+  _bm.compose(_bv.set(hoja[0],hoja[1],hoja[2]), _bq,
+              _bs.set(tamPant(HOJA_X1-HOJA_X0,TAB_D)*camara.aspect,
+                      tamPant(HOJA_Y1-HOJA_Y0,TAB_D), 1));
+  tabMalla.setMatrixAt(1, _bm);
+  /* la pantalla se pone ROJA al errar: es el aviso que se ve sin leer nada */
+  if(TABLETA.sacud>0) _bc.setRGB(0.55,0.06,0.06); else _bc.setRGB(0.72,0.80,0.62);
+  tabMalla.setColorAt(1, _bc);
+  tabMalla.instanceMatrix.needsUpdate=true;
+  if(tabMalla.instanceColor) tabMalla.instanceColor.needsUpdate=true;
+
+  let d=0;
+  const poner=(x,y,rFrac,cr,cg,cb,dz)=>{
+    if(d>=DISCO_MAX) return;
+    const w=deSPantalla(x+sac, y, TAB_D-(dz||0));
+    const r=tamPant(rFrac, TAB_D);
+    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(r,r,1));
+    discoMalla.setMatrixAt(d, _bm);
+    _bc.setRGB(cr,cg,cb); discoMalla.setColorAt(d, _bc);
+    d++;
+  };
+  /* LOS OJOS, que son lo que la vuelve un personaje y no un cartel. Miran a la punta cuando hay una:
+     una tableta que sigue tu mano con la mirada dice "te estoy viendo dibujar" sin una palabra. */
+  const p=tabPunta();
+  for(const ox of [-0.115, 0.115]){
+    const ex=TAB_CX+ox, ey=0.215;
+    poner(ex, ey, 0.052, 0.97,0.97,0.94, 0.05);
+    let dx=0, dy=0;
+    if(p){ dx=Math.max(-1,Math.min(1,(p.x-ex)*5))*0.017; dy=Math.max(-1,Math.min(1,(p.y-ey)*5))*0.017; }
+    poner(ex+dx, ey+dy, 0.024, 0.05,0.05,0.06, 0.07);
+  }
+  /* la forma pedida, en puntitos apagados */
+  const G=formaPuntos(TABLETA.formas[TABLETA.k]||'circulo');
+  const paso=Math.max(1, Math.ceil(G.length/GUIA_MAX));
+  for(let k=0;k<G.length;k+=paso) poner(G[k][0], G[k][1], 0.010, 0.34,0.38,0.30, 0.02);
+  /* y el trazo del jugador, encima */
+  for(const q of TABLETA.trazo) poner(q[0], q[1], 0.016, 0.05,0.06,0.05, 0.04);
+  for(let q=d;q<DISCO_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    discoMalla.setMatrixAt(q, _bm);
+  }
+  discoMalla.instanceMatrix.needsUpdate=true;
+  if(discoMalla.instanceColor) discoMalla.instanceColor.needsUpdate=true;
+}
+
+/* =========================================================================================
+   PASILLO 6 — LOS GLOBOS: lo que se entrena es DISTINGUIR
+
+   Los casilleros ya entrenan elegir, pero ahi elegir es dar con el unico que se mueve: el juego te
+   dice cual. Aca los cinco estan quietos y a la vista, y lo que hay que hacer es NO tocar el que no
+   va. Es la primera actividad en la que hacer algo de mas cuesta — y por eso es la que prepara el
+   ultimo pasillo, donde cortar un bloque rojo se paga.
+
+   Y NO MATA: reventar un rojo suelta un verde nuevo, o sea que cuesta tiempo. La muerte de este juego
+   es una sola cosa —contestar mal una cuenta— y meter una segunda la abarataria.
+   ========================================================================================= */
+const GLOBOS=[];
+function globosSoltar(n, rumbo){
+  GLOBOS.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  const N=Math.max(2, Math.min(GLOBO_MAX, n||5));
+  for(let k=0;k<N;k++){
+    /* MAS CERCA Y MAS ABIERTOS DE LO QUE PARECE QUE HACE FALTA. Puestos a tres metros con poco
+       reparto lateral, los cinco caian sobre la columna del medio del pasillo — o sea justo encima
+       del profesor, que es verde. Un globo verde delante de un sueter verde no es un blanco: es un
+       bulto. Se abren a los costados para que ninguno comparta silueta con el, y se acercan para que
+       sean grandes en el marco, que es lo unico que hace que se distinga el color de un vistazo. */
+    const d=2.2+((k*0.63)%1.30);
+    const lat=(((k%2)?1:-1)*(0.62+((k*0.37)%0.55)));
+    /* uno de cada tres es rojo, y el reparto es fijo por indice: con azar puro puede salir una tanda
+       entera de un color y la actividad no ensena nada */
+    GLOBOS.push({ x:cam.x+dx*d+px*lat, y:0.98+((k*0.51)%1.10), z:cam.z+dz*d+pz*lat,
+                  verde:((k%3)!==2), viva:true, fase:k*1.3 });
+  }
+  bichosVivos=GLOBOS.filter(b=>b.verde).length;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+}
+function globosTick(dt){
+  if(!GLOBOS.length) return;
+  for(const b of GLOBOS){ b.fase+=dt; }
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, GLOBOS, b=>b.viva, b=>[b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z]);
+    if(k<0) continue;
+    const b=GLOBOS[k]; b.viva=false;
+    esquirlasSoltar(b.x, b.y, b.z, 8);
+    if(b.verde){ bichosVivos=Math.max(0, bichosVivos-1); son('revienta'); }
+    else {
+      /* el castigo: sale un verde nuevo donde estaba el rojo */
+      son('mal');
+      GLOBOS.push({ x:b.x, y:b.y, z:b.z, verde:true, viva:true, fase:b.fase+1.1 });
+      bichosVivos++;
+    }
+    pintarLibros();
+  }
+}
+function globosDibujar(){
+  const hay=GLOBOS.some(b=>b.viva);
+  globoMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const b of GLOBOS){
+    if(!b.viva || k>=GLOBO_MAX) continue;
+    _be.set(0, Math.atan2(cam.x-b.x, cam.z-b.z), Math.sin(b.fase*1.1)*0.13); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z), _bq, _bs.set(1,1,1));
+    globoMalla.setMatrixAt(k, _bm);
+    /* OJO: setRGB TOMA LOS NUMEROS EN LINEAL, no en sRGB, y esa es la trampa que ya habia costado
+       una vuelta entera en Eco. Puesto (0,44 · 1,00 · 0,52) —que escrito parece un verde vivo— sale
+       en pantalla como (0,69 · 1,00 · 0,75): un verde salvia lavado, casi gris. Para que se vea un
+       verde hay que escribir los canales que NO mandan mucho mas abajo. */
+    if(b.verde) _bc.setRGB(0.09, 0.80, 0.18); else _bc.setRGB(0.80, 0.015, 0.03);
+    globoMalla.setColorAt(k, _bc);
+    k++;
+  }
+  for(let q=k;q<GLOBO_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    globoMalla.setMatrixAt(q, _bm);
+  }
+  globoMalla.instanceMatrix.needsUpdate=true;
+  if(globoMalla.instanceColor) globoMalla.instanceColor.needsUpdate=true;
+}
+
+/* =========================================================================================
+   EL PUNTO AL QUE APUNTA EL JUGADOR AUTOMATICO, PARA CUALQUIERA DE LAS SIETE ACTIVIDADES
+
+   Vive aca y no en los ganchos de prueba por una razon concreta: los ganchos lo necesitan DOS veces
+   —jugarSolo() y auditarRumbo()— y tenerlo escrito dos veces garantiza que una actividad nueva quede
+   soportada en una de las dos y no en la otra, que es como se descubre tarde que la auditoria se
+   colgaba en el pasillo 6. Devuelve una fraccion del marco, o sea exactamente lo mismo que produce un
+   dedo: la prueba entra por el mismo agujero que el jugador y no por atras.
+   ========================================================================================= */
+/* =========================================================================================
+   EL INDICADOR DE PUNTERIA: DONDE ESTA APUNTANDO LA MANO Y SI HAY ALGO DEBAJO
+
+   `miraBlanco` pregunta lo mismo que preguntaria un golpe en ese punto, pero SIN pegarle a nada, y
+   pasa por las mismas funciones —golpeEnLista y el mismo radio—: si el aro se encendiera con una
+   cuenta propia, podria decir "le estas dando" en un sitio donde el golpe falla, y un indicador que
+   miente es peor que no tener indicador.
+   ========================================================================================= */
+const MIRA_R=0.055;          // radio del aro en reposo, en fraccion del ancho
+function miraBlanco(g){
+  if(BICHOS.length) return golpeEnLista(g, BICHOS, b=>b.viva, b=>[b.x,b.y,b.z])>=0;
+  if(TIZAS.length)  return golpeEnLista(g, TIZAS, z=>z.viva && z.espera<=0, z=>[z.x,z.y,z.z])>=0;
+  if(CASILL.length) return golpeEnLista(g, CASILL, c=>!c.abierto, c=>[c.x,c.y+0.35,c.z])>=0;
+  if(GLOBOS.length) return golpeEnLista(g, GLOBOS, b=>b.viva,
+                                        b=>[b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z])>=0;
+  if(ROMPE.length){
+    /* el rompecabezas vive en fracciones del marco y no en el mundo, asi que no pasa por
+       golpeEnLista; el radio es el mismo */
+    for(const p of ROMPE){
+      if(p.puesta) continue;
+      if(Math.hypot(p.cx-g.x, p.cy-g.y) < BICHO_R) return true;
+      /* y tambien se enciende sobre el HUECO mientras se lleva una pieza: ahi el blanco es el hueco */
+      if(p.tomada>=0 && Math.hypot(p.sx-g.x, p.sy-g.y) < ROMPE_PEGA*1.6) return true;
+    }
+    return false;
+  }
+  if(TABLETA.on){
+    /* en la tableta el aro no dice "hay un blanco": dice EL LAPIZ ESTA SOBRE LA HOJA. Es la misma
+       pregunta desde el punto de vista del jugador —¿lo que hago ahora cuenta?— y es la unica que
+       importa antes de empezar a dibujar. */
+    return g.x>HOJA_X0-0.04 && g.x<HOJA_X1+0.04 && g.y>HOJA_Y0-0.04 && g.y<HOJA_Y1+0.04;
+  }
+  return false;
+}
+/* se llama una vez por cuadro, DESPUES de dibujar las manos: el aro sale del mismo punto que usa el
+   juego para golpear, o sea de MANO.pinzas, y no de una proyeccion propia */
+function pintarMiras(){
+  const W=lienzo.clientWidth||1;
+  const hayAct = bichosVivos>0;
+  const ps=(MANO.on && MANO.pinzas)? MANO.pinzas : [];
+  for(let q=0;q<2;q++){
+    const el=document.getElementById('manoMira'+q); if(!el) continue;
+    const m=ps.find(p=>p.k===q);
+    /* SOLO MIENTRAS HAY ACTIVIDAD. En el aula lo que se hace es contar con los dedos, y ahi un aro
+       de punteria no indica nada: es ruido encima del unico momento en que hay que mirar el libro. */
+    if(!hayAct || !m){ if(el._ver){ el.classList.remove('ver'); el._ver=false; } continue; }
+    const x=m.x, y=m.y;
+    const hay=miraBlanco({x, y});
+    /* sobre la hoja de la tableta el aro NO se abre al radio de un blanco: ahi no hay blanco, hay
+       hoja, y un aro gigante taparia justamente el dibujo que se esta haciendo */
+    const rad=(hay? (TABLETA.on? MIRA_R*1.15 : BICHO_R) : MIRA_R)*W;
+    /* SOLO SE ESCRIBE LO QUE CAMBIO, Y ESTO ERA UN TIRON DE VERDAD.
+       Escribir el.style.left/top/width/height invalida el diseño de la pagina, y hacerlo en CADA
+       cuadro por cada mano obliga al navegador a recalcular la disposicion sesenta veces por segundo
+       para mover un aro. Medido con el perfil de cola: con una mano en pantalla el reparto era
+       bimodal —mediana 0,3 ms pero p90 de 38 ms—, que es la firma de un recalculo de diseño que cae
+       cada tantos cuadros. Guardando lo ultimo escrito y salteando lo igual, la mayoria de los cuadros
+       no toca el DOM: el aro se mueve pocos pixeles y el tamaño casi nunca cambia. */
+    const izq=(x*100).toFixed(2)+'%', arr=(y*100).toFixed(2)+'%', anc=(rad*2).toFixed(1)+'px';
+    if(el._izq!==izq){ el.style.left=izq; el._izq=izq; }
+    if(el._arr!==arr){ el.style.top=arr; el._arr=arr; }
+    if(el._anc!==anc){ el.style.width=anc; el.style.height=anc; el._anc=anc; }
+    if(el._hit!==hay){ el.classList.toggle('hit', hay); el._hit=hay; }
+    const cer=!!m.pinza;
+    if(el._cer!==cer){ el.classList.toggle('cerrada', cer); el._cer=cer; }
+    if(!el._ver){ el.classList.add('ver'); el._ver=true; }
+  }
+}
+
+/* =========================================================================================
+   EL JUGADOR AUTOMATICO DE LA TABLETA
+
+   Las otras seis actividades se prueban empujando un TOQUE en el pixel del blanco. Esta no se puede
+   probar asi, porque no hay un pixel: hay un camino. Asi que el automatico recorre la forma pedida
+   moviendo el DEDO —el mismo puntero que usa una persona sin camara— y al terminar lo levanta, que es
+   lo que dispara la puntuacion. La prueba entra por el mismo agujero que el jugador.
+
+   Y VA CON TEMBLOR A PROPOSITO. Trazar la forma exacta probaria que el puntuador acepta una
+   circunferencia perfecta, que es lo unico que una mano NO va a dibujar nunca. Con ruido encima se
+   prueba lo que hace falta: que tolera el pulso de una persona.
+   ========================================================================================= */
+let tabAutoK=0, tabAutoSem=7;
+function tabAuto(){
+  if(!TABLETA.on) return;
+  const G=formaPuntos(TABLETA.formas[TABLETA.k]||'circulo');
+  /* el circulo se cierra: se recorre un pelo mas de la vuelta para que el giro medido pase de 270 */
+  const total = (TABLETA.formas[TABLETA.k]==='circulo')? G.length+3 : G.length;
+  if(tabAutoK>=total+4){ DEDO.activo=false; tabAutoK=0; return; }   // lapiz levantado: puntua
+  if(tabAutoK>=total){ DEDO.activo=false; tabAutoK++; return; }
+  const q=G[tabAutoK%G.length];
+  tabAutoSem=(tabAutoSem*1103515245+12345)&0x7fffffff;
+  const r1=(tabAutoSem/0x7fffffff*2-1)*0.006;
+  tabAutoSem=(tabAutoSem*1103515245+12345)&0x7fffffff;
+  const r2=(tabAutoSem/0x7fffffff*2-1)*0.006;
+  DEDO.activo=true; DEDO.x=q[0]+r1; DEDO.y=q[1]+r2;
+  tabAutoK++;
+}
+
+function actPuntoAuto(){
+  let p=null;
+  const b=BICHOS.find(q=>q.viva);
+  const z=TIZAS.find(q=>q.viva && q.espera<=0);
+  const gl=GLOBOS.find(q=>q.viva && q.verde);
+  if(b) p=[b.x,b.y,b.z];
+  else if(z) p=[z.x,z.y,z.z];
+  else if(gl) p=[gl.x, gl.y, gl.z];
+  else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+    const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+  }
+  else if(ROMPE.length){
+    /* el rompecabezas se juega en dos toques —la pieza y despues el hueco—, asi que el punto depende
+       de si ya hay una elegida. Es el mismo camino de dos toques que usa un jugador sin camara. */
+    if(rompeSel>=0 && ROMPE[rompeSel] && !ROMPE[rompeSel].puesta){
+      const q=ROMPE[rompeSel]; return { x:q.sx, y:q.sy };
+    }
+    const q=ROMPE.find(r=>!r.puesta);
+    if(q) return { x:q.cx, y:q.cy };
+  }
+  else if(TABLETA.on){
+    /* LA TABLETA NO SE JUEGA CON UN TOQUE: hay que DIBUJAR. El jugador automatico no puede apuntar a
+       un punto — tiene que recorrer la forma entera —, asi que esta actividad se avanza desde
+       tabAuto() y aca no hay a donde apuntar. */
+    return null;
+  }
+  if(!p) return null;
+  const s=aPantalla(p[0],p[1],p[2]);
+  return s.delante? { x:s.x, y:s.y } : null;
+}
+
+function pasoFijo(dt){
+  /* EL GRITO CORRE ANTES QUE TODO Y DEVUELVE. Es el unico momento del juego en que el guion no
+     manda: no avanza la escena, no camina nadie y el jugador no puede contestar nada. */
+  if(gritoT>0){ gritoTick(dt); return; }
+  if(!jugando || terminado) return;
+  /* EL FINAL TAMBIEN MANDA SOBRE EL GUION: cuando arranca ya no hay escenas que avanzar, hay una
+     salida que caminar. Corre el riel, el profesor y las esperas, y nada mas. */
+  if(FIN.on){
+    esperasTick(dt); rielTick(dt); profeTick(dt); finTick(dt);
+    return;
+  }
+  const E=GUION[escena_i];
+  if(!E) return;
+  escenaT+=dt;
+  esperasTick(dt);
+  rielTick(dt);
+  profeTick(dt);
+  actTick(dt);
+  /* GESTICULA CUANDO HABLA Y SE QUEDA QUIETO CUANDO ESPERA. Antes se quedaba en 'explicando' todo
+     el rato, o sea con los brazos abiertos mientras el jugador contaba con los dedos: a la distancia
+     y con el filtro, dos brazos abiertos y quietos son dos palitos que no dicen nada. Atar el gesto
+     a que el subtitulo se este escribiendo sale gratis y ademas es lo que hace una persona. */
+  if(E.clase){ profeAnim((dVer && dPos<dCola.length)? 'explicar' : 'quieto'); }
+  if(E.mira && !riel) profeMirarCam(dt, 3.0);
+  if(E.mira && !riel) mirarA(PROFE.x, PROFE.z, dt, 2.2);
+
+  /* --- las escenas que terminan por tiempo --- */
+  if(E.dur && escenaT>=E.dur && !E.clase){ siguienteEscena(); return; }
+  if(E.clase && E.dur && escenaT>=E.dur && !cuenta && aulaK===0){ ponerCuenta(); return; }
+
+  /* --- el viaje: la camara es la que manda. El llega antes y espera. --- */
+  if(E.viaje!=null && !riel){ profeAnim('quieto'); siguienteEscena(); return; }
+  /* --- los bichos: se sale cuando no queda ninguno --- */
+  if(E.act && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
+  /* MIENTRAS HACES LA ACTIVIDAD, EL TE MIRA. Quedandose de espaldas parece que se olvido de vos; se
+     da vuelta apenas termina de caminar y espera mirandote, que es lo que hace que "se queda con
+     vos" se note sin decirlo. */
+  if(E.act && !profeRiel) profeMirarCam(dt, 2.2);
+  if(E.act && !bichosCerrado){
+    if(bichosVivos<=0 && escenaT>0.5){
+      /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,act:0}: eso
+         apaga la tanda para siempre, asi que al morir y volver a pasar por el mismo pasillo ya no
+         habia bichos. El guion es la partitura y no se toca; lo que cambia es el estado. */
+      bichosCerrado=true;
+      dice('dBichosFin'); son('listo');
+      bichosApagar();
+      luegoDe(0.6, ()=>siguienteEscena());
+      return;
+    }
+  }
+  if(E.puerta!=null){
+    /* el empuja la puerta y despues los dos entran */
+    if(escenaT>1.5 && !riel && !profeRiel){
+      /* EL EMPUJON DURA LO QUE DURA EL EMPUJON. Los dos rieles arrancaban y el se quedaba en la
+         pose de 'puerta' los siete segundos que tarda en cruzar el aula: medido, seguia con el brazo
+         estirado empujando aire. Ahora camina, y camina hasta donde se tiene que quedar. */
+      const n=E.puerta, S=AULA_SITIO[n], dentro=rutaEntrar(n);
+      profeAnim('caminar');
+      /* POR rutaDesde() TAMBIEN: cuando llego al aula ya venia adelantado PROFE_ADELANTE metros
+         hacia adentro, asi que el primer punto de esta ruta —la boca— le queda detras. */
+      /* el ultimo punto NO se corre de costado: ahi tiene que quedar centrado detras del escritorio */
+      profeIr(rutaDesde([...costado(dentro.slice(0,-1).map(cel2), PROFE_COSTADO), [S.x, S.zProfe]],
+                        PROFE.x, PROFE.z), VEL_PROFE);
+      rielIr([...dentro.slice(0,-1).map(cel2), [S.x, S.zCam]], VEL_CAM, ()=>siguienteEscena());
+    }
+  }
+
+  /* --- lo que espera una mano --- */
+  if(E.espera){
+    const q=E.espera;
+    let ok=false, num=null, rot='';
+    if(q.tipo==='dedos'){
+      num = MANO.on? (MANO.hay? MANO.dedos : null) : (padPedido>0? padPedido : null);
+      ok = (num===q.n);
+      rot = TX('dedos',{n:q.n});
+    } else {
+      ok = MANO.on? (MANO.gesto==='pinza') : (padPedido>0);
+      rot = TX('hazPinza');
+      num = null;
+    }
+    if(ok) esperaT+=dt; else esperaT=Math.max(0, esperaT-dt*1.6);
+    pintarAro(esperaT/MANO_SOSTEN, num, esperaT>0.05? TX('sostene') : rot);
+    if(esperaT>=MANO_SOSTEN){ son('listo'); siguienteEscena(); return; }
+  }
+
+  /* --- la clase: se contesta sosteniendo el numero --- */
+  if(cuenta && !bloqueo){
+    const p=numeroPedido();
+    if(p && p.listo){ padPedido=-1; contestar(p.n); return; }
+    const n = p? p.n : null;
+    if(n!=null && n===cuenta.res) esperaT+=dt;
+    else esperaT=Math.max(0, esperaT-dt*1.4);
+    pintarAro(esperaT/MANO_SOSTEN, n, esperaT>0.05? TX('sostene') : cuentaTxt);
+    if(esperaT>=MANO_SOSTEN){ contestar(cuenta.res); return; }
+  }
+}
+
+/* =========================================================================================
+   EL BUCLE: paso fijo con interpolacion al dibujar.
+   Mismo criterio que siempre y por la misma razon: el guion, los rieles y el sosten de la mano
+   dependen del tiempo, y si dependieran de los cuadros el tutorial tardaria distinto en un telefono
+   y en una notebook. El dibujo interpola, asi que a 144 cuadros se ven 144 posiciones aunque solo
+   haya 60 pasos.
+   ========================================================================================= */
+let acum=0, ultimo=performance.now(), pasosTotal=0, cuadrosTotal=0;
+function guardarAnterior(){
+  cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro; cam.apitch=cam.pitch; cam.aojo=cam.ojo;
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
+}
+function avanzar(dt){
+  if(dt>0.25) dt=0.25;
+  acum+=dt;
+  let n=0;
+  while(acum>=PASO && n<8){ guardarAnterior(); pasoFijo(PASO); acum-=PASO; n++; pasosTotal++; }
+  if(n>=8) acum=0;
+  dialogoTick(dt);
+  if(avisoT>0){ avisoT-=dt; if(avisoT<=0) marcaEl.classList.remove('ver'); }
+  return n;
+}
+function angLerp(a,b,f){ let d=b-a; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+  return a+d*f; }
+function ponerCamara(alfa){
+  camara.position.set(cam.ax+(cam.x-cam.ax)*alfa, cam.aojo+(cam.ojo-cam.aojo)*alfa,
+                      cam.az+(cam.z-cam.az)*alfa);
+  camara.rotation.set(cam.apitch+(cam.pitch-cam.apitch)*alfa,
+                      angLerp(cam.agiro, cam.giro, alfa)+Math.PI, 0, 'YXZ');
+  camara.updateMatrixWorld(true);
+}
+function dibujar(alfa){
+  cuadrosTotal++;
+  ponerCamara(alfa);
+  /* la caja de sombra viaja con la camara: cubre once metros y no el colegio entero */
+  sombraSeguir(camara.position.x, camara.position.z, cam.giro);
+  if(render.shadowMap.enabled) render.shadowMap.needsUpdate=((cuadrosTotal&1)===0);
+  const R = baldiGLB? baldi : profe;
+  if(R && R.raiz){
+    R.raiz.position.x=PROFE.ax+(PROFE.x-PROFE.ax)*alfa;
+    R.raiz.position.z=PROFE.az+(PROFE.z-PROFE.az)*alfa;
+    /* SIN EL +PI. Estaba copiado del rig de cajas de la version anterior y sumaba media vuelta de
+       mas: profeMirarCam() calcula bien el rumbo HACIA la camara —atan2 da pi cuando la camara esta
+       en -Z— y el +PI lo devolvia a 0, o sea de espaldas. En pantalla se veia una cabeza pelada SIN
+       CARA, porque la cara estaba del otro lado. La camara SI lleva +PI, y no es lo mismo: three.js
+       apunta las camaras a su -Z y los modelos vienen mirando a +Z. */
+    R.raiz.rotation.y=angLerp(PROFE.agiro, PROFE.giro, alfa);
+  }
+  animarBaldi(PROFE.anim, PROFE.animOtro, PROFE.mezcla, PROFE.at);
+  for(const l of LIBROS){ if(!l.g.visible) continue;
+    l.giro+=0.012; l.g.rotation.y=Math.PI+Math.sin(l.giro)*0.34;
+    l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
+  actDibujar();
+  if(!PRUEBA.sinManos3D) manos3DDibujar();
+  if(!PRUEBA.sinMiras) pintarMiras();
+  if(!PRUEBA.sinEscena) pintarEscena();
+}
+/* EL VIGIA SE FUE ENTERO, Y LO PIDIO EL JUGADOR: "que no se baje automaticamente los graficos".
+   Tenia razon y ademas se habia vuelto redundante. Bajaba la calidad por escalones —apagaba los
+   lockers, acortaba la niebla—, o sea que le sacaba COSAS QUE SE VEN a quien menos podia. Desde que
+   existe la resolucion dinamica eso no hace falta: lo que cuesta es el relleno de pixeles y eso se
+   ajusta solo sin tocar nada de lo que hay en el colegio. La calidad ahora la elige el jugador en el
+   menu y NADIE se la cambia por atras. */
+
+/* =========================================================================================
+   LO QUE EL DETECTOR TIENE QUE HACER SALE DE LO QUE EL JUEGO ESTA PIDIENDO
+
+   CUANTAS MANOS. Dos manos solo hacen falta cuando la respuesta pasa de cinco, porque seis dedos no
+   entran en una mano. Eso pasa en el aula y en un paso del tutorial. En los siete pasillos —pinza,
+   arrastre, dibujo— no hay una sola actividad que necesite dos, y medirlas cuesta el modelo de puntos
+   dos veces.
+
+   A QUE RITMO. La escena solo APORTA: dice que esta pidiendo algo. Quien decide el ritmo es
+   manoTope(), que mira ademas si hay una mano en cuadro — y si la hay, va a fondo aunque la escena no
+   pida nada, que fue el defecto de la vuelta anterior.
+   ========================================================================================= */
+function manoLoQueHaceFalta(){
+  const E=GUION[escena_i];
+  if(cuenta && !bloqueo) return { manos:(cuenta.res>5? 2 : 1), activo:true };
+  if(E && E.espera){
+    const n=(E.espera.tipo==='dedos')? (E.espera.n||1) : 1;
+    return { manos:(n>5? 2 : 1), activo:true };
+  }
+  if(bichosVivos>0) return { manos:1, activo:true };
+  if(E && E.clase!=null) return { manos:1, activo:true };
+  return { manos:1, activo:false };
+}
+function manoAjustarPedido(){
+  if(!MANO.on) return;
+  const q=manoLoQueHaceFalta();
+  manoPedirManos(q.manos);
+  MANO.escenaPide=q.activo;
+  if(MANO.escenaPide && MANO.hz<(MANO.hzMax||24)) MANO.hz=MANO.hzMax||24;
+}
+
+/* =========================================================================================
+   CALENTAR LOS SHADERS ANTES DE JUGAR
+
+   Esto es lo que el jugador reporta como "se laguea de la nada" y como "la segunda mano aparece y se
+   laguea un monton". MEDIDO con el perfil de cola: sin manos el cuadro tipico son 0,2 ms; la PRIMERA
+   tanda con una mano da p90 de 32,5 ms y un maximo de 145 ms — y la segunda tanda, con DOS manos,
+   vuelve a 0,4 ms de mediana y 1,8 de maximo. Dos manos no cuestan mas que una: lo que costaba era
+   LA PRIMERA VEZ.
+
+   La causa es que WebGL compila el programa de un material la primera vez que ese material se dibuja.
+   Las mallas de las manos, de los bichos, de las tizas, de los casilleros, del rompecabezas, de los
+   globos y de la tableta arrancan invisibles y se encienden en medio de la partida — o sea que cada
+   una paga su compilacion EN EL PEOR MOMENTO POSIBLE: el cuadro en el que aparece.
+
+   Se compilan todas de una, con el menu en pantalla, donde un tiron no molesta a nadie porque no hay
+   nada moviendose. Hay que hacerlas visibles para compilarlas: render.compile() recorre lo VISIBLE, y
+   justamente el problema son las que no lo estan. */
+/* interruptores de prueba: dejan apagar partes del cuadro para saber cual cuesta */
+const PRUEBA={ sinManos3D:false, sinMiras:false, sinEscena:false };
+function calentarShaders(){
+  if(!render || !escena || !camara) return 0;
+  const lista=[manoArt, manoHue, manoPal, bichoMalla, bichoOjos, esqMalla, tizaMalla, casillMalla,
+               rompeMalla, huecoMalla, globoMalla, tabMalla, discoMalla];
+  const antes=lista.map(m=>m && m.visible);
+  for(const m of lista) if(m) m.visible=true;
+  /* PREDIJE QUE EL PATIO IBA A COSTAR UNA COMPILACION Y LA MEDICION DIJO QUE NO. El razonamiento
+     parecia solido: el autobus y la fachada viven en un grupo apagado toda la partida, asi que su
+     primer cuadro dibujado es el primero de la cinematica final. Se midio calentando con el patio y
+     sin el patio, en dos cargas distintas: 19 programas en los dos casos, y 19 tambien despues de
+     que el patio aparece. La razon es que sus materiales son Lambert y Basic PELADOS —sin textura—
+     y esos dos programas ya estaban compilados por otras piezas del juego. La cache de programas de
+     three.js es por combinacion de caracteristicas, no por material. */
+  lista.forEach((m,i)=>{ if(m) m.visible=antes[i]; });
+  return render.info.programs? render.info.programs.length : 0;
+}
+
+let CONGELADO=false;
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora=performance.now();
+  const dt=(ahora-ultimo)/1000; ultimo=ahora;
+  /* LA MEDICION YA NO SE LLAMA DESDE ACA. Antes estaba manosTick(), que hacia detectForVideo() —
+     entre 8 y 20 ms en un telefono— DENTRO del cuadro de render: el presupuesto de 16,6 ms para 60
+     fps se iba en mirar la mano. Ahora la medicion la maneja el propio <video> por su cuenta y lo
+     unico que corre a 60 es la interpolacion, que son 126 numeros. */
+  if(MANO.on) manosAvanzar(dt);
+  /* CONGELADO: PARA PODER FOTOGRAFIAR UN INSTANTE. Con avanzar() se simula sin dibujar, pero entre
+     ese paso y la captura el navegador sigue corriendo su propio bucle y la escena se va: las tres
+     primeras fotos del autobus salieron con la camara ya dada vuelta mirando a Baldi, y parecia que
+     el autobus no se dibujaba. Congelado, la simulacion no avanza y el dibujo sigue. */
+  if(!CONGELADO) avanzar(dt);
+  dibujar(Math.min(1, acum/PASO));
+  resTick(dt);
+}
+ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
+addEventListener('resize', ajustar);
+/* SE CALIENTAN CON EL MENU EN PANTALLA, que es el unico momento del juego en que un tiron no le
+   molesta a nadie: no hay nada moviendose todavia. Y de nuevo al terminar de cargar a Baldi, porque
+   su material entra despues y trae el suyo propio. */
+calentarShaders();
+cargarBaldi(()=>{ aplicarSombras(CAL[calidad].sombras); calentarShaders(); });
+bucle();
