@@ -2,11 +2,11 @@
 # Sube el sitio a Cloudflare Pages y deja el contenido cargado. Un comando.
 #
 #   export CLOUDFLARE_API_TOKEN=...      # cuenta -> Cloudflare Pages -> Edit
-#   export IBLO_CLAVE=...                # la del panel, solo la primera vez
 #   ./desplegar-iblo.sh
 #
-# Las dos se leen del entorno y se usan en el momento: no quedan escritas en
-# ningun archivo del repositorio.
+# El token se lee del entorno y se usa en el momento: no queda escrito en
+# ningun archivo del repositorio. La contrasenia del panel NO hace falta: el
+# contenido inicial viaja adentro del panel y se carga con un boton.
 #
 # Lo que hace, en orden:
 #   1. arma sitio/ con armar-sitio.sh, que es el que sabe los tres pasos que no
@@ -14,7 +14,7 @@
 #   2. despliega
 #   3. espera a que /api/sitio conteste, que es la prueba de que las funciones
 #      compilaron: si contesta 405 o 404, no compilaron
-#   4. carga el contenido inicial, una sola vez
+#   4. mira si la base ya tiene contenido
 #   5. comprueba que las paginas sigan sirviendo
 set -e
 cd "$(dirname "$0")"
@@ -52,13 +52,10 @@ if [ "$cod" != "200" ]; then
 fi
 echo "   200 . $(head -c 120 /tmp/iblo-sitio.json)"
 
-echo "-- 4/5  contenido inicial"
-if [ -n "$IBLO_CLAVE" ]; then
-  IBLO_API="$SITIO/api" python3 herramientas/iblo/sembrar.py
-else
-  IBLO_API="$SITIO/api" python3 herramientas/iblo/sembrar.py --ver
-  echo "   (sin IBLO_CLAVE no siembro; la web sigue mostrando su copia de respaldo)"
-fi
+echo "-- 4/5  contenido"
+IBLO_API="$SITIO/api" python3 herramientas/iblo/sembrar.py --ver
+echo "   Si dice «nada todavia»: entra al panel, «La pagina», «Traer las que ya"
+echo "   estan en la web». Un boton. Mientras tanto la web muestra su copia."
 
 echo "-- 5/5  comprobando las paginas"
 for r in / /esteticas /m/iblo /iblo-app; do

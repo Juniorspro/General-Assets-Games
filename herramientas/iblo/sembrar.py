@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Carga en la base el contenido que hoy está escrito adentro del HTML.
 
-Se corre UNA vez, después del primer despliegue con `/api/sitio` andando. De ahí
-en más el dueño maneja todo desde el panel y esto no se toca más.
+NORMALMENTE NO HACE FALTA: el panel trae el mismo contenido adentro y lo carga
+con el botón «Traer las que ya están en la web», sin terminal y sin contraseña.
+Esto queda para cargarlo desde acá si alguna vez conviene, o para mirar con
+`--ver` qué hay en la base.
 
 Por qué hace falta: la página trae su copia como respaldo y la base arranca
 vacía, así que mientras nadie publique nada desde el panel se ve lo de siempre.
