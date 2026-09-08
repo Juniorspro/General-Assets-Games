@@ -132,6 +132,11 @@
     pedir("/sitio").then(function (d) {
       var a = (d && d.areas) || {};
       estado.esteticas = Array.isArray(a.esteticas) ? a.esteticas : [];
+      /* cuántas está mostrando la web AHORA: las de la base si hay, y si no las
+         de fábrica, que son las que el HTML dibuja de respaldo */
+      estado.enLaWeb = estado.esteticas.length
+        ? estado.esteticas.filter(function (e) { return !e.oculta; }).length
+        : DEFABRICA.esteticas.length;
       /* Si la base todavía no tiene nada, se arranca de los colores que ya trae
          la web, no de negro: abrir el panel no tiene que ofrecer romper todo. */
       estado.marca = a.marca || { paleta: {
@@ -150,7 +155,40 @@
     }).catch(function (e) { aviso(e.message, "mal"); });
   }
 
+  /* LO QUE MAS DUELE ES PUBLICAR DE MENOS.
+     Lo que se publica REEMPLAZA a lo que muestra la web, no se suma. Alcanza
+     con tocar «empezar una en blanco» y publicar para que las nueve de siempre
+     desaparezcan y quede una sola vacía. Pasó. Así que antes de subir se cuenta
+     qué va a quedar contra qué hay hoy, y si es menos hay que confirmarlo. */
+  function loQueSeVe() {
+    return estado.esteticas.filter(function (e) { return !e.oculta; }).length;
+  }
+  function sinCargar() {
+    return estado.esteticas.filter(function (e) {
+      return !e.oculta && !e.des && !(e.f && e.f.length);
+    });
+  }
+  function puedePublicar() {
+    var quedan = loQueSeVe();
+    if (!quedan) {
+      aviso("Así la web se queda sin ninguna fiesta. Si querés sacar una, " +
+            "usá el ojito; no las borres todas.", "mal");
+      return false;
+    }
+    var hoy = estado.enLaWeb == null ? DEFABRICA.esteticas.length : estado.enLaWeb;
+    if (quedan < hoy && !confirm(
+        "La web muestra " + hoy + " fiestas y vas a dejar " + quedan + ".\n\n" +
+        "Las otras " + (hoy - quedan) + " desaparecen. ¿Seguro?")) return false;
+    var flojas = sinCargar();
+    if (flojas.length && !confirm(
+        (flojas.length === 1 ? "«" + (flojas[0].n || "Una") + "» está sin cargar"
+                             : "Hay " + flojas.length + " sin cargar") +
+        " (sin descripción ni datos).\n\n¿Publicar igual?")) return false;
+    return true;
+  }
+
   function guardar() {
+    if (!puedePublicar()) return;
     var bt = document.getElementById("pgBtGuardar");
     bt.disabled = true;
     var antes = bt.textContent; bt.textContent = "Publicando…";
@@ -158,7 +196,10 @@
       .then(function () {
         return pedir("/sitio", { metodo: "PUT", cuerpo: { area: "marca", valor: estado.marca } });
       })
-      .then(function () { aviso("Listo, la web ya está cambiada.", "bien"); })
+      .then(function () {
+        estado.enLaWeb = loQueSeVe();
+        aviso("Listo, la web ya está cambiada: " + estado.enLaWeb + " fiestas.", "bien");
+      })
       .catch(function (e) { aviso(e.message, "mal"); })
       .then(function () { bt.disabled = false; bt.textContent = antes; });
   }

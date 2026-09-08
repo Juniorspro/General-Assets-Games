@@ -1010,6 +1010,7 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
     
     
     
+    
     <!-- IBLO-PAGINA-SECCION -->
 <section class="pant" id="pPagina" hidden>
   <span class="rot">La web</span>
@@ -1110,9 +1111,9 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.87"/></svg>Equipo</button>
     <button data-p="pArchivo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l1.5 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13.5" r="2.4"/></svg>Archivo</button>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <!-- IBLO-PAGINA-SOLAPA --><button data-p="pPagina">
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <!-- IBLO-PAGINA-SOLAPA --><button data-p="pPagina">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg>La página</button><!-- FIN IBLO-PAGINA-SOLAPA -->
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <button data-p="pAjustes">
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <button data-p="pAjustes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6l1.5 2.2 2.6-.4.5 2.6 2.4 1.1-1.2 2.4 1.2 2.4-2.4 1.1-.5 2.6-2.6-.4L12 21.4l-1.5-2.2-2.6.4-.5-2.6-2.4-1.1L6.2 12 5 9.6l2.4-1.1.5-2.6 2.6.4z"/></svg>Ajustes</button>
   </nav>
 </div>
@@ -2997,6 +2998,11 @@ if ("serviceWorker" in navigator) {
     pedir("/sitio").then(function (d) {
       var a = (d && d.areas) || {};
       estado.esteticas = Array.isArray(a.esteticas) ? a.esteticas : [];
+      /* cuántas está mostrando la web AHORA: las de la base si hay, y si no las
+         de fábrica, que son las que el HTML dibuja de respaldo */
+      estado.enLaWeb = estado.esteticas.length
+        ? estado.esteticas.filter(function (e) { return !e.oculta; }).length
+        : DEFABRICA.esteticas.length;
       /* Si la base todavía no tiene nada, se arranca de los colores que ya trae
          la web, no de negro: abrir el panel no tiene que ofrecer romper todo. */
       estado.marca = a.marca || { paleta: {
@@ -3015,7 +3021,40 @@ if ("serviceWorker" in navigator) {
     }).catch(function (e) { aviso(e.message, "mal"); });
   }
 
+  /* LO QUE MAS DUELE ES PUBLICAR DE MENOS.
+     Lo que se publica REEMPLAZA a lo que muestra la web, no se suma. Alcanza
+     con tocar «empezar una en blanco» y publicar para que las nueve de siempre
+     desaparezcan y quede una sola vacía. Pasó. Así que antes de subir se cuenta
+     qué va a quedar contra qué hay hoy, y si es menos hay que confirmarlo. */
+  function loQueSeVe() {
+    return estado.esteticas.filter(function (e) { return !e.oculta; }).length;
+  }
+  function sinCargar() {
+    return estado.esteticas.filter(function (e) {
+      return !e.oculta && !e.des && !(e.f && e.f.length);
+    });
+  }
+  function puedePublicar() {
+    var quedan = loQueSeVe();
+    if (!quedan) {
+      aviso("Así la web se queda sin ninguna fiesta. Si querés sacar una, " +
+            "usá el ojito; no las borres todas.", "mal");
+      return false;
+    }
+    var hoy = estado.enLaWeb == null ? DEFABRICA.esteticas.length : estado.enLaWeb;
+    if (quedan < hoy && !confirm(
+        "La web muestra " + hoy + " fiestas y vas a dejar " + quedan + ".\n\n" +
+        "Las otras " + (hoy - quedan) + " desaparecen. ¿Seguro?")) return false;
+    var flojas = sinCargar();
+    if (flojas.length && !confirm(
+        (flojas.length === 1 ? "«" + (flojas[0].n || "Una") + "» está sin cargar"
+                             : "Hay " + flojas.length + " sin cargar") +
+        " (sin descripción ni datos).\n\n¿Publicar igual?")) return false;
+    return true;
+  }
+
   function guardar() {
+    if (!puedePublicar()) return;
     var bt = document.getElementById("pgBtGuardar");
     bt.disabled = true;
     var antes = bt.textContent; bt.textContent = "Publicando…";
@@ -3023,7 +3062,10 @@ if ("serviceWorker" in navigator) {
       .then(function () {
         return pedir("/sitio", { metodo: "PUT", cuerpo: { area: "marca", valor: estado.marca } });
       })
-      .then(function () { aviso("Listo, la web ya está cambiada.", "bien"); })
+      .then(function () {
+        estado.enLaWeb = loQueSeVe();
+        aviso("Listo, la web ya está cambiada: " + estado.enLaWeb + " fiestas.", "bien");
+      })
       .catch(function (e) { aviso(e.message, "mal"); })
       .then(function () { bt.disabled = false; bt.textContent = antes; });
   }
