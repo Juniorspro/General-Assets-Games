@@ -382,19 +382,38 @@ son celdas y nada más declaran a quién caer, y **no puede ser el mismo**: el g
 —turquesa, con gotas— y el de cristal al **vidrio puro**, que es su mismo vidrio sin color hecho por
 CSS.
 
-**Y LA CARA DEL RESPALDO TIENE QUE SER DEL MISMO VALOR QUE LA CELDA, que es un defecto que sólo se vio
-fotografiando.** `cristal` empezó cayendo a `vidrio` —«el mismo vidrio sin color», que suena bien
-escrito— y en el cajón quedaban baldosas casi negras al lado de baldosas del color del fondo de
-pantalla: dos packs mezclados otra vez. La celda generada es vidrio **oscuro** —mediana **(56,60,65)**
-medida sobre la hoja, con el bisel en (207,211,216)— así que su respaldo es `pkCristal`, el mismo
-vidrio oscuro con el canto encendido, y lo único que le falta a una app sin celda es el tallado.
+**Y EL VIDRIO SALÍA OPACO, QUE ES LA CORRECCIÓN DEL USUARIO: «no de fondo negro sino transparente».**
+Tenía razón y la causa está en cómo se genera: la hoja se pide sobre **negro puro**, así que la celda
+recortada trae el negro adentro del vidrio y lo que llegaba al cajón era una losa oscura. Un vidrio que
+no deja ver nada no es vidrio.
+
+**Y NO HUBO QUE VOLVER A GENERAR NADA, PORQUE EL PÍXEL YA ES ALFA PREMULTIPLICADO.** Un negro puro no
+aporta luz: todo lo que hay en la celda es lo que el vidrio **agrega** —el bisel, la barrida especular,
+el tallado—, o sea exactamente `color × alfa` sobre alfa cero. Deshaciendo la multiplicación al
+hornear, el cuerpo del vidrio —**mediana 16 de 255**, con el 51,9 % de la celda por debajo de 20— se
+vuelve transparente y quedan opacos el canto y el símbolo. Lo único que no sale de la foto es un
+**piso de 0,10**: sin él la baldosa no existe hasta que uno le pone el dedo encima.
+
+**Y HAY QUE DEJAR DE PONERLE `aero`.** Esa clase quiere decir «hay una foto opaca tapando lo de atrás»
+y apaga el `backdrop-filter`: con la celda transparente, por dentro del vidrio se veía el fondo de
+pantalla **nítido**, que es justo lo que un vidrio grueso no hace. Con el filtro puesto se lee a pieza
+de vidrio de verdad. Lo mismo su respaldo dibujado, que lleva `cssVidrio`: si fuera opaco, una app sin
+celda saldría como una losa en el medio de un pack de vidrio.
+
+**Y EL ALFA CUESTA EL DOBLE SI NO SE LO CUIDA, medido:** dividir por un alfa chico amplifica el ruido
+del JPEG del generador —ruido que **no se ve**, está al diez por ciento de opacidad, y que **no
+comprime**—, y Pillow guarda el canal alfa **sin pérdida** por omisión. Blanqueando el color donde el
+vidrio es fino —que además es lo correcto: un vidrio fino no tiene color— y con `alpha_quality 60`,
+la celda pasa de **6,3 a 3,3 KB** y compuesta sobre un fondo claro y sobre uno oscuro no se distingue.
+El pack entero: **1.087 → 609 KB**. Y va sólo en los packs con alfa: en uno opaco el canal alfa es la
+máscara del canto redondeado —un borde duro— y ahí sí se le verían las abolladuras.
 
 Medido al cerrar: **8 firmas distintas de 8** en la bienvenida, que es donde la vuelta 126 puso la
 prueba. `cristal` con **117 celdas y 26 de 32 apps** contra las 27 de `generado` —y las seis sin celda
 son las cinco apps del propio launcher, que se dibujan con su glifo y no pasan por ningún pack, más
 Rappi—. Los nueve packs aplicados y revertidos uno por uno, la bienvenida recorrida entera eligiendo
 Crystal y quedando puesta, **cero solapamientos** en el escritorio y en el visor de la cámara, y
-`window.__errs` **vacío en las trece corridas**. APK **2,0 MB** con firma v2+v3.
+`window.__errs` **vacío en las trece corridas**. APK **2,2 MB** con firma v2+v3.
 
 Y las trece hojas están fotografiadas, más el cajón entero con `cristal` y con `generado` uno al lado
 del otro para ver las dos familias.

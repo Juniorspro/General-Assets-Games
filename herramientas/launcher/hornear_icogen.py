@@ -14,7 +14,14 @@
    usa `.baldosa`, un pelo más abierta.
 """
 import base64, io, json, os, sys
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
+
+# ── QUÉ PACK VA CON ALFA ──
+# Pedido textual: *«no de fondo negro sino transparente»*. `generado` NO va:
+# sus baldosas son de color y opacas a propósito, y transparentarlas le
+# borraría el color, que es todo lo que ese pack tiene.
+ALFA = {'cristal': True}
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 CRUDO = os.path.join(RAIZ, 'crudo')
@@ -46,6 +53,43 @@ def mascara(l):
     return m.resize((l, l), Image.LANCZOS)
 
 
+def transparenta(cel, piso=0.10, gan=1.55):
+    """El vidrio fotografiado sobre negro es alfa premultiplicado.
+
+       ── POR QUÉ ESTO NO ES UN TRUCO ──
+       La hoja se genera sobre fondo negro puro, y un negro puro no aporta nada
+       a lo que la cámara ve: todo lo que hay en la celda es luz que el vidrio
+       AGREGA —el bisel, la barrida especular, el tallado—. O sea que el píxel
+       ya ES `color × alfa` sobre alfa cero, que es exactamente la definición de
+       premultiplicado. Deshaciendo la multiplicación, el cuerpo del vidrio
+       —mediana 16 de 255, medido— se vuelve transparente y quedan opacos el
+       canto y el símbolo, que es lo que un vidrio de verdad deja ver.
+
+       El `piso` es lo único que no sale de la foto: sin él la baldosa no existe
+       hasta que uno le pone el dedo encima, porque más de la mitad de sus
+       píxeles están por debajo de 20. Con un décimo de cuerpo se lee a pieza de
+       vidrio apoyada sobre el fondo de pantalla y se sigue viendo lo de atrás.
+    """
+    a = np.asarray(cel.convert('RGB')).astype(np.float32) / 255.0
+    lum = a.max(2)
+    al = np.clip(lum * gan, 0.0, 1.0)
+    al = piso + (1.0 - piso) * al
+    # deshacer la premultiplicación: donde el alfa es chico el color no está
+    # definido, así que se lo lleva a blanco en vez de dejar ruido oscuro
+    col = np.where(al[..., None] > 0.004, a / np.maximum(al[..., None], 0.004), 1.0)
+    col = np.clip(col, 0.0, 1.0)
+    # ── DONDE EL VIDRIO ES FINO, EL COLOR SE VA A BLANCO ──
+    # Dividir por un alfa chico amplifica el ruido del JPEG del generador, y ese
+    # ruido no se ve —está al diez por ciento de opacidad— pero NO COMPRIME: la
+    # celda pasaba de 3,3 a 6,3 KB por píxeles que nadie mira. Un vidrio fino
+    # además no tiene color, así que blanquearlo es lo correcto y no una
+    # concesión.
+    w = np.clip((al[..., None] - piso) / 0.45, 0.0, 1.0)
+    col = col * w + (1.0 - w)
+    out = np.dstack([col * 255.0, al * 255.0]).astype(np.uint8)
+    return Image.fromarray(out, 'RGBA')
+
+
 def hornea(pack, nombre, hoja):
     ruta = os.path.join(CRUDO, ('%s.png' % nombre) if pack == 'generado'
                         else 'ico_%s_%s.png' % (pack, nombre))
@@ -59,9 +103,27 @@ def hornea(pack, nombre, hoja):
         f, c = i // 3, i % 3
         cel = im.crop((c * cw, f * ch, (c + 1) * cw, (f + 1) * ch))
         cel = cel.crop(caja(cel)).resize((LADO, LADO), Image.LANCZOS)
-        cel.putalpha(msk)
+        if ALFA.get(pack):
+            cel = transparenta(cel)
+            # las dos máscaras se MULTIPLICAN: el canto redondeado recorta y el
+            # alfa del vidrio adelgaza. Con `putalpha` la segunda pisa a la
+            # primera y la baldosa vuelve a salir cuadrada.
+            cel.putalpha(Image.fromarray(
+                (np.asarray(cel.split()[3]).astype(np.float32) *
+                 np.asarray(msk).astype(np.float32) / 255.0).astype(np.uint8)))
+        else:
+            cel.putalpha(msk)
         b = io.BytesIO()
-        cel.save(b, 'WEBP', quality=82, method=6)
+        # ── EL ALFA VA LOSSY, Y SÓLO EN LOS PACKS QUE LO USAN ──
+        # Pillow guarda el canal alfa SIN pérdida por omisión, y acá el alfa es
+        # un degradado suave de vidrio: bajarlo a 60 corta la celda a la mitad
+        # (6,3 → 3,3 KB) y no se distingue compuesta sobre un fondo claro ni
+        # sobre uno oscuro. En un pack opaco el alfa es la máscara del canto
+        # redondeado —un borde duro— y ahí sí se le verían las abolladuras.
+        if ALFA.get(pack):
+            cel.save(b, 'WEBP', quality=82, alpha_quality=60, method=6)
+        else:
+            cel.save(b, 'WEBP', quality=82, method=6)
         out[hoja['claves'][i]] = base64.b64encode(b.getvalue()).decode()
     return out
 

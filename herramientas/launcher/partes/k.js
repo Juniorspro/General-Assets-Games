@@ -994,17 +994,15 @@ const PACKS = [
      siete opciones y tenía dos familias.
      Éste es celdas de verdad: vidrio óptico incoloro con el canto biselado y el
      símbolo TALLADO adentro.
-     ── Y SU RESPALDO TIENE QUE SER DEL MISMO VALOR QUE LA CELDA ──
-     Empezó cayendo a `vidrio`, que es «el mismo vidrio sin color» y suena bien
-     escrito. Fotografiado, no: la celda generada es vidrio OSCURO —mediana
-     (56,60,65) medida sobre la hoja— y `vidrio` deja pasar el fondo de
-     pantalla, así que en el cajón quedaban baldosas casi negras al lado de
-     baldosas del color del fondo. Eso se lee a dos packs mezclados, que es
-     exactamente lo que esta vuelta vino a arreglar. Con `pkCristal` la app sin
-     celda sale con SU vidrio oscuro y su canto encendido, y lo único que le
-     falta es el tallado. */
+     ── Y ES TRANSPARENTE DE VERDAD, QUE FUE UNA CORRECCIÓN DEL USUARIO ──
+     *«no de fondo negro sino transparente»*. La hoja se genera sobre negro
+     puro, así que la celda salía opaca y oscura: un vidrio que no deja ver
+     nada no es vidrio. El alfa se deshornea en `hornear_icogen.py` —el píxel
+     sobre negro ya ES alfa premultiplicado— y por eso su respaldo dibujado
+     lleva `cssVidrio`: tiene que dejar pasar el fondo de pantalla igual que la
+     celda, o la app sin celda saldría como una losa en el medio del pack. */
   { id: 'cristal', gen: 'cristal', fondo: null, relieve: true, forma: 'cuad',
-    tinte: null,   glifo: '#fff',  css: 'pkCristal' },
+    tinte: null,   glifo: '#fff',  css: 'pkCristal', cssVidrio: true },
   { id: 'nativo',  nativo: true }
 ];
 const PACK_POR_ID = (() => { const m = {}; for (const p of PACKS) m[p.id] = p; return m; })();
@@ -1031,7 +1029,12 @@ function icoAero(b, pkg, nombre){
     const tabla = (typeof ICOGEN_PACKS !== 'undefined') ? (ICOGEN_PACKS[P.gen] || {}) : {};
     const im = tabla[g];
     if (im){
-      b.classList.add('aero', 'gen');
+      /* ── UNA CELDA CON ALFA NO PUEDE LLEVAR `aero` ──
+         `aero` apaga el `backdrop-filter` porque quiere decir «hay una foto
+         opaca tapando lo de atrás». La celda de cristal es transparente: sin el
+         filtro, por dentro del vidrio se ve el fondo de pantalla NÍTIDO, que es
+         justo lo que un vidrio grueso no hace. */
+      b.classList.add(P.cssVidrio ? 'vidrioPuro' : 'aero', 'gen');
       b.style.backgroundImage = 'url(' + im + ')';
       b.style.backgroundSize = 'cover';
       b.style.backgroundPosition = 'center';
@@ -1067,9 +1070,13 @@ function icoAero(b, pkg, nombre){
     b.style.backgroundSize = 'cover';
     b.style.backgroundPosition = 'center';
   } else if (P.css){
-    /* con su cara propia dibujada: `aero` porque es opaca, así que el
-       `backdrop-filter` se apaga igual que con una foto */
-    b.classList.add('aero', P.css);
+    /* ── HAY DOS CLASES DE CARA DIBUJADA, Y LA DIFERENCIA ES EL VIDRIO ──
+       `aero` quiere decir «esta baldosa es opaca» y apaga el `backdrop-filter`.
+       Eso vale para bliss, tinta y neón, que tapan lo de atrás. La cara de
+       cristal es lo contrario: su celda generada es TRANSPARENTE, así que su
+       respaldo tiene que dejar pasar el fondo de pantalla o la app sin celda
+       saldría como una losa opaca en el medio de un pack de vidrio. */
+    b.classList.add(P.cssVidrio ? 'vidrioPuro' : 'aero', P.css);
   } else {
     b.classList.add('vidrioPuro');
   }
