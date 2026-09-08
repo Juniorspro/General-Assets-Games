@@ -281,6 +281,173 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimonovena vuelta (2026-09-08): **AERO** — ciento cincuenta vidrios por cuadro, el resaltado que se encendía solo, y la accesibilidad
+
+Pedido textual: *"va muy lag el menú de cajón de aplicaciones y también ya aparecen remarcadas las
+letras eso solamente debe pasar si deslizas en la parte de la barra que va abajo, también optimiza en
+un 500% todo porque va muy lag para un launcher también que pida accesos a accesibilidad para que
+sirva la barra de notificaciones"*.
+
+#### LO PRIMERO FUE PODER MEDIRLO: EL BANCO TRAE 32 APPS Y UN TELÉFONO TIENE 150
+
+Todo lo que cuesta en el cajón escala con ese número —el barrido de `.ap`, las anclas del riel,
+cuántos nodos cambian de clase, cuántas baldosas hay que filtrar— así que medir con 32 contesta que
+no cuesta nada y no describe el aparato del dueño. Entró `appsFalsas(n)`, que repite la lista hasta
+`n`, y con eso el defecto apareció de una: **0,04 ms por cuadro con 32 y 3,1 con 150.**
+
+**Y LA LISTA FALSA SE ORDENA, PORQUE LA DE VERDAD VIENE ORDENADA.** Sin eso la letra cambia decenas
+de veces y `LETRAS` sale con repetidas: el riel medía **21 letras contra 19 anclas** y la caché de
+`midaAnclas` dejaba de ser monótona, o sea que la búsqueda binaria mediría otra cosa que el juego.
+Una prueba que no representa lo que se mira no sirve para mirarlo.
+
+#### EL RESALTADO SE ENCENDÍA SOLO PORQUE `marcaRiel` CORRE EN CADA CUADRO DE SCROLL
+
+El reporte era literal y la causa es una línea. `marcaRiel(L)` llamaba a `resaltaLetra(L)`, y a
+`marcaRiel` la llama el manejador de `scroll` — o sea que **bajar por la lista con el dedo encendía
+cada letra al pasar**. Resaltar es la respuesta a «pediste esta letra», y eso sólo pasa en el riel:
+ahora lo llaman `rVa` y `vaALetra`, y nadie más.
+
+Y no era sólo feo: ese manejador costaba **3,1 ms por cuadro** sobre un presupuesto de 16,7, y la
+mayor parte era el resaltado —dos `querySelectorAll` a nivel de DOCUMENTO y cambios de clase en
+decenas de nodos, sesenta veces por segundo.
+
+**Y LAS ANCLAS SE MEDÍAN EN CADA CUADRO.** `letraVisible()` hacía `getBoundingClientRect()` de las
+veintiuna anclas por evento de scroll, y cada una obliga al navegador a recalcular el layout. Las
+anclas no se mueven mientras uno scrollea: su `offsetTop` es fijo hasta que la lista se repinte o
+cambie de tamaño. Se cachean en `midaAnclas()` —invalidada en `pintaCajon` y en el `resize`— y la
+letra sale por **búsqueda binaria**. En el manejador no queda una sola lectura de layout.
+
+| | ms por cuadro de scroll, 150 apps |
+|---|---|
+| antes | **3,159** |
+| ahora | **0,034 – 0,047** |
+
+#### EL HALLAZGO DE LA VUELTA: **159 PASADAS DE `backdrop-filter` POR CUADRO**
+
+Con el cajón abierto y 150 apps, `vidrios()` devuelve la cuenta de verdad:
+
+| pack | pasadas | píxeles filtrados |
+|---|---|---|
+| generado | 29 | 537.529 |
+| **cristal** | **159** | **874.179** |
+| **nativo** | **159** | **856.975** |
+
+La regla de la vuelta 123 sigue valiendo —**lo que cuesta es la PASADA, no el radio**— así que el
+problema no es cuánto desenfoca cada baldosa sino que haya ciento cincuenta. Y no se arregla
+apagándolas: en `cristal` la celda es transparente a propósito (vuelta 128) y el vidrio es lo único
+que hay detrás del tallado; en `nativo` no hay pack y el vidrio ES la baldosa. `generado` está en 29
+justamente porque su celda es opaca y lleva `backdrop-filter:none`.
+
+**En el cajón entran unas quince a la vez.** Un `IntersectionObserver` con la lista de raíz les pone
+`lejos` a las que están fuera de la ventana, y ahí el filtro no cuesta nada: filtrar lo que nadie ve
+es trabajo puro. El margen es de cuatro filas, así que ninguna aparece sin vidrio al scrollear.
+
+| pack | pasadas | píxeles |
+|---|---|---|
+| generado | **12** | 496.372 |
+| cristal | **42** | 599.857 |
+| nativo | **42** | 573.718 |
+
+**Y SE OBSERVA UNA VEZ, AL ARMAR LA BALDOSA, NO EN CADA PINTADA.** La primera versión hacía
+`disconnect()` y ciento cincuenta `observe()` por pintada, y eso se comía la mitad de lo que la caché
+de baldosas acababa de ahorrar: medido, la pintada subía de **32 a 55 ms**. Un observador sigue
+observando al elemento aunque se lo saque del documento y se lo vuelva a poner, que es exactamente lo
+que `pintaCajon` hace con los nodos guardados.
+
+#### LA PINTADA DE LA LISTA: 68 ms, Y PASA EN CADA LETRA QUE SE ESCRIBE
+
+`cajPinta(n)` mide lo otro que el jugador siente como lag, porque la lista se rehace entera en cada
+tecla del buscador. Desglosado con `cajParte()`: **20 ms armar los 150 nodos**, 3 la animación de
+entrada, 1,5 las lecturas de layout, y el resto engancharlos al documento.
+
+Tres cosas, en orden de lo que compraron:
+
+1. **LAS BALDOSAS SE GUARDAN.** La baldosa de una app es siempre la misma hasta que cambia el pack o
+   la lista de apps: se guarda por paquete (`CAJ_NODO`) y la pintada pasa a ser apilar nodos que ya
+   existen — de paso los escuchas de toque tampoco se vuelven a colgar. La caché es **sólo del
+   cajón**: un nodo del DOM vive en un sitio y nada más, así que el escritorio y el dock arman los
+   suyos. La limpia `ICO_CACHE_LIMPIA` y el cargado de apps.
+   **Y `CAJ_NODO` se declara en `b.js` y no en `e.js`**, porque la limpia `k.js`, que se evalúa antes:
+   un `let` leído antes de su línea no devuelve `undefined`, tira, y se lleva el módulo entero. Van
+   nueve veces en este repo.
+2. **UN SOLO REFLUJO PARA LA LISTA ENTERA.** `entraLista` hacía `remove('entra') · void offsetWidth ·
+   add('entra')` **dentro** del bucle, y `offsetWidth` obliga a recalcular el layout ahí mismo: 150
+   recálculos sincrónicos por pintada. La lectura sólo existe para que el navegador vea que la clase
+   se fue y vuelva a disparar la animación, y para eso alcanza con **una**.
+3. **UNA PINTADA POR CUADRO, NO UNA POR TECLA.** Escribiendo rápido entran varias teclas en el mismo
+   cuadro y cada una rehacía la lista. El navegador dibuja una vez por cuadro; la lista también.
+
+Medido: **68 → 36-41 ms** por pintada con 150 apps.
+
+#### LA ACCESIBILIDAD, Y HAY QUE DECIR QUE NO ES LO MISMO QUE LAS NOTIFICACIONES
+
+El pedido dice *«que pida accesos a accesibilidad para que sirva la barra de notificaciones»*, y las
+dos cosas son permisos distintos. Las notificaciones las **lee** `Escucha`, que es un
+`NotificationListenerService` y tiene su propia pantalla; un servicio de accesibilidad ve pasar
+eventos de notificación pero **no tiene `getActiveNotifications()`**, así que por ahí la lista
+quedaría incompleta y sin poder borrar nada. Mandar a alguien a dar el permiso de accesibilidad para
+arreglar la lista sería mandarlo al sitio equivocado.
+
+Lo que la accesibilidad sí hace, y **un launcher no puede hacer de ninguna otra forma**, son las
+acciones globales: **bajar la barra del sistema**, abrir los ajustes rápidos, ver recientes y
+bloquear la pantalla. La vuelta 126 dejó anotado que diez de los doce interruptores del centro de
+control son atajos porque desde Android 10 una app normal no puede prender el wifi; esto no cambia
+eso, pero convierte cuatro cosas en acciones de verdad. Entra `Acces.java` y el centro pasa de 12 a
+**16 botones: 1 llave · 10 atajos · 4 de accesibilidad · la cámara**.
+
+**Y EL SERVICIO NO MIRA NADA.** `canRetrieveWindowContent="false"` y la máscara de eventos en cero:
+lo único que expone es `performGlobalAction`, o sea los mismos gestos que el dueño ya puede hacer con
+el dedo. Pedir permisos que no se usan es lo que hace que nadie los dé, y la descripción que el
+sistema muestra lo dice con todas las letras.
+
+**LOS CUATRO NO SE QUEDAN MUDOS SIN EL PERMISO**, que es la lección de la vuelta 126: un botón que no
+hace nada se lee a launcher roto. Llevan la marca `falta` —un punto ámbar, no la flecha ↗, porque no
+abren un panel: hacen la cosa— y tocarlos abre la pantalla donde se da. Medido: con el permiso puesto,
+tocar «Notificaciones» llama a `notis` y «Bloquear» a `bloquear`; sin él, ninguno actúa y los dos
+abren la pantalla del permiso.
+
+**Y LOS CUATRO ESTADOS SON LOS MISMOS QUE LOS DE LA LISTA DE NOTIFICACIONES, POR LA MISMA RAZÓN:**
+habilitado no es enlazado, y volver a pedirle el permiso a alguien que ya lo dio es lo peor que se
+puede hacer. Medido los cuatro: `sinPuente` · `sinPermiso` con su botón · `esperando` · `ok` sin
+aviso.
+
+**Y LA PANTALLA DEL PERMISO VA DE LO PARTICULAR A LO GENERAL.** La lista de «acceso a notificaciones»
+de un teléfono tiene cuarenta apps y en HyperOS está enterrada en otro sitio: mandar a alguien ahí y
+que no encuentre el interruptor se ve igual que un permiso que no se puede dar. Desde API 30 hay un
+intent que abre **derecho** el interruptor de esta app; si el ROM no lo tiene se cae a la lista —con
+el extra que le pide a Ajustes que deje marcada nuestra fila— y en el peor caso a los ajustes de la
+propia app. Tres escalones: el que no acepte uno aterriza en el siguiente en vez de no ir a ninguna
+parte.
+
+#### DOS DEFECTOS DE MEDICIÓN, Y LOS DOS SON MÍOS
+
+- **`cajModo(v)` REPINTA LA LISTA**, así que llamarlo para *leer* el estado del resaltado lo borraba
+  antes de contarlo: devolvía `res: 0` sobre un resaltado que estaba puesto. Se lee con `cajModo()`
+  sin argumento. Es la enésima vez en este repo que la sonda escribe el estado que viene a medir.
+- **Y `accToca` contesta antes de que la acción ocurra**, porque el centro se cierra primero y la
+  acción va 180 ms después —bajar la barra del sistema con nuestra hoja encima deja dos paneles
+  apilados—. La prueba tiene que esperar y leer `window.__accUlt`, no el retorno.
+
+#### MEDIDO AL CERRAR
+
+Cajón con 150 apps: scroll **0,034-0,047 ms por cuadro** (era 3,159) y **`res: 0` mientras se
+scrollea**; el riel sí resalta (`res: 4`, `hayRes: true`) y se apaga solo a los 1,6 s. Pintada
+**36-41 ms** (era 68). Vidrio: **12 · 42 · 42 pasadas** en generado, cristal y nativo (eran 29 · 159 ·
+159). Centro de control: **16 botones · 1 llave · 10 atajos · 4 de accesibilidad**, los cuatro estados
+del permiso recorridos y las dos acciones verificadas. Regresión: gesto hacia abajo abre el centro y
+hacia arriba el cajón con **0 ondas de agua** en los dos, riel de 17 letras con sus 17 encabezados,
+**cero solapamientos** entre los cinco elementos del escritorio, packs con **117 y 201 celdas** y 26 y
+27 de 32 apps. `window.__errs` **vacío en las trece corridas**. APK **2,2 MB** con firma v2+v3, el
+`AccessibilityService` declarado con `BIND_ACCESSIBILITY_SERVICE`, y `Acces`, `accesOk`, `accesPedir`,
+`accesAccion` y `accesHabilitado` verificados dentro del dex.
+
+**LO QUE NO PUDE COMPROBAR:** no hay emulador, así que del servicio de accesibilidad está medido que
+compila, que el manifiesto lo declara con su permiso y su `meta-data`, y que la interfaz recorre los
+cuatro estados y llama a la acción correcta con un puente de mentira — **no** que Android lo enlace en
+un teléfono ni que `performGlobalAction` baje la barra. Y los milisegundos son los del banco, que
+dibuja por software: lo que no depende del aparato es que se hayan sacado 117 pasadas de filtro por
+cuadro y 150 recálculos de layout por pintada.
+
 ### Centésima vigesimoctava vuelta (2026-09-08): **AERO** — la descarga congelaba el launcher 45 segundos, y los packs de iconos pasan a ser celdas generadas
 
 Pedido textual: *"hey mejora el aero OS y arregla los Bugs como que no me deja descargar, el coso este

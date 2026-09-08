@@ -125,6 +125,54 @@ window.__A = {
              mirando: LETRAS.length ? letraVisible() : null,
              encabezados: $$('#cajLista .let').map(e => e.textContent) };
   },
+  /* ── UN TELÉFONO DE VERDAD NO TIENE 32 APPS ──
+     El banco trae 32 y una pantalla real tiene entre 60 y 150. Todo lo que
+     cuesta en el cajón escala con ese número —el barrido de `.ap`, las anclas
+     del riel, cuántos nodos cambian de clase— así que medir con 32 contesta que
+     no cuesta nada y no describe el aparato del dueño. */
+  appsFalsas(n){
+    const base = APPS.slice();
+    if (!base.length) return 0;
+    const out = [];
+    for (let i = 0; out.length < n; i++){
+      for (const a of base){
+        if (out.length >= n) break;
+        out.push({ p: a.p + (i ? '.v' + i : ''),
+                   n: (i ? String.fromCharCode(65 + (i * 7) % 26) + ' ' : '') + a.n,
+                   s: a.s });
+      }
+    }
+    /* ── SE ORDENA, PORQUE LA LISTA DE VERDAD VIENE ORDENADA ──
+       Sin esto la letra cambia decenas de veces y `LETRAS` sale con repetidas:
+       el riel mide 21 letras contra 19 anclas y la caché de `midaAnclas` deja
+       de ser monótona, o sea que la búsqueda binaria mediría otra cosa que el
+       juego. Una prueba que no representa lo que se mira no sirve para mirarlo. */
+    out.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
+    APPS = out;
+    POR_PKG = {}; for (const a of APPS) POR_PKG[a.p] = a;
+    pintaCajon(); rejaRepinta();
+    return APPS.length;
+  },
+
+  /* ── LO QUE CUESTA UN CUADRO DE SCROLL DEL CAJÓN ──
+     Es el número que importa para «va muy lag»: `scroll` dispara docenas de
+     veces por segundo y el manejador mide posiciones, o sea que obliga al
+     navegador a recalcular el layout. Se corre el cuerpo del manejador tal cual
+     lo corre el scroll, con la lista puesta en sitios distintos para que no
+     conteste desde una caché. */
+  cajCosto(n){
+    const l = $('#cajLista');
+    const max = Math.max(1, l.scrollHeight - l.clientHeight);
+    n = n || 120;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++){
+      l.scrollTop = (i/n)*max;
+      marcaRiel(letraVisible());
+    }
+    const ms = performance.now() - t0;
+    return { pasos: n, msTotal: +ms.toFixed(1), msPorCuadro: +(ms/n).toFixed(3),
+             res: $$('#cajLista .ap.res').length, apps: $$('#cajLista .ap').length };
+  },
   /* arrastrar la barra por el camino del dedo, no llamando a vaALetra */
   arrastraRiel(frac){
     const r = $('#riel'), c = r.getBoundingClientRect();
@@ -1124,6 +1172,33 @@ window.__A = {
     const g = glifoDe(pkg, nombre);
     return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
   },
+  /* ── LO QUE CUESTA REPINTAR LA LISTA ──
+     Es el otro número de «va muy lag»: la lista entera se rehace en CADA letra
+     que se escribe en el buscador, así que con 150 apps eso son 150 nodos
+     nuevos más la animación de entrada. Medirlo con las 32 del banco contesta
+     que no cuesta nada. */
+  cajParte(n){
+    n = n || 5;
+    const l = $('#cajLista');
+    let t = performance.now(); for (let i=0;i<n;i++){ const f=document.createDocumentFragment();
+      for (const a of APPS) f.appendChild(nodoApp(a)); }
+    const nodos = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++) entraLista(l);
+    const entra = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++){ l.scrollTop; l.scrollHeight; }
+    const layout = (performance.now()-t)/n;
+    return { apps: APPS.length, msNodos: Math.round(nodos*100)/100,
+             msEntra: Math.round(entra*100)/100, msLayout: Math.round(layout*100)/100 };
+  },
+  cajPinta(n){
+    n = n || 20;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) pintaCajon();
+    const ms = performance.now() - t0;
+    return { vueltas: n, msTotal: Math.round(ms*10)/10,
+             msPorPintada: Math.round(ms/n*100)/100,
+             apps: $$('#cajLista .ap').length };
+  },
   /* ── LAS DOS FORMAS DEL CAJÓN ──
      Devuelve lo único que las distingue: si hay encabezados, cuántas anclas
      tiene el riel y cuántas apps quedaron resaltadas. Un cajón «todo junto» sin
@@ -1145,12 +1220,45 @@ window.__A = {
              botones: $$('#cc .ccB').length,
              llaves: $$('#cc .ccB.llave').length,
              atajos: $$('#cc .ccB.atajo').length,
+             /* los cuatro de accesibilidad: `falta` es la marca de que el
+                permiso no está, o sea que la prueba distingue «hace la cosa» de
+                «te lleva a darlo» y no sólo que el botón exista */
+             acces: $$('#cc .ccB.acc').length,
+             accesFalta: $$('#cc .ccB.acc.falta').length,
+             accesEstado: accEstado(),
              encendidos: $$('#cc .ccB.on').length,
              brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
              alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
              visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
   },
   ccAbrir(){ ccAbre(); return true; },
+  /* ── LA ACCESIBILIDAD, CON UN PUENTE DE MENTIRA ──
+     El banco no tiene servicio de accesibilidad, así que lo que se puede medir
+     es que los cuatro estados se distingan y que tocar un botón llame a la
+     acción correcta cuando el permiso está y a la pantalla del permiso cuando
+     no. Sin esto, «bajé la barra» y «no pasó nada» se ven iguales. */
+  accFinge(est){
+    const A = window.AND = window.AND || {};
+    window.__accUlt = null; window.__accPidio = 0;
+    A.accesAccion = q => { window.__accUlt = q; return est === 'ok'; };
+    A.accesPedir = () => { window.__accPidio++; return true; };
+    if (est === 'sinPuente'){ delete A.accesAccion; delete A.accesPedir; }
+    else {
+      A.accesHabilitado = () => est !== 'sinPermiso';
+      A.accesOk = () => est === 'ok';
+    }
+    ccPinta();
+    return { est: accEstado(), acces: $$('#cc .ccB.acc').length,
+             falta: $$('#cc .ccB.acc.falta').length,
+             aviso: ($('#ccNotis .ccAviso span') || {}).textContent || null };
+  },
+  accToca(id){
+    window.__accUlt = null; window.__accPidio = 0;
+    const b = CC_BOT.filter(x => x.id === id)[0];
+    if (!b) return { hay: false };
+    ccToca(b);
+    return { hay: true, accion: window.__accUlt, pidio: window.__accPidio };
+  },
   /* ── LAS NOTIFICACIONES, CON UN PUENTE DE MENTIRA ──
      El banco no tiene servicio de escucha, así que lo único que se puede medir
      de verdad es que los TRES estados se distingan y que una lista inyectada se

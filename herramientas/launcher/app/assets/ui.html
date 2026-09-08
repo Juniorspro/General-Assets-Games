@@ -524,6 +524,14 @@ body.and #barra{display:none}
    prende el wifi». Sin la marca, los doce se leen como llaves y once mienten. */
 .ccB.atajo::after{content:'↗';position:absolute;top:2px;left:calc(50% + 12px);
   font-weight:700;font-size:10px;line-height:1;opacity:.66;text-shadow:0 1px 2px rgba(0,20,40,.5)}
+/* ── LOS DE ACCESIBILIDAD NO LLEVAN ↗, PORQUE NO ABREN NINGÚN PANEL ──
+   Hacen la cosa: bajan la barra del sistema, muestran recientes o bloquean.
+   Su marca es un punto, y sólo aparece cuando falta el permiso — o sea que la
+   marca dice «esto todavía no funciona» y no «esto es un atajo». */
+.ccB.acc.falta::after{content:'';position:absolute;top:6px;left:calc(50% + 13px);
+  width:6px;height:6px;border-radius:50%;background:#ffd166;
+  box-shadow:0 0 6px rgba(255,209,102,.8)}
+.ccB.acc.falta{opacity:.62}
 /* ── LA LISTA DE NOTIFICACIONES ──
    Cada fila es una tarjeta de vidrio: icono, título con el tiempo, texto, y la
    × sólo si esa notificación se puede descartar (las persistentes no). */
@@ -563,6 +571,17 @@ body.and #barra{display:none}
    Apaga el vidrio de todo lo que lo tiene, que es la única forma de saber qué
    parte del costo de un cuadro es del agua y qué parte es del compositor
    rehaciendo treinta desenfoques. No la usa el juego. */
+/* ── SÓLO LAS BALDOSAS QUE SE VEN LLEVAN VIDRIO ──
+   Medido con 150 apps y el cajón abierto: **159 pasadas de `backdrop-filter` y
+   874.179 píxeles filtrados**, y 150 de esas pasadas son las baldosas. La regla
+   de la vuelta 123 sigue valiendo — lo que cuesta es la PASADA, no el radio —
+   así que el problema no es cuánto desenfoca cada una sino que haya ciento
+   cincuenta.
+   En el cajón entran unas quince a la vez. Un `IntersectionObserver` les pone
+   `lejos` a las que están fuera de la ventana y ahí el vidrio no cuesta nada:
+   filtrar lo que nadie ve es trabajo puro. El margen del observador es de
+   cuatro filas, así que ninguna aparece sin vidrio al scrollear. */
+#cajLista .ap.lejos .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none}
 body.sinVidrio *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.sinBald .baldosa{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.sinPanel .vid,body.sinPanel #cajon,body.sinPanel #menu,body.sinPanel .hoja{
@@ -2110,6 +2129,9 @@ const LEMI = {"nv":4412,"nt":5541,"nh":23,"pmin":[-0.183709,0.0,-0.294526],"pesc
 
 const $ = s => document.querySelector(s);
 const $$ = s => Array.prototype.slice.call(document.querySelectorAll(s));
+
+/* la baldosa ya armada de cada app del cajón; ver `cajCacheLimpia` en e.js */
+let CAJ_NODO = new Map();
 function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
 
 /* ── EL PUENTE PUEDE NO ESTAR, Y ESO NO ES UN ERROR ──
@@ -2148,7 +2170,7 @@ const TXT = {
         pSi: 'Sí', pNo: 'No', pChica: 'Chica', pMedia: 'Media', pGrande: 'Grande',
         pQuieto: 'Quieta', pBaila: 'Bailando', pSaluda: 'Saludando', pMando: 'Jugando',
         pDuerme: 'Durmiendo', pIconos: 'Tamaño de los iconos', pColumnas: 'Columnas',
-        pPack: 'Pack Aero de iconos', nTit: 'NOTIFICACIONES', nLimpiar: 'Limpiar', nVacio: 'Nada nuevo', nAhora: 'ahora', nMin: 'hace {0} min', nHora: 'hace {0} h', nPide: 'Para ver tus notificaciones acá, Android pide que lo habilites a mano. Es la única cosa de este launcher que no se puede prender desde adentro.', nPermitir: 'Habilitar', nEspera: 'Habilitado. Esperando a que Android conecte el servicio…', nSinPuente: 'Vista previa: sin conexión con el sistema no hay notificaciones que leer.', ccPie: 'Los que llevan ↗ abren el panel del sistema: desde Android 10 una app no puede prender el wifi ni los datos por su cuenta.', ccAtajo: 'Abriría: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Datos', cc_bt: 'Bluetooth', cc_linterna: 'Linterna', cc_avion: 'Avión', cc_rotar: 'Rotación', cc_dnd: 'No molestar', cc_ubicacion: 'Ubicación', cc_bateria: 'Batería', cc_nfc: 'NFC', cc_ajustes: 'Ajustes', cc_cam: 'Cámara', bvPack: 'Elegí tus iconos', bvPackD: 'Todos son de vidrio Aero. Se puede cambiar cuando quieras desde Personalizar.', bvReja: '¿De qué tamaño?', bvRejaD: 'Cuántas apps entran en cada fila del escritorio.', bvGrande: 'Grandes', bvMedia: 'Medianos', bvChica: 'Chicos', bvMini: 'Muchos', bvCajon: '¿Cómo querés el cajón?', bvCajonD: 'Por letras pone un encabezado por letra; todo junto es una sola reja, y el riel del costado resalta las de esa letra.', bvCam: '¿Qué cámara abre una cámara?', bvCamD: 'La Aero es la de este launcher: vidrio líquido y fondo Frutiger.', bvCC: '¿Centro de control propio?', bvCCD: 'Bajando el dedo en el escritorio se abre uno de vidrio, en vez del panel del sistema.', bvSig: 'Seguir', bvListo: 'Listo', bvAtras: 'Atrás', pCam: 'Al tocar una cámara', pPreg: 'Preguntar', pCC: 'Centro de control propio', pCajon: 'Cajón de apps', pPorLetras: 'Por letras', pJunto: 'Todo junto',
+        pPack: 'Pack Aero de iconos', nTit: 'NOTIFICACIONES', nLimpiar: 'Limpiar', nVacio: 'Nada nuevo', nAhora: 'ahora', nMin: 'hace {0} min', nHora: 'hace {0} h', nPide: 'Para ver tus notificaciones acá, Android pide que lo habilites a mano. Es la única cosa de este launcher que no se puede prender desde adentro.', nPermitir: 'Habilitar', nEspera: 'Habilitado. Esperando a que Android conecte el servicio…', nSinPuente: 'Vista previa: sin conexión con el sistema no hay notificaciones que leer.', ccPie: 'Los que llevan ↗ abren el panel del sistema: desde Android 10 una app no puede prender el wifi ni los datos por su cuenta.', ccAtajo: 'Abriría: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Datos', cc_bt: 'Bluetooth', cc_linterna: 'Linterna', cc_avion: 'Avión', cc_rotar: 'Rotación', cc_dnd: 'No molestar', cc_ubicacion: 'Ubicación', cc_bateria: 'Batería', cc_nfc: 'NFC', cc_ajustes: 'Ajustes', cc_cam: 'Cámara', cc_barra: 'Notificaciones', cc_rapidos: 'Ajustes rápidos', cc_recientes: 'Recientes', cc_bloquear: 'Bloquear', aPide: 'Bajar la barra de notificaciones, ver recientes y bloquear la pantalla son acciones del sistema: hace falta el permiso de accesibilidad. No lee nada de lo que hay en pantalla.', aEspera: 'Accesibilidad habilitada. Esperando a que Android conecte el servicio…', aSinPuente: 'Vista previa: sin conexión con el sistema no hay barra que bajar.', bvPack: 'Elegí tus iconos', bvPackD: 'Todos son de vidrio Aero. Se puede cambiar cuando quieras desde Personalizar.', bvReja: '¿De qué tamaño?', bvRejaD: 'Cuántas apps entran en cada fila del escritorio.', bvGrande: 'Grandes', bvMedia: 'Medianos', bvChica: 'Chicos', bvMini: 'Muchos', bvCajon: '¿Cómo querés el cajón?', bvCajonD: 'Por letras pone un encabezado por letra; todo junto es una sola reja, y el riel del costado resalta las de esa letra.', bvCam: '¿Qué cámara abre una cámara?', bvCamD: 'La Aero es la de este launcher: vidrio líquido y fondo Frutiger.', bvCC: '¿Centro de control propio?', bvCCD: 'Bajando el dedo en el escritorio se abre uno de vidrio, en vez del panel del sistema.', bvSig: 'Seguir', bvListo: 'Listo', bvAtras: 'Atrás', pCam: 'Al tocar una cámara', pPreg: 'Preguntar', pCC: 'Centro de control propio', pCajon: 'Cajón de apps', pPorLetras: 'Por letras', pJunto: 'Todo junto',
         pk_aero:'Aero',pk_vidrio:'Vidrio puro',pk_burbuja:'Burbuja',pk_bliss:'Colina',pk_tinta:'Tinta',pk_neon:'Neón',pk_generado:'Generado',pk_cristal:'Cristal',pk_nativo:'El del sistema', pIcono: 'Fondo de los iconos', pAgua: 'Agua', pPasto: 'Pasto', pNube: 'Nubes',
         /* ── la cámara Aero ── */
         caElegi:'¿Con cuál sacás la foto?', caElegiD:'Aero es la de este launcher: vidrio líquido y fondo Frutiger. La del sistema es la que tenés puesta.',
@@ -2240,7 +2262,7 @@ const TXT = {
         pSi: 'On', pNo: 'Off', pChica: 'Small', pMedia: 'Medium', pGrande: 'Large',
         pQuieto: 'Idle', pBaila: 'Dancing', pSaluda: 'Waving', pMando: 'Playing',
         pDuerme: 'Sleeping', pIconos: 'Icon size', pColumnas: 'Columns',
-        pPack: 'Aero icon pack', nTit: 'NOTIFICATIONS', nLimpiar: 'Clear', nVacio: 'Nothing new', nAhora: 'now', nMin: '{0} min ago', nHora: '{0} h ago', nPide: 'To see your notifications here, Android needs you to enable it by hand. It is the one thing in this launcher that cannot be turned on from the inside.', nPermitir: 'Enable', nEspera: 'Enabled. Waiting for Android to connect the service…', nSinPuente: 'Preview: with no system bridge there are no notifications to read.', ccPie: 'The ones marked ↗ open the system panel: since Android 10 an app cannot turn Wi-Fi or mobile data on by itself.', ccAtajo: 'Would open: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Mobile data', cc_bt: 'Bluetooth', cc_linterna: 'Torch', cc_avion: 'Airplane', cc_rotar: 'Rotation', cc_dnd: 'Do not disturb', cc_ubicacion: 'Location', cc_bateria: 'Battery', cc_nfc: 'NFC', cc_ajustes: 'Settings', cc_cam: 'Camera', bvPack: 'Pick your icons', bvPackD: 'They are all Aero glass. You can change this any time from Personalize.', bvReja: 'What size?', bvRejaD: 'How many apps fit in each home-screen row.', bvGrande: 'Large', bvMedia: 'Medium', bvChica: 'Small', bvMini: 'Many', bvCajon: 'How do you want the drawer?', bvCajonD: 'By letter adds a heading per letter; all together is one grid, and the side rail highlights the ones with that letter.', bvCam: 'Which camera opens a camera?', bvCamD: 'Aero is the one built into this launcher: liquid glass and a Frutiger backdrop.', bvCC: 'Your own control centre?', bvCCD: 'Swiping down on the home screen opens a glass one instead of the system panel.', bvSig: 'Next', bvListo: 'Done', bvAtras: 'Back', pCam: 'When a camera is tapped', pPreg: 'Ask', pCC: 'Own control centre', pCajon: 'App drawer', pPorLetras: 'By letter', pJunto: 'All together',
+        pPack: 'Aero icon pack', nTit: 'NOTIFICATIONS', nLimpiar: 'Clear', nVacio: 'Nothing new', nAhora: 'now', nMin: '{0} min ago', nHora: '{0} h ago', nPide: 'To see your notifications here, Android needs you to enable it by hand. It is the one thing in this launcher that cannot be turned on from the inside.', nPermitir: 'Enable', nEspera: 'Enabled. Waiting for Android to connect the service…', nSinPuente: 'Preview: with no system bridge there are no notifications to read.', ccPie: 'The ones marked ↗ open the system panel: since Android 10 an app cannot turn Wi-Fi or mobile data on by itself.', ccAtajo: 'Would open: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Mobile data', cc_bt: 'Bluetooth', cc_linterna: 'Torch', cc_avion: 'Airplane', cc_rotar: 'Rotation', cc_dnd: 'Do not disturb', cc_ubicacion: 'Location', cc_bateria: 'Battery', cc_nfc: 'NFC', cc_ajustes: 'Settings', cc_cam: 'Camera', cc_barra: 'Notifications', cc_rapidos: 'Quick settings', cc_recientes: 'Recents', cc_bloquear: 'Lock', aPide: 'Pulling down the notification bar, opening recents and locking the screen are system actions: they need the accessibility permission. It reads nothing of what is on screen.', aEspera: 'Accessibility enabled. Waiting for Android to connect the service…', aSinPuente: 'Preview: with no system bridge there is no bar to pull down.', bvPack: 'Pick your icons', bvPackD: 'They are all Aero glass. You can change this any time from Personalize.', bvReja: 'What size?', bvRejaD: 'How many apps fit in each home-screen row.', bvGrande: 'Large', bvMedia: 'Medium', bvChica: 'Small', bvMini: 'Many', bvCajon: 'How do you want the drawer?', bvCajonD: 'By letter adds a heading per letter; all together is one grid, and the side rail highlights the ones with that letter.', bvCam: 'Which camera opens a camera?', bvCamD: 'Aero is the one built into this launcher: liquid glass and a Frutiger backdrop.', bvCC: 'Your own control centre?', bvCCD: 'Swiping down on the home screen opens a glass one instead of the system panel.', bvSig: 'Next', bvListo: 'Done', bvAtras: 'Back', pCam: 'When a camera is tapped', pPreg: 'Ask', pCC: 'Own control centre', pCajon: 'App drawer', pPorLetras: 'By letter', pJunto: 'All together',
         pk_aero:'Aero',pk_vidrio:'Pure glass',pk_burbuja:'Bubble',pk_bliss:'Hillside',pk_tinta:'Ink',pk_neon:'Neon',pk_generado:'Generated',pk_cristal:'Crystal',pk_nativo:'System icon', pIcono: 'Icon backdrop', pAgua: 'Water', pPasto: 'Grass', pNube: 'Clouds',
         caElegi:'Which one takes the shot?', caElegiD:'Aero is this launcher\u2019s: liquid glass over a Frutiger backdrop. System is the one you already use.',
         caAero:'AERO CAMERA', caSistema:'System camera', caCam:'Aero Camera',
@@ -2331,7 +2353,7 @@ const TXT = {
         pSi: 'Sim', pNo: 'Não', pChica: 'Pequeno', pMedia: 'Médio', pGrande: 'Grande',
         pQuieto: 'Parado', pBaila: 'Dançando', pSaluda: 'Acenando', pMando: 'Jogando',
         pDuerme: 'Dormindo', pIconos: 'Tamanho dos ícones', pColumnas: 'Colunas',
-        pPack: 'Pacote de ícones Aero', nTit: 'NOTIFICAÇÕES', nLimpiar: 'Limpar', nVacio: 'Nada novo', nAhora: 'agora', nMin: 'há {0} min', nHora: 'há {0} h', nPide: 'Para ver suas notificações aqui, o Android pede que você habilite na mão. É a única coisa deste launcher que não se liga por dentro.', nPermitir: 'Habilitar', nEspera: 'Habilitado. Esperando o Android conectar o serviço…', nSinPuente: 'Prévia: sem ponte com o sistema não há notificações para ler.', ccPie: 'Os marcados com ↗ abrem o painel do sistema: desde o Android 10 um app não pode ligar o Wi-Fi nem os dados sozinho.', ccAtajo: 'Abriria: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Dados', cc_bt: 'Bluetooth', cc_linterna: 'Lanterna', cc_avion: 'Avião', cc_rotar: 'Rotação', cc_dnd: 'Não perturbe', cc_ubicacion: 'Localização', cc_bateria: 'Bateria', cc_nfc: 'NFC', cc_ajustes: 'Ajustes', cc_cam: 'Câmera', bvPack: 'Escolha seus ícones', bvPackD: 'Todos são de vidro Aero. Dá para mudar quando quiser em Personalizar.', bvReja: 'De que tamanho?', bvRejaD: 'Quantos apps cabem em cada linha da tela inicial.', bvGrande: 'Grandes', bvMedia: 'Médios', bvChica: 'Pequenos', bvMini: 'Muitos', bvCajon: 'Como quer a gaveta?', bvCajonD: 'Por letra coloca um cabeçalho por letra; tudo junto é uma grade só, e o trilho lateral destaca os dessa letra.', bvCam: 'Qual câmera abre uma câmera?', bvCamD: 'A Aero é a deste launcher: vidro líquido e fundo Frutiger.', bvCC: 'Central de controle própria?', bvCCD: 'Deslizando para baixo na tela inicial abre uma de vidro, em vez do painel do sistema.', bvSig: 'Seguir', bvListo: 'Pronto', bvAtras: 'Voltar', pCam: 'Ao tocar uma câmera', pPreg: 'Perguntar', pCC: 'Central de controle própria', pCajon: 'Gaveta de apps', pPorLetras: 'Por letra', pJunto: 'Tudo junto',
+        pPack: 'Pacote de ícones Aero', nTit: 'NOTIFICAÇÕES', nLimpiar: 'Limpar', nVacio: 'Nada novo', nAhora: 'agora', nMin: 'há {0} min', nHora: 'há {0} h', nPide: 'Para ver suas notificações aqui, o Android pede que você habilite na mão. É a única coisa deste launcher que não se liga por dentro.', nPermitir: 'Habilitar', nEspera: 'Habilitado. Esperando o Android conectar o serviço…', nSinPuente: 'Prévia: sem ponte com o sistema não há notificações para ler.', ccPie: 'Os marcados com ↗ abrem o painel do sistema: desde o Android 10 um app não pode ligar o Wi-Fi nem os dados sozinho.', ccAtajo: 'Abriria: {0}', cc_wifi: 'Wi-Fi', cc_datos: 'Dados', cc_bt: 'Bluetooth', cc_linterna: 'Lanterna', cc_avion: 'Avião', cc_rotar: 'Rotação', cc_dnd: 'Não perturbe', cc_ubicacion: 'Localização', cc_bateria: 'Bateria', cc_nfc: 'NFC', cc_ajustes: 'Ajustes', cc_cam: 'Câmera', cc_barra: 'Notificações', cc_rapidos: 'Ajustes rápidos', cc_recientes: 'Recentes', cc_bloquear: 'Bloquear', aPide: 'Baixar a barra de notificações, ver recentes e bloquear a tela são ações do sistema: precisam da permissão de acessibilidade. Não lê nada do que está na tela.', aEspera: 'Acessibilidade habilitada. Esperando o Android conectar o serviço…', aSinPuente: 'Prévia: sem ponte com o sistema não há barra para baixar.', bvPack: 'Escolha seus ícones', bvPackD: 'Todos são de vidro Aero. Dá para mudar quando quiser em Personalizar.', bvReja: 'De que tamanho?', bvRejaD: 'Quantos apps cabem em cada linha da tela inicial.', bvGrande: 'Grandes', bvMedia: 'Médios', bvChica: 'Pequenos', bvMini: 'Muitos', bvCajon: 'Como quer a gaveta?', bvCajonD: 'Por letra coloca um cabeçalho por letra; tudo junto é uma grade só, e o trilho lateral destaca os dessa letra.', bvCam: 'Qual câmera abre uma câmera?', bvCamD: 'A Aero é a deste launcher: vidro líquido e fundo Frutiger.', bvCC: 'Central de controle própria?', bvCCD: 'Deslizando para baixo na tela inicial abre uma de vidro, em vez do painel do sistema.', bvSig: 'Seguir', bvListo: 'Pronto', bvAtras: 'Voltar', pCam: 'Ao tocar uma câmera', pPreg: 'Perguntar', pCC: 'Central de controle própria', pCajon: 'Gaveta de apps', pPorLetras: 'Por letra', pJunto: 'Tudo junto',
         pk_aero:'Aero',pk_vidrio:'Vidro puro',pk_burbuja:'Bolha',pk_bliss:'Colina',pk_tinta:'Tinta',pk_neon:'Néon',pk_generado:'Gerado',pk_cristal:'Cristal',pk_nativo:'Do sistema', pIcono: 'Fundo dos ícones', pAgua: 'Água', pPasto: 'Grama', pNube: 'Nuvens',
         caElegi:'Com qual voc\u00ea tira a foto?', caElegiD:'Aero \u00e9 a deste launcher: vidro l\u00edquido sobre um fundo Frutiger. A do sistema \u00e9 a que voc\u00ea j\u00e1 usa.',
         caAero:'C\u00c2MERA AERO', caSistema:'C\u00e2mera do sistema', caCam:'C\u00e2mera Aero',
@@ -2825,6 +2847,14 @@ const GLIFOS = {
              ['-c',32,48,6], ['-c',50,48,6], ['-c',68,48,6]],
   contactos:[['c',50,32,18], ['p','M14 90 C14 66 30 56 50 56 C70 56 86 66 86 90 Z']],
   reloj:    [['o',50,50,38,8], ['l',50,26,50,52,6], ['l',50,52,70,58,6]],
+  /* los tres de la accesibilidad: campana, candado y capas. No son marcas, son
+     acciones del sistema, así que van con la misma geometría que el resto */
+  campana:  [['p','M28 68 Q28 40 50 34 Q72 40 72 68 Z',0], ['r',22,68,56,7,3.5],
+             ['c',50,30,5], ['p','M42 79 Q50 88 58 79',6]],
+  candado:  [['r',26,48,48,34,7], ['p','M36 48 L36 36 Q36 24 50 24 Q64 24 64 36 L64 48',8],
+             ['-c',50,63,5]],
+  capas:    [['r',22,26,44,44,6], ['-r',29,33,30,30,3],
+             ['p','M74 34 L74 70 Q74 76 68 76 L34 76',7]],
   calc:     [['r',14,8,72,84,10], ['-r',24,18,52,18,4],
              ['-l',32,52,42,52,6],['-l',58,52,68,52,6],['-l',63,47,63,57,6],
              ['-l',32,72,42,72,6],['-l',58,68,68,68,5],['-l',58,77,68,77,5]],
@@ -3438,7 +3468,10 @@ const ICO_DE_FAM = (() => {
 let ICO_CACHE = {};
 /* apagar el pack no puede dejar la caché puesta: `glifoDe` guarda por paquete y
    la respuesta correcta cambia con el ajuste */
-function ICO_CACHE_LIMPIA(){ ICO_CACHE = {}; }
+function ICO_CACHE_LIMPIA(){ ICO_CACHE = {};
+  /* la baldosa guardada del cajón lleva el pack puesto adentro: si el glifo
+     cambia y la baldosa no, el cajón se queda con el pack anterior */
+  cajCacheLimpia(); }
 
 function icoNorm(s){
   return String(s || '').toLowerCase()
@@ -4274,14 +4307,30 @@ function letraBaldosa(b, a){
    `pintaInicio` corre en cada soltada de un arrastre: escalonando siempre, la
    reja entera volvería a entrar cada vez que se mueve un icono, que se lee a
    parpadeo y no a animación. */
-function entraLista(cont){
-  if (!cont) return 0;
+/* ── UN SOLO REFLUJO PARA LA LISTA ENTERA, NO UNO POR BALDOSA ──
+   Esto hacía `remove('entra') · void offsetWidth · add('entra')` DENTRO del
+   bucle, y `offsetWidth` obliga al navegador a recalcular el layout ahí mismo.
+   Con 150 apps eso son **150 recálculos de layout sincrónicos** en cada pintada
+   de la lista — o sea en cada letra que se escribe en el buscador.
+   La lectura sólo existe para que el navegador vea que la clase se fue y vuelva
+   a disparar la animación, y para eso alcanza con UNA: se sacan todas, se lee
+   una vez, y se ponen todas. Mismo efecto, un layout en vez de ciento cincuenta. */
+function entraJunta(cont, nodos){
   let i = 0;
   for (const n of cont.children){
-    if (n.classList.contains('pag')){ i += entraLista(n); continue; }
+    if (n.classList.contains('pag')){ i += entraJunta(n, nodos); continue; }
     n.style.setProperty('--i', i++);
-    n.classList.remove('entra'); void n.offsetWidth; n.classList.add('entra');
+    n.classList.remove('entra');
+    nodos.push(n);
   }
+  return i;
+}
+function entraLista(cont){
+  if (!cont) return 0;
+  const nodos = [];
+  const i = entraJunta(cont, nodos);
+  if (nodos.length) void nodos[0].offsetWidth;   /* el único reflujo */
+  for (const n of nodos) n.classList.add('entra');
   return i;
 }
 
@@ -4416,8 +4465,24 @@ function letraIni(a){
   return (c >= 'a' && c <= 'z') ? c.toUpperCase() : '#';
 }
 
+/* ── LAS BALDOSAS DEL CAJÓN SE GUARDAN, NO SE REHACEN EN CADA PINTADA ──
+   `pintaCajon` rehacía las 150 baldosas en cada letra que se escribe en el
+   buscador. Medido con 150 apps, la pintada entera costaba **68 ms** y **20 de
+   esos** eran armar los nodos: crear el div, buscarle el glifo, pegarle el SVG
+   y escribirle una data URI de quince kilobytes en `backgroundImage`.
+   Y no hace falta: la baldosa de una app es siempre la misma hasta que cambia
+   el pack o la lista de apps. Se guarda por paquete y la pintada pasa a ser
+   apilar nodos que ya existen — de paso los escuchas de toque tampoco se
+   vuelven a colgar.
+   La caché es SÓLO del cajón: un nodo del DOM vive en un sitio y nada más, así
+   que el escritorio y el dock arman los suyos.
+   `CAJ_NODO` se declara en `b.js` y no acá: la limpia `ICO_CACHE_LIMPIA`, que
+   vive en `k.js` —o sea que se evalúa ANTES— y un `let` leído antes de su línea
+   no devuelve undefined: tira, y se lleva el módulo entero. */
+function cajCacheLimpia(){ CAJ_NODO = new Map(); }
 let LETRAS = [];          /* las letras que de verdad tienen apps */
 let ANCLA = {};           /* letra → el nodo de su encabezado, para poder saltar */
+let ANCLA_Y = [];         /* letra → su offsetTop medido, ver `midaAnclas` */
 
 function pintaCajon(filtro){
   const l = $('#cajLista');
@@ -4433,7 +4498,7 @@ function pintaCajon(filtro){
   }
 
   l.innerHTML = '';
-  LETRAS = []; ANCLA = {}; PEDIDA = null;
+  LETRAS = []; ANCLA = {}; ANCLA_Y = []; PEDIDA = null;
 
   /* ── LOS ENCABEZADOS SÓLO EXISTEN SIN FILTRO ──
      Con dos resultados, partirlos en dos secciones de uno es ruido; y el riel
@@ -4461,7 +4526,9 @@ function pintaCajon(filtro){
         LETRAS.push(L); ANCLA[L] = null;   /* se completa con su primera app */
       }
     }
-    const nd = nodoApp(a);
+    let nd = CAJ_NODO.get(a.p);
+    if (!nd){ nd = nodoApp(a); CAJ_NODO.set(a.p, nd); cajObserva(nd); }
+    else { nd.classList.remove('res'); delete nd.dataset.l; }
     if (!q){
       nd.dataset.l = L;
       if (!porLetra && !ANCLA[L]) ANCLA[L] = nd;
@@ -4500,6 +4567,30 @@ function pintaCajon(filtro){
      letra que se escribe, o sea que cada pintada es una lista nueva */
   entraLista(l);
   pintaRiel();
+}
+
+/* ── EL VIDRIO DE LAS BALDOSAS SE ENCIENDE AL ENTRAR EN LA VENTANA ──
+   Ver el porqué en `#cajLista .ap.lejos .baldosa`. Nace con `lejos` puesto: así
+   la primera pintada del cajón —la que se paga al abrirlo— no arranca con
+   ciento cincuenta pasadas de filtro, y el observador enciende las quince que
+   de verdad se ven en el cuadro siguiente.
+   Se observa UNA VEZ, al armar la baldosa, y no en cada pintada: la primera
+   versión hacía `disconnect()` y ciento cincuenta `observe()` por pintada y eso
+   se comía la mitad de lo que la caché de baldosas acababa de ahorrar —medido,
+   la pintada subía de 32 a 55 ms—. Un observador sigue observando al elemento
+   aunque se lo saque del documento y se lo vuelva a poner, que es exactamente
+   lo que hace `pintaCajon` con los nodos guardados. */
+let CAJ_IO = null;
+function cajObserva(nd){
+  if (typeof IntersectionObserver !== 'function') return;
+  if (!CAJ_IO){
+    const l = $('#cajLista'); if (!l) return;
+    CAJ_IO = new IntersectionObserver(es => {
+      for (const e of es) e.target.classList.toggle('lejos', !e.isIntersecting);
+    }, { root: l, rootMargin: '260px 0px' });
+  }
+  nd.classList.add('lejos');
+  CAJ_IO.observe(nd);
 }
 
 /* ══════════ LA BARRA DEL ÍNDICE ══════════ */
@@ -4544,13 +4635,27 @@ function alFondo(){
   const l = $('#cajLista');
   return l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
 }
+/* ── LOS OFFSETS DE LAS ANCLAS SE MIDEN UNA VEZ, NO EN CADA CUADRO ──
+   Esto medía `getBoundingClientRect()` de las veintiuna anclas en CADA evento
+   de scroll, y cada una obliga al navegador a recalcular el layout. Medido con
+   150 apps, el manejador entero costaba **3,1 ms por cuadro** sobre un
+   presupuesto de 16,7.
+   Y las anclas no se mueven mientras uno scrollea: su `offsetTop` respecto de
+   la lista es fijo hasta que la lista se vuelva a pintar o cambie de tamaño.
+   Se cachean ahí y acá no queda una sola lectura de layout. */
+function midaAnclas(){
+  ANCLA_Y = LETRAS.map(L => ({ L: L, y: ANCLA[L] ? ANCLA[L].offsetTop : 0 }));
+}
 function letraVisible(){
   const l = $('#cajLista');
   if (PEDIDA && alFondo() && LETRAS.indexOf(PEDIDA) >= 0) return PEDIDA;
-  const y = l.getBoundingClientRect().top + 8;
-  let act = LETRAS[0] || '';
-  for (const L of LETRAS){
-    if (ANCLA[L].getBoundingClientRect().top <= y) act = L; else break;
+  if (ANCLA_Y.length !== LETRAS.length) midaAnclas();
+  const y = l.scrollTop + 8;
+  /* búsqueda binaria: la última ancla que ya pasó por arriba del borde */
+  let a = 0, b = ANCLA_Y.length - 1, act = LETRAS[0] || '';
+  while (a <= b){
+    const m = (a + b) >> 1;
+    if (ANCLA_Y[m].y <= y){ act = ANCLA_Y[m].L; a = m + 1; } else b = m - 1;
   }
   return act;
 }
@@ -4559,27 +4664,46 @@ function letraVisible(){
    tiene que poder decirlo de la única forma que queda: encendiendo las apps que
    son de ésa. Se apaga solo, porque un resaltado permanente deja de significar
    «acabás de pedir esta letra» y pasa a ser parte del dibujo. */
-let RES_T = 0;
+let RES_T = 0, RES_HOY = '', RES_NODOS = [];
+function resApaga(){
+  for (const n of RES_NODOS) n.classList.remove('res');
+  RES_NODOS = []; RES_HOY = '';
+  $('#cajLista').classList.remove('hayRes');
+}
 function resaltaLetra(L){
   const l = $('#cajLista');
   if (!l.classList.contains('junto')) return;
-  $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
-  l.classList.remove('hayRes');
+  /* ── PEDIR LA MISMA LETRA DOS VECES NO CUESTA NADA ──
+     Arrastrando el riel, la letra se repite decenas de cuadros seguidos; sin
+     esta guarda cada uno apagaba y volvía a encender los mismos nodos, o sea
+     un recálculo de estilo por cuadro para dejar todo igual. */
+  if (L && L === RES_HOY){ resVence(); return; }
+  resApaga();
   if (!L) return;
-  const hay = $$('#cajLista .ap[data-l="' + L + '"]');
-  hay.forEach(n => n.classList.add('res'));
-  if (hay.length) l.classList.add('hayRes');
-  clearTimeout(RES_T);
-  RES_T = setTimeout(() => {
-    $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
-    l.classList.remove('hayRes');
-  }, 1600);
+  /* los nodos se buscan una vez y se guardan: el barrido de `.ap.res` era un
+     `querySelectorAll` a nivel de DOCUMENTO por cada cuadro de scroll */
+  RES_NODOS = $$('#cajLista .ap[data-l="' + L + '"]');
+  for (const n of RES_NODOS) n.classList.add('res');
+  if (RES_NODOS.length){ l.classList.add('hayRes'); RES_HOY = L; }
+  resVence();
 }
+function resVence(){
+  clearTimeout(RES_T);
+  RES_T = setTimeout(resApaga, 1600);
+}
+/* ── MARCAR EL RIEL NO ES RESALTAR LAS APPS ──
+   Reporte textual: *«ya aparecen remarcadas las letras, eso solamente debe
+   pasar si deslizás en la parte de la barra»*. Tenía razón: `marcaRiel` corre
+   en CADA cuadro de scroll —bajar por la lista con el dedo es scrollear— así
+   que el resaltado se encendía solo al pasar por cada letra. Y no era sólo
+   feo: medido con 150 apps en modo «todo junto», el manejador del scroll
+   costaba **3,1 ms por cuadro** contra 0,04 sin resaltar, o sea ochenta veces,
+   la mayor parte en dos `querySelectorAll` de documento y en los cambios de
+   clase de decenas de nodos.
+   Resaltar es la respuesta a «pediste esta letra», y eso sólo pasa en el riel:
+   lo llaman `rVa` y `vaALetra`, y nadie más. */
 function marcaRiel(L){
-  /* la letra ya no vive en una columna: se muestra en la burbuja mientras se
-     arrastra, y lo único permanente es dónde quedó el pomo */
   $('#burbuja').textContent = L || '';
-  resaltaLetra(L);
   ponPomo();
 }
 function vaALetra(L){
@@ -4589,6 +4713,7 @@ function vaALetra(L){
   PEDIDA = L;
   l.scrollTop += h.getBoundingClientRect().top - l.getBoundingClientRect().top - 4;
   marcaRiel(L);
+  resaltaLetra(L);
 }
 
 function aLaWeb(q){
@@ -4819,6 +4944,7 @@ function cargaApps(){
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
+  cajCacheLimpia();
 
   INICIO = (lee('inicio', null) || []).filter(p => POR_PKG[p]);
   DOCK = (lee('dock', null) || []).filter(p => POR_PKG[p]);
@@ -5029,6 +5155,7 @@ function enganchaCajon(){
     const L = letraVisible();
     if (bur.textContent !== L) vibra(6);
     bur.textContent = L;
+    resaltaLetra(L);
     bur.style.top = Math.max(46, Math.min(innerHeight - 46, y)) + 'px';
     ponPomo();
   };
@@ -5364,10 +5491,20 @@ function arranca(){
   $('#buscaCaja').addEventListener('pointerdown', abreBusca);
   $('#busca').addEventListener('focus', abreBusca);
 
+  /* ── UNA PINTADA POR CUADRO, NO UNA POR TECLA ──
+     Escribiendo rápido entran varias teclas dentro del mismo cuadro y cada una
+     rehacía la lista: medido con 150 apps, la pintada cuesta 35 ms, así que
+     tres teclas seguidas son cien milisegundos de hilo bloqueado para mostrar
+     un resultado que ya nadie va a ver. El navegador dibuja una vez por cuadro;
+     la lista también. */
+  let bPend = false, bVal = '';
   $('#busca2').addEventListener('input', e => {
     if (!CAJON) verCajon(true);
-    pintaCajon(e.target.value);
-    mascotaBaila(e.target.value.length > 0);
+    bVal = e.target.value;
+    mascotaBaila(bVal.length > 0);
+    if (bPend) return;
+    bPend = true;
+    requestAnimationFrame(() => { bPend = false; pintaCajon(bVal); });
   });
   $('#busca2').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
@@ -5399,7 +5536,10 @@ function arranca(){
   $('#hoja').addEventListener('pointermove', fc);
 
   document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
-  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira(); });
+  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira();
+  /* la lista cambia de ancho, o sea que las anclas se mueven: la caché de
+     `midaAnclas` deja de valer y hay que volver a medirla */
+  ANCLA_Y = []; });
   addEventListener('contextmenu', e => e.preventDefault());
 
   setTimeout(() => $('#carga').classList.add('off'), 260);
@@ -8724,7 +8864,20 @@ const CC_BOT = [
   { id: 'bateria',   ico: 'bateria',   llave: false, sis: 'bateria' },
   { id: 'nfc',       ico: 'nfc',       llave: false, sis: 'nfc' },
   { id: 'ajustes',   ico: 'ajustes',   llave: false, sis: 'ajustes' },
-  { id: 'cam',       ico: 'camara',    llave: false, cam: true }
+  { id: 'cam',       ico: 'camara',    llave: false, cam: true },
+  /* ── LOS CUATRO QUE LA ACCESIBILIDAD CONVIERTE EN ACCIONES DE VERDAD ──
+     Pedido textual: «que pida accesos a accesibilidad para que sirva la barra
+     de notificaciones». Un launcher no puede bajar la barra del sistema ni
+     bloquear la pantalla de ninguna otra forma: `performGlobalAction` es la
+     única puerta, y está detrás de ese permiso.
+     No llevan la marca ↗ —no abren un panel de ajustes, HACEN la cosa— y
+     tampoco son `llave`, porque una llave guarda estado y esto no guarda nada.
+     Sin el permiso NO se quedan mudas: llevan la marca `acc` y tocarlas abre
+     la pantalla donde se da, que es lo único útil que pueden hacer ahí. */
+  { id: 'barra',     ico: 'campana',   llave: false, acc: 'notis' },
+  { id: 'rapidos',   ico: 'gauge',     llave: false, acc: 'rapidos' },
+  { id: 'recientes', ico: 'capas',     llave: false, acc: 'recientes' },
+  { id: 'bloquear',  ico: 'candado',   llave: false, acc: 'bloquear' }
 ];
 
 /* los dibujos: los mismos `<path>` del pack de iconos, que ya sabe dibujar
@@ -8771,7 +8924,7 @@ function ccArma(){
        la cámara de la casa, adentro del launcher— salía con la flecha: la marca
        prometía un salto al sistema que no pasa. La lleva sólo lo que tiene
        `sis`. */
-    e.className = 'ccB' + (b.llave ? ' llave' : (b.sis ? ' atajo' : ''));
+    e.className = 'ccB' + (b.llave ? ' llave' : b.acc ? ' acc' : (b.sis ? ' atajo' : ''));
     e.dataset.id = b.id;
     const sv = ccIco(b.ico);
     if (sv) e.appendChild(sv);
@@ -8823,6 +8976,16 @@ function ccEnganchaBajar(el){
 function ccToca(b){
   vibra(12);
   if (b.cam){ ccCierra(); setTimeout(camAbre, 220); return; }
+  if (b.acc){
+    /* el centro se cierra ANTES: bajar la barra del sistema con nuestra hoja
+       encima deja dos paneles apilados, y bloquear la pantalla con el centro
+       abierto lo deja abierto para la próxima vez */
+    ccCierra();
+    if (accEstado() === 'ok'){
+      setTimeout(() => { if (andQ('accesAccion')) AND.accesAccion(b.acc); }, 180);
+    } else accPide();
+    return;
+  }
   if (b.llave){
     if (b.id === 'linterna'){
       CC.linterna = !CC.linterna;
@@ -8858,6 +9021,30 @@ function ccNotisEstado(){
   return 'ok';
 }
 
+/* ══════════ LA ACCESIBILIDAD ══════════
+
+   ── NO ES EL MISMO PERMISO QUE LAS NOTIFICACIONES, Y HAY QUE DECIRLO ──
+   Las notificaciones las LEE `Escucha`, que es un `NotificationListenerService`
+   y tiene su propia pantalla. La accesibilidad no lee ninguna: lo que hace es
+   BAJAR la barra del sistema, abrir los ajustes rápidos, ver recientes y
+   bloquear la pantalla — las cuatro cosas que un launcher no puede hacer de
+   ninguna otra manera. Un cartel que los mezclara mandaría al dueño a dar un
+   permiso que no arregla lo que está viendo.
+
+   Los mismos cuatro estados que la lista de notificaciones, y por lo mismo:
+   habilitado no es enlazado, y volver a pedirle el permiso a alguien que ya lo
+   dio es lo peor que se puede hacer. */
+function accEstado(){
+  if (!andQ('accesAccion')) return 'sinPuente';
+  if (andQ('accesHabilitado') && !AND.accesHabilitado()) return 'sinPermiso';
+  if (andQ('accesOk') && !AND.accesOk()) return 'esperando';
+  return 'ok';
+}
+function accPide(){
+  if (andQ('accesPedir')) AND.accesPedir();
+  else avisa(T('aSinPuente'));
+}
+
 function ccHace(ms){
   const m = Math.max(0, Math.round((Date.now() - ms)/60000));
   if (m < 1) return T('nAhora');
@@ -8865,9 +9052,30 @@ function ccHace(ms){
   return T('nHora', Math.round(m/60));
 }
 
+/* el aviso de accesibilidad va ARRIBA del de notificaciones y sólo cuando
+   falta: son dos permisos y el dueño tiene que poder ver cuál le falta sin
+   adivinar. Con los dos dados no se dibuja ninguno de los dos. */
+function ccAcces(c){
+  const est = accEstado();
+  if (est === 'ok') return;
+  const f = document.createElement('div');
+  f.className = 'ccAviso';
+  const t = document.createElement('span');
+  t.textContent = T(est === 'sinPermiso' ? 'aPide' : est === 'esperando' ? 'aEspera' : 'aSinPuente');
+  f.appendChild(t);
+  if (est === 'sinPermiso'){
+    const b = document.createElement('button');
+    b.className = 'ccBt'; b.textContent = T('nPermitir');
+    b.addEventListener('click', () => { ccCierra(); accPide(); });
+    f.appendChild(b);
+  }
+  c.appendChild(f);
+}
+
 function ccNotis(){
   const c = $('#ccNotis'); if (!c) return;
   c.innerHTML = '';
+  ccAcces(c);
   const est = ccNotisEstado();
   if (est !== 'ok'){
     const f = document.createElement('div');
@@ -8971,6 +9179,7 @@ function ccPinta(){
   for (const b of CC_BOT){
     const e = $('#cc .ccB[data-id="' + b.id + '"]'); if (!e) continue;
     e.querySelector('.ccT').textContent = T('cc_' + b.id);
+    if (b.acc) e.classList.toggle('falta', accEstado() !== 'ok');
     e.classList.toggle('on', b.id === 'linterna' && CC.linterna);
   }
   $('#ccPie').textContent = T('ccPie');
@@ -9637,6 +9846,54 @@ window.__A = {
              burbuja: $('#burbuja').textContent,
              mirando: LETRAS.length ? letraVisible() : null,
              encabezados: $$('#cajLista .let').map(e => e.textContent) };
+  },
+  /* ── UN TELÉFONO DE VERDAD NO TIENE 32 APPS ──
+     El banco trae 32 y una pantalla real tiene entre 60 y 150. Todo lo que
+     cuesta en el cajón escala con ese número —el barrido de `.ap`, las anclas
+     del riel, cuántos nodos cambian de clase— así que medir con 32 contesta que
+     no cuesta nada y no describe el aparato del dueño. */
+  appsFalsas(n){
+    const base = APPS.slice();
+    if (!base.length) return 0;
+    const out = [];
+    for (let i = 0; out.length < n; i++){
+      for (const a of base){
+        if (out.length >= n) break;
+        out.push({ p: a.p + (i ? '.v' + i : ''),
+                   n: (i ? String.fromCharCode(65 + (i * 7) % 26) + ' ' : '') + a.n,
+                   s: a.s });
+      }
+    }
+    /* ── SE ORDENA, PORQUE LA LISTA DE VERDAD VIENE ORDENADA ──
+       Sin esto la letra cambia decenas de veces y `LETRAS` sale con repetidas:
+       el riel mide 21 letras contra 19 anclas y la caché de `midaAnclas` deja
+       de ser monótona, o sea que la búsqueda binaria mediría otra cosa que el
+       juego. Una prueba que no representa lo que se mira no sirve para mirarlo. */
+    out.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
+    APPS = out;
+    POR_PKG = {}; for (const a of APPS) POR_PKG[a.p] = a;
+    pintaCajon(); rejaRepinta();
+    return APPS.length;
+  },
+
+  /* ── LO QUE CUESTA UN CUADRO DE SCROLL DEL CAJÓN ──
+     Es el número que importa para «va muy lag»: `scroll` dispara docenas de
+     veces por segundo y el manejador mide posiciones, o sea que obliga al
+     navegador a recalcular el layout. Se corre el cuerpo del manejador tal cual
+     lo corre el scroll, con la lista puesta en sitios distintos para que no
+     conteste desde una caché. */
+  cajCosto(n){
+    const l = $('#cajLista');
+    const max = Math.max(1, l.scrollHeight - l.clientHeight);
+    n = n || 120;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++){
+      l.scrollTop = (i/n)*max;
+      marcaRiel(letraVisible());
+    }
+    const ms = performance.now() - t0;
+    return { pasos: n, msTotal: +ms.toFixed(1), msPorCuadro: +(ms/n).toFixed(3),
+             res: $$('#cajLista .ap.res').length, apps: $$('#cajLista .ap').length };
   },
   /* arrastrar la barra por el camino del dedo, no llamando a vaALetra */
   arrastraRiel(frac){
@@ -10637,6 +10894,33 @@ window.__A = {
     const g = glifoDe(pkg, nombre);
     return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
   },
+  /* ── LO QUE CUESTA REPINTAR LA LISTA ──
+     Es el otro número de «va muy lag»: la lista entera se rehace en CADA letra
+     que se escribe en el buscador, así que con 150 apps eso son 150 nodos
+     nuevos más la animación de entrada. Medirlo con las 32 del banco contesta
+     que no cuesta nada. */
+  cajParte(n){
+    n = n || 5;
+    const l = $('#cajLista');
+    let t = performance.now(); for (let i=0;i<n;i++){ const f=document.createDocumentFragment();
+      for (const a of APPS) f.appendChild(nodoApp(a)); }
+    const nodos = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++) entraLista(l);
+    const entra = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++){ l.scrollTop; l.scrollHeight; }
+    const layout = (performance.now()-t)/n;
+    return { apps: APPS.length, msNodos: Math.round(nodos*100)/100,
+             msEntra: Math.round(entra*100)/100, msLayout: Math.round(layout*100)/100 };
+  },
+  cajPinta(n){
+    n = n || 20;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) pintaCajon();
+    const ms = performance.now() - t0;
+    return { vueltas: n, msTotal: Math.round(ms*10)/10,
+             msPorPintada: Math.round(ms/n*100)/100,
+             apps: $$('#cajLista .ap').length };
+  },
   /* ── LAS DOS FORMAS DEL CAJÓN ──
      Devuelve lo único que las distingue: si hay encabezados, cuántas anclas
      tiene el riel y cuántas apps quedaron resaltadas. Un cajón «todo junto» sin
@@ -10658,12 +10942,45 @@ window.__A = {
              botones: $$('#cc .ccB').length,
              llaves: $$('#cc .ccB.llave').length,
              atajos: $$('#cc .ccB.atajo').length,
+             /* los cuatro de accesibilidad: `falta` es la marca de que el
+                permiso no está, o sea que la prueba distingue «hace la cosa» de
+                «te lleva a darlo» y no sólo que el botón exista */
+             acces: $$('#cc .ccB.acc').length,
+             accesFalta: $$('#cc .ccB.acc.falta').length,
+             accesEstado: accEstado(),
              encendidos: $$('#cc .ccB.on').length,
              brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
              alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
              visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
   },
   ccAbrir(){ ccAbre(); return true; },
+  /* ── LA ACCESIBILIDAD, CON UN PUENTE DE MENTIRA ──
+     El banco no tiene servicio de accesibilidad, así que lo que se puede medir
+     es que los cuatro estados se distingan y que tocar un botón llame a la
+     acción correcta cuando el permiso está y a la pantalla del permiso cuando
+     no. Sin esto, «bajé la barra» y «no pasó nada» se ven iguales. */
+  accFinge(est){
+    const A = window.AND = window.AND || {};
+    window.__accUlt = null; window.__accPidio = 0;
+    A.accesAccion = q => { window.__accUlt = q; return est === 'ok'; };
+    A.accesPedir = () => { window.__accPidio++; return true; };
+    if (est === 'sinPuente'){ delete A.accesAccion; delete A.accesPedir; }
+    else {
+      A.accesHabilitado = () => est !== 'sinPermiso';
+      A.accesOk = () => est === 'ok';
+    }
+    ccPinta();
+    return { est: accEstado(), acces: $$('#cc .ccB.acc').length,
+             falta: $$('#cc .ccB.acc.falta').length,
+             aviso: ($('#ccNotis .ccAviso span') || {}).textContent || null };
+  },
+  accToca(id){
+    window.__accUlt = null; window.__accPidio = 0;
+    const b = CC_BOT.filter(x => x.id === id)[0];
+    if (!b) return { hay: false };
+    ccToca(b);
+    return { hay: true, accion: window.__accUlt, pidio: window.__accPidio };
+  },
   /* ── LAS NOTIFICACIONES, CON UN PUENTE DE MENTIRA ──
      El banco no tiene servicio de escucha, así que lo único que se puede medir
      de verdad es que los TRES estados se distingan y que una lista inyectada se

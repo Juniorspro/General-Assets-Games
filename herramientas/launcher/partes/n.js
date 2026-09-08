@@ -44,7 +44,20 @@ const CC_BOT = [
   { id: 'bateria',   ico: 'bateria',   llave: false, sis: 'bateria' },
   { id: 'nfc',       ico: 'nfc',       llave: false, sis: 'nfc' },
   { id: 'ajustes',   ico: 'ajustes',   llave: false, sis: 'ajustes' },
-  { id: 'cam',       ico: 'camara',    llave: false, cam: true }
+  { id: 'cam',       ico: 'camara',    llave: false, cam: true },
+  /* ── LOS CUATRO QUE LA ACCESIBILIDAD CONVIERTE EN ACCIONES DE VERDAD ──
+     Pedido textual: «que pida accesos a accesibilidad para que sirva la barra
+     de notificaciones». Un launcher no puede bajar la barra del sistema ni
+     bloquear la pantalla de ninguna otra forma: `performGlobalAction` es la
+     única puerta, y está detrás de ese permiso.
+     No llevan la marca ↗ —no abren un panel de ajustes, HACEN la cosa— y
+     tampoco son `llave`, porque una llave guarda estado y esto no guarda nada.
+     Sin el permiso NO se quedan mudas: llevan la marca `acc` y tocarlas abre
+     la pantalla donde se da, que es lo único útil que pueden hacer ahí. */
+  { id: 'barra',     ico: 'campana',   llave: false, acc: 'notis' },
+  { id: 'rapidos',   ico: 'gauge',     llave: false, acc: 'rapidos' },
+  { id: 'recientes', ico: 'capas',     llave: false, acc: 'recientes' },
+  { id: 'bloquear',  ico: 'candado',   llave: false, acc: 'bloquear' }
 ];
 
 /* los dibujos: los mismos `<path>` del pack de iconos, que ya sabe dibujar
@@ -91,7 +104,7 @@ function ccArma(){
        la cámara de la casa, adentro del launcher— salía con la flecha: la marca
        prometía un salto al sistema que no pasa. La lleva sólo lo que tiene
        `sis`. */
-    e.className = 'ccB' + (b.llave ? ' llave' : (b.sis ? ' atajo' : ''));
+    e.className = 'ccB' + (b.llave ? ' llave' : b.acc ? ' acc' : (b.sis ? ' atajo' : ''));
     e.dataset.id = b.id;
     const sv = ccIco(b.ico);
     if (sv) e.appendChild(sv);
@@ -143,6 +156,16 @@ function ccEnganchaBajar(el){
 function ccToca(b){
   vibra(12);
   if (b.cam){ ccCierra(); setTimeout(camAbre, 220); return; }
+  if (b.acc){
+    /* el centro se cierra ANTES: bajar la barra del sistema con nuestra hoja
+       encima deja dos paneles apilados, y bloquear la pantalla con el centro
+       abierto lo deja abierto para la próxima vez */
+    ccCierra();
+    if (accEstado() === 'ok'){
+      setTimeout(() => { if (andQ('accesAccion')) AND.accesAccion(b.acc); }, 180);
+    } else accPide();
+    return;
+  }
   if (b.llave){
     if (b.id === 'linterna'){
       CC.linterna = !CC.linterna;
@@ -178,6 +201,30 @@ function ccNotisEstado(){
   return 'ok';
 }
 
+/* ══════════ LA ACCESIBILIDAD ══════════
+
+   ── NO ES EL MISMO PERMISO QUE LAS NOTIFICACIONES, Y HAY QUE DECIRLO ──
+   Las notificaciones las LEE `Escucha`, que es un `NotificationListenerService`
+   y tiene su propia pantalla. La accesibilidad no lee ninguna: lo que hace es
+   BAJAR la barra del sistema, abrir los ajustes rápidos, ver recientes y
+   bloquear la pantalla — las cuatro cosas que un launcher no puede hacer de
+   ninguna otra manera. Un cartel que los mezclara mandaría al dueño a dar un
+   permiso que no arregla lo que está viendo.
+
+   Los mismos cuatro estados que la lista de notificaciones, y por lo mismo:
+   habilitado no es enlazado, y volver a pedirle el permiso a alguien que ya lo
+   dio es lo peor que se puede hacer. */
+function accEstado(){
+  if (!andQ('accesAccion')) return 'sinPuente';
+  if (andQ('accesHabilitado') && !AND.accesHabilitado()) return 'sinPermiso';
+  if (andQ('accesOk') && !AND.accesOk()) return 'esperando';
+  return 'ok';
+}
+function accPide(){
+  if (andQ('accesPedir')) AND.accesPedir();
+  else avisa(T('aSinPuente'));
+}
+
 function ccHace(ms){
   const m = Math.max(0, Math.round((Date.now() - ms)/60000));
   if (m < 1) return T('nAhora');
@@ -185,9 +232,30 @@ function ccHace(ms){
   return T('nHora', Math.round(m/60));
 }
 
+/* el aviso de accesibilidad va ARRIBA del de notificaciones y sólo cuando
+   falta: son dos permisos y el dueño tiene que poder ver cuál le falta sin
+   adivinar. Con los dos dados no se dibuja ninguno de los dos. */
+function ccAcces(c){
+  const est = accEstado();
+  if (est === 'ok') return;
+  const f = document.createElement('div');
+  f.className = 'ccAviso';
+  const t = document.createElement('span');
+  t.textContent = T(est === 'sinPermiso' ? 'aPide' : est === 'esperando' ? 'aEspera' : 'aSinPuente');
+  f.appendChild(t);
+  if (est === 'sinPermiso'){
+    const b = document.createElement('button');
+    b.className = 'ccBt'; b.textContent = T('nPermitir');
+    b.addEventListener('click', () => { ccCierra(); accPide(); });
+    f.appendChild(b);
+  }
+  c.appendChild(f);
+}
+
 function ccNotis(){
   const c = $('#ccNotis'); if (!c) return;
   c.innerHTML = '';
+  ccAcces(c);
   const est = ccNotisEstado();
   if (est !== 'ok'){
     const f = document.createElement('div');
@@ -291,6 +359,7 @@ function ccPinta(){
   for (const b of CC_BOT){
     const e = $('#cc .ccB[data-id="' + b.id + '"]'); if (!e) continue;
     e.querySelector('.ccT').textContent = T('cc_' + b.id);
+    if (b.acc) e.classList.toggle('falta', accEstado() !== 'ok');
     e.classList.toggle('on', b.id === 'linterna' && CC.linterna);
   }
   $('#ccPie').textContent = T('ccPie');

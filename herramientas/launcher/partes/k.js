@@ -122,6 +122,14 @@ const GLIFOS = {
              ['-c',32,48,6], ['-c',50,48,6], ['-c',68,48,6]],
   contactos:[['c',50,32,18], ['p','M14 90 C14 66 30 56 50 56 C70 56 86 66 86 90 Z']],
   reloj:    [['o',50,50,38,8], ['l',50,26,50,52,6], ['l',50,52,70,58,6]],
+  /* los tres de la accesibilidad: campana, candado y capas. No son marcas, son
+     acciones del sistema, así que van con la misma geometría que el resto */
+  campana:  [['p','M28 68 Q28 40 50 34 Q72 40 72 68 Z',0], ['r',22,68,56,7,3.5],
+             ['c',50,30,5], ['p','M42 79 Q50 88 58 79',6]],
+  candado:  [['r',26,48,48,34,7], ['p','M36 48 L36 36 Q36 24 50 24 Q64 24 64 36 L64 48',8],
+             ['-c',50,63,5]],
+  capas:    [['r',22,26,44,44,6], ['-r',29,33,30,30,3],
+             ['p','M74 34 L74 70 Q74 76 68 76 L34 76',7]],
   calc:     [['r',14,8,72,84,10], ['-r',24,18,52,18,4],
              ['-l',32,52,42,52,6],['-l',58,52,68,52,6],['-l',63,47,63,57,6],
              ['-l',32,72,42,72,6],['-l',58,68,68,68,5],['-l',58,77,68,77,5]],
@@ -735,7 +743,10 @@ const ICO_DE_FAM = (() => {
 let ICO_CACHE = {};
 /* apagar el pack no puede dejar la caché puesta: `glifoDe` guarda por paquete y
    la respuesta correcta cambia con el ajuste */
-function ICO_CACHE_LIMPIA(){ ICO_CACHE = {}; }
+function ICO_CACHE_LIMPIA(){ ICO_CACHE = {};
+  /* la baldosa guardada del cajón lleva el pack puesto adentro: si el glifo
+     cambia y la baldosa no, el cajón se queda con el pack anterior */
+  cajCacheLimpia(); }
 
 function icoNorm(s){
   return String(s || '').toLowerCase()

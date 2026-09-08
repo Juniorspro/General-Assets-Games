@@ -45,14 +45,30 @@ function letraBaldosa(b, a){
    `pintaInicio` corre en cada soltada de un arrastre: escalonando siempre, la
    reja entera volvería a entrar cada vez que se mueve un icono, que se lee a
    parpadeo y no a animación. */
-function entraLista(cont){
-  if (!cont) return 0;
+/* ── UN SOLO REFLUJO PARA LA LISTA ENTERA, NO UNO POR BALDOSA ──
+   Esto hacía `remove('entra') · void offsetWidth · add('entra')` DENTRO del
+   bucle, y `offsetWidth` obliga al navegador a recalcular el layout ahí mismo.
+   Con 150 apps eso son **150 recálculos de layout sincrónicos** en cada pintada
+   de la lista — o sea en cada letra que se escribe en el buscador.
+   La lectura sólo existe para que el navegador vea que la clase se fue y vuelva
+   a disparar la animación, y para eso alcanza con UNA: se sacan todas, se lee
+   una vez, y se ponen todas. Mismo efecto, un layout en vez de ciento cincuenta. */
+function entraJunta(cont, nodos){
   let i = 0;
   for (const n of cont.children){
-    if (n.classList.contains('pag')){ i += entraLista(n); continue; }
+    if (n.classList.contains('pag')){ i += entraJunta(n, nodos); continue; }
     n.style.setProperty('--i', i++);
-    n.classList.remove('entra'); void n.offsetWidth; n.classList.add('entra');
+    n.classList.remove('entra');
+    nodos.push(n);
   }
+  return i;
+}
+function entraLista(cont){
+  if (!cont) return 0;
+  const nodos = [];
+  const i = entraJunta(cont, nodos);
+  if (nodos.length) void nodos[0].offsetWidth;   /* el único reflujo */
+  for (const n of nodos) n.classList.add('entra');
   return i;
 }
 
@@ -187,8 +203,24 @@ function letraIni(a){
   return (c >= 'a' && c <= 'z') ? c.toUpperCase() : '#';
 }
 
+/* ── LAS BALDOSAS DEL CAJÓN SE GUARDAN, NO SE REHACEN EN CADA PINTADA ──
+   `pintaCajon` rehacía las 150 baldosas en cada letra que se escribe en el
+   buscador. Medido con 150 apps, la pintada entera costaba **68 ms** y **20 de
+   esos** eran armar los nodos: crear el div, buscarle el glifo, pegarle el SVG
+   y escribirle una data URI de quince kilobytes en `backgroundImage`.
+   Y no hace falta: la baldosa de una app es siempre la misma hasta que cambia
+   el pack o la lista de apps. Se guarda por paquete y la pintada pasa a ser
+   apilar nodos que ya existen — de paso los escuchas de toque tampoco se
+   vuelven a colgar.
+   La caché es SÓLO del cajón: un nodo del DOM vive en un sitio y nada más, así
+   que el escritorio y el dock arman los suyos.
+   `CAJ_NODO` se declara en `b.js` y no acá: la limpia `ICO_CACHE_LIMPIA`, que
+   vive en `k.js` —o sea que se evalúa ANTES— y un `let` leído antes de su línea
+   no devuelve undefined: tira, y se lleva el módulo entero. */
+function cajCacheLimpia(){ CAJ_NODO = new Map(); }
 let LETRAS = [];          /* las letras que de verdad tienen apps */
 let ANCLA = {};           /* letra → el nodo de su encabezado, para poder saltar */
+let ANCLA_Y = [];         /* letra → su offsetTop medido, ver `midaAnclas` */
 
 function pintaCajon(filtro){
   const l = $('#cajLista');
@@ -204,7 +236,7 @@ function pintaCajon(filtro){
   }
 
   l.innerHTML = '';
-  LETRAS = []; ANCLA = {}; PEDIDA = null;
+  LETRAS = []; ANCLA = {}; ANCLA_Y = []; PEDIDA = null;
 
   /* ── LOS ENCABEZADOS SÓLO EXISTEN SIN FILTRO ──
      Con dos resultados, partirlos en dos secciones de uno es ruido; y el riel
@@ -232,7 +264,9 @@ function pintaCajon(filtro){
         LETRAS.push(L); ANCLA[L] = null;   /* se completa con su primera app */
       }
     }
-    const nd = nodoApp(a);
+    let nd = CAJ_NODO.get(a.p);
+    if (!nd){ nd = nodoApp(a); CAJ_NODO.set(a.p, nd); cajObserva(nd); }
+    else { nd.classList.remove('res'); delete nd.dataset.l; }
     if (!q){
       nd.dataset.l = L;
       if (!porLetra && !ANCLA[L]) ANCLA[L] = nd;
@@ -271,6 +305,30 @@ function pintaCajon(filtro){
      letra que se escribe, o sea que cada pintada es una lista nueva */
   entraLista(l);
   pintaRiel();
+}
+
+/* ── EL VIDRIO DE LAS BALDOSAS SE ENCIENDE AL ENTRAR EN LA VENTANA ──
+   Ver el porqué en `#cajLista .ap.lejos .baldosa`. Nace con `lejos` puesto: así
+   la primera pintada del cajón —la que se paga al abrirlo— no arranca con
+   ciento cincuenta pasadas de filtro, y el observador enciende las quince que
+   de verdad se ven en el cuadro siguiente.
+   Se observa UNA VEZ, al armar la baldosa, y no en cada pintada: la primera
+   versión hacía `disconnect()` y ciento cincuenta `observe()` por pintada y eso
+   se comía la mitad de lo que la caché de baldosas acababa de ahorrar —medido,
+   la pintada subía de 32 a 55 ms—. Un observador sigue observando al elemento
+   aunque se lo saque del documento y se lo vuelva a poner, que es exactamente
+   lo que hace `pintaCajon` con los nodos guardados. */
+let CAJ_IO = null;
+function cajObserva(nd){
+  if (typeof IntersectionObserver !== 'function') return;
+  if (!CAJ_IO){
+    const l = $('#cajLista'); if (!l) return;
+    CAJ_IO = new IntersectionObserver(es => {
+      for (const e of es) e.target.classList.toggle('lejos', !e.isIntersecting);
+    }, { root: l, rootMargin: '260px 0px' });
+  }
+  nd.classList.add('lejos');
+  CAJ_IO.observe(nd);
 }
 
 /* ══════════ LA BARRA DEL ÍNDICE ══════════ */
@@ -315,13 +373,27 @@ function alFondo(){
   const l = $('#cajLista');
   return l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
 }
+/* ── LOS OFFSETS DE LAS ANCLAS SE MIDEN UNA VEZ, NO EN CADA CUADRO ──
+   Esto medía `getBoundingClientRect()` de las veintiuna anclas en CADA evento
+   de scroll, y cada una obliga al navegador a recalcular el layout. Medido con
+   150 apps, el manejador entero costaba **3,1 ms por cuadro** sobre un
+   presupuesto de 16,7.
+   Y las anclas no se mueven mientras uno scrollea: su `offsetTop` respecto de
+   la lista es fijo hasta que la lista se vuelva a pintar o cambie de tamaño.
+   Se cachean ahí y acá no queda una sola lectura de layout. */
+function midaAnclas(){
+  ANCLA_Y = LETRAS.map(L => ({ L: L, y: ANCLA[L] ? ANCLA[L].offsetTop : 0 }));
+}
 function letraVisible(){
   const l = $('#cajLista');
   if (PEDIDA && alFondo() && LETRAS.indexOf(PEDIDA) >= 0) return PEDIDA;
-  const y = l.getBoundingClientRect().top + 8;
-  let act = LETRAS[0] || '';
-  for (const L of LETRAS){
-    if (ANCLA[L].getBoundingClientRect().top <= y) act = L; else break;
+  if (ANCLA_Y.length !== LETRAS.length) midaAnclas();
+  const y = l.scrollTop + 8;
+  /* búsqueda binaria: la última ancla que ya pasó por arriba del borde */
+  let a = 0, b = ANCLA_Y.length - 1, act = LETRAS[0] || '';
+  while (a <= b){
+    const m = (a + b) >> 1;
+    if (ANCLA_Y[m].y <= y){ act = ANCLA_Y[m].L; a = m + 1; } else b = m - 1;
   }
   return act;
 }
@@ -330,27 +402,46 @@ function letraVisible(){
    tiene que poder decirlo de la única forma que queda: encendiendo las apps que
    son de ésa. Se apaga solo, porque un resaltado permanente deja de significar
    «acabás de pedir esta letra» y pasa a ser parte del dibujo. */
-let RES_T = 0;
+let RES_T = 0, RES_HOY = '', RES_NODOS = [];
+function resApaga(){
+  for (const n of RES_NODOS) n.classList.remove('res');
+  RES_NODOS = []; RES_HOY = '';
+  $('#cajLista').classList.remove('hayRes');
+}
 function resaltaLetra(L){
   const l = $('#cajLista');
   if (!l.classList.contains('junto')) return;
-  $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
-  l.classList.remove('hayRes');
+  /* ── PEDIR LA MISMA LETRA DOS VECES NO CUESTA NADA ──
+     Arrastrando el riel, la letra se repite decenas de cuadros seguidos; sin
+     esta guarda cada uno apagaba y volvía a encender los mismos nodos, o sea
+     un recálculo de estilo por cuadro para dejar todo igual. */
+  if (L && L === RES_HOY){ resVence(); return; }
+  resApaga();
   if (!L) return;
-  const hay = $$('#cajLista .ap[data-l="' + L + '"]');
-  hay.forEach(n => n.classList.add('res'));
-  if (hay.length) l.classList.add('hayRes');
-  clearTimeout(RES_T);
-  RES_T = setTimeout(() => {
-    $$('#cajLista .ap.res').forEach(n => n.classList.remove('res'));
-    l.classList.remove('hayRes');
-  }, 1600);
+  /* los nodos se buscan una vez y se guardan: el barrido de `.ap.res` era un
+     `querySelectorAll` a nivel de DOCUMENTO por cada cuadro de scroll */
+  RES_NODOS = $$('#cajLista .ap[data-l="' + L + '"]');
+  for (const n of RES_NODOS) n.classList.add('res');
+  if (RES_NODOS.length){ l.classList.add('hayRes'); RES_HOY = L; }
+  resVence();
 }
+function resVence(){
+  clearTimeout(RES_T);
+  RES_T = setTimeout(resApaga, 1600);
+}
+/* ── MARCAR EL RIEL NO ES RESALTAR LAS APPS ──
+   Reporte textual: *«ya aparecen remarcadas las letras, eso solamente debe
+   pasar si deslizás en la parte de la barra»*. Tenía razón: `marcaRiel` corre
+   en CADA cuadro de scroll —bajar por la lista con el dedo es scrollear— así
+   que el resaltado se encendía solo al pasar por cada letra. Y no era sólo
+   feo: medido con 150 apps en modo «todo junto», el manejador del scroll
+   costaba **3,1 ms por cuadro** contra 0,04 sin resaltar, o sea ochenta veces,
+   la mayor parte en dos `querySelectorAll` de documento y en los cambios de
+   clase de decenas de nodos.
+   Resaltar es la respuesta a «pediste esta letra», y eso sólo pasa en el riel:
+   lo llaman `rVa` y `vaALetra`, y nadie más. */
 function marcaRiel(L){
-  /* la letra ya no vive en una columna: se muestra en la burbuja mientras se
-     arrastra, y lo único permanente es dónde quedó el pomo */
   $('#burbuja').textContent = L || '';
-  resaltaLetra(L);
   ponPomo();
 }
 function vaALetra(L){
@@ -360,6 +451,7 @@ function vaALetra(L){
   PEDIDA = L;
   l.scrollTop += h.getBoundingClientRect().top - l.getBoundingClientRect().top - 4;
   marcaRiel(L);
+  resaltaLetra(L);
 }
 
 function aLaWeb(q){
@@ -590,6 +682,7 @@ function cargaApps(){
   APPS.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
   POR_PKG = {};
   for (const a of APPS) POR_PKG[a.p] = a;
+  cajCacheLimpia();
 
   INICIO = (lee('inicio', null) || []).filter(p => POR_PKG[p]);
   DOCK = (lee('dock', null) || []).filter(p => POR_PKG[p]);
@@ -800,6 +893,7 @@ function enganchaCajon(){
     const L = letraVisible();
     if (bur.textContent !== L) vibra(6);
     bur.textContent = L;
+    resaltaLetra(L);
     bur.style.top = Math.max(46, Math.min(innerHeight - 46, y)) + 'px';
     ponPomo();
   };
@@ -1135,10 +1229,20 @@ function arranca(){
   $('#buscaCaja').addEventListener('pointerdown', abreBusca);
   $('#busca').addEventListener('focus', abreBusca);
 
+  /* ── UNA PINTADA POR CUADRO, NO UNA POR TECLA ──
+     Escribiendo rápido entran varias teclas dentro del mismo cuadro y cada una
+     rehacía la lista: medido con 150 apps, la pintada cuesta 35 ms, así que
+     tres teclas seguidas son cien milisegundos de hilo bloqueado para mostrar
+     un resultado que ya nadie va a ver. El navegador dibuja una vez por cuadro;
+     la lista también. */
+  let bPend = false, bVal = '';
   $('#busca2').addEventListener('input', e => {
     if (!CAJON) verCajon(true);
-    pintaCajon(e.target.value);
-    mascotaBaila(e.target.value.length > 0);
+    bVal = e.target.value;
+    mascotaBaila(bVal.length > 0);
+    if (bPend) return;
+    bPend = true;
+    requestAnimationFrame(() => { bPend = false; pintaCajon(bVal); });
   });
   $('#busca2').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
@@ -1170,7 +1274,10 @@ function arranca(){
   $('#hoja').addEventListener('pointermove', fc);
 
   document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
-  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira(); });
+  addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira();
+  /* la lista cambia de ancho, o sea que las anclas se mueven: la caché de
+     `midaAnclas` deja de valer y hay que volver a medirla */
+  ANCLA_Y = []; });
   addEventListener('contextmenu', e => e.preventDefault());
 
   setTimeout(() => $('#carga').classList.add('off'), 260);

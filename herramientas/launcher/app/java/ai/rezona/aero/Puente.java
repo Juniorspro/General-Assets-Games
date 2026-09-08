@@ -18,6 +18,7 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
@@ -525,11 +526,59 @@ public class Puente {
   @JavascriptInterface public boolean notiQuitar(String key) { return Escucha.quita(key); }
   @JavascriptInterface public boolean notiLimpiar() { return Escucha.quitaTodo(); }
 
+  /* ── LA PANTALLA DEL PERMISO, DE LO PARTICULAR A LO GENERAL ──
+   * La lista de «acceso a notificaciones» de un teléfono tiene cuarenta apps y
+   * en HyperOS está enterrada en otro sitio: mandar a alguien ahí y que no
+   * encuentre el interruptor se ve igual que un permiso que no se puede dar.
+   * Desde API 30 hay un intent que abre DERECHO el interruptor de esta app, y
+   * si el ROM no lo tiene se cae a la lista y, en el peor caso, a los ajustes
+   * de la propia app. Tres escalones: el que no acepte uno aterriza en el
+   * siguiente en vez de no ir a ninguna parte. */
   @JavascriptInterface public boolean notiPedir() {
+    ComponentName cn = new ComponentName(act, Escucha.class);
+    if (Build.VERSION.SDK_INT >= 30) {
+      Intent d = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS);
+      d.putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn.flattenToString());
+      if (lanza(d)) return true;
+    }
+    Intent i = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+    resalta(i, cn);
+    if (lanza(i)) return true;
+    return lanza(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:" + act.getPackageName())));
+  }
+
+  /* ══════════ LA ACCESIBILIDAD ══════════
+   * Ojo con el nombre: esto NO lee notificaciones —eso es `Escucha`— sino que
+   * BAJA la barra del sistema, abre los ajustes rápidos y bloquea la pantalla.
+   * Son dos permisos distintos y el panel dice cuál falta. */
+  @JavascriptInterface public boolean accesOk() { return Acces.conectada(); }
+  @JavascriptInterface public boolean accesHabilitado() { return Acces.habilitada(act); }
+  @JavascriptInterface public boolean accesAccion(String q) { return Acces.hace(q); }
+
+  @JavascriptInterface public boolean accesPedir() {
+    Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+    resalta(i, new ComponentName(act, Acces.class));
+    if (lanza(i)) return true;
+    return lanza(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:" + act.getPackageName())));
+  }
+
+  /* le pide a la pantalla de ajustes que deje marcada NUESTRA fila; el extra es
+   * interno de la app de Ajustes, así que un ROM que no lo entienda lo ignora y
+   * abre la lista igual — no puede romper nada */
+  private void resalta(Intent i, ComponentName cn) {
     try {
-      Intent i = new Intent(Build.VERSION.SDK_INT >= 22
-          ? Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
-          : "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+      String k = cn.flattenToString();
+      Bundle b = new Bundle();
+      b.putString(":settings:fragment_args_key", k);
+      i.putExtra(":settings:fragment_args_key", k);
+      i.putExtra(":settings:show_fragment_args", b);
+    } catch (Exception e) { }
+  }
+
+  private boolean lanza(Intent i) {
+    try {
       i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       act.startActivity(i);
       return true;
