@@ -1835,43 +1835,74 @@ arrancarReloj(new Date("2026-09-19T22:00:00-03:00").getTime());
     return ((a && a.esteticas) || []).filter(function (x) { return !x.oculta; })
       .map(function (x) { return x.k; }).join(",");
   }
+  /* Salida de emergencia: iblo-eventos.pages.dev/?limpiar borra la copia local
+     y recarga. Existe porque la copia vive en el teléfono de cada uno y desde
+     el servidor no se la puede tocar: si alguna vez queda pegada algo raro, es
+     un link que se manda por WhatsApp y listo. */
+  if (location.search.indexOf("limpiar") >= 0) {
+    try {
+      localStorage.removeItem(CACHE);
+      sessionStorage.removeItem("iblo.recargo");
+    } catch (e) {}
+    location.replace(location.pathname);
+    return;
+  }
+
   var previo = null;
   try {
     var g = localStorage.getItem(CACHE);
     if (g) { previo = JSON.parse(g); aplicar(previo, false); }
   } catch (e) {}
 
+  function tieneAlgo(o) {
+    for (var q in (o || {})) return true;
+    return false;
+  }
+
+  /* Colores, textos y esconder secciones se aplican en caliente y listo.
+     AGREGAR O SACAR una estética es otra cosa: hay que volver a dibujar la
+     baraja, los observadores de scroll, los videos y las piezas 3D. Volver a
+     correr todo eso a mano en una página de dos megas es donde se rompen las
+     cosas; recargar una vez es feo por medio segundo y no falla nunca. Pasa
+     sólo en la primera visita después del cambio, porque enseguida queda en la
+     copia local y se dibuja de entrada.
+
+     El candado guarda A QUÉ se recargó, no un simple «ya recargué»: con un
+     booleano, el segundo cambio del día no se aplicaba nunca. */
+  function recargarSiHaceFalta(antes, ahora) {
+    if (ahora === antes) return;
+    try {
+      if (sessionStorage.getItem("iblo.recargo") === ahora) return;
+      sessionStorage.setItem("iblo.recargo", ahora);
+      location.reload();
+    } catch (e) {}
+  }
+
   if (!window.fetch) return;
   fetch("/api/sitio", { headers: { Accept: "application/json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d || !d.areas) return;
-      var hay = false; for (var k in d.areas) { hay = true; break; }
-      if (!hay) return;                       // base vacía: se queda lo del HTML
+
+      if (!tieneAlgo(d.areas)) {
+        /* EL SERVIDOR SE QUEDÓ SIN NADA. Si acá había una copia guardada hay
+           que BORRARLA y sacar la hoja de estilos, o el que la tenía sigue
+           viendo lo viejo PARA SIEMPRE y arreglar el servidor no lo alcanza.
+           Pasó de verdad: una paleta celeste quedó pegada en un teléfono con
+           la base ya limpia, y desde el sitio no había forma de despegarla. */
+        try { localStorage.removeItem(CACHE); } catch (e) {}
+        if (tieneAlgo(previo)) {
+          var hoja = document.getElementById("ibloTemas");
+          if (hoja) hoja.textContent = "";             // los colores vuelven ya
+          recargarSiHaceFalta(llaves(previo), "");     // la lista, al recargar
+        }
+        return;
+      }
+
       var antes = llaves(previo), ahora = llaves(d.areas);
       try { localStorage.setItem(CACHE, JSON.stringify(d.areas)); } catch (e) {}
       aplicar(d.areas, true);
-
-      /* Colores, textos y ocultar secciones se aplican en caliente y listo.
-         AGREGAR O SACAR una estética es otra cosa: hay que volver a dibujar la
-         baraja, los observadores de scroll, los videos y las piezas 3D. Volver
-         a correr todo eso a mano en una página de dos megas es donde se rompen
-         las cosas; recargar una sola vez es feo por medio segundo y no falla
-         nunca. Sólo pasa la primera vez que alguien entra después del cambio,
-         porque en la siguiente ya está en la copia local y se dibuja de una.
-         El candado de sesión es para que un error no lo deje recargando. */
-      /* Sin el caso vacío esto no se cura solo: si en el servidor se borra la
-         lista, el visitante que ya tenía la vieja en su copia local la sigue
-         dibujando para siempre, porque `ahora` queda en blanco y la condición
-         no entra. Pasó de verdad. */
-      if (ahora !== antes) {
-        try {
-          if (!sessionStorage.getItem("iblo.recargo")) {
-            sessionStorage.setItem("iblo.recargo", "1");
-            location.reload();
-          }
-        } catch (e) {}
-      }
+      recargarSiHaceFalta(antes, ahora);
     })
     .catch(function () {});
 })();
