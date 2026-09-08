@@ -281,6 +281,143 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima vuelta (2026-09-08): **AERO** — el agua deja de tocar el `body`, la deriva va a escalones, y abrir el cajón no repinta
+
+Pedido textual: *"va muy lag, tocó el agua y se laguea feo y de paso da tirones al subir el cajón
+mientras hay agua ayuda AAAA usa tu máximo"*.
+
+#### EL AGUA: LO QUE COSTABA NO ERA EL SHADER, ERAN LAS DOS CLASES DEL `body`
+
+La vuelta 123 midió que un lienzo que repinta la pantalla obliga al compositor a rehacer cada
+`backdrop-filter` en cada cuadro (47,6 ms con vidrio contra 20,8 sin él) y respondió con una
+escalera de clases en el `body` —`aguaN1..3`— que **apagaba el vidrio mientras duraba la ráfaga**.
+Eso tenía tres costos y los tres caían en el cuadro del dedo:
+
+1. **Dos clases en el `body` por toque son dos recálculos de estilo del documento ENTERO** —una al
+   empezar y otra al terminar— más el repintado de cada pieza de vidrio, que cambia de fondo.
+2. **El vidrio se apagaba y se prendía en cada toque**: un parpadeo de la página completa.
+3. **Y EL AJUSTE ESTABA ROTO Y CAÍA SIEMPRE AL ÚLTIMO ESCALÓN.** Comparaba el hueco entre dos
+   `requestAnimationFrame` —que a 60 Hz **no baja de 16,7 ms** aunque el cuadro haya costado uno—
+   contra un presupuesto de **7 ms**. O sea que en cualquier aparato, en seis cuadros, se iba al
+   escalón 3 y lo dejaba guardado: cada toque apagaba el vidrio entero, lo prendía, y el lienzo
+   corría a un tercio de resolución para siempre.
+
+Más el `display:none`→`block` del lienzo, que le pide al compositor **una capa nueva en cada toque**.
+
+Ahora **el `body` no se toca**: ninguna clase, ningún recálculo de documento, ningún parpadeo. El
+vidrio se queda puesto durante la ráfaga. El único escalón de calidad que queda es sacar la
+**refracción** de las tres piezas del escritorio —el `feDisplacementMap`, que es la parte del filtro
+que en un WebView puede caerse al procesador— y va como **estilo en línea sobre esas tres piezas**
+(`aguaRefr`): tres elementos recalculados y no el documento, sin tocar el desenfoque, así que no se
+ve. El lienzo queda siempre en el documento y transparente: apagar es borrar.
+
+**Y EL AJUSTE COMPARA CONTRA UN CUADRO PERDIDO (26 ms) Y VA EN LOS DOS SENTIDOS.** Dos cuadros
+perdidos en la ventana 3..10 bajan un escalón y lo guardan —uno solo no: un tropiezo del recolector
+no puede dejar el agua a un tercio para siempre— y una ventana sin un cuadro perdido **sube** uno.
+El viejo sólo bajaba. Medido forzando el escalón 3 y tocando cinco veces: **3 → 3 → 3 → 2 → 1 → 0**.
+
+#### LO QUE SE PROBÓ Y NO SIRVIÓ, Y ES LA LECCIÓN DE LA VUELTA
+
+La primera versión puso el lienzo **por encima** del escritorio (z-index 2) con **máscaras en el
+shader** para las piezas de vidrio —una distancia con signo a caja redondeada por pieza, veinticuatro
+uniformes, `getBoundingClientRect` de cada pieza cada doce cuadros— con el argumento de que un
+`backdrop-filter` toma lo que hay debajo y arriba no habría nada que rehacer. Funcionaba: alfa 0
+adentro de la pieza, 255 afuera, `window.__errs` vacío. **Y no cambiaba un cuadro.** Con la misma
+sonda en el mismo banco:
+
+| | con vidrio | sin vidrio |
+|---|---|---|
+| lienzo ENCIMA del vidrio, con máscaras | **32,1 fps** | 59,9 |
+| lienzo DEBAJO del vidrio | **33,0 fps** | 59,9 |
+
+La razón es cómo dibuja Chrome: un `backdrop-filter` se vuelve a aplicar cada vez que su rectángulo
+cae dentro del **área dañada** del cuadro, y un lienzo a pantalla completa daña la pantalla completa
+esté donde esté en la pila. El orden no compra nada; lo que cuesta es que el rectángulo se redibuje.
+Se sacó entero antes de commitear: complejidad que no gana un cuadro es deuda.
+
+Medido al cerrar, la escalera con la sonda `aguaFps` (render por software, o sea el peor caso):
+
+| escalón | qué saca | ms por cuadro |
+|---|---|---|
+| 0 | nada | 22,5 – 26,8 |
+| 1 | la refracción de las tres piezas | 22,6 – 23,4 |
+| 2 | + resolución a 0,46 | 20,2 – 20,8 |
+| 3 | + resolución a 0,34 | 18,3 – 19,1 |
+| control: sin vidrio | | 16,7 |
+
+Y contra el commit anterior, misma sonda, escalón 0: mediana **31,9–34,8 → 26,8–30,3**, promedio
+**40–65 → 24–32**, p90 **51–115 → 28–44**. Lo que se fue es la cola: los dos recálculos de documento
+y la capa nueva por toque.
+
+#### LA DERIVA DEL FONDO CAMBIABA LA FOTO SESENTA VECES POR SEGUNDO, PARA SIEMPRE
+
+`#fondo.ok` lleva una animación de 24 s sobre el `transform`. Continua, cambia la foto **en cada
+cuadro** — y cada `backdrop-filter` del launcher toma la foto de abajo, así que el reloj, la
+búsqueda, el dock, cada baldosa y, abierto, **el desenfoque de 34 px a pantalla completa del cajón**
+se volvían a filtrar sesenta veces por segundo aunque nadie tocara nada, porque el fondo se corría un
+centésimo de píxel. Es el lag «de fondo» que el banco no puede ver, porque acá dibuja por software y
+en el teléfono lo paga el compositor.
+
+Con **`steps(48)`** la foto se mueve 48 veces en 24 s —un cuarto de píxel cada medio segundo— y entre
+paso y paso NO CAMBIA. Medido: **60 → 2 cambios del transform por segundo**. Y debajo de una hoja que
+la tapa se **pausa** del todo (`body.caj`, `cc`, `pers`, `fg`, `bienv`): medido,
+`animationPlayState: paused` con el cajón puesto.
+
+**Y `#fondo.hondo` ESTABA MUERTO Y COBRABA IGUAL.** Era `transform:scale(1.14)` —y una animación
+sobre `transform` PISA la declaración, así que el acercamiento no corría nunca— más un
+`filter:saturate() brightness()`, o sea un filtro más a pantalla completa por cuadro mientras el cajón
+está abierto para oscurecer algo que el propio vidrio del cajón ya oscurece con su `brightness(.84)`.
+Pasa a la propiedad individual `scale`, que se compone con el `transform` animado —medido, **1,075 con
+el cajón abierto y `none` cerrado**— y el filtro se va (`filter: none`).
+
+#### EL TIRÓN DEL CAJÓN: ABRIR REPINTABA LA LISTA ENTERA
+
+`verCajon(true)` llamaba a `pintaCajon('')` en el mismo cuadro en que arranca la transición: 36 ms
+medidos con 150 apps (vuelta 129) sobre un presupuesto de 16, para pintar **la misma lista que ya
+estaba**, la de filtro vacío. Si la última pintada fue para `''`, alcanza con volver a escalonar la
+entrada. Medido con 150 apps, tres veces, la misma apertura con la caché caliente:
+
+| | ms |
+|---|---|
+| como antes (repinta) | 43,6 · 44,8 · 45,4 |
+| **ahora** (escalona) | **17,5 · 18,1 · 18,7** |
+
+Más `#cajon.on.abre .baldosa{backdrop-filter:none}` durante los 420 ms de la apertura: un filtro
+anidado dentro de otro que se está **moviendo** es una pasada que se rehace en cada cuadro de la
+transición, y en el cajón entran unas cuarenta encima del desenfoque de 34 px que también se mueve.
+Medido: `abre` puesto al abrir y sacado a los 520 ms.
+
+#### TRES DEFECTOS DE MEDICIÓN, Y LOS TRES DEL TIPO DE SIEMPRE
+
+- **`aguaTocar` mandaba sólo el `pointerdown`.** Desde la vuelta 126 el agua arranca en el
+  `pointerup`, así que la sonda medía un dedo apoyado que a los 400 ms **abre la galería de fondos**:
+  las dos primeras fotos de la vuelta salieron con la galería encima. El toque va entero.
+- **`gesto` hacia abajo dejaba el centro de control abierto** y todo lo que venía después lo medía con
+  `#cc.on` puesto: `aguaFps` devolvía **59,9 fps «con vidrio»** porque el agua se cortaba en el primer
+  cuadro —`#cc.on` está en `AGUA_TAPAN`— y la sonda estaba midiendo un `requestAnimationFrame` vacío.
+  Un número perfecto en el sitio equivocado.
+- **Y `scale` se leyó en el medio de su transición**: 520 ms después de poner `.hondo` daba `1` y
+  parecía que la propiedad no aplicaba. Con 1.100 da 1,075. Es la enésima vez que la sonda mide otro
+  instante.
+
+#### MEDIDO AL CERRAR
+
+Toque de verdad: `on: true` con **3 vidrios puestos** durante la ráfaga y el `body` sin una clase
+nueva (`bodyIgual: true`); refracción en línea en las tres piezas al escalón 1 y devuelta al apagar;
+sin onda, **0 píxeles con alfa** de 132.145. El corte al abrir el cajón cae en la microtarea con el
+vigía y en el rAF sin él (control). Gesto arriba abre el cajón y abajo el centro con **0 ondas**.
+Deriva `steps(48)`, **2 cambios por segundo**, pausada bajo el cajón, `scale 1,075` y `filter none`.
+Apertura del cajón **17,5–18,7 ms contra 43,6–45,4**. Regresión: riel de 17 letras, centro de control
+**16 · 1 · 10 · 4**, **0 choques** en el escritorio, scroll del cajón 0,04 ms por cuadro, pintada 36,9
+ms. `window.__errs` **vacío en las once corridas**. APK **2,2 MB** con firma v2+v3.
+
+**LO QUE NO PUDE COMPROBAR:** los cuadros por segundo del teléfono. El banco dibuja por software, y
+ahí el vidrio cuesta lo mismo esté donde esté; lo que no depende del aparato es que se fueron los dos
+recálculos de documento por toque, la capa nueva por toque, el filtro a pantalla completa con el
+cajón abierto, los 58 refiltrados por segundo de la deriva y la mitad de la apertura del cajón. Y si
+el `feDisplacementMap` corre en el procesador del WebView —que es lo que la vuelta 123 anotó— el
+escalón 1 lo saca solo en cuanto pierda dos cuadros.
+
 ### Centésima vigesimonovena vuelta (2026-09-08): **AERO** — ciento cincuenta vidrios por cuadro, el resaltado que se encendía solo, y la accesibilidad
 
 Pedido textual: *"va muy lag el menú de cajón de aplicaciones y también ya aparecen remarcadas las

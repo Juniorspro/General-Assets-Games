@@ -479,10 +479,14 @@ window.__A = {
      que el filtro de «espacio libre» deja pasar el fondo y no una app */
   aguaTocar(x, y){
     const t = document.elementFromPoint(x, y);
-    t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y,
-                                                      pointerId: 3, isPrimary: true }));
+    /* el toque entero: desde la vuelta 126 el agua arranca en el `pointerup`, y
+       un `pointerdown` solo es un dedo que se queda apoyado — a los 400 ms
+       eso abre la galería de fondos, que es lo que le pasó a la sonda vieja */
+    const ev = tipo => t.dispatchEvent(new PointerEvent(tipo, { bubbles: true, clientX: x, clientY: y,
+                                                                  pointerId: 3, isPrimary: true }));
+    ev('pointerdown'); ev('pointerup');
     return { destino: t ? (t.id || t.className || t.tagName) : null,
-             libre: aguaLibre(t), agua: this.agua() };
+             libre: aguaLibre(t), agua: this.agua(), vidrios: this.vidrios().n };
   },
   aguaArrastra(x0, y0, x1, y1, n){
     const t = document.elementFromPoint(x0, y0);
@@ -496,10 +500,10 @@ window.__A = {
   },
   aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
   aguaNivel(n){ if (n != null){ if (!aguaArma()) return 'roto'; aguaNivel(n); } return this.aguaRes(); },
-  aguaRes(){ return { niv: AGUA.niv, clases: document.body.className,
+  aguaRes(){ return { niv: AGUA.niv, enc: AGUA.on, sinRefr: AGUA.sinRefr,
                       res: AGUA.res, lienzo: AGUA.el ? [AGUA.el.width, AGUA.el.height] : null,
                       px: AGUA.el ? AGUA.el.width*AGUA.el.height : 0,
-                      guardado: lee('aguaNiv', 0),
+                      guardado: lee('aguaRes2', 0),
                       bake: AGUA.bake ? [AGUA.bake.width, AGUA.bake.height] : null }; },
   /* ── EL LIENZO ES TRANSPARENTE DONDE NO HAY ONDA ──
      Antes esto era una copia de la foto entera y había que medir si era fiel.
@@ -511,7 +515,6 @@ window.__A = {
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const gl = AGUA.gl, b = AGUA.onda;
     b.fill(0);
@@ -543,7 +546,6 @@ window.__A = {
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const gl = AGUA.gl, b = AGUA.onda;
     b.fill(0);
@@ -567,7 +569,6 @@ window.__A = {
     const gl = AGUA.gl;
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const b = AGUA.onda; b.fill(0);
     for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
@@ -658,7 +659,8 @@ window.__A = {
           const px = AGUA.el.width*AGUA.el.height, nv = AGUA.niv;
           document.body.classList.remove('sinVidrio');
           AGUA.fijo = false;
-          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length,
+          const vid = this.vidrios().n;
+          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length, vidrios: vid,
                 mediana: +med.toFixed(2), promedio: +prom.toFixed(2),
                 p90: +(v[Math.floor(v.length*0.9)] || 0).toFixed(2),
                 fps: +(1000/Math.max(med, 0.01)).toFixed(1),
@@ -686,7 +688,7 @@ window.__A = {
     /* un cuadro de bucle: es lo que tarda `aguaPaso` en enterarse */
     aguaPaso();
     const dur = { on: AGUA.on, ondas: AGUA.ondas.length, tapada: aguaTapada(),
-                  clase: AGUA.el.className, agua: document.body.classList.contains('agua'),
+                  clase: AGUA.el.className, agua: AGUA.on,
                   deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
     const v = this.vidrios();
     /* cuántos cuadros más habría repintado el lienzo a pantalla completa con
@@ -840,16 +842,14 @@ window.__A = {
     tf.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x1, clientY: y1, pointerId: 3 }));
     await new Promise(r => requestAnimationFrame(r));
     if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
-    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON,
-                 agua: document.body.classList.contains('agua') };
+    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON, agua: AGUA.on };
     aguaCorta(); verCajon(false);
     return r2;
   },
-  /* ── EL TIRÓN AL ABRIR EL CAJÓN, MEDIDO ──
-     `body.agua` apaga los once `backdrop-filter` del launcher mientras dura la
-     ráfaga. Lo que se mide es CUÁNDO vuelven: en la microtarea que sigue al
-     cambio de clase (o sea antes de que el navegador calcule estilo, o sea en
-     el mismo cuadro que la hoja empieza a abrirse) o recién en el rAF
+  /* ── EL CORTE AL ABRIR EL CAJÓN, MEDIDO ──
+     Ya no hay clase del `body` que devolver: lo que se mide es CUÁNDO se apaga
+     el agua. En la microtarea que sigue al cambio de clase del cajón (o sea en
+     el mismo cuadro en que la hoja empieza a abrirse) o recién en el rAF
      siguiente, que es en el medio de la animación. */
   async aguaTiron(vigilar){
     aguaCorta();
@@ -857,23 +857,102 @@ window.__A = {
     aguaVigila(!!vigilar);
     const on0 = AGUA.on;
     verCajon(true);
-    const antes = document.body.classList.contains('agua');
+    const antes = AGUA.on;
     await Promise.resolve(); await Promise.resolve();
-    const micro = document.body.classList.contains('agua');
+    const micro = AGUA.on;
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const raf = document.body.classList.contains('agua');
+    const raf = AGUA.on;
     verCajon(false); aguaCorta(); aguaVigila(false);
     return { vigilando: !!vigilar, aguaEncendida: on0,
              enElCambio: antes, trasLaMicrotarea: micro, trasElRaf: raf,
-             filtrosVuelvenEn: micro ? 'el rAF (en medio de la animación)'
-                                     : 'la microtarea (mismo cuadro)' };
+             seApagaEn: micro ? 'el rAF (en medio de la animación)'
+                              : 'la microtarea (mismo cuadro)' };
   },
   aguaApaga(){
-    AGUA.ondas = []; AGUA.on = false;
-    if (AGUA.el) AGUA.el.classList.remove('on');
-    document.body.classList.remove('agua', 'aguaN1', 'aguaN2', 'aguaN3');
+    AGUA.ondas = []; AGUA.on = false; aguaRefr(false);
+    if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
     FONDO_EL.style.animationPlayState = '';
     return this.agua();
+  },
+  /* ── LA REFRACCIÓN SE VA Y VUELVE SIN TOCAR EL BODY ──
+     Con la ráfaga encendida y el nivel forzado a 1, las piezas refractadas del
+     escritorio tienen que quedar con el filtro plano EN LÍNEA —y el `body` sin
+     una sola clase nueva—; al apagar la ráfaga, vuelven a la regla. */
+  aguaRefr(){
+    if (!aguaArma()) return 'roto';
+    aguaCorta();
+    const cls0 = document.body.className;
+    const lee = () => [...document.querySelectorAll('#capa .vid.refr')]
+      .map(e => ({ id: e.id, inline: e.style.backdropFilter || '',
+                   fil: getComputedStyle(e).backdropFilter.slice(0, 30) }));
+    AGUA.fijo = true;
+    aguaNivel(0); aguaToca(206, 520, 1);
+    const n0 = lee();
+    aguaNivel(1);
+    const n1 = lee();
+    const cls1 = document.body.className;
+    aguaCorta(); AGUA.fijo = false; aguaNivel(0);
+    const fin = lee();
+    return { nivel0: n0, nivel1: n1, alApagar: fin,
+             bodyIgual: cls0 === cls1, body: cls1 };
+  },
+  /* ── LA DERIVA Y EL ACERCAMIENTO ──
+     Lo que el compositor paga por la foto de fondo: con qué curva se mueve y
+     si se pausa debajo del cajón. Y que `.hondo` de verdad cambie la escala,
+     que antes no cambiaba nada porque la animación le pisaba el `transform`. */
+  async aguaDeriva(){
+    const cs = () => getComputedStyle(FONDO_EL);
+    const esp = ms => new Promise(r => setTimeout(r, ms));
+    const r = { timing: cs().animationTimingFunction, dur: cs().animationDuration,
+                estado: cs().animationPlayState, transform: cs().transform.slice(0, 40) };
+    const caj = CAJON;
+    document.body.classList.add('caj');
+    r.estadoConCajon = cs().animationPlayState;
+    document.body.classList.toggle('caj', caj);
+    /* `scale` tiene una transición de 420 ms: leído en el acto vale 1 */
+    fondoProfundo(true); await esp(1100);
+    r.escalaHondo = cs().scale; r.filtroHondo = cs().filter;
+    fondoProfundo(CAJON); await esp(1100);
+    r.escalaNormal = cs().scale;
+    /* cuántas veces cambia el transform de la foto en un segundo: con la deriva
+       continua eran sesenta, o sea sesenta refiltrados de todo el vidrio */
+    let ult = cs().transform, cambios = 0; const t0 = performance.now();
+    while (performance.now() - t0 < 1100){
+      await new Promise(f => requestAnimationFrame(f));
+      const t = cs().transform; if (t !== ult){ cambios++; ult = t; }
+    }
+    r.cambiosPorSegundo = cambios;
+    return r;
+  },
+  /* ── ABRIR EL CAJÓN: CUÁNTO CUESTA LA SEGUNDA VEZ ──
+     La primera apertura pinta la lista; la segunda ya la tiene y sólo la
+     escalona. Se mide cuánto tarda `verCajon(true)` en cada caso y si `.abre`
+     está puesto durante la transición y sacado después. */
+  async cajAbre(){
+    verCajon(false); cajCacheLimpia();
+    await new Promise(r => setTimeout(r, 60));
+    const caj = $('#cajon');
+    let t = performance.now(); verCajon(true); const primera = performance.now() - t;
+    const abre1 = caj.classList.contains('abre');
+    await new Promise(r => setTimeout(r, 520));
+    const abreTarde = caj.classList.contains('abre');
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    t = performance.now(); verCajon(true); const segunda = performance.now() - t;
+    const ult = CAJ_ULT_Q;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    /* el control: la caché de baldosas caliente pero obligando a repintar, que
+       es exactamente lo que hacía cada apertura hasta esta vuelta */
+    CAJ_ULT_Q = null;
+    t = performance.now(); verCajon(true); const antes = performance.now() - t;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    return { primeraMs: +primera.toFixed(2), segundaMs: +segunda.toFixed(2),
+             comoAntesMs: +antes.toFixed(2),
+             abreDurante: abre1, abreDespues: abreTarde, ultimoFiltro: ult,
+             apps: $('#cajLista').querySelectorAll('.ap').length };
   },
 
   /* ── LA PANTALLA DE INICIO ──

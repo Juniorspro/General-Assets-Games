@@ -5,6 +5,9 @@ const $$ = s => Array.prototype.slice.call(document.querySelectorAll(s));
 
 /* la baldosa ya armada de cada app del cajón; ver `cajCacheLimpia` en e.js */
 let CAJ_NODO = new Map();
+/* con qué filtro se pintó la lista del cajón por última vez: `null` es «hay que
+   pintarla». Abrir el cajón con la lista ya pintada para '' no la repinta. */
+let CAJ_ULT_Q = null;
 function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
 
 /* ── EL PUENTE PUEDE NO ESTAR, Y ESO NO ES UN ERROR ──

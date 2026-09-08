@@ -73,22 +73,51 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    un rectángulo vacío.
    La deriva y el acercamiento son `transform` puro, o sea que los resuelve el
    compositor y no cuestan un cuadro de JavaScript. El `scale(1.06)` de base
-   existe para que la deriva no descubra los bordes. */
+   existe para que la deriva no descubra los bordes.
+
+   ── LA DERIVA VA A ESCALONES, Y ES EL HALLAZGO DE LA VUELTA 130 ──
+   Una animación continua del `transform` de la foto cambia la foto en CADA
+   cuadro, para siempre. Y cada `backdrop-filter` del launcher toma la foto de
+   abajo: o sea que el reloj, la búsqueda, el dock, cada baldosa y —abierto— el
+   cajón entero se volvían a FILTRAR sesenta veces por segundo aunque nadie
+   tocara nada, sólo porque el fondo se corría un centésimo de píxel. Ése es el
+   lag «de fondo» que el banco no puede ver, porque acá dibuja por software y
+   en el teléfono lo paga el compositor. Con `steps(48)` la foto se mueve 48
+   veces en 24 s —un cuarto de píxel cada medio segundo, que no se ve como
+   salto— y entre paso y paso NO CAMBIA: los filtros se rehacen dos veces por
+   segundo y no sesenta.
+   Y debajo de una hoja que la tapa la deriva se pausa del todo: con el cajón
+   abierto, mover la foto era rehacer un desenfoque de 34 px a pantalla
+   completa por cuadro para mostrar algo que no se ve. */
 #fondo{position:fixed;inset:0;z-index:0;
   background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
   background-size:cover;background-position:center;
   transform:scale(1.06);will-change:transform;
-  transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
-#fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
-#fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+  transition:scale .42s cubic-bezier(.22,.9,.24,1)}
+#fondo.ok{animation:deriva 24s steps(48) infinite alternate}
+body.caj #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,body.fg #fondo.ok,
+body.bienv #fondo.ok{animation-play-state:paused}
+/* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
+   Estaba escrito como `transform:scale(1.14)`, y una animación sobre
+   `transform` PISA la declaración: el acercamiento no corría nunca. Y llevaba
+   un `filter:saturate() brightness()` que es un filtro más a pantalla completa
+   por cuadro mientras el cajón está abierto, para oscurecer algo que el propio
+   vidrio del cajón ya oscurece con su `brightness(.84)`. `scale` se compone
+   con el `transform` animado, así que sí se ve, y el filtro se va. */
+#fondo.hondo{scale:1.075}
 /* ── EL LIENZO DEL AGUA VA ENTRE LA FOTO Y LOS VELOS ──
    Encima del fondo, porque es una copia suya desplazada; debajo de `#oscuro` y
    de las dos bandas, para que oscurecer el fondo y los degradados de los
-   textos sigan valiendo igual con el agua encendida. Y `pointer-events:none`,
-   porque el toque que la enciende tiene que seguir llegando a lo que haya
-   debajo — un lienzo que se come el gesto de subir mataría el cajón. */
-#agua{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
-#agua.on{display:block}
+   textos sigan valiendo igual con el agua encendida. (Se probó ponerlo POR
+   ENCIMA del vidrio para que los filtros no se rehicieran: no cambia nada,
+   porque Chrome vuelve a aplicar un `backdrop-filter` cada vez que su
+   rectángulo cae en el área dañada, y un lienzo a pantalla completa la daña
+   entera esté donde esté — ver `r.js`.) Siempre en el documento y
+   transparente: prender y apagar el `display` le pedía al compositor una capa
+   nueva en cada toque. Y `pointer-events:none`, porque el toque que la
+   enciende tiene que seguir llegando a lo que haya debajo — un lienzo que se
+   come el gesto de subir mataría el cajón. */
+#agua{position:fixed;inset:0;z-index:0;pointer-events:none}
 
 /* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
    Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
@@ -609,29 +638,23 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
 #asis:not(.on) .vid,#pers:not(.on) .vid,#fondos:not(.on) .vid{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
-/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE ══════════
-   ── DE DÓNDE SALE ESTE APARTADO ──
-   Medido: un cuadro de agua cuesta 47,6 ms con el vidrio puesto y 20,8 sin él.
-   O sea que el shader NO es el problema — el problema es que un lienzo que
-   repinta la pantalla entera obliga al compositor a REHACER el `backdrop-filter`
-   de cada pieza de vidrio en cada cuadro. Bajarle el radio al desenfoque no
-   sirve (medido: 61,4 ms, o sea peor): lo que cuesta es la pasada, no el radio.
-   Así que lo único que se puede hacer es SACAR pasadas mientras dura la ráfaga,
-   y en el orden que menos se ve. Fuera de la ráfaga el vidrio queda entero.
-     n1  el refractado (el `feDisplacementMap`, que en un WebView se cae del
-         camino de GPU y pasa a hacerse en el procesador): 7,2 ms de 47,6
-     n2  el desenfoque de las piezas grandes, con un tinte más fuerte que lo
-         reemplaza para que el salto se note lo menos posible
-     n3  el desenfoque de las baldosas */
-body.agua.aguaN1 .vid.refr{backdrop-filter:var(--v-filR);
-  -webkit-backdrop-filter:var(--v-filR)}
-body.agua.aguaN1 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
-  background-color:rgba(120,170,215,.30)}
-body.agua.aguaN2 .vid,body.agua.aguaN2 .vid.refr,body.agua.aguaN3 .vid,body.agua.aguaN3 .vid.refr{
-  backdrop-filter:none;-webkit-backdrop-filter:none;
-  background:linear-gradient(150deg,rgba(10,40,78,.50),rgba(6,28,58,.62))}
-body.agua.aguaN3 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
-  background-color:rgba(120,170,215,.36)}
+/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE: SE QUEDA ══════════
+   Acá vivía una escalera de tres escalones (`body.aguaN1..3`) que apagaba el
+   vidrio mientras duraba la ráfaga, porque un lienzo que repinta la pantalla
+   obliga a rehacer cada filtro en cada cuadro (medido: 47,6 ms contra 20,8).
+   Desde la vuelta 130 el vidrio se queda: una clase en el `body` recalculaba el
+   estilo del documento entero dos veces por toque y repintaba cada pieza, y
+   además el ajuste que elegía el escalón estaba roto y caía siempre al último.
+   Lo que queda de escalera es sacar la refracción de tres piezas, en línea y
+   sin tocar el desenfoque (ver `aguaRefr` en `r.js`).
+
+   ── LAS BALDOSAS DEL CAJÓN, MIENTRAS EL CAJÓN SE DESLIZA ──
+   Un `backdrop-filter` anidado dentro de otro que se está MOVIENDO es una
+   pasada que se rehace en cada cuadro de la transición, y en el cajón entran
+   unas cuarenta a la vez encima de un desenfoque de 34 px a pantalla completa
+   que también se mueve. Durante los 420 ms de la apertura las baldosas van sin
+   filtro —su fondo de color ya las separa— y lo recuperan al asentarse. */
+#cajon.on.abre .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
@@ -2132,6 +2155,9 @@ const $$ = s => Array.prototype.slice.call(document.querySelectorAll(s));
 
 /* la baldosa ya armada de cada app del cajón; ver `cajCacheLimpia` en e.js */
 let CAJ_NODO = new Map();
+/* con qué filtro se pintó la lista del cajón por última vez: `null` es «hay que
+   pintarla». Abrir el cajón con la lista ya pintada para '' no la repinta. */
+let CAJ_ULT_Q = null;
 function cl(v, a, b){ return v < a ? a : v > b ? b : v; }
 
 /* ── EL PUENTE PUEDE NO ESTAR, Y ESO NO ES UN ERROR ──
@@ -4479,7 +4505,7 @@ function letraIni(a){
    `CAJ_NODO` se declara en `b.js` y no acá: la limpia `ICO_CACHE_LIMPIA`, que
    vive en `k.js` —o sea que se evalúa ANTES— y un `let` leído antes de su línea
    no devuelve undefined: tira, y se lleva el módulo entero. */
-function cajCacheLimpia(){ CAJ_NODO = new Map(); }
+function cajCacheLimpia(){ CAJ_NODO = new Map(); CAJ_ULT_Q = null; }
 let LETRAS = [];          /* las letras que de verdad tienen apps */
 let ANCLA = {};           /* letra → el nodo de su encabezado, para poder saltar */
 let ANCLA_Y = [];         /* letra → su offsetTop medido, ver `midaAnclas` */
@@ -4567,6 +4593,7 @@ function pintaCajon(filtro){
      letra que se escribe, o sea que cada pintada es una lista nueva */
   entraLista(l);
   pintaRiel();
+  CAJ_ULT_Q = q;
 }
 
 /* ── EL VIDRIO DE LAS BALDOSAS SE ENCIENDE AL ENTRAR EN LA VENTANA ──
@@ -4808,9 +4835,22 @@ function cierraMenu(){
 }
 
 /* ══════════ EL CAJÓN ══════════ */
+/* ── ABRIR NO ES REPINTAR ──
+   Reporte de la vuelta 130: «da tirones al subir el cajón». `verCajon(true)`
+   rehacía la lista ENTERA en el mismo cuadro en que arranca la transición —36
+   ms medidos con 150 apps, sobre un presupuesto de 16—, y la lista que se iba a
+   pintar era la misma que ya estaba: la de filtro vacío. Si la última pintada
+   fue para '', alcanza con volver a escalonar la entrada, que cuesta un reflujo. */
+let CAJ_ABRE_T = 0;
+const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
 function verCajon(v){
   CAJON = !!v;
-  $('#cajon').classList.toggle('on', CAJON);
+  const caj = $('#cajon');
+  caj.classList.toggle('on', CAJON);
+  /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
+  caj.classList.add('abre');
+  clearTimeout(CAJ_ABRE_T);
+  CAJ_ABRE_T = setTimeout(() => caj.classList.remove('abre'), CAJ_ABRE_MS);
   /* el CSS de la mascota decide su sitio con esto */
   document.body.classList.toggle('caj', CAJON);
   mascSitio();
@@ -4819,7 +4859,8 @@ function verCajon(v){
   fondoProfundo(CAJON);
   if (CAJON){
     $('#busca2').value = '';
-    pintaCajon('');
+    if (CAJ_ULT_Q === '') entraLista($('#cajLista'));
+    else pintaCajon('');
     $('#cajLista').scrollTop = 0;
     marcaRiel(LETRAS[0] || '');
   } else {
@@ -6614,11 +6655,62 @@ function iniInit(){
       mayoría de los píxeles, y con una ventana suave para que no quede un canto
       dibujado en el radio del corte. */
 
+/* ══════════ VUELTA 130: EL VIDRIO SE QUEDA, Y EL BODY NO SE TOCA ══════════
+   Reporte: «tocó el agua y se laguea feo y de paso da tirones al subir el
+   cajón mientras hay agua».
+
+   ── LO QUE HABÍA, Y LO QUE COSTABA ──
+   La vuelta 123 midió que un lienzo que repinta la pantalla entera obliga al
+   compositor a rehacer CADA `backdrop-filter` de la página en cada cuadro
+   (47,6 ms con el vidrio, 20,8 sin él), y la respuesta fue una escalera de
+   clases en el `body` (`aguaN1..3`) que APAGABA el vidrio mientras duraba la
+   ráfaga. Eso tenía tres costos que el usuario sí ve, y los tres caían en el
+   cuadro del dedo:
+     · dos clases en el `body` son dos recálculos de estilo del documento
+       ENTERO por toque —una al empezar y otra al terminar— más el repintado de
+       cada pieza de vidrio, que cambia de fondo;
+     · el vidrio se apaga y se enciende en cada toque: un parpadeo de página;
+     · y el ajuste comparaba el hueco entre dos `requestAnimationFrame` —que no
+       baja de 16,7 ms— contra un presupuesto de 7: SIEMPRE caía al último
+       escalón en seis cuadros y lo dejaba guardado. Con eso, en cualquier
+       aparato, cada toque apagaba el vidrio entero y lo volvía a prender.
+   Más el `display:none`→`block` del lienzo, que le pide al compositor una capa
+   nueva en cada toque.
+
+   ── LO QUE SE PROBÓ Y NO SIRVIÓ, Y VALE ANOTARLO ──
+   La primera versión de esta vuelta puso el lienzo POR ENCIMA del escritorio
+   con máscaras en el shader para las piezas de vidrio, con el argumento de que
+   un `backdrop-filter` toma lo que hay debajo y arriba no habría nada que
+   rehacer. Medido con la misma sonda (`aguaFps`) en el mismo banco: **32 fps
+   con vidrio contra 60 sin vidrio, arriba igual que abajo**. La razón es cómo
+   Chrome dibuja: un `backdrop-filter` se vuelve a aplicar cada vez que su
+   rectángulo cae dentro del área DAÑADA del cuadro, y un lienzo a pantalla
+   completa daña la pantalla completa esté donde esté. El orden no compra nada;
+   lo que cuesta es que el rectángulo se redibuje. Se sacó: eran tres distancias
+   por píxel, veinticuatro `getBoundingClientRect` y un puñado de uniformes para
+   no ganar un cuadro.
+
+   ── LO QUE SÍ HACE AHORA ──
+   · El `body` no se toca. Ninguna clase, ningún recálculo de documento.
+   · El vidrio se queda puesto: el desenfoque en una GPU es barato, y lo que
+     costaba de verdad era rehacer el estilo y repintar para sacarlo.
+   · El único escalón de calidad que queda es sacar la REFRACCIÓN de las
+     piezas del escritorio (el `feDisplacementMap`, que es la parte del filtro
+     que en un WebView puede caerse al procesador), y va como estilo en línea
+     sobre esas tres piezas —tres elementos recalculados, no el documento— sin
+     tocar el desenfoque, así que no se ve.
+   · El ajuste compara contra un cuadro PERDIDO (26 ms) y no contra 7.
+   · El lienzo queda siempre en el documento y transparente: apagar es borrar.
+
+   El otro tirón —el del cajón— está en `e.js` (`verCajon`) y en el CSS de
+   `#fondo.ok`: ver ahí. */
+
 const AGUA = {
   el: null, gl: null, prog: null, tex: null, buf: null,
   bake: null, bctx: null, onda: null,
   on: false, listo: false, roto: false, quieto: false,
-  res: 0, niv: 0, fijo: false, mide: 0, t0: 0, ondas: [], ultimo: [0, 0], u: {}
+  res: 0, niv: 0, fijo: false, mide: 0, t0: 0, ondas: [], ultimo: [0, 0], u: {},
+  sinRefr: false, tarde: 0, bajo: false
 };
 
 const AGUA_VEL = 900, AGUA_ANCHO = 58, AGUA_LARGO = 70;
@@ -6639,17 +6731,19 @@ const AGUA_ALFA = 5.0;
    pasa del presupuesto y se guarda, así que el segundo toque ya arranca donde
    corresponde a ESTE aparato. */
 const AGUA_ESC = [0.60, 0.60, 0.46, 0.34];
-/* 8,3 ms es un cuadro de 120 Hz; se deja un pelo de aire porque el compositor
-   también tiene que hacer lo suyo */
-const AGUA_PRESU = 7.0;
-/* ── LA ESCALERA DE CALIDAD, Y POR QUÉ NO ES SÓLO RESOLUCIÓN ──
-   Medido con el lienzo ya achicado once veces: 47,6 ms por cuadro con el vidrio
-   puesto y 20,8 sin él. El shader no era el problema. Lo que cuesta es que un
-   lienzo que repinta la pantalla entera obliga al compositor a rehacer el
-   `backdrop-filter` de cada pieza de vidrio en cada cuadro, y eso no baja
-   achicando el lienzo — baja sacando pasadas.
-   Cada escalón saca la que menos se ve, y sólo MIENTRAS la ráfaga dura. */
-const AGUA_NIV = ['', 'aguaN1', 'aguaN2', 'aguaN3'];
+/* ── EL UMBRAL SE MIDE CONTRA LO QUE SE PUEDE MEDIR ──
+   Lo único que el bucle sabe es el hueco entre dos `requestAnimationFrame`, y
+   ese hueco NUNCA baja de 16,7 ms a 60 Hz aunque el cuadro haya costado uno.
+   Compararlo contra 7 ms —que es lo que había— es concluir que todo aparato es
+   lento. Un cuadro PERDIDO a 60 Hz mide 33 ms: 26 está en el medio, así que
+   sólo baja cuando de verdad se perdió un cuadro. */
+const AGUA_TARDE = 26;
+/* ── EL ÚNICO ESCALÓN DE CALIDAD: LA REFRACCIÓN DEL ESCRITORIO ──
+   Del nivel 1 en adelante, las piezas refractadas de `#capa` pasan al filtro
+   plano (`--v-filR`) MIENTRAS dura la ráfaga. Va como estilo en línea sobre
+   cada pieza: son tres elementos y no una clase del `body`, y el desenfoque se
+   queda, así que el cambio no se ve. */
+const AGUA_REFR_SEL = '#capa .vid.refr';
 
 const AGUA_VS = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
 
@@ -6751,7 +6845,10 @@ function aguaArma(){
                                                        cuadro es basura regalada */
     AGUA.bake = document.createElement('canvas');
     AGUA.bctx = AGUA.bake.getContext('2d');
-    AGUA.niv = Math.min(+lee('aguaNiv', 0) | 0, AGUA_NIV.length - 1);
+    /* la clave cambia de nombre a propósito: el `aguaNiv` viejo guardaba el
+       escalón al que el ajuste roto había caído SIEMPRE, o sea 3 en todos los
+       aparatos, y arrancar de ahí sería heredar el defecto */
+    AGUA.niv = Math.min(+lee('aguaRes2', 0) | 0, AGUA_ESC.length - 1);
     AGUA.res = AGUA_ESC[AGUA.niv];
     AGUA.u = { res: gl.getUniformLocation(pr, 'uRes'),
                onda: gl.getUniformLocation(pr, 'uOnda'),
@@ -6775,8 +6872,13 @@ function aguaMapa(){
   const iw = FONDO_IMG.naturalWidth, ih = FONDO_IMG.naturalHeight;
   let s = 1, ex = 0, ey = 0;
   try {
-    const m = new DOMMatrixReadOnly(getComputedStyle(FONDO_EL).transform);
+    const cs = getComputedStyle(FONDO_EL);
+    const m = new DOMMatrixReadOnly(cs.transform);
     if (m.a) { s = m.a; ex = m.e; ey = m.f; }
+    /* `scale` es la propiedad individual (el `.hondo` va por ahí): se compone
+       POR FUERA del `transform`, así que multiplica también al corrimiento */
+    const sc = parseFloat(cs.scale);
+    if (sc && sc !== 1){ s *= sc; ex *= sc; ey *= sc; }
   } catch (e) {}
   const cx = W/2, cy = H/2;
   const esc = Math.max(W/iw, H/ih), dw = iw*esc, dh = ih*esc;
@@ -6794,6 +6896,22 @@ function aguaMapa(){
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, c);
   return { s: s, ex: ex, ey: ey, esc: esc, res: r, bake: [bw, bh] };
+}
+
+/* ── SACAR Y DEVOLVER LA REFRACCIÓN, SIN TOCAR EL BODY ──
+   Escribe el filtro plano en línea sobre las piezas refractadas del escritorio
+   (o lo borra, y vuelve a mandar la regla `.vid.refr`). El estilo en línea de
+   un elemento recalcula ESE elemento; una clase en el `body` recalcula todo. */
+function aguaRefr(v){
+  const on = !!v;
+  if (on === AGUA.sinRefr) return AGUA.sinRefr;
+  AGUA.sinRefr = on;
+  const els = document.querySelectorAll(AGUA_REFR_SEL);
+  for (const el of els){
+    el.style.backdropFilter = on ? 'var(--v-filR)' : '';
+    el.style.webkitBackdropFilter = on ? 'var(--v-filR)' : '';
+  }
+  return on;
 }
 
 /* al cambiar de fondo se vuelve a hornear; el mapa lo recalcula `aguaMapa` en
@@ -6831,8 +6949,8 @@ function aguaMide(){
 
    Las dos cosas se pagan en el ocio. `decode()` fuerza la decodificación fuera
    del camino del dedo, y una pasada de horneado deja el shader compilado y la
-   textura subida. El lienzo sigue en `display:none`, así que precalentar no
-   dibuja un solo píxel. */
+   textura subida. El lienzo está transparente —borrado— así que precalentar
+   no dibuja un solo píxel visible. */
 let AGUA_TIBIA = false;
 function aguaOcio(fn){
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2500 });
@@ -6883,11 +7001,12 @@ function aguaToca(x, y, fuerza){
     /* la deriva se congela mientras dura: la foto horneada lleva la matriz de
        ESTE instante metida adentro */
     FONDO_EL.style.animationPlayState = 'paused';
-    AGUA.el.classList.add('on');
-    document.body.classList.add('agua');
-    if (AGUA_NIV[AGUA.niv]) document.body.classList.add(AGUA_NIV[AGUA.niv]);
-    AGUA.on = true; AGUA.mide = 0; AGUA_ULT = 0;
+    /* NADA se le toca al `body`: una clase ahí es un recálculo de estilo del
+       documento entero en el cuadro del dedo, y el vidrio ya no hace falta
+       apagarlo porque el lienzo pasó por encima */
+    AGUA.on = true; AGUA.mide = 0; AGUA.tarde = 0; AGUA.bajo = false; AGUA_ULT = 0;
     aguaMide(); aguaMapa();
+    if (AGUA.niv >= 1) aguaRefr(true);
     aguaVigila(true);
     requestAnimationFrame(aguaPaso);
   }
@@ -6897,16 +7016,20 @@ function aguaToca(x, y, fuerza){
   return true;
 }
 
-/* ── LA RESOLUCIÓN SE AJUSTA A ESTE APARATO, MIDIENDO ──
-   Un número fijo no puede estar bien en los dos extremos. Se miran los primeros
-   cuadros de la ráfaga —los primeros dos se descartan, que ahí entran la
-   compilación del shader y la primera subida de textura— y si el promedio se
-   pasa del presupuesto se baja un escalón y se guarda. */
+/* ── LA RESOLUCIÓN SE AJUSTA A ESTE APARATO, MIDIENDO, Y EN LOS DOS SENTIDOS ──
+   Un número fijo no puede estar bien en los dos extremos. Se miran los cuadros
+   3 a 10 de la ráfaga —los primeros dos se descartan, que ahí entran el horneado
+   de la foto y la primera subida de textura— y:
+   · DOS cuadros perdidos bajan un escalón y lo guardan. Uno solo no: un
+     tropiezo cualquiera (el recolector, una notificación) no puede dejar el
+     agua a un tercio de resolución para siempre.
+   · Y una ventana SIN un cuadro perdido sube un escalón y lo guarda, así que el
+     aparato no queda clavado abajo por un mal día. Lo único que el bucle puede
+     medir es si perdió cuadros, así que ésta es la única forma de volver: el
+     ajuste viejo sólo bajaba, y con el umbral roto bajaba siempre. */
 function aguaNivel(n){
-  AGUA.niv = Math.max(0, Math.min(n, AGUA_NIV.length - 1));
-  const c = document.body.classList;
-  for (const k of AGUA_NIV) if (k) c.remove(k);
-  if (AGUA_NIV[AGUA.niv]) c.add(AGUA_NIV[AGUA.niv]);
+  AGUA.niv = Math.max(0, Math.min(n, AGUA_ESC.length - 1));
+  if (AGUA.on) aguaRefr(AGUA.niv >= 1);
   const r = AGUA_ESC[AGUA.niv];
   if (r !== AGUA.res){ AGUA.res = r; aguaMide(); aguaMapa(); }
 }
@@ -6918,10 +7041,15 @@ function aguaAjusta(ms){
      subida de textura: medirlos es concluir que el aparato es lento cuando lo
      único lento fue empezar */
   if (AGUA.mide < 3 || AGUA.mide > 10) return;
-  if (ms <= AGUA_PRESU) return;
-  if (AGUA.niv >= AGUA_NIV.length - 1) return;
-  aguaNivel(AGUA.niv + 1);
-  guarda('aguaNiv', AGUA.niv);
+  if (ms > AGUA_TARDE) AGUA.tarde++;
+  if (AGUA.tarde >= 2){
+    AGUA.tarde = 0; AGUA.bajo = true;
+    if (AGUA.niv < AGUA_ESC.length - 1){ aguaNivel(AGUA.niv + 1); guarda('aguaRes2', AGUA.niv); }
+    return;
+  }
+  if (AGUA.mide === 10 && !AGUA.bajo && AGUA.tarde === 0 && AGUA.niv > 0){
+    aguaNivel(AGUA.niv - 1); guarda('aguaRes2', AGUA.niv);
+  }
 }
 
 /* ── QUÉ TAPA AL AGUA ──
@@ -6943,10 +7071,11 @@ function aguaCorta(){
   aguaVigila(false);
   AGUA.ondas.length = 0;
   AGUA.on = false;
-  AGUA.el.classList.remove('on');
-  document.body.classList.remove('agua');
-  for (const k of AGUA_NIV) if (k) document.body.classList.remove(k);
+  aguaRefr(false);
   FONDO_EL.style.animationPlayState = '';
+  /* el lienzo queda siempre puesto y transparente: borrarlo es lo que lo apaga.
+     Prender y apagar el `display` le costaba al compositor una capa nueva por
+     ráfaga, y eso también era un tirón en el cuadro del dedo. */
   if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
   return true;
 }
@@ -6989,12 +7118,9 @@ function aguaPaso(){
   if (!v.length){
     AGUA.on = false;
     aguaVigila(false);
-    AGUA.el.classList.remove('on');
-    /* el vidrio vuelve entero: la escalera de calidad vale sólo mientras el
-       lienzo está repintando */
-    document.body.classList.remove('agua');
-    for (const k of AGUA_NIV) if (k) document.body.classList.remove(k);
+    aguaRefr(false);
     FONDO_EL.style.animationPlayState = '';
+    gl.clear(gl.COLOR_BUFFER_BIT);
     return;
   }
   const t0 = performance.now();
@@ -10201,10 +10327,14 @@ window.__A = {
      que el filtro de «espacio libre» deja pasar el fondo y no una app */
   aguaTocar(x, y){
     const t = document.elementFromPoint(x, y);
-    t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y,
-                                                      pointerId: 3, isPrimary: true }));
+    /* el toque entero: desde la vuelta 126 el agua arranca en el `pointerup`, y
+       un `pointerdown` solo es un dedo que se queda apoyado — a los 400 ms
+       eso abre la galería de fondos, que es lo que le pasó a la sonda vieja */
+    const ev = tipo => t.dispatchEvent(new PointerEvent(tipo, { bubbles: true, clientX: x, clientY: y,
+                                                                  pointerId: 3, isPrimary: true }));
+    ev('pointerdown'); ev('pointerup');
     return { destino: t ? (t.id || t.className || t.tagName) : null,
-             libre: aguaLibre(t), agua: this.agua() };
+             libre: aguaLibre(t), agua: this.agua(), vidrios: this.vidrios().n };
   },
   aguaArrastra(x0, y0, x1, y1, n){
     const t = document.elementFromPoint(x0, y0);
@@ -10218,10 +10348,10 @@ window.__A = {
   },
   aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
   aguaNivel(n){ if (n != null){ if (!aguaArma()) return 'roto'; aguaNivel(n); } return this.aguaRes(); },
-  aguaRes(){ return { niv: AGUA.niv, clases: document.body.className,
+  aguaRes(){ return { niv: AGUA.niv, enc: AGUA.on, sinRefr: AGUA.sinRefr,
                       res: AGUA.res, lienzo: AGUA.el ? [AGUA.el.width, AGUA.el.height] : null,
                       px: AGUA.el ? AGUA.el.width*AGUA.el.height : 0,
-                      guardado: lee('aguaNiv', 0),
+                      guardado: lee('aguaRes2', 0),
                       bake: AGUA.bake ? [AGUA.bake.width, AGUA.bake.height] : null }; },
   /* ── EL LIENZO ES TRANSPARENTE DONDE NO HAY ONDA ──
      Antes esto era una copia de la foto entera y había que medir si era fiel.
@@ -10233,7 +10363,6 @@ window.__A = {
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const gl = AGUA.gl, b = AGUA.onda;
     b.fill(0);
@@ -10265,7 +10394,6 @@ window.__A = {
     if (!aguaArma()) return 'roto';
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const gl = AGUA.gl, b = AGUA.onda;
     b.fill(0);
@@ -10289,7 +10417,6 @@ window.__A = {
     const gl = AGUA.gl;
     FONDO_EL.style.animationPlayState = 'paused';
     AGUA.on = false; AGUA.ondas = [];
-    AGUA.el.classList.add('on');
     aguaMide(); aguaMapa();
     const b = AGUA.onda; b.fill(0);
     for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
@@ -10380,7 +10507,8 @@ window.__A = {
           const px = AGUA.el.width*AGUA.el.height, nv = AGUA.niv;
           document.body.classList.remove('sinVidrio');
           AGUA.fijo = false;
-          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length,
+          const vid = this.vidrios().n;
+          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length, vidrios: vid,
                 mediana: +med.toFixed(2), promedio: +prom.toFixed(2),
                 p90: +(v[Math.floor(v.length*0.9)] || 0).toFixed(2),
                 fps: +(1000/Math.max(med, 0.01)).toFixed(1),
@@ -10408,7 +10536,7 @@ window.__A = {
     /* un cuadro de bucle: es lo que tarda `aguaPaso` en enterarse */
     aguaPaso();
     const dur = { on: AGUA.on, ondas: AGUA.ondas.length, tapada: aguaTapada(),
-                  clase: AGUA.el.className, agua: document.body.classList.contains('agua'),
+                  clase: AGUA.el.className, agua: AGUA.on,
                   deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
     const v = this.vidrios();
     /* cuántos cuadros más habría repintado el lienzo a pantalla completa con
@@ -10562,16 +10690,14 @@ window.__A = {
     tf.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x1, clientY: y1, pointerId: 3 }));
     await new Promise(r => requestAnimationFrame(r));
     if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
-    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON,
-                 agua: document.body.classList.contains('agua') };
+    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON, agua: AGUA.on };
     aguaCorta(); verCajon(false);
     return r2;
   },
-  /* ── EL TIRÓN AL ABRIR EL CAJÓN, MEDIDO ──
-     `body.agua` apaga los once `backdrop-filter` del launcher mientras dura la
-     ráfaga. Lo que se mide es CUÁNDO vuelven: en la microtarea que sigue al
-     cambio de clase (o sea antes de que el navegador calcule estilo, o sea en
-     el mismo cuadro que la hoja empieza a abrirse) o recién en el rAF
+  /* ── EL CORTE AL ABRIR EL CAJÓN, MEDIDO ──
+     Ya no hay clase del `body` que devolver: lo que se mide es CUÁNDO se apaga
+     el agua. En la microtarea que sigue al cambio de clase del cajón (o sea en
+     el mismo cuadro en que la hoja empieza a abrirse) o recién en el rAF
      siguiente, que es en el medio de la animación. */
   async aguaTiron(vigilar){
     aguaCorta();
@@ -10579,23 +10705,102 @@ window.__A = {
     aguaVigila(!!vigilar);
     const on0 = AGUA.on;
     verCajon(true);
-    const antes = document.body.classList.contains('agua');
+    const antes = AGUA.on;
     await Promise.resolve(); await Promise.resolve();
-    const micro = document.body.classList.contains('agua');
+    const micro = AGUA.on;
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const raf = document.body.classList.contains('agua');
+    const raf = AGUA.on;
     verCajon(false); aguaCorta(); aguaVigila(false);
     return { vigilando: !!vigilar, aguaEncendida: on0,
              enElCambio: antes, trasLaMicrotarea: micro, trasElRaf: raf,
-             filtrosVuelvenEn: micro ? 'el rAF (en medio de la animación)'
-                                     : 'la microtarea (mismo cuadro)' };
+             seApagaEn: micro ? 'el rAF (en medio de la animación)'
+                              : 'la microtarea (mismo cuadro)' };
   },
   aguaApaga(){
-    AGUA.ondas = []; AGUA.on = false;
-    if (AGUA.el) AGUA.el.classList.remove('on');
-    document.body.classList.remove('agua', 'aguaN1', 'aguaN2', 'aguaN3');
+    AGUA.ondas = []; AGUA.on = false; aguaRefr(false);
+    if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
     FONDO_EL.style.animationPlayState = '';
     return this.agua();
+  },
+  /* ── LA REFRACCIÓN SE VA Y VUELVE SIN TOCAR EL BODY ──
+     Con la ráfaga encendida y el nivel forzado a 1, las piezas refractadas del
+     escritorio tienen que quedar con el filtro plano EN LÍNEA —y el `body` sin
+     una sola clase nueva—; al apagar la ráfaga, vuelven a la regla. */
+  aguaRefr(){
+    if (!aguaArma()) return 'roto';
+    aguaCorta();
+    const cls0 = document.body.className;
+    const lee = () => [...document.querySelectorAll('#capa .vid.refr')]
+      .map(e => ({ id: e.id, inline: e.style.backdropFilter || '',
+                   fil: getComputedStyle(e).backdropFilter.slice(0, 30) }));
+    AGUA.fijo = true;
+    aguaNivel(0); aguaToca(206, 520, 1);
+    const n0 = lee();
+    aguaNivel(1);
+    const n1 = lee();
+    const cls1 = document.body.className;
+    aguaCorta(); AGUA.fijo = false; aguaNivel(0);
+    const fin = lee();
+    return { nivel0: n0, nivel1: n1, alApagar: fin,
+             bodyIgual: cls0 === cls1, body: cls1 };
+  },
+  /* ── LA DERIVA Y EL ACERCAMIENTO ──
+     Lo que el compositor paga por la foto de fondo: con qué curva se mueve y
+     si se pausa debajo del cajón. Y que `.hondo` de verdad cambie la escala,
+     que antes no cambiaba nada porque la animación le pisaba el `transform`. */
+  async aguaDeriva(){
+    const cs = () => getComputedStyle(FONDO_EL);
+    const esp = ms => new Promise(r => setTimeout(r, ms));
+    const r = { timing: cs().animationTimingFunction, dur: cs().animationDuration,
+                estado: cs().animationPlayState, transform: cs().transform.slice(0, 40) };
+    const caj = CAJON;
+    document.body.classList.add('caj');
+    r.estadoConCajon = cs().animationPlayState;
+    document.body.classList.toggle('caj', caj);
+    /* `scale` tiene una transición de 420 ms: leído en el acto vale 1 */
+    fondoProfundo(true); await esp(1100);
+    r.escalaHondo = cs().scale; r.filtroHondo = cs().filter;
+    fondoProfundo(CAJON); await esp(1100);
+    r.escalaNormal = cs().scale;
+    /* cuántas veces cambia el transform de la foto en un segundo: con la deriva
+       continua eran sesenta, o sea sesenta refiltrados de todo el vidrio */
+    let ult = cs().transform, cambios = 0; const t0 = performance.now();
+    while (performance.now() - t0 < 1100){
+      await new Promise(f => requestAnimationFrame(f));
+      const t = cs().transform; if (t !== ult){ cambios++; ult = t; }
+    }
+    r.cambiosPorSegundo = cambios;
+    return r;
+  },
+  /* ── ABRIR EL CAJÓN: CUÁNTO CUESTA LA SEGUNDA VEZ ──
+     La primera apertura pinta la lista; la segunda ya la tiene y sólo la
+     escalona. Se mide cuánto tarda `verCajon(true)` en cada caso y si `.abre`
+     está puesto durante la transición y sacado después. */
+  async cajAbre(){
+    verCajon(false); cajCacheLimpia();
+    await new Promise(r => setTimeout(r, 60));
+    const caj = $('#cajon');
+    let t = performance.now(); verCajon(true); const primera = performance.now() - t;
+    const abre1 = caj.classList.contains('abre');
+    await new Promise(r => setTimeout(r, 520));
+    const abreTarde = caj.classList.contains('abre');
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    t = performance.now(); verCajon(true); const segunda = performance.now() - t;
+    const ult = CAJ_ULT_Q;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    /* el control: la caché de baldosas caliente pero obligando a repintar, que
+       es exactamente lo que hacía cada apertura hasta esta vuelta */
+    CAJ_ULT_Q = null;
+    t = performance.now(); verCajon(true); const antes = performance.now() - t;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    return { primeraMs: +primera.toFixed(2), segundaMs: +segunda.toFixed(2),
+             comoAntesMs: +antes.toFixed(2),
+             abreDurante: abre1, abreDespues: abreTarde, ultimoFiltro: ult,
+             apps: $('#cajLista').querySelectorAll('.ap').length };
   },
 
   /* ── LA PANTALLA DE INICIO ──

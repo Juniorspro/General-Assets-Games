@@ -73,22 +73,51 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    un rectángulo vacío.
    La deriva y el acercamiento son `transform` puro, o sea que los resuelve el
    compositor y no cuestan un cuadro de JavaScript. El `scale(1.06)` de base
-   existe para que la deriva no descubra los bordes. */
+   existe para que la deriva no descubra los bordes.
+
+   ── LA DERIVA VA A ESCALONES, Y ES EL HALLAZGO DE LA VUELTA 130 ──
+   Una animación continua del `transform` de la foto cambia la foto en CADA
+   cuadro, para siempre. Y cada `backdrop-filter` del launcher toma la foto de
+   abajo: o sea que el reloj, la búsqueda, el dock, cada baldosa y —abierto— el
+   cajón entero se volvían a FILTRAR sesenta veces por segundo aunque nadie
+   tocara nada, sólo porque el fondo se corría un centésimo de píxel. Ése es el
+   lag «de fondo» que el banco no puede ver, porque acá dibuja por software y
+   en el teléfono lo paga el compositor. Con `steps(48)` la foto se mueve 48
+   veces en 24 s —un cuarto de píxel cada medio segundo, que no se ve como
+   salto— y entre paso y paso NO CAMBIA: los filtros se rehacen dos veces por
+   segundo y no sesenta.
+   Y debajo de una hoja que la tapa la deriva se pausa del todo: con el cajón
+   abierto, mover la foto era rehacer un desenfoque de 34 px a pantalla
+   completa por cuadro para mostrar algo que no se ve. */
 #fondo{position:fixed;inset:0;z-index:0;
   background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
   background-size:cover;background-position:center;
   transform:scale(1.06);will-change:transform;
-  transition:transform .42s cubic-bezier(.22,.9,.24,1),filter .42s ease}
-#fondo.ok{animation:deriva 24s ease-in-out infinite alternate}
-#fondo.hondo{transform:scale(1.14);filter:saturate(1.12) brightness(.92)}
+  transition:scale .42s cubic-bezier(.22,.9,.24,1)}
+#fondo.ok{animation:deriva 24s steps(48) infinite alternate}
+body.caj #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,body.fg #fondo.ok,
+body.bienv #fondo.ok{animation-play-state:paused}
+/* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
+   Estaba escrito como `transform:scale(1.14)`, y una animación sobre
+   `transform` PISA la declaración: el acercamiento no corría nunca. Y llevaba
+   un `filter:saturate() brightness()` que es un filtro más a pantalla completa
+   por cuadro mientras el cajón está abierto, para oscurecer algo que el propio
+   vidrio del cajón ya oscurece con su `brightness(.84)`. `scale` se compone
+   con el `transform` animado, así que sí se ve, y el filtro se va. */
+#fondo.hondo{scale:1.075}
 /* ── EL LIENZO DEL AGUA VA ENTRE LA FOTO Y LOS VELOS ──
    Encima del fondo, porque es una copia suya desplazada; debajo de `#oscuro` y
    de las dos bandas, para que oscurecer el fondo y los degradados de los
-   textos sigan valiendo igual con el agua encendida. Y `pointer-events:none`,
-   porque el toque que la enciende tiene que seguir llegando a lo que haya
-   debajo — un lienzo que se come el gesto de subir mataría el cajón. */
-#agua{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
-#agua.on{display:block}
+   textos sigan valiendo igual con el agua encendida. (Se probó ponerlo POR
+   ENCIMA del vidrio para que los filtros no se rehicieran: no cambia nada,
+   porque Chrome vuelve a aplicar un `backdrop-filter` cada vez que su
+   rectángulo cae en el área dañada, y un lienzo a pantalla completa la daña
+   entera esté donde esté — ver `r.js`.) Siempre en el documento y
+   transparente: prender y apagar el `display` le pedía al compositor una capa
+   nueva en cada toque. Y `pointer-events:none`, porque el toque que la
+   enciende tiene que seguir llegando a lo que haya debajo — un lienzo que se
+   come el gesto de subir mataría el cajón. */
+#agua{position:fixed;inset:0;z-index:0;pointer-events:none}
 
 /* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
    Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
@@ -609,29 +638,23 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
 #asis:not(.on) .vid,#pers:not(.on) .vid,#fondos:not(.on) .vid{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
-/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE ══════════
-   ── DE DÓNDE SALE ESTE APARTADO ──
-   Medido: un cuadro de agua cuesta 47,6 ms con el vidrio puesto y 20,8 sin él.
-   O sea que el shader NO es el problema — el problema es que un lienzo que
-   repinta la pantalla entera obliga al compositor a REHACER el `backdrop-filter`
-   de cada pieza de vidrio en cada cuadro. Bajarle el radio al desenfoque no
-   sirve (medido: 61,4 ms, o sea peor): lo que cuesta es la pasada, no el radio.
-   Así que lo único que se puede hacer es SACAR pasadas mientras dura la ráfaga,
-   y en el orden que menos se ve. Fuera de la ráfaga el vidrio queda entero.
-     n1  el refractado (el `feDisplacementMap`, que en un WebView se cae del
-         camino de GPU y pasa a hacerse en el procesador): 7,2 ms de 47,6
-     n2  el desenfoque de las piezas grandes, con un tinte más fuerte que lo
-         reemplaza para que el salto se note lo menos posible
-     n3  el desenfoque de las baldosas */
-body.agua.aguaN1 .vid.refr{backdrop-filter:var(--v-filR);
-  -webkit-backdrop-filter:var(--v-filR)}
-body.agua.aguaN1 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
-  background-color:rgba(120,170,215,.30)}
-body.agua.aguaN2 .vid,body.agua.aguaN2 .vid.refr,body.agua.aguaN3 .vid,body.agua.aguaN3 .vid.refr{
-  backdrop-filter:none;-webkit-backdrop-filter:none;
-  background:linear-gradient(150deg,rgba(10,40,78,.50),rgba(6,28,58,.62))}
-body.agua.aguaN3 .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none;
-  background-color:rgba(120,170,215,.36)}
+/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE: SE QUEDA ══════════
+   Acá vivía una escalera de tres escalones (`body.aguaN1..3`) que apagaba el
+   vidrio mientras duraba la ráfaga, porque un lienzo que repinta la pantalla
+   obliga a rehacer cada filtro en cada cuadro (medido: 47,6 ms contra 20,8).
+   Desde la vuelta 130 el vidrio se queda: una clase en el `body` recalculaba el
+   estilo del documento entero dos veces por toque y repintaba cada pieza, y
+   además el ajuste que elegía el escalón estaba roto y caía siempre al último.
+   Lo que queda de escalera es sacar la refracción de tres piezas, en línea y
+   sin tocar el desenfoque (ver `aguaRefr` en `r.js`).
+
+   ── LAS BALDOSAS DEL CAJÓN, MIENTRAS EL CAJÓN SE DESLIZA ──
+   Un `backdrop-filter` anidado dentro de otro que se está MOVIENDO es una
+   pasada que se rehace en cada cuadro de la transición, y en el cajón entran
+   unas cuarenta a la vez encima de un desenfoque de 34 px a pantalla completa
+   que también se mueve. Durante los 420 ms de la apertura las baldosas van sin
+   filtro —su fondo de color ya las separa— y lo recuperan al asentarse. */
+#cajon.on.abre .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));

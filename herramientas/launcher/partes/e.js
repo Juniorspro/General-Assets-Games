@@ -217,7 +217,7 @@ function letraIni(a){
    `CAJ_NODO` se declara en `b.js` y no acá: la limpia `ICO_CACHE_LIMPIA`, que
    vive en `k.js` —o sea que se evalúa ANTES— y un `let` leído antes de su línea
    no devuelve undefined: tira, y se lleva el módulo entero. */
-function cajCacheLimpia(){ CAJ_NODO = new Map(); }
+function cajCacheLimpia(){ CAJ_NODO = new Map(); CAJ_ULT_Q = null; }
 let LETRAS = [];          /* las letras que de verdad tienen apps */
 let ANCLA = {};           /* letra → el nodo de su encabezado, para poder saltar */
 let ANCLA_Y = [];         /* letra → su offsetTop medido, ver `midaAnclas` */
@@ -305,6 +305,7 @@ function pintaCajon(filtro){
      letra que se escribe, o sea que cada pintada es una lista nueva */
   entraLista(l);
   pintaRiel();
+  CAJ_ULT_Q = q;
 }
 
 /* ── EL VIDRIO DE LAS BALDOSAS SE ENCIENDE AL ENTRAR EN LA VENTANA ──
@@ -546,9 +547,22 @@ function cierraMenu(){
 }
 
 /* ══════════ EL CAJÓN ══════════ */
+/* ── ABRIR NO ES REPINTAR ──
+   Reporte de la vuelta 130: «da tirones al subir el cajón». `verCajon(true)`
+   rehacía la lista ENTERA en el mismo cuadro en que arranca la transición —36
+   ms medidos con 150 apps, sobre un presupuesto de 16—, y la lista que se iba a
+   pintar era la misma que ya estaba: la de filtro vacío. Si la última pintada
+   fue para '', alcanza con volver a escalonar la entrada, que cuesta un reflujo. */
+let CAJ_ABRE_T = 0;
+const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
 function verCajon(v){
   CAJON = !!v;
-  $('#cajon').classList.toggle('on', CAJON);
+  const caj = $('#cajon');
+  caj.classList.toggle('on', CAJON);
+  /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
+  caj.classList.add('abre');
+  clearTimeout(CAJ_ABRE_T);
+  CAJ_ABRE_T = setTimeout(() => caj.classList.remove('abre'), CAJ_ABRE_MS);
   /* el CSS de la mascota decide su sitio con esto */
   document.body.classList.toggle('caj', CAJON);
   mascSitio();
@@ -557,7 +571,8 @@ function verCajon(v){
   fondoProfundo(CAJON);
   if (CAJON){
     $('#busca2').value = '';
-    pintaCajon('');
+    if (CAJ_ULT_Q === '') entraLista($('#cajLista'));
+    else pintaCajon('');
     $('#cajLista').scrollTop = 0;
     marcaRiel(LETRAS[0] || '');
   } else {
