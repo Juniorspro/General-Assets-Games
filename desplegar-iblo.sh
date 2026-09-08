@@ -53,7 +53,8 @@ fi
 echo "   200 . $(head -c 120 /tmp/iblo-sitio.json)"
 
 echo "-- 4/5  contenido"
-IBLO_API="$SITIO/api" python3 herramientas/iblo/sembrar.py --ver
+# no es fatal: es informativo, y si falla no tiene que cortar la comprobacion
+IBLO_API="$SITIO/api" python3 herramientas/iblo/sembrar.py --ver || true
 echo "   Si dice «nada todavia»: entra al panel, «La pagina», «Traer las que ya"
 echo "   estan en la web». Un boton. Mientras tanto la web muestra su copia."
 

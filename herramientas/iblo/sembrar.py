@@ -24,7 +24,9 @@ DOC = os.path.join(AQUI, "contenido-inicial.json")
 
 
 def llamar(ruta, datos=None, metodo=None, token=None):
-    cab = {"Content-Type": "application/json"}
+    # sin User-Agent, Cloudflare le contesta 403 a urllib y parece que la ruta
+    # no existiera; con uno cualquiera pasa
+    cab = {"Content-Type": "application/json", "User-Agent": "iblo-sembrar/1.0"}
     if token:
         cab["Authorization"] = "Bearer " + token
     cuerpo = json.dumps(datos).encode() if datos is not None else None
