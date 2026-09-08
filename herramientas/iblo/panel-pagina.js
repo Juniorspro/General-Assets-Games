@@ -74,16 +74,17 @@
   function tarjeta(e, i) {
     var abierta = estado.abierta === i;
     var h = '<div class="estCard' + (e.oculta ? " apagada" : "") + '" data-i="' + i + '">' +
-      '<div class="estCab">' +
+      '<div class="estCab" data-abre="1" role="button" tabindex="0" ' +
+           'aria-expanded="' + (abierta ? "true" : "false") + '">' +
         '<span class="punto" style="background:' + esc(e.paleta.ac) + '"></span>' +
         '<div class="estNom"><b>' + esc(e.n || "Sin nombre") + '</b>' +
           '<span>' + esc(e.sub || "—") + '</span></div>' +
+        '<button type="button" class="mini" data-ojo="1" ' +
+          'aria-label="' + (e.oculta ? "Mostrar en la web" : "Esconder de la web") + '">' +
+          (e.oculta ? "◌" : "●") + '</button>' +
         '<button type="button" class="mini" data-sube="1" aria-label="Subir">▲</button>' +
         '<button type="button" class="mini" data-baja="1" aria-label="Bajar">▼</button>' +
-        '<button type="button" class="mini" data-ojo="1" aria-label="Mostrar o esconder">' +
-          (e.oculta ? "◌" : "●") + '</button>' +
-        '<button type="button" class="mini" data-abre="1" aria-label="Editar">' +
-          (abierta ? "▴" : "▾") + '</button>' +
+        '<span class="chevron">' + (abierta ? "▴" : "▾") + '</span>' +
       '</div>';
     if (abierta) {
       h += '<div class="estCuerpo">' +
@@ -112,7 +113,6 @@
   function pintar() {
     var l = document.getElementById("pgLista");
     l.innerHTML = estado.esteticas.map(tarjeta).join("");
-    document.getElementById("pgVacio").hidden = estado.esteticas.length > 0;
   }
 
   function pintarMarca() {
@@ -144,8 +144,8 @@
          mostrando lo que trae el HTML. Se avisa, porque si no parece un error. */
       document.getElementById("pgTraer").hidden = estado.esteticas.length > 0;
       if (!estado.esteticas.length)
-        aviso("Todavía no cargaste nada acá, así que la web sigue mostrando las nueve " +
-              "de siempre. Tocá «Traer las que ya están» y las tenés todas editables.", "");
+        aviso("La web está mostrando las nueve de siempre. Traelas acá y quedan " +
+              "todas editables.", "");
       pintar(); pintarMarca();
     }).catch(function (e) { aviso(e.message, "mal"); });
   }
@@ -203,7 +203,20 @@
   }
 
   document.addEventListener("click", function (ev) {
-    var b = ev.target.closest("button"); if (!b) return;
+    var b = ev.target.closest("button");
+    if (!b) {
+      /* Tocar la fila abre el editor. Va DESPUÉS de buscar el botón: las
+         flechitas y el ojo están adentro de la fila y tienen que seguir
+         haciendo lo suyo sin desplegarla. Cuatro botoncitos iguales de medio
+         centímetro en un teléfono no se distinguen; el blanco grande es la
+         fila entera. */
+      var cab = ev.target.closest(".estCab[data-abre]");
+      if (cab) {
+        var ic = idx(cab);
+        if (ic >= 0) { estado.abierta = estado.abierta === ic ? null : ic; pintar(); }
+      }
+      return;
+    }
     if (b.id === "pgBtGuardar") return guardar();
     if (b.id === "pgBtDeshacer") return deshacer();
     if (b.id === "pgBtIA") return porIA();
@@ -213,6 +226,7 @@
       document.getElementById("pgTraer").hidden = true;
       pintar(); pintarMarca();
       aviso("Listas las nueve. Cambiá lo que quieras y tocá «Publicar los cambios».", "bien");
+      document.querySelector(".masFiesta").open = false;
       return;
     }
     if (b.id === "pgBtNueva") {
@@ -233,7 +247,6 @@
     }
     var i = idx(b); if (i < 0) return;
     var e = estado.esteticas[i]; if (!e) return;
-    if (b.dataset.abre) { estado.abierta = estado.abierta === i ? null : i; return pintar(); }
     if (b.dataset.ojo) { e.oculta = !e.oculta; return pintar(); }
     if (b.dataset.sube && i > 0) {
       estado.esteticas.splice(i - 1, 0, estado.esteticas.splice(i, 1)[0]);
