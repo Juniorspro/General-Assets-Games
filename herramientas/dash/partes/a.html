@@ -42,12 +42,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05060a;color:#eaf0f
 
 /* ══════════ EL HUD ══════════ */
 #hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+/* ── UN VELO ARRIBA, POR LO MISMO QUE LA PISTA DE LA BARRA ──
+   Los cuatro rotulos de esa franja —el tema, el modo, el porcentaje y el
+   mejor— llevan sombra difusa, y una sombra difusa oscura casi no oscurece un
+   cielo crema: sobre el nivel 1 se leen a marca de agua. Un degradado corto de
+   62 px arregla los cuatro de una y no tapa nada, porque ahi no hay juego: el
+   piso esta al 80 % del alto. */
+#hud::before{content:'';position:absolute;left:0;right:0;top:0;height:62px;
+  background:linear-gradient(180deg,rgba(4,7,14,.50),rgba(4,7,14,.24) 62%,transparent);
+  pointer-events:none}
 body.jugando #hud{opacity:1}
 /* la barra de progreso arriba: es la ficha del genero. Dice cuanto falta, y el
    numero al costado dice cuanto, porque una barra sola no se puede comparar
    contra el intento anterior */
+/* ── Y LA PISTA DE LA BARRA TIENE QUE VERSE SOBRE UN CIELO CLARO ──
+   Estaba en blanco al 10 % con borde al 16 %. Medido sobre la captura del nivel
+   1 —cuyo cielo es crema—, los pixeles de adentro de la pista daban
+   (183,169,157) y los de justo debajo (191,177,158): ocho puntos sobre 255, o
+   sea que la barra de progreso, que es LA ficha de este genero, era invisible
+   en el nivel con el que arranca todo el mundo. Va oscura, que se lee sobre los
+   dos: sobre el cielo crema por contraste y sobre el neon negro por el borde. */
 #barra{position:absolute;left:6%;right:24%;top:10px;height:13px;border-radius:99px;
-  background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);overflow:hidden}
+  background:rgba(6,10,18,.46);border:1px solid rgba(255,255,255,.34);overflow:hidden;
+  box-shadow:0 1px 6px rgba(0,0,0,.45)}
 #barra i{display:block;height:100%;width:0;border-radius:99px;
   background:linear-gradient(90deg,#2de2a8,#5ad9ff);transition:width .06s linear}
 /* el numero va AL LADO de la barra y no encima: adentro se pisa con ella, y una
@@ -100,6 +117,20 @@ body.jugando #bPausa{display:block}
 .pan::before{content:'';position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(5,6,10,.95),rgba(5,6,10,.88) 42%,
     rgba(6,8,14,.66) 56%,rgba(6,8,14,.34) 76%,rgba(5,6,10,.88))}
+/* ── EL VELO DEL MENU SE ABRE TAMBIEN ABAJO ──
+   Reporte del jefe: el menu se veia pobre. Medido sobre la captura, el quinto
+   de abajo del cuadro daba 26,6 de brillo mientras el mundo que hay DETRAS —leido
+   del propio buffer con `brillo()`— daba 53: o sea que el velo estaba tapando
+   casi la mitad de un juego que ya se estaba dibujando, para poner encima unos
+   botones que tienen su propio fondo al 84 %. Se abre, y lo unico que
+   conserva respaldo propio es el pie, que es texto chico. */
+#pMenu::before{background:linear-gradient(180deg,rgba(5,6,10,.94),
+  rgba(5,6,10,.84) 38%,rgba(6,8,14,.44) 54%,rgba(6,8,14,.16) 72%,rgba(5,6,10,.34))}
+/* OJO: `#pMenu .bt` es ID + clase y le gana a `.bt.p`, que es dos clases — la
+   primera version dejo el boton de JUGAR sin su degradado, o sea una pildora
+   vacia justo en el unico boton que importa. Va excluyendo los modificadores. */
+#pMenu .bt:not(.p):not(.sel){background:rgba(9,14,24,.86)}
+#pMenu .pie{background:rgba(5,6,10,.62);border-radius:9px;padding:6px 10px;display:inline-block}
 /* ── LA FOTO DEL MENU VA SOLO EN LA FRANJA DE ARRIBA ──
    Un telon de pantalla completa taparia el demo, que es lo unico que este menu
    tiene para mostrar. Arriba, donde el velo ya esta cerrado para que se lea el
@@ -132,12 +163,25 @@ h1::after{content:'';display:block;width:84px;height:2px;margin:11px auto 0;bord
 @keyframes filo{0%,100%{width:84px;opacity:.55}50%{width:158px;opacity:1}}
 .sub{font:700 9.5px/1.7 ui-monospace,monospace;letter-spacing:.24em;
   color:rgba(190,215,245,.46);text-transform:uppercase;margin:8px 0 16px}
-.tx{font-size:12.5px;line-height:1.6;color:rgba(220,235,255,.80);margin-bottom:14px;
-  text-shadow:0 1px 4px rgba(0,0,0,.85)}
+/* ── LA FILA DE PROGRESO REEMPLAZA AL PARRAFO ──
+   Habia DOS parrafos de prosa —uno debajo del subtitulo y el pie— diciendo casi
+   lo mismo, y ninguno de los dos decia lo unico que un menu tiene que decir:
+   como vas. El de arriba pasa a ser una fila de numeros que se lee de una
+   ojeada: los diamantes juntados y el mejor porcentaje de cada tema. El pie se
+   queda con LA regla y en una linea. */
+.tx{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.tx b{font:800 13px/1 system-ui,sans-serif;letter-spacing:.05em;
+  background:rgba(9,14,24,.72);border:1px solid rgba(90,217,255,.22);
+  border-radius:9px;padding:6px 10px;color:#cfe6ff;text-shadow:0 1px 4px rgba(0,0,0,.85)}
+.tx b.d{color:#7cf3c8;border-color:rgba(124,243,200,.34)}
+.tx b i{font-style:normal;opacity:.55;margin-right:5px}
+.tx b.hecho{color:#ffd86a;border-color:rgba(255,216,106,.42)}
 .bt{display:block;width:100%;margin-top:9px;padding:13px 16px;border-radius:12px;
   border:1px solid rgba(90,217,255,.28);background:rgba(9,14,24,.72);color:#eaf0fb;
   font:800 14px/1 system-ui,sans-serif;letter-spacing:.08em;transition:transform .1s}
 .bt:active{transform:scale(.97)}
+.fila{display:flex;gap:7px;margin-top:9px}
+.fila .bt{margin-top:0;padding:11px 6px;font-size:12.5px}
 .bt.p{background:linear-gradient(135deg,#2de2a8,#5ad9ff);color:#04222c;border-color:transparent;
   /* ── EL BOTON LATE CON EL TEMA QUE ESTA SONANDO ──
      `--pulso` lo escribe el bucle, y SOLO mientras hay un panel abierto: escribir
@@ -218,10 +262,12 @@ h1::after{content:'';display:block;width:84px;height:2px;margin:11px auto 0;bord
 
   <div class="pan" id="pMenu"><div id="mFondo"></div><div class="caja">
     <img id="mSello" alt=""><h1>ROTOR</h1><div class="sub" id="mSub"></div>
-    <p class="tx" id="mTx"></p>
+    <div class="tx" id="mTx"></div>
     <button class="bt p" id="bJugar"></button>
-    <button class="bt" id="bIconos"></button>
-    <button class="bt" id="bAjustes"></button>
+    <!-- ICONO y AJUSTES van en una fila: el marco de este juego mide 412 de
+         alto y con los tres apilados el pie caia FUERA del cuadro — medido en la
+         captura, la ultima linea salia cortada por el borde. -->
+    <div class="fila"><button class="bt" id="bIconos"></button><button class="bt" id="bAjustes"></button></div>
     <div class="pie" id="mPie"></div>
   </div></div>
 

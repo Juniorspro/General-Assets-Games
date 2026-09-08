@@ -256,8 +256,7 @@ const TXT = {
         fin:'LOS DOS TEMAS', finT:'Los pasaste enteros. Probá el modo práctica para las monedas.',
         vel:'VELOCIDAD', dos:'DOS TEMAS',
         sigue:'SIGUIENTE', menu:'MENÚ',
-        texto:'Un toque hace lo que la forma haga: saltar, subir, volar. Los orbes se aprietan en el aire. No hay vidas: si chocás, volvés al principio.',
-        pie:'Dos temas. Los obstáculos caen en el compás: la música y el nivel son lo mismo. Sobre un bloque se puede parar; lo que mata son los pinches y lo que chocás.' },
+        pie:'Un toque hace lo que la forma haga. Sobre un bloque se puede parar: lo que mata son los pinches.' },
   en: { dif1:'EASY', dif2:'NORMAL', dif3:'HARD', dif4:'INSANE', sub:'TWO TRACKS, EIGHT FORMS, NO LIVES', jugar:'PLAY', iconos:'ICON',
         ajustes:'SETTINGS', volver:'BACK', niveles:'LEVELS', elegi:'PICK A TRACK',
         icono:'ICON', forma:'SHAPE', color:'COLOUR', ajus:'SETTINGS',
@@ -269,8 +268,7 @@ const TXT = {
         fin:'BOTH TRACKS', finT:'You cleared both. Try practice mode for the coins.',
         vel:'SPEED', dos:'TWO TRACKS',
         sigue:'NEXT', menu:'MENU',
-        texto:'One tap does whatever the form does: jump, climb, fly. Orbs are pressed in mid-air. No lives: crash and you go back to the start.',
-        pie:'Two tracks. Obstacles land on the beat: the music and the level are the same thing. You can stand on blocks; spikes and what you crash into kill.' },
+        pie:'One tap does whatever the form does. You can stand on blocks: what kills you are the spikes.' },
   pt: { dif1:'FÁCIL', dif2:'NORMAL', dif3:'DIFÍCIL', dif4:'INSANO', sub:'DUAS FAIXAS, OITO FORMAS, NENHUMA VIDA', jugar:'JOGAR', iconos:'ÍCONE',
         ajustes:'AJUSTES', volver:'VOLTAR', niveles:'NÍVEIS', elegi:'ESCOLHA A FAIXA',
         icono:'ÍCONE', forma:'FORMA', color:'COR', ajus:'AJUSTES',
@@ -282,8 +280,7 @@ const TXT = {
         fin:'AS DUAS FAIXAS', finT:'Você passou as duas. Tente o modo treino pelas moedas.',
         vel:'VELOCIDADE', dos:'DUAS FAIXAS',
         sigue:'PRÓXIMO', menu:'MENU',
-        texto:'Um toque faz o que a forma faz: saltar, subir, voar. Os orbes se apertam no ar. Não há vidas: se bater, volta ao início.',
-        pie:'Duas faixas. Os obstáculos caem no compasso: a música e o nível são a mesma coisa. Dá para ficar em cima dos blocos; o que mata são os espinhos e o que você bate.' }
+        pie:'Um toque faz o que a forma faz. Dá para ficar em cima dos blocos: o que mata são os espinhos.' }
 };
 let LANG = 'en';
 const TX = (k) => (TXT[LANG] && TXT[LANG][k]) || TXT.es[k] || k;

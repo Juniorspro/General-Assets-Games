@@ -36,10 +36,30 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07090d;
     rgba(7,9,13,.88) 60%,rgba(7,9,13,.16) 100%)}
 .caja{position:relative;width:min(80%,560px);max-height:94%;overflow:auto;text-align:center;
   display:flex;flex-direction:column;gap:1.15vh;padding:1vh 0}
+/* ── EL TITULO SE PINTA CON LOS MATERIALES DEL JUEGO ──
+   Estaba con un degradado de hielo, que es el unico material que este juego no
+   tiene: es un juego de tierra, pasto y piedra. Ahora la letra lleva ese corte
+   —pasto arriba, tierra abajo— y un bisel DURO de tres escalones en vez de una
+   sombra difusa, porque lo que hace que algo se lea a bloque es el canto y no el
+   volumen. Cero assets: es la misma tipografia del sistema con otro relleno. */
 .tit{font-size:clamp(30px,7.4vh,64px);font-weight:900;letter-spacing:.14em;margin:0;
-  background:linear-gradient(180deg,#fff 0%,#bcd6ef 55%,#7fa6cc 100%);
+  background:linear-gradient(180deg,#9fe07a 0%,#6dbb4e 34%,#8a6a44 36%,#6b4f2f 78%,#4a361f 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+  filter:drop-shadow(2px 0 0 rgba(20,14,8,.9)) drop-shadow(0 2px 0 rgba(20,14,8,.9))
+         drop-shadow(0 5px 0 rgba(0,0,0,.55)) drop-shadow(0 10px 16px rgba(0,0,0,.55))}
+/* ── EL MENU SE APOYA ARRIBA, NO EN EL MEDIO ──
+   Con la columna centrada, los botones caen justo sobre la obra del demo y lo
+   unico que este menu tiene para mostrar queda detras de AJUSTES. Apoyada
+   arriba, la mitad de abajo del cuadro queda libre y ahi entra la obra entera
+   —que es donde la camara la pone— sin pelearse con nada. */
+#pMenu{align-items:flex-start;padding-top:2.5vh}
+/* la fila de progreso: record y partidas, en la misma pildora de piedra que los
+   botones secundarios para que se lea como parte de la familia */
+.stat{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin:0}
+.stat b{font-weight:800;font-size:clamp(11px,1.9vh,15px);letter-spacing:.09em;
+  background:linear-gradient(180deg,#31404f 0%,#1e2a35 100%);color:#ffd86a;
+  border-radius:10px;padding:.7vh 1.4vh;box-shadow:0 3px 0 #121a22}
+.stat b i{font-style:normal;color:#9fb4c8;opacity:.85;margin-right:6px;font-size:.82em}
 .sub{font-size:clamp(10px,1.9vh,14px);letter-spacing:.26em;opacity:.72;margin:0}
 .bt{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:800;letter-spacing:.14em;
   padding:1.35vh 2vh;border-radius:12px;color:#0d1117;font-size:clamp(12px,2.1vh,17px);
@@ -170,6 +190,7 @@ body.jugando #hud{opacity:1}
   <div class="pan" id="pMenu"><div class="caja">
     <h1 class="tit">CUBOS</h1>
     <p class="sub" id="mSub">TE DICEN QUÉ. VOS LO CONSTRUÍS.</p>
+    <p class="stat" id="mStat"></p>
     <button class="bt" id="bJugar">JUGAR</button>
     <button class="bt sec" id="bAjustes">AJUSTES</button>
     <p class="rot" id="mJuez">—</p>
@@ -451,7 +472,8 @@ const TXT = {
         volar: 'VOLAR', paleta: 'PALETA', reloj: 'RELOJ', corto: 'CORTO', largo: 'LARGO',
         normal: 'NORMAL', pie: 'Un dedo mueve, el otro mira. Tocá para poner un bloque.',
         siguiente: 'SIGUIENTE', final: 'FIN DE LA PARTIDA', bien: 'LO BUENO',
-        mejorar: 'PARA LA PRÓXIMA', sinLlave: 'sin llave: puntúa el juez de la casa',
+        mejorar: 'PARA LA PRÓXIMA', record: 'RÉCORD', partidas: 'PARTIDAS',
+        sinLlave: 'sin llave: puntúa el juez de la casa',
         conLlave: 'con llave: puntúa Claude de verdad', pegar: 'PEGÁ TU LLAVE ACÁ',
         guardar: 'GUARDAR', quitar: 'QUITAR', modelo: 'MODELO', avisoLlave:
         'La llave se guarda sólo en este teléfono y sólo se manda a api.anthropic.com. La pagás vos.',
@@ -467,7 +489,8 @@ const TXT = {
         volar: 'FLY', paleta: 'PALETTE', reloj: 'CLOCK', corto: 'SHORT', largo: 'LONG',
         normal: 'NORMAL', pie: 'One thumb moves, the other looks. Tap to place a block.',
         siguiente: 'NEXT', final: 'MATCH OVER', bien: 'WHAT WORKS',
-        mejorar: 'NEXT TIME', sinLlave: 'no key: the house judge scores',
+        mejorar: 'NEXT TIME', record: 'BEST', partidas: 'RUNS',
+        sinLlave: 'no key: the house judge scores',
         conLlave: 'with a key: Claude really scores it', pegar: 'PASTE YOUR KEY HERE',
         guardar: 'SAVE', quitar: 'REMOVE', modelo: 'MODEL', avisoLlave:
         'The key is stored only on this phone and only sent to api.anthropic.com. You pay for it.',
@@ -483,7 +506,8 @@ const TXT = {
         volar: 'VOAR', paleta: 'PALETA', reloj: 'RELÓGIO', corto: 'CURTO', largo: 'LONGO',
         normal: 'NORMAL', pie: 'Um dedo anda, o outro olha. Toque para pôr um bloco.',
         siguiente: 'PRÓXIMA', final: 'FIM DA PARTIDA', bien: 'O QUE FICOU BOM',
-        mejorar: 'PARA A PRÓXIMA', sinLlave: 'sem chave: pontua o juiz da casa',
+        mejorar: 'PARA A PRÓXIMA', record: 'RECORDE', partidas: 'PARTIDAS',
+        sinLlave: 'sem chave: pontua o juiz da casa',
         conLlave: 'com chave: o Claude pontua de verdade', pegar: 'COLE SUA CHAVE AQUI',
         guardar: 'SALVAR', quitar: 'TIRAR', modelo: 'MODELO', avisoLlave:
         'A chave fica só neste telefone e só vai para api.anthropic.com. Você paga por ela.',
@@ -1931,14 +1955,27 @@ function demoMenu(){
 let ORB = 0.9;
 function camMenu(dt){
   ORB += dt*0.075;
-  const r = 20.0;
+  const r = 19.0;
   /* ── SE APUNTA POR ENCIMA DE LA OBRA, NO A ELLA ──
      La columna del menu vive centrada, asi que una obra en el medio del cuadro
      queda justo detras de los botones: medido, la casa salia tapada por JUGAR.
      Apuntando doce metros por encima, la obra cae en el tercio de abajo —donde
      el velo esta abierto— y el titulo queda sobre el cielo. */
+  /* ── Y APUNTAR DEMASIADO ARRIBA CORTA LA OBRA POR ABAJO ──
+     El campo vertical es 74 grados, o sea 37 de medio angulo. Con la mira en
+     13,2 y el lente a 20 m la base de la obra cae a atan(13,2/20) = 33,4
+     grados, o sea al 90 % del alto del cuadro: la casa entraba raspando y su
+     esquina cercana quedaba cortada por el borde. Y bajar la mira es al REVES
+     de lo que hace falta —apuntar mas ABAJO sube la obra en el cuadro— : con
+     8,6 la casa se metia detras de los botones. Eso se arreglo apoyando la
+     columna del menu ARRIBA, y recien con la mitad de abajo libre se pudo
+     bajar la mira. Ojo con la cuenta: el lente esta a 10,5 y la mira a 9,8, o
+     sea que ademas cabecea 2,1 grados hacia abajo, y ese termino hay que
+     sumarlo — sin el, la primera version predijo la base al 80 % del cuadro y
+     medida salio al 100. Con 19 m y mira 9,8 la base cae a 26,8 grados, o sea
+     al 84 % del alto. */
   cam.position.set(N/2 + Math.sin(ORB)*r, 10.5 + Math.sin(ORB*0.63)*2.0, N/2 + Math.cos(ORB)*r);
-  cam.lookAt(N/2, 13.2, N/2);
+  cam.lookAt(N/2, 9.8, N/2);
   cam.updateMatrixWorld(true);
 }
 
@@ -1961,6 +1998,8 @@ function pintaIdioma(){
   const g = id => document.getElementById(id);
   g('mSub').textContent = TX('sub');
   g('bJugar').textContent = TX('jugar');  g('bAjustes').textContent = TX('ajustes');
+  g('mStat').innerHTML = '<b><i>' + TX('record') + '</i>' + REC + '</b>' +
+    (PARTIDAS ? '<b><i>' + TX('partidas') + '</i>' + PARTIDAS + '</b>' : '');
   g('mJuez').textContent = hayLlave() ? TX('conLlave') : TX('sinLlave');
   g('mPie').textContent = TX('pie');
   g('aTit').textContent = TX('ajustes'); g('aGrafL').textContent = TX('graficos');
@@ -2102,6 +2141,16 @@ function pintaPunt(){
   g('rNota').textContent = pie.join(' — ');
   g('bSig').textContent = RUN.fase === 'final' ? TX('total') : TX('siguiente');
 }
+/* ── EL RECORD, QUE ES LO UNICO QUE SOBREVIVE A UNA PARTIDA ──
+   El menu no decia absolutamente nada de lo jugado: ni cuantas partidas, ni cual
+   fue la mejor. Un menu sin progreso se lee a demo. Se guarda el total mas alto
+   y las partidas terminadas, y las dos salen en la fila del menu. */
+let REC = +lee('cubos_rec', 0) || 0, PARTIDAS = +lee('cubos_part', 0) || 0;
+function anotaFin(t){
+  PARTIDAS++; guarda('cubos_part', PARTIDAS);
+  if (t > REC){ REC = t; guarda('cubos_rec', REC); return true; }
+  return false;
+}
 function pintaFin(){
   if (!RUN || !RUN.puntajes.length) return;
   const g = id => document.getElementById(id);
@@ -2117,7 +2166,7 @@ function pintaFin(){
   }
 }
 function sigue(){
-  if (RUN.fase === 'final'){ pintaFin(); verPantalla('fin'); }
+  if (RUN.fase === 'final'){ anotaFin(totalRun()); pintaFin(); verPantalla('fin'); }
   else { RES = null; rondaSiguiente(); SUCIA = true; muestraTema(); }
 }
 function partidaNueva(){

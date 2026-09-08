@@ -287,14 +287,27 @@ function demoMenu(){
 let ORB = 0.9;
 function camMenu(dt){
   ORB += dt*0.075;
-  const r = 20.0;
+  const r = 19.0;
   /* ── SE APUNTA POR ENCIMA DE LA OBRA, NO A ELLA ──
      La columna del menu vive centrada, asi que una obra en el medio del cuadro
      queda justo detras de los botones: medido, la casa salia tapada por JUGAR.
      Apuntando doce metros por encima, la obra cae en el tercio de abajo —donde
      el velo esta abierto— y el titulo queda sobre el cielo. */
+  /* ── Y APUNTAR DEMASIADO ARRIBA CORTA LA OBRA POR ABAJO ──
+     El campo vertical es 74 grados, o sea 37 de medio angulo. Con la mira en
+     13,2 y el lente a 20 m la base de la obra cae a atan(13,2/20) = 33,4
+     grados, o sea al 90 % del alto del cuadro: la casa entraba raspando y su
+     esquina cercana quedaba cortada por el borde. Y bajar la mira es al REVES
+     de lo que hace falta —apuntar mas ABAJO sube la obra en el cuadro— : con
+     8,6 la casa se metia detras de los botones. Eso se arreglo apoyando la
+     columna del menu ARRIBA, y recien con la mitad de abajo libre se pudo
+     bajar la mira. Ojo con la cuenta: el lente esta a 10,5 y la mira a 9,8, o
+     sea que ademas cabecea 2,1 grados hacia abajo, y ese termino hay que
+     sumarlo — sin el, la primera version predijo la base al 80 % del cuadro y
+     medida salio al 100. Con 19 m y mira 9,8 la base cae a 26,8 grados, o sea
+     al 84 % del alto. */
   cam.position.set(N/2 + Math.sin(ORB)*r, 10.5 + Math.sin(ORB*0.63)*2.0, N/2 + Math.cos(ORB)*r);
-  cam.lookAt(N/2, 13.2, N/2);
+  cam.lookAt(N/2, 9.8, N/2);
   cam.updateMatrixWorld(true);
 }
 
@@ -317,6 +330,8 @@ function pintaIdioma(){
   const g = id => document.getElementById(id);
   g('mSub').textContent = TX('sub');
   g('bJugar').textContent = TX('jugar');  g('bAjustes').textContent = TX('ajustes');
+  g('mStat').innerHTML = '<b><i>' + TX('record') + '</i>' + REC + '</b>' +
+    (PARTIDAS ? '<b><i>' + TX('partidas') + '</i>' + PARTIDAS + '</b>' : '');
   g('mJuez').textContent = hayLlave() ? TX('conLlave') : TX('sinLlave');
   g('mPie').textContent = TX('pie');
   g('aTit').textContent = TX('ajustes'); g('aGrafL').textContent = TX('graficos');
@@ -458,6 +473,16 @@ function pintaPunt(){
   g('rNota').textContent = pie.join(' — ');
   g('bSig').textContent = RUN.fase === 'final' ? TX('total') : TX('siguiente');
 }
+/* ── EL RECORD, QUE ES LO UNICO QUE SOBREVIVE A UNA PARTIDA ──
+   El menu no decia absolutamente nada de lo jugado: ni cuantas partidas, ni cual
+   fue la mejor. Un menu sin progreso se lee a demo. Se guarda el total mas alto
+   y las partidas terminadas, y las dos salen en la fila del menu. */
+let REC = +lee('cubos_rec', 0) || 0, PARTIDAS = +lee('cubos_part', 0) || 0;
+function anotaFin(t){
+  PARTIDAS++; guarda('cubos_part', PARTIDAS);
+  if (t > REC){ REC = t; guarda('cubos_rec', REC); return true; }
+  return false;
+}
 function pintaFin(){
   if (!RUN || !RUN.puntajes.length) return;
   const g = id => document.getElementById(id);
@@ -473,7 +498,7 @@ function pintaFin(){
   }
 }
 function sigue(){
-  if (RUN.fase === 'final'){ pintaFin(); verPantalla('fin'); }
+  if (RUN.fase === 'final'){ anotaFin(totalRun()); pintaFin(); verPantalla('fin'); }
   else { RES = null; rondaSiguiente(); SUCIA = true; muestraTema(); }
 }
 function partidaNueva(){

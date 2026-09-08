@@ -53,6 +53,17 @@ body.jugando #hud{opacity:1}
   color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.85);opacity:0;transition:opacity .35s}
 #capa.on{opacity:1}
 #capa small{display:block;font:700 10px/1.6 ui-monospace,monospace;letter-spacing:.2em;opacity:.7}
+/* ── LA PROXIMA CAPA, QUE ES DE LO QUE ESTE JUEGO SE TRATA ──
+   El cartel de capa aparece 2,6 segundos al LLEGAR y despues no queda nada: el
+   HUD decia a que altura estas y no cuanto falta para lo unico que importa,
+   que es la capa siguiente. Quince capas y ninguna a la vista es progresion
+   invisible. Va debajo del reloj, con el nombre y los metros que faltan. */
+#prox{position:absolute;left:14px;top:92px;max-width:64%;
+  font:700 10px/1.5 ui-monospace,monospace;letter-spacing:.12em;
+  color:rgba(226,236,255,.62);text-shadow:0 1px 6px rgba(0,0,0,.9);opacity:0;
+  transition:opacity .2s}
+#prox.hay{opacity:1}
+#prox b{display:block;font-weight:800;color:#ffb05c;letter-spacing:.1em}
 /* el aviso grande del centro: la cuenta regresiva y el «MAXIMO» */
 #grande{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
   font:900 clamp(48px,calc(var(--mw,412px)*0.2),110px)/1 system-ui,sans-serif;color:#fff;
@@ -82,6 +93,21 @@ body.jugando #bPausa{display:block}
 .pan.on{visibility:visible;opacity:1}
 .pan::before{content:'';position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(6,7,13,.92),rgba(6,7,13,.80) 14%,rgba(6,7,13,.30) 27%,rgba(6,7,13,.14) 34%,rgba(6,7,13,.14) 50%,rgba(6,7,13,.86) 60%,rgba(6,7,13,.96))}
+/* ── EL VELO DEL MENU SE ABRE TAMBIEN ABAJO ──
+   Reporte del jefe: el menu se veia pobre. Medido sobre la captura, el quinto
+   de abajo del cuadro daba 10,2 de brillo mientras el mundo que hay DETRAS —leido
+   del propio buffer con `brillo()`— daba 53: o sea que el velo estaba tapando
+   casi la mitad de un juego que ya se estaba dibujando, para poner encima unos
+   botones que tienen su propio fondo al 84 %. Se abre, y lo unico que
+   conserva respaldo propio es el pie, que es texto chico. */
+#pMenu::before{background:linear-gradient(180deg,rgba(6,7,13,.92),
+  rgba(6,7,13,.78) 14%,rgba(6,7,13,.26) 27%,rgba(6,7,13,.12) 34%,
+  rgba(6,7,13,.12) 56%,rgba(6,7,13,.38) 68%,rgba(6,7,13,.44))}
+/* OJO: `#pMenu .bt` es ID + clase y le gana a `.bt.p`, que es dos clases — la
+   primera version dejo el boton de JUGAR sin su degradado, o sea una pildora
+   vacia justo en el unico boton que importa. Va excluyendo los modificadores. */
+#pMenu .bt:not(.p):not(.sel){background:rgba(12,14,24,.86)}
+#pMenu .pie{background:rgba(6,7,13,.62);border-radius:9px;padding:6px 10px;display:inline-block}
 /* el menu deja ver el cohete girando en el medio: el velo se abre ahi */
 .caja{position:relative;text-align:center;width:min(440px,94%);max-height:100%;overflow:auto;padding:4px 2px}
 .caja::-webkit-scrollbar{display:none}
@@ -169,6 +195,7 @@ h1::after{content:'';display:block;width:70px;height:2px;margin:10px auto 0;bord
     <div id="alt">0<span id="altU">m</span></div>
     <div id="vel"></div>
     <div id="tiempo"></div>
+    <div id="prox"></div>
     <div id="comb"><i id="combI"></i></div>
     <div id="combL"></div>
     <div id="mon"></div>
@@ -393,7 +420,7 @@ const TXT = {
         abandona: 'ABANDONAR', musica: 'MÚSICA', fx: 'EFECTOS', idioma: 'IDIOMA', calidad: 'GRÁFICOS', baja: 'BAJA',
         media: 'MEDIA', alta: 'ALTA', borrar: 'BORRAR EL PROGRESO', borrado: 'BORRADO', ganaste: 'GANASTE', nuevo: 'NUEVO',
         estilo: 'ESTILO', ayudaPad: 'MANTENÉ APRETADO PARA EMPUJAR · ARRASTRÁ PARA ESQUIVAR', ayudaVuelo: 'SOLTÁ PARA AHORRAR COMBUSTIBLE',
-        sinComb: 'SIN COMBUSTIBLE · PLANEANDO', tiempo: 'TIEMPO', llegaste: 'LLEGASTE A', golpe: '¡GOLPE!', explota: 'EXPLOTÓ',
+        sinComb: 'SIN COMBUSTIBLE · PLANEANDO', tiempo: 'TIEMPO', prox: 'FALTA PARA', llegaste: 'LLEGASTE A', golpe: '¡GOLPE!', explota: 'EXPLOTÓ',
         texto: 'Un cohete, un dedo. Mantené apretado para empujar y arrastrá para esquivar. Cada metro paga monedas, y con las monedas el cohete mejora: más motor, más tanque, menos peso. Quince capas, de las copas de los árboles a Marte.',
         pie: 'Las alturas son reales: 100 km es la línea de Kármán, 400 la estación espacial, 384.000 la Luna.',
         fin: 'ESPACIO PROFUNDO', finT: 'Pasaste Marte y seguís. El cohete ya es otra cosa.', rafNo: 'SIN RÁFAGA',
@@ -406,7 +433,7 @@ const TXT = {
         abandona: 'ABANDON', musica: 'MUSIC', fx: 'SFX', idioma: 'LANGUAGE', calidad: 'GRAPHICS', baja: 'LOW',
         media: 'MEDIUM', alta: 'HIGH', borrar: 'ERASE PROGRESS', borrado: 'ERASED', ganaste: 'EARNED', nuevo: 'NEW',
         estilo: 'STYLE', ayudaPad: 'HOLD TO THRUST · DRAG TO DODGE', ayudaVuelo: 'RELEASE TO SAVE FUEL',
-        sinComb: 'OUT OF FUEL · COASTING', tiempo: 'TIME', llegaste: 'YOU REACHED', golpe: 'HIT!', explota: 'EXPLODED',
+        sinComb: 'OUT OF FUEL · COASTING', tiempo: 'TIME', prox: 'NEXT LAYER IN', llegaste: 'YOU REACHED', golpe: 'HIT!', explota: 'EXPLODED',
         texto: 'One rocket, one finger. Hold to thrust and drag to dodge. Every metre pays coins, and coins upgrade the rocket: more engine, more tank, less weight. Fifteen layers, from the treetops to Mars.',
         pie: 'The altitudes are real: 100 km is the Kármán line, 400 the space station, 384,000 the Moon.',
         fin: 'DEEP SPACE', finT: 'You passed Mars and kept going. The rocket is something else now.', rafNo: 'NO BOOST',
@@ -419,7 +446,7 @@ const TXT = {
         abandona: 'ABANDONAR', musica: 'MÚSICA', fx: 'EFEITOS', idioma: 'IDIOMA', calidad: 'GRÁFICOS', baja: 'BAIXA',
         media: 'MÉDIA', alta: 'ALTA', borrar: 'APAGAR O PROGRESSO', borrado: 'APAGADO', ganaste: 'GANHOU', nuevo: 'NOVO',
         estilo: 'ESTILO', ayudaPad: 'SEGURE PARA EMPURRAR · ARRASTE PARA DESVIAR', ayudaVuelo: 'SOLTE PARA ECONOMIZAR',
-        sinComb: 'SEM COMBUSTÍVEL · PLANANDO', tiempo: 'TEMPO', llegaste: 'VOCÊ CHEGOU A', golpe: 'BATIDA!', explota: 'EXPLODIU',
+        sinComb: 'SEM COMBUSTÍVEL · PLANANDO', tiempo: 'TEMPO', prox: 'FALTA PARA', llegaste: 'VOCÊ CHEGOU A', golpe: 'BATIDA!', explota: 'EXPLODIU',
         texto: 'Um foguete, um dedo. Segure para empurrar e arraste para desviar. Cada metro paga moedas, e as moedas melhoram o foguete: mais motor, mais tanque, menos peso. Quinze camadas, das copas das árvores até Marte.',
         pie: 'As alturas são reais: 100 km é a linha de Kármán, 400 a estação espacial, 384.000 a Lua.',
         fin: 'ESPAÇO PROFUNDO', finT: 'Você passou Marte e continua. O foguete já é outra coisa.', rafNo: 'SEM RAJADA',
@@ -1797,6 +1824,14 @@ function pintaHud(){
   } else if ($('grande').dataset.i){ $('grande').dataset.i = ''; $('grande').classList.remove('on'); }
   if (R.planea && !$('grande').dataset.max){ $('grande').dataset.max = '1'; $('grande').textContent = TX('maximo'); $('grande').classList.add('on'); }
   $('tiempo').textContent = TX('tiempo') + ' ' + R.t.toFixed(1) + ' s'; $('tiempo').classList.toggle('hay', R.fase === 'vuelo');
+  /* la capa siguiente: la que viene despues de la que estas pisando. En la
+     ultima no hay ninguna, y ahi el renglon se apaga en vez de mentir. */
+  const cs = capaDe(R.h) + 1, pe = $('prox');
+  if (R.fase === 'vuelo' && cs < CAPAS.length){
+    pe.innerHTML = TX('prox') + '<b>' + TL(CAPAS[cs].nom) + '</b>' +
+      altTexto(Math.max(0, CAPAS[cs].h - R.h));
+    pe.classList.add('hay');
+  } else pe.classList.remove('hay');
   pintaRafBoton();
 }
 function pintaRafBoton(){
@@ -1980,7 +2015,7 @@ window.__C = {
   audio(){ return { ...nivelAudio(), motor: +MOT.nivel.toFixed(3), cama: CAMA.on, ctx: AUD ? AUD.state : null }; },
   /* solapamientos entre lo visible del HUD y de la pantalla abierta */
   solapes(){
-    const ids = PANTALLA === '' ? ['alt', 'vel', 'tiempo', 'comb', 'combL', 'mon', 'capa', 'bRaf', 'ayuda', 'bPausa'] : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *')).map(e => e.id || e.className);
+    const ids = PANTALLA === '' ? ['alt', 'vel', 'tiempo', 'prox', 'comb', 'combL', 'mon', 'capa', 'bRaf', 'ayuda', 'bPausa'] : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *')).map(e => e.id || e.className);
     const els = PANTALLA === '' ? ids.map(i => document.getElementById(i)) : Array.from(document.querySelectorAll('#' + PANTALLA + ' .caja > *'));
     const cajas = els.filter(e => e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && (e.offsetWidth > 0) && +getComputedStyle(e).opacity > 0.05)
       .map(e => ({ id: e.id || e.className, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }));

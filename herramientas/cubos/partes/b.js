@@ -198,7 +198,8 @@ const TXT = {
         volar: 'VOLAR', paleta: 'PALETA', reloj: 'RELOJ', corto: 'CORTO', largo: 'LARGO',
         normal: 'NORMAL', pie: 'Un dedo mueve, el otro mira. Tocá para poner un bloque.',
         siguiente: 'SIGUIENTE', final: 'FIN DE LA PARTIDA', bien: 'LO BUENO',
-        mejorar: 'PARA LA PRÓXIMA', sinLlave: 'sin llave: puntúa el juez de la casa',
+        mejorar: 'PARA LA PRÓXIMA', record: 'RÉCORD', partidas: 'PARTIDAS',
+        sinLlave: 'sin llave: puntúa el juez de la casa',
         conLlave: 'con llave: puntúa Claude de verdad', pegar: 'PEGÁ TU LLAVE ACÁ',
         guardar: 'GUARDAR', quitar: 'QUITAR', modelo: 'MODELO', avisoLlave:
         'La llave se guarda sólo en este teléfono y sólo se manda a api.anthropic.com. La pagás vos.',
@@ -214,7 +215,8 @@ const TXT = {
         volar: 'FLY', paleta: 'PALETTE', reloj: 'CLOCK', corto: 'SHORT', largo: 'LONG',
         normal: 'NORMAL', pie: 'One thumb moves, the other looks. Tap to place a block.',
         siguiente: 'NEXT', final: 'MATCH OVER', bien: 'WHAT WORKS',
-        mejorar: 'NEXT TIME', sinLlave: 'no key: the house judge scores',
+        mejorar: 'NEXT TIME', record: 'BEST', partidas: 'RUNS',
+        sinLlave: 'no key: the house judge scores',
         conLlave: 'with a key: Claude really scores it', pegar: 'PASTE YOUR KEY HERE',
         guardar: 'SAVE', quitar: 'REMOVE', modelo: 'MODEL', avisoLlave:
         'The key is stored only on this phone and only sent to api.anthropic.com. You pay for it.',
@@ -230,7 +232,8 @@ const TXT = {
         volar: 'VOAR', paleta: 'PALETA', reloj: 'RELÓGIO', corto: 'CURTO', largo: 'LONGO',
         normal: 'NORMAL', pie: 'Um dedo anda, o outro olha. Toque para pôr um bloco.',
         siguiente: 'PRÓXIMA', final: 'FIM DA PARTIDA', bien: 'O QUE FICOU BOM',
-        mejorar: 'PARA A PRÓXIMA', sinLlave: 'sem chave: pontua o juiz da casa',
+        mejorar: 'PARA A PRÓXIMA', record: 'RECORDE', partidas: 'PARTIDAS',
+        sinLlave: 'sem chave: pontua o juiz da casa',
         conLlave: 'com chave: o Claude pontua de verdade', pegar: 'COLE SUA CHAVE AQUI',
         guardar: 'SALVAR', quitar: 'TIRAR', modelo: 'MODELO', avisoLlave:
         'A chave fica só neste telefone e só vai para api.anthropic.com. Você paga por ela.',

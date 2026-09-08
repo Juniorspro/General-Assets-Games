@@ -132,6 +132,14 @@ function pintaHud(){
   } else if ($('grande').dataset.i){ $('grande').dataset.i = ''; $('grande').classList.remove('on'); }
   if (R.planea && !$('grande').dataset.max){ $('grande').dataset.max = '1'; $('grande').textContent = TX('maximo'); $('grande').classList.add('on'); }
   $('tiempo').textContent = TX('tiempo') + ' ' + R.t.toFixed(1) + ' s'; $('tiempo').classList.toggle('hay', R.fase === 'vuelo');
+  /* la capa siguiente: la que viene despues de la que estas pisando. En la
+     ultima no hay ninguna, y ahi el renglon se apaga en vez de mentir. */
+  const cs = capaDe(R.h) + 1, pe = $('prox');
+  if (R.fase === 'vuelo' && cs < CAPAS.length){
+    pe.innerHTML = TX('prox') + '<b>' + TL(CAPAS[cs].nom) + '</b>' +
+      altTexto(Math.max(0, CAPAS[cs].h - R.h));
+    pe.classList.add('hay');
+  } else pe.classList.remove('hay');
   pintaRafBoton();
 }
 function pintaRafBoton(){
