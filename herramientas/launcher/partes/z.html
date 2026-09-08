@@ -1015,6 +1015,114 @@ window.__A = {
              vidFin: vidFin.n, pxFin: vidFin.px,
              topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* ── Y EL CIERRE, QUE ES LA MITAD QUE NADIE HABÍA MEDIDO ──
+     Las vueltas 130 a 133 midieron SUBIR. El cierre no es el mismo viaje al
+     revés: en su primer cuadro `verCajon(false)` saca `body.cajQ`, o sea que
+     `#capa` pasa de `visibility:hidden` a visible y el escritorio ENTERO —el
+     reloj, el dock, las treinta baldosas, la búsqueda— vuelve a la vista justo
+     en el cuadro en que la hoja arranca. Eso es exactamente lo que la vuelta
+     130 encontró con las 150 animaciones de entrada, con otro disfraz. */
+  /* el A/B del cierre, sobre el MISMO binario: `true` devuelve la regla vieja
+     —`#capa` escondido— para que la medición pueda detectar el defecto además
+     de aprobar el arreglo */
+  /* cambiar de idioma tiene que repintar la fecha aunque el minuto no haya
+     cambiado: `pintaReloj` se sale por el atajo si el reloj dice lo mismo */
+  idioma(v){
+    const f = PERS.filter(x => x.tit === 'pIdioma')[0];
+    if (v) f.pon(v);
+    return { lang: LANG, hora: ($('#hora') || {}).textContent,
+             fecha: ($('#fecha') || {}).textContent,
+             saludo: ($('#wSaludo') || {}).textContent };
+  },
+  /* ── EL ARRASTRE, QUE ES EL OTRO CAMINO DEL CIERRE ──
+     El dedo baja la hoja sin transición, así que cada cuadro es el dedo. Lo que
+     se mide es si en el cuadro en que el dedo empieza a tirar cambia algo:
+     `#capa` de escondido a visible, o los tres vidrios de apagados a
+     encendidos. Las dos cosas son un escalón en el peor cuadro posible. */
+  async cajArrastra(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    vid: this.vidrios().n, px: this.vidrios().px };
+    const man = $('#cajManija');
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    man.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y0, bubbles: true, pointerId: 9 }));
+    man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + 12, bubbles: true, pointerId: 9 }));
+    const p1 = { capa: getComputedStyle(capa).visibility,
+                 vid: this.vidrios().n, px: this.vidrios().px,
+                 cajMueve: document.body.classList.contains('cajMueve'),
+                 y: getComputedStyle($('#cajon')).getPropertyValue('--caj-y').trim() };
+    for (let i = 2; i <= 8; i++)
+      man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + i * 24, bubbles: true, pointerId: 9 }));
+    const medio = { vid: this.vidrios().n, px: this.vidrios().px };
+    man.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y0 + 200, bubbles: true, pointerId: 9 }));
+    await new Promise(r2 => setTimeout(r2, 620));
+    const fin = this.vidrios();
+    return { antes: antes, primerCuadro: p1, medio: medio,
+             cerro: !CAJON, vidFin: fin.n, pxFin: fin.px };
+  },
+  cajQModo(v){
+    document.body.classList.toggle('cajQvis', !!v);
+    return { escondeCapa: !!v };
+  },
+  async cajCierra(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    cajQ: document.body.classList.contains('cajQ'),
+                    vidAbierto: this.vidrios().n, pxAbierto: this.vidrios().px };
+    /* el bucle sólo cronometra: llamar a `vidrios()` por cuadro es barrer el
+       DOM entero sesenta veces por segundo y medir la sonda en vez del juego
+       —medido, dejaba la ventana en dos cuadros—. Lo que cuesta se muestrea en
+       instantes fijos. */
+    const dts = []; let ult = performance.now(); let corre = true;
+    let primerCapa = null;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (primerCapa === null) primerCapa = getComputedStyle(capa).visibility;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 60));
+    const anim = document.getAnimations().filter(x => x.playState === 'running')
+                   .map(x => (x.effect && x.effect.target ? (x.effect.target.id || x.effect.target.className || '?') : '?'));
+    const vid90 = this.vidrios();
+    await new Promise(r => setTimeout(r, 560));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a2, b2) => a2 - b2);
+    const med = o.length ? o[o.length >> 1] : 0;
+    return { antes: antes, capaPrimerCuadro: primerCapa,
+             cuadros: o.length, mediana: +med.toFixed(1),
+             peor: +(o[o.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animando: anim.length, quienes: anim.slice(0, 6),
+             vidDurante: vid90.n, pxDurante: vid90.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topFin: vidFin.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
+     en el primer cuadro del cierre */
+  capaPeso(){
+    const capa = $('#capa');
+    const todos = capa.querySelectorAll('*');
+    let vid = 0, img = 0;
+    todos.forEach(e => {
+      const c = getComputedStyle(e);
+      if ((c.backdropFilter && c.backdropFilter !== 'none') ||
+          (c.webkitBackdropFilter && c.webkitBackdropFilter !== 'none')) vid++;
+      if (e.tagName === 'IMG' || (c.backgroundImage && c.backgroundImage !== 'none')) img++;
+    });
+    const r = capa.getBoundingClientRect();
+    return { nodos: todos.length, conVidrio: vid, conImagen: img,
+             px: Math.round(r.width * r.height),
+             visibilidad: getComputedStyle(capa).visibility };
+  },
   /* ── QUÉ LE PIDE AL COMPOSITOR EL CUADRO EN QUE LA HOJA ARRANCA ──
      El banco dibuja por software, así que sus milisegundos no son los del
      teléfono. Lo que sí no depende del aparato es CUÁNTAS cosas se le piden:

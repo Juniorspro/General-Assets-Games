@@ -281,6 +281,117 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima cuarta vuelta (2026-09-08): **AERO** — el cierre no es la apertura al revés
+
+Pedido textual, después de que la vuelta anterior midiera la apertura: *"cambia el motor gráfico de
+la app, encima ahora el lag es al bajar"* y *"busca los motores más optimizados"*.
+
+#### LO PRIMERO ES QUE «AL BAJAR» ES UN CAMINO QUE NADIE HABÍA MEDIDO
+
+Las vueltas 130 a 133 midieron **subir**: el repintado de la lista, el desenfoque de la hoja, las
+veintiocho animaciones de entrada, los tres filtros de SVG. Ninguna miró el cierre, y el cierre **no
+es el mismo viaje al revés**. Entraron dos sondas —`cajCierra()` y `cajArrastra()`— y contestaron de
+una.
+
+**`#capa` PASABA DE ESCONDIDO A VISIBLE EN EL PRIMER CUADRO DEL CIERRE.** `verCajon(false)` saca
+`body.cajQ` en su tercera línea, y `body.cajQ #capa{visibility:hidden}` era la regla de la vuelta
+131. Medido con `capaPeso()`, lo que vuelve a la vista en ese cuadro:
+
+| | |
+|---|---|
+| nodos de `#capa` | **98** |
+| píxeles | **367.504** |
+| piezas con `backdrop-filter` | 3 |
+| elementos con imagen de fondo | 4 |
+
+O sea que el escritorio ENTERO hay que volver a rasterizarlo y subirlo a la GPU **justo en el cuadro
+en que la hoja empieza a bajar**. Es la misma familia que las 150 animaciones de entrada de la vuelta
+130, con otro disfraz: trabajo grande apilado en el peor cuadro posible.
+
+**Y EN EL ARRASTRE ERA PEOR, porque ahí no hay transición.** `pone()` —el manejador del
+`pointermove` de la manija— saca `cajQ` en el primer movimiento del dedo, y la hoja sigue al dedo con
+`transition:none`. Medido con `cajArrastra()`: `capa` pasaba de **`hidden` a `visible` en el primer
+`pointermove`**. El cuadro en que el dedo empieza a tirar es exactamente el cuadro que el ojo está
+mirando.
+
+#### EL ARREGLO ES QUE `cajQ` DEJE DE ESCONDER Y SÓLO APAGUE
+
+Lo que la vuelta 131 midió que `cajQ` ahorraba **era el filtro** —ocho pasadas y 40.720 px— no el
+pintado. El escritorio es estático: dejarlo compuesto cuesta **textura**, no milisegundos por cuadro.
+Así que se apaga lo que costaba y se deja quieto lo que no — la misma regla que `cajMueve`, sin tocar
+la visibilidad:
+
+```css
+body.cajQ #capa .vid, body.cajQ #capa .baldosa { backdrop-filter: none }
+```
+
+**Y EL A/B VIVE EN EL MISMO BINARIO** (`__A.cajQModo(true)` devuelve la regla vieja), porque si no
+«mejoró» sería un recuerdo. Medido, tres corridas de cada lado:
+
+| | `#capa` con el cajón abierto | filtro con el cajón abierto | durante el cierre | al asentarse |
+|---|---|---|---|---|
+| control (regla vieja) | **`hidden`** → visible en el primer cuadro | 0 / 0 | 0 / 0 | 3 / 96.401 |
+| **ahora** | **`visible`, sin transición** | **0 / 0** | 0 / 0 | 3 / 96.401 |
+
+**El ahorro entero de la vuelta 131 se conserva** —cero pasadas con el cajón abierto, que es lo único
+que había que no romper— y el escalón desaparece de los dos caminos. Cuadros dibujados en la misma
+ventana de 620 ms: **2 · 3 · 4 el control contra 5 · 5 · 5 ahora**.
+
+#### Y EL ARRASTRE NO ESTABA CUBIERTO POR NINGUNA DE LAS DOS REGLAS
+
+Con `cajQ` recién sacado y `cajMueve` todavía sin poner —lo pone `cajAsienta`, o sea al SOLTAR—
+durante todo el arrastre el escritorio quedaba en tierra de nadie y sus tres piezas encendían sus
+96.401 px de filtro en el cuadro en que el dedo empieza a tirar. `pone()` pone `cajMueve` en el mismo
+`if` en que saca `cajQ`, así las dos reglas se solapan y **no hay un solo cuadro de transición**:
+sale apagado y sigue apagado. Medido: `vid 0 / 0` de punta a punta del arrastre y `cajMueve:true`
+desde el primer movimiento.
+
+#### DOS COSAS MÁS DEL MISMO CUADRO, Y UNA NO TENÍA POR QUÉ EXISTIR
+
+- **`$('#cajLista').scrollTop = 0` EN EL CIERRE.** Escribir `scrollTop` sobre un scroller de 150
+  filas fuerza un layout sincrónico, y lo hacía para acomodar una lista que nadie va a ver:
+  `verCajon(true)` ya la deja arriba **al abrir**. Se va.
+- **`blur()` SOBRE UN CAMPO QUE NO TIENE EL FOCO.** No hace nada salvo, en Android, disparar el
+  cierre del teclado y con él un cambio de inset — o sea un reflujo del documento entero a mitad de
+  animación. Ahora se pregunta por `document.activeElement` primero, así que cerrar el cajón sin
+  haber tecleado no toca el foco.
+
+#### Y UNA QUE ESTE CAMBIO DESTAPÓ: EL RELOJ SE REPINTABA CINCUENTA Y NUEVE VECES DE GUSTO
+
+`setInterval(pintaReloj, 1000)` y el reloj muestra **minutos**: cincuenta y nueve de cada sesenta
+pasadas escriben exactamente el mismo texto, y escribir `textContent` ensucia el nodo igual aunque el
+valor no cambie. Con `#capa` escondido detrás de la hoja eso no se pagaba; con el escritorio
+compuesto, sí. Y el atajo es correcto **siempre**: en el escritorio pelado eran cincuenta y nueve
+repintados por minuto para no cambiar un píxel.
+
+**PERO EL ATAJO NECESITA UNA PUERTA, y por poco no la pongo.** `pintaReloj` pinta además la fecha y
+el saludo, y `repintaIdioma()` la llama **justamente para cambiarlas de idioma**: sin el parámetro,
+cambiar de idioma dentro del mismo minuto se sale por el atajo y la fecha se queda en el idioma
+anterior. Es el defecto que en Z Force costó 107 claves, servido por la puerta de atrás. Con
+`pintaReloj(true)` en los cinco llamadores de una sola vez, medido: `Tuesday → terça → martes` sin
+que el minuto cambie.
+
+#### SOBRE EL MOTOR, QUE ES LA OTRA MITAD DEL PEDIDO
+
+Está contestado en texto aparte con las cuatro opciones medidas por su piso de versión de Android y
+por lo que cuesta cada una en **este** launcher. Lo que este archivo tiene que dejar anotado es el
+número que decide: **`RenderEffect` es API 31 y AGSL es API 33**, y `backdrop-filter` con
+`feDisplacementMap` anda **desde Android 8** — o sea que el puerto nativo empieza perdiendo el efecto
+que motivó el proyecto justamente en los teléfonos donde más falta hace. Y el interruptor de la
+vuelta 133 sigue siendo el que cierra la discusión con un dato del aparato del dueño.
+
+#### MEDIDO AL CERRAR
+
+Cierre: `#capa` **visible antes, durante y después** (era `hidden`→`visible` en el primer cuadro),
+filtro **0 / 0** durante el deslizamiento y **3 / 96.401** al asentarse. Arrastre: **0 / 0 de punta a
+punta**, `cajMueve` puesto desde el primer `pointermove`, y cierra. Apertura sin cambio: `cajDesliza`
+**13 cuadros, mediana 17,1 ms**, `cajCarga` con 0 pasadas durante el deslizamiento y 26 de 150
+entradas escalonadas. Reloj: la fecha y el saludo siguen al idioma dentro del mismo minuto.
+Regresión: riel de 19 letras con sus 19 encabezados, `letra('S')` mirando la S, **9 packs**, centro de
+control **16 · 1 · 10 · 4**, gesto arriba abre el cajón y abajo el centro con **0 ondas de agua** en
+los dos, mascota con 23 huesos y 5.541 triángulos, el interruptor de medición en su fila y apagado.
+`window.__errs` **vacío en las seis corridas**.
+
 ### Centésima trigésima tercera vuelta (2026-09-08): **AERO** — el teléfono se mide solo, porque el banco no puede
 
 Pregunta del usuario, dos veces en el mismo mensaje: *"no sería mejor cambiar el motor grafico de la

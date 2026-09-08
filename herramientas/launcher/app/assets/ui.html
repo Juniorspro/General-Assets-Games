@@ -778,8 +778,29 @@ body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,
    ventana. Se apaga recién cuando la hoja LLEGÓ: durante los 340 ms del
    deslizamiento el escritorio asoma por encima del canto y apagarlo ahí sería
    un parpadeo. Y sólo con `.hor`: sin horneado la hoja es translúcida y esto se
-   vería. */
-body.cajQ #capa{visibility:hidden}
+   vería.
+
+   ── Y ESCONDERLO NO ERA LA FORMA CORRECTA DE APAGARLO ──
+   Reporte de la vuelta 134: «ahora el lag es al bajar». El cierre no es la
+   apertura al revés, y el primer cuadro lo explica: `verCajon(false)` saca
+   `body.cajQ`, o sea que `#capa` pasa de `visibility:hidden` a visible y el
+   escritorio ENTERO vuelve a la vista **en el mismo cuadro en que la hoja
+   arranca**. Medido con `capaPeso`: **98 nodos, 367.504 px, 3 piezas de vidrio
+   y 4 fondos de imagen** que el compositor tiene que volver a rasterizar y
+   subir justo ahí. Es la misma familia que las 150 animaciones de entrada de
+   la vuelta 130, con otro disfraz.
+
+   Y lo que la vuelta 131 midió que `cajQ` ahorraba era **el FILTRO** —ocho
+   pasadas y 40.720 px— no el pintado: el escritorio es estático, así que
+   dejarlo compuesto cuesta textura y no milisegundos por cuadro. Así que se
+   apaga lo que costaba y se deja quieto lo que no: la misma regla que
+   `cajMueve`, sin tocar la visibilidad. Con eso el ahorro con el cajón abierto
+   es el mismo y en el cierre no hay nada que rasterizar de nuevo. */
+body.cajQ #capa .vid,body.cajQ #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el A/B vive en el mismo binario: sin esto, «mejoró» sería un recuerdo y no
+   una medición (ver `__A.cajQModo`) */
+body.cajQvis.cajQ #capa{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
@@ -4699,9 +4720,8 @@ function pintaDock(){
   d.style.setProperty('--cols', Math.max(1, d.children.length));
   /* ── UN DOCK VACÍO SE ESCONDE POR CLASE Y NO EN LÍNEA ──
      Estaba como `style.visibility`, y un estilo en línea le gana a cualquier
-     selector: con el cajón asentado, `body.cajQ #capa{visibility:hidden}` no
-     lo alcanzaba y el dock seguía filtrando 36.096 px detrás de una hoja
-     opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
+     selector: con el cajón asentado, la regla de `body.cajQ` no lo alcanzaba y
+     el dock seguía filtrando 36.096 px detrás de una hoja opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
      recalibrar. */
   d.classList.toggle('vacio', !DOCK.length);
   if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
@@ -5181,8 +5201,10 @@ function verCajon(v){
   const caj = $('#cajon');
   caj.classList.toggle('on', CAJON);
   /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
-  /* el escritorio vuelve a la vista en el acto al empezar a cerrar; se apaga
-     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`) */
+  /* el vidrio del escritorio vuelve en el acto al empezar a cerrar y se apaga
+     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`). Desde la
+     vuelta 134 `cajQ` ya NO esconde `#capa`: lo único que apaga es el filtro,
+     así que sacarlo no obliga a rasterizar el escritorio de nuevo. */
   document.body.classList.remove('cajQ');
   cajAsienta();
   /* el CSS de la mascota decide su sitio con esto */
@@ -5206,8 +5228,16 @@ function verCajon(v){
     $('#cajLista').scrollTop = 0;
     marcaRiel(LETRAS[0] || '');
   } else {
-    $('#busca2').blur(); $('#busca').blur();
-    $('#cajLista').scrollTop = 0;
+    /* ── EL CIERRE NO TIENE QUE TOCAR LA LISTA NI EL FOCO SI NO HACE FALTA ──
+       `scrollTop = 0` sobre un scroller de 150 filas fuerza un layout
+       sincrónico, y lo hacía en el cuadro en que la hoja arranca a bajar para
+       acomodar una lista que nadie va a ver: `verCajon(true)` ya la deja
+       arriba al abrir. Y `blur()` sobre un campo que no tiene el foco no hace
+       nada salvo, en Android, disparar el cierre del teclado y con él un
+       cambio de inset — o sea un reflujo del documento entero a mitad de
+       animación. Se pregunta antes. */
+    const f = document.activeElement;
+    if (f === $('#busca2') || f === $('#busca')) f.blur();
     mascotaBaila(false);
     $('#burbuja').classList.remove('on');
   }
@@ -5231,7 +5261,7 @@ function repintaIdioma(){
     $('#mInfo').lastElementChild.textContent = T('info');
     $('#mBorrar').lastElementChild.textContent = T('borrar');
   }
-  pintaReloj(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
+  pintaReloj(true); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
   /* las dos hojas que escriben su texto al abrirse, si están abiertas: cambiar
      de idioma con una a la vista la dejaría en el anterior hasta cerrarla */
   if ($('#fondos').classList.contains('on')) fgPinta();
@@ -5241,16 +5271,33 @@ function repintaIdioma(){
 
 /* ══════════ RELOJ Y BATERÍA ══════════ */
 function dosD(n){ return n < 10 ? '0' + n : String(n); }
-function pintaReloj(){
+/* ── ESCRIBIR EL MISMO MINUTO SESENTA VECES ES SESENTA REPINTADOS ──
+   El intervalo es de un segundo y el reloj muestra minutos: cincuenta y nueve
+   de cada sesenta pasadas escriben exactamente el mismo texto, y escribir
+   `textContent` ensucia el nodo igual aunque el valor no cambie. Con `#capa`
+   escondido detrás de la hoja eso no se pagaba; desde la vuelta 134 el
+   escritorio se queda compuesto, así que ahora sí. Y de paso es correcto
+   siempre: en el escritorio pelado eran cincuenta y nueve repintados por
+   minuto para no cambiar un píxel.
+   Y lleva `forzar`, porque esta función pinta además la fecha y el saludo:
+   `repintaIdioma` la llama justamente para cambiarlos de idioma, y sin el
+   parámetro un cambio de idioma dentro del mismo minuto se sale por el atajo y
+   deja la fecha en el idioma anterior. Es el mismo defecto que en Z Force
+   costó 107 claves, servido por la puerta de atrás. */
+let RELOJ_ULT = '';
+function pintaReloj(forzar){
   const d = new Date();
-  $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  const hhmm = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  if (!forzar && hhmm === RELOJ_ULT && $('#hora') && $('#hora').textContent === hhmm) return;
+  RELOJ_ULT = hhmm;
+  $('#bIzq').textContent = hhmm;
   /* ── EL WIDGET DE RELOJ PUEDE NO ESTAR PUESTO ──
      Desde que los widgets se eligen, `#hora` existe sólo si el dueño dejó el de
      reloj. Sin la guarda, el intervalo de un segundo tira `null.textContent`
      sesenta veces por minuto y se lleva por delante la pintada de todo lo demás
      que corre en la misma vuelta. */
   if (!$('#hora')) return;
-  $('#hora').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  $('#hora').textContent = hhmm;
   const t = TXT[LANG] || TXT.es;
   $('#fecha').innerHTML = t.dias[d.getDay()] + '<br>' + d.getDate() + ' ' + t.meses[d.getMonth()];
   /* ── EL SALUDO SALE DE LA HORA, NO DE UNA CONSTANTE ──
@@ -5460,7 +5507,20 @@ function enganchaCajon(){
   const pone = d => {
     /* `contains` es una lectura de clase, no fuerza recálculo: el `remove` sale
        una sola vez y no en cada cuadro del arrastre */
-    if (document.body.classList.contains('cajQ')) document.body.classList.remove('cajQ');
+    if (document.body.classList.contains('cajQ')){
+      /* ── EL ARRASTRE ES UN DESLIZAMIENTO Y TIENE QUE CONTAR COMO TAL ──
+         `cajMueve` lo ponía sólo `cajAsienta`, o sea al SOLTAR. Durante todo el
+         arrastre —que es cuando el dedo está mirando la pantalla y la hoja va
+         sin transición— el escritorio quedaba fuera de las dos reglas: `cajQ`
+         recién sacado y `cajMueve` todavía sin poner, así que sus tres piezas
+         encendían sus 96.401 px de filtro justo en el cuadro en que el dedo
+         empieza a tirar. Poniéndolo acá las dos reglas se solapan y no hay un
+         solo cuadro de transición: sale off y sigue off. Lo saca `cajAsienta`,
+         que corre por los dos caminos del final (soltar arriba y soltar
+         abajo). */
+      document.body.classList.remove('cajQ');
+      document.body.classList.add('cajMueve');
+    }
     caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
   };
   const suelta = () => {
@@ -5738,7 +5798,7 @@ function mascToque(){
    Los llama la Activity. Sin ellos, volver al escritorio deja abierto lo que
    estuviera abierto tres apps atrás, que no es «conservar el estado». */
 window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
-window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
+window.__alVolver = function(){ pintaReloj(true); pintaBateria(); CORRE = true; };
 window.__atras = function(){
   /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
      cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
@@ -5844,8 +5904,8 @@ function arranca(){
   cargaApps();
   pintaInicio(); pintaDock();
   cajPrepara();
-  pintaReloj(); pintaBateria();
-  setInterval(pintaReloj, 1000);
+  pintaReloj(true); pintaBateria();
+  setInterval(() => pintaReloj(), 1000);
   setInterval(pintaBateria, 30000);
 
   asisInit();
@@ -8228,7 +8288,7 @@ const WIDGETS = {
       + '<circle class="wCarga" id="wArco" cx="30" cy="30" r="25"/></svg>'
       + '<div id="wPct">—</div><div id="wSaludo">—</div></div>';
     e.id = 'reloj';
-    pintaReloj(); pintaBateria();   /* la primera vez sí se le pregunta al puente */
+    pintaReloj(true); pintaBateria();   /* la primera vez sí se le pregunta al puente */
   }},
 
   /* ── 2 · SÓLO LA HORA, GRANDE ── */
@@ -8722,7 +8782,7 @@ function widPinta(){
   /* el de reloj se pinta con las funciones de siempre — con la ÚLTIMA lectura
      de batería y no pidiéndola de nuevo, que sería cruzar el puente diez veces
      por segundo con el cronómetro andando */
-  if (WID.indexOf('reloj') >= 0){ pintaReloj(); ponBateria(BAT_ULT); }
+  if (WID.indexOf('reloj') >= 0){ pintaReloj(true); ponBateria(BAT_ULT); }
 }
 
 /* ── EL RITMO SALE DE LO QUE HAY PUESTO ──
@@ -11223,6 +11283,114 @@ window.__A = {
              vidMedio: vidMedio.n, pxMedio: vidMedio.px,
              vidFin: vidFin.n, pxFin: vidFin.px,
              topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* ── Y EL CIERRE, QUE ES LA MITAD QUE NADIE HABÍA MEDIDO ──
+     Las vueltas 130 a 133 midieron SUBIR. El cierre no es el mismo viaje al
+     revés: en su primer cuadro `verCajon(false)` saca `body.cajQ`, o sea que
+     `#capa` pasa de `visibility:hidden` a visible y el escritorio ENTERO —el
+     reloj, el dock, las treinta baldosas, la búsqueda— vuelve a la vista justo
+     en el cuadro en que la hoja arranca. Eso es exactamente lo que la vuelta
+     130 encontró con las 150 animaciones de entrada, con otro disfraz. */
+  /* el A/B del cierre, sobre el MISMO binario: `true` devuelve la regla vieja
+     —`#capa` escondido— para que la medición pueda detectar el defecto además
+     de aprobar el arreglo */
+  /* cambiar de idioma tiene que repintar la fecha aunque el minuto no haya
+     cambiado: `pintaReloj` se sale por el atajo si el reloj dice lo mismo */
+  idioma(v){
+    const f = PERS.filter(x => x.tit === 'pIdioma')[0];
+    if (v) f.pon(v);
+    return { lang: LANG, hora: ($('#hora') || {}).textContent,
+             fecha: ($('#fecha') || {}).textContent,
+             saludo: ($('#wSaludo') || {}).textContent };
+  },
+  /* ── EL ARRASTRE, QUE ES EL OTRO CAMINO DEL CIERRE ──
+     El dedo baja la hoja sin transición, así que cada cuadro es el dedo. Lo que
+     se mide es si en el cuadro en que el dedo empieza a tirar cambia algo:
+     `#capa` de escondido a visible, o los tres vidrios de apagados a
+     encendidos. Las dos cosas son un escalón en el peor cuadro posible. */
+  async cajArrastra(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    vid: this.vidrios().n, px: this.vidrios().px };
+    const man = $('#cajManija');
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    man.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y0, bubbles: true, pointerId: 9 }));
+    man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + 12, bubbles: true, pointerId: 9 }));
+    const p1 = { capa: getComputedStyle(capa).visibility,
+                 vid: this.vidrios().n, px: this.vidrios().px,
+                 cajMueve: document.body.classList.contains('cajMueve'),
+                 y: getComputedStyle($('#cajon')).getPropertyValue('--caj-y').trim() };
+    for (let i = 2; i <= 8; i++)
+      man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + i * 24, bubbles: true, pointerId: 9 }));
+    const medio = { vid: this.vidrios().n, px: this.vidrios().px };
+    man.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y0 + 200, bubbles: true, pointerId: 9 }));
+    await new Promise(r2 => setTimeout(r2, 620));
+    const fin = this.vidrios();
+    return { antes: antes, primerCuadro: p1, medio: medio,
+             cerro: !CAJON, vidFin: fin.n, pxFin: fin.px };
+  },
+  cajQModo(v){
+    document.body.classList.toggle('cajQvis', !!v);
+    return { escondeCapa: !!v };
+  },
+  async cajCierra(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    cajQ: document.body.classList.contains('cajQ'),
+                    vidAbierto: this.vidrios().n, pxAbierto: this.vidrios().px };
+    /* el bucle sólo cronometra: llamar a `vidrios()` por cuadro es barrer el
+       DOM entero sesenta veces por segundo y medir la sonda en vez del juego
+       —medido, dejaba la ventana en dos cuadros—. Lo que cuesta se muestrea en
+       instantes fijos. */
+    const dts = []; let ult = performance.now(); let corre = true;
+    let primerCapa = null;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (primerCapa === null) primerCapa = getComputedStyle(capa).visibility;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 60));
+    const anim = document.getAnimations().filter(x => x.playState === 'running')
+                   .map(x => (x.effect && x.effect.target ? (x.effect.target.id || x.effect.target.className || '?') : '?'));
+    const vid90 = this.vidrios();
+    await new Promise(r => setTimeout(r, 560));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a2, b2) => a2 - b2);
+    const med = o.length ? o[o.length >> 1] : 0;
+    return { antes: antes, capaPrimerCuadro: primerCapa,
+             cuadros: o.length, mediana: +med.toFixed(1),
+             peor: +(o[o.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animando: anim.length, quienes: anim.slice(0, 6),
+             vidDurante: vid90.n, pxDurante: vid90.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topFin: vidFin.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
+     en el primer cuadro del cierre */
+  capaPeso(){
+    const capa = $('#capa');
+    const todos = capa.querySelectorAll('*');
+    let vid = 0, img = 0;
+    todos.forEach(e => {
+      const c = getComputedStyle(e);
+      if ((c.backdropFilter && c.backdropFilter !== 'none') ||
+          (c.webkitBackdropFilter && c.webkitBackdropFilter !== 'none')) vid++;
+      if (e.tagName === 'IMG' || (c.backgroundImage && c.backgroundImage !== 'none')) img++;
+    });
+    const r = capa.getBoundingClientRect();
+    return { nodos: todos.length, conVidrio: vid, conImagen: img,
+             px: Math.round(r.width * r.height),
+             visibilidad: getComputedStyle(capa).visibility };
   },
   /* ── QUÉ LE PIDE AL COMPOSITOR EL CUADRO EN QUE LA HOJA ARRANCA ──
      El banco dibuja por software, así que sus milisegundos no son los del

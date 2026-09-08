@@ -75,7 +75,7 @@ const WIDGETS = {
       + '<circle class="wCarga" id="wArco" cx="30" cy="30" r="25"/></svg>'
       + '<div id="wPct">—</div><div id="wSaludo">—</div></div>';
     e.id = 'reloj';
-    pintaReloj(); pintaBateria();   /* la primera vez sí se le pregunta al puente */
+    pintaReloj(true); pintaBateria();   /* la primera vez sí se le pregunta al puente */
   }},
 
   /* ── 2 · SÓLO LA HORA, GRANDE ── */
@@ -569,7 +569,7 @@ function widPinta(){
   /* el de reloj se pinta con las funciones de siempre — con la ÚLTIMA lectura
      de batería y no pidiéndola de nuevo, que sería cruzar el puente diez veces
      por segundo con el cronómetro andando */
-  if (WID.indexOf('reloj') >= 0){ pintaReloj(); ponBateria(BAT_ULT); }
+  if (WID.indexOf('reloj') >= 0){ pintaReloj(true); ponBateria(BAT_ULT); }
 }
 
 /* ── EL RITMO SALE DE LO QUE HAY PUESTO ──

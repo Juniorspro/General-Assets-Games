@@ -778,8 +778,29 @@ body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,
    ventana. Se apaga recién cuando la hoja LLEGÓ: durante los 340 ms del
    deslizamiento el escritorio asoma por encima del canto y apagarlo ahí sería
    un parpadeo. Y sólo con `.hor`: sin horneado la hoja es translúcida y esto se
-   vería. */
-body.cajQ #capa{visibility:hidden}
+   vería.
+
+   ── Y ESCONDERLO NO ERA LA FORMA CORRECTA DE APAGARLO ──
+   Reporte de la vuelta 134: «ahora el lag es al bajar». El cierre no es la
+   apertura al revés, y el primer cuadro lo explica: `verCajon(false)` saca
+   `body.cajQ`, o sea que `#capa` pasa de `visibility:hidden` a visible y el
+   escritorio ENTERO vuelve a la vista **en el mismo cuadro en que la hoja
+   arranca**. Medido con `capaPeso`: **98 nodos, 367.504 px, 3 piezas de vidrio
+   y 4 fondos de imagen** que el compositor tiene que volver a rasterizar y
+   subir justo ahí. Es la misma familia que las 150 animaciones de entrada de
+   la vuelta 130, con otro disfraz.
+
+   Y lo que la vuelta 131 midió que `cajQ` ahorraba era **el FILTRO** —ocho
+   pasadas y 40.720 px— no el pintado: el escritorio es estático, así que
+   dejarlo compuesto cuesta textura y no milisegundos por cuadro. Así que se
+   apaga lo que costaba y se deja quieto lo que no: la misma regla que
+   `cajMueve`, sin tocar la visibilidad. Con eso el ahorro con el cajón abierto
+   es el mismo y en el cierre no hay nada que rasterizar de nuevo. */
+body.cajQ #capa .vid,body.cajQ #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el A/B vive en el mismo binario: sin esto, «mejoró» sería un recuerdo y no
+   una medición (ver `__A.cajQModo`) */
+body.cajQvis.cajQ #capa{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.

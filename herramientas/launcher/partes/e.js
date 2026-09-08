@@ -204,9 +204,8 @@ function pintaDock(){
   d.style.setProperty('--cols', Math.max(1, d.children.length));
   /* ── UN DOCK VACÍO SE ESCONDE POR CLASE Y NO EN LÍNEA ──
      Estaba como `style.visibility`, y un estilo en línea le gana a cualquier
-     selector: con el cajón asentado, `body.cajQ #capa{visibility:hidden}` no
-     lo alcanzaba y el dock seguía filtrando 36.096 px detrás de una hoja
-     opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
+     selector: con el cajón asentado, la regla de `body.cajQ` no lo alcanzaba y
+     el dock seguía filtrando 36.096 px detrás de una hoja opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
      recalibrar. */
   d.classList.toggle('vacio', !DOCK.length);
   if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
@@ -686,8 +685,10 @@ function verCajon(v){
   const caj = $('#cajon');
   caj.classList.toggle('on', CAJON);
   /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
-  /* el escritorio vuelve a la vista en el acto al empezar a cerrar; se apaga
-     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`) */
+  /* el vidrio del escritorio vuelve en el acto al empezar a cerrar y se apaga
+     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`). Desde la
+     vuelta 134 `cajQ` ya NO esconde `#capa`: lo único que apaga es el filtro,
+     así que sacarlo no obliga a rasterizar el escritorio de nuevo. */
   document.body.classList.remove('cajQ');
   cajAsienta();
   /* el CSS de la mascota decide su sitio con esto */
@@ -711,8 +712,16 @@ function verCajon(v){
     $('#cajLista').scrollTop = 0;
     marcaRiel(LETRAS[0] || '');
   } else {
-    $('#busca2').blur(); $('#busca').blur();
-    $('#cajLista').scrollTop = 0;
+    /* ── EL CIERRE NO TIENE QUE TOCAR LA LISTA NI EL FOCO SI NO HACE FALTA ──
+       `scrollTop = 0` sobre un scroller de 150 filas fuerza un layout
+       sincrónico, y lo hacía en el cuadro en que la hoja arranca a bajar para
+       acomodar una lista que nadie va a ver: `verCajon(true)` ya la deja
+       arriba al abrir. Y `blur()` sobre un campo que no tiene el foco no hace
+       nada salvo, en Android, disparar el cierre del teclado y con él un
+       cambio de inset — o sea un reflujo del documento entero a mitad de
+       animación. Se pregunta antes. */
+    const f = document.activeElement;
+    if (f === $('#busca2') || f === $('#busca')) f.blur();
     mascotaBaila(false);
     $('#burbuja').classList.remove('on');
   }
@@ -736,7 +745,7 @@ function repintaIdioma(){
     $('#mInfo').lastElementChild.textContent = T('info');
     $('#mBorrar').lastElementChild.textContent = T('borrar');
   }
-  pintaReloj(); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
+  pintaReloj(true); pintaInicio(); pintaDock(); pintaCajon($('#busca2').value);
   /* las dos hojas que escriben su texto al abrirse, si están abiertas: cambiar
      de idioma con una a la vista la dejaría en el anterior hasta cerrarla */
   if ($('#fondos').classList.contains('on')) fgPinta();
@@ -746,16 +755,33 @@ function repintaIdioma(){
 
 /* ══════════ RELOJ Y BATERÍA ══════════ */
 function dosD(n){ return n < 10 ? '0' + n : String(n); }
-function pintaReloj(){
+/* ── ESCRIBIR EL MISMO MINUTO SESENTA VECES ES SESENTA REPINTADOS ──
+   El intervalo es de un segundo y el reloj muestra minutos: cincuenta y nueve
+   de cada sesenta pasadas escriben exactamente el mismo texto, y escribir
+   `textContent` ensucia el nodo igual aunque el valor no cambie. Con `#capa`
+   escondido detrás de la hoja eso no se pagaba; desde la vuelta 134 el
+   escritorio se queda compuesto, así que ahora sí. Y de paso es correcto
+   siempre: en el escritorio pelado eran cincuenta y nueve repintados por
+   minuto para no cambiar un píxel.
+   Y lleva `forzar`, porque esta función pinta además la fecha y el saludo:
+   `repintaIdioma` la llama justamente para cambiarlos de idioma, y sin el
+   parámetro un cambio de idioma dentro del mismo minuto se sale por el atajo y
+   deja la fecha en el idioma anterior. Es el mismo defecto que en Z Force
+   costó 107 claves, servido por la puerta de atrás. */
+let RELOJ_ULT = '';
+function pintaReloj(forzar){
   const d = new Date();
-  $('#bIzq').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  const hhmm = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  if (!forzar && hhmm === RELOJ_ULT && $('#hora') && $('#hora').textContent === hhmm) return;
+  RELOJ_ULT = hhmm;
+  $('#bIzq').textContent = hhmm;
   /* ── EL WIDGET DE RELOJ PUEDE NO ESTAR PUESTO ──
      Desde que los widgets se eligen, `#hora` existe sólo si el dueño dejó el de
      reloj. Sin la guarda, el intervalo de un segundo tira `null.textContent`
      sesenta veces por minuto y se lleva por delante la pintada de todo lo demás
      que corre en la misma vuelta. */
   if (!$('#hora')) return;
-  $('#hora').textContent = dosD(d.getHours()) + ':' + dosD(d.getMinutes());
+  $('#hora').textContent = hhmm;
   const t = TXT[LANG] || TXT.es;
   $('#fecha').innerHTML = t.dias[d.getDay()] + '<br>' + d.getDate() + ' ' + t.meses[d.getMonth()];
   /* ── EL SALUDO SALE DE LA HORA, NO DE UNA CONSTANTE ──
@@ -965,7 +991,20 @@ function enganchaCajon(){
   const pone = d => {
     /* `contains` es una lectura de clase, no fuerza recálculo: el `remove` sale
        una sola vez y no en cada cuadro del arrastre */
-    if (document.body.classList.contains('cajQ')) document.body.classList.remove('cajQ');
+    if (document.body.classList.contains('cajQ')){
+      /* ── EL ARRASTRE ES UN DESLIZAMIENTO Y TIENE QUE CONTAR COMO TAL ──
+         `cajMueve` lo ponía sólo `cajAsienta`, o sea al SOLTAR. Durante todo el
+         arrastre —que es cuando el dedo está mirando la pantalla y la hoja va
+         sin transición— el escritorio quedaba fuera de las dos reglas: `cajQ`
+         recién sacado y `cajMueve` todavía sin poner, así que sus tres piezas
+         encendían sus 96.401 px de filtro justo en el cuadro en que el dedo
+         empieza a tirar. Poniéndolo acá las dos reglas se solapan y no hay un
+         solo cuadro de transición: sale off y sigue off. Lo saca `cajAsienta`,
+         que corre por los dos caminos del final (soltar arriba y soltar
+         abajo). */
+      document.body.classList.remove('cajQ');
+      document.body.classList.add('cajMueve');
+    }
     caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
   };
   const suelta = () => {
@@ -1243,7 +1282,7 @@ function mascToque(){
    Los llama la Activity. Sin ellos, volver al escritorio deja abierto lo que
    estuviera abierto tres apps atrás, que no es «conservar el estado». */
 window.__alInicio = function(){ cierraMenu(); verCajon(false); $('#busca2').value = ''; ponPagina(0); };
-window.__alVolver = function(){ pintaReloj(); pintaBateria(); CORRE = true; };
+window.__alVolver = function(){ pintaReloj(true); pintaBateria(); CORRE = true; };
 window.__atras = function(){
   /* las tres hojas primero, y de la de más arriba a la de más abajo: «atrás»
      cierra lo que está encima, no lo que estaba abierto tres pasos atrás */
@@ -1349,8 +1388,8 @@ function arranca(){
   cargaApps();
   pintaInicio(); pintaDock();
   cajPrepara();
-  pintaReloj(); pintaBateria();
-  setInterval(pintaReloj, 1000);
+  pintaReloj(true); pintaBateria();
+  setInterval(() => pintaReloj(), 1000);
   setInterval(pintaBateria, 30000);
 
   asisInit();
