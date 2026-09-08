@@ -18,7 +18,36 @@ function audioDespierta(){
   try { AC = new (window.AudioContext || window.webkitAudioContext)(); }
   catch (e){ AC = null; return null; }
   MAE = AC.createGain(); MAE.gain.value = 0.9; MAE.connect(AC.destination);
+  /* el analizador cuelga del maestro: es lo unico que prueba que un sonido
+     llego a la salida. Que un clip decodifique no dice que suene. */
+  ANAL = AC.createAnalyser(); ANAL.fftSize = 1024; MAE.connect(ANAL);
+  sfxCarga();
   return AC;
+}
+
+/* ══════════ LOS EFECTOS GRABADOS ══════════
+   Cinco clips generados encima de los osciladores. LO SINTETIZADO NO SE BORRA:
+   `son()` intenta la muestra y cae al golpe de siempre si el MP3 no decodifico.
+   Y `pal` USA EL CLIP DE `ui` a proposito: son el mismo gesto —un boton de la
+   interfaz— y su propio clip volvio MUDO del generador (pico 0,0001, medido).
+   Dos toques de interfaz con caracter distinto se escuchan a dos juegos. */
+let ANAL = null;
+const SFX = {}, SFX_ALIAS = { pal: 'ui' };
+function sfxCarga(){
+  if (typeof SFX_B64 === 'undefined' || !AC) return;
+  for (const k in SFX_B64){
+    try {
+      const t = atob(SFX_B64[k]), a = new Uint8Array(t.length);
+      for (let i = 0; i < t.length; i++) a[i] = t.charCodeAt(i);
+      AC.decodeAudioData(a.buffer, b => { SFX[k] = b; }, () => {});
+    } catch (e) {}
+  }
+}
+function sfxSuena(k){
+  const b = SFX[SFX_ALIAS[k] || k]; if (!b || !AC) return false;
+  const f = AC.createBufferSource(); f.buffer = b;
+  f.connect(MAE); f.start(AC.currentTime);
+  return true;
 }
 function ruidoBuf(seg){
   const n = Math.max(1, Math.floor(AC.sampleRate*seg));
@@ -61,6 +90,7 @@ function tono(k){ return 1 + (Math.random() - 0.5)*k; }
 
 function son(que){
   if (!AC || !SON_ON) return false;
+  if (sfxSuena(que)) return true;
   if (que === 'pon')    golpe(240*tono(0.14), 130, 0.09, 0.22, 1.4);
   else if (que === 'sac') golpe(150*tono(0.16), 70,  0.13, 0.24, 0.8);
   else if (que === 'nada') golpe(90, 70, 0.06, 0.07, 0.6, 'sine');

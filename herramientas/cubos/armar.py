@@ -13,7 +13,7 @@ import io, os
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
 P = os.path.join(AQUI, 'partes')
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'g.js', 'f.js', 'z.html']
+ORDEN = ['a.html', 'i_sfx.js', 'b.js', 'c.js', 'd.js', 'e.js', 'g.js', 'f.js', 'z.html']
 
 def parte(n):
     return io.open(os.path.join(P, n), encoding='utf8').read()

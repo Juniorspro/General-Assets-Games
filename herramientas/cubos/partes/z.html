@@ -246,7 +246,32 @@ window.__C = {
   finRonda(){ if (RUN){ RUN.t = RUN.reloj; } return RUN ? RUN.fase : null; },
   pantalla(p){ verPantalla(p); return PANT; },
   reloj(r){ ponReloj(r); return { reloj: RELOJ_EL, seg: RELOJES[RELOJ_EL] }; },
-  audio(){ return { ctx: AC ? AC.state : null, cama: !!CAMA, on: SON_ON }; },
+  audio(){ return { ctx: AC ? AC.state : null, cama: !!CAMA, on: SON_ON,
+    /* que clips grabados llegaron: sin esto, un base64 cortado se ve igual que
+       un efecto que suena, porque cae al golpe sintetizado y nadie se entera */
+    sfx: Object.keys(SFX).map(k => k + ':' + SFX[k].duration.toFixed(2)).sort() }; },
+  /* ── QUE UN CLIP DECODIFIQUE NO DICE QUE ESE SONIDO LO USE ──
+     Con el alias de `pal` a `ui` y el respaldo sintetizado detras, hay tres
+     estados posibles por clave —muestra propia, muestra prestada, oscilador— y
+     desde afuera los tres suenan. Esto los distingue. */
+  usaMuestra(k){ const a = SFX_ALIAS[k] || k; return SFX[a] ? a : false; },
+  /* dispara un efecto y BARRE el clip entero: una sola lectura del analizador
+     son treinta milisegundos y cae donde cae. */
+  sonMide(k, ms){
+    son(k);
+    if (!ANAL) return Promise.resolve({ k, sinAnal: true });
+    return new Promise(res => {
+      let pico = 0, s = 0, n = 0;
+      const b = new Uint8Array(ANAL.fftSize), t0 = performance.now();
+      const paso = () => {
+        ANAL.getByteTimeDomainData(b);
+        for (let i = 0; i < b.length; i++){ const v = (b[i]-128)/128; s += v*v; n++; if (Math.abs(v) > pico) pico = Math.abs(v); }
+        if (performance.now() - t0 < (ms || 900)) requestAnimationFrame(paso);
+        else res({ k, pico: +pico.toFixed(3), rms: +Math.sqrt(s/n).toFixed(4) });
+      };
+      requestAnimationFrame(paso);
+    });
+  },
   /* el nivel se mide colgando un analizador del maestro: «suena» no es «no tiro
      excepcion», y una cama que tape un golpe de bloque es un defecto de mezcla */
   async nivel(que, ms){

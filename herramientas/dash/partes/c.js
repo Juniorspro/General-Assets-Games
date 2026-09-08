@@ -34,6 +34,34 @@ function armaAudio(){
   const d = RUI.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1;
   musCarga(0);
+  sfxCarga();
+}
+
+/* ══════════ LOS EFECTOS GRABADOS ══════════
+   Seis clips generados que reemplazan a los seis osciladores. LO SINTETIZADO NO
+   SE BORRA: `son()` intenta la muestra y cae al oscilador si el MP3 no
+   decodifico. Un juego mudo por un decodificador es peor que uno con bips, y ya
+   paso una vez en Campo de Tiro.
+   Y se decodifica con el PRIMER GESTO y no al cargar: `decodeAudioData` necesita
+   un contexto, y ningun navegador crea uno antes de un gesto de verdad — en el
+   arranque el contexto esta suspendido y los clips se pierden en silencio. */
+const SFX = {};
+function sfxCarga(){
+  if (typeof SFX_B64 === 'undefined' || !AUD) return;
+  for (const k in SFX_B64){
+    try {
+      const s = atob(SFX_B64[k]), a = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+      AUD.decodeAudioData(a.buffer, b => { SFX[k] = b; }, () => {});
+    } catch (e) {}
+  }
+}
+function sfxSuena(k, v){
+  const b = SFX[k]; if (!b || !AUD) return false;
+  const f = AUD.createBufferSource(); f.buffer = b;
+  const g = AUD.createGain(); g.gain.value = v == null ? 1 : v;
+  f.connect(g); g.connect(GFX); f.start(AUD.currentTime);
+  return true;
 }
 
 const MUS = { on: false, t0: 0, bpm: 158, pista: 0, ganancia: 1 };
@@ -153,6 +181,7 @@ function musPaso(){
 
 function son(k){
   armaAudio(); if (!AUD) return;
+  if (sfxSuena(k)) return;
   const t = AUD.currentTime, g = AUD.createGain(); g.connect(GFX);
   if (k === 'salta'){
     const o = AUD.createOscillator(); o.type = 'square';

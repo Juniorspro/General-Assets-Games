@@ -624,6 +624,31 @@ window.__R = {
              pads: MUNDO.pads.length, orbes: MUNDO.orbes.length,
              monedas: MUNDO.monedas.length, sierras: MUNDO.sierras.length, portales: modos };
   },
+  /* dispara un efecto por el mismo camino que el juego. Lo unico que prueba que
+     un clip suena es leer el analizador colgado del maestro un instante despues:
+     que decodifique no dice que llegue a la salida. */
+  sonar(k){ son(k); return k; },
+  /* que un clip decodifique no dice que ese sonido lo use: con el respaldo
+     sintetizado detras, las dos cosas suenan y desde afuera no se distinguen */
+  usaMuestra(k){ return SFX[k] ? k : false; },
+  /* ── Y SE BARRE EL CLIP ENTERO, NO SE LEE UNA VEZ ──
+     La ventana del analizador son 1024 muestras, o sea treinta milisegundos: una
+     sola lectura cae donde cae y compara la cola de un clip contra el ataque de
+     otro. Es la leccion de los doce gritos de VIGILIA. */
+  sonMide(k, ms){
+    son(k);
+    return new Promise(res => {
+      let pico = 0, s = 0, n = 0;
+      const b = new Uint8Array(ANAL.fftSize), t0 = performance.now();
+      const paso = () => {
+        ANAL.getByteTimeDomainData(b);
+        for (let i = 0; i < b.length; i++){ const v = (b[i]-128)/128; s += v*v; n++; if (Math.abs(v) > pico) pico = Math.abs(v); }
+        if (performance.now() - t0 < (ms || 900)) requestAnimationFrame(paso);
+        else res({ k, pico: +pico.toFixed(3), rms: +Math.sqrt(s/n).toFixed(4) });
+      };
+      requestAnimationFrame(paso);
+    });
+  },
   audio(){
     if (!AUD || !ANAL) return { hay: false };
     const b = new Uint8Array(ANAL.fftSize); ANAL.getByteTimeDomainData(b);
@@ -632,7 +657,11 @@ window.__R = {
     return { hay: true, estado: AUD.state, on: MUS.on, bpm: MUS.bpm, lista: musLista(EST.nivel),
              t: MUS.on ? +musTiempo().toFixed(3) : null,
              pico: +pico.toFixed(4), rms: +Math.sqrt(s/b.length).toFixed(4),
-             mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2) };
+             mus: +VOL_MUS.toFixed(2), fx: +VOL_FX.toFixed(2),
+             /* que clips grabados llegaron: sin esto, un base64 cortado se ve
+                exactamente igual que un efecto que suena, porque cae al
+                oscilador y nadie se entera */
+             sfx: Object.keys(SFX).map(k => k + ':' + SFX[k].duration.toFixed(2)).sort() };
   },
   /* ── APAGAR UNA PIEZA Y VOLVER A DIBUJAR ──
      «Hay una cuna negra tapando el cielo» no se puede diagnosticar mirando: hay

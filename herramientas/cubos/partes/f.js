@@ -315,6 +315,12 @@ function camMenu(dt){
 const PANS = ['pMenu', 'pAjustes', 'pPausa', 'pTema', 'pPunt', 'pFin', 'pIdioma'];
 function verPantalla(p){
   if (p === 'menu' && !RUN) demoMenu();
+  /* ── EL RECORD SE REPINTA AL VOLVER AL MENU ──
+     `anotaFin` lo guarda y `pintaIdioma` lo dibuja, pero pintaIdioma corre al
+     arrancar y al cambiar de idioma: medido, despues de una partida de 195 el
+     menu seguia diciendo RECORD 0 hasta recargar la pagina. Un numero que se
+     guarda y no se muestra no existe para el jugador. */
+  if (p === 'menu') pintaStat();
   PANT = p;
   for (const id of PANS) document.getElementById(id).classList.toggle('on', id === 'p' + p[0].toUpperCase() + p.slice(1));
   document.body.classList.toggle('jugando', p === 'juega');
@@ -330,8 +336,7 @@ function pintaIdioma(){
   const g = id => document.getElementById(id);
   g('mSub').textContent = TX('sub');
   g('bJugar').textContent = TX('jugar');  g('bAjustes').textContent = TX('ajustes');
-  g('mStat').innerHTML = '<b><i>' + TX('record') + '</i>' + REC + '</b>' +
-    (PARTIDAS ? '<b><i>' + TX('partidas') + '</i>' + PARTIDAS + '</b>' : '');
+  pintaStat();
   g('mJuez').textContent = hayLlave() ? TX('conLlave') : TX('sinLlave');
   g('mPie').textContent = TX('pie');
   g('aTit').textContent = TX('ajustes'); g('aGrafL').textContent = TX('graficos');
@@ -482,6 +487,14 @@ function anotaFin(t){
   PARTIDAS++; guarda('cubos_part', PARTIDAS);
   if (t > REC){ REC = t; guarda('cubos_rec', REC); return true; }
   return false;
+}
+/* la fila del menu: record y partidas. Aparte de `pintaIdioma` porque la llaman
+   dos cosas distintas —el idioma y el volver al menu— y con una sola no se
+   podia repintar sin repintar la pantalla entera. */
+function pintaStat(){
+  const e = document.getElementById('mStat'); if (!e) return;
+  e.innerHTML = '<b><i>' + TX('record') + '</i>' + REC + '</b>' +
+    (PARTIDAS ? '<b><i>' + TX('partidas') + '</i>' + PARTIDAS + '</b>' : '');
 }
 function pintaFin(){
   if (!RUN || !RUN.puntajes.length) return;
