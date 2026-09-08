@@ -281,6 +281,187 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimoséptima vuelta (2026-09-08): **VIGILIA · DASH · CRUCE · DESPEGUE · CUBOS** — quedarse quieto deja de ganar, y el menú deja de tapar el juego
+
+Cinco líneas del jefe del usuario, relevadas textuales: *"Rotor Dash: need better HUD and menu; the
+SFX is still basic · Cruce: same as Rotor Dash · **Vigilia: i can let my phone stay still and nothing
+stops me from losing** · Despegue: same as Rotor Dash · Cubos: Build Battle: same as Rotor Dash"*.
+
+#### VIGILIA: EL RECLAMO ERA LITERAL, Y LA CAUSA ESTABA EN UNA LÍNEA
+
+Medido antes de tocar nada, sobre 40 semillas: el bot que deja el teléfono **QUIETO ganaba 40 de 40
+con el 33,6 % del agua todavía en el bol**, y el torpe —350 ms de retardo— 40 de 40 con el 53,8 %.
+
+**LA CAUSA: LA CASA ES UNA RECTA A VELOCIDAD CONSTANTE.** Las catorce habitaciones tienen `giro: 0`
+—la vuelta 107 dejó las esquinas pendientes— y el paso era `R.s += VEL*DT`. Con eso lo único que
+mueve el agua es el cabeceo del paso, que es **un seno de amplitud y frecuencia fijas**: acotado, de
+media cero y perfectamente predecible. Un seno no pide nada.
+
+**Y NO SE ARREGLA HACIENDO QUE EL SUSTO TUMBE.** Eso es exactamente lo que el jugador pidió que NO
+pasara en la vuelta 110. Las dos cosas no se contradicen: él pidió que la HABILIDAD alcance, y el
+jefe dice que **no hacer nada no puede ser una habilidad**. El defecto no es que sostener derecho
+gane: es que sostener derecho no cuesta nada.
+
+Ahora el caminante **afloja al cruzar cada puerta y se apura en el medio del cuarto**. Eso es lo que
+de verdad cuesta llevando un plato lleno —frenar y arrancar— y empuja el agua en un eje que hasta
+ahora sólo tocaban los sustos. Es gratis para la geometría (`s` sigue la misma recta, nada más que no
+lineal), se ve venir, y no hay un gesto nuevo que aprender.
+
+**LA MEDIA TIENE QUE SEGUIR SIENDO `VEL`, Y NO ES LA ARITMÉTICA.** El recorrido tiene que durar los
+mismos tres minutos y medir los mismos 130 m, porque de eso cuelgan la agenda de sustos y los catorce
+cuartos. El tiempo es `∫ds/v`, o sea que lo que hay que igualar es la media **ARMÓNICA**, y para
+`v = VEL·k·(1 − A·cos 2πu)` la integral cierra sola:
+
+    ∫₀^L ds/(1 − A cos 2πs/L) = L/√(1−A²)   →   k = 1/√(1−A²)
+
+Con la aritmética el recorrido saldría un 8 % más largo y las catorce habitaciones no entrarían.
+
+**Y HUBO QUE INVENTAR DOS BOTS, que es el hallazgo de la vuelta.** El primer intento subió la ganancia
+a secas y **le pegó igual a todos** (con K_AND 8 y A 0,62: bot 0, quieto 3). La razón vale anotarla:
+el tirón de andar es un **SESGO SOSTENIDO**, y `botTilt` es realimentación puramente derivativa
+—amortiguamiento— que **por construcción no puede sostener una inclinación**. O sea que con los bots
+que había, la mecánica nueva era indistinguible de subir la dificultad para todos. Entraron
+**`experto`** —que se anticipa con el término directo `v·dv/ds·K_AND/g`, que es exactamente el
+equilibrio del agua— y **`humano`**, el mismo con el 60 % de la ganancia y 160 ms de retardo.
+
+Barrido de 40 semillas por casilla, seis bots (ganadas de 40):
+
+| K_AND | A_VEL | exp | hum | bot | torpe | quieto | azar |
+|---|---|---|---|---|---|---|---|
+| 9 | 0,34 | 40 | 40 | 40 | 40 | **40** | 22 |
+| 16 | 0,34 | 40 | 40 | 36 | 37 | 30 | 6 |
+| 9 | 0,42 | 40 | 40 | 40 | 40 | 38 | 20 |
+| **13** | **0,42** | **40** | **40** | **28** | **35** | **26** | **1** |
+| 16 | 0,42 | 40 | 40 | 1 | 9 | 7 | 0 |
+| 11 | 0,48 | 40 | 40 | 4 | 29 | 22 | 0 |
+| 13 | 0,48 | 40 | **36** | 1 | 4 | 7 | 0 |
+
+La fila elegida es la última en la que se cumplen **las tres** condiciones: el que se anticipa gana
+siempre (la promesa de la vuelta 110 sigue en pie), el que deja el teléfono quieto ya no —pierde una
+de cada tres—, y el que reacciona sin anticiparse todavía llega la mayoría de las veces. A partir de
+A 0,48 el humano empieza a perder, y eso es romper lo que el jugador pidió.
+
+**DOS DEFECTOS DE MEDICIÓN QUE ESTO DESTAPÓ:**
+1. **El tirón entraba en las dos sondas de física**, que miden propiedades del BOL y no del
+   caminante: el resbale daba **21,5 grados contra los 22,8** que vale `atan(mu)`. Va detrás de
+   `PERTURBA`, igual que el cabeceo. Medido después: chapoteo **1,69 contra 1,69** teóricos y resbale
+   **22,1 contra 22,8**.
+2. **`VEL*t` dejó de ser la posición.** La media armónica las hace coincidir en los bordes de cada
+   cuarto y en el total, pero adentro se separan **hasta 85 cm** — en un pasillo de dos metros de
+   ancho eso alcanza para fotografiar un susto en el sitio equivocado. Entró `sDeT(t)`, que integra
+   con el mismo paso que el juego, y la usan las dos sondas de foto y la auditoría de la agenda.
+
+Y **el cartel del tutorial decía «MANTENÉ EL BOL DERECHO»**, que ahora es exactamente el consejo que
+hace perder. Dice qué hacer, y al cruzar la primera puerta entra un segundo cartel que nombra el
+momento, en los tres idiomas.
+
+#### EL VELO DEL MENÚ TAPABA UN JUEGO QUE YA SE ESTABA DIBUJANDO
+
+Los cuatro «same as Rotor Dash» tenían el mismo defecto y se puede medir. Sobre la captura, el quinto
+de abajo del cuadro daba **15,6 de brillo en CRUCE, 10,2 en DESPEGUE y 26,6 en DASH** — mientras que
+el mundo que hay **detrás**, leído del propio buffer con `brillo()`, daba **53 en las cinco franjas**.
+O sea que el velo se cerraba a .86-.96 desde el 58 % para abajo, para poner encima unos botones que ya
+tienen su propio fondo. Abierto: **48,4 · 31,9 · 32,7**, tres veces más.
+
+**Y APARECIÓ UN DEFECTO DE ESPECIFICIDAD QUE ESTE REPO YA TIENE ANOTADO:** `#pMenu .bt` es ID + clase
+y le gana a `.bt.p`, que es dos clases. La primera versión dejó el botón de JUGAR **sin su
+degradado** — una píldora vacía justo en el único botón que importa.
+
+**DASH tenía DOS párrafos de prosa** diciendo casi lo mismo, y ninguno decía lo único que un menú
+tiene que decir: cómo vas. El de arriba pasa a ser una fila de números que se lee de una ojeada —los
+diamantes juntados y el mejor porcentaje de cada tema— y el pie se queda con LA regla, en una línea.
+ICONO y AJUSTES pasan a una fila: el marco mide 412 de alto y con los tres apilados **el pie caía
+fuera del cuadro**.
+
+**CUBOS ERA EL MÁS FLOJO Y NECESITÓ TRES COSAS.** El título llevaba un degradado de hielo, que es el
+único material que este juego no tiene: ahora es **pasto arriba y tierra abajo con un bisel DURO de
+tres escalones**, porque lo que hace que algo se lea a bloque es el canto y no el volumen — cero
+assets, la misma tipografía del sistema con otro relleno. Entra el **récord**, que no existía. Y la
+obra del demo salía cortada por abajo, con una cuenta que me salió mal dos veces:
+- el campo vertical es 74 grados, o sea **37 de medio ángulo**, y con la mira en 13,2 a 20 m la base
+  caía a `atan(13,2/20)` = 33,4 grados = **90 % del alto**: entraba raspando;
+- **bajar la mira es al REVÉS de lo que hace falta** —apuntar más abajo SUBE la obra en el cuadro— y
+  con 8,6 se metía detrás de los botones, que es el defecto que ese número existe para evitar;
+- se arregla **apoyando la columna del menú ARRIBA**, y recién con la mitad de abajo libre se puede
+  bajar la mira. Y falta un término que se me escapó: el lente está a 10,5 y la mira a 9,8, o sea que
+  además **cabecea 2,1 grados**, y sin sumarlo la predicción daba 80 % donde medido salía 100.
+
+#### EL HUD: TRES ARREGLOS, Y UNO ERA DE LA SONDA Y NO DEL JUEGO
+
+- **DASH — la pista de la barra de progreso era invisible.** Estaba en blanco al 10 %. Medido sobre la
+  captura del nivel 1 —cuyo cielo es crema—, los píxeles de adentro daban **(183,169,157)** y los de
+  justo debajo **(191,177,158)**: ocho puntos sobre 255. La barra, que es **LA** ficha de este género,
+  no se veía en el nivel con el que arranca todo el mundo. Con la pista oscura, **101 contra 192**.
+  Y los cuatro rótulos de esa franja tenían el mismo problema con su sombra difusa —una sombra difusa
+  oscura casi no oscurece un cielo crema— así que va además un velo corto de 62 px.
+- **CRUCE — el mundo se desplaza**, así que detrás del puntaje pasa una ruta oscura, un río celeste y
+  un pasto al sol, uno detrás de otro. Una sombra de texto aguanta lo oscuro y no aguanta el pasto:
+  va un velo corto arriba.
+- **DESPEGUE — el cartel de capa aparece 2,6 s al LLEGAR y después no queda nada.** Quince capas y
+  ninguna a la vista es progresión invisible. Entra la línea de la próxima capa con su nombre y los
+  metros que faltan, y se apaga en la última en vez de mentir. Y **se agregó a la lista de
+  `solapes()`**: un elemento nuevo que ninguna prueba mira es un solapamiento esperando.
+- **CUBOS no necesitó nada, y eso también se comprobó.** La primera captura mostraba el tema en «—» y
+  estuve por «arreglarlo»: era **la sonda**. `empieza()` saltea `muestraTema()`, que es el paso que el
+  jugador siempre da. Por el camino de verdad el tema se ve.
+
+#### LOS EFECTOS: 14 DE 38, Y LOS OTROS 24 SE QUEDARON SIN CRÉDITO
+
+Se pidieron 38 a Rezona y salieron 14; los otros volvieron **`CREDIT_INSUFFICIENT`**. Los `task_id`
+quedan en `herramientas/audio_juegos/tareas.json` y los 14 crudos en `crudo/`, porque perder un
+task_id es perder un asset pagado.
+
+**Y `fetch_generated_asset` NO ES DE FIAR, PERO SE PUEDE USAR IGUAL.** Se cuelga y el cliente muere a
+los 300 s — pero **el archivo queda en el disco**. La receta es lanzarlo con `timeout 100` y después
+comprobar el archivo. (Y el `output_path` que hay que pedir lleva el sufijo del servidor: no
+`assets/x.mp3` sino **`assets/x-g1.mp3`**, que es lo que devuelve `check_generation_tasks`.)
+
+Con eso alcanza para **DASH (6 de 6)** y **CUBOS (5 de 7)**. **CRUCE se queda con 2 de 12 y DESPEGUE
+con 0 de 13, y NO se enchufan**: dos efectos grabados entre diez osciladores se escuchan a dos juegos
+distintos. El horneado ya sabe hacerlos.
+
+**UN HORNEADO PARA LOS CUATRO** (`herramientas/audio_juegos/hornear.py`), con las cuatro reglas que
+este repo ya pagó: recorte por **energía** y no por pico · nivelado por **RMS** con una `tanh` cuya
+fuerza se **busca** · el lazo **cerrado sobre el MP3 ya escrito**, porque a 40 kbps el codificador se
+lleva el brillo y en un transitorio ahí está casi toda la energía · y **lo sintetizado no se borra**.
+
+**DOS DEFECTOS DEL HORNEADO, LOS DOS ENCONTRADOS MIDIENDO:**
+1. **UN CLIP MUDO SE HORNEABA IGUAL.** `cubos_pal` volvió con **pico 0,0001** —la falla de siempre de
+   este generador, ya anotada en RezUno y en los casuales— y salía un MP3 de un kilobyte que no suena
+   **y que además TAPA al sintetizado**, porque el juego prefiere la muestra: peor que no tenerlo. Se
+   rechaza por debajo de 0,02. En su lugar, `pal` **usa el clip de `ui`**: son el mismo gesto y dos
+   toques de interfaz con carácter distinto se escuchan a dos juegos.
+2. **EL RMS COMPRABA UN PICO POR ENCIMA DE UNO.** El lazo persigue el rms y el codificador se pasa
+   entre muestras: `dash_gana` salió con **pico 1,013**, o sea recortando al reproducir. El techo
+   manda sobre el objetivo.
+
+**Y LA SONDA QUE FALTABA ES `usaMuestra(k)`.** Con el respaldo detrás hay **tres** estados por clave
+—muestra propia, muestra prestada, oscilador— y **los tres suenan**, así que «los clips
+decodificaron» no dice que el juego los use. Medido:
+`DASH salta·muere·moneda·portal·pad·gana → los seis con la suya` y
+`CUBOS pon·sac·ui·nada·fin propias · pal→ui · reloj→oscilador`.
+Más `sonMide(k, ms)`, que **barre el clip entero**: la ventana del analizador son treinta
+milisegundos y una sola lectura compara la cola de un clip contra el ataque de otro.
+
+Y un defecto del récord de CUBOS: `anotaFin` lo guardaba y `pintaIdioma` lo dibujaba, pero
+pintaIdioma corre al arrancar y al cambiar de idioma. Medido, **después de una partida de 195 el menú
+seguía diciendo RÉCORD 0 hasta recargar**. Un número que se guarda y no se muestra no existe.
+
+#### MEDIDO AL CERRAR
+
+**VIGILIA**: 11 de 11 assets y 9 de 9 monstruos con `fallas: []`; **57 de 57 sustos únicos repartidos
+en los 14 cuartos** (de 2 a 6 por cuarto), del segundo 6,5 al 174, huecos de 2,16 a 3,77, **0 mudos y
+0 fuera de cuadro**; chapoteo **1,69 contra 1,69** y resbale **22,1 contra 22,8**; mundo de 14
+cuartos, 130 m y 180,6 s; partida completa terminando en `gana`; 29 llamadas de dibujo.
+**DASH**: auditoría `ok: true` **al 100 % en los dos niveles** y **12 de 12 fases**, 45 llamadas y
+14.650 triángulos. **CUBOS**: el juez ordenando **nada 0 · losa 43 · cubo 40 · torre 67 · casa 64**,
+récord 195 guardado y mostrado, 10 llamadas. **Cero solapamientos** en los cuatro HUD (7 · 5 · 9 · 13
+cajas) y en los cuatro menús. `window.__errs` **vacío en las veintiséis corridas**.
+
+**LO QUE QUEDÓ AFUERA, Y ES HONESTO DECIRLO:** los 24 efectos de CRUCE y DESPEGUE, por falta de
+crédito. Y los tres fondos de pack de AERO (vuelta 126) siguen `ready` en el servidor y sin bajar
+—con la receta del `timeout` de arriba ahora sí se pueden traer.
+
 ### Centésima vigesimosexta vuelta (2026-09-07): **AERO** — los iconos se recortan tal cual salieron, un centro de control propio, la bienvenida, y 49 reglas de CSS que no aplicaban
 
 Nueve pedidos en un mensaje, con nueve capturas de HyperOS: *"se laguea al abrir la barra de aplicaciones
