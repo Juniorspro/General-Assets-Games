@@ -38,10 +38,24 @@ echo "── recursos"
 "$BT/aapt2" compile --dir "$APP/res" -o "$OUT/flat/res.zip"
 
 echo "── enlace"
+# ── EL NÚMERO DE VERSIÓN SUBE SOLO ──
+# El manifiesto decía `versionCode 1` en todas las compilaciones. Android acepta
+# reinstalar la misma versión, pero el instalador de HyperOS/MIUI a veces la
+# rechaza como «no se instaló» sin decir por qué, y de paso no había forma de
+# saber qué compilación tenía puesta el teléfono. Sale de la cantidad de commits:
+# crece con cada vuelta y se puede leer en Ajustes › Apps.
+VC=$(git -C "$AQUI" rev-list --count HEAD 2>/dev/null || echo 1)
+echo "   versionCode $VC"
+# El manifiesto no trae `versionCode` y con `--version-code` de aapt2 el APK
+# seguía diciendo 1 (medido con `dump badging`). Se le escribe el atributo al
+# manifiesto en la salida y se enlaza ése.
+sed -e "s|package=\"ai.rezona.aero\">|package=\"ai.rezona.aero\" android:versionCode=\"$VC\" android:versionName=\"1.$VC\">|" \
+    "$APP/AndroidManifest.xml" > "$OUT/AndroidManifest.xml"
+grep -q "versionCode=\"$VC\"" "$OUT/AndroidManifest.xml" || { echo "el manifiesto no tomó la versión"; exit 1; }
 "$BT/aapt2" link \
   -o "$OUT/base.apk" \
   -I "$PLAT" \
-  --manifest "$APP/AndroidManifest.xml" \
+  --manifest "$OUT/AndroidManifest.xml" \
   -A "$APP/assets" \
   --java "$OUT/gen" \
   --min-sdk-version 26 \

@@ -418,6 +418,56 @@ cajón abierto, los 58 refiltrados por segundo de la deriva y la mitad de la ape
 el `feDisplacementMap` corre en el procesador del WebView —que es lo que la vuelta 123 anotó— el
 escalón 1 lo saca solo en cuanto pierda dos cuadros.
 
+#### Y DESPUÉS, EN LA MISMA VUELTA: EL VIDEO DEL TELÉFONO, Y LA PRIMERA APERTURA QUE PAGABA TODO
+
+El usuario mandó una grabación de pantalla de 1,43 s (88 cuadros a ~60 Hz, 1268×2756) abriendo el
+cajón: *"mira el vídeo y nota el lag que hay al subir"*. Se decodificó con PyAV y se midió la
+**diferencia entre cuadros consecutivos**: un cuadro igual al anterior es un cuadro que el teléfono
+no llegó a dibujar.
+
+| desde | hasta | cuadros congelados |
+|---|---|---|
+| 0,000 s | 0,215 s | **12 = 215 ms**, con el cajón A MITAD de subida y sólo DOS baldosas pintadas |
+| 0,360 | 0,537 | 10 = 177 ms |
+| 0,650 | 0,746 | 5 = 95 ms |
+| 0,795 | 0,908 | 6 = 112 ms |
+
+O sea: la hoja arranca, se clava 215 ms a mitad de camino con la lista vacía, salta al final, y los
+iconos van apareciendo de a uno durante trescientos milisegundos más. Dos causas, y ninguna de las dos
+la veía el banco porque el banco tiene la lista caliente:
+
+1. **LA PRIMERA APERTURA PAGABA TODO EN EL CUADRO DEL DEDO.** Los ciento cincuenta nodos se armaban
+   recién al abrir (130 ms medidos en frío), y cada icono se decodifica **al pintarse** — el navegador
+   lo hace perezosamente, y eso es lo que se ve como iconos que llegan de a uno. Ahora `cajPrepara()`
+   arma la lista **en el ocio, con el cajón cerrado**, y deja decodificados los iconos: los `<img>`
+   del sistema y **también las celdas de los packs**, que van como `background-image` en línea sobre
+   la baldosa — la caché de imágenes se indexa por la URL, así que una `Image` con la misma data URI
+   deja lista también la del fondo. La primera apertura pasa a costar lo que la segunda.
+2. **CIENTO CINCUENTA ANIMACIONES DE ENTRADA SON CIENTO CINCUENTA CAPAS.** Cada `.ap.entra` anima
+   `transform` y `opacity`, y el compositor le da a cada una **su propia capa**: a densidad 3 son
+   unos veinte megas de texturas que reservar, rasterizar y subir a la GPU en el mismo cuadro en que
+   la hoja empieza a moverse — para animar iconos que están dos pantallas por debajo del borde. Ahora
+   entran escalonados **sólo los primeros 28** (cuatro columnas por siete filas); los demás llegan
+   quietos, que es como se ve una lista al scrollearla. Medido: `entran: 26` de 150 (los dos que
+   faltan son encabezados de letra).
+
+Medido con la sonda `cajAbre` sobre 150 apps, tres corridas:
+
+| | ms |
+|---|---|
+| primera apertura, lista en frío | 130 – 150 → **62 – 108** |
+| apertura como antes (repinta, caché caliente) | 43 – 66 |
+| **apertura ahora** (lista prearmada, 28 animaciones) | **9 – 16** |
+
+**Y EL APK NO SE INSTALABA.** Dos cosas a la vez: el manifiesto no traía `versionCode`, así que todas
+las compilaciones eran la versión 1 —y el instalador de HyperOS a veces rechaza reinstalar la misma
+versión con un «no se instaló» sin motivo— y `--version-code` de aapt2 **no lo inyectaba** (medido con
+`dump badging`: seguía diciendo 1). El atributo se escribe ahora en el manifiesto de salida y sale de
+la cantidad de commits (`git rev-list --count`), así que crece con cada vuelta y se puede leer en
+Ajustes › Apps. La llave de firma es la misma desde el 6 de septiembre; si el teléfono tiene una
+instalación firmada con una llave anterior a esa fecha, no hay versión que la actualice: hay que
+desinstalar una vez.
+
 ### Centésima vigesimonovena vuelta (2026-09-08): **AERO** — ciento cincuenta vidrios por cuadro, el resaltado que se encendía solo, y la accesibilidad
 
 Pedido textual: *"va muy lag el menú de cajón de aplicaciones y también ya aparecen remarcadas las
