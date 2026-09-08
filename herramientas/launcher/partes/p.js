@@ -112,6 +112,15 @@ const PERS = [
     lee: () => lee('oscuro', 0), sufijo: ' %',
     pon: v => { guarda('oscuro', v); persOscuro(); } },
 
+  /* ── EL INTERRUPTOR DE LA MEDICIÓN ──
+     No es un ajuste de gusto: es la única forma de contestar, EN EL APARATO DEL
+     DUEÑO, lo que el banco no puede — cuántos cuadros perdió la hoja al viajar.
+     Va al final de la lista y apagado de fábrica. */
+  { tit: 'pMedir', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => MED_ON ? '1' : '0',
+    pon: v => { MED_ON = v === '1' ? 1 : 0; guarda('medir', MED_ON); } },
+
   { tit: 'pIdioma', tipo: 'ops',
     ops: () => [['es', 'Castellano'], ['en', 'English'], ['pt', 'Português']],
     lee: () => LANG,

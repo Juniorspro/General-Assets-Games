@@ -623,9 +623,51 @@ const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
    asentada: abrirla con el botón y soltarla a mitad de un arrastre sin llegar
    al umbral de cierre. Repartido, el segundo se olvida de apagar el escritorio
    y el defecto no se ve nunca —sólo cuesta. */
+/* ── LA ÚNICA MEDICIÓN QUE EL BANCO NO PUEDE DAR ──
+   El banco dibuja por software: sus milisegundos no son los del teléfono, y no
+   expone el gestor de baldosas, así que de `will-change` sólo está medido que
+   se APLICA. Lo que queda por saber —si el rasterizado de la hoja se retiene
+   entre aperturas— sólo lo puede contestar el aparato del dueño.
+   Va apagado de fábrica y detrás de un interruptor: un launcher que le tira
+   números al dueño en cada apertura es peor que uno que tironea. Y cuando está
+   apagado no cuesta un solo `requestAnimationFrame`: la guarda es la primera
+   línea. */
+let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GEN = 0;
+function medArranca(){
+  if (!MED_ON) return;
+  /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
+     `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
+     marca, abrir dos veces seguidas deja DOS bucles empujando al mismo array:
+     cada cuadro entra dos veces y el segundo mide cero. Medido, siete cuadros
+     con mediana 0,0 ms — un número imposible que es la firma exacta del
+     apilado. La marca hace que sólo el último bucle siga vivo. */
+  const gen = ++MED_GEN;
+  MED_T = []; MED_ULT = performance.now(); MED_CORRE = true;
+  const paso = () => {
+    if (gen !== MED_GEN) return;
+    const t = performance.now(); MED_T.push(t - MED_ULT); MED_ULT = t;
+    if (MED_CORRE) requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
+}
+function medTermina(){
+  if (!MED_CORRE) return;
+  MED_CORRE = false; MED_GEN++;
+  /* el primer hueco arranca en el toque y no en un cuadro: no es un cuadro
+     perdido, es el tiempo que pasó desde que se soltó el dedo */
+  const d = MED_T.slice(1);
+  if (d.length < 3) return;
+  const perdidos = d.filter(x => x > 26).length;
+  const o = d.slice().sort((a, b) => a - b);
+  const med = o[o.length >> 1];
+  const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
+  avisa(T('pMedeUno', d.length, med.toFixed(1), p90.toFixed(1), perdidos));
+}
+
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
+  medArranca();
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
@@ -635,6 +677,7 @@ function cajAsienta(){
     caj.classList.remove('abre');
     document.body.classList.remove('cajMueve');
     if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
+    medTermina();
   }, CAJ_ABRE_MS);
 }
 

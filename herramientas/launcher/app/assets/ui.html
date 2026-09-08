@@ -2303,6 +2303,8 @@ const TXT = {
         cgObtur:'Sonido del obturador', cgObturD:'Esta función no está disponible para momentos en vivo',
         cgVol:'Función de los botones de volumen', cgInfo:'Guardar información de la ubicación',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
+        pMedir: 'Medir el deslizamiento del caj\u00f3n',
+        pMedeUno: '{0} cuadros \u00b7 mediana {1} ms \u00b7 p90 {2} \u00b7 {3} perdidos',
         aNombreP: 'Personalizar',
         cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
         fgGenar: 'Generar', fgGenando: 'Generando…', fgGenPh: 'Describí un fondo…', fgGenOk: 'Fondo nuevo', fgNoGen: 'No se pudo generar. Probá de nuevo.', fgSinRed: 'Generar necesita conexión con el sistema', fg_i1: 'acuario con peces y burbujas', fg_i2: 'pasto con rocío al amanecer', fg_i3: 'nubes sobre un cielo celeste', fg_i4: 'isla con una palmera', fg_i5: 'atardecer sobre el mar', fg_i6: 'burbujas de vidrio bajo el agua', fgTit: 'Fondo de pantalla', fgFab: 'De fábrica', fgPropio: 'La tuya',
@@ -2394,6 +2396,8 @@ const TXT = {
         cgObtur:'Shutter sound', cgObturD:'Not available for live moments',
         cgVol:'Volume button action', cgInfo:'Save location information',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
+        pMedir: 'Measure the drawer slide',
+        pMedeUno: '{0} frames \u00b7 median {1} ms \u00b7 p90 {2} \u00b7 {3} dropped',
         aNombreP: 'Personalize',
         cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
         fgGenar: 'Generate', fgGenando: 'Generating…', fgGenPh: 'Describe a wallpaper…', fgGenOk: 'New wallpaper', fgNoGen: 'Could not generate. Try again.', fgSinRed: 'Generating needs the system bridge', fg_i1: 'aquarium with fish and bubbles', fg_i2: 'dewy grass at sunrise', fg_i3: 'clouds over a bright blue sky', fg_i4: 'island with a palm tree', fg_i5: 'sunset over the sea', fg_i6: 'glass bubbles underwater', fgTit: 'Wallpaper', fgFab: 'Default', fgPropio: 'Yours',
@@ -2485,6 +2489,8 @@ const TXT = {
         cgObtur:'Som do obturador', cgObturD:'Este recurso n\u00e3o est\u00e1 dispon\u00edvel para momentos ao vivo',
         cgVol:'Fun\u00e7\u00e3o dos bot\u00f5es de volume', cgInfo:'Salvar informa\u00e7\u00e3o da localiza\u00e7\u00e3o',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
+        pMedir: 'Medir o deslize da gaveta',
+        pMedeUno: '{0} quadros \u00b7 mediana {1} ms \u00b7 p90 {2} \u00b7 {3} perdidos',
         aNombreP: 'Personalizar',
         cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
         fgGenar: 'Gerar', fgGenando: 'Gerando…', fgGenPh: 'Descreva um fundo…', fgGenOk: 'Fundo novo', fgNoGen: 'Não deu para gerar. Tente de novo.', fgSinRed: 'Gerar precisa da ponte com o sistema', fg_i1: 'aquário com peixes e bolhas', fg_i2: 'grama com orvalho ao amanhecer', fg_i3: 'nuvens num céu azul claro', fg_i4: 'ilha com uma palmeira', fg_i5: 'pôr do sol sobre o mar', fg_i6: 'bolhas de vidro debaixo da água', fgTit: 'Papel de parede', fgFab: 'De fábrica', fgPropio: 'Sua',
@@ -5112,9 +5118,51 @@ const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
    asentada: abrirla con el botón y soltarla a mitad de un arrastre sin llegar
    al umbral de cierre. Repartido, el segundo se olvida de apagar el escritorio
    y el defecto no se ve nunca —sólo cuesta. */
+/* ── LA ÚNICA MEDICIÓN QUE EL BANCO NO PUEDE DAR ──
+   El banco dibuja por software: sus milisegundos no son los del teléfono, y no
+   expone el gestor de baldosas, así que de `will-change` sólo está medido que
+   se APLICA. Lo que queda por saber —si el rasterizado de la hoja se retiene
+   entre aperturas— sólo lo puede contestar el aparato del dueño.
+   Va apagado de fábrica y detrás de un interruptor: un launcher que le tira
+   números al dueño en cada apertura es peor que uno que tironea. Y cuando está
+   apagado no cuesta un solo `requestAnimationFrame`: la guarda es la primera
+   línea. */
+let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GEN = 0;
+function medArranca(){
+  if (!MED_ON) return;
+  /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
+     `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
+     marca, abrir dos veces seguidas deja DOS bucles empujando al mismo array:
+     cada cuadro entra dos veces y el segundo mide cero. Medido, siete cuadros
+     con mediana 0,0 ms — un número imposible que es la firma exacta del
+     apilado. La marca hace que sólo el último bucle siga vivo. */
+  const gen = ++MED_GEN;
+  MED_T = []; MED_ULT = performance.now(); MED_CORRE = true;
+  const paso = () => {
+    if (gen !== MED_GEN) return;
+    const t = performance.now(); MED_T.push(t - MED_ULT); MED_ULT = t;
+    if (MED_CORRE) requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
+}
+function medTermina(){
+  if (!MED_CORRE) return;
+  MED_CORRE = false; MED_GEN++;
+  /* el primer hueco arranca en el toque y no en un cuadro: no es un cuadro
+     perdido, es el tiempo que pasó desde que se soltó el dedo */
+  const d = MED_T.slice(1);
+  if (d.length < 3) return;
+  const perdidos = d.filter(x => x > 26).length;
+  const o = d.slice().sort((a, b) => a - b);
+  const med = o[o.length >> 1];
+  const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
+  avisa(T('pMedeUno', d.length, med.toFixed(1), p90.toFixed(1), perdidos));
+}
+
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
+  medArranca();
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
@@ -5124,6 +5172,7 @@ function cajAsienta(){
     caj.classList.remove('abre');
     document.body.classList.remove('cajMueve');
     if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
+    medTermina();
   }, CAJ_ABRE_MS);
 }
 
@@ -6721,6 +6770,15 @@ const PERS = [
   { tit: 'pOscuro', tipo: 'rango', min: 0, max: 70, paso: 5,
     lee: () => lee('oscuro', 0), sufijo: ' %',
     pon: v => { guarda('oscuro', v); persOscuro(); } },
+
+  /* ── EL INTERRUPTOR DE LA MEDICIÓN ──
+     No es un ajuste de gusto: es la única forma de contestar, EN EL APARATO DEL
+     DUEÑO, lo que el banco no puede — cuántos cuadros perdió la hoja al viajar.
+     Va al final de la lista y apagado de fábrica. */
+  { tit: 'pMedir', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => MED_ON ? '1' : '0',
+    pon: v => { MED_ON = v === '1' ? 1 : 0; guarda('medir', MED_ON); } },
 
   { tit: 'pIdioma', tipo: 'ops',
     ops: () => [['es', 'Castellano'], ['en', 'English'], ['pt', 'Português']],
@@ -11128,6 +11186,16 @@ window.__A = {
     else { c.classList.add('tira'); c.style.setProperty('--caj-y', y + 'px'); }
     return { y: c.style.getPropertyValue('--caj-y') || '0px',
              hor: c.classList.contains('hor') };
+  },
+  /* el interruptor de la medición en el teléfono: encenderlo, apagarlo y leer
+     lo que el aviso terminó diciendo */
+  medir(v){
+    if (v !== undefined){ MED_ON = v ? 1 : 0; guarda('medir', MED_ON); }
+    const fila = PERS.filter(x => x.tit === 'pMedir');
+    return { on: MED_ON, fila: fila.length, rot: T('pMedir'),
+             marcada: fila.length ? fila[0].lee() : null,
+             aviso: $('#aviso').textContent,
+             visible: $('#aviso').classList.contains('on') };
   },
   async cajDesliza(){
     verCajon(false);

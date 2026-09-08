@@ -281,6 +281,86 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima tercera vuelta (2026-09-08): **AERO** — el teléfono se mide solo, porque el banco no puede
+
+Pregunta del usuario, dos veces en el mismo mensaje: *"no sería mejor cambiar el motor grafico de la
+app?"*.
+
+#### LA RESPUESTA CORTA ES NO, Y LA LARGA ESTÁ MEDIDA EN LAS TRES VUELTAS ANTERIORES
+
+Las vueltas 130, 131 y 132 encontraron **cuatro causas del tirón y ninguna era del motor**: eran
+pasadas de filtro que el launcher pedía y no necesitaba. Medido con el A/B sobre el mismo binario,
+a los 90 ms del deslizamiento con 150 apps y el pack `cristal`:
+
+| | pasadas de vidrio | píxeles filtrados por cuadro |
+|---|---|---|
+| control | **8** | **478.305** |
+| ahora | **0** | **0** |
+
+Y el deslizamiento, con la sonda `cajDesliza`: **28 cuadros, mediana 16,6 ms**, contra los 3-4
+cuadros con mediana 143-153 de los que se partió. **Un motor que a esta altura hace 16,6 ms de
+mediana no es el cuello de botella.**
+
+**Y EL WEBVIEW NO SE ELIGIÓ POR PEREZA, está escrito en la vuelta 115**: lo que se pidió es vidrio
+líquido —refracción de lo que hay detrás, especular en el canto—, y en Android nativo eso es
+`RenderEffect`, que existe **desde API 31** y deja afuera a media base instalada, más un shader AGSL
+por pieza —y AGSL es **API 33**—. En un WebView es `backdrop-filter` con un `feDisplacementMap` y
+anda **desde Android 8**. O sea que un puerto nativo empieza perdiendo el efecto que motivó el
+proyecto en los teléfonos donde más falta hace.
+
+Lo que costaría, y es concreto: 24 partes, tres idiomas, nueve packs de iconos, la bienvenida, el
+centro de control, la lista de notificaciones, la cámara, el generador de fondos, el asistente, el
+agua —que es WebGL y pasaría a `SurfaceView`—, la mascota —que es three.js con 23 huesos— y **las
+sondas de `z.html`, que son la mitad del valor del repo**. Nada de eso arregla un problema que ya
+mide cero.
+
+#### LO ÚNICO QUE UN MOTOR DISTINTO PODRÍA COMPRAR ES LO QUE EL BANCO NO PUEDE MEDIR
+
+La vuelta 132 lo dejó anotado: **no se pudo comprobar que el rasterizado de la hoja se retenga entre
+aperturas**. El banco dibuja por software y no expone el gestor de baldosas, así que de
+`will-change` está medido que se **aplica** y nada más. Ésa es la única hipótesis viva, y no se
+contesta con una discusión: se contesta con el teléfono del dueño.
+
+Así que entra la medición, en el aparato: **un interruptor en Personalizar** que cuenta los cuadros
+del deslizamiento y los dice en el aviso — *«28 cuadros · mediana 16,6 ms · p90 16,9 · 2 perdidos»*.
+Tres decisiones:
+
+- **Va apagado de fábrica y detrás de un interruptor.** Un launcher que le tira números al dueño en
+  cada apertura es peor que uno que tironea.
+- **Apagado no cuesta un solo `requestAnimationFrame`**: la guarda es la primera línea de
+  `medArranca`. Medido: con el interruptor en 0, el aviso **no se actualiza** y se apaga solo.
+- **Y se engancha en `cajAsienta`**, que es el único sitio que ya sabe cuándo empieza y cuándo
+  termina el viaje —abrir, cerrar y soltar un arrastre—. Repartido en tres, el próximo camino que se
+  agregue queda sin medir.
+
+#### UN DEFECTO PROPIO, Y LO CANTÓ UN NÚMERO IMPOSIBLE
+
+La primera versión devolvió **siete cuadros con mediana 0,0 ms**. Un cuadro no dura cero. La causa:
+`cajAsienta` corre al abrir **y** al cerrar, así que dos aperturas seguidas dejaban **dos bucles**
+empujando al mismo array — cada cuadro entraba dos veces y el segundo medía cero. Con una marca de
+generación (`MED_GEN`) sólo el último bucle sigue vivo: medido después, mediana **32,0 ms** en el
+banco, que es un número plausible para render por software.
+Es la misma familia de siempre en este repo: **la sonda estaba mal antes que el juego, y la firma
+fue un resultado demasiado redondo.**
+
+#### MEDIDO AL CERRAR
+
+Interruptor: la fila aparece en Personalizar en los tres idiomas, `marcada` sigue al valor, encendido
+el aviso dice los cuatro números y apagado **no se actualiza** (`visible:false`). Regresión intacta:
+deslizamiento **0 pasadas / 0 px** con `body` en `icoTex cajMueve caj`, asentado **0 / 0** con
+`cajQ`, cerrando **0** con `cajMueve`, cerrado con `#capa` visible y los tres de siempre arriba
+—`#reloj.vid.refr` 43.193 · `#dock.vid.refr` 36.096 · `#buscaCaja.vid.refr` 17.112 = **96.401**, el
+mismo permanente de la vuelta 131—. Gesto abajo desde el escritorio limpio abre el centro con
+**16 botones · 1 llave · 10 atajos** y **0 ondas de agua**; gesto arriba abre el cajón. Riel de 17
+letras, `letra('S')` mirando la S, **9 packs**, mascota con 23 huesos y 5.541 triángulos, dock de 4 y
+reja 4×6. `window.__errs` **vacío en las cinco corridas**.
+
+**LO QUE SIGUE SIN PODERSE COMPROBAR DESDE ACÁ:** exactamente lo mismo que antes, y por eso existe el
+interruptor. Si el teléfono devuelve mediana cerca de 16,7 con pocos cuadros perdidos, el motor no es
+el problema y la discusión se cierra con un número; si devuelve medianas de 30 o 40 con muchos
+perdidos, ahí sí hay algo que el WebView no está pudiendo y **recién entonces** vale la pena hablar
+de otro motor — con el dato en la mano y no antes.
+
 ### Centésima trigésima segunda vuelta (2026-09-08): **AERO** — el escritorio deja de filtrar mientras la hoja viaja, y las baldosas no desenfocan lo que ya está desenfocado
 
 Pedido textual, dos veces en el mismo mensaje: *"al abrir el cajón sigue yendo MUY LAGUEADO"*. O
