@@ -962,10 +962,17 @@ const PACKS = [
      es la regla de siempre acá: lo generado no reemplaza nada hasta que llega. */
   { id: 'bliss',   fondo: 'img', img: 'bliss',   relieve: true,  forma: 'cuad',
     tinte: null,   glifo: '#fff',   css: 'pkBliss' },
+  /* ── ESTOS DOS TIENEN CARA PROPIA **Y** TABLA GENERADA ──
+     `gen` no obliga a tener celdas: dice cuál tabla mirar. Mientras no haya
+     ninguna, `icoAero` sigue derecho por el camino de siempre y se ven como
+     hasta ahora; el día que las hojas de `tinta` o `neon` se horneen, cada app
+     con celda pasa sola a la celda de verdad y la que no la tenga se queda con
+     SU cara dibujada. O sea que un pack a medio generar nunca se ve como dos
+     packs mezclados, que es el defecto que la vuelta 126 midió con `firmas`. */
   { id: 'tinta',   fondo: 'img', img: 'tinta',   relieve: false, forma: 'cuad',
-    tinte: null,   glifo: '#fff',   css: 'pkTinta' },
+    tinte: null,   glifo: '#fff',   css: 'pkTinta',  gen: 'tinta' },
   { id: 'neon',    fondo: 'img', img: 'neon',    relieve: true,  forma: 'cuad',
-    tinte: null,   glifo: 'acento', css: 'pkNeon' },
+    tinte: null,   glifo: 'acento', css: 'pkNeon',   gen: 'neon' },
   /* ── EL PACK GENERADO: LA CELDA TAL CUAL SALIÓ ──
      Pedido textual: «literalmente podías simplemente recortar cada ícono
      generado con Rezona y ponerlos como íconos en vez de reconstruirlo a mano».
@@ -977,7 +984,21 @@ const PACKS = [
      nueve marcas volvieron mal; pedidos como símbolos genéricos, los nueve
      salieron bien y en orden. Cada celda se describe por su geometría —«una
      nota musical blanca», «un avión de papel»— que es además lo que el logo ES. */
-  { id: 'generado', gen: true },
+  { id: 'generado', gen: 'generado', cae: 'aero' },
+  /* ── «PURO CRISTAL», Y ES EL PEDIDO TEXTUAL ──
+     *«el único diferente es el personalizados, que ahí sí descargaste y te
+     cortaste; quiero que todos sean así pero con otras estéticas como puro
+     cristal»*. Tenía razón y se puede decir con un número: de los siete packs,
+     UNO era un juego de celdas generadas y recortadas y los otros seis eran
+     tratamientos de CSS sobre un glifo dibujado — o sea que la lista ofrecía
+     siete opciones y tenía dos familias.
+     Éste es celdas de verdad: vidrio óptico incoloro con el canto biselado y el
+     símbolo TALLADO adentro. Y cae a `vidrio` y no a `aero`, que es la parte
+     que importa: una celda que todavía no llegó tiene que salir con la cara de
+     SU familia, y `vidrio` es el mismo vidrio sin color hecho por CSS. Cayendo
+     al Aero —que es turquesa y con gotas— una app sin celda se vería como un
+     pack a medio poner, que es justo lo que se vino a arreglar. */
+  { id: 'cristal', gen: 'cristal', cae: 'vidrio' },
   { id: 'nativo',  nativo: true }
 ];
 const PACK_POR_ID = (() => { const m = {}; for (const p of PACKS) m[p.id] = p; return m; })();
@@ -1001,7 +1022,8 @@ function icoAero(b, pkg, nombre){
      brillo, así que todo lo de abajo —el fondo de familia, el vidrio, el relieve
      del glifo— sería una segunda baldosa dibujada encima de la primera. */
   if (P.gen){
-    const im = (typeof ICOGEN !== 'undefined') ? ICOGEN[g] : null;
+    const tabla = (typeof ICOGEN_PACKS !== 'undefined') ? (ICOGEN_PACKS[P.gen] || {}) : {};
+    const im = tabla[g];
     if (im){
       b.classList.add('aero', 'gen');
       b.style.backgroundImage = 'url(' + im + ')';
@@ -1009,11 +1031,15 @@ function icoAero(b, pkg, nombre){
       b.style.backgroundPosition = 'center';
       return true;
     }
-    /* ── SIN CELDA, EL TRATAMIENTO AERO; NO EL ICONO DEL SISTEMA ──
+    /* ── SIN CELDA, LA CARA DE SU PROPIA FAMILIA; NO EL ICONO DEL SISTEMA ──
        Una app sin celda generada al lado de veinte que sí la tienen se ve como
-       un pack a medio poner. Cayendo al Aero sigue siendo una baldosa de vidrio
-       con su símbolo blanco, o sea la misma familia. */
-    P = PACK_POR_ID.aero;
+       un pack a medio poner. Un pack que YA tiene cara dibujada (`css` o una
+       imagen de fondo) se queda con la suya y sigue por el camino de abajo; los
+       dos que no tienen ninguna —`generado` y `cristal`, que son celdas y nada
+       más— declaran a quién caer, y no puede ser el mismo para los dos: el
+       generado cae al Aero, que es turquesa y con gotas, y el de cristal al
+       vidrio puro, que es su mismo vidrio sin color hecho por CSS. */
+    if (P.cae) P = PACK_POR_ID[P.cae] || PACK_POR_ID.aero;
   }
 
   const sv = glifoSvg(g, P); if (!sv) return false;

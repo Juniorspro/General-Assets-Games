@@ -46,8 +46,9 @@ def mascara(l):
     return m.resize((l, l), Image.LANCZOS)
 
 
-def hornea(nombre, hoja):
-    ruta = os.path.join(CRUDO, nombre + '.png')
+def hornea(pack, nombre, hoja):
+    ruta = os.path.join(CRUDO, ('%s.png' % nombre) if pack == 'generado'
+                        else 'ico_%s_%s.png' % (pack, nombre))
     if not os.path.exists(ruta):
         return {}
     im = Image.open(ruta).convert('RGB')
@@ -66,22 +67,39 @@ def hornea(nombre, hoja):
 
 
 if __name__ == '__main__':
+    sys.path.insert(0, RAIZ)
+    import recetas
     hojas = json.load(open(os.path.join(CRUDO, 'icogen.json')))
-    todo = {}
-    for n in sorted(hojas):
-        r = hornea(n, hojas[n])
-        if r:
-            print('%s  %d celdas  %d KB' % (n, len(r), sum(len(v) for v in r.values()) // 1024))
-        todo.update(r)
-    if not todo:
+    packs = {}
+    for pack in sorted(recetas.RECETAS):
+        todo = {}
+        for n in sorted(hojas):
+            r = hornea(pack, n, hojas[n])
+            if r:
+                todo.update(r)
+        if todo:
+            packs[pack] = todo
+            print('%-9s %3d de %d celdas  %d KB' % (pack, len(todo), 207,
+                  sum(len(v) for v in todo.values()) // 1024))
+    if not packs:
         sys.exit('no hay una sola hoja en crudo/')
-    li = ["  %s: 'data:image/webp;base64,%s'" % (k, v) for k, v in todo.items()]
-    txt = ("/* ═══════════ EL PACK GENERADO ═══════════\n"
-           "   %d iconos recortados de las hojas de Rezona. NO son glifos\n"
-           "   dibujados por código: es la celda de la hoja tal cual salió,\n"
-           "   recortada a su baldosa y enmascarada al canto de `.baldosa`.\n"
+    cuerpo = []
+    for pack in sorted(packs):
+        li = ["    %s: 'data:image/webp;base64,%s'" % (k, v) for k, v in packs[pack].items()]
+        cuerpo.append('  %s: {\n%s\n  }' % (pack, ',\n'.join(li)))
+    txt = ("/* ═══════════ LOS PACKS GENERADOS ═══════════\n"
+           "   Celdas recortadas de las hojas de Rezona. NO son glifos dibujados\n"
+           "   por código: es la celda de la hoja tal cual salió, recortada a su\n"
+           "   baldosa y enmascarada al canto de `.baldosa`.\n"
+           "\n"
+           "   %s\n"
+           "\n"
            "   Lo escribe `hornear_icogen.py`; no se edita a mano. */\n"
-           "const ICOGEN = {\n%s\n};\n") % (len(todo), ',\n'.join(li))
+           "const ICOGEN_PACKS = {\n%s\n};\n"
+           "/* el pack original se sigue llamando así en el resto del código */\n"
+           "const ICOGEN = ICOGEN_PACKS.generado || {};\n") % (
+              ' · '.join('%s %d' % (p, len(packs[p])) for p in sorted(packs)),
+              ',\n'.join(cuerpo))
     dst = os.path.join(RAIZ, 'partes', 'i_icogen.js')
     open(dst, 'w').write(txt)
-    print('%d iconos  %d KB en base64' % (len(todo), len(txt) // 1024))
+    print('%d packs  %d KB en base64' % (len(packs), len(txt) // 1024))

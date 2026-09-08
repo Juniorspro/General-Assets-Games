@@ -1101,10 +1101,19 @@ window.__A = {
     for (const sel of q){ const e = $(sel); if (!e) continue;
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) c.push({ q: sel, x: r.left, y: r.top, w: r.width, h: r.height }); }
+    /* ── UN PADRE NO CHOCA CON SU HIJO, Y ESO SE PREGUNTA, NO SE ENUMERA ──
+       Acá había una lista a mano con `#camBarra` y sus tres hijos. Desde la
+       vuelta 124 los chips de zoom viven ADENTRO del visor a propósito, y esa
+       pareja no estaba en la lista: la sonda venía informando
+       `#camVisorC×#camZoom` como choque desde entonces. Una prueba que nunca
+       puede dar limpio deja de detectar el choque de verdad, que es todo su
+       trabajo. `contains` lo contesta para cualquier anidado, también el que se
+       agregue mañana. */
     const ch = [];
     for (let i = 0; i < c.length; i++) for (let j = i+1; j < c.length; j++){
       const a = c[i], b = c[j];
-      if (a.q === '#camBarra' && ['#camThumb','#camDisp','#camFlip'].indexOf(b.q) >= 0) continue;
+      const ea = $(a.q), eb = $(b.q);
+      if (ea.contains(eb) || eb.contains(ea)) continue;
       if (a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h) ch.push(a.q+'×'+b.q);
     }
     const fuera = c.filter(e => e.x < -1 || e.y < -1 || e.x+e.w > innerWidth+1 || e.y+e.h > innerHeight+1)
@@ -1231,19 +1240,60 @@ window.__A = {
   bvSig(){ $('#bvSig').click(); return BV_PASO; },
   bvCerrar(){ bvCierra(); return true; },
   packs(){ return { hoy: packHoy().id, todos: PACKS.map(p => p.id) }; },
+
+  /* ── LA BAJADA: LO QUE HAY QUE PODER MEDIR ES QUE NO BLOQUEA ──
+     Devuelve cuántos milisegundos se quedó el hilo de JS adentro de la llamada
+     y cuántas veces late un `setInterval` mientras la red trabaja. Con el
+     puente síncrono lo primero era el tiempo entero de la descarga —hasta 45,7
+     segundos medidos contra el generador de verdad— y lo segundo, cero. */
+  async bajada(){
+    const t0 = performance.now();
+    const p = fgGenera('acuario');
+    const bloqueo = performance.now() - t0;
+    let late = 0;
+    const iv = setInterval(() => late++, 20);
+    const bt = $('#fgGenB');
+    const enVuelo = { boton: bt ? bt.textContent : null,
+                      cancel: $('#fgGenX') ? getComputedStyle($('#fgGenX')).display : null };
+    await p;
+    clearInterval(iv);
+    return { msBloqueado: +bloqueo.toFixed(1), latidosMientrasBajaba: late,
+             enVuelo: enVuelo, alTerminar: bt ? bt.textContent : null,
+             fondo: lee('fondoSel', 'fab') };
+  },
+
+  bajaAsincHay(){ return typeof AND !== 'undefined' && AND
+                     && typeof AND.bajaAsinc === 'function'; },
+  /* arranca y NO espera: sirve para el puente que no contesta nunca —y así se
+     puede medir el cancelar— y para el APK viejo, que ni siquiera arranca */
+  bajaPide(){
+    fgGenera('acuario');
+    const bt = $('#fgGenB'), av = $('#aviso');
+    return { gen: FG_GEN, boton: bt ? bt.textContent : null,
+             cancel: $('#fgGenX') ? getComputedStyle($('#fgGenX')).display : null,
+             aviso: av ? av.textContent : null };
+  },
+  bajaCancela(){ fgCancela(); return { gen: FG_GEN, pend: Object.keys(FG_BAJAS).length }; },
   /* ── CUÁNTAS APPS TIENEN CELDA GENERADA, Y CUÁLES NO ──
      Un pack generado que le cae a la mitad de las apps se ve como dos packs
      mezclados, así que el número que importa no es cuántas celdas se hornearon
      sino cuántas ALCANZAN a una app instalada. */
-  gen(){
-    const hay = typeof ICOGEN !== 'undefined' ? ICOGEN : {};
-    const con = [], sin = [];
-    for (const a of APPS){
-      const g = glifoDe(a.p, a.n);
-      (g && hay[g] ? con : sin).push(a.n);
-    }
-    return { celdas: Object.keys(hay).length, apps: APPS.length,
-             con: con.length, sin: sin.slice(0, 12) };
+  gen(id){
+    const T = (typeof ICOGEN_PACKS !== 'undefined') ? ICOGEN_PACKS : {};
+    const uno = p => {
+      const hay = T[p] || {};
+      const con = [], sin = [];
+      for (const a of APPS){
+        const g = glifoDe(a.p, a.n);
+        (g && hay[g] ? con : sin).push(a.n);
+      }
+      return { celdas: Object.keys(hay).length, apps: APPS.length,
+               con: con.length, sin: sin.slice(0, 12) };
+    };
+    if (id) return uno(id);
+    const r = {};
+    for (const p of Object.keys(T)) r[p] = uno(p);
+    return r;
   },
   pack(id){
     guarda('icoPack', id); ICO_CACHE_LIMPIA(); rejaRepinta();

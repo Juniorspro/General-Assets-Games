@@ -281,6 +281,133 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima vigesimoctava vuelta (2026-09-08): **AERO** — la descarga congelaba el launcher 45 segundos, y los packs de iconos pasan a ser celdas generadas
+
+Pedido textual: *"hey mejora el aero OS y arregla los Bugs como que no me deja descargar, el coso este
+de los íconos el único diferente es el personalizados que ahí si descargaste y te cortaste, quiero que
+todos sean así pero con otras estéticas como puro cristal"*. Las dos cosas eran ciertas y las dos se
+pueden decir con números.
+
+#### «NO ME DEJA DESCARGAR»: LA LLAMADA ERA SÍNCRONA Y TARDABA HASTA 45,7 SEGUNDOS
+
+El generador de fondos llamaba a `AND.baja(url)` y esperaba el `return`. **Una llamada a
+`@JavascriptInterface` es SÍNCRONA**, y el comentario que había en `Puente.baja` decía que esperar la
+red ahí *"no congela la pantalla"*. Es media verdad y era el defecto: el hilo de la **interfaz de
+Android** no se bloquea, pero el que llama es **JavaScript**, y ese hilo es el que repinta la página,
+atiende el dedo y dibuja el agua.
+
+Medido contra Pollinations de verdad, nueve pedidos seguidos:
+
+| | |
+|---|---|
+| 200 con imagen | **6 de 9** |
+| **500 con un 429 adentro** (`community_model_rate_limit`) | **3 de 9** |
+| tiempos | **1,7 · 2,9 · 3,5 · 4,0 · 41,0 · 44,5 · 45,7 s** |
+
+O sea que tocar GENERAR dejaba el launcher tildado casi un minuto —y el botón **ni siquiera llegaba a
+decir «generando»**, porque el repintado necesita justamente el hilo que quedó bloqueado—. Desde
+afuera eso es exactamente *«no me deja descargar»*. Y **un tercio de los intentos se informaba como
+«no se pudo generar» sobre un servidor que estaba a punto de contestar bien**.
+
+Cuatro cosas, y ninguna es subir un timeout:
+
+1. **`bajaAsinc(id, url)`**: la red va en un hilo aparte y la respuesta vuelve por
+   `window.__bajaFin(id, dataURI, motivo)`, que es el mismo camino que ya usan los insets y el
+   teclado.
+2. **Reintenta, y sólo lo que vale la pena reintentar.** `bajaUna` devuelve un motivo —`ok` · `red` ·
+   `servidor` · `no` · `grande`— y sólo `servidor` y `red` se repiten, hasta tres veces con 1,2 s de
+   pausa. **Un 200 con `content-type: application/json` también cuenta como `servidor`**: así es como
+   este generador informa que está ocupado.
+3. **El motivo llega hasta el cartel.** Antes los cuatro modos de falla decían la misma frase. Ahora
+   son tres distintas —«el generador está ocupado», «sin internet», «no se pudo generar»— y eso no es
+   cosmético: la primera se arregla esperando un minuto y la segunda no.
+4. **Y hay CANCELAR, más un segundero en el botón.** Cuarenta y cinco segundos con un botón que dice
+   «Generando…» y no cambia se leen a colgado. Cancelar es olvidarse de la bajada, no interrumpir la
+   red: el hilo de Java termina igual y su respuesta cae en un `FG_BAJAS` que ya no la tiene.
+
+**Y EL APK VIEJO NO CAE AL SÍNCRONO.** `bajaAsinc` puede no existir; ahí se avisa *«actualizá la
+app»* y no se llama a `baja`. Un launcher tildado cuarenta y cinco segundos es peor que un cartel que
+dice qué hacer.
+
+Medido con el puente de mentira, por el mismo camino que usa el dedo:
+
+| | antes | ahora |
+|---|---|---|
+| ms que el hilo de JS se queda adentro de la llamada | hasta **45.700** | **0,1 a 0,5** |
+| latidos de un `setInterval` de 20 ms mientras bajaba | 0 | **125** |
+| el botón, en vuelo | «Generar» | **«Generando… 0s»** con CANCELAR visible |
+
+Y los cinco caminos, uno por uno: imagen buena → el fondo queda puesto; `servidor` → *«el generador
+está ocupado»*; `red` → *«sin internet»*; cancelar → `gen:false, pend:0`; sin `bajaAsinc` →
+*«actualizá la app»*; sin puente → *«necesita conexión con el sistema»*.
+
+**Y VA CON LAMBDAS Y NO CON CLASES ANÓNIMAS**, que en este proyecto no es estilo: `d8` 8.2.2 —el único
+que hay, porque `maven.google.com` no está en la lista blanca del proxy— revienta al dexear ciertas
+clases internas anónimas con un NullPointerException que no dice la línea. Ya costó una vuelta en la
+115 y otra en la 124. Comprobado sobre el dex compilado: `bajaAsinc`, `bajaUna` y los dos
+`lambda$bajaAsinc$` están adentro.
+
+#### LOS PACKS: SIETE OPCIONES Y DOS FAMILIAS
+
+*«El único diferente es el personalizados»* — y es literal. De los siete packs, **uno** era un juego
+de celdas generadas y recortadas y los otros seis eran **tratamientos de CSS sobre un glifo dibujado
+por código**. La lista ofrecía siete opciones y tenía dos familias.
+
+Entra **`cristal`**, que es el que se pidió con todas las letras: vidrio óptico incoloro con el canto
+biselado y el símbolo **tallado adentro**, no pintado encima. El bisel es lo que lo hace leer a pieza
+de vidrio y no a rectángulo translúcido — que es lo que el `backdrop-filter` del CSS ya daba, o sea
+que sin él este pack no aportaría nada nuevo.
+
+**LA LISTA DE SÍMBOLOS ES UNA SOLA, Y ESO ES LO QUE HACE QUE UN PACK CUESTE 23 PEDIDOS Y NO 207.**
+Las 207 celdas de `crudo/icogen.json` están escritas como `<símbolo>, on a <color> tile`: la primera
+mitad es QUÉ es el icono y la segunda CÓMO se ve la baldosa. **Las 207 cumplen el patrón, medido**,
+así que una expresión las parte y el símbolo se reusa entero en cada pack; lo único que cambia es la
+receta. Con una lista por pack, arreglar un símbolo en uno lo deja mal en los otros tres — y eso no
+falla: sale distinto.
+
+`recetas.py` tiene las cuatro recetas y `pedir_icogen.py <pack>` / `estado_icogen.py <pack> --traer` /
+`hornear_icogen.py` hacen el resto. **`tinta` y `neon` ya declaran su tabla**: mientras no haya celdas
+siguen viéndose como hasta ahora, y el día que se horneen cada app con celda pasa sola a la celda de
+verdad. Un pack a medio generar nunca se ve como dos packs mezclados.
+
+**Y EL RESPALDO ES DE CADA PACK, NO UNO PARA TODOS.** Una app sin celda al lado de veinte que sí la
+tienen se ve como un pack a medio poner. Un pack con cara dibujada se queda con la suya; los dos que
+son celdas y nada más declaran a quién caer, y **no puede ser el mismo**: el generado cae al Aero
+—turquesa, con gotas— y el de cristal al **vidrio puro**, que es su mismo vidrio sin color hecho por
+CSS.
+
+Medido en la bienvenida, que es donde la vuelta 126 puso la prueba: **8 firmas distintas de 8**. Y las
+ocho filas fotografiadas una al lado de la otra, más el cajón entero con `cristal` y con `generado`
+para comparar las dos familias.
+
+#### DOS DEFECTOS DE MEDICIÓN, Y UNO ERA MÍO DE ESTA MISMA VUELTA
+
+- **`camChoques` informaba un choque que no existe desde la vuelta 124.** Tenía una lista a mano con
+  `#camBarra` y sus tres hijos, y desde que los chips de zoom viven **adentro** del visor esa pareja
+  no estaba: la sonda venía devolviendo `#camVisorC×#camZoom` desde entonces. **Una prueba que nunca
+  puede dar limpio deja de detectar el choque de verdad**, que es todo su trabajo. Ahora pregunta
+  `contains`, que contesta para cualquier anidado y también para el que se agregue mañana.
+- **Y `estado_icogen.py` bajaba las hojas y no las copiaba nunca.** `fetch_generated_asset` escribe
+  respetando el `output_path`, o sea en `<carpeta>/assets/x-g1.png`, y yo buscaba el archivo por su
+  `basename`. Nunca lo encontraba: **volvía a bajar la misma hoja en cada vuelta** —noventa segundos
+  cada una— y no dejaba un solo archivo en `crudo/`.
+
+**Y DOS QUE PARECÍAN DEFECTOS Y NO LO ERAN, comprobados antes de «arreglarlos»:** el centro de control
+daba `visible: -11` porque la sonda medía a los 300 ms y la transición dura 340 (a los 900 da 550); y
+el riel del cajón daba `letras: []` porque la medición caía **con el filtro de búsqueda puesto**, que
+es cuando el riel se esconde a propósito — borrando el filtro vuelve a 17 letras.
+
+#### LO QUE QUEDÓ AFUERA, Y HAY QUE DECIRLO
+
+**El crédito se acabó a mitad del pack.** De las 23 hojas de `cristal` salieron **13**; las otras diez
+devolvieron `CREDIT_INSUFFICIENT`, que es terminal. Higgsfield también está en **0 créditos**. Así que
+`tinta` y `neon` quedan con las recetas escritas y la cañería lista —son un comando cada uno— y
+`cristal` sale con las celdas que hay y el resto cayendo a vidrio puro, que es su misma familia.
+
+Y los tres fondos de pack de la vuelta 126 (bliss, tinta, neon) **quedaron sin `task_id` en el repo**:
+sólo vivían en el contexto de aquella sesión. No se pueden traer y no hace falta — `tinta` y `neon`
+están ahora en el camino generado y `bliss` se queda con su cara dibujada.
+
 ### Centésima vigesimoséptima vuelta (2026-09-08): **VIGILIA · DASH · CRUCE · DESPEGUE · CUBOS** — quedarse quieto deja de ganar, y el menú deja de tapar el juego
 
 Cinco líneas del jefe del usuario, relevadas textuales: *"Rotor Dash: need better HUD and menu; the

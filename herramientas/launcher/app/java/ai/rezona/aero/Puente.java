@@ -553,32 +553,102 @@ public class Puente {
    * equivocada se traga la memoria del launcher.
    */
   @JavascriptInterface public String baja(String url) {
+    return bajaUna(url, null);
+  }
+
+  /* ── Y LA QUE DE VERDAD SE USA ES ESTA, PORQUE LA DE ARRIBA CONGELA ──
+   *
+   * El comentario que estaba acá decía que esperar la red en el hilo del puente
+   * «no congela la pantalla». Es media verdad y era el defecto: el hilo de la
+   * INTERFAZ de Android no se bloquea, pero el que llama es JavaScript y una
+   * llamada a `@JavascriptInterface` es SÍNCRONA — el hilo de JS del WebView se
+   * queda esperando el `return`, y ese hilo es el que dibuja la página, atiende
+   * el dedo y corre el agua. Medido contra el generador de verdad, nueve
+   * pedidos seguidos: seis contestaron una imagen y tres un 500, y los tiempos
+   * fueron de 1,7 a **45,7 segundos**. O sea que tocar GENERAR dejaba el
+   * launcher tildado casi un minuto — y el botón ni siquiera llegaba a decir
+   * «generando», porque el repintado necesita justamente el hilo que quedó
+   * bloqueado. Desde afuera eso es «no me deja descargar».
+   *
+   * Acá la red va en un hilo aparte y la respuesta vuelve por
+   * `window.__bajaFin(id, dataURI, motivo)`, igual que los insets y el teclado.
+   *
+   * ── Y LOS 500 SE REINTENTAN, PORQUE SON TRANSITORIOS ──
+   * Los tres que fallaron devolvieron un 500 con un 429 adentro
+   * (`community_model_rate_limit`) y el pedido siguiente anduvo. Sin reintento,
+   * un tercio de los intentos se informaba como «no se pudo generar» sobre un
+   * servicio que estaba a punto de contestar bien.
+   */
+  /* Va con lambdas y NO con clases anónimas, que es lo que usa el resto de este
+     archivo y no es una preferencia de estilo: `d8` 8.2.2 —el único que hay en
+     este contenedor, y `maven.google.com` no está en la lista blanca del
+     proxy— revienta al dexear ciertas clases internas anónimas con un
+     NullPointerException que no dice ni la línea. Ya costó una vuelta con
+     `Principal$1` en la 115 y otra en la 124. */
+  @JavascriptInterface public void bajaAsinc(final String id, final String url) {
+    new Thread(() -> {
+      String[] motivo = new String[1];
+      String d = "";
+      for (int i = 0; i < 3 && d.isEmpty(); i++) {
+        if (i > 0) { try { Thread.sleep(1200); } catch (InterruptedException e) { } }
+        d = bajaUna(url, motivo);
+        /* 'no' y 'grande' no son transitorios: reintentarlos es esperar por nada */
+        if ("no".equals(motivo[0]) || "grande".equals(motivo[0])) break;
+      }
+      final String dd = d;
+      final String mm = motivo[0] == null ? "no" : motivo[0];
+      /* con el `esc` de este mismo archivo y no con `org.json`: el dato es un
+         data URI y un identificador, o sea sólo caracteres de base64 */
+      web.post(() -> web.evaluateJavascript("window.__bajaFin && __bajaFin(\""
+          + esc(id) + "\",\"" + esc(dd) + "\",\"" + esc(mm) + "\")", null));
+    }).start();
+  }
+
+  /* `motivo` es una casilla de salida y puede venir en null: 'ok' · 'red' (no
+     conectó o cortó) · 'servidor' (5xx o 429, o sea reintentable) · 'no' (no es
+     una imagen, o la URL no sirve) · 'grande' (pasó el tope). Distinguir
+     'servidor' de 'no' es lo único que hace que el reintento tenga sentido. */
+  private String bajaUna(String url, String[] motivo) {
+    if (motivo != null) motivo[0] = "no";
     if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) return "";
     java.net.HttpURLConnection c = null;
     try {
       c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
       c.setConnectTimeout(15000);
-      c.setReadTimeout(90000);
+      /* 60 y no 90: el peor caso medido del generador es 45,7 s, y con tres
+         intentos un techo de 90 son cuatro minutos y medio de espera. */
+      c.setReadTimeout(60000);
       c.setInstanceFollowRedirects(true);
       c.setRequestProperty("User-Agent", "AeroLauncher/1.0");
-      if (c.getResponseCode() / 100 != 2) return "";
+      int cod = c.getResponseCode();
+      if (cod / 100 != 2) {
+        if (motivo != null) motivo[0] = (cod >= 500 || cod == 429) ? "servidor" : "no";
+        return "";
+      }
       String tipo = c.getContentType();
-      if (tipo == null || !tipo.startsWith("image/")) return "";
+      if (tipo == null || !tipo.startsWith("image/")) {
+        /* el generador contesta los errores con 200 y JSON: eso también es
+           «el servidor está ocupado», no «la URL no sirve» */
+        if (motivo != null) motivo[0] = (tipo != null && tipo.contains("json")) ? "servidor" : "no";
+        return "";
+      }
       java.io.InputStream in = c.getInputStream();
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       byte[] buf = new byte[16384];
       int n, total = 0;
       while ((n = in.read(buf)) > 0) {
         total += n;
-        if (total > 4 * 1024 * 1024) return "";
+        if (total > 4 * 1024 * 1024) { in.close(); if (motivo != null) motivo[0] = "grande"; return ""; }
         out.write(buf, 0, n);
       }
       in.close();
       int cp = tipo.indexOf(';');
       if (cp > 0) tipo = tipo.substring(0, cp);
+      if (motivo != null) motivo[0] = "ok";
       return "data:" + tipo + ";base64,"
            + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP);
     } catch (Exception e) {
+      if (motivo != null) motivo[0] = "red";
       return "";
     } finally {
       if (c != null) try { c.disconnect(); } catch (Exception e) { }
