@@ -8,10 +8,20 @@ Cuenta `Holasoyjuniors365@gmail.com` · account id `65d82a1d3c6b280cf892511df290
 |---|---|
 | `iblo-eventos` | https://iblo-eventos.pages.dev |
 
-Se despliega subiendo la carpeta ya armada, sin build:
+Se despliega subiendo la carpeta ya armada, sin build. Con un comando:
 
 ```sh
 export CLOUDFLARE_API_TOKEN=...        # token de cuenta, NUNCA al repo
+export IBLO_CLAVE=...                  # la del panel, sólo la primera vez
+./desplegar-iblo.sh
+```
+
+`desplegar-iblo.sh` arma la carpeta, despliega, **espera a que `/api/sitio`
+conteste 200** —que es la única prueba de que las funciones compilaron: si
+contestan 405 no compilaron— carga el contenido inicial la primera vez y
+comprueba que las páginas sigan sirviendo. A mano son los mismos dos pasos:
+
+```sh
 ./armar-sitio.sh                       # arma sitio/ desde docs/paginas/
 cd sitio && npx wrangler pages deploy . --project-name=iblo-eventos --branch=main --commit-dirty=true
 ```
