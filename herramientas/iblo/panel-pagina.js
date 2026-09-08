@@ -261,6 +261,42 @@
     if (b.id === "pgBtGuardar") return guardar();
     if (b.id === "pgBtDeshacer") return deshacer();
     if (b.id === "pgBtIA") return porIA();
+    /* LOS DOS BOTONES DE VOLVER ATRAS.
+       «Deshacer» va un paso para atras y depende del historial. Esto es otra
+       cosa: no importa cuantos pasos se dieron ni si el historial llega, vuelve
+       a los valores de fabrica, que viajan adentro del panel. Es el boton que
+       hace falta el dia en que algo quedo feo y nadie se acuerda que toco. */
+    if (b.id === "pgResetColor") {
+      if (!confirm("Devuelve los colores de fábrica: los de la página y los de " +
+                   "cada fiesta.\n\nLos nombres y los textos quedan como están. ¿Dale?")) return;
+      var deFab = {};
+      DEFABRICA.esteticas.forEach(function (x) { deFab[x.k] = x.paleta; });
+      estado.esteticas.forEach(function (e) {
+        e.paleta = JSON.parse(JSON.stringify(deFab[e.k] || DEFABRICA.marca.paleta));
+      });
+      estado.marca = JSON.parse(JSON.stringify(DEFABRICA.marca));
+      /* la vista previa del panel tambien se tiñe con esto, hay que devolverla */
+      for (var t = 0; t < TONOS.length; t++)
+        document.documentElement.style.removeProperty("--" + TONOS[t][0]);
+      document.documentElement.style.removeProperty("--curva");
+      pintar(); pintarMarca();
+      aviso("Colores de fábrica puestos. Tocá «Publicar» para que se vean en la web.", "bien");
+      return;
+    }
+    if (b.id === "pgResetTodo") {
+      if (!confirm("Vuelve TODO como el primer día: las nueve fiestas de siempre, " +
+                   "con sus colores y sus textos.\n\nLo que hayas cambiado se pierde. ¿Dale?")) return;
+      estado.esteticas = JSON.parse(JSON.stringify(DEFABRICA.esteticas));
+      estado.marca = JSON.parse(JSON.stringify(DEFABRICA.marca));
+      estado.enLaWeb = estado.esteticas.length;   // que no vuelva a preguntar por «dejás menos»
+      for (var u = 0; u < TONOS.length; u++)
+        document.documentElement.style.removeProperty("--" + TONOS[u][0]);
+      document.documentElement.style.removeProperty("--curva");
+      document.getElementById("pgTraer").hidden = true;
+      pintar(); pintarMarca();
+      guardar();                                   // este si se publica solo
+      return;
+    }
     if (b.id === "pgTraer") {
       estado.esteticas = JSON.parse(JSON.stringify(DEFABRICA.esteticas));
       estado.marca = JSON.parse(JSON.stringify(DEFABRICA.marca));
