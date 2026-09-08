@@ -192,8 +192,19 @@ def main():
             d, inf = hornea(j, k, obj)
             if d is None: faltan.append(k); continue
             salida[k] = base64.b64encode(d).decode(); med.append(inf)
+        # ── UN SET A MEDIAS NO SE ESCRIBE ──
+        # Dos efectos grabados entre diez osciladores se escuchan a DOS juegos
+        # distintos, asi que un juego se enchufa entero o no se enchufa. Y
+        # dejando el `i_sfx.js` igual queda un archivo vivo que no lee nadie, que
+        # es lo peor de los dos mundos: el dia que se toque va a estar roto sin
+        # que nada lo diga. Se escribe cuando falta como mucho un clip, que es lo
+        # que el alias o el respaldo sintetizado tapan sin que se note.
+        if len(faltan) > 1:
+            print('%-9s %d de %d — NO se escribe: faltan %s' %
+                  (j, len(salida), len(RMS[j]), ','.join(faltan)))
+            continue
         if not salida:
-            print('%-9s sin un solo clip%s' % (j, ' (faltan %d)' % len(faltan) if faltan else ''))
+            print('%-9s sin un solo clip' % j)
             continue
         p = os.path.join(os.path.dirname(AQUI), j, 'partes', 'i_sfx.js')
         io.open(p, 'w', encoding='utf-8').write(
