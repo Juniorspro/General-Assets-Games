@@ -1005,6 +1005,39 @@ window.__A = {
              vidFin: vidFin.n, pxFin: vidFin.px,
              topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* ── QUÉ LE PIDE AL COMPOSITOR EL CUADRO EN QUE LA HOJA ARRANCA ──
+     El banco dibuja por software, así que sus milisegundos no son los del
+     teléfono. Lo que sí no depende del aparato es CUÁNTAS cosas se le piden:
+     cada `.ap.entra` es una capa que hay que reservar, rasterizar y subir a la
+     GPU justo en el cuadro en que la hoja empieza a moverse, y cada cambio del
+     `transform` del fondo obliga a rehacer todos los `backdrop-filter` que
+     tenga encima. */
+  async cajCarga(){
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    const f = $('#fondo');
+    const vistos = new Set(); let cuadros = 0; let corre = true;
+    const mira = () => {
+      const c = getComputedStyle(f);
+      vistos.add((c.scale || '') + '|' + (c.transform || ''));
+      cuadros++;
+      if (corre) requestAnimationFrame(mira);
+    };
+    requestAnimationFrame(mira);
+    verCajon(true);
+    /* la CLASE puede estar puesta de una pintada vieja y su animación ya
+       terminada: lo que cuesta una capa es la que está CORRIENDO */
+    const clase = $$('#cajLista .ap.entra').length;
+    await new Promise(r => setTimeout(r, 60));
+    const anim = document.getAnimations().filter(a => a.playState === 'running').length;
+    const vid = this.vidrios();
+    await new Promise(r => setTimeout(r, 440));
+    corre = false;
+    return { claseEntra: clase, animando: anim,
+             cambiosFondo: vistos.size, cuadros: cuadros,
+             vidDurante: vid.n, pxDurante: vid.px,
+             topDurante: vid.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
   async cajAbre(){
     verCajon(false); cajCacheLimpia();
     await new Promise(r => setTimeout(r, 60));

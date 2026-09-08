@@ -626,9 +626,14 @@ const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
+  /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
+     también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
+     vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
+  document.body.classList.add('cajMueve');
   clearTimeout(CAJ_ABRE_T);
   CAJ_ABRE_T = setTimeout(() => {
     caj.classList.remove('abre');
+    document.body.classList.remove('cajMueve');
     if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
   }, CAJ_ABRE_MS);
 }
@@ -650,8 +655,16 @@ function verCajon(v){
   fondoProfundo(CAJON);
   if (CAJON){
     $('#busca2').value = '';
-    if (CAJ_ULT_Q === '') entraLista($('#cajLista'), CAJ_ENTRA_MAX);
-    else pintaCajon('');
+    /* ── ABRIR NO ESCALONA LA ENTRADA, Y ES A PROPÓSITO ──
+       Cada `.ap.entra` anima `transform` y `opacity`, y el compositor le da a
+       cada una SU capa: veintiocho baldosas a densidad 3 son unos diez megas de
+       texturas que hay que reservar, rasterizar y subir a la GPU **en el mismo
+       cuadro en que la hoja empieza a moverse**. Y lo que compran es un efecto
+       que no se ve: la hoja cruza la pantalla en 340 ms, así que lo que el ojo
+       lee es el vuelo de la hoja y no que los iconos aparecieron de a uno.
+       El escalonado se queda donde SÍ se ve, que es filtrando: ahí la hoja está
+       quieta y la entrada es lo único que se mueve (ver `pintaCajon`). */
+    if (CAJ_ULT_Q !== '') pintaCajon('');
     $('#cajLista').scrollTop = 0;
     marcaRiel(LETRAS[0] || '');
   } else {

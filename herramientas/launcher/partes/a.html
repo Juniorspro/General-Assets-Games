@@ -656,6 +656,60 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
    filtro —su fondo de color ya las separa— y lo recuperan al asentarse. */
 #cajon.on.abre .baldosa,#cajon.on.abre #cajBusca{
   backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y EL ESCRITORIO TAMPOCO FILTRA MIENTRAS LA HOJA VIAJA ──
+   Medido con `cajCarga` durante el deslizamiento: **tres pasadas y 96.401 px**,
+   y las tres son `.vid.refr`, o sea que además del desenfoque llevan el
+   `feDisplacementMap` de `url(#refr)` — un filtro de SVG, que es lo que la
+   vuelta 130 anotó que en un WebView puede caerse al procesador.
+
+       #reloj    43.193 px      #dock  36.096 px      #buscaCaja  17.112 px
+
+   Se rehacen en CADA cuadro de los 340 ms, y no por culpa de ellas: el fondo
+   se está acercando (`#fondo.hondo`), o sea que su respaldo cambia. Con el
+   vidrio de la hoja horneado, esto es lo único que quedaba filtrando.
+
+   Y no hace falta que exista: **el dock lo tapa la hoja en los primeros
+   cuadros** y las otras dos a los doscientos y pico de milisegundos. Las tres
+   conservan su tinte, su borde y sus cinco sombras internas —o sea que siguen
+   leyéndose a pieza de vidrio— y lo único que se van son 340 ms de desenfoque
+   detrás de algo que está por taparse.
+
+   Va por clase del `body` y no por `#cajon.on.abre` porque el CIERRE también
+   desliza, y ahí `.on` ya no está. */
+/* y las baldosas del DOCK con ellas: son `.baldosa` y no `.vid`, así que la
+   regla de arriba no las alcanza —medido con el pack `cristal`, cuatro pasadas
+   y 14.400 px seguían vivas durante los 340 ms— y el dock es justamente lo
+   primero que la hoja tapa. */
+body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y CON EL VIDRIO HORNEADO, LAS BALDOSAS TAMPOCO FILTRAN NADA ──
+   Lo que una baldosa del cajón desenfoca es la hoja, y la hoja ya es un mapa de
+   bits desenfocado a 34 px: **desenfocar 12 px lo que ya está desenfocado 34 no
+   cambia la imagen**. Medido apagándolas sobre la misma captura del cajón
+   asentado: **0,40 % de los píxeles cambian, con una media de 0,06 sobre 255**.
+
+   Lo que sí cambia es lo que cuesta, y en dos sitios: las quince a cuarenta
+   pasadas del cajón asentado, y —peor— el ESCALÓN del final del deslizamiento,
+   donde `.abre` se sacaba y las quince se encendían todas en el mismo cuadro,
+   justo cuando la hoja aterriza.
+
+   La regla de `.abre` se queda igual: si no hay foto no hay horneado, y ahí el
+   filtro de la hoja sigue vivo y las baldosas lo siguen anidando. */
+#cajon.hor .baldosa,#cajon.hor #cajBusca{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y LA HOJA SE QUEDA PROMOVIDA MIENTRAS SE MUEVE Y MIENTRAS ESTÁ PUESTA ──
+   Sin el `backdrop-filter` la hoja dejó de necesitar una superficie de render
+   propia, así que promoverla pasa a depender de que el navegador reconozca la
+   transición de `transform`. La pista lo dice sin ambigüedad, y de paso le
+   avisa al gestor de baldosas que este contenido va a entrar: lo que la vuelta
+   130 vio en el video del teléfono —«la hoja a mitad de subida con SÓLO DOS
+   baldosas pintadas»— es la firma de un rasterizado que llega tarde.
+   No va permanente: son 412×892 a densidad 3, o sea trece megas de textura, y
+   con el cajón cerrado y asentado no hay nada que sostener. */
+#cajon.on,#cajon.abre{will-change:transform}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));

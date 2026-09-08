@@ -281,6 +281,119 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima segunda vuelta (2026-09-08): **AERO** — el escritorio deja de filtrar mientras la hoja viaja, y las baldosas no desenfocan lo que ya está desenfocado
+
+Pedido textual, dos veces en el mismo mensaje: *"al abrir el cajón sigue yendo MUY LAGUEADO"*. O
+sea que el horneado de la vuelta 131 —que sacó el desenfoque de 34 px a pantalla completa— no movió
+la aguja. Y la vuelta 131 ya había dejado escrito cuál era el próximo sospechoso.
+
+#### EL SOSPECHOSO ERA EL CORRECTO Y ERA PEOR DE LO ANOTADO: TRES FILTROS DE **SVG** POR CUADRO
+
+La sonda nueva `cajCarga` mide el deslizamiento y devuelve qué está filtrando. Con el cajón a
+noventa milisegundos de haber arrancado:
+
+| | px por cuadro | filtro |
+|---|---|---|
+| `#reloj.vid.refr` | **43.193** | `url(#refr)` + blur |
+| `#dock.vid.refr` | **36.096** | `url(#refr)` + blur |
+| `#buscaCaja.vid.refr` | **17.112** | `url(#refr)` + blur |
+
+**Las tres son `.refr`, o sea que además del desenfoque llevan el `feDisplacementMap`** — y la
+vuelta 130 ya había anotado que ése es *"la parte del filtro que en un WebView puede caerse al
+procesador"*. Tres filtros de SVG a rehacer en cada uno de los ~20 cuadros de los 340 ms, y no por
+culpa de ellos: **el fondo se está acercando** (`#fondo.hondo`), así que su respaldo cambia y el
+filtro es inválido por construcción. Eso es exactamente lo que el archivo de la vuelta 131 dejó
+escrito como pendiente.
+
+**Y NO TIENEN POR QUÉ EXISTIR MIENTRAS LA HOJA VIAJA.** El dock lo tapa la hoja en los primeros
+cuadros; el reloj y la búsqueda, a los doscientos y pico de milisegundos. Las tres conservan su
+tinte, su borde de degradado y sus cinco sombras internas —o sea que se siguen leyendo a pieza de
+vidrio— y lo único que pierden son 340 ms de desenfoque detrás de algo que está por taparse.
+
+**LA MARCA VA EN EL `body` Y NO EN `#cajon.on.abre`, y es por el CIERRE**: cerrar también desliza, y
+ahí `#cajon` ya perdió su `.on`, así que la regla no lo alcanzaría justo en la mitad de los casos.
+`cajAsienta()` pone y saca `body.cajMueve`, que es el mismo sitio donde ya vivían `.abre` y `cajQ`.
+
+**Y HUBO QUE AGREGAR LAS BALDOSAS DEL DOCK, que la primera versión no alcanzaba.** Son `.baldosa` y
+no `.vid`, así que `body.cajMueve #capa .vid` no las tocaba: medido con el pack `cristal`, **cuatro
+pasadas y 14.400 px** seguían vivas durante todo el deslizamiento — y el dock es justamente lo
+primero que la hoja tapa.
+
+#### Y LA OTRA MITAD: UNA BALDOSA DESENFOCA LA HOJA, Y LA HOJA YA ES UN DESENFOQUE
+
+Ésta sale de la vuelta anterior y no se había visto. Lo que una baldosa del cajón desenfoca es la
+hoja, y desde la vuelta 131 la hoja **es un mapa de bits ya desenfocado a 34 px**: desenfocar 12 px
+lo que ya está desenfocado 34 no cambia la imagen. Medido apagándolas sobre la misma captura del
+cajón asentado: **0,40 % de los píxeles cambian, con una media de 0,06 sobre 255.**
+
+Lo que sí cambia es lo que cuesta, y en dos sitios:
+- **el cajón asentado**, que con 150 apps y el pack `cristal` iba en **35 pasadas y 501.824 px**;
+- y **el escalón del final del deslizamiento**, que es peor: al sacarse `.abre` las quince a
+  cuarenta baldosas encendían su filtro **todas en el mismo cuadro**, justo cuando la hoja aterriza.
+
+La regla de `.abre` se queda igual, y no es redundante: sin foto no hay horneado, y ahí el filtro de
+la hoja sigue vivo y las baldosas lo siguen anidando.
+
+Comparadas al lado sobre la misma captura —el horneado sin vidrio de baldosa contra el filtro vivo
+con todo— las dos imágenes son indistinguibles, también con `cristal`, que es el pack cuya celda es
+transparente a propósito y donde el vidrio es lo único que hay detrás del tallado.
+
+#### VEINTIOCHO CAPAS QUE SE RESERVAN EN EL CUADRO EN QUE LA HOJA ARRANCA
+
+Cada `.ap.entra` anima `transform` y `opacity`, y el compositor le da a cada una **su** capa: a
+densidad 3 son unos diez megas de texturas que hay que reservar, rasterizar y subir a la GPU en el
+mismo cuadro en que la hoja empieza a moverse. La vuelta 130 las bajó de 150 a 28 y midió la mejora
+**del JavaScript**; lo que no se veía es que las 28 que quedaron siguen cayendo en el peor cuadro
+posible.
+
+**Y lo que compran es un efecto que no se ve.** La hoja cruza la pantalla en 340 ms: lo que el ojo
+lee es el vuelo de la hoja, no que los iconos aparecieron de a uno. Abrir deja de escalonar. **El
+escalonado se queda donde SÍ se ve, que es filtrando** —ahí la hoja está quieta y la entrada es lo
+único que se mueve—, y eso está medido: buscando «mer», `entran: 3` con `corriendo: 3`.
+
+Medido a los 60 ms de abrir: **23 animaciones corriendo → 2.**
+
+#### Y LA HOJA SE PROMUEVE A MANO, PORQUE DEJÓ DE NECESITARLO SOLA
+
+Sin el `backdrop-filter`, `#cajon` ya no necesita una superficie de render propia: que se componga
+pasa a depender de que el navegador reconozca la transición de `transform`. `will-change:transform`
+lo dice sin ambigüedad y de paso le avisa al gestor de baldosas que ese contenido va a entrar — que
+es lo que la vuelta 130 vio en el video del teléfono: *«la hoja a mitad de subida con SÓLO DOS
+baldosas pintadas»*, que es la firma de un rasterizado que llega tarde. **No va permanente**: son
+412×892 a densidad 3, o sea trece megas de textura, y con el cajón cerrado no hay nada que sostener.
+
+#### MEDIDO AL CERRAR
+
+El A/B **sobre el mismo binario y en el mismo instante** (90 ms de deslizamiento, 150 apps, pack
+`cristal`), sacando `cajMueve` y devolviendo el filtro vivo:
+
+| | pasadas de vidrio | píxeles filtrados por cuadro |
+|---|---|---|
+| control | **8** | **478.305** |
+| **ahora** | **0** | **0** |
+
+y el desglose del control nombra a los cuatro: `#cajon.on.abre` 367.504 · `#reloj.vid.refr` 43.193 ·
+`#dock.vid.refr` 36.096 · `#buscaCaja.vid.refr` 17.112. **Cero pasadas durante el deslizamiento, cero
+al aterrizar y cero con el cajón asentado**, en los tres packs y con 32 y con 150 apps; el cajón
+asentado con `cristal` iba en 35 pasadas y 501.824 px. Cerrar: `cajMueve` puesto durante y sacado
+después, `#capa` visible y sus tres vidrios de vuelta (3 · 96.401). Arrastre: la manija mueve
+`--caj-y` a 48 px y saca `cajMueve` —la hoja sigue al dedo, no hay transición— y soltarla por debajo
+del umbral lo devuelve y asienta con `cajQ`.
+
+Deslizamiento medido con `cajDesliza`: **28 cuadros, mediana 16,6 ms, p90 16,9, dos perdidos**, que
+es lo mejor que este cajón midió nunca en el banco (venía de 3-4 cuadros con mediana 143-153).
+Regresión: gesto arriba abre el cajón y abajo el centro de control con **0 ondas de agua** en los
+dos, centro **16 · 1 · 10 · 4**, packs con **117 y 201 celdas** y 26 y 27 de 32 apps, riel de 17
+letras, `letra('S')` mirando la S, las cuatro búsquedas, mascota con 23 huesos y 5.541 triángulos,
+**0 solapamientos** en el escritorio, scroll del cajón **0,042 ms por cuadro**. `window.__errs`
+**vacío en las siete corridas**.
+
+**LO QUE NO PUDE COMPROBAR:** que el rasterizado de la hoja se retenga entre aperturas. El banco
+dibuja por software y no expone el gestor de baldosas, así que de `will-change` está medido que se
+aplica y nada más. Lo que no depende del aparato son los 478.305 píxeles de filtrado por cuadro que
+se fueron del deslizamiento —tres de ellos con `feDisplacementMap`, o sea filtros de SVG— y las
+veintiuna animaciones que ya no se reservan en el cuadro en que la hoja arranca.
+
 ### Centésima trigésima primera vuelta (2026-09-08): **AERO** — el vidrio del cajón se hornea una vez, y el escritorio deja de filtrarse detrás de una hoja opaca
 
 Pedido textual: *"sigue siendo súper lag eso we haz que el deslizamiento solamente deba cargarse una
