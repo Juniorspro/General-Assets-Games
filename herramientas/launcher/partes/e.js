@@ -202,7 +202,13 @@ function pintaDock(){
      apps— se partía en DOS FILAS: medido, pasaba de 74 px de alto a 232. Un
      dock que se envuelve no es un dock. Sus columnas son cuántas apps tiene. */
   d.style.setProperty('--cols', Math.max(1, d.children.length));
-  d.style.visibility = DOCK.length ? 'visible' : 'hidden';
+  /* ── UN DOCK VACÍO SE ESCONDE POR CLASE Y NO EN LÍNEA ──
+     Estaba como `style.visibility`, y un estilo en línea le gana a cualquier
+     selector: con el cajón asentado, `body.cajQ #capa{visibility:hidden}` no
+     lo alcanzaba y el dock seguía filtrando 36.096 px detrás de una hoja
+     opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
+     recalibrar. */
+  d.classList.toggle('vacio', !DOCK.length);
   if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
 }
 
@@ -334,6 +340,9 @@ function cajPrepara(){
     ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 900);
   ocio(() => {
     if (CAJON) return;
+    /* el vidrio de la hoja: se calcula una vez acá y el deslizamiento pasa a ser
+       una traslación y nada más (ver `cajFrostHornea` en `c.js`) */
+    cajFrostHornea();
     if (CAJ_ULT_Q !== '') pintaCajon('');
     /* el icono del sistema es un `<img>`; la celda de un pack va como
        `background-image` en línea sobre la baldosa (ver `icoAero`). Las dos se
@@ -609,14 +618,30 @@ function cierraMenu(){
    fue para '', alcanza con volver a escalonar la entrada, que cuesta un reflujo. */
 let CAJ_ABRE_T = 0;
 const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
+/* ── LO QUE PASA CUANDO LA HOJA LLEGA ──
+   Vive en una función porque hay DOS caminos que terminan con la hoja
+   asentada: abrirla con el botón y soltarla a mitad de un arrastre sin llegar
+   al umbral de cierre. Repartido, el segundo se olvida de apagar el escritorio
+   y el defecto no se ve nunca —sólo cuesta. */
+function cajAsienta(){
+  const caj = $('#cajon');
+  caj.classList.add('abre');
+  clearTimeout(CAJ_ABRE_T);
+  CAJ_ABRE_T = setTimeout(() => {
+    caj.classList.remove('abre');
+    if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
+  }, CAJ_ABRE_MS);
+}
+
 function verCajon(v){
   CAJON = !!v;
   const caj = $('#cajon');
   caj.classList.toggle('on', CAJON);
   /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
-  caj.classList.add('abre');
-  clearTimeout(CAJ_ABRE_T);
-  CAJ_ABRE_T = setTimeout(() => caj.classList.remove('abre'), CAJ_ABRE_MS);
+  /* el escritorio vuelve a la vista en el acto al empezar a cerrar; se apaga
+     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`) */
+  document.body.classList.remove('cajQ');
+  cajAsienta();
   /* el CSS de la mascota decide su sitio con esto */
   document.body.classList.toggle('caj', CAJON);
   mascSitio();
@@ -881,8 +906,16 @@ function enganchaCajon(){
      cajón está cerrado. */
   const man = $('#cajManija');
   let y0 = 0, tira = false;
-  const pone = d => caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
-  const suelta = () => { caj.classList.remove('tira'); caj.style.removeProperty('--caj-y'); };
+  const pone = d => {
+    /* `contains` es una lectura de clase, no fuerza recálculo: el `remove` sale
+       una sola vez y no en cada cuadro del arrastre */
+    if (document.body.classList.contains('cajQ')) document.body.classList.remove('cajQ');
+    caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
+  };
+  const suelta = () => {
+    caj.classList.remove('tira'); caj.style.removeProperty('--caj-y');
+    if (CAJON) cajAsienta();      /* soltó a mitad de camino: la hoja vuelve sola */
+  };
 
   man.addEventListener('pointerdown', e => {
     y0 = e.clientY; tira = true;
@@ -1345,6 +1378,7 @@ function arranca(){
 
   document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
   addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira();
+    cajFrostRehornea();
   /* la lista cambia de ancho, o sea que las anclas se mueven: la caché de
      `midaAnclas` deja de valer y hay que volver a medirla */
   ANCLA_Y = []; });

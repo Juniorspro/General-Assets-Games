@@ -348,7 +348,8 @@ window.__A = {
   },
   /* el catálogo entero, uno por uno, para poder mirarlos */
   async widSolo(k){ widPone([k]); await new Promise(r => setTimeout(r, 240)); return this.wid(); },
-  fondos(){
+  fondos(k){
+    if (k) fondoPone(k);
     const l = $$('#fgRejilla .fgIt').map(n => n.dataset.k);
     return { abierta: $('#fondos').classList.contains('on'), n: l.length, claves: l,
              sel: lee('fondoSel', 'fab'),
@@ -626,7 +627,14 @@ window.__A = {
       const c = getComputedStyle(e);
       const f = c.backdropFilter || c.webkitBackdropFilter;
       if (!f || f === 'none') continue;
+      /* ── LO ESCONDIDO NO SE PINTA, ASÍ QUE NO FILTRA ──
+         `getComputedStyle` informa el `backdrop-filter` igual de un elemento
+         con `visibility:hidden`, y `getBoundingClientRect` le devuelve su caja:
+         sin esta guarda la sonda contaba las tres piezas del escritorio con el
+         cajón asentado, o sea que no podía ver el ahorro que venía a medir. */
+      if (c.visibility === 'hidden' || c.display === 'none' || c.opacity === '0') continue;
       const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
       v.push({ q: (e.id ? '#'+e.id : '') + (e.className && typeof e.className === 'string'
                  ? '.'+e.className.trim().split(/\s+/).join('.') : ''),
                px: Math.round(r.width*r.height), f: f.slice(0, 46) });
@@ -940,6 +948,63 @@ window.__A = {
      La primera apertura pinta la lista; la segunda ya la tiene y sólo la
      escalona. Se mide cuánto tarda `verCajon(true)` en cada caso y si `.abre`
      está puesto durante la transición y sacado después. */
+  /* ── CUÁNTO CUESTA EL DESLIZAMIENTO, CUADRO POR CUADRO ──
+     `cajAbre` mide el JAVASCRIPT de la apertura; esto mide lo otro, que es lo
+     que el jugador siente: los 340 ms en los que la hoja se está moviendo. Un
+     `backdrop-filter` sobre algo que SE MUEVE se rehace en cada cuadro por
+     construcción —su fondo cambia porque el elemento cambió de sitio— así que
+     acá lo que interesa no es el pico de JS sino cuántos cuadros perdidos hay
+     y cuántas pasadas de filtro siguen vivas a mitad de camino. */
+  /* prende y apaga el horneado sobre EL MISMO binario: sin esto la comparación
+     sería contra otro archivo y mediría dos cosas a la vez */
+  cajFrost(v){
+    const caj = $('#cajon');
+    if (v === true || typeof v === 'number') cajFrostHornea(typeof v === 'number' ? v : null);
+    else if (v === false) caj.classList.remove('hor');
+    const cs = getComputedStyle(caj);
+    const uri = caj.style.getPropertyValue('--cajFrost') || '';
+    return { hor: caj.classList.contains('hor'), bytes: uri.length,
+             filtro: (cs.backdropFilter || cs.webkitBackdropFilter || 'none').slice(0, 44),
+             capas: (cs.backgroundImage || '').split('url(').length - 1 };
+  },
+  /* planta la hoja a media subida y SIN transición: es la única forma honesta
+     de fotografiar un instante del deslizamiento, porque la transición la
+     interpola el navegador y no se puede congelar desde acá */
+  cajPon(y){
+    const c = $('#cajon');
+    verCajon(true);
+    if (y == null){ c.classList.remove('tira'); c.style.removeProperty('--caj-y'); }
+    else { c.classList.add('tira'); c.style.setProperty('--caj-y', y + 'px'); }
+    return { y: c.style.getPropertyValue('--caj-y') || '0px',
+             hor: c.classList.contains('hor') };
+  },
+  async cajDesliza(){
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const dts = []; let ult = performance.now(); let vidMedio = null;
+    let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 170));
+    vidMedio = this.vidrios();
+    await new Promise(r => setTimeout(r, 400));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             vidMedio: vidMedio.n, pxMedio: vidMedio.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
   async cajAbre(){
     verCajon(false); cajCacheLimpia();
     await new Promise(r => setTimeout(r, 60));

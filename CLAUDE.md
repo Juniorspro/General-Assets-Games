@@ -281,6 +281,138 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima primera vuelta (2026-09-08): **AERO** — el vidrio del cajón se hornea una vez, y el escritorio deja de filtrarse detrás de una hoja opaca
+
+Pedido textual: *"sigue siendo súper lag eso we haz que el deslizamiento solamente deba cargarse una
+vez para que después vaya súper fluido"*.
+
+#### UN `backdrop-filter` SOBRE ALGO QUE SE MUEVE SE REHACE EN CADA CUADRO, Y NO ES UNA TORPEZA
+
+Es por construcción: el filtro toma lo que hay **debajo del rectángulo** del elemento, así que cuando
+el elemento se corre, el rectángulo mira otra parte del fondo y hay que volver a filtrar. `#cajon` es
+una hoja a pantalla completa con `blur(34px)` que se desliza durante 340 ms: son **367.504 píxeles de
+desenfoque de 34 px, veinte veces seguidas, en cada apertura**. Eso es literalmente *«cargarse cada
+vez»*, y las tres vueltas anteriores no lo habían tocado — la 130 sacó las baldosas anidadas y dejó el
+desenfoque de la hoja intacto.
+
+**Y NO SE PUEDE ABARATAR EL DESENFOQUE.** La vuelta 123 ya midió que **lo que cuesta es la PASADA y no
+el radio**: bajar de 34 px a 4 midió **peor** (61,4 ms contra 47,6). La única palanca es que la pasada
+no exista.
+
+**Y NO TIENE POR QUÉ EXISTIR, PORQUE EL FONDO NO CAMBIA.** Lo que el cajón desenfoca es la foto, que
+es estática, y encima la deriva se **pausa** debajo del cajón desde la vuelta 130. O sea que las veinte
+pasadas de cada apertura calculan siempre el mismo resultado. Se calcula **una vez, en el ocio**, y de
+ahí en más el deslizamiento es una traslación: lo que el compositor hace sin tocar el hilo principal.
+
+**EL DESENFOQUE ES EL ACHIQUE, NO EL FILTRO.** Achicar a 108 px de ancho y volver a estirar ya es un
+desenfoque; el `filter` del lienzo pone lo que falta y sobre 108×234 cuesta nada. **El horneado pesa
+3.552 bytes** —una imagen borrosa comprime a nada— y se guarda en una variable de CSS, así que el
+tinte sigue siendo un valor vivo del CSS y lo único que pone el JavaScript es la foto.
+
+Medido con el A/B **sobre el mismo binario** (`__A.cajFrost(false)` devuelve el filtro vivo, que es la
+única forma de que la medición detecte el defecto además de aprobar el arreglo):
+
+| | pasadas de vidrio | píxeles filtrados por cuadro |
+|---|---|---|
+| deslizándose, filtro vivo | 4 | **463.905** |
+| **deslizándose, horneado** | **3** | **96.401** |
+| asentado, filtro vivo | 12 | **504.625** |
+| **asentado, horneado** | **8** | **40.720** |
+
+**−79,2 % durante el deslizamiento y −91,9 % con el cajón abierto.**
+
+#### TRES ERRORES MÍOS EN LA CUENTA DEL HORNEADO, Y LOS TRES SE VIERON MIDIENDO Y NO MIRANDO
+
+1. **EL «COVER» SE CALCULABA SOBRE EL LIENZO CON EL MARGEN**, que tiene otra proporción que la
+   pantalla, así que recortaba otra franja de la foto.
+2. **EL BORDE SALÍA LAVADO.** `ctx.filter` muestrea fuera del lienzo como **transparente**; un
+   `backdrop-filter` de verdad clampea. Se repiten la última fila y la última columna sobre un margen
+   de tres sigmas y se recorta después.
+3. **Y LA DERIVA NO ES DE UN CUARTO DE PÍXEL.** Yo la había anotado así en la vuelta 130 y ese es el
+   incremento **por escalón**, no el recorrido: `@keyframes deriva` va de `scale(1.06)` a
+   `scale(1.09)` —1,075 en el medio— y encima `#fondo.hondo` multiplica por 1,075 con el cajón puesto.
+   Horneando con 1,06 el mapa de bits mostraba un **9 % más de foto** que la pantalla, y eso sí se ve:
+   el azul del ángulo superior salía mucho más vivo. El factor es `1,075 × 1,075`.
+
+Con los tres arreglados, medido contra el filtro vivo sobre la misma captura: **el interior da 1,0 a
+2,0 de diferencia sobre 255**, o sea idéntico. Lo que queda son dos bandas, arriba y abajo, y tienen
+una causa clara: **el filtro vivo también desenfoca el reloj, la búsqueda y el dock**, que el horneado
+no tiene. Verificado con un segundo fondo (`arrecife`): interior **1,23**, mismas bandas.
+
+**Y `background-attachment:fixed` NO LO ARREGLA, comprobado en vez de supuesto:** computa como `fixed`
+y devuelve **exactamente los mismos píxeles** (0,00 de diferencia), porque el `transform` de la hoja lo
+degrada a `scroll`. O sea que con la hoja trasladándose no hay forma de que el horneado quede fijo a
+la pantalla: durante los 340 ms viaja con ella y muestra la parte de arriba de la foto en vez de lo
+que hay detrás en ese instante. Fotografiado a media subida, se lee a hoja esmerilada azul-verde
+subiendo; no se lee a error, y es un estado que dura un tercio de segundo con todo en movimiento.
+
+#### Y CON LA HOJA OPACA, EL ESCRITORIO DE ATRÁS NO SE VE — ASÍ QUE DEJA DE FILTRARSE
+
+El horneado es un JPEG: cubre la hoja entera y la hoja cubre la pantalla entera. Pero las cuatro
+piezas de vidrio del escritorio se seguían filtrando detrás, y **filtrar lo que nadie ve es trabajo
+puro** — la misma lección de la vuelta 129 con las baldosas fuera de la ventana. `body.cajQ` apaga
+`#capa` **cuando la hoja llegó**, no antes: durante el deslizamiento el escritorio asoma por encima
+del canto y apagarlo ahí sería un parpadeo.
+
+Y que sea invisible no se afirma, se mide: la misma captura con `cajQ` puesto y sacado da **0 píxeles
+de diferencia sobre 367.504**.
+
+**DOS DEFECTOS QUE ESTO DESTAPÓ:**
+
+- **`#dock` LLEVABA `visibility` COMO ESTILO EN LÍNEA** (`d.style.visibility = ...` en `pintaDock`), y
+  un estilo en línea le gana a cualquier selector: `body.cajQ #capa{visibility:hidden}` no lo
+  alcanzaba y el dock seguía filtrando **36.096 px** detrás de una hoja opaca. Es exactamente el
+  defecto que en la vuelta 123 dejó el vidrio sin recalibrar. Pasa a clase.
+- **Y LA SONDA NO PODÍA VER EL AHORRO QUE VENÍA A MEDIR.** `getComputedStyle` informa el
+  `backdrop-filter` igual de un elemento con `visibility:hidden`, y `getBoundingClientRect` le
+  devuelve su caja: `vidrios()` contaba las tres piezas del escritorio con el cajón asentado. Ahora
+  saltea lo escondido y lo de caja vacía.
+
+#### DOS COSAS MÁS, DEL MISMO RAZONAMIENTO
+
+- **`#cajBusca` FILTRABA DENTRO DE LA HOJA QUE SE MUEVE** —15.520 px— que es el mismo caso que las
+  baldosas de la vuelta 130. Va sin filtro durante los 420 ms de la apertura; su fondo de color ya la
+  separa.
+- **`cajAsienta()` VIVE EN UNA FUNCIÓN PORQUE HAY DOS CAMINOS** que terminan con la hoja asentada:
+  abrirla con el botón y **soltarla a mitad de un arrastre sin llegar al umbral de cierre**. Repartido,
+  el segundo se olvida de apagar el escritorio y el defecto no se ve nunca — sólo cuesta.
+
+#### UN HUECO DE ARRANQUE QUE HABRÍA DEJADO EL HORNEADO SIN HACER
+
+`cajPrepara` lo intenta en el ocio, pero **el ocio puede llegar antes de que el data URI de la foto
+decodifique**: ahí `cajFrostHornea` se rinde y no vuelve a intentar nunca, o sea que el cajón se queda
+con el filtro vivo para siempre y nada falla. Ahora también lo dispara el `onload` de la foto, que es
+el único sitio donde se sabe que la imagen está. Y se rehornea al cambiar de fondo —verificado, el
+horneado pasa de 3.552 a 3.052 bytes con `arrecife` y vuelve a 3.568 con el de fábrica— y al girar el
+teléfono, con 260 ms de espera porque es una decodificación.
+
+**Y SIN FOTO NO SE HORNEA NADA:** queda el `backdrop-filter` de siempre. El degradado de respaldo ya
+es liso, así que no hay nada que desenfocar, y degradar a un rectángulo plano sería peor que pagar el
+filtro. Es el mismo criterio de «lo generado no reemplaza nada hasta que llega».
+
+#### MEDIDO AL CERRAR
+
+Deslizamiento **3 pasadas / 96.401 px** contra 4 / 463.905 del control, asentado **8 / 40.720** contra
+12 / 504.625, con el desenfoque de 34 px a pantalla completa **fuera**. Horneado 3.552 bytes, interior
+idéntico al filtro vivo (**1,0-2,0 de 255**) en los dos fondos probados, y `cajQ` con **0 píxeles de
+diferencia** sobre 367.504. Apertura: `segundaMs` **7,8-8,8** (era 9-17) y el control que repinta
+**31,5-35,2** (era 43-66). El cajón se cierra y el escritorio vuelve **en el mismo instante**
+(`cajQ:false`, `capa:visible`, `dock:visible`); arrastrar la hoja lo devuelve y soltarla lo vuelve a
+apagar. Regresión: gesto arriba abre el cajón y abajo el centro de control con **0 ondas de agua** en
+los dos, centro **16 · 1 · 10 · 4**, packs con **117 y 201 celdas** y 26 y 27 de 32 apps, riel de 17
+letras, **0 solapamientos** en el escritorio y en el visor de la cámara, mascota con 23 huesos y 5.541
+triángulos, personalizar con 13 grupos, scroll del cajón **0,074 ms por cuadro**. `window.__errs`
+**vacío en las nueve corridas**.
+
+**LO QUE NO PUDE COMPROBAR:** el banco dibuja por software, así que los milisegundos no son los del
+teléfono; lo que no depende del aparato es que se fueron 367.504 píxeles de desenfoque por cuadro
+durante el deslizamiento y 463.905 con el cajón abierto. Y queda un costo conocido que **no** se puede
+medir desde acá: `fondoProfundo` anima la escala de la foto durante 420 ms **justo mientras la hoja se
+desliza**, y una transformación que cambia en cada cuadro obliga a rehacer los tres vidrios que quedan
+—es la misma familia que la deriva de la vuelta 130—. Se dejó porque el acercamiento es un efecto
+buscado y no hay forma de medir acá si sacarlo gana algo; si el teléfono sigue tironeando al subir, es
+el próximo sospechoso.
+
 ### Centésima trigésima vuelta (2026-09-08): **AERO** — el agua deja de tocar el `body`, la deriva va a escalones, y abrir el cajón no repinta
 
 Pedido textual: *"va muy lag, tocó el agua y se laguea feo y de paso da tirones al subir el cajón

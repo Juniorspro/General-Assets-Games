@@ -654,7 +654,8 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
    unas cuarenta a la vez encima de un desenfoque de 34 px a pantalla completa
    que también se mueve. Durante los 420 ms de la apertura las baldosas van sin
    filtro —su fondo de color ya las separa— y lo recuperan al asentarse. */
-#cajon.on.abre .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none}
+#cajon.on.abre .baldosa,#cajon.on.abre #cajBusca{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
@@ -685,6 +686,7 @@ body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,
 /* ══════════ DOCK ══════════ */
 #dock{flex:0 0 auto;margin:0 14px;padding:10px 6px 8px;border-radius:30px;
   display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:0}
+#dock.vacio{visibility:hidden}
 
 /* ══════════ CAJÓN ══════════ */
 /* ── LA HOJA ESMERILADA DEJA VER EL FONDO, Y ESO NO ES ADORNO ──
@@ -703,6 +705,27 @@ body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,
   background:linear-gradient(180deg,rgba(9,44,84,.34) 0%,rgba(8,38,74,.44) 40%,rgba(6,30,60,.56) 100%);
   backdrop-filter:blur(34px) saturate(118%) brightness(.84);
   -webkit-backdrop-filter:blur(34px) saturate(118%) brightness(.84)}
+/* ── CON EL VIDRIO HORNEADO, LA HOJA NO FILTRA NADA ──
+   El degradado del tinte se queda en el CSS y el mapa de bits entra como
+   segunda capa: así el tinte sigue siendo un valor vivo y lo único que pone el
+   JavaScript es la foto. `100% 100%` y no `cover` porque el horneado ya se hizo
+   en espacio de pantalla, o sea que su proporción ES la de la hoja.
+   Ver `cajFrostHornea` en `c.js`. */
+#cajon.hor{
+  background-image:linear-gradient(180deg,rgba(9,44,84,.34) 0%,rgba(8,38,74,.44) 40%,rgba(6,30,60,.56) 100%),var(--cajFrost);
+  background-size:auto,100% 100%;background-repeat:no-repeat;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y CON LA HOJA OPACA, EL ESCRITORIO DE ATRÁS NO SE VE ──
+   El horneado es un JPEG: cubre la hoja entera y la hoja cubre la pantalla
+   entera, así que con el cajón asentado no queda un solo píxel del escritorio a
+   la vista. Pero sus cuatro piezas de vidrio se seguían filtrando —el reloj, la
+   búsqueda, el dock y las baldosas— y filtrar lo que nadie ve es trabajo puro,
+   que es la misma lección de la vuelta 129 con las baldosas de afuera de la
+   ventana. Se apaga recién cuando la hoja LLEGÓ: durante los 340 ms del
+   deslizamiento el escritorio asoma por encima del canto y apagarlo ahí sería
+   un parpadeo. Y sólo con `.hor`: sin horneado la hoja es translúcida y esto se
+   vería. */
+body.cajQ #capa{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
@@ -2565,6 +2588,7 @@ function fondoPone(k){
     FONDO_EL.classList.add('ok');
     FONDO_OK = true;
     if (typeof aguaRefondo === 'function') aguaRefondo();
+    if (typeof cajFrostHornea === 'function') cajFrostHornea();
     /* ── UN FONDO NUEVO ES UNA DECODIFICACIÓN NUEVA ──
        Y se paga la primera vez que alguien la DIBUJA, que sin esto era adentro
        del manejador del dedo del agua. Se paga acá, en el ocio. */
@@ -2593,6 +2617,12 @@ function fondoInit(){
     FONDO_EL.classList.add('ok');
     FONDO_OK = true;
     if (typeof aguaRecalienta === 'function') aguaRecalienta();
+    /* ── EL HORNEADO DEL CAJÓN DEPENDE DE ESTA FOTO ──
+       `cajPrepara` lo intenta en el ocio, pero el ocio puede llegar ANTES de
+       que el data URI decodifique: ahí `cajFrostHornea` se rinde y no vuelve a
+       intentar nunca, o sea que el cajón se queda con el filtro vivo. Acá se
+       sabe que la foto está. */
+    if (typeof cajFrostRehornea === 'function') cajFrostRehornea();
   };
   im.onerror = () => { FONDO_OK = false; };   /* queda el degradado, que ya se ve */
   im.src = fondoURI();
@@ -2602,6 +2632,123 @@ function fondoInit(){
    Una clase y nada más: la transición la hace el compositor. */
 function fondoProfundo(v){
   if (FONDO_EL) FONDO_EL.classList.toggle('hondo', !!v);
+}
+
+/* ══════════ EL VIDRIO DEL CAJÓN SE HORNEA UNA SOLA VEZ ══════════
+
+   ── UN `backdrop-filter` SOBRE ALGO QUE SE MUEVE SE REHACE EN CADA CUADRO ──
+   Y no por una torpeza del navegador: es por construcción. El filtro toma lo
+   que hay DEBAJO del rectángulo del elemento, así que cuando el elemento se
+   corre, el rectángulo mira otra parte del fondo y hay que volver a filtrar.
+   El cajón es una hoja a pantalla completa con `blur(34px)` que se desliza
+   durante 340 ms: son **367.504 píxeles de desenfoque de 34 px, veinte veces
+   seguidas, en cada apertura**. Medido con `cajDesliza`: 5 pasadas de vidrio y
+   479.425 px por cuadro mientras la hoja viaja.
+
+   Lo que no se puede es abaratar el desenfoque: la vuelta 123 ya midió que
+   **lo que cuesta es la PASADA y no el radio** (bajar de 34 px a 4 midió PEOR,
+   61,4 ms contra 47,6). Así que la única palanca es que la pasada no exista.
+
+   ── Y NO TIENE POR QUÉ EXISTIR, PORQUE EL FONDO NO CAMBIA ──
+   Lo que el cajón desenfoca es la foto de fondo, que es una imagen estática —y
+   encima la deriva se PAUSA debajo del cajón desde la vuelta 130—. O sea que
+   las veinte pasadas de cada apertura calculan siempre el mismo resultado. Se
+   calcula una vez, en el ocio, y queda como mapa de bits: de ahí en más el
+   deslizamiento es una traslación y nada más, que es lo que el compositor sabe
+   hacer sin tocar el hilo principal.
+
+   ── EL DESENFOQUE ES EL ACHIQUE, NO EL FILTRO ──
+   Achicar a 108 px de ancho y volver a estirar YA es un desenfoque: el
+   promediado del achique y la interpolación del estirado hacen la mayor parte
+   del trabajo. El `filter` del lienzo sólo pone lo que falta, y sobre 108×234
+   cuesta nada. Se hornea en **espacio de pantalla** —con el mismo «cover» y el
+   mismo `scale(1.06)` que tiene `#fondo`— así que con la hoja asentada el
+   horneado cae exactamente donde cae la foto: no hay nada que alinear.
+
+   ── EL BORDE SE RECORTA, O QUEDA UN HALO ──
+   `ctx.filter` muestrea fuera del lienzo como transparente, así que blurear
+   contra el borde deja el canto lavado. Se hornea con un margen del doble del
+   radio y se recorta después. */
+const CAJ_FROST_W = 108;
+const CAJ_FROST_R = 34;        /* el mismo radio que el `backdrop-filter` vivo */
+/* ── CUÁNTO ESTÁ ACERCADA LA FOTO CUANDO EL CAJÓN ESTÁ ABIERTO ──
+   No es el 1.06 de la declaración: `@keyframes deriva` va de `scale(1.06)` a
+   `scale(1.09)` —o sea 1.075 en el medio— y encima `#fondo.hondo` multiplica
+   por 1.075 con el cajón puesto. Horneando con 1.06 el mapa de bits muestra un
+   9% MÁS de foto que la pantalla, y eso se ve: medido contra el filtro vivo,
+   el horneado salía con brillo 105,5 contra 101,7 y con el azul del ángulo
+   superior mucho más vivo, porque estaba mostrando otra franja del cielo.
+   Lo que queda de error es la deriva, ±1,4% de escala y ±4 px de traslación
+   según en qué escalón se haya pausado: por debajo del radio del desenfoque. */
+const CAJ_FROST_Z = 1.075 * 1.075;
+let CAJ_FROST_T = 0;
+
+function cajFrostHornea(rad){
+  const caj = document.getElementById('cajon');
+  if (!caj) return false;
+  /* sin foto queda el `backdrop-filter` de siempre: el degradado de respaldo ya
+     es liso, así que no hay nada que desenfocar, y degradar a un rectángulo
+     plano sería peor que pagar el filtro */
+  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  const W = innerWidth || 412, H = innerHeight || 892;
+  const w = CAJ_FROST_W, h = Math.max(8, Math.round(w * H / W));
+  const s = w / W;                                   /* pantalla → lienzo */
+  const r = (rad == null ? CAJ_FROST_R : rad) * s;   /* el radio, en el lienzo */
+  const m = Math.max(2, Math.ceil(r * 3));           /* tres sigmas de margen */
+  try {
+    /* ── 1. LA FOTO COMO LA VE LA PANTALLA ──
+       El «cover» se calcula contra W×H y no contra el lienzo con margen: el
+       margen tiene otra proporción, y calcularlo ahí recorta OTRA parte de la
+       foto. Medido con la cuenta mal: el horneado salía con media 108,6 contra
+       101,7 del vivo, o sea más azul y más saturado, porque estaba mostrando
+       una franja distinta del cielo. */
+    const iw = FONDO_IMG.naturalWidth, ih = FONDO_IMG.naturalHeight;
+    const k = Math.max(w / iw, h / ih) * CAJ_FROST_Z;
+    const dw = iw * k, dh = ih * k;
+    const base = document.createElement('canvas');
+    base.width = w; base.height = h;
+    const bx = base.getContext('2d');
+    if (!bx) return false;
+    bx.drawImage(FONDO_IMG, (w - dw) / 2, (h - dh) / 2, dw, dh);
+
+    /* ── 2. EL BORDE SE REPITE HACIA AFUERA ──
+       `ctx.filter` muestrea fuera del lienzo como TRANSPARENTE, así que
+       desenfocar contra el borde deja el canto lavado. Un `backdrop-filter` de
+       verdad clampea, y eso es lo que se imita: la última fila y la última
+       columna se estiran sobre el margen, más las cuatro esquinas. */
+    const cw = w + m * 2, ch = h + m * 2;
+    const pad = document.createElement('canvas');
+    pad.width = cw; pad.height = ch;
+    const px = pad.getContext('2d');
+    px.drawImage(base, m, m);
+    px.drawImage(base, 0, 0, w, 1, m, 0, w, m);
+    px.drawImage(base, 0, h - 1, w, 1, m, m + h, w, m);
+    px.drawImage(base, 0, 0, 1, h, 0, m, m, h);
+    px.drawImage(base, w - 1, 0, 1, h, m + w, m, m, h);
+    px.drawImage(base, 0, 0, 1, 1, 0, 0, m, m);
+    px.drawImage(base, w - 1, 0, 1, 1, m + w, 0, m, m);
+    px.drawImage(base, 0, h - 1, 1, 1, 0, m + h, m, m);
+    px.drawImage(base, w - 1, h - 1, 1, 1, m + w, m + h, m, m);
+
+    /* ── 3. EL DESENFOQUE, Y DESPUÉS EL RECORTE ── */
+    const bl = document.createElement('canvas');
+    bl.width = cw; bl.height = ch;
+    const lx = bl.getContext('2d');
+    lx.filter = 'blur(' + r.toFixed(2) + 'px) saturate(118%) brightness(.84)';
+    lx.drawImage(pad, 0, 0);
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    out.getContext('2d').drawImage(bl, m, m, w, h, 0, 0, w, h);
+
+    caj.style.setProperty('--cajFrost', 'url(' + out.toDataURL('image/jpeg', 0.82) + ')');
+    caj.classList.add('hor');
+    return true;
+  } catch (e){ return false; }   /* un lienzo teñido no puede leerse: queda el filtro */
+}
+
+function cajFrostRehornea(){
+  clearTimeout(CAJ_FROST_T);
+  CAJ_FROST_T = setTimeout(cajFrostHornea, 260);
 }
 /* ══════════════════════ EL VIDRIO ══════════════════════
    ── QUÉ SEPARA «VIDRIO ESMERILADO» DE «LIQUID GLASS» ──
@@ -4490,7 +4637,13 @@ function pintaDock(){
      apps— se partía en DOS FILAS: medido, pasaba de 74 px de alto a 232. Un
      dock que se envuelve no es un dock. Sus columnas son cuántas apps tiene. */
   d.style.setProperty('--cols', Math.max(1, d.children.length));
-  d.style.visibility = DOCK.length ? 'visible' : 'hidden';
+  /* ── UN DOCK VACÍO SE ESCONDE POR CLASE Y NO EN LÍNEA ──
+     Estaba como `style.visibility`, y un estilo en línea le gana a cualquier
+     selector: con el cajón asentado, `body.cajQ #capa{visibility:hidden}` no
+     lo alcanzaba y el dock seguía filtrando 36.096 px detrás de una hoja
+     opaca. Es el mismo defecto que en la vuelta 123 dejó el vidrio sin
+     recalibrar. */
+  d.classList.toggle('vacio', !DOCK.length);
   if (!DOCK_VISTO){ DOCK_VISTO = true; entraLista(d); }
 }
 
@@ -4622,6 +4775,9 @@ function cajPrepara(){
     ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 900);
   ocio(() => {
     if (CAJON) return;
+    /* el vidrio de la hoja: se calcula una vez acá y el deslizamiento pasa a ser
+       una traslación y nada más (ver `cajFrostHornea` en `c.js`) */
+    cajFrostHornea();
     if (CAJ_ULT_Q !== '') pintaCajon('');
     /* el icono del sistema es un `<img>`; la celda de un pack va como
        `background-image` en línea sobre la baldosa (ver `icoAero`). Las dos se
@@ -4897,14 +5053,30 @@ function cierraMenu(){
    fue para '', alcanza con volver a escalonar la entrada, que cuesta un reflujo. */
 let CAJ_ABRE_T = 0;
 const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
+/* ── LO QUE PASA CUANDO LA HOJA LLEGA ──
+   Vive en una función porque hay DOS caminos que terminan con la hoja
+   asentada: abrirla con el botón y soltarla a mitad de un arrastre sin llegar
+   al umbral de cierre. Repartido, el segundo se olvida de apagar el escritorio
+   y el defecto no se ve nunca —sólo cuesta. */
+function cajAsienta(){
+  const caj = $('#cajon');
+  caj.classList.add('abre');
+  clearTimeout(CAJ_ABRE_T);
+  CAJ_ABRE_T = setTimeout(() => {
+    caj.classList.remove('abre');
+    if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
+  }, CAJ_ABRE_MS);
+}
+
 function verCajon(v){
   CAJON = !!v;
   const caj = $('#cajon');
   caj.classList.toggle('on', CAJON);
   /* mientras se desliza, las baldosas van sin vidrio (ver `#cajon.on.abre`) */
-  caj.classList.add('abre');
-  clearTimeout(CAJ_ABRE_T);
-  CAJ_ABRE_T = setTimeout(() => caj.classList.remove('abre'), CAJ_ABRE_MS);
+  /* el escritorio vuelve a la vista en el acto al empezar a cerrar; se apaga
+     recién cuando la hoja llegó (ver `cajAsienta` y `body.cajQ`) */
+  document.body.classList.remove('cajQ');
+  cajAsienta();
   /* el CSS de la mascota decide su sitio con esto */
   document.body.classList.toggle('caj', CAJON);
   mascSitio();
@@ -5169,8 +5341,16 @@ function enganchaCajon(){
      cajón está cerrado. */
   const man = $('#cajManija');
   let y0 = 0, tira = false;
-  const pone = d => caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
-  const suelta = () => { caj.classList.remove('tira'); caj.style.removeProperty('--caj-y'); };
+  const pone = d => {
+    /* `contains` es una lectura de clase, no fuerza recálculo: el `remove` sale
+       una sola vez y no en cada cuadro del arrastre */
+    if (document.body.classList.contains('cajQ')) document.body.classList.remove('cajQ');
+    caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
+  };
+  const suelta = () => {
+    caj.classList.remove('tira'); caj.style.removeProperty('--caj-y');
+    if (CAJON) cajAsienta();      /* soltó a mitad de camino: la hoja vuelve sola */
+  };
 
   man.addEventListener('pointerdown', e => {
     y0 = e.clientY; tira = true;
@@ -5633,6 +5813,7 @@ function arranca(){
 
   document.addEventListener('visibilitychange', () => { CORRE = !document.hidden; mascMira(); });
   addEventListener('resize', () => { calculaFilas(); pintaInicio(); mascMira();
+    cajFrostRehornea();
   /* la lista cambia de ancho, o sea que las anclas se mueven: la caché de
      `midaAnclas` deja de valer y hay que volver a medirla */
   ANCLA_Y = []; });
@@ -10251,7 +10432,8 @@ window.__A = {
   },
   /* el catálogo entero, uno por uno, para poder mirarlos */
   async widSolo(k){ widPone([k]); await new Promise(r => setTimeout(r, 240)); return this.wid(); },
-  fondos(){
+  fondos(k){
+    if (k) fondoPone(k);
     const l = $$('#fgRejilla .fgIt').map(n => n.dataset.k);
     return { abierta: $('#fondos').classList.contains('on'), n: l.length, claves: l,
              sel: lee('fondoSel', 'fab'),
@@ -10529,7 +10711,14 @@ window.__A = {
       const c = getComputedStyle(e);
       const f = c.backdropFilter || c.webkitBackdropFilter;
       if (!f || f === 'none') continue;
+      /* ── LO ESCONDIDO NO SE PINTA, ASÍ QUE NO FILTRA ──
+         `getComputedStyle` informa el `backdrop-filter` igual de un elemento
+         con `visibility:hidden`, y `getBoundingClientRect` le devuelve su caja:
+         sin esta guarda la sonda contaba las tres piezas del escritorio con el
+         cajón asentado, o sea que no podía ver el ahorro que venía a medir. */
+      if (c.visibility === 'hidden' || c.display === 'none' || c.opacity === '0') continue;
       const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
       v.push({ q: (e.id ? '#'+e.id : '') + (e.className && typeof e.className === 'string'
                  ? '.'+e.className.trim().split(/\s+/).join('.') : ''),
                px: Math.round(r.width*r.height), f: f.slice(0, 46) });
@@ -10843,6 +11032,63 @@ window.__A = {
      La primera apertura pinta la lista; la segunda ya la tiene y sólo la
      escalona. Se mide cuánto tarda `verCajon(true)` en cada caso y si `.abre`
      está puesto durante la transición y sacado después. */
+  /* ── CUÁNTO CUESTA EL DESLIZAMIENTO, CUADRO POR CUADRO ──
+     `cajAbre` mide el JAVASCRIPT de la apertura; esto mide lo otro, que es lo
+     que el jugador siente: los 340 ms en los que la hoja se está moviendo. Un
+     `backdrop-filter` sobre algo que SE MUEVE se rehace en cada cuadro por
+     construcción —su fondo cambia porque el elemento cambió de sitio— así que
+     acá lo que interesa no es el pico de JS sino cuántos cuadros perdidos hay
+     y cuántas pasadas de filtro siguen vivas a mitad de camino. */
+  /* prende y apaga el horneado sobre EL MISMO binario: sin esto la comparación
+     sería contra otro archivo y mediría dos cosas a la vez */
+  cajFrost(v){
+    const caj = $('#cajon');
+    if (v === true || typeof v === 'number') cajFrostHornea(typeof v === 'number' ? v : null);
+    else if (v === false) caj.classList.remove('hor');
+    const cs = getComputedStyle(caj);
+    const uri = caj.style.getPropertyValue('--cajFrost') || '';
+    return { hor: caj.classList.contains('hor'), bytes: uri.length,
+             filtro: (cs.backdropFilter || cs.webkitBackdropFilter || 'none').slice(0, 44),
+             capas: (cs.backgroundImage || '').split('url(').length - 1 };
+  },
+  /* planta la hoja a media subida y SIN transición: es la única forma honesta
+     de fotografiar un instante del deslizamiento, porque la transición la
+     interpola el navegador y no se puede congelar desde acá */
+  cajPon(y){
+    const c = $('#cajon');
+    verCajon(true);
+    if (y == null){ c.classList.remove('tira'); c.style.removeProperty('--caj-y'); }
+    else { c.classList.add('tira'); c.style.setProperty('--caj-y', y + 'px'); }
+    return { y: c.style.getPropertyValue('--caj-y') || '0px',
+             hor: c.classList.contains('hor') };
+  },
+  async cajDesliza(){
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const dts = []; let ult = performance.now(); let vidMedio = null;
+    let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 170));
+    vidMedio = this.vidrios();
+    await new Promise(r => setTimeout(r, 400));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             vidMedio: vidMedio.n, pxMedio: vidMedio.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
   async cajAbre(){
     verCajon(false); cajCacheLimpia();
     await new Promise(r => setTimeout(r, 60));
