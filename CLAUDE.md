@@ -321,6 +321,22 @@ metros y medios pasos tienen que dar la misma zancada. Si no dan, el cuerpo choc
 empujando —pasa cuando el director abre una puerta en el camino, y pasó— y el número no vale. Eso lo
 dice `perdido_pct` y por eso el 21 % de una corrida se pudo descartar en vez de creerle.
 
+#### Y DE PASO SE FUE EL "GIRÁ EL TELÉFONO"
+
+Pedido: *"elimina el gira el celular y dejalo ya girado 90° al juego"*.
+
+**Ya estaba girado.** `#stage` lleva `rotate(90deg)` en cuanto la ventana es más alta que ancha, y con
+el escenario girado giran también el menú, el HUD y los controles; `aLocal` y `dLocal` deshacen el giro
+para los toques, así que una pantalla vertical es jugable de punta a punta. Lo único que hacía el
+cartel era **tapar el menú ya girado con una capa fija —afuera del escenario, o sea sin girar— pidiendo
+que se hiciera lo que el juego acababa de hacer solo**. Se fueron la capa, su animación, su línea en el
+layout y sus tres claves de idioma.
+
+Medido en 412×892 a dpr 2,75, entrando con **toques de verdad** y no con clicks sintéticos: el elemento
+ya no existe, `transform: matrix(0,1,-1,0,412,0)` —o sea 90°—, la pantalla usada es **1,000**, el
+destino de render 1520×702, y la cadena idioma → menú → `estado: play` se recorre tocando. Y en
+apaisado nada rota (`transform: none`), que es la mitad que no se podía romper.
+
 #### MEDIDO AL CERRAR, A dpr 1
 
 Cabeceo: 2 hundimientos y 1 ciclo lateral por zancada, desfase **0**, y en vivo ±1,95 cm · ±1,34 cm ·
