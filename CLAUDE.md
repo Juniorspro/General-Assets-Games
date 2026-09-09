@@ -281,6 +281,221 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+- **`Huesos.html` es "HUESOS"** (~920 KB, de los cuales 830 son las cincuenta y una texturas
+  generadas; el mundo entero, los bichos y las animaciones se dibujan por código). El decimosexto
+  juego. Un **RPG de matar esqueletos en tercera persona**, vertical nativo y con joystick: se
+  camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a uno y el
+  remate barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del juego. Tres
+  **zonas encadenadas** —bosque, ruinas y ceniza— cada una con su suelo, su niebla, su cielo y su
+  luz; una zona se abre cuando la anterior quedó **limpia**, y limpiarla es el punto de control:
+  cura entera y regala un nivel. **Veintidós esqueletos de cuatro clases** —peón, lancero, bruto y
+  el **rey** de 460 de vida al fondo de la ceniza— que salen de **una** máquina de estados y una
+  tabla de números, no de cuatro ramas. El rey es el único con **corona y capa**, y son dos mallas
+  instanciadas más cuya matriz queda en cero para todos los demás. La vegetación son **veinticuatro
+  mallas instanciadas** —seis familias de cuatro variantes— con encaramiento cilíndrico parchado en
+  el shader. Pixelado de verdad (destino de render chico estirado con NEAREST). Vive partido en
+  `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
+  hornean con `python3 herramientas/huesos/hornear.py`.
+
+### Centésima cuadragésima cuarta vuelta (2026-09-09): **HUESOS**, el decimosexto juego — un RPG de matar esqueletos, y cinco defectos que sólo aparecen midiendo
+
+Pedido textual, con una captura de «What Came Back» de @Goshumio en la app de Rezona: *"agrégale
+animasciones y haz un mini juego rpg de matar esqueletos, con cada medievales, zonas, bosques,
+plantas de palos con obviamente hojas algo así Sprites que tú generes, arbustos, tercera persona,
+controles moviles, etc etc etc"*.
+
+`juegos-pc/Huesos.html` (920 KB). Vive partido en `herramientas/huesos/partes/` y se arma con
+`python3 herramientas/huesos/armar.py`.
+
+#### CUATRO CLASES, UNA MÁQUINA DE ESTADOS, Y LA DIFERENCIA SON NÚMEROS
+
+Peón, lancero, bruto y rey salen de la **misma** tabla —vida, velocidad, daño, alcance, cadencia,
+carga, escala, xp, radio, alto, color, vista, empuje— y del mismo `esqPaso`. Un enemigo con su
+propio `if` es un enemigo que el día que se corrige un defecto se queda sin corregir. Lo mismo el
+golpe del jugador: `jugResuelveGolpe` es **una** función y la usan el dedo y el auto-jugador, así
+que si el bot termina la partida, la partida se puede terminar.
+
+#### LA ZANCADA NO SE ESCRIBE AL LADO: SE MIDE DEL PROPIO CICLO
+
+`pasos por segundo = velocidad ÷ zancada`, y la zancada sale de medir el recorrido del pie en la
+animación (`midePasos()` la calcula al arrancar). Escrita a mano al lado de la velocidad, las dos
+se separan el día que se toca el ciclo y los pies patinan — el defecto que en RECREO tenía a Baldi
+a 2,7 metros por paso. Medido: **0 % de patinaje** en caminar (zancada 1,348, cadencia 4,53
+pasos/s) y en correr (2,037 y 5,5), con `desliza: 0` en los dos.
+
+#### EL REY TE CRUZABA EL MAPA, Y ERA UN NÚMERO
+
+`vista: 60` es lo que lo hace un jefe: te ve de lejos. Pero con eso puesto **se levantaba de la
+ceniza y te venía a buscar a las ruinas**: medido, cuatro de los ocho golpes que mataban al bot
+eran suyos, a nivel 2 y en tierra de otra zona. Un jefe que caza antes de que su zona se abra no es
+un jefe, es una emboscada de tres minutos. Ahora **una zona cerrada no persigue**: la vista sólo
+vale dentro de `ZONA_ACT`.
+
+#### EL ESQUIVE NO ESQUIVABA NADA, Y LA SONDA LO DIJO CON UN CERO
+
+`TALLY.esquivados` contaba cuántos golpes se comían los cuadros de invencibilidad, y devolvía
+**cero** partida tras partida. La ventana estaba puesta más corta que el retardo con el que el bot
+reacciona: existía en el código y no ocurría nunca. Sin esos cuadros, esquivar es «correr un poco»
+y el aviso de carga del enemigo no sirve para nada. Con la ventana medida contra la duración de la
+carga, el bot honesto esquiva entre 6 y 21 golpes por partida.
+
+#### EL BOT SE CLAVABA CONTRA UN ÁRBOL, Y EL SIGNO DEL DESVÍO ERA MÍO
+
+`rodea()` desvía la dirección pedida cuando hay un sólido en el camino. La primera versión lo
+desviaba **hacia** el obstáculo: el bot se plantaba contra un tronco, la distancia al objetivo no
+bajaba, y ahí se quedaba los sesenta mil pasos. Se ve como un juego que se cuelga y es una resta al
+revés. Y hubo que agregarle además un **detector de atasco** —si en doce pasos no se movió y el
+blanco está lejos, gira— porque un desvío puro tiene puntos de equilibrio: dos árboles enfrentados
+lo dejan oscilando entre los dos para siempre.
+
+#### EL BOT NO ATACABA PORQUE EL UMBRAL ERA MÁS FINO QUE UN PASO DE FÍSICA
+
+Se paraba a `alc * 0.98` y atacaba dentro de eso. A 5,6 m/s un paso de física son 9 cm: la ventana
+entre «todavía lejos» y «ya encima» era más angosta que eso, así que el bot la cruzaba sin caer
+adentro y se quedaba bailando alrededor del esqueleto sin pegar una. En 0,92 entra.
+
+#### Y UNA SONDA QUE INFORMABA DE MENOS
+
+`anda()` devuelve `dentroDeAlgo`, o sea en cuántos pasos el jugador quedó dentro de un sólido.
+Comparaba contra `s.r + J_RADIO * 0.9`, o sea **un radio más chico que el que usa el choque**: los
+casos en que el cuerpo entraba un poco no los contaba. Una prueba que mide con una tolerancia más
+floja que el juego aprueba lo que el juego rechaza.
+
+#### LA VIDA SÓLO BAJABA, Y ESO NO ES DIFICULTAD
+
+Adentro de una zona no había forma de recuperar vida: cualquier error se acumulaba hasta el final.
+Medido con el bot en tres semillas y ocho tandas de ajustes, moría **siempre** en la ceniza, con
+nueve brutos y un rey de 460 por delante y la barra por la mitad. Dos cosas lo arreglan y ninguna
+es bajar el daño:
+
+- **Matar cura** una fracción de la vida del muerto (`MATA_CURA = 0.115`): un peón devuelve cuatro y
+  un bruto doce. Recompensa ir para adelante, que es para lo que están el combo y el esquive, y
+  escala sola con la clase sin una segunda tabla.
+- **Limpiar una zona es el punto de control**: cura entera y regala un nivel. Antes abrir la
+  siguiente era puro costo — te la ganabas con la vida por la mitad y entrabas a pelear contra
+  cosas del doble de vida.
+
+#### LA CADENA DE DIAGNÓSTICO DE LA IMAGEN, QUE ES LA MITAD DE LA VUELTA
+
+Cuatro defectos encadenados, y ninguno se encontró mirando la pantalla: cada uno tapaba al
+siguiente.
+
+1. **`brillo()` LEÍA UNA ESQUINA Y NO EL CUADRO.** Hacía
+   `readRenderTargetPixels(RT, 0, 0, 120, 68, …)` sobre un destino de 372×172: eso es el **13 % de
+   abajo a la izquierda** —el origen de un render target es la esquina de abajo— o sea puro suelo en
+   sombra. Informaba 8,8 de media para una escena cuyo cielo mide 65. **La sonda estaba mal antes
+   que el juego**, y todo lo que vino después salió de arreglarla primero.
+2. **EL SUELO ESTABA NEGRO (9,4 de 255), Y ERA LA REGLA 7 DEL HORNEADO SIN APLICAR.** Descarté las
+   sombras (la imagen sale idéntica sin ellas) y la exposición —barrida de 1,06 a 2,4, la media se
+   movió **0,1**, o sea un parámetro que no está en el camino—. Lo que contestó fue un A/B que pinta
+   el suelo blanco y sin mapa: **120,1**. La causa: three.js multiplica `map × vertexColor ×
+   material.color`, así que el color del material es un **tinte sobre la foto**, y el tinte 0,27
+   venía de cuando el suelo era un lienzo dibujado. 0,27 × 0,0416 de la foto = **0,011**. Se arregla
+   en el horneado, nivelando el albedo de cada suelo por **luma** —no canal por canal, que le cambia
+   el color— con una `tanh` en vez de recorte, porque una ganancia de 6,5 empuja el 8 % de los
+   píxeles por encima de uno. Bandas de abajo: 9,4 → 32.
+3. **LA PANTALLA MEDÍA 3,7 CON EL DESTINO EN 36,6.** El render target se declara
+   `SRGBColorSpace`, así que guarda codificado y **el hardware decodifica al muestrear**; y una
+   pasada de post con `ShaderMaterial` crudo **no recibe** el `colorspace_fragment` que three.js
+   inyecta en sus materiales, así que nadie volvía a codificar. Una función de sRGB a mano en el
+   shader: **3,7 → 31,0**. (Y el tone mapping tampoco se aplica dibujando a un render target, que es
+   por qué la exposición no movía nada.)
+4. **Y AL ESCRIBIR ESO SE CAYÓ EL MÓDULO ENTERO.** El comentario que puse adentro del shader llevaba
+   acentos graves, y el shader vive en un template literal: los acentos lo terminan en el medio.
+   `SyntaxError: Unexpected identifier 'colorSpace'` y la página en blanco. **Es la misma lección de
+   Eco**, con otro disfraz.
+
+#### EL PERSONAJE NUNCA HABÍA ESTADO EN PANTALLA, Y LA SONDA DECÍA QUE SÍ
+
+El más grande de la vuelta. `kits()` informaba 1 de 14 instancias, en la escena, visible y sin
+recortar; pintándolos de rojo plano tampoco aparecía nada. Lo que lo dijo fue leer la **matriz de
+instancia** de verdad y llevarla al espacio de la cámara: **`zVista: +4.98`**, o sea **detrás del
+lente**. `camPaso` ponía la cámara en `ojo + dir·d` y `dir` es hacia donde MIRA: la cámara se
+plantaba delante del jugador mirando para el otro lado. Y eso explica el síntoma anterior, que yo
+había leído mal: la proyección daba x e y cerca del centro con z de 1,05 — **un punto detrás de la
+cámara proyecta igual, dado vuelta, y cae adentro del cuadro**, así que ni la x ni la y alcanzan
+para decir «se ve». Es la trampa del autobús de RECREO. Con el signo corregido el héroe ocupa el
+**24,4 % del alto**.
+
+#### EL JEFE DEL JUEGO ERA IDÉNTICO AL PRIMER BICHO QUE UNO MATA
+
+Esto lo destapó la foto de la ceniza, que es para lo que están las fotos. Las cuatro clases
+comparten **una** receta y sólo se distinguen por la escala y el tinte, así que el rey salía con la
+misma silueta un 86 % más grande — y a diez metros no hay con qué comparar un tamaño. Lo que separa
+una silueta de otra no es cuánto mide sino que tenga algo que las demás no tienen: **corona y capa**,
+colgadas de huesos que ya existen (`cuello` y `pecho`), así que se mueven con la cabeza y con el
+pecho solas y escalan con el cuerpo por construcción.
+
+**Y NO CUESTAN UN BICHO MÁS.** Son dos piezas más en el kit instanciado —o sea **dos llamadas de
+dibujo en total**, haya uno o haya catorce esqueletos— con la matriz en **cero** para todo el que no
+sea rey. La matriz cero y no saltear la instancia: las instancias de un `InstancedMesh` son un rango
+contiguo, así que saltear una corre el índice y el bicho 7 pinta la cabeza del 8.
+Y se comprueba leyendo la matriz que se subió a la GPU y no la lista de clases, que es lo único que
+prueba que lo dibujado coincide con lo querido: **1 con corona de 14, y es el rey**; en el bosque,
+0 de 14.
+
+#### LA PANTALLA DE FINAL SE BORRABA SU PROPIO SUBTÍTULO
+
+`<h1 id="fTit"><span id="fSub"></span></h1>`, y `pintaFin` hacía `$('#fTit').textContent = …`:
+**`textContent` sobre el padre borra a los hijos**, así que la línea siguiente escribía sobre un
+`#fSub` que ya no existía y tiraba. O sea que la pantalla de final **nunca mostró ni el subtítulo
+ni las bajas**, y la excepción se comía el resto del cuadro cada vuelta mientras el panel estaba
+puesto. Es un defecto que no se ve leyendo el código —los dos ids existen en el HTML— y que la
+primera captura de la victoria cantó en una línea. El título va en su propio nodo.
+
+#### DOS VECES QUE LA MEDICIÓN ME CORRIGIÓ A MÍ
+
+- **«El héroe está en T-pose».** En la foto del bosque los brazos salían horizontales con lo que
+  parecía una espada cruzada. Estuve por perseguir la mezcla de poses; `encuadre()` contestó
+  **`pctAncho: 6,2 %`** —una T-pose son unos 20— así que el héroe estaba bien y **las barras eran las
+  ramas de un árbol justo detrás**. Dos números, una corrida.
+- **«La semilla 29 es una semilla mala».** El bot honesto moría ahí a los 14,8 s con cero bajas.
+  Corriendo la misma semilla dos veces: 13 bajas y nivel 4 la primera, cero la segunda. **El juego no
+  es determinista por semilla** (la fase de cada esqueleto sale de `Math.random`), así que una
+  corrida no describe una semilla. Y las cuarenta semillas tienen el spawn limpio, medido: el
+  esqueleto más cercano nunca cae a menos de 17 m.
+
+#### EL MENÚ MUESTRA EL JUEGO, Y DÓNDE CAE EL HÉROE SE DERIVA
+
+Detrás del velo corre el mundo de verdad con su semilla propia: el héroe respira, los esqueletos
+cercanos se animan y la cámara orbita. **No se los hace pasar**: `esqPaso` es lo que decide y lo que
+pega, así que en el menú se los posa y no se los corre — no hay forma de morirse mirando el menú.
+El velo es un degradado —cerrado arriba y abajo, abierto en el medio— que es la lección de POMPOM.
+
+**Y EL CORRIMIENTO LATERAL DEL HÉROE NO SE TANTEA.** Con 2,3 m escritos a mano caía en el 62 % del
+ancho, o sea **detrás de la fila de GRÁFICOS**, que llega al 74. Y el número correcto depende del
+campo, de la distancia y de la proporción de la pantalla, así que un metraje fijo se rompe en cuanto
+se toca cualquiera de los tres. Se elige la **fracción de media pantalla** y el corrimiento sale de
+`lat = frac · tan(fov/2) · aspecto · d`.
+
+#### MEDIDO AL CERRAR
+
+**51 de 51 texturas y 0 fallidas** (seis familias de cuatro variantes más los tres suelos).
+**40 de 40 semillas auditadas** sin una celda suelta. Patinaje **0 %** en las dos marchas. **Nueve
+poses** con recorrido de mano, pie y cabeza distinto en cada una. **Cero solapamientos** de HUD en
+el menú (6 elementos) y en partida (7), en 892×412. Las tres calidades en caliente (279×129 ·
+372×172 · 525×242) y los tres idiomas en vivo (`EL BOSQUE · THE WOOD · A MATA`). Corona **1 de 14 en
+la ceniza y 0 de 14 en el bosque**. Audio por el camino del botón: ambiente rms 0,0054 y un impacto
+en 0,2422 de pico con rms 0,028, o sea **5,2 veces el fondo**. Costo: **80 llamadas de dibujo y
+28 mil triángulos** con la turba entera y el rey en pantalla. `window.__errs` **vacío en las trece
+corridas**.
+
+Y la separación que prueba que hay una decisión adentro, sobre doce partidas jugadas de punta a
+punta por el mismo camino que usa el dedo:
+
+| | gana | bajas | nivel |
+|---|---|---|---|
+| auto-jugador honesto | **6 de 12** | 22 cuando gana | 6 |
+| el que se mueve al azar | **0 de 8** | **nunca pasa de 3** | 1 |
+
+**LO QUE NO ESTÁ RESUELTO, Y ES HONESTO DECIRLO:** de las seis derrotas del bot honesto, cinco son
+profundas —muere en las ruinas o en la ceniza con 13 a 20 bajas, que es el juego funcionando— y una
+es temprana: cuatro peones lo rodean a nivel 1 y se lo comen en veintitrés segundos. Su rama de huida
+(`cerca >= 3`) sólo dispara con los bichos **ya** en distancia de golpe y se apaga por debajo de 30
+de aguante, así que desperdicia la ventaja de correr, que son 5,6 contra los 2,55 de un peón. Un
+humano tiene esa herramienta y el bot casi no la usa, así que el 6 de 12 es un piso y no el número
+del juego.
+
 ### Centésima cuadragésima tercera vuelta (2026-09-09): **AERO** — «a la app se le negó el acceso», que no es un defecto nuestro pero sí una pared a la que mandábamos
 
 Dos capturas y ni una palabra: la pantalla de accesibilidad de HyperOS con la fila **Aero · «Función
