@@ -281,6 +281,148 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima novena vuelta (2026-09-09): **AERO** — el vidrio dejaba de ser vidrio, y el fondo hacía zoom
+
+Reporte, en una línea: *"creo que el lag viene de que cuando bajas la ventana de apps los widgets y
+cristales se vuelven opacos en vez de transparentes y de paso como que la imagen de wallpaper está en
+zoom y vuelve"*.
+
+#### LAS DOS COSAS SON MÍAS, Y SON LAS OPTIMIZACIONES DE LAS VUELTAS 132 Y 138 HACIÉNDOSE VISIBLES
+
+No es que el lag venga de ahí —el lag venía de un `background-color` animado y está medido— pero el
+defecto que reporta es **real, es de bulto, y lo introduje yo**. Las vueltas 132 y 138 apagan el
+`backdrop-filter` de las tres piezas del escritorio mientras una hoja viaja:
+
+    body.cajMueve #capa .vid,  body.cajQ #capa .vid,  body.ccMueve #capa .vid
+
+Y apagar el filtro no es apagar un costo: **es apagar el vidrio**. Fotografiado a 412×892, en el dock
+se ve exactamente qué pasa — el pasto y **un pez azul del fondo se leen NÍTIDOS a través del dock**,
+así que la pieza deja de ser una lámina y pasa a ser un contorno dibujado encima de la foto; y las
+baldosas de adentro, que reciben esa misma foto sin desenfocar, se leen a cuadraditos impresos. Eso es
+lo que él llama «opacos».
+
+Medido entre el viaje y el control, en el mismo binario: **11,5 % de los píxeles cambian más de 8
+sobre 255, con máximo 119**, y todo el cambio cae en dos bandas — la del reloj con la búsqueda y la
+del dock. Ni una sola diferencia en el medio de la pantalla, que es donde no hay vidrio.
+
+**Y NO ALCANZA CON DEVOLVERLES EL FILTRO DONDE SE VEN.** El dock queda a la vista durante **todo** el
+viaje del centro de control —la hoja mide 699 px de 892— así que devolvérselo son 36.096 px de
+desenfoque por cuadro justo en el gesto que la vuelta anterior acababa de llevar de 23 a 60 cuadros
+por segundo.
+
+#### LA SALIDA ES LA MISMA QUE YA SE USÓ DOS VECES: DARLES EL VIDRIO HORNEADO
+
+Las tres piezas **no se mueven**, así que con `background-attachment:fixed` y
+`background-size:100vw 100vh` cada una recibe exactamente la franja del horneado que le toca, **sin
+una sola cuenta por pieza** y corrigiéndose sola al cambiar de tamaño o de insets. Cero pasadas de
+filtro y sigue habiendo vidrio.
+
+(`fixed` se degrada a `scroll` bajo un ancestro con `transform` —es lo que la vuelta 131 midió con
+`#cajon`— así que se comprobó contra la posición calculada a mano: **los dos dan la misma imagen**.)
+
+#### PERO EL PRIMER HORNEADO SALIÓ 42 DE 255 MÁS CLARO, Y LA CAUSA YA ESTABA ESCRITA
+
+Puesto el horneado tal cual, el widget quedó **azul vivo donde el filtro vivo es azul apagado**:
+medido, **42,29 de 255 de diferencia**, o sea PEOR que dejarlo sin vidrio (9,73). El horneado sale de
+**la foto cruda**, y un `backdrop-filter` desenfoca **todo** lo que hay debajo de la pieza — y debajo
+hay tres capas más: el velo de oscurecer y los dos degradados de arriba y de abajo. Es literalmente el
+defecto que la vuelta 131 encontró en la hoja del centro de control (*«Y LE FALTABA EL VELO ADENTRO»*),
+en otro sitio y sin que se me ocurriera buscarlo.
+
+Con los velos pintados en el lienzo antes de desenfocar:
+
+| pieza | horneado | sin vidrio (lo que se estaba viendo) |
+|---|---|---|
+| reloj | **4,50** (era 42,29) | 9,73 |
+| búsqueda | **7,54** | 13,43 |
+| dock | **5,68** | 15,68 |
+
+O sea que ahora está **dos y tres veces más cerca** de su propio filtro que lo que se venía
+publicando. Medido aparte con el fondo congelado —**0,0 fuera de la pieza**, así que la medición es
+del vidrio y no de la deriva— el reloj da **4,6 de 255 con máximo 41**.
+
+**Y LOS OCHO NÚMEROS DE LOS VELOS PASAN A SER VARIABLES DE CSS**, porque el horneado los lee. Escritos
+dos veces, el día que se toque uno el mapa de bits pasa a describir una pantalla que no existe — que
+es exactamente el defecto de arriba, servido por la puerta de atrás.
+
+#### Y SON DOS HORNEADOS Y NO UNO, PORQUE LA RECETA NO ES LA MISMA
+
+La hoja lleva `blur(34px) saturate(118%) brightness(.84)` y las tres piezas del escritorio
+`blur(19px) saturate(122%) brightness(.90)`. El argumento de la vuelta 131 contra una segunda cocción
+—*«calcular dos veces la misma imagen y dejar dos que se pueden desincronizar»*— valía cuando la
+receta **era la misma**, y acá no lo es. Cuesta un lienzo de 108×234 más en el ocio y **4.208 bytes**.
+
+#### EL ACERCAMIENTO DE LA FOTO: 1,075 ERA UN ZOOM DE CÁMARA, NO UN INDICIO DE PROFUNDIDAD
+
+`#fondo.hondo` estaba en **1,075**, o sea siete y medio por ciento. Medido contra el reposo:
+
+| acercamiento | píxeles que cambian >8 | recorrido de la esquina |
+|---|---|---|
+| **1,075** | **54,6 %** | **37 px** |
+| 1,040 | 42,5 % | 20 px |
+| **1,022** | **31,4 %** | **11 px** |
+| 1,015 | 25,6 % | 7 px |
+
+Treinta y siete píxeles en 340 ms es una cámara haciendo zoom, y en la foto de al lado se ve la isla
+entera correrse. En **1,022** la esquina recorre once y el medio de la pantalla cuatro y medio: se
+siente y no se nombra, que es lo que un indicio de profundidad tiene que hacer. (El porcentaje de
+píxeles no baja tanto porque esta foto está llena de burbujas y de un horizonte: cualquier escala mueve
+bordes. El número que describe el gesto es el recorrido.)
+
+**Y EL NÚMERO SE LEE DEL CSS, NO SE COPIA.** El horneado de la hoja va a `deriva × hondo` y el del
+escritorio a `deriva` a secas —las tres piezas se miran mientras la foto todavía está en su escala de
+reposo—. Con el número escrito en los dos sitios, cambiarlo en el CSS deja el horneado describiendo una
+foto que ya no está. `frostHondo()` lee `--hondo`.
+
+De paso, las dos hojas MEJORAN con los velos horneados: la del centro de control pasa de **4,86 a 2,73
+de 255** contra su filtro vivo (y **0,03 fuera de la hoja**), y la del cajón queda en **0,83 con máximo
+15**.
+
+#### Y OSCURECER EL FONDO OBLIGA A REHORNEAR, QUE ES LO QUE ESTE CAMBIO DESTAPÓ
+
+El velo de oscurecer está **debajo** de las piezas, así que desde que el horneado lo repone, moverlo
+deja el mapa de bits describiendo una pantalla más clara que la que hay. Va por el mismo rebote de
+260 ms que el giro del teléfono, porque lo llama un deslizador que se arrastra. Medido con el
+deslizador en 40 por el camino del dedo: el horneado pasa de **4.208 a 3.452 bytes** y vuelve a 4.224
+al soltarlo en 0, y la pieza queda en **3,71 de 255 con máximo 26** contra su filtro vivo.
+
+#### UN DEFECTO DE LA SONDA, Y VENÍA DE LA VUELTA ANTERIOR
+
+`cajFrost()` informaba `bytes` leyendo `--cajFrost` **del estilo en línea de `#cajon`**, y la vuelta
+138 movió la variable a la raíz: venía devolviendo **0 desde entonces**. No rompía nada —los otros
+campos cargaban el significado— pero era un número que no describía nada. Ahora lee la raíz y devuelve
+los dos horneados.
+
+#### MEDIDO AL CERRAR
+
+El A/B en el mismo binario, tres corridas de cada lado, bajando el centro de control:
+
+| | medianas | mediana | vidrio a mitad de viaje | caras |
+|---|---|---|---|---|
+| control (vuelta 138 revertida) | 39,4 · 42,3 · 38,6 | **39,4 ms** | 4 pasadas / 384.621 px | 1 |
+| **ahora** | 39,1 · **17,0 · 16,6** | **17,0 ms** | **0 / 0** | **0** |
+
+O sea que **el vidrio horneado no cuesta un solo cuadro**: la ganancia de la vuelta anterior queda
+entera y las piezas vuelven a leerse a vidrio. Fotografiado el gesto de verdad en tres instantes, el
+dock se mantiene como una lámina esmerilada de punta a punta del viaje.
+
+Sin foto no hay `body.frost`, así que las reglas no aplican y las piezas quedan como estaban —
+verificado: `filtro: none, img: none`. Regresión: escritorio **4 capas / 35,5 MB / 3 vidrios / 1
+animación / 0 caras**, riel de **17 letras** con `letra('S')` mirando la S, **9 packs**, mascota 23
+huesos y 5.541 triángulos, **0 solapamientos**, gesto arriba abre el cajón con **0 ondas de agua**, el
+cajón cierra con **0 / 0** de filtro durante el deslizamiento y deja el escritorio en **3 / 96.401**,
+la escala de la foto en **1,022 a los 90 ms y 1 al terminar**, y los tres idiomas en vivo.
+`window.__errs` **vacío en las diez corridas**. APK **1.676**, 2,2 MB.
+
+**Y EL APK PASA A TENER ENLACE.** Vivía sólo en `salida/`, que está en el `.gitignore`, así que no había
+nada que abrir desde el teléfono. Se copia a `descargas/Aero.apk`, que sí se versiona: hay que volver a
+copiarlo ahí después de cada `compilar.sh` o el enlace apunta a la versión vieja.
+
+**LO QUE SIGUE SIN EXPLICARSE:** el pico de 108 a 183 ms al traer la hoja a escena sigue ahí y sigue
+estando en los dos lados del A/B. El próximo sospechoso es el mismo que anotó la vuelta anterior, y
+ahora está confirmado por lectura: **`ccArma()` construye la hoja entera adentro de `ccAbre()`**, o sea
+en el primer cuadro del gesto. Se contesta armándola en el ocio como `cajPrepara()` hace con el cajón.
+
 ### Centésima trigésima octava vuelta (2026-09-09): **AERO** — bajar el centro de control iba a 23 cuadros por segundo
 
 Reporte, con dos capturas: *"acá cuando estás bajando esta cosa, se laguea feo, se vuelve re lento, eso

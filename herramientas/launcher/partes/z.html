@@ -962,8 +962,12 @@ window.__A = {
     if (v === true || typeof v === 'number') cajFrostHornea(typeof v === 'number' ? v : null);
     else if (v === false) caj.classList.remove('hor');
     const cs = getComputedStyle(caj);
-    const uri = caj.style.getPropertyValue('--cajFrost') || '';
+    /* la variable vive en la RAÍZ desde que la comparten las dos hojas: leída
+       del estilo en línea de `#cajon` devolvía 0 y el número no describía nada */
+    const raiz = document.documentElement.style;
+    const uri = raiz.getPropertyValue('--cajFrost') || '';
     return { hor: caj.classList.contains('hor'), bytes: uri.length,
+             bytesVid: (raiz.getPropertyValue('--vidFrost') || '').length,
              filtro: (cs.backdropFilter || cs.webkitBackdropFilter || 'none').slice(0, 44),
              capas: (cs.backgroundImage || '').split('url(').length - 1 };
   },
@@ -1111,6 +1115,24 @@ window.__A = {
   ccVieja(v){
     document.body.classList.toggle('ccViejaV', !!v);
     return !document.body.classList.contains('ccViejaV');
+  },
+  /* El A/B del vidrio horneado del escritorio: `true` devuelve el estado de la
+     vuelta 138 —las tres piezas sin filtro Y sin horneado, o sea sin vidrio— que
+     es lo que el dueño reportó. Sin esto la medición sólo podría aprobar el
+     arreglo y no detectar el defecto. */
+  vidFrost(v){
+    document.body.classList.toggle('vidFrostV', !!v);
+    const el = $('#reloj'), cs = getComputedStyle(el);
+    return { horneado: !document.body.classList.contains('vidFrostV'),
+             frost: document.body.classList.contains('frost'),
+             img: cs.backgroundImage.slice(0, 42),
+             largoCaj: (getComputedStyle(document.documentElement)
+               .getPropertyValue('--cajFrost') || '').length,
+             largoVid: (getComputedStyle(document.documentElement)
+               .getPropertyValue('--vidFrost') || '').length,
+             hondo: getComputedStyle(document.documentElement)
+               .getPropertyValue('--hondo').trim(),
+             filtro: cs.backdropFilter };
   },
   async cajCierra(){
     verCajon(true);
@@ -1924,6 +1946,15 @@ window.__A = {
   persAbrir(){ persAbre(); return this.pers(); },
   persCerrar(){ persCierra(); return this.pers(); },
   /* se toca la opción por su texto, que es lo que hace el dedo */
+  /* el deslizador de oscurecer, por el mismo camino que el dedo: `persOscuro`
+     es quien tiene que pedir el rehorneado, así que la sonda lo llama a él y no
+     escribe la opacidad a mano */
+  oscurece(v){
+    guarda('oscuro', v); persOscuro();
+    return { velo: getComputedStyle($('#oscuro')).opacity,
+             bytesVid: (document.documentElement.style
+               .getPropertyValue('--vidFrost') || '').length };
+  },
   persToca(grupo, txt){
     const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
     if (!g) return { error: 'no está ' + grupo, hay: $$('#persCuerpo .pTit').map(t => t.textContent) };

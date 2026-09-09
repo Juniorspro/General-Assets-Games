@@ -47,6 +47,23 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
      escritorio o el cajón: acá van los valores del escritorio, que es lo que se
      ve en el primer cuadro. */
   --masc-w:214px; --masc-h:292px; --masc-b:132px;
+  /* ── CUÁNTO SE ACERCA LA FOTO CON EL CAJÓN PUESTO ──
+     Estaba en 1,075, o sea **siete y medio por ciento**: medido contra el
+     reposo, eso mueve el 54,6 % de los píxeles más de 8 sobre 255 y lleva la
+     esquina de la foto **37 px** en los 340 ms del viaje. Eso no se lee a
+     profundidad, se lee a que la cámara hizo zoom — y es lo que el dueño
+     reportó con todas las letras. En 1,022 la esquina recorre **11 px** y el
+     medio de la pantalla 4,5: se siente y no se nombra, que es lo que un
+     indicio de profundidad tiene que hacer.
+     Va en una variable porque el horneado del vidrio la LEE (`frostHondo()` en
+     `c.js`): con el número escrito en los dos sitios, cambiarlo acá deja el
+     mapa de bits describiendo una foto que ya no está. */
+  --hondo:1.022;
+  /* los dos velos de arriba y de abajo, en variables porque los LEE el
+     horneado del vidrio (`frostUno()` en `c.js`) */
+  --velo-rgb:3,26,54;
+  --veloT-h:30%; --veloT-a:.50; --veloT-b:.30; --veloT-m:52%;
+  --veloB-h:21%; --veloB-a:.46; --veloB-b:.18; --veloB-m:60%;
   --v-fil:blur(24px) saturate(120%) brightness(.90);
   --v-filR:blur(19px) saturate(122%) brightness(.90);
   --acento:#7fe3ff;
@@ -130,7 +147,7 @@ body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
    por cuadro mientras el cajón está abierto, para oscurecer algo que el propio
    vidrio del cajón ya oscurece con su `brightness(.84)`. `scale` se compone
    con el `transform` animado, así que sí se ve, y el filtro se va. */
-#fondo.hondo{scale:1.075}
+#fondo.hondo{scale:var(--hondo)}
 /* ── EL LIENZO DEL AGUA VA ENTRE LA FOTO Y LOS VELOS ──
    Encima del fondo, porque es una copia suya desplazada; debajo de `#oscuro` y
    de las dos bandas, para que oscurecer el fondo y los degradados de los
@@ -155,10 +172,25 @@ body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
    entero quedaba embarrado, y el cielo es lo único que este fondo tiene para
    mostrar. Ahora cubre exactamente lo que lleva texto —barra de estado, widget
    y búsqueda terminan en el 25% del alto— y suelta el medio. */
-#veloT{top:0;height:30%;
-  background:linear-gradient(180deg,rgba(3,26,54,.50) 0%,rgba(3,26,54,.30) 52%,rgba(3,26,54,0) 100%)}
-#veloB{bottom:0;height:21%;
-  background:linear-gradient(0deg,rgba(3,26,54,.46) 0%,rgba(3,26,54,.18) 60%,rgba(3,26,54,0) 100%)}
+/* ── LOS OCHO NÚMEROS DE LOS VELOS SON VARIABLES PORQUE EL HORNEADO LOS LEE ──
+   Un `backdrop-filter` desenfoca TODO lo que hay debajo de la pieza, y debajo
+   de las tres piezas del escritorio están estos dos velos. El horneado sale de
+   la foto cruda: sin reponerlos, el widget salía **42,3 de 255 más claro** que
+   su propio filtro —medido— porque le faltaba justo el velo que oscurece la
+   franja de arriba. Es el mismo defecto que la vuelta 131 encontró en la hoja
+   del centro de control, en otro sitio.
+   Escritos dos veces —acá y en `frostUno()`— el día que se toque uno el
+   horneado pasa a describir una pantalla que no existe. Se declaran una vez. */
+#veloT{top:0;height:var(--veloT-h);
+  background:linear-gradient(180deg,
+    rgba(var(--velo-rgb),var(--veloT-a)) 0%,
+    rgba(var(--velo-rgb),var(--veloT-b)) var(--veloT-m),
+    rgba(var(--velo-rgb),0) 100%)}
+#veloB{bottom:0;height:var(--veloB-h);
+  background:linear-gradient(0deg,
+    rgba(var(--velo-rgb),var(--veloB-a)) 0%,
+    rgba(var(--velo-rgb),var(--veloB-b)) var(--veloB-m),
+    rgba(var(--velo-rgb),0) 100%)}
 @keyframes deriva{
   from{transform:scale(1.06) translate3d(-.9%,-.5%,0)}
   to  {transform:scale(1.09) translate3d(.9%,.6%,0)}}
@@ -810,6 +842,52 @@ body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldos
    que no es lo mismo que tapa la del cajón. */
 body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
   backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── PERO APAGAR EL FILTRO NO PUEDE SER APAGAR EL VIDRIO ──
+   Reportado por el dueño mirando el cajón: *«cuando bajas la ventana de apps
+   los widgets y cristales se vuelven opacos en vez de transparentes»*. Tenía
+   razón, y fotografiado a 412×892 se ve exactamente qué pasa: sin desenfoque,
+   el pasto y un pez del fondo se leen **NÍTIDOS a través del dock**, así que la
+   pieza deja de ser una lámina de vidrio y pasa a ser un contorno dibujado
+   encima de la foto — y las baldosas de adentro, que reciben esa misma foto
+   nítida, se leen a cuadraditos impresos. Medido: entre el viaje y el control,
+   **11,5 % de los píxeles cambian más de 8 sobre 255, con máximo 119**, y todo
+   el cambio cae en dos bandas: el reloj con la búsqueda y el dock.
+
+   Y no alcanza con devolverles el filtro donde se ven, porque el dock se ve
+   durante TODO el viaje del centro de control —la hoja mide 699 px de 892— y
+   eso son 36.096 px de desenfoque por cuadro justo en el gesto que la vuelta
+   138 acababa de llevar de 23 a 60 cuadros por segundo.
+
+   Lo que sí se puede es lo mismo que ya se hizo dos veces: **darles el vidrio
+   HORNEADO**. Las tres piezas no se mueven, así que con `background-attachment:
+   fixed` y `background-size:100vw 100vh` cada una recibe exactamente la franja
+   del horneado que le toca, sin una sola cuenta por pieza y corrigiéndose sola
+   al cambiar de tamaño o de insets. Cero pasadas de filtro y sigue habiendo
+   vidrio.
+
+   LAS BALDOSAS DEL DOCK SE QUEDAN SIN NADA, y es correcto: lo que una baldosa
+   desenfoca es el dock, y el dock ya es un mapa de bits desenfocado. Ponerles
+   el horneado de la FOTO sería desenfocar dos veces la misma imagen y mostrar
+   lo que hay detrás del dock en vez de lo que hay detrás de la baldosa.
+
+   EL TINTE VA COMO CAPA Y NO COMO COLOR, porque el horneado es un JPEG opaco y
+   tapa el `background-color` de `.vid`. Con el color abajo, `--v-fondo` no se
+   vería y las piezas saldrían más claras que su propio filtro.
+
+   `body.frost` es la marca de que hay horneado: sin foto no hay nada que
+   hornear y las reglas de arriba dejan las piezas sin filtro, que es lo que ya
+   hacían. Y `vidFrostV` es el A/B en el mismo binario. */
+body.frost:not(.vidFrostV).cajMueve #capa .vid,
+body.frost:not(.vidFrostV).cajQ #capa .vid,
+body.frost:not(.vidFrostV).ccMueve:not(.ccViejaV) #capa .vid,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #reloj,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #buscaCaja{
+  background-image:linear-gradient(var(--v-fondo),var(--v-fondo)),var(--vidFrost);
+  background-size:auto,100vw 100vh;
+  background-position:left top,left top;
+  background-attachment:scroll,fixed;
+  background-repeat:no-repeat}
 
 /* ── Y CON EL VIDRIO HORNEADO, LAS BALDOSAS TAMPOCO FILTRAN NADA ──
    Lo que una baldosa del cajón desenfoca es la hoja, y la hoja ya es un mapa de

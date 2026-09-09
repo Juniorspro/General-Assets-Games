@@ -159,6 +159,14 @@ function persAcento(){
 function persOscuro(){
   const v = cl(+lee('oscuro', 0), 0, 70)/100;
   $('#oscuro').style.opacity = String(v);
+  /* ── Y EL HORNEADO DEL VIDRIO LO LLEVA ADENTRO, ASÍ QUE HAY QUE REHACERLO ──
+     Este velo está DEBAJO de las piezas de vidrio, o sea que su
+     `backdrop-filter` lo desenfoca: desde que el horneado repone los velos, un
+     horneado viejo describe una pantalla más clara que la que hay y la pieza
+     saldría más clara que su propio filtro. Va por el mismo rebote de 260 ms
+     que el giro del teléfono, porque esto lo llama un deslizador que se arrastra
+     y hornear en cada cuadro del dedo sería peor que no hornear. */
+  if (typeof cajFrostRehornea === 'function') cajFrostRehornea();
 }
 
 /* ── LA HOJA MUEVE A LA MASCOTA, PORQUE ES LO QUE TAPA ABAJO ──
