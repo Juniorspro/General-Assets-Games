@@ -3,12 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%2308070c%22%2F%3E%3Ctext%20x%3D%2232%22%20y%3D%2245%22%20font-family%3D%22Impact%2CAnton%2Csans-serif%22%20font-size%3D%2234%22%20text-anchor%3D%22middle%22%20fill%3D%22%23ff1e8e%22%3EIB%3C%2Ftext%3E%3C%2Fsvg%3E">
 <title>Publicaciones · IBLO Eventos</title>
 <meta name="description" content="La próxima fecha, las entradas a la venta y los avisos de IBLO Eventos.">
 <link rel="canonical" href="https://iblo-eventos.pages.dev/iblo-publicaciones">
 <meta property="og:title" content="IBLO Eventos">
 <meta property="og:description" content="Viví las mejores noches con nosotros. Productora de fiestas — Margarita Belén, Chaco.">
+<meta property="og:image" content="https://iblo-eventos.pages.dev/og-iblo.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="IBLO Eventos, productora de fiestas de Margarita Belén, Chaco">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://iblo-eventos.pages.dev/iblo-publicaciones">
+<meta property="og:site_name" content="IBLO Eventos">
+<meta property="og:locale" content="es_AR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="IBLO Eventos">
+<meta name="twitter:image" content="https://iblo-eventos.pages.dev/og-iblo.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Great+Vibes&family=Barlow:ital,wght@0,400;0,600;0,800;1,400&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
@@ -1578,7 +1590,26 @@ function linkMapa(lugar){
      Sólo van las que todavía no pasaron: anunciar una fiesta vencida en el
      buscador es peor que no anunciar nada. */
   function fichaDeEventos(lista){
-    var eventos = lista.filter(function(p){ return p.cuando > Date.now(); })
+    /* DOS ARREGLOS QUE IMPORTAN, Y LOS DOS SE VEN EN PRODUCCIÓN:
+
+       1. SIN QUITAR REPETIDOS. Hoy mismo hay dos publicaciones con el mismo
+          evento (ids 21 y 22, misma fecha y mismo título). Salían dos fichas
+          idénticas, y Google marca los eventos duplicados como error en la
+          ficha estructurada.
+       2. LA IMAGEN VENÍA COMO `data:`. `p.imagen` es un webp en base64 —el que
+          se sube desde el panel—, así que en `image` se metía un texto de
+          cientos de miles de caracteres. Google necesita una URL que pueda
+          descargar; un `data:` no le sirve, y encima el JSON-LD pesaba más que
+          la página. Ahora sólo entra si es una dirección http, y si no, va la
+          imagen para compartir del sitio. */
+    var vistos = {};
+    var eventos = lista.filter(function(p){
+        if (!(p.cuando > Date.now())) return false;
+        var llave = (p.titulo || "").trim().toLowerCase() + "|" + p.cuando;
+        if (vistos[llave]) return false;
+        vistos[llave] = 1;
+        return true;
+      })
       .slice(0, 20).map(function(p){
         var e = {
           "@type": "Event", "name": p.titulo,
@@ -1593,7 +1624,8 @@ function linkMapa(lugar){
                          "addressRegion": "Chaco", "addressCountry": "AR" } }
         };
         if (p.detalle) e.description = p.detalle;
-        if (p.imagen) e.image = p.imagen;
+        e.image = (p.imagen && /^https?:/.test(p.imagen))
+          ? p.imagen : location.origin + "/og-iblo.jpg";
         if (p.precio) e.offers = { "@type": "Offer", "price": (p.precio.match(/\d[\d.]*/) || [""])[0].replace(/\./g, ""),
                                    "priceCurrency": "ARS", "availability": "https://schema.org/InStock",
                                    "url": location.origin + "/iblo-publicaciones" };
