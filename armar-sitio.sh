@@ -28,5 +28,13 @@ mkdir -p sitio/functions
 mv sitio/api sitio/functions/api
 rm -f sitio/functions/api/LEEME.md      # las notas no se publican
 
+# funciones que no son de la API: hoy, la verificacion de Search Console, que
+# necesita contestar 200 en una direccion terminada en .html —y Pages le saca
+# la extension a los archivos, asi que como archivo no se puede
+if [ -d sitio/_funciones ]; then
+  cp sitio/_funciones/*.js sitio/functions/ 2>/dev/null || true
+  rm -rf sitio/_funciones
+fi
+
 echo "sitio/ armado. Portada: $(grep -o '<title>[^<]*</title>' sitio/index.html | head -1)"
 echo "Ahora:  cd sitio && npx wrangler pages deploy . --project-name iblo-eventos --branch main --commit-dirty=true"
