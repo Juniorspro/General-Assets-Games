@@ -1,6 +1,8 @@
 
 /* ══════════════ LAS DOCE PIEZAS 3D DE LOS ESQUELETOS ══════════════
-   Generadas con Rezona Lab (Tripo), con la textura horneada en los
+   Generadas con Rezona Lab — Tripo por la llave de API, Meshy si hay
+   un GLB en assets/huesos/meshy/ (ver herramientas/huesos/meshy.py) —
+   con la textura horneada en los
    vértices y decimadas con `herramientas/huesos/hornear_3d.py`.
    REEMPLAZAN LA GEOMETRÍA DE UNA PIEZA DEL KIT, no el rig: las nueve
    poses, el patinaje cero, la corona con matriz cero y el tinte por

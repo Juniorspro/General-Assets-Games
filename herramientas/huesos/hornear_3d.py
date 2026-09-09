@@ -40,6 +40,7 @@ from PIL import Image
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(os.path.dirname(AQUI))
 ENT = os.path.join(RAIZ, 'assets', 'huesos')
+MESHY = os.path.join(ENT, 'meshy')
 TMP = '/tmp/h3d'
 
 TAM = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
@@ -387,7 +388,17 @@ def main():
     out, inf, modos = [], [], []
     for d in P:
         n = d['n']
-        ent = os.path.join(ENT, n + '.glb')
+        # MESHY PRIMERO, TRIPO DE RESPALDO. No es una preferencia de gusto: Meshy
+        # remalla de verdad —`model_type:lowpoly` + `should_remesh` +
+        # `target_polycount` desde cien— así que entrega una cáscara cerrada al
+        # número pedido, mientras que la de Tripo es un centenar de islas sueltas
+        # que se topan en su piso topológico (cráneo 540, costillar 500, pie 418:
+        # pedirles menos no baja un triángulo). La receta para pedirlas está en
+        # `herramientas/huesos/meshy.py`, con por qué hay que pedirlas a mano.
+        ent = os.path.join(MESHY, n + '.glb')
+        fuente = 'meshy'
+        if not os.path.exists(ent):
+            ent, fuente = os.path.join(ENT, n + '.glb'), 'tripo'
         if not os.path.exists(ent):
             print('  falta', ent); continue
         vc = os.path.join(TMP, n + '_vc.glb')
@@ -399,6 +410,12 @@ def main():
         # que la malla trae de verdad, no contra el face_limit que se pidió
         ratio = max(0.01, min(1.0, d['tris'] / max(cru, 1)))
         dec = os.path.join(TMP, n + '_d.glb')
+        # LO QUE YA ENTRA NO SE DECIMA. Una malla de Meshy pedida a low-poly
+        # puede llegar por debajo del presupuesto, y ahí gltfpack no tiene nada
+        # que hacer: correrlo igual sólo puede sacarle detalle a cambio de cero
+        # triángulos. Con Tripo esta rama no se toca nunca —llegan con un millón.
+        if cru <= d['tris']:
+            dec = vc
         # `-sa` es la simplificación AGRESIVA, que ignora la topología. Se probó
         # sacarla para el costillar y la pelvis creyendo que soldaba las
         # costillas —salían una losa— y NO ERA ESO: era el búfer de índices
@@ -406,16 +423,19 @@ def main():
         # conserva las doce costillas y sus huecos, contra 5.304 sin ella, y a
         # 372×172 las dos imágenes son la misma. O sea la tercera parte de los
         # triángulos por el mismo dibujo. Queda puesta.
-        # Y `-sp` HACE FALTA PORQUE EL COLOR VA EN LOS VÉRTICES. El simplificador
-        # no colapsa a través de una discontinuidad de atributo, y el horneado
-        # deja una en cada costura de color: con `-sa` solo, el pie pedía 130
-        # triángulos y se plantaba en 412, la corona en 554 y el yelmo en 781.
-        # `-sp` lo autoriza a cruzarlas —o sea a mezclar el color en la costura—
-        # y a 39 píxeles de alto eso no se ve, mientras que el triángulo sí se
-        # paga catorce veces. Medido: pie 412 → 129, yelmo 781 → 320.
-        subprocess.run(['npx', '--yes', 'gltfpack', '-si', '%.4f' % ratio, '-sa', '-sp',
-                        '-kn', '-noq', '-i', vc, '-o', dec], check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # `-sp` QUEDA PUESTO Y NO HACE NADA CON LAS MALLAS DE TRIPO, y conviene
+        # decirlo porque este mismo comentario decía antes lo contrario. Lo puse
+        # creyendo que el freno era el color por vértice —el simplificador no
+        # colapsa a través de una discontinuidad de atributo, y el horneado deja
+        # una en cada costura—. Medido: el pie fue de 412 a 418 triángulos, o sea
+        # nada. El freno no es el color, es la TOPOLOGÍA: un pie de Tripo son unas
+        # cien islas sueltas y una isla cerrada no baja de cuatro triángulos.
+        # Se queda porque con una malla CERRADA —la de Meshy— sí es lo correcto:
+        # ahí la única discontinuidad que queda es la de color.
+        if dec != vc:
+            subprocess.run(['npx', '--yes', 'gltfpack', '-si', '%.4f' % ratio, '-sa', '-sp',
+                            '-kn', '-noq', '-i', vc, '-o', dec], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         pos, nor, col, idx = malla(dec)
         col = a_tinte(col, d['tinte'])
         pos, nor = normaliza(d, pos, nor)
@@ -424,12 +444,15 @@ def main():
         out.append("  %s: '%s'" % (n, base64.b64encode(b).decode('ascii')))
         mn, mx = pos.min(axis=0), pos.max(axis=0)
         modos.append("  %s: '%s'" % (n, d['modo']))
-        inf.append((n, cru, idx.shape[0] // 3, pos.shape[0], len(b),
+        inf.append((n + ('*' if fuente == 'meshy' else ''),
+                    cru, idx.shape[0] // 3, pos.shape[0], len(b),
                     tuple(round(float(x), 3) for x in (mx - mn)),
                     tuple(round(float(x), 3) for x in (mn + mx) / 2)))
 
     txt = ("\n/* ══════════════ LAS DOCE PIEZAS 3D DE LOS ESQUELETOS ══════════════\n"
-           "   Generadas con Rezona Lab (Tripo), con la textura horneada en los\n"
+           "   Generadas con Rezona Lab — Tripo por la llave de API, Meshy si hay\n"
+           "   un GLB en assets/huesos/meshy/ (ver herramientas/huesos/meshy.py) —\n"
+           "   con la textura horneada en los\n"
            "   vértices y decimadas con `herramientas/huesos/hornear_3d.py`.\n"
            "   REEMPLAZAN LA GEOMETRÍA DE UNA PIEZA DEL KIT, no el rig: las nueve\n"
            "   poses, el patinaje cero, la corona con matriz cero y el tinte por\n"
@@ -454,6 +477,7 @@ def main():
         print('%-10s %7d %6d %6d %8d  %-22s %s' % (n, c, t, v, b, e, ce))
     print('\ntotal %d bytes, %d en base64' % (sum(i[4] for i in inf),
                                               len(txt)))
+    print('(* = malla de Meshy; el resto, de Tripo — ver herramientas/huesos/meshy.py)')
     return 0
 
 

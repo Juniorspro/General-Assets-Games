@@ -287,28 +287,54 @@
   },
   "proveedores_3d": {
     "_": [
-      "QUIÉN HACE QUÉ. CORREGIDO Y MEDIDO EL 2026-09-09 contra la propia API, después de",
-      "que el usuario avisara que en rezona.ai/studio/3d SÍ aparece Meshy. Tenía razón",
-      "sobre la app y la nota anterior estaba incompleta: hay DOS superficies distintas.",
+      "QUIÉN HACE QUÉ. MEDIDO EL 2026-09-09 contra la propia API, dos veces, la segunda",
+      "después de que el usuario insistiera. TENÍA RAZÓN LAS DOS VECES: Meshy en Rezona",
+      "existe, es real y está en el catálogo. Lo que no existe es un camino desde la",
+      "LLAVE DE API hasta él. Son DOS SERVIDORES DISTINTOS, no dos vistas del mismo:",
       "",
-      "  el NAVEGADOR  ->  rezona.ai/studio/3d  ->  selector de modelo: Tripo H3 Y MESHY",
-      "  la LLAVE DE API -> lab.rezona.ai/game/pgcserver -> SÓLO TRIPO",
+      "  el NAVEGADOR   rezona.ai/tln/biz/…            ← el Studio. ACÁ ESTÁ MESHY",
+      "  la LLAVE       lab.rezona.ai/game/pgcserver   ← el PGC de juegos. SÓLO TRIPO",
       "",
-      "Es la MISMA cuenta —el saldo del recorte, 497.400, es el que devuelve",
-      "/api/credits/pat-balance— y aun así la llave no llega a Meshy. Tres mediciones:",
-      "  1. el OpenAPI del servidor (GET /openapi.json, 399 KB, público) menciona a Tripo",
-      "     25 veces y a Meshy CERO;",
-      "  2. extra:{model_version:'meshy'} devuelve GENERATION_MODEL_UNSUPPORTED:",
-      "     'Unsupported Tripo model_version: meshy' — o sea que el campo valida contra",
-      "     la lista de Tripo y nada más;",
-      "  3. las rutas /canvas/… —donde vive el selector de la app— contestan 403",
-      "     PAT_ROUTE_FORBIDDEN: 'This endpoint is not available to API key credentials'.",
+      "EL CATÁLOGO DEL STUDIO ES PÚBLICO y no hace falta credencial para leerlo:",
+      "    curl https://rezona.ai/tln/biz/models",
+      "44 modelos, y de 3D hay exactamente DOS:",
+      "    tripo-h3-v3   vendor Tripo   244 créditos",
+      "    meshy-3d      vendor Meshy   100 créditos   ← más barato, y low-poly nativo",
       "",
-      "Y por Higgsfield tampoco: medido el 2026-09-09, los DOS workspaces (el privado y",
-      "el de equipo «Rezona») en 0 créditos.",
+      "POR QUÉ LA LLAVE NO LLEGA, con las cinco mediciones:",
+      "  1. Todas las rutas del Studio que piden identidad contestan 401",
+      "     `unauthenticated` con la llave `rz_live_…`. Probado con Authorization:",
+      "     Bearer, x-api-key, X-Rezona-Token, Cookie y el token pelado: 401 en las",
+      "     cinco, en /tln/biz/me, /tln/biz/credits/balance y POST /tln/biz/assets/model3d.",
+      "  2. El OpenAPI del pgcserver (526 KB) menciona a Tripo 32 veces y a Meshy CERO,",
+      "     y describe `AgentModel3DParams` como «3D 生成参数（对齐 Tripo /task 白名单）»",
+      "     —los parámetros alineados con la lista blanca de Tripo—. No hay campo de",
+      "     proveedor: los 18 son prompt, source_url, model_version, negative_prompt,",
+      "     texture, pbr, texture_quality, face_limit, quad, style, auto_size,",
+      "     smart_low_poly, los tres seed, texture_alignment, orientation y name.",
+      "  3. Cualquier `model_version` desconocido devuelve literalmente «Unsupported",
+      "     **Tripo** model_version: …» — el mensaje nombra al proveedor, o sea que el",
+      "     campo valida contra la lista de Tripo y nada más.",
+      "  4. Mandar `model`, `ai_model` o `vendor` por el cuerpo devuelve 200 Y SE",
+      "     DESCARTA EN SILENCIO: la tarea arranca igual, en Tripo, con",
+      "     `ignored_params: null`. Ese null no prueba nada — ver la nota de abajo.",
+      "  5. En los 21 feature flags del pgcserver (pgc-sprite-generation, pgc-3d-rigging,",
+      "     pgc-mcp-generation…) NO hay ninguno de Meshy: no está ni apagado.",
       "",
-      "O SEA: para meter un modelo de Meshy en un juego hay que generarlo a mano en la",
-      "app y bajar el archivo; desde acá no hay forma de pedirlo."
+      "Y TAMPOCO SE PUEDE BAJAR DESPUÉS lo que se genere en la app: /api/library/assets,",
+      "/api/auth/me y todas las /canvas/… contestan 403 PAT_ROUTE_FORBIDDEN («This",
+      "endpoint is not available to API key credentials»).",
+      "",
+      "Por Higgsfield tampoco, y ahí sí hay Meshy —meshy_v6_text_to_3d, meshy_v7_image_to_3d,",
+      "meshy_v5_remesh, meshy_v5_retexture—: medido el 2026-09-09, los DOS espacios de",
+      "trabajo (el privado y el de equipo «Rezona») en 0 CRÉDITOS. El preflight de un",
+      "Meshy 6 low-poly da 25 créditos; generar contesta «Out of credits in the selected",
+      "workspace».",
+      "",
+      "O SEA: para meter un modelo de Meshy en un juego hay que generarlo a mano en",
+      "rezona.ai/studio/3d y bajar el archivo. `herramientas/huesos/meshy.py` imprime la",
+      "receta lista para pegar, y `hornear_3d.py` prefiere el GLB de Meshy sobre el de",
+      "Tripo sin tocar una línea."
     ],
     "tripo_maximo_detalle": {
       "_": "Probado y medido el 2026-09-09. `ignored_params: null` en la respuesta es la comprobación de que el servidor ACEPTÓ los dos parámetros de detalle en vez de descartarlos en silencio.",
@@ -383,6 +409,80 @@
       "PERO la ruta es /canvas/items/rig3d/precheck y da 403 con llave de API. Desde acá",
       "la única señal sigue siendo `ignored_animations` en check_generation_tasks: lo que",
       "no exista para esa topología se descarta EN SILENCIO y se cae al set por omisión."
-    ]
+    ],
+    "meshy_en_el_studio": {
+      "_": [
+        "LOS PARÁMETROS DE VERDAD, sacados del catálogo público (no de la documentación):",
+        "GET https://rezona.ai/tln/biz/models → el objeto con id `meshy-3d`.",
+        "Sirven para pedirlo bien A MANO en la app; desde la llave no se puede."
+      ],
+      "id": "meshy-3d",
+      "vendor": "Meshy",
+      "creditos": 100,
+      "endpoint_del_studio": "POST https://rezona.ai/tln/biz/assets/model3d  (401 con llave de API)",
+      "params": {
+        "ai_model": [
+          "meshy-5",
+          "meshy-6",
+          "latest"
+        ],
+        "mode": [
+          "text_to_model",
+          "image_to_model"
+        ],
+        "model_type": [
+          "standard",
+          "lowpoly"
+        ],
+        "topology": [
+          "quad",
+          "triangle"
+        ],
+        "target_polycount": "entero, 100 a 300.000, paso 100, por omisión 30.000",
+        "pose_mode": [
+          "a-pose",
+          "t-pose",
+          ""
+        ],
+        "origin_at": [
+          "bottom",
+          "center"
+        ],
+        "art_style": [
+          "realistic"
+        ],
+        "otros": [
+          "should_texture",
+          "should_remesh",
+          "enable_pbr",
+          "hd_texture",
+          "image_enhancement",
+          "alpha_thumbnail",
+          "multi_view_thumbnails",
+          "remove_lighting",
+          "auto_size",
+          "moderation",
+          "decimation_mode",
+          "save_pre_remeshed_model",
+          "target_formats",
+          "texture_image_url",
+          "texture_prompt"
+        ]
+      },
+      "meshy_5_no_soporta": [
+        "hd_texture",
+        "image_enhancement"
+      ],
+      "por_que_conviene_sobre_tripo": [
+        "Tripo devuelve UN MILLÓN de triángulos y hay que decimarlos con gltfpack; ahí",
+        "las piezas se topan en su PISO TOPOLÓGICO —en HUESOS: cráneo 540, costillar 500,",
+        "pie 418— porque un hueso generado no es una cáscara sino un centenar de islas",
+        "sueltas, y una isla cerrada no baja de cuatro triángulos. Pedir menos no baja",
+        "un triángulo (medido con `-si 0.01`, o sea pidiendo el 1 %).",
+        "Meshy remalla de verdad: `model_type:lowpoly` + `should_remesh` +",
+        "`target_polycount` DESDE CIEN. El presupuesto deja de ser una pelea con el",
+        "simplificador y pasa a ser un número que se pide. Y cuesta 100 contra 244."
+      ]
+    }
   }
 }

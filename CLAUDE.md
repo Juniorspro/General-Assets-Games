@@ -297,6 +297,107 @@ munecas.
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
 
+### Centésima cuadragésima sexta vuelta (2026-09-09): **MESHY** — dónde está de verdad, por qué la llave no llega, y la receta lista
+
+Pedido, tres veces y con razón: *"genera los modelos en Rezona con meshy deja de hacer cagada"*.
+
+#### LA VUELTA ANTERIOR DIJO «MESHY NO SALE POR LA LLAVE» Y ERA CIERTO PERO INSERVIBLE
+
+Cierto y a medias: no decía **dónde sí está**, ni con qué parámetros, ni cuánto cuesta, ni por
+qué conviene. Un «no se puede» sin la otra mitad se lee a excusa, y el usuario insistió dos
+veces. La regla de la vuelta 50 —*«cuando el usuario dice "yo sé que se puede", lo que
+corresponde es probar, no citar la documentación»*— vale también cuando lo que hay que probar
+es dónde está la cosa. Así que se midió de nuevo, entero.
+
+#### SON DOS SERVIDORES, NO DOS VISTAS DEL MISMO
+
+    el NAVEGADOR   rezona.ai/tln/biz/…            el Studio.  ACÁ ESTÁ MESHY
+    la LLAVE       lab.rezona.ai/game/pgcserver   el PGC de juegos. SÓLO TRIPO
+
+**Y EL CATÁLOGO DEL STUDIO ES PÚBLICO**, que es lo que cierra la discusión sin credencial:
+`curl https://rezona.ai/tln/biz/models` devuelve 44 modelos y de 3D hay exactamente dos —
+**`tripo-h3-v3`, vendor Tripo, 244 créditos** y **`meshy-3d`, vendor Meshy, 100**. O sea que
+Meshy no sólo existe: es **menos de la mitad de caro**.
+
+Los parámetros salen del mismo catálogo, no de suponerlos: `ai_model` (meshy-5 · meshy-6 ·
+latest), `mode`, `model_type` (standard · **lowpoly**), `topology` (quad · triangle),
+**`target_polycount` de 100 a 300.000 con paso 100**, `pose_mode`, `origin_at`, `should_remesh`,
+`should_texture`, `enable_pbr`, `hd_texture` y ocho más. Quedan anotados en
+`herramientas/rezona/estado.json`.
+
+#### POR QUÉ LA LLAVE NO LLEGA, CON LAS CINCO MEDICIONES
+
+1. **401 en todo el Studio.** `/tln/biz/me`, `/tln/biz/credits/balance` y
+   `POST /tln/biz/assets/model3d` contestan `unauthenticated` con la llave `rz_live_…`, probada
+   como `Authorization: Bearer`, `x-api-key`, `X-Rezona-Token`, `Cookie` y el token pelado:
+   **401 en las cinco formas**.
+2. **El OpenAPI del pgcserver menciona a Tripo 32 veces y a Meshy CERO**, y describe
+   `AgentModel3DParams` como *«los parámetros alineados con la lista blanca de Tripo /task»*.
+   No hay campo de proveedor entre los dieciocho.
+3. **El mensaje de error nombra al proveedor.** Cualquier `model_version` desconocido devuelve
+   literalmente `Unsupported **Tripo** model_version: …` — o sea que el campo valida contra la
+   lista de Tripo y nada más.
+4. **`model`, `ai_model` y `vendor` por el cuerpo devuelven 200 y se descartan EN SILENCIO**: la
+   tarea arranca igual, en Tripo. Eso costó cuatro generaciones de sonda, y `ignored_params:
+   null` no avisa — ya estaba anotado que ese null no prueba nada.
+5. **En los 21 feature flags del pgcserver no hay ninguno de Meshy**: no está ni apagado.
+
+Y tampoco se puede **bajar** después lo que se genere en la app: `/api/library/assets`,
+`/api/auth/me` y todas las `/canvas/…` dan 403 `PAT_ROUTE_FORBIDDEN`.
+
+**POR HIGGSFIELD TAMPOCO, Y AHÍ SÍ HAY MESHY** —`meshy_v6_text_to_3d`, `meshy_v7_image_to_3d`,
+`meshy_v5_remesh`, `meshy_v5_retexture`—: los **dos** espacios de trabajo, el privado y el de
+equipo «Rezona», en **0 créditos**. El preflight de un Meshy 6 low-poly da 25 créditos y generar
+contesta *«Out of credits in the selected workspace»*.
+
+#### Y MESHY ES MEJOR QUE TRIPO PARA ESTE JUEGO, QUE ES LO QUE HACE QUE VALGA LA PENA
+
+No es preferencia, es el número de la vuelta anterior. Tripo devuelve **un millón** de triángulos
+y hay que bajarlos con gltfpack; ahí las piezas se topan en su **piso topológico** —cráneo 540,
+costillar 500, pie 418— porque un hueso generado no es una cáscara sino un centenar de islas
+sueltas y una isla cerrada no baja de cuatro triángulos. Medido con `-si 0.01`, o sea pidiendo el
+1 %: no baja **un** triángulo.
+
+Meshy remalla de verdad: `lowpoly` + `should_remesh` + `target_polycount` **desde cien**. El
+presupuesto deja de ser una pelea con el simplificador y pasa a ser un número que se pide.
+
+#### LO QUE SE ENTREGA, QUE ES EL PASO QUE FALTA HECHO
+
+- **`herramientas/huesos/meshy.py`** imprime la receta de las catorce piezas lista para pegar en
+  `rezona.ai/studio/3d`: el prompt entero y los parámetros exactos. **Lee los prompts de
+  `pedir_3d.py` y los presupuestos de `hornear_3d.py`**, así que no hay una segunda lista que se
+  pueda desincronizar — que es la regla de siempre acá. `target_polycount` se pide al **doble**
+  del presupuesto del juego, redondeado a los cien del paso de la app: con una malla cerrada el
+  horneado llega al número exacto, y pedir el presupuesto justo dejaría a la pieza sin la pasada
+  de `-sa`, que es la que conserva las costillas.
+  Y `symmetry_mode` **no va en `on` para todo**: cráneo, costillar, pelvis, corona y yelmo son
+  simétricos; un fémur, una mano con los dedos curvados y las cinco armas no lo son, y forzarlo
+  ahí les inventa un espejo.
+- **`hornear_3d.py` prefiere `assets/huesos/meshy/<pieza>.glb`** sobre el de Tripo, sin tocar una
+  línea, y **no decima lo que ya entra en presupuesto** — correr gltfpack sobre una malla que ya
+  está por debajo sólo puede sacarle detalle a cambio de cero triángulos.
+- **Y UN COMENTARIO QUE SE CONTRADECÍA CON EL DE VEINTE LÍNEAS MÁS ARRIBA.** El de `-sp` decía
+  *«Medido: pie 412 → 129, yelmo 781 → 320»* y el de la tabla `P` decía *«movió el pie de 412 a
+  418, o sea nada»*. El segundo es el bueno; el primero era de la hipótesis anterior —que el
+  freno era el color por vértice— y quedó puesto. `-sp` se queda igual, porque con una malla
+  **cerrada** sí es lo correcto, y ahora el comentario dice eso.
+
+**LO QUE NO SE PUDO HACER, Y ES EL PUNTO:** apretar el botón. Ese paso es de una persona con el
+navegador abierto. Lo que sí está hecho es que dure dos minutos.
+
+**Y LO QUE HAY QUE VOLVER A MEDIR CUANDO LLEGUEN LOS ARCHIVOS:** el **giro** de cada pieza. Los
+`giro` de la tabla `P` están medidos contra las mallas de Tripo —tres venían mirando a −X— y
+Meshy no tiene por qué orientar igual. El horneado imprime el tamaño (x,y,z) de cada pieza, que
+es la primera señal, y la prueba de verdad es la hoja de contactos.
+
+#### MEDIDO AL CERRAR
+
+El horneado con los GLB de Tripo devuelve **los 14 blobs byte por byte idénticos** a los de la
+vuelta anterior: lo de esta vuelta es cañería, no dibujo. En el banco, **14 de 14 mallas con
+`fallas: []`**, 4.722 triángulos por cuerpo, **88 llamadas de dibujo y 147.914 triángulos**, armas
+0,62 · 1,618 · 1,12 · 1,82 contra 0,62 · 1,62 · 1,12 · 1,82 esperados, corona **0 de 14 en el
+bosque**, y `window.__errs` **vacío**.
+
 ### Centésima cuadragésima quinta vuelta (2026-09-09): **HUESOS** — los esqueletos pasan a ser catorce mallas generadas, y dos defectos que no fallan
 
 Pedido textual: *"pero genera modelos 3D con meshy y animaciones también mejores enemigos 3D genera
