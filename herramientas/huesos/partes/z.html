@@ -365,6 +365,45 @@ window.__H = {
              centroX: +(((x0 + x1) / 2) * 100).toFixed(1), centroY: +(((y0 + y1) / 2) * 100).toFixed(1),
              camD: +CAM_D_ACT.toFixed(2), camY: +cam.position.y.toFixed(2) };
   },
+  /* PONE LA CÁMARA DELANTE DE UN ESQUELETO Y DICE DÓNDE CAYÓ EN LA PANTALLA.
+     Hacía falta y no estaba: `encuadre` mide al HÉROE, y lo que hay que
+     verificar acá es la orientación de las doce piezas generadas — que no sale
+     de la caja envolvente sola: una calavera girada noventa grados tiene una
+     caja perfectamente razonable.
+     ADELANTA UN PASO ANTES DE MEDIR. Las matrices de las instancias las escribe
+     `kitPinta` dentro del paso de física, así que moviendo al bicho con el juego
+     congelado la foto sale con el kit donde estaba: se ve como si la pieza no se
+     dibujara, y se dibuja. Ya costó dos capturas. */
+  esqFoto(cl, d, alto, conHeroe) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere' && (!cl || x.cl === cl));
+    if (!e) return null;
+    const dd = d === undefined ? 3.0 : d;
+    CONGELADO = false;
+    /* al bicho se lo trae DELANTE del jugador y se lo deja quieto mirándolo:
+       persiguiendo camina y la foto sale movida */
+    const a = JUG.rumbo;
+    e.x = JUG.x + Math.sin(a) * dd; e.z = JUG.z + Math.cos(a) * dd; e.y = H(e.x, e.z);
+    e.est = 'quieto'; e.atur = 0; e.esp = 0; e.rumbo = a + Math.PI;
+    CAM_YAW = a; CAM_PIT = alto === undefined ? -0.02 : alto;
+    unPaso(PASO); camPaso(0.5, 0, 0); cam.updateMatrixWorld(true);
+    CONGELADO = true;
+    /* EL HÉROE SE ESCONDE, porque la cámara va DETRÁS de él: a tres metros su
+       espalda ocupa medio cuadro y tapa justo lo que se viene a mirar. Se apaga
+       el kit entero —son dos llamadas de dibujo— y se devuelve encendido con
+       `conHeroe`, que es lo que hay que usar para comparar tamaños. */
+    if (JUG.kit) for (const k in JUG.kit.mallas) JUG.kit.mallas[k].visible = !!conHeroe;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, det = 0;
+    const v = new THREE.Vector3();
+    for (const k in e.cuerpo.h) {
+      v.setFromMatrixPosition(e.cuerpo.h[k].matrixWorld);
+      if (v.clone().applyMatrix4(cam.matrixWorldInverse).z > -0.05) { det++; continue; }
+      const n = v.project(cam), px = (n.x + 1) / 2, py = (1 - n.y) / 2;
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    return { cl: e.cl, d: +dd.toFixed(2), detras: det,
+             x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)],
+             pctAlto: +((y1 - y0) * 100).toFixed(1), pctAncho: +((x1 - x0) * 100).toFixed(1) };
+  },
   pintaKits(a, b) {
     for (const [k, c] of [[JUG.kit, a], [ESQ_KIT, b]]) {
       if (!k) continue;
@@ -468,6 +507,59 @@ window.__H = {
      Se mide leyendo la MATRIZ DE INSTANCIA que se subió a la GPU, no la
      lista de clases: es lo único que prueba que lo que se dibuja coincide
      con lo que se quiso dibujar. Una matriz de escala cero no pinta nada. */
+
+  /* ── LAS PIEZAS 3D ────────────────────────────────────────────────────
+     `tres(false)` devuelve el juego a las cajas EN EL MISMO BINARIO, que es
+     lo único que hace que una medición del antes y el después sirva: contra
+     el commit anterior se estarían midiendo dos programas distintos. */
+  /* barre el engorde de los huesos en el mismo binario */
+  gordo(gr, kc) { if (gr) H3_GR = gr; if (kc) H3_KC = kc;
+                  return { gr: H3_GR, kc: H3_KC, rehechas: esqRehacePiezas() }; },
+  tres(v) { H3_ON = v !== false; return { on: H3_ON, rehechas: esqRehacePiezas() }; },
+  /* enciende y apaga LAS PIEZAS DE A UNA, en el mismo binario. Sin esto no hay
+     forma de saber cuáles de las doce mallas mejoran el bicho y cuáles lo
+     rompen: `tres` las mueve a todas juntas y el promedio esconde el reparto. */
+  tresPieza(k, v) {
+    if (v === undefined) return Object.keys(H3_NO);
+    if (v) delete H3_NO[k]; else H3_NO[k] = 1;
+    return { apagadas: Object.keys(H3_NO), rehechas: esqRehacePiezas() };
+  },
+
+  piezas3() {
+    const r = recetaEsq(), o = {}; let tri = 0, ver = 0;
+    for (const k in r.piezas) {
+      const g = r.piezas[k];
+      const t = (g.index ? g.index.count : g.attributes.position.count) / 3;
+      tri += t; ver += g.attributes.position.count;
+      g.computeBoundingBox(); const b = g.boundingBox;
+      o[k] = { tri: t, caja: [+(b.max.x - b.min.x).toFixed(3), +(b.max.y - b.min.y).toFixed(3),
+                              +(b.max.z - b.min.z).toFixed(3)],
+               y: [+b.min.y.toFixed(3), +b.max.y.toFixed(3)] };
+    }
+    return { on: H3_ON, mallas: Object.keys(H3).length, fallas: H3_FALLAS,
+             triPorCuerpo: tri, verPorCuerpo: ver, piezas: o };
+  },
+
+  /* EL ALCANCE TIENE QUE VERSE, y lo que hay que medir es EL ARMA y no la
+     pose. La primera versión medía la distancia de la punta al hombro y
+     contestaba que el lancero llega MENOS lejos que el bruto (1,42 contra
+     2,00): cierto y sin sentido, porque ahí adentro está el brazo colgando y
+     hacia dónde apunta el arma en reposo, que no es su alcance. Lo que hay
+     que comprobar es que el arma DIBUJADA mida lo que el alcance dice, o sea
+     su arista más larga por la escala del cuerpo. */
+  armas() {
+    const r = recetaEsq(), o = {};
+    for (const cl in ARMA_DE) {
+      const g = r.piezas[ARMA_DE[cl]], e = ESQ[cl].esc;
+      g.computeBoundingBox(); const b = g.boundingBox;
+      const L = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
+      o[cl] = { alc: ESQ[cl].alc, esc: e,
+                largoMundo: +(L * e).toFixed(3),
+                esperado: +(ARMA_BASE + ESQ[cl].alc - ESQ.peon.alc).toFixed(3) };
+    }
+    return o;
+  },
+
   corona() {
     if (!ESQ_KIT) return null;
     const cerca = esqCerca(), im = ESQ_KIT.mallas.corona, m = new THREE.Matrix4();

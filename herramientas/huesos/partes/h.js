@@ -57,11 +57,14 @@ function cajas(lista) {
 /* ── LAS DOS RECETAS ───────────────────────────────────────────────────────
    Mismos nombres de hueso en las dos, así que UNA sola tabla de poses mueve
    al caballero y a los cuatro esqueletos. Lo que cambia son las cajas.     */
-function recetaHeroe() {
-  const PIEL = 0xb98a63, CUERO = 0x4a3526, ACERO = 0x7d848c, TELA = 0x6b2b2a, OSC = 0x2a2420;
-  return {
-    alto: 1.72, nombre: 'heroe',
-    huesos: {
+/* LA TABLA DE HUESOS SE CALCULA UNA VEZ. El caballero y los cuatro esqueletos
+   comparten el mismo esqueleto de pivotes, y `armaCuerpo` es lo único que la
+   lee: construir las dieciocho geometrías de la receta catorce veces —una por
+   bicho— sólo para tirarlas ya era caro con cajas, y con mallas generadas de
+   por medio es clonar y fundir doce mallas catorce veces. */
+let _HUESOS = null;
+function huesosBase() {
+  return _HUESOS || (_HUESOS = {
       pelvis: { padre: null, y: 0.94 },
       torso:  { padre: 'pelvis', y: 0.02 },
       pecho:  { padre: 'torso', y: 0.24 },
@@ -74,7 +77,16 @@ function recetaHeroe() {
       musloD: { padre: 'pelvis', y: -0.06, x: -0.11 },
       pantI:  { padre: 'musloI', y: -0.44 },
       pantD:  { padre: 'musloD', y: -0.44 },
-    },
+  });
+}
+const ALTO_ESQ = 1.66;
+const cuerpoEsq = () => armaCuerpo({ alto: ALTO_ESQ, huesos: huesosBase() });
+
+function recetaHeroe() {
+  const PIEL = 0xb98a63, CUERO = 0x4a3526, ACERO = 0x7d848c, TELA = 0x6b2b2a, OSC = 0x2a2420;
+  return {
+    alto: 1.72, nombre: 'heroe',
+    huesos: huesosBase(),
     piezas: {
       pelvis: cajas([{ w: 0.30, h: 0.16, d: 0.20, y: -0.05, c: CUERO }]),
       torso:  cajas([{ w: 0.34, h: 0.26, d: 0.21, y: 0.12, c: TELA }]),
@@ -84,12 +96,21 @@ function recetaHeroe() {
         { w: 0.10, h: 0.24, d: 0.26, y: 0.13, c: 0x8f979f },     // el filo del peto
         { w: 0.44, h: 0.06, d: 0.06, y: 0.06, z: 0.12, c: CUERO }, // correa
       ]),
-      cuello: cajas([
-        { w: 0.12, h: 0.08, d: 0.12, y: 0.04, c: PIEL },
-        { w: 0.21, h: 0.22, d: 0.21, y: 0.19, c: PIEL },          // cabeza
-        { w: 0.23, h: 0.10, d: 0.23, y: 0.28, c: 0x8d949c },      // el yelmo
-        { w: 0.24, h: 0.05, d: 0.05, y: 0.20, z: 0.11, c: OSC },  // la ranura
-        { w: 0.05, h: 0.13, d: 0.05, y: 0.24, z: 0.11, c: 0x8d949c }, // nasal
+      /* EL YELMO Y LA ESPADA DEL HÉROE TAMBIÉN SON MALLA GENERADA, y no es
+         un extra: en tercera persona el caballero está en pantalla el cien
+         por cien del tiempo y ocupa el 24 % del alto, así que es lo que más
+         se mira del juego. La cabeza de piel se queda debajo del yelmo —doce
+         triángulos— para que si la malla no llegara no quedara un cuello sin
+         nada encima.                                                      */
+      cuello: fundeGeo([
+        cajas([{ w: 0.12, h: 0.08, d: 0.12, y: 0.04, c: PIEL },
+               { w: 0.21, h: 0.22, d: 0.21, y: 0.19, c: PIEL }]),   // cabeza
+        hay3('yelmo') ? pon3caja('yelmo', 0.245, 0.280, 0.245, 0, 0.205, 0.005)
+          : cajas([
+            { w: 0.23, h: 0.10, d: 0.23, y: 0.28, c: 0x8d949c },      // el yelmo
+            { w: 0.24, h: 0.05, d: 0.05, y: 0.20, z: 0.11, c: OSC },  // la ranura
+            { w: 0.05, h: 0.13, d: 0.05, y: 0.24, z: 0.11, c: 0x8d949c }, // nasal
+          ]),
       ]),
       hombroI: cajas([{ w: 0.12, h: 0.30, d: 0.13, y: -0.15, c: TELA },
                       { w: 0.17, h: 0.10, d: 0.17, y: 0.01, c: 0x8f979f }]),
@@ -100,12 +121,17 @@ function recetaHeroe() {
       /* LA ESPADA CUELGA DEL ANTEBRAZO DERECHO Y NO DE LA ESCENA. Así la
          lleva la mano por construcción y no hay dos animaciones que se
          puedan desincronizar — la lección del leño de LEMI.                */
-      anteD:  cajas([{ w: 0.10, h: 0.26, d: 0.11, y: -0.13, c: PIEL },
-                     { w: 0.12, h: 0.11, d: 0.13, y: -0.30, c: CUERO },
-                     { w: 0.19, h: 0.05, d: 0.06, y: -0.36, c: 0x6a5238 },  // guarda
-                     { w: 0.05, h: 0.09, d: 0.05, y: -0.44, c: 0x4a3a28 },  // puño
-                     { w: 0.07, h: 0.86, d: 0.03, y: -0.83, c: 0xa9b2bb },  // hoja
-                     { w: 0.03, h: 0.86, d: 0.035, y: -0.83, c: 0xd6dde3 }]), // el filo
+      anteD:  fundeGeo([
+        cajas([{ w: 0.10, h: 0.26, d: 0.11, y: -0.13, c: PIEL },
+               { w: 0.12, h: 0.11, d: 0.13, y: -0.30, c: CUERO }]),
+        hay3('esphero') ? pon3palo('esphero', 0.95, 0, -0.31, 0)
+          : cajas([
+            { w: 0.19, h: 0.05, d: 0.06, y: -0.36, c: 0x6a5238 },  // guarda
+            { w: 0.05, h: 0.09, d: 0.05, y: -0.44, c: 0x4a3a28 },  // puño
+            { w: 0.07, h: 0.86, d: 0.03, y: -0.83, c: 0xa9b2bb },  // hoja
+            { w: 0.03, h: 0.86, d: 0.035, y: -0.83, c: 0xd6dde3 }, // el filo
+          ]),
+      ]),
       musloI: cajas([{ w: 0.14, h: 0.44, d: 0.15, y: -0.22, c: CUERO }]),
       musloD: cajas([{ w: 0.14, h: 0.44, d: 0.15, y: -0.22, c: CUERO }]),
       pantI:  cajas([{ w: 0.12, h: 0.42, d: 0.13, y: -0.21, c: 0x3b2b1e },
@@ -116,80 +142,355 @@ function recetaHeroe() {
   };
 }
 
+
+/* ══════════════ LAS PIEZAS 3D, Y CÓMO ENTRAN AL KIT ══════════════════════
+   `i_3d.js` trae doce mallas generadas con Rezona (Tripo), con la textura ya
+   horneada en los vértices y NORMALIZADAS: las de modo 'caja' vienen centradas
+   con su arista mayor en 1, las de modo 'palo' paradas sobre −Y con largo 1 y
+   el agarre en el origen. Colocarlas es trabajo de la receta, que es donde ya
+   viven los metros.
+
+   REEMPLAZAN LA GEOMETRÍA DE UNA PIEZA Y NADA MÁS. El rig sigue siendo el de
+   pivotes, las nueve poses siguen siendo funciones del tiempo, el patinaje
+   sigue en cero y el kit sigue costando UNA llamada de dibujo por pieza haya
+   uno o haya catorce bichos. Un `SkinnedMesh` riggeado habría costado las
+   cuatro cosas — ver el encabezado de `herramientas/huesos/pedir_3d.py`.
+
+   Y CADA UNA SE DECODIFICA EN SU PROPIO `try`: un blob roto cuesta ESA pieza
+   —que se queda con su caja— y no el módulo entero. Acá no hay nada
+   asincrónico: un blob de geometría es `atob` y una vista tipada, así que a
+   diferencia de una imagen no hace falta cambiarle la geometría al kit
+   después.                                                                */
+function h3Geo(b64) {
+  const s = atob(b64), n = s.length, u8 = new Uint8Array(n);
+  for (let i = 0; i < n; i++) u8[i] = s.charCodeAt(i);
+  const dv = new DataView(u8.buffer);
+  const nv = dv.getUint32(0, true), ni = dv.getUint32(4, true);
+  const mn = [dv.getFloat32(8, true), dv.getFloat32(12, true), dv.getFloat32(16, true)];
+  const ra = [dv.getFloat32(20, true), dv.getFloat32(24, true), dv.getFloat32(28, true)];
+  let o = 32;
+  const pos = new Float32Array(nv * 3);
+  for (let i = 0; i < nv; i++) for (let k = 0; k < 3; k++)
+    pos[i * 3 + k] = mn[k] + dv.getUint16(o + i * 6 + k * 2, true) / 65535 * ra[k];
+  o += nv * 6; if (o & 1) o++;
+  const nor = new Float32Array(nv * 3);
+  for (let i = 0; i < nv * 3; i++) nor[i] = dv.getInt8(o + i) / 127;
+  o += nv * 3; if (o & 1) o++;
+  /* EL COLOR PASA POR LA MISMA CADENA QUE `cajas()` —`setHex` y después
+     `convertSRGBToLinear`— y no por una conversión propia. No es que la cadena
+     esté bien: en three r169 `setHex` YA lleva de sRGB al espacio de trabajo,
+     así que el juego entero convierte dos veces y sus colores salen más
+     oscuros de lo que dice el hexadecimal. Pero ésa es la calibración contra la
+     que están elegidos los cincuenta colores del juego: una pieza generada que
+     convirtiera «bien» sería la única cosa clara de un mundo oscuro.       */
+  const col = new Float32Array(nv * 3), c = new THREE.Color();
+  for (let i = 0; i < nv; i++) {
+    c.setHex((u8[o + i * 3] << 16) | (u8[o + i * 3 + 1] << 8) | u8[o + i * 3 + 2]).convertSRGBToLinear();
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  o += nv * 3; if (o & 1) o++;
+  const idx = new Uint16Array(ni);
+  for (let i = 0; i < ni; i++) idx[i] = dv.getUint16(o + i * 2, true);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  return g;
+}
+
+const H3 = {};
+let H3_FALLAS = [];
+(() => {
+  if (typeof H3_B64 === 'undefined') return;
+  for (const k in H3_B64) {
+    try { H3[k] = h3Geo(H3_B64[k]); } catch (e) { H3_FALLAS.push(k); }
+  }
+})();
+
+/* ¿hay malla para esta pieza? Todo lo que la use pregunta por acá, así que
+   apagar el 3D para medir el antes y el después es una sola bandera.
+
+   ACÁ HUBO UN DIAGNÓSTICO MÍO QUE ERA FALSO Y CONVIENE DEJARLO ESCRITO. Medido
+   con las doce mallas puestas, la silueta del bicho a 2,8 m se partía en
+   noventa manchas con la mayor en el 27 %, contra setenta y cinco y el 61 % de
+   las cajas, y de ahí concluí que «anatómicamente un esqueleto es casi todo
+   agujeros y a treinta y cinco píxeles eso parte la silueta». Era mentira: lo
+   que estaba roto eran DOS COSAS DEL HORNEADO, y las dos se ven en un dibujo y
+   no en el código.
+     · Las tres piezas centrales venían MIRANDO A −X y `modo:'caja'` no orienta
+       nada, así que el ajuste uniforme al mínimo agarraba el eje corto: el
+       costillar entraba con 0,105 m de ancho contra los 0,34 de la caja (31 %)
+       y la pelvis con 0,091 contra 0,24. O sea que las dos masas que hacen que
+       un esqueleto se lea como UNA silueta desaparecían.
+     · Y `suelda()` revolvía el búfer de índices —una `argsort` de más—, así que
+       la malla salía una maraña de púas. En un palo eso se sigue leyendo a
+       palo, y por eso duró.
+   Con las dos cosas arregladas el costillar tiene sus doce pares de costillas,
+   el cráneo sus cuencas y la pelvis sus dos agujeros, y las catorce mallas le
+   ganan a las cajas. */
+/* CUÁNTO SE ENGORDAN LOS HUESOS, Y POR QUÉ HAY QUE ENGORDARLOS.
+   Un esqueleto de verdad es mucho más fino que el muñeco de cajas que
+   reemplaza, y las cajas eran gordas a propósito: medido a 2,2 m, el bicho de
+   cajas cubre el 26,4 % de su propia caja envolvente y el de mallas el 14,9 %.
+   A 372×172 un húmero de siete centímetros mide UN píxel, así que la mitad del
+   esqueleto se promedia con el pasto y el bicho se despinta. `H3_GR` engorda la
+   SECCIÓN de los huesos largos sin tocar su largo —el largo es de lo que cuelga
+   el rig— y `H3_KC` deja que las piezas de caja se pasen un poco de la caja que
+   reemplazan. Los dos salen de barrer y medir la cobertura contra las cajas.
+   Y NO TOCAN NI LAS ARMAS NI LA CORONA NI EL YELMO: una espada engordada al
+   doble es un garrote, y ahí la silueta ESTRECHA es justamente lo que dice de
+   qué clase es el bicho.
+   Y NO SE ARREGLA CON EMISIVO, que fue lo primero que probé: el hueso se lee
+   como una silueta MÁS OSCURA que el pasto, así que un piso de emisivo lo sube
+   hasta el valor del fondo y lo BORRA — medido, el contraste cae de 8,5 a 4,9
+   y en la captura el bicho desaparece.
+
+   LOS DOS NÚMEROS SE ELIGIERON MIRANDO LA FOTO A SU RESOLUCIÓN DE VERDAD, y
+   eso es la mitad del trabajo: la captura del banco viene estirada 2,4 veces
+   —el cuadro son 892×412 y el destino de render 372×172— así que juzgar a 4×
+   sobre la captura es juzgar a DIEZ veces lo que ve el jugador, y ahí las
+   mallas ganan siempre porque se les ve la anatomía. Devuelta a 43×49, que es
+   lo que el bruto mide de verdad a distancia de pelea, la cuenta cambia:
+
+     cajas       cubre 48,5 %   contra 21,1   ← silueta limpia, pero un maniquí
+     gr 1,90     cubre 44,9 %   contra 18,5   ← se desarma, se pierde en el pasto
+     gr 2,40     cubre 48,1 %   contra 18,8   ← empata a las cajas Y se le ven los huesos
+     gr 3,00     cubre 52,0 %   contra 19,0   ← los hombros se vuelven una barra
+     gr 3,80     cubre 59,6 %   contra 18,3   ← un bulto
+
+   O sea que 2,40 es el primer valor en el que la malla cubre lo mismo que la
+   caja. Por debajo el bicho se despinta y por encima deja de ser un esqueleto.
+   Lo que sigue perdiendo la malla es CONTRASTE (18,8 contra 21,1), y eso no
+   tiene arreglo: el pasto se ve por entre las costillas. */
+let H3_GR = 2.40, H3_KC = 1.40;
+let H3_ON = true;
+/* apaga PIEZAS SUELTAS sin tocar el resto, para poder medir cuáles ganan y
+   cuáles rompen. Vacío a propósito: con el búfer de índices arreglado y las
+   tres piezas centrales orientadas, las catorce mallas le ganan a las cajas.
+   Lo usa `__H.tresPieza(k, v)` desde el banco. */
+const H3_NO = {};
+const hay3 = k => H3_ON && !H3_NO[k] && H3[k] !== undefined;
+
+/* mete la malla en LA MISMA CAJA que dibujaba `cajas()`: escala UNIFORME y la
+   más chica de las tres, así entra por construcción y no se estira — una
+   calavera estirada por eje sale ovalada */
+function pon3caja(k, w, h, d, cx, cy, cz, kc) {
+  const g = H3[k].clone();
+  g.computeBoundingBox();
+  const b = g.boundingBox, ex = b.max.x - b.min.x, ey = b.max.y - b.min.y, ez = b.max.z - b.min.z;
+  const e = Math.min(w / ex, h / ey, d / ez) * (kc || 1);
+  g.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, -(b.min.z + b.max.z) / 2);
+  g.scale(e, e, e); g.translate(cx, cy, cz);
+  return g;
+}
+
+/* un palo viene con largo 1 colgando del origen: escala uniforme al largo que
+   pide la receta, se inclina si hace falta y se corre a donde va el agarre.
+   `fr` corre el agarre A LO LARGO DEL PROPIO PALO —una lanza se agarra por el
+   tercio de atrás, no por la punta— y por eso el desplazamiento va sobre la
+   dirección del palo YA GIRADO y no sobre −Y.                              */
+const _EJEX = new THREE.Vector3(1, 0, 0);
+function pon3palo(k, L, dx, dy, dz, gx, fr, gr) {
+  const g = H3[k].clone();
+  /* el LARGO es exacto —de ahí cuelga el rig— y lo que engorda es la SECCIÓN */
+  g.scale(L * (gr || 1), L, L * (gr || 1));
+  if (gx) g.rotateX(gx);
+  if (fr) {
+    const d = new THREE.Vector3(0, -1, 0).applyAxisAngle(_EJEX, gx || 0).multiplyScalar(-L * fr);
+    g.translate(d.x, d.y, d.z);
+  }
+  g.translate(dx || 0, dy || 0, dz || 0);
+  return g;
+}
+
+/* junta cajas y mallas en UNA geometría: el kit tiene una malla instanciada
+   por pieza, así que una pieza es una geometría y no una lista */
+function fundeGeo(lista) {
+  const gs = lista.filter(Boolean);
+  if (gs.length === 1 && !gs[0].index) return gs[0];
+  let nv = 0, ni = 0;
+  for (const g of gs) {
+    nv += g.attributes.position.count;
+    ni += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), C = new Float32Array(nv * 3);
+  /* el índice va en Uint32 y no en Uint16: un desborde de 65.535 no avisa,
+     dibuja triángulos que apuntan a cualquier lado */
+  const I = new Uint32Array(ni);
+  let vo = 0, io = 0;
+  for (const g of gs) {
+    const p = g.attributes.position, n = g.attributes.normal, c = g.attributes.color;
+    P.set(p.array.subarray(0, p.count * 3), vo * 3);
+    N.set(n.array.subarray(0, n.count * 3), vo * 3);
+    C.set(c.array.subarray(0, c.count * 3), vo * 3);
+    if (g.index) for (let i = 0; i < g.index.count; i++) I[io++] = g.index.array[i] + vo;
+    else for (let i = 0; i < p.count; i++) I[io++] = i + vo;
+    vo += p.count;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  g.setIndex(new THREE.BufferAttribute(I, 1));
+  return g;
+}
+
+/* ── EL LARGO DEL ARMA SALE DEL ALCANCE ────────────────────────────────────
+   `alc` vale 1,85 · 2,85 · 2,35 · 3,05 y las cuatro clases mostraban HOY la
+   MISMA hoja de 0,62: o sea que el número con el que el jugador decide si
+   entra o espera no se veía por ningún lado, y el lancero —que llega medio
+   metro más lejos que el bruto— parecía llegar igual. Derivado no puede
+   mentir, y se comprueba con `__H.armas()`.
+   El divisor es la escala del cuerpo, porque `raiz.scale` la multiplica
+   después: lo que tiene que seguir al alcance es el largo EN EL MUNDO.     */
+const ARMA_BASE = 0.62;
+const ARMA_DE = { peon: 'armaPeon', lancero: 'armaLanza', bruto: 'armaMazo', rey: 'armaReal' };
+const ARMA_MALLA = { armaPeon: 'espada', armaLanza: 'lanza', armaMazo: 'mazo', armaReal: 'espadon' };
+const largoArma = cl => (ARMA_BASE + ESQ[cl].alc - ESQ.peon.alc) / ESQ[cl].esc;
+
 function recetaEsq() {
   const HUE = 0xd6d0bd, OSC = 0x1a1714, OXI = 0x6a5a48, ORO = 0xc8a13a;
   const cost = [];
   for (let i = 0; i < 4; i++)                       // la caja torácica
     cost.push({ w: 0.26 - i * 0.018, h: 0.030, d: 0.19 - i * 0.012, y: 0.24 - i * 0.055, c: HUE });
   return {
-    alto: 1.66, nombre: 'esq',
-    huesos: recetaHeroe().huesos,                   // MISMO esqueleto de pivotes
-    piezas: {
-      pelvis: cajas([{ w: 0.24, h: 0.13, d: 0.15, y: -0.05, c: HUE },
-                     { w: 0.06, h: 0.10, d: 0.10, y: -0.11, x: 0.08, c: HUE },
-                     { w: 0.06, h: 0.10, d: 0.10, y: -0.11, x: -0.08, c: HUE }]),
-      torso:  cajas([{ w: 0.07, h: 0.28, d: 0.07, y: 0.13, c: HUE }]),   // la columna
-      pecho:  cajas(cost.concat([
+    alto: ALTO_ESQ, nombre: 'esq',
+    huesos: huesosBase(),                           // MISMO esqueleto de pivotes
+    piezas: piezasEsq(HUE, OSC, OXI, ORO, cost),
+    /* una pieza cuyo nombre NO es un hueso dice de cuál cuelga */
+    hueso: { corona: 'cuello', capa: 'pecho',
+             armaPeon: 'anteD', armaLanza: 'anteD', armaMazo: 'anteD', armaReal: 'anteD' },
+  };
+}
+
+/* ── LAS PIEZAS DEL ESQUELETO ──────────────────────────────────────────────
+   Cada una es «las cajas que quedan» más «la malla generada, si llegó». Lo que
+   la malla reemplaza sale de la lista de cajas; lo que no —el muñón del
+   cuello, la capa de tela— se queda. Así apagar el 3D con `__H.tres(false)`
+   devuelve EXACTAMENTE el juego de antes, que es lo único que permite medir el
+   antes y el después en el mismo binario.                                  */
+function piezasEsq(HUE, OSC, OXI, ORO, cost) {
+  const P = {};
+
+  P.pelvis = hay3('pelvis')
+    ? pon3caja('pelvis', 0.26, 0.180, 0.16, 0, -0.0725, 0, H3_KC)
+    : cajas([{ w: 0.24, h: 0.13, d: 0.15, y: -0.05, c: HUE },
+             { w: 0.06, h: 0.10, d: 0.10, y: -0.11, x: 0.08, c: HUE },
+             { w: 0.06, h: 0.10, d: 0.10, y: -0.11, x: -0.08, c: HUE }]);
+
+  P.torso = cajas([{ w: 0.07, h: 0.28, d: 0.07, y: 0.13, c: HUE }]);   // la columna lumbar
+
+  P.pecho = hay3('costillar')
+    ? pon3caja('costillar', 0.34, 0.300, 0.19, 0, 0.130, 0, H3_KC)
+    : cajas(cost.concat([
         { w: 0.06, h: 0.30, d: 0.06, y: 0.13, c: HUE },                  // esternón
         { w: 0.34, h: 0.04, d: 0.05, y: 0.26, c: HUE },                  // clavículas
-      ])),
-      cuello: cajas([
-        { w: 0.05, h: 0.09, d: 0.05, y: 0.04, c: HUE },
+      ]));
+
+  /* el muñón del cuello NO se va con la calavera: es lo que la une al pecho */
+  P.cuello = fundeGeo([
+    cajas([{ w: 0.05, h: 0.09, d: 0.05, y: 0.04, c: HUE }]),
+    hay3('craneo') ? pon3caja('craneo', 0.19, 0.215, 0.225, 0, 0.1625, 0.010, H3_KC)
+      : cajas([
         { w: 0.19, h: 0.18, d: 0.20, y: 0.18, c: HUE },                  // el cráneo
         { w: 0.15, h: 0.07, d: 0.06, y: 0.09, z: 0.09, c: HUE },         // mandíbula
         /* LAS CUENCAS SON LO ÚNICO QUE HACE QUE UNA CAJA SEA UNA CALAVERA:
-           dos huecos oscuros y la línea de los dientes. Sin eso, a diez
-           metros y con niebla es un ladrillo claro.                       */
+           dos huecos oscuros y la nariz. Sin eso, a diez metros y con niebla
+           es un ladrillo claro. Con la malla generada esto sobra.          */
         { w: 0.055, h: 0.055, d: 0.04, y: 0.20, x: 0.045, z: 0.095, c: OSC },
         { w: 0.055, h: 0.055, d: 0.04, y: 0.20, x: -0.045, z: 0.095, c: OSC },
-        { w: 0.03, h: 0.035, d: 0.03, y: 0.155, z: 0.10, c: OSC },       // nariz
+        { w: 0.03, h: 0.035, d: 0.03, y: 0.155, z: 0.10, c: OSC },
       ]),
-      hombroI: cajas([{ w: 0.055, h: 0.30, d: 0.055, y: -0.15, c: HUE },
-                      { w: 0.10, h: 0.07, d: 0.10, y: 0.00, c: HUE }]),
-      hombroD: cajas([{ w: 0.055, h: 0.30, d: 0.055, y: -0.15, c: HUE },
-                      { w: 0.10, h: 0.07, d: 0.10, y: 0.00, c: HUE }]),
-      anteI:  cajas([{ w: 0.048, h: 0.26, d: 0.048, y: -0.13, c: HUE },
-                     { w: 0.09, h: 0.09, d: 0.05, y: -0.29, c: HUE }]),
-      anteD:  cajas([{ w: 0.048, h: 0.26, d: 0.048, y: -0.13, c: HUE },
-                     { w: 0.09, h: 0.09, d: 0.05, y: -0.29, c: HUE },
-                     { w: 0.05, h: 0.05, d: 0.05, y: -0.34, c: OXI },
-                     { w: 0.055, h: 0.62, d: 0.025, y: -0.66, c: 0x8d8574 }]),  // la hoja mellada
-      musloI: cajas([{ w: 0.062, h: 0.44, d: 0.062, y: -0.22, c: HUE }]),
-      musloD: cajas([{ w: 0.062, h: 0.44, d: 0.062, y: -0.22, c: HUE }]),
-      pantI:  cajas([{ w: 0.052, h: 0.42, d: 0.052, y: -0.21, c: HUE },
-                     { w: 0.09, h: 0.06, d: 0.20, y: -0.45, z: 0.04, c: HUE }]),
-      pantD:  cajas([{ w: 0.052, h: 0.42, d: 0.052, y: -0.21, c: HUE },
-                     { w: 0.09, h: 0.06, d: 0.20, y: -0.45, z: 0.04, c: HUE }]),
-      /* ── LO QUE HACE QUE UN REY SE LEA A REY ──────────────────────────────
-         Las cuatro clases comparten ESTA receta y sólo se distinguen por la
-         escala y el tinte, así que el jefe del juego salía idéntico al primer
-         bicho que uno mata — medido en la foto de la ceniza: la misma
-         silueta, un 86 % más grande. Lo que separa una silueta de otra no es
-         el tamaño (a diez metros no hay con qué compararlo) sino que tenga
-         algo que las demás no tienen. Corona y capa cuelgan de huesos que ya
-         existen, así que se mueven con la cabeza y con el pecho solos.
-         Y NO CUESTAN UN BICHO MÁS: son dos mallas instanciadas de cupo 16
-         cuyo matriz queda en CERO para todo el que no sea rey, o sea dos
-         llamadas de dibujo en total y ni un triángulo para los peones.     */
-      corona: cajas([
-        { w: 0.23, h: 0.055, d: 0.23, y: 0.295, c: ORO },                  // el aro
+  ]);
+
+  /* EL MISMO HÚMERO HACE DE BRAZO Y DE ANTEBRAZO, Y EL MISMO FÉMUR DE MUSLO Y
+     DE TIBIA, escalados. Son cuatro huesos largos con la misma silueta —tallo
+     fino y dos cabezas— y a la escala a la que se ven (un brazo mide veintiséis
+     centímetros en un juego que dibuja a 372×172) la diferencia anatómica no
+     llega a un píxel. Lo que sí cuesta es la memoria: cuatro mallas distintas
+     serían cuatro geometrías más para dibujar lo mismo.                    */
+  const brazo = (L) => hay3('humero') ? pon3palo('humero', L, 0, 0.015, 0, 0, 0, H3_GR)
+    : cajas([{ w: 0.055, h: L, d: 0.055, y: -L / 2, c: HUE },
+             { w: 0.10, h: 0.07, d: 0.10, y: 0.00, c: HUE }]);
+  const pierna = (L) => hay3('femur') ? pon3palo('femur', L, 0, 0.015, 0, 0, 0, H3_GR)
+    : cajas([{ w: 0.062, h: L, d: 0.062, y: -L / 2, c: HUE }]);
+  const mano = () => hay3('mano') ? pon3caja('mano', 0.105, 0.120, 0.080, 0, -0.300, 0.005, H3_KC)
+    : cajas([{ w: 0.09, h: 0.09, d: 0.05, y: -0.29, c: HUE }]);
+  /* el pie generado lleva el tobillo, así que es ALTO: con la caja de 0,08
+     que dibujaba el cubo, el ajuste al mínimo lo dejaba de la mitad de
+     largo. La caja de destino sube a 0,16 y baja un poco, así el tobillo
+     PISA la tibia en vez de dejar un hueco en la juntura. */
+  const pie = () => hay3('pie') ? pon3caja('pie', 0.100, 0.160, 0.215, 0, -0.470, 0.030, H3_KC)
+    : cajas([{ w: 0.09, h: 0.06, d: 0.20, y: -0.45, z: 0.04, c: HUE }]);
+
+  P.hombroI = brazo(0.315); P.hombroD = brazo(0.315);
+  P.anteI = fundeGeo([brazo(0.275), mano()]);
+  P.anteD = fundeGeo([brazo(0.275), mano()]);
+  P.musloI = pierna(0.455); P.musloD = pierna(0.455);
+  P.pantI = fundeGeo([pierna(0.435), pie()]);
+  P.pantD = fundeGeo([pierna(0.435), pie()]);
+
+  /* ── LO QUE HACE QUE UN REY SE LEA A REY ────────────────────────────────
+     Las cuatro clases comparten la MISMA receta y sólo se distinguen por la
+     escala y el tinte, así que el jefe salía idéntico al primer bicho que uno
+     mata — medido en la foto de la ceniza: la misma silueta, un 86 % más
+     grande. Corona y capa cuelgan de huesos que ya existen, así que se mueven
+     con la cabeza y con el pecho solas. Y NO CUESTAN UN BICHO MÁS: son mallas
+     instanciadas cuya matriz queda en CERO para todo el que no sea rey.   */
+  P.corona = hay3('corona')
+    ? pon3caja('corona', 0.245, 0.205, 0.245, 0, 0.335, 0)
+    : cajas([
+        { w: 0.23, h: 0.055, d: 0.23, y: 0.295, c: ORO },
         { w: 0.045, h: 0.12, d: 0.045, y: 0.375, z: 0.095, c: ORO },
         { w: 0.045, h: 0.12, d: 0.045, y: 0.375, z: -0.095, c: ORO },
         { w: 0.045, h: 0.12, d: 0.045, y: 0.375, x: 0.095, c: ORO },
         { w: 0.045, h: 0.12, d: 0.045, y: 0.375, x: -0.095, c: ORO },
-        { w: 0.05, h: 0.05, d: 0.05, y: 0.445, z: 0.095, c: 0x7d1420 },    // la piedra
-      ]),
-      capa: cajas([
-        { w: 0.40, h: 0.10, d: 0.06, y: 0.235, z: -0.085, c: 0x5e1420 },   // el cuello
-        { w: 0.34, h: 0.52, d: 0.035, y: -0.05, z: -0.105, c: 0x4a1019 },
-        { w: 0.13, h: 0.30, d: 0.03, y: -0.44, z: -0.115, x: -0.09, c: 0x3d0d15 },
-        { w: 0.11, h: 0.22, d: 0.03, y: -0.50, z: -0.115, x: 0.08, c: 0x3d0d15 },
-      ]),
-    },
-    /* una pieza cuyo nombre NO es un hueso dice de cuál cuelga */
-    hueso: { corona: 'cuello', capa: 'pecho' },
-  };
+        { w: 0.05, h: 0.05, d: 0.05, y: 0.445, z: 0.095, c: 0x7d1420 },
+      ]);
+  P.capa = cajas([
+    { w: 0.40, h: 0.10, d: 0.06, y: 0.235, z: -0.085, c: 0x5e1420 },   // el cuello
+    { w: 0.34, h: 0.52, d: 0.035, y: -0.05, z: -0.105, c: 0x4a1019 },
+    { w: 0.13, h: 0.30, d: 0.03, y: -0.44, z: -0.115, x: -0.09, c: 0x3d0d15 },
+    { w: 0.11, h: 0.22, d: 0.03, y: -0.50, z: -0.115, x: 0.08, c: 0x3d0d15 },
+  ]);
+
+  /* UN ARMA POR CLASE, con la misma máquina de matriz cero que la corona.
+     El largo sale de `largoArma`, o sea del ALCANCE, así que no puede mentir.
+     LA LANZA VA INCLINADA HACIA ADELANTE y agarrada por el tercio de atrás,
+     que es como se lleva una lanza: colgando recta, 1,53 × 1,06 de escala se
+     meten ochenta centímetros bajo el piso — y encima una pica vertical no
+     muestra el alcance, que es todo el punto de que el lancero llegue más
+     lejos que el bruto.                                                    */
+  for (const cl in ARMA_DE) {
+    const k = ARMA_DE[cl], L = largoArma(cl), m = ARMA_MALLA[k];
+    /* −93° deja la lanza casi horizontal apuntando adelante y agarrada por el
+       quinto de atrás: es como se lleva una lanza y —lo que importa— es la
+       única postura en la que se VE que llega más lejos que el mazo del bruto */
+    const gx = cl === 'lancero' ? -1.62 : 0, fr = cl === 'lancero' ? 0.22 : 0;
+    P[k] = hay3(m) ? pon3palo(m, L, 0, -0.34, 0, gx, fr)
+      : cajas([{ w: 0.055, h: L, d: 0.025, y: -0.34 - L / 2 + fr * L, rx: gx, c: 0x8d8574 },
+               { w: 0.05, h: 0.05, d: 0.05, y: -0.34, c: OXI }]);
+  }
+  return P;
 }
+
+/* vuelve a armar las geometrías del kit con lo que `hay3` diga ahora. Sólo lo
+   usa la sonda `__H.tres()`: el juego no lo necesita porque un blob no es una
+   imagen y ya está decodificado antes del primer cuadro. */
+function rehaceKit(kit, receta) {
+  if (!kit) return 0;
+  const r = receta(); let n = 0;
+  for (const k in kit.mallas) {
+    if (!r.piezas[k]) continue;
+    kit.mallas[k].geometry.dispose();
+    kit.mallas[k].geometry = r.piezas[k];
+    n++;
+  }
+  return n;
+}
+const esqRehacePiezas = () =>
+  rehaceKit(ESQ_KIT, recetaEsq) + rehaceKit(JUG && JUG.kit, recetaHeroe);
 
 /* ── EL KIT: UNA MALLA INSTANCIADA POR PIEZA ───────────────────────────────
    Catorce esqueletos sueltos serían catorce por dieciocho = 252 llamadas de

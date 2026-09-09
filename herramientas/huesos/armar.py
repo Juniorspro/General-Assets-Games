@@ -18,6 +18,7 @@ SALIDA = RAIZ.parent.parent / 'juegos-pc' / 'Huesos.html'
 ORDEN = [
     'a.html',      # doctype, CSS, DOM, importmap y el <script type=module>
     'i_assets.js', # GENERADO: los 24 sprites y los 3 suelos en base64
+    'i_3d.js',     # GENERADO: las doce piezas 3D de los esqueletos
     'b.js',        # constantes y los tres idiomas
     'c.js',        # utilidades y el azar con semilla
     'd.js',        # el mundo: altura, siembra y la auditoría

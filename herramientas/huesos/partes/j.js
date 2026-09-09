@@ -7,6 +7,20 @@
 
 let ESQS = [], ESQ_KIT = null, ESQ_TINTE = new THREE.Color();
 
+/* ── QUÉ PIEZAS *NO* LE TOCAN A ESTA CLASE ─────────────────────────────────
+   El kit dibuja TODAS las piezas para TODOS los cuerpos: las que no
+   corresponden van con matriz cero y no pintan un píxel. La máscara se arma
+   de una tabla y no a mano, porque con cuatro armas y dos adornos reales son
+   seis renglones por clase y el día que se agregue un arma alguien se olvida
+   de sacársela a las otras tres — y eso no falla: sale un peón con la espada
+   del rey encima.                                                          */
+function sinDe(cl) {
+  const s = {};
+  if (cl !== 'rey') { s.corona = 1; s.capa = 1; }
+  for (const c in ARMA_DE) if (c !== cl) s[ARMA_DE[c]] = 1;
+  return s;
+}
+
 function esqArranca(lista) {
   ESQS = lista.map((s, i) => ({
     id: i, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
@@ -15,12 +29,12 @@ function esqArranca(lista) {
     sx: s.x, sz: s.z, est: 'duerme', t: 0, esp: 0, atur: 0, muerteT: 0, vive: true, gDio: false,
     fase: Math.random() * 6.283, ronX: s.x, ronZ: s.z, ronT: 0,
     cuerpo: null, tinte: null,
-    /* la corona y la capa son del rey y de nadie más */
-    sin: s.cl === 'rey' ? null : { corona: 1, capa: 1 },
+    /* la corona, la capa y las tres armas que no son suyas van con matriz cero */
+    sin: sinDe(s.cl),
   }));
   if (!ESQ_KIT) ESQ_KIT = armaKit(recetaEsq(), ESQ_TURBA + 2);
   for (const e of ESQS) {
-    e.cuerpo = armaCuerpo(recetaEsq());
+    e.cuerpo = cuerpoEsq();
     e.cuerpo.raiz.scale.setScalar(ESQ[e.cl].esc);
     e.tinte = new THREE.Color(ESQ[e.cl].color).convertSRGBToLinear();
   }
