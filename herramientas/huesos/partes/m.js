@@ -276,6 +276,12 @@ function bucle() {
 }
 
 function unPaso(dt) {
+  /* ── EL FRENO DEL IMPACTO ────────────────────────────────────────────────
+     Va ACÁ y no en el bucle de dibujo: así lo pagan también el auto-jugador y
+     `__H.pasos()`, que es lo único que hace que las mediciones describan el
+     juego que se juega. La escena se sigue dibujando —congelar el dibujo se
+     lee a tirón— y lo que se detiene es el tiempo del mundo.               */
+  if (HITSTOP > 0) { HITSTOP -= dt; TALLY.frenoT += dt; return; }
   jugPaso(dt, entradaLee());
   esqPaso(dt);
   zonasPaso(dt);

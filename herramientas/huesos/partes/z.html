@@ -409,6 +409,26 @@ window.__H = {
              x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)],
              pctAlto: +((y1 - y0) * 100).toFixed(1), pctAncho: +((x1 - x0) * 100).toFixed(1) };
   },
+  /* ── LA CAMINATA, DE PERFIL Y CONGELADA ────────────────────────────────
+     De frente un ciclo de piernas no se lee: hay que mirarlo de costado y en
+     un instante fijo. Planta al héroe en la fase pedida, pone la cámara a un
+     lado y congela — el bucle sigue dibujando pero nada avanza, así que la
+     foto es del instante que se pidió y no de tres cuadros después.       */
+  marchaFoto(f, nom, k) {
+    CONGELADO = false;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.vx = 0; JUG.vz = 0;
+    JUG.rumbo = 0;
+    poseAplica(JUG.cuerpo, nom || 'camina', f || 0, null, 0, 0);
+    JUG.cuerpo.raiz.position.set(JUG.x, JUG.y, JUG.z);
+    JUG.cuerpo.raiz.rotation.y = JUG.rumbo;
+    if (JUG.kit) { for (const m in JUG.kit.mallas) JUG.kit.mallas[m].visible = true; kitPinta(JUG.kit, [JUG]); }
+    const d = 3.4;
+    cam.position.set(JUG.x + d, JUG.y + 1.15, JUG.z);
+    cam.lookAt(JUG.x, JUG.y + 0.95, JUG.z);
+    cam.updateMatrixWorld(true);
+    CONGELADO = true;
+    return { f: +(f || 0).toFixed(2), pose: nom || 'camina' };
+  },
   pintaKits(a, b) {
     for (const [k, c] of [[JUG.kit, a], [ESQ_KIT, b]]) {
       if (!k) continue;
@@ -528,6 +548,155 @@ window.__H = {
     return { zancada: +z.toFixed(3), barre: +barre.toFixed(3),
              desliza: +(z - barre).toFixed(3), pct: +((z - barre) / z * 100).toFixed(1),
              cadencia: +(vel / z).toFixed(2), pasosSeg: +(vel / z * 2).toFixed(2) };
+  },
+  /* ── HACIA DÓNDE CAMINA EL CICLO ───────────────────────────────────────
+     `patina()` mide CUÁNTO barre el pie y no HACIA DÓNDE: un ciclo dado
+     vuelta da exactamente el mismo `barre`, así que aprobaba una caminata
+     hacia atrás. Lo que lo distingue es el signo del barrido DURANTE EL
+     APOYO: con el cuerpo yendo hacia +Z, el pie apoyado tiene que ir hacia
+     −Z. Y la rodilla es la segunda firma: se dobla en el VUELO, no al
+     estirar la pierna hacia adelante.                                     */
+  marcha(nom) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    const N = 72, z = [], y = [], rod = [];
+    for (let i = 0; i < N; i++) {
+      poseAplica(c, nom || 'camina', i / N * Math.PI * 2, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      v.set(0, -0.44, 0).applyMatrix4(c.h.pantI.matrixWorld);
+      z.push(v.z); y.push(v.y); rod.push(c.h.pantI.rotation.x);
+    }
+    const ymin = Math.min(...y), ymax = Math.max(...y);
+    const umb = ymin + (ymax - ymin) * 0.30;      // el 30% más bajo es apoyo
+    let dz = 0, np = 0, iBaj = 0, iRod = 0;
+    for (let i = 0; i < N; i++) {
+      if (y[i] > umb) continue;
+      const j = (i + 1) % N;
+      if (y[j] > umb) continue;
+      let d = z[j] - z[i];
+      dz += d; np++;
+    }
+    for (let i = 0; i < N; i++) { if (y[i] < y[iBaj]) iBaj = i; if (rod[i] > rod[iRod]) iRod = i; }
+    /* cuánto del ciclo separa el pie más bajo (apoyo) de la rodilla más
+       doblada (medio vuelo): en una marcha buena es cerca de medio ciclo */
+    let sep = Math.abs(iRod - iBaj) / N; if (sep > 0.5) sep = 1 - sep;
+    const T = Math.PI * 2 / N;
+    return { pasos: np, barreApoyo: +dz.toFixed(4),
+             adelante: dz < 0,                    // pie apoyado va a −Z = cuerpo a +Z
+             fApoyo: +(iBaj * T).toFixed(2), fRodilla: +(iRod * T).toFixed(2),
+             sepRodilla: +sep.toFixed(3), rodillaOk: sep > 0.28,
+             zApoyo: +z[iBaj].toFixed(3), yApoyo: +y[iBaj].toFixed(3),
+             rodMax: +rod[iRod].toFixed(2), rodApoyo: +rod[iBaj].toFixed(2) };
+  },
+  /* ── LOS EJES DE UN HUESO NO SE ADIVINAN ───────────────────────────────
+     Se gira y se mira dónde quedó la punta. Con el hueso colgando de −Y, si
+     +rotación.x manda el pie a −Z entonces «rotación positiva» es «pierna
+     atrás», y de ese signo cuelga el sentido de la caminata entera.        */
+  ejeH(hueso, eje, ang, y) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    poseAplica(c, 'quieto', 0, null, 0, 0);
+    c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0;
+    c.h[hueso].rotation.set(0, 0, 0);
+    c.raiz.updateMatrixWorld(true);
+    const p0 = v.set(0, y === undefined ? -0.44 : y, 0).applyMatrix4(c.h[hueso].matrixWorld).clone();
+    c.h[hueso].rotation[eje || 'x'] = ang === undefined ? 0.5 : ang;
+    c.raiz.updateMatrixWorld(true);
+    const p1 = v.set(0, y === undefined ? -0.44 : y, 0).applyMatrix4(c.h[hueso].matrixWorld).clone();
+    return { dx: +(p1.x - p0.x).toFixed(3), dy: +(p1.y - p0.y).toFixed(3), dz: +(p1.z - p0.z).toFixed(3) };
+  },
+  /* ── EL ESQUIVE, MEDIDO ────────────────────────────────────────────────
+     Cuánto recorre de verdad —con el choque puesto—, cuánto tarda, y cuánto
+     GIRA la cámara del cuerpo: un esquive de costado que hace girar al
+     personaje noventa grados no se lee a esquive, se lee a que el mando se
+     trabó y el héroe salió corriendo para otro lado.                       */
+  esqMide(lx, lz) {
+    const x0 = JUG.x, z0 = JUG.z, r0 = JUG.rumbo;
+    JUG.entX = lx === undefined ? 0 : lx; JUG.entZ = lz === undefined ? 0 : lz;
+    const ok = jugPide('esquiva');
+    let n = 0, inv = 0;
+    /* LOS CUADROS DE INVENCIBILIDAD DEL ESQUIVE NO PASAN POR `invT`: los
+       decide `jugRecibe` con `esqT`. Midiendo `invT` la sonda devolvía 0 y
+       denunciaba un defecto que no existe. */
+    while (JUG.esqT > 0 && n < 200) { n++; if ((J_ESQ_T - JUG.esqT) < J_ESQ_INV) inv++; unPaso(PASO); }
+    let dr = JUG.rumbo - r0; while (dr > Math.PI) dr -= 6.283; while (dr < -Math.PI) dr += 6.283;
+    return { ok, rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2),
+             pasos: n, giroGrados: +(dr * 57.3).toFixed(1),
+             invPasos: inv, agu: Math.round(JUG.agu) };
+  },
+  /* ── EL COMBO, MEDIDO ──────────────────────────────────────────────────
+     Cuánto tarda cada golpe de punta a punta y cuánto de eso es ventana
+     activa. Un combo cuyo remate dura tres cuartos de segundo con once
+     centésimas de golpe es un combo que se mira, no que se juega.          */
+  comboMide() {
+    const out = [];
+    for (let i = 0; i < J_COMBO.length; i++) {
+      const g = J_COMBO[i];
+      out.push({ i, largo: +jugLargoGolpe(g).toFixed(3), activo: g.activo,
+                 pctActivo: +(g.activo / jugLargoGolpe(g) * 100).toFixed(1),
+                 dano: g.dano, alc: g.alc, dps: +(g.dano / jugLargoGolpe(g)).toFixed(1) });
+    }
+    const T = out.reduce((a, o) => a + o.largo, 0);
+    const D = out.reduce((a, o) => a + o.dano, 0);
+    return { golpes: out, largoCombo: +T.toFixed(2), dano: D,
+             dps: +(D / T).toFixed(1), agu: J_AGU_GOLPE * 3,
+             golpesPeon: Math.ceil(ESQ.peon.vida / (D / 3)) };
+  },
+  viejo(v) { COMBO_VIEJO = !!v; return COMBO_VIEJO; },
+  /* ¿el ciclo se da vuelta cuando el cuerpo va de espaldas? Se empuja al
+     jugador hacia atrás sin tocarle el rumbo, que es lo que le pasa cuando
+     lo tiran de un hachazo, y se mira hacia dónde avanza la fase. */
+  cicloAtras() {
+    const r = JUG.rumbo, f0 = JUG.fase;
+    JUG.vx = -Math.sin(r) * 3; JUG.vz = -Math.cos(r) * 3;
+    JUG.golpe = -1; JUG.esqT = 0;
+    const dAtras = (() => { const a = JUG.fase; jugPaso(PASO, { x: 0, z: 0 }); return JUG.fase - a; })();
+    JUG.rumbo = r; JUG.vx = Math.sin(r) * 3; JUG.vz = Math.cos(r) * 3;
+    const dAdel = (() => { const a = JUG.fase; jugPaso(PASO, { x: 0, z: 0 }); return JUG.fase - a; })();
+    return { atras: +dAtras.toFixed(4), adelante: +dAdel.toFixed(4),
+             daVuelta: dAtras < 0 && dAdel > 0 };
+  },
+  peleaVieja(v) { PELEA_VIEJA = !!v; return PELEA_VIEJA; },
+  sinAsist(v) { SIN_ASIST = !!v; return SIN_ASIST; },
+  esqViejo(v) { ESQ_VIEJO = !!v; return ESQ_VIEJO; },
+  /* ── MACHACAR EL BOTÓN: ¿SALE EL COMBO? ────────────────────────────────
+     Toca ATACAR en cada cuadro durante `n` pasos y cuenta cuántos arcos
+     salieron de verdad. Sin cola de entrada, un toque que cae en el medio de
+     un arco se tira, así que machacar da MENOS golpes que tocar con el tiempo
+     justo — que es exactamente lo contrario de lo que el jugador espera.   */
+  machaca(n) {
+    const t0 = TALLY.tajos, f0 = TALLY.frenoT;
+    /* SE TOCA POR EL MISMO CAMINO QUE EL DEDO. La primera versión llamaba a
+       `jugGolpeArranca()` derecho, o sea que se SALTEABA la cola de entrada
+       —justo lo que venía a medir— y las dos ramas del A/B daban lo mismo. */
+    for (let i = 0; i < (n || 180); i++) { jugPide('ataca'); unPaso(PASO); }
+    return { pasos: n || 180, seg: +((n || 180) * PASO).toFixed(2),
+             tajos: TALLY.tajos - t0, aciertos: TALLY.aciertos,
+             freno: +(TALLY.frenoT - f0).toFixed(3), agu: Math.round(JUG.agu) };
+  },
+  /* ── UN SOLO TOQUE EN EL MEDIO DEL ARCO ────────────────────────────────
+     Arranca un golpe, espera `t` segundos y toca UNA vez, como un pulgar.
+     Devuelve hasta qué eslabón del combo llegó. Sin cola, un toque que cae
+     en el medio del arco se tira y el combo se queda en el primero.       */
+  combo1(t) {
+    JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.agu = J_AGU;
+    jugPide('ataca');
+    const n = Math.round((t === undefined ? 0.25 : t) / PASO);
+    for (let i = 0; i < n; i++) unPaso(PASO);
+    const dentro = jugAtacando(), g0 = JUG.golpe;
+    jugPide('ataca');                       // el único toque que se mide
+    let max = JUG.golpe;
+    for (let i = 0; i < 90; i++) { unPaso(PASO); if (JUG.golpe > max) max = JUG.golpe; }
+    return { toqueEn: +(t === undefined ? 0.25 : t).toFixed(2), dentroDelArco: dentro,
+             golpeAlTocar: g0, llegoA: max, encadeno: max > 0 };
+  },
+  /* la asistencia de puntería, medida: cuántos grados corrige contra un
+     blanco puesto a un ángulo conocido */
+  asistMide(gr) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere'); if (!e) return null;
+    const a = JUG.rumbo + gr * Math.PI / 180, d = 1.8;
+    e.x = JUG.x + Math.sin(a) * d; e.z = JUG.z + Math.cos(a) * d; e.y = H(e.x, e.z);
+    const r0 = JUG.rumbo; JUG.golpe = 0;
+    const c = jugApunta(); JUG.golpe = -1; JUG.rumbo = r0;
+    return { pedido: gr, corrige: +(c * 57.3).toFixed(1) };
   },
   tally() {
     const c = ESQS.filter(e => e.vive && e.est !== 'muere')

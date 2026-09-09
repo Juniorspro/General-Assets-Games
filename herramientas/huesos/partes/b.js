@@ -89,6 +89,32 @@ const J_COMBO = [
   { carga: 0.19, activo: 0.14, fin: 0.44, alc: 2.45, arco: 2.10, dano: 41, empuje: 7.0 },
 ];
 const J_COMBO_VENTANA = 0.46;     // desde que termina un golpe para encadenar
+/* CUÁNTO VIVE UN TOQUE EN LA COLA. Un arco entero mide 0,54 s: con menos de
+   media ventana el toque que cae al principio del golpe se pierde igual, y
+   con mucho más el héroe ataca solo dos segundos después de haber soltado. */
+const J_BUF = 0.34;
+/* A/B EN EL MISMO BINARIO. Una mejora contada contra el recuerdo no es una
+   medición: `__H.viejo(true)` devuelve la regla anterior —encadenar sólo con
+   el arco terminado y tirar el toque que caiga en el medio— para poder medir
+   las dos con el mismo código y la misma semilla. */
+let COMBO_VIEJO = false;
+/* y lo mismo para lo que SÍ toca la pelea: la asistencia de puntería, el
+   freno del impacto y que el esquive no gire el cuerpo. Sin poder apagarlos
+   en el mismo binario, «el bot pasó de 5 a 7» no dice cuál de los tres fue. */
+let PELEA_VIEJA = false, SIN_ASIST = false, ESQ_VIEJO = false;
+/* cuánto dura el fundido entre dos poses de un esqueleto */
+const ESQ_FUNDE = 0.16;
+/* la asistencia de puntería: cuánto se corrige y dentro de qué arco se busca
+   blanco. Es asistencia y no apuntado automático — el tope es lo que deja la
+   decisión de a quién pegarle del lado del jugador. */
+const J_ASIST = 0.42;             // rad = 24° de corrección como mucho
+const J_ASIST_ARCO = 1.15;        // rad = ±66° donde se busca
+const J_GIRO_CARGA = 7.0;         // cuánto se puede reorientar juntando el golpe
+/* EL FRENO DEL IMPACTO. Tres cuadros de nada es lo que separa «el arco pasó
+   por encima» de «le pegué»: sin freno, el tajo y el aire se ven igual. Y el
+   remate se lleva casi el doble, porque es el que tiene que sentirse. */
+const HIT_STOP = 0.050;
+const HIT_STOP_REMATE = 0.090;
 
 /* ── LOS ESQUELETOS ────────────────────────────────────────────────────────
    Tres clases y una sola máquina de estados. La diferencia entre ellas son

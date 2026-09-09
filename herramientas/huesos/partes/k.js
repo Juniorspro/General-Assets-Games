@@ -6,7 +6,7 @@
    estaría probando un juego que no existe.                                */
 
 let ZONA_ACT = 0, PART = 'menu', FIN_T = 0, GANO = false;
-let SANGRE = 0, SACUDE = 0, AVISO = '', AVISO_T = 0;
+let SANGRE = 0, SACUDE = 0, AVISO = '', AVISO_T = 0, HITSTOP = 0;
 /* ── EL ESTADO DE LAS OLEADAS ──────────────────────────────────────────────
    `i` es cuál oleada de la zona actual está en pie y `espera` el respiro que
    falta para la siguiente. `hechas` cuenta las limpiadas en toda la partida y
@@ -39,11 +39,17 @@ function jugResuelveGolpe() {
        botón y las clases dejan de significar algo. */
     if (JUG.golpe < J_COMBO.length - 1) break;
   }
-  if (n) { SACUDE = Math.max(SACUDE, JUG.golpe === 2 ? 0.30 : 0.16); son('impacto'); }
+  TALLY.tajos++;
+  if (n) {
+    TALLY.aciertos++;
+    SACUDE = Math.max(SACUDE, JUG.golpe === 2 ? 0.30 : 0.16);
+    if (!PELEA_VIEJA) HITSTOP = Math.max(HITSTOP, JUG.golpe === 2 ? HIT_STOP_REMATE : HIT_STOP);
+    son('impacto');
+  }
   return n;
 }
 
-const TALLY = { golpes: 0, dano: 0, porCl: {}, esquivados: 0 };
+const TALLY = { golpes: 0, dano: 0, porCl: {}, esquivados: 0, tajos: 0, aciertos: 0, frenoT: 0 };
 function jugRecibe(dano, dx, dz, empuje, cl) {
   if (JUG.muerto) return;
   /* LOS CUADROS DE INVENCIBILIDAD DEL ESQUIVE SON LA MITAD DEL JUEGO: sin

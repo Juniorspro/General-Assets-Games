@@ -300,6 +300,151 @@ munecas.
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
 
+### Centésima quincuagésima vuelta (2026-09-09): **HUESOS** — caminaban para atrás, el esquive te daba media vuelta, y el combo no encadenaba
+
+Pedido, dos veces textual: *"mejora el combate y los esqueletos caminan hacia atrás pero adelante
+también arregla el impulso o salto del personaje y agrega animaciones más fluidas y bien
+trabajadas"*. Cuatro cosas, y las cuatro eran ciertas.
+
+#### CAMINABAN PARA ATRÁS PORQUE EL EJE DEL MUSLO ESTABA AL REVÉS, Y `patina()` NO PODÍA VERLO
+
+Es el defecto de la vuelta y lo grave no es el signo: es que **la sonda que existía para vigilar la
+caminata era estructuralmente incapaz de detectarlo**. `patina()` compara cuánto barre el pie contra
+cuánto avanza el cuerpo, o sea **magnitudes**: un ciclo dado vuelta patina exactamente cero, porque
+el pie de apoyo barre lo mismo — para el otro lado. Devolvía `0 %` desde la vuelta 144 y el juego
+tenía a los veintiocho esqueletos y al héroe caminando hacia atrás.
+
+El eje no se dedujo, se **midió**, y con dos mediciones independientes:
+
+1. **`ejeH(hueso, eje, ang)`**, que gira un hueso y dice dónde quedó la punta: `musloI.rotation.x =
+   +0,5` deja el pie en **`dz = −0,211`**. O sea que **positivo es pierna ATRÁS**, y la pose escribía
+   `mIX = +sin(f)`, que es la pierna yendo al revés del cuerpo.
+2. **`marcha(nom)`**, que mide el **signo** del barrido del pie de apoyo: `barreApoyo **+0,428**`
+   con el cuerpo avanzando en +Z, o sea las dos cosas para el mismo lado — que es la firma exacta
+   de una caminata invertida.
+
+Corregido: `barreApoyo **−0,0577** · adelante: true`, con el patinaje **todavía en 0 %** — que es
+justamente la prueba de que la sonda vieja nunca lo iba a ver. Y la zancada, que en este juego **se
+mide del ciclo y no se escribe al lado**, creció sola de **1,348 a 1,934** caminando y de 2,037 a
+**2,531** corriendo, con la cadencia siguiéndola a **3,15 y 4,43 pasos/s** sin tocar un número.
+
+#### LA SEGUNDA MITAD DEL RECLAMO: SE DESLIZABAN PARA ATRÁS CON EL CICLO PARA ADELANTE
+
+*"pero adelante también"* era literal y es **otro** defecto. Hay tres sitios que mueven un cuerpo
+**sin tocar su rumbo**: `esqMueve` separa esqueletos superpuestos, `esqMira` clava el encaramiento
+en el jugador mientras la velocidad decae, y `jugRecibe` empuja al jugador hacia atrás al pegarle.
+En los tres, la fase del ciclo avanzaba con `|v|`, así que el cuerpo se deslizaba hacia atrás
+**pisando hacia adelante**.
+
+`cicloSigno(vx, vz, rumbo, prev)` proyecta la velocidad sobre el frente y devuelve el signo de la
+fase. **Va con banda asimétrica y memoria** (entra en −0,30, sale en +0,10, y guarda el signo por
+cuerpo): con un umbral solo, cualquier cuerpo casi quieto —que es el caso normal entre golpe y
+golpe— parpadea entre adelante y atrás varias veces por segundo, y eso se ve peor que el defecto.
+Medido: `{atras: −0,1308, adelante: +0,1308, daVuelta: true}`.
+
+#### EL IMPULSO: EL ESQUIVE TE DEJABA MIRANDO PARA EL OTRO LADO
+
+Este juego no tiene salto, así que *"el impulso o salto"* es el esquive. Medido con `esqMide(lx,lz)`:
+un esquive lateral giraba el cuerpo **90 grados** y uno **sin dirección −179,9** — o sea que
+esquivar sin tocar el joystick te dejaba de espaldas al esqueleto que te acababa de atacar, y
+esquivar de costado te sacaba la mira de encima. El esquive es la mitad del juego justamente porque
+lo que sigue es el contragolpe, y con el cuerpo dado vuelta ese contragolpe no existe.
+
+**El esquive no cambia el encaramiento en absoluto**: `giroGrados 0` medido en las cuatro
+direcciones. Y **sin dirección ahora se esquiva hacia ATRÁS** y no hacia adelante — lanzarse contra
+el hacha del bruto no es esquivar, es entregarse.
+
+**Y UNA CORRECCIÓN MÍA QUE LA MEDICIÓN DESMINTIÓ:** el primer arreglo giraba el cuerpo **hacia** la
+dirección del esquive, que suena a lo correcto. Medido, un esquive sin dirección daba `giroGrados
+−179,9`: exactamente el defecto que venía a arreglar, con otro disfraz.
+
+**Y UN DEFECTO DE LA SONDA QUE CASI CUESTA UN REPORTE FALSO.** `esqMide` devolvía `invPasos: 0` y
+estuve por escribir que el esquive no tenía cuadros de invencibilidad. Los tiene: `jugRecibe` los
+comprueba con `(J_ESQ_T − JUG.esqT) < J_ESQ_INV` y no con un `invT`, que es lo que la sonda estaba
+mirando. Con la comprobación correcta: **19 de 21 pasos**.
+
+#### EL COMBATE: UN TOQUE SUELTO NO ENCADENABA NUNCA, Y ESO SÓLO SE VE CON UNA MEDICIÓN HUMANA
+
+`jugPide('ataca')` sólo encadenaba si el toque caía dentro de `gVent`, la ventana corta del final
+del golpe. Un jugador no apunta a una ventana: aprieta cuando ve que el tajo salió. `combo1(t)`
+—**un solo toque** en un instante del arco— es la medición que lo dice, y es la única que separa
+esto de un ajuste que sólo le sirve al bot:
+
+| toque en | 0,08 s | 0,18 | 0,28 | 0,40 | 0,52 |
+|---|---|---|---|---|---|
+| regla vieja | no | no | no | no | no |
+| **ahora** | **sí** | **sí** | **sí** | **sí** | **sí** |
+
+Tres cosas, y las tres van juntas: **buffer de entrada** de 0,34 s (un toque que llega temprano se
+guarda y sale al primer cuadro legal), **encadenar durante la recuperación** y no sólo en la
+ventana, y **un solo sitio que arranca un golpe** —`jugGolpeArranca()`— que llaman el buffer y el
+dedo. Con dos caminos, el buffer y el toque directo se desincronizan el día que se toque uno.
+
+**ASISTENCIA DE APUNTADO ACOTADA**, que es lo que de verdad cambió el juego: busca dentro de ±66° y
+corrige **como mucho 24°**. Medido: un enemigo a 18° corrige 18 (entero), a 45° corrige **24,1** (el
+tope) y a 80° corrige **0**. El tope es lo que la hace asistencia y no puntería automática.
+Más **giro durante la carga** (el cuerpo sigue al joystick mientras el tajo se prepara, y se clava
+al salir) y **hitstop** de 50 ms —90 en el remate— que va dentro de `unPaso` y no en el bucle de
+dibujo, así el auto-jugador y las sondas lo pagan igual.
+
+#### DE DÓNDE SALE LA MEJORA, MEDIDO PIEZA POR PIEZA
+
+El bot honesto pasó de **3 de 8 a 7 de 8**, y lo honesto es decir **cuál** de los cuatro cambios lo
+hizo. Todo en el mismo binario, con las mismas ocho semillas y con un interruptor por pieza:
+
+| | gana de 8 |
+|---|---|
+| todo viejo | **3** |
+| sólo el combo nuevo | **3** — semilla por semilla, idéntico |
+| sin asistencia de apuntado | 2 |
+| con el esquive viejo | 7 |
+| **todo nuevo** | **7** |
+| al azar (control) | **0** |
+
+O sea: **la asistencia de apuntado es toda la ganancia**. El buffer del combo aporta **exactamente
+cero** a un bot que aprieta el botón en cada cuadro —por construcción nunca llega tarde a una
+ventana— y el arreglo del esquive es invisible para uno que se vuelve a apuntar perfecto. Las dos
+cosas son arreglos **para una persona**, y por eso su prueba no es el bot sino `combo1` (0/5 → 5/5)
+y `esqMide` (giro 0 en las cuatro direcciones).
+
+#### LAS ANIMACIONES: CUATRO COSAS, Y NINGUNA ES UN CUADRO MÁS
+
+- **La rodilla dejó de recortarse.** Era `max(0, sin)` con un tope: un corte duro en la derivada, que
+  es lo que se lee a pierna que se traba. Va con potencia mayor a uno —arranca y termina suave por
+  construcción— más una **respuesta de carga**: la rodilla cede un poco justo después de apoyar el
+  talón, que es lo que hace un cuerpo que recibe su propio peso.
+  **Y LA FASE DE ESA CARGA SALIÓ MAL LA PRIMERA VEZ:** con `sin(f − 4,55)` picaba en f≈6,12, o sea
+  **en el medio del apoyo**, y dejaba la rodilla a 0,50 rad justo cuando la pierna tiene que estar
+  recta — `sepRodilla 0,181 · rodillaOk false`. Con `sin(f − 3,53)` pica en f≈5,1, apenas después
+  del talón: `sepRodilla **0,403**` y la rodilla en **0,12 rad** en el apoyo.
+- **Pelvis, tronco y pecho.** La cadera bascula, el tronco gira **al revés** que la cadera —que es
+  lo que hace cualquiera al caminar— y el pecho respira con el ciclo. Cuesta cuatro líneas y es la
+  diferencia entre un cuerpo y dos piernas.
+- **El ciclo con signo**, que es lo de arriba y también es fluidez: un cuerpo que retrocede pisando
+  hacia adelante se lee a error de dibujo.
+- **Y LOS ESQUELETOS POR FIN MEZCLAN SUS POSES.** El jugador tenía fundido entre animaciones desde
+  la vuelta 144 y **los veintiocho esqueletos cortaban en seco** entre quieto, caminar, cargar y
+  pegar. Va un fundido de 0,16 s guardando la pose anterior por bicho (`poseB`, `poseBrg`, `poseM`).
+  Es lo que más se nota de las cuatro, porque son veintiocho contra uno.
+
+#### MEDIDO AL CERRAR
+
+Auditoría `ok: true`: **28 esqueletos, 7 oleadas** (`ppp / plpp / lpbp / pplbp / blbll / blblll /
+r`), **13.454 de 13.454 celdas alcanzables**, 0 sueltas, **0 fríos**, 0 trabados. Marcha:
+`adelante: true`, `fApoyo 6,2`, `fRodilla 2,44`, patinaje **0 %** en las dos marchas. Esquive:
+**giro 0** en las cuatro direcciones, `rec 2,66`, **19 de 21 pasos invencibles**. Combo: un toque
+suelto encadena en **5 de 5** instantes (era 0 de 5). Asistencia **18 → 18 · 45 → 24,1 · 80 → 0**.
+Armas 0,62 · 1,618 · 1,12 · 1,82 contra 0,62 · 1,62 · 1,12 · 1,82 esperados. **Cero solapamientos**
+de HUD y `hud()` con `faltan` sólo en `joy` y `teclas`, que es lo correcto en teléfono. Tres idiomas
+en vivo (`EL BOSQUE · THE WOOD · A MATA`) y tres calidades en caliente (279×129 · 372×172 ·
+525×242). **88 llamadas de dibujo y 44.030 triángulos.** `window.__errs` **vacío en todas las
+corridas**.
+
+**LO QUE NO ESTÁ RESUELTO, Y VIENE DE LA VUELTA 145:** el bot honesto sigue perdiendo la semilla 41
+en la oleada 5 con 23 bajas. Su rama de huida dispara con los bichos **ya** en distancia de golpe,
+así que desperdicia los 5,6 m/s contra los 2,55 de un peón — el 7 de 8 sigue siendo un piso y no el
+número del juego.
+
 ### Centésima cuadragésima novena vuelta (2026-09-09): **HUESOS** — oleadas, y el defecto que ninguna sonda podía ver
 
 Pedido, dos veces textual: *"hace mejor el juego controles móviles etc we y oleadas etc menú todo"*.

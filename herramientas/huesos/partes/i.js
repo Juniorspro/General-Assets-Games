@@ -7,7 +7,7 @@ const JUG = {
   vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
   nivel: 1, xp: 0, xpSig: XP_NIVEL(1),
   golpe: -1, gT: 0, gDio: false, gVent: 0,
-  esqT: 0, esqEsp: 0, esqX: 0, esqZ: 0,
+  esqT: 0, esqEsp: 0, esqX: 0, esqZ: 0, esqRumbo: 0, gBuf: 0, cicSg: 1,
   danoT: 0, invT: 0, muerto: false, muerteT: 0,
   fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0,
   cuerpo: null, kit: null,
@@ -18,7 +18,7 @@ function jugArranca() {
   Object.assign(JUG, {
     x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
     nivel: 1, xp: 0, xpSig: XP_NIVEL(1), golpe: -1, gT: 0, gDio: false, gVent: 0,
-    esqT: 0, esqEsp: 0, danoT: 0, invT: 0, muerto: false, muerteT: 0,
+    esqT: 0, esqEsp: 0, esqRumbo: 0, gBuf: 0, cicSg: 1, danoT: 0, invT: 0, muerto: false, muerteT: 0,
     fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0, vive: true,
   });
   JUG.y = H(0, 0);
@@ -44,25 +44,92 @@ function jugPide(que) {
        eso se lee a que el botón no anduvo */
     JUG.golpe = -1; JUG.gVent = 0;
     JUG.esqT = J_ESQ_T; JUG.esqEsp = J_ESQ_ESPERA; JUG.agu -= J_AGU_ESQ;
+    JUG.gBuf = 0;                     // esquivar tira el golpe que estaba en cola
     const l = Math.hypot(JUG.entX || 0, JUG.entZ || 0);
     if (l > 0.2) { JUG.esqX = JUG.entX / l; JUG.esqZ = JUG.entZ / l; }
+    /* SIN DIRECCIÓN SE ESQUIVA HACIA ATRÁS Y NO HACIA ADELANTE. El esquive es
+       el botón del pánico: se aprieta con el pulgar quieto justo cuando algo
+       viene, y saliendo hacia adelante el jugador se metía SOLO adentro del
+       hacha que estaba esquivando. */
+    else if (!PELEA_VIEJA && !ESQ_VIEJO) { JUG.esqX = -Math.sin(JUG.rumbo); JUG.esqZ = -Math.cos(JUG.rumbo); }
     else { JUG.esqX = Math.sin(JUG.rumbo); JUG.esqZ = Math.cos(JUG.rumbo); }
-    JUG.rumbo = Math.atan2(JUG.esqX, JUG.esqZ);
+    if (PELEA_VIEJA || ESQ_VIEJO) JUG.rumbo = Math.atan2(JUG.esqX, JUG.esqZ);
+    /* ── EL ESQUIVE NO GIRA EL CUERPO, Y ESO NO ES UN DETALLE ──────────────
+       Escribía `rumbo = atan2(esqX, esqZ)`, o sea que el cuerpo saltaba a
+       mirar hacia donde salía: medido, `giroGrados 90` en UN cuadro para un
+       esquive de costado y **−180 para uno hacia atrás**. Lo segundo es lo
+       grave: el esquive de este juego existe para esquivar Y CONTRAATACAR, y
+       terminarlo de espaldas al bicho obliga a volver a girar antes de pegar
+       — o sea que la ventana que el esquive acaba de abrir se gasta en darse
+       vuelta. El cuerpo se queda mirando donde miraba y lo único direccional
+       es el desplazamiento; la pose es una cuclilla y se lee igual para
+       cualquier lado. */
     son('esquiva');
     return true;
   }
   if (que === 'ataca') {
-    if (JUG.esqT > 0 || JUG.agu < J_AGU_GOLPE) return false;
-    if (JUG.golpe < 0) { JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false; JUG.agu -= J_AGU_GOLPE; son('tajo'); return true; }
-    /* ENCADENAR SÓLO EN LA VENTANA. Sin ventana, machacar el botón encadena
-       los tres golpes al instante y el tercero —que es el caro— sale gratis */
-    if (JUG.gVent > 0 && JUG.golpe < J_COMBO.length - 1) {
-      JUG.golpe++; JUG.gT = 0; JUG.gDio = false; JUG.gVent = 0;
-      JUG.agu -= J_AGU_GOLPE; son('tajo'); return true;
-    }
+    if (JUG.esqT > 0) return false;
+    if (jugGolpeArranca()) return true;
+    /* LA COLA DE ENTRADA. Sin ella, un toque que cae en el medio del arco se
+       TIRA A LA BASURA y hay que volver a tocar con el tiempo justo: en un
+       teléfono eso convierte el combo de tres en un golpe suelto repetido.
+       Con la cola, el toque espera a que se abra la ventana. Y caduca, porque
+       una cola sin vencimiento encadena un golpe que se pidió hace dos
+       segundos y el jugador ve al héroe atacar solo. */
+    if (!COMBO_VIEJO) JUG.gBuf = J_BUF;
     return false;
   }
   return false;
+}
+
+/* ── EL ÚNICO SITIO QUE ARRANCA UN GOLPE ───────────────────────────────────
+   Lo llaman el botón, la cola de entrada y el auto-jugador. Con la regla
+   escrita en dos sitios, el día que se toque la ventana el bot prueba un
+   juego que no existe.                                                     */
+function jugGolpeArranca() {
+  if (JUG.muerto || JUG.esqT > 0 || JUG.agu < J_AGU_GOLPE) return false;
+  if (JUG.golpe < 0) {
+    JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false; JUG.agu -= J_AGU_GOLPE;
+    JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
+  }
+  /* ENCADENAR SÓLO EN LA VENTANA. Sin ventana, machacar el botón encadena los
+     tres golpes al instante y el tercero —que es el caro— sale gratis. Pero
+     la ventana ABRE AL EMPEZAR LA RECUPERACIÓN y no al terminarla: esperando
+     a que el arco termine entero, entre golpe y golpe hay tres décimas de
+     nada y el combo no fluye — se ven tres tajos sueltos, no un combo. */
+  const g = J_COMBO[JUG.golpe];
+  const enRec = !COMBO_VIEJO && JUG.gT >= g.carga + g.activo;
+  if ((enRec || JUG.gVent > 0) && JUG.golpe < J_COMBO.length - 1) {
+    JUG.golpe++; JUG.gT = 0; JUG.gDio = false; JUG.gVent = 0;
+    JUG.agu -= J_AGU_GOLPE; JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
+  }
+  return false;
+}
+
+/* ── LA ASISTENCIA DE PUNTERÍA ─────────────────────────────────────────────
+   Un esqueleto se mueve a 2,5 m/s y el arco tarda 130 ms en salir: apuntado a
+   pulgar contra un blanco que camina, el tajo pasa al lado. Al arrancar el
+   golpe el rumbo se corre HACIA el bicho más cercano que ya esté dentro del
+   arco — y con tope, porque una corrección sin tope es apuntado automático y
+   entonces elegir a quién pegarle deja de ser una decisión.                */
+function jugApunta() {
+  if (PELEA_VIEJA || SIN_ASIST) return 0;
+  const g = J_COMBO[JUG.golpe];
+  let m = null, md = 1e9;
+  for (const e of ESQS) {
+    if (!e.vive || e.est === 'muere') continue;
+    const dx = e.x - JUG.x, dz = e.z - JUG.z, d2 = dx * dx + dz * dz;
+    const R = g.alc + ESQ[e.cl].radio + 0.55;
+    if (d2 > R * R || d2 < 1e-6) continue;
+    let a = Math.atan2(dx, dz) - JUG.rumbo;
+    while (a > Math.PI) a -= 6.283; while (a < -Math.PI) a += 6.283;
+    if (Math.abs(a) > J_ASIST_ARCO) continue;
+    if (d2 < md) { md = d2; m = a; }
+  }
+  if (m === null) return 0;
+  const c = lim(m, -J_ASIST, J_ASIST);
+  JUG.rumbo += c;
+  return c;
 }
 
 function jugPaso(dt, ent) {
@@ -75,6 +142,8 @@ function jugPaso(dt, ent) {
   JUG.esqEsp = Math.max(0, JUG.esqEsp - dt);
   JUG.gVent = Math.max(0, JUG.gVent - dt);
 
+  JUG.gBuf = Math.max(0, JUG.gBuf - dt);
+
   /* ── el esquive manda sobre todo lo demás ── */
   if (JUG.esqT > 0) {
     JUG.esqT -= dt;
@@ -85,6 +154,13 @@ function jugPaso(dt, ent) {
   } else if (jugAtacando()) {
     JUG.gT += dt;
     const g = J_COMBO[JUG.golpe];
+    /* SE PUEDE CORREGIR LA PUNTERÍA MIENTRAS SE JUNTA EL GOLPE, poco y sólo
+       antes del arco. Clavado del todo, un blanco que se corre medio metro
+       durante la carga obliga a fallar el tajo entero mirándolo. */
+    if (JUG.gT < g.carga) {
+      const le = Math.hypot(ent.x, ent.z);
+      if (le > 0.3) JUG.rumbo = angAmort(JUG.rumbo, Math.atan2(ent.x / le, ent.z / le), J_GIRO_CARGA, dt);
+    }
     /* EL GOLPE EMPUJA HACIA ADELANTE, y no es adorno: sin ese medio metro,
        apuntar a un blanco que retrocede obliga a soltar el botón y volver a
        apretarlo, y el combo de tres deja de existir en la práctica */
@@ -94,12 +170,16 @@ function jugPaso(dt, ent) {
        cada cuadro del arco, un tajo de 110 ms le pega siete veces al mismo
        bicho y el peón se muere de un toque. */
     if (!JUG.gDio && jugFaseGolpe() === 1) { JUG.gDio = true; jugResuelveGolpe(); }
-    if (JUG.gT >= jugLargoGolpe(g)) {
+    /* la cola se cobra en cuanto la ventana abre: es lo que hace que el
+       combo salga del toque que ya se dio y no de uno nuevo */
+    if (JUG.gBuf > 0) jugGolpeArranca();
+    if (jugAtacando() && JUG.gT >= jugLargoGolpe(J_COMBO[JUG.golpe])) {
       JUG.gVent = J_COMBO_VENTANA;
       if (JUG.golpe === J_COMBO.length - 1) JUG.gVent = 0;   // el remate no encadena
       JUG.golpe = -1;
     }
   } else {
+    if (JUG.gBuf > 0) jugGolpeArranca();
     /* ── caminar ─────────────────────────────────────────────────────────
        LO QUE SE ACELERA ES SÓLO LO QUE FALTA EN LA DIRECCIÓN PEDIDA, y el
        roce se aplica a lo de costado. Sumando al vector y topando el total,
@@ -147,10 +227,33 @@ function jugPaso(dt, ent) {
   const v = Math.hypot(JUG.vx, JUG.vz);
   JUG.anda = amort(JUG.anda, JUG.esqT > 0 || jugAtacando() ? 0 : v, 12, dt);
   const antes = JUG.fase;
-  JUG.fase += (v * dt) / zancada(JUG_MEZ.b === 'corre' ? JUG_MEZ.k : 0) * Math.PI * 2;
+  JUG.cicSg = cicloSigno(JUG.vx, JUG.vz, JUG.rumbo, JUG.cicSg);
+  JUG.fase += JUG.cicSg * (v * dt)
+            / zancada(JUG_MEZ.b === 'corre' ? JUG_MEZ.k : 0) * Math.PI * 2;
   if (v > 0.6 && Math.floor(antes / Math.PI) !== Math.floor(JUG.fase / Math.PI)) son('pisa');
 
   jugPose(dt);
+}
+
+/* ── EL CICLO CORRE HACIA DONDE SE VA, NO HACIA DONDE SE MIRA ──────────────
+   La fase se adelantaba con el MÓDULO de la velocidad, o sea siempre hacia
+   adelante, y el cuerpo puede perfectamente ir hacia atrás mirando al frente:
+   un esqueleto empujado por el de al lado —`esqMueve` los separa y no toca el
+   rumbo—, uno que se para a su alcance con `esqMira` clavado en el jugador, o
+   el propio héroe cuando un hachazo lo tira para atrás. En todos esos casos
+   se veía el cuerpo deslizarse de espaldas con las piernas caminando de
+   frente, que es la otra mitad de «caminan hacia atrás pero adelante
+   también». Con el signo del avance el ciclo se da vuelta solo.
+   Y LA BANDA ES ASIMÉTRICA, o sea con histéresis: con un solo umbral, un
+   cuerpo que se mueve casi de costado tiene el avance oscilando alrededor de
+   cero y el ciclo se daría vuelta varias veces por segundo — que se ve peor
+   que el defecto que viene a arreglar. Se entra en reversa por debajo de
+   −0,30 y se sale por encima de +0,10; en el medio manda lo que ya venía. */
+function cicloSigno(vx, vz, rumbo, prev) {
+  const fw = vx * Math.sin(rumbo) + vz * Math.cos(rumbo);
+  if (fw < -0.30) return -1;
+  if (fw > 0.10) return 1;
+  return prev || 1;
 }
 
 /* la mezcla de poses: qué se está haciendo manda, y el resto se funde */

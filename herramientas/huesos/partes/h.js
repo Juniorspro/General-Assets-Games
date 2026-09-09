@@ -596,13 +596,39 @@ POSE.quieto = (p, t) => {
 };
 
 /* caminar y correr son la MISMA curva con otra amplitud: son el mismo gesto
-   a otra velocidad, y con dos curvas sueltas se separan al mezclarlas */
+   a otra velocidad, y con dos curvas sueltas se separan al mezclarlas.
+
+   ── HACIA DÓNDE CAMINA ESTE CICLO ────────────────────────────────────────
+   MEDIDO y no supuesto (`__H.ejeH('musloI','x',0.5)` → `dz −0.211`): con el
+   hueso colgando de −Y, **rotación positiva del muslo es PIERNA ATRÁS**. De
+   ahí sale todo lo demás:
+
+     · `mIX = +sin(f)` ⇒ la izquierda está ATRÁS en f=π/2 (despegue) y
+       ADELANTE en f=3π/2 (apoyo del talón). El apoyo va de 3π/2 a π/2 y el
+       vuelo de π/2 a 3π/2.
+     · el brazo va contralateral y ya estaba bien: `hIX` es más negativo en
+       f=π/2 —y rotación negativa manda la mano a +Z, o sea adelante— así que
+       el brazo izquierdo está adelante justo cuando la pierna izquierda está
+       atrás.
+     · LA RODILLA ES LA QUE ESTABA DADA VUELTA. Iba con
+       `max(0, −sin(f − 0.55))`, que pica en f=5,26 — donde la pierna está en
+       su punto MÁS ADELANTADO. O sea: se plantaba con la rodilla doblada y
+       la estiraba barriendo hacia adelante, que es literalmente caminar de
+       espaldas. Y no era visible en ninguna sonda: `patina()` mide CUÁNTO
+       barre el pie y no HACIA DÓNDE, así que un ciclo dado vuelta le daba el
+       mismo 0 % de patinaje. Lo destapó `__H.marcha()`, que mira el SIGNO del
+       barrido durante el apoyo: daba `+0,428` con el cuerpo yendo a +Z.
+       La rodilla se dobla en el VUELO, y pica poco después del despegue.  */
 function poseAndar(p, f, k) {
   poseCero(p);
   const s = Math.sin(f), c = Math.cos(f);
   p.mIX = s * 0.86 * k; p.mDX = -s * 0.86 * k;
-  p.pIX = Math.max(0, -Math.sin(f - 0.55)) * 1.28 * k;
-  p.pDX = Math.max(0, -Math.sin(f + Math.PI - 0.55)) * 1.28 * k;
+  /* EL CLIP DURO DEJA UN CODO EN LA DERIVADA justo donde la rodilla se
+     bloquea, y a esa velocidad eso se lee a tranco de juguete. Una potencia
+     por encima de 1 sobre la parte positiva la deja con derivada cero en el
+     cruce, así que entra y sale sin escalón. */
+  p.pIX = (rodilla(f) * 1.36 + 0.16) * k;
+  p.pDX = (rodilla(f + Math.PI) * 1.36 + 0.16) * k;
   p.hIX = 0.05 - s * 0.62 * k; p.hDX = 0.05 + s * 0.62 * k;
   p.aIX = -0.28 - (0.42 + s * 0.30) * k; p.aDX = -0.28 - (0.42 - s * 0.30) * k;
   /* el rebote va al DOBLE de la frecuencia del vaivén, porque hay DOS
@@ -613,6 +639,22 @@ function poseAndar(p, f, k) {
   p.pelZ = c * 0.045 * k;
   p.pecX = -0.10 * k - Math.abs(c) * 0.05 * k;
   p.cueX = 0.09 * k;              // la cabeza compensa el rebote
+}
+/* la rodilla de UNA pierna: el pico grande del vuelo más el amortiguado de
+   la carga —los quince grados que una rodilla dobla justo después de apoyar
+   el talón—. Sin ese segundo, la pierna de apoyo queda RECTA todo el apoyo y
+   el cuerpo se lee a zanco. */
+function rodilla(f) {
+  /* el vuelo va de f=π/2 (despegue) a f=3π/2 (apoyo del talón) y la rodilla
+     pica cerca del 30 % del vuelo, o sea f≈2,4 */
+  const v = Math.sin(f - 0.85);
+  const vue = v > 0 ? Math.pow(v, 1.5) : 0;
+  /* la carga es JUSTO DESPUÉS del talón (f≈5,1), no en el medio del apoyo:
+     puesta en el medio la pierna de apoyo se dobla donde tiene que sostener
+     y el cuerpo se hunde en la mitad del paso */
+  const g = Math.sin(f - 3.53);
+  const car = g > 0 ? Math.pow(g, 2.6) * 0.20 : 0;
+  return vue + car;
 }
 POSE.camina = (p, t, v) => poseAndar(p, t, 0.62);
 POSE.corre = (p, t, v) => {

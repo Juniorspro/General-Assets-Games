@@ -42,6 +42,7 @@ function esqAlta(s) {
   const e = {
     id: ESQS.length, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
     rumbo: Math.atan2(-s.x, -s.z), vx: 0, vz: 0,
+    poseA: 'quieto', poseB: null, poseBrg: 0, poseArg: 0, poseM: 0, cicSg: 1,
     vida: D.vida, vidaMax: D.vida,
     sx: s.x, sz: s.z, est: 'duerme', t: 0, esp: 0, atur: 0, muerteT: 0, vive: true, gDio: false,
     fase: Math.random() * 6.283, ronX: s.x, ronZ: s.z, ronT: 0,
@@ -211,13 +212,30 @@ function esqPose(e, dt, d) {
   else if (e.atur > 0) { a = 'dano'; arg = 1 - e.atur / ESQ_ATURDE; }
   else if (e.est === 'carga') { a = 'carga'; arg = Math.min(1, e.t / D.carga); }
   else if (e.est === 'golpe') { a = 'tajo'; arg = Math.min(1, e.t / 0.42); }
+  /* ── LA POSE SALIENTE SE FUNDE ─────────────────────────────────────────
+     El jugador ya mezclaba —`JUG.anda`— y los veintiocho esqueletos no: al
+     terminar un tajo saltaban a 'quieto' en UN cuadro, con el brazo cruzado
+     por delante y de golpe colgando. Un corte se ve aunque el bicho esté a
+     veinte metros, y acá hay catorce a la vez. Se guarda la pose anterior y
+     se funde en 0,16 s, que es lo que dura el corte sin que el aviso de la
+     carga —que es lo que hace justa la pelea— llegue tarde.               */
+  if (a !== e.poseA) { e.poseB = e.poseA; e.poseBrg = e.poseArg || 0; e.poseM = 1; e.poseA = a; }
+  e.poseArg = arg;
   /* LA CADENCIA SALE DE LA VELOCIDAD Y DE LA ZANCADA (`ω = 2π·v/zancada`), y
      la fase se adelanta SIEMPRE —también en carga o aturdido— porque si no,
      al volver a caminar el ciclo arranca de donde quedó hace tres segundos y
      el primer paso sale con el pie en el aire.                             */
   const v = Math.hypot(e.vx, e.vz);
-  e.paso = (e.paso || 0) + (v * dt) / (zancada(0) * D.esc) * Math.PI * 2;
+  e.cicSg = cicloSigno(e.vx, e.vz, e.rumbo, e.cicSg);
+  e.paso = (e.paso || 0) + e.cicSg * (v * dt) / (zancada(0) * D.esc) * Math.PI * 2;
   if (a === 'quieto' && v > 0.25) { b = 'camina'; brg = e.paso; k = lim(v / (D.vel * 0.9), 0, 1); }
+  /* la mezcla de salida MANDA sobre la de caminar: son las dos el mismo
+     `poseAplica`, y con dos capas habría que evaluar tres poses por bicho por
+     cuadro para catorce bichos. Mientras dura el corte se funde la vieja. */
+  if (e.poseM > 0) {
+    e.poseM = Math.max(0, e.poseM - dt / ESQ_FUNDE);
+    if (e.poseM > 0.001) { b = e.poseB; brg = e.poseBrg; k = e.poseM; }
+  }
   poseAplica(e.cuerpo, a, arg, b, brg, k);
   e.cuerpo.raiz.position.set(e.x, e.y, e.z);
   e.cuerpo.raiz.rotation.y = e.rumbo;
