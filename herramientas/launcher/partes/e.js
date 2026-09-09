@@ -721,6 +721,10 @@ function verCajon(v){
      vuelta 134 `cajQ` ya NO esconde `#capa`: lo único que apaga es el filtro,
      así que sacarlo no obliga a rasterizar el escritorio de nuevo. */
   document.body.classList.remove('cajQ');
+  /* la red del arrastre: `suelta` ya la saca por los dos caminos del final, pero
+     un `pointerdown` sin su `pointerup` la dejaría pegada y el escritorio se
+     quedaría sin promover para siempre. Acá se pasa siempre. */
+  document.body.classList.remove('cajTira');
   cajAsienta();
   /* el CSS de la mascota decide su sitio con esto */
   document.body.classList.toggle('caj', CAJON);
@@ -1019,6 +1023,18 @@ function enganchaCajon(){
      cajón está cerrado. */
   const man = $('#cajManija');
   let y0 = 0, tira = false;
+  /* ── SE PROBÓ COALESCER CON UN rAF Y NO COMPRA NADA, MEDIDO ──
+     Un teléfono manda hasta 240 `pointermove` por segundo y el navegador dibuja
+     60, así que juntar las escrituras en un cuadro parecía la mejora obvia — es
+     lo que la vuelta 126 le hizo al arrastre de iconos. Acá midió igual o un
+     pelo peor: con 4 eventos por cuadro, 32,6-53 ms con el rAF contra 26-30,8
+     sin él; con 12, 61-63 contra 58,4-58,8. La razón es que **el navegador ya
+     coalesce**: la invalidación de estilo es una marca, no un recálculo, y el
+     recálculo pasa una sola vez antes de pintar — cuatro `setProperty`
+     seguidos sin una lectura en el medio cuestan lo mismo que uno. Y encima
+     obligaba a cancelar el cuadro pendiente al soltar, porque una escritura
+     encolada aterriza después del `removeProperty` y vuelve a clavar la hoja.
+     Un ajuste que no mide mejor no se deja puesto por parecer razonable. */
   const pone = d => {
     /* `contains` es una lectura de clase, no fuerza recálculo: el `remove` sale
        una sola vez y no en cada cuadro del arrastre */
@@ -1039,13 +1055,14 @@ function enganchaCajon(){
     caj.style.setProperty('--caj-y', Math.max(0, d) + 'px');
   };
   const suelta = () => {
-    caj.classList.remove('tira'); caj.style.removeProperty('--caj-y');
+    caj.classList.remove('tira'); document.body.classList.remove('cajTira');
+    caj.style.removeProperty('--caj-y');
     if (CAJON) cajAsienta();      /* soltó a mitad de camino: la hoja vuelve sola */
   };
 
   man.addEventListener('pointerdown', e => {
     y0 = e.clientY; tira = true;
-    caj.classList.add('tira');
+    caj.classList.add('tira'); document.body.classList.add('cajTira');
     try { man.setPointerCapture(e.pointerId); } catch (x) {}
   });
   man.addEventListener('pointermove', e => { if (tira) pone(e.clientY - y0); });
@@ -1075,7 +1092,7 @@ function enganchaCajon(){
     const d = e.touches[0].clientY - ly;
     if (d <= 0){ larr = false; return; }
     e.preventDefault();
-    caj.classList.add('tira'); pone(d);
+    caj.classList.add('tira'); document.body.classList.add('cajTira'); pone(d);
   }, { passive: false });
   const lfin = e => {
     if (!larr) return;

@@ -281,6 +281,132 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima cuadragésima primera vuelta (2026-09-09): **AERO** — el cajón bajaba a seis cuadros por segundo, y era una custom property que hereda
+
+Reporte, y **corrige la superficie que las tres vueltas anteriores estuvieron optimizando**: *"hablaba
+de la pantalla de apps que cuando baja da lag, el de notificaciones va bien, además al tocar botón
+hacia atrás en la barra de apps ahí si no hay lag 😭 y baja fluido"*.
+
+O sea que el centro de control —lo único que las vueltas 138, 139 y 140 tocaron— **anda bien**, y lo
+que laguea es el **cajón al cerrarse**. Las tres vueltas anteriores arreglaron cosas reales y medidas
+en la hoja equivocada.
+
+#### LA ASIMETRÍA ES LA PISTA ENTERA, Y ES UN CONTROL QUE VENÍA GRATIS
+
+*«Con el botón atrás baja fluido»* quiere decir que el cierre tiene **dos caminos** y sólo uno cuesta.
+Medido con 150 apps, contando los huecos entre cuadros:
+
+| cerrar el cajón | mediana | cuadros perdidos |
+|---|---|---|
+| **botón** (`verCajon(false)`) | **16,7 ms** | 4 de 40 |
+| **arrastre** | **158 a 233 ms** | **27 de 37** |
+
+Diez a catorce veces, o sea seis cuadros por segundo contra sesenta. Y el botón no es un caso especial:
+es el **control** que separa lo que cuesta mover la hoja de lo que cuesta el camino del arrastre.
+
+#### LA CAUSA: `--caj-y` HEREDA, Y DEBAJO DE `#cajon` CUELGAN 2.537 NODOS
+
+El botón sólo saca la clase `.on` y deja la transición al compositor. El arrastre escribe
+`--caj-y` **en cada `pointermove`** — y las custom properties **heredan**, así que cada escritura marca
+para recálculo de estilo a los **2.537 nodos** que cuelgan del cajón (150 apps, el riel, la búsqueda).
+Medido con el flush forzado, escritura por escritura y en el mismo binario:
+
+| | ms por escritura |
+|---|---|
+| `--caj-y` en `#cajon` (2.537 descendientes) | **85,4** |
+| la misma variable en `#cajManija` (0 descendientes) | **0,17** |
+| `transform` inline en `#cajon` | 2,08 |
+| **`--caj-y` con `@property{inherits:false}`** | **0,248** |
+
+**Trescientas cuarenta y cuatro veces**, y empata con el transform inline. El A/B es del mismo binario:
+la registración se inyecta en caliente sobre la página ya cargada.
+
+**Y DEGRADA SOLO:** un WebView sin `@property` ignora la at-rule entera y la variable vuelve a ser
+heredable, o sea al comportamiento de hoy — no ahorra, pero no rompe. Es la propiedad que hace que se
+pueda poner sin condicionar nada.
+
+Medido el gesto entero después: **158-233 → 57,2-64,2 ms de mediana**.
+
+#### SE PROBÓ COALESCER CON UN rAF Y SE SACÓ, PORQUE NO MEDÍA MEJOR
+
+Un teléfono manda hasta 240 `pointermove` por segundo y el navegador dibuja 60: juntar las escrituras
+en un cuadro parecía la mejora obvia, y es exactamente lo que la vuelta 126 le hizo al arrastre de
+iconos. Medido en los dos regímenes:
+
+| eventos por cuadro | con rAF | sin rAF |
+|---|---|---|
+| 4 | 32,6 · 53 | **26 · 30,8** |
+| 12 | 61 · 63,3 | **58,4 · 58,8** |
+
+Igual o un pelo **peor**. La razón es que **el navegador ya coalesce**: la invalidación de estilo es una
+marca y no un recálculo, así que cuatro `setProperty` seguidos sin una lectura en el medio cuestan lo
+mismo que uno — el recálculo pasa una sola vez antes de pintar. Y encima obligaba a cancelar el cuadro
+pendiente al soltar, porque una escritura encolada aterriza **después** del `removeProperty` y vuelve a
+clavar la hoja donde estaba el dedo. Se sacó entera.
+
+#### Y EL ARRASTRE NO TENÍA EL ALIVIO DE CAPAS, POR LA MISMA RAZÓN QUE EL CENTRO NO LO TENÍA
+
+La vuelta 136 justificó que el `will-change` vuelva en el primer cuadro del cierre así: *«`cajQ` sale
+ahí y en ese mismo cuadro arranca la transición del `scale` de `#fondo`: la promoción se pide igual»*.
+Es cierto para el botón y **falso para el arrastre**: ahí `fondoProfundo` no corre hasta que se suelta,
+así que `#fondo` y `#tira` están perfectamente quietos y sostienen sus texturas para nada. Y `pone()`
+saca `cajQ` en el **primer `pointermove`**, o sea que la reserva cae justo en el cuadro en que el dedo
+empieza a tirar.
+
+`body.cajTira` la pone el `pointerdown` y la saca `suelta`, o sea **antes** de `verCajon(false)`: cuando
+la transición del `scale` arranca de verdad, la promoción ya volvió. Medido a mitad del arrastre:
+
+| | capas | MB |
+|---|---|---|
+| control | 4 | **36,2** |
+| **ahora** | **2** | **13,4** |
+
+**−22,8 MB**, con `will-change` de `#fondo` y `#tira` en `auto`. Y **no cuesta un píxel**: 117 de 367.504
+con máximo 20 — contra **193 con máximo 223 del TESTIGO**, que es la misma clase puesta las dos veces.
+Sin ese testigo, 117 píxeles parecen una diferencia; con él se ve que están por debajo del ruido de dos
+capturas del mismo estado.
+
+#### LO QUE QUEDA ESTÁ CARACTERIZADO, Y NO ES HILO PRINCIPAL
+
+El arrastre sigue en 57 ms contra los 16,7 del botón, y eso no se puede tapar. Tres mediciones dicen
+qué es:
+
+1. **No hay una sola tarea larga** en ninguno de los dos caminos (`PerformanceObserver` de `longtask`).
+2. **El andamio de la sonda cuesta cero:** los mismos 96 eventos despachados sobre `#cajTit`, que no
+   tiene manejador, dan **16,6 ms y 0 cuadros perdidos**. O sea que los 57 son del juego.
+3. **Y escala con el contenido:** con la lista de demo en vez de 150 apps, **16,8 a 24,5 ms**.
+
+O sea que lo que queda es **rasterizado** de una capa que con 150 apps mide 4.873 px de alto, y es justo
+lo que el alivio de capas ataca soltando 22,8 MB de presupuesto de baldosas — que es lo único que el
+banco no puede medir, porque dibuja por software y no expone el gestor de baldosas. Y hay una parte
+irreducible: una transición de CSS corre en el hilo del compositor y un arrastre obliga a un ciclo
+completo de hilo principal por cuadro, que es lo que hace cualquier arrastre en cualquier app.
+
+#### UN DEFECTO DE LA SONDA, Y VA LA QUINTA VEZ
+
+**`cajArrastra` YA EXISTÍA** doscientas líneas más abajo, midiendo el vidrio. En un objeto literal gana
+la última clave, así que la sonda nueva **no existía** y contestaba la vieja, con campos que nadie le
+había pedido. Van cinco veces en este repo (`reja`, `pack`, `aguaCosto`, `anim` y ésta). La vieja pasó
+a llamarse `cajArrVidrio`, que es lo que mide.
+
+Y una segunda, del mismo tipo: **`cajTira(y)` esperaba 600 ms con el arrastre plantado, y para entonces
+el temporizador de `cajAsienta` ya había puesto `cajQ`** — que tapa exactamente lo que la sonda venía a
+medir. Devolvía 13,4 MB con la clase puesta **y 13,4 con la clase sacada**, o sea un A/B que no movía
+nada. Un arrastre de verdad pisa ese temporizador en cada `pone`; una foto plantada espera quieta.
+
+#### MEDIDO AL CERRAR
+
+Cerrar arrastrando: mediana **57,2 · 57,2 · 64,2 ms** (era 158-233), con **13,4 MB en 2 capas** a mitad
+del gesto y **0 pasadas de vidrio**; al soltar vuelve a 3 / 96.401 y 35,5 MB. Cerrar con el botón sigue
+en **16,6-16,7 con 4 perdidos**. Soltar por debajo del umbral (48 px de 78) deja la hoja abierta, sin
+`--caj-y` y sin `tira`, o sea que vuelve sola. Escritura de la variable **0,15-0,28 ms** contra 0,23-0,26
+del transform inline. Con el pack `cristal`, arrastre 55,5 y botón 16,6. Regresión: escritorio **4 capas
+/ 35,6 MB / 3 vidrios / 96.401 px / 1 animación / 0 caras**, riel de **17 letras** con `letra('S')`
+mirando la S, **9 packs**, mascota 23 huesos y 5.541 triángulos, **0 solapamientos**, gesto arriba abre
+el cajón y abajo el centro con **0 ondas de agua** en los dos, centro **16 · 1 · 10 · 4 con `arma: 0`** y
+**1 capa / 0,8 MB / 0 vidrios** asentado —o sea la vuelta 140 intacta— y los tres idiomas en vivo.
+`window.__errs` **vacío en las nueve corridas**. APK **1.678**, 2,2 MB.
+
 ### Centésima cuadragésima vuelta (2026-09-09): **AERO** — la hoja del centro se armaba adentro del gesto, y nadie le había dado el alivio de capas
 
 Reporte, después de la vuelta anterior: *"damn sigue yendo lento al bajar la pestaña de apps"*. La 139

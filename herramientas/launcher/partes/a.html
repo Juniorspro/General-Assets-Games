@@ -1053,6 +1053,19 @@ body.cajQvis.cajQ #capa{visibility:hidden}
    `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
 body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
 body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
+/* ── Y DURANTE EL ARRASTRE TAMPOCO HAY NADA QUE PROMOVER ──
+   La razón de arriba —«el `will-change` vuelve en el primer cuadro del cierre
+   porque en ese mismo cuadro arranca la transición del `scale` de `#fondo`»— es
+   cierta para el cierre por BOTÓN y falsa para el arrastre: ahí `fondoProfundo`
+   no corre hasta que se suelta, así que `#fondo` y `#tira` están perfectamente
+   quietos y se sostienen sus texturas para nada. Y el arrastre saca `cajQ` en
+   el PRIMER `pointermove` (ver `pone`), o sea que la reserva cae justo en el
+   cuadro en que el dedo empieza a tirar — el peor posible.
+   `cajTira` la pone el `pointerdown` y la saca `suelta`, o sea ANTES de
+   `verCajon(false)`: cuando la transición del `scale` arranca de verdad, la
+   promoción ya volvió. */
+body.cajTira:not(.cajCapasV) #fondo,body.cajTira:not(.cajCapasV) #tira{will-change:auto}
+body.cajTira:not(.cajCapasV) #agua{visibility:hidden}
 /* ── Y EL CENTRO DE CONTROL NO TENÍA NADA DE ESTO ──
    La vuelta 136 midió el cajón y nadie llevó la regla al otro panel: medido con
    la hoja del centro asentada, `capas()` seguía devolviendo **4 capas y 35,5 MB**
@@ -1078,6 +1091,27 @@ body.ccQ:not(.ccCapasV) #agua,body.ccMueve:not(.ccCapasV) #agua{visibility:hidde
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
    Con una variable que sólo lee la regla `.on`, cerrar vuelve a valer siempre:
    sin `.on` no hay quien la mire. */
+/* ── Y LA VARIABLE VA DECLARADA `inherits:false`, QUE ES EL ARREGLO GRANDE ──
+   Reporte: «la pantalla de apps cuando baja da lag ... al tocar botón hacia
+   atrás ahí no hay lag y baja fluido». Esa asimetría es la pista entera: el
+   botón no escribe esta variable NUNCA —saca `.on` y deja la transición al
+   compositor— y el arrastre la escribe en cada `pointermove`.
+   Las custom properties HEREDAN, así que escribir `--caj-y` en `#cajon` marca
+   para recálculo de estilo a **los 2.537 nodos** que cuelgan de él (150 apps,
+   el riel, la búsqueda). Medido con el flush forzado, escritura por escritura:
+
+     `--caj-y` en `#cajon` (2.537 descendientes) ...... 85,4 ms
+     la misma variable en `#cajManija` (0 descend.) ...  0,17 ms
+     `transform` inline en `#cajon` ...................  2,08 ms
+
+   Declarada sin herencia, la invalidación se queda en el propio elemento:
+   **85,4 → 0,248 ms**, o sea 344 veces, y empata con el transform inline.
+   DEGRADA SOLO: un WebView sin `@property` ignora la at-rule entera y la
+   variable vuelve a ser heredable, o sea al comportamiento de hoy — no ahorra,
+   pero no rompe. Y `initial-value` es lo que `removeProperty` devuelve al
+   soltar, así que la declaración de abajo pasa a ser redundante y se queda por
+   claridad. */
+@property --caj-y{syntax:'<length>';inherits:false;initial-value:0px}
 #cajon{--caj-y:0px}
 #cajon.on{transform:translateY(var(--caj-y))}
 #cajon.tira{transition:none}

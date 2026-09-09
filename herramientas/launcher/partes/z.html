@@ -992,6 +992,106 @@ window.__A = {
              aviso: $('#aviso').textContent,
              visible: $('#aviso').classList.contains('on') };
   },
+  /* ── EL CIERRE POR ARRASTRE, QUE ES EL QUE NADIE MEDÍA ──
+     El reclamo señaló la asimetría exacta: «al tocar botón hacia atrás ahí no
+     hay lag y baja fluido». O sea que el cierre tiene DOS caminos y sólo uno
+     laguea, y el que laguea es el único que escribe `--caj-y` por evento.
+     `n` es cuántos `pointermove` se mandan por cuadro: un teléfono manda de 1 a
+     4, y con la coalescencia puesta el número no tiene que cambiar nada. */
+  async cajArrastra(n){
+    const man = $('#cajManija');
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 1400));
+    const dts = []; let ult = performance.now(), corre = true;
+    const paso = () => { const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso); };
+    requestAnimationFrame(paso);
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    const ev = (t, y) => man.dispatchEvent(new PointerEvent(t,
+      { clientX: x, clientY: y, bubbles: true, pointerId: 9 }));
+    ev('pointerdown', y0);
+    const CU = 24, por = n || 4; let y = y0; let medio = null;
+    for (let c = 0; c < CU; c++){
+      for (let k = 0; k < por; k++){ y += Math.round(700 / (CU * por)); ev('pointermove', y); }
+      await new Promise(rr => requestAnimationFrame(rr));
+      /* a mitad del arrastre: es donde hay que preguntar cuánta textura se está
+         sosteniendo, no al final — al final el gesto ya terminó */
+      if (c === CU >> 1) medio = { mb: this.capas().mb, n: this.capas().n,
+                                   vid: this.vidrios().n, px: this.vidrios().px };
+    }
+    ev('pointerup', y);
+    await new Promise(rr => setTimeout(rr, 700));
+    corre = false;
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a, b) => a - b);
+    return { porCuadro: por, cuadros: dts.length,
+             mediana: +o[o.length >> 1].toFixed(1),
+             p90: +o[Math.min(o.length - 1, Math.floor(o.length * 0.9))].toFixed(1),
+             peor: +o[o.length - 1].toFixed(1), perdidos: perdidos,
+             cerro: !CAJON, medio: medio, mbFin: this.capas().mb };
+  },
+  /* planta el arrastre a mitad de camino y lo DEJA ahí, sin soltar: es la única
+     forma de fotografiar el estado del gesto, porque soltarlo lo termina */
+  cajTira(y){
+    const man = $('#cajManija'), caj = $('#cajon');
+    verCajon(true);
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    const ev = (t, yy) => man.dispatchEvent(new PointerEvent(t,
+      { clientX: x, clientY: yy, bubbles: true, pointerId: 9 }));
+    ev('pointerdown', y0); ev('pointermove', y0 + (y == null ? 40 : y));
+    /* ── Y HAY QUE MATAR EL TEMPORIZADOR DE `cajAsienta` ──
+       `verCajon(true)` agenda el timeout que pone `cajQ` a los 420 ms. Un
+       arrastre de verdad lo pisa con el suyo en cada `pone`; una foto plantada
+       espera quieta, así que a los 600 ms `cajQ` ya volvió y TAPA justo lo que
+       esta sonda viene a medir — medido, daba 13,4 MB con la clase puesta y
+       13,4 con la clase sacada, o sea que el A/B no movía nada. */
+    clearTimeout(CAJ_ABRE_T); document.body.classList.remove('cajQ');
+    return { y: caj.style.getPropertyValue('--caj-y'),
+             cajTira: document.body.classList.contains('cajTira'),
+             mb: this.capas().mb, capas: this.capas().n,
+             wcFondo: getComputedStyle($('#fondo')).willChange,
+             wcTira: getComputedStyle($('#tira')).willChange,
+             agua: getComputedStyle($('#agua')).visibility };
+  },
+  /* el mismo cierre por el otro camino: es el CONTROL del de arriba, y es lo
+     que el dueño describe como fluido */
+  async cajBoton(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 1400));
+    const dts = []; let ult = performance.now(), corre = true;
+    const paso = () => { const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso); };
+    requestAnimationFrame(paso);
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 1260));
+    corre = false;
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a, b) => a - b);
+    return { cuadros: dts.length, mediana: +o[o.length >> 1].toFixed(1),
+             p90: +o[Math.min(o.length - 1, Math.floor(o.length * 0.9))].toFixed(1),
+             peor: +o[o.length - 1].toFixed(1), perdidos: perdidos, cerro: !CAJON };
+  },
+  /* cuánto cuesta UNA escritura de la variable del arrastre con el flush
+     forzado, contra un `transform` inline en el mismo elemento. Es el número
+     que explica la asimetría: la variable hereda, así que invalida el subárbol
+     entero del cajón. */
+  cajVarCosto(){
+    const c = $('#cajon'), N = 80;
+    const med = f => { const t0 = performance.now();
+      for (let i = 0; i < N; i++){ f(i); document.body.offsetHeight; }
+      return +((performance.now() - t0) / N).toFixed(3); };
+    med(i => c.style.setProperty('--caj-y', (i % 7) + 'px'));
+    const a = med(i => c.style.setProperty('--caj-y', (i % 97) + 'px'));
+    c.style.removeProperty('--caj-y');
+    const b = med(i => { c.style.transform = 'translateY(' + (i % 97) + 'px)'; });
+    c.style.removeProperty('transform');
+    return { variable: a, transformInline: b, nodosCajon: c.querySelectorAll('*').length,
+             registrada: (CSS.supports && CSS.supports('--caj-y', '1px')) || null };
+  },
   async cajDesliza(){
     verCajon(false);
     await new Promise(r => setTimeout(r, 420));
@@ -1074,12 +1174,16 @@ window.__A = {
              fecha: ($('#fecha') || {}).textContent,
              saludo: ($('#wSaludo') || {}).textContent };
   },
-  /* ── EL ARRASTRE, QUE ES EL OTRO CAMINO DEL CIERRE ──
+  /* ── EL VIDRIO DURANTE EL ARRASTRE ──
      El dedo baja la hoja sin transición, así que cada cuadro es el dedo. Lo que
      se mide es si en el cuadro en que el dedo empieza a tirar cambia algo:
      `#capa` de escondido a visible, o los tres vidrios de apagados a
-     encendidos. Las dos cosas son un escalón en el peor cuadro posible. */
-  async cajArrastra(){
+     encendidos. Las dos cosas son un escalón en el peor cuadro posible.
+     SE LLAMABA `cajArrastra` Y ESO SE LLEVÓ PUESTA A LA SONDA DE CUADROS: en un
+     objeto literal gana la última clave, así que la de arriba no existía y
+     contestaba ésta, con campos que nadie le había pedido. Van cinco veces en
+     este repo (`reja`, `pack`, `aguaCosto`, `anim` y ésta). */
+  async cajArrVidrio(){
     verCajon(true);
     await new Promise(r => setTimeout(r, 620));
     const capa = $('#capa');
