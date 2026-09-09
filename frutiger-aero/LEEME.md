@@ -1,10 +1,53 @@
 # Frutiger Aero
 
-Un archivo de la estética, con la piel de Windows Vista: ventanas de vidrio
-con barra de título, menú, recuadros celestes, aparatos de la barra lateral y
-barra de tareas. La mascota vive adentro de una de las ventanas.
+Un escritorio de vidrio. Se entra por una pantalla de inicio de sesión de
+Vista —como invitado o con Google—, y adentro hay ventanas de verdad: el
+archivo de la estética, un buscaminas, un bloc que guarda, un reproductor con
+visualizador y un panel de control que cambia el color del vidrio de toda la
+interfaz. La mascota 3D vive en una de las ventanas.
 
     https://frutiger-aero-86q.pages.dev
+
+## Entrar con Google: qué falta y por qué no está en el código
+
+El botón de Google anda solo en cuanto exista un identificador de cliente. **No
+está escrito en el código a propósito**: lo sirve `functions/api/config.js`
+desde la variable de entorno `GOOGLE_CLIENT_ID`, así se cambia desde el panel de
+Cloudflare sin volver a publicar el sitio. Mientras no haya ninguno, la pantalla
+lo dice y explica los tres pasos, en lugar de tirar un error.
+
+Los tres pasos, una sola vez:
+
+1. Google Cloud → **APIs y servicios** → **Credenciales** → *Crear credenciales*
+   → **ID de cliente de OAuth** → Aplicación web.
+2. En «Orígenes autorizados de JavaScript», el dominio del sitio.
+3. Cloudflare Pages → **Settings** → **Variables** → `GOOGLE_CLIENT_ID`.
+
+**El token se verifica del lado del servidor y eso no es opcional.** Un JWT es
+texto firmado: leerlo en el navegador sin comprobar la firma es leer lo que
+quiso escribir el que lo mandó, y cualquiera podría entrar con el nombre y la
+foto que se le antoje. `functions/api/entrar.js` se lo da a Google y comprueba
+las tres cosas que casi siempre faltan: que la firma sea de Google, que el
+`aud` sea **esta** aplicación y que no esté vencido.
+
+## Nada se guarda en un servidor
+
+El perfil que vuelve de Google, las notas del bloc, el color del vidrio y el
+récord del buscaminas viven en el navegador de quien entró. No hay base de
+datos y no hace falta: es un escritorio de adorno, no hay nada que proteger, y
+pedirle la cuenta a alguien para después guardarle los datos sin necesidad
+sería cobrarle de más.
+
+Todo lo que toca `localStorage` pasa por un envoltorio con `try/catch`: en
+pestaña privada tira excepción, y una página que se cae por no poder guardar
+una preferencia es una página rota.
+
+## El color del vidrio es una variable, no un valor
+
+Vista dejaba cambiar el color del cromo desde el panel de control, y acá
+también. Todo el cromo se arma con `hsl(var(--tono) var(--sat) ...)`, así que
+mover un número retiñe la interfaz entera —barras de título, orbe, cartel,
+aparatos, barra de tareas— sin tocar una regla más.
 
 ## La piel es Aero, y Aero no es «vidrio»
 
@@ -74,6 +117,13 @@ habíamos pedido—. Ahora cada archivo de `img/`, `js/`, `vendor/` y `modelos/`
 lleva ocho dígitos de su propio hash: si el archivo cambia, cambia la URL, y no
 hay caché que pueda quedarse con lo viejo. El mapa de nombres queda en
 `nombres.json` y `nombres-js.json`.
+
+Eso se hacía a mano y ahora lo hace `sellar.py`, que además **vuelve a calcular
+el hash de los archivos que ya tienen nombre sellado**. Es el error que se cae
+solo: si alguien edita `aero.4f317a9e.css` sin renombrarlo, el nombre miente y
+`immutable` vuelve a ser una promesa rota. Correrlo dos veces no cambia nada.
+
+    python3 sellar.py
 
 ## El modelo tiene rig, y encima una capa por código
 
