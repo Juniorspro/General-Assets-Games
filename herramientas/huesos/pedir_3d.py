@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Pide a Rezona (Tripo) las PIEZAS 3D de los esqueletos de HUESOS.
 
-    env -u REZONA_PAT python3 herramientas/huesos/pedir_3d.py
+    python3 herramientas/huesos/pedir_3d.py
+
+OJO CON LA CUENTA. Esto decía `env -u REZONA_PAT`, que manda a la cuenta NUEVA;
+las piezas de este juego están en la VIEJA (la de la variable de entorno, que es
+la que heredaron las herramientas `mcp__rezona__*`). Mezclarlas contesta
+«Not your project», que se lee a proyecto borrado y no lo es.
 
 ═══════════════════════════════════════════════════════════════════════════
 POR QUÉ PIEZAS SUELTAS Y NO UN ESQUELETO RIGGEADO ENTERO
@@ -123,7 +128,18 @@ def main():
               # triángulos y con v3.0-20250812 salen 988.300 —o sea que el default YA
               # es la más nueva— pero el día que el servidor mueva el default, esta
               # línea es lo único que impide que las piezas cambien de modelo solas.
-              'extra': {'face_limit': 6000, 'model_version': MODELO}})
+              'extra': {'face_limit': 6000, 'model_version': MODELO,
+                        # ── LA PALANCA QUE ESTE REPO NO USABA ──
+                        # Tripo tiene remallador propio y nunca se lo había pedido.
+                        # Medido el 2026-09-09 sobre el cráneo: sin él la malla llega
+                        # con 5.795 triángulos y se planta en 540 al decimar; con él
+                        # llega con 2.544 y se planta en 417 — un 23 % más abajo, o sea
+                        # unas 104 islas sueltas contra 135 (el piso es 4 × islas).
+                        # Y trae PBR: tres imágenes en vez de una.
+                        # NO RESPETA `face_limit`: pedido 1.100 devolvió 2.544 y pedido
+                        # 1.000 devolvió 5.117. Con esto el face_limit es una sugerencia,
+                        # así que el presupuesto lo sigue poniendo el horneado.
+                        'smart_low_poly': True}})
           for n, p in PIEZAS]
     tareas = {}
     for (n, _), r in zip(PIEZAS, rz.sesion(ll, espera=900)):

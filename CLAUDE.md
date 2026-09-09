@@ -297,6 +297,99 @@ munecas.
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
 
+### Centésima cuadragésima octava vuelta (2026-09-09): **ERA REZONA** — 41 huesos y cinco clips, y la vuelta 146 midió en la cuenta equivocada
+
+Quinto rechazo del usuario sobre el mismo punto, y el que por fin dio en el clavo:
+*"NOOOO no en esta sesión en otra sesión anduvo sin highsfield sino por Rezona búscale la vuelta"*.
+
+#### TENÍA RAZÓN Y LA PRUEBA ES UN ARCHIVO: **41 HUESOS Y CINCO ANIMACIONES**
+
+Dos llamadas a Rezona —`submit_model3d_generation` y `submit_rig3d_generation`— y volvió un GLB de
+2,7 MB con esqueleto de **41 huesos** y **cinco clips**, sin tocar Higgsfield. Y una animación no se
+da por buena porque esté en el archivo: se mide el recorrido de un pie y de una mano por cinemática
+directa, que es lo único que prueba que anima **y** que los cinco son distintos.
+
+| clip | pie | mano | qué se ve |
+|---|---|---|---|
+| `preset:idle` | 0,100 m | 0,152 | respira, no camina |
+| `preset:walk` | **0,394** | 0,203 | zancada |
+| `preset:run` | **0,504** | 0,494 | zancada larga |
+| `preset:slash` | 0,121 | **0,617** | trabaja el brazo, no el pie |
+| `preset:hurt` | 0,022 | 0,106 | se encoge |
+
+**Y NO ES MESHY, que es la parte honesta.** El agente de Rezona es Tripo: `model_version: meshy-6`
+contesta `Unsupported Tripo model_version` **en las dos cuentas**, y el OpenAPI del pgcserver nombra
+a Tripo 32 veces y a Meshy cero. Lo que el usuario recordaba —«un modelo con Meshy y animaciones»—
+es un cuerpo riggeado y animado, y eso Rezona lo da igual: **este repo ya lo había hecho así en el
+Visor3D** (Maicol 3D, diez animaciones, todo por Rezona Lab). La vuelta 147 se fue a Higgsfield a
+buscar algo que estaba de este lado.
+
+#### EL ERROR DE MÉTODO: LA VUELTA 146 MIDIÓ EN LA CUENTA EQUIVOCADA
+
+**Hay dos credenciales y no son la misma cuenta.** `REZONA_PAT` es la cuenta **vieja** —162.187
+créditos y **339 proyectos**— y `~/.rezona/credentials.json` es la **nueva**, con 497.130 y recién
+estrenada. Las cinco mediciones de la vuelta 146 salieron todas por `env -u REZONA_PAT`, o sea por
+la cuenta nueva y vacía, **y el propio repo lo tenía escrito como regla en la primera línea de uso
+de `pedir_3d.py`**.
+
+**Y `list_projects` PAGINA DE A 20 Y DEVUELVE `total`.** Leyendo sólo los items, la cuenta vieja
+parece tener veinte proyectos; el `total` dice 339. Al revés, la nueva con un proyecto parece rota y
+no lo está. Una cuenta vacía y una sin permiso contestan parecido, y esa confusión es la que costó
+dos vueltas enteras.
+
+**Las herramientas `mcp__rezona__*` NO se pueden redirigir**: heredaron la variable al arrancar la
+sesión, así que van siempre a la vieja. Lo generado por una no se ve desde la otra —contesta
+«Not your project», que se lee a proyecto borrado y no lo es.
+
+#### EL RIG SE RECHAZA POR LA SILUETA, Y LA CAJA LO DICE ANTES DE GASTAR
+
+El primer rey salió **con capa** y el rig falló con `RIG_SOURCE_NOT_RIGGABLE`. No hubo que adivinar
+por qué: su caja mide **0,241 × 0,981 × 0,911**, o sea **casi tan hondo como alto** — eso no es una
+figura de pie, es una losa. La capa le funde los brazos al torso y el prerigcheck de Tripo deja de
+leerlo humanoide. Es exactamente lo que ya le había pasado a la calavera y al busto de VIGILIA.
+
+Pedido **sin nada colgado encima** y con los brazos bien separados: **0,171 × 0,999 × 0,998**, y
+pasa el pre-chequeo a la primera. **La capa se sigue dibujando por código**, que es como ya estaba
+en el juego —dos mallas instanciadas con la matriz en cero para el que no es rey—, así que no se
+pierde nada. Regla nueva: **medir la caja antes de pagar el rig; si el hondo se parece al alto, no
+va a pasar.**
+
+Y el vocabulario lleva prefijo —`preset:walk`, no `walk`— con tope de **cinco** clips y facturación
+por clip. Un nombre desconocido **se ignora en silencio** y devuelve el juego por omisión: el rig
+sale bien y con las animaciones que nadie pidió.
+
+#### LA PALANCA QUE SE FUE A BUSCAR A MESHY LA TIENE TRIPO, Y NUNCA SE LA HABÍA PEDIDO
+
+`extra: {"smart_low_poly": true}`. La vuelta 146 escribió que a Tripo le faltaba el remallado y que
+por eso las piezas se topaban en su piso topológico. Medido sobre el cráneo, con la misma cadena del
+repo (color en vértices y después `gltfpack -si -sa -sp`):
+
+| | llega con | se planta en |
+|---|---|---|
+| `face_limit: 6000` | 5.795 tri | **540** |
+| **`smart_low_poly`** | **2.544** | **417** |
+
+Un 23 % más abajo —o sea unas 104 islas sueltas contra 135, porque el piso es cuatro por isla— y de
+paso trae **PBR**: tres imágenes en vez de una.
+
+**PERO NO RESPETA `face_limit`, y hay que decirlo:** pedido 1.100 devolvió 2.544 y pedido 1.000
+devolvió 5.117. Con esto el `face_limit` es una sugerencia y el presupuesto lo sigue poniendo el
+horneado. Y **no desbloquea nada que estuviera bloqueado**: el piso de 540 ya cumplía el presupuesto
+del cráneo, que es 550. Lo que compra es una malla más limpia al mismo número de triángulos.
+
+**Y LA ORIENTACIÓN CAMBIA, que era el pendiente anotado.** El costillar nuevo tiene su eje largo en
+**Z** y el viejo en Y: los `giro` de la tabla `P` están medidos contra las mallas de antes y hay que
+volver a medirlos pieza por pieza.
+
+#### LO QUE NO ES DE ESTE LADO
+
+El Studio de Rezona —`rezona.ai/tln/biz`, que es donde sí vive `meshy-3d` (vendor Meshy, 100
+créditos, visible en el catálogo **público** `/tln/biz/models` sin credencial)— **se autentica por
+cookie de sesión y no por bearer**. Medido con las dos credenciales: 401 en `/me` y en
+`/credits/balance`; y leído en su propio bundle, las únicas cabeceras que arma son las de axios y no
+hay un solo `Bearer` en el código. O sea que ninguna cabecera lo va a arreglar: es una superficie de
+navegador, y ahí el paso es de una persona.
+
 ### Centésima cuadragésima séptima vuelta (2026-09-09): **MESHY, LA PUERTA BUENA** — era Higgsfield, y este repo ya lo había hecho tres veces
 
 Cuarto rechazo del usuario, y el que lo cerró: *"NOOOO si en otra sesión si armó modelo con meshy y
