@@ -1086,12 +1086,25 @@ window.__A = {
       if (corre) requestAnimationFrame(paso);
     };
     requestAnimationFrame(paso);
+    const fondoEstado = () => {
+      const f = $('#fondo');
+      const co = document.getAnimations().filter(x => x.playState === 'running' &&
+                   x.effect && x.effect.target === f);
+      return { corriendo: co.length,
+               escala: getComputedStyle(f).scale };
+    };
     verCajon(false);
     await new Promise(r => setTimeout(r, 60));
     const anim = document.getAnimations().filter(x => x.playState === 'running')
                    .map(x => (x.effect && x.effect.target ? (x.effect.target.id || x.effect.target.className || '?') : '?'));
     const vid90 = this.vidrios();
-    await new Promise(r => setTimeout(r, 560));
+    const fondo90 = fondoEstado();
+    /* el instante que importa: 10 ms después de que se acaba `CAJ_ABRE_MS`, o
+       sea donde antes las tres piezas encendían sus 96.401 px de golpe */
+    await new Promise(r => setTimeout(r, 370));
+    const vid430 = this.vidrios();
+    const fondo430 = fondoEstado();
+    await new Promise(r => setTimeout(r, 270));
     corre = false;
     const vidFin = this.vidrios();
     dts.shift();
@@ -1103,9 +1116,38 @@ window.__A = {
              peor: +(o[o.length - 1] || 0).toFixed(1), perdidos: perdidos,
              animando: anim.length, quienes: anim.slice(0, 6),
              vidDurante: vid90.n, pxDurante: vid90.px,
+             fondo90: fondo90, fondo430: fondo430,
+             vid430: vid430.n, px430: vid430.px,
              vidFin: vidFin.n, pxFin: vidFin.px,
              topFin: vidFin.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* la mascota se va CON el cajón: buscando y cerrando, antes se quedaba 2,4 s
+     encima del escritorio con su bucle de WebGL corriendo */
+  async mascCierre(q){
+    verCajon(true);
+    /* la mascota sólo cabe con la lista corta: sin filtro, con 150 apps
+       `mascCabe()` es falso y la prueba mediría un camino que no existe */
+    if (q !== undefined){ $('#busca2').value = q; pintaCajon(q);
+      /* la pintada va una por cuadro (vuelta 129): pidiendo la mascota en el
+         mismo instante, `mascCabe()` mide todavía la lista de 150 */
+      await new Promise(r => setTimeout(r, 260)); }
+    mascotaBaila(true);
+    await new Promise(r => setTimeout(r, 700));
+    const dentro = this.masc();
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const a420 = this.masc();
+    await new Promise(r => setTimeout(r, 900));
+    const a1300 = this.masc();
+    return { cabe: dentro.cabe,
+             dentro: { on: dentro.on, corre: dentro.corre },
+             a420: { on: a420.on, corre: a420.corre },
+             a1300: { on: a1300.on, corre: a1300.corre } };
+  },
+  mascSinCaj(v){ MASC_SIN_CAJ = !!v; return MASC_SIN_CAJ; },
+  /* el A/B del cierre: con 0 el vidrio del escritorio vuelve en el mismo cuadro
+     en que se acaba la animación, que es como estaba antes de la vuelta 135 */
+  cajTarde(v){ CAJ_VUELVE_MS = +v; return CAJ_VUELVE_MS; },
   /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
      en el primer cuadro del cierre */
   capaPeso(){

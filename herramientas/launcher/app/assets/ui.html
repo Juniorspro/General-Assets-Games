@@ -93,10 +93,23 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
   background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
   background-size:cover;background-position:center;
   transform:scale(1.06);will-change:transform;
-  transition:scale .42s cubic-bezier(.22,.9,.24,1)}
+  /* ── LA FOTO TIENE QUE FRENAR CON LA HOJA, NO 80 ms DESPUÉS ──
+     Estaba en .42s contra los .34s del cajón: al cerrar, la foto seguía
+     escalándose ochenta milisegundos después de que la hoja ya había
+     aterrizado, y justo ahí es cuando el vidrio del escritorio vuelve. O sea
+     que los tres `feDisplacementMap` se armaban sobre un respaldo que todavía
+     se estaba moviendo, que es el peor instante posible. Mismo número que la
+     hoja: los dos terminan juntos. */
+  transition:scale .34s cubic-bezier(.22,.9,.24,1)}
 #fondo.ok{animation:deriva 24s steps(48) infinite alternate}
-body.caj #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,body.fg #fondo.ok,
-body.bienv #fondo.ok{animation-play-state:paused}
+/* `cajMueve` está en la lista porque el CIERRE saca `body.caj` en su primer
+   cuadro: sin esto, la deriva se DESPAUSA mientras la hoja baja y la foto pasa
+   a tener dos fuentes de transform a la vez —la deriva y el `scale` que se está
+   deshaciendo— durante todo el deslizamiento. Al abrir es al revés: se pausa en
+   el primer cuadro. Era la asimetría más grande entre subir y bajar y no la
+   había visto nadie. */
+body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,
+body.fg #fondo.ok,body.bienv #fondo.ok{animation-play-state:paused}
 /* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
    Estaba escrito como `transform:scale(1.14)`, y una animación sobre
    `transform` PISA la declaración: el acercamiento no corría nunca. Y llevaba
@@ -2325,7 +2338,8 @@ const TXT = {
         cgVol:'Función de los botones de volumen', cgInfo:'Guardar información de la ubicación',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
         pMedir: 'Medir el deslizamiento del caj\u00f3n',
-        pMedeUno: '{0} cuadros \u00b7 mediana {1} ms \u00b7 p90 {2} \u00b7 {3} perdidos',
+        pMedeUno: '{0} \u00b7 {1} cuadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
+        pMedeSube: 'AL SUBIR', pMedeBaja: 'AL BAJAR',
         aNombreP: 'Personalizar',
         cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
         fgGenar: 'Generar', fgGenando: 'Generando…', fgGenPh: 'Describí un fondo…', fgGenOk: 'Fondo nuevo', fgNoGen: 'No se pudo generar. Probá de nuevo.', fgSinRed: 'Generar necesita conexión con el sistema', fg_i1: 'acuario con peces y burbujas', fg_i2: 'pasto con rocío al amanecer', fg_i3: 'nubes sobre un cielo celeste', fg_i4: 'isla con una palmera', fg_i5: 'atardecer sobre el mar', fg_i6: 'burbujas de vidrio bajo el agua', fgTit: 'Fondo de pantalla', fgFab: 'De fábrica', fgPropio: 'La tuya',
@@ -2418,7 +2432,8 @@ const TXT = {
         cgVol:'Volume button action', cgInfo:'Save location information',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
         pMedir: 'Measure the drawer slide',
-        pMedeUno: '{0} frames \u00b7 median {1} ms \u00b7 p90 {2} \u00b7 {3} dropped',
+        pMedeUno: '{0} \u00b7 {1} frames \u00b7 median {2} ms \u00b7 p90 {3} \u00b7 {4} dropped',
+        pMedeSube: 'OPENING', pMedeBaja: 'CLOSING',
         aNombreP: 'Personalize',
         cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
         fgGenar: 'Generate', fgGenando: 'Generating…', fgGenPh: 'Describe a wallpaper…', fgGenOk: 'New wallpaper', fgNoGen: 'Could not generate. Try again.', fgSinRed: 'Generating needs the system bridge', fg_i1: 'aquarium with fish and bubbles', fg_i2: 'dewy grass at sunrise', fg_i3: 'clouds over a bright blue sky', fg_i4: 'island with a palm tree', fg_i5: 'sunset over the sea', fg_i6: 'glass bubbles underwater', fgTit: 'Wallpaper', fgFab: 'Default', fgPropio: 'Yours',
@@ -2511,7 +2526,8 @@ const TXT = {
         cgVol:'Fun\u00e7\u00e3o dos bot\u00f5es de volume', cgInfo:'Salvar informa\u00e7\u00e3o da localiza\u00e7\u00e3o',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
         pMedir: 'Medir o deslize da gaveta',
-        pMedeUno: '{0} quadros \u00b7 mediana {1} ms \u00b7 p90 {2} \u00b7 {3} perdidos',
+        pMedeUno: '{0} \u00b7 {1} quadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
+        pMedeSube: 'AO ABRIR', pMedeBaja: 'AO FECHAR',
         aNombreP: 'Personalizar',
         cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
         fgGenar: 'Gerar', fgGenando: 'Gerando…', fgGenPh: 'Descreva um fundo…', fgGenOk: 'Fundo novo', fgNoGen: 'Não deu para gerar. Tente de novo.', fgSinRed: 'Gerar precisa da ponte com o sistema', fg_i1: 'aquário com peixes e bolhas', fg_i2: 'grama com orvalho ao amanhecer', fg_i3: 'nuvens num céu azul claro', fg_i4: 'ilha com uma palmeira', fg_i5: 'pôr do sol sobre o mar', fg_i6: 'bolhas de vidro debaixo da água', fgTit: 'Papel de parede', fgFab: 'De fábrica', fgPropio: 'Sua',
@@ -5148,7 +5164,12 @@ const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
    apagado no cuesta un solo `requestAnimationFrame`: la guarda es la primera
    línea. */
 let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GEN = 0;
-function medArranca(){
+/* el aviso tiene que decir QUÉ midió: subir y bajar no son el mismo viaje y no
+   cuestan lo mismo, así que un solo número sin dirección no se puede usar para
+   decidir nada. */
+let MED_SUBE = true;
+function medArranca(sube){
+  MED_SUBE = !!sube;
   if (!MED_ON) return;
   /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
      `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
@@ -5176,24 +5197,44 @@ function medTermina(){
   const o = d.slice().sort((a, b) => a - b);
   const med = o[o.length >> 1];
   const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
-  avisa(T('pMedeUno', d.length, med.toFixed(1), p90.toFixed(1), perdidos));
+  avisa(T('pMedeUno', T(MED_SUBE ? 'pMedeSube' : 'pMedeBaja'),
+          d.length, med.toFixed(1), p90.toFixed(1), perdidos));
 }
 
+/* lo que se espera DESPUÉS de que la hoja y la foto ya se detuvieron, y sólo al
+   cerrar. Ver el comentario de abajo. */
+let CAJ_VUELVE_MS = 190;   /* `let` porque el A/B vive en el mismo binario: ver
+                              `__A.cajTarde`. Si no, «mejoró» sería un recuerdo. */
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
-  medArranca();
+  medArranca(CAJON);
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
   document.body.classList.add('cajMueve');
   clearTimeout(CAJ_ABRE_T);
+  /* ── EL CIERRE NO TIENE RELEVO, Y AHÍ ESTABA EL ESCALÓN ──
+     Al ABRIR, `cajQ` releva a `cajMueve` en este mismo instante y el filtro del
+     escritorio se queda apagado: no hay nada que encender. Al CERRAR no hay
+     relevo, así que las tres piezas de vidrio de `#capa` encienden **96.401 px
+     de desenfoque y tres filtros de SVG en un solo cuadro** — y caía a los
+     80 ms de haber aterrizado la hoja, con la foto todavía escalándose y la
+     deriva recién despausada. Tres cosas en la misma ventana de 80 ms, todas
+     sólo al bajar: es exactamente lo que se reporta como «laguea al bajar».
+     El trabajo es el mismo y no se puede evitar —el vidrio tiene que volver—
+     pero **no tiene por qué pagarse en el cuadro en que la animación termina**:
+     se espera a que todo esté quieto. El precio son 190 ms más de reloj y dock
+     sin desenfoque mientras el ojo sigue a la hoja bajando; conservan su tinte,
+     su borde y sus cinco sombras internas, que es el mismo trato que la vuelta
+     132 ya hizo para los 340 ms del deslizamiento. */
+  const espera = CAJON ? CAJ_ABRE_MS : CAJ_ABRE_MS + CAJ_VUELVE_MS;
   CAJ_ABRE_T = setTimeout(() => {
     caj.classList.remove('abre');
     document.body.classList.remove('cajMueve');
     if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
     medTermina();
-  }, CAJ_ABRE_MS);
+  }, espera);
 }
 
 function verCajon(v){
@@ -5704,14 +5745,26 @@ function pisoAlto(){
    Un solo sitio: **apoyada sobre el teclado, mientras se busca**. Estuvo en el
    medio del escritorio una vuelta y el reporte fue que molestaba: es la
    pantalla de inicio, ahí lo que uno quiere ver es el fondo y sus apps. */
+/* ── ESCRIBIR UNA VARIABLE DE `:root` QUE NO CAMBIÓ NO ES GRATIS ──
+   `mascSitio` corre en el primer cuadro de CADA apertura y de cada cierre, y las
+   tres variables casi nunca cambian: el ancho sale de un ajuste y el piso del
+   teclado o del panel abierto. Una custom property del elemento raíz invalida el
+   estilo de todo lo que la lea, y hacerlo en el cuadro en que la hoja arranca es
+   trabajo puro. Es el mismo atajo que `pintaReloj`. */
+let MASC_VAR = '', MASC_SIN_CAJ = true;
 function mascSitio(){
   /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
      del ancho, cambiar uno deja al muñeco estirado y nada avisa */
   const w = PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media;
-  const r = document.documentElement.style;
-  r.setProperty('--masc-w', w + 'px');
-  r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
-  r.setProperty('--masc-b', (pisoAlto() + 12) + 'px');
+  const h = Math.round(w*MASC_H/MASC_W), b = pisoAlto() + 12;
+  const firma = w + '|' + h + '|' + b;
+  if (firma !== MASC_VAR){
+    MASC_VAR = firma;
+    const r = document.documentElement.style;
+    r.setProperty('--masc-w', w + 'px');
+    r.setProperty('--masc-h', h + 'px');
+    r.setProperty('--masc-b', b + 'px');
+  }
   mascMira();
 }
 
@@ -5765,8 +5818,16 @@ function mascMira(){
      acaba de pedir — que es el reclamo que trajo esta vuelta, en chiquito. Se
      aparta en un cuarto de segundo, que igual alcanza para que no parpadee
      entre una tecla y la siguiente. */
+  /* ── Y CERRAR EL CAJÓN NO ES DEJAR DE BUSCAR ──
+     Los 2,4 s son la despedida de quien deja de escribir CON el cajón puesto:
+     ahí el muñeco está en su sitio y un corte seco se lee a error. Pero
+     cerrando el cajón mientras se buscaba, `cabe` cae por `CAJON` y la mascota
+     se quedaba **dos segundos y medio encima del escritorio**, con su bucle de
+     WebGL corriendo durante todo el deslizamiento — justo lo que la vuelta 120
+     vino a sacar del inicio. Sin cajón no hay de dónde despedirse.
+     El A/B vive en el mismo binario: ver `__A.mascSinCaj`. */
   MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); },
-                      busca ? 260 : 2400);
+                      (busca || (MASC_SIN_CAJ && !CAJON)) ? 260 : 2400);
 }
 
 function mascotaBaila(v){
@@ -11355,12 +11416,25 @@ window.__A = {
       if (corre) requestAnimationFrame(paso);
     };
     requestAnimationFrame(paso);
+    const fondoEstado = () => {
+      const f = $('#fondo');
+      const co = document.getAnimations().filter(x => x.playState === 'running' &&
+                   x.effect && x.effect.target === f);
+      return { corriendo: co.length,
+               escala: getComputedStyle(f).scale };
+    };
     verCajon(false);
     await new Promise(r => setTimeout(r, 60));
     const anim = document.getAnimations().filter(x => x.playState === 'running')
                    .map(x => (x.effect && x.effect.target ? (x.effect.target.id || x.effect.target.className || '?') : '?'));
     const vid90 = this.vidrios();
-    await new Promise(r => setTimeout(r, 560));
+    const fondo90 = fondoEstado();
+    /* el instante que importa: 10 ms después de que se acaba `CAJ_ABRE_MS`, o
+       sea donde antes las tres piezas encendían sus 96.401 px de golpe */
+    await new Promise(r => setTimeout(r, 370));
+    const vid430 = this.vidrios();
+    const fondo430 = fondoEstado();
+    await new Promise(r => setTimeout(r, 270));
     corre = false;
     const vidFin = this.vidrios();
     dts.shift();
@@ -11372,9 +11446,38 @@ window.__A = {
              peor: +(o[o.length - 1] || 0).toFixed(1), perdidos: perdidos,
              animando: anim.length, quienes: anim.slice(0, 6),
              vidDurante: vid90.n, pxDurante: vid90.px,
+             fondo90: fondo90, fondo430: fondo430,
+             vid430: vid430.n, px430: vid430.px,
              vidFin: vidFin.n, pxFin: vidFin.px,
              topFin: vidFin.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* la mascota se va CON el cajón: buscando y cerrando, antes se quedaba 2,4 s
+     encima del escritorio con su bucle de WebGL corriendo */
+  async mascCierre(q){
+    verCajon(true);
+    /* la mascota sólo cabe con la lista corta: sin filtro, con 150 apps
+       `mascCabe()` es falso y la prueba mediría un camino que no existe */
+    if (q !== undefined){ $('#busca2').value = q; pintaCajon(q);
+      /* la pintada va una por cuadro (vuelta 129): pidiendo la mascota en el
+         mismo instante, `mascCabe()` mide todavía la lista de 150 */
+      await new Promise(r => setTimeout(r, 260)); }
+    mascotaBaila(true);
+    await new Promise(r => setTimeout(r, 700));
+    const dentro = this.masc();
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const a420 = this.masc();
+    await new Promise(r => setTimeout(r, 900));
+    const a1300 = this.masc();
+    return { cabe: dentro.cabe,
+             dentro: { on: dentro.on, corre: dentro.corre },
+             a420: { on: a420.on, corre: a420.corre },
+             a1300: { on: a1300.on, corre: a1300.corre } };
+  },
+  mascSinCaj(v){ MASC_SIN_CAJ = !!v; return MASC_SIN_CAJ; },
+  /* el A/B del cierre: con 0 el vidrio del escritorio vuelve en el mismo cuadro
+     en que se acaba la animación, que es como estaba antes de la vuelta 135 */
+  cajTarde(v){ CAJ_VUELVE_MS = +v; return CAJ_VUELVE_MS; },
   /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
      en el primer cuadro del cierre */
   capaPeso(){

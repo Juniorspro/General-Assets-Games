@@ -632,7 +632,12 @@ const CAJ_ABRE_MS = 420;   /* la transición dura 340 y se le deja aire */
    apagado no cuesta un solo `requestAnimationFrame`: la guarda es la primera
    línea. */
 let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GEN = 0;
-function medArranca(){
+/* el aviso tiene que decir QUÉ midió: subir y bajar no son el mismo viaje y no
+   cuestan lo mismo, así que un solo número sin dirección no se puede usar para
+   decidir nada. */
+let MED_SUBE = true;
+function medArranca(sube){
+  MED_SUBE = !!sube;
   if (!MED_ON) return;
   /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
      `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
@@ -660,24 +665,44 @@ function medTermina(){
   const o = d.slice().sort((a, b) => a - b);
   const med = o[o.length >> 1];
   const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
-  avisa(T('pMedeUno', d.length, med.toFixed(1), p90.toFixed(1), perdidos));
+  avisa(T('pMedeUno', T(MED_SUBE ? 'pMedeSube' : 'pMedeBaja'),
+          d.length, med.toFixed(1), p90.toFixed(1), perdidos));
 }
 
+/* lo que se espera DESPUÉS de que la hoja y la foto ya se detuvieron, y sólo al
+   cerrar. Ver el comentario de abajo. */
+let CAJ_VUELVE_MS = 190;   /* `let` porque el A/B vive en el mismo binario: ver
+                              `__A.cajTarde`. Si no, «mejoró» sería un recuerdo. */
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
-  medArranca();
+  medArranca(CAJON);
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
   document.body.classList.add('cajMueve');
   clearTimeout(CAJ_ABRE_T);
+  /* ── EL CIERRE NO TIENE RELEVO, Y AHÍ ESTABA EL ESCALÓN ──
+     Al ABRIR, `cajQ` releva a `cajMueve` en este mismo instante y el filtro del
+     escritorio se queda apagado: no hay nada que encender. Al CERRAR no hay
+     relevo, así que las tres piezas de vidrio de `#capa` encienden **96.401 px
+     de desenfoque y tres filtros de SVG en un solo cuadro** — y caía a los
+     80 ms de haber aterrizado la hoja, con la foto todavía escalándose y la
+     deriva recién despausada. Tres cosas en la misma ventana de 80 ms, todas
+     sólo al bajar: es exactamente lo que se reporta como «laguea al bajar».
+     El trabajo es el mismo y no se puede evitar —el vidrio tiene que volver—
+     pero **no tiene por qué pagarse en el cuadro en que la animación termina**:
+     se espera a que todo esté quieto. El precio son 190 ms más de reloj y dock
+     sin desenfoque mientras el ojo sigue a la hoja bajando; conservan su tinte,
+     su borde y sus cinco sombras internas, que es el mismo trato que la vuelta
+     132 ya hizo para los 340 ms del deslizamiento. */
+  const espera = CAJON ? CAJ_ABRE_MS : CAJ_ABRE_MS + CAJ_VUELVE_MS;
   CAJ_ABRE_T = setTimeout(() => {
     caj.classList.remove('abre');
     document.body.classList.remove('cajMueve');
     if (CAJON && caj.classList.contains('hor')) document.body.classList.add('cajQ');
     medTermina();
-  }, CAJ_ABRE_MS);
+  }, espera);
 }
 
 function verCajon(v){
@@ -1188,14 +1213,26 @@ function pisoAlto(){
    Un solo sitio: **apoyada sobre el teclado, mientras se busca**. Estuvo en el
    medio del escritorio una vuelta y el reporte fue que molestaba: es la
    pantalla de inicio, ahí lo que uno quiere ver es el fondo y sus apps. */
+/* ── ESCRIBIR UNA VARIABLE DE `:root` QUE NO CAMBIÓ NO ES GRATIS ──
+   `mascSitio` corre en el primer cuadro de CADA apertura y de cada cierre, y las
+   tres variables casi nunca cambian: el ancho sale de un ajuste y el piso del
+   teclado o del panel abierto. Una custom property del elemento raíz invalida el
+   estilo de todo lo que la lea, y hacerlo en el cuadro en que la hoja arranca es
+   trabajo puro. Es el mismo atajo que `pintaReloj`. */
+let MASC_VAR = '', MASC_SIN_CAJ = true;
 function mascSitio(){
   /* el alto sale de la proporción del lienzo (132×180): escrito a mano al lado
      del ancho, cambiar uno deja al muñeco estirado y nada avisa */
   const w = PERS_MASC[lee('mascTam', 'media')] || PERS_MASC.media;
-  const r = document.documentElement.style;
-  r.setProperty('--masc-w', w + 'px');
-  r.setProperty('--masc-h', Math.round(w*MASC_H/MASC_W) + 'px');
-  r.setProperty('--masc-b', (pisoAlto() + 12) + 'px');
+  const h = Math.round(w*MASC_H/MASC_W), b = pisoAlto() + 12;
+  const firma = w + '|' + h + '|' + b;
+  if (firma !== MASC_VAR){
+    MASC_VAR = firma;
+    const r = document.documentElement.style;
+    r.setProperty('--masc-w', w + 'px');
+    r.setProperty('--masc-h', h + 'px');
+    r.setProperty('--masc-b', b + 'px');
+  }
   mascMira();
 }
 
@@ -1249,8 +1286,16 @@ function mascMira(){
      acaba de pedir — que es el reclamo que trajo esta vuelta, en chiquito. Se
      aparta en un cuarto de segundo, que igual alcanza para que no parpadee
      entre una tecla y la siguiente. */
+  /* ── Y CERRAR EL CAJÓN NO ES DEJAR DE BUSCAR ──
+     Los 2,4 s son la despedida de quien deja de escribir CON el cajón puesto:
+     ahí el muñeco está en su sitio y un corte seco se lee a error. Pero
+     cerrando el cajón mientras se buscaba, `cabe` cae por `CAJON` y la mascota
+     se quedaba **dos segundos y medio encima del escritorio**, con su bucle de
+     WebGL corriendo durante todo el deslizamiento — justo lo que la vuelta 120
+     vino a sacar del inicio. Sin cajón no hay de dónde despedirse.
+     El A/B vive en el mismo binario: ver `__A.mascSinCaj`. */
   MASC_T = setTimeout(() => { m.classList.remove('on'); l3Corre(false); },
-                      busca ? 260 : 2400);
+                      (busca || (MASC_SIN_CAJ && !CAJON)) ? 260 : 2400);
 }
 
 function mascotaBaila(v){

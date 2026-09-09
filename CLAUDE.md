@@ -281,6 +281,105 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima quinta vuelta (2026-09-09): **AERO** — el cierre pagaba todo en los últimos 80 ms
+
+Reporte, después de la vuelta anterior: *"la re cajeta sigue laguensod al bajar"*.
+
+#### LA VUELTA 134 ARREGLÓ ALGO REAL Y NO ERA LO QUE SE SIENTE
+
+Ahí se sacó el `visibility:hidden` de `#capa` —98 nodos y 367.504 px que volvían a la vista en el
+primer cuadro del cierre— y está medido que se fue. No alcanzó, y mirando el cierre entero en vez de
+su primer cuadro aparece por qué: **lo caro no estaba al principio, estaba al final**, y son TRES
+cosas distintas que caen en la misma ventana de ochenta milisegundos. Las tres pasan **sólo al
+bajar**, que es exactamente lo que el reporte dice.
+
+1. **EL ESCALÓN DEL FILTRO, Y EXISTE PORQUE AL CERRAR NO HAY RELEVO.** Al abrir, `cajQ` releva a
+   `cajMueve` en el mismo instante y el vidrio del escritorio se queda apagado: no hay nada que
+   encender. Al cerrar no hay quien releve, así que las tres piezas de `#capa` encienden **96.401 px
+   de desenfoque y tres `feDisplacementMap`** —o sea tres filtros de SVG, que es lo que la vuelta 130
+   anotó que en un WebView puede caerse al procesador— **en un solo cuadro**, a los 80 ms de haber
+   aterrizado la hoja.
+2. **LA FOTO FRENABA OCHENTA MILISEGUNDOS DESPUÉS QUE LA HOJA.** `#fondo` tenía `transition:scale
+   .42s` contra los `.34s` del cajón. O sea que los tres filtros se armaban **sobre un respaldo que
+   todavía se estaba moviendo**, que es el peor instante posible para armar un filtro. Los dos van
+   ahora en `.34s`.
+3. **Y LA DERIVA SE DESPAUSABA EN EL PRIMER CUADRO DEL CIERRE.** La pausa cuelga de `body.caj`, y el
+   cierre lo saca en su primera línea: durante todo el deslizamiento la foto tenía **dos fuentes de
+   transform a la vez** —la deriva resumida y el `scale` deshaciéndose—. Al abrir es al revés: se
+   pausa en el primer cuadro. Era la asimetría más grande entre subir y bajar y no la había visto
+   nadie. `body.cajMueve` entra en la lista de pausa, así que ahora la deriva sigue quieta durante
+   los dos viajes.
+
+**EL ARREGLO NO ES SACAR TRABAJO, ES SACARLO DEL CAMINO.** El vidrio tiene que volver; lo que no
+tiene por qué es volver **en el cuadro en que la animación termina**. Al cerrar se esperan 190 ms
+más (`CAJ_VUELVE_MS`) y las tres piezas se encienden con todo quieto. El precio son 190 ms más de
+reloj y dock sin desenfoque mientras el ojo sigue a la hoja bajando —conservan su tinte, su borde y
+sus cinco sombras internas— que es el mismo trato que la vuelta 132 ya había hecho para los 340 ms
+del deslizamiento.
+
+Medido con el A/B **en el mismo binario** (`__A.cajTarde(0)` devuelve el comportamiento viejo), a
+los 430 ms de haber tocado cerrar:
+
+| | pasadas de vidrio | píxeles | animaciones vivas sobre `#fondo` |
+|---|---|---|---|
+| control | **3** | **96.401** | **2** |
+| **ahora** | **0** | **0** | **1** |
+
+Y el vidrio vuelve igual: `vidFin` **3 / 96.401** en los dos.
+
+#### LA MASCOTA SE QUEDABA 2,4 s EN EL ESCRITORIO CON SU WEBGL CORRIENDO
+
+Salió buscando qué más corre sólo al cerrar. `verCajon(false)` llama a `mascotaBaila(false)`, que
+termina en `mascMira()`; ahí `cabe` cae **por `CAJON`**, y la despedida de ese caso son **2.400 ms**.
+Esa despedida está bien pensada para quien deja de escribir **con el cajón puesto** —un corte seco se
+lee a error— y es exactamente lo que no hay que hacer cuando la hoja entera se está yendo: el muñeco
+quedaba encima del escritorio, con su bucle de three.js —23 huesos, 5.541 triángulos— corriendo
+durante todo el deslizamiento y dos segundos más. Y encima contradice a la vuelta 120, que sacó la
+mascota del inicio justamente porque ahí molesta.
+
+Medido con el A/B (`__A.mascSinCaj`), buscando y cerrando:
+
+| | a los 420 ms del cierre | a los 1.300 ms |
+|---|---|---|
+| control | **puesta, WebGL corriendo** | **puesta, corriendo** |
+| **ahora** | **fuera, parado** | fuera, parado |
+
+#### Y `mascSitio` ESCRIBÍA TRES VARIABLES DE `:root` QUE NO CAMBIAN NUNCA
+
+Corre en el primer cuadro de **cada** apertura y de cada cierre, y las tres —`--masc-w`, `--masc-h`,
+`--masc-b`— salen de un ajuste y del teclado: casi nunca cambian. Una custom property del elemento
+raíz invalida el estilo de todo lo que la lea, y hacerlo en el cuadro en que la hoja arranca es
+trabajo puro. Se compara la firma antes de escribir, que es el mismo atajo que `pintaReloj` de la
+vuelta anterior. Medido después: `mascW 148px · mascH 202px`, sin cambio.
+
+#### EL MEDIDOR AHORA DICE QUÉ MIDIÓ, Y ESO ES LA MITAD DE LA VUELTA
+
+El interruptor de la vuelta 133 devolvía *«28 cuadros · mediana 16,6 ms · p90 16,9 · 2 perdidos»* y
+**no decía si eso fue subiendo o bajando**. Subir y bajar no son el mismo viaje y esta vuelta prueba
+que no cuestan lo mismo: un número sin dirección no se puede usar para decidir nada. Ahora el aviso
+empieza con **AL SUBIR** o **AL BAJAR**, en los tres idiomas.
+
+#### MEDIDO AL CERRAR
+
+Regresión: riel de **17 letras** con sus encabezados, `letra('S')` mirando la S, **9 packs**, reja
+60 px · 4 columnas · 6 filas, gesto abajo abre el centro de control **16 · 1 · 10 · 4** con **0 ondas
+de agua** y gesto arriba abre el cajón con **0 ondas**, Personalizar con sus **14 grupos**, los tres
+idiomas en vivo con la fecha y el saludo siguiéndolos dentro del mismo minuto, mascota con 23 huesos
+y 5.541 triángulos. Arrastre: `capa` **visible** de punta a punta, **0 / 0** de filtro durante todo el
+deslizamiento y `cajMueve` puesto desde el primer `pointermove`. `window.__errs` **vacío en las cinco
+corridas**.
+
+**LO QUE NO SE PUDO COMPROBAR, Y ES IMPORTANTE:** el banco dibuja por software y acá corre a **menos
+de tres cuadros por segundo**, así que los milisegundos que devuelve `cajCierra` no describen nada —
+lo que sí describe es el **orden** de lo que pasa y **cuánto filtro hay puesto en cada instante**, que
+es lo que está medido arriba. Y queda una hipótesis que desde acá no se puede tocar: mientras el cajón
+está abierto, `#capa` está **tapado al cien por ciento por una hoja opaca**, y el compositor de Chrome
+desaloja baldosas de lo que está ocluido aunque siga `visible`. Si eso pasa, el escritorio se vuelve a
+rasterizar **durante el deslizamiento** por más que no se lo esconda — que explicaría por qué la
+vuelta 134 no movió la aguja. Eso lo contesta el medidor del teléfono y nada más: si al bajar devuelve
+mediana cerca de 16,7, lo de esta vuelta alcanzó; si devuelve 30 o 40 con muchos perdidos, el WebView
+no está pudiendo y **ahí sí** vale portar el cajón a nativo con AGSL y medirlo contra éste.
+
 ### Centésima trigésima cuarta vuelta (2026-09-08): **AERO** — el cierre no es la apertura al revés
 
 Pedido textual, después de que la vuelta anterior midiera la apertura: *"cambia el motor gráfico de
