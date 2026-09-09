@@ -83,7 +83,11 @@ $("nombre").addEventListener("keydown", function(e){ if (e.key === "Enter") como
 var CLIENTE = null;
 
 fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(function(c){
-  if (c && c.auto) { AUTO = c.auto; armarPaypal(); }
+  if (c && c.auto) {
+    AUTO = c.auto;
+    if (AUTO.prueba) avisarPrueba();
+    armarPaypal();
+  }
   if (c && c.pago) { pago = c.pago; }
   pintarMontos();
   mirarLaVuelta();
@@ -759,6 +763,23 @@ revisarPase();
    El monto tampoco viaja como verdad: /api/pagar arma la orden con el precio
    del lado del servidor. Lo que se manda desde acá es una intención. */
 var AUTO = null;
+
+/* el cartel de modo de prueba. Va arriba de todo, en rojo, y no se puede
+   cerrar: cobrar con plata que no existe y no darse cuenta es el error caro
+   de este montaje. */
+function avisarPrueba(){
+  if ($("aviso-prueba")) return;
+  var d = document.createElement("div");
+  d.id = "aviso-prueba";
+  d.style.cssText = "margin:0 0 12px;padding:10px 13px;border-radius:4px;" +
+    "border:1px solid #d98b7a;background:linear-gradient(180deg,#fff1ec,#ffdfd6);" +
+    "color:#8a2412;font-size:13.5px;line-height:1.45";
+  d.innerHTML = "<b>Modo de prueba de PayPal.</b> Los pagos son simulados: " +
+    "<b>no entra dinero de verdad</b>. Sirve para probar el circuito, no para " +
+    "cobrar. Cambiar las credenciales a Live antes de anunciar nada.";
+  var cuerpo = document.querySelector("#fondoDona .cuerpo");
+  if (cuerpo) cuerpo.insertBefore(d, cuerpo.firstChild);
+}
 
 function decirEspera(t, mal){
   var e = $("pp-espera"); e.hidden = false;

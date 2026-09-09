@@ -23,6 +23,10 @@ export const onRequestGet = ({ env }) => {
     // que vias pueden cobrar y verificar solas
     auto: {
       paypal: !!(env.PAYPAL_CLIENT_ID && env.PAYPAL_SECRET) ? env.PAYPAL_CLIENT_ID : null,
+      // EN PRUEBA SE COBRA CON PLATA QUE NO EXISTE. Si esto no se avisara en
+      // pantalla, se podria anunciar la tienda creyendo que entra dinero y
+      // regalar accesos a cambio de nada. Es el error caro de este montaje.
+      prueba: env.PAYPAL_MODO === "sandbox",
       mp: !!env.MP_TOKEN,
       minUsd: parseFloat(env.ACCESO_MINIMO_USD || "1"),
       minArs: parseInt(env.ACCESO_MINIMO_ARS || "1", 10),
