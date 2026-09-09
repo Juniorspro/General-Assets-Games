@@ -18730,6 +18730,11 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - **No** poner el identificador del modelo en commits, PRs, comentarios de código ni en
   nada que se pushee.
 - Cuando pide "dame el HTML", quiere el archivo `juegos-pc/Campo_de_Tiro.html` adjunto.
+- **SIEMPRE EL HTML** (2026-09-09, textual: *"siempre el html"*): al cerrar cada vuelta hay que
+  **adjuntar el archivo armado** del juego que se tocó, sin que lo pida. No alcanza con commitear y
+  pushear: el usuario prueba en el celular y lo que necesita es el archivo. Y si hace falta un
+  enlace, va por **githack** — `raw.githubusercontent.com` y jsDelivr sirven el HTML como
+  `text/plain` con `nosniff`, así que el navegador muestra el código en vez de correr el juego.
 - El juego se sube al portal **Rezona**. Es un HTML autocontenido: todo va adentro del
   archivo, sin dependencias externas más allá del CDN de three.js.
 - **Rezona se autentica con la variable de entorno `REZONA_PAT`**, cargada en el entorno de Claude
