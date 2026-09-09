@@ -578,11 +578,11 @@ function enlacesDePago(){
     mp.href = pago.mpLink || "#";
     $("dona-mp-pie").textContent = pago.mpLink
       ? "Link de pago · " + MONTOS.ars.simbolo + " " + plata(monto)
-      : "Transferí al alias de acá abajo";
+      : "Copiá el alias de acá abajo · " + MONTOS.ars.simbolo + " " + plata(monto);
   } else {
     mp.href = "#";
     $("dona-mp-pie").textContent = moneda === "usd"
-      ? "Sólo cobra en pesos — pasá a pesos" : "Sin datos cargados";
+      ? "Es en pesos — pasá a pesos" : "Sin datos cargados";
   }
 
   if (hayPP){
