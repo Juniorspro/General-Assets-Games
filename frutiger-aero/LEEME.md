@@ -1,9 +1,59 @@
 # Frutiger Aero
 
-Una foto de fondo, la barra de vidrio arriba y un cartel que dice
-«Próximamente :)» con la mascota. Nada más.
+Un archivo de la estética, con la piel de Windows Vista: ventanas de vidrio
+con barra de título, menú, recuadros celestes, aparatos de la barra lateral y
+barra de tareas. La mascota vive adentro de una de las ventanas.
 
     https://frutiger-aero-86q.pages.dev
+
+## La piel es Aero, y Aero no es «vidrio»
+
+La primera versión era vidrio de Apple: desenfoque grande y bordes de 30 px.
+Se parecía a 2021, no a 2007. Aero se hace distinto y hay tres cosas que lo
+definen.
+
+**El corte duro al 45 %.** Un botón Aero no tiene un degradado suave: tiene dos
+degradados pegados, y el escalón entre los dos es el reflejo del plástico.
+
+    linear-gradient(180deg, #f2f2f2 45%, #ebebeb 45%, #cfcfcf)
+                                     ^^^^^^^^^^^^^^ acá
+
+Sin ese escalón el botón queda de 2014. Está en los botones, en las pastillas,
+en la barra de tareas y en el cartel de bienvenida, que es el mismo corte pero
+de 130 px de alto.
+
+**La barra de título son cuatro capas**, y hacen falta las cuatro:
+
+1. y 2. dos diagonales claras que entran desde las esquinas de arriba — son el
+   reflejo del marco, y es lo que más se extraña cuando falta;
+3. el brillo vertical, con su propio corte al 46 %;
+4. el azul translúcido, con `backdrop-filter` atrás.
+
+Más el filo blanco de 1 px arriba y a los costados (`inset` box-shadow), que es
+el canto del vidrio.
+
+**Los valores no se adivinaron.** El azul `#4580c4`, los grises de los botones y
+las posiciones de los cortes salen de [7.css](https://khang-nd.github.io/7.css/),
+que los sacó de la interfaz real.
+
+## Cerrar una ventana no rompe la página
+
+Los tres botones de cada barra de título funcionan. Cerrar o minimizar no borra
+la sección: la manda a la barra de tareas de abajo, y de ahí vuelve. Una cruz
+que hace desaparecer contenido para siempre sería una broma, no una interfaz.
+
+## La tipografía se sirve desde acá
+
+`Segoe UI` primero, para quien esté en Windows y tenga la de verdad. Para el
+resto, **Source Sans 3 servida desde el propio sitio**: un archivo variable de
+28 KB que cubre de 200 a 900. No se pide a Google —un pedido menos afuera y
+ningún salto de tipografía al cargar— y lleva el hash en el nombre como todo
+lo demás.
+
+Ojo con el CSS que devuelve Google Fonts: viene ordenado por subconjunto
+(vietnamita, latin-ext, latin) y quedarse con el primer `.woff2` deja una
+fuente **sin una sola letra del alfabeto**, que el navegador carga «bien» y
+dibuja con la serif del sistema. Hay que buscar el bloque `/* latin */`.
 
 La mascota es un **modelo 3D con rig**: 41 huesos, animación de reposo, salto
 al tocarla, y una capa de movimiento hecha por código encima. Se arrastra para
