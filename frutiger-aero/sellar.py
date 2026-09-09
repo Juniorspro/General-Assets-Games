@@ -19,8 +19,9 @@ import hashlib, json, os, re, sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
 SITIO = os.path.join(AQUI, "sitio")
 # base -> dónde se lo nombra
-SELLAR = ["css/aero.css", "js/escritorio.js", "audio/tema.mp3"]
-DONDE = ["index.html", "404.html", "css/aero.css", "js/escritorio.js"]
+SELLAR = ["css/aero.css", "js/escritorio.js", "js/social.js", "audio/tema.mp3"]
+DONDE = ["index.html", "404.html", "admin.html", "css/aero.css",
+         "js/escritorio.js", "js/social.js"]
 
 
 def hash8(ruta):

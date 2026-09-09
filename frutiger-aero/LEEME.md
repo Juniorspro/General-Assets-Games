@@ -30,6 +30,54 @@ foto que se le antoje. `functions/api/entrar.js` se lo da a Google y comprueba
 las tres cosas que casi siempre faltan: que la firma sea de Google, que el
 `aud` sea **esta** aplicación y que no esté vencido.
 
+## Lo social: muro, perfiles y cuentas
+
+Cada uno se hace una cuenta, arma su perfil y publica proyectos Frutiger Aero
+pidiendo apoyo. Barra arriba con las tres rayitas, el muro, y el perfil.
+
+### El dinero no pasa por acá, y es a propósito
+
+Cada publicación lleva **el enlace de cobro de quien la escribió**, y el botón
+va directo a esa cuenta. Si la plata pasara por la del sitio, esto sería un
+intermediario de pagos —con todo lo que eso implica— y habría que responder por
+proyectos ajenos. El sitio pone la vidriera y nada más.
+
+Por lo mismo, **el contador de apoyos no es dinero**: dice cuánta gente fue a
+apoyar, no cuánto se juntó. Este servidor no tiene forma de saber lo segundo, y
+mostrarlo como plata recaudada sería inventar una cifra.
+
+### La contraseña no se guarda
+
+Se guarda el resultado de pasarla 100.000 veces por PBKDF2 con una sal distinta
+por persona. Si alguien se lleva la base, no se lleva contraseñas: se lleva
+ruido carísimo de revertir. Un `sha256` pelado no sirve —una placa de video
+prueba miles de millones por segundo—; lo que la hace segura es que PBKDF2 es
+**lenta a propósito**.
+
+Al fallar el ingreso nunca se dice *cuál* de los dos datos estuvo mal, y la
+comprobación se corre igual aunque el usuario no exista, contra un hash
+inventado. Si no, la respuesta vuelve antes cuando el usuario no existe, y esa
+diferencia de tiempo deja averiguar quién tiene cuenta acá.
+
+### Todo lo que escribe otro se inserta como texto, nunca como HTML
+
+Un muro donde cualquiera publica es exactamente donde alguien va a probar con
+`<script>`. Las tarjetas se arman con `createElement` y `textContent`: no hay un
+solo `innerHTML` con datos del servidor. Los enlaces de cobro se validan en el
+servidor y sólo se aceptan `http(s)`, porque `javascript:` en el perfil de uno
+es un agujero para todos los que lo miren.
+
+### La trampa del wrangler.toml que dejó el sitio sin API
+
+Al agregar la base de datos hizo falta `wrangler.toml` para declarar el enlace
+a D1. **Con ese archivo puesto, las funciones se buscan en `functions/` AL LADO
+del toml, no adentro de `sitio/`.** Dejarlas donde estaban hizo que wrangler
+subiera el sitio sin compilar una sola función, y *todas* las rutas de `/api`
+pasaron a contestar 404 — incluidas las de cobro, que ya andaban.
+
+El despliegue no avisa. Simplemente deja de decir «Compiled Worker
+successfully». Si falta esa línea, algo está mal.
+
 ## Cobrar: qué variable hace qué
 
 Nada de esto está en el código. Son variables del proyecto en Cloudflare
