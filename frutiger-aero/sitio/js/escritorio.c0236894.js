@@ -79,8 +79,16 @@ $("nombre").addEventListener("keydown", function(e){ if (e.key === "Enter") como
 /* --- Google ---
    El identificador de cliente NO está en el código: lo sirve /api/config desde
    una variable de entorno, así se cambia desde el panel de Cloudflare sin
-   volver a publicar. Si no hay ninguno, el botón lo dice en lugar de fallar. */
-var CLIENTE = null;
+   volver a publicar. Si no hay ninguno, el botón lo dice en lugar de fallar.
+
+   ENTRAR CON GOOGLE DA UNA CUENTA DE VERDAD, la misma que se crea a mano con
+   usuario y contraseña: se puede publicar, tener perfil y pedir el acceso.
+   Antes devolvía un nombre y una foto que vivían sólo acá, así que entrar con
+   Google era entrar a un escritorio de adorno y nada más.
+
+   El token NO se lee acá. Un JWT es texto firmado: leerlo sin comprobar la
+   firma es creerle a quien lo mandó. Lo comprueba el servidor. */
+var CLIENTE = null, NUMERO = null, TICKET = null;
 
 fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(function(c){
   if (c && c.auto) {
@@ -101,28 +109,130 @@ fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(fun
   document.head.appendChild(s);
 }).catch(function(){ $("sin-google").hidden = false; });
 
+/* El número de un solo uso. Va DENTRO del token que firma Google, así que ata
+   ese token a este inicio de sesión: uno robado de otro lado no entra. Vence,
+   por eso se pide otro cada tanto mientras la pantalla sigue abierta. */
+function pedirNumero(){
+  return fetch("api/entrar").then(function(r){ return r.json(); })
+    .then(function(j){ NUMERO = j.numero; return NUMERO; });
+}
+
 function armarGoogle(){
   if (!window.google || !google.accounts || !google.accounts.id) return;
+  pedirNumero().then(dibujar).catch(function(){ $("sin-google").hidden = false; });
+  setInterval(function(){
+    if ($("logon").hidden) return;      /* ya entró: no hay nada que refrescar */
+    pedirNumero().then(dibujar).catch(function(){});
+  }, 20 * 60000);
+}
+
+function dibujar(){
   google.accounts.id.initialize({
     client_id: CLIENTE,
-    callback: function(resp){
-      /* el token se verifica del lado del servidor: si lo decodificáramos acá
-         cualquiera podría entrar con uno inventado y el nombre que quisiera */
-      fetch("api/entrar", {
-        method:"POST", headers:{"content-type":"application/json"},
-        body: JSON.stringify({ credential: resp.credential })
-      }).then(function(r){ return r.json(); }).then(function(u){
-        if (u && u.nombre) entrar({ nombre:u.nombre, foto:u.foto, correo:u.correo, via:"google" });
-        else $("sin-google").hidden = false;
-      }).catch(function(){ $("sin-google").hidden = false; });
-    }
+    nonce: NUMERO,
+    callback: function(resp){ mandarToken(resp.credential); }
   });
   $("gbt").hidden = true;
+  $("gsi").textContent = "";
   google.accounts.id.renderButton($("gsi"), {
     theme:"outline", size:"large", shape:"rectangular", width:330,
-    text:"signup_with", locale:"es"
+    text:"continue_with", locale:"es"
   });
 }
+
+function avisoG(t){
+  var a = $("g-aviso");
+  if (!t){ a.hidden = true; return; }
+  a.hidden = false; a.textContent = t;
+}
+
+/* de acá salen los dos finales: o ya tiene cuenta y entra, o hay que pedirle
+   el nombre de usuario */
+function mandarToken(credential){
+  $("g-error").hidden = true;
+  llamarEntrar({ credential: credential, numero: NUMERO }).then(function(j){
+    if (j.pase) return conCuenta(j);
+    if (j.nuevo){
+      TICKET = j.ticket;
+      $("paso1").hidden = true;
+      $("paso2").hidden = false;
+      $("g-quien").textContent = j.correo
+        ? "Entraste como " + j.correo + ". Falta una cosa:"
+        : "Falta una cosa:";
+      $("g-usuario").value = j.sugerido || "";
+      $("g-usuario").dataset.nombre = j.nombre || "";
+      if (j.foto) $("g-usuario").dataset.foto = j.foto;
+      verMuestra();
+      $("g-usuario").focus();
+      $("g-usuario").select();
+    }
+  }).catch(function(e){
+    /* el error vuelve a la pantalla de entrada, que es donde está mirando */
+    $("paso2").hidden = true; $("paso1").hidden = false;
+    var n = $("g-error"); n.hidden = false; n.textContent = e.message;
+  });
+}
+
+function llamarEntrar(cuerpo){
+  return fetch("api/entrar", {
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify(cuerpo)
+  }).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok) throw new Error(j.error || ("error " + r.status));
+      return j;
+    });
+  });
+}
+
+/* la sesión de la cuenta es la MISMA que usa el muro: se guarda donde la
+   busca, y se avisa por si esa parte ya se cargó */
+function conCuenta(j){
+  var ses = { pase: j.pase, yo: j.yo };
+  caja.poner("sesion", ses);
+  document.dispatchEvent(new CustomEvent("cuenta-lista", { detail: ses }));
+  entrar({ nombre: j.yo.nombre, foto: j.foto || null,
+           correo: j.correo || null, via: "google" });
+}
+
+function verMuestra(){
+  var v = ($("g-usuario").value || "").toLowerCase().trim();
+  $("g-muestra").textContent = "@" + (v || "vos");
+}
+
+if ($("g-usuario")) {
+  $("g-usuario").addEventListener("input", verMuestra);
+  $("g-usuario").addEventListener("keydown", function(e){
+    if (e.key === "Enter") $("g-listo").click();
+  });
+
+  $("g-listo").addEventListener("click", function(){
+    var u = ($("g-usuario").value || "").toLowerCase().trim();
+    if (!/^[a-z0-9](?:[a-z0-9_.]{1,18}[a-z0-9])$/.test(u)){
+      avisoG("En minúsculas, de 3 a 20, sin espacios ni acentos."); return;
+    }
+    avisoG("Creando tu cuenta…");
+    llamarEntrar({ hacer:"registrar", ticket: TICKET, usuario: u,
+                   nombre: $("g-usuario").dataset.nombre })
+      .then(conCuenta).catch(function(e){ avisoG(e.message); });
+  });
+
+  $("g-vincular").addEventListener("click", function(){
+    avisoG("Pegando tu Google…");
+    llamarEntrar({ hacer:"vincular", ticket: TICKET,
+                   usuario: $("g-vi-us").value, clave: $("g-vi-cl").value })
+      .then(conCuenta).catch(function(e){ avisoG(e.message); });
+  });
+  $("g-vi-cl").addEventListener("keydown", function(e){
+    if (e.key === "Enter") $("g-vincular").click();
+  });
+
+  $("g-volver").addEventListener("click", function(){
+    TICKET = null; avisoG("");
+    $("paso2").hidden = true; $("paso1").hidden = false;
+  });
+}
+
 $("gbt").addEventListener("click", function(){
   if (!CLIENTE) { $("sin-google").hidden = false; $("sin-google").scrollIntoView({block:"nearest"}); }
 });

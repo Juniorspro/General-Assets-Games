@@ -595,6 +595,15 @@ $("bsInicio").addEventListener("click", function(e){ e.preventDefault(); scrollT
 $("irPublicar").addEventListener("click", formularioPublicar);
 $("muroMas").addEventListener("click", function(){ cargarMuro(true); });
 
+/* Entrar con Google pasa por la pantalla de inicio, que es la otra mitad del
+   sitio: cuando de ahí sale una cuenta, hay que enterarse. Sin esto la sesión
+   queda guardada pero esta parte sigue con la de antes hasta recargar. */
+document.addEventListener("cuenta-lista", function(e){
+  sesion = e.detail;
+  caja.poner("sesion", sesion);
+  pintarBarra();
+});
+
 /* al entrar al escritorio: comprobar la sesión contra el servidor y abrir el muro */
 document.addEventListener("hay-sesion", arrancar);
 if (!$("escritorio").hidden) arrancar();
