@@ -75,6 +75,26 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
       <ul class="lista" id="salida" hidden></ul>
     </div>
   </section>
+
+  <!-- ============================================ la cola de pedidos -->
+  <section class="ventana">
+    <header class="titulo">
+      <span class="txt">Pedidos de acceso esperando</span>
+    </header>
+    <div class="cuerpo">
+      <div class="grupo blanco" style="margin-top:0">
+        <p style="font-size:14px;margin:0">Cada uno dej&#243; el n&#250;mero de
+          operaci&#243;n de su transferencia. Compar&#225;lo con lo que te entr&#243; y
+          resolv&#233;. <b>Aprobar habilita la cuenta al toque</b>, sin que tengas
+          que mandarle nada.</p>
+        <div class="bots">
+          <button class="bt p" type="button" id="verCola">Ver la cola</button>
+          <span id="colaInfo" style="font-size:13.5px;color:var(--tinta-2);align-self:center"></span>
+        </div>
+      </div>
+      <div id="cola" style="margin-top:12px"></div>
+    </div>
+  </section>
 </div>
 <script>
 (function(){
@@ -109,6 +129,65 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
     if (navigator.clipboard) navigator.clipboard.writeText(t).then(ok, ok); else ok();
   });
   $("clave").addEventListener("keydown", function(e){ if (e.key === "Enter") $("ir").click(); });
+
+  /* ---------------------------------------------------- la cola de pedidos */
+  function nodo(t, c, x){ var n = document.createElement(t); if (c) n.className = c;
+                          if (x != null) n.textContent = x; return n; }
+  function cuando(ms){
+    var d = Math.floor((Date.now() - ms)/60000);
+    if (d < 60) return "hace " + d + " min";
+    if (d < 1440) return "hace " + Math.floor(d/60) + " h";
+    return "hace " + Math.floor(d/1440) + " días";
+  }
+
+  function mandar(cuerpo){
+    cuerpo.clave = $("clave").value;
+    return fetch("api/revisar", { method:"POST", headers:{"content-type":"application/json"},
+                                  body: JSON.stringify(cuerpo) })
+      .then(function(r){ return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || "error"); return j; }); });
+  }
+
+  function verCola(){
+    var c = $("cola");
+    if (!$("clave").value){ $("clave").focus(); return; }
+    c.textContent = ""; c.appendChild(nodo("p", null, "Buscando…"));
+    mandar({ hacer:"ver" })
+      .then(function(j){
+        $("colaInfo").textContent = j.conAcceso + " cuentas con acceso";
+        c.textContent = "";
+        if (!j.pedidos.length){ c.appendChild(nodo("p", null, "No hay nada esperando.")); return; }
+        var ul = nodo("ul", "lista");
+        j.pedidos.forEach(function(p){
+          var li = nodo("li"); var f = nodo("div", "fila");
+          var d = nodo("div"); d.style.flex = "1";
+          d.appendChild(nodo("b", null, p.nombre + "  ·  @" + p.usuario));
+          d.appendChild(nodo("span", null, "Operación: " + p.refer +
+            (p.monto ? "   ·   dice haber mandado " + p.monto : "")));
+          d.appendChild(nodo("span", null, cuando(p.creado)));
+          f.appendChild(d);
+          var bots = nodo("div", "bots"); bots.style.marginTop = "0";
+          var ok = nodo("button", "bt p", "Aprobar"); ok.type = "button";
+          var no = nodo("button", "bt", "Rechazar"); no.type = "button";
+          ok.addEventListener("click", function(){
+            ok.disabled = no.disabled = true;
+            mandar({ hacer:"aprobar", id:p.id }).then(verCola)
+              .catch(function(e){ decir(e.message, true); });
+          });
+          no.addEventListener("click", function(){
+            if (!confirm("¿Rechazar el pedido de @" + p.usuario + "?")) return;
+            mandar({ hacer:"rechazar", id:p.id }).then(verCola)
+              .catch(function(e){ decir(e.message, true); });
+          });
+          bots.appendChild(ok); bots.appendChild(no);
+          f.appendChild(bots);
+          li.appendChild(f); ul.appendChild(li);
+        });
+        c.appendChild(ul);
+      })
+      .catch(function(e){ c.textContent = ""; c.appendChild(nodo("p", null, e.message)); });
+  }
+  $("verCola").addEventListener("click", verCola);
 })();
 </script>
 </body>

@@ -78,6 +78,29 @@ pasaron a contestar 404 — incluidas las de cobro, que ya andaban.
 El despliegue no avisa. Simplemente deja de decir «Compiled Worker
 successfully». Si falta esa línea, algo está mal.
 
+## En pesos la verificación es a mano, y no por vagancia
+
+**Ninguna billetera que pueda usar un menor de edad en Argentina entrega
+credenciales de cobro.** Mercado Pago abre cuentas desde los 13 con permiso de
+un adulto y deja **recibir** transferencias, pero no vender: sin Checkout Pro no
+hay token, no hay API, no hay aviso automático. Prex lo mismo. Así que alguien
+tiene que mirar el comprobante, y eso no se arregla con código.
+
+Lo que sí se arregla con código es que mirarlo cueste dos toques:
+
+1. El que transfirió deja el **número de operación** en la pantalla de
+   colaborar. Eso no le da nada: lo pone en una cola.
+2. En `/admin` aparece el pedido con el nombre, el número y cuánto dice haber
+   mandado.
+3. **Aprobar habilita la cuenta al instante.** No hay que mandarle un código ni
+   escribirle por WhatsApp.
+
+Un índice único parcial (`WHERE estado = 'espera'`) impide dos pedidos abiertos
+de la misma persona: insistir no acelera nada y sólo llena la cola.
+
+El acceso queda pegado a la **cuenta**, así que entrar después desde otro
+teléfono ya lo trae.
+
 ## Ningún pago se pierde, aunque cierren la pestaña
 
 Al principio el acceso se daba cuando el que pagaba **volvía** al sitio con el

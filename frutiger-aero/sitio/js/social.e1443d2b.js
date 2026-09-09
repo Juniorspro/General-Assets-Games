@@ -373,6 +373,47 @@ function formularioPublicar(){
   });
 }
 
+
+/* ------------------------------------------------ «ya transferí»
+   La única verificación posible en pesos es que una persona mire el
+   comprobante: ninguna billetera para menores de edad da credenciales de
+   cobro. Lo que sí se puede es que eso no cueste una conversación: el que
+   transfirió deja el número acá, queda en una cola, y se resuelve de un botón.
+
+   Este formulario NO da acceso. Sólo pide turno. */
+function engancharReclamo(){
+  var b = $("rc-btn"); if (!b) return;
+  var av = $("rc-aviso");
+  function decir(t, mal){
+    av.hidden = false; av.style.color = mal ? "#a3231b" : "#0e5a2c"; av.textContent = t;
+  }
+  b.addEventListener("click", function(){
+    if (!sesion){
+      decir("Primero entrá con tu cuenta: el acceso queda pegado a ella.", true);
+      setTimeout(verPerfil, 1200);
+      return;
+    }
+    var refer = ($("rc-refer").value || "").trim();
+    if (refer.length < 4){ $("rc-refer").focus(); decir("Falta el número de operación.", true); return; }
+    b.disabled = true; decir("Mandando…", false);
+    pedir("reclamo", { method:"POST", body: JSON.stringify({
+      medio:"transferencia", refer: refer, monto: $("rc-monto").value }) })
+      .then(function(j){
+        b.disabled = false;
+        if (j.ya){ decir("Ya tenías el acceso habilitado.", false); return; }
+        decir("Listo, quedó pedido. Te lo habilitamos apenas lo miremos.", false);
+        $("rc-refer").value = "";
+      })
+      .catch(function(e){ b.disabled = false; decir(e.message, true); });
+  });
+
+  /* si ya hay un pedido esperando, se dice, para que no lo mande de nuevo */
+  if (sesion) pedir("reclamo").then(function(j){
+    if (j.reclamo && j.reclamo.estado === "espera")
+      decir("Tenés un pedido esperando desde " + cuando(j.reclamo.creado) + ".", false);
+  }).catch(function(){});
+}
+
 /* ------------------------------------------------------------ enganches */
 document.addEventListener("click", function(e){
   var a = e.target.closest("[data-perfil]");
@@ -428,6 +469,7 @@ if (!$("escritorio").hidden) arrancar();
 
 function arrancar(){
   pintarBarra();
+  engancharReclamo();
   if (sesion){
     /* el pase puede haber vencido o la cuenta estar suspendida: se pregunta */
     pedir("cuenta").then(function(j){
