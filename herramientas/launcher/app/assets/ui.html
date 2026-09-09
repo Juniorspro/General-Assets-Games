@@ -92,7 +92,15 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
 #fondo{position:fixed;inset:0;z-index:0;
   background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
   background-size:cover;background-position:center;
-  transform:scale(1.06);will-change:transform;
+  transform:scale(1.06);
+  /* ── EL `will-change` APUNTABA A LA PROPIEDAD CONGELADA ──
+     Durante el deslizamiento lo que se mueve es `scale` (el `.hondo`), y la
+     deriva —que es la que anima `transform`— está PAUSADA desde la vuelta 135.
+     Medido a los 120 ms de abrir: `will-change:transform`,
+     `animation-play-state:paused`, `scale:1.06597`. O sea que el aviso estaba
+     puesto sobre lo único que no se movía y faltaba sobre lo único que sí.
+     `scale` es una propiedad aparte de `transform` en CSS, no un valor suyo. */
+  will-change:transform,scale;
   /* ── LA FOTO TIENE QUE FRENAR CON LA HOJA, NO 80 ms DESPUÉS ──
      Estaba en .42s contra los .34s del cajón: al cerrar, la foto seguía
      escalándose ochenta milisegundos después de que la hoja ya había
@@ -108,8 +116,13 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    deshaciendo— durante todo el deslizamiento. Al abrir es al revés: se pausa en
    el primer cuadro. Era la asimetría más grande entre subir y bajar y no la
    había visto nadie. */
+/* `abriendo` entra por lo mismo que `cajMueve`: durante esos 170 ms el
+   launcher entero se escala hacia el icono, así que la foto —414.390 px— tendría
+   DOS fuentes de transform a la vez, la deriva y el zoom. Medido con `anims()`
+   a los 80 ms de `body.abriendo`: la deriva seguía corriendo. */
 body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,
-body.fg #fondo.ok,body.bienv #fondo.ok{animation-play-state:paused}
+body.fg #fondo.ok,body.bienv #fondo.ok,
+body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
 /* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
    Estaba escrito como `transform:scale(1.14)`, y una animación sobre
    `transform` PISA la declaración: el acercamiento no corría nunca. Y llevaba
@@ -1148,7 +1161,27 @@ body.arrastrando .ap{transition:none}
    El launcher entero se va hacia el icono que se tocó —de ahí `--zx`/`--zy`— y
    el icono crece y se apaga. Es la animación que dice «esto se convirtió en
    aquello» en vez de «la pantalla parpadeó». */
-body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{
+/* ── EL DOCK SE ESTABA YENDO AL DOBLE DE VELOCIDAD QUE EL LAUNCHER ──
+   `#dock` es HIJO de `#capa` (mirá el marcado), así que ya se escala con él:
+   nombrarlo aparte lo escalaba DOS VECES. Medido a mitad de la animación, en
+   el mismo instante: `#capa` 412 → 450,6 px (×1,094) y `#dock` 384 → 459,4
+   (×1,196). O sea que la fila de abajo salía volando más rápido que la pantalla
+   en la que está apoyada — y encima costaba una segunda capa animada de 40.483
+   px para hacerlo mal.
+
+   ── Y EL CAJÓN SE ANIMABA CERRADO ──
+   Abriendo una app DESDE EL ESCRITORIO, `#cajon` está en `translateY(100%)`: no
+   se ve un solo píxel suyo. Igual se le escalaba y se le fundía la opacidad
+   durante 170 ms, y mide 389.198 px — o sea el objeto más caro de la animación,
+   invisible. Ahora sólo entra cuando el cajón está puesto (`body.caj`), que es
+   justamente cuando SÍ es lo que se ve. Medido con `anims()` a los 80 ms:
+   7 animaciones vivas → 4, y las dos que se van son las dos más grandes. */
+body.abriendo #capa,body.abriendo.caj #cajon{
+  transform-origin:var(--zx,50%) var(--zy,50%);
+  transition:transform .17s ease-in,opacity .17s ease-in;
+  transform:scale(1.14);opacity:0}
+/* el A/B en el mismo binario: `__A.anim(true)` devuelve las tres capas viejas */
+body.animViejaV.abriendo #dock,body.animViejaV.abriendo #cajon{
   transform-origin:var(--zx,50%) var(--zy,50%);
   transition:transform .17s ease-in,opacity .17s ease-in;
   transform:scale(1.14);opacity:0}
@@ -1157,7 +1190,9 @@ body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{
 
 /* ── LA HOJA DE UNA CARPETA CRECE DESDE SU BALDOSA ──
    El punto de origen lo escribe `carpOrigen` midiendo dónde está el icono. */
-#carp{will-change:transform,opacity}
+/* cerrada no hay nada que sostener: es la regla de la vuelta 136 aplicada
+   donde faltaba. Medido en el escritorio, `capas()` la contaba con 3.810 px. */
+#carp.on{will-change:transform,opacity}
 
 /* ── EL WIDGET ENTRA ──
    Una tarjeta que aparece de golpe empuja la reja de un cuadro al otro. */
@@ -11564,6 +11599,48 @@ window.__A = {
   },
   /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
      en el primer cuadro del cierre */
+  /* Devuelve las tres capas viejas del zoom de abrir app y la deriva sin
+     pausar. SE LLAMA `animVieja` Y NO `anim` PORQUE `anim()` YA EXISTÍA
+     doscientas líneas más abajo: en un objeto literal gana la última, así que
+     la mía no existía y el A/B contestaba con los datos de otra sonda sin
+     fallar. Van tres veces en este repo (`reja`, `pack`, `aguaCosto`). */
+  animVieja(v){ document.body.classList.toggle('animViejaV', !!v);
+           return !document.body.classList.contains('animViejaV'); },
+  /* ── EL INVENTARIO DE ANIMACIONES ──
+     `capas()` cuenta lo que el compositor SOSTIENE; esto cuenta lo que
+     RECALCULA. Devuelve cada animación viva con su objetivo, qué propiedades
+     toca y si esas propiedades se pueden componer en la GPU: todo lo que no
+     sea `transform`, `opacity`, `filter` o `scale`/`rotate`/`translate` obliga
+     a rehacer estilo, layout o pintado en cada cuadro, y ésas son las caras.
+     `px` es cuánto mide su objetivo, que es lo que decide si una animación
+     compuesta también cuesta una textura. */
+  anims(){
+    const COMP = new Set(['transform','opacity','filter','scale','rotate',
+                          'translate','backdrop-filter','offset-distance']);
+    const l = [];
+    for (const a of document.getAnimations()){
+      if (a.playState !== 'running') continue;
+      const e = a.effect && a.effect.target; if (!e) continue;
+      const props = new Set();
+      try { for (const k of a.effect.getKeyframes())
+              for (const p of Object.keys(k))
+                if (!['offset','computedOffset','easing','composite'].includes(p))
+                  props.add(p.replace(/[A-Z]/g, c => '-' + c.toLowerCase())); } catch(_){}
+      const r = e.getBoundingClientRect();
+      const t = a.effect.getTiming();
+      l.push({ q: (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string'
+                 ? '.' + e.className.trim().split(/\s+/).join('.') : ''),
+               k: a.animationName || (a.transitionProperty ? 'tr:' + a.transitionProperty : '?'),
+               p: [...props].join(','),
+               dur: t.duration, inf: t.iterations === Infinity,
+               px: Math.round(r.width * r.height),
+               caro: [...props].some(p => !COMP.has(p)) });
+    }
+    l.sort((a, b) => b.px - a.px);
+    const inf = l.filter(x => x.inf), caras = l.filter(x => x.caro);
+    return { n: l.length, infinitas: inf.length, caras: caras.length,
+             pxInf: inf.reduce((a, b) => a + b.px, 0), lista: l };
+  },
   capaPeso(){
     const capa = $('#capa');
     const todos = capa.querySelectorAll('*');

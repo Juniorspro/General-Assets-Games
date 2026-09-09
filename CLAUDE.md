@@ -281,6 +281,100 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima séptima vuelta (2026-09-09): **AERO** — abrir una app animaba siete cosas y dos no se veían
+
+Pedido: *"elimina toda faz de lag que generen las animaciones"*.
+
+#### PRIMERO HUBO QUE PODER CONTARLAS: `anims()`
+
+`capas()` de la vuelta anterior cuenta lo que el compositor **sostiene**; faltaba contar lo que
+**recalcula**. `anims()` enumera cada animación viva con su objetivo, qué propiedades toca, si son
+componibles —todo lo que no sea `transform`, `opacity`, `filter` o `scale`/`rotate`/`translate`
+obliga a rehacer estilo, layout o pintado en cada cuadro— y **cuánto mide su objetivo**, que es lo
+que decide si una animación compuesta cuesta además una textura.
+
+Y lo primero que contestó fue que **no hay una sola animación cara en todo el launcher**: `caras: 0`
+en los seis estados barridos. El escritorio quieto tiene **una** (la deriva) y el cajón asentado
+**ninguna**. O sea que el problema no estaba en un `transition:width` escondido: estaba en cuántas
+cosas grandes se mueven a la vez y en si se ven.
+
+#### ABRIR UNA APP MOVÍA 2.051.550 PÍXELES Y 1.273.198 NO SE VEÍAN
+
+Es el gesto más frecuente de un launcher y era el más caro. Medido a los 80 ms, desde el escritorio:
+
+| | animaciones vivas | píxeles animados | MB a densidad 3 |
+|---|---|---|---|
+| control | **7** | **2.051.550** | **70,4** |
+| **ahora** | **2** | **778.352** | **26,7** |
+
+**−62 %**, y las cinco que se van son tres defectos distintos:
+
+1. **EL DOCK SE IBA AL DOBLE DE VELOCIDAD QUE EL LAUNCHER.** `#dock` es **hijo de `#capa`**, así que
+   ya se escala con él; nombrarlo aparte en la regla lo escalaba **dos veces**. Medido en el mismo
+   instante: `#capa` 412 → 450,6 px (**×1,094**) y `#dock` 384 → **459,4 (×1,196)**. La fila de abajo
+   salía volando más rápido que la pantalla en la que está apoyada, y encima costaba una segunda
+   capa animada de 40.483 px para hacerlo mal. Fotografiado con la transición estirada a cuatro
+   segundos, en el control los cuatro iconos del dock salen **cortados por el borde de abajo**.
+2. **EL CAJÓN CERRADO SE ANIMABA IGUAL.** Abriendo una app desde el escritorio, `#cajon` está en
+   `translateY(100%)`: no se ve un solo píxel suyo. Igual se le escalaba y se le fundía la opacidad
+   durante 170 ms, y mide **389.198 px** — el objeto más caro de la animación, invisible. Y no era
+   sólo costo: en la misma foto del control, **la barra de búsqueda del cajón sube al cuadro**,
+   porque escalar un elemento que está justo debajo del borde lo mete adentro. Ahora sólo entra con
+   `body.caj` puesto, y verificado que **desde el cajón sí se anima** (`#cajon.hor.on` en la lista).
+3. **Y LA DERIVA DE LA FOTO SEGUÍA CORRIENDO.** Durante esos 170 ms el launcher entero se escala
+   hacia el icono, así que `#fondo` —414.390 px— tenía **dos fuentes de transform a la vez**. Es
+   exactamente la asimetría que la vuelta 135 arregló para el cajón, en el otro camino. `abriendo`
+   entra en la lista de pausa.
+
+#### EL `will-change` DE LA FOTO APUNTABA A LA PROPIEDAD CONGELADA
+
+Lo destapó el inventario mirando el deslizamiento en vez del estado. Durante los 340 ms lo que se
+mueve en `#fondo` es **`scale`** (el `.hondo`), y la deriva —que es la que anima `transform`— está
+**pausada desde la vuelta 135**. Medido a los 120 ms de abrir: `will-change:transform`,
+`animation-play-state:paused`, `scale:1.06597`. O sea que el aviso al compositor estaba puesto sobre
+lo único que no se movía y faltaba sobre lo único que sí — y **`scale` es una propiedad aparte de
+`transform` en CSS, no un valor suyo**, así que el `will-change` no lo cubría. Queda
+`will-change:transform,scale`.
+
+#### Y LA HOJA DE CARPETA SOSTENÍA UNA CAPA CERRADA
+
+`#carp{will-change:transform,opacity}` era permanente, y una carpeta está cerrada el 99 % del
+tiempo. Es la regla de la vuelta 136 aplicada donde faltaba: el escritorio pasa de **5 capas a 4**.
+
+#### DOS DEFECTOS DE MEDICIÓN, Y EL SEGUNDO YA VA POR CUARTA VEZ
+
+1. **EL BANCO ARRANCA EN LA BIENVENIDA, y `body.bienv` pausa la deriva.** Las tres primeras corridas
+   del inventario devolvieron **`n: 0` en todos los estados** y parecía que el launcher no tenía una
+   sola animación. No fallaba: contestaba. Los planes tienen que empezar por `__A.bvCerrar()`.
+2. **EL A/B SE LLAMABA `anim` Y `anim()` YA EXISTÍA** doscientas líneas más abajo. En un objeto
+   literal gana la última, así que mi interruptor no existía y el control contestaba con los datos de
+   otra sonda: `__A.anim(true)` devolvía `[object Object]` y el `body` quedaba sin la clase. La firma
+   fue que **el control y el arreglo daban el mismo número**. Van cuatro veces en este repo (`reja`,
+   `pack`, `aguaCosto`, y ésta). Se llama `animVieja`.
+
+#### LO QUE SE MIDIÓ Y NO SE TOCÓ
+
+- **El deslizamiento no mejora en el banco y no se afirma que mejore.** Seis corridas de
+  `cajDesliza`, tres con el zoom de la foto y tres sin él: **mediana 16,6-16,7 ms en las seis**. El
+  banco dibuja por software y los huecos de `requestAnimationFrame` van a vsync pase lo que pase, así
+  que de la re-rasterización del `scale` no se puede decir nada desde acá. Por eso la vuelta corrige
+  el `will-change` —que es un defecto que se lee— y **no saca el acercamiento**, que es un efecto
+  buscado y cuyo costo real no está medido.
+- **`transition:all`, `transition:width` y compañía se buscaron y son inofensivas**: las doce que hay
+  están sobre un punto de página de 6 px, el pomo del riel de 4 px y el relleno de un deslizador. Nada
+  de eso aparece en `anims()` durante un gesto grande.
+
+#### MEDIDO AL CERRAR
+
+Abrir app: **7 animaciones y 70,4 MB → 2 y 26,7**, con el dock y el escritorio escalando al **mismo
+factor (×1,114 los dos)** donde antes iban a 1,196 y 1,094. Desde el cajón, el cajón sigue animándose.
+Escritorio **4 capas / 35,5 MB** (era 5) con `will-change:transform, scale`. Cajón abierto **2 capas /
+13,4 MB · 1 vidrio · 9.748 px** y riel de 17 letras, o sea la vuelta 136 intacta. Cerrado: cuerpo
+limpio, agua visible, los dos `will-change` devueltos, y una onda al tocar el escritorio. Gesto arriba
+abre el cajón y abajo el centro —**16 · 1 · 10 · 4**— con **0 ondas de agua** en los dos. Mascota 23
+huesos y 5.541 triángulos con el bucle parado. `letra('S')` mirando la S. `window.__errs` **vacío en
+las nueve corridas**.
+
 ### Centésima trigésima sexta vuelta (2026-09-09): **AERO** — cincuenta megas de textura sostenida para tapar con una hoja opaca
 
 Reporte, con dos capturas del cajón abierto: *"estando ahí se laguea un montón"*.
