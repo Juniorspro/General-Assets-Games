@@ -51,6 +51,16 @@ export const onRequestPost = async ({ request, env }) => {
   if (refer.length < 4)
     return json({ error: "Poné el número de operación del comprobante." }, 400);
 
+  /* EL NOMBRE DEL QUE TRANSFIRIO, y no el del perfil: son dos cosas distintas
+     y confundirlas es no poder cruzar nada. En el resumen del banco figura el
+     titular de la cuenta que mando la plata, que puede llamarse cualquier cosa
+     y no tiene por que parecerse al «@pepe123» del sitio. Sin esto, un pedido
+     de cien pesos entre veinte transferencias de cien pesos es imposible de
+     identificar. */
+  const titular = limpio(c.titular, 70);
+  if (titular.length < 5 || titular.indexOf(" ") < 1)
+    return json({ error: "Poné tu nombre y apellido, igual que en la transferencia." }, 400);
+
   const moneda = c.moneda === "USD" ? "USD" : "ARS";
   const monto = aNumero(c.monto);
   if (!(monto > 0))
@@ -83,9 +93,9 @@ export const onRequestPost = async ({ request, env }) => {
   }
 
   await env.DB.prepare(
-    "INSERT INTO aportes (usuario, moneda, monto, refer, nota, foto, foto_tipo, creado) " +
-    "VALUES (?,?,?,?,?,?,?,?)")
-    .bind(yo.u, moneda, monto, refer, limpio(c.nota, 200), foto, tipo, Date.now()).run();
+    "INSERT INTO aportes (usuario, moneda, monto, refer, titular, nota, foto, foto_tipo, creado) " +
+    "VALUES (?,?,?,?,?,?,?,?,?)")
+    .bind(yo.u, moneda, monto, refer, titular, limpio(c.nota, 200), foto, tipo, Date.now()).run();
 
   /* ¿llegó al piso de SU moneda? */
   const piso = PISOS(env)[moneda];
@@ -112,5 +122,10 @@ export const onRequestGet = async ({ request, env }) => {
     "SELECT moneda, estado, COALESCE(SUM(monto),0) AS t, COUNT(*) AS n, MAX(creado) AS ult " +
     "FROM aportes WHERE usuario = ? AND estado IN ('juntando','espera') " +
     "GROUP BY moneda, estado").bind(yo.u).all();
-  return json({ tramos: results, pisos: PISOS(env) });
+  /* el titular de la vez pasada, para no hacerlo escribir el nombre de nuevo
+     en cada aporte */
+  const ult = await env.DB.prepare(
+    "SELECT titular FROM aportes WHERE usuario = ? AND titular <> '' " +
+    "ORDER BY creado DESC LIMIT 1").bind(yo.u).first();
+  return json({ tramos: results, pisos: PISOS(env), titular: (ult && ult.titular) || "" });
 };

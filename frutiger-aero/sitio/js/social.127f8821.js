@@ -404,15 +404,24 @@ function engancharReclamo(){
       setTimeout(verPerfil, 1200);
       return;
     }
+    /* el nombre del que transfirió, no el del perfil: en el comprobante figura
+       el titular de la cuenta y es lo único que se puede cruzar a mano. */
+    var titular = ($("rc-titular").value || "").trim().replace(/\s+/g, " ");
+    if (titular.length < 5 || titular.indexOf(" ") < 1){
+      $("rc-titular").focus();
+      decir("Poné tu nombre y apellido, igual que en la transferencia.", true); return;
+    }
     var refer = ($("rc-refer").value || "").trim();
     if (refer.length < 4){ $("rc-refer").focus(); decir("Falta el número de operación.", true); return; }
     b.disabled = true; decir("Mandando…", false);
     pedir("reclamo", { method:"POST", body: JSON.stringify({
+      titular: titular,
       refer: refer, monto: $("rc-monto").value, moneda: $("rc-moneda").value,
       foto: fotoLista }) })
       .then(function(j){
         b.disabled = false;
         $("rc-refer").value = ""; $("rc-monto").value = "";
+        /* el titular queda puesto: el que manda en dos tramos es la misma persona */
         fotoLista = null; $("rc-previa").hidden = true;
         if (j.ya){ decir("Ya tenías el acceso habilitado.", false); return; }
         if (j.enCola){
@@ -443,6 +452,7 @@ function engancharReclamo(){
     pedir("reclamo").then(function(j){
       var m = $("rc-moneda").value;
       var piso = j.pisos[m];
+      if (j.titular && !$("rc-titular").value) $("rc-titular").value = j.titular;
       $("rc-piso").textContent = plataDe(m, piso);
       var esperando = j.tramos.filter(function(t){ return t.estado === "espera"; })[0];
       if (esperando){

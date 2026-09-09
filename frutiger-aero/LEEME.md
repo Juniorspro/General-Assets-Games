@@ -100,9 +100,15 @@ revisión. Los pisos se cambian en `ACCESO_MINIMO_ARS` y `ACCESO_MINIMO_USD`.
 
 ## El circuito de acceso, de punta a punta
 
-1. La persona transfiere y aprieta **«Ya transferí»**. Deja el número de
-   operación, cuánto mandó, **la captura del comprobante** y, si quiere, su
-   correo. Eso no le da nada: pide turno.
+1. La persona transfiere y aprieta **«Ya transferí»**. Deja **su nombre y
+   apellido**, el número de operación, cuánto mandó y **la captura del
+   comprobante**. Eso no le da nada: pide turno.
+
+   El nombre es obligatorio y es *el del que transfirió*, no el del perfil: en
+   el comprobante figura el titular de la cuenta, y es lo único que se puede
+   cruzar contra lo que entró —el `@usuario` del sitio no aparece en ningún
+   banco. Si alguien manda dos tramos con nombres distintos, la cola lo avisa
+   en la tarjeta en vez de dejarlo pasar callado.
 2. En **`/solicitudes`** aparece el pedido con la imagen. Se compara con lo que
    entró.
 3. **Aprobar** habilita la cuenta, **manda el aviso** y **borra la imagen**.

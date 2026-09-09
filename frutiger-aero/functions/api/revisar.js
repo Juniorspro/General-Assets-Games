@@ -51,7 +51,7 @@ export const onRequestPost = async ({ request, env }) => {
      hacer revisar algo que no llega al piso es hacer trabajar al pedo. */
   if (c.hacer === "ver") {
     const { results } = await env.DB.prepare(
-      "SELECT a.id, a.moneda, a.monto, a.refer, a.nota, a.creado, a.foto_tipo, " +
+      "SELECT a.id, a.moneda, a.monto, a.refer, a.titular, a.nota, a.creado, a.foto_tipo, " +
       "       u.id AS uid, u.usuario, u.nombre " +
       "FROM aportes a JOIN usuarios u ON u.id = a.usuario " +
       "WHERE a.estado = 'espera' ORDER BY u.id, a.creado ASC LIMIT 200").all();
@@ -61,14 +61,17 @@ export const onRequestPost = async ({ request, env }) => {
     for (const a of results) {
       if (!indice[a.uid]) {
         indice[a.uid] = { uid: a.uid, usuario: a.usuario, nombre: a.nombre,
-                          moneda: a.moneda, total: 0, desde: a.creado, aportes: [] };
+                          titular: a.titular || "", moneda: a.moneda, total: 0,
+                          desde: a.creado, aportes: [] };
         porGente.push(indice[a.uid]);
       }
       const g = indice[a.uid];
       g.total += a.monto;
       g.desde = Math.min(g.desde, a.creado);
-      g.aportes.push({ id: a.id, monto: a.monto, refer: a.refer, nota: a.nota,
-                       creado: a.creado, foto: !!a.foto_tipo });
+      if (a.titular && a.titular !== g.titular && g.titular)
+        g.varios = true;      /* mando con dos nombres distintos: hay que mirar */
+      g.aportes.push({ id: a.id, monto: a.monto, refer: a.refer, titular: a.titular,
+                       nota: a.nota, creado: a.creado, foto: !!a.foto_tipo });
     }
 
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM usuarios WHERE acceso = 1").first();

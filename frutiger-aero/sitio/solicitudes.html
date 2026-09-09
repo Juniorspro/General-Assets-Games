@@ -150,7 +150,8 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
       .then(function(j){
         $("vEntrar").hidden = true; $("vCola").hidden = false;
         $("tituloCola").textContent = "Solicitudes — entraste como @" + j.yo;
-        $("info").textContent = j.conAcceso + " cuentas con acceso";
+        $("info").textContent = j.conAcceso + " cuentas con acceso" +
+          (j.juntando ? "  ·  " + j.juntando + " juntando todavía" : "");
         var c = $("cola"); c.textContent = "";
         if (!j.pedidos.length){ c.appendChild(nodo("p", null, "No hay nada esperando.")); return; }
         j.pedidos.forEach(function(p){ c.appendChild(tarjeta(p)); });
@@ -161,29 +162,74 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
       });
   }
 
+  function plata(m, n){
+    return (m === "USD" ? "US$ " : "$ ") +
+      Number(n).toLocaleString("es-AR", {maximumFractionDigits: m === "USD" ? 2 : 0});
+  }
+
+  /* UNA TARJETA ES UNA PERSONA, no un comprobante: quien mandó cincuenta dos
+     veces es un solo pedido de cien con dos capturas, y se resuelve entero.
+
+     Arriba va EL NOMBRE DEL TITULAR, no el del perfil. En el comprobante figura
+     el titular de la cuenta que transfirió, y es lo único que se puede cruzar
+     contra lo que entró: el @usuario del sitio no aparece en ningún banco. */
   function tarjeta(p){
     var d = nodo("div", "ped");
+
     var cab = nodo("div", "cab");
     var t = nodo("div");
-    t.appendChild(nodo("b", null, p.nombre + "  ·  @" + p.usuario));
-    t.appendChild(nodo("span", null, cuando(p.creado) + (p.correo ? "  ·  " + p.correo : "")));
+    t.appendChild(nodo("b", null, p.titular || "(sin nombre)"));
+    t.appendChild(nodo("span", null,
+      p.nombre + "  ·  @" + p.usuario + "  ·  " + cuando(p.desde)));
     cab.appendChild(t);
+    var tot = nodo("div", null, plata(p.moneda, p.total));
+    tot.style.cssText = "margin-left:auto;font-weight:700;font-size:16px;white-space:nowrap";
+    cab.appendChild(tot);
     d.appendChild(cab);
 
     var dd = nodo("div", "dd");
-    var l1 = nodo("div"); l1.appendChild(nodo("i", null, "Operación "));
-    l1.appendChild(nodo("code", null, p.refer)); dd.appendChild(l1);
-    if (p.monto){ var l2 = nodo("div"); l2.appendChild(nodo("i", null, "Dice haber mandado "));
-                  l2.appendChild(document.createTextNode(p.monto)); dd.appendChild(l2); }
-    if (p.nota) dd.appendChild(nodo("div", null, p.nota));
-    if (p.foto_tipo){
-      var im = nodo("img", "comp"); im.alt = "Comprobante";
-      /* la imagen también pide el pase: la sirve la misma función */
-      fetch("api/revisar?foto=" + p.id, { headers:{ authorization:"Bearer " + pase } })
-        .then(function(r){ return r.ok ? r.blob() : null; })
-        .then(function(b){ if (b) im.src = URL.createObjectURL(b); });
-      dd.appendChild(im);
+
+    /* dos nombres distintos en un mismo pedido: puede ser que se corrigió, o
+       que está juntando comprobantes ajenos. Lo decide quien mira, pero tiene
+       que verlo. */
+    if (p.varios){
+      var ojo = nodo("div", null,
+        "⚠ Mandó los comprobantes con nombres distintos. Fijate cada uno abajo.");
+      ojo.style.cssText = "background:#fff3cd;border:1px solid #d9b350;color:#6b4c00;" +
+                          "border-radius:4px;padding:8px 10px;font-size:13.5px";
+      dd.appendChild(ojo);
     }
+
+    p.aportes.forEach(function(a){
+      var caja = nodo("div");
+      caja.style.cssText = "border-top:1px dashed #d5e0eb;padding-top:9px;display:grid;gap:5px";
+      if (p.aportes.length === 1) caja.style.borderTop = "0";
+
+      var l1 = nodo("div");
+      l1.appendChild(nodo("i", null, "Operación "));
+      l1.appendChild(nodo("code", null, a.refer));
+      l1.appendChild(document.createTextNode("  " + plata(p.moneda, a.monto)));
+      caja.appendChild(l1);
+
+      /* el nombre de cada comprobante, cuando difiere del de arriba */
+      if (a.titular && a.titular !== p.titular){
+        var l2 = nodo("div");
+        l2.appendChild(nodo("i", null, "A nombre de "));
+        l2.appendChild(document.createTextNode(a.titular));
+        caja.appendChild(l2);
+      }
+      if (a.nota) caja.appendChild(nodo("div", null, a.nota));
+
+      if (a.foto){
+        var im = nodo("img", "comp"); im.alt = "Comprobante";
+        /* la imagen también pide el pase: la sirve la misma función */
+        fetch("api/revisar?foto=" + a.id, { headers:{ authorization:"Bearer " + pase } })
+          .then(function(r){ return r.ok ? r.blob() : null; })
+          .then(function(b){ if (b) im.src = URL.createObjectURL(b); });
+        caja.appendChild(im);
+      }
+      dd.appendChild(caja);
+    });
     d.appendChild(dd);
 
     var acc = nodo("div", "acc");
@@ -191,12 +237,13 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
     var no = nodo("button", "bt malo", "Rechazar"); no.type = "button";
     ok.addEventListener("click", function(){
       ok.disabled = no.disabled = true;
-      pedir("revisar", { hacer:"aprobar", id:p.id }).then(ver)
+      pedir("revisar", { hacer:"aprobar", uid:p.uid }).then(ver)
         .catch(function(e){ alert(e.message); ok.disabled = no.disabled = false; });
     });
     no.addEventListener("click", function(){
-      if (!confirm("¿Rechazar el pedido de @" + p.usuario + "? Le llega un aviso.")) return;
-      pedir("revisar", { hacer:"rechazar", id:p.id }).then(ver)
+      if (!confirm("¿Rechazar el pedido de " + (p.titular || "@" + p.usuario) +
+                   "? Le llega un aviso.")) return;
+      pedir("revisar", { hacer:"rechazar", uid:p.uid }).then(ver)
         .catch(function(e){ alert(e.message); });
     });
     acc.appendChild(ok); acc.appendChild(no);
