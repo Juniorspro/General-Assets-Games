@@ -381,9 +381,20 @@ function formularioPublicar(){
    transfirió deja el número acá, queda en una cola, y se resuelve de un botón.
 
    Este formulario NO da acceso. Sólo pide turno. */
+var fotoLista = null;
 function engancharReclamo(){
   var b = $("rc-btn"); if (!b) return;
   var av = $("rc-aviso");
+
+  var f = $("rc-foto");
+  if (f) f.addEventListener("change", function(){
+    var a = this.files && this.files[0];
+    if (!a) { fotoLista = null; $("rc-previa").hidden = true; return; }
+    achicar(a).then(function(d){
+      fotoLista = d;
+      $("rc-previa").src = d; $("rc-previa").hidden = false;
+    }).catch(function(){ fotoLista = null; });
+  });
   function decir(t, mal){
     av.hidden = false; av.style.color = mal ? "#a3231b" : "#0e5a2c"; av.textContent = t;
   }
@@ -397,7 +408,8 @@ function engancharReclamo(){
     if (refer.length < 4){ $("rc-refer").focus(); decir("Falta el número de operación.", true); return; }
     b.disabled = true; decir("Mandando…", false);
     pedir("reclamo", { method:"POST", body: JSON.stringify({
-      medio:"transferencia", refer: refer, monto: $("rc-monto").value }) })
+      medio:"transferencia", refer: refer, monto: $("rc-monto").value,
+      correo: $("rc-correo").value, foto: fotoLista }) })
       .then(function(j){
         b.disabled = false;
         if (j.ya){ decir("Ya tenías el acceso habilitado.", false); return; }
@@ -412,6 +424,78 @@ function engancharReclamo(){
     if (j.reclamo && j.reclamo.estado === "espera")
       decir("Tenés un pedido esperando desde " + cuando(j.reclamo.creado) + ".", false);
   }).catch(function(){});
+}
+
+
+/* ------------------------------------------------------------- avisos
+   Aprobar tiene que NOTIFICAR. Sin esto la persona pagó y le queda adivinar
+   cuándo volver a mirar, que es la peor parte de comprar en un lugar chico. */
+function verAvisos(){
+  var c = $("avisosLista"); c.textContent = "";
+  abrirVentana("v-avisos");
+  c.appendChild(nodo("p", null, "Cargando…"));
+  pedir("avisos").then(function(j){
+    c.textContent = "";
+    if (!j.avisos.length){
+      c.appendChild(nodo("p", null, "Todavía no hay avisos.")); return;
+    }
+    var ul = nodo("ul", "lista");
+    j.avisos.forEach(function(a){
+      var li = nodo("li"); var f = nodo("div", "fila");
+      var b = nodo("span", "bola");
+      b.style.background = a.tipo === "bueno"
+        ? "radial-gradient(circle at 32% 26%,#e8ffd9,#7cc242 45%,#3f7a17)"
+        : a.tipo === "malo"
+        ? "radial-gradient(circle at 32% 26%,#ffdcd4,#e0402a 45%,#9a1e0c)"
+        : "radial-gradient(circle at 32% 26%,#dff6ff,#57b8e8 45%,#1a6ea8)";
+      f.appendChild(b);
+      var d = nodo("div");
+      d.appendChild(nodo("b", null, a.texto));
+      d.appendChild(nodo("span", null, cuando(a.creado)));
+      f.appendChild(d); li.appendChild(f); ul.appendChild(li);
+    });
+    c.appendChild(ul);
+    pedir("avisos", { method:"POST", body:"{}" }).then(function(){
+      $("bsPunto").hidden = true;
+    }).catch(function(){});
+  }).catch(function(e){
+    c.textContent = ""; c.appendChild(nodo("p", null, e.message));
+  });
+}
+
+function mirarAvisos(){
+  if (!sesion) return;
+  pedir("avisos").then(function(j){
+    var n = j.sinLeer || 0;
+    $("bsPunto").hidden = !n;
+    $("bsPunto").textContent = n > 9 ? "9+" : String(n);
+    /* si le acaban de habilitar el acceso, que se note ya, sin recargar */
+    if (n) pedir("cuenta").then(function(k){
+      if (k.pase) document.dispatchEvent(new CustomEvent("hay-pase-de-cuenta", {detail:k.pase}));
+    }).catch(function(){});
+  }).catch(function(){});
+}
+
+/* achicar la captura antes de subirla: una foto de celular son 4 MB y lo que
+   hace falta es que se lea un número */
+function achicar(archivo){
+  return new Promise(function(listo, mal){
+    var lector = new FileReader();
+    lector.onerror = mal;
+    lector.onload = function(){
+      var im = new Image();
+      im.onerror = mal;
+      im.onload = function(){
+        var esc = Math.min(1, 1100 / Math.max(im.width, im.height));
+        var cv = document.createElement("canvas");
+        cv.width = Math.round(im.width * esc); cv.height = Math.round(im.height * esc);
+        cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+        listo(cv.toDataURL("image/jpeg", 0.72));
+      };
+      im.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
+  });
 }
 
 /* ------------------------------------------------------------ enganches */
@@ -459,6 +543,7 @@ document.addEventListener("keydown", function(e){ if (e.key === "Escape") $("caj
 $("bsMuro").addEventListener("click", function(){ abrirVentana("v-muro"); cargarMuro(); });
 $("bsPerfil").addEventListener("click", function(){ verPerfil(); });
 $("bsAjustes").addEventListener("click", function(){ abrirVentana("v-control"); });
+$("bsAvisos").addEventListener("click", verAvisos);
 $("bsInicio").addEventListener("click", function(e){ e.preventDefault(); scrollTo({top:0, behavior:"smooth"}); });
 $("irPublicar").addEventListener("click", formularioPublicar);
 $("muroMas").addEventListener("click", function(){ cargarMuro(true); });
@@ -470,6 +555,8 @@ if (!$("escritorio").hidden) arrancar();
 function arrancar(){
   pintarBarra();
   engancharReclamo();
+  mirarAvisos();
+  setInterval(mirarAvisos, 60000);
   if (sesion){
     /* el pase puede haber vencido o la cuenta estar suspendida: se pregunta */
     pedir("cuenta").then(function(j){

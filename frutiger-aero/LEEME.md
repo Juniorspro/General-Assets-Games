@@ -78,6 +78,48 @@ pasaron a contestar 404 — incluidas las de cobro, que ya andaban.
 El despliegue no avisa. Simplemente deja de decir «Compiled Worker
 successfully». Si falta esa línea, algo está mal.
 
+## El circuito de acceso, de punta a punta
+
+1. La persona transfiere y aprieta **«Ya transferí»**. Deja el número de
+   operación, cuánto mandó, **la captura del comprobante** y, si quiere, su
+   correo. Eso no le da nada: pide turno.
+2. En **`/solicitudes`** aparece el pedido con la imagen. Se compara con lo que
+   entró.
+3. **Aprobar** habilita la cuenta, **manda el aviso** y **borra la imagen**.
+4. A la persona le aparece el punto rojo en la campanita, sin recargar.
+
+### El administrador es una cuenta, no una clave compartida
+
+Una clave suelta escrita en cada pantalla no dice quién entró, no se le puede
+sacar a una sola persona, y si se filtra hay que cambiarla para todos. Ahora se
+entra con **el mismo usuario y contraseña que cualquiera**, y la cuenta lleva
+una marca que el servidor comprueba en cada llamada. La página no decide nada:
+sólo muestra lo que el servidor le deja ver.
+
+Para nombrar al primero se usa `CLAVE_ADMIN` una única vez, con la sesión
+abierta. Después no se toca más.
+
+### El comprobante se borra al resolver
+
+Va como BLOB —base64 pesa un tercio más por nada— y se achica en el navegador
+antes de subirlo: una foto de celular son 4 MB y lo único que hace falta es que
+se lea un número. **Al aprobar o rechazar, la imagen se borra.** Sin eso la base
+se llenaría de capturas de comprobantes ajenos, que es exactamente lo que no hay
+que guardar.
+
+El tamaño se vuelve a comprobar en el servidor: lo que valida el navegador no
+vale, porque el pedido se puede armar a mano sin pasar por la página.
+
+### El correo necesita un dominio, y no lo hay
+
+Los servicios de envío sólo dejan escribirle a cualquiera desde un dominio
+verificado; con un `.pages.dev` prestado no se puede verificar nada, y lo que
+salga de un remitente de prueba cae en spam. **Por eso el aviso dentro del sitio
+no es el plan B: es el que siempre corre.** El correo se suma encima el día que
+existan `RESEND_API_KEY` y `CORREO_DESDE`, sin tocar código. Si el envío falla,
+se traga el error: que no salga un mail no puede impedir que alguien reciba el
+acceso que pagó.
+
 ## En pesos la verificación es a mano, y no por vagancia
 
 **Ninguna billetera que pueda usar un menor de edad en Argentina entrega

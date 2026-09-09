@@ -29,10 +29,34 @@ export const onRequestPost = async ({ request, env }) => {
 
   const medio = ["transferencia", "paypal", "otro"].includes(c.medio) ? c.medio : "otro";
 
+  /* El comprobante llega achicado desde el navegador (ver social.js). Igual se
+     comprueba el tamanio ACA: lo que valida el cliente no vale, porque el
+     pedido se puede armar a mano sin pasar por la pagina. */
+  let foto = null, tipo = "";
+  if (typeof c.foto === "string" && c.foto.startsWith("data:image/")) {
+    const coma = c.foto.indexOf(",");
+    const cab = c.foto.slice(5, c.foto.indexOf(";"));
+    if (["image/jpeg", "image/png", "image/webp"].includes(cab)) {
+      const crudo = atob(c.foto.slice(coma + 1));
+      if (crudo.length <= 400 * 1024) {
+        foto = new Uint8Array(crudo.length);
+        for (let i = 0; i < crudo.length; i++) foto[i] = crudo.charCodeAt(i);
+        tipo = cab;
+      }
+    }
+  }
+
+  /* el correo es opcional y solo sirve para avisarle: se guarda en su cuenta */
+  const correo = limpio(c.correo, 90);
+  if (correo && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo))
+    await env.DB.prepare("UPDATE usuarios SET correo = ? WHERE id = ?").bind(correo, yo.u).run();
+
   try {
     await env.DB.prepare(
-      "INSERT INTO reclamos (usuario, medio, refer, monto, nota, creado) VALUES (?,?,?,?,?,?)")
-      .bind(yo.u, medio, refer, limpio(c.monto, 20), limpio(c.nota, 200), Date.now()).run();
+      "INSERT INTO reclamos (usuario, medio, refer, monto, nota, creado, foto, foto_tipo) " +
+      "VALUES (?,?,?,?,?,?,?,?)")
+      .bind(yo.u, medio, refer, limpio(c.monto, 20), limpio(c.nota, 200), Date.now(),
+            foto, tipo).run();
   } catch {
     /* el indice unico parcial no deja dos pedidos en espera de la misma
        persona: insistir no acelera nada y solo llena la cola */

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Solicitudes · Frutiger Aero</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="stylesheet" href="css/aero.d242cdaf.css">
+<!-- ==========================================================================
+     La cola de solicitudes. Entra sólo el administrador.
+
+     SE ENTRA CON USUARIO Y CONTRASEÑA, no con una clave compartida. Una clave
+     suelta escrita en cada pantalla no dice quién entró, no se le puede sacar a
+     una sola persona, y si se filtra hay que cambiarla para todos. Acá la
+     cuenta lleva una marca y el servidor la comprueba en cada llamada: esta
+     página no decide nada, sólo muestra lo que el servidor le deja ver.
+
+     La primera vez hay que nombrarse administrador con la clave vieja. Después
+     no se usa más.
+     ========================================================================== -->
+<style>
+body{display:grid; place-items:start center; padding:22px 12px 60px}
+.hoja{width:min(680px,100%); display:grid; gap:14px}
+label{display:block; font-size:13.5px; font-weight:600; margin-bottom:5px}
+input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:3px;
+  border:1px solid #b9c6d4; background:#fff; box-shadow:inset 0 1px 3px rgba(0,30,60,.14)}
+.ped{border:1px solid #c2d0de; border-radius:5px; margin-bottom:10px; overflow:hidden;
+  background:linear-gradient(180deg,#fff,#f4f8fc)}
+.ped .cab{display:flex; align-items:center; gap:10px; padding:10px 13px;
+  border-bottom:1px solid #e3ebf3; background:linear-gradient(180deg,#f7fbff,#e9f2fa)}
+.ped .cab b{font-size:15px} .ped .cab span{font-size:12.5px; color:var(--tinta-2)}
+.ped .dd{padding:12px 13px; display:grid; gap:6px; font-size:14.5px}
+.ped .dd i{font-style:normal; color:var(--tinta-2); font-size:12.5px;
+  letter-spacing:.14em; text-transform:uppercase}
+.ped code{font-family:ui-monospace,Menlo,monospace; font-size:16px; color:#0e3b5e;
+  background:#eaf6fb; padding:2px 8px; border-radius:3px; display:inline-block}
+.ped img.comp{max-width:100%; border-radius:4px; border:1px solid #b9c6d4; margin-top:4px}
+.ped .acc{display:flex; gap:8px; padding:10px 13px; border-top:1px solid #e3ebf3;
+  background:#f6fafd; flex-wrap:wrap}
+.bt.malo{border-color:#a83a24; color:#fff;
+  background:linear-gradient(180deg,#f0a08e 45%,#d6432a 45%,#a81e0c)}
+.bt.malo:hover{background:linear-gradient(180deg,#ffbcaa 45%,#e8543a 45%,#c02a14)}
+</style>
+</head>
+<body>
+<div class="hoja">
+
+  <section class="ventana" id="vEntrar">
+    <header class="titulo"><span class="txt">Entrar como administrador</span></header>
+    <div class="cuerpo">
+      <div class="grupo blanco" style="margin-top:0">
+        <p style="font-size:14px;margin:0 0 10px">Con <b>tu cuenta del sitio</b>,
+          la misma con la que publicás.</p>
+        <div><label for="us">Usuario</label><input id="us" autocomplete="username"></div>
+        <div style="margin-top:9px"><label for="cl">Contrase&#241;a</label>
+          <input id="cl" type="password" autocomplete="current-password"></div>
+        <div class="bots"><button class="bt p" type="button" id="btEntrar">Entrar</button></div>
+        <p id="avEntrar" style="margin-top:9px;font-size:13.5px" hidden></p>
+
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:13.5px;color:var(--tinta-2)">
+            Primera vez: nombrarme administrador</summary>
+          <p style="font-size:13.5px;margin:8px 0 0;color:var(--tinta-2)">
+            Entr&#225; arriba con tu cuenta y pon&#233; ac&#225; la clave vieja del sitio.
+            Se usa una sola vez.</p>
+          <div style="margin-top:8px"><input id="cla" type="password" placeholder="Clave del sitio"></div>
+          <div class="bots"><button class="bt" type="button" id="btNombrar">Nombrarme</button></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="ventana" id="vCola" hidden>
+    <header class="titulo">
+      <span class="txt" id="tituloCola">Solicitudes esperando</span>
+      <span class="mandos"><button type="button" class="cerrar" id="btSalir"
+        aria-label="Salir" style="width:auto;padding:0 10px;font-size:12px">Salir</button></span>
+    </header>
+    <div class="cuerpo">
+      <div class="grupo blanco" style="margin-top:0">
+        <p style="font-size:14px;margin:0">Compar&#225; cada n&#250;mero de operaci&#243;n
+          con lo que te entr&#243;. <b>Aprobar habilita la cuenta y le manda el aviso</b>
+          en el momento.</p>
+        <div class="bots">
+          <button class="bt p" type="button" id="btVer">Actualizar</button>
+          <span id="info" style="font-size:13.5px;color:var(--tinta-2);align-self:center"></span>
+        </div>
+      </div>
+      <div id="cola" style="margin-top:12px"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(i){ return document.getElementById(i); };
+  var pase = null;
+  try { var g = JSON.parse(localStorage.getItem("fa.sesion") || "null");
+        if (g && g.pase) pase = g.pase; } catch(e){}
+
+  function nodo(t, c, x){ var n = document.createElement(t); if (c) n.className = c;
+                          if (x != null) n.textContent = x; return n; }
+  function cuando(ms){
+    var d = Math.floor((Date.now()-ms)/60000);
+    if (d < 60) return "hace " + d + " min";
+    if (d < 1440) return "hace " + Math.floor(d/60) + " h";
+    return "hace " + Math.floor(d/1440) + " días";
+  }
+  function pedir(ruta, cuerpo){
+    var o = { headers:{} };
+    if (pase) o.headers.authorization = "Bearer " + pase;
+    if (cuerpo){ o.method = "POST"; o.headers["content-type"] = "application/json";
+                 o.body = JSON.stringify(cuerpo); }
+    return fetch("api/" + ruta, o).then(function(r){
+      return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || ("error " + r.status)); return j; }); });
+  }
+  function decir(el, t, mal){
+    var a = $(el); a.hidden = false; a.style.color = mal ? "#a3231b" : "#0e5a2c"; a.textContent = t;
+  }
+
+  $("btEntrar").addEventListener("click", function(){
+    decir("avEntrar", "Entrando…", false);
+    pedir("cuenta", { hacer:"entrar", usuario:$("us").value, clave:$("cl").value })
+      .then(function(j){
+        pase = j.pase;
+        try { localStorage.setItem("fa.sesion", JSON.stringify({pase:j.pase, yo:j.yo})); } catch(e){}
+        ver();
+      })
+      .catch(function(e){ decir("avEntrar", e.message, true); });
+  });
+  $("cl").addEventListener("keydown", function(e){ if (e.key === "Enter") $("btEntrar").click(); });
+
+  $("btNombrar").addEventListener("click", function(){
+    if (!pase){ decir("avEntrar", "Primero entrá con tu cuenta.", true); return; }
+    pedir("revisar", { hacer:"nombrarme", clave:$("cla").value })
+      .then(function(){ decir("avEntrar", "Listo, ya sos administrador.", false); ver(); })
+      .catch(function(e){ decir("avEntrar", e.message, true); });
+  });
+
+  $("btSalir").addEventListener("click", function(){
+    $("vCola").hidden = true; $("vEntrar").hidden = false;
+  });
+  $("btVer").addEventListener("click", ver);
+
+  function ver(){
+    pedir("revisar", { hacer:"ver" })
+      .then(function(j){
+        $("vEntrar").hidden = true; $("vCola").hidden = false;
+        $("tituloCola").textContent = "Solicitudes — entraste como @" + j.yo;
+        $("info").textContent = j.conAcceso + " cuentas con acceso";
+        var c = $("cola"); c.textContent = "";
+        if (!j.pedidos.length){ c.appendChild(nodo("p", null, "No hay nada esperando.")); return; }
+        j.pedidos.forEach(function(p){ c.appendChild(tarjeta(p)); });
+      })
+      .catch(function(e){
+        if (/administrador|sesión/i.test(e.message)){ $("vCola").hidden = true; $("vEntrar").hidden = false; }
+        decir("avEntrar", e.message, true);
+      });
+  }
+
+  function tarjeta(p){
+    var d = nodo("div", "ped");
+    var cab = nodo("div", "cab");
+    var t = nodo("div");
+    t.appendChild(nodo("b", null, p.nombre + "  ·  @" + p.usuario));
+    t.appendChild(nodo("span", null, cuando(p.creado) + (p.correo ? "  ·  " + p.correo : "")));
+    cab.appendChild(t);
+    d.appendChild(cab);
+
+    var dd = nodo("div", "dd");
+    var l1 = nodo("div"); l1.appendChild(nodo("i", null, "Operación "));
+    l1.appendChild(nodo("code", null, p.refer)); dd.appendChild(l1);
+    if (p.monto){ var l2 = nodo("div"); l2.appendChild(nodo("i", null, "Dice haber mandado "));
+                  l2.appendChild(document.createTextNode(p.monto)); dd.appendChild(l2); }
+    if (p.nota) dd.appendChild(nodo("div", null, p.nota));
+    if (p.foto_tipo){
+      var im = nodo("img", "comp"); im.alt = "Comprobante";
+      /* la imagen también pide el pase: la sirve la misma función */
+      fetch("api/revisar?foto=" + p.id, { headers:{ authorization:"Bearer " + pase } })
+        .then(function(r){ return r.ok ? r.blob() : null; })
+        .then(function(b){ if (b) im.src = URL.createObjectURL(b); });
+      dd.appendChild(im);
+    }
+    d.appendChild(dd);
+
+    var acc = nodo("div", "acc");
+    var ok = nodo("button", "bt p", "Aprobar y avisarle"); ok.type = "button";
+    var no = nodo("button", "bt malo", "Rechazar"); no.type = "button";
+    ok.addEventListener("click", function(){
+      ok.disabled = no.disabled = true;
+      pedir("revisar", { hacer:"aprobar", id:p.id }).then(ver)
+        .catch(function(e){ alert(e.message); ok.disabled = no.disabled = false; });
+    });
+    no.addEventListener("click", function(){
+      if (!confirm("¿Rechazar el pedido de @" + p.usuario + "? Le llega un aviso.")) return;
+      pedir("revisar", { hacer:"rechazar", id:p.id }).then(ver)
+        .catch(function(e){ alert(e.message); });
+    });
+    acc.appendChild(ok); acc.appendChild(no);
+    d.appendChild(acc);
+    return d;
+  }
+
+  if (pase) ver();
+})();
+</script>
+</body>
+</html>
