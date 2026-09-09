@@ -1,6 +1,7 @@
 package ai.rezona.aero;
 
 import android.app.Activity;
+import android.app.AppOpsManager;
 import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -641,6 +642,41 @@ public class Puente {
     Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
     resalta(i, new ComponentName(act, Acces.class));
     if (lanza(i)) return true;
+    return lanza(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:" + act.getPackageName())));
+  }
+
+  /* ══════════ LOS AJUSTES RESTRINGIDOS DE ANDROID 13 ══════════
+   * Desde Android 13, una app que NO vino de una tienda no puede encender ni
+   * la accesibilidad ni el acceso a notificaciones: el interruptor está ahí y
+   * al tocarlo salta «a la app se le negó el acceso». No es un permiso que se
+   * pueda pedir —ése es justamente el punto de la protección— así que desde
+   * acá no hay nada que llamar: se destraba a mano en Ajustes › la app › ⋮.
+   *
+   * LO ÚNICO QUE PODEMOS HACER ES DECIRLO Y LLEVAR HASTA LA PUERTA. Un dueño
+   * que se choca con ese cartel no tiene forma de saber que el remedio está en
+   * OTRA pantalla, y volver a tocar «permitir» lo devuelve a la misma pared.
+   *
+   * `restringido()` es una PISTA y no una verdad: el sistema anota el estado en
+   * un app-op propio (`android:access_restricted_settings`) que uno puede
+   * consultar sobre sí mismo, pero es una clave interna y un ROM puede no
+   * tenerla. Por eso hay tres respuestas y no dos —1 trabado, 0 libre, −1 no
+   * sé— y quien la usa trata el −1 como «no sé», no como «libre». */
+  @JavascriptInterface public int restringido() {
+    if (Build.VERSION.SDK_INT < 33) return 0;   // la restricción no existe
+    try {
+      AppOpsManager ao = (AppOpsManager) act.getSystemService(Context.APP_OPS_SERVICE);
+      if (ao == null) return -1;
+      int m = ao.unsafeCheckOpNoThrow("android:access_restricted_settings",
+          Process.myUid(), act.getPackageName());
+      return m == AppOpsManager.MODE_ALLOWED ? 0 : 1;
+    } catch (Throwable e) { return -1; }
+  }
+
+  /* la ficha de ESTA app, que es donde vive el ⋮ con «permitir ajustes
+   * restringidos». Es el mismo intent que `info(pkg)` y por eso no puede
+   * fallar de una manera nueva. */
+  @JavascriptInterface public boolean restringidoAbrir() {
     return lanza(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
         Uri.parse("package:" + act.getPackageName())));
   }

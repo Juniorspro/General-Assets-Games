@@ -194,9 +194,70 @@ function ccToca(b){
    Se le pregunta al servicio cada vez que el centro se abre. Una lista propia
    se desincroniza en cuanto el dueño descarta algo desde otra parte, y una
    lista desincronizada muestra mensajes que ya no existen. */
+/* ══════════ LOS AJUSTES RESTRINGIDOS DE ANDROID 13 ══════════
+
+   Desde Android 13, una app que no vino de una tienda tiene el interruptor de
+   accesibilidad y el de acceso a notificaciones VISIBLES PERO MUERTOS: al
+   tocarlos salta «a la app se le negó el acceso». Desde acá no hay nada que
+   pedir —ése es el punto de la protección— así que lo único que se puede hacer
+   es NOMBRARLO y llevar hasta la puerta, que es la ficha de la app.
+
+   SIN ESTO EL LAUNCHER MANDA A UNA PARED Y SE QUEDA CALLADO: el dueño toca
+   «Habilitar», se choca con el cartel del sistema, vuelve, y lo único que le
+   ofrecemos es el mismo botón que lo devuelve al mismo sitio.
+
+   HAY DOS SEÑALES Y LA DEL SISTEMA MANDA. `AND.restringido()` consulta el
+   app-op que Android usa para anotarlo, y contesta 1 trabado · 0 libre · −1 no
+   sé (un ROM puede no tener esa clave, y por debajo de Android 13 la
+   restricción no existe: ahí siempre es 0). Cuando dice algo, se le cree.
+   Cuando dice −1 queda la señal medida de este lado: se lo pedimos y el dueño
+   volvió sin el permiso.
+
+   Y LA MARCA SE GUARDA EN DISCO, que no es un detalle: mientras la pantalla de
+   Ajustes está adelante, Android puede matar al launcher tranquilamente. Con la
+   marca en memoria el aviso no aparecería nunca en el caso de verdad. */
+const RESTR_K = { acces: 'restrA', noti: 'restrN' };
+
+function restrPista(){ return andQ('restringido') ? (AND.restringido() | 0) : -1; }
+function restrPidio(cual){ guarda(RESTR_K[cual], 1); }
+function restrLimpia(cual){ if (lee(RESTR_K[cual], 0)) guarda(RESTR_K[cual], 0); }
+
+function restrTrabado(cual){
+  const p = restrPista();
+  if (p === 0){ restrLimpia(cual); return false; }  /* el sistema dice que no */
+  if (p === 1) return true;                          /* el sistema dice que sí */
+  return !!lee(RESTR_K[cual], 0);                    /* no sabe: lo medimos nosotros */
+}
+
+/* la fila del aviso: el texto, y un botón sólo si hay algo que tocar. Los dos
+   permisos comparten esta función porque comparten los cuatro estados — con dos
+   copias, el día que se agregue un estado una de las dos se queda corta. */
+function ccAviso(c, est, cual, txtPide, txtEspera, txtSinPuente){
+  const f = document.createElement('div');
+  f.className = 'ccAviso';
+  const t = document.createElement('span');
+  t.textContent = est === 'trabado' ? T('rTrab', T(cual === 'acces' ? 'rAcces' : 'rNoti'))
+    : est === 'sinPermiso' ? T(txtPide)
+    : est === 'esperando' ? T(txtEspera) : T(txtSinPuente);
+  f.appendChild(t);
+  if (est === 'sinPermiso' || est === 'trabado'){
+    const b = document.createElement('button');
+    b.className = 'ccBt';
+    b.textContent = T(est === 'trabado' ? 'rBoton' : 'nPermitir');
+    b.addEventListener('click', () => {
+      ccCierra();
+      if (cual === 'acces') accPide(); else notiPide();
+    });
+    f.appendChild(b);
+  }
+  c.appendChild(f);
+}
+
 function ccNotisEstado(){
   if (!andQ('notis')) return 'sinPuente';
-  if (andQ('notiHabilitado') && !AND.notiHabilitado()) return 'sinPermiso';
+  if (andQ('notiHabilitado') && !AND.notiHabilitado())
+    return restrTrabado('noti') ? 'trabado' : 'sinPermiso';
+  restrLimpia('noti');
   if (andQ('notiOk') && !AND.notiOk()) return 'esperando';
   return 'ok';
 }
@@ -216,13 +277,37 @@ function ccNotisEstado(){
    dio es lo peor que se puede hacer. */
 function accEstado(){
   if (!andQ('accesAccion')) return 'sinPuente';
-  if (andQ('accesHabilitado') && !AND.accesHabilitado()) return 'sinPermiso';
+  if (andQ('accesHabilitado') && !AND.accesHabilitado())
+    return restrTrabado('acces') ? 'trabado' : 'sinPermiso';
+  restrLimpia('acces');
   if (andQ('accesOk') && !AND.accesOk()) return 'esperando';
   return 'ok';
 }
+/* ── PEDIR UN PERMISO PASA POR UN SOLO SITIO, Y ES A PROPÓSITO ──
+   Hay dos formas de llegar acá: el botón del aviso y tocar uno de los cuatro
+   botones de accesibilidad del centro. Repartido, una de las dos se olvida de
+   anotar el intento —o de desviar cuando está trabado— y el defecto sólo
+   aparece por el camino que nadie prueba. */
 function accPide(){
+  if (restrTrabado('acces')){
+    if (andQ('restringidoAbrir')) AND.restringidoAbrir();
+    else avisa(T('rTrab', T('rAcces')));
+    return;
+  }
+  restrPidio('acces');
   if (andQ('accesPedir')) AND.accesPedir();
   else avisa(T('aSinPuente'));
+}
+
+function notiPide(){
+  if (restrTrabado('noti')){
+    if (andQ('restringidoAbrir')) AND.restringidoAbrir();
+    else avisa(T('rTrab', T('rNoti')));
+    return;
+  }
+  restrPidio('noti');
+  if (andQ('notiPedir')) AND.notiPedir();
+  else avisa(T('nSinPuente'));
 }
 
 function ccHace(ms){
@@ -238,18 +323,7 @@ function ccHace(ms){
 function ccAcces(c){
   const est = accEstado();
   if (est === 'ok') return;
-  const f = document.createElement('div');
-  f.className = 'ccAviso';
-  const t = document.createElement('span');
-  t.textContent = T(est === 'sinPermiso' ? 'aPide' : est === 'esperando' ? 'aEspera' : 'aSinPuente');
-  f.appendChild(t);
-  if (est === 'sinPermiso'){
-    const b = document.createElement('button');
-    b.className = 'ccBt'; b.textContent = T('nPermitir');
-    b.addEventListener('click', () => { ccCierra(); accPide(); });
-    f.appendChild(b);
-  }
-  c.appendChild(f);
+  ccAviso(c, est, 'acces', 'aPide', 'aEspera', 'aSinPuente');
 }
 
 function ccNotis(){
@@ -258,18 +332,7 @@ function ccNotis(){
   ccAcces(c);
   const est = ccNotisEstado();
   if (est !== 'ok'){
-    const f = document.createElement('div');
-    f.className = 'ccAviso';
-    const t = document.createElement('span');
-    t.textContent = T(est === 'sinPermiso' ? 'nPide' : est === 'esperando' ? 'nEspera' : 'nSinPuente');
-    f.appendChild(t);
-    if (est === 'sinPermiso'){
-      const b = document.createElement('button');
-      b.className = 'ccBt'; b.textContent = T('nPermitir');
-      b.addEventListener('click', () => { ccCierra(); if (andQ('notiPedir')) AND.notiPedir(); });
-      f.appendChild(b);
-    }
-    c.appendChild(f);
+    ccAviso(c, est, 'noti', 'nPide', 'nEspera', 'nSinPuente');
     return;
   }
   let lista = [];

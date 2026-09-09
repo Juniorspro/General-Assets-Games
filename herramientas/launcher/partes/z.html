@@ -1875,6 +1875,7 @@ window.__A = {
   accFinge(est){
     const A = window.AND = window.AND || {};
     window.__accUlt = null; window.__accPidio = 0;
+    guarda('restrA', 0); delete A.restringido; delete A.restringidoAbrir;
     A.accesAccion = q => { window.__accUlt = q; return est === 'ok'; };
     A.accesPedir = () => { window.__accPidio++; return true; };
     if (est === 'sinPuente'){ delete A.accesAccion; delete A.accesPedir; }
@@ -1908,6 +1909,66 @@ window.__A = {
              boton: $$('#ccNotis .ccAviso .ccBt').length,
              textos: $$('#ccNotis .ccN').map(f => f.querySelector('.ccNT').textContent) };
   },
+  /* ── EL MODO RESTRINGIDO DE ANDROID 13, QUE ES LO QUE EL BANCO NO TIENE ──
+     Acá no hay app-op ni pantalla de Ajustes, así que lo medible es lo único
+     que puede estar mal de este lado: que las DOS señales lleven al estado
+     'trabado', que la del sistema le gane a la medida, que el botón cambie de
+     rótulo y de destino, y que dar el permiso borre la marca. `pista` es
+     1 trabado · 0 libre · null sin puente (o sea el −1 de «no sé»). */
+  restrFinge(cual, pista, sinPermiso){
+    const A = window.AND = window.AND || {}; A.__f = true;
+    window.__restrAbrio = 0;
+    guarda('restrA', 0); guarda('restrN', 0);
+    if (pista === null) delete A.restringido; else A.restringido = () => pista;
+    A.restringidoAbrir = () => { window.__restrAbrio++; return true; };
+    if (cual === 'acces'){
+      window.__accPidio = 0;
+      A.accesAccion = () => true;
+      A.accesPedir = () => { window.__accPidio++; return true; };
+      A.accesHabilitado = () => !sinPermiso;
+      A.accesOk = () => !sinPermiso;
+    } else {
+      window.__notiPidio = 0;
+      A.notis = () => '[]';
+      A.notiPedir = () => { window.__notiPidio++; return true; };
+      A.notiHabilitado = () => !sinPermiso;
+      A.notiOk = () => !sinPermiso;
+    }
+    ccPinta();
+    return __A.restrVer(cual);
+  },
+  restrVer(cual){
+    ccPinta();                     /* el panel se repinta acá: desde el banco no
+                                      se alcanza una función del módulo */
+    const f = $$('#ccNotis .ccAviso');
+    /* el de accesibilidad va primero y el de notificaciones después: con los
+       dos avisos puestos hay que mirar el que se pidió y no el primero */
+    const i = cual === 'acces' ? 0 : (accEstado() === 'ok' ? 0 : 1);
+    const n = f[i] || null;
+    return { est: cual === 'acces' ? accEstado() : ccNotisEstado(),
+             avisos: f.length,
+             texto: n ? (n.querySelector('span') || {}).textContent || null : null,
+             boton: n ? ((n.querySelector('.ccBt') || {}).textContent || null) : null,
+             marca: lee(cual === 'acces' ? 'restrA' : 'restrN', 0) };
+  },
+  restrDa(cual){                    /* le damos el permiso: la marca tiene que irse */
+    if (cual === 'acces'){ AND.accesHabilitado = () => true; AND.accesOk = () => true; }
+    else { AND.notiHabilitado = () => true; AND.notiOk = () => true; }
+    return __A.restrVer(cual);
+  },
+  restrPista(v){ if (v === null) delete AND.restringido; else AND.restringido = () => v;
+                 return __A.restrVer('acces'); },
+  restrToca(cual){
+    window.__restrAbrio = 0; window.__accPidio = 0; window.__notiPidio = 0;
+    const f = $$('#ccNotis .ccAviso');
+    const i = cual === 'acces' ? 0 : (accEstado() === 'ok' ? 0 : 1);
+    const b = f[i] && f[i].querySelector('.ccBt');
+    if (!b) return { hay: false };
+    b.click();
+    return { hay: true, abrioFicha: window.__restrAbrio,
+             pidioPermiso: cual === 'acces' ? window.__accPidio : window.__notiPidio,
+             marca: lee(cual === 'acces' ? 'restrA' : 'restrN', 0) };
+  },
   notiFinge(lista){
     if (lista === null){ if (window.AND && AND.__f) delete window.AND; ccNotis(); return ccNotisEstado(); }
     window.AND = window.AND || {};
@@ -1924,6 +1985,7 @@ window.__A = {
   },
   notiSinPermiso(){
     window.AND = window.AND || {}; AND.__f = true;
+    guarda('restrN', 0); delete AND.restringido; delete AND.restringidoAbrir;
     AND.notis = () => '[]';
     AND.notiHabilitado = () => false;
     AND.notiOk = () => false;

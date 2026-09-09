@@ -281,6 +281,78 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima cuadragésima tercera vuelta (2026-09-09): **AERO** — «a la app se le negó el acceso», que no es un defecto nuestro pero sí una pared a la que mandábamos
+
+Dos capturas y ni una palabra: la pantalla de accesibilidad de HyperOS con la fila **Aero · «Función
+controlada por configuración restringida»** y encima el cuadro del sistema **«A la app se le negó el
+acceso»**.
+
+#### NO ES UN DEFECTO DEL LAUNCHER, Y ESO HAY QUE DECIRLO PRIMERO
+
+Es la protección de **ajustes restringidos de Android 13**: una app que **no vino de una tienda** no
+puede encender ni la accesibilidad ni el acceso a notificaciones. El interruptor está ahí y está
+muerto. No hay API para pedirlo —ése es exactamente el punto de la protección— así que **no existe
+una línea de código que lo destrabe**, ni acá ni en ningún launcher. Se destraba a mano, una vez, en
+Ajustes › la app › **⋮ › Permitir ajustes restringidos**.
+
+**Y PEGA EN TRES COSAS A LA VEZ**, o sea que con esto puesto medio launcher está apagado: los cuatro
+botones de accesibilidad del centro (bajar la barra, ajustes rápidos, recientes, bloquear), la lista
+de notificaciones, y **los puntitos de la vuelta anterior**, que salen del mismo servicio.
+
+#### LO QUE SÍ ERA DEFECTO NUESTRO: MANDÁBAMOS A LA PARED Y NOS QUEDÁBAMOS CALLADOS
+
+`accesPedir()` abre la pantalla del permiso y ahí termina su trabajo. El dueño se choca con el
+cartel, vuelve, y lo único que el launcher le ofrece es **el mismo botón que lo devuelve al mismo
+sitio**. Eso es lo que se arregla: un cuarto estado, `trabado`, con su propio texto —que nombra el
+cartel del sistema y dicta el camino— y su propio botón, que va a **la ficha de la app**, que es
+donde vive el ⋮.
+
+**HAY DOS SEÑALES Y LA DEL SISTEMA MANDA.** `AND.restringido()` consulta el app-op con el que Android
+lo anota (`android:access_restricted_settings`, vía `unsafeCheckOpNoThrow` sobre uno mismo) y
+contesta **1 trabado · 0 libre · −1 no sé**. Cuando dice algo se le cree —incluido el 0, que **borra
+la marca**, porque entonces el intento fallido fue por otra cosa—; cuando dice −1 queda la señal
+medida de este lado: se lo pedimos y el dueño volvió sin el permiso. Por debajo de Android 13 la
+restricción no existe y devuelve 0, así que ahí el aviso **no puede aparecer nunca**.
+
+**Y LA MARCA SE GUARDA EN DISCO, que no es un detalle:** mientras la pantalla de Ajustes está
+adelante, Android puede matar al launcher tranquilamente. Con la marca en memoria el aviso no
+aparecería **nunca en el caso de verdad**, que es justamente el único que importa.
+
+**PEDIR UN PERMISO PASA POR UN SOLO SITIO.** Hay dos caminos hasta acá —el botón del aviso y tocar
+uno de los cuatro botones de accesibilidad del centro— y repartido, uno de los dos se olvida de
+anotar el intento o de desviar cuando está trabado; el defecto aparece por el camino que nadie
+prueba. Lo mismo la fila del aviso: `ccAviso()` la arma para los dos permisos, porque comparten los
+cuatro estados y con dos copias el día que se agregue un estado una se queda corta.
+
+#### MEDIDO, CON LOS DOS CAMINOS Y SU CONTROL
+
+| | estado | botón | qué llama | marca |
+|---|---|---|---|---|
+| primer pedido, sin pista | `sinPermiso` | «Habilitar» | **pide el permiso** | 0 → 1 |
+| segundo, tras volver sin él | **`trabado`** | «Abrir la ficha» | **abre la ficha** | 1 |
+| el sistema dice 1 | **`trabado`** desde el primer cuadro | «Abrir la ficha» | abre la ficha | 0 |
+| el sistema dice 0 | `sinPermiso` | «Habilitar» | pide el permiso | **1 → 0** |
+| permiso dado | `ok` | — | — | **0** |
+
+Los cinco casos verificados en los **dos** permisos, más: los **tres idiomas**, los cuatro botones de
+accesibilidad del centro desviando a la ficha (`accion: null · pidio: 0 · abrioFicha: 1`), y **sin
+`restringidoAbrir` en el puente no rompe nada** —avisa y sigue—. Y el control, que es lo que hace que
+la prueba valga: **sin trabar, el botón sigue pidiendo el permiso de siempre.**
+Regresión: escritorio **4 capas / 35,5 MB / 3 vidrios / 0 caras / 0 solapamientos**, riel de 19
+letras con `letra('S')` mirando la S, mascota 23 huesos y 5.541 triángulos, atajos **3 filas** con
+`atajoToca(1)` llamando a `c2` y el control sin permiso en 0 filas / 4 opciones, puntos
+**1 → punto · 5 → «5» · 120 → «99+»** con la puerta en 0 ms por latido, ocultas 32 → 31 → 32 sin
+aparecer al buscar, olvido **30 → 11,2**, copia de 254 bytes con ida y vuelta exacta y las cuatro
+entradas malas rechazadas, centro **16 · 1 · 10 · 4** y cajón cerrando en **mediana 16,7 ms**.
+`window.__errs` **vacío en las dos corridas**. APK **1.680**, 2,2 MB.
+
+**LO QUE NO SE PUDO COMPROBAR, Y ES LA MITAD DE LA VUELTA:** el banco no tiene app-op ni pantalla de
+Ajustes, así que de `restringido()` está medido **el camino entero con el puente fingido** —que la
+pista llega, que le gana a la marca, que mueve el estado, el rótulo y el destino— y **no** que
+`unsafeCheckOpNoThrow` conteste lo que se espera en un teléfono. Por eso hay tres respuestas y no
+dos: el −1 cae en la señal medida, que sí está probada de punta a punta. Y el remedio en sí **no es
+de este lado**: por más que el aviso lleve hasta la puerta, la puerta la abre el dueño.
+
 ### Centésima cuadragésima segunda vuelta (2026-09-09): **AERO** — atajos de app, puntos de notificación, apps ocultas, sugeridas, doble toque y copia de seguridad
 
 Pedido: *"que más funciones tiene un launcher para volverlo aún más completo haz más funciones etc"*.
