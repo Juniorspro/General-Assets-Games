@@ -49,6 +49,7 @@ function entrar(u){
     document.body.classList.remove("sinsesion");
     $("escritorio").hidden = false;
     pintarUsuario();
+    quizasColaborar();
     document.dispatchEvent(new CustomEvent("hay-sesion"));
   }, quieto ? 60 : 1500);
 }
@@ -82,6 +83,7 @@ $("nombre").addEventListener("keydown", function(e){ if (e.key === "Enter") como
 var CLIENTE = null;
 
 fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(function(c){
+  if (c && c.pago) { pago = c.pago; pintarMontos(); }
   CLIENTE = c && c.google;
   if (!CLIENTE){ $("sin-google").hidden = false; return; }
   var s = document.createElement("script");
@@ -526,6 +528,145 @@ $("poses").addEventListener("click", function(e){
   $("respaldo").src = b.dataset.src;
   $$("button", this).forEach(function(o){ o.setAttribute("aria-pressed", String(o === b)); });
 });
+
+/* =========================================================== 6 · colaborar
+   Aparece una vez, DESPUÉS de entrar, y siempre se puede cerrar. Un muro de
+   donaciones que no deja pasar no recauda: espanta. Por eso «Ahora no» es un
+   botón normal, del mismo tamaño que el otro, y la respuesta se recuerda:
+
+     · «Ahora no»          -> no vuelve por 30 días
+     · «Ya colaboré»       -> no vuelve más
+     · el icono y el menú  -> se puede abrir cuando se quiera
+
+   Los datos de cobro NO están en el código: los sirve /api/config desde
+   variables de entorno, igual que el identificador de Google. Así se cambian
+   desde el panel de Cloudflare sin volver a publicar, y si no hay ninguno la
+   pantalla lo dice en vez de mostrar botones que no llevan a ningún lado. */
+var MONTOS = {
+  ars: { simbolo: "$",   pasos: [1000, 2500, 5000, 10000], porDefecto: 2500 },
+  usd: { simbolo: "US$", pasos: [3, 5, 10, 25],            porDefecto: 5 }
+};
+var pago = null, moneda = "ars", monto = MONTOS.ars.porDefecto;
+
+function plata(n){ return n.toLocaleString("es-AR"); }
+
+function pintarMontos(){
+  var m = MONTOS[moneda];
+  $("dona-simbolo").textContent = m.simbolo;
+  $("dona-montos").innerHTML = m.pasos.map(function(v){
+    return '<button type="button" data-monto="' + v + '" aria-pressed="' +
+           (v === monto) + '">' + m.simbolo + " " + plata(v) + "</button>";
+  }).join("");
+  $$("#dona-monedas button").forEach(function(b){
+    b.setAttribute("aria-pressed", String(b.dataset.moneda === moneda));
+  });
+  enlacesDePago();
+}
+
+function enlacesDePago(){
+  var mp = $("dona-mp"), pp = $("dona-pp");
+
+  /* Mercado Pago cobra en pesos y PayPal en dólares. Ofrecer el que no
+     corresponde es mandar a alguien a una pantalla que no le va a servir. */
+  var hayMP = pago && (pago.mpLink || pago.mpAlias) && moneda === "ars";
+  var hayPP = pago && pago.paypal && moneda === "usd";
+
+  mp.setAttribute("aria-disabled", String(!hayMP));
+  pp.setAttribute("aria-disabled", String(!hayPP));
+
+  if (hayMP){
+    mp.href = pago.mpLink || "#";
+    $("dona-mp-pie").textContent = pago.mpLink
+      ? "Link de pago · " + MONTOS.ars.simbolo + " " + plata(monto)
+      : "Transferí al alias de acá abajo";
+  } else {
+    mp.href = "#";
+    $("dona-mp-pie").textContent = moneda === "usd"
+      ? "Sólo cobra en pesos — pasá a pesos" : "Sin datos cargados";
+  }
+
+  if (hayPP){
+    /* paypal.me sí acepta el monto en la dirección, así que llega escrito */
+    pp.href = "https://www.paypal.com/paypalme/" +
+              encodeURIComponent(pago.paypal) + "/" + monto + "USD";
+    $("dona-pp-pie").textContent = "Tarjeta o saldo · US$ " + plata(monto);
+  } else {
+    pp.href = "#";
+    $("dona-pp-pie").textContent = moneda === "ars"
+      ? "Cobra en dólares — pasá a dólares" : "Sin datos cargados";
+  }
+
+  var fila = $("dona-alias");
+  if (pago && pago.mpAlias && moneda === "ars"){
+    fila.hidden = false; $("dona-alias-txt").textContent = pago.mpAlias;
+  } else fila.hidden = true;
+
+  $("dona-nada").hidden = !!(pago && (pago.mpAlias || pago.mpLink || pago.paypal));
+}
+
+function cerrarDona(recordar){
+  $("fondoDona").hidden = true;
+  if (recordar === "listo") caja.poner("colaboro", 1);
+  else if (recordar === "luego") caja.poner("donaVisto", Date.now());
+}
+
+function abrirDona(){
+  $("fondoDona").hidden = false;
+  cerrarInicio();
+  pintarMontos();
+}
+
+function quizasColaborar(){
+  if (caja.leer("colaboro", 0)) return;              // ya dijo que sí
+  var visto = caja.leer("donaVisto", 0);
+  if (Date.now() - visto < 30*24*3600*1000) return;  // dijo «ahora no» hace poco
+  setTimeout(abrirDona, 900);
+}
+
+$("dona-x").addEventListener("click", function(){ cerrarDona("luego"); });
+$("dona-luego").addEventListener("click", function(){ cerrarDona("luego"); });
+$("dona-listo").addEventListener("click", function(){ cerrarDona("listo"); });
+$("ic-dona").addEventListener("click", abrirDona);
+$("mi-dona").addEventListener("click", abrirDona);
+$("fondoDona").addEventListener("click", function(e){
+  if (e.target === this) cerrarDona("luego");
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !$("fondoDona").hidden) cerrarDona("luego");
+});
+
+$("dona-monedas").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-moneda]"); if (!b) return;
+  moneda = b.dataset.moneda;
+  monto = MONTOS[moneda].porDefecto;
+  $("dona-otro").value = "";
+  pintarMontos();
+});
+$("dona-montos").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-monto]"); if (!b) return;
+  monto = +b.dataset.monto; $("dona-otro").value = "";
+  pintarMontos();
+});
+$("dona-otro").addEventListener("input", function(){
+  var v = Math.floor(+this.value);
+  if (v > 0){ monto = v; pintarMontos();
+    $$("#dona-montos button").forEach(function(b){ b.setAttribute("aria-pressed","false"); });
+  }
+});
+$("dona-copiar").addEventListener("click", function(){
+  var t = $("dona-alias-txt").textContent, b = this;
+  var ok = function(){ b.textContent = "Copiado"; setTimeout(function(){ b.textContent = "Copiar"; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(t).then(ok, ok);
+  else ok();
+});
+/* un botón apagado no tiene que navegar a ningún lado */
+["dona-mp","dona-pp"].forEach(function(id){
+  $(id).addEventListener("click", function(e){
+    if (this.getAttribute("aria-disabled") === "true"){ e.preventDefault(); }
+  });
+});
+pintarMontos();
 
 conectarControl();
 conectarMinas();
