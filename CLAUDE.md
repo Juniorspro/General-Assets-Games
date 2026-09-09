@@ -297,6 +297,170 @@ munecas.
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
 
+### Centésima cuadragésima quinta vuelta (2026-09-09): **HUESOS** — los esqueletos pasan a ser catorce mallas generadas, y dos defectos que no fallan
+
+Pedido textual: *"pero genera modelos 3D con meshy y animaciones también mejores enemigos 3D genera
+todo el 3D que desees"*, y después, corrigiéndome una afirmación equivocada mía: *"hermano, Rezona ya
+tiene meshy ai y se pueden usar también sus animaciones"*.
+
+#### PRIMERO: MESHY ESTÁ EN LA APP Y NO EN LA LLAVE DE API, Y YO LO HABÍA DICHO MAL
+
+Tenía razón: en `rezona.ai/studio/3d` el desplegable de modelos lista **Tripo H3** y **Meshy**. Lo
+que **no** es cierto es que se llegue a Meshy desde acá: la llave de API expone
+`submit_model3d_generation` con tres versiones y las tres son de **Tripo**
+(`v3.0-20250812`, `v2.5-20250123`, `v2.0-20240919`). Medido: pedir cualquier otro nombre devuelve
+`VALIDATION_ERROR` con la lista de las tres, y mandar `provider: 'meshy'` por `extra` **no falla y no
+hace nada** — `ignored_params` viene `null` igual, así que ese campo no prueba nada. Queda anotado en
+`herramientas/rezona/estado.json`. O sea que el camino que existe es: **el usuario genera con Meshy
+en la app y yo horneo el archivo dentro del juego.**
+
+Así que estos catorce salieron de Tripo, que es lo que la llave alcanza.
+
+#### POR QUÉ PIEZAS SUELTAS Y NO UN ESQUELETO RIGGEADO ENTERO
+
+Lo obvio sería `submit_rig3d_generation` con sus clips y un `SkinnedMesh`. Cuesta cuatro cosas que ya
+están medidas en el juego: el **kit instanciado** —hoy catorce esqueletos son catorce llamadas de
+dibujo, una por PIEZA, y un `SkinnedMesh` no se instancia—, las **nueve poses** escritas sobre este
+rig con mezcla —Tripo da un puñado de clips de vocabulario cerrado, sin esquive, y los tres golpes
+del combo serían el mismo `slash`—, el **patinaje cero**, que sale de medir el ciclo, y la corona y la
+capa con matriz cero. Reemplazando sólo la **geometría** de cada pieza, las cuatro siguen en pie.
+
+Y se comprueba: `__H.tres(false)` devuelve las cajas **en el mismo binario**, y el auto-jugador da
+resultados **idénticos** con mallas y con cajas — semilla 7: 12.991 pasos, 22 bajas, nivel 6, vida 66;
+semilla 11: 7.923 pasos, 14 bajas, muere. Byte por byte. Eso es la prueba de que esto es dibujo.
+
+#### EL DEFECTO GRANDE: `suelda()` REVOLVÍA EL BÚFER DE ÍNDICES
+
+El cráneo salía un huevo y el costillar una losa. Se lo atribuí primero a la simplificación agresiva
+—le puse una bandera para apagarla— y después a la anatomía, y escribí en el código que *«un esqueleto
+es casi todo agujeros y a treinta y cinco píxeles eso parte la silueta»*. **Las dos conclusiones eran
+falsas y estaban construidas sobre el mismo defecto.**
+
+Lo que lo destapó fue **renderizar las etapas de la tubería una por una**: la anatomía sobrevive a
+gltfpack perfecta y se rompe en el paso siguiente. Y la causa es de una línea: la inversa de una
+permutación es `argsort` **una** vez, y había un `argsort` de más — o sea el **rango** en vez de la
+inversa. Eso no falla ruidosamente: **revuelve los índices** y la malla queda con los mismos vértices
+unidos al revés.
+
+**Se comprueba comparando los CENTROIDES de los triángulos antes y después de soldar**, que es lo
+único que dice que la superficie es la misma: **0,880445 de diferencia máxima → 0,0000000**. Con los
+índices bien, `-sa` a 1.802 triángulos conserva las doce costillas y sus huecos contra 5.304 sin ella,
+y a 372×172 las dos imágenes son la misma: la tercera parte de los triángulos por el mismo dibujo.
+
+#### Y TRES PIEZAS VENÍAN DE COSTADO, QUE ES LO QUE TAPABA LO DEMÁS
+
+Tripo devolvió el cráneo, el costillar y la pelvis **mirando a −X**, y `modo:'caja'` no orienta nada:
+el juego las mete en su caja con un ajuste **uniforme al mínimo**, así que el eje corto de la malla
+—que era el ancho de verdad— mandaba y aplastaba la pieza. Medido: el costillar salía de **0,105 m de
+ancho contra los 0,34 de la caja (31 %)** y la pelvis **0,091 contra 0,24 (38 %)**. O sea que las dos
+masas **centrales** —las que hacen que un esqueleto se lea como UNA silueta— desaparecían. Más la mano,
+que viene con los dedos para arriba, y el pie, acostado sobre X.
+
+De la caja envolvente sola eso **no sale**: una calavera girada noventa grados tiene una caja
+perfectamente razonable. Se comprueba en la hoja de contactos y se corrige con un número.
+
+#### EL PRESUPUESTO DE TRIÁNGULOS NO LO PONE EL ARCHIVO: LO PONE LA MALLA
+
+Un bruto a distancia de pelea mide el 22,5 % del alto del cuadro, y el cuadro se dibuja en un destino
+de **372×172** que después se estira: son **39 PÍXELES DE ALTO**, y su calavera unos siete. Con los
+presupuestos de la primera tanda el cuerpo costaba **6.926 triángulos** —cien por píxel de alto— y la
+escena **207.100** contra los 29.972 de las cajas.
+
+Bajados: **4.722 por cuerpo y 147.914 en la escena**, sin que la imagen cambie —fotografiado al lado,
+las dos son la misma—. Y ahí se topa, porque es el **piso topológico**: medido con `-si 0.01`, que es
+pedir el 1 %, el cráneo se planta en 540, el costillar en 500, la pelvis en 381, el pie en 418, la
+corona en 549 y el yelmo en 760. La razón es que **un hueso generado no es una cáscara**: el pie son
+unas cien islas sueltas —una por huesecito— y una isla cerrada no baja de cuatro triángulos.
+Se probó `-sp`, que autoriza a colapsar a través de las costuras de color por vértice, creyendo que el
+freno era el color: movió el pie de 412 a 418, o sea **nada**.
+
+#### EL ENGORDE SE ELIGIÓ MIRANDO LA FOTO A SU RESOLUCIÓN DE VERDAD, Y ESO ES LA MITAD DEL TRABAJO
+
+**La captura del banco viene estirada 2,4 veces** —el cuadro son 892×412 y el destino de render
+372×172— así que juzgar a 4× sobre la captura es juzgar a **diez veces** lo que ve el jugador. Y a diez
+veces las mallas ganan siempre, porque se les ve la anatomía: costillas, pelvis, nudillos. Con eso a la
+vista yo estaba por dar la vuelta por buena.
+
+Devuelta la captura a **43×49**, que es lo que el bruto mide de verdad, la cuenta cambia:
+
+| | cubre | contra | qué se ve |
+|---|---|---|---|
+| cajas | **48,5 %** | **21,1** | silueta limpia, pero un maniquí |
+| gr 1,90 | 44,9 % | 18,5 | se desarma, se pierde en el pasto |
+| **gr 2,40** | **48,1 %** | 18,8 | empata a las cajas **y** se le ven los huesos |
+| gr 3,00 | 52,0 % | 19,0 | los hombros se vuelven una barra |
+| gr 3,80 | 59,6 % | 18,3 | un bulto |
+
+2,40 es el primer valor en el que la malla cubre lo mismo que la caja. Y **lo honesto es decir qué se
+sigue perdiendo**: contraste (18,8 contra 21,1), y eso no tiene arreglo — el pasto se ve por entre las
+costillas. En la ceniza, que es suelo claro, el reparto se da vuelta y las mallas se leen mejor.
+
+**Y NO SE ARREGLA CON EMISIVO, que fue lo primero que probé.** El hueso se lee como una silueta **más
+oscura** que el pasto, así que un piso de emisivo lo sube hasta el valor del fondo y lo **borra**:
+medido, el contraste cae de 8,5 a 4,9 y en la captura el bicho desaparece. Se revirtió, junto con su
+sonda.
+
+**Y EL ENGORDE NO TOCA NI LAS ARMAS, NI LA CORONA, NI EL YELMO.** Una espada engordada al doble es un
+garrote, y ahí la silueta **estrecha** es justamente lo que dice de qué clase es el bicho. El factor va
+por sitio de llamada y no adentro de `pon3caja`/`pon3palo`.
+
+**Y LA PRIMERA MEDICIÓN DEL ENGORDE ESTABA MAL POR OTRA RAZÓN:** el barrido esperaba 300 ms entre
+capturas y **el mundo no está congelado del todo**, así que el bicho se iba caminando del cuadro entre
+foto y foto. Hay que llamar a `esqFoto` antes de cada una.
+
+#### UN ARMA POR CLASE, Y EL ALCANCE POR FIN SE VE
+
+`alc` vale 1,85 · 2,85 · 2,35 · 3,05 y las cuatro clases mostraban **la misma hoja de 0,62**: o sea que
+el número con el que el jugador decide si entra o espera no se veía por ningún lado. Ahora el largo del
+arma **sale del alcance**, con la misma máquina de matriz cero que la corona. Medido: **0,62 · 1,618 ·
+1,12 · 1,82** contra 0,62 · 1,62 · 1,12 · 1,82 esperados.
+
+Y la lanza va **inclinada hacia adelante y agarrada por el quinto de atrás**: colgando recta se mete
+ochenta centímetros bajo el piso, y encima una pica vertical no muestra el alcance, que es todo el
+punto de que el lancero llegue más lejos que el bruto.
+
+**LA MÁSCARA DE «QUÉ PIEZAS NO LE TOCAN A ESTA CLASE» SE ARMA DE UNA TABLA.** Con cuatro armas y dos
+adornos son seis renglones por clase, y el día que se agregue un arma alguien se olvida de sacársela a
+las otras tres — y eso no falla: sale un peón con la espada del rey encima.
+
+#### DOS PIEZAS PARA EL HÉROE, DEL OTRO LADO DEL VOCABULARIO A PROPÓSITO
+
+El yelmo y la espada del caballero también son malla generada, y sus prompts piden **acero limpio y
+cuero curtido** contra el **hierro comido y el hueso viejo** de la turba. Si el héroe saliera del mismo
+cierre se leería a uno más de los esqueletos; así se distingue a diez metros y sin leer un rótulo. La
+cabeza de piel se queda debajo del yelmo —doce triángulos— para que si la malla no llegara no quedara
+un cuello sin nada encima.
+
+#### DOS COSAS MÁS DEL HORNEADO
+
+- **El color se muestrea en el CENTROIDE del triángulo** y la V **no** se da vuelta. Es la regla 4 de
+  siempre; lo nuevo es que `hornear_props.py` de LEMI **sí** la da vuelta y está mal — ahí no se nota
+  porque una antorcha es marrón de los dos lados.
+- **El tinte se lleva al de la caja que reemplaza, canal por canal y en lineal** (`a_tinte`), pero
+  conservando la variación interna. Sin eso la pieza generada trae su propio promedio y las catorce se
+  ven de catorce colores distintos, cuando lo que las une es que todas son hueso.
+- **La conversión doble de sRGB es a propósito**: `cajas()` hace `setHex().convertSRGBToLinear()` y en
+  three r169 `setHex` ya convierte, así que el juego entero está calibrado sobre una conversión doble.
+  Lo generado tiene que pasar por la misma cadena o sale de otro color.
+
+#### LO QUE COSTÓ, MEDIDO
+
+**64 llamadas de dibujo con las cajas y 88 con las mallas**, y de triángulos **29.972 → 147.914**. En
+el banco, que dibuja por software y por lo tanto exagera el costo de vértice, eso son **27,5 → 21,9
+cuadros por segundo**. Es un precio real y hay que decirlo: cinco veces los triángulos por un bicho que
+mide treinta y nueve píxeles. Lo que se compra es que un juego que se llama HUESOS tenga esqueletos y
+no maniquíes.
+
+#### MEDIDO AL CERRAR
+
+**14 de 14 mallas cargadas con `fallas: []`.** Patinaje **0 %** en las dos marchas (zancada 1,348 y
+2,037, cadencia 4,53 y 5,5 pasos/s). **51 de 51 texturas** y 0 fallidas. **40 de 40 semillas auditadas**
+sin una celda suelta. **Cero solapamientos** de HUD. Las tres calidades en caliente (279×129 · 372×172 ·
+525×242) y los tres idiomas en vivo (`EL BOSQUE · THE WOOD · A MATA`). Corona **1 de 14 en la ceniza y
+0 de 14 en el bosque**, leída de la matriz que se subió a la GPU. Armas 0,62 · 1,618 · 1,12 · 1,82.
+Auto-jugador idéntico con mallas y con cajas en dos semillas. `window.__errs` **vacío en las siete
+corridas**. El HTML pasó de 941 KB a **1,00 MB**, y esos 64 KB son las catorce piezas.
+
 ### Centésima cuadragésima cuarta vuelta (2026-09-09): **HUESOS**, el decimosexto juego — un RPG de matar esqueletos, y cinco defectos que sólo aparecen midiendo
 
 Pedido textual, con una captura de «What Came Back» de @Goshumio en la app de Rezona: *"agrégale
