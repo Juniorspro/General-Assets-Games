@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Códigos · Frutiger Aero</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="stylesheet" href="css/aero.66021e7a.css">
+<!-- ==========================================================================
+     Generador de códigos, para las transferencias en pesos.
+
+     ES UNA PÁGINA Y NO UN SCRIPT a propósito: quien administra esto no usa la
+     terminal, y una herramienta de línea de comandos sería una herramienta que
+     nadie va a correr nunca.
+
+     La clave NO se guarda en el navegador. Se escribe cada vez. Es una página
+     que se abre cinco veces por mes; dejar la llave del negocio en el
+     localStorage de un teléfono para ahorrar cinco segundos es mal negocio.
+
+     Lleva `noindex` porque no tiene por qué salir en Google. No es lo que la
+     protege —eso es la clave, que se comprueba en el servidor— pero no hay
+     motivo para publicitarla.
+     ========================================================================== -->
+<style>
+body{display:grid; place-items:start center; padding:26px 14px 60px}
+.hoja{width:min(560px,100%); display:grid; gap:14px}
+#salida{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:15px;
+  line-height:1.9; letter-spacing:.02em}
+#salida li{display:flex; align-items:center; gap:10px; padding:6px 10px}
+#salida li + li{border-top:1px solid #e6edf4}
+#salida code{flex:1}
+.dos{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+label{display:block; font-size:13.5px; font-weight:600; margin-bottom:5px}
+input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:3px;
+  border:1px solid #b9c6d4; background:#fff; box-shadow:inset 0 1px 3px rgba(0,30,60,.14)}
+</style>
+</head>
+<body>
+<div class="hoja">
+  <section class="ventana">
+    <header class="titulo">
+      <span class="txt">Generar códigos de acceso</span>
+    </header>
+    <div class="cuerpo">
+      <div class="grupo blanco" style="margin-top:0">
+        <p style="font-size:14px">Mirá que la transferencia haya entrado, gener&#225;
+          un c&#243;digo y mand&#225;selo. Cada uno sirve una sola vez por persona,
+          pero <b>no se puede revocar de a uno</b>: si se filtra alguno, hay que
+          cambiar la clave del sitio y se caen todos.</p>
+        <div style="margin-top:12px">
+          <label for="clave">Clave de administrador</label>
+          <input id="clave" type="password" autocomplete="current-password"
+                 placeholder="No se guarda: se escribe cada vez">
+        </div>
+        <div class="dos" style="margin-top:10px">
+          <div>
+            <label for="desde">Desde el n&#250;mero</label>
+            <input id="desde" type="number" min="1" value="1">
+          </div>
+          <div>
+            <label for="cuantos">Cu&#225;ntos</label>
+            <input id="cuantos" type="number" min="1" max="50" value="5">
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--tinta-2);margin-top:8px">
+          Los c&#243;digos salen del n&#250;mero: pedir el mismo rango dos veces da los
+          mismos. Anot&#225; en cu&#225;l quedaste.</p>
+        <div class="bots">
+          <button class="bt p" type="button" id="ir">Generar</button>
+          <button class="bt" type="button" id="copiar" hidden>Copiar todos</button>
+        </div>
+        <p id="aviso" style="margin-top:10px;font-size:13.5px" hidden></p>
+      </div>
+      <ul class="lista" id="salida" hidden></ul>
+    </div>
+  </section>
+</div>
+<script>
+(function(){
+  var $ = function(i){ return document.getElementById(i); };
+  var ultimos = [];
+  function decir(t, mal){
+    var a = $("aviso"); a.hidden = false;
+    a.style.color = mal ? "#a3231b" : "#0e5a2c"; a.textContent = t;
+  }
+  $("ir").addEventListener("click", function(){
+    var clave = $("clave").value;
+    if (!clave){ $("clave").focus(); return; }
+    this.disabled = true; decir("Generando…", false);
+    fetch("api/codigos", { method:"POST", headers:{"content-type":"application/json"},
+      body: JSON.stringify({ clave: clave, desde: +$("desde").value, cuantos: +$("cuantos").value }) })
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        $("ir").disabled = false;
+        if (!res.ok){ decir(res.j.error || "No se pudo.", true); return; }
+        ultimos = res.j.codigos;
+        $("salida").hidden = false; $("copiar").hidden = false;
+        $("salida").innerHTML = ultimos.map(function(c){
+          return "<li><code>" + c + "</code></li>"; }).join("");
+        $("desde").value = res.j.siguiente;
+        decir("Listo. El próximo arranca en " + res.j.siguiente + ".", false);
+      })
+      .catch(function(){ $("ir").disabled = false; decir("No se pudo conectar.", true); });
+  });
+  $("copiar").addEventListener("click", function(){
+    var t = ultimos.join("\n"), b = this;
+    var ok = function(){ b.textContent = "Copiado"; setTimeout(function(){ b.textContent = "Copiar todos"; }, 1600); };
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(ok, ok); else ok();
+  });
+  $("clave").addEventListener("keydown", function(e){ if (e.key === "Enter") $("ir").click(); });
+})();
+</script>
+</body>
+</html>

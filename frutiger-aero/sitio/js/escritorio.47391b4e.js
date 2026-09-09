@@ -668,6 +668,76 @@ $("dona-copiar").addEventListener("click", function(){
 });
 pintarMontos();
 
+/* ==================================================== 7 · zona de donantes
+   El pase lo firma el servidor y el navegador solo lo guarda. Acá no se decide
+   nada: se pregunta. Si alguien se inventa un pase en el localStorage, la lista
+   vuelve 403 y no hay nada que mostrar.
+
+   Lo que este candado SÍ hace: que la lista y sus enlaces no estén en el HTML
+   de la página, donde cualquiera los lee con ver-código-fuente.
+   Lo que NO hace: impedir que un donante pase el archivo. Con un APK eso no
+   tiene solución, y prometerlo sería mentir. */
+var pase = caja.leer("pase", null);
+
+function pintarZona(datos){
+  var caja2 = $("zona-lista");
+  if (!datos || !datos.items || !datos.items.length){
+    caja2.innerHTML =
+      '<div class="grupo"><h2>Todavía no hay nada para bajar</h2>' +
+      '<p>Tu acceso ya quedó guardado. Lo primero que va a aparecer acá es el ' +
+      '<b>launcher de Android</b>, que está en desarrollo — cuando salga, lo ' +
+      'vas a ver en esta ventana sin tener que hacer nada.</p></div>';
+    return;
+  }
+  caja2.innerHTML = '<ul class="lista">' + datos.items.map(function(i){
+    return '<li><a href="' + i.url + '" target="_blank" rel="noopener">' +
+      '<span class="bola" style="background:radial-gradient(circle at 32% 26%,#fff3d0,#ffd23f 45%,#c98f10)"></span>' +
+      '<span><b>' + i.nombre + '</b><span>' + (i.desc || "") + '</span></span></a></li>';
+  }).join("") + "</ul>";
+}
+
+function revisarPase(){
+  if (!pase) return;
+  fetch("api/zona?pase=" + encodeURIComponent(pase))
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d){ pase = null; caja.sacar("pase"); return; }   /* venció o ya no vale */
+      $("v-zona").hidden = false;
+      $("ic-zona").hidden = false;
+      caja.poner("colaboro", 1);        /* no le pedimos plata a quien ya puso */
+      pintarZona(d);
+    })
+    .catch(function(){});
+}
+
+$("cod-btn").addEventListener("click", function(){
+  var v = ($("cod-txt").value || "").trim().toUpperCase();
+  var av = $("cod-aviso"), bt = this;
+  if (!v){ $("cod-txt").focus(); return; }
+  bt.disabled = true; av.hidden = false; av.style.color = "var(--tinta-2)";
+  av.textContent = "Comprobando…";
+  fetch("api/acceso", { method:"POST", headers:{"content-type":"application/json"},
+                        body: JSON.stringify({ codigo: v }) })
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      bt.disabled = false;
+      if (!res.ok){ av.style.color = "#a3231b"; av.textContent = res.j.error || "No se pudo."; return; }
+      pase = res.j.pase; caja.poner("pase", pase);
+      av.style.color = "#0e5a2c"; av.textContent = "Listo. Ya tenés acceso.";
+      revisarPase();
+      setTimeout(function(){ cerrarDona("listo"); abrir("v-zona"); }, 900);
+    })
+    .catch(function(){
+      bt.disabled = false; av.style.color = "#a3231b";
+      av.textContent = "No se pudo conectar. Probá de nuevo.";
+    });
+});
+$("cod-txt").addEventListener("keydown", function(e){
+  if (e.key === "Enter") $("cod-btn").click();
+});
+$("ic-zona").addEventListener("click", function(){ abrir("v-zona"); });
+revisarPase();
+
 conectarControl();
 conectarMinas();
 conectarBloc();
