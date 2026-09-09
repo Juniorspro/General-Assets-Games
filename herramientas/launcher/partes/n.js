@@ -365,10 +365,40 @@ function ccPinta(){
   $('#ccPie').textContent = T('ccPie');
 }
 
+/* ── LA HOJA VIAJA 340 ms Y ESO SE MARCA EN EL `body` ──
+   `ccMueve` es lo que apaga el vidrio mientras la hoja cruza la pantalla y lo
+   que mantiene la deriva de la foto pausada durante los DOS viajes. `ccQ` es
+   la hoja ya asentada. Los dos caminos —abrir y cerrar— pasan por la misma
+   función, porque repartidos se desincronizan el día que se toque uno. */
+let CC_T = 0;
+/* al CERRAR el vidrio del escritorio vuelve TARDE, con todo quieto: sacándolo
+   en el cuadro en que la hoja termina de subir, las tres piezas encienden sus
+   96.401 px de desenfoque y sus tres filtros de SVG de golpe. Es el escalón que
+   la vuelta 135 midió en el cajón, y acá estaba igual. */
+const CC_MUEVE_MS = 360, CC_VUELVE_MS = 190;
+function ccMueve(abre){
+  const c = document.body.classList;
+  c.add('ccMueve'); c.remove('ccQ');
+  clearTimeout(CC_T);
+  /* el medidor de cuadros del dueño cubre este viaje también: el banco dibuja
+     por software y sus huecos van a vsync pase lo que pase, así que el único
+     número que describe SU teléfono sale de acá. Y con rótulo propio, porque
+     bajar el centro y subir el cajón no son el mismo viaje. */
+  if (typeof medArranca === 'function') medArranca(abre ? 'pMedeCC' : 'pMedeCCS');
+  CC_T = setTimeout(() => {
+    c.remove('ccMueve');
+    if (abre && CC.on) c.add('ccQ');
+  }, CC_MUEVE_MS + (abre ? 0 : CC_VUELVE_MS));
+  /* la medición se corta cuando la hoja se detuvo, no cuando el vidrio vuelve:
+     lo que se está midiendo es el VIAJE. */
+  setTimeout(() => { if (typeof medTermina === 'function') medTermina(); }, CC_MUEVE_MS);
+}
+
 function ccAbre(){
   if (CC.on) return;
   ccArma(); ccLee(); ccPinta();
   CC.on = true;
+  ccMueve(true);
   /* ── `visibility` SE LEVANTA UN CUADRO ANTES DE ANIMAR ──
      Cambiando visibilidad y transformación en el mismo cuadro, la transición no
      tiene de dónde partir y la hoja aparece ya puesta. Es lo mismo que ya hacía
@@ -381,6 +411,7 @@ function ccAbre(){
 function ccCierra(){
   if (!CC.on) return;
   CC.on = false;
+  ccMueve(false);
   const e = $('#cc');
   e.classList.remove('on');
   /* y se baja recién cuando la hoja terminó de subir: bajándola en el acto, el

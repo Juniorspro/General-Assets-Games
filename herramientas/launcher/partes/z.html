@@ -1015,6 +1015,42 @@ window.__A = {
              vidFin: vidFin.n, pxFin: vidFin.px,
              topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* ── EL VIAJE DEL CENTRO DE CONTROL, QUE ES LO QUE SE REPORTÓ ──
+     Cuenta los huecos entre cuadros mientras la hoja BAJA, igual que
+     `cajDesliza` con el cajón. `dir` es 'abajo' (por omisión) o 'arriba'.
+     OJO: el banco dibuja por software y sus huecos de `requestAnimationFrame`
+     van a vsync pase lo que pase, así que de acá NO sale la tasa de cuadros de
+     un teléfono. Lo que sí sale —y no depende del aparato— es cuántas pasadas
+     de filtro y cuántas animaciones caras hay vivas a mitad del viaje. */
+  async ccDesliza(dir){
+    const baja = dir !== 'arriba';
+    if (baja) { ccCierra(); } else { ccAbre(); }
+    await new Promise(r => setTimeout(r, 700));
+    const dts = []; let ult = performance.now(); let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    if (baja) { ccAbre(); } else { ccCierra(); }
+    await new Promise(r => setTimeout(r, 170));
+    const medio = this.vidrios(), aMedio = this.anims();
+    await new Promise(r => setTimeout(r, 420));
+    corre = false;
+    const fin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { dir: baja ? 'abajo' : 'arriba',
+             cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animMedio: aMedio.n, carasMedio: aMedio.caras,
+             vidMedio: medio.n, pxMedio: medio.px,
+             vidFin: fin.n, pxFin: fin.px,
+             topMedio: medio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
   /* ── Y EL CIERRE, QUE ES LA MITAD QUE NADIE HABÍA MEDIDO ──
      Las vueltas 130 a 133 midieron SUBIR. El cierre no es el mismo viaje al
      revés: en su primer cuadro `verCajon(false)` saca `body.cajQ`, o sea que
@@ -1066,6 +1102,15 @@ window.__A = {
   cajQModo(v){
     document.body.classList.toggle('cajQvis', !!v);
     return { escondeCapa: !!v };
+  },
+  /* Devuelve el velo de `background-color` y el vidrio sin apagar del centro de
+     control. SE LLAMA `ccVieja` Y NO `cc` PORQUE `cc()` YA EXISTE seiscientas
+     líneas más abajo: en un objeto literal gana la última, así que la mía no
+     existiría y el A/B contestaría con los datos de otra sonda SIN FALLAR. Van
+     cinco veces en este repo (`reja`, `pack`, `aguaCosto`, `anim`, y ésta). */
+  ccVieja(v){
+    document.body.classList.toggle('ccViejaV', !!v);
+    return !document.body.classList.contains('ccViejaV');
   },
   async cajCierra(){
     verCajon(true);

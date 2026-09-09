@@ -120,7 +120,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    launcher entero se escala hacia el icono, así que la foto —414.390 px— tendría
    DOS fuentes de transform a la vez, la deriva y el zoom. Medido con `anims()`
    a los 80 ms de `body.abriendo`: la deriva seguía corriendo. */
-body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,
+body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.ccMueve #fondo.ok,body.pers #fondo.ok,
 body.fg #fondo.ok,body.bienv #fondo.ok,
 body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
 /* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
@@ -490,9 +490,34 @@ body.and #barra{display:none}
    Baja desde arriba, ocupa lo que necesita y deja ver el fondo debajo: es una
    hoja de vidrio, no una pantalla. El velo de atrás es lo que hace que tocar
    afuera se lea a «cerrar». */
-#cc{position:fixed;inset:0;z-index:7;pointer-events:none;
-  background:rgba(2,14,30,0);transition:background .26s ease}
-#cc.on{pointer-events:auto;background:rgba(2,14,30,.42)}
+#cc{position:fixed;inset:0;z-index:7;pointer-events:none}
+#cc.on{pointer-events:auto}
+/* ── EL VELO ES UNA CAPA CON OPACIDAD, NO UN COLOR DE FONDO QUE CAMBIA ──
+   `background-color` NO ES COMPONIBLE. Animado sobre un `inset:0` obliga a
+   REPINTAR los **367.504 px de la pantalla entera** en cada uno de los ~16
+   cuadros de los 260 ms, y —peor— daña la pantalla entera en cada uno de esos
+   cuadros, o sea que fuerza a rehacer TODOS los `backdrop-filter` de la
+   página aunque ninguno se mueva. Es exactamente el mecanismo que la vuelta
+   130 midió con el lienzo del agua.
+
+   Y no era una sospecha: `anims()` devolvía **`caras: 1` bajando el centro de
+   control y `caras: 0` en los otros seis estados barridos**. De todo el
+   launcher, ésta era la ÚNICA animación no componible que había — y caía justo
+   en el gesto que se reportó.
+
+   Con la opacidad de un pseudo lo resuelve el compositor y no cuesta un
+   repintado. Va en un pseudo y no en `#cc` porque una opacidad sobre el padre
+   se llevaría también a la hoja —que tiene que DESLIZARSE, no fundirse— y
+   además crearía un grupo de composición que le cambia el respaldo al
+   `backdrop-filter` del hijo. */
+#cc::before{content:'';position:absolute;inset:0;
+  background:rgba(2,14,30,.42);opacity:0;transition:opacity .26s ease}
+#cc.on::before{opacity:1}
+/* el A/B en el mismo binario: `__A.ccVieja(true)` devuelve el velo viejo. Sin
+   esto, «mejoró» sería un recuerdo y no una medición. */
+body.ccViejaV #cc::before{display:none}
+body.ccViejaV #cc{background:rgba(2,14,30,0);transition:background .26s ease}
+body.ccViejaV #cc.on{background:rgba(2,14,30,.42)}
 /* ── CERRADO NO CUESTA UNA PASADA DE FILTRO ──
    Es la regla de la vuelta 123: un `backdrop-filter` sobre una pieza escondida
    se compone igual, y en este launcher lo que cuesta es la PASADA y no el
@@ -521,6 +546,45 @@ body.and #barra{display:none}
     inset 0 1px 0 rgba(255,255,255,.30);
   transform:translateY(-102%);transition:transform .34s cubic-bezier(.22,1,.3,1)}
 #cc.on #ccHoja{transform:translateY(0)}
+/* ── Y EL VIDRIO DE LA HOJA SE HORNEA, IGUAL QUE EL DEL CAJÓN ──
+   Un `backdrop-filter` sobre algo que se TRASLADA se rehace en cada cuadro por
+   construcción: el rectángulo mira otra parte del fondo. Medido, la hoja son
+   **288.220 px de desenfoque de 34 px rehechos veinte veces** en los 340 ms de
+   cada viaje, más las tres piezas del escritorio detrás: 384.621 px por cuadro
+   contra los 96.401 del escritorio quieto.
+
+   Y NO SE PUEDE ARREGLAR APAGÁNDOLO: fotografiado sin filtro, el fondo se lee
+   NÍTIDO a través de la hoja —los peces, el widget, dos relojes en el mismo
+   sitio— que es exactamente lo que el comentario de arriba dice que no puede
+   pasar. La hoja depende del desenfoque para tapar; su degradado solo va al
+   40-60 %.
+
+   Lo que sí se puede es calcularlo UNA VEZ: el fondo es una foto estática y la
+   deriva está pausada con el centro puesto, así que las veinte pasadas de cada
+   viaje calculan siempre lo mismo. Es el horneado de la vuelta 131, y es
+   LITERALMENTE la misma imagen —`cajFrostHornea` desenfoca la pantalla
+   entera— colocada desde arriba. Ver `cajFrostHornea` en `c.js`.
+
+   Mientras viaja, el mapa de bits se traslada con la hoja y muestra la parte de
+   arriba de la foto en vez de lo que hay detrás en ese instante. Es el mismo
+   precedente que la vuelta 131 dejó anotado y aceptado para el cajón, y acá es
+   más benigno: la hoja ESTÁ arriba, así que la parte de arriba de la foto es
+   aproximadamente lo que tiene detrás. */
+/* Y LLEVA EL VELO ADENTRO, que es la parte que no es obvia: el
+   `backdrop-filter` vivo desenfoca TODO lo que hay debajo de la hoja, y debajo
+   está el velo de `#cc::before`. El horneado sale de la foto CRUDA, así que sin
+   reponerlo la hoja queda más clara — medido, [63,89,120] el vivo contra
+   [83,123,170] el horneado, con el fondo congelado y **0,0 de diferencia fuera
+   de la hoja**, o sea que la medición es del vidrio y no de la deriva.
+   El color es el del velo pasado por el mismo filtro que el horneado
+   (`saturate(118%) brightness(.84)` sobre `rgb(2,14,30)`), y va como capa
+   propia porque el degradado del tinte es un valor vivo del CSS. */
+body.frost:not(.ccViejaV) #ccHoja{
+  background-image:linear-gradient(180deg,rgba(9,44,84,.40) 0%,rgba(8,38,74,.50) 45%,rgba(6,30,60,.60) 100%),
+    linear-gradient(rgba(0,12,28,.42),rgba(0,12,28,.42)),var(--cajFrost);
+  background-size:auto,auto,100% 100vh;
+  background-position:top,top,top;background-repeat:no-repeat;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
 #ccTop{display:grid;grid-template-columns:auto 1fr auto;align-items:baseline;
   gap:0 10px;padding:0 6px 12px}
 #ccHora{font-weight:800;font-size:34px;line-height:1;letter-spacing:-.5px;
@@ -710,6 +774,43 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
 body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
+/* ── Y EL CENTRO DE CONTROL PAGA LO MISMO QUE EL CAJÓN, POR LO MISMO ──
+   Medido a los 90 y a los 260 ms de bajarlo, con `vidrios()`:
+
+       escritorio quieto        3 pasadas ·  96.401 px
+       bajando el centro        4 pasadas · **384.621 px**   (cuatro veces)
+
+   Los 288.220 que aparecen son **la propia hoja**: `#ccHoja` lleva
+   `blur(34px)` y se TRASLADA, y un `backdrop-filter` sobre algo que se mueve
+   se rehace en cada cuadro por construcción — el rectángulo mira otra parte
+   del fondo. Y detrás siguen filtrando el reloj, la búsqueda y el dock, que la
+   hoja va a tapar de todos modos.
+
+   Mientras viaja, ninguno filtra. La hoja conserva su degradado, su borde y
+   sus tres sombras internas —o sea que se sigue leyendo a pieza de vidrio— y
+   lo único que pierde son 340 ms de desenfoque mientras cruza la pantalla.
+   Es el mismo trato de la vuelta 132.
+
+   Va por clase del `body` y no por `#cc.on` porque el CIERRE también desliza,
+   y ahí `.on` ya no está: repartido, la mitad de los casos queda sin cubrir.
+
+   LA HOJA NO ENTRA EN ESTA REGLA, y es la corrección que costó una captura:
+   entre que el launcher arranca y que `cajPrepara` hornea en el ocio hay unos
+   segundos con foto y SIN horneado, y ahí apagarle el filtro la deja
+   transparente — el fondo se lee nítido a través, dos relojes en el mismo
+   sitio. Con el horneado puesto la hoja ya no tiene filtro que apagar, así que
+   la regla no compraría nada y sólo podría romper esa ventana. */
+body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y CON LA HOJA ASENTADA, LO QUE TAPA DEJA DE FILTRAR ──
+   La hoja mide **699 px de alto sobre una pantalla de 892**, así que el reloj y
+   la barra de búsqueda quedan debajo al cien por cien: filtrarlos es trabajo
+   puro. El DOCK no —queda en la franja de abajo, a la vista— así que conserva
+   su vidrio. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja,
+   que no es lo mismo que tapa la del cajón. */
+body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
 /* ── Y CON EL VIDRIO HORNEADO, LAS BALDOSAS TAMPOCO FILTRAN NADA ──
    Lo que una baldosa del cajón desenfoca es la hoja, y la hoja ya es un mapa de
    bits desenfocado a 34 px: **desenfocar 12 px lo que ya está desenfocado 34 no
@@ -736,6 +837,14 @@ body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
    No va permanente: son 412×892 a densidad 3, o sea trece megas de textura, y
    con el cajón cerrado y asentado no hay nada que sostener. */
 #cajon.on,#cajon.abre{will-change:transform}
+/* SE PROBÓ `will-change:transform` EN LA HOJA Y SE SACÓ, que es lo que
+   corresponde con un ajuste que no mide mejor. La idea era la de la vuelta
+   132: la hoja vive con `visibility:hidden`, así que al abrirla hay que
+   rasterizar de cero 412 × 699 px con dieciséis botones y sus glifos, y una
+   promoción anticipada le avisaría al gestor de baldosas. Medido, el pico del
+   viaje se quedó donde estaba —108 a 183 ms con y sin— y la promoción cuesta
+   trece megas de textura. Lo que sí está medido es que el pico NO es de tener
+   el centro puesto: abierto y quieto da peor 17,5 ms y CERO cuadros perdidos. */
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
@@ -2403,9 +2512,10 @@ const TXT = {
         cgObtur:'Sonido del obturador', cgObturD:'Esta función no está disponible para momentos en vivo',
         cgVol:'Función de los botones de volumen', cgInfo:'Guardar información de la ubicación',
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
-        pMedir: 'Medir el deslizamiento del caj\u00f3n',
+        pMedir: 'Medir los cuadros de cada gesto',
         pMedeUno: '{0} \u00b7 {1} cuadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
         pMedeSube: 'AL SUBIR', pMedeBaja: 'AL BAJAR', pMedeScroll: 'SCROLLEANDO',
+        pMedeCC: 'BAJANDO EL CENTRO', pMedeCCS: 'SUBIENDO EL CENTRO',
         aNombreP: 'Personalizar',
         cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
         fgGenar: 'Generar', fgGenando: 'Generando…', fgGenPh: 'Describí un fondo…', fgGenOk: 'Fondo nuevo', fgNoGen: 'No se pudo generar. Probá de nuevo.', fgSinRed: 'Generar necesita conexión con el sistema', fg_i1: 'acuario con peces y burbujas', fg_i2: 'pasto con rocío al amanecer', fg_i3: 'nubes sobre un cielo celeste', fg_i4: 'isla con una palmera', fg_i5: 'atardecer sobre el mar', fg_i6: 'burbujas de vidrio bajo el agua', fgTit: 'Fondo de pantalla', fgFab: 'De fábrica', fgPropio: 'La tuya',
@@ -2497,9 +2607,10 @@ const TXT = {
         cgObtur:'Shutter sound', cgObturD:'Not available for live moments',
         cgVol:'Volume button action', cgInfo:'Save location information',
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
-        pMedir: 'Measure the drawer slide',
+        pMedir: 'Measure frames on every gesture',
         pMedeUno: '{0} \u00b7 {1} frames \u00b7 median {2} ms \u00b7 p90 {3} \u00b7 {4} dropped',
         pMedeSube: 'OPENING', pMedeBaja: 'CLOSING', pMedeScroll: 'SCROLLING',
+        pMedeCC: 'SHADE DOWN', pMedeCCS: 'SHADE UP',
         aNombreP: 'Personalize',
         cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
         fgGenar: 'Generate', fgGenando: 'Generating…', fgGenPh: 'Describe a wallpaper…', fgGenOk: 'New wallpaper', fgNoGen: 'Could not generate. Try again.', fgSinRed: 'Generating needs the system bridge', fg_i1: 'aquarium with fish and bubbles', fg_i2: 'dewy grass at sunrise', fg_i3: 'clouds over a bright blue sky', fg_i4: 'island with a palm tree', fg_i5: 'sunset over the sea', fg_i6: 'glass bubbles underwater', fgTit: 'Wallpaper', fgFab: 'Default', fgPropio: 'Yours',
@@ -2591,9 +2702,10 @@ const TXT = {
         cgObtur:'Som do obturador', cgObturD:'Este recurso n\u00e3o est\u00e1 dispon\u00edvel para momentos ao vivo',
         cgVol:'Fun\u00e7\u00e3o dos bot\u00f5es de volume', cgInfo:'Salvar informa\u00e7\u00e3o da localiza\u00e7\u00e3o',
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
-        pMedir: 'Medir o deslize da gaveta',
+        pMedir: 'Medir os quadros de cada gesto',
         pMedeUno: '{0} \u00b7 {1} quadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
         pMedeSube: 'AO ABRIR', pMedeBaja: 'AO FECHAR', pMedeScroll: 'ROLANDO',
+        pMedeCC: 'ABRINDO O CENTRO', pMedeCCS: 'FECHANDO O CENTRO',
         aNombreP: 'Personalizar',
         cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
         fgGenar: 'Gerar', fgGenando: 'Gerando…', fgGenPh: 'Descreva um fundo…', fgGenOk: 'Fundo novo', fgNoGen: 'Não deu para gerar. Tente de novo.', fgSinRed: 'Gerar precisa da ponte com o sistema', fg_i1: 'aquário com peixes e bolhas', fg_i2: 'grama com orvalho ao amanhecer', fg_i3: 'nuvens num céu azul claro', fg_i4: 'ilha com uma palmeira', fg_i5: 'pôr do sol sobre o mar', fg_i6: 'bolhas de vidro debaixo da água', fgTit: 'Papel de parede', fgFab: 'De fábrica', fgPropio: 'Sua',
@@ -2852,7 +2964,13 @@ function cajFrostHornea(rad){
   /* sin foto queda el `backdrop-filter` de siempre: el degradado de respaldo ya
      es liso, así que no hay nada que desenfocar, y degradar a un rectángulo
      plano sería peor que pagar el filtro */
-  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth){
+    /* sacando la foto, el horneado viejo describe un fondo que ya no está: la
+       clase se va y las dos hojas vuelven al filtro vivo, que sobre un
+       degradado liso no cuesta casi nada */
+    caj.classList.remove('hor'); document.body.classList.remove('frost');
+    return false;
+  }
   const W = innerWidth || 412, H = innerHeight || 892;
   const w = CAJ_FROST_W, h = Math.max(8, Math.round(w * H / W));
   const s = w / W;                                   /* pantalla → lienzo */
@@ -2903,10 +3021,24 @@ function cajFrostHornea(rad){
     out.width = w; out.height = h;
     out.getContext('2d').drawImage(bl, m, m, w, h, 0, 0, w, h);
 
-    caj.style.setProperty('--cajFrost', 'url(' + out.toDataURL('image/jpeg', 0.82) + ')');
+    /* ── LA VARIABLE VA EN LA RAÍZ Y NO EN `#cajon`, Y ESO ES LO QUE LA
+           HACE SERVIR PARA LOS DOS ──
+       El horneado es **la pantalla entera desenfocada**, así que la hoja del
+       centro de control —que está pegada arriba y mide 699 px de los 892—
+       recibe exactamente los píxeles que le tocan con `background-position:top`
+       y `background-size:100% 100vh`. Una segunda cocción para el centro sería
+       calcular dos veces la misma imagen y dejar dos que se pueden
+       desincronizar el día que cambie el radio. Las custom properties heredan,
+       así que `#cajon.hor` la sigue leyendo igual. */
+    document.documentElement.style.setProperty(
+      '--cajFrost', 'url(' + out.toDataURL('image/jpeg', 0.82) + ')');
     caj.classList.add('hor');
+    document.body.classList.add('frost');
     return true;
-  } catch (e){ return false; }   /* un lienzo teñido no puede leerse: queda el filtro */
+  } catch (e){                   /* un lienzo teñido no puede leerse: queda el filtro */
+    caj.classList.remove('hor'); document.body.classList.remove('frost');
+    return false;
+  }
 }
 
 function cajFrostRehornea(){
@@ -9883,10 +10015,40 @@ function ccPinta(){
   $('#ccPie').textContent = T('ccPie');
 }
 
+/* ── LA HOJA VIAJA 340 ms Y ESO SE MARCA EN EL `body` ──
+   `ccMueve` es lo que apaga el vidrio mientras la hoja cruza la pantalla y lo
+   que mantiene la deriva de la foto pausada durante los DOS viajes. `ccQ` es
+   la hoja ya asentada. Los dos caminos —abrir y cerrar— pasan por la misma
+   función, porque repartidos se desincronizan el día que se toque uno. */
+let CC_T = 0;
+/* al CERRAR el vidrio del escritorio vuelve TARDE, con todo quieto: sacándolo
+   en el cuadro en que la hoja termina de subir, las tres piezas encienden sus
+   96.401 px de desenfoque y sus tres filtros de SVG de golpe. Es el escalón que
+   la vuelta 135 midió en el cajón, y acá estaba igual. */
+const CC_MUEVE_MS = 360, CC_VUELVE_MS = 190;
+function ccMueve(abre){
+  const c = document.body.classList;
+  c.add('ccMueve'); c.remove('ccQ');
+  clearTimeout(CC_T);
+  /* el medidor de cuadros del dueño cubre este viaje también: el banco dibuja
+     por software y sus huecos van a vsync pase lo que pase, así que el único
+     número que describe SU teléfono sale de acá. Y con rótulo propio, porque
+     bajar el centro y subir el cajón no son el mismo viaje. */
+  if (typeof medArranca === 'function') medArranca(abre ? 'pMedeCC' : 'pMedeCCS');
+  CC_T = setTimeout(() => {
+    c.remove('ccMueve');
+    if (abre && CC.on) c.add('ccQ');
+  }, CC_MUEVE_MS + (abre ? 0 : CC_VUELVE_MS));
+  /* la medición se corta cuando la hoja se detuvo, no cuando el vidrio vuelve:
+     lo que se está midiendo es el VIAJE. */
+  setTimeout(() => { if (typeof medTermina === 'function') medTermina(); }, CC_MUEVE_MS);
+}
+
 function ccAbre(){
   if (CC.on) return;
   ccArma(); ccLee(); ccPinta();
   CC.on = true;
+  ccMueve(true);
   /* ── `visibility` SE LEVANTA UN CUADRO ANTES DE ANIMAR ──
      Cambiando visibilidad y transformación en el mismo cuadro, la transición no
      tiene de dónde partir y la hoja aparece ya puesta. Es lo mismo que ya hacía
@@ -9899,6 +10061,7 @@ function ccAbre(){
 function ccCierra(){
   if (!CC.on) return;
   CC.on = false;
+  ccMueve(false);
   const e = $('#cc');
   e.classList.remove('on');
   /* y se baja recién cuando la hoja terminó de subir: bajándola en el acto, el
@@ -11435,6 +11598,42 @@ window.__A = {
              vidFin: vidFin.n, pxFin: vidFin.px,
              topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
   },
+  /* ── EL VIAJE DEL CENTRO DE CONTROL, QUE ES LO QUE SE REPORTÓ ──
+     Cuenta los huecos entre cuadros mientras la hoja BAJA, igual que
+     `cajDesliza` con el cajón. `dir` es 'abajo' (por omisión) o 'arriba'.
+     OJO: el banco dibuja por software y sus huecos de `requestAnimationFrame`
+     van a vsync pase lo que pase, así que de acá NO sale la tasa de cuadros de
+     un teléfono. Lo que sí sale —y no depende del aparato— es cuántas pasadas
+     de filtro y cuántas animaciones caras hay vivas a mitad del viaje. */
+  async ccDesliza(dir){
+    const baja = dir !== 'arriba';
+    if (baja) { ccCierra(); } else { ccAbre(); }
+    await new Promise(r => setTimeout(r, 700));
+    const dts = []; let ult = performance.now(); let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    if (baja) { ccAbre(); } else { ccCierra(); }
+    await new Promise(r => setTimeout(r, 170));
+    const medio = this.vidrios(), aMedio = this.anims();
+    await new Promise(r => setTimeout(r, 420));
+    corre = false;
+    const fin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { dir: baja ? 'abajo' : 'arriba',
+             cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animMedio: aMedio.n, carasMedio: aMedio.caras,
+             vidMedio: medio.n, pxMedio: medio.px,
+             vidFin: fin.n, pxFin: fin.px,
+             topMedio: medio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
   /* ── Y EL CIERRE, QUE ES LA MITAD QUE NADIE HABÍA MEDIDO ──
      Las vueltas 130 a 133 midieron SUBIR. El cierre no es el mismo viaje al
      revés: en su primer cuadro `verCajon(false)` saca `body.cajQ`, o sea que
@@ -11486,6 +11685,15 @@ window.__A = {
   cajQModo(v){
     document.body.classList.toggle('cajQvis', !!v);
     return { escondeCapa: !!v };
+  },
+  /* Devuelve el velo de `background-color` y el vidrio sin apagar del centro de
+     control. SE LLAMA `ccVieja` Y NO `cc` PORQUE `cc()` YA EXISTE seiscientas
+     líneas más abajo: en un objeto literal gana la última, así que la mía no
+     existiría y el A/B contestaría con los datos de otra sonda SIN FALLAR. Van
+     cinco veces en este repo (`reja`, `pack`, `aguaCosto`, `anim`, y ésta). */
+  ccVieja(v){
+    document.body.classList.toggle('ccViejaV', !!v);
+    return !document.body.classList.contains('ccViejaV');
   },
   async cajCierra(){
     verCajon(true);

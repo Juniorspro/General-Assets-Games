@@ -281,6 +281,162 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima octava vuelta (2026-09-09): **AERO** — bajar el centro de control iba a 23 cuadros por segundo
+
+Reporte, con dos capturas: *"acá cuando estás bajando esta cosa, se laguea feo, se vuelve re lento, eso
+quiero que te fijes no cosas ndqvr"*, y enseguida *"medi pue los fps"*.
+
+#### EL NÚMERO PRIMERO, PORQUE ES LO QUE SE PIDIÓ
+
+Cinco corridas de cada lado del A/B **en el mismo binario** (`__A.ccVieja(true)` devuelve el
+comportamiento viejo), midiendo los huecos entre cuadros mientras la hoja baja:
+
+| bajando el centro | medianas de las cinco | mediana | cuadros por segundo |
+|---|---|---|---|
+| control | 37,5 · 37,6 · 44,2 · 44,6 · 68,1 | **44,2 ms** | **23** |
+| **ahora** | **16,6 · 16,7 · 16,7 · 17,0 · 47,7** | **16,7 ms** | **60** |
+
+**Y ESTA VEZ EL BANCO SÍ PUEDE VER LA MEJORA, que en las ocho vueltas anteriores no podía.** El
+deslizamiento del cajón daba 16,6-16,7 con y sin arreglo, porque el banco dibuja por software y los
+huecos de `requestAnimationFrame` van a vsync pase lo que pase. Acá el defecto era **un repintado de
+pantalla completa por cuadro**, y eso lo paga el procesador igual. El testigo: el escritorio quieto da
+mediana 16,7 · peor 33,6 · 2 cuadros perdidos, y el centro **abierto y quieto** da 16,7 · **peor 17,5 ·
+CERO perdidos** — o sea que los 44 ms eran del viaje y de nada más.
+
+#### LA CAUSA: `background-color` NO ES COMPONIBLE, Y ERA LA ÚNICA CARA DEL LAUNCHER
+
+`anims()` —la sonda de la vuelta anterior— contestó en una línea. El velo del centro de control era
+`#cc{background:rgba(2,14,30,0); transition:background .26s ease}` sobre un `inset:0`:
+
+| | animaciones caras | píxeles |
+|---|---|---|
+| `#cc.on` · `background-color` | **1** | **367.504** — la pantalla entera |
+| `#ccHoja` · `transform` | 0 | 288.220 |
+
+La vuelta 137 había barrido seis estados y devuelto **`caras: 0` en los seis**; ésta es la séptima y la
+única con una. Un `background-color` animado obliga a **repintar** la capa en cada uno de los ~16
+cuadros y, peor, **daña la pantalla entera en cada uno**, o sea que fuerza a rehacer TODOS los
+`backdrop-filter` de la página aunque ninguno se mueva. Es el mismo mecanismo que la vuelta 130 midió
+con el lienzo del agua.
+
+**EL VELO PASA A SER LA OPACIDAD DE UN PSEUDO**, que la resuelve el compositor. Va en `#cc::before` y
+no en `#cc` por dos razones: una opacidad sobre el padre se llevaría también a la hoja —que tiene que
+DESLIZARSE, no fundirse— y crearía un grupo de composición que le cambia el respaldo al
+`backdrop-filter` del hijo.
+
+#### Y LA OTRA MITAD: 384.621 PÍXELES DE FILTRO POR CUADRO
+
+| | pasadas de vidrio | píxeles por cuadro |
+|---|---|---|
+| escritorio quieto | 3 | 96.401 |
+| **bajando el centro** | **4** | **384.621** |
+
+Los 288.220 que aparecen son **la propia hoja**: `#ccHoja` lleva `blur(34px)` y se **traslada**, así que
+el filtro se rehace en cada cuadro por construcción — el rectángulo mira otra parte del fondo. Es
+exactamente lo que la vuelta 132 encontró con el cajón.
+
+**Y NO SE ARREGLA APAGÁNDOLO, que fue lo primero que probé.** Fotografiado sin filtro, el fondo se lee
+**nítido** a través de la hoja —los peces, el widget, dos relojes en el mismo sitio— que es literalmente
+lo que el comentario de ese CSS dice desde que se escribió: la hoja depende del desenfoque para tapar,
+su degradado sólo va al 40-60 %.
+
+**LO QUE SÍ SE PUEDE ES CALCULARLO UNA VEZ, Y LA IMAGEN YA EXISTÍA.** `cajFrostHornea` —la vuelta 131—
+desenfoca **la pantalla entera** para el cajón, y la hoja del centro está pegada arriba: con
+`background-position:top` y `background-size:100% 100vh` recibe exactamente los píxeles que le tocan.
+Una segunda cocción sería calcular dos veces la misma imagen y dejar dos que se pueden desincronizar.
+La variable se sube de `#cajon` a la raíz —las custom properties heredan, así que `#cajon.hor` la sigue
+leyendo— y la clase pasa a `body.frost`.
+
+**Y LE FALTABA EL VELO ADENTRO, que es la parte que no es obvia.** El `backdrop-filter` vivo desenfoca
+**todo** lo que hay debajo de la hoja, y debajo está el velo; el horneado sale de la foto cruda. Medido
+con el fondo congelado y **0,0 de diferencia fuera de la hoja** —o sea que la medición es del vidrio y
+no de la deriva—:
+
+| | vivo | horneado |
+|---|---|---|
+| hoja arriba | [63,2 · 89,1 · 119,6] | [82,8 · 123,4 · 170,1] |
+| **media de la hoja** | | **28,79 sobre 255** |
+
+Con el velo repuesto como capa propia —el color del velo pasado por el mismo filtro, `rgba(0,12,28,.42)`—
+la media baja a **4,86**, y las bandas del medio y de abajo quedan en **0,4 y 0,9**. Lo que sobra arriba
+(11,0) es el mismo residuo que la vuelta 131 ya documentó y aceptó: el filtro vivo desenfoca además el
+widget del reloj, que el horneado no tiene.
+
+#### DOS CLASES MÁS, Y LA SEGUNDA SALE DE UNA CUENTA
+
+`ccMueve` mientras la hoja viaja y `ccQ` con la hoja asentada, igual que el cajón. Y van por clase del
+`body` y no por `#cc.on` **porque el cierre también desliza** y ahí `.on` ya no está: repartido, la
+mitad de los casos queda sin cubrir.
+
+**QUÉ TAPA ESTA HOJA NO ES LO MISMO QUE TAPA LA DEL CAJÓN.** Mide **700 px medidos sobre una pantalla de
+892**, así que el reloj y la búsqueda quedan debajo al cien por cien y el **dock no** — queda en la
+franja de abajo, a la vista, y conserva su vidrio. Medido alternando `ccQ` con el fondo congelado:
+**0,106 % de los píxeles cambian, con máximo 4 sobre 255**.
+
+Al cerrar, el vidrio del escritorio vuelve **tarde** (`CC_VUELVE_MS` 190): sacándolo en el cuadro en que
+la hoja termina de subir, las tres piezas encienden sus 96.401 px de golpe. Es el escalón de la vuelta
+135, que estaba igual acá.
+
+**Y LA DERIVA SE DESPAUSABA EN EL PRIMER CUADRO DEL CIERRE.** `body.cc` la pausa y `ccCierra` lo saca en
+su primera línea: medido, a los 90 ms del cierre `#fondo.ok` estaba animando `transform` sobre 414.878
+px mientras la hoja subía. Es el mismo defecto que la vuelta 135 arregló para el cajón y que nadie
+había aplicado acá. `ccMueve` entra en la lista de pausa.
+
+#### LA HOJA NO ENTRA EN LA REGLA DE `ccMueve`, Y ESO COSTÓ UNA CAPTURA
+
+Entre que el launcher arranca y que `cajPrepara` hornea en el ocio hay unos segundos **con foto y sin
+horneado**, y ahí apagarle el filtro la deja transparente. Con el horneado puesto la hoja ya no tiene
+filtro que apagar, así que la regla no compraba nada y sólo podía romper esa ventana. Verificado
+fotografiando el respaldo: sin horneado la hoja usa su filtro vivo y tapa igual.
+
+#### SE PROBÓ `will-change` EN LA HOJA Y SE SACÓ
+
+La idea era la de la vuelta 132: la hoja vive con `visibility:hidden`, así que al abrirla hay que
+rasterizar de cero 412 × 700 px con dieciséis botones y sus glifos. Medido, **el pico del viaje se quedó
+donde estaba —108 a 183 ms con y sin—** y la promoción cuesta trece megas de textura. Un ajuste que no
+mide mejor no se deja puesto por parecer razonable.
+
+#### EL MEDIDOR DEL TELÉFONO CUBRE LOS DOS VIAJES NUEVOS
+
+El de la vuelta 133 decía AL SUBIR · AL BAJAR · SCROLLEANDO, o sea que cubría **el cajón** y nada más —
+y el reclamo es de otro gesto. Ahora dice además **BAJANDO EL CENTRO** y **SUBIENDO EL CENTRO**, en los
+tres idiomas, y el rótulo del interruptor deja de decir *«medir el deslizamiento del cajón»*, que con
+cinco viajes medidos era falso. Verificado en el banco: `SHADE DOWN · 3 frames`, `SHADE UP`, y
+`OPENING` para el cajón, los tres con su rótulo propio.
+
+#### DOS DEFECTOS DE MEDICIÓN, Y LOS DOS DABAN NÚMEROS PLAUSIBLES
+
+1. **EL BANCO TARDA MÁS DE 1,5 s EN ASENTARSE.** La primera corrida devolvió **22 animaciones vivas** en
+   el escritorio quieto —veintiuna `.ap.entra`— y estuve por perseguir un bucle de re-entrada que no
+   existe. A los 3 s hay **1** (la deriva): las baldosas todavía estaban entrando en escena. Los planes
+   esperan 3,2 s.
+2. **EL CONTROL DEL A/B NO ERA CONTROL.** La regla de `ccMueve` le faltaba el `:not(.ccViejaV)`, así que
+   el vidrio estaba apagado en los dos lados y el control devolvía **0 pasadas**. La firma fue que
+   control y arreglo daban el mismo número, que es la misma de siempre en este repo.
+   Y una tercera, ya conocida: comparar dos capturas separadas por un cierre da **8,6 % de píxeles
+   distintos** porque la deriva corre en el medio. Alternando la clase con el centro abierto —donde la
+   deriva está pausada— el fondo da **0,0 de diferencia** y la comparación pasa a medir el vidrio.
+
+#### MEDIDO AL CERRAR
+
+Bajando el centro: **caras 1 → 0**, vidrio **4 pasadas / 384.621 px → 0 / 0**, mediana **44,2 → 16,7 ms
+(23 → 60 cuadros por segundo)** sobre cinco corridas de cada lado. Asentado: **4 / 384.621 → 1 / 36.096**
+(sólo el dock). Cerrado vuelve a 3 / 96.401 con el `body` limpio. Horneado 3.552 bytes, interior a
+**4,86 de 255** del filtro vivo y **0,0 fuera de la hoja**. `ccQ` con **0,106 % de píxeles y máximo 4**.
+Respaldo sin horneado verificado y fotografiado. Regresión: escritorio **4 capas / 35,5 MB / 3 vidrios /
+1 animación**, riel de **17 letras** con `letra('S')` mirando la S, **9 packs** con 36 baldosas, mascota
+23 huesos y 5.541 triángulos, centro **16 · 1 · 10 · 4** con **0 ondas de agua**, gesto arriba abre el
+cajón con 0 ondas, el cajón cierra y deja el escritorio en 3 / 96.401, y los tres idiomas en vivo.
+`window.__errs` **vacío en las once corridas**. APK **1.675**, 2,2 MB.
+
+**LO QUE NO SE PUDO EXPLICAR, Y ES HONESTO DECIRLO:** queda un pico de 108 a 183 ms en el viaje, con
+cuatro cuadros perdidos. Está **en los dos lados del A/B** —o sea que no lo introduje ni lo arreglé— y
+no es lo que se reportó, que es la mediana. Está medido dónde NO está: el escritorio quieto da peor 33,6
+y el centro abierto y quieto **peor 17,5 con cero perdidos**, así que es de traer la hoja a escena y no
+de tenerla puesta. El `will-change` no lo movió. El próximo sospechoso es `ccArma`/`ccPinta`/`ccNotis`,
+que rehacen la lista en cada apertura, y eso se contesta armando el centro en el ocio como
+`cajPrepara()` hace con el cajón.
+
 ### Centésima trigésima séptima vuelta (2026-09-09): **AERO** — abrir una app animaba siete cosas y dos no se veían
 
 Pedido: *"elimina toda faz de lag que generen las animaciones"*.

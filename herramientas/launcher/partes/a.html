@@ -120,7 +120,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
    launcher entero se escala hacia el icono, así que la foto —414.390 px— tendría
    DOS fuentes de transform a la vez, la deriva y el zoom. Medido con `anims()`
    a los 80 ms de `body.abriendo`: la deriva seguía corriendo. */
-body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.pers #fondo.ok,
+body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.ccMueve #fondo.ok,body.pers #fondo.ok,
 body.fg #fondo.ok,body.bienv #fondo.ok,
 body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
 /* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
@@ -490,9 +490,34 @@ body.and #barra{display:none}
    Baja desde arriba, ocupa lo que necesita y deja ver el fondo debajo: es una
    hoja de vidrio, no una pantalla. El velo de atrás es lo que hace que tocar
    afuera se lea a «cerrar». */
-#cc{position:fixed;inset:0;z-index:7;pointer-events:none;
-  background:rgba(2,14,30,0);transition:background .26s ease}
-#cc.on{pointer-events:auto;background:rgba(2,14,30,.42)}
+#cc{position:fixed;inset:0;z-index:7;pointer-events:none}
+#cc.on{pointer-events:auto}
+/* ── EL VELO ES UNA CAPA CON OPACIDAD, NO UN COLOR DE FONDO QUE CAMBIA ──
+   `background-color` NO ES COMPONIBLE. Animado sobre un `inset:0` obliga a
+   REPINTAR los **367.504 px de la pantalla entera** en cada uno de los ~16
+   cuadros de los 260 ms, y —peor— daña la pantalla entera en cada uno de esos
+   cuadros, o sea que fuerza a rehacer TODOS los `backdrop-filter` de la
+   página aunque ninguno se mueva. Es exactamente el mecanismo que la vuelta
+   130 midió con el lienzo del agua.
+
+   Y no era una sospecha: `anims()` devolvía **`caras: 1` bajando el centro de
+   control y `caras: 0` en los otros seis estados barridos**. De todo el
+   launcher, ésta era la ÚNICA animación no componible que había — y caía justo
+   en el gesto que se reportó.
+
+   Con la opacidad de un pseudo lo resuelve el compositor y no cuesta un
+   repintado. Va en un pseudo y no en `#cc` porque una opacidad sobre el padre
+   se llevaría también a la hoja —que tiene que DESLIZARSE, no fundirse— y
+   además crearía un grupo de composición que le cambia el respaldo al
+   `backdrop-filter` del hijo. */
+#cc::before{content:'';position:absolute;inset:0;
+  background:rgba(2,14,30,.42);opacity:0;transition:opacity .26s ease}
+#cc.on::before{opacity:1}
+/* el A/B en el mismo binario: `__A.ccVieja(true)` devuelve el velo viejo. Sin
+   esto, «mejoró» sería un recuerdo y no una medición. */
+body.ccViejaV #cc::before{display:none}
+body.ccViejaV #cc{background:rgba(2,14,30,0);transition:background .26s ease}
+body.ccViejaV #cc.on{background:rgba(2,14,30,.42)}
 /* ── CERRADO NO CUESTA UNA PASADA DE FILTRO ──
    Es la regla de la vuelta 123: un `backdrop-filter` sobre una pieza escondida
    se compone igual, y en este launcher lo que cuesta es la PASADA y no el
@@ -521,6 +546,45 @@ body.and #barra{display:none}
     inset 0 1px 0 rgba(255,255,255,.30);
   transform:translateY(-102%);transition:transform .34s cubic-bezier(.22,1,.3,1)}
 #cc.on #ccHoja{transform:translateY(0)}
+/* ── Y EL VIDRIO DE LA HOJA SE HORNEA, IGUAL QUE EL DEL CAJÓN ──
+   Un `backdrop-filter` sobre algo que se TRASLADA se rehace en cada cuadro por
+   construcción: el rectángulo mira otra parte del fondo. Medido, la hoja son
+   **288.220 px de desenfoque de 34 px rehechos veinte veces** en los 340 ms de
+   cada viaje, más las tres piezas del escritorio detrás: 384.621 px por cuadro
+   contra los 96.401 del escritorio quieto.
+
+   Y NO SE PUEDE ARREGLAR APAGÁNDOLO: fotografiado sin filtro, el fondo se lee
+   NÍTIDO a través de la hoja —los peces, el widget, dos relojes en el mismo
+   sitio— que es exactamente lo que el comentario de arriba dice que no puede
+   pasar. La hoja depende del desenfoque para tapar; su degradado solo va al
+   40-60 %.
+
+   Lo que sí se puede es calcularlo UNA VEZ: el fondo es una foto estática y la
+   deriva está pausada con el centro puesto, así que las veinte pasadas de cada
+   viaje calculan siempre lo mismo. Es el horneado de la vuelta 131, y es
+   LITERALMENTE la misma imagen —`cajFrostHornea` desenfoca la pantalla
+   entera— colocada desde arriba. Ver `cajFrostHornea` en `c.js`.
+
+   Mientras viaja, el mapa de bits se traslada con la hoja y muestra la parte de
+   arriba de la foto en vez de lo que hay detrás en ese instante. Es el mismo
+   precedente que la vuelta 131 dejó anotado y aceptado para el cajón, y acá es
+   más benigno: la hoja ESTÁ arriba, así que la parte de arriba de la foto es
+   aproximadamente lo que tiene detrás. */
+/* Y LLEVA EL VELO ADENTRO, que es la parte que no es obvia: el
+   `backdrop-filter` vivo desenfoca TODO lo que hay debajo de la hoja, y debajo
+   está el velo de `#cc::before`. El horneado sale de la foto CRUDA, así que sin
+   reponerlo la hoja queda más clara — medido, [63,89,120] el vivo contra
+   [83,123,170] el horneado, con el fondo congelado y **0,0 de diferencia fuera
+   de la hoja**, o sea que la medición es del vidrio y no de la deriva.
+   El color es el del velo pasado por el mismo filtro que el horneado
+   (`saturate(118%) brightness(.84)` sobre `rgb(2,14,30)`), y va como capa
+   propia porque el degradado del tinte es un valor vivo del CSS. */
+body.frost:not(.ccViejaV) #ccHoja{
+  background-image:linear-gradient(180deg,rgba(9,44,84,.40) 0%,rgba(8,38,74,.50) 45%,rgba(6,30,60,.60) 100%),
+    linear-gradient(rgba(0,12,28,.42),rgba(0,12,28,.42)),var(--cajFrost);
+  background-size:auto,auto,100% 100vh;
+  background-position:top,top,top;background-repeat:no-repeat;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
 #ccTop{display:grid;grid-template-columns:auto 1fr auto;align-items:baseline;
   gap:0 10px;padding:0 6px 12px}
 #ccHora{font-weight:800;font-size:34px;line-height:1;letter-spacing:-.5px;
@@ -710,6 +774,43 @@ body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
 body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
+/* ── Y EL CENTRO DE CONTROL PAGA LO MISMO QUE EL CAJÓN, POR LO MISMO ──
+   Medido a los 90 y a los 260 ms de bajarlo, con `vidrios()`:
+
+       escritorio quieto        3 pasadas ·  96.401 px
+       bajando el centro        4 pasadas · **384.621 px**   (cuatro veces)
+
+   Los 288.220 que aparecen son **la propia hoja**: `#ccHoja` lleva
+   `blur(34px)` y se TRASLADA, y un `backdrop-filter` sobre algo que se mueve
+   se rehace en cada cuadro por construcción — el rectángulo mira otra parte
+   del fondo. Y detrás siguen filtrando el reloj, la búsqueda y el dock, que la
+   hoja va a tapar de todos modos.
+
+   Mientras viaja, ninguno filtra. La hoja conserva su degradado, su borde y
+   sus tres sombras internas —o sea que se sigue leyendo a pieza de vidrio— y
+   lo único que pierde son 340 ms de desenfoque mientras cruza la pantalla.
+   Es el mismo trato de la vuelta 132.
+
+   Va por clase del `body` y no por `#cc.on` porque el CIERRE también desliza,
+   y ahí `.on` ya no está: repartido, la mitad de los casos queda sin cubrir.
+
+   LA HOJA NO ENTRA EN ESTA REGLA, y es la corrección que costó una captura:
+   entre que el launcher arranca y que `cajPrepara` hornea en el ocio hay unos
+   segundos con foto y SIN horneado, y ahí apagarle el filtro la deja
+   transparente — el fondo se lee nítido a través, dos relojes en el mismo
+   sitio. Con el horneado puesto la hoja ya no tiene filtro que apagar, así que
+   la regla no compraría nada y sólo podría romper esa ventana. */
+body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y CON LA HOJA ASENTADA, LO QUE TAPA DEJA DE FILTRAR ──
+   La hoja mide **699 px de alto sobre una pantalla de 892**, así que el reloj y
+   la barra de búsqueda quedan debajo al cien por cien: filtrarlos es trabajo
+   puro. El DOCK no —queda en la franja de abajo, a la vista— así que conserva
+   su vidrio. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja,
+   que no es lo mismo que tapa la del cajón. */
+body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
 /* ── Y CON EL VIDRIO HORNEADO, LAS BALDOSAS TAMPOCO FILTRAN NADA ──
    Lo que una baldosa del cajón desenfoca es la hoja, y la hoja ya es un mapa de
    bits desenfocado a 34 px: **desenfocar 12 px lo que ya está desenfocado 34 no
@@ -736,6 +837,14 @@ body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
    No va permanente: son 412×892 a densidad 3, o sea trece megas de textura, y
    con el cajón cerrado y asentado no hay nada que sostener. */
 #cajon.on,#cajon.abre{will-change:transform}
+/* SE PROBÓ `will-change:transform` EN LA HOJA Y SE SACÓ, que es lo que
+   corresponde con un ajuste que no mide mejor. La idea era la de la vuelta
+   132: la hoja vive con `visibility:hidden`, así que al abrirla hay que
+   rasterizar de cero 412 × 699 px con dieciséis botones y sus glifos, y una
+   promoción anticipada le avisaría al gestor de baldosas. Medido, el pico del
+   viaje se quedó donde estaba —108 a 183 ms con y sin— y la promoción cuesta
+   trece megas de textura. Lo que sí está medido es que el pico NO es de tener
+   el centro puesto: abierto y quieto da peor 17,5 ms y CERO cuadros perdidos. */
 .baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
   border-radius:0 0 60% 60%/0 0 34% 34%;
   background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));

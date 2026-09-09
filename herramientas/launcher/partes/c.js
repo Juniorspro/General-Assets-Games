@@ -151,7 +151,13 @@ function cajFrostHornea(rad){
   /* sin foto queda el `backdrop-filter` de siempre: el degradado de respaldo ya
      es liso, así que no hay nada que desenfocar, y degradar a un rectángulo
      plano sería peor que pagar el filtro */
-  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth) return false;
+  if (!FONDO_OK || !FONDO_IMG || !FONDO_IMG.naturalWidth){
+    /* sacando la foto, el horneado viejo describe un fondo que ya no está: la
+       clase se va y las dos hojas vuelven al filtro vivo, que sobre un
+       degradado liso no cuesta casi nada */
+    caj.classList.remove('hor'); document.body.classList.remove('frost');
+    return false;
+  }
   const W = innerWidth || 412, H = innerHeight || 892;
   const w = CAJ_FROST_W, h = Math.max(8, Math.round(w * H / W));
   const s = w / W;                                   /* pantalla → lienzo */
@@ -202,10 +208,24 @@ function cajFrostHornea(rad){
     out.width = w; out.height = h;
     out.getContext('2d').drawImage(bl, m, m, w, h, 0, 0, w, h);
 
-    caj.style.setProperty('--cajFrost', 'url(' + out.toDataURL('image/jpeg', 0.82) + ')');
+    /* ── LA VARIABLE VA EN LA RAÍZ Y NO EN `#cajon`, Y ESO ES LO QUE LA
+           HACE SERVIR PARA LOS DOS ──
+       El horneado es **la pantalla entera desenfocada**, así que la hoja del
+       centro de control —que está pegada arriba y mide 699 px de los 892—
+       recibe exactamente los píxeles que le tocan con `background-position:top`
+       y `background-size:100% 100vh`. Una segunda cocción para el centro sería
+       calcular dos veces la misma imagen y dejar dos que se pueden
+       desincronizar el día que cambie el radio. Las custom properties heredan,
+       así que `#cajon.hor` la sigue leyendo igual. */
+    document.documentElement.style.setProperty(
+      '--cajFrost', 'url(' + out.toDataURL('image/jpeg', 0.82) + ')');
     caj.classList.add('hor');
+    document.body.classList.add('frost');
     return true;
-  } catch (e){ return false; }   /* un lienzo teñido no puede leerse: queda el filtro */
+  } catch (e){                   /* un lienzo teñido no puede leerse: queda el filtro */
+    caj.classList.remove('hor'); document.body.classList.remove('frost');
+    return false;
+  }
 }
 
 function cajFrostRehornea(){
