@@ -30,6 +30,48 @@ foto que se le antoje. `functions/api/entrar.js` se lo da a Google y comprueba
 las tres cosas que casi siempre faltan: que la firma sea de Google, que el
 `aud` sea **esta** aplicación y que no esté vencido.
 
+## Cobrar: qué variable hace qué
+
+Nada de esto está en el código. Son variables del proyecto en Cloudflare
+(Pages → Settings → Variables), así que se cambian sin volver a publicar.
+
+| Variable | Para qué |
+|---|---|
+| `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | Cobrar en dólares y verificar el pago |
+| `PAYPAL_MERCHANT_ID` | Comprobar que el dinero fue **a esta** cuenta |
+| `PAYPAL_MODO` | `sandbox` para probar; cualquier otra cosa es real |
+| `MP_TOKEN` | Cobrar en pesos por Mercado Pago (todavía sin poner) |
+| `PAGO_MP_ALIAS` · `PAGO_PAYPAL` | Los datos para pagar a mano, sin verificación |
+| `ACCESO_MINIMO_USD` · `ACCESO_MINIMO_ARS` | El piso para dar acceso |
+| `SECRETO` | Firma los pases y los códigos. Cambiarla los invalida a todos |
+| `CLAVE_ADMIN` | Entra a `/admin` a generar códigos |
+| `ZONA_ITEMS` | La lista de la zona de donantes, en JSON |
+
+### No adivines cuál credencial es cuál: probala
+
+Se perdió un rato con esto. Lo esperable es que el Client ID de PayPal empiece
+con `A` y el Secret con `E`. **En esta cuenta el Client ID de Live empieza con
+`BAA`**, así que la forma no sirve para distinguirlos, y encima las primeras que
+llegaron eran de Sandbox sin que nada lo dijera.
+
+La única manera confiable es preguntarle a PayPal, que además dice si son de
+prueba o de verdad: el mismo par contra los dos servidores, y el que conteste
+200 es el bueno.
+
+    curl -s -o /dev/null -w '%{http_code}\n' -u "ID:SECRET" \
+      -d grant_type=client_credentials https://api-m.paypal.com/v1/oauth2/token
+    # 200 = son de Live . 401 = probá contra api-m.sandbox.paypal.com
+
+El `PAYPAL_MERCHANT_ID` no hace falta ir a buscarlo: viene en la respuesta de
+la primera orden, en `purchase_units[0].payee.merchant_id`.
+
+### En modo prueba el cartel rojo no es decorativo
+
+Con `PAYPAL_MODO=sandbox` se cobra con plata que no existe. La pantalla lo
+avisa arriba de todo y no se puede cerrar, porque el error caro de este montaje
+es anunciar la tienda creyendo que entra dinero y regalar accesos a cambio de
+nada.
+
 ## Nada se guarda en un servidor
 
 El perfil que vuelve de Google, las notas del bloc, el color del vidrio y el
