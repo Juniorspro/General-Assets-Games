@@ -71,6 +71,42 @@ public class Escucha extends NotificationListenerService {
     return b.append(']').toString();
   }
 
+  /** ── LA CUENTA POR PAQUETE, QUE NO ES `json()` CON MENOS CAMPOS ──
+   * Los puntitos de los iconos hay que refrescarlos cada tanto, y `json()`
+   * arma título y texto de hasta veinticuatro notificaciones: son kilobytes de
+   * cadena construidos y cruzados por el puente para contar. Esto devuelve
+   * `paquete:cuantas`, que con diez apps son cien bytes.
+   *
+   * Y cuenta lo que un punto tiene que decir, que no es lo mismo que una fila
+   * de la lista: acá SÍ entran las que no traen título ni texto —una descarga
+   * en curso no tiene nada que mostrar y sin embargo es una notificación de esa
+   * app— y siguen sin entrar los resúmenes de grupo, que contarían doble. */
+  static String cuenta() {
+    Escucha e = viva;
+    if (e == null) return null;
+    StatusBarNotification[] ns;
+    try { ns = e.getActiveNotifications(); } catch (Exception x) { return null; }
+    if (ns == null) return "{}";
+    java.util.LinkedHashMap<String, Integer> m = new java.util.LinkedHashMap<>();
+    for (StatusBarNotification s : ns) {
+      if (s == null) continue;
+      Notification no = s.getNotification();
+      if (no != null && (no.flags & Notification.FLAG_GROUP_SUMMARY) != 0) continue;
+      String p = s.getPackageName();
+      if (p == null) continue;
+      Integer v = m.get(p);
+      m.put(p, v == null ? 1 : v + 1);
+    }
+    StringBuilder b = new StringBuilder("{");
+    boolean pri = true;
+    for (java.util.Map.Entry<String, Integer> en : m.entrySet()) {
+      if (!pri) b.append(',');
+      pri = false;
+      b.append('"').append(esc(en.getKey())).append("\":").append(en.getValue());
+    }
+    return b.append('}').toString();
+  }
+
   private static boolean esQuitable(StatusBarNotification s) {
     if (Build.VERSION.SDK_INT >= 21) return s.isClearable();
     return true;

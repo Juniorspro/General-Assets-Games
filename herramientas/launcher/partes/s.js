@@ -402,6 +402,12 @@ function arrInit(){
   arrEngancha($('#tira'), 'inicio');
   arrEngancha($('#dock'), 'dock');
   arrEngancha($('#cajLista'), 'cajon');
+  /* ── LA FILA DE SUGERIDAS ENTRA POR EL MISMO CAMINO QUE EL CAJÓN ──
+     Sus nodos los arma `nodoApp`, o sea que son `.ap` con su paquete: con
+     esta línea heredan el toque que abre y el mantener que arrastra al
+     escritorio. Con un manejador propio serían dos formas de tocar un icono
+     y la de la fila se quedaría atrás en cuanto se toque la otra. */
+  arrEngancha($('#cajSugR'), 'cajon');
 
   /* ── EL FANTASMA VA EN EL DEDO; LO DEMÁS, UNA VEZ POR CUADRO ──
      Pedido textual: «al mantener una app puedas moverlo de lugar pero más

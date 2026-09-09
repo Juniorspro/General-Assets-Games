@@ -246,10 +246,15 @@ function pintaCajon(filtro){
      Buscando por los dos a la vez, «mer» devolvía Cámara: `com.android.ca-MER-a2`
      lo contiene. El paquete sólo entra cuando el nombre no encontró nada, que
      es cuando de verdad sirve (buscar «whatsapp» sin acordarse del icono). */
-  let v = APPS;
+  /* ── LO OCULTO SE SACA ANTES DE FILTRAR, Y TAMBIÉN AL BUSCAR ──
+     Dejándolo pasar con el buscador, «oculta» pasaría a querer decir «hay que
+     escribir el nombre», que es un juego de adivinanzas y no una opción. Vuelve
+     desde Personalizar, que es donde uno la fue a buscar. */
+  let base = OCULTAS.length ? APPS.filter(a => !ocultaEs(a.p)) : APPS;
+  let v = base;
   if (q){
-    v = APPS.filter(a => norm(a.n).indexOf(q) >= 0);
-    if (!v.length) v = APPS.filter(a => norm(a.p).indexOf(q) >= 0);
+    v = base.filter(a => norm(a.n).indexOf(q) >= 0);
+    if (!v.length) v = base.filter(a => norm(a.p).indexOf(q) >= 0);
   }
 
   l.innerHTML = '';
@@ -288,6 +293,7 @@ function pintaCajon(filtro){
       nd.dataset.l = L;
       if (!porLetra && !ANCLA[L]) ANCLA[L] = nd;
     }
+    insigniaPon(nd, a.p);
     l.appendChild(nd);
   }
   l.classList.toggle('junto', !q && !porLetra);
@@ -321,6 +327,7 @@ function pintaCajon(filtro){
   /* acá SÍ se escalona siempre: la lista se rehace al abrir el cajón y en cada
      letra que se escribe, o sea que cada pintada es una lista nueva */
   entraLista(l, CAJ_ENTRA_MAX);
+  sugPinta(q);
   pintaRiel();
   CAJ_ULT_Q = q;
 }
@@ -565,6 +572,7 @@ function zoomArranca(pkg, nodo){
 
 function abre(pkg){
   vibra(10);
+  usoAnota(pkg);
   /* el asistente vive adentro del launcher: pedírselo al sistema devolvería
      «no existe» sobre un paquete que nunca se instaló */
   if (pkg === ASIS_PKG){ asisAbre(); return; }
@@ -598,9 +606,17 @@ function abreMenu(pkg, y){
   $('#menuTit').textContent = a ? a.n : pkg;
   $('#mFijar').lastElementChild.textContent = fijado(pkg) ? T('soltar') : T('fijar');
   $('#mInfo').lastElementChild.textContent = T('info');
+  $('#mOcultar').lastElementChild.textContent = ocultaEs(pkg) ? T('oMostrar') : T('oOcultar');
   $('#mBorrar').lastElementChild.textContent = T('borrar');
+  atajosPinta(pkg);
   const m = $('#menu');
-  m.style.top = cl(y - 40, 60, innerHeight - 260) + 'px';
+  /* ── EL TOPE DE ABAJO SALE DE LO QUE EL MENÚ MIDE, NO DE UN NÚMERO ──
+     Con los atajos puestos el menú pasa de tres filas a nueve: con el 260 fijo
+     de antes, las últimas quedaban por debajo del borde de la pantalla. */
+  /* `offsetHeight` es layout y no pintado: la opacidad 0 y el `scale(.94)` del
+     estado cerrado no lo tocan, así que se puede medir antes de encenderlo */
+  const alto = m.offsetHeight || 260;
+  m.style.top = cl(y - 40, 60, Math.max(60, innerHeight - alto - 24)) + 'px';
   m.classList.add('on'); $('#velo').classList.add('on');
 }
 function cierraMenu(){
@@ -1428,7 +1444,14 @@ function arranca(){
   /* ── VOLVER DE UNA APP LIMPIA EL ZOOM ──
      La animación de abrir deja el launcher escalado y transparente: si el
      arranque falla o el sistema vuelve sin recargar la página, se queda así. */
-  addEventListener('visibilitychange', () => { if (!document.hidden) zoomLimpia(); });
+  addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    zoomLimpia();
+    /* ── VOLVER DE UNA APP ES CUANDO LLEGÓ LA NOTIFICACIÓN ──
+       Esperar el turno del latido dejaría el punto sin aparecer hasta seis
+       segundos después de estar mirando la pantalla. */
+    NOTI_T = 0; insigniasLatido();
+  });
   addEventListener('pageshow', zoomLimpia);
   /* la reja se restituye antes de pintar nada: puesta después, el primer cuadro
      sale con los iconos de fábrica y salta de tamaño a la vista */
@@ -1478,6 +1501,8 @@ function arranca(){
   if (typeof ccPrepara === 'function') ccPrepara();
   pintaReloj(true); pintaBateria();
   setInterval(() => pintaReloj(), 1000);
+  insigniasLatido();
+  setInterval(insigniasLatido, 2000);
   setInterval(pintaBateria, 30000);
 
   asisInit();
@@ -1533,7 +1558,7 @@ function arranca(){
   $('#busca2').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const q = e.target.value.trim(); if (!q) return;
-    const v = APPS.filter(a => norm(a.n).indexOf(norm(q)) >= 0);
+    const v = APPS.filter(a => !ocultaEs(a.p) && norm(a.n).indexOf(norm(q)) >= 0);
     /* Enter abre la primera coincidencia; sólo si no hay ninguna sale a la web,
        porque buscar «what» y terminar en Google en vez de en WhatsApp es lo
        contrario de lo que uno quiso. Para ir a la web a propósito está la fila. */
@@ -1544,6 +1569,7 @@ function arranca(){
   $('#velo').addEventListener('pointerdown', cierraMenu);
   $('#mFijar').addEventListener('click', () => { if (MENU_PKG) alterna(MENU_PKG); cierraMenu(); });
   $('#mInfo').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.info(MENU_PKG); cierraMenu(); });
+  $('#mOcultar').addEventListener('click', () => { if (MENU_PKG) ocultaAlterna(MENU_PKG); cierraMenu(); });
   $('#mBorrar').addEventListener('click', () => { if (MENU_PKG && HAY_AND) AND.borrar(MENU_PKG); cierraMenu(); });
 
   /* ── MANTENER EL FONDO ABRE LOS AJUSTES DEL ESCRITORIO ──
@@ -1552,10 +1578,22 @@ function arranca(){
      el dock— y no sobre el fondo: el fondo está en `z-index 0`, debajo de la
      capa, así que nunca recibiría un dedo. */
   let fl = null;
+  /* declarado antes del escucha porque el escucha lo llama: un `const` leído
+     antes de su línea no devuelve undefined, tira */
+  const fc = () => { if (fl){ clearTimeout(fl); fl = null; } };
   $('#hoja').addEventListener('pointerdown', () => {
+    /* ── EL PLAZO VIEJO SE MATA ANTES DE ARMAR OTRO ──
+       Sin esto, el segundo toque de un doble toque pisaba la variable y dejaba
+       el primer temporizador vivo: la pantalla se bloqueaba Y 620 ms después se
+       abría el selector de launcher detrás del bloqueo. El defecto ya estaba —
+       dos toques seguidos en el escritorio son un gesto que cualquiera hace—
+       pero recién con el doble toque pasa a ser la mitad de las veces. */
+    fc();
+    /* y si el doble toque disparó, no se arma ninguno: lo que sigue es la
+       pantalla bloqueada */
+    if (dobleToque()) return;
     fl = setTimeout(() => { vibra(20); if (HAY_AND) AND.elegirInicio(); else avisa(T('inicio')); }, 620);
   });
-  const fc = () => { if (fl){ clearTimeout(fl); fl = null; } };
   $('#hoja').addEventListener('pointerup', fc);
   $('#hoja').addEventListener('pointermove', fc);
 

@@ -112,6 +112,48 @@ const PERS = [
     lee: () => lee('oscuro', 0), sufijo: ' %',
     pon: v => { guarda('oscuro', v); persOscuro(); } },
 
+  { tit: 'pInsig', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => lee('insig', 1) ? '1' : '0',
+    pon: v => { guarda('insig', v === '1' ? 1 : 0);
+      if (v === '1'){ NOTI_T = 0; insigniasLatido(); } else insigniasApaga(); } },
+
+  { tit: 'pSug', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => lee('sug', 1) ? '1' : '0',
+    pon: v => { guarda('sug', v === '1' ? 1 : 0); sugPinta(''); } },
+
+  { tit: 'pDtap', tipo: 'ops',
+    ops: () => [['1', T('pSi')], ['0', T('pNo')]],
+    lee: () => lee('dtap', 1) ? '1' : '0',
+    pon: v => guarda('dtap', v === '1' ? 1 : 0) },
+
+  /* ── LAS OCULTAS SÓLO APARECEN SI HAY ALGUNA ──
+     Un grupo vacío que dice «no hay apps ocultas» ocupa una fila para no decir
+     nada; el que ocultó una sabe que la ocultó y la viene a buscar acá. */
+  { tit: 'pOcultas', tipo: 'botones', ver: () => OCULTAS.length > 0,
+    bts: () => OCULTAS.slice().map(p => [
+      (POR_PKG[p] ? POR_PKG[p].n : p) + '  \u2715',
+      () => { ocultaAlterna(p); persPinta(); }
+    ]) },
+
+  { tit: 'pCopia', tipo: 'texto', id: 'pCopiaT',
+    ph: () => T('pCopiaPh'),
+    bts: () => [
+      [T('pCopiaSac'), t => { t.value = copiaArma(); t.select(); avisa(T('pCopiaLista')); }],
+      [T('pCopiaPon'), t => {
+        if (!t.value.trim()){ avisa(T('pCopiaVacia')); return; }
+        if (!copiaPone(t.value.trim())){ avisa(T('pCopiaMala')); return; }
+        avisa(T('pCopiaOk'));
+        /* ── SE RECARGA, Y NO ES PEREZA ──
+           Una copia trae el escritorio, el dock, la reja, el pack, el idioma y
+           el fondo a la vez: reaplicar cada uno en caliente sería repetir acá
+           el arranque entero, y el día que se agregue un ajuste queda uno que
+           no se restituye. Recargar corre el arranque de verdad. */
+        setTimeout(() => location.reload(), 700);
+      }]
+    ] },
+
   /* ── EL INTERRUPTOR DE LA MEDICIÓN ──
      No es un ajuste de gusto: es la única forma de contestar, EN EL APARATO DEL
      DUEÑO, lo que el banco no puede — cuántos cuadros perdió la hoja al viajar.
@@ -205,6 +247,34 @@ function persPinta(){
         b.className = 'pOp' + (v === val ? ' sel' : '');
         b.textContent = txt;
         b.addEventListener('click', () => { g.pon(v); vibra(10); persPinta(); });
+        f.appendChild(b);
+      }
+    } else if (g.tipo === 'botones'){
+      /* ── UN TIPO PARA LO QUE NO ES UN VALOR ──
+         Restaurar una app oculta o pegar una copia de seguridad no son un
+         ajuste con estado: son acciones. Metidas como `ops` quedarían con una
+         de ellas marcada como «la elegida», que no quiere decir nada. */
+      for (const [txt, fn] of g.bts()){
+        const b = document.createElement('button');
+        b.className = 'pBt'; b.textContent = txt;
+        b.addEventListener('click', () => { fn(); vibra(10); });
+        f.appendChild(b);
+      }
+      if (g.nota){
+        const n = document.createElement('div');
+        n.className = 'pNota'; n.textContent = g.nota();
+        n.style.flexBasis = '100%';
+        f.appendChild(n);
+      }
+    } else if (g.tipo === 'texto'){
+      const t = document.createElement('textarea');
+      t.className = 'pTxt'; t.id = g.id; t.spellcheck = false;
+      t.placeholder = g.ph ? g.ph() : '';
+      f.appendChild(t);
+      for (const [txt, fn] of g.bts()){
+        const b = document.createElement('button');
+        b.className = 'pBt'; b.textContent = txt;
+        b.addEventListener('click', () => { fn(t); vibra(10); });
         f.appendChild(b);
       }
     } else if (g.tipo === 'colores'){

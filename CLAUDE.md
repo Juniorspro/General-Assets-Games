@@ -281,6 +281,183 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima cuadragésima segunda vuelta (2026-09-09): **AERO** — atajos de app, puntos de notificación, apps ocultas, sugeridas, doble toque y copia de seguridad
+
+Pedido: *"que más funciones tiene un launcher para volverlo aún más completo haz más funciones etc"*.
+Seis, y las seis con un criterio en común: **ninguna pide un permiso nuevo**. Los atajos usan uno que
+Android le da al launcher **por serlo**; los puntos salen del `Escucha` que ya estaba; el bloqueo usa
+la accesibilidad que ya estaba; y las sugeridas **se cuentan solas** — pedir `PACKAGE_USAGE_STATS`
+para averiguar cuántas veces uno mismo abrió una app es regalar una pantalla de permiso a cambio de
+nada. Casi todo vive en `partes/t.js`, que es archivo nuevo.
+
+#### 1 · LOS ATAJOS: LA API EXISTE Y SÓLO SE LA DAN AL QUE ES LA PANTALLA DE INICIO
+
+Mantener WhatsApp y que salgan «Chat nuevo» o «Cámara». Es `LauncherApps.getShortcuts()`, API 25+, y
+**`hasShortcutHostPermission()` devuelve false para cualquier app que no sea el launcher por
+omisión** — para las demás, `getShortcuts` tira `SecurityException`. O sea que hay **tres** respuestas
+y no dos: los atajos de esta app, ninguno, y «no somos el launcher».
+
+**LA TERCERA NO SE INFORMA CON UN CARTEL, y es la decisión de diseño.** El menú ya tiene sus opciones
+útiles; un aviso de permiso arriba de ellas convierte un menú que funciona en uno que se queja. Sin el
+permiso el menú se queda exactamente como estaba, y eso es lo que mide el control.
+
+Los tres tipos se piden juntos —dinámicos, los del manifiesto y los que el dueño clavó— porque para
+quien mantiene el icono son la misma lista: el que los separa es el sistema, no la persona. Y el
+orden sale del `rank` que declara la app, que es el orden en el que ella quiere que se lean.
+
+**Y EL TOPE DE ABAJO DEL MENÚ TUVO QUE PASAR DE UN NÚMERO A UNA MEDIDA.** Estaba en
+`innerHeight - 260`, escrito cuando el menú tenía tres filas; con los atajos pasa a nueve y las
+últimas quedaban por debajo del borde de la pantalla. `offsetHeight` es layout y no pintado, así que
+la opacidad 0 y el `scale(.94)` del estado cerrado no lo tocan y se puede medir **antes** de
+encenderlo. Medido: **368 px de alto con tres atajos y 235 sin ellos**, y `entra: true` en los dos.
+
+#### 2 · LOS PUNTOS: `notis()` NO SIRVE PARA CONTAR
+
+El puntito sobre el icono sale del mismo servicio que alimenta la lista del centro de control, pero
+**no de `notis()`**: ése arma título y texto de hasta veinticuatro notificaciones, o sea kilobytes de
+cadena construidos y cruzados por el puente para contar. `Escucha.cuenta()` devuelve
+`paquete:cuántas`, que con diez apps son cien bytes. Y cuenta lo que un punto tiene que decir, que no
+es lo mismo que una fila: **ahí sí entran las que no traen título ni texto** —una descarga en curso
+no tiene nada que mostrar y sin embargo es una notificación de esa app— y siguen sin entrar los
+resúmenes de grupo, que contarían doble.
+
+Con una, el punto ya dice que hay algo y el «1» es ruido; con más, el número es lo único que dice si
+vale la pena entrar. Medido: **1 → punto sin número, 5 → «5», 120 → «99+»**.
+
+**Y EL REPINTADO SELECTIVO SE PROBÓ Y SE SACÓ.** Parecía la optimización obvia: con 150 apps, mover un
+punto no puede costar tocar los ciento cincuenta nodos. Medido en el mismo binario con el mismo mapa
+de cuentas:
+
+| | ms |
+|---|---|
+| repintar sólo los 3 que cambiaron | **0,3** |
+| repintar los 154 | **0,3** |
+
+La misma cifra, porque un `querySelector('.baldosa')` sobre un nodo que ya está en memoria no cuesta
+nada. **Lo que sí vale es la puerta de más arriba** —salir sin tocar el DOM cuando el mapa no se
+movió—, que es el 99 % de los latidos: una notificación llega cada varios minutos y el latido
+pregunta cada seis segundos.
+
+| latido con nada que cambiar | ms por latido |
+|---|---|
+| con la puerta | **0,0017** |
+| repintando siempre | 0,1667 |
+
+**Noventa y ocho veces**, y la versión que quedó es además la que tiene menos código.
+
+**`null` ES «EL SERVICIO NO ESTÁ» Y NO SE LE CREE A LA PRIMERA.** Android reengancha el listener por
+su cuenta cada tanto, así que un null suelto es un parpadeo y borrar los puntos ahí los apaga y los
+prende sin que haya pasado nada. Dos seguidos —doce segundos— ya no es un reenganche sino que el
+permiso se cayó, y ahí unos puntos que nunca se van son peores. Medido: un null deja los puntos, dos
+los borran.
+
+**Y EL PUNTO NO PUEDE IR EN LA BALDOSA, que costó una captura.** `.baldosa` lleva `overflow:hidden`
+—es lo que recorta el icono del sistema al canto redondeado— así que un punto que asoma por el borde
+sale **cortado**: en la primera foto se veía media luna cian en la esquina. Colgado de `.ap`, que ya
+es `position:relative`, queda entero, y su sitio sale de la geometría de la baldosa (centrada, de
+ancho `--ico`, bajo 8 px de relleno) así que sigue al tamaño de icono que el dueño haya elegido.
+
+#### 3 · LAS OCULTAS: OCULTAR TAMBIÉN DESFIJA
+
+Una app «oculta» que sigue en el escritorio no está oculta: está oculta en el único sitio donde no
+molestaba. El cajón es la lista completa y el escritorio es lo que uno eligió, así que ocultar la saca
+de los dos. **Y tampoco aparece buscando**: dejándola pasar con el buscador, «oculta» pasaría a querer
+decir «hay que escribir el nombre», que es una adivinanza y no una opción. Vuelve desde Personalizar,
+que es donde uno la fue a buscar — y ese grupo **sólo existe si hay alguna**, porque uno vacío que
+dice «no hay apps ocultas» ocupa una fila para no decir nada.
+
+Medido: ocultar una deja el cajón en **149 de 150**, buscar «sett» ya no la encuentra, buscarla por su
+paquete entero tampoco, y mostrarla la devuelve a las 150.
+
+#### 4 · LAS SUGERIDAS: EL LAUNCHER YA SABE CUÁNTAS VECES ABRIÓ CADA APP
+
+Las cuatro que más se abren, arriba del cajón, contando en `abre()`. **Y olvida, porque si no es un
+museo**: sin olvido, la app que se usó cien veces hace tres meses gana para siempre y la fila deja de
+describir lo que uno hace hoy. Cada sesenta aperturas todo se multiplica por 0,72 y lo que no llega a
+media apertura se borra —sin esa poda el objeto guarda para siempre cada app que se abrió una vez—.
+Medido: treinta aperturas de una app caen a **11,2** después de ciento ochenta de otra.
+
+Con menos de ocho aperturas en total la fila **no aparece**: recién instalado sería ruido. Y no se
+dibuja con el buscador escrito, porque ahí compite con los resultados por el mismo pulgar y el mismo
+sitio de la pantalla.
+
+**LA FILA ENTRA POR EL MISMO CAMINO QUE EL CAJÓN.** Sus nodos los arma `nodoApp`, o sea que son `.ap`
+con su paquete: una línea de `arrEngancha` y heredan el toque que abre y el mantener que arrastra al
+escritorio. Con un manejador propio serían dos formas de tocar un icono, y la de la fila se quedaría
+atrás en cuanto se toque la otra.
+
+#### 5 · DOBLE TOQUE PARA BLOQUEAR, Y UN DEFECTO VIEJO QUE DESTAPÓ
+
+La acción es la misma que el botón «Bloquear» del centro de control. Lo único propio es distinguir dos
+toques de uno. **Sin el permiso no se queda callado**: un gesto que no hace nada se lee a launcher
+roto y con el aviso se lee a que falta un permiso, que es algo que se puede arreglar.
+
+**Y `#hoja` PERDÍA UN TEMPORIZADOR.** El escucha hacía `fl = setTimeout(...)` sin matar el anterior,
+así que el segundo toque de un doble toque pisaba la variable y dejaba el primero vivo: la pantalla se
+bloqueaba **y 620 ms después se abría el selector de launcher detrás del bloqueo**. El defecto ya
+estaba —dos toques seguidos en el escritorio son un gesto que cualquiera hace— pero recién con esto
+pasa a ser la mitad de las veces. Medido con `pointerdown` de verdad: a 150 ms de separación **1
+bloqueo y ningún aviso después**; a 600 ms, **0 bloqueos**; apagado, 0.
+
+#### 6 · LA COPIA DE SEGURIDAD: RESTAURAR ES REEMPLAZAR, NO MEZCLAR
+
+La primera versión sólo escribía lo que la copia traía, y **la prueba de ida y vuelta la reprobó**: un
+ajuste tocado DESPUÉS de sacar la copia sobrevivía, así que el resultado no era el escritorio del que
+se sacó la copia sino una mezcla de los dos. Ahora se borran las claves de ahora y se escriben las de
+la copia — **y se valida entera antes de borrar nada**, porque si resultara mala a mitad de camino lo
+que queda es media configuración y ninguna forma de volver.
+
+**LA FOTO PROPIA NO ENTRA, Y ES UNA CUENTA.** Un fondo propio son cientos de kilobytes en base64 y
+todo lo demás son unos pocos miles de caracteres: metida adentro, el texto deja de poder copiarse a
+mano y encima puede no entrar en la cuota al restaurarlo, que es el momento en que fallar duele más.
+Y por lo mismo tampoco se borra al restaurar: no está en la copia, así que borrarla sería perderla sin
+poder devolverla.
+
+**VA EN UN CUADRO DE TEXTO Y NO EN EL PORTAPAPELES NI EN UN `prompt`.** `prompt()` en un WebView sin
+`onJsPrompt` devuelve null sin avisar, y el portapapeles pide permisos que en un WebView no siempre
+están. Un textarea funciona en los dos y encima deja **ver** lo que se va a restaurar.
+
+Medido: **217 bytes con 9 claves y sin la foto**; la ida y vuelta devuelve el valor cambiado **y borra
+la clave agregada después** (`volvio: true`, `sobrante: null`); y los cuatro casos malos —texto que no
+es JSON, vacío, otra versión y una clave con `../`— se rechazan sin escribir nada.
+
+#### LO QUE LE COSTÓ AL CAJÓN, MEDIDO EN EL MISMO BINARIO
+
+| pintada del cajón con 150 apps | con lo nuevo | sin lo nuevo |
+|---|---|---|
+| sin notificaciones | 40,52 ms | 38,89 |
+| con dos notificaciones | 35,16 ms | 34,09 |
+
+**Uno a uno coma seis milisegundos, o sea un 3 %.** No hace falta optimizarlo, y agregarle una guarda
+para ahorrar ese milisegundo sería complejidad por nada.
+
+#### MEDIDO AL CERRAR
+
+Atajos: **3 filas con sus rótulos**, tocar la segunda llama a `atajoAbrir(pkg,'cam')` y cierra el
+menú; el control —sin permiso de host— deja **0 filas y las 4 opciones de siempre**, con el menú
+entrando en la pantalla en los dos casos. Puntos: 1 → punto, 5 → «5», 120 → «99+»; apagar los borra y
+prender los devuelve; la puerta cuesta **0,0017 ms por latido**. Ocultas: 150 → 149 → 150, sin
+aparecer al buscar por nombre ni por paquete. Sugeridas: 4 iconos ordenados por uso, la oculta
+excluida y devuelta al mostrarla, el rótulo siguiendo al idioma en vivo. Doble toque: 1 · 0 · 0 en los
+tres casos. Copia: 217 bytes, ida y vuelta exacta, cuatro entradas malas rechazadas. Maquetación:
+**cero solapamientos** entre la búsqueda, la fila de sugeridas y la lista en **412×892 y en 360×640**
+—donde siguen entrando 4 filas— y `cajas()` con `choques: []` en los dos.
+Regresión: escritorio **4 capas / 35,5 MB / 3 vidrios / 0 caras**, riel de **17 letras** con
+`letra('S')` mirando la S, mascota 23 huesos y 5.541 triángulos, **0 solapamientos**, gesto arriba
+abre el cajón y abajo el centro con **0 ondas de agua** en los dos, cajón abierto **2 capas / 13,4 MB
+/ 0 vidrios**, centro **16 · 1 · 10 · 4 con `arma: 0`** y 1 capa / 0,8 MB, cerrado vuelve a 4 / 35,5 /
+3 con el `body` limpio, y los tres idiomas en vivo. **El cierre del cajón de la vuelta anterior queda
+intacto**: arrastrando, mediana **56,0 · 58,4 ms** con 13,4 MB y 0 vidrios a mitad de gesto; con el
+botón, **16,6 ms con 3 cuadros perdidos**. `window.__errs` **vacío en las trece corridas**. APK
+**1.679**, 2,2 MB.
+
+**LO QUE NO SE PUDO COMPROBAR:** el banco no es la pantalla de inicio de ningún Android, así que
+`hasShortcutHostPermission()` sería false de verdad y de los atajos está medido **lo único que puede
+estar mal de este lado** —que las filas se armen, que abran el atajo que dicen, que el menú entre en
+la pantalla y que sin permiso no cambie nada— con el puente fingido. Que Android nos entregue los
+atajos de WhatsApp sólo lo dice el teléfono. Lo mismo `notiCuenta()`: está medido el camino entero con
+cuentas inyectadas, no con notificaciones de verdad.
+
 ### Centésima cuadragésima primera vuelta (2026-09-09): **AERO** — el cajón bajaba a seis cuadros por segundo, y era una custom property que hereda
 
 Reporte, y **corrige la superficie que las tres vueltas anteriores estuvieron optimizando**: *"hablaba

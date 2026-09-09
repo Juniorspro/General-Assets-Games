@@ -1932,6 +1932,223 @@ window.__A = {
     return { estado: ccNotisEstado(), aviso: $$('#ccNotis .ccAviso').length,
              boton: $$('#ccNotis .ccAviso .ccBt').length };
   },
+  /* ══════════ LO NUEVO DE LA VUELTA 142 ══════════ */
+
+  /* ── LOS ATAJOS, CON EL PUENTE FINGIDO ──
+     El banco no es la pantalla de inicio de ningún Android, así que
+     `hasShortcutHostPermission` sería false de verdad y no habría nada que
+     medir. Lo que se prueba acá es lo único que puede estar mal de este lado:
+     que las filas se armen, que abran el atajo que dicen, y —el control— que
+     sin permiso el menú se quede con sus tres opciones de siempre. */
+  atajoFinge(lista){
+    window.AND = window.AND || {}; AND.__f = true;
+    ATAJOS_OK = null;
+    AND.atajosOk = () => lista !== null;
+    AND.atajos = () => JSON.stringify(lista || []);
+    AND.__at = null;
+    AND.atajoAbrir = (p, i) => { AND.__at = p + '|' + i; return true; };
+    return { ok: atajosHay() };
+  },
+  atajosVer(pkg){
+    abreMenu(pkg || (APPS[0] && APPS[0].p), 300);
+    const m = $('#menu');
+    return { filas: $$('#menuAt .mat').length,
+             on: $('#menuAt').classList.contains('on'),
+             textos: $$('#menuAt .mat').map(f => f.lastElementChild.textContent),
+             mops: $$('#menu .mop').length,
+             top: parseInt(m.style.top, 10),
+             alto: m.offsetHeight,
+             entra: parseInt(m.style.top, 10) + m.offsetHeight <= innerHeight };
+  },
+  atajoToca(i){
+    const f = $$('#menuAt .mat')[i || 0];
+    if (!f) return null;
+    f.click();
+    return { llamo: window.AND && AND.__at, menu: $('#menu').classList.contains('on') };
+  },
+  atajosCosto(pkg, n){
+    /* cuánto cuesta la consulta sincrónica: es una llamada Binder al servicio
+       del sistema, no la red de la vuelta 128 */
+    const p = pkg || (APPS[0] && APPS[0].p), v = n || 40;
+    const t0 = performance.now();
+    for (let k = 0; k < v; k++) atajosDe(p);
+    return { ms: +((performance.now() - t0) / v).toFixed(4), n: v };
+  },
+
+  /* ── LOS PUNTOS ──
+     `cuenta` es el objeto que devolvería `Escucha.cuenta()`. */
+  insigFinge(cuenta){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.notiCuenta = () => cuenta === null ? 'null' : JSON.stringify(cuenta);
+    NOTI_T = 0;
+    insigniasLee();
+    return __A.insig();
+  },
+  insig(){
+    const v = $$('.ap').filter(n => n.querySelector('.insig'));
+    return { mapa: NOTI_N,
+             conPunto: v.length,
+             pkgs: v.map(n => n.dataset.p).slice(0, 12),
+             textos: v.map(n => n.querySelector('.insig').textContent).slice(0, 12),
+             ptos: v.filter(n => n.querySelector('.insig').classList.contains('pto')).length,
+             encendido: !!lee('insig', 1) };
+  },
+  /* la prueba de que el repintado es SELECTIVO: se cuentan cuántos nodos se
+     tocan de verdad, no cuántos hay */
+  insigCosto(cuenta){
+    const t0 = performance.now();
+    __A.insigFinge(cuenta);
+    return { ms: +(performance.now() - t0).toFixed(3), apsEnDom: $$('.ap').length };
+  },
+  /* `APPS` es un `let` del módulo, o sea que no está en `window`: las pruebas
+     nombran las apps por su índice y la sonda traduce */
+  insigFingeIdx(pares){
+    const q = {};
+    for (const [i, n] of pares) if (APPS[i]) q[APPS[i].p] = n;
+    return __A.insigFinge(q);
+  },
+  pkgs(n){ return APPS.slice(0, n || 5).map(a => a.p); },
+  /* el A/B del repintado selectivo, en el mismo binario: mismo mapa de
+     cuentas, una vez tocando sólo lo que cambió y otra tocando los 154 */
+  /* la puerta: cuántos latidos tocan el DOM cuando nada cambió. Es lo único
+     que la diferencia contra repintar siempre, y es lo que se midió. */
+  insigPuerta(pares, n){
+    __A.insigFingeIdx(pares);
+    let toco = 0;
+    const orig = window.__insigCnt = 0;
+    const t0 = performance.now();
+    for (let k = 0; k < (n || 30); k++) insigniasLee();
+    const ms = performance.now() - t0;
+    return { latidos: n || 30, ms: +ms.toFixed(3), porLatido: +(ms / (n || 30)).toFixed(4),
+             conPunto: $$('.ap').filter(x => x.querySelector('.insig')).length,
+             aps: $$('.ap').length };
+  },
+  insigPintaTodos(n){
+    const t0 = performance.now();
+    for (let k = 0; k < (n || 30); k++) insigniasTodas();
+    const ms = performance.now() - t0;
+    return { n: n || 30, porPintada: +(ms / (n || 30)).toFixed(4), aps: $$('.ap').length };
+  },
+  /* el A/B de lo que la vuelta le agregó a la pintada del cajón, en el mismo
+     binario: la fila de sugeridas y el punto por app */
+  cajPintaAB(n){
+    const v = n || 20, l = $('#cajLista');
+    const mide = () => { const t = performance.now();
+      for (let k = 0; k < v; k++) pintaCajon('');
+      return +((performance.now() - t) / v).toFixed(2); };
+    const gI = lee('insig', 1), gS = lee('sug', 1);
+    guarda('insig', 1); guarda('sug', 1);  const con = mide();
+    guarda('insig', 0); guarda('sug', 0);  const sin = mide();
+    guarda('insig', gI); guarda('sug', gS);
+    return { con: con, sin: sin, apps: $$('#cajLista .ap').length, notis: Object.keys(NOTI_N).length };
+  },
+  insigApaga(){ guarda('insig', 0); insigniasApaga(); return __A.insig(); },
+  insigPrende(){ guarda('insig', 1); NOTI_T = 0; insigniasLatido(); return __A.insig(); },
+
+  /* ── LAS OCULTAS ── */
+  ocultas(){
+    return { lista: OCULTAS.slice(),
+             enCajon: $$('#cajLista .ap').length,
+             enApps: APPS.length,
+             fijadas: INICIO.slice(), dock: DOCK.slice() };
+  },
+  ocultaToca(pkg){ ocultaAlterna(pkg); return __A.ocultas(); },
+  ocultaBusca(q){
+    pintaCajon(q);
+    const r = { n: $$('#cajLista .ap').length, pkgs: $$('#cajLista .ap').map(n => n.dataset.p) };
+    pintaCajon('');
+    return r;
+  },
+
+  /* ── LAS SUGERIDAS ── */
+  sug(){
+    const c = $('#cajSug');
+    return { on: c.classList.contains('on'),
+             n: $$('#cajSugR .ap').length,
+             pkgs: $$('#cajSugR .ap').map(n => n.dataset.p),
+             usos: Object.assign({}, USOS), usosN: USOS_N,
+             rot: $('#cajSugT').textContent };
+  },
+  sugUsa(pkg, n){
+    for (let i = 0; i < (n || 1); i++) usoAnota(pkg);
+    sugPinta('');
+    return __A.sug();
+  },
+  /* el olvido: se abre A muchas veces, después B, y se mira si A cae */
+  sugOlvido(a, b, na, nb){
+    USOS = {}; USOS_N = 0;
+    for (let i = 0; i < na; i++) usoAnota(a);
+    const antes = USOS[a];
+    for (let i = 0; i < nb; i++) usoAnota(b);
+    return { antes: +antes.toFixed(2), despues: +(USOS[a] || 0).toFixed(2),
+             b: +(USOS[b] || 0).toFixed(2), cayo: (USOS[a] || 0) < antes };
+  },
+  sugLimpia(){ USOS = {}; USOS_N = 0; guarda('usos', {}); guarda('usosN', 0); sugPinta(''); return __A.sug(); },
+
+  /* ── EL DOBLE TOQUE ──
+     Se disparan dos `pointerdown` de verdad sobre `#hoja` separados por `ms`,
+     que es el mismo camino que usa el dedo. */
+  async dtap(ms){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.__bloq = 0;
+    AND.accesOk = () => true;
+    AND.accesAccion = q => { if (q === 'bloquear') AND.__bloq++; return true; };
+    DTAP_T = 0;
+    const h = $('#hoja');
+    const tira = () => h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    /* ── Y SE MIRA QUE NO QUEDE UN PLAZO LARGO VIVO ──
+       El aviso es lo que delata al selector de launcher abriéndose detrás del
+       bloqueo: sin puente, `elegirInicio` cae a `avisa(T('inicio'))`. */
+    $('#aviso').textContent = '';
+    tira();
+    await new Promise(r => setTimeout(r, ms));
+    tira();
+    h.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 900));
+    return { bloqueos: AND.__bloq, ms: ms, encendido: !!lee('dtap', 1),
+             avisoDespues: $('#aviso').textContent };
+  },
+  dtapSinPermiso(){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.__bloq = 0;
+    AND.accesOk = () => false;
+    AND.accesAccion = () => { AND.__bloq++; return true; };
+    DTAP_T = Date.now();
+    dobleToque();
+    return { bloqueos: AND.__bloq, aviso: $('#aviso').textContent };
+  },
+
+  /* ── LA COPIA ── */
+  copiaSaca(){
+    const t = copiaArma();
+    let d = null; try { d = JSON.parse(t); } catch (e){}
+    return { bytes: t.length, claves: d ? Object.keys(d.d).length : 0,
+             tieneFondo: !!(d && d.d && d.d.fondoPropio),
+             v: d && d.v };
+  },
+  /* la ida y vuelta: se cambia un ajuste, se restaura la copia vieja, y se
+     mira si volvió al valor de antes */
+  copiaVuelta(){
+    guarda('acento', '#00ff88'); guarda('cajLetras', 1);
+    const col = lee('acento', ''), letras = lee('cajLetras', -1);
+    const antes = copiaArma();
+    /* se cambia uno que estaba y se AGREGA uno que no: la copia tiene que
+       devolver el primero y borrar el segundo */
+    guarda('acento', '#ff0000'); guarda('cajLetras', 0); guarda('zzTest', 7);
+    const ok = copiaPone(antes);
+    return { ok: ok, colAntes: col, colDespues: lee('acento', ''),
+             letrasAntes: letras, letrasDespues: lee('cajLetras', -1),
+             sobrante: lee('zzTest', null),
+             volvio: lee('acento', '') === col && lee('cajLetras', -1) === letras };
+  },
+  copiaMala(){
+    return { texto: copiaPone('esto no es json'),
+             vacio: copiaPone(''),
+             otroV: copiaPone('{"v":9,"d":{"a":"1"}}'),
+             claveMala: (() => { copiaPone('{"v":1,"d":{"../evil":"1","acento":"\"#123456\""}}');
+                                 return localStorage.getItem('aero_../evil'); })() };
+  },
+
   ccCerrar(){ ccCierra(); return true; },
   ccToca(id){ const b = CC_BOT.filter(x => x.id === id)[0]; if (!b) return null; ccToca(b); return true; },
   ccSl(k, v){

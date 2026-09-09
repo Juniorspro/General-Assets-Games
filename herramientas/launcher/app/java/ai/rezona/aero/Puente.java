@@ -8,7 +8,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.LauncherApps;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ShortcutInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
@@ -19,6 +21,7 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Process;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
@@ -145,6 +148,78 @@ public class Puente {
       act.startActivity(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg))
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     } catch (Exception e) {}
+  }
+
+  /* ══════════ LOS ATAJOS DE UNA APP ══════════
+   * Mantener WhatsApp y que salgan «Chat nuevo» o «Cámara». Es lo más visible
+   * que le falta a un launcher que no los tiene, y es una API que Android le da
+   * SÓLO al que es la pantalla de inicio por omisión: `hasShortcutHostPermission`
+   * devuelve false para cualquier otra app, y `getShortcuts` tira SecurityException.
+   *
+   * Por eso las tres preguntas están separadas y `atajosOk()` existe: sin ella,
+   * «esta app no tiene atajos» y «no somos el launcher» se ven exactamente igual
+   * desde la interfaz, y son dos cosas que se arreglan de maneras opuestas.
+   *
+   * Los tres tipos se piden juntos —dinámicos, los del manifiesto y los que el
+   * dueño clavó— porque para quien mantiene el icono son la misma lista; el que
+   * los separa es el sistema, no la persona. */
+  private LauncherApps la() {
+    try { return (LauncherApps) act.getSystemService(Context.LAUNCHER_APPS_SERVICE); }
+    catch (Exception e) { return null; }
+  }
+
+  @JavascriptInterface public boolean atajosOk() {
+    if (Build.VERSION.SDK_INT < 25) return false;
+    LauncherApps l = la();
+    try { return l != null && l.hasShortcutHostPermission(); }
+    catch (Exception e) { return false; }
+  }
+
+  @JavascriptInterface public String atajos(String pkg) {
+    if (Build.VERSION.SDK_INT < 25 || pkg == null) return "[]";
+    LauncherApps l = la();
+    if (l == null) return "[]";
+    try {
+      if (!l.hasShortcutHostPermission()) return "[]";
+      LauncherApps.ShortcutQuery q = new LauncherApps.ShortcutQuery();
+      q.setPackage(pkg);
+      q.setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC
+                    | LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
+                    | LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
+      List<ShortcutInfo> v = l.getShortcuts(q, Process.myUserHandle());
+      if (v == null) return "[]";
+      /* el rango es el orden en que la app quiere que se lean, y los del
+         manifiesto no lo traen: los que no lo declaran van al final en el orden
+         en que vinieron, que es mejor que barajarlos */
+      Collections.sort(v, (x, y) -> Integer.compare(x.getRank(), y.getRank()));
+      StringBuilder sb = new StringBuilder("[");
+      int n = 0;
+      for (ShortcutInfo si : v) {
+        if (si == null || !si.isEnabled()) continue;
+        CharSequence c = si.getShortLabel();
+        CharSequence g = si.getLongLabel();
+        /* el corto es el que entra en una fila; el largo sólo si el corto vino
+           vacío, que pasa con algunos atajos del manifiesto */
+        String t = c != null && c.length() > 0 ? c.toString()
+                 : (g != null ? g.toString() : null);
+        if (t == null || t.trim().isEmpty()) continue;
+        if (n > 0) sb.append(',');
+        sb.append("{\"i\":\"").append(esc(si.getId()))
+          .append("\",\"t\":\"").append(esc(t)).append("\"}");
+        if (++n >= 6) break;   /* seis filas es lo que entra sin scrollear */
+      }
+      return sb.append(']').toString();
+    } catch (Exception e) { return "[]"; }
+  }
+
+  @JavascriptInterface public boolean atajoAbrir(String pkg, String id) {
+    if (Build.VERSION.SDK_INT < 25 || pkg == null || id == null) return false;
+    LauncherApps l = la();
+    if (l == null) return false;
+    try {
+      l.startShortcut(pkg, id, null, null, Process.myUserHandle());
+      return true;
+    } catch (Exception e) { return false; }
   }
 
   @JavascriptInterface public void ajustes() {
@@ -519,6 +594,12 @@ public class Puente {
 
   @JavascriptInterface public String notis() {
     String j = Escucha.json();
+    return j == null ? "null" : j;
+  }
+
+  /* la cuenta por paquete para los puntitos de los iconos: ver Escucha.cuenta() */
+  @JavascriptInterface public String notiCuenta() {
+    String j = Escucha.cuenta();
     return j == null ? "null" : j;
   }
 
