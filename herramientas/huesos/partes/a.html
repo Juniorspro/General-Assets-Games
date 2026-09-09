@@ -1,0 +1,165 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>HUESOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#07090b;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e8e4dc;
+  overscroll-behavior:none;touch-action:none}
+canvas{display:block}
+
+/* ── EL MARCO ──────────────────────────────────────────────────────────────
+   El juego se dibuja apaisado. En una pantalla vertical NO se encoge: se GIRA,
+   igual que en Z Force y en DASH. Encogerlo deja el juego en una ranura del
+   11% de la pantalla; girarlo lo deja entero. Y adentro del marco va TODO
+   —lienzo, HUD y menús— así que hay UNA sola transformación y nada puede
+   quedar desalineado.                                                       */
+#marco{position:fixed;left:50%;top:50%;transform-origin:50% 50%;overflow:hidden;background:#07090b}
+#lienzo{position:absolute;inset:0;width:100%;height:100%}
+
+/* ── HUD ──────────────────────────────────────────────────────────────── */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
+body.jugando #hud{opacity:1}
+
+.barra{position:absolute;height:14px;border:2px solid #0b0d10;border-radius:2px;
+  background:#14181d;box-shadow:0 0 0 1px #3a4048 inset}
+.barra i{display:block;height:100%;width:100%;transform-origin:0 50%;transition:transform .12s linear}
+#bVida{left:14px;top:14px;width:176px}
+#bVida i{background:linear-gradient(180deg,#c8443a,#7e2119)}
+#bAgu{left:14px;top:34px;width:132px;height:9px}
+#bAgu i{background:linear-gradient(180deg,#d8c46a,#8a7420);transition:transform .06s linear}
+#bXp{left:14px;top:49px;width:132px;height:5px}
+#bXp i{background:linear-gradient(180deg,#79c2d8,#2c6a80)}
+
+#nivel{position:absolute;left:152px;top:44px;font:700 12px/1 monospace;color:#9fd0e0;
+  text-shadow:0 2px 0 #06080a}
+#zona{position:absolute;left:50%;top:14px;transform:translateX(-50%);font:700 13px/1.2 monospace;
+  letter-spacing:.16em;color:#cfc7b6;text-shadow:0 2px 0 #06080a;text-align:center}
+#zonaSub{display:block;font:500 10px/1.4 monospace;letter-spacing:.08em;color:#8e8779;margin-top:3px}
+#restan{position:absolute;right:14px;top:14px;font:700 12px/1.3 monospace;color:#cfc7b6;
+  text-align:right;text-shadow:0 2px 0 #06080a}
+#restan b{color:#e0b0a8}
+
+/* el cartel que cuenta la historia, con la misma caja del juego de referencia */
+#dialogo{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:70%;
+  padding:9px 13px;background:rgba(10,13,16,.86);border:2px solid #39414b;
+  font:500 12px/1.5 monospace;color:#ded7c8;opacity:0;transition:opacity .3s;text-align:center}
+#dialogo.on{opacity:1}
+
+#aviso{position:absolute;left:50%;top:58%;transform:translateX(-50%);padding:7px 14px;
+  background:rgba(10,13,16,.9);border:2px solid #4a525c;font:700 12px/1 monospace;
+  letter-spacing:.1em;color:#e8dfc8;opacity:0;transition:opacity .2s;white-space:nowrap}
+#aviso.on{opacity:1}
+
+/* el golpe en la cara: rojo cuando te pegan, y va DENTRO del marco */
+#sangre{position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0) 32%,rgba(150,20,14,.62) 100%)}
+
+/* ── CONTROLES TÁCTILES ───────────────────────────────────────────────── */
+#tac{position:absolute;inset:0;pointer-events:none;display:none}
+body.movil.jugando #tac{display:block}
+#joy{position:absolute;left:22px;bottom:22px;width:118px;height:118px;border-radius:50%;
+  border:2px solid rgba(210,200,180,.30);background:rgba(12,15,19,.34);pointer-events:auto}
+#joyP{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;
+  border-radius:50%;background:rgba(215,205,185,.42);border:2px solid rgba(235,228,210,.6)}
+.bt{position:absolute;border-radius:50%;border:2px solid rgba(210,200,180,.34);
+  background:rgba(12,15,19,.40);pointer-events:auto;display:grid;place-items:center;
+  font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0}
+.bt:active,.bt.on{background:rgba(150,120,70,.5)}
+#bAtaca{right:22px;bottom:26px;width:96px;height:96px;font-size:13px}
+#bEsq{right:126px;bottom:34px;width:66px;height:66px}
+#bCam{right:22px;top:22px;width:52px;height:52px;font-size:10px}
+#bPausa{left:14px;bottom:150px;width:42px;height:42px;font-size:15px;pointer-events:auto}
+body.jugando #bPausa{display:grid}
+#teclas{position:absolute;right:14px;bottom:14px;font:500 10px/1.6 monospace;color:#8b8577;
+  text-align:right;display:none}
+body.pc.jugando #teclas{display:block}
+
+/* ── PANELES ──────────────────────────────────────────────────────────── */
+.panel{position:absolute;inset:0;display:none;place-items:center;
+  background:linear-gradient(180deg,rgba(6,8,10,.95) 0%,rgba(6,8,10,.42) 40%,rgba(6,8,10,.42) 66%,rgba(6,8,10,.95) 100%)}
+.panel.on{display:grid}
+.caja{width:min(78%,430px);text-align:center;display:flex;flex-direction:column;
+  align-items:center;gap:2.4vh}
+h1{font:800 clamp(26px,7.4vh,44px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
+  text-shadow:0 3px 0 #1a1206,0 0 26px rgba(190,150,80,.28)}
+/* EL TÍTULO DEL FINAL VA EN SU PROPIO NODO. Estaba como `<h1 id=fTit>` con
+   el subtítulo de hijo, y `textContent` sobre el padre BORRA a los hijos: la
+   línea siguiente escribía sobre un `#fSub` que ya no existía y tiraba, así
+   que la pantalla de final nunca mostró ni el subtítulo ni las bajas — y la
+   excepción se comía el resto del cuadro mientras el panel estaba puesto. */
+h1 b{display:block;font-weight:800}
+h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:.22em;
+  color:#8d8574;margin-top:1.1vh;text-shadow:none}
+.b{padding:11px 26px;min-width:190px;border:2px solid #6a5c3c;background:rgba(30,26,18,.82);
+  font:700 13px/1 monospace;letter-spacing:.16em;color:#e6dcc2;cursor:pointer}
+.b:active{background:rgba(96,78,42,.9)}
+.b.off{opacity:.34;pointer-events:none}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+/* las fichas heredan de `.b`, que tiene `min-width:190px`: sin anularlo, tres
+   fichas de 190 no entran en una caja de 430 y la fila se parte en dos. */
+.ch{padding:8px 0;min-width:0;flex:1 1 0;border:2px solid #4d4638;background:rgba(24,22,17,.8);
+  font:600 10px/1 monospace;letter-spacing:.09em;color:#bdb49f;cursor:pointer}
+.fila.tres{width:100%;flex-wrap:nowrap}
+.ch.sel{border-color:#b79a56;color:#f0e6cc;background:rgba(74,60,30,.85)}
+.pie{font:500 10px/1.7 monospace;color:#857e6e;max-width:340px}
+.tit2{font:700 12px/1 monospace;letter-spacing:.18em;color:#9d947f}
+.gr{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
+</style></head><body>
+<div id="marco">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud">
+    <div class="barra" id="bVida"><i></i></div>
+    <div class="barra" id="bAgu"><i></i></div>
+    <div class="barra" id="bXp"><i></i></div>
+    <div id="nivel">1</div>
+    <div id="zona"><span id="zonaTit"></span><span id="zonaSub"></span></div>
+    <div id="restan"></div>
+    <div id="dialogo"></div>
+    <div id="aviso"></div>
+    <div id="sangre"></div>
+  </div>
+
+  <div id="tac">
+    <div id="joy"><div id="joyP"></div></div>
+    <div class="bt" id="bAtaca">✦</div>
+    <div class="bt" id="bEsq">↷</div>
+    <div class="bt" id="bCam">◎</div>
+  </div>
+  <div class="bt" id="bPausa" style="display:none">≡</div>
+  <div id="teclas"></div>
+
+  <div class="panel on" id="pIdioma"><div class="caja">
+    <h1>HUESOS<span id="iSub">elegí tu idioma</span></h1>
+    <div class="fila" id="iBotones"></div>
+  </div></div>
+
+  <div class="panel" id="pMenu"><div class="caja">
+    <h1>HUESOS<span id="mSub"></span></h1>
+    <button class="b" id="mJugar"></button>
+    <button class="b" id="mSeguir" style="display:none"></button>
+    <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
+    <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
+    <div class="pie" id="mPie"></div>
+  </div></div>
+
+  <div class="panel" id="pPausa"><div class="caja">
+    <h1 id="paTit"></h1>
+    <button class="b" id="paSeguir"></button>
+    <button class="b" id="paMenu"></button>
+    <div class="pie" id="paPie"></div>
+  </div></div>
+
+  <div class="panel" id="pFin"><div class="caja">
+    <h1><b id="fTit"></b><span id="fSub"></span></h1>
+    <div class="pie" id="fDatos"></div>
+    <button class="b" id="fOtra"></button>
+    <button class="b" id="fMenu"></button>
+  </div></div>
+</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';

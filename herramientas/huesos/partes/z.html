@@ -1,0 +1,490 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ARRANQUE Y SONDAS
+   ══════════════════════════════════════════════════════════════════════════ */
+function armaPaneles() {
+  const idi = document.getElementById('iBotones');
+  [['es', 'Castellano'], ['en', 'English'], ['pt', 'Português']].forEach(([k, n]) => {
+    const b = document.createElement('button'); b.className = 'b'; b.textContent = n;
+    b.onclick = () => { IDIOMA = k; try { localStorage.setItem('huesos_idi', k); } catch (e) {} pintaIdioma(); verPanel('pMenu'); PART = 'menu'; };
+    idi.appendChild(b);
+  });
+  const cal = document.getElementById('mCal');
+  ['baja', 'media', 'alta'].forEach(k => {
+    const b = document.createElement('button'); b.className = 'b ch'; b.dataset.c = k;
+    b.onclick = () => {
+      aplicaCalidad(k); try { localStorage.setItem('huesos_cal', k); } catch (e) {}
+      document.querySelectorAll('#mCal button').forEach(x => x.classList.toggle('sel', x.dataset.c === k));
+    };
+    cal.appendChild(b);
+  });
+  const mi = document.getElementById('mIdi');
+  [['es', 'ES'], ['en', 'EN'], ['pt', 'PT']].forEach(([k, n]) => {
+    const b = document.createElement('button'); b.className = 'b ch'; b.dataset.i = k; b.textContent = n;
+    b.onclick = () => {
+      IDIOMA = k; try { localStorage.setItem('huesos_idi', k); } catch (e) {}
+      pintaIdioma();
+      document.querySelectorAll('#mIdi button').forEach(x => x.classList.toggle('sel', x.dataset.i === k));
+    };
+    mi.appendChild(b);
+  });
+  const cl = (id, fn) => document.getElementById(id).onclick = fn;
+  cl('mJugar', () => { audioArranca(); nuevaPartida(); });
+  cl('mSeguir', () => { PART = 'juego'; verPanel(null); });
+  cl('paSeguir', () => pausa(false));
+  cl('paMenu', () => alMenu());
+  cl('fOtra', () => nuevaPartida());
+  cl('fMenu', () => alMenu());
+}
+
+function arranca() {
+  armaRender(document.getElementById('lienzo'));
+  try {
+    const i = localStorage.getItem('huesos_idi'); if (i) IDIOMA = i;
+    const c = localStorage.getItem('huesos_cal'); if (c) CALIDAD = c;
+  } catch (e) {}
+  ajustaMarco();
+  addEventListener('resize', ajustaMarco);
+  midePasos();
+  armaTexturas();
+  menuMundo();
+  armaEntrada();
+  armaPaneles();
+  pintaIdioma();
+  document.querySelectorAll('#mCal button').forEach(x => x.classList.toggle('sel', x.dataset.c === CALIDAD));
+  document.querySelectorAll('#mIdi button').forEach(x => x.classList.toggle('sel', x.dataset.i === IDIOMA));
+  /* PLATAFORMA: los controles táctiles tapan media pantalla en PC para hacer
+     lo que ya hace el teclado. Tacto Y puntero grueso: con una sola de las dos
+     una notebook táctil se lleva el joystick. */
+  const movil = matchMedia('(pointer:coarse)').matches && 'ontouchstart' in window;
+  document.body.classList.toggle('movil', movil);
+  document.body.classList.toggle('pc', !movil);
+  bucle();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   `window.__H` — una afirmación sin número no vale
+   ══════════════════════════════════════════════════════════════════════════ */
+const _v3 = new THREE.Vector3();
+function _pto(hueso, y) { return _v3.set(0, y || 0, 0).applyMatrix4(hueso.matrixWorld).clone(); }
+/* UNA SONDA QUE TIRA EN EL MENÚ NO SE PUEDE CORRER, y la regresión se corre
+   justamente ahí. `JUG.cuerpo` no existe hasta que empieza una partida, así
+   que las tres sondas que miden el rig se arman uno de descarte con LA MISMA
+   receta: miden el mismo esqueleto, no uno parecido. */
+let _CMED = null;
+function _cuerpoMedir() {
+  if (JUG.cuerpo) return JUG.cuerpo;
+  if (!_CMED) _CMED = armaCuerpo(recetaHeroe());
+  return _CMED;
+}
+
+window.__H = {
+  est() {
+    const i = ren.info.render;
+    return {
+      fps: +FPS.toFixed(1), llamadas: i.calls, tri: i.triangles,
+      part: PART, cal: CALIDAD, rt: [RT.width, RT.height],
+      zonaAct: ZONA_ACT, zonaVis: ZONA_VIS,
+      jug: { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
+             vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, agu: Math.round(JUG.agu),
+             niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
+             muerto: JUG.muerto, golpe: JUG.golpe, esq: +JUG.esqT.toFixed(2) },
+      esq: { vivos: ESQS.filter(e => e.vive).length, cerca: ESQ_KIT ? ESQ_KIT.n : 0,
+             porZona: [0, 1, 2].map(z => esqVivos(z)) },
+      veg: VEG.reduce((a, v) => a + v.malla.count, 0), vegMallas: VEG.length,
+      errs: (window.__errs || []).length,
+    };
+  },
+  nueva(s) { audioArranca(); nuevaPartida(s || 7); return this.est(); },
+  cal(c) { aplicaCalidad(c); return { cal: CALIDAD, rt: [RT.width, RT.height], sombra: CAL[c].sombra }; },
+  idi(k) { IDIOMA = k; pintaIdioma(); return { idi: IDIOMA, zona: document.getElementById('zonaTit').textContent }; },
+  ir(x, z) { JUG.x = x; JUG.z = z; JUG.y = H(x, z); JUG.vx = JUG.vz = 0; return { x: JUG.x, z: JUG.z, y: +JUG.y.toFixed(2), zona: zonaDe(x, z) }; },
+  mira(y, p) { CAM_YAW = y; if (p !== undefined) CAM_PIT = p; return { yaw: CAM_YAW, pit: CAM_PIT }; },
+  congela(v) { CONGELADO = !!v; return CONGELADO; },
+
+  /* caminar DE VERDAD: por el mismo camino que usa el dedo, con la física y
+     el choque puestos. Un teletransporte no prueba que el mundo se recorra. */
+  anda(n, dx, dz, corre) {
+    const x0 = JUG.x, z0 = JUG.z; let dentro = 0;
+    for (let i = 0; i < n; i++) {
+      const m = { x: dx, z: dz, corre: !!corre };
+      jugPaso(PASO, m);
+      for (const s of solidosCerca(JUG.x, JUG.z))
+        if (dist2(JUG.x, JUG.z, s.x, s.z) < (s.r + J_RADIO * 0.9) * (s.r + J_RADIO * 0.9)) { dentro++; break; }
+    }
+    return { rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2), dentroDeAlgo: dentro,
+             x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), zona: zonaDe(JUG.x, JUG.z) };
+  },
+  ataca() { return jugPide('ataca'); },
+  esquiva() { return jugPide('esquiva'); },
+  pasos(n) { for (let i = 0; i < n; i++) unPaso(PASO); return this.est(); },
+
+  esqs(n) {
+    return ESQS.filter(e => e.vive).slice(0, n || 6).map(e => ({
+      cl: e.cl, est: e.est, zona: e.zona, vida: Math.round(e.vida),
+      d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1),
+    }));
+  },
+  /* trae un esqueleto al lado, para poder medir una pelea sin caminar 80 m */
+  trae(d, cl) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere' && (!cl || x.cl === cl)); if (!e) return null;
+    const a = JUG.rumbo;
+    e.x = JUG.x + Math.sin(a) * (d || 2.0); e.z = JUG.z + Math.cos(a) * (d || 2.0);
+    e.y = H(e.x, e.z); e.est = 'persigue'; e.atur = 0; e.esp = 0;
+    return { cl: e.cl, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2), vida: e.vida };
+  },
+  /* al revés que `trae`: lleva al JUGADOR hasta la clase pedida. Hace falta
+     para fotografiar al rey EN SU CENIZA — traído al bosque saldría con la
+     niebla, el suelo y la luz de otra zona, o sea otra foto. */
+  vaA(cl, d) {
+    const e = ESQS.find(x => x.vive && x.cl === cl); if (!e) return null;
+    const dd = d === undefined ? 5.2 : d, a = Math.atan2(e.x, e.z);
+    JUG.x = e.x - Math.sin(a) * dd; JUG.z = e.z - Math.cos(a) * dd;
+    JUG.y = H(JUG.x, JUG.z); JUG.vx = JUG.vz = 0;
+    JUG.rumbo = Math.atan2(e.x - JUG.x, e.z - JUG.z);
+    CAM_YAW = JUG.rumbo; CAM_PIT = -0.06;
+    ZONA_ACT = e.zona; e.est = 'persigue'; e.atur = 0;
+    camPaso(0.5, 0, 0);
+    return { cl: e.cl, zona: e.zona, vida: e.vida,
+             d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2),
+             zonaPie: zonaDe(JUG.x, JUG.z) };
+  },
+
+  /* ── EL AUTO-JUGADOR ───────────────────────────────────────────────────
+     Va al más cercano, se para a su alcance y machaca el combo; esquiva
+     cuando el bicho está cargando. Juega por el MISMO camino que el dedo
+     —`jugPide` y la entrada— así que si termina la partida, la partida se
+     puede terminar. */
+  juega(tope, tonto) {
+    const T0 = tope || 60000; let n = 0, huyo = 0, esq = 0;
+    while (n < T0 && PART === 'juego') {
+      n++;
+      let m = null, md = 1e9, cerca = 0, peligro = null;
+      for (const e of ESQS) {
+        if (!e.vive || e.est === 'muere') continue;
+        const d2 = dist2(e.x, e.z, JUG.x, JUG.z), D = ESQ[e.cl];
+        const alc = (D.alc + J_RADIO) * 1.12;
+        if (d2 < alc * alc) {
+          cerca++;
+          /* SE ESQUIVA AL QUE ESTÁ POR PEGARTE, no al blanco. Un jugador no
+             mira "el más cercano de la zona": mira el brazo que se levantó. */
+          if (e.est === 'carga' && e.t > D.carga - 0.10) peligro = e;
+        }
+        if (e.zona !== ZONA_ACT) continue;
+        if (d2 < md) { md = d2; m = e; }
+      }
+      let ex = 0, ez = 0;
+      if (tonto) {
+        const a = Math.random() * 6.283; ex = Math.cos(a); ez = Math.sin(a);
+        if (Math.random() < 0.05) jugPide('ataca');
+        if (Math.random() < 0.01) jugPide('esquiva');
+      } else if (peligro && JUG.agu > J_AGU_ESQ + J_AGU_GOLPE + 6) {
+        const dx = (peligro.x - JUG.x), dz = (peligro.z - JUG.z), l = Math.hypot(dx, dz) || 1;
+        JUG.entX = -dz / l; JUG.entZ = dx / l;
+        if (jugPide('esquiva')) esq++;
+      } else if (m) {
+        const d = Math.sqrt(md), dx = (m.x - JUG.x) / d, dz = (m.z - JUG.z) / d;
+        const g = J_COMBO[0].alc * 0.92;
+        /* SE SEPARA CUANDO LO RODEAN: correr son 5,6 contra los 1,9 de un
+           bruto, y esa ventaja ES la herramienta contra una turba. */
+        if (cerca >= 3 && JUG.agu > 30) { huyo++; ex = -dx; ez = -dz; }
+        else if (d > g) { ex = dx; ez = dz; }
+        else if (!jugAtacando() && JUG.esqT <= 0 && JUG.agu > J_AGU_GOLPE + 4) jugPide('ataca');
+      }
+      if (ex || ez) {
+        if (n % 12 === 0) {
+          const dd = dist2(JUG.x, JUG.z, this._px || 0, this._pz || 0);
+          this._atasco = (dd < 0.02 && md > 4) ? (this._atasco || 0) + 1 : 0;
+          this._px = JUG.x; this._pz = JUG.z;
+        }
+        if ((this._atasco || 0) > 2) {
+          const t = n * 0.06; ex = Math.cos(t); ez = Math.sin(t);
+          if ((this._atasco || 0) > 8) this._atasco = 0;
+        }
+        const l = Math.hypot(ex, ez), g = rodea(JUG.x, JUG.z, ex / l, ez / l, J_RADIO, Math.min(Math.sqrt(md), 4.2));
+        ex = g.x; ez = g.z;
+      }
+      jugPaso(PASO, { x: ex, z: ez, corre: md > 64 || cerca >= 3 });
+      esqPaso(PASO); zonasPaso(PASO);
+      if (PART === 'fin') break;
+    }
+    return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: GANO,
+             bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
+             huyo, esq, vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
+  },
+  audita(s) { return audita(s === undefined ? SEM : s); },
+  auditaN(n) {
+    let malas = 0, peor = null;
+    for (let i = 1; i <= (n || 40); i++) { const a = audita(i); if (!a.ok) { malas++; if (!peor) peor = { sem: i, a }; } }
+    return { semillas: n || 40, malas, peor };
+  },
+
+  /* ── LAS ANIMACIONES SE MIDEN ──────────────────────────────────────────
+     El recorrido de una mano y de un pie a lo largo del ciclo es la ÚNICA
+     prueba de que una animación anima y de que dos son distintas. Un clip
+     mal pesado gira igual y no desplaza un solo vértice.                   */
+  medirPose(nom, ciclo) {
+    const c = _cuerpoMedir(), mx = [], mn = [];
+    const pts = [['manoD', c.h.anteD, -0.30], ['manoI', c.h.anteI, -0.30],
+                 ['pieI', c.h.pantI, -0.44], ['cabeza', c.h.cuello, 0.19]];
+    const acum = {};
+    for (const [k] of pts) acum[k] = { mnx: 1e9, mxx: -1e9, mny: 1e9, mxy: -1e9, mnz: 1e9, mxz: -1e9 };
+    const N = 40, L = ciclo || (nom === 'quieto' ? 12 : (nom === 'camina' || nom === 'corre' ? 6.283 : 1));
+    for (let i = 0; i <= N; i++) {
+      poseAplica(c, nom, i / N * L, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0;
+      c.raiz.updateMatrixWorld(true);
+      for (const [k, h, y] of pts) {
+        const p = _pto(h, y), a = acum[k];
+        a.mnx = Math.min(a.mnx, p.x); a.mxx = Math.max(a.mxx, p.x);
+        a.mny = Math.min(a.mny, p.y); a.mxy = Math.max(a.mxy, p.y);
+        a.mnz = Math.min(a.mnz, p.z); a.mxz = Math.max(a.mxz, p.z);
+      }
+    }
+    const r = { pose: nom };
+    for (const k in acum) {
+      const a = acum[k];
+      r[k] = [+(a.mxx - a.mnx).toFixed(3), +(a.mxy - a.mny).toFixed(3), +(a.mxz - a.mnz).toFixed(3)];
+    }
+    return r;
+  },
+  /* planta una pose y CONGELA: el bucle sigue dibujando pero no avanza, así
+     la foto es del instante que se pidió y no de tres cuadros después */
+  pose(nom, u, quien) {
+    CONGELADO = true;
+    const c = quien === 'esq' && ESQS[0] ? ESQS[0].cuerpo : _cuerpoMedir();
+    poseAplica(c, nom, u || 0, null, 0, 0);
+    c.raiz.updateMatrixWorld(true);
+    if (quien === 'esq' && ESQS[0]) kitPinta(ESQ_KIT, [ESQS[0]]); else if (JUG.kit && JUG.cuerpo) kitPinta(JUG.kit, [JUG]);
+    return { pose: nom, u: u || 0 };
+  },
+
+  /* ── DE DÓNDE SALE LA OSCURIDAD ────────────────────────────────────────
+     Una escena negra tiene cinco sospechosos —el sol, el ambiente, el
+     hemisférico, la exposición y el color del material— y mirando la pantalla
+     los cinco se ven igual. Ésta los apaga de a uno y mide el búfer. */
+  luz(v) {
+    if (v) {
+      if (v.sol !== undefined) solLuz.intensity = v.sol;
+      if (v.amb !== undefined) ambLuz.intensity = v.amb;
+      if (v.hem !== undefined) hemLuz.intensity = v.hem;
+      if (v.exp !== undefined) ren.toneMappingExposure = v.exp;
+    }
+    const s = solLuz.intensity, a = ambLuz.intensity, h = hemLuz.intensity;
+    const uno = (S, A, Hm) => { solLuz.intensity = S; ambLuz.intensity = A; hemLuz.intensity = Hm;
+                                const r = this.brillo(); solLuz.intensity = s; ambLuz.intensity = a; hemLuz.intensity = h; return r.medio; };
+    return {
+      ajuste: { sol: s, amb: a, hem: h, exp: +ren.toneMappingExposure.toFixed(2) },
+      todo: this.brillo(), nada: uno(0, 0, 0), soloSol: uno(s, 0, 0), soloAmb: uno(0, a, 0), soloHem: uno(0, 0, h),
+      niebla: esc.fog ? { c: '#' + esc.fog.color.getHexString(), d: +(esc.fog.density || 0).toFixed(4) } : null,
+      fondo: esc.background && esc.background.getHexString ? '#' + esc.background.getHexString() : '' + esc.background,
+      suelos: Object.keys(MAT_SUELO).map(k => [k, '#' + MAT_SUELO[k].color.getHexString(), !!MAT_SUELO[k].map]),
+      solPos: solLuz.position.toArray().map(x => +x.toFixed(1)),
+      solTgt: solLuz.target.position.toArray().map(x => +x.toFixed(1)),
+      jug: [+JUG.x.toFixed(1), +JUG.z.toFixed(1)],
+      /* EL SUELO PELADO: blanco y sin foto. Si con eso sigue negro, no es la
+         textura ni el tinte — es que no le llega luz o no se está dibujando. */
+      sueloPelado: (() => {
+        const g = [];
+        for (const k in MAT_SUELO) { const m = MAT_SUELO[k]; g.push([m, m.map, m.color.clone()]); m.map = null; m.color.setRGB(1, 1, 1); m.needsUpdate = true; }
+        const r = this.brillo();
+        for (const [m, mp, c] of g) { m.map = mp; m.color.copy(c); m.needsUpdate = true; }
+        return r;
+      })(),
+      /* y sin vegetación: 833 tarjetas alfa pueden estar tapando el suelo */
+      sinVeg: (() => {
+        const v = VEG.map(x => x.malla.visible); VEG.forEach(x => { x.malla.visible = false; });
+        const r = this.brillo();
+        VEG.forEach((x, i) => { x.malla.visible = v[i]; });
+        return r;
+      })(),
+    };
+  },
+  /* ¿SE ESTÁN DIBUJANDO LOS CUERPOS? Un kit instanciado con `count` en 0, o
+     con la malla fuera de la escena, se ve exactamente igual que un juego sin
+     personajes — y en una foto oscura eso se confunde con falta de luz. */
+  kits() {
+    const uno = (n, k) => {
+      if (!k) return { n, kit: null };
+      const m = k.mallas[Object.keys(k.mallas)[0]];
+      return { n, piezas: Object.keys(k.mallas).length, count: m.count, cupo: k.cupo,
+               enEsc: !!m.parent, vis: m.visible, culled: m.frustumCulled };
+    };
+    const p = JUG.cuerpo ? _pto(JUG.cuerpo.h.cuello, 0.19) : null;
+    const pv = p ? p.clone().project(cam) : null;
+    return { jug: uno('jug', JUG.kit), esq: uno('esq', ESQ_KIT),
+             jugXYZ: p ? [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)] : null,
+             jugPant: pv ? [+((pv.x + 1) / 2).toFixed(3), +((1 - pv.y) / 2).toFixed(3), +pv.z.toFixed(3)] : null,
+             cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+             camMira: [+CAM_YAW.toFixed(2), +CAM_PIT.toFixed(2)],
+    };
+  },
+  /* atajo de diagnóstico: pinta los kits de un color plano para saber si el
+     problema es que no se dibujan o que son del color del suelo */
+  /* dónde cae de verdad UNA instancia, leída de la matriz que se le mandó a
+     la GPU, y en qué z de vista queda. La proyección a NDC no distingue
+     «adelante» de «atrás»: un punto detrás de la cámara proyecta igual, dado
+     vuelta, y cae dentro del cuadro. Eso ya costó una vuelta en RECREO. */
+  inst() {
+    const m = new THREE.Matrix4(), v = new THREE.Vector3(), out = [];
+    for (const [n, k] of [['jug', JUG.kit], ['esq', ESQ_KIT]]) {
+      if (!k) continue;
+      for (const p of ['cuello', 'pelvis']) {
+        const im = k.mallas[p]; if (!im || !im.count) continue;
+        im.getMatrixAt(0, m); v.setFromMatrixPosition(m);
+        const vw = v.clone().applyMatrix4(cam.matrixWorldInverse);
+        const nd = v.clone().project(cam);
+        out.push({ n, p, mundo: [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)],
+                   zVista: +vw.z.toFixed(2),
+                   pant: [+((nd.x + 1) / 2).toFixed(3), +((1 - nd.y) / 2).toFixed(3)],
+                   esc: +new THREE.Vector3().setFromMatrixScale(m).x.toFixed(3) });
+      }
+    }
+    return { cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+             near: cam.near, far: cam.far, fov: cam.fov, asp: +cam.aspect.toFixed(3), inst: out };
+  },
+  /* CUÁNTO OCUPA EL HÉROE EN LA PANTALLA. Un encuadre no se elige a ojo: en
+     un marco apaisado de teléfono, un personaje por debajo del 20% del alto no
+     deja ver una animación, y por encima del 45% tapa lo que hay que esquivar. */
+  encuadre(cf) {
+    if (cf) { if (cf.d !== undefined) { CAM_D = cf.d; CAM_D_ACT = cf.d; } if (cf.h !== undefined) CAM_H = cf.h; if (cf.m !== undefined) CAM_MIRA = cf.m;
+             camPaso(0.5, 0, 0); cam.updateMatrixWorld(true); }
+    const c = JUG.cuerpo; if (!c) return null;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, det = 0;
+    const v = new THREE.Vector3();
+    for (const k in c.h) {
+      v.setFromMatrixPosition(c.h[k].matrixWorld);
+      const dv = v.clone().applyMatrix4(cam.matrixWorldInverse);
+      if (dv.z > -0.05) { det++; continue; }
+      const n = v.project(cam);
+      const px = (n.x + 1) / 2, py = (1 - n.y) / 2;
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    return { detras: det, x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)],
+             pctAlto: +((y1 - y0) * 100).toFixed(1), pctAncho: +((x1 - x0) * 100).toFixed(1),
+             centroX: +(((x0 + x1) / 2) * 100).toFixed(1), centroY: +(((y0 + y1) / 2) * 100).toFixed(1),
+             camD: +CAM_D_ACT.toFixed(2), camY: +cam.position.y.toFixed(2) };
+  },
+  pintaKits(a, b) {
+    for (const [k, c] of [[JUG.kit, a], [ESQ_KIT, b]]) {
+      if (!k) continue;
+      k.mat.vertexColors = false; k.mat.color.setRGB(c[0], c[1], c[2]); k.mat.needsUpdate = true;
+    }
+    return 'ok';
+  },
+  tex() {
+    const s = {};
+    for (const fam in SPR_MAN) s[fam] = SPR_MAN[fam].map(p => !!(TEX[p.k] && TEX[p.k].image)).filter(Boolean).length;
+    return { listas: TEX_LISTAS, falladas: TEX_FALLADAS, porFam: s,
+             suelos: ZONAS.map(z => !!(MAT_SUELO[z.suelo] && MAT_SUELO[z.suelo].map)) };
+  },
+  /* lee el BÚFER de verdad: `drawImage` sobre un lienzo WebGL sin
+     `preserveDrawingBuffer` devuelve cero */
+  /* SE LEE EL CUADRO ENTERO, no una esquina. `readRenderTargetPixels` empieza
+     en la esquina de ABAJO A LA IZQUIERDA, así que pedir 120×68 de un destino
+     de 372×172 devuelve el 13% del cuadro y todo suelo: la primera versión de
+     esta sonda informaba 8,8 sobre una escena cuyo cielo mide 65. Y las
+     franjas van de ARRIBA hacia abajo, que es como se lee una pantalla —en
+     WebGL la fila 0 es la de abajo. */
+  brillo() {
+    const W = RT.width, Hh = RT.height, px = new Uint8Array(W * Hh * 4);
+    ren.setRenderTarget(RT); ren.render(esc, cam);
+    ren.readRenderTargetPixels(RT, 0, 0, W, Hh, px);
+    ren.setRenderTarget(null);
+    let s = 0, mx = 0, n = 0;
+    const fr = [0, 0, 0, 0, 0], fn = [0, 0, 0, 0, 0];
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const o = (j * W + i) * 4;
+      const l = px[o] * 0.2126 + px[o + 1] * 0.7152 + px[o + 2] * 0.0722;
+      s += l; mx = Math.max(mx, l); n++;
+      const f = Math.min(4, Math.floor((Hh - 1 - j) / Hh * 5)); fr[f] += l; fn[f]++;
+    }
+    return { medio: +(s / n).toFixed(1), max: Math.round(mx),
+             franjas: fr.map((v, i) => +(v / fn[i]).toFixed(1)) };
+  },
+  /* solapamientos del HUD: dos elementos que se pisan no se ven en una foto
+     chica y sí en el teléfono del usuario */
+  cajas() {
+    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso'];
+    const c = [], ch = [];
+    for (const id of ids) {
+      const e = document.getElementById(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
+      if (!e.offsetWidth || !e.offsetHeight) continue;
+      c.push({ id, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight });
+    }
+    for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) {
+      const a = c[i], b = c[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
+    }
+    return { n: c.length, choques: ch, marco: [ANCHO, ALTO] };
+  },
+  audio() {
+    if (!ANAL) return { on: false };
+    const b = new Uint8Array(ANAL.fftSize); ANAL.getByteTimeDomainData(b);
+    let mx = 0, s = 0;
+    for (let i = 0; i < b.length; i++) { const v = (b[i] - 128) / 128; mx = Math.max(mx, Math.abs(v)); s += v * v; }
+    return { on: true, pico: +mx.toFixed(4), rms: +Math.sqrt(s / b.length).toFixed(4) };
+  },
+  son(k) { audioArranca(); son(k); return k; },
+  paso() { return { camina: +PASO_M.camina.toFixed(3), corre: +PASO_M.corre.toFixed(3),
+                    cadCamina: +(J_VEL / PASO_M.camina).toFixed(2),
+                    cadCorre: +(J_CORRE / PASO_M.corre).toFixed(2) }; },
+  /* PATINAJE: cuánto se desliza el pie apoyado. Es la única prueba de que la
+     zancada medida y la velocidad del juego describen el mismo movimiento. */
+  patina(corre) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    const z = zancada(corre ? 1 : 0), vel = corre ? J_CORRE : J_VEL;
+    let mn = 1e9, mx = -1e9;
+    for (let i = 0; i <= 48; i++) {
+      poseAplica(c, corre ? 'corre' : 'camina', i / 48 * Math.PI * 2, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      v.set(0, -0.44, 0).applyMatrix4(c.h.pantI.matrixWorld);
+      mn = Math.min(mn, v.z); mx = Math.max(mx, v.z);
+    }
+    const barre = (mx - mn) * 2;
+    return { zancada: +z.toFixed(3), barre: +barre.toFixed(3),
+             desliza: +(z - barre).toFixed(3), pct: +((z - barre) / z * 100).toFixed(1),
+             cadencia: +(vel / z).toFixed(2), pasosSeg: +(vel / z * 2).toFixed(2) };
+  },
+  tally() {
+    const c = ESQS.filter(e => e.vive && e.est !== 'muere')
+      .map(e => ({ cl: e.cl, est: e.est, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1) }))
+      .sort((a, b) => a.d - b.d).slice(0, 6);
+    return { golpes: TALLY.golpes, dano: TALLY.dano, porCl: TALLY.porCl,
+             esquivados: TALLY.esquivados, cerca: c };
+  },
+  zona0() {
+    return ESQS.filter(e => e.vive && e.zona === ZONA_ACT).map(e => ({
+      cl: e.cl, est: e.est, vida: Math.round(e.vida),
+      d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2),
+      x: +e.x.toFixed(1), z: +e.z.toFixed(1), v: +Math.hypot(e.vx, e.vz).toFixed(2),
+      dSpawn: +Math.sqrt(dist2(e.x, e.z, e.sx, e.sz)).toFixed(1),
+      enTurba: esqCerca().indexOf(e) >= 0,
+    }));
+  },
+  /* ── LA CORONA ES DEL REY Y DE NADIE MÁS ───────────────────────────────
+     Se mide leyendo la MATRIZ DE INSTANCIA que se subió a la GPU, no la
+     lista de clases: es lo único que prueba que lo que se dibuja coincide
+     con lo que se quiso dibujar. Una matriz de escala cero no pinta nada. */
+  corona() {
+    if (!ESQ_KIT) return null;
+    const cerca = esqCerca(), im = ESQ_KIT.mallas.corona, m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    let con = 0, sin = 0; const clases = {};
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, m); v.setFromMatrixScale(m);
+      const cl = cerca[i] ? cerca[i].cl : '?';
+      if (v.x > 1e-4) { con++; clases[cl] = (clases[cl] || 0) + 1; } else sin++;
+    }
+    return { instancias: im.count, conCorona: con, sinCorona: sin, clases,
+             piezas: Object.keys(ESQ_KIT.mallas).length };
+  },
+  errs() { return window.__errs || []; },
+};
+
+arranca();
+
+</script>
+</body></html>

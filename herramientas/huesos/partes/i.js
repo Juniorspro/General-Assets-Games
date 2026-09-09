@@ -1,0 +1,307 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   EL JUGADOR — moverse, correr, esquivar y el combo de tres
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const JUG = {
+  x: 0, z: 0, y: 0, rumbo: 0, vx: 0, vz: 0,
+  vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+  nivel: 1, xp: 0, xpSig: XP_NIVEL(1),
+  golpe: -1, gT: 0, gDio: false, gVent: 0,
+  esqT: 0, esqEsp: 0, esqX: 0, esqZ: 0,
+  danoT: 0, invT: 0, muerto: false, muerteT: 0,
+  fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0,
+  cuerpo: null, kit: null,
+};
+let JUG_MEZ = { a: 'quieto', b: null, k: 0 };   // qué pose se está mezclando
+
+function jugArranca() {
+  Object.assign(JUG, {
+    x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+    nivel: 1, xp: 0, xpSig: XP_NIVEL(1), golpe: -1, gT: 0, gDio: false, gVent: 0,
+    esqT: 0, esqEsp: 0, danoT: 0, invT: 0, muerto: false, muerteT: 0,
+    fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0, vive: true,
+  });
+  JUG.y = H(0, 0);
+  if (!JUG.cuerpo) {
+    JUG.cuerpo = armaCuerpo(recetaHeroe());
+    JUG.kit = armaKit(recetaHeroe(), 1);
+  }
+}
+
+const jugAtacando = () => JUG.golpe >= 0;
+const jugFaseGolpe = () => {                     // 0 carga · 1 activo · 2 fin
+  const g = J_COMBO[JUG.golpe];
+  return JUG.gT < g.carga ? 0 : (JUG.gT < g.carga + g.activo ? 1 : 2);
+};
+const jugLargoGolpe = g => g.carga + g.activo + g.fin;
+
+function jugPide(que) {
+  if (JUG.muerto) return false;
+  if (que === 'esquiva') {
+    if (JUG.esqT > 0 || JUG.esqEsp > 0 || JUG.agu < J_AGU_ESQ) return false;
+    /* esquivar CANCELA el golpe: si no, el jugador queda clavado en la
+       recuperación de un tajo mientras le llega un hachazo que veía venir, y
+       eso se lee a que el botón no anduvo */
+    JUG.golpe = -1; JUG.gVent = 0;
+    JUG.esqT = J_ESQ_T; JUG.esqEsp = J_ESQ_ESPERA; JUG.agu -= J_AGU_ESQ;
+    const l = Math.hypot(JUG.entX || 0, JUG.entZ || 0);
+    if (l > 0.2) { JUG.esqX = JUG.entX / l; JUG.esqZ = JUG.entZ / l; }
+    else { JUG.esqX = Math.sin(JUG.rumbo); JUG.esqZ = Math.cos(JUG.rumbo); }
+    JUG.rumbo = Math.atan2(JUG.esqX, JUG.esqZ);
+    son('esquiva');
+    return true;
+  }
+  if (que === 'ataca') {
+    if (JUG.esqT > 0 || JUG.agu < J_AGU_GOLPE) return false;
+    if (JUG.golpe < 0) { JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false; JUG.agu -= J_AGU_GOLPE; son('tajo'); return true; }
+    /* ENCADENAR SÓLO EN LA VENTANA. Sin ventana, machacar el botón encadena
+       los tres golpes al instante y el tercero —que es el caro— sale gratis */
+    if (JUG.gVent > 0 && JUG.golpe < J_COMBO.length - 1) {
+      JUG.golpe++; JUG.gT = 0; JUG.gDio = false; JUG.gVent = 0;
+      JUG.agu -= J_AGU_GOLPE; son('tajo'); return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+function jugPaso(dt, ent) {
+  JUG.tiempo += dt;
+  JUG.entX = ent.x; JUG.entZ = ent.z;
+  if (JUG.muerto) { JUG.muerteT += dt; jugPose(dt); return; }
+
+  JUG.invT = Math.max(0, JUG.invT - dt);
+  JUG.danoT = Math.max(0, JUG.danoT - dt);
+  JUG.esqEsp = Math.max(0, JUG.esqEsp - dt);
+  JUG.gVent = Math.max(0, JUG.gVent - dt);
+
+  /* ── el esquive manda sobre todo lo demás ── */
+  if (JUG.esqT > 0) {
+    JUG.esqT -= dt;
+    const u = 1 - JUG.esqT / J_ESQ_T;
+    const v = J_ESQ_V * (1 - suav(lim(u, 0, 1)) * 0.72);   // arranca fuerte y frena
+    JUG.vx = JUG.esqX * v; JUG.vz = JUG.esqZ * v;
+    if (JUG.esqT <= 0) { JUG.vx *= 0.25; JUG.vz *= 0.25; }
+  } else if (jugAtacando()) {
+    JUG.gT += dt;
+    const g = J_COMBO[JUG.golpe];
+    /* EL GOLPE EMPUJA HACIA ADELANTE, y no es adorno: sin ese medio metro,
+       apuntar a un blanco que retrocede obliga a soltar el botón y volver a
+       apretarlo, y el combo de tres deja de existir en la práctica */
+    const emp = JUG.gT < g.carga + g.activo ? g.empuje * (1 - JUG.gT / (g.carga + g.activo)) : 0;
+    JUG.vx = Math.sin(JUG.rumbo) * emp; JUG.vz = Math.cos(JUG.rumbo) * emp;
+    /* EL GOLPE SE RESUELVE UNA VEZ, en la ventana activa. Resolviéndolo en
+       cada cuadro del arco, un tajo de 110 ms le pega siete veces al mismo
+       bicho y el peón se muere de un toque. */
+    if (!JUG.gDio && jugFaseGolpe() === 1) { JUG.gDio = true; jugResuelveGolpe(); }
+    if (JUG.gT >= jugLargoGolpe(g)) {
+      JUG.gVent = J_COMBO_VENTANA;
+      if (JUG.golpe === J_COMBO.length - 1) JUG.gVent = 0;   // el remate no encadena
+      JUG.golpe = -1;
+    }
+  } else {
+    /* ── caminar ─────────────────────────────────────────────────────────
+       LO QUE SE ACELERA ES SÓLO LO QUE FALTA EN LA DIRECCIÓN PEDIDA, y el
+       roce se aplica a lo de costado. Sumando al vector y topando el total,
+       doblar FRENA y el tope real queda por debajo del ajuste —el defecto
+       que ya costó una vuelta en Z Force—.                                */
+    const l = Math.hypot(ent.x, ent.z);
+    JUG.corre = ent.corre && l > 0.55 && JUG.agu > 1;
+    const vMax = (JUG.corre ? J_CORRE : J_VEL) * (l > 0.34 ? Math.min(1, l) : 0);
+    if (l > 0.06) {
+      const dx = ent.x / l, dz = ent.z / l;
+      JUG.rumbo = angAmort(JUG.rumbo, Math.atan2(dx, dz), 15.5, dt);
+      const act = JUG.vx * dx + JUG.vz * dz;
+      const falta = vMax - act;
+      if (falta > 0) {
+        const a = Math.min(falta, 46 * dt);
+        JUG.vx += dx * a; JUG.vz += dz * a;
+      }
+      const lx = JUG.vx - dx * act, lz = JUG.vz - dz * act;
+      const f = Math.exp(-11 * dt);
+      JUG.vx = dx * act + lx * f; JUG.vz = dz * act + lz * f;
+    } else {
+      const f = Math.exp(-13 * dt);
+      JUG.vx *= f; JUG.vz *= f;
+    }
+    if (JUG.corre && vMax > 0.2) JUG.agu = Math.max(0, JUG.agu - J_AGU_CORRE * dt);
+  }
+
+  /* el aguante se recupera cuando no se gasta, y no mientras se corre */
+  if (!JUG.corre && JUG.esqT <= 0) JUG.agu = Math.min(J_AGU, JUG.agu + J_AGU_REC * dt);
+
+  /* ── mover y chocar ── */
+  const nx = JUG.x + JUG.vx * dt, nz = JUG.z + JUG.vz * dt;
+  const c = corrigeChoque(nx, nz, J_RADIO);
+  JUG.x = c.x; JUG.z = c.z;
+  const r = largo2(JUG.x, JUG.z);
+  if (r > MUNDO_R * 0.955) {                 // el borde del mundo empuja, no frena
+    const k = (MUNDO_R * 0.955) / r;
+    JUG.x *= k; JUG.z *= k;
+  }
+  JUG.y = H(JUG.x, JUG.z);
+
+  /* LA FASE DEL PASO SALE DE LA DISTANCIA Y NO DEL RELOJ: así el sonido del
+     pie, el balanceo del cuerpo y la cámara son EL MISMO número y no se
+     pueden desincronizar, y frenar no patina */
+  const v = Math.hypot(JUG.vx, JUG.vz);
+  JUG.anda = amort(JUG.anda, JUG.esqT > 0 || jugAtacando() ? 0 : v, 12, dt);
+  const antes = JUG.fase;
+  JUG.fase += (v * dt) / zancada(JUG_MEZ.b === 'corre' ? JUG_MEZ.k : 0) * Math.PI * 2;
+  if (v > 0.6 && Math.floor(antes / Math.PI) !== Math.floor(JUG.fase / Math.PI)) son('pisa');
+
+  jugPose(dt);
+}
+
+/* la mezcla de poses: qué se está haciendo manda, y el resto se funde */
+function jugPose(dt) {
+  let a = 'quieto', arg = JUG.tiempo, b = null, brg = 0, obj = 0;
+  if (JUG.muerto) { a = 'muere'; arg = Math.min(1, JUG.muerteT / 1.15); }
+  else if (JUG.esqT > 0) { a = 'esquiva'; arg = 1 - JUG.esqT / J_ESQ_T; }
+  else if (jugAtacando()) {
+    a = 'golpe' + JUG.golpe; arg = JUG.gT / jugLargoGolpe(J_COMBO[JUG.golpe]);
+  } else if (JUG.danoT > 0) { a = 'dano'; arg = 1 - JUG.danoT / 0.32; }
+  else {
+    const v = JUG.anda;
+    if (v > 0.35) {
+      a = 'camina'; arg = JUG.fase;
+      b = 'corre'; brg = JUG.fase;
+      obj = lim((v - J_VEL * 0.72) / (J_CORRE - J_VEL * 0.72), 0, 1);
+    } else {
+      a = 'quieto'; arg = JUG.tiempo;
+      b = 'camina'; brg = JUG.fase; obj = lim(v / 1.5, 0, 1);
+    }
+  }
+  JUG_MEZ.a = a; JUG_MEZ.b = b;
+  JUG_MEZ.k = b ? obj : 0;
+  poseAplica(JUG.cuerpo, a, arg, b, brg, JUG_MEZ.k);
+  JUG.cuerpo.raiz.position.set(JUG.x, JUG.y, JUG.z);
+  JUG.cuerpo.raiz.rotation.y = JUG.rumbo;
+}
+
+/* ── EL CHOQUE SALE DE LA MISMA LISTA QUE DIBUJA EL BOSQUE ─────────────────
+   Con una segunda lista "para el choque" el día que se agregue un árbol se
+   camina a través de él, o peor: hay una pared invisible donde no hay nada. */
+let SOLIDOS = [], SOL_REJA = null, SOL_PASO = 8;
+function preparaChoque(solidos) {
+  SOLIDOS = solidos; SOL_REJA = new Map();
+  for (const s of solidos) {
+    const i = Math.floor(s.x / SOL_PASO), j = Math.floor(s.z / SOL_PASO);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const k = (i + a) * 10007 + (j + b);
+      (SOL_REJA.get(k) || SOL_REJA.set(k, []).get(k)).push(s);
+    }
+  }
+}
+function solidosCerca(x, z) {
+  if (!SOL_REJA) return SOLIDOS;
+  return SOL_REJA.get(Math.floor(x / SOL_PASO) * 10007 + Math.floor(z / SOL_PASO)) || [];
+}
+function corrigeChoque(x, z, r) {
+  /* una sola pasada de separación por eje de menor penetración: dos círculos
+     encimados empujan en sentidos opuestos y dejan al cuerpo trabado */
+  for (const s of solidosCerca(x, z)) {
+    const dx = x - s.x, dz = z - s.z, R = s.r + r;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < R * R && d2 > 1e-9) {
+      const d = Math.sqrt(d2), k = (R - d) / d;
+      x += dx * k; z += dz * k;
+    }
+  }
+  return { x, z };
+}
+
+/* ── ESQUIVAR UN TRONCO ────────────────────────────────────────────────────
+   Nadie tiene pathfinding acá y no hace falta: lo que hay son árboles
+   sueltos, no un laberinto. Con la dirección derecha, un cuerpo empujado
+   hacia afuera del tronco y empujando hacia adelante se ANULA, y los dos se
+   quedan clavados —medido: el bot y un peón a tres metros, cada uno de un
+   lado del mismo árbol, mil quinientos segundos sin moverse—. Alcanza con
+   rodear el primer tronco que se cruza.                                    */
+function rodea(x, z, dx, dz, r, alcance) {
+  const A = alcance === undefined ? 4.2 : alcance;
+  let peor = null, pd = 1e9;
+  for (const s of solidosCerca(x, z)) {
+    const ax = s.x - x, az = s.z - z;
+    const t = ax * dx + az * dz;                 // cuánto adelante está
+    if (t < 0.05 || t > A) continue;             // detrás, o más lejos que el destino
+    const px = ax - dx * t, pz = az - dz * t;    // cuánto de costado
+    const lat = Math.hypot(px, pz);
+    if (lat > s.r + r + 0.12) continue;          // no está en el camino
+    if (t < pd) { pd = t; peor = { r: s.r, px, pz, lat }; }
+  }
+  if (!peor) return { x: dx, z: dz };
+  /* SE ARMA COMO VECTOR Y NO COMO ÁNGULO: con un ángulo hay que acertar el
+     signo de la convención, y equivocarse no falla —dirige HACIA el tronco,
+     el choque lo empuja afuera, y el cuerpo orbita el árbol para siempre.
+     Medido con el signo al revés: mil bajas menos, dos mil segundos girando. */
+  const lx = dz, lz = -dx;                       // la perpendicular
+  const sg = (peor.px * lx + peor.pz * lz) > 0 ? -1 : 1;   // al lado contrario
+  const k = 0.55 + 1.05 * (1 - peor.lat / (peor.r + r + 0.12));
+  const nx = dx + lx * sg * k, nz = dz + lz * sg * k;
+  const l = Math.hypot(nx, nz) || 1;
+  return { x: nx / l, z: nz / l };
+}
+
+/* ── LA CÁMARA ─────────────────────────────────────────────────────────────
+   Al hombro y no justo atrás: de frente al eje del cuerpo las piernas se
+   tapan entre ellas y la zancada casi no se lee.                          */
+let CAM_YAW = 0, CAM_PIT = -0.13, CAM_D_ACT = CAM_D;
+function camPaso(dt, giroX, giroY) {
+  if (!JUG.cuerpo) return;      // en el menú no hay cuerpo todavía
+  CAM_YAW -= giroX; CAM_PIT = lim(CAM_PIT - giroY, -0.95, 0.52);
+  const ojo = new THREE.Vector3(JUG.x, JUG.y + CAM_MIRA, JUG.z);
+  const dir = new THREE.Vector3(
+    Math.sin(CAM_YAW) * Math.cos(CAM_PIT), Math.sin(CAM_PIT), Math.cos(CAM_YAW) * Math.cos(CAM_PIT));
+  const lado = new THREE.Vector3(Math.cos(CAM_YAW), 0, -Math.sin(CAM_YAW));
+  /* SE MARCHA HACIA ATRÁS Y SE CORTA EN EL ÚLTIMO PUNTO LIBRE. Sin esto la
+     cámara se mete adentro de un árbol y lo que llena la pantalla es la cara
+     interior de un tronco. Y por debajo de CAM_MIN pasa a PRIMERA PERSONA
+     entera: una cámara "al hombro" a veinte centímetros no es al hombro, es
+     estar adentro del muñeco.
+     EL SIGNO: `dir` es hacia dónde MIRA la cámara, así que la cámara va en
+     `ojo − dir·d`. Sumándolo queda DELANTE del jugador mirando para el otro
+     lado: el héroe no aparece nunca y el juego se ve como un bosque vacío.
+     Medido con la matriz de instancia, el cuello del jugador caía en z de
+     vista +4,98 —o sea cinco metros DETRÁS del lente— y proyectaba igual en
+     el medio del cuadro, porque un punto de atrás proyecta dado vuelta y cae
+     adentro. Es la misma trampa que en RECREO dio un autobús «entero y
+     centrado» con la cámara mirando al revés.                              */
+  let d = CAM_D;
+  for (let i = 8; i >= 1; i--) {
+    const p = i / 8 * CAM_D;
+    const px = ojo.x - dir.x * p + lado.x * CAM_LADO;
+    const pz = ojo.z - dir.z * p + lado.z * CAM_LADO;
+    const py = ojo.y - dir.y * p + CAM_H * 0.30;
+    let libre = py > H(px, pz) + 0.35;
+    if (libre) for (const s of solidosCerca(px, pz)) {
+      if (dist2(px, pz, s.x, s.z) < (s.r + 0.42) * (s.r + 0.42)) { libre = false; break; }
+    }
+    if (libre) { d = p; break; }
+    d = (i - 1) / 8 * CAM_D;
+  }
+  CAM_D_ACT = amort(CAM_D_ACT, d, d < CAM_D_ACT ? 34 : 7.5, dt);
+  const pri = CAM_D_ACT < CAM_MIN;
+  const dd = pri ? 0 : CAM_D_ACT, ll = pri ? 0 : CAM_LADO;
+  const px = ojo.x - dir.x * dd + lado.x * ll;
+  const pz = ojo.z - dir.z * dd + lado.z * ll;
+  const py = ojo.y - dir.y * dd + (pri ? J_ALTO - CAM_MIRA : CAM_H * 0.30);
+  cam.position.set(px, Math.max(py, H(px, pz) + 0.28), pz);
+  cam.rotation.set(CAM_PIT, CAM_YAW + Math.PI, 0);
+  /* la cabeza se achica a la centésima parte en primera persona: una cámara
+     metida en la cabeza no puede ver la cabeza, sólo su interior */
+  const e = pri ? 0.01 : 1;
+  JUG.cuerpo.h.cuello.scale.setScalar(e);
+  /* la caja de sombra sigue al jugador: 26 m de lado son 79 texels por metro
+     contra los 9 que daría cubrir el mundo entero */
+  solLuz.position.set(JUG.x + 24, JUG.y + 40, JUG.z + 16);
+  solLuz.target.position.set(JUG.x, JUG.y, JUG.z);
+  solLuz.target.updateMatrixWorld();
+}
+
+/* la dirección de la entrada es RELATIVA A LA CÁMARA: con el joystick en
+   ejes de mundo, girar la cámara deja "adelante" apuntando a otro lado */
+function entradaMundo(jx, jz) {
+  const s = Math.sin(CAM_YAW), c = Math.cos(CAM_YAW);
+  return { x: jx * c - jz * s, z: -jx * s - jz * c };
+}
