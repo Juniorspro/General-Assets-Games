@@ -297,6 +297,85 @@ munecas.
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
 
+### Centésima cuadragésima séptima vuelta (2026-09-09): **MESHY, LA PUERTA BUENA** — era Higgsfield, y este repo ya lo había hecho tres veces
+
+Cuarto rechazo del usuario, y el que lo cerró: *"NOOOO si en otra sesión si armó modelo con meshy y
+animaciones"*.
+
+#### TENÍA RAZÓN, Y LA PRUEBA ESTABA EN EL PROPIO REPO
+
+Un `grep -ri meshy` de tres segundos —lo primero que había que hacer y lo último que hice— devuelve
+esto:
+
+| juego | qué | cómo |
+|---|---|---|
+| **RECREO** | Baldi, riggeado con 24 huesos y texturizado | `image_to_3d` (Meshy) → `hornear_baldi.py` |
+| **VECINDARIO** | la abuela con el bate, riggeada | lo mismo → `hornear_abuela.py` |
+| **ECO** | la criatura, **con CUATRO CLIPS DE ANIMACIÓN** (341 · 613 · 644 · 386) | `image_to_3d` (Meshy) → `juntar_clips.py` |
+
+O sea que **«un modelo con Meshy y animaciones» ya salió de acá, y salió por HIGGSFIELD.** La vuelta
+146 se pasó la sesión golpeando la puerta de al lado —el Studio de Rezona por HTTP— y escribió con
+cinco mediciones que no se podía. Las cinco mediciones son ciertas y **la conclusión estaba mal
+dirigida**: lo que no se puede es por *esa* puerta.
+
+**LA LECCIÓN NO ES SOBRE MESHY, ES DE MÉTODO.** El repo ya tenía escrita la regla —*«cuando el
+usuario dice "yo sé que se puede", lo que corresponde es probar, no citar la documentación»*— y yo la
+apliqué **contra el proveedor equivocado**: probé más fuerte en Rezona en vez de preguntarle al repo
+dónde había funcionado antes. Tres rechazos seguidos del usuario sobre el mismo punto no son un
+malentendido: son la señal de que estoy midiendo bien en el lugar equivocado.
+
+#### QUÉ HAY DEL OTRO LADO, MEDIDO
+
+`models_explore(type:'3d')` devuelve siete modelos de Meshy, y el que le sirve a HUESOS es
+**`meshy_v6_text_to_3d`**: es **texto → GLB**, y los catorce prompts de este juego ya son texto. Trae
+`model_type:'lowpoly'` + `should_remesh` + `target_polycount` **desde cien**, que es exactamente la
+palanca que a Tripo le falta —ahí las piezas se topan en su piso topológico y pedir menos no baja un
+triángulo—. Y trae `enable_rigging` + `enable_animation` + `animation_action_id` sobre una biblioteca
+de **678 clips**.
+
+**LA BÚSQUEDA DE CLIPS NO ACEPTA FRASES.** `animation_actions` con `query: "sword attack"` o
+`"zombie walk"` devuelve **cero** las dos veces; hay que filtrar por `category`. Las que importan acá:
+`AttackingwithWeapon` (38), `Dying` (11), `GettingHit` (11), `Walking` (87), `Running` (47).
+
+#### EL PLAN: LAS CATORCE PIEZAS SIN RIG, Y EL REY CON ÉL
+
+**Los catorce huesos NO se riggean, y no es pereza.** Son un **kit instanciado** —catorce esqueletos
+cuestan una llamada de dibujo por PIEZA, no por cuerpo— y un `SkinnedMesh` no se instancia; encima
+las nueve poses están escritas sobre ese rig con mezcla y el patinaje cero sale de medir el ciclo.
+Reemplazando sólo la **geometría**, las cuatro cosas siguen en pie, y está medido: el auto-jugador da
+resultados **idénticos** con mallas y con cajas.
+
+**El rey es el único caso donde un cuerpo riggeado paga: hay UNO SOLO**, así que no hay nada que
+instanciar, y es al que el jugador le mira la cara al final. Seis clips elegidos contra las poses que
+el juego ya tiene y no por su nombre — `Combat_Stance` 89 (un jefe no está en reposo neutro),
+`Slow_Orc_Walk` 119 (460 de vida no camina casual), `Standard_Forward_Charge` 510 (la carga **es** su
+ataque, y `carga` es una pose del juego), `Triple_Combo_Attack` 105 (el combo del juego es de tres),
+`Hit_Reaction` 178 y `Dead` 8— fundidos en un GLB con `juntar_clips.py`, que ya está probado en ECO.
+
+`herramientas/huesos/meshy.py` deja de imprimir una receta para pegar en un navegador y pasa a emitir
+**el plan exacto**, con `--json`, listo para la herramienta que sí abre. Sigue importando los prompts
+de `pedir_3d.py` y los presupuestos de `hornear_3d.py`, así que no hay una segunda lista que se pueda
+desincronizar.
+
+#### EL COSTO ESTÁ MEDIDO Y EL FRENO TAMBIÉN
+
+`get_cost` es gratis y contesta, así que el plan se valida **sin gastar**: los parámetros del rey
+—rig, animación, `pose_mode:'a-pose'`, `rigging_height_meters:2.1`— se aceptan y dan **25 créditos**,
+o sea que **el rig y la animación no cuestan más que una pieza pelada**. Veinte generaciones × 25 =
+**500 créditos**.
+
+Y generar de verdad, probado en los dos espacios: **«Out of credits in the selected workspace»**, con
+el privado (free) y el de equipo «Rezona» (team) los dos en **0**, y `unlim.available` en false.
+
+**LO QUE NO SE PUDO HACER, Y ES EL PUNTO:** cargar créditos. Ese paso es del dueño de la cuenta. Lo
+que sí está hecho es que después no haya que pensar nada: el plan está escrito, validado contra el
+servidor y con la cañería de horneado ya prefiriendo `assets/huesos/meshy/`.
+
+**Y LO QUE HAY QUE VOLVER A MEDIR CUANDO LLEGUEN LOS ARCHIVOS** sigue siendo el **giro** de cada
+pieza: los `giro` de la tabla `P` están medidos contra las mallas de Tripo —tres venían mirando a −X—
+y Meshy no tiene por qué orientar igual. El horneado imprime el tamaño (x,y,z) de cada pieza, que es
+la primera señal, y la prueba de verdad es la hoja de contactos.
+
 ### Centésima cuadragésima sexta vuelta (2026-09-09): **MESHY** — dónde está de verdad, por qué la llave no llega, y la receta lista
 
 Pedido, tres veces y con razón: *"genera los modelos en Rezona con meshy deja de hacer cagada"*.
