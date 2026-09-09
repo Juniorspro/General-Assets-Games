@@ -21,23 +21,47 @@ function sinDe(cl) {
   return s;
 }
 
-function esqArranca(lista) {
-  ESQS = lista.map((s, i) => ({
-    id: i, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
+/* ── DAR DE ALTA UNO SOLO ──────────────────────────────────────────────────
+   Es la ÚNICA puerta por la que entra un esqueleto al mundo, y la usan las
+   tres cosas que lo hacen: el arranque de la partida, cada oleada y el menú.
+   Con un alta por camino, el bicho de la tercera oleada nace sin la máscara
+   de piezas o sin el tinte y eso no falla: sale un peón con la espada del rey.
+   EL CUERPO SE RECICLA de un muerto de la misma clase cuando lo hay. Un
+   `cuerpoEsq()` es una jerarquía de veintitantos nodos, y una partida entera
+   son treinta y cuatro altas contra catorce vivos a la vez: sin reciclar se
+   construyen veinte jerarquías que no se dibujan nunca más.                */
+function esqAlta(s) {
+  const D = ESQ[s.cl];
+  let cuerpo = null;
+  for (let i = 0; i < ESQS.length; i++) {
+    const v = ESQS[i];
+    if (!v.vive && v.cl === s.cl && v.cuerpo) { cuerpo = v.cuerpo; v.cuerpo = null; break; }
+  }
+  if (!cuerpo) cuerpo = cuerpoEsq();
+  cuerpo.raiz.scale.setScalar(D.esc);
+  const e = {
+    id: ESQS.length, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
     rumbo: Math.atan2(-s.x, -s.z), vx: 0, vz: 0,
-    vida: ESQ[s.cl].vida, vidaMax: ESQ[s.cl].vida,
+    vida: D.vida, vidaMax: D.vida,
     sx: s.x, sz: s.z, est: 'duerme', t: 0, esp: 0, atur: 0, muerteT: 0, vive: true, gDio: false,
     fase: Math.random() * 6.283, ronX: s.x, ronZ: s.z, ronT: 0,
-    cuerpo: null, tinte: null,
+    /* NACE ENTRANDO EN ESCENA: 0,45 s en los que crece desde el suelo. Un
+       esqueleto que aparece de un cuadro a otro a veinte metros se lee a
+       defecto de dibujo, no a que algo se levantó de la tierra. */
+    naceT: 0,
+    cuerpo, tinte: new THREE.Color(D.color).convertSRGBToLinear(),
     /* la corona, la capa y las tres armas que no son suyas van con matriz cero */
     sin: sinDe(s.cl),
-  }));
+  };
+  ESQS.push(e);
+  return e;
+}
+const ESQ_NACE = 0.45;            // cuánto tarda en levantarse del suelo
+
+function esqArranca(lista) {
+  ESQS = [];
   if (!ESQ_KIT) ESQ_KIT = armaKit(recetaEsq(), ESQ_TURBA + 2);
-  for (const e of ESQS) {
-    e.cuerpo = cuerpoEsq();
-    e.cuerpo.raiz.scale.setScalar(ESQ[e.cl].esc);
-    e.tinte = new THREE.Color(ESQ[e.cl].color).convertSRGBToLinear();
-  }
+  for (const s of lista) esqAlta(s);
 }
 
 const esqVivos = z => ESQS.filter(e => e.vive && e.zona === z).length;
@@ -75,6 +99,11 @@ function esqPaso(dt) {
     const d = Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z));
 
     if (e.est === 'muere') { e.muerteT += dt; if (e.muerteT > ESQ_MUERE) e.vive = false; esqPose(e, dt, d); continue; }
+    /* MIENTRAS SE LEVANTA NO DECIDE NADA. Sin esto, un esqueleto que nace a
+       diecinueve metros con la vista en treinta y dos ya está persiguiendo en
+       el mismo cuadro en que aparece, y lo que se ve es que la oleada empieza
+       a correr antes de terminar de salir. */
+    if (e.naceT < ESQ_NACE) { esqPose(e, dt, d); continue; }
     if (e.atur > 0) { e.vx *= Math.exp(-9 * dt); e.vz *= Math.exp(-9 * dt); esqMueve(e, dt); esqPose(e, dt, d); continue; }
 
     switch (e.est) {
@@ -192,7 +221,12 @@ function esqPose(e, dt, d) {
   poseAplica(e.cuerpo, a, arg, b, brg, k);
   e.cuerpo.raiz.position.set(e.x, e.y, e.z);
   e.cuerpo.raiz.rotation.y = e.rumbo;
-  e.cuerpo.raiz.scale.setScalar(D.esc);
+  /* EL NACIMIENTO VA ACÁ Y NO EN `esqAlta`, porque esta línea corre en CADA
+     cuadro y pisa cualquier escala escrita una sola vez — la misma lección
+     que el parpadeo de la fogata de LEMI contra el apagado de la cinemática. */
+  e.naceT = Math.min(ESQ_NACE, (e.naceT || 0) + dt);
+  const nac = e.naceT / ESQ_NACE;
+  e.cuerpo.raiz.scale.setScalar(D.esc * (nac < 1 ? 0.18 + 0.82 * suav(nac) : 1));
   /* el tinte parpadea al recibir: es el único acuse de recibo que hay de que
      el golpe entró, porque una barra de vida sobre catorce bichos es ruido */
   const f = e.atur > 0 ? e.atur / ESQ_ATURDE : 0;

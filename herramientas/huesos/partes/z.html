@@ -46,6 +46,7 @@ function arranca() {
   ajustaMarco();
   addEventListener('resize', ajustaMarco);
   midePasos();
+  leeRecord();
   armaTexturas();
   menuMundo();
   armaEntrada();
@@ -85,6 +86,9 @@ window.__H = {
       fps: +FPS.toFixed(1), llamadas: i.calls, tri: i.triangles,
       part: PART, cal: CALIDAD, rt: [RT.width, RT.height],
       zonaAct: ZONA_ACT, zonaVis: ZONA_VIS,
+      ola: { i: OLA.i, de: ZONAS[ZONA_ACT].olas.length, hechas: OLA.hechas,
+             espera: +OLA.espera.toFixed(2), suelta: OLA.suelta, total: OLA_TOTAL },
+      rec: { olas: RECORD.olas, bajas: RECORD.bajas },
       jug: { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
              vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, agu: Math.round(JUG.agu),
              niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
@@ -210,6 +214,7 @@ window.__H = {
     }
     return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: GANO,
              bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
+             olas: OLA.hechas, deOlas: OLA_TOTAL, zona: ZONA_ACT,
              huyo, esq, vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
   },
   audita(s) { return audita(s === undefined ? SEM : s); },
@@ -444,20 +449,57 @@ window.__H = {
   /* solapamientos del HUD: dos elementos que se pisan no se ven en una foto
      chica y sí en el teléfono del usuario */
   cajas() {
-    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso'];
+    /* LOS BOTONES ENTRAN EN LA CUENTA. Medía sólo los rótulos, así que el
+       botón de pausa pegado a la barra de vida —los dos arriba a la
+       izquierda— era un choque que ninguna prueba podía ver. Lo que se pisa
+       no es el dibujo del botón sino su CAJA: el dedo va ahí igual. */
+    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso',
+                 'bAtaca', 'bEsq', 'bCam', 'bPausa'];
     const c = [], ch = [];
     for (const id of ids) {
       const e = document.getElementById(id); if (!e) continue;
       const s = getComputedStyle(e);
       if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
       if (!e.offsetWidth || !e.offsetHeight) continue;
-      c.push({ id, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight });
+      /* ── EL `offsetLeft` NO SABE DEL `transform` ───────────────────────
+         Casi todo lo centrado del HUD va con `left:50%` + `translateX(-50%)`,
+         y `offsetLeft` devuelve el 50% pelado: la caja se informaba media
+         anchura a la derecha de donde está, y de ahí salían dos choques que
+         no existen. `getBoundingClientRect` tampoco sirve —el marco va
+         GIRADO y devuelve coordenadas de ventana— así que lo correcto es
+         sumarle al offset la traslación que la matriz ya tiene resuelta en
+         píxeles. */
+      const m = new DOMMatrixReadOnly(s.transform === 'none' ? '' : s.transform);
+      c.push({ id, x: e.offsetLeft + m.m41, y: e.offsetTop + m.m42, w: e.offsetWidth, h: e.offsetHeight });
     }
     for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) {
       const a = c[i], b = c[j];
       if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
     }
     return { n: c.length, choques: ch, marco: [ANCHO, ALTO] };
+  },
+  /* ── EL MENÚ TIENE QUE ENTRAR EN EL MARCO ──────────────────────────────
+     El marco va GIRADO noventa grados, así que `getBoundingClientRect`
+     devuelve coordenadas de ventana y el alto que informa es el ANCHO del
+     cuadro: medir con eso da números que parecen razonables y describen otra
+     pantalla. `offsetTop` es de la caja, que es lo que se ve. Y hay que
+     medirlo porque `.caja` va centrada: cuando el contenido pasa el alto del
+     marco no se recorta abajo, se sale por ARRIBA Y POR ABAJO a la vez. */
+  menuCajas(pan) {
+    const P = document.getElementById(pan || 'pMenu');
+    const c = P.querySelector('.caja'), h = [];
+    let y0 = 1e9, y1 = -1e9;
+    for (const e of c.children) {
+      if (getComputedStyle(e).display === 'none' || !e.offsetHeight) continue;
+      const t = e.offsetTop, b = t + e.offsetHeight;
+      h.push({ id: e.id || e.className, y: [t, b] });
+      y0 = Math.min(y0, t); y1 = Math.max(y1, b);
+    }
+    const ch = [];
+    for (let i = 0; i < h.length - 1; i++) if (h[i].y[1] > h[i + 1].y[0]) ch.push(h[i].id + '×' + h[i + 1].id);
+    return { panel: pan || 'pMenu', marco: [ANCHO, ALTO], caja: [y0, y1],
+             alto: y1 - y0, aire: ALTO - (y1 - y0), entra: (y1 - y0) <= ALTO,
+             choques: ch, hijos: h };
   },
   audio() {
     if (!ANAL) return { on: false };
@@ -572,6 +614,119 @@ window.__H = {
     }
     return { instancias: im.count, conCorona: con, sinCorona: sin, clases,
              piezas: Object.keys(ESQ_KIT.mallas).length };
+  },
+  /* ── LOS CONTROLES SE VEN, Y ESO SE MIDE ───────────────────────────────
+     Ésta es la sonda que faltaba y la que hace que el defecto no vuelva.
+     `l.js` escribía la clase `enJuego` y el CSS pedía `jugando`: medido con
+     esto, `#hud` quedaba en opacidad 0 la partida ENTERA y `#bAtaca` en 0×0
+     —o sea que en un teléfono no había forma de atacar—. Y sobrevivió porque
+     en PC el teclado llega al ataque por otro camino, así que la partida se
+     terminaba igual y ninguna prueba lo tocaba.
+
+     LA OPACIDAD SE MULTIPLICA POR LA DE SUS PADRES. Preguntándole a un botón
+     su propio `opacity` contesta 1 aunque su contenedor esté en 0: hay que
+     subir por la cadena. Lo mismo `display:none` en un ancestro, que deja al
+     hijo con `display:grid` y caja vacía.                                  */
+  hud() {
+    const uno = (id) => {
+      const e = document.getElementById(id);
+      if (!e) return { id, hay: false };
+      let op = 1, oculto = false;
+      for (let n = e; n && n !== document.body.parentNode; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        op *= +s.opacity;
+        if (s.display === 'none' || s.visibility === 'hidden') oculto = true;
+      }
+      const r = e.getBoundingClientRect();
+      return { id, hay: true, op: +op.toFixed(3), oculto,
+               w: Math.round(r.width), h: Math.round(r.height),
+               ve: !oculto && op > 0.05 && r.width > 1 && r.height > 1 };
+    };
+    const ids = ['hud', 'bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan',
+                 'tac', 'joy', 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'teclas'];
+    const o = {}; const faltan = [];
+    for (const id of ids) { const r = uno(id); o[id] = r; if (!r.ve) faltan.push(id); }
+    /* Y QUÉ HAY DEBAJO DEL DEDO. Un botón visible que no recibe el puntero es
+       exactamente igual de inútil, y eso no lo dice ninguna caja: el joystick
+       tenía `pointer-events:auto` y su aro invisible se comía el toque que
+       tenía que llegar al lienzo. */
+    const bajo = (id) => {
+      const e = document.getElementById(id); if (!e) return null;
+      const r = e.getBoundingClientRect();
+      const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return t ? (t.id || t.tagName.toLowerCase() + '.' + t.className) : null;
+    };
+    return { clases: [...document.body.classList], part: PART,
+             faltan, el: o,
+             bajoDedo: { bAtaca: bajo('bAtaca'), bEsq: bajo('bEsq'), joy: bajo('joy') },
+             /* los estados de los botones son información: un ataque sin
+                aguante tiene que verse apagado ANTES de tocarlo */
+             bAtacaNo: document.getElementById('bAtaca').classList.contains('no'),
+             bEsqNo: document.getElementById('bEsq').classList.contains('no'),
+             bEsqEspera: document.getElementById('bEsq').classList.contains('espera'),
+             barras: ['bVida', 'bAgu', 'bXp'].map(k =>
+               getComputedStyle(document.querySelector('#' + k + ' i')).transform) };
+  },
+
+  /* ── LAS OLEADAS ───────────────────────────────────────────────────────
+     `salta()` limpia la que está en pie y adelanta el respiro, que es lo
+     único que permite ver la 6 sin jugar cinco minutos. Y devuelve DÓNDE
+     cayó cada uno: el sitio se sortea contra la posición del jugador, así
+     que la composición se puede auditar en node pero el reparto no.        */
+  ola() {
+    const Z = ZONAS[ZONA_ACT];
+    return { zona: ZONA_ACT, i: OLA.i, de: Z.olas.length, pide: Z.olas[OLA.i],
+             hechas: OLA.hechas, total: OLA_TOTAL, espera: +OLA.espera.toFixed(2),
+             suelta: OLA.suelta, vivos: esqVivos(ZONA_ACT),
+             comp: composicionOla(ZONA_ACT, OLA.i, SEM).join(''),
+             donde: ESQS.filter(e => e.vive && e.zona === ZONA_ACT).map(e => ({
+               cl: e.cl, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1),
+               nace: +(e.naceT || 0).toFixed(2), est: e.est })) };
+  },
+  /* barre las oleadas EN EL MISMO BINARIO: `{olas:[[3,4],[4,5],[5,6,'rey']],
+     cura:0.28}`. Sin esto, comparar dos tamaños de oleada obliga a rearmar el
+     HTML y a comparar dos programas — y el bot ya no es determinista por
+     semilla (la fase de cada esqueleto sale de `Math.random`), así que la
+     diferencia entre dos corridas no se podría atribuir al cambio. */
+  olas(cfg) {
+    if (cfg) {
+      if (cfg.olas) { cfg.olas.forEach((o, i) => { if (ZONAS[i]) ZONAS[i].olas = o.slice(); }); OLA_TOTAL = olaTotal(); }
+      if (cfg.cura !== undefined) OLA_CURA = cfg.cura;
+      if (cfg.xp !== undefined) OLA_XP = cfg.xp;
+    }
+    return { olas: ZONAS.map(Z => Z.olas), total: OLA_TOTAL, cura: OLA_CURA, xp: OLA_XP };
+  },
+  /* mata a los que quedan y corre el respiro: para fotografiar la oleada n
+     sin jugar cinco minutos. LA MUERTE VA POR `esqRecibe` y no bajando `vida`
+     a mano: ahí adentro están la xp, la cura de matar y el contador de bajas,
+     y saltearlos dejaría al jugador en nivel 1 en la ceniza — o sea midiendo
+     una partida que nadie puede jugar. Y después hay que CORRER EL RELOJ:
+     morirse dura `ESQ_MUERE` y `esqVivos` cuenta hasta que la animación
+     termina, así que sin los pasos el respiro no arranca nunca. */
+  salta(n) {
+    let g = 0, t = 0;
+    for (let k = 0; k < (n || 1) && PART === 'juego'; k++) {
+      const h0 = OLA.hechas;
+      for (const e of ESQS) if (e.vive && e.zona === ZONA_ACT && e.est !== 'muere') esqRecibe(e, 1e9, 1, 0, 0);
+      /* SE PARA CUANDO LA SIGUIENTE YA ESTÁ EN EL PISO, no cuando quedan
+         vivos: un muerto sigue contando `vive` hasta que su animación
+         termina, así que preguntar por `esqVivos` corta en el primer paso y
+         `salta` no salta nada. La primera versión devolvía `pasos: 4`. */
+      while (PART === 'juego' && t < 3000 &&
+             !(OLA.hechas > h0 && OLA.espera <= 0 && esqVivos(ZONA_ACT) > 0)) {
+        esqPaso(PASO); zonasPaso(PASO); t++;
+      }
+      g++;
+    }
+    return { saltadas: g, pasos: t, ...this.ola() };
+  },
+  /* el récord vive en `localStorage` y sus dos funciones son del módulo, o sea
+     que desde el banco no se las puede llamar: sin esto no hay forma de
+     fotografiar el menú con un récord puesto. */
+  rec(o) {
+    if (o) { try { localStorage.setItem('huesos_rec', JSON.stringify(o)); } catch (e) {} leeRecord(); pintaRecord(); }
+    return { rec: RECORD, tot: document.getElementById('mTot').textContent,
+             lin: document.getElementById('mRec').textContent };
   },
   errs() { return window.__errs || []; },
 };

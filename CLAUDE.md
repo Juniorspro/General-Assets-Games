@@ -287,15 +287,129 @@ munecas.
   camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a uno y el
   remate barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del juego. Tres
   **zonas encadenadas** —bosque, ruinas y ceniza— cada una con su suelo, su niebla, su cielo y su
-  luz; una zona se abre cuando la anterior quedó **limpia**, y limpiarla es el punto de control:
-  cura entera y regala un nivel. **Veintidós esqueletos de cuatro clases** —peón, lancero, bruto y
-  el **rey** de 460 de vida al fondo de la ceniza— que salen de **una** máquina de estados y una
-  tabla de números, no de cuatro ramas. El rey es el único con **corona y capa**, y son dos mallas
+  luz, y **caen por oleadas**: siete en total (2 · 2 · 3, la última es el rey), con un respiro entre
+  una y otra que cura un poco y paga xp. Limpiada la última de una zona se abre la siguiente, y eso
+  es el punto de control: cura entera y regala un nivel. **Veintiocho esqueletos de cuatro clases**
+  —peón, lancero, bruto y el **rey** de 460 de vida al fondo de la ceniza— que salen de **una**
+  máquina de estados y una tabla de números, no de cuatro ramas; la composición de cada oleada es
+  determinista por semilla y **no puede llevar más de un tercio de brutos**. El récord son oleadas
+  limpiadas, que es lo único que distingue entrar a la ceniza de terminarla. El rey es el único con **corona y capa**, y son dos mallas
   instanciadas más cuya matriz queda en cero para todos los demás. La vegetación son **veinticuatro
   mallas instanciadas** —seis familias de cuatro variantes— con encaramiento cilíndrico parchado en
   el shader. Pixelado de verdad (destino de render chico estirado con NEAREST). Vive partido en
   `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
   hornean con `python3 herramientas/huesos/hornear.py`.
+
+### Centésima cuadragésima novena vuelta (2026-09-09): **HUESOS** — oleadas, y el defecto que ninguna sonda podía ver
+
+Pedido, dos veces textual: *"hace mejor el juego controles móviles etc we y oleadas etc menú todo"*.
+
+#### LOS CONTROLES MÓVILES NO EXISTÍAN, Y ERA UN NOMBRE DE CLASE
+
+`verPanel()` escribía `body.enJuego` y el CSS de los controles pedía `body.jugando`. O sea que el
+joystick, el botón de atacar, el de esquivar y el de la cámara **no aparecían nunca en el
+teléfono** — el juego se podía mirar y no jugar, que es exactamente lo que se reportó primero.
+No falla ni avisa: la clase se pone, nadie la lee, y desde afuera se ve como un juego sin
+controles. Entró `hud()`, que barre los doce elementos de la interfaz y devuelve **cuáles faltan**:
+en teléfono `faltan: []` salvo `joy` y `teclas`, que son los dos que tienen que estar apagados en
+PC y encendidos en móvil respectivamente. Un barrido que sólo mira uno de doce encuentra un defecto
+de uno; éste encuentra los doce.
+
+#### LAS OLEADAS: TODO PASA POR UNA PUERTA
+
+Cada zona declara sus oleadas en la tabla —`bosque [3,4]`, `ruinas [4,5]`, `ceniza [5,6,'rey']`— y
+`olaSuelta()` es el único sitio que las suelta: siembra, avisa y suena. Con la cuenta repartida
+—una desde el arranque de la partida y otra desde el bucle— la primera oleada nace **sin respiro y
+sin aviso**, y eso no se lee a defecto: se lee a que la oleada 1 no existió.
+
+El respiro va con el reloj de la simulación y no con un `setTimeout`: con un temporizador de pared,
+un teléfono a 30 cuadros y una notebook a 144 esperan lo mismo pero la pelea corre distinto, y el
+respiro deja de durar lo que dura el resto del juego.
+
+**LIMPIAR UNA OLEADA CURA UN POCO Y PAGA XP, Y LAS DOS COSAS SALIERON DE UNA MEDICIÓN.** Con la xp
+saliendo sólo de las bajas, limpiar las tres primeras del bosque no alcanza para subir de nivel y
+la oleada 2 se pelea con la misma vida y el mismo daño que la 1: medido, el auto-jugador moría ahí
+en **dos de ocho semillas, a nivel 1, comiéndose once golpes de peón**. Y la xp es una **fracción
+de lo que falta para el nivel** (`OLA_XP` de `JUG.xpSig`) y no un número de puntos: así vale lo
+mismo en la primera oleada que en la última, donde un nivel cuesta cinco veces más.
+
+#### EL JUEGO NO SE PODÍA TERMINAR, Y LA CAUSA ERA LA CONVERGENCIA
+
+Con las oleadas puestas, el auto-jugador honesto ganó **0 de 5**. La siembra vieja repartía los
+esqueletos por la zona entera; una oleada **converge sobre el jugador**, así que la misma
+composición que antes se peleaba de a dos ahora llega junta. Medido en `TALLY.porCl` al morir:
+**bruto 7 de 15, 12 de 18, 12 de 22** — la ceniza salía `blbbbl` y `blbbbbl`, o sea cuatro y cinco
+brutos juntos, y eso no es una pelea, es una ejecución.
+
+El arreglo es un tope y no bajar el daño: **un tercio de brutos por oleada y ni uno más**
+(`ceil(n/3)`), con los que sobran degradados a lancero. Y **un piso**: la última oleada de una zona
+que no sea el bosque lleva al menos uno — va DESPUÉS del tope, porque es un piso y no un techo.
+Con eso más las oleadas recortadas, el bot honesto pasó de **0/5 a 5/8**.
+
+#### EL DEFECTO GRANDE: ESQUELETOS QUE NACEN FRÍOS, Y LA OLEADA NO TERMINA NUNCA
+
+`esqCerca()` sólo pasa por el bucle a los que están dentro de `CAL.vista + 10`. Un esqueleto sembrado
+más lejos que eso **no camina, no pega y no se puede matar**: la oleada no se limpia y la partida se
+queda esperando para siempre. No es un tirón ni un error en consola — es un juego trabado.
+
+**Y LA AUDITORÍA NO LO PODÍA VER, porque miraba desde un solo sitio.** Auditaba con el jugador en la
+boca de cada zona, que es de donde se entra; pero al jugador lo puede agarrar una oleada estando en
+cualquier parte, y en la ceniza —que llega a 999 de radio— no hay un solo punto de la zona a menos
+de 66 m del origen. Agregando un segundo puesto de observación (el origen), la auditoría cantó
+**11 fríos**.
+
+El arreglo no es alargar el radio de la siembra: es **aflojar el terreno y no la distancia**. Cuatro
+pases sobre el mismo punto de partida —adentro de la zona y cerca, adentro y lejos, fuera de la zona
+y cerca, fuera y lejos— así que la distancia al jugador (`OLA_R0` de piso y `OLA_R_FRIO` de techo) se
+respeta **en los cuatro** y lo que se relaja es exigir que el punto caiga adentro del anillo de su
+propia zona. Medido después: **0 fríos**.
+
+**Y LA AUDITORÍA CONTABA DOBLE** al mirar desde dos puestos: informaba 49 esqueletos donde hay 28.
+Una bandera `dup` deja que el segundo puesto compruebe los fríos sin sumar al total — un número que
+sube porque se lo mide dos veces no describe nada.
+
+#### DOS DEFECTOS DE LAS SONDAS, Y LOS DOS DEL TIPO DE SIEMPRE
+
+1. **`salta()` devolvía `pasos: 4` y no avanzaba.** Su bucle esperaba a que la zona quedara vacía, y
+   un esqueleto en estado `'muere'` **sigue con `vive === true`**: la condición se cumplía en el
+   cuarto paso y salía sin haber soltado la oleada siguiente. Ahora espera a que la siguiente **ya
+   esté en el piso** (`OLA.hechas > h0 && OLA.espera <= 0 && esqVivos > 0`).
+2. **`cajas()` inventaba dos solapamientos.** `offsetLeft` **no sabe del `transform`**, así que los
+   elementos centrados con `translateX(-50%)` se informaban media anchura a la derecha de donde
+   están. Se lee la traslación con `DOMMatrixReadOnly` y se la suma. Es la enésima vez en este repo
+   que la medición está mal antes que el juego, y la firma es la de siempre: un defecto que la
+   captura no muestra.
+
+#### EL MENÚ NO ENTRABA, Y LA UNIDAD ESTABA MAL
+
+Medido: en castellano el menú mide **410 px en un marco de 412**, y a 360×640 mide **361 en 360**
+(`entra: false`). La causa es que **el marco está girado noventa grados**, así que `vh` resuelve
+contra la **ventana** (892) y no contra el lado corto del marco (412): un hueco de `2.4vh` mide
+veintiún píxeles donde tenía que medir diez. `ajustaMarco()` publica ahora `--mh` y `--mw`, y los
+huecos, el título y el subtítulo salen de ahí. Quedan **28 · 62 · 74 px de aire** en los tres
+tamaños.
+
+**Y EL PIE DEL MENÚ DESCRIBÍA UN JUEGO QUE YA NO EXISTE** —*«matá a todos los esqueletos de una para
+que se abra la siguiente»*—, que es lo que pasaba antes de las oleadas. Reescrito en los tres
+idiomas.
+
+**Y `body.movil .barra{left:72px}` NO HACÍA NADA:** `#bVida` es un ID y le gana a dos clases, así que
+las tres barras seguían debajo del botón de pausa en teléfono. Va por ID.
+
+#### MEDIDO AL CERRAR
+
+Auditoría en node —sin navegador, porque `d.js` no toca ni el DOM ni three—: **40 semillas, 0 malas,
+28 esqueletos, 7 oleadas, `frios: 0`, `sueltas: 0`**, con la composición
+`ppp / plpp / lpbp / pplbp / blbll / blblll / r`. Auto-jugadores sobre 8 semillas: **honesto 5 de 8**
+con 5,5 oleadas de 7, 22,1 bajas, nivel 5,9 y 157 s de partida; **al azar 0 de 8** con 0,4 oleadas y
+2,4 bajas. **Cero solapamientos** entre los doce elementos del HUD en **360×640, 412×892, 430×764 y
+900×460**, y el menú entra en los tres tamaños en los tres idiomas. `window.__errs` **vacío en todas
+las corridas**. El HTML quedó en **1,03 MB**.
+
+**LO QUE NO ESTÁ RESUELTO, Y VIENE DE LA VUELTA 145:** el bot honesto todavía pierde un par de
+semillas temprano, rodeado a nivel 1. Su rama de huida sólo dispara con los bichos **ya** en
+distancia de golpe, así que desperdicia la ventaja de correr — el 5 de 8 es un piso y no el número
+del juego.
 
 ### Centésima cuadragésima octava vuelta (2026-09-09): **ERA REZONA** — 41 huesos y cinco clips, y la vuelta 146 midió en la cuenta equivocada
 

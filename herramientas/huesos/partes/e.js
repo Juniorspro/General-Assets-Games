@@ -118,6 +118,14 @@ function ajustaMarco() {
   const girar = H > W;
   ANCHO = girar ? H : W; ALTO = girar ? W : H;
   m.style.width = ANCHO + 'px'; m.style.height = ALTO + 'px';
+  /* EL MARCO VA GIRADO, ASÍ QUE `vh` NO ES SU ALTO: es el de la VENTANA, que
+     acá es el lado LARGO. Con los huecos del menú en `2.4vh` salían de 21 px
+     en un cuadro de 412 y la columna medía 410 —dos píxeles de aire— así que
+     una pantalla un poco más baja, o una traducción con una línea más, la
+     recorta ARRIBA Y ABAJO a la vez, porque va centrada. Lo que el CSS tiene
+     que leer es esto. */
+  m.style.setProperty('--mh', ALTO + 'px');
+  m.style.setProperty('--mw', ANCHO + 'px');
   m.style.transform = 'translate(-50%,-50%)' + (girar ? ' rotate(90deg)' : '');
   document.body.classList.toggle('girado', girar);
   if (!ren) return;

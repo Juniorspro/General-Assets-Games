@@ -25,6 +25,11 @@ body.jugando #hud{opacity:1}
 
 .barra{position:absolute;height:14px;border:2px solid #0b0d10;border-radius:2px;
   background:#14181d;box-shadow:0 0 0 1px #3a4048 inset}
+/* LA BARRA SE MUEVE CON `transform` Y NO CON `width`: la transición estaba
+   declarada sobre transform y el JS escribía width, así que no corría nunca
+   —una barra que salta de golpe no deja ver cuánto te sacó el hachazo— y
+   encima cada escritura de width es un layout. `scaleX` lo resuelve el
+   compositor y la transición sí se aplica. */
 .barra i{display:block;height:100%;width:100%;transform-origin:0 50%;transition:transform .12s linear}
 #bVida{left:14px;top:14px;width:176px}
 #bVida i{background:linear-gradient(180deg,#c8443a,#7e2119)}
@@ -33,22 +38,27 @@ body.jugando #hud{opacity:1}
 #bXp{left:14px;top:49px;width:132px;height:5px}
 #bXp i{background:linear-gradient(180deg,#79c2d8,#2c6a80)}
 
-#nivel{position:absolute;left:152px;top:44px;font:700 12px/1 monospace;color:#9fd0e0;
+#nivel{position:absolute;left:14px;top:62px;font:700 12px/1 monospace;color:#9fd0e0;
   text-shadow:0 2px 0 #06080a}
 #zona{position:absolute;left:50%;top:14px;transform:translateX(-50%);font:700 13px/1.2 monospace;
   letter-spacing:.16em;color:#cfc7b6;text-shadow:0 2px 0 #06080a;text-align:center}
 #zonaSub{display:block;font:500 10px/1.4 monospace;letter-spacing:.08em;color:#8e8779;margin-top:3px}
-#restan{position:absolute;right:14px;top:14px;font:700 12px/1.3 monospace;color:#cfc7b6;
-  text-align:right;text-shadow:0 2px 0 #06080a}
-#restan b{color:#e0b0a8}
+#restan{position:absolute;right:14px;top:14px;font:600 10px/1.5 monospace;color:#8e8779;
+  text-align:right;text-shadow:0 2px 0 #06080a;letter-spacing:.08em}
+#restan b{display:block;font:700 13px/1.25 monospace;color:#e0b0a8;letter-spacing:.06em}
 
 /* el cartel que cuenta la historia, con la misma caja del juego de referencia */
-#dialogo{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:70%;
+/* ── EL DIÁLOGO NO LLEGA HASTA LOS BOTONES ────────────────────────────────
+   Con el 70% del ancho la caja se metía por debajo del de esquivar —medido,
+   dos choques— y con `bottom:96` quedaba pisada por el cartel de oleada en un
+   teléfono corto. Sube contra el ALTO DEL MARCO y no contra `vh`, que acá es
+   el lado largo porque el cuadro va girado. */
+#dialogo{position:absolute;left:50%;bottom:calc(var(--mh,412px)*.36);transform:translateX(-50%);max-width:56%;
   padding:9px 13px;background:rgba(10,13,16,.86);border:2px solid #39414b;
   font:500 12px/1.5 monospace;color:#ded7c8;opacity:0;transition:opacity .3s;text-align:center}
 #dialogo.on{opacity:1}
 
-#aviso{position:absolute;left:50%;top:58%;transform:translateX(-50%);padding:7px 14px;
+#aviso{position:absolute;left:50%;top:36%;transform:translateX(-50%);padding:7px 14px;
   background:rgba(10,13,16,.9);border:2px solid #4a525c;font:700 12px/1 monospace;
   letter-spacing:.1em;color:#e8dfc8;opacity:0;transition:opacity .2s;white-space:nowrap}
 #aviso.on{opacity:1}
@@ -60,19 +70,54 @@ body.jugando #hud{opacity:1}
 /* ── CONTROLES TÁCTILES ───────────────────────────────────────────────── */
 #tac{position:absolute;inset:0;pointer-events:none;display:none}
 body.movil.jugando #tac{display:block}
-#joy{position:absolute;left:22px;bottom:22px;width:118px;height:118px;border-radius:50%;
-  border:2px solid rgba(210,200,180,.30);background:rgba(12,15,19,.34);pointer-events:auto}
-#joyP{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;
+/* ── EL JOYSTICK NO RECIBE EL DEDO, Y ES UN DEFECTO QUE COSTABA UN GESTO ───
+   El dedo lo lee el LIENZO —el joystick nace donde uno apoya— y este div es
+   sólo el dibujo. Con `pointer-events:auto` se comía el toque: al soltar, el
+   aro se queda donde estuvo el pulgar, así que volver a apoyar EN EL MISMO
+   SITIO —o sea lo que uno hace— caía sobre el div y el lienzo no se enteraba.
+   El joystick no arrancaba y desde afuera eso es que el juego se trabó.
+   Y VA CENTRADO EN EL DEDO: el JS escribe `left`/`top`, o sea la ESQUINA, así
+   que el aro salía abajo y a la derecha del pulgar. Con la traslación del 50%
+   el centro cae donde está el dedo, que es lo que el jugador espera.
+   Arranca invisible: con opacidad 1 hay un aro fantasma en el rincón hasta
+   que alguien lo toca y lo suelta por primera vez.                        */
+#joy{position:absolute;left:0;top:0;width:132px;height:132px;border-radius:50%;
+  transform:translate(-50%,-50%);opacity:0;transition:opacity .12s;pointer-events:none;
+  border:2px solid rgba(210,200,180,.30);background:rgba(12,15,19,.34)}
+#joyP{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
   border-radius:50%;background:rgba(215,205,185,.42);border:2px solid rgba(235,228,210,.6)}
 .bt{position:absolute;border-radius:50%;border:2px solid rgba(210,200,180,.34);
   background:rgba(12,15,19,.40);pointer-events:auto;display:grid;place-items:center;
-  font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0}
-.bt:active,.bt.on{background:rgba(150,120,70,.5)}
-#bAtaca{right:22px;bottom:26px;width:96px;height:96px;font-size:13px}
-#bEsq{right:126px;bottom:34px;width:66px;height:66px}
-#bCam{right:22px;top:22px;width:52px;height:52px;font-size:10px}
-#bPausa{left:14px;bottom:150px;width:42px;height:42px;font-size:15px;pointer-events:auto}
-body.jugando #bPausa{display:grid}
+  font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0;
+  transition:background .08s,opacity .12s,border-color .12s}
+.bt:active,.bt.on{background:rgba(150,120,70,.5);border-color:rgba(235,215,160,.7)}
+/* ── UN BOTÓN QUE NO PUEDE HACER LO QUE DICE SE APAGA ──────────────────────
+   Sin aguante, tocar ATACAR no hacía absolutamente nada y no había forma de
+   saber si el botón no respondió o si al personaje no le daba: las dos cosas
+   se ven igual, y la primera se lee a juego roto. Apagado se lee a la regla
+   que es. `.esp` es el esquive en su espera; el aro de adentro cuenta.    */
+.bt.no{opacity:.30}
+#bEsq .esp{position:absolute;inset:5px;border-radius:50%;border:2px solid rgba(230,200,130,.75);pointer-events:none;
+  clip-path:inset(0 0 0 0);opacity:0}
+#bEsq.espera .esp{opacity:1}
+#bAtaca{right:24px;bottom:28px;width:104px;height:104px;font-size:15px}
+#bEsq{right:134px;bottom:38px;width:74px;height:74px;font-size:16px}
+#bCam{right:24px;top:88px;width:54px;height:54px;font-size:11px}
+/* EL `display:none` ESTABA EN LÍNEA Y LE GANABA A SU PROPIA REGLA. Un estilo
+   en línea gana contra cualquier selector, así que `body.jugando #bPausa` no
+   podía encenderlo nunca y el botón de pausa no existía en el teléfono — el
+   mismo defecto que en AERO tenía el atajo de `background`. Va en el CSS. */
+#bPausa{display:none;left:16px;top:16px;width:46px;height:46px;font-size:17px;pointer-events:auto}
+/* ── LAS BARRAS SE CORREN PORQUE AHÍ HAY UN BOTÓN ─────────────────────────
+   El de pausa vive en la esquina de arriba a la izquierda, que es donde vive
+   en cualquier juego, y las tres barras arrancaban en la misma esquina: la
+   caja del botón les caía encima —medido con `cajas()`, tres choques—. Se
+   corren SÓLO en teléfono, que es donde el botón existe. */
+/* CON `.barra` NO ALCANZA: `#bVida` es un ID y le gana a dos clases, así que
+   la regla no movía nada. Van por ID, que es la misma trampa de siempre. */
+body.movil #bVida, body.movil #bAgu, body.movil #bXp{left:72px}
+body.movil #nivel{left:72px}
+body.jugando.movil #bPausa{display:grid}
 #teclas{position:absolute;right:14px;bottom:14px;font:500 10px/1.6 monospace;color:#8b8577;
   text-align:right;display:none}
 body.pc.jugando #teclas{display:block}
@@ -82,8 +127,8 @@ body.pc.jugando #teclas{display:block}
   background:linear-gradient(180deg,rgba(6,8,10,.95) 0%,rgba(6,8,10,.42) 40%,rgba(6,8,10,.42) 66%,rgba(6,8,10,.95) 100%)}
 .panel.on{display:grid}
 .caja{width:min(78%,430px);text-align:center;display:flex;flex-direction:column;
-  align-items:center;gap:2.4vh}
-h1{font:800 clamp(26px,7.4vh,44px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
+  align-items:center;gap:calc(var(--mh,412px)*.034)}
+h1{font:800 clamp(24px,calc(var(--mh,412px)*.098),42px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
   text-shadow:0 3px 0 #1a1206,0 0 26px rgba(190,150,80,.28)}
 /* EL TÍTULO DEL FINAL VA EN SU PROPIO NODO. Estaba como `<h1 id=fTit>` con
    el subtítulo de hijo, y `textContent` sobre el padre BORRA a los hijos: la
@@ -91,8 +136,8 @@ h1{font:800 clamp(26px,7.4vh,44px)/1 monospace;letter-spacing:.30em;color:#ded3b
    que la pantalla de final nunca mostró ni el subtítulo ni las bajas — y la
    excepción se comía el resto del cuadro mientras el panel estaba puesto. */
 h1 b{display:block;font-weight:800}
-h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:.22em;
-  color:#8d8574;margin-top:1.1vh;text-shadow:none}
+h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 monospace;letter-spacing:.22em;
+  color:#8d8574;margin-top:calc(var(--mh,412px)*.018);text-shadow:none}
 .b{padding:11px 26px;min-width:190px;border:2px solid #6a5c3c;background:rgba(30,26,18,.82);
   font:700 13px/1 monospace;letter-spacing:.16em;color:#e6dcc2;cursor:pointer}
 .b:active{background:rgba(96,78,42,.9)}
@@ -105,6 +150,10 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
 .fila.tres{width:100%;flex-wrap:nowrap}
 .ch.sel{border-color:#b79a56;color:#f0e6cc;background:rgba(74,60,30,.85)}
 .pie{font:500 10px/1.7 monospace;color:#857e6e;max-width:340px}
+/* el récord y el total van en su propia línea y en el color del oro del
+   título: es lo único del menú que cambia entre una partida y la siguiente */
+.pie.rec{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
+  font:600 10px/1.6 monospace;letter-spacing:.09em;color:#a8975f}
 .tit2{font:700 12px/1 monospace;letter-spacing:.18em;color:#9d947f}
 .gr{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
 </style></head><body>
@@ -126,10 +175,10 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
   <div id="tac">
     <div id="joy"><div id="joyP"></div></div>
     <div class="bt" id="bAtaca">✦</div>
-    <div class="bt" id="bEsq">↷</div>
+    <div class="bt" id="bEsq">↷<i class="esp"></i></div>
     <div class="bt" id="bCam">◎</div>
   </div>
-  <div class="bt" id="bPausa" style="display:none">≡</div>
+  <div class="bt" id="bPausa">≡</div>
   <div id="teclas"></div>
 
   <div class="panel on" id="pIdioma"><div class="caja">
@@ -144,6 +193,7 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
     <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
     <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
     <div class="pie" id="mPie"></div>
+    <div class="pie rec"><span id="mTot"></span><span id="mRec"></span></div>
   </div></div>
 
   <div class="panel" id="pPausa"><div class="caja">
@@ -265,15 +315,45 @@ const CELDA = 6;                  // paso de la reja de siembra
    CADA cuadro: tocar `solLuz.intensity` a mano no sirve de nada, se pisa al
    cuadro siguiente. Los valores salieron de barrer y medir el búfer: con 1,05
    y 0,42 las tres franjas de abajo daban 32 contra un cielo de 58 —o sea el
-   suelo casi negro contra el cielo— y con 1,80 y 0,55 dan 41 contra 59. */
+   suelo casi negro contra el cielo— y con 1,80 y 0,55 dan 41 contra 59.
+   Y `olas` es CUÁNTOS ESQUELETOS TRAE CADA OLEADA de esa zona, y de ahí sale
+   todo lo demás: cuántas oleadas hay, el cupo total, el contador del HUD y la
+   auditoría. Con el total escrito aparte, el día que se agregue una oleada el
+   HUD cuenta una cosa y el mundo trae otra — y eso no falla, miente.      */
 const ZONAS = [
   { id: 'bosque',  r: 40,  suelo: 's_bosque',  niebla: 0x2c3630, nieblaD: 0.0135,
-    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, mata: 5, densi: 1.00 },
+    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, olas: [3, 4], densi: 1.00 },
   { id: 'ruinas',  r: 76,  suelo: 's_piedra',  niebla: 0x33333a, nieblaD: 0.0165,
-    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, mata: 7, densi: 0.62 },
+    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, olas: [4, 5], densi: 0.62 },
   { id: 'ceniza',  r: 999, suelo: 's_ceniza',  niebla: 0x2a2724, nieblaD: 0.0210,
-    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, mata: 9, densi: 0.34 },
+    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, olas: [5, 6, 'rey'], densi: 0.34 },
 ];
+/* ── LAS OLEADAS ───────────────────────────────────────────────────────────
+   Una oleada cae, se la limpia, hay un respiro y viene la siguiente. Lo que
+   eso compra sobre «matá a los diez que hay sembrados» son tres cosas: el
+   mundo no arranca con treinta y nueve bichos plantados esperando —o sea que
+   no se los puede sacar de a uno hasta el claro y pelearlos en fila—, hay un
+   momento de calma donde se recupera, y la dificultad sube EN ESCALONES que
+   el jugador puede contar en vez de subir sola con la distancia.           */
+const OLA_RESPIRO = 3.4;          // segundos entre una oleada y la siguiente
+const OLA_RESPIRO_Z = 5.0;        // el respiro más largo al abrir una zona
+/* `let` Y NO `const`, y no es descuido: el auto-jugador barre estos dos en el
+   MISMO BINARIO (`__H.olas`). Un barrido contra otro commit compara dos
+   programas distintos y no dice nada de éste.                              */
+let OLA_CURA = 0.28;              // fracción de vida que devuelve limpiar una
+let OLA_XP = 0.45;                // y fracción del nivel que paga limpiarla
+const OLA_R0 = 19;                // no cae nada más cerca que esto del jugador
+const OLA_R1 = 40;                // ni más lejos: una oleada tiene que LLEGAR
+/* ── Y NUNCA MÁS ALLÁ DEL RADIO EN QUE EL JUEGO LOS PIENSA ────────────────
+   `esqCerca` sólo pasa por el bucle a los que están a `CAL.vista + 10`: uno
+   nacido más lejos NO SE MUEVE, NO SE MUERE Y NO CUENTA COMO ENEMIGO QUE SE
+   ACERCA, y como la oleada no termina hasta que no queda ninguno vivo, la
+   partida se queda esperando a algo que está congelado. Se ve como que el
+   juego se colgó. El número sale de la calidad MÁS BAJA —62 + 10— porque la
+   promesa tiene que valer en las tres.                                     */
+const OLA_R_FRIO = 66;
+const olaTotal = () => ZONAS.reduce((a, Z) => a + Z.olas.length, 0);
+let OLA_TOTAL = olaTotal();
 
 /* ── EL JUGADOR ────────────────────────────────────────────────────────────
    La velocidad y la zancada NO son dos números sueltos: la cadencia del paso
@@ -372,7 +452,7 @@ const TXT = {
     jugar: 'JUGAR', seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAJA', cmedia: 'MEDIA', calta: 'ALTA',
-    pie: 'Tres zonas. Matá a todos los esqueletos de una para que se abra la siguiente. El rey te espera en la ceniza.',
+    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.',
     piePausa: 'El mundo se queda quieto mientras esto esté abierto.',
     zbosque: 'EL BOSQUE', zruinas: 'LAS RUINAS', zceniza: 'EL CAMPO DE CENIZA',
     zbosqueS: 'donde los enterraron', zruinasS: 'lo que quedó de la abadía',
@@ -384,6 +464,16 @@ const TXT = {
     perdiste: 'TE CAÍSTE', perdisteS: 'los huesos siguen ahí',
     datos: 'Esqueletos {0} · Nivel {1} · {2}',
     teclas: 'WASD mover · SHIFT correr · CLIC atacar\nESPACIO esquivar · MOUSE cámara · ESC pausa',
+    ola: 'OLEADA',
+    olaViene: 'OLEADA {0} DE {1}',
+    olaCae: 'LA OLEADA CAYÓ',
+    olaUlt: 'LA ÚLTIMA',
+    olaRey: 'EL REY SE LEVANTA',
+    rec: 'RÉCORD',
+    recNada: 'todavía no llegaste a ninguna',
+    recLinea: 'Récord · {0} · {1} bajas',
+    total: '{0} oleadas · 3 zonas',
+    datos2: 'Oleadas {0}/{1} · Esqueletos {2} · Nivel {3} · {4}',
     d0: 'Los enterraron acá arriba y algo los volvió a parar.',
     d1: 'El camino sigue. Las piedras de la abadía están más adelante.',
     d2: 'Acá se acaba el bosque. Lo que hay adelante ya no es tierra.',
@@ -394,7 +484,7 @@ const TXT = {
     jugar: 'PLAY', seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
     calidad: 'GRAPHICS', idioma: 'LANGUAGE',
     cbaja: 'LOW', cmedia: 'MEDIUM', calta: 'HIGH',
-    pie: 'Three zones. Clear one of skeletons and the next opens. The king waits in the ash.',
+    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.',
     piePausa: 'The world stands still while this is open.',
     zbosque: 'THE WOOD', zruinas: 'THE RUINS', zceniza: 'THE ASH FIELD',
     zbosqueS: 'where they were buried', zruinasS: 'what is left of the abbey',
@@ -406,6 +496,16 @@ const TXT = {
     perdiste: 'YOU FELL', perdisteS: 'the bones are still there',
     datos: 'Skeletons {0} · Level {1} · {2}',
     teclas: 'WASD move · SHIFT run · CLICK attack\nSPACE dodge · MOUSE camera · ESC pause',
+    ola: 'WAVE',
+    olaViene: 'WAVE {0} OF {1}',
+    olaCae: 'THE WAVE IS DOWN',
+    olaUlt: 'THE LAST ONE',
+    olaRey: 'THE KING RISES',
+    rec: 'BEST',
+    recNada: 'you have not reached one yet',
+    recLinea: 'Best · {0} · {1} kills',
+    total: '{0} waves · 3 zones',
+    datos2: 'Waves {0}/{1} · Skeletons {2} · Level {3} · {4}',
     d0: 'They were buried up here, and something stood them back up.',
     d1: 'The path goes on. The abbey stones are further ahead.',
     d2: 'The wood ends here. What lies ahead is not soil any more.',
@@ -416,7 +516,7 @@ const TXT = {
     jugar: 'JOGAR', seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAIXA', cmedia: 'MÉDIA', calta: 'ALTA',
-    pie: 'Três zonas. Limpe uma de esqueletos e a próxima se abre. O rei espera na cinza.',
+    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.',
     piePausa: 'O mundo fica parado enquanto isto estiver aberto.',
     zbosque: 'A MATA', zruinas: 'AS RUÍNAS', zceniza: 'O CAMPO DE CINZA',
     zbosqueS: 'onde os enterraram', zruinasS: 'o que sobrou da abadia',
@@ -428,6 +528,16 @@ const TXT = {
     perdiste: 'VOCÊ CAIU', perdisteS: 'os ossos continuam lá',
     datos: 'Esqueletos {0} · Nível {1} · {2}',
     teclas: 'WASD mover · SHIFT correr · CLIQUE atacar\nESPAÇO esquivar · MOUSE câmera · ESC pausa',
+    ola: 'ONDA',
+    olaViene: 'ONDA {0} DE {1}',
+    olaCae: 'A ONDA CAIU',
+    olaUlt: 'A ÚLTIMA',
+    olaRey: 'O REI SE LEVANTA',
+    rec: 'RECORDE',
+    recNada: 'você ainda não chegou a nenhuma',
+    recLinea: 'Recorde · {0} · {1} baixas',
+    total: '{0} ondas · 3 zonas',
+    datos2: 'Ondas {0}/{1} · Esqueletos {2} · Nível {3} · {4}',
     d0: 'Enterraram-nos aqui em cima, e algo os pôs de pé de novo.',
     d1: 'O caminho segue. As pedras da abadia estão mais à frente.',
     d2: 'A mata acaba aqui. O que vem depois já não é terra.',
@@ -570,70 +680,176 @@ function siembra(sem) {
   return { cosas, solidos, sem };
 }
 
-/* qué clase toca en cada zona. EN UNA FUNCIÓN porque ahora la leen dos sitios
-   —el rechazo por radio y el alta— y con la tabla escrita dos veces el bicho
-   que se esquiva no es el que se coloca. El bruto no sale en el bosque: ahí
-   el jugador todavía no subió de nivel y no tiene con qué. */
-function claseDe(zi, r) {
-  if (zi === 0) return 'peon';
-  if (zi === 1) return r < 0.42 ? 'peon' : (r < 0.82 ? 'lancero' : 'bruto');
-  return r < 0.22 ? 'lancero' : 'bruto';
+/* qué clase toca en cada zona. EN UNA FUNCIÓN porque la leen tres sitios —el
+   rechazo por radio, el alta y la auditoría— y con la tabla escrita tres veces
+   el bicho que se esquiva no es el que se coloca. El bruto no sale en el
+   bosque: ahí el jugador todavía no subió de nivel y no tiene con qué.
+   LA PRESIÓN (0 la primera oleada de la zona, 1 la última) EMPUJA LA MEZCLA
+   HACIA LO PESADO, y sin ella la oleada 3 es la oleada 1 con dos bichos más:
+   la escalera existe en el contador del HUD y no en la pelea.              */
+function claseDe(zi, r, pres) {
+  const p = pres || 0;
+  if (zi === 0) return r < 0.94 - p * 0.36 ? 'peon' : 'lancero';
+  if (zi === 1) return r < 0.42 - p * 0.22 ? 'peon' : (r < 0.86 - p * 0.22 ? 'lancero' : 'bruto');
+  return r < 0.30 - p * 0.22 ? 'lancero' : 'bruto';
 }
 
-/* ── LOS ESQUELETOS DEL MAPA ───────────────────────────────────────────────
-   Se siembran POR ZONA con su cupo, y lejos del arranque: aparecer al lado
-   de uno no es dificultad, es una emboscada.                                */
-function siembraEsq(sem, solidos) {
-  const az = semilla(sem ^ 0x5F3A);
-  /* LOS SÓLIDOS ENTRAN COMO ARGUMENTO Y NO SE RECALCULAN ACÁ. Con dos llamadas
-     a `siembra()` habría dos bosques —el que se dibuja y el que esta función
-     esquiva— y el día que cambie una constante de siembra se separan. */
-  const S = solidos || siembra(sem).solidos;
-  const chocaAlgo = (x, z, r) => {
-    for (const s of S) if (dist2(x, z, s.x, s.z) < (s.r + r) * (s.r + r)) return true;
-    return false;
-  };
-  const lista = [];
-  ZONAS.forEach((Z, zi) => {
-    const r0 = zi === 0 ? 13 : ZONAS[zi - 1].r + 3;
-    const r1 = zi === ZONAS.length - 1 ? MUNDO_R * 0.90 : Z.r - 2;
-    for (let n = 0; n < Z.mata; n++) {
-      let x = 0, z = 0, ok = false;
-      for (let i = 0; i < 240 && !ok; i++) {
-        const a = az() * 6.283, d = mez(r0, r1, Math.sqrt(az()));
-        x = Math.cos(a) * d; z = Math.sin(a) * d;
-        ok = zonaDe(x, z) === zi && pendiente(x, z) < 2.8 && largo2(x, z) > 13
-             && !chocaAlgo(x, z, ESQ[claseDe(zi, azarEn(i, n, zi))].radio + 0.35);
+/* ── QUÉ TRAE CADA OLEADA ──────────────────────────────────────────────────
+   La COMPOSICIÓN es determinista por semilla y el SITIO no, y las dos cosas
+   tienen que ser así. Si la composición se sorteara en vivo, dos partidas con
+   la misma semilla no se podrían comparar y el auto-jugador dejaría de probar
+   nada; y si el sitio viniera pre-sorteado, una oleada caería encima del
+   jugador —aparecer al lado de uno no es dificultad, es una emboscada.     */
+function composicionOla(zi, oi, sem) {
+  const n = ZONAS[zi].olas[oi];
+  if (n === 'rey') return ['rey'];
+  /* LA PRIMERA OLEADA DEL BOSQUE ES TODA DE PEONES, y es a propósito: es el
+     primer minuto del juego y ahí no se enseña nada con variedad, se enseña
+     que el combo pega y que el esquive salva. */
+  if (zi === 0 && oi === 0) return new Array(n).fill('peon');
+  const az = semilla((sem ^ 0x0A1E) + zi * 977 + oi * 131);
+  const pres = ZONAS[zi].olas.length > 1 ? oi / (ZONAS[zi].olas.length - 1) : 0;
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(claseDe(zi, az(), pres));
+  /* ── UN TERCIO DE BRUTOS Y NI UNO MÁS ──────────────────────────────────
+     Lo que hace difícil una oleada tiene que ser LA MEZCLA y no una clase
+     repetida. Sin este tope la ceniza salía `blbbbl` y `blbbbbl` —cuatro y
+     cinco brutos juntos— y eso no es una pelea, es una ejecución: medido con
+     el auto-jugador, de los golpes que se comía en toda la partida el bruto
+     le ponía 7 de 15, 12 de 18 y 12 de 22, y moría siempre en la primera
+     oleada de la ceniza. Los que sobran bajan a lancero, que es el escalón de
+     abajo y conserva el alcance largo que hace que la oleada siga pidiendo
+     esquivar. Va como REGLA y no como tabla por zona: así escala solo el día
+     que una oleada cambie de tamaño.                                       */
+  const tope = Math.max(1, Math.ceil(n / 3));
+  let br = 0;
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] !== 'bruto') continue;
+    if (++br > tope) out[i] = 'lancero';
+  }
+  /* la última oleada de una zona trae un bruto sí o sí: es el escalón que
+     avisa que la zona se está por cerrar. VA DESPUÉS DEL TOPE, porque es un
+     piso y no un techo — puesto antes, el tope se lo podría llevar. */
+  if (oi === ZONAS[zi].olas.length - 1 && zi > 0 && out.indexOf('bruto') < 0) out[0] = 'bruto';
+  return out;
+}
+
+/* ── DÓNDE CAE UN ESQUELETO DE UNA OLEADA ──────────────────────────────────
+   Cuatro condiciones son las mismas de siempre —dentro de la zona, en terreno
+   pisable, fuera del claro del arranque, fuera de un tronco— y la quinta sólo
+   existe para las oleadas: A DISTANCIA DEL JUGADOR. Más cerca de `OLA_R0` es
+   una emboscada; más lejos de `OLA_R1` es una oleada que no llega nunca y hay
+   que ir a buscarla, que es exactamente lo que una oleada no es.
+   LA SEGUNDA PASADA AFLOJA EL BORDE DE AFUERA y no el de adentro: en la
+   ceniza, con el jugador en el centro, el anillo entero puede caer fuera de
+   la zona y con una sola pasada la oleada no saldría. Lo que NO se afloja
+   nunca es la distancia mínima ni el choque.
+   Devuelve null si no encontró: inventar un punto sin comprobar es sembrar
+   un esqueleto adentro de un árbol, y esa zona ya no se puede limpiar.    */
+function puntoOla(zi, az, solidos, jx, jz, radio) {
+  const Z = ZONAS[zi];
+  const r0 = zi === 0 ? 13 : ZONAS[zi - 1].r + 3;
+  const r1 = zi === ZONAS.length - 1 ? MUNDO_R * 0.90 : Z.r - 2;
+  /* ── CUATRO PASES, Y LO QUE SE AFLOJA ES EL SUELO, NO LA DISTANCIA ───────
+     La oleada la define QUÉ VIENE y no sobre qué tierra nace. Nada obliga al
+     jugador a quedarse en la ceniza: puede volverse caminando al bosque, y
+     ahí no existe UN SOLO punto que esté a la vez adentro de la ceniza —que
+     empieza a 76 m del centro— y a menos de 66 del jugador. Medido con la
+     auditoría desde el origen: once esqueletos nacían CONGELADOS, o sea fuera
+     del radio en que `esqCerca` los piensa, y la oleada no terminaba nunca.
+     Así que los dos últimos pases sueltan la zona y conservan el anillo: son
+     brutos de la ceniza caminando por el bosque, que es exactamente lo que
+     hace algo que te está cazando. `e.zona` sigue siendo la de la OLEADA, así
+     que `esqVivos(ZONA_ACT)` los cuenta igual y la zona cierra donde debe.
+     Lo que NUNCA se afloja es la distancia mínima ni el choque: un esqueleto
+     que nace encima del jugador o adentro de una piedra no es un enemigo. */
+  for (let pase = 0; pase < 4; pase++) {
+    const enZona = pase < 2, cerca = pase === 0 || pase === 2;
+    const q0 = enZona ? r0 : 13, q1 = enZona ? r1 : MUNDO_R * 0.90;
+    for (let i = 0; i < 260; i++) {
+      const a = az() * 6.283, d = mez(q0, q1, Math.sqrt(az()));
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (enZona && zonaDe(x, z) !== zi) continue;
+      if (pendiente(x, z) > 2.8) continue;
+      if (largo2(x, z) < 13) continue;
+      const dj = dist2(x, z, jx, jz);
+      if (dj < OLA_R0 * OLA_R0) continue;
+      if (cerca && dj > OLA_R1 * OLA_R1) continue;
+      if (!cerca && dj > OLA_R_FRIO * OLA_R_FRIO) continue;
+      let choca = false;
+      for (const s of solidos) {
+        const R = s.r + radio + 0.35;
+        if (dist2(x, z, s.x, s.z) < R * R) { choca = true; break; }
       }
-      if (!ok) continue;
-      lista.push({ cl: claseDe(zi, azarEn(0, n, zi)), x, z, zona: zi });
+      if (!choca) return { x, z };
     }
-  });
-  // el rey, al fondo de la ceniza y en el sitio más lejano que sea plano
+  }
+  return null;
+}
+
+/* EL REY NO CAE EN EL ANILLO: se levanta AL FONDO DE LA CENIZA, en el sitio
+   plano más lejano que haya. Que haya que caminar hasta él es la mitad de que
+   se lea a jefe — una oleada de uno que aparece a veinte metros es un bruto
+   grande. Y su sitio sale de la semilla, así que la misma semilla lo pone
+   siempre en el mismo lugar y se lo puede fotografiar. */
+function puntoRey(sem, solidos) {
   let rx = 0, rz = 0, mejor = -1;
-  const azr = semilla(sem ^ 0x1234);
+  const az = semilla(sem ^ 0x1234);
   for (let i = 0; i < 900; i++) {
-    const a = azr() * 6.283, d = mez(MUNDO_R * 0.62, MUNDO_R * 0.86, azr());
+    const a = az() * 6.283, d = mez(MUNDO_R * 0.62, MUNDO_R * 0.86, az());
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (zonaDe(x, z) !== 2 || pendiente(x, z) > 2.0) continue;
-    if (chocaAlgo(x, z, ESQ.rey.radio + 1.2)) continue;   // el rey mide 82 cm de radio
-    if (d > mejor) { mejor = d; rx = x; rz = z; }
+    let choca = false;
+    for (const s of solidos) {
+      const R = s.r + ESQ.rey.radio + 1.2;
+      if (dist2(x, z, s.x, s.z) < R * R) { choca = true; break; }
+    }
+    if (!choca && d > mejor) { mejor = d; rx = x; rz = z; }
   }
-  lista.push({ cl: 'rey', x: rx, z: rz, zona: 2 });
-  return lista;
+  return { x: rx, z: rz };
+}
+
+/* ── LA OLEADA COMPLETA, EN PUNTOS ─────────────────────────────────────────
+   Una llamada devuelve la lista lista para dar de alta. La usan las DOS cosas
+   que tienen que coincidir: el juego, que suelta la oleada de verdad, y la
+   auditoría, que comprueba que se pueda soltar. Con dos caminos, la auditoría
+   estaría aprobando un juego que no existe.
+   Lo que NO se puede encontrar se descarta y se informa: una oleada de siete
+   que sale de seis se sigue pudiendo limpiar; una que devuelve un punto
+   inventado adentro de un tronco deja la zona trabada para siempre.        */
+function oleadaEn(zi, oi, sem, solidos, jx, jz) {
+  const comp = composicionOla(zi, oi, sem);
+  const az = semilla((sem ^ 0x7C3E) + zi * 613 + oi * 89 + ((jx * 31 + jz * 17) | 0));
+  const out = [];
+  let fallados = 0;
+  for (const cl of comp) {
+    if (cl === 'rey') { const r = puntoRey(sem, solidos); out.push({ cl, x: r.x, z: r.z, zona: zi }); continue; }
+    const pt = puntoOla(zi, az, solidos, jx, jz, ESQ[cl].radio);
+    if (!pt) { fallados++; continue; }
+    out.push({ cl, x: pt.x, z: pt.z, zona: zi });
+  }
+  out.fallados = fallados;
+  return out;
 }
 
 /* ── LA AUDITORÍA ──────────────────────────────────────────────────────────
    Lo que comprueba, y por qué cada una:
-     · TODO esqueleto tiene que ser ALCANZABLE. Uno sembrado adentro de un
-       tronco o detrás de un anillo cerrado de árboles deja la zona sin poder
-       limpiarse, y la siguiente no abre nunca: el juego se traba sin fallar.
-     · Ningún esqueleto puede NACER METIDO en un sólido.
-     · Cada zona tiene que tener su cupo, o el contador del HUD miente.
+     · CADA OLEADA se puede soltar entera. Una que devuelve seis de siete deja
+       la zona más fácil; una que devuelve cero deja el juego trabado sin
+       fallar, porque el contador nunca llega a cero por el otro lado.
+     · TODO esqueleto de toda oleada es ALCANZABLE. Uno detrás de un anillo
+       cerrado de árboles deja la zona sin poder limpiarse.
+     · Ninguno NACE METIDO en un sólido.
+     · Ninguno cae a menos de `OLA_R0` del jugador — que es lo que separa una
+       oleada de una emboscada, y es lo único que esta versión agrega.
+   Y SE AUDITA CON EL JUGADOR DONDE VA A ESTAR DE VERDAD, o sea en el borde
+   de adentro de la zona que se abre: auditando siempre desde el origen, el
+   anillo de la ceniza cae entero fuera de alcance y la prueba mide la segunda
+   pasada en vez de la primera.
    El relleno va sobre una reja de 1,5 m con el cuerpo del jugador inflado,
    que es la única forma honesta de preguntar «¿se puede caminar hasta acá?». */
 function audita(sem) {
-  const m = siembra(sem), es = siembraEsq(sem, m.solidos);
+  const m = siembra(sem);
   const P = 1.5, N = Math.ceil(MUNDO_R * 2 / P) + 2;
   const idx = (i, j) => (j + N) * (2 * N + 1) + (i + N);
   const libre = new Uint8Array((2 * N + 1) * (2 * N + 1));
@@ -645,7 +861,6 @@ function audita(sem) {
     for (const s of m.solidos) { if (dist2(x, z, s.x, s.z) < (s.r + J_RADIO) * (s.r + J_RADIO)) { ok = 0; break; } }
     libre[idx(i, j)] = ok;
   }
-  // relleno desde el arranque
   const vis = new Uint8Array(libre.length);
   const cola = [[0, 0]]; vis[idx(0, 0)] = 1;
   let alcanz = 0;
@@ -667,20 +882,43 @@ function audita(sem) {
     }
     return false;
   };
-  const malos = [], dentro = [];
-  es.forEach((e, n) => {
-    if (!cerca(e.x, e.z)) malos.push(n);
-    for (const s of m.solidos) if (dist2(e.x, e.z, s.x, s.z) < s.r * s.r) { dentro.push(n); break; }
+
+  const olas = [];
+  let malos = 0, dentro = 0, cerquita = 0, fallados = 0, total = 0, frios = 0;
+  /* ── SE AUDITA DESDE DOS SITIOS, Y EL SEGUNDO ES EL QUE ENCUENTRA COSAS ──
+     El normal es el borde de adentro de la zona, que es de donde el jugador
+     viene. Pero NADA LO OBLIGA A QUEDARSE: puede volverse caminando al bosque
+     con la ceniza abierta, y ahí la oleada tiene que caer igual y tiene que
+     poder llegar. Auditando sólo el caso bueno, el tercer pase de `puntoOla`
+     —el que existe justamente para eso— no se ejerce nunca.                */
+  const desde = [];
+  ZONAS.forEach((Z, zi) => { desde.push([zi, zi === 0 ? 0 : ZONAS[zi - 1].r + 4, 0, 0]); if (zi > 0) desde.push([zi, 0, 0, 1]); });
+  desde.forEach(([zi, jx, jz, dup]) => {
+    const Z = ZONAS[zi];
+    Z.olas.forEach((_, oi) => {
+      const L = oleadaEn(zi, oi, sem, m.solidos, jx, jz);
+      fallados += L.fallados;
+      /* el total es EL DE UNA PARTIDA: el segundo mirador vuelve a sembrar las
+         mismas oleadas y sumarlas dos veces da un número que nadie va a jugar */
+      if (!dup) total += composicionOla(zi, oi, sem).length;
+      for (const e of L) {
+        if (!cerca(e.x, e.z)) malos++;
+        for (const s of m.solidos) if (dist2(e.x, e.z, s.x, s.z) < s.r * s.r) { dentro++; break; }
+        if (e.cl !== 'rey' && dist2(e.x, e.z, jx, jz) < OLA_R0 * OLA_R0) cerquita++;
+        if (e.cl !== 'rey' && dist2(e.x, e.z, jx, jz) > OLA_R_FRIO * OLA_R_FRIO) frios++;
+      }
+      if (!dup) olas.push({ z: zi, o: oi, n: L.length, cl: L.map(e => e.cl[0]).join('') });
+    });
   });
-  const porZona = [0, 0, 0]; es.forEach(e => porZona[e.zona]++);
   let libres = 0; for (let k = 0; k < libre.length; k++) libres += libre[k];
   return {
-    sem, cosas: m.cosas.length, solidos: m.solidos.length, esqueletos: es.length,
-    porZona, celdasLibres: libres, alcanzables: alcanz,
-    sueltas: libres - alcanz,
-    esqInalcanzables: malos, esqDentroDeAlgo: dentro,
-    cupoOk: porZona.every((c, i) => c >= ZONAS[i].mata - 1),
-    ok: malos.length === 0 && dentro.length === 0 && porZona.every((c, i) => c >= ZONAS[i].mata - 1),
+    sem, cosas: m.cosas.length, solidos: m.solidos.length,
+    oleadas: olas.length, esqueletos: total, olas,
+    celdasLibres: libres, alcanzables: alcanz, sueltas: libres - alcanz,
+    esqInalcanzables: malos, esqDentroDeAlgo: dentro, esqEncima: cerquita, esqSinSitio: fallados,
+    esqFrios: frios,
+    ok: malos === 0 && dentro === 0 && cerquita === 0 && fallados === 0 && frios === 0
+        && olas.every(o => o.n === composicionOla(o.z, o.o, sem).length),
   };
 }
 /* ══════════════════════════════════════════════════════════════════════════
@@ -803,6 +1041,14 @@ function ajustaMarco() {
   const girar = H > W;
   ANCHO = girar ? H : W; ALTO = girar ? W : H;
   m.style.width = ANCHO + 'px'; m.style.height = ALTO + 'px';
+  /* EL MARCO VA GIRADO, ASÍ QUE `vh` NO ES SU ALTO: es el de la VENTANA, que
+     acá es el lado LARGO. Con los huecos del menú en `2.4vh` salían de 21 px
+     en un cuadro de 412 y la columna medía 410 —dos píxeles de aire— así que
+     una pantalla un poco más baja, o una traducción con una línea más, la
+     recorta ARRIBA Y ABAJO a la vez, porque va centrada. Lo que el CSS tiene
+     que leer es esto. */
+  m.style.setProperty('--mh', ALTO + 'px');
+  m.style.setProperty('--mw', ANCHO + 'px');
   m.style.transform = 'translate(-50%,-50%)' + (girar ? ' rotate(90deg)' : '');
   document.body.classList.toggle('girado', girar);
   if (!ren) return;
@@ -2289,23 +2535,47 @@ function sinDe(cl) {
   return s;
 }
 
-function esqArranca(lista) {
-  ESQS = lista.map((s, i) => ({
-    id: i, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
+/* ── DAR DE ALTA UNO SOLO ──────────────────────────────────────────────────
+   Es la ÚNICA puerta por la que entra un esqueleto al mundo, y la usan las
+   tres cosas que lo hacen: el arranque de la partida, cada oleada y el menú.
+   Con un alta por camino, el bicho de la tercera oleada nace sin la máscara
+   de piezas o sin el tinte y eso no falla: sale un peón con la espada del rey.
+   EL CUERPO SE RECICLA de un muerto de la misma clase cuando lo hay. Un
+   `cuerpoEsq()` es una jerarquía de veintitantos nodos, y una partida entera
+   son treinta y cuatro altas contra catorce vivos a la vez: sin reciclar se
+   construyen veinte jerarquías que no se dibujan nunca más.                */
+function esqAlta(s) {
+  const D = ESQ[s.cl];
+  let cuerpo = null;
+  for (let i = 0; i < ESQS.length; i++) {
+    const v = ESQS[i];
+    if (!v.vive && v.cl === s.cl && v.cuerpo) { cuerpo = v.cuerpo; v.cuerpo = null; break; }
+  }
+  if (!cuerpo) cuerpo = cuerpoEsq();
+  cuerpo.raiz.scale.setScalar(D.esc);
+  const e = {
+    id: ESQS.length, cl: s.cl, zona: s.zona, x: s.x, z: s.z, y: H(s.x, s.z),
     rumbo: Math.atan2(-s.x, -s.z), vx: 0, vz: 0,
-    vida: ESQ[s.cl].vida, vidaMax: ESQ[s.cl].vida,
+    vida: D.vida, vidaMax: D.vida,
     sx: s.x, sz: s.z, est: 'duerme', t: 0, esp: 0, atur: 0, muerteT: 0, vive: true, gDio: false,
     fase: Math.random() * 6.283, ronX: s.x, ronZ: s.z, ronT: 0,
-    cuerpo: null, tinte: null,
+    /* NACE ENTRANDO EN ESCENA: 0,45 s en los que crece desde el suelo. Un
+       esqueleto que aparece de un cuadro a otro a veinte metros se lee a
+       defecto de dibujo, no a que algo se levantó de la tierra. */
+    naceT: 0,
+    cuerpo, tinte: new THREE.Color(D.color).convertSRGBToLinear(),
     /* la corona, la capa y las tres armas que no son suyas van con matriz cero */
     sin: sinDe(s.cl),
-  }));
+  };
+  ESQS.push(e);
+  return e;
+}
+const ESQ_NACE = 0.45;            // cuánto tarda en levantarse del suelo
+
+function esqArranca(lista) {
+  ESQS = [];
   if (!ESQ_KIT) ESQ_KIT = armaKit(recetaEsq(), ESQ_TURBA + 2);
-  for (const e of ESQS) {
-    e.cuerpo = cuerpoEsq();
-    e.cuerpo.raiz.scale.setScalar(ESQ[e.cl].esc);
-    e.tinte = new THREE.Color(ESQ[e.cl].color).convertSRGBToLinear();
-  }
+  for (const s of lista) esqAlta(s);
 }
 
 const esqVivos = z => ESQS.filter(e => e.vive && e.zona === z).length;
@@ -2343,6 +2613,11 @@ function esqPaso(dt) {
     const d = Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z));
 
     if (e.est === 'muere') { e.muerteT += dt; if (e.muerteT > ESQ_MUERE) e.vive = false; esqPose(e, dt, d); continue; }
+    /* MIENTRAS SE LEVANTA NO DECIDE NADA. Sin esto, un esqueleto que nace a
+       diecinueve metros con la vista en treinta y dos ya está persiguiendo en
+       el mismo cuadro en que aparece, y lo que se ve es que la oleada empieza
+       a correr antes de terminar de salir. */
+    if (e.naceT < ESQ_NACE) { esqPose(e, dt, d); continue; }
     if (e.atur > 0) { e.vx *= Math.exp(-9 * dt); e.vz *= Math.exp(-9 * dt); esqMueve(e, dt); esqPose(e, dt, d); continue; }
 
     switch (e.est) {
@@ -2460,7 +2735,12 @@ function esqPose(e, dt, d) {
   poseAplica(e.cuerpo, a, arg, b, brg, k);
   e.cuerpo.raiz.position.set(e.x, e.y, e.z);
   e.cuerpo.raiz.rotation.y = e.rumbo;
-  e.cuerpo.raiz.scale.setScalar(D.esc);
+  /* EL NACIMIENTO VA ACÁ Y NO EN `esqAlta`, porque esta línea corre en CADA
+     cuadro y pisa cualquier escala escrita una sola vez — la misma lección
+     que el parpadeo de la fogata de LEMI contra el apagado de la cinemática. */
+  e.naceT = Math.min(ESQ_NACE, (e.naceT || 0) + dt);
+  const nac = e.naceT / ESQ_NACE;
+  e.cuerpo.raiz.scale.setScalar(D.esc * (nac < 1 ? 0.18 + 0.82 * suav(nac) : 1));
   /* el tinte parpadea al recibir: es el único acuse de recibo que hay de que
      el golpe entró, porque una barra de vida sobre catorce bichos es ruido */
   const f = e.atur > 0 ? e.atur / ESQ_ATURDE : 0;
@@ -2499,6 +2779,12 @@ function esqRecibe(e, dano, dx, dz, empuje) {
 
 let ZONA_ACT = 0, PART = 'menu', FIN_T = 0, GANO = false;
 let SANGRE = 0, SACUDE = 0, AVISO = '', AVISO_T = 0;
+/* ── EL ESTADO DE LAS OLEADAS ──────────────────────────────────────────────
+   `i` es cuál oleada de la zona actual está en pie y `espera` el respiro que
+   falta para la siguiente. `hechas` cuenta las limpiadas en toda la partida y
+   es lo único que sirve para el récord: «llegué a la zona 2» no distingue
+   entrar a la ceniza de terminarla.                                        */
+const OLA = { i: 0, espera: 0, hechas: 0, suelta: 0 };
 
 /* ¿este esqueleto entra en el arco del golpe? */
 function enArco(e, x, z, rumbo, alc, arco) {
@@ -2547,7 +2833,7 @@ function jugRecibe(dano, dx, dz, empuje, cl) {
   son('dano');
   if (JUG.vida <= 0) {
     JUG.vida = 0; JUG.muerto = true; JUG.muerteT = 0; JUG.golpe = -1; JUG.esqT = 0;
-    son('muere'); PART = 'fin'; GANO = false; FIN_T = 0;
+    son('muere'); PART = 'fin'; GANO = false; FIN_T = 0; guardaRecord();
   }
 }
 
@@ -2567,26 +2853,100 @@ function jugGanaXp(n) {
 
 function avisa(txt, seg) { AVISO = txt; AVISO_T = seg || 2.6; }
 
-/* ── LAS ZONAS ─────────────────────────────────────────────────────────────
-   Una zona se abre cuando la anterior quedó limpia. Es lo único que
-   convierte "matar esqueletos" en una partida con principio y final.      */
+/* ── LAS OLEADAS Y LAS ZONAS ───────────────────────────────────────────────
+   Una oleada cae, hay un respiro, y viene la siguiente. Limpiada la última de
+   una zona se abre la que sigue. Es lo único que convierte "matar esqueletos"
+   en una partida con principio y final, y ahora además con escalones.
+
+   TODO PASA POR ACÁ Y POR NADA MÁS: el respiro, la cura, el aviso, el sonido,
+   el récord y el final. Con la cuenta repartida —una oleada soltada desde el
+   arranque y otra desde el bucle— la primera nace sin respiro y sin aviso, y
+   eso no falla: se ve como que la oleada 1 no existió.                     */
+function olaSuelta() {
+  const Z = ZONAS[ZONA_ACT];
+  const L = oleadaEn(ZONA_ACT, OLA.i, SEM, MUNDO ? MUNDO.solidos : [], JUG.x, JUG.z);
+  for (const s of L) esqAlta(s);
+  OLA.suelta = L.length;
+  const rey = Z.olas[OLA.i] === 'rey';
+  avisa(rey ? T('olaRey')
+            : T('olaViene', OLA.i + 1, Z.olas.length) + (OLA.i === Z.olas.length - 1 ? ' · ' + T('olaUlt') : ''),
+        rey ? 3.6 : 2.4);
+  son(rey ? 'zona' : 'ola');
+  return L.length;
+}
+
 function zonasPaso(dt) {
-  const quedan = esqVivos(ZONA_ACT);
-  if (quedan === 0 && ZONA_ACT < ZONAS.length - 1) {
-    ZONA_ACT++;
+  /* EL RESPIRO ES DEL RELOJ DE LA SIMULACIÓN y no de un `setTimeout`: con un
+     temporizador de pared, un teléfono a 30 cuadros y una notebook a 144
+     esperan lo mismo pero la pelea de al lado corre distinto, y el respiro
+     deja de durar lo que dura el resto del juego. */
+  if (OLA.espera > 0) {
+    OLA.espera -= dt;
+    if (OLA.espera <= 0) olaSuelta();
+    return;
+  }
+  if (PART !== 'juego') return;
+  if (esqVivos(ZONA_ACT) > 0) return;
+
+  OLA.hechas++;
+  const Z = ZONAS[ZONA_ACT];
+  if (OLA.i < Z.olas.length - 1) {
+    /* ── LIMPIAR UNA OLEADA CURA UN POCO ───────────────────────────────────
+       No entera: eso es lo que paga cerrar una ZONA. Un pedazo, que es lo que
+       convierte el respiro en un respiro y no en una cuenta regresiva — sin
+       nada de cura, la oleada 3 se pelea con lo que sobró de la 2 y la
+       escalera se vuelve un embudo, que es exactamente lo que ya costó una
+       vuelta con las tres zonas.                                           */
+    JUG.vida = Math.min(JUG.vidaMax, JUG.vida + JUG.vidaMax * OLA_CURA);
+    /* ── Y PAGA XP, QUE ES LA OTRA MITAD ───────────────────────────────────
+       Las oleadas escalan; el jugador tiene que escalar con ellas. Con la xp
+       saliendo sólo de las bajas, limpiar las tres primeras del bosque no
+       alcanza para subir de nivel y la oleada 2 se pelea con la misma vida y
+       el mismo daño que la 1 — medido, el auto-jugador moría ahí en dos de
+       ocho semillas, a nivel 1, comiéndose once golpes de peón. Es una
+       FRACCIÓN de lo que falta para el nivel y no un número de puntos: así
+       vale lo mismo en la primera oleada que en la última, donde un nivel
+       cuesta cinco veces más.                                              */
+    jugGanaXp(Math.round(JUG.xpSig * OLA_XP));
+    OLA.i++; OLA.espera = OLA_RESPIRO;
+    avisa(T('olaCae'), 1.8);
+    son('nivel');
+  } else if (ZONA_ACT < ZONAS.length - 1) {
     /* ── LIMPIAR UNA ZONA ES EL PUNTO DE CONTROL ───────────────────────────
        Antes abrir la siguiente era PURO COSTO: te la ganabas con la vida por
        la mitad y entrabas a pelear contra cosas del doble de vida. Medido con
        el bot en tres semillas: doce bajas, nivel 2, muerto en la ceniza, las
        tres veces — el juego no se podía terminar. Curar entero y regalar un
        nivel es lo que convierte la puerta en un respiro y no en un embudo. */
+    ZONA_ACT++; OLA.i = 0; OLA.espera = OLA_RESPIRO_Z;
     JUG.vida = JUG.vidaMax;
     jugGanaXp(JUG.xpSig - JUG.xp);
     avisa(T('abre') + ' · ' + T('z' + ZONAS[ZONA_ACT].id), 3.4);
     son('zona');
-  } else if (quedan === 0 && ZONA_ACT === ZONAS.length - 1 && PART === 'juego') {
-    PART = 'fin'; GANO = true; FIN_T = 0; son('gana');
+  } else {
+    PART = 'fin'; GANO = true; FIN_T = 0; son('gana'); guardaRecord();
   }
+}
+
+/* ── EL RÉCORD ─────────────────────────────────────────────────────────────
+   Lo que se guarda son OLEADAS LIMPIADAS y no la zona: «llegué a la ceniza»
+   no distingue entrar de terminarla, y con tres zonas el récord tendría tres
+   valores posibles. Con siete oleadas hay siete escalones que contar, que es
+   lo que hace que volver a jugar tenga un número al que ganarle.
+   Y se guarda TAMBIÉN al morir, que es de donde va a salir casi siempre: un
+   récord que sólo se anota ganando no es un récord, es el final.          */
+let RECORD = { olas: 0, bajas: 0 };
+function leeRecord() {
+  try {
+    const r = JSON.parse(localStorage.getItem('huesos_rec') || 'null');
+    if (r && typeof r.olas === 'number') RECORD = { olas: r.olas | 0, bajas: r.bajas | 0 };
+  } catch (e) {}
+}
+function guardaRecord() {
+  if (OLA.hechas < RECORD.olas) return;
+  if (OLA.hechas === RECORD.olas && JUG.bajas <= RECORD.bajas) return;
+  RECORD = { olas: OLA.hechas, bajas: JUG.bajas };
+  try { localStorage.setItem('huesos_rec', JSON.stringify(RECORD)); } catch (e) {}
 }
 
 /* la niebla, el cielo y la luz salen de la zona EN LA QUE ESTÁ EL JUGADOR y
@@ -2676,6 +3036,12 @@ const SON = {
   gruñe:   () => _tono(120, 62, 0.40, 0.13, 'sawtooth'),
   nivel:   () => { _tono(520, 780, 0.16, 0.16, 'triangle'); setTimeout(() => AC && _tono(780, 1170, 0.22, 0.14, 'triangle'), 130); },
   zona:    () => { _tono(180, 240, 0.5, 0.15, 'triangle'); _ruido(0.7, 'lowpass', 180, 0.8, 0.20, 1.0); },
+  /* LA OLEADA SUENA A CUERNO Y NO A CAMPANA, y es lo único que la anuncia sin
+     mirar el cartel: dos tonos graves que suben, con la quinta encima. Un
+     sonido agudo se confundiría con subir de nivel, que es la recompensa —y
+     una oleada que llega no es una recompensa. */
+  ola:     () => { _tono(98, 147, 0.62, 0.17, 'sawtooth'); _tono(147, 196, 0.55, 0.09, 'triangle');
+                   _ruido(0.55, 'lowpass', 220, 0.7, 0.14, 1.0); },
   gana:    () => { [392, 523, 659, 784].forEach((f, i) => setTimeout(() => AC && _tono(f, f * 1.005, 0.42, 0.17, 'triangle'), i * 150)); },
   muere:   () => { _tono(160, 40, 1.1, 0.28, 'sawtooth'); _ruido(0.9, 'lowpass', 300, 0.7, 0.22, 1.0); },
 };
@@ -2694,6 +3060,7 @@ function pintaIdioma() {
   $('#mTitCal').textContent = T('calidad');
   $('#mTitIdi').textContent = T('idioma');
   $('#mPie').textContent = T('pie');
+  pintaRecord();
   $('#paTit').textContent = T('pausa');
   $('#paSeguir').textContent = T('seguir');
   $('#paMenu').textContent = T('menu');
@@ -2705,11 +3072,22 @@ function pintaIdioma() {
   pintaHud(true);
   if (PART === 'fin') pintaFin();
 }
+/* EL RÉCORD VA EN EL MENÚ Y NO EN LA PANTALLA DE FINAL: en el final ya está
+   el número de ESTA partida, y dos cifras juntas no se comparan de una ojeada.
+   En el menú es lo único que contesta «¿por qué volver a jugar?». */
+function pintaRecord() {
+  $('#mTot').textContent = T('total', OLA_TOTAL);
+  $('#mRec').textContent = RECORD.olas > 0
+    ? T('recLinea', T('ola') + ' ' + RECORD.olas + '/' + OLA_TOTAL, RECORD.bajas)
+    : T('rec') + ' · ' + T('recNada');
+}
+
 function pintaFin() {
   $('#fTit').textContent = T(GANO ? 'ganaste' : 'perdiste');
   $('#fSub').textContent = T(GANO ? 'ganasteS' : 'perdisteS');
   const m = Math.floor(JUG.tiempo / 60), s = Math.floor(JUG.tiempo % 60);
-  $('#fDatos').textContent = T('datos', JUG.bajas, JUG.nivel, m + ':' + String(s).padStart(2, '0'));
+  $('#fDatos').textContent = T('datos2', OLA.hechas, OLA_TOTAL, JUG.bajas, JUG.nivel,
+                              m + ':' + String(s).padStart(2, '0'));
 }
 
 let _hudV = -1, _hudA = -1, _hudX = -1, _hudN = -1, _hudR = -1, _hudZ = -1;
@@ -2718,21 +3096,56 @@ function pintaHud(forzar) {
      al navegador a recalcular el layout sesenta veces por segundo para poner
      el mismo texto. */
   const v = Math.round(JUG.vida / JUG.vidaMax * 100);
-  if (forzar || v !== _hudV) { $('#bVida i').style.width = lim(v, 0, 100) + '%'; _hudV = v; }
+  if (forzar || v !== _hudV) { $('#bVida i').style.transform = 'scaleX(' + lim(v, 0, 100) / 100 + ')'; _hudV = v; }
   const a = Math.round(JUG.agu / J_AGU * 100);
-  if (forzar || a !== _hudA) { $('#bAgu i').style.width = lim(a, 0, 100) + '%'; _hudA = a; }
+  if (forzar || a !== _hudA) { $('#bAgu i').style.transform = 'scaleX(' + lim(a, 0, 100) / 100 + ')'; _hudA = a; }
   const x = Math.round(JUG.xp / JUG.xpSig * 100);
-  if (forzar || x !== _hudX) { $('#bXp i').style.width = lim(x, 0, 100) + '%'; _hudX = x; }
+  if (forzar || x !== _hudX) { $('#bXp i').style.transform = 'scaleX(' + lim(x, 0, 100) / 100 + ')'; _hudX = x; }
+  pintaBotones(forzar);
   if (forzar || JUG.nivel !== _hudN) { $('#nivel').textContent = T('nivel') + ' ' + JUG.nivel; _hudN = JUG.nivel; }
-  const r = esqVivos(ZONA_ACT);
-  if (forzar || r !== _hudR) {
-    $('#restan').textContent = (ZONA_ACT === 2 && r <= 1 ? T('restanRey') : T('restan') + ' ' + r);
-    _hudR = r;
+  /* EL CONTADOR DICE LAS DOS COSAS: cuántos quedan de la oleada que está en
+     pie y en qué oleada de la zona va. Con sólo «QUEDAN 3» no hay forma de
+     saber si limpiar eso abre la zona o trae otra tanda, y esa diferencia es
+     justamente lo que el jugador está decidiendo cuando le queda media vida. */
+  const r = esqVivos(ZONA_ACT), Z = ZONAS[ZONA_ACT];
+  const rey = Z.olas[OLA.i] === 'rey';
+  const cl = r + OLA.i * 1000 + ZONA_ACT * 100000 + (OLA.espera > 0 ? 7e6 : 0);
+  if (forzar || cl !== _hudR) {
+    $('#restan').innerHTML = OLA.espera > 0
+      ? '<b>' + T('olaViene', OLA.i + 1, Z.olas.length) + '</b>'
+      : (rey ? '<b>' + T('restanRey') + '</b>'
+             : T('ola') + ' ' + (OLA.i + 1) + '/' + Z.olas.length + '<br><b>' + T('restan') + ' ' + r + '</b>');
+    _hudR = cl;
   }
   if (forzar || ZONA_VIS !== _hudZ) {
     $('#zonaTit').textContent = T('z' + ZONAS[ZONA_VIS].id);
     $('#zonaSub').textContent = T('z' + ZONAS[ZONA_VIS].id + 'S');
     _hudZ = ZONA_VIS;
+  }
+}
+
+/* ── LOS BOTONES DICEN SI SE PUEDE ─────────────────────────────────────────
+   La condición NO se escribe acá: se le pregunta a `jugPide`, que es la que
+   de verdad decide. Con la regla copiada, el botón se apaga en un caso y el
+   golpe sale igual en otro — y a partir de ahí el jugador no puede confiar en
+   lo que ve, que en un juego de aguante es lo único que administra.       */
+let _btA = -1, _btE = -1;
+function pintaBotones(forzar) {
+  const puedeA = !JUG.muerto && JUG.esqT <= 0 && JUG.agu >= J_AGU_GOLPE ? 1 : 0;
+  const puedeE = !JUG.muerto && JUG.esqT <= 0 && JUG.esqEsp <= 0 && JUG.agu >= J_AGU_ESQ ? 1 : 0;
+  if (forzar || puedeA !== _btA) { $('#bAtaca').classList.toggle('no', !puedeA); _btA = puedeA; }
+  if (forzar || puedeE !== _btE) {
+    const e = $('#bEsq');
+    e.classList.toggle('no', !puedeE);
+    /* el aro de adentro se vacía mientras dura la espera: un botón apagado
+       dice «ahora no» y el aro dice «cuánto falta», que no es lo mismo */
+    e.classList.toggle('espera', JUG.esqEsp > 0);
+    _btE = puedeE;
+  }
+  if (JUG.esqEsp > 0) {
+    const k = 1 - JUG.esqEsp / J_ESQ_ESPERA;
+    $('#bEsq .esp').style.clipPath = 'inset(' + ((1 - k) * 100).toFixed(1) + '% 0 0 0)';
+    _btE = -1;                                   // que se relea al terminar
   }
 }
 
@@ -2763,9 +3176,18 @@ function dialogoRey() {
   const e = $('#dialogo'); e.textContent = T('d3'); e.dataset.t = '5.5';
 }
 
+/* ── LA CLASE SE LLAMA `jugando` Y NO `enJuego` ────────────────────────────
+   Decía `enJuego` y las cinco reglas del CSS piden `jugando`, así que NINGUNA
+   aplicaba nunca. Medido antes de tocar nada, con la partida ya empezada:
+   `#hud` en opacidad 0 —o sea la vida, el aguante, la xp, el nivel, la zona,
+   el contador y el cartel de historia invisibles la partida entera— y `#tac`
+   en `display:none`, con los botones de ATACAR y ESQUIVAR midiendo 0×0. En un
+   teléfono eso no es un HUD que falta: es que NO SE PUEDE ATACAR. Lo tapaba
+   que en PC el teclado hace las dos cosas por otro camino.
+   `__H.hud()` mide exactamente esto y es lo que impide que vuelva.        */
 function verPanel(p) {
   for (const k of ['pIdioma', 'pMenu', 'pPausa', 'pFin']) $('#' + k).classList.toggle('on', k === p);
-  document.body.classList.toggle('enJuego', p === null);
+  document.body.classList.toggle('jugando', p === null);
 }
 /* ══════════════════════════════════════════════════════════════════════════
    LA ENTRADA Y EL BUCLE
@@ -2892,11 +3314,18 @@ function nuevaPartida(sem) {
   armaSuelo();
   armaVegetacion(MUNDO);
   jugArranca();
-  esqArranca(siembraEsq(SEM, MUNDO.solidos));
+  esqArranca([]);
   ZONA_ACT = 0; TALLY.golpes = 0; TALLY.dano = 0; TALLY.porCl = {}; TALLY.esquivados = 0; SANGRE = 0; SACUDE = 0; AVISO_T = 0;
   DICHO[0] = DICHO[1] = DICHO[2] = DICHO[3] = false;
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
-  PART = 'juego'; verPanel(null); pintaHud(true);
+  PART = 'juego'; verPanel(null);
+  /* EL MUNDO ARRANCA VACÍO Y LA PRIMERA OLEADA LA SUELTA `olaSuelta`, que es
+     la misma que suelta las otras seis. Sembrando la primera acá quedarían
+     dos altas con dos comportamientos: la del arranque sin aviso, sin sonido
+     y sin la distancia mínima al jugador, y las demás con las tres cosas. */
+  OLA.i = 0; OLA.espera = 0; OLA.hechas = 0;
+  olaSuelta();
+  pintaHud(true);
 }
 function pausa(v) {
   if (v && PART === 'juego') { PART = 'pausa'; verPanel('pPausa'); document.exitPointerLock?.(); }
@@ -2916,6 +3345,26 @@ function alMenu() { PART = 'menu'; verPanel('pMenu'); document.exitPointerLock?.
    más. `esqPaso` es el que decide y hace daño, y un héroe que se muere solo
    mientras alguien mira el título no es un demo, es un defecto.            */
 const MENU_SEM = 3141;
+/* cinco esqueletos en arco alrededor del claro, entre cuatro y nueve metros:
+   lo bastante cerca para que se les vea la silueta y lo bastante lejos para
+   que no le tapen la cara al héroe. Se saltea el sitio que tenga un tronco. */
+function menuEsqs() {
+  const az = semilla(MENU_SEM ^ 0xBEEF), out = [], S = MUNDO ? MUNDO.solidos : [];
+  const clases = ['peon', 'peon', 'lancero', 'peon', 'bruto'];
+  for (let i = 0; i < clases.length; i++) {
+    const cl = clases[i];
+    for (let k = 0; k < 40; k++) {
+      const a = (i / clases.length) * 6.283 + (az() - 0.5) * 0.9;
+      const d = 4.4 + az() * 4.6;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      let choca = false;
+      for (const s of S) { const R = s.r + ESQ[cl].radio; if (dist2(x, z, s.x, s.z) < R * R) { choca = true; break; } }
+      if (choca) continue;
+      out.push({ cl, x, z, zona: 0 }); break;
+    }
+  }
+  return out;
+}
 const MENU_X = 0.64;              // a qué fracción de media pantalla cae el héroe
 let MENU_LISTO = false, MENU_T = 0;
 function menuMundo() {
@@ -2925,7 +3374,13 @@ function menuMundo() {
   armaSuelo();
   armaVegetacion(MUNDO);
   jugArranca();
-  esqArranca(siembraEsq(MENU_SEM, MUNDO.solidos));
+  /* EL MENÚ NO USA UNA OLEADA, y no es pereza: una oleada nace a diecinueve
+     metros como mínimo —que es lo que la hace justa— y a diecinueve metros de
+     una cámara que orbita a seis, un esqueleto son cuatro píxeles. Acá hacen
+     falta cerca y en arco, que es otro problema; lo que sí comparten es el
+     alta, así que nacen con su máscara de piezas y su tinte igual que en
+     partida. Y NO SE MUEVEN NI PEGAN: `menuPaso` sólo les corre la pose.  */
+  esqArranca(menuEsqs());
   ZONA_ACT = 0; ZONA_VIS = 0;
   JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
 }
@@ -3066,6 +3521,7 @@ function arranca() {
   ajustaMarco();
   addEventListener('resize', ajustaMarco);
   midePasos();
+  leeRecord();
   armaTexturas();
   menuMundo();
   armaEntrada();
@@ -3105,6 +3561,9 @@ window.__H = {
       fps: +FPS.toFixed(1), llamadas: i.calls, tri: i.triangles,
       part: PART, cal: CALIDAD, rt: [RT.width, RT.height],
       zonaAct: ZONA_ACT, zonaVis: ZONA_VIS,
+      ola: { i: OLA.i, de: ZONAS[ZONA_ACT].olas.length, hechas: OLA.hechas,
+             espera: +OLA.espera.toFixed(2), suelta: OLA.suelta, total: OLA_TOTAL },
+      rec: { olas: RECORD.olas, bajas: RECORD.bajas },
       jug: { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
              vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, agu: Math.round(JUG.agu),
              niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
@@ -3230,6 +3689,7 @@ window.__H = {
     }
     return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: GANO,
              bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
+             olas: OLA.hechas, deOlas: OLA_TOTAL, zona: ZONA_ACT,
              huyo, esq, vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
   },
   audita(s) { return audita(s === undefined ? SEM : s); },
@@ -3464,20 +3924,57 @@ window.__H = {
   /* solapamientos del HUD: dos elementos que se pisan no se ven en una foto
      chica y sí en el teléfono del usuario */
   cajas() {
-    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso'];
+    /* LOS BOTONES ENTRAN EN LA CUENTA. Medía sólo los rótulos, así que el
+       botón de pausa pegado a la barra de vida —los dos arriba a la
+       izquierda— era un choque que ninguna prueba podía ver. Lo que se pisa
+       no es el dibujo del botón sino su CAJA: el dedo va ahí igual. */
+    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso',
+                 'bAtaca', 'bEsq', 'bCam', 'bPausa'];
     const c = [], ch = [];
     for (const id of ids) {
       const e = document.getElementById(id); if (!e) continue;
       const s = getComputedStyle(e);
       if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
       if (!e.offsetWidth || !e.offsetHeight) continue;
-      c.push({ id, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight });
+      /* ── EL `offsetLeft` NO SABE DEL `transform` ───────────────────────
+         Casi todo lo centrado del HUD va con `left:50%` + `translateX(-50%)`,
+         y `offsetLeft` devuelve el 50% pelado: la caja se informaba media
+         anchura a la derecha de donde está, y de ahí salían dos choques que
+         no existen. `getBoundingClientRect` tampoco sirve —el marco va
+         GIRADO y devuelve coordenadas de ventana— así que lo correcto es
+         sumarle al offset la traslación que la matriz ya tiene resuelta en
+         píxeles. */
+      const m = new DOMMatrixReadOnly(s.transform === 'none' ? '' : s.transform);
+      c.push({ id, x: e.offsetLeft + m.m41, y: e.offsetTop + m.m42, w: e.offsetWidth, h: e.offsetHeight });
     }
     for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) {
       const a = c[i], b = c[j];
       if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
     }
     return { n: c.length, choques: ch, marco: [ANCHO, ALTO] };
+  },
+  /* ── EL MENÚ TIENE QUE ENTRAR EN EL MARCO ──────────────────────────────
+     El marco va GIRADO noventa grados, así que `getBoundingClientRect`
+     devuelve coordenadas de ventana y el alto que informa es el ANCHO del
+     cuadro: medir con eso da números que parecen razonables y describen otra
+     pantalla. `offsetTop` es de la caja, que es lo que se ve. Y hay que
+     medirlo porque `.caja` va centrada: cuando el contenido pasa el alto del
+     marco no se recorta abajo, se sale por ARRIBA Y POR ABAJO a la vez. */
+  menuCajas(pan) {
+    const P = document.getElementById(pan || 'pMenu');
+    const c = P.querySelector('.caja'), h = [];
+    let y0 = 1e9, y1 = -1e9;
+    for (const e of c.children) {
+      if (getComputedStyle(e).display === 'none' || !e.offsetHeight) continue;
+      const t = e.offsetTop, b = t + e.offsetHeight;
+      h.push({ id: e.id || e.className, y: [t, b] });
+      y0 = Math.min(y0, t); y1 = Math.max(y1, b);
+    }
+    const ch = [];
+    for (let i = 0; i < h.length - 1; i++) if (h[i].y[1] > h[i + 1].y[0]) ch.push(h[i].id + '×' + h[i + 1].id);
+    return { panel: pan || 'pMenu', marco: [ANCHO, ALTO], caja: [y0, y1],
+             alto: y1 - y0, aire: ALTO - (y1 - y0), entra: (y1 - y0) <= ALTO,
+             choques: ch, hijos: h };
   },
   audio() {
     if (!ANAL) return { on: false };
@@ -3592,6 +4089,119 @@ window.__H = {
     }
     return { instancias: im.count, conCorona: con, sinCorona: sin, clases,
              piezas: Object.keys(ESQ_KIT.mallas).length };
+  },
+  /* ── LOS CONTROLES SE VEN, Y ESO SE MIDE ───────────────────────────────
+     Ésta es la sonda que faltaba y la que hace que el defecto no vuelva.
+     `l.js` escribía la clase `enJuego` y el CSS pedía `jugando`: medido con
+     esto, `#hud` quedaba en opacidad 0 la partida ENTERA y `#bAtaca` en 0×0
+     —o sea que en un teléfono no había forma de atacar—. Y sobrevivió porque
+     en PC el teclado llega al ataque por otro camino, así que la partida se
+     terminaba igual y ninguna prueba lo tocaba.
+
+     LA OPACIDAD SE MULTIPLICA POR LA DE SUS PADRES. Preguntándole a un botón
+     su propio `opacity` contesta 1 aunque su contenedor esté en 0: hay que
+     subir por la cadena. Lo mismo `display:none` en un ancestro, que deja al
+     hijo con `display:grid` y caja vacía.                                  */
+  hud() {
+    const uno = (id) => {
+      const e = document.getElementById(id);
+      if (!e) return { id, hay: false };
+      let op = 1, oculto = false;
+      for (let n = e; n && n !== document.body.parentNode; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        op *= +s.opacity;
+        if (s.display === 'none' || s.visibility === 'hidden') oculto = true;
+      }
+      const r = e.getBoundingClientRect();
+      return { id, hay: true, op: +op.toFixed(3), oculto,
+               w: Math.round(r.width), h: Math.round(r.height),
+               ve: !oculto && op > 0.05 && r.width > 1 && r.height > 1 };
+    };
+    const ids = ['hud', 'bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan',
+                 'tac', 'joy', 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'teclas'];
+    const o = {}; const faltan = [];
+    for (const id of ids) { const r = uno(id); o[id] = r; if (!r.ve) faltan.push(id); }
+    /* Y QUÉ HAY DEBAJO DEL DEDO. Un botón visible que no recibe el puntero es
+       exactamente igual de inútil, y eso no lo dice ninguna caja: el joystick
+       tenía `pointer-events:auto` y su aro invisible se comía el toque que
+       tenía que llegar al lienzo. */
+    const bajo = (id) => {
+      const e = document.getElementById(id); if (!e) return null;
+      const r = e.getBoundingClientRect();
+      const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return t ? (t.id || t.tagName.toLowerCase() + '.' + t.className) : null;
+    };
+    return { clases: [...document.body.classList], part: PART,
+             faltan, el: o,
+             bajoDedo: { bAtaca: bajo('bAtaca'), bEsq: bajo('bEsq'), joy: bajo('joy') },
+             /* los estados de los botones son información: un ataque sin
+                aguante tiene que verse apagado ANTES de tocarlo */
+             bAtacaNo: document.getElementById('bAtaca').classList.contains('no'),
+             bEsqNo: document.getElementById('bEsq').classList.contains('no'),
+             bEsqEspera: document.getElementById('bEsq').classList.contains('espera'),
+             barras: ['bVida', 'bAgu', 'bXp'].map(k =>
+               getComputedStyle(document.querySelector('#' + k + ' i')).transform) };
+  },
+
+  /* ── LAS OLEADAS ───────────────────────────────────────────────────────
+     `salta()` limpia la que está en pie y adelanta el respiro, que es lo
+     único que permite ver la 6 sin jugar cinco minutos. Y devuelve DÓNDE
+     cayó cada uno: el sitio se sortea contra la posición del jugador, así
+     que la composición se puede auditar en node pero el reparto no.        */
+  ola() {
+    const Z = ZONAS[ZONA_ACT];
+    return { zona: ZONA_ACT, i: OLA.i, de: Z.olas.length, pide: Z.olas[OLA.i],
+             hechas: OLA.hechas, total: OLA_TOTAL, espera: +OLA.espera.toFixed(2),
+             suelta: OLA.suelta, vivos: esqVivos(ZONA_ACT),
+             comp: composicionOla(ZONA_ACT, OLA.i, SEM).join(''),
+             donde: ESQS.filter(e => e.vive && e.zona === ZONA_ACT).map(e => ({
+               cl: e.cl, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1),
+               nace: +(e.naceT || 0).toFixed(2), est: e.est })) };
+  },
+  /* barre las oleadas EN EL MISMO BINARIO: `{olas:[[3,4],[4,5],[5,6,'rey']],
+     cura:0.28}`. Sin esto, comparar dos tamaños de oleada obliga a rearmar el
+     HTML y a comparar dos programas — y el bot ya no es determinista por
+     semilla (la fase de cada esqueleto sale de `Math.random`), así que la
+     diferencia entre dos corridas no se podría atribuir al cambio. */
+  olas(cfg) {
+    if (cfg) {
+      if (cfg.olas) { cfg.olas.forEach((o, i) => { if (ZONAS[i]) ZONAS[i].olas = o.slice(); }); OLA_TOTAL = olaTotal(); }
+      if (cfg.cura !== undefined) OLA_CURA = cfg.cura;
+      if (cfg.xp !== undefined) OLA_XP = cfg.xp;
+    }
+    return { olas: ZONAS.map(Z => Z.olas), total: OLA_TOTAL, cura: OLA_CURA, xp: OLA_XP };
+  },
+  /* mata a los que quedan y corre el respiro: para fotografiar la oleada n
+     sin jugar cinco minutos. LA MUERTE VA POR `esqRecibe` y no bajando `vida`
+     a mano: ahí adentro están la xp, la cura de matar y el contador de bajas,
+     y saltearlos dejaría al jugador en nivel 1 en la ceniza — o sea midiendo
+     una partida que nadie puede jugar. Y después hay que CORRER EL RELOJ:
+     morirse dura `ESQ_MUERE` y `esqVivos` cuenta hasta que la animación
+     termina, así que sin los pasos el respiro no arranca nunca. */
+  salta(n) {
+    let g = 0, t = 0;
+    for (let k = 0; k < (n || 1) && PART === 'juego'; k++) {
+      const h0 = OLA.hechas;
+      for (const e of ESQS) if (e.vive && e.zona === ZONA_ACT && e.est !== 'muere') esqRecibe(e, 1e9, 1, 0, 0);
+      /* SE PARA CUANDO LA SIGUIENTE YA ESTÁ EN EL PISO, no cuando quedan
+         vivos: un muerto sigue contando `vive` hasta que su animación
+         termina, así que preguntar por `esqVivos` corta en el primer paso y
+         `salta` no salta nada. La primera versión devolvía `pasos: 4`. */
+      while (PART === 'juego' && t < 3000 &&
+             !(OLA.hechas > h0 && OLA.espera <= 0 && esqVivos(ZONA_ACT) > 0)) {
+        esqPaso(PASO); zonasPaso(PASO); t++;
+      }
+      g++;
+    }
+    return { saltadas: g, pasos: t, ...this.ola() };
+  },
+  /* el récord vive en `localStorage` y sus dos funciones son del módulo, o sea
+     que desde el banco no se las puede llamar: sin esto no hay forma de
+     fotografiar el menú con un récord puesto. */
+  rec(o) {
+    if (o) { try { localStorage.setItem('huesos_rec', JSON.stringify(o)); } catch (e) {} leeRecord(); pintaRecord(); }
+    return { rec: RECORD, tot: document.getElementById('mTot').textContent,
+             lin: document.getElementById('mRec').textContent };
   },
   errs() { return window.__errs || []; },
 };

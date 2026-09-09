@@ -123,11 +123,18 @@ function nuevaPartida(sem) {
   armaSuelo();
   armaVegetacion(MUNDO);
   jugArranca();
-  esqArranca(siembraEsq(SEM, MUNDO.solidos));
+  esqArranca([]);
   ZONA_ACT = 0; TALLY.golpes = 0; TALLY.dano = 0; TALLY.porCl = {}; TALLY.esquivados = 0; SANGRE = 0; SACUDE = 0; AVISO_T = 0;
   DICHO[0] = DICHO[1] = DICHO[2] = DICHO[3] = false;
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
-  PART = 'juego'; verPanel(null); pintaHud(true);
+  PART = 'juego'; verPanel(null);
+  /* EL MUNDO ARRANCA VACÍO Y LA PRIMERA OLEADA LA SUELTA `olaSuelta`, que es
+     la misma que suelta las otras seis. Sembrando la primera acá quedarían
+     dos altas con dos comportamientos: la del arranque sin aviso, sin sonido
+     y sin la distancia mínima al jugador, y las demás con las tres cosas. */
+  OLA.i = 0; OLA.espera = 0; OLA.hechas = 0;
+  olaSuelta();
+  pintaHud(true);
 }
 function pausa(v) {
   if (v && PART === 'juego') { PART = 'pausa'; verPanel('pPausa'); document.exitPointerLock?.(); }
@@ -147,6 +154,26 @@ function alMenu() { PART = 'menu'; verPanel('pMenu'); document.exitPointerLock?.
    más. `esqPaso` es el que decide y hace daño, y un héroe que se muere solo
    mientras alguien mira el título no es un demo, es un defecto.            */
 const MENU_SEM = 3141;
+/* cinco esqueletos en arco alrededor del claro, entre cuatro y nueve metros:
+   lo bastante cerca para que se les vea la silueta y lo bastante lejos para
+   que no le tapen la cara al héroe. Se saltea el sitio que tenga un tronco. */
+function menuEsqs() {
+  const az = semilla(MENU_SEM ^ 0xBEEF), out = [], S = MUNDO ? MUNDO.solidos : [];
+  const clases = ['peon', 'peon', 'lancero', 'peon', 'bruto'];
+  for (let i = 0; i < clases.length; i++) {
+    const cl = clases[i];
+    for (let k = 0; k < 40; k++) {
+      const a = (i / clases.length) * 6.283 + (az() - 0.5) * 0.9;
+      const d = 4.4 + az() * 4.6;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      let choca = false;
+      for (const s of S) { const R = s.r + ESQ[cl].radio; if (dist2(x, z, s.x, s.z) < R * R) { choca = true; break; } }
+      if (choca) continue;
+      out.push({ cl, x, z, zona: 0 }); break;
+    }
+  }
+  return out;
+}
 const MENU_X = 0.64;              // a qué fracción de media pantalla cae el héroe
 let MENU_LISTO = false, MENU_T = 0;
 function menuMundo() {
@@ -156,7 +183,13 @@ function menuMundo() {
   armaSuelo();
   armaVegetacion(MUNDO);
   jugArranca();
-  esqArranca(siembraEsq(MENU_SEM, MUNDO.solidos));
+  /* EL MENÚ NO USA UNA OLEADA, y no es pereza: una oleada nace a diecinueve
+     metros como mínimo —que es lo que la hace justa— y a diecinueve metros de
+     una cámara que orbita a seis, un esqueleto son cuatro píxeles. Acá hacen
+     falta cerca y en arco, que es otro problema; lo que sí comparten es el
+     alta, así que nacen con su máscara de piezas y su tinte igual que en
+     partida. Y NO SE MUEVEN NI PEGAN: `menuPaso` sólo les corre la pose.  */
+  esqArranca(menuEsqs());
   ZONA_ACT = 0; ZONA_VIS = 0;
   JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
 }

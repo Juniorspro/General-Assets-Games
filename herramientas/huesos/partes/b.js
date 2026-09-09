@@ -15,15 +15,45 @@ const CELDA = 6;                  // paso de la reja de siembra
    CADA cuadro: tocar `solLuz.intensity` a mano no sirve de nada, se pisa al
    cuadro siguiente. Los valores salieron de barrer y medir el búfer: con 1,05
    y 0,42 las tres franjas de abajo daban 32 contra un cielo de 58 —o sea el
-   suelo casi negro contra el cielo— y con 1,80 y 0,55 dan 41 contra 59. */
+   suelo casi negro contra el cielo— y con 1,80 y 0,55 dan 41 contra 59.
+   Y `olas` es CUÁNTOS ESQUELETOS TRAE CADA OLEADA de esa zona, y de ahí sale
+   todo lo demás: cuántas oleadas hay, el cupo total, el contador del HUD y la
+   auditoría. Con el total escrito aparte, el día que se agregue una oleada el
+   HUD cuenta una cosa y el mundo trae otra — y eso no falla, miente.      */
 const ZONAS = [
   { id: 'bosque',  r: 40,  suelo: 's_bosque',  niebla: 0x2c3630, nieblaD: 0.0135,
-    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, mata: 5, densi: 1.00 },
+    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, olas: [3, 4], densi: 1.00 },
   { id: 'ruinas',  r: 76,  suelo: 's_piedra',  niebla: 0x33333a, nieblaD: 0.0165,
-    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, mata: 7, densi: 0.62 },
+    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, olas: [4, 5], densi: 0.62 },
   { id: 'ceniza',  r: 999, suelo: 's_ceniza',  niebla: 0x2a2724, nieblaD: 0.0210,
-    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, mata: 9, densi: 0.34 },
+    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, olas: [5, 6, 'rey'], densi: 0.34 },
 ];
+/* ── LAS OLEADAS ───────────────────────────────────────────────────────────
+   Una oleada cae, se la limpia, hay un respiro y viene la siguiente. Lo que
+   eso compra sobre «matá a los diez que hay sembrados» son tres cosas: el
+   mundo no arranca con treinta y nueve bichos plantados esperando —o sea que
+   no se los puede sacar de a uno hasta el claro y pelearlos en fila—, hay un
+   momento de calma donde se recupera, y la dificultad sube EN ESCALONES que
+   el jugador puede contar en vez de subir sola con la distancia.           */
+const OLA_RESPIRO = 3.4;          // segundos entre una oleada y la siguiente
+const OLA_RESPIRO_Z = 5.0;        // el respiro más largo al abrir una zona
+/* `let` Y NO `const`, y no es descuido: el auto-jugador barre estos dos en el
+   MISMO BINARIO (`__H.olas`). Un barrido contra otro commit compara dos
+   programas distintos y no dice nada de éste.                              */
+let OLA_CURA = 0.28;              // fracción de vida que devuelve limpiar una
+let OLA_XP = 0.45;                // y fracción del nivel que paga limpiarla
+const OLA_R0 = 19;                // no cae nada más cerca que esto del jugador
+const OLA_R1 = 40;                // ni más lejos: una oleada tiene que LLEGAR
+/* ── Y NUNCA MÁS ALLÁ DEL RADIO EN QUE EL JUEGO LOS PIENSA ────────────────
+   `esqCerca` sólo pasa por el bucle a los que están a `CAL.vista + 10`: uno
+   nacido más lejos NO SE MUEVE, NO SE MUERE Y NO CUENTA COMO ENEMIGO QUE SE
+   ACERCA, y como la oleada no termina hasta que no queda ninguno vivo, la
+   partida se queda esperando a algo que está congelado. Se ve como que el
+   juego se colgó. El número sale de la calidad MÁS BAJA —62 + 10— porque la
+   promesa tiene que valer en las tres.                                     */
+const OLA_R_FRIO = 66;
+const olaTotal = () => ZONAS.reduce((a, Z) => a + Z.olas.length, 0);
+let OLA_TOTAL = olaTotal();
 
 /* ── EL JUGADOR ────────────────────────────────────────────────────────────
    La velocidad y la zancada NO son dos números sueltos: la cadencia del paso
@@ -122,7 +152,7 @@ const TXT = {
     jugar: 'JUGAR', seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAJA', cmedia: 'MEDIA', calta: 'ALTA',
-    pie: 'Tres zonas. Matá a todos los esqueletos de una para que se abra la siguiente. El rey te espera en la ceniza.',
+    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.',
     piePausa: 'El mundo se queda quieto mientras esto esté abierto.',
     zbosque: 'EL BOSQUE', zruinas: 'LAS RUINAS', zceniza: 'EL CAMPO DE CENIZA',
     zbosqueS: 'donde los enterraron', zruinasS: 'lo que quedó de la abadía',
@@ -134,6 +164,16 @@ const TXT = {
     perdiste: 'TE CAÍSTE', perdisteS: 'los huesos siguen ahí',
     datos: 'Esqueletos {0} · Nivel {1} · {2}',
     teclas: 'WASD mover · SHIFT correr · CLIC atacar\nESPACIO esquivar · MOUSE cámara · ESC pausa',
+    ola: 'OLEADA',
+    olaViene: 'OLEADA {0} DE {1}',
+    olaCae: 'LA OLEADA CAYÓ',
+    olaUlt: 'LA ÚLTIMA',
+    olaRey: 'EL REY SE LEVANTA',
+    rec: 'RÉCORD',
+    recNada: 'todavía no llegaste a ninguna',
+    recLinea: 'Récord · {0} · {1} bajas',
+    total: '{0} oleadas · 3 zonas',
+    datos2: 'Oleadas {0}/{1} · Esqueletos {2} · Nivel {3} · {4}',
     d0: 'Los enterraron acá arriba y algo los volvió a parar.',
     d1: 'El camino sigue. Las piedras de la abadía están más adelante.',
     d2: 'Acá se acaba el bosque. Lo que hay adelante ya no es tierra.',
@@ -144,7 +184,7 @@ const TXT = {
     jugar: 'PLAY', seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
     calidad: 'GRAPHICS', idioma: 'LANGUAGE',
     cbaja: 'LOW', cmedia: 'MEDIUM', calta: 'HIGH',
-    pie: 'Three zones. Clear one of skeletons and the next opens. The king waits in the ash.',
+    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.',
     piePausa: 'The world stands still while this is open.',
     zbosque: 'THE WOOD', zruinas: 'THE RUINS', zceniza: 'THE ASH FIELD',
     zbosqueS: 'where they were buried', zruinasS: 'what is left of the abbey',
@@ -156,6 +196,16 @@ const TXT = {
     perdiste: 'YOU FELL', perdisteS: 'the bones are still there',
     datos: 'Skeletons {0} · Level {1} · {2}',
     teclas: 'WASD move · SHIFT run · CLICK attack\nSPACE dodge · MOUSE camera · ESC pause',
+    ola: 'WAVE',
+    olaViene: 'WAVE {0} OF {1}',
+    olaCae: 'THE WAVE IS DOWN',
+    olaUlt: 'THE LAST ONE',
+    olaRey: 'THE KING RISES',
+    rec: 'BEST',
+    recNada: 'you have not reached one yet',
+    recLinea: 'Best · {0} · {1} kills',
+    total: '{0} waves · 3 zones',
+    datos2: 'Waves {0}/{1} · Skeletons {2} · Level {3} · {4}',
     d0: 'They were buried up here, and something stood them back up.',
     d1: 'The path goes on. The abbey stones are further ahead.',
     d2: 'The wood ends here. What lies ahead is not soil any more.',
@@ -166,7 +216,7 @@ const TXT = {
     jugar: 'JOGAR', seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAIXA', cmedia: 'MÉDIA', calta: 'ALTA',
-    pie: 'Três zonas. Limpe uma de esqueletos e a próxima se abre. O rei espera na cinza.',
+    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.',
     piePausa: 'O mundo fica parado enquanto isto estiver aberto.',
     zbosque: 'A MATA', zruinas: 'AS RUÍNAS', zceniza: 'O CAMPO DE CINZA',
     zbosqueS: 'onde os enterraram', zruinasS: 'o que sobrou da abadia',
@@ -178,6 +228,16 @@ const TXT = {
     perdiste: 'VOCÊ CAIU', perdisteS: 'os ossos continuam lá',
     datos: 'Esqueletos {0} · Nível {1} · {2}',
     teclas: 'WASD mover · SHIFT correr · CLIQUE atacar\nESPAÇO esquivar · MOUSE câmera · ESC pausa',
+    ola: 'ONDA',
+    olaViene: 'ONDA {0} DE {1}',
+    olaCae: 'A ONDA CAIU',
+    olaUlt: 'A ÚLTIMA',
+    olaRey: 'O REI SE LEVANTA',
+    rec: 'RECORDE',
+    recNada: 'você ainda não chegou a nenhuma',
+    recLinea: 'Recorde · {0} · {1} baixas',
+    total: '{0} ondas · 3 zonas',
+    datos2: 'Ondas {0}/{1} · Esqueletos {2} · Nível {3} · {4}',
     d0: 'Enterraram-nos aqui em cima, e algo os pôs de pé de novo.',
     d1: 'O caminho segue. As pedras da abadia estão mais à frente.',
     d2: 'A mata acaba aqui. O que vem depois já não é terra.',

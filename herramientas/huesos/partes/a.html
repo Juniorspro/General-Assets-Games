@@ -25,6 +25,11 @@ body.jugando #hud{opacity:1}
 
 .barra{position:absolute;height:14px;border:2px solid #0b0d10;border-radius:2px;
   background:#14181d;box-shadow:0 0 0 1px #3a4048 inset}
+/* LA BARRA SE MUEVE CON `transform` Y NO CON `width`: la transición estaba
+   declarada sobre transform y el JS escribía width, así que no corría nunca
+   —una barra que salta de golpe no deja ver cuánto te sacó el hachazo— y
+   encima cada escritura de width es un layout. `scaleX` lo resuelve el
+   compositor y la transición sí se aplica. */
 .barra i{display:block;height:100%;width:100%;transform-origin:0 50%;transition:transform .12s linear}
 #bVida{left:14px;top:14px;width:176px}
 #bVida i{background:linear-gradient(180deg,#c8443a,#7e2119)}
@@ -33,22 +38,27 @@ body.jugando #hud{opacity:1}
 #bXp{left:14px;top:49px;width:132px;height:5px}
 #bXp i{background:linear-gradient(180deg,#79c2d8,#2c6a80)}
 
-#nivel{position:absolute;left:152px;top:44px;font:700 12px/1 monospace;color:#9fd0e0;
+#nivel{position:absolute;left:14px;top:62px;font:700 12px/1 monospace;color:#9fd0e0;
   text-shadow:0 2px 0 #06080a}
 #zona{position:absolute;left:50%;top:14px;transform:translateX(-50%);font:700 13px/1.2 monospace;
   letter-spacing:.16em;color:#cfc7b6;text-shadow:0 2px 0 #06080a;text-align:center}
 #zonaSub{display:block;font:500 10px/1.4 monospace;letter-spacing:.08em;color:#8e8779;margin-top:3px}
-#restan{position:absolute;right:14px;top:14px;font:700 12px/1.3 monospace;color:#cfc7b6;
-  text-align:right;text-shadow:0 2px 0 #06080a}
-#restan b{color:#e0b0a8}
+#restan{position:absolute;right:14px;top:14px;font:600 10px/1.5 monospace;color:#8e8779;
+  text-align:right;text-shadow:0 2px 0 #06080a;letter-spacing:.08em}
+#restan b{display:block;font:700 13px/1.25 monospace;color:#e0b0a8;letter-spacing:.06em}
 
 /* el cartel que cuenta la historia, con la misma caja del juego de referencia */
-#dialogo{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:70%;
+/* ── EL DIÁLOGO NO LLEGA HASTA LOS BOTONES ────────────────────────────────
+   Con el 70% del ancho la caja se metía por debajo del de esquivar —medido,
+   dos choques— y con `bottom:96` quedaba pisada por el cartel de oleada en un
+   teléfono corto. Sube contra el ALTO DEL MARCO y no contra `vh`, que acá es
+   el lado largo porque el cuadro va girado. */
+#dialogo{position:absolute;left:50%;bottom:calc(var(--mh,412px)*.36);transform:translateX(-50%);max-width:56%;
   padding:9px 13px;background:rgba(10,13,16,.86);border:2px solid #39414b;
   font:500 12px/1.5 monospace;color:#ded7c8;opacity:0;transition:opacity .3s;text-align:center}
 #dialogo.on{opacity:1}
 
-#aviso{position:absolute;left:50%;top:58%;transform:translateX(-50%);padding:7px 14px;
+#aviso{position:absolute;left:50%;top:36%;transform:translateX(-50%);padding:7px 14px;
   background:rgba(10,13,16,.9);border:2px solid #4a525c;font:700 12px/1 monospace;
   letter-spacing:.1em;color:#e8dfc8;opacity:0;transition:opacity .2s;white-space:nowrap}
 #aviso.on{opacity:1}
@@ -60,19 +70,54 @@ body.jugando #hud{opacity:1}
 /* ── CONTROLES TÁCTILES ───────────────────────────────────────────────── */
 #tac{position:absolute;inset:0;pointer-events:none;display:none}
 body.movil.jugando #tac{display:block}
-#joy{position:absolute;left:22px;bottom:22px;width:118px;height:118px;border-radius:50%;
-  border:2px solid rgba(210,200,180,.30);background:rgba(12,15,19,.34);pointer-events:auto}
-#joyP{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;
+/* ── EL JOYSTICK NO RECIBE EL DEDO, Y ES UN DEFECTO QUE COSTABA UN GESTO ───
+   El dedo lo lee el LIENZO —el joystick nace donde uno apoya— y este div es
+   sólo el dibujo. Con `pointer-events:auto` se comía el toque: al soltar, el
+   aro se queda donde estuvo el pulgar, así que volver a apoyar EN EL MISMO
+   SITIO —o sea lo que uno hace— caía sobre el div y el lienzo no se enteraba.
+   El joystick no arrancaba y desde afuera eso es que el juego se trabó.
+   Y VA CENTRADO EN EL DEDO: el JS escribe `left`/`top`, o sea la ESQUINA, así
+   que el aro salía abajo y a la derecha del pulgar. Con la traslación del 50%
+   el centro cae donde está el dedo, que es lo que el jugador espera.
+   Arranca invisible: con opacidad 1 hay un aro fantasma en el rincón hasta
+   que alguien lo toca y lo suelta por primera vez.                        */
+#joy{position:absolute;left:0;top:0;width:132px;height:132px;border-radius:50%;
+  transform:translate(-50%,-50%);opacity:0;transition:opacity .12s;pointer-events:none;
+  border:2px solid rgba(210,200,180,.30);background:rgba(12,15,19,.34)}
+#joyP{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
   border-radius:50%;background:rgba(215,205,185,.42);border:2px solid rgba(235,228,210,.6)}
 .bt{position:absolute;border-radius:50%;border:2px solid rgba(210,200,180,.34);
   background:rgba(12,15,19,.40);pointer-events:auto;display:grid;place-items:center;
-  font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0}
-.bt:active,.bt.on{background:rgba(150,120,70,.5)}
-#bAtaca{right:22px;bottom:26px;width:96px;height:96px;font-size:13px}
-#bEsq{right:126px;bottom:34px;width:66px;height:66px}
-#bCam{right:22px;top:22px;width:52px;height:52px;font-size:10px}
-#bPausa{left:14px;bottom:150px;width:42px;height:42px;font-size:15px;pointer-events:auto}
-body.jugando #bPausa{display:grid}
+  font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0;
+  transition:background .08s,opacity .12s,border-color .12s}
+.bt:active,.bt.on{background:rgba(150,120,70,.5);border-color:rgba(235,215,160,.7)}
+/* ── UN BOTÓN QUE NO PUEDE HACER LO QUE DICE SE APAGA ──────────────────────
+   Sin aguante, tocar ATACAR no hacía absolutamente nada y no había forma de
+   saber si el botón no respondió o si al personaje no le daba: las dos cosas
+   se ven igual, y la primera se lee a juego roto. Apagado se lee a la regla
+   que es. `.esp` es el esquive en su espera; el aro de adentro cuenta.    */
+.bt.no{opacity:.30}
+#bEsq .esp{position:absolute;inset:5px;border-radius:50%;border:2px solid rgba(230,200,130,.75);pointer-events:none;
+  clip-path:inset(0 0 0 0);opacity:0}
+#bEsq.espera .esp{opacity:1}
+#bAtaca{right:24px;bottom:28px;width:104px;height:104px;font-size:15px}
+#bEsq{right:134px;bottom:38px;width:74px;height:74px;font-size:16px}
+#bCam{right:24px;top:88px;width:54px;height:54px;font-size:11px}
+/* EL `display:none` ESTABA EN LÍNEA Y LE GANABA A SU PROPIA REGLA. Un estilo
+   en línea gana contra cualquier selector, así que `body.jugando #bPausa` no
+   podía encenderlo nunca y el botón de pausa no existía en el teléfono — el
+   mismo defecto que en AERO tenía el atajo de `background`. Va en el CSS. */
+#bPausa{display:none;left:16px;top:16px;width:46px;height:46px;font-size:17px;pointer-events:auto}
+/* ── LAS BARRAS SE CORREN PORQUE AHÍ HAY UN BOTÓN ─────────────────────────
+   El de pausa vive en la esquina de arriba a la izquierda, que es donde vive
+   en cualquier juego, y las tres barras arrancaban en la misma esquina: la
+   caja del botón les caía encima —medido con `cajas()`, tres choques—. Se
+   corren SÓLO en teléfono, que es donde el botón existe. */
+/* CON `.barra` NO ALCANZA: `#bVida` es un ID y le gana a dos clases, así que
+   la regla no movía nada. Van por ID, que es la misma trampa de siempre. */
+body.movil #bVida, body.movil #bAgu, body.movil #bXp{left:72px}
+body.movil #nivel{left:72px}
+body.jugando.movil #bPausa{display:grid}
 #teclas{position:absolute;right:14px;bottom:14px;font:500 10px/1.6 monospace;color:#8b8577;
   text-align:right;display:none}
 body.pc.jugando #teclas{display:block}
@@ -82,8 +127,8 @@ body.pc.jugando #teclas{display:block}
   background:linear-gradient(180deg,rgba(6,8,10,.95) 0%,rgba(6,8,10,.42) 40%,rgba(6,8,10,.42) 66%,rgba(6,8,10,.95) 100%)}
 .panel.on{display:grid}
 .caja{width:min(78%,430px);text-align:center;display:flex;flex-direction:column;
-  align-items:center;gap:2.4vh}
-h1{font:800 clamp(26px,7.4vh,44px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
+  align-items:center;gap:calc(var(--mh,412px)*.034)}
+h1{font:800 clamp(24px,calc(var(--mh,412px)*.098),42px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
   text-shadow:0 3px 0 #1a1206,0 0 26px rgba(190,150,80,.28)}
 /* EL TÍTULO DEL FINAL VA EN SU PROPIO NODO. Estaba como `<h1 id=fTit>` con
    el subtítulo de hijo, y `textContent` sobre el padre BORRA a los hijos: la
@@ -91,8 +136,8 @@ h1{font:800 clamp(26px,7.4vh,44px)/1 monospace;letter-spacing:.30em;color:#ded3b
    que la pantalla de final nunca mostró ni el subtítulo ni las bajas — y la
    excepción se comía el resto del cuadro mientras el panel estaba puesto. */
 h1 b{display:block;font-weight:800}
-h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:.22em;
-  color:#8d8574;margin-top:1.1vh;text-shadow:none}
+h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 monospace;letter-spacing:.22em;
+  color:#8d8574;margin-top:calc(var(--mh,412px)*.018);text-shadow:none}
 .b{padding:11px 26px;min-width:190px;border:2px solid #6a5c3c;background:rgba(30,26,18,.82);
   font:700 13px/1 monospace;letter-spacing:.16em;color:#e6dcc2;cursor:pointer}
 .b:active{background:rgba(96,78,42,.9)}
@@ -105,6 +150,10 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
 .fila.tres{width:100%;flex-wrap:nowrap}
 .ch.sel{border-color:#b79a56;color:#f0e6cc;background:rgba(74,60,30,.85)}
 .pie{font:500 10px/1.7 monospace;color:#857e6e;max-width:340px}
+/* el récord y el total van en su propia línea y en el color del oro del
+   título: es lo único del menú que cambia entre una partida y la siguiente */
+.pie.rec{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
+  font:600 10px/1.6 monospace;letter-spacing:.09em;color:#a8975f}
 .tit2{font:700 12px/1 monospace;letter-spacing:.18em;color:#9d947f}
 .gr{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
 </style></head><body>
@@ -126,10 +175,10 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
   <div id="tac">
     <div id="joy"><div id="joyP"></div></div>
     <div class="bt" id="bAtaca">✦</div>
-    <div class="bt" id="bEsq">↷</div>
+    <div class="bt" id="bEsq">↷<i class="esp"></i></div>
     <div class="bt" id="bCam">◎</div>
   </div>
-  <div class="bt" id="bPausa" style="display:none">≡</div>
+  <div class="bt" id="bPausa">≡</div>
   <div id="teclas"></div>
 
   <div class="panel on" id="pIdioma"><div class="caja">
@@ -144,6 +193,7 @@ h1 span{display:block;font:600 clamp(8px,2vh,11px)/1.6 monospace;letter-spacing:
     <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
     <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
     <div class="pie" id="mPie"></div>
+    <div class="pie rec"><span id="mTot"></span><span id="mRec"></span></div>
   </div></div>
 
   <div class="panel" id="pPausa"><div class="caja">

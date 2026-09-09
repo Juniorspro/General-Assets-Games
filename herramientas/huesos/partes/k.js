@@ -7,6 +7,12 @@
 
 let ZONA_ACT = 0, PART = 'menu', FIN_T = 0, GANO = false;
 let SANGRE = 0, SACUDE = 0, AVISO = '', AVISO_T = 0;
+/* ── EL ESTADO DE LAS OLEADAS ──────────────────────────────────────────────
+   `i` es cuál oleada de la zona actual está en pie y `espera` el respiro que
+   falta para la siguiente. `hechas` cuenta las limpiadas en toda la partida y
+   es lo único que sirve para el récord: «llegué a la zona 2» no distingue
+   entrar a la ceniza de terminarla.                                        */
+const OLA = { i: 0, espera: 0, hechas: 0, suelta: 0 };
 
 /* ¿este esqueleto entra en el arco del golpe? */
 function enArco(e, x, z, rumbo, alc, arco) {
@@ -55,7 +61,7 @@ function jugRecibe(dano, dx, dz, empuje, cl) {
   son('dano');
   if (JUG.vida <= 0) {
     JUG.vida = 0; JUG.muerto = true; JUG.muerteT = 0; JUG.golpe = -1; JUG.esqT = 0;
-    son('muere'); PART = 'fin'; GANO = false; FIN_T = 0;
+    son('muere'); PART = 'fin'; GANO = false; FIN_T = 0; guardaRecord();
   }
 }
 
@@ -75,26 +81,100 @@ function jugGanaXp(n) {
 
 function avisa(txt, seg) { AVISO = txt; AVISO_T = seg || 2.6; }
 
-/* ── LAS ZONAS ─────────────────────────────────────────────────────────────
-   Una zona se abre cuando la anterior quedó limpia. Es lo único que
-   convierte "matar esqueletos" en una partida con principio y final.      */
+/* ── LAS OLEADAS Y LAS ZONAS ───────────────────────────────────────────────
+   Una oleada cae, hay un respiro, y viene la siguiente. Limpiada la última de
+   una zona se abre la que sigue. Es lo único que convierte "matar esqueletos"
+   en una partida con principio y final, y ahora además con escalones.
+
+   TODO PASA POR ACÁ Y POR NADA MÁS: el respiro, la cura, el aviso, el sonido,
+   el récord y el final. Con la cuenta repartida —una oleada soltada desde el
+   arranque y otra desde el bucle— la primera nace sin respiro y sin aviso, y
+   eso no falla: se ve como que la oleada 1 no existió.                     */
+function olaSuelta() {
+  const Z = ZONAS[ZONA_ACT];
+  const L = oleadaEn(ZONA_ACT, OLA.i, SEM, MUNDO ? MUNDO.solidos : [], JUG.x, JUG.z);
+  for (const s of L) esqAlta(s);
+  OLA.suelta = L.length;
+  const rey = Z.olas[OLA.i] === 'rey';
+  avisa(rey ? T('olaRey')
+            : T('olaViene', OLA.i + 1, Z.olas.length) + (OLA.i === Z.olas.length - 1 ? ' · ' + T('olaUlt') : ''),
+        rey ? 3.6 : 2.4);
+  son(rey ? 'zona' : 'ola');
+  return L.length;
+}
+
 function zonasPaso(dt) {
-  const quedan = esqVivos(ZONA_ACT);
-  if (quedan === 0 && ZONA_ACT < ZONAS.length - 1) {
-    ZONA_ACT++;
+  /* EL RESPIRO ES DEL RELOJ DE LA SIMULACIÓN y no de un `setTimeout`: con un
+     temporizador de pared, un teléfono a 30 cuadros y una notebook a 144
+     esperan lo mismo pero la pelea de al lado corre distinto, y el respiro
+     deja de durar lo que dura el resto del juego. */
+  if (OLA.espera > 0) {
+    OLA.espera -= dt;
+    if (OLA.espera <= 0) olaSuelta();
+    return;
+  }
+  if (PART !== 'juego') return;
+  if (esqVivos(ZONA_ACT) > 0) return;
+
+  OLA.hechas++;
+  const Z = ZONAS[ZONA_ACT];
+  if (OLA.i < Z.olas.length - 1) {
+    /* ── LIMPIAR UNA OLEADA CURA UN POCO ───────────────────────────────────
+       No entera: eso es lo que paga cerrar una ZONA. Un pedazo, que es lo que
+       convierte el respiro en un respiro y no en una cuenta regresiva — sin
+       nada de cura, la oleada 3 se pelea con lo que sobró de la 2 y la
+       escalera se vuelve un embudo, que es exactamente lo que ya costó una
+       vuelta con las tres zonas.                                           */
+    JUG.vida = Math.min(JUG.vidaMax, JUG.vida + JUG.vidaMax * OLA_CURA);
+    /* ── Y PAGA XP, QUE ES LA OTRA MITAD ───────────────────────────────────
+       Las oleadas escalan; el jugador tiene que escalar con ellas. Con la xp
+       saliendo sólo de las bajas, limpiar las tres primeras del bosque no
+       alcanza para subir de nivel y la oleada 2 se pelea con la misma vida y
+       el mismo daño que la 1 — medido, el auto-jugador moría ahí en dos de
+       ocho semillas, a nivel 1, comiéndose once golpes de peón. Es una
+       FRACCIÓN de lo que falta para el nivel y no un número de puntos: así
+       vale lo mismo en la primera oleada que en la última, donde un nivel
+       cuesta cinco veces más.                                              */
+    jugGanaXp(Math.round(JUG.xpSig * OLA_XP));
+    OLA.i++; OLA.espera = OLA_RESPIRO;
+    avisa(T('olaCae'), 1.8);
+    son('nivel');
+  } else if (ZONA_ACT < ZONAS.length - 1) {
     /* ── LIMPIAR UNA ZONA ES EL PUNTO DE CONTROL ───────────────────────────
        Antes abrir la siguiente era PURO COSTO: te la ganabas con la vida por
        la mitad y entrabas a pelear contra cosas del doble de vida. Medido con
        el bot en tres semillas: doce bajas, nivel 2, muerto en la ceniza, las
        tres veces — el juego no se podía terminar. Curar entero y regalar un
        nivel es lo que convierte la puerta en un respiro y no en un embudo. */
+    ZONA_ACT++; OLA.i = 0; OLA.espera = OLA_RESPIRO_Z;
     JUG.vida = JUG.vidaMax;
     jugGanaXp(JUG.xpSig - JUG.xp);
     avisa(T('abre') + ' · ' + T('z' + ZONAS[ZONA_ACT].id), 3.4);
     son('zona');
-  } else if (quedan === 0 && ZONA_ACT === ZONAS.length - 1 && PART === 'juego') {
-    PART = 'fin'; GANO = true; FIN_T = 0; son('gana');
+  } else {
+    PART = 'fin'; GANO = true; FIN_T = 0; son('gana'); guardaRecord();
   }
+}
+
+/* ── EL RÉCORD ─────────────────────────────────────────────────────────────
+   Lo que se guarda son OLEADAS LIMPIADAS y no la zona: «llegué a la ceniza»
+   no distingue entrar de terminarla, y con tres zonas el récord tendría tres
+   valores posibles. Con siete oleadas hay siete escalones que contar, que es
+   lo que hace que volver a jugar tenga un número al que ganarle.
+   Y se guarda TAMBIÉN al morir, que es de donde va a salir casi siempre: un
+   récord que sólo se anota ganando no es un récord, es el final.          */
+let RECORD = { olas: 0, bajas: 0 };
+function leeRecord() {
+  try {
+    const r = JSON.parse(localStorage.getItem('huesos_rec') || 'null');
+    if (r && typeof r.olas === 'number') RECORD = { olas: r.olas | 0, bajas: r.bajas | 0 };
+  } catch (e) {}
+}
+function guardaRecord() {
+  if (OLA.hechas < RECORD.olas) return;
+  if (OLA.hechas === RECORD.olas && JUG.bajas <= RECORD.bajas) return;
+  RECORD = { olas: OLA.hechas, bajas: JUG.bajas };
+  try { localStorage.setItem('huesos_rec', JSON.stringify(RECORD)); } catch (e) {}
 }
 
 /* la niebla, el cielo y la luz salen de la zona EN LA QUE ESTÁ EL JUGADOR y
