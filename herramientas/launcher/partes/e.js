@@ -635,9 +635,15 @@ let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GE
 /* el aviso tiene que decir QUÉ midió: subir y bajar no son el mismo viaje y no
    cuestan lo mismo, así que un solo número sin dirección no se puede usar para
    decidir nada. */
-let MED_SUBE = true;
-function medArranca(sube){
-  MED_SUBE = !!sube;
+/* y es una CLAVE y no un booleano porque ya hay tres viajes que medir: subir,
+   bajar y scrollear la lista — que es lo que uno hace «estando ahí». */
+let MED_QUE = 'pMedeSube', MED_SC = 0;
+function medArranca(que){
+  MED_QUE = que;
+  /* el corte del scroll es un temporizador de 240 ms: sin limpiarlo, cerrar el
+     cajón mientras se scrollea deja ese corte pendiente y termina la medición
+     del CIERRE a mitad de camino, con el rótulo de la otra. */
+  clearTimeout(MED_SC);
   if (!MED_ON) return;
   /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
      `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
@@ -665,7 +671,7 @@ function medTermina(){
   const o = d.slice().sort((a, b) => a - b);
   const med = o[o.length >> 1];
   const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
-  avisa(T('pMedeUno', T(MED_SUBE ? 'pMedeSube' : 'pMedeBaja'),
+  avisa(T('pMedeUno', T(MED_QUE),
           d.length, med.toFixed(1), p90.toFixed(1), perdidos));
 }
 
@@ -676,7 +682,7 @@ let CAJ_VUELVE_MS = 190;   /* `let` porque el A/B vive en el mismo binario: ver
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
-  medArranca(CAJON);
+  medArranca(CAJON ? 'pMedeSube' : 'pMedeBaja');
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
@@ -1082,9 +1088,27 @@ function enganchaCajon(){
   l.addEventListener('touchend', lfin);
   l.addEventListener('touchcancel', lfin);
 
+  /* ── Y EL SCROLL TAMBIÉN SE MIDE, PORQUE ES LO QUE UNO HACE «ESTANDO AHÍ» ──
+     El medidor de la vuelta 133 mide el DESLIZAMIENTO, o sea abrir y cerrar. El
+     reporte de la 136 no es de un viaje: es del estado. Y un estado no se mide
+     solo —si nada se mueve no hay cuadros que contar— así que lo que se mide es
+     el único momento en que el cajón abierto tiene que dibujar de verdad.
+     Se termina 240 ms después del último evento: menos que eso corta un
+     scroll con inercia al primer respiro del dedo. */
+  const medScroll = () => {
+    /* sólo con la hoja ASENTADA: `verCajon(true)` hace `scrollTop = 0`, o sea
+       que abrir dispara un `scroll` y sin esta guarda cortaría la medición de
+       la subida a los 240 ms y la informaría como si hubiera terminado. */
+    if (!MED_ON || !document.body.classList.contains('cajQ')) return;
+    if (!MED_CORRE) medArranca('pMedeScroll');
+    clearTimeout(MED_SC);
+    MED_SC = setTimeout(medTermina, 240);
+  };
+
   /* la letra que se está mirando, mientras se baja por la lista */
   let pend = false;
   l.addEventListener('scroll', () => {
+    medScroll();
     if (pend || !LETRAS.length) return;
     pend = true;
     /* una vez por cuadro y no una por evento: `scroll` dispara docenas de veces

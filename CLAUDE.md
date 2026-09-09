@@ -281,6 +281,131 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima trigésima sexta vuelta (2026-09-09): **AERO** — cincuenta megas de textura sostenida para tapar con una hoja opaca
+
+Reporte, con dos capturas del cajón abierto: *"estando ahí se laguea un montón"*.
+
+#### «ESTANDO AHÍ» NO ES UN VIAJE, ES UN ESTADO — Y ESO CAMBIA EL SOSPECHOSO
+
+Las vueltas 130 a 135 midieron **abrir** y **cerrar**: pasadas de filtro, animaciones de entrada,
+repintados, el escalón del final. Todo eso es trabajo **por cuadro**, y las cinco sondas de este
+launcher miden milisegundos. Este reporte es de otra cosa: el cajón **quieto**. Y quieto no hay
+cuadros que contar — si nada se mueve, no hay nada que medir en tiempo.
+
+Lo primero fue comprobar que lo de las vueltas anteriores sigue en pie, y sigue: con el cajón
+asentado, `vidrios()` devuelve **0 pasadas y 0 píxeles**. No queda un solo `backdrop-filter` vivo.
+Y el scroll de la lista cuesta **0,067 ms por cuadro** con 150 apps, o sea lo mismo que la vuelta
+129. Por ahí no era.
+
+#### LO QUE SÍ SE PAGA ESTANDO QUIETO NO SON MILISEGUNDOS: ES MEMORIA DE VIDEO
+
+Entró `capas()`, que no mide tiempo: enumera lo que el compositor tiene que **sostener** —todo lo
+que lleva `will-change` más cada `<canvas>` visible— y lo pasa a megas suponiendo densidad 3 y
+cuatro bytes por píxel, que es lo que cuesta una textura en un teléfono. Con el cajón abierto y
+quieto:
+
+| | píxeles | qué |
+|---|---|---|
+| `#fondo.ok.hondo` | **478.879** | `will-change:transform` — y su deriva está **PAUSADA** con el cajón puesto |
+| `#cajon.hor.on` | 367.504 | `will-change:transform` (vuelta 132) |
+| `#agua` | **367.504** | un `<canvas>` visible a pantalla completa |
+| `#tira` | **229.948** | `will-change:transform` — la tira de páginas del escritorio |
+| `#mLien` · `#carp` | 25.921 | la mascota y la hoja de carpeta |
+
+**1.469.756 píxeles, o sea 50,5 MB**, y **37 de esos son de cosas que la hoja opaca tapa por
+completo**: la foto, el lienzo del agua y la tira de páginas — a la que ni siquiera se le puede
+cambiar de página sin cerrar el cajón antes.
+
+**`will-change` NO ES UNA SUGERENCIA: LE PIDE AL COMPOSITOR QUE RESERVE UNA SUPERFICIE.** Ésa es la
+diferencia con `#capa`, que la vuelta 134 dejó compuesto a propósito: `#capa` no lleva `will-change`,
+así que el compositor **puede desalojar su textura** si le hace falta y volver a rasterizarla. Las
+tres de arriba no. Y cuando el presupuesto de baldosas se acaba, lo que se desaloja y se vuelve a
+rasterizar es todo lo demás — que es exactamente la hipótesis que la vuelta 135 dejó anotada como
+«no se pudo comprobar desde acá».
+
+**EL `will-change` VUELVE EN EL PRIMER CUADRO DEL CIERRE y el LIENZO VUELVE TARDE**, y las dos cosas
+tienen su razón. `cajQ` sale en `verCajon`, y en ese mismo cuadro arranca la transición del `scale`
+de `#fondo`: la promoción se pide igual, así que devolverla ahí no agrega ningún escalón. El agua,
+en cambio, no puede existir durante el deslizamiento —`AGUA_TAPAN` lo prohíbe desde la vuelta 124—
+así que reservar trece megas en el cuadro en que la hoja arranca sería el escalón que las tres
+vueltas anteriores estuvieron sacando: se devuelve con `cajMueve`, que es el mismo trato de la 135.
+
+Medido con el A/B **en el mismo binario** (`__A.cajCapas(true)` devuelve las capas viejas):
+
+| con el cajón abierto y quieto | capas | píxeles | MB a densidad 3 |
+|---|---|---|---|
+| control | 6 | 1.469.756 | **50,5** |
+| **ahora** | **3** | **393.425** | **13,5** |
+
+**−73 %.** Y **no cuesta un solo píxel**: la misma captura con el control y con esto da **0 píxeles
+de diferencia sobre 367.504**, media 0,0 y máximo 0.
+
+Al cerrar, medido paso a paso: a los **130 ms** `#fondo` y `#tira` ya volvieron y el agua sigue
+afuera (35,8 MB); a los **880 ms** vuelve el agua (35,6). Y el agua **funciona**: tocando el
+escritorio después de cerrar, una onda.
+
+#### `content-visibility:auto` SE PROBÓ Y MIDIÓ PEOR
+
+La lista mide **4.873 px de alto con 150 nodos**, o sea 6,4 pantallas, y saltear el layout y el
+pintado de lo que está fuera de la ventana es literalmente para lo que esa propiedad existe. Medido:
+
+| | alto de la lista | scroll |
+|---|---|---|
+| como está | 4.873 px | **0,067 ms/cuadro** |
+| con `content-visibility` | **5.315 px** | **0,103 ms/cuadro** |
+
+Las dos cosas mal. El alto crece un 9 % —o sea que la barra de scroll promete contenido que no
+existe, porque `contain-intrinsic-size` se aplica **por elemento** y las `.ap` viven en una reja de
+cuatro columnas— y el scroll sale **más caro**, porque cada cuadro el navegador tiene que decidir
+qué saltea y las que entran hacen layout ahí mismo. Se sacó. Es la misma familia que el radio del
+desenfoque de la vuelta 123: un ajuste que suena razonable y mide peor.
+
+#### EL MEDIDOR APRENDE EL TERCER VIAJE
+
+El de la vuelta 133 mide el deslizamiento y el de la 135 le puso dirección. Ninguno de los dos puede
+contestar «estando ahí», porque un estado quieto no produce cuadros. Lo que sí produce cuadros con
+el cajón abierto es **scrollear la lista**, que es lo que uno hace ahí. `MED_SUBE` —un booleano—
+pasa a `MED_QUE`, una clave, y el aviso dice **AL SUBIR · AL BAJAR · SCROLLEANDO**.
+
+**DOS GUARDAS QUE HACEN FALTA Y NO SON OBVIAS:**
+- **Sólo con la hoja ASENTADA.** `verCajon(true)` hace `scrollTop = 0`, así que abrir dispara un
+  `scroll`: sin la guarda de `cajQ`, el corte de 240 ms terminaba la medición de la **subida** a
+  mitad de camino y la informaba con el rótulo de la otra.
+- **Y `medArranca` limpia el corte pendiente.** Cerrar el cajón mientras se scrollea dejaba un
+  `setTimeout` vivo que terminaba la medición del **cierre** a los 240 ms.
+
+Medido en el banco: `SCROLLING · 9 cuadros · mediana 46,1 ms` (el banco dibuja por software, así que
+el número es del banco), el cierre sigue dando `CLOSING` sin que el scroll lo pise, apagado el aviso
+no se actualiza, y el rótulo sigue al idioma.
+
+#### DOS DEFECTOS DE LAS SONDAS, Y LOS DOS ME COSTARON UNA MEDICIÓN CADA UNO
+
+1. **`cajPon(y)` NO ES ABRIR NI CERRAR.** Pone el `--caj-y` del arrastre y **siempre** llama a
+   `verCajon(true)`. Así que `__A.cajPon(false)` **abre** el cajón y le escribe `--caj-y: false px`,
+   que el CSS ignora. Toda mi primera medición del cierre estaba hecha sobre un cajón que nunca se
+   cerró — y no fallaba: contestaba.
+2. **`cajon()` SIN ARGUMENTO ABRÍA EL CAJÓN.** Decía `verCajon(v !== false)`, o sea que preguntar
+   por el estado lo abría: una lectura después de un arrastre devolvía «abierto» porque la propia
+   sonda lo había abierto un milisegundo antes. Es la misma familia que `cajModo(v)` en la vuelta
+   129 y que `verCara(true)` en BARRIO. Arreglado: sin argumento lee.
+
+#### MEDIDO AL CERRAR
+
+Cajón abierto: **3 capas · 13,5 MB · 0 pasadas de vidrio · 0 px**, y **0 píxeles de diferencia**
+contra el control. Los tres caminos de cierre verificados —botón, arrastre corto y arrastre largo—
+los tres dejan `cajon:false`, el `body` limpio, el agua visible y `will-change:transform` de vuelta
+en `#fondo` y `#tira`; el arrastre da `0 / 0` de filtro de punta a punta y `vidFin` **3 / 96.401**.
+El agua vuelve a funcionar después de cerrar. Regresión: riel de **17 letras** con `letra('S')`
+mirando la S, gesto arriba abre el cajón y abajo el centro de control con **0 ondas** en los dos,
+centro **16 · 1 · 10 · 4**, mascota con 23 huesos y 5.541 triángulos, pintada 8,74 ms.
+`window.__errs` **vacío en las siete corridas**.
+
+**LO QUE NO SE PUDO COMPROBAR, Y ES LO MISMO DE SIEMPRE:** el banco no expone el gestor de baldosas,
+así que de los 37 megas está medido que **se dejan de pedir** y no cuánto alivia eso en el teléfono.
+La diferencia con la vuelta anterior es que ahora hay con qué contestarlo: el interruptor de
+Personalizar mide también el scroll, así que un `SCROLLEANDO · mediana ~16,7` cierra la discusión y
+un `mediana 40 con muchos perdidos` dice que sigue faltando.
+
 ### Centésima trigésima quinta vuelta (2026-09-09): **AERO** — el cierre pagaba todo en los últimos 80 ms
 
 Reporte, después de la vuelta anterior: *"la re cajeta sigue laguensod al bajar"*.

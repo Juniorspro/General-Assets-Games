@@ -814,6 +814,37 @@ body.cajQ #capa .vid,body.cajQ #capa .baldosa{
 /* el A/B vive en el mismo binario: sin esto, «mejoró» sería un recuerdo y no
    una medición (ver `__A.cajQModo`) */
 body.cajQvis.cajQ #capa{visibility:hidden}
+/* ══════════ Y CON LA HOJA PUESTA, NADIE SOSTIENE UNA CAPA QUE NO SE VE ══════════
+   `will-change:transform` no es una sugerencia: le pide al compositor que
+   RESERVE una superficie de render. Medido con el cajón abierto y quieto, lo
+   que quedaba reservado:
+
+       #fondo  478.879 px      #tira  229.948 px      #cajon  367.504 px
+
+   A densidad 3 eso son **38,9 MB de textura**, y **25,5 de esos son de cosas
+   que la hoja opaca tapa por completo**: la foto —cuya deriva encima está
+   PAUSADA con el cajón puesto— y la tira de páginas del escritorio, a la que no
+   se le puede cambiar de página sin cerrar el cajón. Más `#agua`, que desde la
+   vuelta 130 vive siempre en el documento y transparente: un lienzo visible de
+   pantalla completa es otra capa, y son 13,2 MB más.
+
+   Nada de esto cuesta milisegundos por cuadro, y por eso ninguna sonda de
+   tiempo lo veía. Cuesta MEMORIA DE VIDEO, y cuando el presupuesto de baldosas
+   se acaba el compositor desaloja y vuelve a rasterizar — que es exactamente la
+   hipótesis que la vuelta 135 dejó anotada como «no se pudo comprobar desde
+   acá». Con la hoja puesta se sueltan las tres.
+
+   EL `will-change` VUELVE EN EL PRIMER CUADRO DEL CIERRE, porque `cajQ` sale
+   ahí (`verCajon`) y en ese mismo cuadro arranca la transición del `scale` de
+   `#fondo`: la promoción se pide igual, así que no hay escalón que agregar.
+   EL LIENZO DEL AGUA VUELVE TARDE, con `cajMueve`, que es el mismo trato de la
+   vuelta 135 — durante el deslizamiento no puede haber agua (`AGUA_TAPAN` ya lo
+   prohíbe) y reservar trece megas en el cuadro en que la hoja arranca sería el
+   escalón que las tres vueltas anteriores estuvieron sacando.
+
+   `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
+body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
+body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
@@ -2339,7 +2370,7 @@ const TXT = {
         pAcento: 'Color de acento', pOscuro: 'Oscurecer el fondo', pIdioma: 'Idioma',
         pMedir: 'Medir el deslizamiento del caj\u00f3n',
         pMedeUno: '{0} \u00b7 {1} cuadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
-        pMedeSube: 'AL SUBIR', pMedeBaja: 'AL BAJAR',
+        pMedeSube: 'AL SUBIR', pMedeBaja: 'AL BAJAR', pMedeScroll: 'SCROLLEANDO',
         aNombreP: 'Personalizar',
         cCarpeta: 'Carpeta', cSacada: 'La saqué de la carpeta',
         fgGenar: 'Generar', fgGenando: 'Generando…', fgGenPh: 'Describí un fondo…', fgGenOk: 'Fondo nuevo', fgNoGen: 'No se pudo generar. Probá de nuevo.', fgSinRed: 'Generar necesita conexión con el sistema', fg_i1: 'acuario con peces y burbujas', fg_i2: 'pasto con rocío al amanecer', fg_i3: 'nubes sobre un cielo celeste', fg_i4: 'isla con una palmera', fg_i5: 'atardecer sobre el mar', fg_i6: 'burbujas de vidrio bajo el agua', fgTit: 'Fondo de pantalla', fgFab: 'De fábrica', fgPropio: 'La tuya',
@@ -2433,7 +2464,7 @@ const TXT = {
         pAcento: 'Accent colour', pOscuro: 'Dim the wallpaper', pIdioma: 'Language',
         pMedir: 'Measure the drawer slide',
         pMedeUno: '{0} \u00b7 {1} frames \u00b7 median {2} ms \u00b7 p90 {3} \u00b7 {4} dropped',
-        pMedeSube: 'OPENING', pMedeBaja: 'CLOSING',
+        pMedeSube: 'OPENING', pMedeBaja: 'CLOSING', pMedeScroll: 'SCROLLING',
         aNombreP: 'Personalize',
         cCarpeta: 'Folder', cSacada: 'Taken out of the folder',
         fgGenar: 'Generate', fgGenando: 'Generating…', fgGenPh: 'Describe a wallpaper…', fgGenOk: 'New wallpaper', fgNoGen: 'Could not generate. Try again.', fgSinRed: 'Generating needs the system bridge', fg_i1: 'aquarium with fish and bubbles', fg_i2: 'dewy grass at sunrise', fg_i3: 'clouds over a bright blue sky', fg_i4: 'island with a palm tree', fg_i5: 'sunset over the sea', fg_i6: 'glass bubbles underwater', fgTit: 'Wallpaper', fgFab: 'Default', fgPropio: 'Yours',
@@ -2527,7 +2558,7 @@ const TXT = {
         pAcento: 'Cor de destaque', pOscuro: 'Escurecer o fundo', pIdioma: 'Idioma',
         pMedir: 'Medir o deslize da gaveta',
         pMedeUno: '{0} \u00b7 {1} quadros \u00b7 mediana {2} ms \u00b7 p90 {3} \u00b7 {4} perdidos',
-        pMedeSube: 'AO ABRIR', pMedeBaja: 'AO FECHAR',
+        pMedeSube: 'AO ABRIR', pMedeBaja: 'AO FECHAR', pMedeScroll: 'ROLANDO',
         aNombreP: 'Personalizar',
         cCarpeta: 'Pasta', cSacada: 'Tirei da pasta',
         fgGenar: 'Gerar', fgGenando: 'Gerando…', fgGenPh: 'Descreva um fundo…', fgGenOk: 'Fundo novo', fgNoGen: 'Não deu para gerar. Tente de novo.', fgSinRed: 'Gerar precisa da ponte com o sistema', fg_i1: 'aquário com peixes e bolhas', fg_i2: 'grama com orvalho ao amanhecer', fg_i3: 'nuvens num céu azul claro', fg_i4: 'ilha com uma palmeira', fg_i5: 'pôr do sol sobre o mar', fg_i6: 'bolhas de vidro debaixo da água', fgTit: 'Papel de parede', fgFab: 'De fábrica', fgPropio: 'Sua',
@@ -5167,9 +5198,15 @@ let MED_ON = lee('medir', 0), MED_T = [], MED_ULT = 0, MED_CORRE = false, MED_GE
 /* el aviso tiene que decir QUÉ midió: subir y bajar no son el mismo viaje y no
    cuestan lo mismo, así que un solo número sin dirección no se puede usar para
    decidir nada. */
-let MED_SUBE = true;
-function medArranca(sube){
-  MED_SUBE = !!sube;
+/* y es una CLAVE y no un booleano porque ya hay tres viajes que medir: subir,
+   bajar y scrollear la lista — que es lo que uno hace «estando ahí». */
+let MED_QUE = 'pMedeSube', MED_SC = 0;
+function medArranca(que){
+  MED_QUE = que;
+  /* el corte del scroll es un temporizador de 240 ms: sin limpiarlo, cerrar el
+     cajón mientras se scrollea deja ese corte pendiente y termina la medición
+     del CIERRE a mitad de camino, con el rótulo de la otra. */
+  clearTimeout(MED_SC);
   if (!MED_ON) return;
   /* ── LA MEDICIÓN NO PUEDE APILARSE, Y LO CANTÓ EL NÚMERO ──
      `cajAsienta` corre al abrir, al cerrar y al soltar un arrastre. Sin esta
@@ -5197,7 +5234,7 @@ function medTermina(){
   const o = d.slice().sort((a, b) => a - b);
   const med = o[o.length >> 1];
   const p90 = o[Math.min(o.length - 1, Math.floor(o.length * 0.9))];
-  avisa(T('pMedeUno', T(MED_SUBE ? 'pMedeSube' : 'pMedeBaja'),
+  avisa(T('pMedeUno', T(MED_QUE),
           d.length, med.toFixed(1), p90.toFixed(1), perdidos));
 }
 
@@ -5208,7 +5245,7 @@ let CAJ_VUELVE_MS = 190;   /* `let` porque el A/B vive en el mismo binario: ver
 function cajAsienta(){
   const caj = $('#cajon');
   caj.classList.add('abre');
-  medArranca(CAJON);
+  medArranca(CAJON ? 'pMedeSube' : 'pMedeBaja');
   /* la marca del deslizamiento va en el `body` y no en `#cajon`: el CIERRE
      también desliza, y ahí `#cajon` ya perdió su `.on`. Es lo que apaga el
      vidrio del escritorio mientras la hoja viaja (ver `body.cajMueve`). */
@@ -5614,9 +5651,27 @@ function enganchaCajon(){
   l.addEventListener('touchend', lfin);
   l.addEventListener('touchcancel', lfin);
 
+  /* ── Y EL SCROLL TAMBIÉN SE MIDE, PORQUE ES LO QUE UNO HACE «ESTANDO AHÍ» ──
+     El medidor de la vuelta 133 mide el DESLIZAMIENTO, o sea abrir y cerrar. El
+     reporte de la 136 no es de un viaje: es del estado. Y un estado no se mide
+     solo —si nada se mueve no hay cuadros que contar— así que lo que se mide es
+     el único momento en que el cajón abierto tiene que dibujar de verdad.
+     Se termina 240 ms después del último evento: menos que eso corta un
+     scroll con inercia al primer respiro del dedo. */
+  const medScroll = () => {
+    /* sólo con la hoja ASENTADA: `verCajon(true)` hace `scrollTop = 0`, o sea
+       que abrir dispara un `scroll` y sin esta guarda cortaría la medición de
+       la subida a los 240 ms y la informaría como si hubiera terminado. */
+    if (!MED_ON || !document.body.classList.contains('cajQ')) return;
+    if (!MED_CORRE) medArranca('pMedeScroll');
+    clearTimeout(MED_SC);
+    MED_SC = setTimeout(medTermina, 240);
+  };
+
   /* la letra que se está mirando, mientras se baja por la lista */
   let pend = false;
   l.addEventListener('scroll', () => {
+    medScroll();
     if (pend || !LETRAS.length) return;
     pend = true;
     /* una vez por cuadro y no una por evento: `scroll` dispara docenas de veces
@@ -11478,6 +11533,35 @@ window.__A = {
   /* el A/B del cierre: con 0 el vidrio del escritorio vuelve en el mismo cuadro
      en que se acaba la animación, que es como estaba antes de la vuelta 135 */
   cajTarde(v){ CAJ_VUELVE_MS = +v; return CAJ_VUELVE_MS; },
+  /* el A/B de la vuelta 136: con `true` vuelven las capas que la hoja tapa */
+  cajCapas(v){ document.body.classList.toggle('cajCapasV', !!v);
+               return !document.body.classList.contains('cajCapasV'); },
+  /* ── LO QUE EL COMPOSITOR TIENE QUE SOSTENER EN ESTE INSTANTE ──
+     No mide milisegundos: mide MEMORIA. Un `will-change` reserva una superficie
+     de render y un `<canvas>` visible es una capa, se dibuje algo en él o no —
+     y las dos cosas se pagan aunque estén tapadas por una hoja opaca. Los megas
+     salen de suponer densidad 3 y cuatro bytes por píxel, que es lo que cuesta
+     una textura en un teléfono. */
+  capas(){
+    const l = [];
+    const anota = (e, por) => {
+      const c = getComputedStyle(e);
+      if (c.visibility === 'hidden' || c.display === 'none') return;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return;
+      l.push({ q: (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className
+                   ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''),
+               por, px: Math.round(r.width * r.height) });
+    };
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      if (c.willChange && c.willChange !== 'auto') anota(e, 'will-change:' + c.willChange);
+    }
+    for (const e of document.querySelectorAll('canvas')) anota(e, 'canvas');
+    const px = l.reduce((a, b) => a + b.px, 0);
+    l.sort((a, b) => b.px - a.px);
+    return { n: l.length, px, mb: +(px * 9 * 4 / 1048576).toFixed(1), lista: l };
+  },
   /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
      en el primer cuadro del cierre */
   capaPeso(){
@@ -11699,7 +11783,13 @@ window.__A = {
   mascDormir(){ MASC_ULT = Date.now() - 9000; mascOcio(); return this.masc(); },
   mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
-  cajon(v){ verCajon(v !== false); return CAJON; },
+  /* ── SIN ARGUMENTO LEE, NO ESCRIBE ──
+     Decía `verCajon(v !== false)`, o sea que preguntar por el estado lo ABRÍA.
+     Costó dos mediciones de la vuelta 136: una lectura después de un arrastre
+     devolvía «abierto» porque la propia sonda lo había abierto un milisegundo
+     antes. Es la misma familia que `cajModo(v)` en la vuelta 129 — una sonda
+     que escribe el estado que viene a medir no está midiendo el juego. */
+  cajon(v){ if (v !== undefined) verCajon(!!v); return CAJON; },
   /* La animación de arranque, ejercida por el mismo camino que el dedo. Va por
      `zoomArranca` y no por `abreZoom` porque en el banco no hay puente y esa
      guarda saldría por el atajo — o sea que la sonda no mediría nada. */

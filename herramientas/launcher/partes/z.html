@@ -1148,6 +1148,35 @@ window.__A = {
   /* el A/B del cierre: con 0 el vidrio del escritorio vuelve en el mismo cuadro
      en que se acaba la animación, que es como estaba antes de la vuelta 135 */
   cajTarde(v){ CAJ_VUELVE_MS = +v; return CAJ_VUELVE_MS; },
+  /* el A/B de la vuelta 136: con `true` vuelven las capas que la hoja tapa */
+  cajCapas(v){ document.body.classList.toggle('cajCapasV', !!v);
+               return !document.body.classList.contains('cajCapasV'); },
+  /* ── LO QUE EL COMPOSITOR TIENE QUE SOSTENER EN ESTE INSTANTE ──
+     No mide milisegundos: mide MEMORIA. Un `will-change` reserva una superficie
+     de render y un `<canvas>` visible es una capa, se dibuje algo en él o no —
+     y las dos cosas se pagan aunque estén tapadas por una hoja opaca. Los megas
+     salen de suponer densidad 3 y cuatro bytes por píxel, que es lo que cuesta
+     una textura en un teléfono. */
+  capas(){
+    const l = [];
+    const anota = (e, por) => {
+      const c = getComputedStyle(e);
+      if (c.visibility === 'hidden' || c.display === 'none') return;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return;
+      l.push({ q: (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className
+                   ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''),
+               por, px: Math.round(r.width * r.height) });
+    };
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      if (c.willChange && c.willChange !== 'auto') anota(e, 'will-change:' + c.willChange);
+    }
+    for (const e of document.querySelectorAll('canvas')) anota(e, 'canvas');
+    const px = l.reduce((a, b) => a + b.px, 0);
+    l.sort((a, b) => b.px - a.px);
+    return { n: l.length, px, mb: +(px * 9 * 4 / 1048576).toFixed(1), lista: l };
+  },
   /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
      en el primer cuadro del cierre */
   capaPeso(){
@@ -1369,7 +1398,13 @@ window.__A = {
   mascDormir(){ MASC_ULT = Date.now() - 9000; mascOcio(); return this.masc(); },
   mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
   /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
-  cajon(v){ verCajon(v !== false); return CAJON; },
+  /* ── SIN ARGUMENTO LEE, NO ESCRIBE ──
+     Decía `verCajon(v !== false)`, o sea que preguntar por el estado lo ABRÍA.
+     Costó dos mediciones de la vuelta 136: una lectura después de un arrastre
+     devolvía «abierto» porque la propia sonda lo había abierto un milisegundo
+     antes. Es la misma familia que `cajModo(v)` en la vuelta 129 — una sonda
+     que escribe el estado que viene a medir no está midiendo el juego. */
+  cajon(v){ if (v !== undefined) verCajon(!!v); return CAJON; },
   /* La animación de arranque, ejercida por el mismo camino que el dedo. Va por
      `zoomArranca` y no por `abreZoom` porque en el banco no hay puente y esa
      guarda saldría por el atajo — o sea que la sonda no mediría nada. */

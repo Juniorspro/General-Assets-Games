@@ -814,6 +814,37 @@ body.cajQ #capa .vid,body.cajQ #capa .baldosa{
 /* el A/B vive en el mismo binario: sin esto, «mejoró» sería un recuerdo y no
    una medición (ver `__A.cajQModo`) */
 body.cajQvis.cajQ #capa{visibility:hidden}
+/* ══════════ Y CON LA HOJA PUESTA, NADIE SOSTIENE UNA CAPA QUE NO SE VE ══════════
+   `will-change:transform` no es una sugerencia: le pide al compositor que
+   RESERVE una superficie de render. Medido con el cajón abierto y quieto, lo
+   que quedaba reservado:
+
+       #fondo  478.879 px      #tira  229.948 px      #cajon  367.504 px
+
+   A densidad 3 eso son **38,9 MB de textura**, y **25,5 de esos son de cosas
+   que la hoja opaca tapa por completo**: la foto —cuya deriva encima está
+   PAUSADA con el cajón puesto— y la tira de páginas del escritorio, a la que no
+   se le puede cambiar de página sin cerrar el cajón. Más `#agua`, que desde la
+   vuelta 130 vive siempre en el documento y transparente: un lienzo visible de
+   pantalla completa es otra capa, y son 13,2 MB más.
+
+   Nada de esto cuesta milisegundos por cuadro, y por eso ninguna sonda de
+   tiempo lo veía. Cuesta MEMORIA DE VIDEO, y cuando el presupuesto de baldosas
+   se acaba el compositor desaloja y vuelve a rasterizar — que es exactamente la
+   hipótesis que la vuelta 135 dejó anotada como «no se pudo comprobar desde
+   acá». Con la hoja puesta se sueltan las tres.
+
+   EL `will-change` VUELVE EN EL PRIMER CUADRO DEL CIERRE, porque `cajQ` sale
+   ahí (`verCajon`) y en ese mismo cuadro arranca la transición del `scale` de
+   `#fondo`: la promoción se pide igual, así que no hay escalón que agregar.
+   EL LIENZO DEL AGUA VUELVE TARDE, con `cajMueve`, que es el mismo trato de la
+   vuelta 135 — durante el deslizamiento no puede haber agua (`AGUA_TAPAN` ya lo
+   prohíbe) y reservar trece megas en el cuadro en que la hoja arranca sería el
+   escalón que las tres vueltas anteriores estuvieron sacando.
+
+   `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
+body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
+body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
