@@ -8,6 +8,7 @@
  * «ese usuario no existe»: lo segundo deja averiguar quien tiene cuenta aca
  * probando nombres, que es informacion de la gente que no es nuestra para dar.
  */
+import { darPase } from "./_firma.js";
 import { guardarClave, claveVale, darSesion, quienEs,
          RE_USUARIO, RESERVADOS, limpio, enlaceVale, json } from "./_social.js";
 
@@ -82,8 +83,14 @@ export const onRequestGet = async ({ request, env }) => {
   const yo = await quienEs(env, request);
   if (!yo) return json({ error: "sin sesión" }, 401);
   const u = await env.DB.prepare(
-    "SELECT id, usuario, nombre, retrato, sobre, cobro, bloqueado FROM usuarios WHERE id = ?")
+    "SELECT id, usuario, nombre, retrato, sobre, cobro, bloqueado, acceso FROM usuarios WHERE id = ?")
     .bind(yo.u).first();
   if (!u || u.bloqueado) return json({ error: "sin sesión" }, 401);
-  return json({ yo: u });
+
+  /* si ya pago alguna vez, el pase viaja con la cuenta: entrar desde otro
+     telefono no lo obliga a pagar de nuevo, que es lo que pasaria si el acceso
+     viviera solo en el navegador donde pago */
+  const extra = u.acceso && env.SECRETO
+    ? { pase: await darPase(env.SECRETO, { via: "cuenta", u: u.id }) } : {};
+  return json({ yo: u, ...extra });
 };

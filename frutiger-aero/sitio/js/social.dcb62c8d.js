@@ -292,6 +292,9 @@ function formularioCuenta(){
         caja.poner("sesion", sesion);
         pintarBarra();
         verPerfil();
+        pedir("cuenta").then(function(k){
+          if (k.pase) document.dispatchEvent(new CustomEvent("hay-pase-de-cuenta", {detail: k.pase}));
+        }).catch(function(){});
       })
       .catch(function(e){ decir(e.message, true); });
   }
@@ -429,6 +432,8 @@ function arrancar(){
     /* el pase puede haber vencido o la cuenta estar suspendida: se pregunta */
     pedir("cuenta").then(function(j){
       sesion.yo = j.yo; caja.poner("sesion", sesion); pintarBarra();
+      /* el pase de acceso anticipado viaja con la cuenta, no con el navegador */
+      if (j.pase) document.dispatchEvent(new CustomEvent("hay-pase-de-cuenta", {detail: j.pase}));
     }).catch(function(){ sesion = null; caja.sacar("sesion"); pintarBarra(); });
   }
   abrirVentana("v-muro");

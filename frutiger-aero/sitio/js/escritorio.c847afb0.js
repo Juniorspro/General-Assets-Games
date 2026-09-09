@@ -695,6 +695,14 @@ pintarMontos();
    tiene solución, y prometerlo sería mentir. */
 var pase = caja.leer("pase", null);
 
+/* Si la cuenta ya pago alguna vez, el servidor manda el pase junto con el
+   perfil. Asi entrar desde otro telefono no obliga a pagar de nuevo: el acceso
+   viaja con la cuenta y no con el navegador donde se pago. */
+document.addEventListener("hay-pase-de-cuenta", function(e){
+  if (!e.detail) return;
+  pase = e.detail; caja.poner("pase", pase); revisarPase();
+});
+
 function pintarZona(datos){
   var caja2 = $("zona-lista");
   if (!datos || !datos.items || !datos.items.length){

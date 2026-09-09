@@ -18,6 +18,7 @@
  * el pase igual. Es el caso normal de alguien que recarga la pagina.
  */
 import { darPase, codigoVale } from "./_firma.js";
+import { quienEs } from "./_social.js";
 import { API_PP, fichaPaypal } from "./pagar.js";
 
 const json = (o, s = 200) =>
@@ -25,6 +26,19 @@ const json = (o, s = 200) =>
     status: s,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
+
+/* Anota el pago y, si habia sesion, le deja el acceso pegado a la CUENTA y no
+   solo a este navegador. Asi entrar desde el telefono despues de haber pagado
+   en la compu no obliga a pagar de nuevo. */
+async function anotar(env, request, medio, ref, monto, moneda) {
+  if (!env.DB) return;
+  const yo = await quienEs(env, request);
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO pagos (medio, ref, usuario, monto, moneda, estado, creado) " +
+    "VALUES (?,?,?,?,?,'approved',?)")
+    .bind(medio, String(ref), yo ? yo.u : null, monto, moneda, Date.now()).run();
+  if (yo) await env.DB.prepare("UPDATE usuarios SET acceso = 1 WHERE id = ?").bind(yo.u).run();
+}
 
 export const onRequestPost = async ({ request, env }) => {
   if (!env.SECRETO) return json({ error: "falta SECRETO" }, 503);
@@ -78,6 +92,7 @@ export const onRequestPost = async ({ request, env }) => {
     if (!(monto >= minimo))
       return json({ error: "El acceso anticipado arranca en US$ " + minimo + "." }, 402);
 
+    await anotar(env, request, "paypal", c.orden, monto, "USD");
     return json({ pase: await darPase(env.SECRETO, { via: "paypal", ord: c.orden.slice(-8) }), monto });
   }
 
@@ -102,6 +117,7 @@ export const onRequestPost = async ({ request, env }) => {
     if (!(monto >= minimo))
       return json({ error: "El acceso anticipado arranca en $ " + minimo + "." }, 402);
 
+    await anotar(env, request, "mp", c.mpPago, monto, "ARS");
     return json({
       pase: await darPase(env.SECRETO, { via: "mp", pag: String(c.mpPago).slice(-8) }),
       monto,

@@ -78,6 +78,31 @@ pasaron a contestar 404 — incluidas las de cobro, que ya andaban.
 El despliegue no avisa. Simplemente deja de decir «Compiled Worker
 successfully». Si falta esa línea, algo está mal.
 
+## Ningún pago se pierde, aunque cierren la pestaña
+
+Al principio el acceso se daba cuando el que pagaba **volvía** al sitio con el
+identificador en la dirección. Si cerraba la pestaña, se le cortaba el 4G o
+Mercado Pago tardaba en devolverlo: pagaba y no recibía nada. Y del lado de acá
+no quedaba rastro de que había pagado, así que ni reclamando se podía comprobar.
+
+Ahora hay tres redes debajo:
+
+1. **La pasarela avisa sola** (`/api/mp-aviso`), apenas se acredita, sin
+   depender de que el navegador siga vivo.
+2. **Todo pago queda anotado** en la tabla `pagos`, con su identificador. El
+   `UNIQUE(medio, ref)` hace que el aviso repetido no cuente dos veces —Mercado
+   Pago reintenta, y lo hace bien.
+3. **El acceso viaja con la cuenta, no con el navegador.** Quien pagó en la
+   compu y después entra desde el teléfono ya lo tiene.
+
+**Al aviso no se le cree.** Sólo trae un número de pago, y podría mandarlo
+cualquiera: lo único que se hace con él es ir a preguntarle a Mercado Pago por
+ese pago con nuestro token. La verdad sale de la consulta, nunca del cuerpo del
+pedido.
+
+Y al webhook se le contesta **200 aunque no se pueda procesar**: si contesta
+error, Mercado Pago lo reintenta durante horas.
+
 ## Cobrar: qué variable hace qué
 
 Nada de esto está en el código. Son variables del proyecto en Cloudflare

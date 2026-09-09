@@ -9,6 +9,8 @@
  * identificador se verifica CONTRA EL SERVIDOR DE LA PASARELA antes de dar
  * nada. Nunca se le cree al navegador.
  */
+import { quienEs } from "./_social.js";
+
 const json = (o, s = 200) =>
   new Response(JSON.stringify(o), {
     status: s,
@@ -34,6 +36,13 @@ export const onRequestPost = async ({ request, env }) => {
   let c;
   try { c = await request.json(); } catch { return json({ error: "cuerpo ilegible" }, 400); }
 
+  /* De quien es este pago. Va pegado a la orden en la pasarela, asi que cuando
+     el aviso vuelve —incluso si la persona cerro la pestania— se sabe a quien
+     darle el acceso. Sin esto, un pago sin vuelta al sitio es plata cobrada y
+     nada entregado. */
+  const yo = await quienEs(env, request);
+  const dueno = yo ? String(yo.u) : "";
+
   const monto = Math.floor(Number(c.monto));
   if (!(monto > 0) || monto > 5000000) return json({ error: "monto inválido" }, 400);
 
@@ -57,6 +66,7 @@ export const onRequestPost = async ({ request, env }) => {
         purchase_units: [{
           amount: { currency_code: "USD", value: monto.toFixed(2) },
           description: "Frutiger Aero - acceso anticipado",
+          ...(dueno ? { custom_id: dueno } : {}),
         }],
         application_context: {
           shipping_preference: "NO_SHIPPING", user_action: "PAY_NOW",
@@ -85,6 +95,8 @@ export const onRequestPost = async ({ request, env }) => {
                      failure: raiz + "/?pago=no" },
         auto_return: "approved",
         statement_descriptor: "FRUTIGERAERO",
+        ...(dueno ? { external_reference: dueno } : {}),
+        notification_url: raiz + "/api/mp-aviso",
       }),
     });
     if (!r.ok) return json({ error: "Mercado Pago rechazó la preferencia" }, 502);
