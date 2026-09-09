@@ -20,6 +20,13 @@ export const onRequestGet = ({ env }) => {
   return new Response(JSON.stringify({
     google: env.GOOGLE_CLIENT_ID || null,
     pago: Object.keys(pago).length ? pago : null,
+    // que vias pueden cobrar y verificar solas
+    auto: {
+      paypal: !!(env.PAYPAL_CLIENT_ID && env.PAYPAL_SECRET) ? env.PAYPAL_CLIENT_ID : null,
+      mp: !!env.MP_TOKEN,
+      minUsd: parseFloat(env.ACCESO_MINIMO_USD || "1"),
+      minArs: parseInt(env.ACCESO_MINIMO_ARS || "1", 10),
+    },
   }), {
     headers: {
       "content-type": "application/json; charset=utf-8",

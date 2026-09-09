@@ -83,7 +83,10 @@ $("nombre").addEventListener("keydown", function(e){ if (e.key === "Enter") como
 var CLIENTE = null;
 
 fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(function(c){
-  if (c && c.pago) { pago = c.pago; pintarMontos(); }
+  if (c && c.auto) { AUTO = c.auto; armarPaypal(); }
+  if (c && c.pago) { pago = c.pago; }
+  pintarMontos();
+  mirarLaVuelta();
   CLIENTE = c && c.google;
   if (!CLIENTE){ $("sin-google").hidden = false; return; }
   var s = document.createElement("script");
@@ -568,17 +571,25 @@ function enlacesDePago(){
 
   /* Mercado Pago cobra en pesos y PayPal en dólares. Ofrecer el que no
      corresponde es mandar a alguien a una pantalla que no le va a servir. */
-  var hayMP = pago && (pago.mpLink || pago.mpAlias) && moneda === "ars";
-  var hayPP = pago && pago.paypal && moneda === "usd";
+  var autoMP = AUTO && AUTO.mp && moneda === "ars";
+  var autoPP = AUTO && AUTO.paypal && moneda === "usd";
+  var hayMP = (autoMP || (pago && (pago.mpLink || pago.mpAlias))) && moneda === "ars";
+  var hayPP = (autoPP || (pago && pago.paypal)) && moneda === "usd";
+
+  /* con PayPal automático mandan los botones propios de PayPal, no el enlace */
+  if ($("pp-botones")) $("pp-botones").hidden = !autoPP;
+  if (autoPP && window.paypal) pintarPaypal();
+  $("dona-pp").hidden = !!autoPP;
 
   mp.setAttribute("aria-disabled", String(!hayMP));
   pp.setAttribute("aria-disabled", String(!hayPP));
 
   if (hayMP){
     mp.href = pago.mpLink || "#";
-    $("dona-mp-pie").textContent = pago.mpLink
-      ? "Link de pago · " + MONTOS.ars.simbolo + " " + plata(monto)
-      : "Copiá el alias de acá abajo · " + MONTOS.ars.simbolo + " " + plata(monto);
+    $("dona-mp-pie").textContent = autoMP
+      ? "Pagás y entrás solo · " + MONTOS.ars.simbolo + " " + plata(monto)
+      : (pago.mpLink ? "Link de pago · " + MONTOS.ars.simbolo + " " + plata(monto)
+                     : "Copiá el alias de acá abajo · " + MONTOS.ars.simbolo + " " + plata(monto));
   } else {
     mp.href = "#";
     $("dona-mp-pie").textContent = moneda === "usd"
@@ -597,11 +608,11 @@ function enlacesDePago(){
   }
 
   var fila = $("dona-alias");
-  if (pago && pago.mpAlias && moneda === "ars"){
+  if (pago && pago.mpAlias && moneda === "ars" && !autoMP){
     fila.hidden = false; $("dona-alias-txt").textContent = pago.mpAlias;
   } else fila.hidden = true;
 
-  $("dona-nada").hidden = !!(pago && (pago.mpAlias || pago.mpLink || pago.paypal));
+  $("dona-nada").hidden = !!(hayMP || hayPP || (pago && (pago.mpAlias || pago.paypal)));
 }
 
 function cerrarDona(recordar){
@@ -660,10 +671,11 @@ $("dona-copiar").addEventListener("click", function(){
     navigator.clipboard.writeText(t).then(ok, ok);
   else ok();
 });
-/* un botón apagado no tiene que navegar a ningún lado */
 ["dona-mp","dona-pp"].forEach(function(id){
   $(id).addEventListener("click", function(e){
-    if (this.getAttribute("aria-disabled") === "true"){ e.preventDefault(); }
+    if (this.getAttribute("aria-disabled") === "true"){ e.preventDefault(); return; }
+    /* con cobro automático el botón no lleva a un enlace: arranca el trámite */
+    if (id === "dona-mp" && AUTO && AUTO.mp){ e.preventDefault(); irAMercadoPago(); }
   });
 });
 pintarMontos();
@@ -737,6 +749,103 @@ $("cod-txt").addEventListener("keydown", function(e){
 });
 $("ic-zona").addEventListener("click", function(){ abrir("v-zona"); });
 revisarPase();
+
+/* ================================================ 8 · cobro automático
+   Las dos vías terminan igual: el que paga vuelve con un identificador, y ese
+   identificador se manda a /api/acceso, que lo verifica CONTRA EL SERVIDOR DE
+   LA PASARELA. Acá no se decide nada. Si esta parte mintiera —«pagó, dale el
+   pase»— el servidor igual diría que no.
+
+   El monto tampoco viaja como verdad: /api/pagar arma la orden con el precio
+   del lado del servidor. Lo que se manda desde acá es una intención. */
+var AUTO = null;
+
+function decirEspera(t, mal){
+  var e = $("pp-espera"); e.hidden = false;
+  e.style.color = mal ? "#a3231b" : "var(--tinta-2)"; e.textContent = t;
+}
+
+function entregarPase(j){
+  pase = j.pase; caja.poner("pase", pase);
+  revisarPase();
+  decirEspera("¡Listo! Ya tenés acceso anticipado.", false);
+  setTimeout(function(){ cerrarDona("listo"); abrir("v-zona"); }, 1200);
+}
+
+/* --- PayPal: se paga adentro de la página, sin salir --- */
+function armarPaypal(){
+  if (!AUTO || !AUTO.paypal || window.paypal) return;
+  var sc = document.createElement("script");
+  sc.src = "https://www.paypal.com/sdk/js?client-id=" + encodeURIComponent(AUTO.paypal) +
+           "&currency=USD&intent=capture&components=buttons&locale=es_AR";
+  sc.onload = pintarPaypal;
+  sc.onerror = function(){ decirEspera("No se pudo cargar PayPal.", true); };
+  document.head.appendChild(sc);
+}
+
+function pintarPaypal(){
+  if (!window.paypal || !$("pp-botones")) return;
+  $("pp-botones").innerHTML = "";
+  paypal.Buttons({
+    style: { layout:"vertical", shape:"rect", height:44, label:"pay" },
+    createOrder: function(){
+      decirEspera("Preparando el pago…", false);
+      return fetch("api/pagar", { method:"POST", headers:{"content-type":"application/json"},
+                                  body: JSON.stringify({ via:"paypal", monto: monto }) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){ if (!j.orden) throw new Error(j.error || "sin orden"); return j.orden; });
+    },
+    onApprove: function(datos){
+      decirEspera("Confirmando el pago…", false);
+      return fetch("api/acceso", { method:"POST", headers:{"content-type":"application/json"},
+                                   body: JSON.stringify({ orden: datos.orderID }) })
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+        .then(function(res){
+          if (!res.ok){ decirEspera(res.j.error || "No se pudo confirmar.", true); return; }
+          entregarPase(res.j);
+        });
+    },
+    onCancel: function(){ decirEspera("Cancelaste el pago. No se cobró nada.", false); },
+    onError: function(){ decirEspera("PayPal tuvo un problema. Probá de nuevo.", true); }
+  }).render("#pp-botones");
+  $("pp-botones").hidden = false;
+}
+
+/* --- Mercado Pago: se va y vuelve --- */
+function irAMercadoPago(){
+  decirEspera("Abriendo Mercado Pago…", false);
+  fetch("api/pagar", { method:"POST", headers:{"content-type":"application/json"},
+                       body: JSON.stringify({ via:"mp", monto: monto }) })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (!j.ir) throw new Error(j.error || "sin enlace");
+      /* se recuerda que salimos a pagar, para reconocer la vuelta */
+      caja.poner("volviendo", 1);
+      location.href = j.ir;
+    })
+    .catch(function(e){ decirEspera("No se pudo abrir Mercado Pago.", true); });
+}
+
+/* la vuelta: Mercado Pago devuelve el identificador en la dirección */
+function mirarLaVuelta(){
+  var q = new URLSearchParams(location.search);
+  if (q.get("pago") !== "mp") return;
+  var id = q.get("payment_id") || q.get("collection_id");
+  /* se limpia la dirección para que recargar no repita el trámite */
+  history.replaceState(null, "", location.pathname);
+  caja.sacar("volviendo");
+  if (!id) return;
+  abrirDona();
+  decirEspera("Confirmando el pago…", false);
+  fetch("api/acceso", { method:"POST", headers:{"content-type":"application/json"},
+                        body: JSON.stringify({ mpPago: id }) })
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if (!res.ok){ decirEspera(res.j.error || "No se pudo confirmar.", true); return; }
+      entregarPase(res.j);
+    })
+    .catch(function(){ decirEspera("No se pudo confirmar. Escribinos.", true); });
+}
 
 conectarControl();
 conectarMinas();

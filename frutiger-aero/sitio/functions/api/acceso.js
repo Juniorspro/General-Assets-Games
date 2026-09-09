@@ -1,43 +1,30 @@
-/* Da el pase de acceso anticipado. Dos caminos, y ninguno confia en el cliente.
+/* Da el pase. Tres caminos, y NINGUNO le cree al navegador.
  *
- * 1 · PAYPAL, AUTOMATICO. El navegador manda el numero de orden que le devolvio
- *     PayPal. Eso solo NO PRUEBA NADA: cualquiera puede inventar un numero. Asi
- *     que el servidor le pregunta a PayPal por esa orden con sus propias
- *     credenciales y mira tres cosas: que este COMPLETED, que el dinero haya
- *     ido a NUESTRA cuenta, y que llegue al minimo. Recien ahi firma el pase.
+ * 1 · PAYPAL. Llega el numero de orden. Eso solo no prueba nada: cualquiera
+ *     inventa uno. El servidor CAPTURA la orden con sus propias credenciales
+ *     —capturar es el paso que mueve la plata de verdad— y despues comprueba
+ *     tres cosas: que quede COMPLETED, que el dinero haya ido a NUESTRA cuenta
+ *     (sin eso alguien pega la orden de un pago suyo a otra persona y entra) y
+ *     que llegue al minimo.
  *
- * 2 · CODIGO, A MANO. Prex no avisa a nadie cuando entra plata —no tiene
- *     webhooks ni API publica—, asi que las transferencias en pesos se miran a
- *     ojo y se manda un codigo. El codigo va firmado: no se puede inventar.
+ * 2 · MERCADO PAGO. Vuelve con un identificador de pago en la direccion. Se le
+ *     pregunta a Mercado Pago por ese pago: que este `approved`, en pesos, y
+ *     por el monto minimo.
  *
- * Lo que este archivo NO puede hacer, dicho de frente: verificar una
- * transferencia a Prex. No existe forma. Si en algun momento la via en pesos
- * tiene que ser automatica, hay que cobrar por Mercado Pago, que si tiene API.
+ * 3 · CODIGO. Para transferencias sueltas, que no avisan a nadie. Va firmado.
+ *
+ * SI SE PIDE DOS VECES LA MISMA ORDEN no pasa nada malo: capturar algo ya
+ * capturado devuelve un error que se reconoce, y ahi se lee el estado y se da
+ * el pase igual. Es el caso normal de alguien que recarga la pagina.
  */
 import { darPase, codigoVale } from "./_firma.js";
+import { API_PP, fichaPaypal } from "./pagar.js";
 
 const json = (o, s = 200) =>
   new Response(JSON.stringify(o), {
     status: s,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
-
-const API = (env) => env.PAYPAL_MODO === "sandbox"
-  ? "https://api-m.sandbox.paypal.com"
-  : "https://api-m.paypal.com";
-
-async function fichaPaypal(env) {
-  const r = await fetch(API(env) + "/v1/oauth2/token", {
-    method: "POST",
-    headers: {
-      authorization: "Basic " + btoa(env.PAYPAL_CLIENT_ID + ":" + env.PAYPAL_SECRET),
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-  if (!r.ok) return null;
-  return (await r.json()).access_token;
-}
 
 export const onRequestPost = async ({ request, env }) => {
   if (!env.SECRETO) return json({ error: "falta SECRETO" }, 503);
@@ -61,12 +48,19 @@ export const onRequestPost = async ({ request, env }) => {
 
     const ficha = await fichaPaypal(env);
     if (!ficha) return json({ error: "no pude hablar con PayPal" }, 502);
+    const cab = { authorization: "Bearer " + ficha, "content-type": "application/json" };
 
-    const r = await fetch(API(env) + "/v2/checkout/orders/" + c.orden, {
-      headers: { authorization: "Bearer " + ficha },
-    });
-    if (!r.ok) return json({ error: "PayPal no reconoce esa orden" }, 403);
-    const o = await r.json();
+    let o = null;
+    const cap = await fetch(API_PP(env) + "/v2/checkout/orders/" + c.orden + "/capture",
+                            { method: "POST", headers: cab });
+    if (cap.ok) {
+      o = await cap.json();
+    } else {
+      /* ya estaba capturada (recargó la página) u otro problema: se mira */
+      const r = await fetch(API_PP(env) + "/v2/checkout/orders/" + c.orden, { headers: cab });
+      if (!r.ok) return json({ error: "PayPal no reconoce esa orden" }, 403);
+      o = await r.json();
+    }
 
     if (o.status !== "COMPLETED")
       return json({ error: "El pago figura como " + o.status + ", no como completado." }, 402);
@@ -74,8 +68,6 @@ export const onRequestPost = async ({ request, env }) => {
     const u = (o.purchase_units || [])[0] || {};
     const pago = ((u.payments || {}).captures || [])[0] || {};
 
-    /* que el dinero haya ido a NUESTRA cuenta: sin esto, alguien pega el numero
-       de una orden suya, pagada a otro, y entra igual */
     const nuestro = env.PAYPAL_MERCHANT_ID;
     const destino = (pago.payee || u.payee || {}).merchant_id;
     if (nuestro && destino && destino !== nuestro)
@@ -86,11 +78,35 @@ export const onRequestPost = async ({ request, env }) => {
     if (!(monto >= minimo))
       return json({ error: "El acceso anticipado arranca en US$ " + minimo + "." }, 402);
 
+    return json({ pase: await darPase(env.SECRETO, { via: "paypal", ord: c.orden.slice(-8) }), monto });
+  }
+
+  /* --------------------------------------------------- por Mercado Pago */
+  if (c.mpPago) {
+    if (!env.MP_TOKEN) return json({ error: "Mercado Pago todavía no está configurado" }, 503);
+    if (!/^\d{6,24}$/.test(String(c.mpPago))) return json({ error: "pago inválido" }, 400);
+
+    const r = await fetch("https://api.mercadopago.com/v1/payments/" + c.mpPago, {
+      headers: { authorization: "Bearer " + env.MP_TOKEN },
+    });
+    if (!r.ok) return json({ error: "Mercado Pago no reconoce ese pago" }, 403);
+    const p = await r.json();
+
+    if (p.status !== "approved")
+      return json({ error: "El pago figura como " + p.status + "." }, 402);
+    if (p.currency_id !== "ARS")
+      return json({ error: "moneda inesperada" }, 402);
+
+    const monto = Number(p.transaction_amount || 0);
+    const minimo = parseInt(env.ACCESO_MINIMO_ARS || "1", 10);
+    if (!(monto >= minimo))
+      return json({ error: "El acceso anticipado arranca en $ " + minimo + "." }, 402);
+
     return json({
-      pase: await darPase(env.SECRETO, { via: "paypal", ord: c.orden.slice(-8) }),
+      pase: await darPase(env.SECRETO, { via: "mp", pag: String(c.mpPago).slice(-8) }),
       monto,
     });
   }
 
-  return json({ error: "falta el código o la orden" }, 400);
+  return json({ error: "falta el código, la orden o el pago" }, 400);
 };
