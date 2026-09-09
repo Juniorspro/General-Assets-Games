@@ -44,40 +44,64 @@ export const onRequestPost = async ({ request, env }) => {
   const j = await jefe(env, request);
   if (!j) return json({ error: "No sos administrador." }, 403);
 
-  /* --------------------------------------------------------- ver la cola */
+  /* --------------------------------------------------------- ver la cola
+     Llega UNA fila por persona, no una por comprobante: quien mando cincuenta
+     dos veces es un solo pedido de cien con dos comprobantes, y hay que
+     mirarlos juntos para decidir. Los que todavia estan juntando NO aparecen:
+     hacer revisar algo que no llega al piso es hacer trabajar al pedo. */
   if (c.hacer === "ver") {
     const { results } = await env.DB.prepare(
-      "SELECT r.id, r.medio, r.refer, r.monto, r.nota, r.creado, r.foto_tipo, " +
-      "       u.usuario, u.nombre, u.correo " +
-      "FROM reclamos r JOIN usuarios u ON u.id = r.usuario " +
-      "WHERE r.estado = 'espera' ORDER BY r.creado ASC LIMIT 50").all();
+      "SELECT a.id, a.moneda, a.monto, a.refer, a.nota, a.creado, a.foto_tipo, " +
+      "       u.id AS uid, u.usuario, u.nombre " +
+      "FROM aportes a JOIN usuarios u ON u.id = a.usuario " +
+      "WHERE a.estado = 'espera' ORDER BY u.id, a.creado ASC LIMIT 200").all();
+
+    const porGente = [];
+    const indice = {};
+    for (const a of results) {
+      if (!indice[a.uid]) {
+        indice[a.uid] = { uid: a.uid, usuario: a.usuario, nombre: a.nombre,
+                          moneda: a.moneda, total: 0, desde: a.creado, aportes: [] };
+        porGente.push(indice[a.uid]);
+      }
+      const g = indice[a.uid];
+      g.total += a.monto;
+      g.desde = Math.min(g.desde, a.creado);
+      g.aportes.push({ id: a.id, monto: a.monto, refer: a.refer, nota: a.nota,
+                       creado: a.creado, foto: !!a.foto_tipo });
+    }
+
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM usuarios WHERE acceso = 1").first();
-    return json({ pedidos: results, conAcceso: n.n, yo: j.usuario });
+    const jun = await env.DB.prepare(
+      "SELECT COUNT(DISTINCT usuario) AS n FROM aportes WHERE estado = 'juntando'").first();
+    return json({ pedidos: porGente, conAcceso: n.n, juntando: jun.n, yo: j.usuario });
   }
 
   /* ------------------------------------------------------------ resolver */
+  /* Se resuelve la persona entera, no un comprobante suelto: lo que se aprueba
+     es «este junto los cien», y eso son todos sus aportes a la vez. */
   if (c.hacer === "aprobar" || c.hacer === "rechazar") {
-    const id = parseInt(c.id, 10);
-    if (!id) return json({ error: "pedido inválido" }, 400);
-    const r = await env.DB.prepare(
-      "SELECT usuario FROM reclamos WHERE id = ? AND estado = 'espera'").bind(id).first();
-    if (!r) return json({ error: "Ese pedido ya no está esperando." }, 404);
+    const uid = parseInt(c.uid, 10);
+    if (!uid) return json({ error: "pedido inválido" }, 400);
+    const hay = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM aportes WHERE usuario = ? AND estado = 'espera'")
+      .bind(uid).first();
+    if (!hay.n) return json({ error: "Ese pedido ya no está esperando." }, 404);
 
     const aprueba = c.hacer === "aprobar";
-    /* la foto se borra al resolver: la base no es un album, y el comprobante
-       ya cumplio su unica funcion */
+    /* las fotos se borran al resolver: la base no es un album de comprobantes
+       ajenos, y ya cumplieron su unica funcion */
     await env.DB.prepare(
-      "UPDATE reclamos SET estado = ?, visto = ?, quien_vio = ?, foto = NULL, foto_tipo = '' " +
-      "WHERE id = ?")
-      .bind(aprueba ? "aprobado" : "rechazado", Date.now(), j.id, id).run();
+      "UPDATE aportes SET estado = ?, visto = ?, quien_vio = ?, foto = NULL, foto_tipo = '' " +
+      "WHERE usuario = ? AND estado = 'espera'")
+      .bind(aprueba ? "aprobado" : "rechazado", Date.now(), j.id, uid).run();
 
     if (aprueba) {
-      await env.DB.prepare("UPDATE usuarios SET acceso = 1 WHERE id = ?").bind(r.usuario).run();
-      await avisar(env, r.usuario,
-        "¡Listo! Confirmamos tu transferencia y la zona de donantes ya te quedó abierta.",
-        "bueno");
+      await env.DB.prepare("UPDATE usuarios SET acceso = 1 WHERE id = ?").bind(uid).run();
+      await avisar(env, uid,
+        "¡Listo! Confirmamos tu aporte y la zona de donantes ya te quedó abierta.", "bueno");
     } else {
-      await avisar(env, r.usuario,
+      await avisar(env, uid,
         "No pudimos encontrar tu transferencia. Si creés que hay un error, " +
         "volvé a mandar el comprobante con el número completo.", "malo");
     }
@@ -105,7 +129,7 @@ export const onRequestGet = async ({ request, env }) => {
   const j = await jefe(env, request);
   if (!j) return new Response("no", { status: 403 });
   const id = parseInt(new URL(request.url).searchParams.get("foto") || "0", 10);
-  const r = await env.DB.prepare("SELECT foto, foto_tipo FROM reclamos WHERE id = ?")
+  const r = await env.DB.prepare("SELECT foto, foto_tipo FROM aportes WHERE id = ?")
     .bind(id).first();
   if (!r || !r.foto) return new Response("no hay", { status: 404 });
   return new Response(r.foto, {

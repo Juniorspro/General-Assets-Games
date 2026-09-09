@@ -78,6 +78,26 @@ pasaron a contestar 404 — incluidas las de cobro, que ya andaban.
 El despliegue no avisa. Simplemente deja de decir «Compiled Worker
 successfully». Si falta esa línea, algo está mal.
 
+## El piso, y por qué los aportes se juntan
+
+El acceso anticipado arranca en **$ 100** (o **US$ 0,10**). Quien manda la mitad
+**no entra en la cola** —sería hacer revisar algo que todavía no alcanza— pero
+**tampoco pierde lo que mandó**: su aporte queda juntando, la pantalla le dice
+cuánto le falta, y el día que completa, *todo lo suyo* pasa a la cola de una
+vez y con todos los comprobantes juntos.
+
+Por eso la cola llega **agrupada por persona y no por comprobante**: quien mandó
+cincuenta dos veces es un solo pedido de cien con dos capturas, y hay que
+mirarlas juntas para decidir. Aprobar resuelve a la persona entera.
+
+Se acumula **por moneda y no se convierte nada**. Poner una cotización acá sería
+inventar un número que cambia todos los días y del que este servidor no sabe
+nada: cada moneda llega a su propio piso.
+
+Y lo que se junta es lo **declarado**, que no es lo verificado. Por eso al final
+hay una persona mirando los comprobantes: esto ordena la cola, no reemplaza la
+revisión. Los pisos se cambian en `ACCESO_MINIMO_ARS` y `ACCESO_MINIMO_USD`.
+
 ## El circuito de acceso, de punta a punta
 
 1. La persona transfiere y aprieta **«Ya transferí»**. Deja el número de
@@ -109,16 +129,6 @@ que guardar.
 
 El tamaño se vuelve a comprobar en el servidor: lo que valida el navegador no
 vale, porque el pedido se puede armar a mano sin pasar por la página.
-
-### El correo necesita un dominio, y no lo hay
-
-Los servicios de envío sólo dejan escribirle a cualquiera desde un dominio
-verificado; con un `.pages.dev` prestado no se puede verificar nada, y lo que
-salga de un remitente de prueba cae en spam. **Por eso el aviso dentro del sitio
-no es el plan B: es el que siempre corre.** El correo se suma encima el día que
-existan `RESEND_API_KEY` y `CORREO_DESDE`, sin tocar código. Si el envío falla,
-se traga el error: que no salga un mail no puede impedir que alguien reciba el
-acceso que pagó.
 
 ## En pesos la verificación es a mano, y no por vagancia
 

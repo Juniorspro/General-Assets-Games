@@ -408,22 +408,59 @@ function engancharReclamo(){
     if (refer.length < 4){ $("rc-refer").focus(); decir("Falta el número de operación.", true); return; }
     b.disabled = true; decir("Mandando…", false);
     pedir("reclamo", { method:"POST", body: JSON.stringify({
-      medio:"transferencia", refer: refer, monto: $("rc-monto").value,
-      correo: $("rc-correo").value, foto: fotoLista }) })
+      refer: refer, monto: $("rc-monto").value, moneda: $("rc-moneda").value,
+      foto: fotoLista }) })
       .then(function(j){
         b.disabled = false;
+        $("rc-refer").value = ""; $("rc-monto").value = "";
+        fotoLista = null; $("rc-previa").hidden = true;
         if (j.ya){ decir("Ya tenías el acceso habilitado.", false); return; }
-        decir("Listo, quedó pedido. Te lo habilitamos apenas lo miremos.", false);
-        $("rc-refer").value = "";
+        if (j.enCola){
+          decir("¡Completaste " + (j.moneda === "USD" ? "US$ " : "$ ") + j.juntado +
+                "! Ya quedó pedido: te avisamos por la campanita apenas lo miremos.", false);
+        } else {
+          decir("Sumado. Llevás " + (j.moneda === "USD" ? "US$ " : "$ ") + j.juntado +
+                " de " + (j.moneda === "USD" ? "US$ " : "$ ") + j.piso +
+                ". Te faltan " + (j.moneda === "USD" ? "US$ " : "$ ") + j.falta +
+                " para el acceso.", false);
+        }
+        mirarTramos();
       })
       .catch(function(e){ b.disabled = false; decir(e.message, true); });
   });
 
-  /* si ya hay un pedido esperando, se dice, para que no lo mande de nuevo */
-  if (sesion) pedir("reclamo").then(function(j){
-    if (j.reclamo && j.reclamo.estado === "espera")
-      decir("Tenés un pedido esperando desde " + cuando(j.reclamo.creado) + ".", false);
-  }).catch(function(){});
+  $("rc-moneda").addEventListener("change", mirarTramos);
+  mirarTramos();
+
+  /* cuánto lleva juntado y cuánto le falta. Se pide al servidor: el navegador
+     no lleva la cuenta de la plata de nadie. */
+  function plataDe(m, n){
+    return (m === "USD" ? "US$ " : "$ ") +
+      n.toLocaleString("es-AR", {maximumFractionDigits: m === "USD" ? 2 : 0});
+  }
+  function mirarTramos(){
+    if (!sesion) return;
+    pedir("reclamo").then(function(j){
+      var m = $("rc-moneda").value;
+      var piso = j.pisos[m];
+      $("rc-piso").textContent = plataDe(m, piso);
+      var esperando = j.tramos.filter(function(t){ return t.estado === "espera"; })[0];
+      if (esperando){
+        $("rc-barra").hidden = true;
+        decir("Ya mandaste " + plataDe(esperando.moneda, esperando.t) +
+              " y está esperando revisión. Te avisamos por la campanita.", false);
+        return;
+      }
+      var jun = j.tramos.filter(function(t){ return t.estado === "juntando" && t.moneda === m; })[0];
+      var llevo = jun ? jun.t : 0;
+      if (!llevo){ $("rc-barra").hidden = true; return; }
+      $("rc-barra").hidden = false;
+      $("rc-llevas").textContent = "Llevás " + plataDe(m, llevo);
+      $("rc-falta").textContent = "Faltan " + plataDe(m, Math.max(0, piso - llevo));
+      $("rc-lleno").style.width = Math.min(100, llevo / piso * 100).toFixed(1) + "%";
+    }).catch(function(){});
+  }
+  engancharReclamo.mirar = mirarTramos;
 }
 
 
