@@ -394,9 +394,36 @@ function ccMueve(abre){
   setTimeout(() => { if (typeof medTermina === 'function') medTermina(); }, CC_MUEVE_MS);
 }
 
+/* ── LA HOJA SE ARMA EN EL OCIO, NO EN EL PRIMER CUADRO DEL GESTO ──
+   Las vueltas 138 y 139 dejaron anotado un pico de 108 a 183 ms al traer la
+   hoja a escena, presente en los DOS lados de sus A/B. Medido con el cronómetro
+   de `ccAbre`: `ccArma` cuesta **27,6 y 93,1 ms** la primera vez y **0** las
+   siguientes, mientras que `ccLee` y `ccPinta` juntos no llegan a un
+   milisegundo. O sea que el pico es construir dieciséis botones con sus
+   dieciséis dibujos de SVG adentro del cuadro en que el dedo empieza a
+   arrastrar, y se contesta como el cajón: armándola antes, con el escritorio
+   quieto. Es literalmente `cajPrepara()` para el centro. */
+function ccPrepara(){
+  const ocio = fn => (typeof requestIdleCallback === 'function')
+    ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 900);
+  /* el A/B vive en el mismo binario: con `ccArmaV` puesto no se arma nada acá y
+     la apertura vuelve a pagarlo, que es la única forma de que la medición
+     DETECTE el defecto además de aprobar el arreglo */
+  ocio(() => { if (!document.body.classList.contains('ccArmaV')) ccArma(); });
+}
+
 function ccAbre(){
   if (CC.on) return;
-  ccArma(); ccLee(); ccPinta();
+  /* ── CUÁNTO CUESTA TRAER LA HOJA A ESCENA, MEDIDO Y NO SUPUESTO ──
+     Las vueltas 138 y 139 dejaron anotado un pico de 108 a 183 ms al abrir que
+     estaba en los DOS lados de su A/B, o sea que no lo introdujo ni lo arregló
+     ninguna de las dos. Cuatro `performance.now()` por apertura no cuestan
+     nada y son la única forma de saber cuál de los cuatro pasos lo paga. */
+  const t0 = performance.now();
+  ccArma();  const t1 = performance.now();
+  ccLee();   const t2 = performance.now();
+  ccPinta(); const t3 = performance.now();
+  CC.ms = { arma: t1-t0, lee: t2-t1, pinta: t3-t2, total: t3-t0 };
   CC.on = true;
   ccMueve(true);
   /* ── `visibility` SE LEVANTA UN CUADRO ANTES DE ANIMAR ──

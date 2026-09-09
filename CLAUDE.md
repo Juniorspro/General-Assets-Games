@@ -281,6 +281,135 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
+### Centésima cuadragésima vuelta (2026-09-09): **AERO** — la hoja del centro se armaba adentro del gesto, y nadie le había dado el alivio de capas
+
+Reporte, después de la vuelta anterior: *"damn sigue yendo lento al bajar la pestaña de apps"*. La 139
+arregló el defecto **visual** que él había diagnosticado —el vidrio que dejaba de ser vidrio y el zoom
+de la foto— y conservó entera la ganancia de cuadros de la 138. La lentitud siguió, así que lo que
+faltaba era otra cosa.
+
+#### PRIMERO HUBO QUE VER SI SE ACUMULA, PORQUE «SIGUE LENTO» PUEDE SER UNA FUGA
+
+Midiendo los huecos entre cuadros **con el escritorio quieto**, antes y después de seis ciclos de
+abrir y cerrar el centro: 41 · 41 · 41 cuadros por 700 ms de base, **15 justo después de un cierre**,
+y **41 otra vez 600 ms más tarde**. Y sacando la hoja del documento, 41. O sea que **no hay fuga**:
+`capas()` da 4 capas y 35,5 MB antes y después, el DOM crece una sola vez (811 → 1.054 nodos, que es
+la hoja) y se queda en un `#cc` y dieciséis botones. Lo que hay es un pico grande y transitorio en
+cada apertura.
+
+**Y NO ES JAVASCRIPT, MEDIDO:** con un `PerformanceObserver` de `longtask` sobre el ciclo entero
+—paradas de 544, 762, 690, 392 y 192 ms— **no se registró una sola tarea larga**. Eso descarta el
+hilo principal y deja el rasterizado, que es justo lo que el banco no sabe medir.
+
+#### LO QUE SÍ SE PUDO MEDIR Y ERA EL PICO QUE DOS VUELTAS DEJARON SIN EXPLICAR
+
+`ccAbre` pasa a cronometrar sus tres pasos —cuatro `performance.now()` no cuestan nada— y contesta en
+una línea:
+
+| | `ccArma` | `ccLee` | `ccPinta` | total |
+|---|---|---|---|---|
+| primera apertura | **10,3 · 13,9 · 18,4 ms** | 0,1 | 0,7 | **11,1 · 14,7 · 19,3** |
+| las siguientes | 0 | 0 | 0,4 | 0,5 |
+
+O sea que el pico es **construir dieciséis botones con sus dieciséis dibujos de SVG adentro del cuadro
+en que el dedo empieza a arrastrar**, y `ccLee` más `ccPinta` juntos no llegan al milisegundo. Con la
+máquina ya cargada —el caso de verdad, que es el de un gesto— el mismo `ccArma` medido por
+`ccCosto()` da **27,6 · 93,1 · 111,1 · 115,6 ms**. Es exactamente el pico de 108 a 183 ms que las
+vueltas 138 y 139 anotaron como inexplicado, y estaba **en los dos lados de sus A/B** justamente
+porque ninguna de las dos lo tocaba.
+
+**`ccPrepara()` LO ARMA EN EL OCIO**, que es literalmente `cajPrepara()` para el centro. Medido en
+páginas frescas, tres corridas de cada lado con el A/B en el mismo binario (`ccArmaV`):
+
+| primera apertura de verdad | `arma` | total |
+|---|---|---|
+| armando en el gesto | 10,3 · 13,9 · 18,4 | 11,1 · 14,7 · 19,3 |
+| **armando en el ocio** | **0 · 0 · 0** | **0,9 · 1,0 · 0,9** |
+
+Y se comprueba sin abrir nada: `armada: true` con **16 botones** antes de tocar la pantalla.
+
+#### Y EL HALLAZGO GRANDE: EL CENTRO NUNCA TUVO EL ALIVIO DE CAPAS DE LA VUELTA 136
+
+La 136 midió el cajón, encontró **cincuenta megas de textura sostenida detrás de una hoja opaca** y
+soltó `will-change` de `#fondo` y `#tira` más el lienzo del agua. **Nadie llevó la regla al otro
+panel.** Medido con la hoja del centro asentada: `capas()` seguía devolviendo **4 capas y 35,5 MB**
+detrás de una hoja de 700 px sobre 892.
+
+| con el centro asentado | capas | MB | pasadas de vidrio |
+|---|---|---|---|
+| control (`ccCapasV`) | 4 | **35,5** | 1 / 36.096 px |
+| **ahora** | **1** (`#mLien`) | **0,8** | **0 / 0** |
+
+**−34,7 MB**, y **no cuesta un solo píxel**: la misma captura con el control y con esto da **0
+píxeles de diferencia sobre 367.504, media 0,0 y máximo 0**.
+
+**LO QUE CAMBIA RESPECTO DEL CAJÓN ES QUE ESTA HOJA NO TAPA LA PANTALLA ENTERA**, así que el criterio
+no es el mismo pieza por pieza y hubo que medirlo. Con la hoja puesta: `#reloj` 41-156 y `#buscaCaja`
+178-224 quedan **tapados al cien por cien**, `#tira` 224-782 asoma 82 px por debajo del canto, y
+`#dock` 782-876 se ve entero. De ahí salen las tres decisiones:
+
+- **`will-change:auto` en `#fondo` y `#tira`.** No esconde nada: deja que el compositor desaloje la
+  textura y vuelva a rasterizar lo poco que se ve. Vuelve en el primer cuadro del cierre, porque
+  `ccQ` sale ahí y en ese mismo cuadro arranca la transición — la promoción se pide igual.
+- **El agua se esconde, y se puede porque ya está muerta:** `#cc.on` está en `AGUA_TAPAN` desde la
+  vuelta 126, o sea que con el centro abierto el lienzo no dibuja un solo píxel. Y vuelve **tarde**,
+  con `ccMueve`, por lo mismo que en el cajón: reservar trece megas en el cuadro en que la hoja
+  arranca es el escalón que estas vueltas estuvieron sacando.
+- **Y EL RELOJ Y LA BÚSQUEDA DEJAN DE PINTAR SU HORNEADO.** La vuelta 139 se los dio para las dos
+  clases; con la hoja asentada están tapados al cien por cien, así que era pintar para nadie. Durante
+  el viaje sí lo llevan, porque durante el viaje se ven.
+
+#### EL DOCK PASA A HORNEADO CON LA HOJA PUESTA, Y ESO ES UNA REGLA QUE CADUCÓ
+
+La vuelta 138 le dejó el filtro vivo *porque queda a la vista*, y era lo correcto entonces:
+apagárselo lo habría dejado sin vidrio. Con el horneado de la 139 esa disyuntiva no existe. **Y el
+horneado es EXACTO acá**, que es la parte que hay que razonar: lo que un `backdrop-filter` del dock
+desenfoca es lo que hay **debajo** —la foto y sus velos— y el velo del centro (`#cc::before`, z-index
+7) está por **encima**. Medido contra su propio filtro vivo sobre la misma captura: **2,26 de 255 con
+máximo 44** en la franja del dock, y **0,24 en la pantalla entera**. Con eso el centro asentado pasa
+de **1 pasada / 36.096 px a CERO**.
+
+**Y SIN FOTO NO CAMBIA NADA**, verificado: sin `body.frost` la regla del dock no aplica y el centro
+abierto devuelve **2 pasadas** —`#ccHoja` con su filtro vivo de 288.220 px y el dock con el suyo—,
+que es exactamente lo que hacía antes.
+
+#### DOS DEFECTOS DE MEDICIÓN, Y LOS DOS ME COSTARON UNA CONCLUSIÓN
+
+1. **`ccCosto()` BORRA `#cc` PARA PODER MEDIR DOS VECES EN LA MISMA PÁGINA**, así que su lado
+   «nuevo» también paga un `ccArma`. Leído sin pensar, decía que el arreglo ahorraba de 115 a 7 ms
+   —cierto de casualidad— cuando el número honesto sale de **la primera apertura de verdad en una
+   página fresca**, que es 19,3 → 0,9.
+2. **EL SIGNO DEL GESTO ESTABA AL REVÉS EN MI PLAN.** `gestoY('#hoja', +90)` abre el **centro** y
+   `-90` el cajón; con los rótulos cambiados, la corrida informó «gesto arriba → cajón cerrado» y
+   «tras cerrar el cajón: 0 / 0» sobre un centro que estaba abierto. Los números eran ciertos y
+   ninguno medía lo que el rótulo decía.
+
+#### LO QUE NO SE PUDO MEDIR, Y ES LO MISMO QUE LA VUELTA 136
+
+El banco dibuja por software y **no expone el gestor de baldosas**: el A/B de cuadros del alivio de
+capas da 380 · 184 · 20 ms de un lado y 184 · 16 · 187 del otro, o sea puro ruido. De los 34,7 MB
+está medido que **se dejan de pedir** y que no cuestan un píxel, no cuánto alivia eso en el teléfono.
+Se probó además dejar la hoja **pintada fuera de pantalla** en vez de escondida —la razón que la
+justificaba, no pagar una pasada de filtro con la hoja oculta, caducó con el horneado— y el banco no
+distingue: 1.840 · 1.716 ms de paradas escondida contra 1.811 · 1.824 · 2.004 pintada. Un cambio que
+no mide mejor no se deja puesto por parecer razonable, así que se sacó.
+
+**El número que falta lo tiene su teléfono, y el launcher ya trae el instrumento**: el interruptor de
+Personalizar de la vuelta 133 mide este viaje y lo dice con su rótulo propio —*BAJANDO EL CENTRO ·
+N cuadros · mediana X*—. Si devuelve mediana cerca de 16,7, lo de esta vuelta alcanzó.
+
+#### MEDIDO AL CERRAR
+
+Escritorio **4 capas / 35,5 MB / 3 vidrios / 96.401 px / 0 caras**. Hoja del centro **armada en el
+ocio** (16 botones sin tocar nada) y primera apertura en **0,7 ms con `arma: 0`**. Con el centro
+asentado, **0 pasadas de vidrio y 0,8 MB de capas**; al cerrar vuelve a 3 / 96.401 y 35,5 MB, con el
+agua visible, `will-change:transform, scale` devuelto y el `body` limpio. Cajón intacto: abierto
+**0 / 0 con 13,4 MB**, cerrado **3 / 96.401 con 35,5**. Regresión: riel de **17 letras** con
+`letra('S')` mirando la S, **9 packs**, mascota 23 huesos y 5.541 triángulos, **0 solapamientos**,
+gesto arriba abre el cajón y abajo el centro con **0 ondas de agua** en los dos, centro **16 · 1 ·
+10 · 4**, y los tres idiomas en vivo. `window.__errs` **vacío en las quince corridas**. APK **1.677**,
+2,2 MB.
+
 ### Centésima trigésima novena vuelta (2026-09-09): **AERO** — el vidrio dejaba de ser vidrio, y el fondo hacía zoom
 
 Reporte, en una línea: *"creo que el lag viene de que cuando bajas la ventana de apps los widgets y

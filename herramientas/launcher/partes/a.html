@@ -837,10 +837,19 @@ body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldos
 /* ── Y CON LA HOJA ASENTADA, LO QUE TAPA DEJA DE FILTRAR ──
    La hoja mide **699 px de alto sobre una pantalla de 892**, así que el reloj y
    la barra de búsqueda quedan debajo al cien por cien: filtrarlos es trabajo
-   puro. El DOCK no —queda en la franja de abajo, a la vista— así que conserva
-   su vidrio. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja,
-   que no es lo mismo que tapa la del cajón. */
-body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
+   puro. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja, que
+   no es lo mismo que tapa la del cajón.
+
+   ── Y EL DOCK TAMBIÉN, AUNQUE SE VEA, PORQUE TIENE HORNEADO ──
+   Cuando esta regla se escribió el dock conservaba su filtro vivo *porque queda
+   a la vista*, y era lo correcto entonces: apagárselo lo habría dejado sin
+   vidrio. Con el horneado de la vuelta 139 esa disyuntiva no existe — se lee a
+   vidrio igual y no cuesta una pasada. Y el horneado es EXACTO acá: lo que un
+   `backdrop-filter` del dock desenfoca es lo que hay DEBAJO, o sea la foto y
+   sus velos, y el velo del centro (`#cc::before`, z-index 7) está por ENCIMA.
+   Con esto el centro asentado pasa de 1 pasada / 36.096 px a **cero**. */
+body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
 /* ── PERO APAGAR EL FILTRO NO PUEDE SER APAGAR EL VIDRIO ──
@@ -881,8 +890,7 @@ body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
 body.frost:not(.vidFrostV).cajMueve #capa .vid,
 body.frost:not(.vidFrostV).cajQ #capa .vid,
 body.frost:not(.vidFrostV).ccMueve:not(.ccViejaV) #capa .vid,
-body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #reloj,
-body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #buscaCaja{
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
   background-image:linear-gradient(var(--v-fondo),var(--v-fondo)),var(--vidFrost);
   background-size:auto,100vw 100vh;
   background-position:left top,left top;
@@ -1045,6 +1053,26 @@ body.cajQvis.cajQ #capa{visibility:hidden}
    `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
 body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
 body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
+/* ── Y EL CENTRO DE CONTROL NO TENÍA NADA DE ESTO ──
+   La vuelta 136 midió el cajón y nadie llevó la regla al otro panel: medido con
+   la hoja del centro asentada, `capas()` seguía devolviendo **4 capas y 35,5 MB**
+   detrás de una hoja opaca de 700 px sobre 892. Es el mismo gasto y el mismo
+   remedio.
+
+   LO QUE CAMBIA ES QUE ESTA HOJA NO TAPA LA PANTALLA ENTERA, así que el criterio
+   no es el mismo pieza por pieza. Medido con la hoja puesta: `#reloj` 41-156 y
+   `#buscaCaja` 178-224 quedan **tapados al cien por cien** —por eso pierden
+   también el horneado, que sería pintar para nadie— y `#tira` 224-782 asoma 82
+   px por debajo del canto. `will-change:auto` no esconde nada: deja que el
+   compositor desaloje la textura y vuelva a rasterizar lo poco que se ve.
+
+   EL AGUA SÍ SE ESCONDE, y se puede porque ya está muerta: `#cc.on` está en
+   `AGUA_TAPAN` desde la vuelta 126, o sea que con el centro abierto el lienzo no
+   dibuja un solo píxel. Y vuelve tarde, con `ccMueve`, por lo mismo que en el
+   cajón: reservar trece megas en el cuadro en que la hoja arranca es el escalón
+   que estas vueltas estuvieron sacando. */
+body.ccQ:not(.ccCapasV) #fondo,body.ccQ:not(.ccCapasV) #tira{will-change:auto}
+body.ccQ:not(.ccCapasV) #agua,body.ccMueve:not(.ccCapasV) #agua{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.

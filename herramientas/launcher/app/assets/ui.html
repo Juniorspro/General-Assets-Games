@@ -837,10 +837,19 @@ body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldos
 /* ── Y CON LA HOJA ASENTADA, LO QUE TAPA DEJA DE FILTRAR ──
    La hoja mide **699 px de alto sobre una pantalla de 892**, así que el reloj y
    la barra de búsqueda quedan debajo al cien por cien: filtrarlos es trabajo
-   puro. El DOCK no —queda en la franja de abajo, a la vista— así que conserva
-   su vidrio. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja,
-   que no es lo mismo que tapa la del cajón. */
-body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
+   puro. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja, que
+   no es lo mismo que tapa la del cajón.
+
+   ── Y EL DOCK TAMBIÉN, AUNQUE SE VEA, PORQUE TIENE HORNEADO ──
+   Cuando esta regla se escribió el dock conservaba su filtro vivo *porque queda
+   a la vista*, y era lo correcto entonces: apagárselo lo habría dejado sin
+   vidrio. Con el horneado de la vuelta 139 esa disyuntiva no existe — se lee a
+   vidrio igual y no cuesta una pasada. Y el horneado es EXACTO acá: lo que un
+   `backdrop-filter` del dock desenfoca es lo que hay DEBAJO, o sea la foto y
+   sus velos, y el velo del centro (`#cc::before`, z-index 7) está por ENCIMA.
+   Con esto el centro asentado pasa de 1 pasada / 36.096 px a **cero**. */
+body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
   backdrop-filter:none;-webkit-backdrop-filter:none}
 
 /* ── PERO APAGAR EL FILTRO NO PUEDE SER APAGAR EL VIDRIO ──
@@ -881,8 +890,7 @@ body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja{
 body.frost:not(.vidFrostV).cajMueve #capa .vid,
 body.frost:not(.vidFrostV).cajQ #capa .vid,
 body.frost:not(.vidFrostV).ccMueve:not(.ccViejaV) #capa .vid,
-body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #reloj,
-body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #buscaCaja{
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
   background-image:linear-gradient(var(--v-fondo),var(--v-fondo)),var(--vidFrost);
   background-size:auto,100vw 100vh;
   background-position:left top,left top;
@@ -1045,6 +1053,26 @@ body.cajQvis.cajQ #capa{visibility:hidden}
    `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
 body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
 body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
+/* ── Y EL CENTRO DE CONTROL NO TENÍA NADA DE ESTO ──
+   La vuelta 136 midió el cajón y nadie llevó la regla al otro panel: medido con
+   la hoja del centro asentada, `capas()` seguía devolviendo **4 capas y 35,5 MB**
+   detrás de una hoja opaca de 700 px sobre 892. Es el mismo gasto y el mismo
+   remedio.
+
+   LO QUE CAMBIA ES QUE ESTA HOJA NO TAPA LA PANTALLA ENTERA, así que el criterio
+   no es el mismo pieza por pieza. Medido con la hoja puesta: `#reloj` 41-156 y
+   `#buscaCaja` 178-224 quedan **tapados al cien por cien** —por eso pierden
+   también el horneado, que sería pintar para nadie— y `#tira` 224-782 asoma 82
+   px por debajo del canto. `will-change:auto` no esconde nada: deja que el
+   compositor desaloje la textura y vuelva a rasterizar lo poco que se ve.
+
+   EL AGUA SÍ SE ESCONDE, y se puede porque ya está muerta: `#cc.on` está en
+   `AGUA_TAPAN` desde la vuelta 126, o sea que con el centro abierto el lienzo no
+   dibuja un solo píxel. Y vuelve tarde, con `ccMueve`, por lo mismo que en el
+   cajón: reservar trece megas en el cuadro en que la hoja arranca es el escalón
+   que estas vueltas estuvieron sacando. */
+body.ccQ:not(.ccCapasV) #fondo,body.ccQ:not(.ccCapasV) #tira{will-change:auto}
+body.ccQ:not(.ccCapasV) #agua,body.ccMueve:not(.ccCapasV) #agua{visibility:hidden}
 /* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
    Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
    le gana por especificidad y el cajón queda clavado donde estaba el dedo.
@@ -6328,6 +6356,8 @@ function arranca(){
   cargaApps();
   pintaInicio(); pintaDock();
   cajPrepara();
+  /* y la hoja del centro de control por el mismo motivo: ver `ccPrepara` */
+  if (typeof ccPrepara === 'function') ccPrepara();
   pintaReloj(true); pintaBateria();
   setInterval(() => pintaReloj(), 1000);
   setInterval(pintaBateria, 30000);
@@ -10193,9 +10223,36 @@ function ccMueve(abre){
   setTimeout(() => { if (typeof medTermina === 'function') medTermina(); }, CC_MUEVE_MS);
 }
 
+/* ── LA HOJA SE ARMA EN EL OCIO, NO EN EL PRIMER CUADRO DEL GESTO ──
+   Las vueltas 138 y 139 dejaron anotado un pico de 108 a 183 ms al traer la
+   hoja a escena, presente en los DOS lados de sus A/B. Medido con el cronómetro
+   de `ccAbre`: `ccArma` cuesta **27,6 y 93,1 ms** la primera vez y **0** las
+   siguientes, mientras que `ccLee` y `ccPinta` juntos no llegan a un
+   milisegundo. O sea que el pico es construir dieciséis botones con sus
+   dieciséis dibujos de SVG adentro del cuadro en que el dedo empieza a
+   arrastrar, y se contesta como el cajón: armándola antes, con el escritorio
+   quieto. Es literalmente `cajPrepara()` para el centro. */
+function ccPrepara(){
+  const ocio = fn => (typeof requestIdleCallback === 'function')
+    ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 900);
+  /* el A/B vive en el mismo binario: con `ccArmaV` puesto no se arma nada acá y
+     la apertura vuelve a pagarlo, que es la única forma de que la medición
+     DETECTE el defecto además de aprobar el arreglo */
+  ocio(() => { if (!document.body.classList.contains('ccArmaV')) ccArma(); });
+}
+
 function ccAbre(){
   if (CC.on) return;
-  ccArma(); ccLee(); ccPinta();
+  /* ── CUÁNTO CUESTA TRAER LA HOJA A ESCENA, MEDIDO Y NO SUPUESTO ──
+     Las vueltas 138 y 139 dejaron anotado un pico de 108 a 183 ms al abrir que
+     estaba en los DOS lados de su A/B, o sea que no lo introdujo ni lo arregló
+     ninguna de las dos. Cuatro `performance.now()` por apertura no cuestan
+     nada y son la única forma de saber cuál de los cuatro pasos lo paga. */
+  const t0 = performance.now();
+  ccArma();  const t1 = performance.now();
+  ccLee();   const t2 = performance.now();
+  ccPinta(); const t3 = performance.now();
+  CC.ms = { arma: t1-t0, lee: t2-t1, pinta: t3-t2, total: t3-t0 };
   CC.on = true;
   ccMueve(true);
   /* ── `visibility` SE LEVANTA UN CUADRO ANTES DE ANIMAR ──
@@ -12453,10 +12510,48 @@ window.__A = {
              accesEstado: accEstado(),
              encendidos: $$('#cc .ccB.on').length,
              brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
+             /* lo que costó la ÚLTIMA apertura, paso por paso: es el número
+                que dice si la hoja se armó en el ocio o adentro del gesto */
+             ms: CC.ms ? { arma: +CC.ms.arma.toFixed(1), lee: +CC.ms.lee.toFixed(1),
+                           pinta: +CC.ms.pinta.toFixed(1), total: +CC.ms.total.toFixed(1) } : null,
              alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
              visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
   },
   ccAbrir(){ ccAbre(); return true; },
+  /* ── DÓNDE SE VA EL PICO DE ABRIR, PASO POR PASO ──
+     Las vueltas 138 y 139 midieron el viaje entero y dejaron un pico de 108 a
+     183 ms sin explicar, presente en los dos lados de sus A/B. Un número solo
+     no dice cuál de los cuatro pasos lo paga, así que `ccAbre` cronometra los
+     tres suyos y esto los devuelve. `frio` es la PRIMERA apertura —la única en
+     la que `ccArma` tiene algo que hacer— y `caliente` la segunda. */
+  /* el A/B de armar en el ocio: `true` deja la hoja sin armar y la apertura
+     vuelve a pagar los 27-93 ms de `ccArma`, o sea que la medición detecta el
+     defecto además de aprobar el arreglo */
+  ccArmaVieja(v){
+    document.body.classList.toggle('ccArmaV', !!v);
+    return !document.body.classList.contains('ccArmaV');
+  },
+  /* y el del alivio de capas del centro, igual que `cajCapas` con el cajón */
+  ccCapas(v){
+    document.body.classList.toggle('ccCapasV', !!v);
+    return !document.body.classList.contains('ccCapasV');
+  },
+  async ccCosto(){
+    const cc = $('#cc'); if (cc) cc.remove();
+    CC.on = false; document.body.classList.remove('cc','ccMueve','ccQ');
+    await new Promise(r => setTimeout(r, 60));
+    ccAbre(); const frio = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    await new Promise(r => setTimeout(r, 700));
+    ccAbre(); const cal = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    const r3 = x => ({ arma: +x.arma.toFixed(1), lee: +x.lee.toFixed(1),
+                       pinta: +x.pinta.toFixed(1), total: +x.total.toFixed(1) });
+    return { frio: r3(frio), caliente: r3(cal),
+             armada: !!$('#cc'), botones: $$('#cc .ccB').length };
+  },
   /* ── LA ACCESIBILIDAD, CON UN PUENTE DE MENTIRA ──
      El banco no tiene servicio de accesibilidad, así que lo que se puede medir
      es que los cuatro estados se distingan y que tocar un botón llame a la

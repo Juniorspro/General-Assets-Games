@@ -1457,6 +1457,8 @@ function arranca(){
   cargaApps();
   pintaInicio(); pintaDock();
   cajPrepara();
+  /* y la hoja del centro de control por el mismo motivo: ver `ccPrepara` */
+  if (typeof ccPrepara === 'function') ccPrepara();
   pintaReloj(true); pintaBateria();
   setInterval(() => pintaReloj(), 1000);
   setInterval(pintaBateria, 30000);

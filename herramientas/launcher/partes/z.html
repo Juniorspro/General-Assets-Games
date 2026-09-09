@@ -1721,10 +1721,48 @@ window.__A = {
              accesEstado: accEstado(),
              encendidos: $$('#cc .ccB.on').length,
              brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
+             /* lo que costó la ÚLTIMA apertura, paso por paso: es el número
+                que dice si la hoja se armó en el ocio o adentro del gesto */
+             ms: CC.ms ? { arma: +CC.ms.arma.toFixed(1), lee: +CC.ms.lee.toFixed(1),
+                           pinta: +CC.ms.pinta.toFixed(1), total: +CC.ms.total.toFixed(1) } : null,
              alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
              visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
   },
   ccAbrir(){ ccAbre(); return true; },
+  /* ── DÓNDE SE VA EL PICO DE ABRIR, PASO POR PASO ──
+     Las vueltas 138 y 139 midieron el viaje entero y dejaron un pico de 108 a
+     183 ms sin explicar, presente en los dos lados de sus A/B. Un número solo
+     no dice cuál de los cuatro pasos lo paga, así que `ccAbre` cronometra los
+     tres suyos y esto los devuelve. `frio` es la PRIMERA apertura —la única en
+     la que `ccArma` tiene algo que hacer— y `caliente` la segunda. */
+  /* el A/B de armar en el ocio: `true` deja la hoja sin armar y la apertura
+     vuelve a pagar los 27-93 ms de `ccArma`, o sea que la medición detecta el
+     defecto además de aprobar el arreglo */
+  ccArmaVieja(v){
+    document.body.classList.toggle('ccArmaV', !!v);
+    return !document.body.classList.contains('ccArmaV');
+  },
+  /* y el del alivio de capas del centro, igual que `cajCapas` con el cajón */
+  ccCapas(v){
+    document.body.classList.toggle('ccCapasV', !!v);
+    return !document.body.classList.contains('ccCapasV');
+  },
+  async ccCosto(){
+    const cc = $('#cc'); if (cc) cc.remove();
+    CC.on = false; document.body.classList.remove('cc','ccMueve','ccQ');
+    await new Promise(r => setTimeout(r, 60));
+    ccAbre(); const frio = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    await new Promise(r => setTimeout(r, 700));
+    ccAbre(); const cal = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    const r3 = x => ({ arma: +x.arma.toFixed(1), lee: +x.lee.toFixed(1),
+                       pinta: +x.pinta.toFixed(1), total: +x.total.toFixed(1) });
+    return { frio: r3(frio), caliente: r3(cal),
+             armada: !!$('#cc'), botones: $$('#cc .ccB').length };
+  },
   /* ── LA ACCESIBILIDAD, CON UN PUENTE DE MENTIRA ──
      El banco no tiene servicio de accesibilidad, así que lo que se puede medir
      es que los cuatro estados se distingan y que tocar un botón llame a la
