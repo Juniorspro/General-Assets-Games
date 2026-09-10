@@ -1,0 +1,209 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>DUNA</title>
+<style>
+/* ── EL MARCO VA APAISADO ADENTRO DE UN TELEFONO VERTICAL ─────────────────
+   Este juego corre hacia la derecha, asi que necesita ancho: en un 412x892
+   un 16:9 sin girar mide 412x232, o sea el 11% de la pantalla. Las dos
+   salidas malas son encogerlo y pedirle al jugador que gire el aparato —una
+   pantalla que no hace nada—. Se gira el MARCO 90 grados y adentro va TODO:
+   lienzo, HUD y paneles, una sola transformacion, nada que desalinear.
+   En una pantalla que ya es apaisada no se gira nada.                     */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#07080c;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#eae4d8;
+  -webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+#marco{position:absolute;left:50%;top:50%;transform-origin:50% 50%;overflow:hidden;
+  background:#07080c}
+#lienzo{display:block;width:100%;height:100%}
+
+/* ── LA INTERFAZ ──────────────────────────────────────────────────────────
+   Todo el texto sale de `--mh`, que es el LADO CORTO del marco: el marco va
+   girado, asi que `vh` aca es el lado LARGO y cualquier medida en vh sale
+   dos veces mas grande en un telefono. Ya costo una vuelta en HUESOS.     */
+#hud{position:absolute;inset:0;pointer-events:none}
+/* EL MARCADOR VA CON MARGEN A LOS DOS LADOS, Y NO ES ESTETICA. Con
+   `left:0;right:0` la CAJA mide el ancho entero aunque el texto vaya centrado,
+   asi que se pisa con el contador de monedas —que vive a la derecha— y con el
+   boton de pausa, que vive a la izquierda: medido, `pts×mon` y `pts×bPausa`.
+   No se ve, pero el dedo que va a la pausa toca el marcador. Es exactamente el
+   mismo defecto que ya costo una vuelta en CRUCE. El margen sale de donde
+   terminan los dos: la pausa llega a .038+.082 y las monedas empiezan a .045
+   del canto derecho, asi que .14 los despeja a los dos con aire.          */
+#pts{position:absolute;left:calc(var(--mh,412px)*.14);right:calc(var(--mh,412px)*.14);
+  top:calc(var(--mh,412px)*.045);text-align:center;
+  font:800 clamp(20px,calc(var(--mh,412px)*.086),40px)/1 monospace;letter-spacing:.06em;
+  color:#fff;opacity:.94;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+#sub{position:absolute;left:0;right:0;top:calc(var(--mh,412px)*.135);text-align:center;
+  font:600 clamp(9px,calc(var(--mh,412px)*.030),13px)/1 monospace;letter-spacing:.22em;
+  color:#fff;opacity:.50}
+#mon{position:absolute;right:calc(var(--mh,412px)*.045);top:calc(var(--mh,412px)*.045);
+  font:700 clamp(11px,calc(var(--mh,412px)*.036),16px)/1 monospace;letter-spacing:.10em;
+  color:#ffd98a;opacity:.92;display:flex;align-items:center;gap:6px}
+#mon i{display:block;width:.75em;height:.75em;border-radius:50%;background:#ffd98a;
+  box-shadow:0 0 8px rgba(255,217,138,.6);font-style:normal}
+/* Y LOS TRES SE APAGAN FUERA DE LA PARTIDA. El marcador estaba siempre puesto,
+   asi que la PRIMERA pantalla del juego —la de elegir idioma— salia con un
+   «0 metros» y un contador de monedas en cero encima del cartel del nombre:
+   un marcador que cuenta una partida que todavia no empezo no informa nada, y
+   encima le compite al titulo. `#bPausa` ya lo hacia bien; a estos tres nadie
+   se los habia mirado porque `cajas()` mide el HUD contra si mismo y no
+   contra los paneles. Y EL AVISO DE TRUCO ES EL PEOR DE LOS CINCO: se queda
+   con su `.on` puesto del ultimo truco, asi que la pantalla de final salia
+   con «hace un salto de 14 metros / HECHO» cruzado por encima de los metros
+   recorridos y del renglon de monedas —dos textos en el mismo sitio—. */
+#pts,#sub,#mon,#truco,#pista{display:none}
+body.jugando #pts,body.jugando #sub,
+body.jugando #truco,body.jugando #pista{display:block}
+body.jugando #mon{display:flex}
+/* el aviso de truco: entra y se va, y es lo unico que le dice al jugador que
+   lo que hizo tiene nombre. Sin esto un backflip es "salte y no me cai". */
+#truco{position:absolute;left:0;right:0;top:calc(var(--mh,412px)*.30);text-align:center;
+  font:800 clamp(13px,calc(var(--mh,412px)*.048),22px)/1.25 monospace;letter-spacing:.16em;
+  color:#fff;opacity:0;transform:translateY(10px);transition:opacity .18s,transform .18s;
+  text-shadow:0 2px 14px rgba(0,0,0,.45)}
+#truco.on{opacity:1;transform:translateY(0)}
+#truco b{display:block;font-size:.62em;letter-spacing:.30em;opacity:.72;font-weight:600;
+  margin-top:.35em}
+
+/* ── LOS PANELES ──────────────────────────────────────────────────────────
+   El velo es un DEGRADADO y no una opacidad pareja: cerrado arriba y abajo,
+   donde van el titulo y los botones, y abierto en el medio, que es donde el
+   juego tiene algo para mostrar. Detras corre la partida de demostracion. */
+.panel{position:absolute;inset:0;display:none;place-items:center;z-index:5;
+  background:linear-gradient(180deg,rgba(8,9,14,.93) 0%,rgba(8,9,14,.40) 38%,
+    rgba(8,9,14,.40) 62%,rgba(8,9,14,.94) 100%)}
+.panel.on{display:grid}
+/* EL RITMO VERTICAL VA EN --mh Y APRETADO. Medido, con el hueco en 0,026 la
+   caja del menu media 414 px en un marco de 412 y 401 en uno de 360: el
+   titulo salia cortado por arriba y la linea del record pegada al borde de
+   abajo. Y no alcanza con achicar el hueco, porque casi todo lo demas —los
+   botones, las tres filas de objetivos— esta en px fijos y en un marco chico
+   eso es lo que manda: hubo que apretar las nueve medidas a la vez.       */
+/* Y ENSANCHAR LA CAJA NO SIRVE, medido: con 470, 540 y 600 px de ancho el
+   panel mide 369 px LOS TRES, hasta el pixel. Lo que lo hace alto no es texto
+   que se parte en renglones —ninguna fila envuelve— sino el relleno de las
+   tres filas de objetivos y los cinco huecos. Un cambio que no mide mejor no
+   se deja puesto por parecer razonable.                                  */
+.caja{width:min(80%,470px);text-align:center;display:flex;flex-direction:column;
+  align-items:center;gap:calc(var(--mh,412px)*.014)}
+h1{font:800 clamp(22px,calc(var(--mh,412px)*.092),44px)/1 monospace;letter-spacing:.34em;
+  color:#f4ead8;text-shadow:0 3px 0 rgba(0,0,0,.30),0 0 34px rgba(255,190,120,.22)}
+/* `:not(.nm)` Y NO `h1 span` A SECAS. Esta regla se escribio para el
+   SUBTITULO, y el nombre del juego tambien es un span: medido, `DUNA` salia a
+   10,712 px —exactamente el mismo cuerpo que su propio subtitulo— sobre un h1
+   que dice 37,904. O sea que lo mas grande del menu era lo mas chico, y no
+   fallaba nada: se leia como un rotulo. */
+h1 .nm{display:block}
+h1 span:not(.nm){display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),12px)/1.6 monospace;
+  letter-spacing:.26em;color:#c9bda8;opacity:.72;margin-top:calc(var(--mh,412px)*.012);
+  text-shadow:none}
+/* EL ANCHO DEL TITULO NO PUEDE DEPENDER DEL SUBTITULO. Un `h1` dentro de una
+   columna flex centrada se encoge hasta su contenido, y su contenido mas
+   ancho es el subtitulo: medido, el cartel quedaba en 314 px sobre una caja
+   de 540 porque esa es la longitud de «bajá la duna · un dedo · sin final».
+   O sea que el tamano del nombre del juego cambiaba con el idioma.       */
+.tit{width:100%}
+.tit .cart{display:none}
+body.cartel .tit .nm{display:none}
+body.cartel .tit .cart{display:block;width:100%;
+  height:clamp(26px,calc(var(--mh,412px)*.130),62px);
+  background:var(--cartel) center/contain no-repeat;
+  filter:drop-shadow(0 3px 12px rgba(0,0,0,.45))}
+.b{padding:9px 30px;min-width:210px;border:0;border-radius:999px;
+  background:linear-gradient(180deg,#f6ecd8,#dcc9a6);
+  font:700 13px/1 monospace;letter-spacing:.20em;color:#2a2013;cursor:pointer;
+  box-shadow:0 3px 0 rgba(0,0,0,.22)}
+.b:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.22)}
+.b.s{background:rgba(255,255,255,.10);color:#e9e0cd;box-shadow:none;
+  border:1px solid rgba(255,255,255,.20);min-width:150px;padding:9px 22px;font-size:11px}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.fila.tres{width:100%;flex-wrap:nowrap}
+.ch{padding:6px 0;min-width:0;flex:1 1 0;border:1px solid rgba(255,255,255,.18);
+  border-radius:8px;background:rgba(255,255,255,.05);
+  font:600 10px/1 monospace;letter-spacing:.10em;color:#cdc4b2;cursor:pointer}
+.ch.sel{border-color:rgba(255,214,150,.75);color:#ffe9c4;background:rgba(255,200,130,.14)}
+.tit2{font:700 11px/1 monospace;letter-spacing:.22em;color:#a99e8a;opacity:.8}
+/* el relleno de las filas y los huecos son lo unico que se aprieta: el
+   cuerpo de letra no, que es lo que no se puede achicar sin perder
+   legibilidad. */
+.gr{display:flex;flex-direction:column;gap:3px;align-items:center;width:100%}
+.pies{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%}
+.pie{font:500 10px/1.45 monospace;color:#9b9280;max-width:360px}
+.pie.rec{font:600 10px/1.5 monospace;letter-spacing:.09em;color:#d8b877;
+  display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* ── LOS OBJETIVOS ────────────────────────────────────────────────────────
+   Tres a la vez y en una lista, como en Alto: son lo que convierte "corri
+   otra vez" en "me falta uno". El tildado va en el propio renglon, porque un
+   contador aparte obliga a mirar dos sitios.                              */
+#obj{display:flex;flex-direction:column;gap:4px;width:100%;margin-top:0}
+.ob{display:flex;align-items:center;gap:9px;text-align:left;
+  font:500 10px/1.35 monospace;color:#b7ad99;padding:4px 11px;border-radius:9px;
+  background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07)}
+.ob u{flex:0 0 auto;width:14px;height:14px;border-radius:4px;text-decoration:none;
+  border:1px solid rgba(255,255,255,.28);display:grid;place-items:center;
+  font-size:9px;color:#0d1018}
+.ob.ok{color:#e7dcc4}
+.ob.ok u{background:#ffd98a;border-color:#ffd98a}
+.ob.ok u::after{content:'✓'}
+.ob s{margin-left:auto;text-decoration:none;opacity:.6;font-size:9px;letter-spacing:.08em}
+
+/* ── EL BOTON DE PAUSA ────────────────────────────────────────────────────
+   Es lo unico tactil que hay ademas del juego entero: se toca en cualquier
+   lado para saltar, asi que la pausa tiene que estar donde el pulgar NO va
+   —arriba a la izquierda— y ser chica.                                    */
+#bPausa{position:absolute;left:calc(var(--mh,412px)*.038);top:calc(var(--mh,412px)*.038);
+  width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.20);
+  border:1px solid rgba(255,255,255,.18);display:none;place-items:center;
+  font:700 15px/1 monospace;color:#fff;opacity:.55;pointer-events:auto;cursor:pointer}
+body.jugando #bPausa{display:grid}
+/* la pista del primer toque: se va sola en cuanto se salta una vez */
+#pista{position:absolute;left:0;right:0;bottom:calc(var(--mh,412px)*.10);text-align:center;
+  font:600 clamp(9px,calc(var(--mh,412px)*.030),13px)/1.5 monospace;letter-spacing:.16em;
+  color:#fff;opacity:0;transition:opacity .4s}
+#pista.on{opacity:.62}
+</style></head><body>
+<div id="marco">
+  <canvas id="lienzo"></canvas>
+  <div id="hud">
+    <div id="pts">0</div>
+    <div id="sub"></div>
+    <div id="mon"><i></i><span id="monN">0</span></div>
+    <div id="truco"></div>
+    <div id="pista"></div>
+  </div>
+  <div class="bt" id="bPausa">‖</div>
+
+  <div class="panel on" id="pIdioma"><div class="caja">
+    <h1 class="tit"><i class="cart"></i><span class="nm">DUNA</span><span id="iSub">elegí tu idioma</span></h1>
+    <div class="fila" id="iBotones"></div>
+  </div></div>
+
+  <div class="panel" id="pMenu"><div class="caja">
+    <h1 class="tit"><i class="cart"></i><span class="nm">DUNA</span><span id="mSub"></span></h1>
+    <button class="b" id="mJugar"></button>
+    <div class="gr"><div class="tit2" id="mTitObj"></div><div id="obj"></div></div>
+    <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
+    <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
+    <div class="pies"><div class="pie" id="mPie"></div>
+    <div class="pie rec"><span id="mRec"></span><span id="mMon"></span></div></div>
+  </div></div>
+
+  <div class="panel" id="pPausa"><div class="caja">
+    <h1 id="paTit"></h1>
+    <button class="b" id="paSeguir"></button>
+    <button class="b s" id="paMenu"></button>
+    <div class="pie" id="paPie"></div>
+  </div></div>
+
+  <div class="panel" id="pFin"><div class="caja">
+    <h1><b id="fTit"></b><span id="fSub"></span></h1>
+    <div class="pie" id="fDatos"></div>
+    <div class="gr"><div id="objF"></div></div>
+    <button class="b" id="fOtra"></button>
+    <button class="b s" id="fMenu"></button>
+  </div></div>
+</div>
+<script type="module">

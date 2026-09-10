@@ -1,0 +1,170 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LAS SONDAS
+   ──────────────────────────────────────────────────────────────────────────
+   Una afirmacion sin numero no vale. Esto es lo que permite decir "el mundo
+   se puede recorrer" con veinticinco semillas en vez de con una captura, y
+   —lo mas importante— lo que permite que una prueba DETECTE un defecto y no
+   solo apruebe el arreglo.                                                */
+window.__errs = [];
+addEventListener('error', e => window.__errs.push('' + (e.message || e)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + e.reason));
+
+window.__D = {
+  est: () => ({
+    pant: PANT, idi: IDIOMA, cal: CAL, hora: +HORA.toFixed(3), pal: PAL.n,
+    x: +R.x.toFixed(1), y: +R.y.toFixed(2), s: +R.s.toFixed(2),
+    suelo: R.suelo, cuerda: !!R.cuerda, vivo: R.vivo, muerte: R.muerte,
+    ang: +R.ang.toFixed(3), giro: +R.giro.toFixed(2),
+    dist: Math.floor(R.dist), mons: R.mons, flips: R.flips, grinds: R.grinds,
+    trucos: R.trucos, comboMax: R.comboMax, saltoMax: +R.saltoMax.toFixed(1),
+    demo: DEMO, marco: [ANCHO, ALTO], esc: +ESC.toFixed(2), pxr: +PXR.toFixed(2),
+    lienzo: [lienzo.width, lienzo.height],
+    bufanda: BUF.length, arena: ARE.length, estela: EST.length,
+    rec: GUARDA.rec, monTot: GUARDA.mon, niv: Object.assign({}, GUARDA.niv),
+  }),
+  /* jugar de verdad: el bot aprieta el MISMO boton que el dedo y pasa por el
+     mismo `unPaso`, asi que terminar una partida aca prueba el juego que se
+     juega y no una simulacion parecida */
+  /* EL MODO PASA TAL CUAL Y NO CONVERTIDO A BOOLEANO. Con `!!modo` el control
+     al azar llegaba como `true`, o sea como el bot torpe: medido, las dos
+     filas daban 6.649 y 6.664 metros —la misma cifra— y eso se lee a que el
+     juego no pide nada cuando lo que pasaba es que se estaba corriendo dos
+     veces el mismo bot. Un control que no es un control aprueba cualquier
+     cosa. */
+  juega: (seg, modo) => {
+    const g = DEMO; DEMO = true; DEMO_REVIVE = false; botReinicia(modo);
+    const n = Math.round((seg || 60) / PASO);
+    let i = 0;
+    /* Y ADEMAS AVANZA LO VISUAL. `unPaso` mueve la fisica y nada mas: la
+       bufanda, la arena y la estela viven en `cuadro`, o sea al ritmo del
+       DIBUJO. Un bot que solo integra la fisica los deja congelados en su
+       pose de reposo, y entonces `bufanda()` despues de `juega()` mide una
+       bufanda que nunca vivio — medido, cuarenta muestras dieron curva 0,000
+       y largo 1,53 clavado, que es la cadena en reposo. Aca el paso fijo y el
+       cuadro van al mismo ritmo, asi que avanzarlos juntos es fiel. */
+    /* Y LA CAMARA TAMBIEN, que es lo que hace que una foto sacada despues de
+       un bot muestre el sitio donde el rider esta. `camPaso` vive en `cuadro`,
+       asi que sin esto la camara se queda donde estaba en el ultimo dibujo
+       mientras el rider avanza quinientos metros: medido en la captura, el
+       terreno se veia bien y el rider NO ESTABA EN EL CUADRO. Es la misma
+       trampa que ya costo una vuelta en RECREO y otra en HUESOS. */
+    for (; i < n && R.vivo; i++) {
+      unPaso(PASO); TIEMPO += PASO;
+      riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
+    }
+    const r = { dist: Math.floor(R.dist), seg: +(i * PASO).toFixed(1),
+                s: +(R.dist / Math.max(i * PASO, 0.01)).toFixed(1),
+                muerte: R.muerte, vivo: R.vivo, mons: R.mons, flips: R.flips,
+                grinds: R.grinds, trucos: R.trucos, saltos: SALTOS };
+    DEMO = g; DEMO_REVIVE = true; return r;
+  },
+  nueva: sem => {
+    terrReinicia(sem === undefined ? (Math.random() * 1e9) | 0 : sem);
+    riderReinicia(); camReinicia(); riderVisReinicia(); botReinicia(false);
+    HORA0 = 0; HORA = 0; OBJ_HECHOS = [];
+    PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
+    return TERR_SEM;
+  },
+  /* AUDITAR EL MUNDO NO ES MIRARLO: se recorre el terreno metro a metro y se
+     comprueba que ningun hueco sea mas ancho de lo que un salto cruza, que
+     ninguna moneda quede enterrada y que ninguna cuerda quede fuera de
+     alcance. Un mapa generado y no comprobado es un mapa roto que todavia no
+     se sabe. */
+  audita: (sem, metros) => {
+    terrReinicia(sem); riderReinicia();
+    const hasta = metros || 4000;
+    terrGenera(hasta + 400);
+    let peorHueco = 0, monMal = 0, cuMal = 0;
+    for (const h of HUECOS) if (h.b - h.a > peorHueco) peorHueco = h.b - h.a;
+    for (const m of MONEDAS) if (hayPiso(m.x) && m.y < terrY(m.x) + 0.4) monMal++;
+    for (const c of CUERDAS) if (c.y0 - terrY(c.x0) > 7 || c.y0 - terrY(c.x0) < 1.2) cuMal++;
+    return { sem: TERR_SEM, pc: PC.length, huecos: HUECOS.length,
+             peorHueco: +peorHueco.toFixed(1), cuerdas: CUERDAS.length, cuMal,
+             monedas: MONEDAS.length, monMal, deco: DECO.length };
+  },
+  hora: h => { HORA0 = h - R.dist / CICLO_M; HORA = h; paletaEn(HORA); return PAL.n; },
+  pantalla: p => { verPantalla(p); return PANT; },
+  idioma: k => { IDIOMA = k; pintaTodo(); return T('jugar'); },
+  calidad: i => { CAL = i; ajustaMarco(); pintaMenu(); return [ANCHO, ALTO, +PXR.toFixed(2)]; },
+  toca: v => { if (v) entradaAbajo(null); else entradaArriba(); return APRETADO; },
+  empieza: () => { empieza(); return PANT; },
+  mata: () => { R.vivo = false; R.muerte = 'sonda'; if (!DEMO) termina(); return PANT; },
+  nivel: (id, n) => { GUARDA.niv[id] = n; guardaEscribe(); pintaMenu();
+                      return objActivos().map(o => o.id); },
+  objs: () => objActivos().map(o => ({ id: o.id, meta: objMeta(o),
+        val: +objValor(o).toFixed(1), txt: objTexto(o) })),
+  audio: () => audioNivel(),
+  /* disparar un sonido SUELTO es la unica forma de medir la escala de la
+     mezcla: leyendo el nivel en el medio de una partida se miden tres cosas
+     encimadas y no se sabe cual es cual. */
+  son: k => { son(k); return k; },
+  /* la bufanda no se puede juzgar en una captura de treinta pixeles: lo que
+     dice si va atras o se enrosca es donde caen sus diez puntos respecto del
+     cuello, en metros */
+  /* Y EL LARGO SOLO NO ALCANZA: una antena mide igual que una tela. Lo que
+     las separa es CUANTO SE APARTA de la recta cuello-punta, en fracciones de
+     su propio largo. Un palo da 0; medido, una bufanda que ondula da entre
+     0,05 y 0,25. Sin este numero la primera version paso la prueba del largo
+     con una recta perfecta. */
+  bufanda: () => {
+    const n = BUF[0], u = BUF[BUF.length - 1];
+    const L = Math.hypot(u.x - n.x, u.y - n.y);
+    let cur = 0;
+    if (L > 1e-3) for (let i = 1; i < BUF.length - 1; i++)
+      cur = Math.max(cur, Math.abs((u.x - n.x) * (n.y - BUF[i].y) - (n.x - BUF[i].x) * (u.y - n.y)) / L);
+    return { ang: +R.ang.toFixed(2), vx: +R.vx.toFixed(1), vy: +R.vy.toFixed(1),
+             pts: BUF.map(p => [+(p.x - n.x).toFixed(2), +(p.y - n.y).toFixed(2)]),
+             largo: +L.toFixed(2), curva: +(cur / Math.max(L, 1e-3)).toFixed(3) };
+  },
+  pose: () => ({ ag: +POSE.ag.toFixed(2), tk: +POSE.tk.toFixed(2),
+                 br: +POSE.br.toFixed(2), ln: +POSE.ln.toFixed(2), sq: +POSE.sq.toFixed(2) }),
+  mudo: v => { audioMudo(v); return SON_ON; },
+  /* PARA MEDIR SOLAPAMIENTOS HAY QUE USAR offsetLeft/offsetTop Y NO
+     getBoundingClientRect: el marco esta GIRADO noventa grados, y el
+     rectangulo que devuelve el navegador esta alineado a los ejes de la
+     pantalla, o sea que denuncia choques que no existen. Ya costo una vuelta
+     en ECO y otra en HUESOS. */
+  cajas: () => {
+    const ids = ['pts', 'sub', 'mon', 'truco', 'pista', 'bPausa'];
+    const v = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < 0.05) continue;
+      if (!e.offsetWidth || !e.offsetHeight) continue;
+      v.push({ id, x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight });
+    }
+    const ch = [];
+    for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) {
+      const a = v[i], b = v[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+        ch.push(a.id + '×' + b.id);
+    }
+    const fuera = v.filter(c => c.x < -1 || c.y < -1 || c.x + c.w > ANCHO + 1 || c.y + c.h > ALTO + 1)
+                   .map(c => c.id);
+    return { n: v.length, choques: ch, fuera, marco: [ANCHO, ALTO], cajas: v };
+  },
+  /* que un panel ENTRE en el cuadro es una propiedad del panel, no del texto:
+     con tres idiomas y seis metas de largo variable, el que no entra es
+     siempre el que nadie miro */
+  panel: id => {
+    const p = $(id), c = p.querySelector('.caja');
+    return { on: p.classList.contains('on'), alto: c.offsetHeight, marco: ALTO,
+             entra: c.offsetHeight <= ALTO, sobra: ALTO - c.offsetHeight };
+  },
+  /* el brillo se lee del BUFFER y no de una captura: es lo unico que dice si
+     una paleta de verdad ilumina la pantalla */
+  brillo: () => {
+    const d = ctx.getImageData(0, 0, lienzo.width, lienzo.height).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4 * 37) { s += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
+    return +(s / n).toFixed(1);
+  },
+  costo: () => {
+    const t0 = performance.now();
+    for (let i = 0; i < 20; i++) pinta(R.x, R.y, R.ang);
+    return { msCuadro: +((performance.now() - t0) / 20).toFixed(3) };
+  },
+};
+</script></body></html>

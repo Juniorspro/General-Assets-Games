@@ -281,8 +281,8 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
-- **`Huesos.html` es "HUESOS"** (~1,48 MB, de los cuales la mayor parte son las sesenta y nueve
-  texturas y las catorce mallas generadas; el mundo entero y las animaciones se dibujan por código).
+- **`Huesos.html` es "HUESOS"** (~1,59 MB, de los cuales la mayor parte son las sesenta y nueve
+  texturas y las veinte mallas generadas; el mundo entero y las animaciones se dibujan por código).
   El decimosexto juego. Un **RPG de matar esqueletos en tercera persona**, vertical nativo y con
   joystick: se camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a
   uno y el tercero barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del
@@ -307,6 +307,158 @@ munecas.
   (destino de render chico estirado con NEAREST). Vive partido en `herramientas/huesos/partes/` y se
   arma con `python3 herramientas/huesos/armar.py`; los sprites se hornean con
   `python3 herramientas/huesos/hornear.py` y las mallas con `hornear_3d.py`.
+  **Se puede pasar**: matar al rey abre un final de **once segundos** que no es un panel —la ceniza
+  se levanta, la cámara se despega del hombro y sube 4,82 m, y entran las tres líneas del epílogo—
+  y **se puede saltear**, porque un final obligatorio visto cinco veces deja de ser un final. La
+  **historia** son tres líneas de prólogo, una por zona al abrirla, una del rey y tres de epílogo,
+  encoladas. El héroe lleva **seis piezas de armadura generadas con Tripo** —peto, faldar, brazal,
+  guante, quijote y greba, 4.705 triángulos en 12 piezas— que entran por el mismo camino que
+  reemplaza geometría, así que un base64 roto cuesta **una pieza y no un héroe invisible**. Y el
+  menú tiene **cartel del nombre** y cuatro iconos que van como **máscara de CSS sobre
+  `currentColor`**, para que el color siga viviendo en la hoja de estilos.
+
+- **`Duna.html` es "DUNA"** (~197 KB, de los cuales 57 son el cartel del nombre generado con
+  Rezona; **el juego en sí no tiene un solo asset**: las dunas, el rider, la bufanda, las nubes y
+  los ocho cielos se dibujan por código y el sonido es procedural). El decimoséptimo juego. Un
+  **sandboard sin final con UN SOLO BOTÓN**, en el estilo de Alto's Odyssey: arte vectorial de
+  siluetas planas, y **el suelo es lo CLARO y todo lo que se apoya en él es lo OSCURO** —esa
+  inversión es el estilo—. Se toca y salta; se mantiene en el aire y da una voltereta; **aterrizar
+  derecho paga velocidad y de cabeza te caés**, con 36 grados de tolerancia. Sobre una cuerda de
+  banderines se mantiene para colgarse. El terreno es una **Hermite sobre puntos de control con
+  derivada analítica** y los huecos son una **máscara** y no parte de la curva. **La hora del día
+  avanza con la DISTANCIA y no con el reloj** (un ciclo cada 3.200 m) y cada partida arranca en un
+  punto distinto del ciclo: ocho paletas, de la noche con luna a la siesta lavada. Los números no
+  se eligen, se derivan: el roce sale del equilibrio de crucero a 20 m/s, y el impulso y la
+  gravedad de que **una vuelta entera entre en un vuelo llano** (0,73 s de giro dentro de 1,10 de
+  aire). Vive partido en `herramientas/duna/partes/` y se arma con
+  `python3 herramientas/duna/armar.py`; el cartel se hornea con `hornear_ui.py`.
+
+### Centésima quincuagésima cuarta vuelta (2026-09-10): **DUNA**, el decimoséptimo juego — un sandboard de un botón, y seis defectos que sólo salieron midiendo
+
+`juegos-pc/Duna.html` (197 KB, de los cuales 57 son el cartel del nombre generado con Rezona).
+Vive partido en `herramientas/duna/partes/` y se arma con `python3 herramientas/duna/armar.py`.
+
+#### LO QUE DEFINE AL GÉNERO NO ES LA TABLA: ES QUE HAYA UN SOLO BOTÓN
+
+Se toca y salta; se **mantiene** en el aire y da una voltereta; sobre una cuerda de banderines se
+mantiene para colgarse. Un botón y tres cosas, decididas por **dónde está el cuerpo** y no por un
+segundo control. Y **aterrizar derecho paga y de cabeza te caés**, con 36 grados de tolerancia:
+ésa es la única regla que el juego tiene, y es la que hace que la voltereta sea una apuesta en vez
+de un adorno.
+
+**EL SUELO ES LO CLARO Y LO QUE SE APOYA EN ÉL ES LO OSCURO.** Esa inversión es el estilo entero:
+la arena es la superficie más brillante del cuadro y el rider, los árboles secos y las dunas del
+fondo son siluetas planas. Con el suelo oscuro y el personaje claro esto se leería a cualquier
+plataformas.
+
+#### LOS NÚMEROS NO SE ELIGEN, SE DERIVAN
+
+- **El roce sale del equilibrio de crucero.** Se decide a qué velocidad se quiere ir cuesta abajo
+  (20 m/s) y de ahí sale μ, no al revés. Escrito a mano, la velocidad de crucero es lo que salga.
+- **El impulso y la gravedad salen de que una vuelta entera entre en un vuelo llano**: `GIRO_V`
+  8,6 rad/s da 0,73 s por vuelta y `2·SALTO/G` da **1,10 s** de aire. Si el vuelo fuera más corto
+  que el giro, la voltereta sería imposible por construcción y no por dificultad.
+- **La hora del día avanza con la DISTANCIA y no con el reloj** (un ciclo cada 3.200 m), y cada
+  partida arranca en un punto distinto del ciclo. Con el reloj de pared, dos partidas seguidas se
+  ven iguales; con la distancia, avanzar **es** que amanezca.
+
+Medido, las ocho paletas leídas del búfer: **noche 88 · alba 131 · amanecer 178 · mañana 200 ·
+día 199 · siesta 200 · atardecer 161 · ocaso 111**.
+
+#### EL TERRENO ES UNA HERMITE Y LOS HUECOS SON UNA MÁSCARA
+
+La altura sale de una Hermite sobre puntos de control **con derivada analítica**, así que la
+pendiente que usa la física es la de la curva y no una diferencia entre dos muestras — y esa
+pendiente es lo que decide el ángulo de aterrizaje, o sea la única regla del juego.
+
+**Y LOS HUECOS NO SON PARTE DE LA CURVA: SON UNA MÁSCARA.** Metidos adentro de la altura habría que
+inventar un valor para «no hay piso» y ese valor entra en la derivada; con una máscara, la curva
+sigue siendo continua y `hayPiso(x)` contesta aparte.
+
+Auditoría sobre **25 semillas de 4.000 m**: **0 monedas enterradas y 0 cuerdas fuera de alcance**,
+1 a 8 huecos, 76 a 150 monedas, 0 a 8 cuerdas, 91 a 104 puntos de control por semilla.
+
+#### TRES BOTS, Y EL DEL AZAR ES EL QUE PRUEBA QUE HAY UN JUEGO
+
+Doce semillas × 180 s, los tres apretando **el mismo botón que el dedo** (entran por `pulsa`):
+
+| | vivos | mediana | el peor | de qué murieron |
+|---|---|---|---|---|
+| honesto (vuela el salto y elige) | **12 / 12** | 4.433 m | 4.369 | — |
+| torpe (sin variantes, mira menos) | 7 / 12 | 4.303 | 1.184 | **hueco ×5** |
+| al azar | **0 / 12** | **22 m** | 12 | **ángulo ×12** |
+
+El del azar muere a los veintidós metros y las doce veces por **el ángulo de aterrizaje**: eso es
+la prueba de que la regla del juego es la regla del juego y no un adorno. Y el torpe muere en los
+**huecos**, que es lo que separa «elegir cuándo saltar» de «saltar».
+
+#### SEIS DEFECTOS, Y CINCO ERAN DE LA MEDICIÓN
+
+Vale anotarlos juntos porque son la misma familia: **una sonda que adelanta una parte del juego
+está midiendo un juego que no existe.**
+
+1. **`juega()` NO ADELANTABA LO VISUAL, así que la bufanda nunca vivía.** La bufanda, la arena y la
+   estela viven en `cuadro`, o sea al ritmo del **dibujo**; el bot sólo integraba `unPaso`. Medido:
+   cuarenta muestras dieron **curva 0,000 y largo 1,53 clavado hasta el centésimo** — que es
+   exactamente la cadena en reposo (9 × 0,17). Y la sonda existe **precisamente** para separar una
+   tela de una antena: su propio comentario dice *«un palo da 0»*. Estuve a punto de escribir que la
+   bufanda estaba rota. Con el paso visual adentro del bot: en el suelo **curva 0,072 y largo 1,49
+   de 1,53** (tensa, con ondulación), en el aire **0,239 y 1,25** (se recoge). Eso es una tela.
+2. **Y TAMPOCO ADELANTABA LA CÁMARA.** `camPaso` vive en `cuadro`: después de un bot de 500 m la
+   cámara se quedaba donde estaba el último dibujo. En la captura se veía el terreno perfecto y
+   **el rider no estaba en el cuadro**. Es la misma trampa que ya costó una vuelta en RECREO y otra
+   en HUESOS.
+3. **`brillo()` LEE EL BÚFER, ASÍ QUE `hora(h)` SIN REPINTAR NO MIDE NADA.** Las ocho paletas
+   devolvían **176,6 las ocho** —el mismo número hasta el decimal, que es la firma de que no se
+   está midiendo lo que se cree— y las paletas estaban perfectas. Repintando entre medio, 88 a 200.
+4. **EL BOT APILA TODOS LOS SONIDOS EN EL MISMO INSTANTE DE AUDIO.** `juega` comprime ocho segundos
+   de juego en **una vuelta sincrónica de JS**, y `AudioContext.currentTime` no avanza adentro de
+   una: los doce saltos, las seis volteretas y sus aterrizajes arrancan todos en el mismo timestamp
+   y **se suman en fase**. Medido, el maestro daba **pico 12,8 y rms 4,55** —o sea recortando trece
+   veces— y después decaía solo. No es un defecto de la mezcla: es que la mezcla no se puede medir
+   ahí. Con el bot en mudo, soltando el silencio y midiendo con tiempo real de por medio, la escala
+   es la correcta: cama **rms 0,0305** · saltar 0,0314 · aterrizar 0,0334 · cuerda 0,0330 · moneda
+   0,0519 · truco 0,0486 · **choque 0,0833, o sea 2,7 veces la cama y lo más fuerte del juego**, que
+   es lo que corresponde al único acontecimiento que termina una partida.
+5. **Y DOS ERRORES MÍOS DE POLARIDAD, los dos con resultado plausible.** `mudo(false)` es *encender*
+   y lo leí al revés, así que medí los siete efectos **con el juego en silencio** y salieron todos
+   en cero. Y hay **tres** bots, no dos: pasando `true` esperando el del azar sale el **torpe**, que
+   es justo lo que el comentario de la propia sonda advierte —*«un control que no es un control
+   aprueba cualquier cosa»*— y por eso la primera tabla daba 12/12 contra 7/12 con medianas casi
+   iguales, que se lee a que el juego no pide nada.
+
+#### Y UNO QUE SÍ ERA DEL JUEGO, EN LA PRIMERA PANTALLA QUE SE VE
+
+**EL MARCADOR ESTABA PUESTO FUERA DE LA PARTIDA.** `#bPausa` estaba bien gateado por
+`body.jugando` y a `#pts`, `#sub`, `#mon`, `#truco` y `#pista` **no se los había mirado nunca**,
+porque `cajas()` mide el HUD **contra sí mismo** y no contra los paneles. Consecuencias, las dos
+fotografiadas:
+
+- la pantalla de **elegir idioma** —la primera del juego— salía con un **«0 / metros»** y un
+  contador de monedas en cero encima del cartel del nombre;
+- y la de **final** salía con el aviso de truco (**«hacé un salto de 14 metros · HECHO»**, que se
+  queda con su `.on` del último truco) cruzado por encima de los metros recorridos y del renglón de
+  monedas: dos textos en el mismo sitio.
+
+Un marcador que cuenta una partida que todavía no empezó no informa nada, y encima le compite al
+título. Es literalmente la misma corrección que ya se había hecho en PISTOLA.
+
+#### MEDIDO AL CERRAR
+
+Auditoría **25 de 25 semillas** con 0 monedas enterradas y 0 cuerdas fuera de alcance. Los tres
+bots: **12/12 · 7/12 · 0/12**. **Cero solapamientos** entre los cinco elementos del HUD y **cero
+fuera del marco**. Los **tres paneles entran en los tres idiomas** (menú +45, pausa +280, final
++108 a +346 de sobra). Las **tres calidades** en caliente (0,60 · 0,84 · 1,00 de píxel). Bufanda
+0,072/1,49 en el suelo y 0,239/1,25 en el aire. Costo **0,305 ms por cuadro**. Audio con el choque
+2,7 veces la cama. Partida completa jugada por el camino del dedo hasta **RÉCORD NUEVO** con seis
+objetivos cumplidos. `window.__errs` **vacío en las diez corridas**.
+
+**LO QUE NO ESTÁ RESUELTO, Y ES HONESTO DECIRLO:** la auditoría informa el hueco más ancho —**21,6 m
+sobre 25 semillas**— y **no lo compara contra nada**. El alcance de un salto llano es `v·2·SALTO/G`,
+o sea 22,0 m a 20 m/s y **9,4 m a la velocidad mínima**: un hueco de 21,6 se cruza a crucero y no se
+cruza despacio. El bot honesto no murió en un hueco ni una vez, así que en la práctica no aparece,
+pero la comprobación que corresponde es medir el hueco contra la velocidad **alcanzable en ese
+punto** y hoy no está.
 
 ### Centésima quincuagésima tercera vuelta (2026-09-10): **HUESOS** — la historia, el final, la armadura de Tripo y una interfaz generada
 
