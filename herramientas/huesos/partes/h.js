@@ -82,15 +82,74 @@ function huesosBase() {
 const ALTO_ESQ = 1.66;
 const cuerpoEsq = () => armaCuerpo({ alto: ALTO_ESQ, huesos: huesosBase() });
 
+/* LOS CUATRO MIEMBROS SE ESCRIBEN UNA VEZ Y NO OCHO. Izquierda y derecha son
+   la misma pieza, y el brazo derecho encima lleva la espada colgada: con las
+   ocho escritas a mano, el día que se mueva un centímetro la placa queda en
+   siete y no en ocho, y eso no falla — sale un caballero con un brazo torcido.
+
+   LA SECCIÓN SE ENGORDA Y EL LARGO NO. `pon3palo` escala uniforme al largo,
+   que es de donde cuelga el rig; pero un brazal de Tripo es más fino que el
+   brazo que tiene que envolver (0,229 de sección contra los 0,12 de la caja),
+   así que `gr` lo abre a lo ancho SIN tocar el largo. Medido en el horneado:
+   brazal 0,229 · guante 0,374 · quijote 0,422 · greba 0,288.               */
+function brazoArriba(TELA) {
+  return fundeGeo([
+    cajas([{ w: 0.12, h: 0.30, d: 0.13, y: -0.15, c: TELA }]),
+    hay3('brazal') ? pon3palo('brazal', 0.31, 0, 0.01, 0, 0, 0, 1.9)
+      /* el casquete del hombro sólo existe SIN peto: el peto trae sus dos
+         hombreras y las dos capas juntas se leen a bulto */
+      : cajas([{ w: 0.17, h: 0.10, d: 0.17, y: 0.01, c: 0x8f979f }]),
+  ]);
+}
+function brazoAbajo(PIEL, CUERO) {
+  return fundeGeo([
+    cajas([{ w: 0.10, h: 0.26, d: 0.11, y: -0.13, c: PIEL },
+           { w: 0.12, h: 0.11, d: 0.13, y: -0.30, c: CUERO }]),
+    hay3('guante') ? pon3palo('guante', 0.38, 0, 0.01, 0, 0, 0, 1.0) : null,
+  ]);
+}
+function muslo(CUERO) {
+  return fundeGeo([
+    cajas([{ w: 0.14, h: 0.44, d: 0.15, y: -0.22, c: CUERO }]),
+    hay3('quijote') ? pon3palo('quijote', 0.46, 0, 0.01, 0, 0, 0, 0.80) : null,
+  ]);
+}
+function canilla(OSC) {
+  return fundeGeo([
+    cajas([{ w: 0.12, h: 0.42, d: 0.13, y: -0.21, c: 0x3b2b1e },
+           { w: 0.14, h: 0.09, d: 0.26, y: -0.44, z: 0.05, c: OSC }]),
+    hay3('greba') ? pon3palo('greba', 0.50, 0, 0.01, 0, 0, 0, 1.0) : null,
+  ]);
+}
+
 function recetaHeroe() {
   const PIEL = 0xb98a63, CUERO = 0x4a3526, ACERO = 0x7d848c, TELA = 0x6b2b2a, OSC = 0x2a2420;
   return {
     alto: 1.72, nombre: 'heroe',
     huesos: huesosBase(),
     piezas: {
-      pelvis: cajas([{ w: 0.30, h: 0.16, d: 0.20, y: -0.05, c: CUERO }]),
+      pelvis: fundeGeo([
+        cajas([{ w: 0.30, h: 0.16, d: 0.20, y: -0.05, c: CUERO }]),
+        hay3('faldar') ? pon3caja('faldar', 0.38, 0.26, 0.30, 0, -0.10, 0) : null,
+      ]),
       torso:  cajas([{ w: 0.34, h: 0.26, d: 0.21, y: 0.12, c: TELA }]),
-      pecho:  cajas([
+      /* ── LA ARMADURA (vuelta 153) ─────────────────────────────────────
+         Seis piezas más de Tripo, y entran por el MISMO camino que el yelmo
+         y la espada: reemplazan la geometría de una pieza y nada más. El rig
+         de pivotes, las once poses, el patinaje cero y el kit instanciado
+         siguen intactos — que es exactamente lo que un `SkinnedMesh` habría
+         costado (ver `herramientas/huesos/pedir_caballero.py`).
+
+         LA CAJA DE ABAJO SE QUEDA SÓLO DONDE NO ESTORBA. En los brazos y las
+         piernas la placa envuelve al miembro, así que la caja queda por
+         dentro y no se ve; en el pecho no, porque el peto trae sus hombreras
+         y su quillón y las tres cajas de acero le asomarían por debajo. Ahí
+         lo que sobrevive es la capa de tela y la correa, que es lo que se ve
+         si el blob no decodifica.                                          */
+      pecho:  hay3('peto') ? fundeGeo([
+        cajas([{ w: 0.34, h: 0.28, d: 0.20, y: 0.13, c: TELA }]),   // la cota de abajo
+        pon3caja('peto', 0.44, 0.34, 0.27, 0, 0.145, 0.005),
+      ]) : cajas([
         { w: 0.40, h: 0.30, d: 0.24, y: 0.13, c: ACERO },
         { w: 0.42, h: 0.05, d: 0.26, y: 0.25, c: 0x9aa2ab },     // hombrera de arriba
         { w: 0.10, h: 0.24, d: 0.26, y: 0.13, c: 0x8f979f },     // el filo del peto
@@ -112,18 +171,13 @@ function recetaHeroe() {
             { w: 0.05, h: 0.13, d: 0.05, y: 0.24, z: 0.11, c: 0x8d949c }, // nasal
           ]),
       ]),
-      hombroI: cajas([{ w: 0.12, h: 0.30, d: 0.13, y: -0.15, c: TELA },
-                      { w: 0.17, h: 0.10, d: 0.17, y: 0.01, c: 0x8f979f }]),
-      hombroD: cajas([{ w: 0.12, h: 0.30, d: 0.13, y: -0.15, c: TELA },
-                      { w: 0.17, h: 0.10, d: 0.17, y: 0.01, c: 0x8f979f }]),
-      anteI:  cajas([{ w: 0.10, h: 0.26, d: 0.11, y: -0.13, c: PIEL },
-                     { w: 0.12, h: 0.11, d: 0.13, y: -0.30, c: CUERO }]),
+      hombroI: brazoArriba(TELA), hombroD: brazoArriba(TELA),
+      anteI:  brazoAbajo(PIEL, CUERO),
       /* LA ESPADA CUELGA DEL ANTEBRAZO DERECHO Y NO DE LA ESCENA. Así la
          lleva la mano por construcción y no hay dos animaciones que se
          puedan desincronizar — la lección del leño de LEMI.                */
       anteD:  fundeGeo([
-        cajas([{ w: 0.10, h: 0.26, d: 0.11, y: -0.13, c: PIEL },
-               { w: 0.12, h: 0.11, d: 0.13, y: -0.30, c: CUERO }]),
+        brazoAbajo(PIEL, CUERO),
         hay3('esphero') ? pon3palo('esphero', 0.95, 0, -0.31, 0)
           : cajas([
             { w: 0.19, h: 0.05, d: 0.06, y: -0.36, c: 0x6a5238 },  // guarda
@@ -132,12 +186,8 @@ function recetaHeroe() {
             { w: 0.03, h: 0.86, d: 0.035, y: -0.83, c: 0xd6dde3 }, // el filo
           ]),
       ]),
-      musloI: cajas([{ w: 0.14, h: 0.44, d: 0.15, y: -0.22, c: CUERO }]),
-      musloD: cajas([{ w: 0.14, h: 0.44, d: 0.15, y: -0.22, c: CUERO }]),
-      pantI:  cajas([{ w: 0.12, h: 0.42, d: 0.13, y: -0.21, c: 0x3b2b1e },
-                     { w: 0.14, h: 0.09, d: 0.26, y: -0.44, z: 0.05, c: OSC }]),
-      pantD:  cajas([{ w: 0.12, h: 0.42, d: 0.13, y: -0.21, c: 0x3b2b1e },
-                     { w: 0.14, h: 0.09, d: 0.26, y: -0.44, z: 0.05, c: OSC }]),
+      musloI: muslo(CUERO), musloD: muslo(CUERO),
+      pantI:  canilla(OSC),  pantD:  canilla(OSC),
     },
   };
 }

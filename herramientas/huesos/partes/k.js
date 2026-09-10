@@ -258,8 +258,43 @@ function zonasPaso(dt) {
     avisa(T('abre') + ' · ' + T('z' + ZONAS[ZONA_ACT].id), 3.4);
     son('zona');
   } else {
-    PART = 'fin'; GANO = true; FIN_T = 0; son('gana'); guardaRecord();
+    finalArranca();
   }
+}
+
+/* ── PASARSE EL JUEGO ES UN MOMENTO, NO UN CARTEL ──────────────────────────
+   Hasta acá matar al rey ponía `PART='fin'` EN EL MISMO CUADRO: el último
+   hachazo y la pantalla de resultado caían juntos, así que las once oleadas
+   terminaban en una tabla de números y no en un final. Y eso es literalmente
+   lo que se pidió arreglar: «una manera de pasarse el juego».
+   Son once segundos con tres cosas que pasan a la vez y ninguna es un panel:
+     · la CENIZA SE LEVANTA — la niebla se abre y el cielo se aclara hasta un
+       amanecer pálido, que es el único momento del juego en que se ve lejos;
+     · la CÁMARA SE DESPEGA del hombro y sube, que es lo que hace una cámara
+       cuando el personaje deja de tener algo que hacer;
+     · y las tres líneas del epílogo, que son lo que cierra la historia.
+   Se puede saltear con un toque o una tecla: un final obligatorio visto cinco
+   veces deja de ser un final y pasa a ser un peaje —la lección de POMPOM—,
+   pero LA PRIMERA VEZ nadie sabe que se puede saltear, así que se ve entero.
+   Y el jugador no maneja: `entradaLee` devuelve cero mientras dura. */
+const FIN_DUR = 11.0;
+/* el amanecer no es una zona de `ZONAS` y no puede serlo: `zonaDe` lo elegiría
+   por el radio y esto no está en ninguna parte del mapa, es un ESTADO */
+const Z_FIN = { niebla: 0xb9b2a4, nieblaD: 0.0062, cielo: 0xcdc6b6,
+                luz: 0xffe8c6, sol: 2.35, amb: 0.92 };
+let FINAL = 0;
+function finalArranca() {
+  if (FINAL) return;
+  GANO = true; FINAL = 1e-4; son('gana'); guardaRecord();
+  diceCola([['f0'], ['f1', [JUG.bajas]], ['f2']], 3.2);
+}
+function finalPaso(dt) {
+  FINAL += dt;
+  if (FINAL >= FIN_DUR) finalCorta();
+}
+function finalCorta() {
+  if (!FINAL) return;
+  FINAL = 0; PART = 'fin'; FIN_T = 0;
 }
 
 /* ── EL RÉCORD ─────────────────────────────────────────────────────────────
@@ -269,17 +304,26 @@ function zonasPaso(dt) {
    lo que hace que volver a jugar tenga un número al que ganarle.
    Y se guarda TAMBIÉN al morir, que es de donde va a salir casi siempre: un
    récord que sólo se anota ganando no es un récord, es el final.          */
-let RECORD = { olas: 0, bajas: 0 };
+let RECORD = { olas: 0, bajas: 0, gano: false };
 function leeRecord() {
   try {
     const r = JSON.parse(localStorage.getItem('huesos_rec') || 'null');
-    if (r && typeof r.olas === 'number') RECORD = { olas: r.olas | 0, bajas: r.bajas | 0 };
+    if (r && typeof r.olas === 'number')
+      RECORD = { olas: r.olas | 0, bajas: r.bajas | 0, gano: !!r.gano };
   } catch (e) {}
 }
 function guardaRecord() {
-  if (OLA.hechas < RECORD.olas) return;
-  if (OLA.hechas === RECORD.olas && JUG.bajas <= RECORD.bajas) return;
-  RECORD = { olas: OLA.hechas, bajas: JUG.bajas };
+  /* HABERLO PASADO NO SE PIERDE NUNCA, y va antes de las dos guardas: una
+     partida peor no puede borrar que el juego ya se terminó una vez. */
+  const g = RECORD.gano || GANO;
+  if (OLA.hechas < RECORD.olas) { if (g !== RECORD.gano) { RECORD.gano = g; escribeRecord(); } return; }
+  if (OLA.hechas === RECORD.olas && JUG.bajas <= RECORD.bajas) {
+    if (g !== RECORD.gano) { RECORD.gano = g; escribeRecord(); } return;
+  }
+  RECORD = { olas: OLA.hechas, bajas: JUG.bajas, gano: g };
+  escribeRecord();
+}
+function escribeRecord() {
   try { localStorage.setItem('huesos_rec', JSON.stringify(RECORD)); } catch (e) {}
 }
 
@@ -310,13 +354,17 @@ let ZONA_VIS = 0;
    a doscientos metros todo es del color de la niebla.
    Antes de volver a intentarlo hay que cambiar la CÁMARA, no el domo.        */
 function zonaMezcla(dt) {
-  const zi = zonaDe(JUG.x, JUG.z), Z = ZONAS[zi];
+  const zi = zonaDe(JUG.x, JUG.z);
+  /* durante el final manda el amanecer y no la zona, y con una constante de
+     tiempo mucho más lenta: 1,9 lleva la ceniza a un cielo claro en medio
+     segundo y eso no se lee a que la niebla se abre, se lee a un corte */
+  const Z = FINAL ? Z_FIN : ZONAS[zi];
   if (!esc.fog) {
     esc.fog = new THREE.FogExp2(Z.niebla, Z.nieblaD);
     esc.background = new THREE.Color(Z.cielo);
     ZONA_VIS = zi;
   }
-  const k = 1 - Math.exp(-1.9 * dt);
+  const k = 1 - Math.exp(-(FINAL ? 0.42 : 1.9) * dt);
   esc.fog.color.lerp(_CN.setHex(Z.niebla), k);
   esc.fog.density = mez(esc.fog.density, Z.nieblaD * (CALIDAD === 'baja' ? 1.22 : 1), k);
   esc.background.lerp(_CC.setHex(Z.cielo), k);

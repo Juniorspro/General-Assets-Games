@@ -54,7 +54,7 @@ body.jugando #hud{opacity:1}
    se aprieta del juego. Medido, `cajas()` cantó `bAtaca×bRem`. Con 140 queda
    en 670..752 · 204..286: catorce píxeles de aire contra los dos.          */
 #bRem{right:140px;bottom:126px;width:82px;height:82px;font-size:26px;
-  color:#fff0cf;border-color:rgba(255,170,70,.85);background:rgba(120,38,10,.72);
+  color:#fff0cf;border-color:rgba(255,170,70,.85);background-color:rgba(120,38,10,.72);
   box-shadow:0 0 16px rgba(255,130,40,.6);display:none}
 /* `.hay` Y NO `.on`: en `.bt` la clase `on` ya quiere decir APRETADO y trae su
    propio fondo y su borde. Y va `display:grid` y no `flex`, porque el centrado
@@ -117,7 +117,43 @@ body.movil.jugando #tac{display:block}
   background:rgba(12,15,19,.40);pointer-events:auto;display:grid;place-items:center;
   font:700 11px/1 monospace;letter-spacing:.06em;color:#ded5c0;
   transition:background .08s,opacity .12s,border-color .12s}
-.bt:active,.bt.on{background:rgba(150,120,70,.5);border-color:rgba(235,215,160,.7)}
+/* ── VA `background-color` Y NO EL ATAJO ───────────────────────────────────
+   `background: …` es el ATAJO, y un atajo REPONE A SU VALOR INICIAL todo lo
+   que no nombra: con la chapa generada puesta en `background-image`, apretar
+   el botón se la borraba y no volvía nunca. Es literalmente el defecto que en
+   AERO dejó la flecha del botón de saltar embaldosada, y en BARRIO el color
+   de la baldosa tapando la textura. */
+.bt:active,.bt.on{background-color:rgba(150,120,70,.5);border-color:rgba(235,215,160,.7)}
+
+/* ── LOS BOTONES GENERADOS ────────────────────────────────────────────────
+   La CHAPA —el aro de hueso con sus cuatro remaches— es la misma en los
+   cinco, así que va una vez y se estira; los ICONOS van uno por botón. Y el
+   icono entra como MÁSCARA y no como imagen: pintado, el color quedaría
+   clavado en el PNG y el remate —que es ámbar, no hueso— tendría que ser un
+   segundo archivo. Con `background:currentColor` sobre la máscara, el color
+   sigue saliendo del CSS y `.bt.no{opacity:.30}` sigue valiendo.
+   NADA DE ESTO SE ENCIENDE HASTA QUE LAS IMÁGENES DECODIFICAN: `body.icos` la
+   pone el JS cuando las cinco llegaron, así que un base64 roto cuesta el
+   dibujo nuevo y no cinco botones vacíos —que es lo que pasaría con la
+   máscara puesta y sin imagen: un cuadrado de color macizo.                */
+.bt .ic{display:none;pointer-events:none}
+body.icos .bt{background-image:var(--chapa);background-size:100% 100%;
+  background-repeat:no-repeat;border-color:transparent}
+body.icos .bt:not(#bPausa){font-size:0}
+/* EL GLIFO VA POSICIONADO Y NO ES CAPRICHO: `.bt` es una reja y adentro
+   quedan DOS cosas —el `<i>` y el carácter de respaldo, que aunque vaya en
+   `font-size:0` sigue siendo un ítem anónimo y se lleva su propia fila—, así
+   que un `height:46%` resolvía contra media reja. Medido: 46 px de ancho
+   contra 23 de alto en un botón de 104, o sea el icono aplastado a la mitad.
+   Sacándolo del flujo, el tamaño sale de la caja del botón y no de cuántos
+   hijos tenga. `.bt` ya es `position:absolute`, así que le sirve de ancla. */
+body.icos .bt .ic{display:block;position:absolute;inset:27%;background:currentColor;
+  -webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+body.icos #bAtaca{--ic:var(--icAtacar)}
+body.icos #bEsq{--ic:var(--icEsquiva)}
+body.icos #bRem{--ic:var(--icRemate)}
+body.icos #bCam{--ic:var(--icCamara)}
+body.icos #bRem{border-color:transparent}
 /* ── UN BOTÓN QUE NO PUEDE HACER LO QUE DICE SE APAGA ──────────────────────
    Sin aguante, tocar ATACAR no hacía absolutamente nada y no había forma de
    saber si el botón no respondió o si al personaje no le daba: las dos cosas
@@ -154,9 +190,31 @@ body.pc.jugando #teclas{display:block}
   background:linear-gradient(180deg,rgba(6,8,10,.95) 0%,rgba(6,8,10,.42) 40%,rgba(6,8,10,.42) 66%,rgba(6,8,10,.95) 100%)}
 .panel.on{display:grid}
 .caja{width:min(78%,430px);text-align:center;display:flex;flex-direction:column;
-  align-items:center;gap:calc(var(--mh,412px)*.034)}
+  align-items:center;gap:calc(var(--mh,412px)*.027)}
 h1{font:800 clamp(24px,calc(var(--mh,412px)*.098),42px)/1 monospace;letter-spacing:.30em;color:#ded3ba;
   text-shadow:0 3px 0 #1a1206,0 0 26px rgba(190,150,80,.28)}
+/* ── EL CARTEL DEL NOMBRE ─────────────────────────────────────────────────
+   Escrito con la tipografía del sistema, el nombre del juego sale en Roboto
+   en Android, San Francisco en iPhone y Segoe en Windows: o sea que lo único
+   que uno reconoce de lejos cambia de forma según el aparato. El cartel es
+   una imagen y siempre es el mismo dibujo.
+   Y LA PALABRA NO SE BORRA: se esconde detrás de `body.cartel`, que la pone
+   el JS al decodificar. Sin cartel, el título es el de siempre.
+   El ALTO sale de `--mh` como el cuerpo de la letra que reemplaza —el marco
+   va girado, así que `vh` acá es el lado LARGO y un cartel medido en vh sale
+   dos veces más alto en un teléfono.
+   Y EL MENÚ SE QUEDÓ SIN AIRE AL PONERLO. La vuelta 149 midió 28 px de
+   sobra en 412; con el cartel en `.155` —63,9 px contra los 40,4 que medía
+   la palabra a `.098`— quedaban CUATRO y el título salía cortado por el
+   borde de arriba. Los 23,5 px se devuelven entre las dos cosas que los
+   gastaron: el cartel a `.140` (57,7) y el hueco de `.caja` de `.034` a
+   `.027`, que son cinco huecos y por lo tanto pesa más que el cartel. */
+.tit .cart{display:none}
+body.cartel .tit .nm{display:none}
+body.cartel .tit .cart{display:block;width:100%;
+  height:clamp(28px,calc(var(--mh,412px)*.140),62px);
+  background:var(--cartel) center/contain no-repeat;
+  filter:drop-shadow(0 3px 0 #1a1206) drop-shadow(0 0 22px rgba(190,150,80,.30))}
 /* EL TÍTULO DEL FINAL VA EN SU PROPIO NODO. Estaba como `<h1 id=fTit>` con
    el subtítulo de hijo, y `textContent` sobre el padre BORRA a los hijos: la
    línea siguiente escribía sobre un `#fSub` que ya no existía y tiraba, así
@@ -176,11 +234,16 @@ h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 mo
   font:600 10px/1 monospace;letter-spacing:.09em;color:#bdb49f;cursor:pointer}
 .fila.tres{width:100%;flex-wrap:nowrap}
 .ch.sel{border-color:#b79a56;color:#f0e6cc;background:rgba(74,60,30,.85)}
-.pie{font:500 10px/1.7 monospace;color:#857e6e;max-width:340px}
+/* LOS DOS PIES VAN EN UN GRUPO Y NO SUELTOS EN `.caja`. Son dos bloques de
+   texto seguidos, así que el hueco de la columna —que existe para separar
+   secciones— entre ellos sobra; y en un marco de 360 de lado corto ese hueco
+   es lo que dejaba el menú nueve píxeles fuera del cuadro. Medido. */
+.pies{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%}
+.pie{font:500 10px/1.55 monospace;color:#857e6e;max-width:340px}
 /* el récord y el total van en su propia línea y en el color del oro del
    título: es lo único del menú que cambia entre una partida y la siguiente */
 .pie.rec{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
-  font:600 10px/1.6 monospace;letter-spacing:.09em;color:#a8975f}
+  font:600 10px/1.5 monospace;letter-spacing:.09em;color:#a8975f}
 .tit2{font:700 12px/1 monospace;letter-spacing:.18em;color:#9d947f}
 .gr{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
 </style></head><body>
@@ -201,27 +264,27 @@ h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 mo
 
   <div id="tac">
     <div id="joy"><div id="joyP"></div></div>
-    <div class="bt" id="bAtaca">✦</div>
-    <div class="bt" id="bEsq">↷<i class="esp"></i></div>
-    <div class="bt" id="bRem">✹</div>
-    <div class="bt" id="bCam">◎</div>
+    <div class="bt" id="bAtaca">✦<i class="ic"></i></div>
+    <div class="bt" id="bEsq">↷<i class="ic"></i><i class="esp"></i></div>
+    <div class="bt" id="bRem">✹<i class="ic"></i></div>
+    <div class="bt" id="bCam">◎<i class="ic"></i></div>
   </div>
   <div class="bt" id="bPausa">≡</div>
   <div id="teclas"></div>
 
   <div class="panel on" id="pIdioma"><div class="caja">
-    <h1>HUESOS<span id="iSub">elegí tu idioma</span></h1>
+    <h1 class="tit"><i class="cart"></i><span class="nm">HUESOS</span><span id="iSub">elegí tu idioma</span></h1>
     <div class="fila" id="iBotones"></div>
   </div></div>
 
   <div class="panel" id="pMenu"><div class="caja">
-    <h1>HUESOS<span id="mSub"></span></h1>
+    <h1 class="tit"><i class="cart"></i><span class="nm">HUESOS</span><span id="mSub"></span></h1>
     <button class="b" id="mJugar"></button>
     <button class="b" id="mSeguir" style="display:none"></button>
     <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
     <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
-    <div class="pie" id="mPie"></div>
-    <div class="pie rec"><span id="mTot"></span><span id="mRec"></span></div>
+    <div class="pies"><div class="pie" id="mPie"></div>
+    <div class="pie rec"><span id="mTot"></span><span id="mRec"></span></div></div>
   </div></div>
 
   <div class="panel" id="pPausa"><div class="caja">

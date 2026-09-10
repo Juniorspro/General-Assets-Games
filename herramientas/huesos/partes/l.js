@@ -112,15 +112,24 @@ function pintaIdioma() {
   $('#teclas').textContent = T('teclas');
   document.querySelectorAll('#mCal button').forEach(b => { b.textContent = T('c' + b.dataset.c); });
   pintaHud(true);
+  dialogoPinta($('#dialogo'));   // la línea que se está leyendo también cambia
   if (PART === 'fin') pintaFin();
 }
 /* EL RÉCORD VA EN EL MENÚ Y NO EN LA PANTALLA DE FINAL: en el final ya está
    el número de ESTA partida, y dos cifras juntas no se comparan de una ojeada.
    En el menú es lo único que contesta «¿por qué volver a jugar?». */
 function pintaRecord() {
-  $('#mTot').textContent = T('total', OLA_TOTAL);
+  /* EL NÚMERO DE ZONAS SALE DE LA TABLA Y NO DEL TEXTO. Decía «3 zonas»
+     escrito adentro de la cadena en los tres idiomas, y las zonas son CINCO
+     desde la vuelta 151: el menú describía un juego que ya no existe, y eso
+     no falla ni avisa. */
+  $('#mTot').textContent = T('total', OLA_TOTAL, ZONAS.length);
+  /* «TERMINADO» ES LA ÚNICA MARCA DE QUE EL JUEGO SE PUEDE PASAR. Sin ella,
+     el récord de once oleadas y el de diez se leen igual de lejos y no hay
+     nada en el menú que diga que hay un final del otro lado. */
   $('#mRec').textContent = RECORD.olas > 0
-    ? T('recLinea', T('ola') + ' ' + RECORD.olas + '/' + OLA_TOTAL, RECORD.bajas)
+    ? (RECORD.gano ? T('hecho') + ' · ' : '')
+      + T('recLinea', T('ola') + ' ' + RECORD.olas + '/' + OLA_TOTAL, RECORD.bajas)
     : T('rec') + ' · ' + T('recNada');
 }
 
@@ -220,19 +229,41 @@ function pintaAviso(dt) {
    todas las letras. Ninguna de las dos cosas falla: se leen. */
 const DICHO = ZONAS.map(() => false).concat(false);
 const DICHO_REY = ZONAS.length;
+
+/* ── LA HISTORIA PASA POR UNA COLA, Y NO ES COMODIDAD ──────────────────────
+   Con `e.textContent = …` directo, dos líneas que caen en el mismo segundo se
+   pisan y sólo se lee la última: el prólogo son TRES seguidas y el epílogo
+   otras tres, así que sin cola se leería una de cada tres. Y la línea de zona
+   entra por la misma cola en vez de escribir el cartel ella: con dos caminos,
+   entrar al pantano en medio del prólogo borra el prólogo.
+   SE GUARDA LA CLAVE Y NO EL TEXTO —también la del cartel que está puesto en
+   este momento, en `dataset.k`— porque `pintaIdioma` tiene que poder repintar
+   lo que se está leyendo. Es la regla de siempre acá: con el texto resuelto
+   adentro, cambiar de idioma deja la línea en el idioma anterior.          */
+let COLA = [];
+const diceCola = (l, seg) => { for (const c of l) COLA.push([c[0], c[1] || [], seg || 5.2]); };
+function dialogoPinta(e) {
+  if (!e.dataset.k) return;
+  e.textContent = T(e.dataset.k, ...JSON.parse(e.dataset.a || '[]'));
+}
 function dialogoPaso(dt) {
   const e = $('#dialogo');
-  if (!DICHO[ZONA_VIS]) {
-    DICHO[ZONA_VIS] = true;
-    e.textContent = T('d' + ZONA_VIS); e.dataset.t = '5.5';
+  if (!DICHO[ZONA_VIS]) { DICHO[ZONA_VIS] = true; COLA.push(['d' + ZONA_VIS, [], 5.5]); }
+  let t = parseFloat(e.dataset.t || '0') - dt;
+  /* la que sigue entra recién cuando la anterior se APAGÓ del todo: entrando
+     en `t <= 0` el cambio de texto cae en el mismo cuadro que el fundido y lo
+     que se ve es un cartel que parpadea y cambia de frase a la vez */
+  if (t <= -0.25 && COLA.length) {
+    const [k, a, seg] = COLA.shift();
+    e.dataset.k = k; e.dataset.a = JSON.stringify(a);
+    dialogoPinta(e); t = seg;
   }
-  const t = parseFloat(e.dataset.t || '0') - dt;
   e.dataset.t = t;
   e.style.opacity = t > 0 ? Math.min(1, t / 0.6) : 0;
 }
 function dialogoRey() {
   if (DICHO[DICHO_REY]) return; DICHO[DICHO_REY] = true;
-  const e = $('#dialogo'); e.textContent = T('dRey'); e.dataset.t = '5.5';
+  COLA.push(['dRey', [], 5.5]);
 }
 
 /* ── LA CLASE SE LLAMA `jugando` Y NO `enJuego` ────────────────────────────
@@ -248,3 +279,41 @@ function verPanel(p) {
   for (const k of ['pIdioma', 'pMenu', 'pPausa', 'pFin']) $('#' + k).classList.toggle('on', k === p);
   document.body.classList.toggle('jugando', p === null);
 }
+
+
+/* ══════════════ LA INTERFAZ GENERADA ═════════════════════════════════════
+   `i_ui.js` trae seis imágenes en base64: el cartel del nombre, la chapa de
+   hueso de los botones y los cuatro glifos. Acá lo único que se hace es
+   ponerlas en variables de CSS y encender las dos clases que las usan.
+
+   NADA SE ENCIENDE HASTA QUE DECODIFICAN, y ésa es toda la gracia del
+   reparto. Un data URI decodifica de forma asincrónica, así que una clase
+   puesta antes de tiempo deja cuatro botones con una máscara sin imagen — o
+   sea cuatro cuadrados de color macizo, que es PEOR que el glifo de texto que
+   venía a reemplazar. `body.icos` la pone la carga de las CINCO piezas del
+   botón y `body.cartel` la del cartel, por separado: un blob roto cuesta su
+   dibujo y no los otros cinco. El glifo de texto y el `HUESOS` escrito con la
+   tipografía del sistema se quedan debajo, y son lo que se ve si nada llega.
+
+   Y EL COLOR SIGUE VIVIENDO EN EL CSS. Los cuatro glifos entran como
+   `-webkit-mask` sobre `currentColor`, no como imagen pintada: por eso el
+   botón de remate puede seguir siendo ámbar cuando la barra está llena y el
+   `.bt.no{opacity:.30}` de un botón apagado sigue funcionando.            */
+function uiCarga() {
+  if (typeof UI_B64 !== 'object') return;
+  const raiz = document.documentElement.style;
+  const pon = (k, v) => new Promise(ok => {
+    const b = UI_B64[k];
+    if (!b) return ok(false);
+    const im = new Image();
+    im.onload = () => { raiz.setProperty(v, 'url(' + im.src + ')'); ok(true); };
+    im.onerror = () => ok(false);
+    im.src = 'data:image/webp;base64,' + b;
+  });
+  pon('cartel', '--cartel').then(o => o && document.body.classList.add('cartel'));
+  Promise.all([pon('chapa', '--chapa'), pon('atacar', '--icAtacar'),
+    pon('esquiva', '--icEsquiva'), pon('remate', '--icRemate'),
+    pon('camara', '--icCamara')])
+    .then(r => { if (r.every(Boolean)) document.body.classList.add('icos'); });
+}
+uiCarga();

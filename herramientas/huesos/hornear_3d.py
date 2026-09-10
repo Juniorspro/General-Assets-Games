@@ -129,6 +129,25 @@ P = [
  dict(n='espadon',   tris=240, giro=(0, 0, 0), tinte=0x6a5a48, modo='palo'),
  dict(n='esphero',   tris=260, giro=(0, 0, 0), tinte=0x7d848c, modo='palo'),
  dict(n='yelmo',     tris=760, giro=(0, 0, 0), tinte=0x7d848c, modo='caja'),
+ # ── LA ARMADURA DEL CABALLERO (vuelta 153) ────────────────────────────────
+ # HAY UN SOLO HÉROE, así que su kit tiene UNA instancia por pieza: el
+ # presupuesto de acá no se multiplica por catorce como el de la turba y por
+ # eso son más generosos que los huesos. Y el `giro` de las seis arranca en
+ # cero y se CORRIGE contra la hoja de contactos, que es la única forma de
+ # saber para dónde mira una placa de acero — de la caja envolvente sale el
+ # eje largo y nada más. Medido: el peto y el faldar vinieron con el ANCHO de
+ # hombros sobre Z y el frente sobre +X (en la hoja, la vista +X es la que
+ # muestra el quillón del pecho y las dos hombreras, y la −X el respaldo
+ # liso), así que van con −90 en Y, que es el giro que lleva +X a +Z. Y la
+ # greba vino con el escarpe apuntando a −Z, o sea con el pie hacia atrás:
+ # media vuelta. Va de `palo` y no de `caja` porque lo que la define es el
+ # largo de la canilla, que es lo que el juego escala.
+ dict(n='peto',      tris=700, giro=(0, -90, 0), tinte=0x7d848c, modo='caja'),
+ dict(n='faldar',    tris=350, giro=(0, -90, 0), tinte=0x7d848c, modo='caja'),
+ dict(n='brazal',    tris=260, giro=(0, 0, 0), tinte=0x7d848c, modo='palo'),
+ dict(n='guante',    tris=320, giro=(0, 0, 0), tinte=0x7d848c, modo='palo'),
+ dict(n='quijote',   tris=280, giro=(0, 0, 0), tinte=0x7d848c, modo='palo'),
+ dict(n='greba',     tris=420, giro=(0, 180, 0), tinte=0x7d848c, modo='palo'),
 ]
 
 

@@ -1133,6 +1133,66 @@ window.__H = {
              lin: document.getElementById('mRec').textContent };
   },
   errs() { return window.__errs || []; },
+
+  /* ── LA VUELTA 153: LA HISTORIA, EL FINAL, LA ARMADURA Y LA INTERFAZ ────
+     LA COLA DE DIÁLOGO SE MIDE POR LO QUE ESTÁ ESCRITO EN PANTALLA y no por
+     lo que se le empujó: `diceCola` sólo encola, y quien decide qué se ve es
+     `dialogoPaso`. Devolviendo la cola se estaría midiendo la intención. */
+  cola(dt) {
+    if (dt) for (let i = 0; i < dt; i++) dialogoPaso(0.1);
+    const e = document.getElementById('dialogo');
+    return { k: e.dataset.k || '', txt: e.textContent, t: +(+e.dataset.t || 0).toFixed(2),
+             op: +getComputedStyle(e).opacity, cola: COLA.map(c => c[0]) };
+  },
+  /* el final entero, sin esperar los once segundos: `finalPaso` es una
+     función del tiempo, así que se lo puede plantar en cualquier instante */
+  fin(t) {
+    if (t === 'arranca') { finalArranca(); return { FINAL: +FINAL.toFixed(4), GANO, cola: COLA.map(c => c[0]) }; }
+    if (t === 'corta') { finalCorta(); }
+    else if (typeof t === 'number') { FINAL = t; zonaMezcla(4, 9); camPaso(1 / 60, 0, 0); }
+    return { FINAL: +FINAL.toFixed(3), PART, GANO,
+             nieblaD: +esc.fog.density.toFixed(5),
+             cielo: '#' + esc.background.getHexString(),
+             camD: +cam.position.distanceTo(new THREE.Vector3(JUG.x, JUG.y + CAM_MIRA, JUG.z)).toFixed(2),
+             camY: +(cam.position.y - JUG.y).toFixed(2),
+             pit: +CAM_PIT.toFixed(3),
+             dialogo: document.getElementById('dialogo').dataset.k || '',
+             panel: document.querySelector('#pFin.on') ? 'fin' : null };
+  },
+  /* la armadura: qué piezas llegaron y qué le costó al héroe. `hay3` es lo
+     único que decide si la caja o la malla, así que es lo que hay que leer */
+  armadura() {
+    const NN = ['peto', 'faldar', 'brazal', 'guante', 'quijote', 'greba'];
+    const g = JUG.kit && JUG.kit.mallas;
+    let tri = 0;
+    for (const k in (g || {})) {
+      const q = g[k].geometry;
+      tri += (q.index ? q.index.count : q.attributes.position.count) / 3;
+    }
+    return { hay: NN.filter(hay3), faltan: NN.filter(n => !hay3(n)),
+             triHeroe: tri, piezas: Object.keys(g || {}).length };
+  },
+  /* la interfaz generada: no alcanza con que los blobs estén, hay que
+     comprobar que las variables de CSS quedaron puestas Y que las dos clases
+     se encendieron — un `--icAtacar` sin `body.icos` no dibuja nada */
+  ui() {
+    const r = getComputedStyle(document.documentElement);
+    const v = k => (r.getPropertyValue(k) || '').trim().slice(0, 22);
+    const b = document.getElementById('bAtaca');
+    const ic = b && b.querySelector('.ic');
+    const cart = document.querySelector('#pMenu .tit .cart');
+    return {
+      icos: document.body.classList.contains('icos'),
+      cartel: document.body.classList.contains('cartel'),
+      vars: { chapa: !!v('--chapa'), atacar: !!v('--icAtacar'), esquiva: !!v('--icEsquiva'),
+              remate: !!v('--icRemate'), camara: !!v('--icCamara'), cartel: !!v('--cartel') },
+      icPx: ic ? [Math.round(ic.getBoundingClientRect().width),
+                  Math.round(ic.getBoundingClientRect().height)] : null,
+      icVer: ic ? getComputedStyle(ic).display : null,
+      cartPx: cart ? [Math.round(cart.offsetWidth), Math.round(cart.offsetHeight)] : null,
+      nmVer: cart ? getComputedStyle(document.querySelector('#pMenu .tit .nm')).display : null,
+    };
+  },
 };
 
 arranca();

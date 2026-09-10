@@ -471,7 +471,24 @@ function rodea(x, z, dx, dz, r, alcance) {
 let CAM_YAW = 0, CAM_PIT = -0.13, CAM_D_ACT = CAM_D;
 function camPaso(dt, giroX, giroY) {
   if (!JUG.cuerpo) return;      // en el menú no hay cuerpo todavía
-  CAM_YAW -= giroX; CAM_PIT = lim(CAM_PIT - giroY, -0.95, 0.52);
+  /* ── LA CÁMARA SE DESPEGA EN EL FINAL ─────────────────────────────────────
+     Once segundos con la cámara pegada al hombro de alguien que ya no hace
+     nada se leen a que el juego se trabó. Se va hacia atrás y hacia arriba,
+     y GIRA despacio alrededor del cuerpo: sin el giro, lo que se ve es un
+     acercamiento al revés y no una cámara que se suelta.
+     El progreso va con una curva que arranca frenada (`u²·(3−2u)`), porque el
+     primer segundo todavía es el impacto del último golpe: acelerando desde
+     el cuadro cero, el remate y la salida de cámara se pisan.             */
+  let fin = 0;
+  if (FINAL) {
+    const u = lim(FINAL / FIN_DUR, 0, 1);
+    fin = u * u * (3 - 2 * u);
+    CAM_YAW += dt * 0.16;
+    CAM_PIT = amort(CAM_PIT, -0.52, 0.55, dt);
+  } else {
+    CAM_YAW -= giroX; CAM_PIT = lim(CAM_PIT - giroY, -0.95, 0.52);
+  }
+  const CAM_DF = CAM_D * (1 + fin * 2.4);
   const ojo = new THREE.Vector3(JUG.x, JUG.y + CAM_MIRA, JUG.z);
   const dir = new THREE.Vector3(
     Math.sin(CAM_YAW) * Math.cos(CAM_PIT), Math.sin(CAM_PIT), Math.cos(CAM_YAW) * Math.cos(CAM_PIT));
@@ -489,9 +506,9 @@ function camPaso(dt, giroX, giroY) {
      el medio del cuadro, porque un punto de atrás proyecta dado vuelta y cae
      adentro. Es la misma trampa que en RECREO dio un autobús «entero y
      centrado» con la cámara mirando al revés.                              */
-  let d = CAM_D;
+  let d = CAM_DF;
   for (let i = 8; i >= 1; i--) {
-    const p = i / 8 * CAM_D;
+    const p = i / 8 * CAM_DF;
     const px = ojo.x - dir.x * p + lado.x * CAM_LADO;
     const pz = ojo.z - dir.z * p + lado.z * CAM_LADO;
     const py = ojo.y - dir.y * p + CAM_H * 0.30;
@@ -500,7 +517,7 @@ function camPaso(dt, giroX, giroY) {
       if (dist2(px, pz, s.x, s.z) < (s.r + 0.42) * (s.r + 0.42)) { libre = false; break; }
     }
     if (libre) { d = p; break; }
-    d = (i - 1) / 8 * CAM_D;
+    d = (i - 1) / 8 * CAM_DF;
   }
   CAM_D_ACT = amort(CAM_D_ACT, d, d < CAM_D_ACT ? 34 : 7.5, dt);
   const pri = CAM_D_ACT < CAM_MIN;

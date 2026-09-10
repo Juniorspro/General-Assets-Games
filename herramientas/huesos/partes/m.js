@@ -27,8 +27,16 @@ function dMarco(dx, dy) {
 function armaEntrada() {
   const lz = document.getElementById('lienzo');
 
+  /* ── SALTEAR EL FINAL, CON MEDIO SEGUNDO Y MEDIO DE GRACIA ────────────────
+     El toque que mata al rey y el que saltea son el MISMO gesto: sin la
+     gracia, el último hachazo se lleva puesto el final entero y nadie lo ve
+     nunca. Con 1,6 s ya se leyó la primera línea del epílogo. Es la misma
+     guarda que la cinemática de BARRIO. */
+  const salteaFinal = () => { if (FINAL > 1.6) { finalCorta(); return true; } return false; };
+
   addEventListener('keydown', e => {
     TECLAS[e.code] = true;
+    if (FINAL && salteaFinal()) return;
     if (e.code === 'Escape') { PART === 'juego' ? pausa(true) : (PART === 'pausa' ? pausa(false) : 0); }
     if (e.code === 'Space' && PART === 'juego') { e.preventDefault(); jugPide('esquiva'); }
     /* EN PC EL REMATE ES UNA TECLA Y NO EL BOTÓN: el botón vive en la esquina
@@ -44,6 +52,7 @@ function armaEntrada() {
   lz.addEventListener('contextmenu', e => e.preventDefault());
   lz.addEventListener('mousedown', e => {
     if (PART !== 'juego') return;
+    if (FINAL && salteaFinal()) return;
     if (e.button === 0) { jugPide('ataca'); if (!document.pointerLockElement) lz.requestPointerLock(); }
   });
   addEventListener('mousemove', e => {
@@ -56,6 +65,7 @@ function armaEntrada() {
   lz.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse') return;
     e.preventDefault();
+    if (FINAL && salteaFinal()) return;
     const p = aMarco(e.clientX, e.clientY);
     if (zonaJoy(p) && JOY.id < 0) {
       JOY.id = e.pointerId; JOY.cx = p.x; JOY.cy = p.y; JOY.dx = 0; JOY.dy = 0;
@@ -101,6 +111,10 @@ function armaEntrada() {
 
 function entradaLee() {
   let x = 0, z = 0, corre = false;
+  /* DURANTE EL FINAL EL JUGADOR NO MANEJA, y va acá y no en `jugPaso`: éste
+     es el único sitio por el que entran el joystick, el teclado y el mando a
+     la vez, así que bloqueándolo acá no queda un cuarto camino sin cubrir. */
+  if (FINAL) { ENT.x = 0; ENT.z = 0; ENT.corre = false; return ENT; }
   if (JOY.id >= 0) {
     x = JOY.dx / JOY.r; z = JOY.dy / JOY.r;
     /* CORRER ES EMPUJAR MÁS ALLÁ DEL ARO, no llegar al borde. Con el umbral
@@ -136,6 +150,13 @@ function nuevaPartida(sem) {
   FOGO = 0; ONDA = -1; LINEAS = 0; HITSTOP = 0; LENTO = 1;
   if (matPost) { matPost.uniforms.uFogo.value = 0; matPost.uniforms.uLineas.value = 0; }
   DICHO.fill(false);
+  /* EL PRÓLOGO ES LO PRIMERO QUE SE LEE Y POR ESO SE ENCOLA ANTES DE `d0`.
+     La línea de zona la encola `dialogoPaso` en su primer cuadro, o sea
+     después de ésta, y la cola respeta el orden: si fuera al revés, la
+     historia empezaría por el capítulo dos. */
+  COLA.length = 0; FINAL = 0;
+  $('#dialogo').dataset.k = ''; $('#dialogo').dataset.t = '0';
+  diceCola([['p0'], ['p1'], ['p2']], 4.4);
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
   PART = 'juego'; verPanel(null);
   /* EL MUNDO ARRANCA VACÍO Y LA PRIMERA OLEADA LA SUELTA `olaSuelta`, que es
@@ -266,6 +287,7 @@ function bucle() {
       cam.position.y += (Math.random() - 0.5) * s;
       cam.position.z += (Math.random() - 0.5) * s;
     }
+    if (FINAL && PART === 'juego' && !CONGELADO) finalPaso(dt);
     if (PART !== 'menu' && !CONGELADO) efectosPaso(dt);
     SANGRE = Math.max(0, SANGRE - dt * 1.5);
     matPost.uniforms.uSangre.value = SANGRE * 0.75 + (JUG.vida < JUG.vidaMax * 0.28 && !JUG.muerto

@@ -308,6 +308,119 @@ munecas.
   arma con `python3 herramientas/huesos/armar.py`; los sprites se hornean con
   `python3 herramientas/huesos/hornear.py` y las mallas con `hornear_3d.py`.
 
+### Centésima quincuagésima tercera vuelta (2026-09-10): **HUESOS** — la historia, el final, la armadura de Tripo y una interfaz generada
+
+Pedido textual: *"agrégale una mini historia y una manera de pasarse el juego, genera UI personalizada y
+cartel del nombre y botones personalizados con Rezona y modelo 3D real con tripo rezona"*.
+
+#### PASARSE EL JUEGO YA PASABA; LO QUE NO HABÍA ERA UN FINAL
+
+Matar al rey ya ponía `PART='fin'` y `GANO=true` — o sea que el juego **terminaba** desde la vuelta 149.
+Lo que faltaba es que **se sintiera**: el último hachazo y la tabla de números caían en el mismo cuadro,
+así que once oleadas cerraban en una pantalla de resultado. Ahora son **once segundos** con tres cosas a
+la vez y ninguna es un panel: la ceniza se levanta (la niebla se abre y el cielo se aclara a un amanecer
+pálido, el único momento del juego en que se ve lejos), la cámara **se despega del hombro y sube**, y
+entran las tres líneas del epílogo.
+
+**ES UNA FUNCIÓN DEL TIEMPO Y NO UNA MÁQUINA DE ESTADOS**, así que la sonda `fin(t)` la planta en
+cualquier instante sin esperar los once segundos. Medido:
+
+| FINAL | 0,2 | 3,5 | 7,0 | 10,6 |
+|---|---|---|---|---|
+| niebla | 0,00756 | 0,00642 | 0,00624 | 0,00621 |
+| cielo | #bcb6a8 | #cac4b4 | #cdc6b6 | #cdc6b6 |
+| la cámara sube | 2,03 m | 2,34 | 3,17 | **4,82** |
+| cabeceo | −0,134 | −0,203 | −0,262 | **−0,326** |
+
+Y `corta` deja `PART:'fin'` con el panel. **El amanecer no es una zona de `ZONAS` y no puede serlo**:
+`zonaDe` la elegiría por el radio y esto no está en ninguna parte del mapa — es un **estado**.
+
+**SE PUEDE SALTEAR.** Un final obligatorio visto cinco veces deja de ser un final y pasa a ser un peaje
+—la lección de POMPOM— pero la primera vez nadie sabe que se puede saltear, así que se ve entero. Y el
+jugador no maneja: `entradaLee` devuelve cero mientras dura.
+
+#### LA HISTORIA ES UNA COLA, Y SE MIDE POR LO QUE ESTÁ ESCRITO
+
+Tres líneas de prólogo, una por zona al abrirla, una del rey y tres de epílogo. Van por `diceCola`, que
+**encola**; quien decide qué se ve es `dialogoPaso`. Por eso la sonda `cola(dt)` devuelve **lo que está
+en pantalla** y no la cola: devolviendo la cola se estaría midiendo la intención. Medido avanzando el
+reloj: `p0` a los 3,54 s con la cola en `[p1,p2,d0]`, después `p1` con `[p2,d0]`.
+
+#### LA ARMADURA: SEIS PIEZAS DE TRIPO Y NINGUNA DE LAS ONCE POSES SE TOCÓ
+
+La vuelta 152 argumentó que meterle un `SkinnedMesh` al héroe costaría las once poses escritas a mano, el
+patinaje cero —que sale de medir el ciclo— y el kit instanciado. Eso sigue siendo cierto, y por eso la
+armadura entra **por el camino que ya existía**: `hay3()` + `pon3caja`/`pon3palo` reemplazan **geometría**
+pieza por pieza. Peto, faldar, brazal, guante, quijote y greba, **68.396 bytes** horneados.
+El héroe pasa a **4.705 triángulos en 12 piezas**, y un base64 roto cuesta **una pieza**, no un héroe
+invisible.
+
+**LA ORIENTACIÓN SE MIDE MIRANDO, NO LEYENDO LA CAJA.** La caja envolvente sólo dice cuál es el eje largo.
+El peto y el faldar vinieron con el **ancho de hombros sobre Z y el frente sobre +X** —en la hoja de
+contactos, la vista +X es la que muestra el quillón del pecho y las dos hombreras, y la −X el respaldo
+liso— así que van con `giro=(0,-90,0)`, que es el que lleva +X a +Z. Y la **greba vino con el escarpe
+apuntando a −Z**, o sea con el pie hacia atrás: media vuelta. Va de `palo` y no de `caja` porque lo que la
+define es el largo de la canilla, que es lo que el juego escala.
+
+**Y LA CAJA DE ABAJO SOBREVIVE EN TODAS MENOS EN EL PECHO.** El peto trae sus propias hombreras y su
+quillón, así que las tres cajas de acero que había asomaban por debajo. En los brazos y las piernas la
+caja se queda: es el cuerpo, y la pieza generada es lo que va encima.
+
+#### LA INTERFAZ: UN CARTEL Y CUATRO GLIFOS, Y LOS GLIFOS VAN COMO MÁSCARA
+
+El nombre escrito con la tipografía del sistema sale en Roboto en Android, San Francisco en iPhone y Segoe
+en Windows: lo único que uno reconoce de lejos cambiaba de forma según el aparato. Ahora es una imagen.
+**Y LA PALABRA NO SE BORRA**: se esconde detrás de `body.cartel`, que la pone el JS al decodificar.
+
+**LOS CUATRO ICONOS VAN COMO MÁSCARA DE CSS SOBRE `currentColor`**, no como dibujos pintados. Un PNG
+pintado congela el color, así que el botón de remate —que es ámbar— necesitaría un segundo archivo; y
+`.bt.no{opacity:.30}` dejaría de funcionar. Con máscara, el color sigue viviendo en la hoja de estilos.
+
+**EL BYTE SE MIDIÓ A TAMAÑO DE PANTALLA, no a tamaño de archivo:** el cartel a 380 px y calidad 78 son
+**24 KB** contra 75 a 640/92, y comparados al tamaño al que se ven son indistinguibles. Las seis piezas
+suman **43.626 bytes**.
+
+**Y EL ICONO MEDÍA 46×23 EN VEZ DE 46×46.** `.bt` es una reja y adentro quedan **DOS** cosas —el `<i>` y el
+carácter de respaldo, que aunque vaya en `font-size:0` sigue siendo un ítem anónimo y se lleva su propia
+fila— así que un `height:46%` resolvía contra media reja. Con el icono fuera de flujo (`position:absolute;
+inset:27%`), 46×46 medidos.
+
+#### EL MENÚ SE QUEDÓ SIN AIRE, Y LA CUENTA LO DICE
+
+La vuelta 149 midió **28 px de sobra** en un marco de 412. Con el cartel puesto a `.155` —63,9 px contra
+los 40,4 que medía la palabra a `.098`— quedaban **CUATRO** y el título salía cortado por el borde de
+arriba. Los 23,5 px se devuelven entre las dos cosas que los gastaron: el cartel a `.140` y el hueco de
+`.caja` de `.034` a `.027`.
+
+**Y NO ALCANZÓ EN EL MARCO CHICO.** En 360 de lado corto el menú seguía **nueve píxeles afuera**
+(`entra:false`), y la razón es aritmética: hay **249 px de contenido que no escala** —el botón, los dos
+grupos de fichas y los dos pies— contra un marco de 360. Lo que lo destrabó fue **juntar los dos pies en
+un grupo**: son dos bloques de texto seguidos, así que el hueco de la columna —que existe para separar
+secciones— entre ellos sobra, y en 360 ese hueco era justo lo que faltaba. Más el interlineado de `.pie`
+de 1,7 a 1,55.
+
+| | 412×892 | 900×460 | 360×640 |
+|---|---|---|---|
+| antes del cartel (v149) | 28 | 62 | 74 |
+| con el cartel | **4** | 42 | **−9 · no entra** |
+| ahora | **40** | **78** | **4 · entra** |
+
+Los tres, en los tres idiomas, con `choques: []`.
+
+**Y EL PIE DECÍA «3 ZONAS» DESDE LA VUELTA 151.** El número estaba escrito **adentro de la cadena de
+traducción**, en los tres idiomas, así que agregar el pantano y el osario no lo movió. Va `{1}` y sale de
+`ZONAS.length`.
+
+#### MEDIDO AL CERRAR
+
+**6 de 6 piezas de armadura** con `faltan: []`, héroe 4.705 triángulos en 12 piezas. Interfaz: las dos
+clases encendidas, las **seis variables de CSS** puestas, icono **46×46**, cartel 273×58 en el menú y la
+palabra escondida. Texturas **69 de 69, 0 fallidas**, 5 de 5 suelos. Auditoría en node sobre **40
+semillas: 0 malas**. Joystick **+1 / −1 / +1 / −1** en los cuatro ejes. **Cero solapamientos** de HUD
+sobre doce elementos y `faltan` sólo en `joy`, `bRem` y `teclas`, que es lo correcto en teléfono con la
+furia vacía. **98 llamadas de dibujo y 57.038 triángulos.** `window.__errs` **vacío en las nueve
+corridas**. El HTML quedó en **1,59 MB**.
+
 ### Centésima quincuagésima segunda vuelta (2026-09-10): **HUESOS** — se va la barra de aguante, entra la furia, la rueda y un remate
 
 Pedido, textual y repetido dos veces: *"agrega una forma en la cuál el personaje tenga más habilidades
