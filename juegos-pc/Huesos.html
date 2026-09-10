@@ -33,8 +33,35 @@ body.jugando #hud{opacity:1}
 .barra i{display:block;height:100%;width:100%;transform-origin:0 50%;transition:transform .12s linear}
 #bVida{left:14px;top:14px;width:176px}
 #bVida i{background:linear-gradient(180deg,#c8443a,#7e2119)}
-#bAgu{left:14px;top:34px;width:132px;height:9px}
-#bAgu i{background:linear-gradient(180deg,#d8c46a,#8a7420);transition:transform .06s linear}
+/* LA BARRA DE LA FURIA ES LA MISMA CAJA QUE ERA EL AGUANTE Y NO SE PARECE:
+   el aguante iba en oro apagado y bajaba; ésta va en brasa y sube. Y llena se
+   ENCIENDE —el pulso es el aviso de que el remate existe, así no hace falta
+   un cartel que lo diga. */
+#bFur{left:14px;top:34px;width:132px;height:9px}
+#bFur i{background:linear-gradient(180deg,#ff9a3c,#c3341a);transition:transform .06s linear}
+#bFur.full{box-shadow:0 0 0 1px rgba(255,190,90,.85),0 0 12px rgba(255,140,40,.75);
+  animation:furia .82s ease-in-out infinite}
+#bFur.full i{background:linear-gradient(180deg,#fff0c0,#ff7a1e)}
+@keyframes furia{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
+/* el botón del remate NO EXISTE hasta que la barra está llena: un tercer
+   botón apagado la partida entera es un botón que nadie aprende, y apareciendo
+   sólo cuando sirve, su aparición ES el aviso */
+/* ── DÓNDE VA, Y SALE DE LA CUENTA ─────────────────────────────────────────
+   El marco mide 892×412 y los otros dos botones están anclados al canto: el
+   de atacar ocupa x 764..868 · y 280..384 y el de esquivar 684..758 · 300..374.
+   Con `right:120` el nuevo caía en 690..772 · 204..286 y se PISABA con el de
+   atacar por ocho píxeles de x y seis de y — o sea encima del botón que más
+   se aprieta del juego. Medido, `cajas()` cantó `bAtaca×bRem`. Con 140 queda
+   en 670..752 · 204..286: catorce píxeles de aire contra los dos.          */
+#bRem{right:140px;bottom:126px;width:82px;height:82px;font-size:26px;
+  color:#fff0cf;border-color:rgba(255,170,70,.85);background:rgba(120,38,10,.72);
+  box-shadow:0 0 16px rgba(255,130,40,.6);display:none}
+/* `.hay` Y NO `.on`: en `.bt` la clase `on` ya quiere decir APRETADO y trae su
+   propio fondo y su borde. Y va `display:grid` y no `flex`, porque el centrado
+   del glifo lo pone `place-items:center` de `.bt`: con flex el ✹ se iba al
+   borde izquierdo del círculo, medido en la captura. */
+#bRem.hay{display:grid;animation:remEnt .26s cubic-bezier(.2,1.5,.4,1)}
+@keyframes remEnt{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 #bXp{left:14px;top:49px;width:132px;height:5px}
 #bXp i{background:linear-gradient(180deg,#79c2d8,#2c6a80)}
 
@@ -115,7 +142,7 @@ body.movil.jugando #tac{display:block}
    corren SÓLO en teléfono, que es donde el botón existe. */
 /* CON `.barra` NO ALCANZA: `#bVida` es un ID y le gana a dos clases, así que
    la regla no movía nada. Van por ID, que es la misma trampa de siempre. */
-body.movil #bVida, body.movil #bAgu, body.movil #bXp{left:72px}
+body.movil #bVida, body.movil #bFur, body.movil #bXp{left:72px}
 body.movil #nivel{left:72px}
 body.jugando.movil #bPausa{display:grid}
 #teclas{position:absolute;right:14px;bottom:14px;font:500 10px/1.6 monospace;color:#8b8577;
@@ -162,7 +189,7 @@ h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 mo
 
   <div id="hud">
     <div class="barra" id="bVida"><i></i></div>
-    <div class="barra" id="bAgu"><i></i></div>
+    <div class="barra" id="bFur"><i></i></div>
     <div class="barra" id="bXp"><i></i></div>
     <div id="nivel">1</div>
     <div id="zona"><span id="zonaTit"></span><span id="zonaSub"></span></div>
@@ -176,6 +203,7 @@ h1 span{display:block;font:600 clamp(8px,calc(var(--mh,412px)*.026),11px)/1.6 mo
     <div id="joy"><div id="joyP"></div></div>
     <div class="bt" id="bAtaca">✦</div>
     <div class="bt" id="bEsq">↷<i class="esp"></i></div>
+    <div class="bt" id="bRem">✹</div>
     <div class="bt" id="bCam">◎</div>
   </div>
   <div class="bt" id="bPausa">≡</div>
@@ -448,11 +476,25 @@ const J_ZANCADA = 1.35;
 const J_RADIO = 0.42;
 const J_ALTO = 1.72;
 const J_VIDA = 100;
-const J_AGU = 100;                // aguante
-const J_AGU_REC = 26;             // aguante por segundo cuando no se gasta
-const J_AGU_CORRE = 17;           // por segundo corriendo
-const J_AGU_ESQ = 28;             // por esquive
-const J_AGU_GOLPE = 12;           // por golpe
+
+/* ── LA FURIA REEMPLAZA AL AGUANTE, Y NO ES EL MISMO NÚMERO CON OTRO NOMBRE ─
+   El aguante CASTIGA: baja sola al correr, corta el combo en el medio y hace
+   que el botón de esquivar diga «no» justo cuando hace falta. Y lo peor no es
+   que moleste sino QUÉ premia: administrar una barra es no pelear. La furia
+   PAGA — sube pegando, sube matando, sube incluso cuando te pegan a vos, y lo
+   único que se puede hacer con ella es gastarla en el remate. Es la misma
+   barra, en el mismo sitio del HUD, y significa lo contrario.
+   SE ENFRÍA CUANDO NO HAY NADIE CERCA y no todo el tiempo: enfriándose en
+   plena pelea vuelve a ser una barra que hay que administrar, y entre oleada
+   y oleada, sin enfriamiento, se llega a la siguiente con el remate cargado
+   de arriba —o sea gratis—.                                                */
+const J_FUR = 100;
+const J_FUR_GOLPE = 7.0;          // por golpe que ACIERTA; los que fallan no pagan
+const J_FUR_BAJA = 15;            // por esqueleto abajo
+const J_FUR_RECIBE = 6;           // recibir también carga: perder no es sólo perder
+const J_FUR_FUGA = 3.4;           // por segundo, y sólo sin nadie a menos de 14 m
+const J_FUR_FRIO = 14;            // ese radio
+
 const J_ESQ_V = 12.6;             // velocidad del esquive
 const J_ESQ_T = 0.34;             // cuánto dura
 /* CUÁNTO DURA LA INVULNERABILIDAD SALE DE UNA CUENTA, no del gusto. El aviso
@@ -462,6 +504,58 @@ const J_ESQ_T = 0.34;             // cuánto dura
    0,14 s: sigue pidiendo el tiempo justo y se puede acertar con un pulgar. */
 const J_ESQ_INV = 0.30;
 const J_ESQ_ESPERA = 0.52;
+
+/* ── LA RUEDA: LO MISMO QUE EL ESQUIVE NO SERÍA UNA HABILIDAD MÁS ──────────
+   Un segundo esquive con otro nombre es un botón repetido. Lo que separa a
+   los dos es QUÉ CUESTA: el esquive es corto, intocable sólo al principio y
+   se recupera enseguida —el botón del pánico, se aprieta sin pensar—; la
+   rueda dura casi el doble, llega a más del doble de distancia, es intocable
+   durante casi todo el recorrido y se paga con una espera larga. O sea que
+   una es reacción y la otra es COMPROMISO, que es la decisión que un esquive
+   solo no puede pedir.
+   Y NO HAY BOTÓN NUEVO: la rueda es el esquive CON IMPULSO. Se rueda cuando
+   ya se venía moviendo rápido, que es además lo que hace un cuerpo de verdad
+   —nadie rueda desde parado— y lo hace descubrible sin un cartel: el que
+   corre y esquiva la encuentra sola. En un teléfono con dos botones de pelea,
+   un tercero para esto sería el que nadie aprieta.                         */
+const J_ROD_V = 15.5;             // velocidad de la rueda
+const J_ROD_T = 0.62;             // cuánto dura
+const J_ROD_INV = 0.46;           // intocable durante casi todo, no sólo al entrar
+const J_ROD_ESPERA = 0.86;        // y la espera es lo que la hace un compromiso
+const J_ROD_MIN = J_VEL * 1.10;   // a partir de qué velocidad el esquive es rueda
+
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Es lo único del juego que le saca el control al jugador, y por eso tiene
+   que valer la pena: salta de verdad —es el único momento del juego con los
+   dos pies en el aire—, el mundo se agacha a un tercio mientras está arriba,
+   y al caer parte el suelo. Los tiempos son de ESTE MOVIMIENTO y no de un
+   número redondo: el salto tiene que durar lo suficiente para que se lea el
+   arco, la caída tiene que ser MÁS CORTA que la subida —una caída lenta se
+   lee a flotar— y el impacto tiene que ser un instante.                   */
+const J_REM_T = [0.34, 0.24, 0.12, 0.36];   // salto · caída · impacto · fin
+const J_REM_ALTO = 3.1;           // el ápice del arco, en metros
+const J_REM_ALC = 8.0;            // hasta dónde busca a quién saltarle encima
+const J_REM_R = 3.6;              // el radio del golpe al caer
+/* ── EL FOGONAZO Y LAS LÍNEAS SE ELIGEN MIDIENDO LA PANTALLA ───────────────
+   El post hace `mix(color, blanco, uFogo)`, así que el fogonazo tapa la escena
+   entera y es exactamente lo que el fogonazo NO tiene que hacer: subraya el
+   golpe borrando lo que hay que ver. Barrido sobre el búfer de pantalla —no el
+   del mundo, que es anterior al post y no lo puede ver— con la escena de fondo
+   en 44,9 de luminancia media:
+
+     uFogo   0,16 → 78,5 · 3,1 % de píxeles blancos
+             0,30 → 107,9 · 3,2 %      ← acá
+             0,75 → 202,5 · 63,2 %
+             0,92 → 238,2 · 100 %      ← lo que había: pantalla blanca entera
+
+   0,34 deja la media en 2,4 veces la del fondo sin mover el porcentaje de
+   blanco: se lee a golpe y no a corte a blanco. Las líneas, igual: a 1,00 el
+   32 % de la pantalla se va a blanco y a 0,55 el 2,8 %.                    */
+const J_REM_FOGO = 0.34;
+const J_REM_LINEAS = 0.55;
+const J_REM_DANO = 104;           // barre, así que es UN golpe para toda la turba
+const J_REM_EMPUJE = 12.0;
+const J_REM_LENTO = 0.32;         // a cuánto se agacha el mundo mientras está arriba
 
 /* el combo de tres: cada golpe con su ventana, su alcance y su daño */
 const J_COMBO = [
@@ -483,6 +577,11 @@ let COMBO_VIEJO = false;
    freno del impacto y que el esquive no gire el cuerpo. Sin poder apagarlos
    en el mismo binario, «el bot pasó de 5 a 7» no dice cuál de los tres fue. */
 let PELEA_VIEJA = false, SIN_ASIST = false, ESQ_VIEJO = false;
+/* y lo mismo para los dos de esta vuelta. El bot honesto pasó de 11 de 12 a
+   12 de 12 y hay DOS cambios encima: la rueda —que es esquivar más lejos— y
+   el remate. Sin poder apagarlos por separado en el mismo binario, «mejoró»
+   no dice cuál de los dos fue, y encima podría ser que uno solo bastara. */
+let SIN_REMATE = false, SIN_RUEDA = false;
 /* cuánto dura el fundido entre dos poses de un esqueleto */
 const ESQ_FUNDE = 0.16;
 /* la asistencia de puntería: cuánto se corrige y dentro de qué arco se busca
@@ -559,7 +658,7 @@ const TXT = {
     jugar: 'JUGAR', seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAJA', cmedia: 'MEDIA', calta: 'ALTA',
-    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.',
+    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.\nEsquivar corriendo es rodar. Pegando se carga la furia, y llena sale el remate.',
     piePausa: 'El mundo se queda quieto mientras esto esté abierto.',
     zbosque: 'EL BOSQUE', zpantano: 'EL PANTANO', zruinas: 'LAS RUINAS',
     zosario: 'EL OSARIO', zceniza: 'EL CAMPO DE CENIZA',
@@ -572,7 +671,7 @@ const TXT = {
     ganaste: 'EL CAMPO ESTÁ QUIETO', ganasteS: 'el rey no se levanta más',
     perdiste: 'TE CAÍSTE', perdisteS: 'los huesos siguen ahí',
     datos: 'Esqueletos {0} · Nivel {1} · {2}',
-    teclas: 'WASD mover · SHIFT correr · CLIC atacar\nESPACIO esquivar · MOUSE cámara · ESC pausa',
+    teclas: 'WASD mover · SHIFT correr · CLIC atacar · Q remate\nESPACIO esquivar (corriendo: rodar) · MOUSE cámara · ESC pausa',
     ola: 'OLEADA',
     olaViene: 'OLEADA {0} DE {1}',
     olaCae: 'LA OLEADA CAYÓ',
@@ -595,7 +694,7 @@ const TXT = {
     jugar: 'PLAY', seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
     calidad: 'GRAPHICS', idioma: 'LANGUAGE',
     cbaja: 'LOW', cmedia: 'MEDIUM', calta: 'HIGH',
-    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.',
+    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.\nDodge while running to roll. Hitting builds rage; when it is full, the finisher is yours.',
     piePausa: 'The world stands still while this is open.',
     zbosque: 'THE WOOD', zpantano: 'THE MARSH', zruinas: 'THE RUINS',
     zosario: 'THE BONEYARD', zceniza: 'THE ASH FIELD',
@@ -608,7 +707,7 @@ const TXT = {
     ganaste: 'THE FIELD IS QUIET', ganasteS: 'the king does not rise again',
     perdiste: 'YOU FELL', perdisteS: 'the bones are still there',
     datos: 'Skeletons {0} · Level {1} · {2}',
-    teclas: 'WASD move · SHIFT run · CLICK attack\nSPACE dodge · MOUSE camera · ESC pause',
+    teclas: 'WASD move · SHIFT run · CLICK attack · Q finisher\nSPACE dodge (running: roll) · MOUSE camera · ESC pause',
     ola: 'WAVE',
     olaViene: 'WAVE {0} OF {1}',
     olaCae: 'THE WAVE IS DOWN',
@@ -631,7 +730,7 @@ const TXT = {
     jugar: 'JOGAR', seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAIXA', cmedia: 'MÉDIA', calta: 'ALTA',
-    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.',
+    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.\nEsquivar correndo é rolar. Bater carrega a fúria, e cheia sai o remate.',
     piePausa: 'O mundo fica parado enquanto isto estiver aberto.',
     zbosque: 'A MATA', zpantano: 'O PÂNTANO', zruinas: 'AS RUÍNAS',
     zosario: 'O OSSÁRIO', zceniza: 'O CAMPO DE CINZA',
@@ -644,7 +743,7 @@ const TXT = {
     ganaste: 'O CAMPO ESTÁ QUIETO', ganasteS: 'o rei não se levanta mais',
     perdiste: 'VOCÊ CAIU', perdisteS: 'os ossos continuam lá',
     datos: 'Esqueletos {0} · Nível {1} · {2}',
-    teclas: 'WASD mover · SHIFT correr · CLIQUE atacar\nESPAÇO esquivar · MOUSE câmera · ESC pausa',
+    teclas: 'WASD mover · SHIFT correr · CLIQUE atacar · Q remate\nESPAÇO esquivar (correndo: rolar) · MOUSE câmera · ESC pausa',
     ola: 'ONDA',
     olaViene: 'ONDA {0} DE {1}',
     olaCae: 'A ONDA CAIU',
@@ -1068,7 +1167,7 @@ const POST_FS = `
 precision highp float;
 uniform sampler2D tD;
 uniform vec2 uTam;
-uniform float uSat, uPost, uVin, uGrano, uSangre, uT;
+uniform float uSat, uPost, uVin, uGrano, uSangre, uT, uFogo, uLineas;
 varying vec2 vUv;
 /* ── Y SE VUELVE A CODIFICAR A sRGB, QUE NO ES UN DETALLE ────────────────
    El destino de render se declara con colorSpace SRGBColorSpace, así que el
@@ -1106,6 +1205,27 @@ void main(){
   // el golpe en la cara va DESPUÉS del posterizado, o sea luz en el ojo y no
   // luz en la escena
   c = mix(c, vec3(0.46, 0.05, 0.03), uSangre * (0.25 + 0.75 * dot(d, d) * 3.0));
+  /* ── LAS LÍNEAS DE VELOCIDAD ──────────────────────────────────────────
+     Son la firma de un plano de anime y cuestan seis líneas: el ángulo se
+     parte en sectores, cada sector se prende o no con un azar propio y
+     arranca a su propio radio. Sin el radio distinto por sector se ven como
+     una rueda de rayos —o sea un dibujo— y no como velocidad.
+     VAN DESPUÉS DEL POSTERIZADO Y DE LA VIÑETA a propósito: son luz en el
+     ojo, igual que el golpe en la cara, y pasadas por los escalones de color
+     quedarían dentadas justo en el borde, que es lo único que tienen.    */
+  if (uLineas > 0.001) {
+    vec2 q = (vUv - 0.5) * vec2(1.0, 0.5625);
+    float r = length(q) * 2.6;
+    float ang = atan(q.y, q.x) * 8.0;
+    float sec = floor(ang);
+    float a1 = fract(sin(sec * 12.9898 + 4.1) * 43758.5453);
+    float a2 = fract(sin(sec * 78.2330 + 1.7) * 43758.5453);
+    float ini = 0.30 + a1 * 0.42;
+    float fino = smoothstep(0.50, 0.30, abs(fract(ang) - 0.5));
+    c += smoothstep(ini, ini + 0.16, r) * fino * step(0.42, a2) * uLineas * 0.80;
+  }
+  // el fogonazo del remate: lo ÚLTIMO, porque tiene que tapar todo
+  c = mix(c, vec3(1.0), uFogo);
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -1134,6 +1254,7 @@ function armaRender(lienzo) {
       tD: { value: RT.texture }, uTam: { value: new THREE.Vector2(320, 180) },
       uSat: { value: 1.16 }, uPost: { value: 22 }, uVin: { value: 1.30 },
       uGrano: { value: 0.035 }, uSangre: { value: 0 }, uT: { value: 0 },
+      uFogo: { value: 0 }, uLineas: { value: 0 },
     },
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
     fragmentShader: POST_FS, depthTest: false, depthWrite: false,
@@ -2305,6 +2426,73 @@ POSE.esquiva = (p, u) => {
   p.aIX = -0.28 - k * 1.35; p.aDX = -0.28 - k * 1.20;
 };
 
+/* ── LA RUEDA: UNA VUELTA ENTERA, Y EL PIVOTE ES LA CADERA ─────────────────
+   La pelvis es la RAÍZ de todo el esqueleto —el torso y los dos muslos
+   cuelgan de ella— así que girarla en X da un salto mortal del cuerpo entero
+   sin tocar una sola articulación más. Lo único que hay que agregar es
+   ENCOGERSE: girando estirado, la cabeza y los pies barren un metro de radio
+   y a mitad de vuelta la mitad del cuerpo queda bajo tierra.
+   EL SENTIDO SE DERIVA Y SE MIDE. Rx(θ) manda (0,1,0) a (0,cosθ,senθ): con θ
+   positivo la coronilla se va hacia +Z, que es hacia adelante. Y la cadera
+   BAJA mientras dura, porque un cuerpo hecho un ovillo tiene el centro a
+   medio metro del piso y no a noventa y cuatro centímetros.                */
+POSE.rueda = (p, u) => {
+  poseCero(p);
+  const t = lim(u, 0, 1);
+  /* el ovillo entra en el primer cuarto y sale en el último: encogido de
+     punta a punta, el arranque y la salida se ven a saltito y no a rueda */
+  const o = suav(Math.min(1, t * 4.2)) * suav(Math.min(1, (1 - t) * 4.2));
+  p.pelX = t * 6.283;
+  p.alt = -0.46 * o;
+  p.troX = -0.30 * o; p.pecX = -0.50 * o; p.cueX = 0.62 * o;
+  p.mIX = -1.95 * o; p.mDX = -1.75 * o;      // rodillas al pecho
+  p.pIX = 2.05 * o; p.pDX = 1.90 * o;        // y los talones a la cola
+  p.hIX = 0.05 - 1.35 * o; p.hDX = 0.05 - 1.15 * o;
+  p.hIZ = 0.16 + 0.30 * o; p.hDZ = -0.16 - 0.30 * o;
+  p.aIX = -0.28 - 1.55 * o; p.aDX = -0.28 - 1.40 * o;
+};
+
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Cuatro tiempos y el arma va de POR ENCIMA DE LA CABEZA AL PISO, que es lo
+   único que hace que un golpe se lea a remate y no a un tajo más.
+   EL ÁNGULO DEL HOMBRO NO SE TANTEA: el brazo cuelga por el −Y del hombro y
+   Rx(θ) lo manda a (0,−cosθ,−senθ), así que la mano queda arriba con θ ≈ −π
+   y abajo y adelante con θ ≈ −0,8. Los dos números salen de ahí y la
+   medición los comprueba: `__H.medirPose('remate')` tiene que dar la mano
+   BAJANDO más de un metro entre el aire y el impacto.                     */
+POSE.remate = (p, u) => {
+  poseCero(p);
+  const T = J_REM_T, TT = T[0] + T[1] + T[2] + T[3];
+  const a = T[0] / TT, b = (T[0] + T[1]) / TT, c = (T[0] + T[1] + T[2]) / TT;
+  let sub, baja, gol, sal;
+  if (u < a)      { sub = suav(u / a); baja = 0; gol = 0; sal = 0; }
+  else if (u < b) { sub = 1; baja = suav((u - a) / (b - a)); gol = 0; sal = 0; }
+  else if (u < c) { sub = 1; baja = 1; gol = suav((u - b) / (c - b)); sal = 0; }
+  else            { sub = 1; baja = 1; gol = 1; sal = suav((u - c) / (1 - c)); }
+  /* `k` es cuánto bajó el arma: 0 arriba de todo, 1 clavada en el piso. Sube
+     mientras se salta y se cae —el arma se lleva atrás y arriba— y CAE ENTERA
+     en los ciento veinte milisegundos del impacto. */
+  const k = gol;
+  const arr = (1 - sal);                       // se levanta del suelo al final
+  /* el brazo del arma: de −2,95 (por encima de la cabeza) a −0,80 (al piso) */
+  p.hDX = mez(-0.55, -2.95, sub * (1 - k * 0.02)) + k * 2.15;
+  p.hIX = mez(-0.55, -2.75, sub) + k * 1.95;
+  p.hDZ = -0.16 - 0.10 * (1 - k);
+  p.hIZ = 0.16 + 0.10 * (1 - k);
+  p.aDX = -0.10 - 0.45 * (1 - k) * sub;
+  p.aIX = -0.10 - 0.45 * (1 - k) * sub;
+  /* el tronco: se arquea hacia atrás juntando el golpe y se dobla al caer */
+  p.pecX = mez(-0.05, -0.62, sub) * (1 - k) + k * 0.72;
+  p.troX = mez(0, -0.24, sub) * (1 - k) + k * 0.30;
+  p.cueX = mez(0, 0.34, sub) * (1 - k) + k * 0.18;   // mira lo que va a partir
+  /* las piernas: encogidas en el aire y UNA RODILLA EN EL PISO al caer. Las
+     dos rectas al aterrizar se leen a alguien que se cayó parado. */
+  const air = sub * (1 - baja * 0.35) * (1 - k);
+  p.mIX = -1.65 * air - k * 1.55 * arr; p.pIX = 1.85 * air + k * 1.90 * arr;
+  p.mDX = -0.95 * air + k * 0.55 * arr; p.pDX = 1.10 * air + k * 0.30 * arr;
+  p.alt = -0.10 * air - k * 0.46 * arr;
+};
+
 /* recibir: el tronco se va para atrás y los brazos se abren. Dura poco y por
    eso vale la pena que sea grande — un cuadro y medio de lectura */
 POSE.dano = (p, u) => {
@@ -2400,23 +2588,40 @@ function zancada(k) { return mez(PASO_M.camina || 1.35, PASO_M.corre || 2.04, li
 
 const JUG = {
   x: 0, z: 0, y: 0, rumbo: 0, vx: 0, vz: 0,
-  vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+  vida: J_VIDA, vidaMax: J_VIDA, fur: 0,
   nivel: 1, xp: 0, xpSig: XP_NIVEL(1),
   golpe: -1, gT: 0, gDio: false, gVent: 0,
   esqT: 0, esqEsp: 0, esqX: 0, esqZ: 0, esqRumbo: 0, gBuf: 0, cicSg: 1,
+  /* `esqLargo` es cuánto dura ESTE esquive: el esquive y la rueda comparten
+     el desplazamiento entero y se diferencian en tres números. Con dos
+     máquinas de estado paralelas, el día que se toque el choque o el freno
+     una de las dos se queda sin tocar. */
+  esqLargo: J_ESQ_T, esqVel: J_ESQ_V, esqInv: J_ESQ_INV, rueda: false,
+  /* el remate: `rem` es la fase (−1 = no está), `aire` la altura POR ENCIMA
+     del terreno, que es lo único de este juego que no vale H(x,z) */
+  rem: -1, remT: 0, remX: 0, remZ: 0, remX0: 0, remZ0: 0, remDio: false, aire: 0,
   danoT: 0, invT: 0, muerto: false, muerteT: 0,
   fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0,
   cuerpo: null, kit: null,
 };
+/* CUÁNTO SE AGACHA EL MUNDO. Vale 1 salvo en el aire del remate, y lo lee
+   `unPaso` para escalar el dt de los esqueletos y de las oleadas — NUNCA el
+   del jugador. Eso es exactamente lo que es un tiempo bala: el que decide va
+   a tiempo real y lo demás se arrastra. Escalando también al jugador, el
+   remate duraría tres segundos y medio de reloj y se leería a tirón. */
+let LENTO = 1;
 let JUG_MEZ = { a: 'quieto', b: null, k: 0 };   // qué pose se está mezclando
 
 function jugArranca() {
   Object.assign(JUG, {
-    x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+    x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, fur: 0,
     nivel: 1, xp: 0, xpSig: XP_NIVEL(1), golpe: -1, gT: 0, gDio: false, gVent: 0,
     esqT: 0, esqEsp: 0, esqRumbo: 0, gBuf: 0, cicSg: 1, danoT: 0, invT: 0, muerto: false, muerteT: 0,
+    esqLargo: J_ESQ_T, esqVel: J_ESQ_V, esqInv: J_ESQ_INV, rueda: false,
+    rem: -1, remT: 0, remDio: false, aire: 0,
     fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0, vive: true,
   });
+  LENTO = 1;
   JUG.y = H(0, 0);
   if (!JUG.cuerpo) {
     JUG.cuerpo = armaCuerpo(recetaHeroe());
@@ -2425,6 +2630,10 @@ function jugArranca() {
 }
 
 const jugAtacando = () => JUG.golpe >= 0;
+const jugRematando = () => JUG.rem >= 0;
+/* la barra llena es la ÚNICA condición: sin nada que gastar el botón no
+   existe, y por eso no hace falta apagarlo ni explicarlo */
+const jugPuedeRemate = () => !SIN_REMATE && !JUG.muerto && !jugRematando() && JUG.fur >= J_FUR;
 const jugFaseGolpe = () => {                     // 0 carga · 1 activo · 2 fin
   const g = J_COMBO[JUG.golpe];
   return JUG.gT < g.carga ? 0 : (JUG.gT < g.carga + g.activo ? 1 : 2);
@@ -2433,13 +2642,26 @@ const jugLargoGolpe = g => g.carga + g.activo + g.fin;
 
 function jugPide(que) {
   if (JUG.muerto) return false;
+  if (que === 'remate') return jugRemateArranca();
   if (que === 'esquiva') {
-    if (JUG.esqT > 0 || JUG.esqEsp > 0 || JUG.agu < J_AGU_ESQ) return false;
+    if (JUG.esqT > 0 || JUG.esqEsp > 0 || jugRematando()) return false;
+    /* ── EL MISMO BOTÓN DA DOS COSAS, Y LO DECIDE EL CUERPO ──────────────
+       Con impulso sale rueda y parado sale esquive. No es un modo escondido:
+       es la diferencia entre tirarse de costado y rodar, que es la misma que
+       hay en la realidad. El umbral va sobre la velocidad QUE YA SE TIENE y
+       no sobre el botón de correr, así que vale igual con el joystick pasado
+       del aro que con Shift.                                              */
+    const vel = Math.hypot(JUG.vx, JUG.vz);
+    const rueda = !SIN_RUEDA && !PELEA_VIEJA && !ESQ_VIEJO && vel > J_ROD_MIN;
+    JUG.rueda = rueda;
+    JUG.esqLargo = rueda ? J_ROD_T : J_ESQ_T;
+    JUG.esqVel = rueda ? J_ROD_V : J_ESQ_V;
+    JUG.esqInv = rueda ? J_ROD_INV : J_ESQ_INV;
     /* esquivar CANCELA el golpe: si no, el jugador queda clavado en la
        recuperación de un tajo mientras le llega un hachazo que veía venir, y
        eso se lee a que el botón no anduvo */
     JUG.golpe = -1; JUG.gVent = 0;
-    JUG.esqT = J_ESQ_T; JUG.esqEsp = J_ESQ_ESPERA; JUG.agu -= J_AGU_ESQ;
+    JUG.esqT = JUG.esqLargo; JUG.esqEsp = rueda ? J_ROD_ESPERA : J_ESQ_ESPERA;
     JUG.gBuf = 0;                     // esquivar tira el golpe que estaba en cola
     const l = Math.hypot(JUG.entX || 0, JUG.entZ || 0);
     if (l > 0.2) { JUG.esqX = JUG.entX / l; JUG.esqZ = JUG.entZ / l; }
@@ -2460,11 +2682,18 @@ function jugPide(que) {
        vuelta. El cuerpo se queda mirando donde miraba y lo único direccional
        es el desplazamiento; la pose es una cuclilla y se lee igual para
        cualquier lado. */
+    /* LA RUEDA SE ORIENTA HACIA DONDE VA Y EL ESQUIVE NO, y no es una
+       excepción a la regla de arriba: el esquive es un salto de costado y se
+       lee igual mirando a cualquier lado, pero un cuerpo no puede rodar de
+       costado — rodando, el eje del giro ES la dirección, así que un cuerpo
+       que rueda hacia allá mirando para acá se ve roto. Y no cuesta el
+       contraataque, porque la rueda ya termina lejos.                     */
+    if (rueda) JUG.rumbo = Math.atan2(JUG.esqX, JUG.esqZ);
     son('esquiva');
     return true;
   }
   if (que === 'ataca') {
-    if (JUG.esqT > 0) return false;
+    if (JUG.esqT > 0 || jugRematando()) return false;
     if (jugGolpeArranca()) return true;
     /* LA COLA DE ENTRADA. Sin ella, un toque que cae en el medio del arco se
        TIRA A LA BASURA y hay que volver a tocar con el tiempo justo: en un
@@ -2483,9 +2712,9 @@ function jugPide(que) {
    escrita en dos sitios, el día que se toque la ventana el bot prueba un
    juego que no existe.                                                     */
 function jugGolpeArranca() {
-  if (JUG.muerto || JUG.esqT > 0 || JUG.agu < J_AGU_GOLPE) return false;
+  if (JUG.muerto || JUG.esqT > 0 || jugRematando()) return false;
   if (JUG.golpe < 0) {
-    JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false; JUG.agu -= J_AGU_GOLPE;
+    JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false;
     JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
   }
   /* ENCADENAR SÓLO EN LA VENTANA. Sin ventana, machacar el botón encadena los
@@ -2497,7 +2726,7 @@ function jugGolpeArranca() {
   const enRec = !COMBO_VIEJO && JUG.gT >= g.carga + g.activo;
   if ((enRec || JUG.gVent > 0) && JUG.golpe < J_COMBO.length - 1) {
     JUG.golpe++; JUG.gT = 0; JUG.gDio = false; JUG.gVent = 0;
-    JUG.agu -= J_AGU_GOLPE; JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
+    JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
   }
   return false;
 }
@@ -2528,10 +2757,74 @@ function jugApunta() {
   return c;
 }
 
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Cuatro tiempos y UNA parábola: el arco de salto y caída es continuo —de la
+   posición de salida al punto de aterrizaje— y las dos primeras fases sólo
+   parten ese arco para poder poner la pose y el mundo lento donde van.
+   EL BLANCO SE ELIGE AL ARRANCAR y no al aterrizar: elegido al final, el
+   héroe saltaría hacia un sitio y caería en otro, que es lo que se ve como
+   teletransporte. Sin nadie cerca salta igual hacia adelante — un botón que
+   a veces no hace nada se lee a botón roto.                               */
+const J_REM_TOT = J_REM_T.reduce((a, b) => a + b, 0);
+function jugRemateArranca() {
+  if (!jugPuedeRemate() || JUG.esqT > 0) return false;
+  let m = null, md = 1e9;
+  for (const e of ESQS) {
+    if (!e.vive || e.est === 'muere') continue;
+    const d2 = dist2(e.x, e.z, JUG.x, JUG.z);
+    if (d2 < md && d2 < J_REM_ALC * J_REM_ALC) { md = d2; m = e; }
+  }
+  JUG.remX0 = JUG.x; JUG.remZ0 = JUG.z;
+  if (m) {
+    /* SE CAE ENCIMA Y NO AL LADO: el aterrizaje es el centro del golpe, así
+       que apuntar al bicho es apuntar al medio de la turba que lo rodea. */
+    JUG.remX = m.x; JUG.remZ = m.z;
+    JUG.rumbo = Math.atan2(m.x - JUG.x, m.z - JUG.z);
+  } else {
+    JUG.remX = JUG.x + Math.sin(JUG.rumbo) * 5.2;
+    JUG.remZ = JUG.z + Math.cos(JUG.rumbo) * 5.2;
+  }
+  JUG.rem = 0; JUG.remT = 0; JUG.remDio = false;
+  JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.esqT = 0;
+  JUG.fur = 0;
+  JUG.vx = 0; JUG.vz = 0;
+  son('remate');
+  return true;
+}
+
+function jugRemate(dt) {
+  JUG.remT += dt;
+  let t = JUG.remT, f = 0;
+  while (f < J_REM_T.length - 1 && t >= J_REM_T[f]) { t -= J_REM_T[f]; f++; }
+  JUG.rem = f;
+  /* el mundo se agacha SÓLO en el aire: agachado también en el impacto, el
+     golpe que es el punto entero del movimiento se vería en cámara lenta */
+  LENTO = (f <= 1) ? J_REM_LENTO : 1;
+
+  if (f <= 1) {
+    const u = lim((JUG.remT) / (J_REM_T[0] + J_REM_T[1]), 0, 1);
+    /* SALE RÁPIDO Y SE CUELGA ARRIBA. Con la interpolación lineal el arco se
+       recorre parejo y no hay un instante en el que la cámara alcance a leer
+       la silueta contra el cielo, que es de lo que vive este plano. */
+    const w = 1 - Math.pow(1 - u, 1.7);
+    JUG.x = mez(JUG.remX0, JUG.remX, w);
+    JUG.z = mez(JUG.remZ0, JUG.remZ, w);
+    JUG.aire = J_REM_ALTO * 4 * u * (1 - u);
+  } else {
+    JUG.x = JUG.remX; JUG.z = JUG.remZ; JUG.aire = 0;
+    if (!JUG.remDio) { JUG.remDio = true; jugRemateGolpe(); }
+  }
+  if (JUG.remT >= J_REM_TOT) { JUG.rem = -1; JUG.aire = 0; LENTO = 1; }
+  JUG.y = H(JUG.x, JUG.z) + JUG.aire;
+  jugPose(dt);
+}
+
 function jugPaso(dt, ent) {
   JUG.tiempo += dt;
   JUG.entX = ent.x; JUG.entZ = ent.z;
   if (JUG.muerto) { JUG.muerteT += dt; jugPose(dt); return; }
+  if (jugRematando()) { jugRemate(dt); return; }
+  LENTO = 1;
 
   JUG.invT = Math.max(0, JUG.invT - dt);
   JUG.danoT = Math.max(0, JUG.danoT - dt);
@@ -2543,8 +2836,8 @@ function jugPaso(dt, ent) {
   /* ── el esquive manda sobre todo lo demás ── */
   if (JUG.esqT > 0) {
     JUG.esqT -= dt;
-    const u = 1 - JUG.esqT / J_ESQ_T;
-    const v = J_ESQ_V * (1 - suav(lim(u, 0, 1)) * 0.72);   // arranca fuerte y frena
+    const u = 1 - JUG.esqT / JUG.esqLargo;
+    const v = JUG.esqVel * (1 - suav(lim(u, 0, 1)) * 0.72);   // arranca fuerte y frena
     JUG.vx = JUG.esqX * v; JUG.vz = JUG.esqZ * v;
     if (JUG.esqT <= 0) { JUG.vx *= 0.25; JUG.vz *= 0.25; }
   } else if (jugAtacando()) {
@@ -2582,7 +2875,7 @@ function jugPaso(dt, ent) {
        doblar FRENA y el tope real queda por debajo del ajuste —el defecto
        que ya costó una vuelta en Z Force—.                                */
     const l = Math.hypot(ent.x, ent.z);
-    JUG.corre = ent.corre && l > 0.55 && JUG.agu > 1;
+    JUG.corre = ent.corre && l > 0.55;
     const vMax = (JUG.corre ? J_CORRE : J_VEL) * (l > 0.34 ? Math.min(1, l) : 0);
     if (l > 0.06) {
       const dx = ent.x / l, dz = ent.z / l;
@@ -2600,11 +2893,20 @@ function jugPaso(dt, ent) {
       const f = Math.exp(-13 * dt);
       JUG.vx *= f; JUG.vz *= f;
     }
-    if (JUG.corre && vMax > 0.2) JUG.agu = Math.max(0, JUG.agu - J_AGU_CORRE * dt);
   }
 
-  /* el aguante se recupera cuando no se gasta, y no mientras se corre */
-  if (!JUG.corre && JUG.esqT <= 0) JUG.agu = Math.min(J_AGU, JUG.agu + J_AGU_REC * dt);
+  /* ── LA FURIA SE ENFRÍA CUANDO NO HAY NADIE CERCA ─────────────────────
+     Corriendo NO se gasta, que es la mitad del pedido: administrar la
+     carrera era lo que hacía que huir fuera una cuenta en vez de una
+     decisión. */
+  if (JUG.fur > 0) {
+    let cerca = false;
+    for (const e of ESQS) {
+      if (!e.vive || e.est === 'muere') continue;
+      if (dist2(e.x, e.z, JUG.x, JUG.z) < J_FUR_FRIO * J_FUR_FRIO) { cerca = true; break; }
+    }
+    if (!cerca) JUG.fur = Math.max(0, JUG.fur - J_FUR_FUGA * dt);
+  }
 
   /* ── mover y chocar ── */
   const nx = JUG.x + JUG.vx * dt, nz = JUG.z + JUG.vz * dt;
@@ -2615,6 +2917,7 @@ function jugPaso(dt, ent) {
     const k = (MUNDO_R * 0.955) / r;
     JUG.x *= k; JUG.z *= k;
   }
+  JUG.aire = 0;
   JUG.y = H(JUG.x, JUG.z);
 
   /* LA FASE DEL PASO SALE DE LA DISTANCIA Y NO DEL RELOJ: así el sonido del
@@ -2656,7 +2959,11 @@ function cicloSigno(vx, vz, rumbo, prev) {
 function jugPose(dt) {
   let a = 'quieto', arg = JUG.tiempo, b = null, brg = 0, obj = 0;
   if (JUG.muerto) { a = 'muere'; arg = Math.min(1, JUG.muerteT / 1.15); }
-  else if (JUG.esqT > 0) { a = 'esquiva'; arg = 1 - JUG.esqT / J_ESQ_T; }
+  else if (jugRematando()) { a = 'remate'; arg = lim(JUG.remT / J_REM_TOT, 0, 1); }
+  else if (JUG.esqT > 0) {
+    a = JUG.rueda ? 'rueda' : 'esquiva';
+    arg = 1 - JUG.esqT / JUG.esqLargo;
+  }
   else if (jugAtacando()) {
     a = 'golpe' + JUG.golpe; arg = JUG.gT / jugLargoGolpe(J_COMBO[JUG.golpe]);
   } else if (JUG.danoT > 0) { a = 'dano'; arg = 1 - JUG.danoT / 0.32; }
@@ -3087,6 +3394,7 @@ function esqRecibe(e, dano, dx, dz, empuje) {
     jugGanaXp(ESQ[e.cl].xp);
     JUG.vida = Math.min(JUG.vidaMax, JUG.vida + e.vidaMax * MATA_CURA);
     JUG.bajas++;
+    JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_BAJA);
     return true;
   }
   son('pega');
@@ -3136,6 +3444,9 @@ function jugResuelveGolpe() {
   TALLY.tajos++;
   if (n) {
     TALLY.aciertos++;
+    /* PAGA EL GOLPE QUE ACIERTA, no el que se tira. Con la furia subiendo por
+       machacar el botón al aire, el remate se carga de espaldas a la pelea. */
+    JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_GOLPE * n);
     SACUDE = Math.max(SACUDE, JUG.golpe === 2 ? 0.30 : 0.16);
     if (!PELEA_VIEJA) HITSTOP = Math.max(HITSTOP, JUG.golpe === 2 ? HIT_STOP_REMATE : HIT_STOP);
     son('impacto');
@@ -3143,7 +3454,99 @@ function jugResuelveGolpe() {
   return n;
 }
 
-const TALLY = { golpes: 0, dano: 0, porCl: {}, esquivados: 0, tajos: 0, aciertos: 0, frenoT: 0 };
+/* ── EL GOLPE DEL REMATE ───────────────────────────────────────────────────
+   Barre un CÍRCULO y no un arco: cae desde arriba, así que no hay «de qué
+   lado» — y eso es justamente lo que lo hace la respuesta a estar rodeado,
+   que es el único apuro que este juego tiene. Va por `esqRecibe`, la misma
+   que el combo, así que la cura por matar, la xp, la muerte y el sonido son
+   los de siempre y no una segunda contabilidad.                           */
+function jugRemateGolpe() {
+  const mult = 1 + (JUG.nivel - 1) * NIV_DANO;
+  let n = 0;
+  for (const e of ESQS) {
+    if (!e.vive || e.est === 'muere') continue;
+    const R = J_REM_R + ESQ[e.cl].radio;
+    if (dist2(e.x, e.z, JUG.x, JUG.z) > R * R) continue;
+    esqRecibe(e, Math.round(J_REM_DANO * mult), e.x - JUG.x, e.z - JUG.z, J_REM_EMPUJE);
+    n++;
+  }
+  TALLY.remates++; TALLY.remBajas += n;
+  /* EL FOGONAZO Y EL FRENO SON EL GOLPE: sin ellos, el momento más caro del
+     juego se ve igual que un tajo. El freno es el doble que el del remate del
+     combo, y el anillo de choque queda dibujándose solo por su cuenta. */
+  FOGO = 1; ONDA = 0; ONDA_X = JUG.x; ONDA_Z = JUG.z; ONDA_Y = H(JUG.x, JUG.z);
+  SACUDE = Math.max(SACUDE, 0.62);
+  HITSTOP = Math.max(HITSTOP, HIT_STOP_REMATE * 1.8);
+  son('impacto'); son('remImpacto');
+  return n;
+}
+
+/* el fogonazo, el anillo del suelo y las líneas de velocidad: los tres son
+   estado del EFECTO y no del jugador, así que viven acá y los apaga el bucle */
+let FOGO = 0, ONDA = -1, ONDA_X = 0, ONDA_Z = 0, ONDA_Y = 0, LINEAS = 0;
+const ONDA_DUR = 0.46;
+
+/* ── LAS DOS PIEZAS DEL IMPACTO ────────────────────────────────────────────
+   El anillo del SUELO dice dónde cayó y a quién alcanzó —su radio final es
+   `J_REM_R`, o sea que lo que se ve es exactamente lo que se golpeó— y la
+   media luna VERTICAL es el corte en el aire, que es lo que ninguna cosa
+   apoyada en el piso puede decir. Con una sola de las dos el remate se lee a
+   explosión y no a espadazo.
+   SE CREAN LA PRIMERA VEZ Y NO AL ARRANCAR: así no hay que acordarse de
+   llamar a nada desde el arranque ni hay un orden de módulos que respetar. */
+let EFE = null;
+function efectosPaso(dt) {
+  if (!EFE) {
+    const anilloG = new THREE.RingGeometry(0.72, 1.0, 30, 1).rotateX(-Math.PI / 2);
+    const mat = () => new THREE.MeshBasicMaterial({
+      color: 0xfff3d2, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+    const anillo = new THREE.Mesh(anilloG, mat());
+    /* la media luna es un anillo CORTADO —media vuelta— parado de canto: un
+       plano entero se lee a bandera y un disco a burbuja */
+    const luna = new THREE.Mesh(new THREE.RingGeometry(0.80, 1.0, 26, 1, Math.PI * 0.12, Math.PI * 0.76), mat());
+    anillo.frustumCulled = false; luna.frustumCulled = false;
+    anillo.visible = false; luna.visible = false;
+    esc.add(anillo); esc.add(luna);
+    EFE = { anillo, luna };
+  }
+  if (ONDA >= 0) {
+    ONDA += dt;
+    const u = ONDA / ONDA_DUR;
+    if (u >= 1) { ONDA = -1; EFE.anillo.visible = false; EFE.luna.visible = false; }
+    else {
+      /* CRECE CON LA RAÍZ: sale disparado y frena, que es lo que hace una
+         onda. Lineal se ve a globo que se infla. */
+      const r = J_REM_R * 1.12 * Math.sqrt(u), o = (1 - u) * (1 - u);
+      EFE.anillo.visible = true;
+      EFE.anillo.position.set(ONDA_X, ONDA_Y + 0.06, ONDA_Z);
+      EFE.anillo.scale.setScalar(Math.max(0.01, r));
+      EFE.anillo.material.opacity = o * 0.95;
+      /* la media luna va CHICA y RÁPIDA: es el corte, no la explosión, así
+         que tiene que haberse ido cuando el anillo recién va por la mitad.
+         Y CHICA DE VERDAD: con la escala llegando a 3,7 el arco medía siete
+         unidades de punta a punta contra un héroe de 1,8 —fotografiado, un
+         arco blanco enorme flotando arriba y a la derecha, que no se lee a
+         tajo sino a error de dibujo—. Topada en 1,9 el arco pasa por encima
+         de la cabeza y se va antes de que el anillo llegue a la mitad. */
+      const v = Math.min(1, u * 3.0);
+      EFE.luna.visible = v < 1;
+      EFE.luna.position.set(ONDA_X, ONDA_Y + 0.78, ONDA_Z);
+      EFE.luna.rotation.set(0, Math.atan2(cam.position.x - ONDA_X, cam.position.z - ONDA_Z), 0.35);
+      EFE.luna.scale.set(0.85 + v * 1.05, 0.85 + v * 1.05, 1);
+      EFE.luna.material.opacity = (1 - v) * 0.75;
+    }
+  }
+  /* el fogonazo se apaga A TIRONES y no suave: uno que se desvanece parejo se
+     lee a transición de video y uno que corta se lee a golpe */
+  if (FOGO > 0) FOGO = Math.max(0, FOGO - dt * (FOGO > 0.5 ? 9.5 : 4.2));
+  const lin = jugRematando() && JUG.rem <= 1 ? J_REM_LINEAS : 0;
+  LINEAS = amort(LINEAS, lin, lin ? 26 : 13, dt);
+  matPost.uniforms.uFogo.value = FOGO * J_REM_FOGO;
+  matPost.uniforms.uLineas.value = LINEAS;
+}
+
+const TALLY = { remates: 0, remBajas: 0, golpes: 0, dano: 0, porCl: {}, esquivados: 0, tajos: 0, aciertos: 0, frenoT: 0 };
 function jugRecibe(dano, dx, dz, empuje, cl) {
   if (JUG.muerto) return;
   /* LOS CUADROS DE INVENCIBILIDAD DEL ESQUIVE SON LA MITAD DEL JUEGO: sin
@@ -3153,6 +3556,11 @@ function jugRecibe(dano, dx, dz, empuje, cl) {
   JUG.vida -= dano;
   TALLY.golpes++; TALLY.dano += dano; TALLY.porCl[cl || '?'] = (TALLY.porCl[cl || '?'] || 0) + 1;
   JUG.invT = 0.42; JUG.danoT = 0.32;
+  /* RECIBIR TAMBIÉN CARGA. Es lo que impide que la barra se apague justo
+     cuando la pelea se pone fea: rodeado no se llega a pegar, y sin esto el
+     remate —que es la herramienta contra una turba— no se puede pagar nunca
+     en el único momento en que hace falta. */
+  JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_RECIBE);
   const l = Math.hypot(JUG.x - dx, JUG.z - dz) || 1;
   JUG.vx += (JUG.x - dx) / l * empuje;
   JUG.vz += (JUG.z - dz) / l * empuje;
@@ -3398,6 +3806,16 @@ const SON = {
                    _ruido(0.55, 'lowpass', 220, 0.7, 0.14, 1.0); },
   gana:    () => { [392, 523, 659, 784].forEach((f, i) => setTimeout(() => AC && _tono(f, f * 1.005, 0.42, 0.17, 'triangle'), i * 150)); },
   muere:   () => { _tono(160, 40, 1.1, 0.28, 'sawtooth'); _ruido(0.9, 'lowpass', 300, 0.7, 0.22, 1.0); },
+  /* ── EL REMATE SUENA EN DOS TIEMPOS, y son dos sonidos distintos ────────
+     El salto es un tono que SUBE con un siseo de aire: anuncia, y el que lo
+     oye sabe que lo que viene todavía no pasó. El impacto baja, es grave y
+     es LO MÁS FUERTE DEL JUEGO —0,46 contra los 0,34 de un impacto normal—
+     porque es el único golpe que cuesta una barra entera. Uno solo para los
+     dos momentos dejaría el aviso y el golpe indistinguibles.             */
+  remate:  () => { _tono(300, 900, 0.34, 0.17, 'triangle'); _ruido(0.34, 'highpass', 2100, 0.7, 0.14, 1.0); },
+  remImpacto: () => { _tono(180, 44, 0.72, 0.46, 'sawtooth');
+                      _ruido(0.52, 'lowpass', 190, 0.9, 0.42, 0.9);
+                      _ruido(0.30, 'highpass', 3400, 0.7, 0.26, 0.7); },
 };
 function son(k) { if (AC && SON[k]) try { SON[k](); } catch (e) {} }
 
@@ -3451,8 +3869,12 @@ function pintaHud(forzar) {
      el mismo texto. */
   const v = Math.round(JUG.vida / JUG.vidaMax * 100);
   if (forzar || v !== _hudV) { $('#bVida i').style.transform = 'scaleX(' + lim(v, 0, 100) / 100 + ')'; _hudV = v; }
-  const a = Math.round(JUG.agu / J_AGU * 100);
-  if (forzar || a !== _hudA) { $('#bAgu i').style.transform = 'scaleX(' + lim(a, 0, 100) / 100 + ')'; _hudA = a; }
+  const a = Math.round(JUG.fur / J_FUR * 100);
+  if (forzar || a !== _hudA) {
+    $('#bFur i').style.transform = 'scaleX(' + lim(a, 0, 100) / 100 + ')';
+    $('#bFur').classList.toggle('full', a >= 100);
+    _hudA = a;
+  }
   const x = Math.round(JUG.xp / JUG.xpSig * 100);
   if (forzar || x !== _hudX) { $('#bXp i').style.transform = 'scaleX(' + lim(x, 0, 100) / 100 + ')'; _hudX = x; }
   pintaBotones(forzar);
@@ -3483,10 +3905,16 @@ function pintaHud(forzar) {
    de verdad decide. Con la regla copiada, el botón se apaga en un caso y el
    golpe sale igual en otro — y a partir de ahí el jugador no puede confiar en
    lo que ve, que en un juego de aguante es lo único que administra.       */
-let _btA = -1, _btE = -1;
+let _btA = -1, _btE = -1, _btR = -1;
 function pintaBotones(forzar) {
-  const puedeA = !JUG.muerto && JUG.esqT <= 0 && JUG.agu >= J_AGU_GOLPE ? 1 : 0;
-  const puedeE = !JUG.muerto && JUG.esqT <= 0 && JUG.esqEsp <= 0 && JUG.agu >= J_AGU_ESQ ? 1 : 0;
+  const puedeA = !JUG.muerto && JUG.esqT <= 0 && !jugRematando() ? 1 : 0;
+  const puedeE = !JUG.muerto && JUG.esqT <= 0 && JUG.esqEsp <= 0 && !jugRematando() ? 1 : 0;
+  /* EL BOTÓN DEL REMATE APARECE Y DESAPARECE, no se apaga: la condición es
+     `jugPuedeRemate`, o sea la misma que decide si el golpe sale. Con la regla
+     copiada acá, el botón podría estar en un caso donde apretarlo no hace
+     nada, y eso es peor que no tenerlo. */
+  const puedeR = jugPuedeRemate() ? 1 : 0;
+  if (forzar || puedeR !== _btR) { $('#bRem').classList.toggle('hay', !!puedeR); _btR = puedeR; }
   if (forzar || puedeA !== _btA) { $('#bAtaca').classList.toggle('no', !puedeA); _btA = puedeA; }
   if (forzar || puedeE !== _btE) {
     const e = $('#bEsq');
@@ -3583,6 +4011,9 @@ function armaEntrada() {
     TECLAS[e.code] = true;
     if (e.code === 'Escape') { PART === 'juego' ? pausa(true) : (PART === 'pausa' ? pausa(false) : 0); }
     if (e.code === 'Space' && PART === 'juego') { e.preventDefault(); jugPide('esquiva'); }
+    /* EN PC EL REMATE ES UNA TECLA Y NO EL BOTÓN: el botón vive en la esquina
+       del pulgar y en PC no hay pulgar ahí. Q está al lado de WASD. */
+    if (e.code === 'KeyQ' && PART === 'juego') { e.preventDefault(); jugPide('remate'); }
   });
   addEventListener('keyup', e => { TECLAS[e.code] = false; });
   addEventListener('blur', () => { for (const k in TECLAS) TECLAS[k] = false; });
@@ -3643,6 +4074,7 @@ function armaEntrada() {
   };
   bt('bAtaca', () => jugPide('ataca'));
   bt('bEsq', () => jugPide('esquiva'));
+  bt('bRem', () => jugPide('remate'));
   bt('bCam', () => { CAM_YAW = JUG.rumbo + Math.PI; });   // volver a poner la cámara detrás
   bt('bPausa', () => pausa(true));
 }
@@ -3677,6 +4109,12 @@ function nuevaPartida(sem) {
   jugArranca();
   esqArranca([]);
   ZONA_ACT = 0; TALLY.golpes = 0; TALLY.dano = 0; TALLY.porCl = {}; TALLY.esquivados = 0; SANGRE = 0; SACUDE = 0; AVISO_T = 0;
+  TALLY.remates = 0; TALLY.remBajas = 0;
+  /* LOS EFECTOS SE APAGAN A MANO. Muriendo en medio de un remate, el fogonazo
+     y las líneas de velocidad se quedan puestos y la partida nueva arranca
+     con la pantalla blanca — y eso no falla, se ve. */
+  FOGO = 0; ONDA = -1; LINEAS = 0; HITSTOP = 0; LENTO = 1;
+  if (matPost) { matPost.uniforms.uFogo.value = 0; matPost.uniforms.uLineas.value = 0; }
   DICHO.fill(false);
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
   PART = 'juego'; verPanel(null);
@@ -3808,6 +4246,7 @@ function bucle() {
       cam.position.y += (Math.random() - 0.5) * s;
       cam.position.z += (Math.random() - 0.5) * s;
     }
+    if (PART !== 'menu' && !CONGELADO) efectosPaso(dt);
     SANGRE = Math.max(0, SANGRE - dt * 1.5);
     matPost.uniforms.uSangre.value = SANGRE * 0.75 + (JUG.vida < JUG.vidaMax * 0.28 && !JUG.muerto
       ? 0.10 + Math.sin(performance.now() * 0.004) * 0.05 : 0);
@@ -3834,9 +4273,15 @@ function unPaso(dt) {
      juego que se juega. La escena se sigue dibujando —congelar el dibujo se
      lee a tirón— y lo que se detiene es el tiempo del mundo.               */
   if (HITSTOP > 0) { HITSTOP -= dt; TALLY.frenoT += dt; return; }
+  /* ── EL JUGADOR VA A TIEMPO REAL Y EL MUNDO SE AGACHA ────────────────────
+     `LENTO` lo escribe el remate y vale 1 el resto del tiempo. Escalando
+     también el dt del jugador, el remate duraría tres segundos y medio de
+     reloj y lo que se leería es un tirón; escalando sólo el mundo, lo que se
+     lee es que el héroe se movió más rápido que todo lo demás — que es
+     exactamente lo que un tiempo bala dice.                                */
   jugPaso(dt, entradaLee());
-  esqPaso(dt);
-  zonasPaso(dt);
+  esqPaso(dt * LENTO);
+  zonasPaso(dt * LENTO);
   /* LA ÚLTIMA ZONA, no la 2: con el índice escrito, agregar una zona deja al
      rey anunciándose en el medio del recorrido y mudo cuando de verdad sale. */
   const uz = ZONAS.length - 1;
@@ -3935,7 +4380,8 @@ window.__H = {
              espera: +OLA.espera.toFixed(2), suelta: OLA.suelta, total: OLA_TOTAL },
       rec: { olas: RECORD.olas, bajas: RECORD.bajas },
       jug: { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
-             vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, agu: Math.round(JUG.agu),
+             vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, fur: Math.round(JUG.fur),
+             rem: JUG.rem, aire: +JUG.aire.toFixed(2), rueda: JUG.rueda, lento: +LENTO.toFixed(2),
              niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
              muerto: JUG.muerto, golpe: JUG.golpe, esq: +JUG.esqT.toFixed(2) },
       esq: { vivos: ESQS.filter(e => e.vive).length, cerca: ESQ_KIT ? ESQ_KIT.n : 0,
@@ -4033,7 +4479,7 @@ window.__H = {
      —`jugPide` y la entrada— así que si termina la partida, la partida se
      puede terminar. */
   juega(tope, tonto) {
-    const T0 = tope || 60000; let n = 0, huyo = 0, esq = 0;
+    const T0 = tope || 60000; let n = 0, huyo = 0, esq = 0, rem = 0, rod = 0;
     while (n < T0 && PART === 'juego') {
       n++;
       let m = null, md = 1e9, cerca = 0, peligro = null;
@@ -4055,18 +4501,31 @@ window.__H = {
         const a = Math.random() * 6.283; ex = Math.cos(a); ez = Math.sin(a);
         if (Math.random() < 0.05) jugPide('ataca');
         if (Math.random() < 0.01) jugPide('esquiva');
-      } else if (peligro && JUG.agu > J_AGU_ESQ + J_AGU_GOLPE + 6) {
+      } else if (jugPuedeRemate() && cerca >= 2 && jugPide('remate')) {
+        /* EL REMATE SE GUARDA PARA CUANDO HAY TURBA, que es para lo que es:
+           gastarlo en un peón suelto es tirar una barra entera por 46 de
+           vida. Con el bot rematando al primero que ve, la medición diría
+           que el movimiento sirve cuando lo que sirve es el desperdicio.
+           Y LA RAMA TIENE QUE CAERSE SI EL GOLPE NO SALE. Con la condición
+           escrita como `fur>=J_FUR && cerca>=2` y el `jugPide` adentro, el
+           A/B con el remate apagado dejaba al bot QUIETO para siempre: la
+           barra llena no se gasta nunca, la rama se toma todos los cuadros y
+           no se ataca ni se esquiva. Medido, informaba 0 de 12 y 2,9 oleadas
+           —peor que antes de que el remate existiera—, o sea que la sonda
+           acusaba al juego de un defecto suyo. */
+        rem++;
+      } else if (peligro) {
         const dx = (peligro.x - JUG.x), dz = (peligro.z - JUG.z), l = Math.hypot(dx, dz) || 1;
         JUG.entX = -dz / l; JUG.entZ = dx / l;
-        if (jugPide('esquiva')) esq++;
+        if (jugPide('esquiva')) { esq++; if (JUG.rueda) rod++; }
       } else if (m) {
         const d = Math.sqrt(md), dx = (m.x - JUG.x) / d, dz = (m.z - JUG.z) / d;
         const g = J_COMBO[0].alc * 0.92;
         /* SE SEPARA CUANDO LO RODEAN: correr son 5,6 contra los 1,9 de un
            bruto, y esa ventaja ES la herramienta contra una turba. */
-        if (cerca >= 3 && JUG.agu > 30) { huyo++; ex = -dx; ez = -dz; }
+        if (cerca >= 3) { huyo++; ex = -dx; ez = -dz; }
         else if (d > g) { ex = dx; ez = dz; }
-        else if (!jugAtacando() && JUG.esqT <= 0 && JUG.agu > J_AGU_GOLPE + 4) jugPide('ataca');
+        else if (!jugAtacando() && JUG.esqT <= 0) jugPide('ataca');
       }
       if (ex || ez) {
         if (n % 12 === 0) {
@@ -4095,7 +4554,8 @@ window.__H = {
     return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: PART === 'fin' && GANO,
              bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
              olas: OLA.hechas, deOlas: OLA_TOTAL, zona: ZONA_ACT,
-             huyo, esq, vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
+             huyo, esq, rem, rod, remBajas: TALLY.remBajas,
+             vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
   },
   audita(s) { return audita(s === undefined ? SEM : s); },
   auditaN(n) {
@@ -4133,6 +4593,124 @@ window.__H = {
     }
     return r;
   },
+  /* ── LA TRAYECTORIA, QUE ES LO QUE `medirPose` NO PUEDE VER ────────────
+     `medirPose` devuelve CUÁNTO se movió cada punto, y con eso una vuelta de
+     campana entera y un temblor de la misma amplitud dan lo mismo. Lo que
+     prueba que la rueda es una rueda es el ORDEN: la coronilla tiene que
+     BAJAR por debajo de la cadera en el medio del recorrido y volver arriba
+     al final, y ninguna extensión dice eso. Devuelve la altura muestreada.  */
+  trayec(nom, n) {
+    const c = _cuerpoMedir(), N = n || 12, out = [];
+    for (let i = 0; i <= N; i++) {
+      poseAplica(c, nom, i / N, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      const cab = _pto(c.h.cuello, 0.19), man = _pto(c.h.anteD, -0.62), cad = _pto(c.h.pelvis, 0);
+      out.push({ u: +(i / N).toFixed(2), cab: +cab.y.toFixed(3), cabZ: +cab.z.toFixed(3),
+                 man: +man.y.toFixed(3), manZ: +man.z.toFixed(3), cad: +cad.y.toFixed(3) });
+    }
+    return out;
+  },
+
+  /* ── EL REMATE, JUGADO DE VERDAD ───────────────────────────────────────
+     Se planta una turba alrededor, se carga la barra y se aprieta el botón
+     POR EL MISMO CAMINO QUE EL DEDO (`jugPide`), y se mira cuadro a cuadro
+     qué pasa: cuánto sube, si el mundo se agacha, a cuántos alcanza y si el
+     fogonazo y el anillo salieron. Sin esto, «hay un remate» quiere decir
+     «escribí una función».                                                */
+  remate(n) {
+    const N = n === undefined ? 6 : n;
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0; JUG.vida = JUG.vidaMax;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1; JUG.aire = 0; LENTO = 1;
+    FOGO = 0; ONDA = -1; HITSTOP = 0;
+    const ls = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * 6.283;
+      ls.push({ cl: i % 3 === 2 ? 'lancero' : 'peon', x: Math.cos(a) * 2.2 + 4.0, z: Math.sin(a) * 2.2, zona: 0 });
+    }
+    esqArranca(ls);
+    const vid0 = ESQS.map(e => e.vida);
+    JUG.fur = J_FUR;
+    const puede = jugPuedeRemate();
+    const salio = jugPide('remate');
+    let alto = 0, lentoMin = 1, fogo = 0, onda = 0, pasos = 0, lin = 0;
+    for (let i = 0; i < 260 && (jugRematando() || HITSTOP > 0); i++) {
+      pasos++;
+      if (HITSTOP > 0) { HITSTOP -= PASO; efectosPaso(PASO); continue; }
+      jugPaso(PASO, { x: 0, z: 0, corre: false });
+      esqPaso(PASO * LENTO);
+      efectosPaso(PASO);
+      alto = Math.max(alto, JUG.aire); lentoMin = Math.min(lentoMin, LENTO);
+      fogo = Math.max(fogo, FOGO); onda = Math.max(onda, ONDA >= 0 ? 1 : 0);
+      lin = Math.max(lin, LINEAS);
+    }
+    let toc = 0, dano = 0;
+    ESQS.forEach((e, i) => { const d = vid0[i] - e.vida; if (d > 0) { toc++; dano += d; } });
+    const dist = Math.hypot(JUG.x, JUG.z);
+    return { puede, salio, pasos, seg: +(pasos * PASO).toFixed(2),
+             alto: +alto.toFixed(2), lentoMin: +lentoMin.toFixed(2),
+             fogo: +fogo.toFixed(2), lineas: +lin.toFixed(2), onda,
+             tocados: toc, deN: N, dano, saltoM: +dist.toFixed(2),
+             furDespues: Math.round(JUG.fur), errs: (window.__errs || []).length };
+  },
+
+  /* ── ESQUIVE CONTRA RUEDA ──────────────────────────────────────────────
+     El mismo botón por el mismo camino, una vez parado y otra con impulso, y
+     lo que se compara es CUÁNTO RECORRIÓ y CUÁNTOS PASOS FUE INTOCABLE. Si
+     los dos números dieran parecido serían el mismo movimiento con dos
+     nombres, que es justo lo que este pedido no quería.                    */
+  esqRod(corriendo) {
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
+    JUG.esqT = 0; JUG.esqEsp = 0; JUG.rem = -1; JUG.golpe = -1;
+    JUG.vx = 0; JUG.vz = 0;
+    /* la velocidad se pone CAMINANDO de verdad y no escribiendo `vx`: lo que
+       decide rueda o esquive es la velocidad al apretar, así que ponerla a
+       mano probaría una condición que el juego no evalúa igual */
+    if (corriendo) for (let i = 0; i < 40; i++) jugPaso(PASO, { x: 0, z: 1, corre: true });
+    const v0 = Math.hypot(JUG.vx, JUG.vz), x0 = JUG.x, z0 = JUG.z;
+    JUG.entX = 0; JUG.entZ = 1;
+    const salio = jugPide('esquiva');
+    const rueda = JUG.rueda, largo = JUG.esqLargo;
+    let inv = 0, pasos = 0;
+    while (JUG.esqT > 0 && pasos < 200) {
+      pasos++;
+      if ((JUG.esqLargo - JUG.esqT) < JUG.esqInv) inv++;
+      jugPaso(PASO, { x: 0, z: 0, corre: false });
+    }
+    return { salio, rueda, vAntes: +v0.toFixed(2), largo: +largo.toFixed(2),
+             pasos, invPasos: inv, dist: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2),
+             espera: +JUG.esqEsp.toFixed(2), rumbo: +JUG.rumbo.toFixed(2) };
+  },
+
+  /* ── LA FURIA: DE DÓNDE SALE Y CUÁNTO TARDA ────────────────────────────
+     Un número que sube no dice nada; lo que hay que poder contestar es en
+     cuántos golpes se llena y si se enfría donde tiene que enfriarse.      */
+  furia() {
+    JUG.fur = 0; JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
+    JUG.vida = JUG.vidaMax; JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1;
+    esqArranca([{ cl: 'bruto', x: 0, z: 1.5, zona: 0 }]);
+    ESQS[0].vida = 99999; ESQS[0].vidaMax = 99999;
+    let g = 0; const a0 = TALLY.aciertos, t0 = TALLY.tajos;
+    for (let i = 0; i < 3000 && JUG.fur < J_FUR; i++) {
+      if (!jugAtacando() && jugPide('ataca')) g++;
+      jugPaso(PASO, { x: 0, z: 0, corre: false }); esqPaso(PASO);
+      /* SE CLAVAN LOS DOS CUERPOS, y hace falta: el bruto contesta y su empuje
+         saca al héroe del alcance. Sin clavarlo, de 91 tajos acertaban 4 y la
+         sonda medía una pelea perdida en vez de cuánto carga un golpe. */
+      ESQS[0].vida = 99999; ESQS[0].x = 0; ESQS[0].z = 1.5;
+      JUG.x = 0; JUG.z = 0; JUG.rumbo = 0; JUG.vida = JUG.vidaMax; JUG.muerto = false;
+    }
+    const lleno = Math.round(JUG.fur), golpes = g;
+    /* se enfría SÓLO sin nadie cerca: con el bicho al lado no puede bajar */
+    let f0 = JUG.fur;
+    for (let i = 0; i < 60; i++) jugPaso(PASO, { x: 0, z: 0, corre: false });
+    const conBicho = Math.round(JUG.fur);
+    esqArranca([]);
+    for (let i = 0; i < 120; i++) jugPaso(PASO, { x: 0, z: 0, corre: false });
+    return { golpesParaLlenar: golpes, lleno, conBichoAlLado: conBicho,
+             solo2s: Math.round(JUG.fur), bajo: +(f0 - JUG.fur).toFixed(1),
+             tajos: TALLY.tajos - t0, aciertos: TALLY.aciertos - a0 };
+  },
+
   /* planta una pose y CONGELA: el bucle sigue dibujando pero no avanza, así
      la foto es del instante que se pidió y no de tres cuadros después */
   pose(nom, u, quien) {
@@ -4353,8 +4931,8 @@ window.__H = {
        botón de pausa pegado a la barra de vida —los dos arriba a la
        izquierda— era un choque que ninguna prueba podía ver. Lo que se pisa
        no es el dibujo del botón sino su CAJA: el dedo va ahí igual. */
-    const ids = ['bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso',
-                 'bAtaca', 'bEsq', 'bCam', 'bPausa'];
+    const ids = ['bVida', 'bFur', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso',
+                 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'bRem'];
     const c = [], ch = [];
     for (const id of ids) {
       const e = document.getElementById(id); if (!e) continue;
@@ -4500,7 +5078,7 @@ window.__H = {
     let dr = JUG.rumbo - r0; while (dr > Math.PI) dr -= 6.283; while (dr < -Math.PI) dr += 6.283;
     return { ok, rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2),
              pasos: n, giroGrados: +(dr * 57.3).toFixed(1),
-             invPasos: inv, agu: Math.round(JUG.agu) };
+             invPasos: inv, fur: Math.round(JUG.fur) };
   },
   /* ── EL COMBO, MEDIDO ──────────────────────────────────────────────────
      Cuánto tarda cada golpe de punta a punta y cuánto de eso es ventana
@@ -4517,10 +5095,76 @@ window.__H = {
     const T = out.reduce((a, o) => a + o.largo, 0);
     const D = out.reduce((a, o) => a + o.dano, 0);
     return { golpes: out, largoCombo: +T.toFixed(2), dano: D,
-             dps: +(D / T).toFixed(1), agu: J_AGU_GOLPE * 3,
+             dps: +(D / T).toFixed(1),
              golpesPeon: Math.ceil(ESQ.peon.vida / (D / 3)) };
   },
   viejo(v) { COMBO_VIEJO = !!v; return COMBO_VIEJO; },
+  /* EL BOTÓN DEL REMATE SÓLO EXISTE CON LA BARRA LLENA, así que medir los
+     solapamientos en una partida recién empezada lo saltea justo a él: es el
+     único elemento nuevo del HUD y el que hay que comprobar. Ésta llena la
+     furia y repinta, para poder medir el caso en que se ve. */
+  /* EL FOGONAZO, LAS LÍNEAS Y EL ANILLO DURAN DÉCIMAS. `remate()` corre el
+     golpe entero, así que la foto que se saca después es la de un campo
+     tranquilo: para verlos hay que PARAR en el medio y congelar. */
+  remateFoto(n, pasos) {
+    this.remate === undefined;
+    const N = n === undefined ? 6 : n;
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0; JUG.vida = JUG.vidaMax;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1; JUG.aire = 0; LENTO = 1;
+    FOGO = 0; ONDA = -1; HITSTOP = 0; CONGELADO = false;
+    const ls = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * 6.283;
+      ls.push({ cl: i % 3 === 2 ? 'lancero' : 'peon', x: Math.cos(a) * 2.2 + 3.2, z: Math.sin(a) * 2.2, zona: 0 });
+    }
+    esqArranca(ls);
+    JUG.fur = J_FUR; jugPide('remate');
+    const P = pasos === undefined ? 44 : pasos;
+    for (let i = 0; i < P; i++) unPaso(PASO);
+    efectosPaso(PASO);
+    CONGELADO = true;
+    return { rem: JUG.rem, aire: +JUG.aire.toFixed(2), fogo: +FOGO.toFixed(2),
+             lineas: +matPost.uniforms.uLineas.value.toFixed(2), onda: +ONDA.toFixed(2),
+             lento: LENTO, vivos: ESQS.filter(e => e.vive).length };
+  },
+  /* ── EL BRILLO DE LA PANTALLA, QUE NO ES EL DEL MUNDO ──────────────────
+     `brillo()` dibuja la escena en RT y LEE RT, o sea lo de ANTES de la
+     pasada de post: el fogonazo y las líneas viven en el shader del post, así
+     que esa sonda es estructuralmente incapaz de verlos. Medido con el
+     defecto: nueve valores de fogonazo de 0 a 0,92 devolvían los NUEVE el
+     mismo 52,1 de medio. Ésta dibuja el post en un destino propio y lee ése.
+     Y el uniforme se escribe DENTRO, porque `efectosPaso` lo repisa en cada
+     cuadro del bucle: puesto desde afuera dura un cuadro y la sonda mide el
+     valor de siempre. */
+  brilloPost(fogo, lineas) {
+    if (!this._rtp || this._rtp.width !== RT.width) {
+      if (this._rtp) this._rtp.dispose();
+      this._rtp = new THREE.WebGLRenderTarget(RT.width, RT.height);
+    }
+    const f0 = matPost.uniforms.uFogo.value, l0 = matPost.uniforms.uLineas.value;
+    if (fogo !== undefined) matPost.uniforms.uFogo.value = fogo;
+    if (lineas !== undefined) matPost.uniforms.uLineas.value = lineas;
+    ren.setRenderTarget(RT); ren.render(esc, cam);
+    ren.setRenderTarget(this._rtp); ren.render(escPost, camPost);
+    const W = this._rtp.width, Hh = this._rtp.height, px = new Uint8Array(W * Hh * 4);
+    ren.readRenderTargetPixels(this._rtp, 0, 0, W, Hh, px);
+    ren.setRenderTarget(null);
+    matPost.uniforms.uFogo.value = f0; matPost.uniforms.uLineas.value = l0;
+    let s = 0, mx = 0, blan = 0;
+    for (let i = 0; i < W * Hh; i++) {
+      const o = i * 4, l = px[o] * 0.2126 + px[o + 1] * 0.7152 + px[o + 2] * 0.0722;
+      s += l; if (l > mx) mx = l; if (l > 200) blan++;
+    }
+    return { fogo: matPost.uniforms.uFogo.value, medio: +(s / (W * Hh)).toFixed(1),
+             max: Math.round(mx), pctBlanco: +(blan / (W * Hh) * 100).toFixed(1) };
+  },
+  botonRem(v) {
+    JUG.fur = (v === false) ? 0 : J_FUR; pintaBotones(); pintaHud();
+    const e = document.getElementById('bRem');
+    return { fur: JUG.fur, on: e.classList.contains('hay'), w: e.offsetWidth, h: e.offsetHeight };
+  },
+  viejo152(v) { v = v || {}; SIN_REMATE = !!v.sinRemate; SIN_RUEDA = !!v.sinRueda;
+    return { sinRemate: SIN_REMATE, sinRueda: SIN_RUEDA }; },
   /* ¿el ciclo se da vuelta cuando el cuerpo va de espaldas? Se empuja al
      jugador hacia atrás sin tocarle el rumbo, que es lo que le pasa cuando
      lo tiran de un hachazo, y se mira hacia dónde avanza la fase. */
@@ -4550,14 +5194,14 @@ window.__H = {
     for (let i = 0; i < (n || 180); i++) { jugPide('ataca'); unPaso(PASO); }
     return { pasos: n || 180, seg: +((n || 180) * PASO).toFixed(2),
              tajos: TALLY.tajos - t0, aciertos: TALLY.aciertos,
-             freno: +(TALLY.frenoT - f0).toFixed(3), agu: Math.round(JUG.agu) };
+             freno: +(TALLY.frenoT - f0).toFixed(3), fur: Math.round(JUG.fur) };
   },
   /* ── UN SOLO TOQUE EN EL MEDIO DEL ARCO ────────────────────────────────
      Arranca un golpe, espera `t` segundos y toca UNA vez, como un pulgar.
      Devuelve hasta qué eslabón del combo llegó. Sin cola, un toque que cae
      en el medio del arco se tira y el combo se queda en el primero.       */
   combo1(t) {
-    JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.agu = J_AGU;
+    JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.fur = 0;
     jugPide('ataca');
     const n = Math.round((t === undefined ? 0.25 : t) / PASO);
     for (let i = 0; i < n; i++) unPaso(PASO);
@@ -4691,8 +5335,8 @@ window.__H = {
                w: Math.round(r.width), h: Math.round(r.height),
                ve: !oculto && op > 0.05 && r.width > 1 && r.height > 1 };
     };
-    const ids = ['hud', 'bVida', 'bAgu', 'bXp', 'nivel', 'zona', 'restan',
-                 'tac', 'joy', 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'teclas'];
+    const ids = ['hud', 'bVida', 'bFur', 'bXp', 'nivel', 'zona', 'restan',
+                 'tac', 'joy', 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'bRem', 'teclas'];
     const o = {}; const faltan = [];
     for (const id of ids) { const r = uno(id); o[id] = r; if (!r.ve) faltan.push(id); }
     /* Y QUÉ HAY DEBAJO DEL DEDO. Un botón visible que no recibe el puntero es
@@ -4713,7 +5357,7 @@ window.__H = {
              bAtacaNo: document.getElementById('bAtaca').classList.contains('no'),
              bEsqNo: document.getElementById('bEsq').classList.contains('no'),
              bEsqEspera: document.getElementById('bEsq').classList.contains('espera'),
-             barras: ['bVida', 'bAgu', 'bXp'].map(k =>
+             barras: ['bVida', 'bFur', 'bXp'].map(k =>
                getComputedStyle(document.querySelector('#' + k + ' i')).transform) };
   },
 

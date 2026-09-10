@@ -42,6 +42,9 @@ function jugResuelveGolpe() {
   TALLY.tajos++;
   if (n) {
     TALLY.aciertos++;
+    /* PAGA EL GOLPE QUE ACIERTA, no el que se tira. Con la furia subiendo por
+       machacar el botón al aire, el remate se carga de espaldas a la pelea. */
+    JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_GOLPE * n);
     SACUDE = Math.max(SACUDE, JUG.golpe === 2 ? 0.30 : 0.16);
     if (!PELEA_VIEJA) HITSTOP = Math.max(HITSTOP, JUG.golpe === 2 ? HIT_STOP_REMATE : HIT_STOP);
     son('impacto');
@@ -49,7 +52,99 @@ function jugResuelveGolpe() {
   return n;
 }
 
-const TALLY = { golpes: 0, dano: 0, porCl: {}, esquivados: 0, tajos: 0, aciertos: 0, frenoT: 0 };
+/* ── EL GOLPE DEL REMATE ───────────────────────────────────────────────────
+   Barre un CÍRCULO y no un arco: cae desde arriba, así que no hay «de qué
+   lado» — y eso es justamente lo que lo hace la respuesta a estar rodeado,
+   que es el único apuro que este juego tiene. Va por `esqRecibe`, la misma
+   que el combo, así que la cura por matar, la xp, la muerte y el sonido son
+   los de siempre y no una segunda contabilidad.                           */
+function jugRemateGolpe() {
+  const mult = 1 + (JUG.nivel - 1) * NIV_DANO;
+  let n = 0;
+  for (const e of ESQS) {
+    if (!e.vive || e.est === 'muere') continue;
+    const R = J_REM_R + ESQ[e.cl].radio;
+    if (dist2(e.x, e.z, JUG.x, JUG.z) > R * R) continue;
+    esqRecibe(e, Math.round(J_REM_DANO * mult), e.x - JUG.x, e.z - JUG.z, J_REM_EMPUJE);
+    n++;
+  }
+  TALLY.remates++; TALLY.remBajas += n;
+  /* EL FOGONAZO Y EL FRENO SON EL GOLPE: sin ellos, el momento más caro del
+     juego se ve igual que un tajo. El freno es el doble que el del remate del
+     combo, y el anillo de choque queda dibujándose solo por su cuenta. */
+  FOGO = 1; ONDA = 0; ONDA_X = JUG.x; ONDA_Z = JUG.z; ONDA_Y = H(JUG.x, JUG.z);
+  SACUDE = Math.max(SACUDE, 0.62);
+  HITSTOP = Math.max(HITSTOP, HIT_STOP_REMATE * 1.8);
+  son('impacto'); son('remImpacto');
+  return n;
+}
+
+/* el fogonazo, el anillo del suelo y las líneas de velocidad: los tres son
+   estado del EFECTO y no del jugador, así que viven acá y los apaga el bucle */
+let FOGO = 0, ONDA = -1, ONDA_X = 0, ONDA_Z = 0, ONDA_Y = 0, LINEAS = 0;
+const ONDA_DUR = 0.46;
+
+/* ── LAS DOS PIEZAS DEL IMPACTO ────────────────────────────────────────────
+   El anillo del SUELO dice dónde cayó y a quién alcanzó —su radio final es
+   `J_REM_R`, o sea que lo que se ve es exactamente lo que se golpeó— y la
+   media luna VERTICAL es el corte en el aire, que es lo que ninguna cosa
+   apoyada en el piso puede decir. Con una sola de las dos el remate se lee a
+   explosión y no a espadazo.
+   SE CREAN LA PRIMERA VEZ Y NO AL ARRANCAR: así no hay que acordarse de
+   llamar a nada desde el arranque ni hay un orden de módulos que respetar. */
+let EFE = null;
+function efectosPaso(dt) {
+  if (!EFE) {
+    const anilloG = new THREE.RingGeometry(0.72, 1.0, 30, 1).rotateX(-Math.PI / 2);
+    const mat = () => new THREE.MeshBasicMaterial({
+      color: 0xfff3d2, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+    const anillo = new THREE.Mesh(anilloG, mat());
+    /* la media luna es un anillo CORTADO —media vuelta— parado de canto: un
+       plano entero se lee a bandera y un disco a burbuja */
+    const luna = new THREE.Mesh(new THREE.RingGeometry(0.80, 1.0, 26, 1, Math.PI * 0.12, Math.PI * 0.76), mat());
+    anillo.frustumCulled = false; luna.frustumCulled = false;
+    anillo.visible = false; luna.visible = false;
+    esc.add(anillo); esc.add(luna);
+    EFE = { anillo, luna };
+  }
+  if (ONDA >= 0) {
+    ONDA += dt;
+    const u = ONDA / ONDA_DUR;
+    if (u >= 1) { ONDA = -1; EFE.anillo.visible = false; EFE.luna.visible = false; }
+    else {
+      /* CRECE CON LA RAÍZ: sale disparado y frena, que es lo que hace una
+         onda. Lineal se ve a globo que se infla. */
+      const r = J_REM_R * 1.12 * Math.sqrt(u), o = (1 - u) * (1 - u);
+      EFE.anillo.visible = true;
+      EFE.anillo.position.set(ONDA_X, ONDA_Y + 0.06, ONDA_Z);
+      EFE.anillo.scale.setScalar(Math.max(0.01, r));
+      EFE.anillo.material.opacity = o * 0.95;
+      /* la media luna va CHICA y RÁPIDA: es el corte, no la explosión, así
+         que tiene que haberse ido cuando el anillo recién va por la mitad.
+         Y CHICA DE VERDAD: con la escala llegando a 3,7 el arco medía siete
+         unidades de punta a punta contra un héroe de 1,8 —fotografiado, un
+         arco blanco enorme flotando arriba y a la derecha, que no se lee a
+         tajo sino a error de dibujo—. Topada en 1,9 el arco pasa por encima
+         de la cabeza y se va antes de que el anillo llegue a la mitad. */
+      const v = Math.min(1, u * 3.0);
+      EFE.luna.visible = v < 1;
+      EFE.luna.position.set(ONDA_X, ONDA_Y + 0.78, ONDA_Z);
+      EFE.luna.rotation.set(0, Math.atan2(cam.position.x - ONDA_X, cam.position.z - ONDA_Z), 0.35);
+      EFE.luna.scale.set(0.85 + v * 1.05, 0.85 + v * 1.05, 1);
+      EFE.luna.material.opacity = (1 - v) * 0.75;
+    }
+  }
+  /* el fogonazo se apaga A TIRONES y no suave: uno que se desvanece parejo se
+     lee a transición de video y uno que corta se lee a golpe */
+  if (FOGO > 0) FOGO = Math.max(0, FOGO - dt * (FOGO > 0.5 ? 9.5 : 4.2));
+  const lin = jugRematando() && JUG.rem <= 1 ? J_REM_LINEAS : 0;
+  LINEAS = amort(LINEAS, lin, lin ? 26 : 13, dt);
+  matPost.uniforms.uFogo.value = FOGO * J_REM_FOGO;
+  matPost.uniforms.uLineas.value = LINEAS;
+}
+
+const TALLY = { remates: 0, remBajas: 0, golpes: 0, dano: 0, porCl: {}, esquivados: 0, tajos: 0, aciertos: 0, frenoT: 0 };
 function jugRecibe(dano, dx, dz, empuje, cl) {
   if (JUG.muerto) return;
   /* LOS CUADROS DE INVENCIBILIDAD DEL ESQUIVE SON LA MITAD DEL JUEGO: sin
@@ -59,6 +154,11 @@ function jugRecibe(dano, dx, dz, empuje, cl) {
   JUG.vida -= dano;
   TALLY.golpes++; TALLY.dano += dano; TALLY.porCl[cl || '?'] = (TALLY.porCl[cl || '?'] || 0) + 1;
   JUG.invT = 0.42; JUG.danoT = 0.32;
+  /* RECIBIR TAMBIÉN CARGA. Es lo que impide que la barra se apague justo
+     cuando la pelea se pone fea: rodeado no se llega a pegar, y sin esto el
+     remate —que es la herramienta contra una turba— no se puede pagar nunca
+     en el único momento en que hace falta. */
+  JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_RECIBE);
   const l = Math.hypot(JUG.x - dx, JUG.z - dz) || 1;
   JUG.vx += (JUG.x - dx) / l * empuje;
   JUG.vz += (JUG.z - dz) / l * empuje;

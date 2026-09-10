@@ -31,6 +31,9 @@ function armaEntrada() {
     TECLAS[e.code] = true;
     if (e.code === 'Escape') { PART === 'juego' ? pausa(true) : (PART === 'pausa' ? pausa(false) : 0); }
     if (e.code === 'Space' && PART === 'juego') { e.preventDefault(); jugPide('esquiva'); }
+    /* EN PC EL REMATE ES UNA TECLA Y NO EL BOTÓN: el botón vive en la esquina
+       del pulgar y en PC no hay pulgar ahí. Q está al lado de WASD. */
+    if (e.code === 'KeyQ' && PART === 'juego') { e.preventDefault(); jugPide('remate'); }
   });
   addEventListener('keyup', e => { TECLAS[e.code] = false; });
   addEventListener('blur', () => { for (const k in TECLAS) TECLAS[k] = false; });
@@ -91,6 +94,7 @@ function armaEntrada() {
   };
   bt('bAtaca', () => jugPide('ataca'));
   bt('bEsq', () => jugPide('esquiva'));
+  bt('bRem', () => jugPide('remate'));
   bt('bCam', () => { CAM_YAW = JUG.rumbo + Math.PI; });   // volver a poner la cámara detrás
   bt('bPausa', () => pausa(true));
 }
@@ -125,6 +129,12 @@ function nuevaPartida(sem) {
   jugArranca();
   esqArranca([]);
   ZONA_ACT = 0; TALLY.golpes = 0; TALLY.dano = 0; TALLY.porCl = {}; TALLY.esquivados = 0; SANGRE = 0; SACUDE = 0; AVISO_T = 0;
+  TALLY.remates = 0; TALLY.remBajas = 0;
+  /* LOS EFECTOS SE APAGAN A MANO. Muriendo en medio de un remate, el fogonazo
+     y las líneas de velocidad se quedan puestos y la partida nueva arranca
+     con la pantalla blanca — y eso no falla, se ve. */
+  FOGO = 0; ONDA = -1; LINEAS = 0; HITSTOP = 0; LENTO = 1;
+  if (matPost) { matPost.uniforms.uFogo.value = 0; matPost.uniforms.uLineas.value = 0; }
   DICHO.fill(false);
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
   PART = 'juego'; verPanel(null);
@@ -256,6 +266,7 @@ function bucle() {
       cam.position.y += (Math.random() - 0.5) * s;
       cam.position.z += (Math.random() - 0.5) * s;
     }
+    if (PART !== 'menu' && !CONGELADO) efectosPaso(dt);
     SANGRE = Math.max(0, SANGRE - dt * 1.5);
     matPost.uniforms.uSangre.value = SANGRE * 0.75 + (JUG.vida < JUG.vidaMax * 0.28 && !JUG.muerto
       ? 0.10 + Math.sin(performance.now() * 0.004) * 0.05 : 0);
@@ -282,9 +293,15 @@ function unPaso(dt) {
      juego que se juega. La escena se sigue dibujando —congelar el dibujo se
      lee a tirón— y lo que se detiene es el tiempo del mundo.               */
   if (HITSTOP > 0) { HITSTOP -= dt; TALLY.frenoT += dt; return; }
+  /* ── EL JUGADOR VA A TIEMPO REAL Y EL MUNDO SE AGACHA ────────────────────
+     `LENTO` lo escribe el remate y vale 1 el resto del tiempo. Escalando
+     también el dt del jugador, el remate duraría tres segundos y medio de
+     reloj y lo que se leería es un tirón; escalando sólo el mundo, lo que se
+     lee es que el héroe se movió más rápido que todo lo demás — que es
+     exactamente lo que un tiempo bala dice.                                */
   jugPaso(dt, entradaLee());
-  esqPaso(dt);
-  zonasPaso(dt);
+  esqPaso(dt * LENTO);
+  zonasPaso(dt * LENTO);
   /* LA ÚLTIMA ZONA, no la 2: con el índice escrito, agregar una zona deja al
      rey anunciándose en el medio del recorrido y mudo cuando de verdad sale. */
   const uz = ZONAS.length - 1;

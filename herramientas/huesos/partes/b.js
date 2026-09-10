@@ -138,11 +138,25 @@ const J_ZANCADA = 1.35;
 const J_RADIO = 0.42;
 const J_ALTO = 1.72;
 const J_VIDA = 100;
-const J_AGU = 100;                // aguante
-const J_AGU_REC = 26;             // aguante por segundo cuando no se gasta
-const J_AGU_CORRE = 17;           // por segundo corriendo
-const J_AGU_ESQ = 28;             // por esquive
-const J_AGU_GOLPE = 12;           // por golpe
+
+/* ── LA FURIA REEMPLAZA AL AGUANTE, Y NO ES EL MISMO NÚMERO CON OTRO NOMBRE ─
+   El aguante CASTIGA: baja sola al correr, corta el combo en el medio y hace
+   que el botón de esquivar diga «no» justo cuando hace falta. Y lo peor no es
+   que moleste sino QUÉ premia: administrar una barra es no pelear. La furia
+   PAGA — sube pegando, sube matando, sube incluso cuando te pegan a vos, y lo
+   único que se puede hacer con ella es gastarla en el remate. Es la misma
+   barra, en el mismo sitio del HUD, y significa lo contrario.
+   SE ENFRÍA CUANDO NO HAY NADIE CERCA y no todo el tiempo: enfriándose en
+   plena pelea vuelve a ser una barra que hay que administrar, y entre oleada
+   y oleada, sin enfriamiento, se llega a la siguiente con el remate cargado
+   de arriba —o sea gratis—.                                                */
+const J_FUR = 100;
+const J_FUR_GOLPE = 7.0;          // por golpe que ACIERTA; los que fallan no pagan
+const J_FUR_BAJA = 15;            // por esqueleto abajo
+const J_FUR_RECIBE = 6;           // recibir también carga: perder no es sólo perder
+const J_FUR_FUGA = 3.4;           // por segundo, y sólo sin nadie a menos de 14 m
+const J_FUR_FRIO = 14;            // ese radio
+
 const J_ESQ_V = 12.6;             // velocidad del esquive
 const J_ESQ_T = 0.34;             // cuánto dura
 /* CUÁNTO DURA LA INVULNERABILIDAD SALE DE UNA CUENTA, no del gusto. El aviso
@@ -152,6 +166,58 @@ const J_ESQ_T = 0.34;             // cuánto dura
    0,14 s: sigue pidiendo el tiempo justo y se puede acertar con un pulgar. */
 const J_ESQ_INV = 0.30;
 const J_ESQ_ESPERA = 0.52;
+
+/* ── LA RUEDA: LO MISMO QUE EL ESQUIVE NO SERÍA UNA HABILIDAD MÁS ──────────
+   Un segundo esquive con otro nombre es un botón repetido. Lo que separa a
+   los dos es QUÉ CUESTA: el esquive es corto, intocable sólo al principio y
+   se recupera enseguida —el botón del pánico, se aprieta sin pensar—; la
+   rueda dura casi el doble, llega a más del doble de distancia, es intocable
+   durante casi todo el recorrido y se paga con una espera larga. O sea que
+   una es reacción y la otra es COMPROMISO, que es la decisión que un esquive
+   solo no puede pedir.
+   Y NO HAY BOTÓN NUEVO: la rueda es el esquive CON IMPULSO. Se rueda cuando
+   ya se venía moviendo rápido, que es además lo que hace un cuerpo de verdad
+   —nadie rueda desde parado— y lo hace descubrible sin un cartel: el que
+   corre y esquiva la encuentra sola. En un teléfono con dos botones de pelea,
+   un tercero para esto sería el que nadie aprieta.                         */
+const J_ROD_V = 15.5;             // velocidad de la rueda
+const J_ROD_T = 0.62;             // cuánto dura
+const J_ROD_INV = 0.46;           // intocable durante casi todo, no sólo al entrar
+const J_ROD_ESPERA = 0.86;        // y la espera es lo que la hace un compromiso
+const J_ROD_MIN = J_VEL * 1.10;   // a partir de qué velocidad el esquive es rueda
+
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Es lo único del juego que le saca el control al jugador, y por eso tiene
+   que valer la pena: salta de verdad —es el único momento del juego con los
+   dos pies en el aire—, el mundo se agacha a un tercio mientras está arriba,
+   y al caer parte el suelo. Los tiempos son de ESTE MOVIMIENTO y no de un
+   número redondo: el salto tiene que durar lo suficiente para que se lea el
+   arco, la caída tiene que ser MÁS CORTA que la subida —una caída lenta se
+   lee a flotar— y el impacto tiene que ser un instante.                   */
+const J_REM_T = [0.34, 0.24, 0.12, 0.36];   // salto · caída · impacto · fin
+const J_REM_ALTO = 3.1;           // el ápice del arco, en metros
+const J_REM_ALC = 8.0;            // hasta dónde busca a quién saltarle encima
+const J_REM_R = 3.6;              // el radio del golpe al caer
+/* ── EL FOGONAZO Y LAS LÍNEAS SE ELIGEN MIDIENDO LA PANTALLA ───────────────
+   El post hace `mix(color, blanco, uFogo)`, así que el fogonazo tapa la escena
+   entera y es exactamente lo que el fogonazo NO tiene que hacer: subraya el
+   golpe borrando lo que hay que ver. Barrido sobre el búfer de pantalla —no el
+   del mundo, que es anterior al post y no lo puede ver— con la escena de fondo
+   en 44,9 de luminancia media:
+
+     uFogo   0,16 → 78,5 · 3,1 % de píxeles blancos
+             0,30 → 107,9 · 3,2 %      ← acá
+             0,75 → 202,5 · 63,2 %
+             0,92 → 238,2 · 100 %      ← lo que había: pantalla blanca entera
+
+   0,34 deja la media en 2,4 veces la del fondo sin mover el porcentaje de
+   blanco: se lee a golpe y no a corte a blanco. Las líneas, igual: a 1,00 el
+   32 % de la pantalla se va a blanco y a 0,55 el 2,8 %.                    */
+const J_REM_FOGO = 0.34;
+const J_REM_LINEAS = 0.55;
+const J_REM_DANO = 104;           // barre, así que es UN golpe para toda la turba
+const J_REM_EMPUJE = 12.0;
+const J_REM_LENTO = 0.32;         // a cuánto se agacha el mundo mientras está arriba
 
 /* el combo de tres: cada golpe con su ventana, su alcance y su daño */
 const J_COMBO = [
@@ -173,6 +239,11 @@ let COMBO_VIEJO = false;
    freno del impacto y que el esquive no gire el cuerpo. Sin poder apagarlos
    en el mismo binario, «el bot pasó de 5 a 7» no dice cuál de los tres fue. */
 let PELEA_VIEJA = false, SIN_ASIST = false, ESQ_VIEJO = false;
+/* y lo mismo para los dos de esta vuelta. El bot honesto pasó de 11 de 12 a
+   12 de 12 y hay DOS cambios encima: la rueda —que es esquivar más lejos— y
+   el remate. Sin poder apagarlos por separado en el mismo binario, «mejoró»
+   no dice cuál de los dos fue, y encima podría ser que uno solo bastara. */
+let SIN_REMATE = false, SIN_RUEDA = false;
 /* cuánto dura el fundido entre dos poses de un esqueleto */
 const ESQ_FUNDE = 0.16;
 /* la asistencia de puntería: cuánto se corrige y dentro de qué arco se busca
@@ -249,7 +320,7 @@ const TXT = {
     jugar: 'JUGAR', seguir: 'SEGUIR', menu: 'MENÚ', otra: 'OTRA VEZ', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAJA', cmedia: 'MEDIA', calta: 'ALTA',
-    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.',
+    pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.\nEsquivar corriendo es rodar. Pegando se carga la furia, y llena sale el remate.',
     piePausa: 'El mundo se queda quieto mientras esto esté abierto.',
     zbosque: 'EL BOSQUE', zpantano: 'EL PANTANO', zruinas: 'LAS RUINAS',
     zosario: 'EL OSARIO', zceniza: 'EL CAMPO DE CENIZA',
@@ -262,7 +333,7 @@ const TXT = {
     ganaste: 'EL CAMPO ESTÁ QUIETO', ganasteS: 'el rey no se levanta más',
     perdiste: 'TE CAÍSTE', perdisteS: 'los huesos siguen ahí',
     datos: 'Esqueletos {0} · Nivel {1} · {2}',
-    teclas: 'WASD mover · SHIFT correr · CLIC atacar\nESPACIO esquivar · MOUSE cámara · ESC pausa',
+    teclas: 'WASD mover · SHIFT correr · CLIC atacar · Q remate\nESPACIO esquivar (corriendo: rodar) · MOUSE cámara · ESC pausa',
     ola: 'OLEADA',
     olaViene: 'OLEADA {0} DE {1}',
     olaCae: 'LA OLEADA CAYÓ',
@@ -285,7 +356,7 @@ const TXT = {
     jugar: 'PLAY', seguir: 'RESUME', menu: 'MENU', otra: 'AGAIN', pausa: 'PAUSED',
     calidad: 'GRAPHICS', idioma: 'LANGUAGE',
     cbaja: 'LOW', cmedia: 'MEDIUM', calta: 'HIGH',
-    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.',
+    pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.\nDodge while running to roll. Hitting builds rage; when it is full, the finisher is yours.',
     piePausa: 'The world stands still while this is open.',
     zbosque: 'THE WOOD', zpantano: 'THE MARSH', zruinas: 'THE RUINS',
     zosario: 'THE BONEYARD', zceniza: 'THE ASH FIELD',
@@ -298,7 +369,7 @@ const TXT = {
     ganaste: 'THE FIELD IS QUIET', ganasteS: 'the king does not rise again',
     perdiste: 'YOU FELL', perdisteS: 'the bones are still there',
     datos: 'Skeletons {0} · Level {1} · {2}',
-    teclas: 'WASD move · SHIFT run · CLICK attack\nSPACE dodge · MOUSE camera · ESC pause',
+    teclas: 'WASD move · SHIFT run · CLICK attack · Q finisher\nSPACE dodge (running: roll) · MOUSE camera · ESC pause',
     ola: 'WAVE',
     olaViene: 'WAVE {0} OF {1}',
     olaCae: 'THE WAVE IS DOWN',
@@ -321,7 +392,7 @@ const TXT = {
     jugar: 'JOGAR', seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', pausa: 'PAUSA',
     calidad: 'GRÁFICOS', idioma: 'IDIOMA',
     cbaja: 'BAIXA', cmedia: 'MÉDIA', calta: 'ALTA',
-    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.',
+    pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.\nEsquivar correndo é rolar. Bater carrega a fúria, e cheia sai o remate.',
     piePausa: 'O mundo fica parado enquanto isto estiver aberto.',
     zbosque: 'A MATA', zpantano: 'O PÂNTANO', zruinas: 'AS RUÍNAS',
     zosario: 'O OSSÁRIO', zceniza: 'O CAMPO DE CINZA',
@@ -334,7 +405,7 @@ const TXT = {
     ganaste: 'O CAMPO ESTÁ QUIETO', ganasteS: 'o rei não se levanta mais',
     perdiste: 'VOCÊ CAIU', perdisteS: 'os ossos continuam lá',
     datos: 'Esqueletos {0} · Nível {1} · {2}',
-    teclas: 'WASD mover · SHIFT correr · CLIQUE atacar\nESPAÇO esquivar · MOUSE câmera · ESC pausa',
+    teclas: 'WASD mover · SHIFT correr · CLIQUE atacar · Q remate\nESPAÇO esquivar (correndo: rolar) · MOUSE câmera · ESC pausa',
     ola: 'ONDA',
     olaViene: 'ONDA {0} DE {1}',
     olaCae: 'A ONDA CAIU',

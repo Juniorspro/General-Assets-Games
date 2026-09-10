@@ -4,23 +4,40 @@
 
 const JUG = {
   x: 0, z: 0, y: 0, rumbo: 0, vx: 0, vz: 0,
-  vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+  vida: J_VIDA, vidaMax: J_VIDA, fur: 0,
   nivel: 1, xp: 0, xpSig: XP_NIVEL(1),
   golpe: -1, gT: 0, gDio: false, gVent: 0,
   esqT: 0, esqEsp: 0, esqX: 0, esqZ: 0, esqRumbo: 0, gBuf: 0, cicSg: 1,
+  /* `esqLargo` es cuánto dura ESTE esquive: el esquive y la rueda comparten
+     el desplazamiento entero y se diferencian en tres números. Con dos
+     máquinas de estado paralelas, el día que se toque el choque o el freno
+     una de las dos se queda sin tocar. */
+  esqLargo: J_ESQ_T, esqVel: J_ESQ_V, esqInv: J_ESQ_INV, rueda: false,
+  /* el remate: `rem` es la fase (−1 = no está), `aire` la altura POR ENCIMA
+     del terreno, que es lo único de este juego que no vale H(x,z) */
+  rem: -1, remT: 0, remX: 0, remZ: 0, remX0: 0, remZ0: 0, remDio: false, aire: 0,
   danoT: 0, invT: 0, muerto: false, muerteT: 0,
   fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0,
   cuerpo: null, kit: null,
 };
+/* CUÁNTO SE AGACHA EL MUNDO. Vale 1 salvo en el aire del remate, y lo lee
+   `unPaso` para escalar el dt de los esqueletos y de las oleadas — NUNCA el
+   del jugador. Eso es exactamente lo que es un tiempo bala: el que decide va
+   a tiempo real y lo demás se arrastra. Escalando también al jugador, el
+   remate duraría tres segundos y medio de reloj y se leería a tirón. */
+let LENTO = 1;
 let JUG_MEZ = { a: 'quieto', b: null, k: 0 };   // qué pose se está mezclando
 
 function jugArranca() {
   Object.assign(JUG, {
-    x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, agu: J_AGU,
+    x: 0, z: 0, rumbo: 0, vx: 0, vz: 0, vida: J_VIDA, vidaMax: J_VIDA, fur: 0,
     nivel: 1, xp: 0, xpSig: XP_NIVEL(1), golpe: -1, gT: 0, gDio: false, gVent: 0,
     esqT: 0, esqEsp: 0, esqRumbo: 0, gBuf: 0, cicSg: 1, danoT: 0, invT: 0, muerto: false, muerteT: 0,
+    esqLargo: J_ESQ_T, esqVel: J_ESQ_V, esqInv: J_ESQ_INV, rueda: false,
+    rem: -1, remT: 0, remDio: false, aire: 0,
     fase: 0, anda: 0, corre: false, bajas: 0, tiempo: 0, vive: true,
   });
+  LENTO = 1;
   JUG.y = H(0, 0);
   if (!JUG.cuerpo) {
     JUG.cuerpo = armaCuerpo(recetaHeroe());
@@ -29,6 +46,10 @@ function jugArranca() {
 }
 
 const jugAtacando = () => JUG.golpe >= 0;
+const jugRematando = () => JUG.rem >= 0;
+/* la barra llena es la ÚNICA condición: sin nada que gastar el botón no
+   existe, y por eso no hace falta apagarlo ni explicarlo */
+const jugPuedeRemate = () => !SIN_REMATE && !JUG.muerto && !jugRematando() && JUG.fur >= J_FUR;
 const jugFaseGolpe = () => {                     // 0 carga · 1 activo · 2 fin
   const g = J_COMBO[JUG.golpe];
   return JUG.gT < g.carga ? 0 : (JUG.gT < g.carga + g.activo ? 1 : 2);
@@ -37,13 +58,26 @@ const jugLargoGolpe = g => g.carga + g.activo + g.fin;
 
 function jugPide(que) {
   if (JUG.muerto) return false;
+  if (que === 'remate') return jugRemateArranca();
   if (que === 'esquiva') {
-    if (JUG.esqT > 0 || JUG.esqEsp > 0 || JUG.agu < J_AGU_ESQ) return false;
+    if (JUG.esqT > 0 || JUG.esqEsp > 0 || jugRematando()) return false;
+    /* ── EL MISMO BOTÓN DA DOS COSAS, Y LO DECIDE EL CUERPO ──────────────
+       Con impulso sale rueda y parado sale esquive. No es un modo escondido:
+       es la diferencia entre tirarse de costado y rodar, que es la misma que
+       hay en la realidad. El umbral va sobre la velocidad QUE YA SE TIENE y
+       no sobre el botón de correr, así que vale igual con el joystick pasado
+       del aro que con Shift.                                              */
+    const vel = Math.hypot(JUG.vx, JUG.vz);
+    const rueda = !SIN_RUEDA && !PELEA_VIEJA && !ESQ_VIEJO && vel > J_ROD_MIN;
+    JUG.rueda = rueda;
+    JUG.esqLargo = rueda ? J_ROD_T : J_ESQ_T;
+    JUG.esqVel = rueda ? J_ROD_V : J_ESQ_V;
+    JUG.esqInv = rueda ? J_ROD_INV : J_ESQ_INV;
     /* esquivar CANCELA el golpe: si no, el jugador queda clavado en la
        recuperación de un tajo mientras le llega un hachazo que veía venir, y
        eso se lee a que el botón no anduvo */
     JUG.golpe = -1; JUG.gVent = 0;
-    JUG.esqT = J_ESQ_T; JUG.esqEsp = J_ESQ_ESPERA; JUG.agu -= J_AGU_ESQ;
+    JUG.esqT = JUG.esqLargo; JUG.esqEsp = rueda ? J_ROD_ESPERA : J_ESQ_ESPERA;
     JUG.gBuf = 0;                     // esquivar tira el golpe que estaba en cola
     const l = Math.hypot(JUG.entX || 0, JUG.entZ || 0);
     if (l > 0.2) { JUG.esqX = JUG.entX / l; JUG.esqZ = JUG.entZ / l; }
@@ -64,11 +98,18 @@ function jugPide(que) {
        vuelta. El cuerpo se queda mirando donde miraba y lo único direccional
        es el desplazamiento; la pose es una cuclilla y se lee igual para
        cualquier lado. */
+    /* LA RUEDA SE ORIENTA HACIA DONDE VA Y EL ESQUIVE NO, y no es una
+       excepción a la regla de arriba: el esquive es un salto de costado y se
+       lee igual mirando a cualquier lado, pero un cuerpo no puede rodar de
+       costado — rodando, el eje del giro ES la dirección, así que un cuerpo
+       que rueda hacia allá mirando para acá se ve roto. Y no cuesta el
+       contraataque, porque la rueda ya termina lejos.                     */
+    if (rueda) JUG.rumbo = Math.atan2(JUG.esqX, JUG.esqZ);
     son('esquiva');
     return true;
   }
   if (que === 'ataca') {
-    if (JUG.esqT > 0) return false;
+    if (JUG.esqT > 0 || jugRematando()) return false;
     if (jugGolpeArranca()) return true;
     /* LA COLA DE ENTRADA. Sin ella, un toque que cae en el medio del arco se
        TIRA A LA BASURA y hay que volver a tocar con el tiempo justo: en un
@@ -87,9 +128,9 @@ function jugPide(que) {
    escrita en dos sitios, el día que se toque la ventana el bot prueba un
    juego que no existe.                                                     */
 function jugGolpeArranca() {
-  if (JUG.muerto || JUG.esqT > 0 || JUG.agu < J_AGU_GOLPE) return false;
+  if (JUG.muerto || JUG.esqT > 0 || jugRematando()) return false;
   if (JUG.golpe < 0) {
-    JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false; JUG.agu -= J_AGU_GOLPE;
+    JUG.golpe = 0; JUG.gT = 0; JUG.gDio = false;
     JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
   }
   /* ENCADENAR SÓLO EN LA VENTANA. Sin ventana, machacar el botón encadena los
@@ -101,7 +142,7 @@ function jugGolpeArranca() {
   const enRec = !COMBO_VIEJO && JUG.gT >= g.carga + g.activo;
   if ((enRec || JUG.gVent > 0) && JUG.golpe < J_COMBO.length - 1) {
     JUG.golpe++; JUG.gT = 0; JUG.gDio = false; JUG.gVent = 0;
-    JUG.agu -= J_AGU_GOLPE; JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
+    JUG.gBuf = 0; jugApunta(); son('tajo'); return true;
   }
   return false;
 }
@@ -132,10 +173,74 @@ function jugApunta() {
   return c;
 }
 
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Cuatro tiempos y UNA parábola: el arco de salto y caída es continuo —de la
+   posición de salida al punto de aterrizaje— y las dos primeras fases sólo
+   parten ese arco para poder poner la pose y el mundo lento donde van.
+   EL BLANCO SE ELIGE AL ARRANCAR y no al aterrizar: elegido al final, el
+   héroe saltaría hacia un sitio y caería en otro, que es lo que se ve como
+   teletransporte. Sin nadie cerca salta igual hacia adelante — un botón que
+   a veces no hace nada se lee a botón roto.                               */
+const J_REM_TOT = J_REM_T.reduce((a, b) => a + b, 0);
+function jugRemateArranca() {
+  if (!jugPuedeRemate() || JUG.esqT > 0) return false;
+  let m = null, md = 1e9;
+  for (const e of ESQS) {
+    if (!e.vive || e.est === 'muere') continue;
+    const d2 = dist2(e.x, e.z, JUG.x, JUG.z);
+    if (d2 < md && d2 < J_REM_ALC * J_REM_ALC) { md = d2; m = e; }
+  }
+  JUG.remX0 = JUG.x; JUG.remZ0 = JUG.z;
+  if (m) {
+    /* SE CAE ENCIMA Y NO AL LADO: el aterrizaje es el centro del golpe, así
+       que apuntar al bicho es apuntar al medio de la turba que lo rodea. */
+    JUG.remX = m.x; JUG.remZ = m.z;
+    JUG.rumbo = Math.atan2(m.x - JUG.x, m.z - JUG.z);
+  } else {
+    JUG.remX = JUG.x + Math.sin(JUG.rumbo) * 5.2;
+    JUG.remZ = JUG.z + Math.cos(JUG.rumbo) * 5.2;
+  }
+  JUG.rem = 0; JUG.remT = 0; JUG.remDio = false;
+  JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.esqT = 0;
+  JUG.fur = 0;
+  JUG.vx = 0; JUG.vz = 0;
+  son('remate');
+  return true;
+}
+
+function jugRemate(dt) {
+  JUG.remT += dt;
+  let t = JUG.remT, f = 0;
+  while (f < J_REM_T.length - 1 && t >= J_REM_T[f]) { t -= J_REM_T[f]; f++; }
+  JUG.rem = f;
+  /* el mundo se agacha SÓLO en el aire: agachado también en el impacto, el
+     golpe que es el punto entero del movimiento se vería en cámara lenta */
+  LENTO = (f <= 1) ? J_REM_LENTO : 1;
+
+  if (f <= 1) {
+    const u = lim((JUG.remT) / (J_REM_T[0] + J_REM_T[1]), 0, 1);
+    /* SALE RÁPIDO Y SE CUELGA ARRIBA. Con la interpolación lineal el arco se
+       recorre parejo y no hay un instante en el que la cámara alcance a leer
+       la silueta contra el cielo, que es de lo que vive este plano. */
+    const w = 1 - Math.pow(1 - u, 1.7);
+    JUG.x = mez(JUG.remX0, JUG.remX, w);
+    JUG.z = mez(JUG.remZ0, JUG.remZ, w);
+    JUG.aire = J_REM_ALTO * 4 * u * (1 - u);
+  } else {
+    JUG.x = JUG.remX; JUG.z = JUG.remZ; JUG.aire = 0;
+    if (!JUG.remDio) { JUG.remDio = true; jugRemateGolpe(); }
+  }
+  if (JUG.remT >= J_REM_TOT) { JUG.rem = -1; JUG.aire = 0; LENTO = 1; }
+  JUG.y = H(JUG.x, JUG.z) + JUG.aire;
+  jugPose(dt);
+}
+
 function jugPaso(dt, ent) {
   JUG.tiempo += dt;
   JUG.entX = ent.x; JUG.entZ = ent.z;
   if (JUG.muerto) { JUG.muerteT += dt; jugPose(dt); return; }
+  if (jugRematando()) { jugRemate(dt); return; }
+  LENTO = 1;
 
   JUG.invT = Math.max(0, JUG.invT - dt);
   JUG.danoT = Math.max(0, JUG.danoT - dt);
@@ -147,8 +252,8 @@ function jugPaso(dt, ent) {
   /* ── el esquive manda sobre todo lo demás ── */
   if (JUG.esqT > 0) {
     JUG.esqT -= dt;
-    const u = 1 - JUG.esqT / J_ESQ_T;
-    const v = J_ESQ_V * (1 - suav(lim(u, 0, 1)) * 0.72);   // arranca fuerte y frena
+    const u = 1 - JUG.esqT / JUG.esqLargo;
+    const v = JUG.esqVel * (1 - suav(lim(u, 0, 1)) * 0.72);   // arranca fuerte y frena
     JUG.vx = JUG.esqX * v; JUG.vz = JUG.esqZ * v;
     if (JUG.esqT <= 0) { JUG.vx *= 0.25; JUG.vz *= 0.25; }
   } else if (jugAtacando()) {
@@ -186,7 +291,7 @@ function jugPaso(dt, ent) {
        doblar FRENA y el tope real queda por debajo del ajuste —el defecto
        que ya costó una vuelta en Z Force—.                                */
     const l = Math.hypot(ent.x, ent.z);
-    JUG.corre = ent.corre && l > 0.55 && JUG.agu > 1;
+    JUG.corre = ent.corre && l > 0.55;
     const vMax = (JUG.corre ? J_CORRE : J_VEL) * (l > 0.34 ? Math.min(1, l) : 0);
     if (l > 0.06) {
       const dx = ent.x / l, dz = ent.z / l;
@@ -204,11 +309,20 @@ function jugPaso(dt, ent) {
       const f = Math.exp(-13 * dt);
       JUG.vx *= f; JUG.vz *= f;
     }
-    if (JUG.corre && vMax > 0.2) JUG.agu = Math.max(0, JUG.agu - J_AGU_CORRE * dt);
   }
 
-  /* el aguante se recupera cuando no se gasta, y no mientras se corre */
-  if (!JUG.corre && JUG.esqT <= 0) JUG.agu = Math.min(J_AGU, JUG.agu + J_AGU_REC * dt);
+  /* ── LA FURIA SE ENFRÍA CUANDO NO HAY NADIE CERCA ─────────────────────
+     Corriendo NO se gasta, que es la mitad del pedido: administrar la
+     carrera era lo que hacía que huir fuera una cuenta en vez de una
+     decisión. */
+  if (JUG.fur > 0) {
+    let cerca = false;
+    for (const e of ESQS) {
+      if (!e.vive || e.est === 'muere') continue;
+      if (dist2(e.x, e.z, JUG.x, JUG.z) < J_FUR_FRIO * J_FUR_FRIO) { cerca = true; break; }
+    }
+    if (!cerca) JUG.fur = Math.max(0, JUG.fur - J_FUR_FUGA * dt);
+  }
 
   /* ── mover y chocar ── */
   const nx = JUG.x + JUG.vx * dt, nz = JUG.z + JUG.vz * dt;
@@ -219,6 +333,7 @@ function jugPaso(dt, ent) {
     const k = (MUNDO_R * 0.955) / r;
     JUG.x *= k; JUG.z *= k;
   }
+  JUG.aire = 0;
   JUG.y = H(JUG.x, JUG.z);
 
   /* LA FASE DEL PASO SALE DE LA DISTANCIA Y NO DEL RELOJ: así el sonido del
@@ -260,7 +375,11 @@ function cicloSigno(vx, vz, rumbo, prev) {
 function jugPose(dt) {
   let a = 'quieto', arg = JUG.tiempo, b = null, brg = 0, obj = 0;
   if (JUG.muerto) { a = 'muere'; arg = Math.min(1, JUG.muerteT / 1.15); }
-  else if (JUG.esqT > 0) { a = 'esquiva'; arg = 1 - JUG.esqT / J_ESQ_T; }
+  else if (jugRematando()) { a = 'remate'; arg = lim(JUG.remT / J_REM_TOT, 0, 1); }
+  else if (JUG.esqT > 0) {
+    a = JUG.rueda ? 'rueda' : 'esquiva';
+    arg = 1 - JUG.esqT / JUG.esqLargo;
+  }
   else if (jugAtacando()) {
     a = 'golpe' + JUG.golpe; arg = JUG.gT / jugLargoGolpe(J_COMBO[JUG.golpe]);
   } else if (JUG.danoT > 0) { a = 'dano'; arg = 1 - JUG.danoT / 0.32; }

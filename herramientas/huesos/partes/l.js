@@ -76,6 +76,16 @@ const SON = {
                    _ruido(0.55, 'lowpass', 220, 0.7, 0.14, 1.0); },
   gana:    () => { [392, 523, 659, 784].forEach((f, i) => setTimeout(() => AC && _tono(f, f * 1.005, 0.42, 0.17, 'triangle'), i * 150)); },
   muere:   () => { _tono(160, 40, 1.1, 0.28, 'sawtooth'); _ruido(0.9, 'lowpass', 300, 0.7, 0.22, 1.0); },
+  /* ── EL REMATE SUENA EN DOS TIEMPOS, y son dos sonidos distintos ────────
+     El salto es un tono que SUBE con un siseo de aire: anuncia, y el que lo
+     oye sabe que lo que viene todavía no pasó. El impacto baja, es grave y
+     es LO MÁS FUERTE DEL JUEGO —0,46 contra los 0,34 de un impacto normal—
+     porque es el único golpe que cuesta una barra entera. Uno solo para los
+     dos momentos dejaría el aviso y el golpe indistinguibles.             */
+  remate:  () => { _tono(300, 900, 0.34, 0.17, 'triangle'); _ruido(0.34, 'highpass', 2100, 0.7, 0.14, 1.0); },
+  remImpacto: () => { _tono(180, 44, 0.72, 0.46, 'sawtooth');
+                      _ruido(0.52, 'lowpass', 190, 0.9, 0.42, 0.9);
+                      _ruido(0.30, 'highpass', 3400, 0.7, 0.26, 0.7); },
 };
 function son(k) { if (AC && SON[k]) try { SON[k](); } catch (e) {} }
 
@@ -129,8 +139,12 @@ function pintaHud(forzar) {
      el mismo texto. */
   const v = Math.round(JUG.vida / JUG.vidaMax * 100);
   if (forzar || v !== _hudV) { $('#bVida i').style.transform = 'scaleX(' + lim(v, 0, 100) / 100 + ')'; _hudV = v; }
-  const a = Math.round(JUG.agu / J_AGU * 100);
-  if (forzar || a !== _hudA) { $('#bAgu i').style.transform = 'scaleX(' + lim(a, 0, 100) / 100 + ')'; _hudA = a; }
+  const a = Math.round(JUG.fur / J_FUR * 100);
+  if (forzar || a !== _hudA) {
+    $('#bFur i').style.transform = 'scaleX(' + lim(a, 0, 100) / 100 + ')';
+    $('#bFur').classList.toggle('full', a >= 100);
+    _hudA = a;
+  }
   const x = Math.round(JUG.xp / JUG.xpSig * 100);
   if (forzar || x !== _hudX) { $('#bXp i').style.transform = 'scaleX(' + lim(x, 0, 100) / 100 + ')'; _hudX = x; }
   pintaBotones(forzar);
@@ -161,10 +175,16 @@ function pintaHud(forzar) {
    de verdad decide. Con la regla copiada, el botón se apaga en un caso y el
    golpe sale igual en otro — y a partir de ahí el jugador no puede confiar en
    lo que ve, que en un juego de aguante es lo único que administra.       */
-let _btA = -1, _btE = -1;
+let _btA = -1, _btE = -1, _btR = -1;
 function pintaBotones(forzar) {
-  const puedeA = !JUG.muerto && JUG.esqT <= 0 && JUG.agu >= J_AGU_GOLPE ? 1 : 0;
-  const puedeE = !JUG.muerto && JUG.esqT <= 0 && JUG.esqEsp <= 0 && JUG.agu >= J_AGU_ESQ ? 1 : 0;
+  const puedeA = !JUG.muerto && JUG.esqT <= 0 && !jugRematando() ? 1 : 0;
+  const puedeE = !JUG.muerto && JUG.esqT <= 0 && JUG.esqEsp <= 0 && !jugRematando() ? 1 : 0;
+  /* EL BOTÓN DEL REMATE APARECE Y DESAPARECE, no se apaga: la condición es
+     `jugPuedeRemate`, o sea la misma que decide si el golpe sale. Con la regla
+     copiada acá, el botón podría estar en un caso donde apretarlo no hace
+     nada, y eso es peor que no tenerlo. */
+  const puedeR = jugPuedeRemate() ? 1 : 0;
+  if (forzar || puedeR !== _btR) { $('#bRem').classList.toggle('hay', !!puedeR); _btR = puedeR; }
   if (forzar || puedeA !== _btA) { $('#bAtaca').classList.toggle('no', !puedeA); _btA = puedeA; }
   if (forzar || puedeE !== _btE) {
     const e = $('#bEsq');

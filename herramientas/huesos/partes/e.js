@@ -15,7 +15,7 @@ const POST_FS = `
 precision highp float;
 uniform sampler2D tD;
 uniform vec2 uTam;
-uniform float uSat, uPost, uVin, uGrano, uSangre, uT;
+uniform float uSat, uPost, uVin, uGrano, uSangre, uT, uFogo, uLineas;
 varying vec2 vUv;
 /* ── Y SE VUELVE A CODIFICAR A sRGB, QUE NO ES UN DETALLE ────────────────
    El destino de render se declara con colorSpace SRGBColorSpace, así que el
@@ -53,6 +53,27 @@ void main(){
   // el golpe en la cara va DESPUÉS del posterizado, o sea luz en el ojo y no
   // luz en la escena
   c = mix(c, vec3(0.46, 0.05, 0.03), uSangre * (0.25 + 0.75 * dot(d, d) * 3.0));
+  /* ── LAS LÍNEAS DE VELOCIDAD ──────────────────────────────────────────
+     Son la firma de un plano de anime y cuestan seis líneas: el ángulo se
+     parte en sectores, cada sector se prende o no con un azar propio y
+     arranca a su propio radio. Sin el radio distinto por sector se ven como
+     una rueda de rayos —o sea un dibujo— y no como velocidad.
+     VAN DESPUÉS DEL POSTERIZADO Y DE LA VIÑETA a propósito: son luz en el
+     ojo, igual que el golpe en la cara, y pasadas por los escalones de color
+     quedarían dentadas justo en el borde, que es lo único que tienen.    */
+  if (uLineas > 0.001) {
+    vec2 q = (vUv - 0.5) * vec2(1.0, 0.5625);
+    float r = length(q) * 2.6;
+    float ang = atan(q.y, q.x) * 8.0;
+    float sec = floor(ang);
+    float a1 = fract(sin(sec * 12.9898 + 4.1) * 43758.5453);
+    float a2 = fract(sin(sec * 78.2330 + 1.7) * 43758.5453);
+    float ini = 0.30 + a1 * 0.42;
+    float fino = smoothstep(0.50, 0.30, abs(fract(ang) - 0.5));
+    c += smoothstep(ini, ini + 0.16, r) * fino * step(0.42, a2) * uLineas * 0.80;
+  }
+  // el fogonazo del remate: lo ÚLTIMO, porque tiene que tapar todo
+  c = mix(c, vec3(1.0), uFogo);
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -81,6 +102,7 @@ function armaRender(lienzo) {
       tD: { value: RT.texture }, uTam: { value: new THREE.Vector2(320, 180) },
       uSat: { value: 1.16 }, uPost: { value: 22 }, uVin: { value: 1.30 },
       uGrano: { value: 0.035 }, uSangre: { value: 0 }, uT: { value: 0 },
+      uFogo: { value: 0 }, uLineas: { value: 0 },
     },
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
     fragmentShader: POST_FS, depthTest: false, depthWrite: false,

@@ -269,6 +269,7 @@ function esqRecibe(e, dano, dx, dz, empuje) {
     jugGanaXp(ESQ[e.cl].xp);
     JUG.vida = Math.min(JUG.vidaMax, JUG.vida + e.vidaMax * MATA_CURA);
     JUG.bajas++;
+    JUG.fur = Math.min(J_FUR, JUG.fur + J_FUR_BAJA);
     return true;
   }
   son('pega');

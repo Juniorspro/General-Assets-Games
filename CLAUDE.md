@@ -281,12 +281,17 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
-- **`Huesos.html` es "HUESOS"** (~1,45 MB, de los cuales la mayor parte son las sesenta y nueve
+- **`Huesos.html` es "HUESOS"** (~1,48 MB, de los cuales la mayor parte son las sesenta y nueve
   texturas y las catorce mallas generadas; el mundo entero y las animaciones se dibujan por código).
   El decimosexto juego. Un **RPG de matar esqueletos en tercera persona**, vertical nativo y con
   joystick: se camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a
-  uno y el remate barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del
-  juego. **Cinco zonas encadenadas** en anillos concéntricos —bosque, pantano, ruinas, osario y
+  uno y el tercero barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del
+  juego; **esquivar CORRIENDO es una rueda**, que lleva 6,06 m contra 2,66 y te deja mirando para
+  donde saliste. **No hay barra de aguante: hay FURIA**, que sube pegando, matando y recibiendo, se
+  enfría sólo si no hay nadie a menos de catorce metros, y llena paga un **remate**: el héroe salta
+  3,10 m, el mundo va a un tercio de velocidad, cae con la espada por encima de la cabeza y barre un
+  **círculo** de 3,6 m con fogonazo, líneas de velocidad y un anillo de choque. Es lo único del juego
+  con los dos pies en el aire y la respuesta a estar rodeado. **Cinco zonas encadenadas** en anillos concéntricos —bosque, pantano, ruinas, osario y
   ceniza, 132 m de radio— cada una con su suelo, su niebla, su cielo, su luz, **su propia receta de
   vegetación en tres capas y su propia mezcla de clases**, y **caen por oleadas**: once en total
   (2 · 2 · 2 · 2 · 3, la última es el rey), con un respiro entre una y otra que cura un poco y paga
@@ -302,6 +307,165 @@ munecas.
   (destino de render chico estirado con NEAREST). Vive partido en `herramientas/huesos/partes/` y se
   arma con `python3 herramientas/huesos/armar.py`; los sprites se hornean con
   `python3 herramientas/huesos/hornear.py` y las mallas con `hornear_3d.py`.
+
+### Centésima quincuagésima segunda vuelta (2026-09-10): **HUESOS** — se va la barra de aguante, entra la furia, la rueda y un remate
+
+Pedido, textual y repetido dos veces: *"agrega una forma en la cuál el personaje tenga más habilidades
+como rodar por el suelo, usa deep para poder hacer animaciones realistas y eso o genera con tripo un
+personaje de caballero we etc también agrega que el de saltar sea más god y que no haya barra de
+stamina también que haya una dónde sea un remate que hazlo vos súper anime etc"*.
+
+#### EL CABALLERO DE TRIPO YA ESTABA, Y CAMBIARLO COSTARÍA LAS ONCE POSES
+
+El héroe **ya se arma con mallas generadas** —`hay3('yelmo')` y `hay3('esphero')` en `recetaHeroe`,
+pedidas en la vuelta 145 con acero limpio y cuero curtido para que no se leyera como uno más de la
+turba—. Meter un `SkinnedMesh` entero en su lugar cuesta las nueve poses escritas a mano más las dos
+de esta vuelta, el patinaje cero —que sale de medir el ciclo— y un retarget de huesos, que en Eco
+costó una vuelta entera. Así que la entrega es la animación y no una malla nueva.
+
+#### LA BARRA DE AGUANTE SE VA Y SU HUECO NO QUEDA VACÍO: ES FURIA
+
+No alcanza con borrarla. Es el mismo cajón del HUD con el significado dado vuelta: el aguante
+**castiga y hay que administrarlo**, la furia **premia y sólo se puede gastar**. Sube pegando (7 por
+golpe que **acierta**; los que se tiran al aire no pagan, que si no se carga de espaldas a la pelea),
+15 por baja y 6 por recibir —perder no es sólo perder—. Medido: **13 golpes la llenan, 13 de 13
+aciertan**.
+
+**Y SE ENFRÍA SÓLO SIN NADIE A MENOS DE CATORCE METROS.** Con enfriamiento permanente sería una
+tarea de administración en el medio de la pelea; sin ninguno, se llega a la oleada siguiente con un
+remate de regalo. Medido: con el bruto al lado, **100 → 100**; solo dos segundos, **100 → 93**, o sea
+los 3,4 por segundo que dice la constante.
+
+**Y LA SONDA DE ESTO ESTABA MIDIENDO OTRA COSA.** La primera corrida devolvió `golpesParaLlenar: 91`
+con la barra en **0**, y no era el juego: el bruto contesta y su empuje **saca al héroe del alcance**
+—de 91 tajos acertaban **4**—, así que lo que se medía era una pelea perdida y no cuánto carga un
+golpe. Clavando los dos cuerpos, 13 de 13.
+
+#### LA RUEDA NO ES UN BOTÓN NUEVO: ES EL ESQUIVE CON IMPULSO
+
+En teléfono hay **dos** botones de pelea y un tercero sería el que nadie aprieta. El esquive se
+convierte en rueda **cuando ya venís corriendo** (por encima de 1,10 veces la velocidad de caminar),
+que es exactamente cuando el cuerpo tiene con qué rodar. Una máquina de estados, tres números
+distintos:
+
+| | esquive | rueda |
+|---|---|---|
+| recorre | **2,66 m** | **6,06 m** |
+| pasos invencibles | 19 de 21 | **28 de 38** |
+| y además | **no gira el cuerpo** (vuelta 150) | **sí se orienta** hacia donde va |
+
+Dos movimientos y no uno con dos nombres: la rueda lleva **2,3 veces más lejos** y encima te deja
+mirando para donde saliste.
+
+**Y LO QUE PRUEBA QUE UNA RUEDA ES UNA RUEDA NO ES UNA EXTENSIÓN, ES EL ORDEN.** `medirPose` devuelve
+cuánto abarca la pose y eso no distingue un volteo de una agachada. Entró `trayec(nom)`, que muestrea
+la coronilla, la mano y la cadera a lo largo del recorrido. Medido: la coronilla va **1,65 → 0,05 →
+−0,20 (mínimo en u 0,57) → 1,65**, o sea que pasa **por debajo de la cadera**, que se queda en 0,48.
+La cabeza está abajo en el medio del giro: es un volteo completo de 2π sobre la pelvis, que es la
+raíz del esqueleto.
+
+**Y LA RUEDA NO LE APORTA NADA AL BOT, medido, y eso es honesto decirlo:** el A/B en el mismo binario
+da **12 de 12 con rueda y 12 de 12 sin ella**, cifra por cifra. La razón es la misma que en la vuelta
+150 con el buffer del combo: un bot que se vuelve a apuntar perfecto no gana nada con esquivar más
+lejos. Su prueba es `esqRod` y `trayec`, no el auto-jugador — es un arreglo **para una persona**.
+
+#### EL REMATE: LO ÚNICO DEL JUEGO CON LOS DOS PIES EN EL AIRE
+
+*"El de saltar"* tiene dos lecturas y las dos están atendidas: este juego **no tiene salto** y en la
+vuelta 150 el jugador llamó así al esquive —que es lo que la rueda mejora— y ahora además hay un arco
+aéreo de verdad. Cuatro tiempos: **sube** (0,34 s) · **cae** (0,24) · **impacto** (0,12) · **fin**
+(0,36), con la altura en una parábola de 3,10 m y hasta 8 m de alcance hacia el enemigo elegido.
+
+- **Barre un CÍRCULO y no un arco.** Cae desde arriba, así que no hay «de qué lado» — y eso es lo que
+  lo convierte en la respuesta a estar rodeado, que es el único apuro que este juego tiene. Medido
+  con seis enemigos en anillo: **5 tocados de 6 y 262 de daño**; el sexto queda a 4,4 m del punto de
+  caída contra los 3,6 del radio, o sea que el radio importa y no es un botón de limpiar la pantalla.
+- **Va por `esqRecibe`**, la misma que el combo, así que la cura por matar, la xp, la muerte y el
+  sonido son los de siempre y no una segunda contabilidad.
+- **Y EL MUNDO VA A CÁMARA LENTA, EL JUGADOR NO.** `LENTO` lo leen `esqPaso` y `zonasPaso` y nunca
+  `jugPaso`: escalando también al héroe, el golpe duraría tres segundos y medio de reloj y se leería
+  a tirón. Medido, `lentoMin 0,32` mientras está en el aire y 1 desde el impacto.
+- Medido con `trayec`: la mano de la espada va **0,72 → 2,13 (pico en u 0,21) → 0,00 en el impacto**,
+  o sea que **desciende 2,13 metros**; la cadera baja de 0,94 a 0,51, que es la rodilla en el piso.
+
+#### CUATRO DEFECTOS QUE SÓLO SE VIERON MIDIENDO O MIRANDO
+
+1. **EL FOGONAZO DEJABA LA PANTALLA BLANCA ENTERA, y es la tercera vez en este repo.** El post hace
+   `mix(color, blanco, uFogo)` y el pico estaba en 0,92. Y **`brillo()` no lo puede ver**: dibuja la
+   escena en el destino de render y **lee ése**, o sea lo de ANTES de la pasada de post — medido,
+   nueve valores de fogonazo de 0 a 0,92 devolvían los **nueve el mismo 52,1**. Con una sonda que
+   dibuja el post en un destino propio (`brilloPost`), sobre un fondo de 44,9 de luminancia media:
+
+   | uFogo | 0 | 0,16 | **0,34** | 0,55 | 0,75 | 0,92 |
+   |---|---|---|---|---|---|---|
+   | medio | 44,9 | 78,5 | **~113** | 160,4 | 202,5 | 238,2 |
+   | % de píxeles blancos | 2,2 | 3,1 | **2,2** | 3,2 | **63,2** | **100** |
+
+   Fotografiado con 0,92, el personaje, los seis esqueletos y el anillo **no se veían**: el efecto
+   tapaba justo lo que el efecto viene a subrayar. Es literalmente lo que ya había pasado en VIGILIA.
+   Las líneas de velocidad, igual: a 1,00 el 32 % de la pantalla se va a blanco y a **0,55** el 2,8 %.
+2. **LA MEDIA LUNA MEDÍA SIETE UNIDADES.** Su escala llegaba a 3,7 sobre un héroe de 1,8: en la foto
+   era un arco blanco enorme flotando arriba y a la derecha, que no se lee a tajo sino a error de
+   dibujo. Topada en 1,9 y bajada a la altura del pecho, pasa por encima de la cabeza y se va antes
+   de que el anillo del piso llegue a la mitad.
+3. **EL BOTÓN NUEVO SE PISABA CON EL DE ATACAR.** El marco mide 892×412 y los botones van anclados al
+   canto: atacar ocupa x 764..868 · y 280..384 y esquivar 684..758 · 300..374. Con `right:120` el de
+   remate caía en 690..772 · 204..286 — **ocho píxeles de x y seis de y encima del botón que más se
+   aprieta del juego**. `cajas()` cantó `bAtaca×bRem`, y sólo pudo cantarlo porque en esta vuelta el
+   botón entró en la lista: **un elemento nuevo que ninguna prueba mira es un solapamiento
+   esperando**. Con `right:140` quedan catorce píxeles de aire contra los dos.
+   Y hubo que medirlo **con el botón encendido y la animación terminada**: `getComputedStyle` justo
+   después de poner la clase devuelve el cuadro 0 de `remEnt`, que es `opacity:0`, y `cajas()` lo
+   saltea por invisible. Con la partida congelada —que además impide que el enfriamiento vacíe la
+   barra y lo apague— aparece.
+4. **`display:flex` LE ROMPIÓ EL CENTRADO AL GLIFO.** `.bt` centra con `display:grid;
+   place-items:center`; mi `#bRem.on{display:flex}` lo pisaba y el ✹ se iba al borde izquierdo del
+   círculo. Y la clase pasó de `.on` a `.hay`, porque en `.bt` la clase `on` ya quiere decir
+   **apretado** y trae su propio fondo y su borde: dos significados en la misma clase es un choque
+   esperando a que alguien cambie una especificidad.
+
+#### UN DEFECTO DEL AUTO-JUGADOR QUE ACUSABA AL JUEGO DE ALGO SUYO
+
+El A/B con el remate apagado devolvió **0 de 12 y 2,9 oleadas** — peor que antes de que el remate
+existiera. No era el juego: la rama del bot estaba escrita `fur>=J_FUR && cerca>=2` con el `jugPide`
+adentro, así que con el remate apagado la barra llena **no se gasta nunca**, la rama se toma en todos
+los cuadros y el bot se queda **quieto para siempre** sin atacar ni esquivar. Con el `jugPide` en la
+condición, la rama se cae si el golpe no sale.
+
+#### EL EQUILIBRIO, MEDIDO CON EL A/B EN EL MISMO BINARIO
+
+Doce semillas, auto-jugador honesto:
+
+| | gana de 12 | oleadas | bajas |
+|---|---|---|---|
+| todo nuevo | **12** | 11,0 | 46,0 |
+| sin remate | 11 | 10,8 | 45,6 |
+| sin rueda | **12** | 11,0 | 46,0 |
+| ninguno (la base de la vuelta 151) | 11 | 10,8 | 45,6 |
+
+O sea: **el remate es toda la ganancia y la rueda aporta cero**, y la fila de «ninguno» reproduce la
+base exacta, que es lo que hace que el A/B valga. El juego se hizo más fácil por **una semilla** —la
+que la vuelta 151 dejaba anotada como pendiente, donde el bot muere rodeado— y eso es exactamente
+para lo que el remate existe. Cuesta una barra entera (13 golpes) y el bot lo usa 4,7 veces por
+partida para 10,2 de sus 46 bajas, o sea el 22 %: no es un botón de limpiar la pantalla. Y el bot al
+azar sigue en **0 de 12 con 0,8 oleadas**.
+
+#### MEDIDO AL CERRAR
+
+Texturas **69 de 69, 0 fallidas**, ocho familias de cuatro y **5 de 5 suelos**. Auditoría en node
+sobre **40 semillas: 0 malas**. Joystick **+1 / −1 / +1 / −1** en los cuatro ejes, también con la
+cámara girada 1,9 rad. Marcha con patinaje **0 %** en las dos (zancada 1,934 y 2,531). Esquive
+**giro 0** con 19 de 21 pasos invencibles; rueda 28 de 38 y 6,06 m. Combo: un toque suelto encadena
+en **5 de 5** instantes. Armas 0,62 · 1,618 · 1,12 · 1,82 contra lo esperado. **Cero solapamientos**
+de HUD sobre **trece** elementos —con el botón de remate encendido— y `faltan` sólo en `joy` y
+`teclas`. Corona **0 de 3 en el bosque**. Tres idiomas en vivo (`EL BOSQUE · THE WOOD · A MATA`) y
+tres calidades en caliente (**279×129 · 372×172 · 525×242**). Audio: fondo rms 0,0060 · impacto
+0,0071 · el grito del remate 0,0251 · **el impacto del remate 0,1356, o sea 22,6 veces el fondo y el
+sonido más fuerte del juego**. **98 llamadas de dibujo y 50.154 triángulos** (78.486 con el remate en
+pantalla). `window.__errs` **vacío en las quince corridas**. El HTML quedó en **1,48 MB**.
+
+**LO QUE NO ESTÁ RESUELTO:** el costillar y la pelvis siguen con el giro sin poder comprobarse a su
+cantidad de triángulos, que viene de la vuelta 151.
 
 ### Centésima quincuagésima primera vuelta (2026-09-10): **HUESOS** — la calavera al revés, el joystick espejado, y de tres zonas a cinco
 

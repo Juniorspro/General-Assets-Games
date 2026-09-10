@@ -721,6 +721,73 @@ POSE.esquiva = (p, u) => {
   p.aIX = -0.28 - k * 1.35; p.aDX = -0.28 - k * 1.20;
 };
 
+/* ── LA RUEDA: UNA VUELTA ENTERA, Y EL PIVOTE ES LA CADERA ─────────────────
+   La pelvis es la RAÍZ de todo el esqueleto —el torso y los dos muslos
+   cuelgan de ella— así que girarla en X da un salto mortal del cuerpo entero
+   sin tocar una sola articulación más. Lo único que hay que agregar es
+   ENCOGERSE: girando estirado, la cabeza y los pies barren un metro de radio
+   y a mitad de vuelta la mitad del cuerpo queda bajo tierra.
+   EL SENTIDO SE DERIVA Y SE MIDE. Rx(θ) manda (0,1,0) a (0,cosθ,senθ): con θ
+   positivo la coronilla se va hacia +Z, que es hacia adelante. Y la cadera
+   BAJA mientras dura, porque un cuerpo hecho un ovillo tiene el centro a
+   medio metro del piso y no a noventa y cuatro centímetros.                */
+POSE.rueda = (p, u) => {
+  poseCero(p);
+  const t = lim(u, 0, 1);
+  /* el ovillo entra en el primer cuarto y sale en el último: encogido de
+     punta a punta, el arranque y la salida se ven a saltito y no a rueda */
+  const o = suav(Math.min(1, t * 4.2)) * suav(Math.min(1, (1 - t) * 4.2));
+  p.pelX = t * 6.283;
+  p.alt = -0.46 * o;
+  p.troX = -0.30 * o; p.pecX = -0.50 * o; p.cueX = 0.62 * o;
+  p.mIX = -1.95 * o; p.mDX = -1.75 * o;      // rodillas al pecho
+  p.pIX = 2.05 * o; p.pDX = 1.90 * o;        // y los talones a la cola
+  p.hIX = 0.05 - 1.35 * o; p.hDX = 0.05 - 1.15 * o;
+  p.hIZ = 0.16 + 0.30 * o; p.hDZ = -0.16 - 0.30 * o;
+  p.aIX = -0.28 - 1.55 * o; p.aDX = -0.28 - 1.40 * o;
+};
+
+/* ── EL REMATE ─────────────────────────────────────────────────────────────
+   Cuatro tiempos y el arma va de POR ENCIMA DE LA CABEZA AL PISO, que es lo
+   único que hace que un golpe se lea a remate y no a un tajo más.
+   EL ÁNGULO DEL HOMBRO NO SE TANTEA: el brazo cuelga por el −Y del hombro y
+   Rx(θ) lo manda a (0,−cosθ,−senθ), así que la mano queda arriba con θ ≈ −π
+   y abajo y adelante con θ ≈ −0,8. Los dos números salen de ahí y la
+   medición los comprueba: `__H.medirPose('remate')` tiene que dar la mano
+   BAJANDO más de un metro entre el aire y el impacto.                     */
+POSE.remate = (p, u) => {
+  poseCero(p);
+  const T = J_REM_T, TT = T[0] + T[1] + T[2] + T[3];
+  const a = T[0] / TT, b = (T[0] + T[1]) / TT, c = (T[0] + T[1] + T[2]) / TT;
+  let sub, baja, gol, sal;
+  if (u < a)      { sub = suav(u / a); baja = 0; gol = 0; sal = 0; }
+  else if (u < b) { sub = 1; baja = suav((u - a) / (b - a)); gol = 0; sal = 0; }
+  else if (u < c) { sub = 1; baja = 1; gol = suav((u - b) / (c - b)); sal = 0; }
+  else            { sub = 1; baja = 1; gol = 1; sal = suav((u - c) / (1 - c)); }
+  /* `k` es cuánto bajó el arma: 0 arriba de todo, 1 clavada en el piso. Sube
+     mientras se salta y se cae —el arma se lleva atrás y arriba— y CAE ENTERA
+     en los ciento veinte milisegundos del impacto. */
+  const k = gol;
+  const arr = (1 - sal);                       // se levanta del suelo al final
+  /* el brazo del arma: de −2,95 (por encima de la cabeza) a −0,80 (al piso) */
+  p.hDX = mez(-0.55, -2.95, sub * (1 - k * 0.02)) + k * 2.15;
+  p.hIX = mez(-0.55, -2.75, sub) + k * 1.95;
+  p.hDZ = -0.16 - 0.10 * (1 - k);
+  p.hIZ = 0.16 + 0.10 * (1 - k);
+  p.aDX = -0.10 - 0.45 * (1 - k) * sub;
+  p.aIX = -0.10 - 0.45 * (1 - k) * sub;
+  /* el tronco: se arquea hacia atrás juntando el golpe y se dobla al caer */
+  p.pecX = mez(-0.05, -0.62, sub) * (1 - k) + k * 0.72;
+  p.troX = mez(0, -0.24, sub) * (1 - k) + k * 0.30;
+  p.cueX = mez(0, 0.34, sub) * (1 - k) + k * 0.18;   // mira lo que va a partir
+  /* las piernas: encogidas en el aire y UNA RODILLA EN EL PISO al caer. Las
+     dos rectas al aterrizar se leen a alguien que se cayó parado. */
+  const air = sub * (1 - baja * 0.35) * (1 - k);
+  p.mIX = -1.65 * air - k * 1.55 * arr; p.pIX = 1.85 * air + k * 1.90 * arr;
+  p.mDX = -0.95 * air + k * 0.55 * arr; p.pDX = 1.10 * air + k * 0.30 * arr;
+  p.alt = -0.10 * air - k * 0.46 * arr;
+};
+
 /* recibir: el tronco se va para atrás y los brazos se abren. Dura poco y por
    eso vale la pena que sea grande — un cuadro y medio de lectura */
 POSE.dano = (p, u) => {
