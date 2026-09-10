@@ -113,19 +113,19 @@ window.__D = {
   pantalla: p => { verPantalla(p); return PANT; },
   idioma: k => { IDIOMA = k; pintaTodo(); return T('jugar'); },
   calidad: i => { CAL = i; ajustaMarco(); pintaMenu(); return [ANCHO, ALTO, +PXR.toFixed(2)]; },
-  /* EL DEDO ENTRA POR LA ZONA Y NO POR UNA FUNCION APARTE: `zonaIzqAbajo`
+  /* EL DEDO ENTRA POR LA ZONA Y NO POR UNA FUNCION APARTE: `zonaSaltoAbajo`
      lee `e.pointerId`, asi que una sonda que llame a `pulsa()` directo
      saltearia justamente el reparto de dedos que puede estar roto. */
   toca: v => {
-    if (v) zonaIzqAbajo({ pointerId: 99, cancelable: false, preventDefault() {} });
-    else zonaIzqArriba({ pointerId: 99 });
+    if (v) zonaSaltoAbajo({ pointerId: 99, cancelable: false, preventDefault() {} });
+    else zonaSaltoArriba({ pointerId: 99 });
     return APRETADO;
   },
-  /* el mismo camino que el dedo derecho: `zonaDerAbajo` -> `turbo()` */
+  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()` */
   empuja: n => {
     const a = R.s, b = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
-      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       R.turboCd = 0;              // la sonda no espera el enfriamiento del dedo
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - b, tope: TURBO_TOPE };
@@ -140,14 +140,35 @@ window.__D = {
   /* zonas: que el dedo caiga del lado correcto con el marco GIRADO es lo
      unico que esta vuelta no podia dar por sentado */
   zonas: () => {
-    const a = $('zIzq').getBoundingClientRect(), b = $('zDer').getBoundingClientRect();
+    const a = $('zTurbo').getBoundingClientRect(), b = $('zSalto').getBoundingClientRect();
     const c = q => { const e = document.elementFromPoint(q[0], q[1]); return e && e.id; };
     return {
       izq: [Math.round(a.left), Math.round(a.top), Math.round(a.width), Math.round(a.height)],
       der: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)],
       enIzq: c([a.left + a.width / 2, a.top + a.height / 2]),
       enDer: c([b.left + b.width / 2, b.top + b.height / 2]),
+      /* que el dedo caiga en la zona que HACE lo que dice, no en la que esta
+         donde dice: es lo unico que esta vuelta no podia dar por sentado */
+      izqHace: 'turbo', derHace: 'salto',
     };
+  },
+  /* ── SOSTENER n PASOS Y VER QUE PASA ────────────────────────────────────
+     Es la sonda de esta vuelta y existe porque el defecto que se reporto
+     —«no me caigo y aun asi dice que me cai»— no se ve en una captura: dura
+     un segundo y el rider queda apoyado igual. Lo que lo hace visible es
+     barrer la DURACION DEL APRIETE y contar caidas y volteretas: un apriete
+     que no termina ni en una cosa ni en la otra es un castigo que el jugador
+     no pidio. */
+  sost: (pasos, antes, luego) => {
+    const c0 = R.caidas, f0 = R.flips;
+    for (let i = 0; i < (antes === undefined ? 90 : antes); i++) { unPaso(PASO); TIEMPO += PASO; }
+    __D.toca(true);
+    for (let i = 0; i < pasos; i++) { unPaso(PASO); TIEMPO += PASO; }
+    __D.toca(false);
+    for (let i = 0; i < (luego === undefined ? 90 : luego); i++) { unPaso(PASO); TIEMPO += PASO; }
+    return { pasos, ms: Math.round(pasos * PASO * 1000), caidas: R.caidas - c0,
+             flips: R.flips - f0, muerte: R.muerte, suelo: R.suelo,
+             giro: +R.giro.toFixed(2) };
   },
   cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas, s: +R.s.toFixed(2) }; },
   /* adelantar el juego SIN el bot: es lo unico que deja medir cuanto dura un
@@ -158,7 +179,7 @@ window.__D = {
   empujaReal: (n, dt) => {
     const a = R.s, e = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
-      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       const k = Math.max(1, Math.round((dt || 0) / PASO));
       for (let j = 0; j < k; j++) { unPaso(PASO); TIEMPO += PASO; }
     }

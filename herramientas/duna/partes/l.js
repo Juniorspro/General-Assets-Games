@@ -3,7 +3,7 @@
    LA ENTRADA Y EL BUCLE
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── DOS ZONAS: IZQUIERDA SALTA, DERECHA EMPUJA ───────────────────────────
+/* ── DOS ZONAS: IZQUIERDA EMPUJA, DERECHA SALTA ───────────────────────────
    Cada mitad de la pantalla es un boton entero. Pedir punteria sobre un boton
    chico con el pulgar en un juego que corre a treinta metros por segundo es
    cobrar por el aparato y no por el juego; media pantalla no se erra nunca.
@@ -15,25 +15,30 @@
    dos divs adentro del marco, la cuenta la hace el navegador y no puede
    salir mal.
 
-   LA IZQUIERDA SE MANTIENE Y LA DERECHA SE GOLPEA: sostener no acelera —eso
+   LA DERECHA SE MANTIENE Y LA IZQUIERDA SE GOLPEA: sostener no acelera —eso
    haria que la velocidad tope fuera gratis— asi que lo que suma es cada
    TOQUE, con un enfriamiento que es lo que un dedo puede repetir.
+
+   Y EL REPARTO ESTA AL REVES QUE EN LA VUELTA 155, a pedido: el pulgar
+   derecho es el que mas se usa y lo que mas se usa es saltar. El codigo NO
+   dice «izquierda» y «derecha» sino `SALTO` y `TURBO`, asi que darlo vuelta
+   otra vez es mover dos lineas de CSS y ninguna de logica.
 
    Y EL TECLADO ENTRA POR LAS MISMAS DOS FUNCIONES que el dedo, `pulsa()` y
    `turbo()`: con dos caminos, el dia que se toque uno el otro se queda
    atras.                                                                  */
-const IZQ = new Set();          // punteros que estan sosteniendo la izquierda
-function zonaIzqAbajo(e) {
+const SOST = new Set();         // punteros que estan sosteniendo el salto
+function zonaSaltoAbajo(e) {
   if (PANT !== 'juego') return;
-  IZQ.add(e.pointerId);
-  if (IZQ.size === 1) pulsa(true);
+  SOST.add(e.pointerId);
+  if (SOST.size === 1) pulsa(true);
   if (e.cancelable) e.preventDefault();
 }
-function zonaIzqArriba(e) {
-  if (e) IZQ.delete(e.pointerId); else IZQ.clear();
-  if (IZQ.size === 0) pulsa(false);
+function zonaSaltoArriba(e) {
+  if (e) SOST.delete(e.pointerId); else SOST.clear();
+  if (SOST.size === 0) pulsa(false);
 }
-function zonaDerAbajo(e) {
+function zonaTurboAbajo(e) {
   if (PANT !== 'juego') return;
   turbo();
   if (e && e.cancelable) e.preventDefault();
@@ -41,16 +46,18 @@ function zonaDerAbajo(e) {
 /* si el dedo se levanta afuera de la ventana el `pointerup` no llega nunca y
    el rider se queda girando para siempre: es el mismo defecto que en RECREO
    dejaba al jugador caminando contra una pared */
-addEventListener('blur', () => zonaIzqArriba(null));
-addEventListener('pointerup', zonaIzqArriba);
-addEventListener('pointercancel', zonaIzqArriba);
+addEventListener('blur', () => zonaSaltoArriba(null));
+addEventListener('pointerup', zonaSaltoArriba);
+addEventListener('pointercancel', zonaSaltoArriba);
 addEventListener('keydown', e => {
   if (e.repeat) return;
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
+  /* el teclado ESPEJA la pantalla: la flecha derecha salta y la izquierda
+     empuja, asi la ayuda escrita vale para los dos aparatos */
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
     if (PANT !== 'juego') return;
-    IZQ.add('tecla'); if (IZQ.size === 1) pulsa(true);
+    SOST.add('tecla'); if (SOST.size === 1) pulsa(true);
     if (e.cancelable) e.preventDefault();
-  } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+  } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
     if (PANT !== 'juego') return;
     turbo();
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
@@ -58,12 +65,12 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
-    IZQ.delete('tecla'); if (IZQ.size === 0) pulsa(false);
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
+    SOST.delete('tecla'); if (SOST.size === 0) pulsa(false);
   }
 });
-$('zIzq').addEventListener('pointerdown', zonaIzqAbajo, { passive: false });
-$('zDer').addEventListener('pointerdown', zonaDerAbajo, { passive: false });
+$('zSalto').addEventListener('pointerdown', zonaSaltoAbajo, { passive: false });
+$('zTurbo').addEventListener('pointerdown', zonaTurboAbajo, { passive: false });
 addEventListener('resize', ajustaMarco);
 /* el primer gesto despierta el audio: ningun navegador deja sonar nada antes
    de uno, y en captura sobre el documento no hay que acordarse en cada boton */
@@ -97,7 +104,7 @@ function nuevaPartida(demo) {
   HORA0 = Math.random();
   HORA = HORA0;
   OBJ_HECHOS = [];
-  IZQ.clear(); pulsa(false);
+  SOST.clear(); pulsa(false);
   tutoReinicia(demo);
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
   HUD.pts = -1; HUD.mon = -1; HUD.truco = null; HUD.pista = null;

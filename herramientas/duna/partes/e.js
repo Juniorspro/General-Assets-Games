@@ -26,7 +26,7 @@ const R = {
   /* `caido` es lo que reemplaza a la muerte: cuanto le falta para levantarse.
      Mientras corre, el dedo no hace nada y el cuerpo se arrastra hasta parar. */
   caido: 0, caidas: 0,
-  // el empuje de la mano derecha
+  // el empuje de la mano de empujar
   turboCd: 0, turbo: 0, empujes: 0,
   // los cuadros de gracia
   coyote: 0, buffer: 0,
@@ -178,8 +178,41 @@ function pasoAire(dt) {
      asi que sostener el dedo en el suelo no adelanta nada */
   R.girAp = APRETADO ? R.girAp + dt : 0;
   const gira = APRETADO && R.girAp > GIRO_ESPERA;
-  R.rot = mezcla(R.rot, gira ? GIRO_V : 0, 1 - Math.pow(1e-9, dt));
+
+  /* ── SOLTAR ES ENDEREZARSE, Y ESTO ES LO QUE SACA EL TUMBO FANTASMA ────
+     Antes, soltar el dedo dejaba el giro CONGELADO donde estaba, y como el
+     aterrizaje compara el angulo contra la tangente, cualquier apriete de
+     entre 0,20 y 0,73 s terminaba en un tumbo que el jugador no habia
+     pedido: medido antes de esto, sostener 12, 14, 16, 18, 20, 24, 30, 40 y
+     60 pasos daba UNA CAIDA Y CERO VOLTERETAS en los nueve casos. O sea que
+     habia medio segundo de apriete —justo el que hace cualquiera que mira su
+     propio salto antes de soltar— donde perder era obligatorio. Reportado
+     textual: «no me caigo y aun asi sigue diciendo que me cai».
+
+     Lo que se arregla no es la tolerancia sino QUE SIGNIFICA SOLTAR: soltar
+     es abortar. El cuerpo vuelve a la vuelta entera MAS CERCANA —a cero si
+     no llego a media vuelta, y a la vuelta completa si la paso— con una
+     ganancia proporcional topada en `GIRO_V`.
+
+     Y NO REGALA LA VOLTERETA, que es lo que habria que pagar por esto:
+     enderezarse CUESTA TIEMPO y el tiempo es aire. Media vuelta de
+     correccion son 0,35 s sobre 1,10 de vuelo llano, asi que soltar tarde o
+     saltar despacio —donde el vuelo es mas corto— sigue terminando en el
+     piso torcido. La apuesta pasa de «clavar el instante» a «tener aire»,
+     que es exactamente lo que hace el genero. */
+  let objRot = GIRO_V;
+  if (!gira) {
+    const meta = Math.round(R.giro / TAU) * TAU;
+    objRot = clamp((meta - R.giro) * GIRO_ENDEREZA, -GIRO_V, GIRO_V);
+  }
+  R.rot = mezcla(R.rot, objRot, 1 - Math.pow(1e-9, dt));
   R.ang += R.rot * dt; R.giro += R.rot * dt;
+  /* y se clava al llegar: sin el corte, la ganancia deja un resto que nunca
+     baja de cero y `giro` no vuelve a ser un numero de vueltas exacto */
+  if (!gira) {
+    const meta = Math.round(R.giro / TAU) * TAU, d = meta - R.giro;
+    if (Math.abs(d) < 0.015) { R.ang += d; R.giro = meta; R.rot = 0; }
+  }
 
   const py = terrY(R.x);
   if (R.y <= py) {
@@ -420,7 +453,7 @@ function _rollout(n, ap, hastaElFinal, emp) {
    decide nada saque mucho menos. Sostiene el boton tandas de duracion al azar
    y no lo toca cuadro por cuadro: apretar y soltar a sesenta hercios es un
    promedio, no un jugador, y encima no llegaria a completar una sola vuelta. */
-/* Y LOS TRES APRIETAN LAS DOS ZONAS, no una. Desde que la derecha empuja, un
+/* Y LOS TRES APRIETAN LAS DOS ZONAS, no una. Desde que una mitad empuja, un
    bot que solo salta esta jugando OTRO juego: mediria un mundo donde la
    velocidad no se administra, o sea justo la decision que se agrego. Es la
    misma regla que ya vale para el salto — el bot entra por `pulsa()` y por

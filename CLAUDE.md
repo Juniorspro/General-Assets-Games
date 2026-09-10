@@ -322,10 +322,12 @@ munecas.
   la bufanda, las nubes y los ocho cielos se dibujan por código y el viento es procedural). El
   decimoséptimo juego. Un **sandboard que no se termina**, en el estilo de Alto's Odyssey: arte
   vectorial de siluetas planas, y **el suelo es lo CLARO y todo lo que se apoya en él es lo
-  OSCURO** —esa inversión es el estilo—. **La pantalla está partida en dos**: la mitad izquierda
-  salta —y sostenida da una voltereta— y **en la derecha se toca repetido para empujarse**, +1,70
+  OSCURO** —esa inversión es el estilo—. **La pantalla está partida en dos**: la mitad **derecha**
+  salta —y sostenida da una voltereta— y **en la izquierda se toca repetido para empujarse**, +1,70
   m/s por toque contra un techo de 33 y 85 ms de espera entre uno y otro, así que la velocidad es
-  una cuenta de dedo y no un botón de acelerar. **Aterrizar derecho paga velocidad y de cabeza te
+  una cuenta de dedo y no un botón de acelerar. **Soltar el dedo es enderezarse**: el cuerpo vuelve
+  a la vuelta entera más cercana, así que un apriete cualquiera no te tumba y lo que sigue costando
+  es tener aire para cerrar la vuelta. **Aterrizar derecho paga velocidad y de cabeza te
   TUMBA**: 1,15 s en el piso y la velocidad a 4,5, o sea que un error cuesta lo único que este
   juego tiene y **no cuesta la corrida** — la corrida la termina uno desde la pausa, que es lo que
   hace que el récord signifique algo. Sobre una cuerda de banderines se mantiene para colgarse. El
@@ -339,6 +341,101 @@ munecas.
   **tutorial de tres pasos** que espera a que se haga cada cosa. Vive partido en
   `herramientas/duna/partes/` y se arma con `python3 herramientas/duna/armar.py`; el cartel se
   hornea con `hornear_ui.py` y la música con `hornear_musica.py`.
+
+### Centésima quincuagésima sexta vuelta (2026-09-10): **DUNA** — el tumbo fantasma, y las dos mitades se dan vuelta
+
+Reporte, textual: *"no me caigo y aún así sigue diciendo que me caí, también sería mejor que los
+controles se inviertan, andar más rápido izquierda y saltar derecha"*.
+
+#### EL TUMBO FANTASMA ERA REAL, Y HABÍA MEDIO SEGUNDO DE APRIETE DONDE PERDER ERA OBLIGATORIO
+
+Se reprodujo antes de tocar nada, barriendo la **duración del apriete** con el rider en crucero:
+
+| pasos sostenidos | 1 | 4 | 8 | 10 | **12** | 14 | 20 | 30 | 40 | 60 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ms | 17 | 67 | 133 | 167 | **200** | 233 | 333 | 500 | 667 | 1000 |
+| caídas | 0 | 0 | 0 | 0 | **1** | 1 | 1 | 1 | 1 | 1 |
+| volteretas | 0 | 0 | 0 | 0 | **0** | 0 | 0 | 0 | 0 | 0 |
+
+O sea: **de 200 ms a 983 ms de apriete, UNA CAÍDA Y CERO VOLTERETAS en los nueve casos.** Medio
+segundo largo —justo el que hace cualquiera que aprieta, mira su propio salto y suelta— donde el
+juego cobraba una caída por algo que el jugador no pidió y que además no le devolvía nada. La
+vuelta 155 había medido *«de 1 a 10 pasos, 0 caídas»* y *«la ventana de la voltereta es 47-54»*, y
+las dos mediciones son ciertas: lo que nadie midió es **el hueco entre las dos**.
+
+**LA CAUSA NO ES LA TOLERANCIA DEL ATERRIZAJE, ES QUÉ SIGNIFICA SOLTAR.** Soltar dejaba el giro
+**congelado donde estaba**, y como el aterrizaje compara el ángulo del cuerpo contra la tangente,
+cualquier fracción de vuelta que no fuera una vuelta entera era un tumbo. Soltar no era abortar:
+era abandonar el cuerpo torcido.
+
+Ahora soltar **endereza**: el cuerpo vuelve a la vuelta entera **más cercana** —a cero si no llegó
+a media vuelta, a la vuelta completa si la pasó— con una ganancia proporcional topada en `GIRO_V`.
+
+**Y NO REGALA LA VOLTERETA, que es lo que habría que pagar por esto: enderezarse CUESTA TIEMPO, y
+el tiempo es aire.** Media vuelta de corrección son 0,35 s sobre 1,10 de vuelo llano. Medido con el
+barrido fino, **en dos semillas distintas y desde el mismo punto, carácter por carácter idéntico**:
+
+```
+n =  1 .......................... 30 ....... 59 ................ 75
+      ...............................FFFFFFFFFFFFFFFFFFFFFFFFFFFFXXXXXXXXXXXXXXXX
+```
+
+- **1 a 30 pasos (17 a 500 ms): salto limpio, cero caídas.** Era una caída garantizada de 12 en
+  adelante.
+- **31 a 59 (517 a 983 ms): voltereta, cero caídas.** La ventana pasó de **133 ms a 483 ms**.
+- **60 en adelante: tumbo.** Se sostuvo pasada la vuelta entera y no queda aire para deshacer lo
+  que sobra. Ésa es la apuesta que queda, y es la correcta: pasa de «clavar el instante» a «tener
+  aire», que es lo que hace el género.
+
+**Y HAY QUE CLAVAR EL FINAL.** La ganancia deja un resto que nunca llega a cero, así que por debajo
+de 0,015 rad se salta al valor exacto — sin eso `giro` deja de ser un número de vueltas y
+`Math.round(giro/2π)` empieza a contar mal.
+
+**LOS TRES BOTS, SOBRE LAS MISMAS 12 SEMILLAS × 180 s:**
+
+| | metros | caídas | volteretas |
+|---|---|---|---|
+| honesto | 5.178 | **0,0** (era 1,2) | 121 (era 100) |
+| torpe | 5.174 | 1,4 | 112 |
+| **al azar** | **3.742** | **25,0** | 24 |
+
+El que juega al azar sigue cayéndose **veinticinco veces por corrida contra cero del honesto**, así
+que el ángulo de aterrizaje sigue siendo la regla del juego. Lo honesto es decir que el del azar
+mejoró —de 2.552 m a 3.742— porque enderezarse le perdona los aprietes al voleo; lo que la
+separación mide ahora es infinito y no cuarenta veces.
+
+#### LAS DOS MITADES SE DAN VUELTA, Y EL CÓDIGO DEJA DE HABLAR DE LADOS
+
+**Izquierda empuja, derecha salta.** El pulgar derecho es el que más se usa y lo que más se usa es
+saltar.
+
+**Y LOS NOMBRES PASAN A SER DEL TRABAJO Y NO DEL SITIO**: `zTurbo` y `zSalto`, `zonaSaltoAbajo` y
+`zonaTurboAbajo`, `SOST` en vez de `IZQ`. Con `zIzq`/`zDer` el código decía un sitio y hacía otra
+cosa, que es la forma más rápida de invertir la mitad de los controles y ninguna de las otras — y
+darlo vuelta otra vez es mover **dos líneas de CSS** y ninguna de lógica.
+
+**EL TECLADO ESPEJA LA PANTALLA**: la flecha derecha y `D` saltan, la izquierda y `A` empujan, y el
+espacio sigue saltando. Con el teclado al revés que la pantalla, la ayuda escrita sería falsa en
+uno de los dos aparatos.
+
+**Y EL COLOR DEL TUTORIAL VA CON EL TRABAJO Y NO CON EL LADO.** El ámbar es empujar y el celeste
+saltar en los tres pasos: atado al lado, dar vuelta las zonas daba vuelta lo que el jugador ya
+había aprendido a reconocer. Qué mitad se enciende sigue saliendo de la **clave** del paso —que es
+la corrección de la vuelta anterior— así que sólo hubo que dar vuelta un booleano.
+
+#### MEDIDO AL CERRAR
+
+Zonas: `izq [0,0,412,446] → zTurbo` · `der [0,446,412,446] → zSalto`, y **con eventos de puntero de
+verdad sobre el DOM**: un toque en la izquierda suma **+1,70 m/s y un empujón**, uno en la derecha
+despega el cuerpo (**+1,44 m en seis pasos**) y aterriza **sin caerse**. Tutorial recorrido de punta
+a punta por el mismo camino que el dedo —tocar la derecha, machacar la izquierda, sostener la
+derecha— con **1 voltereta y 0 caídas**, y fotografiado: el círculo celeste a la derecha en los
+pasos 1 y 3, el ámbar a la izquierda con sus cuatro puntos en el 2. La pista dice **«DERECHA SALTA ·
+IZQUIERDA EMPUJA»**. Auditoría **25 de 25 semillas** con 0 monedas enterradas y 0 cuerdas fuera de
+alcance. Los tres paneles entran en los tres idiomas (396 · 382 · 382 de 412) y **cero
+solapamientos** de HUD. Tres calidades en caliente (0,60 · 0,84 · 1,00 de píxel), tres idiomas en
+vivo, música decodificando y eligiendo pista por la hora. Costo **0,655 ms por cuadro**.
+`window.__errs` **vacío en las siete corridas**.
 
 ### Centésima quincuagésima quinta vuelta (2026-09-10): **DUNA** — la corrida no se termina, la pantalla se parte en dos, y seis camas de música
 

@@ -4,10 +4,10 @@
    LA PANTALLA SE PARTE AL MEDIO Y CADA MITAD ES UNA MANO. No hay botones
    dibujados que haya que acertar: la zona ES la pantalla, asi que el pulgar
    cae donde caiga y siempre esta encima de algo.
-     IZQUIERDA · un toque en el suelo      → salta
+     IZQUIERDA · tocar repetido            → empuja, hasta un TOPE
+     DERECHA   · un toque en el suelo      → salta
                  sostener en el aire       → voltereta hacia atras
                  sostener sobre una cuerda → se cuelga y se desliza
-     DERECHA   · tocar repetido            → empuja, hasta un TOPE
    De ahi cuelga el resto del diseno: no hay nada que apuntar, asi que la
    dificultad esta en el TIEMPO —cuando saltar, cuando soltar, cuando gastar
    velocidad— y no en la punteria, que es lo unico que un dedo sobre una
@@ -68,6 +68,13 @@ const COYOTE = 0.11;        // se puede saltar un pestaneo despues de haberse id
 const BUFFER = 0.15;        // un salto apretado un pestaneo antes de tocar vale igual
 const GIRO_V = 8.6;         // rad/s de la voltereta: una vuelta en 0,73 s
 const GIRO_TOL = 0.62;      // cuanto se puede errar el angulo al aterrizar
+const TAU = Math.PI * 2;
+/* ENDEREZARSE CUESTA TIEMPO, Y ESO ES LO QUE HACE QUE LA VOLTERETA SIGA
+   SIENDO UNA APUESTA. Al soltar el dedo el cuerpo vuelve a la vuelta entera
+   mas cercana a nueve radianes por segundo de ganancia, topado en `GIRO_V`:
+   medio giro son 0,35 s de correccion y el vuelo llano dura 1,10, asi que
+   soltar tarde o saltar despacio te deja llegando torcido igual.        */
+const GIRO_ENDEREZA = 9.0;
 const RIDER_ALTO = 1.85;
 
 /* ── EL EMPUJE, Y SU TOPE ─────────────────────────────────────────────────
@@ -90,8 +97,8 @@ const RIDER_ALTO = 1.85;
    primer cuadro del apriete: medido, sostener CUATRO pasos —67 ms, mas corto
    que un toque humano, que dura entre 60 y 120— ya deja el cuerpo 33 grados
    torcido contra una tolerancia de 36 y te tumba. O sea que la PRIMERA
-   instruccion del tutorial —«toca a la izquierda para saltar»— te hacia caer.
-   Nunca se habia notado porque hasta esta vuelta el izquierdo era el UNICO
+   instruccion del tutorial —«toca para saltar»— te hacia caer.
+   Nunca se habia notado porque hasta la vuelta 155 el salto era el UNICO
    boton y tocar y mantener eran el mismo gesto. Con la espera puesta, tocar
    es saltar y mantener es girar, que es lo que el juego dice que son.
    Y entra en el vuelo: 0,14 + 0,73 de vuelta son 0,87 contra 1,10 de aire. */
@@ -158,8 +165,8 @@ const LANG = {
     idi: 'elegí tu idioma', sub: 'metros',
     msub: 'bajá la duna · dos manos · sin final',
     jugar: 'JUGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Izquierda: tocá para saltar y mantené en el aire para girar. ' +
-         'Derecha: tocá rápido para empujar, hasta el tope. ' +
+    pie: 'Derecha: tocá para saltar y mantené en el aire para girar. ' +
+         'Izquierda: tocá rápido para empujar, hasta el tope. ' +
          'Aterrizar derecho te da velocidad; de cabeza te caés, y caerse ' +
          'cuesta la velocidad y no la bajada — esto no se termina nunca.',
     rec: 'RÉCORD · {0} m', mon: '{0} monedas',
@@ -167,12 +174,12 @@ const LANG = {
     papie: 'el paisaje sigue ahí cuando vuelvas',
     fin: 'HASTA ACÁ', finS: '{0} metros',
     fdatos: '{0} m · {1} monedas · {2} trucos · {3} caídas', otra: 'OTRA VEZ',
-    pista: 'IZQUIERDA SALTA · DERECHA EMPUJA',
+    pista: 'DERECHA SALTA · IZQUIERDA EMPUJA',
     tumbo: 'TE CAÍSTE', tvel: 'VELOCIDAD', ttope: 'TOPE',
     tuto: 'CÓMO SE JUEGA', tsalta: 'SALTAR', tempuja: 'EMPUJAR',
-    tu1: 'TOCÁ A LA IZQUIERDA PARA SALTAR',
-    tu2: 'MANTENÉ LA IZQUIERDA EN EL AIRE Y DÁ UNA VOLTERETA',
-    tu3: 'TOCÁ RÁPIDO A LA DERECHA PARA EMPUJAR',
+    tu1: 'TOCÁ A LA DERECHA PARA SALTAR',
+    tu2: 'MANTENÉ LA DERECHA EN EL AIRE Y DÁ UNA VOLTERETA',
+    tu3: 'TOCÁ RÁPIDO A LA IZQUIERDA PARA EMPUJAR',
     tu4: 'ASÍ SE JUEGA · LA BAJADA NO TERMINA',
     tsalt: 'saltear',
     nuevo: 'RÉCORD NUEVO',
@@ -192,8 +199,8 @@ const LANG = {
     idi: 'pick your language', sub: 'metres',
     msub: 'ride the dune · two hands · no finish line',
     jugar: 'PLAY', obj: 'GOALS', cal: 'GRAPHICS', idio: 'LANGUAGE',
-    pie: 'Left: tap to jump, hold in the air to backflip. ' +
-         'Right: tap fast to push, up to the cap. ' +
+    pie: 'Right: tap to jump, hold in the air to backflip. ' +
+         'Left: tap fast to push, up to the cap. ' +
          'Land level and you gain speed; land on your head and you wipe out — ' +
          'and a wipeout costs you speed, not the run. This never ends.',
     rec: 'BEST · {0} m', mon: '{0} coins',
@@ -201,12 +208,12 @@ const LANG = {
     papie: 'the dune will still be there',
     fin: 'THAT FAR', finS: '{0} metres',
     fdatos: '{0} m · {1} coins · {2} tricks · {3} wipeouts', otra: 'AGAIN',
-    pista: 'LEFT JUMPS · RIGHT PUSHES',
+    pista: 'RIGHT JUMPS · LEFT PUSHES',
     tumbo: 'WIPEOUT', tvel: 'SPEED', ttope: 'CAP',
     tuto: 'HOW TO PLAY', tsalta: 'JUMP', tempuja: 'PUSH',
-    tu1: 'TAP THE LEFT SIDE TO JUMP',
-    tu2: 'HOLD THE LEFT SIDE IN THE AIR AND LAND A BACKFLIP',
-    tu3: 'TAP THE RIGHT SIDE FAST TO PUSH',
+    tu1: 'TAP THE RIGHT SIDE TO JUMP',
+    tu2: 'HOLD THE RIGHT SIDE IN THE AIR AND LAND A BACKFLIP',
+    tu3: 'TAP THE LEFT SIDE FAST TO PUSH',
     tu4: 'THAT IS THE GAME · THE RUN NEVER ENDS',
     tsalt: 'skip',
     nuevo: 'NEW BEST',
@@ -226,8 +233,8 @@ const LANG = {
     idi: 'escolha seu idioma', sub: 'metros',
     msub: 'desça a duna · duas mãos · sem fim',
     jugar: 'JOGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Esquerda: toque para pular e segure no ar para girar. ' +
-         'Direita: toque rápido para empurrar, até o limite. ' +
+    pie: 'Direita: toque para pular e segure no ar para girar. ' +
+         'Esquerda: toque rápido para empurrar, até o limite. ' +
          'Pousar reto dá velocidade; de cabeça você cai, e cair custa a ' +
          'velocidade e não a descida — isto não acaba nunca.',
     rec: 'RECORDE · {0} m', mon: '{0} moedas',
@@ -235,12 +242,12 @@ const LANG = {
     papie: 'a duna continua aí quando voltar',
     fin: 'ATÉ AQUI', finS: '{0} metros',
     fdatos: '{0} m · {1} moedas · {2} manobras · {3} quedas', otra: 'DE NOVO',
-    pista: 'ESQUERDA PULA · DIREITA EMPURRA',
+    pista: 'DIREITA PULA · ESQUERDA EMPURRA',
     tumbo: 'VOCÊ CAIU', tvel: 'VELOCIDADE', ttope: 'LIMITE',
     tuto: 'COMO SE JOGA', tsalta: 'PULAR', tempuja: 'EMPURRAR',
-    tu1: 'TOQUE À ESQUERDA PARA PULAR',
-    tu2: 'SEGURE A ESQUERDA NO AR E DÊ UM MORTAL',
-    tu3: 'TOQUE RÁPIDO À DIREITA PARA EMPURRAR',
+    tu1: 'TOQUE À DIREITA PARA PULAR',
+    tu2: 'SEGURE A DIREITA NO AR E DÊ UM MORTAL',
+    tu3: 'TOQUE RÁPIDO À ESQUERDA PARA EMPURRAR',
     tu4: 'É ISSO · A DESCIDA NÃO ACABA',
     tsalt: 'pular',
     nuevo: 'NOVO RECORDE',

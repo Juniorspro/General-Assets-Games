@@ -193,13 +193,17 @@ function pintaTuto() {
        hacer— deja el circulo pulsando en la mitad equivocada de la pantalla
        sin que nada falle. */
     const emp = TUTO_PASOS[TUTO.paso] === 'tu3';
-    const izq = !emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
+    const izq = emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
     const cx = izq ? ANCHO * 0.25 : ANCHO * 0.75;
-    tutoCirculo(cx, cy, r, k, izq ? '#ffe6b8' : '#9fe6ff');
+    /* el color va con el TRABAJO y no con el lado: el ambar es empujar y el
+       celeste saltar en los tres pasos, asi que dar vuelta las zonas no da
+       vuelta lo que el jugador ya aprendio a reconocer */
+    const col = emp ? '#ffe6b8' : '#9fe6ff';
+    tutoCirculo(cx, cy, r, k, col);
     ctx.globalAlpha = 0.85;
-    ctx.fillStyle = izq ? '#ffe6b8' : '#9fe6ff';
+    ctx.fillStyle = col;
     ctx.font = '700 ' + Math.round(clamp(mh * 0.030, 9, 14)) + 'px monospace';
-    ctx.fillText(T(izq ? 'tsalta' : 'tempuja'), cx, cy + r * 1.75);
+    ctx.fillText(T(emp ? 'tempuja' : 'tsalta'), cx, cy + r * 1.75);
     /* Y EL PASO 3 MUESTRA CUANTOS TOQUES VAN: un «toca rapido» sin cuenta no
        dice cuando esta hecho, y entonces el paso parece trabado. */
     if (emp) {

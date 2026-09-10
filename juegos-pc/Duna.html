@@ -166,8 +166,13 @@ body.cartel .tit .cart{display:block;width:100%;
    dura y despues se va.                                                   */
 .zona{position:absolute;top:0;bottom:0;width:50%;z-index:1;background:transparent}
 body:not(.jugando) .zona{display:none}
-#zIzq{left:0}
-#zDer{right:0}
+/* LOS NOMBRES SON DE TRABAJO Y NO DE SITIO: `zTurbo` esta a la izquierda y
+   `zSalto` a la derecha, y el dia que se vuelvan a dar vuelta lo que se
+   mueve es UNA linea de CSS. Con `zIzq`/`zDer` el codigo diria un sitio y
+   haria otra cosa, que es la forma mas rapida de invertir la mitad de los
+   controles y ninguna de las otras. */
+#zTurbo{left:0}
+#zSalto{right:0}
 /* saltear el tutorial: chiquito, abajo a la derecha, donde no hay nada */
 #tSalt{position:absolute;right:calc(var(--mh,412px)*.04);bottom:calc(var(--mh,412px)*.04);
   z-index:3;display:none;padding:6px 14px;border-radius:999px;
@@ -192,8 +197,8 @@ body.jugando #bPausa{display:grid}
 #pista.on{opacity:.62}
 /* CON EL TUTORIAL PUESTO LA PISTA SOBRA, y encima se pisan: las dos caen en
    la misma franja de abajo y el renglon del tutorial la tapa a medias
-   —fotografiado, «IZQUIERDA SALTA · DERECHA EMPUJA» asomando por debajo de
-   «TOCÁ A LA IZQUIERDA PARA SALTAR»—. La pista es el respaldo para el que
+   —fotografiado, «DERECHA SALTA · IZQUIERDA EMPUJA» asomando por debajo de
+   «TOCÁ A LA DERECHA PARA SALTAR»—. La pista es el respaldo para el que
    salteo el tutorial, asi que mientras el tutorial habla, se calla.
    `cajas()` no lo puede ver: el renglon del tutorial se dibuja en el lienzo
    y la pista es DOM. */
@@ -201,8 +206,8 @@ body.tuto #pista{display:none}
 </style></head><body>
 <div id="marco">
   <canvas id="lienzo"></canvas>
-  <div class="zona" id="zIzq"></div>
-  <div class="zona" id="zDer"></div>
+  <div class="zona" id="zTurbo"></div>
+  <div class="zona" id="zSalto"></div>
   <div id="hud">
     <div id="pts">0</div>
     <div id="sub"></div>
@@ -272,10 +277,10 @@ const MUS_B64 = {
    LA PANTALLA SE PARTE AL MEDIO Y CADA MITAD ES UNA MANO. No hay botones
    dibujados que haya que acertar: la zona ES la pantalla, asi que el pulgar
    cae donde caiga y siempre esta encima de algo.
-     IZQUIERDA · un toque en el suelo      → salta
+     IZQUIERDA · tocar repetido            → empuja, hasta un TOPE
+     DERECHA   · un toque en el suelo      → salta
                  sostener en el aire       → voltereta hacia atras
                  sostener sobre una cuerda → se cuelga y se desliza
-     DERECHA   · tocar repetido            → empuja, hasta un TOPE
    De ahi cuelga el resto del diseno: no hay nada que apuntar, asi que la
    dificultad esta en el TIEMPO —cuando saltar, cuando soltar, cuando gastar
    velocidad— y no en la punteria, que es lo unico que un dedo sobre una
@@ -336,6 +341,13 @@ const COYOTE = 0.11;        // se puede saltar un pestaneo despues de haberse id
 const BUFFER = 0.15;        // un salto apretado un pestaneo antes de tocar vale igual
 const GIRO_V = 8.6;         // rad/s de la voltereta: una vuelta en 0,73 s
 const GIRO_TOL = 0.62;      // cuanto se puede errar el angulo al aterrizar
+const TAU = Math.PI * 2;
+/* ENDEREZARSE CUESTA TIEMPO, Y ESO ES LO QUE HACE QUE LA VOLTERETA SIGA
+   SIENDO UNA APUESTA. Al soltar el dedo el cuerpo vuelve a la vuelta entera
+   mas cercana a nueve radianes por segundo de ganancia, topado en `GIRO_V`:
+   medio giro son 0,35 s de correccion y el vuelo llano dura 1,10, asi que
+   soltar tarde o saltar despacio te deja llegando torcido igual.        */
+const GIRO_ENDEREZA = 9.0;
 const RIDER_ALTO = 1.85;
 
 /* ── EL EMPUJE, Y SU TOPE ─────────────────────────────────────────────────
@@ -358,8 +370,8 @@ const RIDER_ALTO = 1.85;
    primer cuadro del apriete: medido, sostener CUATRO pasos —67 ms, mas corto
    que un toque humano, que dura entre 60 y 120— ya deja el cuerpo 33 grados
    torcido contra una tolerancia de 36 y te tumba. O sea que la PRIMERA
-   instruccion del tutorial —«toca a la izquierda para saltar»— te hacia caer.
-   Nunca se habia notado porque hasta esta vuelta el izquierdo era el UNICO
+   instruccion del tutorial —«toca para saltar»— te hacia caer.
+   Nunca se habia notado porque hasta la vuelta 155 el salto era el UNICO
    boton y tocar y mantener eran el mismo gesto. Con la espera puesta, tocar
    es saltar y mantener es girar, que es lo que el juego dice que son.
    Y entra en el vuelo: 0,14 + 0,73 de vuelta son 0,87 contra 1,10 de aire. */
@@ -426,8 +438,8 @@ const LANG = {
     idi: 'elegí tu idioma', sub: 'metros',
     msub: 'bajá la duna · dos manos · sin final',
     jugar: 'JUGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Izquierda: tocá para saltar y mantené en el aire para girar. ' +
-         'Derecha: tocá rápido para empujar, hasta el tope. ' +
+    pie: 'Derecha: tocá para saltar y mantené en el aire para girar. ' +
+         'Izquierda: tocá rápido para empujar, hasta el tope. ' +
          'Aterrizar derecho te da velocidad; de cabeza te caés, y caerse ' +
          'cuesta la velocidad y no la bajada — esto no se termina nunca.',
     rec: 'RÉCORD · {0} m', mon: '{0} monedas',
@@ -435,12 +447,12 @@ const LANG = {
     papie: 'el paisaje sigue ahí cuando vuelvas',
     fin: 'HASTA ACÁ', finS: '{0} metros',
     fdatos: '{0} m · {1} monedas · {2} trucos · {3} caídas', otra: 'OTRA VEZ',
-    pista: 'IZQUIERDA SALTA · DERECHA EMPUJA',
+    pista: 'DERECHA SALTA · IZQUIERDA EMPUJA',
     tumbo: 'TE CAÍSTE', tvel: 'VELOCIDAD', ttope: 'TOPE',
     tuto: 'CÓMO SE JUEGA', tsalta: 'SALTAR', tempuja: 'EMPUJAR',
-    tu1: 'TOCÁ A LA IZQUIERDA PARA SALTAR',
-    tu2: 'MANTENÉ LA IZQUIERDA EN EL AIRE Y DÁ UNA VOLTERETA',
-    tu3: 'TOCÁ RÁPIDO A LA DERECHA PARA EMPUJAR',
+    tu1: 'TOCÁ A LA DERECHA PARA SALTAR',
+    tu2: 'MANTENÉ LA DERECHA EN EL AIRE Y DÁ UNA VOLTERETA',
+    tu3: 'TOCÁ RÁPIDO A LA IZQUIERDA PARA EMPUJAR',
     tu4: 'ASÍ SE JUEGA · LA BAJADA NO TERMINA',
     tsalt: 'saltear',
     nuevo: 'RÉCORD NUEVO',
@@ -460,8 +472,8 @@ const LANG = {
     idi: 'pick your language', sub: 'metres',
     msub: 'ride the dune · two hands · no finish line',
     jugar: 'PLAY', obj: 'GOALS', cal: 'GRAPHICS', idio: 'LANGUAGE',
-    pie: 'Left: tap to jump, hold in the air to backflip. ' +
-         'Right: tap fast to push, up to the cap. ' +
+    pie: 'Right: tap to jump, hold in the air to backflip. ' +
+         'Left: tap fast to push, up to the cap. ' +
          'Land level and you gain speed; land on your head and you wipe out — ' +
          'and a wipeout costs you speed, not the run. This never ends.',
     rec: 'BEST · {0} m', mon: '{0} coins',
@@ -469,12 +481,12 @@ const LANG = {
     papie: 'the dune will still be there',
     fin: 'THAT FAR', finS: '{0} metres',
     fdatos: '{0} m · {1} coins · {2} tricks · {3} wipeouts', otra: 'AGAIN',
-    pista: 'LEFT JUMPS · RIGHT PUSHES',
+    pista: 'RIGHT JUMPS · LEFT PUSHES',
     tumbo: 'WIPEOUT', tvel: 'SPEED', ttope: 'CAP',
     tuto: 'HOW TO PLAY', tsalta: 'JUMP', tempuja: 'PUSH',
-    tu1: 'TAP THE LEFT SIDE TO JUMP',
-    tu2: 'HOLD THE LEFT SIDE IN THE AIR AND LAND A BACKFLIP',
-    tu3: 'TAP THE RIGHT SIDE FAST TO PUSH',
+    tu1: 'TAP THE RIGHT SIDE TO JUMP',
+    tu2: 'HOLD THE RIGHT SIDE IN THE AIR AND LAND A BACKFLIP',
+    tu3: 'TAP THE LEFT SIDE FAST TO PUSH',
     tu4: 'THAT IS THE GAME · THE RUN NEVER ENDS',
     tsalt: 'skip',
     nuevo: 'NEW BEST',
@@ -494,8 +506,8 @@ const LANG = {
     idi: 'escolha seu idioma', sub: 'metros',
     msub: 'desça a duna · duas mãos · sem fim',
     jugar: 'JOGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Esquerda: toque para pular e segure no ar para girar. ' +
-         'Direita: toque rápido para empurrar, até o limite. ' +
+    pie: 'Direita: toque para pular e segure no ar para girar. ' +
+         'Esquerda: toque rápido para empurrar, até o limite. ' +
          'Pousar reto dá velocidade; de cabeça você cai, e cair custa a ' +
          'velocidade e não a descida — isto não acaba nunca.',
     rec: 'RECORDE · {0} m', mon: '{0} moedas',
@@ -503,12 +515,12 @@ const LANG = {
     papie: 'a duna continua aí quando voltar',
     fin: 'ATÉ AQUI', finS: '{0} metros',
     fdatos: '{0} m · {1} moedas · {2} manobras · {3} quedas', otra: 'DE NOVO',
-    pista: 'ESQUERDA PULA · DIREITA EMPURRA',
+    pista: 'DIREITA PULA · ESQUERDA EMPURRA',
     tumbo: 'VOCÊ CAIU', tvel: 'VELOCIDADE', ttope: 'LIMITE',
     tuto: 'COMO SE JOGA', tsalta: 'PULAR', tempuja: 'EMPURRAR',
-    tu1: 'TOQUE À ESQUERDA PARA PULAR',
-    tu2: 'SEGURE A ESQUERDA NO AR E DÊ UM MORTAL',
-    tu3: 'TOQUE RÁPIDO À DIREITA PARA EMPURRAR',
+    tu1: 'TOQUE À DIREITA PARA PULAR',
+    tu2: 'SEGURE A DIREITA NO AR E DÊ UM MORTAL',
+    tu3: 'TOQUE RÁPIDO À ESQUERDA PARA EMPURRAR',
     tu4: 'É ISSO · A DESCIDA NÃO ACABA',
     tsalt: 'pular',
     nuevo: 'NOVO RECORDE',
@@ -906,7 +918,7 @@ const R = {
   /* `caido` es lo que reemplaza a la muerte: cuanto le falta para levantarse.
      Mientras corre, el dedo no hace nada y el cuerpo se arrastra hasta parar. */
   caido: 0, caidas: 0,
-  // el empuje de la mano derecha
+  // el empuje de la mano de empujar
   turboCd: 0, turbo: 0, empujes: 0,
   // los cuadros de gracia
   coyote: 0, buffer: 0,
@@ -1058,8 +1070,41 @@ function pasoAire(dt) {
      asi que sostener el dedo en el suelo no adelanta nada */
   R.girAp = APRETADO ? R.girAp + dt : 0;
   const gira = APRETADO && R.girAp > GIRO_ESPERA;
-  R.rot = mezcla(R.rot, gira ? GIRO_V : 0, 1 - Math.pow(1e-9, dt));
+
+  /* ── SOLTAR ES ENDEREZARSE, Y ESTO ES LO QUE SACA EL TUMBO FANTASMA ────
+     Antes, soltar el dedo dejaba el giro CONGELADO donde estaba, y como el
+     aterrizaje compara el angulo contra la tangente, cualquier apriete de
+     entre 0,20 y 0,73 s terminaba en un tumbo que el jugador no habia
+     pedido: medido antes de esto, sostener 12, 14, 16, 18, 20, 24, 30, 40 y
+     60 pasos daba UNA CAIDA Y CERO VOLTERETAS en los nueve casos. O sea que
+     habia medio segundo de apriete —justo el que hace cualquiera que mira su
+     propio salto antes de soltar— donde perder era obligatorio. Reportado
+     textual: «no me caigo y aun asi sigue diciendo que me cai».
+
+     Lo que se arregla no es la tolerancia sino QUE SIGNIFICA SOLTAR: soltar
+     es abortar. El cuerpo vuelve a la vuelta entera MAS CERCANA —a cero si
+     no llego a media vuelta, y a la vuelta completa si la paso— con una
+     ganancia proporcional topada en `GIRO_V`.
+
+     Y NO REGALA LA VOLTERETA, que es lo que habria que pagar por esto:
+     enderezarse CUESTA TIEMPO y el tiempo es aire. Media vuelta de
+     correccion son 0,35 s sobre 1,10 de vuelo llano, asi que soltar tarde o
+     saltar despacio —donde el vuelo es mas corto— sigue terminando en el
+     piso torcido. La apuesta pasa de «clavar el instante» a «tener aire»,
+     que es exactamente lo que hace el genero. */
+  let objRot = GIRO_V;
+  if (!gira) {
+    const meta = Math.round(R.giro / TAU) * TAU;
+    objRot = clamp((meta - R.giro) * GIRO_ENDEREZA, -GIRO_V, GIRO_V);
+  }
+  R.rot = mezcla(R.rot, objRot, 1 - Math.pow(1e-9, dt));
   R.ang += R.rot * dt; R.giro += R.rot * dt;
+  /* y se clava al llegar: sin el corte, la ganancia deja un resto que nunca
+     baja de cero y `giro` no vuelve a ser un numero de vueltas exacto */
+  if (!gira) {
+    const meta = Math.round(R.giro / TAU) * TAU, d = meta - R.giro;
+    if (Math.abs(d) < 0.015) { R.ang += d; R.giro = meta; R.rot = 0; }
+  }
 
   const py = terrY(R.x);
   if (R.y <= py) {
@@ -1300,7 +1345,7 @@ function _rollout(n, ap, hastaElFinal, emp) {
    decide nada saque mucho menos. Sostiene el boton tandas de duracion al azar
    y no lo toca cuadro por cuadro: apretar y soltar a sesenta hercios es un
    promedio, no un jugador, y encima no llegaria a completar una sola vuelta. */
-/* Y LOS TRES APRIETAN LAS DOS ZONAS, no una. Desde que la derecha empuja, un
+/* Y LOS TRES APRIETAN LAS DOS ZONAS, no una. Desde que una mitad empuja, un
    bot que solo salta esta jugando OTRO juego: mediria un mundo donde la
    velocidad no se administra, o sea justo la decision que se agrego. Es la
    misma regla que ya vale para el salto — el bot entra por `pulsa()` y por
@@ -2668,13 +2713,17 @@ function pintaTuto() {
        hacer— deja el circulo pulsando en la mitad equivocada de la pantalla
        sin que nada falle. */
     const emp = TUTO_PASOS[TUTO.paso] === 'tu3';
-    const izq = !emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
+    const izq = emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
     const cx = izq ? ANCHO * 0.25 : ANCHO * 0.75;
-    tutoCirculo(cx, cy, r, k, izq ? '#ffe6b8' : '#9fe6ff');
+    /* el color va con el TRABAJO y no con el lado: el ambar es empujar y el
+       celeste saltar en los tres pasos, asi que dar vuelta las zonas no da
+       vuelta lo que el jugador ya aprendio a reconocer */
+    const col = emp ? '#ffe6b8' : '#9fe6ff';
+    tutoCirculo(cx, cy, r, k, col);
     ctx.globalAlpha = 0.85;
-    ctx.fillStyle = izq ? '#ffe6b8' : '#9fe6ff';
+    ctx.fillStyle = col;
     ctx.font = '700 ' + Math.round(clamp(mh * 0.030, 9, 14)) + 'px monospace';
-    ctx.fillText(T(izq ? 'tsalta' : 'tempuja'), cx, cy + r * 1.75);
+    ctx.fillText(T(emp ? 'tempuja' : 'tsalta'), cx, cy + r * 1.75);
     /* Y EL PASO 3 MUESTRA CUANTOS TOQUES VAN: un «toca rapido» sin cuenta no
        dice cuando esta hecho, y entonces el paso parece trabado. */
     if (emp) {
@@ -2857,7 +2906,7 @@ function pintaTodo() {
    LA ENTRADA Y EL BUCLE
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── DOS ZONAS: IZQUIERDA SALTA, DERECHA EMPUJA ───────────────────────────
+/* ── DOS ZONAS: IZQUIERDA EMPUJA, DERECHA SALTA ───────────────────────────
    Cada mitad de la pantalla es un boton entero. Pedir punteria sobre un boton
    chico con el pulgar en un juego que corre a treinta metros por segundo es
    cobrar por el aparato y no por el juego; media pantalla no se erra nunca.
@@ -2869,25 +2918,30 @@ function pintaTodo() {
    dos divs adentro del marco, la cuenta la hace el navegador y no puede
    salir mal.
 
-   LA IZQUIERDA SE MANTIENE Y LA DERECHA SE GOLPEA: sostener no acelera —eso
+   LA DERECHA SE MANTIENE Y LA IZQUIERDA SE GOLPEA: sostener no acelera —eso
    haria que la velocidad tope fuera gratis— asi que lo que suma es cada
    TOQUE, con un enfriamiento que es lo que un dedo puede repetir.
+
+   Y EL REPARTO ESTA AL REVES QUE EN LA VUELTA 155, a pedido: el pulgar
+   derecho es el que mas se usa y lo que mas se usa es saltar. El codigo NO
+   dice «izquierda» y «derecha» sino `SALTO` y `TURBO`, asi que darlo vuelta
+   otra vez es mover dos lineas de CSS y ninguna de logica.
 
    Y EL TECLADO ENTRA POR LAS MISMAS DOS FUNCIONES que el dedo, `pulsa()` y
    `turbo()`: con dos caminos, el dia que se toque uno el otro se queda
    atras.                                                                  */
-const IZQ = new Set();          // punteros que estan sosteniendo la izquierda
-function zonaIzqAbajo(e) {
+const SOST = new Set();         // punteros que estan sosteniendo el salto
+function zonaSaltoAbajo(e) {
   if (PANT !== 'juego') return;
-  IZQ.add(e.pointerId);
-  if (IZQ.size === 1) pulsa(true);
+  SOST.add(e.pointerId);
+  if (SOST.size === 1) pulsa(true);
   if (e.cancelable) e.preventDefault();
 }
-function zonaIzqArriba(e) {
-  if (e) IZQ.delete(e.pointerId); else IZQ.clear();
-  if (IZQ.size === 0) pulsa(false);
+function zonaSaltoArriba(e) {
+  if (e) SOST.delete(e.pointerId); else SOST.clear();
+  if (SOST.size === 0) pulsa(false);
 }
-function zonaDerAbajo(e) {
+function zonaTurboAbajo(e) {
   if (PANT !== 'juego') return;
   turbo();
   if (e && e.cancelable) e.preventDefault();
@@ -2895,16 +2949,18 @@ function zonaDerAbajo(e) {
 /* si el dedo se levanta afuera de la ventana el `pointerup` no llega nunca y
    el rider se queda girando para siempre: es el mismo defecto que en RECREO
    dejaba al jugador caminando contra una pared */
-addEventListener('blur', () => zonaIzqArriba(null));
-addEventListener('pointerup', zonaIzqArriba);
-addEventListener('pointercancel', zonaIzqArriba);
+addEventListener('blur', () => zonaSaltoArriba(null));
+addEventListener('pointerup', zonaSaltoArriba);
+addEventListener('pointercancel', zonaSaltoArriba);
 addEventListener('keydown', e => {
   if (e.repeat) return;
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
+  /* el teclado ESPEJA la pantalla: la flecha derecha salta y la izquierda
+     empuja, asi la ayuda escrita vale para los dos aparatos */
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
     if (PANT !== 'juego') return;
-    IZQ.add('tecla'); if (IZQ.size === 1) pulsa(true);
+    SOST.add('tecla'); if (SOST.size === 1) pulsa(true);
     if (e.cancelable) e.preventDefault();
-  } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+  } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
     if (PANT !== 'juego') return;
     turbo();
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
@@ -2912,12 +2968,12 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
-    IZQ.delete('tecla'); if (IZQ.size === 0) pulsa(false);
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
+    SOST.delete('tecla'); if (SOST.size === 0) pulsa(false);
   }
 });
-$('zIzq').addEventListener('pointerdown', zonaIzqAbajo, { passive: false });
-$('zDer').addEventListener('pointerdown', zonaDerAbajo, { passive: false });
+$('zSalto').addEventListener('pointerdown', zonaSaltoAbajo, { passive: false });
+$('zTurbo').addEventListener('pointerdown', zonaTurboAbajo, { passive: false });
 addEventListener('resize', ajustaMarco);
 /* el primer gesto despierta el audio: ningun navegador deja sonar nada antes
    de uno, y en captura sobre el documento no hay que acordarse en cada boton */
@@ -2951,7 +3007,7 @@ function nuevaPartida(demo) {
   HORA0 = Math.random();
   HORA = HORA0;
   OBJ_HECHOS = [];
-  IZQ.clear(); pulsa(false);
+  SOST.clear(); pulsa(false);
   tutoReinicia(demo);
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
   HUD.pts = -1; HUD.mon = -1; HUD.truco = null; HUD.pista = null;
@@ -3217,19 +3273,19 @@ window.__D = {
   pantalla: p => { verPantalla(p); return PANT; },
   idioma: k => { IDIOMA = k; pintaTodo(); return T('jugar'); },
   calidad: i => { CAL = i; ajustaMarco(); pintaMenu(); return [ANCHO, ALTO, +PXR.toFixed(2)]; },
-  /* EL DEDO ENTRA POR LA ZONA Y NO POR UNA FUNCION APARTE: `zonaIzqAbajo`
+  /* EL DEDO ENTRA POR LA ZONA Y NO POR UNA FUNCION APARTE: `zonaSaltoAbajo`
      lee `e.pointerId`, asi que una sonda que llame a `pulsa()` directo
      saltearia justamente el reparto de dedos que puede estar roto. */
   toca: v => {
-    if (v) zonaIzqAbajo({ pointerId: 99, cancelable: false, preventDefault() {} });
-    else zonaIzqArriba({ pointerId: 99 });
+    if (v) zonaSaltoAbajo({ pointerId: 99, cancelable: false, preventDefault() {} });
+    else zonaSaltoArriba({ pointerId: 99 });
     return APRETADO;
   },
-  /* el mismo camino que el dedo derecho: `zonaDerAbajo` -> `turbo()` */
+  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()` */
   empuja: n => {
     const a = R.s, b = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
-      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       R.turboCd = 0;              // la sonda no espera el enfriamiento del dedo
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - b, tope: TURBO_TOPE };
@@ -3244,14 +3300,35 @@ window.__D = {
   /* zonas: que el dedo caiga del lado correcto con el marco GIRADO es lo
      unico que esta vuelta no podia dar por sentado */
   zonas: () => {
-    const a = $('zIzq').getBoundingClientRect(), b = $('zDer').getBoundingClientRect();
+    const a = $('zTurbo').getBoundingClientRect(), b = $('zSalto').getBoundingClientRect();
     const c = q => { const e = document.elementFromPoint(q[0], q[1]); return e && e.id; };
     return {
       izq: [Math.round(a.left), Math.round(a.top), Math.round(a.width), Math.round(a.height)],
       der: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)],
       enIzq: c([a.left + a.width / 2, a.top + a.height / 2]),
       enDer: c([b.left + b.width / 2, b.top + b.height / 2]),
+      /* que el dedo caiga en la zona que HACE lo que dice, no en la que esta
+         donde dice: es lo unico que esta vuelta no podia dar por sentado */
+      izqHace: 'turbo', derHace: 'salto',
     };
+  },
+  /* ── SOSTENER n PASOS Y VER QUE PASA ────────────────────────────────────
+     Es la sonda de esta vuelta y existe porque el defecto que se reporto
+     —«no me caigo y aun asi dice que me cai»— no se ve en una captura: dura
+     un segundo y el rider queda apoyado igual. Lo que lo hace visible es
+     barrer la DURACION DEL APRIETE y contar caidas y volteretas: un apriete
+     que no termina ni en una cosa ni en la otra es un castigo que el jugador
+     no pidio. */
+  sost: (pasos, antes, luego) => {
+    const c0 = R.caidas, f0 = R.flips;
+    for (let i = 0; i < (antes === undefined ? 90 : antes); i++) { unPaso(PASO); TIEMPO += PASO; }
+    __D.toca(true);
+    for (let i = 0; i < pasos; i++) { unPaso(PASO); TIEMPO += PASO; }
+    __D.toca(false);
+    for (let i = 0; i < (luego === undefined ? 90 : luego); i++) { unPaso(PASO); TIEMPO += PASO; }
+    return { pasos, ms: Math.round(pasos * PASO * 1000), caidas: R.caidas - c0,
+             flips: R.flips - f0, muerte: R.muerte, suelo: R.suelo,
+             giro: +R.giro.toFixed(2) };
   },
   cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas, s: +R.s.toFixed(2) }; },
   /* adelantar el juego SIN el bot: es lo unico que deja medir cuanto dura un
@@ -3262,7 +3339,7 @@ window.__D = {
   empujaReal: (n, dt) => {
     const a = R.s, e = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
-      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       const k = Math.max(1, Math.round((dt || 0) / PASO));
       for (let j = 0; j < k; j++) { unPaso(PASO); TIEMPO += PASO; }
     }
