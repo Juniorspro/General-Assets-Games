@@ -33,6 +33,35 @@ export const onRequestGet = async ({ request, env }) => {
     return json({ perfil: u, publicaciones: results, yo: yo ? yo.u : null });
   }
 
+  /* -------------------------------------------------------- buscar
+     La caja de arriba del escritorio busca ACÁ y no en internet: lo que hay
+     para encontrar son las publicaciones y la gente de este sitio. Un buscador
+     que no busca lo que tenés delante es un adorno.
+
+     Se escapan `%` y `_` antes de armar el LIKE: sin eso, alguien que busca
+     «%» pide todas las filas, y «_» le pega a cualquier cosa. No es un agujero
+     grave, pero es una consulta que no hace lo que dice. */
+  const busca = (q.get("busca") || "").trim().slice(0, 60);
+  if (busca) {
+    const como = "%" + busca.replace(/[\\%_]/g, (x) => "\\" + x) + "%";
+    const { results } = await env.DB.prepare(
+      "SELECT p.*, u.usuario, u.nombre, u.retrato, u.marco, u.lema, u.acceso, " +
+      "  (SELECT COUNT(*) FROM apoyos a WHERE a.pub = p.id) AS apoyos " +
+      "FROM publicaciones p JOIN usuarios u ON u.id = p.autor " +
+      "WHERE p.oculto = 0 AND u.bloqueado = 0 AND (" +
+      "  p.titulo LIKE ?1 ESCAPE '\\' OR p.cuerpo LIKE ?1 ESCAPE '\\' OR " +
+      "  u.usuario LIKE ?1 ESCAPE '\\' OR u.nombre LIKE ?1 ESCAPE '\\') " +
+      "ORDER BY p.creado DESC LIMIT ?2").bind(como, PAGINA).all();
+
+    const gente = await env.DB.prepare(
+      "SELECT usuario, nombre, retrato, marco, lema, acceso FROM usuarios " +
+      "WHERE bloqueado = 0 AND (usuario LIKE ?1 ESCAPE '\\' OR nombre LIKE ?1 ESCAPE '\\') " +
+      "LIMIT 6").bind(como).all();
+
+    return json({ publicaciones: results, gente: gente.results || [],
+                  busca, yo: yo ? yo.u : null });
+  }
+
   /* --------------------------------------------------------- el muro */
   const antes = parseInt(q.get("antes") || "0", 10) || Date.now();
   const { results } = await env.DB.prepare(

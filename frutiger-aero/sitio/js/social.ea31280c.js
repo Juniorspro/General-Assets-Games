@@ -720,6 +720,63 @@ document.addEventListener("click", function(e){
    escondido detrás de un ícono que hay que adivinar. */
 /* El muelle del teléfono vive en el otro archivo, que es el del escritorio, y
    le avisa a este en vez de repetir lo que ya está escrito acá. */
+/* ------------------------------------------------------------- buscar
+   Busca en el servidor y no filtrando lo que ya está en pantalla: el muro trae
+   de a veinte, así que filtrar acá encontraría sólo lo de esta semana y diría
+   «no hay nada» de todo lo demás, que es peor que no tener buscador. */
+if ($("buscaCaja")) $("buscaCaja").addEventListener("submit", function(e){
+  e.preventDefault();
+  var q = ($("buscaTxt").value || "").trim();
+  if (!q) return;
+  $("buscaTxt").blur();
+  abrirVentana("v-muro");
+  var c = $("muroLista");
+  c.textContent = "";
+  c.appendChild(nodo("p", null, "Buscando «" + q + "»…"));
+  pedir("muro?busca=" + encodeURIComponent(q)).then(function(j){
+    c.textContent = "";
+    var cab = nodo("div", "grupo blanco");
+    cab.style.marginTop = "0";
+    cab.appendChild(nodo("b", null, "Resultados para «" + q + "»"));
+    var volver = nodo("button", "bt", "Volver al muro");
+    volver.type = "button"; volver.style.marginLeft = "10px";
+    volver.addEventListener("click", function(){ $("buscaTxt").value = ""; cargarMuro(); });
+    cab.appendChild(volver);
+    c.appendChild(cab);
+
+    (j.gente || []).forEach(function(u){
+      var f = nodo("div", "grupo blanco");
+      f.style.cssText = "display:flex;align-items:center;gap:10px";
+      f.appendChild(conAro(u.retrato, u.marco, 38));
+      var d = nodo("div"); d.style.flex = "1";
+      var b = nodo("b", null, u.nombre || u.usuario);
+      if (u.acceso) b.appendChild(insignia());
+      d.appendChild(b);
+      var ar = nodo("div", null, "@" + u.usuario + (u.lema ? " · " + u.lema : ""));
+      ar.style.cssText = "font-size:12.5px;color:var(--tinta-2)";
+      d.appendChild(ar);
+      f.appendChild(d);
+      var ver = nodo("button", "bt", "Ver perfil"); ver.type = "button";
+      ver.addEventListener("click", function(){ verPerfil(u.usuario); });
+      f.appendChild(ver);
+      c.appendChild(f);
+    });
+
+    if (!j.publicaciones.length && !(j.gente || []).length)
+      c.appendChild(nodo("p", null, "No encontramos nada con eso."));
+    j.publicaciones.forEach(function(p){ c.appendChild(tarjeta(p)); });
+  }).catch(function(err){
+    c.textContent = ""; c.appendChild(nodo("p", null, err.message));
+  });
+});
+
+/* --------------------------------------------------------- la papelera
+   Los avisos que cerraste. Cerrar algo y que desaparezca para siempre es una
+   forma de perder justo el que cerraste sin leer. */
+if ($("papelera")) $("papelera").addEventListener("click", function(){
+  verAvisos();
+});
+
 document.addEventListener("ir-a", function(e){
   var d = e.detail;
   if (d === "muro"){ abrirVentana("v-muro"); cargarMuro(); }
