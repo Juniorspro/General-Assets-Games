@@ -7,7 +7,7 @@ const MEC_T = 0.36;
 const JU = { n: 0, M: null, E: null, toques: 0, fin: false,
              mecI: -1, mecT: 9, mecDe: 0, mecA: 0,
              hizoAndar: false, hizoMec: false, hizoGirar: false, pistaK: null,
-             ganaT: 0 };
+             ganaT: 0, tuto: false, opt: 0 };
 
 const PANS = ['pIdioma', 'pMenu', 'pNiveles', 'pAjustes', 'pPausa', 'pGana'];
 function verPanel(id) {
@@ -22,21 +22,32 @@ const enPanel = () => PANS.some(p => $(p).classList.contains('on'));
    CAMBIAR, no solo al arrancar: si no, lo que ya esta escrito se queda.    */
 function pintaIdioma() {
   const T2 = {
-    mSub: 'sub', bJugar: 'jugar', bNiveles: 'niveles', bAjustes: 'ajustes', mPie: 'pie',
+    mSub: 'sub', bJugar: 'jugar', bTuto: 'tuto', bNiveles: 'niveles', bAjustes: 'ajustes', mPie: 'pie',
     nTit: 'niveles', nSub: 'nivelesSub', nVolver: 'volver',
     aTit: 'ajTit', aMusL: 'musica', aFxL: 'efectos', aIdiL: 'idioma', aCalL: 'calidad',
     aBorrar: 'borrar', aVolver: 'volver',
     pTit: 'pausa', pSub: 'pausaSub', bSigo: 'seguir', bReini2: 'reiniciar', bSalir: 'salir',
-    gTit: 'gana', gSub: 'ganaSub', gSig: 'siguiente', gNiv2: 'niveles', gMenu: 'salir',
+    gNiv2: 'niveles', gMenu: 'salir',
   };
   for (const k in T2) { const e = $(k); if (e) e.textContent = TX(T2[k]); }
+  /* el panel de victoria lo escribe UNA funcion y no dos: escrito aca y en
+     `ganaste`, cambiar de idioma con el panel puesto lo devuelve al texto de
+     nivel aunque lo que se acabe de terminar sea el tutorial */
+  pintaGana();
   $('cSub').textContent = TX('cargando');
   $('nope').textContent = TX('nope');
+  /* EL HUD Y LA PISTA TAMBIEN, Y LA PISTA HAY QUE FORZARLA. `pistaVer` sale
+     por el atajo cuando la clave no cambio —para no tocar el DOM sesenta
+     veces por segundo— asi que cambiando de idioma la clave SIGUE SIENDO LA
+     MISMA y el cartel se queda en el idioma anterior hasta que el jugador
+     avanza de paso. Medido: en el tutorial, `lang('en')` dejaba «tocá el
+     bloque de allá» puesto. Poniendo la clave en null el atajo no aplica. */
+  if (JU.M) { pintaHud(); JU.pistaK = null; pistaVer(pistaQue()); }
   const fi = $('aIdi'); fi.innerHTML = '';
   for (const [k, n] of [['es', 'ES'], ['en', 'EN'], ['pt', 'PT']]) {
     const b = document.createElement('button');
     b.className = 'bt' + (LANG === k ? ' sel' : ''); b.textContent = n;
-    b.onclick = () => { son('toque'); LANG = k; guardaProg(); pintaIdioma(); pintaNiveles(); pintaHud(); };
+    b.onclick = () => { son('toque'); LANG = k; guardaProg(); pintaIdioma(); pintaNiveles(); };
     fi.appendChild(b);
   }
   const fc = $('aCal'); fc.innerHTML = '';
@@ -52,7 +63,7 @@ function pintaIdioma() {
 }
 
 function pintaHud() {
-  $('niv').textContent = TX('nivel', JU.n + 1);
+  $('niv').textContent = JU.tuto ? TX('tutTit') : TX('nivel', JU.n + 1);
   $('sub').textContent = JU.toques + ' ' + TX('tocaPara');
 }
 /* LA PISTA SE DECIDE EN UN SOLO SITIO Y SE MIRA POR CUADRO: repartida en los
@@ -67,6 +78,17 @@ function pistaVer(k) {
 }
 function pistaQue() {
   if (JU.fin || !JU.M) return null;
+  /* EL TUTORIAL USA LA MISMA PISTA Y NO UN CARTEL PROPIO: es el unico sitio
+     del juego que decide que decir, asi que con un segundo el dia que se
+     agregue un gesto habria que acordarse en los dos. Los cuatro pasos son
+     los tres de siempre mas «llega a la meta», y cada uno espera su bandera:
+     el orden en que el jugador los haga no importa. */
+  if (JU.tuto) {
+    if (!JU.hizoAndar) return 'tut1';
+    if (!JU.hizoGirar) return 'tut2';
+    if (!JU.hizoMec) return 'tut3';
+    return 'tut4';
+  }
   if (!JU.hizoAndar) return 'pistaMov';
   if (JU.M.mec.length && !JU.hizoMec) return 'pistaMec';
   if (!JU.hizoGirar) return 'pistaGira';
@@ -97,7 +119,7 @@ function pintaNiveles() {
 }
 
 function cargaNivel(n) {
-  JU.n = n;
+  JU.n = n; JU.tuto = false;
   /* GENERAR ES CARO Y VA CON LA PANTALLA DE CARGA PUESTA: el nivel 19 hace
      cientos de miles de nodos de busqueda y sin el cartel eso se ve como que
      el juego se colgo al tocar un boton. */
@@ -119,7 +141,7 @@ function cargaNivel(n) {
     setTimeout(() => $('carga').classList.add('ido'), 60);
   }, 40);
 }
-function reinicia() { cargaNivel(JU.n); }
+function reinicia() { if (JU.tuto) cargaTuto(); else cargaNivel(JU.n); }
 
 /* ══════════════════════ EL TOQUE ══════════════════════
    Un toque es una ACCION y no un paso, y de eso sale que se cuenten toques:
@@ -161,16 +183,30 @@ function tocaMec(i) {
 const enMeta = () => JU.M && ROB.cel[0] === JU.M.meta[0] && ROB.cel[1] === JU.M.meta[1]
                      && ROB.cel[2] === JU.M.meta[2];
 
+function pintaGana() {
+  const n = JU.n, opt = JU.opt || JU.toques;
+  $('gTit').textContent = JU.tuto ? TX('tutGana') : TX('gana');
+  $('gSub').textContent = JU.tuto ? TX('tutGanaSub') : TX('ganaSub');
+  $('gDatos').textContent = JU.tuto ? TX('tutDatos')
+    : (JU.toques <= opt ? TX('ganaDatosPerf', JU.toques) : TX('ganaDatos', JU.toques, opt));
+  $('gSig').textContent = JU.tuto ? TX('jugar') : TX('siguiente');
+  $('gSig').style.display = (JU.tuto || n + 1 < NIVELES) ? '' : 'none';
+}
 function ganaste() {
   JU.fin = true;
   son('gana');
   const n = JU.n, opt = JU.M.plan ? JU.M.plan.length : JU.toques;
-  if (PROG.hechos.indexOf(n) < 0) PROG.hechos.push(n);
-  if (!PROG.mejor[n] || JU.toques < PROG.mejor[n]) PROG.mejor[n] = JU.toques;
-  guardaProg();
-  $('gDatos').textContent = JU.toques <= opt
-    ? TX('ganaDatosPerf', JU.toques) : TX('ganaDatos', JU.toques, opt);
-  $('gSig').style.display = n + 1 < NIVELES ? '' : 'none';
+  /* EL TUTORIAL NO CUENTA COMO NIVEL: anotarlo dejaria «1 de 20 resueltos»
+     sin haber resuelto ninguno, y encima `PROG.hechos` decide que niveles
+     estan abiertos. Lo unico que guarda es que ya se vio. */
+  if (JU.tuto) { PROG.visto = 1; guardaProg(); }
+  else {
+    if (PROG.hechos.indexOf(n) < 0) PROG.hechos.push(n);
+    if (!PROG.mejor[n] || JU.toques < PROG.mejor[n]) PROG.mejor[n] = JU.toques;
+    guardaProg();
+  }
+  JU.opt = opt;
+  pintaGana();
   /* EL CARTEL LLEGA TARDE A PROPOSITO —hay que ver al robot pisar la meta—
      Y POR ESO HAY QUE PODER CANCELARLO: cambiando de nivel dentro de esos
      620 ms, el temporizador del nivel VIEJO abre el panel encima del nuevo y
@@ -196,7 +232,10 @@ function enganchaUI() {
   const b = (id, f) => { const e = $(id); if (e) e.onclick = () => { auDesp(); son('toque'); f(); }; };
   for (const e of document.querySelectorAll('#pIdioma [data-lang]'))
     e.onclick = () => { auDesp(); son('toque'); LANG = e.dataset.lang; guardaProg();
-      pintaIdioma(); pintaNiveles(); verPanel('pMenu'); };
+      pintaIdioma(); pintaNiveles();
+      /* elegido el idioma por primera vez, se va DERECHO al tutorial: pasar
+         por el menu obligaria a encontrar un boton para aprender a jugar */
+      if (!PROG.visto) { verPanel(null); cargaTuto(); } else verPanel('pMenu'); };
   b('bJugar', () => cargaNivel(proxNivel()));
   b('bNiveles', () => { pintaNiveles(); verPanel('pNiveles'); });
   b('bAjustes', () => verPanel('pAjustes'));
@@ -209,7 +248,10 @@ function enganchaUI() {
   b('bSigo', () => verPanel(null));
   b('bReini2', () => { verPanel(null); reinicia(); });
   b('bSalir', () => { verPanel('pMenu'); });
-  b('gSig', () => cargaNivel(Math.min(NIVELES - 1, JU.n + 1)));
+  b('bTuto', cargaTuto);
+  /* desde el tutorial, SIGUIENTE es JUGAR: `JU.n` vale -1, asi que la misma
+     cuenta lleva al nivel 1 sin una rama */
+  b('gSig', () => cargaNivel(cl(JU.n + 1, 0, NIVELES - 1)));
   b('gNiv2', () => { pintaNiveles(); verPanel('pNiveles'); });
   b('gMenu', () => verPanel('pMenu'));
   const sl = (id, k, f) => {

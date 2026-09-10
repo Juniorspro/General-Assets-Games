@@ -213,6 +213,9 @@ window.__M = {
     hechos: PROG.hechos.slice().sort((a, b) => a - b), mejor: Object.assign({}, PROG.mejor),
   }),
   audita: () => auditaNiveles(),
+  auditaTuto: () => auditaTuto(),
+  tuto: () => { cargaTuto(); return true; },
+  visto: v => { PROG.visto = v ? 1 : 0; guardaProg(); return PROG.visto; },
   /* EL ENCUADRE SE MIDE EN PIXELES DE PANTALLA Y NO EN UNIDADES DE CAMARA:
      lo que importa es cuanto del cuadro ocupa el diorama, y eso depende del
      encuadre, del alto del marco y de la caja del nivel a la vez.         */
@@ -296,7 +299,14 @@ function arranca() {
   if (M) { construyeDiorama(M); robEntra(M.ini); }
   $('cBarra').style.width = '100%';
 
-  verPanel(hab ? 'pMenu' : 'pIdioma');
+  /* SE ENTRA AL TUTORIAL Y NO AL MENU LA PRIMERA VEZ. El pedido fue textual
+     («apenas entres al juego ya entres a un tutorial»), y ademas es lo
+     correcto: el menu de este juego no tiene nada que ensenar. El idioma
+     sigue yendo antes, porque un tutorial en un idioma que no se entiende no
+     es un tutorial. */
+  if (!hab) verPanel('pIdioma');
+  else if (!PROG.visto) { verPanel(null); setTimeout(cargaTuto, 30); }
+  else verPanel('pMenu');
   setTimeout(() => $('carga').classList.add('ido'), 120);
   requestAnimationFrame(cuadro);
 }

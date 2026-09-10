@@ -24,7 +24,7 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 PART = os.path.join(AQUI, 'partes')
 SAL  = os.path.join(RAIZ, 'juegos-pc', 'Meko.html')
 
-ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'h.js', 'z.html']
+ORDEN = ['a.html', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js', 'h.js', 'i.js', 'z.html']
 
 # LO GENERADO ES OPCIONAL: un asset que todavia no se horneo tiene que costar
 # el asset y no el juego entero. Hoy no hay ninguno — este juego no tiene un

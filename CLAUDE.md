@@ -342,8 +342,8 @@ munecas.
   `herramientas/duna/partes/` y se arma con `python3 herramientas/duna/armar.py`; el cartel se
   hornea con `hornear_ui.py` y la música con `hornear_musica.py`.
 
-- **`Meko.html` es "MEKO"** (~117 KB, **sin un solo asset**: las texturas se dibujan por código y el
-  sonido es procedural). El decimoctavo juego. Un **diorama de voxels** al estilo Mekorama, vertical
+- **`Meko.html` es "MEKO"** (~140 KB, **sin un solo asset**: las texturas y el cielo se dibujan por
+  código y el sonido es procedural). El decimoctavo juego. Un **diorama de voxels** al estilo Mekorama, vertical
   nativo, con cámara **ortográfica isométrica** que se orbita arrastrando. Hay **un solo verbo**: se
   toca un bloque y el robot camina hasta arriba de él; se toca una pieza naranja y la pieza se mueve.
   No hay joystick ni botón de saltar — el dedo dice *dónde* y el juego resuelve *cómo*, y el marcador
@@ -354,8 +354,120 @@ munecas.
   comprueba individualmente necesario**: con los demás quietos, el nivel tiene que ser imposible. La
   **escalera** es el único bloque que sostiene sin bloquear, y por eso trepar sale de la misma regla
   de caminar en vez de un caso aparte. La regla del toque vive en **una** función (`pedirToque`) que
-  usan el dedo, el auto-jugador y el generador. Vive partido en `herramientas/meko/partes/` y se arma
-  con `python3 herramientas/meko/armar.py`.
+  usan el dedo, el auto-jugador y el generador. **Se entra derecho a un tutorial de cuatro pasos** y
+  cada uno espera a que se haga la cosa. Los bloques llevan **textura dibujada por código** —una por
+  tipo, con la cara de arriba distinta de la de costado— y detrás hay un **cielo con nubes** que se
+  desplaza al orbitar el diorama, que no cuesta una sola llamada de dibujo. Vive partido en
+  `herramientas/meko/partes/` y se arma con `python3 herramientas/meko/armar.py`.
+
+### Centésima quincuagésima octava vuelta (2026-09-10): **MEKO** — cielo, texturas, saturación y un tutorial que se entra sin pedirlo
+
+Pedido textual, con una captura de Bowmasters: *"agrega mejores gráficos saturados cielo texturas a
+mekorama y haz u apenas entres al juego ya entres a un tutorial de como jugar okey? ahora haz este
+juego de arcos con los mismos gráficos y animaciones"*. Las dos primeras van acá; el juego de arcos
+es la vuelta siguiente.
+
+#### LA SATURACIÓN VA EN UNA FUNCIÓN Y **ANTES** DEL TINTE, Y ESO NO ES UN DETALLE
+
+Lo obvio es volver a escribir los ocho colores de `BLOQ` a mano. Con una función (`satura`) se
+mueven juntos los ocho **más** el naranja del mecanismo, el dorado de la meta y los cuatro tintes de
+paleta: un color nuevo el día de mañana ya sale saturado sin que nadie se acuerde.
+
+**Y EL ORDEN IMPORTA.** La primera versión saturaba **después** del tinte de paleta, y el tinte
+existe justamente para **desaturar** hacia el color del cielo con la distancia: saturando encima, el
+ladrillo del nivel 20 salía **rosa chicle**. Se satura el color base y recién después se mezcla
+hacia el tinte, así la atmósfera sigue haciendo lo suyo.
+
+#### UNA TEXTURA POR TIPO DE BLOQUE Y NO UN ATLAS
+
+Un atlas es lo que uno escribiría, y acá está mal: este juego dibuja los bloques a unos **treinta
+píxeles** y a ese tamaño los mipmaps mezclan la baldosa de al lado — el ladrillo se contagia el
+pasto. Nueve texturas de 64×128 (una por tipo) cuestan **+7 a +9 llamadas de dibujo por nivel** y no
+tienen vecinos que sangrar.
+
+**DOS FILAS POR TEXTURA: LA DE ARRIBA ES LA CARA SUPERIOR Y LA DE ABAJO EL COSTADO.** El rango de
+`v` se elige por cara al armar la geometría, así que el pasto tiene briznas arriba y tierra en los
+flancos con **una** imagen. Ojo con `flipY`: la fila 0 de la imagen cae en `v = 1`.
+
+Y las texturas van en `LinearSRGBColorSpace` y no en sRGB: **son un multiplicador** sobre el color
+por vértice, no un color. Puestas en sRGB, todo el diorama se aclara.
+
+#### EL CIELO ES EL FONDO DE LA ESCENA, Y LAS NUBES SE MUEVEN GRATIS
+
+Un domo costaría una esfera, y con cámara ortográfica se vería de él un parche del tamaño del
+encuadre. Va como `scene.background`, que three.js dibuja con un cuadrado de pantalla completa: **2
+triángulos y cero llamadas de dibujo propias**.
+
+**Y LAS NUBES HACEN PARALAJE.** Verificado leyendo `WebGLBackground` en el bundle de three (r170,
+~línea 15190): copia `background.matrix` al uniforme `uvTransform` después de `updateMatrix()`, así
+que `offset` y `repeat` sobre la textura de fondo **se respetan**. `cieloAjusta()` mueve el `offset`
+con el rumbo de la cámara: orbitar el diorama mueve las nubes, y eso es lo único que separa un cielo
+de un degradado pegado detrás.
+
+**EL SOL Y LAS NUBES SE DIBUJAN TRES VECES** —en `-W`, `0` y `+W`— porque la textura envuelve en
+horizontal y una nube cortada por el borde deja una costura que da la vuelta con la cámara.
+
+**EL DEGRADADO DE CSS NO SE VA.** Es lo que se ve mientras el módulo carga y en el primer cuadro,
+antes de que haya escena; el cielo lo pisa después.
+
+#### EL TUTORIAL: CUATRO PASOS Y CADA UNO ESPERA A QUE SE HAGA LA COSA
+
+Se entra ahí la primera vez, no al menú. Un juego cuyo único verbo es «tocar un bloque» tiene un
+problema concreto: **nada en la pantalla dice que se pueda tocar un bloque**. Un cartel en el menú
+no lo arregla —se saltea— y lo que se saltea es exactamente lo que después no se entiende.
+
+*tocá un bloque y el robot camina* · *arrastrá y el diorama gira* · *la pieza naranja se mueve,
+tocala* · *llegá al rombo*. Cada paso espera su bandera, así que **el orden no importa**: si el
+jugador toca la pieza antes de caminar, ese paso ya está hecho. Y usa **la misma pista** que los
+niveles, no un cartel propio: con dos, el día que se agregue un gesto hay que acordarse en los dos.
+
+**EL MUNDO ESTÁ ESCRITO A MANO Y ES LA ÚNICA PIEZA DEL JUEGO QUE LO ESTÁ.** Cada paso nombra una
+cosa concreta de la pantalla, y un tutorial cuya geometría cambia cada vez no puede decir «el bloque
+de allá». Igual **se audita con el mismo BFS que los veinte niveles** (`auditaTuto`): plan de 2
+toques, y con el mecanismo congelado el hueco es **infranqueable** — sin eso el paso 3 se saltearía
+solo y el tutorial no enseñaría nada.
+
+#### EL DEFECTO DE LA VUELTA: LA DECORACIÓN TAPABA EL ÚNICO BLOQUE QUE HAY QUE TOCAR CON PUNTERÍA
+
+Los adornos estaban en `z = 4` con el comentario *«van en los bordes de atrás»*. **`z = 4` es el
+FRENTE**: la cámara mira desde `+X +Z`, así que un bloque en `(x,2,4)` le queda **encima en pantalla**
+al bloque de `(x,1,3)` que hay que tocar. Medido tocando el píxel del dorado: el rayo pegaba en el
+adorno y el robot terminaba en `(7,3,4)` en vez de en la meta — el tutorial **no se podía terminar**,
+y desde afuera eso se ve como que el toque no funciona.
+
+Se arregla con geometría y no con un ajuste: los cinco adornos van todos a `z = 2` dejando `x = 3,4,5`
+libres —por ahí pasa el cruce cuando llega el puente— y **la meta se muda a la fila de adelante**
+(`z = 4`), que es el único bloque del tutorial que se toca con puntería y por lo tanto el único que
+no puede tener nada delante.
+
+#### Y UN SEGUNDO DEFECTO, QUE SÓLO APARECE CAMBIANDO DE IDIOMA A MITAD DE CAMINO
+
+`pistaVer` sale por el atajo cuando la clave no cambió —para no tocar el DOM sesenta veces por
+segundo— así que cambiando de idioma **la clave sigue siendo la misma** y el cartel se queda en el
+anterior hasta que el jugador avanza de paso. Medido: `lang('en')` dejaba *«tocá el bloque de allá»*
+puesto. `pintaIdioma()` pone la clave en null y repinta; de paso los tres botones de idioma dejan de
+llamar a `pintaHud()` por su cuenta, que era la mitad del mismo trabajo hecha en el sitio equivocado.
+
+Y **el panel de victoria lo escribe una sola función** (`pintaGana`), que llaman `ganaste()` y
+`pintaIdioma()`: escrito en dos, cambiar de idioma con el panel puesto lo devolvía al texto de nivel
+aunque lo que se acabara de terminar fuera el tutorial.
+
+#### MEDIDO AL CERRAR
+
+Tutorial jugado de punta a punta **con eventos de puntero de verdad sobre el lienzo** —no con las
+sondas—: `tut1` → toque → `tut2` → arrastre → `tut3` → toque a la pieza (`est [0]` → `[1]`) →
+`tut4` → toque al dorado → **`fin: true`, panel `pGana`** con *«¡ESO ES TODO!» · «ya sabés jugar» ·
+«un dedo y un robot · nada más»* y el botón diciendo **JUGAR**. `PROG.visto` pasa a 1 y
+`PROG.hechos` **queda vacío**: el tutorial no cuenta como nivel resuelto. Recargando se entra al
+menú y **CÓMO SE JUEGA** lo repite. Auditoría del tutorial `ok: true`, 2 toques, imposible con el
+mecanismo congelado. Los tres idiomas cambian la pista **en vivo** (`tocá el bloque de allá` ·
+`tap that block over there` · `toque naquele bloco`). **Cero solapamientos** de HUD.
+
+Regresión intacta: auditoría **20 de 20 niveles, 0 malos** en 7,8 s, y el auto-jugador los termina
+los veinte **en exactamente los toques del plan** (`1·2·3·3·3·4·4·3·4·5·6·6·7·5·7·8·7·9·6·10`).
+Costo: **38 llamadas y 1.510 triángulos** en el nivel 9 y **43 y 3.242** en el 19 (eran 31/1.508 y
+34/3.240: la diferencia son las texturas por tipo). Tres calidades en caliente —baja 24/1.650, media
+y alta 43/3.242—. `window.__errs` **vacío en las cinco corridas**. El HTML pasó de 117 a **140 KB**.
 
 ### Centésima quincuagésima séptima vuelta (2026-09-10): **MEKO**, el decimoctavo juego — un diorama, un robot y un dedo
 

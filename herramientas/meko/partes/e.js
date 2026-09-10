@@ -15,11 +15,29 @@ let ANCHO = 412, ALTO = 892;
    fondo, asi que el cielo y el diorama pertenecen al mismo sitio. No cambia
    una sola regla: cambia que el nivel 9 no se vea igual que el 3.          */
 const PALETAS = [
-  { t: 0xffffff, k: 0.00, cielo: ['#a9cadd', '#cbdfe9', '#e6eee9', '#efeee6'] },
-  { t: 0xffd7ad, k: 0.22, cielo: ['#e6b489', '#f0cfa8', '#f7e4c8', '#f6ecd8'] },
-  { t: 0xbdd9f5, k: 0.20, cielo: ['#8fb4d4', '#b7d0e2', '#dbe7ee', '#e9eef0'] },
-  { t: 0xd3f0c8, k: 0.16, cielo: ['#a5c8b4', '#c6dcc9', '#e2ecdd', '#eef0e6'] },
+  { t: 0xffffff, k: 0.00, sol: [0.70, 0.20], solc: '255,246,214',
+    cielo: ['#3f8fd0', '#6cb6e4', '#a9dcf0', '#dff0e4'] },
+  { t: 0xffbe78, k: 0.24, sol: [0.30, 0.30], solc: '255,226,168',
+    cielo: ['#e0783f', '#f0a45c', '#f7cf92', '#fae7c4'] },
+  { t: 0x8fc4f5, k: 0.22, sol: [0.78, 0.14], solc: '214,238,255',
+    cielo: ['#2f5fa8', '#548fd0', '#93c2e6', '#cfe4ef'] },
+  { t: 0xa8f0a0, k: 0.18, sol: [0.42, 0.24], solc: '236,255,214',
+    cielo: ['#2f8f6e', '#5cb890', '#9ad9ac', '#d6efcf'] },
 ];
+
+/* ── LA SATURACION ES UNA SOLA FUNCION Y LA PASAN TODOS LOS COLORES ───────
+   Pedido: «graficos saturados». Retocar los ocho colores de `BLOQ` a mano
+   dejaria los tintes de paleta, el naranja del mecanismo y el dorado de la
+   meta con la saturacion vieja, o sea el diorama vivo y las piezas que
+   importan apagadas. Un solo sitio: HSL, se multiplica la S y se topa —
+   por encima de 0,80 los grises dejan de ser grises y la piedra sale rosa. */
+const SAT_K = 1.42, SAT_TOPE = 0.80;
+const _hsl = { h: 0, s: 0, l: 0 };
+function satura(c) {
+  c.getHSL(_hsl);
+  if (_hsl.s > 0.004) c.setHSL(_hsl.h, Math.min(SAT_TOPE, _hsl.s * SAT_K), _hsl.l);
+  return c;
+}
 
 /* ── LAS SEIS CARAS, CON SUS EJES ─────────────────────────────────────────
    `u × w = n` en las seis, asi que la tira (o, o+u, o+u+w, o+w) sale con la
@@ -38,30 +56,216 @@ const CARAS = [
    lo unico que hace que un rincon se lea como un rincon con una sola luz. */
 const AO_F = [0.50, 0.69, 0.86, 1.00];
 
-/* ── LA JUNTA ENTRE BLOQUES ───────────────────────────────────────────────
-   La oclusion sola no alcanza: una pared lisa de cuatro bloques no tiene
-   ocluyentes en ninguna esquina, asi que sale de un color parejo y se lee a
-   UNA caja de cuatro de alto. Y en este juego contar bloques ES el juego —
-   se sube uno y se cae tres—, o sea que no poder contarlos no es un problema
-   de estilo.
-   Un mapa de 32 pixeles con el borde oscuro, estirado sobre CADA cara, pone
-   la junta donde va y no cuesta un solo triangulo. Va en espacio LINEAL a
-   proposito: es un multiplicador, no un color, asi que 0,86 tiene que llegar
-   al shader como 0,86 y no convertido.                                     */
-let TEX_TEJA = null;
-function texTeja() {
-  if (TEX_TEJA) return TEX_TEJA;
-  const c = document.createElement('canvas'); c.width = c.height = 32;
+/* ── LA TEXTURA DE CADA BLOQUE ────────────────────────────────────────────
+   Hasta acá los ocho tipos compartían UN mapa de borde: la junta caía donde
+   iba —que es lo importante en un juego donde contar bloques ES el juego, se
+   sube uno y se cae tres— y el ladrillo, la piedra y la madera se veían
+   exactamente igual. Ahora cada tipo tiene la suya.
+
+   UNA TEXTURA POR TIPO Y NO UN ATLAS, y es por los mipmaps: un atlas mezcla
+   la baldosa de al lado en cuanto la camara se aleja, y acá un bloque mide
+   unos treinta pixeles. Cuesta una malla por tipo —tres o cuatro por nivel,
+   medido— contra un juego entero de UV parchadas.
+
+   Y SON DOS FILAS: la mitad de arriba del lienzo es la TAPA y la de abajo el
+   LADO. `flipY` manda la fila 0 del lienzo a v=1, asi que las caras de
+   arriba piden v 0,5..1 y todas las demas v 0..0,5. Sin eso el pasto se veria
+   con briznas en los cuatro costados, que es de lo que este juego se rie.
+
+   VAN EN ESPACIO LINEAL A PROPOSITO: son un MULTIPLICADOR sobre el color que
+   viaja en los vertices —el tinte de la paleta, la oclusion y el tono por
+   bloque—, no un color. Un 0,84 tiene que llegar al shader como 0,84.      */
+const TEXB = {};
+function texBloque(tp) {
+  if (TEXB[tp]) return TEXB[tp];
+  const L = 64, c = document.createElement('canvas');
+  c.width = L; c.height = L * 2;
   const g = c.getContext('2d');
-  g.fillStyle = '#fff'; g.fillRect(0, 0, 32, 32);
-  g.fillStyle = 'rgba(0,0,0,.19)'; g.fillRect(0, 0, 32, 1); g.fillRect(0, 31, 32, 1);
-  g.fillRect(0, 0, 1, 32); g.fillRect(31, 0, 1, 32);
-  g.fillStyle = 'rgba(0,0,0,.08)'; g.fillRect(1, 1, 30, 1); g.fillRect(1, 30, 30, 1);
-  g.fillRect(1, 1, 1, 30); g.fillRect(30, 1, 1, 30);
-  TEX_TEJA = new T.CanvasTexture(c);
-  TEX_TEJA.colorSpace = T.LinearSRGBColorSpace;
-  TEX_TEJA.anisotropy = 4;
-  return TEX_TEJA;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, L, L * 2);
+  const R = azar(tp * 7717 + 13);
+  const os = (a) => 'rgba(0,0,0,' + a + ')', bl = (a) => 'rgba(255,255,255,' + a + ')';
+
+  /* la junta va en las dos mitades y es lo unico que TODOS comparten: es lo
+     que dice donde termina un bloque y empieza el siguiente */
+  const junta = y0 => {
+    g.fillStyle = os(0.22);
+    g.fillRect(0, y0, L, 1); g.fillRect(0, y0 + L - 1, L, 1);
+    g.fillRect(0, y0, 1, L); g.fillRect(L - 1, y0, 1, L);
+    g.fillStyle = os(0.09);
+    g.fillRect(1, y0 + 1, L - 2, 1); g.fillRect(1, y0 + L - 2, L - 2, 1);
+    g.fillRect(1, y0 + 1, 1, L - 2); g.fillRect(L - 2, y0 + 1, 1, L - 2);
+  };
+  const mota = (y0, n, a, cl_) => {
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = cl_(a * (0.4 + R() * 0.6));
+      const w = 1 + Math.floor(R() * 3);
+      g.fillRect(2 + Math.floor(R() * (L - 4)), y0 + 2 + Math.floor(R() * (L - 4)), w, w);
+    }
+  };
+  const hiladas = (y0, filas, alt) => {          /* ladrillo: hiladas trabadas */
+    for (let f = 0; f < filas; f++) {
+      const y = y0 + Math.round(f * alt);
+      g.fillStyle = os(0.17); g.fillRect(0, y, L, 2);
+      g.fillStyle = bl(0.13); g.fillRect(0, y + 2, L, 1);
+      const off = (f % 2) ? 0 : L / 2;
+      for (let k = 0; k < 2; k++) {
+        const x = Math.round((off + k * L / 2) % L);
+        g.fillStyle = os(0.14); g.fillRect(x, y + 2, 2, Math.round(alt) - 2);
+      }
+    }
+  };
+  const tablas = (y0, n, vert) => {              /* madera: tablas con veta */
+    const p = L / n;
+    for (let i = 0; i < n; i++) {
+      const a = Math.round(i * p);
+      g.fillStyle = os(0.16);
+      if (vert) g.fillRect(a, y0, 2, L); else g.fillRect(0, y0 + a, L, 2);
+      g.fillStyle = bl(0.11);
+      if (vert) g.fillRect(a + 2, y0, 1, L); else g.fillRect(0, y0 + a + 2, L, 1);
+      for (let v = 0; v < 3; v++) {
+        g.fillStyle = os(0.07 + R() * 0.05);
+        const q = a + 4 + Math.floor(R() * (p - 7));
+        if (vert) g.fillRect(q, y0 + Math.floor(R() * 20), 1, 18 + Math.floor(R() * 30));
+        else g.fillRect(Math.floor(R() * 20), y0 + q, 18 + Math.floor(R() * 30), 1);
+      }
+    }
+  };
+  const remaches = y0 => {
+    g.fillStyle = os(0.20);
+    for (const [x, y] of [[6, 6], [L - 8, 6], [6, L - 8], [L - 8, L - 8]]) {
+      g.fillRect(x, y0 + y, 2, 2);
+      g.fillStyle = bl(0.22); g.fillRect(x, y0 + y - 1, 2, 1); g.fillStyle = os(0.20);
+    }
+  };
+
+  if (tp === LADRILLO)      { hiladas(0, 3, L / 3); hiladas(L, 4, L / 4); }
+  else if (tp === PIEDRA)   {
+    mota(0, 60, 0.10, os); mota(0, 30, 0.14, bl);
+    for (let i = 0; i < 3; i++) {                /* dos grietas por mitad */
+      g.fillStyle = os(0.13);
+      let x = 4 + R() * (L - 8), y = 4 + R() * (L - 8);
+      for (let k = 0; k < 9; k++) { g.fillRect(x | 0, y | 0, 1, 1); x += R() * 5 - 2; y += R() * 5 - 2; }
+    }
+    mota(L, 70, 0.13, os); mota(L, 26, 0.12, bl);
+    g.fillStyle = os(0.09);
+    for (let f = 1; f < 3; f++) g.fillRect(0, L + Math.round(f * L / 3), L, 1);
+  }
+  else if (tp === PASTO)    {
+    for (let i = 0; i < 150; i++) {              /* la tapa: briznas */
+      g.fillStyle = R() < 0.45 ? bl(0.10 + R() * 0.16) : os(0.06 + R() * 0.10);
+      g.fillRect(2 + Math.floor(R() * (L - 4)), 2 + Math.floor(R() * (L - 5)), 1, 2 + Math.floor(R() * 3));
+    }
+    mota(L, 80, 0.13, os); mota(L, 24, 0.10, bl);
+    g.fillStyle = bl(0.16); g.fillRect(0, L + 2, L, 4);   /* el labio de pasto */
+    g.fillStyle = os(0.10);
+    for (let i = 0; i < 10; i++) g.fillRect(3 + Math.floor(R() * (L - 6)), L + 7, 1, 3 + Math.floor(R() * 7));
+  }
+  else if (tp === MADERA)   { tablas(0, 3, false); tablas(L, 4, true); }
+  else if (tp === METAL)    {
+    g.fillStyle = os(0.09);
+    for (let i = -L; i < L * 2; i += 9) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + L, L); g.strokeStyle = os(0.08); g.lineWidth = 2; g.stroke(); }
+    remaches(0);
+    g.fillStyle = os(0.13); g.fillRect(0, L + L / 2 - 1, L, 2);
+    g.fillStyle = bl(0.14); g.fillRect(0, L + L / 2 + 1, L, 1);
+    remaches(L);
+  }
+  else if (tp === META)     {
+    for (const y0 of [0, L]) {
+      const rg = g.createRadialGradient(L / 2, y0 + L / 2, 2, L / 2, y0 + L / 2, L * 0.52);
+      rg.addColorStop(0, bl(0.34)); rg.addColorStop(0.55, bl(0.06)); rg.addColorStop(1, os(0.10));
+      g.fillStyle = rg; g.fillRect(0, y0, L, L);
+      g.strokeStyle = bl(0.20); g.lineWidth = 2;
+      for (const r of [12, 22]) { g.beginPath(); g.arc(L / 2, y0 + L / 2, r, 0, 6.2832); g.stroke(); }
+    }
+  }
+  else if (tp === VIDRIO)   {
+    for (const y0 of [0, L]) {
+      g.fillStyle = os(0.14); g.fillRect(4, y0 + 4, L - 8, 2); g.fillRect(4, y0 + L - 6, L - 8, 2);
+      g.fillRect(4, y0 + 4, 2, L - 8); g.fillRect(L - 6, y0 + 4, 2, L - 8);
+      g.strokeStyle = bl(0.30); g.lineWidth = 3;
+      g.beginPath(); g.moveTo(10, y0 + L - 12); g.lineTo(L - 22, y0 + 10); g.stroke();
+      g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(24, y0 + L - 10); g.lineTo(L - 10, y0 + 22); g.stroke();
+    }
+  }
+  junta(0); junta(L);
+
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.LinearSRGBColorSpace;
+  t.anisotropy = 4;
+  TEXB[tp] = t;
+  return t;
+}
+
+/* ── EL CIELO ─────────────────────────────────────────────────────────────
+   Era un degradado de CSS por detras del lienzo: cuatro paradas de color y
+   nada mas, o sea que girar el diorama no movia un solo pixel del fondo.
+   Ahora es un lienzo con sol, halo y nubes puesto como `scene.background`,
+   Y SE CORRE CON LA ORBITA: el fondo de three respeta `offset`/`repeat` de
+   la textura, asi que arrastrar el dedo hace que las nubes pasen. Cuesta UNA
+   textura, cero geometria y cero llamadas de dibujo — con un domo habria que
+   dibujar una esfera de mas y encima con camara ortografica se veria un
+   parche del tamano del encuadre.
+
+   LAS NUBES SE DIBUJAN TRES VECES —en x, x-W y x+W— porque la textura se
+   repite en horizontal: sin eso, al panear aparece la costura.            */
+const CIELOS = [];
+function cieloTex(pi) {
+  if (CIELOS[pi]) return CIELOS[pi];
+  const pal = PALETAS[pi], W = 1024, H = 512;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, H);
+  const ps = pal.cielo;
+  gr.addColorStop(0, ps[0]); gr.addColorStop(0.44, ps[1]);
+  gr.addColorStop(0.76, ps[2]); gr.addColorStop(1, ps[3]);
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+
+  const sx = W * pal.sol[0], sy = H * pal.sol[1];
+  for (const off of [-W, 0, W]) {
+    const rg = g.createRadialGradient(sx + off, sy, 0, sx + off, sy, H * 0.62);
+    rg.addColorStop(0, 'rgba(' + pal.solc + ',.92)');
+    rg.addColorStop(0.09, 'rgba(' + pal.solc + ',.55)');
+    rg.addColorStop(0.34, 'rgba(' + pal.solc + ',.16)');
+    rg.addColorStop(1, 'rgba(' + pal.solc + ',0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W, H);
+  }
+
+  const R = azar(pi * 1237 + 71);
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 16; i++) {
+    const cx = R() * W, cy = H * (0.10 + R() * 0.52), s = 0.5 + R() * 1.1;
+    const a = 0.05 + R() * 0.10;
+    for (const off of [-W, 0, W]) for (let k = 0; k < 7; k++) {
+      const ex = cx + off + (k - 3) * 34 * s, ey = cy + Math.sin(k * 1.7 + i) * 9 * s;
+      const rw = (52 - Math.abs(k - 3) * 9) * s, rh = rw * 0.44;
+      const rg = g.createRadialGradient(ex, ey, 0, ex, ey, rw);
+      rg.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+      rg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.save(); g.translate(ex, ey); g.scale(1, rh / rw); g.translate(-ex, -ey);
+      g.fillStyle = rg; g.beginPath(); g.arc(ex, ey, rw, 0, 6.2832); g.fill(); g.restore();
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.wrapS = T.RepeatWrapping; t.wrapT = T.ClampToEdgeWrapping;
+  CIELOS[pi] = t;
+  return t;
+}
+/* EL RECORTE SALE DE LA PROPORCION DEL MARCO Y NO DE UN NUMERO: con `repeat`
+   fijo, en apaisado —donde el marco es una columna angosta— el cielo saldria
+   estirado y las nubes se leerian a manchas verticales.                    */
+function cieloAjusta() {
+  const t = ESC && ESC.background;
+  if (!t || !t.isTexture || !t.image) return;
+  const ry = 0.88;
+  const rx = cl((ANCHO / ALTO) * (t.image.height / t.image.width) * ry, 0.03, 1);
+  let ox = (CAM_YAW / (Math.PI * 2)) * 0.55; ox -= Math.floor(ox);
+  const ke = cl((CAM_EL - CAM_EL_MIN) / (CAM_EL_MAX - CAM_EL_MIN), 0, 1);
+  t.repeat.set(rx, ry);
+  t.offset.set(ox, (1 - ry) * (1 - ke));
 }
 
 /* mete una caja con normales planas en los arreglos. La usan la escalera y
@@ -98,7 +302,11 @@ function geoBloques(lista, ocupa, tinte, kt, blanco) {
       const ax = b.x + f.n[0], ay = b.y + f.n[1], az = b.z + f.n[2];
       if (ocupa(ax, ay, az)) continue;                 /* cara tapada: no existe */
       if (blanco) cbase.setRGB(1, 1, 1);
-      else { cbase.setHex(f.n[1] === 1 ? B.top : B.col); if (kt > 0) cbase.lerp(ct, kt); }
+      /* SE SATURA EL COLOR DEL BLOQUE Y DESPUES SE TINE, NO AL REVES: el
+         tinte de la paleta es atmosfera —acerca todo al color del cielo— y
+         resaturando DESPUES se lo deshace. Medido en el nivel 20, cuya paleta
+         es azul: con el orden al reves el ladrillo salia rosa chicle. */
+      else { cbase.setHex(f.n[1] === 1 ? B.top : B.col); satura(cbase); if (kt > 0) cbase.lerp(ct, kt); }
       const cr = cbase.r * jit, cg = cbase.g * jit, cb = cbase.b * jit;
       const ao = [];
       for (let q = 0; q < 4; q++) {
@@ -119,10 +327,15 @@ function geoBloques(lista, ocupa, tinte, kt, blanco) {
         A.n.push(f.n[0], f.n[1], f.n[2]);
         A.c.push(cr * ao[q], cg * ao[q], cb * ao[q]);
       }
-      /* UNA UV POR CARA Y NO POR BLOQUE: el mapa de teja se estira sobre cada
-         cara suelta, asi que la junta cae exactamente en el borde del bloque
-         sea cual sea el tamano del diorama. */
-      A.u.push(0, 0, 1, 0, 1, 1, 0, 1);
+      /* UNA UV POR CARA Y NO POR BLOQUE: el mapa se estira sobre cada cara
+         suelta, asi que la junta cae exactamente en el borde del bloque sea
+         cual sea el tamano del diorama.
+         Y LA MITAD DE ARRIBA DE LA TEXTURA ES LA CARA DE ARRIBA: `flipY` deja
+         la fila 0 del lienzo en v=1, o sea que la tapa pide v 0,5..1 y los
+         costados v 0..0,5. Sin eso el pasto tendria briznas en los cuatro
+         costados y tierra en la tapa. */
+      const v0 = (f.n[1] === 1) ? 0.5 : 0, v1 = v0 + 0.5;
+      A.u.push(0, v0, 1, v0, 1, v1, 0, v1);
       /* LA DIAGONAL SE DA VUELTA CUANDO CONVIENE: con la diagonal fija, un
          rincon en el que dos esquinas opuestas estan ocluidas sale con un
          pliegue torcido que se ve como un error de malla y no como sombra. */
@@ -164,7 +377,7 @@ function escInit() {
      mira cada cara, asi que con el suelo en negro toda cara que mire para
      abajo recibe CERO y la panza del diorama desaparece.                   */
   ESC.add(new T.HemisphereLight(0xd6e8f2, 0x6e6b60, 0.78));
-  LUZ = new T.DirectionalLight(0xfff2dd, 1.06);
+  LUZ = new T.DirectionalLight(0xfff2dd, 1.18);
   LUZ.position.set(17, 30, 13);
   ESC.add(LUZ); ESC.add(LUZ.target);
   aplicaCalidad();
@@ -237,6 +450,7 @@ function ponCam() {
   CAM.up.set(0, 1, 0);
   CAM.lookAt(0, cy, 0);
   CAM.updateMatrixWorld();
+  cieloAjusta();
 }
 function medir() {
   const m = $('marco').getBoundingClientRect();
@@ -246,7 +460,7 @@ function medir() {
      saldria de la columna. */
   document.documentElement.style.setProperty('--mw', ANCHO + 'px');
   REN.setSize(ANCHO, ALTO, false);
-  encuadra(); ponCam();
+  encuadra(); ponCam(); cieloAjusta();
 }
 
 /* la caja de sombra se ajusta al diorama: con una del tamano del mundo, la
@@ -276,7 +490,7 @@ function soltaDiorama() {
 function construyeDiorama(M) {
   soltaDiorama();
   const grupo = new T.Group();
-  const pal = PALETAS[(M.paleta || 0) % PALETAS.length];
+  const pi = (M.paleta || 0) % PALETAS.length, pal = PALETAS[pi];
 
   /* lo que ocluye y tapa caras: los bloques enteros del mundo BASE. Los
      mecanismos NO entran — se mueven, asi que hornear su oclusion en la malla
@@ -308,15 +522,27 @@ function construyeDiorama(M) {
   const ox = -(bb.min[0] + bb.max[0]) / 2, oz = -(bb.min[2] + bb.max[2]) / 2;
   grupo.position.set(ox, 0, oz);
 
-  const matOp = new T.MeshLambertMaterial({ vertexColors: true, map: texTeja() });
-  const mOp = new T.Mesh(geoBloques(op, ocupaOp, pal.t, pal.k), matOp);
-  mOp.castShadow = true; mOp.receiveShadow = true;
-  grupo.add(mOp);
+  /* UNA MALLA POR TIPO DE BLOQUE, y no una sola para todo lo opaco: cada
+     tipo tiene su textura, y una textura por tipo son tres o cuatro llamadas
+     de dibujo por nivel (medido) contra la unica de antes. Con un atlas serian
+     una sola llamada y el mipmap mezclaria la baldosa de al lado en cuanto la
+     camara se aleja — y aca un bloque mide unos treinta pixeles.
+     LA OCLUSION SIGUE SIENDO GLOBAL (`ocupaOp`): las caras que se tapan entre
+     bloques de tipos distintos se siguen descartando igual. */
+  const porTipo = new Map();
+  for (const b of op) { let l = porTipo.get(b.t); if (!l) porTipo.set(b.t, l = []); l.push(b); }
+  const mOps = [];
+  for (const [t, lista] of porTipo) {
+    const m = new T.Mesh(geoBloques(lista, ocupaOp, pal.t, pal.k),
+      new T.MeshLambertMaterial({ vertexColors: true, map: texBloque(t) }));
+    m.castShadow = true; m.receiveShadow = true;
+    grupo.add(m); mOps.push(m);
+  }
 
   let mVi = null;
   if (vi.length) {
     mVi = new T.Mesh(geoBloques(vi, ocupaVi, pal.t, pal.k),
-      new T.MeshLambertMaterial({ vertexColors: true, map: texTeja(), transparent: true, opacity: 0.42 }));
+      new T.MeshLambertMaterial({ vertexColors: true, map: texBloque(VIDRIO), transparent: true, opacity: 0.42 }));
     mVi.receiveShadow = true;
     grupo.add(mVi);
   }
@@ -358,7 +584,7 @@ function construyeDiorama(M) {
        lo que viaja en los vertices es SOLO la oclusion, y el naranja la
        hereda con sus pliegues puestos. */
     const geo = geoBloques(lista, oc, 0xffffff, 0, true);
-    const ml = new T.Mesh(geo, new T.MeshLambertMaterial({ vertexColors: true, map: texTeja(), color: cMec }));
+    const ml = new T.Mesh(geo, new T.MeshLambertMaterial({ vertexColors: true, map: texBloque(METAL), color: cMec }));
     ml.castShadow = true; ml.receiveShadow = true;
     ml.userData.mec = i;
     g.add(ml);
@@ -405,18 +631,23 @@ function construyeDiorama(M) {
   grupo.add(marca);
 
   ESC.add(grupo);
-  DIO = { M, grupo, ox, oz, caja: bb, mOp, mVi, mEsc, mecs, metaG, rombo, marca, marT: 0,
+  DIO = { M, grupo, ox, oz, caja: bb, mOps, mVi, mEsc, mecs, metaG, rombo, marca, marT: 0,
           mira: 0, radio: 8, pal,
-          blancos: [mOp, mEsc, mVi].filter(Boolean).concat(mecs.map(o => o.malla)) };
+          blancos: mOps.concat([mEsc, mVi].filter(Boolean)).concat(mecs.map(o => o.malla)) };
   midePeorEncuadre(CAM_EL);
   encuadra(); ponCam(); ajustaSombra();
-  fondoDe(pal);
+  fondoDe(pi);
   for (let i = 0; i < mecs.length; i++) mecPone(i, 0);
   return DIO;
 }
-function fondoDe(pal) {
+function fondoDe(pi) {
+  const pal = PALETAS[pi];
+  /* el degradado de CSS NO SE VA: es lo que se ve mientras el modulo carga y
+     en el primer cuadro, antes de que haya escena. El cielo lo pisa despues. */
   $('marco').style.background = 'linear-gradient(180deg,' + pal.cielo[0] + ' 0%,' +
     pal.cielo[1] + ' 42%,' + pal.cielo[2] + ' 78%,' + pal.cielo[3] + ' 100%)';
+  ESC.background = cieloTex(pi);
+  cieloAjusta();
 }
 function mecPone(i, e) {
   const o = DIO.mecs[i]; if (!o) return;
