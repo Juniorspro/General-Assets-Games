@@ -1342,13 +1342,19 @@ function linkMapa(lugar){
         return e;
       });
     if (!eventos.length) return;
+    /* el servidor ya la pone; dos fichas iguales es un error en la estructurada */
+    if (document.querySelector('script[data-eventos="servidor"]')) return;
     var n = document.createElement("script");
     n.type = "application/ld+json";
     n.textContent = JSON.stringify(eventos);
     document.head.appendChild(n);
   }
 
-  caja.innerHTML = '<div class="cargandoEnt">Buscando…</div>';
+  /* Si el servidor ya dejó las publicaciones puestas, no se borran para poner
+     «Buscando…»: eso sería sacar de pantalla algo que ya está para mostrar un
+     cartel de espera, que es al revés de lo que conviene. */
+  var delServidor = caja.hasAttribute("data-servidor");
+  if (!delServidor) caja.innerHTML = '<div class="cargandoEnt">Buscando…</div>';
   fetch("https://iblo-eventos.pages.dev/api/publicaciones")
     .then(function(r){ return r.json(); })
     .then(function(j){
@@ -1362,6 +1368,9 @@ function linkMapa(lugar){
       pintarSolapas(); pintar(); fichaDeEventos(todo);
     })
     .catch(function(){
+      /* con lo del servidor puesto, un pedido que falla no deja a nadie sin
+         nada: se queda lo que ya estaba, que es de hace un rato pero es cierto */
+      if (delServidor) return;
       caja.innerHTML = '<div class="sinEnt"><b>No se pudieron cargar</b>' +
         'Probá de nuevo en un rato, o escribinos por WhatsApp.</div>';
     });
