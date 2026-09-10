@@ -1664,4 +1664,51 @@ function cuandoCorto(ms){
   return "hace " + Math.floor(d / 1440) + " días";
 }
 
+
+/* ============================================ 7 · el latido
+   Le avisa al servidor que esta pestaña sigue abierta, y SOLO mientras está a
+   la vista. Esa es la diferencia entre saber cuánto se queda alguien y saber
+   cuánto tiempo dejó la pestaña olvidada en el fondo: sin esto, una pestaña de
+   ayer sumaría veinte horas de «uso» y el número no diría nada.
+
+   El identificador es al azar y vive en `sessionStorage`, o sea que se muere
+   al cerrar la pestaña. No sirve para seguir a nadie entre días, a propósito:
+   lo que hace falta es contar visitas, no armar el prontuario de un
+   desconocido. */
+var LATE = 45000;
+
+function idDeVisita(){
+  var k = "fa.visita", v = null;
+  try { v = sessionStorage.getItem(k); } catch(e){}
+  if (!v){
+    v = ([].map.call(crypto.getRandomValues(new Uint8Array(12)),
+         function(x){ return (x + 256).toString(16).slice(1); })).join("");
+    try { sessionStorage.setItem(k, v); } catch(e){}
+  }
+  return v;
+}
+
+(function latir(){
+  var id = idDeVisita();
+  var movil = matchMedia("(max-width:720px)").matches;
+
+  function tirar(){
+    if (document.hidden) return;
+    var o = { method:"POST", headers:{"content-type":"application/json"},
+              body: JSON.stringify({ id: id, movil: movil }) };
+    /* si hay sesión, el latido la lleva: así la visita pasa a tener nombre */
+    var ses = caja.leer("sesion", null);
+    if (ses && ses.pase) o.headers.authorization = "Bearer " + ses.pase;
+    fetch("api/visitas", o).catch(function(){});
+  }
+
+  tirar();
+  setInterval(tirar, LATE);
+  /* al volver a la pestaña se late enseguida, para no esperar 45 s a que
+     aparezca en «quién está ahora» */
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden) tirar();
+  });
+})();
+
 })();

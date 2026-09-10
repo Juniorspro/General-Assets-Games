@@ -89,6 +89,14 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
       </div>
       <div id="cola" style="margin-top:12px"></div>
 
+      <!-- Qui&#233;n est&#225; mirando. Los que tienen cuenta salen con nombre; los que
+           entran sin cuenta no tienen un &#171;qui&#233;n&#187; que mostrar y se cuentan. -->
+      <details class="grupo blanco" id="vsCaja" style="margin-top:14px">
+        <summary style="cursor:pointer;font-weight:600;font-size:14.5px">
+          Visitas <span id="vsAhora" style="font-weight:400;color:var(--tinta-2)"></span></summary>
+        <div id="vsCuerpo" style="margin-top:10px"></div>
+      </details>
+
       <!-- Los c&#243;digos, que antes viv&#237;an en /admin con su propia clave. Una
            segunda p&#225;gina de administraci&#243;n con una segunda llave es una llave
            m&#225;s que se puede perder, para hacer algo que va justo al lado de
@@ -279,6 +287,111 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
     d.appendChild(acc);
     return d;
   }
+
+  /* --------------------------------------------------------- las visitas */
+  function rato(ms){
+    var s = Math.round(ms / 1000);
+    if (s < 60) return s + " s";
+    var m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    var h = Math.floor(m / 60);
+    return h + " h " + (m % 60) + " min";
+  }
+  function haceCuanto(ms){ return rato(Date.now() - ms); }
+
+  function verVisitas(){
+    pedir("visitas").then(function(j){
+      $("vsAhora").textContent = "· " + j.ahora.length +
+        (j.ahora.length === 1 ? " mirando ahora" : " mirando ahora");
+      var c = $("vsCuerpo"); c.textContent = "";
+
+      /* los que están en este momento */
+      var t1 = nodo("b", null, "Ahora mismo");
+      c.appendChild(t1);
+      if (!j.ahora.length){
+        c.appendChild(nodo("p", null, "Nadie en este momento."));
+      } else {
+        var ul = nodo("div");
+        ul.style.cssText = "display:grid;gap:6px;margin:8px 0 14px";
+        j.ahora.forEach(function(v){
+          var f = nodo("div");
+          f.style.cssText = "display:flex;gap:10px;align-items:baseline;padding:7px 10px;" +
+            "border:1px solid #c2d0de;border-radius:4px;background:#fff";
+          var q = nodo("b", null, v.usuario ? (v.nombre || v.usuario) : "Alguien sin cuenta");
+          f.appendChild(q);
+          if (v.usuario){
+            var ar = nodo("span", null, "@" + v.usuario);
+            ar.style.cssText = "font-size:12.5px;color:var(--tinta-2)";
+            f.appendChild(ar);
+          }
+          var d = nodo("span", null, "hace " + haceCuanto(v.desde) +
+            (v.movil ? "  ·  celular" : "  ·  computadora"));
+          d.style.cssText = "margin-left:auto;font-size:12.5px;color:var(--tinta-2)";
+          f.appendChild(d);
+          ul.appendChild(f);
+        });
+        c.appendChild(ul);
+      }
+
+      /* los números */
+      function bloque(titulo, d){
+        var g = nodo("div");
+        g.style.cssText = "border:1px solid #c2d0de;border-radius:4px;background:#fff;" +
+          "padding:9px 11px";
+        g.appendChild(nodo("b", null, titulo));
+        var n = nodo("div");
+        n.style.cssText = "font-size:13.5px;margin-top:3px;line-height:1.6";
+        var prom = d.visitas ? rato(Math.round((d.tiempo || 0) / d.visitas)) : "—";
+        n.textContent = (d.visitas || 0) + " visitas · " +
+          (d.conCuenta || 0) + " con cuenta · " +
+          (d.enCelu || 0) + " desde el celular · se quedan " + prom + " en promedio";
+        g.appendChild(n);
+        return g;
+      }
+      var nums = nodo("div");
+      nums.style.cssText = "display:grid;gap:8px;margin-bottom:14px";
+      nums.appendChild(bloque("Últimas 24 horas", j.hoy || {}));
+      nums.appendChild(bloque("Últimos 7 días", j.semana || {}));
+      c.appendChild(nums);
+
+      /* los que tienen cuenta */
+      c.appendChild(nodo("b", null, "Los que tienen cuenta, esta semana"));
+      if (!j.gente.length){
+        c.appendChild(nodo("p", null, "Nadie con cuenta entró esta semana."));
+      } else {
+        var g2 = nodo("div");
+        g2.style.cssText = "display:grid;gap:6px;margin-top:8px";
+        j.gente.forEach(function(u){
+          var f = nodo("div");
+          f.style.cssText = "display:flex;gap:10px;align-items:baseline;padding:7px 10px;" +
+            "border:1px solid #c2d0de;border-radius:4px;background:#fff";
+          var b = nodo("b", null, u.nombre || u.usuario);
+          if (u.acceso){
+            var e = nodo("span", null, " ★");
+            e.title = "Colaboró"; e.style.color = "#e8a800";
+            b.appendChild(e);
+          }
+          f.appendChild(b);
+          var ar = nodo("span", null, "@" + u.usuario);
+          ar.style.cssText = "font-size:12.5px;color:var(--tinta-2)";
+          f.appendChild(ar);
+          var d = nodo("span", null, u.veces + (u.veces === 1 ? " visita" : " visitas") +
+            " · " + rato(u.tiempo || 0) + " en total · última hace " + haceCuanto(u.ultima));
+          d.style.cssText = "margin-left:auto;font-size:12.5px;color:var(--tinta-2)";
+          f.appendChild(d);
+          g2.appendChild(f);
+        });
+        c.appendChild(g2);
+      }
+
+      var nota = nodo("p", null, j.nota);
+      nota.style.cssText = "margin-top:12px;font-size:12.5px;color:var(--tinta-2)";
+      c.appendChild(nota);
+    }).catch(function(e){
+      $("vsCuerpo").textContent = e.message;
+    });
+  }
+  $("vsCaja").addEventListener("toggle", function(){ if (this.open) verVisitas(); });
 
   /* -------------------------------------------------------- los códigos */
   $("cgHacer").addEventListener("click", function(){
