@@ -39,22 +39,27 @@ const esParaT = t => t !== VACIO;
 const esRompeT = t => t !== VACIO && BLOQ[t].rompe === 1;
 
 /* ── EL MUNDO ─────────────────────────────────────────────────────────────
-   NX FIJO EN LOS DOCE DUELOS, y no es pereza: el marco mide lo que mide, asi
-   que el ancho del mundo decide cuantos pixeles vale una celda — y de eso sale
-   el mapeo entre lo que arrastra el dedo y la velocidad de la flecha. Con un
-   ancho por duelo, la fuerza que uno aprendio en el duelo 3 mentiria en el 4.
-   Lo que cambia entre duelos es el TERRENO, el viento y el rival.           */
-const NX = 15, NY = 30, NZ = 5;
+   NX FIJO EN LOS DOCE DUELOS, y no es pereza: el mapeo entre lo que arrastra
+   el dedo y la velocidad de la flecha sale del tamanio de una celda en
+   pixeles. Con un ancho por duelo, la fuerza que uno aprendio en el duelo 3
+   mentiria en el 4. Lo que cambia entre duelos es el TERRENO, el viento y el
+   rival.
+   Y TODO LO DEL TERRENO SE DERIVA DE XA, XB Y XM: escrito a mano —la torre en
+   la columna 6, la viga de la 5 a la 9— agrandar el mapa deja los obstaculos
+   apilados contra el arquero de la izquierda y el duelo se rompe sin que nada
+   falle.                                                                    */
+const NX = 18, NY = 32, NZ = 5;
 const ZC = 2;              /* el plano por el que vuela la flecha: el del medio */
-const XA = 2, XB = 13;     /* las dos columnas de los arqueros — 11 celdas      */
+const XA = 2, XB = 15;     /* las dos columnas de los arqueros — 13 celdas      */
+const XM = Math.round((XA + XB) / 2);   /* el medio de la arena, para el terreno */
 
-/* EL ANCHO DEL MUNDO SALE DEL PORTE DEL ARQUERO Y NO AL REVES, y es la unica
-   cuenta que decide como se ve este juego. En un marco 9:16 la separacion
-   entre los dos manda sobre todo lo demas: el arquero mide 3,0 celdas y con
-   quince de ancho el encuadre deja ver unas 35, o sea que el cuerpo ocupa el
-   8,5 % del alto —unos 76 px en un telefono— y los once de separacion el 65 %
-   del ancho. Con las dieciocho de la primera version el arquero bajaba a 62
-   px y dejaba de leerse la cara.                                           */
+/* EL MAPA CRECIO Y EL ARQUERO NO SE ACHICO, y eso SOLO SE PUEDE con una
+   camara que se mueva. En un marco 9:16 el ancho manda: mostrar trece celdas
+   de separacion con un encuadre fijo dejaria al arquero en 53 px SIEMPRE.
+   Con la camara en reposo abierta y CERRANDOSE sobre la flecha en vuelo, lo
+   unico que se achica es el plano de espera —el cuerpo baja de 62 a 53 px— y
+   lo que se AGRANDA es lo que antes no se veia: en vuelo mide 73 px y la
+   flecha 39 contra 33. Es lo que hace Bowmasters.                          */
 
 /* ── LA BALISTICA ─────────────────────────────────────────────────────────
    LOS NUMEROS NO SE ELIGEN, SE DERIVAN. Se decide que el tiro de 45 grados a
@@ -115,6 +120,7 @@ const LANGS = {
     vos: 'VOS', viento: 'VIENTO', calma: 'CALMA',
     tuTurno: 'TU TURNO', suTurno: 'TIRA {0}',
     pistaTira: 'arrastrá para atrás y soltá',
+    pistaRival: 'tira el rival…',
     pistaFuerza: 'cuanto más lejos tirás del dedo, más fuerte',
     falla: 'AFUERA', cabezazo: '¡EN LA CABEZA!',
     pie: 'sin un solo asset · todo dibujado por código', cargando: 'CARGANDO',
@@ -142,6 +148,7 @@ const LANGS = {
     vos: 'YOU', viento: 'WIND', calma: 'CALM',
     tuTurno: 'YOUR TURN', suTurno: '{0} SHOOTS',
     pistaTira: 'drag backwards and let go',
+    pistaRival: 'rival is shooting…',
     pistaFuerza: 'the further you pull, the harder it flies',
     falla: 'MISS', cabezazo: 'HEADSHOT!',
     pie: 'not one asset · all drawn in code', cargando: 'LOADING',
@@ -169,6 +176,7 @@ const LANGS = {
     vos: 'VOCÊ', viento: 'VENTO', calma: 'CALMA',
     tuTurno: 'SUA VEZ', suTurno: '{0} ATIRA',
     pistaTira: 'arraste para trás e solte',
+    pistaRival: 'o rival vai atirar…',
     pistaFuerza: 'quanto mais puxa, mais forte o tiro',
     falla: 'ERROU', cabezazo: 'NA CABEÇA!',
     pie: 'sem um único asset · tudo desenhado em código', cargando: 'CARREGANDO',

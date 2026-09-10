@@ -278,7 +278,12 @@ window.__A = {
      ULTIMO cuadro dibujado: midiendo justo despues de cambiar la calidad se
      informa la anterior, y las tres salen identicas — que es lo que devolvia
      esta sonda antes de esta linea.                                       */
-  cal: (k) => { PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
+  /* Y LA CLAVE SE COMPRUEBA. `aplicaCalidad` cae a `media` cuando no la
+     reconoce, asi que una sonda que acepte cualquier cosa devuelve tres
+     veces la misma calidad sin fallar — pedirle 0/1/2 en vez de los nombres
+     informaba `det:1` en las tres y parecia que la palanca no hacia nada. */
+  cal: (k) => { if (!CALIDADES[k]) return { error: 'calidad?', hay: Object.keys(CALIDADES) };
+                PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
   panel: (id) => { verPanel(id); return PAN; },
   /* EL INDICE ES EL DE LA LISTA, 0..DUELOS-1, y se RECORTA a proposito:
      `armaMundo` hace `DUELO[n % largo]`, asi que pedir el 12 devuelve el 0
@@ -332,11 +337,20 @@ window.__A = {
     }
     return { choques, fuera, n: c.length, marco: [Math.round(m.width), Math.round(m.height)] };
   },
+  /* EL CUERPO Y LA CAJA DE CHOQUE SON DOS COSAS. El ragdoll es SOLO dibujo
+     —`cajaArq` sigue clavada en XA/XB— asi que la sonda tiene que informar
+     las dos: `rx/ry/rot` es donde se ve el cuerpo y no donde se le pega. */
   arq: () => ARQ.map(a => a && ({
     lado: a.lado, est: a.est, piso: a.piso, ang: +a.ang.toFixed(3),
     boca: [+a.boca.x.toFixed(2), +a.boca.y.toFixed(2)],
-    puesto: !!a.puesto,
+    puesto: !!a.puesto, rag: !!a.rag, muere: !!a.muere,
+    rx: +a.rx.toFixed(3), ry: +a.ry.toFixed(3), rot: +a.rot.toFixed(3),
+    tension: +a.k.toFixed(3),
   })),
+  /* un golpe a mano, para poder mirar el tumbo sin depender de que la
+     flecha acierte. `mata` deja al arquero en el piso: un muerto no se
+     levanta, y eso hay que poder comprobarlo aparte. */
+  golpe: (lado, cab, mata) => { arqRecibe(lado | 0, !!cab, cab ? DANO_CABEZA : DANO_CUERPO, !!mata); return window.__A.arq()[lado | 0]; },
   errs: () => window.__errs.slice(),
 };
 

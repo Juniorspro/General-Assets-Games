@@ -71,12 +71,12 @@ function perfilDe(forma, rnd) {
     for (let x = 0; x < NX; x++) h[x] = Math.round(7 + ondas(x, 1.6, f1));
   } else if (forma === 'escalon') {
     for (let x = 0; x < NX; x++) {
-      const k = cl((x - 5) / 7, 0, 1);
+      const k = cl((x - (XA + 3)) / (XB - XA - 4), 0, 1);
       h[x] = Math.round(mez(6, 12, k * k * (3 - 2 * k)) + ondas(x, 0.9, f2));
     }
   } else if (forma === 'valle') {
     for (let x = 0; x < NX; x++) {
-      const d = Math.abs(x - (NX - 1) / 2) / ((NX - 1) / 2);
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
       h[x] = Math.round(mez(2, 10, d * d) + ondas(x, 0.8, f1));
     }
   } else if (forma === 'mesa') {
@@ -86,7 +86,7 @@ function perfilDe(forma, rnd) {
     }
   } else if (forma === 'pico') {
     for (let x = 0; x < NX; x++) {
-      const d = Math.abs(x - (NX - 1) / 2) / ((NX - 1) / 2);
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
       h[x] = Math.round(mez(15, 6, Math.pow(d, 0.85)) + ondas(x, 0.7, f2));
     }
   }
@@ -141,7 +141,12 @@ function armaMundo(n, oc) {
      y encima no se ve, porque desde la camara queda detras del arquero.    */
   const libre = x => Math.abs(x - XA) > 2.5 && Math.abs(x - XB) > 2.5;
   if (D.forma === 'torre') {
-    const x0 = 6 + (rnd() < 0.5 ? 0 : 1);
+    /* LA TORRE VA EN EL MEDIO EXACTO Y NO SE MUEVE. Mide dos bloques, asi
+       que x0 = XM-1 la deja ocupando [8,10] con su centro en 9,0, que es el
+       medio entre los dos arqueros. Corrida una celda —que es lo que hacia
+       el sorteo— la tiene mas cerca uno de los dos, y lo que ya varia es la
+       altura, que es lo que de verdad cambia el tiro.                     */
+    const x0 = XM - 1;
     const alt = h[x0] + Math.max(2, Math.round((8 + Math.floor(rnd() * 3)) * oc));
     for (let x = x0; x <= x0 + 1; x++) for (let y = h[x]; y < alt; y++)
       for (let z = 0; z < NZ; z++) pon(M, x, y, z, LADRILLO);
@@ -149,10 +154,10 @@ function armaMundo(n, oc) {
        la torre puede perder ladrillos y seguir siendo una torre */
     for (let x = x0 - 1; x <= x0 + 2; x++) for (let z = 0; z < NZ; z++) pon(M, x, alt, z, METAL);
   } else if (D.forma === 'viga') {
-    const y0 = Math.round(h[7] + Math.max(2, (9 + Math.floor(rnd() * 3)) * oc));
-    for (let x = 5; x <= 9; x++) for (let z = 0; z < NZ; z++) pon(M, x, y0, z, METAL);
+    const y0 = Math.round(h[XM - 1] + Math.max(2, (9 + Math.floor(rnd() * 3)) * oc));
+    for (let x = XM - 2; x <= XM + 1; x++) for (let z = 0; z < NZ; z++) pon(M, x, y0, z, METAL);
   } else if (D.forma === 'bosque') {
-    for (let x = 4; x < NX - 3; x++) {
+    for (let x = XA + 2; x < NX - 3; x++) {
       if (!libre(x) || rnd() > 0.34) continue;
       const t0 = h[x], alt = 4 + Math.floor(rnd() * 3);
       for (let y = t0; y < t0 + alt; y++) for (let z = 1; z < NZ - 1; z++) pon(M, x, y, z, MADERA);

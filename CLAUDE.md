@@ -360,6 +360,131 @@ munecas.
   desplaza al orbitar el diorama, que no cuesta una sola llamada de dibujo. Vive partido en
   `herramientas/meko/partes/` y se arma con `python3 herramientas/meko/armar.py`.
 
+### Centésima sexagésima vuelta (2026-09-10): **ARCO** — el turno del rival, el mapa más grande y el tumbo
+
+Pedido textual: *"no veo la flecha del otro falta su turno, también que el mapa sea aún más grande y
+al pegarte una flecha te mandé hacia atrás con radgoll etc"*. Las tres cosas son de la misma vuelta y
+la segunda es la que obliga a resolver la primera.
+
+#### «NO VEO LA FLECHA DEL OTRO» NO ERA UN DEFECTO DE LÓGICA: EL RIVAL TIRABA SIN AVISAR
+
+El turno del rival existía y funcionaba —`piensa` duraba 0,85 s y después salía la flecha— pero
+**apuntaba y soltaba EN EL MISMO CUADRO**, así que el único aviso de que venía una flecha era la
+flecha. Y la flecha medía **27,9 px** de punta a punta en un marco de 412 sobre un cielo con nubes.
+Tres cosas, y ninguna es agrandar la flecha:
+
+- **El HUD lo dice** (`pistaRival`, en los tres idiomas): *«tira el rival…»*.
+- **El arco se tensa a la vista.** El tiro se resuelve **una vez** —volver a resolverlo por cuadro
+  daría un rival distinto en cada uno— y la tensión sube de cero a fondo en `RIV_TENSA` 0,72 s.
+  Medido en vivo: 0,167 → 0,417 → 0,9 y recién ahí sale.
+- **Y la flecha deja rastro**: catorce posiciones guardadas, un solo `beginPath`/`fill` por cuadro,
+  con el radio creciendo hacia la punta. Sin rastro, un objeto de treinta píxeles cruzando la
+  pantalla en un segundo es un parpadeo.
+
+#### EL MAPA MÁS GRANDE **OBLIGA** A UNA CÁMARA, Y ESO ES LO QUE ARREGLA LO ANTERIOR
+
+El mundo pasa de 15×32 a **18×32**, con los arqueros en 2 y 15: el vano crece de once celdas a
+**trece**. Y ahí aparece la contradicción: con un encuadre fijo que muestre las trece celdas más los
+márgenes, el arquero mide **53 px SIEMPRE** —cae de 62— y la flecha se queda en 27,9. O sea que
+agrandar el mapa achica al personaje, que es lo contrario de lo que este juego necesita.
+
+La salida es que el encuadre **no sea uno**: en espera se abre a 16,4 celdas de ancho y **con la
+flecha en vuelo se CIERRA sobre ella** hasta 11,8. Medido:
+
+| | celdas de ancho | px por celda | arquero | flecha |
+|---|---|---|---|---|
+| espera | 16,4 | 25,12 | 52,8 px | 27,9 px |
+| **en vuelo** | **11,8** | **34,9** | **73,3 px** | **38,7 px** |
+
+Lo único que se achica es el plano de espera; **lo que se agranda es justo lo que antes no se veía**.
+
+**Y LA CÁMARA ES SEGURA POR CONSTRUCCIÓN, que es lo que permite moverla.** La transformación del
+mundo es `translate` + `scale` **uniforme**, y `pantAMundo` es su inversa exacta: medido,
+`lineal()` da `peor: 0`. O sea que la dirección y la fuerza del tiro **no dependen del zoom** —
+arrastrar el dedo diez píxeles vale lo mismo con la cámara abierta que cerrada.
+
+**EL PISO DEL ENCUADRE VA CON EL ZOOM ACTUAL Y NO CON EL DE DESTINO.** `CAM.cy` se topa contra
+`SUELO_Y + camAlto(CAM.cel)` usando la celda **del cuadro**, no la que se está persiguiendo: con la
+del destino, en la mitad de la transición el borde de abajo cae por debajo del terreno y aparece
+vacío. Medido en las seis corridas: `cam.bajo` nunca por debajo de −1,15.
+
+#### EL TERRENO SE CENTRA EN LA ARENA Y NO EN EL MUNDO, Y LA TORRE SE VEÍA
+
+Con `XB` en 15 y `NX` en 18, el medio del mundo es 8,5 y **el medio entre los dos arqueros es 9,0**:
+el valle, el pico y la torre se dibujaban medio bloque corridos. La torre además se sorteaba
+`XM-2 + (0|1)`, o sea que quedaba **más cerca de uno de los dos** — y lo que tiene que variar de un
+duelo a otro es su ALTURA, que es lo que cambia el tiro, no de qué lado está. Fija en `XM-1` ocupa
+[8,10] con su centro en 9,0, y la viga en [7,11].
+
+Medido en la auditoría, los dos duelos de torre bajan de `va 28,9 / vb 26,3` y `28,6 / 24,5` a
+**25,1 / 23,7** y **23,0 / 19,9**: la torre equidistante saca el tiro extremo.
+
+#### EL TUMBO ES **SÓLO DIBUJO**, Y ESO NO ES UNA CONCESIÓN
+
+`cajaArq` está clavada en la columna del arquero y de ella dependen la auditoría de los doce duelos y
+los dos auto-jugadores. Un cuerpo que se mueva de verdad haría que el dibujo y el blanco dijeran
+cosas distintas, y encima el que acaba de recibir es justo el que tiene que tirar. Así que el ragdoll
+mueve `rx/ry/rot` —tres números de dibujo— y **el turno espera a que se levante** (`arqCayendo()`).
+La sonda informa las dos cosas por separado, que es lo único que deja comprobarlo.
+
+**EL QUE SE MUERE NO CUENTA EN ESA ESPERA**, o si no un golpe mortal deja la partida trabada para
+siempre esperando a alguien que no se va a parar.
+
+**Y EL EMPUJÓN SALE DEL DAÑO.** Un rozón de veinte y un cabezazo de setenta tienen que verse
+distinto: el número que sube en la barra ya lo dice y el cuerpo no puede contradecirlo. Medido el
+**pico** —muestreando cada 16 ms el tumbo entero, porque una sola lectura a los 200 ms agarra a los
+dos a mitad de camino y devuelve el mismo número—:
+
+| | se va | gira |
+|---|---|---|
+| cuerpo | **0,755 celdas** | 80° |
+| cabeza | **1,05** (el tope) | 93°, boca arriba |
+
+**Y EL TOPE SALE DE LA MESETA MEDIDA, no de un número lindo.** El aplanado de `c.js` va de X−1 a
+X+1, así que el piso plano del rival llega a x = 17 y el arquero está en 15,5. Con el primer valor
+—1,35— el cuerpo tumbado quedaba con el hombro colgando del canto **y** cortado por el borde del
+cuadro en reposo.
+
+**LA PRIMERA CALIBRACIÓN DEL IMPULSO ESTABA MAL Y SE VIO MIDIENDO:** con 2,4 y 3,2 el cuerpo llegaba
+al tope **también con un golpe de cuerpo**, o sea que el clamp se comía justo la diferencia que el
+empujón existe para mostrar — un rozón y un cabezazo terminaban en la misma pose.
+
+**Y HAY UN CUARTO SITIO DONDE EL CUERPO NO ENTRA: EL FINAL DEL DUELO.** Al terminar, la cámara se
+soltaba y volvía al plano de espera, y ahí las 16,4 celdas **no alcanzan** para un cuerpo tumbado: la
+cabeza del rival llega a x 17,19 contra un borde en 17,20. Entró `arqMuerto()`, que enfoca el cuerpo
+—y va **después** de `arqFin`, porque `arqFin` es quien decide si el perdedor se queda en el piso:
+preguntando antes devuelve siempre null—. Medido: `cx 13,95 · der 19,85` con el muerto en 16,1.
+
+#### UN DEFECTO DE LA SONDA, DEL TIPO DE SIEMPRE
+
+`cal(k)` aceptaba cualquier cosa, y `aplicaCalidad` cae a `media` cuando no reconoce la clave: el
+plan del banco le pasaba **0/1/2** en vez de los nombres y las tres calidades devolvían `det:1`, o
+sea que la palanca parecía no hacer nada. Con la clave comprobada: **71 · 73 · 73 llamadas de dibujo
+con `det` 0 · 1 · 2**, y una clave mala contesta `{error:'calidad?', hay:[...]}`.
+
+#### MEDIDO AL CERRAR
+
+Auditoría en node **12 de 12, 0 malos**, con la torre re-centrada. Auto-jugador sobre **40 semillas
+por duelo, 480 partidas por fila**:
+
+| precisión del bot | gana |
+|---|---|
+| 1,00 | **80,2 %** |
+| 0,95 | 72,3 |
+| 0,88 | 68,8 |
+| 0,75 | 61,9 |
+| 0,55 | 47,3 |
+| 0,30 | 32,5 |
+| **al azar** | **4,2 %** |
+
+Monótona, y el que tira a ciegas gana el 4,2 %. Auditoría del tutorial `ok: true` (v 16,68 · ángulo
+46,6 · libre · viento 2,4). Inversa de la proyección `peor: 0`. Duelo entero jugado en el navegador
+—**5 aciertos de 9 flechas**, el tumbo por el camino de verdad con la cámara enfocada, y el panel de
+final abriéndose solo—. Turno del rival verificado en vivo: pista *«tira el rival…»*, tensión
+0,167 → 0,417 → 0,9 y la flecha con su rastro. **Cero solapamientos y cero elementos fuera del
+marco** en el menú, la partida y el final, en los tres idiomas. Costo **71 a 79 llamadas de dibujo**.
+`window.__errs` **vacío en las siete corridas**. El HTML quedó en **154 KB**, sin un solo asset.
+
 ### Centésima quincuagésima novena vuelta (2026-09-10): **ARCO** — el 3D se tira entero y el juego pasa a vector plano
 
 Pedido textual, mandado dos veces con dos capturas de Bowmasters: *"hey 3D no, arco es un juego 2D

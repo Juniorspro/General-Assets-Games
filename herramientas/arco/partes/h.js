@@ -19,6 +19,8 @@ const JU = {
   fin: false, tuto: false, paso: 0, pausa: false,
 };
 const VU = { on: false, pts: null, r: null, t: 0, dur: 0, vx: 0, vy: 0, w: 0, quien: 0 };
+const RIV = { d: null, k: 0 };      /* el tiro del rival, resuelto una sola vez */
+const RIV_TENSA = 0.72;             /* lo que tarda en tensar, a la vista */
 const DT_PTS = 13 * PASO_F;
 
 /* ── PANELES ────────────────────────────────────────────────────────────── */
@@ -64,8 +66,14 @@ function pintaHud() {
     ? '<u>' + TX('calma') + '</u>'
     : '<u>' + TX('viento') + '</u> ' + (w > 0 ? '▶' : '◀') + ' ' + Math.abs(w).toFixed(1);
   $('duelo').textContent = JU.tuto ? TX('tutTit') : TX('duelo', JU.n + 1);
+  /* Y EL TURNO DEL RIVAL SE ANUNCIA. Estaba en blanco: el rival se tomaba
+     casi un segundo pensando sin una sola senial en pantalla, asi que desde
+     afuera el juego se veia trabado y despues aparecia una flecha de la
+     nada. Lo que faltaba no era la flecha, era saber que le tocaba a el. */
   const pi = JU.tuto ? TX('tut' + Math.min(4, JU.paso + 1))
-    : (JU.est === 'apunta' && JU.turno === 0 ? TX('pistaTira') : '');
+    : (JU.turno === 0
+        ? (JU.est === 'apunta' ? TX('pistaTira') : '')
+        : ((JU.est === 'piensa' || JU.est === 'vuela') ? TX('pistaRival') : ''));
   /* la pista arranca en `opacity:0` y la enciende su clase: escribiendo sólo
      el texto, los cuatro pasos del tutorial no se leen en ninguna parte */
   $('pista').textContent = pi;
@@ -79,12 +87,20 @@ function avisa(tx, ms) {
 }
 /* el numero del dano SALE DEL PUNTO DEL IMPACTO, proyectado con la misma
    camara: puesto en un sitio fijo del HUD no diria a quien le pegaron.    */
+/* Y SE REPINTA CADA CUADRO MIENTRAS DURA: con la camara moviendose, un
+   numero colocado una sola vez se despega del sitio donde pego la flecha. */
+const GOL = { on: false, x: 0, y: 0 };
 function golpeEn(x, y, tx, cab) {
-  const p = mundoAPant(x, y);
   const e = $('golpe');
   e.textContent = tx; e.className = cab ? 'cab on' : 'on';
+  GOL.on = true; GOL.x = x; GOL.y = y; golpeMueve();
+  clearTimeout(golpeEn._t);
+  golpeEn._t = setTimeout(() => { e.className = ''; GOL.on = false; }, 1000);
+}
+function golpeMueve() {
+  if (!GOL.on) return;
+  const p = mundoAPant(GOL.x, GOL.y), e = $('golpe');
   e.style.left = p.x + 'px'; e.style.top = p.y + 'px';
-  clearTimeout(golpeEn._t); golpeEn._t = setTimeout(() => e.className = '', 1000);
 }
 
 /* ── IDIOMA ───────────────────────────────────────────────────────────────
@@ -203,7 +219,11 @@ function arranca(M, tuto) {
   VU.on = false;
   construyeMundo(M);
   arqEntra(M);
+  RIV.d = null; RIV.k = 0;
   flechaOculta(); previaOculta(); limpiaClavadas();
+  /* la camara se PLANTA y no lerpea: viniendo del duelo anterior, el primer
+     medio segundo del duelo nuevo seria un viaje que nadie pidio */
+  camSuelta(); camPlanta();
   musRaiz(RAICES[(M.paleta || 0) % RAICES.length]);
   auViento(M.viento);
   verPanel(null);
@@ -248,10 +268,14 @@ function tira(l, vx, vy) {
    que es donde de verdad se clavaria una punta que entro y estallo.       */
 function impacto(r) {
   const M = JU.M;
+  camFoco(r.x, r.y);      /* la camara se queda donde pego */
   if (r.fin === 'arq') {
     const dn = danoDe(r);
     if (r.quien === 0) JU.va -= dn; else { JU.vb -= dn; if (VU.quien === 0) JU.aciertos++; }
-    arqRecibe(r.quien, r.cab);
+    /* SI EL GOLPE MATA SE SABE ACA Y NO EN `termina`: el que se muere se
+       queda en el piso, y para eso el tumbo tiene que enterarse en el mismo
+       cuadro — enterandose despues, el cuerpo ya se levanto. */
+    arqRecibe(r.quien, r.cab, dn, (r.quien === 0 ? JU.va : JU.vb) <= 0);
     son(r.cab ? 'cabeza' : 'pega');
     golpeEn(r.x, r.y, '-' + dn, r.cab);
     if (r.cab) avisa(TX('cabezazo'), 1100);
@@ -288,6 +312,7 @@ function impacto(r) {
 function duePaso(dt) {
   const M = JU.M; if (!M || JU.pausa) return;
   JU.t += dt;
+  golpeMueve();
 
   if (JU.est === 'vuela') {
     VU.t += dt;
@@ -300,6 +325,7 @@ function duePaso(dt) {
        posiciones dibujadas: en el apice vy cruza el cero y con posiciones la
        flecha pega un tiron justo ahi. */
     flechaPon(x, y, VU.vx + VU.w * u, VU.vy - G * u);
+    camFoco(x, y);
     if (VU.t >= VU.dur) {
       VU.on = false;
       impacto(VU.r);
@@ -310,6 +336,11 @@ function duePaso(dt) {
        mismo cuadro, el golpe no se llega a ver y el duelo se lee a una
        sucesion de numeros. */
     if (JU.t < 0.95) return;
+    /* EL TURNO NO PASA CON ALGUIEN EN EL PISO: el que acaba de recibir es
+       justo el que tiene que tirar, y la caja de choque esta clavada en su
+       columna — tirando desde el suelo, el dibujo y el blanco dirian cosas
+       distintas. El que se murio no cuenta: ese no se levanta. */
+    if (arqCayendo()) return;
     if (JU.va <= 0 || JU.vb <= 0) { termina(); return; }
     /* EN EL TUTORIAL EL TURNO NO PASA Y UN SOLO ACIERTO ALCANZA: el rival
        esta ahi de blanco, no de rival, y tres impactos para terminar de
@@ -321,14 +352,20 @@ function duePaso(dt) {
     JU.turno = 1 - JU.turno;
     JU.est = JU.turno === 0 ? 'apunta' : 'piensa';
     JU.t = 0; HUD_ANT = '';
-    if (JU.turno === 0) { son('turno'); arqQuieto(0); }
+    camSuelta();          /* la camara se abre otra vez al plano de espera */
+    son('turno');
+    if (JU.turno === 0) arqQuieto(0); else { RIV.d = null; RIV.k = 0; }
   } else if (JU.est === 'piensa') {
-    /* el rival se toma un momento: tirando en el cuadro en que le toca, el
-       jugador no ve de quien salio la flecha */
-    if (JU.t < 0.85) return;
-    const d = tiroRival(M, M.prec, Math.random);
-    arqApunta(1, Math.atan2(d.vy, d.vx), 0.9);
-    tira(1, d.vx, d.vy);
+    /* EL RIVAL TENSA A LA VISTA, y eso no es adorno: antes apuntaba y
+       soltaba EN EL MISMO CUADRO, o sea que el unico aviso de que la flecha
+       venia era la flecha. Ahora el tiro se resuelve UNA vez —volver a
+       resolverlo por cuadro daria un rival distinto en cada uno— y la
+       tension sube de cero a fondo mientras el arco se llena. */
+    if (!RIV.d) { RIV.d = tiroRival(M, M.prec, Math.random); RIV.k = 0; }
+    RIV.k = Math.min(1, RIV.k + dt / RIV_TENSA);
+    const ang = Math.atan2(RIV.d.vy, RIV.d.vx);
+    arqApunta(1, ang, RIV.k * 0.9);
+    if (RIV.k >= 1 && JU.t >= RIV_TENSA + 0.18) { const d = RIV.d; RIV.d = null; tira(1, d.vx, d.vy); }
   }
   pintaHud();
 }
@@ -337,6 +374,10 @@ function termina() {
   JU.fin = true; JU.est = 'fin';
   const gano = JU.vb <= 0 && JU.va > 0;
   arqFin(0, gano); arqFin(1, !gano);
+  /* EL ORDEN IMPORTA: `arqFin` es quien decide si el perdedor se queda en el
+     piso, asi que preguntar por el muerto ANTES devuelve siempre null.     */
+  const mu = arqMuerto();
+  if (mu) camFoco(mu.x, mu.y); else camSuelta();
   son(gano ? 'gana' : 'pierde');
   if (gano && !JU.tuto && PROG.hechos.indexOf(JU.n) < 0) { PROG.hechos.push(JU.n); guardaProg(); }
   clearTimeout(termina._t);

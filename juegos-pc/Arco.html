@@ -292,22 +292,27 @@ const esParaT = t => t !== VACIO;
 const esRompeT = t => t !== VACIO && BLOQ[t].rompe === 1;
 
 /* ── EL MUNDO ─────────────────────────────────────────────────────────────
-   NX FIJO EN LOS DOCE DUELOS, y no es pereza: el marco mide lo que mide, asi
-   que el ancho del mundo decide cuantos pixeles vale una celda — y de eso sale
-   el mapeo entre lo que arrastra el dedo y la velocidad de la flecha. Con un
-   ancho por duelo, la fuerza que uno aprendio en el duelo 3 mentiria en el 4.
-   Lo que cambia entre duelos es el TERRENO, el viento y el rival.           */
-const NX = 15, NY = 30, NZ = 5;
+   NX FIJO EN LOS DOCE DUELOS, y no es pereza: el mapeo entre lo que arrastra
+   el dedo y la velocidad de la flecha sale del tamanio de una celda en
+   pixeles. Con un ancho por duelo, la fuerza que uno aprendio en el duelo 3
+   mentiria en el 4. Lo que cambia entre duelos es el TERRENO, el viento y el
+   rival.
+   Y TODO LO DEL TERRENO SE DERIVA DE XA, XB Y XM: escrito a mano —la torre en
+   la columna 6, la viga de la 5 a la 9— agrandar el mapa deja los obstaculos
+   apilados contra el arquero de la izquierda y el duelo se rompe sin que nada
+   falle.                                                                    */
+const NX = 18, NY = 32, NZ = 5;
 const ZC = 2;              /* el plano por el que vuela la flecha: el del medio */
-const XA = 2, XB = 13;     /* las dos columnas de los arqueros — 11 celdas      */
+const XA = 2, XB = 15;     /* las dos columnas de los arqueros — 13 celdas      */
+const XM = Math.round((XA + XB) / 2);   /* el medio de la arena, para el terreno */
 
-/* EL ANCHO DEL MUNDO SALE DEL PORTE DEL ARQUERO Y NO AL REVES, y es la unica
-   cuenta que decide como se ve este juego. En un marco 9:16 la separacion
-   entre los dos manda sobre todo lo demas: el arquero mide 3,0 celdas y con
-   quince de ancho el encuadre deja ver unas 35, o sea que el cuerpo ocupa el
-   8,5 % del alto —unos 76 px en un telefono— y los once de separacion el 65 %
-   del ancho. Con las dieciocho de la primera version el arquero bajaba a 62
-   px y dejaba de leerse la cara.                                           */
+/* EL MAPA CRECIO Y EL ARQUERO NO SE ACHICO, y eso SOLO SE PUEDE con una
+   camara que se mueva. En un marco 9:16 el ancho manda: mostrar trece celdas
+   de separacion con un encuadre fijo dejaria al arquero en 53 px SIEMPRE.
+   Con la camara en reposo abierta y CERRANDOSE sobre la flecha en vuelo, lo
+   unico que se achica es el plano de espera —el cuerpo baja de 62 a 53 px— y
+   lo que se AGRANDA es lo que antes no se veia: en vuelo mide 73 px y la
+   flecha 39 contra 33. Es lo que hace Bowmasters.                          */
 
 /* ── LA BALISTICA ─────────────────────────────────────────────────────────
    LOS NUMEROS NO SE ELIGEN, SE DERIVAN. Se decide que el tiro de 45 grados a
@@ -368,6 +373,7 @@ const LANGS = {
     vos: 'VOS', viento: 'VIENTO', calma: 'CALMA',
     tuTurno: 'TU TURNO', suTurno: 'TIRA {0}',
     pistaTira: 'arrastrá para atrás y soltá',
+    pistaRival: 'tira el rival…',
     pistaFuerza: 'cuanto más lejos tirás del dedo, más fuerte',
     falla: 'AFUERA', cabezazo: '¡EN LA CABEZA!',
     pie: 'sin un solo asset · todo dibujado por código', cargando: 'CARGANDO',
@@ -395,6 +401,7 @@ const LANGS = {
     vos: 'YOU', viento: 'WIND', calma: 'CALM',
     tuTurno: 'YOUR TURN', suTurno: '{0} SHOOTS',
     pistaTira: 'drag backwards and let go',
+    pistaRival: 'rival is shooting…',
     pistaFuerza: 'the further you pull, the harder it flies',
     falla: 'MISS', cabezazo: 'HEADSHOT!',
     pie: 'not one asset · all drawn in code', cargando: 'LOADING',
@@ -422,6 +429,7 @@ const LANGS = {
     vos: 'VOCÊ', viento: 'VENTO', calma: 'CALMA',
     tuTurno: 'SUA VEZ', suTurno: '{0} ATIRA',
     pistaTira: 'arraste para trás e solte',
+    pistaRival: 'o rival vai atirar…',
     pistaFuerza: 'quanto mais puxa, mais forte o tiro',
     falla: 'ERROU', cabezazo: 'NA CABEÇA!',
     pie: 'sem um único asset · tudo desenhado em código', cargando: 'CARREGANDO',
@@ -542,12 +550,12 @@ function perfilDe(forma, rnd) {
     for (let x = 0; x < NX; x++) h[x] = Math.round(7 + ondas(x, 1.6, f1));
   } else if (forma === 'escalon') {
     for (let x = 0; x < NX; x++) {
-      const k = cl((x - 5) / 7, 0, 1);
+      const k = cl((x - (XA + 3)) / (XB - XA - 4), 0, 1);
       h[x] = Math.round(mez(6, 12, k * k * (3 - 2 * k)) + ondas(x, 0.9, f2));
     }
   } else if (forma === 'valle') {
     for (let x = 0; x < NX; x++) {
-      const d = Math.abs(x - (NX - 1) / 2) / ((NX - 1) / 2);
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
       h[x] = Math.round(mez(2, 10, d * d) + ondas(x, 0.8, f1));
     }
   } else if (forma === 'mesa') {
@@ -557,7 +565,7 @@ function perfilDe(forma, rnd) {
     }
   } else if (forma === 'pico') {
     for (let x = 0; x < NX; x++) {
-      const d = Math.abs(x - (NX - 1) / 2) / ((NX - 1) / 2);
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
       h[x] = Math.round(mez(15, 6, Math.pow(d, 0.85)) + ondas(x, 0.7, f2));
     }
   }
@@ -612,7 +620,12 @@ function armaMundo(n, oc) {
      y encima no se ve, porque desde la camara queda detras del arquero.    */
   const libre = x => Math.abs(x - XA) > 2.5 && Math.abs(x - XB) > 2.5;
   if (D.forma === 'torre') {
-    const x0 = 6 + (rnd() < 0.5 ? 0 : 1);
+    /* LA TORRE VA EN EL MEDIO EXACTO Y NO SE MUEVE. Mide dos bloques, asi
+       que x0 = XM-1 la deja ocupando [8,10] con su centro en 9,0, que es el
+       medio entre los dos arqueros. Corrida una celda —que es lo que hacia
+       el sorteo— la tiene mas cerca uno de los dos, y lo que ya varia es la
+       altura, que es lo que de verdad cambia el tiro.                     */
+    const x0 = XM - 1;
     const alt = h[x0] + Math.max(2, Math.round((8 + Math.floor(rnd() * 3)) * oc));
     for (let x = x0; x <= x0 + 1; x++) for (let y = h[x]; y < alt; y++)
       for (let z = 0; z < NZ; z++) pon(M, x, y, z, LADRILLO);
@@ -620,10 +633,10 @@ function armaMundo(n, oc) {
        la torre puede perder ladrillos y seguir siendo una torre */
     for (let x = x0 - 1; x <= x0 + 2; x++) for (let z = 0; z < NZ; z++) pon(M, x, alt, z, METAL);
   } else if (D.forma === 'viga') {
-    const y0 = Math.round(h[7] + Math.max(2, (9 + Math.floor(rnd() * 3)) * oc));
-    for (let x = 5; x <= 9; x++) for (let z = 0; z < NZ; z++) pon(M, x, y0, z, METAL);
+    const y0 = Math.round(h[XM - 1] + Math.max(2, (9 + Math.floor(rnd() * 3)) * oc));
+    for (let x = XM - 2; x <= XM + 1; x++) for (let z = 0; z < NZ; z++) pon(M, x, y0, z, METAL);
   } else if (D.forma === 'bosque') {
-    for (let x = 4; x < NX - 3; x++) {
+    for (let x = XA + 2; x < NX - 3; x++) {
       if (!libre(x) || rnd() > 0.34) continue;
       const t0 = h[x], alt = 4 + Math.floor(rnd() * 3);
       for (let y = t0; y < t0 + alt; y++) for (let z = 1; z < NZ - 1; z++) pon(M, x, y, z, MADERA);
@@ -892,23 +905,38 @@ let DIO = null;
 let LLAM = 0, LLAM_ANT = 0;
 let DET = 1;
 
-/* CUANTAS CELDAS ENTRAN DE ANCHO, y de ahi sale todo lo demas. NO SON LAS
-   QUINCE DEL MUNDO: los arqueros estan en 2,5 y 13,5, o sea que las dos
-   columnas y media de cada punta no las mira nadie nunca. Mostrandolas, el
-   marco 9:16 termina enseniando 34 celdas de ALTO —el doble de lo que sube
-   la flecha mas alta del juego, medida— y los dos tercios de arriba de la
-   pantalla quedan de cielo vacio.
-   EL PISO LO PONE EL ANCHO Y NO EL ALTO: el cuerpo del arquero con su carcaj
-   llega a x 1,98, asi que con 13,2 el canto izquierdo cae en 1,4 y quedan
-   dieciocho pixeles de aire — se lee a arquero apoyado contra el borde. Con
-   14,0 el canto cae en 1,0 y quedan veintinueve, y el arquero sigue midiendo
-   88 px contra los 78 del encuadre viejo.                                  */
-const ENC_CELDAS = 14.0;
-/* Y EL ENCUADRE SE CENTRA EN LA ARENA, NO EN EL MUNDO: el medio entre los
-   dos arqueros es 8 y el del mundo 7,5, asi que centrando en el mundo el de
-   la derecha queda media celda mas cerca del canto que el de la izquierda. */
+/* ── LA CAMARA ────────────────────────────────────────────────────────────
+   HAY UNA CAMARA PORQUE EL MAPA CRECIO, y las dos cosas son la misma
+   decision. En un marco 9:16 el ancho manda: mostrar de una las trece celdas
+   que separan a los arqueros deja el cuerpo en 62 px y la flecha en 20 —o
+   sea que la flecha del rival, que cruza el cuadro en cuatro decimas, no se
+   ve—. Con encuadre fijo no hay numero que arregle las dos cosas: agrandar
+   el mapa achica todo lo que hay adentro.
+
+   ASI QUE EL ENCUADRE SE ABRE EN REPOSO Y SE CIERRA SOBRE LA FLECHA. Lo
+   unico que se achica es el plano de espera —el cuerpo del arquero baja de
+   62 a 53 px— y lo que se AGRANDA es justamente lo que antes no se veia: en
+   vuelo el cuerpo mide 73 px y la flecha 39 contra 33. Medido en el marco de
+   412: 25,1 px por celda esperando y 34,9 en vuelo.
+
+   Y APUNTAR NO SE ROMPE, que es lo que hay que comprobar antes de mover una
+   camara en un juego de punteria: `mundoAPant` es una escala UNIFORME, asi
+   que un DELTA pasado por `pantAMundo` conserva la direccion —la escala se
+   divide sola al normalizar— y la fuerza sale de pixeles del marco. Las dos
+   son invariantes al zoom, medido.                                        */
+const CEL_REPOSO = 16.4;   /* celdas de ancho esperando  */
+const CEL_VUELO  = 11.8;   /* celdas de ancho en vuelo   */
+const CAM_VEL = 3.6;       /* con que rapidez sigue      */
+const CAM_ZOOM = 2.8;      /* y con que rapidez cierra   */
+const CAM_ALTO = 7;        /* cuanto puede subir sobre el piso siguiendo la flecha */
+/* EL ENCUADRE SE CENTRA EN LA ARENA, NO EN EL MUNDO: el medio entre los dos
+   arqueros es 8,5 y el del mundo 9, asi que centrando en el mundo el de la
+   derecha queda media celda mas cerca del canto que el de la izquierda. */
 const ENC_CX = (XA + XB) / 2 + 0.5;
 const SUELO_Y = -1.15;     /* la linea del mundo que cae en el canto de abajo */
+const CAM = { cx: ENC_CX, cy: 16, cel: CEL_REPOSO, foco: null };
+/* medio alto visible, en celdas, para un ancho dado */
+const camAlto = cel => ALTO * cel / (2 * ANCHO);
 
 /* ── COLOR ────────────────────────────────────────────────────────────────
    Todo pasa por aca. Con los colores escritos a mano en cada sitio, subir la
@@ -1029,12 +1057,37 @@ function cieloLienzo(pi) {
    No hay camara: hay una escala y dos corrimientos. `pantAMundo` es la
    inversa EXACTA de `mundoAPant` porque las dos son la misma division.    */
 function encuadra() {
-  PX = ANCHO / ENC_CELDAS;
-  OFX = ANCHO / 2 - ENC_CX * PX;
-  OFY = ALTO + SUELO_Y * PX;          /* y del mundo = 0 cae aca */
+  PX = ANCHO / CAM.cel;
   ENC_W = ANCHO / (2 * PX);
   ENC_H = ALTO / (2 * PX);
-  MIRA = SUELO_Y + ENC_H;
+  OFX = ANCHO / 2 - CAM.cx * PX;
+  OFY = ALTO / 2 + CAM.cy * PX;
+  MIRA = CAM.cy;
+}
+/* a donde quiere ir la camara AHORA. Sin foco, al plano de espera. */
+function camObj() {
+  if (!CAM.foco) return { x: ENC_CX, y: SUELO_Y + camAlto(CEL_REPOSO), cel: CEL_REPOSO };
+  const y0 = SUELO_Y + camAlto(CEL_VUELO);
+  /* la x se topa DENTRO de las alas del terreno (tres celdas a cada lado),
+     asi que por mucho que la flecha se vaya de la arena no aparece el vacio
+     de mas alla del mundo */
+  return { x: cl(CAM.foco.x, XA + 1, XB - 1), y: cl(CAM.foco.y, y0, y0 + CAM_ALTO), cel: CEL_VUELO };
+}
+function camFoco(x, y) { CAM.foco = { x, y }; }
+function camSuelta() { CAM.foco = null; }
+function camPlanta() { const o = camObj(); CAM.cx = o.x; CAM.cy = o.y; CAM.cel = o.cel; encuadra(); }
+function camPaso(dt) {
+  const o = camObj();
+  const kr = 1 - Math.exp(-dt * CAM_VEL), kz = 1 - Math.exp(-dt * CAM_ZOOM);
+  CAM.cx += (o.x - CAM.cx) * kr;
+  CAM.cy += (o.y - CAM.cy) * kr;
+  CAM.cel += (o.cel - CAM.cel) * kz;
+  /* EL PISO DE LA CAMARA SE MIDE CON EL ZOOM DEL CUADRO Y NO CON EL DE
+     DESTINO: durante el cierre, la altura visible baja mas despacio que la
+     camara, y sin este piso aparece una franja de vacio debajo del terreno.
+     Con el, la camara solo puede bajar al ritmo al que se cierra.        */
+  CAM.cy = Math.max(CAM.cy, SUELO_Y + camAlto(CAM.cel));
+  encuadra();
 }
 function mundoAPant(x, y) { return { x: OFX + x * PX, y: OFY - y * PX }; }
 function pantAMundo(dpx, dpy) { return { x: dpx / PX, y: -dpy / PX }; }
@@ -1058,7 +1111,7 @@ function medir() {
   ANCHO = Math.max(1, Math.round(m.width)); ALTO = Math.max(1, Math.round(m.height));
   document.documentElement.style.setProperty('--mw', ANCHO + 'px');
   if (CV) { CV.width = Math.round(ANCHO * DPR); CV.height = Math.round(ALTO * DPR); }
-  encuadra();
+  if (CAM.foco) encuadra(); else camPlanta();
   if (DIO) rayasArma(DIO.M ? DIO.M.viento : 0);
 }
 
@@ -1305,6 +1358,7 @@ function construyeMundo(M) {
     cla: [],                        /* las clavadas */
     eqD: new Float32Array(26 * 5), eqN: 0, eqC: [200, 200, 200],
     raD: new Float32Array(30 * 3), raN: 0,
+    esD: new Float32Array(EST_N * 2), esI: 0, esN: 0,   /* la estela */
   };
   rayasArma(M.viento);
 }
@@ -1313,8 +1367,25 @@ function rehaceTerreno() { if (DIO) DIO.terr = terrArma(DIO.M); }
 /* ── LA FLECHA ────────────────────────────────────────────────────────────
    El rumbo sale de la VELOCIDAD y no de restar dos posiciones: en el apice
    vy cruza el cero y con posiciones la flecha pega un tiron justo ahi.    */
-function flechaPon(x, y, vx, vy) { if (DIO) DIO.fl = { x, y, a: Math.atan2(vy, vx) }; }
-function flechaOculta() { if (DIO) DIO.fl = null; }
+/* ── LA ESTELA ────────────────────────────────────────────────────────────
+   ES LO QUE HACE VISIBLE LA FLECHA DEL RIVAL. Su vuelo dura unas cuatro
+   decimas y la flecha mide 33 px: mirando el cuadro suelto no hay nada que
+   ver, porque lo que la delata no es su forma sino su RECORRIDO. Catorce
+   posiciones guardadas —siete celdas de cola a velocidad de crucero— y todas
+   en UN solo trazo: son puntos que se achican, igual que la vista previa, y
+   eso no es coqueteria — con una polilinea que se afina harian falta trece
+   llamadas de dibujo por cuadro sobre un cuadro que cuesta setenta y cinco.
+   Y de paso las dos cosas hablan el mismo idioma: puntos blancos = camino de
+   la flecha, antes y despues de soltarla.                                 */
+const EST_N = 14;
+function flechaPon(x, y, vx, vy) {
+  if (!DIO) return;
+  DIO.fl = { x, y, a: Math.atan2(vy, vx) };
+  DIO.esD[DIO.esI * 2] = x; DIO.esD[DIO.esI * 2 + 1] = y;
+  DIO.esI = (DIO.esI + 1) % EST_N;
+  if (DIO.esN < EST_N) DIO.esN++;
+}
+function flechaOculta() { if (DIO) { DIO.fl = null; DIO.esN = 0; DIO.esI = 0; } }
 function previaPon(pts, n) {
   if (!DIO) return;
   const c = Math.min(n, Math.floor(pts.length / 2));
@@ -1364,19 +1435,25 @@ function estalla(x, y, tp, fuerza) {
 }
 
 /* ── LAS RAYAS DEL VIENTO ─────────────────────────────────────────────── */
+/* LA BANDA DE LAS RAYAS ES FIJA Y NO SALE DEL ENCUADRE: con la camara
+   moviendose, sembrarlas contra el alto visible del momento las dejaria
+   apiladas en la franja del ultimo `medir()` — y encima habria que
+   resembrarlas por cuadro, que es justo lo que este arreglo no hace. */
+const RAYA_ALTO = 34;
 function rayasArma(w) {
   if (!DIO) return;
   const n = Math.abs(w) < 0.4 ? 0 : (DET === 0 ? 12 : DET === 1 ? 20 : 30);
   const R = azar(((w * 100) | 0) + 991);
   for (let i = 0; i < n; i++) {
     DIO.raD[i * 3] = R() * (NX + 8) - 4;
-    DIO.raD[i * 3 + 1] = 4 + R() * (ENC_H * 2 - 4);
+    DIO.raD[i * 3 + 1] = 4 + R() * RAYA_ALTO;
     DIO.raD[i * 3 + 2] = 0.5 + R() * 1.2;
   }
   DIO.raN = n;
 }
 
 function escPaso(dt, w) {
+  camPaso(dt);
   if (!DIO) return;
   CIELO_OX -= (w || 0) * dt * 1.9;
   if (DIO.eqN > 0) {
@@ -1452,6 +1529,18 @@ function escDibuja() {
     }
     g.fill(); LLAM++;
   }
+  if (DIO.fl && DIO.esN > 1) {
+    const n = DIO.esN;
+    g.fillStyle = 'rgba(255,255,255,.36)';
+    g.beginPath();
+    for (let k = 0; k < n; k++) {
+      const i = (DIO.esI - n + k + EST_N * 2) % EST_N;
+      const u = (k + 1) / n, r = 0.105 * u * u;
+      const x = DIO.esD[i * 2], y = DIO.esD[i * 2 + 1];
+      g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832);
+    }
+    g.fill(); LLAM++;
+  }
   if (DIO.fl) flechaP(g, DIO.fl.x, DIO.fl.y, DIO.fl.a, '#4a3222', '#f2ece0');
 
   if (DIO.eqN > 0) {
@@ -1473,7 +1562,12 @@ function escCosto() {
   return { llamadas: LLAM_ANT, triangulos: 0, cal: PROG.cal,
            px: +DPR.toFixed(2), w: ANCHO, h: ALTO, det: DET,
            encW: +ENC_W.toFixed(2), encH: +ENC_H.toFixed(2), mira: +MIRA.toFixed(2),
-           celda: +PX.toFixed(2) };
+           celda: +PX.toFixed(2),
+           cam: { cx: +CAM.cx.toFixed(2), cy: +CAM.cy.toFixed(2), cel: +CAM.cel.toFixed(2),
+                  foco: !!CAM.foco,
+                  arqPx: +(ARQ_ALTO * PX).toFixed(1), flePx: +((FL_L + 0.16) * PX).toFixed(1),
+                  bajo: +(CAM.cy - ENC_H).toFixed(3), izq: +(CAM.cx - ENC_W).toFixed(2),
+                  der: +(CAM.cx + ENC_W).toFixed(2) } };
 }
 /* ══════════════════════════════════════════════════════════════════════════
    F · LOS DOS ARQUEROS, EN VECTOR PLANO
@@ -1505,6 +1599,54 @@ const CADERA_Y = 0.88, PIERNA_L = 0.88;
    el codo se estira en linea recta al llegar al limite y el brazo se lee a
    palo en la pose que mas se mira, que es la de apuntar.                  */
 const BR1 = 0.50, BR2 = 0.46;
+
+/* ── EL TUMBO ─────────────────────────────────────────────────────────────
+   ES DIBUJO Y NADA MAS, Y ESO NO ES UNA CONCESION: `cajaArq` —el blanco— vive
+   clavada en la columna del arquero, en `d.js`, y de ella dependen el
+   resolvedor, la auditoria de los doce duelos y el auto-jugador. Un cuerpo
+   que se lleva su propia caja mientras rueda convertiria «apuntarle al
+   arquero» en apuntarle a donde estaba hace medio segundo, y la auditoria
+   aprobaria duelos que no se pueden pelear.
+   Y NO HACE FALTA que la caja se mueva, porque los turnos son alternos: el
+   unico momento en que un cuerpo esta fuera de su puesto es justo despues de
+   recibir un flechazo, y ahi le toca tirar A EL. Por eso `espera` no pasa el
+   turno mientras haya alguien en el piso (`arqCayendo`).
+
+   EL CUERPO ES UN SOLIDO Y LOS MIEMBROS SON RESORTES. Con el cuerpo entero
+   girando en bloque se lee a tabla que cae; lo que dice «esto es un cuerpo
+   sin fuerzas» es que los brazos y las piernas lleguen TARDE — cada uno con
+   su muelle subamortiguado apuntando a colgar hacia abajo en el MUNDO, o sea
+   a `-rot` en el marco del arquero.                                        */
+const G_RAG = 18;              /* la gravedad del tumbo, en celdas/s^2      */
+/* EL IMPULSO ESTA CALIBRADO CONTRA EL TOPE, y el primer valor no lo estaba:
+   con 2,4 y 3,2 el cuerpo llegaba al canto de la meseta y al maximo de giro
+   TAMBIEN con un golpe de cuerpo, asi que un rozon y un cabezazo terminaban
+   en la misma pose — el clamp se comia justo la diferencia que el empujon
+   existe para mostrar. Medido, ahora el cuerpo se va 0,84 celdas y la cabeza
+   1,35, que es el borde: 1,6 veces mas lejos, y el cuerpo se queda a 73
+   grados del suelo mientras la cabeza termina boca arriba.                                                          */
+const RAG_VX = 1.2, RAG_VY = 3.5, RAG_VR = 2.3;
+/* EL TOPE SALE DE LA MESETA MEDIDA, no de un numero comodo: el aplanado de
+   `c.js` va de X-1 a X+1, asi que el piso plano del rival llega a x=17 y el
+   arquero esta en 15,5. Con 1,35 el cuerpo tumbado quedaba con el hombro
+   colgando del canto Y ademas cortado por el borde del cuadro en reposo.  */
+const RAG_XMIN = -1.05, RAG_XMAX = 0.15;
+const RAG_ROT_MAX = 1.62;      /* boca arriba y no mas: no rueda de espaldas */
+const RAG_K = 140, RAG_C = 11; /* muelle de miembro: zeta ~ 0,46            */
+const RAG_LEV = 0.55;          /* lo que tarda en volver a ponerse de pie   */
+
+/* un muelle subamortiguado, integrado en subpasos: con dt de 0,05 y K de 140
+   el producto K*dt pasa de 1 y el integrador explota — el muelle sale
+   disparado y el brazo desaparece de la pantalla. */
+function muelle(a, k, obj, dt) {
+  const v = k + 'v';
+  const ns = Math.max(1, Math.ceil(dt * 120)), h = dt / ns;
+  for (let i = 0; i < ns; i++) {
+    a[v] += ((obj - a[k]) * RAG_K - a[v] * RAG_C) * h;
+    a[k] += a[v] * h;
+  }
+}
+const suave = u => u * u * (3 - 2 * u);
 
 /* el perfil de media limba, de la empunadura a la punta. Es UNA curva y no
    cuatro tramos rectos: a los ~40 px que mide el arco en pantalla, lo unico
@@ -1602,6 +1744,15 @@ function arqDibuja(g, a) {
   g.save();
   g.translate(a.x, a.piso);
   if (a.lado) g.scale(-1, 1);
+  /* EL TUMBO VA ANTES QUE TODO Y DESPUES DEL ESPEJO: escrito en el marco
+     local, `-x` es «hacia atras» para los dos arqueros, y el espejo da vuelta
+     el eje Y EL SENTIDO DEL GIRO a la vez, asi que los dos caen para el lado
+     contrario al que les tiraron sin una sola cuenta aparte. Y pivota en la
+     CADERA, no en los pies: un cuerpo que gira desde los tobillos se lee a
+     poste que se cae, no a persona que sale despedida.                    */
+  if (a.rag) {
+    g.translate(a.rx, a.ry + CADERA_Y); g.rotate(a.rot); g.translate(0, -CADERA_Y);
+  }
   g.lineCap = 'round'; g.lineJoin = 'round';
 
   const resp = S.resp, tr = S.torsoR + a.incl;
@@ -1720,6 +1871,7 @@ function arqEntra(M) {
     a.x = (l ? XB : XA) + 0.5;
     a.est = 'quieto'; a.t = 0; a.k = 0; a.ang = 0.7;
     a.ocio = Math.random() * 5; a.sac = 0; a.incl = 0; a.inclObj = 0;
+    ragCero(a);
     a.boca = bocaDe(M, l);
     arqPose(a, 0);
   }
@@ -1739,7 +1891,7 @@ function arqSuelta() {
    forma de que una animacion pise a la otra a mitad de camino.             */
 function arqApunta(l, angMundo, k) {
   const a = ARQ[l]; if (!a) return;
-  if (a.est === 'recibe' || a.est === 'gana' || a.est === 'pierde') return;
+  if (a.est === 'caido' || a.est === 'levanta' || a.est === 'gana' || a.est === 'pierde') return;
   a.est = 'apunta'; a.t = 0;
   /* el rival se dibuja espejado en x, asi que el angulo hay que llevarlo al
      marco local: PI menos el de mundo es su reflejo */
@@ -1751,17 +1903,38 @@ function arqTira(l) {
   const a = ARQ[l]; if (!a) return;
   a.est = 'tira'; a.t = 0;
 }
-function arqRecibe(l, cab) {
+function ragCero(a) {
+  a.rag = false; a.muere = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = 0; a.rvy = 0; a.rvr = 0;
+  a.mPiF = 0.10; a.mPiFv = 0; a.mPiT = -0.14; a.mPiTv = 0;
+  a.mCab = 0; a.mCabv = 0; a.mBrF = 0; a.mBrFv = 0; a.mBrT = 0; a.mBrTv = 0;
+  a.r0x = 0; a.r0y = 0; a.r0r = 0; a.tocado = false;
+}
+/* EL EMPUJON SALE DEL DANO Y NO DE UNA CONSTANTE: un rozon de veinte y un
+   cabezazo de setenta tienen que verse distinto, porque el numero que sube
+   en la barra ya lo dice y el cuerpo no puede contradecirlo. Medido, un
+   cuerpo se va ~0,9 celdas y una cabeza pega en el tope de la meseta.    */
+function arqRecibe(l, cab, dn, mata) {
   const a = ARQ[l]; if (!a) return;
-  a.est = 'recibe'; a.t = 0; a.sac = cab ? 1 : 0.7;
+  const f = (cab ? 1.5 : 1.0) * cl((dn || DANO_CUERPO) / DANO_CUERPO, 0.75, 1.25);
+  a.est = 'caido'; a.t = 0; a.rag = true; a.muere = !!mata; a.tocado = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = -RAG_VX * f; a.rvy = RAG_VY * f; a.rvr = RAG_VR * f;
+  a.mBrFv = -9 * f; a.mBrTv = -7 * f; a.mCabv = -6 * f;
 }
 function arqFin(l, gano) {
   const a = ARQ[l]; if (!a) return;
+  /* AL QUE LO MATARON SE QUEDA EN EL PISO: devolverlo al puesto para que
+     haga la pose de perder deshace el unico golpe que decidio el duelo. */
+  if (a.est === 'caido' && a.muere) return;
+  a.rag = false; ragCero(a);
   a.est = gano ? 'gana' : 'pierde'; a.t = 0;
 }
 function arqQuieto(l) {
   const a = ARQ[l]; if (!a) return;
   if (a.est === 'gana' || a.est === 'pierde') return;
+  if (a.est === 'caido' || a.est === 'levanta') return;
   a.est = 'quieto'; a.t = 0; a.k = 0;
 }
 
@@ -1808,17 +1981,63 @@ function arqPose(a, dt) {
     torsoR = 0.10 * g; cabR = -0.14 * g; resp = -0.02 * Math.abs(g);
     arcoAng = a.ang + 0.16 * g;
     if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
-  } else if (e === 'recibe') {
-    /* lo tira hacia atras y vuelve con un muelle: el golpe se SIENTE aunque
-       la barra de vida ya lo diga */
-    const u = cl(a.t / 0.62, 0, 1);
-    const g = Math.exp(-u * 5.5) * Math.cos(u * 15);
-    torsoR = -0.42 * g * a.sac; cabR = -0.55 * g * a.sac;
-    resp = -0.10 * Math.abs(g) * a.sac;
-    manoTx = -0.10 - 0.24 * g; manoTy = 1.24;
-    arcoAng = -0.95 + 0.5 * g; bocaY = by - 0.22;
-    piFR = 0.10 - 0.30 * g; piTR = -0.14 - 0.26 * g;
-    if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
+  } else if (e === 'caido' || e === 'levanta') {
+    if (e === 'caido') {
+      /* el solido: gravedad, un rebote y roce contra el piso */
+      a.rvy -= G_RAG * dt;
+      a.rx += a.rvx * dt; a.ry += a.rvy * dt; a.rot += a.rvr * dt;
+      /* LA ALTURA DEL SUELO DEPENDE DE CUANTO ESTA GIRADO: acostado, la
+         cadera queda a media panza del piso y no a los 0,88 de estar de
+         pie. Con una altura fija, el cuerpo horizontal flota. */
+      const hc = -(CADERA_Y - 0.30) * Math.abs(Math.sin(a.rot));
+      if (a.ry <= hc) {
+        a.ry = hc;
+        if (a.rvy < -0.9) {
+          a.rvy = -a.rvy * 0.32; a.rvx *= 0.62; a.rvr *= 0.55;
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        } else {
+          a.rvy = 0;
+          const r = Math.max(0, 1 - dt * 7);
+          a.rvx *= r; a.rvr *= Math.max(0, 1 - dt * 6);
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        }
+      }
+      /* NO SE SALE DE LA MESETA: son tres columnas planas y mas alla hay
+         pendiente. Un cuerpo que se desliza al vacio se lee a defecto. */
+      a.rx = cl(a.rx, RAG_XMIN, RAG_XMAX);
+      a.rot = cl(a.rot, -0.25, RAG_ROT_MAX);
+      if (!a.muere && a.t > 0.9 && Math.abs(a.rvy) < 0.35 && Math.abs(a.rvr) < 0.9) {
+        a.est = 'levanta'; a.t = 0;
+        a.r0x = a.rx; a.r0y = a.ry; a.r0r = a.rot;
+      }
+    } else {
+      /* SE LEVANTA VOLVIENDO AL PUESTO, y la caja de choque no se entera
+         nunca porque nunca se movio: al terminar, el cuerpo esta otra vez
+         exactamente donde el resolvedor cree que esta. */
+      const u = cl(a.t / RAG_LEV, 0, 1), k = suave(u);
+      a.rx = a.r0x * (1 - k); a.ry = a.r0y * (1 - k); a.rot = a.r0r * (1 - k);
+      if (u >= 1) { a.rag = false; ragCero(a); a.est = 'quieto'; a.ocio = 0; }
+    }
+
+    /* LOS MIEMBROS CUELGAN HACIA ABAJO EN EL MUNDO, o sea a `-rot` en este
+       marco — y llegan TARDE, que es lo unico que separa un cuerpo sin
+       fuerzas de un maniqui girando en bloque. */
+    const o = -a.rot;
+    muelle(a, 'mPiF', o + 0.26, dt);
+    muelle(a, 'mPiT', o - 0.30, dt);
+    muelle(a, 'mCab', o * 0.80, dt);
+    muelle(a, 'mBrF', o - 0.22, dt);
+    muelle(a, 'mBrT', o + 0.30, dt);
+
+    torsoR = -a.rot * 0.22; cabR = a.mCab - torsoR; resp = 0;
+    piFR = a.mPiF; piTR = a.mPiT;
+    const hyR = HOMBRO_Y;
+    manoTx = Math.sin(a.mBrT) * BRAZO_L * 0.92;
+    manoTy = hyR - Math.cos(a.mBrT) * BRAZO_L * 0.92;
+    bocaX = Math.sin(a.mBrF) * BRAZO_L * 0.92;
+    bocaY = hyR - Math.cos(a.mBrF) * BRAZO_L * 0.92;
+    arcoAng = -1.35 - a.rot;   /* el arco cuelga de la mano, tambien sin fuerza */
+    flVis = false;
   } else if (e === 'gana') {
     /* los brazos arriba y saltitos: el arco se guarda, que es lo que hace
        cualquiera que dejo de tener a quien tirarle */
@@ -1854,7 +2073,28 @@ function arqPose(a, dt) {
 function arqPaso(dt) {
   for (const a of ARQ) if (a && a.puesto) arqPose(a, dt);
 }
-const arqLibre = () => !ARQ[0] || (ARQ[0].est !== 'tira' && (!ARQ[1] || ARQ[1].est !== 'tira'));
+const arqOcupado = a => !a || a.est === 'tira' || a.est === 'caido' || a.est === 'levanta';
+const arqLibre = () => !ARQ[0] || (!arqOcupado(ARQ[0]) && (!ARQ[1] || !arqOcupado(ARQ[1])));
+/* EL TURNO NO PASA MIENTRAS HAY ALGUIEN EN EL PISO — y el que se murio no
+   cuenta, porque ese no se levanta nunca y el duelo se quedaria esperando. */
+/* EL PLANO DEL REMATE ES EL CUERPO, NO EL PUESTO. Al terminar el duelo la
+   camara se suelta y vuelve al reposo, y ahi el encuadre de espera —16,4
+   celdas de ancho— NO ALCANZA para un cuerpo tumbado: acostado a 63 grados
+   la cabeza del rival llega a x 17,19 contra un borde en 17,20, asi que el
+   muerto salia CORTADO por el canto en la ultima imagen del duelo. Enfocando
+   el cuerpo, el encuadre de vuelo lo deja con dos celdas y media de aire. */
+const arqMuerto = () => {
+  for (const a of ARQ) if (a && a.puesto && a.muere) return { x: a.x, y: a.piso + 1.0 };
+  return null;
+};
+const arqCayendo = () => {
+  for (const a of ARQ) {
+    if (!a || !a.puesto) continue;
+    if (a.est === 'levanta') return true;
+    if (a.est === 'caido' && !a.muere) return true;
+  }
+  return false;
+};
 /* ══════════════════════════════════════════════════════════════════════════
    G · EL AUDIO, PROCEDURAL
    Ni un byte de asset. Lo que suena en un juego de arcos son golpes cortos
@@ -2030,6 +2270,7 @@ function son(k, a) {
   else if (k === 'pega')  { ruidito(t, 0.18, 380, 1.0, 0.38); tono(t, 0.20, 220, 70, 0.30); }
   else if (k === 'cabeza'){ ruidito(t, 0.20, 420, 1.0, 0.40); tono(t, 0.22, 260, 80, 0.32);
                             tono(t + 0.05, 0.55, 1320, 1320, 0.20, 'triangle'); }
+  else if (k === 'tumbo') { ruidito(t, 0.22, 170, 0.9, 0.34); tono(t, 0.24, 120, 52, 0.24); }
   else if (k === 'falla') { tono(t, 0.16, 300, 190, 0.11, 'square'); }
   else if (k === 'turno') { tono(t, 0.14, 520, 660, 0.13, 'triangle'); }
   else if (k === 'ui')    { ruidito(t, 0.045, 1500, 2.2, 0.10); }
@@ -2090,6 +2331,8 @@ const JU = {
   fin: false, tuto: false, paso: 0, pausa: false,
 };
 const VU = { on: false, pts: null, r: null, t: 0, dur: 0, vx: 0, vy: 0, w: 0, quien: 0 };
+const RIV = { d: null, k: 0 };      /* el tiro del rival, resuelto una sola vez */
+const RIV_TENSA = 0.72;             /* lo que tarda en tensar, a la vista */
 const DT_PTS = 13 * PASO_F;
 
 /* ── PANELES ────────────────────────────────────────────────────────────── */
@@ -2135,8 +2378,14 @@ function pintaHud() {
     ? '<u>' + TX('calma') + '</u>'
     : '<u>' + TX('viento') + '</u> ' + (w > 0 ? '▶' : '◀') + ' ' + Math.abs(w).toFixed(1);
   $('duelo').textContent = JU.tuto ? TX('tutTit') : TX('duelo', JU.n + 1);
+  /* Y EL TURNO DEL RIVAL SE ANUNCIA. Estaba en blanco: el rival se tomaba
+     casi un segundo pensando sin una sola senial en pantalla, asi que desde
+     afuera el juego se veia trabado y despues aparecia una flecha de la
+     nada. Lo que faltaba no era la flecha, era saber que le tocaba a el. */
   const pi = JU.tuto ? TX('tut' + Math.min(4, JU.paso + 1))
-    : (JU.est === 'apunta' && JU.turno === 0 ? TX('pistaTira') : '');
+    : (JU.turno === 0
+        ? (JU.est === 'apunta' ? TX('pistaTira') : '')
+        : ((JU.est === 'piensa' || JU.est === 'vuela') ? TX('pistaRival') : ''));
   /* la pista arranca en `opacity:0` y la enciende su clase: escribiendo sólo
      el texto, los cuatro pasos del tutorial no se leen en ninguna parte */
   $('pista').textContent = pi;
@@ -2150,12 +2399,20 @@ function avisa(tx, ms) {
 }
 /* el numero del dano SALE DEL PUNTO DEL IMPACTO, proyectado con la misma
    camara: puesto en un sitio fijo del HUD no diria a quien le pegaron.    */
+/* Y SE REPINTA CADA CUADRO MIENTRAS DURA: con la camara moviendose, un
+   numero colocado una sola vez se despega del sitio donde pego la flecha. */
+const GOL = { on: false, x: 0, y: 0 };
 function golpeEn(x, y, tx, cab) {
-  const p = mundoAPant(x, y);
   const e = $('golpe');
   e.textContent = tx; e.className = cab ? 'cab on' : 'on';
+  GOL.on = true; GOL.x = x; GOL.y = y; golpeMueve();
+  clearTimeout(golpeEn._t);
+  golpeEn._t = setTimeout(() => { e.className = ''; GOL.on = false; }, 1000);
+}
+function golpeMueve() {
+  if (!GOL.on) return;
+  const p = mundoAPant(GOL.x, GOL.y), e = $('golpe');
   e.style.left = p.x + 'px'; e.style.top = p.y + 'px';
-  clearTimeout(golpeEn._t); golpeEn._t = setTimeout(() => e.className = '', 1000);
 }
 
 /* ── IDIOMA ───────────────────────────────────────────────────────────────
@@ -2274,7 +2531,11 @@ function arranca(M, tuto) {
   VU.on = false;
   construyeMundo(M);
   arqEntra(M);
+  RIV.d = null; RIV.k = 0;
   flechaOculta(); previaOculta(); limpiaClavadas();
+  /* la camara se PLANTA y no lerpea: viniendo del duelo anterior, el primer
+     medio segundo del duelo nuevo seria un viaje que nadie pidio */
+  camSuelta(); camPlanta();
   musRaiz(RAICES[(M.paleta || 0) % RAICES.length]);
   auViento(M.viento);
   verPanel(null);
@@ -2319,10 +2580,14 @@ function tira(l, vx, vy) {
    que es donde de verdad se clavaria una punta que entro y estallo.       */
 function impacto(r) {
   const M = JU.M;
+  camFoco(r.x, r.y);      /* la camara se queda donde pego */
   if (r.fin === 'arq') {
     const dn = danoDe(r);
     if (r.quien === 0) JU.va -= dn; else { JU.vb -= dn; if (VU.quien === 0) JU.aciertos++; }
-    arqRecibe(r.quien, r.cab);
+    /* SI EL GOLPE MATA SE SABE ACA Y NO EN `termina`: el que se muere se
+       queda en el piso, y para eso el tumbo tiene que enterarse en el mismo
+       cuadro — enterandose despues, el cuerpo ya se levanto. */
+    arqRecibe(r.quien, r.cab, dn, (r.quien === 0 ? JU.va : JU.vb) <= 0);
     son(r.cab ? 'cabeza' : 'pega');
     golpeEn(r.x, r.y, '-' + dn, r.cab);
     if (r.cab) avisa(TX('cabezazo'), 1100);
@@ -2359,6 +2624,7 @@ function impacto(r) {
 function duePaso(dt) {
   const M = JU.M; if (!M || JU.pausa) return;
   JU.t += dt;
+  golpeMueve();
 
   if (JU.est === 'vuela') {
     VU.t += dt;
@@ -2371,6 +2637,7 @@ function duePaso(dt) {
        posiciones dibujadas: en el apice vy cruza el cero y con posiciones la
        flecha pega un tiron justo ahi. */
     flechaPon(x, y, VU.vx + VU.w * u, VU.vy - G * u);
+    camFoco(x, y);
     if (VU.t >= VU.dur) {
       VU.on = false;
       impacto(VU.r);
@@ -2381,6 +2648,11 @@ function duePaso(dt) {
        mismo cuadro, el golpe no se llega a ver y el duelo se lee a una
        sucesion de numeros. */
     if (JU.t < 0.95) return;
+    /* EL TURNO NO PASA CON ALGUIEN EN EL PISO: el que acaba de recibir es
+       justo el que tiene que tirar, y la caja de choque esta clavada en su
+       columna — tirando desde el suelo, el dibujo y el blanco dirian cosas
+       distintas. El que se murio no cuenta: ese no se levanta. */
+    if (arqCayendo()) return;
     if (JU.va <= 0 || JU.vb <= 0) { termina(); return; }
     /* EN EL TUTORIAL EL TURNO NO PASA Y UN SOLO ACIERTO ALCANZA: el rival
        esta ahi de blanco, no de rival, y tres impactos para terminar de
@@ -2392,14 +2664,20 @@ function duePaso(dt) {
     JU.turno = 1 - JU.turno;
     JU.est = JU.turno === 0 ? 'apunta' : 'piensa';
     JU.t = 0; HUD_ANT = '';
-    if (JU.turno === 0) { son('turno'); arqQuieto(0); }
+    camSuelta();          /* la camara se abre otra vez al plano de espera */
+    son('turno');
+    if (JU.turno === 0) arqQuieto(0); else { RIV.d = null; RIV.k = 0; }
   } else if (JU.est === 'piensa') {
-    /* el rival se toma un momento: tirando en el cuadro en que le toca, el
-       jugador no ve de quien salio la flecha */
-    if (JU.t < 0.85) return;
-    const d = tiroRival(M, M.prec, Math.random);
-    arqApunta(1, Math.atan2(d.vy, d.vx), 0.9);
-    tira(1, d.vx, d.vy);
+    /* EL RIVAL TENSA A LA VISTA, y eso no es adorno: antes apuntaba y
+       soltaba EN EL MISMO CUADRO, o sea que el unico aviso de que la flecha
+       venia era la flecha. Ahora el tiro se resuelve UNA vez —volver a
+       resolverlo por cuadro daria un rival distinto en cada uno— y la
+       tension sube de cero a fondo mientras el arco se llena. */
+    if (!RIV.d) { RIV.d = tiroRival(M, M.prec, Math.random); RIV.k = 0; }
+    RIV.k = Math.min(1, RIV.k + dt / RIV_TENSA);
+    const ang = Math.atan2(RIV.d.vy, RIV.d.vx);
+    arqApunta(1, ang, RIV.k * 0.9);
+    if (RIV.k >= 1 && JU.t >= RIV_TENSA + 0.18) { const d = RIV.d; RIV.d = null; tira(1, d.vx, d.vy); }
   }
   pintaHud();
 }
@@ -2408,6 +2686,10 @@ function termina() {
   JU.fin = true; JU.est = 'fin';
   const gano = JU.vb <= 0 && JU.va > 0;
   arqFin(0, gano); arqFin(1, !gano);
+  /* EL ORDEN IMPORTA: `arqFin` es quien decide si el perdedor se queda en el
+     piso, asi que preguntar por el muerto ANTES devuelve siempre null.     */
+  const mu = arqMuerto();
+  if (mu) camFoco(mu.x, mu.y); else camSuelta();
   son(gano ? 'gana' : 'pierde');
   if (gano && !JU.tuto && PROG.hechos.indexOf(JU.n) < 0) { PROG.hechos.push(JU.n); guardaProg(); }
   clearTimeout(termina._t);
@@ -2779,7 +3061,12 @@ window.__A = {
      ULTIMO cuadro dibujado: midiendo justo despues de cambiar la calidad se
      informa la anterior, y las tres salen identicas — que es lo que devolvia
      esta sonda antes de esta linea.                                       */
-  cal: (k) => { PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
+  /* Y LA CLAVE SE COMPRUEBA. `aplicaCalidad` cae a `media` cuando no la
+     reconoce, asi que una sonda que acepte cualquier cosa devuelve tres
+     veces la misma calidad sin fallar — pedirle 0/1/2 en vez de los nombres
+     informaba `det:1` en las tres y parecia que la palanca no hacia nada. */
+  cal: (k) => { if (!CALIDADES[k]) return { error: 'calidad?', hay: Object.keys(CALIDADES) };
+                PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
   panel: (id) => { verPanel(id); return PAN; },
   /* EL INDICE ES EL DE LA LISTA, 0..DUELOS-1, y se RECORTA a proposito:
      `armaMundo` hace `DUELO[n % largo]`, asi que pedir el 12 devuelve el 0
@@ -2833,11 +3120,20 @@ window.__A = {
     }
     return { choques, fuera, n: c.length, marco: [Math.round(m.width), Math.round(m.height)] };
   },
+  /* EL CUERPO Y LA CAJA DE CHOQUE SON DOS COSAS. El ragdoll es SOLO dibujo
+     —`cajaArq` sigue clavada en XA/XB— asi que la sonda tiene que informar
+     las dos: `rx/ry/rot` es donde se ve el cuerpo y no donde se le pega. */
   arq: () => ARQ.map(a => a && ({
     lado: a.lado, est: a.est, piso: a.piso, ang: +a.ang.toFixed(3),
     boca: [+a.boca.x.toFixed(2), +a.boca.y.toFixed(2)],
-    puesto: !!a.puesto,
+    puesto: !!a.puesto, rag: !!a.rag, muere: !!a.muere,
+    rx: +a.rx.toFixed(3), ry: +a.ry.toFixed(3), rot: +a.rot.toFixed(3),
+    tension: +a.k.toFixed(3),
   })),
+  /* un golpe a mano, para poder mirar el tumbo sin depender de que la
+     flecha acierte. `mata` deja al arquero en el piso: un muerto no se
+     levanta, y eso hay que poder comprobarlo aparte. */
+  golpe: (lado, cab, mata) => { arqRecibe(lado | 0, !!cab, cab ? DANO_CABEZA : DANO_CUERPO, !!mata); return window.__A.arq()[lado | 0]; },
   errs: () => window.__errs.slice(),
 };
 

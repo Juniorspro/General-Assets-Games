@@ -29,23 +29,38 @@ let DIO = null;
 let LLAM = 0, LLAM_ANT = 0;
 let DET = 1;
 
-/* CUANTAS CELDAS ENTRAN DE ANCHO, y de ahi sale todo lo demas. NO SON LAS
-   QUINCE DEL MUNDO: los arqueros estan en 2,5 y 13,5, o sea que las dos
-   columnas y media de cada punta no las mira nadie nunca. Mostrandolas, el
-   marco 9:16 termina enseniando 34 celdas de ALTO —el doble de lo que sube
-   la flecha mas alta del juego, medida— y los dos tercios de arriba de la
-   pantalla quedan de cielo vacio.
-   EL PISO LO PONE EL ANCHO Y NO EL ALTO: el cuerpo del arquero con su carcaj
-   llega a x 1,98, asi que con 13,2 el canto izquierdo cae en 1,4 y quedan
-   dieciocho pixeles de aire — se lee a arquero apoyado contra el borde. Con
-   14,0 el canto cae en 1,0 y quedan veintinueve, y el arquero sigue midiendo
-   88 px contra los 78 del encuadre viejo.                                  */
-const ENC_CELDAS = 14.0;
-/* Y EL ENCUADRE SE CENTRA EN LA ARENA, NO EN EL MUNDO: el medio entre los
-   dos arqueros es 8 y el del mundo 7,5, asi que centrando en el mundo el de
-   la derecha queda media celda mas cerca del canto que el de la izquierda. */
+/* ── LA CAMARA ────────────────────────────────────────────────────────────
+   HAY UNA CAMARA PORQUE EL MAPA CRECIO, y las dos cosas son la misma
+   decision. En un marco 9:16 el ancho manda: mostrar de una las trece celdas
+   que separan a los arqueros deja el cuerpo en 62 px y la flecha en 20 —o
+   sea que la flecha del rival, que cruza el cuadro en cuatro decimas, no se
+   ve—. Con encuadre fijo no hay numero que arregle las dos cosas: agrandar
+   el mapa achica todo lo que hay adentro.
+
+   ASI QUE EL ENCUADRE SE ABRE EN REPOSO Y SE CIERRA SOBRE LA FLECHA. Lo
+   unico que se achica es el plano de espera —el cuerpo del arquero baja de
+   62 a 53 px— y lo que se AGRANDA es justamente lo que antes no se veia: en
+   vuelo el cuerpo mide 73 px y la flecha 39 contra 33. Medido en el marco de
+   412: 25,1 px por celda esperando y 34,9 en vuelo.
+
+   Y APUNTAR NO SE ROMPE, que es lo que hay que comprobar antes de mover una
+   camara en un juego de punteria: `mundoAPant` es una escala UNIFORME, asi
+   que un DELTA pasado por `pantAMundo` conserva la direccion —la escala se
+   divide sola al normalizar— y la fuerza sale de pixeles del marco. Las dos
+   son invariantes al zoom, medido.                                        */
+const CEL_REPOSO = 16.4;   /* celdas de ancho esperando  */
+const CEL_VUELO  = 11.8;   /* celdas de ancho en vuelo   */
+const CAM_VEL = 3.6;       /* con que rapidez sigue      */
+const CAM_ZOOM = 2.8;      /* y con que rapidez cierra   */
+const CAM_ALTO = 7;        /* cuanto puede subir sobre el piso siguiendo la flecha */
+/* EL ENCUADRE SE CENTRA EN LA ARENA, NO EN EL MUNDO: el medio entre los dos
+   arqueros es 8,5 y el del mundo 9, asi que centrando en el mundo el de la
+   derecha queda media celda mas cerca del canto que el de la izquierda. */
 const ENC_CX = (XA + XB) / 2 + 0.5;
 const SUELO_Y = -1.15;     /* la linea del mundo que cae en el canto de abajo */
+const CAM = { cx: ENC_CX, cy: 16, cel: CEL_REPOSO, foco: null };
+/* medio alto visible, en celdas, para un ancho dado */
+const camAlto = cel => ALTO * cel / (2 * ANCHO);
 
 /* ── COLOR ────────────────────────────────────────────────────────────────
    Todo pasa por aca. Con los colores escritos a mano en cada sitio, subir la
@@ -166,12 +181,37 @@ function cieloLienzo(pi) {
    No hay camara: hay una escala y dos corrimientos. `pantAMundo` es la
    inversa EXACTA de `mundoAPant` porque las dos son la misma division.    */
 function encuadra() {
-  PX = ANCHO / ENC_CELDAS;
-  OFX = ANCHO / 2 - ENC_CX * PX;
-  OFY = ALTO + SUELO_Y * PX;          /* y del mundo = 0 cae aca */
+  PX = ANCHO / CAM.cel;
   ENC_W = ANCHO / (2 * PX);
   ENC_H = ALTO / (2 * PX);
-  MIRA = SUELO_Y + ENC_H;
+  OFX = ANCHO / 2 - CAM.cx * PX;
+  OFY = ALTO / 2 + CAM.cy * PX;
+  MIRA = CAM.cy;
+}
+/* a donde quiere ir la camara AHORA. Sin foco, al plano de espera. */
+function camObj() {
+  if (!CAM.foco) return { x: ENC_CX, y: SUELO_Y + camAlto(CEL_REPOSO), cel: CEL_REPOSO };
+  const y0 = SUELO_Y + camAlto(CEL_VUELO);
+  /* la x se topa DENTRO de las alas del terreno (tres celdas a cada lado),
+     asi que por mucho que la flecha se vaya de la arena no aparece el vacio
+     de mas alla del mundo */
+  return { x: cl(CAM.foco.x, XA + 1, XB - 1), y: cl(CAM.foco.y, y0, y0 + CAM_ALTO), cel: CEL_VUELO };
+}
+function camFoco(x, y) { CAM.foco = { x, y }; }
+function camSuelta() { CAM.foco = null; }
+function camPlanta() { const o = camObj(); CAM.cx = o.x; CAM.cy = o.y; CAM.cel = o.cel; encuadra(); }
+function camPaso(dt) {
+  const o = camObj();
+  const kr = 1 - Math.exp(-dt * CAM_VEL), kz = 1 - Math.exp(-dt * CAM_ZOOM);
+  CAM.cx += (o.x - CAM.cx) * kr;
+  CAM.cy += (o.y - CAM.cy) * kr;
+  CAM.cel += (o.cel - CAM.cel) * kz;
+  /* EL PISO DE LA CAMARA SE MIDE CON EL ZOOM DEL CUADRO Y NO CON EL DE
+     DESTINO: durante el cierre, la altura visible baja mas despacio que la
+     camara, y sin este piso aparece una franja de vacio debajo del terreno.
+     Con el, la camara solo puede bajar al ritmo al que se cierra.        */
+  CAM.cy = Math.max(CAM.cy, SUELO_Y + camAlto(CAM.cel));
+  encuadra();
 }
 function mundoAPant(x, y) { return { x: OFX + x * PX, y: OFY - y * PX }; }
 function pantAMundo(dpx, dpy) { return { x: dpx / PX, y: -dpy / PX }; }
@@ -195,7 +235,7 @@ function medir() {
   ANCHO = Math.max(1, Math.round(m.width)); ALTO = Math.max(1, Math.round(m.height));
   document.documentElement.style.setProperty('--mw', ANCHO + 'px');
   if (CV) { CV.width = Math.round(ANCHO * DPR); CV.height = Math.round(ALTO * DPR); }
-  encuadra();
+  if (CAM.foco) encuadra(); else camPlanta();
   if (DIO) rayasArma(DIO.M ? DIO.M.viento : 0);
 }
 
@@ -442,6 +482,7 @@ function construyeMundo(M) {
     cla: [],                        /* las clavadas */
     eqD: new Float32Array(26 * 5), eqN: 0, eqC: [200, 200, 200],
     raD: new Float32Array(30 * 3), raN: 0,
+    esD: new Float32Array(EST_N * 2), esI: 0, esN: 0,   /* la estela */
   };
   rayasArma(M.viento);
 }
@@ -450,8 +491,25 @@ function rehaceTerreno() { if (DIO) DIO.terr = terrArma(DIO.M); }
 /* ── LA FLECHA ────────────────────────────────────────────────────────────
    El rumbo sale de la VELOCIDAD y no de restar dos posiciones: en el apice
    vy cruza el cero y con posiciones la flecha pega un tiron justo ahi.    */
-function flechaPon(x, y, vx, vy) { if (DIO) DIO.fl = { x, y, a: Math.atan2(vy, vx) }; }
-function flechaOculta() { if (DIO) DIO.fl = null; }
+/* ── LA ESTELA ────────────────────────────────────────────────────────────
+   ES LO QUE HACE VISIBLE LA FLECHA DEL RIVAL. Su vuelo dura unas cuatro
+   decimas y la flecha mide 33 px: mirando el cuadro suelto no hay nada que
+   ver, porque lo que la delata no es su forma sino su RECORRIDO. Catorce
+   posiciones guardadas —siete celdas de cola a velocidad de crucero— y todas
+   en UN solo trazo: son puntos que se achican, igual que la vista previa, y
+   eso no es coqueteria — con una polilinea que se afina harian falta trece
+   llamadas de dibujo por cuadro sobre un cuadro que cuesta setenta y cinco.
+   Y de paso las dos cosas hablan el mismo idioma: puntos blancos = camino de
+   la flecha, antes y despues de soltarla.                                 */
+const EST_N = 14;
+function flechaPon(x, y, vx, vy) {
+  if (!DIO) return;
+  DIO.fl = { x, y, a: Math.atan2(vy, vx) };
+  DIO.esD[DIO.esI * 2] = x; DIO.esD[DIO.esI * 2 + 1] = y;
+  DIO.esI = (DIO.esI + 1) % EST_N;
+  if (DIO.esN < EST_N) DIO.esN++;
+}
+function flechaOculta() { if (DIO) { DIO.fl = null; DIO.esN = 0; DIO.esI = 0; } }
 function previaPon(pts, n) {
   if (!DIO) return;
   const c = Math.min(n, Math.floor(pts.length / 2));
@@ -501,19 +559,25 @@ function estalla(x, y, tp, fuerza) {
 }
 
 /* ── LAS RAYAS DEL VIENTO ─────────────────────────────────────────────── */
+/* LA BANDA DE LAS RAYAS ES FIJA Y NO SALE DEL ENCUADRE: con la camara
+   moviendose, sembrarlas contra el alto visible del momento las dejaria
+   apiladas en la franja del ultimo `medir()` — y encima habria que
+   resembrarlas por cuadro, que es justo lo que este arreglo no hace. */
+const RAYA_ALTO = 34;
 function rayasArma(w) {
   if (!DIO) return;
   const n = Math.abs(w) < 0.4 ? 0 : (DET === 0 ? 12 : DET === 1 ? 20 : 30);
   const R = azar(((w * 100) | 0) + 991);
   for (let i = 0; i < n; i++) {
     DIO.raD[i * 3] = R() * (NX + 8) - 4;
-    DIO.raD[i * 3 + 1] = 4 + R() * (ENC_H * 2 - 4);
+    DIO.raD[i * 3 + 1] = 4 + R() * RAYA_ALTO;
     DIO.raD[i * 3 + 2] = 0.5 + R() * 1.2;
   }
   DIO.raN = n;
 }
 
 function escPaso(dt, w) {
+  camPaso(dt);
   if (!DIO) return;
   CIELO_OX -= (w || 0) * dt * 1.9;
   if (DIO.eqN > 0) {
@@ -589,6 +653,18 @@ function escDibuja() {
     }
     g.fill(); LLAM++;
   }
+  if (DIO.fl && DIO.esN > 1) {
+    const n = DIO.esN;
+    g.fillStyle = 'rgba(255,255,255,.36)';
+    g.beginPath();
+    for (let k = 0; k < n; k++) {
+      const i = (DIO.esI - n + k + EST_N * 2) % EST_N;
+      const u = (k + 1) / n, r = 0.105 * u * u;
+      const x = DIO.esD[i * 2], y = DIO.esD[i * 2 + 1];
+      g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832);
+    }
+    g.fill(); LLAM++;
+  }
   if (DIO.fl) flechaP(g, DIO.fl.x, DIO.fl.y, DIO.fl.a, '#4a3222', '#f2ece0');
 
   if (DIO.eqN > 0) {
@@ -610,5 +686,10 @@ function escCosto() {
   return { llamadas: LLAM_ANT, triangulos: 0, cal: PROG.cal,
            px: +DPR.toFixed(2), w: ANCHO, h: ALTO, det: DET,
            encW: +ENC_W.toFixed(2), encH: +ENC_H.toFixed(2), mira: +MIRA.toFixed(2),
-           celda: +PX.toFixed(2) };
+           celda: +PX.toFixed(2),
+           cam: { cx: +CAM.cx.toFixed(2), cy: +CAM.cy.toFixed(2), cel: +CAM.cel.toFixed(2),
+                  foco: !!CAM.foco,
+                  arqPx: +(ARQ_ALTO * PX).toFixed(1), flePx: +((FL_L + 0.16) * PX).toFixed(1),
+                  bajo: +(CAM.cy - ENC_H).toFixed(3), izq: +(CAM.cx - ENC_W).toFixed(2),
+                  der: +(CAM.cx + ENC_W).toFixed(2) } };
 }

@@ -173,6 +173,7 @@ function son(k, a) {
   else if (k === 'pega')  { ruidito(t, 0.18, 380, 1.0, 0.38); tono(t, 0.20, 220, 70, 0.30); }
   else if (k === 'cabeza'){ ruidito(t, 0.20, 420, 1.0, 0.40); tono(t, 0.22, 260, 80, 0.32);
                             tono(t + 0.05, 0.55, 1320, 1320, 0.20, 'triangle'); }
+  else if (k === 'tumbo') { ruidito(t, 0.22, 170, 0.9, 0.34); tono(t, 0.24, 120, 52, 0.24); }
   else if (k === 'falla') { tono(t, 0.16, 300, 190, 0.11, 'square'); }
   else if (k === 'turno') { tono(t, 0.14, 520, 660, 0.13, 'triangle'); }
   else if (k === 'ui')    { ruidito(t, 0.045, 1500, 2.2, 0.10); }

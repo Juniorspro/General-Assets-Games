@@ -29,6 +29,56 @@ const CADERA_Y = 0.88, PIERNA_L = 0.88;
    palo en la pose que mas se mira, que es la de apuntar.                  */
 const BR1 = 0.50, BR2 = 0.46;
 
+/* ── EL TUMBO ─────────────────────────────────────────────────────────────
+   ES DIBUJO Y NADA MAS, Y ESO NO ES UNA CONCESION: `cajaArq` —el blanco— vive
+   clavada en la columna del arquero, en `d.js`, y de ella dependen el
+   resolvedor, la auditoria de los doce duelos y el auto-jugador. Un cuerpo
+   que se lleva su propia caja mientras rueda convertiria «apuntarle al
+   arquero» en apuntarle a donde estaba hace medio segundo, y la auditoria
+   aprobaria duelos que no se pueden pelear.
+   Y NO HACE FALTA que la caja se mueva, porque los turnos son alternos: el
+   unico momento en que un cuerpo esta fuera de su puesto es justo despues de
+   recibir un flechazo, y ahi le toca tirar A EL. Por eso `espera` no pasa el
+   turno mientras haya alguien en el piso (`arqCayendo`).
+
+   EL CUERPO ES UN SOLIDO Y LOS MIEMBROS SON RESORTES. Con el cuerpo entero
+   girando en bloque se lee a tabla que cae; lo que dice «esto es un cuerpo
+   sin fuerzas» es que los brazos y las piernas lleguen TARDE — cada uno con
+   su muelle subamortiguado apuntando a colgar hacia abajo en el MUNDO, o sea
+   a `-rot` en el marco del arquero.                                        */
+const G_RAG = 18;              /* la gravedad del tumbo, en celdas/s^2      */
+/* EL IMPULSO ESTA CALIBRADO CONTRA EL TOPE, y el primer valor no lo estaba:
+   con 2,4 y 3,2 el cuerpo llegaba al canto de la meseta y al maximo de giro
+   TAMBIEN con un golpe de cuerpo, asi que un rozon y un cabezazo terminaban
+   en la misma pose — el clamp se comia justo la diferencia que el empujon
+   existe para mostrar. Medido el PICO —muestreando cada 16 ms el tumbo
+   entero, porque una sola lectura a los 200 ms agarra a los dos a mitad de
+   camino y devuelve el mismo numero— el cuerpo se va 0,755 celdas y gira
+   80 grados, y la cabeza pega en el tope: 1,05 celdas y 93 grados, o sea
+   1,4 veces mas lejos y boca arriba contra tumbado.                       */
+const RAG_VX = 1.2, RAG_VY = 3.5, RAG_VR = 2.3;
+/* EL TOPE SALE DE LA MESETA MEDIDA, no de un numero comodo: el aplanado de
+   `c.js` va de X-1 a X+1, asi que el piso plano del rival llega a x=17 y el
+   arquero esta en 15,5. Con 1,35 el cuerpo tumbado quedaba con el hombro
+   colgando del canto Y ademas cortado por el borde del cuadro en reposo.  */
+const RAG_XMIN = -1.05, RAG_XMAX = 0.15;
+const RAG_ROT_MAX = 1.62;      /* boca arriba y no mas: no rueda de espaldas */
+const RAG_K = 140, RAG_C = 11; /* muelle de miembro: zeta ~ 0,46            */
+const RAG_LEV = 0.55;          /* lo que tarda en volver a ponerse de pie   */
+
+/* un muelle subamortiguado, integrado en subpasos: con dt de 0,05 y K de 140
+   el producto K*dt pasa de 1 y el integrador explota — el muelle sale
+   disparado y el brazo desaparece de la pantalla. */
+function muelle(a, k, obj, dt) {
+  const v = k + 'v';
+  const ns = Math.max(1, Math.ceil(dt * 120)), h = dt / ns;
+  for (let i = 0; i < ns; i++) {
+    a[v] += ((obj - a[k]) * RAG_K - a[v] * RAG_C) * h;
+    a[k] += a[v] * h;
+  }
+}
+const suave = u => u * u * (3 - 2 * u);
+
 /* el perfil de media limba, de la empunadura a la punta. Es UNA curva y no
    cuatro tramos rectos: a los ~40 px que mide el arco en pantalla, lo unico
    que dice «esto es un arco» es que la silueta se curve hacia el blanco. */
@@ -125,6 +175,15 @@ function arqDibuja(g, a) {
   g.save();
   g.translate(a.x, a.piso);
   if (a.lado) g.scale(-1, 1);
+  /* EL TUMBO VA ANTES QUE TODO Y DESPUES DEL ESPEJO: escrito en el marco
+     local, `-x` es «hacia atras» para los dos arqueros, y el espejo da vuelta
+     el eje Y EL SENTIDO DEL GIRO a la vez, asi que los dos caen para el lado
+     contrario al que les tiraron sin una sola cuenta aparte. Y pivota en la
+     CADERA, no en los pies: un cuerpo que gira desde los tobillos se lee a
+     poste que se cae, no a persona que sale despedida.                    */
+  if (a.rag) {
+    g.translate(a.rx, a.ry + CADERA_Y); g.rotate(a.rot); g.translate(0, -CADERA_Y);
+  }
   g.lineCap = 'round'; g.lineJoin = 'round';
 
   const resp = S.resp, tr = S.torsoR + a.incl;
@@ -243,6 +302,7 @@ function arqEntra(M) {
     a.x = (l ? XB : XA) + 0.5;
     a.est = 'quieto'; a.t = 0; a.k = 0; a.ang = 0.7;
     a.ocio = Math.random() * 5; a.sac = 0; a.incl = 0; a.inclObj = 0;
+    ragCero(a);
     a.boca = bocaDe(M, l);
     arqPose(a, 0);
   }
@@ -262,7 +322,7 @@ function arqSuelta() {
    forma de que una animacion pise a la otra a mitad de camino.             */
 function arqApunta(l, angMundo, k) {
   const a = ARQ[l]; if (!a) return;
-  if (a.est === 'recibe' || a.est === 'gana' || a.est === 'pierde') return;
+  if (a.est === 'caido' || a.est === 'levanta' || a.est === 'gana' || a.est === 'pierde') return;
   a.est = 'apunta'; a.t = 0;
   /* el rival se dibuja espejado en x, asi que el angulo hay que llevarlo al
      marco local: PI menos el de mundo es su reflejo */
@@ -274,17 +334,38 @@ function arqTira(l) {
   const a = ARQ[l]; if (!a) return;
   a.est = 'tira'; a.t = 0;
 }
-function arqRecibe(l, cab) {
+function ragCero(a) {
+  a.rag = false; a.muere = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = 0; a.rvy = 0; a.rvr = 0;
+  a.mPiF = 0.10; a.mPiFv = 0; a.mPiT = -0.14; a.mPiTv = 0;
+  a.mCab = 0; a.mCabv = 0; a.mBrF = 0; a.mBrFv = 0; a.mBrT = 0; a.mBrTv = 0;
+  a.r0x = 0; a.r0y = 0; a.r0r = 0; a.tocado = false;
+}
+/* EL EMPUJON SALE DEL DANO Y NO DE UNA CONSTANTE: un rozon de veinte y un
+   cabezazo de setenta tienen que verse distinto, porque el numero que sube
+   en la barra ya lo dice y el cuerpo no puede contradecirlo. Medido, un
+   cuerpo se va 0,755 celdas y una cabeza pega en el tope de la meseta.   */
+function arqRecibe(l, cab, dn, mata) {
   const a = ARQ[l]; if (!a) return;
-  a.est = 'recibe'; a.t = 0; a.sac = cab ? 1 : 0.7;
+  const f = (cab ? 1.5 : 1.0) * cl((dn || DANO_CUERPO) / DANO_CUERPO, 0.75, 1.25);
+  a.est = 'caido'; a.t = 0; a.rag = true; a.muere = !!mata; a.tocado = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = -RAG_VX * f; a.rvy = RAG_VY * f; a.rvr = RAG_VR * f;
+  a.mBrFv = -9 * f; a.mBrTv = -7 * f; a.mCabv = -6 * f;
 }
 function arqFin(l, gano) {
   const a = ARQ[l]; if (!a) return;
+  /* AL QUE LO MATARON SE QUEDA EN EL PISO: devolverlo al puesto para que
+     haga la pose de perder deshace el unico golpe que decidio el duelo. */
+  if (a.est === 'caido' && a.muere) return;
+  a.rag = false; ragCero(a);
   a.est = gano ? 'gana' : 'pierde'; a.t = 0;
 }
 function arqQuieto(l) {
   const a = ARQ[l]; if (!a) return;
   if (a.est === 'gana' || a.est === 'pierde') return;
+  if (a.est === 'caido' || a.est === 'levanta') return;
   a.est = 'quieto'; a.t = 0; a.k = 0;
 }
 
@@ -331,17 +412,63 @@ function arqPose(a, dt) {
     torsoR = 0.10 * g; cabR = -0.14 * g; resp = -0.02 * Math.abs(g);
     arcoAng = a.ang + 0.16 * g;
     if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
-  } else if (e === 'recibe') {
-    /* lo tira hacia atras y vuelve con un muelle: el golpe se SIENTE aunque
-       la barra de vida ya lo diga */
-    const u = cl(a.t / 0.62, 0, 1);
-    const g = Math.exp(-u * 5.5) * Math.cos(u * 15);
-    torsoR = -0.42 * g * a.sac; cabR = -0.55 * g * a.sac;
-    resp = -0.10 * Math.abs(g) * a.sac;
-    manoTx = -0.10 - 0.24 * g; manoTy = 1.24;
-    arcoAng = -0.95 + 0.5 * g; bocaY = by - 0.22;
-    piFR = 0.10 - 0.30 * g; piTR = -0.14 - 0.26 * g;
-    if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
+  } else if (e === 'caido' || e === 'levanta') {
+    if (e === 'caido') {
+      /* el solido: gravedad, un rebote y roce contra el piso */
+      a.rvy -= G_RAG * dt;
+      a.rx += a.rvx * dt; a.ry += a.rvy * dt; a.rot += a.rvr * dt;
+      /* LA ALTURA DEL SUELO DEPENDE DE CUANTO ESTA GIRADO: acostado, la
+         cadera queda a media panza del piso y no a los 0,88 de estar de
+         pie. Con una altura fija, el cuerpo horizontal flota. */
+      const hc = -(CADERA_Y - 0.30) * Math.abs(Math.sin(a.rot));
+      if (a.ry <= hc) {
+        a.ry = hc;
+        if (a.rvy < -0.9) {
+          a.rvy = -a.rvy * 0.32; a.rvx *= 0.62; a.rvr *= 0.55;
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        } else {
+          a.rvy = 0;
+          const r = Math.max(0, 1 - dt * 7);
+          a.rvx *= r; a.rvr *= Math.max(0, 1 - dt * 6);
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        }
+      }
+      /* NO SE SALE DE LA MESETA: son tres columnas planas y mas alla hay
+         pendiente. Un cuerpo que se desliza al vacio se lee a defecto. */
+      a.rx = cl(a.rx, RAG_XMIN, RAG_XMAX);
+      a.rot = cl(a.rot, -0.25, RAG_ROT_MAX);
+      if (!a.muere && a.t > 0.9 && Math.abs(a.rvy) < 0.35 && Math.abs(a.rvr) < 0.9) {
+        a.est = 'levanta'; a.t = 0;
+        a.r0x = a.rx; a.r0y = a.ry; a.r0r = a.rot;
+      }
+    } else {
+      /* SE LEVANTA VOLVIENDO AL PUESTO, y la caja de choque no se entera
+         nunca porque nunca se movio: al terminar, el cuerpo esta otra vez
+         exactamente donde el resolvedor cree que esta. */
+      const u = cl(a.t / RAG_LEV, 0, 1), k = suave(u);
+      a.rx = a.r0x * (1 - k); a.ry = a.r0y * (1 - k); a.rot = a.r0r * (1 - k);
+      if (u >= 1) { a.rag = false; ragCero(a); a.est = 'quieto'; a.ocio = 0; }
+    }
+
+    /* LOS MIEMBROS CUELGAN HACIA ABAJO EN EL MUNDO, o sea a `-rot` en este
+       marco — y llegan TARDE, que es lo unico que separa un cuerpo sin
+       fuerzas de un maniqui girando en bloque. */
+    const o = -a.rot;
+    muelle(a, 'mPiF', o + 0.26, dt);
+    muelle(a, 'mPiT', o - 0.30, dt);
+    muelle(a, 'mCab', o * 0.80, dt);
+    muelle(a, 'mBrF', o - 0.22, dt);
+    muelle(a, 'mBrT', o + 0.30, dt);
+
+    torsoR = -a.rot * 0.22; cabR = a.mCab - torsoR; resp = 0;
+    piFR = a.mPiF; piTR = a.mPiT;
+    const hyR = HOMBRO_Y;
+    manoTx = Math.sin(a.mBrT) * BRAZO_L * 0.92;
+    manoTy = hyR - Math.cos(a.mBrT) * BRAZO_L * 0.92;
+    bocaX = Math.sin(a.mBrF) * BRAZO_L * 0.92;
+    bocaY = hyR - Math.cos(a.mBrF) * BRAZO_L * 0.92;
+    arcoAng = -1.35 - a.rot;   /* el arco cuelga de la mano, tambien sin fuerza */
+    flVis = false;
   } else if (e === 'gana') {
     /* los brazos arriba y saltitos: el arco se guarda, que es lo que hace
        cualquiera que dejo de tener a quien tirarle */
@@ -377,4 +504,25 @@ function arqPose(a, dt) {
 function arqPaso(dt) {
   for (const a of ARQ) if (a && a.puesto) arqPose(a, dt);
 }
-const arqLibre = () => !ARQ[0] || (ARQ[0].est !== 'tira' && (!ARQ[1] || ARQ[1].est !== 'tira'));
+const arqOcupado = a => !a || a.est === 'tira' || a.est === 'caido' || a.est === 'levanta';
+const arqLibre = () => !ARQ[0] || (!arqOcupado(ARQ[0]) && (!ARQ[1] || !arqOcupado(ARQ[1])));
+/* EL TURNO NO PASA MIENTRAS HAY ALGUIEN EN EL PISO — y el que se murio no
+   cuenta, porque ese no se levanta nunca y el duelo se quedaria esperando. */
+/* EL PLANO DEL REMATE ES EL CUERPO, NO EL PUESTO. Al terminar el duelo la
+   camara se suelta y vuelve al reposo, y ahi el encuadre de espera —16,4
+   celdas de ancho— NO ALCANZA para un cuerpo tumbado: acostado a 63 grados
+   la cabeza del rival llega a x 17,19 contra un borde en 17,20, asi que el
+   muerto salia CORTADO por el canto en la ultima imagen del duelo. Enfocando
+   el cuerpo, el encuadre de vuelo lo deja con dos celdas y media de aire. */
+const arqMuerto = () => {
+  for (const a of ARQ) if (a && a.puesto && a.muere) return { x: a.x, y: a.piso + 1.0 };
+  return null;
+};
+const arqCayendo = () => {
+  for (const a of ARQ) {
+    if (!a || !a.puesto) continue;
+    if (a.est === 'levanta') return true;
+    if (a.est === 'caido' && !a.muere) return true;
+  }
+  return false;
+};
