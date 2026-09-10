@@ -323,6 +323,8 @@ function formularioPerfil(){
   g.appendChild(bots); g.appendChild(av);
   c.appendChild(g);
 
+  if (window.FA && FA.hayLlaves) c.appendChild(panelLlaves());
+
   bV.addEventListener("click", function(){ verPerfil(); });
   bG.addEventListener("click", function(){
     av.hidden = false; av.style.color = "var(--tinta-2)"; av.textContent = "Guardando…";
@@ -338,6 +340,83 @@ function formularioPerfil(){
       })
       .catch(function(e){ av.style.color = "#a3231b"; av.textContent = e.message; });
   });
+}
+
+/* ------------------------------------------------------- llaves de acceso
+   Para el que entró con contraseña y quiere dejar de escribirla, y para sumar
+   el segundo aparato. Se listan con nombre y fecha porque una llave que no se
+   puede distinguir de otra no se puede borrar: al perder el teléfono hay que
+   saber cuál sacar. */
+function panelLlaves(){
+  var g = nodo("div", "grupo blanco");
+  g.appendChild(nodo("h2", null, "Llaves de acceso"));
+  g.appendChild(nodo("p", null,
+    "Entrá con la huella, la cara o el PIN de tu dispositivo, sin escribir " +
+    "nada. La llave no sale de este aparato: acá sólo queda su mitad pública, " +
+    "que no sirve para entrar."));
+  var lista = nodo("div"); lista.style.cssText = "display:grid;gap:6px;margin:10px 0";
+  g.appendChild(lista);
+  var av = nodo("p", "avisoS"); av.hidden = true;
+  var bots = nodo("div", "bots");
+  var bA = nodo("button", "bt p", "Agregar este dispositivo"); bA.type = "button";
+  bots.appendChild(bA);
+  g.appendChild(bots); g.appendChild(av);
+
+  function decir(t, mal){
+    if (!t){ av.hidden = true; return; }
+    av.hidden = false; av.style.color = mal ? "#a3231b" : "#0e5a2c"; av.textContent = t;
+  }
+  function cuandoFue(ms){
+    return new Date(ms).toLocaleDateString("es-AR",
+      { day:"numeric", month:"short", year:"numeric" });
+  }
+  function pintar(){
+    pedir("llave").then(function(j){
+      lista.textContent = "";
+      if (!j.llaves.length){
+        lista.appendChild(nodo("p", null, "Todavía no tenés ninguna."));
+        return;
+      }
+      j.llaves.forEach(function(k){
+        var f = nodo("div");
+        f.style.cssText = "display:flex;gap:10px;align-items:center;padding:7px 10px;" +
+          "border:1px solid #c2d0de;border-radius:4px;background:#fff";
+        var t = nodo("div"); t.style.flex = "1";
+        t.appendChild(nodo("b", null, k.nombre || "Un dispositivo"));
+        var d = nodo("div", null, "Desde el " + cuandoFue(k.creado) +
+          (k.usado ? "  ·  se usó el " + cuandoFue(k.usado) : "  ·  sin usar todavía"));
+        d.style.cssText = "font-size:12.5px;color:var(--tinta-2)";
+        t.appendChild(d);
+        f.appendChild(t);
+        var bB = nodo("button", "bt", "Borrar"); bB.type = "button";
+        bB.addEventListener("click", function(){ borrar(k, false); });
+        f.appendChild(bB);
+        lista.appendChild(f);
+      });
+    }).catch(function(e){ decir(e.message, true); });
+  }
+  function borrar(k, seguro){
+    pedir("llave", { method:"POST",
+      body: JSON.stringify({ hacer:"borrar", id:k.id, seguro:seguro }) })
+      .then(function(){ decir("Borrada.", false); pintar(); })
+      .catch(function(e){
+        /* si es su única forma de entrar, el servidor frena y avisa: borrarla
+           sin decir nada sería dejar a alguien afuera de su propia cuenta */
+        if (/única forma/.test(e.message) &&
+            confirm(e.message + "\n\n¿La borro igual?")) borrar(k, true);
+        else decir(e.message, true);
+      });
+  }
+  bA.addEventListener("click", function(){
+    decir("Pedile a tu dispositivo que la cree…", false);
+    bA.disabled = true;
+    FA.agregarLlave()
+      .then(function(){ decir("Listo: ya podés entrar con este dispositivo.", false);
+                        bA.disabled = false; pintar(); })
+      .catch(function(e){ decir(FA.porQueFallo(e), true); bA.disabled = false; });
+  });
+  pintar();
+  return g;
 }
 
 function formularioPublicar(){

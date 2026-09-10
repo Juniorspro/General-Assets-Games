@@ -62,7 +62,9 @@ function salir(){
 function pintarUsuario(){
   if (!usuario) return;
   $("quien-nombre").textContent = usuario.nombre;
-  $("quien-rol").textContent = usuario.via === "google" ? usuario.correo : "Cuenta local de este dispositivo";
+  $("quien-rol").textContent = usuario.via === "cuenta"
+    ? (usuario.correo || "Cuenta de Frutiger Aero")
+    : "Cuenta local de este dispositivo";
   $("quien-retrato").innerHTML = retratoDe(usuario);
   $("hola").textContent = "Hola, " + usuario.nombre.split(" ")[0];
 }
@@ -76,19 +78,22 @@ function comoInvitado(){
 $("flecha").addEventListener("click", comoInvitado);
 $("nombre").addEventListener("keydown", function(e){ if (e.key === "Enter") comoInvitado(); });
 
-/* --- Google ---
-   El identificador de cliente NO está en el código: lo sirve /api/config desde
-   una variable de entorno, así se cambia desde el panel de Cloudflare sin
-   volver a publicar. Si no hay ninguno, el botón lo dice en lugar de fallar.
+/* --- las tres puertas: llave de acceso, Discord y Google ---
+   Las tres terminan en lo mismo: una cuenta de verdad, con el mismo pase que
+   la de usuario y contraseña. No son tres sesiones distintas.
 
-   ENTRAR CON GOOGLE DA UNA CUENTA DE VERDAD, la misma que se crea a mano con
-   usuario y contraseña: se puede publicar, tener perfil y pedir el acceso.
-   Antes devolvía un nombre y una foto que vivían sólo acá, así que entrar con
-   Google era entrar a un escritorio de adorno y nada más.
+   La que manda es LA LLAVE DE ACCESO, porque es la única que no depende de
+   nadie: no hay consola de un tercero que registrar, no hay secreto que se
+   pueda filtrar, y no hay edad mínima que cumplirle a nadie. La clave privada
+   vive en el teléfono o en la computadora y no sale de ahí; acá queda la
+   pública, que no sirve para entrar. Y no se puede pescar: la firma lleva
+   adentro de qué sitio salió, así que una copia de esta página en otra
+   dirección no puede usarla, aunque la persona caiga y apoye el dedo. */
+var CLIENTE = null, NUMERO = null, TICKET = null, PUERTA = null;
 
-   El token NO se lee acá. Un JWT es texto firmado: leerlo sin comprobar la
-   firma es creerle a quien lo mandó. Lo comprueba el servidor. */
-var CLIENTE = null, NUMERO = null, TICKET = null;
+var HAY_LLAVES = !!(window.PublicKeyCredential && navigator.credentials &&
+                    window.AuthenticatorAttestationResponse &&
+                    AuthenticatorAttestationResponse.prototype.getPublicKey);
 
 fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(function(c){
   if (c && c.auto) {
@@ -99,44 +104,31 @@ fetch("api/config").then(function(r){ return r.ok ? r.json() : null; }).then(fun
   if (c && c.pago) { pago = c.pago; }
   pintarMontos();
   mirarLaVuelta();
+
+  if (HAY_LLAVES){ $("llave-btn").hidden = false; $("pie-llave").hidden = false; }
+  if (c && c.discord) $("discord-btn").hidden = false;
+
   CLIENTE = c && c.google;
-  if (!CLIENTE){ $("sin-google").hidden = false; return; }
-  var s = document.createElement("script");
-  s.src = "https://accounts.google.com/gsi/client";
-  s.async = true; s.defer = true;
-  s.onload = armarGoogle;
-  s.onerror = function(){ $("sin-google").hidden = false; };
-  document.head.appendChild(s);
+  if (!CLIENTE){ if (!HAY_LLAVES && !(c && c.discord)) $("sin-google").hidden = false; return; }
+  var g = document.createElement("script");
+  g.src = "https://accounts.google.com/gsi/client";
+  g.async = true; g.defer = true;
+  g.onload = armarGoogle;
+  g.onerror = function(){ $("sin-google").hidden = false; };
+  document.head.appendChild(g);
 }).catch(function(){ $("sin-google").hidden = false; });
 
-/* El número de un solo uso. Va DENTRO del token que firma Google, así que ata
-   ese token a este inicio de sesión: uno robado de otro lado no entra. Vence,
-   por eso se pide otro cada tanto mientras la pantalla sigue abierta. */
-function pedirNumero(){
-  return fetch("api/entrar").then(function(r){ return r.json(); })
-    .then(function(j){ NUMERO = j.numero; return NUMERO; });
-}
-
-function armarGoogle(){
-  if (!window.google || !google.accounts || !google.accounts.id) return;
-  pedirNumero().then(dibujar).catch(function(){ $("sin-google").hidden = false; });
-  setInterval(function(){
-    if ($("logon").hidden) return;      /* ya entró: no hay nada que refrescar */
-    pedirNumero().then(dibujar).catch(function(){});
-  }, 20 * 60000);
-}
-
-function dibujar(){
-  google.accounts.id.initialize({
-    client_id: CLIENTE,
-    nonce: NUMERO,
-    callback: function(resp){ mandarToken(resp.credential); }
-  });
-  $("gbt").hidden = true;
-  $("gsi").textContent = "";
-  google.accounts.id.renderButton($("gsi"), {
-    theme:"outline", size:"large", shape:"rectangular", width:330,
-    text:"continue_with", locale:"es"
+/* ------------------------------------------------------- cosas compartidas */
+function llamar(ruta, cuerpo){
+  var o = { method:"POST", headers:{"content-type":"application/json"},
+            body: JSON.stringify(cuerpo) };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) o.headers.authorization = "Bearer " + ses.pase;
+  return fetch("api/" + ruta, o).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok) throw new Error(j.error || ("error " + r.status));
+      return j;
+    });
   });
 }
 
@@ -145,54 +137,35 @@ function avisoG(t){
   if (!t){ a.hidden = true; return; }
   a.hidden = false; a.textContent = t;
 }
-
-/* de acá salen los dos finales: o ya tiene cuenta y entra, o hay que pedirle
-   el nombre de usuario */
-function mandarToken(credential){
-  $("g-error").hidden = true;
-  llamarEntrar({ credential: credential, numero: NUMERO }).then(function(j){
-    if (j.pase) return conCuenta(j);
-    if (j.nuevo){
-      TICKET = j.ticket;
-      $("paso1").hidden = true;
-      $("paso2").hidden = false;
-      $("g-quien").textContent = j.correo
-        ? "Entraste como " + j.correo + ". Falta una cosa:"
-        : "Falta una cosa:";
-      $("g-usuario").value = j.sugerido || "";
-      $("g-usuario").dataset.nombre = j.nombre || "";
-      if (j.foto) $("g-usuario").dataset.foto = j.foto;
-      verMuestra();
-      $("g-usuario").focus();
-      $("g-usuario").select();
-    }
-  }).catch(function(e){
-    /* el error vuelve a la pantalla de entrada, que es donde está mirando */
-    $("paso2").hidden = true; $("paso1").hidden = false;
-    var n = $("g-error"); n.hidden = false; n.textContent = e.message;
-  });
-}
-
-function llamarEntrar(cuerpo){
-  return fetch("api/entrar", {
-    method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify(cuerpo)
-  }).then(function(r){
-    return r.json().then(function(j){
-      if (!r.ok) throw new Error(j.error || ("error " + r.status));
-      return j;
-    });
-  });
+function errorG(t){
+  $("paso2").hidden = true; $("paso1").hidden = false;
+  var n = $("g-error"); n.hidden = false; n.textContent = t;
 }
 
 /* la sesión de la cuenta es la MISMA que usa el muro: se guarda donde la
-   busca, y se avisa por si esa parte ya se cargó */
+   busca, y se avisa por si esa parte de la página ya se cargó */
 function conCuenta(j){
   var ses = { pase: j.pase, yo: j.yo };
   caja.poner("sesion", ses);
   document.dispatchEvent(new CustomEvent("cuenta-lista", { detail: ses }));
   entrar({ nombre: j.yo.nombre, foto: j.foto || null,
-           correo: j.correo || null, via: "google" });
+           correo: j.correo || null, via: "cuenta" });
+}
+
+/* el segundo paso: Google y Discord ya dijeron quién es, pero no cómo quiere
+   que lo vean acá. El nombre de usuario es la dirección del perfil. */
+function pedirUsuario(j, puerta){
+  PUERTA = puerta; TICKET = j.ticket;
+  $("paso1").hidden = true; $("paso2").hidden = false;
+  $("g-error").hidden = true;
+  avisoG("");
+  $("g-quien").textContent = j.correo ? "Entraste como " + j.correo + ". Falta una cosa:"
+                                      : "Falta una cosa:";
+  $("g-conclave").hidden = (puerta === "llave");
+  $("g-usuario").value = j.sugerido || "";
+  $("g-usuario").dataset.nombre = j.nombre || "";
+  verMuestra();
+  $("g-usuario").focus(); $("g-usuario").select();
 }
 
 function verMuestra(){
@@ -200,6 +173,171 @@ function verMuestra(){
   $("g-muestra").textContent = "@" + (v || "vos");
 }
 
+/* ============================================== 1 · llaves de acceso */
+var cod = new TextEncoder();
+function aB64u(b){
+  var s = "", u = new Uint8Array(b);
+  for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+  return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function deB64u(t){
+  var s = String(t).replace(/-/g,"+").replace(/_/g,"/");
+  while (s.length % 4) s += "=";
+  var b = atob(s), u = new Uint8Array(b.length);
+  for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u;
+}
+/* un nombre para poder distinguirla después en la lista y borrar la correcta */
+function nombreDelAparato(){
+  var u = navigator.userAgent;
+  if (/Android/.test(u)) return "Android";
+  if (/iPhone|iPad|iPod/.test(u)) return "iPhone o iPad";
+  if (/Mac OS X/.test(u)) return "Mac";
+  if (/Windows/.test(u)) return "Windows";
+  if (/Linux/.test(u)) return "Linux";
+  return "Este dispositivo";
+}
+/* el navegador cancela y avisa igual que si fallara: hay que distinguirlos, o
+   el que cierra el diálogo a propósito ve un error de sistema */
+function porQueFallo(e){
+  if (e && e.name === "NotAllowedError")
+    return "Se canceló, o pasó demasiado tiempo. Probá otra vez.";
+  if (e && e.name === "InvalidStateError")
+    return "Este aparato ya tiene una llave en esa cuenta: entrá con ella.";
+  if (e && e.name === "SecurityError")
+    return "Las llaves sólo andan en la dirección oficial del sitio.";
+  return (e && e.message) || "No se pudo.";
+}
+
+function entrarConLlave(){
+  $("g-error").hidden = true;
+  llamar("llave", { hacer:"reto" }).then(function(j){
+    return navigator.credentials.get({ publicKey: {
+      challenge: cod.encode(j.reto),
+      rpId: location.hostname,
+      userVerification: "preferred",
+      timeout: 60000
+    }});
+  }).then(function(c){
+    if (!c) throw new Error("No se eligió ninguna llave.");
+    var r = c.response;
+    return llamar("llave", { hacer:"entrar", cred: aB64u(c.rawId),
+      cliente: aB64u(r.clientDataJSON), auth: aB64u(r.authenticatorData),
+      firma: aB64u(r.signature) });
+  }).then(conCuenta).catch(function(e){ errorG(porQueFallo(e)); });
+}
+
+/* La ceremonia en sí: el navegador crea el par de claves, y acá sube sólo la
+   pública. La privada no sale del aparato ni pasando por este código. */
+function ceremonia(j){
+  return navigator.credentials.create({ publicKey: {
+    challenge: cod.encode(j.reto),
+    rp: { name: "Frutiger Aero", id: location.hostname },
+    user: { id: deB64u(j.handle), name: j.usuario, displayName: j.nombre || j.usuario },
+    /* los dos tipos que entiende todo el mundo: curva elíptica y RSA */
+    pubKeyCredParams: [{ type:"public-key", alg:-7 }, { type:"public-key", alg:-257 }],
+    /* «residentKey» es lo que permite entrar SIN escribir el usuario: la llave
+       se acuerda a qué cuenta pertenece y el aparato la ofrece sola */
+    authenticatorSelection: { residentKey:"required", userVerification:"preferred" },
+    /* para que no ofrezca poner una segunda llave del mismo aparato en la
+       misma cuenta, que sólo sirve para confundir después al borrarlas */
+    excludeCredentials: (j.tiene || []).map(function(id){
+      return { type:"public-key", id: deB64u(id) }; }),
+    attestation: "none",
+    timeout: 60000
+  }}).then(function(c){
+    if (!c) throw new Error("No se creó la llave.");
+    var r = c.response;
+    return llamar("llave", { hacer:"guardar", ticket: j.ticket,
+      cred: aB64u(c.rawId), cliente: aB64u(r.clientDataJSON),
+      clave: aB64u(r.getPublicKey()), alg: r.getPublicKeyAlgorithm(),
+      nombre: nombreDelAparato() });
+  });
+}
+
+/* crear la cuenta: primero el nombre de usuario, DESPUÉS la llave. La cuenta se
+   crea recién cuando la llave ya existe, para no dejar cuentas huérfanas a las
+   que nadie pueda entrar si se cancela el diálogo del navegador. */
+function hacerLlave(usuario){
+  avisoG("Pedile a tu dispositivo que la cree…");
+  return llamar("llave", { hacer:"empezar", usuario: usuario,
+                           nombre: $("g-usuario").dataset.nombre })
+    .then(ceremonia).then(conCuenta);
+}
+
+/* desde adentro, para el que ya tiene cuenta con contraseña y quiere dejar de
+   escribirla, o para sumar el segundo aparato */
+window.FA = window.FA || {};
+window.FA.hayLlaves = HAY_LLAVES;
+window.FA.agregarLlave = function(){
+  return llamar("llave", { hacer:"empezar" }).then(ceremonia);
+};
+window.FA.porQueFallo = porQueFallo;
+
+if ($("llave-btn")) $("llave-btn").addEventListener("click", entrarConLlave);
+if ($("crear-llave")) $("crear-llave").addEventListener("click", function(){
+  pedirUsuario({ sugerido:"", nombre:"" }, "llave");
+  $("g-quien").textContent = "Elegí tu nombre de usuario y listo:";
+});
+
+/* ============================================== 2 · Discord */
+if ($("discord-btn")) $("discord-btn").addEventListener("click", function(){
+  location.href = "api/discord";
+});
+
+/* La vuelta de Discord llega por la dirección. Viene en el pedacito de después
+   del `#`, que NO se manda a ningún servidor; igual se borra apenas se lee,
+   para que no quede en el historial ni en un enlace compartido. */
+(function volvioDeDiscord(){
+  var h = location.hash || "";
+  if (h.length < 2) return;
+  var m = /^#(entra|nuevo|mal)=(.*)$/.exec(h);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  var dato = decodeURIComponent(m[2]);
+  if (m[1] === "mal"){ errorG(dato); return; }
+  var j; try { j = JSON.parse(dato); } catch(e){ return; }
+  if (m[1] === "entra") conCuenta(j); else pedirUsuario(j, "discord");
+})();
+
+/* ============================================== 3 · Google */
+function pedirNumero(){
+  return fetch("api/entrar").then(function(r){ return r.json(); })
+    .then(function(j){ NUMERO = j.numero; return NUMERO; });
+}
+function armarGoogle(){
+  if (!window.google || !google.accounts || !google.accounts.id) return;
+  pedirNumero().then(dibujarGoogle).catch(function(){ $("sin-google").hidden = false; });
+  /* el número vence: mientras la pantalla siga abierta se pide otro */
+  setInterval(function(){
+    if ($("logon").hidden) return;
+    pedirNumero().then(dibujarGoogle).catch(function(){});
+  }, 20 * 60000);
+}
+function dibujarGoogle(){
+  google.accounts.id.initialize({
+    client_id: CLIENTE, nonce: NUMERO,
+    callback: function(resp){
+      $("g-error").hidden = true;
+      llamar("entrar", { credential: resp.credential, numero: NUMERO })
+        .then(function(j){
+          if (j.pase) conCuenta(j); else if (j.nuevo) pedirUsuario(j, "google");
+        })
+        .catch(function(e){ errorG(e.message); });
+    }
+  });
+  $("gbt").hidden = true;
+  $("gsi").textContent = "";
+  google.accounts.id.renderButton($("gsi"), {
+    theme:"outline", size:"large", shape:"rectangular", width:330,
+    text:"continue_with", locale:"es"
+  });
+}
+$("gbt").addEventListener("click", function(){
+  if (!CLIENTE) { $("sin-google").hidden = false; $("sin-google").scrollIntoView({block:"nearest"}); }
+});
+
+/* ============================================== el 2º paso, para las tres */
 if ($("g-usuario")) {
   $("g-usuario").addEventListener("input", verMuestra);
   $("g-usuario").addEventListener("keydown", function(e){
@@ -211,16 +349,20 @@ if ($("g-usuario")) {
     if (!/^[a-z0-9](?:[a-z0-9_.]{1,18}[a-z0-9])$/.test(u)){
       avisoG("En minúsculas, de 3 a 20, sin espacios ni acentos."); return;
     }
+    if (PUERTA === "llave"){
+      hacerLlave(u).catch(function(e){ avisoG(porQueFallo(e)); });
+      return;
+    }
     avisoG("Creando tu cuenta…");
-    llamarEntrar({ hacer:"registrar", ticket: TICKET, usuario: u,
-                   nombre: $("g-usuario").dataset.nombre })
+    llamar("entrar", { hacer:"registrar", ticket: TICKET, usuario: u,
+                       nombre: $("g-usuario").dataset.nombre })
       .then(conCuenta).catch(function(e){ avisoG(e.message); });
   });
 
   $("g-vincular").addEventListener("click", function(){
-    avisoG("Pegando tu Google…");
-    llamarEntrar({ hacer:"vincular", ticket: TICKET,
-                   usuario: $("g-vi-us").value, clave: $("g-vi-cl").value })
+    avisoG("Pegando tu cuenta…");
+    llamar("entrar", { hacer:"vincular", ticket: TICKET,
+                       usuario: $("g-vi-us").value, clave: $("g-vi-cl").value })
       .then(conCuenta).catch(function(e){ avisoG(e.message); });
   });
   $("g-vi-cl").addEventListener("keydown", function(e){
@@ -228,14 +370,10 @@ if ($("g-usuario")) {
   });
 
   $("g-volver").addEventListener("click", function(){
-    TICKET = null; avisoG("");
+    TICKET = null; PUERTA = null; avisoG("");
     $("paso2").hidden = true; $("paso1").hidden = false;
   });
 }
-
-$("gbt").addEventListener("click", function(){
-  if (!CLIENTE) { $("sin-google").hidden = false; $("sin-google").scrollIntoView({block:"nearest"}); }
-});
 
 /* --- apagar --- */
 $("apagar").addEventListener("click", function(){
@@ -305,8 +443,13 @@ $("cerrar-sesion").addEventListener("click", salir);
 /* ============================================== 3 · el panel de control */
 var ajustes = caja.leer("ajustes", { tono:210, sat:52, vidrio:82, fondo:"pasto", burbujas:true });
 
+/* Las direcciones van desde la raíz y no relativas. Un `url()` que se mete en
+   una variable de CSS no se resuelve desde el documento sino desde la hoja de
+   estilos donde la variable SE USA —que está en /css/—, así que «img/fondo»
+   terminaba pidiendo «/css/img/fondo» y el escritorio se quedaba sin fondo,
+   con el azul liso de abajo. No daba error en pantalla: sólo faltaba el pasto. */
 var FONDOS = {
-  pasto:  { ancho:'url("img/fondo.06222548.webp")', alto:'url("img/fondo-alto.550e8e84.webp")' },
+  pasto:  { ancho:'url("/img/fondo.06222548.webp")', alto:'url("/img/fondo-alto.550e8e84.webp")' },
   aurora: { ancho:"linear-gradient(180deg,#04203f,#0c4a7e 40%,#1e8fa8 70%,#7fe0cf)",
             alto:  "linear-gradient(180deg,#04203f,#0c4a7e 40%,#1e8fa8 70%,#7fe0cf)" },
   vidrio: { ancho:"radial-gradient(120% 90% at 30% 10%,#bfe9ff,#2f7fd0 45%,#0a3a6b)",

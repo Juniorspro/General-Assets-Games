@@ -19,6 +19,9 @@ export const onRequestGet = ({ env }) => {
 
   return new Response(JSON.stringify({
     google: env.GOOGLE_CLIENT_ID || null,
+    /* Discord solo necesita saberse encendido: su identificador y su secreto
+       viajan entre servidores, no por el navegador. */
+    discord: !!(env.DISCORD_CLIENT_ID && env.DISCORD_SECRET),
     pago: Object.keys(pago).length ? pago : null,
     // que vias pueden cobrar y verificar solas
     auto: {

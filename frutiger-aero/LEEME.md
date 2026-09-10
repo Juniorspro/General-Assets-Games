@@ -8,20 +8,92 @@ interfaz. La mascota 3D vive en una de las ventanas.
 
     https://frutiger-aero-86q.pages.dev
 
-## Entrar con Google: qué falta y por qué no está en el código
+## Cuatro formas de entrar, y una sola cuenta
 
-El botón de Google anda solo en cuanto exista un identificador de cliente. **No
-está escrito en el código a propósito**: lo sirve `functions/api/config.js`
-desde la variable de entorno `GOOGLE_CLIENT_ID`, así se cambia desde el panel de
-Cloudflare sin volver a publicar el sitio. Mientras no haya ninguno, la pantalla
-lo dice y explica los tres pasos, en lugar de tirar un error.
+Usuario y contraseña, **llave de acceso**, **Discord** y **Google**. Las cuatro
+terminan en la misma cuenta de la base y en el mismo pase firmado: no son
+sesiones distintas ni cuentas distintas. Quien entró por una puede pegarse las
+otras después, y el que entró con Google y ya tenía cuenta con contraseña la
+vincula en vez de quedarse con dos perfiles.
 
-Los tres pasos, una sola vez:
+Todas se atan al **número de la cuenta del otro lado**, nunca al correo ni al
+nombre de usuario. El correo de Google cambia, el nombre de Discord cambia, y
+una dirección de escuela o de trabajo se le reasigna a otra persona cuando el
+primero se va: atar el perfil a algo que cambia es dejar que el que herede ese
+algo herede el perfil, las publicaciones y el acceso pagado.
 
-1. Google Cloud → **APIs y servicios** → **Credenciales** → *Crear credenciales*
-   → **ID de cliente de OAuth** → Aplicación web.
-2. En «Orígenes autorizados de JavaScript», el dominio del sitio.
-3. Cloudflare Pages → **Settings** → **Variables** → `GOOGLE_CLIENT_ID`.
+### Llaves de acceso: la única que no le pide permiso a nadie
+
+Las otras tres necesitan darse de alta en la consola de alguien, y la de Google
+pide **mayoría de edad**. Las llaves de acceso no: la clave privada la guarda el
+teléfono o la computadora de cada uno, acá queda la pública, y entrar es firmar
+un número al azar con la huella, la cara o el PIN. No hay tercero, no hay
+secreto que se pueda filtrar y no hay edad mínima que cumplirle a nadie. Andan
+sin configurar nada: si el navegador las soporta, el botón aparece.
+
+Tres cosas que salen gratis y con contraseñas no se pueden tener:
+
+- **Lo guardado acá no sirve para entrar.** Es la mitad pública. Si alguien se
+  lleva la base no se lleva con qué hacerse pasar por nadie. Con contraseñas,
+  por mejor guardadas que estén, siempre queda algo contra lo que probar.
+- **No se puede pescar.** La firma lleva adentro de qué sitio salió, así que una
+  copia de esta página en otra dirección no puede usar estas llaves, aunque la
+  persona caiga y apoye el dedo.
+- **No hay nada que recordar ni que repetir en otro sitio.**
+
+Dos detalles de implementación que importan:
+
+- La clave pública la entrega el navegador con `getPublicKey()`, ya en el
+  formato que entiende WebCrypto. El estándar la manda envuelta en CBOR dentro
+  del `attestationObject`, y desarmar eso a mano es donde se cometen los
+  errores. No es confiar en el navegador: una clave pública no es un secreto, y
+  el que registra una que no controla sólo se perjudica a sí mismo. Lo que sí se
+  comprueba, y es lo que importa, es **la firma de cada entrada**.
+- Una firma ECDSA sale del autenticador envuelta en ASN.1 y WebCrypto la quiere
+  pelada, los dos números pegados de 32 bytes cada uno. Sin esa traducción
+  (`firmaPelada`, en `_llave.js`) **ninguna** entrada da, y el síntoma es de los
+  que hacen perder una tarde: no hay error, simplemente nadie puede entrar.
+
+La cuenta se crea **recién cuando la llave ya existe**, no antes: al revés
+quedarían cuentas huérfanas a las que nadie puede entrar cada vez que alguien
+cancela el diálogo del navegador.
+
+### Discord: la puerta de afuera que sí está al alcance
+
+El portal de desarrolladores de Discord se abre desde los 13 con la cuenta de
+siempre. Una vez:
+
+1. **discord.com/developers/applications** → *New Application*.
+2. En **OAuth2**, en «Redirects», la dirección del sitio + `/api/discord`.
+3. Cloudflare Pages → **Settings** → **Variables** → `DISCORD_CLIENT_ID` y
+   `DISCORD_SECRET`. El secreto va **como secreto**, no como variable común.
+
+Acá no llega un token firmado sino un **código** de un solo uso que hay que
+cambiarle a Discord por un permiso, y ese cambio lleva el secreto de la
+aplicación: por eso pasa entre servidores y no puede estar en el navegador.
+
+**El `state` no es decoración**: sin él, cualquier página puede mandar a alguien
+a la vuelta de este circuito con un código suyo y dejarlo con la sesión de otro
+sin que se dé cuenta. Va firmado por este servidor y con fecha.
+
+Y el pase vuelve en el pedacito de después del `#`, que **no se manda a ningún
+servidor** —ni al nuestro ni al de en medio—; la página lo borra apenas lo lee.
+En la parte de antes del `?` quedaría escrito en los registros de todo el camino.
+
+### Google: qué falta y por qué no está en el código
+
+Anda solo en cuanto exista un identificador de cliente. **No está escrito en el
+código a propósito**: lo sirve `functions/api/config.js` desde la variable
+`GOOGLE_CLIENT_ID`, así se cambia desde el panel de Cloudflare sin volver a
+publicar. Una vez:
+
+1. **console.cloud.google.com** → crear un proyecto.
+2. **Plataforma de Auth de Google** → *Empezar* → tipo **Externo**.
+3. **Clientes** → *Crear cliente* → **Aplicación web**. En «Orígenes autorizados
+   de JavaScript», la dirección del sitio, entera y sin barra al final.
+4. Cloudflare Pages → **Settings** → **Variables** → `GOOGLE_CLIENT_ID`.
+
+El *secreto* del cliente no hace falta y no se pega en ningún lado.
 
 **El token se verifica del lado del servidor y eso no es opcional.** Un JWT es
 texto firmado: leerlo en el navegador sin comprobar la firma es leer lo que
@@ -29,6 +101,14 @@ quiso escribir el que lo mandó, y cualquiera podría entrar con el nombre y la
 foto que se le antoje. `functions/api/entrar.js` se lo da a Google y comprueba
 las tres cosas que casi siempre faltan: que la firma sea de Google, que el
 `aud` sea **esta** aplicación y que no esté vencido.
+
+### El número de un solo uso
+
+Google, Discord y las llaves usan el mismo (`darNumero` en `_firma.js`). Sirve
+para que algo robado en otro lado no entre acá: sólo vale el número que pidió
+**esta** página hace un rato. No tiene tabla y no la necesita —la fecha y la
+firma viajan adentro del propio número—, porque una tabla de números de un solo
+uso hay que limpiarla, y una tabla que nadie limpia crece para siempre.
 
 ## Lo social: muro, perfiles y cuentas
 
