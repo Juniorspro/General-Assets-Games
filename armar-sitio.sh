@@ -36,5 +36,33 @@ if [ -d sitio/_funciones ]; then
   rm -rf sitio/_funciones
 fi
 
+# LAS FECHAS DEL SITEMAP, sacadas de git y no escritas a mano.
+#
+# De todo lo que lleva un sitemap, Google mira una sola cosa: `lastmod`. Y si
+# todas las direcciones dicen la misma fecha de hace meses, aprende que este
+# sitemap no dice la verdad y le deja de creer; a partir de ahi publicar algo
+# nuevo no le avisa a nadie. Asi que la fecha de cada pagina es la del ultimo
+# commit que toco SU archivo. La otra mitad —cuando cambiaron los datos que la
+# pagina muestra— la pregunta la funcion a la base, en cada pedido.
+#
+# El sitemap deja de ser un archivo: lo arma `functions/sitemap.xml.js`. Por eso
+# se borra el estatico, para que no haya dos y se sirva el equivocado.
+rm -f sitio/sitemap.xml
+{
+  echo "/* Generado por armar-sitio.sh. La fecha del ultimo commit que toco cada"
+  echo "   pagina, en milisegundos. No editar a mano: se pisa al publicar. */"
+  echo "export const FECHAS = {"
+  for f in iblo iblo-publicaciones iblo-esteticas iblo-servicios iblo-archivo iblo-reels; do
+    # `git log -1` da la fecha del ultimo cambio de ESE archivo; si el archivo
+    # todavia no esta en git (recien creado), vale la fecha de ahora
+    seg=$(git log -1 --format=%ct -- "docs/paginas/$f.html" 2>/dev/null || true)
+    [ -n "$seg" ] || seg=$(date +%s)
+    ruta=$f
+    [ "$f" = "iblo" ] && ruta=""          # iblo.html es la portada, o sea «/»
+    echo "  \"$ruta\": ${seg}000,"
+  done
+  echo "};"
+} > sitio/functions/_fechas.js
+
 echo "sitio/ armado. Portada: $(grep -o '<title>[^<]*</title>' sitio/index.html | head -1)"
 echo "Ahora:  cd sitio && npx wrangler pages deploy . --project-name iblo-eventos --branch main --commit-dirty=true"
