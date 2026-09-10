@@ -351,6 +351,23 @@ window.__A = {
      flecha acierte. `mata` deja al arquero en el piso: un muerto no se
      levanta, y eso hay que poder comprobarlo aparte. */
   golpe: (lado, cab, mata) => { arqRecibe(lado | 0, !!cab, cab ? DANO_CABEZA : DANO_CUERPO, !!mata); return window.__A.arq()[lado | 0]; },
+  /* LA CAMARA A MANO, para poder MIRAR una pieza a tamano de estudio. A la
+     escala de partida un arquero mide 53 px y el arco 40: a eso, un arco mal
+     puesto y uno bien puesto se ven igual, asi que juzgar la pose en una
+     captura de partida es juzgar una mancha. Planta la camara y dibuja. */
+  mira: (x, y, cel) => { camFoco(x, y); CAM.cx = x; CAM.cy = y;
+                         CAM.cel = cel || 4; encuadra(); escDibuja();
+                         return { cx: CAM.cx, cy: CAM.cy, cel: CAM.cel }; },
+  /* LA POSE, en el marco local del arquero. Es lo unico que dice donde cae
+     el arco respecto del hombro y de la mano, que es lo que una foto de
+     cuarenta pixeles no puede contestar. */
+  pose: (l) => { const a = ARQ[l | 0]; if (!a) return null; const P = a.P;
+                 return { est: a.est, bocaX: +P.bocaX.toFixed(3), bocaY: +P.bocaY.toFixed(3),
+                          arcoAng: +P.arcoAng.toFixed(3), nockX: +P.nockX.toFixed(3),
+                          manoTx: +P.manoTx.toFixed(3), manoTy: +P.manoTy.toFixed(3),
+                          hombroY: +(HOMBRO_Y + P.resp).toFixed(3),
+                          brazo: +Math.hypot(P.bocaX, P.bocaY - HOMBRO_Y - P.resp).toFixed(3),
+                          brazoMax: +(BR1 + BR2).toFixed(3) }; },
   errs: () => window.__errs.slice(),
 };
 

@@ -81,9 +81,23 @@ const suave = u => u * u * (3 - 2 * u);
 
 /* el perfil de media limba, de la empunadura a la punta. Es UNA curva y no
    cuatro tramos rectos: a los ~40 px que mide el arco en pantalla, lo unico
-   que dice «esto es un arco» es que la silueta se curve hacia el blanco. */
-const ARCO_PT = [0.02, 0.20, 0.056, 0.59, 0.34, 0.98];   /* p0, control, p1 */
-const ARCO_PUNTA = [0.34, 0.98];
+   que dice «esto es un arco» es que la silueta se curve hacia el blanco.
+
+   Y ESTABA DADO VUELTA. Las puntas caian en x = +0,34, o sea DELANTE de la
+   empunadura, asi que la cuerda —que va de punta a punta— pasaba por encima
+   del puno y entre el arquero y el blanco. Un arco de verdad es al reves:
+   target <- empunadura <- cuerda <- arquero, y la separacion entre las dos
+   ES el brace height. Con la empunadura adelante (x = +0,02) y las puntas
+   atras (-0,30) la curva bombea hacia el blanco, que es lo que hace una
+   limba, y la cuerda queda del lado del que tira.                         */
+const ARCO_PT = [0.02, 0.20, -0.03, 0.60, -0.30, 0.98];  /* p0, control, p1 */
+const ARCO_PUNTA = [-0.30, 0.98];
+
+/* EL NOCK: donde esta la cuerda. En reposo cae en la linea de las dos puntas
+   —o sea recta— y al tensar viaja hacia atras por la linea de la flecha.
+   0,85 sobre un arquero de 2,10 son unos 71 cm de apertura a escala de
+   persona, que es lo que mide un tiro de verdad. */
+const NOCK_0 = -0.30, NOCK_1 = -0.85;
 
 const ARQ_COL = [
   /* 0 = el jugador. Los otros son los rivales, uno por duelo (se repiten a
@@ -157,6 +171,25 @@ function codoDe(sx, sy, hx, hy, s) {
   const h = Math.sqrt(Math.max(0, BR1 * BR1 - a * a));
   return [sx + ux * a + uy * h * s, sy + uy * a - ux * h * s];
 }
+/* EL NOCK NO PUEDE IRSE MAS ATRAS DE LO QUE EL BRAZO ALCANZA. Tensar es
+   llevar el puno hasta `nock` sobre la linea de la flecha, y a angulos altos
+   ese punto se va a metro y pico del hombro contra los 0,96 que mide el
+   brazo: `codoDe` recorta la distancia pero sigue DIBUJANDO la mano donde se
+   la pidieron, asi que el antebrazo se estira ocho pixeles sobre un arquero
+   de cincuenta y tres. Se corta la linea contra la esfera del alcance — o
+   sea que el arquero tensa lo que puede y no lo que se le pidio.
+   (t^2 + 2t(P.d) + |P|^2 = R^2 con P = boca - hombro; se toma la raiz de
+   atras, que es el punto mas lejos al que el puno todavia llega.)         */
+const ALC_R = BR1 + BR2 - 0.02;
+function nockTope(bx, by, ang, n) {
+  const px = bx, py = by - HOMBRO_Y;
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const pd = px * dx + py * dy, p2 = px * px + py * py;
+  const disc = pd * pd - p2 + ALC_R * ALC_R;
+  if (disc <= 0) return n;              /* la boca ya esta fuera: no hay corte */
+  return Math.max(n, -pd - Math.sqrt(disc));
+}
+
 function brazoDib(g, P, sx, sy, hx, hy, s, manga) {
   const [ex, ey] = codoDe(sx, sy, hx, hy, s);
   capsu(g, sx, sy, ex, ey, 0.25, manga ? P.ropaO : P.pielS);
@@ -198,9 +231,15 @@ function arqDibuja(g, a) {
     rredon(g, px - 0.13, py - 0.10, 0.42, 0.20, 0.09, zz ? '#2e2f38' : '#22232a');
   }
 
-  /* BRAZO DE ATRAS: el de la cuerda. Va antes del torso, asi que al tensar
-     la mano viaja POR DETRAS del pecho, que es lo que hace de verdad.    */
-  brazoDib(g, P, 0, hy, S.manoTx, S.manoTy + resp, -1, true);
+  /* BRAZO DE LA CUERDA: DE QUE LADO DEL TORSO VA LO DECIDE DONDE ESTA LA
+     MANO, no una constante. Iba SIEMPRE detras, y eso valia cuando el puno
+     estaba escrito a mano por detras del hombro; desde que el puno sale del
+     nock —o sea de la linea de la flecha— a angulos de subida cae DELANTE
+     del pecho, y dibujado atras el brazo entero desaparece adentro de la
+     camiseta: el arquero tensa con un brazo que no se ve.                */
+  const manoAdel = S.manoTx > -0.05;
+  const braT = () => brazoDib(g, P, 0, hy, S.manoTx, S.manoTy + resp, -1, true);
+  if (!manoAdel) braT();
 
   /* EL CARCAJ, antes del torso: cruzado a la espalda dice «este tipo tira
      flechas» sin un solo rotulo, y de perfil es la silueta que lo separa
@@ -275,14 +314,23 @@ function arqDibuja(g, a) {
     g.lineTo(S.nockX, 0); g.lineTo(ARCO_PUNTA[0], -ARCO_PUNTA[1]);
     g.stroke(); LLAM++;
     if (S.flVis) {
-      capsu(g, S.nockX, 0, S.nockX + 0.78, 0, 0.06, '#8a6034');
+      /* LARGO DE FLECHA DE VERDAD: 1,02 sobre un arquero de 2,10 son unos
+         85 cm, y con la apertura llena la punta queda justo pasando la
+         empunadura — que es como se ve un arco tensado. Con los 0,94 de
+         antes la punta se quedaba corta y la flecha parecia un palito. */
+      capsu(g, S.nockX, 0, S.nockX + 0.88, 0, 0.06, '#8a6034');
       g.fillStyle = _r2c([216, 221, 224]); g.beginPath();
-      g.moveTo(S.nockX + 0.94, 0); g.lineTo(S.nockX + 0.74, 0.075);
-      g.lineTo(S.nockX + 0.74, -0.075); g.closePath(); g.fill(); LLAM++;
+      g.moveTo(S.nockX + 1.02, 0); g.lineTo(S.nockX + 0.84, 0.078);
+      g.lineTo(S.nockX + 0.84, -0.078); g.closePath(); g.fill(); LLAM++;
+      /* el emplumado: dos trazos al lado del nock. Sin ellos la flecha es
+         una linea, y una linea saliendo de la cuerda no se lee a flecha. */
+      capsu(g, S.nockX + 0.05, 0, S.nockX + 0.22, 0.085, 0.028, P.det);
+      capsu(g, S.nockX + 0.05, 0, S.nockX + 0.22, -0.085, 0.028, P.det);
     }
     g.restore();
   }
 
+  if (manoAdel) braT();
   /* BRAZO DE ADELANTE: el que sostiene el arco. Ultimo, por encima de todo. */
   brazoDib(g, P, 0, hy, S.bocaX, S.bocaY + resp, 1, true);
   g.restore();
@@ -385,6 +433,7 @@ function arqPose(a, dt) {
   let manoTx = -0.22, manoTy = 1.20;    /* la mano de la cuerda, en reposo */
   let torsoY = 0, torsoR = 0, cabR = 0, piFR = 0.10, piTR = -0.14, resp = 0;
   let arcoVis = true, flVis = false, arcoAng = a.ang, bocaX = bx, bocaY = by;
+  let nock = NOCK_0;
 
   if (e === 'quieto') {
     a.ocio += dt;
@@ -394,13 +443,24 @@ function arqPose(a, dt) {
     const g = a.ocio % 6.8;
     cabR = g < 1.0 ? Math.sin(g * Math.PI / 1.0) * 0.22 : 0;
     manoTx = -0.20 + Math.sin(a.ocio * 1.7) * 0.02; manoTy = 1.18 + resp;
-    arcoAng = -0.95;                    /* el arco colgando, apuntando al piso */
-    bocaY = by - 0.22;
+    /* EN REPOSO EL ARCO CUELGA CASI VERTICAL, no cruzado en diagonal por
+       delante del cuerpo: con -0,95 la punta de abajo caia en (-0,18 · 0,76),
+       o sea DENTRO del torso y de las piernas, y lo que se veia era un palo
+       atravesado. Casi a plomo, la punta de abajo roza el piso detras de los
+       pies y la de arriba llega a la altura de los ojos. */
+    arcoAng = -0.18;
+    bocaX = 0.42; bocaY = 1.10;
   } else if (e === 'apunta') {
     /* la cuerda se tira hasta el menton y el cuerpo se echa atras: la
        tension es lo unico que dice cuanta fuerza lleva el tiro */
     const k = a.k;
-    manoTx = mez(-0.20, -0.52, k); manoTy = mez(1.20, 1.62, k);
+    /* LA MANO DE LA CUERDA NO SE ESCRIBE: SE DERIVA DEL NOCK. Estaban los
+       dos por separado, asi que el puno terminaba en un sitio y la cuerda
+       en otro — o sea que el arquero tensaba el aire. Con el nock como
+       unico dato, cuerda, flecha y puno son EL MISMO PUNTO por construccion. */
+    nock = nockTope(bocaX, bocaY, arcoAng, mez(NOCK_0, NOCK_1, k));
+    manoTx = bocaX + nock * Math.cos(arcoAng);
+    manoTy = bocaY + nock * Math.sin(arcoAng);
     torsoR = -0.06 * k; piFR = 0.10 + 0.16 * k; piTR = -0.14 - 0.10 * k;
     flVis = true;
   } else if (e === 'tira') {
@@ -408,9 +468,12 @@ function arqPose(a, dt) {
        se sacude — sin eso, soltar se ve como que la flecha aparecio sola. */
     const u = cl(a.t / 0.42, 0, 1);
     const g = Math.exp(-u * 7) * Math.sin(u * 26);
-    manoTx = mez(-0.52, -0.14, Math.min(1, u * 5)); manoTy = mez(1.62, 1.30, Math.min(1, u * 5));
     torsoR = 0.10 * g; cabR = -0.14 * g; resp = -0.02 * Math.abs(g);
     arcoAng = a.ang + 0.16 * g;
+    /* la cuerda vuelve de golpe y la mano con ella, por el mismo camino */
+    nock = nockTope(bocaX, bocaY, arcoAng, mez(NOCK_1, NOCK_0, Math.min(1, u * 5)));
+    manoTx = bocaX + nock * Math.cos(arcoAng);
+    manoTy = bocaY + nock * Math.sin(arcoAng);
     if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
   } else if (e === 'caido' || e === 'levanta') {
     if (e === 'caido') {
@@ -498,7 +561,7 @@ function arqPose(a, dt) {
   P.manoTx = manoTx; P.manoTy = manoTy;
   P.arcoVis = arcoVis; P.flVis = flVis; P.arcoAng = arcoAng;
   P.bocaX = bocaX; P.bocaY = bocaY;
-  P.nockX = -0.20 - (flVis ? a.k : 0) * 0.34;
+  P.nockX = nock;
 }
 
 function arqPaso(dt) {

@@ -39,6 +39,11 @@ const foto=async n=>{ const r=await cdp.send('Page.captureScreenshot',{format:'p
  console.log('foto ->',n); };
 for(const p of plan){
  if(p.wait) await pg.waitForTimeout(p.wait);
+ /* RECARGAR LA PAGINA ES UN PASO DEL PLAN Y NO UN `location.reload()` METIDO EN UN {js}:
+    ese camino destruye el contexto en el medio del evaluate y vuelve como error, asi que
+    el plan no puede distinguir «recargue» de «se rompio». Y hace falta de verdad: lo que
+    se guarda en localStorage solo se puede comprobar cruzando una carga.                */
+ if(p.reload){ await pg.reload({waitUntil:'domcontentloaded'}); console.log('reload'); }
  if(p.click){ try{ await pg.click(p.click); }catch(e){ console.log('click falla',p.click); } }
  if(p.key){ await pg.keyboard.press(p.key); }
  if(p.js){ let v; try{ v=await pg.evaluate(p.js); }catch(e){ v='ERR '+String(e).slice(0,300); }

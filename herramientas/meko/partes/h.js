@@ -233,8 +233,8 @@ function enganchaUI() {
   for (const e of document.querySelectorAll('#pIdioma [data-lang]'))
     e.onclick = () => { auDesp(); son('toque'); LANG = e.dataset.lang; guardaProg();
       pintaIdioma(); pintaNiveles();
-      /* elegido el idioma por primera vez, se va DERECHO al tutorial: pasar
-         por el menu obligaria a encontrar un boton para aprender a jugar */
+      /* elegido el idioma, se va DERECHO al tutorial: pasar por el menu
+         obligaria a encontrar un boton para aprender a jugar */
       if (!PROG.visto) { verPanel(null); cargaTuto(); } else verPanel('pMenu'); };
   b('bJugar', () => cargaNivel(proxNivel()));
   b('bNiveles', () => { pintaNiveles(); verPanel('pNiveles'); });

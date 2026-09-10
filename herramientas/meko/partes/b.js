@@ -170,6 +170,15 @@ function cargaProg() {
     if (!s) return false;
     const o = JSON.parse(s);
     if (o && typeof o === 'object') Object.assign(PROG, o);
+    /* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, y por eso la marca
+       NO SOBREVIVE A UNA RECARGA. Pedido textual: «cada vez que inicie en
+       cada juego, siempre hay un tutorial». Se pone en cero DESPUES de leer
+       el disco, asi que sigue valiendo DENTRO de la sesion —terminado una
+       vez, no vuelve a dispararse entre partida y partida— y lo unico que
+       se pierde es que un jugador viejo se lo saltee de entrada. Es el
+       unico dato del guardado que se descarta a proposito: el resto
+       —idioma, niveles, monedas, ajustes— sigue igual.                   */
+    PROG.visto = 0;
     if (PROG.lang) LANG = PROG.lang;
     return !!PROG.lang;
   } catch (e) { return false; }

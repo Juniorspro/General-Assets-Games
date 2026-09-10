@@ -150,9 +150,9 @@ input[type=range]{width:100%;accent-color:#e39322}
     <div class="grupo"><h1>MEKO</h1><div class="sub" id="mSub"></div></div>
     <div class="grupo">
       <button class="bt p" id="bJugar"></button>
-      <!-- COMO SE JUEGA queda en el menu aunque el tutorial salga solo la
-           primera vez: obligatorio siempre es un peaje, y sin boton no hay
-           forma de volver a verlo. -->
+      <!-- COMO SE JUEGA queda en el menu aunque el tutorial salga solo al
+           abrir el juego: dentro de una sesion no vuelve, y sin boton no
+           habria forma de verlo otra vez. -->
       <div class="fila"><button class="bt" id="bTuto"></button>
         <button class="bt" id="bNiveles"></button></div>
       <button class="bt" id="bAjustes"></button>
@@ -375,6 +375,15 @@ function cargaProg() {
     if (!s) return false;
     const o = JSON.parse(s);
     if (o && typeof o === 'object') Object.assign(PROG, o);
+    /* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, y por eso la marca
+       NO SOBREVIVE A UNA RECARGA. Pedido textual: «cada vez que inicie en
+       cada juego, siempre hay un tutorial». Se pone en cero DESPUES de leer
+       el disco, asi que sigue valiendo DENTRO de la sesion —terminado una
+       vez, no vuelve a dispararse entre partida y partida— y lo unico que
+       se pierde es que un jugador viejo se lo saltee de entrada. Es el
+       unico dato del guardado que se descarta a proposito: el resto
+       —idioma, niveles, monedas, ajustes— sigue igual.                   */
+    PROG.visto = 0;
     if (PROG.lang) LANG = PROG.lang;
     return !!PROG.lang;
   } catch (e) { return false; }
@@ -2366,8 +2375,8 @@ function enganchaUI() {
   for (const e of document.querySelectorAll('#pIdioma [data-lang]'))
     e.onclick = () => { auDesp(); son('toque'); LANG = e.dataset.lang; guardaProg();
       pintaIdioma(); pintaNiveles();
-      /* elegido el idioma por primera vez, se va DERECHO al tutorial: pasar
-         por el menu obligaria a encontrar un boton para aprender a jugar */
+      /* elegido el idioma, se va DERECHO al tutorial: pasar por el menu
+         obligaria a encontrar un boton para aprender a jugar */
       if (!PROG.visto) { verPanel(null); cargaTuto(); } else verPanel('pMenu'); };
   b('bJugar', () => cargaNivel(proxNivel()));
   b('bNiveles', () => { pintaNiveles(); verPanel('pNiveles'); });
@@ -2425,7 +2434,7 @@ function solapes() {
 /* ══════════════════════════════════════════════════════════════════════════
    I · EL TUTORIAL
 
-   SE ENTRA ACA Y NO AL MENU LA PRIMERA VEZ. Un juego cuyo unico verbo es
+   SE ENTRA ACA Y NO AL MENU AL ABRIR EL JUEGO. Un juego cuyo unico verbo es
    «tocar un bloque» tiene un problema: nada en la pantalla dice que se pueda
    tocar un bloque. Un cartel de texto en el menu no lo arregla —se saltea— y
    lo que se saltea es exactamente lo que despues no se entiende.
@@ -2830,11 +2839,14 @@ function arranca() {
   if (M) { construyeDiorama(M); robEntra(M.ini); }
   $('cBarra').style.width = '100%';
 
-  /* SE ENTRA AL TUTORIAL Y NO AL MENU LA PRIMERA VEZ. El pedido fue textual
-     («apenas entres al juego ya entres a un tutorial»), y ademas es lo
-     correcto: el menu de este juego no tiene nada que ensenar. El idioma
-     sigue yendo antes, porque un tutorial en un idioma que no se entiende no
-     es un tutorial. */
+  /* SE ENTRA AL TUTORIAL Y NO AL MENU, Y AHORA CADA VEZ QUE SE ABRE EL
+     JUEGO. El pedido fue textual las dos veces («apenas entres al juego ya
+     entres a un tutorial» y despues «cada vez que inicie en cada juego,
+     siempre hay un tutorial»), y ademas es lo correcto: el menu de este
+     juego no tiene nada que ensenar. Lo que hace que valga «cada vez» no
+     esta aca sino en `cargaProg`, que descarta `visto` al leer el disco.
+     El idioma sigue yendo antes, porque un tutorial en un idioma que no se
+     entiende no es un tutorial. */
   if (!hab) verPanel('pIdioma');
   else if (!PROG.visto) { verPanel(null); setTimeout(cargaTuto, 30); }
   else verPanel('pMenu');

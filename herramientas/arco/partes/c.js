@@ -214,9 +214,17 @@ function crater(M, cx, cy, r) {
    y la flecha nace dentro de la caja del propio tirador, o sea que sale viva
    de milagro y solo porque `vuela` le perdona los primeros 0,30 s. Con 0,62
    —mas que el medio ancho del cuerpo, que es 0,52— nace al aire.          */
-const FRENTE_BOCA = 0.62;
+/* LA BOCA DEL ARCO ES LA MANO ADELANTADA, Y ESTABA A LA ALTURA DE LA PANZA.
+   El hombro esta en 1,82 y el brazo alcanza 0,96: con 0,62 adelante y 1,55 de
+   alto la mano quedaba 27 cm POR DEBAJO del hombro y a 0,68 de el —el 70 % del
+   alcance— o sea el arco agarrado a la cadera y el codo doblado. Un arquero
+   extiende el brazo: 0,84 adelante y 1,70 de alto dejan la mano a 0,85 del
+   hombro (el 89 %) y casi al nivel de los ojos.
+   Y SE MUEVE ACA Y NO EN EL DIBUJO porque de aca sale tambien el origen del
+   vuelo: con dos numeros, la flecha saldria de donde no esta el arco.      */
+const FRENTE_BOCA = 0.84;
 function bocaDe(M, lado) {
   const X = lado ? XB : XA, piso = lado ? M.pisoB : M.pisoA;
   const s = lado ? -1 : 1;                 /* el de la derecha mira a -X */
-  return { x: X + 0.5 + s * FRENTE_BOCA, y: piso + 1.55 };
+  return { x: X + 0.5 + s * FRENTE_BOCA, y: piso + 1.70 };
 }

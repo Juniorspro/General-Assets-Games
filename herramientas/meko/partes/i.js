@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
    I · EL TUTORIAL
 
-   SE ENTRA ACA Y NO AL MENU LA PRIMERA VEZ. Un juego cuyo unico verbo es
+   SE ENTRA ACA Y NO AL MENU AL ABRIR EL JUEGO. Un juego cuyo unico verbo es
    «tocar un bloque» tiene un problema: nada en la pantalla dice que se pueda
    tocar un bloque. Un cartel de texto en el menu no lo arregla —se saltea— y
    lo que se saltea es exactamente lo que despues no se entiende.

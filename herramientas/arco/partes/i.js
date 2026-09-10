@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
    I · EL TUTORIAL
 
-   SE ENTRA ACA Y NO AL MENU LA PRIMERA VEZ. El unico verbo de este juego es
+   SE ENTRA ACA Y NO AL MENU AL ABRIR EL JUEGO. El unico verbo de este es
    arrastrar el dedo hacia atras, y nada en la pantalla dice que se pueda
    hacer eso: un cartel en el menu se saltea, y lo que se saltea es
    exactamente lo que despues no se entiende.

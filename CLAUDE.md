@@ -360,6 +360,155 @@ munecas.
   desplaza al orbitar el diorama, que no cuesta una sola llamada de dibujo. Vive partido en
   `herramientas/meko/partes/` y se arma con `python3 herramientas/meko/armar.py`.
 
+### Centésima sexagésima primera vuelta (2026-09-10): **ARCO · MEKO · DUNA** — el arco estaba dado vuelta, y el tutorial pasa a verse cada vez
+
+Pedido textual: *"Los arcos no están bien posicionados, arregla eso. También dame los últimos tres
+HTML y hace que cada vez que inicie en cada juego, siempre hay un tutorial en los tres juegos"*.
+
+#### EL ARCO ERAN CUATRO DEFECTOS, Y EL PRIMERO ES QUE EL PERFIL ESTABA AL REVÉS
+
+`ARCO_PT` ponía la empuñadura en x = +0,02 y **las dos puntas en +0,34**, o sea DELANTE del puño.
+La cuerda va de punta a punta, así que pasaba **entre el arquero y el blanco** y por encima de la
+mano. Un arco de verdad es al revés —blanco ← empuñadura ← cuerda ← arquero— y la separación entre
+las dos ES el *brace height*. Las puntas van a **−0,30**.
+
+**Y LA MANO DEL ARCO ESTABA A LA ALTURA DE LA PANZA.** Medido con la sonda nueva `pose(l)`, que
+devuelve el sitio del arco, el del puño y **cuánto brazo se está usando**: con `FRENTE_BOCA` 0,62 y
+la boca en y 1,55, la mano quedaba **27 cm por debajo del hombro** (que está en 1,82) y a 0,676 de
+él, o sea el **70 % del alcance** — el arco agarrado a la cadera con el codo doblado. En 0,84 / 1,70
+la mano queda a 0,849 del hombro, el **88 %**, y casi al nivel de los ojos.
+
+**EL NÚMERO SE MUEVE EN `c.js` Y NO EN EL DIBUJO, y eso no es prolijidad:** `bocaDe` es también el
+**origen del vuelo** —lo leen la balística, el solver y el rival— así que con dos números la flecha
+saldría de donde el arco no está.
+
+**Y EN REPOSO EL ARCO ERA UN PALO CRUZADO POR DELANTE DEL CUERPO.** Con `arcoAng` −0,95 la punta de
+abajo caía en (−0,18 · 0,76), o sea **dentro del torso y de las piernas**. Casi a plomo (−0,18) la
+punta de abajo roza el piso detrás de los pies y la de arriba llega a la altura de los ojos.
+
+#### LA MANO DE LA CUERDA NO SE ESCRIBE: SE DERIVA DEL NOCK
+
+Estaban los dos por separado —`manoT` con sus propias coordenadas y `nockX` con las suyas— así que
+el puño terminaba en un sitio y la cuerda en otro: **el arquero tensaba el aire**. Y el propio
+archivo tenía escrito que eran el mismo punto. Ahora el nock es el único dato y la mano sale de él,
+así que cuerda, flecha y puño **son el mismo punto por construcción**.
+
+**LA APERTURA SE CALCULÓ, NO SE ELIGIÓ.** El primer valor iba a ser −1,30, y sobre un arquero de
+2,10 eso es **1,08 m de apertura**: no existe. `NOCK_1` = **−0,85**, que a escala de persona son
+unos 71 cm, que es lo que mide un tiro de verdad.
+
+**Y HACE FALTA UN TOPE DE ALCANCE, porque `codoDe` no lo pone.** El solver de dos huesos recorta la
+*distancia* al calcular el codo pero **igual dibuja la mano donde se la pidió**: una mano fuera de
+alcance no se ve como un brazo corto, se ve como un antebrazo estirado. `nockTope` corta el nock
+contra el círculo de alcance (`ALC_R` = BR1 + BR2 − 0,02 = 0,94) resolviendo la cuadrática de la
+recta de la flecha contra ese círculo. Medido:
+
+| | ángulo | nock pedido | nock puesto | mano al hombro |
+|---|---|---|---|---|
+| a 45° | 0,785 | −0,85 | **−0,85** (no hace falta) | 0,760 = 79 % |
+| a 70° | 1,232 | −0,85 | **−0,604** (recortado) | **0,940 = exactamente ALC_R** |
+
+#### Y UN DEFECTO QUE EL ARREGLO ANTERIOR CREÓ: EL BRAZO DE LA CUERDA DESAPARECÍA
+
+El brazo de atrás se dibujaba **siempre antes del torso**, y eso valía cuando el puño estaba escrito
+a mano por detrás del hombro. Desde que sale del nock, a ángulos de subida cae **delante del pecho**:
+medido a 45°, la mano queda en (0,239 · 1,099), o sea adentro del torso, y dibujada antes se
+**perdía entera adentro de la camiseta**. De qué lado va lo decide **dónde está la mano** (`manoAdel`)
+y no una constante.
+
+De paso la flecha se alargó y ganó **punta y emplumado**: a ángulos de subida lo único que asomaba
+por delante de la empuñadura era una línea marrón, y sin punta no se lee a flecha.
+
+#### EL EQUILIBRIO NO SE MOVIÓ, Y ESO SE MIDIÓ CON UN A/B EN EL MISMO BINARIO
+
+Con **las mismas semillas** y 480 partidas por casilla, contra un control que es el mismo archivo
+con las dos constantes de la boca revertidas:
+
+| precisión del bot | control (0,62 / 1,55) | ahora (0,84 / 1,70) |
+|---|---|---|
+| 1,00 | 81,7 % | **82,5 %** |
+| 0,55 | 48,3 | **49,8** |
+| **al azar** | **19,8** | **22,1** |
+
+O sea que mover la boca 22 cm adelante y 15 arriba **no cambia el juego**: lo que cambia es que se
+vea un arco.
+
+**Y ACÁ HAY UNA LECCIÓN DE MEDICIÓN QUE VALE MÁS QUE LA TABLA.** La vuelta anterior publicó **4,2 %**
+para el bot que tira al azar y acá da 22,1: parece una regresión enorme y **no lo es**. Es el
+esquema de semillas. Medido, la misma fila con tres formas de elegirlas:
+
+| semilla | `s` | `9000 + n·71 + s` | `s·97 + n` |
+|---|---|---|---|
+| gana al azar | **11,3 %** | 19,2 | **22,1** |
+
+**El número absoluto se mueve el doble según cómo se sortee**, así que compararlo entre vueltas no
+significa nada si el esquema no es el mismo. Lo que sí significa algo es la **monotonía y la
+separación dentro de una misma corrida**, y eso se conserva: 82,5 · 49,8 · 22,1.
+
+#### EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, EN LOS TRES
+
+Y esto **contradice a propósito una regla escrita en este archivo** —*«un tutorial obligatorio visto
+cinco veces deja de ser un tutorial y pasa a ser un peaje, la lección de POMPOM»*—. El pedido fue
+textual y manda.
+
+**NO SE TOCÓ UN SOLO SITIO DE LOS QUE DISPARAN EL TUTORIAL.** Son cuatro por juego —el botón de
+idioma, el arranque, el botón de repetirlo y el fin de partida— y parchearlos uno por uno garantiza
+olvidarse de alguno. Lo que se hace es que **la marca no sobreviva a una recarga**: se pone en cero
+**después** de leer el disco, en `cargaProg()` (ARCO y MEKO) y en `guardaLee()` (DUNA). Con eso:
+
+- al abrir el juego, el tutorial sale **siempre**;
+- **dentro** de la sesión sigue valiendo, así que no vuelve a dispararse entre partida y partida;
+- y es **el único dato del guardado que se descarta**: el idioma, los niveles, las monedas y los
+  ajustes siguen igual.
+
+Medido en los tres, cruzando una recarga de verdad —para eso el banco aprendió un paso `reload`, que
+antes no tenía: `location.reload()` metido en un `{js}` destruye el contexto y vuelve como error, así
+que un plan no podía distinguir «recargué» de «se rompió», y lo que se guarda en disco **sólo se
+puede comprobar cruzando una carga**—:
+
+| | primera carga | en disco | segunda carga |
+|---|---|---|---|
+| **ARCO** | `pIdioma` → tutorial (`n −1`) | `visto: 1` | **tutorial otra vez** (`tuto true`, `n −1`) |
+| **MEKO** | `pIdioma` → tutorial (`pista tut1`) | `visto: 1` (forzado) | **tutorial otra vez** (`nivel −1`) |
+| **DUNA** | JUGAR → tutorial (`on true`) | `tuto: 1` | **tutorial otra vez** (`on true`) |
+
+Y que **no** se re-dispara dentro de la sesión, que es la otra mitad: en ARCO, ir al duelo 3 deja
+`tuto false`; en MEKO, cargar el nivel 4 deja la pista en `pistaMov`; en DUNA, saltearlo y arrancar
+una segunda partida desde el menú deja `on false`.
+
+**Y SE ACTUALIZARON LOS COMENTARIOS QUE PASARON A MENTIR.** Seis, en los tres juegos: los dos
+encabezados de `i.js` que decían «la primera vez», el de DUNA que citaba la lección de POMPOM, el
+del menú de MEKO y el de su botón de idioma. Un comentario que describe algo que ya no pasa es peor
+que no tenerlo.
+
+#### DOS DEFECTOS DE LA MEDICIÓN, LOS DOS DEL TIPO DE SIEMPRE
+
+- **`__M.nivel(n)` DEVUELVE UNA PROMESA** —el nivel se genera detrás de la pantalla de carga— y el
+  bucle del auto-jugador la usaba sin esperarla: los veinte niveles se jugaban sobre el mapa del
+  tutorial y salía `1·X1·X2·…·X19`, o sea diecinueve niveles rotos que no lo estaban. Con `await`:
+  **`1·2·3·3·3·4·4·3·4·5·6·6·7·5·7·8·7·9·6·10`**, que es exactamente la fila de la vuelta 157.
+- **EL MODO DEL BOT DE DUNA ES UNA CADENA Y NO UN BOOLEANO.** Pasándole `2` esperando el del azar
+  sale el **torpe** —`BOT.azar = modo === 'azar'`— y la tabla salió `honesto 5.201 · torpe 5.191 ·
+  azar 5.186`, que se lee a que los tres juegan igual. Es literalmente la trampa que la vuelta 154
+  ya había anotado, y volvió a caer. Con `'azar'`: **5.186 · 5.198 · 3.691**, con 0 · 1,2 · **24,9**
+  caídas.
+- **Y `__A.pose()` LEE LO QUE EL ÚLTIMO CUADRO DIBUJÓ**, así que medir en el mismo `{js}` en que se
+  arrastra devuelve la pose de reposo con el estado ya en `apunta`: las tres lecturas salían
+  idénticas. Hace falta un cuadro en el medio.
+
+#### MEDIDO AL CERRAR
+
+**ARCO**: auditoría **12 de 12, `malos: []`**; tutorial `ok:true` (v 16,41 · ángulo 45,5 · libre ·
+viento 2,4); inversa de la proyección `peor: 0`; **cero solapamientos y cero fuera del marco** en el
+menú y en partida; 73 llamadas de dibujo con el arquero en 52,8 px y la flecha en 27,9. **MEKO**:
+auditoría **20 de 20, 0 malos** en 9,1 s, tutorial `ok:true` con plan de 2 toques e imposible con el
+mecanismo congelado, el auto-jugador termina los veinte en los toques del plan, encuadre 0,945 del
+ancho. **DUNA**: **25 de 25 semillas** con 0 monedas enterradas y 0 cuerdas fuera de alcance; los
+tres bots **5.186 · 5.198 · 3.691 m**; zonas `izq → zTurbo` y `der → zSalto` con la izquierda
+empujando y la derecha saltando; **cero solapamientos** entre los cinco elementos del HUD; costo
+0,175 ms por cuadro. `window.__errs` **vacío en las once corridas**. Los tres HTML: **160 · 141 ·
+560 KB**.
+
 ### Centésima sexagésima vuelta (2026-09-10): **ARCO** — el turno del rival, el mapa más grande y el tumbo
 
 Pedido textual: *"no veo la flecha del otro falta su turno, también que el mapa sea aún más grande y

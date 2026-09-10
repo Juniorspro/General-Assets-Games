@@ -2547,6 +2547,15 @@ function guardaLee() {
       GUARDA.rec = s.rec | 0; GUARDA.mon = s.mon | 0; GUARDA.tuto = s.tuto | 0;
       GUARDA.niv = s.niv || {}; GUARDA.ac = s.ac || { grinds: 0 };
     }
+    /* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, y por eso la marca
+       NO SOBREVIVE A UNA RECARGA. Pedido textual: «cada vez que inicie en
+       cada juego, siempre hay un tutorial». Se pone en cero DESPUES de leer
+       el disco, asi que sigue valiendo DENTRO de la sesion —terminado una
+       vez, no vuelve a dispararse entre partida y partida— y lo unico que
+       se pierde es que un jugador viejo se lo saltee de entrada. Es el
+       unico dato del guardado que se descarta a proposito: el resto
+       —idioma, niveles, monedas, ajustes— sigue igual.                   */
+    GUARDA.tuto = 0;
   } catch (e) { /* ventana privada: se juega igual, no se guarda */ }
   OBJS.forEach(o => { if (typeof GUARDA.niv[o.id] !== 'number') GUARDA.niv[o.id] = 0; });
   if (typeof GUARDA.ac.grinds !== 'number') GUARDA.ac.grinds = 0;
@@ -2653,9 +2662,14 @@ const TUTO_PASOS = ['tu1', 'tu3', 'tu2'];
 function tutoReinicia(demo) {
   TUTO.on = false; TUTO.fin = 0; TUTO.t = 0; tutoClase();
   if (demo) return;
-  /* la primera corrida lo abre sola; despues vive en el boton del menu. Un
-     tutorial obligatorio visto cinco veces deja de ser un tutorial y pasa a
-     ser un peaje — la leccion de POMPOM. */
+  /* LA PRIMERA CORRIDA DE CADA SESION LO ABRE SOLA. Antes era la primera
+     corrida a secas —«visto cinco veces deja de ser un tutorial y pasa a
+     ser un peaje», la leccion de POMPOM— y el usuario pidio lo contrario
+     con todas las letras: «cada vez que inicie en cada juego, siempre hay
+     un tutorial». Lo que queda de aquella regla es que DENTRO de la sesion
+     no vuelve: `GUARDA.tuto` se pone en 1 al terminarlo o saltearlo y lo
+     unico que lo devuelve a cero es abrir el juego de nuevo. Y el boton
+     del menu sigue estando, para verlo cuando uno quiere.               */
   if (!GUARDA.tuto) tutoArranca(false);
 }
 /* UN SOLO SITIO PRENDE Y APAGA LA CLASE del boton de saltear: con una
