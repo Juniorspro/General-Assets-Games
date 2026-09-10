@@ -1,0 +1,306 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Z · LA ENTRADA, EL BUCLE, LAS SONDAS Y EL ARRANQUE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── UN DEDO HACE DOS COSAS Y HAY QUE SEPARARLAS ──────────────────────────
+   Tocar apunta y arrastrar gira. La unica forma de distinguirlas es esperar:
+   mientras el dedo no se movio mas que el umbral sigue siendo un toque, y en
+   cuanto lo pasa deja de serlo PARA SIEMPRE en ese gesto — sin esa marca, un
+   arrastre largo que termina cerca de donde empezo mandaria al robot a
+   caminar a donde uno solo estaba mirando.                                 */
+const ARR_PX = 9, TOQUE_MS = 700;
+let DED = null;
+
+function dedoBaja(e) {
+  auDesp();
+  if (enPanel()) return;
+  DED = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+          t0: performance.now(), arr: false };
+  try { $('cv').setPointerCapture(e.pointerId); } catch (err) {}
+}
+function dedoMueve(e) {
+  if (!DED || e.pointerId !== DED.id) return;
+  const dx = e.clientX - DED.x, dy = e.clientY - DED.y;
+  DED.x = e.clientX; DED.y = e.clientY;
+  if (!DED.arr && Math.hypot(e.clientX - DED.x0, e.clientY - DED.y0) > ARR_PX) DED.arr = true;
+  if (DED.arr) { giraCam(dx, dy); JU.hizoGirar = true; }
+}
+function dedoSube(e) {
+  if (!DED || e.pointerId !== DED.id) return;
+  const d = DED; DED = null;
+  try { $('cv').releasePointerCapture(e.pointerId); } catch (err) {}
+  if (d.arr || performance.now() - d.t0 > TOQUE_MS) return;
+  jugTocar(d.x0, d.y0);
+}
+
+/* ── EL BUCLE ─────────────────────────────────────────────────────────────
+   El `dt` va topado en 0,05: una pestana que estuvo dormida vuelve con varios
+   segundos de golpe y sin tope el robot cruza el diorama en un cuadro.     */
+let RELOJ = performance.now();
+function avanza(dt) {
+  if (!enPanel()) { jugPaso(dt); robPaso(dt); auPasos(); }
+  escPaso(dt);
+}
+function cuadro() {
+  requestAnimationFrame(cuadro);
+  const t = performance.now();
+  const dt = Math.min(0.05, (t - RELOJ) / 1000);
+  RELOJ = t;
+  /* EL DIORAMA GIRA SOLO EN EL MENU Y NO EN LA PAUSA: en el menu es lo unico
+     que hay para mostrar; en la pausa, girarlo le mueve el rompecabezas a
+     alguien que lo dejo a medias mirando desde un angulo que eligio. */
+  if (enPanel() && !$('pPausa').classList.contains('on') && !$('pGana').classList.contains('on'))
+    giraCam(dt * 17, 0);
+  avanza(dt);
+  if (REN && DIO) escDibuja();
+}
+
+/* ══════════════════════ SONDAS ══════════════════════
+   `window.__M`: sin esto no hay forma de afirmar nada. Todo lo que mide entra
+   por el mismo camino que usa el dedo.                                     */
+function aPantalla(wx, wy, wz) {
+  ESC.updateMatrixWorld(true);
+  const v = new T.Vector3(wx, wy, wz).project(CAM);
+  const r = $('cv').getBoundingClientRect();
+  return [r.left + (v.x * 0.5 + 0.5) * r.width, r.top + (0.5 - v.y * 0.5) * r.height];
+}
+/* el centro de una cara de una celda, en pixeles de pantalla */
+const MUESTRAS = [[0, 0], [-0.30, -0.30], [0.30, -0.30], [-0.30, 0.30], [0.30, 0.30]];
+function pxCara(cel, cara, q) {
+  const g = DIO.grupo.position;
+  /* los dos ejes DE LA CARA: el que no es la normal. Con un desplazamiento
+     escrito en x/z fijos, en una cara lateral los cinco puntos caerian fuera
+     de ella. */
+  const u = cara[1] ? [1, 0, 0] : [0, 1, 0];
+  const w = cara[1] ? [0, 0, 1] : (cara[0] ? [0, 0, 1] : [1, 0, 0]);
+  const a = q ? q[0] : 0, b = q ? q[1] : 0;
+  return aPantalla(g.x + cel[0] + 0.5 + cara[0] * 0.499 + u[0] * a + w[0] * b,
+                   g.y + cel[1] + 0.5 + cara[1] * 0.499 + u[1] * a + w[1] * b,
+                   g.z + cel[2] + 0.5 + cara[2] * 0.499 + u[2] * a + w[2] * b);
+}
+const mismo = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+
+/* QUE CARAS SIRVEN PARA PEDIR UNA ACCION. Para caminar a `c` lo natural es la
+   tapa del bloque de abajo; la alternativa es la cara lateral del vecino que
+   mira hacia `c`, que es como uno le apunta a una pared. Y la lateral solo
+   vale si la tapa de ESE vecino NO se alcanza, porque `jugTocar` prueba
+   arriba primero y si no la sonda estaria pidiendo una cosa y el juego
+   haciendo otra.                                                           */
+const CARAS6 = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+
+/* QUE CARAS SIRVEN PARA PEDIR UNA ACCION, Y LA REGLA NO SE ESCRIBE DOS VECES.
+   Para un mecanismo vale CUALQUIER cara de cualquiera de sus celdas, porque
+   `jugTocar` sale por `r.mec >= 0` antes de mirar la normal —y hace falta:
+   una pieza con un bloque encima no expone la tapa desde ningun angulo—.
+   Para caminar, en vez de razonar cual cara manda a donde, se le PREGUNTA a
+   `rutaDeToque`, que es la misma funcion que va a contestar cuando el dedo
+   toque de verdad. Los candidatos son el propio destino (una escalera se
+   pisa por dentro), el bloque de abajo y los cuatro vecinos laterales, y
+   sobrevive el que resuelve al destino que el plan pide.                  */
+function blancosDe(a) {
+  const out = [];
+  if (a.t === 'mec') {
+    const m = JU.M.mec[a.i], e = JU.E[a.i].e;
+    for (const c of m.cel) {
+      const cel = [c[0] + m.dir[0] * e, c[1] + m.dir[1] * e, c[2] + m.dir[2] * e];
+      for (const f of CARAS6) out.push({ cel, cara: f, mec: a.i });
+    }
+    return out;
+  }
+  const c = a.c, cels = [c.slice(), [c[0], c[1] - 1, c[2]]];
+  for (const d of DIRS) cels.push([c[0] - d[0], c[1], c[2] - d[1]]);
+  for (const cel of cels) {
+    if (tipoEn(JU.M, JU.E, cel[0], cel[1], cel[2]) === VACIO) continue;  /* al aire no se le apunta */
+    if (mecEn(JU.M, JU.E, cel[0], cel[1], cel[2]) >= 0) continue;        /* eso mueve la pieza, no camina */
+    for (const f of CARAS6) {
+      const r = rutaDeToque(cel, f);
+      if (!r) continue;
+      const fin = r[r.length - 1];
+      if (!mismo(fin, c)) continue;
+      out.push({ cel, cara: f, mec: -1, dest: c });
+    }
+  }
+  return out;
+}
+
+/* Y SE PRUEBAN VARIOS ANGULOS: una cara puede estar tapada desde donde esta
+   la camara, y eso no es un defecto del nivel — es que hay que girar, que es
+   justamente el otro gesto del juego.                                       */
+function sirve(b, r) {
+  if (!r) return false;
+  /* a un mecanismo le alcanza con que el rayo pegue en EL, no en una celda
+     concreta: `tocaMec` recibe el indice y las piezas de varias celdas son
+     todas la misma pieza */
+  if (b.mec >= 0) return r.mec === b.mec;
+  if (r.mec >= 0 || !mismo(r.cel, b.cel)) return false;
+  return b.tapa ? true : mismo(r.n, b.cara);
+}
+function pideAccion(a) {
+  const bl = blancosDe(a);
+  /* Y SE BARREN DOS ALTURAS ADEMAS DE LOS GIROS: hay caras que ningun rumbo
+     expone y una inclinacion si —la tapa de algo hundido se ve de arriba y la
+     de abajo desde el ras—, que es exactamente lo que el dedo puede hacer. */
+  const el0 = CAM_EL, ponEl = e => giraCam(0, (e - CAM_EL) / 0.0055);
+  for (const el of [el0, CAM_EL_MIN, CAM_EL_MAX]) {
+    ponEl(el);
+    for (let k = 0; k < 24; k++) {
+      if (k) giraCam(42, 0);
+      for (const b of bl) {
+        /* CINCO PUNTOS POR CARA Y NO SOLO EL CENTRO: una cara puede estar
+           tapada justo en el medio por una columna vecina y asomar por una
+           esquina, y eso es exactamente lo que el dedo aprovecha. */
+        for (const q of MUESTRAS) {
+          const p = pxCara(b.cel, b.cara, q);
+          const r = tocaEn(p[0], p[1]);
+          if (!sirve(b, r)) continue;
+          const t0 = JU.toques;
+          jugTocar(p[0], p[1]);
+          if (JU.toques > t0) { ponEl(el0); return { ok: true, cel: b.cel, cara: b.cara, giros: k, el: +el.toFixed(2) }; }
+        }
+      }
+    }
+  }
+  ponEl(el0);
+  /* EL FALLO DICE POR QUE, porque «no se pudo pedir» no se puede arreglar:
+     lo que hace falta saber es si la cara no existe, si el rayo pega en otra
+     celda o si `jugTocar` la interpreto distinto.                          */
+  const dg = bl.slice(0, 12).map(b => {
+    const p = pxCara(b.cel, b.cara);
+    const r = tocaEn(p[0], p[1]);
+    return { cel: b.cel, cara: b.cara, dio: r ? r.cel : null, mec: r ? r.mec : null, n: r ? r.n : null };
+  });
+  /* Y DONDE ESTAN LAS PIEZAS DE VERDAD: sin esto, «el rayo pego en otra celda»
+     no distingue una pieza tapada de una pieza que no esta donde el plan cree. */
+  const mp = JU.M.mec.map((m, i) => ({ i, dir: m.dir, e: JU.E[i].e, pasos: m.pasos,
+    cel: m.cel.map(c => [c[0] + m.dir[0] * JU.E[i].e, c[1] + m.dir[1] * JU.E[i].e, c[2] + m.dir[2] * JU.E[i].e]) }));
+  return { ok: false, a, dg, mp, cel: ROB.cel.slice(), mecT: +JU.mecT.toFixed(3) };
+}
+
+/* EL AUTO-JUGADOR ENTRA POR `jugTocar` CON PIXELES DE PANTALLA: replicando el
+   plan sobre el modelo se estaria probando `d.js` otra vez, que ya se prueba
+   solo. Lo que esto prueba es la cadena entera —proyeccion, rayo, celda,
+   camino, animacion— que es donde de verdad se rompen las cosas.           */
+function juegaSolo(topeSeg) {
+  const M = JU.M;
+  if (!M || !M.plan) return { ok: false, por: 'sin nivel' };
+  const tope = topeSeg || 14;
+  const hechos = [];
+  for (const a of M.plan) {
+    const r = pideAccion(a);
+    if (!r.ok) return { ok: false, por: 'no se pudo pedir', paso: hechos.length, a,
+                        toques: JU.toques, dg: r.dg, mp: r.mp, mecT: r.mecT, cel: r.cel };
+    hechos.push({ t: a.t, giros: r.giros });
+    let s = 0;
+    while (ocupado() && s < tope) { avanza(1 / 60); s += 1 / 60; }
+    if (ocupado()) return { ok: false, por: 'no termina el movimiento', paso: hechos.length };
+    if (a.t === 'ir' && !mismo(ROB.cel, a.c))
+      return { ok: false, por: 'llego a otra celda', paso: hechos.length, cel: ROB.cel.slice(), quiso: a.c };
+  }
+  avanza(1 / 60);
+  return { ok: JU.fin, gano: JU.fin, toques: JU.toques, plan: M.plan.length,
+           cel: ROB.cel.slice(), meta: M.meta.slice(),
+           giros: hechos.reduce((s, h) => s + h.giros, 0) };
+}
+
+window.__M = {
+  est: () => ({
+    nivel: JU.n, toques: JU.toques, fin: JU.fin, panel: PANS.find(p => $(p).classList.contains('on')) || null,
+    cel: ROB.cel.slice(), meta: JU.M ? JU.M.meta.slice() : null,
+    quieto: robQuieto() && !ocupado(), pista: JU.pistaK,
+    mecs: JU.M ? JU.M.mec.length : 0, est: JU.E ? JU.E.map(o => o.e) : [],
+    caja: JU.M ? [JU.M.nx, JU.M.ny, JU.M.nz] : null, lang: LANG, cal: PROG.cal,
+    hechos: PROG.hechos.slice().sort((a, b) => a - b), mejor: Object.assign({}, PROG.mejor),
+  }),
+  audita: () => auditaNiveles(),
+  /* EL ENCUADRE SE MIDE EN PIXELES DE PANTALLA Y NO EN UNIDADES DE CAMARA:
+     lo que importa es cuanto del cuadro ocupa el diorama, y eso depende del
+     encuadre, del alto del marco y de la caja del nivel a la vez.         */
+  enc: () => {
+    if (!DIO) return null;
+    const bb = DIO.caja, g = DIO.grupo.position;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (let i = 0; i < 8; i++) {
+      const p = aPantalla(g.x + (i & 1 ? bb.max[0] : bb.min[0]),
+                          g.y + (i & 2 ? bb.max[1] : bb.min[1]),
+                          g.z + (i & 4 ? bb.max[2] : bb.min[2]));
+      if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+    }
+    const r = $('cv').getBoundingClientRect();
+    return { pctAncho: +((x1 - x0) / r.width).toFixed(3), pctAlto: +((y1 - y0) / r.height).toFixed(3),
+             caja: [Math.round(x0), Math.round(y0), Math.round(x1), Math.round(y1)],
+             encW: +ENC_W.toFixed(2), encH: +ENC_H.toFixed(2),
+             cam: [+CAM.left.toFixed(2), +CAM.right.toFixed(2), +CAM.bottom.toFixed(2), +CAM.top.toFixed(2)],
+             bb: [bb.min.slice(), bb.max.slice()], marco: [Math.round(r.width), Math.round(r.height)] };
+  },
+  costo: () => escCosto(),
+  cajas, solapes,
+  nivel: n => new Promise(r => { cargaNivel(n); const v = () => (JU.M && $('carga').classList.contains('ido')) ? r(window.__M.est()) : setTimeout(v, 40); setTimeout(v, 60); }),
+  juega: s => juegaSolo(s),
+  bloq: (x, y, z) => ({ base: tipoBase(JU.M, x, y, z), con: tipoEn(JU.M, JU.E, x, y, z),
+                        mec: mecEn(JU.M, JU.E, x, y, z) }),
+  avanza: (seg, dt) => { const d = dt || 1 / 60; for (let t = 0; t < seg; t += d) avanza(d); return window.__M.est(); },
+  toca: (x, y) => { jugTocar(x, y); return window.__M.est(); },
+  pxCara: (cel, cara) => pxCara(cel, cara),
+  mira: (x, y, z) => tocaEn(...pxCara([x, y, z], [0, 1, 0])),
+  gira: (dx, dy) => { giraCam(dx, dy); return { yaw: +CAM_YAW.toFixed(3), el: +CAM_EL.toFixed(3) }; },
+  panel: id => { verPanel(id === 'juego' ? null : id); return window.__M.est(); },
+  lang: k => { LANG = k; guardaProg(); pintaIdioma(); pintaNiveles(); return LANG; },
+  /* SE DIBUJA UN CUADRO ANTES DE MEDIR: `info` describe el cuadro que ya se
+     dibujo, asi que leyendolo justo despues de cambiar la calidad lo que
+     vuelve es el costo de la calidad ANTERIOR. */
+  cal: k => { PROG.cal = k; guardaProg(); aplicaCalidad(); medir(); escDibuja(); return escCosto(); },
+  auNivel: ms => auNivel(ms || 900),
+  son: k => { auDesp(); son(k); },
+  textos: () => {
+    const o = [];
+    document.querySelectorAll('#hud div, .pan .caja > *, .nb').forEach(e => {
+      const cs = getComputedStyle(e);
+      if (cs.display === 'none' || +cs.opacity < 0.05) return;
+      const t = (e.textContent || '').trim();
+      if (t) o.push(t);
+    });
+    return o;
+  },
+};
+
+/* ══════════════════════ EL ARRANQUE ══════════════════════ */
+function arranca() {
+  const hab = cargaProg();
+  escInit();
+  medir();
+  $('cBarra').style.width = '35%';
+  enganchaUI();
+  pintaIdioma();
+  pintaNiveles();
+
+  const cv = $('cv');
+  cv.addEventListener('pointerdown', dedoBaja);
+  cv.addEventListener('pointermove', dedoMueve);
+  cv.addEventListener('pointerup', dedoSube);
+  cv.addEventListener('pointercancel', () => { DED = null; });
+  window.addEventListener('resize', medir);
+  /* el reloj se reancla al volver: sin esto el primer cuadro de vuelta trae
+     el tiempo que la pestana estuvo dormida y el tope de 0,05 lo recorta,
+     pero la musica sigue planificando sobre un reloj que nunca se detuvo */
+  document.addEventListener('visibilitychange', () => {
+    RELOJ = performance.now();
+    if (AC) musVer(!document.hidden);
+  });
+
+  /* EL MENU MUESTRA UN DIORAMA DE VERDAD Y NO UN PANEL VACIO: el velo esta
+     abierto en el medio justamente para eso, y girandolo solo se ve lo unico
+     que este juego tiene para enseñar antes de tocar nada. */
+  const M = generaNivel(0);
+  if (M) { construyeDiorama(M); robEntra(M.ini); }
+  $('cBarra').style.width = '100%';
+
+  verPanel(hab ? 'pMenu' : 'pIdioma');
+  setTimeout(() => $('carga').classList.add('ido'), 120);
+  requestAnimationFrame(cuadro);
+}
+arranca();
+
+</script>
+</body></html>

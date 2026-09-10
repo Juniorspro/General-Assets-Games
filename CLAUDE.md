@@ -342,6 +342,167 @@ munecas.
   `herramientas/duna/partes/` y se arma con `python3 herramientas/duna/armar.py`; el cartel se
   hornea con `hornear_ui.py` y la música con `hornear_musica.py`.
 
+- **`Meko.html` es "MEKO"** (~117 KB, **sin un solo asset**: las texturas se dibujan por código y el
+  sonido es procedural). El decimoctavo juego. Un **diorama de voxels** al estilo Mekorama, vertical
+  nativo, con cámara **ortográfica isométrica** que se orbita arrastrando. Hay **un solo verbo**: se
+  toca un bloque y el robot camina hasta arriba de él; se toca una pieza naranja y la pieza se mueve.
+  No hay joystick ni botón de saltar — el dedo dice *dónde* y el juego resuelve *cómo*, y el marcador
+  son **toques** y no segundos. Se sube **uno** y se cae **hasta tres**, y esa asimetría es la regla
+  que hace que la altura sea un problema: si se pudiera subir lo que se cae, una torre sería una
+  rampa y los mecanismos no harían falta. **Veinte niveles procedurales** de 8×10×10 a 14×12×14, con
+  0 a 3 mecanismos —puentes y ascensores— y planes mínimos de 1 a 10 toques, y **cada mecanismo se
+  comprueba individualmente necesario**: con los demás quietos, el nivel tiene que ser imposible. La
+  **escalera** es el único bloque que sostiene sin bloquear, y por eso trepar sale de la misma regla
+  de caminar en vez de un caso aparte. La regla del toque vive en **una** función (`pedirToque`) que
+  usan el dedo, el auto-jugador y el generador. Vive partido en `herramientas/meko/partes/` y se arma
+  con `python3 herramientas/meko/armar.py`.
+
+### Centésima quincuagésima séptima vuelta (2026-09-10): **MEKO**, el decimoctavo juego — un diorama, un robot y un dedo
+
+Pedido, con una captura de Mekorama en la tienda: *"también hazme un mekorama"*. (Las otras dos cosas
+del mismo mensaje —el aviso de caída fantasma de DUNA y dar vuelta sus controles— salieron en la
+vuelta anterior.)
+
+`juegos-pc/Meko.html` (117 KB, **sin un solo asset**: las texturas se dibujan por código y el sonido
+es procedural). Vive partido en `herramientas/meko/partes/` y se arma con
+`python3 herramientas/meko/armar.py`.
+
+#### UN SOLO VERBO, Y DE AHÍ SALE TODO LO DEMÁS
+
+Se toca un bloque y el robot **camina hasta arriba de él**; se toca una pieza naranja y la pieza se
+mueve. Nada más. No hay joystick, ni botón de saltar, ni gestos: el dedo dice *dónde* y el juego
+resuelve *cómo*. Y el marcador de la partida son **toques**, no segundos, porque lo que este juego
+pide es pensar el camino y no ejecutarlo rápido.
+
+De ese verbo salen las dos reglas del movimiento, y **no son simétricas a propósito**: se sube **uno**
+y se cae **hasta tres**. Si se pudiera subir lo que se cae, una torre sería una rampa y los
+mecanismos no harían falta para nada — la altura dejaría de ser un problema.
+
+Veinte niveles, **8 × 10 × 10 el primero y 14 × 12 × 14 el último**, con 0 a 3 mecanismos y planes
+mínimos de 1 a 10 toques.
+
+#### LA ESCALERA ES LA ÚNICA RAZÓN POR LA QUE `solido` Y `bloquea` SON DOS COSAS, Y EL GENERADOR NO
+PONÍA NINGUNA
+
+Es el hallazgo de la vuelta y salió de una sola pregunta que no se había hecho: *¿aparecen de
+verdad?* Medido barriendo el volumen de los veinte niveles: **cero peldaños en los veinte**. O sea
+que el bloque más interesante del juego —el que sostiene sin bloquear, el que hace que trepar salga
+de la misma regla de caminar en vez de un caso aparte— existía en la tabla, tenía su rama en
+`vecinos()`, tenía su rama en `pedirToque` («la escalera se pisa por dentro») y su dibujo propio en
+el diorama, y **no lo ejercía nadie**. Un comentario que describe algo que no pasa.
+
+Había **dos** causas encadenadas y la segunda es la que importa:
+
+1. **Se tiraba un `(x,y,z)` al azar sobre el volumen entero con catorce intentos.** En un nivel de
+   800 celdas hay una decena de sitios donde una escalera entra: con catorce tiradas eso es casi
+   nunca. Se juntan los que sirven y se sortea uno.
+2. **Y AUN ASÍ SEGUÍA EN CERO, PORQUE LA CONDICIÓN NO SE PUEDE CUMPLIR NUNCA.** Se exigía que la
+   columna no fuera del camino, y los pilares y la masa colgante están escritos **para no crear una
+   sola celda pisable nueva** —ésa es literalmente su demostración, y es lo que permite no
+   revalidar después de ponerlos—. Consecuencia: la única celda sólida con aire libre encima que
+   existe en el diorama es **la que el robot pisó**. Medido con un contador dentro del generador:
+   **15 a 31 sitios buenos por nivel, todos descartados por eso, y cero candidatos.**
+
+Que la escalera caiga en el camino no rompe nada, **y no hay que confiar**: `generaNivel` valida
+DESPUÉS —el plan, el mínimo de toques, y que cada mecanismo siga siendo necesario— así que un atajo
+que la escalera abriera descarta el intento y se reintenta. Lo que sí se le pide de más es que esté
+**apoyada contra una pared**.
+
+**Y LA PARED TIENE QUE SER LA MISMA EN LAS TRES ALTURAS.** Con «algún vecino sólido en alguna
+altura» alcanza el roce de una esquina, y fotografiado eso se lee a **palo flotando delante del
+diorama** en vez de apoyado contra algo. Pero exigir sólo la pared entera deja niveles sin escalera
+—medido, 2 de 18— así que el roce queda de respaldo: la pared entera se prefiere y la esquina se usa
+cuando no hay otra. Medido después: **18 de 18 niveles con escalera** (del 2 al 19), de dos o tres
+peldaños.
+
+**Y SE TREPA POR EL CAMINO DEL DEDO**, que es lo único que prueba que la regla existe: tocando el
+peldaño de arriba, el robot termina exactamente ahí. Medido en **2 de los 18** — las otras dieciséis
+no son alcanzables desde la celda inicial sin resolver el nivel primero, que es lo esperable en algo
+que es decoración anclada a una pared y no parte del camino.
+
+#### LA REGLA DEL TOQUE SE ESCRIBE UNA VEZ Y LA USAN TRES
+
+`pedirToque(M, E, rob, cel, n)` vive en el modelo puro y contesta *qué hace el dedo al tocar esta
+cara de esta celda*. La llaman **el dedo del jugador**, **el auto-jugador cuando apunta** y **el
+generador cuando comprueba que cada paso del plan se pueda pedir**. Con tres cuentas, el validador
+aprobaría planes que el dedo no puede ejecutar — y eso no falla: el nivel se ve bien y no se puede
+jugar.
+
+De ahí salen las tres aserciones del generador, y las tres encontraron un defecto real:
+
+1. **`pedibleIr`**: cada paso `ir` del plan tiene que ser pedible desde alguna cara de alguna celda.
+2. **`mecsTocables`, visibilidad**: un mecanismo con bloques en las seis caras no tiene ninguna a la
+   vista desde ningún ángulo. Y **no alcanza con que la cara esté libre**: una cara pegada a un hueco
+   de una celda sigue sin verse, así que se pide un tramo despejado de **tres celdas** o el borde del
+   mundo. Salió del nivel 15, donde el auto-jugador se quedaba sin forma de pedir la acción.
+3. **`mecsTocables`, recorrido**: cada celda de cada desplazamiento tiene que estar **vacía en el
+   mundo base**, y esto el modelo no lo puede notar — `tipoEn` pregunta primero por el mecanismo, así
+   que una pieza metida adentro de un ladrillo devuelve la pieza y la búsqueda la da por buena.
+   **Medido en el nivel 18**: `bloq(3,2,6)` devolvía `{base: ladrillo, con: metal, mec: 1}` — la
+   pieza viajaba de `[5,2,6]` a `[3,2,6]` y ahí hay un ladrillo. En pantalla eran las dos caras
+   peleándose el mismo píxel y el rayo del dedo pegando en el ladrillo, o sea la pieza imposible de
+   tocar.
+
+#### EL DEFECTO QUE SÓLO APARECE JUGANDO VEINTE NIVELES SEGUIDOS
+
+Los niveles 12, 15 y 16 fallaban en una corrida completa **y pasaban de a uno**. `ganaste()` agendaba
+`setTimeout(() => { if (JU.fin) verPanel('pGana'); }, 620)` y **nadie lo cancelaba**: el panel de
+victoria del nivel anterior se abría encima del siguiente y `jugTocar` salía por la puerta de atrás
+para siempre. Es un defecto del jugador de verdad —terminar un nivel y tocar SIGUIENTE antes de los
+620 ms— y sólo lo destapó el orden. Va con `JU.ganaT` y `clearTimeout` en `ganaste` y en
+`cargaNivel`.
+
+#### EL AUTO-JUGADOR APUNTA COMO UN DEDO, Y ESO LO HACE UNA PRUEBA
+
+No fija estado: **proyecta la cara a píxeles y toca**. Barre tres elevaciones × 24 rumbos × cinco
+puntos de muestreo por cara, porque una cara puede quedar tapada desde un ángulo y no desde otro —
+que es exactamente lo que le pasa a un jugador. Y las cinco muestras van **sobre los dos ejes de la
+cara** y no en x/z fijos: con un desplazamiento escrito a mano, en una cara lateral los cinco puntos
+caerían fuera de ella.
+
+**Y LA MEDICIÓN ESTUVO MAL DOS VECES, LAS DOS DEVOLVIENDO NÚMEROS PLAUSIBLES:** el diagnóstico de la
+falla vivía en el ámbito de la página, donde los nombres del módulo no existen y contestaba
+`undefined`; y después `juegaSolo` no reenviaba los campos nuevos en su propio objeto de retorno.
+Más una lectura mía equivocada: registré `nb: 0` y lo leí como «no hay candidatos» cuando esos
+niveles habían **pasado** —`ok:true`, así que el diagnóstico ni existía—.
+
+#### Y OTRA VEZ `renderer.info`, QUE YA HABÍA COSTADO UNA MEDICIÓN EN Z FORCE
+
+`escCosto()` leía `REN.info.render` sin apagar `autoReset`. three.js lo pone a cero al empezar
+**cada** `render()`, y la pasada de sombra es otra pasada dentro de la misma llamada: leído así, sólo
+queda la última y **apagar las sombras parece no cambiar nada**. Medido, las tres calidades daban
+`12 llamadas y 224 triángulos`. Con `autoReset = false` y un `reset()` por cuadro:
+
+| | llamadas | triángulos |
+|---|---|---|
+| baja (sin sombra) | **12** | **224** |
+| media (1024) | **23** | **440** |
+| alta (2048) | 23 | 440 |
+
+O sea que la pasada de sombra cuesta **11 llamadas y 216 triángulos**, y recién ahora la selección de
+gráficos se puede afirmar con un número. Y un segundo defecto del mismo tipo: `__M.cal()` leía el
+costo **sin dibujar un cuadro**, así que devolvía el de la calidad anterior.
+
+#### MEDIDO AL CERRAR
+
+Auditoría **20 de 20 niveles, 0 malos** en 5,25 s, con cada mecanismo verificado individualmente
+necesario (`resuelve(M,[i]) === null`), toques mínimos de 1 a 10, 14 a 243 bloques y hasta 57
+reintentos del generador. **El auto-jugador termina los 20 apuntando con el dedo**, cada uno en
+exactamente los toques del plan: `1·2·3·3·3·4·4·3·4·5·6·6·7·5·7·8·7·9·6·10`. Escalera en **18 de 18**
+niveles y trepada de verdad en 2. Camino humano completo: pantalla de idioma → menú → JUGAR → nivel
+cargado con su pista. Los tres idiomas en vivo (`NIVEL 1` · `LEVEL 1` · `NÍVEL 1`, y el pie del menú
+entero). **Cero solapamientos** entre los cinco elementos del HUD y cero fuera del marco. Costo:
+**31 llamadas y 1.508 triángulos** en el nivel 9, **34 y 3.240** en el 19. Encuadre 0,75 a 0,91 del
+ancho —el marco es 9:16 y la cámara ortográfica isométrica lo llena por el ancho, que es
+estructural—. Audio: toque 0,065 de pico · mecanismo 0,174 · **ganar 0,374 de pico y 0,0747 de rms,
+o sea 5,4 veces el silencio**, que es lo que corresponde al único acontecimiento que termina un
+nivel. `window.__errs` **vacío en las once corridas**.
+
+**LO QUE NO ESTÁ RESUELTO:** la escalera es decoración anclada y no parte de la solución de ningún
+nivel — el generador la pone después de trazar el camino y la validación sólo comprueba que no lo
+rompa. Un nivel cuya solución *pase* por una escalera pide que el trazador la use como herramienta,
+y eso es otra vuelta.
+
 ### Centésima quincuagésima sexta vuelta (2026-09-10): **DUNA** — el tumbo fantasma, y las dos mitades se dan vuelta
 
 Reporte, textual: *"no me caigo y aún así sigue diciendo que me caí, también sería mejor que los

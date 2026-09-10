@@ -1,0 +1,201 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>MEKO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e1418;color:#20303a;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+
+/* ══════════ VERTICAL NATIVO ══════════
+   Un diorama se mira de arriba y girando alrededor: el marco es el telefono tal
+   como se agarra. En una pantalla apaisada el juego ocupa una columna con
+   proporcion de telefono, centrada, y los cuerpos de letra salen del ANCHO del
+   marco (`--mw`) y no de `vw`, porque en apaisado `vw` es el ancho de toda la
+   ventana y el titulo se sale de la columna.                                 */
+#envase{position:fixed;inset:0;display:grid;place-items:center;background:#0b1013}
+/* EL FONDO ES CSS Y NO UNA TEXTURA DE ESCENA: el lienzo va con alfa, asi que
+   el degradado se ve por detras del diorama sin costar un solo pixel de GPU
+   ni una textura que subir. Y de paso los paneles se apoyan en el mismo
+   degradado, o sea que el menu y el juego son el mismo sitio. */
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;overflow:hidden;
+  background:linear-gradient(180deg,#a9cadd 0%,#cbdfe9 42%,#e6eee9 78%,#efeee6 100%)}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+body.jugando #hud{opacity:1}
+#niv{position:absolute;left:58px;right:58px;top:calc(14px + env(safe-area-inset-top));text-align:center;
+  font:800 clamp(13px,calc(var(--mw,412px)*0.042),20px)/1 system-ui;letter-spacing:.16em;
+  color:#33454f;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+#sub{position:absolute;left:58px;right:58px;top:calc(40px + env(safe-area-inset-top));text-align:center;
+  font:600 clamp(9px,calc(var(--mw,412px)*0.026),12px)/1 ui-monospace,monospace;letter-spacing:.18em;
+  color:rgba(51,69,79,.62)}
+/* LOS DOS BOTONES VAN EN LOS CANTOS Y EL ROTULO EN EL MEDIO CON MARGEN: con
+   `left:0;right:0` la caja del rotulo ocupa el ancho entero aunque el texto
+   este centrado, asi que se solapa con los dos botones sin que se vea — y el
+   dedo que va a reiniciar toca el rotulo. Ya costo una vuelta en CRUCE y otra
+   en DUNA. Los dos botones miden 40 y arrancan a 12 del
+   canto, o sea que ocupan 12..52: el rotulo entra a 58 de cada lado y el
+   solapamiento pasa a ser imposible por construccion. Lo mide `solapes()`. */
+#bPausa,#bReinicia{position:absolute;top:calc(10px + env(safe-area-inset-top));
+  width:40px;height:40px;border-radius:13px;border:1px solid rgba(32,48,58,.16);
+  background:rgba(255,255,255,.62);color:#33454f;font:700 15px/1 system-ui;
+  pointer-events:auto;display:none;place-items:center;backdrop-filter:blur(4px)}
+body.jugando #bPausa,body.jugando #bReinicia{display:grid}
+#bPausa{left:12px}
+#bReinicia{right:12px}
+/* la pista de abajo: dice el gesto y se va sola cuando el jugador ya lo hizo */
+#pista{position:absolute;left:8%;right:8%;bottom:calc(24px + env(safe-area-inset-bottom));
+  text-align:center;font:600 clamp(9px,calc(var(--mw,412px)*0.029),13px)/1.6 system-ui;
+  letter-spacing:.10em;color:rgba(45,62,72,.70);opacity:0;transition:opacity .35s;
+  text-shadow:0 1px 0 rgba(255,255,255,.55)}
+#pista.on{opacity:1}
+/* el aviso de que ese toque no lleva a ningun lado: sin esto, tocar una pared
+   no produce nada y desde afuera eso se lee a juego trabado */
+#nope{position:absolute;left:0;right:0;top:44%;text-align:center;opacity:0;
+  font:800 clamp(11px,calc(var(--mw,412px)*0.034),16px)/1 system-ui;letter-spacing:.20em;
+  color:#c2543f;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+#nope.on{animation:nop .5s}
+@keyframes nop{0%{opacity:0}18%{opacity:.95}70%{opacity:.95}100%{opacity:0}}
+
+/* ══════════ LAS PANTALLAS ══════════
+   El velo es un DEGRADADO y no una opacidad pareja: cerrado arriba y abajo,
+   donde van el titulo y los botones, y abierto en el medio, que es donde el
+   diorama tiene algo para mostrar. Detras sigue girando el nivel.            */
+.pan{position:absolute;inset:0;display:none;place-items:center;z-index:6;padding:20px;
+  background:rgba(226,236,242,.93)}
+.pan.on{display:grid}
+.caja{width:min(92%,430px);display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);text-align:center}
+h1{font:900 clamp(30px,calc(var(--mw,412px)*0.135),58px)/1 system-ui;letter-spacing:.22em;
+  color:#2a3d48;text-shadow:0 2px 0 rgba(255,255,255,.7)}
+.sub{font:700 clamp(9px,calc(var(--mw,412px)*0.027),12px)/1.5 ui-monospace,monospace;
+  letter-spacing:.24em;color:rgba(42,61,72,.60)}
+.tx{font:500 clamp(11px,calc(var(--mw,412px)*0.032),14px)/1.65 system-ui;color:rgba(42,61,72,.82)}
+.pie{font:600 clamp(9px,calc(var(--mw,412px)*0.026),12px)/1.6 ui-monospace,monospace;
+  letter-spacing:.10em;color:rgba(42,61,72,.52)}
+.bt{padding:12px 26px;min-width:210px;border:0;border-radius:14px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(32,48,58,.14);
+  font:700 clamp(11px,calc(var(--mw,412px)*0.031),14px)/1 system-ui;letter-spacing:.14em;
+  color:#2a3d48;cursor:pointer}
+.bt.p{background:linear-gradient(180deg,#f5b13f,#e39322);border-color:rgba(120,72,10,.25);
+  color:#3a2606;box-shadow:0 3px 0 rgba(120,72,10,.22)}
+.bt:active{transform:translateY(2px)}
+.bt.p:active{box-shadow:0 1px 0 rgba(120,72,10,.22)}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+.fila .bt{min-width:0;flex:1 1 0;padding:10px 8px;letter-spacing:.08em}
+.bt.sel{background:linear-gradient(180deg,#8fc9e0,#6fb0cb);color:#132630;
+  border-color:rgba(20,60,80,.25)}
+.hueco{height:calc(var(--mw,412px)*0.10)}
+/* EL MENU ABRE UNA VENTANA EN EL MEDIO: el titulo se va arriba y los botones
+   abajo, que es justo donde el velo esta cerrado, y la franja del medio queda
+   para el diorama. Con la columna centrada —que es lo que hace `place-items`
+   en los otros paneles— el texto cae exactamente en la unica banda abierta y
+   el diorama termina detras de la palabra MEKO. */
+.pan.abre{place-items:stretch;
+  background:linear-gradient(180deg,rgba(226,236,242,.94) 0%,rgba(226,236,242,.94) 16%,
+    rgba(226,236,242,.15) 26%,rgba(226,236,242,.15) 80%,
+    rgba(226,236,242,.95) 90%,rgba(226,236,242,.95) 100%)}
+.pan.abre .caja{width:100%;height:100%;justify-content:space-between;
+  padding:calc(var(--mw,412px)*0.055) 0 calc(var(--mw,412px)*0.030)}
+.pan.abre .caja > .grupo{display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);width:min(92%,430px)}
+
+/* la reja de niveles: cinco por fila, y el estado se lee del color */
+#gNiv{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:100%}
+.nb{aspect-ratio:1;border-radius:12px;border:1px solid rgba(32,48,58,.14);
+  background:rgba(255,255,255,.55);color:#2a3d48;font:800 15px/1 system-ui;
+  display:grid;place-items:center;cursor:pointer;position:relative}
+.nb.hecho{background:linear-gradient(180deg,#9ed08a,#7cb668);border-color:rgba(40,90,30,.22);
+  color:#1d3313}
+.nb.trabado{opacity:.34;cursor:default}
+.nb i{position:absolute;bottom:4px;left:0;right:0;font:600 8px/1 ui-monospace,monospace;
+  font-style:normal;letter-spacing:.06em;opacity:.66}
+
+input[type=range]{width:100%;accent-color:#e39322}
+
+/* ══════════ LA PANTALLA DE CARGA ══════════ */
+#carga{position:absolute;inset:0;z-index:9;display:grid;place-items:center;
+  background:linear-gradient(180deg,#cfe0ea,#e8eef1);transition:opacity .35s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(60%,220px);height:5px;border-radius:3px;background:rgba(32,48,58,.14);overflow:hidden}
+.barc i{display:block;height:100%;width:0;background:#e39322;transition:width .3s;font-style:normal}
+</style>
+</head>
+<body>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="niv"></div>
+    <div id="sub"></div>
+    <div id="pista"></div>
+    <div id="nope"></div>
+    <button id="bPausa">॥</button>
+    <button id="bReinicia">↺</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>MEKO</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <div class="hueco"></div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan abre" id="pMenu"><div class="caja">
+    <div class="grupo"><h1>MEKO</h1><div class="sub" id="mSub"></div></div>
+    <div class="grupo">
+      <button class="bt p" id="bJugar"></button>
+      <div class="fila"><button class="bt" id="bNiveles"></button>
+        <button class="bt" id="bAjustes"></button></div>
+      <div class="pie" id="mPie"></div>
+    </div>
+  </div></div>
+
+  <div class="pan" id="pNiveles"><div class="caja">
+    <h1 id="nTit"></h1><div class="sub" id="nSub"></div>
+    <div id="gNiv"></div>
+    <button class="bt" id="nVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1>
+    <div class="pie" id="aMusL"></div><input type="range" id="aMus" min="0" max="100" value="50">
+    <div class="pie" id="aFxL"></div><input type="range" id="aFx" min="0" max="100" value="80">
+    <div class="pie" id="aIdiL"></div><div class="fila" id="aIdi"></div>
+    <div class="pie" id="aCalL"></div><div class="fila" id="aCal"></div>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bReini2"></button>
+    <button class="bt" id="bSalir"></button>
+  </div></div>
+
+  <div class="pan" id="pGana"><div class="caja">
+    <h1 id="gTit"></h1><div class="sub" id="gSub"></div>
+    <div class="tx" id="gDatos"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="gSig"></button>
+    <button class="bt" id="gNiv2"></button>
+    <button class="bt" id="gMenu"></button>
+  </div></div>
+
+  <div id="carga"><div class="caja"><h1>MEKO</h1>
+    <div class="sub" id="cSub">CARGANDO</div>
+    <div class="barc"><i id="cBarra"></i></div></div></div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as T from 'three';
