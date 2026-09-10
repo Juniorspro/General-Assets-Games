@@ -119,6 +119,8 @@ body.cartel .tit .cart{display:block;width:100%;
 .b.s{background:rgba(255,255,255,.10);color:#e9e0cd;box-shadow:none;
   border:1px solid rgba(255,255,255,.20);min-width:150px;padding:9px 22px;font-size:11px}
 .fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.fila.jt{gap:10px;align-items:center}
+.b.ch{min-width:0;padding:9px 18px;font-size:.86em}
 .fila.tres{width:100%;flex-wrap:nowrap}
 .ch{padding:6px 0;min-width:0;flex:1 1 0;border:1px solid rgba(255,255,255,.18);
   border-radius:8px;background:rgba(255,255,255,.05);
@@ -150,13 +152,37 @@ body.cartel .tit .cart{display:block;width:100%;
 .ob.ok u::after{content:'✓'}
 .ob s{margin-left:auto;text-decoration:none;opacity:.6;font-size:9px;letter-spacing:.08em}
 
+/* ── LAS DOS ZONAS ────────────────────────────────────────────────────────
+   Media pantalla cada una, y son DIV DEL DOM a proposito: el marco esta
+   girado noventa grados, asi que averiguar de que lado cayo el dedo con
+   cuentas sobre el puntero obliga a invertir la rotacion a mano —y este repo
+   ya se equivoco con eso dos veces—. Con dos divs, la cuenta la hace el
+   navegador.
+   Van DEBAJO de los paneles (z 5) y del boton de pausa (z 3): con la pausa
+   por debajo, tocarla saltaria y pausaria en el mismo gesto y el jugador
+   volveria de la pausa en el aire sin haber apretado nada.
+   Y NO SE VEN. Un rectangulo tenue partiendo la pantalla al medio se lee a
+   error de dibujo; lo que ensena donde tocar es el tutorial, que dura lo que
+   dura y despues se va.                                                   */
+.zona{position:absolute;top:0;bottom:0;width:50%;z-index:1;background:transparent}
+body:not(.jugando) .zona{display:none}
+#zIzq{left:0}
+#zDer{right:0}
+/* saltear el tutorial: chiquito, abajo a la derecha, donde no hay nada */
+#tSalt{position:absolute;right:calc(var(--mh,412px)*.04);bottom:calc(var(--mh,412px)*.04);
+  z-index:3;display:none;padding:6px 14px;border-radius:999px;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18);
+  font:600 clamp(8px,calc(var(--mh,412px)*.026),12px)/1 monospace;letter-spacing:.16em;
+  color:#e9e0cd;opacity:.7;cursor:pointer;pointer-events:auto}
+body.tuto #tSalt{display:block}
+
 /* ── EL BOTON DE PAUSA ────────────────────────────────────────────────────
    Es lo unico tactil que hay ademas del juego entero: se toca en cualquier
    lado para saltar, asi que la pausa tiene que estar donde el pulgar NO va
    —arriba a la izquierda— y ser chica.                                    */
 #bPausa{position:absolute;left:calc(var(--mh,412px)*.038);top:calc(var(--mh,412px)*.038);
   width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.20);
-  border:1px solid rgba(255,255,255,.18);display:none;place-items:center;
+  border:1px solid rgba(255,255,255,.18);display:none;place-items:center;z-index:3;
   font:700 15px/1 monospace;color:#fff;opacity:.55;pointer-events:auto;cursor:pointer}
 body.jugando #bPausa{display:grid}
 /* la pista del primer toque: se va sola en cuanto se salta una vez */
@@ -164,9 +190,19 @@ body.jugando #bPausa{display:grid}
   font:600 clamp(9px,calc(var(--mh,412px)*.030),13px)/1.5 monospace;letter-spacing:.16em;
   color:#fff;opacity:0;transition:opacity .4s}
 #pista.on{opacity:.62}
+/* CON EL TUTORIAL PUESTO LA PISTA SOBRA, y encima se pisan: las dos caen en
+   la misma franja de abajo y el renglon del tutorial la tapa a medias
+   —fotografiado, «IZQUIERDA SALTA · DERECHA EMPUJA» asomando por debajo de
+   «TOCÁ A LA IZQUIERDA PARA SALTAR»—. La pista es el respaldo para el que
+   salteo el tutorial, asi que mientras el tutorial habla, se calla.
+   `cajas()` no lo puede ver: el renglon del tutorial se dibuja en el lienzo
+   y la pista es DOM. */
+body.tuto #pista{display:none}
 </style></head><body>
 <div id="marco">
   <canvas id="lienzo"></canvas>
+  <div class="zona" id="zIzq"></div>
+  <div class="zona" id="zDer"></div>
   <div id="hud">
     <div id="pts">0</div>
     <div id="sub"></div>
@@ -175,6 +211,7 @@ body.jugando #bPausa{display:grid}
     <div id="pista"></div>
   </div>
   <div class="bt" id="bPausa">‖</div>
+  <button id="tSalt"></button>
 
   <div class="panel on" id="pIdioma"><div class="caja">
     <h1 class="tit"><i class="cart"></i><span class="nm">DUNA</span><span id="iSub">elegí tu idioma</span></h1>
@@ -183,7 +220,13 @@ body.jugando #bPausa{display:grid}
 
   <div class="panel" id="pMenu"><div class="caja">
     <h1 class="tit"><i class="cart"></i><span class="nm">DUNA</span><span id="mSub"></span></h1>
-    <button class="b" id="mJugar"></button>
+    <!-- LOS DOS EN UNA FILA, y no es por ahorrar: son HERMANOS —los dos
+         arrancan una corrida, uno con el tutorial puesto— asi que apilados
+         el segundo se lee a nota al pie. Y apilados el menu media 433 en un
+         marco de 412: la fila devuelve 37 px, que son los 21 que faltaban
+         mas aire. La jerarquia la sigue diciendo el tamano. -->
+    <div class="fila jt"><button class="b" id="mJugar"></button>
+    <button class="b s ch" id="mTuto"></button></div>
     <div class="gr"><div class="tit2" id="mTitObj"></div><div id="obj"></div></div>
     <div class="gr"><div class="tit2" id="mTitCal"></div><div class="fila tres" id="mCal"></div></div>
     <div class="gr"><div class="tit2" id="mTitIdi"></div><div class="fila tres" id="mIdi"></div></div>
@@ -194,6 +237,7 @@ body.jugando #bPausa{display:grid}
   <div class="panel" id="pPausa"><div class="caja">
     <h1 id="paTit"></h1>
     <button class="b" id="paSeguir"></button>
+    <button class="b s" id="paTerm"></button>
     <button class="b s" id="paMenu"></button>
     <div class="pie" id="paPie"></div>
   </div></div>

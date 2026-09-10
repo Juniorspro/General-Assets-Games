@@ -317,21 +317,190 @@ munecas.
   menú tiene **cartel del nombre** y cuatro iconos que van como **máscara de CSS sobre
   `currentColor`**, para que el color siga viviendo en la hoja de estilos.
 
-- **`Duna.html` es "DUNA"** (~197 KB, de los cuales 57 son el cartel del nombre generado con
-  Rezona; **el juego en sí no tiene un solo asset**: las dunas, el rider, la bufanda, las nubes y
-  los ocho cielos se dibujan por código y el sonido es procedural). El decimoséptimo juego. Un
-  **sandboard sin final con UN SOLO BOTÓN**, en el estilo de Alto's Odyssey: arte vectorial de
-  siluetas planas, y **el suelo es lo CLARO y todo lo que se apoya en él es lo OSCURO** —esa
-  inversión es el estilo—. Se toca y salta; se mantiene en el aire y da una voltereta; **aterrizar
-  derecho paga velocidad y de cabeza te caés**, con 36 grados de tolerancia. Sobre una cuerda de
-  banderines se mantiene para colgarse. El terreno es una **Hermite sobre puntos de control con
-  derivada analítica** y los huecos son una **máscara** y no parte de la curva. **La hora del día
-  avanza con la DISTANCIA y no con el reloj** (un ciclo cada 3.200 m) y cada partida arranca en un
-  punto distinto del ciclo: ocho paletas, de la noche con luna a la siesta lavada. Los números no
-  se eligen, se derivan: el roce sale del equilibrio de crucero a 20 m/s, y el impulso y la
-  gravedad de que **una vuelta entera entre en un vuelo llano** (0,73 s de giro dentro de 1,10 de
-  aire). Vive partido en `herramientas/duna/partes/` y se arma con
-  `python3 herramientas/duna/armar.py`; el cartel se hornea con `hornear_ui.py`.
+- **`Duna.html` es "DUNA"** (~554 KB, de los cuales 323 son las seis camas de música generadas con
+  Rezona y 57 el cartel del nombre; **el juego en sí no tiene un solo asset**: las dunas, el rider,
+  la bufanda, las nubes y los ocho cielos se dibujan por código y el viento es procedural). El
+  decimoséptimo juego. Un **sandboard que no se termina**, en el estilo de Alto's Odyssey: arte
+  vectorial de siluetas planas, y **el suelo es lo CLARO y todo lo que se apoya en él es lo
+  OSCURO** —esa inversión es el estilo—. **La pantalla está partida en dos**: la mitad izquierda
+  salta —y sostenida da una voltereta— y **en la derecha se toca repetido para empujarse**, +1,70
+  m/s por toque contra un techo de 33 y 85 ms de espera entre uno y otro, así que la velocidad es
+  una cuenta de dedo y no un botón de acelerar. **Aterrizar derecho paga velocidad y de cabeza te
+  TUMBA**: 1,15 s en el piso y la velocidad a 4,5, o sea que un error cuesta lo único que este
+  juego tiene y **no cuesta la corrida** — la corrida la termina uno desde la pausa, que es lo que
+  hace que el récord signifique algo. Sobre una cuerda de banderines se mantiene para colgarse. El
+  terreno es una **Hermite sobre puntos de control con derivada analítica** y los huecos son una
+  **máscara** y no parte de la curva. **La hora del día avanza con la DISTANCIA y no con el reloj**
+  (un ciclo cada 3.200 m) y cada partida arranca en un punto distinto del ciclo: ocho paletas, de
+  la noche con luna a la siesta lavada, y **seis camas de música que se cruzan con ella** —seis
+  sobre ocho a propósito: la música es una capa más lenta que la luz—. Los números no se eligen, se
+  derivan: el roce sale del equilibrio de crucero a 20 m/s, y el impulso y la gravedad de que **una
+  vuelta entera entre en un vuelo llano** (0,73 s de giro dentro de 1,10 de aire). Y trae un
+  **tutorial de tres pasos** que espera a que se haga cada cosa. Vive partido en
+  `herramientas/duna/partes/` y se arma con `python3 herramientas/duna/armar.py`; el cartel se
+  hornea con `hornear_ui.py` y la música con `hornear_musica.py`.
+
+### Centésima quincuagésima quinta vuelta (2026-09-10): **DUNA** — la corrida no se termina, la pantalla se parte en dos, y seis camas de música
+
+Pedido, mandado dos veces textual: *"agrega que sea infinito genera con Rezona más de 5 canciones lofi
+goty de fondo ambientales y tranquilas también un tutorial visual que te indique ue hacer también que
+al tocar repetidamente a la derecha ahí avances rápido con un límite y si tocas a la izquierda es el
+salto"*.
+
+#### «INFINITO» NO ERA EL TERRENO: EL TERRENO YA LO ERA
+
+`terrGenera`/`terrAvanza` siembran y podan a medida que el rider avanza desde la vuelta 154, así que
+el mundo no se acaba nunca. Lo que se acababa era **la corrida**: aterrizar de cabeza la terminaba y
+mandaba a la pantalla de final. Ahora un mal aterrizaje es un **TUMBO** (`cae()`): 1,15 s en el piso y
+la velocidad a 4,5 — cuesta **lo único que este juego tiene**, que es la velocidad, y no la partida.
+La corrida la termina uno, desde la pausa (`TERMINAR`), y eso es lo que hace que el récord siga
+significando algo: con la corrida infinita **y** el récord automático, el número sería «cuánto rato
+dejé el teléfono encendido».
+
+**Y EL PELIGRO DE ESTO NO ES EL JUGADOR, SON LOS BOTS.** `_rollout` cortaba con `!R.vivo`, y sin
+muertes eso **nunca se cumple**: los tres auto-jugadores habrían visto cero errores y la auditoría de
+terreno habría aprobado cualquier cosa. Corta con `R.caido > 0`. Es el mismo defecto que en POMPOM
+hacía que el validador aprobara un juego que no existe, con otro disfraz.
+
+#### LA PANTALLA SE PARTE EN DOS, Y ESO DA VUELTA EL DISEÑO DE LA VUELTA ANTERIOR
+
+La vuelta 154 escribió, con todas las letras, que *«lo que define al género no es la tabla: es que
+haya UN SOLO BOTÓN»*. Eso ya no es cierto y hay que decirlo: **izquierda salta, derecha empuja**.
+
+Las dos zonas son **divs del DOM** y no una cuenta de coordenadas, y es por lo de siempre en este
+juego: `#marco` va **girado noventa grados** en vertical, así que cualquier cuenta a mano tiene que
+invertir la rotación —lo que ya costó una medición en Z Force y otra en Eco—. Con dos divs, la
+frontera la resuelve el navegador y no se puede equivocar. Medido: `izq [0,0,412,446]` ·
+`der [0,446,412,446]`, y `elementFromPoint` devuelve `zIzq` y `zDer` donde corresponde.
+
+**EL EMPUJE ES UN TOQUE Y NO UN SOSTENIDO, y el techo no es un adorno.** +1,70 m/s por toque, 85 ms de
+espera entre uno y otro, y **satura en 33** contra los 38 de la máxima que da el terreno. Con
+sostenido la velocidad tope sería gratis y el terreno dejaría de decidir nada; con el techo, machacar
+el dedo te lleva **cerca** del máximo y lo que falta lo tiene que poner una pendiente. Medido: 8 toques
+a 30 ms cuentan **3** (la espera muerde) y a 120 ms cuentan **8**; el barrido de saturación da
+`{s0: 24,48 → s: 33, sumó 6, tope 33}`.
+
+**Y SE PROBÓ Y SE DESCARTÓ el empuje en el aire**: convierte el vuelo en un planeador y se lleva
+puesta la única regla del juego, que es el ángulo de aterrizaje.
+
+#### EL DEFECTO DE LA VUELTA: UN TOQUE TE TUMBABA, Y LA PRIMERA LÍNEA DEL TUTORIAL TE HACÍA CAER
+
+El giro arrancaba **en el primer cuadro del apriete**. Medido: sostener **cuatro pasos —67 ms, más
+corto que un toque humano, que dura entre 60 y 120—** ya deja el cuerpo **33 grados torcido** contra
+una tolerancia de 36. O sea que tocar para saltar te tumbaba, y el primer paso del tutorial —«tocá a
+la izquierda para saltar»— era una trampa.
+
+**Nunca se había notado porque hasta esta vuelta el izquierdo era el ÚNICO botón**: tocar y mantener
+eran el mismo gesto y nadie tocaba corto a propósito. Va una zona muerta de **0,14 s** (`GIRO_ESPERA`),
+y entra en el vuelo por aritmética: 0,14 + 0,73 de vuelta son 0,87 contra 1,10 de aire.
+
+Tres cosas que eso obligó, y las tres son de este repo:
+- **`girAp` se declara en el literal de `R`** y no nace al vuelo: `_EST` sale de `Object.keys(R)`, así
+  que un campo que aparece a mitad de un cuadro **no lo guarda ni lo restaura el rollout** — y
+  entonces el bot planifica volteretas sobre un estado de giro que no es el suyo.
+- **Se reinicia en los seis sitios** donde se reinician `R.giro`/`R.rot`. Con uno olvidado, la espera
+  quedaría medio consumida desde el salto anterior.
+- **Y el bot tiene que sumarla a su estimación** de cuánto dura una vuelta: sin eso la cuenta queda
+  0,14 s corta, las variantes (±0,11) no la alcanzan y **cerraría CERO volteretas**.
+
+Medido después: sostener de 1 a 10 pasos (hasta 167 ms) da **0 caídas y 0 volteretas**, a crucero y
+parado. Y la ventana en la que la voltereta cierra pasó de 40-46 pasos a **47-54, o sea 133 ms de
+ancho** — se corrió entera, no se angostó.
+
+#### SEIS CAMAS DE MÚSICA, UNA POR TRAMO DEL DÍA
+
+Generadas con Rezona (`rpvTPzKA`, el descartable), horneadas con `hornear_musica.py`: 6 pistas de
+7,2 a 8,9 s, **rms 0,109-0,110 medido sobre el MP3 escrito**, 323 KB en base64.
+
+**SEIS SOBRE OCHO PALETAS A PROPÓSITO.** La hora avanza con la distancia, así que atar la música a la
+hora hace que avanzar se **escuche** además de verse; pero haciendo coincidir una pista con cada
+paleta, cada cambio de luz traería además un cambio de música y las dos cosas se leerían como una
+sola. Con seis, la música es una capa **más lenta** que la luz. Medido: `noche/m0 · alba/m0 ·
+amanecer/m1 · mañana/m2 · día/m3 · siesta/m3 · atardecer/m4 · ocaso/m5`, cruzándose en 1,6 s (medido en
+vivo: la vieja 0,186 → 0,005 → 0 mientras la nueva va 0 → 0,194 → 0,199).
+
+**LA CAMA VA POR DEBAJO DEL VIENTO, Y ESO ES LA MITAD DE LA DECISIÓN.** En DUNA el viento **es** el
+instrumento: su ganancia sale de la velocidad, o sea que es el único sitio donde acelerar se escucha.
+Con la música al nivel del viento, empujarse dejaría de oírse. Medido con el A/B **en el mismo binario
+y con la velocidad clavada antes de cada lectura**: todo rms 0,0364 · viento 0,0304 · **música
+0,0112**.
+
+**Y ESE A/B ESTABA CONTAMINADO LA PRIMERA VEZ:** «viento» medía **más** que «todo», que es imposible.
+La causa no era la mezcla sino que la ganancia del viento sigue a la velocidad —`(R.s−6)/26`— y el
+rider **frena entre una lectura y la otra**: se estaban comparando dos velocidades distintas. Con la
+velocidad rellenada justo antes de cada medición, los números cierran.
+
+**Y `duration` ES UN TECHO Y NO UNA ORDEN**: se pidieron 20 s por pista y volvieron entre 8,8 y 10,5.
+Ya había pasado en RECREO. No importa porque son camas: con la cola fundida sobre la cabeza un bucle
+de ocho segundos aguanta, y cada tramo del día dura unos 27 s de juego, o sea cuatro vueltas antes de
+cruzar a la siguiente.
+
+**LO PROCEDURAL NO SE BORRA.** El viento sigue siendo el de siempre y una pista que no decodifique
+deja el juego con viento y sin cama, no mudo.
+
+#### EL TUTORIAL: TRES PASOS, Y EL ORDEN NO ES EL QUE UNO ESCRIBIRÍA
+
+`saltar · empujar · voltereta`, y cada paso **espera a que se haga la cosa**. El orden salió de un
+defecto medido: con la voltereta en segundo lugar el auto-jugador **se quedaba trabado ahí con la
+velocidad en CERO**, y la razón es aritmética — una vuelta entera son 0,73 s de giro y el vuelo dura
+1,10 s **a crucero**; despacio el salto es más corto que el giro y la voltereta es **imposible por
+construcción**, no por dificultad. Y fallarla cuesta un tumbo, o sea todavía menos velocidad. Pidiendo
+primero los empujones, cuando llega la voltereta ya hay con qué darla.
+
+**Y QUÉ ZONA SE ENCIENDE SALE DE LA CLAVE DEL PASO Y NO DE SU ÍNDICE.** Atado al índice, reordenar los
+pasos —que es justo lo que se acababa de hacer— deja el círculo pulsando en la mitad equivocada de la
+pantalla **sin que nada falle**.
+
+#### CUATRO DEFECTOS MÁS, Y DOS ERAN DE LA MEDICIÓN
+
+1. **`juega()` NO REINICIABA LA CORRIDA.** `R.dist`, `R.caidas` y `R.empujes` los pone en cero
+   `nuevaPartida` y nadie más, así que tres llamadas seguidas devolvían la **suma** de las tres:
+   medido, honesto 5.266 m, torpe 10.561 y azar **13.107** — que se lee a que el bot que juega al azar
+   es el mejor de los tres cuando en realidad hizo 2.546. Es la sonda informando la corrida anterior,
+   otra vez.
+2. **DOS CLAVES `hora:` EN EL OBJETO DE SONDAS, y van seis veces en este repo.** Mi sonda nueva de
+   música pisó a la que ya estaba, así que `paletaEn()` dejó de llamarse y **cualquier medición de
+   paleta estaba leyendo la anterior**. Y de paso: se mueve `HORA0` y no `HORA`, porque `unPaso`
+   reescribe `HORA = HORA0 + dist/CICLO_M` en cada cuadro y pisar `HORA` a secas mide un cambio que el
+   cuadro siguiente deshace.
+3. **La ficha de un objetivo decía `13.600992165146787/400`, y encima era la distancia de la DEMO.**
+   Dos cosas: los contadores de este juego son cuentas —metros, monedas, volteretas— así que el
+   decimal no informa nada y rompe el renglón; y en el menú corre la demo, que no es el jugador, así
+   que la barra de «bajá 400 metros de una» **subía sola sin que nadie estuviera jugando**.
+4. **El menú dejó de entrar** al ganar el botón de tutorial: 433 px en un marco de 412. Los dos
+   botones van **en una fila**, y no es por ahorrar: son hermanos —los dos arrancan una corrida— así
+   que apilados el segundo se lee a nota al pie. La fila devuelve 37 px. Medido: es 396 · en 382 ·
+   pt 382, los tres entran.
+   Y el renglón del tutorial **tapaba a medias la pista** —las dos caen en la misma franja de abajo—:
+   `cajas()` no lo puede ver, porque el tutorial se dibuja en el lienzo y la pista es DOM.
+
+#### MEDIDO AL CERRAR
+
+Los tres bots sobre **12 semillas × 180 s**, todos entrando por `pulsa()` y `turbo()`, que son las dos
+funciones del dedo:
+
+| | metros | caídas | volteretas |
+|---|---|---|---|
+| honesto | **5.183** | 1,2 | 100 |
+| torpe | 5.189 | 1,0 | 99 |
+| **al azar** | **2.552** | **48,9** | 5 |
+
+El del azar se cae **cuarenta veces más** y llega a la mitad de distancia: ésa es la prueba de que el
+ángulo de aterrizaje sigue siendo la regla del juego después de haberla dejado de castigar con la
+corrida. Y honesto y torpe llegan a **sMax 38**, que es `V_MAX`.
+
+Auditoría **25 de 25 semillas** con 0 monedas enterradas y 0 cuerdas fuera de alcance. Tumbo verificado
+(`caido 1,15 · s 4,5`, y con el rider en el piso el salto y el empuje son inertes). Tutorial recorrido
+de punta a punta 0→1→2→hecho, no vuelve a salir en la segunda corrida, `#mTuto` lo repite y `#tSalt` lo
+saltea. TERMINAR desde la pausa cierra la corrida con sus datos (`259 m · 3 monedas · 0 trucos · 2
+caídas`). **Cero solapamientos** de HUD y cero fuera del marco. Las **tres calidades** en caliente
+(0,60 · 0,84 · 1,00 de píxel). Costo **0,375 ms por cuadro**. `window.__errs` **vacío en las diez
+corridas**. El HTML pasó de 197 a **554 KB**, y esos 323 son la música.
+
+**LO QUE NO ESTÁ RESUELTO:** sigue en pie lo de la vuelta anterior —la auditoría informa el hueco más
+ancho y no lo compara contra la velocidad alcanzable en ese punto— y ahora importa un poco más, porque
+con el empuje la velocidad en un punto dado depende de cuánto machacó el dedo el jugador y no sólo de
+la pendiente.
 
 ### Centésima quincuagésima cuarta vuelta (2026-09-10): **DUNA**, el decimoséptimo juego — un sandboard de un botón, y seis defectos que sólo salieron midiendo
 

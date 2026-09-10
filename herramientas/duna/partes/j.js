@@ -21,7 +21,7 @@ let CAMA = null, CAMA_G = null, CAMA_F = null;
 let PAD = [], PAD_G = null;
 let SON_ON = true;
 
-const VOL = { maestro: 0.62, cama: 0.30, pad: 0.16 };
+const VOL = { maestro: 0.62, cama: 0.30, pad: 0.16, mus: 0.20 };
 
 function audioArranca() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
@@ -63,6 +63,83 @@ function audioArranca() {
     PAD.push(o);
   }
   padAfina(0);
+  musArranca();
+}
+
+/* ── LA MUSICA: SEIS CAMAS DE LOFI, UNA POR TRAMO DEL DIA ─────────────────
+   VAN POR DEBAJO DEL VIENTO Y NO ENCIMA, y esa es la unica decision dura de
+   la mezcla: el viento es el unico sitio del juego donde la velocidad —que
+   es lo que el jugador administra— se escucha. Una cama de musica al nivel
+   del viento se come esa informacion y acelerar deja de oirse.
+
+   Y LA PISTA LA ELIGE LA HORA, que en este juego avanza con la DISTANCIA:
+   asi que avanzar se ESCUCHA ademas de verse, que es lo que ya hacen la
+   paleta y el pad. Seis pistas sobre ocho paletas a proposito — la musica es
+   una capa mas lenta que la luz, y hacerlas coincidir dejaria un corte en
+   cada cambio de paleta.
+
+   SE CRUZAN Y NO SE CORTAN. Un tema que para y arranca otro se escucha como
+   un error; dos ganancias que se cruzan en tres segundos, no.
+
+   Y NO SE DECODIFICAN LAS SEIS DE GOLPE: cada una entra cuando su tramo se
+   acerca. Decodificar seis MP3 en el arranque son varios segundos de hilo
+   principal justo cuando el juego tiene que empezar a correr.
+   LO PROCEDURAL NO SE BORRA: sin las camas —un navegador que no decodifica,
+   un base64 roto— el viento y el pad siguen ahi y el juego suena igual.   */
+const MUS = { n: [], buf: [], src: [], gan: [], act: -1, listo: false, ped: [] };
+const MUS_ORDEN = ['m0_noche', 'm1_alba', 'm2_manana', 'm3_siesta', 'm4_tarde', 'm5_ocaso'];
+
+function musArranca() {
+  if (typeof MUS_B64 !== 'object' || !MUS_B64) return;
+  MUS.n = MUS_ORDEN.filter(k => typeof MUS_B64[k] === 'string' && MUS_B64[k]);
+  if (!MUS.n.length) return;
+  MUS.buf = MUS.n.map(() => null);
+  MUS.src = MUS.n.map(() => null);
+  MUS.gan = MUS.n.map(() => null);
+  MUS.ped = MUS.n.map(() => false);
+  MUS.listo = true;
+  musPide(musIdx(HORA));
+}
+/* que pista le toca a esta hora: seis tramos iguales del ciclo */
+function musIdx(h) {
+  if (!MUS.n.length) return -1;
+  const u = ((h % 1) + 1) % 1;
+  return Math.min(MUS.n.length - 1, Math.floor(u * MUS.n.length));
+}
+function musPide(i) {
+  if (i < 0 || !MUS.listo || MUS.ped[i]) return;
+  MUS.ped[i] = true;
+  const b64 = MUS_B64[MUS.n[i]];
+  const bin = atob(b64.slice(b64.indexOf(',') + 1));
+  const ab = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) ab[k] = bin.charCodeAt(k);
+  AC.decodeAudioData(ab.buffer, b => { MUS.buf[i] = b; }, () => {});
+}
+/* VA CON UN BufferSource EN BUCLE Y NO CON UN <audio loop>: el loop de un
+   <audio> vuelve al cero con un hueco de milisegundos, y en una pista de
+   veinte segundos eso se escucha en cada vuelta. */
+function musSuena(i) {
+  if (MUS.src[i] || !MUS.buf[i]) return;
+  const g = AC.createGain(); g.gain.value = 0; g.connect(MAE);
+  const s = AC.createBufferSource(); s.buffer = MUS.buf[i]; s.loop = true;
+  s.connect(g); s.start();
+  MUS.src[i] = s; MUS.gan[i] = g;
+}
+function musPaso() {
+  if (!MUS.listo) return;
+  const i = musIdx(HORA);
+  if (i !== MUS.act) {
+    MUS.act = i;
+    musPide(i);
+    musPide((i + 1) % MUS.n.length);      // la siguiente, para que llegue antes de hacer falta
+  }
+  musSuena(i);
+  const t = AC.currentTime;
+  for (let k = 0; k < MUS.n.length; k++) {
+    if (!MUS.gan[k]) continue;
+    const v = k === i ? VOL.mus : 0;
+    MUS.gan[k].gain.setTargetAtTime(v, t, 1.1);   // ~3 s de cruce
+  }
 }
 
 /* pentatonica menor: la escala en la que cualquier nota suena bien con
@@ -86,6 +163,7 @@ function audioPaso(dt, enJuego) {
   CAMA_F.frequency.setTargetAtTime(320 + v * 1500, t, 0.30);
   PAD_G.gain.setTargetAtTime(VOL.pad * (enJuego ? 0.75 : 1), t, 0.8);
   padAfina(HORA);
+  musPaso();
 }
 
 function audioMudo(v) {
@@ -146,6 +224,11 @@ function son(k) {
     case 'truco':  _tono(t, 0.22, 880, 1320, 0.18, 'triangle'); break;
     case 'choque': _ruido(t, 0.55, 'lowpass', 900, 90, 0.62, 0.8);
                    _tono(t, 0.42, 180, 55, 0.34, 'sawtooth'); break;
+    /* EL EMPUJON SUENA A PIE CONTRA LA ARENA y no a un bip: es un gesto
+       fisico —una patada— y suena cincuenta veces por partida, asi que va
+       corto, seco y por debajo del salto. Un tono en ese sitio se vuelve
+       insoportable en el primer minuto. */
+    case 'empuja': _ruido(t, 0.11, 'bandpass', 1100, 400, 0.20, 1.1); break;
     case 'ui':     _tono(t, 0.09, 660, 660, 0.16, 'square'); break;
     case 'obj':    _tono(t, 0.16, 880, 880, 0.20, 'sine');
                    _tono(t + 0.09, 0.26, 1320, 1320, 0.18, 'sine');
@@ -155,6 +238,15 @@ function son(k) {
 
 /* el pico y el rms de lo que SALE, no de lo que se pidio: es la unica prueba
    de que un sonido sono, y la unica forma de comprobar la mezcla */
+/* cuantas camas decodificaron y cual esta sonando: sin este numero,
+   «la musica anda» seria «no tiro excepcion» */
+function musVer() {
+  return { pistas: MUS.n.length, dec: MUS.buf.filter(Boolean).length,
+           act: MUS.act, nom: MUS.act >= 0 ? MUS.n[MUS.act] : '',
+           gan: MUS.gan.map(g => g ? +g.gain.value.toFixed(3) : null),
+           hora: +HORA.toFixed(3) };
+}
+
 function audioNivel() {
   if (!ANA) return { pico: 0, rms: 0 };
   const n = ANA.fftSize, d = new Float32Array(n);

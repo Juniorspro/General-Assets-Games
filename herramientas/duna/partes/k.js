@@ -17,14 +17,14 @@
 const $ = s => document.getElementById(s);
 const D_CLAVE = 'duna_v1';
 
-const GUARDA = { idi: '', cal: 1, rec: 0, mon: 0, niv: {}, ac: { grinds: 0 } };
+const GUARDA = { idi: '', cal: 1, rec: 0, mon: 0, tuto: 0, niv: {}, ac: { grinds: 0 } };
 function guardaLee() {
   try {
     const s = JSON.parse(localStorage.getItem(D_CLAVE) || '{}');
     if (s && typeof s === 'object') {
       if (s.idi) GUARDA.idi = s.idi;
       if (typeof s.cal === 'number') GUARDA.cal = clamp(s.cal | 0, 0, 2);
-      GUARDA.rec = s.rec | 0; GUARDA.mon = s.mon | 0;
+      GUARDA.rec = s.rec | 0; GUARDA.mon = s.mon | 0; GUARDA.tuto = s.tuto | 0;
       GUARDA.niv = s.niv || {}; GUARDA.ac = s.ac || { grinds: 0 };
     }
   } catch (e) { /* ventana privada: se juega igual, no se guarda */ }
@@ -49,7 +49,12 @@ function objActivos() {
 }
 function objMeta(o) { return o.m[Math.min(GUARDA.niv[o.id], o.m.length - 1)]; }
 function objValor(o) {
-  const v = R[o.c] || 0;
+  /* EN EL MENU CORRE LA DEMO, Y LA DEMO NO ES EL JUGADOR. Sin esta guarda la
+     barra de «baja 400 metros DE UNA» sube sola mientras nadie esta jugando
+     —medido en la captura del menu: 13,6/400 a los dos segundos de abrir—.
+     Lo que se acumula ENTRE corridas si se muestra: no depende de que haya
+     una corrida en curso. */
+  const v = DEMO ? 0 : (R[o.c] || 0);
   return o.acum ? GUARDA.ac.grinds + v : v;
 }
 function objTexto(o) { return T(o.k, objMeta(o)); }
@@ -100,6 +105,179 @@ function avisa(a, b) {
   R.ultTruco = a + '\n' + b; R.ultTrucoT = 2.2; HUD.truco = null;
 }
 
+/* ── EL TUTORIAL VISUAL ───────────────────────────────────────────────────
+   TRES PASOS Y CADA UNO ESPERA A QUE LA COSA PASE, no a que se lea un cartel.
+   Un tutorial que se pasa leyendo se saltea, y lo que se saltea es
+   exactamente lo que despues no se entiende. Es la regla que ya ordeno el de
+   ECO y el de RECREO.
+
+   Y LO QUE SE MIRA ES EL RESULTADO Y NO EL BOTON. El paso de la voltereta
+   espera a que se ATERRICE una —o sea a `R.flips`— y no a que se mantenga el
+   dedo: enganchado al boton, el paso se aprobaria manteniendo apretado en el
+   suelo, que es justo lo que no ensena. Enganchado al contador, aprobarlo es
+   haberlo hecho.
+
+   SE DIBUJA EN EL LIENZO Y NO EN EL DOM porque lo que hay que mostrar es
+   DONDE tocar: dos mitades de pantalla con su circulo latiendo. Un cartel de
+   texto puede decir «izquierda» y no senala nada.                         */
+const TUTO = { on: false, paso: 0, t: 0, fin: 0, s0: 0, f0: 0, e0: 0 };
+/* EL ORDEN ES SALTAR · EMPUJAR · VOLTERETA, y no el que uno escribiria.
+   Una voltereta entera son 0,73 s de giro y el vuelo dura 1,10 s A CRUCERO:
+   despacio el salto es mas corto que el giro y la voltereta es IMPOSIBLE por
+   construccion, no por dificultad. Y fallarla cuesta un tumbo, o sea menos
+   velocidad todavia. Medido con la voltereta en segundo lugar, el auto-jugador
+   se quedaba trabado ahi con la velocidad en CERO. Pidiendo primero los
+   empujones, cuando llega la voltereta ya hay con que darla. */
+const TUTO_PASOS = ['tu1', 'tu3', 'tu2'];
+
+function tutoReinicia(demo) {
+  TUTO.on = false; TUTO.fin = 0; TUTO.t = 0; tutoClase();
+  if (demo) return;
+  /* la primera corrida lo abre sola; despues vive en el boton del menu. Un
+     tutorial obligatorio visto cinco veces deja de ser un tutorial y pasa a
+     ser un peaje — la leccion de POMPOM. */
+  if (!GUARDA.tuto) tutoArranca(false);
+}
+/* UN SOLO SITIO PRENDE Y APAGA LA CLASE del boton de saltear: con una
+   llamada por camino —arranca, termina, saltea, cambio de pantalla— el que
+   se olvide deja el boton puesto en el medio de una partida sin tutorial. */
+function tutoClase() {
+  document.body.classList.toggle('tuto', TUTO.on && PANT === 'juego');
+}
+function tutoArranca(forz) {
+  TUTO.on = true; TUTO.paso = 0; TUTO.t = 0; TUTO.fin = 0;
+  TUTO.s0 = SALTOS; TUTO.f0 = R.flips; TUTO.e0 = R.empujes;
+  if (forz) { GUARDA.tuto = 0; guardaEscribe(); }
+  tutoClase();
+}
+function tutoTermina() {
+  TUTO.on = false; TUTO.fin = 2.4;
+  GUARDA.tuto = 1; guardaEscribe(); tutoClase();
+}
+function tutoSaltea() {
+  if (!TUTO.on) return;
+  TUTO.fin = 0; TUTO.on = false; GUARDA.tuto = 1; guardaEscribe(); tutoClase();
+}
+
+/* ── LO QUE SE DIBUJA ─────────────────────────────────────────────────────
+   Va en el LIENZO y en unidades del marco (el contexto ya viene con la
+   densidad puesta), asi que nada de esto pide una escritura al DOM por
+   cuadro — que con el marco girado se paga entera.                       */
+function tutoCirculo(cx, cy, r, k, col) {
+  const g = 0.5 + 0.5 * Math.sin(k * Math.PI * 2);
+  ctx.save();
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.30 + 0.45 * g;
+  ctx.lineWidth = Math.max(2, r * 0.10);
+  ctx.beginPath(); ctx.arc(cx, cy, r * (0.72 + 0.28 * g), 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.10 + 0.14 * g;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.restore();
+}
+function pintaTuto() {
+  if (!TUTO.on && TUTO.fin <= 0) return;
+  const mh = ALTO, cy = ALTO * 0.56;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  if (TUTO.on) {
+    /* la linea del medio: es lo unico que dice que la pantalla esta partida */
+    ctx.save();
+    ctx.setLineDash([6, 10]); ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    ctx.beginPath(); ctx.moveTo(ANCHO / 2, ALTO * 0.20); ctx.lineTo(ANCHO / 2, ALTO * 0.94); ctx.stroke();
+    ctx.restore();
+
+    /* QUE ZONA SE ENCIENDE SALE DE LA CLAVE DEL PASO Y NO DE SU INDICE:
+       atado al indice, reordenar los pasos —que es justo lo que se acaba de
+       hacer— deja el circulo pulsando en la mitad equivocada de la pantalla
+       sin que nada falle. */
+    const emp = TUTO_PASOS[TUTO.paso] === 'tu3';
+    const izq = !emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
+    const cx = izq ? ANCHO * 0.25 : ANCHO * 0.75;
+    tutoCirculo(cx, cy, r, k, izq ? '#ffe6b8' : '#9fe6ff');
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = izq ? '#ffe6b8' : '#9fe6ff';
+    ctx.font = '700 ' + Math.round(clamp(mh * 0.030, 9, 14)) + 'px monospace';
+    ctx.fillText(T(izq ? 'tsalta' : 'tempuja'), cx, cy + r * 1.75);
+    /* Y EL PASO 3 MUESTRA CUANTOS TOQUES VAN: un «toca rapido» sin cuenta no
+       dice cuando esta hecho, y entonces el paso parece trabado. */
+    if (emp) {
+      const n = clamp(R.empujes - TUTO.e0, 0, 4);
+      ctx.globalAlpha = 0.9;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(cx - r * 0.9 + i * r * 0.6, cy + r * 2.55, r * 0.14, 0, Math.PI * 2);
+        ctx.globalAlpha = i < n ? 0.95 : 0.28; ctx.fill();
+      }
+    }
+  }
+
+  /* el renglon: abajo, sobre su propia franja, porque tiene que leerse igual
+     sobre la arena clara del mediodia y sobre la noche */
+  const a = TUTO.on ? 1 : clamp(TUTO.fin / 0.8, 0, 1);
+  const txt = TUTO.on ? T(TUTO_PASOS[TUTO.paso]) : T('tu4');
+  const fs = Math.round(clamp(mh * 0.036, 10, 17));
+  ctx.font = '800 ' + fs + 'px monospace';
+  const w = ctx.measureText(txt).width + fs * 2.2, y = ALTO * 0.86;
+  ctx.globalAlpha = 0.62 * a;
+  ctx.fillStyle = '#080a10';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(ANCHO / 2 - w / 2, y - fs * 1.1, w, fs * 2.2, fs);
+  else ctx.rect(ANCHO / 2 - w / 2, y - fs * 1.1, w, fs * 2.2);
+  ctx.fill();
+  ctx.globalAlpha = a; ctx.fillStyle = '#fff';
+  ctx.fillText(txt, ANCHO / 2, y);
+  ctx.restore();
+}
+
+/* ── LA BARRA DE VELOCIDAD ────────────────────────────────────────────────
+   EL TOPE TIENE QUE VERSE O NO ES UN TOPE. Empujar contra un limite invisible
+   se lee a que el boton dejo de funcionar; con la marca puesta se lee a que
+   se llego. Y la barra existe porque desde esta vuelta la velocidad es lo que
+   se administra: es la unica moneda del juego —un tumbo la cobra— asi que
+   tiene que estar a la vista.
+   Va en el lienzo y no en el DOM: cambia sesenta veces por segundo y escribir
+   un ancho en CSS por cuadro obliga a recalcular la maqueta cada vez.     */
+function pintaBarra() {
+  if (PANT !== 'juego' && PANT !== 'pausa') return;
+  const mh = ALTO, w = ANCHO * 0.34, h = Math.max(4, mh * 0.016);
+  const x = (ANCHO - w) / 2, y = mh * 0.205;
+  const v = clamp((R.s - V_MIN) / (V_MAX - V_MIN), 0, 1);
+  const tp = clamp((TURBO_TOPE - V_MIN) / (V_MAX - V_MIN), 0, 1);
+  ctx.save();
+  ctx.globalAlpha = 0.55; ctx.fillStyle = '#0a0c12';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, h / 2); else ctx.rect(x, y, w, h);
+  ctx.fill();
+  ctx.globalAlpha = 0.92;
+  /* el color dice el estado: ambar mientras se empuja, cian pasado el tope
+     —eso ultimo solo pasa cayendo de una duna, o sea que el cian es «esto es
+     regalado y no se puede sostener»— y crema el resto */
+  ctx.fillStyle = R.s > TURBO_TOPE + 0.2 ? '#9fe6ff' : (R.turbo > 0.05 ? '#ffd08a' : '#e6dcc6');
+  ctx.beginPath();
+  const wv = Math.max(h, w * v);
+  if (ctx.roundRect) ctx.roundRect(x, y, wv, h, h / 2); else ctx.rect(x, y, wv, h);
+  ctx.fill();
+  ctx.globalAlpha = 0.85; ctx.fillStyle = '#fff';
+  ctx.fillRect(x + w * tp - 1, y - h * 0.45, 2, h * 1.9);
+  ctx.restore();
+}
+
+function tutoPaso(dt) {
+  if (TUTO.fin > 0) TUTO.fin -= dt;
+  if (!TUTO.on) return;
+  TUTO.t += dt;
+  const p = TUTO.paso;
+  const hecho = p === 0 ? SALTOS > TUTO.s0
+              : p === 1 ? R.empujes >= TUTO.e0 + 4
+              : R.flips > TUTO.f0;
+  if (!hecho) return;
+  TUTO.paso++; TUTO.t = 0;
+  son('obj');
+  if (TUTO.paso >= TUTO_PASOS.length) tutoTermina();
+}
+
 /* ── LOS PANELES ──────────────────────────────────────────────────────────
    Uno solo encendido, y el estado vive en UNA variable. Con una bandera por
    panel, dos pueden quedar prendidos a la vez y eso no falla: se ve. */
@@ -109,6 +287,7 @@ function verPantalla(p) {
   PANT = p;
   for (const k in PANELES) if (PANELES[k]) $(PANELES[k]).classList.toggle('on', k === p);
   document.body.classList.toggle('jugando', p === 'juego');
+  tutoClase();
   if (p === 'menu') pintaMenu();
 }
 
@@ -130,7 +309,11 @@ function pintaObjs(cont, lista) {
     const hecho = typeof o === 'string';
     d.className = 'ob' + (hecho ? ' ok' : '');
     const txt = hecho ? o : objTexto(o);
-    const val = hecho ? '' : Math.min(objValor(o), objMeta(o)) + '/' + objMeta(o);
+    /* REDONDEADO: `R.dist` son metros en coma flotante y la ficha salia
+       «13.600992165146787/400». Todos los contadores de este juego son
+       cuentas —metros, monedas, volteretas— asi que el decimal no informa
+       nada y rompe el renglon. */
+    const val = hecho ? '' : Math.floor(Math.min(objValor(o), objMeta(o))) + '/' + objMeta(o);
     d.innerHTML = '<u></u><span>' + txt + '</span>' + (val ? '<s>' + val + '</s>' : '');
     cont.appendChild(d);
   });
@@ -139,6 +322,7 @@ function pintaObjs(cont, lista) {
 function pintaMenu() {
   $('mSub').textContent = T('msub');
   $('mJugar').textContent = T('jugar');
+  $('mTuto').textContent = T('tuto');
   $('mTitObj').textContent = T('obj');
   $('mTitCal').textContent = T('cal');
   $('mTitIdi').textContent = T('idio');
@@ -168,6 +352,7 @@ function pintaMenu() {
 function pintaPausa() {
   $('paTit').textContent = T('pausa');
   $('paSeguir').textContent = T('seguir');
+  $('paTerm').textContent = T('term');
   $('paMenu').textContent = T('menu');
   $('paPie').textContent = T('papie');
 }
@@ -175,7 +360,7 @@ function pintaPausa() {
 function pintaFin(nuevo) {
   $('fTit').textContent = nuevo ? T('nuevo') : T('fin');
   $('fSub').textContent = T('finS', Math.floor(R.dist));
-  $('fDatos').textContent = T('fdatos', Math.floor(R.dist), R.mons, R.trucos);
+  $('fDatos').textContent = T('fdatos', Math.floor(R.dist), R.mons, R.trucos, R.caidas);
   $('fOtra').textContent = T('otra');
   $('fMenu').textContent = T('menu');
   pintaObjs($('objF'), OBJ_HECHOS.length ? OBJ_HECHOS : objActivos());
@@ -187,6 +372,7 @@ function pintaFin(nuevo) {
 function pintaTodo() {
   $('sub').textContent = T('sub');
   $('pista').textContent = T('pista');
+  $('tSalt').textContent = T('tsalt');
   pintaIdioma(); pintaMenu(); pintaPausa();
   if (PANT === 'fin') pintaFin(false);
   HUD.truco = null; HUD.pts = -1; HUD.mon = -1;

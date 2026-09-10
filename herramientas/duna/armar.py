@@ -18,6 +18,7 @@ SAL  = os.path.join(RAIZ, 'juegos-pc', 'Duna.html')
 ORDEN = [
     'a.html',    # cabecera, CSS, marco y paneles
     'i_ui.js',   # las imagenes generadas, en base64 (si estan)
+    'i_mus.js',  # las camas de musica en base64 — OPCIONAL, ver OPCIONAL
     'b.js',      # constantes, azar con semilla, idiomas
     'c.js',      # las paletas y la hora del dia
     'd.js',      # el terreno: generacion y evaluacion (sin DOM ni lienzo)
@@ -32,17 +33,27 @@ ORDEN = [
     'z.html',    # las sondas y el cierre
 ]
 
+# LO GENERADO ES OPCIONAL, y no es comodidad: un asset que todavia no se
+# genero —o que fallo— tiene que costar el asset y no el juego entero. El
+# codigo que lo usa comprueba que exista antes de tocarlo.
+OPCIONAL = ('i_mus.js',)
+
+
 def main():
-    faltan = [n for n in ORDEN if not os.path.exists(os.path.join(PART, n))]
+    faltan = [n for n in ORDEN
+              if n not in OPCIONAL and not os.path.exists(os.path.join(PART, n))]
     if faltan:
         print('FALTAN: ' + ', '.join(faltan)); sys.exit(1)
-    trozos = []
+    trozos, sin = [], []
     for n in ORDEN:
-        with io.open(os.path.join(PART, n), encoding='utf-8') as f:
-            trozos.append(f.read())
+        f = os.path.join(PART, n)
+        if not os.path.exists(f): sin.append(n); continue
+        with io.open(f, encoding='utf-8') as fh:
+            trozos.append(fh.read())
     txt = ''.join(trozos)
     with io.open(SAL, 'w', encoding='utf-8') as f:
         f.write(txt)
-    print('%s  %d KB  (%d partes)' % (SAL, len(txt.encode('utf-8')) // 1024, len(ORDEN)))
+    print('%s  %d KB  (%d partes)' % (SAL, len(txt.encode('utf-8')) // 1024, len(trozos)))
+    if sin: print('   sin hornear todavia: %s' % ', '.join(sin))
 
 main()

@@ -17,6 +17,9 @@ window.__D = {
     suelo: R.suelo, cuerda: !!R.cuerda, vivo: R.vivo, muerte: R.muerte,
     ang: +R.ang.toFixed(3), giro: +R.giro.toFixed(2),
     dist: Math.floor(R.dist), mons: R.mons, flips: R.flips, grinds: R.grinds,
+    caido: +R.caido.toFixed(2), caidas: R.caidas, empujes: R.empujes,
+    turbo: +R.turbo.toFixed(2), tope: TURBO_TOPE,
+    tuto: TUTO.on ? TUTO.paso : -1, tutoFin: +TUTO.fin.toFixed(2),
     trucos: R.trucos, comboMax: R.comboMax, saltoMax: +R.saltoMax.toFixed(1),
     demo: DEMO, marco: [ANCHO, ALTO], esc: +ESC.toFixed(2), pxr: +PXR.toFixed(2),
     lienzo: [lienzo.width, lienzo.height],
@@ -33,7 +36,14 @@ window.__D = {
      veces el mismo bot. Un control que no es un control aprueba cualquier
      cosa. */
   juega: (seg, modo) => {
-    const g = DEMO; DEMO = true; DEMO_REVIVE = false; botReinicia(modo);
+    /* EMPIEZA UNA CORRIDA DE VERDAD, y no es ceremonia: `R.dist`, `R.caidas`,
+       `R.empujes` y `SALTOS` los reinicia `nuevaPartida` y nadie mas. Sin
+       esto, tres llamadas seguidas devuelven la SUMA de las tres —medido:
+       honesto 5.266 m, torpe 10.561 y azar 13.107, que se lee a que el bot
+       que juega al azar es el mejor de los tres cuando en realidad hizo
+       2.546—. Es la sonda informando la corrida anterior, otra vez. */
+    const g = DEMO; nuevaPartida(true); DEMO = true; DEMO_REVIVE = false;
+    botReinicia(modo);
     const n = Math.round((seg || 60) / PASO);
     let i = 0;
     /* Y ADEMAS AVANZA LO VISUAL. `unPaso` mueve la fisica y nada mas: la
@@ -49,14 +59,21 @@ window.__D = {
        mientras el rider avanza quinientos metros: medido en la captura, el
        terreno se veia bien y el rider NO ESTABA EN EL CUADRO. Es la misma
        trampa que ya costo una vuelta en RECREO y otra en HUESOS. */
-    for (; i < n && R.vivo; i++) {
+    /* Y AHORA NO CORTA POR MUERTE, PORQUE NO HAY: la corrida dura los
+       segundos que se le pidan y lo que se informa son las CAIDAS. Con el
+       corte viejo (`R.vivo`) una corrida de sesenta segundos duraba los
+       sesenta siempre y `caidas` era el unico numero que podia salir mal. */
+    let _SMAX = 0;
+    for (; i < n; i++) {
       unPaso(PASO); TIEMPO += PASO;
+      if (R.s > _SMAX) _SMAX = R.s;
       riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
     }
     const r = { dist: Math.floor(R.dist), seg: +(i * PASO).toFixed(1),
                 s: +(R.dist / Math.max(i * PASO, 0.01)).toFixed(1),
                 muerte: R.muerte, vivo: R.vivo, mons: R.mons, flips: R.flips,
-                grinds: R.grinds, trucos: R.trucos, saltos: SALTOS };
+                grinds: R.grinds, trucos: R.trucos, saltos: SALTOS,
+                caidas: R.caidas, empujes: R.empujes, sMax: +_SMAX.toFixed(1) };
     DEMO = g; DEMO_REVIVE = true; return r;
   },
   nueva: sem => {
@@ -83,18 +100,89 @@ window.__D = {
              peorHueco: +peorHueco.toFixed(1), cuerdas: CUERDAS.length, cuMal,
              monedas: MONEDAS.length, monMal, deco: DECO.length };
   },
-  hora: h => { HORA0 = h - R.dist / CICLO_M; HORA = h; paletaEn(HORA); return PAL.n; },
+  /* SE MUEVE `HORA0` Y NO `HORA`: `unPaso` reescribe HORA todos los cuadros
+     con `HORA0 + dist/CICLO_M`, asi que pisando HORA a secas la sonda mide un
+     cambio que el cuadro siguiente deshace.
+     Y ADELANTA LA PALETA *Y* LA MUSICA: son las dos cosas que cuelgan de la
+     hora, y con una sonda por cabeza la segunda pisa a la primera —en un
+     objeto literal gana la ultima clave, y eso ya costo cinco veces en este
+     repo. */
+  hora: h => { HORA0 = h - R.dist / CICLO_M; HORA = h;
+               paletaEn(HORA); musPaso();
+               return Object.assign({ pal: PAL.n }, musVer()); },
   pantalla: p => { verPantalla(p); return PANT; },
   idioma: k => { IDIOMA = k; pintaTodo(); return T('jugar'); },
   calidad: i => { CAL = i; ajustaMarco(); pintaMenu(); return [ANCHO, ALTO, +PXR.toFixed(2)]; },
-  toca: v => { if (v) entradaAbajo(null); else entradaArriba(); return APRETADO; },
+  /* EL DEDO ENTRA POR LA ZONA Y NO POR UNA FUNCION APARTE: `zonaIzqAbajo`
+     lee `e.pointerId`, asi que una sonda que llame a `pulsa()` directo
+     saltearia justamente el reparto de dedos que puede estar roto. */
+  toca: v => {
+    if (v) zonaIzqAbajo({ pointerId: 99, cancelable: false, preventDefault() {} });
+    else zonaIzqArriba({ pointerId: 99 });
+    return APRETADO;
+  },
+  /* el mismo camino que el dedo derecho: `zonaDerAbajo` -> `turbo()` */
+  empuja: n => {
+    const a = R.s, b = R.empujes;
+    for (let i = 0; i < (n || 1); i++) {
+      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      R.turboCd = 0;              // la sonda no espera el enfriamiento del dedo
+    }
+    return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - b, tope: TURBO_TOPE };
+  },
+  tuto: () => ({ on: TUTO.on, paso: TUTO.on ? TUTO.paso : -1,
+                 txt: TUTO.on ? T(TUTO_PASOS[TUTO.paso]) : (TUTO.fin > 0 ? T('tu4') : ''),
+                 fin: +TUTO.fin.toFixed(2), visto: GUARDA.tuto,
+                 clase: document.body.classList.contains('tuto'),
+                 salt: getComputedStyle($('tSalt')).display }),
+  tutoArranca: () => { tutoArranca(true); return TUTO.paso; },
+  tutoSaltea: () => { tutoSaltea(); return TUTO.on; },
+  /* zonas: que el dedo caiga del lado correcto con el marco GIRADO es lo
+     unico que esta vuelta no podia dar por sentado */
+  zonas: () => {
+    const a = $('zIzq').getBoundingClientRect(), b = $('zDer').getBoundingClientRect();
+    const c = q => { const e = document.elementFromPoint(q[0], q[1]); return e && e.id; };
+    return {
+      izq: [Math.round(a.left), Math.round(a.top), Math.round(a.width), Math.round(a.height)],
+      der: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)],
+      enIzq: c([a.left + a.width / 2, a.top + a.height / 2]),
+      enDer: c([b.left + b.width / 2, b.top + b.height / 2]),
+    };
+  },
+  cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas, s: +R.s.toFixed(2) }; },
+  /* adelantar el juego SIN el bot: es lo unico que deja medir cuanto dura un
+     tumbo o si el enfriamiento del empujon hace lo que dice */
+  pasos: n => { for (let i = 0; i < (n || 1); i++) { unPaso(PASO); TIEMPO += PASO; } return __D.est(); },
+  /* el empujon POR EL CAMINO DE VERDAD, con el reloj corriendo entre toque y
+     toque: `empuja()` pisa el enfriamiento a proposito y por eso no lo mide */
+  empujaReal: (n, dt) => {
+    const a = R.s, e = R.empujes;
+    for (let i = 0; i < (n || 1); i++) {
+      zonaDerAbajo({ cancelable: false, preventDefault() {} });
+      const k = Math.max(1, Math.round((dt || 0) / PASO));
+      for (let j = 0; j < k; j++) { unPaso(PASO); TIEMPO += PASO; }
+    }
+    return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - e };
+  },
   empieza: () => { empieza(); return PANT; },
-  mata: () => { R.vivo = false; R.muerte = 'sonda'; if (!DEMO) termina(); return PANT; },
+  /* YA NO HAY «MATAR»: lo que termina una corrida es el jugador. La sonda
+     entra por el mismo boton de la pausa. */
+  termina: () => { termina(); return PANT; },
   nivel: (id, n) => { GUARDA.niv[id] = n; guardaEscribe(); pintaMenu();
                       return objActivos().map(o => o.id); },
   objs: () => objActivos().map(o => ({ id: o.id, meta: objMeta(o),
         val: +objValor(o).toFixed(1), txt: objTexto(o) })),
   audio: () => audioNivel(),
+  /* LA MUSICA NO SE PUEDE JUZGAR CONTANDO ARCHIVOS: seis pistas metidas en el
+     HTML y cero decodificadas se ven igual desde afuera. `dec` dice cuantas
+     llegaron al buffer y `act` cual esta sonando AHORA, que es lo unico que
+     prueba que la hora la elige. */
+  mus: () => musVer(),
+  /* EL A/B VA EN EL MISMO BINARIO Y CON UNA CONSTANTE DADA VUELTA: comparar
+     contra el commit anterior mide dos cosas a la vez. Con la cama en cero,
+     lo que queda es el viento; con el viento en cero, lo que queda es la cama. */
+  musVol: v => { VOL.mus = v; musPaso(); return VOL.mus; },
+  camaVol: v => { VOL.cama = v; return VOL.cama; },
   /* disparar un sonido SUELTO es la unica forma de medir la escala de la
      mezcla: leyendo el nivel en el medio de una partida se miden tres cosas
      encimadas y no se sabe cual es cual. */
@@ -126,7 +214,7 @@ window.__D = {
      pantalla, o sea que denuncia choques que no existen. Ya costo una vuelta
      en ECO y otra en HUESOS. */
   cajas: () => {
-    const ids = ['pts', 'sub', 'mon', 'truco', 'pista', 'bPausa'];
+    const ids = ['pts', 'sub', 'mon', 'truco', 'pista', 'bPausa', 'tSalt'];
     const v = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;

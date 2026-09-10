@@ -1,15 +1,24 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   DUNA · sandboard de un boton
+   DUNA · sandboard de dos zonas, sin final
    ──────────────────────────────────────────────────────────────────────────
-   LO QUE DEFINE AL GENERO NO ES LA TABLA, ES QUE HAYA UN SOLO BOTON. Todo lo
-   que el jugador puede hacer sale de tocar y de cuanto sostiene el dedo:
-     · un toque en el suelo   → salta
-     · sostener en el aire    → voltereta hacia atras
-     · sostener sobre una cuerda → se cuelga y se desliza
+   LA PANTALLA SE PARTE AL MEDIO Y CADA MITAD ES UNA MANO. No hay botones
+   dibujados que haya que acertar: la zona ES la pantalla, asi que el pulgar
+   cae donde caiga y siempre esta encima de algo.
+     IZQUIERDA · un toque en el suelo      → salta
+                 sostener en el aire       → voltereta hacia atras
+                 sostener sobre una cuerda → se cuelga y se desliza
+     DERECHA   · tocar repetido            → empuja, hasta un TOPE
    De ahi cuelga el resto del diseno: no hay nada que apuntar, asi que la
-   dificultad tiene que estar en el TIEMPO —cuando saltar, cuando soltar— y
-   no en la punteria, que es lo unico que un dedo sobre una pantalla no puede
-   dar con precision.
+   dificultad esta en el TIEMPO —cuando saltar, cuando soltar, cuando gastar
+   velocidad— y no en la punteria, que es lo unico que un dedo sobre una
+   pantalla no puede dar con precision.
+
+   Y NO SE PIERDE: LA BAJADA NO TERMINA. Caerse cuesta lo unico que este
+   juego tiene para cobrar —la velocidad— y no la partida. Una pantalla de
+   derrota cada cuarenta segundos convierte un paseo por una duna en una
+   sucesion de menus; sin ella, el error se paga en los cuatro o cinco
+   segundos que cuesta volver a agarrar ritmo, que es un castigo que se
+   siente y no interrumpe. La corrida la termina el jugador desde la pausa.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── EL RELOJ ─────────────────────────────────────────────────────────────
@@ -61,6 +70,44 @@ const GIRO_V = 8.6;         // rad/s de la voltereta: una vuelta en 0,73 s
 const GIRO_TOL = 0.62;      // cuanto se puede errar el angulo al aterrizar
 const RIDER_ALTO = 1.85;
 
+/* ── EL EMPUJE, Y SU TOPE ─────────────────────────────────────────────────
+   Cada toque de la mano derecha suma velocidad SOBRE LA TANGENTE, que es
+   donde vive la rapidez cuando el cuerpo esta apoyado: empujar con el pie
+   contra la arena. En el aire no hace nada, y eso no es una omision — un
+   empujon en el aire alargaria el vuelo a voluntad y el aterrizaje, que es
+   la unica regla del juego, dejaria de ser una apuesta.
+
+   EL TOPE ES EL LIMITE PEDIDO Y ESTA POR DEBAJO DE `V_MAX`: masheando no se
+   llega a la velocidad que un aterrizaje bien clavado paga, asi que empujar
+   no reemplaza jugar bien, lo adelanta. Y EL ENFRIAMIENTO EXISTE PORQUE UN
+   DEDO NO ES UN RELOJ: sin el, un toque por cuadro son sesenta empujones por
+   segundo y el tope se alcanza en un cuadro. A 0,085 s el ritmo util son
+   once toques por segundo, que es lo que una mano da.
+   Y SE GASTA SOLO, sin ningun temporizador: el roce del aire va con el
+   CUADRADO de la velocidad, asi que a 33 m/s frena 2,7 veces mas que a 20 y
+   la velocidad vuelve sola a crucero en un par de segundos. */
+/* UN TOQUE NO ES UNA VOLTERETA, Y SIN ESTO LO ERA. El giro arrancaba en el
+   primer cuadro del apriete: medido, sostener CUATRO pasos —67 ms, mas corto
+   que un toque humano, que dura entre 60 y 120— ya deja el cuerpo 33 grados
+   torcido contra una tolerancia de 36 y te tumba. O sea que la PRIMERA
+   instruccion del tutorial —«toca a la izquierda para saltar»— te hacia caer.
+   Nunca se habia notado porque hasta esta vuelta el izquierdo era el UNICO
+   boton y tocar y mantener eran el mismo gesto. Con la espera puesta, tocar
+   es saltar y mantener es girar, que es lo que el juego dice que son.
+   Y entra en el vuelo: 0,14 + 0,73 de vuelta son 0,87 contra 1,10 de aire. */
+const GIRO_ESPERA = 0.14;
+const TURBO_IMP = 1.70;     // lo que suma un toque, en m/s
+const TURBO_TOPE = 33.0;    // el limite: por encima de crucero (20) y debajo de V_MAX (38)
+const TURBO_CD = 0.085;     // un dedo no aprieta mas rapido que esto
+
+/* ── LA CAIDA NO ES UNA MUERTE ────────────────────────────────────────────
+   Un tumbo: el cuerpo se va al piso, pierde toda la velocidad y tarda en
+   levantarse. Ese segundo largo mas los cuatro que cuesta volver a crucero
+   es el castigo entero, y es mas caro de lo que parece en un juego donde la
+   distancia sale de la velocidad. */
+const TUMBO_T = 1.15;       // cuanto tarda en levantarse
+const TUMBO_V = 4.5;        // con cuanta velocidad queda
+
 /* ── LA PENDIENTE MEDIA ───────────────────────────────────────────────────
    El mundo BAJA con x: es una ladera infinita, como en Alto. Ese numero es
    el que hace que no haga falta un boton de acelerar — la gravedad empuja
@@ -109,17 +156,25 @@ let IDIOMA = 'es';
 const LANG = {
   es: {
     idi: 'elegí tu idioma', sub: 'metros',
-    msub: 'bajá la duna · un dedo · sin final',
+    msub: 'bajá la duna · dos manos · sin final',
     jugar: 'JUGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Tocá para saltar y mantené en el aire para dar una voltereta. ' +
-         'Aterrizar derecho te da velocidad; de cabeza, te caés. ' +
-         'Sobre una cuerda, mantené para colgarte.',
+    pie: 'Izquierda: tocá para saltar y mantené en el aire para girar. ' +
+         'Derecha: tocá rápido para empujar, hasta el tope. ' +
+         'Aterrizar derecho te da velocidad; de cabeza te caés, y caerse ' +
+         'cuesta la velocidad y no la bajada — esto no se termina nunca.',
     rec: 'RÉCORD · {0} m', mon: '{0} monedas',
-    pausa: 'PAUSA', seguir: 'SEGUIR', menu: 'MENÚ',
+    pausa: 'PAUSA', seguir: 'SEGUIR', menu: 'MENÚ', term: 'TERMINAR',
     papie: 'el paisaje sigue ahí cuando vuelvas',
-    fin: 'TE CAÍSTE', finS: '{0} metros',
-    fdatos: '{0} m · {1} monedas · {2} trucos', otra: 'OTRA VEZ',
-    pista: 'TOCÁ PARA SALTAR · MANTENÉ PARA GIRAR',
+    fin: 'HASTA ACÁ', finS: '{0} metros',
+    fdatos: '{0} m · {1} monedas · {2} trucos · {3} caídas', otra: 'OTRA VEZ',
+    pista: 'IZQUIERDA SALTA · DERECHA EMPUJA',
+    tumbo: 'TE CAÍSTE', tvel: 'VELOCIDAD', ttope: 'TOPE',
+    tuto: 'CÓMO SE JUEGA', tsalta: 'SALTAR', tempuja: 'EMPUJAR',
+    tu1: 'TOCÁ A LA IZQUIERDA PARA SALTAR',
+    tu2: 'MANTENÉ LA IZQUIERDA EN EL AIRE Y DÁ UNA VOLTERETA',
+    tu3: 'TOCÁ RÁPIDO A LA DERECHA PARA EMPUJAR',
+    tu4: 'ASÍ SE JUEGA · LA BAJADA NO TERMINA',
+    tsalt: 'saltear',
     nuevo: 'RÉCORD NUEVO',
     baja: 'BAJA', media: 'MEDIA', alta: 'ALTA',
     t1: 'VOLTERETA', t2: 'DOBLE VOLTERETA', t3: 'TRIPLE VOLTERETA',
@@ -135,17 +190,25 @@ const LANG = {
   },
   en: {
     idi: 'pick your language', sub: 'metres',
-    msub: 'ride the dune · one finger · no finish line',
+    msub: 'ride the dune · two hands · no finish line',
     jugar: 'PLAY', obj: 'GOALS', cal: 'GRAPHICS', idio: 'LANGUAGE',
-    pie: 'Tap to jump and hold in the air to backflip. ' +
-         'Land level and you gain speed; land on your head and you wipe out. ' +
-         'Over a rope, hold to grind.',
+    pie: 'Left: tap to jump, hold in the air to backflip. ' +
+         'Right: tap fast to push, up to the cap. ' +
+         'Land level and you gain speed; land on your head and you wipe out — ' +
+         'and a wipeout costs you speed, not the run. This never ends.',
     rec: 'BEST · {0} m', mon: '{0} coins',
-    pausa: 'PAUSED', seguir: 'RESUME', menu: 'MENU',
+    pausa: 'PAUSED', seguir: 'RESUME', menu: 'MENU', term: 'END RUN',
     papie: 'the dune will still be there',
-    fin: 'YOU WIPED OUT', finS: '{0} metres',
-    fdatos: '{0} m · {1} coins · {2} tricks', otra: 'AGAIN',
-    pista: 'TAP TO JUMP · HOLD TO FLIP',
+    fin: 'THAT FAR', finS: '{0} metres',
+    fdatos: '{0} m · {1} coins · {2} tricks · {3} wipeouts', otra: 'AGAIN',
+    pista: 'LEFT JUMPS · RIGHT PUSHES',
+    tumbo: 'WIPEOUT', tvel: 'SPEED', ttope: 'CAP',
+    tuto: 'HOW TO PLAY', tsalta: 'JUMP', tempuja: 'PUSH',
+    tu1: 'TAP THE LEFT SIDE TO JUMP',
+    tu2: 'HOLD THE LEFT SIDE IN THE AIR AND LAND A BACKFLIP',
+    tu3: 'TAP THE RIGHT SIDE FAST TO PUSH',
+    tu4: 'THAT IS THE GAME · THE RUN NEVER ENDS',
+    tsalt: 'skip',
     nuevo: 'NEW BEST',
     baja: 'LOW', media: 'MEDIUM', alta: 'HIGH',
     t1: 'BACKFLIP', t2: 'DOUBLE BACKFLIP', t3: 'TRIPLE BACKFLIP',
@@ -161,17 +224,25 @@ const LANG = {
   },
   pt: {
     idi: 'escolha seu idioma', sub: 'metros',
-    msub: 'desça a duna · um dedo · sem fim',
+    msub: 'desça a duna · duas mãos · sem fim',
     jugar: 'JOGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
-    pie: 'Toque para pular e segure no ar para dar um mortal. ' +
-         'Pousar reto dá velocidade; de cabeça, você cai. ' +
-         'Sobre uma corda, segure para deslizar.',
+    pie: 'Esquerda: toque para pular e segure no ar para girar. ' +
+         'Direita: toque rápido para empurrar, até o limite. ' +
+         'Pousar reto dá velocidade; de cabeça você cai, e cair custa a ' +
+         'velocidade e não a descida — isto não acaba nunca.',
     rec: 'RECORDE · {0} m', mon: '{0} moedas',
-    pausa: 'PAUSA', seguir: 'CONTINUAR', menu: 'MENU',
+    pausa: 'PAUSA', seguir: 'CONTINUAR', menu: 'MENU', term: 'ENCERRAR',
     papie: 'a duna continua aí quando voltar',
-    fin: 'VOCÊ CAIU', finS: '{0} metros',
-    fdatos: '{0} m · {1} moedas · {2} manobras', otra: 'DE NOVO',
-    pista: 'TOQUE PARA PULAR · SEGURE PARA GIRAR',
+    fin: 'ATÉ AQUI', finS: '{0} metros',
+    fdatos: '{0} m · {1} moedas · {2} manobras · {3} quedas', otra: 'DE NOVO',
+    pista: 'ESQUERDA PULA · DIREITA EMPURRA',
+    tumbo: 'VOCÊ CAIU', tvel: 'VELOCIDADE', ttope: 'LIMITE',
+    tuto: 'COMO SE JOGA', tsalta: 'PULAR', tempuja: 'EMPURRAR',
+    tu1: 'TOQUE À ESQUERDA PARA PULAR',
+    tu2: 'SEGURE A ESQUERDA NO AR E DÊ UM MORTAL',
+    tu3: 'TOQUE RÁPIDO À DIREITA PARA EMPURRAR',
+    tu4: 'É ISSO · A DESCIDA NÃO ACABA',
+    tsalt: 'pular',
     nuevo: 'NOVO RECORDE',
     baja: 'BAIXA', media: 'MÉDIA', alta: 'ALTA',
     t1: 'MORTAL', t2: 'MORTAL DUPLO', t3: 'MORTAL TRIPLO',

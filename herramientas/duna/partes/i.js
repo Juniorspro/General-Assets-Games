@@ -45,7 +45,7 @@ function riderVisReinicia() {
   BUF.length = 0;
   const nx = R.x, ny = R.y + 1.45;
   for (let i = 0; i < BUF_N; i++) BUF.push({ x: nx - i * BUF_SEG, y: ny, px: nx - i * BUF_SEG, py: ny });
-  ARE.length = 0; EST.length = 0; EST_T = 0;
+  ARE.length = 0; EST.length = 0; EST_T = 0; ARE_emp = 0; ARE_golpe = 0;
   POSE.ag = 0.3; POSE.tk = 0; POSE.br = 0.2; POSE.ln = 0; POSE.sq = 0;
 }
 
@@ -79,7 +79,10 @@ function riderVis(dt, x, y, ang) {
   } else {                 // en el aire y derecho: estirado, que es lo que dice "estoy volando"
     ag = 0.06; tk = 0; br = 0.85; ln = 0.05;
   }
-  if (!R.vivo) { ag = 0.95; tk = 0.6; br = 1.0; }
+  /* EL TUMBO TIENE SU PROPIA POSE, y desde esta vuelta es la unica que
+     importa: ya no hay muerte, asi que `!R.vivo` no ocurre nunca y el cuerpo
+     se levantaba de un choque sin haberse caido. Encogido y de lado. */
+  if (R.caido > 0 || !R.vivo) { ag = 0.95; tk = 0.6; br = 1.0; }
 
   const k = 1 - Math.pow(0.00002, dt);          // ~90 ms
   POSE.ag = mezcla(POSE.ag, ag + R.sacude * 0.55, k);
@@ -186,7 +189,7 @@ function bufandaPaso(dt, x, y, ang) {
    verdad, y va hacia atras con la mitad de la velocidad del rider: emitida
    quieta se ve como una nube que el rider deja atras, y lo que tiene que
    verse es una estela que lo persigue.                                    */
-let ARE_ac = 0, ARE_golpe = 0;
+let ARE_ac = 0, ARE_golpe = 0, ARE_emp = 0;
 function arenaSuelta(x, y, ang, n, fuerza) {
   const c = Math.cos(ang), s = Math.sin(ang);
   for (let i = 0; i < n && ARE.length < ARE_MAX; i++) {
@@ -208,6 +211,16 @@ function arenaPaso(dt, x, y, ang) {
   } else ARE_ac = 0;
   if (R.sacude > 0.30 && !ARE_golpe) { ARE_golpe = 1; arenaSuelta(x, y, ang, 16, 1.5); }
   if (R.sacude < 0.12) ARE_golpe = 0;
+  /* CADA EMPUJON LEVANTA ARENA, y no es adorno: es lo unico que confirma que
+     el toque de la derecha ENTRO. Sin eso, tocar contra el tope se ve igual
+     que tocar y que no pase nada, y el jugador no puede saber cual de las dos
+     cosas fue. Se mira el CONTADOR y no la bandera, que es el mismo patron
+     que el golpe de arriba: `turbo()` corre en el paso fijo y esto en el
+     cuadro, asi que un booleano se pierde entre medio. */
+  if (R.empujes !== ARE_emp) {
+    if (R.empujes > ARE_emp) arenaSuelta(x, y, ang, 7, 1.05);
+    ARE_emp = R.empujes;
+  }
 
   for (let i = ARE.length - 1; i >= 0; i--) {
     const p = ARE[i];

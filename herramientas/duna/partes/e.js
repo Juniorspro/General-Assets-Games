@@ -16,8 +16,18 @@
 const R = {
   x: 0, y: 0, vx: 0, vy: 0, s: 0,      // `s` es la rapidez sobre la tangente
   suelo: true, ang: 0, rot: 0, giro: 0,
+  /* DECLARADO ACA Y NO CREADO AL VUELO: `_EST` sale de `Object.keys(R)`, asi
+     que un campo que nace en medio de un cuadro no lo guarda ni lo restaura
+     el rollout — y entonces el bot planifica volteretas sobre un estado de
+     giro que no es el suyo. */
+  girAp: 0,
   cuerda: null, cu: 0,
   vivo: true, muerte: '',
+  /* `caido` es lo que reemplaza a la muerte: cuanto le falta para levantarse.
+     Mientras corre, el dedo no hace nada y el cuerpo se arrastra hasta parar. */
+  caido: 0, caidas: 0,
+  // el empuje de la mano derecha
+  turboCd: 0, turbo: 0, empujes: 0,
   // los cuadros de gracia
   coyote: 0, buffer: 0,
   // lo que la partida cuenta
@@ -35,6 +45,7 @@ function riderReinicia() {
   R.x = 0; R.y = terrY(0); R.s = 13; R.vx = 13; R.vy = 0;
   R.suelo = true; R.ang = Math.atan(terrPend(0)); R.rot = 0; R.giro = 0;
   R.cuerda = null; R.cu = 0; R.vivo = true; R.muerte = '';
+  R.caido = 0; R.caidas = 0; R.turboCd = 0; R.turbo = 0; R.empujes = 0;
   R.coyote = 0; R.buffer = 0;
   R.dist = 0; R.mons = 0; R.flips = 0; R.grinds = 0; R.trucos = 0;
   R.combo = 0; R.comboMax = 0; R.comboT = 0; R.saltoMax = 0;
@@ -77,6 +88,31 @@ function riderPaso(dt) {
   R.sacude *= Math.pow(0.0016, dt);
   if (R.buffer > 0) R.buffer -= dt;
   if (R.coyote > 0) R.coyote -= dt;
+  if (R.turboCd > 0) R.turboCd -= dt;
+  if (R.turbo > 0) R.turbo = Math.max(0, R.turbo - dt * 1.8);
+
+  /* ── EL TUMBO ───────────────────────────────────────────────────────────
+     El cuerpo se arrastra hasta parar y despues se levanta. NO SE ARRASTRA
+     DENTRO DE UN HUECO: la caida ya lo dejo del lado de enfrente, y dejarlo
+     resbalar hasta el borde siguiente lo tiraria otra vez sin que el jugador
+     haya podido hacer nada — un castigo que se encadena solo no es un
+     castigo, es un cuelgue. */
+  if (R.caido > 0) {
+    R.caido -= dt;
+    R.buffer = 0; R.turbo = 0;
+    R.s = Math.max(0, R.s - 14 * dt);
+    const m = terrPend(R.x), k = 1 / Math.sqrt(1 + m * m);
+    const nx = R.x + R.s * k * dt;
+    if (hayPiso(nx)) R.x = nx; else R.s = 0;
+    R.y = terrY(R.x); R.suelo = true;
+    R.ang = angHacia(R.ang, Math.atan(m), 1 - Math.pow(0.0000001, dt));
+    R.vx = R.s * k; R.vy = R.s * m * k;
+    R.polvo = clamp(R.s / 26, 0, 1);
+    R.dist = Math.max(R.dist, R.x);
+    terrAvanza(R.x); juntaMonedas();
+    if (R.caido <= 0) { R.caido = 0; R.s = V_MIN; }   // se levanta y vuelve a empujar
+    return;
+  }
 
   if (R.cuerda) { pasoCuerda(dt); return; }
   if (R.suelo) pasoSuelo(dt); else pasoAire(dt);
@@ -104,7 +140,7 @@ function pasoSuelo(dt) {
      exacto, un cambio de pendiente rota el rider en un cuadro y se lee a
      tiron. Y es rapido —28— porque un rider apoyado NO puede quedar torcido */
   R.ang = angHacia(R.ang, Math.atan(m), 1 - Math.pow(0.0000001, dt));
-  R.giro = 0; R.rot = 0;
+  R.giro = 0; R.rot = 0; R.girAp = 0;
   R.polvo = clamp((R.s - 9) / 18, 0, 1);
   R.coyote = COYOTE;
 
@@ -138,15 +174,19 @@ function pasoAire(dt) {
      angulo dentro de la tolerancia. Y no es un problema del bot: un jugador
      tendria que anticipar la misma cola. Con τ=0,05 el arranque y el frenado
      casi se cancelan y "soltar cuando cerraste la vuelta" pasa a ser cierto. */
-  R.rot = mezcla(R.rot, APRETADO ? GIRO_V : 0, 1 - Math.pow(1e-9, dt));
+  /* la espera cuenta EN EL AIRE: este renglon solo corre en la rama de vuelo,
+     asi que sostener el dedo en el suelo no adelanta nada */
+  R.girAp = APRETADO ? R.girAp + dt : 0;
+  const gira = APRETADO && R.girAp > GIRO_ESPERA;
+  R.rot = mezcla(R.rot, gira ? GIRO_V : 0, 1 - Math.pow(1e-9, dt));
   R.ang += R.rot * dt; R.giro += R.rot * dt;
 
   const py = terrY(R.x);
   if (R.y <= py) {
-    if (!hayPiso(R.x)) { const h = huecoEn(R.x); if (h && R.y < h.y0 - 2.5) return muere('hueco'); return; }
+    if (!hayPiso(R.x)) { const h = huecoEn(R.x); if (h && R.y < h.y0 - 2.5) return cae('hueco'); return; }
     aterriza(py);
   }
-  if (R.y < terrY(R.x) - 60) muere('hueco');
+  if (R.y < terrY(R.x) - 60) cae('hueco');
 }
 
 /* ── EL ATERRIZAJE ES LA UNICA COSA QUE SE PUEDE HACER MAL ────────────────
@@ -160,7 +200,7 @@ function aterriza(py) {
   const vueltas = Math.round(Math.abs(R.giro) / (Math.PI * 2));
   R.saltoMax = Math.max(R.saltoMax, R.x - R.vueloX);
 
-  if (d > GIRO_TOL) return muere('angulo');
+  if (d > GIRO_TOL) return cae('angulo');
 
   R.y = py; R.suelo = true;
   /* y se normaliza al aterrizar: sin esto `ang` crece sin techo vuelta tras
@@ -181,14 +221,34 @@ function aterriza(py) {
   } else if (d > GIRO_TOL * 0.72) {
     R.ultTruco = T('casi'); R.ultTrucoT = 1.1;
   }
-  R.giro = 0; R.rot = 0; R.aire = 0;
+  R.giro = 0; R.rot = 0; R.girAp = 0; R.aire = 0;
   R.sacude = Math.min(1, Math.abs(R.vy) / 22);
   if (typeof son === 'function') son('cae');
 }
 
-function muere(por) {
-  if (!R.vivo) return;
-  R.vivo = false; R.muerte = por; R.sacude = 1;
+/* ── CAERSE CUESTA LA VELOCIDAD, NO LA BAJADA ─────────────────────────────
+   Esto era `muere()` y terminaba la partida. Lo que cobra ahora es lo unico
+   que este juego administra: el cuerpo queda en el piso un segundo largo y
+   se levanta a paso de hombre, o sea que un error vale los cuatro o cinco
+   segundos que cuesta volver a crucero. En una bajada que no termina, ese
+   tiempo ES el puntaje.
+
+   Y SE SALE POR EL BORDE DE ENFRENTE DEL HUECO y no por el de atras: el
+   salto ya se erro, y devolverlo al borde de entrada lo dejaria mirando el
+   mismo hueco con la velocidad en cero — o sea sin forma de cruzarlo nunca.
+   `R.dist` es un maximo, asi que el hueco no se cobra dos veces.        */
+function cae(por) {
+  if (R.caido > 0 || !R.vivo) return;
+  R.muerte = por; R.caido = TUMBO_T;
+  R.combo = 0; R.comboT = 0;
+  R.cuerda = null; R.giro = 0; R.rot = 0; R.girAp = 0; R.buffer = 0; R.coyote = 0;
+  const h = huecoEn(R.x);
+  if (h) R.x = h.b + 1.6;
+  R.y = terrY(R.x); R.suelo = true; R.ang = Math.atan(terrPend(R.x));
+  R.s = TUMBO_V; R.vx = 0; R.vy = 0; R.turbo = 0; R.turboCd = 0;
+  if (SIM) return;                 // en un rollout no se cuenta ni suena
+  R.caidas++; R.sacude = 1;
+  R.ultTruco = T('tumbo'); R.ultTrucoT = 1.4;
   if (typeof son === 'function') son('choque');
 }
 
@@ -215,7 +275,7 @@ function buscaCuerda() {
       /* el cuerpo queda alineado con la cuerda, asi que la vuelta a medias que
          traia NO se cobra: dejar `giro` puesto hace que el aterrizaje de dos
          segundos despues cuente vueltas que no se hicieron */
-      R.giro = 0; R.rot = 0;
+      R.giro = 0; R.rot = 0; R.girAp = 0;
       R.s = Math.max(R.s, Math.hypot(R.vx, R.vy));
       if (!c.usada && !SIM) { c.usada = true; R.grinds++; truco(T('grind'), 'grind'); }
       if (typeof son === 'function') son('grind');
@@ -240,7 +300,7 @@ function pasoCuerda(dt) {
      cuerda seria una cinta transportadora y no una decision */
   if (R.cu >= 1 || !APRETADO) {
     R.cuerda = null; R.suelo = false; R.vueloX = R.x; R.vueloY = R.y; R.aire = 0;
-    R.giro = 0; R.rot = 0;   // sale alineado con la cuerda: el giro arranca de cero
+    R.giro = 0; R.rot = 0; R.girAp = 0;   // sale alineado con la cuerda: el giro arranca de cero
   }
 }
 
@@ -265,11 +325,33 @@ function juntaMonedas() {
    sin el — y el que se olvida es siempre el que nadie prueba. Paso en RECREO
    con el salto del avion, que con teclado no existia.                     */
 function pulsa(v) {
-  if (v && !APRETADO) {
+  if (v && !APRETADO && R.caido <= 0) {
     if (R.suelo || R.coyote > 0) { R.buffer = BUFFER; if (R.suelo) salta(); }
     else R.buffer = BUFFER;
   }
   APRETADO = v;
+}
+
+/* ── LA MANO DERECHA: UN TOQUE, UN EMPUJON ────────────────────────────────
+   Y NO ES UN SOSTENIDO. Con el dedo apoyado la velocidad subiria sola hasta
+   el tope y quedarse ahi seria gratis; con toques sueltos hay que gastar la
+   mano, y sobre todo hay que decidir CUANDO —empujar entrando a una duna no
+   es lo mismo que empujar antes de un hueco—.
+   SOLO CON EL CUERPO APOYADO: `R.s` es la rapidez sobre la tangente, o sea
+   que en el aire ni siquiera existe. Empujar volando alargaria el vuelo a
+   voluntad y el aterrizaje dejaria de ser una apuesta.
+   Devuelve si el empujon SUMO velocidad, que no es lo mismo que si se acepto
+   el toque: en el tope el toque vale —la barra avisa— y no suma nada.   */
+function turbo() {
+  if (!R.vivo || R.caido > 0 || R.turboCd > 0) return false;
+  if (!R.suelo && !R.cuerda) return false;
+  R.turboCd = TURBO_CD;
+  R.turbo = 1;
+  if (R.s >= TURBO_TOPE) return false;
+  R.s = Math.min(R.s + TURBO_IMP, TURBO_TOPE);
+  R.empujes++;
+  if (!SIM && typeof son === 'function') son('empuja');
+  return true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -297,7 +379,7 @@ function _pone(o) { R.cuerda = o._cu; APRETADO = o._ap; for (const k of _EST) R[
    generado antes, o el rollout consumiria numeros del azar y el mundo de
    verdad saldria distinto. Es el defecto silencioso de cualquier rollout
    sobre un mundo procedural.                                              */
-function _rollout(n, ap, hastaElFinal) {
+function _rollout(n, ap, hastaElFinal, emp) {
   const g = _guarda(); SIM = true;
   /* EL CORTE ES "TOCO EL SUELO DESPUES DE HABER VOLADO", no "esta en el
      suelo". Con la segunda version, un rollout lanzado DESDE el suelo —que es
@@ -307,8 +389,12 @@ function _rollout(n, ap, hastaElFinal) {
   let vivo = true, i = 0, volo = !R.suelo, colgo = false;
   for (; i < n; i++) {
     pulsa(typeof ap === 'function' ? ap(i * PASO) : ap);
+    if (emp) turbo();
     riderPaso(PASO);
-    if (!R.vivo) { vivo = false; break; }
+    /* LO QUE CORTA UN ROLLOUT AHORA ES EL TUMBO Y NO LA MUERTE, porque ya no
+       hay muerte: sin esta linea el bot no ve un solo error y toda la
+       validacion del terreno aprueba cualquier cosa. */
+    if (R.caido > 0) { vivo = false; break; }
     if (R.cuerda) colgo = true;
     if (!R.suelo) volo = true;
     else if (volo && i > 2 && !hastaElFinal) break;
@@ -334,11 +420,42 @@ function _rollout(n, ap, hastaElFinal) {
    decide nada saque mucho menos. Sostiene el boton tandas de duracion al azar
    y no lo toca cuadro por cuadro: apretar y soltar a sesenta hercios es un
    promedio, no un jugador, y encima no llegaria a completar una sola vuelta. */
-const BOT = { plan: null, planT: 0, cd: 0, torpe: false, azar: false, react: 0, ap: false };
+/* Y LOS TRES APRIETAN LAS DOS ZONAS, no una. Desde que la derecha empuja, un
+   bot que solo salta esta jugando OTRO juego: mediria un mundo donde la
+   velocidad no se administra, o sea justo la decision que se agrego. Es la
+   misma regla que ya vale para el salto — el bot entra por `pulsa()` y por
+   `turbo()`, las mismas dos funciones que el dedo.                        */
+const BOT = { plan: null, planT: 0, cd: 0, torpe: false, azar: false, react: 0, ap: false,
+              emp: false, empT: 0 };
 function botReinicia(modo) {
   BOT.plan = null; BOT.planT = 0; BOT.cd = 0; BOT.react = 0; BOT.ap = false;
+  BOT.emp = false; BOT.empT = 0;
   BOT.azar = modo === 'azar';
   BOT.torpe = !BOT.azar && !!modo;
+}
+
+/* ── CUANDO EMPUJAR ───────────────────────────────────────────────────────
+   El honesto NO empuja siempre, y esa es la decision: mas velocidad es mas
+   alcance de salto y menos tiempo para reaccionar, asi que empujar contra un
+   hueco ancho es bueno y empujar contra una cresta con un hueco corto detras
+   te manda de cabeza. Se decide con el MISMO rollout que decide el salto, con
+   `emp` puesto: si volar cien pasos empujando sobrevive, se empuja.
+   Y SE PREGUNTA CADA 0,2 s Y NO POR CUADRO: un rollout de cien pasos por
+   cuadro son seis mil pasos de fisica por segundo de mas, y la respuesta no
+   cambia en dieciseis milesimas.
+   El torpe empuja a su cadencia de reaccion sin mirar nada —que es lo que
+   hace alguien que quiere ir rapido— y el del azar, al azar.              */
+function botEmpuja(dt) {
+  if (!R.vivo || R.caido > 0) return false;
+  if (BOT.azar) return Math.random() < 0.30;
+  if (BOT.torpe) return true;
+  BOT.empT -= dt;
+  if (BOT.empT > 0) return BOT.emp;
+  BOT.empT = 0.20;
+  if (R.s >= TURBO_TOPE - 0.05) { BOT.emp = false; return false; }
+  const r = _rollout(110, false, true, true);
+  BOT.emp = r.vivo;
+  return BOT.emp;
 }
 
 /* EL PLAN SE DECIDE AL DESPEGAR Y NO EN CADA CUADRO: cuantas vueltas entran
@@ -365,7 +482,9 @@ function botPiensa(dt) {
          error de cinco centesimas tira la vuelta entera. */
       const VAR = BOT.torpe ? [0] : [0, -0.055, 0.055, -0.11, 0.11];
       for (let k = BOT.torpe ? 2 : 4; k >= 0 && BOT.plan === null; k--) {
-        const d0 = k === 0 ? 0 : (k * Math.PI * 2) / GIRO_V;
+        /* + LA ESPERA: sin sumarla la estimacion queda 0,14 s corta y las
+           variantes (±0,11) no la alcanzan — el bot cerraria CERO vueltas */
+        const d0 = k === 0 ? 0 : GIRO_ESPERA + (k * Math.PI * 2) / GIRO_V;
         for (const e of VAR) {
           const dur = Math.max(0, d0 + e);
           const r = _rollout(200, t => t < dur);
@@ -433,6 +552,6 @@ function botPiensa(dt) {
      sobrevive, salta. Eso es lo que hace un jugador: saltar por gusto. */
   BOT.cd = 0.30;
   const pr = _rollout(200, t => t < 0.05);
-  if (!pr.vivo || pr.pasos * PASO < (Math.PI * 2) / GIRO_V + 0.14) return false;
+  if (!pr.vivo || pr.pasos * PASO < (Math.PI * 2) / GIRO_V + GIRO_ESPERA) return false;
   return true;
 }

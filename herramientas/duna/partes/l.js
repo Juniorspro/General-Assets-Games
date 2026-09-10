@@ -3,42 +3,67 @@
    LA ENTRADA Y EL BUCLE
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── UN SOLO BOTON, Y ES LA PANTALLA ENTERA ───────────────────────────────
-   No hay joystick ni zona sensible: se toca donde sea. Pedir punteria sobre
-   un boton chico con el pulgar en un juego que corre a treinta metros por
-   segundo es cobrar por el aparato y no por el juego.
-   Y EL TECLADO ENTRA POR EL MISMO SITIO que el dedo, que es `pulsa()`: con
-   dos caminos, el dia que se toque uno el otro se queda atras.            */
-let DEDOS = 0;
-function entradaAbajo(e) {
+/* ── DOS ZONAS: IZQUIERDA SALTA, DERECHA EMPUJA ───────────────────────────
+   Cada mitad de la pantalla es un boton entero. Pedir punteria sobre un boton
+   chico con el pulgar en un juego que corre a treinta metros por segundo es
+   cobrar por el aparato y no por el juego; media pantalla no se erra nunca.
+
+   Y SON DOS DIV DEL DOM Y NO CUENTAS SOBRE EL PUNTERO. El marco esta GIRADO
+   noventa grados, asi que decidir de que lado cayo el dedo pide invertir la
+   rotacion a mano —y este repo ya se equivoco con eso en ECO y en HUESOS,
+   donde `getBoundingClientRect` devolvia la caja alineada a los ejes—. Con
+   dos divs adentro del marco, la cuenta la hace el navegador y no puede
+   salir mal.
+
+   LA IZQUIERDA SE MANTIENE Y LA DERECHA SE GOLPEA: sostener no acelera —eso
+   haria que la velocidad tope fuera gratis— asi que lo que suma es cada
+   TOQUE, con un enfriamiento que es lo que un dedo puede repetir.
+
+   Y EL TECLADO ENTRA POR LAS MISMAS DOS FUNCIONES que el dedo, `pulsa()` y
+   `turbo()`: con dos caminos, el dia que se toque uno el otro se queda
+   atras.                                                                  */
+const IZQ = new Set();          // punteros que estan sosteniendo la izquierda
+function zonaIzqAbajo(e) {
   if (PANT !== 'juego') return;
-  /* el boton de pausa vive DENTRO de la pantalla que salta: sin esta linea,
-     tocarlo pausa y salta en el mismo gesto, y el jugador vuelve de la pausa
-     en el aire sin haber apretado nada */
-  if (e && e.target && e.target.closest && e.target.closest('#bPausa')) return;
-  DEDOS++;
-  if (DEDOS === 1) pulsa(true);
+  IZQ.add(e.pointerId);
+  if (IZQ.size === 1) pulsa(true);
+  if (e.cancelable) e.preventDefault();
+}
+function zonaIzqArriba(e) {
+  if (e) IZQ.delete(e.pointerId); else IZQ.clear();
+  if (IZQ.size === 0) pulsa(false);
+}
+function zonaDerAbajo(e) {
+  if (PANT !== 'juego') return;
+  turbo();
   if (e && e.cancelable) e.preventDefault();
 }
-function entradaArriba() {
-  DEDOS = Math.max(0, DEDOS - 1);
-  if (DEDOS === 0) pulsa(false);
-}
-addEventListener('pointerdown', entradaAbajo, { passive: false });
-addEventListener('pointerup', entradaArriba);
-addEventListener('pointercancel', entradaArriba);
 /* si el dedo se levanta afuera de la ventana el `pointerup` no llega nunca y
    el rider se queda girando para siempre: es el mismo defecto que en RECREO
    dejaba al jugador caminando contra una pared */
-addEventListener('blur', () => { DEDOS = 0; pulsa(false); });
+addEventListener('blur', () => zonaIzqArriba(null));
+addEventListener('pointerup', zonaIzqArriba);
+addEventListener('pointercancel', zonaIzqArriba);
 addEventListener('keydown', e => {
   if (e.repeat) return;
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { entradaAbajo(e); }
-  else if (e.code === 'Escape' || e.code === 'KeyP') { if (PANT === 'juego') pausa(true); else if (PANT === 'pausa') pausa(false); }
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
+    if (PANT !== 'juego') return;
+    IZQ.add('tecla'); if (IZQ.size === 1) pulsa(true);
+    if (e.cancelable) e.preventDefault();
+  } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+    if (PANT !== 'juego') return;
+    turbo();
+  } else if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (PANT === 'juego') pausa(true); else if (PANT === 'pausa') pausa(false);
+  }
 });
 addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') entradaArriba();
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
+    IZQ.delete('tecla'); if (IZQ.size === 0) pulsa(false);
+  }
 });
+$('zIzq').addEventListener('pointerdown', zonaIzqAbajo, { passive: false });
+$('zDer').addEventListener('pointerdown', zonaDerAbajo, { passive: false });
 addEventListener('resize', ajustaMarco);
 /* el primer gesto despierta el audio: ningun navegador deja sonar nada antes
    de uno, y en captura sobre el documento no hay que acordarse en cada boton */
@@ -72,7 +97,8 @@ function nuevaPartida(demo) {
   HORA0 = Math.random();
   HORA = HORA0;
   OBJ_HECHOS = [];
-  DEDOS = 0; pulsa(false);
+  IZQ.clear(); pulsa(false);
+  tutoReinicia(demo);
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
   HUD.pts = -1; HUD.mon = -1; HUD.truco = null; HUD.pista = null;
 }
@@ -82,6 +108,10 @@ function empieza() {
   verPantalla('juego');
   audioArranca();
 }
+/* TERMINAR LA CORRIDA ES UNA DECISION DEL JUGADOR, y esa es toda la
+   consecuencia de que la bajada no acabe: sin muerte, lo unico que cierra
+   una partida —y lo unico que hace que el record signifique algo— es que
+   alguien diga «hasta aca». Vive en la pausa, que es donde uno ya paro. */
 function pausa(v) {
   if (v && PANT === 'juego') verPantalla('pausa');
   else if (!v && PANT === 'pausa') verPantalla('juego');
@@ -112,8 +142,9 @@ let ACU = 0, ULT = 0, HORA0 = 0;
 function unPaso(dt) {
   if (!R.vivo) return;
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
-  if (DEMO) pulsa(botPiensa(dt));
+  if (DEMO) { pulsa(botPiensa(dt)); if (botEmpuja(dt)) turbo(); }
   riderPaso(dt);
+  if (!DEMO) tutoPaso(dt);
   HORA = HORA0 + R.dist / CICLO_M;
   if (!DEMO) objPaso();
   if (!R.vivo && !DEMO) termina();
@@ -170,6 +201,10 @@ function pinta(x, y, ang) {
   pintaRider(x, y, ang);
   pintaMonedas(TIEMPO);
   ctx.restore();
+  /* la barra y el tutorial van FUERA del sacudon: son interfaz, y una
+     interfaz que tiembla con el choque se lee a error de dibujo */
+  pintaBarra();
+  pintaTuto();
 }
 
 /* ── EL CARTEL DEL NOMBRE ─────────────────────────────────────────────────
@@ -206,6 +241,9 @@ $('mJugar').onclick = () => { son('ui'); empieza(); };
 $('bPausa').onclick = e => { e.stopPropagation(); son('ui'); pausa(true); };
 $('paSeguir').onclick = () => { son('ui'); pausa(false); };
 $('paMenu').onclick = () => { son('ui'); alMenu(); };
+$('paTerm').onclick = () => { son('ui'); termina(); };
+$('mTuto').onclick = () => { son('ui'); empieza(); tutoArranca(true); verPantalla('juego'); };
+$('tSalt').onclick = e => { e.stopPropagation(); son('ui'); tutoSaltea(); verPantalla('juego'); };
 $('fOtra').onclick = () => { son('ui'); empieza(); };
 $('fMenu').onclick = () => { son('ui'); alMenu(); };
 
