@@ -37,6 +37,40 @@ var ARCHIVOS = {
   "m-surf":"m-surf.b7132097.webp", "m-nube":"m-nube.684daf29.webp",
   "m-juego":"m-juego.66c8b81c.webp", "m-dormido":"m-dormido.13aeff0c.webp"
 };
+/* El retrato con su aro, si quien lo puso tiene uno. Va acá y no repetido en
+   el muro y en el perfil porque son la misma cosa vista en dos lugares, y si se
+   escribe dos veces un día se arreglan distinto.
+
+   El marco lo elige el servidor de una lista cerrada (`MARCOS` en aeromas.js),
+   así que acá se puede armar el nombre del archivo sin miedo: no puede llegar
+   algo que no esté en esa lista. */
+function conAro(retrato, marco, alto){
+  var d = nodo("div", "conAro");
+  d.style.cssText = "position:relative;flex:none;width:" + alto + "px;height:" + alto + "px";
+  var im = nodo("img");
+  im.src = retratoUrl(retrato); im.alt = ""; im.loading = "lazy";
+  im.style.cssText = marco
+    ? "position:absolute;inset:13%;width:74%;height:74%;border-radius:50%;object-fit:cover"
+    : "position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover";
+  d.appendChild(im);
+  if (marco){
+    var ar = nodo("img");
+    ar.src = "img/zona/marco-" + marco + ".webp"; ar.alt = ""; ar.loading = "lazy";
+    ar.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+    d.appendChild(ar);
+  }
+  return d;
+}
+
+/* La estrellita de quien colaboró. Es chica a propósito: marca, no grita. */
+function insignia(){
+  var b = nodo("span", null, "★");
+  b.title = "Colaboró con el sitio";
+  b.setAttribute("aria-label", "Colaboró con el sitio");
+  b.style.cssText = "color:#e8a800;font-size:13px;margin-left:5px;vertical-align:1px";
+  return b;
+}
+
 function retratoUrl(r){
   if (r && /^https?:/.test(r)) return r;
   return "img/mascota/" + (ARCHIVOS[r] || ARCHIVOS["m-saludando"]);
@@ -96,15 +130,19 @@ function tarjeta(p){
   var art = nodo("article", "pub");
 
   var q = nodo("div", "quien");
-  var im = nodo("img"); im.src = retratoUrl(p.retrato); im.alt = ""; im.loading = "lazy";
-  im.width = 760; im.height = 760;
-  q.appendChild(im);
+  q.appendChild(conAro(p.retrato, p.marco, 42));
   var qd = nodo("div");
   var a = nodo("a", null, p.nombre || p.usuario);
   a.href = "#"; a.dataset.perfil = p.usuario;
   var b = nodo("b"); b.appendChild(a);
+  if (p.acceso) b.appendChild(insignia());
   qd.appendChild(b);
   qd.appendChild(nodo("time", null, "@" + p.usuario + " · " + cuando(p.creado)));
+  if (p.lema){
+    var lm = nodo("div", null, p.lema);
+    lm.style.cssText = "font-size:12.5px;color:var(--tinta-2);margin-top:1px";
+    qd.appendChild(lm);
+  }
   q.appendChild(qd);
   art.appendChild(q);
 
@@ -175,13 +213,25 @@ function verPerfil(usuario){
     .then(function(j){
       c.textContent = "";
       var u = j.perfil;
-      c.appendChild(nodo("div", "tapa"));
+      var tapa = nodo("div", "tapa");
+      /* la banda que eligió en Aero+, si eligió alguna */
+      if (u.banda){
+        tapa.style.backgroundImage = 'url("img/zona/f-' + u.banda + '.webp")';
+        tapa.style.backgroundSize = "cover";
+        tapa.style.backgroundPosition = "center";
+      }
+      c.appendChild(tapa);
       var f = nodo("div", "fichaP");
-      var im = nodo("img"); im.src = retratoUrl(u.retrato); im.alt = "";
-      im.width = 760; im.height = 760;
-      f.appendChild(im);
+      f.appendChild(conAro(u.retrato, u.marco, 86));
       var d = nodo("div", "dat");
-      d.appendChild(nodo("h2", null, u.nombre));
+      var h2 = nodo("h2", null, u.nombre);
+      if (u.acceso) h2.appendChild(insignia());
+      d.appendChild(h2);
+      if (u.lema){
+        var lm = nodo("div", null, u.lema);
+        lm.style.cssText = "font-size:13.5px;color:var(--tinta-2);margin:1px 0 2px";
+        d.appendChild(lm);
+      }
       d.appendChild(nodo("div", "arroba", "@" + u.usuario + " · desde " +
         new Date(u.creado).toLocaleDateString("es-AR", {month:"long", year:"numeric"})));
       if (u.sobre) d.appendChild(nodo("p", null, u.sobre));

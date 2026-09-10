@@ -979,8 +979,10 @@ function revisarPase(){
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){
       if (!d){ pase = null; caja.sacar("pase"); return; }   /* venció o ya no vale */
-      $("v-zona").hidden = false;
+      /* la ventana vieja de la zona ya no se abre: la reemplazó Aero+, que es
+         una interfaz entera. Lo único que queda de ella es el ícono. */
       $("ic-zona").hidden = false;
+      amPintarIcono();
       caja.poner("colaboro", 1);        /* no le pedimos plata a quien ya puso */
       pintarZona(d);
     })
@@ -1012,7 +1014,6 @@ $("cod-btn").addEventListener("click", function(){
 $("cod-txt").addEventListener("keydown", function(e){
   if (e.key === "Enter") $("cod-btn").click();
 });
-$("ic-zona").addEventListener("click", function(){ abrir("v-zona"); });
 revisarPase();
 
 /* ================================================ 8 · cobro automático
@@ -1133,5 +1134,365 @@ conectarControl();
 conectarMinas();
 conectarBloc();
 conectarRepro();
+
+
+/* ================================================= 5 · Aero+
+   La zona de donantes. No es una ventana más: es otra interfaz a pantalla
+   completa, con su barra, sus aplicaciones y su fondo. Lo que se desbloquea
+   tiene que SENTIRSE distinto, no ser la misma pantalla con un cartel.
+
+   QUIÉN DECIDE SI ENTRÁS: el servidor, no esta página. Acá no hay ningún
+   `if (esDonante)` que alguien pueda dar vuelta desde la consola del navegador;
+   se le pide `api/aeromas` y si contesta 403 no hay nada que pintar. Poner esa
+   decisión de este lado sería dejar la puerta cerrada con un cartel en vez de
+   con llave. */
+var AM = null;                 /* lo que contestó el servidor */
+var amTema = { fondo:"cristal", tono:210, sat:52, vidrio:82 };
+
+var AM_FONDOS = {
+  cristal:  "Cristal",   pasto: "Pasto",     nocturno: "Aurora",
+  oceano:   "Océano",    cielo: "Cielo"
+};
+var AM_MARCOS = { agua:"Agua", oro:"Oro", vidrio:"Vidrio" };
+/* Íconos de verdad y no los aros: tres anillos casi iguales en la columna no
+   distinguen una aplicación de otra, que es para lo único que sirve un ícono. */
+var AM_LAMS = { "i-vidrio":"img/zona/ico-temas.webp",
+                "i-personaje":"img/zona/ico-perfil.webp",
+                "i-ventana":"img/zona/ico-galeria.webp" };
+
+function amPedir(cuerpo){
+  var o = { headers:{} };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) o.headers.authorization = "Bearer " + ses.pase;
+  if (cuerpo){ o.method = "POST"; o.headers["content-type"] = "application/json";
+               o.body = JSON.stringify(cuerpo); }
+  return fetch("api/aeromas", o).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok) throw new Error(j.error || ("error " + r.status));
+      return j; });
+  });
+}
+
+/* --- el ícono del escritorio: instalar la primera vez, abrir después --- */
+function amInstalado(){ return !!caja.leer("aeromas", false); }
+
+function amPintarIcono(){
+  var t = $("ic-zona-txt");
+  if (t) t.textContent = amInstalado() ? "Aero+" : "Instalar Aero+";
+}
+
+/* El instalador. Es teatro —una barra que avanza— pero no miente: cada paso
+   espera a que la cosa que nombra haya terminado de verdad. Un progreso que
+   corre solo mientras atrás no pasa nada es de las cosas que más rápido hacen
+   desconfiar de un programa. */
+function amInstalar(){
+  var caja1 = $("am-instalar"), lleno = $("am-lleno"), paso = $("am-paso");
+  caja1.hidden = false;
+  var pasos = [
+    ["Comprobando tu acceso…", function(){ return amPedir(null).then(function(j){ AM = j; }); }],
+    ["Bajando los fondos…", function(){ return amPrecargar(); }],
+    ["Escribiendo en el escritorio…", function(){
+        return new Promise(function(r){ caja.poner("aeromas", true); setTimeout(r, quieto?0:450); }); }]
+  ];
+  var i = 0;
+  function seguir(){
+    if (i >= pasos.length){
+      lleno.style.width = "100%"; paso.textContent = "Listo.";
+      setTimeout(function(){ caja1.hidden = true; amPintarIcono(); amAbrir(); }, quieto?0:600);
+      return;
+    }
+    paso.textContent = pasos[i][0];
+    lleno.style.width = Math.round(i / pasos.length * 100) + "%";
+    pasos[i][1]().then(function(){ i++; seguir(); })
+      .catch(function(e){
+        paso.textContent = e.message;
+        lleno.style.background = "#d6432a";
+        setTimeout(function(){ caja1.hidden = true; }, 2600);
+      });
+  }
+  seguir();
+}
+
+/* que el fondo no aparezca a pedazos la primera vez que se elige */
+function amPrecargar(){
+  return Promise.all(Object.keys(AM_FONDOS).map(function(f){
+    return new Promise(function(r){
+      var im = new Image(); im.onload = im.onerror = r; im.src = "img/zona/f-" + f + ".webp";
+    });
+  }));
+}
+
+function amAbrir(){
+  (AM ? Promise.resolve(AM) : amPedir(null).then(function(j){ AM = j; }))
+    .then(function(){
+      if (AM.yo.tema){ try { amTema = JSON.parse(AM.yo.tema); } catch(e){} }
+      $("aeromas").hidden = false;
+      document.body.style.overflow = "hidden";
+      $("am-quien").textContent = "@" + AM.yo.usuario +
+        (AM.cuantos > 1 ? "  ·  " + AM.cuantos + " la tienen" : "");
+      amPintarApps();
+      amAplicarFondo();
+      amVer(AM.estrena ? "bienvenida" : "temas");
+    })
+    .catch(function(e){ alert(e.message); });
+}
+
+function amCerrar(){
+  $("aeromas").hidden = true;
+  document.body.style.overflow = "";
+}
+
+function amPintarApps(){
+  var n = $("am-apps"); n.textContent = "";
+  AM.apps.forEach(function(a){
+    var b = document.createElement("button");
+    b.type = "button"; b.dataset.app = a.id;
+    var im = document.createElement("img");
+    im.className = "lam"; im.src = AM_LAMS[a.icono] || "img/zona/app.webp"; im.alt = "";
+    var t = document.createElement("div");
+    var bb = document.createElement("b"); bb.textContent = a.nombre;
+    var sp = document.createElement("span"); sp.textContent = a.que;
+    t.appendChild(bb); t.appendChild(sp);
+    b.appendChild(im); b.appendChild(t);
+    b.addEventListener("click", function(){ amVer(a.id); });
+    n.appendChild(b);
+  });
+}
+
+function amAplicarFondo(){
+  $("am-fondo").style.backgroundImage = 'url("img/zona/f-' + amTema.fondo + '.webp")';
+}
+
+function amVer(cual){
+  Array.prototype.forEach.call($("am-apps").children, function(b){
+    b.setAttribute("aria-current", String(b.dataset.app === cual));
+  });
+  var p = $("am-panel"); p.textContent = "";
+  if (cual === "bienvenida") return amBienvenida(p);
+  if (cual === "temas")   return amTemas(p);
+  if (cual === "perfil")  return amPerfil(p);
+  if (cual === "galeria") return amGaleria(p);
+}
+
+function amTitulo(p, t, b){
+  var h = document.createElement("h2"); h.textContent = t; p.appendChild(h);
+  var q = document.createElement("p"); q.className = "baja"; q.textContent = b; p.appendChild(q);
+}
+function amCaja(p, t){
+  var c = document.createElement("div"); c.className = "am-caja";
+  if (t){ var h = document.createElement("h3"); h.textContent = t; c.appendChild(h); }
+  p.appendChild(c); return c;
+}
+
+function amBienvenida(p){
+  amTitulo(p, "Bienvenido a Aero+",
+    "Se instaló. Desde ahora el ícono del escritorio te trae directo acá.");
+  var c = amCaja(p, null);
+  var q = document.createElement("p");
+  q.style.cssText = "margin:0;font-size:14.5px;line-height:1.6";
+  q.textContent = "Hay tres cosas adentro: un estudio de temas con fondos que no " +
+    "están en el escritorio común, marcos para tu retrato que se ven en el muro, " +
+    "y la galería para bajarte los fondos en grande. Todo lo que elijas queda " +
+    "guardado en tu cuenta, así que te sigue si entrás desde el teléfono.";
+  c.appendChild(q);
+  var b = document.createElement("button");
+  b.className = "am-bt"; b.type = "button"; b.textContent = "Empezar por los temas";
+  b.style.marginTop = "12px";
+  b.addEventListener("click", function(){ amVer("temas"); });
+  c.appendChild(b);
+}
+
+/* ------------------------------------------------------- estudio de temas */
+function amTemas(p){
+  amTitulo(p, "Estudio de temas",
+    "El fondo es de acá adentro. El color del vidrio y la transparencia también " +
+    "pintan el escritorio de afuera, en vivo.");
+
+  var c = amCaja(p, "Fondo");
+  var r = document.createElement("div"); r.className = "am-rej";
+  Object.keys(AM_FONDOS).forEach(function(f){
+    var b = document.createElement("button"); b.type = "button";
+    b.setAttribute("aria-pressed", String(amTema.fondo === f));
+    var im = document.createElement("img");
+    im.src = "img/zona/f-" + f + ".webp"; im.alt = AM_FONDOS[f]; im.loading = "lazy";
+    var pie = document.createElement("span"); pie.className = "pie"; pie.textContent = AM_FONDOS[f];
+    b.appendChild(im); b.appendChild(pie);
+    b.addEventListener("click", function(){
+      amTema.fondo = f;
+      Array.prototype.forEach.call(r.children, function(x){
+        x.setAttribute("aria-pressed", String(x === b)); });
+      amAplicarFondo(); amGuardar();
+    });
+    r.appendChild(b);
+  });
+  c.appendChild(r);
+
+  var c2 = amCaja(p, "El vidrio");
+  [["tono","Color", 0, 360], ["sat","Saturación", 0, 100], ["vidrio","Transparencia", 40, 100]]
+    .forEach(function(x){
+      var l = document.createElement("label"); l.textContent = x[1];
+      var i = document.createElement("input");
+      i.type = "range"; i.min = x[2]; i.max = x[3]; i.value = amTema[x[0]];
+      i.addEventListener("input", function(){
+        amTema[x[0]] = +this.value;
+        /* el escritorio de afuera usa las mismas variables: se retiñe solo */
+        var raiz = document.documentElement.style;
+        raiz.setProperty("--tono", amTema.tono);
+        raiz.setProperty("--sat", amTema.sat + "%");
+        raiz.setProperty("--vidrio", amTema.vidrio + "%");
+      });
+      i.addEventListener("change", amGuardar);
+      c2.appendChild(l); c2.appendChild(i);
+    });
+}
+
+/* ------------------------------------------------------------- Perfil+ */
+function amPerfil(p){
+  amTitulo(p, "Perfil+",
+    "El marco y el lema se ven en el muro, así que los ve el resto. " +
+    "La banda es el fondo de tu perfil.");
+
+  var c = amCaja(p, "Marco del retrato");
+  var fila = document.createElement("div"); fila.className = "am-fila";
+  var prev = document.createElement("div"); prev.className = "am-previa";
+  var rt = document.createElement("img"); rt.className = "rt"; rt.alt = "";
+  var ses = caja.leer("sesion", null);
+  rt.src = (ses && ses.yo) ? retratoDe2(ses.yo.retrato) : "img/mascota/m-saludando.463f6804.webp";
+  var ar = document.createElement("img"); ar.className = "ar"; ar.alt = "";
+  prev.appendChild(rt); prev.appendChild(ar);
+  fila.appendChild(prev);
+  c.appendChild(fila);
+
+  function pintarAro(){
+    ar.src = AM.yo.marco ? "img/zona/marco-" + AM.yo.marco + ".webp" : "";
+    ar.style.display = AM.yo.marco ? "" : "none";
+  }
+  pintarAro();
+
+  var r = document.createElement("div"); r.className = "am-rej aros";
+  r.style.marginTop = "12px";
+  [""].concat(Object.keys(AM_MARCOS)).forEach(function(m){
+    var b = document.createElement("button"); b.type = "button";
+    b.setAttribute("aria-pressed", String((AM.yo.marco || "") === m));
+    b.title = m ? AM_MARCOS[m] : "Sin marco";
+    if (m){
+      var im = document.createElement("img");
+      im.alt = b.title; im.loading = "lazy";
+      im.src = "img/zona/marco-" + m + ".webp";
+      b.appendChild(im);
+    } else {
+      /* el «sin marco» es un hueco, no otra opción de aro: con la mascota
+         adentro parecía un cuarto marco y no la forma de sacárselos */
+      var v = document.createElement("span");
+      v.style.cssText = "display:grid;place-items:center;aspect-ratio:1;font-size:12.5px;" +
+        "color:rgba(226,242,255,.75);border-radius:50%;" +
+        "background:repeating-linear-gradient(45deg,rgba(255,255,255,.05) 0 7px," +
+        "rgba(255,255,255,.11) 7px 14px)";
+      v.textContent = "Sin marco";
+      b.appendChild(v);
+    }
+    b.addEventListener("click", function(){
+      AM.yo.marco = m;
+      Array.prototype.forEach.call(r.children, function(x){
+        x.setAttribute("aria-pressed", String(x === b)); });
+      pintarAro(); amGuardar();
+    });
+    r.appendChild(b);
+  });
+  c.appendChild(r);
+
+  var c2 = amCaja(p, "Tu lema");
+  var l = document.createElement("label");
+  l.htmlFor = "am-lema"; l.textContent = "Una línea, la que quieras";
+  var i = document.createElement("input");
+  i.type = "text"; i.id = "am-lema"; i.maxLength = 80; i.value = AM.yo.lema || "";
+  i.placeholder = "Hago cosas con vidrio y burbujas";
+  i.addEventListener("change", function(){ AM.yo.lema = this.value; amGuardar(); });
+  c2.appendChild(l); c2.appendChild(i);
+
+  var c3 = amCaja(p, "Banda del perfil");
+  var r2 = document.createElement("div"); r2.className = "am-rej";
+  [""].concat(Object.keys(AM_FONDOS)).forEach(function(f){
+    var b = document.createElement("button"); b.type = "button";
+    b.setAttribute("aria-pressed", String((AM.yo.banda || "") === f));
+    if (f){
+      var im = document.createElement("img");
+      im.src = "img/zona/f-" + f + ".webp"; im.alt = AM_FONDOS[f]; im.loading = "lazy";
+      b.appendChild(im);
+    } else {
+      var v = document.createElement("span");
+      v.style.cssText = "display:block;aspect-ratio:16/9;background:rgba(255,255,255,.08)";
+      b.appendChild(v);
+    }
+    var pie = document.createElement("span");
+    pie.className = "pie"; pie.textContent = f ? AM_FONDOS[f] : "Sin banda";
+    b.appendChild(pie);
+    b.addEventListener("click", function(){
+      AM.yo.banda = f;
+      Array.prototype.forEach.call(r2.children, function(x){
+        x.setAttribute("aria-pressed", String(x === b)); });
+      amGuardar();
+    });
+    r2.appendChild(b);
+  });
+  c3.appendChild(r2);
+}
+
+/* el mismo mapa de retratos que usa el muro, sin duplicar la lista */
+function retratoDe2(r){
+  if (r && /^https?:/.test(r)) return r;
+  var e = document.querySelector('#retratos [data-r="' + r + '"] img');
+  return e ? e.src : "img/mascota/m-saludando.463f6804.webp";
+}
+
+/* ------------------------------------------------------------- galería */
+function amGaleria(p){
+  amTitulo(p, "Galería",
+    "Los cinco fondos en grande. Son tuyos: usalos donde quieras.");
+  var c = amCaja(p, null);
+  var r = document.createElement("div"); r.className = "am-rej";
+  Object.keys(AM_FONDOS).forEach(function(f){
+    var a = document.createElement("a");
+    a.href = "img/zona/f-" + f + ".webp"; a.target = "_blank"; a.rel = "noopener";
+    a.className = "";
+    a.style.cssText = "display:block;border-radius:5px;overflow:hidden;" +
+      "border:2px solid rgba(255,255,255,.22);text-decoration:none;color:inherit";
+    var im = document.createElement("img");
+    im.src = "img/zona/f-" + f + ".webp"; im.alt = AM_FONDOS[f]; im.loading = "lazy";
+    im.style.cssText = "display:block;width:100%;aspect-ratio:16/9;object-fit:cover";
+    var pie = document.createElement("span");
+    pie.className = "pie"; pie.style.display = "block";
+    pie.textContent = AM_FONDOS[f] + " — abrir en grande";
+    a.appendChild(im); a.appendChild(pie);
+    r.appendChild(a);
+  });
+  c.appendChild(r);
+}
+
+/* Se guarda solo, en cuanto se toca algo. Un botón «Guardar» en una pantalla de
+   personalización es una forma de que alguien pruebe cinco fondos, cierre, y
+   pierda el que le gustaba. */
+var amReloj = null;
+function amGuardar(){
+  clearTimeout(amReloj);
+  amReloj = setTimeout(function(){
+    amPedir({ hacer:"guardar", marco: AM.yo.marco || "", banda: AM.yo.banda || "",
+              lema: AM.yo.lema || "", tema: JSON.stringify(amTema) })
+      .then(function(){ caja.poner("ajustes", { tono:amTema.tono, sat:amTema.sat,
+              vidrio:amTema.vidrio, fondo:ajustes.fondo, burbujas:ajustes.burbujas }); })
+      .catch(function(){});
+  }, 600);
+}
+
+if ($("ic-zona")){
+  amPintarIcono();
+  $("ic-zona").addEventListener("click", function(){
+    if (amInstalado()) amAbrir(); else amInstalar();
+  });
+}
+if ($("am-salir")) $("am-salir").addEventListener("click", amCerrar);
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !$("aeromas").hidden) amCerrar();
+});
 
 })();

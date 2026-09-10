@@ -22,7 +22,8 @@ export const onRequestGet = async ({ request, env }) => {
   /* ------------------------------------------------------- un perfil */
   if (q.get("perfil")) {
     const u = await env.DB.prepare(
-      "SELECT id, usuario, nombre, retrato, sobre, cobro, creado FROM usuarios " +
+      "SELECT id, usuario, nombre, retrato, sobre, cobro, creado, " +
+      "       marco, banda, lema, acceso FROM usuarios " +
       "WHERE usuario = ? AND bloqueado = 0").bind(q.get("perfil").toLowerCase()).first();
     if (!u) return json({ error: "No existe ese perfil." }, 404);
     const { results } = await env.DB.prepare(
@@ -35,7 +36,9 @@ export const onRequestGet = async ({ request, env }) => {
   /* --------------------------------------------------------- el muro */
   const antes = parseInt(q.get("antes") || "0", 10) || Date.now();
   const { results } = await env.DB.prepare(
-    "SELECT p.*, u.usuario, u.nombre, u.retrato, " +
+    /* el marco y la insignia viajan con cada publicación: son de quien la
+       escribió y se ven acá, que es donde los mira el resto */
+    "SELECT p.*, u.usuario, u.nombre, u.retrato, u.marco, u.lema, u.acceso, " +
     "  (SELECT COUNT(*) FROM apoyos a WHERE a.pub = p.id) AS apoyos " +
     "FROM publicaciones p JOIN usuarios u ON u.id = p.autor " +
     "WHERE p.oculto = 0 AND u.bloqueado = 0 AND p.creado < ? " +
