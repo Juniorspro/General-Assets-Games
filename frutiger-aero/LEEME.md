@@ -228,7 +228,7 @@ Lo que sí se arregla con código es que mirarlo cueste dos toques:
 
 1. El que transfirió deja el **número de operación** en la pantalla de
    colaborar. Eso no le da nada: lo pone en una cola.
-2. En `/admin` aparece el pedido con el nombre, el número y cuánto dice haber
+2. En `/solicitudes` aparece el pedido con el nombre, el número y cuánto dice haber
    mandado.
 3. **Aprobar habilita la cuenta al instante.** No hay que mandarle un código ni
    escribirle por WhatsApp.
@@ -278,7 +278,7 @@ Nada de esto está en el código. Son variables del proyecto en Cloudflare
 | `PAGO_MP_ALIAS` · `PAGO_PAYPAL` | Los datos para pagar a mano, sin verificación |
 | `ACCESO_MINIMO_USD` · `ACCESO_MINIMO_ARS` | El piso para dar acceso |
 | `SECRETO` | Firma los pases y los códigos. Cambiarla los invalida a todos |
-| `CLAVE_ADMIN` | Entra a `/admin` a generar códigos |
+| `CLAVE_ADMIN` | Nombra al primer administrador, y genera códigos en `/solicitudes` |
 | `ZONA_ITEMS` | La lista de la zona de donantes, en JSON |
 
 ### No adivines cuál credencial es cuál: probala

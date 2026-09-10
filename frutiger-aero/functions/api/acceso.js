@@ -50,6 +50,13 @@ export const onRequestPost = async ({ request, env }) => {
   if (c.codigo) {
     if (!(await codigoVale(env.SECRETO, c.codigo)))
       return json({ error: "Ese código no es válido. Fijate que esté completo." }, 403);
+
+    /* EL CODIGO TIENE QUE VALER LO MISMO QUE UN PAGO, y no valia. Devolvia solo
+       un pase de navegador y nunca marcaba la cuenta, asi que el que entraba
+       con un codigo quedaba con medio acceso: sin Aero+, sin insignia, y lo
+       perdia al cambiar de telefono o al borrar el navegador. Nadie se enteraba
+       hasta que abria el celular y no le aparecia nada. */
+    await anotar(env, request, "codigo", c.codigo.trim().toUpperCase(), 0, "ARS");
     return json({ pase: await darPase(env.SECRETO, { via: "codigo" }) });
   }
 

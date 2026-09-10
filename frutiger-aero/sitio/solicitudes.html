@@ -88,6 +88,35 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
         </div>
       </div>
       <div id="cola" style="margin-top:12px"></div>
+
+      <!-- Los c&#243;digos, que antes viv&#237;an en /admin con su propia clave. Una
+           segunda p&#225;gina de administraci&#243;n con una segunda llave es una llave
+           m&#225;s que se puede perder, para hacer algo que va justo al lado de
+           esto. Ahora es una secci&#243;n de ac&#225;. -->
+      <details class="grupo blanco" style="margin-top:14px">
+        <summary style="cursor:pointer;font-weight:600;font-size:14.5px">
+          Generar c&#243;digos de acceso</summary>
+        <p style="font-size:13.5px;margin:9px 0 0">Para el que te pag&#243; en mano y
+          no va a mandar comprobante. Mir&#225; que la plata haya entrado, gener&#225; uno
+          y pas&#225;selo. Un c&#243;digo vale <b>lo mismo que un pago</b>: le habilita la
+          cuenta con la que lo canjee.</p>
+        <div style="margin-top:10px"><label for="cgClave">Clave de administrador</label>
+          <input id="cgClave" type="password" autocomplete="off"
+                 placeholder="No se guarda: se escribe cada vez"></div>
+        <div style="display:flex;gap:9px;margin-top:9px">
+          <div style="flex:1"><label for="cgDesde">Desde el n&#250;mero</label>
+            <input id="cgDesde" type="number" min="1" value="1"></div>
+          <div style="flex:1"><label for="cgCuantos">Cu&#225;ntos</label>
+            <input id="cgCuantos" type="number" min="1" max="50" value="5"></div>
+        </div>
+        <div class="bots">
+          <button class="bt p" type="button" id="cgHacer">Generar</button>
+          <button class="bt" type="button" id="cgCopiar" hidden>Copiar todos</button>
+        </div>
+        <p id="cgAviso" style="margin:9px 0 0;font-size:13.5px" hidden></p>
+        <ul id="cgSalida" class="lista" style="margin-top:9px;
+            font-family:ui-monospace,Menlo,monospace;font-size:15px"></ul>
+      </details>
     </div>
   </section>
 </div>
@@ -250,6 +279,37 @@ input{width:100%; font:inherit; font-size:15px; padding:8px 12px; border-radius:
     d.appendChild(acc);
     return d;
   }
+
+  /* -------------------------------------------------------- los códigos */
+  $("cgHacer").addEventListener("click", function(){
+    var clave = $("cgClave").value;
+    if (!clave){ $("cgClave").focus(); decir("cgAviso", "Falta la clave.", true); return; }
+    decir("cgAviso", "Generando…", false);
+    fetch("api/codigos", { method:"POST", headers:{"content-type":"application/json"},
+      body: JSON.stringify({ clave: clave, desde: +$("cgDesde").value || 1,
+                             cuantos: +$("cgCuantos").value || 5 }) })
+      .then(function(r){ return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || ("error " + r.status)); return j; }); })
+      .then(function(j){
+        var u = $("cgSalida"); u.textContent = "";
+        (j.codigos || []).forEach(function(c){
+          var li = nodo("li", null, c); u.appendChild(li);
+        });
+        $("cgCopiar").hidden = !(j.codigos || []).length;
+        decir("cgAviso", (j.codigos || []).length + " listos. Pasáselos de a uno.", false);
+        /* la clave se borra apenas se usa: no queda escrita esperando a que
+           alguien mire el teléfono por encima del hombro */
+        $("cgClave").value = "";
+      })
+      .catch(function(e){ decir("cgAviso", e.message, true); });
+  });
+
+  $("cgCopiar").addEventListener("click", function(){
+    var t = [].map.call($("cgSalida").children, function(li){ return li.textContent; }).join("\n");
+    navigator.clipboard.writeText(t)
+      .then(function(){ decir("cgAviso", "Copiados.", false); })
+      .catch(function(){ decir("cgAviso", "No pude copiar: seleccionalos a mano.", true); });
+  });
 
   if (pase) ver();
 })();

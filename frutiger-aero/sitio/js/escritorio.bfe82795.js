@@ -1158,7 +1158,8 @@ var AM_FONDOS = {
 var AM_MARCOS = { agua:"Agua", oro:"Oro", vidrio:"Vidrio" };
 /* Íconos de verdad y no los aros: tres anillos casi iguales en la columna no
    distinguen una aplicación de otra, que es para lo único que sirve un ícono. */
-var AM_LAMS = { "i-vidrio":"img/zona/ico-temas.webp",
+var AM_LAMS = { "i-orbe":"img/zona/app.webp",
+                "i-vidrio":"img/zona/ico-temas.webp",
                 "i-personaje":"img/zona/ico-perfil.webp",
                 "i-ventana":"img/zona/ico-galeria.webp" };
 
@@ -1274,6 +1275,7 @@ function amVer(cual){
   if (cual === "temas")   return amTemas(p);
   if (cual === "perfil")  return amPerfil(p);
   if (cual === "galeria") return amGaleria(p);
+  if (cual === "tienda")  return amTienda(p);
 }
 
 function amTitulo(p, t, b){
@@ -1469,6 +1471,85 @@ function amGaleria(p){
     r.appendChild(a);
   });
   c.appendChild(r);
+}
+
+/* ------------------------------------------------------------- la tienda
+   Las apps que hace el dueño, gratis para el que colaboró. El catálogo lo manda
+   el servidor: si viviera acá, agregarse una app sería editar un objeto en la
+   consola del navegador. */
+function amTienda(p){
+  amTitulo(p, "Tienda",
+    "Las apps que hago, gratis para vos por haber colaborado. Se bajan de acá y " +
+    "se instalan a mano.");
+
+  if (!AM.tienda || !AM.tienda.length){
+    var v = amCaja(p, null);
+    v.appendChild(document.createTextNode("Todavía no hay nada acá. Pronto."));
+    return;
+  }
+
+  AM.tienda.forEach(function(a){
+    var c = amCaja(p, null);
+    var cab = document.createElement("div");
+    cab.style.cssText = "display:flex;gap:12px;align-items:flex-start";
+    var im = document.createElement("img");
+    im.src = "img/zona/app.webp"; im.alt = ""; im.loading = "lazy";
+    im.style.cssText = "width:56px;height:56px;flex:none";
+    cab.appendChild(im);
+    var t = document.createElement("div"); t.style.flex = "1";
+    var h = document.createElement("h3"); h.style.margin = "0 0 2px";
+    h.textContent = a.nombre;
+    t.appendChild(h);
+    var meta = document.createElement("div");
+    meta.style.cssText = "font-size:12.5px;color:rgba(226,242,255,.75)";
+    meta.textContent = [a.version, a.para, a.peso].filter(Boolean).join("  ·  ");
+    t.appendChild(meta);
+    var q = document.createElement("p");
+    q.style.cssText = "margin:7px 0 0;font-size:14px;line-height:1.55";
+    q.textContent = a.que;
+    t.appendChild(q);
+    cab.appendChild(t);
+    c.appendChild(cab);
+
+    /* Lo que pide y el aviso van ANTES del botón, no escondidos detrás. Quien
+       instala tiene derecho a saber qué le va a pedir sin tener que leerlo
+       recién en la pantalla de Android, cuando ya lo bajó. */
+    if (a.permisos && a.permisos.length){
+      var d = document.createElement("details");
+      d.style.cssText = "margin-top:10px;font-size:13.5px";
+      var r = document.createElement("summary");
+      r.style.cursor = "pointer";
+      r.textContent = "Qué permisos te va a pedir (" + a.permisos.length + ")";
+      d.appendChild(r);
+      var ul = document.createElement("ul");
+      ul.style.cssText = "margin:7px 0 0;padding-left:18px;line-height:1.6";
+      a.permisos.forEach(function(x){
+        var li = document.createElement("li"); li.textContent = x; ul.appendChild(li);
+      });
+      d.appendChild(ul);
+      c.appendChild(d);
+    }
+    if (a.aviso){
+      var av = document.createElement("p");
+      av.style.cssText = "margin:10px 0 0;padding:9px 11px;border-radius:4px;" +
+        "font-size:13px;line-height:1.5;background:rgba(255,210,63,.14);" +
+        "border:1px solid rgba(255,210,63,.4)";
+      av.textContent = a.aviso;
+      c.appendChild(av);
+    }
+
+    var bots = document.createElement("div"); bots.className = "bots";
+    var b = document.createElement("a");
+    b.className = "am-bt";
+    b.style.cssText = "display:inline-block;text-decoration:none;padding:8px 16px";
+    b.textContent = "Bajar " + a.nombre;
+    /* el pase va en la dirección porque un enlace no puede mandar cabeceras;
+       del otro lado hay una función que lo comprueba antes de servir nada */
+    b.href = "apps/" + a.archivo + "?pase=" + encodeURIComponent(AM.pase || "");
+    b.setAttribute("download", a.archivo);
+    bots.appendChild(b);
+    c.appendChild(bots);
+  });
 }
 
 /* Se guarda solo, en cuanto se toca algo. Un botón «Guardar» en una pantalla de
