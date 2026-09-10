@@ -360,6 +360,157 @@ munecas.
   desplaza al orbitar el diorama, que no cuesta una sola llamada de dibujo. Vive partido en
   `herramientas/meko/partes/` y se arma con `python3 herramientas/meko/armar.py`.
 
+### Centésima quincuagésima novena vuelta (2026-09-10): **ARCO** — el 3D se tira entero y el juego pasa a vector plano
+
+Pedido textual, mandado dos veces con dos capturas de Bowmasters: *"hey 3D no, arco es un juego 2D
+procedural con los mismos gráficos que el original"*.
+
+ARCO existía desde la vuelta 152 y estaba hecho con three.js. Ahora es **un lienzo 2D**, sin una
+sola dependencia — no hay CDN que pueda dejarlo sin dibujar. Y **vive partido** en
+`herramientas/arco/partes/` con `python3 herramientas/arco/armar.py`, que es lo que hizo que el
+cambio fuera reemplazar dos archivos y no reescribir el juego.
+
+#### LO QUE **NO** SE TOCÓ, Y ES LA MITAD DEL TRABAJO
+
+`b.js` (constantes y tablas), `c.js` (el mundo de voxels y los doce duelos) y `d.js` (la balística,
+el solver, la auditoría y el auto-jugador) **no tocan ni el DOM ni el lienzo**, así que se
+concatenan y se corren en node. Esa separación es lo que permite afirmar que el port no cambió el
+juego: la auditoría en node devuelve **los mismos números duelo por duelo** que la versión 3D
+—`ok:true, malos:[]`, va de 14,2 a 27,8 y vb de 11,7 a 23,7, en 81 ms— o sea que lo que se
+reemplazó es **cómo se ve** y nada más.
+
+Lo que se rehizo entero es `e.js` (601 líneas de dibujo) y `f.js` (los arqueros), y `a.html` perdió
+el importmap.
+
+#### EL ENCUADRE: EL PISO LO PONE EL ANCHO, Y ESO SE MIDIÓ TRES VECES
+
+El mundo mide quince celdas de ancho y treinta de alto, y el primer encuadre mostraba las quince.
+Medido en un marco 9:16, eso deja **34,2 celdas de alto**: el doble de lo que sube la flecha más
+alta del juego —la del duelo 6, con `ta` 2,06 s, que llega a y ≈ 20,8— así que **el tercio de
+arriba de la pantalla no lo usa nadie nunca** y los arqueros medían 78 px, el 8,7 % del alto.
+
+Y los arqueros están en 2,5 y 13,5: **las dos columnas y media de cada punta tampoco las mira
+nadie.** Con 13,2 celdas de ancho el arquero pasó a 93 px… y en la captura quedaba **pegado al
+canto**: su cuerpo con el carcaj llega a x 1,98 y el borde izquierdo caía en 1,40, o sea dieciocho
+píxeles. En **14,0** el borde cae en 1,00 y quedan veintinueve, con el arquero en 88 px. Verificado
+en vuelo: el ápice de la flecha sigue entrando con holgura.
+
+**Y EL CENTRO ES EL DE LA ARENA, NO EL DEL MUNDO**: el medio entre los dos arqueros es 8 y el del
+mundo 7,5, así que centrando en el mundo el de la derecha quedaba media celda más cerca del canto
+que el de la izquierda.
+
+**LO QUE NO SE PUEDE ARREGLAR, y es honesto decirlo:** los dos arqueros están a once celdas uno del
+otro, así que en un marco vertical el ancho manda y sobra cielo por construcción. La referencia
+—Bowmasters— es apaisada. Lo que se puede hacer es que ese cielo tenga algo, y por eso las nubes se
+dibujan tres veces y hay dos bandas de fondo por bioma.
+
+#### LO QUE SACA AL TERRENO DE PARECER MINECRAFT
+
+El mundo es una reja de celdas y una reja de cuadrados se lee a voxel por muchos colores que tenga.
+Se redondean **sólo las esquinas expuestas** —las que tienen los dos lados al aire— y la unión de
+doscientas celdas sale con silueta continua. **El radio está topado en 0,26 a propósito**: es dibujo
+sobre una física que sigue siendo cuadrada, así que la diferencia entre lo que se ve y lo que choca
+no puede pasar de un cuarto de celda. Más redondo se vería mejor y mentiría donde este juego no
+puede mentir. Más una capa de tapa de 0,30 de otro color, que es lo que separa el pasto de la
+tierra.
+
+**Y HABÍA UN DEFECTO ESCONDIDO DEBAJO DE UN PLACEHOLDER MÍO.** Las tres celdas de extensión de cada
+punta armaban su tapa con `o.cap.rect(...)` y tres líneas más abajo un `o.cap = new Path2D()` la
+borraba: las alas del terreno se habrían dibujado **sin banda de tapa**. Salió al limpiar el
+placeholder, no leyendo el código.
+
+#### LA TIERRA ERA UN RECTÁNGULO MARRÓN, Y SE VIO EN LA FOTO
+
+Las marcas de textura de la tierra, la arena y el pasto estaban detrás de `DET > 1`, o sea sólo en
+calidad alta. Y el terreno de este juego **baja de la plataforma hasta el canto de abajo**: un
+cuarto de la pantalla es ese material. Medido en la captura de la pradera, la banda de abajo salía
+lisa de punta a punta mientras la de piedra —que sí tiene junta— se leía a muro. Van desde media,
+con dos marcas por celda en vez de tres.
+
+#### LOS BRAZOS SON DOS HUESOS, Y LA SUMA PASA APENAS DEL LARGO
+
+Con la suma justa, el codo se estira en línea recta al llegar al límite y el brazo se lee a palo
+**en la pose que más se mira, que es la de apuntar**. Con 0,50 + 0,46 contra un brazo de 0,90 el
+codo siempre dobla. El codo sale de la intersección de dos círculos y el signo decide de qué lado
+se dobla.
+
+El resto del arquero es lo que hace que se lea a Bowmasters y no a maniquí: botas oscuras, carcaj
+girado con tres flechas asomando, torso con peto claro y franja de sombra atrás, cinturón, nariz,
+pelo, la banda oscura de los anteojos con su destello, y el arco como **dos curvas cuadráticas**
+—una recta no es un arco— con la cuerda tirando al punto donde está la flecha encajada. Se dibuja
+de atrás para adelante y el brazo de adelante va último, que es lo único que hace que la mano tape
+el arco y no al revés.
+
+#### CUATRO DEFECTOS DE PANTALLA, Y LOS CUATRO SALIERON DE MIRAR
+
+1. **«¡GANASTE!» SALÍA CORTADO POR EL CANTO DERECHO.** El título sale de `--mw · 0,135` con
+   espaciado de 0,22 em, o sea unos 47 px por letra en un marco de 412: nueve letras piden **455 px
+   de los 379 que tiene la caja**. Y al desbordar un flex con `align-items:center` arrastraba los
+   **tres botones fuera del eje** — en la captura el panel entero estaba corrido a la derecha.
+2. **Y NO SE ARREGLA CON UN NÚMERO MÁS CHICO, porque el largo cambia con el idioma**: «VOCÊ
+   VENCEU!» son doce letras. Se mide y se divide, y una sola pasada alcanza porque el ancho del
+   texto es **lineal** en el cuerpo de la letra (el espaciado va en em). Medido después: ES 41,84 px
+   · PT 31,15 · EN 47,35, los tres adentro.
+3. **MEDIR CONTRA EL PADRE DEVUELVE «ENTRA» SIEMPRE.** `.caja` es un item de grilla, o sea
+   `min-width:auto`, así que **no puede achicarse por debajo de su contenido**: con el título en
+   `nowrap` el padre crece hasta contenerlo y la regla se mueve con la cosa que se quiere medir. Es
+   un lazo. Medido, el padre informaba 419 px de ancho en un marco de 412. Se mide contra el marco.
+4. **Y `pintaFin` CORRE ANTES DE ABRIR EL PANEL**, así que el título estaba en `display:none` y
+   medía cero: el ajuste se rendía y el número no se movía. El ajuste va en `verPanel`, que es el
+   único sitio que sabe que algo se acaba de mostrar. Más un repaso al cambiar de tamaño, porque el
+   cuerpo de letra queda escrito en píxeles y un giro de teléfono lo dejaría con el tamaño del marco
+   anterior.
+
+#### DOS DEFECTOS DE LAS SONDAS, Y LOS DOS DEL TIPO DE SIEMPRE
+
+- **`solapes()` MIRABA SÓLO LOS DIEZ ELEMENTOS DEL HUD**, así que informaba `fuera: []` con el
+  título cortado adentro de un panel: **una prueba que sólo mira el HUD no puede ver eso**. Ahora
+  recorre además los textos y botones del panel abierto —por borde, no de a pares: una columna con
+  hueco no se puede pisar sola, y el `gDue` son cuarenta y ocho casillas de una reja— y **detecta el
+  defecto**: revirtiendo el arreglo devuelve `fuera: ["fTit@pFin"]`.
+- **`duelo(n)` ACEPTABA CUALQUIER NÚMERO Y NO FALLABA: MENTÍA.** `armaMundo` hace
+  `DUELO[n % largo]`, así que pedir el 12 devolvía el 0 con el rótulo diciendo DUELO 13. Recortado,
+  la sonda mide el duelo que dice medir.
+
+#### EL AUTO-JUGADOR, SOBRE 480 PARTIDAS POR FILA
+
+Con doce duelos y una semilla, un 5 de 12 no dice nada. Con **cuarenta semillas por duelo**:
+
+| precisión del bot | gana |
+|---|---|
+| 1,00 | **76,3 %** |
+| 0,95 | 64,8 |
+| 0,88 | 54,6 |
+| 0,75 | 48,8 |
+| 0,55 | 39,0 |
+| 0,30 | 27,7 |
+| **al azar** | **3,3 %** |
+
+La curva es monótona —apuntar mejor gana más— y el que tira a ciegas gana el 3,3 %: eso es la
+prueba de que hay una decisión adentro. Y que el bot perfecto se quede en 76 % es correcto: la
+precisión del rival sube de 0,26 a 0,92 a lo largo de los doce, así que los últimos son difíciles
+jugados perfecto.
+
+#### LAS TRES CALIDADES CAMBIAN LO QUE CUESTA Y NO LO QUE EL JUEGO ES
+
+En un lienzo 2D lo único que siempre se paga es **rellenar píxeles**, así que la palanca de verdad
+es cuántos píxeles tiene el lienzo y no una lista de efectos que apagar. `det` es cuánta marca de
+textura, de brizna y de partícula se dibuja. Medido con `devicePixelRatio` en 3, que es lo que hay
+en un teléfono: **412×892 · 577×1249 · 824×1784**, o sea 1× · 1,96× · 4× de relleno, con las
+llamadas de dibujo en 75 · 79 · 79 — las llamadas casi no se mueven porque `det` agrega segmentos a
+un trazo que ya existe, no trazos nuevos.
+
+#### MEDIDO AL CERRAR
+
+Auditoría en node **12 de 12, 0 malos** en 81 ms, con los mismos números que la versión 3D.
+Auditoría del tutorial `ok: true` (v 15,2 · ángulo 46,5 · libre · viento 2,4). **La inversa de la
+proyección es exacta**: `lineal()` da `peor: 0` en los cuatro casos, o sea que dibujar y apuntar son
+la misma cuenta por construcción. Partida completa jugada en el navegador —el duelo 5 ganado 54 a
+−18 con 5 aciertos de 9 flechas, el panel de final abriéndose solo y el progreso guardado—. **Cero
+solapamientos y cero elementos fuera del marco** en el menú, la lista de duelos, los ajustes, la
+pausa, la partida y el final, en los tres idiomas. Costo **75 a 79 llamadas de dibujo**.
+`window.__errs` **vacío en las seis corridas**. El HTML quedó en **137 KB**, sin un solo asset.
+
 ### Centésima quincuagésima octava vuelta (2026-09-10): **MEKO** — cielo, texturas, saturación y un tutorial que se entra sin pedirlo
 
 Pedido textual, con una captura de Bowmasters: *"agrega mejores gráficos saturados cielo texturas a
