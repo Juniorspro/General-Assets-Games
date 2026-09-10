@@ -3,7 +3,7 @@
 
    Cinco cosas, en este orden:
      1. la sesión (invitado o Google)
-     2. las ventanas, la barra de tareas y el menú de inicio
+     2. las ventanas, el menú de inicio y la barra de abajo
      3. el panel de control, que retiñe el vidrio de verdad
      4. buscaminas, el bloc y el reproductor
      5. los adornos: reloj y burbujas
@@ -396,34 +396,34 @@ if (usuario){
   document.body.classList.add("sinsesion");
 }
 
-/* ================================================= 2 · ventanas y tareas */
-var abajo = $("tareas");
+/* ================================================= 2 · las ventanas
+   LA CRUZ CIERRA. Antes minimizaba: la ventana se iba a una fila de botones
+   abajo, y esa fila se llenaba de cosas que nadie iba a volver a abrir. Cerrar
+   y minimizar hacían exactamente lo mismo, así que había dos botones para una
+   sola acción y ninguno hacía lo que decía.
 
-function guardarVentana(id){
-  var v = $(id); if (!v || v.hidden) return;
-  var nombre = v.querySelector(".titulo .txt").textContent;
+   Se puede cerrar todo sin quedar encerrado: cada ventana tiene de dónde volver
+   a abrirse —las aplicaciones desde el menú de inicio, el muro, los avisos y el
+   perfil desde la barra de arriba, las secciones desde el menú de «Frutiger
+   Aero», y la zona de donantes desde su ícono del escritorio— así que no hace
+   falta guardarlas en ningún lado por las dudas. */
+function cerrarVentana(id){
+  var v = $(id); if (!v) return;
   v.hidden = true;
-  var b = document.createElement("button");
-  b.className = "tarea"; b.type = "button"; b.textContent = nombre;
-  b.dataset.para = id;
-  b.addEventListener("click", function(){ abrir(id); });
-  abajo.appendChild(b);
 }
 
 function abrir(id){
   var v = $(id); if (!v) return;
   v.hidden = false;
-  var t = abajo.querySelector('[data-para="'+id+'"]');
-  if (t) t.remove();
   cerrarInicio();
   v.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"start" });
 }
 
 document.addEventListener("click", function(e){
-  var b = e.target.closest("[data-cerrar],[data-min],[data-abrir]");
+  var b = e.target.closest("[data-cerrar],[data-abrir]");
   if (!b) return;
   if (b.dataset.abrir) { abrir(b.dataset.abrir); return; }
-  guardarVentana(b.dataset.cerrar || b.dataset.min);
+  cerrarVentana(b.dataset.cerrar);
 });
 
 /* --- menú de inicio --- */

@@ -86,8 +86,6 @@ function pintarBarra(){
 function abrirVentana(id){
   var v = $(id); if (!v) return;
   v.hidden = false;
-  var t = document.querySelector('#tareas [data-para="'+id+'"]');
-  if (t) t.remove();
   v.scrollIntoView({ behavior:"smooth", block:"start" });
 }
 
@@ -646,26 +644,14 @@ document.addEventListener("click", function(e){
       .catch(function(){});
   }
 
-  var va = e.target.closest("#cajon [data-va]");
-  if (va){
-    $("cajon").hidden = true;
-    var d = va.dataset.va;
-    if (d === "muro"){ abrirVentana("v-muro"); cargarMuro(); }
-    if (d === "perfil") verPerfil();
-    if (d === "publicar") formularioPublicar();
-    if (d === "salir"){ caja.sacar("sesion"); location.reload(); }
-    return;
-  }
-  var ab = e.target.closest("#cajon [data-abrir]");
-  if (ab){ $("cajon").hidden = true; abrirVentana(ab.dataset.abrir); }
 });
 
-$("bsMenu").addEventListener("click", function(){
-  var c = $("cajon"); c.hidden = !c.hidden;
-  this.setAttribute("aria-expanded", String(!c.hidden));
-});
-$("cajon").addEventListener("click", function(e){ if (e.target === this) this.hidden = true; });
-document.addEventListener("keydown", function(e){ if (e.key === "Escape") $("cajon").hidden = true; });
+/* Acá había un cajón lateral con las tres rayitas, y no mostraba NADA que no
+   estuviera ya a un toque de distancia: el muro, los avisos y el perfil son
+   botones de esta misma barra; las aplicaciones están en el menú de inicio;
+   publicar tiene su botón adentro del muro; y cerrar sesión está en el menú de
+   inicio. Eran dos menús mostrando la misma lista, y el de abajo encima estaba
+   escondido detrás de un ícono que hay que adivinar. */
 $("bsMuro").addEventListener("click", function(){ abrirVentana("v-muro"); cargarMuro(); });
 $("bsPerfil").addEventListener("click", function(){ verPerfil(); });
 $("bsAjustes").addEventListener("click", function(){ abrirVentana("v-control"); });
