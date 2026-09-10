@@ -777,3 +777,83 @@ button{font:inherit}
   .am-apps span{display:none}
   .am-panel{padding:14px 12px 30px}
 }
+
+/* ================================================= el escritorio en el teléfono
+   En una pantalla grande el escritorio arranca con las ventanas abiertas y se
+   lee como un escritorio. En un teléfono eso mismo es una tira de nueve cosas
+   apiladas que hay que scrollear: no se parece a un escritorio, se parece a una
+   página larga. Así que en el teléfono arranca como arranca un teléfono —fondo,
+   grilla de íconos y un muelle abajo— y las ventanas se abren encima. */
+@media (max-width:720px){
+  .iconos{grid-template-columns:repeat(4,1fr); gap:2px 0; padding:10px 8px 0}
+  .iconos button{width:auto; padding:9px 2px 8px; font-size:11.5px; line-height:1.25}
+  .iconos .lam{width:44px; height:44px}
+
+  /* la ventana abierta tapa la pantalla, como una aplicación de teléfono, en
+     vez de empujar a las de abajo */
+  #escritorio .ventana:not([hidden]){
+    position:fixed; left:0; right:0; top:0; z-index:90;
+    bottom:calc(56px + env(safe-area-inset-bottom,0px));
+    margin:0; border-radius:0; display:flex; flex-direction:column}
+  #escritorio .ventana:not([hidden]) > .cuerpo{flex:1; min-height:0; overflow:auto}
+  #escritorio .ventana.pegajosa{position:fixed}
+  /* el muelle deja lugar arriba de la barra de tareas */
+  .tareas{padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+}
+
+/* ------------------------------------------------------------- el muelle */
+.muelle{position:fixed; left:0; right:0; z-index:85; display:none;
+  justify-content:center; gap:10px; padding:7px 12px;
+  bottom:calc(56px + env(safe-area-inset-bottom,0px))}
+.muelle button{position:relative; width:52px; height:46px; flex:none; padding:0;
+  cursor:pointer; border-radius:7px; border:1px solid rgba(255,255,255,.5);
+  background:linear-gradient(180deg, rgba(233,246,255,.9) 45%, rgba(176,214,242,.82) 45%,
+                                     rgba(139,190,229,.8));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 4px 12px rgba(0,25,60,.45);
+  backdrop-filter:blur(10px) saturate(160%); -webkit-backdrop-filter:blur(10px) saturate(160%)}
+.muelle button:active{transform:translateY(1px)}
+.muelle svg{width:26px; height:26px}
+.muelle b{position:absolute; top:-4px; right:-4px; min-width:17px; height:17px;
+  border-radius:999px; font-size:10.5px; line-height:17px; color:#fff; font-weight:700;
+  background:linear-gradient(180deg,#ff6a5a,#d0241a); border:1px solid #fff;
+  box-shadow:0 1px 3px rgba(0,20,50,.5)}
+@media (max-width:720px){ .muelle:not([hidden]){display:flex} }
+
+/* ------------------------------------------ los avisos, cada uno su ventana
+   Un aviso que aparece y se va solo es un aviso que alguien se pierde. Acá se
+   quedan hasta que los cierres, y cerrarlos es lo que los marca leídos: el
+   gesto de sacarlo de la pantalla y el de darlo por visto son el mismo. */
+#avisitos{position:fixed; right:12px; z-index:110; display:grid; gap:8px;
+  width:min(320px, calc(100vw - 24px)); pointer-events:none;
+  bottom:calc(62px + env(safe-area-inset-bottom,0px))}
+@media (max-width:720px){
+  #avisitos{left:12px; right:12px; width:auto;
+    bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+}
+.avisito{pointer-events:auto; border-radius:6px; overflow:hidden;
+  border:1px solid rgba(255,255,255,.55);
+  box-shadow:0 10px 30px -8px rgba(0,20,50,.75), inset 0 1px 0 rgba(255,255,255,.7);
+  animation:avisoEntra .32s cubic-bezier(.2,.9,.3,1.2) both}
+@media (prefers-reduced-motion:reduce){ .avisito{animation:none} }
+@keyframes avisoEntra{ from{opacity:0; transform:translateY(14px) scale(.97)} }
+.avisito.yendo{animation:avisoSale .22s ease forwards}
+@keyframes avisoSale{ to{opacity:0; transform:translateX(18px) scale(.98)} }
+.avisito .titulo{display:flex; align-items:center; gap:8px; padding:5px 6px 5px 9px;
+  font-size:12.5px; font-weight:600; color:#0d2b44;
+  background:linear-gradient(180deg, rgba(255,255,255,.92) 45%, rgba(206,232,250,.9) 45%,
+                                     rgba(168,208,238,.92))}
+.avisito .titulo .bola{width:11px; height:11px; border-radius:50%; flex:none;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.8)}
+.avisito .titulo .x{margin-left:auto; width:22px; height:19px; flex:none; padding:0;
+  cursor:pointer; border-radius:3px; color:#3a1a14; border:1px solid #c98b80;
+  background:linear-gradient(180deg,#ffd9d2 45%,#f08b78 45%,#d6432a);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.avisito .titulo .x svg{width:9px; height:9px; display:block; margin:0 auto}
+.avisito .cuerpo3{padding:10px 11px; font-size:13.5px; line-height:1.5; color:#122c44;
+  background:linear-gradient(180deg,#fbfdff,#eef6fc)}
+.avisito .cuerpo3 time{display:block; margin-top:4px; font-size:11.5px; color:#5b7690}
+
+/* Un ícono oculto seguía ocupando su casillero: el `hidden` está en el botón y
+   quien hace de casillero es el <li> de alrededor, así que la grilla dejaba un
+   hueco en el medio —se veía como si faltara algo—. Se oculta el casillero. */
+.iconos li:has(> button[hidden]){display:none}

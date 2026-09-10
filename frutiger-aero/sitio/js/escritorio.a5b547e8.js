@@ -48,6 +48,7 @@ function entrar(u){
     b.hidden = true;
     document.body.classList.remove("sinsesion");
     $("escritorio").hidden = false;
+    arrancarCelu();
     pintarUsuario();
     quizasColaborar();
     document.dispatchEvent(new CustomEvent("hay-sesion"));
@@ -391,6 +392,7 @@ if (usuario){
   $("logon").hidden = true;
   document.body.classList.remove("sinsesion");
   $("escritorio").hidden = false;
+  arrancarCelu();
   pintarUsuario();
 } else {
   document.body.classList.add("sinsesion");
@@ -1494,5 +1496,91 @@ if ($("am-salir")) $("am-salir").addEventListener("click", amCerrar);
 document.addEventListener("keydown", function(e){
   if (e.key === "Escape" && !$("aeromas").hidden) amCerrar();
 });
+
+
+/* ============================================ 6 · el escritorio en el teléfono
+   En una pantalla grande el escritorio arranca con las ventanas abiertas y se
+   lee como un escritorio. En un teléfono eso mismo es una tira de nueve cosas
+   apiladas: no se parece a un escritorio, se parece a una página larga. Así que
+   en el teléfono arranca como arranca un teléfono —fondo, grilla de íconos y un
+   muelle abajo— y cada ventana se abre encima, entera, y se cierra.
+
+   Se decide UNA vez al cargar y no se escucha el cambio de tamaño: si alguien
+   gira el teléfono a mitad de camino, cerrarle de golpe lo que estaba leyendo
+   sería peor que dejarlo como está. */
+/* Se pregunta ADENTRO y no en una variable de arriba: una de las dos entradas
+   al escritorio —la de quien ya tenía sesión guardada— corre antes de que esta
+   parte del archivo se haya ejecutado, así que una variable declarada acá
+   todavía valdría `undefined` y el teléfono se quedaría sin su pantalla de
+   inicio. Sin error en la consola, además: simplemente no pasaba. */
+function arrancarCelu(){
+  if (!matchMedia("(max-width:720px)").matches) return;
+  $$("#escritorio .ventana").forEach(function(v){ v.hidden = true; });
+  $("muelle").hidden = false;
+}
+
+/* el muelle: los cuatro de todos los días, a un toque y donde está el pulgar */
+if ($("muelle")) $("muelle").addEventListener("click", function(e){
+  var b = e.target.closest("[data-muelle]"); if (!b) return;
+  /* lo social vive en el otro archivo: se le avisa en vez de duplicarlo acá */
+  document.dispatchEvent(new CustomEvent("ir-a", { detail: b.dataset.muelle }));
+});
+
+/* ------------------------------------------ los avisos, cada uno su ventana
+   Antes eran un puntito rojo en la barra: había que darse cuenta, tocarlo y
+   leer una lista. Ahora cada aviso llega como una ventanita, con su barra de
+   título y su cruz, y se van cerrando de a una. Cerrar es lo que lo marca
+   leído: sacarlo de la pantalla y darlo por visto son el mismo gesto, así que
+   no hacen falta dos. */
+var avisosVistos = {};
+
+function colorDeAviso(t){
+  return t === "bueno" ? "radial-gradient(circle at 32% 26%,#e8ffd9,#7cc242 45%,#3f7a17)"
+       : t === "malo"  ? "radial-gradient(circle at 32% 26%,#ffdcd4,#e0402a 45%,#9a1e0c)"
+       :                 "radial-gradient(circle at 32% 26%,#dff6ff,#57b8e8 45%,#1a6ea8)";
+}
+
+function mostrarAvisito(a, cerrarlo){
+  if (avisosVistos[a.id]) return;
+  avisosVistos[a.id] = 1;
+
+  var v = document.createElement("div"); v.className = "avisito";
+  var t = document.createElement("div"); t.className = "titulo";
+  var b = document.createElement("span"); b.className = "bola";
+  b.style.background = colorDeAviso(a.tipo);
+  var n = document.createElement("span");
+  n.textContent = a.tipo === "bueno" ? "Buenas noticias"
+                : a.tipo === "malo"  ? "Atención" : "Aviso";
+  var x = document.createElement("button");
+  x.type = "button"; x.className = "x"; x.setAttribute("aria-label", "Cerrar aviso");
+  x.innerHTML = '<svg viewBox="0 0 11 11" aria-hidden="true"><path d="M2 2l7 7M9 2l-7 7"' +
+                ' stroke="currentColor" stroke-width="1.8" fill="none"/></svg>';
+  t.appendChild(b); t.appendChild(n); t.appendChild(x);
+
+  var c = document.createElement("div"); c.className = "cuerpo3";
+  c.appendChild(document.createTextNode(a.texto));
+  var h = document.createElement("time"); h.textContent = cuandoCorto(a.creado);
+  c.appendChild(h);
+
+  v.appendChild(t); v.appendChild(c);
+  $("avisitos").appendChild(v);
+
+  x.addEventListener("click", function(){
+    v.classList.add("yendo");
+    setTimeout(function(){ v.remove(); }, quieto ? 0 : 220);
+    cerrarlo(a.id);
+  });
+}
+
+/* lo usa el otro archivo, que es el que sabe cuándo llegó un aviso */
+window.mostrarAvisito = mostrarAvisito;
+
+function cuandoCorto(ms){
+  var d = Math.floor((Date.now() - ms) / 60000);
+  if (d < 1) return "recién";
+  if (d < 60) return "hace " + d + " min";
+  if (d < 1440) return "hace " + Math.floor(d / 60) + " h";
+  return "hace " + Math.floor(d / 1440) + " días";
+}
 
 })();

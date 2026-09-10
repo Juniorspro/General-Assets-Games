@@ -643,6 +643,22 @@ function mirarAvisos(){
     var n = j.sinLeer || 0;
     $("bsPunto").hidden = !n;
     $("bsPunto").textContent = n > 9 ? "9+" : String(n);
+    var mp = $("muellePunto");
+    if (mp){ mp.hidden = !n; mp.textContent = n > 9 ? "9+" : String(n); }
+
+    /* Cada aviso sin leer sale como su propia ventanita, que se cierra sola y
+       al cerrarse queda leído. Antes había que darse cuenta del puntito rojo,
+       tocarlo y leer una lista: tres pasos para enterarte de que te habían
+       aprobado el acceso. Se muestran de a tres para no tapar la pantalla; las
+       que quedan aparecen cuando cerrás alguna. */
+    var pendientes = (j.avisos || []).filter(function(a){ return !a.leido; }).reverse();
+    var lugar = 3 - document.querySelectorAll("#avisitos .avisito").length;
+    pendientes.slice(0, Math.max(0, lugar)).forEach(function(a){
+      mostrarAvisito(a, function(id){
+        pedir("avisos", { method:"POST", body: JSON.stringify({ id: id }) })
+          .then(mirarAvisos).catch(function(){});
+      });
+    });
     /* si le acaban de habilitar el acceso, que se note ya, sin recargar */
     if (n) pedir("cuenta").then(function(k){
       if (k.pase) document.dispatchEvent(new CustomEvent("hay-pase-de-cuenta", {detail:k.pase}));
@@ -702,6 +718,16 @@ document.addEventListener("click", function(e){
    publicar tiene su botón adentro del muro; y cerrar sesión está en el menú de
    inicio. Eran dos menús mostrando la misma lista, y el de abajo encima estaba
    escondido detrás de un ícono que hay que adivinar. */
+/* El muelle del teléfono vive en el otro archivo, que es el del escritorio, y
+   le avisa a este en vez de repetir lo que ya está escrito acá. */
+document.addEventListener("ir-a", function(e){
+  var d = e.detail;
+  if (d === "muro"){ abrirVentana("v-muro"); cargarMuro(); }
+  if (d === "avisos") verAvisos();
+  if (d === "perfil") verPerfil();
+  if (d === "publicar") formularioPublicar();
+});
+
 $("bsMuro").addEventListener("click", function(){ abrirVentana("v-muro"); cargarMuro(); });
 $("bsPerfil").addEventListener("click", function(){ verPerfil(); });
 $("bsAjustes").addEventListener("click", function(){ abrirVentana("v-control"); });
@@ -736,7 +762,11 @@ function arrancar(){
       if (j.pase) document.dispatchEvent(new CustomEvent("hay-pase-de-cuenta", {detail: j.pase}));
     }).catch(function(){ sesion = null; caja.sacar("sesion"); pintarBarra(); });
   }
-  abrirVentana("v-muro");
+  /* En una pantalla grande el muro abre solo: es lo que uno viene a mirar y el
+     escritorio tiene lugar de sobra. En el teléfono NO, porque taparía la
+     pantalla de inicio apenas entrás y no habrías visto nunca el escritorio.
+     Está a un toque en el muelle. */
+  if (!matchMedia("(max-width:720px)").matches) abrirVentana("v-muro");
   cargarMuro();
 }
 })();
