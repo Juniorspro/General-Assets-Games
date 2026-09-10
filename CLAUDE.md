@@ -360,6 +360,169 @@ munecas.
   desplaza al orbitar el diorama, que no cuesta una sola llamada de dibujo. Vive partido en
   `herramientas/meko/partes/` y se arma con `python3 herramientas/meko/armar.py`.
 
+- **`Flechas.html` es "FLECHAS"** (~90 KB, **sin un solo asset y sin una sola dependencia**: no baja
+  ni three.js — es un lienzo 2D, y hasta el sonido es procedural). El decimonoveno juego, del género
+  de *Arrows – Puzzle Escape*. Un tablero blanco lleno de flechas negras dibujadas como trazos
+  quebrados —en L, en U, en S— cada una terminada en punta. Se toca una y **sale por donde apunta**:
+  eso es todo el verbo. **El teorema del juego es que una flecha se desliza SOBRE SU PROPIO TRAZO**,
+  así que las únicas celdas nuevas que ocupa son las del **rayo que va de su punta al borde** — o
+  sea que *una flecha puede salir si y sólo si su rayo está libre*. Esa cuenta vive en **una**
+  función, `puedeSalir`, y la usan el dibujo, la regla, el generador y el validador. **Y el corolario
+  ordena el juego entero**: sacar una pieza sólo puede LIBERAR rayos, nunca taparlos, así que el
+  conjunto de legales sólo crece y **el orden no importa nunca** — no hay forma de trabar el tablero,
+  y por eso no hay deshacer. Lo que cuesta es equivocarse, y eso lo cobran los **tres corazones**.
+  **6 mundos × 20 niveles = 120**, procedurales con semilla y auditados uno por uno. Vive partido en
+  `herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
+
+### Centésima sexagésima segunda vuelta (2026-09-10): **FLECHAS**, el decimonoveno juego — un teorema de una línea, y cuatro defectos que sólo salieron midiendo
+
+Pedido, con la captura de la ficha de Google Play de *Arrows – Puzzle Escape* (Lessmore GmbH) y dos
+mensajes seguidos: *"ahora este juego"* y *"ahora este juego 100% completo con tutorial apenas
+empieza"*.
+
+`juegos-pc/Flechas.html` (90 KB, **sin un solo asset y sin una sola dependencia**). Vive partido en
+`herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
+
+#### TODO EL JUEGO SALE DE UNA OBSERVACIÓN, Y ES LO QUE PERMITE AUDITARLO
+
+Una flecha no vuela: **se desliza sobre su propio trazo**. O sea que las únicas celdas nuevas que
+ocupa al salir son las del **rayo que va de su punta hasta el borde**, y de ahí:
+
+> **una flecha puede salir si y sólo si su rayo está libre.**
+
+Eso es `puedeSalir`, y la llaman **cuatro** cosas: el dibujo —que apaga las que no se pueden—, el
+toque del dedo, el generador y el validador. Con dos cuentas, el validador estaría aprobando un juego
+que no existe; con una, «este nivel se puede terminar» es una afirmación sobre el juego que se juega.
+
+**Y EL COROLARIO ES LO QUE ORDENA EL DISEÑO ENTERO.** Sacar una pieza sólo puede **liberar** rayos
+—nunca taparlos— así que el conjunto de jugadas legales **sólo crece**: el tablero no se puede trabar
+y **el orden no importa**. Medido: **960 corridas codiciosas de 960 terminaron**, y `maxNodos: 19`
+—o sea el número de piezas— quiere decir que el solucionador **nunca tuvo que retroceder ni una vez**.
+
+De eso se siguen dos decisiones que si no serían arbitrarias:
+- **No hay deshacer, y no es un olvido.** Un botón de deshacer acá no arreglaría nada y estaría
+  diciendo que el juego se puede arruinar.
+- **Este juego es de LEER, no de ORDENAR.** Lo que hay que medir no es cuántos caminos hay sino
+  **cuánto cuesta ver cuál flecha está libre**, y por eso las dos métricas del generador son
+  `pAcierto` —qué fracción de las piezas son legales en un instante cualquiera— y `fallosAzar` —cuántos
+  errores comete alguien que toca al azar—. Los tres corazones existen para castigar no leer.
+
+#### LOS SEIS MUNDOS SON UNA CURVA MEDIDA, NO SEIS TAMAÑOS
+
+| mundo | piezas | pAcierto | fallos del que toca al azar |
+|---|---|---|---|
+| 1 · PAPEL | 5,0 | **0,610** | 4,6 |
+| 2 · TINTA | 7,9 | 0,474 | 12,4 |
+| 3 · CABLE | 10,2 | 0,426 | 19,2 |
+| 4 · NUDO | 11,7 | 0,399 | 21,0 |
+| 5 · TELAR | 13,3 | 0,384 | 25,7 |
+| 6 · SALIDA | 15,9 | **0,356** | **35,1** |
+
+Monótona en las dos columnas: cada mundo esconde más y cada mundo castiga más el toque a ciegas.
+
+#### CUATRO DEFECTOS PROPIOS, Y DOS ERAN DE LA MEDICIÓN
+
+1. **LA VENTANA DE ENTRADA CON CERO CORAZONES.** Al perder el último, el nivel se rehace con un
+   temporizador; en ese rato `JU.fase` seguía en `'juega'`, así que el dedo seguía entrando y se podía
+   tocar un tablero que ya estaba muerto.
+2. **EL SUBTÍTULO CONTRADECÍA EL TEOREMA.** Decía algo sobre el orden, y el orden **no importa** —
+   está demostrado arriba—. Un juego que le enseña al jugador una regla falsa en la primera pantalla
+   es peor que uno sin subtítulo. Ahora dice *«sacá todas las flechas · mirá lo que cada una tiene
+   delante»*, que es literalmente la cuenta.
+3. **`MUNDOS[].nom` ESTABA VIVO Y NO LO LEÍA NADIE.** Los seis nombres se dibujaban desde la tabla de
+   idiomas, así que el campo era una segunda lista que el día que alguien tocara se iba a
+   desincronizar sin fallar.
+4. **Y LA MEDICIÓN DEL AUDIO ESTABA MAL ANTES QUE LA MEZCLA.** La ventana del analizador son
+   **42,7 ms** (`fftSize` 2048) y un efecto dura entre 200 y 700: **una sola lectura cae donde caiga y
+   lo que devuelve es la cama**. Medido así, `sale` —el acto central del juego, uno por flecha— daba
+   **0,94 veces el fondo**, o sea que sonaba más flojo que el silencio. Entró `sonMide(k, ms)`, que
+   **barre el clip entero** muestreando cada 16 ms y se queda con el pico, **y mide el fondo antes con
+   la misma regla** — comparando contra un número sacado de otra ventana la comparación no significa
+   nada.
+   Con la medición honesta apareció la mezcla de verdad: **ocho senos de la cama que se refuerzan
+   entre sí** sumaban 0,436 contra efectos que picaban en 0,16. La cama bajó a un tercio y los efectos
+   subieron.
+   **Y `sale` SEGUÍA EN 1,28 DESPUÉS DE SUBIRLE EL PICO**: su pasabanda tenía Q 1,3, y un pasabanda
+   estrecho sobre ruido blanco **se come casi toda la energía** — es el mismo defecto que en POMPOM
+   dejaba el sonido de reventar doce veces por debajo. Con Q 0,8 pasó a 1,68.
+
+   Escala final, medida barriendo el clip entero, con el fondo por la misma regla:
+
+   | | ui | mal | sale | vida | gana | **perf** |
+   |---|---|---|---|---|---|---|
+   | veces el fondo | 1,10 | 1,86 | 2,15 | 2,34 | 2,87 | **3,37** |
+
+   El más fuerte es terminar un nivel sin un solo error, que es lo que corresponde, y ningún pico pasa
+   de 0,27.
+
+#### EL DEFECTO DE LA SONDA QUE INFORMABA VICTORIAS QUE NO OCURRIERON
+
+El más caro de la vuelta y es del tipo de siempre. `juega()` devolvía `hecho`, que **lee el progreso
+guardado**: después de una tanda del bot honesto los 120 niveles quedaban marcados, así que la tanda
+siguiente —la del que toca al azar— informaba **20 de 20 en los seis mundos con ochenta derrotas
+adentro**. Estaba leyendo las victorias de la corrida anterior.
+
+Ganar es **terminar el tablero sin que el nivel se te reinicie**, o sea sin quedarse sin corazones ni
+una vez: `gano: perdidas === 0 && quedan === 0`. Y las tandas se corren con el azar **primero**.
+Medido después, con el disco limpio entre las dos:
+
+| | gana de 120 | derrotas | fallos |
+|---|---|---|---|
+| honesto | **120** | 0 | **0** |
+| al azar | **17** | 382 | 317 |
+
+#### EL PANEL DE FIN NO SE TRADUCÍA, Y NO SE ARREGLA CAMPO POR CAMPO
+
+Medido barriendo sus botones en los tres idiomas: `SIGUIENTE` salía igual en castellano, inglés y
+portugués — y con él el título, el subtítulo y la ficha de contadores. La clave existía en las tres
+tablas y `gana()` la escribía; lo que faltaba es que **cambiar de idioma repinte un panel que ya está
+en pantalla**. Es el mismo defecto que en Z Force costó 107 claves.
+
+**Y REPINTARLO CAMPO POR CAMPO DESDE `pintaIdioma()` NO ALCANZA**, por tres razones concretas: habría
+que adivinar si la victoria fue perfecta, cuántas piezas tenía el tablero y cuántos toques costó; el
+botón lleva **dos rótulos distintos** —JUGAR al terminar el tutorial y SIGUIENTE al ganar un nivel—; y
+**en el último nivel del juego está apagado a propósito**, así que escribirle un texto lo resucitaría.
+Lo que se guarda es **el estado** (`FIN`) y lo pinta **una** función (`pintaFin`), que llaman `gana()`
+y `pintaIdioma()`: no pueden decir cosas distintas.
+
+Medido después, los seis textos del panel: `¡PERFECTO! · sin un solo error · 9 flechas · 9 toques ·
+SIGUIENTE · REINICIAR · MENÚ` contra `PERFECT! · not a single mistake · 9 arrows · 9 taps · NEXT ·
+RESTART · MENU` y `PERFEITO! · sem um único erro · 9 setas · 9 toques · PRÓXIMO · REINICIAR · MENU`.
+En el tutorial el mismo botón dice **JUGAR · PLAY · JOGAR**, y en el nivel 120 sigue en
+**`display:none` en los tres idiomas**. Cambiar de idioma **antes de haber ganado nunca** —o sea con
+`FIN` en null— da cero errores.
+
+#### EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO
+
+Pedido textual: *«con tutorial apenas empieza»*. Se entra ahí **antes que al menú**, apenas hay
+idioma. Y la marca **no sobrevive a una recarga**: se pone en cero **después** de leer el disco, así
+que sigue valiendo dentro de la sesión —hecho una vez, no vuelve a dispararse entre nivel y nivel— y
+es **el único dato del guardado que se descarta a propósito**. Es la misma decisión de la vuelta 161.
+Sus tres pasos esperan cada uno a que se haga la cosa.
+
+#### DOS COSAS DE MAQUETACIÓN QUE SÓLO SE VEN MIRANDO
+
+- **Las seis pestañas de mundo no entraban.** Con `flex:1 1 0` y `min-width:0` entran en **412, 430 y
+  360 px de ancho**, en los tres idiomas, con `entra:true` y ninguna con el texto cortado.
+- **Y `SALIR AL MENÚ` partía el botón en dos renglones.** En el panel de fin los tres botones van en
+  fila y sus vecinos entran en uno solo; en la pausa van apilados y ahí la etiqueta larga entra. Entró
+  `menuCorto`. Medido: **46 · 50 · 50 px de alto** en los tres idiomas, o sea una línea cada uno.
+
+#### MEDIDO AL CERRAR
+
+Auditoría en node —`b.js`+`c.js`+`g.js` no tocan el DOM, así que se concatenan y se importan—:
+**120 niveles, `malos: []`, 470 ms, `maxNodos: 19`**. Auto-jugadores **120 de 120 contra 17 de 120**.
+Partida completa por el camino del dedo: idioma → tutorial → *¡ESO ES TODO!* → nivel 1-1 →
+*¡PERFECTO!* → SIGUIENTE → nivel 1-2 → pausa → menú → lista de niveles → ajustes. **Cero
+solapamientos** de HUD (`choques: []`, `fuera: []`) y **los seis paneles sin cortar** en 412, 430 y
+360, en los tres idiomas. Audio con `perf` a 3,37 veces el fondo. `window.__errs` **vacío en las once
+corridas**.
+
+**LO QUE NO ESTÁ RESUELTO, Y ES HONESTO DECIRLO:** el juego no tiene una sola imagen generada — el
+trazo, la punta, los corazones y la reja se dibujan por código, que es lo correcto para un juego de
+tinta sobre papel, pero el **nombre del menú es tipografía del sistema**, así que cambia de forma
+según el aparato. Se arregla generando el cartel como imagen, y es otra vuelta.
+
 ### Centésima sexagésima primera vuelta (2026-09-10): **ARCO · MEKO · DUNA** — el arco estaba dado vuelta, y el tutorial pasa a verse cada vez
 
 Pedido textual: *"Los arcos no están bien posicionados, arregla eso. También dame los últimos tres

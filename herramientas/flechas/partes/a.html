@@ -1,0 +1,254 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#e9e4d8">
+<title>FLECHAS</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   A · MARCO, PIEL Y PANTALLAS
+   Vertical NATIVO: el tablero es mas alto que ancho en los seis mundos, asi
+   que el telefono como uno lo agarra ES el formato del juego. Nada que girar.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --papel:#f4f1ea; --papel2:#e9e4d8; --tinta:#181614; --tinta2:#4a453d;
+  --acento:#c8452f; --ok:#2f7d4f; --mw:412px; --mh:892px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#100f0d;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+#marco{position:fixed;inset:0;display:flex;flex-direction:column;
+  background:radial-gradient(120% 90% at 50% 0%,var(--papel) 0%,var(--papel2) 70%,#ded7c7 100%);
+  color:var(--tinta);overflow:hidden}
+
+/* el grano del papel: dos degradados repetidos, cero bytes de imagen */
+#marco::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,.022) 0 1px,transparent 1px 3px),
+    repeating-linear-gradient(90deg,rgba(0,0,0,.016) 0 1px,transparent 1px 4px)}
+
+/* ── el lienzo ── */
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+
+/* ── HUD ── */
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 0;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:8px;z-index:3;pointer-events:none}
+#hud.off{display:none}
+#vidas{display:flex;gap:6px;align-items:center;height:30px}
+.cor{width:19px;height:19px;position:relative;transition:transform .22s,opacity .22s}
+.cor::before,.cor::after{content:'';position:absolute;width:10px;height:15px;border-radius:6px 6px 0 0;
+  background:var(--acento);top:1px}
+.cor::before{left:0;transform:rotate(-45deg);transform-origin:50% 100%}
+.cor::after{right:0;transform:rotate(45deg);transform-origin:50% 100%}
+.cor.ida{opacity:.16;transform:scale(.74)}
+.cor.ida::before,.cor.ida::after{background:var(--tinta2)}
+.cor.late{animation:late .5s ease}
+@keyframes late{0%,100%{transform:scale(1)}35%{transform:scale(1.4)}}
+#nivRot{flex:1;text-align:center;font-size:13px;font-weight:800;letter-spacing:.14em;
+  color:var(--tinta2);line-height:16px;padding-top:5px}
+#nivRot b{display:block;font-size:10px;font-weight:700;letter-spacing:.2em;opacity:.55}
+#bPausa{pointer-events:auto;width:34px;height:30px;border:0;background:transparent;
+  display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+#bPausa i{width:4px;height:15px;border-radius:2px;background:var(--tinta2);display:block}
+
+/* ── pie: toques + deshacer ── */
+#pie{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  padding:0 16px;display:flex;align-items:center;justify-content:space-between;z-index:3;pointer-events:none}
+#pie.off{display:none}
+#toques,#restan{font-size:12px;font-weight:800;letter-spacing:.16em;color:var(--tinta2);opacity:.62}
+#restan{opacity:.85}#restan b{font-size:17px;letter-spacing:.02em;color:var(--tinta)}
+
+/* ── la pista del tutorial ── */
+#pista{position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 54px);
+  text-align:center;font-size:14px;font-weight:700;line-height:1.35;z-index:4;pointer-events:none;
+  color:var(--tinta);background:rgba(255,255,255,.82);border:1.5px solid rgba(24,22,20,.14);
+  border-radius:14px;padding:10px 14px;box-shadow:0 6px 18px rgba(0,0,0,.09);
+  opacity:0;transform:translateY(8px);transition:opacity .28s,transform .28s}
+#pista.on{opacity:1;transform:none}
+
+/* ── aviso corto ── */
+#aviso{position:absolute;left:0;right:0;top:44%;text-align:center;z-index:6;pointer-events:none;
+  font-size:20px;font-weight:900;letter-spacing:.1em;color:var(--acento);
+  text-shadow:0 2px 10px rgba(255,255,255,.9);opacity:0;transition:opacity .2s}
+#aviso.on{opacity:1}
+
+/* ── PANELES ── */
+.pan{position:absolute;inset:0;z-index:10;display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:26px 22px;
+  background:linear-gradient(180deg,rgba(244,241,234,.97) 0%,rgba(233,228,216,.99) 100%);
+  animation:ent .24s ease}
+.pan.on{display:flex}
+@keyframes ent{from{opacity:0}to{opacity:1}}
+.pan h1{font-size:44px;font-weight:900;letter-spacing:.22em;margin-left:.22em;line-height:1}
+.pan h2{font-size:24px;font-weight:900;letter-spacing:.14em;margin-left:.14em}
+.pan .sub{font-size:13px;font-weight:600;color:var(--tinta2);text-align:center;line-height:1.5;margin-top:10px}
+.pan .pie{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--tinta2);opacity:.5;text-align:center}
+.bt{border:0;background:var(--tinta);color:var(--papel);font-size:14px;font-weight:800;
+  letter-spacing:.16em;padding:15px 0;border-radius:14px;cursor:pointer;width:100%;
+  box-shadow:0 5px 0 rgba(24,22,20,.22);transition:transform .1s,box-shadow .1s}
+.bt:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(24,22,20,.22)}
+.bt.sec{background:transparent;color:var(--tinta);border:2px solid rgba(24,22,20,.2);box-shadow:none}
+.bt.sec:active{transform:none;background:rgba(24,22,20,.06)}
+.col{display:flex;flex-direction:column;gap:11px;width:100%;max-width:290px}
+.fila{display:flex;gap:10px;width:100%;max-width:290px}
+.fila .bt{flex:1}
+
+/* la marca: la flecha del juego, dibujada con bordes */
+.marca{width:88px;height:60px;position:relative;margin-bottom:6px}
+.marca i{position:absolute;background:var(--tinta);border-radius:3px;display:block}
+.marca .h{height:6px}.marca .v{width:6px}
+.marca .p{width:0;height:0;background:transparent;border-left:15px solid var(--tinta);
+  border-top:11px solid transparent;border-bottom:11px solid transparent;border-radius:0}
+
+/* ── lista de niveles ── */
+#pNiv{justify-content:flex-start;padding-top:calc(env(safe-area-inset-top,0px) + 20px)}
+#nvCab{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:330px;margin-bottom:4px}
+#nvCab h2{font-size:19px}
+#nvMundos{display:flex;gap:5px;width:100%;max-width:360px;margin:12px 0;justify-content:center}
+.mtab{flex:0 0 auto;border:1.5px solid rgba(24,22,20,.18);background:transparent;color:var(--tinta2);
+  font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:8px 7px;border-radius:9px;cursor:pointer;flex:1 1 0;min-width:0}
+.mtab.sel{background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
+.mtab.cerr{opacity:.3}
+#nvGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%;max-width:330px;
+  overflow-y:auto;flex:1;align-content:start;padding:2px 2px 16px}
+.nvB{aspect-ratio:1;border:1.5px solid rgba(24,22,20,.18);background:rgba(255,255,255,.6);
+  border-radius:12px;font-size:16px;font-weight:800;color:var(--tinta);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative}
+.nvB.ok{background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
+.nvB.cerr{opacity:.3;background:transparent}
+.nvB s{font-size:9px;letter-spacing:.1em;opacity:.8;text-decoration:none}
+.nvB.perf::after{content:'';position:absolute;top:5px;right:5px;width:6px;height:6px;
+  border-radius:50%;background:var(--acento)}
+
+/* ── ajustes ── */
+.aj{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  max-width:290px;padding:11px 0;border-bottom:1px solid rgba(24,22,20,.1)}
+.aj span{font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--tinta2)}
+.aj input[type=range]{width:130px;accent-color:var(--tinta)}
+.chip{border:1.5px solid rgba(24,22,20,.18);background:transparent;color:var(--tinta2);
+  font-size:11px;font-weight:800;padding:7px 11px;border-radius:9px;cursor:pointer}
+.chip.sel{background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
+
+/* ── carga ── */
+#carga{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;background:var(--papel2);transition:opacity .4s}
+#carga.off{opacity:0;pointer-events:none}
+#cSub{font-size:11px;font-weight:800;letter-spacing:.24em;color:var(--tinta2)}
+#cBarra{width:150px;height:3px;border-radius:2px;background:rgba(24,22,20,.14);overflow:hidden}
+#cBarra i{display:block;height:100%;width:35%;background:var(--tinta);border-radius:2px;
+  animation:cb 1.1s ease-in-out infinite}
+@keyframes cb{0%{margin-left:-35%}100%{margin-left:100%}}
+
+@media (max-height:700px){
+  .pan h1{font-size:36px}.marca{transform:scale(.8);margin-bottom:0}
+  .bt{padding:13px 0}.col{gap:9px}
+}
+</style></head><body>
+
+<div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud" class="off">
+    <div id="vidas"></div>
+    <div id="nivRot"><b id="nrM">MUNDO 1</b><span id="nrN">NIVEL 1-1</span></div>
+    <button id="bPausa" aria-label="pausa"><i></i><i></i></button>
+  </div>
+
+  <div id="pista"></div>
+  <div id="aviso"></div>
+
+  <div id="pie" class="off">
+    <div id="restan">0</div>
+    <div id="toques">0</div>
+  </div>
+
+  <!-- idioma -->
+  <div id="pIdioma" class="pan">
+    <div class="marca"><i class="h" style="left:6px;top:27px;width:46px"></i><i class="p" style="left:50px;top:19px"></i></div>
+    <h1>FLECHAS</h1>
+    <div class="sub" style="margin-bottom:20px">idioma · language · idioma</div>
+    <div class="col">
+      <button class="bt" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <!-- menu -->
+  <div id="pMenu" class="pan">
+    <div class="marca">
+      <i class="h" style="left:4px;top:44px;width:34px"></i>
+      <i class="v" style="left:32px;top:14px;height:36px"></i>
+      <i class="h" style="left:32px;top:14px;width:28px"></i>
+      <i class="p" style="left:57px;top:6px"></i>
+    </div>
+    <h1>FLECHAS</h1>
+    <div class="sub" id="mSub"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="mJugar">JUGAR</button>
+      <div class="fila">
+        <button class="bt sec" id="mNiv">NIVELES</button>
+        <button class="bt sec" id="mTuto">CÓMO SE JUEGA</button>
+      </div>
+      <button class="bt sec" id="mAj">AJUSTES</button>
+    </div>
+    <div class="pie" id="mPie" style="margin-top:20px"></div>
+  </div>
+
+  <!-- lista de niveles -->
+  <div id="pNiv" class="pan">
+    <div id="nvCab"><h2 id="nvTit">NIVELES</h2><button class="chip" id="nvVolver">VOLVER</button></div>
+    <div class="sub" id="nvSub" style="margin:0"></div>
+    <div id="nvMundos"></div>
+    <div id="nvGrid"></div>
+  </div>
+
+  <!-- ajustes -->
+  <div id="pAj" class="pan">
+    <h2 id="ajTit">AJUSTES</h2>
+    <div style="height:14px"></div>
+    <div class="aj"><span id="ajMus">MÚSICA</span><input type="range" id="rMus" min="0" max="100" value="50"></div>
+    <div class="aj"><span id="ajFx">SONIDOS</span><input type="range" id="rFx" min="0" max="100" value="80"></div>
+    <div class="aj"><span id="ajIdi">IDIOMA</span><div style="display:flex;gap:6px">
+      <button class="chip" data-l2="es">ES</button><button class="chip" data-l2="en">EN</button><button class="chip" data-l2="pt">PT</button>
+    </div></div>
+    <div style="height:18px"></div>
+    <div class="col">
+      <button class="bt sec" id="ajBorrar">BORRAR EL PROGRESO</button>
+      <button class="bt" id="ajVolver">VOLVER</button>
+    </div>
+  </div>
+
+  <!-- pausa -->
+  <div id="pPausa" class="pan">
+    <h2 id="paTit">PAUSA</h2>
+    <div class="sub" id="paSub"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="paSeguir">SEGUIR</button>
+      <button class="bt sec" id="paRe">REINICIAR</button>
+      <button class="bt sec" id="paSalir">SALIR AL MENÚ</button>
+    </div>
+  </div>
+
+  <!-- final -->
+  <div id="pFin" class="pan">
+    <h2 id="fTit">¡LIMPIO!</h2>
+    <div class="sub" id="fSub"></div>
+    <div class="sub" id="fDatos" style="opacity:.6;margin-top:4px"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="fSig">SIGUIENTE</button>
+      <div class="fila">
+        <button class="bt sec" id="fRe">REINICIAR</button>
+        <button class="bt sec" id="fMenu">SALIR AL MENÚ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="carga">
+    <div class="marca" style="transform:scale(.7)"><i class="h" style="left:6px;top:27px;width:46px"></i><i class="p" style="left:50px;top:19px"></i></div>
+    <div id="cSub">CARGANDO</div>
+    <div id="cBarra"><i></i></div>
+  </div>
+</div>
+
+<script type="module">
