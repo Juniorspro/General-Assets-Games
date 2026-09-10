@@ -36,7 +36,12 @@ SAL = 'herramientas/huesos/partes/i_assets.js'
 # cuántos píxeles de alto quedan. El juego dibuja a un tercio de resolución y
 # estira con NEAREST, así que más que esto es peso que no se ve nunca.
 ALTOS = {'arboles': 288, 'ruinas': 200, 'arbustos': 160, 'rocas': 144,
-         'plantas': 176, 'helechos': 128}
+         'plantas': 176, 'helechos': 128,
+         # las dos familias de las zonas nuevas. El alto sale de lo que la pieza
+         # MIDE EN EL MUNDO y no del gusto: el pantano lleva un arbol muerto de
+         # hasta 4,4 m —entre `ruinas` y `arboles`— y el osario son pilas de
+         # huesos de 2,6 m, o sea del orden de un arbusto grande.
+         'pantano': 240, 'osario': 168}
 SUELO_PX = 512
 
 # ── EL ALBEDO DEL SUELO SE NIVELA, Y ES LA REGLA 7 DEL HORNEADO ──────────────
@@ -48,7 +53,8 @@ SUELO_PX = 512
 # Se nivela acá y no en el juego por dos razones: se puede medir con precisión
 # antes de comprimir, y multiplicar por seis y medio en el teléfono amplifica el
 # ruido del WebP sobre una foto que ya es plana.
-SUELO_ALB = {'s_bosque': 0.088, 's_piedra': 0.190, 's_ceniza': 0.132}
+SUELO_ALB = {'s_bosque': 0.088, 's_piedra': 0.190, 's_ceniza': 0.132,
+             's_pantano': 0.070, 's_osario': 0.205}
 
 
 def _a_lineal(a):
@@ -178,11 +184,28 @@ def main():
             rec = rec.resize((nw, alto), Image.LANCZOS)
             k = '%s%d' % (nom, i)
             piezas[k] = b64(rec, 'WEBP', quality=86, method=6)
-            manif[nom].append({'k': k, 'w': nw, 'h': alto, 'prop': round(nw / alto, 4)})
+            manif[nom].append({'k': k, 'w': nw, 'h': alto, 'prop': round(nw / alto, 4),
+                               'px': h})
             print('    %s  %dx%d  prop %.3f  %d KB' % (k, w, h, nw / alto, len(piezas[k]) * 3 // 4096))
+        # ── LO ALTO QUE ES CADA PIEZA DENTRO DE SU FAMILIA, MEDIDO ─────────
+        # Las cuatro variantes vienen dibujadas UNA AL LADO DE LA OTRA en la
+        # misma hoja, o sea a la misma escala: el alto de su recorte ES su
+        # tamaño relativo, y no hay que declararlo. Cada pieza se estira
+        # después a `ALTOS[fam]` para que el mapa tenga la misma nitidez, así
+        # que sin esto esa medida se pierde y las cuatro salen igual de altas.
+        # Se nota en el pantano, que es la familia con más dispersión: el
+        # tronco caído mide 136 px contra los 451 del árbol muerto —el 30 %—
+        # y dibujado a la altura del árbol quedaba de DIEZ METROS de largo,
+        # porque su proporción es 2,46. Se normaliza por la MEDIA y no por el
+        # máximo: `esc` es el alto TÍPICO de la capa, así que la media tiene
+        # que valer 1 o la familia entera se achica.
+        med = sum(m['px'] for m in manif[nom]) / len(manif[nom])
+        for m in manif[nom]:
+            m['hrel'] = round(m['px'] / med, 3); del m['px']
+        print('    hrel %s' % [m['hrel'] for m in manif[nom]])
     suelos = {}
     linmed = {}
-    for nom in ('s_bosque', 's_piedra', 's_ceniza'):
+    for nom in ('s_bosque', 's_piedra', 's_ceniza', 's_pantano', 's_osario'):
         p = os.path.join(ENT, 'h_%s-g1.png' % nom)
         if not os.path.exists(p):
             print('  falta', p); continue

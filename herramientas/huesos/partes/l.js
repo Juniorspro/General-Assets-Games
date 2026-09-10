@@ -191,8 +191,15 @@ function pintaAviso(dt) {
   if (o === 0) _av = '';
 }
 
-/* el diálogo de zona: una línea, la primera vez que se entra a cada una */
-const DICHO = [false, false, false, false];
+/* ── EL DIÁLOGO DE ZONA: UNA LÍNEA LA PRIMERA VEZ QUE SE ENTRA A CADA UNA ──
+   La lista SALE DE `ZONAS` y el rey se lleva UNA CASILLA APARTE, la última.
+   Estaba clavada en cuatro y el rey usaba `DICHO[3]`, que con tres zonas caía
+   justo una más allá de la última y por eso funcionaba. Con cinco, la casilla
+   3 es el OSARIO: entrar ahí dejaba al rey mudo, y la ceniza pedía `d4`, que
+   no existía en ninguna tabla — en pantalla salía la clave, «d4», escrita con
+   todas las letras. Ninguna de las dos cosas falla: se leen. */
+const DICHO = ZONAS.map(() => false).concat(false);
+const DICHO_REY = ZONAS.length;
 function dialogoPaso(dt) {
   const e = $('#dialogo');
   if (!DICHO[ZONA_VIS]) {
@@ -204,8 +211,8 @@ function dialogoPaso(dt) {
   e.style.opacity = t > 0 ? Math.min(1, t / 0.6) : 0;
 }
 function dialogoRey() {
-  if (DICHO[3]) return; DICHO[3] = true;
-  const e = $('#dialogo'); e.textContent = T('d3'); e.dataset.t = '5.5';
+  if (DICHO[DICHO_REY]) return; DICHO[DICHO_REY] = true;
+  const e = $('#dialogo'); e.textContent = T('dRey'); e.dataset.t = '5.5';
 }
 
 /* ── LA CLASE SE LLAMA `jugando` Y NO `enJuego` ────────────────────────────

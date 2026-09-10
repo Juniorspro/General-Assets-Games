@@ -95,7 +95,23 @@ P = [
  # de color) creyendo que el color por vértice era el freno: movió el pie de 412
  # a 418, o sea nada. El presupuesto de verdad de esta tanda no lo pone este
  # archivo, lo pone la malla.
- dict(n='craneo',    tris=540, giro=(0, 90, 0), tinte=0xd6d0bd, modo='caja'),
+ # PERO EL SIGNO DEL CRÁNEO ESTABA AL REVÉS, Y LA CAJA NO LO PODÍA VER. Con +90
+ # la calavera quedaba con la CARA MIRANDO A −Z, o sea a la espalda del bicho:
+ # medido rasterizando la malla sola desde los cuatro ejes, la vista desde +Z
+ # —que es el frente del juego— devuelve el OCCIPUCIO liso y la de −Z las
+ # cuencas, la abertura nasal y los dientes. Y en cuartiles de masa, el tercio
+ # DE ABAJO del cráneo (maxilar y dientes, que en un cráneo van adelante) cae
+ # en z 0,275 contra 0,521 del tercio de arriba, o sea sesgado a −Z.
+ # De la caja envolvente eso no sale: 0,658 × 1,0 × 0,874 dice que el eje largo
+ # es Z y no para qué lado mira, que es justo lo que se reportó como «las
+ # calaveras tienen la cabeza para atrás».
+ # O sea que la malla cruda mira a +X y no a −X: Ry(−90) lleva +X a +Z.
+ # EL COSTILLAR Y LA PELVIS SE QUEDAN EN +90 A PROPÓSITO: rasterizados igual,
+ # sus vistas de +Z y de −Z son indistinguibles a 500 y 383 triángulos —no hay
+ # esternón ni sacro que sobreviva al decimado— así que girarlas sería cambiar
+ # algo que no se puede medir. Lo que sí se midió es que su EJE LARGO queda
+ # bien con +90, que es el defecto que ese giro vino a arreglar.
+ dict(n='craneo',    tris=540, giro=(0, -90, 0), tinte=0xd6d0bd, modo='caja'),
  dict(n='costillar', tris=500, giro=(0, 90, 0), tinte=0xd6d0bd, modo='caja'),
  dict(n='pelvis',    tris=381, giro=(0, 90, 0), tinte=0xd6d0bd, modo='caja'),
  dict(n='humero',    tris=110, giro=(0, 0, 0), tinte=0xd6d0bd, modo='palo'),

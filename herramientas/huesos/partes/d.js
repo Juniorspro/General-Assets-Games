@@ -56,16 +56,16 @@ function siembra(sem) {
       if (dd < 9) continue;                       // el claro del arranque queda limpio
       if (pendiente(x, z) > 3.4) continue;        // nada clavado en un barranco
       const r1 = azarEn(i, j, k * 11 + 4);
-      let t, esc;
-      if (k === 0) {                               // la capa alta: árboles y ruinas
-        if (zi === 0) { t = 'arboles'; esc = 3.1 + r1 * 2.6; }
-        else if (zi === 1) { t = r1 < 0.55 ? 'ruinas' : 'arboles'; esc = t === 'ruinas' ? 1.5 + r1 * 1.3 : 2.4 + r1 * 1.8; }
-        else { t = r1 < 0.72 ? 'ruinas' : 'arboles'; esc = t === 'ruinas' ? 1.3 + r1 * 1.1 : 2.2 + r1 * 1.2; }
-      } else if (k === 1) {                        // la capa media: arbustos y rocas
-        t = r1 < 0.58 ? 'arbustos' : 'rocas'; esc = 0.85 + r1 * 0.8;
-      } else {                                     // la capa baja: plantas y helechos
-        t = r1 < 0.5 ? 'plantas' : 'helechos'; esc = 0.55 + r1 * 0.55;
-      }
+      /* LAS TRES CAPAS SALEN DE LA ZONA Y NINGUNA DE UN if POR ÍNDICE.
+         La alta ya venía de la tabla; la media y la baja estaban escritas acá
+         IGUALES PARA LAS CINCO —arbustos, rocas, plantas y helechos— o sea que
+         lo único que distinguía una zona de otra era el objeto grande. Se ve:
+         en el campo de huesos y en la ceniza crecían HELECHOS VERDES, y el
+         tinte de la zona no los salva porque multiplica sobre un verde. Ahora
+         las tres zonas secas ponen cascote y tallo seco abajo. */
+      const capa = Z.veg[k] || Z.veg[Z.veg.length - 1];
+      const rec = capa.find(e => r1 < e[0]) || capa[capa.length - 1];
+      const t = rec[1], esc = rec[2] + r1 * rec[3];
       const v = Math.floor(azarEn(i, j, k * 11 + 5) * 4);
       cosas.push({ t, v, x, z, esc, giro: azarEn(i, j, k * 11 + 6) * 6.283 });
       // SÓLO LO GRANDE FRENA. Un arbusto que frena convierte el bosque en un
@@ -84,10 +84,9 @@ function siembra(sem) {
    HACIA LO PESADO, y sin ella la oleada 3 es la oleada 1 con dos bichos más:
    la escalera existe en el contador del HUD y no en la pelea.              */
 function claseDe(zi, r, pres) {
-  const p = pres || 0;
-  if (zi === 0) return r < 0.94 - p * 0.36 ? 'peon' : 'lancero';
-  if (zi === 1) return r < 0.42 - p * 0.22 ? 'peon' : (r < 0.86 - p * 0.22 ? 'lancero' : 'bruto');
-  return r < 0.30 - p * 0.22 ? 'lancero' : 'bruto';
+  const p = pres || 0, L = ZONAS[zi].clases;
+  for (const [u, k, cl] of L) if (r < u - p * k) return cl;
+  return L[L.length - 1][2];
 }
 
 /* ── QUÉ TRAE CADA OLEADA ──────────────────────────────────────────────────
@@ -123,10 +122,17 @@ function composicionOla(zi, oi, sem) {
     if (out[i] !== 'bruto') continue;
     if (++br > tope) out[i] = 'lancero';
   }
-  /* la última oleada de una zona trae un bruto sí o sí: es el escalón que
+  /* La última oleada de una zona trae un bruto sí o sí: es el escalón que
      avisa que la zona se está por cerrar. VA DESPUÉS DEL TOPE, porque es un
-     piso y no un techo — puesto antes, el tope se lo podría llevar. */
-  if (oi === ZONAS[zi].olas.length - 1 && zi > 0 && out.indexOf('bruto') < 0) out[0] = 'bruto';
+     piso y no un techo — puesto antes, el tope se lo podría llevar.
+     Y SÓLO SI LA ZONA TIENE BRUTOS EN SU RECETA, que no es lo mismo que
+     `zi > 0`: el pantano es la segunda zona y su receta es peón y lancero a
+     propósito —el primer bruto del juego aparece en las ruinas—. Con el
+     índice, la última oleada del pantano metía uno igual y se comía el
+     escalón entero. Sale de la tabla, así que reordenar las zonas no lo
+     vuelve a romper. */
+  const hayBruto = ZONAS[zi].clases.some(e => e[2] === 'bruto');
+  if (oi === ZONAS[zi].olas.length - 1 && hayBruto && out.indexOf('bruto') < 0) out[0] = 'bruto';
   return out;
 }
 
@@ -194,7 +200,12 @@ function puntoRey(sem, solidos) {
   for (let i = 0; i < 900; i++) {
     const a = az() * 6.283, d = mez(MUNDO_R * 0.62, MUNDO_R * 0.86, az());
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
-    if (zonaDe(x, z) !== 2 || pendiente(x, z) > 2.0) continue;
+    /* LA ÚLTIMA ZONA, no el índice 2. Estaba clavado en 2 de cuando eran tres
+       zonas, y con cinco eso planta al rey en las RUINAS: aparecería a cuarenta
+       metros de donde el jugador está peleando la oleada del osario, y encima
+       fuera de su propio anillo. No falla ni avisa — el jefe simplemente sale
+       en el sitio equivocado. */
+    if (zonaDe(x, z) !== ZONAS.length - 1 || pendiente(x, z) > 2.0) continue;
     let choca = false;
     for (const s of solidos) {
       const R = s.r + ESQ.rey.radio + 1.2;

@@ -9,7 +9,14 @@ const PASO = 1 / 60;              // el reloj de la simulación, fijo
 const PASO_MAX = 8;               // cuántos pasos por cuadro antes de rendirse
 
 /* ── EL MUNDO ──────────────────────────────────────────────────────────── */
-const MUNDO_R = 108;              // radio del mapa, en metros
+/* CRECIÓ CON LAS ZONAS, Y SALE DE UNA CUENTA. Las zonas son anillos y el
+   último llega hasta `MUNDO_R * 0.90`: con cinco dentro de 108 los dos de
+   afuera quedaban de 18 y de 7 metros de ancho, y un anillo de siete metros
+   no tiene dónde soltar una oleada —`puntoOla` pide entre 19 y 40 m del
+   jugador— así que la zona final se soltaría siempre por el pase que afloja
+   el suelo y dejaría de ser un sitio. Con 132 los cinco miden 32 · 24 · 22 ·
+   22 · 19, que es lo que ocupaba cada uno cuando eran tres.               */
+const MUNDO_R = 132;              // radio del mapa, en metros
 const CELDA = 6;                  // paso de la reja de siembra
 /* `sol` y `amb` son las intensidades de la zona, y las escribe `zonaMezcla` en
    CADA cuadro: tocar `solLuz.intensity` a mano no sirve de nada, se pisa al
@@ -20,13 +27,53 @@ const CELDA = 6;                  // paso de la reja de siembra
    todo lo demás: cuántas oleadas hay, el cupo total, el contador del HUD y la
    auditoría. Con el total escrito aparte, el día que se agregue una oleada el
    HUD cuenta una cosa y el mundo trae otra — y eso no falla, miente.      */
+/* ── Y LA ZONA TRAE SU PROPIA RECETA, QUE ES LO QUE PERMITE QUE HAYA CINCO ──
+   `veg` dice qué familia sale en la capa alta y con qué escala, y `clases` qué
+   bicho trae la oleada. Las dos vivían escritas como `if (zi === 0) … else if
+   (zi === 1) … else …` adentro de `siembra` y de `claseDe`, o sea que agregar
+   una zona la dejaba cayendo en el `else` de la última: el pantano se sembraba
+   con ruinas de ceniza y traía brutos desde su primera oleada. Y eso NO FALLA
+   —el juego arranca igual— se ve como que la zona nueva no se hizo.
+   `veg` y `clases` son listas de [umbral, …] recorridas en orden con un azar
+   de 0 a 1: la primera cuyo umbral lo supere es la que sale. En `clases` el
+   segundo número es cuánto CORRE ese umbral con la presión de la oleada (0 la
+   primera de la zona, 1 la última), que es lo que hace que la última oleada
+   sea más pesada y no la misma con dos bichos más.                         */
 const ZONAS = [
-  { id: 'bosque',  r: 40,  suelo: 's_bosque',  niebla: 0x2c3630, nieblaD: 0.0135,
-    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, olas: [3, 4], densi: 1.00 },
-  { id: 'ruinas',  r: 76,  suelo: 's_piedra',  niebla: 0x33333a, nieblaD: 0.0165,
-    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, olas: [4, 5], densi: 0.62 },
+  { id: 'bosque',  r: 32,  suelo: 's_bosque',  niebla: 0x2c3630, nieblaD: 0.0135,
+    cielo: 0x39443c, luz: 0x9fb08c, sol: 1.80, amb: 0.55, olas: [3, 4], densi: 1.00,
+    veg: [[[1.00, 'arboles', 3.10, 2.60]],
+          [[0.58, 'arbustos', 0.85, 0.80], [1.00, 'rocas', 0.85, 0.80]],
+          [[0.50, 'plantas', 0.55, 0.55], [1.00, 'helechos', 0.55, 0.55]]],
+    clases: [[0.94, 0.36, 'peon'], [1, 0, 'lancero']] },
+  { id: 'pantano', r: 56,  suelo: 's_pantano', niebla: 0x1e2822, nieblaD: 0.0195,
+    cielo: 0x27332a, luz: 0x8fa47e, sol: 1.62, amb: 0.52, olas: [4, 4], densi: 0.88,
+    veg: [[[0.62, 'pantano', 2.50, 1.90], [1.00, 'arboles', 2.60, 1.60]],
+          [[0.62, 'arbustos', 0.80, 0.70], [1.00, 'rocas', 0.70, 0.60]],
+          [[0.62, 'helechos', 0.50, 0.50], [1.00, 'plantas', 0.60, 0.60]]],
+    clases: [[0.70, 0.28, 'peon'], [1, 0, 'lancero']] },
+  { id: 'ruinas',  r: 78,  suelo: 's_piedra',  niebla: 0x33333a, nieblaD: 0.0165,
+    cielo: 0x3c3c46, luz: 0x9c9cae, sol: 1.55, amb: 0.48, olas: [4, 5], densi: 0.62,
+    veg: [[[0.55, 'ruinas', 1.50, 1.30], [1.00, 'arboles', 2.40, 1.80]],
+          [[0.42, 'arbustos', 0.75, 0.70], [1.00, 'rocas', 0.90, 0.85]],
+          [[0.62, 'rocas', 0.30, 0.28], [1.00, 'plantas', 0.45, 0.45]]],
+    clases: [[0.42, 0.22, 'peon'], [0.86, 0.22, 'lancero'], [1, 0, 'bruto']] },
+  /* EL OSARIO ES EL ÚNICO QUE ACLARA, Y ES A PROPÓSITO. Las otras cuatro van
+     de menos a más niebla, y con la quinta siguiendo la escalera el tramo
+     entero se lee a un solo sitio que se va apagando. Un campo de huesos es
+     abierto y pálido: se ve lejos, y por eso la ceniza que viene después pega. */
+  { id: 'osario',  r: 100, suelo: 's_osario',  niebla: 0x413d35, nieblaD: 0.0128,
+    cielo: 0x4a4539, luz: 0xc9c2ab, sol: 1.72, amb: 0.54, olas: [5, 5], densi: 0.46,
+    veg: [[[0.66, 'osario', 1.40, 1.20], [1.00, 'ruinas', 1.30, 1.00]],
+          [[0.30, 'arbustos', 0.70, 0.60], [1.00, 'rocas', 0.85, 0.80]],
+          [[0.70, 'rocas', 0.26, 0.24], [1.00, 'plantas', 0.40, 0.40]]],
+    clases: [[0.34, 0.20, 'peon'], [0.80, 0.24, 'lancero'], [1, 0, 'bruto']] },
   { id: 'ceniza',  r: 999, suelo: 's_ceniza',  niebla: 0x2a2724, nieblaD: 0.0210,
-    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, olas: [5, 6, 'rey'], densi: 0.34 },
+    cielo: 0x35312c, luz: 0xb8a894, sol: 1.34, amb: 0.40, olas: [5, 6, 'rey'], densi: 0.34,
+    veg: [[[0.72, 'ruinas', 1.30, 1.10], [1.00, 'arboles', 2.20, 1.20]],
+          [[0.34, 'arbustos', 0.70, 0.65], [1.00, 'rocas', 0.90, 0.90]],
+          [[0.74, 'rocas', 0.28, 0.26], [1.00, 'plantas', 0.42, 0.42]]],
+    clases: [[0.30, 0.22, 'lancero'], [1, 0, 'bruto']] },
 ];
 /* ── LAS OLEADAS ───────────────────────────────────────────────────────────
    Una oleada cae, se la limpia, hay un respiro y viene la siguiente. Lo que
@@ -40,8 +87,32 @@ const OLA_RESPIRO_Z = 5.0;        // el respiro más largo al abrir una zona
 /* `let` Y NO `const`, y no es descuido: el auto-jugador barre estos dos en el
    MISMO BINARIO (`__H.olas`). Un barrido contra otro commit compara dos
    programas distintos y no dice nada de éste.                              */
-let OLA_CURA = 0.28;              // fracción de vida que devuelve limpiar una
-let OLA_XP = 0.45;                // y fracción del nivel que paga limpiarla
+/* ── LA ECONOMÍA SE VOLVIÓ A MEDIR AL PASAR DE 7 OLEADAS A 11 ──────────────
+   Los tres números estaban tuneados contra tres zonas y siete oleadas: con
+   cinco y once, la cura por oleada dispara 7 veces en vez de 4 y el punto de
+   control 4 en vez de 2. Medido con el auto-jugador honesto sobre doce
+   semillas, con los números viejos y con éstos:
+
+     cura  olaXP  zonaXP │ gana      nivel  vida al terminar
+     0,28  0,45   1,0    │ 12 de 12   10,2   225   ← lo que había
+     0,28  0,45   0,5    │ 10 de 10    9,4   201
+     0,20  0,32   0,5    │ 11 de 12    8,8   176   ← esto
+     0,20  0,28   0,35   │  8 de 10    7,6   136
+
+   Lo que no es ruido es la ÚLTIMA COLUMNA: cuánto margen le queda al que
+   termina. Con los números viejos el bot cerraba las once oleadas con el 94 %
+   de la vida puesta, o sea sin haber estado nunca en peligro — y nadie pidió
+   un juego más fácil, se pidieron más mapas. */
+let OLA_CURA = 0.20;              // fracción de vida que devuelve limpiar una
+let OLA_XP = 0.32;                // y fracción del nivel que paga limpiarla
+/* ── LO QUE PAGA CERRAR UNA ZONA, Y POR QUÉ AHORA ES UN NÚMERO ─────────────
+   Era `jugGanaXp(JUG.xpSig - JUG.xp)` escrito derecho en el código, o sea un
+   nivel entero, y estaba tuneado cuando había TRES zonas: dos regalos. Con
+   cinco son cuatro, y eso se mide — el auto-jugador honesto pasó de terminar
+   nivel 6 perdiendo una de ocho a terminar nivel 10 ganando las ocho con el
+   94 % de la vida puesta. Nadie pidió un juego más fácil: se pidieron más
+   mapas. Va como fracción para poder barrerla. */
+let ZONA_XP = 0.5;                // niveles que regala cerrar una zona
 const OLA_R0 = 19;                // no cae nada más cerca que esto del jugador
 const OLA_R1 = 40;                // ni más lejos: una oleada tiene que LLEGAR
 /* ── Y NUNCA MÁS ALLÁ DEL RADIO EN QUE EL JUEGO LOS PIENSA ────────────────
@@ -180,8 +251,10 @@ const TXT = {
     cbaja: 'BAJA', cmedia: 'MEDIA', calta: 'ALTA',
     pie: 'Caen por oleadas. Limpiá la última de una zona y se abre la siguiente. El rey espera en la ceniza.',
     piePausa: 'El mundo se queda quieto mientras esto esté abierto.',
-    zbosque: 'EL BOSQUE', zruinas: 'LAS RUINAS', zceniza: 'EL CAMPO DE CENIZA',
-    zbosqueS: 'donde los enterraron', zruinasS: 'lo que quedó de la abadía',
+    zbosque: 'EL BOSQUE', zpantano: 'EL PANTANO', zruinas: 'LAS RUINAS',
+    zosario: 'EL OSARIO', zceniza: 'EL CAMPO DE CENIZA',
+    zbosqueS: 'donde los enterraron', zpantanoS: 'el agua nunca se fue',
+    zruinasS: 'lo que quedó de la abadía', zosarioS: 'los sacaron de la abadía',
     zcenizaS: 'no crece nada desde entonces',
     restan: 'QUEDAN', restanRey: 'EL REY',
     nivel: 'NIVEL', subiste: 'NIVEL {0}',
@@ -201,9 +274,11 @@ const TXT = {
     total: '{0} oleadas · 3 zonas',
     datos2: 'Oleadas {0}/{1} · Esqueletos {2} · Nivel {3} · {4}',
     d0: 'Los enterraron acá arriba y algo los volvió a parar.',
-    d1: 'El camino sigue. Las piedras de la abadía están más adelante.',
-    d2: 'Acá se acaba el bosque. Lo que hay adelante ya no es tierra.',
-    d3: 'Algo grande se levantó al fondo de la ceniza.',
+    d1: 'El bosque se hunde. El agua nunca se fue de acá.',
+    d2: 'Las piedras de la abadía. Todavía huele a quemado.',
+    d3: 'Los sacaron de la abadía y los apilaron acá. Nadie los volvió a enterrar.',
+    d4: 'Acá se acaba todo. Lo que hay adelante ya no es tierra.',
+    dRey: 'Algo grande se levantó al fondo de la ceniza.',
   },
   en: {
     sub: 'a small RPG about killing skeletons',
@@ -212,8 +287,10 @@ const TXT = {
     cbaja: 'LOW', cmedia: 'MEDIUM', calta: 'HIGH',
     pie: 'They come in waves. Clear a zone\u2019s last one and the next opens. The king waits in the ash.',
     piePausa: 'The world stands still while this is open.',
-    zbosque: 'THE WOOD', zruinas: 'THE RUINS', zceniza: 'THE ASH FIELD',
-    zbosqueS: 'where they were buried', zruinasS: 'what is left of the abbey',
+    zbosque: 'THE WOOD', zpantano: 'THE MARSH', zruinas: 'THE RUINS',
+    zosario: 'THE BONEYARD', zceniza: 'THE ASH FIELD',
+    zbosqueS: 'where they were buried', zpantanoS: 'the water never drained',
+    zruinasS: 'what is left of the abbey', zosarioS: 'they were dug out of the abbey',
     zcenizaS: 'nothing has grown here since',
     restan: 'LEFT', restanRey: 'THE KING',
     nivel: 'LEVEL', subiste: 'LEVEL {0}',
@@ -233,9 +310,11 @@ const TXT = {
     total: '{0} waves · 3 zones',
     datos2: 'Waves {0}/{1} · Skeletons {2} · Level {3} · {4}',
     d0: 'They were buried up here, and something stood them back up.',
-    d1: 'The path goes on. The abbey stones are further ahead.',
-    d2: 'The wood ends here. What lies ahead is not soil any more.',
-    d3: 'Something large has risen at the far end of the ash.',
+    d1: 'The wood sinks. The water never drained out of here.',
+    d2: 'The abbey stones. It still smells burnt.',
+    d3: 'They were dug out of the abbey and piled here. Nobody buried them again.',
+    d4: 'Everything ends here. What lies ahead is not soil any more.',
+    dRey: 'Something large has risen at the far end of the ash.',
   },
   pt: {
     sub: 'um mini RPG de matar esqueletos',
@@ -244,8 +323,10 @@ const TXT = {
     cbaja: 'BAIXA', cmedia: 'MÉDIA', calta: 'ALTA',
     pie: 'Vêm em ondas. Limpe a última de uma zona e a próxima se abre. O rei espera na cinza.',
     piePausa: 'O mundo fica parado enquanto isto estiver aberto.',
-    zbosque: 'A MATA', zruinas: 'AS RUÍNAS', zceniza: 'O CAMPO DE CINZA',
-    zbosqueS: 'onde os enterraram', zruinasS: 'o que sobrou da abadia',
+    zbosque: 'A MATA', zpantano: 'O PÂNTANO', zruinas: 'AS RUÍNAS',
+    zosario: 'O OSSÁRIO', zceniza: 'O CAMPO DE CINZA',
+    zbosqueS: 'onde os enterraram', zpantanoS: 'a água nunca escoou',
+    zruinasS: 'o que sobrou da abadia', zosarioS: 'tiraram-nos da abadia',
     zcenizaS: 'nada cresce aqui desde então',
     restan: 'FALTAM', restanRey: 'O REI',
     nivel: 'NÍVEL', subiste: 'NÍVEL {0}',
@@ -265,9 +346,11 @@ const TXT = {
     total: '{0} ondas · 3 zonas',
     datos2: 'Ondas {0}/{1} · Esqueletos {2} · Nível {3} · {4}',
     d0: 'Enterraram-nos aqui em cima, e algo os pôs de pé de novo.',
-    d1: 'O caminho segue. As pedras da abadia estão mais à frente.',
-    d2: 'A mata acaba aqui. O que vem depois já não é terra.',
-    d3: 'Algo grande se levantou no fundo da cinza.',
+    d1: 'A mata afunda. A água nunca escoou daqui.',
+    d2: 'As pedras da abadia. Ainda cheira a queimado.',
+    d3: 'Tiraram-nos da abadia e empilharam-nos aqui. Ninguém os enterrou de novo.',
+    d4: 'Aqui acaba tudo. O que vem depois já não é terra.',
+    dRey: 'Algo grande se levantou no fundo da cinza.',
   },
 };
 /* la sonda lo pone para fotografiar un instante; vive ACÁ y no en la parte

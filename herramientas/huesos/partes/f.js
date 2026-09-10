@@ -14,7 +14,7 @@ let TEX_LISTAS = 0, TEX_FALLADAS = 0;
    casa de muñecas o de gigante, y es la regla 6 del horneado: la escala no se
    elige, se cuenta sobre la imagen. Estas tres se pidieron con el detalle a
    escala de "un metro y medio de suelo", así que ése es el número.          */
-const SUELO_M = { s_bosque: 2.6, s_piedra: 2.2, s_ceniza: 3.0 };
+const SUELO_M = { s_bosque: 2.6, s_piedra: 2.2, s_ceniza: 3.0, s_pantano: 2.8, s_osario: 2.4 };
 /* ── EL TINTE VA CASI EN BLANCO, Y ES LA REGLA 7 ─────────────────────────
    three.js multiplica `map × color`, así que el tinte del material es un tinte
    SOBRE la foto. Los tres anteriores —0x8f9a7e y compañía— se escribieron
@@ -24,7 +24,8 @@ const SUELO_M = { s_bosque: 2.6, s_piedra: 2.2, s_ceniza: 3.0 };
    Ahora el ALBEDO lo pone el horneado —`nivela()`, que lleva cada foto a su
    objetivo— y acá queda sólo el empujón de color, con la luma cerca de 1: si
    el tinte volviera a bajar la luma estaría corrigiendo dos veces lo mismo. */
-const SUELO_TINTE = { s_bosque: 0xf2ffe8, s_piedra: 0xf8f6ff, s_ceniza: 0xfff6ec };
+const SUELO_TINTE = { s_bosque: 0xf2ffe8, s_piedra: 0xf8f6ff, s_ceniza: 0xfff6ec,
+                      s_pantano: 0xeafff0, s_osario: 0xfffaf0 };
 
 function texDe(url, cb) {
   const t = new THREE.Texture();
@@ -96,7 +97,8 @@ function sueloRespaldo(k) {
   /* el respaldo lleva el ALBEDO puesto, igual que la foto nivelada: con los
      grises viejos —0,056 de luma lineal por 0,27 de tinte— el suelo dibujado
      por código salía tan negro como el fotográfico */
-  const base = { s_bosque: '#525f48', s_piedra: '#7d7b74', s_ceniza: '#6a655e' }[k] || '#525f48';
+  const base = { s_bosque: '#525f48', s_piedra: '#7d7b74', s_ceniza: '#6a655e',
+                 s_pantano: '#3b4a3c', s_osario: '#8d887a' }[k] || '#525f48';
   g.fillStyle = base; g.fillRect(0, 0, 128, 128);
   for (let i = 0; i < 900; i++) {
     const v = Math.floor(az() * 46) - 23;

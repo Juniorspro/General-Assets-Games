@@ -94,7 +94,7 @@ window.__H = {
              niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
              muerto: JUG.muerto, golpe: JUG.golpe, esq: +JUG.esqT.toFixed(2) },
       esq: { vivos: ESQS.filter(e => e.vive).length, cerca: ESQ_KIT ? ESQ_KIT.n : 0,
-             porZona: [0, 1, 2].map(z => esqVivos(z)) },
+             porZona: ZONAS.map((_, z) => esqVivos(z)) },
       veg: VEG.reduce((a, v) => a + v.malla.count, 0), vegMallas: VEG.length,
       errs: (window.__errs || []).length,
     };
@@ -118,6 +118,34 @@ window.__H = {
     }
     return { rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2), dentroDeAlgo: dentro,
              x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), zona: zonaDe(JUG.x, JUG.z) };
+  },
+  /* EL JOYSTICK, MEDIDO CONTRA LOS EJES DE LA CÁMARA — que es lo único que
+     puede decir si está invertido. `anda(n,dx,dz)` recibe la dirección YA EN
+     EL MUNDO, así que se saltea `entradaMundo` entera: por ahí nunca iba a
+     aparecer que empujar a la derecha mueve al bicho a la izquierda de la
+     pantalla, y por eso el defecto duró. Acá se escribe el JOY de verdad, se
+     llama a `entradaLee()` —el mismo camino que el dedo— y lo que sale se
+     proyecta sobre el frente y sobre la DERECHA de la cámara.
+     La derecha de la cámara no se supone: se lee de su matriz de mundo, que
+     ya lleva adentro el `CAM_YAW + PI` y el orden del Euler.               */
+  joyMide(jx, jz) {
+    const g = JOY.id; JOY.id = 99; JOY.dx = jx * JOY.r; JOY.dy = jz * JOY.r; JOY.bruto = Math.hypot(jx, jz);
+    const m = entradaLee();
+    JOY.id = g; JOY.dx = JOY.dy = 0; JOY.bruto = 0;
+    /* LA CÁMARA SE PONE AL DÍA ANTES DE LEERLA. `mira()` escribe CAM_YAW y
+       nadie mueve el lente hasta el próximo cuadro dibujado: leyendo la matriz
+       ahí se compara un yaw nuevo contra una cámara vieja. Medido con el
+       defecto puesto, a yaw 1,9 empujar a la derecha daba `adelante −0,946`,
+       que es exactamente el coseno de la diferencia con el yaw anterior. */
+    camPaso(0.5, 0, 0); cam.updateMatrixWorld(true);
+    const e = cam.matrixWorld.elements;
+    const der = new THREE.Vector3(e[0], e[1], e[2]).setY(0).normalize();   // +X de la cámara
+    const fre = new THREE.Vector3(-e[8], -e[9], -e[10]).setY(0).normalize(); // −Z de la cámara
+    const v = new THREE.Vector3(m.x, 0, m.z);
+    const l = v.length() || 1;
+    return { pide: [jx, jz], mundo: [+m.x.toFixed(3), +m.z.toFixed(3)],
+             adelante: +(v.dot(fre) / l).toFixed(3), derecha: +(v.dot(der) / l).toFixed(3),
+             corre: m.corre };
   },
   ataca() { return jugPide('ataca'); },
   esquiva() { return jugPide('esquiva'); },
@@ -212,7 +240,14 @@ window.__H = {
       esqPaso(PASO); zonasPaso(PASO);
       if (PART === 'fin') break;
     }
-    return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: GANO,
+    /* ── `gano` SÓLO VALE SI LA PARTIDA TERMINÓ ────────────────────────────
+       `GANO` es una global del módulo y este bucle puede salir por el TOPE DE
+       PASOS con la partida todavía en pie; ahí lo que se devolvía era el
+       resultado de la corrida ANTERIOR. Medido: doce corridas honestas —la
+       última ganada— y enseguida doce al azar, y la primera al azar informaba
+       `gano: true` con 0,8 oleadas limpiadas de once. Una sonda que informa
+       una victoria que no ocurrió es peor que una que no informa nada. */
+    return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: PART === 'fin' && GANO,
              bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
              olas: OLA.hechas, deOlas: OLA_TOTAL, zona: ZONA_ACT,
              huyo, esq, vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
@@ -862,8 +897,9 @@ window.__H = {
       if (cfg.olas) { cfg.olas.forEach((o, i) => { if (ZONAS[i]) ZONAS[i].olas = o.slice(); }); OLA_TOTAL = olaTotal(); }
       if (cfg.cura !== undefined) OLA_CURA = cfg.cura;
       if (cfg.xp !== undefined) OLA_XP = cfg.xp;
+      if (cfg.zxp !== undefined) ZONA_XP = cfg.zxp;
     }
-    return { olas: ZONAS.map(Z => Z.olas), total: OLA_TOTAL, cura: OLA_CURA, xp: OLA_XP };
+    return { olas: ZONAS.map(Z => Z.olas), total: OLA_TOTAL, cura: OLA_CURA, xp: OLA_XP, zxp: ZONA_XP };
   },
   /* mata a los que quedan y corre el respiro: para fotografiar la oleada n
      sin jugar cinco minutos. LA MUERTE VA POR `esqRecibe` y no bajando `vida`

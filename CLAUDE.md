@@ -281,24 +281,171 @@ munecas.
   `herramientas/tono/partes/` y se arma con `python3 herramientas/tono/armar.py`; los sonidos se
   hornean con `python3 herramientas/tono/hornear_sonidos.py`.
 
-- **`Huesos.html` es "HUESOS"** (~920 KB, de los cuales 830 son las cincuenta y una texturas
-  generadas; el mundo entero, los bichos y las animaciones se dibujan por código). El decimosexto
-  juego. Un **RPG de matar esqueletos en tercera persona**, vertical nativo y con joystick: se
-  camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a uno y el
-  remate barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del juego. Tres
-  **zonas encadenadas** —bosque, ruinas y ceniza— cada una con su suelo, su niebla, su cielo y su
-  luz, y **caen por oleadas**: siete en total (2 · 2 · 3, la última es el rey), con un respiro entre
-  una y otra que cura un poco y paga xp. Limpiada la última de una zona se abre la siguiente, y eso
-  es el punto de control: cura entera y regala un nivel. **Veintiocho esqueletos de cuatro clases**
-  —peón, lancero, bruto y el **rey** de 460 de vida al fondo de la ceniza— que salen de **una**
-  máquina de estados y una tabla de números, no de cuatro ramas; la composición de cada oleada es
-  determinista por semilla y **no puede llevar más de un tercio de brutos**. El récord son oleadas
-  limpiadas, que es lo único que distingue entrar a la ceniza de terminarla. El rey es el único con **corona y capa**, y son dos mallas
-  instanciadas más cuya matriz queda en cero para todos los demás. La vegetación son **veinticuatro
-  mallas instanciadas** —seis familias de cuatro variantes— con encaramiento cilíndrico parchado en
-  el shader. Pixelado de verdad (destino de render chico estirado con NEAREST). Vive partido en
-  `herramientas/huesos/partes/` y se arma con `python3 herramientas/huesos/armar.py`; los sprites se
-  hornean con `python3 herramientas/huesos/hornear.py`.
+- **`Huesos.html` es "HUESOS"** (~1,45 MB, de los cuales la mayor parte son las sesenta y nueve
+  texturas y las catorce mallas generadas; el mundo entero y las animaciones se dibujan por código).
+  El decimosexto juego. Un **RPG de matar esqueletos en tercera persona**, vertical nativo y con
+  joystick: se camina, se pega un **combo de tres golpes** —los dos primeros son tajos que le dan a
+  uno y el remate barre— y se **esquiva**, que tiene cuadros de invencibilidad y es la mitad del
+  juego. **Cinco zonas encadenadas** en anillos concéntricos —bosque, pantano, ruinas, osario y
+  ceniza, 132 m de radio— cada una con su suelo, su niebla, su cielo, su luz, **su propia receta de
+  vegetación en tres capas y su propia mezcla de clases**, y **caen por oleadas**: once en total
+  (2 · 2 · 2 · 2 · 3, la última es el rey), con un respiro entre una y otra que cura un poco y paga
+  xp. Limpiada la última de una zona se abre la siguiente, y eso es el punto de control: cura entera
+  y regala medio nivel. **Cuarenta y seis esqueletos de cuatro clases** —peón, lancero, bruto y el
+  **rey** de 460 de vida al fondo de la ceniza— que salen de **una** máquina de estados y una tabla
+  de números, no de cuatro ramas; la composición de cada oleada es determinista por semilla y **no
+  puede llevar más de un tercio de brutos**. El récord son oleadas limpiadas, que es lo único que
+  distingue entrar a la ceniza de terminarla. El rey es el único con **corona y capa**, y son dos
+  mallas instanciadas más cuya matriz queda en cero para todos los demás. La vegetación son
+  **treinta y dos mallas instanciadas** —ocho familias de cuatro variantes, con el alto de cada
+  variante MEDIDO al hornear— con encaramiento cilíndrico parchado en el shader. Pixelado de verdad
+  (destino de render chico estirado con NEAREST). Vive partido en `herramientas/huesos/partes/` y se
+  arma con `python3 herramientas/huesos/armar.py`; los sprites se hornean con
+  `python3 herramientas/huesos/hornear.py` y las mallas con `hornear_3d.py`.
+
+### Centésima quincuagésima primera vuelta (2026-09-10): **HUESOS** — la calavera al revés, el joystick espejado, y de tres zonas a cinco
+
+Pedido, textual y repetido dos veces: *"las calaveras tienen la cabeza para atrás el joystick está
+invertido genera más mapas y mejores gráficos"*. Las cuatro cosas eran ciertas.
+
+#### LA CALAVERA MIRABA PARA ATRÁS, Y EL GIRO ESTABA EN LA TABLA
+
+`hornear_3d.py` tiene una columna `giro` por pieza, medida contra las mallas de Tripo en la vuelta
+145. La del cráneo decía `(0, 90, 0)` y tenía que decir **`(0, -90, 0)`**: la malla vino mirando a
+−X, así que un cuarto de vuelta la lleva a +Z **o** a −Z según el signo, y el signo estaba al revés.
+El cuerpo avanza hacia +Z, o sea que los veintiocho esqueletos caminaban con la cara en la nuca.
+
+**Y NO SE PUDO JUZGAR CON UNA CAPTURA DEL JUEGO.** La cámara va detrás del jugador, así que un
+esqueleto a distancia de pelea ocupa el **15,8 % del alto del cuadro** y encima el diálogo le queda
+encima: a ese tamaño una calavera de 540 triángulos girada 180 grados se ve igual que una derecha.
+Lo que lo contestó en una imagen fue un **rasterizador propio con búfer de profundidad**
+(`rend.py` del scratchpad), que lee el GLB horneado de `i_3d.js` y saca la pieza sola desde los
+cuatro ejes: en +Z se ven las cuencas, la abertura nasal y los dientes, y en −Z el occipital.
+
+**EL COSTILLAR Y LA PELVIS SE QUEDAN EN `+90` A PROPÓSITO.** Se miraron con la misma hoja de
+contactos y **sus vistas +Z y −Z son indistinguibles** a 500 y 383 triángulos: no hay un lado
+correcto que se pueda comprobar, así que darlos vuelta sería mover un número sin poder medirlo.
+
+#### EL JOYSTICK: SÓLO EL EJE HORIZONTAL, Y LA SONDA QUE EXISTÍA NO PODÍA VERLO
+
+`entradaMundo` devolvía `{ x: jx*c − jz*s, z: −jx*s − jz*c }` y va
+**`{ x: −jx*c − jz*s, z: jx*s − jz*c }`**: el eje de adelante estaba bien y el de costado espejado,
+que es exactamente lo que se reporta como *"está invertido"* y no como *"no anda"*.
+
+**POR QUÉ SOBREVIVIÓ TANTAS VUELTAS:** todo lo que este juego audita entra por `anda(n, dx, dz)`,
+que recibe una dirección **de mundo** y por lo tanto **saltea `entradaMundo` entera**. El
+auto-jugador, las cuarenta semillas de la auditoría y el patinaje pasaban todos por al lado del
+único sitio que estaba roto. Entró `joyMide(jx, jz)`, que empuja el joystick como el dedo y devuelve
+la dirección resultante proyectada sobre el frente y el costado de la cámara — y para eso tiene que
+poner la cámara al día ella misma (`camPaso(0.5,0,0)` + `updateMatrixWorld`), porque `cam` sólo se
+acomoda al dibujar y una sonda que mide sin dibujar lee la matriz del cuadro anterior. Es la quinta
+vez en este repo.
+
+Medido: `(1,0)` → derecha **+1**, `(−1,0)` → **−1**, `(0,−1)` → adelante **+1**, `(0,1)` → **−1**, y
+sigue dando lo mismo con la cámara girada 1,9 rad y en una diagonal 0,707/0,707. El teclado entra
+por la misma función, así que WASD se arregló con la misma línea.
+
+#### DE TRES ZONAS A CINCO, Y LA TABLA TUVO QUE PODER DESCRIBIRLAS
+
+Entran el **pantano** entre el bosque y las ruinas, y el **osario** entre las ruinas y la ceniza:
+`bosque · pantano · ruinas · osario · ceniza`, con el mundo de 108 a **132 m de radio** y las
+oleadas de 7 a **11** (46 esqueletos). Cuatro assets generados con Rezona en el proyecto de siempre
+—dos familias de sprites y dos suelos— horneados con la cadena que ya estaba.
+
+Pero agregar dos filas a `ZONAS` no alcanzaba, porque **había cinco cosas escritas para tres**:
+
+1. **`puntoRey` decía `zonaDe(x,z) !== 2`.** Con cinco zonas el rey nace en las **ruinas**, a
+   cuarenta metros de donde el jugador está peleando la oleada del osario. No falla: el rey
+   simplemente aparece en otra parte del mapa.
+2. **El piso de brutos era `zi > 0`**, así que la última oleada del pantano —cuya receta es peón y
+   lancero a propósito— se llevaba un bruto forzado. Ahora lee `ZONAS[zi].clases`.
+3. **LAS CAPAS BAJA Y MEDIA DE VEGETACIÓN ESTABAN CLAVADAS PARA LAS TRES ZONAS**, con un
+   `if (k===0) … else if (k===1) … else …`. O sea **helechos verdes en el campo de huesos y en la
+   ceniza**. Cada zona declara ahora sus tres capas (`veg`) y se elige con una tabla; medido después:
+   **cero helechos** en el osario y en la ceniza.
+4. **`DICHO` era un arreglo fijo de cuatro** y su índice 3 hacía además de bandera del rey — cosa que
+   funcionaba **sólo porque con tres zonas el índice 3 era uno más allá de la última**. Con cinco, el
+   3 es el osario: entrar ahí silenciaba al rey, y la ceniza pedía una clave que no existía y
+   **escribía `d4` literal en la pantalla**. Va dimensionado desde `ZONAS` con un `DICHO_REY` propio,
+   más `d4` y `dRey` en los tres idiomas.
+5. **`porZona` de la sonda estaba escrito `[0,1,2].map(...)`**, así que informaba tres zonas de cinco.
+
+**Y EL TAMAÑO DEL CUADRADO DEL SUELO SE MANTIENE, QUE ES LO QUE HACE QUE LOS BORDES NO SE VEAN
+DENTADOS.** El corte entre zonas se decide **por cuadrado**, así que al crecer el mundo de 108 a 132
+con la misma cantidad de segmentos el cuadrado se agranda y el borde se escalona. `SUELO_SEG` sube de
+84 a **102** y el cuadrado se queda en 2,59 m.
+
+**LOS TAMAÑOS DE LAS PIEZAS SE MIDEN AL HORNEAR.** Las cuatro variantes de una familia comparten un
+`esc`, así que un tronco del pantano que ocupa el 42 % de su celda y otro que ocupa el 141 % salen
+del mismo alto: medido, un tronco de pantano quedaba de **diez metros de ancho**. `hornear.py`
+escribe ahora un `hrel` por pieza —su alto en píxeles dividido por el promedio de su familia— y la
+instancia lo multiplica. Medido: pantano `[1,409 · 1,222 · 0,944 · 0,425]`, o sea que la variación de
+verdad es de más de tres a uno.
+
+#### LA ECONOMÍA HUBO QUE VOLVER A MEDIRLA, PORQUE CINCO ZONAS DISPARAN OTRA CANTIDAD DE VECES
+
+Limpiar una oleada cura y paga xp, y cerrar una zona cura entero y regala nivel. Con tres zonas y
+siete oleadas eso pasaba 4 y 2 veces; con cinco y once pasa **7 y 4**. Medido sin tocar nada, el bot
+honesto pasó a ganar **12 de 12 terminando con el 94 % de la vida** — o sea que agregar mapas había
+hecho el juego más fácil, que es justo lo que nadie pidió. Barrido y asentado en `OLA_CURA 0,20 ·
+OLA_XP 0,32 · ZONA_XP 0,5` (eran 0,28 · 0,45 · un nivel entero escrito a mano en `k.js`).
+
+**Y EL BOT AL AZAR INFORMABA `gano: true` PROMEDIANDO 0,8 OLEADAS DE 11**, que es aritméticamente
+imposible. `juega` devolvía la global `GANO`, que queda vieja cuando el bucle sale por el tope de
+pasos en vez de llegar a `PART === 'fin'`. Va `gano: PART === 'fin' && GANO`. **Una sonda que informa
+una victoria que no ocurrió es el peor defecto que este repo puede tener**, porque aprueba todo lo
+demás.
+
+#### EL CIELO EN DEGRADADO: SE HIZO, SE MIDIÓ CONTRA SÍ MISMO Y SE SACÓ
+
+`esc.background = Color` rellena de un solo valor más de un tercio del cuadro, así que un domo con el
+color en los vértices —cenit oscuro, horizonte del color de la niebla— parecía la mejora obvia.
+
+**PRIMERO ESTABA CLIPEADO Y NO SE VEÍA.** Radio 400 con el plano lejano de la cámara **en 400**: el
+domo se recortaba entero y lo que se seguía viendo era el fondo plano de siempre. La firma fue que
+las cinco zonas devolvían **delta 0 con la banda de arriba y la de abajo iguales hasta el decimal**.
+Con radio 200 y `depthTest:false` —que es el truco de cualquier fondo: se dibuja primero y todo lo
+demás lo tapa, así que su radio deja de importar— empezó a dibujarse.
+
+Y ahí el A/B **en el mismo binario**, apagando el domo y volviendo a medir, dijo esto:
+
+| zona | sin domo | con domo | lo que puso |
+|---|---|---|---|
+| bosque | 65,0 | 61,4 | **−3,6** |
+| pantano | 49,8 | 48,6 | **−1,2** |
+| ruinas | 58,0 | 55,4 | **−2,6** |
+| ceniza | 36,3 | 37,0 | **+0,7** ← al revés |
+
+Menos de cuatro sobre 255 con el cenit ya multiplicado por 0,30, y en la ceniza para el otro lado.
+**La causa es geométrica y ningún ajuste la mueve:** `CAM_PIT` arranca en −0,13 y el campo es de 58
+grados, así que la franja de cielo que el jugador ve llega a **21 grados de elevación** —o sea
+`t ≤ 0,53` de un degradado anclado abajo— y el horizonte del domo **tiene** que ser el color de la
+niebla o aparece una costura donde el terreno se disuelve. La mitad de un rango chico es nada.
+Y encima el cielo plano es lo correcto acá: con la niebla en 0,0135 a 0,021, a doscientos metros todo
+es del color de la niebla.
+
+Se sacó entero —el domo, su sonda y su constante— y **queda la medición escrita en `k.js`**: la
+próxima vez que alguien lo intente va a leer primero que hay que cambiar la cámara y no el domo.
+Es la regla de siempre: *un cambio que no mide mejor no se deja puesto por parecer razonable*.
+
+#### MEDIDO AL CERRAR
+
+Joystick **+1 / −1 / +1 / −1** en los cuatro ejes, también con la cámara girada. Auditoría en node
+sobre **40 semillas: 0 malas**, 20.080 de 20.080 celdas alcanzables por semilla, **0 fríos, 0
+sueltas**, 46 esqueletos y 11 oleadas con la composición `ppp / lppl / pppl / lpll / lpll / blppl /
+lbllb / pbbll / lbbll / blblll / r`. Auto-jugadores sobre 12 semillas: **honesto 11 de 12** con 10,6
+oleadas de 11 y 44,3 bajas, **al azar 0 de 12** con 0,5 oleadas y 2,8 bajas. Texturas **69 de 69, 0
+fallidas**, ocho familias de cuatro y **5 de 5 suelos**. Marcha `adelante: true` con patinaje **0 %**
+y la rodilla en 0,12 rad en el apoyo. Esquive **giro 0** con 19 de 21 pasos invencibles. Combo: un
+toque suelto encadena. Armas 0,62 · 1,618 · 1,12 · 1,82 contra lo esperado. **Cero solapamientos** de
+HUD y `hud()` con `faltan` sólo en `joy` y `teclas`. Tres idiomas en vivo (`EL BOSQUE · THE WOOD ·
+A MATA`) y tres calidades en caliente (**279×129 · 372×172 · 525×242**, con 68 llamadas de dibujo y
+34,1 mil triángulos en baja contra 98 y 50,2 mil en media y alta). `window.__errs` **vacío en todas
+las corridas**. El HTML quedó en **1,45 MB**.
+
+**LO QUE NO ESTÁ RESUELTO:** la semilla que el bot honesto pierde sigue siendo la de la vuelta 145 —
+su rama de huida dispara con los bichos ya en distancia de golpe, así que desperdicia los 5,6 m/s
+contra los 2,55 de un peón—. Y el costillar y la pelvis siguen con el giro sin poder comprobarse.
 
 ### Centésima quincuagésima vuelta (2026-09-09): **HUESOS** — caminaban para atrás, el esquive te daba media vuelta, y el combo no encadenaba
 

@@ -406,5 +406,17 @@ function camPaso(dt, giroX, giroY) {
    ejes de mundo, girar la cámara deja "adelante" apuntando a otro lado */
 function entradaMundo(jx, jz) {
   const s = Math.sin(CAM_YAW), c = Math.cos(CAM_YAW);
-  return { x: jx * c - jz * s, z: -jx * s - jz * c };
+  /* EL EJE HORIZONTAL ESTABA INVERTIDO, Y NINGUNA SONDA LO PODÍA VER. La
+     cámara mira por su −Z con `rotation.y = CAM_YAW + PI`, así que su +X
+     —lo que el jugador llama «derecha»— es (−cos YAW, +sin YAW), y esto
+     devolvía (+cos YAW, −sin YAW): el negativo exacto. Empujar el joystick a
+     la derecha movía al héroe a la IZQUIERDA de la pantalla, y lo mismo la D
+     del teclado, porque los dos caminos entran por acá.
+     DURÓ PORQUE `anda(n, dx, dz)` —la sonda con la que se auditó todo— recibe
+     la dirección YA EN EL MUNDO y se saltea esta función entera, y el
+     auto-jugador hace lo mismo. Medido ahora con `joyMide`, que escribe el JOY
+     de verdad, llama a `entradaLee()` y proyecta lo que sale sobre los ejes de
+     la CÁMARA leídos de su matriz de mundo: empujar (1,0) daba `derecha −1`.
+     El eje vertical siempre estuvo bien: empujar arriba da `adelante +1`.   */
+  return { x: -jx * c - jz * s, z: jx * s - jz * c };
 }

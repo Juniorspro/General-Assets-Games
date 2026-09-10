@@ -92,7 +92,16 @@ function armaVegetacion(mundo) {
     lista.forEach((it, i) => {
       const { c, p } = it;
       const y = H(c.x, c.z);
-      const al = c.esc, an = c.esc * p.prop;   // el ancho sale de la proporción medida
+      /* EL ALTO LO CORRIGE `hrel`, QUE TAMBIÉN ESTÁ MEDIDO. `c.esc` es el alto
+         TÍPICO de la capa en metros y `hrel` cuánto se sale de él esta pieza
+         dentro de su familia —sale del alto de su recorte en la hoja, donde
+         las cuatro están dibujadas a la misma escala—. Sin él las cuatro
+         variantes salen igual de altas y el ancho, que sí es la proporción
+         medida, las estira: el tronco caído del pantano tiene proporción 2,46
+         y a la altura del árbol muerto medía DIEZ METROS. Las seis familias
+         viejas están entre 0,95 y 1,05, o sea que esto casi no las toca; las
+         que se mueven son las que tienen que moverse, `ruinas` y `pantano`. */
+      const al = c.esc * (p.hrel || 1), an = al * p.prop;
       M.makeScale(an, al, 1); M.setPosition(c.x, y, c.z);
       im.setMatrixAt(i, M);
       /* el tinte de zona va HORNEADO en la instancia: es un dato de la
@@ -144,7 +153,13 @@ function vegLimpia() {
    Una malla por zona, recortada al anillo que le toca, con las UV EN METROS
    —regla 6 del horneado: la repetición sale de cuántos metros cubre la foto,
    no de un número elegido a ojo—.                                          */
-let SUELO = [], SUELO_SEG = 84;
+/* EL PASO DE LA REJA SE CONSERVA CUANDO EL MUNDO CRECE, y no el número de
+   segmentos. El corte entre dos zonas es a nivel de CUADRO —`zonaDe` decide por
+   el centro de cada uno— así que el tamaño del cuadro ES lo dentado que se ve
+   la frontera. Con 84 clavados y el radio de 108 a 132, el cuadro pasaba de
+   2,57 m a 3,14 y las cuatro fronteras salían un 22 % más escalonadas sin que
+   nadie hubiera pedido eso. 102 devuelve el cuadro a 2,59. */
+let SUELO = [], SUELO_SEG = 102;
 
 function armaSuelo() {
   for (const s of SUELO) { esc.remove(s); s.geometry.dispose(); }

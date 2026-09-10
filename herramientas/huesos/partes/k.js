@@ -154,7 +154,7 @@ function zonasPaso(dt) {
        nivel es lo que convierte la puerta en un respiro y no en un embudo. */
     ZONA_ACT++; OLA.i = 0; OLA.espera = OLA_RESPIRO_Z;
     JUG.vida = JUG.vidaMax;
-    jugGanaXp(JUG.xpSig - JUG.xp);
+    jugGanaXp(Math.round((JUG.xpSig - JUG.xp) * ZONA_XP));
     avisa(T('abre') + ' · ' + T('z' + ZONAS[ZONA_ACT].id), 3.4);
     son('zona');
   } else {
@@ -187,9 +187,35 @@ function guardaRecord() {
    no de la que le toca matar: lo que hay que ver es dónde estás parado */
 const _CN = new THREE.Color(), _CC = new THREE.Color(), _CL = new THREE.Color();
 let ZONA_VIS = 0;
+
+/* ── EL CIELO ES PLANO, Y SE PROBÓ QUE NO PUEDE NO SERLO ──────────────────
+   `esc.background = Color` rellena de un solo valor todo lo que no tapa la
+   geometría, y en este encuadre eso es más de un tercio del cuadro. Se hizo un
+   domo con el color en los vértices —cenit oscuro, horizonte del color de la
+   niebla— y SE MIDIÓ CONTRA SÍ MISMO, apagándolo en el mismo binario:
+
+     zona     sin domo   con domo   lo que puso
+     bosque     65,0       61,4       −3,6
+     pantano    49,8       48,6       −1,2
+     ruinas     58,0       55,4       −2,6
+     ceniza     36,3       37,0       +0,7   ← al revés
+
+   Menos de cuatro sobre 255, y en la ceniza para el otro lado. La causa es
+   GEOMÉTRICA y ningún ajuste la mueve: `CAM_PIT` arranca en −0,13 y el campo
+   es de 58 grados, así que la franja de cielo que el jugador ve llega a 21
+   grados de elevación —o sea `t ≤ 0,53` de un degradado anclado ABAJO— y el
+   horizonte del domo TIENE que ser el color de la niebla o aparece una costura
+   donde el terreno se disuelve. La mitad de un rango chico es nada.
+   Y encima el cielo plano es lo CORRECTO acá: con la niebla en 0,0135 a 0,021,
+   a doscientos metros todo es del color de la niebla.
+   Antes de volver a intentarlo hay que cambiar la CÁMARA, no el domo.        */
 function zonaMezcla(dt) {
   const zi = zonaDe(JUG.x, JUG.z), Z = ZONAS[zi];
-  if (!esc.fog) { esc.fog = new THREE.FogExp2(Z.niebla, Z.nieblaD); esc.background = new THREE.Color(Z.cielo); ZONA_VIS = zi; }
+  if (!esc.fog) {
+    esc.fog = new THREE.FogExp2(Z.niebla, Z.nieblaD);
+    esc.background = new THREE.Color(Z.cielo);
+    ZONA_VIS = zi;
+  }
   const k = 1 - Math.exp(-1.9 * dt);
   esc.fog.color.lerp(_CN.setHex(Z.niebla), k);
   esc.fog.density = mez(esc.fog.density, Z.nieblaD * (CALIDAD === 'baja' ? 1.22 : 1), k);

@@ -125,7 +125,7 @@ function nuevaPartida(sem) {
   jugArranca();
   esqArranca([]);
   ZONA_ACT = 0; TALLY.golpes = 0; TALLY.dano = 0; TALLY.porCl = {}; TALLY.esquivados = 0; SANGRE = 0; SACUDE = 0; AVISO_T = 0;
-  DICHO[0] = DICHO[1] = DICHO[2] = DICHO[3] = false;
+  DICHO.fill(false);
   CAM_YAW = Math.PI; CAM_PIT = -0.13; CAM_D_ACT = CAM_D;
   PART = 'juego'; verPanel(null);
   /* EL MUNDO ARRANCA VACÍO Y LA PRIMERA OLEADA LA SUELTA `olaSuelta`, que es
@@ -285,6 +285,9 @@ function unPaso(dt) {
   jugPaso(dt, entradaLee());
   esqPaso(dt);
   zonasPaso(dt);
-  if (ZONA_ACT === 2 && !DICHO[3] && esqVivos(2) <= 1) dialogoRey();
+  /* LA ÚLTIMA ZONA, no la 2: con el índice escrito, agregar una zona deja al
+     rey anunciándose en el medio del recorrido y mudo cuando de verdad sale. */
+  const uz = ZONAS.length - 1;
+  if (ZONA_ACT === uz && !DICHO[DICHO_REY] && esqVivos(uz) <= 1) dialogoRey();
   if (PART === 'fin') { verPanel('pFin'); pintaFin(); }
 }
