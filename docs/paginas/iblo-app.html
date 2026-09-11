@@ -690,6 +690,11 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
           <span><b>Archivo de eventos</b><small>Subir fotos y videos a su sección.</small></span>
           <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
         </button>
+        <button class="acc" type="button" data-ir="pVisitas">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19V9M9 19V5M15 19v-7M21 19v-4"/></svg></span>
+          <span><b>Qui&#233;n est&#225; mirando</b><small>Cu&#225;nta gente hay ahora, de d&#243;nde viene y qu&#233; mira.</small></span>
+          <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+        </button>
         <button class="acc" type="button" data-ir="pLista">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h7"/></svg></span>
           <span><b>Lo que está en la web</b><small>Para bajar algo.</small></span>
@@ -889,6 +894,14 @@ input[type=text],input[type=password],input[type=datetime-local],input:not([type
     </section>
 
     <!-- ---------- publicadas ---------- -->
+    <!-- Qui&#233;n est&#225; mirando la web. No hay cuentas en el sitio p&#250;blico, as&#237; que
+         nadie tiene nombre: lo honesto es contar, no inventar identidades. -->
+    <section class="pant" id="pVisitas" hidden>
+      <h2>Qui&#233;n est&#225; mirando</h2>
+      <p class="baja" id="vsResumen">Cargando&#8230;</p>
+      <div id="vsCuerpo"></div>
+    </section>
+
     <section class="pant" id="pLista" hidden>
       <span class="rot">Lo que está arriba</span>
       <h2>Mis <em>publicaciones</em></h2>
@@ -1355,7 +1368,7 @@ $("btSalir").addEventListener("click", function(){ cerrarSesion(); });
 $("btSalir2").addEventListener("click", function(){ cerrarSesion(); });
 
 /* ---------- moverse ---------- */
-var PANTALLAS = ["pInicio","pAsis","pCargar","pLista","pArchivo","pEquipo","pAjustes"];
+var PANTALLAS = ["pInicio","pAsis","pCargar","pLista","pArchivo","pEquipo","pAjustes", "pVisitas"];
 function irA(p){
   PANTALLAS.forEach(function(x){ $(x).hidden = (x !== p); });
   [].forEach.call($("tabs").children, function(b){ b.classList.toggle("act", b.dataset.p === p); });
@@ -1363,6 +1376,7 @@ function irA(p){
   if (p === "pLista"){ cargarLista(); cargarIg(); }
   if (p === "pEquipo") cargarEquipo();
   if (p === "pArchivo") cargarArchivo();
+  if (p === "pVisitas") cargarVisitas();
   scrollTo(0,0);
 }
 $("tabs").addEventListener("click", function(ev){
@@ -1373,6 +1387,105 @@ document.addEventListener("click", function(ev){
   if (b.dataset.tipo) elegirTipo(b.dataset.tipo);
   irA(b.dataset.ir);
 });
+
+/* ---------- quién está mirando la web ----------
+   No hay cuentas en el sitio público: todo el que entra es un desconocido y no
+   hay ningún «quién» que mostrar. Lo único honesto es contarlos, y contar bien:
+   la pantalla dice «visitas» y no «personas» porque es una fila por visita. */
+function ratoVs(ms){
+  var s = Math.round(ms / 1000);
+  if (s < 60) return s + " s";
+  var m = Math.round(s / 60);
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+function nombreDePagina(p){
+  var n = { "portada":"La portada", "iblo":"La portada",
+            "iblo-publicaciones":"Publicaciones", "iblo-archivo":"Archivo",
+            "iblo-reels":"Reels", "iblo-esteticas":"Estéticas",
+            "iblo-servicios":"Servicios" };
+  if (p.indexOf("m:") === 0) return (n[p.slice(2)] || p.slice(2)) + " (celular)";
+  return n[p] || p;
+}
+function cargarVisitas(){
+  var c = $("vsCuerpo");
+  pedir("/visitas").then(function(j){
+    $("vsResumen").textContent = j.ahora.length
+      ? (j.ahora.length === 1 ? "Hay 1 persona mirando ahora mismo."
+                              : "Hay " + j.ahora.length + " personas mirando ahora mismo.")
+      : "No hay nadie mirando en este momento.";
+    c.innerHTML = "";
+
+    function caja(titulo){
+      var d = document.createElement("div");
+      /* mismo cromo que las cifras del tablero, para que no parezca pegado */
+      d.style.cssText = "margin-bottom:14px;padding:15px 16px;border-radius:16px;" +
+        "background:var(--carta);border:1px solid var(--linea)";
+      if (titulo){
+        var h = document.createElement("h3");
+        h.style.cssText = "margin:0 0 4px;font:600 10px/1.4 var(--cond);" +
+          "letter-spacing:.14em;text-transform:uppercase;color:var(--tenue)";
+        h.textContent = titulo; d.appendChild(h);
+      }
+      c.appendChild(d); return d;
+    }
+    function fila(izq, der){
+      var f = document.createElement("div");
+      f.style.cssText = "display:flex;gap:10px;justify-content:space-between;" +
+        "padding:9px 0;border-bottom:1px solid var(--linea);font-size:14.5px";
+      var a = document.createElement("span"); a.textContent = izq;
+      var b = document.createElement("b"); b.textContent = der;
+      f.appendChild(a); f.appendChild(b); return f;
+    }
+
+    /* ahora mismo */
+    if (j.ahora.length){
+      var d0 = caja("Ahora mismo");
+      j.ahora.forEach(function(v){
+        var q = [nombreDePagina(v.pagina || "portada")];
+        if (v.vino) q.push("vino de " + v.vino);
+        d0.appendChild(fila(q.join(" · "),
+          "hace " + ratoVs(Date.now() - v.desde) + (v.movil ? " · celu" : " · compu")));
+      });
+    }
+
+    /* los números */
+    [["Últimas 24 horas", j.hoy], ["Últimos 7 días", j.semana]].forEach(function(x){
+      var d = caja(x[0]), n = x[1] || {};
+      var prom = n.visitas ? ratoVs(Math.round((n.tiempo || 0) / n.visitas)) : "—";
+      d.appendChild(fila("Visitas", String(n.visitas || 0)));
+      d.appendChild(fila("Desde el celular", String(n.enCelu || 0)));
+      d.appendChild(fila("Se quedan, en promedio", prom));
+    });
+
+    if (j.paginas.length){
+      var d1 = caja("Qué miran (7 días)");
+      j.paginas.forEach(function(x){ d1.appendChild(fila(nombreDePagina(x.pagina), String(x.n))); });
+    }
+    if (j.vienen.length){
+      var d2 = caja("De dónde vienen (7 días)");
+      j.vienen.forEach(function(x){ d2.appendChild(fila(x.vino, String(x.n))); });
+    } else {
+      var d2b = caja("De dónde vienen (7 días)");
+      var p2 = document.createElement("p");
+      p2.style.cssText = "margin:0;font-size:13.5px;opacity:.75";
+      p2.textContent = "Todavía nadie llegó desde otro sitio, o entraron escribiendo la dirección.";
+      d2b.appendChild(p2);
+    }
+    if (j.dias.length){
+      var d3 = caja("Día por día");
+      j.dias.forEach(function(x){ d3.appendChild(fila(x.dia, String(x.n))); });
+    }
+
+    var nota = document.createElement("p");
+    nota.style.cssText = "font-size:12.5px;opacity:.7;margin-top:4px";
+    nota.textContent = j.nota;
+    c.appendChild(nota);
+  }).catch(function(e){
+    $("vsResumen").textContent = e.message;
+    c.innerHTML = "";
+  });
+}
 
 /* ---------- el tablero de inicio ---------- */
 function refrescarTablero(){
