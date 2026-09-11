@@ -374,6 +374,161 @@ munecas.
   **6 mundos × 20 niveles = 120**, procedurales con semilla y auditados uno por uno. Vive partido en
   `herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
 
+### Centésima sexagésima quinta vuelta (2026-09-11): **CERCO**, el vigésimo juego — un Paper.io, y la meta que no se elige se deriva
+
+Pedido: *"y el paper io"* — el pendiente que la vuelta 164 dejó anotado con todas las letras.
+
+`juegos-pc/Cerco.html` (133 KB, **sin un solo asset**: el tablero, la interfaz y los diez sonidos se
+hacen por código). Vive partido en `herramientas/cerco/partes/` y se arma con
+`python3 herramientas/cerco/armar.py`. **Vertical nativo**: el tablero es cuadrado y la cámara lo
+recorre, así que el marco es el teléfono como se agarra.
+
+**SE LLAMA CERCO Y NO «PAPER.IO»**, que es el otro pendiente de la misma lista —*«los nombres más
+originales»*—: *cercar* es literalmente el verbo de la mecánica, es una palabra, y entra en la
+familia (CRUCE, CUBOS, DUNA, MEKO, TONO, LOOPA, FLECHAS).
+
+#### LA META NO SE ELIGE: SALE DE CUÁNTO TABLERO HAY Y ENTRE CUÁNTOS
+
+Es la decisión de la que cuelga el juego entero, y llegó midiendo. Con la meta escrita a mano —un
+porcentaje por nivel— el auto-jugador honesto ganaba **4 de 40**: en un tablero de 74 con tres
+rivales, pedir el 35 % es pedir más de lo que hay. El tablero termina **79,5 % ocupado**
+(`OCUPA`) repartido entre todos, así que la parte pareja de cada uno es `OCUPA/(1+riv)` y la meta
+tiene que ser una **fracción de eso**: `META_A` 0,55 a `META_B` 0,72 a lo largo de los ocho niveles
+de cada mundo. Con eso, y **sin tocar una línea del cerebro del bot**, pasó de 4 de 40 a **40 de 40**.
+
+Y 0,72 es el último multiplicador que conserva el 40 de 40: el barrido dice que por encima el
+honesto empieza a perder los últimos niveles de ANILLO, que son los de tres rivales.
+
+#### LA REGLA ES UNA FUNCIÓN Y LA USAN CUATRO
+
+`reclama()` decide qué queda adentro al cerrar, y la llaman **el jugador, los tres bots, el
+auditor y el fogonazo del reclamo**. Con dos cuentas, el auditor aprueba un juego que no existe —
+la lección de siempre acá.
+
+Y el relleno **es exacto y no aproximado**: territorio más estela forman un anillo cerrado de
+cuatro vecinos, así que inundar desde afuera y quedarse con lo que no se alcanzó es la respuesta
+correcta por topología, no una heurística. **La piedra es transitable en la inundación**: si no lo
+fuera, un peñasco pegado al borde del cerco dejaría el agujero de afuera marcado como propio.
+
+La auditoría de la regla son cuatro casos y los cuatro pasan: **mordida** (30 celdas ganadas contra
+30 esperadas), **roca** (sigue siendo roca y cuenta como mía), **rival** (pierde sus 9 celdas de
+adentro) y **la propia estela** (te mata).
+
+#### UNA SOLA FRACCIÓN DE CELDA PARA TODOS LOS CUERPOS
+
+`M.f` es global. Todos van a la misma velocidad y arrancan alineados, así que **cruzan el borde de
+celda en el mismo instante** y las muertes se resuelven todas juntas: con un reloj por cuerpo, quién
+mata a quién dependería del orden del bucle. La cabeza se dibuja en `ix + dx*M.f`, o sea que la
+interpolación sale del mismo número que la simulación.
+
+#### LOS DOS AUTO-JUGADORES, Y EL TERCERO ES EL QUE PRUEBA QUE HAY JUEGO
+
+| | gana de 40 | tajada | cortes |
+|---|---|---|---|
+| honesto | **40** | 18,1 % | 0,42 |
+| **ciego** (no mira si viene alguien) | 36 | 17,4 % | 0,97 |
+| **al azar** | **0** | **2,3 %** | **2,90** |
+
+El del azar gana **cero de cuarenta** y se come casi tres cortes por partida. Y la separación entre
+el honesto y el ciego es chica **a propósito**: dos barridos independientes dicen lo mismo —
+**CERCO se decide MIRANDO, no arriesgando ni con reflejos**. El que no mira igual llega la mayoría
+de las veces; lo que paga es el doble de cortes.
+
+#### EL DEFECTO DE LA VUELTA: LA CUENTA DE LA PRUEBA NO ERA LA DEL JUEGO
+
+El banco de node nuevo informó **38 de 40** donde el navegador daba 40, y en vez de perseguirlo
+corrí **la misma prueba contra el código de antes del cambio**: idéntico cifra por cifra
+(`38/40 · 17,8 · 0,45`). O sea que mi cambio no había tocado nada — **la que estaba mal era la
+prueba**: calculaba la tajada como `propias / n²` y el juego la calcula con `tajada(M, id)`, que
+divide por **`M.libres`**, o sea las celdas que no son piedra. Le estaba pidiendo al bot más de lo
+que el juego le pide. Exportando y llamando a la función del propio juego: **40 de 40**, los mismos
+números del navegador.
+
+La lección es la de siempre y vale anotarla otra vez: **comparar contra el commit anterior EN EL
+MISMO BANCO es lo único que separa «esto lo rompí yo» de «esto ya era así»** — y una prueba con su
+propia versión de una cuenta del juego no está midiendo el juego.
+
+#### LA CASA DEL TUTORIAL ESTABA PEGADA A UNA PARED, Y ERA EL RADIO
+
+Las casas se plantan sobre un círculo de radio `n·0,31` para que dos no nazcan encimadas. Con **un
+solo jugador** eso no separa nada y encima **empuja la única casa contra una pared**: medido en el
+tutorial —26 celdas, `riv: 0`— la casa caía en el 18 de 26, o sea cinco celdas de aire de un lado y
+dieciséis del otro, con la cámara clavada en su tope. Se vio leyendo la captura: el borde derecho
+del tablero entraba en el cuadro y el izquierdo no.
+
+`rad = nj > 1 ? n*0.31 : 0`. Y **ninguno de los cinco mundos tiene `riv: 0`**, así que esto toca al
+tutorial y a nada más — verificado con el control del párrafo anterior.
+
+#### EL AUDIO: TRES AVISOS QUE NO EXISTÍAN
+
+`d.js` era el último subsistema sin medir, y midiéndolo con `sonMide` —que **barre el clip entero**,
+porque la ventana del analizador son 42,7 ms y un efecto dura entre 150 y 700— aparecieron tres:
+
+| | rms | veces la cama |
+|---|---|---|
+| cama (el pad) | 0,0174 | 1,00 |
+| **sale** | 0,0258 | **1,09** ← el aviso de que estás expuesto |
+| **des** | 0,0271 | **1,12** ← el paso del tutorial dado por hecho |
+| **ui** | 0,0279 | **1,23** ← el toque de un botón |
+
+El comentario de `sale` decía *«se dispara una vez por vuelta, así que va flojo»*. **1,09 veces la
+cama no es flojo: es que no existe**, y ése es el único sonido que dice que saliste de tu territorio
+y que a partir de ahí la estela te puede matar. Lo mismo con los otros dos: un acuse de recibo
+inaudible se lee a que el juego no te escuchó.
+
+Subidos —con un golpecito grave adelante en `sale`, porque un roce agudo solo tiene poca masa y se
+pierde debajo de un pad que es grave— la escala queda **monótona y con el orden que corresponde**:
+
+| ui | sale | des | casi | tierra | pierde | gana | perf | **corte** |
+|---|---|---|---|---|---|---|---|---|
+| 1,48 | 1,70 | 1,82 | 2,17 | 3,11 | 3,30 | 3,57 | 4,17 | **5,85** |
+
+**El corte es lo más fuerte del juego y tiene que serlo: es lo único que cuesta una vida.** Y
+`perf` por encima de `gana`, que es lo que corresponde. Los tres avisos quedan **por debajo de
+`casi`**, que es la alarma de verdad: uno dice que arrancaste y el otro que te vienen a cortar.
+
+**Y LA AGACHADA DE LA FANFARRIA ES EXACTA**: medido antes, durante y después de ganar un nivel de
+verdad, la cama va **0,0228 → 0,0058 → 0,0195** de rms. 0,25 justo, que es el factor que se pide, y
+vuelve sola.
+
+**Y EL PLAN DE MEDICIÓN NO PUEDE LLEVAR `await` ARRIBA DE TODO.** `run2.sh` evalúa una **expresión**,
+así que un `await` suelto devuelve `SyntaxError: missing ) after argument list` en los nueve pasos y
+parece que el audio está roto. `sonMide` devuelve una promesa: va `.then(r => JSON.stringify(r))`.
+Y **hay que espaciar las medidas**: la primera tanda midió `des` con un fondo de 0,1089 —cinco veces
+el normal— porque la cola del efecto anterior seguía sonando, y devolvió **0,21 veces la cama**, o
+sea un número por debajo del silencio.
+
+#### DOS COSAS QUE PARECÍAN DEFECTOS Y NO LO ERAN
+
+- **La pista del tutorial se queda en castellano al cambiar de idioma en un nivel.** Está en un
+  elemento **escondido**: `pintaIdioma()` la repinta con `if (TUT.on)`, y sin esa guarda cambiar de
+  idioma en el medio de un nivel **resucitaría la pista del tutorial**. Verificado el caso que
+  importa: cambiando de idioma DENTRO del tutorial, la pista y el botón de saltear se retraducen.
+- **Los niveles 1 y 2 abren los dos con cero hechos.** Es la regla escrita en `abierto()`: *«el
+  siguiente al último hecho, más uno de gracia»* — con el siguiente y nada más, un nivel que a
+  alguien no le sale le cierra el juego entero.
+
+#### EL SINGULAR NO ES UN SUFIJO, Y EL NÚMERO DE VIDAS NO SE ESCRIBE CON LETRAS
+
+El panel de fin decía **«1 cortes»**. Se arregla con una frase entera por idioma (`datos1`) y no con
+una regla de sufijo: en inglés son *cut* y *cuts*, dos palabras distintas en la tabla — la lección
+que AERO ya había pagado con *solicitud/solicitudes* contra *request/requests*.
+Y el subtítulo decía *«te cortaron tres veces»* con el número escrito en palabras: cambiar `VIDAS`
+dejaría la frase mintiendo sin que nada falle. Sale de `VIDAS`, como el pie de HUESOS.
+
+#### MEDIDO AL CERRAR
+
+Regla **4 de 4 casos, 0 malos**. Mapas **40 de 40, 0 malos**. Auto-jugadores **40 / 36 / 0 de 40**.
+Partidas jugadas de verdad en el navegador: 1-1 ganado (34,4 % contra 21,9 de meta, 1 corte) y 2-4
+**perfecto** (18,3 % contra 16,5, 0 cortes); el del azar muere sin vidas en los dos. **Cero
+solapamientos** entre los ocho elementos del HUD —contando el aviso— en castellano, inglés y
+portugués, y los **seis paneles con `cortado: 0`** en un marco de 892. Tutorial recorrido con la
+pista y el botón de saltear traducidos en los tres. Encuadre: tutorial `esc 21,7 · yo [13,13]` en un
+tablero de 26. Costo **0,108 a 0,236 ms por cuadro**. `window.__errs` **vacío en las siete corridas**.
+
+**LO QUE SIGUE PENDIENTE, Y ES DE LA MISMA LISTA:** que todos los juegos entren en inglés o
+pregunten el idioma antes del tutorial, y las portadas 9:16 generadas con Rezona.
+
 ### Centésima sexagésima cuarta vuelta (2026-09-11): **DUNA** — tres vidas, el salto cargado, y la sonda que cargaba sola
 
 Pedido textual: *"agrégale a duna unas 3 vidas y que cada caída te saque una, agrega formas de saltar

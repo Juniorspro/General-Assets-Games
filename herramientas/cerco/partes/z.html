@@ -1,0 +1,320 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   z · ARRANQUE, RELOJ Y SONDAS
+   ──────────────────────────────────────────────────────────────────────────
+   EL RELOJ DEL JUEGO ES DE PASO FIJO Y VIVE EN `paso(M, dt)` —c.js—, no aca:
+   lo unico que hace este bucle es entregarle un `dt` topado. El tope de 0,05
+   no es cosmetico: una pestana que estuvo dormida devuelve dos segundos de
+   golpe, y dos segundos son once tics simulados en un cuadro con todos los
+   cuerpos cruzando media pantalla sin que nadie pueda doblar.
+
+   Y EL DIBUJO VA DESPUES DE TODO, incluido el tutorial: `tutPaso` puede
+   cerrar la partida —el paso 5 llama a `termina`— y dibujar antes de eso
+   pintaria un cuadro del mundo que ya termino.
+   ══════════════════════════════════════════════════════════════════════ */
+let ULT = 0, MSDIB = 0;
+function bucle(ts) {
+  requestAnimationFrame(bucle);
+  const dt = Math.min(0.05, ULT ? (ts - ULT) / 1000 : 0); ULT = ts;
+  partidaPaso(dt);
+  tutPaso(dt);
+  if (P.on) {
+    vpCam(P.M, dt);
+    vpDibuja(P.M, dt);
+    vpMiniPinta(P.M);
+    MSDIB = MSDIB * 0.9 + V.msDib * 0.1;
+  }
+}
+
+/* EL AUDIO DESPIERTA CON EL PRIMER GESTO Y NO AL CARGAR: ningun navegador
+   deja sonar nada antes de uno, asi que un `auArranca()` en el arranque deja
+   el contexto suspendido y la cama muda para el resto de la partida. Va
+   DELEGADO EN CAPTURA sobre el documento: colgandolo de cada boton habria
+   que acordarse en los quince que hay y en el proximo que se agregue.     */
+function auEngancha() {
+  const f = () => { auArranca(); auDesp(); };
+  for (const k of ['pointerdown', 'click', 'keydown'])
+    addEventListener(k, f, { capture: true, once: false, passive: true });
+}
+
+function arranca() {
+  cargaProg();
+  vpInit();
+  entInit();
+  uiInit();
+  auEngancha();
+  pintaIdioma();
+  arranqueUI();
+  setTimeout(() => {
+    const c = $('carga');
+    c.classList.add('off');
+    setTimeout(() => { c.style.display = 'none'; }, 420);
+  }, 340);
+  requestAnimationFrame(bucle);
+}
+arranca();
+
+/* ══════════════════════════ SONDAS ══════════════════════════
+   Una afirmacion sin numero no vale. Lo que se pueda medir por el camino del
+   dedo se mide por ahi: los bots entran por `p.ped` —el mismo campo que
+   escribe `entPide`— y el tutorial se juega moviendo el cuerpo, no
+   escribiendole los contadores que sus pasos miran.                       */
+window.__C = {
+  est() {
+    const M = P.M;
+    return {
+      on: P.on, panel: PANEL, tuto: P.tuto, lang: LANG, pausa: P.pausa, fin: P.fin,
+      m: P.m, nv: P.nv, n: M ? M.n : 0, riv: P.cfg ? P.cfg.riv : 0,
+      pct: M ? +(tajada(M, 1) * 100).toFixed(1) : 0,
+      meta: P.cfg ? +(P.cfg.meta * 100).toFixed(1) : 0,
+      cortes: P.yo ? P.yo.cortes : 0, cerros: P.yo ? P.yo.cerros : 0,
+      estela: P.yo ? P.yo.estela : 0, fuera: P.yo ? P.yo.fuera : false,
+      vivo: P.yo ? P.yo.vivo : false, seg: +P.seg.toFixed(1),
+      giros: P.giros, ganUlt: P.ganUlt,
+      tutOn: TUT.on, tutPaso: TUT.paso, pista: $('pista').textContent,
+      hechos: cuentaHechos(), ult: PROG.ult, cal: PROG.cal,
+      ms: +MSDIB.toFixed(3), dpr: V.dpr,
+    };
+  },
+
+  /* ── caminos ── */
+  nivel(m, n) { juega(m, n); return this.est(); },
+  tut() { tutArranca(); verPanel(null); return this.est(); },
+  menu() { vaMenu(); return this.est(); },
+  panel(id) { verPanel(id); return { panel: PANEL }; },
+  clic(id) { const e = $(id); if (!e) return 'no hay ' + id; e.click(); return this.est(); },
+  lang(l) { LANG = l; guardaProg(); pintaIdioma(); return { lang: LANG, sub: $('mSub').textContent, pista: $('pista').textContent, fTit: $('fTit').textContent }; },
+
+  /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
+     `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
+     que un arrastre sintetico sobre el lienzo ejerce la zona muerta, la
+     histeresis del eje y la cola — que es lo unico que prueba que doblar
+     funciona como doblar y no como escribir `p.ped`.                      */
+  arrastra(dx, dy) {
+    const c = $('cv'), r = c.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
+    ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + dx, y0 + dy);
+    ev('pointerup', x0 + dx, y0 + dy);
+    return { ped: P.yo ? P.yo.ped : null, dx: P.yo ? P.yo.dx : 0, dy: P.yo ? P.yo.dy : 0 };
+  },
+  tecla(k) { entTecla({ key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null }; },
+
+  /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
+     el dibujo a resolucion de software cuesta mas que la fisica entera. */
+  anda(n, dt) { for (let i = 0; i < (n || 60); i++) partidaPaso(dt || 0.016); return this.est(); },
+
+  /* ── el tutorial jugado por el camino del jugador ──
+     Cada paso se cumple MOVIENDO el cuerpo y no tocando su contador: si se
+     escribiera `P.giros` a mano, la prueba estaria aprobando su propia
+     cuenta en vez del gesto.                                             */
+  juegaTut(tope) {
+    const T = tope || 6000, hist = [];
+    /* UN CUADRADO Y NO UN ZIGZAG. La primera version doblaba alternando eje
+       —derecha, abajo, derecha, abajo— y eso no es un cuadrado: es una
+       escalera que se aleja de casa y NO VUELVE NUNCA. Medido, se clavaba en
+       el paso 3 con 2.401 vueltas sin cerrar una sola area. Doblar siempre
+       para el MISMO lado es lo unico que devuelve al punto de partida, y
+       volver es exactamente lo que cierra.                                */
+    const R = [[1, 0], [0, 1], [-1, 0], [0, -1]];   /* der · abajo · izq · arriba */
+    /* Y EL LADO CRECE AL LLEGAR AL PASO 4, porque si no el cuerpo ya no sale.
+       Medido con lado fijo de nueve: los dos primeros pasos salian y el
+       cuarto se clavaba 3.000 vueltas, y la causa es que despues de cerrar
+       el primer cuadrado ESE CUADRADO YA ES TERRENO PROPIO — el segundo se
+       traza entero adentro de lo ganado, sin una celda de estela y sin nada
+       que cerrar. Lo que hace una persona al leer «cuanto mas grande la
+       vuelta» es justamente eso: irse mas lejos. Con el lado en infinito el
+       cuerpo dobla solo contra la pared y recorre el borde del tablero.   */
+    const CELDA = 1 / (VEL * 0.016);              /* cuadros por celda      */
+    let g = 0, prev = -1, ri = 0, quiere = 0;
+    while (TUT.on && g++ < T) {
+      if (TUT.paso !== prev) { hist.push({ paso: TUT.paso, t: g, pista: $('pista').textContent }); prev = TUT.paso; quiere = 0; }
+      const yo = P.yo, n = P.M.n;
+      /* NADIE CORRE CONTRA LA PARED. Si el rumbo de ahora se acaba en tres
+         celdas, se dobla ya: sin esto el driver muere contra el borde y lo
+         que se mediria seria el renacimiento, no el gesto.                */
+      const pared = (d) => {
+        const x = yo.ix + R[d][0] * 3, y = yo.iy + R[d][1] * 3;
+        return x < 1 || y < 1 || x > n - 2 || y > n - 2;
+      };
+      const dAct = R.findIndex((d) => d[0] === yo.dx && d[1] === yo.dy);
+      if (--quiere <= 0 || (dAct >= 0 && pared(dAct))) {
+        /* del ciclo se toma el primero que no sea media vuelta ni pared */
+        for (let k = 0; k < 4; k++) {
+          const d = R[(ri + k) % 4];
+          if (d[0] === -yo.dx && d[1] === -yo.dy) continue;
+          if (pared((ri + k) % 4)) continue;
+          this.arrastra(d[0] * 90, d[1] * 90);
+          ri = (ri + k + 1) % 4;
+          break;
+        }
+        quiere = TUT.paso >= 3 ? 1e9 : Math.round(9 * CELDA);
+      }
+      partidaPaso(0.016);
+      tutPaso(0.016);
+    }
+    return { hist, vueltas: g, tutOn: TUT.on, panel: PANEL, fTit: $('fTit').textContent, fDatos: $('fDatos').textContent, visto: PROG.visto };
+  },
+
+  /* ── el nivel puesto, jugado solo ──
+     ENTRA POR `p.ped`, o sea por el mismo campo que escribe el dedo: un bot
+     que escriba `dx`/`dy` estaria jugando otra fisica y ganar no probaria
+     nada. `azar` es el control — sin el, que el honesto termine no dice que
+     haya una decision adentro.                                           */
+  /* Y ARRANCA EL NIVEL ELLA MISMA. Tomando la partida que hubiera puesta,
+     lo que se mide al abrir el juego es EL TUTORIAL —que es lo que corre por
+     omision— y ese mapa no tiene rival ni meta alcanzable: medido, doce mil
+     vueltas llenando el tablero al 100 % sin terminar nunca. Un bot que juega
+     otro mapa que el jugador no prueba nada.                               */
+  juega(m, nv, modo, tope) {
+    juega(m, nv);
+    const yo = P.yo;
+    yo.bot = modo === 'azar' ? { azar: true } : { per: 0.80 };
+    const T = tope || 12000;
+    let g = 0;
+    while (P.on && !P.fin && g++ < T) partidaPaso(1 / VEL);
+    yo.bot = null;
+    return {
+      fin: P.fin, pct: +(P.pct * 100).toFixed(1), meta: +(P.cfg.meta * 100).toFixed(1),
+      cortes: yo.cortes, cerros: yo.cerros, seg: +P.seg.toFixed(1), vueltas: g,
+      gano: P.fin === 'gana', panel: PANEL, fTit: $('fTit').textContent,
+    };
+  },
+
+  /* ── auditorias del modelo puro ── */
+  regla() { return auditaRegla(); },
+  mapas() { return auditaMapas(); },
+  audita(modo) { return auditaTodo(modo); },
+  solo(m, n, modo) { return juegaSolo(m, n, modo); },
+
+  /* ── maquetacion ──
+     Se mide con `getBoundingClientRect` contra el MARCO y no contra la
+     ventana: el juego vive adentro de `#marco`, y medir contra la ventana
+     da «entra» siempre en una pantalla grande.                           */
+  /* EL ENCUADRE, que desde afuera no se puede preguntar: `V` es un `const` del
+     modulo y `page.evaluate` no lo ve. Devuelve lo que decide que se ve —el
+     lienzo de verdad, la escala, el centro de camara y cuantas celdas entran—
+     mas donde cae el tablero EN PANTALLA, que es la unica forma de comprobar
+     que no se sale por un lado.                                             */
+  vista() {
+    if (!P.on) return { on: false };
+    const r = V.cv.getBoundingClientRect(), n = P.M.n;
+    /* las cuatro esquinas del tablero, en pixeles de pantalla */
+    /* LA CAMARA ES LA ESQUINA DE ARRIBA A LA IZQUIERDA, no el centro, que es
+       como lo hace `vpDibuja`: `px(x) = (x - camx) * esc`. Con la cuenta del
+       centro esta sonda informaba el tablero cien pixeles corrido y a mitad de
+       pantalla, o sea un defecto de encuadre que no existia.                */
+    const px = (cx, cy) => [
+      r.left + (cx - V.camx) * V.esc,
+      r.top + (cy - V.camy) * V.esc,
+    ];
+    const a = px(0, 0), b = px(n, n);
+    return {
+      on: true, n, dpr: V.dpr, esc: +V.esc.toFixed(3),
+      cam: [+V.camx.toFixed(2), +V.camy.toFixed(2)],
+      vis: [+V.visW.toFixed(2), +V.visH.toFixed(2)],
+      lienzo: [Math.round(r.width), Math.round(r.height), V.W, V.H],
+      tablero: [Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1])],
+      yo: P.yo ? [P.yo.ix, P.yo.iy] : null,
+    };
+  },
+
+  cajas() {
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const R = [], vis = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
+      const c = e.getBoundingClientRect();
+      if (c.width < 1 || c.height < 1) continue;
+      R.push({ id, x: c.left, y: c.top, w: c.width, h: c.height }); vis.push(id);
+    }
+    const m = $('marco').getBoundingClientRect(), ch = [], fuera = [];
+    for (let i = 0; i < R.length; i++) {
+      const a = R[i];
+      if (a.x < m.left - 1 || a.y < m.top - 1 || a.x + a.w > m.right + 1 || a.y + a.h > m.bottom + 1) fuera.push(a.id);
+      for (let j = i + 1; j < R.length; j++) {
+        const b = R[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
+      }
+    }
+    return { vis, choques: ch, fuera, marco: [Math.round(m.width), Math.round(m.height)] };
+  },
+
+  /* cada panel se enciende para medirlo y se devuelve como estaba: un panel
+     medido con `display:none` da caja cero y aprueba cualquier cosa.     */
+  paneles() {
+    const out = {}, m = $('marco').getBoundingClientRect();
+    for (const id of ['pIdioma', 'pMenu', 'pNiv', 'pAj', 'pPausa', 'pFin']) {
+      const e = $(id); if (!e) continue;
+      const pre = e.classList.contains('on');
+      e.classList.add('on');
+      const hs = [...e.querySelectorAll('button,h1,h2,.sub,.pie,.aj,#nvGrid,#nvMundos')].filter(x => x.offsetWidth > 0);
+      let alto = 0, cortado = 0;
+      for (const x of hs) {
+        const c = x.getBoundingClientRect();
+        alto = Math.max(alto, c.bottom - m.top);
+        if (c.bottom > m.bottom + 1 || c.top < m.top - 1) cortado++;
+      }
+      out[id] = { n: hs.length, alto: Math.round(alto), cortado };
+      if (!pre) e.classList.remove('on');
+    }
+    return out;
+  },
+
+  /* ── audio ──
+     MIDE UN EFECTO BARRIENDOLO ENTERO: la ventana del analizador son 42,7 ms
+     y un efecto dura entre 200 y 700, asi que una sola lectura cae donde
+     caiga y lo que devuelve es la cama. Y el fondo se mide ANTES con la
+     misma regla — comparar contra un numero sacado de otra ventana no
+     significa nada.                                                      */
+  sonMide(k, arg, ms) {
+    auArranca(); auDesp();
+    if (!AU.on) return Promise.resolve({ on: false });
+    const d = new Float32Array(AU.an.fftSize), T = ms || 900;
+    const lee = () => {
+      AU.an.getFloatTimeDomainData(d);
+      let p = 0, s = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; s += d[i] * d[i]; }
+      return { p, r: Math.sqrt(s / d.length) };
+    };
+    return new Promise(res => {
+      let fp = 0, fr = 0, n0 = 0;
+      const t0 = setInterval(() => {
+        const x = lee(); if (x.p > fp) fp = x.p; if (x.r > fr) fr = x.r;
+        if (++n0 < 14) return;
+        clearInterval(t0);
+        son(k, arg);
+        let pp = 0, rr = 0, n = 0;
+        const t1 = setInterval(() => {
+          const y = lee(); if (y.p > pp) pp = y.p; if (y.r > rr) rr = y.r;
+          if (++n < Math.ceil(T / 16)) return;
+          clearInterval(t1);
+          res({ on: true, k, fondoPico: +fp.toFixed(4), fondoRms: +fr.toFixed(4),
+                pico: +pp.toFixed(4), rms: +rr.toFixed(4), veces: +(rr / (fr || 1e-9)).toFixed(2) });
+        }, 16);
+      }, 16);
+    });
+  },
+  son(k, arg) { auArranca(); auDesp(); son(k, arg); return { on: AU.on, acorde: AU.acorde, abre: +AU.abre.toFixed(3) }; },
+  audio(ms) {
+    if (!AU.on) return Promise.resolve({ on: false });
+    const d = new Float32Array(AU.an.fftSize);
+    return new Promise(res => setTimeout(() => {
+      AU.an.getFloatTimeDomainData(d);
+      let p = 0, s = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; s += d[i] * d[i]; }
+      res({ on: true, pico: +p.toFixed(4), rms: +Math.sqrt(s / d.length).toFixed(4), acorde: AU.acorde, abre: +AU.abre.toFixed(3) });
+    }, ms || 320));
+  },
+
+  costo(n) {
+    if (!P.on) return { err: 'no hay partida' };
+    const N = n || 90, t0 = performance.now();
+    for (let i = 0; i < N; i++) vpDibuja(P.M, 0.016);
+    return { ms: +((performance.now() - t0) / N).toFixed(3), n: N, dpr: V.dpr, w: V.W, h: V.H };
+  },
+};
+</script></body></html>

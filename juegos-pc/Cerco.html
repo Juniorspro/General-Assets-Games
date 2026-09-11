@@ -1,0 +1,2783 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#10141d">
+<title>CERCO</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   A · MARCO, PIEL Y PANTALLAS
+   Vertical NATIVO: el tablero es cuadrado y la camara lo recorre, asi que lo
+   que decide el formato es la mano — el telefono como uno lo agarra. Nada
+   que girar y ninguna pantalla de «gira el celular».
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --fondo:#10141d; --tabla:#171d29; --linea:#212a3a; --piedra:#2f3a4e;
+  --tinta:#e8edf6; --tinta2:#8f9cb3;
+  --yo:#f0a13a; --yo2:#ffd9a0;
+  --acento:#f0a13a; --mal:#e0556e;
+  --mw:412px; --mh:892px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+#marco{position:fixed;inset:0;display:flex;flex-direction:column;
+  background:var(--fondo);color:var(--tinta);overflow:hidden}
+
+/* ── el lienzo ── */
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+
+/* ══ HUD ══════════════════════════════════════════════════════════════════
+   Todo lo que es TEXTO vive en el DOM y no en el lienzo: tiene que poder
+   traducirse y tiene que salir nitido en cualquier densidad. Y todo lo que
+   es texto esta en la misma columna de arriba o en la de abajo, asi el
+   solapamiento no depende de acordarse de un pixel.                        */
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 9px) 13px 0;
+  z-index:3;pointer-events:none;display:flex;flex-direction:column;gap:7px}
+#hud.off{display:none}
+#fila1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+#vidas{display:flex;gap:5px;align-items:center;height:26px}
+.cor{width:17px;height:17px;position:relative;transition:transform .22s,opacity .22s}
+/* LOS DOS LOBULOS PIVOTAN SOBRE LA PUNTA DEL CORAZON, no sobre su propio pie.
+   Con `transform-origin:50% 100%` cada lobulo gira alrededor de SU centro de
+   abajo, y como esos dos centros estan a ocho pixeles uno del otro lo que sale
+   son dos bollos separados con una muesca en V ABAJO: un corazon dado vuelta.
+   Fotografiado y contado. Los dos origenes tienen que caer en el MISMO punto
+   —el pie del corazon— y de ahi los lobulos se abren hacia arriba.          */
+.cor::before,.cor::after{content:'';position:absolute;width:9px;height:13px;border-radius:5px 5px 0 0;
+  background:var(--yo);top:1px}
+.cor::before{left:8px;transform:rotate(-45deg);transform-origin:0 100%}
+.cor::after{left:0;transform:rotate(45deg);transform-origin:100% 100%}
+.cor.ida{opacity:.2;transform:scale(.72)}
+.cor.ida::before,.cor.ida::after{background:var(--tinta2)}
+.cor.late{animation:late .5s ease}
+@keyframes late{0%,100%{transform:scale(1)}35%{transform:scale(1.45)}}
+#nivRot{flex:1;text-align:center;font-size:12px;font-weight:800;letter-spacing:.14em;
+  color:var(--tinta2);line-height:15px;padding-top:3px}
+#nivRot b{display:block;font-size:9px;font-weight:700;letter-spacing:.2em;opacity:.62}
+#bPausa{pointer-events:auto;width:32px;height:26px;border:0;background:transparent;
+  display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+#bPausa i{width:4px;height:14px;border-radius:2px;background:var(--tinta2);display:block}
+
+/* ── LA BARRA DE REPARTO ──────────────────────────────────────────────────
+   Una sola barra donde cada jugador ocupa su tajada y una marca dice donde
+   esta la meta. Con cuatro contadores sueltos habria que leer cuatro
+   numeros y restarlos; asi el estado de la partida se lee de una ojeada.  */
+#barra{position:relative;height:9px;border-radius:5px;overflow:hidden;
+  background:rgba(255,255,255,.07);display:flex}
+#barra i{display:block;height:100%;width:0;transition:width .18s linear}
+#meta{position:absolute;top:-3px;width:2px;height:15px;border-radius:1px;
+  background:var(--tinta);box-shadow:0 0 0 1px rgba(0,0,0,.5);left:0}
+
+/* ── el mapa chico ──
+
+   EL 66 ESTA MEDIDO Y NO ELEGIDO. `#hud` es una columna: 9 px de relleno de
+   arriba + `#fila1` + 7 de hueco + los 9 de `#barra`. Y `#fila1` NO mide 26 como
+   las vidas: lo estira `#nivRot`, que lleva dos renglones y da 33. O sea que la
+   barra ocupa de y 49 a 58, y con el mapa en 52 se pisaban seis pixeles en la
+   franja x 325..399 —medido con `cajas()`: `choques: ["barra×mini"]`—. Con 66
+   quedan ocho de aire. Si manana el rotulo cambia de alto, este numero se vuelve
+   a medir; no se adivina.                                                    */
+#mini{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 66px);
+  width:74px;height:74px;z-index:3;pointer-events:none;border-radius:8px;
+  border:1.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.28);
+  image-rendering:pixelated}
+#mini.off{display:none}
+
+/* ── pie ── */
+#pie{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 11px);
+  padding:0 15px;display:flex;align-items:flex-end;justify-content:space-between;z-index:3;pointer-events:none}
+#pie.off{display:none}
+#pct{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--tinta2)}
+#pct b{display:block;font-size:25px;letter-spacing:0;color:var(--yo);line-height:1.05}
+#reloj{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--tinta2);text-align:right}
+#reloj b{display:block;font-size:25px;letter-spacing:.02em;color:var(--tinta);line-height:1.05;
+  font-variant-numeric:tabular-nums}
+#reloj.poco b{color:var(--mal)}
+
+/* ── la pista del tutorial ── */
+#pista{position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 78px);
+  text-align:center;font-size:14px;font-weight:700;line-height:1.35;z-index:4;pointer-events:none;
+  color:var(--tinta);background:rgba(16,20,29,.9);border:1.5px solid rgba(255,255,255,.14);
+  border-radius:14px;padding:10px 14px;box-shadow:0 8px 22px rgba(0,0,0,.45);
+  opacity:0;transform:translateY(8px);transition:opacity .28s,transform .28s}
+#pista.on{opacity:1;transform:none}
+
+/* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, asi que TIENE que poder
+   saltearse: obligatorio una vez es un tutorial y obligatorio siempre es un
+   peaje. Va del lado libre —el mapa chico esta apagado en el tutorial—.   */
+#tSalt{position:absolute;left:13px;top:calc(env(safe-area-inset-top,0px) + 58px);
+  z-index:4;display:none}
+#tSalt.on{display:block}
+
+/* ── aviso corto ── */
+#aviso{position:absolute;left:0;right:0;top:41%;text-align:center;z-index:6;pointer-events:none;
+  font-size:22px;font-weight:900;letter-spacing:.12em;color:var(--acento);
+  text-shadow:0 3px 16px rgba(0,0,0,.9);opacity:0;transition:opacity .2s}
+#aviso.on{opacity:1}
+
+/* ══ PANELES ══════════════════════════════════════════════════════════════
+   EL VELO SE ABRE EN EL MEDIO. Cerrado arriba —donde va el titulo— y abajo
+   —donde van los botones—, y translucido en la franja del medio: detras
+   sigue corriendo el tablero, que es lo unico que este juego tiene que
+   ensenar antes de que alguien toque nada.                                 */
+.pan{position:absolute;inset:0;z-index:10;display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:26px 22px;
+  background:linear-gradient(180deg,rgba(16,20,29,.985) 0%,rgba(16,20,29,.93) 28%,
+    rgba(16,20,29,.74) 50%,rgba(16,20,29,.94) 76%,rgba(16,20,29,.995) 100%);
+  animation:ent .24s ease}
+.pan.on{display:flex}
+@keyframes ent{from{opacity:0}to{opacity:1}}
+.pan h1{font-size:46px;font-weight:900;letter-spacing:.26em;margin-left:.26em;line-height:1}
+.pan h2{font-size:24px;font-weight:900;letter-spacing:.14em;margin-left:.14em}
+.pan .sub{font-size:13px;font-weight:600;color:var(--tinta2);text-align:center;line-height:1.5;margin-top:10px}
+.pan .pie{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--tinta2);opacity:.5;text-align:center}
+.bt{border:0;background:var(--yo);color:#1b1204;font-size:14px;font-weight:800;
+  letter-spacing:.16em;padding:15px 0;border-radius:14px;cursor:pointer;width:100%;
+  box-shadow:0 5px 0 rgba(0,0,0,.42);transition:transform .1s,box-shadow .1s}
+.bt:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.42)}
+.bt.sec{background:transparent;color:var(--tinta);border:2px solid rgba(255,255,255,.2);box-shadow:none}
+.bt.sec:active{transform:none;background:rgba(255,255,255,.08)}
+.col{display:flex;flex-direction:column;gap:11px;width:100%;max-width:290px}
+.fila{display:flex;gap:10px;width:100%;max-width:290px}
+.fila .bt{flex:1}
+
+/* la marca: un cuadrado cerrandose sobre si mismo, que es el juego entero */
+.marca{width:76px;height:76px;position:relative;margin-bottom:10px}
+.marca i{position:absolute;display:block;border-radius:2px}
+.marca .z{background:var(--yo);opacity:.28}
+.marca .t{background:var(--yo2);box-shadow:0 0 8px rgba(255,217,160,.5)}
+.marca .c{background:var(--yo);border-radius:50%;box-shadow:0 0 10px rgba(240,161,58,.8)}
+
+/* ── lista de niveles ── */
+#pNiv{justify-content:flex-start;padding-top:calc(env(safe-area-inset-top,0px) + 20px)}
+#nvCab{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:330px;margin-bottom:4px}
+#nvCab h2{font-size:19px}
+#nvMundos{display:flex;gap:5px;width:100%;max-width:360px;margin:12px 0;justify-content:center}
+.mtab{border:1.5px solid rgba(255,255,255,.18);background:transparent;color:var(--tinta2);
+  font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:8px 6px;border-radius:9px;
+  cursor:pointer;flex:1 1 0;min-width:0}
+.mtab.sel{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+.mtab.cerr{opacity:.3}
+#nvGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%;max-width:330px;
+  overflow-y:auto;flex:1;align-content:start;padding:2px 2px 16px}
+.nvB{aspect-ratio:1;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);
+  border-radius:12px;font-size:16px;font-weight:800;color:var(--tinta);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative}
+.nvB.ok{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+.nvB.cerr{opacity:.28;background:transparent}
+.nvB s{font-size:9px;letter-spacing:.06em;opacity:.85;text-decoration:none}
+
+/* ── ajustes ── */
+.aj{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  max-width:290px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.09)}
+.aj span{font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--tinta2)}
+.aj input[type=range]{width:130px;accent-color:var(--yo)}
+.chip{border:1.5px solid rgba(255,255,255,.18);background:transparent;color:var(--tinta2);
+  font-size:11px;font-weight:800;padding:7px 11px;border-radius:9px;cursor:pointer}
+.chip.sel{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+
+/* ── carga ── */
+#carga{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;background:var(--fondo);transition:opacity .4s}
+#carga.off{opacity:0;pointer-events:none}
+#cSub{font-size:11px;font-weight:800;letter-spacing:.24em;color:var(--tinta2)}
+#cBarra{width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+#cBarra i{display:block;height:100%;width:35%;background:var(--yo);border-radius:2px;
+  animation:cb 1.1s ease-in-out infinite}
+@keyframes cb{0%{margin-left:-35%}100%{margin-left:100%}}
+
+@media (max-height:700px){
+  .pan h1{font-size:36px}.marca{transform:scale(.78);margin-bottom:0}
+  .bt{padding:13px 0}.col{gap:9px}
+}
+</style></head><body>
+
+<div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud" class="off">
+    <div id="fila1">
+      <div id="vidas"></div>
+      <div id="nivRot"><b id="nrM">MUNDO 1</b><span id="nrN">NIVEL 1-1</span></div>
+      <button id="bPausa" aria-label="pausa"><i></i><i></i></button>
+    </div>
+    <div id="barra"><i></i><i></i><i></i><i></i><div id="meta"></div></div>
+  </div>
+
+  <canvas id="mini" class="off" width="74" height="74"></canvas>
+
+  <div id="pista"></div>
+  <button id="tSalt" class="chip">SALTEAR</button>
+  <div id="aviso"></div>
+
+  <div id="pie" class="off">
+    <div id="pct"><b>0%</b><span id="pctR">META 40%</span></div>
+    <div id="reloj"><b>1:30</b><span id="relR">TIEMPO</span></div>
+  </div>
+
+  <!-- idioma -->
+  <div id="pIdioma" class="pan">
+    <div class="marca">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <h1>CERCO</h1>
+    <div class="sub" style="margin-bottom:20px">idioma · language · idioma</div>
+    <div class="col">
+      <button class="bt" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <!-- menu -->
+  <div id="pMenu" class="pan">
+    <div class="marca">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <h1>CERCO</h1>
+    <div class="sub" id="mSub"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="mJugar">JUGAR</button>
+      <div class="fila">
+        <button class="bt sec" id="mNiv">NIVELES</button>
+        <button class="bt sec" id="mTuto">CÓMO SE JUEGA</button>
+      </div>
+      <button class="bt sec" id="mAj">AJUSTES</button>
+    </div>
+    <div class="pie" id="mPie" style="margin-top:20px"></div>
+  </div>
+
+  <!-- lista de niveles -->
+  <div id="pNiv" class="pan">
+    <div id="nvCab"><h2 id="nvTit">NIVELES</h2><button class="chip" id="nvVolver">VOLVER</button></div>
+    <div class="sub" id="nvSub" style="margin:0"></div>
+    <div id="nvMundos"></div>
+    <div id="nvGrid"></div>
+  </div>
+
+  <!-- ajustes -->
+  <div id="pAj" class="pan">
+    <h2 id="ajTit">AJUSTES</h2>
+    <div style="height:14px"></div>
+    <div class="aj"><span id="ajMus">MÚSICA</span><input type="range" id="rMus" min="0" max="100" value="45"></div>
+    <div class="aj"><span id="ajFx">SONIDOS</span><input type="range" id="rFx" min="0" max="100" value="80"></div>
+    <div class="aj"><span id="ajCal">GRÁFICOS</span><div style="display:flex;gap:6px">
+      <button class="chip" data-cal="0">BAJO</button><button class="chip" data-cal="1">MEDIO</button><button class="chip" data-cal="2">ALTO</button>
+    </div></div>
+    <div class="aj"><span id="ajIdi">IDIOMA</span><div style="display:flex;gap:6px">
+      <button class="chip" data-l2="es">ES</button><button class="chip" data-l2="en">EN</button><button class="chip" data-l2="pt">PT</button>
+    </div></div>
+    <div style="height:18px"></div>
+    <div class="col">
+      <button class="bt sec" id="ajBorrar">BORRAR EL PROGRESO</button>
+      <button class="bt" id="ajVolver">VOLVER</button>
+    </div>
+  </div>
+
+  <!-- pausa -->
+  <div id="pPausa" class="pan">
+    <h2 id="paTit">PAUSA</h2>
+    <div class="sub" id="paSub"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="paSeguir">SEGUIR</button>
+      <button class="bt sec" id="paRe">REINICIAR</button>
+      <button class="bt sec" id="paSalir">SALIR AL MENÚ</button>
+    </div>
+  </div>
+
+  <!-- final -->
+  <div id="pFin" class="pan">
+    <h2 id="fTit">¡TERRENO!</h2>
+    <div class="sub" id="fSub"></div>
+    <div class="sub" id="fDatos" style="opacity:.6;margin-top:4px"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="fSig">SIGUIENTE</button>
+      <div class="fila">
+        <button class="bt sec" id="fRe">REINTENTAR</button>
+        <button class="bt sec" id="fMenu">MENÚ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="carga">
+    <div class="marca" style="transform:scale(.7)">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <div id="cSub">CARGANDO</div>
+    <div id="cBarra"><i></i></div>
+  </div>
+</div>
+
+<script type="module">
+/* ══════════════════════════════════════════════════════════════════════════
+   B · CONSTANTES, MUNDOS, IDIOMAS Y GUARDADO
+   ══════════════════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+const mez = (a, b, k) => a + (b - a) * k;
+
+/* AZAR CON SEMILLA. Un nivel tiene que ser EL MISMO nivel en cualquier
+   aparato y en cualquier intento: con un azar de verdad, «el 3-5» no querria
+   decir nada y reintentar seria jugar otro mapa.                           */
+function azar(s) {
+  let x = (s | 0) || 1;
+  return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x |= 0; return (x >>> 0) / 4294967296; };
+}
+
+/* ── LAS CUATRO DIRECCIONES ───────────────────────────────────────────────
+   El indice ES la direccion y su opuesta es `d^1`. Con eso la regla de «no
+   se puede dar media vuelta» —la de cualquier juego de estela— se escribe en
+   una comparacion y no en una tabla que alguien tiene que mantener.        */
+const DIR = [[1, 0], [-1, 0], [0, 1], [0, -1]];    /* der · izq · abajo · arriba */
+const DNOM = ['der', 'izq', 'abajo', 'arriba'];
+
+/* ── LO QUE HAY EN UNA CELDA ──────────────────────────────────────────────
+   `z` es el DUENO del terreno y `t` el dueno de la ESTELA, y son dos cosas
+   distintas a proposito: se puede estar parado sobre tierra propia y tener
+   estela de otro en la misma celda. Guardarlo en un solo numero obligaria a
+   inventar combinaciones y el dia que entre un cuarto rival no alcanzan.   */
+const LIBRE = 0;      /* z: nadie                                           */
+const PIEDRA = 9;     /* z: roca — bloquea, mata y corta el relleno         */
+const NJUG = 4;       /* el jugador es el 1; los rivales van del 2 al 4     */
+
+/* ── LOS COLORES ──────────────────────────────────────────────────────────
+   Tres por jugador y no uno: el terreno tiene que dejarse mirar sin cansar,
+   la estela tiene que gritar —es lo unico que mata— y la cabeza tiene que
+   encontrarse de una ojeada en un tablero de setenta celdas de lado. El
+   jugador se lleva el ambar, que es el unico color calido de la paleta.    */
+const COLS = [
+  null,
+  { z: '#7a4d12', t: '#f0a13a', c: '#ffe0b0' },   /* 1 · vos            */
+  { z: '#0e5148', t: '#2fc2a8', c: '#b6f2e6' },   /* 2 · verde agua     */
+  { z: '#3d2a6b', t: '#9a6bf2', c: '#d9c8ff' },   /* 3 · violeta        */
+  { z: '#6b1f3a', t: '#f0578f', c: '#ffc8dc' },   /* 4 · rosa           */
+];
+const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
+
+/* ── LOS NUMEROS DEL CUERPO, DERIVADOS ────────────────────────────────────
+   No se eligen sueltos: se elige CUANTO SE VE y CUANTO TARDA EN CRUZARSE, y
+   de ahi salen los dos. Con 19 celdas de ancho en un marco de 412 px, una
+   celda mide 21,7 px —o sea que la cabeza y la estela se distinguen sin
+   agrandar nada— y a 5,4 celdas por segundo la ventana visible se cruza en
+   3,5 s. Eso ademas fija el ritmo del pulgar: una curva se puede pedir cada
+   185 ms, que es lo que tarda el cuerpo en cambiar de celda.               */
+const VISTA = 19;
+const VEL = 5.4;
+const VIDAS = 3;
+
+/* ── LOS CINCO MUNDOS ─────────────────────────────────────────────────────
+   Lo que crece no es «la dificultad» como numero suelto: crecen el TABLERO,
+   la CANTIDAD DE RIVALES y lo BIEN QUE JUEGAN. Y el tablero es el que mas
+   pesa, porque con la vista fija en 19 celdas un tablero de 74 es un mapa
+   que no entra en la pantalla y hay que acordarse de por donde se venia.
+   `pat` es el dibujo de las rocas: no es decoracion, es lo que hace que dos
+   mundos del mismo tamano se jueguen distinto.                             */
+const MUNDOS = [
+  { k: 'm1', nom: 'LLANO',  n: 44, pat: 'vacio',   riv: 1, per: 0.52, seg: 100 },
+  { k: 'm2', nom: 'PILARES',n: 52, pat: 'pilares', riv: 2, per: 0.64, seg: 100 },
+  { k: 'm3', nom: 'CRUCE',  n: 60, pat: 'cruz',    riv: 2, per: 0.74, seg: 105 },
+  { k: 'm4', nom: 'ISLAS',  n: 66, pat: 'islas',   riv: 3, per: 0.84, seg: 110 },
+  { k: 'm5', nom: 'ANILLO', n: 74, pat: 'anillo',  riv: 3, per: 0.93, seg: 115 },
+];
+
+/* ── EL OBJETIVO NO SE ESCRIBE: SE DERIVA DEL REPARTO ─────────────────────
+   Estaba como una fraccion ABSOLUTA del tablero por mundo (0,40 a 0,55) y el
+   juego era imposible, no dificil. Dos mediciones lo explican:
+
+   · el tablero termina ocupado casi entero — 79,5 % de media sobre los 40
+     niveles — y repartido entre TODOS los que juegan, asi que la parte pareja
+     de uno es 0,795/nj: 39,8 % a dos, 26,5 % a tres y 19,9 % a cuatro;
+   · y el `meta` viejo SUBIA justo donde entra el tercer rival, o sea que en el
+     mundo 5 le pedia el 55 % a uno mientras los otros tres se repartian el 25.
+
+   Y el modelo del reparto le gana al fisico, medido: prediciendo la tajada del
+   bot con 0,795/nj el coeficiente de variacion es 0,278, y con el modelo de
+   recorrido (VEL·seg/libres, o sea cuanto alcanza a encerrar uno solo) es
+   0,312 — porque los rivales se comen lo que uno no agarra.
+
+   El multiplicador es el ULTIMO valor con el que el auto-jugador honesto pasa
+   los 40 de 40: 0,55 al entrar a un mundo y 0,72 al salir. Con 0,58 ya pierde
+   el 5-2. O sea que este objetivo es el mas exigente que esta DEMOSTRADO que
+   se puede cumplir, y no un numero elegido a ojo.                          */
+const OCUPA = 0.795;
+const META_A = 0.55, META_B = 0.72;
+const NIV_MUNDO = 8;
+const NIVELES = MUNDOS.length * NIV_MUNDO;
+
+/* La semilla sale del par (mundo, nivel) y de nada mas.                    */
+const semNivel = (m, n) => (m + 1) * 100003 + (n + 1) * 7919 + 13;
+
+/* Dentro de un mundo tambien hay curva: ocho niveles con el mismo tablero y
+   los mismos rivales son el mismo nivel ocho veces.                        */
+function cfgNivel(m, n) {
+  const M = MUNDOS[m], u = NIV_MUNDO > 1 ? n / (NIV_MUNDO - 1) : 0;
+  const riv = M.riv + (n >= 5 && M.riv < 3 ? 1 : 0);
+  return {
+    mundo: m, nivel: n, pat: M.pat,
+    n: Math.round(M.n + u * 8),
+    riv,
+    per: cl(M.per + u * 0.10, 0, 1),
+    /* la parte pareja, por el multiplicador — nunca una fraccion escrita     */
+    meta: OCUPA / (1 + riv) * (META_A + u * (META_B - META_A)),
+    seg: M.seg,
+    sem: semNivel(m, n),
+  };
+}
+
+/* ══════════════════════ IDIOMAS ══════════════════════ */
+const LANGS = {
+  es: {
+    sub: 'salí, rodeá y volvé · lo que quede adentro es tuyo',
+    jugar: 'JUGAR', tuto: 'CÓMO SE JUEGA', niveles: 'NIVELES', ajustes: 'AJUSTES',
+    volver: 'VOLVER', seguir: 'SEGUIR', reiniciar: 'REINICIAR', salir: 'SALIR AL MENÚ',
+    /* el panel de fin pone REINTENTAR al lado, en fila: con la etiqueta larga
+       el boton se parte en dos renglones mientras su vecino va en uno.     */
+    menuCorto: 'MENÚ', reintentar: 'REINTENTAR', siguiente: 'SIGUIENTE',
+    pausa: 'PAUSA', pausaSub: 'el terreno te espera',
+    nivelesSub: 'tocá uno para jugarlo',
+    gana: '¡CERCADO!', ganaSub: 'el terreno es tuyo',
+    ganaPerf: '¡SIN UN RASGUÑO!', ganaPerfSub: 'no perdiste una sola vida',
+    pierdeT: 'SE ACABÓ EL TIEMPO', pierdeTSub: 'te faltó terreno',
+    pierdeV: 'SIN VIDAS', pierdeVSub: 'te cortaron {0} veces',
+    datos: '{0}% de {1}% · {2} cortes', datos1: '{0}% de {1}% · 1 corte',
+    ajTit: 'AJUSTES', musica: 'MÚSICA', efectos: 'SONIDOS', graficos: 'GRÁFICOS',
+    idioma: 'IDIOMA', calN: ['BAJO', 'MEDIO', 'ALTO'],
+    borrar: 'BORRAR EL PROGRESO', borrado: 'BORRADO',
+    mundo: 'MUNDO {0}', nivel: 'NIVEL {0}-{1}', tiempo: 'TIEMPO', metaR: 'META {0}%',
+    mundos: ['LLANO', 'PILARES', 'CRUCE', 'ISLAS', 'ANILLO'],
+    avTierra: '¡TIERRA!', avCorte: '¡TE CORTARON!', avCasi: '¡FALTA POCO!',
+    avSinVidas: 'SIN VIDAS',
+    pie: 'sin un solo asset · todo dibujado por código', cargando: 'CARGANDO',
+    tutTit: 'TUTORIAL',
+    tut1: 'arrastrá el dedo · el cuerpo dobla al toque',
+    tut2: 'salí de tu terreno · vas dejando estela',
+    tut3: 'volvé a pisar lo tuyo · lo que rodeaste es tuyo',
+    tut4: 'cuanto más grande la vuelta, más terreno',
+    tut5: 'y ojo: si te pisan la estela, te cortan',
+    tutGana: '¡ESO ES TODO!', tutGanaSub: 'ya sabés jugar',
+    tutDatos: 'salir, rodear y volver · nada más', salt: 'SALTEAR',
+  },
+  en: {
+    sub: 'go out, loop around and come back · what you enclose is yours',
+    jugar: 'PLAY', tuto: 'HOW TO PLAY', niveles: 'LEVELS', ajustes: 'SETTINGS',
+    volver: 'BACK', seguir: 'RESUME', reiniciar: 'RESTART', salir: 'BACK TO MENU',
+    menuCorto: 'MENU', reintentar: 'RETRY', siguiente: 'NEXT',
+    pausa: 'PAUSED', pausaSub: 'the land will wait',
+    nivelesSub: 'tap one to play it',
+    gana: 'CLAIMED!', ganaSub: 'the land is yours',
+    ganaPerf: 'NOT A SCRATCH!', ganaPerfSub: 'you never lost a life',
+    pierdeT: "TIME'S UP", pierdeTSub: 'you were short on land',
+    pierdeV: 'OUT OF LIVES', pierdeVSub: 'they cut you {0} times',
+    datos: '{0}% of {1}% · {2} cuts', datos1: '{0}% of {1}% · 1 cut',
+    ajTit: 'SETTINGS', musica: 'MUSIC', efectos: 'SOUNDS', graficos: 'GRAPHICS',
+    idioma: 'LANGUAGE', calN: ['LOW', 'MID', 'HIGH'],
+    borrar: 'ERASE PROGRESS', borrado: 'ERASED',
+    mundo: 'WORLD {0}', nivel: 'LEVEL {0}-{1}', tiempo: 'TIME', metaR: 'GOAL {0}%',
+    mundos: ['PLAIN', 'PILLARS', 'CROSS', 'ISLES', 'RING'],
+    avTierra: 'LAND!', avCorte: 'CUT!', avCasi: 'ALMOST!',
+    avSinVidas: 'OUT OF LIVES',
+    pie: 'not one asset · all drawn in code', cargando: 'LOADING',
+    tutTit: 'TUTORIAL',
+    tut1: 'drag your finger · the body turns as you go',
+    tut2: 'leave your land · you trail behind you',
+    tut3: 'step back on your own · what you looped is yours',
+    tut4: 'the wider the loop, the more land',
+    tut5: 'careful: step on your trail and they cut you',
+    tutGana: "THAT'S ALL!", tutGanaSub: 'you know how to play',
+    tutDatos: 'out, around and back · nothing else', salt: 'SKIP',
+  },
+  pt: {
+    sub: 'saia, cerque e volte · o que ficar dentro é seu',
+    jugar: 'JOGAR', tuto: 'COMO SE JOGA', niveles: 'NÍVEIS', ajustes: 'AJUSTES',
+    volver: 'VOLTAR', seguir: 'CONTINUAR', reiniciar: 'REINICIAR', salir: 'SAIR AO MENU',
+    menuCorto: 'MENU', reintentar: 'TENTAR DE NOVO', siguiente: 'PRÓXIMO',
+    pausa: 'PAUSA', pausaSub: 'o terreno espera',
+    nivelesSub: 'toque em um para jogar',
+    gana: 'CERCADO!', ganaSub: 'o terreno é seu',
+    ganaPerf: 'SEM UM ARRANHÃO!', ganaPerfSub: 'não perdeu nenhuma vida',
+    pierdeT: 'ACABOU O TEMPO', pierdeTSub: 'faltou terreno',
+    pierdeV: 'SEM VIDAS', pierdeVSub: 'te cortaram {0} vezes',
+    datos: '{0}% de {1}% · {2} cortes', datos1: '{0}% de {1}% · 1 corte',
+    ajTit: 'AJUSTES', musica: 'MÚSICA', efectos: 'SONS', graficos: 'GRÁFICOS',
+    idioma: 'IDIOMA', calN: ['BAIXO', 'MÉDIO', 'ALTO'],
+    borrar: 'APAGAR O PROGRESSO', borrado: 'APAGADO',
+    mundo: 'MUNDO {0}', nivel: 'NÍVEL {0}-{1}', tiempo: 'TEMPO', metaR: 'META {0}%',
+    mundos: ['PLANO', 'PILARES', 'CRUZ', 'ILHAS', 'ANEL'],
+    avTierra: 'TERRA!', avCorte: 'TE CORTARAM!', avCasi: 'FALTA POUCO!',
+    avSinVidas: 'SEM VIDAS',
+    pie: 'sem um único asset · tudo desenhado em código', cargando: 'CARREGANDO',
+    tutTit: 'TUTORIAL',
+    tut1: 'arraste o dedo · o corpo vira na hora',
+    tut2: 'saia do seu terreno · vai deixando rastro',
+    tut3: 'volte a pisar no seu · o que cercou é seu',
+    tut4: 'quanto maior a volta, mais terreno',
+    tut5: 'cuidado: se pisarem seu rastro, te cortam',
+    tutGana: 'É SÓ ISSO!', tutGanaSub: 'você já sabe jogar',
+    tutDatos: 'sair, cercar e voltar · nada mais', salt: 'PULAR',
+  },
+};
+let LANG = 'en';
+/* `TX` Y NO `t`: una funcion global de una letra la pisa cualquier cosa que
+   comparta la pagina, y cuando se pisa no falla el idioma — falla TODO.   */
+function TX(k, ...a) {
+  let s = (LANGS[LANG] && LANGS[LANG][k]) != null ? LANGS[LANG][k] : (LANGS.es[k] || k);
+  for (let i = 0; i < a.length; i++) s = String(s).split('{' + i + '}').join(a[i]);
+  return s;
+}
+/* El mundo tiene NOMBRE y no numero: cinco pestanas que digan «MUNDO n» son
+   numeros al lado de una reja de numeros, y encima no entran en 412 px.   */
+const nomMundo = m => (LANGS[LANG].mundos || LANGS.es.mundos)[m] || TX('mundo', m + 1);
+
+/* ══════════════════════ EL GUARDADO ══════════════════════
+   En una ventana privada `localStorage` TIRA: todo va envuelto.            */
+const PROG = { lang: null, hechos: {}, vol: 0.45, fx: 0.8, cal: 1, visto: 0, ult: 0 };
+function cargaProg() {
+  try {
+    const s = localStorage.getItem('cerco');
+    if (!s) return false;
+    const o = JSON.parse(s);
+    if (o && typeof o === 'object') Object.assign(PROG, o);
+    /* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO: la marca se pone en
+       cero DESPUES de leer el disco, asi que sigue valiendo dentro de la
+       sesion —hecho una vez, no vuelve a salir entre nivel y nivel— y es el
+       unico dato del guardado que se descarta a proposito.                */
+    PROG.visto = 0;
+    if (PROG.lang) LANG = PROG.lang;
+    return !!PROG.lang;
+  } catch (e) { return false; }
+}
+function guardaProg() { try { PROG.lang = LANG; localStorage.setItem('cerco', JSON.stringify(PROG)); } catch (e) {} }
+function borraProg() {
+  PROG.hechos = {}; PROG.visto = 0; PROG.ult = 0;
+  try { localStorage.removeItem('cerco'); } catch (e) {}
+}
+const idNiv = (m, n) => m * NIV_MUNDO + n;
+const hecho = (m, n) => !!PROG.hechos[idNiv(m, n)];
+const perfecto = (m, n) => PROG.hechos[idNiv(m, n)] === 2;
+function anota(m, n, perf) {
+  const k = idNiv(m, n), v = perf ? 2 : 1;
+  if ((PROG.hechos[k] | 0) < v) PROG.hechos[k] = v;
+  if (k + 1 > PROG.ult && k + 1 < NIVELES) PROG.ult = k + 1;
+  guardaProg();
+}
+/* «el siguiente al ultimo hecho, mas uno de gracia»: con el siguiente y nada
+   mas, un nivel que a alguien no le sale le cierra el juego entero.        */
+function abierto(k) {
+  if (k <= 0) return true;
+  let alto = 0;
+  for (const s in PROG.hechos) { const i = +s; if (i + 1 > alto) alto = i + 1; }
+  return k <= alto + 1;
+}
+const cuentaHechos = () => Object.keys(PROG.hechos).length;
+/* ══════════════════════════════════════════════════════════════════════════
+   C · EL MODELO
+   NO TOCA NI EL DOM NI EL LIENZO, y eso no es prolijidad: es lo que permite
+   concatenar b.js + c.js e importarlos en node para auditar los cuarenta
+   niveles y correr los dos auto-jugadores sin abrir un navegador.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── EL TEOREMA DEL JUEGO ─────────────────────────────────────────────────
+   Lo que uno encierra con su estela es suyo, y «encierra» es literal: el
+   terreno propio mas la estela forman un anillo 4-CONEXO, y un anillo
+   4-conexo separa el plano bajo relleno de 4 vecinos. O sea que rellenar
+   desde afuera y quedarse con lo que NO se alcanzo no es una aproximacion:
+   es exactamente lo que se rodeo.
+   DE AHI SALE QUE LA ROCA SE PUEDA CRUZAR EN EL RELLENO. Como la barrera es
+   el terreno propio y nada mas, dejar pasar la roca no abre ninguna fuga —y
+   al reves, si la roca bloqueara, un hueco rodeado de piedra se regalaria
+   sin que nadie lo hubiera rodeado nunca.                                  */
+
+function nuevoM(n) {
+  return {
+    n, z: new Uint8Array(n * n), t: new Uint8Array(n * n),
+    jug: [], f: 0, libres: n * n, cuenta: new Int32Array(NJUG + 1),
+    sucio: true, reloj: 0,
+    _vis: null, _pila: null, _bq: null,
+  };
+}
+const dentro = (M, x, y) => x >= 0 && y >= 0 && x < M.n && y < M.n;
+const solido = (M, x, y) => !dentro(M, x, y) || M.z[y * M.n + x] === PIEDRA;
+
+function nuevoJug(id, bot) {
+  return {
+    id, bot: bot || null, ix: 0, iy: 0, dx: 1, dy: 0, ped: null,
+    vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
+    dc: null, dcSucio: true, plan: null, muerteT: 0,
+  };
+}
+
+/* ── RECLAMAR ─────────────────────────────────────────────────────────────
+   ES UNA SOLA FUNCION Y LA USAN CUATRO COSAS: el jugador, los bots, el
+   auditor y el dibujo del destello. Con dos cuentas, el auditor estaria
+   aprobando un juego que no existe.                                        */
+function reclama(M, p) {
+  const n = M.n, id = p.id, z = M.z, t = M.t;
+  let nue = 0;
+  for (let i = 0; i < t.length; i++) if (t[i] === id) { t[i] = 0; if (z[i] !== id) { z[i] = id; nue++; } }
+  p.estela = 0; p.cola.length = 0;
+
+  /* reja virtual de (n+2)²: el anillo de afuera siempre se pisa, asi que el
+     relleno arranca de un sitio que existe sin tener que tratar los bordes
+     como un caso aparte.                                                   */
+  const w = n + 2, W = w * w;
+  if (!M._vis || M._vis.length !== W) { M._vis = new Uint8Array(W); M._pila = new Int32Array(W); }
+  const vis = M._vis, pila = M._pila;
+  vis.fill(0);
+  let sp = 0; pila[sp++] = 0; vis[0] = 1;
+  while (sp > 0) {
+    const c = pila[--sp], cx = c % w, cy = (c / w) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= w) continue;
+      const k = ny * w + nx; if (vis[k]) continue;
+      if (nx > 0 && ny > 0 && nx <= n && ny <= n && z[(ny - 1) * n + (nx - 1)] === id) continue;
+      vis[k] = 1; pila[sp++] = k;
+    }
+  }
+  for (let y = 0; y < n; y++) {
+    const fv = (y + 1) * w + 1, fz = y * n;
+    for (let x = 0; x < n; x++) {
+      if (vis[fv + x]) continue;
+      const i = fz + x, v = z[i];
+      if (v === PIEDRA || v === id) continue;
+      z[i] = id; nue++;
+    }
+  }
+  p.fuera = false; p.cerros++;
+  M.sucio = true;
+  for (const q of M.jug) q.dcSucio = true;
+  return nue;
+}
+
+/* ── EL CAMPO DE DISTANCIA AL BORDE, CON SIGNO ────────────────────────────
+   Un BFS por celda para decidir cada paso costaria, sobre los cuarenta
+   niveles, cientos de millones de visitas. El campo cuesta O(n²) UNA VEZ por
+   cambio de terreno —el mismo precio que el relleno que lo provoco— y se
+   calcula PEREZOSO: un bot que no esta volviendo a casa no lo paga.
+
+   Y LLEVA SIGNO, que es lo que lo hace servir para las dos mitades del
+   viaje. Con el campo medido desde el terreno propio, TODO lo propio vale
+   cero: adentro no hay pendiente, asi que un bot parado en el medio de su
+   casa no tiene por donde subir y sale dando vueltas al azar hasta chocarse
+   con el borde. Medido, eso eran DIECISEIS TICS seguidos en el cero, y el
+   terreno crece, o sea que empeora solo a lo largo de la partida.
+   El cero pasa a ser EL BORDE: hacia afuera +1, +2… y hacia adentro −1, −2…
+   Con eso «salir» es subir por el campo desde donde se este, y el camino que
+   sale es el mas corto por construccion.                                   */
+const DC_NADA = -1e6;
+function campoCasa(M, p) {
+  const n = M.n, N = n * n;
+  if (!p.dc || p.dc.length !== N) p.dc = new Int32Array(N);
+  const dc = p.dc; dc.fill(DC_NADA);
+  if (!M._bq || M._bq.length !== N) M._bq = new Int32Array(N);
+  const q = M._bq; let qa = 0, qb = 0;
+  /* semilla: las celdas propias que dan a algo pisable que no es propio */
+  for (let i = 0; i < N; i++) {
+    if (M.z[i] !== p.id) continue;
+    const cx = i % n, cy = (i / n) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const k = ny * n + nx;
+      if (M.z[k] === PIEDRA || M.z[k] === p.id) continue;
+      dc[i] = 0; q[qb++] = i; break;
+    }
+  }
+  /* un terreno encerrado sin una sola salida no tiene borde: se cae al campo
+     de antes para que el bot al menos tenga un gradiente y no un plano.    */
+  if (!qb) for (let i = 0; i < N; i++) if (M.z[i] === p.id) { dc[i] = 0; q[qb++] = i; }
+  while (qa < qb) {
+    const c = q[qa++], cx = c % n, cy = (c / n) | 0, v = dc[c];
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const k = ny * n + nx;
+      if (dc[k] !== DC_NADA || M.z[k] === PIEDRA) continue;
+      /* lo propio baja y lo ajeno sube. Una celda propia vecina de una de
+         afuera ya se sembro en cero, asi que las dos ramas no se cruzan.   */
+      dc[k] = M.z[k] === p.id ? v - 1 : v + 1;
+      q[qb++] = k;
+    }
+  }
+  p.dcSucio = false;
+  return dc;
+}
+const verCasa = (M, p) => (p.dcSucio || !p.dc ? campoCasa(M, p) : p.dc);
+
+function recuenta(M) {
+  M.cuenta.fill(0);
+  for (let i = 0; i < M.z.length; i++) { const v = M.z[i]; if (v > 0 && v < PIEDRA) M.cuenta[v]++; }
+  M.sucio = false;
+}
+function tajada(M, id) {
+  if (M.sucio) recuenta(M);
+  return M.libres > 0 ? M.cuenta[id] / M.libres : 0;
+}
+
+/* ── UN PASO DE CELDA ─────────────────────────────────────────────────────
+   TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
+   cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
+   tablero, y no una por jugador. Con una por jugador habria que decidir en
+   que orden se resuelven dos cabezas que entran a la misma celda, y el
+   resultado dependeria del orden del array.                                */
+function tic(M) {
+  const n = M.n, vivos = [];
+  for (const p of M.jug) {
+    if (!p.vivo) continue;
+    if (p.ped && !(p.ped[0] === -p.dx && p.ped[1] === -p.dy)) { p.dx = p.ped[0]; p.dy = p.ped[1]; }
+    p.ped = null;
+    p.ix += p.dx; p.iy += p.dy;
+    vivos.push(p);
+  }
+
+  /* LAS MUERTES SE JUNTAN Y SE APLICAN TODAS DE UNA, y la estela se mira
+     ANTES de que nadie deje la de este paso: si no, el que se mueve primero
+     tendria ventaja sobre el que se mueve segundo por estar antes en la
+     lista.                                                                 */
+  const mata = new Set();
+  for (const p of vivos) {
+    if (!dentro(M, p.ix, p.iy)) { mata.add(p); continue; }
+    const i = p.iy * n + p.ix;
+    if (M.z[i] === PIEDRA) { mata.add(p); continue; }
+    const te = M.t[i];
+    if (te !== 0) {
+      /* el dueno de la estela es el que cae: pisar la propia es suicidio y
+         pisar la ajena es un corte. Una sola regla, dos resultados.        */
+      const q = M.jug[te - 1];
+      if (q && q.vivo) mata.add(q);
+    }
+  }
+  for (let a = 0; a < vivos.length; a++) for (let b = a + 1; b < vivos.length; b++)
+    if (vivos[a].ix === vivos[b].ix && vivos[a].iy === vivos[b].iy) { mata.add(vivos[a]); mata.add(vivos[b]); }
+
+  for (const p of mata) muere(M, p);
+
+  for (const p of vivos) {
+    if (!p.vivo) continue;
+    const i = p.iy * n + p.ix;
+    if (M.z[i] === p.id) { if (p.fuera) reclama(M, p); }
+    else { if (M.t[i] !== p.id) { M.t[i] = p.id; p.estela++; p.cola.push(i); } p.fuera = true; }
+  }
+  for (const p of vivos) if (p.vivo && p.bot) piensa(M, p);
+}
+
+function muere(M, p) {
+  if (!p.vivo) return;
+  p.vivo = false; p.cortes++;
+  for (let i = 0; i < M.t.length; i++) if (M.t[i] === p.id) M.t[i] = 0;
+  p.estela = 0; p.cola.length = 0; p.fuera = false; p.plan = null;
+  p.muerteT = M.reloj;
+}
+
+/* ── RENACER ──────────────────────────────────────────────────────────────
+   EL TERRENO NO SE PIERDE. Perderlo entero en cada corte convierte tres
+   vidas en tres intentos del nivel completo con el reloj corriendo; lo que
+   un corte tiene que costar es TIEMPO y POSICION, que es lo que cuesta
+   volver a salir desde el medio de lo propio.                              */
+function renace(M, p) {
+  const n = M.n;
+  let mejor = -1, mejorV = -1;
+  const cab = [];
+  for (const q of M.jug) if (q !== p && q.vivo) cab.push([q.ix, q.iy]);
+  for (let i = 0; i < M.z.length; i++) {
+    if (M.z[i] !== p.id) continue;
+    const x = i % n, y = (i / n) | 0;
+    let d = 1e9;
+    for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
+    if (d > mejorV) { mejorV = d; mejor = i; }
+  }
+  if (mejor < 0) mejor = carvaCasa(M, p);
+  p.ix = mejor % n; p.iy = (mejor / n) | 0;
+  p.vivo = true; p.fuera = false; p.estela = 0; p.ped = null; p.plan = null; p.dcSucio = true;
+  /* mira hacia adentro de lo propio: renacer apuntando al vacio es salir sin
+     haberlo pedido, y eso no es un renacimiento, es otro corte.            */
+  let d0 = 0;
+  for (let d = 0; d < 4; d++) {
+    const nx = p.ix + DIR[d][0], ny = p.iy + DIR[d][1];
+    if (dentro(M, nx, ny) && M.z[ny * n + nx] === p.id) { d0 = d; break; }
+  }
+  p.dx = DIR[d0][0]; p.dy = DIR[d0][1];
+}
+
+/* Carva un cuadrado nuevo donde mas neutral haya y mas lejos de las cabezas
+   ajenas. Sólo hace falta cuando a alguien le encerraron TODO el terreno.  */
+function carvaCasa(M, p, rad) {
+  const n = M.n, r = rad || 2;
+  const cab = [];
+  for (const q of M.jug) if (q !== p && q.vivo) cab.push([q.ix, q.iy]);
+  let mejor = -1, mejorV = -1e9;
+  for (let y = r + 1; y < n - r - 1; y += 2) for (let x = r + 1; x < n - r - 1; x += 2) {
+    let lib = 0, roca = 0;
+    for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++) {
+      const v = M.z[(y + b) * n + (x + a)];
+      if (v === PIEDRA) roca++; else if (v === LIBRE) lib++;
+    }
+    if (roca > 0) continue;
+    let d = 1e9;
+    for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
+    const v = lib * 2 + Math.min(d, 30) * 3;
+    if (v > mejorV) { mejorV = v; mejor = y * n + x; }
+  }
+  if (mejor < 0) mejor = ((n >> 1) * n + (n >> 1));
+  const cx = mejor % n, cy = (mejor / n) | 0;
+  for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++) {
+    const x = cx + a, y = cy + b;
+    if (!dentro(M, x, y)) continue;
+    const i = y * n + x;
+    if (M.z[i] !== PIEDRA) M.z[i] = p.id;
+  }
+  M.sucio = true;
+  for (const q of M.jug) q.dcSucio = true;
+  return mejor;
+}
+
+/* ── EL PASO DE RELOJ ─────────────────────────────────────────────────────
+   La fraccion se acumula y los ticks salen enteros: asi un telefono a 30 y
+   una notebook a 144 juegan EL MISMO juego.                                */
+const RENACE_S = 1.15;
+function paso(M, dt) {
+  M.reloj += dt;
+  for (const p of M.jug) if (!p.vivo && M.reloj - p.muerteT >= RENACE_S && p.cortes < (p.topeCortes || 1e9)) renace(M, p);
+  M.f += VEL * dt;
+  let g = 0;
+  while (M.f >= 1 && g < 8) { M.f -= 1; tic(M); g++; }
+  if (M.f >= 1) M.f = 0;
+}
+
+/* ══════════════════════ EL MAPA ══════════════════════ */
+function generaMapa(cfg) {
+  const n = cfg.n, M = nuevoM(n), R = azar(cfg.sem);
+  /* EL AZAR DEL CEREBRO SALE DE LA SEMILLA DEL NIVEL, y no es prolijidad:
+     con `Math.random` la misma auditoria devolvia gana 3, 4, 4, 7 y 5 sobre
+     el MISMO binario, asi que comparar dos ajustes no significaba nada — tres
+     mediciones seguidas se leyeron como regresion y eran ruido. Y del lado del
+     jugador vale lo mismo: un nivel con semilla tiene que ser EL MISMO nivel,
+     o reintentar el que casi ganaste es jugar otro.                          */
+  M.az = azar(cfg.sem ^ 0x5bf03635);
+  ponPiedras(M, cfg, R);
+
+  /* las casas van repartidas en un circulo: con posiciones al azar dos
+     jugadores pueden nacer pegados y el nivel se decide en el primer
+     segundo, que no es dificultad sino sorteo.                            */
+  /* CON UN SOLO JUGADOR EL CIRCULO NO SEPARA NADA Y ENCIMA ESTORBA: el radio
+     existe para que dos casas no nazcan pegadas, y sin rival lo unico que hace
+     es empujar la unica casa contra una pared. Medido en el tutorial —26 celdas
+     y `riv: 0`— la casa caia en el 18 de 26, o sea cinco celdas de aire de un
+     lado y dieciseis del otro, con la camara clavada en su tope. Ninguno de los
+     cinco mundos tiene `riv: 0`, asi que esto toca al tutorial y a nada mas. */
+  const nj = 1 + cfg.riv, rad = nj > 1 ? n * 0.31 : 0, cx = n / 2, cy = n / 2;
+  const a0 = R() * Math.PI * 2;
+  for (let j = 0; j < nj; j++) {
+    const a = a0 + j * Math.PI * 2 / nj;
+    let x = Math.round(cx + Math.cos(a) * rad), y = Math.round(cy + Math.sin(a) * rad);
+    x = cl(x, 4, n - 5); y = cl(y, 4, n - 5);
+    const p = nuevoJug(j + 1, j === 0 ? null : { per: cfg.per });
+    M.jug.push(p);
+    for (let b = -2; b <= 2; b++) for (let a2 = -2; a2 <= 2; a2++) {
+      const i = (y + b) * n + (x + a2);
+      M.z[i] = p.id;
+    }
+    /* un anillo de una celda alrededor de la casa se limpia de roca: nacer
+       con la unica salida tapada es perder antes de tocar la pantalla.    */
+    for (let b = -3; b <= 3; b++) for (let a2 = -3; a2 <= 3; a2++) {
+      const xx = x + a2, yy = y + b;
+      if (!dentro(M, xx, yy)) continue;
+      const i = yy * n + xx;
+      if (M.z[i] === PIEDRA) M.z[i] = LIBRE;
+    }
+    p.ix = x; p.iy = y; p.dx = 1; p.dy = 0;
+  }
+
+  /* CONEXIDAD POR CONSTRUCCION: lo que no se alcanza desde la casa del
+     jugador pasa a ser roca. Un bolsillo suelto no rompe el relleno —la
+     barrera es el terreno propio— pero si rompe el juego: seria terreno que
+     cuenta para la meta y al que no se puede llegar.                      */
+  selloSueltos(M);
+  M.libres = 0;
+  for (let i = 0; i < M.z.length; i++) if (M.z[i] !== PIEDRA) M.libres++;
+  M.sucio = true;
+  M.cfg = cfg;
+  return M;
+}
+
+function ponPiedras(M, cfg, R) {
+  const n = M.n, z = M.z;
+  const roca = (x, y) => { if (dentro(M, x, y)) z[y * n + x] = PIEDRA; };
+  const bloque = (x, y, w, h) => { for (let b = 0; b < h; b++) for (let a = 0; a < w; a++) roca(x + a, y + b); };
+  switch (cfg.pat) {
+    case 'pilares': {
+      const paso = Math.max(7, Math.round(n / 7));
+      for (let y = paso; y < n - 3; y += paso) for (let x = paso; x < n - 3; x += paso) {
+        const w = 2 + (R() < 0.4 ? 1 : 0);
+        bloque(x - (w >> 1), y - (w >> 1), w, w);
+      }
+      break;
+    }
+    case 'cruz': {
+      const g = Math.max(3, Math.round(n * 0.07)), c = n >> 1, hu = Math.round(n * 0.17);
+      for (let i = 0; i < n; i++) {
+        if (Math.abs(i - c) < hu) continue;
+        for (let k = 0; k < g; k++) { roca(i, c - (g >> 1) + k); roca(c - (g >> 1) + k, i); }
+      }
+      break;
+    }
+    case 'islas': {
+      const q = Math.round(n * n / 240);
+      for (let i = 0; i < q; i++) {
+        const x = 3 + Math.floor(R() * (n - 6)), y = 3 + Math.floor(R() * (n - 6));
+        const w = 2 + Math.floor(R() * 4), h = 2 + Math.floor(R() * 4);
+        bloque(x, y, w, h);
+      }
+      break;
+    }
+    case 'anillo': {
+      const c = (n - 1) / 2, r1 = n * 0.30, r2 = n * 0.34;
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        const d = Math.hypot(x - c, y - c);
+        if (d < r1 || d > r2) continue;
+        const a = Math.atan2(y - c, x - c);
+        /* cuatro puertas: un anillo cerrado parte el mapa en dos y el
+           sellado de sueltos se llevaria la mitad del tablero.            */
+        let puerta = false;
+        for (let k = 0; k < 4; k++) if (Math.abs(((a - k * Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI) > Math.PI - 0.22) puerta = true;
+        if (!puerta) roca(x, y);
+      }
+      break;
+    }
+  }
+}
+
+function selloSueltos(M) {
+  const n = M.n, N = n * n, vis = new Uint8Array(N), q = new Int32Array(N);
+  let qa = 0, qb = 0, ini = -1;
+  for (let i = 0; i < N; i++) if (M.z[i] === 1) { ini = i; break; }
+  if (ini < 0) for (let i = 0; i < N; i++) if (M.z[i] !== PIEDRA) { ini = i; break; }
+  if (ini < 0) return;
+  vis[ini] = 1; q[qb++] = ini;
+  while (qa < qb) {
+    const c = q[qa++], cx = c % n, cy = (c / n) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const k = ny * n + nx;
+      if (vis[k] || M.z[k] === PIEDRA) continue;
+      vis[k] = 1; q[qb++] = k;
+    }
+  }
+  for (let i = 0; i < N; i++) if (!vis[i] && M.z[i] !== PIEDRA) M.z[i] = PIEDRA;
+}
+
+/* ── LA AUDITORIA DEL MAPA ────────────────────────────────────────────────
+   Cuatro propiedades, y las cuatro rompen el nivel de formas que una captura
+   no muestra: terreno inalcanzable que cuenta para la meta, una casa tapada,
+   dos casas pegadas, o una meta que ni ocupando todo se alcanza.          */
+function auditaMapa(M) {
+  const n = M.n, N = n * n, cfg = M.cfg;
+  const vis = new Uint8Array(N), q = new Int32Array(N);
+  let qa = 0, qb = 0;
+  const ini = M.jug[0].iy * n + M.jug[0].ix;
+  vis[ini] = 1; q[qb++] = ini;
+  while (qa < qb) {
+    const c = q[qa++], cx = c % n, cy = (c / n) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const k = ny * n + nx;
+      if (vis[k] || M.z[k] === PIEDRA) continue;
+      vis[k] = 1; q[qb++] = k;
+    }
+  }
+  let libres = 0, alcanz = 0;
+  for (let i = 0; i < N; i++) { if (M.z[i] !== PIEDRA) { libres++; if (vis[i]) alcanz++; } }
+  let salidas = 99, cerca = 1e9;
+  for (const p of M.jug) {
+    let s = 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = p.ix + DIR[d][0] * 3, ny = p.iy + DIR[d][1] * 3;
+      if (dentro(M, nx, ny) && M.z[ny * n + nx] !== PIEDRA) s++;
+    }
+    if (s < salidas) salidas = s;
+    for (const r of M.jug) if (r !== p) {
+      const e = Math.abs(r.ix - p.ix) + Math.abs(r.iy - p.iy);
+      if (e < cerca) cerca = e;
+    }
+  }
+  if (M.jug.length < 2) cerca = 999;
+  const malos = [];
+  if (alcanz !== libres) malos.push('sueltas:' + (libres - alcanz));
+  if (salidas < 2) malos.push('casa tapada');
+  if (cerca < n * 0.30) malos.push('casas pegadas:' + cerca);
+  if (cfg && cfg.meta > 0.92) malos.push('meta imposible');
+  return { n, libres, alcanz, salidas, cerca, roca: N - libres, meta: cfg ? cfg.meta : 0, malos };
+}
+
+/* ══════════════════════ LOS BOTS ══════════════════════
+   Entran por `p.ped`, o sea POR EL MISMO SITIO QUE EL DEDO. Con un camino
+   propio, que un bot termine el nivel no diria nada sobre el nivel que se
+   juega.                                                                   */
+function legales(M, p) {
+  const out = [];
+  for (let d = 0; d < 4; d++) {
+    const dx = DIR[d][0], dy = DIR[d][1];
+    if (dx === -p.dx && dy === -p.dy) continue;      /* nada de media vuelta */
+    const nx = p.ix + dx, ny = p.iy + dy;
+    if (!dentro(M, nx, ny)) continue;
+    const i = ny * M.n + nx;
+    if (M.z[i] === PIEDRA) continue;
+    if (M.t[i] === p.id) continue;                   /* la propia estela mata */
+    out.push(d);
+  }
+  return out;
+}
+function cabCerca(M, p) {
+  let d = 1e9;
+  for (const q of M.jug) if (q !== p && q.vivo) {
+    const e = Math.abs(q.ix - p.ix) + Math.abs(q.iy - p.iy);
+    if (e < d) d = e;
+  }
+  return d;
+}
+
+const rnd = M => M.az ? M.az() : Math.random();
+
+/* ── CUANTO FALTA PARA QUE ME CORTEN ──────────────────────────────────────
+   EL PELIGRO NO ES QUE UN RIVAL ESTE CERCA DE MI CABEZA: ES QUE LLEGUE A MI
+   ESTELA ANTES QUE YO A CASA. Medido contra la cabeza y con un radio fijo,
+   el bot se TRABABA: salia, veia un rival a nueve celdas —con la estela en
+   cero, o sea sin una sola celda que perder— se volvia, y repetia. En el
+   nivel 4-2 eso fueron TREINTA Y DOS abortos y el 2,1 % del tablero.
+   Sin estela no hay riesgo: parado en lo propio a nadie lo pueden cortar. */
+function riesgo(M, p) {
+  const c = p.cola, L = c.length;
+  if (!L) return 1e9;
+  const n = M.n;
+  /* EL CONTROL `ciego` NO ES TORPEZA: ES NO MIRAR. Juega la misma geometria
+     —esquiva paredes, piedras y su propia estela todos los tics— y lo unico
+     que no hace es preguntar donde estan los rivales, o sea que se vuelve a
+     casa por el tramo y no por el corte. Es el unico control que aisla LA
+     decision de este juego.
+     Dos intentos anteriores no median el juego: uno que dejaba de pensar del
+     todo se mataba contra el decorado (87 de 114 muertes contra pared o
+     piedra) y otro que solo retrasaba la vista de los rivales casi no movia
+     el resultado (35 a 39 de 40 entre 0,37 y 1,11 s de atraso).            */
+  if (p.bot && p.bot.ciego) return 1e9;
+  let d = 1e9;
+  for (const q of M.jug) {
+    if (q === p || !q.vivo) continue;
+    for (let k = 0; k < L; k++) {
+      const i = c[k], e = Math.abs((i % n) - q.ix) + Math.abs(((i / n) | 0) - q.iy);
+      if (e < d) d = e;
+    }
+  }
+  return d;
+}
+
+/* EL BOT NO CUENTA PASOS: MIRA LA PROFUNDIDAD.
+   Contando pasos, el tramo se gasta tambien caminando adentro de lo propio —y
+   como el terreno crece, a mitad de partida casi todo el tramo se va en cruzar
+   la casa y las vueltas se achican solas. Medido asi, el bot cercaba 40 celdas
+   por vuelta donde hacen falta mas del doble. `dc` ya dice a cuantos pasos de
+   lo propio esta cada celda, o sea que «salir» es subir por ese campo, «correr
+   el costado» es mantenerlo y «volver» es bajarlo: los tres modos son el mismo
+   numero y ninguno depende de por donde se venia.                           */
+function piensa(M, p) {
+  const b = p.bot; if (!b) return;
+  if (b.azar) return piensaAzar(M, p);
+  const n = M.n, per = b.per, leg = legales(M, p);
+  if (!leg.length) return;
+  const dc = verCasa(M, p), aqui = dc[p.iy * n + p.ix];
+  const enCasa = aqui <= 0;                       /* cero es el borde        */
+
+  /* LO QUE `per` GOBIERNA ES CUANTO SE ARRIESGA, no la punteria: un bot que
+     sale mas hondo y corre mas de costado cerca mas por vuelta y se expone
+     mas tiempo. El area de una vuelta es hondo x lado.                      */
+  const hondo  = Math.round(mez(4, 14, per));
+  const largo  = Math.round(mez(6, 34, per));
+  const tope   = Math.round(mez(18, 96, per));
+  const margen = Math.round(mez(6, 1, per));
+
+  if (enCasa) p.plan = null;
+  if (!p.plan) p.plan = { modo: 'salir', lado: rnd(M) < 0.5 ? 1 : -1, resta: largo };
+
+  /* volver cuando el rival llega a la estela antes que yo a casa: `aqui` son
+     mis pasos hasta lo propio, y el margen es lo unico que `per` mueve aca. */
+  if (p.estela > tope || riesgo(M, p) <= aqui + margen) p.plan.modo = 'volver';
+  else if (p.plan.modo === 'salir') { if (aqui >= hondo) p.plan.modo = 'lado'; }
+  else if (p.plan.modo === 'lado') { if (p.plan.resta <= 0) p.plan.modo = 'volver'; else p.plan.resta--; }
+
+  let mejor = -1e9, d = leg[0];
+  for (const k of leg) {
+    const nx = p.ix + DIR[k][0], ny = p.iy + DIR[k][1], i = ny * n + nx;
+    const dd = dc[i];
+    let v;
+    if (p.plan.modo === 'volver') v = -dd * 10;
+    else if (p.plan.modo === 'salir') v = dd * 10;
+    else v = -Math.abs(dd - hondo) * 10;        /* paralelo al borde         */
+    /* seguir derecho cuando empata: un bot que zigzaguea gasta el doble de
+       estela para encerrar lo mismo.                                        */
+    if (k === dirDe(p.dx, p.dy)) v += 3;
+    if (M.t[i] !== 0 && M.t[i] !== p.id) v += 60;   /* de paso, un corte      */
+    if (M.z[i] === p.id && p.plan.modo !== 'volver') v -= 25;
+    v += rnd(M) * 2;
+    if (v > mejor) { mejor = v; d = k; }
+  }
+  p.ped = DIR[d];
+}
+function piensaAzar(M, p) {
+  const leg = legales(M, p);
+  if (!leg.length) return;
+  p.ped = DIR[leg[Math.floor(rnd(M) * leg.length)]];
+}
+const dirDe = (dx, dy) => dx > 0 ? 0 : (dx < 0 ? 1 : (dy > 0 ? 2 : 3));
+
+/* ══════════════════════ AUDITORIAS ══════════════════════ */
+
+/* LA REGLA, CONTRA FORMAS CONOCIDAS. Un relleno que devuelva «algo» no
+   prueba nada: hay que pedirle un numero que se pueda contar a mano.      */
+function auditaRegla() {
+  const out = [];
+  /* 1 · una mordida rectangular: se sale del terreno, se rodea un 5×3 y se
+        vuelve. Tienen que quedar EXACTAMENTE esas quince celdas mas la
+        estela, ni una mas.                                                */
+  {
+    const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
+    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
+    const cam = [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [0, -1], [0, -1], [0, -1], [0, -1],
+                 [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0]];
+    let antes = 0; for (let i = 0; i < M.z.length; i++) if (M.z[i] === 1) antes++;
+    for (const c of cam) { p.ped = c; tic(M); }
+    let desp = 0; for (let i = 0; i < M.z.length; i++) if (M.z[i] === 1) desp++;
+    /* seis de ida, cuatro de subida, seis de vuelta = 16 de estela, mas el
+       interior 5×3 = 15. La ultima de la vuelta cae en terreno propio.    */
+    out.push({ caso: 'mordida', antes, desp, gano: desp - antes, esperado: 30, ok: desp - antes === 30 });
+  }
+  /* 2 · rodear una roca: la roca SIGUE SIENDO ROCA y lo de alrededor pasa a
+        ser terreno. Si la roca se reclamara, el tablero perderia el unico
+        obstaculo que tiene.                                               */
+  {
+    const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
+    M.z[8 * 24 + 16] = PIEDRA;
+    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
+    const cam = [[0, -1], [1, 0], [1, 0], [1, 0], [1, 0], [0, 1], [0, 1], [-1, 0], [-1, 0], [-1, 0], [-1, 0]];
+    for (const c of cam) { p.ped = c; tic(M); }
+    out.push({ caso: 'roca', sigueRoca: M.z[8 * 24 + 16] === PIEDRA, mio: M.z[7 * 24 + 16] === 1, ok: M.z[8 * 24 + 16] === PIEDRA && M.z[7 * 24 + 16] === 1 });
+  }
+  /* 3 · encerrar a un rival: su terreno pasa a ser mio. Sin esto los rivales
+        serian decoracion que estorba.                                     */
+  {
+    const M = nuevoM(24), p = nuevoJug(1, null), q = nuevoJug(2, null); M.jug.push(p, q);
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
+    for (let y = 7; y < 10; y++) for (let x = 15; x < 18; x++) M.z[y * 24 + x] = 2;
+    q.ix = 16; q.iy = 8; q.vivo = false;
+    const suyo0 = M.z.reduce((a, v) => a + (v === 2 ? 1 : 0), 0);
+    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
+    const cam = [[0, -1], [0, -1], [0, -1], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0],
+                 [0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0],
+                 [0, -1], [0, -1], [0, -1]];
+    for (const c of cam) { p.ped = c; tic(M); }
+    const suyo1 = M.z.reduce((a, v) => a + (v === 2 ? 1 : 0), 0);
+    out.push({ caso: 'rival', suyo0, suyo1, ok: suyo0 === 9 && suyo1 === 0 });
+  }
+  /* 4 · la propia estela mata, y la ajena mata a su dueno. Es LA regla que
+        hace que salir cueste algo.                                        */
+  {
+    const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
+    for (let y = 4; y < 8; y++) for (let x = 4; x < 8; x++) M.z[y * 24 + x] = 1;
+    p.ix = 7; p.iy = 6; p.dx = 1; p.dy = 0;
+    const cam = [[1, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [0, -1]];
+    for (const c of cam) { if (p.vivo) { p.ped = c; tic(M); } }
+    out.push({ caso: 'propia estela', vivo: p.vivo, ok: !p.vivo });
+  }
+  return { casos: out, malos: out.filter(o => !o.ok).map(o => o.caso) };
+}
+
+/* JUGAR UN NIVEL ENTERO SIN DIBUJAR. Es lo unico que prueba que un nivel
+   generado se puede terminar — y la separacion entre el bot honesto y el
+   que se mueve al azar es lo unico que prueba que adentro hay una decision.
+   Los dos entran por `p.ped`.                                             */
+function juegaSolo(m, nn, modo, sem) {
+  const cfg = cfgNivel(m, nn);
+  if (sem != null) cfg.sem = sem;
+  const M = generaMapa(cfg);
+  const yo = M.jug[0];
+  yo.bot = modo === 'azar'  ? { azar: true }
+         : modo === 'ciego' ? { per: 0.80, ciego: true }
+         :                    { per: 0.80 };
+  yo.topeCortes = VIDAS;
+  for (let j = 1; j < M.jug.length; j++) M.jug[j].topeCortes = 1e9;
+  const DT = 1 / VEL;                     /* un tic exacto por paso          */
+  let t = 0, gano = false;
+  const tope = Math.ceil(cfg.seg * VEL) + 40;
+  for (let k = 0; k < tope; k++) {
+    paso(M, DT); t += DT;
+    if (tajada(M, 1) >= cfg.meta) { gano = true; break; }
+    if (yo.cortes >= VIDAS && !yo.vivo) break;
+    if (t >= cfg.seg) break;
+  }
+  return {
+    m, n: nn, modo, gano, seg: +t.toFixed(1), meta: +(cfg.meta * 100).toFixed(1),
+    pct: +(tajada(M, 1) * 100).toFixed(1), cortes: yo.cortes, cerros: yo.cerros,
+    riv: M.jug.slice(1).map(q => +(tajada(M, q.id) * 100).toFixed(1)),
+  };
+}
+function auditaTodo(modo) {
+  const r = [], t0 = Date.now();
+  for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) r.push(juegaSolo(m, n, modo || 'bot'));
+  const gana = r.filter(x => x.gano).length;
+  return {
+    modo: modo || 'bot', de: r.length, gana, ms: Date.now() - t0,
+    pctMedio: +(r.reduce((a, x) => a + x.pct, 0) / r.length).toFixed(1),
+    cortesMedio: +(r.reduce((a, x) => a + x.cortes, 0) / r.length).toFixed(2),
+    malos: r.filter(x => !x.gano).map(x => (x.m + 1) + '-' + (x.n + 1) + ' ' + x.pct + '/' + x.meta),
+  };
+}
+function auditaMapas() {
+  const malos = [], filas = [];
+  for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) {
+    const M = generaMapa(cfgNivel(m, n)), a = auditaMapa(M);
+    filas.push({ niv: (m + 1) + '-' + (n + 1), n: a.n, libres: a.libres, roca: a.roca, cerca: a.cerca });
+    if (a.malos.length) malos.push((m + 1) + '-' + (n + 1) + ': ' + a.malos.join(','));
+  }
+  return { de: filas.length, malos, filas };
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   D · AUDIO
+   Procedural y sin un byte de asset, y aca eso ademas es lo correcto: lo que
+   suena en CERCO es tierra que se cierra y una estela que se corta — un tono
+   con cuerpo y un golpe seco, o sea ruido filtrado. Un clip grabado pesaria
+   cientos de kilobytes y encima se cortaria en cada vuelta del bucle.
+   TODO CUELGA DE UN MAESTRO para que el analizador de las sondas pueda decir
+   si algo sono de verdad: «no tiro excepcion» no es «se escucho».
+   ══════════════════════════════════════════════════════════════════════════ */
+const AU = { ctx: null, maes: null, mus: null, fx: null, an: null, ruido: null, on: false, cama: null, acorde: 0, abre: 0 };
+
+/* Un solo bufer de ruido de un segundo, generado una vez. Cada golpe lo
+   reproduce con otro filtro y otro sobre: dos rellenos de ruido distintos
+   cuestan lo mismo que dos filtros y pesan el doble.                       */
+function auRuido() {
+  if (AU.ruido) return AU.ruido;
+  const n = AU.ctx.sampleRate, b = AU.ctx.createBuffer(1, n, n), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  AU.ruido = b; return b;
+}
+
+function auArranca() {
+  if (AU.on) return;
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return;
+  try { AU.ctx = new C(); } catch (e) { return; }
+  AU.maes = AU.ctx.createGain(); AU.maes.gain.value = 0.9;
+  AU.an = AU.ctx.createAnalyser(); AU.an.fftSize = 2048;
+  AU.maes.connect(AU.an); AU.an.connect(AU.ctx.destination);
+  AU.mus = AU.ctx.createGain(); AU.mus.gain.value = PROG.vol; AU.mus.connect(AU.maes);
+  AU.fx  = AU.ctx.createGain(); AU.fx.gain.value  = PROG.fx;  AU.fx.connect(AU.maes);
+  AU.on = true;
+  auCama();
+}
+function auDesp() { if (AU.ctx && AU.ctx.state === 'suspended') AU.ctx.resume(); }
+function auVol() { if (!AU.on) return; AU.mus.gain.value = PROG.vol; AU.fx.gain.value = PROG.fx; }
+
+/* ── LA CAMA ──────────────────────────────────────────────────────────────
+   Cuatro voces DOBLADAS y desafinadas un pelo entre si: dos senos identicos
+   suenan a tono de prueba y dos que baten cada varios segundos suenan a
+   instrumento. Y un pasabajos que respira cada 19 s.
+
+   LO PROPIO DE ESTE JUEGO ES QUE EL FILTRO SE ABRE CON LA TAJADA. Cuanto mas
+   tablero es tuyo, mas brillo tiene la cama: la musica dice como vas sin un
+   numero y sin un cartel, que es justo lo que un tablero de setenta celdas de
+   lado no puede mostrar de una ojeada. Y no es un segundo tema —eso seria un
+   corte— es el MISMO acorde abriendose.                                     */
+const AU_RAIZ = [55, 58.27, 61.74, 49, 51.91];   /* una por mundo            */
+const AU_GR = [0, 12, 19, 26];                   /* raiz · octava · quinta · novena */
+function auCama() {
+  if (!AU.on) return;
+  const c = AU.ctx, t = c.currentTime;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+  lp.frequency.value = 400; lp.connect(AU.mus);
+  const lfo = c.createOscillator(), lg = c.createGain();
+  lfo.frequency.value = 1 / 19; lg.gain.value = 190;
+  lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t);
+  AU.cama = { lp, voces: [] };
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; g.gain.value = 0.030 / (1 + i * 0.5);
+    o.connect(g); g.connect(lp); o.start(t);
+    AU.cama.voces.push({ o, g, i, det: j ? 1.00027 : 1 });
+  }
+  auAcorde(0); auAbre(0);
+}
+/* Cada mundo TRANSPONE la raiz; no cambia de tema. Cinco temas serian cinco
+   cortes, y este juego no tiene un solo corte.                             */
+function auAcorde(m) {
+  if (!AU.on || !AU.cama) return;
+  AU.acorde = m;
+  const r = AU_RAIZ[cl(m, 0, AU_RAIZ.length - 1)], t = AU.ctx.currentTime;
+  for (const v of AU.cama.voces)
+    v.o.frequency.setTargetAtTime(r * Math.pow(2, AU_GR[v.i] / 12) * v.det, t, 0.9);
+}
+/* `k` es cuanto falta para la meta, de 0 a 1. El corte va lento a proposito
+   (medio segundo de constante): siguiendo la tajada cuadro a cuadro el filtro
+   late en cada reclamo y eso se escucha peor que no moverlo.               */
+function auAbre(k) {
+  if (!AU.on || !AU.cama) return;
+  AU.abre = cl(k, 0, 1);
+  AU.cama.lp.frequency.setTargetAtTime(400 + AU.abre * 1500, AU.ctx.currentTime, 0.5);
+}
+
+/* ── LOS EFECTOS ─────────────────────────────────────────────────────────
+   LA ESCALA SE MIDE CON `sonMide`, QUE BARRE EL CLIP ENTERO: la ventana del
+   analizador son 42,7 ms y un efecto dura entre 150 y 700, asi que una sola
+   lectura cae donde caiga y devuelve la cama.
+   Y la Q va ABIERTA: un pasabanda estrecho sobre ruido blanco se come casi
+   toda la energia — ya costo una vuelta en POMPOM y otra en FLECHAS.      */
+function auEnv(g, t, a, d, pico) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(pico, t + a);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+}
+function auTono(f, t, dur, pico, tipo, f1) {
+  const c = AU.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = tipo || 'sine'; o.frequency.setValueAtTime(f, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  o.connect(g); g.connect(AU.fx);
+  auEnv(g, t, 0.008, dur, pico);
+  o.start(t); o.stop(t + dur + 0.06);
+}
+function auRoce(t, dur, f0, f1, pico, q) {
+  const c = AU.ctx, s = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = auRuido(); s.loop = true;
+  bp.type = 'bandpass'; bp.Q.value = q || 0.9;
+  bp.frequency.setValueAtTime(f0, t);
+  bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  s.connect(bp); bp.connect(g); g.connect(AU.fx);
+  auEnv(g, t, 0.012, dur, pico);
+  s.start(t); s.stop(t + dur + 0.08);
+}
+function son(k, arg) {
+  if (!AU.on) return;
+  auDesp();
+  const t = AU.ctx.currentTime;
+  switch (k) {
+    /* ── TIERRA: el acto central, y SUENA MAS CUANTO MAS SE CERRO. Con un
+          sonido fijo, encerrar tres celdas y encerrar trescientas dan lo
+          mismo, y entonces el unico premio del juego no informa nada.      */
+    case 'tierra': {
+      const k2 = cl((arg || 0) / 260, 0, 1);
+      const g = [0, 7, 12, 16, 19];
+      const cu = 2 + Math.round(k2 * 3);                 /* de dos a cinco notas */
+      for (let i = 0; i < cu; i++)
+        auTono(261.63 * Math.pow(2, g[i] / 12), t + i * 0.055, 0.26, 0.19, 'sine');
+      auRoce(t, 0.22 + k2 * 0.25, 700, 2600 + k2 * 1800, 0.11 + k2 * 0.07, 0.8);
+      break;
+    }
+    /* ── EL CORTE: lo mas fuerte del juego, y tiene que serlo. Es lo unico
+          que cuesta una vida. Golpe grave que CAE — uno que sube suena a
+          premio — mas un raspon ancho.                                     */
+    case 'corte':
+      auTono(190, t, 0.34, 0.40, 'triangle', 62);
+      auRoce(t, 0.26, 1800, 220, 0.34, 0.7);
+      break;
+    /* SALIR DE LO PROPIO ES EL UNICO AVISO DE QUE ESTAS EXPUESTO, y estaba
+       puesto «flojo porque suena una vez por vuelta». Medido con `sonMide`,
+       flojo era 1,09 VECES LA CAMA: o sea que no existia. Un aviso que no se
+       oye no es discreto, es un aviso que no esta. Va al doble de pico y con
+       un golpecito grave adelante — un roce agudo solo tiene poca masa y se
+       pierde debajo del pad, que es grave.
+       Y sigue por DEBAJO de `casi` (2,2x), que es la alarma de verdad: esto
+       avisa que arrancaste, aquello avisa que te vienen a cortar.          */
+    case 'sale':
+      auRoce(t, 0.16, 2000, 3800, 0.34, 0.9);
+      auTono(330, t, 0.10, 0.13, 'sine');
+      break;
+    /* un rival llegando a la estela: dos golpes, que es lo que se lee a
+       alarma — uno solo se confunde con el roce de salir.                   */
+    case 'casi':
+      auTono(740, t, 0.09, 0.20, 'square');
+      auTono(740, t + 0.13, 0.09, 0.20, 'square');
+      break;
+    /* los dos que confirman: el toque de un boton y el paso del tutorial que
+       se dio por hecho. Medidos en 1,23x y 1,12x la cama — o sea que tocar un
+       boton no sonaba y avanzar de paso tampoco. Un acuse de recibo inaudible
+       se lee a que el juego no te escucho.                                  */
+    case 'ui':   auTono(880, t, 0.06, 0.24, 'sine'); break;
+    case 'des':
+      auRoce(t, 0.18, 2600, 900, 0.30, 1.2);
+      auTono(659.25, t + 0.02, 0.12, 0.16, 'sine');
+      break;
+    case 'gana': { const r = 440, g = [0, 4, 7, 12];
+      for (let i = 0; i < 4; i++) auTono(r * Math.pow(2, g[i] / 12), t + i * 0.075, 0.32, 0.22, 'sine');
+      auRoce(t, 0.55, 800, 4200, 0.12, 0.9); break; }
+    case 'perf': { const r = 523.25, g = [0, 4, 7, 12, 16, 19];
+      for (let i = 0; i < 6; i++) auTono(r * Math.pow(2, g[i] / 12), t + i * 0.068, 0.44, 0.21, 'sine');
+      auRoce(t, 0.75, 1000, 5400, 0.14, 0.9); break; }
+    case 'pierde':
+      auTono(174.6, t, 0.55, 0.24, 'sawtooth', 87.3);
+      auTono(130.8, t + 0.10, 0.55, 0.20, 'sawtooth', 65.4);
+      break;
+  }
+}
+/* Agacha la cama mientras suena algo que hay que escuchar: sin esto la
+   fanfarria compite con el pad y no se oye ninguna de las dos.
+
+   `f` ES UNA FRACCION Y `dur` PUEDE NO ESTAR, y esa segunda forma no es un
+   adorno: hay DOS agachadas distintas y con una sola firma una de las dos
+   sale rota. La de la fanfarria dura lo que dura el sonido y se levanta
+   sola; la de la PAUSA dura lo que dure la pausa —no hay forma de saberlo
+   de antemano— y la levanta quien despausa. Con `dur` obligatorio, los tres
+   llamadores de la pausa pasaban un booleano y `t + undefined` es NaN:
+   `setTargetAtTime` TIRA con un valor no finito, y esa excepcion se llevaba
+   puesto a `partidaSale` entero —o sea salir al menu desde la pausa— sin que
+   nada del audio pareciera tener que ver.                                  */
+function auAgacha(f, dur) {
+  if (!AU.on) return;
+  const t = AU.ctx.currentTime, g = AU.mus.gain;
+  g.cancelScheduledValues(t);
+  g.setTargetAtTime(PROG.vol * f, t, 0.05);
+  if (dur > 0) g.setTargetAtTime(PROG.vol, t + dur, 0.35);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   E · EL DIBUJO
+   EL TABLERO SE HORNEA A UN PIXEL POR CELDA Y SE ESTIRA CON NEAREST. Un
+   tablero de 74 son 5.476 celdas: dibujarlas de a un rectangulo son 5.476
+   ordenes por cuadro para pintar bloques de color liso. Horneado en una
+   ImageData de n×n y estirado con `imageSmoothingEnabled=false` es UNA sola
+   orden, y el escalon duro del vecino mas cercano es justo el estilo que
+   este juego quiere.
+   Y EL MISMO LIENZO DE n×n ES EL MAPA CHICO, que asi cuesta otro drawImage y
+   no una segunda pasada por el tablero — con dos dibujantes, el dia que se
+   toque uno el mapa chico empieza a mentir.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const V = {
+  cv: null, g: null, W: 0, H: 0, dpr: 1, k: 1,
+  off: null, og: null, img: null, b32: null, n: 0, zsucio: true,
+  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19,
+  mini: null, mg: null, miniT: 0,
+  prevZ: null, cort: null, viv: null,
+  part: [], dest: [], sac: 0, sacx: 0, sacy: 0, gan: new Int32Array(NJUG + 1),
+  fa: 0, faT: 0, cuadros: 0, msDib: 0,
+};
+
+const vpRGB = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+/* el color de cada celda ya empaquetado: el horneado escribe bytes y no
+   parsea una cadena cinco mil veces por rebake.                           */
+const VP_Z = [], VP_ROCA = vpRGB(C_PIEDRA);
+for (let i = 0; i <= NJUG; i++) VP_Z.push(COLS[i] ? vpRGB(COLS[i].z) : [0, 0, 0]);
+
+/* ── EL LIENZO ────────────────────────────────────────────────────────────
+   La densidad la topa la calidad y no el aparato: este juego esta limitado
+   por RELLENO —todo es superficie plana— asi que cada paso de densidad
+   cuesta el cuadrado. A dpr 3 en un marco de 412×892 serian 3,3 millones de
+   pixeles por cuadro para dibujar bloques de color.                        */
+const VP_DPR = [1, 1.5, 2];
+function vpMide() {
+  const m = $('marco'), r = m.getBoundingClientRect();
+  const d = Math.min(window.devicePixelRatio || 1, VP_DPR[cl(PROG.cal | 0, 0, 2)]);
+  const W = Math.max(1, Math.round(r.width * d)), H = Math.max(1, Math.round(r.height * d));
+  if (W === V.W && H === V.H && d === V.dpr) return;
+  V.W = W; V.H = H; V.dpr = d; V.k = d;
+  V.cv.width = W; V.cv.height = H;
+  V.esc = W / VISTA;
+  V.visW = W / V.esc; V.visH = H / V.esc;
+  /* el contexto se resetea al cambiar de tamano: el filtro hay que volver a
+     apagarlo o el tablero sale borroneado en vez de pixelado.              */
+  V.g.imageSmoothingEnabled = false;
+}
+
+function vpInit() {
+  V.cv = $('cv'); V.g = V.cv.getContext('2d', { alpha: false });
+  V.mini = $('mini'); V.mg = V.mini.getContext('2d');
+  V.mg.imageSmoothingEnabled = false;
+  vpMide();
+  addEventListener('resize', vpMide);
+}
+
+/* ── EL HORNEADO ──────────────────────────────────────────────────────────
+   Solo el TERRENO y la ROCA, que cambian de tanto en tanto. La estela no
+   entra: cambia todos los tics y ademas cada jugador ya lleva su lista de
+   celdas (`p.cola`), asi que dibujarla al derecho sale mas barato que
+   escanear el tablero entero buscandola.                                   */
+function vpNuevo(M) {
+  const n = M.n;
+  if (V.n !== n || !V.off) {
+    V.n = n;
+    V.off = document.createElement('canvas'); V.off.width = n; V.off.height = n;
+    V.og = V.off.getContext('2d');
+    V.img = V.og.createImageData(n, n);
+    V.b32 = V.img.data;
+    V.prevZ = new Uint8Array(n * n);
+  }
+  V.prevZ.set(M.z);
+  V.cort = new Int32Array(NJUG + 1);
+  V.viv = new Uint8Array(NJUG + 1);
+  for (const p of M.jug) { V.cort[p.id] = p.cortes; V.viv[p.id] = 1; }
+  V.zsucio = true; V.part.length = 0; V.dest.length = 0; V.sac = 0; V.miniT = 0;
+  V.camx = cl(M.jug[0].ix - V.visW / 2, 0, Math.max(0, n - V.visW));
+  V.camy = cl(M.jug[0].iy - V.visH / 2, 0, Math.max(0, n - V.visH));
+}
+
+function vpHornea(M) {
+  const n = M.n, z = M.z, d = V.b32;
+  for (let i = 0, o = 0; i < z.length; i++, o += 4) {
+    const v = z[i];
+    if (v === LIBRE) { d[o + 3] = 0; continue; }
+    const c = v === PIEDRA ? VP_ROCA : VP_Z[v];
+    d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2];
+    /* el terreno va apenas translucido: la reja se sigue viendo por debajo y
+       eso es lo que deja contar celdas de una ojeada. La roca va opaca,
+       porque lo unico que tiene que decir es «por aca no».                 */
+    d[o + 3] = v === PIEDRA ? 255 : 232;
+  }
+  V.og.putImageData(V.img, 0, 0);
+  V.zsucio = false;
+}
+
+/* ── LO QUE CAMBIO ────────────────────────────────────────────────────────
+   Un barrido del tablero por cuadro contra la copia anterior: con 5.476
+   celdas son trescientas mil comparaciones por segundo, o sea nada, y a
+   cambio el destello del cercado, el rehorneado y las esquirlas de la
+   muerte salen de UN solo sitio en vez de tres avisos que alguien tiene que
+   acordarse de mandar.                                                     */
+function vpTras(M) {
+  const n = M.n, z = M.z, pz = V.prevZ;
+  let cam = 0;
+  const nue = [];
+  V.gan.fill(0);
+  for (let i = 0; i < z.length; i++) {
+    if (z[i] === pz[i]) continue;
+    cam++;
+    if (z[i] > 0 && z[i] < PIEDRA) { nue.push(i); V.gan[z[i]]++; }
+    pz[i] = z[i];
+  }
+  if (cam) { V.zsucio = true; V.miniT = 0; }
+  if (nue.length) {
+    const id = z[nue[0]];
+    V.dest.push({ c: nue, id, t: 0 });
+    if (V.dest.length > 6) V.dest.shift();
+  }
+  for (const p of M.jug) {
+    if (p.cortes !== V.cort[p.id]) {
+      V.cort[p.id] = p.cortes;
+      vpEsquirlas(p.ix, p.iy, p.id);
+      if (p.id === 1) V.sac = 1;
+    }
+    V.viv[p.id] = p.vivo ? 1 : 0;
+  }
+  /* devuelve cuantas celdas gano cada uno EN ESTE CUADRO. El barrido ya esta
+     hecho para el rehorneado y el destello; contarlo aparte en la capa de
+     juego seria recorrer el tablero dos veces para saber lo mismo.        */
+  return V.gan;
+}
+
+function vpEsquirlas(x, y, id) {
+  const c = COLS[id] || COLS[1];
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 7;
+    V.part.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+      t: 0, vida: 0.35 + Math.random() * 0.3, c: i & 1 ? c.t : c.c });
+  }
+}
+
+/* ── LA CAMARA ────────────────────────────────────────────────────────────
+   Sigue al jugador con un suavizado exponencial —asi va igual a 30 y a 144
+   cuadros— y se topa contra el tablero DEJANDO DOS CELDAS DE MARGEN: sin
+   margen la pared no se ve nunca y morir contra el borde se lee a que el
+   juego te mato sin avisar.                                                */
+const VP_MARG = 2;
+function vpCam(M, dt) {
+  const p = M.jug[0];
+  let tx = p.ix + p.dx * M.f + 0.5 - V.visW / 2;
+  let ty = p.iy + p.dy * M.f + 0.5 - V.visH / 2;
+  const n = M.n;
+  if (V.visW >= n + VP_MARG * 2) tx = (n - V.visW) / 2;
+  else tx = cl(tx, -VP_MARG, n - V.visW + VP_MARG);
+  if (V.visH >= n + VP_MARG * 2) ty = (n - V.visH) / 2;
+  else ty = cl(ty, -VP_MARG, n - V.visH + VP_MARG);
+  const a = 1 - Math.exp(-dt * 11);
+  V.camx += (tx - V.camx) * a;
+  V.camy += (ty - V.camy) * a;
+  if (V.sac > 0) {
+    V.sac = Math.max(0, V.sac - dt * 3.4);
+    const s = V.sac * V.sac * 0.55;
+    V.sacx = (Math.random() * 2 - 1) * s; V.sacy = (Math.random() * 2 - 1) * s;
+  } else { V.sacx = 0; V.sacy = 0; }
+}
+
+/* ══════════════════════════ EL CUADRO ══════════════════════════ */
+function vpDibuja(M, dt) {
+  const t0 = performance.now();
+  const g = V.g, e = V.esc, W = V.W, H = V.H, n = M.n;
+  const cx = V.camx + V.sacx, cy = V.camy + V.sacy;
+  const px = x => (x - cx) * e, py = y => (y - cy) * e;
+
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = C_TABLA; g.fillRect(0, 0, W, H);
+
+  const x0 = Math.max(0, Math.floor(cx) - 1), x1 = Math.min(n, Math.ceil(cx + V.visW) + 1);
+  const y0 = Math.max(0, Math.floor(cy) - 1), y1 = Math.min(n, Math.ceil(cy + V.visH) + 1);
+
+  /* la reja va DEBAJO del terreno y se ve por su alfa: dibujada encima
+     compite con la estela, que es lo unico que hay que mirar.             */
+  g.strokeStyle = C_LINEA; g.lineWidth = Math.max(1, V.k * 0.9);
+  g.beginPath();
+  for (let x = x0; x <= x1; x++) { const s = Math.round(px(x)) + 0.5; g.moveTo(s, 0); g.lineTo(s, H); }
+  for (let y = y0; y <= y1; y++) { const s = Math.round(py(y)) + 0.5; g.moveTo(0, s); g.lineTo(W, s); }
+  g.stroke();
+
+  /* el borde del tablero, que es pared y mata */
+  g.strokeStyle = '#3b4760'; g.lineWidth = V.k * 3;
+  g.strokeRect(px(0), py(0), n * e, n * e);
+
+  if (V.zsucio) vpHornea(M);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(V.off, 0, 0, n, n, px(0), py(0), n * e, n * e);
+
+  vpBordes(M, x0, y0, x1, y1, px, py, e);
+  vpEstelas(M, px, py, e);
+  vpDestellos(M, dt, px, py, e);
+  vpCabezas(M, px, py, e);
+  vpPart(dt, px, py, e);
+
+  V.msDib = performance.now() - t0;
+  V.cuadros++;
+}
+
+/* ── LOS BORDES ───────────────────────────────────────────────────────────
+   Un bloque de color liso no dice donde termina lo tuyo cuando lo tuyo toca
+   lo de otro. Se barre la VENTANA VISIBLE —unas novecientas celdas, no las
+   cinco mil— mirando el vecino de la derecha y el de abajo, asi cada arista
+   se visita una sola vez, y sale una ruta por jugador mas una para la roca.
+   Son seis trazos por cuadro.                                              */
+function vpBordes(M, x0, y0, x1, y1, px, py, e) {
+  const g = V.g, n = M.n, z = M.z;
+  const rutas = [];
+  for (let i = 0; i <= NJUG + 1; i++) rutas.push(null);
+  const dame = k => rutas[k] || (rutas[k] = new Path2D());
+  const val = (x, y) => (x < 0 || y < 0 || x >= n || y >= n) ? -1 : z[y * n + x];
+  for (let y = y0 - 1; y <= y1; y++) for (let x = x0 - 1; x <= x1; x++) {
+    const a = val(x, y);
+    const b = val(x + 1, y);
+    if (a !== b) {
+      const k = a === PIEDRA || b === PIEDRA ? NJUG + 1 : Math.max(a, b);
+      if (k > 0) { const p = dame(k), sx = px(x + 1); p.moveTo(sx, py(y)); p.lineTo(sx, py(y + 1)); }
+    }
+    const c = val(x, y + 1);
+    if (a !== c) {
+      const k = a === PIEDRA || c === PIEDRA ? NJUG + 1 : Math.max(a, c);
+      if (k > 0) { const p = dame(k), sy = py(y + 1); p.moveTo(px(x), sy); p.lineTo(px(x + 1), sy); }
+    }
+  }
+  for (let k = 1; k <= NJUG; k++) {
+    if (!rutas[k]) continue;
+    g.strokeStyle = COLS[k].t; g.globalAlpha = k === 1 ? 0.85 : 0.5;
+    g.lineWidth = V.k * (k === 1 ? 2.2 : 1.6);
+    g.stroke(rutas[k]);
+  }
+  g.globalAlpha = 1;
+  if (rutas[NJUG + 1]) { g.strokeStyle = '#4d5c78'; g.lineWidth = V.k * 1.4; g.stroke(rutas[NJUG + 1]); }
+}
+
+/* ── LAS ESTELAS ──────────────────────────────────────────────────────────
+   Salen de `p.cola`, que es la lista que el modelo ya lleva: buscarlas
+   escaneando el tablero seria repetir un trabajo que ya esta hecho. La
+   propia va MAS GRUESA y con halo, porque es lo unico del juego que mata.  */
+function vpEstelas(M, px, py, e) {
+  const g = V.g, n = M.n;
+  for (const p of M.jug) {
+    if (!p.vivo || !p.cola.length) continue;
+    const c = COLS[p.id], mio = p.id === 1;
+    const w = e * (mio ? 0.62 : 0.5), o = (e - w) / 2;
+    if (mio) {
+      g.globalAlpha = 0.30; g.fillStyle = c.t;
+      for (const i of p.cola) {
+        const x = i % n, y = (i / n) | 0;
+        const sx = px(x), sy = py(y);
+        if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
+        g.fillRect(sx - e * 0.16, sy - e * 0.16, e * 1.32, e * 1.32);
+      }
+      g.globalAlpha = 1;
+    }
+    g.fillStyle = c.t;
+    for (const i of p.cola) {
+      const x = i % n, y = (i / n) | 0;
+      const sx = px(x), sy = py(y);
+      if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
+      g.fillRect(sx + o, sy + o, w, w);
+    }
+  }
+}
+
+/* ── EL DESTELLO DEL CERCADO ──────────────────────────────────────────────
+   Lo que se acaba de ganar se enciende y se apaga en medio segundo: sin eso
+   el terreno nuevo aparece de un cuadro al otro y la unica recompensa del
+   juego no se ve ocurrir.                                                  */
+const VP_DEST_S = 0.52;
+function vpDestellos(M, dt, px, py, e) {
+  const g = V.g, n = M.n;
+  for (let k = V.dest.length - 1; k >= 0; k--) {
+    const d = V.dest[k];
+    d.t += dt;
+    if (d.t >= VP_DEST_S) { V.dest.splice(k, 1); continue; }
+    const u = d.t / VP_DEST_S;
+    g.globalAlpha = (1 - u) * (d.id === 1 ? 0.85 : 0.45);
+    g.fillStyle = COLS[d.id].c;
+    const cr = e * (0.10 + u * 0.42);
+    for (const i of d.c) {
+      const x = i % n, y = (i / n) | 0;
+      const sx = px(x), sy = py(y);
+      if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
+      g.fillRect(sx + (e - cr) / 2, sy + (e - cr) / 2, cr, cr);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+/* ── LAS CABEZAS ──────────────────────────────────────────────────────────
+   Se dibujan en la fraccion: `ix + dx·f`, o sea entre la celda en la que
+   estan y la que viene. Con la posicion entera el cuerpo salta de celda en
+   celda cinco veces por segundo y el juego se lee a diapositivas.          */
+function vpCabezas(M, px, py, e) {
+  const g = V.g;
+  for (const p of M.jug) {
+    if (!p.vivo) continue;
+    const c = COLS[p.id], mio = p.id === 1;
+    const x = p.ix + p.dx * M.f, y = p.iy + p.dy * M.f;
+    const sx = px(x) + e / 2, sy = py(y) + e / 2;
+    if (sx < -e * 2 || sy < -e * 2 || sx > V.W + e * 2 || sy > V.H + e * 2) continue;
+    if (mio) {
+      const gr = g.createRadialGradient(sx, sy, 0, sx, sy, e * 1.9);
+      gr.addColorStop(0, 'rgba(255,224,176,.34)'); gr.addColorStop(1, 'rgba(255,224,176,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, e * 1.9, 0, 7); g.fill();
+    }
+    /* la punta dice para donde va, que es lo unico que el jugador necesita
+       saber cuando pide una curva.                                         */
+    g.fillStyle = c.t;
+    g.beginPath();
+    g.arc(sx, sy, e * (mio ? 0.46 : 0.40), 0, 7);
+    g.fill();
+    g.beginPath();
+    g.moveTo(sx + p.dx * e * 0.78, sy + p.dy * e * 0.78);
+    g.lineTo(sx - p.dy * e * 0.3 + p.dx * e * 0.15, sy + p.dx * e * 0.3 + p.dy * e * 0.15);
+    g.lineTo(sx + p.dy * e * 0.3 + p.dx * e * 0.15, sy - p.dx * e * 0.3 + p.dy * e * 0.15);
+    g.closePath(); g.fill();
+    g.fillStyle = c.c;
+    g.beginPath(); g.arc(sx, sy, e * (mio ? 0.25 : 0.20), 0, 7); g.fill();
+  }
+}
+
+function vpPart(dt, px, py, e) {
+  const g = V.g;
+  for (let k = V.part.length - 1; k >= 0; k--) {
+    const q = V.part[k];
+    q.t += dt;
+    if (q.t >= q.vida) { V.part.splice(k, 1); continue; }
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    q.vx *= 0.93; q.vy *= 0.93;
+    const u = 1 - q.t / q.vida, s = e * 0.22 * u;
+    g.globalAlpha = u;
+    g.fillStyle = q.c;
+    g.fillRect(px(q.x) - s / 2, py(q.y) - s / 2, s, s);
+  }
+  g.globalAlpha = 1;
+}
+
+/* ── EL MAPA CHICO ────────────────────────────────────────────────────────
+   El mismo lienzo de n×n estirado a 74 px, mas las cabezas y el recuadro de
+   lo que se esta mirando. Se repinta cinco veces por segundo y no sesenta:
+   nada de lo que muestra cambia mas rapido que eso.                        */
+function vpMiniPinta(M) {
+  if (V.mini.classList.contains('off')) return;
+  V.miniT -= 1;
+  if (V.miniT > 0) return;
+  V.miniT = 12;
+  const g = V.mg, S = V.mini.width, n = M.n, k = S / n;
+  if (V.zsucio) vpHornea(M);
+  g.clearRect(0, 0, S, S);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(V.off, 0, 0, n, n, 0, 0, S, S);
+  for (const p of M.jug) {
+    if (!p.vivo) continue;
+    g.fillStyle = COLS[p.id].c;
+    const r = p.id === 1 ? 2.6 : 1.9;
+    g.beginPath(); g.arc((p.ix + 0.5) * k, (p.iy + 0.5) * k, r, 0, 7); g.fill();
+  }
+  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1;
+  g.strokeRect(V.camx * k, V.camy * k, V.visW * k, V.visH * k);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   f.js · LA PARTIDA: el dedo, las vidas, el reloj y el marcador
+   ──────────────────────────────────────────────────────────────────────────
+   EL DEDO NO ES UN JOYSTICK, ES UN GESTO. Un joystick fijo en una esquina se
+   pelea con el tablero —que ocupa la pantalla entera— y encima obliga a
+   mirarlo. Aca se arrastra donde uno quiera: lo que se lee es el
+   DESPLAZAMIENTO desde el ultimo cambio de rumbo, y cuando pasa la zona
+   muerta se dobla y el ancla se muda al dedo. O sea: una pasada de dedo es
+   UNA vuelta, y encadenar vueltas es seguir arrastrando.
+
+   Y LO QUE SE ESCRIBE ES `p.ped`, que es EL MISMO campo que usan los bots y
+   el auto-jugador. Si el dedo escribiera `dx`/`dy` directo, el jugador podria
+   doblar a mitad de celda y los bots no: dos fisicas distintas en el mismo
+   tablero, y la auditoria estaria aprobando un juego que nadie juega.
+
+   EL BUFFER DE UNA VUELTA es la unica pieza que no esta en el modelo. A 5,4
+   celdas por segundo un tic dura 185 ms: dos toques mas rapidos que eso
+   —bajar y doblar en la misma pasada— pisarian el primero. Se guarda UNA
+   sola vuelta pendiente y se suelta en cuanto `tic` consumio la anterior.
+   Con mas de una el cuerpo dejaria de responder a lo ultimo que se pidio.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const P = {
+  on: false, pausa: false, fin: null, tuto: false,
+  m: 0, nv: 0, cfg: null, M: null, yo: null,
+  seg: 0, cortesVistos: 0, pct: 0, mejor: 0, casi: false, ganUlt: 0,
+  giros: 0, gdx: 0, gdy: 0,
+  hCor: [], hPct: '', hMeta: '', hRel: '', hPoco: false, hNiv: '',
+};
+
+/* ══════════════════════ EL DEDO ══════════════════════ */
+const ENT = { id: null, ax: 0, ay: 0, ejeX: 0, cola: null };
+const ENT_MIN = 15;     /* px de zona muerta: un toque no dobla             */
+const ENT_HIST = 1.30;  /* cuanto le tiene que ganar el otro eje para valer */
+
+/* UNA SOLA PUERTA para el dedo, el teclado y el tutorial. Con dos caminos, el
+   que nadie prueba —el teclado— se desincroniza el dia que se toque el otro. */
+function entPide(dx, dy) {
+  const p = P.yo;
+  if (!p || !P.on || P.pausa || P.fin) return false;
+  if (dx === p.dx && dy === p.dy) return false;
+  if (dx === -p.dx && dy === -p.dy) return false;   /* media vuelta: suicidio */
+  if (p.ped) {
+    /* `tic` todavia no consumio la anterior: se guarda la nueva y sale en
+       cuanto se libere el campo. */
+    if (p.ped[0] === dx && p.ped[1] === dy) return false;
+    ENT.cola = [dx, dy];
+    return true;
+  }
+  p.ped = [dx, dy];
+  return true;
+}
+/* corre DESPUES de `paso`: ahi `tic` ya vacio `ped` y el pendiente puede
+   entrar sin pisar nada. */
+function entSuelta() {
+  const p = P.yo;
+  if (!p || !ENT.cola) return;
+  if (p.ped) return;
+  if (!(ENT.cola[0] === -p.dx && ENT.cola[1] === -p.dy) &&
+      !(ENT.cola[0] === p.dx && ENT.cola[1] === p.dy)) p.ped = ENT.cola;
+  ENT.cola = null;
+}
+
+function entBaja(e) {
+  if (!P.on || P.pausa || P.fin) return;
+  if (ENT.id !== null) return;
+  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = 0;
+  try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
+}
+function entMueve(e) {
+  if (ENT.id !== e.pointerId) return;
+  const dx = e.clientX - ENT.ax, dy = e.clientY - ENT.ay;
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  if (ax < ENT_MIN && ay < ENT_MIN) return;
+  /* HISTERESIS SOBRE EL EJE Y NO SOBRE LA DISTANCIA: en una diagonal, con
+     `ax > ay` a secas el eje dominante parpadea y el cuerpo hace zigzag. El
+     otro eje tiene que GANARLE por un tercio para robarle el turno.        */
+  let eje;                                   /* 1 horizontal · 2 vertical   */
+  if (ENT.ejeX === 1)      eje = ay > ax * ENT_HIST ? 2 : 1;
+  else if (ENT.ejeX === 2) eje = ax > ay * ENT_HIST ? 1 : 2;
+  else                     eje = ax >= ay ? 1 : 2;
+  if (eje === 1 ? ax < ENT_MIN : ay < ENT_MIN) return;
+  entPide(...(eje === 1 ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1]));
+  /* EL ANCLA SE MUDA HAYA DOBLADO O NO: si no, un arrastre largo deja el
+     desplazamiento saturado y la vuelta siguiente se dispara con un pixel. */
+  ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = eje;
+}
+function entSube(e) {
+  if (ENT.id !== e.pointerId) return;
+  ENT.id = null; ENT.ejeX = 0;
+}
+const ENT_TEC = {
+  ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1],
+  KeyD: [1, 0], KeyA: [-1, 0], KeyS: [0, 1], KeyW: [0, -1],
+};
+function entTecla(e) {
+  const d = ENT_TEC[e.code];
+  if (d) { entPide(d[0], d[1]); e.preventDefault(); return; }
+  if (e.code === 'Escape' || e.code === 'KeyP') { if (P.on && !P.fin) pausaPon(!P.pausa); }
+}
+function entInit() {
+  const c = $('cv');
+  c.addEventListener('pointerdown', entBaja);
+  c.addEventListener('pointermove', entMueve);
+  c.addEventListener('pointerup', entSube);
+  c.addEventListener('pointercancel', entSube);
+  addEventListener('keydown', entTecla);
+}
+
+/* ══════════════════════ LA PARTIDA ══════════════════════ */
+function partidaArranca(m, nv, tuto) {
+  P.m = m; P.nv = nv; P.tuto = !!tuto;
+  /* entrar a un nivel de verdad apaga el tutorial, y va ACA porque esta es la
+     unica puerta por la que se entra a una partida —`juega`, el boton de
+     siguiente, la sonda—. En `juega` sola, la proxima puerta que se agregue
+     entra con la pista del tutorial puesta encima del nivel 1-1.           */
+  if (!P.tuto) { TUT.on = false; cl2($('tSalt'), 'on', false); cl2($('pista'), 'on', false); }
+  P.cfg = tuto ? tutCfg() : cfgNivel(m, nv);
+  P.M = generaMapa(P.cfg);
+  P.yo = P.M.jug[0];
+  /* el tope de cortes es lo que hace que la tercera vida sea la ultima: sin
+     el, `paso` revive para siempre y las vidas serian un numero que baja.  */
+  P.yo.topeCortes = P.tuto ? 1e9 : VIDAS;
+  P.seg = P.cfg.seg;
+  P.on = true; P.pausa = false; P.fin = null;
+  P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
+  P.giros = 0; P.gdx = P.yo.dx; P.gdy = P.yo.dy;
+  P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false; P.hNiv = '';
+  vpNuevo(P.M);
+  hudArma();
+  hudPinta(true);
+  cl2($('hud'), 'off', false);
+  cl2($('pie'), 'off', P.tuto);
+  cl2($('mini'), 'off', P.tuto);
+  auAbre(0);
+  return P.M;
+}
+
+function partidaPaso(dt) {
+  if (!P.on || P.pausa || P.fin) return;
+  const M = P.M, yo = P.yo;
+  paso(M, dt);
+  entSuelta();
+  const gan = vpTras(M);
+  P.ganUlt = gan[1];
+
+  /* LAS VUELTAS SE CUENTAN POR EL RUMBO QUE EL CUERPO TOMO, no por los toques
+     que se pidieron: un pedido puede quedar en la cola y no salir nunca, y el
+     tutorial estaria dando por hecho un gesto que no ocurrio.              */
+  if (yo.dx !== P.gdx || yo.dy !== P.gdy) { P.giros++; P.gdx = yo.dx; P.gdy = yo.dy; }
+
+  /* ── lo que gano este cuadro ── */
+  if (gan[1] > 0) {
+    son('tierra', gan[1]);
+    if (gan[1] >= 90) avisa(TX('avTierra'));
+  }
+  /* ── los cortes ── */
+  if (yo.cortes !== P.cortesVistos) {
+    P.cortesVistos = yo.cortes;
+    son('corte');
+    hudPinta(true);
+    if (!P.tuto && yo.cortes >= VIDAS) { avisa(TX('avSinVidas')); termina('vidas'); return; }
+    avisa(TX('avCorte'));
+  }
+
+  P.pct = tajada(M, 1);
+  if (P.pct > P.mejor) P.mejor = P.pct;
+  auAbre(P.cfg.meta > 0 ? P.pct / P.cfg.meta : 0);
+
+  if (!P.tuto) {
+    if (!P.casi && P.pct >= P.cfg.meta * 0.82 && P.pct < P.cfg.meta) {
+      P.casi = true; son('casi'); avisa(TX('avCasi'));
+    }
+    if (P.pct >= P.cfg.meta) { termina('gana'); return; }
+    P.seg -= dt;
+    if (P.seg <= 0) { P.seg = 0; termina('tiempo'); return; }
+  }
+  hudPinta(false);
+}
+
+function termina(fin) {
+  P.fin = fin;
+  const perf = fin === 'gana' && P.yo.cortes === 0;
+  if (fin === 'gana') {
+    son(perf ? 'perf' : 'gana');
+    if (!P.tuto) anota(P.m, P.nv, perf);
+  } else son('pierde');
+  /* LA FANFARRIA PIDE SILENCIO Y SE LEVANTA SOLA. La cama es un pad sostenido
+     y el remate dura dos segundos: sin agachar, las dos suenan a la vez y no se
+     escucha ninguna. Va con duracion —a diferencia de la de la pausa, que dura
+     lo que dure la pausa y la levanta quien despausa—.                       */
+  auAgacha(0.25, 2.2);
+  hudPinta(true);
+  if (P.tuto) { tutFin(); return; }
+  finPon({ tuto: false, fin, perf, pct: P.pct, meta: P.cfg.meta, cortes: P.yo.cortes, m: P.m, nv: P.nv });
+  verPanel('pFin');
+}
+
+function pausaPon(v) {
+  if (!P.on || P.fin) return;
+  P.pausa = !!v;
+  if (P.pausa) { son('ui'); auAgacha(0.22); verPanel('pPausa'); }
+  else { auAgacha(1); verPanel(null); }
+}
+
+function partidaSale() {
+  P.on = false; P.pausa = false; P.fin = null;
+  /* Y EL TUTORIAL SE APAGA ACA, no en quien lo cierra. Hay TRES caminos que
+     sacan al jugador de una partida —terminarla, saltearla y la PAUSA, que
+     durante el tutorial tambien tiene su SALIR— y con la bandera apagada solo
+     en los dos primeros, salir desde la pausa dejaba `TUT.on` prendido: medido,
+     el nivel 1-1 arrancaba con `tutOn: true` y la pista del tutorial puesta
+     encima. Apagarlo en el unico sitio por el que pasan los tres es la unica
+     forma de que el proximo camino que se agregue no lo vuelva a perder.     */
+  TUT.on = false;
+  cl2($('hud'), 'off', true);
+  cl2($('pie'), 'off', true);
+  cl2($('mini'), 'off', true);
+  cl2($('pista'), 'on', false);
+  cl2($('tSalt'), 'on', false);
+  auAgacha(1); auAbre(0);
+}
+
+/* siguiente nivel: el ultimo del ultimo mundo no tiene siguiente, y un boton
+   que lleva a la nada se lee a juego roto. */
+function partidaSig() {
+  let m = P.m, nv = P.nv + 1;
+  if (nv >= NIV_MUNDO) { m++; nv = 0; }
+  if (m >= MUNDOS.length) return null;
+  return [m, nv];
+}
+
+/* ══════════════════════ EL MARCADOR ══════════════════════
+   TODO SE ESCRIBE SOLO CUANDO CAMBIA. `textContent` ensucia el layout aunque
+   el valor sea el mismo, y aca hay cuatro numeros por cuadro a sesenta por
+   segundo: doscientos cuarenta reflujos para pintar lo mismo.              */
+function cl2(el, c, v) { if (el) el.classList.toggle(c, !!v); }
+
+function hudArma() {
+  const v = $('vidas');
+  v.innerHTML = '';
+  P.hCor = [];
+  if (P.tuto) return;
+  for (let i = 0; i < VIDAS; i++) {
+    const d = document.createElement('div');
+    d.className = 'cor';
+    v.appendChild(d); P.hCor.push(d);
+  }
+}
+
+function fmtReloj(s) {
+  s = Math.max(0, Math.ceil(s));
+  const m = (s / 60) | 0, r = s % 60;
+  return m + ':' + (r < 10 ? '0' : '') + r;
+}
+
+function hudPinta(todo) {
+  const M = P.M, cfg = P.cfg;
+  if (!M) return;
+
+  /* la barra: la tajada de cada uno, y la marca de la meta */
+  const bs = $('barra').getElementsByTagName('i');
+  if (M.sucio) recuenta(M);
+  for (let i = 0; i < bs.length; i++) {
+    const id = i + 1;
+    const w = id <= (1 + cfg.riv) && M.libres > 0 ? M.cuenta[id] / M.libres : 0;
+    bs[i].style.width = (w * 100).toFixed(2) + '%';
+    if (todo) bs[i].style.background = COLS[id] ? COLS[id].t : 'transparent';
+  }
+  if (todo) {
+    $('meta').style.left = (cl(cfg.meta, 0, 1) * 100).toFixed(2) + '%';
+    $('meta').style.display = P.tuto ? 'none' : 'block';
+  }
+
+  if (!P.tuto) {
+    const pc = Math.round(P.pct * 100) + '%';
+    if (pc !== P.hPct) { $('pct').firstElementChild.textContent = pc; P.hPct = pc; }
+    const mt = TX('metaR', Math.round(cfg.meta * 100));
+    if (mt !== P.hMeta) { $('pctR').textContent = mt; P.hMeta = mt; }
+    const rl = fmtReloj(P.seg);
+    if (rl !== P.hRel) { $('reloj').firstElementChild.textContent = rl; P.hRel = rl; }
+    const poco = P.seg <= 10.5;
+    if (poco !== P.hPoco) { cl2($('reloj'), 'poco', poco); P.hPoco = poco; }
+    if (todo) $('relR').textContent = TX('tiempo');
+  }
+
+  if (todo) {
+    const nv = P.tuto ? TX('tutTit') : TX('nivel', P.m + 1, P.nv + 1);
+    if (nv !== P.hNiv) {
+      $('nrN').textContent = nv;
+      $('nrM').textContent = P.tuto ? '' : nomMundo(P.m);
+      P.hNiv = nv;
+    }
+    for (let i = 0; i < P.hCor.length; i++) {
+      const ida = i < P.yo.cortes;
+      const d = P.hCor[P.hCor.length - 1 - i];   /* se gastan de derecha a izquierda */
+      if (ida && !d.classList.contains('ida')) {
+        d.classList.add('ida', 'late');
+        setTimeout(() => d.classList.remove('late'), 520);
+      } else if (!ida) d.classList.remove('ida', 'late');
+    }
+  }
+}
+
+/* ── el aviso corto ── */
+let AV_T = 0;
+function avisa(txt, ms) {
+  const a = $('aviso');
+  a.textContent = txt;
+  cl2(a, 'on', true);
+  clearTimeout(AV_T);
+  AV_T = setTimeout(() => cl2(a, 'on', false), ms || 900);
+}
+
+/* ── el panel de fin ──
+   SE PINTA DESDE UNA FUNCION Y NO DESDE EL SITIO QUE GANO: cambiar de idioma
+   con el panel puesto tiene que repintarlo, y para eso hay que poder volver a
+   pintarlo sin volver a ganar. Por eso el estado se guarda en `FIN`.
+   Y LO PINTA UNA SOLA FUNCION PARA LOS DOS CIERRES —el del nivel y el del
+   tutorial—: con dos pintores, el dia que se agregue un campo uno de los dos
+   se queda corto, y el que se queda corto es siempre el que nadie mira.   */
+let FIN = null;
+function finPon(o) { FIN = o; finPinta(); }
+function finPinta() {
+  if (!FIN) return;
+  const f = FIN;
+  if (f.tuto) {
+    $('fTit').textContent = TX('tutGana');
+    $('fSub').textContent = TX('tutGanaSub');
+    $('fDatos').textContent = TX('tutDatos');
+    $('fSig').style.display = '';
+    $('fSig').textContent = TX('jugar');
+    $('fRe').textContent = TX('tuto');
+    $('fMenu').textContent = TX('menuCorto');
+    return;
+  }
+  const gana = f.fin === 'gana';
+  $('fTit').textContent = TX(gana ? (f.perf ? 'ganaPerf' : 'gana') : (f.fin === 'vidas' ? 'pierdeV' : 'pierdeT'));
+  /* UN CORTE NO SON «1 cortes», y el singular es una FRASE por idioma y no un
+     sufijo: en ingles son «cut»/«cuts», dos palabras distintas. Y el numero de
+     vidas del subtitulo sale de VIDAS y no escrito en palabras — con «tres»
+     puesto a mano, cambiar VIDAS deja la frase mintiendo sin que nada falle. */
+  $('fSub').textContent = TX(gana ? (f.perf ? 'ganaPerfSub' : 'ganaSub') : (f.fin === 'vidas' ? 'pierdeVSub' : 'pierdeTSub'), VIDAS);
+  $('fDatos').textContent = f.cortes === 1
+    ? TX('datos1', Math.round(f.pct * 100), Math.round(f.meta * 100))
+    : TX('datos', Math.round(f.pct * 100), Math.round(f.meta * 100), f.cortes);
+  const sig = gana ? partidaSig() : null;
+  $('fSig').style.display = sig ? '' : 'none';
+  $('fSig').textContent = TX('siguiente');
+  $('fRe').textContent = TX('reintentar');
+  $('fMenu').textContent = TX('menuCorto');
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   g.js · EL TUTORIAL: cuatro cosas que HACER y una que mirar
+   ──────────────────────────────────────────────────────────────────────────
+   CADA PASO ESPERA A QUE SE HAGA LA COSA. Un tutorial que avanza con el reloj
+   se saltea leyendo, y lo que se saltea es exactamente lo que despues no se
+   entiende. Los cuatro primeros pasos tienen una CONDICION medida sobre el
+   mismo modelo que juega el juego —el rumbo del cuerpo, la estela, los
+   cerrados, las celdas ganadas— asi que no se puede pasar sin entender.
+
+   Y NO HAY RIVAL (`riv: 0`). Con uno, el tutorial tiene un cuerpo suelto que
+   puede pisarte la estela en el medio del paso 3 y dejarte esperando una
+   condicion que acaba de romper. Nadie aprende a cercar mientras lo cazan.
+   Lo que se pierde es la regla que no se puede practicar solo —que te corten—
+   y por eso el paso 5 es un cartel y no una prueba: es la unica del juego que
+   no se puede ensayar sin alguien enfrente.
+
+   SE PUEDE SALTEAR, y no es una cortesia: `PROG.visto` se pone en cero DESPUES
+   de leer el disco, o sea que esto sale CADA VEZ que se abre el juego.
+   Obligatorio una vez es un tutorial; obligatorio siempre es un peaje.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const TUT = { on: false, paso: 0, t: 0, fin: 0 };
+
+/* el minimo que un cartel tiene que estar en pantalla antes de que su
+   condicion pueda darse por cumplida: si no, un paso que ya estaba hecho
+   —el dedo venia arrastrando— parpadea y no lo lee nadie. */
+const TUT_LEER = 0.9;
+const TUT_CIERRE = 2.6;   /* el paso 5 no se hace, se mira */
+
+/* EL MAPA DEL TUTORIAL ES CHICO Y PELADO. 26 celdas contra las 19 de la vista
+   quiere decir que casi todo el tablero entra en pantalla de una: en un
+   tutorial sin mapa chico —esta apagado— no se puede pedir que alguien busque
+   el borde. Sin piedras, porque ninguno de los cinco pasos habla de piedras. */
+function tutCfg() {
+  return {
+    mundo: -1, nivel: -1, pat: 'vacio', n: 26, riv: 0,
+    per: 0.6, meta: 1.1, seg: 0, sem: 20260911,
+  };
+}
+
+/* cuanto terreno cuenta como «una vuelta grande». La casa son 5x5 = 25
+   celdas, asi que 40 es rodear una superficie mas ancha que la propia casa:
+   se llega con una vuelta de nueve por nueve y no se llega pegandose a la
+   pared de casa, que es justo la diferencia que el paso 4 quiere ensenar. */
+const TUT_GRANDE = 40;
+
+const TUT_PASOS = [
+  { k: 'tut1', ok: () => P.giros >= 1 },
+  { k: 'tut2', ok: () => P.yo.estela >= 5 },
+  { k: 'tut3', ok: () => P.yo.cerros >= 1 },
+  { k: 'tut4', ok: () => P.ganUlt >= TUT_GRANDE },
+  { k: 'tut5', ok: () => false },            /* este se mira, no se hace */
+];
+
+function tutArranca() {
+  TUT.on = true; TUT.paso = 0; TUT.t = 0; TUT.fin = 0;
+  partidaArranca(-1, -1, true);
+  cl2($('tSalt'), 'on', true);
+  $('tSalt').textContent = TX('salt');
+  tutPista();
+}
+
+function tutPista() {
+  const p = TUT_PASOS[TUT.paso];
+  const e = $('pista');
+  if (!p) { cl2(e, 'on', false); return; }
+  e.textContent = TX(p.k);
+  cl2(e, 'on', true);
+}
+
+function tutPaso(dt) {
+  if (!TUT.on || !P.on || P.pausa || P.fin) return;
+  TUT.t += dt;
+  const p = TUT_PASOS[TUT.paso];
+  if (!p) return;
+
+  /* el ultimo no tiene condicion: se queda el rato que tarda en leerse y
+     cierra por el mismo camino que gana un nivel, asi que la fanfarria, el
+     marcador y el panel son los de siempre y no una segunda contabilidad. */
+  if (TUT.paso === TUT_PASOS.length - 1) {
+    if (TUT.t >= TUT_CIERRE) termina('gana');
+    return;
+  }
+
+  if (TUT.t < TUT_LEER || !p.ok()) return;
+  TUT.paso++; TUT.t = 0;
+  son('des');
+  tutPista();
+}
+
+/* EL CIERRE PASA POR `finPon` Y NO ESCRIBE EL PANEL A MANO: cambiar de idioma
+   con el panel puesto tiene que repintarlo, y el unico que sabe repintarlo es
+   el pintor. Con dos, el del tutorial es el que se queda viejo.            */
+function tutFin() {
+  TUT.on = false;
+  cl2($('pista'), 'on', false);
+  cl2($('tSalt'), 'on', false);
+  PROG.visto = 1; guardaProg();
+  finPon({ tuto: true });
+  verPanel('pFin');
+}
+
+/* saltear deja el tutorial por hecho y devuelve al MENU y no al juego: el que
+   lo salteo no eligio todavia que jugar. El que lo termina si —por eso su
+   panel ofrece JUGAR—.                                                     */
+function tutSalta() {
+  if (!TUT.on) return;
+  TUT.on = false;
+  son('ui');
+  PROG.visto = 1; guardaProg();
+  partidaSale();
+  vaMenu();
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   h.js · LOS PANELES: menu, niveles, ajustes, pausa y fin
+   ──────────────────────────────────────────────────────────────────────────
+   UN SOLO SITIO ABRE Y CIERRA (`verPanel`), y de ahi cuelga todo lo demas:
+   con cada boton apagando el panel que conoce, el dia que se agrega uno queda
+   una pantalla encima de otra y no falla nada — se ve como un juego trabado.
+
+   EL VELO ES UN DEGRADADO Y NO UNA OPACIDAD PAREJA: cerrado arriba y abajo,
+   donde viven el titulo y los botones, y abierto en el medio, asi que el
+   tablero sigue corriendo detras del menu. Un panel opaco encima de una
+   escena que ya se esta dibujando tira a la basura lo unico que este juego
+   tiene para mostrar antes de que alguien toque nada.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let PANEL = null;
+function verPanel(id) {
+  const ps = document.getElementsByClassName('pan');
+  for (let i = 0; i < ps.length; i++) ps[i].classList.toggle('on', ps[i].id === id);
+  PANEL = id;
+}
+
+/* ── el idioma se escribe entero, y de UNA funcion ──
+   `pintaIdioma` la llaman el arranque Y los seis botones de idioma, asi que
+   no hay forma de agregar un texto que quede sin traducir en uno de los dos
+   caminos. Y repinta TAMBIEN lo que ya esta en pantalla —el panel de fin, la
+   pista del tutorial, el marcador— porque cambiar de idioma con un panel
+   puesto tiene que cambiarlo: es literalmente el defecto que en Z Force
+   costo 107 claves.                                                        */
+function pintaIdioma() {
+  const T = (id, k, ...a) => { const e = $(id); if (e) e.textContent = TX(k, ...a); };
+  T('mSub', 'sub');
+  T('mJugar', 'jugar'); T('mNiv', 'niveles'); T('mTuto', 'tuto'); T('mAj', 'ajustes');
+  T('mPie', 'pie');
+  T('nvTit', 'niveles'); T('nvVolver', 'volver'); T('nvSub', 'nivelesSub');
+  T('ajTit', 'ajTit'); T('ajMus', 'musica'); T('ajFx', 'efectos');
+  T('ajCal', 'graficos'); T('ajIdi', 'idioma');
+  T('ajBorrar', 'borrar'); T('ajVolver', 'volver');
+  T('paTit', 'pausa'); T('paSub', 'pausaSub');
+  T('paSeguir', 'seguir'); T('paRe', 'reiniciar'); T('paSalir', 'salir');
+  T('cSub', 'cargando'); T('tSalt', 'salt');
+  const cal = LANGS[LANG].calN || LANGS.es.calN;
+  chips('[data-cal]', b => { b.textContent = cal[+b.dataset.cal] || ''; });
+  finPinta();
+  if (TUT.on) tutPista();
+  if (P.on) hudPinta(true);
+  nvPinta();
+  marcaChips();
+}
+
+function chips(sel, f) {
+  const l = document.querySelectorAll(sel);
+  for (let i = 0; i < l.length; i++) f(l[i]);
+}
+function marcaChips() {
+  chips('[data-cal]', b => b.classList.toggle('sel', (+b.dataset.cal) === (PROG.cal | 0)));
+  chips('[data-l2]', b => b.classList.toggle('sel', b.dataset.l2 === LANG));
+}
+
+/* ══════════════════════ LA LISTA DE NIVELES ══════════════════════
+   El mundo va por PESTANA y no todo junto: cuarenta botones en una columna
+   son cuarenta botones que hay que scrollear para llegar al ultimo, y el
+   ultimo es justo al que uno quiere volver.                                */
+let NV_M = 0;
+function nvAbre() {
+  NV_M = cl(Math.floor(PROG.ult / NIV_MUNDO), 0, MUNDOS.length - 1);
+  nvPinta();
+  verPanel('pNiv');
+}
+function nvPinta() {
+  const tab = $('nvMundos'), gr = $('nvGrid');
+  if (!tab || !gr) return;
+  tab.innerHTML = '';
+  for (let m = 0; m < MUNDOS.length; m++) {
+    const b = document.createElement('button');
+    b.className = 'mtab';
+    b.textContent = nomMundo(m);
+    /* un mundo esta abierto si su PRIMER nivel lo esta: preguntando por el
+       ultimo, la pestana del mundo en el que uno esta parado sale cerrada. */
+    const libre = abierto(idNiv(m, 0));
+    b.classList.toggle('sel', m === NV_M);
+    b.classList.toggle('cerr', !libre);
+    if (libre) b.onclick = () => { son('ui'); NV_M = m; nvPinta(); };
+    tab.appendChild(b);
+  }
+  gr.innerHTML = '';
+  for (let n = 0; n < NIV_MUNDO; n++) {
+    const k = idNiv(NV_M, n), libre = abierto(k);
+    const b = document.createElement('button');
+    b.className = 'nvB';
+    b.classList.toggle('ok', hecho(NV_M, n));
+    b.classList.toggle('cerr', !libre);
+    b.innerHTML = (n + 1) + (perfecto(NV_M, n) ? '<s>◆</s>' : '');
+    if (libre) b.onclick = () => { son('ui'); juega(NV_M, n); };
+    gr.appendChild(b);
+  }
+}
+
+/* ══════════════════════ LOS CAMINOS ══════════════════════ */
+function juega(m, n) {
+  auDesp();
+  partidaArranca(m, n, false);
+  auAcorde(m);
+  verPanel(null);
+}
+function vaMenu() {
+  partidaSale();
+  verPanel('pMenu');
+}
+/* JUGAR arranca en el ultimo abierto y no siempre en el 1-1: en un juego de
+   cuarenta niveles, el boton grande tiene que llevar a donde uno quedo.   */
+function juegaUltimo() {
+  const k = cl(PROG.ult | 0, 0, NIVELES - 1);
+  juega(Math.floor(k / NIV_MUNDO), k % NIV_MUNDO);
+}
+
+function uiInit() {
+  const cl1 = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+
+  chips('[data-lang]', b => {
+    b.onclick = () => { LANG = b.dataset.lang; guardaProg(); pintaIdioma(); auDesp(); son('ui'); arranqueUI(); };
+  });
+  chips('[data-l2]', b => {
+    b.onclick = () => { LANG = b.dataset.l2; guardaProg(); son('ui'); pintaIdioma(); };
+  });
+  chips('[data-cal]', b => {
+    b.onclick = () => { PROG.cal = +b.dataset.cal; guardaProg(); son('ui'); vpMide(); marcaChips(); };
+  });
+
+  cl1('mJugar', () => { son('ui'); juegaUltimo(); });
+  cl1('mNiv', () => { son('ui'); nvAbre(); });
+  cl1('mTuto', () => { son('ui'); auDesp(); tutArranca(); verPanel(null); });
+  cl1('mAj', () => { son('ui'); verPanel('pAj'); });
+  cl1('nvVolver', () => { son('ui'); verPanel('pMenu'); });
+  cl1('ajVolver', () => { son('ui'); verPanel(P.on ? 'pPausa' : 'pMenu'); });
+  cl1('ajBorrar', () => {
+    son('des'); borraProg();
+    $('ajBorrar').textContent = TX('borrado');
+    setTimeout(() => { $('ajBorrar').textContent = TX('borrar'); }, 1100);
+    nvPinta();
+  });
+
+  cl1('bPausa', () => pausaPon(true));
+  cl1('paSeguir', () => { son('ui'); pausaPon(false); });
+  cl1('paRe', () => { son('ui'); P.pausa = false; auAgacha(1); juega(P.m, P.nv); });
+  cl1('paSalir', () => { son('ui'); vaMenu(); });
+
+  /* EL PANEL DE FIN TIENE DOS DUENOS —el nivel y el tutorial— y los tres
+     botones cambian de destino segun cual cerro. Se pregunta por `P.tuto`,
+     que sigue puesto hasta que `partidaSale` corra: guardar una segunda
+     bandera seria un estado mas que se puede desincronizar del primero.  */
+  cl1('fSig', () => {
+    son('ui');
+    if (P.tuto) { partidaSale(); juegaUltimo(); return; }
+    const s = partidaSig();
+    if (s) juega(s[0], s[1]); else vaMenu();
+  });
+  cl1('fRe', () => {
+    son('ui');
+    if (P.tuto) { partidaSale(); tutArranca(); verPanel(null); return; }
+    juega(P.m, P.nv);
+  });
+  cl1('fMenu', () => { son('ui'); vaMenu(); });
+
+  cl1('tSalt', () => tutSalta());
+
+  const rm = $('rMus'), rf = $('rFx');
+  if (rm) { rm.value = Math.round(PROG.vol * 100); rm.oninput = () => { PROG.vol = rm.value / 100; auVol(); guardaProg(); }; }
+  if (rf) { rf.value = Math.round(PROG.fx * 100); rf.oninput = () => { PROG.fx = rf.value / 100; auVol(); guardaProg(); }; }
+}
+
+/* ══════════════════════ EL ARRANQUE ══════════════════════
+   EL TUTORIAL VA ANTES DEL MENU, y sale cada vez que se abre el juego —
+   `PROG.visto` se descarta al leer el disco—. Entrar al menu primero
+   convierte la lection en una opcion, y lo que es opcional en un menu no lo
+   toca nadie: despues no se entiende el juego y la culpa parece del juego.  */
+function arranqueUI() {
+  if (!PROG.lang) { verPanel('pIdioma'); return; }
+  if (!PROG.visto) { auDesp(); tutArranca(); verPanel(null); return; }
+  verPanel('pMenu');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   z · ARRANQUE, RELOJ Y SONDAS
+   ──────────────────────────────────────────────────────────────────────────
+   EL RELOJ DEL JUEGO ES DE PASO FIJO Y VIVE EN `paso(M, dt)` —c.js—, no aca:
+   lo unico que hace este bucle es entregarle un `dt` topado. El tope de 0,05
+   no es cosmetico: una pestana que estuvo dormida devuelve dos segundos de
+   golpe, y dos segundos son once tics simulados en un cuadro con todos los
+   cuerpos cruzando media pantalla sin que nadie pueda doblar.
+
+   Y EL DIBUJO VA DESPUES DE TODO, incluido el tutorial: `tutPaso` puede
+   cerrar la partida —el paso 5 llama a `termina`— y dibujar antes de eso
+   pintaria un cuadro del mundo que ya termino.
+   ══════════════════════════════════════════════════════════════════════ */
+let ULT = 0, MSDIB = 0;
+function bucle(ts) {
+  requestAnimationFrame(bucle);
+  const dt = Math.min(0.05, ULT ? (ts - ULT) / 1000 : 0); ULT = ts;
+  partidaPaso(dt);
+  tutPaso(dt);
+  if (P.on) {
+    vpCam(P.M, dt);
+    vpDibuja(P.M, dt);
+    vpMiniPinta(P.M);
+    MSDIB = MSDIB * 0.9 + V.msDib * 0.1;
+  }
+}
+
+/* EL AUDIO DESPIERTA CON EL PRIMER GESTO Y NO AL CARGAR: ningun navegador
+   deja sonar nada antes de uno, asi que un `auArranca()` en el arranque deja
+   el contexto suspendido y la cama muda para el resto de la partida. Va
+   DELEGADO EN CAPTURA sobre el documento: colgandolo de cada boton habria
+   que acordarse en los quince que hay y en el proximo que se agregue.     */
+function auEngancha() {
+  const f = () => { auArranca(); auDesp(); };
+  for (const k of ['pointerdown', 'click', 'keydown'])
+    addEventListener(k, f, { capture: true, once: false, passive: true });
+}
+
+function arranca() {
+  cargaProg();
+  vpInit();
+  entInit();
+  uiInit();
+  auEngancha();
+  pintaIdioma();
+  arranqueUI();
+  setTimeout(() => {
+    const c = $('carga');
+    c.classList.add('off');
+    setTimeout(() => { c.style.display = 'none'; }, 420);
+  }, 340);
+  requestAnimationFrame(bucle);
+}
+arranca();
+
+/* ══════════════════════════ SONDAS ══════════════════════════
+   Una afirmacion sin numero no vale. Lo que se pueda medir por el camino del
+   dedo se mide por ahi: los bots entran por `p.ped` —el mismo campo que
+   escribe `entPide`— y el tutorial se juega moviendo el cuerpo, no
+   escribiendole los contadores que sus pasos miran.                       */
+window.__C = {
+  est() {
+    const M = P.M;
+    return {
+      on: P.on, panel: PANEL, tuto: P.tuto, lang: LANG, pausa: P.pausa, fin: P.fin,
+      m: P.m, nv: P.nv, n: M ? M.n : 0, riv: P.cfg ? P.cfg.riv : 0,
+      pct: M ? +(tajada(M, 1) * 100).toFixed(1) : 0,
+      meta: P.cfg ? +(P.cfg.meta * 100).toFixed(1) : 0,
+      cortes: P.yo ? P.yo.cortes : 0, cerros: P.yo ? P.yo.cerros : 0,
+      estela: P.yo ? P.yo.estela : 0, fuera: P.yo ? P.yo.fuera : false,
+      vivo: P.yo ? P.yo.vivo : false, seg: +P.seg.toFixed(1),
+      giros: P.giros, ganUlt: P.ganUlt,
+      tutOn: TUT.on, tutPaso: TUT.paso, pista: $('pista').textContent,
+      hechos: cuentaHechos(), ult: PROG.ult, cal: PROG.cal,
+      ms: +MSDIB.toFixed(3), dpr: V.dpr,
+    };
+  },
+
+  /* ── caminos ── */
+  nivel(m, n) { juega(m, n); return this.est(); },
+  tut() { tutArranca(); verPanel(null); return this.est(); },
+  menu() { vaMenu(); return this.est(); },
+  panel(id) { verPanel(id); return { panel: PANEL }; },
+  clic(id) { const e = $(id); if (!e) return 'no hay ' + id; e.click(); return this.est(); },
+  lang(l) { LANG = l; guardaProg(); pintaIdioma(); return { lang: LANG, sub: $('mSub').textContent, pista: $('pista').textContent, fTit: $('fTit').textContent }; },
+
+  /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
+     `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
+     que un arrastre sintetico sobre el lienzo ejerce la zona muerta, la
+     histeresis del eje y la cola — que es lo unico que prueba que doblar
+     funciona como doblar y no como escribir `p.ped`.                      */
+  arrastra(dx, dy) {
+    const c = $('cv'), r = c.getBoundingClientRect();
+    const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+    const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
+    ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + dx, y0 + dy);
+    ev('pointerup', x0 + dx, y0 + dy);
+    return { ped: P.yo ? P.yo.ped : null, dx: P.yo ? P.yo.dx : 0, dy: P.yo ? P.yo.dy : 0 };
+  },
+  tecla(k) { entTecla({ key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null }; },
+
+  /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
+     el dibujo a resolucion de software cuesta mas que la fisica entera. */
+  anda(n, dt) { for (let i = 0; i < (n || 60); i++) partidaPaso(dt || 0.016); return this.est(); },
+
+  /* ── el tutorial jugado por el camino del jugador ──
+     Cada paso se cumple MOVIENDO el cuerpo y no tocando su contador: si se
+     escribiera `P.giros` a mano, la prueba estaria aprobando su propia
+     cuenta en vez del gesto.                                             */
+  juegaTut(tope) {
+    const T = tope || 6000, hist = [];
+    /* UN CUADRADO Y NO UN ZIGZAG. La primera version doblaba alternando eje
+       —derecha, abajo, derecha, abajo— y eso no es un cuadrado: es una
+       escalera que se aleja de casa y NO VUELVE NUNCA. Medido, se clavaba en
+       el paso 3 con 2.401 vueltas sin cerrar una sola area. Doblar siempre
+       para el MISMO lado es lo unico que devuelve al punto de partida, y
+       volver es exactamente lo que cierra.                                */
+    const R = [[1, 0], [0, 1], [-1, 0], [0, -1]];   /* der · abajo · izq · arriba */
+    /* Y EL LADO CRECE AL LLEGAR AL PASO 4, porque si no el cuerpo ya no sale.
+       Medido con lado fijo de nueve: los dos primeros pasos salian y el
+       cuarto se clavaba 3.000 vueltas, y la causa es que despues de cerrar
+       el primer cuadrado ESE CUADRADO YA ES TERRENO PROPIO — el segundo se
+       traza entero adentro de lo ganado, sin una celda de estela y sin nada
+       que cerrar. Lo que hace una persona al leer «cuanto mas grande la
+       vuelta» es justamente eso: irse mas lejos. Con el lado en infinito el
+       cuerpo dobla solo contra la pared y recorre el borde del tablero.   */
+    const CELDA = 1 / (VEL * 0.016);              /* cuadros por celda      */
+    let g = 0, prev = -1, ri = 0, quiere = 0;
+    while (TUT.on && g++ < T) {
+      if (TUT.paso !== prev) { hist.push({ paso: TUT.paso, t: g, pista: $('pista').textContent }); prev = TUT.paso; quiere = 0; }
+      const yo = P.yo, n = P.M.n;
+      /* NADIE CORRE CONTRA LA PARED. Si el rumbo de ahora se acaba en tres
+         celdas, se dobla ya: sin esto el driver muere contra el borde y lo
+         que se mediria seria el renacimiento, no el gesto.                */
+      const pared = (d) => {
+        const x = yo.ix + R[d][0] * 3, y = yo.iy + R[d][1] * 3;
+        return x < 1 || y < 1 || x > n - 2 || y > n - 2;
+      };
+      const dAct = R.findIndex((d) => d[0] === yo.dx && d[1] === yo.dy);
+      if (--quiere <= 0 || (dAct >= 0 && pared(dAct))) {
+        /* del ciclo se toma el primero que no sea media vuelta ni pared */
+        for (let k = 0; k < 4; k++) {
+          const d = R[(ri + k) % 4];
+          if (d[0] === -yo.dx && d[1] === -yo.dy) continue;
+          if (pared((ri + k) % 4)) continue;
+          this.arrastra(d[0] * 90, d[1] * 90);
+          ri = (ri + k + 1) % 4;
+          break;
+        }
+        quiere = TUT.paso >= 3 ? 1e9 : Math.round(9 * CELDA);
+      }
+      partidaPaso(0.016);
+      tutPaso(0.016);
+    }
+    return { hist, vueltas: g, tutOn: TUT.on, panel: PANEL, fTit: $('fTit').textContent, fDatos: $('fDatos').textContent, visto: PROG.visto };
+  },
+
+  /* ── el nivel puesto, jugado solo ──
+     ENTRA POR `p.ped`, o sea por el mismo campo que escribe el dedo: un bot
+     que escriba `dx`/`dy` estaria jugando otra fisica y ganar no probaria
+     nada. `azar` es el control — sin el, que el honesto termine no dice que
+     haya una decision adentro.                                           */
+  /* Y ARRANCA EL NIVEL ELLA MISMA. Tomando la partida que hubiera puesta,
+     lo que se mide al abrir el juego es EL TUTORIAL —que es lo que corre por
+     omision— y ese mapa no tiene rival ni meta alcanzable: medido, doce mil
+     vueltas llenando el tablero al 100 % sin terminar nunca. Un bot que juega
+     otro mapa que el jugador no prueba nada.                               */
+  juega(m, nv, modo, tope) {
+    juega(m, nv);
+    const yo = P.yo;
+    yo.bot = modo === 'azar' ? { azar: true } : { per: 0.80 };
+    const T = tope || 12000;
+    let g = 0;
+    while (P.on && !P.fin && g++ < T) partidaPaso(1 / VEL);
+    yo.bot = null;
+    return {
+      fin: P.fin, pct: +(P.pct * 100).toFixed(1), meta: +(P.cfg.meta * 100).toFixed(1),
+      cortes: yo.cortes, cerros: yo.cerros, seg: +P.seg.toFixed(1), vueltas: g,
+      gano: P.fin === 'gana', panel: PANEL, fTit: $('fTit').textContent,
+    };
+  },
+
+  /* ── auditorias del modelo puro ── */
+  regla() { return auditaRegla(); },
+  mapas() { return auditaMapas(); },
+  audita(modo) { return auditaTodo(modo); },
+  solo(m, n, modo) { return juegaSolo(m, n, modo); },
+
+  /* ── maquetacion ──
+     Se mide con `getBoundingClientRect` contra el MARCO y no contra la
+     ventana: el juego vive adentro de `#marco`, y medir contra la ventana
+     da «entra» siempre en una pantalla grande.                           */
+  /* EL ENCUADRE, que desde afuera no se puede preguntar: `V` es un `const` del
+     modulo y `page.evaluate` no lo ve. Devuelve lo que decide que se ve —el
+     lienzo de verdad, la escala, el centro de camara y cuantas celdas entran—
+     mas donde cae el tablero EN PANTALLA, que es la unica forma de comprobar
+     que no se sale por un lado.                                             */
+  vista() {
+    if (!P.on) return { on: false };
+    const r = V.cv.getBoundingClientRect(), n = P.M.n;
+    /* las cuatro esquinas del tablero, en pixeles de pantalla */
+    /* LA CAMARA ES LA ESQUINA DE ARRIBA A LA IZQUIERDA, no el centro, que es
+       como lo hace `vpDibuja`: `px(x) = (x - camx) * esc`. Con la cuenta del
+       centro esta sonda informaba el tablero cien pixeles corrido y a mitad de
+       pantalla, o sea un defecto de encuadre que no existia.                */
+    const px = (cx, cy) => [
+      r.left + (cx - V.camx) * V.esc,
+      r.top + (cy - V.camy) * V.esc,
+    ];
+    const a = px(0, 0), b = px(n, n);
+    return {
+      on: true, n, dpr: V.dpr, esc: +V.esc.toFixed(3),
+      cam: [+V.camx.toFixed(2), +V.camy.toFixed(2)],
+      vis: [+V.visW.toFixed(2), +V.visH.toFixed(2)],
+      lienzo: [Math.round(r.width), Math.round(r.height), V.W, V.H],
+      tablero: [Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1])],
+      yo: P.yo ? [P.yo.ix, P.yo.iy] : null,
+    };
+  },
+
+  cajas() {
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const R = [], vis = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
+      const c = e.getBoundingClientRect();
+      if (c.width < 1 || c.height < 1) continue;
+      R.push({ id, x: c.left, y: c.top, w: c.width, h: c.height }); vis.push(id);
+    }
+    const m = $('marco').getBoundingClientRect(), ch = [], fuera = [];
+    for (let i = 0; i < R.length; i++) {
+      const a = R[i];
+      if (a.x < m.left - 1 || a.y < m.top - 1 || a.x + a.w > m.right + 1 || a.y + a.h > m.bottom + 1) fuera.push(a.id);
+      for (let j = i + 1; j < R.length; j++) {
+        const b = R[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
+      }
+    }
+    return { vis, choques: ch, fuera, marco: [Math.round(m.width), Math.round(m.height)] };
+  },
+
+  /* cada panel se enciende para medirlo y se devuelve como estaba: un panel
+     medido con `display:none` da caja cero y aprueba cualquier cosa.     */
+  paneles() {
+    const out = {}, m = $('marco').getBoundingClientRect();
+    for (const id of ['pIdioma', 'pMenu', 'pNiv', 'pAj', 'pPausa', 'pFin']) {
+      const e = $(id); if (!e) continue;
+      const pre = e.classList.contains('on');
+      e.classList.add('on');
+      const hs = [...e.querySelectorAll('button,h1,h2,.sub,.pie,.aj,#nvGrid,#nvMundos')].filter(x => x.offsetWidth > 0);
+      let alto = 0, cortado = 0;
+      for (const x of hs) {
+        const c = x.getBoundingClientRect();
+        alto = Math.max(alto, c.bottom - m.top);
+        if (c.bottom > m.bottom + 1 || c.top < m.top - 1) cortado++;
+      }
+      out[id] = { n: hs.length, alto: Math.round(alto), cortado };
+      if (!pre) e.classList.remove('on');
+    }
+    return out;
+  },
+
+  /* ── audio ──
+     MIDE UN EFECTO BARRIENDOLO ENTERO: la ventana del analizador son 42,7 ms
+     y un efecto dura entre 200 y 700, asi que una sola lectura cae donde
+     caiga y lo que devuelve es la cama. Y el fondo se mide ANTES con la
+     misma regla — comparar contra un numero sacado de otra ventana no
+     significa nada.                                                      */
+  sonMide(k, arg, ms) {
+    auArranca(); auDesp();
+    if (!AU.on) return Promise.resolve({ on: false });
+    const d = new Float32Array(AU.an.fftSize), T = ms || 900;
+    const lee = () => {
+      AU.an.getFloatTimeDomainData(d);
+      let p = 0, s = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; s += d[i] * d[i]; }
+      return { p, r: Math.sqrt(s / d.length) };
+    };
+    return new Promise(res => {
+      let fp = 0, fr = 0, n0 = 0;
+      const t0 = setInterval(() => {
+        const x = lee(); if (x.p > fp) fp = x.p; if (x.r > fr) fr = x.r;
+        if (++n0 < 14) return;
+        clearInterval(t0);
+        son(k, arg);
+        let pp = 0, rr = 0, n = 0;
+        const t1 = setInterval(() => {
+          const y = lee(); if (y.p > pp) pp = y.p; if (y.r > rr) rr = y.r;
+          if (++n < Math.ceil(T / 16)) return;
+          clearInterval(t1);
+          res({ on: true, k, fondoPico: +fp.toFixed(4), fondoRms: +fr.toFixed(4),
+                pico: +pp.toFixed(4), rms: +rr.toFixed(4), veces: +(rr / (fr || 1e-9)).toFixed(2) });
+        }, 16);
+      }, 16);
+    });
+  },
+  son(k, arg) { auArranca(); auDesp(); son(k, arg); return { on: AU.on, acorde: AU.acorde, abre: +AU.abre.toFixed(3) }; },
+  audio(ms) {
+    if (!AU.on) return Promise.resolve({ on: false });
+    const d = new Float32Array(AU.an.fftSize);
+    return new Promise(res => setTimeout(() => {
+      AU.an.getFloatTimeDomainData(d);
+      let p = 0, s = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; s += d[i] * d[i]; }
+      res({ on: true, pico: +p.toFixed(4), rms: +Math.sqrt(s / d.length).toFixed(4), acorde: AU.acorde, abre: +AU.abre.toFixed(3) });
+    }, ms || 320));
+  },
+
+  costo(n) {
+    if (!P.on) return { err: 'no hay partida' };
+    const N = n || 90, t0 = performance.now();
+    for (let i = 0; i < N; i++) vpDibuja(P.M, 0.016);
+    return { ms: +((performance.now() - t0) / N).toFixed(3), n: N, dpr: V.dpr, w: V.W, h: V.H };
+  },
+};
+</script></body></html>
