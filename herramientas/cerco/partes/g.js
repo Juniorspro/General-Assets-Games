@@ -27,13 +27,19 @@ const TUT = { on: false, paso: 0, t: 0, fin: 0 };
 const TUT_LEER = 0.9;
 const TUT_CIERRE = 2.6;   /* el paso 5 no se hace, se mira */
 
-/* EL MAPA DEL TUTORIAL ES CHICO Y PELADO. 26 celdas contra las 19 de la vista
-   quiere decir que casi todo el tablero entra en pantalla de una: en un
-   tutorial sin mapa chico —esta apagado— no se puede pedir que alguien busque
-   el borde. Sin piedras, porque ninguno de los cinco pasos habla de piedras. */
+/* EL PLANETA DEL TUTORIAL ES CHICO Y PELADO. Con n=12 la circunferencia son
+   48 celdas contra las 19 de la vista: un cuarto de vuelta entra en pantalla
+   de una, asi que se ve de donde se salio mientras se vuelve. En un tutorial
+   sin mapa chico —esta apagado— eso es lo unico que reemplaza al mapa. Sin
+   piedras, porque ninguno de los cinco pasos habla de piedras.
+
+   Y CHICO TIENE UN SEGUNDO TRABAJO EN LA ESFERA: 864 celdas es el unico
+   tamano en el que el paso 4 —«una vuelta grande», 40 celdas ganadas— es una
+   fraccion del planeta que se ve crecer. En uno de 8.664 son el 0,46 % y la
+   vuelta no se nota.                                                        */
 function tutCfg() {
   return {
-    mundo: -1, nivel: -1, pat: 'vacio', n: 26, riv: 0,
+    mundo: -1, nivel: -1, pat: 'vacio', n: 12, riv: 0,
     per: 0.6, meta: 1.1, seg: 0, sem: 20260911,
   };
 }

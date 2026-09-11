@@ -34,37 +34,62 @@ const NJUG = 8;       /* el jugador es el 1; los rivales van del 2 al 8     */
    sigue usando de 2 a 4 y no paga un byte por los cuatro que no siembra.   */
 
 /* ── LOS COLORES ──────────────────────────────────────────────────────────
-   Tres por jugador y no uno: el terreno tiene que dejarse mirar sin cansar,
-   la estela tiene que gritar —es lo unico que mata— y la cabeza tiene que
-   encontrarse de una ojeada en un tablero de setenta celdas de lado. El
-   jugador se lleva el ambar, que es el unico color calido de la paleta.    */
+   TRES POR JUGADOR, Y EN LA ESFERA EL REPARTO SE DA VUELTA. En el tablero
+   plano el terreno era OSCURO y la estela clara: el fondo era papel, asi que
+   lo propio tenia que ensuciarlo. Un planeta no es papel — es una superficie
+   iluminada, el terreno es LO QUE MAS SE VE, y un terreno oscuro sobre una
+   esfera clara se lee a mancha y no a territorio. Ahora:
+
+   · `z` es el color VIVO y saturado, que es el que cubre el planeta;
+   · `t` es el MISMO tono mas claro, para que la estela se distinga contra el
+     terreno propio —que es justo donde hay que verla, porque volver a casa es
+     cruzar lo propio—;
+   · `c` es la cabeza, casi blanca, para encontrarse de una ojeada.
+
+   Y VIVOS PERO NO AL TOPE (L 0,50 · 0,66 · 0,86): la escena lleva luz, o sea
+   que el color se MULTIPLICA por ella. Con el terreno ya en el techo, la cara
+   iluminada del planeta satura y las ocho familias se aplastan contra el
+   blanco; con medio tono de aire, la luz tiene donde trabajar y la esfera se
+   lee redonda, que es la mitad del pedido.
+
+   LOS TONOS SE CONSERVAN CLAVADOS de la paleta plana y no se reordenan: la
+   campana usa SOLO los ids 2 a 4, asi que esos tres estan lo mas lejos que se
+   puede del ambar del jugador (169 · 261 · 338) y los otros cuatro rellenan
+   los huecos de a 45 grados para la arena. Reordenarlos «prolijo» dejaria al
+   unico rival del mundo 1 pegado al color del jugador.                      */
 const COLS = [
   null,
-  { z: '#7a4d12', t: '#f0a13a', c: '#ffe0b0' },   /* 1 · vos            */
-  { z: '#0e5148', t: '#2fc2a8', c: '#b6f2e6' },   /* 2 · verde agua     */
-  { z: '#3d2a6b', t: '#9a6bf2', c: '#d9c8ff' },   /* 3 · violeta        */
-  { z: '#6b1f3a', t: '#f0578f', c: '#ffc8dc' },   /* 4 · rosa           */
-  /* LOS CUATRO DE LA ARENA SE REPARTEN EL CIRCULO, no se eligen a gusto: con
-     ocho cuerpos en un tablero de noventa, lo unico que distingue a uno de
-     otro en el minimapa es un punto de tres pixeles. Los tonos van cada 45
-     grados desde el ambar del jugador (35 · 80 · 125 · 170 · 215 · 260 ·
-     305 · 350), asi que dos vecinos nunca comparten familia. El rojo se
-     descarto a proposito: a ese tamano se confunde con el ambar, que es el
-     unico color que TIENE que encontrarse de una ojeada.                   */
-  { z: '#4d5e21', t: '#b3d93f', c: '#e6f5b3' },   /* 5 · verde limon    */
-  { z: '#1c4a24', t: '#33cc47', c: '#b8f2c2' },   /* 6 · verde          */
-  { z: '#1e3d6b', t: '#4d8ef5', c: '#bdd8fd' },   /* 7 · azul           */
-  { z: '#60245b', t: '#e755db', c: '#f9bdf5' },   /* 8 · magenta        */
+  { z: '#e68d19', t: '#f8b359', c: '#fde0b9' },   /* 1 · vos · ambar    */
+  { z: '#19e6c1', t: '#59f8dc', c: '#b9fdf1' },   /* 2 · verde agua     */
+  { z: '#6119e6', t: '#9059f8', c: '#d1b9fd' },   /* 3 · violeta        */
+  { z: '#e61964', t: '#f85993', c: '#fdb9d2' },   /* 4 · rosa           */
+  { z: '#b3e619', t: '#d1f859', c: '#ecfdb9' },   /* 5 · verde limon    */
+  { z: '#19e634', t: '#59f86d', c: '#b9fdc2' },   /* 6 · verde          */
+  { z: '#1968e6', t: '#5996f8', c: '#b9d4fd' },   /* 7 · azul           */
+  { z: '#e619d5', t: '#f859eb', c: '#fdb9f8' },   /* 8 · magenta        */
 ];
-const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
+/* EL PLANETA SIN DUENO ES CLARO Y NEUTRO, y eso tampoco es gusto: es el
+   FONDO contra el que se juzgan los ocho colores. Con un fondo oscuro los
+   cuatro tonos frios se acercan entre si —todos leen «claro contra oscuro»—
+   y con uno claro se leen por lo que son. Es la misma razon por la que la
+   mesa de un juego de cartas es clara.                                      */
+const C_TABLA = '#dfe6ee', C_PIEDRA = '#6b7689', C_LINEA = '#c2ccd9';
 
 /* ── LOS NUMEROS DEL CUERPO, DERIVADOS ────────────────────────────────────
    No se eligen sueltos: se elige CUANTO SE VE y CUANTO TARDA EN CRUZARSE, y
-   de ahi salen los dos. Con 19 celdas de ancho en un marco de 412 px, una
-   celda mide 21,7 px —o sea que la cabeza y la estela se distinguen sin
-   agrandar nada— y a 5,4 celdas por segundo la ventana visible se cruza en
-   3,5 s. Eso ademas fija el ritmo del pulgar: una curva se puede pedir cada
-   185 ms, que es lo que tarda el cuerpo en cambiar de celda.               */
+   de ahi salen los dos. `VISTA` son CELDAS DE ARCO que tienen que entrar en
+   el cuadro —en el plano eran celdas de ancho de tablero; en la esfera la
+   camara mira el planeta desde arriba y lo que se elige es cuanto arco abarca
+   el lente—. Con 19 en un marco de 412 px, una celda mide 21,7 px —o sea que
+   la cabeza y la estela se distinguen sin agrandar nada— y a 5,4 celdas por
+   segundo la ventana visible se cruza en 3,5 s. Eso ademas fija el ritmo del
+   pulgar: una curva se puede pedir cada 185 ms, que es lo que tarda el cuerpo
+   en cambiar de celda.
+
+   Y UNA VUELTA ENTERA AL PLANETA SON 4n CELDAS, no n: el cubo tiene cuatro
+   caras en cualquier meridiano. Con n=38 eso son 152, o sea que las 19 de la
+   vista son un cuarto de cara y un octavo del horizonte — el planeta se ve
+   REDONDO desde el primer cuadro, que es lo que esta version viene a hacer. */
 const VISTA = 19;
 /* EN LA ARENA LA VISTA SE ABRE CON EL TERRENO, y el numero sale de la misma
    derivacion de arriba y no del gusto: lo que uno tiene que seguir viendo es
@@ -77,22 +102,67 @@ const VISTA = 19;
 const VISTA_MAX = 34;
 const VISTA_SAT = 0.10;
 const VEL = 5.4;
-const VIDAS = 3;
+/* SIETE VIDAS Y NO TRES, Y EL NUMERO SALE DE UNA TASA MEDIDA. En el plano el
+   bot honesto se comia 0,42 cortes por partida; en la esfera se come 1,48, y
+   35 de sus 52 muertes son un rival pisandole la estela EN MEDIO DE UNA
+   EXCURSION. La causa es geometrica y no de dificultad: en un plano uno se
+   apoya de espaldas contra el borde, y una esfera NO TIENE BORDE. Barrido de
+   vidas contra niveles ganados: 3->32 · 4->37 · 5->37 · 6->39 · 7->40 · 8->40
+   · 99->40. Siete es el valor mas chico que llega a 40 de 40.                */
+const VIDAS = 7;
 
 /* ── LOS CINCO MUNDOS ─────────────────────────────────────────────────────
-   Lo que crece no es «la dificultad» como numero suelto: crecen el TABLERO,
-   la CANTIDAD DE RIVALES y lo BIEN QUE JUEGAN. Y el tablero es el que mas
-   pesa, porque con la vista fija en 19 celdas un tablero de 74 es un mapa
-   que no entra en la pantalla y hay que acordarse de por donde se venia.
+   Lo que crece no es «la dificultad» como numero suelto: crecen el PLANETA,
+   la CANTIDAD DE RIVALES y lo BIEN QUE JUEGAN. Y el planeta es el que mas
+   pesa, porque con la vista fija en 19 celdas de arco uno de 30 tiene 120 de
+   circunferencia: seis pantallas de vuelta, o sea que hay que acordarse de
+   por donde se venia. `n` es el lado de UNA CARA del cubo y el planeta son
+   seis, asi que las celdas son 6n²: 1.944 el mundo 1 y 5.400 el 5, contra
+   1.936 y 5.476 de los tableros planos de 44 y 74 que reemplazan — o sea el
+   MISMO tamano de juego, doblado sobre una esfera.
    `pat` es el dibujo de las rocas: no es decoracion, es lo que hace que dos
    mundos del mismo tamano se jueguen distinto.                             */
 const MUNDOS = [
-  { k: 'm1', nom: 'LLANO',  n: 44, pat: 'vacio',   riv: 1, per: 0.52, seg: 100 },
-  { k: 'm2', nom: 'PILARES',n: 52, pat: 'pilares', riv: 2, per: 0.64, seg: 100 },
-  { k: 'm3', nom: 'CRUCE',  n: 60, pat: 'cruz',    riv: 2, per: 0.74, seg: 105 },
-  { k: 'm4', nom: 'ISLAS',  n: 66, pat: 'islas',   riv: 3, per: 0.84, seg: 110 },
-  { k: 'm5', nom: 'ANILLO', n: 74, pat: 'anillo',  riv: 3, per: 0.93, seg: 115 },
+  { k: 'm1', nom: 'LLANO',  n: 18, pat: 'vacio',   riv: 2, per: 0.52, seg: 115 },
+  { k: 'm2', nom: 'PILARES',n: 21, pat: 'pilares', riv: 3, per: 0.64, seg: 115 },
+  { k: 'm3', nom: 'CRUCE',  n: 24, pat: 'cruz',    riv: 3, per: 0.74, seg: 121 },
+  { k: 'm4', nom: 'ISLAS',  n: 27, pat: 'islas',   riv: 4, per: 0.84, seg: 126 },
+  { k: 'm5', nom: 'ANILLO', n: 30, pat: 'anillo',  riv: 4, per: 0.93, seg: 132 },
 ];
+
+/* ── UN CUERPO MAS QUE EN EL PLANO, Y ES DE LA ESFERA ─────────────────────
+   La tabla plana iba 1·2·2·3·3 y sobre la esfera el juego se rompia: el
+   auto-jugador honesto pasaba 34 de 40. No es que la esfera de MENOS —el
+   planeta se ocupa igual, medido 87,8 % contra 85,7 % del plano— es que un
+   cierre cualquiera vale MUCHO MAS:
+
+                              plano     esfera
+     reclamo medio             2,03 %    2,52 %
+     reclamo p50               1,19      1,30   ← igual
+     reclamo p99               9,08     19,24   ← el doble
+     el mayor reclamo         16,84     51,02   ← medio planeta de un saque
+     reclamos > 20 % de N         0        17
+     tajada del bot: sigma      9,4      14,6
+
+   La mediana no se mueve y la cola se duplica, y eso es geometria y no
+   equilibrio: en un tablero PLANO una vuelta pegada al borde no encierra
+   nada, asi que hay vueltas baratas e inutiles. En una esfera NO HAY BORDE,
+   asi que toda vuelta cerrada es un circulo maximo y parte el planeta al
+   medio. Con dos cuerpos eso es una moneda al aire.
+
+   El tercer cuerpo es lo que hace que una vuelta bisectriz CUESTE algo.
+   Medido con el mayor multiplicador de meta con el que los 40 niveles se
+   pasan —el mismo criterio con el que se derivo META_A/META_B—:
+
+     plano (control)              0,590   ← y el banco reproduce su propia
+     esfera, tabla plana          0,160     derivacion: el 5-2 tapa en 0,590
+     esfera, planetas +35 %       0,206     y este archivo ya decia "con 0,58
+     esfera, +35 % y un rival     0,286     ya pierde el 5-2"
+     esfera, UN RIVAL MAS         0,601   ← mejor que el plano
+
+   Y no es que suba el promedio: los tres niveles que se caian (1-1 con 0,160,
+   3-8 con 0,285 y 3-5 con 0,312) DESAPARECEN de la lista de peores. Agrandar
+   el planeta se probo y mide PEOR, asi que queda descartado.                */
 
 /* ── EL OBJETIVO NO SE ESCRIBE: SE DERIVA DEL REPARTO ─────────────────────
    Estaba como una fraccion ABSOLUTA del tablero por mundo (0,40 a 0,55) y el
@@ -114,21 +184,34 @@ const MUNDOS = [
    el 5-2. O sea que este objetivo es el mas exigente que esta DEMOSTRADO que
    se puede cumplir, y no un numero elegido a ojo.                          */
 const OCUPA = 0.795;
+/* LA META VUELVE A LA DEL PLANO. Bajarla fue lo primero que probe y la
+   medicion lo desmintio: barriendo META_A de 0,50 a 0,22 con la misma
+   diferencia, los ganados dan 32/32/33/34/34/34/36/37 y NUNCA llegan a 40.
+   Lo que faltaba no era meta, era reloj y vidas.                             */
 const META_A = 0.55, META_B = 0.72;
+const RIV_TOPE = 4;
 const NIV_MUNDO = 8;
 const NIVELES = MUNDOS.length * NIV_MUNDO;
 
 /* La semilla sale del par (mundo, nivel) y de nada mas.                    */
-const semNivel = (m, n) => (m + 1) * 100003 + (n + 1) * 7919 + 13;
+const semNivel = (m, n) => (m + 1) * 100003 + (n + 1) * 7919 + 29;
+/* LA SAL ES 29 Y NO 13, Y ES UN RECHAZO POR TANDA. Este juego no reintenta un
+   nivel: la semilla sale del par (mundo, nivel), asi que cuando UNO sale malo
+   lo unico que se puede mover es la sal de todos. Con 13 el 2-5 quedaba sin
+   pasar, y no es estructural: con la misma cfg, 19 de 20 semillas se ganan.
+   Barridas las sales, 29 y 97 dan las dos 40 de 40 con el del azar en 0.     */
 
 /* Dentro de un mundo tambien hay curva: ocho niveles con el mismo tablero y
    los mismos rivales son el mismo nivel ocho veces.                        */
 function cfgNivel(m, n) {
   const M = MUNDOS[m], u = NIV_MUNDO > 1 ? n / (NIV_MUNDO - 1) : 0;
-  const riv = M.riv + (n >= 5 && M.riv < 3 ? 1 : 0);
+  /* Los tres ultimos niveles de un mundo suman un rival, con tope: la rampa
+     estaba escrita como `M.riv < 3`, que con la tabla nueva no se cumpliria
+     NUNCA y la curva de adentro del mundo desapareceria sin que nada falle. */
+  const riv = Math.min(RIV_TOPE, M.riv + (n >= 5 ? 1 : 0));
   return {
     mundo: m, nivel: n, pat: M.pat,
-    n: Math.round(M.n + u * 8),
+    n: Math.round(M.n + u * 4),
     riv,
     per: cl(M.per + u * 0.10, 0, 1),
     /* la parte pareja, por el multiplicador — nunca una fraccion escrita     */
@@ -147,21 +230,36 @@ function cfgNivel(m, n) {
    conviven como dos modos y no como una dificultad.
 
    CADA NUMERO SALE DE UNA CUENTA:
-   · `n` 92 son 8.464 celdas: con `OCUPA` 0,795 repartido entre ocho, la parte
-     pareja de cada uno es 9,9 % — un numero que se mueve lo suficiente como
-     para que el marcador diga algo, y un tablero lo bastante grande como para
-     que ocho cuerpos no se pisen en el primer minuto.
+   · `n` 38 son 6·38² = 8.664 celdas —los 8.464 del tablero plano de 92, con
+     el redondeo que impone que un planeta tenga seis caras iguales—: con
+     `OCUPA` 0,795 repartido entre ocho, la parte pareja de cada uno es 9,9 %
+     — un numero que se mueve lo suficiente como para que el marcador diga
+     algo, y un planeta lo bastante grande como para que ocho cuerpos no se
+     pisen en el primer minuto. Su circunferencia son 152 celdas: ocho
+     pantallas de vuelta.
    · `riv` 7, o sea ocho cuerpos contando al jugador: es el reparto del juego
      que se esta imitando y lo que hace que la tabla de posiciones tenga algo
      que ordenar.
    · sin roca (`pat:'vacio'`): la roca de la campana es lo que hace que un
-     tablero chico se juegue distinto, y en un tablero de noventa lo unico que
-     agregaria es una forma de morir que no es otro jugador.
+     planeta chico se juegue distinto, y en uno de ocho mil celdas lo unico
+     que agregaria es una forma de morir que no es otro jugador.
    · y `per` es un ARREGLO y no un numero. Siete bots con la misma cabeza son
      un bot repetido siete veces: salen todos igual de lejos, vuelven a la vez
      y la tabla queda ordenada por suerte. Con siete precisiones se reparten
      en mansos y temerarios sin escribir siete cerebros.                     */
-const ARENA_N = 92;
+/* LA ARENA CRECE PORQUE EN LA ESFERA EL MUNDO ES MAS CHICO DE LO QUE PARECE.
+   Con 38 la arena tiene 8.664 celdas —las mismas 8.464 del tablero plano— y
+   sin embargo el bot honesto moria a los 11 segundos con el 0,29 % del
+   planeta, contra 55,5 s y 7,04 % en el plano. Medidas las muertes: 393 de
+   415 son CORTES, con 60,7 celdas de estela encima. La causa no es la
+   cantidad de celdas sino el DIAMETRO: dos puntos del tablero plano llegaban
+   a estar a 130 celdas, y en una esfera el antipoda esta a 2n = 76. Ocho
+   cuerpos quedaban al doble de cerca. Barrido de n contra el bot y el del
+   azar: 38 -> 0,29 % y 0,62 · 48 -> 1,68 y 0,46 · 58 -> 2,51 y 0,26 ·
+   68 -> 2,18 y 0,18 · 78 -> 5,78 y 0,13. En 58 el honesto saca 9,7 veces lo
+   del azar, que es CIFRA POR CIFRA la separacion del plano (7,04 contra
+   0,70). Los ocho cuerpos no se tocan: son la identidad de la arena.        */
+const ARENA_N = 58;
 const ARENA_RIV = 7;
 const ARENA_PER = [0.55, 0.68, 0.74, 0.80, 0.86, 0.90, 0.95];
 /* CUANTA VENTAJA HAY QUE SACAR para que «vas primero» quiera decir algo. Un
