@@ -20,7 +20,7 @@ function nuevoM(n) {
   return {
     n, z: new Uint8Array(n * n), t: new Uint8Array(n * n),
     jug: [], f: 0, libres: n * n, cuenta: new Int32Array(NJUG + 1),
-    sucio: true, reloj: 0,
+    sucio: true, reloj: 0, arena: false,
     _vis: null, _pila: null, _bq: null,
   };
 }
@@ -31,6 +31,10 @@ function nuevoJug(id, bot) {
   return {
     id, bot: bot || null, ix: 0, iy: 0, dx: 1, dy: 0, ped: null,
     vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
+    /* `cortes` son las veces que te cortaron A VOS y `matas` las que cortaste
+       vos: dos numeros distintos que en la campana no hacia falta separar,
+       porque ahi el rival no es un marcador, es un obstaculo.              */
+    matas: 0,
     dc: null, dcSucio: true, plan: null, muerteT: 0,
   };
 }
@@ -143,6 +147,25 @@ function tajada(M, id) {
   return M.libres > 0 ? M.cuenta[id] / M.libres : 0;
 }
 
+/* ── LA TABLA DE POSICIONES ───────────────────────────────────────────────
+   Devuelve los que juegan ordenados por terreno, y el PUESTO sale de ahi y
+   no de una segunda cuenta: con dos, el numero grande del marcador y la fila
+   resaltada de la tabla pueden decir cosas distintas, que es justo el defecto
+   que nadie ve hasta que le pasa a un jugador.
+
+   EL MUERTO SIGUE EN LA TABLA, en cero. Sacarlo hace que los puestos de abajo
+   SUBAN cuando alguien se muere: uno mira el marcador, ve que paso de sexto a
+   quinto sin haber hecho nada, y el numero deja de significar.              */
+function tablaPos(M) {
+  if (M.sucio) recuenta(M);
+  const f = [];
+  for (const p of M.jug) f.push({ id: p.id, pct: M.libres > 0 ? M.cuenta[p.id] / M.libres : 0, vivo: p.vivo, matas: p.matas });
+  f.sort((a, b) => b.pct - a.pct || a.id - b.id);
+  for (let i = 0; i < f.length; i++) f[i].pos = i + 1;
+  return f;
+}
+const puestoDe = (M, id) => { const t = tablaPos(M); for (const f of t) if (f.id === id) return f.pos; return t.length; };
+
 /* ── UN PASO DE CELDA ─────────────────────────────────────────────────────
    TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
    cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
@@ -173,7 +196,7 @@ function tic(M) {
       /* el dueno de la estela es el que cae: pisar la propia es suicidio y
          pisar la ajena es un corte. Una sola regla, dos resultados.        */
       const q = M.jug[te - 1];
-      if (q && q.vivo) mata.add(q);
+      if (q && q.vivo) { mata.add(q); if (q !== p) p.matas++; }
     }
   }
   for (let a = 0; a < vivos.length; a++) for (let b = a + 1; b < vivos.length; b++)
@@ -194,6 +217,20 @@ function muere(M, p) {
   if (!p.vivo) return;
   p.vivo = false; p.cortes++;
   for (let i = 0; i < M.t.length; i++) if (M.t[i] === p.id) M.t[i] = 0;
+  /* EN LA ARENA EL TERRENO SE PIERDE ENTERO, y es la otra mitad de lo que
+     hace que cortar a alguien signifique algo. En la campana el corte cuesta
+     tiempo y posicion —el terreno espera— porque ahi la partida tiene reloj
+     y meta; sin reloj ni meta, un corte que no borra nada no cuesta nada, y
+     entonces la tabla de posiciones no se puede mover.
+
+     Y esto es tambien lo que hace que el juego respire: lo que el muerto
+     suelta vuelve a ser tablero libre y ahi vuelve a haber para todos.     */
+  if (M.arena) {
+    const z = M.z;
+    for (let i = 0; i < z.length; i++) if (z[i] === p.id) z[i] = LIBRE;
+    M.sucio = true;
+    for (const q of M.jug) q.dcSucio = true;
+  }
   p.estela = 0; p.cola.length = 0; p.fuera = false; p.plan = null;
   p.muerteT = M.reloj;
 }
@@ -244,7 +281,12 @@ function carvaCasa(M, p, rad) {
     if (roca > 0) continue;
     let d = 1e9;
     for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
-    const v = lib * 2 + Math.min(d, 30) * 3;
+    /* EN LA ARENA PESA EL HUECO Y NO LA DISTANCIA, porque carvar PISA lo que
+       haya: con ocho cuerpos renaciendo todo el tiempo, un renacimiento que
+       prefiere terreno ajeno le roba a alguien un cuadrado cada vez que lo
+       cortan. En la campana da igual —renacer casi nunca llega hasta aca,
+       porque el terreno propio no se pierde.                               */
+    const v = lib * (M.arena ? 6 : 2) + Math.min(d, 30) * 3;
     if (v > mejorV) { mejorV = v; mejor = y * n + x; }
   }
   if (mejor < 0) mejor = ((n >> 1) * n + (n >> 1));
@@ -276,6 +318,7 @@ function paso(M, dt) {
 /* ══════════════════════ EL MAPA ══════════════════════ */
 function generaMapa(cfg) {
   const n = cfg.n, M = nuevoM(n), R = azar(cfg.sem);
+  M.arena = !!cfg.arena;
   /* EL AZAR DEL CEREBRO SALE DE LA SEMILLA DEL NIVEL, y no es prolijidad:
      con `Math.random` la misma auditoria devolvia gana 3, 4, 4, 7 y 5 sobre
      el MISMO binario, asi que comparar dos ajustes no significaba nada — tres
@@ -300,7 +343,12 @@ function generaMapa(cfg) {
     const a = a0 + j * Math.PI * 2 / nj;
     let x = Math.round(cx + Math.cos(a) * rad), y = Math.round(cy + Math.sin(a) * rad);
     x = cl(x, 4, n - 5); y = cl(y, 4, n - 5);
-    const p = nuevoJug(j + 1, j === 0 ? null : { per: cfg.per });
+    /* `per` PUEDE SER UN ARREGLO, y con eso la arena tiene siete cabezas
+       distintas sin escribir siete cerebros: uno manso que sale poco, uno
+       temerario que se va al otro lado del tablero, y cinco en el medio. La
+       campana le sigue pasando un numero, asi que no cambia nada.         */
+    const per = Array.isArray(cfg.per) ? cfg.per[(j - 1) % cfg.per.length] : cfg.per;
+    const p = nuevoJug(j + 1, j === 0 ? null : { per });
     M.jug.push(p);
     for (let b = -2; b <= 2; b++) for (let a2 = -2; a2 <= 2; a2++) {
       const i = (y + b) * n + (x + a2);
@@ -651,6 +699,61 @@ function juegaSolo(m, nn, modo, sem) {
     riv: M.jug.slice(1).map(q => +(tajada(M, q.id) * 100).toFixed(1)),
   };
 }
+/* ── EL AUTO-JUGADOR DE LA ARENA ──────────────────────────────────────────
+   No mide «gana/pierde»: en la arena no hay victoria. Mide CUANTO AGUANTA,
+   cuanto llega a agarrar y en que puesto queda — y eso solo significa algo
+   comparado contra el que juega al azar. Sin ese control, «el bot llego al
+   12 %» no dice si hay una decision adentro o si el tablero se reparte solo.
+
+   EL RELOJ SE TOPA porque una corrida de arena no termina sola: un honesto
+   que no se muere nunca correria para siempre.                             */
+function juegaArena(sem, modo, segs) {
+  const cfg = cfgArena(sem == null ? 1 : sem);
+  const M = generaMapa(cfg);
+  const yo = M.jug[0];
+  yo.bot = modo === 'azar'  ? { azar: true }
+         : modo === 'ciego' ? { per: 0.80, ciego: true }
+         :                    { per: 0.80 };
+  yo.topeCortes = 1;                      /* una vida: el corte cierra       */
+  for (let j = 1; j < M.jug.length; j++) M.jug[j].topeCortes = 1e9;
+  const DT = 1 / VEL, lim = segs || 180;
+  let t = 0, mejor = 0;
+  /* EL PUESTO SE GUARDA EN EL ULTIMO TIC VIVO Y NO AL SALIR DEL BUCLE.
+     En la arena morir BORRA el terreno, asi que preguntando despues el
+     jugador lee 0% y sale ultimo SIEMPRE, por construccion: la medicion
+     estaria describiendo un estado que ella misma destruyo. Medido en la
+     semilla 1001: ultimo vivo pos 7 con 2,52%, ya muerto pos 8 con 0,00.
+     Y la misma regla vale para el panel de fin, que si no diria octavo
+     en todas las partidas.                                              */
+  let ultPos = puestoDe(M, 1), ultPct = tajada(M, 1);
+  const tope = Math.ceil(lim * VEL) + 8;
+  for (let k = 0; k < tope; k++) {
+    paso(M, DT); t += DT;
+    const pc = tajada(M, 1);
+    if (pc > mejor) mejor = pc;
+    if (!yo.vivo) break;
+    ultPct = pc; ultPos = puestoDe(M, 1);
+    if (t >= lim) break;
+  }
+  return {
+    modo, sem: cfg.sem, seg: +t.toFixed(1), vivo: yo.vivo,
+    pct: +(ultPct * 100).toFixed(2), mejor: +(mejor * 100).toFixed(2),
+    pos: ultPos, matas: yo.matas, cerros: yo.cerros,
+    riv: tablaPos(M).map(f => f.id + ':' + (f.pct * 100).toFixed(1)),
+  };
+}
+function auditaArena(modo, veces, segs) {
+  const r = [], t0 = Date.now(), N = veces || 12;
+  for (let i = 0; i < N; i++) r.push(juegaArena(1000 + i * 37, modo || 'bot', segs));
+  const med = k => +(r.reduce((a, x) => a + x[k], 0) / r.length).toFixed(2);
+  return {
+    modo: modo || 'bot', de: r.length, ms: Date.now() - t0,
+    segMedio: med('seg'), mejorMedio: med('mejor'), posMedio: med('pos'),
+    matasMedio: med('matas'), vivos: r.filter(x => x.vivo).length,
+    peorPos: Math.max(...r.map(x => x.pos)), mejorPos: Math.min(...r.map(x => x.pos)),
+  };
+}
+
 function auditaTodo(modo) {
   const r = [], t0 = Date.now();
   for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) r.push(juegaSolo(m, n, modo || 'bot'));

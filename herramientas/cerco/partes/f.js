@@ -21,11 +21,16 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const P = {
-  on: false, pausa: false, fin: null, tuto: false,
+  on: false, pausa: false, fin: null, tuto: false, arena: false,
   m: 0, nv: 0, cfg: null, M: null, yo: null,
   seg: 0, cortesVistos: 0, pct: 0, mejor: 0, casi: false, ganUlt: 0,
   giros: 0, gdx: 0, gdy: 0,
-  hCor: [], hPct: '', hMeta: '', hRel: '', hPoco: false, hNiv: '',
+  /* EL PUESTO Y LA TAJADA SE FOTOGRAFIAN EN EL ULTIMO TIC CON VIDA. En la
+     arena morir BORRA el terreno, asi que preguntando DESPUES del corte el
+     panel de fin diria «8º con 0 %» siempre —es exactamente lo que el banco
+     informo la primera vez, y no era el juego: era la medicion—.           */
+  posUlt: 8, pctUlt: 0, primero: false, tab: null,
+  hCor: [], hPct: '', hMeta: '', hRel: '', hPoco: false, hNiv: '', hTab: '',
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
@@ -108,30 +113,36 @@ function entInit() {
 }
 
 /* ══════════════════════ LA PARTIDA ══════════════════════ */
-function partidaArranca(m, nv, tuto) {
-  P.m = m; P.nv = nv; P.tuto = !!tuto;
+function partidaArranca(m, nv, tuto, arena) {
+  P.m = m; P.nv = nv; P.tuto = !!tuto; P.arena = !!arena;
   /* entrar a un nivel de verdad apaga el tutorial, y va ACA porque esta es la
      unica puerta por la que se entra a una partida —`juega`, el boton de
      siguiente, la sonda—. En `juega` sola, la proxima puerta que se agregue
      entra con la pista del tutorial puesta encima del nivel 1-1.           */
   if (!P.tuto) { TUT.on = false; cl2($('tSalt'), 'on', false); cl2($('pista'), 'on', false); }
-  P.cfg = tuto ? tutCfg() : cfgNivel(m, nv);
+  P.cfg = P.arena ? cfgArena() : (tuto ? tutCfg() : cfgNivel(m, nv));
   P.M = generaMapa(P.cfg);
   P.yo = P.M.jug[0];
   /* el tope de cortes es lo que hace que la tercera vida sea la ultima: sin
-     el, `paso` revive para siempre y las vidas serian un numero que baja.  */
-  P.yo.topeCortes = P.tuto ? 1e9 : VIDAS;
+     el, `paso` revive para siempre y las vidas serian un numero que baja.
+     EN LA ARENA ES UNA, y es la mitad de por que la arena es otro juego: el
+     corte no cuesta terreno, cuesta la corrida entera.                     */
+  P.yo.topeCortes = P.tuto ? 1e9 : (P.arena ? 1 : VIDAS);
   P.seg = P.cfg.seg;
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
   P.giros = 0; P.gdx = P.yo.dx; P.gdy = P.yo.dy;
-  P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false; P.hNiv = '';
+  P.posUlt = 1 + P.cfg.riv; P.pctUlt = 0; P.primero = false; P.tab = null;
+  P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false;
+  P.hNiv = ''; P.hTab = '';
   vpNuevo(P.M);
   hudArma();
   hudPinta(true);
+  cl2($('velo'), 'off', false);
   cl2($('hud'), 'off', false);
   cl2($('pie'), 'off', P.tuto);
   cl2($('mini'), 'off', P.tuto);
+  cl2($('tabla'), 'off', !P.arena);
   auAbre(0);
   return P.M;
 }
@@ -159,6 +170,13 @@ function partidaPaso(dt) {
     P.cortesVistos = yo.cortes;
     son('corte');
     hudPinta(true);
+    /* EN LA ARENA EL PRIMER CORTE CIERRA, y se corta ACA y no mas abajo: el
+       `return` tiene que ganarle a la lectura de la tajada, porque el terreno
+       ya se libero y leerlo despues del corte devuelve cero.               */
+    /* Y SIN AVISO: «SIN VIDAS» mentiria, porque en la arena no hay vidas que
+       gastar —hay una y es la corrida—. Que el cartel no quede debajo del
+       panel lo resuelve `avisaCorta`, que corre desde `termina`.            */
+    if (P.arena) { termina('arena'); return; }
     if (!P.tuto && yo.cortes >= VIDAS) { avisa(TX('avSinVidas')); termina('vidas'); return; }
     avisa(TX('avCorte'));
   }
@@ -166,6 +184,33 @@ function partidaPaso(dt) {
   P.pct = tajada(M, 1);
   if (P.pct > P.mejor) P.mejor = P.pct;
   auAbre(P.cfg.meta > 0 ? P.pct / P.cfg.meta : 0);
+
+  if (P.arena) {
+    /* la foto del ultimo tic con vida: el puesto y la tajada que el panel de
+       fin va a mostrar. Ver el comentario de `P.posUlt`.                   */
+    const tb = tablaPos(M);
+    P.tab = tb;                       /* `hudArena` la reusa: recontar dos veces por cuadro es
+                                         barrer el tablero entero de gusto.                    */
+    P.pctUlt = P.pct;
+    P.posUlt = tb.findIndex((f) => f.id === 1) + 1;
+    /* EL RELOJ SUBE EN VEZ DE BAJAR: acá no hay plazo, así que lo único que
+       un número de tiempo puede decir es cuánto aguantaste — que es
+       literalmente el marcador de este modo.                               */
+    P.seg += dt;
+    /* IR PRIMERO SE AVISA UNA SOLA VEZ. Con el aviso cada vez que se cruza el
+       puesto, en una pelea pareja el cartel parpadea varias veces por segundo
+       y deja de querer decir algo.                                         */
+    /* Y PIDE VENTAJA DE VERDAD, no ganar el desempate. `tablaPos` desempata
+       por id y el jugador es el 1, asi que en el primer cuadro —con los ocho
+       en 0,3 %— el cartel salia SIEMPRE: un «vas primero» que aparece antes
+       de haber hecho nada no dice nada. Con medio cuerpo de ventaja sobre el
+       segundo, el cartel vuelve a significar algo.                          */
+    const vent = P.posUlt === 1 ? tb[0].pct - tb[1].pct : 0;
+    if (!P.primero && vent > ARENA_VENT) { P.primero = true; son('casi'); avisa(TX('avPrimero')); }
+    else if (P.primero && P.posUlt > 2) P.primero = false;
+    hudPinta(false);
+    return;
+  }
 
   if (!P.tuto) {
     if (!P.casi && P.pct >= P.cfg.meta * 0.82 && P.pct < P.cfg.meta) {
@@ -180,6 +225,7 @@ function partidaPaso(dt) {
 
 function termina(fin) {
   P.fin = fin;
+  avisaCorta();
   const perf = fin === 'gana' && P.yo.cortes === 0;
   if (fin === 'gana') {
     son(perf ? 'perf' : 'gana');
@@ -192,6 +238,20 @@ function termina(fin) {
   auAgacha(0.25, 2.2);
   hudPinta(true);
   if (P.tuto) { tutFin(); return; }
+  if (P.arena) {
+    /* EL RECORD ES EL PICO Y NO LA TAJADA DEL FINAL, y es la unica lectura
+       honesta: al morir el terreno se libera, asi que la del final es cero
+       por construccion. Lo que uno recuerda de una corrida es cuanto llego a
+       tener, no cuanto le quedaba en el ultimo cuadro.                     */
+    const rec = P.mejor > (PROG.rec || 0);
+    if (rec) PROG.rec = P.mejor;
+    if (P.yo.matas > (PROG.recB || 0)) PROG.recB = P.yo.matas;
+    guardaProg();
+    finPon({ tuto: false, arena: true, pos: P.posUlt, pct: P.mejor,
+             matas: P.yo.matas, seg: P.seg, rec, recAnt: PROG.rec });
+    verPanel('pFin');
+    return;
+  }
   finPon({ tuto: false, fin, perf, pct: P.pct, meta: P.cfg.meta, cortes: P.yo.cortes, m: P.m, nv: P.nv });
   verPanel('pFin');
 }
@@ -213,9 +273,11 @@ function partidaSale() {
      encima. Apagarlo en el unico sitio por el que pasan los tres es la unica
      forma de que el proximo camino que se agregue no lo vuelva a perder.     */
   TUT.on = false;
+  cl2($('velo'), 'off', true);
   cl2($('hud'), 'off', true);
   cl2($('pie'), 'off', true);
   cl2($('mini'), 'off', true);
+  cl2($('tabla'), 'off', true);
   cl2($('pista'), 'on', false);
   cl2($('tSalt'), 'on', false);
   auAgacha(1); auAbre(0);
@@ -240,6 +302,21 @@ function hudArma() {
   const v = $('vidas');
   v.innerHTML = '';
   P.hCor = [];
+  const t = $('tabla');
+  t.innerHTML = '';
+  P.hTab = '';
+  if (P.arena) {
+    /* LAS OCHO FILAS SE ARMAN UNA VEZ Y DESPUES SOLO SE ESCRIBEN. Rehaciendo
+       el HTML por cuadro son ocho nodos nuevos sesenta veces por segundo para
+       mostrar lo mismo, y encima el navegador rehace el layout en cada una. */
+    for (let i = 0; i < 1 + P.cfg.riv; i++) {
+      const f = document.createElement('div');
+      f.className = 'tf';
+      f.innerHTML = '<span class="tn"></span><i class="tc"></i><span class="tp"></span>';
+      t.appendChild(f);
+    }
+    return;   /* una vida no es un corazon que se gasta: es la corrida entera */
+  }
   if (P.tuto) return;
   for (let i = 0; i < VIDAS; i++) {
     const d = document.createElement('div');
@@ -269,8 +346,10 @@ function hudPinta(todo) {
   }
   if (todo) {
     $('meta').style.left = (cl(cfg.meta, 0, 1) * 100).toFixed(2) + '%';
-    $('meta').style.display = P.tuto ? 'none' : 'block';
+    $('meta').style.display = (P.tuto || P.arena) ? 'none' : 'block';
   }
+
+  if (P.arena) { hudArena(todo); return; }
 
   if (!P.tuto) {
     const pc = Math.round(P.pct * 100) + '%';
@@ -302,6 +381,47 @@ function hudPinta(todo) {
   }
 }
 
+/* ── EL MARCADOR DE LA ARENA ──────────────────────────────────────────────
+   Los dos numeros del pie cambian de significado y no de sitio: donde iba la
+   meta va el puesto, y donde iba el reloj van las bajas. Reusar los mismos
+   elementos no es ahorro de HTML — es que quien juega ya sabe DONDE mirar, y
+   moverle los numeros de lugar entre un modo y otro le cuesta esa costumbre.  */
+function hudArena(todo) {
+  const M = P.M;
+  const t = P.tab || tablaPos(M);
+  const pc = (P.pct * 100).toFixed(1) + '%';
+  if (pc !== P.hPct) { $('pct').firstElementChild.textContent = pc; P.hPct = pc; }
+  if (todo) $('pctR').textContent = TX('terreno');
+
+  const ba = String(P.yo.matas);
+  if (ba !== P.hRel) { $('reloj').firstElementChild.textContent = ba; P.hRel = ba; }
+  if (todo) { $('relR').textContent = TX('bajas'); cl2($('reloj'), 'poco', false); P.hPoco = false; }
+
+  const ps = TX('pos', P.posUlt);
+  if (ps !== P.hNiv) {
+    $('nrN').textContent = ps;
+    $('nrM').textContent = TX('puesto');
+    P.hNiv = ps;
+  }
+
+  /* LA TABLA SE ESCRIBE SOLO CUANDO CAMBIA, y la firma es el texto entero:
+     con ocho filas a sesenta cuadros por segundo son casi mil quinientas
+     escrituras de DOM por segundo para mostrar el mismo reparto.           */
+  const fs = $('tabla').children;
+  let firma = '';
+  for (let i = 0; i < fs.length && i < t.length; i++) firma += t[i].id + ':' + Math.round(t[i].pct * 1000) + (t[i].vivo ? '' : 'x') + '|';
+  if (firma === P.hTab) return;
+  P.hTab = firma;
+  for (let i = 0; i < fs.length && i < t.length; i++) {
+    const f = fs[i], d = t[i], c = COLS[d.id];
+    f.children[0].textContent = String(d.pos);
+    f.children[1].style.background = c ? c.t : 'transparent';
+    f.children[2].textContent = (d.pct * 100).toFixed(1) + '%';
+    cl2(f, 'yo', d.id === 1);
+    cl2(f, 'muerto', !d.vivo);
+  }
+}
+
 /* ── el aviso corto ── */
 let AV_T = 0;
 function avisa(txt, ms) {
@@ -311,6 +431,14 @@ function avisa(txt, ms) {
   clearTimeout(AV_T);
   AV_T = setTimeout(() => cl2(a, 'on', false), ms || 900);
 }
+/* Y SE LO BAJA AL ABRIR EL PANEL, desde `termina` y de ningun otro sitio. El
+   aviso flota en la franja del medio, que es justo donde el panel escribe el
+   subtitulo, y el panel es translucido a proposito: cualquier cartel que
+   siguiera puesto se lee POR DETRAS del texto del final. Fotografiado dos
+   veces, con dos avisos distintos —«SIN VIDAS» primero y «¡TIERRA!» despues—,
+   asi que la cuenta no es «sacar el aviso que molesta» sino que el que abre el
+   panel baje el que haya.                                                   */
+function avisaCorta() { clearTimeout(AV_T); cl2($('aviso'), 'on', false); }
 
 /* ── el panel de fin ──
    SE PINTA DESDE UNA FUNCION Y NO DESDE EL SITIO QUE GANO: cambiar de idioma
@@ -324,6 +452,25 @@ function finPon(o) { FIN = o; finPinta(); }
 function finPinta() {
   if (!FIN) return;
   const f = FIN;
+  if (f.arena) {
+    $('fTit').textContent = TX('arenaFin');
+    $('fSub').textContent = TX('arenaFinSub', f.pos);
+    /* EL SINGULAR ES UNA FRASE ENTERA Y NO UN SUFIJO: en ingles son «kill» y
+       «kills», dos palabras distintas en la tabla. Es la leccion que la vuelta
+       165 ya habia pagado con «1 cortes», y volvio con otro contador.       */
+    $('fDatos').textContent = TX(f.matas === 1 ? 'arenaD1' : 'arenaD',
+                                 (f.pct * 100).toFixed(1), f.matas, fmtReloj(f.seg))
+      + ' · ' + (f.rec ? TX('arenaNuevo') : TX('arenaRec', (f.recAnt * 100).toFixed(1)));
+    $('fSig').style.display = '';
+    $('fSig').textContent = TX('arenaOtra');
+    /* REINTENTAR NO EXISTE ACA, y no es un olvido: una arena no se «reintenta»
+       —no hay un nivel al que volver— asi que el boton y OTRA VEZ harian
+       exactamente lo mismo con dos nombres distintos.                       */
+    $('fRe').style.display = 'none';
+    $('fMenu').textContent = TX('menuCorto');
+    return;
+  }
+  $('fRe').style.display = '';
   if (f.tuto) {
     $('fTit').textContent = TX('tutGana');
     $('fSub').textContent = TX('tutGanaSub');

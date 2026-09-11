@@ -32,6 +32,30 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
    traducirse y tiene que salir nitido en cualquier densidad. Y todo lo que
    es texto esta en la misma columna de arriba o en la de abajo, asi el
    solapamiento no depende de acordarse de un pixel.                        */
+/* ══ EL VELO DE LAS DOS FRANJAS ══════════════════════════════════════════
+   EL HUD SE DIBUJA ENCIMA DEL TABLERO Y EL TABLERO SE LLENA DE COLOR. Medido
+   el contraste de cada tinta contra los ocho colores de cuerpo: sobre el
+   tablero vacio se lee todo (6,62 · 15,63 · 8,63) y sobre territorio —de
+   quien sea— NO SE LEE NADA: la mejor casilla de la matriz da 3,10 y la peor
+   1,00, que es el `10,5 %` en `--yo` encima del territorio propio, o sea
+   exactamente el mismo color. Y eso NO se arregla eligiendo otra tinta: hay
+   ocho cuerpos repartidos cada 45 grados de tono, asi que cualquier color que
+   gane contra uno pierde contra su complementario. La unica salida es
+   respaldo.
+   EL 0,70 ESTA MEDIDO Y NO ELEGIDO: con el velo al color del fondo, el peor
+   caso del numero grande pasa de 1,00 a 4,12 y el de los rotulitos de 1,13 a
+   3,17. Por debajo de 0,62 el numero grande no llega a 3,3.
+   Y VA EN DEGRADADO, cerrado en el canto y abierto hacia adentro: las dos
+   franjas suman el 14 % de la pantalla, y el medio —que es donde se juega— no
+   se toca. Es el mismo reparto que el velo del menu.
+   EN LA CAMPANA NO HACIA FALTA POR SUERTE GEOMETRICA: dos a cuatro cuerpos
+   sobre un tablero chico dejan el HUD casi siempre sobre fondo vacio. Con
+   ocho cuerpos y 92 de lado, el HUD pasa la partida encima de territorio. */
+#velo{position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(to bottom, rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 52px, rgba(16,20,29,0) 106px),
+    linear-gradient(to top,    rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 58px, rgba(16,20,29,0) 118px)}
+#velo.off{display:none}
 #hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 9px) 13px 0;
   z-index:3;pointer-events:none;display:flex;flex-direction:column;gap:7px}
 #hud.off{display:none}
@@ -83,6 +107,33 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
   border:1.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.28);
   image-rendering:pixelated}
 #mini.off{display:none}
+
+/* ── LA TABLA DE POSICIONES (solo arena) ──────────────────────────────────
+   EL 148 SALE DE LA MISMA CUENTA QUE EL 66 DEL MAPA: 66 de arranque + 74 de
+   alto + 8 de aire, o sea el mismo hueco que hay entre la barra y el mapa. Y
+   mide 74 de ancho para caer en la misma columna: dos cajas apiladas con
+   anchos distintos se leen a dos cosas sueltas y no a una columna de datos.
+
+   OCHO FILAS SIEMPRE, tambien las de los muertos: sacando al que se murio,
+   los puestos de abajo SUBEN sin que nadie haya hecho nada —y el alto de la
+   caja cambiaria en el medio de la partida—. El muerto se atenua y se queda. */
+#tabla{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 148px);
+  width:74px;z-index:3;pointer-events:none;border-radius:8px;padding:5px 6px;
+/* EL RESPALDO ESTA MEDIDO: con .28 las filas de los rivales —que van en
+     `--tinta2`— dan 1,11 de contraste contra el peor de los ocho colores de
+     cuerpo, o sea que la tabla se borra en cuanto queda encima de territorio.
+     Con .76 el peor caso pasa a 4,71 y la fila propia a 11,12. La tabla mide
+     74 px de 412 y vive en la esquina: no tapa nada que se juegue.        */
+  background:rgba(0,0,0,.76);border:1.5px solid rgba(255,255,255,.14);
+  display:flex;flex-direction:column;gap:3px}
+#tabla.off{display:none}
+#tabla .tf{display:flex;align-items:center;gap:4px;font-size:8.5px;font-weight:800;
+  letter-spacing:.02em;color:var(--tinta2);line-height:11px;height:11px}
+#tabla .tf.yo{color:var(--tinta)}
+#tabla .tf.muerto{opacity:.34}
+#tabla .tn{width:9px;text-align:right;opacity:.7;font-variant-numeric:tabular-nums}
+#tabla .tc{width:6px;height:6px;border-radius:2px;flex:none}
+#tabla .tp{flex:1;text-align:right;font-variant-numeric:tabular-nums}
 
 /* ── pie ── */
 #pie{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 11px);
@@ -140,6 +191,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
 .bt.sec:active{transform:none;background:rgba(255,255,255,.08)}
 .col{display:flex;flex-direction:column;gap:11px;width:100%;max-width:290px}
 .fila{display:flex;gap:10px;width:100%;max-width:290px}
+/* EL PIE VA PEGADO A SU BOTON, y por eso lleva margen negativo: `.col` reparte
+   once pixeles parejos, asi que sin esto la linea queda a la misma distancia
+   del boton de arriba que del de abajo y no se sabe de cual habla.          */
+.btSub{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tinta2);
+  text-align:center;opacity:.66;margin:-6px 0 1px}
 .fila .bt{flex:1}
 
 /* la marca: un cuadrado cerrandose sobre si mismo, que es el juego entero */
@@ -196,16 +252,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
 <div id="marco">
   <canvas id="cv"></canvas>
 
+  <div id="velo" class="off"></div>
+
   <div id="hud" class="off">
     <div id="fila1">
       <div id="vidas"></div>
       <div id="nivRot"><b id="nrM">MUNDO 1</b><span id="nrN">NIVEL 1-1</span></div>
       <button id="bPausa" aria-label="pausa"><i></i><i></i></button>
     </div>
-    <div id="barra"><i></i><i></i><i></i><i></i><div id="meta"></div></div>
+    <div id="barra"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><div id="meta"></div></div>
   </div>
 
   <canvas id="mini" class="off" width="74" height="74"></canvas>
+  <div id="tabla" class="off"></div>
 
   <div id="pista"></div>
   <button id="tSalt" class="chip">SALTEAR</button>
@@ -243,13 +302,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
     </div>
     <h1>CERCO</h1>
     <div class="sub" id="mSub"></div>
-    <div class="col" style="margin-top:22px">
-      <button class="bt" id="mJugar">JUGAR</button>
+    <div class="col" style="margin-top:20px">
+      <button class="bt" id="mJugar">ARENA</button>
+      <div class="btSub" id="mJugarSub"></div>
+      <button class="bt sec" id="mNiv">CAMPAÑA</button>
+      <div class="btSub" id="mNivSub"></div>
       <div class="fila">
-        <button class="bt sec" id="mNiv">NIVELES</button>
         <button class="bt sec" id="mTuto">CÓMO SE JUEGA</button>
+        <button class="bt sec" id="mAj">AJUSTES</button>
       </div>
-      <button class="bt sec" id="mAj">AJUSTES</button>
     </div>
     <div class="pie" id="mPie" style="margin-top:20px"></div>
   </div>
@@ -348,7 +409,11 @@ const DNOM = ['der', 'izq', 'abajo', 'arriba'];
    inventar combinaciones y el dia que entre un cuarto rival no alcanzan.   */
 const LIBRE = 0;      /* z: nadie                                           */
 const PIEDRA = 9;     /* z: roca — bloquea, mata y corta el relleno         */
-const NJUG = 4;       /* el jugador es el 1; los rivales van del 2 al 4     */
+const NJUG = 8;       /* el jugador es el 1; los rivales van del 2 al 8     */
+/* OCHO Y NO CUATRO, Y EL TECHO NO ES ARBITRARIO: `PIEDRA` vale 9, o sea que
+   los identificadores 1..8 son exactamente los que entran por debajo de la
+   roca sin tener que ensanchar `z` ni `t` a un tipo mas grande. La campana
+   sigue usando de 2 a 4 y no paga un byte por los cuatro que no siembra.   */
 
 /* ── LOS COLORES ──────────────────────────────────────────────────────────
    Tres por jugador y no uno: el terreno tiene que dejarse mirar sin cansar,
@@ -361,6 +426,17 @@ const COLS = [
   { z: '#0e5148', t: '#2fc2a8', c: '#b6f2e6' },   /* 2 · verde agua     */
   { z: '#3d2a6b', t: '#9a6bf2', c: '#d9c8ff' },   /* 3 · violeta        */
   { z: '#6b1f3a', t: '#f0578f', c: '#ffc8dc' },   /* 4 · rosa           */
+  /* LOS CUATRO DE LA ARENA SE REPARTEN EL CIRCULO, no se eligen a gusto: con
+     ocho cuerpos en un tablero de noventa, lo unico que distingue a uno de
+     otro en el minimapa es un punto de tres pixeles. Los tonos van cada 45
+     grados desde el ambar del jugador (35 · 80 · 125 · 170 · 215 · 260 ·
+     305 · 350), asi que dos vecinos nunca comparten familia. El rojo se
+     descarto a proposito: a ese tamano se confunde con el ambar, que es el
+     unico color que TIENE que encontrarse de una ojeada.                   */
+  { z: '#4d5e21', t: '#b3d93f', c: '#e6f5b3' },   /* 5 · verde limon    */
+  { z: '#1c4a24', t: '#33cc47', c: '#b8f2c2' },   /* 6 · verde          */
+  { z: '#1e3d6b', t: '#4d8ef5', c: '#bdd8fd' },   /* 7 · azul           */
+  { z: '#60245b', t: '#e755db', c: '#f9bdf5' },   /* 8 · magenta        */
 ];
 const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
 
@@ -372,6 +448,16 @@ const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
    3,5 s. Eso ademas fija el ritmo del pulgar: una curva se puede pedir cada
    185 ms, que es lo que tarda el cuerpo en cambiar de celda.               */
 const VISTA = 19;
+/* EN LA ARENA LA VISTA SE ABRE CON EL TERRENO, y el numero sale de la misma
+   derivacion de arriba y no del gusto: lo que uno tiene que seguir viendo es
+   el BORDE de lo propio, y el lado de un territorio crece como la RAIZ de su
+   area — por eso el interpolador va con `sqrt(pct/VISTA_SAT)` y no lineal.
+   Satura en la tajada pareja (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va
+   ganando y abrir mas solo achica la cabeza. Y el tope son 34 celdas porque
+   en 412 px eso deja la celda en 12,1 px — por debajo de diez, la cabeza y
+   la estela dejan de distinguirse, que es lo unico que este juego pide ver. */
+const VISTA_MAX = 34;
+const VISTA_SAT = 0.10;
 const VEL = 5.4;
 const VIDAS = 3;
 
@@ -434,6 +520,52 @@ function cfgNivel(m, n) {
   };
 }
 
+/* ══════════════════════ LA ARENA ══════════════════════
+   ES EL OTRO JUEGO, Y CONTRADICE A PROPOSITO LO DE ARRIBA. La campana
+   deriva un objetivo del reparto justamente para que se pueda TERMINAR; la
+   arena no se termina: no hay meta, no hay reloj, hay una vida y se juega
+   hasta que a uno lo cortan. Las dos cosas no se pueden promediar —una pide
+   un tablero chico con un final y la otra uno grande sin final— asi que
+   conviven como dos modos y no como una dificultad.
+
+   CADA NUMERO SALE DE UNA CUENTA:
+   · `n` 92 son 8.464 celdas: con `OCUPA` 0,795 repartido entre ocho, la parte
+     pareja de cada uno es 9,9 % — un numero que se mueve lo suficiente como
+     para que el marcador diga algo, y un tablero lo bastante grande como para
+     que ocho cuerpos no se pisen en el primer minuto.
+   · `riv` 7, o sea ocho cuerpos contando al jugador: es el reparto del juego
+     que se esta imitando y lo que hace que la tabla de posiciones tenga algo
+     que ordenar.
+   · sin roca (`pat:'vacio'`): la roca de la campana es lo que hace que un
+     tablero chico se juegue distinto, y en un tablero de noventa lo unico que
+     agregaria es una forma de morir que no es otro jugador.
+   · y `per` es un ARREGLO y no un numero. Siete bots con la misma cabeza son
+     un bot repetido siete veces: salen todos igual de lejos, vuelven a la vez
+     y la tabla queda ordenada por suerte. Con siete precisiones se reparten
+     en mansos y temerarios sin escribir siete cerebros.                     */
+const ARENA_N = 92;
+const ARENA_RIV = 7;
+const ARENA_PER = [0.55, 0.68, 0.74, 0.80, 0.86, 0.90, 0.95];
+/* CUANTA VENTAJA HAY QUE SACAR para que «vas primero» quiera decir algo. Un
+   cuadrado de arranque son 0,3 % del tablero y la parte pareja de ocho es
+   9,9 %: con 0,8 % ya se sacaron dos cuerpos y medio de diferencia, que es
+   una ventaja que se ve en la tabla. Sin este numero el cartel sale en el
+   primer cuadro, porque `tablaPos` desempata por id y el jugador es el 1.  */
+const ARENA_VENT = 0.008;
+
+function cfgArena(sem) {
+  return {
+    mundo: -1, nivel: -1, pat: 'vacio',
+    n: ARENA_N, riv: ARENA_RIV, per: ARENA_PER,
+    meta: 0, seg: 0, arena: true,
+    /* LA SEMILLA ES AL AZAR EN EL JUEGO Y FIJA EN LA AUDITORIA, y esa
+       diferencia es la que hace que las dos cosas sirvan: una partida
+       reproducible no se siente una arena, y un banco que no se repite no
+       mide nada.                                                           */
+    sem: sem == null ? (Math.random() * 2147483647) | 0 : (sem | 0),
+  };
+}
+
 /* ══════════════════════ IDIOMAS ══════════════════════ */
 const LANGS = {
   es: {
@@ -466,6 +598,18 @@ const LANGS = {
     tut5: 'y ojo: si te pisan la estela, te cortan',
     tutGana: '¡ESO ES TODO!', tutGanaSub: 'ya sabés jugar',
     tutDatos: 'salir, rodear y volver · nada más', salt: 'SALTEAR',
+    /* ── LA ARENA ──
+       «bajas» y no «cortes»: en este juego «corte» ya quiere decir la vez que
+       te cortan a vos, y usar la misma palabra para las dos puntas del mismo
+       hecho deja un marcador que nadie puede leer.                          */
+    arena: 'ARENA', arenaSub: 'ocho cuerpos · una vida · sin final',
+    campana: 'CAMPAÑA', campanaSub: '5 mundos · 40 niveles',
+    bajas: 'BAJAS', puesto: 'PUESTO', tabla: 'POSICIONES', terreno: 'DEL TABLERO',
+    arenaFin: 'TE CORTARON', arenaFinSub: '{0}º en la tabla de ocho',
+    pos: '{0}º',
+    arenaD: '{0}% · {1} bajas · {2}', arenaD1: '{0}% · 1 baja · {2}',
+    arenaRec: 'RÉCORD {0}%', arenaNuevo: '¡RÉCORD!',
+    arenaOtra: 'OTRA VEZ', avPrimero: '¡VAS PRIMERO!',
   },
   en: {
     sub: 'go out, loop around and come back · what you enclose is yours',
@@ -495,6 +639,14 @@ const LANGS = {
     tut5: 'careful: step on your trail and they cut you',
     tutGana: "THAT'S ALL!", tutGanaSub: 'you know how to play',
     tutDatos: 'out, around and back · nothing else', salt: 'SKIP',
+    arena: 'ARENA', arenaSub: 'eight bodies · one life · no finish line',
+    campana: 'CAMPAIGN', campanaSub: '5 worlds · 40 levels',
+    bajas: 'KILLS', puesto: 'RANK', tabla: 'STANDINGS', terreno: 'OF THE BOARD',
+    arenaFin: 'YOU GOT CUT', arenaFinSub: '#{0} out of eight',
+    pos: '#{0}',
+    arenaD: '{0}% · {1} kills · {2}', arenaD1: '{0}% · 1 kill · {2}',
+    arenaRec: 'BEST {0}%', arenaNuevo: 'NEW BEST!',
+    arenaOtra: 'AGAIN', avPrimero: "YOU'RE FIRST!",
   },
   pt: {
     sub: 'saia, cerque e volte · o que ficar dentro é seu',
@@ -524,6 +676,14 @@ const LANGS = {
     tut5: 'cuidado: se pisarem seu rastro, te cortam',
     tutGana: 'É SÓ ISSO!', tutGanaSub: 'você já sabe jogar',
     tutDatos: 'sair, cercar e voltar · nada mais', salt: 'PULAR',
+    arena: 'ARENA', arenaSub: 'oito corpos · uma vida · sem fim',
+    campana: 'CAMPANHA', campanaSub: '5 mundos · 40 níveis',
+    bajas: 'ABATES', puesto: 'POSIÇÃO', tabla: 'CLASSIFICAÇÃO', terreno: 'DO TABULEIRO',
+    arenaFin: 'TE CORTARAM', arenaFinSub: '{0}º entre oito',
+    pos: '{0}º',
+    arenaD: '{0}% · {1} abates · {2}', arenaD1: '{0}% · 1 abate · {2}',
+    arenaRec: 'RECORDE {0}%', arenaNuevo: 'NOVO RECORDE!',
+    arenaOtra: 'DE NOVO', avPrimero: 'VOCÊ ESTÁ EM 1º!',
   },
 };
 let LANG = 'en';
@@ -540,7 +700,11 @@ const nomMundo = m => (LANGS[LANG].mundos || LANGS.es.mundos)[m] || TX('mundo', 
 
 /* ══════════════════════ EL GUARDADO ══════════════════════
    En una ventana privada `localStorage` TIRA: todo va envuelto.            */
-const PROG = { lang: null, hechos: {}, vol: 0.45, fx: 0.8, cal: 1, visto: 0, ult: 0 };
+const PROG = { lang: null, hechos: {}, vol: 0.45, fx: 0.8, cal: 1, visto: 0, ult: 0,
+  /* EL RECORD DE LA ARENA ES SU UNICO PROGRESO. No hay niveles que abrir ni
+     nada que desbloquear: lo unico que queda de una corrida es hasta donde
+     se llego, y sin guardarlo la arena no tiene con que compararse.        */
+  rec: 0, recB: 0 };
 function cargaProg() {
   try {
     const s = localStorage.getItem('cerco');
@@ -558,7 +722,7 @@ function cargaProg() {
 }
 function guardaProg() { try { PROG.lang = LANG; localStorage.setItem('cerco', JSON.stringify(PROG)); } catch (e) {} }
 function borraProg() {
-  PROG.hechos = {}; PROG.visto = 0; PROG.ult = 0;
+  PROG.hechos = {}; PROG.visto = 0; PROG.ult = 0; PROG.rec = 0; PROG.recB = 0;
   try { localStorage.removeItem('cerco'); } catch (e) {}
 }
 const idNiv = (m, n) => m * NIV_MUNDO + n;
@@ -601,7 +765,7 @@ function nuevoM(n) {
   return {
     n, z: new Uint8Array(n * n), t: new Uint8Array(n * n),
     jug: [], f: 0, libres: n * n, cuenta: new Int32Array(NJUG + 1),
-    sucio: true, reloj: 0,
+    sucio: true, reloj: 0, arena: false,
     _vis: null, _pila: null, _bq: null,
   };
 }
@@ -612,6 +776,10 @@ function nuevoJug(id, bot) {
   return {
     id, bot: bot || null, ix: 0, iy: 0, dx: 1, dy: 0, ped: null,
     vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
+    /* `cortes` son las veces que te cortaron A VOS y `matas` las que cortaste
+       vos: dos numeros distintos que en la campana no hacia falta separar,
+       porque ahi el rival no es un marcador, es un obstaculo.              */
+    matas: 0,
     dc: null, dcSucio: true, plan: null, muerteT: 0,
   };
 }
@@ -724,6 +892,25 @@ function tajada(M, id) {
   return M.libres > 0 ? M.cuenta[id] / M.libres : 0;
 }
 
+/* ── LA TABLA DE POSICIONES ───────────────────────────────────────────────
+   Devuelve los que juegan ordenados por terreno, y el PUESTO sale de ahi y
+   no de una segunda cuenta: con dos, el numero grande del marcador y la fila
+   resaltada de la tabla pueden decir cosas distintas, que es justo el defecto
+   que nadie ve hasta que le pasa a un jugador.
+
+   EL MUERTO SIGUE EN LA TABLA, en cero. Sacarlo hace que los puestos de abajo
+   SUBAN cuando alguien se muere: uno mira el marcador, ve que paso de sexto a
+   quinto sin haber hecho nada, y el numero deja de significar.              */
+function tablaPos(M) {
+  if (M.sucio) recuenta(M);
+  const f = [];
+  for (const p of M.jug) f.push({ id: p.id, pct: M.libres > 0 ? M.cuenta[p.id] / M.libres : 0, vivo: p.vivo, matas: p.matas });
+  f.sort((a, b) => b.pct - a.pct || a.id - b.id);
+  for (let i = 0; i < f.length; i++) f[i].pos = i + 1;
+  return f;
+}
+const puestoDe = (M, id) => { const t = tablaPos(M); for (const f of t) if (f.id === id) return f.pos; return t.length; };
+
 /* ── UN PASO DE CELDA ─────────────────────────────────────────────────────
    TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
    cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
@@ -754,7 +941,7 @@ function tic(M) {
       /* el dueno de la estela es el que cae: pisar la propia es suicidio y
          pisar la ajena es un corte. Una sola regla, dos resultados.        */
       const q = M.jug[te - 1];
-      if (q && q.vivo) mata.add(q);
+      if (q && q.vivo) { mata.add(q); if (q !== p) p.matas++; }
     }
   }
   for (let a = 0; a < vivos.length; a++) for (let b = a + 1; b < vivos.length; b++)
@@ -775,6 +962,20 @@ function muere(M, p) {
   if (!p.vivo) return;
   p.vivo = false; p.cortes++;
   for (let i = 0; i < M.t.length; i++) if (M.t[i] === p.id) M.t[i] = 0;
+  /* EN LA ARENA EL TERRENO SE PIERDE ENTERO, y es la otra mitad de lo que
+     hace que cortar a alguien signifique algo. En la campana el corte cuesta
+     tiempo y posicion —el terreno espera— porque ahi la partida tiene reloj
+     y meta; sin reloj ni meta, un corte que no borra nada no cuesta nada, y
+     entonces la tabla de posiciones no se puede mover.
+
+     Y esto es tambien lo que hace que el juego respire: lo que el muerto
+     suelta vuelve a ser tablero libre y ahi vuelve a haber para todos.     */
+  if (M.arena) {
+    const z = M.z;
+    for (let i = 0; i < z.length; i++) if (z[i] === p.id) z[i] = LIBRE;
+    M.sucio = true;
+    for (const q of M.jug) q.dcSucio = true;
+  }
   p.estela = 0; p.cola.length = 0; p.fuera = false; p.plan = null;
   p.muerteT = M.reloj;
 }
@@ -825,7 +1026,12 @@ function carvaCasa(M, p, rad) {
     if (roca > 0) continue;
     let d = 1e9;
     for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
-    const v = lib * 2 + Math.min(d, 30) * 3;
+    /* EN LA ARENA PESA EL HUECO Y NO LA DISTANCIA, porque carvar PISA lo que
+       haya: con ocho cuerpos renaciendo todo el tiempo, un renacimiento que
+       prefiere terreno ajeno le roba a alguien un cuadrado cada vez que lo
+       cortan. En la campana da igual —renacer casi nunca llega hasta aca,
+       porque el terreno propio no se pierde.                               */
+    const v = lib * (M.arena ? 6 : 2) + Math.min(d, 30) * 3;
     if (v > mejorV) { mejorV = v; mejor = y * n + x; }
   }
   if (mejor < 0) mejor = ((n >> 1) * n + (n >> 1));
@@ -857,6 +1063,7 @@ function paso(M, dt) {
 /* ══════════════════════ EL MAPA ══════════════════════ */
 function generaMapa(cfg) {
   const n = cfg.n, M = nuevoM(n), R = azar(cfg.sem);
+  M.arena = !!cfg.arena;
   /* EL AZAR DEL CEREBRO SALE DE LA SEMILLA DEL NIVEL, y no es prolijidad:
      con `Math.random` la misma auditoria devolvia gana 3, 4, 4, 7 y 5 sobre
      el MISMO binario, asi que comparar dos ajustes no significaba nada — tres
@@ -881,7 +1088,12 @@ function generaMapa(cfg) {
     const a = a0 + j * Math.PI * 2 / nj;
     let x = Math.round(cx + Math.cos(a) * rad), y = Math.round(cy + Math.sin(a) * rad);
     x = cl(x, 4, n - 5); y = cl(y, 4, n - 5);
-    const p = nuevoJug(j + 1, j === 0 ? null : { per: cfg.per });
+    /* `per` PUEDE SER UN ARREGLO, y con eso la arena tiene siete cabezas
+       distintas sin escribir siete cerebros: uno manso que sale poco, uno
+       temerario que se va al otro lado del tablero, y cinco en el medio. La
+       campana le sigue pasando un numero, asi que no cambia nada.         */
+    const per = Array.isArray(cfg.per) ? cfg.per[(j - 1) % cfg.per.length] : cfg.per;
+    const p = nuevoJug(j + 1, j === 0 ? null : { per });
     M.jug.push(p);
     for (let b = -2; b <= 2; b++) for (let a2 = -2; a2 <= 2; a2++) {
       const i = (y + b) * n + (x + a2);
@@ -1232,6 +1444,61 @@ function juegaSolo(m, nn, modo, sem) {
     riv: M.jug.slice(1).map(q => +(tajada(M, q.id) * 100).toFixed(1)),
   };
 }
+/* ── EL AUTO-JUGADOR DE LA ARENA ──────────────────────────────────────────
+   No mide «gana/pierde»: en la arena no hay victoria. Mide CUANTO AGUANTA,
+   cuanto llega a agarrar y en que puesto queda — y eso solo significa algo
+   comparado contra el que juega al azar. Sin ese control, «el bot llego al
+   12 %» no dice si hay una decision adentro o si el tablero se reparte solo.
+
+   EL RELOJ SE TOPA porque una corrida de arena no termina sola: un honesto
+   que no se muere nunca correria para siempre.                             */
+function juegaArena(sem, modo, segs) {
+  const cfg = cfgArena(sem == null ? 1 : sem);
+  const M = generaMapa(cfg);
+  const yo = M.jug[0];
+  yo.bot = modo === 'azar'  ? { azar: true }
+         : modo === 'ciego' ? { per: 0.80, ciego: true }
+         :                    { per: 0.80 };
+  yo.topeCortes = 1;                      /* una vida: el corte cierra       */
+  for (let j = 1; j < M.jug.length; j++) M.jug[j].topeCortes = 1e9;
+  const DT = 1 / VEL, lim = segs || 180;
+  let t = 0, mejor = 0;
+  /* EL PUESTO SE GUARDA EN EL ULTIMO TIC VIVO Y NO AL SALIR DEL BUCLE.
+     En la arena morir BORRA el terreno, asi que preguntando despues el
+     jugador lee 0% y sale ultimo SIEMPRE, por construccion: la medicion
+     estaria describiendo un estado que ella misma destruyo. Medido en la
+     semilla 1001: ultimo vivo pos 7 con 2,52%, ya muerto pos 8 con 0,00.
+     Y la misma regla vale para el panel de fin, que si no diria octavo
+     en todas las partidas.                                              */
+  let ultPos = puestoDe(M, 1), ultPct = tajada(M, 1);
+  const tope = Math.ceil(lim * VEL) + 8;
+  for (let k = 0; k < tope; k++) {
+    paso(M, DT); t += DT;
+    const pc = tajada(M, 1);
+    if (pc > mejor) mejor = pc;
+    if (!yo.vivo) break;
+    ultPct = pc; ultPos = puestoDe(M, 1);
+    if (t >= lim) break;
+  }
+  return {
+    modo, sem: cfg.sem, seg: +t.toFixed(1), vivo: yo.vivo,
+    pct: +(ultPct * 100).toFixed(2), mejor: +(mejor * 100).toFixed(2),
+    pos: ultPos, matas: yo.matas, cerros: yo.cerros,
+    riv: tablaPos(M).map(f => f.id + ':' + (f.pct * 100).toFixed(1)),
+  };
+}
+function auditaArena(modo, veces, segs) {
+  const r = [], t0 = Date.now(), N = veces || 12;
+  for (let i = 0; i < N; i++) r.push(juegaArena(1000 + i * 37, modo || 'bot', segs));
+  const med = k => +(r.reduce((a, x) => a + x[k], 0) / r.length).toFixed(2);
+  return {
+    modo: modo || 'bot', de: r.length, ms: Date.now() - t0,
+    segMedio: med('seg'), mejorMedio: med('mejor'), posMedio: med('pos'),
+    matasMedio: med('matas'), vivos: r.filter(x => x.vivo).length,
+    peorPos: Math.max(...r.map(x => x.pos)), mejorPos: Math.min(...r.map(x => x.pos)),
+  };
+}
+
 function auditaTodo(modo) {
   const r = [], t0 = Date.now();
   for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) r.push(juegaSolo(m, n, modo || 'bot'));
@@ -1463,7 +1730,7 @@ function auAgacha(f, dur) {
 const V = {
   cv: null, g: null, W: 0, H: 0, dpr: 1, k: 1,
   off: null, og: null, img: null, b32: null, n: 0, zsucio: true,
-  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19,
+  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19, vista: VISTA,
   mini: null, mg: null, miniT: 0,
   prevZ: null, cort: null, viv: null,
   part: [], dest: [], sac: 0, sacx: 0, sacy: 0, gan: new Int32Array(NJUG + 1),
@@ -1489,11 +1756,34 @@ function vpMide() {
   if (W === V.W && H === V.H && d === V.dpr) return;
   V.W = W; V.H = H; V.dpr = d; V.k = d;
   V.cv.width = W; V.cv.height = H;
-  V.esc = W / VISTA;
-  V.visW = W / V.esc; V.visH = H / V.esc;
+  vpEsc();
   /* el contexto se resetea al cambiar de tamano: el filtro hay que volver a
      apagarlo o el tablero sale borroneado en vez de pixelado.              */
   V.g.imageSmoothingEnabled = false;
+}
+
+/* EL LADO DE LA VENTANA VIVE EN UN SOLO SITIO. Con la escala escrita en
+   `vpMide` y el zoom escribiendola otra vez por su cuenta, cambiar de
+   calidad o girar el telefono devolveria la vista a 19 celdas en medio de
+   una partida — y eso no se ve como un ajuste, se ve como un salto.      */
+function vpEsc() {
+  V.esc = V.W / V.vista;
+  V.visW = V.W / V.esc; V.visH = V.H / V.esc;
+}
+
+/* ── EL ZOOM DE LA ARENA ──────────────────────────────────────────────────
+   Solo en arena: en la campana la vista fija es parte del diseno —el mundo
+   4 es grande JUSTAMENTE porque no entra en la pantalla— asi que abrirla ahi
+   estaria cambiando ocho niveles ya auditados.
+   Y se suavisa en el tiempo con la misma exponencial que la camara: el
+   terreno da saltos de cientos de celdas al cerrar un cerco, y una vista que
+   los copie de golpe se lee a que la camara se rompio.                     */
+function vpZoom(M, dt) {
+  const t = M.arena
+    ? VISTA + (VISTA_MAX - VISTA) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / VISTA_SAT))
+    : VISTA;
+  V.vista += (t - V.vista) * (1 - Math.exp(-dt * 1.2));
+  vpEsc();
 }
 
 function vpInit() {
@@ -1524,6 +1814,7 @@ function vpNuevo(M) {
   V.viv = new Uint8Array(NJUG + 1);
   for (const p of M.jug) { V.cort[p.id] = p.cortes; V.viv[p.id] = 1; }
   V.zsucio = true; V.part.length = 0; V.dest.length = 0; V.sac = 0; V.miniT = 0;
+  V.vista = VISTA; vpEsc();
   V.camx = cl(M.jug[0].ix - V.visW / 2, 0, Math.max(0, n - V.visW));
   V.camy = cl(M.jug[0].iy - V.visH / 2, 0, Math.max(0, n - V.visH));
 }
@@ -1597,6 +1888,7 @@ function vpEsquirlas(x, y, id) {
    juego te mato sin avisar.                                                */
 const VP_MARG = 2;
 function vpCam(M, dt) {
+  vpZoom(M, dt);
   const p = M.jug[0];
   let tx = p.ix + p.dx * M.f + 0.5 - V.visW / 2;
   let ty = p.iy + p.dy * M.f + 0.5 - V.visH / 2;
@@ -1839,11 +2131,16 @@ function vpMiniPinta(M) {
    ══════════════════════════════════════════════════════════════════════ */
 
 const P = {
-  on: false, pausa: false, fin: null, tuto: false,
+  on: false, pausa: false, fin: null, tuto: false, arena: false,
   m: 0, nv: 0, cfg: null, M: null, yo: null,
   seg: 0, cortesVistos: 0, pct: 0, mejor: 0, casi: false, ganUlt: 0,
   giros: 0, gdx: 0, gdy: 0,
-  hCor: [], hPct: '', hMeta: '', hRel: '', hPoco: false, hNiv: '',
+  /* EL PUESTO Y LA TAJADA SE FOTOGRAFIAN EN EL ULTIMO TIC CON VIDA. En la
+     arena morir BORRA el terreno, asi que preguntando DESPUES del corte el
+     panel de fin diria «8º con 0 %» siempre —es exactamente lo que el banco
+     informo la primera vez, y no era el juego: era la medicion—.           */
+  posUlt: 8, pctUlt: 0, primero: false, tab: null,
+  hCor: [], hPct: '', hMeta: '', hRel: '', hPoco: false, hNiv: '', hTab: '',
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
@@ -1926,30 +2223,36 @@ function entInit() {
 }
 
 /* ══════════════════════ LA PARTIDA ══════════════════════ */
-function partidaArranca(m, nv, tuto) {
-  P.m = m; P.nv = nv; P.tuto = !!tuto;
+function partidaArranca(m, nv, tuto, arena) {
+  P.m = m; P.nv = nv; P.tuto = !!tuto; P.arena = !!arena;
   /* entrar a un nivel de verdad apaga el tutorial, y va ACA porque esta es la
      unica puerta por la que se entra a una partida —`juega`, el boton de
      siguiente, la sonda—. En `juega` sola, la proxima puerta que se agregue
      entra con la pista del tutorial puesta encima del nivel 1-1.           */
   if (!P.tuto) { TUT.on = false; cl2($('tSalt'), 'on', false); cl2($('pista'), 'on', false); }
-  P.cfg = tuto ? tutCfg() : cfgNivel(m, nv);
+  P.cfg = P.arena ? cfgArena() : (tuto ? tutCfg() : cfgNivel(m, nv));
   P.M = generaMapa(P.cfg);
   P.yo = P.M.jug[0];
   /* el tope de cortes es lo que hace que la tercera vida sea la ultima: sin
-     el, `paso` revive para siempre y las vidas serian un numero que baja.  */
-  P.yo.topeCortes = P.tuto ? 1e9 : VIDAS;
+     el, `paso` revive para siempre y las vidas serian un numero que baja.
+     EN LA ARENA ES UNA, y es la mitad de por que la arena es otro juego: el
+     corte no cuesta terreno, cuesta la corrida entera.                     */
+  P.yo.topeCortes = P.tuto ? 1e9 : (P.arena ? 1 : VIDAS);
   P.seg = P.cfg.seg;
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
   P.giros = 0; P.gdx = P.yo.dx; P.gdy = P.yo.dy;
-  P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false; P.hNiv = '';
+  P.posUlt = 1 + P.cfg.riv; P.pctUlt = 0; P.primero = false; P.tab = null;
+  P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false;
+  P.hNiv = ''; P.hTab = '';
   vpNuevo(P.M);
   hudArma();
   hudPinta(true);
+  cl2($('velo'), 'off', false);
   cl2($('hud'), 'off', false);
   cl2($('pie'), 'off', P.tuto);
   cl2($('mini'), 'off', P.tuto);
+  cl2($('tabla'), 'off', !P.arena);
   auAbre(0);
   return P.M;
 }
@@ -1977,6 +2280,13 @@ function partidaPaso(dt) {
     P.cortesVistos = yo.cortes;
     son('corte');
     hudPinta(true);
+    /* EN LA ARENA EL PRIMER CORTE CIERRA, y se corta ACA y no mas abajo: el
+       `return` tiene que ganarle a la lectura de la tajada, porque el terreno
+       ya se libero y leerlo despues del corte devuelve cero.               */
+    /* Y SIN AVISO: «SIN VIDAS» mentiria, porque en la arena no hay vidas que
+       gastar —hay una y es la corrida—. Que el cartel no quede debajo del
+       panel lo resuelve `avisaCorta`, que corre desde `termina`.            */
+    if (P.arena) { termina('arena'); return; }
     if (!P.tuto && yo.cortes >= VIDAS) { avisa(TX('avSinVidas')); termina('vidas'); return; }
     avisa(TX('avCorte'));
   }
@@ -1984,6 +2294,33 @@ function partidaPaso(dt) {
   P.pct = tajada(M, 1);
   if (P.pct > P.mejor) P.mejor = P.pct;
   auAbre(P.cfg.meta > 0 ? P.pct / P.cfg.meta : 0);
+
+  if (P.arena) {
+    /* la foto del ultimo tic con vida: el puesto y la tajada que el panel de
+       fin va a mostrar. Ver el comentario de `P.posUlt`.                   */
+    const tb = tablaPos(M);
+    P.tab = tb;                       /* `hudArena` la reusa: recontar dos veces por cuadro es
+                                         barrer el tablero entero de gusto.                    */
+    P.pctUlt = P.pct;
+    P.posUlt = tb.findIndex((f) => f.id === 1) + 1;
+    /* EL RELOJ SUBE EN VEZ DE BAJAR: acá no hay plazo, así que lo único que
+       un número de tiempo puede decir es cuánto aguantaste — que es
+       literalmente el marcador de este modo.                               */
+    P.seg += dt;
+    /* IR PRIMERO SE AVISA UNA SOLA VEZ. Con el aviso cada vez que se cruza el
+       puesto, en una pelea pareja el cartel parpadea varias veces por segundo
+       y deja de querer decir algo.                                         */
+    /* Y PIDE VENTAJA DE VERDAD, no ganar el desempate. `tablaPos` desempata
+       por id y el jugador es el 1, asi que en el primer cuadro —con los ocho
+       en 0,3 %— el cartel salia SIEMPRE: un «vas primero» que aparece antes
+       de haber hecho nada no dice nada. Con medio cuerpo de ventaja sobre el
+       segundo, el cartel vuelve a significar algo.                          */
+    const vent = P.posUlt === 1 ? tb[0].pct - tb[1].pct : 0;
+    if (!P.primero && vent > ARENA_VENT) { P.primero = true; son('casi'); avisa(TX('avPrimero')); }
+    else if (P.primero && P.posUlt > 2) P.primero = false;
+    hudPinta(false);
+    return;
+  }
 
   if (!P.tuto) {
     if (!P.casi && P.pct >= P.cfg.meta * 0.82 && P.pct < P.cfg.meta) {
@@ -1998,6 +2335,7 @@ function partidaPaso(dt) {
 
 function termina(fin) {
   P.fin = fin;
+  avisaCorta();
   const perf = fin === 'gana' && P.yo.cortes === 0;
   if (fin === 'gana') {
     son(perf ? 'perf' : 'gana');
@@ -2010,6 +2348,20 @@ function termina(fin) {
   auAgacha(0.25, 2.2);
   hudPinta(true);
   if (P.tuto) { tutFin(); return; }
+  if (P.arena) {
+    /* EL RECORD ES EL PICO Y NO LA TAJADA DEL FINAL, y es la unica lectura
+       honesta: al morir el terreno se libera, asi que la del final es cero
+       por construccion. Lo que uno recuerda de una corrida es cuanto llego a
+       tener, no cuanto le quedaba en el ultimo cuadro.                     */
+    const rec = P.mejor > (PROG.rec || 0);
+    if (rec) PROG.rec = P.mejor;
+    if (P.yo.matas > (PROG.recB || 0)) PROG.recB = P.yo.matas;
+    guardaProg();
+    finPon({ tuto: false, arena: true, pos: P.posUlt, pct: P.mejor,
+             matas: P.yo.matas, seg: P.seg, rec, recAnt: PROG.rec });
+    verPanel('pFin');
+    return;
+  }
   finPon({ tuto: false, fin, perf, pct: P.pct, meta: P.cfg.meta, cortes: P.yo.cortes, m: P.m, nv: P.nv });
   verPanel('pFin');
 }
@@ -2031,9 +2383,11 @@ function partidaSale() {
      encima. Apagarlo en el unico sitio por el que pasan los tres es la unica
      forma de que el proximo camino que se agregue no lo vuelva a perder.     */
   TUT.on = false;
+  cl2($('velo'), 'off', true);
   cl2($('hud'), 'off', true);
   cl2($('pie'), 'off', true);
   cl2($('mini'), 'off', true);
+  cl2($('tabla'), 'off', true);
   cl2($('pista'), 'on', false);
   cl2($('tSalt'), 'on', false);
   auAgacha(1); auAbre(0);
@@ -2058,6 +2412,21 @@ function hudArma() {
   const v = $('vidas');
   v.innerHTML = '';
   P.hCor = [];
+  const t = $('tabla');
+  t.innerHTML = '';
+  P.hTab = '';
+  if (P.arena) {
+    /* LAS OCHO FILAS SE ARMAN UNA VEZ Y DESPUES SOLO SE ESCRIBEN. Rehaciendo
+       el HTML por cuadro son ocho nodos nuevos sesenta veces por segundo para
+       mostrar lo mismo, y encima el navegador rehace el layout en cada una. */
+    for (let i = 0; i < 1 + P.cfg.riv; i++) {
+      const f = document.createElement('div');
+      f.className = 'tf';
+      f.innerHTML = '<span class="tn"></span><i class="tc"></i><span class="tp"></span>';
+      t.appendChild(f);
+    }
+    return;   /* una vida no es un corazon que se gasta: es la corrida entera */
+  }
   if (P.tuto) return;
   for (let i = 0; i < VIDAS; i++) {
     const d = document.createElement('div');
@@ -2087,8 +2456,10 @@ function hudPinta(todo) {
   }
   if (todo) {
     $('meta').style.left = (cl(cfg.meta, 0, 1) * 100).toFixed(2) + '%';
-    $('meta').style.display = P.tuto ? 'none' : 'block';
+    $('meta').style.display = (P.tuto || P.arena) ? 'none' : 'block';
   }
+
+  if (P.arena) { hudArena(todo); return; }
 
   if (!P.tuto) {
     const pc = Math.round(P.pct * 100) + '%';
@@ -2120,6 +2491,47 @@ function hudPinta(todo) {
   }
 }
 
+/* ── EL MARCADOR DE LA ARENA ──────────────────────────────────────────────
+   Los dos numeros del pie cambian de significado y no de sitio: donde iba la
+   meta va el puesto, y donde iba el reloj van las bajas. Reusar los mismos
+   elementos no es ahorro de HTML — es que quien juega ya sabe DONDE mirar, y
+   moverle los numeros de lugar entre un modo y otro le cuesta esa costumbre.  */
+function hudArena(todo) {
+  const M = P.M;
+  const t = P.tab || tablaPos(M);
+  const pc = (P.pct * 100).toFixed(1) + '%';
+  if (pc !== P.hPct) { $('pct').firstElementChild.textContent = pc; P.hPct = pc; }
+  if (todo) $('pctR').textContent = TX('terreno');
+
+  const ba = String(P.yo.matas);
+  if (ba !== P.hRel) { $('reloj').firstElementChild.textContent = ba; P.hRel = ba; }
+  if (todo) { $('relR').textContent = TX('bajas'); cl2($('reloj'), 'poco', false); P.hPoco = false; }
+
+  const ps = TX('pos', P.posUlt);
+  if (ps !== P.hNiv) {
+    $('nrN').textContent = ps;
+    $('nrM').textContent = TX('puesto');
+    P.hNiv = ps;
+  }
+
+  /* LA TABLA SE ESCRIBE SOLO CUANDO CAMBIA, y la firma es el texto entero:
+     con ocho filas a sesenta cuadros por segundo son casi mil quinientas
+     escrituras de DOM por segundo para mostrar el mismo reparto.           */
+  const fs = $('tabla').children;
+  let firma = '';
+  for (let i = 0; i < fs.length && i < t.length; i++) firma += t[i].id + ':' + Math.round(t[i].pct * 1000) + (t[i].vivo ? '' : 'x') + '|';
+  if (firma === P.hTab) return;
+  P.hTab = firma;
+  for (let i = 0; i < fs.length && i < t.length; i++) {
+    const f = fs[i], d = t[i], c = COLS[d.id];
+    f.children[0].textContent = String(d.pos);
+    f.children[1].style.background = c ? c.t : 'transparent';
+    f.children[2].textContent = (d.pct * 100).toFixed(1) + '%';
+    cl2(f, 'yo', d.id === 1);
+    cl2(f, 'muerto', !d.vivo);
+  }
+}
+
 /* ── el aviso corto ── */
 let AV_T = 0;
 function avisa(txt, ms) {
@@ -2129,6 +2541,14 @@ function avisa(txt, ms) {
   clearTimeout(AV_T);
   AV_T = setTimeout(() => cl2(a, 'on', false), ms || 900);
 }
+/* Y SE LO BAJA AL ABRIR EL PANEL, desde `termina` y de ningun otro sitio. El
+   aviso flota en la franja del medio, que es justo donde el panel escribe el
+   subtitulo, y el panel es translucido a proposito: cualquier cartel que
+   siguiera puesto se lee POR DETRAS del texto del final. Fotografiado dos
+   veces, con dos avisos distintos —«SIN VIDAS» primero y «¡TIERRA!» despues—,
+   asi que la cuenta no es «sacar el aviso que molesta» sino que el que abre el
+   panel baje el que haya.                                                   */
+function avisaCorta() { clearTimeout(AV_T); cl2($('aviso'), 'on', false); }
 
 /* ── el panel de fin ──
    SE PINTA DESDE UNA FUNCION Y NO DESDE EL SITIO QUE GANO: cambiar de idioma
@@ -2142,6 +2562,25 @@ function finPon(o) { FIN = o; finPinta(); }
 function finPinta() {
   if (!FIN) return;
   const f = FIN;
+  if (f.arena) {
+    $('fTit').textContent = TX('arenaFin');
+    $('fSub').textContent = TX('arenaFinSub', f.pos);
+    /* EL SINGULAR ES UNA FRASE ENTERA Y NO UN SUFIJO: en ingles son «kill» y
+       «kills», dos palabras distintas en la tabla. Es la leccion que la vuelta
+       165 ya habia pagado con «1 cortes», y volvio con otro contador.       */
+    $('fDatos').textContent = TX(f.matas === 1 ? 'arenaD1' : 'arenaD',
+                                 (f.pct * 100).toFixed(1), f.matas, fmtReloj(f.seg))
+      + ' · ' + (f.rec ? TX('arenaNuevo') : TX('arenaRec', (f.recAnt * 100).toFixed(1)));
+    $('fSig').style.display = '';
+    $('fSig').textContent = TX('arenaOtra');
+    /* REINTENTAR NO EXISTE ACA, y no es un olvido: una arena no se «reintenta»
+       —no hay un nivel al que volver— asi que el boton y OTRA VEZ harian
+       exactamente lo mismo con dos nombres distintos.                       */
+    $('fRe').style.display = 'none';
+    $('fMenu').textContent = TX('menuCorto');
+    return;
+  }
+  $('fRe').style.display = '';
   if (f.tuto) {
     $('fTit').textContent = TX('tutGana');
     $('fSub').textContent = TX('tutGanaSub');
@@ -2312,7 +2751,9 @@ function verPanel(id) {
 function pintaIdioma() {
   const T = (id, k, ...a) => { const e = $(id); if (e) e.textContent = TX(k, ...a); };
   T('mSub', 'sub');
-  T('mJugar', 'jugar'); T('mNiv', 'niveles'); T('mTuto', 'tuto'); T('mAj', 'ajustes');
+  T('mJugar', 'arena'); T('mJugarSub', 'arenaSub');
+  T('mNiv', 'campana'); T('mNivSub', 'campanaSub');
+  T('mTuto', 'tuto'); T('mAj', 'ajustes');
   T('mPie', 'pie');
   T('nvTit', 'niveles'); T('nvVolver', 'volver'); T('nvSub', 'nivelesSub');
   T('ajTit', 'ajTit'); T('ajMus', 'musica'); T('ajFx', 'efectos');
@@ -2385,6 +2826,20 @@ function juega(m, n) {
   auAcorde(m);
   verPanel(null);
 }
+/* LA ARENA ENTRA POR LA MISMA PUERTA QUE UN NIVEL, con una bandera mas. Con
+   una segunda funcion que armara la partida por su cuenta, el dia que se
+   agregue un paso al arranque —apagar el tutorial, un panel, un sonido— uno
+   de los dos caminos se queda sin el, y el que se queda sin el es siempre el
+   que nadie prueba.
+   Y EL ACORDE ES EL DEL ULTIMO MUNDO: la arena no tiene mundo, asi que se le
+   da el color mas cargado de los cinco, que es el que le corresponde a un
+   modo sin final.                                                          */
+function juegaArenaUI() {
+  auDesp();
+  partidaArranca(0, 0, false, true);
+  auAcorde(MUNDOS.length - 1);
+  verPanel(null);
+}
 function vaMenu() {
   partidaSale();
   verPanel('pMenu');
@@ -2409,7 +2864,7 @@ function uiInit() {
     b.onclick = () => { PROG.cal = +b.dataset.cal; guardaProg(); son('ui'); vpMide(); marcaChips(); };
   });
 
-  cl1('mJugar', () => { son('ui'); juegaUltimo(); });
+  cl1('mJugar', () => { son('ui'); juegaArenaUI(); });
   cl1('mNiv', () => { son('ui'); nvAbre(); });
   cl1('mTuto', () => { son('ui'); auDesp(); tutArranca(); verPanel(null); });
   cl1('mAj', () => { son('ui'); verPanel('pAj'); });
@@ -2424,7 +2879,10 @@ function uiInit() {
 
   cl1('bPausa', () => pausaPon(true));
   cl1('paSeguir', () => { son('ui'); pausaPon(false); });
-  cl1('paRe', () => { son('ui'); P.pausa = false; auAgacha(1); juega(P.m, P.nv); });
+  cl1('paRe', () => {
+    son('ui'); P.pausa = false; auAgacha(1);
+    if (P.arena) juegaArenaUI(); else juega(P.m, P.nv);
+  });
   cl1('paSalir', () => { son('ui'); vaMenu(); });
 
   /* EL PANEL DE FIN TIENE DOS DUENOS —el nivel y el tutorial— y los tres
@@ -2433,7 +2891,11 @@ function uiInit() {
      bandera seria un estado mas que se puede desincronizar del primero.  */
   cl1('fSig', () => {
     son('ui');
-    if (P.tuto) { partidaSale(); juegaUltimo(); return; }
+    /* EL TUTORIAL DESEMBOCA EN LA ARENA y no en la campana: es lo que el boton
+       grande del menu ofrece, asi que mandar a otro lado despues de la leccion
+       seria enseniar un modo y abrir otro.                                  */
+    if (P.tuto) { partidaSale(); juegaArenaUI(); return; }
+    if (P.arena) { partidaSale(); juegaArenaUI(); return; }
     const s = partidaSig();
     if (s) juega(s[0], s[1]); else vaMenu();
   });
@@ -2536,6 +2998,9 @@ window.__C = {
       giros: P.giros, ganUlt: P.ganUlt,
       tutOn: TUT.on, tutPaso: TUT.paso, pista: $('pista').textContent,
       hechos: cuentaHechos(), ult: PROG.ult, cal: PROG.cal,
+      arena: P.arena, pos: P.posUlt, matas: P.yo ? P.yo.matas : 0,
+      rec: +((PROG.rec || 0) * 100).toFixed(1), recB: PROG.recB | 0,
+
       ms: +MSDIB.toFixed(3), dpr: V.dpr,
     };
   },
@@ -2546,7 +3011,14 @@ window.__C = {
   menu() { vaMenu(); return this.est(); },
   panel(id) { verPanel(id); return { panel: PANEL }; },
   clic(id) { const e = $(id); if (!e) return 'no hay ' + id; e.click(); return this.est(); },
-  lang(l) { LANG = l; guardaProg(); pintaIdioma(); return { lang: LANG, sub: $('mSub').textContent, pista: $('pista').textContent, fTit: $('fTit').textContent }; },
+  lang(l) {
+    LANG = l; guardaProg(); pintaIdioma();
+    const t = (id) => { const e = $(id); return e ? e.textContent : null; };
+    return { lang: LANG, sub: t('mSub'), pista: t('pista'),
+             fTit: t('fTit'), fSub: t('fSub'), fDatos: t('fDatos'), fSig: t('fSig'),
+             jugar: t('mJugar'), jugarSub: t('mJugarSub'), niv: t('mNiv'), nivSub: t('mNivSub'),
+             pctR: t('pctR'), relR: t('relR'), nrN: t('nrN') };
+  },
 
   /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
      `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
@@ -2645,6 +3117,45 @@ window.__C = {
     };
   },
 
+  /* ── la arena, jugada por el mismo camino que el boton del menu ──
+     ENTRA POR `juegaArenaUI`, o sea por la puerta que toca el dedo: con un
+     `partidaArranca` a mano, la prueba estaria aprobando una partida que el
+     jugador no arranca nunca y el dia que el boton haga un paso mas —un
+     sonido, un panel— eso quedaria sin medir.                            */
+  arena(modo, tope) {
+    juegaArenaUI();
+    const yo = P.yo;
+    yo.bot = modo === 'azar' ? { azar: true } : { per: 0.80 };
+    const T = tope || 20000;
+    let g = 0, mejorPos = 9;
+    while (P.on && !P.fin && g++ < T) {
+      partidaPaso(1 / VEL);
+      if (yo.vivo && P.posUlt < mejorPos) mejorPos = P.posUlt;
+    }
+    yo.bot = null;
+    return {
+      fin: P.fin, pos: P.posUlt, mejorPos, pct: +(P.mejor * 100).toFixed(1),
+      matas: yo.matas, cortes: yo.cortes, seg: +P.seg.toFixed(1), vueltas: g,
+      panel: PANEL, fTit: $('fTit').textContent, fSub: $('fSub').textContent,
+      fDatos: $('fDatos').textContent, rec: +((PROG.rec || 0) * 100).toFixed(1),
+    };
+  },
+  /* la tabla LEIDA DEL DOM, que es lo unico que prueba que lo que se calcula
+     llega a la pantalla: ocho filas, la mia marcada, los muertos apagados. */
+  tabla() {
+    const t = $('tabla'); if (!t) return null;
+    const f = [];
+    for (const e of t.children) {
+      f.push({
+        n: e.children[0].textContent,
+        col: e.children[1].style.background,
+        p: e.children[2].textContent,
+        yo: e.classList.contains('yo'), muerto: e.classList.contains('muerto'),
+      });
+    }
+    return { off: t.classList.contains('off'), n: f.length, f };
+  },
+
   /* ── auditorias del modelo puro ── */
   regla() { return auditaRegla(); },
   mapas() { return auditaMapas(); },
@@ -2684,7 +3195,7 @@ window.__C = {
   },
 
   cajas() {
-    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
     const R = [], vis = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;

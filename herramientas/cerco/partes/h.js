@@ -29,7 +29,9 @@ function verPanel(id) {
 function pintaIdioma() {
   const T = (id, k, ...a) => { const e = $(id); if (e) e.textContent = TX(k, ...a); };
   T('mSub', 'sub');
-  T('mJugar', 'jugar'); T('mNiv', 'niveles'); T('mTuto', 'tuto'); T('mAj', 'ajustes');
+  T('mJugar', 'arena'); T('mJugarSub', 'arenaSub');
+  T('mNiv', 'campana'); T('mNivSub', 'campanaSub');
+  T('mTuto', 'tuto'); T('mAj', 'ajustes');
   T('mPie', 'pie');
   T('nvTit', 'niveles'); T('nvVolver', 'volver'); T('nvSub', 'nivelesSub');
   T('ajTit', 'ajTit'); T('ajMus', 'musica'); T('ajFx', 'efectos');
@@ -102,6 +104,20 @@ function juega(m, n) {
   auAcorde(m);
   verPanel(null);
 }
+/* LA ARENA ENTRA POR LA MISMA PUERTA QUE UN NIVEL, con una bandera mas. Con
+   una segunda funcion que armara la partida por su cuenta, el dia que se
+   agregue un paso al arranque —apagar el tutorial, un panel, un sonido— uno
+   de los dos caminos se queda sin el, y el que se queda sin el es siempre el
+   que nadie prueba.
+   Y EL ACORDE ES EL DEL ULTIMO MUNDO: la arena no tiene mundo, asi que se le
+   da el color mas cargado de los cinco, que es el que le corresponde a un
+   modo sin final.                                                          */
+function juegaArenaUI() {
+  auDesp();
+  partidaArranca(0, 0, false, true);
+  auAcorde(MUNDOS.length - 1);
+  verPanel(null);
+}
 function vaMenu() {
   partidaSale();
   verPanel('pMenu');
@@ -126,7 +142,7 @@ function uiInit() {
     b.onclick = () => { PROG.cal = +b.dataset.cal; guardaProg(); son('ui'); vpMide(); marcaChips(); };
   });
 
-  cl1('mJugar', () => { son('ui'); juegaUltimo(); });
+  cl1('mJugar', () => { son('ui'); juegaArenaUI(); });
   cl1('mNiv', () => { son('ui'); nvAbre(); });
   cl1('mTuto', () => { son('ui'); auDesp(); tutArranca(); verPanel(null); });
   cl1('mAj', () => { son('ui'); verPanel('pAj'); });
@@ -141,7 +157,10 @@ function uiInit() {
 
   cl1('bPausa', () => pausaPon(true));
   cl1('paSeguir', () => { son('ui'); pausaPon(false); });
-  cl1('paRe', () => { son('ui'); P.pausa = false; auAgacha(1); juega(P.m, P.nv); });
+  cl1('paRe', () => {
+    son('ui'); P.pausa = false; auAgacha(1);
+    if (P.arena) juegaArenaUI(); else juega(P.m, P.nv);
+  });
   cl1('paSalir', () => { son('ui'); vaMenu(); });
 
   /* EL PANEL DE FIN TIENE DOS DUENOS —el nivel y el tutorial— y los tres
@@ -150,7 +169,11 @@ function uiInit() {
      bandera seria un estado mas que se puede desincronizar del primero.  */
   cl1('fSig', () => {
     son('ui');
-    if (P.tuto) { partidaSale(); juegaUltimo(); return; }
+    /* EL TUTORIAL DESEMBOCA EN LA ARENA y no en la campana: es lo que el boton
+       grande del menu ofrece, asi que mandar a otro lado despues de la leccion
+       seria enseniar un modo y abrir otro.                                  */
+    if (P.tuto) { partidaSale(); juegaArenaUI(); return; }
+    if (P.arena) { partidaSale(); juegaArenaUI(); return; }
     const s = partidaSig();
     if (s) juega(s[0], s[1]); else vaMenu();
   });

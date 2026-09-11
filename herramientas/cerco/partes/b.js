@@ -27,7 +27,11 @@ const DNOM = ['der', 'izq', 'abajo', 'arriba'];
    inventar combinaciones y el dia que entre un cuarto rival no alcanzan.   */
 const LIBRE = 0;      /* z: nadie                                           */
 const PIEDRA = 9;     /* z: roca — bloquea, mata y corta el relleno         */
-const NJUG = 4;       /* el jugador es el 1; los rivales van del 2 al 4     */
+const NJUG = 8;       /* el jugador es el 1; los rivales van del 2 al 8     */
+/* OCHO Y NO CUATRO, Y EL TECHO NO ES ARBITRARIO: `PIEDRA` vale 9, o sea que
+   los identificadores 1..8 son exactamente los que entran por debajo de la
+   roca sin tener que ensanchar `z` ni `t` a un tipo mas grande. La campana
+   sigue usando de 2 a 4 y no paga un byte por los cuatro que no siembra.   */
 
 /* ── LOS COLORES ──────────────────────────────────────────────────────────
    Tres por jugador y no uno: el terreno tiene que dejarse mirar sin cansar,
@@ -40,6 +44,17 @@ const COLS = [
   { z: '#0e5148', t: '#2fc2a8', c: '#b6f2e6' },   /* 2 · verde agua     */
   { z: '#3d2a6b', t: '#9a6bf2', c: '#d9c8ff' },   /* 3 · violeta        */
   { z: '#6b1f3a', t: '#f0578f', c: '#ffc8dc' },   /* 4 · rosa           */
+  /* LOS CUATRO DE LA ARENA SE REPARTEN EL CIRCULO, no se eligen a gusto: con
+     ocho cuerpos en un tablero de noventa, lo unico que distingue a uno de
+     otro en el minimapa es un punto de tres pixeles. Los tonos van cada 45
+     grados desde el ambar del jugador (35 · 80 · 125 · 170 · 215 · 260 ·
+     305 · 350), asi que dos vecinos nunca comparten familia. El rojo se
+     descarto a proposito: a ese tamano se confunde con el ambar, que es el
+     unico color que TIENE que encontrarse de una ojeada.                   */
+  { z: '#4d5e21', t: '#b3d93f', c: '#e6f5b3' },   /* 5 · verde limon    */
+  { z: '#1c4a24', t: '#33cc47', c: '#b8f2c2' },   /* 6 · verde          */
+  { z: '#1e3d6b', t: '#4d8ef5', c: '#bdd8fd' },   /* 7 · azul           */
+  { z: '#60245b', t: '#e755db', c: '#f9bdf5' },   /* 8 · magenta        */
 ];
 const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
 
@@ -51,6 +66,16 @@ const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
    3,5 s. Eso ademas fija el ritmo del pulgar: una curva se puede pedir cada
    185 ms, que es lo que tarda el cuerpo en cambiar de celda.               */
 const VISTA = 19;
+/* EN LA ARENA LA VISTA SE ABRE CON EL TERRENO, y el numero sale de la misma
+   derivacion de arriba y no del gusto: lo que uno tiene que seguir viendo es
+   el BORDE de lo propio, y el lado de un territorio crece como la RAIZ de su
+   area — por eso el interpolador va con `sqrt(pct/VISTA_SAT)` y no lineal.
+   Satura en la tajada pareja (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va
+   ganando y abrir mas solo achica la cabeza. Y el tope son 34 celdas porque
+   en 412 px eso deja la celda en 12,1 px — por debajo de diez, la cabeza y
+   la estela dejan de distinguirse, que es lo unico que este juego pide ver. */
+const VISTA_MAX = 34;
+const VISTA_SAT = 0.10;
 const VEL = 5.4;
 const VIDAS = 3;
 
@@ -113,6 +138,52 @@ function cfgNivel(m, n) {
   };
 }
 
+/* ══════════════════════ LA ARENA ══════════════════════
+   ES EL OTRO JUEGO, Y CONTRADICE A PROPOSITO LO DE ARRIBA. La campana
+   deriva un objetivo del reparto justamente para que se pueda TERMINAR; la
+   arena no se termina: no hay meta, no hay reloj, hay una vida y se juega
+   hasta que a uno lo cortan. Las dos cosas no se pueden promediar —una pide
+   un tablero chico con un final y la otra uno grande sin final— asi que
+   conviven como dos modos y no como una dificultad.
+
+   CADA NUMERO SALE DE UNA CUENTA:
+   · `n` 92 son 8.464 celdas: con `OCUPA` 0,795 repartido entre ocho, la parte
+     pareja de cada uno es 9,9 % — un numero que se mueve lo suficiente como
+     para que el marcador diga algo, y un tablero lo bastante grande como para
+     que ocho cuerpos no se pisen en el primer minuto.
+   · `riv` 7, o sea ocho cuerpos contando al jugador: es el reparto del juego
+     que se esta imitando y lo que hace que la tabla de posiciones tenga algo
+     que ordenar.
+   · sin roca (`pat:'vacio'`): la roca de la campana es lo que hace que un
+     tablero chico se juegue distinto, y en un tablero de noventa lo unico que
+     agregaria es una forma de morir que no es otro jugador.
+   · y `per` es un ARREGLO y no un numero. Siete bots con la misma cabeza son
+     un bot repetido siete veces: salen todos igual de lejos, vuelven a la vez
+     y la tabla queda ordenada por suerte. Con siete precisiones se reparten
+     en mansos y temerarios sin escribir siete cerebros.                     */
+const ARENA_N = 92;
+const ARENA_RIV = 7;
+const ARENA_PER = [0.55, 0.68, 0.74, 0.80, 0.86, 0.90, 0.95];
+/* CUANTA VENTAJA HAY QUE SACAR para que «vas primero» quiera decir algo. Un
+   cuadrado de arranque son 0,3 % del tablero y la parte pareja de ocho es
+   9,9 %: con 0,8 % ya se sacaron dos cuerpos y medio de diferencia, que es
+   una ventaja que se ve en la tabla. Sin este numero el cartel sale en el
+   primer cuadro, porque `tablaPos` desempata por id y el jugador es el 1.  */
+const ARENA_VENT = 0.008;
+
+function cfgArena(sem) {
+  return {
+    mundo: -1, nivel: -1, pat: 'vacio',
+    n: ARENA_N, riv: ARENA_RIV, per: ARENA_PER,
+    meta: 0, seg: 0, arena: true,
+    /* LA SEMILLA ES AL AZAR EN EL JUEGO Y FIJA EN LA AUDITORIA, y esa
+       diferencia es la que hace que las dos cosas sirvan: una partida
+       reproducible no se siente una arena, y un banco que no se repite no
+       mide nada.                                                           */
+    sem: sem == null ? (Math.random() * 2147483647) | 0 : (sem | 0),
+  };
+}
+
 /* ══════════════════════ IDIOMAS ══════════════════════ */
 const LANGS = {
   es: {
@@ -145,6 +216,18 @@ const LANGS = {
     tut5: 'y ojo: si te pisan la estela, te cortan',
     tutGana: '¡ESO ES TODO!', tutGanaSub: 'ya sabés jugar',
     tutDatos: 'salir, rodear y volver · nada más', salt: 'SALTEAR',
+    /* ── LA ARENA ──
+       «bajas» y no «cortes»: en este juego «corte» ya quiere decir la vez que
+       te cortan a vos, y usar la misma palabra para las dos puntas del mismo
+       hecho deja un marcador que nadie puede leer.                          */
+    arena: 'ARENA', arenaSub: 'ocho cuerpos · una vida · sin final',
+    campana: 'CAMPAÑA', campanaSub: '5 mundos · 40 niveles',
+    bajas: 'BAJAS', puesto: 'PUESTO', tabla: 'POSICIONES', terreno: 'DEL TABLERO',
+    arenaFin: 'TE CORTARON', arenaFinSub: '{0}º en la tabla de ocho',
+    pos: '{0}º',
+    arenaD: '{0}% · {1} bajas · {2}', arenaD1: '{0}% · 1 baja · {2}',
+    arenaRec: 'RÉCORD {0}%', arenaNuevo: '¡RÉCORD!',
+    arenaOtra: 'OTRA VEZ', avPrimero: '¡VAS PRIMERO!',
   },
   en: {
     sub: 'go out, loop around and come back · what you enclose is yours',
@@ -174,6 +257,14 @@ const LANGS = {
     tut5: 'careful: step on your trail and they cut you',
     tutGana: "THAT'S ALL!", tutGanaSub: 'you know how to play',
     tutDatos: 'out, around and back · nothing else', salt: 'SKIP',
+    arena: 'ARENA', arenaSub: 'eight bodies · one life · no finish line',
+    campana: 'CAMPAIGN', campanaSub: '5 worlds · 40 levels',
+    bajas: 'KILLS', puesto: 'RANK', tabla: 'STANDINGS', terreno: 'OF THE BOARD',
+    arenaFin: 'YOU GOT CUT', arenaFinSub: '#{0} out of eight',
+    pos: '#{0}',
+    arenaD: '{0}% · {1} kills · {2}', arenaD1: '{0}% · 1 kill · {2}',
+    arenaRec: 'BEST {0}%', arenaNuevo: 'NEW BEST!',
+    arenaOtra: 'AGAIN', avPrimero: "YOU'RE FIRST!",
   },
   pt: {
     sub: 'saia, cerque e volte · o que ficar dentro é seu',
@@ -203,6 +294,14 @@ const LANGS = {
     tut5: 'cuidado: se pisarem seu rastro, te cortam',
     tutGana: 'É SÓ ISSO!', tutGanaSub: 'você já sabe jogar',
     tutDatos: 'sair, cercar e voltar · nada mais', salt: 'PULAR',
+    arena: 'ARENA', arenaSub: 'oito corpos · uma vida · sem fim',
+    campana: 'CAMPANHA', campanaSub: '5 mundos · 40 níveis',
+    bajas: 'ABATES', puesto: 'POSIÇÃO', tabla: 'CLASSIFICAÇÃO', terreno: 'DO TABULEIRO',
+    arenaFin: 'TE CORTARAM', arenaFinSub: '{0}º entre oito',
+    pos: '{0}º',
+    arenaD: '{0}% · {1} abates · {2}', arenaD1: '{0}% · 1 abate · {2}',
+    arenaRec: 'RECORDE {0}%', arenaNuevo: 'NOVO RECORDE!',
+    arenaOtra: 'DE NOVO', avPrimero: 'VOCÊ ESTÁ EM 1º!',
   },
 };
 let LANG = 'en';
@@ -219,7 +318,11 @@ const nomMundo = m => (LANGS[LANG].mundos || LANGS.es.mundos)[m] || TX('mundo', 
 
 /* ══════════════════════ EL GUARDADO ══════════════════════
    En una ventana privada `localStorage` TIRA: todo va envuelto.            */
-const PROG = { lang: null, hechos: {}, vol: 0.45, fx: 0.8, cal: 1, visto: 0, ult: 0 };
+const PROG = { lang: null, hechos: {}, vol: 0.45, fx: 0.8, cal: 1, visto: 0, ult: 0,
+  /* EL RECORD DE LA ARENA ES SU UNICO PROGRESO. No hay niveles que abrir ni
+     nada que desbloquear: lo unico que queda de una corrida es hasta donde
+     se llego, y sin guardarlo la arena no tiene con que compararse.        */
+  rec: 0, recB: 0 };
 function cargaProg() {
   try {
     const s = localStorage.getItem('cerco');
@@ -237,7 +340,7 @@ function cargaProg() {
 }
 function guardaProg() { try { PROG.lang = LANG; localStorage.setItem('cerco', JSON.stringify(PROG)); } catch (e) {} }
 function borraProg() {
-  PROG.hechos = {}; PROG.visto = 0; PROG.ult = 0;
+  PROG.hechos = {}; PROG.visto = 0; PROG.ult = 0; PROG.rec = 0; PROG.recB = 0;
   try { localStorage.removeItem('cerco'); } catch (e) {}
 }
 const idNiv = (m, n) => m * NIV_MUNDO + n;

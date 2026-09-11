@@ -374,6 +374,169 @@ munecas.
   **6 mundos × 20 niveles = 120**, procedurales con semilla y auditados uno por uno. Vive partido en
   `herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
 
+- **`Cerco.html` es "CERCO"** (~165 KB, **sin un solo asset**: el tablero, la interfaz y los diez
+  sonidos se hacen por código). El vigésimo juego, del género de Paper.io. Se sale de la propia
+  casa dejando estela, se da la vuelta, y todo lo que quedó adentro pasa a ser tuyo; si alguien
+  pisa tu estela antes de que cierres, te corta. Tiene **dos modos y el grande es la ARENA**: un
+  tablero de 92 de lado, **ocho cuerpos**, **sin meta, sin reloj y con una sola vida**, el
+  territorio se pierde entero al morir, tabla de posiciones en vivo y récord guardado — o sea el
+  original. Y una **CAMPAÑA** de 5 mundos × 8 niveles donde **la meta no se elige: sale de cuánto
+  tablero hay y entre cuántos** (`OCUPA/(1+riv)` por un multiplicador de 0,55 a 0,72), que es lo
+  que llevó al auto-jugador honesto de 4 de 40 a 40 de 40 sin tocar una línea de su cerebro.
+  `reclama()` decide qué queda adentro al cerrar y la llaman **el jugador, los tres bots, el
+  auditor y el fogonazo**: con dos cuentas, el auditor aprueba un juego que no existe. Y el relleno
+  es **exacto y no aproximado** —territorio más estela forman un anillo cerrado, así que inundar
+  desde afuera es la respuesta correcta por topología—. Vertical nativo. Vive partido en
+  `herramientas/cerco/partes/` y se arma con `python3 herramientas/cerco/armar.py`.
+
+### Centésima sexagésima sexta vuelta (2026-09-11): **CERCO** — la ARENA, y una decisión de la vuelta anterior se da vuelta a propósito
+
+Pedido textual: *"hacé un paper io idéntico al original we"*.
+
+#### LO PRIMERO ES DECIR QUE ESTO CONTRADICE LA VUELTA 165, Y CON TODAS LAS LETRAS
+
+Ahí escribí, en mayúsculas, **«LA META NO SE ELIGE: SALE DE CUÁNTO TABLERO HAY Y ENTRE CUÁNTOS»**, y
+la medición que lo sostenía sigue siendo cierta: con la meta escrita a mano el auto-jugador honesto
+ganaba 4 de 40 y con la meta derivada 40 de 40. **El Paper.io original no tiene meta.** Tampoco
+tiene reloj, ni tres vidas, ni piedras, ni niveles: tiene **una arena sin fin, ocho cuerpos, una
+vida, y el territorio se pierde al morir**. O sea que lo que la vuelta anterior construyó con
+cuidado es exactamente lo que el pedido de esta vuelta saca.
+
+**NO SE BORRA, SE AGREGA AL LADO.** La campaña está auditada —40 mapas, tres auto-jugadores, la
+regla con sus cuatro casos— y tirarla sería tirar trabajo probado por un pedido que se satisface con
+un modo más. El menú pasa a tener dos puertas: **ARENA** arriba, que es el botón grande, y
+**CAMPAÑA** abajo. El tutorial desemboca en la arena y no en la campaña, porque es lo que el botón
+grande ofrece: enseñar un modo y abrir otro es una lección que no sirve.
+
+#### LA ARENA ES LO QUE EL ORIGINAL ES, PIEZA POR PIEZA
+
+| | campaña | **arena** |
+|---|---|---|
+| tablero | 26 a 74 de lado | **92, uno solo** |
+| cuerpos | 1 a 4 | **8** |
+| meta | derivada de `OCUPA/(1+riv)` | **ninguna** |
+| reloj | cuenta atrás | **cuenta para arriba** |
+| vidas | 3 | **1** |
+| al morir | se conserva el territorio | **se pierde entero** |
+| piedras | sí | **ninguna** |
+| final | ganar o quedarse sin vidas | **te cortan, y ya** |
+
+Más lo que el original muestra y la campaña no tenía: **tabla de posiciones de ocho filas** con el
+color de cada cuerpo y su porcentaje, **puesto** (`#2 de ocho`), el porcentaje con dos decimales, y
+el **récord** guardado. La cámara se aleja con el territorio, que es lo que hace que crecer se vea.
+
+**Y LA ARENA ENTRA POR LA MISMA PUERTA QUE UN NIVEL** (`partidaArranca(m, n, tuto, arena)`), con una
+bandera más. Con una segunda función que armara la partida por su cuenta, el día que se agregue un
+paso al arranque —apagar el tutorial, un panel, un sonido— uno de los dos caminos se queda sin él, y
+el que se queda sin él es siempre el que nadie prueba. Lo mismo `juegaArenaUI()`: la llaman el botón
+del menú, el REINICIAR de la pausa, el SIGUIENTE del panel de fin, el cierre del tutorial **y la
+sonda del banco**. Cinco llamadores y una sola construcción.
+
+#### EL EQUILIBRIO NO HUBO QUE TOCARLO, Y ESO SE MIDIÓ ANTES DE DIBUJAR NADA
+
+`b.js` y `c.js` no tocan el DOM, así que se concatenan y se importan en node
+(`herramientas/cerco/arena.mjs`). Doce semillas × 120 s, con los mismos tres cerebros de la vuelta
+anterior:
+
+| | segundos vivo | mejor % | puesto | puestos alcanzados |
+|---|---|---|---|---|
+| honesto | **55,5** | **7,04** | **3,33** | 1 a 7 |
+| ciego | 35,8 | 5,06 | 3,25 | 1 a 8 |
+| **al azar** | **20,1** | **0,70** | **7,5** | **6 a 8** |
+
+El del azar vive un tercio de lo que vive el honesto, saca **diez veces menos tablero** y **nunca
+sube del sexto puesto**. La separación que la campaña ya tenía se conserva entera en un modo sin
+meta, así que no hizo falta mover un número: **la arena no es la campaña con otras constantes, es la
+misma regla sin las muletas**. La parte pareja de ocho cuerpos es 9,9 % y el honesto llega a 7,04:
+o sea que ni siquiera el bueno alcanza su porción, que es lo que corresponde a un modo del que no se
+sale ganando.
+
+#### SIETE DEFECTOS, Y LOS SIETE SALIERON DE MIRAR LA PANTALLA
+
+Ninguno lo podía ver una sonda, porque los siete son de lo que se ve.
+
+1. **`¡VAS PRIMERO!` EN EL SEGUNDO CERO.** Los ocho cuerpos arrancan con su casa de nueve celdas,
+   o sea **empatados**, y el desempate era el índice: el jugador es el 0, así que el aviso saltaba
+   en el primer cuadro de cada partida. Un aviso que sale siempre no informa nada. Ahora hace falta
+   estar primero **y** con margen sobre el segundo.
+2. **EL PIE DECÍA LO QUE NO ERA.** Debajo del porcentaje decía `META`, que es el rótulo de la
+   campaña, sobre un modo que no tiene meta. Dice `OF THE BOARD`.
+3. **`0%` CON TERRITORIO PUESTO.** El porcentaje se redondeaba a entero, y las nueve celdas de la
+   casa sobre 8.464 son el 0,1 %: los primeros veinte segundos de cada partida mostraban un cero
+   mientras el jugador veía su cuadrado en pantalla. Va con un decimal.
+4. **UN FANTASMA DETRÁS DEL PANEL DE FIN.** El panel es translúcido a propósito —el tablero sigue
+   corriendo detrás— así que el aviso `¡TIERRA!` o `SIN VIDAS` quedaba **escrito por debajo del
+   panel**. El primer arreglo sacó una llamada a `avisa()` y **era demasiado angosto**: hay cuatro
+   sitios que terminan una partida. Lo correcto es `avisaCorta()` llamado desde `termina()`, que es
+   **la única puerta por la que el panel se abre** — y así la campaña queda cubierta de paso.
+5. **`1 bajas`.** Se arregla con una frase entera por idioma (`arenaD1`) y no con una regla de
+   sufijo: en inglés son *kill* y *kills*, dos palabras distintas en la tabla. Es la tercera vez que
+   este repo paga la misma lección (`solicitud/solicitudes` en AERO, `1 cortes` en la vuelta 165).
+6. **EL HUD NO SE LEÍA ENCIMA DEL TERRITORIO, Y NINGUNA TINTA LO ARREGLA.** Es el hallazgo de la
+   vuelta. Medido el contraste WCAG de las tres tintas del HUD contra los ocho colores de cuerpo:
+
+   | | `--tinta2` | `--tinta` | `--yo` |
+   |---|---|---|---|
+   | sobre el tablero vacío | 6,62 | **15,63** | 8,63 |
+   | sobre territorio propio | 1,30 | 1,81 | **1,00** |
+   | el mejor caso de los ocho | 1,72 | 3,10 | 1,71 |
+
+   Sobre el tablero vacío se lee todo; sobre territorio **de quien sea**, nada — y el 1,00 es el
+   porcentaje en `--yo` encima del territorio propio, que es **literalmente el mismo color**. Y no
+   se arregla eligiendo otra tinta: hay ocho cuerpos repartidos cada 45 grados de tono, así que
+   cualquier color que gane contra uno pierde contra su complementario. La única salida es
+   **respaldo**. Mi primer impulso fue cambiarle el color al puesto, y la matriz lo desmintió: el
+   blanco sobre el naranja propio llega a 1,81, que sigue siendo ilegible.
+
+   **EL 0,70 DEL VELO ESTÁ MEDIDO Y NO ELEGIDO**: con el velo del color del fondo, el peor caso del
+   número grande pasa de **1,00 a 4,12** y el de los rotulitos de 1,13 a 3,17. Por debajo de 0,62 el
+   número grande no llega a 3,3. Va en **degradado** —cerrado en el canto y abierto hacia adentro—
+   así que las dos franjas suman el 14 % de la pantalla y el medio, que es donde se juega, no se
+   toca. Es el mismo reparto que el velo del menú.
+
+   **Y VA AL COLOR DEL JUEGO Y NO A NEGRO PURO**: con negro hacía falta 0,62 para el mismo
+   resultado, pero la banda se lee a **barra negra pegada encima** en vez de a tablero que se va.
+
+   **POR QUÉ ESTO NO APARECIÓ EN LA CAMPAÑA:** dos a cuatro cuerpos sobre un tablero chico dejan el
+   HUD casi siempre sobre fondo vacío. La campaña venía funcionando **por suerte geométrica**. Con
+   ocho cuerpos y 92 de lado, el HUD pasa la partida entera encima de territorio.
+
+   Y la solución ya estaba en el archivo, aplicada a **un solo elemento**: `#aviso` tenía su
+   `text-shadow` desde siempre y nada más lo tenía.
+7. **LA TABLA DE POSICIONES SE BORRABA.** Su respaldo estaba en `.28`, y las filas de los rivales
+   —que van en `--tinta2`— daban **1,11** contra el peor de los ocho colores. Con `.76` el peor caso
+   pasa a **4,71** y la fila propia a 11,12. La tabla mide 74 px de 412 y vive en la esquina: no
+   tapa nada que se juegue.
+
+#### UNA COSA QUE PARECÍA UN DEFECTO Y ERA EL TABLERO
+
+En la captura del pie aparecía un rectángulo azul detrás de las palabras `OF THE`. Ampliándolo, es
+**un agujero en el territorio morado de un rival** — geometría del juego, no interfaz. Estuve a un
+paso de mover un elemento que estaba donde tenía que estar.
+
+#### Y UN DEFECTO DE LA SONDA, DEL TIPO DE SIEMPRE
+
+`juegaArena` leía el puesto con `puestoDe(M, 1)` **después** de que el bucle saliera, o sea después
+de que la muerte liberara el territorio: informaba **7,17 de 8** para un bot que había estado
+segundo casi toda la partida. Por eso existen `P.posUlt` y `P.pctUlt`, que se escriben mientras el
+cuerpo está vivo, y por eso la rama de corte de la arena **devuelve antes** de leer la tajada.
+
+#### MEDIDO AL CERRAR
+
+Regla **4 de 4 casos, 0 malos**. Mapas **40 de 40, 0 malos**. Auto-jugadores de campaña **40 / 36 /
+0 de 40** con tajada 18,1 / 17,4 / 2,3 y cortes 0,42 / 0,97 / 2,90 — **cifra por cifra los números
+de la vuelta 165**, o sea que la arena no tocó la campaña. Arena en node **55,5 / 35,8 / 20,1 s**.
+Partidas jugadas en el navegador: mitad de partida con `pos 2 · 10,5 %` y `pos 5 · 4,7 %`, las dos
+vivas; muerte de verdad con el panel diciendo `YOU GOT CUT · #8 out of eight · 0.3% · 0 kills ·
+0:18 · NEW BEST!`. **Cero solapamientos** entre los siete elementos del HUD de arena, con `fuera:
+[]`, y la tabla con sus ocho filas y la propia en negrita. Los tres idiomas en vivo. El panel de fin
+se dibuja **por encima** del velo (z-index 10 contra el orden del documento). Costo **0,297 a 0,362
+ms por cuadro** con ocho cuerpos. `window.__errs` **vacío en las nueve corridas**. El HTML pasó de
+133 a **165 KB**, sin un solo asset.
+
+**LO QUE SIGUE PENDIENTE, Y ES DE LA MISMA LISTA:** que todos los juegos entren en inglés o
+pregunten el idioma antes del tutorial, y las portadas 9:16 generadas con Rezona.
+
 ### Centésima sexagésima quinta vuelta (2026-09-11): **CERCO**, el vigésimo juego — un Paper.io, y la meta que no se elige se deriva
 
 Pedido: *"y el paper io"* — el pendiente que la vuelta 164 dejó anotado con todas las letras.

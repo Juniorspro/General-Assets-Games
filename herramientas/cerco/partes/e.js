@@ -14,7 +14,7 @@
 const V = {
   cv: null, g: null, W: 0, H: 0, dpr: 1, k: 1,
   off: null, og: null, img: null, b32: null, n: 0, zsucio: true,
-  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19,
+  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19, vista: VISTA,
   mini: null, mg: null, miniT: 0,
   prevZ: null, cort: null, viv: null,
   part: [], dest: [], sac: 0, sacx: 0, sacy: 0, gan: new Int32Array(NJUG + 1),
@@ -40,11 +40,34 @@ function vpMide() {
   if (W === V.W && H === V.H && d === V.dpr) return;
   V.W = W; V.H = H; V.dpr = d; V.k = d;
   V.cv.width = W; V.cv.height = H;
-  V.esc = W / VISTA;
-  V.visW = W / V.esc; V.visH = H / V.esc;
+  vpEsc();
   /* el contexto se resetea al cambiar de tamano: el filtro hay que volver a
      apagarlo o el tablero sale borroneado en vez de pixelado.              */
   V.g.imageSmoothingEnabled = false;
+}
+
+/* EL LADO DE LA VENTANA VIVE EN UN SOLO SITIO. Con la escala escrita en
+   `vpMide` y el zoom escribiendola otra vez por su cuenta, cambiar de
+   calidad o girar el telefono devolveria la vista a 19 celdas en medio de
+   una partida — y eso no se ve como un ajuste, se ve como un salto.      */
+function vpEsc() {
+  V.esc = V.W / V.vista;
+  V.visW = V.W / V.esc; V.visH = V.H / V.esc;
+}
+
+/* ── EL ZOOM DE LA ARENA ──────────────────────────────────────────────────
+   Solo en arena: en la campana la vista fija es parte del diseno —el mundo
+   4 es grande JUSTAMENTE porque no entra en la pantalla— asi que abrirla ahi
+   estaria cambiando ocho niveles ya auditados.
+   Y se suavisa en el tiempo con la misma exponencial que la camara: el
+   terreno da saltos de cientos de celdas al cerrar un cerco, y una vista que
+   los copie de golpe se lee a que la camara se rompio.                     */
+function vpZoom(M, dt) {
+  const t = M.arena
+    ? VISTA + (VISTA_MAX - VISTA) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / VISTA_SAT))
+    : VISTA;
+  V.vista += (t - V.vista) * (1 - Math.exp(-dt * 1.2));
+  vpEsc();
 }
 
 function vpInit() {
@@ -75,6 +98,7 @@ function vpNuevo(M) {
   V.viv = new Uint8Array(NJUG + 1);
   for (const p of M.jug) { V.cort[p.id] = p.cortes; V.viv[p.id] = 1; }
   V.zsucio = true; V.part.length = 0; V.dest.length = 0; V.sac = 0; V.miniT = 0;
+  V.vista = VISTA; vpEsc();
   V.camx = cl(M.jug[0].ix - V.visW / 2, 0, Math.max(0, n - V.visW));
   V.camy = cl(M.jug[0].iy - V.visH / 2, 0, Math.max(0, n - V.visH));
 }
@@ -148,6 +172,7 @@ function vpEsquirlas(x, y, id) {
    juego te mato sin avisar.                                                */
 const VP_MARG = 2;
 function vpCam(M, dt) {
+  vpZoom(M, dt);
   const p = M.jug[0];
   let tx = p.ix + p.dx * M.f + 0.5 - V.visW / 2;
   let ty = p.iy + p.dy * M.f + 0.5 - V.visH / 2;

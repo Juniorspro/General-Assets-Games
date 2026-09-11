@@ -32,6 +32,30 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
    traducirse y tiene que salir nitido en cualquier densidad. Y todo lo que
    es texto esta en la misma columna de arriba o en la de abajo, asi el
    solapamiento no depende de acordarse de un pixel.                        */
+/* ══ EL VELO DE LAS DOS FRANJAS ══════════════════════════════════════════
+   EL HUD SE DIBUJA ENCIMA DEL TABLERO Y EL TABLERO SE LLENA DE COLOR. Medido
+   el contraste de cada tinta contra los ocho colores de cuerpo: sobre el
+   tablero vacio se lee todo (6,62 · 15,63 · 8,63) y sobre territorio —de
+   quien sea— NO SE LEE NADA: la mejor casilla de la matriz da 3,10 y la peor
+   1,00, que es el `10,5 %` en `--yo` encima del territorio propio, o sea
+   exactamente el mismo color. Y eso NO se arregla eligiendo otra tinta: hay
+   ocho cuerpos repartidos cada 45 grados de tono, asi que cualquier color que
+   gane contra uno pierde contra su complementario. La unica salida es
+   respaldo.
+   EL 0,70 ESTA MEDIDO Y NO ELEGIDO: con el velo al color del fondo, el peor
+   caso del numero grande pasa de 1,00 a 4,12 y el de los rotulitos de 1,13 a
+   3,17. Por debajo de 0,62 el numero grande no llega a 3,3.
+   Y VA EN DEGRADADO, cerrado en el canto y abierto hacia adentro: las dos
+   franjas suman el 14 % de la pantalla, y el medio —que es donde se juega— no
+   se toca. Es el mismo reparto que el velo del menu.
+   EN LA CAMPANA NO HACIA FALTA POR SUERTE GEOMETRICA: dos a cuatro cuerpos
+   sobre un tablero chico dejan el HUD casi siempre sobre fondo vacio. Con
+   ocho cuerpos y 92 de lado, el HUD pasa la partida encima de territorio. */
+#velo{position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(to bottom, rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 52px, rgba(16,20,29,0) 106px),
+    linear-gradient(to top,    rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 58px, rgba(16,20,29,0) 118px)}
+#velo.off{display:none}
 #hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 9px) 13px 0;
   z-index:3;pointer-events:none;display:flex;flex-direction:column;gap:7px}
 #hud.off{display:none}
@@ -83,6 +107,33 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
   border:1.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.28);
   image-rendering:pixelated}
 #mini.off{display:none}
+
+/* ── LA TABLA DE POSICIONES (solo arena) ──────────────────────────────────
+   EL 148 SALE DE LA MISMA CUENTA QUE EL 66 DEL MAPA: 66 de arranque + 74 de
+   alto + 8 de aire, o sea el mismo hueco que hay entre la barra y el mapa. Y
+   mide 74 de ancho para caer en la misma columna: dos cajas apiladas con
+   anchos distintos se leen a dos cosas sueltas y no a una columna de datos.
+
+   OCHO FILAS SIEMPRE, tambien las de los muertos: sacando al que se murio,
+   los puestos de abajo SUBEN sin que nadie haya hecho nada —y el alto de la
+   caja cambiaria en el medio de la partida—. El muerto se atenua y se queda. */
+#tabla{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 148px);
+  width:74px;z-index:3;pointer-events:none;border-radius:8px;padding:5px 6px;
+/* EL RESPALDO ESTA MEDIDO: con .28 las filas de los rivales —que van en
+     `--tinta2`— dan 1,11 de contraste contra el peor de los ocho colores de
+     cuerpo, o sea que la tabla se borra en cuanto queda encima de territorio.
+     Con .76 el peor caso pasa a 4,71 y la fila propia a 11,12. La tabla mide
+     74 px de 412 y vive en la esquina: no tapa nada que se juegue.        */
+  background:rgba(0,0,0,.76);border:1.5px solid rgba(255,255,255,.14);
+  display:flex;flex-direction:column;gap:3px}
+#tabla.off{display:none}
+#tabla .tf{display:flex;align-items:center;gap:4px;font-size:8.5px;font-weight:800;
+  letter-spacing:.02em;color:var(--tinta2);line-height:11px;height:11px}
+#tabla .tf.yo{color:var(--tinta)}
+#tabla .tf.muerto{opacity:.34}
+#tabla .tn{width:9px;text-align:right;opacity:.7;font-variant-numeric:tabular-nums}
+#tabla .tc{width:6px;height:6px;border-radius:2px;flex:none}
+#tabla .tp{flex:1;text-align:right;font-variant-numeric:tabular-nums}
 
 /* ── pie ── */
 #pie{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 11px);
@@ -140,6 +191,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
 .bt.sec:active{transform:none;background:rgba(255,255,255,.08)}
 .col{display:flex;flex-direction:column;gap:11px;width:100%;max-width:290px}
 .fila{display:flex;gap:10px;width:100%;max-width:290px}
+/* EL PIE VA PEGADO A SU BOTON, y por eso lleva margen negativo: `.col` reparte
+   once pixeles parejos, asi que sin esto la linea queda a la misma distancia
+   del boton de arriba que del de abajo y no se sabe de cual habla.          */
+.btSub{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tinta2);
+  text-align:center;opacity:.66;margin:-6px 0 1px}
 .fila .bt{flex:1}
 
 /* la marca: un cuadrado cerrandose sobre si mismo, que es el juego entero */
@@ -196,16 +252,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
 <div id="marco">
   <canvas id="cv"></canvas>
 
+  <div id="velo" class="off"></div>
+
   <div id="hud" class="off">
     <div id="fila1">
       <div id="vidas"></div>
       <div id="nivRot"><b id="nrM">MUNDO 1</b><span id="nrN">NIVEL 1-1</span></div>
       <button id="bPausa" aria-label="pausa"><i></i><i></i></button>
     </div>
-    <div id="barra"><i></i><i></i><i></i><i></i><div id="meta"></div></div>
+    <div id="barra"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><div id="meta"></div></div>
   </div>
 
   <canvas id="mini" class="off" width="74" height="74"></canvas>
+  <div id="tabla" class="off"></div>
 
   <div id="pista"></div>
   <button id="tSalt" class="chip">SALTEAR</button>
@@ -243,13 +302,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
     </div>
     <h1>CERCO</h1>
     <div class="sub" id="mSub"></div>
-    <div class="col" style="margin-top:22px">
-      <button class="bt" id="mJugar">JUGAR</button>
+    <div class="col" style="margin-top:20px">
+      <button class="bt" id="mJugar">ARENA</button>
+      <div class="btSub" id="mJugarSub"></div>
+      <button class="bt sec" id="mNiv">CAMPAÑA</button>
+      <div class="btSub" id="mNivSub"></div>
       <div class="fila">
-        <button class="bt sec" id="mNiv">NIVELES</button>
         <button class="bt sec" id="mTuto">CÓMO SE JUEGA</button>
+        <button class="bt sec" id="mAj">AJUSTES</button>
       </div>
-      <button class="bt sec" id="mAj">AJUSTES</button>
     </div>
     <div class="pie" id="mPie" style="margin-top:20px"></div>
   </div>

@@ -73,6 +73,9 @@ window.__C = {
       giros: P.giros, ganUlt: P.ganUlt,
       tutOn: TUT.on, tutPaso: TUT.paso, pista: $('pista').textContent,
       hechos: cuentaHechos(), ult: PROG.ult, cal: PROG.cal,
+      arena: P.arena, pos: P.posUlt, matas: P.yo ? P.yo.matas : 0,
+      rec: +((PROG.rec || 0) * 100).toFixed(1), recB: PROG.recB | 0,
+
       ms: +MSDIB.toFixed(3), dpr: V.dpr,
     };
   },
@@ -83,7 +86,14 @@ window.__C = {
   menu() { vaMenu(); return this.est(); },
   panel(id) { verPanel(id); return { panel: PANEL }; },
   clic(id) { const e = $(id); if (!e) return 'no hay ' + id; e.click(); return this.est(); },
-  lang(l) { LANG = l; guardaProg(); pintaIdioma(); return { lang: LANG, sub: $('mSub').textContent, pista: $('pista').textContent, fTit: $('fTit').textContent }; },
+  lang(l) {
+    LANG = l; guardaProg(); pintaIdioma();
+    const t = (id) => { const e = $(id); return e ? e.textContent : null; };
+    return { lang: LANG, sub: t('mSub'), pista: t('pista'),
+             fTit: t('fTit'), fSub: t('fSub'), fDatos: t('fDatos'), fSig: t('fSig'),
+             jugar: t('mJugar'), jugarSub: t('mJugarSub'), niv: t('mNiv'), nivSub: t('mNivSub'),
+             pctR: t('pctR'), relR: t('relR'), nrN: t('nrN') };
+  },
 
   /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
      `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
@@ -182,6 +192,45 @@ window.__C = {
     };
   },
 
+  /* ── la arena, jugada por el mismo camino que el boton del menu ──
+     ENTRA POR `juegaArenaUI`, o sea por la puerta que toca el dedo: con un
+     `partidaArranca` a mano, la prueba estaria aprobando una partida que el
+     jugador no arranca nunca y el dia que el boton haga un paso mas —un
+     sonido, un panel— eso quedaria sin medir.                            */
+  arena(modo, tope) {
+    juegaArenaUI();
+    const yo = P.yo;
+    yo.bot = modo === 'azar' ? { azar: true } : { per: 0.80 };
+    const T = tope || 20000;
+    let g = 0, mejorPos = 9;
+    while (P.on && !P.fin && g++ < T) {
+      partidaPaso(1 / VEL);
+      if (yo.vivo && P.posUlt < mejorPos) mejorPos = P.posUlt;
+    }
+    yo.bot = null;
+    return {
+      fin: P.fin, pos: P.posUlt, mejorPos, pct: +(P.mejor * 100).toFixed(1),
+      matas: yo.matas, cortes: yo.cortes, seg: +P.seg.toFixed(1), vueltas: g,
+      panel: PANEL, fTit: $('fTit').textContent, fSub: $('fSub').textContent,
+      fDatos: $('fDatos').textContent, rec: +((PROG.rec || 0) * 100).toFixed(1),
+    };
+  },
+  /* la tabla LEIDA DEL DOM, que es lo unico que prueba que lo que se calcula
+     llega a la pantalla: ocho filas, la mia marcada, los muertos apagados. */
+  tabla() {
+    const t = $('tabla'); if (!t) return null;
+    const f = [];
+    for (const e of t.children) {
+      f.push({
+        n: e.children[0].textContent,
+        col: e.children[1].style.background,
+        p: e.children[2].textContent,
+        yo: e.classList.contains('yo'), muerto: e.classList.contains('muerto'),
+      });
+    }
+    return { off: t.classList.contains('off'), n: f.length, f };
+  },
+
   /* ── auditorias del modelo puro ── */
   regla() { return auditaRegla(); },
   mapas() { return auditaMapas(); },
@@ -221,7 +270,7 @@ window.__C = {
   },
 
   cajas() {
-    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
     const R = [], vis = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;
