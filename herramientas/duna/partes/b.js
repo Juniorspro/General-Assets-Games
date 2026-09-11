@@ -115,6 +115,49 @@ const TURBO_CD = 0.085;     // un dedo no aprieta mas rapido que esto
 const TUMBO_T = 1.15;       // cuanto tarda en levantarse
 const TUMBO_V = 4.5;        // con cuanta velocidad queda
 
+/* ── TRES VIDAS, Y ESTO DA VUELTA UNA DECISION ESCRITA ARRIBA ─────────────
+   El encabezado de este archivo dice, con todas las letras, que la bajada no
+   termina y que la corrida la cierra el jugador desde la pausa. Eso ya no es
+   cierto: se pidieron vidas y se ponen. Lo que se conserva es el reparto —un
+   tumbo sigue costando la velocidad, que es lo unico que este juego tiene— y
+   lo que cambia es que el tercero cierra la corrida.
+   TRES Y NO UNA: con una, el primer error de la primera bajada manda al menu
+   y el juego deja de ser una bajada; con tres, los dos primeros son el
+   castigo de siempre y el tercero es el final. */
+const VIDAS = 3;
+
+/* ── EL SALTO CARGADO ─────────────────────────────────────────────────────
+   Se mantiene la mitad IZQUIERDA —la de empujar— y se toca la derecha: el
+   salto sale mas alto. Y el multiplicador NO SE ELIGE, se despeja: el vuelo
+   llano dura `2S/G` y una voltereta doble tarda `GIRO_ESPERA + 2·(2π/GIRO_V)`
+   = 1,601 s. Igualando, `S' = 24,02`, o sea 1,456 veces `SALTO`. Con 1,46 el
+   vuelo cargado mide 1,606 s contra los 1,601 que pide la doble: el salto
+   cargado es EXACTAMENTE aquel en el que una voltereta doble entra en llano.
+
+   QUE COMPRA Y QUE CUESTA. El apice pasa de 4,54 m a 9,67 y el alcance a 20
+   m/s de 22,0 a 32,1 —contra el hueco mas ancho del terreno, que la auditoria
+   mide en 21,6— asi que es una herramienta y no un requisito: los huecos se
+   siguen cruzando con el salto de siempre. Y se paga con lo unico que hay:
+   los 0,55 s de carga son seis toques de empuje que no se dieron, o sea unos
+   diez metros por segundo de velocidad regalados.
+
+   EL MINIMO EXISTE PARA QUE UN TOQUE DE EMPUJE NO CARGUE SIN QUERER: la mano
+   izquierda machaca once veces por segundo, asi que por debajo de 0,12 s de
+   sostenido no hay carga ninguna.                                          */
+const CARGA_MAX = 0.55;     // cuanto hay que sostener para la carga entera
+const CARGA_MIN = 0.12;     // por debajo de esto un sostenido no es una carga
+/* Y LA CARGA SOBREVIVE A SOLTAR LA IZQUIERDA UN PESTANEO, por la misma razon
+   que existen COYOTE y BUFFER: este es un gesto de DOS manos y nadie las
+   suelta en el mismo cuadro. Sin esta gracia, soltar la izquierda cien
+   milisegundos antes de tocar la derecha tira la carga entera —medido: los
+   seis saltos de la sonda dieron apice 4,25 · 4,34 · 4,36 · 4,36 · 4,37 ·
+   4,39 con `k` yendo de 0 a 1, o sea la carga leida bien y aplicada nunca— y
+   el jugador no ve nada: salta igual de bajo despues de haber sostenido medio
+   segundo. Es mas generosa que el buffer del salto (0,15) justo porque son
+   dos dedos y no uno.                                                     */
+const CARGA_GRACIA = 0.18;
+const SALTO_CARGA = 1.46;   // despejado de que la doble voltereta entre en llano
+
 /* ── LA PENDIENTE MEDIA ───────────────────────────────────────────────────
    El mundo BAJA con x: es una ladera infinita, como en Alto. Ese numero es
    el que hace que no haga falta un boton de acelerar — la gravedad empuja
@@ -163,12 +206,13 @@ let IDIOMA = 'es';
 const LANG = {
   es: {
     idi: 'elegí tu idioma', sub: 'metros',
-    msub: 'bajá la duna · dos manos · sin final',
+    msub: 'bajá la duna · dos manos · tres vidas',
     jugar: 'JUGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
     pie: 'Derecha: tocá para saltar y mantené en el aire para girar. ' +
          'Izquierda: tocá rápido para empujar, hasta el tope. ' +
-         'Aterrizar derecho te da velocidad; de cabeza te caés, y caerse ' +
-         'cuesta la velocidad y no la bajada — esto no se termina nunca.',
+         'Mantené la izquierda y tocá la derecha: el salto sale al doble de alto. ' +
+         'Aterrizar derecho te da velocidad; de cabeza te caés, y cada caída ' +
+         'cuesta una de las tres vidas.',
     rec: 'RÉCORD · {0} m', mon: '{0} monedas',
     pausa: 'PAUSA', seguir: 'SEGUIR', menu: 'MENÚ', term: 'TERMINAR',
     papie: 'el paisaje sigue ahí cuando vuelvas',
@@ -180,7 +224,9 @@ const LANG = {
     tu1: 'TOCÁ A LA DERECHA PARA SALTAR',
     tu2: 'MANTENÉ LA DERECHA EN EL AIRE Y DÁ UNA VOLTERETA',
     tu3: 'TOCÁ RÁPIDO A LA IZQUIERDA PARA EMPUJAR',
-    tu4: 'ASÍ SE JUEGA · LA BAJADA NO TERMINA',
+    tu5: 'MANTENÉ LA IZQUIERDA Y TOCÁ LA DERECHA: SALTO CARGADO',
+    tu4: 'ASÍ SE JUEGA · TRES CAÍDAS Y SE TERMINA',
+    tcarga: 'CARGAR', tvidas: 'VIDAS', tsinvidas: 'SIN VIDAS',
     tsalt: 'saltear',
     nuevo: 'RÉCORD NUEVO',
     baja: 'BAJA', media: 'MEDIA', alta: 'ALTA',
@@ -197,12 +243,13 @@ const LANG = {
   },
   en: {
     idi: 'pick your language', sub: 'metres',
-    msub: 'ride the dune · two hands · no finish line',
+    msub: 'ride the dune · two hands · three lives',
     jugar: 'PLAY', obj: 'GOALS', cal: 'GRAPHICS', idio: 'LANGUAGE',
     pie: 'Right: tap to jump, hold in the air to backflip. ' +
          'Left: tap fast to push, up to the cap. ' +
+         'Hold left and tap right and the jump comes out twice as high. ' +
          'Land level and you gain speed; land on your head and you wipe out — ' +
-         'and a wipeout costs you speed, not the run. This never ends.',
+         'and every wipeout costs one of your three lives.',
     rec: 'BEST · {0} m', mon: '{0} coins',
     pausa: 'PAUSED', seguir: 'RESUME', menu: 'MENU', term: 'END RUN',
     papie: 'the dune will still be there',
@@ -214,7 +261,9 @@ const LANG = {
     tu1: 'TAP THE RIGHT SIDE TO JUMP',
     tu2: 'HOLD THE RIGHT SIDE IN THE AIR AND LAND A BACKFLIP',
     tu3: 'TAP THE LEFT SIDE FAST TO PUSH',
-    tu4: 'THAT IS THE GAME · THE RUN NEVER ENDS',
+    tu5: 'HOLD LEFT AND TAP RIGHT FOR A CHARGED JUMP',
+    tu4: 'THAT IS THE GAME · THREE WIPEOUTS AND IT IS OVER',
+    tcarga: 'CHARGE', tvidas: 'LIVES', tsinvidas: 'NO LIVES LEFT',
     tsalt: 'skip',
     nuevo: 'NEW BEST',
     baja: 'LOW', media: 'MEDIUM', alta: 'HIGH',
@@ -231,12 +280,13 @@ const LANG = {
   },
   pt: {
     idi: 'escolha seu idioma', sub: 'metros',
-    msub: 'desça a duna · duas mãos · sem fim',
+    msub: 'desça a duna · duas mãos · três vidas',
     jugar: 'JOGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
     pie: 'Direita: toque para pular e segure no ar para girar. ' +
          'Esquerda: toque rápido para empurrar, até o limite. ' +
-         'Pousar reto dá velocidade; de cabeça você cai, e cair custa a ' +
-         'velocidade e não a descida — isto não acaba nunca.',
+         'Segure a esquerda e toque a direita: o pulo sai o dobro de alto. ' +
+         'Pousar reto dá velocidade; de cabeça você cai, e cada queda ' +
+         'custa uma das três vidas.',
     rec: 'RECORDE · {0} m', mon: '{0} moedas',
     pausa: 'PAUSA', seguir: 'CONTINUAR', menu: 'MENU', term: 'ENCERRAR',
     papie: 'a duna continua aí quando voltar',
@@ -248,7 +298,9 @@ const LANG = {
     tu1: 'TOQUE À DIREITA PARA PULAR',
     tu2: 'SEGURE A DIREITA NO AR E DÊ UM MORTAL',
     tu3: 'TOQUE RÁPIDO À ESQUERDA PARA EMPURRAR',
-    tu4: 'É ISSO · A DESCIDA NÃO ACABA',
+    tu5: 'SEGURE A ESQUERDA E TOQUE A DIREITA: PULO CARREGADO',
+    tu4: 'É ISSO · TRÊS QUEDAS E ACABOU',
+    tcarga: 'CARREGAR', tvidas: 'VIDAS', tsinvidas: 'SEM VIDAS',
     tsalt: 'pular',
     nuevo: 'NOVO RECORDE',
     baja: 'BAIXA', media: 'MÉDIA', alta: 'ALTA',

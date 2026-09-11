@@ -35,7 +35,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#07080c;
   top:calc(var(--mh,412px)*.045);text-align:center;
   font:800 clamp(20px,calc(var(--mh,412px)*.086),40px)/1 monospace;letter-spacing:.06em;
   color:#fff;opacity:.94;text-shadow:0 2px 10px rgba(0,0,0,.35)}
-#sub{position:absolute;left:0;right:0;top:calc(var(--mh,412px)*.135);text-align:center;
+/* EL MARGEN DE `#sub` SALE DE LO QUE MIDE LA FILA DE VIDAS, no de copiarle el
+   de `#pts`. La fila arranca en .038 y su ancho es tres puntos de .9em mas dos
+   huecos de .5em sobre un cuerpo de .030, o sea .038 + 3,7 x .030 = .149 del
+   lado corto: con .14 el subtitulo empezaba DENTRO del tercer punto —medido,
+   `cajas()` cantaba `sub x vidas` en los tres idiomas— y con .175 quedan
+   veintiseis pixeles de aire. Va igual de los dos lados porque el texto esta
+   centrado: con un margen distinto en cada uno, la palabra se corre.
+   Es exactamente el defecto de caja que el comentario de `#pts` ya describe:
+   una caja que va de borde a borde para decir UNA palabra se pisa con todo lo
+   que este a su altura, aunque en pantalla no se toquen.                    */
+#sub{position:absolute;left:calc(var(--mh,412px)*.175);right:calc(var(--mh,412px)*.175);
+  top:calc(var(--mh,412px)*.135);text-align:center;
   font:600 clamp(9px,calc(var(--mh,412px)*.030),13px)/1 monospace;letter-spacing:.22em;
   color:#fff;opacity:.50}
 #mon{position:absolute;right:calc(var(--mh,412px)*.045);top:calc(var(--mh,412px)*.045);
@@ -43,6 +54,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#07080c;
   color:#ffd98a;opacity:.92;display:flex;align-items:center;gap:6px}
 #mon i{display:block;width:.75em;height:.75em;border-radius:50%;background:#ffd98a;
   box-shadow:0 0 8px rgba(255,217,138,.6);font-style:normal}
+/* ── LAS TRES VIDAS ───────────────────────────────────────────────────────
+   Van abajo del boton de pausa y NO arriba a la derecha: ese canto ya lo
+   ocupan las monedas, y las dos cosas son contadores —dos filas de puntitos
+   pegadas se leen como una sola y el jugador no sabe cual es cual—. Los tres
+   van SIEMPRE puestos y el gastado queda HUECO en vez de desaparecer: una
+   fila que se acorta no dice cuantas habia, asi que mirandola no se puede
+   saber si quedan dos de tres o dos de dos. Y como su caja arranca en .038,
+   `#sub` —que iba de borde a borde para decir UNA palabra— pasa a llevar el
+   mismo margen que el marcador: es exactamente el defecto de caja que el
+   comentario de arriba ya describe para `#pts`.                           */
+#vidas{position:absolute;left:calc(var(--mh,412px)*.038);top:calc(var(--mh,412px)*.140);
+  display:none;align-items:center;gap:.5em;
+  font:700 clamp(9px,calc(var(--mh,412px)*.030),14px)/1 monospace}
+#vidas i{display:block;width:.9em;height:.9em;border-radius:50%;font-style:normal;
+  border:1.5px solid rgba(255,255,255,.50);background:transparent;
+  transition:background .22s,box-shadow .22s,border-color .22s}
+#vidas i.on{background:#ff8f8f;border-color:#ff8f8f;
+  box-shadow:0 0 8px rgba(255,143,143,.55)}
+body.jugando #vidas{display:flex}
 /* Y LOS TRES SE APAGAN FUERA DE LA PARTIDA. El marcador estaba siempre puesto,
    asi que la PRIMERA pantalla del juego —la de elegir idioma— salia con un
    «0 metros» y un contador de monedas en cero encima del cartel del nombre:
@@ -212,6 +242,7 @@ body.tuto #pista{display:none}
     <div id="pts">0</div>
     <div id="sub"></div>
     <div id="mon"><i></i><span id="monN">0</span></div>
+    <div id="vidas"><i></i><i></i><i></i></div>
     <div id="truco"></div>
     <div id="pista"></div>
   </div>
@@ -388,6 +419,49 @@ const TURBO_CD = 0.085;     // un dedo no aprieta mas rapido que esto
 const TUMBO_T = 1.15;       // cuanto tarda en levantarse
 const TUMBO_V = 4.5;        // con cuanta velocidad queda
 
+/* ── TRES VIDAS, Y ESTO DA VUELTA UNA DECISION ESCRITA ARRIBA ─────────────
+   El encabezado de este archivo dice, con todas las letras, que la bajada no
+   termina y que la corrida la cierra el jugador desde la pausa. Eso ya no es
+   cierto: se pidieron vidas y se ponen. Lo que se conserva es el reparto —un
+   tumbo sigue costando la velocidad, que es lo unico que este juego tiene— y
+   lo que cambia es que el tercero cierra la corrida.
+   TRES Y NO UNA: con una, el primer error de la primera bajada manda al menu
+   y el juego deja de ser una bajada; con tres, los dos primeros son el
+   castigo de siempre y el tercero es el final. */
+const VIDAS = 3;
+
+/* ── EL SALTO CARGADO ─────────────────────────────────────────────────────
+   Se mantiene la mitad IZQUIERDA —la de empujar— y se toca la derecha: el
+   salto sale mas alto. Y el multiplicador NO SE ELIGE, se despeja: el vuelo
+   llano dura `2S/G` y una voltereta doble tarda `GIRO_ESPERA + 2·(2π/GIRO_V)`
+   = 1,601 s. Igualando, `S' = 24,02`, o sea 1,456 veces `SALTO`. Con 1,46 el
+   vuelo cargado mide 1,606 s contra los 1,601 que pide la doble: el salto
+   cargado es EXACTAMENTE aquel en el que una voltereta doble entra en llano.
+
+   QUE COMPRA Y QUE CUESTA. El apice pasa de 4,54 m a 9,67 y el alcance a 20
+   m/s de 22,0 a 32,1 —contra el hueco mas ancho del terreno, que la auditoria
+   mide en 21,6— asi que es una herramienta y no un requisito: los huecos se
+   siguen cruzando con el salto de siempre. Y se paga con lo unico que hay:
+   los 0,55 s de carga son seis toques de empuje que no se dieron, o sea unos
+   diez metros por segundo de velocidad regalados.
+
+   EL MINIMO EXISTE PARA QUE UN TOQUE DE EMPUJE NO CARGUE SIN QUERER: la mano
+   izquierda machaca once veces por segundo, asi que por debajo de 0,12 s de
+   sostenido no hay carga ninguna.                                          */
+const CARGA_MAX = 0.55;     // cuanto hay que sostener para la carga entera
+const CARGA_MIN = 0.12;     // por debajo de esto un sostenido no es una carga
+/* Y LA CARGA SOBREVIVE A SOLTAR LA IZQUIERDA UN PESTANEO, por la misma razon
+   que existen COYOTE y BUFFER: este es un gesto de DOS manos y nadie las
+   suelta en el mismo cuadro. Sin esta gracia, soltar la izquierda cien
+   milisegundos antes de tocar la derecha tira la carga entera —medido: los
+   seis saltos de la sonda dieron apice 4,25 · 4,34 · 4,36 · 4,36 · 4,37 ·
+   4,39 con `k` yendo de 0 a 1, o sea la carga leida bien y aplicada nunca— y
+   el jugador no ve nada: salta igual de bajo despues de haber sostenido medio
+   segundo. Es mas generosa que el buffer del salto (0,15) justo porque son
+   dos dedos y no uno.                                                     */
+const CARGA_GRACIA = 0.18;
+const SALTO_CARGA = 1.46;   // despejado de que la doble voltereta entre en llano
+
 /* ── LA PENDIENTE MEDIA ───────────────────────────────────────────────────
    El mundo BAJA con x: es una ladera infinita, como en Alto. Ese numero es
    el que hace que no haga falta un boton de acelerar — la gravedad empuja
@@ -436,12 +510,13 @@ let IDIOMA = 'es';
 const LANG = {
   es: {
     idi: 'elegí tu idioma', sub: 'metros',
-    msub: 'bajá la duna · dos manos · sin final',
+    msub: 'bajá la duna · dos manos · tres vidas',
     jugar: 'JUGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
     pie: 'Derecha: tocá para saltar y mantené en el aire para girar. ' +
          'Izquierda: tocá rápido para empujar, hasta el tope. ' +
-         'Aterrizar derecho te da velocidad; de cabeza te caés, y caerse ' +
-         'cuesta la velocidad y no la bajada — esto no se termina nunca.',
+         'Mantené la izquierda y tocá la derecha: el salto sale al doble de alto. ' +
+         'Aterrizar derecho te da velocidad; de cabeza te caés, y cada caída ' +
+         'cuesta una de las tres vidas.',
     rec: 'RÉCORD · {0} m', mon: '{0} monedas',
     pausa: 'PAUSA', seguir: 'SEGUIR', menu: 'MENÚ', term: 'TERMINAR',
     papie: 'el paisaje sigue ahí cuando vuelvas',
@@ -453,7 +528,9 @@ const LANG = {
     tu1: 'TOCÁ A LA DERECHA PARA SALTAR',
     tu2: 'MANTENÉ LA DERECHA EN EL AIRE Y DÁ UNA VOLTERETA',
     tu3: 'TOCÁ RÁPIDO A LA IZQUIERDA PARA EMPUJAR',
-    tu4: 'ASÍ SE JUEGA · LA BAJADA NO TERMINA',
+    tu5: 'MANTENÉ LA IZQUIERDA Y TOCÁ LA DERECHA: SALTO CARGADO',
+    tu4: 'ASÍ SE JUEGA · TRES CAÍDAS Y SE TERMINA',
+    tcarga: 'CARGAR', tvidas: 'VIDAS', tsinvidas: 'SIN VIDAS',
     tsalt: 'saltear',
     nuevo: 'RÉCORD NUEVO',
     baja: 'BAJA', media: 'MEDIA', alta: 'ALTA',
@@ -470,12 +547,13 @@ const LANG = {
   },
   en: {
     idi: 'pick your language', sub: 'metres',
-    msub: 'ride the dune · two hands · no finish line',
+    msub: 'ride the dune · two hands · three lives',
     jugar: 'PLAY', obj: 'GOALS', cal: 'GRAPHICS', idio: 'LANGUAGE',
     pie: 'Right: tap to jump, hold in the air to backflip. ' +
          'Left: tap fast to push, up to the cap. ' +
+         'Hold left and tap right and the jump comes out twice as high. ' +
          'Land level and you gain speed; land on your head and you wipe out — ' +
-         'and a wipeout costs you speed, not the run. This never ends.',
+         'and every wipeout costs one of your three lives.',
     rec: 'BEST · {0} m', mon: '{0} coins',
     pausa: 'PAUSED', seguir: 'RESUME', menu: 'MENU', term: 'END RUN',
     papie: 'the dune will still be there',
@@ -487,7 +565,9 @@ const LANG = {
     tu1: 'TAP THE RIGHT SIDE TO JUMP',
     tu2: 'HOLD THE RIGHT SIDE IN THE AIR AND LAND A BACKFLIP',
     tu3: 'TAP THE LEFT SIDE FAST TO PUSH',
-    tu4: 'THAT IS THE GAME · THE RUN NEVER ENDS',
+    tu5: 'HOLD LEFT AND TAP RIGHT FOR A CHARGED JUMP',
+    tu4: 'THAT IS THE GAME · THREE WIPEOUTS AND IT IS OVER',
+    tcarga: 'CHARGE', tvidas: 'LIVES', tsinvidas: 'NO LIVES LEFT',
     tsalt: 'skip',
     nuevo: 'NEW BEST',
     baja: 'LOW', media: 'MEDIUM', alta: 'HIGH',
@@ -504,12 +584,13 @@ const LANG = {
   },
   pt: {
     idi: 'escolha seu idioma', sub: 'metros',
-    msub: 'desça a duna · duas mãos · sem fim',
+    msub: 'desça a duna · duas mãos · três vidas',
     jugar: 'JOGAR', obj: 'OBJETIVOS', cal: 'GRÁFICOS', idio: 'IDIOMA',
     pie: 'Direita: toque para pular e segure no ar para girar. ' +
          'Esquerda: toque rápido para empurrar, até o limite. ' +
-         'Pousar reto dá velocidade; de cabeça você cai, e cair custa a ' +
-         'velocidade e não a descida — isto não acaba nunca.',
+         'Segure a esquerda e toque a direita: o pulo sai o dobro de alto. ' +
+         'Pousar reto dá velocidade; de cabeça você cai, e cada queda ' +
+         'custa uma das três vidas.',
     rec: 'RECORDE · {0} m', mon: '{0} moedas',
     pausa: 'PAUSA', seguir: 'CONTINUAR', menu: 'MENU', term: 'ENCERRAR',
     papie: 'a duna continua aí quando voltar',
@@ -521,7 +602,9 @@ const LANG = {
     tu1: 'TOQUE À DIREITA PARA PULAR',
     tu2: 'SEGURE A DIREITA NO AR E DÊ UM MORTAL',
     tu3: 'TOQUE RÁPIDO À ESQUERDA PARA EMPURRAR',
-    tu4: 'É ISSO · A DESCIDA NÃO ACABA',
+    tu5: 'SEGURE A ESQUERDA E TOQUE A DIREITA: PULO CARREGADO',
+    tu4: 'É ISSO · TRÊS QUEDAS E ACABOU',
+    tcarga: 'CARREGAR', tvidas: 'VIDAS', tsinvidas: 'SEM VIDAS',
     tsalt: 'pular',
     nuevo: 'NOVO RECORDE',
     baja: 'BAIXA', media: 'MÉDIA', alta: 'ALTA',
@@ -913,7 +996,12 @@ const R = {
      el rollout — y entonces el bot planifica volteretas sobre un estado de
      giro que no es el suyo. */
   girAp: 0,
+  /* LA CARGA DEL SALTO, POR LA MISMA RAZON QUE `girAp`: si naciera al vuelo,
+     el rollout la dejaria contaminada entre una rama imaginaria y la de
+     verdad, y el bot planificaria saltos con una carga que no tiene. */
+  carga: 0, cargaG: 0, cargados: 0,
   cuerda: null, cu: 0,
+  vidas: VIDAS,
   vivo: true, muerte: '',
   /* `caido` es lo que reemplaza a la muerte: cuanto le falta para levantarse.
      Mientras corre, el dedo no hace nada y el cuerpo se arrastra hasta parar. */
@@ -930,13 +1018,14 @@ const R = {
   // lo que se le muestra al jugador
   ultTruco: '', ultTrucoT: 0, sacude: 0, polvo: 0,
 };
-let APRETADO = false, SALTOS = 0;
+let APRETADO = false, CARGA_AP = false, SALTOS = 0;
 const COMBO_VENT = 2.6;   // segundos para encadenar
 
 function riderReinicia() {
   R.x = 0; R.y = terrY(0); R.s = 13; R.vx = 13; R.vy = 0;
   R.suelo = true; R.ang = Math.atan(terrPend(0)); R.rot = 0; R.giro = 0;
   R.cuerda = null; R.cu = 0; R.vivo = true; R.muerte = '';
+  R.carga = 0; R.cargaG = 0; R.cargados = 0; R.vidas = VIDAS;
   R.caido = 0; R.caidas = 0; R.turboCd = 0; R.turbo = 0; R.empujes = 0;
   R.coyote = 0; R.buffer = 0;
   R.dist = 0; R.mons = 0; R.flips = 0; R.grinds = 0; R.trucos = 0;
@@ -982,6 +1071,22 @@ function riderPaso(dt) {
   if (R.coyote > 0) R.coyote -= dt;
   if (R.turboCd > 0) R.turboCd -= dt;
   if (R.turbo > 0) R.turbo = Math.max(0, R.turbo - dt * 1.8);
+
+  /* LA CARGA SE ACUMULA ACA Y NO EN LA RAMA DEL SUELO, y es a proposito: una
+     sola linea que corre en CADA cuadro es lo que garantiza que despegar,
+     caerse o colgarse de una cuerda la pongan en cero sin que ninguno de los
+     tres tenga que acordarse. */
+  /* Y SOLTAR LA IZQUIERDA NO LA TIRA EN EL ACTO: la carga se queda viva
+     CARGA_GRACIA segundos, que es lo que tarda una mano en soltar y la otra
+     en tocar. Lo que sigue poniendola en cero de inmediato es despegar,
+     caerse o colgarse —las tres cosas que hacen que ya no haya nada que
+     cargar— asi que la gracia perdona al dedo y no a la fisica.          */
+  if (CARGA_AP && R.suelo && R.caido <= 0 && !R.cuerda) {
+    R.carga = Math.min(R.carga + dt, CARGA_MAX); R.cargaG = CARGA_GRACIA;
+  } else if (R.carga > 0) {
+    R.cargaG -= dt;
+    if (R.cargaG <= 0 || !R.suelo || R.caido > 0 || R.cuerda) { R.carga = 0; R.cargaG = 0; }
+  }
 
   /* ── EL TUMBO ───────────────────────────────────────────────────────────
      El cuerpo se arrastra hasta parar y despues se levanta. NO SE ARRASTRA
@@ -1041,10 +1146,17 @@ function pasoSuelo(dt) {
 }
 
 function salta() {
+  const k = cargaK();
   R.buffer = 0; R.coyote = 0; R.suelo = false;
-  R.vy = R.s * terrPend(R.x) / Math.sqrt(1 + terrPend(R.x) ** 2) + SALTO;
+  const imp = SALTO * (1 + (SALTO_CARGA - 1) * k);
+  R.vy = R.s * terrPend(R.x) / Math.sqrt(1 + terrPend(R.x) ** 2) + imp;
   R.vueloX = R.x; R.vueloY = R.y; R.aire = 0;
+  R.carga = 0; R.cargaG = 0;
   SALTOS++;
+  if (k > 0) {
+    R.cargados++;
+    if (!SIM) { R.ultTruco = T('tcarga'); R.ultTrucoT = 0.9; }
+  }
   if (typeof son === 'function') son('salta');
 }
 
@@ -1167,13 +1279,19 @@ function cae(por) {
   R.muerte = por; R.caido = TUMBO_T;
   R.combo = 0; R.comboT = 0;
   R.cuerda = null; R.giro = 0; R.rot = 0; R.girAp = 0; R.buffer = 0; R.coyote = 0;
+  R.carga = 0; R.cargaG = 0;
   const h = huecoEn(R.x);
   if (h) R.x = h.b + 1.6;
   R.y = terrY(R.x); R.suelo = true; R.ang = Math.atan(terrPend(R.x));
   R.s = TUMBO_V; R.vx = 0; R.vy = 0; R.turbo = 0; R.turboCd = 0;
   if (SIM) return;                 // en un rollout no se cuenta ni suena
   R.caidas++; R.sacude = 1;
-  R.ultTruco = T('tumbo'); R.ultTrucoT = 1.4;
+  /* LA VIDA SE DESCUENTA DE ESTE LADO DE LA GUARDA, con `caidas`: un rollout
+     imagina docenas de tumbos por cuadro y con el descuento arriba la corrida
+     de verdad se quedaria sin vidas sin que el jugador se haya caido nunca. */
+  R.vidas--;
+  if (R.vidas <= 0) { R.vidas = 0; R.vivo = false; }
+  R.ultTruco = T(R.vivo ? 'tumbo' : 'tsinvidas'); R.ultTrucoT = 1.4;
   if (typeof son === 'function') son('choque');
 }
 
@@ -1257,6 +1375,26 @@ function pulsa(v) {
   APRETADO = v;
 }
 
+/* ── SOSTENER LA IZQUIERDA CARGA EL SALTO ─────────────────────────────────
+   La mitad izquierda ya tenia un flanco —el toque que empuja— y NO tenia
+   sostenido: estaba libre, y por eso se usa esta. Cargar cuesta exactamente
+   lo que se deja de empujar mientras se sostiene, que es un intercambio de
+   verdad y no un boton gratis.
+   La carga vive en el SUELO: en el aire no hay nada que cargar y el renglon
+   que la acumula la pone en cero apenas el cuerpo despega, asi que no se
+   puede guardar de un vuelo para el siguiente.
+   Y SOLTAR NO LA TIRA: lo unico que hace es dejar de acumular. Quien la pone
+   en cero es ese mismo renglon, pasada la gracia —o antes, si el cuerpo
+   despego—. Tirandola aca, soltar la izquierda un cuadro antes de tocar la
+   derecha perdia medio segundo de sostenido sin una sola senal.          */
+function cargaPulsa(v) { CARGA_AP = !!v; }
+
+/* de 0 a 1, lo que la barra dibuja y lo que `salta()` multiplica */
+function cargaK() {
+  if (R.carga < CARGA_MIN) return 0;
+  return clamp((R.carga - CARGA_MIN) / (CARGA_MAX - CARGA_MIN), 0, 1);
+}
+
 /* ── LA MANO DERECHA: UN TOQUE, UN EMPUJON ────────────────────────────────
    Y NO ES UN SOSTENIDO. Con el dedo apoyado la velocidad subiria sola hasta
    el tope y quedarse ahi seria gratis; con toques sueltos hay que gastar la
@@ -1296,8 +1434,8 @@ function turbo() {
    el rollout dejaba `flips`, `saltoMax` y `mons` contaminados —el marcador
    subia por partidas imaginarias— y eso no falla: informa numeros de mas. */
 const _EST = Object.keys(R).filter(k => k !== 'cuerda');
-function _guarda() { const o = { _cu: R.cuerda, _ap: APRETADO }; for (const k of _EST) o[k] = R[k]; return o; }
-function _pone(o) { R.cuerda = o._cu; APRETADO = o._ap; for (const k of _EST) R[k] = o[k]; }
+function _guarda() { const o = { _cu: R.cuerda, _ap: APRETADO, _ca: CARGA_AP }; for (const k of _EST) o[k] = R[k]; return o; }
+function _pone(o) { R.cuerda = o._cu; APRETADO = o._ap; CARGA_AP = o._ca; for (const k of _EST) R[k] = o[k]; }
 
 /* simula `n` pasos con el dedo puesto en `ap` (o siguiendo un plan) y
    devuelve si sobrevivio y cuanto avanzo. NO genera terreno: hay que haberlo
@@ -2101,14 +2239,25 @@ function riderVis(dt, x, y, ang) {
        un bulto encima. La tabla se acorto y el cuerpo se enderezo: 1,76 contra
        1,72, o sea uno a uno, que es la proporcion de una tabla de verdad. */
     ag = 0.16 + 0.32 * vn; tk = 0; br = 0.54 + 0.30 * vn; ln = 0.16 + 0.34 * vn;
+    /* Y CARGANDO SE AGACHA, que es la unica senal que el cuerpo puede dar de
+       que el salto viene mas alto. La barra del tutorial dice cuanto falta,
+       pero la barra vive en el tutorial y la carga se usa toda la partida: sin
+       el agache, sostener el dedo no se ve en ninguna parte y el salto grande
+       parece salir de la nada. Va sobre `ag` —que es el mismo escalar que ya
+       mueve la cadera y las rodillas— asi que no hay una segunda articulacion
+       que pueda desincronizarse, y sube hasta 0,88, que es apenas menos que el
+       0,95 del tumbo: un cuerpo que se prepara, no uno que se cayo.       */
+    const kc = cargaK();
+    if (kc > 0) { ag += (0.88 - ag) * kc; br = mezcla(br, 0.22, kc); ln += 0.10 * kc; }
   } else if (gira > 0.25) {// girando: encogido
     ag = 0.86; tk = 1; br = 0.05; ln = 0.30;
   } else {                 // en el aire y derecho: estirado, que es lo que dice "estoy volando"
     ag = 0.06; tk = 0; br = 0.85; ln = 0.05;
   }
-  /* EL TUMBO TIENE SU PROPIA POSE, y desde esta vuelta es la unica que
-     importa: ya no hay muerte, asi que `!R.vivo` no ocurre nunca y el cuerpo
-     se levantaba de un choque sin haberse caido. Encogido y de lado. */
+  /* EL TUMBO TIENE SU PROPIA POSE. Encogido y de lado, y la comparte con la
+     muerte: desde que hay tres vidas, `!R.vivo` SI ocurre —es la tercera
+     caida— y es correcto que se vea igual, porque lo que pasa es lo mismo.
+     Lo que cambia es que despues de esa no se levanta.                   */
   if (R.caido > 0 || !R.vivo) { ag = 0.95; tk = 0.6; br = 1.0; }
 
   const k = 1 - Math.pow(0.00002, dt);          // ~90 ms
@@ -2755,11 +2904,21 @@ function objPaso() {
    Se escribe SOLO CUANDO CAMBIA. Escribir en el DOM cada cuadro obliga al
    navegador a recalcular la maqueta sesenta veces por segundo para poner el
    mismo texto, y con el marco girado eso se paga entero.                  */
-const HUD = { pts: -1, mon: -1, truco: '', pista: null };
+const HUD = { pts: -1, mon: -1, vidas: -1, truco: '', pista: null };
 function hudPaso() {
   const m = Math.floor(R.dist);
   if (m !== HUD.pts) { HUD.pts = m; $('pts').textContent = m; }
   if (R.mons !== HUD.mon) { HUD.mon = R.mons; $('monN').textContent = R.mons; }
+  /* LOS TRES PUNTOS SE ENCIENDEN Y SE APAGAN, no se agregan y se sacan: los
+     tres nodos estan en el HTML desde siempre y lo unico que se toca es una
+     clase. Escrito con innerHTML habria que rearmar la fila cada vez que se
+     pierde una vida, que es justo el cuadro en que el juego tiene un tumbo,
+     un sonido y un cartel encima.                                        */
+  if (R.vidas !== HUD.vidas) {
+    HUD.vidas = R.vidas;
+    const v = $('vidas').children;
+    for (let i = 0; i < v.length; i++) v[i].classList.toggle('on', i < R.vidas);
+  }
 
   const t = R.ultTrucoT > 0 ? R.ultTruco : '';
   if (t !== HUD.truco) {
@@ -2782,7 +2941,7 @@ function avisa(a, b) {
 }
 
 /* ── EL TUTORIAL VISUAL ───────────────────────────────────────────────────
-   TRES PASOS Y CADA UNO ESPERA A QUE LA COSA PASE, no a que se lea un cartel.
+   CUATRO PASOS Y CADA UNO ESPERA A QUE LA COSA PASE, no a que se lea un cartel.
    Un tutorial que se pasa leyendo se saltea, y lo que se saltea es
    exactamente lo que despues no se entiende. Es la regla que ya ordeno el de
    ECO y el de RECREO.
@@ -2796,15 +2955,19 @@ function avisa(a, b) {
    SE DIBUJA EN EL LIENZO Y NO EN EL DOM porque lo que hay que mostrar es
    DONDE tocar: dos mitades de pantalla con su circulo latiendo. Un cartel de
    texto puede decir «izquierda» y no senala nada.                         */
-const TUTO = { on: false, paso: 0, t: 0, fin: 0, s0: 0, f0: 0, e0: 0 };
-/* EL ORDEN ES SALTAR · EMPUJAR · VOLTERETA, y no el que uno escribiria.
+const TUTO = { on: false, paso: 0, t: 0, fin: 0, s0: 0, f0: 0, e0: 0, c0: 0 };
+/* EL ORDEN ES SALTAR · EMPUJAR · CARGAR · VOLTERETA, y no el que uno escribiria.
    Una voltereta entera son 0,73 s de giro y el vuelo dura 1,10 s A CRUCERO:
    despacio el salto es mas corto que el giro y la voltereta es IMPOSIBLE por
    construccion, no por dificultad. Y fallarla cuesta un tumbo, o sea menos
    velocidad todavia. Medido con la voltereta en segundo lugar, el auto-jugador
    se quedaba trabado ahi con la velocidad en CERO. Pidiendo primero los
    empujones, cuando llega la voltereta ya hay con que darla. */
-const TUTO_PASOS = ['tu1', 'tu3', 'tu2'];
+/* Y EL SALTO CARGADO VA ANTES DE LA VOLTERETA POR LA MISMA ARITMETICA: el
+   vuelo cargado dura 1,61 s contra 1,10 del normal, o sea que la vuelta entra
+   con el doble de holgura. Aprendido el cargado, el paso de la voltereta deja
+   de depender de haber juntado velocidad suficiente. */
+const TUTO_PASOS = ['tu1', 'tu3', 'tu5', 'tu2'];
 
 function tutoReinicia(demo) {
   TUTO.on = false; TUTO.fin = 0; TUTO.t = 0; tutoClase();
@@ -2827,7 +2990,7 @@ function tutoClase() {
 }
 function tutoArranca(forz) {
   TUTO.on = true; TUTO.paso = 0; TUTO.t = 0; TUTO.fin = 0;
-  TUTO.s0 = SALTOS; TUTO.f0 = R.flips; TUTO.e0 = R.empujes;
+  TUTO.s0 = SALTOS; TUTO.f0 = R.flips; TUTO.e0 = R.empujes; TUTO.c0 = R.cargados;
   if (forz) { GUARDA.tuto = 0; guardaEscribe(); }
   tutoClase();
 }
@@ -2838,6 +3001,21 @@ function tutoTermina() {
 function tutoSaltea() {
   if (!TUTO.on) return;
   TUTO.fin = 0; TUTO.on = false; GUARDA.tuto = 1; guardaEscribe(); tutoClase();
+}
+/* CORTA EL TUTORIAL SIN DARLO POR VISTO, que es el mismo reparto que
+   `pbDespiertaCorta()` en PUERTA BLANCA. El panel de final es DOM y se
+   dibuja encima del lienzo, pero el tutorial vive EN el lienzo: con el
+   tutorial vivo quedan su cartel y sus dos circulos por debajo del panel
+   —fotografiado: «MANTENE LA IZQUIERDA Y TOCA LA DERECHA: SALTO CARGADO»
+   cruzando el pie del panel de RECORD NUEVO—. Antes no se podia morir, asi
+   que eso solo pasaba yendo a TERMINAR desde la pausa; con tres vidas es el
+   caso normal.
+   Y NO MARCA `GUARDA.tuto`: el que se cayo tres veces en el paso dos no
+   aprendio nada, asi que la corrida siguiente se lo vuelve a ensenar. Tampoco
+   deja los 2,4 s de despedida de `tutoTermina`, porque no termino: se corto. */
+function tutoCorta() {
+  if (!TUTO.on && TUTO.fin <= 0) return;
+  TUTO.on = false; TUTO.fin = 0; tutoClase();
 }
 
 /* ── LO QUE SE DIBUJA ─────────────────────────────────────────────────────
@@ -2873,17 +3051,34 @@ function pintaTuto() {
        atado al indice, reordenar los pasos —que es justo lo que se acaba de
        hacer— deja el circulo pulsando en la mitad equivocada de la pantalla
        sin que nada falle. */
-    const emp = TUTO_PASOS[TUTO.paso] === 'tu3';
+    const clave = TUTO_PASOS[TUTO.paso];
+    const emp = clave === 'tu3', car = clave === 'tu5';
     const izq = emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
-    const cx = izq ? ANCHO * 0.25 : ANCHO * 0.75;
+    const cx = car ? ANCHO * 0.75 : izq ? ANCHO * 0.25 : ANCHO * 0.75;
     /* el color va con el TRABAJO y no con el lado: el ambar es empujar y el
-       celeste saltar en los tres pasos, asi que dar vuelta las zonas no da
+       celeste saltar en los cuatro pasos, asi que dar vuelta las zonas no da
        vuelta lo que el jugador ya aprendio a reconocer */
     const col = emp ? '#ffe6b8' : '#9fe6ff';
+    const fch = Math.round(clamp(mh * 0.030, 9, 14));
+    /* EL PASO CARGADO ENCIENDE LAS DOS MITADES, porque es el unico gesto del
+       juego que pide las dos manos a la vez: con una sola encendida el
+       jugador toca esa y el paso no avanza nunca. La izquierda muestra
+       ademas cuanto lleva cargado — sin la barra, «mantene» no dice hasta
+       cuando. */
+    if (car) {
+      const cl = ANCHO * 0.25;
+      tutoCirculo(cl, cy, r, k, '#ffe6b8');
+      ctx.globalAlpha = 0.85; ctx.fillStyle = '#ffe6b8';
+      ctx.font = '700 ' + fch + 'px monospace';
+      ctx.fillText(T('tcarga'), cl, cy + r * 1.75);
+      const bw = r * 2.2, bh = Math.max(3, r * 0.16), by = cy + r * 2.35;
+      ctx.globalAlpha = 0.28; ctx.fillRect(cl - bw / 2, by, bw, bh);
+      ctx.globalAlpha = 0.95; ctx.fillRect(cl - bw / 2, by, bw * cargaK(), bh);
+    }
     tutoCirculo(cx, cy, r, k, col);
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
-    ctx.font = '700 ' + Math.round(clamp(mh * 0.030, 9, 14)) + 'px monospace';
+    ctx.font = '700 ' + fch + 'px monospace';
     ctx.fillText(T(emp ? 'tempuja' : 'tsalta'), cx, cy + r * 1.75);
     /* Y EL PASO 3 MUESTRA CUANTOS TOQUES VAN: un «toca rapido» sin cuenta no
        dice cuando esta hecho, y entonces el paso parece trabado. */
@@ -2956,6 +3151,7 @@ function tutoPaso(dt) {
   const p = TUTO.paso;
   const hecho = p === 0 ? SALTOS > TUTO.s0
               : p === 1 ? R.empujes >= TUTO.e0 + 4
+              : p === 2 ? R.cargados > TUTO.c0
               : R.flips > TUTO.f0;
   if (!hecho) return;
   TUTO.paso++; TUTO.t = 0;
@@ -3060,7 +3256,7 @@ function pintaTodo() {
   $('tSalt').textContent = T('tsalt');
   pintaIdioma(); pintaMenu(); pintaPausa();
   if (PANT === 'fin') pintaFin(false);
-  HUD.truco = null; HUD.pts = -1; HUD.mon = -1;
+  HUD.truco = null; HUD.pts = -1; HUD.mon = -1; HUD.vidas = -1;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -3102,17 +3298,30 @@ function zonaSaltoArriba(e) {
   if (e) SOST.delete(e.pointerId); else SOST.clear();
   if (SOST.size === 0) pulsa(false);
 }
+/* LA IZQUIERDA TIENE LAS DOS COSAS: EL FLANCO EMPUJA Y EL SOSTENIDO CARGA.
+   Son dos gestos distintos sobre la misma mitad y no se pisan — un toque
+   corto empuja y no llega al minimo de carga; uno largo empuja una vez y
+   carga. Y lleva su propio Set por la misma razon que el del salto: con dos
+   dedos en la misma mitad, el que se levanta primero apagaria la carga del
+   que sigue apoyado. */
+const SOSC = new Set();         // punteros que estan cargando el salto
 function zonaTurboAbajo(e) {
   if (PANT !== 'juego') return;
   turbo();
+  if (e && e.pointerId !== undefined) SOSC.add(e.pointerId);
+  cargaPulsa(true);
   if (e && e.cancelable) e.preventDefault();
+}
+function zonaTurboArriba(e) {
+  if (e && e.pointerId !== undefined) SOSC.delete(e.pointerId); else SOSC.clear();
+  if (SOSC.size === 0) cargaPulsa(false);
 }
 /* si el dedo se levanta afuera de la ventana el `pointerup` no llega nunca y
    el rider se queda girando para siempre: es el mismo defecto que en RECREO
    dejaba al jugador caminando contra una pared */
-addEventListener('blur', () => zonaSaltoArriba(null));
-addEventListener('pointerup', zonaSaltoArriba);
-addEventListener('pointercancel', zonaSaltoArriba);
+addEventListener('blur', () => { zonaSaltoArriba(null); zonaTurboArriba(null); });
+addEventListener('pointerup', e => { zonaSaltoArriba(e); zonaTurboArriba(e); });
+addEventListener('pointercancel', e => { zonaSaltoArriba(e); zonaTurboArriba(e); });
 addEventListener('keydown', e => {
   if (e.repeat) return;
   /* el teclado ESPEJA la pantalla: la flecha derecha salta y la izquierda
@@ -3124,6 +3333,7 @@ addEventListener('keydown', e => {
   } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
     if (PANT !== 'juego') return;
     turbo();
+    SOSC.add('tecla'); cargaPulsa(true);
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
     if (PANT === 'juego') pausa(true); else if (PANT === 'pausa') pausa(false);
   }
@@ -3131,6 +3341,8 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
     SOST.delete('tecla'); if (SOST.size === 0) pulsa(false);
+  } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+    SOSC.delete('tecla'); if (SOSC.size === 0) cargaPulsa(false);
   }
 });
 $('zSalto').addEventListener('pointerdown', zonaSaltoAbajo, { passive: false });
@@ -3169,9 +3381,10 @@ function nuevaPartida(demo) {
   HORA = HORA0;
   OBJ_HECHOS = [];
   SOST.clear(); pulsa(false);
+  SOSC.clear(); cargaPulsa(false);
   tutoReinicia(demo);
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
-  HUD.pts = -1; HUD.mon = -1; HUD.truco = null; HUD.pista = null;
+  HUD.pts = -1; HUD.mon = -1; HUD.vidas = -1; HUD.truco = null; HUD.pista = null;
 }
 
 function empieza() {
@@ -3179,10 +3392,11 @@ function empieza() {
   verPantalla('juego');
   audioArranca();
 }
-/* TERMINAR LA CORRIDA ES UNA DECISION DEL JUGADOR, y esa es toda la
-   consecuencia de que la bajada no acabe: sin muerte, lo unico que cierra
-   una partida —y lo unico que hace que el record signifique algo— es que
-   alguien diga «hasta aca». Vive en la pausa, que es donde uno ya paro. */
+/* TERMINAR LA CORRIDA SIGUE SIENDO UNA DECISION DEL JUGADOR, Y AHORA NO ES LA
+   UNICA: con tres vidas, la tercera caida la cierra sola. Las dos puertas
+   conviven a proposito —el que juega bien la termina cuando quiere y el que
+   se cae tres veces la termina igual— asi que el record sigue queriendo decir
+   algo. La de la pausa vive donde uno ya paro; esta vive en `cae()`.     */
 function pausa(v) {
   if (v && PANT === 'juego') verPantalla('pausa');
   else if (!v && PANT === 'pausa') verPantalla('juego');
@@ -3192,6 +3406,10 @@ function alMenu() {
   verPantalla('menu');
 }
 function termina() {
+  /* EL TUTORIAL SE CORTA ANTES DE ABRIR EL PANEL, no despues: `pintaFin`
+     y `verPantalla` no tocan el lienzo, asi que un tutorial vivo sigue
+     dibujando su cartel y sus dos circulos por debajo del panel. */
+  tutoCorta();
   const m = Math.floor(R.dist);
   const nuevo = m > GUARDA.rec;
   if (nuevo) GUARDA.rec = m;
@@ -3339,6 +3557,8 @@ window.__D = {
     ang: +R.ang.toFixed(3), giro: +R.giro.toFixed(2),
     dist: Math.floor(R.dist), mons: R.mons, flips: R.flips, grinds: R.grinds,
     caido: +R.caido.toFixed(2), caidas: R.caidas, empujes: R.empujes,
+    vidas: R.vidas, carga: +R.carga.toFixed(3), cargaK: +cargaK().toFixed(3),
+    cargados: R.cargados,
     turbo: +R.turbo.toFixed(2), tope: TURBO_TOPE,
     tuto: TUTO.on ? TUTO.paso : -1, tutoFin: +TUTO.fin.toFixed(2),
     trucos: R.trucos, comboMax: R.comboMax, saltoMax: +R.saltoMax.toFixed(1),
@@ -3380,22 +3600,51 @@ window.__D = {
        mientras el rider avanza quinientos metros: medido en la captura, el
        terreno se veia bien y el rider NO ESTABA EN EL CUADRO. Es la misma
        trampa que ya costo una vuelta en RECREO y otra en HUESOS. */
-    /* Y AHORA NO CORTA POR MUERTE, PORQUE NO HAY: la corrida dura los
-       segundos que se le pidan y lo que se informa son las CAIDAS. Con el
-       corte viejo (`R.vivo`) una corrida de sesenta segundos duraba los
-       sesenta siempre y `caidas` era el unico numero que podia salir mal. */
+    /* Y VUELVE A CORTAR POR MUERTE, PORQUE AHORA LA HAY: tres caidas cierran
+       la corrida, asi que el numero que describe a un bot ya no es solo
+       cuantos metros hizo sino CUANTO AGUANTO. Sin el corte, el bucle sigue
+       girando con `unPaso` saliendo por su primera linea —`if (!R.vivo)
+       return`— y la sonda informa los sesenta segundos pedidos aunque el bot
+       se haya matado en el ocho: un numero que no puede salir mal. Por eso
+       `seg` sale de los pasos DADOS y no de los pedidos. */
     let _SMAX = 0;
     for (; i < n; i++) {
       unPaso(PASO); TIEMPO += PASO;
       if (R.s > _SMAX) _SMAX = R.s;
       riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
+      if (!R.vivo) { i++; break; }
     }
     const r = { dist: Math.floor(R.dist), seg: +(i * PASO).toFixed(1),
                 s: +(R.dist / Math.max(i * PASO, 0.01)).toFixed(1),
                 muerte: R.muerte, vivo: R.vivo, mons: R.mons, flips: R.flips,
                 grinds: R.grinds, trucos: R.trucos, saltos: SALTOS,
-                caidas: R.caidas, empujes: R.empujes, sMax: +_SMAX.toFixed(1) };
+                caidas: R.caidas, empujes: R.empujes, sMax: +_SMAX.toFixed(1),
+                vidas: R.vidas, cargados: R.cargados };
     DEMO = g; DEMO_REVIVE = true; return r;
+  },
+  /* LA MUERTE POR EL CAMINO DEL JUGADOR, que es lo unico que `juega()` no
+     puede medir. `juega()` enciende DEMO para que el bot maneje, y `termina()`
+     cuelga justamente de `!DEMO` —el menu no puede abrir el panel de final
+     mientras la demo se estrella detras del titulo—, asi que ahi las tres
+     caidas cierran la fisica y nunca la partida. Aca el bot pone los dedos y
+     el bucle es el del jugador: `pulsa(botPiensa)` y `turbo()` son exactamente
+     lo que llaman `zonaSaltoAbajo` y `zonaTurboAbajo`, y con DEMO apagado
+     `unPaso` toma su otra rama. Sin esta sonda, el renglon que une «se acabaron
+     las vidas» con «aparece el final» quedaria leido y no medido.        */
+  muere: (modo, seg) => {
+    nuevaPartida(false); botReinicia(modo || 'azar');
+    const n = Math.round((seg || 240) / PASO);
+    let i = 0;
+    for (; i < n; i++) {
+      pulsa(botPiensa(PASO)); if (botEmpuja(PASO)) turbo();
+      unPaso(PASO); TIEMPO += PASO;
+      riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
+      if (PANT !== 'juego') { i++; break; }
+    }
+    return { seg: +(i * PASO).toFixed(1), dist: Math.floor(R.dist), caidas: R.caidas,
+             vidas: R.vidas, vivo: R.vivo, muerte: R.muerte, pant: PANT,
+             rec: GUARDA.rec, fin: $('fTit') ? $('fTit').textContent : null,
+             datos: $('fDatos') ? $('fDatos').textContent.replace(/\s+/g, ' ').trim() : null };
   },
   nueva: sem => {
     terrReinicia(sem === undefined ? (Math.random() * 1e9) | 0 : sem);
@@ -3442,11 +3691,19 @@ window.__D = {
     else zonaSaltoArriba({ pointerId: 99 });
     return APRETADO;
   },
-  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()` */
+  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()`
+     Y SUELTA EL DEDO, que desde que la izquierda tambien CARGA el salto dejarlo
+     apretado no es un detalle: un empujon sin su `pointerup` es una mano que se
+     apoya y no se levanta nunca, asi que la carga se llena sola y el proximo
+     salto sale cargado. Medido antes de arreglarlo: `sost(40..90)` daba CERO
+     caidas con dos y tres volteretas y el rider todavia en el aire a los 140
+     pasos —o sea el salto grande— donde la vuelta 156 habia medido tumbo. La
+     sonda estaba modelando un gesto que nadie hace.                        */
   empuja: n => {
     const a = R.s, b = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
       zonaTurboAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboArriba({ pointerId: 88 });
       R.turboCd = 0;              // la sonda no espera el enfriamiento del dedo
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - b, tope: TURBO_TOPE };
@@ -3491,7 +3748,66 @@ window.__D = {
              flips: R.flips - f0, muerte: R.muerte, suelo: R.suelo,
              giro: +R.giro.toFixed(2) };
   },
-  cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas, s: +R.s.toFixed(2) }; },
+  cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas,
+                                     vidas: R.vidas, vivo: R.vivo, s: +R.s.toFixed(2) }; },
+  /* ── EL SALTO CARGADO, POR EL CAMINO DEL DEDO ───────────────────────────
+     Sostiene la mitad IZQUIERDA `carga` pasos, suelta, y en el mismo cuadro
+     toca la derecha. Entra por `zonaTurboAbajo`/`zonaTurboArriba`, o sea por
+     el mismo reparto de dedos que puede estar roto: llamando a `cargaPulsa()`
+     directo se saltearia justamente el `SOSC` que esta vuelta agrego, y con
+     dos dedos en la misma mitad eso es lo unico que puede fallar.
+     Lo que devuelve es el APICE y el ALCANCE medidos, no el impulso: el
+     impulso es el numero que se escribio y el apice es lo que el jugador ve. */
+  salta: (carga, antes, mantiene) => {
+    /* APAGA EL DEMO, Y NO ES CEREMONIA. `verPantalla('juego')` no lo apaga:
+       `DEMO` lo pone `nuevaPartida`, asi que una sonda que se limite a cambiar
+       de pantalla deja al AUTO-JUGADOR apretando el boton mientras la sonda
+       cree estar midiendo un dedo. Medido asi, los cinco saltos dieron apices
+       de 2,44 · 4,26 · 0,04 · 6,19 · 7,05 con la carga en CERO en tres de los
+       cinco —el bot despegaba antes y en el aire la carga no acumula— o sea
+       cinco numeros plausibles y ninguno del salto que se pidio. */
+    const g = DEMO, gr = DEMO_REVIVE; DEMO = false; DEMO_REVIVE = false;
+    for (let i = 0; i < (antes === undefined ? 90 : antes); i++) { unPaso(PASO); TIEMPO += PASO; }
+    zonaTurboAbajo({ pointerId: 77, cancelable: false, preventDefault() {} });
+    for (let i = 0; i < (carga || 0); i++) { unPaso(PASO); TIEMPO += PASO; }
+    /* LOS DOS ORDENES SE PRUEBAN, y no es de mas: son dos manos. `mantiene`
+       toca la derecha SIN haber soltado la izquierda —el gesto literal que se
+       pidio— y por omision se suelta primero, que es lo que hace cualquiera y
+       lo que la gracia tiene que perdonar. Con un solo orden probado, el otro
+       queda sin medir y es justo el que puede estar roto. */
+    const k = cargaK();
+    if (!mantiene) zonaTurboArriba({ pointerId: 77 });
+    const x0 = R.x, s0 = R.s, p0 = R.y - terrY(R.x);
+    __D.toca(true); unPaso(PASO); TIEMPO += PASO; __D.toca(false);
+    if (mantiene) zonaTurboArriba({ pointerId: 77 });
+    /* EL APICE SE MIDE SOBRE EL TERRENO Y NO SOBRE LA Y DEL MUNDO: la duna
+       baja, asi que la altura absoluta cae desde el primer cuadro y el
+       maximo daria el punto de partida en cualquier salto. */
+    let alto = 0, aire = 0;
+    for (let i = 0; i < 200 && !R.suelo; i++) {
+      unPaso(PASO); TIEMPO += PASO; aire += PASO;
+      const h = R.y - terrY(R.x);
+      if (h > alto) alto = h;
+    }
+    DEMO = g; DEMO_REVIVE = gr;
+    return { carga: carga || 0, k: +k.toFixed(3), mantiene: !!mantiene,
+             apice: +(alto - p0).toFixed(2), aire: +aire.toFixed(3),
+             alcance: +(R.x - x0).toFixed(1), s0: +s0.toFixed(1),
+             cargados: R.cargados, caidas: R.caidas };
+  },
+  /* ── LAS TRES VIDAS ─────────────────────────────────────────────────────
+     Tira al rider `n` veces y devuelve como quedo. Es la unica forma de
+     comprobar que la tercera CIERRA la corrida y que las dos primeras no:
+     con un solo `cae()` las dos ramas se ven iguales. */
+  vidas: n => {
+    const a = [];
+    for (let i = 0; i < (n || 3); i++) {
+      cae('sonda');
+      a.push({ vidas: R.vidas, vivo: R.vivo, pant: PANT, truco: R.ultTruco });
+      for (let j = 0; j < 80 && R.caido > 0; j++) { unPaso(PASO); TIEMPO += PASO; }
+    }
+    return a;
+  },
   /* adelantar el juego SIN el bot: es lo unico que deja medir cuanto dura un
      tumbo o si el enfriamiento del empujon hace lo que dice */
   pasos: n => { for (let i = 0; i < (n || 1); i++) { unPaso(PASO); TIEMPO += PASO; } return __D.est(); },
@@ -3502,7 +3818,16 @@ window.__D = {
     for (let i = 0; i < (n || 1); i++) {
       zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       const k = Math.max(1, Math.round((dt || 0) / PASO));
-      for (let j = 0; j < k; j++) { unPaso(PASO); TIEMPO += PASO; }
+      /* EL DEDO SE LEVANTA A MITAD DEL HUECO, que es lo que hace una mano de
+         verdad: un toque dura entre 60 y 120 ms y el hueco entre toque y toque
+         es mas largo. Soltar recien al final del hueco convertiria cada
+         empujon en un sostenido y cargaria el salto sin que nadie lo pidiera. */
+      const mitad = Math.max(1, k >> 1);
+      for (let j = 0; j < k; j++) {
+        if (j === mitad) zonaTurboArriba({ pointerId: 88 });
+        unPaso(PASO); TIEMPO += PASO;
+      }
+      zonaTurboArriba({ pointerId: 88 });
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - e };
   },
@@ -3556,7 +3881,13 @@ window.__D = {
      pantalla, o sea que denuncia choques que no existen. Ya costo una vuelta
      en ECO y otra en HUESOS. */
   cajas: () => {
-    const ids = ['pts', 'sub', 'mon', 'truco', 'pista', 'bPausa', 'tSalt'];
+    /* LA FILA DE VIDAS ENTRA EN LA LISTA, y no es de mas: es el elemento mas
+       nuevo del HUD y `cajas()` mide contra lo que le nombran, asi que uno que
+       nadie agrego es un solapamiento esperando a que alguien lo mire. Ya paso
+       en DESPEGUE con la linea de la proxima capa. Y de paso es el que obligo a
+       ponerle margen a `#sub`, que iba de borde a borde para decir UNA palabra
+       y le pasaba por encima al primer punto.                                */
+    const ids = ['pts', 'sub', 'mon', 'vidas', 'truco', 'pista', 'bPausa', 'tSalt'];
     const v = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;

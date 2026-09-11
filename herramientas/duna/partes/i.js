@@ -74,14 +74,25 @@ function riderVis(dt, x, y, ang) {
        un bulto encima. La tabla se acorto y el cuerpo se enderezo: 1,76 contra
        1,72, o sea uno a uno, que es la proporcion de una tabla de verdad. */
     ag = 0.16 + 0.32 * vn; tk = 0; br = 0.54 + 0.30 * vn; ln = 0.16 + 0.34 * vn;
+    /* Y CARGANDO SE AGACHA, que es la unica senal que el cuerpo puede dar de
+       que el salto viene mas alto. La barra del tutorial dice cuanto falta,
+       pero la barra vive en el tutorial y la carga se usa toda la partida: sin
+       el agache, sostener el dedo no se ve en ninguna parte y el salto grande
+       parece salir de la nada. Va sobre `ag` —que es el mismo escalar que ya
+       mueve la cadera y las rodillas— asi que no hay una segunda articulacion
+       que pueda desincronizarse, y sube hasta 0,88, que es apenas menos que el
+       0,95 del tumbo: un cuerpo que se prepara, no uno que se cayo.       */
+    const kc = cargaK();
+    if (kc > 0) { ag += (0.88 - ag) * kc; br = mezcla(br, 0.22, kc); ln += 0.10 * kc; }
   } else if (gira > 0.25) {// girando: encogido
     ag = 0.86; tk = 1; br = 0.05; ln = 0.30;
   } else {                 // en el aire y derecho: estirado, que es lo que dice "estoy volando"
     ag = 0.06; tk = 0; br = 0.85; ln = 0.05;
   }
-  /* EL TUMBO TIENE SU PROPIA POSE, y desde esta vuelta es la unica que
-     importa: ya no hay muerte, asi que `!R.vivo` no ocurre nunca y el cuerpo
-     se levantaba de un choque sin haberse caido. Encogido y de lado. */
+  /* EL TUMBO TIENE SU PROPIA POSE. Encogido y de lado, y la comparte con la
+     muerte: desde que hay tres vidas, `!R.vivo` SI ocurre —es la tercera
+     caida— y es correcto que se vea igual, porque lo que pasa es lo mismo.
+     Lo que cambia es que despues de esa no se levanta.                   */
   if (R.caido > 0 || !R.vivo) { ag = 0.95; tk = 0.6; br = 1.0; }
 
   const k = 1 - Math.pow(0.00002, dt);          // ~90 ms

@@ -21,7 +21,12 @@ const R = {
      el rollout — y entonces el bot planifica volteretas sobre un estado de
      giro que no es el suyo. */
   girAp: 0,
+  /* LA CARGA DEL SALTO, POR LA MISMA RAZON QUE `girAp`: si naciera al vuelo,
+     el rollout la dejaria contaminada entre una rama imaginaria y la de
+     verdad, y el bot planificaria saltos con una carga que no tiene. */
+  carga: 0, cargaG: 0, cargados: 0,
   cuerda: null, cu: 0,
+  vidas: VIDAS,
   vivo: true, muerte: '',
   /* `caido` es lo que reemplaza a la muerte: cuanto le falta para levantarse.
      Mientras corre, el dedo no hace nada y el cuerpo se arrastra hasta parar. */
@@ -38,13 +43,14 @@ const R = {
   // lo que se le muestra al jugador
   ultTruco: '', ultTrucoT: 0, sacude: 0, polvo: 0,
 };
-let APRETADO = false, SALTOS = 0;
+let APRETADO = false, CARGA_AP = false, SALTOS = 0;
 const COMBO_VENT = 2.6;   // segundos para encadenar
 
 function riderReinicia() {
   R.x = 0; R.y = terrY(0); R.s = 13; R.vx = 13; R.vy = 0;
   R.suelo = true; R.ang = Math.atan(terrPend(0)); R.rot = 0; R.giro = 0;
   R.cuerda = null; R.cu = 0; R.vivo = true; R.muerte = '';
+  R.carga = 0; R.cargaG = 0; R.cargados = 0; R.vidas = VIDAS;
   R.caido = 0; R.caidas = 0; R.turboCd = 0; R.turbo = 0; R.empujes = 0;
   R.coyote = 0; R.buffer = 0;
   R.dist = 0; R.mons = 0; R.flips = 0; R.grinds = 0; R.trucos = 0;
@@ -90,6 +96,22 @@ function riderPaso(dt) {
   if (R.coyote > 0) R.coyote -= dt;
   if (R.turboCd > 0) R.turboCd -= dt;
   if (R.turbo > 0) R.turbo = Math.max(0, R.turbo - dt * 1.8);
+
+  /* LA CARGA SE ACUMULA ACA Y NO EN LA RAMA DEL SUELO, y es a proposito: una
+     sola linea que corre en CADA cuadro es lo que garantiza que despegar,
+     caerse o colgarse de una cuerda la pongan en cero sin que ninguno de los
+     tres tenga que acordarse. */
+  /* Y SOLTAR LA IZQUIERDA NO LA TIRA EN EL ACTO: la carga se queda viva
+     CARGA_GRACIA segundos, que es lo que tarda una mano en soltar y la otra
+     en tocar. Lo que sigue poniendola en cero de inmediato es despegar,
+     caerse o colgarse —las tres cosas que hacen que ya no haya nada que
+     cargar— asi que la gracia perdona al dedo y no a la fisica.          */
+  if (CARGA_AP && R.suelo && R.caido <= 0 && !R.cuerda) {
+    R.carga = Math.min(R.carga + dt, CARGA_MAX); R.cargaG = CARGA_GRACIA;
+  } else if (R.carga > 0) {
+    R.cargaG -= dt;
+    if (R.cargaG <= 0 || !R.suelo || R.caido > 0 || R.cuerda) { R.carga = 0; R.cargaG = 0; }
+  }
 
   /* ── EL TUMBO ───────────────────────────────────────────────────────────
      El cuerpo se arrastra hasta parar y despues se levanta. NO SE ARRASTRA
@@ -149,10 +171,17 @@ function pasoSuelo(dt) {
 }
 
 function salta() {
+  const k = cargaK();
   R.buffer = 0; R.coyote = 0; R.suelo = false;
-  R.vy = R.s * terrPend(R.x) / Math.sqrt(1 + terrPend(R.x) ** 2) + SALTO;
+  const imp = SALTO * (1 + (SALTO_CARGA - 1) * k);
+  R.vy = R.s * terrPend(R.x) / Math.sqrt(1 + terrPend(R.x) ** 2) + imp;
   R.vueloX = R.x; R.vueloY = R.y; R.aire = 0;
+  R.carga = 0; R.cargaG = 0;
   SALTOS++;
+  if (k > 0) {
+    R.cargados++;
+    if (!SIM) { R.ultTruco = T('tcarga'); R.ultTrucoT = 0.9; }
+  }
   if (typeof son === 'function') son('salta');
 }
 
@@ -275,13 +304,19 @@ function cae(por) {
   R.muerte = por; R.caido = TUMBO_T;
   R.combo = 0; R.comboT = 0;
   R.cuerda = null; R.giro = 0; R.rot = 0; R.girAp = 0; R.buffer = 0; R.coyote = 0;
+  R.carga = 0; R.cargaG = 0;
   const h = huecoEn(R.x);
   if (h) R.x = h.b + 1.6;
   R.y = terrY(R.x); R.suelo = true; R.ang = Math.atan(terrPend(R.x));
   R.s = TUMBO_V; R.vx = 0; R.vy = 0; R.turbo = 0; R.turboCd = 0;
   if (SIM) return;                 // en un rollout no se cuenta ni suena
   R.caidas++; R.sacude = 1;
-  R.ultTruco = T('tumbo'); R.ultTrucoT = 1.4;
+  /* LA VIDA SE DESCUENTA DE ESTE LADO DE LA GUARDA, con `caidas`: un rollout
+     imagina docenas de tumbos por cuadro y con el descuento arriba la corrida
+     de verdad se quedaria sin vidas sin que el jugador se haya caido nunca. */
+  R.vidas--;
+  if (R.vidas <= 0) { R.vidas = 0; R.vivo = false; }
+  R.ultTruco = T(R.vivo ? 'tumbo' : 'tsinvidas'); R.ultTrucoT = 1.4;
   if (typeof son === 'function') son('choque');
 }
 
@@ -365,6 +400,26 @@ function pulsa(v) {
   APRETADO = v;
 }
 
+/* ── SOSTENER LA IZQUIERDA CARGA EL SALTO ─────────────────────────────────
+   La mitad izquierda ya tenia un flanco —el toque que empuja— y NO tenia
+   sostenido: estaba libre, y por eso se usa esta. Cargar cuesta exactamente
+   lo que se deja de empujar mientras se sostiene, que es un intercambio de
+   verdad y no un boton gratis.
+   La carga vive en el SUELO: en el aire no hay nada que cargar y el renglon
+   que la acumula la pone en cero apenas el cuerpo despega, asi que no se
+   puede guardar de un vuelo para el siguiente.
+   Y SOLTAR NO LA TIRA: lo unico que hace es dejar de acumular. Quien la pone
+   en cero es ese mismo renglon, pasada la gracia —o antes, si el cuerpo
+   despego—. Tirandola aca, soltar la izquierda un cuadro antes de tocar la
+   derecha perdia medio segundo de sostenido sin una sola senal.          */
+function cargaPulsa(v) { CARGA_AP = !!v; }
+
+/* de 0 a 1, lo que la barra dibuja y lo que `salta()` multiplica */
+function cargaK() {
+  if (R.carga < CARGA_MIN) return 0;
+  return clamp((R.carga - CARGA_MIN) / (CARGA_MAX - CARGA_MIN), 0, 1);
+}
+
 /* ── LA MANO DERECHA: UN TOQUE, UN EMPUJON ────────────────────────────────
    Y NO ES UN SOSTENIDO. Con el dedo apoyado la velocidad subiria sola hasta
    el tope y quedarse ahi seria gratis; con toques sueltos hay que gastar la
@@ -404,8 +459,8 @@ function turbo() {
    el rollout dejaba `flips`, `saltoMax` y `mons` contaminados —el marcador
    subia por partidas imaginarias— y eso no falla: informa numeros de mas. */
 const _EST = Object.keys(R).filter(k => k !== 'cuerda');
-function _guarda() { const o = { _cu: R.cuerda, _ap: APRETADO }; for (const k of _EST) o[k] = R[k]; return o; }
-function _pone(o) { R.cuerda = o._cu; APRETADO = o._ap; for (const k of _EST) R[k] = o[k]; }
+function _guarda() { const o = { _cu: R.cuerda, _ap: APRETADO, _ca: CARGA_AP }; for (const k of _EST) o[k] = R[k]; return o; }
+function _pone(o) { R.cuerda = o._cu; APRETADO = o._ap; CARGA_AP = o._ca; for (const k of _EST) R[k] = o[k]; }
 
 /* simula `n` pasos con el dedo puesto en `ap` (o siguiendo un plan) y
    devuelve si sobrevivio y cuanto avanzo. NO genera terreno: hay que haberlo

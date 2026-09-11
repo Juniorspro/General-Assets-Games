@@ -88,11 +88,21 @@ function objPaso() {
    Se escribe SOLO CUANDO CAMBIA. Escribir en el DOM cada cuadro obliga al
    navegador a recalcular la maqueta sesenta veces por segundo para poner el
    mismo texto, y con el marco girado eso se paga entero.                  */
-const HUD = { pts: -1, mon: -1, truco: '', pista: null };
+const HUD = { pts: -1, mon: -1, vidas: -1, truco: '', pista: null };
 function hudPaso() {
   const m = Math.floor(R.dist);
   if (m !== HUD.pts) { HUD.pts = m; $('pts').textContent = m; }
   if (R.mons !== HUD.mon) { HUD.mon = R.mons; $('monN').textContent = R.mons; }
+  /* LOS TRES PUNTOS SE ENCIENDEN Y SE APAGAN, no se agregan y se sacan: los
+     tres nodos estan en el HTML desde siempre y lo unico que se toca es una
+     clase. Escrito con innerHTML habria que rearmar la fila cada vez que se
+     pierde una vida, que es justo el cuadro en que el juego tiene un tumbo,
+     un sonido y un cartel encima.                                        */
+  if (R.vidas !== HUD.vidas) {
+    HUD.vidas = R.vidas;
+    const v = $('vidas').children;
+    for (let i = 0; i < v.length; i++) v[i].classList.toggle('on', i < R.vidas);
+  }
 
   const t = R.ultTrucoT > 0 ? R.ultTruco : '';
   if (t !== HUD.truco) {
@@ -115,7 +125,7 @@ function avisa(a, b) {
 }
 
 /* ── EL TUTORIAL VISUAL ───────────────────────────────────────────────────
-   TRES PASOS Y CADA UNO ESPERA A QUE LA COSA PASE, no a que se lea un cartel.
+   CUATRO PASOS Y CADA UNO ESPERA A QUE LA COSA PASE, no a que se lea un cartel.
    Un tutorial que se pasa leyendo se saltea, y lo que se saltea es
    exactamente lo que despues no se entiende. Es la regla que ya ordeno el de
    ECO y el de RECREO.
@@ -129,15 +139,19 @@ function avisa(a, b) {
    SE DIBUJA EN EL LIENZO Y NO EN EL DOM porque lo que hay que mostrar es
    DONDE tocar: dos mitades de pantalla con su circulo latiendo. Un cartel de
    texto puede decir «izquierda» y no senala nada.                         */
-const TUTO = { on: false, paso: 0, t: 0, fin: 0, s0: 0, f0: 0, e0: 0 };
-/* EL ORDEN ES SALTAR · EMPUJAR · VOLTERETA, y no el que uno escribiria.
+const TUTO = { on: false, paso: 0, t: 0, fin: 0, s0: 0, f0: 0, e0: 0, c0: 0 };
+/* EL ORDEN ES SALTAR · EMPUJAR · CARGAR · VOLTERETA, y no el que uno escribiria.
    Una voltereta entera son 0,73 s de giro y el vuelo dura 1,10 s A CRUCERO:
    despacio el salto es mas corto que el giro y la voltereta es IMPOSIBLE por
    construccion, no por dificultad. Y fallarla cuesta un tumbo, o sea menos
    velocidad todavia. Medido con la voltereta en segundo lugar, el auto-jugador
    se quedaba trabado ahi con la velocidad en CERO. Pidiendo primero los
    empujones, cuando llega la voltereta ya hay con que darla. */
-const TUTO_PASOS = ['tu1', 'tu3', 'tu2'];
+/* Y EL SALTO CARGADO VA ANTES DE LA VOLTERETA POR LA MISMA ARITMETICA: el
+   vuelo cargado dura 1,61 s contra 1,10 del normal, o sea que la vuelta entra
+   con el doble de holgura. Aprendido el cargado, el paso de la voltereta deja
+   de depender de haber juntado velocidad suficiente. */
+const TUTO_PASOS = ['tu1', 'tu3', 'tu5', 'tu2'];
 
 function tutoReinicia(demo) {
   TUTO.on = false; TUTO.fin = 0; TUTO.t = 0; tutoClase();
@@ -160,7 +174,7 @@ function tutoClase() {
 }
 function tutoArranca(forz) {
   TUTO.on = true; TUTO.paso = 0; TUTO.t = 0; TUTO.fin = 0;
-  TUTO.s0 = SALTOS; TUTO.f0 = R.flips; TUTO.e0 = R.empujes;
+  TUTO.s0 = SALTOS; TUTO.f0 = R.flips; TUTO.e0 = R.empujes; TUTO.c0 = R.cargados;
   if (forz) { GUARDA.tuto = 0; guardaEscribe(); }
   tutoClase();
 }
@@ -171,6 +185,21 @@ function tutoTermina() {
 function tutoSaltea() {
   if (!TUTO.on) return;
   TUTO.fin = 0; TUTO.on = false; GUARDA.tuto = 1; guardaEscribe(); tutoClase();
+}
+/* CORTA EL TUTORIAL SIN DARLO POR VISTO, que es el mismo reparto que
+   `pbDespiertaCorta()` en PUERTA BLANCA. El panel de final es DOM y se
+   dibuja encima del lienzo, pero el tutorial vive EN el lienzo: con el
+   tutorial vivo quedan su cartel y sus dos circulos por debajo del panel
+   —fotografiado: «MANTENE LA IZQUIERDA Y TOCA LA DERECHA: SALTO CARGADO»
+   cruzando el pie del panel de RECORD NUEVO—. Antes no se podia morir, asi
+   que eso solo pasaba yendo a TERMINAR desde la pausa; con tres vidas es el
+   caso normal.
+   Y NO MARCA `GUARDA.tuto`: el que se cayo tres veces en el paso dos no
+   aprendio nada, asi que la corrida siguiente se lo vuelve a ensenar. Tampoco
+   deja los 2,4 s de despedida de `tutoTermina`, porque no termino: se corto. */
+function tutoCorta() {
+  if (!TUTO.on && TUTO.fin <= 0) return;
+  TUTO.on = false; TUTO.fin = 0; tutoClase();
 }
 
 /* ── LO QUE SE DIBUJA ─────────────────────────────────────────────────────
@@ -206,17 +235,34 @@ function pintaTuto() {
        atado al indice, reordenar los pasos —que es justo lo que se acaba de
        hacer— deja el circulo pulsando en la mitad equivocada de la pantalla
        sin que nada falle. */
-    const emp = TUTO_PASOS[TUTO.paso] === 'tu3';
+    const clave = TUTO_PASOS[TUTO.paso];
+    const emp = clave === 'tu3', car = clave === 'tu5';
     const izq = emp, r = mh * 0.085, k = (TIEMPO * 1.1) % 1;
-    const cx = izq ? ANCHO * 0.25 : ANCHO * 0.75;
+    const cx = car ? ANCHO * 0.75 : izq ? ANCHO * 0.25 : ANCHO * 0.75;
     /* el color va con el TRABAJO y no con el lado: el ambar es empujar y el
-       celeste saltar en los tres pasos, asi que dar vuelta las zonas no da
+       celeste saltar en los cuatro pasos, asi que dar vuelta las zonas no da
        vuelta lo que el jugador ya aprendio a reconocer */
     const col = emp ? '#ffe6b8' : '#9fe6ff';
+    const fch = Math.round(clamp(mh * 0.030, 9, 14));
+    /* EL PASO CARGADO ENCIENDE LAS DOS MITADES, porque es el unico gesto del
+       juego que pide las dos manos a la vez: con una sola encendida el
+       jugador toca esa y el paso no avanza nunca. La izquierda muestra
+       ademas cuanto lleva cargado — sin la barra, «mantene» no dice hasta
+       cuando. */
+    if (car) {
+      const cl = ANCHO * 0.25;
+      tutoCirculo(cl, cy, r, k, '#ffe6b8');
+      ctx.globalAlpha = 0.85; ctx.fillStyle = '#ffe6b8';
+      ctx.font = '700 ' + fch + 'px monospace';
+      ctx.fillText(T('tcarga'), cl, cy + r * 1.75);
+      const bw = r * 2.2, bh = Math.max(3, r * 0.16), by = cy + r * 2.35;
+      ctx.globalAlpha = 0.28; ctx.fillRect(cl - bw / 2, by, bw, bh);
+      ctx.globalAlpha = 0.95; ctx.fillRect(cl - bw / 2, by, bw * cargaK(), bh);
+    }
     tutoCirculo(cx, cy, r, k, col);
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
-    ctx.font = '700 ' + Math.round(clamp(mh * 0.030, 9, 14)) + 'px monospace';
+    ctx.font = '700 ' + fch + 'px monospace';
     ctx.fillText(T(emp ? 'tempuja' : 'tsalta'), cx, cy + r * 1.75);
     /* Y EL PASO 3 MUESTRA CUANTOS TOQUES VAN: un «toca rapido» sin cuenta no
        dice cuando esta hecho, y entonces el paso parece trabado. */
@@ -289,6 +335,7 @@ function tutoPaso(dt) {
   const p = TUTO.paso;
   const hecho = p === 0 ? SALTOS > TUTO.s0
               : p === 1 ? R.empujes >= TUTO.e0 + 4
+              : p === 2 ? R.cargados > TUTO.c0
               : R.flips > TUTO.f0;
   if (!hecho) return;
   TUTO.paso++; TUTO.t = 0;
@@ -393,5 +440,5 @@ function pintaTodo() {
   $('tSalt').textContent = T('tsalt');
   pintaIdioma(); pintaMenu(); pintaPausa();
   if (PANT === 'fin') pintaFin(false);
-  HUD.truco = null; HUD.pts = -1; HUD.mon = -1;
+  HUD.truco = null; HUD.pts = -1; HUD.mon = -1; HUD.vidas = -1;
 }

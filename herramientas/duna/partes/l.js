@@ -38,17 +38,30 @@ function zonaSaltoArriba(e) {
   if (e) SOST.delete(e.pointerId); else SOST.clear();
   if (SOST.size === 0) pulsa(false);
 }
+/* LA IZQUIERDA TIENE LAS DOS COSAS: EL FLANCO EMPUJA Y EL SOSTENIDO CARGA.
+   Son dos gestos distintos sobre la misma mitad y no se pisan — un toque
+   corto empuja y no llega al minimo de carga; uno largo empuja una vez y
+   carga. Y lleva su propio Set por la misma razon que el del salto: con dos
+   dedos en la misma mitad, el que se levanta primero apagaria la carga del
+   que sigue apoyado. */
+const SOSC = new Set();         // punteros que estan cargando el salto
 function zonaTurboAbajo(e) {
   if (PANT !== 'juego') return;
   turbo();
+  if (e && e.pointerId !== undefined) SOSC.add(e.pointerId);
+  cargaPulsa(true);
   if (e && e.cancelable) e.preventDefault();
+}
+function zonaTurboArriba(e) {
+  if (e && e.pointerId !== undefined) SOSC.delete(e.pointerId); else SOSC.clear();
+  if (SOSC.size === 0) cargaPulsa(false);
 }
 /* si el dedo se levanta afuera de la ventana el `pointerup` no llega nunca y
    el rider se queda girando para siempre: es el mismo defecto que en RECREO
    dejaba al jugador caminando contra una pared */
-addEventListener('blur', () => zonaSaltoArriba(null));
-addEventListener('pointerup', zonaSaltoArriba);
-addEventListener('pointercancel', zonaSaltoArriba);
+addEventListener('blur', () => { zonaSaltoArriba(null); zonaTurboArriba(null); });
+addEventListener('pointerup', e => { zonaSaltoArriba(e); zonaTurboArriba(e); });
+addEventListener('pointercancel', e => { zonaSaltoArriba(e); zonaTurboArriba(e); });
 addEventListener('keydown', e => {
   if (e.repeat) return;
   /* el teclado ESPEJA la pantalla: la flecha derecha salta y la izquierda
@@ -60,6 +73,7 @@ addEventListener('keydown', e => {
   } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
     if (PANT !== 'juego') return;
     turbo();
+    SOSC.add('tecla'); cargaPulsa(true);
   } else if (e.code === 'Escape' || e.code === 'KeyP') {
     if (PANT === 'juego') pausa(true); else if (PANT === 'pausa') pausa(false);
   }
@@ -67,6 +81,8 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowRight' || e.code === 'KeyD') {
     SOST.delete('tecla'); if (SOST.size === 0) pulsa(false);
+  } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+    SOSC.delete('tecla'); if (SOSC.size === 0) cargaPulsa(false);
   }
 });
 $('zSalto').addEventListener('pointerdown', zonaSaltoAbajo, { passive: false });
@@ -105,9 +121,10 @@ function nuevaPartida(demo) {
   HORA = HORA0;
   OBJ_HECHOS = [];
   SOST.clear(); pulsa(false);
+  SOSC.clear(); cargaPulsa(false);
   tutoReinicia(demo);
   PREV.x = R.x; PREV.y = R.y; PREV.ang = R.ang;
-  HUD.pts = -1; HUD.mon = -1; HUD.truco = null; HUD.pista = null;
+  HUD.pts = -1; HUD.mon = -1; HUD.vidas = -1; HUD.truco = null; HUD.pista = null;
 }
 
 function empieza() {
@@ -115,10 +132,11 @@ function empieza() {
   verPantalla('juego');
   audioArranca();
 }
-/* TERMINAR LA CORRIDA ES UNA DECISION DEL JUGADOR, y esa es toda la
-   consecuencia de que la bajada no acabe: sin muerte, lo unico que cierra
-   una partida —y lo unico que hace que el record signifique algo— es que
-   alguien diga «hasta aca». Vive en la pausa, que es donde uno ya paro. */
+/* TERMINAR LA CORRIDA SIGUE SIENDO UNA DECISION DEL JUGADOR, Y AHORA NO ES LA
+   UNICA: con tres vidas, la tercera caida la cierra sola. Las dos puertas
+   conviven a proposito —el que juega bien la termina cuando quiere y el que
+   se cae tres veces la termina igual— asi que el record sigue queriendo decir
+   algo. La de la pausa vive donde uno ya paro; esta vive en `cae()`.     */
 function pausa(v) {
   if (v && PANT === 'juego') verPantalla('pausa');
   else if (!v && PANT === 'pausa') verPantalla('juego');
@@ -128,6 +146,10 @@ function alMenu() {
   verPantalla('menu');
 }
 function termina() {
+  /* EL TUTORIAL SE CORTA ANTES DE ABRIR EL PANEL, no despues: `pintaFin`
+     y `verPantalla` no tocan el lienzo, asi que un tutorial vivo sigue
+     dibujando su cartel y sus dos circulos por debajo del panel. */
+  tutoCorta();
   const m = Math.floor(R.dist);
   const nuevo = m > GUARDA.rec;
   if (nuevo) GUARDA.rec = m;

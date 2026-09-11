@@ -18,6 +18,8 @@ window.__D = {
     ang: +R.ang.toFixed(3), giro: +R.giro.toFixed(2),
     dist: Math.floor(R.dist), mons: R.mons, flips: R.flips, grinds: R.grinds,
     caido: +R.caido.toFixed(2), caidas: R.caidas, empujes: R.empujes,
+    vidas: R.vidas, carga: +R.carga.toFixed(3), cargaK: +cargaK().toFixed(3),
+    cargados: R.cargados,
     turbo: +R.turbo.toFixed(2), tope: TURBO_TOPE,
     tuto: TUTO.on ? TUTO.paso : -1, tutoFin: +TUTO.fin.toFixed(2),
     trucos: R.trucos, comboMax: R.comboMax, saltoMax: +R.saltoMax.toFixed(1),
@@ -59,22 +61,51 @@ window.__D = {
        mientras el rider avanza quinientos metros: medido en la captura, el
        terreno se veia bien y el rider NO ESTABA EN EL CUADRO. Es la misma
        trampa que ya costo una vuelta en RECREO y otra en HUESOS. */
-    /* Y AHORA NO CORTA POR MUERTE, PORQUE NO HAY: la corrida dura los
-       segundos que se le pidan y lo que se informa son las CAIDAS. Con el
-       corte viejo (`R.vivo`) una corrida de sesenta segundos duraba los
-       sesenta siempre y `caidas` era el unico numero que podia salir mal. */
+    /* Y VUELVE A CORTAR POR MUERTE, PORQUE AHORA LA HAY: tres caidas cierran
+       la corrida, asi que el numero que describe a un bot ya no es solo
+       cuantos metros hizo sino CUANTO AGUANTO. Sin el corte, el bucle sigue
+       girando con `unPaso` saliendo por su primera linea —`if (!R.vivo)
+       return`— y la sonda informa los sesenta segundos pedidos aunque el bot
+       se haya matado en el ocho: un numero que no puede salir mal. Por eso
+       `seg` sale de los pasos DADOS y no de los pedidos. */
     let _SMAX = 0;
     for (; i < n; i++) {
       unPaso(PASO); TIEMPO += PASO;
       if (R.s > _SMAX) _SMAX = R.s;
       riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
+      if (!R.vivo) { i++; break; }
     }
     const r = { dist: Math.floor(R.dist), seg: +(i * PASO).toFixed(1),
                 s: +(R.dist / Math.max(i * PASO, 0.01)).toFixed(1),
                 muerte: R.muerte, vivo: R.vivo, mons: R.mons, flips: R.flips,
                 grinds: R.grinds, trucos: R.trucos, saltos: SALTOS,
-                caidas: R.caidas, empujes: R.empujes, sMax: +_SMAX.toFixed(1) };
+                caidas: R.caidas, empujes: R.empujes, sMax: +_SMAX.toFixed(1),
+                vidas: R.vidas, cargados: R.cargados };
     DEMO = g; DEMO_REVIVE = true; return r;
+  },
+  /* LA MUERTE POR EL CAMINO DEL JUGADOR, que es lo unico que `juega()` no
+     puede medir. `juega()` enciende DEMO para que el bot maneje, y `termina()`
+     cuelga justamente de `!DEMO` —el menu no puede abrir el panel de final
+     mientras la demo se estrella detras del titulo—, asi que ahi las tres
+     caidas cierran la fisica y nunca la partida. Aca el bot pone los dedos y
+     el bucle es el del jugador: `pulsa(botPiensa)` y `turbo()` son exactamente
+     lo que llaman `zonaSaltoAbajo` y `zonaTurboAbajo`, y con DEMO apagado
+     `unPaso` toma su otra rama. Sin esta sonda, el renglon que une «se acabaron
+     las vidas» con «aparece el final» quedaria leido y no medido.        */
+  muere: (modo, seg) => {
+    nuevaPartida(false); botReinicia(modo || 'azar');
+    const n = Math.round((seg || 240) / PASO);
+    let i = 0;
+    for (; i < n; i++) {
+      pulsa(botPiensa(PASO)); if (botEmpuja(PASO)) turbo();
+      unPaso(PASO); TIEMPO += PASO;
+      riderVis(PASO, R.x, R.y, R.ang); camPaso(PASO);
+      if (PANT !== 'juego') { i++; break; }
+    }
+    return { seg: +(i * PASO).toFixed(1), dist: Math.floor(R.dist), caidas: R.caidas,
+             vidas: R.vidas, vivo: R.vivo, muerte: R.muerte, pant: PANT,
+             rec: GUARDA.rec, fin: $('fTit') ? $('fTit').textContent : null,
+             datos: $('fDatos') ? $('fDatos').textContent.replace(/\s+/g, ' ').trim() : null };
   },
   nueva: sem => {
     terrReinicia(sem === undefined ? (Math.random() * 1e9) | 0 : sem);
@@ -121,11 +152,19 @@ window.__D = {
     else zonaSaltoArriba({ pointerId: 99 });
     return APRETADO;
   },
-  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()` */
+  /* el mismo camino que el otro pulgar: `zonaTurboAbajo` -> `turbo()`
+     Y SUELTA EL DEDO, que desde que la izquierda tambien CARGA el salto dejarlo
+     apretado no es un detalle: un empujon sin su `pointerup` es una mano que se
+     apoya y no se levanta nunca, asi que la carga se llena sola y el proximo
+     salto sale cargado. Medido antes de arreglarlo: `sost(40..90)` daba CERO
+     caidas con dos y tres volteretas y el rider todavia en el aire a los 140
+     pasos —o sea el salto grande— donde la vuelta 156 habia medido tumbo. La
+     sonda estaba modelando un gesto que nadie hace.                        */
   empuja: n => {
     const a = R.s, b = R.empujes;
     for (let i = 0; i < (n || 1); i++) {
       zonaTurboAbajo({ cancelable: false, preventDefault() {} });
+      zonaTurboArriba({ pointerId: 88 });
       R.turboCd = 0;              // la sonda no espera el enfriamiento del dedo
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - b, tope: TURBO_TOPE };
@@ -170,7 +209,66 @@ window.__D = {
              flips: R.flips - f0, muerte: R.muerte, suelo: R.suelo,
              giro: +R.giro.toFixed(2) };
   },
-  cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas, s: +R.s.toFixed(2) }; },
+  cae: () => { cae('sonda'); return { caido: +R.caido.toFixed(2), caidas: R.caidas,
+                                     vidas: R.vidas, vivo: R.vivo, s: +R.s.toFixed(2) }; },
+  /* ── EL SALTO CARGADO, POR EL CAMINO DEL DEDO ───────────────────────────
+     Sostiene la mitad IZQUIERDA `carga` pasos, suelta, y en el mismo cuadro
+     toca la derecha. Entra por `zonaTurboAbajo`/`zonaTurboArriba`, o sea por
+     el mismo reparto de dedos que puede estar roto: llamando a `cargaPulsa()`
+     directo se saltearia justamente el `SOSC` que esta vuelta agrego, y con
+     dos dedos en la misma mitad eso es lo unico que puede fallar.
+     Lo que devuelve es el APICE y el ALCANCE medidos, no el impulso: el
+     impulso es el numero que se escribio y el apice es lo que el jugador ve. */
+  salta: (carga, antes, mantiene) => {
+    /* APAGA EL DEMO, Y NO ES CEREMONIA. `verPantalla('juego')` no lo apaga:
+       `DEMO` lo pone `nuevaPartida`, asi que una sonda que se limite a cambiar
+       de pantalla deja al AUTO-JUGADOR apretando el boton mientras la sonda
+       cree estar midiendo un dedo. Medido asi, los cinco saltos dieron apices
+       de 2,44 · 4,26 · 0,04 · 6,19 · 7,05 con la carga en CERO en tres de los
+       cinco —el bot despegaba antes y en el aire la carga no acumula— o sea
+       cinco numeros plausibles y ninguno del salto que se pidio. */
+    const g = DEMO, gr = DEMO_REVIVE; DEMO = false; DEMO_REVIVE = false;
+    for (let i = 0; i < (antes === undefined ? 90 : antes); i++) { unPaso(PASO); TIEMPO += PASO; }
+    zonaTurboAbajo({ pointerId: 77, cancelable: false, preventDefault() {} });
+    for (let i = 0; i < (carga || 0); i++) { unPaso(PASO); TIEMPO += PASO; }
+    /* LOS DOS ORDENES SE PRUEBAN, y no es de mas: son dos manos. `mantiene`
+       toca la derecha SIN haber soltado la izquierda —el gesto literal que se
+       pidio— y por omision se suelta primero, que es lo que hace cualquiera y
+       lo que la gracia tiene que perdonar. Con un solo orden probado, el otro
+       queda sin medir y es justo el que puede estar roto. */
+    const k = cargaK();
+    if (!mantiene) zonaTurboArriba({ pointerId: 77 });
+    const x0 = R.x, s0 = R.s, p0 = R.y - terrY(R.x);
+    __D.toca(true); unPaso(PASO); TIEMPO += PASO; __D.toca(false);
+    if (mantiene) zonaTurboArriba({ pointerId: 77 });
+    /* EL APICE SE MIDE SOBRE EL TERRENO Y NO SOBRE LA Y DEL MUNDO: la duna
+       baja, asi que la altura absoluta cae desde el primer cuadro y el
+       maximo daria el punto de partida en cualquier salto. */
+    let alto = 0, aire = 0;
+    for (let i = 0; i < 200 && !R.suelo; i++) {
+      unPaso(PASO); TIEMPO += PASO; aire += PASO;
+      const h = R.y - terrY(R.x);
+      if (h > alto) alto = h;
+    }
+    DEMO = g; DEMO_REVIVE = gr;
+    return { carga: carga || 0, k: +k.toFixed(3), mantiene: !!mantiene,
+             apice: +(alto - p0).toFixed(2), aire: +aire.toFixed(3),
+             alcance: +(R.x - x0).toFixed(1), s0: +s0.toFixed(1),
+             cargados: R.cargados, caidas: R.caidas };
+  },
+  /* ── LAS TRES VIDAS ─────────────────────────────────────────────────────
+     Tira al rider `n` veces y devuelve como quedo. Es la unica forma de
+     comprobar que la tercera CIERRA la corrida y que las dos primeras no:
+     con un solo `cae()` las dos ramas se ven iguales. */
+  vidas: n => {
+    const a = [];
+    for (let i = 0; i < (n || 3); i++) {
+      cae('sonda');
+      a.push({ vidas: R.vidas, vivo: R.vivo, pant: PANT, truco: R.ultTruco });
+      for (let j = 0; j < 80 && R.caido > 0; j++) { unPaso(PASO); TIEMPO += PASO; }
+    }
+    return a;
+  },
   /* adelantar el juego SIN el bot: es lo unico que deja medir cuanto dura un
      tumbo o si el enfriamiento del empujon hace lo que dice */
   pasos: n => { for (let i = 0; i < (n || 1); i++) { unPaso(PASO); TIEMPO += PASO; } return __D.est(); },
@@ -181,7 +279,16 @@ window.__D = {
     for (let i = 0; i < (n || 1); i++) {
       zonaTurboAbajo({ cancelable: false, preventDefault() {} });
       const k = Math.max(1, Math.round((dt || 0) / PASO));
-      for (let j = 0; j < k; j++) { unPaso(PASO); TIEMPO += PASO; }
+      /* EL DEDO SE LEVANTA A MITAD DEL HUECO, que es lo que hace una mano de
+         verdad: un toque dura entre 60 y 120 ms y el hueco entre toque y toque
+         es mas largo. Soltar recien al final del hueco convertiria cada
+         empujon en un sostenido y cargaria el salto sin que nadie lo pidiera. */
+      const mitad = Math.max(1, k >> 1);
+      for (let j = 0; j < k; j++) {
+        if (j === mitad) zonaTurboArriba({ pointerId: 88 });
+        unPaso(PASO); TIEMPO += PASO;
+      }
+      zonaTurboArriba({ pointerId: 88 });
     }
     return { s0: +a.toFixed(2), s: +R.s.toFixed(2), sumo: R.empujes - e };
   },
@@ -235,7 +342,13 @@ window.__D = {
      pantalla, o sea que denuncia choques que no existen. Ya costo una vuelta
      en ECO y otra en HUESOS. */
   cajas: () => {
-    const ids = ['pts', 'sub', 'mon', 'truco', 'pista', 'bPausa', 'tSalt'];
+    /* LA FILA DE VIDAS ENTRA EN LA LISTA, y no es de mas: es el elemento mas
+       nuevo del HUD y `cajas()` mide contra lo que le nombran, asi que uno que
+       nadie agrego es un solapamiento esperando a que alguien lo mire. Ya paso
+       en DESPEGUE con la linea de la proxima capa. Y de paso es el que obligo a
+       ponerle margen a `#sub`, que iba de borde a borde para decir UNA palabra
+       y le pasaba por encima al primer punto.                                */
+    const ids = ['pts', 'sub', 'mon', 'vidas', 'truco', 'pista', 'bPausa', 'tSalt'];
     const v = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;

@@ -374,6 +374,149 @@ munecas.
   **6 mundos × 20 niveles = 120**, procedurales con semilla y auditados uno por uno. Vive partido en
   `herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
 
+### Centésima sexagésima cuarta vuelta (2026-09-11): **DUNA** — tres vidas, el salto cargado, y la sonda que cargaba sola
+
+Pedido textual: *"agrégale a duna unas 3 vidas y que cada caída te saque una, agrega formas de saltar
+más alto como si mantienes derecha e izquierda saltas o cargas el salto, también agregalo al tutorial
+etc"*.
+
+#### LAS VIDAS CONTRADICEN UNA DECISIÓN ESCRITA EN ESTE MISMO ARCHIVO, Y ESO HAY QUE DECIRLO
+
+La vuelta 155 dejó anotado con todas las letras que **la corrida la termina uno desde la pausa**, y
+el argumento sigue siendo bueno: con la corrida infinita **y** el récord automático, el número sería
+«cuánto rato dejé el teléfono encendido». El pedido es explícito y manda, así que entran las vidas
+—y lo que se conserva del argumento es que **terminar sigue siendo también una decisión del
+jugador**: el botón de la pausa no se va. Lo que cambia es que ahora hay **dos** finales, y el
+segundo vive en `cae()`.
+
+**TRES Y NO UNA, y el número es del diseño y no del gusto.** Con una, el primer aterrizaje de cabeza
+cierra la partida y el tumbo deja de ser lo que la vuelta 155 hizo que fuera —un castigo que cuesta
+velocidad y no la corrida—. Con tres, los dos primeros errores son exactamente el castigo de
+siempre y **el tercero es el final**.
+
+**EL DESCUENTO VA DEL LADO NO-`SIM` DE `cae()`**, al lado de `R.caidas++`. Los rollouts del bot
+imaginan decenas de tumbos por cuadro: contando ahí, una partida se quedaría sin vidas antes de que
+el jugador tocara la pantalla. Y llegar a cero pone `R.vivo=false`, que `unPaso()` convierte en
+`termina()` **sólo cuando `!DEMO`** — o sea que la demo del menú sigue reviviendo sola.
+
+Medido con `vidas(3)`, que tira al rider tres veces seguidas: **2 → 1 → 0**, con el aviso pasando de
+«TE CAÍSTE» a «TE CAÍSTE» a **«SIN VIDAS»**. Con un solo `cae()` las dos ramas se ven iguales.
+
+#### EL SALTO CARGADO: EL GESTO QUE SE PIDIÓ YA ESTABA LIBRE
+
+*"Como si mantienes derecha e izquierda saltas o cargas el salto"* son dos frases para lo mismo, y
+las dos se satisfacen con una sola mecánica: **la mitad izquierda, que hasta acá sólo servía para
+tocar, ahora también SOSTIENE**. Empujar es un toque —85 ms de espera entre uno y otro— así que
+mantener el dedo apoyado no le estaba pidiendo nada a nadie: estaba libre.
+
+**Y NO ES GRATIS, que es lo que lo hace una decisión.** Los 0,55 s de carga son medio segundo en el
+que **no se empuja**, o sea unos seis empujones que no se dieron. Se cambia velocidad por altura.
+
+**EL MULTIPLICADOR NO SE ELIGIÓ, SE DERIVÓ.** El vuelo llano dura `2·SALTO/G` = 1,10 s y una
+voltereta entera son `GIRO_ESPERA + 2π/GIRO_V` = 0,87. La **doble** son 0,14 + 2×0,7306 = **1,601 s**,
+y el impulso que deja exactamente ese aire es `S' = G·1,601/2 = 24,02`, o sea **1,46 veces** `SALTO`.
+Con eso el salto cargado es, por construcción, el único en el que una doble voltereta entra.
+
+Medido en el juego, con la rampa de carga barrida de cero a fondo: ápice **4,25 → 4,80 → 6,61 →
+7,64 → 9,42 → 9,45 m**. Y a fondo, a 23,6 m/s: **ápice 11,62 m, aire 1,85 s, alcance 37,7 m** contra
+los **21,6 m** del hueco más ancho que la auditoría encuentra en veinticinco semillas.
+
+**LA ACUMULACIÓN VIVE EN UN SOLO SITIO**, arriba de `riderPaso`, así que despegar, caerse o agarrar
+una cuerda la ponen en cero sin que haya que acordarse en tres funciones.
+
+**Y LA CARGA SOBREVIVE A SOLTAR LA IZQUIERDA UN PESTAÑEO** (`CARGA_GRACIA` 0,18 s), por la misma
+razón por la que existen el coyote y el buffer del salto: **es un gesto de dos manos y nadie las
+suelta en el mismo cuadro**. Medido, el orden importa poco: soltando primero la izquierda y
+manteniéndola apretada, los ápices salen **idénticos**.
+
+**LOS BOTS SIGUEN JUGANDO LA MISMA FÍSICA.** `CARGA_AP` sólo lo escriben los manejadores de entrada
+y `nuevaPartida`, así que en una corrida de bot `cargaK()` devuelve 0 y el impulso es `SALTO` pelado
+— medido, `cargados: 0` en las dieciocho corridas.
+
+#### EL DEFECTO DE LA VUELTA ES DE LA SONDA, Y SIN ÉL LA MEDICIÓN HABRÍA MENTIDO A FAVOR
+
+`empuja()` y `empujaReal()` apretaban la mitad izquierda y **no levantaban el dedo nunca**. Eso era
+inofensivo mientras la izquierda sólo tocaba; desde que además **carga**, un empujón sin su
+`pointerup` es una mano que se apoya y no se levanta: la carga se llena sola y **el salto siguiente
+sale cargado sin que nadie lo haya pedido**.
+
+Medido antes de arreglarlo, `sost(40..90)` daba **cero caídas** con dos y tres volteretas donde la
+vuelta 156 había medido tumbos — o sea una sonda modelando un gesto que nadie hace, y devolviendo
+números plausibles. Ahora se suelta, y en `empujaReal` **a mitad del hueco**: un toque dura entre 60
+y 120 ms y el hueco entre toque y toque es más largo, así que soltar recién al final convertiría
+cada empujón en un sostenido.
+
+Verificado después, que es la propiedad que importa: **catorce empujones de verdad dejan
+`carga: 0, k: 0`**.
+
+#### Y UN SUSTO QUE NO ERA UNA REGRESIÓN
+
+`sost()` daba **cero caídas a cualquier largo de sostenido**, de 40 a 150 pasos, a crucero y
+despacio. Parecía que el tumbo se había roto. Se extrajo **el binario anterior**
+(`git show HEAD:juegos-pc/Duna.html`) y se corrió el mismo barrido: **los mismos números, cifra por
+cifra**. No era una regresión: es el salto en cadena del dedo sostenido —el buffer vuelve a disparar
+en cada aterrizaje— más el enderezado al soltar de la vuelta 156. Comparar contra el commit anterior
+**en el mismo banco** es lo único que separa «esto lo rompí yo» de «esto ya era así».
+
+#### `cajas()` NO MIRABA LA FILA DE VIDAS, Y AL AGREGARLA ENCONTRÓ UN SOLAPAMIENTO DE VERDAD
+
+Es la lección de DESPEGUE otra vez: **un elemento nuevo que ninguna prueba mira es un solapamiento
+esperando**. Con `vidas` en la lista, la sonda cantó **`sub × vidas` en los tres idiomas**: `#sub`
+arrancaba en `--mh·.14` = 57,7 px y la fila de vidas ocupaba de 16 a 62 a la misma altura.
+
+**Y EL MARGEN NO SE COPIA DEL DE `#pts`: SE DERIVA DE LA FILA.** Arranca en .038 y mide tres puntos
+de .9em más dos huecos de .5em sobre un cuerpo de .030, o sea `.038 + 3,7 × .030 = .149` del lado
+corto. Con .175 quedan veintiséis píxeles de aire. **Igual de los dos lados**, porque el texto está
+centrado y con márgenes distintos la palabra se corre. Medido después: `choques: []` y `fuera: []` en
+castellano, inglés y portugués.
+
+#### EL PANEL DE FINAL SE DIBUJABA CON EL TUTORIAL PUESTO DEBAJO
+
+El panel es DOM y el tutorial vive **en el lienzo**, así que morir en el paso dos dejaba su cartel y
+sus dos círculos por debajo del panel — fotografiado: *«MANTENÉ LA IZQUIERDA Y TOCÁ LA DERECHA:
+SALTO CARGADO»* cruzando el pie de **RÉCORD NUEVO**. Antes no se podía morir, así que sólo pasaba
+yendo a TERMINAR desde la pausa; **con vidas es el caso normal**.
+
+Va `tutoCorta()`, que es el mismo reparto que `pbDespiertaCorta()` en PUERTA BLANCA: apaga el
+tutorial **sin marcar `GUARDA.tuto`** y sin los 2,4 s de despedida de `tutoTermina`. Las dos cosas
+importan: el que se cayó tres veces en el paso dos **no aprendió nada**, así que la corrida siguiente
+se lo vuelve a enseñar. Medido: al morir, `on:false · fin:0 · clase:false` y el botón de saltear en
+`display:none`; en disco **`tuto: 0`**; y la corrida siguiente arranca en el paso 0.
+
+Y se llama **antes** de abrir el panel, no después: `pintaFin` y `verPantalla` no tocan el lienzo.
+
+#### EL TUTORIAL PASA A CUATRO PASOS, Y EL CARGADO VA ANTES DE LA VOLTERETA
+
+`saltar · empujar · cargar · voltereta`, y el orden sale de la misma aritmética de arriba: el vuelo
+cargado dura 1,85 s contra 1,10 del normal, así que **aprendido el cargado, la voltereta deja de
+depender de haber juntado velocidad suficiente**. El paso del cargado enciende **las dos mitades** con
+la barra de carga alimentada por `cargaK()`, que es la única forma de mostrar un gesto de dos manos.
+
+Recorrido de punta a punta por el camino del dedo: los cuatro pasos en orden y el cierre
+**«ASÍ SE JUEGA · TRES CAÍDAS Y SE TERMINA»**, con `visto: 1`.
+
+#### MEDIDO AL CERRAR
+
+Auditoría **25 de 25 semillas, 0 malas**, hueco más ancho **21,6** —el mismo de la vuelta 154— con 0
+monedas enterradas y 0 cuerdas fuera de alcance. Los tres bots sobre 6 semillas × 120 s:
+
+| | metros | caídas |
+|---|---|---|
+| honesto | **3.452** | 0,7 |
+| torpe | 3.479 | 0,3 |
+| **al azar** | **323** | **3,0 — se queda sin vidas** |
+
+El del azar se derrumba de 2.709 m a 323, que es exactamente lo que las vidas tienen que hacer: la
+separación pasa de un factor 1,3 a **uno de diez**. Muerte por el camino del jugador —dedos del bot,
+bucle del jugador, `DEMO` apagado—: `{seg 21,4 · dist 472 · caídas 3 · vidas 0 · pant "fin" ·
+"RÉCORD NUEVO" · "472 m · 11 monedas · 6 trucos · 3 caídas"}`. **Cero solapamientos** entre los seis
+elementos del HUD en los tres idiomas. Costo **0,225 a 0,305 ms por cuadro**. `window.__errs`
+**vacío en las seis corridas**. El HTML quedó en **588 KB**.
+
+**LO QUE NO SE HIZO, Y ES DEL MISMO PEDIDO:** que todos los juegos entren en inglés o pregunten el
+idioma antes del tutorial, el juego de Paper.io, los nombres más originales y las portadas 9:16
+generadas con Rezona. Quedan para la vuelta que viene.
+
 ### Centésima sexagésima tercera vuelta (2026-09-11): **FLECHAS · ARCO · MEKO · DUNA** — fondos dibujados por código, y una sonrisa que no era un pájaro
 
 Pedido textual: *"podés agregar fondos etc y mejorar los gráficos de los 4 juegos super artisticos pnr
