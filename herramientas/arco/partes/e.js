@@ -124,12 +124,42 @@ const PALETAS = [
 ];
 
 /* ── EL CIELO ─────────────────────────────────────────────────────────────
-   Un lienzo por paleta, dibujado una vez y pegado dos veces con un
-   corrimiento: las nubes SE CORREN CON EL VIENTO, que es la mitad de lo que
-   hacen. El viento es el unico dato del duelo que no se ve en el terreno, y
-   un numero en el HUD se lee una vez y se olvida.                          */
-const CIELOS = [];
+   ESTE JUEGO TIENE DOS TERCIOS DE CUADRO VACIOS POR GEOMETRIA, y eso no se
+   arregla: los dos arqueros estan a trece celdas uno del otro, asi que en un
+   marco vertical el ANCHO manda y sobra cielo. Lo unico que se puede hacer es
+   que ese cielo tenga algo — y esta escrito como pendiente desde la vuelta
+   159. Lo que va aca es eso.
+
+   SON DOS LIENZOS Y NO UNO, y esa es la decision: un solo lienzo se pega con
+   UN corrimiento, o sea que todas las nubes viajan a la misma velocidad y el
+   cielo queda plano. Con dos capas que se corren a ritmos distintos aparece
+   paralaje, que es lo unico que da profundidad en vector plano.
+
+   Y EL REPARTO DE ALTURAS NO ES ESTETICO, ES PARA NO TAPAR LA FLECHA. Medido
+   con el encuadre de espera —mira 16,6 y encH 17,75 sobre 892 px— la flecha
+   vuela entre el 38 % y el 97 % del alto del cuadro: el apice mas alto del
+   juego (y ~ 21, duelo 6) cae en el 38 %. Asi que las nubes GRANDES y opacas
+   viven por ENCIMA del 32 % —donde no vuela nada nunca— y en la banda del
+   vuelo solo quedan las lejanas, que son chatas y palidas. De paso eso es
+   como se ve un cielo de verdad: cerca del horizonte las nubes se apilan y
+   se achatan, y encima de uno se abren.                                    */
+const CIELOS = [], CIELOS_A = [];
 let CIELO_OX = 0, CIELO_PI = 0;
+/* medio angulo del abanico de rayos: 1,24 rad son 71 grados, o sea que la
+   cuña mas abierta sale casi horizontal y NINGUNA sube.                  */
+const RAYO_ABRE = 1.24;
+
+/* una nube de cinco bolas, con el ancho cayendo hacia las puntas */
+function nubeP(g, cx, cy, s, ancho) {
+  g.beginPath();
+  for (let k = 0; k < 5; k++) {
+    const ex = cx + (k - 2) * 46 * s * ancho, ey = cy + Math.sin(k * 1.9 + cx) * 11 * s;
+    const rw = (74 - Math.abs(k - 2) * 15) * s;
+    g.moveTo(ex + rw, ey); g.arc(ex, ey, rw, 0, 6.2832);
+  }
+  g.fill();
+}
+
 function cieloLienzo(pi) {
   const key = pi + '|' + ANCHO + '|' + ALTO + '|' + DPR + '|' + DET;
   if (CIELOS[pi] && CIELOS[pi].key === key) return CIELOS[pi].c;
@@ -143,6 +173,41 @@ function cieloLienzo(pi) {
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
 
   const sx = W * pal.sol[0], sy = H * pal.sol[1];
+
+  /* LOS RAYOS VAN ANTES DEL HALO, y no es orden caprichoso: el halo es un
+     radial que tiene que COMER el nacimiento de los rayos, si no cada cuña
+     arranca con un canto recto pegado al disco y se lee a abanico de papel. */
+  if (DET > 0) {
+    const nr = DET > 1 ? 9 : 6, R0 = azar(pi * 811 + 37);
+    g.save(); g.translate(sx, sy);
+    for (let i = 0; i < nr; i++) {
+      /* EL ABANICO VA HACIA ABAJO Y NADA MAS. Repartido en los 360 grados,
+         la mitad de las cuñas sale hacia arriba y corta contra el borde de
+         arriba del cuadro con un canto recto — que es justo lo que un rayo
+         crepuscular no hace: se abre del sol hacia el suelo.              */
+      const a = 1.5708 + (((i + 0.5) / nr) - 0.5) * 2 * RAYO_ABRE + (R0() - 0.5) * 0.18;
+      const an = 0.026 + R0() * 0.042;
+      const lg = H * (0.55 + R0() * 0.80);
+      /* Y SE DIBUJA DOS VECES: una cuña ancha y floja debajo de una angosta.
+         Una sola cuña de alfa pareja tiene canto duro por construccion y se
+         lee a abanico de papel; con las dos, el ancho cae en dos escalones y
+         el borde se deshace.                                              */
+      for (const [mu, ma] of [[2.5, 0.42], [1, 1]]) {
+        const rg = g.createLinearGradient(0, 0, Math.cos(a) * lg, Math.sin(a) * lg);
+        rg.addColorStop(0, _rgba(pal.solc, 0));
+        rg.addColorStop(0.16, _rgba(pal.solc, 0.105 * ma));
+        rg.addColorStop(0.50, _rgba(pal.solc, 0.048 * ma));
+        rg.addColorStop(1, _rgba(pal.solc, 0));
+        g.fillStyle = rg;
+        g.beginPath(); g.moveTo(0, 0);
+        g.lineTo(Math.cos(a - an * mu) * lg, Math.sin(a - an * mu) * lg);
+        g.lineTo(Math.cos(a + an * mu) * lg, Math.sin(a + an * mu) * lg);
+        g.closePath(); g.fill();
+      }
+    }
+    g.restore();
+  }
+
   for (const off of [-W, 0, W]) {
     const rg = g.createRadialGradient(sx + off, sy, 0, sx + off, sy, H * 0.55);
     rg.addColorStop(0, _rgba(pal.solc, 0.95));
@@ -155,26 +220,119 @@ function cieloLienzo(pi) {
   g.fillStyle = _rgba(pal.solc, 0.90);
   g.beginPath(); g.arc(sx, sy, H * 0.035, 0, 6.2832); g.fill();
 
+  /* LA BRUMA DEL HORIZONTE. Sin ella las crestas del fondo nacen de un canto
+     recto sobre el degradado y el horizonte se lee a corte de papel; con
+     ella el aire de abajo es mas claro y la cresta se disuelve en el. Es
+     perspectiva aerea, y cuesta un relleno.                                */
+  const bg = g.createLinearGradient(0, H * 0.54, 0, H);
+  bg.addColorStop(0, _rgba(_h2r(pal.t), 0));
+  /* NO ES LINEAL: el aire se acumula, asi que la bruma crece mas rapido cerca
+     del suelo. Con una rampa recta la banda se lee a velo pegado encima.   */
+  bg.addColorStop(0.55, _rgba(_h2r(pal.t), 0.20));
+  bg.addColorStop(1, _rgba(_h2r(pal.t), 0.58));
+  g.fillStyle = bg; g.fillRect(0, H * 0.54, W, H * 0.46);
+
   /* LAS NUBES SE DIBUJAN TRES VECES —en -W, 0 y +W— porque el lienzo se pega
      en bucle: sin eso, al correrlas con el viento aparece la costura.      */
   const R = azar(pi * 1237 + 71);
-  const nn = Math.max(4, Math.round(pal.nub * (DET === 0 ? 0.45 : DET === 1 ? 0.8 : 1)));
+  const nn = Math.max(5, Math.round(pal.nub * (DET === 0 ? 0.45 : DET === 1 ? 0.8 : 1)));
   for (let i = 0; i < nn; i++) {
-    const cx = R() * W, cy = H * (0.06 + R() * 0.48), s = (0.5 + R() * 1.2) * (W / 900);
-    const a = 0.16 + R() * 0.22;
+    /* LEJANAS: chatas, palidas y en la banda del horizonte. Son las unicas
+       que caen donde vuela la flecha, y por eso son las que casi no estan. */
+    const cx = R() * W, cy = H * (0.40 + R() * 0.30), s = (0.26 + R() * 0.44) * (W / 900);
+    const a = 0.10 + R() * 0.13;
     g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
-    for (const off of [-W, 0, W]) {
-      g.beginPath();
-      for (let k = 0; k < 5; k++) {
-        const ex = cx + off + (k - 2) * 46 * s, ey = cy + Math.sin(k * 1.9 + i) * 11 * s;
-        const rw = (74 - Math.abs(k - 2) * 15) * s;
-        g.moveTo(ex + rw, ey); g.arc(ex, ey, rw, 0, 6.2832);
-      }
-      g.fill();
-    }
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy, s, 1.45);
   }
   CIELOS[pi] = { key, c };
   return c;
+}
+
+/* ── LA CAPA ALTA ─────────────────────────────────────────────────────────
+   Transparente, con las nubes grandes, y se pega a 1,75 veces el corrimiento
+   del fondo: esa diferencia ES el paralaje. Vive por encima del 32 % del
+   alto, o sea fuera de la trayectoria de cualquier flecha del juego.      */
+function cieloAlto(pi) {
+  const key = pi + '|' + ANCHO + '|' + ALTO + '|' + DPR + '|' + DET;
+  if (CIELOS_A[pi] && CIELOS_A[pi].key === key) return CIELOS_A[pi].c;
+  const pal = PALETAS[pi];
+  const W = Math.max(2, Math.round(ANCHO * DPR)), H = Math.max(2, Math.round(ALTO * DPR));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const R = azar(pi * 5171 + 313);
+  const nn = DET === 0 ? 3 : DET === 1 ? 5 : 7;
+  for (let i = 0; i < nn; i++) {
+    const cx = R() * W, cy = H * (0.02 + R() * 0.26), s = (0.85 + R() * 1.1) * (W / 900);
+    const a = 0.22 + R() * 0.20;
+    /* LA PANZA VA MAS OSCURA QUE LA CORONA, y es lo unico que separa una nube
+       de una mancha blanca: una nube de un solo valor no tiene volumen por
+       muchas bolas que tenga. Se dibuja el cuerpo corrido hacia abajo con el
+       tinte de la paleta y encima la corona en blanco.                     */
+    /* GRIS FRIO Y NO EL TINTE DE LA PALETA. Mezclada hacia `pal.t` la panza
+       sale del color del propio cielo —en el atardecer, marron— y eso no se
+       lee a sombra sino a mancha. Lo que corresponde es un gris apenas
+       teñido: una nube en sombra recibe cielo, no sol.                     */
+    g.fillStyle = _rgba(mezR(mezR([255, 255, 255], [146, 160, 184], 0.62), _h2r(pal.t), 0.20), a * 0.80);
+    /* y la panza se corre 26 y no 10: con diez la media luna mide un septimo
+       del radio y se lee a borde sucio en vez de a volumen.               */
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy + 20 * s, s, 1);
+    g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy, s, 1);
+  }
+  CIELOS_A[pi] = { key, c };
+  return c;
+}
+
+/* ── LOS PAJAROS ──────────────────────────────────────────────────────────
+   Lo mas barato que existe para que un cielo vacio deje de estarlo, y encima
+   INFORMAN: van con el viento, que es el unico dato del duelo que el terreno
+   no muestra. Se dibujan en vivo y no horneados porque aletean, y aletear es
+   la mitad de que se lean a pajaro y no a marca de lapiz.
+
+   Van en la banda 0,16..0,34 del alto: por debajo de las nubes altas y por
+   encima del apice del vuelo, asi que no cruzan por delante de la flecha.  */
+const PAJ = [];
+(function () {
+  const R = azar(4523);
+  for (let b = 0; b < 3; b++) {
+    const n = 4 + ((R() * 4) | 0), P = [];
+    for (let i = 0; i < n; i++) {
+      const k = i - (n - 1) / 2;
+      P.push([Math.abs(k) * (14 + R() * 6), k * (11 + R() * 5), R() * 6.2832]);
+    }
+    PAJ.push({ x: R(), y: 0.16 + R() * 0.18, v: 0.55 + R() * 0.5, s: 1.12 + R() * 0.52, P });
+  }
+})();
+let PAJ_T = 0;
+function pajarosPaso(dt, w) {
+  PAJ_T += dt;
+  for (const b of PAJ) {
+    b.x += (w === undefined ? 1 : (w || 0) * 0.4 + 0.5) * b.v * dt * 0.012;
+    if (b.x > 1.25) b.x -= 1.5; if (b.x < -0.25) b.x += 1.5;
+  }
+}
+function pajarosDibuja(g) {
+  if (DET === 0) return 0;
+  g.save();
+  g.strokeStyle = 'rgba(34,44,62,.36)'; g.lineCap = 'round'; g.lineJoin = 'round';
+  let n = 0;
+  for (const b of PAJ) {
+    const bx = b.x * ANCHO, by = b.y * ALTO, s = b.s * (ANCHO / 412);
+    g.lineWidth = 1.45 * s;
+    g.beginPath();
+    for (const [ox, oy, f] of b.P) {
+      const x = bx + ox * s, y = by + oy * s;
+      /* el aleteo es UN seno por pajaro con su propia fase: en fase los seis
+         suben y bajan juntos y se lee a un solo objeto que late.           */
+      const al = 2.3 * s * (0.30 + 0.70 * Math.sin(PAJ_T * 7.4 + f));
+      g.moveTo(x - 4.9 * s, y + al);
+      g.quadraticCurveTo(x - 2.1 * s, y - al * 0.30, x, y);
+      g.quadraticCurveTo(x + 2.1 * s, y - al * 0.30, x + 4.9 * s, y + al);
+    }
+    g.stroke(); n++;
+  }
+  g.restore();
+  return n;
 }
 
 /* ── EL MARCO Y LA CAMARA ─────────────────────────────────────────────────
@@ -580,6 +738,7 @@ function escPaso(dt, w) {
   camPaso(dt);
   if (!DIO) return;
   CIELO_OX -= (w || 0) * dt * 1.9;
+  pajarosPaso(dt, w);
   if (DIO.eqN > 0) {
     let vivas = 0;
     for (let i = 0; i < DIO.eqN; i++) {
@@ -610,12 +769,24 @@ function escDibuja() {
   LLAM = 0;
   const g = G2;
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
-  /* el cielo: dos pegadas con el corrimiento del viento */
+  /* EL CIELO SON DOS CAPAS A RITMOS DISTINTOS, y esa diferencia es todo el
+     paralaje: pegadas al mismo corrimiento el cielo queda plano por mucha
+     nube que tenga. Cada una se pega dos veces por la costura del bucle.  */
   const cie = cieloLienzo(CIELO_PI);
   let ox = CIELO_OX % ANCHO; if (ox > 0) ox -= ANCHO;
   g.imageSmoothingEnabled = true;
   g.drawImage(cie, ox, 0, ANCHO, ALTO); LLAM++;
   g.drawImage(cie, ox + ANCHO, 0, ANCHO, ALTO); LLAM++;
+  if (DET > 0) {
+    const alt = cieloAlto(CIELO_PI);
+    let oa = (CIELO_OX * 1.75) % ANCHO; if (oa > 0) oa -= ANCHO;
+    g.drawImage(alt, oa, 0, ANCHO, ALTO); LLAM++;
+    g.drawImage(alt, oa + ANCHO, 0, ANCHO, ALTO); LLAM++;
+  }
+  /* LOS PAJAROS VAN EN PIXELES DE PANTALLA Y ANTES DEL `translate`: viven en
+     el cielo, que no se mueve con la camara — metidos en el mundo, cerrar el
+     encuadre sobre la flecha se los traeria encima.                        */
+  LLAM += pajarosDibuja(g);
 
   if (!DIO) { LLAM_ANT = LLAM; return; }
 

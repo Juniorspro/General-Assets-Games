@@ -1281,6 +1281,20 @@ function texBloque(tp) {
    LAS NUBES SE DIBUJAN TRES VECES —en x, x-W y x+W— porque la textura se
    repite en horizontal: sin eso, al panear aparece la costura.            */
 const CIELOS = [];
+
+/* una banda de cerros: una onda suave cerrada contra el pie del lienzo. Dos
+   senos de periodos que NO son multiplos entre si, o sea que el perfil no se
+   repite dentro del ancho y no se lee a diente de sierra.                  */
+function cerroP(g, W, H, y0, amp, fa, fb, fase, col) {
+  g.fillStyle = col;
+  g.beginPath(); g.moveTo(0, H);
+  for (let x = 0; x <= W; x += 6) {
+    const u = x / W * 6.2832;
+    g.lineTo(x, y0 - (Math.sin(u * fa + fase) * 0.62 + Math.sin(u * fb + fase * 1.7) * 0.38) * amp);
+  }
+  g.lineTo(W, H); g.closePath(); g.fill();
+}
+
 function cieloTex(pi) {
   if (CIELOS[pi]) return CIELOS[pi];
   const pal = PALETAS[pi], W = 1024, H = 512;
@@ -1293,6 +1307,35 @@ function cieloTex(pi) {
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
 
   const sx = W * pal.sol[0], sy = H * pal.sol[1];
+
+  /* LOS RAYOS VAN ANTES DEL HALO: el halo es un radial que se come el
+     nacimiento de cada cuña, y sin eso la cuña arranca con un canto recto
+     pegado al disco y el sol se lee a abanico de papel. Y el abanico va
+     HACIA ABAJO: repartido en los 360 grados, la mitad sale hacia arriba y
+     corta contra el borde del cuadro, que es lo que un rayo no hace.      */
+  const R0 = azar(pi * 811 + 37);
+  g.save(); g.translate(sx, sy);
+  for (let i = 0; i < 8; i++) {
+    const a = 1.5708 + (((i + 0.5) / 8) - 0.5) * 2.48 + (R0() - 0.5) * 0.18;
+    const an = 0.028 + R0() * 0.040, lg = H * (0.55 + R0() * 0.80);
+    /* dos cuñas por rayo —una ancha y floja debajo de una angosta— porque una
+       sola de alfa pareja tiene canto duro por construccion.               */
+    for (const mu of [2.5, 1]) {
+      const ma = mu > 2 ? 0.42 : 1;
+      const rg = g.createLinearGradient(0, 0, Math.cos(a) * lg, Math.sin(a) * lg);
+      rg.addColorStop(0, 'rgba(' + pal.solc + ',0)');
+      rg.addColorStop(0.16, 'rgba(' + pal.solc + ',' + (0.11 * ma).toFixed(3) + ')');
+      rg.addColorStop(0.50, 'rgba(' + pal.solc + ',' + (0.05 * ma).toFixed(3) + ')');
+      rg.addColorStop(1, 'rgba(' + pal.solc + ',0)');
+      g.fillStyle = rg;
+      g.beginPath(); g.moveTo(0, 0);
+      g.lineTo(Math.cos(a - an * mu) * lg, Math.sin(a - an * mu) * lg);
+      g.lineTo(Math.cos(a + an * mu) * lg, Math.sin(a + an * mu) * lg);
+      g.closePath(); g.fill();
+    }
+  }
+  g.restore();
+
   for (const off of [-W, 0, W]) {
     const rg = g.createRadialGradient(sx + off, sy, 0, sx + off, sy, H * 0.62);
     rg.addColorStop(0, 'rgba(' + pal.solc + ',.92)');
@@ -1301,23 +1344,119 @@ function cieloTex(pi) {
     rg.addColorStop(1, 'rgba(' + pal.solc + ',0)');
     g.fillStyle = rg; g.fillRect(0, 0, W, H);
   }
+  /* el disco. Faltaba: un halo sin disco es una mancha clara y no un sol. */
+  g.fillStyle = 'rgba(' + pal.solc + ',.94)';
+  g.beginPath(); g.arc(sx, sy, H * 0.042, 0, 6.2832); g.fill();
 
-  const R = azar(pi * 1237 + 71);
-  g.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 16; i++) {
-    const cx = R() * W, cy = H * (0.10 + R() * 0.52), s = 0.5 + R() * 1.1;
-    const a = 0.05 + R() * 0.10;
-    for (const off of [-W, 0, W]) for (let k = 0; k < 7; k++) {
-      const ex = cx + off + (k - 3) * 34 * s, ey = cy + Math.sin(k * 1.7 + i) * 9 * s;
-      const rw = (52 - Math.abs(k - 3) * 9) * s, rh = rw * 0.44;
-      const rg = g.createRadialGradient(ex, ey, 0, ex, ey, rw);
-      rg.addColorStop(0, 'rgba(255,255,255,' + a + ')');
-      rg.addColorStop(1, 'rgba(255,255,255,0)');
-      g.save(); g.translate(ex, ey); g.scale(1, rh / rw); g.translate(-ex, -ey);
-      g.fillStyle = rg; g.beginPath(); g.arc(ex, ey, rw, 0, 6.2832); g.fill(); g.restore();
+  /* ── EL HORIZONTE, QUE ES LO QUE SACA AL DIORAMA DE LA NADA ─────────────
+     Sin el, el fondo es un degradado de un solo color y el diorama flota en
+     una sopa: no hay nada respecto de lo cual este apoyado. Con dos bandas
+     de cerros y un suelo debajo, el diorama pasa a ser una isla en un
+     paisaje — y no cuesta ni un triangulo, porque va horneado en la misma
+     textura de fondo que ya estaba.
+
+     LAS DOS BANDAS SE TIÑEN HACIA EL CIELO Y NO HACIA EL NEGRO: eso es
+     perspectiva aerea, y es lo unico que hace que una se lea MAS LEJOS que
+     la otra en vez de simplemente mas oscura.                             */
+  /* LA ALTURA SALE DE DONDE CAE EN PANTALLA, NO DE DONDE QUEDA LINDA EN EL
+     LIENZO. La textura se recorta a `ry` 0,88 con un corrimiento que depende
+     de la elevacion, asi que la fila `y` del lienzo aparece en la fraccion
+     (1 - y/H - oy) / 0,88 del alto del marco contando desde abajo. Con 0,745
+     eso daba el 15 % —debajo del diorama y tapado por el pie— y medido en la
+     captura no se veia ninguna de las dos bandas. Con 0,56 cae en el 37 %,
+     o sea justo por detras de la base del diorama.                        */
+  const HOR = H * 0.56;
+  const cieloBajo = _hx(ps[2]), suelo = _hx(ps[3]);
+  cerroP(g, W, H, HOR - H * 0.014, H * 0.058, 1, 2.3, pi * 1.7,
+    _rc(_mz(cieloBajo, _hx(ps[0]), 0.44)));
+  cerroP(g, W, H, HOR + H * 0.004, H * 0.038, 1.6, 3.1, pi * 2.9 + 1.2,
+    _rc(_mz(cieloBajo, _hx(ps[0]), 0.70)));
+
+  /* el suelo de abajo del horizonte: mas oscuro que el cielo y aclarandose
+     HACIA el horizonte, que es como se ve un llano a ras de vista.        */
+  const sg = g.createLinearGradient(0, HOR, 0, H);
+  sg.addColorStop(0, _rc(_mz(suelo, _hx(ps[0]), 0.30)));
+  sg.addColorStop(1, _rc(_mz(suelo, _hx(ps[0]), 0.62)));
+  g.fillStyle = sg; g.fillRect(0, HOR, W, H - HOR);
+
+  /* ── EL AGUA ───────────────────────────────────────────────────────────
+     El tercio de abajo del marco es todo este suelo, y medido en la captura
+     salia LISO de punta a punta: un degradado sin nada adentro se lee a
+     vacio, no a lejos. Lo que lo llena sin competir con el diorama son
+     rayas horizontales de espuma — y la perspectiva la da el REPARTO, no el
+     dibujo: las filas se comprimen hacia el horizonte con una potencia, asi
+     que cerca del pie estan separadas y contra el horizonte se apilan.    */
+  const R2 = azar(pi * 3319 + 17);
+  /* CADA ONDA SON DOS LINEAS Y NO UNA: una cresta clara y un valle oscuro
+     justo debajo. Medido en la captura, la espuma blanca sola sobre un suelo
+     claro no se leia ni con el contraste al doble — una linea clara sobre un
+     fondo claro no tiene contra que recortarse. El par cresta/valle si, y
+     ademas es lo que hace un rizo de verdad.                              */
+  for (let i = 0; i < 62; i++) {
+    const u = (i + R2() * 0.6) / 62;
+    const y = HOR + (H - HOR) * Math.pow(u, 1.75);
+    const lw = (0.06 + R2() * 0.26) * W, lx = R2() * W - lw / 2;
+    /* la raya se apaga contra el horizonte —donde el agua es bruma— y contra
+       el pie, donde ya salio del cuadro.                                  */
+    /* OJO CON LA ENVOLVENTE: `sin(min(1,u*2.2)*PI)` se topa en sin(PI)=0, o sea
+       que TODA raya con u>=0,455 salia en alfa CERO. Medido en la captura, el
+       agua solo tenia espuma en la franja pegada al horizonte y el resto era un
+       degradado liso — y yo lo estaba leyendo como «falta contraste». Lo que
+       hace falta es entrar desde el horizonte y quedarse, no ir y volver.   */
+    const a = 0.46 * Math.min(1, u * 3.2) * (0.35 + R2() * 0.65);
+    if (a <= 0.006) continue;
+    const gr = Math.max(1, (1 + u * 3.2));
+    for (const [col, mu, dy] of [['0,22,40', 0.62, gr], ['255,255,255', 1, 0]]) {
+      const rg = g.createLinearGradient(lx, 0, lx + lw, 0);
+      rg.addColorStop(0, 'rgba(' + col + ',0)');
+      rg.addColorStop(0.5, 'rgba(' + col + ',' + (a * mu).toFixed(3) + ')');
+      rg.addColorStop(1, 'rgba(' + col + ',0)');
+      g.fillStyle = rg;
+      g.fillRect(lx, y + dy, lw, gr);
     }
   }
-  g.globalCompositeOperation = 'source-over';
+  /* EL REFLEJO DEL SOL: una columna que se ABRE hacia el pie, porque el
+     camino de luz sobre el agua se ensancha al acercarse al que mira. Es lo
+     unico que ata el sol al suelo; sin el son dos cosas sin relacion.     */
+  const gx = sx;
+  for (let i = 0; i < 26; i++) {
+    const u = i / 26, y = HOR + (H - HOR) * Math.pow(u, 1.6);
+    /* el camino de luz no se apaga hacia el pie: se ENSANCHA. Un (1-u) pelado
+       lo dejaba en 0,06 justo en la mitad del cuadro que mas se ve.        */
+    const an = (0.02 + u * 0.13) * W, a = 0.42 * (0.40 + 0.60 * (1 - u)) * (0.55 + R2() * 0.45);
+    const rg = g.createLinearGradient(gx - an, 0, gx + an, 0);
+    rg.addColorStop(0, 'rgba(' + pal.solc + ',0)');
+    rg.addColorStop(0.5, 'rgba(' + pal.solc + ',' + a.toFixed(3) + ')');
+    rg.addColorStop(1, 'rgba(' + pal.solc + ',0)');
+    g.fillStyle = rg;
+    g.fillRect(gx - an, y, an * 2, Math.max(1, (H - HOR) / 22));
+  }
+
+  /* y una linea clara en el corte: sin ella el horizonte es un canto duro */
+  const lg2 = g.createLinearGradient(0, HOR - H * 0.02, 0, HOR + H * 0.03);
+  lg2.addColorStop(0, 'rgba(255,255,255,0)');
+  lg2.addColorStop(0.4, 'rgba(255,255,255,.22)');
+  lg2.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = lg2; g.fillRect(0, HOR - H * 0.02, W, H * 0.05);
+
+  /* ── LAS NUBES ─────────────────────────────────────────────────────────
+     Estaban en alfa 0,05 a 0,15 con mezcla aditiva sobre un cielo del medio:
+     medido en la captura, no se veia UNA. Van opacas, con la panza teñida y
+     la corona blanca —una nube de un solo valor no tiene volumen por muchas
+     bolas que tenga— y por ENCIMA del horizonte, nunca cruzandolo.        */
+  const R = azar(pi * 1237 + 71);
+  const panza = _rc(_mz(_mz([255, 255, 255], [146, 160, 184], 0.58), _hx(ps[1]), 0.22));
+  for (let i = 0; i < 13; i++) {
+    const cx = R() * W, cy = H * (0.06 + R() * 0.40), s = 0.45 + R() * 0.85;
+    const a = 0.30 + R() * 0.30;
+    for (const off of [-W, 0, W]) {
+      g.globalAlpha = a * 0.82; g.fillStyle = panza;
+      nubeM(g, cx + off, cy + 13 * s, s);
+      g.globalAlpha = a; g.fillStyle = '#ffffff';
+      nubeM(g, cx + off, cy, s);
+    }
+  }
+  g.globalAlpha = 1;
 
   const t = new T.CanvasTexture(c);
   t.colorSpace = T.SRGBColorSpace;
@@ -1325,6 +1464,22 @@ function cieloTex(pi) {
   CIELOS[pi] = t;
   return t;
 }
+/* una nube de siete bolas achatadas, con el ancho cayendo hacia las puntas */
+function nubeM(g, cx, cy, s) {
+  g.beginPath();
+  for (let k = 0; k < 7; k++) {
+    const ex = cx + (k - 3) * 30 * s, ey = cy + Math.sin(k * 1.7 + cx * 0.01) * 8 * s;
+    const rw = (46 - Math.abs(k - 3) * 9) * s, rh = rw * 0.62;
+    g.moveTo(ex + rw, ey);
+    g.ellipse(ex, ey, rw, rh, 0, 0, 6.2832);
+  }
+  g.fill();
+}
+/* tres ayudas de color para el cielo: leer un '#rrggbb', mezclar y escribir */
+function _hx(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function _mz(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function _rc(r) { return 'rgb(' + Math.round(r[0]) + ',' + Math.round(r[1]) + ',' + Math.round(r[2]) + ')'; }
+
 /* EL RECORTE SALE DE LA PROPORCION DEL MARCO Y NO DE UN NUMERO: con `repeat`
    fijo, en apaisado —donde el marco es una columna angosta— el cielo saldria
    estirado y las nubes se leerian a manchas verticales.                    */

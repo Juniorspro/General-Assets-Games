@@ -18,6 +18,7 @@ ORDEN = [
     'c.js',     # el modelo puro: regla, generador, validador, auto-jugador
     'd.js',     # audio
     'e.js',     # estado, encuadre y dibujo   (declara JU)
+    'ef.js',    # el fondo: la mesa de cada mundo, horneada una vez
     'f.js',     # el juego                    (usa JU)
     'g.js',     # el tutorial
     'h.js',     # pantallas, menu y dedo

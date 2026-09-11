@@ -374,6 +374,150 @@ munecas.
   **6 mundos × 20 niveles = 120**, procedurales con semilla y auditados uno por uno. Vive partido en
   `herramientas/flechas/partes/` y se arma con `python3 herramientas/flechas/armar.py`.
 
+### Centésima sexagésima tercera vuelta (2026-09-11): **FLECHAS · ARCO · MEKO · DUNA** — fondos dibujados por código, y una sonrisa que no era un pájaro
+
+Pedido textual: *"podés agregar fondos etc y mejorar los gráficos de los 4 juegos super artisticos pnr
+en 2D y procedural"*. Los cuatro de las dos vueltas anteriores, **sin un solo asset generado**: todo
+sale de código, que es lo que se pidió con todas las letras.
+
+Y ordena la vuelta la propia regla de este archivo: en un juego 2D no existen el cielo 360 ni las
+texturas PBR, así que la mejora es **paleta, parallax, partículas y tipografía**. Tres de los cuatro
+son 2D puros; MEKO es three.js pero su fondo es un lienzo que se sube una vez, así que **cuesta cero
+llamadas de dibujo**.
+
+#### LA REGLA QUE HACE QUE ESTO SEA BARATO: SE HORNEA UNA VEZ
+
+Un fondo de cientos de trazos redibujado por cuadro es lo que convierte un juego que va a sesenta en
+uno que va a treinta. En FLECHAS y ARCO se pinta **una vez** en un lienzo aparte y de ahí en más es
+**un `drawImage`**; en MEKO va a `scene.background`, que three.js dibuja con un cuadrado de pantalla
+completa y **cero llamadas propias**. Lo único que sigue vivo por cuadro es lo que **tiene** que
+moverse: las motas de FLECHAS, los pájaros y la fugaz de DUNA.
+
+Y **la semilla es fija**: el fondo de un mundo es el mismo cada vez que se entra. Con azar de verdad
+no habría forma de reconocer un mundo, que es justamente para lo que un fondo sirve.
+
+#### FLECHAS: SEIS MUNDOS, SEIS MESAS
+
+Era papel blanco y nada más — seis mundos que se distinguían por el rótulo de su pestaña. Ahora cada
+uno tiene su **mesa**: un color de papel, un grano, un motivo dibujado por detrás y unas motas
+flotando. Papel · tinta · cable · nudo · telar · salida, cada uno con su motivo propio.
+
+**EL MOTIVO VA DETRÁS Y MUY FLOJO, y eso no es timidez.** Lo que este juego pide es **leer** cuál
+flecha tiene el rayo libre; cualquier cosa con contraste compitiendo con el trazo negro es
+dificultad que nadie pidió. Medido: el costo por mundo va de **0,067 a 0,181 ms** por cuadro sobre un
+presupuesto de 16,7.
+
+Regresión intacta: auditoría en node **120 niveles, `malos: []`, 442 ms, `maxNodos: 19`**; el tutorial
+con sus 5 piezas y `ok:true`; auto-jugadores **120 de 120 con 0 fallos** (1.277 toques) contra 17 de
+120 del que toca al azar; `cajas()` con `choques: []` y `fuera: []`; las seis pestañas `entra:true` en
+412, 430 y 360 en los tres idiomas; audio `ui 0,96× · sale 1,90× · mal 2,23× · perf 2,91×` el fondo.
+
+#### ARCO: EL ABANICO DE RAYOS IBA PARA ARRIBA
+
+El cielo tenía nubes y dos bandas de fondo por bioma. Lo que faltaba es lo que hace que un cielo se
+lea a hora del día: **los rayos del sol**. Y la primera versión los abría **hacia arriba**, que es lo
+que uno escribiría — y está mal: lo que se ve desde el suelo es el haz que **baja** entre las nubes.
+Con `RAYO_ABRE = 1,24` y el abanico apuntando al suelo, el cielo pasa a tener dirección.
+
+Más: las panzas de las nubes en **gris frío** —una nube iluminada por arriba tiene la panza azulada,
+no gris neutro— y los pájaros retocados.
+
+Costo medido: **71 llamadas de dibujo en baja y 78 en media y alta**, contra 73 de la vuelta anterior.
+Regresión: auditoría **12 de 12, `malos: []`**; tutorial `ok:true` (v 16,41 · ángulo 45,5 · libre ·
+viento 2,4); inversa de la proyección `peor: 0`; `solapes()` con `choques: []` y `fuera: []` en los
+tres idiomas; `pose(0)` con el brazo en **0,844 de 0,96**, idéntico a la vuelta 161.
+
+#### MEKO: EL AGUA NO SE VEÍA, Y LA CAUSA ERA UNA ENVOLVENTE QUE SE TOPA EN CERO
+
+Es el defecto de la vuelta y me costó **dos pasadas leyéndolo mal**. El agua se dibuja con 62 rayas
+de espuma repartidas desde el horizonte hacia el pie del cuadro, y su alfa iba
+
+    0.20 * Math.sin(Math.min(1, u * 2.2) * Math.PI)
+
+`sin(π)` es **cero**. O sea que **toda raya con `u ≥ 0,4545` salía en alfa exactamente cero**: el agua
+sólo tenía espuma en la franja pegada al horizonte y el resto era un degradado liso. Y yo lo estaba
+leyendo como *«falta contraste»* — subí el alfa, le puse realce a la ampliación, y el número no se
+movía, porque **no había nada que subir**. Una envolvente que va y vuelve no sirve acá: hay que
+**entrar desde el horizonte y quedarse**, `Math.min(1, u * 3.2)`.
+
+**Y EL CAMINO DE LUZ DEL SOL TENÍA EL MISMO DEFECTO CON OTRO DISFRAZ.** Iba con un `(1-u)` pelado, o
+sea que se apagaba justo hacia el pie del cuadro — que es la mitad que más se mira. Un reflejo de sol
+sobre agua no se apaga hacia el observador: **se ensancha**. Ahora el ancho crece con `u` y la
+opacidad se queda en `0,40 + 0,60·(1−u)`.
+
+**Y CADA ONDA SON DOS LÍNEAS Y NO UNA.** Una raya blanca sobre un suelo claro no se recorta contra
+nada, por mucho contraste que se le ponga. El par **cresta clara + valle oscuro justo debajo** sí, y
+además es lo que hace un rizo de verdad.
+
+El resto del cielo: silueta de cerros con dos senos, disco de sol con su abanico de rayos, dos bandas
+de loma tintadas 0,44 y 0,70 —perspectiva aérea— y trece nubes volumétricas de siete elipses cada una
+con la panza tintada y la corona blanca. Horizonte al 37 % del alto del cuadro.
+
+**LA GEOMETRÍA DEL FONDO DE MEKO HAY QUE ESCRIBIRLA AL REVÉS**, y conviene dejarlo anotado: un
+`CanvasTexture` tiene `flipY = true`, así que la fila `y` del lienzo cae en `v = 1 − y/H`, y
+`cieloAjusta()` le pone `repeat(rx, 0.88)` con `offset(ox, (1−0,88)(1−ke))`. Con `HOR = H·0,56` y
+`ke = 0,18` el horizonte aterriza en **0,388 del alto desde abajo** y el agua visible cubre las filas
+0,56H a 0,9016H. Sin hacer esa cuenta, cualquier ajuste de altura se mueve para el lado contrario.
+
+Regresión completa y verde: `auditaTuto()` **`ok:true`, 2 toques, imposible con el mecanismo
+congelado**; `audita()` **0 malos** en los 20 niveles en 9.137 ms; el auto-jugador los termina los
+veinte **en los toques exactos del plan** —`1·2·3·3·3·4·4·3·4·5·6·6·7·5·7·8·7·9·6·10`, idéntico a las
+vueltas 157 y 158—; `solapes()` con `choques: []` y `fuera: []`; las tres calidades en caliente
+(**baja 19 llamadas / 358 triángulos · alta 35 / 694**) y el nivel 16 en media con **43 y 2.182**, o
+sea que **el fondo no agrega una sola llamada**; los tres idiomas en vivo.
+
+#### DUNA: RAYOS, CANTOS ENCENDIDOS, UNA BANDADA Y UNA FUGAZ
+
+Era el más desarrollado de los cuatro —ocho paletas por distancia, tres cadenas de montaña con
+perspectiva aérea, estrellas, astro con halo y fase de luna— así que lo que entra es lo que le
+faltaba al cielo:
+
+- **Rayos crepusculares**, y **se apagan con la altura del astro**: `bajo` sale de cuánto bajó el sol,
+  así que aparecen y se van con la hora sin una sola bandera. Cada rayo va en dos pasadas —una ancha y
+  floja, una fina— porque un solo trazo se lee a cuña de cartulina.
+- **El canto encendido de las nubes.** Se dibuja **una copia corrida hacia el astro y por debajo**, y
+  encima la nube normal: así el borde que da al sol queda claro y el resto conserva su color. Y la
+  nube pasó a ser una base chata más cinco jorobas, cada una en su propio subcamino, para que el
+  relleno tome la unión.
+- **Una bandada en V**, tres grupos de cuatro a seis, con el tamaño haciendo de distancia y el aleteo
+  saliendo del reloj. **Se van de noche**: una silueta oscura sobre un cielo oscuro no existe, y lo
+  único que se vería es que algo parpadea.
+- **Una estrella fugaz**, sólo de noche y una cada once segundos y medio. La posición sale del **índice
+  del ciclo** y no de una variable, así que no guarda estado y sale igual después de una pausa.
+
+**Y LOS PÁJAROS SALIERON MAL DOS VECES, LAS DOS POR LA MISMA RAZÓN: LA MUESCA DEL MEDIO.** Con las
+puntas abajo el trazo se cierra en un arco y lo que se ve es una **sonrisa**; dándolas vuelta sigue
+siendo un cuenco, porque los puntos de control estaban **por debajo de la cuerda** y las dos mitades se
+funden en una sola curva. Lo que hace que se lea a pájaro no es que las puntas estén arriba: es que el
+cuerpo quede como un **vértice** entre dos alas arqueadas, y para eso los controles van **por encima**.
+Más un piso en el aleteo, porque un ala plana es una raya — medido, dos de los cinco salían así.
+
+**Y ACÁ HAY UNA LECCIÓN DE MEDICIÓN QUE VALE MÁS QUE LOS PÁJAROS.** El marco de DUNA va **girado
+noventa grados** dentro del teléfono vertical, así que la captura sale en 412×892 y hay que
+**enderezarla a 892×412 para juzgarla como la ve el jugador**. Sin girarla, un pájaro dibujado como
+una «m» horizontal aparece como un **paréntesis vertical**: la captura miente, no el dibujo. Y antes
+de darme cuenta recorté la franja equivocada, vi un garabato oscuro y concluí *«los pájaros son
+enormes»* — **era el rider en medio de una voltereta**. Estuve a un paso de arreglar algo que no
+estaba roto.
+
+Regresión completa: auditoría **25 de 25 semillas, 0 malas** (el hueco más ancho sigue en 21,6, igual
+que la vuelta 154); los tres bots sobre 6 semillas × 120 s —**honesto 3.487 m con 0,2 caídas · torpe
+3.464 con 0,7 · al azar 2.709 con 13,3**, o sea que el que juega al azar se cae **sesenta y seis veces
+más** y el ángulo de aterrizaje sigue siendo la regla del juego, con honesto y torpe llegando a
+`sMax 38`, que es `V_MAX`—; zonas `izq → zTurbo → turbo` y `der → zSalto → salto`; `cajas()` con
+**`choques: []` y `fuera: []`**; las tres calidades en caliente (**0,60 · 0,84 · 1,00** de píxel); los
+tres idiomas en vivo; bufanda con **curva 0,25 y largo 1,32**, o sea tela y no antena; costo **0,295
+ms por cuadro**.
+
+#### MEDIDO AL CERRAR
+
+`window.__errs` **vacío en las once corridas** de los cuatro juegos. Tamaños: **FLECHAS 104 KB ·
+ARCO 169 · MEKO 150 · DUNA 568**, y los cuatro sin un solo asset nuevo — el crecimiento es código.
+
+**LO QUE NO ESTÁ RESUELTO, Y VIENE DE LA VUELTA 162:** el nombre del menú de FLECHAS sigue siendo
+tipografía del sistema, así que cambia de forma según el aparato. Arreglarlo pide generar el cartel
+como imagen, y esta vuelta es de procedural a propósito.
+
 ### Centésima sexagésima segunda vuelta (2026-09-10): **FLECHAS**, el decimonoveno juego — un teorema de una línea, y cuatro defectos que sólo salieron midiendo
 
 Pedido, con la captura de la ficha de Google Play de *Arrows – Puzzle Escape* (Lessmore GmbH) y dos

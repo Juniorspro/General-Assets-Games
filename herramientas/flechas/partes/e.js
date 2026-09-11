@@ -117,9 +117,25 @@ function rectRed(x, y, w, h, r) {
 }
 function dibujaPapel() {
   const x = JU.bx, y = JU.by, w = JU.bw, h = JU.bh, r = Math.min(16, JU.cw * 0.5);
+  const M = mesaDe(JU.m);
+  /* DOS SOMBRAS Y NO UNA. Una pegada y dura dice que la hoja TOCA la mesa;
+     una ancha y floja dice a que altura esta. Con una sola hay que elegir
+     entre las dos cosas, y en el mundo 6 —mesa negra— la floja sola no se
+     ve: lo que despega la hoja ahi es el filo de abajo.                    */
   CX.save();
-  CX.shadowColor = 'rgba(30,25,18,.20)'; CX.shadowBlur = 16; CX.shadowOffsetY = 6;
+  CX.shadowColor = M.osc ? 'rgba(0,0,0,.72)' : 'rgba(30,25,18,.20)';
+  CX.shadowBlur = M.osc ? 46 : 30; CX.shadowOffsetY = M.osc ? 16 : 12;
   CX.fillStyle = '#fbfaf6'; rectRed(x, y, w, h, r); CX.fill();
+  CX.shadowColor = M.osc ? 'rgba(0,0,0,.55)' : 'rgba(30,25,18,.26)';
+  CX.shadowBlur = 8; CX.shadowOffsetY = 3; CX.fill();
+  CX.restore();
+  /* la hoja no es un color plano: entra luz por arriba */
+  CX.save(); rectRed(x, y, w, h, r); CX.clip();
+  const gp = CX.createLinearGradient(0, y, 0, y + h);
+  gp.addColorStop(0, 'rgba(255,255,255,.75)');
+  gp.addColorStop(.55, 'rgba(255,255,255,0)');
+  gp.addColorStop(1, 'rgba(120,104,74,.09)');
+  CX.fillStyle = gp; CX.fillRect(x, y, w, h);
   CX.restore();
   /* la reja, apenas: sin ella el papel es un rectangulo y no se ve que las
      flechas caen en casillas — que es lo que hay que poder contar.         */
@@ -170,10 +186,27 @@ function dibujaPieza(p, dt) {
   for (let i = 1; i < pts.length; i++) CX.lineTo(pts[i][0], pts[i][1] + gr * 0.34);
   CX.stroke(); CX.restore();
   trazo(pts, col, gr, alfa);
+  /* EL FILO DE LA TINTA. Un trazo de un solo color es una barra; con una luz
+     corrida hacia arriba se lee a pluma cargada. Cuesta un stroke por pieza
+     y solo entra con la celda grande: a 34 px un cuarto de trazo es un pelo
+     y lo unico que hace es ensuciar el borde.                              */
+  if (JU.cw > 40) {
+    CX.save();
+    CX.globalAlpha = 0.16 * alfa; CX.strokeStyle = '#fff';
+    CX.lineWidth = gr * 0.26; CX.lineJoin = 'round'; CX.lineCap = 'round';
+    CX.beginPath(); CX.moveTo(pts[0][0], pts[0][1] - gr * 0.22);
+    for (let i = 1; i < pts.length; i++) CX.lineTo(pts[i][0], pts[i][1] - gr * 0.22);
+    CX.stroke(); CX.restore();
+  }
 }
 
 function dibuja(dt) {
   CX.clearRect(0, 0, ANCHO, ALTO);
+  /* la mesa va SIEMPRE, tambien en el menu: es lo unico que hay detras de
+     los paneles, y los paneles son un velo abierto en el medio.           */
+  fondoHornea();
+  if (FON) CX.drawImage(FON, 0, 0, ANCHO, ALTO);
+  motasDibuja(dt);
   if (!JU.T) return;
   dibujaPapel();
   CX.save();
