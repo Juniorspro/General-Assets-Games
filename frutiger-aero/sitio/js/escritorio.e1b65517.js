@@ -1161,7 +1161,8 @@ var AM_MARCOS = { agua:"Agua", oro:"Oro", vidrio:"Vidrio" };
 var AM_LAMS = { "i-orbe":"img/zona/app.webp",
                 "i-vidrio":"img/zona/ico-temas.webp",
                 "i-personaje":"img/zona/ico-perfil.webp",
-                "i-ventana":"img/zona/ico-galeria.webp" };
+                "i-ventana":"img/zona/ico-galeria.webp",
+                "i-fabrica":"img/zona/ico-fabrica.webp" };
 
 function amPedir(cuerpo){
   var o = { headers:{} };
@@ -1275,6 +1276,7 @@ function amVer(cual){
   if (cual === "temas")   return amTemas(p);
   if (cual === "perfil")  return amPerfil(p);
   if (cual === "galeria") return amGaleria(p);
+  if (cual === "fabrica") return amFabrica(p);
   if (cual === "tienda")  return amTienda(p);
 }
 
@@ -1294,9 +1296,10 @@ function amBienvenida(p){
   var c = amCaja(p, null);
   var q = document.createElement("p");
   q.style.cssText = "margin:0;font-size:14.5px;line-height:1.6";
-  q.textContent = "Hay tres cosas adentro: un estudio de temas con fondos que no " +
+  q.textContent = "Hay cuatro cosas adentro: un estudio de temas con fondos que no " +
     "están en el escritorio común, marcos para tu retrato que se ven en el muro, " +
-    "y la galería para bajarte los fondos en grande. Todo lo que elijas queda " +
+    "la galería para bajarte los fondos en grande, y una fábrica donde pedís un " +
+    "fondo con palabras y una máquina te lo dibuja. Todo lo que elijas queda " +
     "guardado en tu cuenta, así que te sigue si entrás desde el teléfono.";
   c.appendChild(q);
   var b = document.createElement("button");
@@ -1473,6 +1476,336 @@ function amGaleria(p){
   c.appendChild(r);
 }
 
+/* -------------------------------------------------- la fábrica de fondos
+   Se escribe una idea y una máquina dibuja el fondo. Tres cosas que esta
+   pantalla hace a propósito:
+
+   NO GUARDA LA IMAGEN ACÁ. Lo que vuelve del servidor es la ficha (número,
+   idea, forma) y la imagen se pide después por su dirección, como cualquier
+   `<img>`. Así el navegador la cachea y volver a esta pantalla no vuelve a
+   bajar varios megabytes.
+
+   EL BOTÓN SE APAGA MIENTRAS DIBUJA. Un dibujo tarda unos segundos y gasta
+   cuota del día: dejar el botón vivo es invitar a que alguien lo toque tres
+   veces y se quede sin cuota por la misma idea.
+
+   EL TOPE SE MUESTRA ANTES Y NO DESPUÉS. Enterarse de que había un límite
+   recién cuando se choca es lo que hace que un límite razonable se sienta una
+   trampa. */
+var FAB = null;
+
+function fabPedir(cuerpo){
+  var o = { headers:{} };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) o.headers.authorization = "Bearer " + ses.pase;
+  if (cuerpo){ o.method = "POST"; o.headers["content-type"] = "application/json";
+               o.body = JSON.stringify(cuerpo); }
+  return fetch("api/fabrica", o).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok) throw new Error(j.error || ("error " + r.status));
+      return j; });
+  });
+}
+
+/* El pedido de dibujo NO vuelve en JSON: vuelve la imagen en crudo. Por eso se
+   mira el `content-type` antes de leer: si es una imagen, es el dibujo; si es
+   JSON, es el motivo por el que no hay dibujo. Leerlo siempre como JSON haría
+   que un error de verdad apareciera como «unexpected token» y nadie entienda
+   qué pasó. */
+function fabDibujar(idea, forma){
+  var h = { "content-type": "application/json" };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) h.authorization = "Bearer " + ses.pase;
+  return fetch("api/fabrica?hacer=dibujar", { method:"POST", headers:h,
+      body: JSON.stringify({ idea:idea, forma:forma }) })
+    .then(function(r){
+      var t = r.headers.get("content-type") || "";
+      if (!r.ok || t.indexOf("image/") !== 0){
+        return r.json().then(function(j){ throw new Error(j.error || ("error " + r.status)); },
+                             function(){ throw new Error("error " + r.status); });
+      }
+      return r.blob().then(function(b){
+        return { blob: b, hechos: parseInt(r.headers.get("x-hechos"), 10) || 0 };
+      });
+    });
+}
+
+/* Lo que dibuja el servidor es un PNG de más de un megabyte. Acá se vuelve a
+   comprimir a JPEG antes de mandarlo a guardar, porque una fila de la base
+   corta cerca de 1 MB y porque después hay que bajarlo cada vez que se abre
+   esta pantalla. Se hace en el navegador y no en el servidor por lo mismo que
+   está explicado en `functions/api/fabrica.js`: la máquina de la persona ya
+   sabe hacerlo y no cuesta nada. */
+function fabAchicar(blob){
+  return createImageBitmap(blob).then(function(im){
+    var lz = document.createElement("canvas");
+    lz.width = im.width; lz.height = im.height;
+    lz.getContext("2d").drawImage(im, 0, 0);
+    im.close && im.close();
+    return new Promise(function(ok, mal){
+      /* se baja la calidad de a poco hasta que entre; empezar directo en algo
+         muy comprimido arruinaría los degradés, que es de lo que está hecho
+         este estilo */
+      var pasos = [0.86, 0.74, 0.62, 0.5], i = 0;
+      (function probar(){
+        lz.toBlob(function(b){
+          if (!b) return mal(new Error("no se pudo achicar"));
+          if (b.size <= 780000 || i >= pasos.length - 1) return ok(b);
+          i++; probar();
+        }, "image/jpeg", pasos[i]);
+      })();
+    });
+  });
+}
+
+function fabGuardar(jpg, idea, forma){
+  var h = { "content-type": "image/jpeg" };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) h.authorization = "Bearer " + ses.pase;
+  return fetch("api/fabrica?hacer=guardar&idea=" + encodeURIComponent(idea) +
+               "&forma=" + encodeURIComponent(forma),
+               { method:"POST", headers:h, body: jpg })
+    .then(function(r){
+      return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || ("error " + r.status));
+        return j; });
+    });
+}
+
+function fabDir(id){
+  return "api/fabrica?id=" + id + "&pase=" + encodeURIComponent(FAB.pase || "");
+}
+
+function fabBorrar(id){
+  var h = {};
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) h.authorization = "Bearer " + ses.pase;
+  return fetch("api/fabrica?hacer=borrar&id=" + id, { method:"POST", headers:h })
+    .then(function(r){
+      return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || ("error " + r.status));
+        return j; });
+    });
+}
+
+/* Las ideas de arranque. Una pantalla que abre con un campo vacío y un botón
+   deja a la persona pensando qué escribir; con ejemplos tocables, la primera
+   prueba sale en dos segundos. */
+var FAB_IDEAS = [
+  "Una isla de pasto flotando sobre el océano",
+  "Burbujas gigantes sobre un campo verde al amanecer",
+  "Un pez de cristal nadando entre nubes",
+  "Rascacielos de vidrio con cascadas cayendo",
+  "Un delfín saltando sobre agua turquesa",
+  "Hojas mojadas con gotas enormes, sol atrás"
+];
+
+function amFabrica(p){
+  amTitulo(p, "Fábrica de fondos",
+    "Escribí lo que querés ver y la máquina lo dibuja en Frutiger Aero.");
+
+  var carga = amCaja(p, null);
+  carga.textContent = "Abriendo la fábrica…";
+
+  /* El mensaje de error se pone en el PANEL y no en la caja de «abriendo»,
+     porque para cuando algo puede fallar al pintar, esa caja ya fue sacada de
+     la pantalla: escribir ahí es escribir en un nodo que nadie ve, y la
+     pantalla queda a medias sin decir por qué. */
+  fabPedir(null).then(function(j){
+    FAB = j;
+    p.textContent = "";
+    amTitulo(p, "Fábrica de fondos",
+      "Escribí lo que querés ver y la máquina lo dibuja en Frutiger Aero.");
+    fabPintar(p);
+  }).catch(function(e){
+    p.textContent = "";
+    amTitulo(p, "Fábrica de fondos", "");
+    amCaja(p, null).textContent = e.message;
+  });
+}
+
+function fabPintar(p){
+  var c = amCaja(p, null);
+
+  if (!FAB.hay){
+    var sin = document.createElement("p");
+    sin.style.cssText = "margin:0;font-size:14px;line-height:1.6";
+    sin.textContent = "La fábrica todavía no está enchufada de este lado. " +
+      "Vas a poder pedir fondos en cuanto lo esté.";
+    c.appendChild(sin);
+    return;
+  }
+
+  /* --- la forma --- */
+  var lf = document.createElement("div");
+  lf.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px";
+  var forma = "telefono";
+  Object.keys(FAB.formas).forEach(function(k){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "am-bt"; b.dataset.forma = k;
+    b.style.cssText = "padding:6px 13px;font-size:13px";
+    b.textContent = FAB.formas[k].que;
+    b.setAttribute("aria-current", String(k === forma));
+    b.addEventListener("click", function(){
+      forma = k;
+      Array.prototype.forEach.call(lf.children, function(x){
+        x.setAttribute("aria-current", String(x.dataset.forma === forma)); });
+    });
+    lf.appendChild(b);
+  });
+  c.appendChild(lf);
+
+  /* --- la idea --- */
+  var fila = document.createElement("div");
+  fila.style.cssText = "display:flex;gap:8px;flex-wrap:wrap";
+  var ent = document.createElement("input");
+  ent.type = "text"; ent.maxLength = 160;
+  ent.placeholder = "Un lago de cristal entre montañas…";
+  ent.style.cssText = "flex:1 1 210px;min-width:0;padding:9px 11px;border-radius:4px;" +
+    "border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);" +
+    "color:#eaf6ff;font:inherit;font-size:14px";
+  var bot = document.createElement("button");
+  bot.type = "button"; bot.className = "am-bt";
+  bot.style.cssText = "padding:9px 18px";
+  bot.textContent = "Dibujar";
+  fila.appendChild(ent); fila.appendChild(bot);
+  c.appendChild(fila);
+
+  /* --- ideas para empezar --- */
+  var ideas = document.createElement("div");
+  ideas.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:9px";
+  FAB_IDEAS.forEach(function(t){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.style.cssText = "padding:4px 10px;border-radius:999px;font:inherit;font-size:12.5px;" +
+      "cursor:pointer;color:#dff0ff;background:rgba(255,255,255,.1);" +
+      "border:1px solid rgba(255,255,255,.22)";
+    b.textContent = t;
+    b.addEventListener("click", function(){ ent.value = t; ent.focus(); });
+    ideas.appendChild(b);
+  });
+  c.appendChild(ideas);
+
+  /* --- cuánto queda --- */
+  var cuota = document.createElement("p");
+  cuota.className = "pie";
+  cuota.style.cssText = "margin:10px 0 0";
+  function verCuota(){
+    var quedan = Math.max(0, FAB.tope - FAB.hechos);
+    cuota.textContent = "Te quedan " + quedan + " de " + FAB.tope + " dibujos hoy. " +
+      "Se guardan los últimos " + FAB.guarda + "; el más viejo se cae solo.";
+  }
+  verCuota();
+  c.appendChild(cuota);
+
+  var aviso = document.createElement("p");
+  aviso.style.cssText = "margin:8px 0 0;font-size:12.5px;line-height:1.55;color:rgba(226,242,255,.7)";
+  aviso.textContent = "Los dibuja una máquina: a veces sale raro, a veces sale hermoso. " +
+    "Si no te gusta, borralo y probá con otras palabras.";
+  c.appendChild(aviso);
+
+  /* --- la rejilla de lo hecho --- */
+  var rej = document.createElement("div");
+  rej.className = "am-rej";
+  rej.style.marginTop = "14px";
+  p.appendChild(rej);
+
+  function vacia(){
+    rej.textContent = "";
+    if (FAB.fondos.length) return false;
+    var v = document.createElement("p");
+    v.className = "pie";
+    v.textContent = "Todavía no hiciste ninguno.";
+    rej.appendChild(v);
+    return true;
+  }
+
+  function pintarRej(){
+    if (vacia()) return;
+    FAB.fondos.forEach(function(f){
+      var t = document.createElement("figure");
+      t.style.cssText = "margin:0;border-radius:5px;overflow:hidden;" +
+        "border:2px solid rgba(255,255,255,.22);background:rgba(0,0,0,.2)";
+      var im = document.createElement("img");
+      /* el pase va en la dirección y no en una cabecera: un `<img>` no puede
+         mandar cabeceras, así que con el pase en `Authorization` todas las
+         miniaturas darían 403 con la pantalla entera pintada */
+      im.src = fabDir(f.id); im.alt = f.idea; im.loading = "lazy";
+      /* cada miniatura con la forma que tiene el fondo de verdad. Si todas
+         salieran en la misma caja, uno elegiría «Teléfono» y vería un
+         rectángulo acostado: justo lo que no va a recibir. */
+      im.style.cssText = "display:block;width:100%;object-fit:cover;aspect-ratio:" +
+        (f.forma === "escritorio" ? "16/9" : f.forma === "cuadrado" ? "1/1" : "9/16");
+      t.appendChild(im);
+      var pie = document.createElement("figcaption");
+      pie.style.cssText = "padding:7px 9px;font-size:12.5px;line-height:1.45";
+      var q = document.createElement("div");
+      q.textContent = f.idea;
+      q.style.cssText = "color:rgba(226,242,255,.9);margin-bottom:6px";
+      pie.appendChild(q);
+      var bots = document.createElement("div");
+      bots.style.cssText = "display:flex;gap:7px;flex-wrap:wrap";
+
+      var baj = document.createElement("a");
+      baj.href = fabDir(f.id);
+      baj.setAttribute("download", "frutiger-" + f.id + ".jpg");
+      baj.textContent = "Bajar";
+      baj.style.cssText = "color:#bfe6ff;font-size:12.5px";
+      bots.appendChild(baj);
+
+      var bor = document.createElement("button");
+      bor.type = "button";
+      bor.textContent = "Borrar";
+      bor.style.cssText = "background:none;border:0;padding:0;cursor:pointer;" +
+        "color:#ffc9bd;font:inherit;font-size:12.5px";
+      bor.addEventListener("click", function(){
+        bor.disabled = true;
+        fabBorrar(f.id).then(function(){
+          FAB.fondos = FAB.fondos.filter(function(x){ return x.id !== f.id; });
+          pintarRej();
+        }).catch(function(e){ bor.disabled = false; alert(e.message); });
+      });
+      bots.appendChild(bor);
+
+      pie.appendChild(bots);
+      t.appendChild(pie);
+      rej.appendChild(t);
+    });
+  }
+  pintarRej();
+
+  bot.addEventListener("click", function(){
+    var idea = ent.value.trim();
+    if (idea.length < 3){ ent.focus(); return; }
+    bot.disabled = true; ent.disabled = true;
+    var antes = bot.textContent;
+    bot.textContent = "Dibujando…";
+    fabDibujar(idea, forma)
+      .then(function(d){
+        /* la cuota se gastó apenas dibujó, aunque después falle el guardado:
+           mostrarlo recién al final haría creer que el intento fue gratis */
+        FAB.hechos = d.hechos || (FAB.hechos + 1);
+        verCuota();
+        bot.textContent = "Guardando…";
+        return fabAchicar(d.blob).then(function(jpg){
+          return fabGuardar(jpg, idea, forma);
+        });
+      })
+      .then(function(j){
+        FAB.fondos.unshift(j.fondo);
+        if (FAB.fondos.length > FAB.guarda) FAB.fondos.length = FAB.guarda;
+        if (j.hechos) FAB.hechos = j.hechos;
+        verCuota(); pintarRej();
+        ent.value = "";
+      })
+      .catch(function(e){ alert(e.message); })
+      .then(function(){
+        bot.disabled = false; ent.disabled = false; bot.textContent = antes;
+      });
+  });
+  ent.addEventListener("keydown", function(e){ if (e.key === "Enter") bot.click(); });
+}
+
 /* ------------------------------------------------------------- la tienda
    Las apps que hace el dueño, gratis para el que colaboró. El catálogo lo manda
    el servidor: si viviera acá, agregarse una app sería editar un objeto en la
@@ -1493,7 +1826,7 @@ function amTienda(p){
     var cab = document.createElement("div");
     cab.style.cssText = "display:flex;gap:12px;align-items:flex-start";
     var im = document.createElement("img");
-    im.src = "img/zona/app.webp"; im.alt = ""; im.loading = "lazy";
+    im.src = a.icono || "img/zona/app.webp"; im.alt = ""; im.loading = "lazy";
     im.style.cssText = "width:56px;height:56px;flex:none";
     cab.appendChild(im);
     var t = document.createElement("div"); t.style.flex = "1";

@@ -38,6 +38,7 @@ export const TIENDA = [
     que: "El escritorio de Frutiger Aero, pero de verdad: reemplaza la pantalla " +
          "de inicio de tu teléfono Android.",
     archivo: "aero-launcher-39.apk",
+    icono: "img/zona/app-launcher.webp",
     peso: "2,2 MB",
     para: "Android",
     /* Se dice lo que pide ANTES de bajarlo y no después. Un launcher necesita
@@ -61,6 +62,8 @@ const APPS = [
     que: "Marco del retrato, banda y lema. Se ve en el muro." },
   { id: "galeria", nombre: "Galería",           icono: "i-ventana",
     que: "Los fondos en grande, para bajar y usar donde quieras." },
+  { id: "fabrica", nombre: "Fábrica de fondos",  icono: "i-fabrica",
+    que: "Pedí un fondo con palabras y la máquina te lo dibuja." },
   { id: "tienda",  nombre: "Tienda",            icono: "i-orbe",
     que: "Las apps que hago, gratis para vos por haber colaborado." },
 ];
