@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>TONO</title>
+<style>
+/* ── TODO SE MIDE CONTRA EL ANCHO DEL MARCO, NO CONTRA vw ──
+   En una pantalla apaisada el juego vive en una columna con proporción de
+   teléfono, y ahí `vw` es el ancho de la VENTANA: el título se saldría de la
+   columna. `--mw` es el ancho de lo que de verdad se ve. */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;overscroll-behavior:none;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e9e6f2;
+  user-select:none;-webkit-user-select:none}
+#marco{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(100vw,calc(100vh * 9 / 16));height:100vh;max-height:100vh;
+  --mw:min(100vw,calc(100vh * 9 / 16));background:#000;overflow:hidden}
+#lz{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* ── LA FRANJA DE ARRIBA ── */
+#hudTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:calc(var(--mw)*.02);
+  padding:calc(var(--mw)*.035) calc(var(--mw)*.045);pointer-events:none;z-index:3;
+  transition:opacity .28s}
+/* ── LA FRANJA SE APARTA MIENTRAS SE TOCA ──
+   El panel llega hasta el borde de arriba, así que la fila de botones se
+   superpone con las notas más agudas justo cuando se las está tocando. */
+body.tocando #hudTop{opacity:.14}
+#hudTop>*{pointer-events:auto}
+.chip{font-size:calc(var(--mw)*.032);letter-spacing:.10em;font-weight:700;
+  padding:calc(var(--mw)*.022) calc(var(--mw)*.038);border-radius:999px;
+  border:1px solid rgba(200,190,235,.22);background:rgba(12,10,20,.55);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#cfc7e6;cursor:pointer}
+#tInst{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  border-color:transparent;background:transparent;color:#8f88a8;letter-spacing:.14em}
+
+/* ── EL HUD DE REPETÍ ── */
+/* ── EL HUD DE REPETÍ VA ARRIBA, CON EL RESTO ──
+   Abajo viven las notas graves, y ahí es donde el dedo tiene que poder caer sin
+   nada encima. Todo lo que se lee se agrupa en la franja de arriba. */
+#hudJue{position:absolute;left:0;right:0;top:calc(var(--mw)*.155);padding:0 calc(var(--mw)*.05);
+  display:none;flex-direction:column;align-items:center;gap:calc(var(--mw)*.018);
+  pointer-events:none;z-index:3;text-align:center;transition:opacity .22s}
+/* ── MIENTRAS SUENA UNA NOTA, NADA MÁS COMPITE ──
+   El panel llega hasta arriba de todo, así que una nota aguda cae justo detrás
+   del rótulo: medido, la del escalón 22 se dibujaba en y 74 y el cartel ocupa de
+   60 a 130. Lo que hay que mirar en ese segundo es la luz, no el texto. */
+body.sonando #hudJue{opacity:.14}
+body.sonando #hudTop{opacity:.10}
+body.jugando #hudJue{display:flex}
+#jFase{font-size:calc(var(--mw)*.058);font-weight:800;letter-spacing:.16em;color:#efeaff;
+  text-shadow:0 0 calc(var(--mw)*.06) rgba(150,120,255,.55)}
+#jRonda{font-size:calc(var(--mw)*.030);letter-spacing:.20em;color:#8f88a8}
+#jPuntos{display:flex;gap:calc(var(--mw)*.016);flex-wrap:wrap;justify-content:center;max-width:100%}
+.pt{width:calc(var(--mw)*.020);height:calc(var(--mw)*.020);border-radius:999px;
+  background:rgba(200,190,235,.20)}
+.pt.ok{background:#b79cff;box-shadow:0 0 calc(var(--mw)*.03) rgba(160,120,255,.9)}
+
+/* ── LOS PANELES ── */
+.pan{position:absolute;inset:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:calc(var(--mw)*.028);
+  padding:calc(var(--mw)*.075);z-index:5;text-align:center;
+  background:radial-gradient(120% 80% at 50% 42%,rgba(28,20,52,.92) 0%,rgba(0,0,0,.97) 72%)}
+.pan.on{display:flex}
+h1{font-size:calc(var(--mw)*.20);font-weight:800;letter-spacing:.20em;line-height:1;
+  color:#f2eeff;text-shadow:0 0 calc(var(--mw)*.10) rgba(150,110,255,.55)}
+.sub{font-size:calc(var(--mw)*.033);letter-spacing:.22em;color:#8d85a6;margin-bottom:calc(var(--mw)*.03)}
+.tit{font-size:calc(var(--mw)*.062);font-weight:800;letter-spacing:.14em;color:#efeaff}
+.bt{width:100%;max-width:calc(var(--mw)*.78);padding:calc(var(--mw)*.042) calc(var(--mw)*.05);
+  font-size:calc(var(--mw)*.046);font-weight:800;letter-spacing:.14em;color:#efeaff;
+  border-radius:calc(var(--mw)*.035);cursor:pointer;
+  border:1px solid rgba(180,150,255,.34);background:linear-gradient(180deg,rgba(60,42,110,.55),rgba(22,16,40,.55))}
+.bt.sec{font-size:calc(var(--mw)*.036);padding:calc(var(--mw)*.032) calc(var(--mw)*.05);
+  border-color:rgba(200,190,235,.18);background:rgba(14,11,24,.6);color:#b8b0cf}
+.pie{font-size:calc(var(--mw)*.026);line-height:1.5;color:#6f6889;max-width:calc(var(--mw)*.84)}
+.cred{font-size:calc(var(--mw)*.021);color:#4e4a63;max-width:calc(var(--mw)*.86);line-height:1.5}
+
+/* ── UNA FILA DE AJUSTES: EL RÓTULO AL COSTADO ──
+   Debajo, siete filas no entran en el alto de un teléfono; al costado sobra
+   ancho y no sobra alto. */
+.fila{width:100%;max-width:calc(var(--mw)*.86);display:flex;align-items:center;
+  gap:calc(var(--mw)*.03);margin:calc(var(--mw)*.008) 0}
+.rot{flex:0 0 calc(var(--mw)*.26);text-align:left;font-size:calc(var(--mw)*.030);
+  letter-spacing:.13em;color:#7f7899}
+.ops{flex:1;display:flex;gap:calc(var(--mw)*.014);flex-wrap:wrap;justify-content:flex-end}
+.op{padding:calc(var(--mw)*.020) calc(var(--mw)*.030);border-radius:calc(var(--mw)*.024);
+  font-size:calc(var(--mw)*.029);font-weight:700;letter-spacing:.07em;cursor:pointer;
+  border:1px solid rgba(200,190,235,.16);background:rgba(14,11,24,.7);color:#9a93b4}
+.op.sel{border-color:rgba(180,150,255,.72);color:#f2eeff;background:rgba(72,48,132,.62)}
+
+/* ── EL SELECTOR DE INSTRUMENTO ── */
+#pInstr{justify-content:flex-start;padding-top:calc(var(--mw)*.05)}
+#pestanas{display:flex;gap:calc(var(--mw)*.012);flex-wrap:wrap;justify-content:center;
+  max-width:100%;margin-bottom:calc(var(--mw)*.02)}
+#lista{width:100%;max-width:calc(var(--mw)*.9);flex:1;overflow-y:auto;
+  display:flex;flex-direction:column;gap:calc(var(--mw)*.016);padding:calc(var(--mw)*.01) 0}
+.ins{width:100%;padding:calc(var(--mw)*.034) calc(var(--mw)*.045);text-align:left;
+  font-size:calc(var(--mw)*.038);font-weight:700;letter-spacing:.06em;cursor:pointer;
+  border-radius:calc(var(--mw)*.028);border:1px solid rgba(200,190,235,.14);
+  background:rgba(14,11,24,.7);color:#b8b0cf;display:flex;justify-content:space-between;align-items:center}
+.ins.sel{border-color:rgba(180,150,255,.72);color:#f2eeff;background:rgba(72,48,132,.55)}
+.ins small{font-size:calc(var(--mw)*.024);letter-spacing:.14em;color:#6f6889}
+#pFin .num{font-size:calc(var(--mw)*.26);font-weight:800;line-height:1;color:#f2eeff;
+  text-shadow:0 0 calc(var(--mw)*.10) rgba(150,110,255,.55)}
+.aviso{position:absolute;left:50%;bottom:calc(var(--mw)*.10);transform:translateX(-50%);
+  font-size:calc(var(--mw)*.028);letter-spacing:.12em;color:#8d85a6;z-index:4;
+  opacity:0;transition:opacity .35s;pointer-events:none;text-align:center;width:86%}
+.aviso.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="marco">
+  <canvas id="lz"></canvas>
+
+  <div id="hudTop">
+    <button class="chip" id="bVolver">‹</button>
+    <div class="chip" id="tInst">—</div>
+    <button class="chip" id="bCfg">···</button>
+  </div>
+
+  <div id="hudJue">
+    <div id="jPuntos"></div>
+    <div id="jFase">—</div>
+    <div id="jRonda">—</div>
+  </div>
+
+  <div class="aviso" id="avPanel">—</div>
+
+  <div class="pan on" id="pIdioma">
+    <h1>TONO</h1>
+    <div class="sub" id="iSub">A BLACK PANEL. TOUCH IT.</div>
+    <button class="bt" data-lang="es">CASTELLANO</button>
+    <button class="bt" data-lang="en">ENGLISH</button>
+    <button class="bt" data-lang="pt">PORTUGUÊS</button>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <h1>TONO</h1>
+    <div class="sub" id="mSub">—</div>
+    <button class="bt" id="bLibre">—</button>
+    <button class="bt" id="bJuego">—</button>
+    <button class="bt sec" id="bAjustes">—</button>
+    <div class="pie" id="mPie">—</div>
+    <div class="cred" id="mCred">—</div>
+  </div>
+
+  <div class="pan" id="pAjustes">
+    <div class="tit" id="aTit">—</div>
+    <div class="fila"><div class="rot" id="aSon">—</div><div class="ops" id="oSon"></div></div>
+    <div class="fila"><div class="rot" id="aLib">—</div><div class="ops" id="oLib"></div></div>
+    <div class="fila"><div class="rot" id="aEsc">—</div><div class="ops" id="oEsc"></div></div>
+    <div class="fila"><div class="rot" id="aTono">—</div><div class="ops" id="oTono"></div></div>
+    <div class="fila"><div class="rot" id="aOct">—</div><div class="ops" id="oOct"></div></div>
+    <div class="fila"><div class="rot" id="aIdi">—</div><div class="ops" id="oIdi"></div></div>
+    <div class="cred" id="aNota">—</div>
+    <button class="bt sec" id="bVerInstr">—</button>
+    <button class="bt" id="bCerrarCfg">—</button>
+  </div>
+
+  <div class="pan" id="pInstr">
+    <div class="tit" id="nTit">—</div>
+    <div id="pestanas"></div>
+    <div id="lista"></div>
+    <button class="bt" id="bCerrarInstr">—</button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <div class="sub" id="fTit">—</div>
+    <div class="num" id="fNum">0</div>
+    <div class="sub" id="fRec">—</div>
+    <button class="bt" id="bOtra">—</button>
+    <button class="bt sec" id="bAlMenu">—</button>
+  </div>
+</div>
+<script type="module">

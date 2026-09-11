@@ -1,0 +1,1201 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ARRANQUE Y SONDAS
+   ══════════════════════════════════════════════════════════════════════════ */
+function armaPaneles() {
+  const idi = document.getElementById('iBotones');
+  [['es', 'Castellano'], ['en', 'English'], ['pt', 'Português']].forEach(([k, n]) => {
+    const b = document.createElement('button'); b.className = 'b'; b.textContent = n;
+    b.onclick = () => { IDIOMA = k; try { localStorage.setItem('huesos_idi', k); } catch (e) {} pintaIdioma(); verPanel('pMenu'); PART = 'menu'; };
+    idi.appendChild(b);
+  });
+  const cal = document.getElementById('mCal');
+  ['baja', 'media', 'alta'].forEach(k => {
+    const b = document.createElement('button'); b.className = 'b ch'; b.dataset.c = k;
+    b.onclick = () => {
+      aplicaCalidad(k); try { localStorage.setItem('huesos_cal', k); } catch (e) {}
+      document.querySelectorAll('#mCal button').forEach(x => x.classList.toggle('sel', x.dataset.c === k));
+    };
+    cal.appendChild(b);
+  });
+  const mi = document.getElementById('mIdi');
+  [['es', 'ES'], ['en', 'EN'], ['pt', 'PT']].forEach(([k, n]) => {
+    const b = document.createElement('button'); b.className = 'b ch'; b.dataset.i = k; b.textContent = n;
+    b.onclick = () => {
+      IDIOMA = k; try { localStorage.setItem('huesos_idi', k); } catch (e) {}
+      pintaIdioma();
+      document.querySelectorAll('#mIdi button').forEach(x => x.classList.toggle('sel', x.dataset.i === k));
+    };
+    mi.appendChild(b);
+  });
+  const cl = (id, fn) => document.getElementById(id).onclick = fn;
+  cl('mJugar', () => { audioArranca(); nuevaPartida(); });
+  cl('mSeguir', () => { PART = 'juego'; verPanel(null); });
+  cl('paSeguir', () => pausa(false));
+  cl('paMenu', () => alMenu());
+  cl('fOtra', () => nuevaPartida());
+  cl('fMenu', () => alMenu());
+}
+
+function arranca() {
+  armaRender(document.getElementById('lienzo'));
+  try {
+    const i = localStorage.getItem('huesos_idi'); if (i) IDIOMA = i;
+    const c = localStorage.getItem('huesos_cal'); if (c) CALIDAD = c;
+  } catch (e) {}
+  ajustaMarco();
+  addEventListener('resize', ajustaMarco);
+  midePasos();
+  leeRecord();
+  armaTexturas();
+  menuMundo();
+  armaEntrada();
+  armaPaneles();
+  pintaIdioma();
+  document.querySelectorAll('#mCal button').forEach(x => x.classList.toggle('sel', x.dataset.c === CALIDAD));
+  document.querySelectorAll('#mIdi button').forEach(x => x.classList.toggle('sel', x.dataset.i === IDIOMA));
+  /* PLATAFORMA: los controles táctiles tapan media pantalla en PC para hacer
+     lo que ya hace el teclado. Tacto Y puntero grueso: con una sola de las dos
+     una notebook táctil se lleva el joystick. */
+  const movil = matchMedia('(pointer:coarse)').matches && 'ontouchstart' in window;
+  document.body.classList.toggle('movil', movil);
+  document.body.classList.toggle('pc', !movil);
+  bucle();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   `window.__H` — una afirmación sin número no vale
+   ══════════════════════════════════════════════════════════════════════════ */
+const _v3 = new THREE.Vector3();
+function _pto(hueso, y) { return _v3.set(0, y || 0, 0).applyMatrix4(hueso.matrixWorld).clone(); }
+/* UNA SONDA QUE TIRA EN EL MENÚ NO SE PUEDE CORRER, y la regresión se corre
+   justamente ahí. `JUG.cuerpo` no existe hasta que empieza una partida, así
+   que las tres sondas que miden el rig se arman uno de descarte con LA MISMA
+   receta: miden el mismo esqueleto, no uno parecido. */
+let _CMED = null;
+function _cuerpoMedir() {
+  if (JUG.cuerpo) return JUG.cuerpo;
+  if (!_CMED) _CMED = armaCuerpo(recetaHeroe());
+  return _CMED;
+}
+
+window.__H = {
+  est() {
+    const i = ren.info.render;
+    return {
+      fps: +FPS.toFixed(1), llamadas: i.calls, tri: i.triangles,
+      part: PART, cal: CALIDAD, rt: [RT.width, RT.height],
+      zonaAct: ZONA_ACT, zonaVis: ZONA_VIS,
+      ola: { i: OLA.i, de: ZONAS[ZONA_ACT].olas.length, hechas: OLA.hechas,
+             espera: +OLA.espera.toFixed(2), suelta: OLA.suelta, total: OLA_TOTAL },
+      rec: { olas: RECORD.olas, bajas: RECORD.bajas },
+      jug: { x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), y: +JUG.y.toFixed(2),
+             vida: Math.round(JUG.vida), vidaMax: JUG.vidaMax, fur: Math.round(JUG.fur),
+             rem: JUG.rem, aire: +JUG.aire.toFixed(2), rueda: JUG.rueda, lento: +LENTO.toFixed(2),
+             niv: JUG.nivel, xp: JUG.xp, xpSig: JUG.xpSig, bajas: JUG.bajas,
+             muerto: JUG.muerto, golpe: JUG.golpe, esq: +JUG.esqT.toFixed(2) },
+      esq: { vivos: ESQS.filter(e => e.vive).length, cerca: ESQ_KIT ? ESQ_KIT.n : 0,
+             porZona: ZONAS.map((_, z) => esqVivos(z)) },
+      veg: VEG.reduce((a, v) => a + v.malla.count, 0), vegMallas: VEG.length,
+      errs: (window.__errs || []).length,
+    };
+  },
+  nueva(s) { audioArranca(); nuevaPartida(s || 7); return this.est(); },
+  cal(c) { aplicaCalidad(c); return { cal: CALIDAD, rt: [RT.width, RT.height], sombra: CAL[c].sombra }; },
+  idi(k) { IDIOMA = k; pintaIdioma(); return { idi: IDIOMA, zona: document.getElementById('zonaTit').textContent }; },
+  ir(x, z) { JUG.x = x; JUG.z = z; JUG.y = H(x, z); JUG.vx = JUG.vz = 0; return { x: JUG.x, z: JUG.z, y: +JUG.y.toFixed(2), zona: zonaDe(x, z) }; },
+  mira(y, p) { CAM_YAW = y; if (p !== undefined) CAM_PIT = p; return { yaw: CAM_YAW, pit: CAM_PIT }; },
+  congela(v) { CONGELADO = !!v; return CONGELADO; },
+
+  /* caminar DE VERDAD: por el mismo camino que usa el dedo, con la física y
+     el choque puestos. Un teletransporte no prueba que el mundo se recorra. */
+  anda(n, dx, dz, corre) {
+    const x0 = JUG.x, z0 = JUG.z; let dentro = 0;
+    for (let i = 0; i < n; i++) {
+      const m = { x: dx, z: dz, corre: !!corre };
+      jugPaso(PASO, m);
+      for (const s of solidosCerca(JUG.x, JUG.z))
+        if (dist2(JUG.x, JUG.z, s.x, s.z) < (s.r + J_RADIO * 0.9) * (s.r + J_RADIO * 0.9)) { dentro++; break; }
+    }
+    return { rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2), dentroDeAlgo: dentro,
+             x: +JUG.x.toFixed(2), z: +JUG.z.toFixed(2), zona: zonaDe(JUG.x, JUG.z) };
+  },
+  /* EL JOYSTICK, MEDIDO CONTRA LOS EJES DE LA CÁMARA — que es lo único que
+     puede decir si está invertido. `anda(n,dx,dz)` recibe la dirección YA EN
+     EL MUNDO, así que se saltea `entradaMundo` entera: por ahí nunca iba a
+     aparecer que empujar a la derecha mueve al bicho a la izquierda de la
+     pantalla, y por eso el defecto duró. Acá se escribe el JOY de verdad, se
+     llama a `entradaLee()` —el mismo camino que el dedo— y lo que sale se
+     proyecta sobre el frente y sobre la DERECHA de la cámara.
+     La derecha de la cámara no se supone: se lee de su matriz de mundo, que
+     ya lleva adentro el `CAM_YAW + PI` y el orden del Euler.               */
+  joyMide(jx, jz) {
+    const g = JOY.id; JOY.id = 99; JOY.dx = jx * JOY.r; JOY.dy = jz * JOY.r; JOY.bruto = Math.hypot(jx, jz);
+    const m = entradaLee();
+    JOY.id = g; JOY.dx = JOY.dy = 0; JOY.bruto = 0;
+    /* LA CÁMARA SE PONE AL DÍA ANTES DE LEERLA. `mira()` escribe CAM_YAW y
+       nadie mueve el lente hasta el próximo cuadro dibujado: leyendo la matriz
+       ahí se compara un yaw nuevo contra una cámara vieja. Medido con el
+       defecto puesto, a yaw 1,9 empujar a la derecha daba `adelante −0,946`,
+       que es exactamente el coseno de la diferencia con el yaw anterior. */
+    camPaso(0.5, 0, 0); cam.updateMatrixWorld(true);
+    const e = cam.matrixWorld.elements;
+    const der = new THREE.Vector3(e[0], e[1], e[2]).setY(0).normalize();   // +X de la cámara
+    const fre = new THREE.Vector3(-e[8], -e[9], -e[10]).setY(0).normalize(); // −Z de la cámara
+    const v = new THREE.Vector3(m.x, 0, m.z);
+    const l = v.length() || 1;
+    return { pide: [jx, jz], mundo: [+m.x.toFixed(3), +m.z.toFixed(3)],
+             adelante: +(v.dot(fre) / l).toFixed(3), derecha: +(v.dot(der) / l).toFixed(3),
+             corre: m.corre };
+  },
+  ataca() { return jugPide('ataca'); },
+  esquiva() { return jugPide('esquiva'); },
+  pasos(n) { for (let i = 0; i < n; i++) unPaso(PASO); return this.est(); },
+
+  esqs(n) {
+    return ESQS.filter(e => e.vive).slice(0, n || 6).map(e => ({
+      cl: e.cl, est: e.est, zona: e.zona, vida: Math.round(e.vida),
+      d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1),
+    }));
+  },
+  /* trae un esqueleto al lado, para poder medir una pelea sin caminar 80 m */
+  trae(d, cl) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere' && (!cl || x.cl === cl)); if (!e) return null;
+    const a = JUG.rumbo;
+    e.x = JUG.x + Math.sin(a) * (d || 2.0); e.z = JUG.z + Math.cos(a) * (d || 2.0);
+    e.y = H(e.x, e.z); e.est = 'persigue'; e.atur = 0; e.esp = 0;
+    return { cl: e.cl, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2), vida: e.vida };
+  },
+  /* al revés que `trae`: lleva al JUGADOR hasta la clase pedida. Hace falta
+     para fotografiar al rey EN SU CENIZA — traído al bosque saldría con la
+     niebla, el suelo y la luz de otra zona, o sea otra foto. */
+  vaA(cl, d) {
+    const e = ESQS.find(x => x.vive && x.cl === cl); if (!e) return null;
+    const dd = d === undefined ? 5.2 : d, a = Math.atan2(e.x, e.z);
+    JUG.x = e.x - Math.sin(a) * dd; JUG.z = e.z - Math.cos(a) * dd;
+    JUG.y = H(JUG.x, JUG.z); JUG.vx = JUG.vz = 0;
+    JUG.rumbo = Math.atan2(e.x - JUG.x, e.z - JUG.z);
+    CAM_YAW = JUG.rumbo; CAM_PIT = -0.06;
+    ZONA_ACT = e.zona; e.est = 'persigue'; e.atur = 0;
+    camPaso(0.5, 0, 0);
+    return { cl: e.cl, zona: e.zona, vida: e.vida,
+             d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2),
+             zonaPie: zonaDe(JUG.x, JUG.z) };
+  },
+
+  /* ── EL AUTO-JUGADOR ───────────────────────────────────────────────────
+     Va al más cercano, se para a su alcance y machaca el combo; esquiva
+     cuando el bicho está cargando. Juega por el MISMO camino que el dedo
+     —`jugPide` y la entrada— así que si termina la partida, la partida se
+     puede terminar. */
+  juega(tope, tonto) {
+    const T0 = tope || 60000; let n = 0, huyo = 0, esq = 0, rem = 0, rod = 0;
+    while (n < T0 && PART === 'juego') {
+      n++;
+      let m = null, md = 1e9, cerca = 0, peligro = null;
+      for (const e of ESQS) {
+        if (!e.vive || e.est === 'muere') continue;
+        const d2 = dist2(e.x, e.z, JUG.x, JUG.z), D = ESQ[e.cl];
+        const alc = (D.alc + J_RADIO) * 1.12;
+        if (d2 < alc * alc) {
+          cerca++;
+          /* SE ESQUIVA AL QUE ESTÁ POR PEGARTE, no al blanco. Un jugador no
+             mira "el más cercano de la zona": mira el brazo que se levantó. */
+          if (e.est === 'carga' && e.t > D.carga - 0.10) peligro = e;
+        }
+        if (e.zona !== ZONA_ACT) continue;
+        if (d2 < md) { md = d2; m = e; }
+      }
+      let ex = 0, ez = 0;
+      if (tonto) {
+        const a = Math.random() * 6.283; ex = Math.cos(a); ez = Math.sin(a);
+        if (Math.random() < 0.05) jugPide('ataca');
+        if (Math.random() < 0.01) jugPide('esquiva');
+      } else if (jugPuedeRemate() && cerca >= 2 && jugPide('remate')) {
+        /* EL REMATE SE GUARDA PARA CUANDO HAY TURBA, que es para lo que es:
+           gastarlo en un peón suelto es tirar una barra entera por 46 de
+           vida. Con el bot rematando al primero que ve, la medición diría
+           que el movimiento sirve cuando lo que sirve es el desperdicio.
+           Y LA RAMA TIENE QUE CAERSE SI EL GOLPE NO SALE. Con la condición
+           escrita como `fur>=J_FUR && cerca>=2` y el `jugPide` adentro, el
+           A/B con el remate apagado dejaba al bot QUIETO para siempre: la
+           barra llena no se gasta nunca, la rama se toma todos los cuadros y
+           no se ataca ni se esquiva. Medido, informaba 0 de 12 y 2,9 oleadas
+           —peor que antes de que el remate existiera—, o sea que la sonda
+           acusaba al juego de un defecto suyo. */
+        rem++;
+      } else if (peligro) {
+        const dx = (peligro.x - JUG.x), dz = (peligro.z - JUG.z), l = Math.hypot(dx, dz) || 1;
+        JUG.entX = -dz / l; JUG.entZ = dx / l;
+        if (jugPide('esquiva')) { esq++; if (JUG.rueda) rod++; }
+      } else if (m) {
+        const d = Math.sqrt(md), dx = (m.x - JUG.x) / d, dz = (m.z - JUG.z) / d;
+        const g = J_COMBO[0].alc * 0.92;
+        /* SE SEPARA CUANDO LO RODEAN: correr son 5,6 contra los 1,9 de un
+           bruto, y esa ventaja ES la herramienta contra una turba. */
+        if (cerca >= 3) { huyo++; ex = -dx; ez = -dz; }
+        else if (d > g) { ex = dx; ez = dz; }
+        else if (!jugAtacando() && JUG.esqT <= 0) jugPide('ataca');
+      }
+      if (ex || ez) {
+        if (n % 12 === 0) {
+          const dd = dist2(JUG.x, JUG.z, this._px || 0, this._pz || 0);
+          this._atasco = (dd < 0.02 && md > 4) ? (this._atasco || 0) + 1 : 0;
+          this._px = JUG.x; this._pz = JUG.z;
+        }
+        if ((this._atasco || 0) > 2) {
+          const t = n * 0.06; ex = Math.cos(t); ez = Math.sin(t);
+          if ((this._atasco || 0) > 8) this._atasco = 0;
+        }
+        const l = Math.hypot(ex, ez), g = rodea(JUG.x, JUG.z, ex / l, ez / l, J_RADIO, Math.min(Math.sqrt(md), 4.2));
+        ex = g.x; ez = g.z;
+      }
+      jugPaso(PASO, { x: ex, z: ez, corre: md > 64 || cerca >= 3 });
+      esqPaso(PASO); zonasPaso(PASO);
+      if (PART === 'fin') break;
+    }
+    /* ── `gano` SÓLO VALE SI LA PARTIDA TERMINÓ ────────────────────────────
+       `GANO` es una global del módulo y este bucle puede salir por el TOPE DE
+       PASOS con la partida todavía en pie; ahí lo que se devolvía era el
+       resultado de la corrida ANTERIOR. Medido: doce corridas honestas —la
+       última ganada— y enseguida doce al azar, y la primera al azar informaba
+       `gano: true` con 0,8 oleadas limpiadas de once. Una sonda que informa
+       una victoria que no ocurrió es peor que una que no informa nada. */
+    return { pasos: n, seg: +(n * PASO).toFixed(1), part: PART, gano: PART === 'fin' && GANO,
+             bajas: JUG.bajas, niv: JUG.nivel, vida: Math.round(JUG.vida),
+             olas: OLA.hechas, deOlas: OLA_TOTAL, zona: ZONA_ACT,
+             huyo, esq, rem, rod, remBajas: TALLY.remBajas,
+             vivos: ESQS.filter(e => e.vive).length, errs: (window.__errs || []).length };
+  },
+  audita(s) { return audita(s === undefined ? SEM : s); },
+  auditaN(n) {
+    let malas = 0, peor = null;
+    for (let i = 1; i <= (n || 40); i++) { const a = audita(i); if (!a.ok) { malas++; if (!peor) peor = { sem: i, a }; } }
+    return { semillas: n || 40, malas, peor };
+  },
+
+  /* ── LAS ANIMACIONES SE MIDEN ──────────────────────────────────────────
+     El recorrido de una mano y de un pie a lo largo del ciclo es la ÚNICA
+     prueba de que una animación anima y de que dos son distintas. Un clip
+     mal pesado gira igual y no desplaza un solo vértice.                   */
+  medirPose(nom, ciclo) {
+    const c = _cuerpoMedir(), mx = [], mn = [];
+    const pts = [['manoD', c.h.anteD, -0.30], ['manoI', c.h.anteI, -0.30],
+                 ['pieI', c.h.pantI, -0.44], ['cabeza', c.h.cuello, 0.19]];
+    const acum = {};
+    for (const [k] of pts) acum[k] = { mnx: 1e9, mxx: -1e9, mny: 1e9, mxy: -1e9, mnz: 1e9, mxz: -1e9 };
+    const N = 40, L = ciclo || (nom === 'quieto' ? 12 : (nom === 'camina' || nom === 'corre' ? 6.283 : 1));
+    for (let i = 0; i <= N; i++) {
+      poseAplica(c, nom, i / N * L, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0;
+      c.raiz.updateMatrixWorld(true);
+      for (const [k, h, y] of pts) {
+        const p = _pto(h, y), a = acum[k];
+        a.mnx = Math.min(a.mnx, p.x); a.mxx = Math.max(a.mxx, p.x);
+        a.mny = Math.min(a.mny, p.y); a.mxy = Math.max(a.mxy, p.y);
+        a.mnz = Math.min(a.mnz, p.z); a.mxz = Math.max(a.mxz, p.z);
+      }
+    }
+    const r = { pose: nom };
+    for (const k in acum) {
+      const a = acum[k];
+      r[k] = [+(a.mxx - a.mnx).toFixed(3), +(a.mxy - a.mny).toFixed(3), +(a.mxz - a.mnz).toFixed(3)];
+    }
+    return r;
+  },
+  /* ── LA TRAYECTORIA, QUE ES LO QUE `medirPose` NO PUEDE VER ────────────
+     `medirPose` devuelve CUÁNTO se movió cada punto, y con eso una vuelta de
+     campana entera y un temblor de la misma amplitud dan lo mismo. Lo que
+     prueba que la rueda es una rueda es el ORDEN: la coronilla tiene que
+     BAJAR por debajo de la cadera en el medio del recorrido y volver arriba
+     al final, y ninguna extensión dice eso. Devuelve la altura muestreada.  */
+  trayec(nom, n) {
+    const c = _cuerpoMedir(), N = n || 12, out = [];
+    for (let i = 0; i <= N; i++) {
+      poseAplica(c, nom, i / N, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      const cab = _pto(c.h.cuello, 0.19), man = _pto(c.h.anteD, -0.62), cad = _pto(c.h.pelvis, 0);
+      out.push({ u: +(i / N).toFixed(2), cab: +cab.y.toFixed(3), cabZ: +cab.z.toFixed(3),
+                 man: +man.y.toFixed(3), manZ: +man.z.toFixed(3), cad: +cad.y.toFixed(3) });
+    }
+    return out;
+  },
+
+  /* ── EL REMATE, JUGADO DE VERDAD ───────────────────────────────────────
+     Se planta una turba alrededor, se carga la barra y se aprieta el botón
+     POR EL MISMO CAMINO QUE EL DEDO (`jugPide`), y se mira cuadro a cuadro
+     qué pasa: cuánto sube, si el mundo se agacha, a cuántos alcanza y si el
+     fogonazo y el anillo salieron. Sin esto, «hay un remate» quiere decir
+     «escribí una función».                                                */
+  remate(n) {
+    const N = n === undefined ? 6 : n;
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0; JUG.vida = JUG.vidaMax;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1; JUG.aire = 0; LENTO = 1;
+    FOGO = 0; ONDA = -1; HITSTOP = 0;
+    const ls = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * 6.283;
+      ls.push({ cl: i % 3 === 2 ? 'lancero' : 'peon', x: Math.cos(a) * 2.2 + 4.0, z: Math.sin(a) * 2.2, zona: 0 });
+    }
+    esqArranca(ls);
+    const vid0 = ESQS.map(e => e.vida);
+    JUG.fur = J_FUR;
+    const puede = jugPuedeRemate();
+    const salio = jugPide('remate');
+    let alto = 0, lentoMin = 1, fogo = 0, onda = 0, pasos = 0, lin = 0;
+    for (let i = 0; i < 260 && (jugRematando() || HITSTOP > 0); i++) {
+      pasos++;
+      if (HITSTOP > 0) { HITSTOP -= PASO; efectosPaso(PASO); continue; }
+      jugPaso(PASO, { x: 0, z: 0, corre: false });
+      esqPaso(PASO * LENTO);
+      efectosPaso(PASO);
+      alto = Math.max(alto, JUG.aire); lentoMin = Math.min(lentoMin, LENTO);
+      fogo = Math.max(fogo, FOGO); onda = Math.max(onda, ONDA >= 0 ? 1 : 0);
+      lin = Math.max(lin, LINEAS);
+    }
+    let toc = 0, dano = 0;
+    ESQS.forEach((e, i) => { const d = vid0[i] - e.vida; if (d > 0) { toc++; dano += d; } });
+    const dist = Math.hypot(JUG.x, JUG.z);
+    return { puede, salio, pasos, seg: +(pasos * PASO).toFixed(2),
+             alto: +alto.toFixed(2), lentoMin: +lentoMin.toFixed(2),
+             fogo: +fogo.toFixed(2), lineas: +lin.toFixed(2), onda,
+             tocados: toc, deN: N, dano, saltoM: +dist.toFixed(2),
+             furDespues: Math.round(JUG.fur), errs: (window.__errs || []).length };
+  },
+
+  /* ── ESQUIVE CONTRA RUEDA ──────────────────────────────────────────────
+     El mismo botón por el mismo camino, una vez parado y otra con impulso, y
+     lo que se compara es CUÁNTO RECORRIÓ y CUÁNTOS PASOS FUE INTOCABLE. Si
+     los dos números dieran parecido serían el mismo movimiento con dos
+     nombres, que es justo lo que este pedido no quería.                    */
+  esqRod(corriendo) {
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
+    JUG.esqT = 0; JUG.esqEsp = 0; JUG.rem = -1; JUG.golpe = -1;
+    JUG.vx = 0; JUG.vz = 0;
+    /* la velocidad se pone CAMINANDO de verdad y no escribiendo `vx`: lo que
+       decide rueda o esquive es la velocidad al apretar, así que ponerla a
+       mano probaría una condición que el juego no evalúa igual */
+    if (corriendo) for (let i = 0; i < 40; i++) jugPaso(PASO, { x: 0, z: 1, corre: true });
+    const v0 = Math.hypot(JUG.vx, JUG.vz), x0 = JUG.x, z0 = JUG.z;
+    JUG.entX = 0; JUG.entZ = 1;
+    const salio = jugPide('esquiva');
+    const rueda = JUG.rueda, largo = JUG.esqLargo;
+    let inv = 0, pasos = 0;
+    while (JUG.esqT > 0 && pasos < 200) {
+      pasos++;
+      if ((JUG.esqLargo - JUG.esqT) < JUG.esqInv) inv++;
+      jugPaso(PASO, { x: 0, z: 0, corre: false });
+    }
+    return { salio, rueda, vAntes: +v0.toFixed(2), largo: +largo.toFixed(2),
+             pasos, invPasos: inv, dist: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2),
+             espera: +JUG.esqEsp.toFixed(2), rumbo: +JUG.rumbo.toFixed(2) };
+  },
+
+  /* ── LA FURIA: DE DÓNDE SALE Y CUÁNTO TARDA ────────────────────────────
+     Un número que sube no dice nada; lo que hay que poder contestar es en
+     cuántos golpes se llena y si se enfría donde tiene que enfriarse.      */
+  furia() {
+    JUG.fur = 0; JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0;
+    JUG.vida = JUG.vidaMax; JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1;
+    esqArranca([{ cl: 'bruto', x: 0, z: 1.5, zona: 0 }]);
+    ESQS[0].vida = 99999; ESQS[0].vidaMax = 99999;
+    let g = 0; const a0 = TALLY.aciertos, t0 = TALLY.tajos;
+    for (let i = 0; i < 3000 && JUG.fur < J_FUR; i++) {
+      if (!jugAtacando() && jugPide('ataca')) g++;
+      jugPaso(PASO, { x: 0, z: 0, corre: false }); esqPaso(PASO);
+      /* SE CLAVAN LOS DOS CUERPOS, y hace falta: el bruto contesta y su empuje
+         saca al héroe del alcance. Sin clavarlo, de 91 tajos acertaban 4 y la
+         sonda medía una pelea perdida en vez de cuánto carga un golpe. */
+      ESQS[0].vida = 99999; ESQS[0].x = 0; ESQS[0].z = 1.5;
+      JUG.x = 0; JUG.z = 0; JUG.rumbo = 0; JUG.vida = JUG.vidaMax; JUG.muerto = false;
+    }
+    const lleno = Math.round(JUG.fur), golpes = g;
+    /* se enfría SÓLO sin nadie cerca: con el bicho al lado no puede bajar */
+    let f0 = JUG.fur;
+    for (let i = 0; i < 60; i++) jugPaso(PASO, { x: 0, z: 0, corre: false });
+    const conBicho = Math.round(JUG.fur);
+    esqArranca([]);
+    for (let i = 0; i < 120; i++) jugPaso(PASO, { x: 0, z: 0, corre: false });
+    return { golpesParaLlenar: golpes, lleno, conBichoAlLado: conBicho,
+             solo2s: Math.round(JUG.fur), bajo: +(f0 - JUG.fur).toFixed(1),
+             tajos: TALLY.tajos - t0, aciertos: TALLY.aciertos - a0 };
+  },
+
+  /* planta una pose y CONGELA: el bucle sigue dibujando pero no avanza, así
+     la foto es del instante que se pidió y no de tres cuadros después */
+  pose(nom, u, quien) {
+    CONGELADO = true;
+    const c = quien === 'esq' && ESQS[0] ? ESQS[0].cuerpo : _cuerpoMedir();
+    poseAplica(c, nom, u || 0, null, 0, 0);
+    c.raiz.updateMatrixWorld(true);
+    if (quien === 'esq' && ESQS[0]) kitPinta(ESQ_KIT, [ESQS[0]]); else if (JUG.kit && JUG.cuerpo) kitPinta(JUG.kit, [JUG]);
+    return { pose: nom, u: u || 0 };
+  },
+
+  /* ── DE DÓNDE SALE LA OSCURIDAD ────────────────────────────────────────
+     Una escena negra tiene cinco sospechosos —el sol, el ambiente, el
+     hemisférico, la exposición y el color del material— y mirando la pantalla
+     los cinco se ven igual. Ésta los apaga de a uno y mide el búfer. */
+  luz(v) {
+    if (v) {
+      if (v.sol !== undefined) solLuz.intensity = v.sol;
+      if (v.amb !== undefined) ambLuz.intensity = v.amb;
+      if (v.hem !== undefined) hemLuz.intensity = v.hem;
+      if (v.exp !== undefined) ren.toneMappingExposure = v.exp;
+    }
+    const s = solLuz.intensity, a = ambLuz.intensity, h = hemLuz.intensity;
+    const uno = (S, A, Hm) => { solLuz.intensity = S; ambLuz.intensity = A; hemLuz.intensity = Hm;
+                                const r = this.brillo(); solLuz.intensity = s; ambLuz.intensity = a; hemLuz.intensity = h; return r.medio; };
+    return {
+      ajuste: { sol: s, amb: a, hem: h, exp: +ren.toneMappingExposure.toFixed(2) },
+      todo: this.brillo(), nada: uno(0, 0, 0), soloSol: uno(s, 0, 0), soloAmb: uno(0, a, 0), soloHem: uno(0, 0, h),
+      niebla: esc.fog ? { c: '#' + esc.fog.color.getHexString(), d: +(esc.fog.density || 0).toFixed(4) } : null,
+      fondo: esc.background && esc.background.getHexString ? '#' + esc.background.getHexString() : '' + esc.background,
+      suelos: Object.keys(MAT_SUELO).map(k => [k, '#' + MAT_SUELO[k].color.getHexString(), !!MAT_SUELO[k].map]),
+      solPos: solLuz.position.toArray().map(x => +x.toFixed(1)),
+      solTgt: solLuz.target.position.toArray().map(x => +x.toFixed(1)),
+      jug: [+JUG.x.toFixed(1), +JUG.z.toFixed(1)],
+      /* EL SUELO PELADO: blanco y sin foto. Si con eso sigue negro, no es la
+         textura ni el tinte — es que no le llega luz o no se está dibujando. */
+      sueloPelado: (() => {
+        const g = [];
+        for (const k in MAT_SUELO) { const m = MAT_SUELO[k]; g.push([m, m.map, m.color.clone()]); m.map = null; m.color.setRGB(1, 1, 1); m.needsUpdate = true; }
+        const r = this.brillo();
+        for (const [m, mp, c] of g) { m.map = mp; m.color.copy(c); m.needsUpdate = true; }
+        return r;
+      })(),
+      /* y sin vegetación: 833 tarjetas alfa pueden estar tapando el suelo */
+      sinVeg: (() => {
+        const v = VEG.map(x => x.malla.visible); VEG.forEach(x => { x.malla.visible = false; });
+        const r = this.brillo();
+        VEG.forEach((x, i) => { x.malla.visible = v[i]; });
+        return r;
+      })(),
+    };
+  },
+  /* ¿SE ESTÁN DIBUJANDO LOS CUERPOS? Un kit instanciado con `count` en 0, o
+     con la malla fuera de la escena, se ve exactamente igual que un juego sin
+     personajes — y en una foto oscura eso se confunde con falta de luz. */
+  kits() {
+    const uno = (n, k) => {
+      if (!k) return { n, kit: null };
+      const m = k.mallas[Object.keys(k.mallas)[0]];
+      return { n, piezas: Object.keys(k.mallas).length, count: m.count, cupo: k.cupo,
+               enEsc: !!m.parent, vis: m.visible, culled: m.frustumCulled };
+    };
+    const p = JUG.cuerpo ? _pto(JUG.cuerpo.h.cuello, 0.19) : null;
+    const pv = p ? p.clone().project(cam) : null;
+    return { jug: uno('jug', JUG.kit), esq: uno('esq', ESQ_KIT),
+             jugXYZ: p ? [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)] : null,
+             jugPant: pv ? [+((pv.x + 1) / 2).toFixed(3), +((1 - pv.y) / 2).toFixed(3), +pv.z.toFixed(3)] : null,
+             cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+             camMira: [+CAM_YAW.toFixed(2), +CAM_PIT.toFixed(2)],
+    };
+  },
+  /* atajo de diagnóstico: pinta los kits de un color plano para saber si el
+     problema es que no se dibujan o que son del color del suelo */
+  /* dónde cae de verdad UNA instancia, leída de la matriz que se le mandó a
+     la GPU, y en qué z de vista queda. La proyección a NDC no distingue
+     «adelante» de «atrás»: un punto detrás de la cámara proyecta igual, dado
+     vuelta, y cae dentro del cuadro. Eso ya costó una vuelta en RECREO. */
+  inst() {
+    const m = new THREE.Matrix4(), v = new THREE.Vector3(), out = [];
+    for (const [n, k] of [['jug', JUG.kit], ['esq', ESQ_KIT]]) {
+      if (!k) continue;
+      for (const p of ['cuello', 'pelvis']) {
+        const im = k.mallas[p]; if (!im || !im.count) continue;
+        im.getMatrixAt(0, m); v.setFromMatrixPosition(m);
+        const vw = v.clone().applyMatrix4(cam.matrixWorldInverse);
+        const nd = v.clone().project(cam);
+        out.push({ n, p, mundo: [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)],
+                   zVista: +vw.z.toFixed(2),
+                   pant: [+((nd.x + 1) / 2).toFixed(3), +((1 - nd.y) / 2).toFixed(3)],
+                   esc: +new THREE.Vector3().setFromMatrixScale(m).x.toFixed(3) });
+      }
+    }
+    return { cam: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+             near: cam.near, far: cam.far, fov: cam.fov, asp: +cam.aspect.toFixed(3), inst: out };
+  },
+  /* CUÁNTO OCUPA EL HÉROE EN LA PANTALLA. Un encuadre no se elige a ojo: en
+     un marco apaisado de teléfono, un personaje por debajo del 20% del alto no
+     deja ver una animación, y por encima del 45% tapa lo que hay que esquivar. */
+  encuadre(cf) {
+    if (cf) { if (cf.d !== undefined) { CAM_D = cf.d; CAM_D_ACT = cf.d; } if (cf.h !== undefined) CAM_H = cf.h; if (cf.m !== undefined) CAM_MIRA = cf.m;
+             camPaso(0.5, 0, 0); cam.updateMatrixWorld(true); }
+    const c = JUG.cuerpo; if (!c) return null;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, det = 0;
+    const v = new THREE.Vector3();
+    for (const k in c.h) {
+      v.setFromMatrixPosition(c.h[k].matrixWorld);
+      const dv = v.clone().applyMatrix4(cam.matrixWorldInverse);
+      if (dv.z > -0.05) { det++; continue; }
+      const n = v.project(cam);
+      const px = (n.x + 1) / 2, py = (1 - n.y) / 2;
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    return { detras: det, x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)],
+             pctAlto: +((y1 - y0) * 100).toFixed(1), pctAncho: +((x1 - x0) * 100).toFixed(1),
+             centroX: +(((x0 + x1) / 2) * 100).toFixed(1), centroY: +(((y0 + y1) / 2) * 100).toFixed(1),
+             camD: +CAM_D_ACT.toFixed(2), camY: +cam.position.y.toFixed(2) };
+  },
+  /* PONE LA CÁMARA DELANTE DE UN ESQUELETO Y DICE DÓNDE CAYÓ EN LA PANTALLA.
+     Hacía falta y no estaba: `encuadre` mide al HÉROE, y lo que hay que
+     verificar acá es la orientación de las doce piezas generadas — que no sale
+     de la caja envolvente sola: una calavera girada noventa grados tiene una
+     caja perfectamente razonable.
+     ADELANTA UN PASO ANTES DE MEDIR. Las matrices de las instancias las escribe
+     `kitPinta` dentro del paso de física, así que moviendo al bicho con el juego
+     congelado la foto sale con el kit donde estaba: se ve como si la pieza no se
+     dibujara, y se dibuja. Ya costó dos capturas. */
+  esqFoto(cl, d, alto, conHeroe) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere' && (!cl || x.cl === cl));
+    if (!e) return null;
+    const dd = d === undefined ? 3.0 : d;
+    CONGELADO = false;
+    /* al bicho se lo trae DELANTE del jugador y se lo deja quieto mirándolo:
+       persiguiendo camina y la foto sale movida */
+    const a = JUG.rumbo;
+    e.x = JUG.x + Math.sin(a) * dd; e.z = JUG.z + Math.cos(a) * dd; e.y = H(e.x, e.z);
+    e.est = 'quieto'; e.atur = 0; e.esp = 0; e.rumbo = a + Math.PI;
+    CAM_YAW = a; CAM_PIT = alto === undefined ? -0.02 : alto;
+    unPaso(PASO); camPaso(0.5, 0, 0); cam.updateMatrixWorld(true);
+    CONGELADO = true;
+    /* EL HÉROE SE ESCONDE, porque la cámara va DETRÁS de él: a tres metros su
+       espalda ocupa medio cuadro y tapa justo lo que se viene a mirar. Se apaga
+       el kit entero —son dos llamadas de dibujo— y se devuelve encendido con
+       `conHeroe`, que es lo que hay que usar para comparar tamaños. */
+    if (JUG.kit) for (const k in JUG.kit.mallas) JUG.kit.mallas[k].visible = !!conHeroe;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, det = 0;
+    const v = new THREE.Vector3();
+    for (const k in e.cuerpo.h) {
+      v.setFromMatrixPosition(e.cuerpo.h[k].matrixWorld);
+      if (v.clone().applyMatrix4(cam.matrixWorldInverse).z > -0.05) { det++; continue; }
+      const n = v.project(cam), px = (n.x + 1) / 2, py = (1 - n.y) / 2;
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    return { cl: e.cl, d: +dd.toFixed(2), detras: det,
+             x: [+x0.toFixed(3), +x1.toFixed(3)], y: [+y0.toFixed(3), +y1.toFixed(3)],
+             pctAlto: +((y1 - y0) * 100).toFixed(1), pctAncho: +((x1 - x0) * 100).toFixed(1) };
+  },
+  /* ── LA CAMINATA, DE PERFIL Y CONGELADA ────────────────────────────────
+     De frente un ciclo de piernas no se lee: hay que mirarlo de costado y en
+     un instante fijo. Planta al héroe en la fase pedida, pone la cámara a un
+     lado y congela — el bucle sigue dibujando pero nada avanza, así que la
+     foto es del instante que se pidió y no de tres cuadros después.       */
+  marchaFoto(f, nom, k) {
+    CONGELADO = false;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.vx = 0; JUG.vz = 0;
+    JUG.rumbo = 0;
+    poseAplica(JUG.cuerpo, nom || 'camina', f || 0, null, 0, 0);
+    JUG.cuerpo.raiz.position.set(JUG.x, JUG.y, JUG.z);
+    JUG.cuerpo.raiz.rotation.y = JUG.rumbo;
+    if (JUG.kit) { for (const m in JUG.kit.mallas) JUG.kit.mallas[m].visible = true; kitPinta(JUG.kit, [JUG]); }
+    const d = 3.4;
+    cam.position.set(JUG.x + d, JUG.y + 1.15, JUG.z);
+    cam.lookAt(JUG.x, JUG.y + 0.95, JUG.z);
+    cam.updateMatrixWorld(true);
+    CONGELADO = true;
+    return { f: +(f || 0).toFixed(2), pose: nom || 'camina' };
+  },
+  pintaKits(a, b) {
+    for (const [k, c] of [[JUG.kit, a], [ESQ_KIT, b]]) {
+      if (!k) continue;
+      k.mat.vertexColors = false; k.mat.color.setRGB(c[0], c[1], c[2]); k.mat.needsUpdate = true;
+    }
+    return 'ok';
+  },
+  tex() {
+    const s = {};
+    for (const fam in SPR_MAN) s[fam] = SPR_MAN[fam].map(p => !!(TEX[p.k] && TEX[p.k].image)).filter(Boolean).length;
+    return { listas: TEX_LISTAS, falladas: TEX_FALLADAS, porFam: s,
+             suelos: ZONAS.map(z => !!(MAT_SUELO[z.suelo] && MAT_SUELO[z.suelo].map)) };
+  },
+  /* lee el BÚFER de verdad: `drawImage` sobre un lienzo WebGL sin
+     `preserveDrawingBuffer` devuelve cero */
+  /* SE LEE EL CUADRO ENTERO, no una esquina. `readRenderTargetPixels` empieza
+     en la esquina de ABAJO A LA IZQUIERDA, así que pedir 120×68 de un destino
+     de 372×172 devuelve el 13% del cuadro y todo suelo: la primera versión de
+     esta sonda informaba 8,8 sobre una escena cuyo cielo mide 65. Y las
+     franjas van de ARRIBA hacia abajo, que es como se lee una pantalla —en
+     WebGL la fila 0 es la de abajo. */
+  brillo() {
+    const W = RT.width, Hh = RT.height, px = new Uint8Array(W * Hh * 4);
+    ren.setRenderTarget(RT); ren.render(esc, cam);
+    ren.readRenderTargetPixels(RT, 0, 0, W, Hh, px);
+    ren.setRenderTarget(null);
+    let s = 0, mx = 0, n = 0;
+    const fr = [0, 0, 0, 0, 0], fn = [0, 0, 0, 0, 0];
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const o = (j * W + i) * 4;
+      const l = px[o] * 0.2126 + px[o + 1] * 0.7152 + px[o + 2] * 0.0722;
+      s += l; mx = Math.max(mx, l); n++;
+      const f = Math.min(4, Math.floor((Hh - 1 - j) / Hh * 5)); fr[f] += l; fn[f]++;
+    }
+    return { medio: +(s / n).toFixed(1), max: Math.round(mx),
+             franjas: fr.map((v, i) => +(v / fn[i]).toFixed(1)) };
+  },
+  /* solapamientos del HUD: dos elementos que se pisan no se ven en una foto
+     chica y sí en el teléfono del usuario */
+  cajas() {
+    /* LOS BOTONES ENTRAN EN LA CUENTA. Medía sólo los rótulos, así que el
+       botón de pausa pegado a la barra de vida —los dos arriba a la
+       izquierda— era un choque que ninguna prueba podía ver. Lo que se pisa
+       no es el dibujo del botón sino su CAJA: el dedo va ahí igual. */
+    const ids = ['bVida', 'bFur', 'bXp', 'nivel', 'zona', 'restan', 'dialogo', 'aviso',
+                 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'bRem'];
+    const c = [], ch = [];
+    for (const id of ids) {
+      const e = document.getElementById(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
+      if (!e.offsetWidth || !e.offsetHeight) continue;
+      /* ── EL `offsetLeft` NO SABE DEL `transform` ───────────────────────
+         Casi todo lo centrado del HUD va con `left:50%` + `translateX(-50%)`,
+         y `offsetLeft` devuelve el 50% pelado: la caja se informaba media
+         anchura a la derecha de donde está, y de ahí salían dos choques que
+         no existen. `getBoundingClientRect` tampoco sirve —el marco va
+         GIRADO y devuelve coordenadas de ventana— así que lo correcto es
+         sumarle al offset la traslación que la matriz ya tiene resuelta en
+         píxeles. */
+      const m = new DOMMatrixReadOnly(s.transform === 'none' ? '' : s.transform);
+      c.push({ id, x: e.offsetLeft + m.m41, y: e.offsetTop + m.m42, w: e.offsetWidth, h: e.offsetHeight });
+    }
+    for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) {
+      const a = c[i], b = c[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
+    }
+    return { n: c.length, choques: ch, marco: [ANCHO, ALTO] };
+  },
+  /* ── EL MENÚ TIENE QUE ENTRAR EN EL MARCO ──────────────────────────────
+     El marco va GIRADO noventa grados, así que `getBoundingClientRect`
+     devuelve coordenadas de ventana y el alto que informa es el ANCHO del
+     cuadro: medir con eso da números que parecen razonables y describen otra
+     pantalla. `offsetTop` es de la caja, que es lo que se ve. Y hay que
+     medirlo porque `.caja` va centrada: cuando el contenido pasa el alto del
+     marco no se recorta abajo, se sale por ARRIBA Y POR ABAJO a la vez. */
+  menuCajas(pan) {
+    const P = document.getElementById(pan || 'pMenu');
+    const c = P.querySelector('.caja'), h = [];
+    let y0 = 1e9, y1 = -1e9;
+    for (const e of c.children) {
+      if (getComputedStyle(e).display === 'none' || !e.offsetHeight) continue;
+      const t = e.offsetTop, b = t + e.offsetHeight;
+      h.push({ id: e.id || e.className, y: [t, b] });
+      y0 = Math.min(y0, t); y1 = Math.max(y1, b);
+    }
+    const ch = [];
+    for (let i = 0; i < h.length - 1; i++) if (h[i].y[1] > h[i + 1].y[0]) ch.push(h[i].id + '×' + h[i + 1].id);
+    return { panel: pan || 'pMenu', marco: [ANCHO, ALTO], caja: [y0, y1],
+             alto: y1 - y0, aire: ALTO - (y1 - y0), entra: (y1 - y0) <= ALTO,
+             choques: ch, hijos: h };
+  },
+  audio() {
+    if (!ANAL) return { on: false };
+    const b = new Uint8Array(ANAL.fftSize); ANAL.getByteTimeDomainData(b);
+    let mx = 0, s = 0;
+    for (let i = 0; i < b.length; i++) { const v = (b[i] - 128) / 128; mx = Math.max(mx, Math.abs(v)); s += v * v; }
+    return { on: true, pico: +mx.toFixed(4), rms: +Math.sqrt(s / b.length).toFixed(4) };
+  },
+  son(k) { audioArranca(); son(k); return k; },
+  paso() { return { camina: +PASO_M.camina.toFixed(3), corre: +PASO_M.corre.toFixed(3),
+                    cadCamina: +(J_VEL / PASO_M.camina).toFixed(2),
+                    cadCorre: +(J_CORRE / PASO_M.corre).toFixed(2) }; },
+  /* PATINAJE: cuánto se desliza el pie apoyado. Es la única prueba de que la
+     zancada medida y la velocidad del juego describen el mismo movimiento. */
+  patina(corre) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    const z = zancada(corre ? 1 : 0), vel = corre ? J_CORRE : J_VEL;
+    let mn = 1e9, mx = -1e9;
+    for (let i = 0; i <= 48; i++) {
+      poseAplica(c, corre ? 'corre' : 'camina', i / 48 * Math.PI * 2, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      v.set(0, -0.44, 0).applyMatrix4(c.h.pantI.matrixWorld);
+      mn = Math.min(mn, v.z); mx = Math.max(mx, v.z);
+    }
+    const barre = (mx - mn) * 2;
+    return { zancada: +z.toFixed(3), barre: +barre.toFixed(3),
+             desliza: +(z - barre).toFixed(3), pct: +((z - barre) / z * 100).toFixed(1),
+             cadencia: +(vel / z).toFixed(2), pasosSeg: +(vel / z * 2).toFixed(2) };
+  },
+  /* ── HACIA DÓNDE CAMINA EL CICLO ───────────────────────────────────────
+     `patina()` mide CUÁNTO barre el pie y no HACIA DÓNDE: un ciclo dado
+     vuelta da exactamente el mismo `barre`, así que aprobaba una caminata
+     hacia atrás. Lo que lo distingue es el signo del barrido DURANTE EL
+     APOYO: con el cuerpo yendo hacia +Z, el pie apoyado tiene que ir hacia
+     −Z. Y la rodilla es la segunda firma: se dobla en el VUELO, no al
+     estirar la pierna hacia adelante.                                     */
+  marcha(nom) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    const N = 72, z = [], y = [], rod = [];
+    for (let i = 0; i < N; i++) {
+      poseAplica(c, nom || 'camina', i / N * Math.PI * 2, null, 0, 0);
+      c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0; c.raiz.updateMatrixWorld(true);
+      v.set(0, -0.44, 0).applyMatrix4(c.h.pantI.matrixWorld);
+      z.push(v.z); y.push(v.y); rod.push(c.h.pantI.rotation.x);
+    }
+    const ymin = Math.min(...y), ymax = Math.max(...y);
+    const umb = ymin + (ymax - ymin) * 0.30;      // el 30% más bajo es apoyo
+    let dz = 0, np = 0, iBaj = 0, iRod = 0;
+    for (let i = 0; i < N; i++) {
+      if (y[i] > umb) continue;
+      const j = (i + 1) % N;
+      if (y[j] > umb) continue;
+      let d = z[j] - z[i];
+      dz += d; np++;
+    }
+    for (let i = 0; i < N; i++) { if (y[i] < y[iBaj]) iBaj = i; if (rod[i] > rod[iRod]) iRod = i; }
+    /* cuánto del ciclo separa el pie más bajo (apoyo) de la rodilla más
+       doblada (medio vuelo): en una marcha buena es cerca de medio ciclo */
+    let sep = Math.abs(iRod - iBaj) / N; if (sep > 0.5) sep = 1 - sep;
+    const T = Math.PI * 2 / N;
+    return { pasos: np, barreApoyo: +dz.toFixed(4),
+             adelante: dz < 0,                    // pie apoyado va a −Z = cuerpo a +Z
+             fApoyo: +(iBaj * T).toFixed(2), fRodilla: +(iRod * T).toFixed(2),
+             sepRodilla: +sep.toFixed(3), rodillaOk: sep > 0.28,
+             zApoyo: +z[iBaj].toFixed(3), yApoyo: +y[iBaj].toFixed(3),
+             rodMax: +rod[iRod].toFixed(2), rodApoyo: +rod[iBaj].toFixed(2) };
+  },
+  /* ── LOS EJES DE UN HUESO NO SE ADIVINAN ───────────────────────────────
+     Se gira y se mira dónde quedó la punta. Con el hueso colgando de −Y, si
+     +rotación.x manda el pie a −Z entonces «rotación positiva» es «pierna
+     atrás», y de ese signo cuelga el sentido de la caminata entera.        */
+  ejeH(hueso, eje, ang, y) {
+    const c = _cuerpoMedir(), v = new THREE.Vector3();
+    poseAplica(c, 'quieto', 0, null, 0, 0);
+    c.raiz.position.set(0, 0, 0); c.raiz.rotation.y = 0;
+    c.h[hueso].rotation.set(0, 0, 0);
+    c.raiz.updateMatrixWorld(true);
+    const p0 = v.set(0, y === undefined ? -0.44 : y, 0).applyMatrix4(c.h[hueso].matrixWorld).clone();
+    c.h[hueso].rotation[eje || 'x'] = ang === undefined ? 0.5 : ang;
+    c.raiz.updateMatrixWorld(true);
+    const p1 = v.set(0, y === undefined ? -0.44 : y, 0).applyMatrix4(c.h[hueso].matrixWorld).clone();
+    return { dx: +(p1.x - p0.x).toFixed(3), dy: +(p1.y - p0.y).toFixed(3), dz: +(p1.z - p0.z).toFixed(3) };
+  },
+  /* ── EL ESQUIVE, MEDIDO ────────────────────────────────────────────────
+     Cuánto recorre de verdad —con el choque puesto—, cuánto tarda, y cuánto
+     GIRA la cámara del cuerpo: un esquive de costado que hace girar al
+     personaje noventa grados no se lee a esquive, se lee a que el mando se
+     trabó y el héroe salió corriendo para otro lado.                       */
+  esqMide(lx, lz) {
+    const x0 = JUG.x, z0 = JUG.z, r0 = JUG.rumbo;
+    JUG.entX = lx === undefined ? 0 : lx; JUG.entZ = lz === undefined ? 0 : lz;
+    const ok = jugPide('esquiva');
+    let n = 0, inv = 0;
+    /* LOS CUADROS DE INVENCIBILIDAD DEL ESQUIVE NO PASAN POR `invT`: los
+       decide `jugRecibe` con `esqT`. Midiendo `invT` la sonda devolvía 0 y
+       denunciaba un defecto que no existe. */
+    while (JUG.esqT > 0 && n < 200) { n++; if ((J_ESQ_T - JUG.esqT) < J_ESQ_INV) inv++; unPaso(PASO); }
+    let dr = JUG.rumbo - r0; while (dr > Math.PI) dr -= 6.283; while (dr < -Math.PI) dr += 6.283;
+    return { ok, rec: +Math.hypot(JUG.x - x0, JUG.z - z0).toFixed(2),
+             pasos: n, giroGrados: +(dr * 57.3).toFixed(1),
+             invPasos: inv, fur: Math.round(JUG.fur) };
+  },
+  /* ── EL COMBO, MEDIDO ──────────────────────────────────────────────────
+     Cuánto tarda cada golpe de punta a punta y cuánto de eso es ventana
+     activa. Un combo cuyo remate dura tres cuartos de segundo con once
+     centésimas de golpe es un combo que se mira, no que se juega.          */
+  comboMide() {
+    const out = [];
+    for (let i = 0; i < J_COMBO.length; i++) {
+      const g = J_COMBO[i];
+      out.push({ i, largo: +jugLargoGolpe(g).toFixed(3), activo: g.activo,
+                 pctActivo: +(g.activo / jugLargoGolpe(g) * 100).toFixed(1),
+                 dano: g.dano, alc: g.alc, dps: +(g.dano / jugLargoGolpe(g)).toFixed(1) });
+    }
+    const T = out.reduce((a, o) => a + o.largo, 0);
+    const D = out.reduce((a, o) => a + o.dano, 0);
+    return { golpes: out, largoCombo: +T.toFixed(2), dano: D,
+             dps: +(D / T).toFixed(1),
+             golpesPeon: Math.ceil(ESQ.peon.vida / (D / 3)) };
+  },
+  viejo(v) { COMBO_VIEJO = !!v; return COMBO_VIEJO; },
+  /* EL BOTÓN DEL REMATE SÓLO EXISTE CON LA BARRA LLENA, así que medir los
+     solapamientos en una partida recién empezada lo saltea justo a él: es el
+     único elemento nuevo del HUD y el que hay que comprobar. Ésta llena la
+     furia y repinta, para poder medir el caso en que se ve. */
+  /* EL FOGONAZO, LAS LÍNEAS Y EL ANILLO DURAN DÉCIMAS. `remate()` corre el
+     golpe entero, así que la foto que se saca después es la de un campo
+     tranquilo: para verlos hay que PARAR en el medio y congelar. */
+  remateFoto(n, pasos) {
+    this.remate === undefined;
+    const N = n === undefined ? 6 : n;
+    JUG.x = 0; JUG.z = 0; JUG.y = H(0, 0); JUG.rumbo = 0; JUG.vida = JUG.vidaMax;
+    JUG.golpe = -1; JUG.esqT = 0; JUG.rem = -1; JUG.aire = 0; LENTO = 1;
+    FOGO = 0; ONDA = -1; HITSTOP = 0; CONGELADO = false;
+    const ls = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * 6.283;
+      ls.push({ cl: i % 3 === 2 ? 'lancero' : 'peon', x: Math.cos(a) * 2.2 + 3.2, z: Math.sin(a) * 2.2, zona: 0 });
+    }
+    esqArranca(ls);
+    JUG.fur = J_FUR; jugPide('remate');
+    const P = pasos === undefined ? 44 : pasos;
+    for (let i = 0; i < P; i++) unPaso(PASO);
+    efectosPaso(PASO);
+    CONGELADO = true;
+    return { rem: JUG.rem, aire: +JUG.aire.toFixed(2), fogo: +FOGO.toFixed(2),
+             lineas: +matPost.uniforms.uLineas.value.toFixed(2), onda: +ONDA.toFixed(2),
+             lento: LENTO, vivos: ESQS.filter(e => e.vive).length };
+  },
+  /* ── EL BRILLO DE LA PANTALLA, QUE NO ES EL DEL MUNDO ──────────────────
+     `brillo()` dibuja la escena en RT y LEE RT, o sea lo de ANTES de la
+     pasada de post: el fogonazo y las líneas viven en el shader del post, así
+     que esa sonda es estructuralmente incapaz de verlos. Medido con el
+     defecto: nueve valores de fogonazo de 0 a 0,92 devolvían los NUEVE el
+     mismo 52,1 de medio. Ésta dibuja el post en un destino propio y lee ése.
+     Y el uniforme se escribe DENTRO, porque `efectosPaso` lo repisa en cada
+     cuadro del bucle: puesto desde afuera dura un cuadro y la sonda mide el
+     valor de siempre. */
+  brilloPost(fogo, lineas) {
+    if (!this._rtp || this._rtp.width !== RT.width) {
+      if (this._rtp) this._rtp.dispose();
+      this._rtp = new THREE.WebGLRenderTarget(RT.width, RT.height);
+    }
+    const f0 = matPost.uniforms.uFogo.value, l0 = matPost.uniforms.uLineas.value;
+    if (fogo !== undefined) matPost.uniforms.uFogo.value = fogo;
+    if (lineas !== undefined) matPost.uniforms.uLineas.value = lineas;
+    ren.setRenderTarget(RT); ren.render(esc, cam);
+    ren.setRenderTarget(this._rtp); ren.render(escPost, camPost);
+    const W = this._rtp.width, Hh = this._rtp.height, px = new Uint8Array(W * Hh * 4);
+    ren.readRenderTargetPixels(this._rtp, 0, 0, W, Hh, px);
+    ren.setRenderTarget(null);
+    matPost.uniforms.uFogo.value = f0; matPost.uniforms.uLineas.value = l0;
+    let s = 0, mx = 0, blan = 0;
+    for (let i = 0; i < W * Hh; i++) {
+      const o = i * 4, l = px[o] * 0.2126 + px[o + 1] * 0.7152 + px[o + 2] * 0.0722;
+      s += l; if (l > mx) mx = l; if (l > 200) blan++;
+    }
+    return { fogo: matPost.uniforms.uFogo.value, medio: +(s / (W * Hh)).toFixed(1),
+             max: Math.round(mx), pctBlanco: +(blan / (W * Hh) * 100).toFixed(1) };
+  },
+  botonRem(v) {
+    JUG.fur = (v === false) ? 0 : J_FUR; pintaBotones(); pintaHud();
+    const e = document.getElementById('bRem');
+    return { fur: JUG.fur, on: e.classList.contains('hay'), w: e.offsetWidth, h: e.offsetHeight };
+  },
+  viejo152(v) { v = v || {}; SIN_REMATE = !!v.sinRemate; SIN_RUEDA = !!v.sinRueda;
+    return { sinRemate: SIN_REMATE, sinRueda: SIN_RUEDA }; },
+  /* ¿el ciclo se da vuelta cuando el cuerpo va de espaldas? Se empuja al
+     jugador hacia atrás sin tocarle el rumbo, que es lo que le pasa cuando
+     lo tiran de un hachazo, y se mira hacia dónde avanza la fase. */
+  cicloAtras() {
+    const r = JUG.rumbo, f0 = JUG.fase;
+    JUG.vx = -Math.sin(r) * 3; JUG.vz = -Math.cos(r) * 3;
+    JUG.golpe = -1; JUG.esqT = 0;
+    const dAtras = (() => { const a = JUG.fase; jugPaso(PASO, { x: 0, z: 0 }); return JUG.fase - a; })();
+    JUG.rumbo = r; JUG.vx = Math.sin(r) * 3; JUG.vz = Math.cos(r) * 3;
+    const dAdel = (() => { const a = JUG.fase; jugPaso(PASO, { x: 0, z: 0 }); return JUG.fase - a; })();
+    return { atras: +dAtras.toFixed(4), adelante: +dAdel.toFixed(4),
+             daVuelta: dAtras < 0 && dAdel > 0 };
+  },
+  peleaVieja(v) { PELEA_VIEJA = !!v; return PELEA_VIEJA; },
+  sinAsist(v) { SIN_ASIST = !!v; return SIN_ASIST; },
+  esqViejo(v) { ESQ_VIEJO = !!v; return ESQ_VIEJO; },
+  /* ── MACHACAR EL BOTÓN: ¿SALE EL COMBO? ────────────────────────────────
+     Toca ATACAR en cada cuadro durante `n` pasos y cuenta cuántos arcos
+     salieron de verdad. Sin cola de entrada, un toque que cae en el medio de
+     un arco se tira, así que machacar da MENOS golpes que tocar con el tiempo
+     justo — que es exactamente lo contrario de lo que el jugador espera.   */
+  machaca(n) {
+    const t0 = TALLY.tajos, f0 = TALLY.frenoT;
+    /* SE TOCA POR EL MISMO CAMINO QUE EL DEDO. La primera versión llamaba a
+       `jugGolpeArranca()` derecho, o sea que se SALTEABA la cola de entrada
+       —justo lo que venía a medir— y las dos ramas del A/B daban lo mismo. */
+    for (let i = 0; i < (n || 180); i++) { jugPide('ataca'); unPaso(PASO); }
+    return { pasos: n || 180, seg: +((n || 180) * PASO).toFixed(2),
+             tajos: TALLY.tajos - t0, aciertos: TALLY.aciertos,
+             freno: +(TALLY.frenoT - f0).toFixed(3), fur: Math.round(JUG.fur) };
+  },
+  /* ── UN SOLO TOQUE EN EL MEDIO DEL ARCO ────────────────────────────────
+     Arranca un golpe, espera `t` segundos y toca UNA vez, como un pulgar.
+     Devuelve hasta qué eslabón del combo llegó. Sin cola, un toque que cae
+     en el medio del arco se tira y el combo se queda en el primero.       */
+  combo1(t) {
+    JUG.golpe = -1; JUG.gVent = 0; JUG.gBuf = 0; JUG.fur = 0;
+    jugPide('ataca');
+    const n = Math.round((t === undefined ? 0.25 : t) / PASO);
+    for (let i = 0; i < n; i++) unPaso(PASO);
+    const dentro = jugAtacando(), g0 = JUG.golpe;
+    jugPide('ataca');                       // el único toque que se mide
+    let max = JUG.golpe;
+    for (let i = 0; i < 90; i++) { unPaso(PASO); if (JUG.golpe > max) max = JUG.golpe; }
+    return { toqueEn: +(t === undefined ? 0.25 : t).toFixed(2), dentroDelArco: dentro,
+             golpeAlTocar: g0, llegoA: max, encadeno: max > 0 };
+  },
+  /* la asistencia de puntería, medida: cuántos grados corrige contra un
+     blanco puesto a un ángulo conocido */
+  asistMide(gr) {
+    const e = ESQS.find(x => x.vive && x.est !== 'muere'); if (!e) return null;
+    const a = JUG.rumbo + gr * Math.PI / 180, d = 1.8;
+    e.x = JUG.x + Math.sin(a) * d; e.z = JUG.z + Math.cos(a) * d; e.y = H(e.x, e.z);
+    const r0 = JUG.rumbo; JUG.golpe = 0;
+    const c = jugApunta(); JUG.golpe = -1; JUG.rumbo = r0;
+    return { pedido: gr, corrige: +(c * 57.3).toFixed(1) };
+  },
+  tally() {
+    const c = ESQS.filter(e => e.vive && e.est !== 'muere')
+      .map(e => ({ cl: e.cl, est: e.est, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1) }))
+      .sort((a, b) => a.d - b.d).slice(0, 6);
+    return { golpes: TALLY.golpes, dano: TALLY.dano, porCl: TALLY.porCl,
+             esquivados: TALLY.esquivados, cerca: c };
+  },
+  zona0() {
+    return ESQS.filter(e => e.vive && e.zona === ZONA_ACT).map(e => ({
+      cl: e.cl, est: e.est, vida: Math.round(e.vida),
+      d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(2),
+      x: +e.x.toFixed(1), z: +e.z.toFixed(1), v: +Math.hypot(e.vx, e.vz).toFixed(2),
+      dSpawn: +Math.sqrt(dist2(e.x, e.z, e.sx, e.sz)).toFixed(1),
+      enTurba: esqCerca().indexOf(e) >= 0,
+    }));
+  },
+  /* ── LA CORONA ES DEL REY Y DE NADIE MÁS ───────────────────────────────
+     Se mide leyendo la MATRIZ DE INSTANCIA que se subió a la GPU, no la
+     lista de clases: es lo único que prueba que lo que se dibuja coincide
+     con lo que se quiso dibujar. Una matriz de escala cero no pinta nada. */
+
+  /* ── LAS PIEZAS 3D ────────────────────────────────────────────────────
+     `tres(false)` devuelve el juego a las cajas EN EL MISMO BINARIO, que es
+     lo único que hace que una medición del antes y el después sirva: contra
+     el commit anterior se estarían midiendo dos programas distintos. */
+  /* barre el engorde de los huesos en el mismo binario */
+  gordo(gr, kc) { if (gr) H3_GR = gr; if (kc) H3_KC = kc;
+                  return { gr: H3_GR, kc: H3_KC, rehechas: esqRehacePiezas() }; },
+  tres(v) { H3_ON = v !== false; return { on: H3_ON, rehechas: esqRehacePiezas() }; },
+  /* enciende y apaga LAS PIEZAS DE A UNA, en el mismo binario. Sin esto no hay
+     forma de saber cuáles de las doce mallas mejoran el bicho y cuáles lo
+     rompen: `tres` las mueve a todas juntas y el promedio esconde el reparto. */
+  tresPieza(k, v) {
+    if (v === undefined) return Object.keys(H3_NO);
+    if (v) delete H3_NO[k]; else H3_NO[k] = 1;
+    return { apagadas: Object.keys(H3_NO), rehechas: esqRehacePiezas() };
+  },
+
+  piezas3() {
+    const r = recetaEsq(), o = {}; let tri = 0, ver = 0;
+    for (const k in r.piezas) {
+      const g = r.piezas[k];
+      const t = (g.index ? g.index.count : g.attributes.position.count) / 3;
+      tri += t; ver += g.attributes.position.count;
+      g.computeBoundingBox(); const b = g.boundingBox;
+      o[k] = { tri: t, caja: [+(b.max.x - b.min.x).toFixed(3), +(b.max.y - b.min.y).toFixed(3),
+                              +(b.max.z - b.min.z).toFixed(3)],
+               y: [+b.min.y.toFixed(3), +b.max.y.toFixed(3)] };
+    }
+    return { on: H3_ON, mallas: Object.keys(H3).length, fallas: H3_FALLAS,
+             triPorCuerpo: tri, verPorCuerpo: ver, piezas: o };
+  },
+
+  /* EL ALCANCE TIENE QUE VERSE, y lo que hay que medir es EL ARMA y no la
+     pose. La primera versión medía la distancia de la punta al hombro y
+     contestaba que el lancero llega MENOS lejos que el bruto (1,42 contra
+     2,00): cierto y sin sentido, porque ahí adentro está el brazo colgando y
+     hacia dónde apunta el arma en reposo, que no es su alcance. Lo que hay
+     que comprobar es que el arma DIBUJADA mida lo que el alcance dice, o sea
+     su arista más larga por la escala del cuerpo. */
+  armas() {
+    const r = recetaEsq(), o = {};
+    for (const cl in ARMA_DE) {
+      const g = r.piezas[ARMA_DE[cl]], e = ESQ[cl].esc;
+      g.computeBoundingBox(); const b = g.boundingBox;
+      const L = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
+      o[cl] = { alc: ESQ[cl].alc, esc: e,
+                largoMundo: +(L * e).toFixed(3),
+                esperado: +(ARMA_BASE + ESQ[cl].alc - ESQ.peon.alc).toFixed(3) };
+    }
+    return o;
+  },
+
+  corona() {
+    if (!ESQ_KIT) return null;
+    const cerca = esqCerca(), im = ESQ_KIT.mallas.corona, m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    let con = 0, sin = 0; const clases = {};
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, m); v.setFromMatrixScale(m);
+      const cl = cerca[i] ? cerca[i].cl : '?';
+      if (v.x > 1e-4) { con++; clases[cl] = (clases[cl] || 0) + 1; } else sin++;
+    }
+    return { instancias: im.count, conCorona: con, sinCorona: sin, clases,
+             piezas: Object.keys(ESQ_KIT.mallas).length };
+  },
+  /* ── LOS CONTROLES SE VEN, Y ESO SE MIDE ───────────────────────────────
+     Ésta es la sonda que faltaba y la que hace que el defecto no vuelva.
+     `l.js` escribía la clase `enJuego` y el CSS pedía `jugando`: medido con
+     esto, `#hud` quedaba en opacidad 0 la partida ENTERA y `#bAtaca` en 0×0
+     —o sea que en un teléfono no había forma de atacar—. Y sobrevivió porque
+     en PC el teclado llega al ataque por otro camino, así que la partida se
+     terminaba igual y ninguna prueba lo tocaba.
+
+     LA OPACIDAD SE MULTIPLICA POR LA DE SUS PADRES. Preguntándole a un botón
+     su propio `opacity` contesta 1 aunque su contenedor esté en 0: hay que
+     subir por la cadena. Lo mismo `display:none` en un ancestro, que deja al
+     hijo con `display:grid` y caja vacía.                                  */
+  hud() {
+    const uno = (id) => {
+      const e = document.getElementById(id);
+      if (!e) return { id, hay: false };
+      let op = 1, oculto = false;
+      for (let n = e; n && n !== document.body.parentNode; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        op *= +s.opacity;
+        if (s.display === 'none' || s.visibility === 'hidden') oculto = true;
+      }
+      const r = e.getBoundingClientRect();
+      return { id, hay: true, op: +op.toFixed(3), oculto,
+               w: Math.round(r.width), h: Math.round(r.height),
+               ve: !oculto && op > 0.05 && r.width > 1 && r.height > 1 };
+    };
+    const ids = ['hud', 'bVida', 'bFur', 'bXp', 'nivel', 'zona', 'restan',
+                 'tac', 'joy', 'bAtaca', 'bEsq', 'bCam', 'bPausa', 'bRem', 'teclas'];
+    const o = {}; const faltan = [];
+    for (const id of ids) { const r = uno(id); o[id] = r; if (!r.ve) faltan.push(id); }
+    /* Y QUÉ HAY DEBAJO DEL DEDO. Un botón visible que no recibe el puntero es
+       exactamente igual de inútil, y eso no lo dice ninguna caja: el joystick
+       tenía `pointer-events:auto` y su aro invisible se comía el toque que
+       tenía que llegar al lienzo. */
+    const bajo = (id) => {
+      const e = document.getElementById(id); if (!e) return null;
+      const r = e.getBoundingClientRect();
+      const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return t ? (t.id || t.tagName.toLowerCase() + '.' + t.className) : null;
+    };
+    return { clases: [...document.body.classList], part: PART,
+             faltan, el: o,
+             bajoDedo: { bAtaca: bajo('bAtaca'), bEsq: bajo('bEsq'), joy: bajo('joy') },
+             /* los estados de los botones son información: un ataque sin
+                aguante tiene que verse apagado ANTES de tocarlo */
+             bAtacaNo: document.getElementById('bAtaca').classList.contains('no'),
+             bEsqNo: document.getElementById('bEsq').classList.contains('no'),
+             bEsqEspera: document.getElementById('bEsq').classList.contains('espera'),
+             barras: ['bVida', 'bFur', 'bXp'].map(k =>
+               getComputedStyle(document.querySelector('#' + k + ' i')).transform) };
+  },
+
+  /* ── LAS OLEADAS ───────────────────────────────────────────────────────
+     `salta()` limpia la que está en pie y adelanta el respiro, que es lo
+     único que permite ver la 6 sin jugar cinco minutos. Y devuelve DÓNDE
+     cayó cada uno: el sitio se sortea contra la posición del jugador, así
+     que la composición se puede auditar en node pero el reparto no.        */
+  ola() {
+    const Z = ZONAS[ZONA_ACT];
+    return { zona: ZONA_ACT, i: OLA.i, de: Z.olas.length, pide: Z.olas[OLA.i],
+             hechas: OLA.hechas, total: OLA_TOTAL, espera: +OLA.espera.toFixed(2),
+             suelta: OLA.suelta, vivos: esqVivos(ZONA_ACT),
+             comp: composicionOla(ZONA_ACT, OLA.i, SEM).join(''),
+             donde: ESQS.filter(e => e.vive && e.zona === ZONA_ACT).map(e => ({
+               cl: e.cl, d: +Math.sqrt(dist2(e.x, e.z, JUG.x, JUG.z)).toFixed(1),
+               nace: +(e.naceT || 0).toFixed(2), est: e.est })) };
+  },
+  /* barre las oleadas EN EL MISMO BINARIO: `{olas:[[3,4],[4,5],[5,6,'rey']],
+     cura:0.28}`. Sin esto, comparar dos tamaños de oleada obliga a rearmar el
+     HTML y a comparar dos programas — y el bot ya no es determinista por
+     semilla (la fase de cada esqueleto sale de `Math.random`), así que la
+     diferencia entre dos corridas no se podría atribuir al cambio. */
+  olas(cfg) {
+    if (cfg) {
+      if (cfg.olas) { cfg.olas.forEach((o, i) => { if (ZONAS[i]) ZONAS[i].olas = o.slice(); }); OLA_TOTAL = olaTotal(); }
+      if (cfg.cura !== undefined) OLA_CURA = cfg.cura;
+      if (cfg.xp !== undefined) OLA_XP = cfg.xp;
+      if (cfg.zxp !== undefined) ZONA_XP = cfg.zxp;
+    }
+    return { olas: ZONAS.map(Z => Z.olas), total: OLA_TOTAL, cura: OLA_CURA, xp: OLA_XP, zxp: ZONA_XP };
+  },
+  /* mata a los que quedan y corre el respiro: para fotografiar la oleada n
+     sin jugar cinco minutos. LA MUERTE VA POR `esqRecibe` y no bajando `vida`
+     a mano: ahí adentro están la xp, la cura de matar y el contador de bajas,
+     y saltearlos dejaría al jugador en nivel 1 en la ceniza — o sea midiendo
+     una partida que nadie puede jugar. Y después hay que CORRER EL RELOJ:
+     morirse dura `ESQ_MUERE` y `esqVivos` cuenta hasta que la animación
+     termina, así que sin los pasos el respiro no arranca nunca. */
+  salta(n) {
+    let g = 0, t = 0;
+    for (let k = 0; k < (n || 1) && PART === 'juego'; k++) {
+      const h0 = OLA.hechas;
+      for (const e of ESQS) if (e.vive && e.zona === ZONA_ACT && e.est !== 'muere') esqRecibe(e, 1e9, 1, 0, 0);
+      /* SE PARA CUANDO LA SIGUIENTE YA ESTÁ EN EL PISO, no cuando quedan
+         vivos: un muerto sigue contando `vive` hasta que su animación
+         termina, así que preguntar por `esqVivos` corta en el primer paso y
+         `salta` no salta nada. La primera versión devolvía `pasos: 4`. */
+      while (PART === 'juego' && t < 3000 &&
+             !(OLA.hechas > h0 && OLA.espera <= 0 && esqVivos(ZONA_ACT) > 0)) {
+        esqPaso(PASO); zonasPaso(PASO); t++;
+      }
+      g++;
+    }
+    return { saltadas: g, pasos: t, ...this.ola() };
+  },
+  /* el récord vive en `localStorage` y sus dos funciones son del módulo, o sea
+     que desde el banco no se las puede llamar: sin esto no hay forma de
+     fotografiar el menú con un récord puesto. */
+  rec(o) {
+    if (o) { try { localStorage.setItem('huesos_rec', JSON.stringify(o)); } catch (e) {} leeRecord(); pintaRecord(); }
+    return { rec: RECORD, tot: document.getElementById('mTot').textContent,
+             lin: document.getElementById('mRec').textContent };
+  },
+  errs() { return window.__errs || []; },
+
+  /* ── LA VUELTA 153: LA HISTORIA, EL FINAL, LA ARMADURA Y LA INTERFAZ ────
+     LA COLA DE DIÁLOGO SE MIDE POR LO QUE ESTÁ ESCRITO EN PANTALLA y no por
+     lo que se le empujó: `diceCola` sólo encola, y quien decide qué se ve es
+     `dialogoPaso`. Devolviendo la cola se estaría midiendo la intención. */
+  cola(dt) {
+    if (dt) for (let i = 0; i < dt; i++) dialogoPaso(0.1);
+    const e = document.getElementById('dialogo');
+    return { k: e.dataset.k || '', txt: e.textContent, t: +(+e.dataset.t || 0).toFixed(2),
+             op: +getComputedStyle(e).opacity, cola: COLA.map(c => c[0]) };
+  },
+  /* el final entero, sin esperar los once segundos: `finalPaso` es una
+     función del tiempo, así que se lo puede plantar en cualquier instante */
+  fin(t) {
+    if (t === 'arranca') { finalArranca(); return { FINAL: +FINAL.toFixed(4), GANO, cola: COLA.map(c => c[0]) }; }
+    if (t === 'corta') { finalCorta(); }
+    else if (typeof t === 'number') { FINAL = t; zonaMezcla(4, 9); camPaso(1 / 60, 0, 0); }
+    return { FINAL: +FINAL.toFixed(3), PART, GANO,
+             nieblaD: +esc.fog.density.toFixed(5),
+             cielo: '#' + esc.background.getHexString(),
+             camD: +cam.position.distanceTo(new THREE.Vector3(JUG.x, JUG.y + CAM_MIRA, JUG.z)).toFixed(2),
+             camY: +(cam.position.y - JUG.y).toFixed(2),
+             pit: +CAM_PIT.toFixed(3),
+             dialogo: document.getElementById('dialogo').dataset.k || '',
+             panel: document.querySelector('#pFin.on') ? 'fin' : null };
+  },
+  /* la armadura: qué piezas llegaron y qué le costó al héroe. `hay3` es lo
+     único que decide si la caja o la malla, así que es lo que hay que leer */
+  armadura() {
+    const NN = ['peto', 'faldar', 'brazal', 'guante', 'quijote', 'greba'];
+    const g = JUG.kit && JUG.kit.mallas;
+    let tri = 0;
+    for (const k in (g || {})) {
+      const q = g[k].geometry;
+      tri += (q.index ? q.index.count : q.attributes.position.count) / 3;
+    }
+    return { hay: NN.filter(hay3), faltan: NN.filter(n => !hay3(n)),
+             triHeroe: tri, piezas: Object.keys(g || {}).length };
+  },
+  /* la interfaz generada: no alcanza con que los blobs estén, hay que
+     comprobar que las variables de CSS quedaron puestas Y que las dos clases
+     se encendieron — un `--icAtacar` sin `body.icos` no dibuja nada */
+  ui() {
+    const r = getComputedStyle(document.documentElement);
+    const v = k => (r.getPropertyValue(k) || '').trim().slice(0, 22);
+    const b = document.getElementById('bAtaca');
+    const ic = b && b.querySelector('.ic');
+    const cart = document.querySelector('#pMenu .tit .cart');
+    return {
+      icos: document.body.classList.contains('icos'),
+      cartel: document.body.classList.contains('cartel'),
+      vars: { chapa: !!v('--chapa'), atacar: !!v('--icAtacar'), esquiva: !!v('--icEsquiva'),
+              remate: !!v('--icRemate'), camara: !!v('--icCamara'), cartel: !!v('--cartel') },
+      icPx: ic ? [Math.round(ic.getBoundingClientRect().width),
+                  Math.round(ic.getBoundingClientRect().height)] : null,
+      icVer: ic ? getComputedStyle(ic).display : null,
+      cartPx: cart ? [Math.round(cart.offsetWidth), Math.round(cart.offsetHeight)] : null,
+      nmVer: cart ? getComputedStyle(document.querySelector('#pMenu .tit .nm')).display : null,
+    };
+  },
+};
+
+arranca();
+
+</script>
+</body></html>

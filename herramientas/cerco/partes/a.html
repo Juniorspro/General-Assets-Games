@@ -1,0 +1,386 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#10141d">
+<title>CERCO</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   A · MARCO, PIEL Y PANTALLAS
+   Vertical NATIVO: el tablero es cuadrado y la camara lo recorre, asi que lo
+   que decide el formato es la mano — el telefono como uno lo agarra. Nada
+   que girar y ninguna pantalla de «gira el celular».
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --fondo:#10141d; --tabla:#171d29; --linea:#212a3a; --piedra:#2f3a4e;
+  --tinta:#e8edf6; --tinta2:#8f9cb3;
+  --yo:#f0a13a; --yo2:#ffd9a0;
+  --acento:#f0a13a; --mal:#e0556e;
+  --mw:412px; --mh:892px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+#marco{position:fixed;inset:0;display:flex;flex-direction:column;
+  background:var(--fondo);color:var(--tinta);overflow:hidden}
+
+/* ── el lienzo ── */
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+
+/* ══ HUD ══════════════════════════════════════════════════════════════════
+   Todo lo que es TEXTO vive en el DOM y no en el lienzo: tiene que poder
+   traducirse y tiene que salir nitido en cualquier densidad. Y todo lo que
+   es texto esta en la misma columna de arriba o en la de abajo, asi el
+   solapamiento no depende de acordarse de un pixel.                        */
+/* ══ EL VELO DE LAS DOS FRANJAS ══════════════════════════════════════════
+   EL HUD SE DIBUJA ENCIMA DEL TABLERO Y EL TABLERO SE LLENA DE COLOR. Medido
+   el contraste de cada tinta contra los ocho colores de cuerpo: sobre el
+   tablero vacio se lee todo (6,62 · 15,63 · 8,63) y sobre territorio —de
+   quien sea— NO SE LEE NADA: la mejor casilla de la matriz da 3,10 y la peor
+   1,00, que es el `10,5 %` en `--yo` encima del territorio propio, o sea
+   exactamente el mismo color. Y eso NO se arregla eligiendo otra tinta: hay
+   ocho cuerpos repartidos cada 45 grados de tono, asi que cualquier color que
+   gane contra uno pierde contra su complementario. La unica salida es
+   respaldo.
+   EL 0,70 ESTA MEDIDO Y NO ELEGIDO: con el velo al color del fondo, el peor
+   caso del numero grande pasa de 1,00 a 4,12 y el de los rotulitos de 1,13 a
+   3,17. Por debajo de 0,62 el numero grande no llega a 3,3.
+   Y VA EN DEGRADADO, cerrado en el canto y abierto hacia adentro: las dos
+   franjas suman el 14 % de la pantalla, y el medio —que es donde se juega— no
+   se toca. Es el mismo reparto que el velo del menu.
+   EN LA CAMPANA NO HACIA FALTA POR SUERTE GEOMETRICA: dos a cuatro cuerpos
+   sobre un tablero chico dejan el HUD casi siempre sobre fondo vacio. Con
+   ocho cuerpos y 92 de lado, el HUD pasa la partida encima de territorio. */
+#velo{position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(to bottom, rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 52px, rgba(16,20,29,0) 106px),
+    linear-gradient(to top,    rgba(16,20,29,.70) 0, rgba(16,20,29,.70) 58px, rgba(16,20,29,0) 118px)}
+#velo.off{display:none}
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 9px) 13px 0;
+  z-index:3;pointer-events:none;display:flex;flex-direction:column;gap:7px}
+#hud.off{display:none}
+#fila1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+#vidas{display:flex;gap:5px;align-items:center;height:26px}
+.cor{width:17px;height:17px;position:relative;transition:transform .22s,opacity .22s}
+/* LOS DOS LOBULOS PIVOTAN SOBRE LA PUNTA DEL CORAZON, no sobre su propio pie.
+   Con `transform-origin:50% 100%` cada lobulo gira alrededor de SU centro de
+   abajo, y como esos dos centros estan a ocho pixeles uno del otro lo que sale
+   son dos bollos separados con una muesca en V ABAJO: un corazon dado vuelta.
+   Fotografiado y contado. Los dos origenes tienen que caer en el MISMO punto
+   —el pie del corazon— y de ahi los lobulos se abren hacia arriba.          */
+.cor::before,.cor::after{content:'';position:absolute;width:9px;height:13px;border-radius:5px 5px 0 0;
+  background:var(--yo);top:1px}
+.cor::before{left:8px;transform:rotate(-45deg);transform-origin:0 100%}
+.cor::after{left:0;transform:rotate(45deg);transform-origin:100% 100%}
+.cor.ida{opacity:.2;transform:scale(.72)}
+.cor.ida::before,.cor.ida::after{background:var(--tinta2)}
+.cor.late{animation:late .5s ease}
+@keyframes late{0%,100%{transform:scale(1)}35%{transform:scale(1.45)}}
+#nivRot{flex:1;text-align:center;font-size:12px;font-weight:800;letter-spacing:.14em;
+  color:var(--tinta2);line-height:15px;padding-top:3px}
+#nivRot b{display:block;font-size:9px;font-weight:700;letter-spacing:.2em;opacity:.62}
+#bPausa{pointer-events:auto;width:32px;height:26px;border:0;background:transparent;
+  display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+#bPausa i{width:4px;height:14px;border-radius:2px;background:var(--tinta2);display:block}
+
+/* ── LA BARRA DE REPARTO ──────────────────────────────────────────────────
+   Una sola barra donde cada jugador ocupa su tajada y una marca dice donde
+   esta la meta. Con cuatro contadores sueltos habria que leer cuatro
+   numeros y restarlos; asi el estado de la partida se lee de una ojeada.  */
+#barra{position:relative;height:9px;border-radius:5px;overflow:hidden;
+  background:rgba(255,255,255,.07);display:flex}
+#barra i{display:block;height:100%;width:0;transition:width .18s linear}
+#meta{position:absolute;top:-3px;width:2px;height:15px;border-radius:1px;
+  background:var(--tinta);box-shadow:0 0 0 1px rgba(0,0,0,.5);left:0}
+
+/* ── el mapa chico ──
+
+   EL 66 ESTA MEDIDO Y NO ELEGIDO. `#hud` es una columna: 9 px de relleno de
+   arriba + `#fila1` + 7 de hueco + los 9 de `#barra`. Y `#fila1` NO mide 26 como
+   las vidas: lo estira `#nivRot`, que lleva dos renglones y da 33. O sea que la
+   barra ocupa de y 49 a 58, y con el mapa en 52 se pisaban seis pixeles en la
+   franja x 325..399 —medido con `cajas()`: `choques: ["barra×mini"]`—. Con 66
+   quedan ocho de aire. Si manana el rotulo cambia de alto, este numero se vuelve
+   a medir; no se adivina.                                                    */
+#mini{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 66px);
+  width:74px;height:74px;z-index:3;pointer-events:none;border-radius:8px;
+  border:1.5px solid rgba(255,255,255,.22);background:transparent;
+  box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#mini.off{display:none}
+
+/* ── LA TABLA DE POSICIONES (solo arena) ──────────────────────────────────
+   EL 148 SALE DE LA MISMA CUENTA QUE EL 66 DEL MAPA: 66 de arranque + 74 de
+   alto + 8 de aire, o sea el mismo hueco que hay entre la barra y el mapa. Y
+   mide 74 de ancho para caer en la misma columna: dos cajas apiladas con
+   anchos distintos se leen a dos cosas sueltas y no a una columna de datos.
+
+   OCHO FILAS SIEMPRE, tambien las de los muertos: sacando al que se murio,
+   los puestos de abajo SUBEN sin que nadie haya hecho nada —y el alto de la
+   caja cambiaria en el medio de la partida—. El muerto se atenua y se queda. */
+#tabla{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 148px);
+  width:74px;z-index:3;pointer-events:none;border-radius:8px;padding:5px 6px;
+/* EL RESPALDO ESTA MEDIDO: con .28 las filas de los rivales —que van en
+     `--tinta2`— dan 1,11 de contraste contra el peor de los ocho colores de
+     cuerpo, o sea que la tabla se borra en cuanto queda encima de territorio.
+     Con .76 el peor caso pasa a 4,71 y la fila propia a 11,12. La tabla mide
+     74 px de 412 y vive en la esquina: no tapa nada que se juegue.        */
+  background:rgba(0,0,0,.76);border:1.5px solid rgba(255,255,255,.14);
+  display:flex;flex-direction:column;gap:3px}
+#tabla.off{display:none}
+#tabla .tf{display:flex;align-items:center;gap:4px;font-size:8.5px;font-weight:800;
+  letter-spacing:.02em;color:var(--tinta2);line-height:11px;height:11px}
+#tabla .tf.yo{color:var(--tinta)}
+#tabla .tf.muerto{opacity:.34}
+#tabla .tn{width:9px;text-align:right;opacity:.7;font-variant-numeric:tabular-nums}
+#tabla .tc{width:6px;height:6px;border-radius:2px;flex:none}
+#tabla .tp{flex:1;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ── pie ── */
+#pie{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 11px);
+  padding:0 15px;display:flex;align-items:flex-end;justify-content:space-between;z-index:3;pointer-events:none}
+#pie.off{display:none}
+#pct{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--tinta2)}
+#pct b{display:block;font-size:25px;letter-spacing:0;color:var(--yo);line-height:1.05}
+#reloj{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--tinta2);text-align:right}
+#reloj b{display:block;font-size:25px;letter-spacing:.02em;color:var(--tinta);line-height:1.05;
+  font-variant-numeric:tabular-nums}
+#reloj.poco b{color:var(--mal)}
+
+/* ── la pista del tutorial ── */
+#pista{position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 78px);
+  text-align:center;font-size:14px;font-weight:700;line-height:1.35;z-index:4;pointer-events:none;
+  color:var(--tinta);background:rgba(16,20,29,.9);border:1.5px solid rgba(255,255,255,.14);
+  border-radius:14px;padding:10px 14px;box-shadow:0 8px 22px rgba(0,0,0,.45);
+  opacity:0;transform:translateY(8px);transition:opacity .28s,transform .28s}
+#pista.on{opacity:1;transform:none}
+
+/* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, asi que TIENE que poder
+   saltearse: obligatorio una vez es un tutorial y obligatorio siempre es un
+   peaje. Va del lado libre —el mapa chico esta apagado en el tutorial—.   */
+#tSalt{position:absolute;left:13px;top:calc(env(safe-area-inset-top,0px) + 58px);
+  z-index:4;display:none}
+#tSalt.on{display:block}
+
+/* ── aviso corto ── */
+#aviso{position:absolute;left:0;right:0;top:41%;text-align:center;z-index:6;pointer-events:none;
+  font-size:22px;font-weight:900;letter-spacing:.12em;color:var(--acento);
+  text-shadow:0 3px 16px rgba(0,0,0,.9);opacity:0;transition:opacity .2s}
+#aviso.on{opacity:1}
+
+/* ══ PANELES ══════════════════════════════════════════════════════════════
+   EL VELO SE ABRE EN EL MEDIO. Cerrado arriba —donde va el titulo— y abajo
+   —donde van los botones—, y translucido en la franja del medio: detras
+   sigue corriendo el tablero, que es lo unico que este juego tiene que
+   ensenar antes de que alguien toque nada.                                 */
+.pan{position:absolute;inset:0;z-index:10;display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:26px 22px;
+  background:linear-gradient(180deg,rgba(16,20,29,.985) 0%,rgba(16,20,29,.93) 28%,
+    rgba(16,20,29,.74) 50%,rgba(16,20,29,.94) 76%,rgba(16,20,29,.995) 100%);
+  animation:ent .24s ease}
+.pan.on{display:flex}
+@keyframes ent{from{opacity:0}to{opacity:1}}
+.pan h1{font-size:46px;font-weight:900;letter-spacing:.26em;margin-left:.26em;line-height:1}
+.pan h2{font-size:24px;font-weight:900;letter-spacing:.14em;margin-left:.14em}
+.pan .sub{font-size:13px;font-weight:600;color:var(--tinta2);text-align:center;line-height:1.5;margin-top:10px}
+.pan .pie{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--tinta2);opacity:.5;text-align:center}
+.bt{border:0;background:var(--yo);color:#1b1204;font-size:14px;font-weight:800;
+  letter-spacing:.16em;padding:15px 0;border-radius:14px;cursor:pointer;width:100%;
+  box-shadow:0 5px 0 rgba(0,0,0,.42);transition:transform .1s,box-shadow .1s}
+.bt:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.42)}
+.bt.sec{background:transparent;color:var(--tinta);border:2px solid rgba(255,255,255,.2);box-shadow:none}
+.bt.sec:active{transform:none;background:rgba(255,255,255,.08)}
+.col{display:flex;flex-direction:column;gap:11px;width:100%;max-width:290px}
+.fila{display:flex;gap:10px;width:100%;max-width:290px}
+/* EL PIE VA PEGADO A SU BOTON, y por eso lleva margen negativo: `.col` reparte
+   once pixeles parejos, asi que sin esto la linea queda a la misma distancia
+   del boton de arriba que del de abajo y no se sabe de cual habla.          */
+.btSub{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tinta2);
+  text-align:center;opacity:.66;margin:-6px 0 1px}
+.fila .bt{flex:1}
+
+/* la marca: un cuadrado cerrandose sobre si mismo, que es el juego entero */
+.marca{width:76px;height:76px;position:relative;margin-bottom:10px}
+.marca i{position:absolute;display:block;border-radius:2px}
+.marca .z{background:var(--yo);opacity:.28}
+.marca .t{background:var(--yo2);box-shadow:0 0 8px rgba(255,217,160,.5)}
+.marca .c{background:var(--yo);border-radius:50%;box-shadow:0 0 10px rgba(240,161,58,.8)}
+
+/* ── lista de niveles ── */
+#pNiv{justify-content:flex-start;padding-top:calc(env(safe-area-inset-top,0px) + 20px)}
+#nvCab{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:330px;margin-bottom:4px}
+#nvCab h2{font-size:19px}
+#nvMundos{display:flex;gap:5px;width:100%;max-width:360px;margin:12px 0;justify-content:center}
+.mtab{border:1.5px solid rgba(255,255,255,.18);background:transparent;color:var(--tinta2);
+  font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:8px 6px;border-radius:9px;
+  cursor:pointer;flex:1 1 0;min-width:0}
+.mtab.sel{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+.mtab.cerr{opacity:.3}
+#nvGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%;max-width:330px;
+  overflow-y:auto;flex:1;align-content:start;padding:2px 2px 16px}
+.nvB{aspect-ratio:1;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);
+  border-radius:12px;font-size:16px;font-weight:800;color:var(--tinta);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative}
+.nvB.ok{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+.nvB.cerr{opacity:.28;background:transparent}
+.nvB s{font-size:9px;letter-spacing:.06em;opacity:.85;text-decoration:none}
+
+/* ── ajustes ── */
+.aj{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  max-width:290px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.09)}
+.aj span{font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--tinta2)}
+.aj input[type=range]{width:130px;accent-color:var(--yo)}
+.chip{border:1.5px solid rgba(255,255,255,.18);background:transparent;color:var(--tinta2);
+  font-size:11px;font-weight:800;padding:7px 11px;border-radius:9px;cursor:pointer}
+.chip.sel{background:var(--yo);color:#1b1204;border-color:var(--yo)}
+
+/* ── carga ── */
+#carga{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;background:var(--fondo);transition:opacity .4s}
+#carga.off{opacity:0;pointer-events:none}
+#cSub{font-size:11px;font-weight:800;letter-spacing:.24em;color:var(--tinta2)}
+#cBarra{width:150px;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+#cBarra i{display:block;height:100%;width:35%;background:var(--yo);border-radius:2px;
+  animation:cb 1.1s ease-in-out infinite}
+@keyframes cb{0%{margin-left:-35%}100%{margin-left:100%}}
+
+@media (max-height:700px){
+  .pan h1{font-size:36px}.marca{transform:scale(.78);margin-bottom:0}
+  .bt{padding:13px 0}.col{gap:9px}
+}
+</style></head><body>
+
+<div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="velo" class="off"></div>
+
+  <div id="hud" class="off">
+    <div id="fila1">
+      <div id="vidas"></div>
+      <div id="nivRot"><b id="nrM">MUNDO 1</b><span id="nrN">NIVEL 1-1</span></div>
+      <button id="bPausa" aria-label="pausa"><i></i><i></i></button>
+    </div>
+    <div id="barra"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><div id="meta"></div></div>
+  </div>
+
+  <canvas id="mini" class="off" width="74" height="74"></canvas>
+  <div id="tabla" class="off"></div>
+
+  <div id="pista"></div>
+  <button id="tSalt" class="chip">SALTEAR</button>
+  <div id="aviso"></div>
+
+  <div id="pie" class="off">
+    <div id="pct"><b>0%</b><span id="pctR">META 40%</span></div>
+    <div id="reloj"><b>1:30</b><span id="relR">TIEMPO</span></div>
+  </div>
+
+  <!-- idioma -->
+  <div id="pIdioma" class="pan">
+    <div class="marca">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <h1>CERCO</h1>
+    <div class="sub" style="margin-bottom:20px">idioma · language · idioma</div>
+    <div class="col">
+      <button class="bt" data-lang="es">ESPAÑOL</button>
+      <button class="bt" data-lang="en">ENGLISH</button>
+      <button class="bt" data-lang="pt">PORTUGUÊS</button>
+    </div>
+  </div>
+
+  <!-- menu -->
+  <div id="pMenu" class="pan">
+    <div class="marca">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <h1>CERCO</h1>
+    <div class="sub" id="mSub"></div>
+    <div class="col" style="margin-top:20px">
+      <button class="bt" id="mJugar">ARENA</button>
+      <div class="btSub" id="mJugarSub"></div>
+      <button class="bt sec" id="mNiv">CAMPAÑA</button>
+      <div class="btSub" id="mNivSub"></div>
+      <div class="fila">
+        <button class="bt sec" id="mTuto">CÓMO SE JUEGA</button>
+        <button class="bt sec" id="mAj">AJUSTES</button>
+      </div>
+    </div>
+    <div class="pie" id="mPie" style="margin-top:20px"></div>
+  </div>
+
+  <!-- lista de niveles -->
+  <div id="pNiv" class="pan">
+    <div id="nvCab"><h2 id="nvTit">NIVELES</h2><button class="chip" id="nvVolver">VOLVER</button></div>
+    <div class="sub" id="nvSub" style="margin:0"></div>
+    <div id="nvMundos"></div>
+    <div id="nvGrid"></div>
+  </div>
+
+  <!-- ajustes -->
+  <div id="pAj" class="pan">
+    <h2 id="ajTit">AJUSTES</h2>
+    <div style="height:14px"></div>
+    <div class="aj"><span id="ajMus">MÚSICA</span><input type="range" id="rMus" min="0" max="100" value="45"></div>
+    <div class="aj"><span id="ajFx">SONIDOS</span><input type="range" id="rFx" min="0" max="100" value="80"></div>
+    <div class="aj"><span id="ajCal">GRÁFICOS</span><div style="display:flex;gap:6px">
+      <button class="chip" data-cal="0">BAJO</button><button class="chip" data-cal="1">MEDIO</button><button class="chip" data-cal="2">ALTO</button>
+    </div></div>
+    <div class="aj"><span id="ajIdi">IDIOMA</span><div style="display:flex;gap:6px">
+      <button class="chip" data-l2="es">ES</button><button class="chip" data-l2="en">EN</button><button class="chip" data-l2="pt">PT</button>
+    </div></div>
+    <div style="height:18px"></div>
+    <div class="col">
+      <button class="bt sec" id="ajBorrar">BORRAR EL PROGRESO</button>
+      <button class="bt" id="ajVolver">VOLVER</button>
+    </div>
+  </div>
+
+  <!-- pausa -->
+  <div id="pPausa" class="pan">
+    <h2 id="paTit">PAUSA</h2>
+    <div class="sub" id="paSub"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="paSeguir">SEGUIR</button>
+      <button class="bt sec" id="paRe">REINICIAR</button>
+      <button class="bt sec" id="paSalir">SALIR AL MENÚ</button>
+    </div>
+  </div>
+
+  <!-- final -->
+  <div id="pFin" class="pan">
+    <h2 id="fTit">¡TERRENO!</h2>
+    <div class="sub" id="fSub"></div>
+    <div class="sub" id="fDatos" style="opacity:.6;margin-top:4px"></div>
+    <div class="col" style="margin-top:22px">
+      <button class="bt" id="fSig">SIGUIENTE</button>
+      <div class="fila">
+        <button class="bt sec" id="fRe">REINTENTAR</button>
+        <button class="bt sec" id="fMenu">MENÚ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="carga">
+    <div class="marca" style="transform:scale(.7)">
+      <i class="z" style="left:8px;top:30px;width:38px;height:38px"></i>
+      <i class="t" style="left:8px;top:8px;width:3px;height:24px"></i>
+      <i class="t" style="left:8px;top:8px;width:46px;height:3px"></i>
+      <i class="c" style="left:49px;top:3px;width:13px;height:13px"></i>
+    </div>
+    <div id="cSub">CARGANDO</div>
+    <div id="cBarra"><i></i></div>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';

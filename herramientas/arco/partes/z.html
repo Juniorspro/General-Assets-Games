@@ -1,0 +1,375 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Z · EL DEDO, LA UI Y EL BUCLE
+
+   UN SOLO VERBO Y UN SOLO GESTO: se arrastra hacia atras y se suelta. Todo lo
+   que el jugador decide entra por aca, y por eso el arrastre no se convierte
+   a mano: pasa por `pantAMundo`, que es la INVERSA EXACTA de la matriz con la
+   que la camara proyecta. Escrita a mano seria una segunda cuenta que hay que
+   mantener igual a la primera, y el dia que se toque la guiñada de la camara
+   el jugador apuntaria a un sitio y la flecha saldria hacia otro — y eso no
+   falla en voz alta: se lee a que uno no sabe apuntar.
+
+   LA DIRECCION SALE DE LA MATRIZ Y LA FUERZA DE LOS PIXELES, y son dos cosas
+   distintas a proposito. La direccion tiene que ser la de la pantalla —lo que
+   se ve es hacia donde va— pero la fuerza tiene que medir lo mismo tirando
+   para arriba que para el costado, y el mundo esta apenas comprimido en x
+   (3,4 % por la guiñada): con la fuerza sacada del mundo, el mismo arrastre
+   pegaria mas fuerte en vertical que en horizontal sin que nada lo diga.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let ARR = null;                 /* el arrastre en curso, o null */
+const ARR_MIN = 0.055;          /* por debajo de esto es un toque y no un tiro */
+
+const puedeTirar = () => !!DIO && !!JU.M && !JU.fin && !JU.pausa && !PAN
+  && JU.est === 'apunta' && JU.turno === 0 && arqLibre();
+
+function relXY(ev) {
+  const r = $('marco').getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+/* de un arrastre en pixeles al vector de salida de la flecha */
+function tiroDe(dpx, dpy) {
+  const maxPx = ARR_MAX_PX * ANCHO;
+  const len = Math.hypot(dpx, dpy);
+  const k = cl(len / maxPx, 0, 1);
+  if (len < 1e-4) return { vx: 0, vy: 0, k: 0, ang: 0 };
+  /* hacia atras: la flecha sale al reves del dedo */
+  const w = pantAMundo(-dpx, -dpy);
+  const wl = Math.hypot(w.x, w.y) || 1e-9;
+  const v = k * V_MAX;
+  return { vx: w.x / wl * v, vy: w.y / wl * v, k, ang: Math.atan2(w.y, w.x) };
+}
+
+function arrastreEmpieza(ev) {
+  if (!puedeTirar()) return;
+  const p = relXY(ev);
+  ARR = { id: ev.pointerId, x0: p.x, y0: p.y, k: 0 };
+  auTensaCero();
+  try { $('cv').setPointerCapture(ev.pointerId); } catch (e) {}
+  $('fuerza').classList.add('on');
+}
+
+function arrastreMueve(ev) {
+  if (!ARR || ev.pointerId !== ARR.id) return;
+  const p = relXY(ev);
+  const d = tiroDe(p.x - ARR.x0, p.y - ARR.y0);
+  ARR.k = d.k; ARR.vx = d.vx; ARR.vy = d.vy;
+  $('fuerza').querySelector('i').style.width = (d.k * 100) + '%';
+  arqApunta(0, d.ang, d.k);
+  auTensa(d.k);
+  tutAvanza('arrastra', d.k);
+  /* LA VISTA PREVIA MUESTRA EL ARRANQUE Y NO LA PARABOLA ENTERA. Con la
+     parabola completa el juego se contesta solo y el viento deja de ser una
+     decision; con los primeros siete puntos —0,38 s de vuelo— alcanza para
+     leer el angulo y no para saber donde cae.                            */
+  if (d.k > 0.04) {
+    const O = bocaDe(JU.M, 0);
+    const r = vuela(JU.M, O.x, O.y, d.vx, d.vy, JU.M.viento, 0);
+    previaPon(r.pts, 7);
+  } else previaOculta();
+}
+
+function arrastreTermina(ev) {
+  if (!ARR || (ev && ev.pointerId !== ARR.id)) return;
+  const a = ARR; ARR = null;
+  $('fuerza').classList.remove('on');
+  $('fuerza').querySelector('i').style.width = '0%';
+  previaOculta(); auTensaCero();
+  if (!puedeTirar()) { arqQuieto(0); return; }
+  if (a.k < ARR_MIN) { arqQuieto(0); avisa(TX('pistaFuerza'), 1200); return; }
+  tira(0, a.vx, a.vy);
+}
+
+function enganchaDedo() {
+  const cv = $('cv');
+  cv.addEventListener('pointerdown', e => { auDesp(); arrastreEmpieza(e); e.preventDefault(); });
+  cv.addEventListener('pointermove', arrastreMueve);
+  cv.addEventListener('pointerup', arrastreTermina);
+  /* `pointercancel` tambien suelta: sin esto, un gesto que el navegador se
+     lleva —la barra de arriba, una llamada— deja el arrastre puesto y el
+     arquero apuntando para siempre a donde quedo el dedo.                */
+  cv.addEventListener('pointercancel', arrastreTermina);
+  window.addEventListener('blur', () => arrastreTermina(null));
+}
+
+/* ── LA UI ────────────────────────────────────────────────────────────────
+   Todos los botones pasan por `b()`: despiertan el audio y suenan. Repartido
+   boton por boton, el proximo que se agregue queda mudo o sin despertar el
+   contexto, y en un navegador eso es un juego que arranca sin sonido.     */
+function enganchaUI() {
+  const b = (id, f) => { const e = $(id); if (e) e.onclick = () => { auDesp(); son('ui'); f(); }; };
+
+  for (const e of document.querySelectorAll('#pIdioma [data-lang]'))
+    e.onclick = () => {
+      auDesp(); son('ui');
+      LANG = e.dataset.lang; guardaProg(); pintaIdioma();
+      if (!PROG.visto) cargaTuto(); else verPanel('pMenu');
+    };
+
+  /* JUGAR va al primer duelo que falta y no al 1: ganado el 5, tocar JUGAR y
+     volver al 1 obliga a pasar por la reja de duelos cada vez.            */
+  b('bJugar', () => {
+    let n = 0;
+    while (n < DUELOS - 1 && PROG.hechos.indexOf(n) >= 0) n++;
+    cargaDuelo(n);
+  });
+  b('bTuto', () => cargaTuto());
+  b('bDuelos', () => { pintaDuelos(); verPanel('pDuelos'); });
+  b('bAjustes', () => verPanel('pAjustes'));
+  b('dVolver', () => verPanel('pMenu'));
+  b('aVolver', () => verPanel('pMenu'));
+  b('aBorrar', () => { borraProg(); pintaIdioma(); pintaDuelos(); avisa(TX('borrado'), 1200); });
+
+  b('bPausa', () => { JU.pausa = true; arrastreTermina(null); verPanel('pPausa'); });
+  b('bSigo', () => { JU.pausa = false; verPanel(null); });
+  const reinicia = () => { JU.pausa = false; if (JU.tuto) cargaTuto(); else cargaDuelo(JU.n); };
+  b('bReinicia', reinicia);
+  b('bReini2', reinicia);
+  const alMenu = () => {
+    JU.pausa = false; JU.fin = true; VU.on = false;
+    arrastreTermina(null);
+    document.body.classList.remove('jugando');
+    pintaDuelos(); verPanel('pMenu');
+  };
+  b('bSalir', alMenu);
+  b('fMenu', alMenu);
+  b('fRe', reinicia);
+  b('fSig', () => cargaDuelo(Math.min(DUELOS - 1, JU.n + 1)));
+
+  const sl = (id, k, f) => {
+    const e = $(id); if (!e) return;
+    e.value = Math.round(PROG[k] * 100);
+    e.oninput = () => { auDesp(); PROG[k] = e.value / 100; auVol(); guardaProg(); if (f) f(); };
+  };
+  sl('aMus', 'vol');
+  sl('aFx', 'fx', () => son('ui'));
+}
+
+/* ── EL BUCLE ─────────────────────────────────────────────────────────────
+   El `requestAnimationFrame` va en la PRIMERA linea: con la llamada al final,
+   una excepcion en el medio no rompe un cuadro, rompe el juego entero. Y el
+   `dt` se topa en 0,05: una pestaña que estuvo dormida no puede devolver un
+   salto de treinta segundos a la fisica.                                  */
+window.__errs = [];
+window.addEventListener('error', e => window.__errs.push('' + (e.message || e)));
+window.addEventListener('unhandledrejection', e => window.__errs.push('' + (e.reason || e)));
+
+let T_ANT = 0;
+function bucle(ts) {
+  requestAnimationFrame(bucle);
+  const dt = T_ANT ? Math.min(0.05, (ts - T_ANT) / 1000) : 0;
+  T_ANT = ts;
+  if (!G2) return;
+  duePaso(dt);
+  arqPaso(dt);
+  escPaso(dt, JU.M ? JU.M.viento : 0);
+  escDibuja();
+}
+
+/* ── ARRANQUE ─────────────────────────────────────────────────────────────
+   EL TUTORIAL ES LA PRIMERA PANTALLA Y NO EL MENU. El unico verbo del juego
+   no esta escrito en ninguna parte de la pantalla: entrar al menu la primera
+   vez es ofrecerle a alguien JUGAR sin haberle dicho que se arrastra.     */
+function inicia() {
+  cargaProg();
+  const hab = !!PROG.lang;
+  if (hab) LANG = PROG.lang;
+  else LANG = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  if (!LANGS[LANG]) LANG = 'en';
+
+  escInit();
+  /* Y EL TITULO SE VUELVE A MEDIR AL CAMBIAR DE TAMANIO: `titAjusta` escribe
+     un cuerpo de letra EN PIXELES, asi que sin esto un giro de telefono deja
+     la palabra con el tamanio del marco anterior — chica en apaisado y
+     cortada volviendo a vertical.                                         */
+  const remedir = () => { medir(); titTodos(); };
+  medir();
+  window.addEventListener('resize', remedir);
+  window.addEventListener('orientationchange', () => setTimeout(remedir, 120));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', remedir);
+
+  pintaIdioma();
+  enganchaUI();
+  enganchaDedo();
+  requestAnimationFrame(bucle);
+
+  $('carga').classList.add('ido');
+  if (!hab) verPanel('pIdioma');
+  else if (!PROG.visto) { verPanel(null); setTimeout(cargaTuto, 30); }
+  else verPanel('pMenu');
+}
+
+/* ── SONDAS ───────────────────────────────────────────────────────────────
+   `apunta` y `dispara` entran por LAS MISMAS funciones que el dedo, asi que
+   lo que mide el banco es el juego y no un atajo. `avanza` corre la fisica
+   con el paso de verdad — 1/60 — porque un paso grande se saltea impactos.  */
+window.__A = {
+  est: () => ({
+    pan: PAN, jugando: document.body.classList.contains('jugando'),
+    n: JU.n, tuto: JU.tuto, est: JU.est, turno: JU.turno,
+    va: JU.va, vb: JU.vb, flechas: JU.flechas, aciertos: JU.aciertos,
+    fin: JU.fin, paso: JU.paso, pausa: JU.pausa,
+    viento: JU.M ? JU.M.viento : null, rival: JU.M ? JU.M.rival : null,
+    lang: LANG, cal: PROG.cal, visto: PROG.visto, hechos: PROG.hechos.slice(),
+  }),
+  costo: () => escCosto(),
+  audita: () => auditaDuelos(),
+  auditaTuto: () => auditaTuto(),
+  solo: (n, p, s) => juegaSolo(n, p === undefined ? 0.88 : p, s),
+  todos: (p) => {
+    const r = [];
+    for (let n = 0; n < DUELOS; n++) r.push(juegaSolo(n, p === undefined ? 0.88 : p, 9000 + n * 71));
+    return { gana: r.filter(x => x.gano).length, de: DUELOS, filas: r };
+  },
+  /* la linealidad del apuntado: se proyecta un desplazamiento del mundo a
+     pixeles y se lo vuelve a traer. Tiene que dar 1,00000 — con camara
+     ortografica la proyeccion es afin y la inversa es exacta. */
+  lineal: () => {
+    const o = mundoAPant(5, 8), q = [];
+    for (const [dx, dy] of [[1, 0], [0, 1], [2, -1.5], [-3, 4]]) {
+      const p = mundoAPant(5 + dx, 8 + dy);
+      const w = pantAMundo(p.x - o.x, p.y - o.y);
+      q.push({ dx, dy, x: +w.x.toFixed(5), y: +w.y.toFixed(5),
+               err: +Math.hypot(w.x - dx, w.y - dy).toFixed(6) });
+    }
+    return { peor: Math.max(...q.map(a => a.err)), q };
+  },
+  /* el arrastre de verdad, en pixeles, por el mismo camino que el dedo */
+  tiroDe: (dpx, dpy) => tiroDe(dpx, dpy),
+  apunta: (dpx, dpy) => { const d = tiroDe(dpx, dpy); arqApunta(0, d.ang, d.k); return d; },
+  dispara: (dpx, dpy) => {
+    if (!puedeTirar()) return { ok: false, est: JU.est, turno: JU.turno };
+    const d = tiroDe(dpx, dpy); tira(0, d.vx, d.vy);
+    return { ok: true, k: +d.k.toFixed(3), vx: +d.vx.toFixed(2), vy: +d.vy.toFixed(2) };
+  },
+  /* dispara APUNTANDO BIEN, con el mismo resolvedor del rival: sirve para
+     llegar al final de un duelo sin depender de la punteria de la sonda */
+  clava: () => {
+    if (!puedeTirar()) return { ok: false, est: JU.est };
+    const s = resuelve(JU.M, 0, JU.M.viento);
+    if (!s) return { ok: false, sin: true };
+    arqApunta(0, Math.atan2(s.vy, s.vx), 0.9);
+    tira(0, s.vx, s.vy);
+    return { ok: true, v: +s.v.toFixed(2) };
+  },
+  avanza: (seg) => {
+    const n = Math.round((seg || 1) * 60);
+    for (let i = 0; i < n; i++) { duePaso(1 / 60); arqPaso(1 / 60); escPaso(1 / 60, JU.M ? JU.M.viento : 0); }
+    escDibuja();
+    return window.__A.est();
+  },
+  /* juega el duelo entero por el camino del jugador: apunta con el
+     resolvedor, tira, y deja correr la fisica hasta que alguien cae */
+  juega: (max) => {
+    const t0 = performance.now();
+    let n = 0;
+    while (!JU.fin && n < (max || 40)) {
+      if (JU.est === 'apunta' && JU.turno === 0) { window.__A.clava(); n++; }
+      duePaso(1 / 60); arqPaso(1 / 60);
+      if (performance.now() - t0 > 12000) break;
+    }
+    escDibuja();
+    return Object.assign({ tiros: n, ms: Math.round(performance.now() - t0) }, window.__A.est());
+  },
+  lang: (k) => { LANG = k; guardaProg(); pintaIdioma(); return LANG; },
+  /* SE DIBUJA UN CUADRO ANTES DE MEDIR. `escCosto` informa las llamadas del
+     ULTIMO cuadro dibujado: midiendo justo despues de cambiar la calidad se
+     informa la anterior, y las tres salen identicas — que es lo que devolvia
+     esta sonda antes de esta linea.                                       */
+  /* Y LA CLAVE SE COMPRUEBA. `aplicaCalidad` cae a `media` cuando no la
+     reconoce, asi que una sonda que acepte cualquier cosa devuelve tres
+     veces la misma calidad sin fallar — pedirle 0/1/2 en vez de los nombres
+     informaba `det:1` en las tres y parecia que la palanca no hacia nada. */
+  cal: (k) => { if (!CALIDADES[k]) return { error: 'calidad?', hay: Object.keys(CALIDADES) };
+                PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
+  panel: (id) => { verPanel(id); return PAN; },
+  /* EL INDICE ES EL DE LA LISTA, 0..DUELOS-1, y se RECORTA a proposito:
+     `armaMundo` hace `DUELO[n % largo]`, asi que pedir el 12 devuelve el 0
+     con el rotulo diciendo DUELO 13 — un numero fuera de rango no falla,
+     miente. Recortado, la sonda mide el duelo que dice medir.            */
+  duelo: (n) => { cargaDuelo(cl(n | 0, 0, DUELOS - 1)); return JU.n; },
+  tuto: () => { cargaTuto(); return JU.tuto; },
+  nivel: (ms) => auNivel(ms),
+  son: (k, a) => { auDesp(); son(k, a); return 1; },
+  /* el HUD contra si mismo y contra el marco: un rotulo nuevo que nadie mide
+     es un solapamiento esperando, y en teléfono ademas es un dedo que toca
+     el cartel en vez del arquero */
+  solapes: () => {
+    const m = $('marco').getBoundingClientRect();
+    const ids = ['vIzq', 'vDer', 'nIzq', 'nDer', 'viento', 'duelo', 'fuerza', 'pista', 'bPausa', 'bReinicia'];
+    const c = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      c.push({ id, x0: r.left - m.left, y0: r.top - m.top, x1: r.right - m.left, y1: r.bottom - m.top });
+    }
+    const choques = [], fuera = [];
+    for (let i = 0; i < c.length; i++) {
+      const a = c[i];
+      if (a.x0 < -1 || a.y0 < -1 || a.x1 > m.width + 1 || a.y1 > m.height + 1) fuera.push(a.id);
+      for (let j = i + 1; j < c.length; j++) {
+        const b2 = c[j];
+        if (a.x0 < b2.x1 && b2.x0 < a.x1 && a.y0 < b2.y1 && b2.y0 < a.y1) choques.push(a.id + '×' + b2.id);
+      }
+    }
+    /* Y EL PANEL ABIERTO TAMBIEN, aunque solo por el borde. La lista de
+       arriba son los diez elementos del HUD, asi que una prueba que solo la
+       mira NO PUEDE VER un titulo cortado adentro de un panel — que es
+       exactamente lo que paso con «¡GANASTE!». Los botones de una columna
+       con hueco no se pueden pisar entre ellos, asi que ahi lo unico que
+       informa es si algo se sale; el `gDue` se saltea porque son cuarenta y
+       ocho casillas de una reja y compararlas de a pares no dice nada.     */
+    const pa = document.querySelector('.pan.on');
+    if (pa) for (const e of pa.querySelectorAll('h1, .sub, .tx, .pie, .bt')) {
+      if (e.closest('#gDue')) continue;
+      const s2 = getComputedStyle(e);
+      if (s2.display === 'none' || s2.visibility === 'hidden') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (r.left - m.left < -1 || r.right - m.left > m.width + 1 ||
+          r.top - m.top < -1 || r.bottom - m.top > m.height + 1)
+        fuera.push((e.id || e.className) + '@' + pa.id);
+    }
+    return { choques, fuera, n: c.length, marco: [Math.round(m.width), Math.round(m.height)] };
+  },
+  /* EL CUERPO Y LA CAJA DE CHOQUE SON DOS COSAS. El ragdoll es SOLO dibujo
+     —`cajaArq` sigue clavada en XA/XB— asi que la sonda tiene que informar
+     las dos: `rx/ry/rot` es donde se ve el cuerpo y no donde se le pega. */
+  arq: () => ARQ.map(a => a && ({
+    lado: a.lado, est: a.est, piso: a.piso, ang: +a.ang.toFixed(3),
+    boca: [+a.boca.x.toFixed(2), +a.boca.y.toFixed(2)],
+    puesto: !!a.puesto, rag: !!a.rag, muere: !!a.muere,
+    rx: +a.rx.toFixed(3), ry: +a.ry.toFixed(3), rot: +a.rot.toFixed(3),
+    tension: +a.k.toFixed(3),
+  })),
+  /* un golpe a mano, para poder mirar el tumbo sin depender de que la
+     flecha acierte. `mata` deja al arquero en el piso: un muerto no se
+     levanta, y eso hay que poder comprobarlo aparte. */
+  golpe: (lado, cab, mata) => { arqRecibe(lado | 0, !!cab, cab ? DANO_CABEZA : DANO_CUERPO, !!mata); return window.__A.arq()[lado | 0]; },
+  /* LA CAMARA A MANO, para poder MIRAR una pieza a tamano de estudio. A la
+     escala de partida un arquero mide 53 px y el arco 40: a eso, un arco mal
+     puesto y uno bien puesto se ven igual, asi que juzgar la pose en una
+     captura de partida es juzgar una mancha. Planta la camara y dibuja. */
+  mira: (x, y, cel) => { camFoco(x, y); CAM.cx = x; CAM.cy = y;
+                         CAM.cel = cel || 4; encuadra(); escDibuja();
+                         return { cx: CAM.cx, cy: CAM.cy, cel: CAM.cel }; },
+  /* LA POSE, en el marco local del arquero. Es lo unico que dice donde cae
+     el arco respecto del hombro y de la mano, que es lo que una foto de
+     cuarenta pixeles no puede contestar. */
+  pose: (l) => { const a = ARQ[l | 0]; if (!a) return null; const P = a.P;
+                 return { est: a.est, bocaX: +P.bocaX.toFixed(3), bocaY: +P.bocaY.toFixed(3),
+                          arcoAng: +P.arcoAng.toFixed(3), nockX: +P.nockX.toFixed(3),
+                          manoTx: +P.manoTx.toFixed(3), manoTy: +P.manoTy.toFixed(3),
+                          hombroY: +(HOMBRO_Y + P.resp).toFixed(3),
+                          brazo: +Math.hypot(P.bocaX, P.bocaY - HOMBRO_Y - P.resp).toFixed(3),
+                          brazoMax: +(BR1 + BR2).toFixed(3) }; },
+  errs: () => window.__errs.slice(),
+};
+
+inicia();
+</script></body></html>

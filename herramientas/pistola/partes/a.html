@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0d12">
+<title>PISTOLA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b0d12;color:#e6ecf5;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+canvas{display:block}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* ── ESTE JUEGO NO GIRA EL CUADRO, Y ES UNA DECISION ──
+   BARRIO y LEMI dibujan apaisado dentro de un marco vertical porque su mundo es
+   ancho. Aca el mundo es una TORRE: se sube de piso en piso, asi que lo que hay
+   que ver es alto y angosto. Girar el cuadro seria pelearse con la forma del
+   nivel para despues volver a girarlo. */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;
+  opacity:0;transition:opacity .2s}
+/* -- EL HUD SOLO EXISTE MIENTRAS SE JUEGA --
+   Con el menu translucido, las tres fichas se veian POR ENCIMA del titulo: en la
+   captura, «PISO 1/10» y «VIDAS 3» flotando sobre la portada. Un marcador que
+   cuenta una partida que todavia no empezo no informa nada, molesta. */
+body.jugando #hud{opacity:1}
+.fic{position:absolute;top:calc(env(safe-area-inset-top, 0px) + 12px);
+  padding:7px 13px;border-radius:99px;background:rgba(12,15,22,.62);
+  backdrop-filter:blur(7px);font:800 12px/1 system-ui,sans-serif;letter-spacing:.13em}
+#fNivel{left:14px}
+#fVidas{right:14px}
+/* ── SIN `position:absolute` EL `top` NO HACE NADA ──
+   Quedaba en el flujo normal, o sea pegado arriba de todo y encima de la ficha
+   del piso: medido, `solapes()` denunciaba `fNivel×fLadrones` en todas las
+   corridas. */
+/* ── Y CON FONDO PROPIO, PORQUE DETRAS PASA LA TORRE ──
+   Sin la pildora, la linea caia justo encima de una tira de luz y en la captura
+   se leia partida: un rotulo del HUD no puede depender de que atras haya algo
+   oscuro. */
+#fLadrones{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top, 0px) + 54px);
+  padding:5px 12px;border-radius:99px;background:rgba(12,15,22,.62);
+  backdrop-filter:blur(7px);
+  font-weight:700;letter-spacing:.20em;font-size:11px;color:rgba(230,236,245,.82)}
+#aviso{position:absolute;left:50%;top:34%;transform:translateX(-50%);
+  font:800 clamp(22px,7vw,34px)/1.2 system-ui,sans-serif;letter-spacing:.06em;
+  text-align:center;opacity:0;transition:opacity .25s;text-shadow:0 3px 18px rgba(0,0,0,.7)}
+#aviso.on{opacity:1}
+#pista{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 96px);
+  transform:translateX(-50%);font:700 12.5px/1.5 system-ui,sans-serif;
+  color:rgba(230,236,245,.62);text-align:center;width:min(320px,82vw)}
+/* ── EL CARTEL DEL TUTORIAL VA ARRIBA Y NO ABAJO ──
+   Abajo esta la pistola, que es justo lo que el cartel te pide que mires; y en
+   el tercio de abajo tambien cae la linea de ayuda. Arriba hay hueco por
+   geometria: la torre es angosta y el cielorraso del piso de arriba esta vacio. */
+#tut{position:absolute;left:50%;top:calc(env(safe-area-inset-top, 0px) + 96px);
+  transform:translateX(-50%);width:min(330px,86vw);
+  padding:11px 15px;border-radius:14px;background:rgba(10,13,19,.80);
+  backdrop-filter:blur(8px);border:1px solid rgba(255,196,106,.30);
+  font:700 13.5px/1.45 system-ui,sans-serif;color:#ffe2a8;text-align:center;
+  opacity:0;transition:opacity .22s;pointer-events:none}
+#tut.on{opacity:1}
+#lento{position:absolute;inset:0;box-shadow:inset 0 0 130px rgba(90,150,255,.30);
+  opacity:0;transition:opacity .18s}
+#lento.on{opacity:1}
+
+/* ── CARGA ── */
+#carga{position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  background:radial-gradient(140% 100% at 50% 20%, #1a2030 0%, #10141d 55%, #080a10 100%);
+  transition:opacity .6s ease}
+#carga.ido{opacity:0;pointer-events:none}
+#carga .caja{text-align:center;width:min(340px,84vw)}
+#carga h1{font:200 clamp(30px,9vw,46px)/1 system-ui,sans-serif;letter-spacing:.30em;
+  text-indent:.30em;color:#dbe6f4}
+#carga .sub{margin-top:6px;font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.26em;
+  color:rgba(200,215,240,.45);text-transform:uppercase}
+#carga .barra{margin:16px auto 0;width:76%;height:3px;background:rgba(255,255,255,.10);
+  overflow:hidden;border-radius:99px}
+#carga .barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#c9a03c,#f0d78a);transition:width .25s}
+
+/* ── IDIOMA, ANTES DEL MENU ──
+   Elegir idioma dentro de un menu ya escrito en un idioma que no se entiende no
+   sirve: para cuando uno encuentra el selector ya leyo todo lo demas sin
+   entenderlo. */
+#idioma,#menu,#fin{position:fixed;inset:0;z-index:95;display:none;place-items:center;
+  background:radial-gradient(140% 100% at 50% 20%, #1a2030 0%, #10141d 55%, #080a10 100%)}
+/* -- EL MENU DEJA VER LA TORRE, Y NO CUESTA UN SOLO ASSET --
+   Un panel opaco encima de una escena 3D que ya esta dibujada tira a la basura
+   lo unico que este juego tiene para mostrar. El velo va como DEGRADADO y no
+   como opacidad pareja: cerrado arriba y abajo -donde estan el titulo y los
+   botones, que tienen que leerse- y abierto en el medio, que es por donde se ve
+   el edificio con sus luces. Es lo mismo que se hizo en POMPOM.
+   `#idioma` se queda opaco a proposito: aparece antes de que exista la escena. */
+#menu,#fin{background:linear-gradient(180deg,
+  rgba(8,10,16,.95) 0%, rgba(8,10,16,.90) 26%, rgba(10,13,20,.52) 46%,
+  rgba(10,13,20,.60) 62%, rgba(8,10,16,.93) 82%, rgba(8,10,16,.97) 100%)}
+#idioma.on,#menu.on,#fin.on{display:grid}
+.caja{text-align:center;width:min(330px,84vw)}
+.caja h1{font:200 clamp(28px,8vw,42px)/1 system-ui,sans-serif;letter-spacing:.28em;
+  text-indent:.28em;color:#dbe6f4;margin-bottom:6px}
+/* -- EL TITULO DEL MENU LLEVA SU PROPIO TRATAMIENTO --
+   El nombre del juego es lo unico que se reconoce de lejos, asi que no puede ser
+   la misma tipografia fina del resto: va pesado, con el relleno de acero de la
+   pistola y un filo calido abajo, que es el color de las luces del edificio. */
+#menu h1,#carga h1,#fin h1{font-weight:800;letter-spacing:.20em;text-indent:.20em;
+  background:linear-gradient(180deg,#f6f9fc 0%,#c3ccd9 44%,#79828f 63%,#e9dcaa 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 12px rgba(0,0,0,.8))}
+/* la raya de abajo es el fogonazo: el unico acento calido del menu, y del mismo
+   ambar que las tiras de luz de la torre */
+#menu h1::after{content:'';display:block;width:76px;height:2px;margin:13px auto 0;
+  border-radius:2px;background:linear-gradient(90deg,transparent,#ffc46a,transparent)}
+.caja .sub{font:600 10px/1.7 ui-monospace,monospace;letter-spacing:.24em;
+  color:rgba(200,215,240,.42);text-transform:uppercase;margin-bottom:20px}
+.caja p{font-size:13px;line-height:1.6;color:rgba(215,228,245,.66);margin-bottom:18px}
+.bt{display:block;width:100%;margin-top:10px;padding:14px 18px;border-radius:12px;
+  border:1px solid rgba(200,170,90,.26);background:rgba(200,170,90,.08);color:#e6ecf5;
+  font:700 15px/1 system-ui,sans-serif;letter-spacing:.06em;transition:transform .12s}
+.bt:active{transform:scale(.97)}
+.bt.p{background:linear-gradient(135deg,#c9a03c,#f0d78a);color:#141008;border-color:transparent}
+.fila{display:flex;gap:8px;margin-top:10px}
+.fila .bt{margin-top:0}
+.bt.sel{background:linear-gradient(135deg,#c9a03c,#f0d78a);color:#141008;border-color:transparent}
+#niveles{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:14px}
+#niveles button{padding:11px 0;border-radius:10px;border:1px solid rgba(200,170,90,.22);
+  background:rgba(200,170,90,.06);color:#e6ecf5;font:800 14px/1 system-ui,sans-serif}
+#niveles button.hecho{background:rgba(200,170,90,.22)}
+#niveles button:disabled{opacity:.30}
+.pie{margin-top:16px;font-size:11px;color:rgba(200,215,240,.38);line-height:1.6}
+</style>
+</head>
+<body>
+<div id="carga"><div class="caja">
+  <h1>PISTOLA</h1><div class="sub" id="cSub">CARGANDO</div>
+  <div class="barra"><i id="cBarra"></i></div>
+</div></div>
+
+<div id="idioma"><div class="caja">
+  <h1>PISTOLA</h1><div class="sub">IDIOMA · LANGUAGE</div>
+  <button class="bt" data-lang="es">Castellano</button>
+  <button class="bt" data-lang="en">English</button>
+  <button class="bt" data-lang="pt">Português</button>
+</div></div>
+
+<div id="menu"><div class="caja">
+  <h1>PISTOLA</h1><div class="sub" id="mSub"></div>
+  <p id="mTexto"></p>
+  <button class="bt p" id="bJugar"></button>
+  <button class="bt" id="bTut"></button>
+  <div id="niveles"></div>
+  <div class="fila" id="filaCal"></div>
+  <div class="fila" id="filaIdi"></div>
+  <div class="pie" id="mPie"></div>
+</div></div>
+
+<div id="fin"><div class="caja">
+  <h1 id="fTitulo"></h1><div class="sub" id="fSub"></div>
+  <p id="fTexto"></p>
+  <button class="bt p" id="bSigue"></button>
+  <button class="bt" id="bMenu"></button>
+</div></div>
+
+<div id="hud">
+  <div class="fic" id="fNivel"></div>
+  <div class="fic" id="fVidas"></div>
+  <div id="fLadrones"></div>
+  <div id="tut"></div>
+  <div id="aviso"></div>
+  <div id="pista"></div>
+  <div id="lento"></div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.170.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as T from 'three';
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + e.reason));
