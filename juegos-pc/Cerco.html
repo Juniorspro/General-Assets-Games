@@ -104,8 +104,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
    a medir; no se adivina.                                                    */
 #mini{position:absolute;right:13px;top:calc(env(safe-area-inset-top,0px) + 66px);
   width:74px;height:74px;z-index:3;pointer-events:none;border-radius:8px;
-  border:1.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.28);
-  image-rendering:pixelated}
+  border:1.5px solid rgba(255,255,255,.22);background:transparent;
+  box-shadow:0 2px 10px rgba(0,0,0,.35)}
 #mini.off{display:none}
 
 /* ── LA TABLA DE POSICIONES (solo arena) ──────────────────────────────────
@@ -379,7 +379,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
   </div>
 </div>
 
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"}}
+</script>
 <script type="module">
+import * as THREE from 'three';
 /* ══════════════════════════════════════════════════════════════════════════
    B · CONSTANTES, MUNDOS, IDIOMAS Y GUARDADO
    ══════════════════════════════════════════════════════════════════════════ */
@@ -416,65 +420,139 @@ const NJUG = 8;       /* el jugador es el 1; los rivales van del 2 al 8     */
    sigue usando de 2 a 4 y no paga un byte por los cuatro que no siembra.   */
 
 /* ── LOS COLORES ──────────────────────────────────────────────────────────
-   Tres por jugador y no uno: el terreno tiene que dejarse mirar sin cansar,
-   la estela tiene que gritar —es lo unico que mata— y la cabeza tiene que
-   encontrarse de una ojeada en un tablero de setenta celdas de lado. El
-   jugador se lleva el ambar, que es el unico color calido de la paleta.    */
+   TRES POR JUGADOR, Y EN LA ESFERA EL REPARTO SE DA VUELTA. En el tablero
+   plano el terreno era OSCURO y la estela clara: el fondo era papel, asi que
+   lo propio tenia que ensuciarlo. Un planeta no es papel — es una superficie
+   iluminada, el terreno es LO QUE MAS SE VE, y un terreno oscuro sobre una
+   esfera clara se lee a mancha y no a territorio. Ahora:
+
+   · `z` es el color VIVO y saturado, que es el que cubre el planeta;
+   · `t` es el MISMO tono mas claro, para que la estela se distinga contra el
+     terreno propio —que es justo donde hay que verla, porque volver a casa es
+     cruzar lo propio—;
+   · `c` es la cabeza, casi blanca, para encontrarse de una ojeada.
+
+   Y VIVOS PERO NO AL TOPE (L 0,50 · 0,66 · 0,86): la escena lleva luz, o sea
+   que el color se MULTIPLICA por ella. Con el terreno ya en el techo, la cara
+   iluminada del planeta satura y las ocho familias se aplastan contra el
+   blanco; con medio tono de aire, la luz tiene donde trabajar y la esfera se
+   lee redonda, que es la mitad del pedido.
+
+   LOS TONOS SE CONSERVAN CLAVADOS de la paleta plana y no se reordenan: la
+   campana usa SOLO los ids 2 a 4, asi que esos tres estan lo mas lejos que se
+   puede del ambar del jugador (169 · 261 · 338) y los otros cuatro rellenan
+   los huecos de a 45 grados para la arena. Reordenarlos «prolijo» dejaria al
+   unico rival del mundo 1 pegado al color del jugador.                      */
 const COLS = [
   null,
-  { z: '#7a4d12', t: '#f0a13a', c: '#ffe0b0' },   /* 1 · vos            */
-  { z: '#0e5148', t: '#2fc2a8', c: '#b6f2e6' },   /* 2 · verde agua     */
-  { z: '#3d2a6b', t: '#9a6bf2', c: '#d9c8ff' },   /* 3 · violeta        */
-  { z: '#6b1f3a', t: '#f0578f', c: '#ffc8dc' },   /* 4 · rosa           */
-  /* LOS CUATRO DE LA ARENA SE REPARTEN EL CIRCULO, no se eligen a gusto: con
-     ocho cuerpos en un tablero de noventa, lo unico que distingue a uno de
-     otro en el minimapa es un punto de tres pixeles. Los tonos van cada 45
-     grados desde el ambar del jugador (35 · 80 · 125 · 170 · 215 · 260 ·
-     305 · 350), asi que dos vecinos nunca comparten familia. El rojo se
-     descarto a proposito: a ese tamano se confunde con el ambar, que es el
-     unico color que TIENE que encontrarse de una ojeada.                   */
-  { z: '#4d5e21', t: '#b3d93f', c: '#e6f5b3' },   /* 5 · verde limon    */
-  { z: '#1c4a24', t: '#33cc47', c: '#b8f2c2' },   /* 6 · verde          */
-  { z: '#1e3d6b', t: '#4d8ef5', c: '#bdd8fd' },   /* 7 · azul           */
-  { z: '#60245b', t: '#e755db', c: '#f9bdf5' },   /* 8 · magenta        */
+  { z: '#e68d19', t: '#f8b359', c: '#fde0b9' },   /* 1 · vos · ambar    */
+  { z: '#19e6c1', t: '#59f8dc', c: '#b9fdf1' },   /* 2 · verde agua     */
+  { z: '#6119e6', t: '#9059f8', c: '#d1b9fd' },   /* 3 · violeta        */
+  { z: '#e61964', t: '#f85993', c: '#fdb9d2' },   /* 4 · rosa           */
+  { z: '#b3e619', t: '#d1f859', c: '#ecfdb9' },   /* 5 · verde limon    */
+  { z: '#19e634', t: '#59f86d', c: '#b9fdc2' },   /* 6 · verde          */
+  { z: '#1968e6', t: '#5996f8', c: '#b9d4fd' },   /* 7 · azul           */
+  { z: '#e619d5', t: '#f859eb', c: '#fdb9f8' },   /* 8 · magenta        */
 ];
-const C_TABLA = '#171d29', C_PIEDRA = '#2f3a4e', C_LINEA = '#212a3a';
+/* EL PLANETA SIN DUENO ES CLARO Y NEUTRO, y eso tampoco es gusto: es el
+   FONDO contra el que se juzgan los ocho colores. Con un fondo oscuro los
+   cuatro tonos frios se acercan entre si —todos leen «claro contra oscuro»—
+   y con uno claro se leen por lo que son. Es la misma razon por la que la
+   mesa de un juego de cartas es clara.                                      */
+const C_TABLA = '#dfe6ee', C_PIEDRA = '#6b7689', C_LINEA = '#c2ccd9';
 
 /* ── LOS NUMEROS DEL CUERPO, DERIVADOS ────────────────────────────────────
-   No se eligen sueltos: se elige CUANTO SE VE y CUANTO TARDA EN CRUZARSE, y
-   de ahi salen los dos. Con 19 celdas de ancho en un marco de 412 px, una
-   celda mide 21,7 px —o sea que la cabeza y la estela se distinguen sin
-   agrandar nada— y a 5,4 celdas por segundo la ventana visible se cruza en
-   3,5 s. Eso ademas fija el ritmo del pulgar: una curva se puede pedir cada
-   185 ms, que es lo que tarda el cuerpo en cambiar de celda.               */
-const VISTA = 19;
-/* EN LA ARENA LA VISTA SE ABRE CON EL TERRENO, y el numero sale de la misma
-   derivacion de arriba y no del gusto: lo que uno tiene que seguir viendo es
-   el BORDE de lo propio, y el lado de un territorio crece como la RAIZ de su
-   area — por eso el interpolador va con `sqrt(pct/VISTA_SAT)` y no lineal.
-   Satura en la tajada pareja (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va
-   ganando y abrir mas solo achica la cabeza. Y el tope son 34 celdas porque
-   en 412 px eso deja la celda en 12,1 px — por debajo de diez, la cabeza y
-   la estela dejan de distinguirse, que es lo unico que este juego pide ver. */
-const VISTA_MAX = 34;
-const VISTA_SAT = 0.10;
+   EL ENCUADRE NO SE PIDE EN CELDAS, SE PIDE EN PLANETA, y eso no es un gusto:
+   es geometria. Una esfera de radio 1 vista desde `d` subtiende `asin(1/d)`,
+   asi que el disco que ocupa en pantalla sale de una cuenta cerrada; pedir «19
+   celdas de arco» en cambio ata el encuadre al TAMANO del planeta, y entonces
+   la arena —que tiene un planeta cinco veces mas grande que el tutorial— se
+   veria como un plano, porque diecinueve celdas de 58 son un pedacito chato.
+   Pidiendo disco, el planeta ocupa SIEMPRE lo mismo y lo que cambia es cuanto
+   mide una celda: en un planeta grande tu territorio se ve chico, que es
+   exactamente lo que este juego tiene que hacer sentir.
+
+   `DISCO` es el DIAMETRO del planeta en fraccion del ALTO del cuadro. De ahi
+   sale la distancia despejando: con `s = DISCO·tan(fov/2)`,
+        tan(asin(1/d)) = s   →   d = √(1+s²)/s
+   Con 0,86 y un lente de 46 grados eso da 2,92 radios: el planeta llena el
+   cuadro a lo ancho —en 9:16 el ancho es el 46 % del alto, asi que un disco
+   del 86 % del alto lo desborda— y deja cielo arriba, abajo y en las cuatro
+   esquinas, que es lo unico que hace que se lea a REDONDO. Mas cerca se ve
+   plano otra vez; mas lejos aparece una franja de cielo que no dice nada.   */
+const DISCO = 0.86;
+/* EN LA ARENA LA CAMARA SE ALEJA CON EL TERRENO, y el interpolador va con la
+   RAIZ de la tajada y no lineal por la misma razon de siempre: lo que uno
+   tiene que seguir viendo es el BORDE de lo propio, y el lado de un
+   territorio crece como la raiz de su area. Satura en la tajada pareja
+   (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va ganando y alejarse mas solo
+   achica la cabeza. El piso son 0,62 porque ahi una celda de la arena mide
+   9,7 px en un marco de 412 — por debajo de diez, la cabeza y la estela
+   dejan de distinguirse, que es lo unico que este juego pide ver.          */
+const DISCO_MIN = 0.62;
+const DISCO_SAT = 0.10;
 const VEL = 5.4;
-const VIDAS = 3;
+/* SIETE VIDAS Y NO TRES, Y EL NUMERO SALE DE UNA TASA MEDIDA. En el plano el
+   bot honesto se comia 0,42 cortes por partida; en la esfera se come 1,48, y
+   35 de sus 52 muertes son un rival pisandole la estela EN MEDIO DE UNA
+   EXCURSION. La causa es geometrica y no de dificultad: en un plano uno se
+   apoya de espaldas contra el borde, y una esfera NO TIENE BORDE. Barrido de
+   vidas contra niveles ganados: 3->32 · 4->37 · 5->37 · 6->39 · 7->40 · 8->40
+   · 99->40. Siete es el valor mas chico que llega a 40 de 40.                */
+const VIDAS = 7;
 
 /* ── LOS CINCO MUNDOS ─────────────────────────────────────────────────────
-   Lo que crece no es «la dificultad» como numero suelto: crecen el TABLERO,
-   la CANTIDAD DE RIVALES y lo BIEN QUE JUEGAN. Y el tablero es el que mas
-   pesa, porque con la vista fija en 19 celdas un tablero de 74 es un mapa
-   que no entra en la pantalla y hay que acordarse de por donde se venia.
+   Lo que crece no es «la dificultad» como numero suelto: crecen el PLANETA,
+   la CANTIDAD DE RIVALES y lo BIEN QUE JUEGAN. Y el planeta es el que mas
+   pesa, porque con la vista fija en 19 celdas de arco uno de 30 tiene 120 de
+   circunferencia: seis pantallas de vuelta, o sea que hay que acordarse de
+   por donde se venia. `n` es el lado de UNA CARA del cubo y el planeta son
+   seis, asi que las celdas son 6n²: 1.944 el mundo 1 y 5.400 el 5, contra
+   1.936 y 5.476 de los tableros planos de 44 y 74 que reemplazan — o sea el
+   MISMO tamano de juego, doblado sobre una esfera.
    `pat` es el dibujo de las rocas: no es decoracion, es lo que hace que dos
    mundos del mismo tamano se jueguen distinto.                             */
 const MUNDOS = [
-  { k: 'm1', nom: 'LLANO',  n: 44, pat: 'vacio',   riv: 1, per: 0.52, seg: 100 },
-  { k: 'm2', nom: 'PILARES',n: 52, pat: 'pilares', riv: 2, per: 0.64, seg: 100 },
-  { k: 'm3', nom: 'CRUCE',  n: 60, pat: 'cruz',    riv: 2, per: 0.74, seg: 105 },
-  { k: 'm4', nom: 'ISLAS',  n: 66, pat: 'islas',   riv: 3, per: 0.84, seg: 110 },
-  { k: 'm5', nom: 'ANILLO', n: 74, pat: 'anillo',  riv: 3, per: 0.93, seg: 115 },
+  { k: 'm1', nom: 'LLANO',  n: 18, pat: 'vacio',   riv: 2, per: 0.52, seg: 115 },
+  { k: 'm2', nom: 'PILARES',n: 21, pat: 'pilares', riv: 3, per: 0.64, seg: 115 },
+  { k: 'm3', nom: 'CRUCE',  n: 24, pat: 'cruz',    riv: 3, per: 0.74, seg: 121 },
+  { k: 'm4', nom: 'ISLAS',  n: 27, pat: 'islas',   riv: 4, per: 0.84, seg: 126 },
+  { k: 'm5', nom: 'ANILLO', n: 30, pat: 'anillo',  riv: 4, per: 0.93, seg: 132 },
 ];
+
+/* ── UN CUERPO MAS QUE EN EL PLANO, Y ES DE LA ESFERA ─────────────────────
+   La tabla plana iba 1·2·2·3·3 y sobre la esfera el juego se rompia: el
+   auto-jugador honesto pasaba 34 de 40. No es que la esfera de MENOS —el
+   planeta se ocupa igual, medido 87,8 % contra 85,7 % del plano— es que un
+   cierre cualquiera vale MUCHO MAS:
+
+                              plano     esfera
+     reclamo medio             2,03 %    2,52 %
+     reclamo p50               1,19      1,30   ← igual
+     reclamo p99               9,08     19,24   ← el doble
+     el mayor reclamo         16,84     51,02   ← medio planeta de un saque
+     reclamos > 20 % de N         0        17
+     tajada del bot: sigma      9,4      14,6
+
+   La mediana no se mueve y la cola se duplica, y eso es geometria y no
+   equilibrio: en un tablero PLANO una vuelta pegada al borde no encierra
+   nada, asi que hay vueltas baratas e inutiles. En una esfera NO HAY BORDE,
+   asi que toda vuelta cerrada es un circulo maximo y parte el planeta al
+   medio. Con dos cuerpos eso es una moneda al aire.
+
+   El tercer cuerpo es lo que hace que una vuelta bisectriz CUESTE algo.
+   Medido con el mayor multiplicador de meta con el que los 40 niveles se
+   pasan —el mismo criterio con el que se derivo META_A/META_B—:
+
+     plano (control)              0,590   ← y el banco reproduce su propia
+     esfera, tabla plana          0,160     derivacion: el 5-2 tapa en 0,590
+     esfera, planetas +35 %       0,206     y este archivo ya decia "con 0,58
+     esfera, +35 % y un rival     0,286     ya pierde el 5-2"
+     esfera, UN RIVAL MAS         0,601   ← mejor que el plano
+
+   Y no es que suba el promedio: los tres niveles que se caian (1-1 con 0,160,
+   3-8 con 0,285 y 3-5 con 0,312) DESAPARECEN de la lista de peores. Agrandar
+   el planeta se probo y mide PEOR, asi que queda descartado.                */
 
 /* ── EL OBJETIVO NO SE ESCRIBE: SE DERIVA DEL REPARTO ─────────────────────
    Estaba como una fraccion ABSOLUTA del tablero por mundo (0,40 a 0,55) y el
@@ -496,21 +574,34 @@ const MUNDOS = [
    el 5-2. O sea que este objetivo es el mas exigente que esta DEMOSTRADO que
    se puede cumplir, y no un numero elegido a ojo.                          */
 const OCUPA = 0.795;
+/* LA META VUELVE A LA DEL PLANO. Bajarla fue lo primero que probe y la
+   medicion lo desmintio: barriendo META_A de 0,50 a 0,22 con la misma
+   diferencia, los ganados dan 32/32/33/34/34/34/36/37 y NUNCA llegan a 40.
+   Lo que faltaba no era meta, era reloj y vidas.                             */
 const META_A = 0.55, META_B = 0.72;
+const RIV_TOPE = 4;
 const NIV_MUNDO = 8;
 const NIVELES = MUNDOS.length * NIV_MUNDO;
 
 /* La semilla sale del par (mundo, nivel) y de nada mas.                    */
-const semNivel = (m, n) => (m + 1) * 100003 + (n + 1) * 7919 + 13;
+const semNivel = (m, n) => (m + 1) * 100003 + (n + 1) * 7919 + 29;
+/* LA SAL ES 29 Y NO 13, Y ES UN RECHAZO POR TANDA. Este juego no reintenta un
+   nivel: la semilla sale del par (mundo, nivel), asi que cuando UNO sale malo
+   lo unico que se puede mover es la sal de todos. Con 13 el 2-5 quedaba sin
+   pasar, y no es estructural: con la misma cfg, 19 de 20 semillas se ganan.
+   Barridas las sales, 29 y 97 dan las dos 40 de 40 con el del azar en 0.     */
 
 /* Dentro de un mundo tambien hay curva: ocho niveles con el mismo tablero y
    los mismos rivales son el mismo nivel ocho veces.                        */
 function cfgNivel(m, n) {
   const M = MUNDOS[m], u = NIV_MUNDO > 1 ? n / (NIV_MUNDO - 1) : 0;
-  const riv = M.riv + (n >= 5 && M.riv < 3 ? 1 : 0);
+  /* Los tres ultimos niveles de un mundo suman un rival, con tope: la rampa
+     estaba escrita como `M.riv < 3`, que con la tabla nueva no se cumpliria
+     NUNCA y la curva de adentro del mundo desapareceria sin que nada falle. */
+  const riv = Math.min(RIV_TOPE, M.riv + (n >= 5 ? 1 : 0));
   return {
     mundo: m, nivel: n, pat: M.pat,
-    n: Math.round(M.n + u * 8),
+    n: Math.round(M.n + u * 4),
     riv,
     per: cl(M.per + u * 0.10, 0, 1),
     /* la parte pareja, por el multiplicador — nunca una fraccion escrita     */
@@ -529,21 +620,36 @@ function cfgNivel(m, n) {
    conviven como dos modos y no como una dificultad.
 
    CADA NUMERO SALE DE UNA CUENTA:
-   · `n` 92 son 8.464 celdas: con `OCUPA` 0,795 repartido entre ocho, la parte
-     pareja de cada uno es 9,9 % — un numero que se mueve lo suficiente como
-     para que el marcador diga algo, y un tablero lo bastante grande como para
-     que ocho cuerpos no se pisen en el primer minuto.
+   · `n` 38 son 6·38² = 8.664 celdas —los 8.464 del tablero plano de 92, con
+     el redondeo que impone que un planeta tenga seis caras iguales—: con
+     `OCUPA` 0,795 repartido entre ocho, la parte pareja de cada uno es 9,9 %
+     — un numero que se mueve lo suficiente como para que el marcador diga
+     algo, y un planeta lo bastante grande como para que ocho cuerpos no se
+     pisen en el primer minuto. Su circunferencia son 152 celdas: ocho
+     pantallas de vuelta.
    · `riv` 7, o sea ocho cuerpos contando al jugador: es el reparto del juego
      que se esta imitando y lo que hace que la tabla de posiciones tenga algo
      que ordenar.
    · sin roca (`pat:'vacio'`): la roca de la campana es lo que hace que un
-     tablero chico se juegue distinto, y en un tablero de noventa lo unico que
-     agregaria es una forma de morir que no es otro jugador.
+     planeta chico se juegue distinto, y en uno de ocho mil celdas lo unico
+     que agregaria es una forma de morir que no es otro jugador.
    · y `per` es un ARREGLO y no un numero. Siete bots con la misma cabeza son
      un bot repetido siete veces: salen todos igual de lejos, vuelven a la vez
      y la tabla queda ordenada por suerte. Con siete precisiones se reparten
      en mansos y temerarios sin escribir siete cerebros.                     */
-const ARENA_N = 92;
+/* LA ARENA CRECE PORQUE EN LA ESFERA EL MUNDO ES MAS CHICO DE LO QUE PARECE.
+   Con 38 la arena tiene 8.664 celdas —las mismas 8.464 del tablero plano— y
+   sin embargo el bot honesto moria a los 11 segundos con el 0,29 % del
+   planeta, contra 55,5 s y 7,04 % en el plano. Medidas las muertes: 393 de
+   415 son CORTES, con 60,7 celdas de estela encima. La causa no es la
+   cantidad de celdas sino el DIAMETRO: dos puntos del tablero plano llegaban
+   a estar a 130 celdas, y en una esfera el antipoda esta a 2n = 76. Ocho
+   cuerpos quedaban al doble de cerca. Barrido de n contra el bot y el del
+   azar: 38 -> 0,29 % y 0,62 · 48 -> 1,68 y 0,46 · 58 -> 2,51 y 0,26 ·
+   68 -> 2,18 y 0,18 · 78 -> 5,78 y 0,13. En 58 el honesto saca 9,7 veces lo
+   del azar, que es CIFRA POR CIFRA la separacion del plano (7,04 contra
+   0,70). Los ocho cuerpos no se tocan: son la identidad de la arena.        */
+const ARENA_N = 58;
 const ARENA_RIV = 7;
 const ARENA_PER = [0.55, 0.68, 0.74, 0.80, 0.86, 0.90, 0.95];
 /* CUANTA VENTAJA HAY QUE SACAR para que «vas primero» quiera decir algo. Un
@@ -744,37 +850,209 @@ function abierto(k) {
 }
 const cuentaHechos = () => Object.keys(PROG.hechos).length;
 /* ══════════════════════════════════════════════════════════════════════════
-   C · EL MODELO
+   C · EL MODELO, AHORA SOBRE UNA ESFERA
    NO TOCA NI EL DOM NI EL LIENZO, y eso no es prolijidad: es lo que permite
    concatenar b.js + c.js e importarlos en node para auditar los cuarenta
-   niveles y correr los dos auto-jugadores sin abrir un navegador.
+   niveles y correr los tres auto-jugadores sin abrir un navegador.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── EL TEOREMA DEL JUEGO ─────────────────────────────────────────────────
-   Lo que uno encierra con su estela es suyo, y «encierra» es literal: el
-   terreno propio mas la estela forman un anillo 4-CONEXO, y un anillo
-   4-conexo separa el plano bajo relleno de 4 vecinos. O sea que rellenar
-   desde afuera y quedarse con lo que NO se alcanzo no es una aproximacion:
-   es exactamente lo que se rodeo.
-   DE AHI SALE QUE LA ROCA SE PUEDA CRUZAR EN EL RELLENO. Como la barrera es
-   el terreno propio y nada mas, dejar pasar la roca no abre ninguna fuga —y
-   al reves, si la roca bloqueara, un hueco rodeado de piedra se regalaria
-   sin que nadie lo hubiera rodeado nunca.                                  */
+/* ── POR QUE UN CUBO INFLADO Y NO UNA ESFERA DE VERDAD ────────────────────
+   El juego entero cuelga de que CADA CELDA TENGA EXACTAMENTE CUATRO VECINOS
+   DE ARISTA. Una esfera partida por latitud y longitud no lo cumple: en los
+   polos convergen n celdas y ahi no hay cuatro direcciones. Un icosaedro
+   subdividido da triangulos, o sea TRES vecinos, y entonces «izquierda» y
+   «derecha» dejan de ser un giro de noventa grados.
+
+   Un cubo de seis caras de n×n con los vertices llevados a la esfera SI lo
+   cumple, y lo cumple TAMBIEN EN LAS OCHO ESQUINAS: la celda de la esquina
+   de una cara tiene dos vecinas dentro de su cara y una en cada una de las
+   dos caras que la tocan. Lo unico singular son los ocho VERTICES del cubo
+   —donde se juntan tres cuadrados— y un relleno de cuatro vecinos no pasa
+   nunca por un vertice: pasa por aristas.
+
+   O SEA QUE EL TEOREMA DEL JUEGO SOBREVIVE. Lo que uno encierra con su
+   estela es suyo, y «encierra» sigue siendo literal: el terreno propio mas
+   la estela forman un anillo 4-conexo, y un anillo 4-conexo separa la
+   superficie bajo relleno de 4 vecinos.
+
+   LO QUE NO SOBREVIVE ES LA PALABRA «AFUERA». En el plano el relleno
+   arrancaba del borde, que es un sitio que siempre existe. Una esfera no
+   tiene borde: una curva cerrada la parte en DOS pedazos y los dos son
+   finitos. Asi que «afuera» pasa a ser una MEDIDA y no una posicion —el
+   pedazo mas grande— y eso es una decision de diseno, no un teorema: esta
+   medida abajo, en `auditaFuera`.
+
+   DE AHI SALE QUE LA ROCA SE PUEDA CRUZAR EN EL RELLENO, igual que antes.
+   Como la barrera es el terreno propio y nada mas, dejar pasar la roca no
+   abre ninguna fuga —y al reves, si la roca bloqueara, un hueco rodeado de
+   piedra se regalaria sin que nadie lo hubiera rodeado nunca.              */
+
+/* ── LAS SEIS CARAS ───────────────────────────────────────────────────────
+   Cada una con su centro y sus dos ejes, y los seis cumplen `ex × ey = C`.
+   Eso no es cosmetico: es lo que hace que la mano de la pantalla sea LA
+   MISMA en las seis. Con una cara al reves, cruzar esa arista invertiria
+   izquierda y derecha y el jugador no tendria forma de saberlo.            */
+const CARAS = [
+  { C: [ 1, 0, 0], ex: [ 0, 0,-1], ey: [0, 1, 0] },   /* 0 · +X */
+  { C: [-1, 0, 0], ex: [ 0, 0, 1], ey: [0, 1, 0] },   /* 1 · -X */
+  { C: [ 0, 1, 0], ex: [ 1, 0, 0], ey: [0, 0,-1] },   /* 2 · +Y */
+  { C: [ 0,-1, 0], ex: [ 1, 0, 0], ey: [0, 0, 1] },   /* 3 · -Y */
+  { C: [ 0, 0, 1], ex: [ 1, 0, 0], ey: [0, 1, 0] },   /* 4 · +Z */
+  { C: [ 0, 0,-1], ex: [-1, 0, 0], ey: [0, 1, 0] },   /* 5 · -Z */
+];
+
+/* DIR sigue valiendo DENTRO de una cara: der · izq · abajo · arriba.
+   Lo que cambia al cruzar una arista es que la direccion se REMAPEA, y eso
+   lo guarda la tabla ND: nadie mas tiene que saber que hay caras.          */
+const OPUE = [1, 0, 3, 2];
+const GIRO_CW  = [2, 3, 1, 0];   /* der→abajo→izq→arriba (horario en pantalla) */
+const GIRO_CCW = [3, 2, 0, 1];
+
+const nrm = v => { const m = Math.hypot(v[0], v[1], v[2]); return [v[0] / m, v[1] / m, v[2] / m]; };
+const pto = (v, w) => v[0] * w[0] + v[1] * w[1] + v[2] * w[2];
+
+/* el centro de la celda (f,x,y) llevado a la esfera */
+function posCel(f, x, y, n) {
+  const c = CARAS[f], u = (x + 0.5) / n * 2 - 1, v = (y + 0.5) / n * 2 - 1;
+  return nrm([c.C[0] + u * c.ex[0] + v * c.ey[0],
+              c.C[1] + u * c.ex[1] + v * c.ey[1],
+              c.C[2] + u * c.ex[2] + v * c.ey[2]]);
+}
+
+/* LA PROYECCION AL REVES: de un punto de la esfera a la celda que lo
+   contiene. Es lo que resuelve las costuras SIN una tabla de aristas
+   escrita a mano —doce aristas por dos sentidos son veinticuatro casos, y
+   uno mal escrito no falla: manda al cuerpo a otra cara sin que nada avise—.
+   El eje dominante dice la cara y de ahi salen u y v por division.         */
+function aCelda(p, n) {
+  const ax = Math.abs(p[0]), ay = Math.abs(p[1]), az = Math.abs(p[2]);
+  let f;
+  if (ax >= ay && ax >= az) f = p[0] > 0 ? 0 : 1;
+  else if (ay >= az)        f = p[1] > 0 ? 2 : 3;
+  else                      f = p[2] > 0 ? 4 : 5;
+  const c = CARAS[f], w = pto(p, c.C);
+  const u = pto(p, c.ex) / w, v = pto(p, c.ey) / w;
+  let x = Math.floor((u + 1) / 2 * n), y = Math.floor((v + 1) / 2 * n);
+  if (x < 0) x = 0; else if (x >= n) x = n - 1;
+  if (y < 0) y = 0; else if (y >= n) y = n - 1;
+  return (f * n + y) * n + x;
+}
+
+/* HACIA DONDE SE SIGUE ANDANDO DESPUES DE CRUZAR UNA COSTURA.
+   NO sirve usar `ex`/`ey` de la cara de destino: esos son los ejes del PLANO
+   del cubo y la superficie ya se curvo, asi que lejos del centro de la cara
+   no son tangentes. Las tangentes de verdad son los mismos ejes proyectados
+   al plano tangente del punto, y sobre ellas la direccion es la componente
+   mas grande del propio paso.                                              */
+function dirEn(f, pDest, pOrig) {
+  const c = CARAS[f];
+  const dx = pto(c.ex, pDest), dy = pto(c.ey, pDest);
+  const Tx = nrm([c.ex[0] - dx * pDest[0], c.ex[1] - dx * pDest[1], c.ex[2] - dx * pDest[2]]);
+  const Ty = nrm([c.ey[0] - dy * pDest[0], c.ey[1] - dy * pDest[1], c.ey[2] - dy * pDest[2]]);
+  const w = [pDest[0] - pOrig[0], pDest[1] - pOrig[1], pDest[2] - pOrig[2]];
+  const A = pto(w, Tx), B = pto(w, Ty);
+  return Math.abs(A) >= Math.abs(B) ? (A > 0 ? 0 : 1) : (B > 0 ? 2 : 3);
+}
+
+/* ── LAS TABLAS ───────────────────────────────────────────────────────────
+   Se arman UNA VEZ por n y de ahi en mas todo el juego es `j = NB[i*4+d]`.
+   Ni el relleno, ni el campo de distancia, ni los bots, ni el auditor saben
+   que hay caras: esa es toda la gracia de precalcularlas.                  */
+const GEO_CACHE = {};
+function geoDe(n) {
+  if (GEO_CACHE[n]) return GEO_CACHE[n];
+  const N = 6 * n * n;
+  const NB = new Int32Array(N * 4), ND = new Uint8Array(N * 4);
+  const POS = new Float32Array(N * 3);
+  for (let f = 0; f < 6; f++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = (f * n + y) * n + x, p = posCel(f, x, y, n);
+    POS[i * 3] = p[0]; POS[i * 3 + 1] = p[1]; POS[i * 3 + 2] = p[2];
+  }
+  for (let f = 0; f < 6; f++) {
+    const c = CARAS[f];
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const i = (f * n + y) * n + x;
+      const pi = [POS[i * 3], POS[i * 3 + 1], POS[i * 3 + 2]];
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DIR[d][0], ny = y + DIR[d][1];
+        if (nx >= 0 && ny >= 0 && nx < n && ny < n) {
+          NB[i * 4 + d] = (f * n + ny) * n + nx; ND[i * 4 + d] = d;
+          continue;
+        }
+        /* la celda virtual de al lado, llevada a la esfera y devuelta a la
+           reja por la proyeccion inversa: funciona igual en el medio de una
+           arista que en una esquina del cubo.                              */
+        const u = (nx + 0.5) / n * 2 - 1, v = (ny + 0.5) / n * 2 - 1;
+        const pv = nrm([c.C[0] + u * c.ex[0] + v * c.ey[0],
+                        c.C[1] + u * c.ex[1] + v * c.ey[1],
+                        c.C[2] + u * c.ex[2] + v * c.ey[2]]);
+        const j = aCelda(pv, n), fj = (j / (n * n)) | 0;
+        const pj = [POS[j * 3], POS[j * 3 + 1], POS[j * 3 + 2]];
+        NB[i * 4 + d] = j; ND[i * 4 + d] = dirEn(fj, pj, pi);
+      }
+    }
+  }
+  /* PASOS POR RADIAN, para que una distancia sobre la esfera se pueda
+     comparar contra un campo BFS, que cuenta PASOS. Una vuelta entera son
+     4n celdas, o sea 2n/π por radian; y el ×4/π es la razon media entre la
+     distancia de manzana y la recta para direcciones al azar, que es lo que
+     el campo mide de verdad.                                               */
+  const g = { NB, ND, POS, N, kD: 8 * n / (Math.PI * Math.PI) };
+  GEO_CACHE[n] = g;
+  return g;
+}
+
+/* distancia en PASOS estimados entre dos celdas */
+function distCel(M, i, j) {
+  const P = M.POS;
+  let c = P[i * 3] * P[j * 3] + P[i * 3 + 1] * P[j * 3 + 1] + P[i * 3 + 2] * P[j * 3 + 2];
+  if (c > 1) c = 1; else if (c < -1) c = -1;
+  return Math.acos(c) * M.kD;
+}
+
+/* UN DISCO DE K CELDAS POR BFS, y no un cuadrado de x±r: un cuadrado se
+   parte cuando cae sobre una arista del cubo y deja media casa en otra cara.
+   Esto da exactamente K celdas contiguas donde sea, esquina incluida.      */
+function discoN(M, i0, K, out) {
+  const NB = M.NB;
+  if (!M._dv || M._dv.length !== M.N) { M._dv = new Int32Array(M.N); M._ds = 0; }
+  const vis = M._dv; M._ds++; const s = M._ds;
+  const q = out; let qa = 0, qb = 0;
+  vis[i0] = s; q[qb++] = i0;
+  while (qa < qb && qb < K) {
+    const c = q[qa++], b = c * 4;
+    for (let d = 0; d < 4; d++) {
+      const k = NB[b + d];
+      if (vis[k] === s) continue;
+      vis[k] = s; q[qb++] = k;
+      if (qb >= K) break;
+    }
+  }
+  return qb;
+}
+
+/* ══════════════════════ EL MODELO ══════════════════════ */
 
 function nuevoM(n) {
+  const g = geoDe(n);
   return {
-    n, z: new Uint8Array(n * n), t: new Uint8Array(n * n),
-    jug: [], f: 0, libres: n * n, cuenta: new Int32Array(NJUG + 1),
+    n, N: g.N, NB: g.NB, ND: g.ND, POS: g.POS, kD: g.kD,
+    z: new Uint8Array(g.N), t: new Uint8Array(g.N),
+    jug: [], f: 0, libres: g.N, cuenta: new Int32Array(NJUG + 1),
     sucio: true, reloj: 0, arena: false,
-    _vis: null, _pila: null, _bq: null,
+    /* dos numeros que solo existen para poder AFIRMAR algo sobre la regla de
+       «afuera»: el peor reparto que vio un relleno y cuantas veces estuvo
+       apretado. Cuestan dos comparaciones por cerrado y son lo unico que hace
+       comprobable la unica decision de diseno que la esfera obliga a tomar. */
+    peorRep: 1, dudas: 0, cerrados: 0,
+    _vis: null, _pila: null, _bq: null, _disco: null,
   };
 }
-const dentro = (M, x, y) => x >= 0 && y >= 0 && x < M.n && y < M.n;
-const solido = (M, x, y) => !dentro(M, x, y) || M.z[y * M.n + x] === PIEDRA;
+const solido = (M, i) => M.z[i] === PIEDRA;
 
 function nuevoJug(id, bot) {
   return {
-    id, bot: bot || null, ix: 0, iy: 0, dx: 1, dy: 0, ped: null,
+    id, bot: bot || null, i: 0, d: 0, ped: null,
     vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
     /* `cortes` son las veces que te cortaron A VOS y `matas` las que cortaste
        vos: dos numeros distintos que en la campana no hacia falta separar,
@@ -787,39 +1065,56 @@ function nuevoJug(id, bot) {
 /* ── RECLAMAR ─────────────────────────────────────────────────────────────
    ES UNA SOLA FUNCION Y LA USAN CUATRO COSAS: el jugador, los bots, el
    auditor y el dibujo del destello. Con dos cuentas, el auditor estaria
-   aprobando un juego que no existe.                                        */
+   aprobando un juego que no existe.
+
+   EN EL PLANO EL RELLENO ARRANCABA DEL BORDE. Una esfera no tiene borde: la
+   estela cerrada la parte en dos pedazos y los DOS son finitos, asi que
+   «afuera» deja de ser una posicion. Se etiquetan las componentes del
+   complemento y **la mas grande es afuera**; todo lo demas se reclama.
+
+   ESO ES UNA DECISION DE DISENO Y NO UN TEOREMA, y por eso se mide: cuando el
+   pedazo encerrado fuera mas grande que el que queda libre, la regla elegiria
+   el lado equivocado. `M.peorRep` guarda el reparto mas apretado que se vio y
+   `M.dudas` cuenta las veces que estuvo por debajo de tres cuartos. Con ocho
+   cuerpos sobre 8.664 celdas, encerrar mas de la mitad del tablero libre en
+   una sola vuelta pide un cerco de miles de celdas de perimetro.           */
 function reclama(M, p) {
-  const n = M.n, id = p.id, z = M.z, t = M.t;
+  const N = M.N, id = p.id, z = M.z, t = M.t, NB = M.NB;
   let nue = 0;
-  for (let i = 0; i < t.length; i++) if (t[i] === id) { t[i] = 0; if (z[i] !== id) { z[i] = id; nue++; } }
+  for (let i = 0; i < N; i++) if (t[i] === id) { t[i] = 0; if (z[i] !== id) { z[i] = id; nue++; } }
   p.estela = 0; p.cola.length = 0;
 
-  /* reja virtual de (n+2)²: el anillo de afuera siempre se pisa, asi que el
-     relleno arranca de un sitio que existe sin tener que tratar los bordes
-     como un caso aparte.                                                   */
-  const w = n + 2, W = w * w;
-  if (!M._vis || M._vis.length !== W) { M._vis = new Uint8Array(W); M._pila = new Int32Array(W); }
-  const vis = M._vis, pila = M._pila;
-  vis.fill(0);
-  let sp = 0; pila[sp++] = 0; vis[0] = 1;
-  while (sp > 0) {
-    const c = pila[--sp], cx = c % w, cy = (c / w) | 0;
-    for (let d = 0; d < 4; d++) {
-      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
-      if (nx < 0 || ny < 0 || nx >= w || ny >= w) continue;
-      const k = ny * w + nx; if (vis[k]) continue;
-      if (nx > 0 && ny > 0 && nx <= n && ny <= n && z[(ny - 1) * n + (nx - 1)] === id) continue;
-      vis[k] = 1; pila[sp++] = k;
+  if (!M._vis || M._vis.length !== N) { M._vis = new Int32Array(N); M._pila = new Int32Array(N); }
+  const lab = M._vis, pila = M._pila;
+  lab.fill(0);
+  let comp = 0, mejor = 0, mejorTam = -1, libres = 0;
+  for (let s = 0; s < N; s++) {
+    if (lab[s] || z[s] === id) continue;
+    comp++;
+    let sp = 0; pila[sp++] = s; lab[s] = comp; let tam = 0;
+    while (sp > 0) {
+      const c = pila[--sp]; tam++;
+      const b = c * 4;
+      for (let d = 0; d < 4; d++) {
+        const k = NB[b + d];
+        if (lab[k] || z[k] === id) continue;
+        lab[k] = comp; pila[sp++] = k;
+      }
     }
+    libres += tam;
+    if (tam > mejorTam) { mejorTam = tam; mejor = comp; }
   }
-  for (let y = 0; y < n; y++) {
-    const fv = (y + 1) * w + 1, fz = y * n;
-    for (let x = 0; x < n; x++) {
-      if (vis[fv + x]) continue;
-      const i = fz + x, v = z[i];
-      if (v === PIEDRA || v === id) continue;
-      z[i] = id; nue++;
-    }
+  for (let i = 0; i < N; i++) {
+    if (lab[i] === mejor || lab[i] === 0) continue;
+    const v = z[i];
+    if (v === PIEDRA || v === id) continue;   /* la roca sigue siendo roca */
+    z[i] = id; nue++;
+  }
+  if (libres > 0) {
+    const rep = mejorTam / libres;
+    if (rep < M.peorRep) M.peorRep = rep;
+    if (rep < 0.75) M.dudas++;
+    M.cerrados++;
   }
   p.fuera = false; p.cerros++;
   M.sucio = true;
@@ -829,7 +1124,7 @@ function reclama(M, p) {
 
 /* ── EL CAMPO DE DISTANCIA AL BORDE, CON SIGNO ────────────────────────────
    Un BFS por celda para decidir cada paso costaria, sobre los cuarenta
-   niveles, cientos de millones de visitas. El campo cuesta O(n²) UNA VEZ por
+   niveles, cientos de millones de visitas. El campo cuesta O(N) UNA VEZ por
    cambio de terreno —el mismo precio que el relleno que lo provoco— y se
    calcula PEREZOSO: un bot que no esta volviendo a casa no lo paga.
 
@@ -837,14 +1132,12 @@ function reclama(M, p) {
    viaje. Con el campo medido desde el terreno propio, TODO lo propio vale
    cero: adentro no hay pendiente, asi que un bot parado en el medio de su
    casa no tiene por donde subir y sale dando vueltas al azar hasta chocarse
-   con el borde. Medido, eso eran DIECISEIS TICS seguidos en el cero, y el
-   terreno crece, o sea que empeora solo a lo largo de la partida.
-   El cero pasa a ser EL BORDE: hacia afuera +1, +2… y hacia adentro −1, −2…
-   Con eso «salir» es subir por el campo desde donde se este, y el camino que
-   sale es el mas corto por construccion.                                   */
+   con el borde. Medido en el plano, eso eran DIECISEIS TICS seguidos en el
+   cero, y el terreno crece, o sea que empeora solo a lo largo de la partida.
+   El cero pasa a ser EL BORDE: hacia afuera +1, +2… y hacia adentro −1, −2… */
 const DC_NADA = -1e6;
 function campoCasa(M, p) {
-  const n = M.n, N = n * n;
+  const N = M.N, NB = M.NB;
   if (!p.dc || p.dc.length !== N) p.dc = new Int32Array(N);
   const dc = p.dc; dc.fill(DC_NADA);
   if (!M._bq || M._bq.length !== N) M._bq = new Int32Array(N);
@@ -852,11 +1145,9 @@ function campoCasa(M, p) {
   /* semilla: las celdas propias que dan a algo pisable que no es propio */
   for (let i = 0; i < N; i++) {
     if (M.z[i] !== p.id) continue;
-    const cx = i % n, cy = (i / n) | 0;
+    const b = i * 4;
     for (let d = 0; d < 4; d++) {
-      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
-      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-      const k = ny * n + nx;
+      const k = NB[b + d];
       if (M.z[k] === PIEDRA || M.z[k] === p.id) continue;
       dc[i] = 0; q[qb++] = i; break;
     }
@@ -865,11 +1156,9 @@ function campoCasa(M, p) {
      de antes para que el bot al menos tenga un gradiente y no un plano.    */
   if (!qb) for (let i = 0; i < N; i++) if (M.z[i] === p.id) { dc[i] = 0; q[qb++] = i; }
   while (qa < qb) {
-    const c = q[qa++], cx = c % n, cy = (c / n) | 0, v = dc[c];
+    const c = q[qa++], v = dc[c], b = c * 4;
     for (let d = 0; d < 4; d++) {
-      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
-      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-      const k = ny * n + nx;
+      const k = NB[b + d];
       if (dc[k] !== DC_NADA || M.z[k] === PIEDRA) continue;
       /* lo propio baja y lo ajeno sube. Una celda propia vecina de una de
          afuera ya se sembro en cero, asi que las dos ramas no se cruzan.   */
@@ -884,23 +1173,16 @@ const verCasa = (M, p) => (p.dcSucio || !p.dc ? campoCasa(M, p) : p.dc);
 
 function recuenta(M) {
   M.cuenta.fill(0);
-  for (let i = 0; i < M.z.length; i++) { const v = M.z[i]; if (v > 0 && v < PIEDRA) M.cuenta[v]++; }
+  for (let i = 0; i < M.N; i++) { const v = M.z[i]; if (v > 0 && v < PIEDRA) M.cuenta[v]++; }
   M.sucio = false;
 }
 function tajada(M, id) {
   if (M.sucio) recuenta(M);
   return M.libres > 0 ? M.cuenta[id] / M.libres : 0;
 }
-
-/* ── LA TABLA DE POSICIONES ───────────────────────────────────────────────
-   Devuelve los que juegan ordenados por terreno, y el PUESTO sale de ahi y
-   no de una segunda cuenta: con dos, el numero grande del marcador y la fila
-   resaltada de la tabla pueden decir cosas distintas, que es justo el defecto
-   que nadie ve hasta que le pasa a un jugador.
-
-   EL MUERTO SIGUE EN LA TABLA, en cero. Sacarlo hace que los puestos de abajo
-   SUBAN cuando alguien se muere: uno mira el marcador, ve que paso de sexto a
-   quinto sin haber hecho nada, y el numero deja de significar.              */
+/* LA TABLA DEJA AL MUERTO ADENTRO, EN CERO. Sacarlo hace que los puestos de
+   abajo SUBAN cuando alguien se muere: uno mira el marcador, ve que paso de
+   sexto a quinto sin haber hecho nada, y el numero deja de significar.     */
 function tablaPos(M) {
   if (M.sucio) recuenta(M);
   const f = [];
@@ -911,19 +1193,30 @@ function tablaPos(M) {
 }
 const puestoDe = (M, id) => { const t = tablaPos(M); for (const f of t) if (f.id === id) return f.pos; return t.length; };
 
-/* ── UN PASO DE CELDA ─────────────────────────────────────────────────────
+/* ── EL TIC ───────────────────────────────────────────────────────────────
    TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
    cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
    tablero, y no una por jugador. Con una por jugador habria que decidir en
    que orden se resuelven dos cabezas que entran a la misma celda, y el
-   resultado dependeria del orden del array.                                */
+   resultado dependeria del orden del array.
+
+   EN LA ESFERA EL MOVIMIENTO SON DOS LECTURAS DE TABLA y ninguna suma de
+   coordenadas: `NB` dice a que celda se va y `ND` con que rumbo se llega.
+   Las dos se leen con el `i` y el `d` VIEJOS —de ahi el `b` calculado antes
+   de escribir nada— porque cruzando una costura el rumbo cambia, y leerlo
+   despues seria leer el rumbo de la cara nueva con el indice de la vieja.
+
+   Y SE FUE LA MUERTE POR SALIRSE DEL TABLERO: una esfera no tiene borde.
+   Es la unica regla del juego que la conversion elimina, y no se reemplaza
+   por nada — en la referencia tampoco hay pared.                          */
 function tic(M) {
-  const n = M.n, vivos = [];
+  const NB = M.NB, ND = M.ND, vivos = [];
   for (const p of M.jug) {
     if (!p.vivo) continue;
-    if (p.ped && !(p.ped[0] === -p.dx && p.ped[1] === -p.dy)) { p.dx = p.ped[0]; p.dy = p.ped[1]; }
+    if (p.ped != null && p.ped !== OPUE[p.d]) p.d = p.ped;
     p.ped = null;
-    p.ix += p.dx; p.iy += p.dy;
+    const b = p.i * 4 + p.d;
+    p.i = NB[b]; p.d = ND[b];
     vivos.push(p);
   }
 
@@ -933,8 +1226,7 @@ function tic(M) {
      lista.                                                                 */
   const mata = new Set();
   for (const p of vivos) {
-    if (!dentro(M, p.ix, p.iy)) { mata.add(p); continue; }
-    const i = p.iy * n + p.ix;
+    const i = p.i;
     if (M.z[i] === PIEDRA) { mata.add(p); continue; }
     const te = M.t[i];
     if (te !== 0) {
@@ -945,13 +1237,13 @@ function tic(M) {
     }
   }
   for (let a = 0; a < vivos.length; a++) for (let b = a + 1; b < vivos.length; b++)
-    if (vivos[a].ix === vivos[b].ix && vivos[a].iy === vivos[b].iy) { mata.add(vivos[a]); mata.add(vivos[b]); }
+    if (vivos[a].i === vivos[b].i) { mata.add(vivos[a]); mata.add(vivos[b]); }
 
   for (const p of mata) muere(M, p);
 
   for (const p of vivos) {
     if (!p.vivo) continue;
-    const i = p.iy * n + p.ix;
+    const i = p.i;
     if (M.z[i] === p.id) { if (p.fuera) reclama(M, p); }
     else { if (M.t[i] !== p.id) { M.t[i] = p.id; p.estela++; p.cola.push(i); } p.fuera = true; }
   }
@@ -961,7 +1253,7 @@ function tic(M) {
 function muere(M, p) {
   if (!p.vivo) return;
   p.vivo = false; p.cortes++;
-  for (let i = 0; i < M.t.length; i++) if (M.t[i] === p.id) M.t[i] = 0;
+  for (let i = 0; i < M.N; i++) if (M.t[i] === p.id) M.t[i] = 0;
   /* EN LA ARENA EL TERRENO SE PIERDE ENTERO, y es la otra mitad de lo que
      hace que cortar a alguien signifique algo. En la campana el corte cuesta
      tiempo y posicion —el terreno espera— porque ahi la partida tiene reloj
@@ -972,7 +1264,7 @@ function muere(M, p) {
      suelta vuelve a ser tablero libre y ahi vuelve a haber para todos.     */
   if (M.arena) {
     const z = M.z;
-    for (let i = 0; i < z.length; i++) if (z[i] === p.id) z[i] = LIBRE;
+    for (let i = 0; i < M.N; i++) if (z[i] === p.id) z[i] = LIBRE;
     M.sucio = true;
     for (const q of M.jug) q.dcSucio = true;
   }
@@ -986,62 +1278,64 @@ function muere(M, p) {
    un corte tiene que costar es TIEMPO y POSICION, que es lo que cuesta
    volver a salir desde el medio de lo propio.                              */
 function renace(M, p) {
-  const n = M.n;
   let mejor = -1, mejorV = -1;
   const cab = [];
-  for (const q of M.jug) if (q !== p && q.vivo) cab.push([q.ix, q.iy]);
-  for (let i = 0; i < M.z.length; i++) {
+  for (const q of M.jug) if (q !== p && q.vivo) cab.push(q.i);
+  for (let i = 0; i < M.N; i++) {
     if (M.z[i] !== p.id) continue;
-    const x = i % n, y = (i / n) | 0;
     let d = 1e9;
-    for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
+    for (const c of cab) { const e = distCel(M, i, c); if (e < d) d = e; }
     if (d > mejorV) { mejorV = d; mejor = i; }
   }
   if (mejor < 0) mejor = carvaCasa(M, p);
-  p.ix = mejor % n; p.iy = (mejor / n) | 0;
+  p.i = mejor;
   p.vivo = true; p.fuera = false; p.estela = 0; p.ped = null; p.plan = null; p.dcSucio = true;
   /* mira hacia adentro de lo propio: renacer apuntando al vacio es salir sin
      haberlo pedido, y eso no es un renacimiento, es otro corte.            */
   let d0 = 0;
-  for (let d = 0; d < 4; d++) {
-    const nx = p.ix + DIR[d][0], ny = p.iy + DIR[d][1];
-    if (dentro(M, nx, ny) && M.z[ny * n + nx] === p.id) { d0 = d; break; }
-  }
-  p.dx = DIR[d0][0]; p.dy = DIR[d0][1];
+  for (let d = 0; d < 4; d++) if (M.z[M.NB[mejor * 4 + d]] === p.id) { d0 = d; break; }
+  p.d = d0;
 }
 
-/* Carva un cuadrado nuevo donde mas neutral haya y mas lejos de las cabezas
-   ajenas. Sólo hace falta cuando a alguien le encerraron TODO el terreno.  */
-function carvaCasa(M, p, rad) {
-  const n = M.n, r = rad || 2;
+/* Carva una casa nueva donde mas neutral haya y mas lejos de las cabezas
+   ajenas. Solo hace falta cuando a alguien le encerraron TODO el terreno.
+
+   LA CASA ES UN DISCO DE 25 CELDAS y no un 5x5, porque en una esfera de cubo
+   un cuadrado de x±r se parte al caer sobre una arista. El numero no es
+   arbitrario: la bola L1 de radio 3 mide EXACTAMENTE 25 celdas, o sea la
+   misma casa del plano celda por celda.
+
+   Y NO SE BARRE CELDA POR CELDA: con 8.664 celdas y un BFS de 25 por
+   candidato eso son doscientos mil pasos por renacimiento. El salto sale del
+   tamano (`N/900`), asi que la cantidad de candidatos es la misma en el
+   tutorial que en la arena y esto no se pone lento al crecer el planeta.  */
+const CASA_K = 25;
+function carvaCasa(M, p, K) {
+  const k = K || CASA_K, N = M.N;
   const cab = [];
-  for (const q of M.jug) if (q !== p && q.vivo) cab.push([q.ix, q.iy]);
+  for (const q of M.jug) if (q !== p && q.vivo) cab.push(q.i);
+  if (!M._disco || M._disco.length < k) M._disco = new Int32Array(Math.max(k, 64));
+  const tmp = M._disco;
+  const salto = Math.max(1, Math.round(N / 900));
   let mejor = -1, mejorV = -1e9;
-  for (let y = r + 1; y < n - r - 1; y += 2) for (let x = r + 1; x < n - r - 1; x += 2) {
+  for (let c = 0; c < N; c += salto) {
+    if (discoN(M, c, k, tmp) < k) continue;
     let lib = 0, roca = 0;
-    for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++) {
-      const v = M.z[(y + b) * n + (x + a)];
-      if (v === PIEDRA) roca++; else if (v === LIBRE) lib++;
-    }
+    for (let j = 0; j < k; j++) { const v = M.z[tmp[j]]; if (v === PIEDRA) roca++; else if (v === LIBRE) lib++; }
     if (roca > 0) continue;
     let d = 1e9;
-    for (const c of cab) { const e = Math.abs(c[0] - x) + Math.abs(c[1] - y); if (e < d) d = e; }
+    for (const q of cab) { const e = distCel(M, c, q); if (e < d) d = e; }
     /* EN LA ARENA PESA EL HUECO Y NO LA DISTANCIA, porque carvar PISA lo que
        haya: con ocho cuerpos renaciendo todo el tiempo, un renacimiento que
-       prefiere terreno ajeno le roba a alguien un cuadrado cada vez que lo
+       prefiere terreno ajeno le roba a alguien una casa cada vez que lo
        cortan. En la campana da igual —renacer casi nunca llega hasta aca,
        porque el terreno propio no se pierde.                               */
     const v = lib * (M.arena ? 6 : 2) + Math.min(d, 30) * 3;
-    if (v > mejorV) { mejorV = v; mejor = y * n + x; }
+    if (v > mejorV) { mejorV = v; mejor = c; }
   }
-  if (mejor < 0) mejor = ((n >> 1) * n + (n >> 1));
-  const cx = mejor % n, cy = (mejor / n) | 0;
-  for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++) {
-    const x = cx + a, y = cy + b;
-    if (!dentro(M, x, y)) continue;
-    const i = y * n + x;
-    if (M.z[i] !== PIEDRA) M.z[i] = p.id;
-  }
+  if (mejor < 0) mejor = 0;
+  const m = discoN(M, mejor, k, tmp);
+  for (let j = 0; j < m; j++) { const i = tmp[j]; if (M.z[i] !== PIEDRA) M.z[i] = p.id; }
   M.sucio = true;
   for (const q of M.jug) q.dcSucio = true;
   return mejor;
@@ -1061,6 +1355,31 @@ function paso(M, dt) {
 }
 
 /* ══════════════════════ EL MAPA ══════════════════════ */
+
+/* LAS CASAS VAN EN ESPIRAL DE FIBONACCI Y NO EN UN CIRCULO. En el plano el
+   circulo existia para que dos casas no nacieran pegadas; en una esfera un
+   circulo es una LATITUD, o sea que con ocho cuerpos los ocho quedarian en la
+   misma franja y los dos polos vacios. La espiral aurea reparte n puntos sobre
+   la esfera dejando a cada uno la misma area, que es exactamente lo que el
+   circulo hacia en el plano.
+
+   Y LLEVA DOS GIROS SORTEADOS y no uno: el de longitud (`a0`) mueve la
+   espiral alrededor del eje, pero el primer punto sigue cayendo siempre cerca
+   del mismo polo, y un polo del cubo es una ESQUINA —tres caras— asi que sin
+   el segundo giro (`b0`, alrededor de X) todos los niveles nacerian con una
+   casa en el mismo vertice.                                                */
+const GA = Math.PI * (3 - Math.sqrt(5));
+function ptoFib(j, nj, a0, b0) {
+  const yy = nj === 1 ? 0 : 1 - (j + 0.5) * 2 / nj;
+  const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+  const th = GA * j + a0;
+  const x = Math.cos(th) * rr, y = yy, z = Math.sin(th) * rr;
+  const cb = Math.cos(b0), sb = Math.sin(b0);
+  return [x, y * cb - z * sb, y * sb + z * cb];
+}
+
+const CASA_LIMPIA = 49;   /* el anillo de roca que se limpia alrededor */
+
 function generaMapa(cfg) {
   const n = cfg.n, M = nuevoM(n), R = azar(cfg.sem);
   M.arena = !!cfg.arena;
@@ -1073,21 +1392,11 @@ function generaMapa(cfg) {
   M.az = azar(cfg.sem ^ 0x5bf03635);
   ponPiedras(M, cfg, R);
 
-  /* las casas van repartidas en un circulo: con posiciones al azar dos
-     jugadores pueden nacer pegados y el nivel se decide en el primer
-     segundo, que no es dificultad sino sorteo.                            */
-  /* CON UN SOLO JUGADOR EL CIRCULO NO SEPARA NADA Y ENCIMA ESTORBA: el radio
-     existe para que dos casas no nazcan pegadas, y sin rival lo unico que hace
-     es empujar la unica casa contra una pared. Medido en el tutorial —26 celdas
-     y `riv: 0`— la casa caia en el 18 de 26, o sea cinco celdas de aire de un
-     lado y dieciseis del otro, con la camara clavada en su tope. Ninguno de los
-     cinco mundos tiene `riv: 0`, asi que esto toca al tutorial y a nada mas. */
-  const nj = 1 + cfg.riv, rad = nj > 1 ? n * 0.31 : 0, cx = n / 2, cy = n / 2;
-  const a0 = R() * Math.PI * 2;
+  const nj = 1 + cfg.riv;
+  const a0 = R() * Math.PI * 2, b0 = R() * Math.PI * 2;
+  const tmp = new Int32Array(Math.max(CASA_K, CASA_LIMPIA));
   for (let j = 0; j < nj; j++) {
-    const a = a0 + j * Math.PI * 2 / nj;
-    let x = Math.round(cx + Math.cos(a) * rad), y = Math.round(cy + Math.sin(a) * rad);
-    x = cl(x, 4, n - 5); y = cl(y, 4, n - 5);
+    const c = aCelda(ptoFib(j, nj, a0, b0), n);
     /* `per` PUEDE SER UN ARREGLO, y con eso la arena tiene siete cabezas
        distintas sin escribir siete cerebros: uno manso que sale poco, uno
        temerario que se va al otro lado del tablero, y cinco en el medio. La
@@ -1095,19 +1404,13 @@ function generaMapa(cfg) {
     const per = Array.isArray(cfg.per) ? cfg.per[(j - 1) % cfg.per.length] : cfg.per;
     const p = nuevoJug(j + 1, j === 0 ? null : { per });
     M.jug.push(p);
-    for (let b = -2; b <= 2; b++) for (let a2 = -2; a2 <= 2; a2++) {
-      const i = (y + b) * n + (x + a2);
-      M.z[i] = p.id;
-    }
-    /* un anillo de una celda alrededor de la casa se limpia de roca: nacer
-       con la unica salida tapada es perder antes de tocar la pantalla.    */
-    for (let b = -3; b <= 3; b++) for (let a2 = -3; a2 <= 3; a2++) {
-      const xx = x + a2, yy = y + b;
-      if (!dentro(M, xx, yy)) continue;
-      const i = yy * n + xx;
-      if (M.z[i] === PIEDRA) M.z[i] = LIBRE;
-    }
-    p.ix = x; p.iy = y; p.dx = 1; p.dy = 0;
+    let m = discoN(M, c, CASA_K, tmp);
+    for (let k = 0; k < m; k++) M.z[tmp[k]] = p.id;
+    /* un anillo alrededor de la casa se limpia de roca: nacer con la unica
+       salida tapada es perder antes de tocar la pantalla.                  */
+    m = discoN(M, c, CASA_LIMPIA, tmp);
+    for (let k = 0; k < m; k++) if (M.z[tmp[k]] === PIEDRA) M.z[tmp[k]] = LIBRE;
+    p.i = c; p.d = 0;
   }
 
   /* CONEXIDAD POR CONSTRUCCION: lo que no se alcanza desde la casa del
@@ -1116,72 +1419,108 @@ function generaMapa(cfg) {
      cuenta para la meta y al que no se puede llegar.                      */
   selloSueltos(M);
   M.libres = 0;
-  for (let i = 0; i < M.z.length; i++) if (M.z[i] !== PIEDRA) M.libres++;
+  for (let i = 0; i < M.N; i++) if (M.z[i] !== PIEDRA) M.libres++;
   M.sucio = true;
   M.cfg = cfg;
   return M;
 }
 
+/* ── LAS PIEDRAS ──────────────────────────────────────────────────────────
+   EN EL PLANO LOS CUATRO PATRONES ERAN DIBUJOS EN UNA GRILLA; aca son
+   propiedades de una DIRECCION, medidas sobre `POS`. Eso no es una traduccion
+   cosmetica: un rectangulo en la grilla de una cara se parte al cruzar una
+   arista, y una franja definida por un angulo contra un eje da la vuelta al
+   planeta entera sin saber que las caras existen.
+
+   LAS FRACCIONES DE ROCA ESTAN CALCULADAS CONTRA LAS DEL PLANO, no elegidas:
+   pilares 7,7 % (el plano daba 7-9), cruz 9,1 (8,9), islas 5,1 (5,0), anillo
+   6,3 (6,0). Una franja de semiancho `hw` alrededor de un circulo maximo cubre
+   `sin(hw)` de la esfera, y `hw = grosor·π/(4n)` es lo que convierte un grosor
+   en celdas a un angulo.                                                    */
 function ponPiedras(M, cfg, R) {
-  const n = M.n, z = M.z;
-  const roca = (x, y) => { if (dentro(M, x, y)) z[y * n + x] = PIEDRA; };
-  const bloque = (x, y, w, h) => { for (let b = 0; b < h; b++) for (let a = 0; a < w; a++) roca(x + a, y + b); };
+  const n = M.n, N = M.N, z = M.z, P = M.POS;
+
+  /* un eje al azar y dos perpendiculares: `U`/`V` son los que dan la longitud
+     alrededor del eje, o sea donde van las puertas.                        */
+  const eje = () => {
+    const u = R() * 2 - 1, t = R() * Math.PI * 2, s = Math.sqrt(Math.max(0, 1 - u * u));
+    return nrm([Math.cos(t) * s, u, Math.sin(t) * s]);
+  };
+  const perp = (A) => {
+    const h = Math.abs(A[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const U = nrm([A[1] * h[2] - A[2] * h[1], A[2] * h[0] - A[0] * h[2], A[0] * h[1] - A[1] * h[0]]);
+    const V = [A[1] * U[2] - A[2] * U[1], A[2] * U[0] - A[0] * U[2], A[0] * U[1] - A[1] * U[0]];
+    return [U, V];
+  };
+  /* puertas: sin ellas una franja cerrada parte el planeta en dos y el sellado
+     de sueltos se llevaria la mitad del tablero.                            */
+  const puerta = (a, q, w) => {
+    for (let k = 0; k < q; k++) {
+      let e = a - k * Math.PI * 2 / q;
+      e = Math.abs(((e % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      if (Math.PI - e < w) return true;
+    }
+    return false;
+  };
+  /* franja alrededor de una latitud `lat` medida desde el ecuador del eje A */
+  const franja = (A, lat, hw, q, w) => {
+    const [U, V] = perp(A);
+    for (let i = 0; i < N; i++) {
+      const x = P[i * 3], y = P[i * 3 + 1], zz = P[i * 3 + 2];
+      let s = x * A[0] + y * A[1] + zz * A[2];
+      if (s > 1) s = 1; else if (s < -1) s = -1;
+      const la = Math.asin(s);
+      if (Math.abs(Math.abs(la) - lat) > hw) continue;
+      if (q > 0) {
+        const a = Math.atan2(x * V[0] + y * V[1] + zz * V[2], x * U[0] + y * U[1] + zz * U[2]);
+        if (puerta(a, q, w)) continue;
+      }
+      z[i] = PIEDRA;
+    }
+  };
+  const disco = (c, k, buf) => { const m = discoN(M, c, k, buf); for (let j = 0; j < m; j++) z[buf[j]] = PIEDRA; };
+
   switch (cfg.pat) {
     case 'pilares': {
-      const paso = Math.max(7, Math.round(n / 7));
-      for (let y = paso; y < n - 3; y += paso) for (let x = paso; x < n - 3; x += paso) {
-        const w = 2 + (R() < 0.4 ? 1 : 0);
-        bloque(x - (w >> 1), y - (w >> 1), w, w);
-      }
+      const q = Math.round(N / 90), buf = new Int32Array(9);
+      for (let i = 0; i < q; i++) disco(Math.floor(R() * N), 5 + Math.floor(R() * 5), buf);
       break;
     }
     case 'cruz': {
-      const g = Math.max(3, Math.round(n * 0.07)), c = n >> 1, hu = Math.round(n * 0.17);
-      for (let i = 0; i < n; i++) {
-        if (Math.abs(i - c) < hu) continue;
-        for (let k = 0; k < g; k++) { roca(i, c - (g >> 1) + k); roca(c - (g >> 1) + k, i); }
-      }
+      /* DOS CIRCULOS MAXIMOS PERPENDICULARES, que es lo que una cruz ES en una
+         esfera: se cruzan en cuatro puntos y parten el planeta en cuatro.  */
+      const hw = 3 * Math.PI / (4 * n);
+      const A = eje(), [U] = perp(A);
+      franja(A, 0, hw, 4, 0.22);
+      franja(U, 0, hw, 4, 0.22);
       break;
     }
     case 'islas': {
-      const q = Math.round(n * n / 240);
-      for (let i = 0; i < q; i++) {
-        const x = 3 + Math.floor(R() * (n - 6)), y = 3 + Math.floor(R() * (n - 6));
-        const w = 2 + Math.floor(R() * 4), h = 2 + Math.floor(R() * 4);
-        bloque(x, y, w, h);
-      }
+      const q = Math.round(N / 280), buf = new Int32Array(20);
+      for (let i = 0; i < q; i++) disco(Math.floor(R() * N), 8 + Math.floor(R() * 13), buf);
       break;
     }
     case 'anillo': {
-      const c = (n - 1) / 2, r1 = n * 0.30, r2 = n * 0.34;
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        const d = Math.hypot(x - c, y - c);
-        if (d < r1 || d > r2) continue;
-        const a = Math.atan2(y - c, x - c);
-        /* cuatro puertas: un anillo cerrado parte el mapa en dos y el
-           sellado de sueltos se llevaria la mitad del tablero.            */
-        let puerta = false;
-        for (let k = 0; k < 4; k++) if (Math.abs(((a - k * Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI) > Math.PI - 0.22) puerta = true;
-        if (!puerta) roca(x, y);
-      }
+      /* dos anillos a 45 grados del ecuador: en el plano era uno concentrico,
+         y en una esfera el equivalente de «un anillo alrededor del centro» son
+         los dos paralelos que rodean los dos polos.                         */
+      franja(eje(), Math.PI / 4, 3 * Math.PI / (4 * n), 4, 0.22);
       break;
     }
   }
 }
 
 function selloSueltos(M) {
-  const n = M.n, N = n * n, vis = new Uint8Array(N), q = new Int32Array(N);
+  const N = M.N, NB = M.NB, vis = new Uint8Array(N), q = new Int32Array(N);
   let qa = 0, qb = 0, ini = -1;
   for (let i = 0; i < N; i++) if (M.z[i] === 1) { ini = i; break; }
   if (ini < 0) for (let i = 0; i < N; i++) if (M.z[i] !== PIEDRA) { ini = i; break; }
   if (ini < 0) return;
   vis[ini] = 1; q[qb++] = ini;
   while (qa < qb) {
-    const c = q[qa++], cx = c % n, cy = (c / n) | 0;
+    const c = q[qa++], b = c * 4;
     for (let d = 0; d < 4; d++) {
-      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
-      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-      const k = ny * n + nx;
+      const k = NB[b + d];
       if (vis[k] || M.z[k] === PIEDRA) continue;
       vis[k] = 1; q[qb++] = k;
     }
@@ -1194,17 +1533,15 @@ function selloSueltos(M) {
    no muestra: terreno inalcanzable que cuenta para la meta, una casa tapada,
    dos casas pegadas, o una meta que ni ocupando todo se alcanza.          */
 function auditaMapa(M) {
-  const n = M.n, N = n * n, cfg = M.cfg;
+  const N = M.N, NB = M.NB, ND = M.ND, cfg = M.cfg;
   const vis = new Uint8Array(N), q = new Int32Array(N);
   let qa = 0, qb = 0;
-  const ini = M.jug[0].iy * n + M.jug[0].ix;
+  const ini = M.jug[0].i;
   vis[ini] = 1; q[qb++] = ini;
   while (qa < qb) {
-    const c = q[qa++], cx = c % n, cy = (c / n) | 0;
+    const c = q[qa++], b = c * 4;
     for (let d = 0; d < 4; d++) {
-      const nx = cx + DIR[d][0], ny = cy + DIR[d][1];
-      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-      const k = ny * n + nx;
+      const k = NB[b + d];
       if (vis[k] || M.z[k] === PIEDRA) continue;
       vis[k] = 1; q[qb++] = k;
     }
@@ -1215,49 +1552,34 @@ function auditaMapa(M) {
   for (const p of M.jug) {
     let s = 0;
     for (let d = 0; d < 4; d++) {
-      const nx = p.ix + DIR[d][0] * 3, ny = p.iy + DIR[d][1] * 3;
-      if (dentro(M, nx, ny) && M.z[ny * n + nx] !== PIEDRA) s++;
+      let i = p.i, dd = d, ok = true;
+      for (let k = 0; k < 3; k++) { const b = i * 4 + dd; i = NB[b]; dd = ND[b]; if (M.z[i] === PIEDRA) { ok = false; break; } }
+      if (ok) s++;
     }
     if (s < salidas) salidas = s;
-    for (const r of M.jug) if (r !== p) {
-      const e = Math.abs(r.ix - p.ix) + Math.abs(r.iy - p.iy);
-      if (e < cerca) cerca = e;
-    }
+    for (const r of M.jug) if (r !== p) { const e = distCel(M, r.i, p.i); if (e < cerca) cerca = e; }
   }
   if (M.jug.length < 2) cerca = 999;
   const malos = [];
   if (alcanz !== libres) malos.push('sueltas:' + (libres - alcanz));
   if (salidas < 2) malos.push('casa tapada');
-  if (cerca < n * 0.30) malos.push('casas pegadas:' + cerca);
+  if (cerca < M.n * 0.30) malos.push('casas pegadas:' + cerca.toFixed(1));
   if (cfg && cfg.meta > 0.92) malos.push('meta imposible');
-  return { n, libres, alcanz, salidas, cerca, roca: N - libres, meta: cfg ? cfg.meta : 0, malos };
+  return { n: M.n, N, libres, alcanz, salidas, cerca: +cerca.toFixed(1), roca: N - libres, meta: cfg ? cfg.meta : 0, malos };
 }
 
-/* ══════════════════════ LOS BOTS ══════════════════════
-   Entran por `p.ped`, o sea POR EL MISMO SITIO QUE EL DEDO. Con un camino
-   propio, que un bot termine el nivel no diria nada sobre el nivel que se
-   juega.                                                                   */
+/* ══════════════════════ LOS BOTS ══════════════════════ */
+
 function legales(M, p) {
-  const out = [];
+  const out = [], NB = M.NB, b = p.i * 4;
   for (let d = 0; d < 4; d++) {
-    const dx = DIR[d][0], dy = DIR[d][1];
-    if (dx === -p.dx && dy === -p.dy) continue;      /* nada de media vuelta */
-    const nx = p.ix + dx, ny = p.iy + dy;
-    if (!dentro(M, nx, ny)) continue;
-    const i = ny * M.n + nx;
+    if (d === OPUE[p.d]) continue;                   /* nada de media vuelta */
+    const i = NB[b + d];
     if (M.z[i] === PIEDRA) continue;
     if (M.t[i] === p.id) continue;                   /* la propia estela mata */
     out.push(d);
   }
   return out;
-}
-function cabCerca(M, p) {
-  let d = 1e9;
-  for (const q of M.jug) if (q !== p && q.vivo) {
-    const e = Math.abs(q.ix - p.ix) + Math.abs(q.iy - p.iy);
-    if (e < d) d = e;
-  }
-  return d;
 }
 
 const rnd = M => M.az ? M.az() : Math.random();
@@ -1268,30 +1590,66 @@ const rnd = M => M.az ? M.az() : Math.random();
    el bot se TRABABA: salia, veia un rival a nueve celdas —con la estela en
    cero, o sea sin una sola celda que perder— se volvia, y repetia. En el
    nivel 4-2 eso fueron TREINTA Y DOS abortos y el 2,1 % del tablero.
-   Sin estela no hay riesgo: parado en lo propio a nadie lo pueden cortar. */
-function riesgo(M, p) {
-  const c = p.cola, L = c.length;
-  if (!L) return 1e9;
-  const n = M.n;
+   Sin estela no hay riesgo: parado en lo propio a nadie lo pueden cortar.
+
+   Y ACA LA ESFERA OBLIGA A CAMBIAR EL METODO, no solo la formula. En el plano
+   la distancia de cuadricula tenia forma cerrada —|dx|+|dy|— asi que el
+   numero era EXACTO y gratis. En una esfera de cubo no hay forma cerrada, y
+   el primer reemplazo fue el angulo escalado (`acos(cos) * kD`, con
+   kD = 8n/pi^2 = pasos por radian por el 4/pi medio de L1 sobre L2). En
+   promedio acierta y en cada caso particular no, porque el 4/pi es una MEDIA
+   sobre direcciones: contra un BFS de verdad, en n = 18, 26, 33 y 38, la
+   estimacion da de media 0,96 a 0,98 del valor real y va de **0,47 a 1,58**.
+   El extremo que importa es el de arriba: decir que un rival esta un 58 % mas
+   lejos de lo que esta es exactamente el error que mata, porque el bot se
+   queda afuera creyendose seguro. Medido, esa era la diferencia entre 35 y 40
+   niveles ganados de 40.
+
+   ASI QUE ACA SE CUENTAN PASOS DE VERDAD, y el BFS es barato porque va
+   ACOTADO: la unica pregunta que `piensa` hace es «¿hay una cabeza rival a
+   `lim` pasos o menos de mi estela?», asi que se siembra en las cabezas
+   rivales y se corta en `lim`. Con `lim` entre 1 y 20 eso es un disco chico
+   alrededor de siete cuerpos y no la esfera entera, y la respuesta es exacta
+   para la comparacion que se hace con ella. Lo que queda mas alla devuelve
+   1e9, que es lo mismo que «no hace falta volver».
+   Y VA CON MARCA DE GENERACION (`_rg`) en vez de borrar el arreglo: limpiar
+   6.500 enteros por cuerpo y por tic cuesta mas que el propio BFS.
+
+   `distCel` —la estimacion angular— se queda, pero SOLO donde su error no
+   decide nada: sembrar casas lejos unas de otras y limpiar la roca alrededor,
+   donde el umbral esta a tres veces del valor medido.                       */
+function riesgo(M, p, lim) {
+  const c = p.cola;
+  if (!c.length) return 1e9;
   /* EL CONTROL `ciego` NO ES TORPEZA: ES NO MIRAR. Juega la misma geometria
-     —esquiva paredes, piedras y su propia estela todos los tics— y lo unico
-     que no hace es preguntar donde estan los rivales, o sea que se vuelve a
-     casa por el tramo y no por el corte. Es el unico control que aisla LA
-     decision de este juego.
-     Dos intentos anteriores no median el juego: uno que dejaba de pensar del
-     todo se mataba contra el decorado (87 de 114 muertes contra pared o
-     piedra) y otro que solo retrasaba la vista de los rivales casi no movia
-     el resultado (35 a 39 de 40 entre 0,37 y 1,11 s de atraso).            */
+     —esquiva piedras y su propia estela todos los tics— y lo unico que no
+     hace es preguntar donde estan los rivales, o sea que se vuelve a casa
+     por el tramo y no por el corte. Es el unico control que aisla LA
+     decision de este juego.                                                */
   if (p.bot && p.bot.ciego) return 1e9;
-  let d = 1e9;
-  for (const q of M.jug) {
-    if (q === p || !q.vivo) continue;
-    for (let k = 0; k < L; k++) {
-      const i = c[k], e = Math.abs((i % n) - q.ix) + Math.abs(((i / n) | 0) - q.iy);
-      if (e < d) d = e;
+  if (lim < 1) return 1e9;
+  const N = M.N, NB = M.NB, t = M.t, z = M.z;
+  if (!M._rq || M._rq.length !== N) { M._rq = new Int32Array(N); M._rv = new Int32Array(N); M._rg = 0; }
+  const q = M._rq, vis = M._rv, g = ++M._rg;
+  let qa = 0, qb = 0;
+  for (const r of M.jug) {
+    if (r === p || !r.vivo) continue;
+    if (t[r.i] === p.id) return 0;
+    if (vis[r.i] !== g) { vis[r.i] = g; q[qb++] = r.i; }
+  }
+  for (let d = 1; d <= lim && qa < qb; d++) {
+    const fin = qb;
+    while (qa < fin) {
+      const b = q[qa++] * 4;
+      for (let k = 0; k < 4; k++) {
+        const j = NB[b + k];
+        if (vis[j] === g || z[j] === PIEDRA) continue;
+        if (t[j] === p.id) return d;
+        vis[j] = g; q[qb++] = j;
+      }
     }
   }
-  return d;
+  return 1e9;
 }
 
 /* EL BOT NO CUENTA PASOS: MIRA LA PROFUNDIDAD.
@@ -1301,13 +1659,14 @@ function riesgo(M, p) {
    por vuelta donde hacen falta mas del doble. `dc` ya dice a cuantos pasos de
    lo propio esta cada celda, o sea que «salir» es subir por ese campo, «correr
    el costado» es mantenerlo y «volver» es bajarlo: los tres modos son el mismo
-   numero y ninguno depende de por donde se venia.                           */
+   numero y ninguno depende de por donde se venia. Y ESO SOBREVIVE ENTERO A LA
+   ESFERA, porque `dc` sale de un BFS sobre `NB` y un BFS no sabe de caras.  */
 function piensa(M, p) {
   const b = p.bot; if (!b) return;
   if (b.azar) return piensaAzar(M, p);
-  const n = M.n, per = b.per, leg = legales(M, p);
+  const NB = M.NB, per = b.per, leg = legales(M, p);
   if (!leg.length) return;
-  const dc = verCasa(M, p), aqui = dc[p.iy * n + p.ix];
+  const dc = verCasa(M, p), aqui = dc[p.i];
   const enCasa = aqui <= 0;                       /* cero es el borde        */
 
   /* LO QUE `per` GOBIERNA ES CUANTO SE ARRIESGA, no la punteria: un bot que
@@ -1323,39 +1682,129 @@ function piensa(M, p) {
 
   /* volver cuando el rival llega a la estela antes que yo a casa: `aqui` son
      mis pasos hasta lo propio, y el margen es lo unico que `per` mueve aca. */
-  if (p.estela > tope || riesgo(M, p) <= aqui + margen) p.plan.modo = 'volver';
+  if (p.estela > tope || riesgo(M, p, aqui + margen) <= aqui + margen) p.plan.modo = 'volver';
   else if (p.plan.modo === 'salir') { if (aqui >= hondo) p.plan.modo = 'lado'; }
   else if (p.plan.modo === 'lado') { if (p.plan.resta <= 0) p.plan.modo = 'volver'; else p.plan.resta--; }
 
+  const base = p.i * 4;
   let mejor = -1e9, d = leg[0];
   for (const k of leg) {
-    const nx = p.ix + DIR[k][0], ny = p.iy + DIR[k][1], i = ny * n + nx;
+    const i = NB[base + k];
     const dd = dc[i];
     let v;
     if (p.plan.modo === 'volver') v = -dd * 10;
     else if (p.plan.modo === 'salir') v = dd * 10;
     else v = -Math.abs(dd - hondo) * 10;        /* paralelo al borde         */
     /* seguir derecho cuando empata: un bot que zigzaguea gasta el doble de
-       estela para encerrar lo mismo.                                        */
-    if (k === dirDe(p.dx, p.dy)) v += 3;
+       estela para encerrar lo mismo. En la esfera «derecho» es el rumbo que
+       trae (`p.d`) y no una direccion de pantalla: `dirDe` desaparece con el
+       plano, porque el rumbo ya es un dato del cuerpo.                      */
+    if (k === p.d) v += 3;
     if (M.t[i] !== 0 && M.t[i] !== p.id) v += 60;   /* de paso, un corte      */
     if (M.z[i] === p.id && p.plan.modo !== 'volver') v -= 25;
     v += rnd(M) * 2;
     if (v > mejor) { mejor = v; d = k; }
   }
-  p.ped = DIR[d];
+  p.ped = d;
 }
+
 function piensaAzar(M, p) {
   const leg = legales(M, p);
   if (!leg.length) return;
-  p.ped = DIR[leg[Math.floor(rnd(M) * leg.length)]];
+  p.ped = leg[Math.floor(rnd(M) * leg.length)];
 }
-const dirDe = (dx, dy) => dx > 0 ? 0 : (dx < 0 ? 1 : (dy > 0 ? 2 : 3));
 
 /* ══════════════════════ AUDITORIAS ══════════════════════ */
 
+/* ── LA GEOMETRIA, ANTES QUE NADA ────────────────────────────────────────
+   LA TABLA DE VECINOS SE CONSTRUYE POR PROYECCION INVERSA y no con una lista
+   de 24 costuras escrita a mano, justamente porque una entrada mal escrita no
+   falla: TELETRANSPORTA el cuerpo a otra cara y desde afuera eso se ve como
+   que el juego hace trampa. Lo que se comprueba es la propiedad que el juego
+   necesita y no el procedimiento: que ir y volver devuelva al mismo sitio
+   (`NB[NB[i,d], OPUE[ND[i,d]]] === i`) y que cada celda tenga CUATRO vecinos
+   distintos. La segunda no es redundante: en una esfera de cubo las ocho
+   esquinas tienen tres cuadrados, y si la proyeccion inversa se equivocara
+   ahi, una celda tendria un vecino repetido — o sea un cuerpo que cruza una
+   arista y sale por donde entro.                                           */
+function auditaGeo(n) {
+  const g = geoDe(n || 38), NB = g.NB, ND = g.ND, N = g.N;
+  let asim = 0, repes = 0, fuera = 0, primero = null;
+  for (let i = 0; i < N; i++) {
+    const b = i * 4;
+    for (let d = 0; d < 4; d++) {
+      const j = NB[b + d], nd = ND[b + d];
+      if (j < 0 || j >= N || nd < 0 || nd > 3) { fuera++; continue; }
+      const v = NB[j * 4 + OPUE[nd]];
+      if (v !== i) { asim++; if (!primero) primero = { i, d, j, nd, vuelve: v }; }
+    }
+    for (let a = 0; a < 4; a++) for (let c = a + 1; c < 4; c++)
+      if (NB[b + a] === NB[b + c]) repes++;
+  }
+  /* que las posiciones esten sobre la esfera y que un vecino este a un paso:
+     si `posCel` se saliera de la normalizacion, `distCel` mentiria en todo el
+     juego sin que nada fallara.                                             */
+  const P = g.POS;
+  let peorR = 0, peorPaso = 0, mejorPaso = 9;
+  for (let i = 0; i < N; i += Math.max(1, (N / 900) | 0)) {
+    const b = i * 3;
+    const r = Math.hypot(P[b], P[b + 1], P[b + 2]);
+    if (Math.abs(r - 1) > peorR) peorR = Math.abs(r - 1);
+    for (let d = 0; d < 4; d++) {
+      const e = distCel(g, i, NB[i * 4 + d]);
+      if (e > peorPaso) peorPaso = e;
+      if (e < mejorPaso) mejorPaso = e;
+    }
+  }
+  return {
+    n: n || 38, N, asim, repes, fuera, primero,
+    radio: +peorR.toExponential(1),
+    paso: [+mejorPaso.toFixed(3), +peorPaso.toFixed(3)],
+    ok: asim === 0 && repes === 0 && fuera === 0,
+  };
+}
+
+/* ── «AFUERA» ES UNA MEDIDA Y HAY QUE MEDIRLA ────────────────────────────
+   En el plano el relleno arrancaba del borde del tablero y el resultado era
+   EXACTO: terreno mas estela forman un anillo 4-conexo y un anillo 4-conexo
+   separa el plano. Una esfera no tiene borde, asi que el anillo la parte en
+   dos pedazos FINITOS y hay que elegir cual es «afuera». La regla es el mas
+   grande, y eso es una decision de diseno: falla cuando el pedazo cercado
+   supera a lo que queda sin duenos —o sea cuando alguien esta a punto de
+   ganar el planeta entero—. Lo que esta funcion informa es CUANTO FALTO para
+   que fallara: `peorRep` es la fraccion mas chica que «afuera» llego a tener
+   de todo el complemento (1 es holgado, 0,5 es empate) y `dudas` cuantos
+   cierres bajaron de 0,75.                                                 */
+function auditaFuera(veces) {
+  const filas = [];
+  let peor = 1, dudas = 0, cerrados = 0;
+  for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) {
+    const r = juegaSolo(m, n, 'bot');
+    filas.push({ niv: (m + 1) + '-' + (n + 1), rep: r.peorRep, dudas: r.dudas, cerrados: r.cerrados });
+    if (r.peorRep < peor) peor = r.peorRep;
+    dudas += r.dudas; cerrados += r.cerrados;
+  }
+  const N = veces || 6;
+  for (let i = 0; i < N; i++) {
+    const r = juegaArena(1000 + i * 37, 'bot', 120);
+    filas.push({ niv: 'arena ' + r.sem, rep: r.peorRep, dudas: r.dudas, cerrados: r.cerrados });
+    if (r.peorRep < peor) peor = r.peorRep;
+    dudas += r.dudas; cerrados += r.cerrados;
+  }
+  return { de: filas.length, peorRep: +peor.toFixed(3), dudas, cerrados, ok: dudas === 0, filas };
+}
+
 /* LA REGLA, CONTRA FORMAS CONOCIDAS. Un relleno que devuelva «algo» no
-   prueba nada: hay que pedirle un numero que se pueda contar a mano.      */
+   prueba nada: hay que pedirle un numero que se pueda contar a mano.
+   LOS CUATRO CASOS SIGUEN SIENDO LOS DEL PLANO, celda por celda: van en el
+   medio de la cara +Z con n=24, y el recorrido mas ancho llega a x=19 y el
+   mas alto a y=4, o sea que NINGUNO toca una arista. Eso es a proposito: lo
+   que estos cuatro casos prueban es la REGLA DEL RELLENO, y meterlos en una
+   costura mezclaria dos cosas que fallan por motivos distintos —la costura
+   ya la prueba `auditaGeo`—.                                               */
+const CR = (x, y) => (4 * 24 + y) * 24 + x;    /* celda de la cara +Z, n=24 */
+const DER = 0, IZQ = 1, ABA = 2, ARR = 3;
+
 function auditaRegla() {
   const out = [];
   /* 1 · una mordida rectangular: se sale del terreno, se rodea un 5×3 y se
@@ -1363,15 +1812,15 @@ function auditaRegla() {
         estela, ni una mas.                                                */
   {
     const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
-    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
-    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
-    const cam = [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [0, -1], [0, -1], [0, -1], [0, -1],
-                 [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0]];
-    let antes = 0; for (let i = 0; i < M.z.length; i++) if (M.z[i] === 1) antes++;
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[CR(x, y)] = 1;
+    p.i = CR(13, 8); p.d = DER;
+    const cam = [DER, DER, DER, DER, DER, DER, ARR, ARR, ARR, ARR,
+                 IZQ, IZQ, IZQ, IZQ, IZQ, IZQ];
+    let antes = 0; for (let i = 0; i < M.N; i++) if (M.z[i] === 1) antes++;
     for (const c of cam) { p.ped = c; tic(M); }
-    let desp = 0; for (let i = 0; i < M.z.length; i++) if (M.z[i] === 1) desp++;
-    /* seis de ida, cuatro de subida, seis de vuelta = 16 de estela, mas el
-       interior 5×3 = 15. La ultima de la vuelta cae en terreno propio.    */
+    let desp = 0; for (let i = 0; i < M.N; i++) if (M.z[i] === 1) desp++;
+    /* seis de ida, cuatro de subida, cinco de vuelta = 15 de estela, mas el
+       interior 5×3 = 15. La sexta de la vuelta cae en terreno propio.     */
     out.push({ caso: 'mordida', antes, desp, gano: desp - antes, esperado: 30, ok: desp - antes === 30 });
   }
   /* 2 · rodear una roca: la roca SIGUE SIENDO ROCA y lo de alrededor pasa a
@@ -1379,46 +1828,56 @@ function auditaRegla() {
         obstaculo que tiene.                                               */
   {
     const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
-    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
-    M.z[8 * 24 + 16] = PIEDRA;
-    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
-    const cam = [[0, -1], [1, 0], [1, 0], [1, 0], [1, 0], [0, 1], [0, 1], [-1, 0], [-1, 0], [-1, 0], [-1, 0]];
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[CR(x, y)] = 1;
+    M.z[CR(16, 8)] = PIEDRA;
+    p.i = CR(13, 8); p.d = DER;
+    const cam = [ARR, DER, DER, DER, DER, ABA, ABA, IZQ, IZQ, IZQ, IZQ];
     for (const c of cam) { p.ped = c; tic(M); }
-    out.push({ caso: 'roca', sigueRoca: M.z[8 * 24 + 16] === PIEDRA, mio: M.z[7 * 24 + 16] === 1, ok: M.z[8 * 24 + 16] === PIEDRA && M.z[7 * 24 + 16] === 1 });
+    const roca = M.z[CR(16, 8)] === PIEDRA, mio = M.z[CR(16, 7)] === 1;
+    out.push({ caso: 'roca', sigueRoca: roca, mio, ok: roca && mio });
   }
   /* 3 · encerrar a un rival: su terreno pasa a ser mio. Sin esto los rivales
         serian decoracion que estorba.                                     */
   {
     const M = nuevoM(24), p = nuevoJug(1, null), q = nuevoJug(2, null); M.jug.push(p, q);
-    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[y * 24 + x] = 1;
-    for (let y = 7; y < 10; y++) for (let x = 15; x < 18; x++) M.z[y * 24 + x] = 2;
-    q.ix = 16; q.iy = 8; q.vivo = false;
-    const suyo0 = M.z.reduce((a, v) => a + (v === 2 ? 1 : 0), 0);
-    p.ix = 13; p.iy = 8; p.dx = 1; p.dy = 0;
-    const cam = [[0, -1], [0, -1], [0, -1], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0],
-                 [0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [0, 1], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0], [-1, 0],
-                 [0, -1], [0, -1], [0, -1]];
+    for (let y = 4; y < 14; y++) for (let x = 4; x < 14; x++) M.z[CR(x, y)] = 1;
+    for (let y = 7; y < 10; y++) for (let x = 15; x < 18; x++) M.z[CR(x, y)] = 2;
+    q.i = CR(16, 8); q.vivo = false;
+    let suyo0 = 0; for (let i = 0; i < M.N; i++) if (M.z[i] === 2) suyo0++;
+    p.i = CR(13, 8); p.d = DER;
+    const cam = [ARR, ARR, ARR, DER, DER, DER, DER, DER, DER,
+                 ABA, ABA, ABA, ABA, ABA, ABA, IZQ, IZQ, IZQ, IZQ, IZQ, IZQ,
+                 ARR, ARR, ARR];
     for (const c of cam) { p.ped = c; tic(M); }
-    const suyo1 = M.z.reduce((a, v) => a + (v === 2 ? 1 : 0), 0);
+    let suyo1 = 0; for (let i = 0; i < M.N; i++) if (M.z[i] === 2) suyo1++;
     out.push({ caso: 'rival', suyo0, suyo1, ok: suyo0 === 9 && suyo1 === 0 });
   }
   /* 4 · la propia estela mata, y la ajena mata a su dueno. Es LA regla que
         hace que salir cueste algo.                                        */
   {
     const M = nuevoM(24), p = nuevoJug(1, null); M.jug.push(p);
-    for (let y = 4; y < 8; y++) for (let x = 4; x < 8; x++) M.z[y * 24 + x] = 1;
-    p.ix = 7; p.iy = 6; p.dx = 1; p.dy = 0;
-    const cam = [[1, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [0, -1]];
+    for (let y = 4; y < 8; y++) for (let x = 4; x < 8; x++) M.z[CR(x, y)] = 1;
+    p.i = CR(7, 6); p.d = DER;
+    const cam = [DER, DER, ABA, IZQ, ARR, ARR];
     for (const c of cam) { if (p.vivo) { p.ped = c; tic(M); } }
     out.push({ caso: 'propia estela', vivo: p.vivo, ok: !p.vivo });
   }
   return { casos: out, malos: out.filter(o => !o.ok).map(o => o.caso) };
 }
 
-/* JUGAR UN NIVEL ENTERO SIN DIBUJAR. Es lo unico que prueba que un nivel
-   generado se puede terminar — y la separacion entre el bot honesto y el
-   que se mueve al azar es lo unico que prueba que adentro hay una decision.
-   Los dos entran por `p.ped`.                                             */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOS AUTO-JUGADORES · lo unico que prueba que hay una decision adentro
+   ───────────────────────────────────────────────────────────────────────────
+   Tres cerebros y el tercero es el control: el que juega al azar tiene que
+   perder por lejos, porque si llega parecido al honesto entonces el juego no
+   esta pidiendo nada y la geometria nueva no arreglo eso, lo tapo.
+
+   Y LOS TRES DEVUELVEN `peorRep`, `dudas` y `cerrados`: la regla del relleno
+   en la esfera —«la componente mas grande es afuera»— es una DECISION y no un
+   teorema, asi que cada partida tiene que informar cuanto le falto para
+   fallar. Eso es lo que junta `auditaFuera`.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function juegaSolo(m, nn, modo, sem) {
   const cfg = cfgNivel(m, nn);
   if (sem != null) cfg.sem = sem;
@@ -1442,34 +1901,27 @@ function juegaSolo(m, nn, modo, sem) {
     m, n: nn, modo, gano, seg: +t.toFixed(1), meta: +(cfg.meta * 100).toFixed(1),
     pct: +(tajada(M, 1) * 100).toFixed(1), cortes: yo.cortes, cerros: yo.cerros,
     riv: M.jug.slice(1).map(q => +(tajada(M, q.id) * 100).toFixed(1)),
+    peorRep: +M.peorRep.toFixed(3), dudas: M.dudas, cerrados: M.cerrados,
   };
 }
-/* ── EL AUTO-JUGADOR DE LA ARENA ──────────────────────────────────────────
-   No mide «gana/pierde»: en la arena no hay victoria. Mide CUANTO AGUANTA,
-   cuanto llega a agarrar y en que puesto queda — y eso solo significa algo
-   comparado contra el que juega al azar. Sin ese control, «el bot llego al
-   12 %» no dice si hay una decision adentro o si el tablero se reparte solo.
 
-   EL RELOJ SE TOPA porque una corrida de arena no termina sola: un honesto
-   que no se muere nunca correria para siempre.                             */
-function juegaArena(sem, modo, segs) {
-  const cfg = cfgArena(sem == null ? 1 : sem);
+function juegaArena(sem, modo, seg) {
+  const cfg = cfgArena(sem);
   const M = generaMapa(cfg);
   const yo = M.jug[0];
   yo.bot = modo === 'azar'  ? { azar: true }
-         : modo === 'ciego' ? { per: 0.80, ciego: true }
-         :                    { per: 0.80 };
-  yo.topeCortes = 1;                      /* una vida: el corte cierra       */
+         : modo === 'ciego' ? { per: 0.86, ciego: true }
+         :                    { per: 0.86 };
+  yo.topeCortes = 1;                      /* una vida: la arena es asi       */
   for (let j = 1; j < M.jug.length; j++) M.jug[j].topeCortes = 1e9;
-  const DT = 1 / VEL, lim = segs || 180;
+  const DT = 1 / VEL, lim = seg || 120;
   let t = 0, mejor = 0;
+
   /* EL PUESTO SE GUARDA EN EL ULTIMO TIC VIVO Y NO AL SALIR DEL BUCLE.
      En la arena morir BORRA el terreno, asi que preguntando despues el
-     jugador lee 0% y sale ultimo SIEMPRE, por construccion: la medicion
-     estaria describiendo un estado que ella misma destruyo. Medido en la
-     semilla 1001: ultimo vivo pos 7 con 2,52%, ya muerto pos 8 con 0,00.
-     Y la misma regla vale para el panel de fin, que si no diria octavo
-     en todas las partidas.                                              */
+     jugador lee 0% y sale ultimo SIEMPRE, por construccion — el numero seria
+     del cadaver y no de la partida. Medido en el plano con la semilla 1001:
+     ultimo vivo pos 7 con 2,52%, ya muerto pos 8 con 0,00.                 */
   let ultPos = puestoDe(M, 1), ultPct = tajada(M, 1);
   const tope = Math.ceil(lim * VEL) + 8;
   for (let k = 0; k < tope; k++) {
@@ -1485,8 +1937,10 @@ function juegaArena(sem, modo, segs) {
     pct: +(ultPct * 100).toFixed(2), mejor: +(mejor * 100).toFixed(2),
     pos: ultPos, matas: yo.matas, cerros: yo.cerros,
     riv: tablaPos(M).map(f => f.id + ':' + (f.pct * 100).toFixed(1)),
+    peorRep: +M.peorRep.toFixed(3), dudas: M.dudas, cerrados: M.cerrados,
   };
 }
+
 function auditaArena(modo, veces, segs) {
   const r = [], t0 = Date.now(), N = veces || 12;
   for (let i = 0; i < N; i++) r.push(juegaArena(1000 + i * 37, modo || 'bot', segs));
@@ -1496,6 +1950,8 @@ function auditaArena(modo, veces, segs) {
     segMedio: med('seg'), mejorMedio: med('mejor'), posMedio: med('pos'),
     matasMedio: med('matas'), vivos: r.filter(x => x.vivo).length,
     peorPos: Math.max(...r.map(x => x.pos)), mejorPos: Math.min(...r.map(x => x.pos)),
+    peorRep: +Math.min(...r.map(x => x.peorRep)).toFixed(3),
+    dudas: r.reduce((a, x) => a + x.dudas, 0),
   };
 }
 
@@ -1507,15 +1963,23 @@ function auditaTodo(modo) {
     modo: modo || 'bot', de: r.length, gana, ms: Date.now() - t0,
     pctMedio: +(r.reduce((a, x) => a + x.pct, 0) / r.length).toFixed(1),
     cortesMedio: +(r.reduce((a, x) => a + x.cortes, 0) / r.length).toFixed(2),
+    peorRep: +Math.min(...r.map(x => x.peorRep)).toFixed(3),
+    dudas: r.reduce((a, x) => a + x.dudas, 0),
     malos: r.filter(x => !x.gano).map(x => (x.m + 1) + '-' + (x.n + 1) + ' ' + x.pct + '/' + x.meta),
   };
 }
+
 function auditaMapas() {
   const malos = [], filas = [];
   for (let m = 0; m < MUNDOS.length; m++) for (let n = 0; n < NIV_MUNDO; n++) {
     const M = generaMapa(cfgNivel(m, n)), a = auditaMapa(M);
-    filas.push({ niv: (m + 1) + '-' + (n + 1), n: a.n, libres: a.libres, roca: a.roca, cerca: a.cerca });
+    filas.push({ niv: (m + 1) + '-' + (n + 1), n: a.n, N: a.N, libres: a.libres, roca: a.roca, cerca: a.cerca });
     if (a.malos.length) malos.push((m + 1) + '-' + (n + 1) + ': ' + a.malos.join(','));
+  }
+  for (let i = 0; i < 4; i++) {
+    const s = 1000 + i * 37, M = generaMapa(cfgArena(s)), a = auditaMapa(M);
+    filas.push({ niv: 'arena ' + s, n: a.n, N: a.N, libres: a.libres, roca: a.roca, cerca: a.cerca });
+    if (a.malos.length) malos.push('arena ' + s + ': ' + a.malos.join(','));
   }
   return { de: filas.length, malos, filas };
 }
@@ -1715,398 +2179,616 @@ function auAgacha(f, dur) {
   if (dur > 0) g.setTargetAtTime(PROG.vol, t + dur, 0.35);
 }
 /* ══════════════════════════════════════════════════════════════════════════
-   E · EL DIBUJO
-   EL TABLERO SE HORNEA A UN PIXEL POR CELDA Y SE ESTIRA CON NEAREST. Un
-   tablero de 74 son 5.476 celdas: dibujarlas de a un rectangulo son 5.476
-   ordenes por cuadro para pintar bloques de color liso. Horneado en una
-   ImageData de n×n y estirado con `imageSmoothingEnabled=false` es UNA sola
-   orden, y el escalon duro del vecino mas cercano es justo el estilo que
-   este juego quiere.
-   Y EL MISMO LIENZO DE n×n ES EL MAPA CHICO, que asi cuesta otro drawImage y
-   no una segunda pasada por el tablero — con dos dibujantes, el dia que se
-   toque uno el mapa chico empieza a mentir.
+   E · EL DIBUJO — EL PLANETA
+   EL TABLERO SE SUBE COMO TEXTURA, UNA POR CARA, Y NO COMO GEOMETRIA. Un
+   planeta de n=58 son 20.184 celdas: una malla por celda serian veinte mil
+   objetos para pintar cuadrados de color liso. Seis mallas de (n+1)² vertices
+   con una `DataTexture` de n×n cada una y filtro NEAREST son SEIS ordenes de
+   dibujo, y el escalon duro del vecino mas cercano es justo el estilo.
+   Y LA ESTELA VA EN LA MISMA TEXTURA QUE EL TERRENO. Dibujada aparte serian
+   ocho listas de celdas que hay que proyectar a la esfera cada cuadro; en la
+   textura cuesta escribir cuatro bytes por celda que cambio, y el dia que se
+   toque el color de una estela no hay un segundo dibujante que corregir.
+   Lo unico que se dibuja aparte son los CUERPOS —una malla instanciada de
+   ocho cubos— y las esquirlas.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const V = {
-  cv: null, g: null, W: 0, H: 0, dpr: 1, k: 1,
-  off: null, og: null, img: null, b32: null, n: 0, zsucio: true,
-  camx: 0, camy: 0, esc: 22, visW: 19, visH: 19, vista: VISTA,
-  mini: null, mg: null, miniT: 0,
-  prevZ: null, cort: null, viv: null,
-  part: [], dest: [], sac: 0, sacx: 0, sacy: 0, gan: new Int32Array(NJUG + 1),
-  fa: 0, faT: 0, cuadros: 0, msDib: 0,
+  ren: null, esc: null, cam: null, cv: null, dpr: 1,
+  W: 0, H: 0, n: 0, N: 0,
+  caras: [], tex: [], buf: [], suc: [],
+  pz: null, pt: null, fl: null, flAct: null,
+  cuer: null, cuerM: null, esq: null, esqG: null, esqP: [],
+  cpos: null, cmira: null, carr: null, dist: 0, distT: 0,
+  sac: 0,
+  cort: null, viv: null, gan: new Int32Array(NJUG + 1),
+  cuadros: 0, msDib: 0, mini: null, minR: null, miniCam: null,
+  _v: null, _v2: null, _v3: null, _q: null, _m: null, _ob: null,
 };
 
 const vpRGB = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-/* el color de cada celda ya empaquetado: el horneado escribe bytes y no
-   parsea una cadena cinco mil veces por rebake.                           */
-const VP_Z = [], VP_ROCA = vpRGB(C_PIEDRA);
-for (let i = 0; i <= NJUG; i++) VP_Z.push(COLS[i] ? vpRGB(COLS[i].z) : [0, 0, 0]);
+const VP_Z = [], VP_T = [], VP_C = [];
+const VP_ROCA = vpRGB(C_PIEDRA), VP_TABLA = vpRGB(C_TABLA);
+for (let i = 0; i <= NJUG; i++) {
+  VP_Z.push(COLS[i] ? vpRGB(COLS[i].z) : VP_TABLA);
+  VP_T.push(COLS[i] ? vpRGB(COLS[i].t) : VP_TABLA);
+  VP_C.push(COLS[i] ? vpRGB(COLS[i].c) : VP_TABLA);
+}
+
+/* EL RADIO ES UNO Y LA CAMARA SE ACERCA: con el radio saliendo de `n`, cambiar
+   de mundo movería tambien las luces, el tamano de los cubos y el plano
+   cercano. Con radio fijo lo unico que cambia entre mundos es cuanto arco
+   entra en la pantalla, que es exactamente lo que `DISCO` ya dice.        */
+/* Un THREE.Color por jugador, hecho UNA vez. setColorAt con un Color nuevo
+   por cuerpo y por cuadro son ocho objetos por cuadro para decir siempre lo
+   mismo, y encima parsea la cadena hexadecimal cada vez.               */
+const VP_TC = [];
+const VP_R = 1;
+const VP_ALTO = 0.028;          /* cuanto sobresale un cuerpo de la superficie */
+const VP_ATRAS = 0.62;          /* cuanto se corre la camara HACIA ATRAS       */
+const VP_DPR = [1, 1.5, 2];
 
 /* ── EL LIENZO ────────────────────────────────────────────────────────────
-   La densidad la topa la calidad y no el aparato: este juego esta limitado
-   por RELLENO —todo es superficie plana— asi que cada paso de densidad
-   cuesta el cuadrado. A dpr 3 en un marco de 412×892 serian 3,3 millones de
-   pixeles por cuadro para dibujar bloques de color.                        */
-const VP_DPR = [1, 1.5, 2];
+   La densidad la topa la calidad y no el aparato: a dpr 3 en un marco de
+   412×892 serian 3,3 millones de pixeles por cuadro.                       */
 function vpMide() {
   const m = $('marco'), r = m.getBoundingClientRect();
   const d = Math.min(window.devicePixelRatio || 1, VP_DPR[cl(PROG.cal | 0, 0, 2)]);
-  const W = Math.max(1, Math.round(r.width * d)), H = Math.max(1, Math.round(r.height * d));
+  const W = Math.max(1, Math.round(r.width)), H = Math.max(1, Math.round(r.height));
   if (W === V.W && H === V.H && d === V.dpr) return;
-  V.W = W; V.H = H; V.dpr = d; V.k = d;
-  V.cv.width = W; V.cv.height = H;
-  vpEsc();
-  /* el contexto se resetea al cambiar de tamano: el filtro hay que volver a
-     apagarlo o el tablero sale borroneado en vez de pixelado.              */
-  V.g.imageSmoothingEnabled = false;
+  V.W = W; V.H = H; V.dpr = d;
+  V.ren.setPixelRatio(d);
+  V.ren.setSize(W, H, false);
+  V.cam.aspect = W / H; V.cam.updateProjectionMatrix();
+  /* `sizeAttenuation:false` pide el tamano en pixeles DEL BUFER, no de CSS, asi
+     que sin multiplicar por el dpr las estrellas salen a la mitad en cualquier
+     telefono — que es justo donde se juega.                                 */
+  if (V.est) for (const e of V.est) e.material.size = e.userData.px * d;
 }
 
-/* EL LADO DE LA VENTANA VIVE EN UN SOLO SITIO. Con la escala escrita en
-   `vpMide` y el zoom escribiendola otra vez por su cuenta, cambiar de
-   calidad o girar el telefono devolveria la vista a 19 celdas en medio de
-   una partida — y eso no se ve como un ajuste, se ve como un salto.      */
-function vpEsc() {
-  V.esc = V.W / V.vista;
-  V.visW = V.W / V.esc; V.visH = V.H / V.esc;
+/* EL LIENZO DEL CIELO, dibujado UNA vez: un degrade vertical y tres nebulosas
+   muy flojas. LAS ESTRELLAS NO ESTAN ACA, y el motivo esta medido: la camara
+   abre 46 grados sobre una esfera de cielo que envuelve 180 en el alto del
+   lienzo, o sea que 512 pixeles de textura se estiran sobre 892 de pantalla
+   con un aumento de 6,8 — una estrella de un pixel sale como una mancha
+   cuadrada de diez. Un lienzo mas grande solo corre el problema: lo que hace
+   falta es que la estrella NO se agrande con la distancia, y eso es un
+   `Points` con `sizeAttenuation` apagado (`vpEstrellas`).                   */
+function vpCielo() {
+  const w = 1024, h = 512, c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0.00, '#060a16');
+  gr.addColorStop(0.40, '#101c40');
+  gr.addColorStop(0.66, '#1d2d5e');
+  gr.addColorStop(1.00, '#090f24');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  /* las nebulosas van por debajo del 9 % de opacidad a proposito: estan para
+     que el cielo no sea un plano de un solo valor, no para competirle al
+     planeta — que es lo unico que hay que mirar.                            */
+  for (const [nx, ny, nr, col] of [[0.22, 0.30, 0.30, '#4d6bd8'],
+                                   [0.74, 0.60, 0.26, '#8a4fc9'],
+                                   [0.48, 0.82, 0.22, '#2f7fb8']]) {
+    const r = g.createRadialGradient(nx * w, ny * h, 0, nx * w, ny * h, nr * w);
+    r.addColorStop(0, col); r.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha = 0.085; g.fillStyle = r; g.fillRect(0, 0, w, h);
+  }
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c);
+  /* un lienzo es sRGB; sin declararlo entra como lineal y el cielo sale el
+     doble de claro, que es justo lo contrario de lo que tiene que hacer.    */
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
-/* ── EL ZOOM DE LA ARENA ──────────────────────────────────────────────────
-   Solo en arena: en la campana la vista fija es parte del diseno —el mundo
-   4 es grande JUSTAMENTE porque no entra en la pantalla— asi que abrirla ahi
-   estaria cambiando ocho niveles ya auditados.
-   Y se suavisa en el tiempo con la misma exponencial que la camara: el
-   terreno da saltos de cientos de celdas al cerrar un cerco, y una vista que
-   los copie de golpe se lee a que la camara se rompio.                     */
-function vpZoom(M, dt) {
-  const t = M.arena
-    ? VISTA + (VISTA_MAX - VISTA) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / VISTA_SAT))
-    : VISTA;
-  V.vista += (t - V.vista) * (1 - Math.exp(-dt * 1.2));
-  vpEsc();
+/* LAS ESTRELLAS SON UNA NUBE DE PUNTOS, no dibujo del lienzo, y eso arregla
+   DOS cosas de una. Una: con `sizeAttenuation` apagado el tamano se pide EN
+   PIXELES, asi que una estrella mide lo mismo este el cielo donde este —que es
+   literalmente lo que hace una estrella—. Y dos: se reparten sobre la esfera
+   con `z` uniforme, que es el reparto parejo de verdad, asi que el apelotonado
+   de los polos que obligaba a estirar las elipses NO PUEDE EXISTIR.
+   VAN EN DOS MALLAS Y NO EN UNA porque `PointsMaterial` tiene UN tamano para
+   todos sus puntos: una nube fina y numerosa mas un punado de gordas es lo que
+   hace que un cielo se lea a profundidad y no a ruido parejo. Dos ordenes de
+   dibujo.
+   EL COLOR VA EN ESPACIO DE TRABAJO: `vertexColors` no convierte nada, asi que
+   sale de `setHex(..., sRGB)` —que si convierte— multiplicado por el brillo.
+   Y con semilla fija, porque un cielo que cambia en cada partida deja de ser
+   un sitio.                                                                 */
+function vpEstrellas(n, brMin, col) {
+  let sm = 20260911 + n;
+  const az = () => (sm = (sm * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const pos = new Float32Array(n * 3), rgb = new Float32Array(n * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const z = az() * 2 - 1, a = az() * 6.2832, r = Math.sqrt(Math.max(0, 1 - z * z));
+    pos[i * 3] = Math.cos(a) * r * 16; pos[i * 3 + 1] = z * 16;
+    pos[i * 3 + 2] = Math.sin(a) * r * 16;
+    const q = az();
+    c.setHex(q > 0.90 ? 0xcfe0ff : q > 0.76 ? 0xffe7c4 : 0xffffff, THREE.SRGBColorSpace);
+    const b = brMin + az() * (1 - brMin);
+    rgb[i * 3] = c.r * b; rgb[i * 3 + 1] = c.g * b; rgb[i * 3 + 2] = c.b * b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  const m = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false,
+    vertexColors: true, depthWrite: false });
+  const p = new THREE.Points(g, m);
+  p.renderOrder = -998; p.frustumCulled = false;
+  p.userData.px = col;
+  return p;
 }
 
 function vpInit() {
-  V.cv = $('cv'); V.g = V.cv.getContext('2d', { alpha: false });
-  V.mini = $('mini'); V.mg = V.mini.getContext('2d');
-  V.mg.imageSmoothingEnabled = false;
+  /* EL COLOR SE CONSTRUYE CON `setHex` Y NO CON TRES FLOTANTES, y no es un
+     detalle: en three r169 el constructor de tres numeros los toma en el
+     espacio DE TRABAJO —o sea lineal— mientras que `setHex` los toma en sRGB
+     y convierte. Metiendo bytes de sRGB como lineales y dejando que la salida
+     los vuelva a codificar, todo sale lavado: el ambar del jugador pasa de
+     `#f8b359` a un beige. Es el mismo defecto que el mapa de las caras.   */
+  if (!VP_TC.length) for (let i = 0; i <= NJUG; i++) {
+    const t = VP_T[i];
+    VP_TC.push(new THREE.Color().setHex((t[0] << 16) | (t[1] << 8) | t[2], THREE.SRGBColorSpace));
+  }
+  V.cv = $('cv'); V.mini = $('mini');
+  V.ren = new THREE.WebGLRenderer({ canvas: V.cv, antialias: false, alpha: false });
+  /* NADA DE TONE MAPPING, Y ESO ES UNA DECISION. Este juego no tiene un solo
+     valor por encima de uno —ni sol, ni emisivo, ni HDRI— asi que cualquier
+     curva de exposicion solo puede AGACHAR los colores puros: medido, ACES
+     baja el ambar del jugador un 18 % y lo acerca al resto. El espacio de
+     salida si va declarado, porque es lo que convierte el lineal con el que
+     three trabaja a los bytes que la pantalla espera.                     */
+  V.ren.toneMapping = THREE.NoToneMapping;
+  V.ren.outputColorSpace = THREE.SRGBColorSpace;
+  V.ren.setClearColor(new THREE.Color().setHex(0x0d1526, THREE.SRGBColorSpace), 1);
+  V.ren.autoClear = false;
+  V.esc = new THREE.Scene();
+  V.cam = new THREE.PerspectiveCamera(46, 1, 0.02, 24);
+  /* EL PLANO LEJANO DEL MINIMAPA CORTA EN 8 Y ESO NO ES UN AHORRO: es lo que
+     saca de el las estrellas y la esfera del cielo, que viven a radio 16 y 18.
+     El minimapa mide setenta y cuatro pixeles y su camara abre 38 grados, o sea
+     que le entran diez veces mas estrellas que a la vista de juego y a ese
+     tamano eso no es un cielo, es ruido encima de lo unico que hay que leer.
+     El planeta esta a 4,1 con radio 1, asi que 8 lo deja entero con margen.  */
+  V.miniCam = new THREE.PerspectiveCamera(38, 1, 0.5, 8);
+
+  /* DOS LUCES Y NINGUNA SOMBRA. Lo que hace que una esfera se lea a esfera no
+     es una sombra proyectada —no hay nada que la reciba— sino el degrade de
+     una direccional contra un hemisferico que NO deje el lado oscuro en
+     negro: un planeta con la mitad negra se lee a agujero.
+
+     LAS INTENSIDADES SALEN DE UNA CUENTA Y NO DE PROBAR. Desde r155 three no
+     escala las luces por pi y el difuso de Lambert es `albedo/pi`, asi que el
+     multiplicador que le llega a un color es `(hemi + dir·cos)/pi`. Con 1,55 y
+     1,25 eso daba **0,891 en la cara iluminada**: o sea que el ambar #f8b359
+     salia al 89 % de lo que es, los ocho colores se acercaban entre si y el
+     cuadro entero se leia lavado. Con 2,05 y 1,15 la cara al sol llega a
+     **1,019**, o sea el color puro, y ni un pelo mas: por encima de uno se
+     recorta, y recortar un color saturado le corre el TONO.
+
+     Y EL SUELO DEL HEMISFERICO SE ACLARA de `0x2a3350` a `0x46578f` por la
+     misma cuenta: la cara de sombra recibe `hemi_suelo/pi`, y con el azul
+     viejo eso eran 0,10 de luz —o sea el agujero que este comentario dice que
+     hay que evitar—. Con el nuevo son 0,21 y el lado oscuro queda TENIDO de
+     azul en vez de apagado, que es lo que hace una atmosfera de verdad.    */
+  const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x46578f, 2.05);
+  V.esc.add(hemi);
+  /* EL SOL CUELGA DE LA CAMARA Y NO DEL MUNDO, y esto NO es una licencia: es
+     lo unico que puede funcionar en un juego que recorre un planeta ENTERO.
+     Con la direccional fija en el mundo, media esfera es el lado oscuro —y
+     medido en la arena, el tablero sin dueno llegaba a la pantalla como un
+     azul apagado en vez del gris claro que es—. En un juego cuya UNICA regla
+     es «del mismo color», que el mismo color se lea distinto segun por donde
+     uno ande es el peor defecto posible: mas grave que perder el degrade.
+     Lo que se conserva es el degrade, que es lo que hace que una esfera se
+     lea a esfera: el sol va CORRIDO del eje de la vista —0,30 hacia arriba y
+     0,24 a la izquierda— asi que el centro del cuadro recibe 0,937 del maximo
+     y el limbo se va apagando solo. O sea una luz de estudio atada al tripode,
+     que es lo que hace cualquier visor de modelos.
+     Medido: el centro llega a `(2,05 + 1,15·0,937)/pi = 0,996` del color, o
+     sea el color puro sin recortar, y ese numero ya NO depende de donde este
+     parado el jugador.                                                     */
+  const sol = new THREE.DirectionalLight(0xfff4e2, 1.15);
+  sol.position.set(0.85, 1.1, 0.7);
+  V.esc.add(sol);
+  V.sol = sol;
+
+  /* el halo: una esfera apenas mas grande dibujada por dentro. Cuesta una
+     orden de dibujo y es lo que despega el planeta del fondo.              */
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(VP_R * 1.10, 40, 24),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color().setHex(0x5f8ff5, THREE.SRGBColorSpace), side: THREE.BackSide,
+      transparent: true, opacity: 0.42, depthWrite: false }));
+  V.esc.add(halo);
+
+  /* EL CIELO ES UNA ESFERA DE VERDAD Y NO EL COLOR DE FONDO, y la razon es que
+     un color plano no tiene nada que mirar: medido en la captura, el cuarto de
+     arriba del cuadro era una banda de azul marino lisa de punta a punta. Y un
+     cielo con estrellas ancladas AL MUNDO hace ademas que recorrer el planeta
+     se vea: la camara orbita, asi que las estrellas se corren por detras, y
+     eso —aparte del limbo— es lo unico que dice que uno esta viajando.
+
+     VA COMO ESFERA Y NO COMO `scene.background` porque este juego dibuja con
+     `autoClear = false` y dos pasadas con tijera propias: una esfera con
+     `depthWrite:false` y `renderOrder` negativo se dibuja primero pase lo que
+     pase, sin depender de como three decida tratar el fondo con el borrado
+     manual. Cuesta UNA orden de dibujo y sale en las dos pasadas, o sea que el
+     minimapa tambien tiene cielo. Radio 18: la camara nunca pasa de 4,1 y el
+     plano lejano esta en 24, asi que la esfera entra entera por construccion. */
+  const cielo = new THREE.Mesh(
+    new THREE.SphereGeometry(18, 32, 20),
+    new THREE.MeshBasicMaterial({ map: vpCielo(), side: THREE.BackSide, depthWrite: false }));
+  cielo.renderOrder = -999;
+  V.esc.add(cielo);
+  /* LA CUENTA SALE DE UNA CUENTA Y NO DE UN NUMERO LINDO: el cono de la camara
+     abre 46 grados de alto por 22 de ancho, o sea `4·asin(sin11,1·sin23)` =
+     0,30 estereorradianes sobre los 12,57 de la esfera — el 2,4 % —, y de eso
+     el planeta se come casi dos tercios: en pantalla cae el 0,84 % de la nube.
+     Con las 640 que tenia el lienzo llegaban TRES, medido en la captura. Con
+     5.400 llegan unas cuarenta y cinco, que es un cielo.                     */
+  V.est = [vpEstrellas(5400, 0.16, 1.7), vpEstrellas(480, 0.55, 3.2)];
+  for (const e of V.est) V.esc.add(e);
+
+  V.cpos = new THREE.Vector3(0, 0, 3); V.cmira = new THREE.Vector3();
+  V.carr = new THREE.Vector3(0, 1, 0);
+  V._v = new THREE.Vector3(); V._v2 = new THREE.Vector3(); V._v3 = new THREE.Vector3();
+  V._q = new THREE.Quaternion(); V._m = new THREE.Matrix4();
+  V._ob = new THREE.Object3D();
+
+  vpCuerpos();
   vpMide();
   addEventListener('resize', vpMide);
 }
 
-/* ── EL HORNEADO ──────────────────────────────────────────────────────────
-   Solo el TERRENO y la ROCA, que cambian de tanto en tanto. La estela no
-   entra: cambia todos los tics y ademas cada jugador ya lleva su lista de
-   celdas (`p.cola`), asi que dibujarla al derecho sale mas barato que
-   escanear el tablero entero buscandola.                                   */
+/* ── LOS CUERPOS ──────────────────────────────────────────────────────────
+   Ocho cubos en UNA malla instanciada: sueltos serian ocho ordenes de dibujo
+   para ocho cajas, y con `instanceColor` cada uno conserva su color sin un
+   material propio.                                                         */
+function vpCuerpos() {
+  const g = new THREE.BoxGeometry(0.034, 0.034, 0.034);
+  const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  V.cuer = new THREE.InstancedMesh(g, m, NJUG);
+  V.cuer.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  V.cuer.frustumCulled = false;
+  V.cuer.count = 0;
+  V.esc.add(V.cuer);
+
+  /* las esquirlas: un solo `Points`, con el buffer al maximo y el tope de
+     dibujo moviendose. Crear geometria por muerte seria alojar y soltar en
+     el peor cuadro posible.                                                */
+  V.esqG = new THREE.BufferGeometry();
+  V.esqG.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 160), 3));
+  V.esqG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(3 * 160), 3));
+  V.esqG.setDrawRange(0, 0);
+  V.esq = new THREE.Points(V.esqG, new THREE.PointsMaterial({
+    size: 0.045, vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false }));
+  V.esq.frustumCulled = false;
+  V.esc.add(V.esq);
+}
+
+/* ── EL PLANETA ───────────────────────────────────────────────────────────
+   Una malla por cara, con sus (n+1)² vertices puestos EXACTAMENTE donde
+   `posCel` pone los centros de celda: `normalize(C + u·ex + v·ey)`. La UV va
+   en `(vx/n, vy/n)`, asi la celda (x,y) cae en el texel (x+0.5, y+0.5)/n de
+   una textura de n×n — que es por lo que NEAREST no puede desalinearse.    */
+function vpPlaneta(n) {
+  for (const c of V.caras) { V.esc.remove(c); c.geometry.dispose(); c.material.dispose(); }
+  for (const t of V.tex) t.dispose();
+  V.caras = []; V.tex = []; V.buf = []; V.suc = [];
+  const L = n + 1;
+  for (let f = 0; f < 6; f++) {
+    const C = CARAS[f].C, ex = CARAS[f].ex, ey = CARAS[f].ey;
+    const pos = new Float32Array(L * L * 3), uv = new Float32Array(L * L * 2);
+    for (let vy = 0; vy < L; vy++) for (let vx = 0; vx < L; vx++) {
+      const u = vx / n * 2 - 1, v = vy / n * 2 - 1, o = (vy * L + vx);
+      let X = C[0] + u * ex[0] + v * ey[0];
+      let Y = C[1] + u * ex[1] + v * ey[1];
+      let Z = C[2] + u * ex[2] + v * ey[2];
+      const r = VP_R / Math.hypot(X, Y, Z);
+      pos[o * 3] = X * r; pos[o * 3 + 1] = Y * r; pos[o * 3 + 2] = Z * r;
+      uv[o * 2] = vx / n; uv[o * 2 + 1] = vy / n;
+    }
+    const idx = new Uint32Array(n * n * 6);
+    for (let y = 0, k = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const a = y * L + x, b = a + 1, c = b + L, d = a + L;
+      idx[k++] = a; idx[k++] = b; idx[k++] = c;
+      idx[k++] = a; idx[k++] = c; idx[k++] = d;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    /* la normal de una esfera ES la posicion: calcularla promediando caras
+       daria lo mismo con un barrido de mas.                                */
+    geo.setAttribute('normal', new THREE.BufferAttribute(pos.slice(), 3));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    const buf = new Uint8Array(n * n * 4);
+    const tex = new THREE.DataTexture(buf, n, n, THREE.RGBAFormat);
+    /* UNA `DataTexture` NACE EN `NoColorSpace`, o sea lineal, y esto es un
+       mapa de COLOR: sin declararlo, los bytes de sRGB entran como si fueran
+       lineales, la salida los vuelve a codificar y el planeta entero sale
+       lavado. Es la causa de que los ocho colores se parecieran entre si. */
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false; tex.needsUpdate = true;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
+    mesh.frustumCulled = false;
+    V.esc.add(mesh);
+    V.caras.push(mesh); V.tex.push(tex); V.buf.push(buf); V.suc.push(true);
+  }
+}
+
+/* el color de una celda, con el damero y el destello del cercado adentro: un
+   solo sitio decide de que color es una celda, asi el mapa chico y el planeta
+   no pueden decir cosas distintas.                                         */
+function vpPinta(M, i) {
+  const n = M.n, f = (i / (n * n)) | 0, r = i - f * n * n;
+  const x = r % n, y = (r / n) | 0;
+  const t = M.t[i], z = M.z[i];
+  let c;
+  if (t) c = VP_T[t];
+  else if (z === PIEDRA) c = VP_ROCA;
+  else if (z > 0) c = VP_Z[z];
+  else c = VP_TABLA;
+  /* EL DAMERO ES LA REJA. Con una celda de 1 texel no hay linea que dibujar,
+     asi que la cuadricula se hace moviendo el valor un 6 % de a una celda:
+     se sigue pudiendo contar de una ojeada y no cuesta un solo triangulo. */
+  const k = ((x + y + f) & 1) ? 1.055 : 0.945;
+  let R = c[0] * k, G = c[1] * k, B = c[2] * k;
+  const fl = V.fl[i];
+  if (fl > 0) {
+    const d = z > 0 && z < PIEDRA ? VP_C[z] : VP_C[1];
+    R += (d[0] - R) * fl; G += (d[1] - G) * fl; B += (d[2] - B) * fl;
+  }
+  const b = V.buf[f], o = (y * n + x) * 4;
+  b[o] = R > 255 ? 255 : R; b[o + 1] = G > 255 ? 255 : G;
+  b[o + 2] = B > 255 ? 255 : B; b[o + 3] = 255;
+  V.suc[f] = true;
+}
+
 function vpNuevo(M) {
   const n = M.n;
-  if (V.n !== n || !V.off) {
-    V.n = n;
-    V.off = document.createElement('canvas'); V.off.width = n; V.off.height = n;
-    V.og = V.off.getContext('2d');
-    V.img = V.og.createImageData(n, n);
-    V.b32 = V.img.data;
-    V.prevZ = new Uint8Array(n * n);
-  }
-  V.prevZ.set(M.z);
+  if (V.n !== n) { V.n = n; vpPlaneta(n); }
+  V.N = M.N;
+  V.pz = new Uint8Array(M.N); V.pt = new Uint8Array(M.N);
+  V.fl = new Float32Array(M.N); V.flAct = [];
+  V.pz.set(M.z); V.pt.set(M.t);
+  for (let i = 0; i < M.N; i++) vpPinta(M, i);
   V.cort = new Int32Array(NJUG + 1);
   V.viv = new Uint8Array(NJUG + 1);
   for (const p of M.jug) { V.cort[p.id] = p.cortes; V.viv[p.id] = 1; }
-  V.zsucio = true; V.part.length = 0; V.dest.length = 0; V.sac = 0; V.miniT = 0;
-  V.vista = VISTA; vpEsc();
-  V.camx = cl(M.jug[0].ix - V.visW / 2, 0, Math.max(0, n - V.visW));
-  V.camy = cl(M.jug[0].iy - V.visH / 2, 0, Math.max(0, n - V.visH));
-}
-
-function vpHornea(M) {
-  const n = M.n, z = M.z, d = V.b32;
-  for (let i = 0, o = 0; i < z.length; i++, o += 4) {
-    const v = z[i];
-    if (v === LIBRE) { d[o + 3] = 0; continue; }
-    const c = v === PIEDRA ? VP_ROCA : VP_Z[v];
-    d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2];
-    /* el terreno va apenas translucido: la reja se sigue viendo por debajo y
-       eso es lo que deja contar celdas de una ojeada. La roca va opaca,
-       porque lo unico que tiene que decir es «por aca no».                 */
-    d[o + 3] = v === PIEDRA ? 255 : 232;
-  }
-  V.og.putImageData(V.img, 0, 0);
-  V.zsucio = false;
+  V.esqP.length = 0; V.sac = 0;
+  V.distT = V.dist = vpDist(M);
+  /* la camara se PLANTA en el sitio de arranque en vez de viajar hasta el:
+     con el suavizado corriendo desde el cuadro anterior, el primer segundo de
+     cada nivel seria la camara cruzando el planeta.                        */
+  vpCam(M, 1e3);
 }
 
 /* ── LO QUE CAMBIO ────────────────────────────────────────────────────────
-   Un barrido del tablero por cuadro contra la copia anterior: con 5.476
-   celdas son trescientas mil comparaciones por segundo, o sea nada, y a
-   cambio el destello del cercado, el rehorneado y las esquirlas de la
-   muerte salen de UN solo sitio en vez de tres avisos que alguien tiene que
-   acordarse de mandar.                                                     */
+   Un barrido del planeta por tic contra la copia anterior. Escribe la textura
+   de las celdas que cambiaron, enciende el destello del cercado y dispara las
+   esquirlas: los tres salen de UN solo sitio en vez de tres avisos que
+   alguien tiene que acordarse de mandar.                                   */
 function vpTras(M) {
-  const n = M.n, z = M.z, pz = V.prevZ;
-  let cam = 0;
-  const nue = [];
+  const z = M.z, t = M.t, pz = V.pz, pt = V.pt;
   V.gan.fill(0);
-  for (let i = 0; i < z.length; i++) {
-    if (z[i] === pz[i]) continue;
-    cam++;
-    if (z[i] > 0 && z[i] < PIEDRA) { nue.push(i); V.gan[z[i]]++; }
-    pz[i] = z[i];
-  }
-  if (cam) { V.zsucio = true; V.miniT = 0; }
-  if (nue.length) {
-    const id = z[nue[0]];
-    V.dest.push({ c: nue, id, t: 0 });
-    if (V.dest.length > 6) V.dest.shift();
+  for (let i = 0; i < V.N; i++) {
+    if (z[i] === pz[i] && t[i] === pt[i]) continue;
+    if (z[i] !== pz[i] && z[i] > 0 && z[i] < PIEDRA) {
+      V.gan[z[i]]++;
+      /* el destello vive en la celda y se apaga solo: una lista de cercos con
+         su reloj seria un segundo estado que se puede desincronizar del
+         tablero, y el tablero ya sabe de quien es cada celda.              */
+      if (V.fl[i] <= 0) V.flAct.push(i);
+      V.fl[i] = 1;
+    }
+    pz[i] = z[i]; pt[i] = t[i];
+    vpPinta(M, i);
   }
   for (const p of M.jug) {
     if (p.cortes !== V.cort[p.id]) {
       V.cort[p.id] = p.cortes;
-      vpEsquirlas(p.ix, p.iy, p.id);
+      vpEsquirlas(M, p.i, p.id);
       if (p.id === 1) V.sac = 1;
     }
     V.viv[p.id] = p.vivo ? 1 : 0;
   }
-  /* devuelve cuantas celdas gano cada uno EN ESTE CUADRO. El barrido ya esta
-     hecho para el rehorneado y el destello; contarlo aparte en la capa de
-     juego seria recorrer el tablero dos veces para saber lo mismo.        */
   return V.gan;
 }
 
-function vpEsquirlas(x, y, id) {
-  const c = COLS[id] || COLS[1];
-  for (let i = 0; i < 16; i++) {
-    const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 7;
-    V.part.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
-      t: 0, vida: 0.35 + Math.random() * 0.3, c: i & 1 ? c.t : c.c });
+function vpEsquirlas(M, i, id) {
+  const ct = VP_T[id] || VP_T[1], cc = VP_C[id] || VP_C[1];
+  const P = M.POS, nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  for (let k = 0; k < 14; k++) {
+    const a = Math.random() * Math.PI * 2, s = Math.sin(a), co = Math.cos(a);
+    /* dos tangentes cualesquiera de la normal: la esquirla sale POR LA
+       SUPERFICIE y no en una direccion del mundo, que en una esfera saldria
+       para adentro la mitad de las veces.                                  */
+    let tx, ty, tz;
+    if (Math.abs(nz) < 0.9) { tx = -ny; ty = nx; tz = 0; } else { tx = 0; ty = -nz; tz = ny; }
+    const tl = Math.hypot(tx, ty, tz); tx /= tl; ty /= tl; tz /= tl;
+    const ux = ny * tz - nz * ty, uy = nz * tx - nx * tz, uz = nx * ty - ny * tx;
+    const v = 0.22 + Math.random() * 0.42;
+    const cr = (k & 1) ? ct : cc;
+    V.esqP.push({
+      x: nx * VP_R, y: ny * VP_R, z: nz * VP_R,
+      vx: (tx * co + ux * s) * v + nx * 0.30,
+      vy: (ty * co + uy * s) * v + ny * 0.30,
+      vz: (tz * co + uz * s) * v + nz * 0.30,
+      r: cr[0] / 255, g: cr[1] / 255, b: cr[2] / 255,
+      t: 0, vida: 0.42 + Math.random() * 0.3,
+    });
   }
+  if (V.esqP.length > 160) V.esqP.splice(0, V.esqP.length - 160);
 }
 
 /* ── LA CAMARA ────────────────────────────────────────────────────────────
-   Sigue al jugador con un suavizado exponencial —asi va igual a 30 y a 144
-   cuadros— y se topa contra el tablero DEJANDO DOS CELDAS DE MARGEN: sin
-   margen la pared no se ve nunca y morir contra el borde se lee a que el
-   juego te mato sin avisar.                                                */
-const VP_MARG = 2;
+   Va SOBRE LA NORMAL DEL JUGADOR, corrida hacia atras en el sentido del
+   viaje. Con la camara en un punto fijo del mundo, al dar la vuelta al
+   planeta el jugador terminaria mirandose la espalda desde el otro lado; con
+   la camara colgada de su normal, el planeta es lo que gira — que es
+   literalmente lo que se pidio.
+   Y EL ARRIBA ES LA TANGENTE DEL VIAJE: sin eso, cruzar el borde de una cara
+   da vuelta la pantalla de golpe, porque los ejes de las dos caras no son los
+   mismos.                                                                  */
+function vpDist(M) {
+  /* LA DISTANCIA SALE DE CUANTO PLANETA SE QUIERE VER, y es una cuenta cerrada
+     y no una estimacion. Una esfera de radio 1 a distancia `d` subtiende
+     `asin(1/d)`, que proyectado sobre el plano de imagen mide `tan(asin(1/d))`
+     medios cuadros de alto sobre `tan(fov/2)`. Pidiendo que el DIAMETRO sea
+     `k` veces el alto del cuadro:
+          tan(asin(1/d)) = k·tan(fov/2) = s   →   d = √(1+s²)/s
+     LA VERSION ANTERIOR TRATABA EL ARCO COMO SI FUERA UNA CUERDA PLANA y lo
+     topaba en 2,4 rad, que son 137 grados: mas de un hemisferio, o sea un
+     encuadre que ninguna camara puede tener. Medido, dejaba el planeta a
+     cuatro radios con un tercio del cuadro en cielo vacio.                 */
+  const k = M.arena
+    ? DISCO + (DISCO_MIN - DISCO) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / DISCO_SAT))
+    : DISCO;
+  const s = k * Math.tan(V.cam.fov * Math.PI / 360);
+  /* el piso es geometrico y no de gusto: por debajo de un radio la camara
+     estaria DENTRO del planeta, y `s` grande la lleva justo ahi.           */
+  return Math.max(VP_R * 1.25, VP_R * Math.sqrt(1 + s * s) / s);
+}
+
+function vpPos(M, p, v) {
+  const P = M.POS, i = p.i, j = M.NB[i * 4 + p.d], f = M.f;
+  v.set(P[i * 3] + (P[j * 3] - P[i * 3]) * f,
+        P[i * 3 + 1] + (P[j * 3 + 1] - P[i * 3 + 1]) * f,
+        P[i * 3 + 2] + (P[j * 3 + 2] - P[i * 3 + 2]) * f).normalize();
+  return v;
+}
+
 function vpCam(M, dt) {
-  vpZoom(M, dt);
   const p = M.jug[0];
-  let tx = p.ix + p.dx * M.f + 0.5 - V.visW / 2;
-  let ty = p.iy + p.dy * M.f + 0.5 - V.visH / 2;
-  const n = M.n;
-  if (V.visW >= n + VP_MARG * 2) tx = (n - V.visW) / 2;
-  else tx = cl(tx, -VP_MARG, n - V.visW + VP_MARG);
-  if (V.visH >= n + VP_MARG * 2) ty = (n - V.visH) / 2;
-  else ty = cl(ty, -VP_MARG, n - V.visH + VP_MARG);
-  const a = 1 - Math.exp(-dt * 11);
-  V.camx += (tx - V.camx) * a;
-  V.camy += (ty - V.camy) * a;
+  const nrm = vpPos(M, p, V._v);                       /* donde esta        */
+  const j = M.NB[p.i * 4 + p.d];
+  const ade = V._v2.set(M.POS[j * 3], M.POS[j * 3 + 1], M.POS[j * 3 + 2])
+    .normalize().sub(nrm);
+  ade.addScaledVector(nrm, -ade.dot(nrm));             /* tangente del viaje */
+  if (ade.lengthSq() < 1e-9) ade.set(0, 0, 1).addScaledVector(nrm, -nrm.z);
+  ade.normalize();
+
+  V.distT = vpDist(M);
+  V.dist += (V.distT - V.dist) * (1 - Math.exp(-dt * 1.2));
+
+  const tp = V._v3.copy(nrm).addScaledVector(ade, -VP_ATRAS).normalize()
+    .multiplyScalar(V.dist);
+  const a = 1 - Math.exp(-dt * 9);
+  V.cpos.lerp(tp, a);
+  V.cmira.lerp(V._v3.copy(nrm).multiplyScalar(VP_R * 0.86).addScaledVector(ade, VP_R * 0.10), a);
+  V.carr.lerp(ade, a).normalize();
+
   if (V.sac > 0) {
     V.sac = Math.max(0, V.sac - dt * 3.4);
-    const s = V.sac * V.sac * 0.55;
-    V.sacx = (Math.random() * 2 - 1) * s; V.sacy = (Math.random() * 2 - 1) * s;
-  } else { V.sacx = 0; V.sacy = 0; }
+    const s = V.sac * V.sac * 0.045;
+    V.cpos.x += (Math.random() * 2 - 1) * s;
+    V.cpos.y += (Math.random() * 2 - 1) * s;
+  }
+  V.cam.position.copy(V.cpos);
+  V.cam.up.copy(V.carr);
+  V.cam.lookAt(V.cmira);
+
+  /* el sol se recoloca con la camara: `oj` es el eje de la vista, `carr` el
+     arriba de pantalla y su producto cruzado la derecha. Una direccional de
+     three apunta de su posicion al origen, y el origen ES el planeta, asi que
+     alcanza con ponerla sobre esa direccion.                               */
+  if (V.sol) {
+    const oj = V._v.copy(V.cpos).normalize();
+    const de = V._v2.crossVectors(V.carr, oj).normalize();
+    V.sol.position.copy(oj).addScaledVector(V.carr, 0.30)
+      .addScaledVector(de, -0.24).normalize().multiplyScalar(8);
+  }
 }
 
 /* ══════════════════════════ EL CUADRO ══════════════════════════ */
 function vpDibuja(M, dt) {
   const t0 = performance.now();
-  const g = V.g, e = V.esc, W = V.W, H = V.H, n = M.n;
-  const cx = V.camx + V.sacx, cy = V.camy + V.sacy;
-  const px = x => (x - cx) * e, py = y => (y - cy) * e;
 
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = C_TABLA; g.fillRect(0, 0, W, H);
+  /* el destello del cercado: solo las celdas encendidas, no el planeta. */
+  if (V.flAct.length) {
+    const q = [];
+    for (const i of V.flAct) {
+      V.fl[i] -= dt * 2.4;
+      if (V.fl[i] > 0) q.push(i); else V.fl[i] = 0;
+      vpPinta(M, i);
+    }
+    V.flAct = q;
+  }
+  for (let f = 0; f < 6; f++) if (V.suc[f]) { V.tex[f].needsUpdate = true; V.suc[f] = false; }
 
-  const x0 = Math.max(0, Math.floor(cx) - 1), x1 = Math.min(n, Math.ceil(cx + V.visW) + 1);
-  const y0 = Math.max(0, Math.floor(cy) - 1), y1 = Math.min(n, Math.ceil(cy + V.visH) + 1);
+  /* los cuerpos */
+  let c = 0;
+  for (const p of M.jug) {
+    if (!p.vivo) continue;
+    const nrm = vpPos(M, p, V._v);
+    V._ob.position.copy(nrm).multiplyScalar(VP_R + VP_ALTO);
+    V._ob.quaternion.setFromUnitVectors(V._v2.set(0, 1, 0), nrm);
+    V._ob.updateMatrix();
+    V.cuer.setMatrixAt(c, V._ob.matrix);
+    V.cuer.setColorAt(c, VP_TC[p.id] || VP_TC[1]);
+    c++;
+  }
+  V.cuer.count = c;
+  V.cuer.instanceMatrix.needsUpdate = true;
+  if (V.cuer.instanceColor) V.cuer.instanceColor.needsUpdate = true;
 
-  /* la reja va DEBAJO del terreno y se ve por su alfa: dibujada encima
-     compite con la estela, que es lo unico que hay que mirar.             */
-  g.strokeStyle = C_LINEA; g.lineWidth = Math.max(1, V.k * 0.9);
-  g.beginPath();
-  for (let x = x0; x <= x1; x++) { const s = Math.round(px(x)) + 0.5; g.moveTo(s, 0); g.lineTo(s, H); }
-  for (let y = y0; y <= y1; y++) { const s = Math.round(py(y)) + 0.5; g.moveTo(0, s); g.lineTo(W, s); }
-  g.stroke();
+  /* las esquirlas */
+  const ap = V.esqG.attributes.position.array, ac = V.esqG.attributes.color.array;
+  let k = 0;
+  for (let i = 0; i < V.esqP.length; i++) {
+    const s = V.esqP[i];
+    s.t += dt;
+    if (s.t >= s.vida) continue;
+    s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+    s.vx *= 0.96; s.vy *= 0.96; s.vz *= 0.96;
+    ap[k * 3] = s.x; ap[k * 3 + 1] = s.y; ap[k * 3 + 2] = s.z;
+    ac[k * 3] = s.r; ac[k * 3 + 1] = s.g; ac[k * 3 + 2] = s.b;
+    V.esqP[k++] = s;
+  }
+  V.esqP.length = k;
+  V.esqG.setDrawRange(0, k);
+  V.esqG.attributes.position.needsUpdate = true;
+  V.esqG.attributes.color.needsUpdate = true;
 
-  /* el borde del tablero, que es pared y mata */
-  g.strokeStyle = '#3b4760'; g.lineWidth = V.k * 3;
-  g.strokeRect(px(0), py(0), n * e, n * e);
-
-  if (V.zsucio) vpHornea(M);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(V.off, 0, 0, n, n, px(0), py(0), n * e, n * e);
-
-  vpBordes(M, x0, y0, x1, y1, px, py, e);
-  vpEstelas(M, px, py, e);
-  vpDestellos(M, dt, px, py, e);
-  vpCabezas(M, px, py, e);
-  vpPart(dt, px, py, e);
+  const ren = V.ren;
+  ren.setScissorTest(false);
+  ren.setViewport(0, 0, V.W, V.H);
+  ren.clear();
+  ren.render(V.esc, V.cam);
+  vpMiniPinta(M);
 
   V.msDib = performance.now() - t0;
   V.cuadros++;
 }
 
-/* ── LOS BORDES ───────────────────────────────────────────────────────────
-   Un bloque de color liso no dice donde termina lo tuyo cuando lo tuyo toca
-   lo de otro. Se barre la VENTANA VISIBLE —unas novecientas celdas, no las
-   cinco mil— mirando el vecino de la derecha y el de abajo, asi cada arista
-   se visita una sola vez, y sale una ruta por jugador mas una para la roca.
-   Son seis trazos por cuadro.                                              */
-function vpBordes(M, x0, y0, x1, y1, px, py, e) {
-  const g = V.g, n = M.n, z = M.z;
-  const rutas = [];
-  for (let i = 0; i <= NJUG + 1; i++) rutas.push(null);
-  const dame = k => rutas[k] || (rutas[k] = new Path2D());
-  const val = (x, y) => (x < 0 || y < 0 || x >= n || y >= n) ? -1 : z[y * n + x];
-  for (let y = y0 - 1; y <= y1; y++) for (let x = x0 - 1; x <= x1; x++) {
-    const a = val(x, y);
-    const b = val(x + 1, y);
-    if (a !== b) {
-      const k = a === PIEDRA || b === PIEDRA ? NJUG + 1 : Math.max(a, b);
-      if (k > 0) { const p = dame(k), sx = px(x + 1); p.moveTo(sx, py(y)); p.lineTo(sx, py(y + 1)); }
-    }
-    const c = val(x, y + 1);
-    if (a !== c) {
-      const k = a === PIEDRA || c === PIEDRA ? NJUG + 1 : Math.max(a, c);
-      if (k > 0) { const p = dame(k), sy = py(y + 1); p.moveTo(px(x), sy); p.lineTo(px(x + 1), sy); }
-    }
-  }
-  for (let k = 1; k <= NJUG; k++) {
-    if (!rutas[k]) continue;
-    g.strokeStyle = COLS[k].t; g.globalAlpha = k === 1 ? 0.85 : 0.5;
-    g.lineWidth = V.k * (k === 1 ? 2.2 : 1.6);
-    g.stroke(rutas[k]);
-  }
-  g.globalAlpha = 1;
-  if (rutas[NJUG + 1]) { g.strokeStyle = '#4d5c78'; g.lineWidth = V.k * 1.4; g.stroke(rutas[NJUG + 1]); }
-}
-
-/* ── LAS ESTELAS ──────────────────────────────────────────────────────────
-   Salen de `p.cola`, que es la lista que el modelo ya lleva: buscarlas
-   escaneando el tablero seria repetir un trabajo que ya esta hecho. La
-   propia va MAS GRUESA y con halo, porque es lo unico del juego que mata.  */
-function vpEstelas(M, px, py, e) {
-  const g = V.g, n = M.n;
-  for (const p of M.jug) {
-    if (!p.vivo || !p.cola.length) continue;
-    const c = COLS[p.id], mio = p.id === 1;
-    const w = e * (mio ? 0.62 : 0.5), o = (e - w) / 2;
-    if (mio) {
-      g.globalAlpha = 0.30; g.fillStyle = c.t;
-      for (const i of p.cola) {
-        const x = i % n, y = (i / n) | 0;
-        const sx = px(x), sy = py(y);
-        if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
-        g.fillRect(sx - e * 0.16, sy - e * 0.16, e * 1.32, e * 1.32);
-      }
-      g.globalAlpha = 1;
-    }
-    g.fillStyle = c.t;
-    for (const i of p.cola) {
-      const x = i % n, y = (i / n) | 0;
-      const sx = px(x), sy = py(y);
-      if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
-      g.fillRect(sx + o, sy + o, w, w);
-    }
-  }
-}
-
-/* ── EL DESTELLO DEL CERCADO ──────────────────────────────────────────────
-   Lo que se acaba de ganar se enciende y se apaga en medio segundo: sin eso
-   el terreno nuevo aparece de un cuadro al otro y la unica recompensa del
-   juego no se ve ocurrir.                                                  */
-const VP_DEST_S = 0.52;
-function vpDestellos(M, dt, px, py, e) {
-  const g = V.g, n = M.n;
-  for (let k = V.dest.length - 1; k >= 0; k--) {
-    const d = V.dest[k];
-    d.t += dt;
-    if (d.t >= VP_DEST_S) { V.dest.splice(k, 1); continue; }
-    const u = d.t / VP_DEST_S;
-    g.globalAlpha = (1 - u) * (d.id === 1 ? 0.85 : 0.45);
-    g.fillStyle = COLS[d.id].c;
-    const cr = e * (0.10 + u * 0.42);
-    for (const i of d.c) {
-      const x = i % n, y = (i / n) | 0;
-      const sx = px(x), sy = py(y);
-      if (sx < -e || sy < -e || sx > V.W || sy > V.H) continue;
-      g.fillRect(sx + (e - cr) / 2, sy + (e - cr) / 2, cr, cr);
-    }
-  }
-  g.globalAlpha = 1;
-}
-
-/* ── LAS CABEZAS ──────────────────────────────────────────────────────────
-   Se dibujan en la fraccion: `ix + dx·f`, o sea entre la celda en la que
-   estan y la que viene. Con la posicion entera el cuerpo salta de celda en
-   celda cinco veces por segundo y el juego se lee a diapositivas.          */
-function vpCabezas(M, px, py, e) {
-  const g = V.g;
-  for (const p of M.jug) {
-    if (!p.vivo) continue;
-    const c = COLS[p.id], mio = p.id === 1;
-    const x = p.ix + p.dx * M.f, y = p.iy + p.dy * M.f;
-    const sx = px(x) + e / 2, sy = py(y) + e / 2;
-    if (sx < -e * 2 || sy < -e * 2 || sx > V.W + e * 2 || sy > V.H + e * 2) continue;
-    if (mio) {
-      const gr = g.createRadialGradient(sx, sy, 0, sx, sy, e * 1.9);
-      gr.addColorStop(0, 'rgba(255,224,176,.34)'); gr.addColorStop(1, 'rgba(255,224,176,0)');
-      g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, e * 1.9, 0, 7); g.fill();
-    }
-    /* la punta dice para donde va, que es lo unico que el jugador necesita
-       saber cuando pide una curva.                                         */
-    g.fillStyle = c.t;
-    g.beginPath();
-    g.arc(sx, sy, e * (mio ? 0.46 : 0.40), 0, 7);
-    g.fill();
-    g.beginPath();
-    g.moveTo(sx + p.dx * e * 0.78, sy + p.dy * e * 0.78);
-    g.lineTo(sx - p.dy * e * 0.3 + p.dx * e * 0.15, sy + p.dx * e * 0.3 + p.dy * e * 0.15);
-    g.lineTo(sx + p.dy * e * 0.3 + p.dx * e * 0.15, sy - p.dx * e * 0.3 + p.dy * e * 0.15);
-    g.closePath(); g.fill();
-    g.fillStyle = c.c;
-    g.beginPath(); g.arc(sx, sy, e * (mio ? 0.25 : 0.20), 0, 7); g.fill();
-  }
-}
-
-function vpPart(dt, px, py, e) {
-  const g = V.g;
-  for (let k = V.part.length - 1; k >= 0; k--) {
-    const q = V.part[k];
-    q.t += dt;
-    if (q.t >= q.vida) { V.part.splice(k, 1); continue; }
-    q.x += q.vx * dt; q.y += q.vy * dt;
-    q.vx *= 0.93; q.vy *= 0.93;
-    const u = 1 - q.t / q.vida, s = e * 0.22 * u;
-    g.globalAlpha = u;
-    g.fillStyle = q.c;
-    g.fillRect(px(q.x) - s / 2, py(q.y) - s / 2, s, s);
-  }
-  g.globalAlpha = 1;
-}
-
 /* ── EL MAPA CHICO ────────────────────────────────────────────────────────
-   El mismo lienzo de n×n estirado a 74 px, mas las cabezas y el recuadro de
-   lo que se esta mirando. Se repinta cinco veces por segundo y no sesenta:
-   nada de lo que muestra cambia mas rapido que eso.                        */
+   UNA SEGUNDA PASADA EN EL MISMO LIENZO y no un segundo contexto: el planeta,
+   sus texturas y sus luces ya estan subidos a la GPU, y un `<canvas>` aparte
+   obligaria a mantener una copia entera del tablero del otro lado. El
+   `<canvas id="mini">` se queda vacio y sirve de MEDIDA: la sonda de HUD
+   sigue teniendo una caja que medir y el mapa se dibuja exactamente ahi.   */
 function vpMiniPinta(M) {
-  if (V.mini.classList.contains('off')) return;
-  V.miniT -= 1;
-  if (V.miniT > 0) return;
-  V.miniT = 12;
-  const g = V.mg, S = V.mini.width, n = M.n, k = S / n;
-  if (V.zsucio) vpHornea(M);
-  g.clearRect(0, 0, S, S);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(V.off, 0, 0, n, n, 0, 0, S, S);
-  for (const p of M.jug) {
-    if (!p.vivo) continue;
-    g.fillStyle = COLS[p.id].c;
-    const r = p.id === 1 ? 2.6 : 1.9;
-    g.beginPath(); g.arc((p.ix + 0.5) * k, (p.iy + 0.5) * k, r, 0, 7); g.fill();
-  }
-  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1;
-  g.strokeRect(V.camx * k, V.camy * k, V.visW * k, V.visH * k);
+  const el = V.mini;
+  if (!el || el.classList.contains('off')) return;
+  const rm = $('marco').getBoundingClientRect(), r = el.getBoundingClientRect();
+  const w = Math.max(8, Math.round(r.width)), h = Math.max(8, Math.round(r.height));
+  const x = Math.round(r.left - rm.left), y = Math.round(rm.bottom - r.bottom);
+  const p = M.jug[0];
+  const nrm = vpPos(M, p, V._v);
+  V.miniCam.aspect = w / h; V.miniCam.updateProjectionMatrix();
+  V.miniCam.position.copy(nrm).multiplyScalar(VP_R * 4.1);
+  V.miniCam.up.copy(V.carr);
+  V.miniCam.lookAt(0, 0, 0);
+  const ren = V.ren;
+  ren.setScissorTest(true);
+  ren.setScissor(x, y, w, h);
+  ren.setViewport(x, y, w, h);
+  ren.clear();
+  ren.render(V.esc, V.miniCam);
+  ren.setScissorTest(false);
 }
 /* ══════════════════════════════════════════════════════════════════════════
    f.js · LA PARTIDA: el dedo, las vidas, el reloj y el marcador
@@ -2119,7 +2801,7 @@ function vpMiniPinta(M) {
    UNA vuelta, y encadenar vueltas es seguir arrastrando.
 
    Y LO QUE SE ESCRIBE ES `p.ped`, que es EL MISMO campo que usan los bots y
-   el auto-jugador. Si el dedo escribiera `dx`/`dy` directo, el jugador podria
+   el auto-jugador. Si el dedo escribiera el rumbo directo, el jugador podria
    doblar a mitad de celda y los bots no: dos fisicas distintas en el mismo
    tablero, y la auditoria estaria aprobando un juego que nadie juega.
 
@@ -2134,7 +2816,7 @@ const P = {
   on: false, pausa: false, fin: null, tuto: false, arena: false,
   m: 0, nv: 0, cfg: null, M: null, yo: null,
   seg: 0, cortesVistos: 0, pct: 0, mejor: 0, casi: false, ganUlt: 0,
-  giros: 0, gdx: 0, gdy: 0,
+  giros: 0, gd: 0,
   /* EL PUESTO Y LA TAJADA SE FOTOGRAFIAN EN EL ULTIMO TIC CON VIDA. En la
      arena morir BORRA el terreno, asi que preguntando DESPUES del corte el
      panel de fin diria «8º con 0 %» siempre —es exactamente lo que el banco
@@ -2144,73 +2826,73 @@ const P = {
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
-const ENT = { id: null, ax: 0, ay: 0, ejeX: 0, cola: null };
-const ENT_MIN = 15;     /* px de zona muerta: un toque no dobla             */
-const ENT_HIST = 1.30;  /* cuanto le tiene que ganar el otro eje para valer */
+const ENT = { id: null, ax: 0, ay: 0, cola: null };
+/* 30 px y no 15: con re-anclaje, un barrido de 60 px son DOS vueltas. En el
+   plano dos vueltas seguidas eran medio cuadrado; en la esfera siguen
+   siendolo, pero un flick de dedo no tiene que pedir dos.                 */
+const ENT_MIN = 30;
 
-/* UNA SOLA PUERTA para el dedo, el teclado y el tutorial. Con dos caminos, el
-   que nadie prueba —el teclado— se desincroniza el dia que se toque el otro. */
-function entPide(dx, dy) {
+/* EL GIRO ES RELATIVO Y NO ABSOLUTO, y no es una preferencia: en una esfera
+   «arriba» no existe. Lo unico que el cuerpo sabe es hacia donde va, asi que
+   lo unico que se le puede pedir es izquierda o derecha — que ademas es el
+   control de Paper.io 3D. Y sale gratis una propiedad que el plano no tenia:
+   UNA VUELTA DE 90 GRADOS NUNCA PUEDE SER MEDIA VUELTA, o sea que el control
+   no se puede suicidar solo.
+   `p.ped` es un INDICE DE DIRECCION ABSOLUTO (0-3), asi que el giro se
+   resuelve aca con GIRO_CW/GIRO_CCW y el modelo no se entera de nada.     */
+function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
   const p = P.yo;
   if (!p || !P.on || P.pausa || P.fin) return false;
-  if (dx === p.dx && dy === p.dy) return false;
-  if (dx === -p.dx && dy === -p.dy) return false;   /* media vuelta: suicidio */
-  if (p.ped) {
-    /* `tic` todavia no consumio la anterior: se guarda la nueva y sale en
-       cuanto se libere el campo. */
-    if (p.ped[0] === dx && p.ped[1] === dy) return false;
-    ENT.cola = [dx, dy];
+  const base = p.ped != null ? p.ped : p.d;   /* se gira sobre lo ya pedido  */
+  const d = (giro > 0 ? GIRO_CW : GIRO_CCW)[base];
+  if (d === p.d) return false;                /* no cambia nada             */
+  if (p.ped != null) {
+    if (p.ped === d) return false;
+    ENT.cola = d;
     return true;
   }
-  p.ped = [dx, dy];
+  p.ped = d;
   return true;
 }
 /* corre DESPUES de `paso`: ahi `tic` ya vacio `ped` y el pendiente puede
    entrar sin pisar nada. */
 function entSuelta() {
   const p = P.yo;
-  if (!p || !ENT.cola) return;
-  if (p.ped) return;
-  if (!(ENT.cola[0] === -p.dx && ENT.cola[1] === -p.dy) &&
-      !(ENT.cola[0] === p.dx && ENT.cola[1] === p.dy)) p.ped = ENT.cola;
+  if (!p || ENT.cola == null) return;
+  if (p.ped != null) return;
+  if (ENT.cola !== p.d && ENT.cola !== OPUE[p.d]) p.ped = ENT.cola;
   ENT.cola = null;
 }
 
 function entBaja(e) {
   if (!P.on || P.pausa || P.fin) return;
   if (ENT.id !== null) return;
-  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = 0;
+  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY;
   try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
 }
 function entMueve(e) {
   if (ENT.id !== e.pointerId) return;
-  const dx = e.clientX - ENT.ax, dy = e.clientY - ENT.ay;
-  const ax = Math.abs(dx), ay = Math.abs(dy);
-  if (ax < ENT_MIN && ay < ENT_MIN) return;
-  /* HISTERESIS SOBRE EL EJE Y NO SOBRE LA DISTANCIA: en una diagonal, con
-     `ax > ay` a secas el eje dominante parpadea y el cuerpo hace zigzag. El
-     otro eje tiene que GANARLE por un tercio para robarle el turno.        */
-  let eje;                                   /* 1 horizontal · 2 vertical   */
-  if (ENT.ejeX === 1)      eje = ay > ax * ENT_HIST ? 2 : 1;
-  else if (ENT.ejeX === 2) eje = ax > ay * ENT_HIST ? 1 : 2;
-  else                     eje = ax >= ay ? 1 : 2;
-  if (eje === 1 ? ax < ENT_MIN : ay < ENT_MIN) return;
-  entPide(...(eje === 1 ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1]));
-  /* EL ANCLA SE MUDA HAYA DOBLADO O NO: si no, un arrastre largo deja el
-     desplazamiento saturado y la vuelta siguiente se dispara con un pixel. */
-  ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = eje;
+  /* SOLO EL EJE HORIZONTAL. Arrastrar hacia arriba es pedir «seguir
+     derecho», que es lo que el cuerpo ya hace; hacia abajo seria media
+     vuelta, que mata. Ninguno de los dos tiene nada que pedir, asi que la
+     histeresis entre ejes del plano sobra: aca hay un solo eje.           */
+  const dx = e.clientX - ENT.ax;
+  if (Math.abs(dx) < ENT_MIN) return;
+  entPide(dx > 0 ? 1 : -1);
+  /* el ancla se muda haya doblado o no: si no, un arrastre largo deja el
+     desplazamiento saturado y la vuelta siguiente sale con un pixel.      */
+  ENT.ax = e.clientX; ENT.ay = e.clientY;
 }
 function entSube(e) {
   if (ENT.id !== e.pointerId) return;
-  ENT.id = null; ENT.ejeX = 0;
+  ENT.id = null;
 }
 const ENT_TEC = {
-  ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1],
-  KeyD: [1, 0], KeyA: [-1, 0], KeyS: [0, 1], KeyW: [0, -1],
+  ArrowRight: 1, ArrowLeft: -1, KeyD: 1, KeyA: -1,
 };
 function entTecla(e) {
-  const d = ENT_TEC[e.code];
-  if (d) { entPide(d[0], d[1]); e.preventDefault(); return; }
+  const g = ENT_TEC[e.code];
+  if (g) { entPide(g); e.preventDefault(); return; }
   if (e.code === 'Escape' || e.code === 'KeyP') { if (P.on && !P.fin) pausaPon(!P.pausa); }
 }
 function entInit() {
@@ -2241,7 +2923,7 @@ function partidaArranca(m, nv, tuto, arena) {
   P.seg = P.cfg.seg;
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
-  P.giros = 0; P.gdx = P.yo.dx; P.gdy = P.yo.dy;
+  P.giros = 0; P.gd = P.yo.d;
   P.posUlt = 1 + P.cfg.riv; P.pctUlt = 0; P.primero = false; P.tab = null;
   P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false;
   P.hNiv = ''; P.hTab = '';
@@ -2268,7 +2950,7 @@ function partidaPaso(dt) {
   /* LAS VUELTAS SE CUENTAN POR EL RUMBO QUE EL CUERPO TOMO, no por los toques
      que se pidieron: un pedido puede quedar en la cola y no salir nunca, y el
      tutorial estaria dando por hecho un gesto que no ocurrio.              */
-  if (yo.dx !== P.gdx || yo.dy !== P.gdy) { P.giros++; P.gdx = yo.dx; P.gdy = yo.dy; }
+  if (yo.d !== P.gd) { P.giros++; P.gd = yo.d; }
 
   /* ── lo que gano este cuadro ── */
   if (gan[1] > 0) {
@@ -2636,13 +3318,19 @@ const TUT = { on: false, paso: 0, t: 0, fin: 0 };
 const TUT_LEER = 0.9;
 const TUT_CIERRE = 2.6;   /* el paso 5 no se hace, se mira */
 
-/* EL MAPA DEL TUTORIAL ES CHICO Y PELADO. 26 celdas contra las 19 de la vista
-   quiere decir que casi todo el tablero entra en pantalla de una: en un
-   tutorial sin mapa chico —esta apagado— no se puede pedir que alguien busque
-   el borde. Sin piedras, porque ninguno de los cinco pasos habla de piedras. */
+/* EL PLANETA DEL TUTORIAL ES CHICO Y PELADO. Con n=12 la circunferencia son
+   48 celdas contra las 19 de la vista: un cuarto de vuelta entra en pantalla
+   de una, asi que se ve de donde se salio mientras se vuelve. En un tutorial
+   sin mapa chico —esta apagado— eso es lo unico que reemplaza al mapa. Sin
+   piedras, porque ninguno de los cinco pasos habla de piedras.
+
+   Y CHICO TIENE UN SEGUNDO TRABAJO EN LA ESFERA: 864 celdas es el unico
+   tamano en el que el paso 4 —«una vuelta grande», 40 celdas ganadas— es una
+   fraccion del planeta que se ve crecer. En uno de 8.664 son el 0,46 % y la
+   vuelta no se nota.                                                        */
 function tutCfg() {
   return {
-    mundo: -1, nivel: -1, pat: 'vacio', n: 26, riv: 0,
+    mundo: -1, nivel: -1, pat: 'vacio', n: 12, riv: 0,
     per: 0.6, meta: 1.1, seg: 0, sem: 20260911,
   };
 }
@@ -2945,8 +3633,7 @@ function bucle(ts) {
   tutPaso(dt);
   if (P.on) {
     vpCam(P.M, dt);
-    vpDibuja(P.M, dt);
-    vpMiniPinta(P.M);
+    vpDibuja(P.M, dt);          /* vpDibuja pinta ademas el mini */
     MSDIB = MSDIB * 0.9 + V.msDib * 0.1;
   }
 }
@@ -3030,11 +3717,13 @@ window.__C = {
     const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
     const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
     ev('pointerdown', x0, y0);
-    ev('pointermove', x0 + dx, y0 + dy);
-    ev('pointerup', x0 + dx, y0 + dy);
-    return { ped: P.yo ? P.yo.ped : null, dx: P.yo ? P.yo.dx : 0, dy: P.yo ? P.yo.dy : 0 };
+    ev('pointermove', x0 + dx, y0 + (dy || 0));
+    ev('pointerup', x0 + dx, y0 + (dy || 0));
+    return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 };
   },
-  tecla(k) { entTecla({ key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null }; },
+  /* giro relativo, que es lo unico que el cuerpo entiende en una esfera */
+  gira(lado) { return this.arrastra((lado > 0 ? 1 : -1) * 60, 0); },
+  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 }; },
 
   /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
      el dibujo a resolucion de software cuesta mas que la fisica entera. */
@@ -3052,7 +3741,6 @@ window.__C = {
        el paso 3 con 2.401 vueltas sin cerrar una sola area. Doblar siempre
        para el MISMO lado es lo unico que devuelve al punto de partida, y
        volver es exactamente lo que cierra.                                */
-    const R = [[1, 0], [0, 1], [-1, 0], [0, -1]];   /* der · abajo · izq · arriba */
     /* Y EL LADO CRECE AL LLEGAR AL PASO 4, porque si no el cuerpo ya no sale.
        Medido con lado fijo de nueve: los dos primeros pasos salian y el
        cuarto se clavaba 3.000 vueltas, y la causa es que despues de cerrar
@@ -3060,30 +3748,19 @@ window.__C = {
        traza entero adentro de lo ganado, sin una celda de estela y sin nada
        que cerrar. Lo que hace una persona al leer «cuanto mas grande la
        vuelta» es justamente eso: irse mas lejos. Con el lado en infinito el
-       cuerpo dobla solo contra la pared y recorre el borde del tablero.   */
+       cuerpo da la vuelta al planeta, que es el cuadrado mas grande que hay.
+       Y ACA NO HAY PARED QUE ESQUIVAR: una esfera no tiene borde, asi que la
+       guarda que el tablero plano necesitaba es codigo muerto. Lo unico que
+       decide es cuanto se camina antes de doblar.                         */
     const CELDA = 1 / (VEL * 0.016);              /* cuadros por celda      */
-    let g = 0, prev = -1, ri = 0, quiere = 0;
+    let g = 0, prev = -1, quiere = 0;
     while (TUT.on && g++ < T) {
       if (TUT.paso !== prev) { hist.push({ paso: TUT.paso, t: g, pista: $('pista').textContent }); prev = TUT.paso; quiere = 0; }
-      const yo = P.yo, n = P.M.n;
-      /* NADIE CORRE CONTRA LA PARED. Si el rumbo de ahora se acaba en tres
-         celdas, se dobla ya: sin esto el driver muere contra el borde y lo
-         que se mediria seria el renacimiento, no el gesto.                */
-      const pared = (d) => {
-        const x = yo.ix + R[d][0] * 3, y = yo.iy + R[d][1] * 3;
-        return x < 1 || y < 1 || x > n - 2 || y > n - 2;
-      };
-      const dAct = R.findIndex((d) => d[0] === yo.dx && d[1] === yo.dy);
-      if (--quiere <= 0 || (dAct >= 0 && pared(dAct))) {
-        /* del ciclo se toma el primero que no sea media vuelta ni pared */
-        for (let k = 0; k < 4; k++) {
-          const d = R[(ri + k) % 4];
-          if (d[0] === -yo.dx && d[1] === -yo.dy) continue;
-          if (pared((ri + k) % 4)) continue;
-          this.arrastra(d[0] * 90, d[1] * 90);
-          ri = (ri + k + 1) % 4;
-          break;
-        }
+      /* SIEMPRE PARA EL MISMO LADO. Un giro relativo de 90 grados no puede
+         ser media vuelta, asi que el descarte que el plano necesitaba
+         tampoco hace falta: el control no se puede suicidar solo.         */
+      if (--quiere <= 0) {
+        this.gira(1);
         quiere = TUT.paso >= 3 ? 1e9 : Math.round(9 * CELDA);
       }
       partidaPaso(0.016);
@@ -3094,7 +3771,7 @@ window.__C = {
 
   /* ── el nivel puesto, jugado solo ──
      ENTRA POR `p.ped`, o sea por el mismo campo que escribe el dedo: un bot
-     que escriba `dx`/`dy` estaria jugando otra fisica y ganar no probaria
+     que escribiera el rumbo directo estaria jugando otra fisica y ganar no probaria
      nada. `azar` es el control — sin el, que el honesto termine no dice que
      haya una decision adentro.                                           */
   /* Y ARRANCA EL NIVEL ELLA MISMA. Tomando la partida que hubiera puesta,
@@ -3167,30 +3844,48 @@ window.__C = {
      ventana: el juego vive adentro de `#marco`, y medir contra la ventana
      da «entra» siempre en una pantalla grande.                           */
   /* EL ENCUADRE, que desde afuera no se puede preguntar: `V` es un `const` del
-     modulo y `page.evaluate` no lo ve. Devuelve lo que decide que se ve —el
-     lienzo de verdad, la escala, el centro de camara y cuantas celdas entran—
-     mas donde cae el tablero EN PANTALLA, que es la unica forma de comprobar
-     que no se sale por un lado.                                             */
+     modulo y `page.evaluate` no lo ve.
+     EN UNA ESFERA NO HAY «ESQUINA DEL TABLERO» QUE PROYECTAR: lo que dice si
+     el encuadre sirve son otras dos cosas. Cuanto del planeta entra —el disco
+     que subtiende una esfera de radio 1 a distancia d es `asin(1/d)`, o sea
+     una cuenta cerrada y no una estimacion— y DONDE CAE EL JUGADOR, que tiene
+     que estar cerca del medio y por debajo de el, porque la camara se corre
+     hacia atras sobre la tangente del viaje.                               */
   vista() {
     if (!P.on) return { on: false };
-    const r = V.cv.getBoundingClientRect(), n = P.M.n;
-    /* las cuatro esquinas del tablero, en pixeles de pantalla */
-    /* LA CAMARA ES LA ESQUINA DE ARRIBA A LA IZQUIERDA, no el centro, que es
-       como lo hace `vpDibuja`: `px(x) = (x - camx) * esc`. Con la cuenta del
-       centro esta sonda informaba el tablero cien pixeles corrido y a mitad de
-       pantalla, o sea un defecto de encuadre que no existia.                */
-    const px = (cx, cy) => [
-      r.left + (cx - V.camx) * V.esc,
-      r.top + (cy - V.camy) * V.esc,
-    ];
-    const a = px(0, 0), b = px(n, n);
+    const r = V.cv.getBoundingClientRect(), n = P.M.n, M = P.M;
+    const d = V.dist, fovV = V.cam.fov * Math.PI / 180;
+    /* medio disco del planeta, en fraccion del ALTO de pantalla */
+    const disco = d > 1 ? Math.tan(Math.asin(1 / d)) / Math.tan(fovV / 2) * 0.5 : 9;
+    /* CUANTAS CELDAS DE ALTO ENTRAN, y esto es el ARCO DE LA SUPERFICIE y no
+       el angulo del cono de la camara — que era lo que la primera version
+       medía y devolvia 1,6 donde hay diez. Un punto a `a` radianes del
+       sub-punto cae en `(cos a, sin a)` con la camara en `(d,0)`, asi que su
+       desvio angular es `atan(sin a/(d−cos a))`; igualandolo al medio campo
+       queda `sin a + T·cos a = T·d` con `T = tan(fov/2)`, que se despeja
+       entero. Si el seno pedido pasa de uno el cono NO alcanza al planeta:
+       entra el disco completo y el limite pasa a ser el horizonte,
+       `acos(1/d)`. Una celda mide (pi/2)/n porque una cara cubre noventa. */
+    const T = Math.tan(fovV / 2), R = Math.hypot(1, T), sn = T * d / R;
+    const arcoV = 2 * (sn >= 1 ? Math.acos(Math.min(1, 1 / d))
+                               : Math.asin(sn) - Math.atan(T));
+    const celdas = arcoV / (Math.PI / 2 / n);
+    /* el jugador proyectado, en fraccion de pantalla (0,0 arriba-izquierda) */
+    let yo = null, cel = null;
+    if (P.yo) {
+      const i = P.yo.i, q = new THREE.Vector3(M.POS[i * 3], M.POS[i * 3 + 1], M.POS[i * 3 + 2]);
+      V.cam.updateMatrixWorld(); q.project(V.cam);
+      yo = [+((q.x + 1) / 2).toFixed(3), +((1 - q.y) / 2).toFixed(3), q.z < 1 ? 1 : 0];
+      const nn = n * n, f = (i / nn) | 0, k = i % nn;
+      cel = [f, k % n, (k / n) | 0];
+    }
     return {
-      on: true, n, dpr: V.dpr, esc: +V.esc.toFixed(3),
-      cam: [+V.camx.toFixed(2), +V.camy.toFixed(2)],
-      vis: [+V.visW.toFixed(2), +V.visH.toFixed(2)],
+      on: true, n, cel3d: 6 * n * n, dpr: V.dpr,
       lienzo: [Math.round(r.width), Math.round(r.height), V.W, V.H],
-      tablero: [Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1])],
-      yo: P.yo ? [P.yo.ix, P.yo.iy] : null,
+      dist: +d.toFixed(3), distT: +V.distT.toFixed(3),
+      disco: +disco.toFixed(3),          /* >0.5 = el planeta pasa el borde  */
+      celdas: +celdas.toFixed(1),        /* celdas de alto a la vista        */
+      yo, cel, msDib: +V.msDib.toFixed(2),
     };
   },
 

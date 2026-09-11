@@ -76,31 +76,35 @@ const COLS = [
 const C_TABLA = '#dfe6ee', C_PIEDRA = '#6b7689', C_LINEA = '#c2ccd9';
 
 /* ── LOS NUMEROS DEL CUERPO, DERIVADOS ────────────────────────────────────
-   No se eligen sueltos: se elige CUANTO SE VE y CUANTO TARDA EN CRUZARSE, y
-   de ahi salen los dos. `VISTA` son CELDAS DE ARCO que tienen que entrar en
-   el cuadro —en el plano eran celdas de ancho de tablero; en la esfera la
-   camara mira el planeta desde arriba y lo que se elige es cuanto arco abarca
-   el lente—. Con 19 en un marco de 412 px, una celda mide 21,7 px —o sea que
-   la cabeza y la estela se distinguen sin agrandar nada— y a 5,4 celdas por
-   segundo la ventana visible se cruza en 3,5 s. Eso ademas fija el ritmo del
-   pulgar: una curva se puede pedir cada 185 ms, que es lo que tarda el cuerpo
-   en cambiar de celda.
+   EL ENCUADRE NO SE PIDE EN CELDAS, SE PIDE EN PLANETA, y eso no es un gusto:
+   es geometria. Una esfera de radio 1 vista desde `d` subtiende `asin(1/d)`,
+   asi que el disco que ocupa en pantalla sale de una cuenta cerrada; pedir «19
+   celdas de arco» en cambio ata el encuadre al TAMANO del planeta, y entonces
+   la arena —que tiene un planeta cinco veces mas grande que el tutorial— se
+   veria como un plano, porque diecinueve celdas de 58 son un pedacito chato.
+   Pidiendo disco, el planeta ocupa SIEMPRE lo mismo y lo que cambia es cuanto
+   mide una celda: en un planeta grande tu territorio se ve chico, que es
+   exactamente lo que este juego tiene que hacer sentir.
 
-   Y UNA VUELTA ENTERA AL PLANETA SON 4n CELDAS, no n: el cubo tiene cuatro
-   caras en cualquier meridiano. Con n=38 eso son 152, o sea que las 19 de la
-   vista son un cuarto de cara y un octavo del horizonte — el planeta se ve
-   REDONDO desde el primer cuadro, que es lo que esta version viene a hacer. */
-const VISTA = 19;
-/* EN LA ARENA LA VISTA SE ABRE CON EL TERRENO, y el numero sale de la misma
-   derivacion de arriba y no del gusto: lo que uno tiene que seguir viendo es
-   el BORDE de lo propio, y el lado de un territorio crece como la RAIZ de su
-   area — por eso el interpolador va con `sqrt(pct/VISTA_SAT)` y no lineal.
-   Satura en la tajada pareja (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va
-   ganando y abrir mas solo achica la cabeza. Y el tope son 34 celdas porque
-   en 412 px eso deja la celda en 12,1 px — por debajo de diez, la cabeza y
-   la estela dejan de distinguirse, que es lo unico que este juego pide ver. */
-const VISTA_MAX = 34;
-const VISTA_SAT = 0.10;
+   `DISCO` es el DIAMETRO del planeta en fraccion del ALTO del cuadro. De ahi
+   sale la distancia despejando: con `s = DISCO·tan(fov/2)`,
+        tan(asin(1/d)) = s   →   d = √(1+s²)/s
+   Con 0,86 y un lente de 46 grados eso da 2,92 radios: el planeta llena el
+   cuadro a lo ancho —en 9:16 el ancho es el 46 % del alto, asi que un disco
+   del 86 % del alto lo desborda— y deja cielo arriba, abajo y en las cuatro
+   esquinas, que es lo unico que hace que se lea a REDONDO. Mas cerca se ve
+   plano otra vez; mas lejos aparece una franja de cielo que no dice nada.   */
+const DISCO = 0.86;
+/* EN LA ARENA LA CAMARA SE ALEJA CON EL TERRENO, y el interpolador va con la
+   RAIZ de la tajada y no lineal por la misma razon de siempre: lo que uno
+   tiene que seguir viendo es el BORDE de lo propio, y el lado de un
+   territorio crece como la raiz de su area. Satura en la tajada pareja
+   (`OCUPA/8` = 9,9 %): mas alla de eso uno ya va ganando y alejarse mas solo
+   achica la cabeza. El piso son 0,62 porque ahi una celda de la arena mide
+   9,7 px en un marco de 412 — por debajo de diez, la cabeza y la estela
+   dejan de distinguirse, que es lo unico que este juego pide ver.          */
+const DISCO_MIN = 0.62;
+const DISCO_SAT = 0.10;
 const VEL = 5.4;
 /* SIETE VIDAS Y NO TRES, Y EL NUMERO SALE DE UNA TASA MEDIDA. En el plano el
    bot honesto se comia 0,42 cortes por partida; en la esfera se come 1,48, y

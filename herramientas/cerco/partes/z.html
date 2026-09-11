@@ -20,8 +20,7 @@ function bucle(ts) {
   tutPaso(dt);
   if (P.on) {
     vpCam(P.M, dt);
-    vpDibuja(P.M, dt);
-    vpMiniPinta(P.M);
+    vpDibuja(P.M, dt);          /* vpDibuja pinta ademas el mini */
     MSDIB = MSDIB * 0.9 + V.msDib * 0.1;
   }
 }
@@ -105,11 +104,13 @@ window.__C = {
     const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
     const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
     ev('pointerdown', x0, y0);
-    ev('pointermove', x0 + dx, y0 + dy);
-    ev('pointerup', x0 + dx, y0 + dy);
-    return { ped: P.yo ? P.yo.ped : null, dx: P.yo ? P.yo.dx : 0, dy: P.yo ? P.yo.dy : 0 };
+    ev('pointermove', x0 + dx, y0 + (dy || 0));
+    ev('pointerup', x0 + dx, y0 + (dy || 0));
+    return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 };
   },
-  tecla(k) { entTecla({ key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null }; },
+  /* giro relativo, que es lo unico que el cuerpo entiende en una esfera */
+  gira(lado) { return this.arrastra((lado > 0 ? 1 : -1) * 60, 0); },
+  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 }; },
 
   /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
      el dibujo a resolucion de software cuesta mas que la fisica entera. */
@@ -127,7 +128,6 @@ window.__C = {
        el paso 3 con 2.401 vueltas sin cerrar una sola area. Doblar siempre
        para el MISMO lado es lo unico que devuelve al punto de partida, y
        volver es exactamente lo que cierra.                                */
-    const R = [[1, 0], [0, 1], [-1, 0], [0, -1]];   /* der · abajo · izq · arriba */
     /* Y EL LADO CRECE AL LLEGAR AL PASO 4, porque si no el cuerpo ya no sale.
        Medido con lado fijo de nueve: los dos primeros pasos salian y el
        cuarto se clavaba 3.000 vueltas, y la causa es que despues de cerrar
@@ -135,30 +135,19 @@ window.__C = {
        traza entero adentro de lo ganado, sin una celda de estela y sin nada
        que cerrar. Lo que hace una persona al leer «cuanto mas grande la
        vuelta» es justamente eso: irse mas lejos. Con el lado en infinito el
-       cuerpo dobla solo contra la pared y recorre el borde del tablero.   */
+       cuerpo da la vuelta al planeta, que es el cuadrado mas grande que hay.
+       Y ACA NO HAY PARED QUE ESQUIVAR: una esfera no tiene borde, asi que la
+       guarda que el tablero plano necesitaba es codigo muerto. Lo unico que
+       decide es cuanto se camina antes de doblar.                         */
     const CELDA = 1 / (VEL * 0.016);              /* cuadros por celda      */
-    let g = 0, prev = -1, ri = 0, quiere = 0;
+    let g = 0, prev = -1, quiere = 0;
     while (TUT.on && g++ < T) {
       if (TUT.paso !== prev) { hist.push({ paso: TUT.paso, t: g, pista: $('pista').textContent }); prev = TUT.paso; quiere = 0; }
-      const yo = P.yo, n = P.M.n;
-      /* NADIE CORRE CONTRA LA PARED. Si el rumbo de ahora se acaba en tres
-         celdas, se dobla ya: sin esto el driver muere contra el borde y lo
-         que se mediria seria el renacimiento, no el gesto.                */
-      const pared = (d) => {
-        const x = yo.ix + R[d][0] * 3, y = yo.iy + R[d][1] * 3;
-        return x < 1 || y < 1 || x > n - 2 || y > n - 2;
-      };
-      const dAct = R.findIndex((d) => d[0] === yo.dx && d[1] === yo.dy);
-      if (--quiere <= 0 || (dAct >= 0 && pared(dAct))) {
-        /* del ciclo se toma el primero que no sea media vuelta ni pared */
-        for (let k = 0; k < 4; k++) {
-          const d = R[(ri + k) % 4];
-          if (d[0] === -yo.dx && d[1] === -yo.dy) continue;
-          if (pared((ri + k) % 4)) continue;
-          this.arrastra(d[0] * 90, d[1] * 90);
-          ri = (ri + k + 1) % 4;
-          break;
-        }
+      /* SIEMPRE PARA EL MISMO LADO. Un giro relativo de 90 grados no puede
+         ser media vuelta, asi que el descarte que el plano necesitaba
+         tampoco hace falta: el control no se puede suicidar solo.         */
+      if (--quiere <= 0) {
+        this.gira(1);
         quiere = TUT.paso >= 3 ? 1e9 : Math.round(9 * CELDA);
       }
       partidaPaso(0.016);
@@ -169,7 +158,7 @@ window.__C = {
 
   /* ── el nivel puesto, jugado solo ──
      ENTRA POR `p.ped`, o sea por el mismo campo que escribe el dedo: un bot
-     que escriba `dx`/`dy` estaria jugando otra fisica y ganar no probaria
+     que escribiera el rumbo directo estaria jugando otra fisica y ganar no probaria
      nada. `azar` es el control — sin el, que el honesto termine no dice que
      haya una decision adentro.                                           */
   /* Y ARRANCA EL NIVEL ELLA MISMA. Tomando la partida que hubiera puesta,
@@ -242,30 +231,48 @@ window.__C = {
      ventana: el juego vive adentro de `#marco`, y medir contra la ventana
      da «entra» siempre en una pantalla grande.                           */
   /* EL ENCUADRE, que desde afuera no se puede preguntar: `V` es un `const` del
-     modulo y `page.evaluate` no lo ve. Devuelve lo que decide que se ve —el
-     lienzo de verdad, la escala, el centro de camara y cuantas celdas entran—
-     mas donde cae el tablero EN PANTALLA, que es la unica forma de comprobar
-     que no se sale por un lado.                                             */
+     modulo y `page.evaluate` no lo ve.
+     EN UNA ESFERA NO HAY «ESQUINA DEL TABLERO» QUE PROYECTAR: lo que dice si
+     el encuadre sirve son otras dos cosas. Cuanto del planeta entra —el disco
+     que subtiende una esfera de radio 1 a distancia d es `asin(1/d)`, o sea
+     una cuenta cerrada y no una estimacion— y DONDE CAE EL JUGADOR, que tiene
+     que estar cerca del medio y por debajo de el, porque la camara se corre
+     hacia atras sobre la tangente del viaje.                               */
   vista() {
     if (!P.on) return { on: false };
-    const r = V.cv.getBoundingClientRect(), n = P.M.n;
-    /* las cuatro esquinas del tablero, en pixeles de pantalla */
-    /* LA CAMARA ES LA ESQUINA DE ARRIBA A LA IZQUIERDA, no el centro, que es
-       como lo hace `vpDibuja`: `px(x) = (x - camx) * esc`. Con la cuenta del
-       centro esta sonda informaba el tablero cien pixeles corrido y a mitad de
-       pantalla, o sea un defecto de encuadre que no existia.                */
-    const px = (cx, cy) => [
-      r.left + (cx - V.camx) * V.esc,
-      r.top + (cy - V.camy) * V.esc,
-    ];
-    const a = px(0, 0), b = px(n, n);
+    const r = V.cv.getBoundingClientRect(), n = P.M.n, M = P.M;
+    const d = V.dist, fovV = V.cam.fov * Math.PI / 180;
+    /* medio disco del planeta, en fraccion del ALTO de pantalla */
+    const disco = d > 1 ? Math.tan(Math.asin(1 / d)) / Math.tan(fovV / 2) * 0.5 : 9;
+    /* CUANTAS CELDAS DE ALTO ENTRAN, y esto es el ARCO DE LA SUPERFICIE y no
+       el angulo del cono de la camara — que era lo que la primera version
+       medía y devolvia 1,6 donde hay diez. Un punto a `a` radianes del
+       sub-punto cae en `(cos a, sin a)` con la camara en `(d,0)`, asi que su
+       desvio angular es `atan(sin a/(d−cos a))`; igualandolo al medio campo
+       queda `sin a + T·cos a = T·d` con `T = tan(fov/2)`, que se despeja
+       entero. Si el seno pedido pasa de uno el cono NO alcanza al planeta:
+       entra el disco completo y el limite pasa a ser el horizonte,
+       `acos(1/d)`. Una celda mide (pi/2)/n porque una cara cubre noventa. */
+    const T = Math.tan(fovV / 2), R = Math.hypot(1, T), sn = T * d / R;
+    const arcoV = 2 * (sn >= 1 ? Math.acos(Math.min(1, 1 / d))
+                               : Math.asin(sn) - Math.atan(T));
+    const celdas = arcoV / (Math.PI / 2 / n);
+    /* el jugador proyectado, en fraccion de pantalla (0,0 arriba-izquierda) */
+    let yo = null, cel = null;
+    if (P.yo) {
+      const i = P.yo.i, q = new THREE.Vector3(M.POS[i * 3], M.POS[i * 3 + 1], M.POS[i * 3 + 2]);
+      V.cam.updateMatrixWorld(); q.project(V.cam);
+      yo = [+((q.x + 1) / 2).toFixed(3), +((1 - q.y) / 2).toFixed(3), q.z < 1 ? 1 : 0];
+      const nn = n * n, f = (i / nn) | 0, k = i % nn;
+      cel = [f, k % n, (k / n) | 0];
+    }
     return {
-      on: true, n, dpr: V.dpr, esc: +V.esc.toFixed(3),
-      cam: [+V.camx.toFixed(2), +V.camy.toFixed(2)],
-      vis: [+V.visW.toFixed(2), +V.visH.toFixed(2)],
+      on: true, n, cel3d: 6 * n * n, dpr: V.dpr,
       lienzo: [Math.round(r.width), Math.round(r.height), V.W, V.H],
-      tablero: [Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1])],
-      yo: P.yo ? [P.yo.ix, P.yo.iy] : null,
+      dist: +d.toFixed(3), distT: +V.distT.toFixed(3),
+      disco: +disco.toFixed(3),          /* >0.5 = el planeta pasa el borde  */
+      celdas: +celdas.toFixed(1),        /* celdas de alto a la vista        */
+      yo, cel, msDib: +V.msDib.toFixed(2),
     };
   },
 

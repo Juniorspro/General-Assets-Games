@@ -20,7 +20,7 @@ const V = {
   pz: null, pt: null, fl: null, flAct: null,
   cuer: null, cuerM: null, esq: null, esqG: null, esqP: [],
   cpos: null, cmira: null, carr: null, dist: 0, distT: 0,
-  vista: VISTA, sac: 0,
+  sac: 0,
   cort: null, viv: null, gan: new Int32Array(NJUG + 1),
   cuadros: 0, msDib: 0, mini: null, minR: null, miniCam: null,
   _v: null, _v2: null, _v3: null, _q: null, _m: null, _ob: null,
@@ -38,7 +38,11 @@ for (let i = 0; i <= NJUG; i++) {
 /* EL RADIO ES UNO Y LA CAMARA SE ACERCA: con el radio saliendo de `n`, cambiar
    de mundo movería tambien las luces, el tamano de los cubos y el plano
    cercano. Con radio fijo lo unico que cambia entre mundos es cuanto arco
-   entra en la pantalla, que es exactamente lo que `VISTA` ya decia.        */
+   entra en la pantalla, que es exactamente lo que `DISCO` ya dice.        */
+/* Un THREE.Color por jugador, hecho UNA vez. setColorAt con un Color nuevo
+   por cuerpo y por cuadro son ocho objetos por cuadro para decir siempre lo
+   mismo, y encima parsea la cadena hexadecimal cada vez.               */
+const VP_TC = [];
 const VP_R = 1;
 const VP_ALTO = 0.028;          /* cuanto sobresale un cuerpo de la superficie */
 const VP_ATRAS = 0.62;          /* cuanto se corre la camara HACIA ATRAS       */
@@ -56,34 +60,196 @@ function vpMide() {
   V.ren.setPixelRatio(d);
   V.ren.setSize(W, H, false);
   V.cam.aspect = W / H; V.cam.updateProjectionMatrix();
+  /* `sizeAttenuation:false` pide el tamano en pixeles DEL BUFER, no de CSS, asi
+     que sin multiplicar por el dpr las estrellas salen a la mitad en cualquier
+     telefono — que es justo donde se juega.                                 */
+  if (V.est) for (const e of V.est) e.material.size = e.userData.px * d;
+}
+
+/* EL LIENZO DEL CIELO, dibujado UNA vez: un degrade vertical y tres nebulosas
+   muy flojas. LAS ESTRELLAS NO ESTAN ACA, y el motivo esta medido: la camara
+   abre 46 grados sobre una esfera de cielo que envuelve 180 en el alto del
+   lienzo, o sea que 512 pixeles de textura se estiran sobre 892 de pantalla
+   con un aumento de 6,8 — una estrella de un pixel sale como una mancha
+   cuadrada de diez. Un lienzo mas grande solo corre el problema: lo que hace
+   falta es que la estrella NO se agrande con la distancia, y eso es un
+   `Points` con `sizeAttenuation` apagado (`vpEstrellas`).                   */
+function vpCielo() {
+  const w = 1024, h = 512, c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0.00, '#060a16');
+  gr.addColorStop(0.40, '#101c40');
+  gr.addColorStop(0.66, '#1d2d5e');
+  gr.addColorStop(1.00, '#090f24');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  /* las nebulosas van por debajo del 9 % de opacidad a proposito: estan para
+     que el cielo no sea un plano de un solo valor, no para competirle al
+     planeta — que es lo unico que hay que mirar.                            */
+  for (const [nx, ny, nr, col] of [[0.22, 0.30, 0.30, '#4d6bd8'],
+                                   [0.74, 0.60, 0.26, '#8a4fc9'],
+                                   [0.48, 0.82, 0.22, '#2f7fb8']]) {
+    const r = g.createRadialGradient(nx * w, ny * h, 0, nx * w, ny * h, nr * w);
+    r.addColorStop(0, col); r.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha = 0.085; g.fillStyle = r; g.fillRect(0, 0, w, h);
+  }
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c);
+  /* un lienzo es sRGB; sin declararlo entra como lineal y el cielo sale el
+     doble de claro, que es justo lo contrario de lo que tiene que hacer.    */
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/* LAS ESTRELLAS SON UNA NUBE DE PUNTOS, no dibujo del lienzo, y eso arregla
+   DOS cosas de una. Una: con `sizeAttenuation` apagado el tamano se pide EN
+   PIXELES, asi que una estrella mide lo mismo este el cielo donde este —que es
+   literalmente lo que hace una estrella—. Y dos: se reparten sobre la esfera
+   con `z` uniforme, que es el reparto parejo de verdad, asi que el apelotonado
+   de los polos que obligaba a estirar las elipses NO PUEDE EXISTIR.
+   VAN EN DOS MALLAS Y NO EN UNA porque `PointsMaterial` tiene UN tamano para
+   todos sus puntos: una nube fina y numerosa mas un punado de gordas es lo que
+   hace que un cielo se lea a profundidad y no a ruido parejo. Dos ordenes de
+   dibujo.
+   EL COLOR VA EN ESPACIO DE TRABAJO: `vertexColors` no convierte nada, asi que
+   sale de `setHex(..., sRGB)` —que si convierte— multiplicado por el brillo.
+   Y con semilla fija, porque un cielo que cambia en cada partida deja de ser
+   un sitio.                                                                 */
+function vpEstrellas(n, brMin, col) {
+  let sm = 20260911 + n;
+  const az = () => (sm = (sm * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const pos = new Float32Array(n * 3), rgb = new Float32Array(n * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const z = az() * 2 - 1, a = az() * 6.2832, r = Math.sqrt(Math.max(0, 1 - z * z));
+    pos[i * 3] = Math.cos(a) * r * 16; pos[i * 3 + 1] = z * 16;
+    pos[i * 3 + 2] = Math.sin(a) * r * 16;
+    const q = az();
+    c.setHex(q > 0.90 ? 0xcfe0ff : q > 0.76 ? 0xffe7c4 : 0xffffff, THREE.SRGBColorSpace);
+    const b = brMin + az() * (1 - brMin);
+    rgb[i * 3] = c.r * b; rgb[i * 3 + 1] = c.g * b; rgb[i * 3 + 2] = c.b * b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  const m = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false,
+    vertexColors: true, depthWrite: false });
+  const p = new THREE.Points(g, m);
+  p.renderOrder = -998; p.frustumCulled = false;
+  p.userData.px = col;
+  return p;
 }
 
 function vpInit() {
+  /* EL COLOR SE CONSTRUYE CON `setHex` Y NO CON TRES FLOTANTES, y no es un
+     detalle: en three r169 el constructor de tres numeros los toma en el
+     espacio DE TRABAJO —o sea lineal— mientras que `setHex` los toma en sRGB
+     y convierte. Metiendo bytes de sRGB como lineales y dejando que la salida
+     los vuelva a codificar, todo sale lavado: el ambar del jugador pasa de
+     `#f8b359` a un beige. Es el mismo defecto que el mapa de las caras.   */
+  if (!VP_TC.length) for (let i = 0; i <= NJUG; i++) {
+    const t = VP_T[i];
+    VP_TC.push(new THREE.Color().setHex((t[0] << 16) | (t[1] << 8) | t[2], THREE.SRGBColorSpace));
+  }
   V.cv = $('cv'); V.mini = $('mini');
   V.ren = new THREE.WebGLRenderer({ canvas: V.cv, antialias: false, alpha: false });
-  V.ren.setClearColor(0x0d1526, 1);
+  /* NADA DE TONE MAPPING, Y ESO ES UNA DECISION. Este juego no tiene un solo
+     valor por encima de uno —ni sol, ni emisivo, ni HDRI— asi que cualquier
+     curva de exposicion solo puede AGACHAR los colores puros: medido, ACES
+     baja el ambar del jugador un 18 % y lo acerca al resto. El espacio de
+     salida si va declarado, porque es lo que convierte el lineal con el que
+     three trabaja a los bytes que la pantalla espera.                     */
+  V.ren.toneMapping = THREE.NoToneMapping;
+  V.ren.outputColorSpace = THREE.SRGBColorSpace;
+  V.ren.setClearColor(new THREE.Color().setHex(0x0d1526, THREE.SRGBColorSpace), 1);
   V.ren.autoClear = false;
   V.esc = new THREE.Scene();
   V.cam = new THREE.PerspectiveCamera(46, 1, 0.02, 24);
-  V.miniCam = new THREE.PerspectiveCamera(38, 1, 0.5, 24);
+  /* EL PLANO LEJANO DEL MINIMAPA CORTA EN 8 Y ESO NO ES UN AHORRO: es lo que
+     saca de el las estrellas y la esfera del cielo, que viven a radio 16 y 18.
+     El minimapa mide setenta y cuatro pixeles y su camara abre 38 grados, o sea
+     que le entran diez veces mas estrellas que a la vista de juego y a ese
+     tamano eso no es un cielo, es ruido encima de lo unico que hay que leer.
+     El planeta esta a 4,1 con radio 1, asi que 8 lo deja entero con margen.  */
+  V.miniCam = new THREE.PerspectiveCamera(38, 1, 0.5, 8);
 
   /* DOS LUCES Y NINGUNA SOMBRA. Lo que hace que una esfera se lea a esfera no
      es una sombra proyectada —no hay nada que la reciba— sino el degrade de
      una direccional contra un hemisferico que NO deje el lado oscuro en
-     negro: un planeta con la mitad negra se lee a agujero.                 */
-  const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x2a3350, 1.55);
+     negro: un planeta con la mitad negra se lee a agujero.
+
+     LAS INTENSIDADES SALEN DE UNA CUENTA Y NO DE PROBAR. Desde r155 three no
+     escala las luces por pi y el difuso de Lambert es `albedo/pi`, asi que el
+     multiplicador que le llega a un color es `(hemi + dir·cos)/pi`. Con 1,55 y
+     1,25 eso daba **0,891 en la cara iluminada**: o sea que el ambar #f8b359
+     salia al 89 % de lo que es, los ocho colores se acercaban entre si y el
+     cuadro entero se leia lavado. Con 2,05 y 1,15 la cara al sol llega a
+     **1,019**, o sea el color puro, y ni un pelo mas: por encima de uno se
+     recorta, y recortar un color saturado le corre el TONO.
+
+     Y EL SUELO DEL HEMISFERICO SE ACLARA de `0x2a3350` a `0x46578f` por la
+     misma cuenta: la cara de sombra recibe `hemi_suelo/pi`, y con el azul
+     viejo eso eran 0,10 de luz —o sea el agujero que este comentario dice que
+     hay que evitar—. Con el nuevo son 0,21 y el lado oscuro queda TENIDO de
+     azul en vez de apagado, que es lo que hace una atmosfera de verdad.    */
+  const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x46578f, 2.05);
   V.esc.add(hemi);
-  const sol = new THREE.DirectionalLight(0xfff4e2, 1.25);
+  /* EL SOL CUELGA DE LA CAMARA Y NO DEL MUNDO, y esto NO es una licencia: es
+     lo unico que puede funcionar en un juego que recorre un planeta ENTERO.
+     Con la direccional fija en el mundo, media esfera es el lado oscuro —y
+     medido en la arena, el tablero sin dueno llegaba a la pantalla como un
+     azul apagado en vez del gris claro que es—. En un juego cuya UNICA regla
+     es «del mismo color», que el mismo color se lea distinto segun por donde
+     uno ande es el peor defecto posible: mas grave que perder el degrade.
+     Lo que se conserva es el degrade, que es lo que hace que una esfera se
+     lea a esfera: el sol va CORRIDO del eje de la vista —0,30 hacia arriba y
+     0,24 a la izquierda— asi que el centro del cuadro recibe 0,937 del maximo
+     y el limbo se va apagando solo. O sea una luz de estudio atada al tripode,
+     que es lo que hace cualquier visor de modelos.
+     Medido: el centro llega a `(2,05 + 1,15·0,937)/pi = 0,996` del color, o
+     sea el color puro sin recortar, y ese numero ya NO depende de donde este
+     parado el jugador.                                                     */
+  const sol = new THREE.DirectionalLight(0xfff4e2, 1.15);
   sol.position.set(0.85, 1.1, 0.7);
   V.esc.add(sol);
+  V.sol = sol;
 
   /* el halo: una esfera apenas mas grande dibujada por dentro. Cuesta una
      orden de dibujo y es lo que despega el planeta del fondo.              */
   const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(VP_R * 1.085, 40, 24),
-    new THREE.MeshBasicMaterial({ color: 0x4e7ad8, side: THREE.BackSide,
-      transparent: true, opacity: 0.34, depthWrite: false }));
+    new THREE.SphereGeometry(VP_R * 1.10, 40, 24),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color().setHex(0x5f8ff5, THREE.SRGBColorSpace), side: THREE.BackSide,
+      transparent: true, opacity: 0.42, depthWrite: false }));
   V.esc.add(halo);
+
+  /* EL CIELO ES UNA ESFERA DE VERDAD Y NO EL COLOR DE FONDO, y la razon es que
+     un color plano no tiene nada que mirar: medido en la captura, el cuarto de
+     arriba del cuadro era una banda de azul marino lisa de punta a punta. Y un
+     cielo con estrellas ancladas AL MUNDO hace ademas que recorrer el planeta
+     se vea: la camara orbita, asi que las estrellas se corren por detras, y
+     eso —aparte del limbo— es lo unico que dice que uno esta viajando.
+
+     VA COMO ESFERA Y NO COMO `scene.background` porque este juego dibuja con
+     `autoClear = false` y dos pasadas con tijera propias: una esfera con
+     `depthWrite:false` y `renderOrder` negativo se dibuja primero pase lo que
+     pase, sin depender de como three decida tratar el fondo con el borrado
+     manual. Cuesta UNA orden de dibujo y sale en las dos pasadas, o sea que el
+     minimapa tambien tiene cielo. Radio 18: la camara nunca pasa de 4,1 y el
+     plano lejano esta en 24, asi que la esfera entra entera por construccion. */
+  const cielo = new THREE.Mesh(
+    new THREE.SphereGeometry(18, 32, 20),
+    new THREE.MeshBasicMaterial({ map: vpCielo(), side: THREE.BackSide, depthWrite: false }));
+  cielo.renderOrder = -999;
+  V.esc.add(cielo);
+  /* LA CUENTA SALE DE UNA CUENTA Y NO DE UN NUMERO LINDO: el cono de la camara
+     abre 46 grados de alto por 22 de ancho, o sea `4·asin(sin11,1·sin23)` =
+     0,30 estereorradianes sobre los 12,57 de la esfera — el 2,4 % —, y de eso
+     el planeta se come casi dos tercios: en pantalla cae el 0,84 % de la nube.
+     Con las 640 que tenia el lienzo llegaban TRES, medido en la captura. Con
+     5.400 llegan unas cuarenta y cinco, que es un cielo.                     */
+  V.est = [vpEstrellas(5400, 0.16, 1.7), vpEstrellas(480, 0.55, 3.2)];
+  for (const e of V.est) V.esc.add(e);
 
   V.cpos = new THREE.Vector3(0, 0, 3); V.cmira = new THREE.Vector3();
   V.carr = new THREE.Vector3(0, 1, 0);
@@ -159,6 +325,11 @@ function vpPlaneta(n) {
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     const buf = new Uint8Array(n * n * 4);
     const tex = new THREE.DataTexture(buf, n, n, THREE.RGBAFormat);
+    /* UNA `DataTexture` NACE EN `NoColorSpace`, o sea lineal, y esto es un
+       mapa de COLOR: sin declararlo, los bytes de sRGB entran como si fueran
+       lineales, la salida los vuelve a codificar y el planeta entero sale
+       lavado. Es la causa de que los ocho colores se parecieran entre si. */
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false; tex.needsUpdate = true;
     const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
@@ -207,7 +378,7 @@ function vpNuevo(M) {
   V.cort = new Int32Array(NJUG + 1);
   V.viv = new Uint8Array(NJUG + 1);
   for (const p of M.jug) { V.cort[p.id] = p.cortes; V.viv[p.id] = 1; }
-  V.esqP.length = 0; V.sac = 0; V.vista = VISTA;
+  V.esqP.length = 0; V.sac = 0;
   V.distT = V.dist = vpDist(M);
   /* la camara se PLANTA en el sitio de arranque en vez de viajar hasta el:
      con el suavizado corriendo desde el cuadro anterior, el primer segundo de
@@ -248,19 +419,19 @@ function vpTras(M) {
 }
 
 function vpEsquirlas(M, i, id) {
-  const c = COLS[id] || COLS[1];
+  const ct = VP_T[id] || VP_T[1], cc = VP_C[id] || VP_C[1];
   const P = M.POS, nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
   for (let k = 0; k < 14; k++) {
     const a = Math.random() * Math.PI * 2, s = Math.sin(a), co = Math.cos(a);
     /* dos tangentes cualesquiera de la normal: la esquirla sale POR LA
        SUPERFICIE y no en una direccion del mundo, que en una esfera saldria
        para adentro la mitad de las veces.                                  */
-    let tx = -ny, ty = nx, tz = 0;
+    let tx, ty, tz;
     if (Math.abs(nz) < 0.9) { tx = -ny; ty = nx; tz = 0; } else { tx = 0; ty = -nz; tz = ny; }
     const tl = Math.hypot(tx, ty, tz); tx /= tl; ty /= tl; tz /= tl;
     const ux = ny * tz - nz * ty, uy = nz * tx - nx * tz, uz = nx * ty - ny * tx;
     const v = 0.22 + Math.random() * 0.42;
-    const col = (k & 1 ? c.t : c.c), cr = vpRGB(col);
+    const cr = (k & 1) ? ct : cc;
     V.esqP.push({
       x: nx * VP_R, y: ny * VP_R, z: nz * VP_R,
       vx: (tx * co + ux * s) * v + nx * 0.30,
@@ -283,15 +454,23 @@ function vpEsquirlas(M, i, id) {
    da vuelta la pantalla de golpe, porque los ejes de las dos caras no son los
    mismos.                                                                  */
 function vpDist(M) {
-  /* cuanto arco entra en la pantalla. `VISTA` esta en celdas y una celda mide
-     ~(π/2)/n de arco, asi que el angulo que hay que abarcar sale del propio
-     `n` y no de un numero suelto.                                          */
-  const vista = M.arena
-    ? VISTA + (VISTA_MAX - VISTA) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / VISTA_SAT))
-    : VISTA;
-  const arco = Math.min(2.4, vista * (Math.PI / 2) / M.n);
-  const fov = V.cam.fov * Math.PI / 180 * 0.5;
-  return VP_R * (1 + arco * 0.5 / Math.tan(fov) + 0.16);
+  /* LA DISTANCIA SALE DE CUANTO PLANETA SE QUIERE VER, y es una cuenta cerrada
+     y no una estimacion. Una esfera de radio 1 a distancia `d` subtiende
+     `asin(1/d)`, que proyectado sobre el plano de imagen mide `tan(asin(1/d))`
+     medios cuadros de alto sobre `tan(fov/2)`. Pidiendo que el DIAMETRO sea
+     `k` veces el alto del cuadro:
+          tan(asin(1/d)) = k·tan(fov/2) = s   →   d = √(1+s²)/s
+     LA VERSION ANTERIOR TRATABA EL ARCO COMO SI FUERA UNA CUERDA PLANA y lo
+     topaba en 2,4 rad, que son 137 grados: mas de un hemisferio, o sea un
+     encuadre que ninguna camara puede tener. Medido, dejaba el planeta a
+     cuatro radios con un tercio del cuadro en cielo vacio.                 */
+  const k = M.arena
+    ? DISCO + (DISCO_MIN - DISCO) * Math.min(1, Math.sqrt(tajada(M, M.jug[0].id) / DISCO_SAT))
+    : DISCO;
+  const s = k * Math.tan(V.cam.fov * Math.PI / 360);
+  /* el piso es geometrico y no de gusto: por debajo de un radio la camara
+     estaria DENTRO del planeta, y `s` grande la lleva justo ahi.           */
+  return Math.max(VP_R * 1.25, VP_R * Math.sqrt(1 + s * s) / s);
 }
 
 function vpPos(M, p, v) {
@@ -331,6 +510,17 @@ function vpCam(M, dt) {
   V.cam.position.copy(V.cpos);
   V.cam.up.copy(V.carr);
   V.cam.lookAt(V.cmira);
+
+  /* el sol se recoloca con la camara: `oj` es el eje de la vista, `carr` el
+     arriba de pantalla y su producto cruzado la derecha. Una direccional de
+     three apunta de su posicion al origen, y el origen ES el planeta, asi que
+     alcanza con ponerla sobre esa direccion.                               */
+  if (V.sol) {
+    const oj = V._v.copy(V.cpos).normalize();
+    const de = V._v2.crossVectors(V.carr, oj).normalize();
+    V.sol.position.copy(oj).addScaledVector(V.carr, 0.30)
+      .addScaledVector(de, -0.24).normalize().multiplyScalar(8);
+  }
 }
 
 /* ══════════════════════════ EL CUADRO ══════════════════════════ */
@@ -358,8 +548,7 @@ function vpDibuja(M, dt) {
     V._ob.quaternion.setFromUnitVectors(V._v2.set(0, 1, 0), nrm);
     V._ob.updateMatrix();
     V.cuer.setMatrixAt(c, V._ob.matrix);
-    const co = COLS[p.id] || COLS[1], rg = vpRGB(co.t);
-    V.cuer.setColorAt(c, V._q.set ? new THREE.Color(rg[0] / 255, rg[1] / 255, rg[2] / 255) : null);
+    V.cuer.setColorAt(c, VP_TC[p.id] || VP_TC[1]);
     c++;
   }
   V.cuer.count = c;

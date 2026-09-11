@@ -9,7 +9,7 @@
    UNA vuelta, y encadenar vueltas es seguir arrastrando.
 
    Y LO QUE SE ESCRIBE ES `p.ped`, que es EL MISMO campo que usan los bots y
-   el auto-jugador. Si el dedo escribiera `dx`/`dy` directo, el jugador podria
+   el auto-jugador. Si el dedo escribiera el rumbo directo, el jugador podria
    doblar a mitad de celda y los bots no: dos fisicas distintas en el mismo
    tablero, y la auditoria estaria aprobando un juego que nadie juega.
 
@@ -24,7 +24,7 @@ const P = {
   on: false, pausa: false, fin: null, tuto: false, arena: false,
   m: 0, nv: 0, cfg: null, M: null, yo: null,
   seg: 0, cortesVistos: 0, pct: 0, mejor: 0, casi: false, ganUlt: 0,
-  giros: 0, gdx: 0, gdy: 0,
+  giros: 0, gd: 0,
   /* EL PUESTO Y LA TAJADA SE FOTOGRAFIAN EN EL ULTIMO TIC CON VIDA. En la
      arena morir BORRA el terreno, asi que preguntando DESPUES del corte el
      panel de fin diria «8º con 0 %» siempre —es exactamente lo que el banco
@@ -34,73 +34,73 @@ const P = {
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
-const ENT = { id: null, ax: 0, ay: 0, ejeX: 0, cola: null };
-const ENT_MIN = 15;     /* px de zona muerta: un toque no dobla             */
-const ENT_HIST = 1.30;  /* cuanto le tiene que ganar el otro eje para valer */
+const ENT = { id: null, ax: 0, ay: 0, cola: null };
+/* 30 px y no 15: con re-anclaje, un barrido de 60 px son DOS vueltas. En el
+   plano dos vueltas seguidas eran medio cuadrado; en la esfera siguen
+   siendolo, pero un flick de dedo no tiene que pedir dos.                 */
+const ENT_MIN = 30;
 
-/* UNA SOLA PUERTA para el dedo, el teclado y el tutorial. Con dos caminos, el
-   que nadie prueba —el teclado— se desincroniza el dia que se toque el otro. */
-function entPide(dx, dy) {
+/* EL GIRO ES RELATIVO Y NO ABSOLUTO, y no es una preferencia: en una esfera
+   «arriba» no existe. Lo unico que el cuerpo sabe es hacia donde va, asi que
+   lo unico que se le puede pedir es izquierda o derecha — que ademas es el
+   control de Paper.io 3D. Y sale gratis una propiedad que el plano no tenia:
+   UNA VUELTA DE 90 GRADOS NUNCA PUEDE SER MEDIA VUELTA, o sea que el control
+   no se puede suicidar solo.
+   `p.ped` es un INDICE DE DIRECCION ABSOLUTO (0-3), asi que el giro se
+   resuelve aca con GIRO_CW/GIRO_CCW y el modelo no se entera de nada.     */
+function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
   const p = P.yo;
   if (!p || !P.on || P.pausa || P.fin) return false;
-  if (dx === p.dx && dy === p.dy) return false;
-  if (dx === -p.dx && dy === -p.dy) return false;   /* media vuelta: suicidio */
-  if (p.ped) {
-    /* `tic` todavia no consumio la anterior: se guarda la nueva y sale en
-       cuanto se libere el campo. */
-    if (p.ped[0] === dx && p.ped[1] === dy) return false;
-    ENT.cola = [dx, dy];
+  const base = p.ped != null ? p.ped : p.d;   /* se gira sobre lo ya pedido  */
+  const d = (giro > 0 ? GIRO_CW : GIRO_CCW)[base];
+  if (d === p.d) return false;                /* no cambia nada             */
+  if (p.ped != null) {
+    if (p.ped === d) return false;
+    ENT.cola = d;
     return true;
   }
-  p.ped = [dx, dy];
+  p.ped = d;
   return true;
 }
 /* corre DESPUES de `paso`: ahi `tic` ya vacio `ped` y el pendiente puede
    entrar sin pisar nada. */
 function entSuelta() {
   const p = P.yo;
-  if (!p || !ENT.cola) return;
-  if (p.ped) return;
-  if (!(ENT.cola[0] === -p.dx && ENT.cola[1] === -p.dy) &&
-      !(ENT.cola[0] === p.dx && ENT.cola[1] === p.dy)) p.ped = ENT.cola;
+  if (!p || ENT.cola == null) return;
+  if (p.ped != null) return;
+  if (ENT.cola !== p.d && ENT.cola !== OPUE[p.d]) p.ped = ENT.cola;
   ENT.cola = null;
 }
 
 function entBaja(e) {
   if (!P.on || P.pausa || P.fin) return;
   if (ENT.id !== null) return;
-  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = 0;
+  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY;
   try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
 }
 function entMueve(e) {
   if (ENT.id !== e.pointerId) return;
-  const dx = e.clientX - ENT.ax, dy = e.clientY - ENT.ay;
-  const ax = Math.abs(dx), ay = Math.abs(dy);
-  if (ax < ENT_MIN && ay < ENT_MIN) return;
-  /* HISTERESIS SOBRE EL EJE Y NO SOBRE LA DISTANCIA: en una diagonal, con
-     `ax > ay` a secas el eje dominante parpadea y el cuerpo hace zigzag. El
-     otro eje tiene que GANARLE por un tercio para robarle el turno.        */
-  let eje;                                   /* 1 horizontal · 2 vertical   */
-  if (ENT.ejeX === 1)      eje = ay > ax * ENT_HIST ? 2 : 1;
-  else if (ENT.ejeX === 2) eje = ax > ay * ENT_HIST ? 1 : 2;
-  else                     eje = ax >= ay ? 1 : 2;
-  if (eje === 1 ? ax < ENT_MIN : ay < ENT_MIN) return;
-  entPide(...(eje === 1 ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1]));
-  /* EL ANCLA SE MUDA HAYA DOBLADO O NO: si no, un arrastre largo deja el
-     desplazamiento saturado y la vuelta siguiente se dispara con un pixel. */
-  ENT.ax = e.clientX; ENT.ay = e.clientY; ENT.ejeX = eje;
+  /* SOLO EL EJE HORIZONTAL. Arrastrar hacia arriba es pedir «seguir
+     derecho», que es lo que el cuerpo ya hace; hacia abajo seria media
+     vuelta, que mata. Ninguno de los dos tiene nada que pedir, asi que la
+     histeresis entre ejes del plano sobra: aca hay un solo eje.           */
+  const dx = e.clientX - ENT.ax;
+  if (Math.abs(dx) < ENT_MIN) return;
+  entPide(dx > 0 ? 1 : -1);
+  /* el ancla se muda haya doblado o no: si no, un arrastre largo deja el
+     desplazamiento saturado y la vuelta siguiente sale con un pixel.      */
+  ENT.ax = e.clientX; ENT.ay = e.clientY;
 }
 function entSube(e) {
   if (ENT.id !== e.pointerId) return;
-  ENT.id = null; ENT.ejeX = 0;
+  ENT.id = null;
 }
 const ENT_TEC = {
-  ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1],
-  KeyD: [1, 0], KeyA: [-1, 0], KeyS: [0, 1], KeyW: [0, -1],
+  ArrowRight: 1, ArrowLeft: -1, KeyD: 1, KeyA: -1,
 };
 function entTecla(e) {
-  const d = ENT_TEC[e.code];
-  if (d) { entPide(d[0], d[1]); e.preventDefault(); return; }
+  const g = ENT_TEC[e.code];
+  if (g) { entPide(g); e.preventDefault(); return; }
   if (e.code === 'Escape' || e.code === 'KeyP') { if (P.on && !P.fin) pausaPon(!P.pausa); }
 }
 function entInit() {
@@ -131,7 +131,7 @@ function partidaArranca(m, nv, tuto, arena) {
   P.seg = P.cfg.seg;
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
-  P.giros = 0; P.gdx = P.yo.dx; P.gdy = P.yo.dy;
+  P.giros = 0; P.gd = P.yo.d;
   P.posUlt = 1 + P.cfg.riv; P.pctUlt = 0; P.primero = false; P.tab = null;
   P.hCor = []; P.hPct = ''; P.hMeta = ''; P.hRel = ''; P.hPoco = false;
   P.hNiv = ''; P.hTab = '';
@@ -158,7 +158,7 @@ function partidaPaso(dt) {
   /* LAS VUELTAS SE CUENTAN POR EL RUMBO QUE EL CUERPO TOMO, no por los toques
      que se pidieron: un pedido puede quedar en la cola y no salir nunca, y el
      tutorial estaria dando por hecho un gesto que no ocurrio.              */
-  if (yo.dx !== P.gdx || yo.dy !== P.gdy) { P.giros++; P.gdx = yo.dx; P.gdy = yo.dy; }
+  if (yo.d !== P.gd) { P.giros++; P.gd = yo.d; }
 
   /* ── lo que gano este cuadro ── */
   if (gan[1] > 0) {
