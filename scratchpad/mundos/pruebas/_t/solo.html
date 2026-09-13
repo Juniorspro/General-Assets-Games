@@ -1,0 +1,35 @@
+<!doctype html><meta charset=utf-8><title>modelo crudo</title>
+<style>html,body{margin:0;background:#8a8f99;height:100%}canvas{display:block}
+#n{position:fixed;left:8px;top:8px;font:700 14px system-ui;color:#fff;text-shadow:0 1px 2px #000}</style>
+<div id=n></div>
+<script type="importmap">{"imports":{"three":"/_vthree/build/three.module.js"}}</script>
+<script type="module">
+/* Muestra el GLB SIN NINGUNA animacion y sin mixer: lo que se ve es la pose de
+   bind tal como salio del generador. Si aparece encorvado aca, el problema es el
+   modelo y no la animacion, y generar animaciones no lo arregla. */
+import * as T from 'three';
+import { GLTFLoader } from '/_vthree/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const f = q.get('f') || 'per/pantano-guia.glb';
+document.getElementById('n').textContent = f + '  (sin animacion)';
+const ren = new T.WebGLRenderer({ antialias:true });
+ren.setSize(innerWidth, innerHeight); document.body.appendChild(ren.domElement);
+const sc = new T.Scene(); sc.background = new T.Color(0x8a8f99);
+const cam = new T.PerspectiveCamera(35, innerWidth/innerHeight, .1, 100);
+sc.add(new T.HemisphereLight(0xffffff, 0x556070, 2.2));
+const dl = new T.DirectionalLight(0xffffff, 1.6); dl.position.set(3,6,4); sc.add(dl);
+/* rejilla de referencia: si el personaje esta derecho, su eje sigue las lineas */
+const g = new T.GridHelper(6, 12, 0x333a44, 0x5a626e); sc.add(g);
+sc.add(new T.AxesHelper(1));
+new GLTFLoader().load('/assets/mundos/' + f, gl => {
+  const m = gl.scene; sc.add(m);
+  const b = new T.Box3().setFromObject(m);
+  const alto = b.max.y - b.min.y, cy = (b.max.y + b.min.y)/2;
+  cam.position.set(0, cy, alto*2.1); cam.lookAt(0, cy, 0);
+  window.__LISTO = { alto:+alto.toFixed(2), anims:(gl.animations||[]).length };
+  ren.render(sc, cam);
+  /* segunda vista de perfil: la inclinacion se ve de costado, no de frente */
+  window.__PERFIL = () => { cam.position.set(alto*2.1, cy, 0); cam.lookAt(0, cy, 0);
+    ren.render(sc, cam); };
+});
+</script>
