@@ -68,13 +68,19 @@ const APPS = [
     que: "Las apps que hago, gratis para vos por haber colaborado." },
 ];
 
+/* EL JEFE ENTRA SIN HABER DONADO. Es el dueño del sitio: pedirle que se done a
+   sí mismo para ver lo que él mismo publica es una vuelta que no protege nada,
+   y peor, es la clase de detalle que se arregla a mano metiendo un 1 en la base
+   —y entonces el permiso vive en una fila que nadie se acuerda de por qué está—.
+   La columna `jefe` ya existe desde esquema4.sql justo para esto: el
+   administrador es una CUENTA, no una contraseña suelta. */
 async function donante(env, request) {
   const yo = await quienEs(env, request);
   if (!yo) return null;
   const u = await env.DB.prepare(
-    "SELECT id, usuario, nombre, acceso, marco, banda, lema, tema, zona_desde " +
+    "SELECT id, usuario, nombre, acceso, jefe, bloqueado, marco, banda, lema, tema, zona_desde " +
     "FROM usuarios WHERE id = ?").bind(yo.u).first();
-  return u && u.acceso ? u : null;
+  return u && (u.acceso || u.jefe) && !u.bloqueado ? u : null;
 }
 
 export const onRequestGet = async ({ request, env }) => {

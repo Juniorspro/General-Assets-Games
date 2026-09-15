@@ -504,9 +504,13 @@ function abrir(id){
   v.hidden = false;
   apilar(id, function(){ v.hidden = true; });
   cerrarInicio();
-  /* en el teléfono la ventana es `position:fixed`: no hay a dónde desplazarse
-     y pedirlo mueve el fondo por atrás */
-  if (!esCelu()) v.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"start" });
+  alFrente(v);
+  /* Dos motivos para NO desplazar la página acá: en el teléfono la ventana es
+     `position:fixed` y pedirlo mueve el fondo por atrás; y si está despegada ya
+     se ve donde la dejaste, así que desplazarse sería mover la página para
+     llegar a algo que no se mueve con ella. */
+  if (!esCelu() && !v.classList.contains("suelta"))
+    v.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"start" });
 }
 
 /* lo usa social.js, que también abre ventanas: si tuviera su propia copia,
@@ -522,6 +526,160 @@ document.addEventListener("click", function(e){
   if (b.dataset.abrir) { abrir(b.dataset.abrir); return; }
   cerrarVentana(b.dataset.cerrar);
 });
+
+/* ========================================== las ventanas se mueven
+
+   POR QUÉ NO ARRANCAN FLOTANDO. Esta página es un documento que se baja con el
+   dedo y las ventanas son sus secciones: si todas empezaran sueltas habría que
+   acomodar nueve antes de poder leer nada. La primera vez que agarrás una de
+   su barra de título, ESA se despega —se queda fija donde está y ya no se va
+   con el scroll— y las demás siguen en su lugar.
+
+   SE AGARRA DE LA BARRA DE TÍTULO Y NO DE LA VENTANA ENTERA: adentro hay
+   textos que se seleccionan, campos que se escriben y botones que se tocan.
+   La cruz y los mandos quedan afuera del agarre, si no cerrar sería arrastrar
+   un píxel sin querer y que no pase nada.
+
+   NO SE PUEDE PERDER UNA VENTANA. Se le exige que siempre queden 60px de barra
+   dentro de la pantalla: una ventana arrastrada afuera es una ventana que no
+   se puede volver a agarrar, y la única salida sería borrar el navegador.
+
+   EN EL TELÉFONO NO SE MUEVEN, y además hay que LIMPIARLES el estilo: la
+   ventana de teléfono es a pantalla completa por CSS, y un `left` puesto a
+   mano le gana a la regla de la media query. Sin esta limpieza, girar el
+   teléfono después de haber movido ventanas en la compu deja la aplicación
+   corrida y media pantalla afuera. */
+
+var zTope = 50;
+
+function moverVentanas(){ return !esCelu(); }
+
+function despegar(v){
+  if (v.classList.contains("suelta")) return;
+  var r = v.getBoundingClientRect();
+  v.style.width = Math.round(r.width) + "px";
+  v.style.left  = Math.round(r.left) + "px";
+  v.style.top   = Math.round(r.top) + "px";
+  v.classList.add("suelta");
+}
+
+function alFrente(v){ if (v.classList.contains("suelta")) v.style.zIndex = ++zTope; }
+
+function altoDe(nombre, siNo){
+  var v = parseInt(getComputedStyle(document.documentElement).getPropertyValue(nombre), 10);
+  return v > 0 ? v : siNo;
+}
+
+/* EL CORRAL. Que siempre quede barra de título para volver a agarrarla, y que
+   NUNCA se meta debajo de las barras del sistema.
+
+   Lo segundo no es cosmético y lo encontré probando: #barraSocial está en
+   z-index 70 y la barra de tareas en 80, o sea que las dos le ganan a una
+   ventana suelta. Una ventana arrastrada contra el borde de arriba queda con su
+   barra de título tapada: no se puede volver a agarrar NI tocar su cruz, que es
+   exactamente el mismo encierro que tenía el teléfono. Se arregla acá y no
+   subiéndole el z-index a la ventana, porque esas dos barras tienen que quedar
+   arriba: son el sistema, no una ventana más. */
+function dentroDePantalla(v){
+  /* si está cerrada, `offsetWidth` es 0 y la cuenta la correría sola; el ancho
+     guardado es el que vale hasta que se vuelva a abrir */
+  var w = v.offsetWidth || parseInt(v.style.width, 10) || 260;
+  var x = parseInt(v.style.left, 10) || 0, y = parseInt(v.style.top, 10) || 0;
+  var arriba = altoDe("--barra-alta", 52);
+  var abajo  = altoDe("--tareas-alta", 56);
+  /* Horizontalmente NO se permite que sobresalga nada, ni siquiera un poco.
+     Dejar asomar 60px parece más cómodo y lo probé así, pero la cruz vive en la
+     PUNTA DERECHA de la barra de título: apenas la ventana se corre a la
+     derecha, la cruz se va de la pantalla y quedás con una ventana que no se
+     puede cerrar. Como `.suelta` tiene `max-width:calc(100vw - 16px)`, siempre
+     entra entera; el Math.max(0, …) es para el caso raro de una pantalla más
+     angosta que la ventana. */
+  x = Math.min(Math.max(x, 0), Math.max(0, innerWidth - w));
+  y = Math.min(Math.max(y, arriba), innerHeight - abajo - 36);
+  v.style.left = Math.round(x) + "px";
+  v.style.top  = Math.round(y) + "px";
+}
+
+function guardarLugares(){
+  var m = {};
+  $$("#escritorio .ventana.suelta").forEach(function(v){
+    m[v.id] = { x: parseInt(v.style.left,10) || 0, y: parseInt(v.style.top,10) || 0,
+                w: parseInt(v.style.width,10) || 0 };
+  });
+  caja.poner("lugares", m);
+}
+
+function pegarDeVuelta(v){
+  v.classList.remove("suelta");
+  v.style.left = v.style.top = v.style.width = v.style.zIndex = "";
+  guardarLugares();
+}
+
+/* Se llama al arrancar y cada vez que cambia el tamaño: es el único lugar que
+   decide si las ventanas están sueltas o no, así que no hay dos verdades. */
+function acomodarVentanas(){
+  if (!moverVentanas()){
+    $$("#escritorio .ventana.suelta").forEach(function(v){
+      v.classList.remove("suelta");
+      v.style.left = v.style.top = v.style.width = v.style.zIndex = "";
+    });
+    return;
+  }
+  var m = caja.leer("lugares", {});
+  Object.keys(m).forEach(function(id){
+    var v = $(id); if (!v) return;
+    if (m[id].w) v.style.width = m[id].w + "px";
+    v.style.left = m[id].x + "px";
+    v.style.top  = m[id].y + "px";
+    v.classList.add("suelta");
+    alFrente(v);
+    dentroDePantalla(v);          /* por si la guardó en una pantalla más grande */
+  });
+}
+
+document.addEventListener("pointerdown", function(e){
+  if (!moverVentanas()) return;
+  if (e.button) return;                                   /* sólo el principal */
+  var t = e.target.closest("#escritorio .ventana > .titulo");
+  if (!t) return;
+  if (e.target.closest("button, a, input, select, textarea")) return;
+  var v = t.parentElement;
+
+  despegar(v); alFrente(v);
+  var r = v.getBoundingClientRect();
+  var dx = e.clientX - r.left, dy = e.clientY - r.top;
+  t.classList.add("agarrando");
+  try { t.setPointerCapture(e.pointerId); } catch(err){}
+
+  function mover(ev){
+    v.style.left = Math.round(ev.clientX - dx) + "px";
+    v.style.top  = Math.round(ev.clientY - dy) + "px";
+    dentroDePantalla(v);
+  }
+  function soltar(){
+    t.classList.remove("agarrando");
+    try { t.releasePointerCapture(e.pointerId); } catch(err){}
+    t.removeEventListener("pointermove", mover);
+    t.removeEventListener("pointerup", soltar);
+    t.removeEventListener("pointercancel", soltar);
+    guardarLugares();
+  }
+  t.addEventListener("pointermove", mover);
+  t.addEventListener("pointerup", soltar);
+  t.addEventListener("pointercancel", soltar);
+  e.preventDefault();                       /* que no seleccione el título */
+});
+
+/* Doble clic en la barra: vuelve a su lugar en la página. Es la salida para el
+   que movió ocho ventanas y quiere leer la página de corrido otra vez. */
+document.addEventListener("dblclick", function(e){
+  var t = e.target.closest("#escritorio .ventana > .titulo");
+  if (!t || e.target.closest("button, a")) return;
+  if (t.parentElement.classList.contains("suelta")) pegarDeVuelta(t.parentElement);
+});
+
+addEventListener("resize", acomodarVentanas);
+acomodarVentanas();
 
 /* --- menú de inicio --- */
 function ocultarInicio(){ $("inicio").hidden = true; $("orbe").setAttribute("aria-expanded","false"); }
@@ -2047,14 +2205,18 @@ if ($("am-salir")) $("am-salir").addEventListener("click", amCerrar);
    en vez de escribirse a mano porque el alto depende del tamaño de letra del
    aparato: con la letra grande de accesibilidad, un 52 fijo vuelve a tapar la
    cruz y el error es el mismo de antes pero sólo para algunos. */
-function medirBarra(){
-  var b = $("barraSocial"); if (!b) return;
-  var h = Math.round(b.getBoundingClientRect().height);
-  if (h > 0) document.documentElement.style.setProperty("--barra-alta", h + "px");
+function medirBarras(){
+  var r = document.documentElement.style;
+  var b = $("barraSocial");
+  if (b){ var h = Math.round(b.getBoundingClientRect().height);
+          if (h > 0) r.setProperty("--barra-alta", h + "px"); }
+  var t = document.querySelector(".tareas");
+  if (t){ var h2 = Math.round(t.getBoundingClientRect().height);
+          if (h2 > 0) r.setProperty("--tareas-alta", h2 + "px"); }
 }
-medirBarra();
-addEventListener("resize", medirBarra);
-addEventListener("load", medirBarra);
+medirBarras();
+addEventListener("resize", medirBarras);
+addEventListener("load", medirBarras);
 
 function arrancarCelu(){
   if (!esCelu()) return;

@@ -35,9 +35,10 @@ export const onRequest = async (context) => {
   /* el pase puede ser de la cuenta o de un codigo; si es de cuenta, ademas se
      comprueba que la cuenta siga teniendo acceso —lo pudo perder— */
   if (d.u && env.DB) {
-    const u = await env.DB.prepare("SELECT acceso, bloqueado FROM usuarios WHERE id = ?")
+    const u = await env.DB.prepare("SELECT acceso, jefe, bloqueado FROM usuarios WHERE id = ?")
       .bind(d.u).first();
-    if (!u || !u.acceso || u.bloqueado)
+    /* el jefe baja lo que el mismo publica sin haber donado: ver `aeromas.js` */
+    if (!u || !(u.acceso || u.jefe) || u.bloqueado)
       return new Response("Esa cuenta ya no tiene acceso.",
         { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
