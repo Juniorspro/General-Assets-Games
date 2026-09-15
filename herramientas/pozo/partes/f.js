@@ -165,7 +165,7 @@ function entraSala(ix, ladoSale){
   }
   JU.P.vx = 0; JU.P.vy = 0; JU.P.esqT = 0;
 
-  if (s.tipo === 'jefe' && !s.limpia){ aviso(T('jefeAhi')); son('jefe'); sacude(7); }
+  if (s.tipo === 'jefe' && !s.limpia){ aviso(T('jefeAhi')); son('jefe'); sacude(7); musica('m_jefe'); }
   else if (s.esc && s.limpia) aviso(T('escalera'));
   hudPinta();
 }
@@ -668,6 +668,7 @@ function eligeMejora(i){
   const m = MEJ_OPC[i]; if (!m) return;
   m.f(JU.P);
   son('mejora');
+  musica('m_pelea');   /* se vuelve de la pelea del jefe */
   JU.modo = 'juega';
   verPan(null);
   entraPiso(JU.piso + 1, (Math.random()*1e9)|0);

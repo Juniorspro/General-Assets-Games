@@ -178,7 +178,7 @@ function armaIdiomas(){
    agregue se olvida de arrancar la demo y nadie se entera. */
 function alMenu(){
   if (!DEMO){ BOT.on = false; JU.modo = 'menu'; }   /* venia una partida de verdad */
-  camaNivel(.26);
+  musNivel(.26, MUS_MENU); musica('m_menu');
   tutCorta();
   pintaIdioma();
   verPan('#pMenu');
@@ -190,7 +190,7 @@ function juegaYa(){
   tutArranca();
   hudReset(); hudPinta();
   verPan(null);
-  camaNivel(.55);
+  musNivel(.55, MUS_JUEGO); musica('m_pelea');
 }
 function pausa(v){
   if (v && JU.modo !== 'juega') return;

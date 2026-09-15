@@ -19,7 +19,9 @@ ORDEN = [
     'a.html',   # marco, CSS, pantallas; abre el <script type="module">
     'b.js',     # constantes, tablas, idiomas, guardado, estado
     'c.js',     # el modelo puro: generador y validador de pisos
+    'i_son.js', # OPCIONAL: las muestras generadas (SONB)
     'd.js',     # audio procedural
+    'i_assets.js', # OPCIONAL: los sprites generados (IMGB, IMGM)
     'e.js',     # el dibujo
     'f.js',     # el juego
     'g.js',     # el tutorial
@@ -32,6 +34,13 @@ def main():
     for n in ORDEN:
         p = PARTES / n
         if not p.exists():
+            # LOS i_*.js SON OPCIONALES POR CONSTRUCCION. El juego dibuja y suena
+            # sin ellos: el sprite generado pisa al codigo cuando decodifica y la
+            # muestra pisa al oscilador cuando llega. Hacer que el armado falle
+            # sin assets seria atar el juego a una descarga que puede no estar.
+            if n.startswith('i_'):
+                print(f'  (sin {n}, se arma sin esos assets)')
+                continue
             sys.exit(f'falta {p}')
         trozos.append(p.read_text(encoding='utf-8'))
     txt = ''.join(trozos)
