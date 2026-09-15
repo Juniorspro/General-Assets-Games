@@ -484,9 +484,16 @@ function vpPos(M, p, v) {
 function vpCam(M, dt) {
   const p = M.jug[0];
   const nrm = vpPos(M, p, V._v);                       /* donde esta        */
+  /* LA CAMARA SIGUE EL RUMBO CONTINUO Y NO LA CELDA. Con la tangente de la
+     celda, la vista se clava en cuatro direcciones y el giro fino del pulgar
+     no se ve: el cuerpo curva y la pantalla salta de a noventa grados, o sea
+     que el control nuevo no se lee. Lo que no tiene rumbo —los bots, el
+     auto-jugador— sigue con la tangente de siempre.                        */
   const j = M.NB[p.i * 4 + p.d];
-  const ade = V._v2.set(M.POS[j * 3], M.POS[j * 3 + 1], M.POS[j * 3 + 2])
-    .normalize().sub(nrm);
+  const ade = p.h
+    ? V._v2.set(p.h[0], p.h[1], p.h[2])
+    : V._v2.set(M.POS[j * 3], M.POS[j * 3 + 1], M.POS[j * 3 + 2])
+      .normalize().sub(nrm);
   ade.addScaledVector(nrm, -ade.dot(nrm));             /* tangente del viaje */
   if (ade.lengthSq() < 1e-9) ade.set(0, 0, 1).addScaledVector(nrm, -nrm.z);
   ade.normalize();

@@ -201,7 +201,7 @@ const solido = (M, i) => M.z[i] === PIEDRA;
 
 function nuevoJug(id, bot) {
   return {
-    id, bot: bot || null, i: 0, d: 0, ped: null,
+    id, bot: bot || null, i: 0, d: 0, ped: null, h: null,
     vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
     /* `cortes` son las veces que te cortaron A VOS y `matas` las que cortaste
        vos: dos numeros distintos que en la campana no hacia falta separar,
@@ -342,6 +342,113 @@ function tablaPos(M) {
 }
 const puestoDe = (M, id) => { const t = tablaPos(M); for (const f of t) if (f.id === id) return f.pos; return t.length; };
 
+/* ── EL RUMBO CONTINUO ────────────────────────────────────────────────────
+   EL CUERPO SIGUE PISANDO CELDAS Y ESO NO SE TOCA: el relleno, la estela,
+   los cortes, los bots y las cuatro auditorias estan todas escritas sobre la
+   tabla de vecinos, y una cabeza a mitad de celda las rompe a las cinco. Lo
+   que se vuelve continuo es HACIA DONDE MIRA, que es lo unico que el jugador
+   toca.
+
+   `p.h` es una TANGENTE UNITARIA en la celda donde esta —tres numeros, no un
+   indice— y gira con el reloj del DIBUJO y no con el del tic: por eso se
+   puede pedir cualquier angulo y no cuatro. En cada tic se elige el vecino
+   cuya tangente mas se le parece, asi que el camino sigue la curva que el
+   dedo dibujo en vez de quebrarla en angulos rectos.
+
+   Y GIRA A UN RITMO TOPADO (`RUM_VEL`): sin tope, soltar el pulgar de un
+   lado al otro seria media vuelta en un cuadro, o sea el giro instantaneo de
+   siempre con otro nombre. Con tope, media vuelta cuesta casi un segundo y
+   ESO es lo que se lee a curva.
+
+   LO QUE NO TIENE RUMBO SIGUE ANDANDO COMO ANTES. `p.h` nulo quiere decir
+   «rumbo por celda», que es lo que usan los bots, los auto-jugadores y las
+   auditorias — asi no hay dos fisicas y los cuarenta mapas se siguen
+   midiendo contra el mismo juego que antes de esta vuelta.                */
+const RUM_VEL = 3.4;     /* rad/s: media vuelta en 0,92 s                  */
+const RUM_ZM  = 0.22;    /* por debajo de esto el pulgar no pide nada      */
+const _rt = [0, 0, 0], _rt2 = [0, 0, 0];
+
+/* la tangente unitaria en `i` que apunta al vecino `d`. Sale de la cuerda
+   proyectada al plano tangente, o sea de POS y NB y de nada mas: no hace
+   falta saber que hay caras, que es justamente la gracia de las tablas.   */
+function tanDir(M, i, d, o) {
+  const P = M.POS, j = M.NB[i * 4 + d];
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  let x = P[j * 3] - nx, y = P[j * 3 + 1] - ny, z = P[j * 3 + 2] - nz;
+  const k = x * nx + y * ny + z * nz;
+  x -= k * nx; y -= k * ny; z -= k * nz;
+  const m = Math.hypot(x, y, z) || 1;
+  o[0] = x / m; o[1] = y / m; o[2] = z / m;
+  return o;
+}
+
+/* enciende el rumbo continuo para este cuerpo, mirando a donde ya iba */
+function rumboPon(M, p) { p.h = tanDir(M, p.i, p.d, [0, 0, 0]); }
+
+/* EL PULGAR PIDE UN ANGULO Y NO UNA VUELTA. Arriba es «seguir derecho»
+   —`p.h` mismo— y a la derecha es la tangente perpendicular, que es tambien
+   la derecha de la PANTALLA porque la camara lleva el rumbo como «arriba».
+   Con eso, pantalla y cuerpo son el mismo marco y no hay nada que traducir. */
+function rumboTira(M, p, jx, jy, dt) {
+  if (!p.h || !p.vivo) return;
+  const mag = Math.hypot(jx, jy);
+  if (mag < RUM_ZM) return;
+  const P = M.POS, i = p.i;
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  const h = p.h;
+  /* der = h x n, que es la derecha de la pantalla con `up = h` */
+  const dx = h[1] * nz - h[2] * ny, dy = h[2] * nx - h[0] * nz, dz = h[0] * ny - h[1] * nx;
+  let tx = jy * h[0] + jx * dx, ty = jy * h[1] + jx * dy, tz = jy * h[2] + jx * dz;
+  const tm = Math.hypot(tx, ty, tz);
+  if (tm < 1e-6) return;
+  tx /= tm; ty /= tm; tz /= tm;
+  /* el angulo con signo entre `h` y el pedido, alrededor de la normal */
+  const co = h[0] * tx + h[1] * ty + h[2] * tz;
+  const si = nx * (h[1] * tz - h[2] * ty) + ny * (h[2] * tx - h[0] * tz) + nz * (h[0] * ty - h[1] * tx);
+  let a = Math.atan2(si, co);
+  const tope = RUM_VEL * dt * Math.min(1, mag);
+  if (a > tope) a = tope; else if (a < -tope) a = -tope;
+  rumboGira(h, nx, ny, nz, a);
+}
+
+/* gira una tangente `a` radianes alrededor de la normal: como los dos son
+   unitarios y perpendiculares, alcanza con `h·cos + (n×h)·sen`.           */
+function rumboGira(h, nx, ny, nz, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const cx = ny * h[2] - nz * h[1], cy = nz * h[0] - nx * h[2], cz = nx * h[1] - ny * h[0];
+  let x = h[0] * c + cx * s, y = h[1] * c + cy * s, z = h[2] * c + cz * s;
+  const m = Math.hypot(x, y, z) || 1;
+  h[0] = x / m; h[1] = y / m; h[2] = z / m;
+}
+
+/* EL VECINO QUE MAS SE PARECE AL RUMBO, y media vuelta queda afuera por la
+   misma razon de siempre: pisar la propia estela es suicidio, asi que un
+   control que puede pedirla se suicida solo.                              */
+function rumboPed(M, p) {
+  const at = OPUE[p.d], h = p.h;
+  let mej = -2, d = p.d;
+  for (let k = 0; k < 4; k++) {
+    if (k === at) continue;
+    const t = tanDir(M, p.i, k, _rt);
+    const v = t[0] * h[0] + t[1] * h[1] + t[2] * h[2];
+    if (v > mej) { mej = v; d = k; }
+  }
+  p.ped = d;
+}
+
+/* despues de pisar la celda nueva la normal cambio, asi que el rumbo deja
+   de ser tangente: se lo vuelve a proyectar. Es transporte paralelo y sale
+   exacto porque el paso de una celda es chico.                            */
+function rumboLleva(M, p) {
+  const P = M.POS, i = p.i, h = p.h;
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  const k = h[0] * nx + h[1] * ny + h[2] * nz;
+  let x = h[0] - k * nx, y = h[1] - k * ny, z = h[2] - k * nz;
+  const m = Math.hypot(x, y, z);
+  if (m < 1e-6) { tanDir(M, i, p.d, h); return; }
+  h[0] = x / m; h[1] = y / m; h[2] = z / m;
+}
+
 /* ── EL TIC ───────────────────────────────────────────────────────────────
    TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
    cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
@@ -362,10 +469,19 @@ function tic(M) {
   const NB = M.NB, ND = M.ND, vivos = [];
   for (const p of M.jug) {
     if (!p.vivo) continue;
+    /* EL RUMBO NO MANDA SOBRE UN BOT, y eso no es un detalle: `juega` y las
+       cuarenta auditorias le cuelgan un cerebro AL MISMO cuerpo que acaba de
+       jugar una persona. Con el rumbo puesto, `rumboPed` le pisaria el `ped`
+       al bot en cada tic y lo medido no seria el bot sino el pulgar que quedo
+       quieto — o sea una auditoria que aprueba un juego que nadie jugo.     */
+    if (p.h && !p.bot) rumboPed(M, p);
     if (p.ped != null && p.ped !== OPUE[p.d]) p.d = p.ped;
     p.ped = null;
     const b = p.i * 4 + p.d;
     p.i = NB[b]; p.d = ND[b];
+    /* y mientras lo maneja un bot el rumbo se RESINCRONIZA con la celda, asi
+       al soltarlo el pulgar retoma desde donde el cuerpo mira de verdad.    */
+    if (p.h) { if (p.bot) tanDir(M, p.i, p.d, p.h); else rumboLleva(M, p); }
     vivos.push(p);
   }
 
@@ -439,6 +555,7 @@ function renace(M, p) {
   if (mejor < 0) mejor = carvaCasa(M, p);
   p.i = mejor;
   p.vivo = true; p.fuera = false; p.estela = 0; p.ped = null; p.plan = null; p.dcSucio = true;
+  if (p.h) rumboPon(M, p);
   /* mira hacia adentro de lo propio: renacer apuntando al vacio es salir sin
      haberlo pedido, y eso no es un renacimiento, es otro corte.            */
   let d0 = 0;

@@ -1,23 +1,34 @@
 /* ══════════════════════════════════════════════════════════════════════════
    f.js · LA PARTIDA: el dedo, las vidas, el reloj y el marcador
    ──────────────────────────────────────────────────────────────────────────
-   EL DEDO NO ES UN JOYSTICK, ES UN GESTO. Un joystick fijo en una esquina se
-   pelea con el tablero —que ocupa la pantalla entera— y encima obliga a
-   mirarlo. Aca se arrastra donde uno quiera: lo que se lee es el
-   DESPLAZAMIENTO desde el ultimo cambio de rumbo, y cuando pasa la zona
-   muerta se dobla y el ancla se muda al dedo. O sea: una pasada de dedo es
-   UNA vuelta, y encadenar vueltas es seguir arrastrando.
+   EL DEDO ES UN JOYSTICK, Y ES FLOTANTE. Las vueltas anteriores lo resolvian
+   con un gesto —arrastrar y que cada pasada valiera una vuelta de noventa
+   grados— y eso tenia un techo que no se podia mover: NOVENTA GRADOS ES LO
+   UNICO QUE SE PODIA PEDIR. El cuerpo trazaba angulos rectos porque el
+   control no sabia decir otra cosa. Ahora el pulgar pide UN ANGULO, y el
+   cuerpo lo sigue tan fino como la reja se lo permita.
 
-   Y LO QUE SE ESCRIBE ES `p.ped`, que es EL MISMO campo que usan los bots y
-   el auto-jugador. Si el dedo escribiera el rumbo directo, el jugador podria
-   doblar a mitad de celda y los bots no: dos fisicas distintas en el mismo
-   tablero, y la auditoria estaria aprobando un juego que nadie juega.
+   FLOTANTE Y NO FIJO, que es lo que el gesto anterior tenia bien: el tablero
+   ocupa la pantalla entera, asi que un aro clavado en una esquina se pelea
+   con el juego y encima obliga a mirarlo. El aro nace donde cae el pulgar; en
+   la esquina queda una sombra que dice DONDE se puede empezar, no el control.
 
-   EL BUFFER DE UNA VUELTA es la unica pieza que no esta en el modelo. A 5,4
-   celdas por segundo un tic dura 185 ms: dos toques mas rapidos que eso
-   —bajar y doblar en la misma pasada— pisarian el primero. Se guarda UNA
-   sola vuelta pendiente y se suelta en cuanto `tic` consumio la anterior.
-   Con mas de una el cuerpo dejaria de responder a lo ultimo que se pidio.
+   Y LO QUE SE TOCA ES `p.h` —el rumbo continuo de `c.js`— y no `p.ped`. El
+   cuerpo sigue pisando celdas enteras, asi que el relleno, la estela, los
+   cortes, los bots y las cuatro auditorias siguen midiendo el mismo juego; lo
+   unico que se volvio continuo es HACIA DONDE MIRA, que es lo unico que el
+   dedo toca. Con el dedo escribiendo `p.ped` directo no habria forma de pedir
+   un angulo que no fuera uno de los cuatro.
+
+   EL BUFFER DE UNA VUELTA SE FUE, y tampoco es un olvido: existia porque un
+   toque podia caer entre dos tics y perderse. Un rumbo no se pierde —esta
+   puesto, y `tic` lo lee cuando le toca— asi que la cola dejo de tener algo
+   que guardar.
+
+   EL TECLADO SIGUE SIENDO DISCRETO, y corresponde: una tecla no tiene angulo.
+   Una flecha gira el rumbo noventa grados de una, que es exactamente el
+   control de las vueltas anteriores — y por eso los planes del banco que
+   doblan con `gira()` siguen midiendo lo mismo.
    ══════════════════════════════════════════════════════════════════════ */
 
 const P = {
@@ -34,66 +45,69 @@ const P = {
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
-const ENT = { id: null, ax: 0, ay: 0, cola: null };
-/* 30 px y no 15: con re-anclaje, un barrido de 60 px son DOS vueltas. En el
-   plano dos vueltas seguidas eran medio cuadrado; en la esfera siguen
-   siendolo, pero un flick de dedo no tiene que pedir dos.                 */
-const ENT_MIN = 30;
+/* EL RADIO ES EL RECORRIDO UTIL DEL PULGAR, no el dibujo del aro: un pulgar
+   apoyado barre unos 56 px antes de tener que levantar la mano. Mas grande y
+   el borde no se alcanza; mas chico y cualquier temblor satura la palanca. */
+const JOY_R = 56;
+const JOY = { id: null, cx: 0, cy: 0, jx: 0, jy: 0 };
 
-/* EL GIRO ES RELATIVO Y NO ABSOLUTO, y no es una preferencia: en una esfera
-   «arriba» no existe. Lo unico que el cuerpo sabe es hacia donde va, asi que
-   lo unico que se le puede pedir es izquierda o derecha — que ademas es el
-   control de Paper.io 3D. Y sale gratis una propiedad que el plano no tenia:
-   UNA VUELTA DE 90 GRADOS NUNCA PUEDE SER MEDIA VUELTA, o sea que el control
-   no se puede suicidar solo.
-   `p.ped` es un INDICE DE DIRECCION ABSOLUTO (0-3), asi que el giro se
-   resuelve aca con GIRO_CW/GIRO_CCW y el modelo no se entera de nada.     */
-function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
-  const p = P.yo;
-  if (!p || !P.on || P.pausa || P.fin) return false;
-  const base = p.ped != null ? p.ped : p.d;   /* se gira sobre lo ya pedido  */
-  const d = (giro > 0 ? GIRO_CW : GIRO_CCW)[base];
-  if (d === p.d) return false;                /* no cambia nada             */
-  if (p.ped != null) {
-    if (p.ped === d) return false;
-    ENT.cola = d;
-    return true;
+/* pone el aro donde cayo el dedo. Las coordenadas son de PANTALLA y el aro
+   vive dentro de `#marco`, asi que hay que restarle su caja: con el marco
+   centrado en una pantalla ancha, sin esa resta el aro sale corrido.      */
+function joyVer(on, cx, cy) {
+  const e = $('joy');
+  if (on) {
+    const r = $('marco').getBoundingClientRect();
+    e.style.left = (cx - r.left) + 'px';
+    e.style.top = (cy - r.top) + 'px';
   }
-  p.ped = d;
-  return true;
+  cl2(e, 'on', on);
 }
-/* corre DESPUES de `paso`: ahi `tic` ya vacio `ped` y el pendiente puede
-   entrar sin pisar nada. */
-function entSuelta() {
-  const p = P.yo;
-  if (!p || ENT.cola == null) return;
-  if (p.ped != null) return;
-  if (ENT.cola !== p.d && ENT.cola !== OPUE[p.d]) p.ped = ENT.cola;
-  ENT.cola = null;
+function joyPomo() {
+  $('joyK').style.transform = 'translate(' + (JOY.jx * JOY_R).toFixed(1) + 'px,'
+    + (-JOY.jy * JOY_R).toFixed(1) + 'px)';
+}
+/* el pulgar en coordenadas de palanca: +y es ARRIBA de la pantalla, que es
+   «seguir derecho», porque la camara lleva el rumbo como arriba.          */
+function joyPon(cx, cy) {
+  let dx = (cx - JOY.cx) / JOY_R, dy = -(cy - JOY.cy) / JOY_R;
+  const m = Math.hypot(dx, dy);
+  if (m > 1) { dx /= m; dy /= m; }
+  JOY.jx = dx; JOY.jy = dy;
+  joyPomo();
+}
+function joySuelta() {
+  JOY.id = null; JOY.jx = 0; JOY.jy = 0;
+  joyVer(false); joyPomo();
+}
+
+/* EL GIRO DISCRETO ES DEL TECLADO Y NADA MAS. Gira el RUMBO noventa grados,
+   no la celda: asi el teclado y el pulgar empujan la misma cosa y no hay dos
+   controles que se puedan contradecir dentro del mismo tic.               */
+function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
+  const p = P.yo, M = P.M;
+  if (!p || !M || !P.on || P.pausa || P.fin) return false;
+  if (!p.h) rumboPon(M, p);
+  const i = p.i, POS = M.POS;
+  rumboGira(p.h, POS[i * 3], POS[i * 3 + 1], POS[i * 3 + 2], (giro > 0 ? -1 : 1) * Math.PI / 2);
+  return true;
 }
 
 function entBaja(e) {
   if (!P.on || P.pausa || P.fin) return;
-  if (ENT.id !== null) return;
-  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY;
+  if (JOY.id !== null) return;
+  JOY.id = e.pointerId; JOY.cx = e.clientX; JOY.cy = e.clientY;
+  JOY.jx = 0; JOY.jy = 0;
+  joyVer(true, e.clientX, e.clientY); joyPomo();
   try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
 }
 function entMueve(e) {
-  if (ENT.id !== e.pointerId) return;
-  /* SOLO EL EJE HORIZONTAL. Arrastrar hacia arriba es pedir «seguir
-     derecho», que es lo que el cuerpo ya hace; hacia abajo seria media
-     vuelta, que mata. Ninguno de los dos tiene nada que pedir, asi que la
-     histeresis entre ejes del plano sobra: aca hay un solo eje.           */
-  const dx = e.clientX - ENT.ax;
-  if (Math.abs(dx) < ENT_MIN) return;
-  entPide(dx > 0 ? 1 : -1);
-  /* el ancla se muda haya doblado o no: si no, un arrastre largo deja el
-     desplazamiento saturado y la vuelta siguiente sale con un pixel.      */
-  ENT.ax = e.clientX; ENT.ay = e.clientY;
+  if (JOY.id !== e.pointerId) return;
+  joyPon(e.clientX, e.clientY);
 }
 function entSube(e) {
-  if (ENT.id !== e.pointerId) return;
-  ENT.id = null;
+  if (JOY.id !== e.pointerId) return;
+  joySuelta();
 }
 const ENT_TEC = {
   ArrowRight: 1, ArrowLeft: -1, KeyD: 1, KeyA: -1,
@@ -129,6 +143,11 @@ function partidaArranca(m, nv, tuto, arena) {
      corte no cuesta terreno, cuesta la corrida entera.                     */
   P.yo.topeCortes = P.tuto ? 1e9 : (P.arena ? 1 : VIDAS);
   P.seg = P.cfg.seg;
+  /* EL RUMBO SE ENCIENDE SOLO PARA EL CUERPO DEL JUGADOR. Un bot con rumbo
+     seria un bot manejado por un pulgar que no existe, y las cuarenta
+     auditorias dejarian de medir al bot.                                   */
+  rumboPon(P.M, P.yo);
+  joySuelta();
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
   P.giros = 0; P.gd = P.yo.d;
@@ -143,6 +162,7 @@ function partidaArranca(m, nv, tuto, arena) {
   cl2($('pie'), 'off', P.tuto);
   cl2($('mini'), 'off', P.tuto);
   cl2($('tabla'), 'off', !P.arena);
+  cl2($('joyG'), 'off', false);
   auAbre(0);
   return P.M;
 }
@@ -150,8 +170,12 @@ function partidaArranca(m, nv, tuto, arena) {
 function partidaPaso(dt) {
   if (!P.on || P.pausa || P.fin) return;
   const M = P.M, yo = P.yo;
+  /* EL PULGAR TIRA ANTES DE PISAR, y el orden importa: al reves, el tic de
+     este cuadro elegiria la celda con el rumbo del cuadro anterior y el
+     control iria un tic atrasado — que a 5,4 celdas por segundo son 185 ms,
+     o sea lo que se lee a control pesado.                                  */
+  rumboTira(M, yo, JOY.jx, JOY.jy, dt);
   paso(M, dt);
-  entSuelta();
   const gan = vpTras(M);
   P.ganUlt = gan[1];
 
@@ -278,6 +302,8 @@ function partidaSale() {
   cl2($('pie'), 'off', true);
   cl2($('mini'), 'off', true);
   cl2($('tabla'), 'off', true);
+  cl2($('joyG'), 'off', true);
+  joySuelta();
   cl2($('pista'), 'on', false);
   cl2($('tSalt'), 'on', false);
   auAgacha(1); auAbre(0);

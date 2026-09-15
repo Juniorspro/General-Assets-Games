@@ -161,6 +161,30 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
   z-index:4;display:none}
 #tSalt.on{display:block}
 
+/* ── EL JOYSTICK ──────────────────────────────────────────────────────────
+   FLOTANTE Y NO FIJO, y las dos mitades son el mismo argumento: el tablero
+   ocupa la pantalla entera, asi que un aro clavado en una esquina se pelea
+   con el juego Y obliga a mirarlo. Nace donde cae el pulgar; lo que se ve en
+   la esquina es una SOMBRA que dice donde se puede empezar, no el control.
+
+   Y NO RECIBE EL TOQUE (`pointer-events:none`): el que escucha es el lienzo,
+   que es el que ya tenia el gesto. Con el aro escuchando, el primer toque de
+   cada partida caeria fuera de el y no haria nada.                         */
+#joy{position:absolute;width:132px;height:132px;margin:-66px 0 0 -66px;z-index:5;
+  pointer-events:none;border-radius:50%;opacity:0;transition:opacity .14s;
+  border:2px solid rgba(255,255,255,.22);background:rgba(0,0,0,.20);
+  box-shadow:0 4px 18px rgba(0,0,0,.35)}
+#joy.on{opacity:1}
+#joyK{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
+  border-radius:50%;background:var(--yo);opacity:.82;
+  box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 2px 6px rgba(255,255,255,.28)}
+/* la sombra de la esquina: el unico sitio del HUD que dice «aca va el dedo» */
+#joyG{position:absolute;left:calc(env(safe-area-inset-left,0px) + 58px);
+  bottom:calc(env(safe-area-inset-bottom,0px) + 74px);
+  width:112px;height:112px;margin:-56px 0 -56px -56px;z-index:2;pointer-events:none;
+  border-radius:50%;border:2px dashed rgba(255,255,255,.13);opacity:.55}
+#joyG.off{display:none}
+
 /* ── aviso corto ── */
 #aviso{position:absolute;left:0;right:0;top:41%;text-align:center;z-index:6;pointer-events:none;
   font-size:22px;font-weight:900;letter-spacing:.12em;color:var(--acento);
@@ -269,6 +293,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
   <div id="pista"></div>
   <button id="tSalt" class="chip">SALTEAR</button>
   <div id="aviso"></div>
+
+  <div id="joyG" class="off"></div>
+  <div id="joy"><div id="joyK"></div></div>
 
   <div id="pie" class="off">
     <div id="pct"><b>0%</b><span id="pctR">META 40%</span></div>
@@ -697,7 +724,7 @@ const LANGS = {
     avSinVidas: 'SIN VIDAS',
     pie: 'sin un solo asset · todo dibujado por código', cargando: 'CARGANDO',
     tutTit: 'TUTORIAL',
-    tut1: 'arrastrá el dedo · el cuerpo dobla al toque',
+    tut1: 'apoyá el dedo y empujá · el cuerpo va hacia donde apuntás',
     tut2: 'salí de tu terreno · vas dejando estela',
     tut3: 'volvé a pisar lo tuyo · lo que rodeaste es tuyo',
     tut4: 'cuanto más grande la vuelta, más terreno',
@@ -738,7 +765,7 @@ const LANGS = {
     avSinVidas: 'OUT OF LIVES',
     pie: 'not one asset · all drawn in code', cargando: 'LOADING',
     tutTit: 'TUTORIAL',
-    tut1: 'drag your finger · the body turns as you go',
+    tut1: 'press and push · the body goes where you point',
     tut2: 'leave your land · you trail behind you',
     tut3: 'step back on your own · what you looped is yours',
     tut4: 'the wider the loop, the more land',
@@ -775,7 +802,7 @@ const LANGS = {
     avSinVidas: 'SEM VIDAS',
     pie: 'sem um único asset · tudo desenhado em código', cargando: 'CARREGANDO',
     tutTit: 'TUTORIAL',
-    tut1: 'arraste o dedo · o corpo vira na hora',
+    tut1: 'apoie o dedo e empurre · o corpo vai para onde aponta',
     tut2: 'saia do seu terreno · vai deixando rastro',
     tut3: 'volte a pisar no seu · o que cercou é seu',
     tut4: 'quanto maior a volta, mais terreno',
@@ -1052,7 +1079,7 @@ const solido = (M, i) => M.z[i] === PIEDRA;
 
 function nuevoJug(id, bot) {
   return {
-    id, bot: bot || null, i: 0, d: 0, ped: null,
+    id, bot: bot || null, i: 0, d: 0, ped: null, h: null,
     vivo: true, fuera: false, estela: 0, cola: [], cortes: 0, cerros: 0,
     /* `cortes` son las veces que te cortaron A VOS y `matas` las que cortaste
        vos: dos numeros distintos que en la campana no hacia falta separar,
@@ -1193,6 +1220,113 @@ function tablaPos(M) {
 }
 const puestoDe = (M, id) => { const t = tablaPos(M); for (const f of t) if (f.id === id) return f.pos; return t.length; };
 
+/* ── EL RUMBO CONTINUO ────────────────────────────────────────────────────
+   EL CUERPO SIGUE PISANDO CELDAS Y ESO NO SE TOCA: el relleno, la estela,
+   los cortes, los bots y las cuatro auditorias estan todas escritas sobre la
+   tabla de vecinos, y una cabeza a mitad de celda las rompe a las cinco. Lo
+   que se vuelve continuo es HACIA DONDE MIRA, que es lo unico que el jugador
+   toca.
+
+   `p.h` es una TANGENTE UNITARIA en la celda donde esta —tres numeros, no un
+   indice— y gira con el reloj del DIBUJO y no con el del tic: por eso se
+   puede pedir cualquier angulo y no cuatro. En cada tic se elige el vecino
+   cuya tangente mas se le parece, asi que el camino sigue la curva que el
+   dedo dibujo en vez de quebrarla en angulos rectos.
+
+   Y GIRA A UN RITMO TOPADO (`RUM_VEL`): sin tope, soltar el pulgar de un
+   lado al otro seria media vuelta en un cuadro, o sea el giro instantaneo de
+   siempre con otro nombre. Con tope, media vuelta cuesta casi un segundo y
+   ESO es lo que se lee a curva.
+
+   LO QUE NO TIENE RUMBO SIGUE ANDANDO COMO ANTES. `p.h` nulo quiere decir
+   «rumbo por celda», que es lo que usan los bots, los auto-jugadores y las
+   auditorias — asi no hay dos fisicas y los cuarenta mapas se siguen
+   midiendo contra el mismo juego que antes de esta vuelta.                */
+const RUM_VEL = 3.4;     /* rad/s: media vuelta en 0,92 s                  */
+const RUM_ZM  = 0.22;    /* por debajo de esto el pulgar no pide nada      */
+const _rt = [0, 0, 0], _rt2 = [0, 0, 0];
+
+/* la tangente unitaria en `i` que apunta al vecino `d`. Sale de la cuerda
+   proyectada al plano tangente, o sea de POS y NB y de nada mas: no hace
+   falta saber que hay caras, que es justamente la gracia de las tablas.   */
+function tanDir(M, i, d, o) {
+  const P = M.POS, j = M.NB[i * 4 + d];
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  let x = P[j * 3] - nx, y = P[j * 3 + 1] - ny, z = P[j * 3 + 2] - nz;
+  const k = x * nx + y * ny + z * nz;
+  x -= k * nx; y -= k * ny; z -= k * nz;
+  const m = Math.hypot(x, y, z) || 1;
+  o[0] = x / m; o[1] = y / m; o[2] = z / m;
+  return o;
+}
+
+/* enciende el rumbo continuo para este cuerpo, mirando a donde ya iba */
+function rumboPon(M, p) { p.h = tanDir(M, p.i, p.d, [0, 0, 0]); }
+
+/* EL PULGAR PIDE UN ANGULO Y NO UNA VUELTA. Arriba es «seguir derecho»
+   —`p.h` mismo— y a la derecha es la tangente perpendicular, que es tambien
+   la derecha de la PANTALLA porque la camara lleva el rumbo como «arriba».
+   Con eso, pantalla y cuerpo son el mismo marco y no hay nada que traducir. */
+function rumboTira(M, p, jx, jy, dt) {
+  if (!p.h || !p.vivo) return;
+  const mag = Math.hypot(jx, jy);
+  if (mag < RUM_ZM) return;
+  const P = M.POS, i = p.i;
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  const h = p.h;
+  /* der = h x n, que es la derecha de la pantalla con `up = h` */
+  const dx = h[1] * nz - h[2] * ny, dy = h[2] * nx - h[0] * nz, dz = h[0] * ny - h[1] * nx;
+  let tx = jy * h[0] + jx * dx, ty = jy * h[1] + jx * dy, tz = jy * h[2] + jx * dz;
+  const tm = Math.hypot(tx, ty, tz);
+  if (tm < 1e-6) return;
+  tx /= tm; ty /= tm; tz /= tm;
+  /* el angulo con signo entre `h` y el pedido, alrededor de la normal */
+  const co = h[0] * tx + h[1] * ty + h[2] * tz;
+  const si = nx * (h[1] * tz - h[2] * ty) + ny * (h[2] * tx - h[0] * tz) + nz * (h[0] * ty - h[1] * tx);
+  let a = Math.atan2(si, co);
+  const tope = RUM_VEL * dt * Math.min(1, mag);
+  if (a > tope) a = tope; else if (a < -tope) a = -tope;
+  rumboGira(h, nx, ny, nz, a);
+}
+
+/* gira una tangente `a` radianes alrededor de la normal: como los dos son
+   unitarios y perpendiculares, alcanza con `h·cos + (n×h)·sen`.           */
+function rumboGira(h, nx, ny, nz, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const cx = ny * h[2] - nz * h[1], cy = nz * h[0] - nx * h[2], cz = nx * h[1] - ny * h[0];
+  let x = h[0] * c + cx * s, y = h[1] * c + cy * s, z = h[2] * c + cz * s;
+  const m = Math.hypot(x, y, z) || 1;
+  h[0] = x / m; h[1] = y / m; h[2] = z / m;
+}
+
+/* EL VECINO QUE MAS SE PARECE AL RUMBO, y media vuelta queda afuera por la
+   misma razon de siempre: pisar la propia estela es suicidio, asi que un
+   control que puede pedirla se suicida solo.                              */
+function rumboPed(M, p) {
+  const at = OPUE[p.d], h = p.h;
+  let mej = -2, d = p.d;
+  for (let k = 0; k < 4; k++) {
+    if (k === at) continue;
+    const t = tanDir(M, p.i, k, _rt);
+    const v = t[0] * h[0] + t[1] * h[1] + t[2] * h[2];
+    if (v > mej) { mej = v; d = k; }
+  }
+  p.ped = d;
+}
+
+/* despues de pisar la celda nueva la normal cambio, asi que el rumbo deja
+   de ser tangente: se lo vuelve a proyectar. Es transporte paralelo y sale
+   exacto porque el paso de una celda es chico.                            */
+function rumboLleva(M, p) {
+  const P = M.POS, i = p.i, h = p.h;
+  const nx = P[i * 3], ny = P[i * 3 + 1], nz = P[i * 3 + 2];
+  const k = h[0] * nx + h[1] * ny + h[2] * nz;
+  let x = h[0] - k * nx, y = h[1] - k * ny, z = h[2] - k * nz;
+  const m = Math.hypot(x, y, z);
+  if (m < 1e-6) { tanDir(M, i, p.d, h); return; }
+  h[0] = x / m; h[1] = y / m; h[2] = z / m;
+}
+
 /* ── EL TIC ───────────────────────────────────────────────────────────────
    TODOS LOS CUERPOS VAN A LA MISMA VELOCIDAD Y ARRANCAN ALINEADOS, asi que
    cruzan el borde de celda en el mismo instante: la fraccion es UNA, del
@@ -1213,10 +1347,19 @@ function tic(M) {
   const NB = M.NB, ND = M.ND, vivos = [];
   for (const p of M.jug) {
     if (!p.vivo) continue;
+    /* EL RUMBO NO MANDA SOBRE UN BOT, y eso no es un detalle: `juega` y las
+       cuarenta auditorias le cuelgan un cerebro AL MISMO cuerpo que acaba de
+       jugar una persona. Con el rumbo puesto, `rumboPed` le pisaria el `ped`
+       al bot en cada tic y lo medido no seria el bot sino el pulgar que quedo
+       quieto — o sea una auditoria que aprueba un juego que nadie jugo.     */
+    if (p.h && !p.bot) rumboPed(M, p);
     if (p.ped != null && p.ped !== OPUE[p.d]) p.d = p.ped;
     p.ped = null;
     const b = p.i * 4 + p.d;
     p.i = NB[b]; p.d = ND[b];
+    /* y mientras lo maneja un bot el rumbo se RESINCRONIZA con la celda, asi
+       al soltarlo el pulgar retoma desde donde el cuerpo mira de verdad.    */
+    if (p.h) { if (p.bot) tanDir(M, p.i, p.d, p.h); else rumboLleva(M, p); }
     vivos.push(p);
   }
 
@@ -1290,6 +1433,7 @@ function renace(M, p) {
   if (mejor < 0) mejor = carvaCasa(M, p);
   p.i = mejor;
   p.vivo = true; p.fuera = false; p.estela = 0; p.ped = null; p.plan = null; p.dcSucio = true;
+  if (p.h) rumboPon(M, p);
   /* mira hacia adentro de lo propio: renacer apuntando al vacio es salir sin
      haberlo pedido, y eso no es un renacimiento, es otro corte.            */
   let d0 = 0;
@@ -2664,9 +2808,16 @@ function vpPos(M, p, v) {
 function vpCam(M, dt) {
   const p = M.jug[0];
   const nrm = vpPos(M, p, V._v);                       /* donde esta        */
+  /* LA CAMARA SIGUE EL RUMBO CONTINUO Y NO LA CELDA. Con la tangente de la
+     celda, la vista se clava en cuatro direcciones y el giro fino del pulgar
+     no se ve: el cuerpo curva y la pantalla salta de a noventa grados, o sea
+     que el control nuevo no se lee. Lo que no tiene rumbo —los bots, el
+     auto-jugador— sigue con la tangente de siempre.                        */
   const j = M.NB[p.i * 4 + p.d];
-  const ade = V._v2.set(M.POS[j * 3], M.POS[j * 3 + 1], M.POS[j * 3 + 2])
-    .normalize().sub(nrm);
+  const ade = p.h
+    ? V._v2.set(p.h[0], p.h[1], p.h[2])
+    : V._v2.set(M.POS[j * 3], M.POS[j * 3 + 1], M.POS[j * 3 + 2])
+      .normalize().sub(nrm);
   ade.addScaledVector(nrm, -ade.dot(nrm));             /* tangente del viaje */
   if (ade.lengthSq() < 1e-9) ade.set(0, 0, 1).addScaledVector(nrm, -nrm.z);
   ade.normalize();
@@ -2793,23 +2944,34 @@ function vpMiniPinta(M) {
 /* ══════════════════════════════════════════════════════════════════════════
    f.js · LA PARTIDA: el dedo, las vidas, el reloj y el marcador
    ──────────────────────────────────────────────────────────────────────────
-   EL DEDO NO ES UN JOYSTICK, ES UN GESTO. Un joystick fijo en una esquina se
-   pelea con el tablero —que ocupa la pantalla entera— y encima obliga a
-   mirarlo. Aca se arrastra donde uno quiera: lo que se lee es el
-   DESPLAZAMIENTO desde el ultimo cambio de rumbo, y cuando pasa la zona
-   muerta se dobla y el ancla se muda al dedo. O sea: una pasada de dedo es
-   UNA vuelta, y encadenar vueltas es seguir arrastrando.
+   EL DEDO ES UN JOYSTICK, Y ES FLOTANTE. Las vueltas anteriores lo resolvian
+   con un gesto —arrastrar y que cada pasada valiera una vuelta de noventa
+   grados— y eso tenia un techo que no se podia mover: NOVENTA GRADOS ES LO
+   UNICO QUE SE PODIA PEDIR. El cuerpo trazaba angulos rectos porque el
+   control no sabia decir otra cosa. Ahora el pulgar pide UN ANGULO, y el
+   cuerpo lo sigue tan fino como la reja se lo permita.
 
-   Y LO QUE SE ESCRIBE ES `p.ped`, que es EL MISMO campo que usan los bots y
-   el auto-jugador. Si el dedo escribiera el rumbo directo, el jugador podria
-   doblar a mitad de celda y los bots no: dos fisicas distintas en el mismo
-   tablero, y la auditoria estaria aprobando un juego que nadie juega.
+   FLOTANTE Y NO FIJO, que es lo que el gesto anterior tenia bien: el tablero
+   ocupa la pantalla entera, asi que un aro clavado en una esquina se pelea
+   con el juego y encima obliga a mirarlo. El aro nace donde cae el pulgar; en
+   la esquina queda una sombra que dice DONDE se puede empezar, no el control.
 
-   EL BUFFER DE UNA VUELTA es la unica pieza que no esta en el modelo. A 5,4
-   celdas por segundo un tic dura 185 ms: dos toques mas rapidos que eso
-   —bajar y doblar en la misma pasada— pisarian el primero. Se guarda UNA
-   sola vuelta pendiente y se suelta en cuanto `tic` consumio la anterior.
-   Con mas de una el cuerpo dejaria de responder a lo ultimo que se pidio.
+   Y LO QUE SE TOCA ES `p.h` —el rumbo continuo de `c.js`— y no `p.ped`. El
+   cuerpo sigue pisando celdas enteras, asi que el relleno, la estela, los
+   cortes, los bots y las cuatro auditorias siguen midiendo el mismo juego; lo
+   unico que se volvio continuo es HACIA DONDE MIRA, que es lo unico que el
+   dedo toca. Con el dedo escribiendo `p.ped` directo no habria forma de pedir
+   un angulo que no fuera uno de los cuatro.
+
+   EL BUFFER DE UNA VUELTA SE FUE, y tampoco es un olvido: existia porque un
+   toque podia caer entre dos tics y perderse. Un rumbo no se pierde —esta
+   puesto, y `tic` lo lee cuando le toca— asi que la cola dejo de tener algo
+   que guardar.
+
+   EL TECLADO SIGUE SIENDO DISCRETO, y corresponde: una tecla no tiene angulo.
+   Una flecha gira el rumbo noventa grados de una, que es exactamente el
+   control de las vueltas anteriores — y por eso los planes del banco que
+   doblan con `gira()` siguen midiendo lo mismo.
    ══════════════════════════════════════════════════════════════════════ */
 
 const P = {
@@ -2826,66 +2988,69 @@ const P = {
 };
 
 /* ══════════════════════ EL DEDO ══════════════════════ */
-const ENT = { id: null, ax: 0, ay: 0, cola: null };
-/* 30 px y no 15: con re-anclaje, un barrido de 60 px son DOS vueltas. En el
-   plano dos vueltas seguidas eran medio cuadrado; en la esfera siguen
-   siendolo, pero un flick de dedo no tiene que pedir dos.                 */
-const ENT_MIN = 30;
+/* EL RADIO ES EL RECORRIDO UTIL DEL PULGAR, no el dibujo del aro: un pulgar
+   apoyado barre unos 56 px antes de tener que levantar la mano. Mas grande y
+   el borde no se alcanza; mas chico y cualquier temblor satura la palanca. */
+const JOY_R = 56;
+const JOY = { id: null, cx: 0, cy: 0, jx: 0, jy: 0 };
 
-/* EL GIRO ES RELATIVO Y NO ABSOLUTO, y no es una preferencia: en una esfera
-   «arriba» no existe. Lo unico que el cuerpo sabe es hacia donde va, asi que
-   lo unico que se le puede pedir es izquierda o derecha — que ademas es el
-   control de Paper.io 3D. Y sale gratis una propiedad que el plano no tenia:
-   UNA VUELTA DE 90 GRADOS NUNCA PUEDE SER MEDIA VUELTA, o sea que el control
-   no se puede suicidar solo.
-   `p.ped` es un INDICE DE DIRECCION ABSOLUTO (0-3), asi que el giro se
-   resuelve aca con GIRO_CW/GIRO_CCW y el modelo no se entera de nada.     */
-function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
-  const p = P.yo;
-  if (!p || !P.on || P.pausa || P.fin) return false;
-  const base = p.ped != null ? p.ped : p.d;   /* se gira sobre lo ya pedido  */
-  const d = (giro > 0 ? GIRO_CW : GIRO_CCW)[base];
-  if (d === p.d) return false;                /* no cambia nada             */
-  if (p.ped != null) {
-    if (p.ped === d) return false;
-    ENT.cola = d;
-    return true;
+/* pone el aro donde cayo el dedo. Las coordenadas son de PANTALLA y el aro
+   vive dentro de `#marco`, asi que hay que restarle su caja: con el marco
+   centrado en una pantalla ancha, sin esa resta el aro sale corrido.      */
+function joyVer(on, cx, cy) {
+  const e = $('joy');
+  if (on) {
+    const r = $('marco').getBoundingClientRect();
+    e.style.left = (cx - r.left) + 'px';
+    e.style.top = (cy - r.top) + 'px';
   }
-  p.ped = d;
-  return true;
+  cl2(e, 'on', on);
 }
-/* corre DESPUES de `paso`: ahi `tic` ya vacio `ped` y el pendiente puede
-   entrar sin pisar nada. */
-function entSuelta() {
-  const p = P.yo;
-  if (!p || ENT.cola == null) return;
-  if (p.ped != null) return;
-  if (ENT.cola !== p.d && ENT.cola !== OPUE[p.d]) p.ped = ENT.cola;
-  ENT.cola = null;
+function joyPomo() {
+  $('joyK').style.transform = 'translate(' + (JOY.jx * JOY_R).toFixed(1) + 'px,'
+    + (-JOY.jy * JOY_R).toFixed(1) + 'px)';
+}
+/* el pulgar en coordenadas de palanca: +y es ARRIBA de la pantalla, que es
+   «seguir derecho», porque la camara lleva el rumbo como arriba.          */
+function joyPon(cx, cy) {
+  let dx = (cx - JOY.cx) / JOY_R, dy = -(cy - JOY.cy) / JOY_R;
+  const m = Math.hypot(dx, dy);
+  if (m > 1) { dx /= m; dy /= m; }
+  JOY.jx = dx; JOY.jy = dy;
+  joyPomo();
+}
+function joySuelta() {
+  JOY.id = null; JOY.jx = 0; JOY.jy = 0;
+  joyVer(false); joyPomo();
+}
+
+/* EL GIRO DISCRETO ES DEL TECLADO Y NADA MAS. Gira el RUMBO noventa grados,
+   no la celda: asi el teclado y el pulgar empujan la misma cosa y no hay dos
+   controles que se puedan contradecir dentro del mismo tic.               */
+function entPide(giro) {                      /* +1 derecha · -1 izquierda  */
+  const p = P.yo, M = P.M;
+  if (!p || !M || !P.on || P.pausa || P.fin) return false;
+  if (!p.h) rumboPon(M, p);
+  const i = p.i, POS = M.POS;
+  rumboGira(p.h, POS[i * 3], POS[i * 3 + 1], POS[i * 3 + 2], (giro > 0 ? -1 : 1) * Math.PI / 2);
+  return true;
 }
 
 function entBaja(e) {
   if (!P.on || P.pausa || P.fin) return;
-  if (ENT.id !== null) return;
-  ENT.id = e.pointerId; ENT.ax = e.clientX; ENT.ay = e.clientY;
+  if (JOY.id !== null) return;
+  JOY.id = e.pointerId; JOY.cx = e.clientX; JOY.cy = e.clientY;
+  JOY.jx = 0; JOY.jy = 0;
+  joyVer(true, e.clientX, e.clientY); joyPomo();
   try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
 }
 function entMueve(e) {
-  if (ENT.id !== e.pointerId) return;
-  /* SOLO EL EJE HORIZONTAL. Arrastrar hacia arriba es pedir «seguir
-     derecho», que es lo que el cuerpo ya hace; hacia abajo seria media
-     vuelta, que mata. Ninguno de los dos tiene nada que pedir, asi que la
-     histeresis entre ejes del plano sobra: aca hay un solo eje.           */
-  const dx = e.clientX - ENT.ax;
-  if (Math.abs(dx) < ENT_MIN) return;
-  entPide(dx > 0 ? 1 : -1);
-  /* el ancla se muda haya doblado o no: si no, un arrastre largo deja el
-     desplazamiento saturado y la vuelta siguiente sale con un pixel.      */
-  ENT.ax = e.clientX; ENT.ay = e.clientY;
+  if (JOY.id !== e.pointerId) return;
+  joyPon(e.clientX, e.clientY);
 }
 function entSube(e) {
-  if (ENT.id !== e.pointerId) return;
-  ENT.id = null;
+  if (JOY.id !== e.pointerId) return;
+  joySuelta();
 }
 const ENT_TEC = {
   ArrowRight: 1, ArrowLeft: -1, KeyD: 1, KeyA: -1,
@@ -2921,6 +3086,11 @@ function partidaArranca(m, nv, tuto, arena) {
      corte no cuesta terreno, cuesta la corrida entera.                     */
   P.yo.topeCortes = P.tuto ? 1e9 : (P.arena ? 1 : VIDAS);
   P.seg = P.cfg.seg;
+  /* EL RUMBO SE ENCIENDE SOLO PARA EL CUERPO DEL JUGADOR. Un bot con rumbo
+     seria un bot manejado por un pulgar que no existe, y las cuarenta
+     auditorias dejarian de medir al bot.                                   */
+  rumboPon(P.M, P.yo);
+  joySuelta();
   P.on = true; P.pausa = false; P.fin = null;
   P.cortesVistos = 0; P.pct = 0; P.mejor = 0; P.casi = false; P.ganUlt = 0;
   P.giros = 0; P.gd = P.yo.d;
@@ -2935,6 +3105,7 @@ function partidaArranca(m, nv, tuto, arena) {
   cl2($('pie'), 'off', P.tuto);
   cl2($('mini'), 'off', P.tuto);
   cl2($('tabla'), 'off', !P.arena);
+  cl2($('joyG'), 'off', false);
   auAbre(0);
   return P.M;
 }
@@ -2942,8 +3113,12 @@ function partidaArranca(m, nv, tuto, arena) {
 function partidaPaso(dt) {
   if (!P.on || P.pausa || P.fin) return;
   const M = P.M, yo = P.yo;
+  /* EL PULGAR TIRA ANTES DE PISAR, y el orden importa: al reves, el tic de
+     este cuadro elegiria la celda con el rumbo del cuadro anterior y el
+     control iria un tic atrasado — que a 5,4 celdas por segundo son 185 ms,
+     o sea lo que se lee a control pesado.                                  */
+  rumboTira(M, yo, JOY.jx, JOY.jy, dt);
   paso(M, dt);
-  entSuelta();
   const gan = vpTras(M);
   P.ganUlt = gan[1];
 
@@ -3070,6 +3245,8 @@ function partidaSale() {
   cl2($('pie'), 'off', true);
   cl2($('mini'), 'off', true);
   cl2($('tabla'), 'off', true);
+  cl2($('joyG'), 'off', true);
+  joySuelta();
   cl2($('pista'), 'on', false);
   cl2($('tSalt'), 'on', false);
   auAgacha(1); auAbre(0);
@@ -3707,23 +3884,129 @@ window.__C = {
              pctR: t('pctR'), relR: t('relR'), nrN: t('nrN') };
   },
 
-  /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
-     `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
-     que un arrastre sintetico sobre el lienzo ejerce la zona muerta, la
-     histeresis del eje y la cola — que es lo unico que prueba que doblar
-     funciona como doblar y no como escribir `p.ped`.                      */
-  arrastra(dx, dy) {
+  /* ── el pulgar, de verdad: SOSTENIDO y no un arrastre que suelta ──
+     El joystick es flotante, asi que apoyar el dedo es `pointerdown` donde
+     caiga y `pointermove` para empujarlo. Y NO SE SUELTA: el rumbo lo tira
+     `partidaPaso` con `JOY.jx/jy`, no el evento, asi que un arrastre que
+     hace `pointerup` en el mismo cuadro deja el pulgar en cero ANTES de que
+     `rumboTira` corra una sola vez — mediria exactamente nada. Por eso
+     `pulgar` empuja y `suelta` levanta, que son dos gestos y no uno.
+     El desplazamiento va en fracciones del aro (`JOY_R`), que es la misma
+     unidad en la que el juego lee el pulgar: pasandolo en pixeles, la
+     prueba tendria su propia cuenta del aro y podria medir otra cosa.    */
+  pulgar(jx, jy) {
     const c = $('cv'), r = c.getBoundingClientRect();
     const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
     const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
-    ev('pointerdown', x0, y0);
-    ev('pointermove', x0 + dx, y0 + (dy || 0));
-    ev('pointerup', x0 + dx, y0 + (dy || 0));
-    return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 };
+    if (JOY.id === null) ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + (jx || 0) * JOY_R, y0 - (jy || 0) * JOY_R);
+    return { jx: +JOY.jx.toFixed(3), jy: +JOY.jy.toFixed(3), on: $('joy').classList.contains('on') };
   },
-  /* giro relativo, que es lo unico que el cuerpo entiende en una esfera */
-  gira(lado) { return this.arrastra((lado > 0 ? 1 : -1) * 60, 0); },
-  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 }; },
+  suelta() {
+    const c = $('cv'), r = c.getBoundingClientRect();
+    c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: r.left, clientY: r.top, bubbles: true }));
+    return { jx: JOY.jx, jy: JOY.jy, on: $('joy').classList.contains('on') };
+  },
+
+  /* EL GIRO DE NOVENTA GRADOS ES DEL TECLADO, y por eso `gira` entra por
+     ahi y no por el dedo. Con el pulgar no hay forma de pedir «noventa
+     grados»: se pide una DIRECCION y el rumbo tarda en llegar. El tutorial
+     necesita doblar exacto para cerrar un cuadrado, asi que usa la unica
+     entrada que dobla exacto — que ademas es una entrada de verdad, no un
+     atajo de sonda.                                                       */
+  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return this.rumbo(); },
+  gira(lado) { return this.tecla(lado > 0 ? 'ArrowRight' : 'ArrowLeft'); },
+  rumbo() {
+    const p = P.yo;
+    return { d: p ? p.d : -1, h: p && p.h ? p.h.map(v => +v.toFixed(4)) : null,
+             ped: p ? p.ped : null };
+  },
+
+  /* ── EL RUMBO CONTINUO ──
+     LOS AUTO-JUGADORES NO EJERCEN ESTE CAMINO, y hay que decirlo: los tres
+     cerebros entran por `p.ped` y `tic` le apaga el rumbo a todo lo que
+     tenga `bot` puesto, asi que ganar cuarenta mapas no prueba una sola
+     linea de lo de abajo. Esta sonda es la unica cobertura que tiene.
+
+     Mide cuatro cosas y las cuatro son propiedades del control, no del
+     dibujo: cuanto gira el rumbo con el pulgar a fondo, que un pulgar
+     chico no pida nada, que la celda elegida sea la que mas se parece al
+     rumbo —si no, lo que se ve y lo que se camina se separan— y que el
+     camino CURVE de verdad en vez de quedarse en una recta.              */
+  rumbo360() {
+    const M = P.M, p = P.yo;
+    if (!M || !p) return { error: 'sin partida' };
+    if (!p.h) rumboPon(M, p);
+    const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1,
+      a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+    const DT = 0.016, PAS = 30;
+
+    /* 1 · a fondo: rad/s, topado por RUM_VEL */
+    let h0 = p.h.slice();
+    for (let i = 0; i < PAS; i++) rumboTira(M, p, 1, 0, DT);
+    const velTope = +(ang(h0, p.h) / (PAS * DT)).toFixed(3);
+
+    /* 2 · la zona muerta: por debajo de RUM_ZM el pulgar no pide nada */
+    h0 = p.h.slice();
+    for (let i = 0; i < PAS; i++) rumboTira(M, p, 0.12, 0, DT);
+    const zonaMuerta = +ang(h0, p.h).toFixed(4);
+
+    /* 3 · la celda elegida contra la fuerza bruta. `rumboPed` deja su
+       respuesta en `p.ped`; se compara contra el mejor de los cuatro
+       vecinos sin el de atras, calculado aca aparte a proposito: con la
+       misma cuenta las dos veces, la prueba aprobaria cualquier cosa.   */
+    let sigue = 0, casos = 0;
+    for (let k = 0; k < 40; k++) {
+      rumboTira(M, p, Math.cos(k * 0.7), Math.sin(k * 0.7), DT * 4);
+      rumboPed(M, p);
+      let mejor = -1, mv = -2;
+      for (let d = 0; d < 4; d++) {
+        if (d === OPUE[p.d]) continue;
+        const t = tanDir(M, p.i, d, [0, 0, 0]);
+        const v = t[0] * p.h[0] + t[1] * p.h[1] + t[2] * p.h[2];
+        if (v > mv) { mv = v; mejor = d; }
+      }
+      casos++; if (p.ped === mejor) sigue++;
+      p.ped = null;
+    }
+
+    /* 4 · el camino CURVA, y la medida no puede ser el rumbo ni la celda.
+       DOS MEDIDAS OBVIAS QUE NO SIRVEN, y las dos se probaron:
+       · comparar `h` al principio contra `h` al final da 1,85 rad
+         caminando DERECHO, porque son dos tangentes en dos puntos
+         distintos de una esfera: lo que mide es cuanto se avanzo, no
+         cuanto se doblo. El transporte paralelo las separa solo.
+       · contar cuantas direcciones de celda se usaron da 4 derecho,
+         porque cruzar de cara del cubo remapea `d` con `ND` sin que la
+         geometria doble un grado.
+       LO QUE SI ES INMUNE AL TRANSPORTE ES EL ARCO RECORRIDO: yendo
+       derecho, veinte celdas son medio planeta; doblando a fondo el
+       cuerpo da vueltas y termina donde empezo. Y aparte se mide lo que
+       el pulgar aporta POR PASO —antes y despues de `rumboTira`, sin el
+       paso de por medio—, que con el pulgar en cero tiene que ser cero
+       exacto y no «casi».                                                */
+    const arco = (a, b) => Math.acos(Math.max(-1, Math.min(1,
+      M.POS[a * 3] * M.POS[b * 3] + M.POS[a * 3 + 1] * M.POS[b * 3 + 1]
+      + M.POS[a * 3 + 2] * M.POS[b * 3 + 2])));
+    let i0 = p.i, giroTot = 0;
+    for (let i = 0; i < 240; i++) {
+      h0 = p.h.slice(); rumboTira(M, p, 1, 0, DT); giroTot += ang(h0, p.h);
+      partidaPaso(DT);
+    }
+    const arcoCurva = +arco(i0, p.i).toFixed(3);
+
+    /* y el control: sin pulgar el rumbo no aporta nada y el cuerpo se va */
+    i0 = p.i; let giroQuieto = 0;
+    for (let i = 0; i < 240; i++) {
+      h0 = p.h.slice(); rumboTira(M, p, 0, 0, DT); giroQuieto += ang(h0, p.h);
+      partidaPaso(DT);
+    }
+    const arcoRecto = +arco(i0, p.i).toFixed(3);
+
+    return { velTope, RUM_VEL, zonaMuerta, sigue, casos,
+             giroTot: +giroTot.toFixed(2), arcoCurva,
+             giroQuieto: +giroQuieto.toFixed(4), arcoRecto };
+  },
 
   /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
      el dibujo a resolucion de software cuesta mas que la fisica entera. */
@@ -3890,7 +4173,7 @@ window.__C = {
   },
 
   cajas() {
-    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso', 'joy', 'joyG'];
     const R = [], vis = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;

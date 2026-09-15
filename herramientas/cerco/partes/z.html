@@ -94,23 +94,129 @@ window.__C = {
              pctR: t('pctR'), relR: t('relR'), nrN: t('nrN') };
   },
 
-  /* ── el dedo, de verdad: el mismo gesto que hace una persona ──
-     `entBaja`/`entMueve` piden un puntero con coordenadas de pantalla, asi
-     que un arrastre sintetico sobre el lienzo ejerce la zona muerta, la
-     histeresis del eje y la cola — que es lo unico que prueba que doblar
-     funciona como doblar y no como escribir `p.ped`.                      */
-  arrastra(dx, dy) {
+  /* ── el pulgar, de verdad: SOSTENIDO y no un arrastre que suelta ──
+     El joystick es flotante, asi que apoyar el dedo es `pointerdown` donde
+     caiga y `pointermove` para empujarlo. Y NO SE SUELTA: el rumbo lo tira
+     `partidaPaso` con `JOY.jx/jy`, no el evento, asi que un arrastre que
+     hace `pointerup` en el mismo cuadro deja el pulgar en cero ANTES de que
+     `rumboTira` corra una sola vez — mediria exactamente nada. Por eso
+     `pulgar` empuja y `suelta` levanta, que son dos gestos y no uno.
+     El desplazamiento va en fracciones del aro (`JOY_R`), que es la misma
+     unidad en la que el juego lee el pulgar: pasandolo en pixeles, la
+     prueba tendria su propia cuenta del aro y podria medir otra cosa.    */
+  pulgar(jx, jy) {
     const c = $('cv'), r = c.getBoundingClientRect();
     const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
     const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
-    ev('pointerdown', x0, y0);
-    ev('pointermove', x0 + dx, y0 + (dy || 0));
-    ev('pointerup', x0 + dx, y0 + (dy || 0));
-    return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 };
+    if (JOY.id === null) ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + (jx || 0) * JOY_R, y0 - (jy || 0) * JOY_R);
+    return { jx: +JOY.jx.toFixed(3), jy: +JOY.jy.toFixed(3), on: $('joy').classList.contains('on') };
   },
-  /* giro relativo, que es lo unico que el cuerpo entiende en una esfera */
-  gira(lado) { return this.arrastra((lado > 0 ? 1 : -1) * 60, 0); },
-  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return { ped: P.yo ? P.yo.ped : null, d: P.yo ? P.yo.d : -1 }; },
+  suelta() {
+    const c = $('cv'), r = c.getBoundingClientRect();
+    c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: r.left, clientY: r.top, bubbles: true }));
+    return { jx: JOY.jx, jy: JOY.jy, on: $('joy').classList.contains('on') };
+  },
+
+  /* EL GIRO DE NOVENTA GRADOS ES DEL TECLADO, y por eso `gira` entra por
+     ahi y no por el dedo. Con el pulgar no hay forma de pedir «noventa
+     grados»: se pide una DIRECCION y el rumbo tarda en llegar. El tutorial
+     necesita doblar exacto para cerrar un cuadrado, asi que usa la unica
+     entrada que dobla exacto — que ademas es una entrada de verdad, no un
+     atajo de sonda.                                                       */
+  tecla(k) { entTecla({ code: k, key: k, preventDefault() {} }); return this.rumbo(); },
+  gira(lado) { return this.tecla(lado > 0 ? 'ArrowRight' : 'ArrowLeft'); },
+  rumbo() {
+    const p = P.yo;
+    return { d: p ? p.d : -1, h: p && p.h ? p.h.map(v => +v.toFixed(4)) : null,
+             ped: p ? p.ped : null };
+  },
+
+  /* ── EL RUMBO CONTINUO ──
+     LOS AUTO-JUGADORES NO EJERCEN ESTE CAMINO, y hay que decirlo: los tres
+     cerebros entran por `p.ped` y `tic` le apaga el rumbo a todo lo que
+     tenga `bot` puesto, asi que ganar cuarenta mapas no prueba una sola
+     linea de lo de abajo. Esta sonda es la unica cobertura que tiene.
+
+     Mide cuatro cosas y las cuatro son propiedades del control, no del
+     dibujo: cuanto gira el rumbo con el pulgar a fondo, que un pulgar
+     chico no pida nada, que la celda elegida sea la que mas se parece al
+     rumbo —si no, lo que se ve y lo que se camina se separan— y que el
+     camino CURVE de verdad en vez de quedarse en una recta.              */
+  rumbo360() {
+    const M = P.M, p = P.yo;
+    if (!M || !p) return { error: 'sin partida' };
+    if (!p.h) rumboPon(M, p);
+    const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1,
+      a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+    const DT = 0.016, PAS = 30;
+
+    /* 1 · a fondo: rad/s, topado por RUM_VEL */
+    let h0 = p.h.slice();
+    for (let i = 0; i < PAS; i++) rumboTira(M, p, 1, 0, DT);
+    const velTope = +(ang(h0, p.h) / (PAS * DT)).toFixed(3);
+
+    /* 2 · la zona muerta: por debajo de RUM_ZM el pulgar no pide nada */
+    h0 = p.h.slice();
+    for (let i = 0; i < PAS; i++) rumboTira(M, p, 0.12, 0, DT);
+    const zonaMuerta = +ang(h0, p.h).toFixed(4);
+
+    /* 3 · la celda elegida contra la fuerza bruta. `rumboPed` deja su
+       respuesta en `p.ped`; se compara contra el mejor de los cuatro
+       vecinos sin el de atras, calculado aca aparte a proposito: con la
+       misma cuenta las dos veces, la prueba aprobaria cualquier cosa.   */
+    let sigue = 0, casos = 0;
+    for (let k = 0; k < 40; k++) {
+      rumboTira(M, p, Math.cos(k * 0.7), Math.sin(k * 0.7), DT * 4);
+      rumboPed(M, p);
+      let mejor = -1, mv = -2;
+      for (let d = 0; d < 4; d++) {
+        if (d === OPUE[p.d]) continue;
+        const t = tanDir(M, p.i, d, [0, 0, 0]);
+        const v = t[0] * p.h[0] + t[1] * p.h[1] + t[2] * p.h[2];
+        if (v > mv) { mv = v; mejor = d; }
+      }
+      casos++; if (p.ped === mejor) sigue++;
+      p.ped = null;
+    }
+
+    /* 4 · el camino CURVA, y la medida no puede ser el rumbo ni la celda.
+       DOS MEDIDAS OBVIAS QUE NO SIRVEN, y las dos se probaron:
+       · comparar `h` al principio contra `h` al final da 1,85 rad
+         caminando DERECHO, porque son dos tangentes en dos puntos
+         distintos de una esfera: lo que mide es cuanto se avanzo, no
+         cuanto se doblo. El transporte paralelo las separa solo.
+       · contar cuantas direcciones de celda se usaron da 4 derecho,
+         porque cruzar de cara del cubo remapea `d` con `ND` sin que la
+         geometria doble un grado.
+       LO QUE SI ES INMUNE AL TRANSPORTE ES EL ARCO RECORRIDO: yendo
+       derecho, veinte celdas son medio planeta; doblando a fondo el
+       cuerpo da vueltas y termina donde empezo. Y aparte se mide lo que
+       el pulgar aporta POR PASO —antes y despues de `rumboTira`, sin el
+       paso de por medio—, que con el pulgar en cero tiene que ser cero
+       exacto y no «casi».                                                */
+    const arco = (a, b) => Math.acos(Math.max(-1, Math.min(1,
+      M.POS[a * 3] * M.POS[b * 3] + M.POS[a * 3 + 1] * M.POS[b * 3 + 1]
+      + M.POS[a * 3 + 2] * M.POS[b * 3 + 2])));
+    let i0 = p.i, giroTot = 0;
+    for (let i = 0; i < 240; i++) {
+      h0 = p.h.slice(); rumboTira(M, p, 1, 0, DT); giroTot += ang(h0, p.h);
+      partidaPaso(DT);
+    }
+    const arcoCurva = +arco(i0, p.i).toFixed(3);
+
+    /* y el control: sin pulgar el rumbo no aporta nada y el cuerpo se va */
+    i0 = p.i; let giroQuieto = 0;
+    for (let i = 0; i < 240; i++) {
+      h0 = p.h.slice(); rumboTira(M, p, 0, 0, DT); giroQuieto += ang(h0, p.h);
+      partidaPaso(DT);
+    }
+    const arcoRecto = +arco(i0, p.i).toFixed(3);
+
+    return { velTope, RUM_VEL, zonaMuerta, sigue, casos,
+             giroTot: +giroTot.toFixed(2), arcoCurva,
+             giroQuieto: +giroQuieto.toFixed(4), arcoRecto };
+  },
 
   /* adelanta la simulacion SIN dibujar: lo que se mide aca es el modelo, y
      el dibujo a resolucion de software cuesta mas que la fisica entera. */
@@ -277,7 +383,7 @@ window.__C = {
   },
 
   cajas() {
-    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso'];
+    const ids = ['vidas', 'nivRot', 'bPausa', 'barra', 'mini', 'tabla', 'pista', 'tSalt', 'pct', 'reloj', 'aviso', 'joy', 'joyG'];
     const R = [], vis = [];
     for (const id of ids) {
       const e = $(id); if (!e) continue;
