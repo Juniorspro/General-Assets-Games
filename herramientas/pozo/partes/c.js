@@ -147,6 +147,80 @@ function generaSala(tipo, puertas, r){
 }
 
 /* ---------- el piso ---------- */
+/* LA SIEMBRA DE UNA SALA ES UNA SOLA FUNCION, y eso no es prolijidad: la sala
+   del jefe la salteaba entera. Medido sobre 600 semillas del piso 10, la escolta
+   del jefe2 salia con `{0:196, 1:261, 2:127, 3:16}` pesados y `{12:164, 13:284,
+   14:122, 15:30}` balas por rafaga — o sea que un tercio de los cuartos del jefe
+   traian DOS O TRES brutos, dos corazones cada uno, encima de un jefe de doce
+   balas. Era la unica sala del juego que no pasaba por ninguno de los dos topes.
+   Con dos copias del reparto, el dia que se corrige un tope queda una sala sin
+   corregir — y esa sala es justamente la que decide la corrida.
+   EL JEFE ENTRA AL CUPO YA GASTADO, con su dano y con sus balas: el jefe ya ES
+   el pesado de su sala (jefe1 18 de dano, jefe2 22, los dos por encima de
+   PESA_D) y ya trae seis veces
+   las balas de cualquier sala normal. Contarlo aparte seria escribir la regla y
+   no aplicarla justo donde mas cuesta. */
+function siembraEnem(r, clases, cant, libres, out, nP, nL){
+  /* NO MAS DE UN TERCIO A DISTANCIA, y no es equilibrio sino generacion: con
+     la clase sorteada uniforme entre tres, una sala del piso 3 podia salir con
+     cuatro tiradores de cinco. Eso no es dificil, es una emboscada — y medido,
+     el tirador solo se llevaba el 67% de todo el dano de una corrida. Lo que
+     sobra se degrada a la primera clase de cuerpo a cuerpo de la propia ola,
+     asi que la mezcla del piso sigue siendo la que dice OLAS. */
+  const cerca = clases.filter(c => ENEM[c].f === 0);
+  /* Y NO MAS DE UN TERCIO PESADO, por la misma razon y con la misma cuenta.
+     El tope de distancia estaba desde el principio y el de dano NO, asi que
+     una sala del piso 7 podia salir con siete bichos que cobran DOS corazones
+     cada uno contra una barra de ocho: medido sobre 400 pisos, la mediana era
+     cuatro pesados por sala y 361 de 2000 salas llevaban seis o siete. Y se
+     ve en quien mata: de 200 corridas, el bruto mete 79 golpes fatales y la
+     bomba 36, mas que los dos jefes juntos, con el bot entrando al piso que
+     lo mata con la barra llena. No se muere de a poco: se muere adentro de
+     una sala. Lo que sobra se degrada a una clase liviana de la propia ola.
+     (El reparto de OLAS ya garantiza que toda ola tenga una clase liviana
+     de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
+  const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
+  const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
+  /* EL TOPE DE DISTANCIA SE MIDE EN BALAS Y NO EN BICHOS, y eso no es un
+     refinamiento: el numero SIEMPRE fue de balas, contar bichos era una
+     aproximacion que valia mientras todos tiraran una. La torreta tira TRES
+     por rafaga y gastaba el mismo cupo que un tirador, asi que los pisos 8 y
+     9 salian con seis balas por rafaga contra las una o dos de los pisos que
+     estaban medidos como sanos —2085 de 2400 salas del 9, o sea el caso
+     normal y no la cola—. Y lo que eso agota es la esquiva: medido, 727 de
+     los 847 golpes de torreta llegan con la esquiva en enfriamiento y CERO
+     llegan tarde. El bot no esquiva mal; la esquiva no vuelve.
+     FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
+     tiradores, o sea que el primer piso con distancia te mostraba dos a la
+     vez. Con floor da uno hasta los cinco bichos y dos desde los seis.
+     Y EL PISO DEL TOPE ES LO QUE CUESTA UN SOLO BICHO DE LA OLA: con un
+     tercio pelado, el piso 8 —cant 6 a 7, tope 2— no podia mostrar NUNCA la
+     torreta que ese piso existe para presentar. Es la regla de «un piso trae
+     una clase nueva» escrita como restriccion del cupo. */
+  const balMax = Math.max(...clases.map(c => ENEM[c].f));
+  const topeL = Math.max(balMax, Math.floor(cant / 3));
+  const topeP = Math.max(1, Math.floor(cant / 3));
+  const usadas = {};
+  for (let i = 0; i < cant; i++){
+    let p, g2 = 0;
+    do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
+    usadas[p.x+','+p.y] = 1;
+    let cl = elige(r, clases);
+    if (nL + ENEM[cl].f > topeL  && cerca.length) cl = elige(r, cerca);
+    if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
+    /* la segunda degradacion puede violar el primer tope —el reemplazo
+     liviano puede ser de distancia— asi que el ultimo recurso es una clase
+     que cumple los dos. */
+    if ((nL + ENEM[cl].f > topeL || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
+      cl = elige(r, llano);
+    /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
+     gasta cupo en un bicho que no salio. */
+    nL += ENEM[cl].f;
+    if (ENEM[cl].d >= PESA_D) nP++;
+    out.push({cl, cx:p.x, cy:p.y});
+  }
+}
+
 function generaPiso(n, sem){
   const r = rng(sem * 7919 + n * 104729 + 13);
   const jefe = (n === 5 || n === 10);
@@ -252,65 +326,7 @@ function generaPiso(n, sem){
     if (s.tipo === 'combate' || s.tipo === 'escalera'){
       const clases = OLAS[Math.min(OLAS.length-1, n-1)];
       const cant = Math.min(libres.length, 3 + Math.floor(n * .55) + ri(r,0,1));
-      /* NO MAS DE UN TERCIO A DISTANCIA, y no es equilibrio sino generacion: con
-         la clase sorteada uniforme entre tres, una sala del piso 3 podia salir con
-         cuatro tiradores de cinco. Eso no es dificil, es una emboscada — y medido,
-         el tirador solo se llevaba el 67% de todo el dano de una corrida. Lo que
-         sobra se degrada a la primera clase de cuerpo a cuerpo de la propia ola,
-         asi que la mezcla del piso sigue siendo la que dice OLAS. */
-      const cerca = clases.filter(c => ENEM[c].f === 0);
-      /* Y NO MAS DE UN TERCIO PESADO, por la misma razon y con la misma cuenta.
-         El tope de distancia estaba desde el principio y el de dano NO, asi que
-         una sala del piso 7 podia salir con siete bichos que cobran DOS corazones
-         cada uno contra una barra de ocho: medido sobre 400 pisos, la mediana era
-         cuatro pesados por sala y 361 de 2000 salas llevaban seis o siete. Y se
-         ve en quien mata: de 200 corridas, el bruto mete 79 golpes fatales y la
-         bomba 36, mas que los dos jefes juntos, con el bot entrando al piso que
-         lo mata con la barra llena. No se muere de a poco: se muere adentro de
-         una sala. Lo que sobra se degrada a una clase liviana de la propia ola.
-         (El reparto de OLAS ya garantiza que toda ola tenga una clase liviana
-         de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
-      const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
-      const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
-      /* EL TOPE DE DISTANCIA SE MIDE EN BALAS Y NO EN BICHOS, y eso no es un
-         refinamiento: el numero SIEMPRE fue de balas, contar bichos era una
-         aproximacion que valia mientras todos tiraran una. La torreta tira TRES
-         por rafaga y gastaba el mismo cupo que un tirador, asi que los pisos 8 y
-         9 salian con seis balas por rafaga contra las una o dos de los pisos que
-         estaban medidos como sanos —2085 de 2400 salas del 9, o sea el caso
-         normal y no la cola—. Y lo que eso agota es la esquiva: medido, 727 de
-         los 847 golpes de torreta llegan con la esquiva en enfriamiento y CERO
-         llegan tarde. El bot no esquiva mal; la esquiva no vuelve.
-         FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
-         tiradores, o sea que el primer piso con distancia te mostraba dos a la
-         vez. Con floor da uno hasta los cinco bichos y dos desde los seis.
-         Y EL PISO DEL TOPE ES LO QUE CUESTA UN SOLO BICHO DE LA OLA: con un
-         tercio pelado, el piso 8 —cant 6 a 7, tope 2— no podia mostrar NUNCA la
-         torreta que ese piso existe para presentar. Es la regla de «un piso trae
-         una clase nueva» escrita como restriccion del cupo. */
-      const balMax = Math.max(...clases.map(c => ENEM[c].f));
-      const topeL = Math.max(balMax, Math.floor(cant / 3));
-      const topeP = Math.max(1, Math.floor(cant / 3));
-      let nL = 0, nP = 0;
-      const usadas = {};
-      for (let i = 0; i < cant; i++){
-        let p, g2 = 0;
-        do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
-        usadas[p.x+','+p.y] = 1;
-        let cl = elige(r, clases);
-        if (nL + ENEM[cl].f > topeL  && cerca.length) cl = elige(r, cerca);
-        if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
-        /* la segunda degradacion puede violar el primer tope —el reemplazo
-           liviano puede ser de distancia— asi que el ultimo recurso es una clase
-           que cumple los dos. */
-        if ((nL + ENEM[cl].f > topeL || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
-          cl = elige(r, llano);
-        /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
-           gasta cupo en un bicho que no salio. */
-        nL += ENEM[cl].f;
-        if (ENEM[cl].d >= PESA_D) nP++;
-        s.enem.push({cl, cx:p.x, cy:p.y});
-      }
+      siembraEnem(r, clases, cant, libres, s.enem, 0, 0);
     } else if (s.tipo === 'jefe'){
       const c = (SALA_W-1)>>1;
       const arriba = sitios.filter(p => p.y <= 4);
@@ -324,8 +340,9 @@ function generaPiso(n, sem){
          tabla de OLAS: dos cosas nuevas a la vez. El primer jefe ENSENA el
          abanico y el ultimo lo TOMA. */
       const esc = n === 5 ? 1 : 3;
-      for (let i = 0; i < esc && i < libres.length; i++)
-        s.enem.push({cl: elige(r, clases), cx:libres[(i*7)%libres.length].x, cy:libres[(i*7)%libres.length].y});
+      const dj = ENEM[n === 5 ? 'jefe1' : 'jefe2'];
+      siembraEnem(r, clases, Math.min(esc, libres.length), libres, s.enem,
+                  dj.d >= PESA_D ? 1 : 0, dj.f);
     } else if (s.tipo === 'cofre'){
       const p = centro(sitios);
       s.cofre = {cx:p.x, cy:p.y, arma: ARMAS[ri(r,0,ARMAS.length-1)].id, abierto:false};

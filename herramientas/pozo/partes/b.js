@@ -37,7 +37,12 @@ const BALA_R    = 4.5;                      // radio de una bala enemiga
    un cuerpo de aire (2*J_R) el hueco pasa a 61 px y el margen a trece a cada
    lado, que es lo que le permite a alguien APUNTAR al hueco. */
 const ABAN_HUE  = J_R*2 + BALA_R*2 + J_R*2;    // cuerpo + dos balas + un cuerpo de aire
-const ABAN_PASO = ABAN_HUE / PELEA_D;       // ~0,285 rad
+const ABAN_PASO = ABAN_HUE / PELEA_D;       // 61/165 = 0,370 rad = 21,2 grados
+/* Y DE AHI SALE CUANTO ABRE CADA ABANICO, que es lo que decide si se puede
+   esquivar de costado o hay que pasar POR UN HUECO: (f-1) x ABAN_PASO. La
+   torreta abre 42 grados, el jefe1 148 y el jefe2 233 — o sea que el del
+   jefe2 se cierra por detras y salirse al costado no existe: lo unico que
+   queda es el hueco de un cuerpo de aire que ABAN_HUE garantiza. */
 const J_VEL    = 205;       // px/s
 const J_PASO   = 34;        // LARGO DE ZANCADA: la cadencia sale de velocidad/paso,
                             // no de un numero al lado, o los pies patinan.
