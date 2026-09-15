@@ -409,17 +409,112 @@ if (usuario){
    perfil desde la barra de arriba, las secciones desde el menú de «Frutiger
    Aero», y la zona de donantes desde su ícono del escritorio— así que no hace
    falta guardarlas en ningún lado por las dudas. */
+/* DE TODO LO QUE SE ABRE, SE SALE. Tres cosas que estaban rotas resultaron ser
+   la misma:
+
+   · En el teléfono las ventanas se APILABAN. Cada una tapa la pantalla entera,
+     así que abrir cuatro dejaba cuatro pantallas idénticas una encima de otra:
+     cerrabas una y aparecía otra abajo. La sensación de no poder salir nunca
+     era literal, había que cerrar cuatro veces.
+   · El «atrás» de Android —el botón, el gesto y el del navegador— no hacía
+     nada, porque la página nunca dejó una entrada en el historial. Atrás no te
+     sacaba de la ventana: te sacaba DEL SITIO.
+   · Escape cerraba el menú de inicio y Aero+, pero no la ventana de adelante.
+
+   Se arregla con una sola idea: todo lo que tapa la pantalla se anota en una
+   pila, atrás cierra lo de arriba, y recién con la pila vacía el «atrás» sale
+   del sitio.
+
+   POR QUÉ UNA SOLA ENTRADA DE HISTORIAL Y NO UNA POR PANTALLA. Una por pantalla
+   fue lo primero que probé y se desincroniza al toque: en el escritorio se
+   cierra cualquier ventana del medio con su cruz, y ahí el historial queda con
+   entradas de pantallas que ya no existen —el «atrás» empieza a no hacer nada
+   una o dos veces antes de funcionar—. Con una sola marca no hay nada que
+   sincronizar: la marca existe si y sólo si hay algo abierto, y se vuelve a
+   poner cuando al cerrar una todavía queda otra abajo. */
+
+var pila = [];        /* [{clave, cerrar}]; la de arriba es la última */
+var marca = false;    /* ¿hay una entrada nuestra en el historial? */
+var saltear = 0;      /* popstates que provocamos nosotros y no cierran nada */
+
+function esCelu(){ return matchMedia("(max-width:720px)").matches; }
+
+function enPila(clave){
+  for (var i = 0; i < pila.length; i++) if (pila[i].clave === clave) return i;
+  return -1;
+}
+
+/* La marca existe si y sólo si hay algo abierto. Todo lo que abre o cierra
+   termina llamando acá, así que no hay un segundo lugar donde se pueda olvidar. */
+function acomodarHistorial(){
+  if (pila.length){
+    if (marca) return;
+    try { history.pushState({ fa:1 }, ""); marca = true; } catch(e){}
+  } else {
+    if (!marca) return;
+    marca = false; saltear++;
+    try { history.back(); } catch(e){ saltear--; }
+  }
+}
+
+function apilar(clave, cerrar){
+  if (enPila(clave) >= 0) return;
+  pila.push({ clave: clave, cerrar: cerrar });
+  acomodarHistorial();
+}
+
+/* `callado` la saca de la pila sin tocar el historial. Lo usa el teléfono
+   cuando una aplicación reemplaza a la anterior: ahí la pila nunca llega a
+   quedar vacía, y pedir «atrás» en el medio dejaría el historial corriendo
+   atrás de la pantalla —`history.back()` no es inmediato, y el `pushState` de
+   la que abre llegaría antes que el `popstate` de la que cerró—. */
+function desapilar(clave, callado){
+  var i = enPila(clave);
+  if (i < 0) return false;
+  pila.splice(i, 1)[0].cerrar();
+  if (!callado) acomodarHistorial();
+  return true;
+}
+
+window.addEventListener("popstate", function(){
+  if (saltear > 0){ saltear--; return; }
+  marca = false;                       /* la entrada nuestra ya no está */
+  if (!pila.length) return;            /* no había nada abierto: que se vaya */
+  pila.pop().cerrar();
+  acomodarHistorial();                 /* si queda algo abajo, se marca de nuevo */
+});
+
 function cerrarVentana(id){
   var v = $(id); if (!v) return;
-  v.hidden = true;
+  /* el `|| v.hidden = true` es para la ventana que abrió algo que no pasó por
+     acá: igual se cierra, sólo que sin historial */
+  if (!desapilar(id)) v.hidden = true;
 }
 
 function abrir(id){
   var v = $(id); if (!v) return;
+  /* EN EL TELÉFONO, UNA SOLA A LA VEZ. Una ventana abierta tapa la pantalla
+     entera, así que dos abiertas son dos pantallas iguales encimadas y cerrar
+     la de arriba parece no hacer nada. Se cierra la anterior, como hace
+     cualquier teléfono. En el escritorio no: ahí tener varias abiertas es
+     justamente la gracia. */
+  if (esCelu()) pila.slice().forEach(function(x){
+    if (x.clave !== id && x.clave.slice(0,2) === "v-") desapilar(x.clave, true);
+  });
   v.hidden = false;
+  apilar(id, function(){ v.hidden = true; });
   cerrarInicio();
-  v.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"start" });
+  /* en el teléfono la ventana es `position:fixed`: no hay a dónde desplazarse
+     y pedirlo mueve el fondo por atrás */
+  if (!esCelu()) v.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"start" });
 }
+
+/* lo usa social.js, que también abre ventanas: si tuviera su propia copia,
+   la mitad de las pantallas quedaría fuera de la pila y el «atrás» andaría
+   en unas sí y en otras no, que es peor que no andar nunca */
+window.FA = window.FA || {};
+window.FA.abrir = abrir;
+window.FA.cerrar = cerrarVentana;
 
 document.addEventListener("click", function(e){
   var b = e.target.closest("[data-cerrar],[data-abrir]");
@@ -429,17 +524,28 @@ document.addEventListener("click", function(e){
 });
 
 /* --- menú de inicio --- */
-function cerrarInicio(){ $("inicio").hidden = true; $("orbe").setAttribute("aria-expanded","false"); }
+function ocultarInicio(){ $("inicio").hidden = true; $("orbe").setAttribute("aria-expanded","false"); }
+function cerrarInicio(){ if ($("inicio").hidden) return; if (!desapilar("inicio")) ocultarInicio(); }
+function abrirInicio(){
+  $("inicio").hidden = false; $("orbe").setAttribute("aria-expanded","true");
+  apilar("inicio", ocultarInicio);
+}
 $("orbe").addEventListener("click", function(e){
   e.stopPropagation();
-  var m = $("inicio");
-  m.hidden = !m.hidden;
-  $("orbe").setAttribute("aria-expanded", String(!m.hidden));
+  if ($("inicio").hidden) abrirInicio(); else cerrarInicio();
 });
 document.addEventListener("click", function(e){
   if (!$("inicio").hidden && !e.target.closest("#inicio") && !e.target.closest("#orbe")) cerrarInicio();
 });
-document.addEventListener("keydown", function(e){ if (e.key === "Escape") cerrarInicio(); });
+
+/* UN SOLO Escape para todo. Antes había tres —uno del menú, uno de la ventana
+   de colaborar y uno de Aero+— y cada uno cerraba lo suyo mirara o no lo que
+   tenía encima: con Aero+ abierto sobre el menú, Escape cerraba el menú de
+   abajo. Ahora cierra lo de arriba, que es lo único que Escape puede querer
+   decir. Va por el historial para no llevar dos cuentas de lo mismo. */
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && pila.length) history.back();
+});
 $("cerrar-sesion").addEventListener("click", salir);
 
 /* ============================================== 3 · el panel de control */
@@ -874,15 +980,23 @@ function enlacesDePago(){
   $("dona-nada").hidden = !!(hayMP || hayPP || (pago && (pago.mpAlias || pago.paypal)));
 }
 
-function cerrarDona(recordar){
+function ocultarDona(recordar){
   $("fondoDona").hidden = true;
   if (recordar === "listo") caja.poner("colaboro", 1);
   else if (recordar === "luego") caja.poner("donaVisto", Date.now());
 }
 
+/* Cerrarla con «atrás» cuenta como «ahora no», igual que la cruz: si no
+   recordara nada, volvería a aparecer sola a los pocos minutos y el «atrás»
+   se sentiría roto sin estarlo. */
+function cerrarDona(recordar){
+  if (!desapilar("dona")) ocultarDona(recordar);
+}
+
 function abrirDona(){
   $("fondoDona").hidden = false;
   cerrarInicio();
+  apilar("dona", function(){ ocultarDona("luego"); });
   pintarMontos();
 }
 
@@ -901,9 +1015,7 @@ $("mi-dona").addEventListener("click", abrirDona);
 $("fondoDona").addEventListener("click", function(e){
   if (e.target === this) cerrarDona("luego");
 });
-document.addEventListener("keydown", function(e){
-  if (e.key === "Escape" && !$("fondoDona").hidden) cerrarDona("luego");
-});
+
 
 $("dona-monedas").addEventListener("click", function(e){
   var b = e.target.closest("button[data-moneda]"); if (!b) return;
@@ -1232,6 +1344,7 @@ function amAbrir(){
       if (AM.yo.tema){ try { amTema = JSON.parse(AM.yo.tema); } catch(e){} }
       $("aeromas").hidden = false;
       document.body.style.overflow = "hidden";
+      apilar("aeromas", ocultarAeromas);
       $("am-quien").textContent = "@" + AM.yo.usuario +
         (AM.cuantos > 1 ? "  ·  " + AM.cuantos + " la tienen" : "");
       amPintarApps();
@@ -1241,9 +1354,13 @@ function amAbrir(){
     .catch(function(e){ alert(e.message); });
 }
 
-function amCerrar(){
+function ocultarAeromas(){
   $("aeromas").hidden = true;
   document.body.style.overflow = "";
+}
+
+function amCerrar(){
+  if (!desapilar("aeromas")) ocultarAeromas();
 }
 
 function amPintarApps(){
@@ -1907,9 +2024,7 @@ if ($("ic-zona")){
   });
 }
 if ($("am-salir")) $("am-salir").addEventListener("click", amCerrar);
-document.addEventListener("keydown", function(e){
-  if (e.key === "Escape" && !$("aeromas").hidden) amCerrar();
-});
+
 
 
 /* ============================================ 6 · el escritorio en el teléfono
@@ -1927,8 +2042,22 @@ document.addEventListener("keydown", function(e){
    parte del archivo se haya ejecutado, así que una variable declarada acá
    todavía valdría `undefined` y el teléfono se quedaría sin su pantalla de
    inicio. Sin error en la consola, además: simplemente no pasaba. */
+/* Le dice al CSS cuánto mide la barra de arriba, para que la ventana a pantalla
+   completa del teléfono empiece justo abajo y su cruz quede a la vista. Se mide
+   en vez de escribirse a mano porque el alto depende del tamaño de letra del
+   aparato: con la letra grande de accesibilidad, un 52 fijo vuelve a tapar la
+   cruz y el error es el mismo de antes pero sólo para algunos. */
+function medirBarra(){
+  var b = $("barraSocial"); if (!b) return;
+  var h = Math.round(b.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty("--barra-alta", h + "px");
+}
+medirBarra();
+addEventListener("resize", medirBarra);
+addEventListener("load", medirBarra);
+
 function arrancarCelu(){
-  if (!matchMedia("(max-width:720px)").matches) return;
+  if (!esCelu()) return;
   $$("#escritorio .ventana").forEach(function(v){ v.hidden = true; });
   $("muelle").hidden = false;
 }

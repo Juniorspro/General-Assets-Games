@@ -117,7 +117,13 @@ function pintarBarra(){
   }
 }
 
+/* La abre el escritorio y no este archivo. Tener acá una copia de «mostrar la
+   ventana» dejaba a la mitad de las pantallas —el muro, el perfil, los avisos,
+   publicar: justo las del muelle del teléfono— fuera de la pila de pantallas,
+   así que el «atrás» funcionaba en unas sí y en otras no. Eso es peor que no
+   funcionar nunca, porque no se aprende. */
 function abrirVentana(id){
+  if (window.FA && FA.abrir) return FA.abrir(id);
   var v = $(id); if (!v) return;
   v.hidden = false;
   v.scrollIntoView({ behavior:"smooth", block:"start" });
