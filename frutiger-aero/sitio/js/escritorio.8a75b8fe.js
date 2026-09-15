@@ -2147,17 +2147,171 @@ function amTienda(p){
     }
 
     var bots = document.createElement("div"); bots.className = "bots";
-    var b = document.createElement("a");
-    b.className = "am-bt";
-    b.style.cssText = "display:inline-block;text-decoration:none;padding:8px 16px";
-    b.textContent = "Bajar " + a.nombre;
+    bots.appendChild(botonDeBajar(a));
+    /* el aviso del enlace de afuera va DEBAJO de la fila y no adentro: metido
+       como un elemento más del flex, se estira y empuja «Editar» y «Borrar»
+       hasta la otra punta de la tarjeta */
+    var nota = notaDeEnlace(a);
+    if (AM.jefe){
+      bots.appendChild(botonChico("Editar", function(){ formTienda(p, a); }));
+      bots.appendChild(botonChico("Borrar", function(){
+        if (!confirm("¿Sacar «" + a.nombre + "» de la tienda?")) return;
+        amPedirTienda({ hacer:"borrar", id:a.id })
+          .then(function(j){ AM.tienda = j.tienda; amVer("tienda"); })
+          .catch(function(e){ alert(e.message); });
+      }));
+    }
+    c.appendChild(bots);
+    if (nota) c.appendChild(nota);
+  });
+
+  if (AM.jefe){
+    var mas = document.createElement("div"); mas.className = "bots";
+    mas.style.marginTop = "14px";
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "am-bt"; b.style.padding = "8px 16px";
+    b.textContent = "Cargar una app";
+    b.addEventListener("click", function(){ formTienda(p, null); });
+    mas.appendChild(b);
+    p.appendChild(mas);
+  }
+}
+
+/* De dónde se baja cada app. Son dos cosas distintas y la pantalla lo dice:
+   un archivo de este sitio pasa por la puerta y pide pase; un enlace de afuera
+   lo abre cualquiera que lo tenga. Decirlo acá no es un detalle: alguien que
+   colaboró tiene derecho a saber si lo que baja estaba guardado o no. */
+function botonDeBajar(a){
+  var b = document.createElement("a");
+  b.className = "am-bt";
+  b.style.cssText = "display:inline-block;text-decoration:none;padding:8px 16px";
+  b.textContent = "Bajar " + a.nombre;
+
+  if (a.archivo){
     /* el pase va en la dirección porque un enlace no puede mandar cabeceras;
        del otro lado hay una función que lo comprueba antes de servir nada */
     b.href = "apps/" + a.archivo + "?pase=" + encodeURIComponent(AM.pase || "");
     b.setAttribute("download", a.archivo);
-    bots.appendChild(b);
-    c.appendChild(bots);
+    return b;
+  }
+
+  /* Se vuelve a mirar el protocolo acá aunque el servidor ya lo haya mirado: un
+     `href` es donde un `javascript:` guardado se volvería código ejecutándose en
+     la pantalla del que entra. Dos puertas para lo mismo cuestan tres líneas. */
+  var u = String(a.enlace || "");
+  if (!/^https?:\/\//i.test(u)) { b.textContent = "Enlace roto"; b.href = "#"; }
+  else { b.href = u; b.target = "_blank"; b.rel = "noopener noreferrer"; }
+  return b;
+}
+
+/* Que la app se baje de afuera cambia quién puede bajarla, así que se dice en
+   la tarjeta y no sólo en el formulario del que la carga: alguien que colaboró
+   tiene derecho a saber si lo que baja estaba guardado para él o lo tiene
+   cualquiera con el link. */
+function notaDeEnlace(a){
+  if (a.archivo || !a.enlace) return null;
+  var n = document.createElement("p");
+  n.className = "pie";
+  n.style.cssText = "margin:8px 0 0";
+  n.textContent = "Se baja de otro sitio, y ese enlace es público: lo abre " +
+    "cualquiera que lo tenga, tenga cuenta acá o no.";
+  return n;
+}
+
+function botonChico(texto, alTocar){
+  var b = document.createElement("button");
+  b.type = "button";
+  b.style.cssText = "margin-left:8px;padding:8px 13px;border-radius:4px;cursor:pointer;" +
+    "font:inherit;font-size:13px;color:#dff0ff;background:rgba(255,255,255,.12);" +
+    "border:1px solid rgba(255,255,255,.28)";
+  b.textContent = texto;
+  b.addEventListener("click", alTocar);
+  return b;
+}
+
+function amPedirTienda(cuerpo){
+  var o = { headers:{} };
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) o.headers.authorization = "Bearer " + ses.pase;
+  if (cuerpo){ o.method = "POST"; o.headers["content-type"] = "application/json";
+               o.body = JSON.stringify(cuerpo); }
+  return fetch("api/tienda", o).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok) throw new Error(j.error || ("error " + r.status));
+      return j; });
   });
+}
+
+/* El formulario de carga. Sólo lo ve el jefe, pero quien decide si la carga
+   entra es el servidor: acá se puede poner `AM.jefe = true` desde la consola y
+   lo único que pasa es que se ve un formulario que después contesta 403. */
+function formTienda(p, a){
+  a = a || {};
+  var c = amCaja(p, a.id ? "Editar «" + a.nombre + "»" : "Cargar una app");
+  c.style.marginTop = "14px";
+
+  var campos = [
+    ["nombre",  "Nombre",        "text",     "Aero Launcher"],
+    ["version", "Versión",       "text",     "beta 39"],
+    ["para",    "Para qué es",   "text",     "Android"],
+    ["peso",    "Cuánto pesa",   "text",     "2,2 MB"],
+    ["que",     "De qué se trata","textarea","Qué hace la app, en una o dos líneas."],
+    ["enlace",  "Enlace de descarga", "url", "https://www.mediafire.com/file/…"],
+    ["archivo", "…o archivo en /apps/", "text", "aero-launcher-39.apk"],
+    ["icono",   "Ícono (dirección)", "text", "img/zona/app-launcher.webp"],
+    ["permisos","Permisos que pide (uno por línea)", "textarea",
+                "Cámara — para el fondo en vivo"],
+    ["aviso",   "Aviso",         "textarea", "Algo que quien instala tenga que saber antes."]
+  ];
+  var entradas = {};
+  campos.forEach(function(f){
+    var l = document.createElement("label");
+    l.style.cssText = "display:block;margin-bottom:9px;font-size:13px";
+    var t = document.createElement("span");
+    t.style.cssText = "display:block;margin-bottom:3px;color:rgba(226,242,255,.85)";
+    t.textContent = f[1];
+    var e = document.createElement(f[2] === "textarea" ? "textarea" : "input");
+    if (f[2] !== "textarea") e.type = f[2];
+    if (f[2] === "textarea") e.rows = 2;
+    e.placeholder = f[3];
+    e.value = a[f[0]] == null ? "" :
+      (f[0] === "permisos" && a.permisos.join ? a.permisos.join("\n") : a[f[0]]);
+    e.style.cssText = "width:100%;box-sizing:border-box;padding:7px 9px;border-radius:4px;" +
+      "border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);" +
+      "color:#eaf6ff;font:inherit;font-size:13.5px";
+    entradas[f[0]] = e;
+    l.appendChild(t); l.appendChild(e);
+    c.appendChild(l);
+  });
+
+  /* La diferencia entre las dos formas de cargar va acá arriba y con todas las
+     letras. Es la única decisión del formulario que no se puede deshacer
+     después sin que alguien ya se haya llevado el archivo. */
+  var nota = document.createElement("p");
+  nota.style.cssText = "margin:4px 0 12px;padding:9px 11px;border-radius:4px;font-size:12.5px;" +
+    "line-height:1.55;background:rgba(87,184,232,.14);border:1px solid rgba(87,184,232,.4)";
+  nota.textContent = "El ENLACE es cómodo —lo cargás ahora mismo— pero es público: " +
+    "cualquiera con el link se baja la app, tenga cuenta o no. El ARCHIVO en /apps/ " +
+    "sí queda detrás de la puerta y pide haber colaborado, pero hay que subirlo al " +
+    "sitio y desplegar. Si ponés los dos, manda el archivo.";
+  c.insertBefore(nota, c.children[1]);
+
+  var bots = document.createElement("div"); bots.className = "bots";
+  var g = document.createElement("button");
+  g.type = "button"; g.className = "am-bt"; g.style.padding = "8px 16px";
+  g.textContent = "Guardar";
+  g.addEventListener("click", function(){
+    var d = { hacer:"guardar", id:a.id || 0 };
+    Object.keys(entradas).forEach(function(k){ d[k] = entradas[k].value; });
+    g.disabled = true;
+    amPedirTienda(d)
+      .then(function(j){ AM.tienda = j.tienda; amVer("tienda"); })
+      .catch(function(e){ g.disabled = false; alert(e.message); });
+  });
+  bots.appendChild(g);
+  bots.appendChild(botonChico("Cancelar", function(){ amVer("tienda"); }));
+  c.appendChild(bots);
+  c.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"nearest" });
 }
 
 /* Se guarda solo, en cuanto se toca algo. Un botón «Guardar» en una pantalla de

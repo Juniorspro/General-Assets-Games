@@ -14,6 +14,7 @@
  */
 import { quienEs, limpio, json } from "./_social.js";
 import { darPase } from "./_firma.js";
+import { leerTienda } from "./tienda.js";
 
 /* Lo que se puede elegir vive acá y NO en el navegador. Si la lista estuviera
    del lado de la página, cualquiera podría pedir «marco: el-que-yo-invente» y
@@ -23,37 +24,12 @@ export const MARCOS = ["", "agua", "oro", "vidrio"];
 export const BANDAS = ["", "cristal", "pasto", "nocturno", "oceano", "cielo"];
 export const FONDOS = ["cristal", "pasto", "nocturno", "oceano", "cielo"];
 
-/* LA TIENDA. El catálogo vive acá y no en la página: si estuviera del lado del
-   navegador, cambiar de precio a «gratis» o agregarse una app sería editar un
-   objeto en la consola. Además, agregar la próxima es tocar una sola lista.
-
-   El `archivo` es lo que se le pide a `/apps/…`, que está detrás de su propia
-   puerta: la lista y la descarga se comprueban por separado, porque proteger
-   sólo la lista es proteger el índice y no el libro. */
-export const TIENDA = [
-  {
-    id: "aero-launcher",
-    nombre: "Aero Launcher",
-    version: "beta 39",
-    que: "El escritorio de Frutiger Aero, pero de verdad: reemplaza la pantalla " +
-         "de inicio de tu teléfono Android.",
-    archivo: "aero-launcher-39.apk",
-    icono: "img/zona/app-launcher.webp",
-    peso: "2,2 MB",
-    para: "Android",
-    /* Se dice lo que pide ANTES de bajarlo y no después. Un launcher necesita
-       estos permisos para hacer su trabajo, pero son fuertes y quien instala
-       tiene derecho a saberlo sin tener que leer la pantalla de Android. */
-    permisos: [
-      "Accesibilidad — para poder bloquear la pantalla y abrir apps",
-      "Notificaciones — para mostrarlas en el escritorio",
-      "Cámara — para el fondo en vivo",
-      "Desinstalar apps — para el botón de quitar del menú",
-    ],
-    aviso: "Está en beta y la hago yo. Android te va a avisar que viene de " +
-           "fuera de Play Store: es normal cuando el que la hizo te la pasa directo.",
-  },
-];
+/* LA TIENDA YA NO VIVE ACÁ. Estaba escrita como una constante en este archivo,
+   así que publicar una app era editar código y desplegar: el dueño del sitio no
+   podía cargar nada por su cuenta. Ahora el catálogo está en la tabla `tienda`
+   y lo lee `./tienda.js`, que además es el único que lo deja escribir —y sólo
+   al jefe—. Se sigue mandando desde acá en la misma respuesta para no hacer dos
+   viajes al abrir Aero+. */
 
 const APPS = [
   { id: "temas",   nombre: "Estudio de temas",  icono: "i-vidrio",
@@ -99,9 +75,14 @@ export const onRequestGet = async ({ request, env }) => {
   const n = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM usuarios WHERE zona_desde IS NOT NULL").first();
 
-  return json({ apps: APPS, tienda: TIENDA, pase: await darPase(env.SECRETO, { u: u.id }, 2),
+  return json({ apps: APPS, tienda: await leerTienda(env),
+                pase: await darPase(env.SECRETO, { u: u.id }, 2),
                 fondos: FONDOS, marcos: MARCOS.filter(Boolean),
                 bandas: BANDAS.filter(Boolean), estrena, cuantos: n.n,
+                /* la pantalla necesita saberlo para mostrar el panel de carga;
+                   que se pueda mentir del lado del navegador no importa, porque
+                   quien decide si la carga entra es `tienda.js` */
+                jefe: !!u.jefe,
                 yo: { usuario: u.usuario, nombre: u.nombre, marco: u.marco,
                       banda: u.banda, lema: u.lema, tema: u.tema } });
 };
