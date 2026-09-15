@@ -2122,6 +2122,124 @@ function amTienda(p){
   b2.addEventListener("click", function(){ formProponer(p); });
   bots.appendChild(b2);
   p.appendChild(bots);
+
+  panelEditor(p);
+}
+
+/* ------------------------------------------------- la cuota para publicar
+   Lo que se cobra es PUBLICAR una app que cobra, no la venta. La plata de las
+   ventas va del que compra al que hizo la app, por afuera de este sitio: acá no
+   pasa plata ajena. Eso está dicho en la pantalla y no sólo en el código,
+   porque es lo que alguien necesita saber ANTES de pagar una cuota. */
+function panelEditor(p){
+  var c = amCaja(p, "Publicar apps que cobran");
+  c.style.marginTop = "18px";
+  var q = document.createElement("p");
+  q.style.cssText = "margin:0 0 10px;font-size:13.5px;line-height:1.6";
+  c.appendChild(q);
+  q.textContent = "Leyendo tu estado…";
+
+  fetch("api/editor", { headers: cabeceraSesion() })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (j.error){ q.textContent = j.error; return; }
+
+      if (j.porSerJefe){
+        q.textContent = "Sos el dueño del sitio: publicás apps que cobran sin cuota.";
+        return;
+      }
+
+      var explica = "Subir apps gratis no cuesta nada. Si querés publicar una que " +
+        "cobre, la cuota es de US$ " + j.mensual + " por mes. Lo que se paga es " +
+        "publicar: la plata de tus ventas va de quien te compra a vos, por afuera " +
+        "de este sitio —acá no pasa plata de nadie más—.";
+
+      if (j.activo){
+        q.textContent = "Tu cuota está al día hasta el " + fechaCorta(j.hasta) + ". " +
+          "Podés publicar apps que cobran. " + explica;
+      } else {
+        q.textContent = explica;
+        if (j.hasta) {
+          var v = document.createElement("p");
+          v.className = "pie"; v.style.cssText = "margin:0 0 10px";
+          v.textContent = "Tu última cuota venció el " + fechaCorta(j.hasta) + ".";
+          c.insertBefore(v, c.children[c.children.length - 1]);
+        }
+      }
+
+      var caja2 = document.createElement("div");
+      caja2.id = "cuota-botones";
+      caja2.style.marginTop = "10px";
+      c.appendChild(caja2);
+      var aviso = document.createElement("p");
+      aviso.className = "pie"; aviso.style.cssText = "margin:8px 0 0";
+      c.appendChild(aviso);
+
+      botonesDeCuota(caja2, aviso, j);
+    })
+    .catch(function(){ q.textContent = "No se pudo leer tu estado de editor."; });
+}
+
+function fechaCorta(ms){
+  if (!ms) return "—";
+  var d = new Date(ms);
+  return d.toLocaleDateString("es-AR", { day:"numeric", month:"long", year:"numeric" });
+}
+
+function cabeceraSesion(){
+  var h = {};
+  var ses = caja.leer("sesion", null);
+  if (ses && ses.pase) h.authorization = "Bearer " + ses.pase;
+  return h;
+}
+
+/* El botón de PayPal de la cuota es el mismo mecanismo que el de colaborar,
+   pero termina en `api/editor` y no en `api/acceso`: son dos cosas distintas y
+   confundirlas daría acceso de donante a quien pagó por publicar, o al revés. */
+function botonesDeCuota(donde, aviso, j){
+  if (!AUTO || !AUTO.paypal){
+    aviso.textContent = "PayPal no está configurado, así que la cuota se arregla a mano por ahora.";
+    return;
+  }
+  function pintar(){
+    if (!window.paypal) return;
+    donde.innerHTML = "";
+    paypal.Buttons({
+      style: { layout:"vertical", shape:"rect", height:42, label:"pay" },
+      createOrder: function(){
+        aviso.textContent = "Preparando el pago…";
+        return fetch("api/pagar", { method:"POST", headers:{"content-type":"application/json"},
+            body: JSON.stringify({ via:"paypal", monto: j.mensual, concepto:"editor" }) })
+          .then(function(r){ return r.json(); })
+          .then(function(x){ if (!x.orden) throw new Error(x.error || "sin orden"); return x.orden; });
+      },
+      onApprove: function(datos){
+        aviso.textContent = "Confirmando el pago…";
+        return fetch("api/editor", { method:"POST",
+            headers: Object.assign({"content-type":"application/json"}, cabeceraSesion()),
+            body: JSON.stringify({ orden: datos.orderID }) })
+          .then(function(r){ return r.json().then(function(x){ return {ok:r.ok, x:x}; }); })
+          .then(function(res){
+            if (!res.ok){ aviso.textContent = res.x.error || "No se pudo confirmar."; return; }
+            /* `yaEstaba` es el caso de recargar después de pagar: no se sumó de
+               nuevo, y decirlo evita que alguien crea que pagó dos veces */
+            aviso.textContent = res.x.yaEstaba
+              ? "Ese pago ya estaba tomado. Tu cuota va hasta el " + fechaCorta(res.x.hasta) + "."
+              : "¡Listo! Podés publicar apps que cobran hasta el " + fechaCorta(res.x.hasta) + ".";
+            setTimeout(function(){ amVer("tienda"); }, 1800);
+          });
+      },
+      onCancel: function(){ aviso.textContent = "Cancelaste el pago. No se cobró nada."; },
+      onError: function(){ aviso.textContent = "PayPal tuvo un problema. Probá de nuevo."; }
+    }).render("#" + donde.id);
+  }
+  if (window.paypal) return pintar();
+  var sc = document.createElement("script");
+  sc.src = "https://www.paypal.com/sdk/js?client-id=" + encodeURIComponent(AUTO.paypal) +
+           "&currency=USD&intent=capture&components=buttons&locale=es_AR";
+  sc.onload = pintar;
+  sc.onerror = function(){ aviso.textContent = "No se pudo cargar PayPal."; };
+  document.head.appendChild(sc);
 }
 
 function seccionTienda(p, titulo, lista, bajada){
@@ -2172,6 +2290,7 @@ function tarjetaApp(p, a, enRevision){
   var meta = document.createElement("div");
   meta.style.cssText = "font-size:12.5px;color:rgba(226,242,255,.75)";
   meta.textContent = [a.version, a.para, a.peso,
+                      a.paga ? (a.precio || "de paga") : null,
                       a.origen === "comunidad" ? "de la comunidad" : null,
                       a.estado === "rechazada" ? "rechazada" :
                       a.estado === "pendiente" ? "esperando revisión" : null]
@@ -2415,6 +2534,25 @@ function selectorDeHuella(c, alTener){
   c.appendChild(l);
 }
 
+/* La casilla de «esta app cobra». Devuelve una función que dice cómo quedó, en
+   vez del elemento: quien la usa sólo necesita saber si está tildada. Que el
+   servidor la vuelva a comprobar no es desconfianza del formulario, es que
+   destildar una casilla desde la consola no puede alcanzar para publicar gratis
+   lo que se cobra. */
+function casillaDePago(c, tildada){
+  var l = document.createElement("label");
+  l.style.cssText = "display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;font-size:13px";
+  var x = document.createElement("input");
+  x.type = "checkbox"; x.checked = !!tildada;
+  x.style.cssText = "margin-top:2px;flex:none";
+  var t = document.createElement("span");
+  t.textContent = "Esta app cobra (tiene precio o pagos adentro). Publicar una app " +
+    "que cobra pide la cuota de editor al día; las gratis no piden nada.";
+  l.appendChild(x); l.appendChild(t);
+  c.appendChild(l);
+  return function(){ return x.checked; };
+}
+
 /* El formulario del jefe. Sólo lo ve él, pero quien decide si la carga entra es
    el servidor: acá se puede poner `AM.jefe = true` desde la consola y lo único
    que pasa es que se ve un formulario que después contesta 403. */
@@ -2442,9 +2580,11 @@ function formTienda(p, a){
     ["archivo", "…o archivo en /apps/","text",     "aero-launcher-39.apk"],
     ["icono",   "Ícono (dirección)",   "text",     "img/zona/app-launcher.webp"],
     ["permisos","Permisos que pide (uno por línea)", "textarea", "Cámara — para el fondo en vivo"],
-    ["aviso",   "Aviso",               "textarea", "Algo que quien instala tenga que saber antes."]
+    ["aviso",   "Aviso",               "textarea", "Algo que quien instala tenga que saber antes."],
+    ["precio",  "Si cobra, cuánto",    "text",     "US$ 3 · o dejalo vacío si es gratis"]
   ], a);
 
+  var paga = casillaDePago(c, a.paga);
   var huella = a.huella || "";
   selectorDeHuella(c, function(h){ huella = h; });
 
@@ -2453,7 +2593,7 @@ function formTienda(p, a){
   g.type = "button"; g.className = "am-bt"; g.style.padding = "8px 16px";
   g.textContent = "Guardar";
   g.addEventListener("click", function(){
-    var d = { hacer:"guardar", id:a.id || 0, huella:huella };
+    var d = { hacer:"guardar", id:a.id || 0, huella:huella, paga: paga() ? 1 : 0 };
     Object.keys(e).forEach(function(k){ d[k] = e[k].value; });
     g.disabled = true;
     amPedirTienda(d)
@@ -2490,9 +2630,11 @@ function formProponer(p){
     ["que",     "De qué se trata",    "textarea", "Qué hace, en una o dos líneas."],
     ["enlace",  "Enlace de descarga", "url",      "https://www.mediafire.com/file/…"],
     ["permisos","Permisos que pide (uno por línea)", "textarea", "Cámara — para sacar fotos"],
-    ["aviso",   "Aviso",              "textarea", "Algo que quien instala tenga que saber antes."]
+    ["aviso",   "Aviso",              "textarea", "Algo que quien instala tenga que saber antes."],
+    ["precio",  "Si cobra, cuánto",   "text",     "US$ 3 · o dejalo vacío si es gratis"]
   ], null);
 
+  var paga = casillaDePago(c);
   var huella = "";
   selectorDeHuella(c, function(h){ huella = h; });
 
@@ -2501,7 +2643,7 @@ function formProponer(p){
   g.type = "button"; g.className = "am-bt"; g.style.padding = "8px 16px";
   g.textContent = "Mandar a revisión";
   g.addEventListener("click", function(){
-    var d = { hacer:"proponer", huella:huella };
+    var d = { hacer:"proponer", huella:huella, paga: paga() ? 1 : 0 };
     Object.keys(e).forEach(function(k){ d[k] = e[k].value; });
     g.disabled = true;
     amPedirTienda(d)

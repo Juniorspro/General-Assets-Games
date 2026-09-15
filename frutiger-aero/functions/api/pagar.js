@@ -65,7 +65,13 @@ export const onRequestPost = async ({ request, env }) => {
         intent: "CAPTURE",
         purchase_units: [{
           amount: { currency_code: "USD", value: monto.toFixed(2) },
-          description: "Frutiger Aero - acceso anticipado",
+          /* Que el recibo diga QUE se pagó. Con una sola descripción para
+             todo, el resumen de PayPal de quien paga la cuota de editor le
+             dice «acceso anticipado», que no es lo que compró; y si algún día
+             pide una devolución, nadie sabe de cuál de las dos cosas habla. */
+          description: c.concepto === "editor"
+            ? "Frutiger Aero - cuota mensual para publicar apps"
+            : "Frutiger Aero - acceso anticipado",
           ...(dueno ? { custom_id: dueno } : {}),
         }],
         application_context: {

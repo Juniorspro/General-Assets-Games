@@ -23,9 +23,22 @@
  * Si están los dos, manda `archivo`, que es el que protege.
  */
 import { quienEs, limpio, json } from "./_social.js";
+import { esEditor } from "./editor.js";
 
 const TOPE_APPS = 60;
 const TOPE_PENDIENTES = 3;   /* propuestas sin revisar por persona */
+
+/* PUBLICAR UNA APP PAGA PIDE LA CUOTA AL DIA. Se comprueba acá, del lado del
+   servidor, y en los dos caminos —proponer y guardar—: si viviera en la
+   pantalla, destildar una casilla desde la consola alcanzaría para publicar
+   gratis lo que se cobra. Lo que se cobra es PUBLICAR: la plata de las ventas
+   va del que compra al que hizo la app, por afuera de este sitio. */
+async function puedeCobrar(env, u, quiereCobrar) {
+  if (!quiereCobrar) return null;
+  if (await esEditor(env, u.id)) return null;
+  return json({ error: "Para publicar una app que cobra hace falta la cuota de " +
+                       "editor al día. Se paga desde la Tienda." }, 402);
+}
 
 /* Un sha256 en hexadecimal y nada más. */
 const HUELLA_VALE = /^[a-f0-9]{64}$/i;
@@ -66,7 +79,8 @@ export const onRequestGet = async ({ request, env }) => {
 };
 
 const FILAS = "id, nombre, version, que, para, peso, archivo, enlace, icono, " +
-              "permisos, aviso, origen, estado, motivo, huella, escaneo, escaneo_cuando, autor";
+              "permisos, aviso, origen, estado, motivo, huella, escaneo, escaneo_cuando, " +
+              "autor, paga, precio";
 
 function acomodar(a, quien) {
   return {
@@ -140,6 +154,10 @@ export const onRequestPost = async ({ request, env }) => {
   const permisos = String(c.permisos == null ? "" : c.permisos)
     .split("\n").map((x) => limpio(x, 120)).filter(Boolean).slice(0, 12).join("\n");
 
+  const paga = c.paga ? 1 : 0;
+  const noPuede = await puedeCobrar(env, u, paga);
+  if (noPuede) return noPuede;
+
   const campos = {
     nombre,
     version: limpio(c.version, 30),
@@ -151,6 +169,7 @@ export const onRequestPost = async ({ request, env }) => {
     permisos,
     aviso: limpio(c.aviso, 400),
     orden: Math.min(999, Math.max(0, parseInt(c.orden, 10) || 0)),
+    paga, precio: limpio(c.precio, 40),
   };
 
   const id = parseInt(c.id, 10);
@@ -159,22 +178,23 @@ export const onRequestPost = async ({ request, env }) => {
   if (id) {
     await env.DB.prepare(
       "UPDATE tienda SET nombre=?, version=?, que=?, para=?, peso=?, archivo=?, " +
-      "enlace=?, icono=?, permisos=?, aviso=?, orden=?, tocado=? WHERE id=?")
+      "enlace=?, icono=?, permisos=?, aviso=?, orden=?, paga=?, precio=?, tocado=? WHERE id=?")
       .bind(campos.nombre, campos.version, campos.que, campos.para, campos.peso,
             campos.archivo, campos.enlace, campos.icono, campos.permisos,
-            campos.aviso, campos.orden, ahora, id).run();
+            campos.aviso, campos.orden, campos.paga, campos.precio, ahora, id).run();
   } else {
     /* un tope, porque una tienda de mil filas es una base llena por accidente */
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM tienda").first();
     if (n.n >= TOPE_APPS) return json({ error: "Ya hay " + TOPE_APPS + " apps; borrá alguna." }, 400);
     await env.DB.prepare(
       "INSERT INTO tienda (nombre, version, que, para, peso, archivo, enlace, " +
-      "icono, permisos, aviso, orden, creado, tocado, autor, origen, estado, huella) " +
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'sitio','aprobada',?)")
+      "icono, permisos, aviso, orden, creado, tocado, autor, origen, estado, huella, " +
+      "paga, precio) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'sitio','aprobada',?,?,?)")
       .bind(campos.nombre, campos.version, campos.que, campos.para, campos.peso,
             campos.archivo, campos.enlace, campos.icono, campos.permisos,
             campos.aviso, campos.orden, ahora, ahora, u.id,
-            HUELLA_VALE.test(String(c.huella || "")) ? String(c.huella).toLowerCase() : "").run();
+            HUELLA_VALE.test(String(c.huella || "")) ? String(c.huella).toLowerCase() : "",
+            campos.paga, campos.precio).run();
   }
 
   return json(await leerTienda(env, u));
@@ -215,17 +235,21 @@ async function proponer(env, c, u) {
                          "Esperá a que se revisen esas." }, 429);
   }
 
+  const paga = c.paga ? 1 : 0;
+  const noPuede = await puedeCobrar(env, u, paga);
+  if (noPuede) return noPuede;
+
   const permisos = String(c.permisos == null ? "" : c.permisos)
     .split("\n").map((x) => limpio(x, 120)).filter(Boolean).slice(0, 12).join("\n");
   const ahora = Date.now();
 
   await env.DB.prepare(
     "INSERT INTO tienda (nombre, version, que, para, peso, archivo, enlace, icono, " +
-    "permisos, aviso, orden, creado, tocado, autor, origen, estado, huella) " +
-    "VALUES (?,?,?,?,?,'',?,'',?,?,500,?,?,?,'comunidad','pendiente',?)")
+    "permisos, aviso, orden, creado, tocado, autor, origen, estado, huella, paga, precio) " +
+    "VALUES (?,?,?,?,?,'',?,'',?,?,500,?,?,?,'comunidad','pendiente',?,?,?)")
     .bind(nombre, limpio(c.version, 30), limpio(c.que, 400), limpio(c.para, 40),
           limpio(c.peso, 20), enlace, permisos, limpio(c.aviso, 400),
-          ahora, ahora, u.id, huella).run();
+          ahora, ahora, u.id, huella, paga, limpio(c.precio, 40)).run();
 
   return json(await leerTienda(env, u));
 }
