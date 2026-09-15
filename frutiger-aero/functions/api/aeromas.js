@@ -75,7 +75,11 @@ export const onRequestGet = async ({ request, env }) => {
   const n = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM usuarios WHERE zona_desde IS NOT NULL").first();
 
-  return json({ apps: APPS, tienda: await leerTienda(env),
+  /* `leerTienda` ya devuelve {sitio, comunidad, esperando} y filtra por quién
+     pregunta: lo que espera revisión lo ve el jefe y quien lo propuso, nadie más */
+  const t = await leerTienda(env, u);
+  return json({ apps: APPS, tienda: t.sitio, comunidad: t.comunidad,
+                esperando: t.esperando, hayRevision: !!env.VIRUSTOTAL,
                 pase: await darPase(env.SECRETO, { u: u.id }, 2),
                 fondos: FONDOS, marcos: MARCOS.filter(Boolean),
                 bandas: BANDAS.filter(Boolean), estrena, cuantos: n.n,

@@ -2085,102 +2085,212 @@ function fabPintar(p){
    Las apps que hace el dueño, gratis para el que colaboró. El catálogo lo manda
    el servidor: si viviera acá, agregarse una app sería editar un objeto en la
    consola del navegador. */
+/* ------------------------------------------------------------- la tienda
+   Partida en dos: lo que hace el dueño y lo que propone la gente. No es una
+   separación decorativa: quien baja algo tiene derecho a saber si lo hizo el
+   que mantiene el sitio o un desconocido, porque es lo que decide cuánta
+   confianza corresponde. Lo de la comunidad además pasa por revisión antes de
+   aparecer. */
 function amTienda(p){
   amTitulo(p, "Tienda",
-    "Las apps que hago, gratis para vos por haber colaborado. Se bajan de acá y " +
-    "se instalan a mano.");
+    "Las apps, gratis para vos por haber colaborado. Se bajan de acá y se " +
+    "instalan a mano.");
 
-  if (!AM.tienda || !AM.tienda.length){
+  seccionTienda(p, "Del sitio", AM.tienda,
+    "Las que hago yo. Salen de acá mismo y pasan por la puerta de tu cuenta.");
+  seccionTienda(p, "De la comunidad", AM.comunidad,
+    "Las que propone la gente. Están revisadas antes de aparecer, pero no las " +
+    "hago yo: mirá la huella y los permisos antes de instalar.");
+
+  if (AM.esperando && AM.esperando.length) colaDeRevision(p);
+
+  var bots = document.createElement("div"); bots.className = "bots";
+  bots.style.marginTop = "16px";
+  if (AM.jefe){
+    var b1 = document.createElement("button");
+    b1.type = "button"; b1.className = "am-bt"; b1.style.padding = "8px 16px";
+    b1.textContent = "Cargar una app";
+    b1.addEventListener("click", function(){ formTienda(p, null); });
+    bots.appendChild(b1);
+  }
+  var b2 = document.createElement("button");
+  b2.type = "button";
+  b2.style.cssText = "margin-left:8px;padding:8px 14px;border-radius:4px;cursor:pointer;" +
+    "font:inherit;font-size:13.5px;color:#dff0ff;background:rgba(255,255,255,.12);" +
+    "border:1px solid rgba(255,255,255,.28)";
+  b2.textContent = "Proponer una app";
+  b2.addEventListener("click", function(){ formProponer(p); });
+  bots.appendChild(b2);
+  p.appendChild(bots);
+}
+
+function seccionTienda(p, titulo, lista, bajada){
+  var h = document.createElement("h3");
+  h.style.cssText = "margin:18px 0 2px;font-size:15px;font-weight:600";
+  h.textContent = titulo;
+  p.appendChild(h);
+  var q = document.createElement("p");
+  q.className = "pie"; q.style.cssText = "margin:0 0 8px";
+  q.textContent = bajada;
+  p.appendChild(q);
+
+  if (!lista || !lista.length){
     var v = amCaja(p, null);
-    v.appendChild(document.createTextNode("Todavía no hay nada acá. Pronto."));
+    v.style.marginTop = "0";
+    v.appendChild(document.createTextNode("Todavía no hay nada acá."));
     return;
   }
+  lista.forEach(function(a){ tarjetaApp(p, a, false); });
+}
 
-  AM.tienda.forEach(function(a){
-    var c = amCaja(p, null);
-    var cab = document.createElement("div");
-    cab.style.cssText = "display:flex;gap:12px;align-items:flex-start";
-    var im = document.createElement("img");
-    im.src = a.icono || "img/zona/app.webp"; im.alt = ""; im.loading = "lazy";
-    im.style.cssText = "width:56px;height:56px;flex:none";
-    cab.appendChild(im);
-    var t = document.createElement("div"); t.style.flex = "1";
-    var h = document.createElement("h3"); h.style.margin = "0 0 2px";
-    h.textContent = a.nombre;
-    t.appendChild(h);
-    var meta = document.createElement("div");
-    meta.style.cssText = "font-size:12.5px;color:rgba(226,242,255,.75)";
-    meta.textContent = [a.version, a.para, a.peso].filter(Boolean).join("  ·  ");
-    t.appendChild(meta);
+/* La cola de revisión. El jefe la ve entera; el que propuso ve la suya, porque
+   mandar algo y no volver a saber nunca más si entró o no es la forma más
+   rápida de que nadie proponga una segunda vez. */
+function colaDeRevision(p){
+  var h = document.createElement("h3");
+  h.style.cssText = "margin:20px 0 2px;font-size:15px;font-weight:600";
+  h.textContent = AM.jefe ? "Esperando que las revises" : "Lo que propusiste";
+  p.appendChild(h);
+  AM.esperando.forEach(function(a){ tarjetaApp(p, a, true); });
+}
+
+function tarjetaApp(p, a, enRevision){
+  var c = amCaja(p, null);
+  c.style.marginTop = "10px";
+
+  var cab = document.createElement("div");
+  cab.style.cssText = "display:flex;gap:12px;align-items:flex-start";
+  var im = document.createElement("img");
+  im.src = a.icono || "img/zona/app.webp"; im.alt = ""; im.loading = "lazy";
+  im.style.cssText = "width:56px;height:56px;flex:none";
+  cab.appendChild(im);
+
+  var t = document.createElement("div"); t.style.flex = "1";
+  var h = document.createElement("h3"); h.style.margin = "0 0 2px";
+  h.textContent = a.nombre;
+  t.appendChild(h);
+  var meta = document.createElement("div");
+  meta.style.cssText = "font-size:12.5px;color:rgba(226,242,255,.75)";
+  meta.textContent = [a.version, a.para, a.peso,
+                      a.origen === "comunidad" ? "de la comunidad" : null,
+                      a.estado === "rechazada" ? "rechazada" :
+                      a.estado === "pendiente" ? "esperando revisión" : null]
+                     .filter(Boolean).join("  ·  ");
+  t.appendChild(meta);
+  if (a.que){
     var q = document.createElement("p");
     q.style.cssText = "margin:7px 0 0;font-size:14px;line-height:1.55";
     q.textContent = a.que;
     t.appendChild(q);
-    cab.appendChild(t);
-    c.appendChild(cab);
-
-    /* Lo que pide y el aviso van ANTES del botón, no escondidos detrás. Quien
-       instala tiene derecho a saber qué le va a pedir sin tener que leerlo
-       recién en la pantalla de Android, cuando ya lo bajó. */
-    if (a.permisos && a.permisos.length){
-      var d = document.createElement("details");
-      d.style.cssText = "margin-top:10px;font-size:13.5px";
-      var r = document.createElement("summary");
-      r.style.cursor = "pointer";
-      r.textContent = "Qué permisos te va a pedir (" + a.permisos.length + ")";
-      d.appendChild(r);
-      var ul = document.createElement("ul");
-      ul.style.cssText = "margin:7px 0 0;padding-left:18px;line-height:1.6";
-      a.permisos.forEach(function(x){
-        var li = document.createElement("li"); li.textContent = x; ul.appendChild(li);
-      });
-      d.appendChild(ul);
-      c.appendChild(d);
-    }
-    if (a.aviso){
-      var av = document.createElement("p");
-      av.style.cssText = "margin:10px 0 0;padding:9px 11px;border-radius:4px;" +
-        "font-size:13px;line-height:1.5;background:rgba(255,210,63,.14);" +
-        "border:1px solid rgba(255,210,63,.4)";
-      av.textContent = a.aviso;
-      c.appendChild(av);
-    }
-
-    var bots = document.createElement("div"); bots.className = "bots";
-    bots.appendChild(botonDeBajar(a));
-    /* el aviso del enlace de afuera va DEBAJO de la fila y no adentro: metido
-       como un elemento más del flex, se estira y empuja «Editar» y «Borrar»
-       hasta la otra punta de la tarjeta */
-    var nota = notaDeEnlace(a);
-    if (AM.jefe){
-      bots.appendChild(botonChico("Editar", function(){ formTienda(p, a); }));
-      bots.appendChild(botonChico("Borrar", function(){
-        if (!confirm("¿Sacar «" + a.nombre + "» de la tienda?")) return;
-        amPedirTienda({ hacer:"borrar", id:a.id })
-          .then(function(j){ AM.tienda = j.tienda; amVer("tienda"); })
-          .catch(function(e){ alert(e.message); });
-      }));
-    }
-    c.appendChild(bots);
-    if (nota) c.appendChild(nota);
-  });
-
-  if (AM.jefe){
-    var mas = document.createElement("div"); mas.className = "bots";
-    mas.style.marginTop = "14px";
-    var b = document.createElement("button");
-    b.type = "button"; b.className = "am-bt"; b.style.padding = "8px 16px";
-    b.textContent = "Cargar una app";
-    b.addEventListener("click", function(){ formTienda(p, null); });
-    mas.appendChild(b);
-    p.appendChild(mas);
   }
+  cab.appendChild(t);
+  c.appendChild(cab);
+
+  /* Lo que pide y el aviso van ANTES del botón, no escondidos detrás. Quien
+     instala tiene derecho a saber qué le va a pedir sin tener que leerlo recién
+     en la pantalla de Android, cuando ya lo bajó. */
+  if (a.permisos && a.permisos.length){
+    var d = document.createElement("details");
+    d.style.cssText = "margin-top:10px;font-size:13.5px";
+    var r = document.createElement("summary");
+    r.style.cursor = "pointer";
+    r.textContent = "Qué permisos te va a pedir (" + a.permisos.length + ")";
+    d.appendChild(r);
+    var ul = document.createElement("ul");
+    ul.style.cssText = "margin:7px 0 0;padding-left:18px;line-height:1.6";
+    a.permisos.forEach(function(x){
+      var li = document.createElement("li"); li.textContent = x; ul.appendChild(li);
+    });
+    d.appendChild(ul);
+    c.appendChild(d);
+  }
+  if (a.aviso) c.appendChild(cartel(a.aviso, "rgba(255,210,63,"));
+  if (a.estado === "rechazada" && a.motivo)
+    c.appendChild(cartel("Rechazada: " + a.motivo, "rgba(224,64,42,"));
+
+  c.appendChild(bloqueDeRevision(a));
+
+  var bots = document.createElement("div"); bots.className = "bots";
+  if (a.estado === "aprobada") bots.appendChild(botonDeBajar(a));
+  var nota = a.estado === "aprobada" ? notaDeEnlace(a) : null;
+
+  if (AM.jefe && enRevision){
+    bots.appendChild(botonChico("Aprobar", function(){
+      mandarTienda({ hacer:"revisar", id:a.id, decision:"aprobar" }, p);
+    }));
+    bots.appendChild(botonChico("Rechazar", function(){
+      var m = prompt("¿Por qué la rechazás? Lo va a leer quien la propuso.");
+      if (m == null) return;
+      mandarTienda({ hacer:"revisar", id:a.id, decision:"rechazar", motivo:m }, p);
+    }));
+    if (a.huella) bots.appendChild(botonChico("Revisar la huella", function(){
+      mandarTienda({ hacer:"escanear", id:a.id }, p);
+    }));
+  }
+  if (AM.jefe && !enRevision){
+    if (a.origen === "sitio") bots.appendChild(botonChico("Editar", function(){ formTienda(p, a); }));
+    bots.appendChild(botonChico("Borrar", function(){
+      if (!confirm("¿Sacar «" + a.nombre + "» de la tienda?")) return;
+      mandarTienda({ hacer:"borrar", id:a.id }, p);
+    }));
+  }
+  if (bots.children.length) c.appendChild(bots);
+  if (nota) c.appendChild(nota);
 }
 
-/* De dónde se baja cada app. Son dos cosas distintas y la pantalla lo dice:
-   un archivo de este sitio pasa por la puerta y pide pase; un enlace de afuera
-   lo abre cualquiera que lo tenga. Decirlo acá no es un detalle: alguien que
-   colaboró tiene derecho a saber si lo que baja estaba guardado o no. */
+function cartel(texto, colorBase){
+  var e = document.createElement("p");
+  e.style.cssText = "margin:10px 0 0;padding:9px 11px;border-radius:4px;font-size:13px;" +
+    "line-height:1.5;background:" + colorBase + ".14);border:1px solid " + colorBase + ".4)";
+  e.textContent = texto;
+  return e;
+}
+
+/* LO QUE SE SABE DEL ARCHIVO, dicho sin adornos. Tres estados y ninguno se
+   pinta de verde por las dudas:
+   · sin huella      -> no hay nada que revisar, y se dice.
+   · con huella y sin preguntar -> la huella sirve igual: cualquiera que lo baje
+     puede sacarle el sha256 al suyo y comparar.
+   · preguntado      -> lo que contestó, tal cual, incluido «no lo conoce».
+   «No lo conoce» NO es «limpio»: es que nadie lo analizó, que es lo normal en
+   una app recién hecha. Mostrar eso como un tilde verde sería mentir justo en
+   la pantalla donde alguien decide instalar algo en su teléfono. */
+function bloqueDeRevision(a){
+  var c = document.createElement("div");
+  c.style.cssText = "margin-top:10px;font-size:12.5px;line-height:1.55;" +
+    "color:rgba(226,242,255,.8)";
+  if (!a.huella){
+    c.textContent = "Sin huella del archivo: no hay forma de revisarlo ni de " +
+      "comprobar que lo que se baja sea lo mismo que se publicó.";
+    return c;
+  }
+  var h = document.createElement("div");
+  h.style.cssText = "font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;" +
+    "word-break:break-all;color:rgba(226,242,255,.62)";
+  h.textContent = "sha256  " + a.huella;
+  c.appendChild(h);
+  var e = document.createElement("div");
+  e.style.marginTop = "4px";
+  e.textContent = a.escaneo
+    ? "Revisión: " + a.escaneo
+    : "Sin revisar todavía. La huella igual te sirve: sacale el sha256 al que " +
+      "bajaste y tiene que dar este mismo.";
+  c.appendChild(e);
+  return c;
+}
+
+function guardarRespuesta(j){
+  if (j.sitio) AM.tienda = j.sitio;
+  if (j.comunidad) AM.comunidad = j.comunidad;
+  if (j.esperando) AM.esperando = j.esperando;
+}
+
+function mandarTienda(cuerpo, p){
+  return amPedirTienda(cuerpo)
+    .then(function(j){ guardarRespuesta(j); amVer("tienda"); })
+    .catch(function(e){ alert(e.message); });
+}
+
 function botonDeBajar(a){
   var b = document.createElement("a");
   b.className = "am-bt";
@@ -2242,51 +2352,77 @@ function amPedirTienda(cuerpo){
   });
 }
 
-/* El formulario de carga. Sólo lo ve el jefe, pero quien decide si la carga
-   entra es el servidor: acá se puede poner `AM.jefe = true` desde la consola y
-   lo único que pasa es que se ve un formulario que después contesta 403. */
-function formTienda(p, a){
-  a = a || {};
-  var c = amCaja(p, a.id ? "Editar «" + a.nombre + "»" : "Cargar una app");
-  c.style.marginTop = "14px";
-
-  var campos = [
-    ["nombre",  "Nombre",        "text",     "Aero Launcher"],
-    ["version", "Versión",       "text",     "beta 39"],
-    ["para",    "Para qué es",   "text",     "Android"],
-    ["peso",    "Cuánto pesa",   "text",     "2,2 MB"],
-    ["que",     "De qué se trata","textarea","Qué hace la app, en una o dos líneas."],
-    ["enlace",  "Enlace de descarga", "url", "https://www.mediafire.com/file/…"],
-    ["archivo", "…o archivo en /apps/", "text", "aero-launcher-39.apk"],
-    ["icono",   "Ícono (dirección)", "text", "img/zona/app-launcher.webp"],
-    ["permisos","Permisos que pide (uno por línea)", "textarea",
-                "Cámara — para el fondo en vivo"],
-    ["aviso",   "Aviso",         "textarea", "Algo que quien instala tenga que saber antes."]
-  ];
-  var entradas = {};
-  campos.forEach(function(f){
+/* Arma los campos de un formulario y devuelve de dónde leerlos después. */
+function camposDe(c, lista, a){
+  var e = {};
+  lista.forEach(function(f){
     var l = document.createElement("label");
     l.style.cssText = "display:block;margin-bottom:9px;font-size:13px";
     var t = document.createElement("span");
     t.style.cssText = "display:block;margin-bottom:3px;color:rgba(226,242,255,.85)";
     t.textContent = f[1];
-    var e = document.createElement(f[2] === "textarea" ? "textarea" : "input");
-    if (f[2] !== "textarea") e.type = f[2];
-    if (f[2] === "textarea") e.rows = 2;
-    e.placeholder = f[3];
-    e.value = a[f[0]] == null ? "" :
-      (f[0] === "permisos" && a.permisos.join ? a.permisos.join("\n") : a[f[0]]);
-    e.style.cssText = "width:100%;box-sizing:border-box;padding:7px 9px;border-radius:4px;" +
+    var x = document.createElement(f[2] === "textarea" ? "textarea" : "input");
+    if (f[2] !== "textarea") x.type = f[2];
+    else x.rows = 2;
+    x.placeholder = f[3];
+    x.value = a && a[f[0]] != null
+      ? (f[0] === "permisos" && a.permisos && a.permisos.join ? a.permisos.join("\n") : a[f[0]])
+      : "";
+    x.style.cssText = "width:100%;box-sizing:border-box;padding:7px 9px;border-radius:4px;" +
       "border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);" +
       "color:#eaf6ff;font:inherit;font-size:13.5px";
-    entradas[f[0]] = e;
-    l.appendChild(t); l.appendChild(e);
+    e[f[0]] = x;
+    l.appendChild(t); l.appendChild(x);
     c.appendChild(l);
   });
+  return e;
+}
 
-  /* La diferencia entre las dos formas de cargar va acá arriba y con todas las
-     letras. Es la única decisión del formulario que no se puede deshacer
-     después sin que alguien ya se haya llevado el archivo. */
+/* EL SELECTOR DE APK NO SUBE NADA. Lee el archivo de tu máquina y le saca el
+   sha256 ahí mismo con la propia criptografía del navegador; lo único que viaja
+   son 64 caracteres. Esto es lo que hace que una app publicada con un enlace a
+   otro sitio se pueda revisar y verificar: sin la huella, lo único que se puede
+   mirar es la página de descarga, y decir «sin virus» mirando una página sería
+   inventar una seguridad que no existe. */
+function selectorDeHuella(c, alTener){
+  var l = document.createElement("label");
+  l.style.cssText = "display:block;margin-bottom:9px;font-size:13px";
+  var t = document.createElement("span");
+  t.style.cssText = "display:block;margin-bottom:3px;color:rgba(226,242,255,.85)";
+  t.textContent = "El APK, para sacarle la huella";
+  var f = document.createElement("input");
+  f.type = "file"; f.accept = ".apk,application/vnd.android.package-archive";
+  f.style.cssText = "width:100%;font:inherit;font-size:13px;color:#dff0ff";
+  var v = document.createElement("div");
+  v.style.cssText = "margin-top:5px;font-size:11.5px;line-height:1.5;" +
+    "color:rgba(226,242,255,.7);word-break:break-all";
+  v.textContent = "No se sube: se lee en tu máquina y sólo viajan los 64 caracteres del sha256.";
+  f.addEventListener("change", function(){
+    var ar = f.files && f.files[0];
+    if (!ar) return;
+    v.textContent = "Calculando…";
+    ar.arrayBuffer()
+      .then(function(b){ return crypto.subtle.digest("SHA-256", b); })
+      .then(function(d){
+        var h = Array.prototype.map.call(new Uint8Array(d), function(x){
+          return ("0" + x.toString(16)).slice(-2); }).join("");
+        alTener(h, ar);
+        v.textContent = "sha256  " + h;
+      })
+      .catch(function(){ v.textContent = "No se pudo leer el archivo."; });
+  });
+  l.appendChild(t); l.appendChild(f); l.appendChild(v);
+  c.appendChild(l);
+}
+
+/* El formulario del jefe. Sólo lo ve él, pero quien decide si la carga entra es
+   el servidor: acá se puede poner `AM.jefe = true` desde la consola y lo único
+   que pasa es que se ve un formulario que después contesta 403. */
+function formTienda(p, a){
+  a = a || {};
+  var c = amCaja(p, a.id ? "Editar «" + a.nombre + "»" : "Cargar una app");
+  c.style.marginTop = "14px";
+
   var nota = document.createElement("p");
   nota.style.cssText = "margin:4px 0 12px;padding:9px 11px;border-radius:4px;font-size:12.5px;" +
     "line-height:1.55;background:rgba(87,184,232,.14);border:1px solid rgba(87,184,232,.4)";
@@ -2294,19 +2430,83 @@ function formTienda(p, a){
     "cualquiera con el link se baja la app, tenga cuenta o no. El ARCHIVO en /apps/ " +
     "sí queda detrás de la puerta y pide haber colaborado, pero hay que subirlo al " +
     "sitio y desplegar. Si ponés los dos, manda el archivo.";
-  c.insertBefore(nota, c.children[1]);
+  c.appendChild(nota);
+
+  var e = camposDe(c, [
+    ["nombre",  "Nombre",              "text",     "Aero Launcher"],
+    ["version", "Versión",             "text",     "beta 39"],
+    ["para",    "Para qué es",         "text",     "Android"],
+    ["peso",    "Cuánto pesa",         "text",     "2,2 MB"],
+    ["que",     "De qué se trata",     "textarea", "Qué hace la app, en una o dos líneas."],
+    ["enlace",  "Enlace de descarga",  "url",      "https://www.mediafire.com/file/…"],
+    ["archivo", "…o archivo en /apps/","text",     "aero-launcher-39.apk"],
+    ["icono",   "Ícono (dirección)",   "text",     "img/zona/app-launcher.webp"],
+    ["permisos","Permisos que pide (uno por línea)", "textarea", "Cámara — para el fondo en vivo"],
+    ["aviso",   "Aviso",               "textarea", "Algo que quien instala tenga que saber antes."]
+  ], a);
+
+  var huella = a.huella || "";
+  selectorDeHuella(c, function(h){ huella = h; });
 
   var bots = document.createElement("div"); bots.className = "bots";
   var g = document.createElement("button");
   g.type = "button"; g.className = "am-bt"; g.style.padding = "8px 16px";
   g.textContent = "Guardar";
   g.addEventListener("click", function(){
-    var d = { hacer:"guardar", id:a.id || 0 };
-    Object.keys(entradas).forEach(function(k){ d[k] = entradas[k].value; });
+    var d = { hacer:"guardar", id:a.id || 0, huella:huella };
+    Object.keys(e).forEach(function(k){ d[k] = e[k].value; });
     g.disabled = true;
     amPedirTienda(d)
-      .then(function(j){ AM.tienda = j.tienda; amVer("tienda"); })
-      .catch(function(e){ g.disabled = false; alert(e.message); });
+      .then(function(j){ guardarRespuesta(j); amVer("tienda"); })
+      .catch(function(err){ g.disabled = false; alert(err.message); });
+  });
+  bots.appendChild(g);
+  bots.appendChild(botonChico("Cancelar", function(){ amVer("tienda"); }));
+  c.appendChild(bots);
+  c.scrollIntoView({ behavior: quieto ? "auto" : "smooth", block:"nearest" });
+}
+
+/* Proponer: lo puede hacer cualquiera que tenga acceso, y queda esperando
+   revisión. La huella es obligatoria acá y el formulario lo dice antes, no
+   después de que la persona llene ocho campos. */
+function formProponer(p){
+  var c = amCaja(p, "Proponer una app");
+  c.style.marginTop = "14px";
+
+  var nota = document.createElement("p");
+  nota.style.cssText = "margin:4px 0 12px;padding:9px 11px;border-radius:4px;font-size:12.5px;" +
+    "line-height:1.55;background:rgba(87,184,232,.14);border:1px solid rgba(87,184,232,.4)";
+  nota.textContent = "Subí el APK a donde quieras (MediaFire, Drive) y pegá el enlace acá. " +
+    "Hace falta además elegir el archivo abajo: el navegador le saca la huella en tu " +
+    "máquina, sin subirlo. Sin esa huella no hay forma de revisar lo que compartís, " +
+    "así que no se publica. No aparece en la tienda hasta que la revisen.";
+  c.appendChild(nota);
+
+  var e = camposDe(c, [
+    ["nombre",  "Nombre",             "text",     "Mi app"],
+    ["version", "Versión",            "text",     "1.0"],
+    ["para",    "Para qué es",        "text",     "Android"],
+    ["peso",    "Cuánto pesa",        "text",     "4 MB"],
+    ["que",     "De qué se trata",    "textarea", "Qué hace, en una o dos líneas."],
+    ["enlace",  "Enlace de descarga", "url",      "https://www.mediafire.com/file/…"],
+    ["permisos","Permisos que pide (uno por línea)", "textarea", "Cámara — para sacar fotos"],
+    ["aviso",   "Aviso",              "textarea", "Algo que quien instala tenga que saber antes."]
+  ], null);
+
+  var huella = "";
+  selectorDeHuella(c, function(h){ huella = h; });
+
+  var bots = document.createElement("div"); bots.className = "bots";
+  var g = document.createElement("button");
+  g.type = "button"; g.className = "am-bt"; g.style.padding = "8px 16px";
+  g.textContent = "Mandar a revisión";
+  g.addEventListener("click", function(){
+    var d = { hacer:"proponer", huella:huella };
+    Object.keys(e).forEach(function(k){ d[k] = e[k].value; });
+    g.disabled = true;
+    amPedirTienda(d)
+      .then(function(j){ guardarRespuesta(j); amVer("tienda"); })
+      .catch(function(err){ g.disabled = false; alert(err.message); });
   });
   bots.appendChild(g);
   bots.appendChild(botonChico("Cancelar", function(){ amVer("tienda"); }));
