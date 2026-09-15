@@ -10,7 +10,12 @@
 const ENT = {x:0, y:0, fuego:false, esq:false, usar:false};
 
 /* el auto-jugador */
-const BOT = {on:false, modo:'honesto', t:0, dir:0, trab:0, ux:0, uy:0};
+const BOT = {on:false, modo:'honesto', t:0, dir:0, trab:0, ux:0, uy:0, barr:true};
+/* LA VENTANA DE LA ESQUIVA DEL BOT, y cuantos rumbos prueba. 0,55 s es lo que
+   tarda en cruzar el pasillo peligroso caminando; 16 rumbos son 22,5 grados,
+   la mitad de lo que mide un cuerpo a distancia de pelea. */
+const BOT_VENT = .55;   /* cuanto adelante mira el bot una bala */
+const BOT_DIRS = 16;    /* rumbos que prueba el bot contra un abanico */
 /* registro de golpes recibidos: piso, clase, corazones, vida que quedo */
 const DANO_LOG = [];
 /* y lo que se curo: la otra mitad de la economia de un piso */
@@ -202,7 +207,7 @@ function dispara(P){
                  vx:Math.cos(a)*v, vy:Math.sin(a)*v, r:3 + A.d*.06,
                  col:A.col, d:A.d * P.mDano, vida:A.a / v});
   }
-  P.ener -= A.e; P.eEsp = .34;
+  P.ener -= A.e; P.eEsp = E_ESP;
   P.cd = A.c / P.mCad;
   P.fog = 1; P.rec = 1;
   P.vx -= Math.cos(ang) * A.r * .22; P.vy -= Math.sin(ang) * A.r * .22;
@@ -443,7 +448,7 @@ function pasoJugador(dt){
     const ah = d < 34;
     if (ah && !s.cofre.visto){
       s.cofre.visto = true;
-      const mej = dps(ARMA_ID[s.cofre.arma]) > dps(P.arma);
+      const mej = dps(ARMA_ID[s.cofre.arma], P) > dps(P.arma, P);
       aviso(TARMA(s.cofre.arma) + (mej ? ' ▲' : ' ▼'));
     }
     cerca(ah ? 'cofre' : null);
@@ -595,7 +600,14 @@ function paso(dt){
    la demo— asi que el bot "honesto" tiraba a la moneda la unica decision que el
    juego le pide entre piso y piso. Con una sola funcion no puede haber dos
    criterios, y el del azar sigue siendo el control. */
-const MEJ_PREF = ['dano','cad','esq','vel','bala','rec','ener'];
+/* LO QUE NO MUEVE EL DPS SE ORDENA A MANO; LO QUE SI, SE MIDE (abajo).
+   `cad` esta ULTIMO y no es un descuido: con el ciclo real de un arma
+   (`max(cadencia, E_ESP + energia/recarga)`) el cuello de botella es la
+   ENERGIA en las diez armas, asi que subir la cadencia vale exactamente CERO
+   por ciento de dano por segundo — medido en las diez. Para que la cadencia
+   empiece a importar en la escopeta hace falta llevar la recarga a 60, o sea
+   SIETE mejoras de `rec` sobre las nueve que dan los diez pisos. */
+const MEJ_PREF = ['esq','ener','vel','bala','cad'];
 function mejorElige(modo){
   if (!MEJ_OPC.length) return 0;
   if (modo === 'azar') return (Math.random() * MEJ_OPC.length) | 0;
@@ -606,6 +618,27 @@ function mejorElige(modo){
   if (falta >= 2 && ix('cura') >= 0) return ix('cura');
   if (ix('vida') >= 0) return ix('vida');
   if (falta >= 1 && ix('cura') >= 0) return ix('cura');
+  /* LA MEJORA DE ATAQUE SE DERIVA, NO SE ESCRIBE. La lista de antes ponia
+     `dano` primero y `cad` segundo, que es el orden que sale de la tabla de
+     cadencias — la misma cuenta que mentia en `dps` y que hacia que el bot
+     llegara al jefe con la peor arma. Con el ciclo real, `rec` le gana a `dano`
+     en 7 de las 10 armas (escopeta +28% contra +18%, canon +31%) y `cad` vale
+     cero en las diez. Aca no se elige un orden: se le aplica cada mejora a una
+     COPIA de los numeros del jugador y se queda la que mas sube el dps del arma
+     que lleva puesta, con la funcion `f` de la propia mejora. Asi, cambiar un
+     numero de MEJORAS mueve la eleccion solo y no hay dos listas que se puedan
+     desincronizar. */
+  const base = dps(P.arma, P);
+  let mej = -1, gan = 1e-9;
+  for (let i = 0; i < MEJ_OPC.length; i++){
+    const q = {eRec:P.eRec, eMax:P.eMax, mDano:P.mDano, mCad:P.mCad,
+               mVel:P.mVel, mEsq:P.mEsq, mVbala:P.mVbala,
+               vida:P.vida, vidaMax:P.vidaMax};
+    MEJ_OPC[i].f(q);
+    const g = dps(P.arma, q) - base;
+    if (g > gan){ gan = g; mej = i; }
+  }
+  if (mej >= 0) return mej;
   for (const id of MEJ_PREF){ const i = ix(id); if (i >= 0) return i; }
   return 0;
 }
@@ -682,7 +715,27 @@ function rutaSalas(desde, hasta){
    los cinco pegaran, asi que sobrestima a la escopeta y a la cruz de lejos.
    Para decidir "esto es mejor que lo que llevo" alcanza; para balancear las
    diez armas entre si, no. */
-const dps = i => { const A = ARMAS[i]; return A.d * A.n / A.c; };
+/* EL DPS ES EL QUE VA HACIA ADELANTE, NO EL DE LA TABLA. La cruz tira sus
+   cuatro balas a los cuatro puntos cardinales (`radial` en `dispara`), asi que
+   contra UN blanco pega una de cada cuatro: 23,9 de dano por segundo y no 95,7.
+   Con la cuenta de la tabla era la mas alta de las diez por un factor de cuatro
+   y en realidad es la mas floja, asi que `cofreVale` —que la usa— rechazaba
+   TODO lo demas desde el piso 4 y el bot llegaba al 10 con la peor arma posible
+   contra un jefe, que es un blanco solo y encima sin escolta (medido: la sala
+   del jefe2 se limpia en las 12 corridas que mueren ahi). El arma no cambia:
+   sigue siendo la que limpia a los que te rodean. Lo que cambia es que la
+   cuenta deje de mentir. */
+const dps = (i, P) => { const A = ARMAS[i];
+  const nDir = (A.s === 0 && A.n > 1) ? 1 : A.n;
+  const eRec = (P && P.eRec) || E_REC0;
+  const md = (P && P.mDano) || 1, mc = (P && P.mCad) || 1;
+  /* EL CICLO LO PONE EL QUE SEA MAS LENTO: la cadencia o la energia. Con la
+     cadencia sola, la aguja "sostiene" 57 de dano por segundo y su tanque da
+     33 tiros de 0,07 s, o sea DOS SEGUNDOS Y MEDIO de fuego; despues dispara a
+     la tasa de la recarga y mide 7,4. Contra una sala de cuatro babas la
+     diferencia no existe —la pelea entera cabe en un tanque— pero contra un
+     jefe de 760 puntos de vida es la unica cuenta que describe algo. */
+  return A.d * nDir * md / Math.max(A.c / mc, E_ESP + A.e / eRec); };
 
 /* SI VALE LA PENA IR A ESE COFRE. UNA puerta y TRES que la llaman —el destino
    entre salas, el destino dentro de la sala y el dedo del bot— porque con la
@@ -690,7 +743,8 @@ const dps = i => { const A = ARMAS[i]; return A.d * A.n / A.c; };
    queda plantado ahi para siempre: medido asi, el piso medio se derrumbo de
    6,04 a 2,96 con las mejores armas que el juego llego a darle. Decir que no
    tiene que significar SEGUIR. */
-const cofreVale = c => !!c && !c.abierto && dps(ARMA_ID[c.arma]) > dps(JU.P.arma);
+const cofreVale = c => !!c && !c.abierto &&
+  dps(ARMA_ID[c.arma], JU.P) > dps(JU.P.arma, JU.P);
 
 /* ---------- COMO SE MUEVE EL BOT ----------
    NO alcanza con mirar 62 px adelante y probar ocho angulos: eso es un
@@ -868,14 +922,16 @@ function botPaso(dt){
      mide el TIEMPO que falta, no los pixeles: una bala de 300 px/s y una de 640
      no dan el mismo aviso a la misma distancia. */
   let peligro = null, pt = 1e9;
+  const amen = [];
   for (const b of JU.eba){
     const rx = P.x-b.x, ry = P.y-b.y;
     const v2 = b.vx*b.vx + b.vy*b.vy; if (v2 < 1) continue;
     const t = (rx*b.vx + ry*b.vy) / v2;
-    if (t <= 0 || t > .55) continue;                 // ya paso, o falta demasiado
+    if (t <= 0 || t > BOT_VENT) continue;            // ya paso, o falta demasiado
     const mx = rx - b.vx*t, my = ry - b.vy*t, m = hip(mx,my);
     if (m > J_R + b.r + 10) continue;                // pasa de largo
-    if (t < pt){ pt = t; peligro = b; b.mx = mx; b.my = my; b.m = m; }
+    b.mx = mx; b.my = my; b.m = m; amen.push(b);
+    if (t < pt){ pt = t; peligro = b; }
   }
   if (peligro){
     /* PARA QUE LADO SALIRSE, y es UNA cuenta para los dos casos. El vector que
@@ -890,6 +946,83 @@ function botPaso(dt){
     else {
       nx = -peligro.vy/lv; ny = peligro.vx/lv;
       if (nx*P.vx + ny*P.vy < 0){ nx = -nx; ny = -ny; }
+    }
+    /* CONTRA UN ABANICO NO SE ESQUIVA UNA BALA, SE ESQUIVA EL ABANICO. Salirse
+       del eje de la primera mete el cuerpo en el de la segunda, y eso no se ve
+       como "no esquiva": se ve como que esquiva y le pegan igual. Medido antes
+       de esto, de 73 golpes del jefe2 --que abre 233 grados con doce balas-- 73
+       llegaron con la esquiva RECARGANDO y uno solo con la esquiva libre.
+       Con mas de una amenaza se prueban 16 rumbos y se elige el que deja menos
+       impactos; con una sola la cuenta de arriba ya es la respuesta y el
+       barrido no corre, asi que las salas normales no cambian.
+
+       MEDIDO CON EL MISMO BINARIO detras de `BOT.barr`, dos muestras de 90
+       corridas por lado (la sonda `jefeMide` devuelve `barr` en el resultado
+       justo para que se pueda comprobar cual lado corrio):
+
+                        llegan al 10   ganan    tasa    me embocan
+         sin barrido      52 y 56      22 y 26   44,4%   0,082 / 0,091
+         CON barrido      59 y 60      44 y 45   74,8%   0,070 / 0,067
+
+       Cuarenta y siete decimas de sigma, y las dos muestras de cada lado dan
+       lo mismo. El mecanismo se lee en la ultima columna: come menos balas,
+       que es exactamente lo que el barrido promete.
+
+       Y HAY UNA LECCION DE MEDICION QUE VALE MAS QUE LA TABLA. La primera vez
+       que se probo esto, el parametro `barr` NO EXISTIA en la sonda: se le
+       pasaba un tercer argumento que se ignoraba en silencio, los dos lados
+       corrian con el barrido ENCENDIDO, y el 60 contra 40 que salio se leyo
+       como que el barrido perdia — y con ese numero falso se saco el barrido
+       del juego. Lo que lo delato fue un `assert` del parche. Por eso la sonda
+       devuelve `barr` ahora: un lado que no cambio se ve de una en el log. */
+    if (BOT.barr && amen.length > 1){
+      /* la velocidad efectiva a lo largo de la ventana, que no es la de punta:
+         la esquiva recorre 105 px en 0,17 s y despues se sigue caminando */
+      const vel = P.esqCd <= 0
+        ? (ESQ_VEL*ESQ_T + J_VEL*P.mVel*(BOT_VENT - ESQ_T)) / BOT_VENT
+        : J_VEL * P.mVel;
+      let mx2 = nx, my2 = ny, mejP = 1e9;
+      for (let k = 0; k <= BOT_DIRS; k++){
+        let dx, dy;
+        /* el rumbo 16 es el que elegiria una sola bala: entra como candidato
+           para que el caso de siempre pueda ganar por su cuenta */
+        if (k === BOT_DIRS){ dx = nx; dy = ny; }
+        else { const a = k * 6.2832 / BOT_DIRS; dx = Math.cos(a); dy = Math.sin(a); }
+        let pen = 0;
+        for (const b of amen){
+          const rx = b.x-P.x, ry = b.y-P.y;
+          const wx = b.vx - dx*vel, wy = b.vy - dy*vel;
+          const w2 = wx*wx + wy*wy; if (w2 < 1) continue;
+          let t = -(rx*wx + ry*wy) / w2;
+          if (t < 0) t = 0; else if (t > BOT_VENT) t = BOT_VENT;
+          const mm = hip(rx + wx*t, ry + wy*t), lim = J_R + b.r;
+          /* un impacto pesa cien y un roce pesa lo que le falta para ser roce:
+             asi un rumbo que no pega nunca le gana a uno que pega una vez, y
+             entre dos que no pegan gana el que pasa mas lejos */
+          pen += mm < lim ? 100 + (lim - mm) : Math.max(0, lim + 30 - mm);
+        }
+        /* Y NO SE ESQUIVA CONTRA UNA PARED NI HACIA UN CUERPO. El barrido
+           elegia mirando SOLO las balas, asi que la respuesta correcta contra el
+           abanico podia ser clavarse en un muro o caminar derecho a un bruto:
+           medido con el barrido a ciegas, el jefe2 bajo de 21 muertes a 14 y el
+           bruto SUBIO de 10 a 17. Un muro pesa menos que un impacto --mejor
+           raspar la pared que comerse la bala-- y meterse en el alcance de un
+           cuerpo pesa lo mismo que el impacto, porque cuesta lo mismo. */
+        if (!botLibre(dx, dy)) pen += 60;
+        for (const e of JU.enemV){
+          if (!e.vivo) continue;
+          const D2 = ENEM[e.cl];
+          if (D2.f > 0 && !D2.expl) continue;
+          const ex = e.x - (P.x + dx*vel*BOT_VENT), ey = e.y - (P.y + dy*vel*BOT_VENT);
+          const de = hip(ex, ey), alc2 = (D2.expl || D2.a) + J_R + 10;
+          if (de < alc2 + 40) pen += alc2 + 40 - de;
+        }
+        /* a igualdad gana el mas parecido al de una bala: sin esto el rumbo
+           salta de un cuadro al otro y no se recorre ninguno */
+        pen += (1 - (dx*nx + dy*ny)) * .5;
+        if (pen < mejP){ mejP = pen; mx2 = dx; my2 = dy; }
+      }
+      nx = mx2; ny = my2;
     }
     if (P.esqCd <= 0){ ENT.esq = true; ENT.x = nx; ENT.y = ny; return; }
     /* SIN ESQUIVA TAMBIEN SE SALE, CAMINANDO. Medido: de 292 balas que pegaron,

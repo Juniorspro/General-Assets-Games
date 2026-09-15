@@ -139,6 +139,80 @@ window.__pozo = {
 
   bot(v){ BOT.on = !!v; return BOT.on; },
 
+  /* HASTA DONDE LLEGA LA PELEA DEL JEFE. `mata` dice QUIEN mata; esto dice
+     POR CUANTO. Un bot que muere con el jefe al 10 % pide mover un numero;
+     uno que muere con el jefe al 55 % tiene el problema en otra parte, y los
+     dos se leen igual en la tabla de clases. Corre el bot honesto y, cada vez
+     que entra a una sala de jefe, anota con cuanta barra entro; al terminar
+     lee la vida que le quedaba al jefe. */
+  /* `barr` enciende y apaga el barrido de rumbos del bot (BOT.barr) para
+     poder medir el A/B con el MISMO binario. Y el valor vuelve en el
+     resultado a proposito: la primera vez que se probo esto el parametro
+     no existia, los dos lados corrieron con el barrido encendido, y el
+     60 contra 40 que salio era ruido puro. Con el eco en el JSON, un lado
+     que no cambio se ve de una. */
+  jefeMide(n = 40, pasosMax = 60000, barr = true){
+    const R = [];
+    for (let i = 0; i < n; i++){
+      BOT.on = true; BOT.modo = 'honesto'; BOT.t = 0; BOT.barr = !!barr;
+      arrancaPartida(); TUT.on = false;
+      let k = 0, ent = null, seg0 = 0, dentro = false;
+      const J = {pasos:0, sale:0, pega:0, conB:0, enCd:0, ener:0};
+      BALA_N.sale = 0; BALA_N.pega = 0;
+      while (k < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+        if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+        const bs0 = BALA_N.sale, bp0 = BALA_N.pega;
+        paso(PASO); k++;
+        const es = !!(JU.sala && JU.sala.tipo === 'jefe');
+        /* LO QUE PASA ADENTRO DE LA SALA DEL JEFE, y no en la corrida entera.
+           `jf` dice cuanto le quedo al jefe; esto dice POR QUE: si las balas
+           no salen es energia o cadencia, si salen y no pegan es punteria, y
+           si pegan es que el jefe tiene demasiada vida. Los tres se leen igual
+           en un solo numero. */
+        if (es){ J.pasos++; J.sale += BALA_N.sale - bs0; J.pega += BALA_N.pega - bp0;
+          if (JU.P.blanco) J.conB++;
+          if (JU.P.cd > 0) J.enCd++;
+          J.ener += JU.P.ener; }
+        if (es && !dentro){ dentro = true; seg0 = JU.seg;
+          ent = {piso:JU.piso, vida:JU.P.vida, max:JU.P.vidaMax,
+                 arma:ARMAS[JU.P.arma].id, md:+JU.P.mDano.toFixed(2), cad:+JU.P.mCad.toFixed(2)}; }
+        if (!es) dentro = false;
+      }
+      const vv = JU.enemV.filter(e => e.vivo);
+      const j = vv.find(e => ENEM[e.cl].jefe);
+      R.push({piso:JU.piso, gano:JU.gano?1:0, vida:JU.P.vida,
+              ent, seg:+(JU.seg - seg0).toFixed(1),
+              jf: j ? +(j.vida/ENEM[j.cl].v).toFixed(3) : (ent && !JU.gano ? 0 : -1),
+              cl: j ? j.cl : '', esc: vv.length - (j ? 1 : 0), J});
+    }
+    BOT.on = false; BOT.barr = true;
+    const n10 = R.filter(x => x.piso === 10 && x.ent && x.ent.piso === 10);
+    const g10 = n10.filter(x => x.gano);
+    const m10 = n10.filter(x => !x.gano);
+    const med = a => { if (!a.length) return null;
+      const b = a.slice().sort((x,y)=>x-y); return +b[b.length>>1].toFixed(3); };
+    return {n, barr:!!barr, llegan10:n10.length, gana10:g10.length,
+            jfMed: med(m10.map(x => x.jf)),
+            jfDist: m10.map(x => x.jf).sort((a,b)=>a-b),
+            entVida: med(n10.map(x => x.ent.vida)),
+            entMax:  med(n10.map(x => x.ent.max)),
+            segMed:  med(m10.map(x => x.seg)),
+            armas: n10.reduce((o,x)=>(o[x.ent.arma]=(o[x.ent.arma]||0)+1,o),{}),
+            esc: m10.reduce((o,x)=>(o[x.esc]=(o[x.esc]||0)+1,o),{}),
+            sala: (()=>{ const A = n10.map(x=>x.J).filter(x=>x.pasos>10);
+              if (!A.length) return null;
+              const S = k => A.reduce((t,x)=>t+x[k],0), pa = S('pasos');
+              return {pasos: Math.round(pa/A.length),
+                      balEnemSeg: +(S('sale')/(pa/60)).toFixed(2),
+                      /* BALA_N es de balas ENEMIGAS: esto es cuantas del jefe
+                         le pegan al bot, o sea lo BIEN que esquiva. No es punteria. */
+                      meEmbocan: +(S('pega')/Math.max(1,S('sale'))).toFixed(3),
+                      pctBlanco: +(S('conB')/pa).toFixed(3),
+                      pctCd: +(S('enCd')/pa).toFixed(3),
+                      enerMed: Math.round(S('ener')/pa)}; })(),
+            pisos: R.reduce((o,x)=>(o[x.piso]=(o[x.piso]||0)+1,o),{})};
+  },
+
   /* DE QUE SE MUERE UNO. juega() dice hasta que piso llega; esto dice por que
      no llega mas lejos: cuantos corazones cuesta cada piso y QUIEN los cobra.
      Sin esto, tocar un numero de la economia es adivinar. */
@@ -190,8 +264,9 @@ window.__pozo = {
       for (const e of VIDA_LOG){
         if (!vidaP[e.p]) vidaP[e.p] = {s:0, n:0, dps:0, arm:{}};
         vidaP[e.p].s += e.v; vidaP[e.p].n++;
-        const A = ARMAS[ARMA_ID[e.a]];
-        vidaP[e.p].dps += A.d*A.n/A.c*(1+e.md);
+        /* POR LA MISMA PUERTA QUE `cofreVale`: con la cuenta escrita aca y
+           alla, la sonda informa un dps y el bot elige con otro. */
+        vidaP[e.p].dps += dps(ARMA_ID[e.a], {mDano:e.md});
         vidaP[e.p].arm[e.a] = (vidaP[e.p].arm[e.a]||0) + 1;
       }
       for (const g of CURA_LOG) curaP[g.p] = (curaP[g.p]||0) + g.c;

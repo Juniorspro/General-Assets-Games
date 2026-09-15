@@ -80,6 +80,13 @@ const ESQ_VEL  = 620;
 const ESQ_CD   = 0.56;
 const E_MAX0   = 100;       // energia de arranque
 const E_REC0   = 15;        // energia por segundo
+/* LO QUE TARDA LA RECARGA EN VOLVER A ARRANCAR DESPUES DE UN TIRO. Es el
+   numero que decide el juego entero y estaba escrito adentro de `dispara`:
+   con el, el ciclo real de un arma no es su cadencia sino
+   `max(c, E_ESP + e/eRec)`, y ahi el orden de las diez se da VUELTA — la
+   escopeta sostiene 23,8 de dano por segundo y la aguja 7,4, cuando la tabla
+   dice 56,5 y 57,1. */
+const E_ESP    = 0.34;      // espera antes de que la energia vuelva a subir
 
 /* --- auto-mira --- */
 const MIRA_CONO = 0.75;     // rad a cada lado de donde apunta el joystick

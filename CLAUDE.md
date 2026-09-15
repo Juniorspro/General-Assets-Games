@@ -389,6 +389,60 @@ munecas.
   desde afuera es la respuesta correcta por topología—. Vertical nativo. Vive partido en
   `herramientas/cerco/partes/` y se arma con `python3 herramientas/cerco/armar.py`.
 
+### Centésima sexagésima séptima vuelta (2026-09-15): **POZO** — el ciclo real de un arma es la energía, no la cadencia
+
+#### LA TABLA DE CADENCIAS MENTÍA, Y DE AHÍ COLGABA MEDIO JUEGO
+
+`dps()` dividía el daño por la cadencia. Pero después de cada tiro la energía **espera 0,34 s**
+antes de volver a subir (`E_ESP`, que estaba escrito adentro de `dispara` y ahora es una constante),
+así que el ciclo real es `max(cadencia, E_ESP + energia/recarga)` — y con ése **el orden de las diez
+armas se da vuelta**: la escopeta sostiene 23,8 de daño por segundo y la aguja 7,4, cuando la tabla
+de cadencias dice 56,5 y 57,1.
+
+**Y `cad` VALE EXACTAMENTE CERO POR CIENTO EN LAS DIEZ ARMAS**, medido una por una: el cuello de
+botella es siempre la energía. Para que la cadencia empiece a importar en la escopeta hay que llevar
+la recarga a 60, o sea **siete mejoras de `rec` sobre las nueve que dan los diez pisos**.
+
+| arma | dps | +dano | +cad | +rec |
+|---|---|---|---|---|
+| escopeta | 23,8 | 18 % | **0 %** | **28 %** |
+| canon | 18,3 | 18 % | **0 %** | **31 %** |
+| pistola | 13,4 | 18 % | **0 %** | 16 % |
+
+`rec` le gana a `dano` en **7 de las 10**. Y `MEJ_PREF` tenía `dano` primero y **`cad` segundo**, o
+sea que el bot tomaba la mejora más inútil del juego antes que la mejor.
+
+**LA MEJORA DE ATAQUE PASA A DERIVARSE Y NO A ESCRIBIRSE:** se le aplica cada mejora ofrecida —con su
+propia `f()`— a una **copia** de los números del jugador y se queda la que más sube el dps del arma
+que lleva puesta. Cambiar un número de `MEJORAS` mueve la elección solo y no hay dos listas que se
+puedan desincronizar. Medido sobre 200 corridas: **piso medio 7,3 → 9,38** y **gana 1-3 → 99 de 200**.
+
+Y `dps()` pasó de `(i, eRec)` a `(i, P)`: la misma puerta la usan el aviso ▲/▼ del cofre, `cofreVale`,
+`mejorElige` y la sonda. Con dos cuentas, la sonda informa un dps y el bot elige con otro.
+
+#### EL BARRIDO DEL ABANICO, Y UNA MEDICIÓN FALSA QUE CASI LO BORRA
+
+Contra un abanico no se esquiva una bala, se esquiva el abanico: salirse del eje de la primera mete
+el cuerpo en el de la segunda. Con más de una amenaza se prueban 16 rumbos y se elige el que deja
+menos impactos, con penalización por pared y por cuerpo. Medido con el mismo binario detrás de
+`BOT.barr`, dos muestras de 90 por lado:
+
+| | llegan al 10 | ganan | tasa | me embocan |
+|---|---|---|---|---|
+| sin barrido | 52 y 56 | 22 y 26 | **44,4 %** | 0,082 / 0,091 |
+| **con barrido** | 59 y 60 | 44 y 45 | **74,8 %** | **0,070 / 0,067** |
+
+**4,7 sigmas**, las dos muestras de cada lado coinciden, y el mecanismo se lee en la última columna:
+come menos balas.
+
+**PERO LA PRIMERA VEZ ESTO SE MIDIÓ MAL Y EL BARRIDO SE SACÓ DEL JUEGO POR ESO.** La sonda
+`jefeMide` **no tenía el parámetro `barr`**: se le pasaba un tercer argumento que se ignoraba en
+silencio, los dos lados corrían con el barrido **encendido**, y el 60 contra 40 que salió se leyó
+como que el barrido perdía. Lo delató un `assert` de un parche, y la prueba definitiva estaba en el
+propio log: **la salida no traía el campo `barr`** que yo creía haber escrito en el `return`. Por eso
+la sonda lo devuelve ahora — **un lado que no cambió se ve de una en el log**, y eso es lo único que
+habría atajado el error en la primera corrida.
+
 ### Centésima sexagésima sexta vuelta (2026-09-11): **CERCO** — la ARENA, y una decisión de la vuelta anterior se da vuelta a propósito
 
 Pedido textual: *"hacé un paper io idéntico al original we"*.
